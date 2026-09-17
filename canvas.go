@@ -62,6 +62,22 @@ func (c *Canvas) FillRect(r Rect, col color.Color) {
 	vector.FillRect(c.Image, c.Px(r.Origin.X), c.Px(r.Origin.Y), c.Px(r.Size.W), c.Px(r.Size.H), col, true)
 }
 
+// FillCircle fills a circle of logical radius around center with col.
+func (c *Canvas) FillCircle(center Point, radius float64, col color.Color) {
+	if c == nil || c.Image == nil || col == nil || radius <= 0 {
+		return
+	}
+	vector.FillCircle(c.Image, c.Px(center.X), c.Px(center.Y), c.Px(radius), col, true)
+}
+
+// StrokeLine draws a line of logical width w from a to b in col.
+func (c *Canvas) StrokeLine(a, b Point, w float64, col color.Color) {
+	if c == nil || c.Image == nil || col == nil || w <= 0 {
+		return
+	}
+	vector.StrokeLine(c.Image, c.Px(a.X), c.Px(a.Y), c.Px(b.X), c.Px(b.Y), c.Px(w), col, true)
+}
+
 // roundRect traces r with corners of the given logical radius, in Image
 // pixels. A zero radius traces a plain rectangle.
 func (c *Canvas) roundRect(r Rect, radius float64) *vector.Path {
@@ -134,7 +150,10 @@ func (c *Canvas) Clip(r Rect) *Canvas {
 	return child
 }
 
-// add records a hit region, trimmed to the clip, on the root Canvas.
+// add records a hit region, trimmed to the clip, on the root Canvas. A
+// region registered at the same Rect as the previous one is merged into it,
+// so Pointer(Focus(w)) or a widget that calls HitPointer and HitKey for the
+// same Rect is one region with both handlers.
 func (c *Canvas) add(h hitRegion) {
 	if c == nil {
 		return
@@ -149,6 +168,9 @@ func (c *Canvas) add(h hitRegion) {
 	for root.parent != nil {
 		root = root.parent
 	}
+	if n := len(root.hits); n > 0 && root.hits[n-1].merge(h) {
+		return
+	}
 	root.hits = append(root.hits, h)
 }
 
@@ -156,6 +178,27 @@ type hitRegion struct {
 	rect    Rect
 	pointer PointerHandler
 	key     KeyHandler
+	cursor  ebiten.CursorShapeType
+}
+
+// merge folds o into r when they share a Rect and o only adds what r lacks.
+func (r *hitRegion) merge(o hitRegion) bool {
+	if r.rect != o.rect ||
+		(o.pointer != nil && r.pointer != nil) ||
+		(o.key != nil && r.key != nil) ||
+		(o.cursor != 0 && r.cursor != 0) {
+		return false
+	}
+	if o.pointer != nil {
+		r.pointer = o.pointer
+	}
+	if o.key != nil {
+		r.key = o.key
+	}
+	if o.cursor != 0 {
+		r.cursor = o.cursor
+	}
+	return true
 }
 
 // HitPointer registers r as a region that receives pointer events. Regions
@@ -168,4 +211,9 @@ func (c *Canvas) HitPointer(r Rect, h PointerHandler) {
 // HitKey registers r as a region that receives keyboard events while focused.
 func (c *Canvas) HitKey(r Rect, h KeyHandler) {
 	c.add(hitRegion{rect: r, key: h})
+}
+
+// HitCursor asks for the mouse cursor to take shape while it is over r.
+func (c *Canvas) HitCursor(r Rect, shape ebiten.CursorShapeType) {
+	c.add(hitRegion{rect: r, cursor: shape})
 }

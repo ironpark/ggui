@@ -58,8 +58,10 @@ func (s TextStyle) resolved() TextStyle {
 // Styled or Provide hand their child a modified copy. It is a value: adding
 // to it never changes the parent's.
 type Env struct {
-	text TextStyle
-	vals *envNode
+	text     TextStyle
+	vals     *envNode
+	theme    Theme
+	hasTheme bool
 }
 
 type envNode struct {
@@ -75,6 +77,23 @@ func (e Env) Text() TextStyle { return e.text }
 // WithText returns e with s merged onto the inherited text style.
 func (e Env) WithText(s TextStyle) Env {
 	e.text = e.text.Merge(s)
+	return e
+}
+
+// Theme returns the theme the tree is laid out under: what the runtime put
+// in the root Env, or DefaultTheme for an Env made by hand, as in tests.
+// Built-in controls take their colors from it at layout time; a Builder
+// reads the theme with UseTheme instead.
+func (e Env) Theme() Theme {
+	if !e.hasTheme {
+		return DefaultTheme()
+	}
+	return e.theme
+}
+
+// WithTheme returns e with t as the theme for the subtree below.
+func (e Env) WithTheme(t Theme) Env {
+	e.theme, e.hasTheme = t, true
 	return e
 }
 
@@ -113,9 +132,13 @@ type Theme struct {
 
 	Fg, Bg      color.Color // default text and window colors
 	Surface     color.Color // panels and cards
-	Accent      color.Color // buttons, selection
+	Field       color.Color // text fields and other inputs
+	Border      color.Color // outlines of inputs and dividers
+	Accent      color.Color // primary buttons, checked controls, focus rings
 	AccentHover color.Color
-	Muted       color.Color // secondary text
+	OnAccent    color.Color // text and marks drawn on Accent
+	Selection   color.Color // selected text
+	Muted       color.Color // secondary text, placeholders, disabled controls
 
 	Radius float64 // corner radius for boxes that ask for one
 	Space  float64 // the unit gaps and padding are multiples of
@@ -130,8 +153,12 @@ func DefaultTheme() Theme {
 		Fg:          fg,
 		Bg:          color.White,
 		Surface:     color.RGBA{0xf2, 0xf3, 0xf5, 0xff},
+		Field:       color.White,
+		Border:      color.RGBA{0xd0, 0xd4, 0xda, 0xff},
 		Accent:      color.RGBA{0x2f, 0x6f, 0xeb, 0xff},
 		AccentHover: color.RGBA{0x24, 0x5c, 0xc7, 0xff},
+		OnAccent:    color.White,
+		Selection:   color.RGBA{0x2f, 0x6f, 0xeb, 0x50},
 		Muted:       color.RGBA{0x6b, 0x72, 0x7c, 0xff},
 		Radius:      6,
 		Space:       8,
@@ -145,8 +172,12 @@ func DarkTheme() Theme {
 	t.Text.Color = t.Fg
 	t.Bg = color.RGBA{0x14, 0x16, 0x1a, 0xff}
 	t.Surface = color.RGBA{0x23, 0x27, 0x2f, 0xff}
-	t.Accent = color.RGBA{0x3a, 0x40, 0x4c, 0xff}
-	t.AccentHover = color.RGBA{0x4c, 0x54, 0x63, 0xff}
+	t.Field = color.RGBA{0x1a, 0x1d, 0x23, 0xff}
+	t.Border = color.RGBA{0x3a, 0x40, 0x4c, 0xff}
+	t.Accent = color.RGBA{0x4f, 0x8c, 0xff, 0xff}
+	t.AccentHover = color.RGBA{0x6c, 0x9f, 0xff, 0xff}
+	t.OnAccent = color.RGBA{0x0e, 0x12, 0x1a, 0xff}
+	t.Selection = color.RGBA{0x4f, 0x8c, 0xff, 0x60}
 	t.Muted = color.RGBA{0x8a, 0x90, 0x9c, 0xff}
 	return t
 }
@@ -163,4 +194,7 @@ func SetTheme(t Theme) { theme.Set(t) }
 func UseTheme() Theme { return theme.Get() }
 
 // rootEnv is the Env the runtime lays the tree out under.
-func rootEnv() Env { return Env{}.WithText(theme.Peek().Text) }
+func rootEnv() Env {
+	t := theme.Peek()
+	return Env{}.WithTheme(t).WithText(t.Text)
+}

@@ -5,6 +5,8 @@ package ggui
 import (
 	"image/color"
 	"math"
+	"sync/atomic"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
@@ -44,6 +46,7 @@ type App struct {
 
 	canvas Canvas // also holds the frame's screen-pixels-per-logical-pixel scale
 	input  inputState
+	cursor ebiten.CursorShapeType
 }
 
 // New creates an App that renders the tree returned by build.
@@ -66,7 +69,10 @@ func (a *App) Run() error {
 	// The tree is rebuilt through an Effect, so every signal read during build
 	// rebuilds the tree when it changes.
 	Effect(func() { a.root = a.build() })
-	return ebiten.RunGame(a)
+	appRunning.Store(true)
+	// Holding a key on macOS pops up the accent menu, as it does in every
+	// text field on the platform; text editing relies on it.
+	return ebiten.RunGameWithOptions(a, &ebiten.RunGameOptions{ApplePressAndHoldEnabled: true})
 }
 
 // OnFrame registers fn to run once per frame, before input is dispatched
@@ -82,11 +88,27 @@ func (a *App) Update() error {
 		fn()
 	}
 	a.input.dispatch(a.readInput())
+	if a.input.cursor != a.cursor {
+		a.cursor = a.input.cursor
+		ebiten.SetCursorShape(a.cursor)
+	}
+	anims.step(time.Now())
 	effects.flush()
 	return nil
 }
 
+// appRunning reports whether RunGame has started, which is when platform
+// services such as the IME may be used.
+var appRunning atomic.Bool
+
 var mouseButtons = []ebiten.MouseButton{ebiten.MouseButtonLeft, ebiten.MouseButtonRight, ebiten.MouseButtonMiddle}
+
+// Key repeat, in frames: a held key delivers KeyPress again after
+// repeatDelay and then every repeatInterval frames.
+const (
+	repeatDelay    = 30
+	repeatInterval = 2
+)
 
 // readInput gathers this frame's input from the platform, with positions
 // converted from screen pixels to logical pixels.
@@ -103,8 +125,18 @@ func (a *App) readInput() frameInput {
 		}
 	}
 	f.wheel = Pt(ebiten.Wheel())
-	f.keys = inpututil.AppendJustPressedKeys(nil)
+	for _, k := range inpututil.AppendPressedKeys(nil) {
+		if d := inpututil.KeyPressDuration(k); d == 1 || d > repeatDelay && (d-repeatDelay)%repeatInterval == 0 {
+			f.keys = append(f.keys, k)
+		}
+	}
 	f.text = string(ebiten.AppendInputChars(nil))
+	f.mods = Mods{
+		Shift: ebiten.IsKeyPressed(ebiten.KeyShift),
+		Ctrl:  ebiten.IsKeyPressed(ebiten.KeyControl),
+		Alt:   ebiten.IsKeyPressed(ebiten.KeyAlt),
+		Meta:  ebiten.IsKeyPressed(ebiten.KeyMeta),
+	}
 	return f
 }
 

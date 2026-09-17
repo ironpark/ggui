@@ -34,7 +34,9 @@ app.OnFrame(func() {
 app.Run()
 ```
 
-Run it: `make run` (or `go run ./examples/counter`).
+Run it: `make run` (or `go run ./examples/counter`). `make run-todo` runs a
+fuller app: a text field with IME input, a keyed list, controls bound to
+signals, a tweened progress bar and a theme switch.
 
 ## Concepts
 
@@ -141,8 +143,9 @@ ggui.Center(
 ```
 
 Current set: `Text`, `Box`, `Padding`, `Column`, `Row`, `Flex`/`Expanded`/`Spacer`,
-`Stack`, `Align`, `Center`, `Scroll`, `Pointer`/`Tap`, `Focus`, `For`, and `List` —
-a column built from your own slice:
+`Stack`, `Align`, `Center`, `Scroll`, `Divider`, `Pointer`/`Tap`, `Focus`, `For`,
+`List`, and the controls `Button`, `Checkbox`, `Radio`, `Switch`, `Slider`,
+`TextField` (see Controls). `List` is a column built from your own slice:
 
 ```go
 ggui.List(rows, func(r Row) ggui.Widget { return ggui.Text(r.Title) }).Gap(4)
@@ -176,6 +179,68 @@ word is wider than the line, so scripts without spaces wrap too. `.Size(px)`,
 built-in font is Go Regular; `LoadFont(ttf)` or `LoadFontFile(path)` load your
 own, and `SetDefaultFont` makes one the default.
 
+## Controls
+
+The ready-made interactive widgets bind to a signal the way Svelte's `bind:`
+does: the control writes it, and writing it moves the control.
+
+```go
+name := ggui.State("")
+agree := ggui.State(false)
+size := ggui.State(0.5)
+plan := ggui.State("free")
+
+ggui.Column(
+	ggui.TextField(name).Placeholder("Your name").OnSubmit(save),
+	ggui.Checkbox(agree, "I agree"),
+	ggui.Switch(dark, "Dark mode"),
+	ggui.Slider(size, 0, 1).Step(0.1),
+	ggui.Row(ggui.Radio(plan, "free", "Free"), ggui.Radio(plan, "pro", "Pro")).Gap(8),
+	ggui.Row(ggui.Button("Save", save), ggui.Button("Cancel", cancel).Secondary()).Gap(8),
+).Gap(12)
+```
+
+`Button(label, onTap)` is the primary button; `.Secondary()` quiets it,
+`.Disabled(v)` greys it out, `ButtonOf(child, onTap)` wraps any content.
+Every control has `.Disabled(v)`. They take their colors from the theme in
+their `Env` at layout time, keep hover and press state in the widget itself,
+and read their signal in `Paint`, so nothing rebuilds for a hover or a tick.
+Buttons and text fields set the mouse cursor.
+
+**Text input.** `TextField(value)` is a single-line editor in a themed box;
+`TextInput(value)` is the bare editor for a box of your own. Text arrives
+through the platform IME (Ebitengine's `exp/textinput`), so composed scripts
+such as Korean and Japanese work, with the composition shown underlined in
+place. Arrows move (Shift selects, Alt or Ctrl jumps words, ⌘ on macOS reaches
+the ends), Home/End, Backspace/Delete, ⌘/Ctrl+A, C, X and V through the system
+clipboard, Enter fires `.OnSubmit`. Click places the caret, drag selects,
+double-click selects a word, triple-click everything. `.Placeholder(s)`,
+`.Password()`, `.OnChange(fn)` and `.MinWidth(w)` tune it. The editor keeps
+its caret and selection across a rebuild of the tree, and `.Input()` on a
+`TextField` reaches the editor for `Focused()`.
+
+The built-in font covers Latin, Greek and Cyrillic; load one with the glyphs
+you type (`examples/todo` picks a system CJK font) with `LoadFontFile`, which
+also reads the first face of a `.ttc`, or `LoadFontCollection`.
+
+## Animation
+
+`Tween(v, d)` and `Spring(v)` are values that move toward their target over
+time instead of jumping, after Svelte's `tweened` and `spring`. Both are
+`Reader`s, so an island that reads one rebuilds every frame the value moves:
+
+```go
+width := ggui.Tween(0.0, 200*time.Millisecond).Easing(ggui.EaseOut)
+bar := ggui.Reactive(func() ggui.Widget { return ggui.Box().Size(width.Get(), 4).Fill(accent) })
+width.Set(120) // slides there over 200ms; Jump(v) skips the motion
+```
+
+A tween restarts from wherever it is when retargeted; a spring keeps its
+momentum, overshoots a little and settles (`.Stiffness`, `.Damping`). Easings:
+`EaseLinear`, `EaseIn`, `EaseOut`, `EaseInOut`. The runtime steps running
+animations once per frame, before effects are flushed. `Switch` slides its
+knob the same way, inside `Paint`, without a signal.
+
 ## Styling
 
 Three layers, each a plain value.
@@ -200,14 +265,14 @@ the same way: `Provide(key, v, child)` stores `v` under a `Key[T]` from
 `NewKey`, and a widget reads it back with `env.Get(key)` in `Layout`.
 
 **Tokens live in a theme.** `Theme` holds colors (`Fg`, `Bg`, `Surface`,
-`Accent`, `AccentHover`, `Muted`), named text styles (`Text`, `Title`) and
-sizes (`Radius`, `Space`). `UseTheme()` reads it at build time and subscribes
-the enclosing Builder; `SetTheme(t)` swaps it and rebuilds only what read it.
-`DefaultTheme()` is light, `DarkTheme()` dark, and a window with no
-`Background` follows the theme's `Bg`. State-dependent looks are a signal in a
-`Component`: the button in `examples/counter` picks `Accent` or `AccentHover`
-from a `hovered` signal. `Box` decorates with `.Fill`, `.Radius(r)` and
-`.Border(w, c)`.
+`Field`, `Border`, `Accent`, `AccentHover`, `OnAccent`, `Selection`, `Muted`),
+named text styles (`Text`, `Title`) and sizes (`Radius`, `Space`).
+`UseTheme()` reads it at build time and subscribes the enclosing Builder;
+`SetTheme(t)` swaps it and rebuilds only what read it. `DefaultTheme()` is
+light, `DarkTheme()` dark, and a window with no `Background` follows the
+theme's `Bg`. The theme also travels in the `Env`, where `env.Theme()` gives a
+custom widget the tokens at layout time, the way the built-in controls get
+theirs. `Box` decorates with `.Fill`, `.Radius(r)` and `.Border(w, c)`.
 
 ## Input
 
@@ -231,27 +296,35 @@ rebuilds; `.Speed(px)` and `.Bar(color)` tune it. Widgets that fill their space
 fall back to their content size on an unbounded axis, so `Center`, `Expanded`
 and `.Justify` inside a `Scroll` do not blow up.
 
-`Pointer` has `OnTap`, `OnDown`, `OnUp`, `OnMove`, `OnEnter`, `OnExit`,
-`OnHover` and `OnScroll`; `Tap(child, fn)` is the one-callback shortcut.
-A tap is a press and a release inside the same region, matched by `Rect`, so
-a tree rebuilt in between still completes it. `Focus(child)` takes keyboard
-focus when clicked and delivers `OnKey`, `OnText` and `OnFocus`. Global
-shortcuts still go in `App.OnFrame`.
+`Pointer` has `OnTap`, `OnDown`, `OnUp`, `OnMove`, `OnDrag`, `OnEnter`,
+`OnExit`, `OnHover` and `OnScroll`, and `.Cursor(shape)` sets the mouse
+cursor over it; `Tap(child, fn)` is the one-callback shortcut. A tap is a
+press and a release inside the same region, matched by `Rect`, so a tree
+rebuilt in between still completes it. The region that took a press captures
+the pointer: it gets `OnDrag` every frame until the release, wherever the
+cursor went, which is what a slider or a text selection needs. `Focus(child)`
+takes keyboard focus when clicked and delivers `OnKey`, `OnText` and
+`OnFocus`; a held key repeats, and `KeyEvent.Mods` carries Shift, Ctrl, Alt
+and Meta (`Mods.Cmd()` is ⌘ on macOS and Ctrl elsewhere). Global shortcuts
+still go in `App.OnFrame`.
 
 To make your own widget interactive, implement `PointerHandler` or
-`KeyHandler` and call `dst.HitPointer(r, w)` or `dst.HitKey(r, w)` from
-`Paint`. `dst.Clip(r)` returns a Canvas that draws and registers regions only
-inside `r`.
+`KeyHandler` and call `dst.HitPointer(r, w)`, `dst.HitKey(r, w)` or
+`dst.HitCursor(r, shape)` from `Paint`; calls for the same `Rect` merge into
+one region. A `KeyHandler` that also implements `TickHandler` runs once per
+frame while focused, which is how `TextInput` drives the IME. `dst.Clip(r)`
+returns a Canvas that draws and registers regions only inside `r`.
 
 ## HiDPI
 
 Widgets work in logical pixels; the screen is allocated at the monitor's
 device scale factor so a Retina display gets a sharp image. `dst.Scale()`
-returns the factor, and drawing goes through it: `dst.FillRect(r, c)` fills a
-logical `Rect`, `dst.Px(v)` converts a length, `dst.Geo(at)` is the transform
-for `DrawImageOptions`, and text rasterizes its face at the scaled size rather
-than scaling the pixels. A custom widget that draws with Ebitengine directly
-should do the same.
+returns the factor, and drawing goes through it: `dst.FillRect`,
+`dst.FillRoundRect`, `dst.StrokeRoundRect`, `dst.FillCircle` and
+`dst.StrokeLine` take logical geometry, `dst.Px(v)` converts a length,
+`dst.Geo(at)` is the transform for `DrawImageOptions`, and text rasterizes
+its face at the scaled size rather than scaling the pixels. A custom widget
+that draws with Ebitengine directly should do the same.
 
 **Custom widgets** — implement `Layout` and `Paint`. `Layout` receives the
 `Env` to pass on to children unchanged; `Paint` receives the `Rect` to draw
@@ -274,14 +347,18 @@ dot := ggui.FromFuncs(
 ├── app.go        App runtime: window setup, frame loop, ebiten.Game
 ├── signal.go     Reactivity: Signal, Memo, Effect, dependency tracking
 ├── widget.go     Widget interface, Builder, Component/Reactive, Children
-├── widgets.go    Built-in widgets
+├── widgets.go    Built-in layout and drawing widgets
+├── controls.go   Button, Checkbox, Radio, Switch, Slider, TextField, Divider
+├── editor.go     TextInput: the text editor and its IME driver
+├── anim.go       Tween, Spring, easings, the per-frame animator
 ├── style.go      TextStyle, Env, Key, Theme
 ├── for.go        For: keyed, reactive list
 ├── canvas.go     Canvas: paint target plus the frame's hit regions
 ├── input.go      Pointer and keyboard events, Pointer/Tap/Focus widgets
+├── clipboard.go  System clipboard for cut, copy and paste
 ├── font.go       Font loading, default font, text wrapping
 ├── geometry.go   Point, Size, Rect, Constraints
-└── examples/     Runnable apps
+└── examples/     Runnable apps: counter, todo
 ```
 
 ## Development
@@ -289,4 +366,5 @@ dot := ggui.FromFuncs(
 ```sh
 make        # fmt + vet + test
 make run    # the counter example
+make run-todo
 ```

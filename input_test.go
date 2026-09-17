@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -138,5 +139,67 @@ func TestFocusLostWhenRegionDisappears(t *testing.T) {
 	in.dispatch(frameInput{pos: Pt(10, 10)})
 	if !blurred || in.focused != nil {
 		t.Fatalf("blurred = %v, focused = %v; want blur and no focus", blurred, in.focused)
+	}
+}
+
+func TestPressedRegionCapturesDragAndRelease(t *testing.T) {
+	var drags, ups int
+	var last Point
+	w := Pointer(Box().Size(50, 50)).
+		OnDrag(func(ev PointerEvent) { drags++; last = ev.Pos }).
+		OnUp(func(PointerEvent) { ups++ })
+	var in inputState
+	paintFrame(&in, w, Sz(50, 50))
+	in.dispatch(frameInput{pos: Pt(10, 10), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.dispatch(frameInput{pos: Pt(200, 200)})
+	in.dispatch(frameInput{pos: Pt(300, 300)})
+	in.dispatch(frameInput{pos: Pt(300, 300), up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.dispatch(frameInput{pos: Pt(300, 300)})
+	if drags != 2 || last != Pt(300, 300) || ups != 1 {
+		t.Fatalf("drags = %d (last %v), ups = %d; want 2 drags outside and the release", drags, last, ups)
+	}
+}
+
+func TestPointerAroundFocusSharesOneRegion(t *testing.T) {
+	taps := 0
+	focused := false
+	w := Tap(Focus(Box().Size(50, 50)).OnFocus(func(b bool) { focused = b }), func() { taps++ })
+	var in inputState
+	paintFrame(&in, w, Sz(50, 50))
+	if len(in.regions) != 1 {
+		t.Fatalf("%d regions for one Rect, want 1 merged", len(in.regions))
+	}
+	in.dispatch(frameInput{pos: Pt(5, 5), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.dispatch(frameInput{pos: Pt(5, 5), up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	if taps != 1 || !focused {
+		t.Fatalf("taps = %d focused = %v", taps, focused)
+	}
+}
+
+func TestCursorFollowsTopmostRegion(t *testing.T) {
+	w := Stack(
+		Pointer(Box().Size(100, 100)).Cursor(ebiten.CursorShapeCrosshair),
+		Pointer(Box().Size(50, 50)).Cursor(ebiten.CursorShapeText),
+	)
+	var in inputState
+	paintFrame(&in, w, Sz(100, 100))
+	in.dispatch(frameInput{pos: Pt(25, 25)})
+	if in.cursor != ebiten.CursorShapeText {
+		t.Fatalf("cursor = %v, want text from the top region", in.cursor)
+	}
+	in.dispatch(frameInput{pos: Pt(75, 75)})
+	if in.cursor != ebiten.CursorShapeCrosshair {
+		t.Fatalf("cursor = %v, want crosshair", in.cursor)
+	}
+	in.dispatch(frameInput{pos: Pt(150, 150)})
+	if in.cursor != ebiten.CursorShapeDefault {
+		t.Fatalf("cursor = %v outside, want default", in.cursor)
+	}
+}
+
+func TestModsCmdIsPlatformSpecific(t *testing.T) {
+	m := Mods{Meta: true}
+	if m.Cmd() != (runtime.GOOS == "darwin") {
+		t.Fatalf("Meta counts as Cmd = %v on %s", m.Cmd(), runtime.GOOS)
 	}
 }

@@ -1,7 +1,7 @@
 // Command counter is a minimal ggui app: a struct of signals for state,
-// derived text built with generic methods, a theme for the look, and
-// buttons with hover state of their own. Click the buttons or press space to
-// count; up/down changes the step; T flips the theme.
+// derived text built with generic methods, a theme for the look, and the
+// built-in Button. Click the buttons or press space to count; up/down
+// changes the step; T flips the theme.
 package main
 
 import (
@@ -20,24 +20,6 @@ type model struct {
 	Step  *ggui.Signal[int]
 }
 
-// buttonWidget is a Component: setup runs once and owns the hover state, the
-// Builder it returns re-runs when hovered or the theme changes.
-func buttonWidget(label string, onTap func()) ggui.Widget {
-	return ggui.Component(func() ggui.Builder {
-		hovered := ggui.State(false)
-		return func() ggui.Widget {
-			t := ggui.UseTheme()
-			bg := t.Accent
-			if hovered.Get() {
-				bg = t.AccentHover
-			}
-			return ggui.Pointer(
-				ggui.Box(ggui.Text(label).Size(18)).Pad(6, 16).Fill(bg).Radius(t.Radius),
-			).OnTap(onTap).OnHover(hovered.Set)
-		}
-	})
-}
-
 func main() {
 	state := model{Count: ggui.State(0), Step: ggui.State(1)}
 	count, step := state.Count, state.Step
@@ -54,8 +36,7 @@ func main() {
 	})
 
 	// The root Builder reads only the theme, so it runs once per theme. The
-	// parts that change are Reactive islands; the buttons keep their hover
-	// state because the root never rebuilds them for a count change.
+	// parts that change are Reactive islands.
 	app := ggui.New(ggui.Config{
 		Title:     "ggui · counter",
 		Width:     480,
@@ -70,8 +51,8 @@ func main() {
 						return ggui.Text(label.Get()).Style(t.Title)
 					}),
 					ggui.Row(
-						buttonWidget("-", func() { ggui.Add(count, -step.Get()) }),
-						buttonWidget("+", func() { ggui.Add(count, step.Get()) }),
+						ggui.Button("-", func() { ggui.Add(count, -step.Get()) }).Pad(6, 16),
+						ggui.Button("+", func() { ggui.Add(count, step.Get()) }).Pad(6, 16),
 					).Gap(t.Space).Justify(ggui.JustifyCenter),
 					ggui.Styled(ggui.Reactive(func() ggui.Widget {
 						return ggui.List(hints.Get(), func(s string) ggui.Widget {

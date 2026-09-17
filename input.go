@@ -1,6 +1,10 @@
 package ggui
 
-import "github.com/hajimehoshi/ebiten/v2"
+import (
+	"runtime"
+
+	"github.com/hajimehoshi/ebiten/v2"
+)
 
 // PointerKind says what a PointerEvent reports.
 type PointerKind int
@@ -13,6 +17,7 @@ const (
 	PointerEnter                     // the region became the hovered one
 	PointerExit                      // the region stopped being the hovered one
 	PointerScroll                    // the wheel moved over the region
+	PointerDrag                      // a button that went down inside the region is still held, wherever the cursor is now
 )
 
 // PointerEvent is a mouse or touch event delivered to a hit region.
@@ -26,8 +31,27 @@ type PointerEvent struct {
 // PointerHandler receives pointer events whose position fell inside the
 // region it was registered with. Returning true consumes the event; false
 // lets the region beneath see it, so a tap target does not block scrolling.
+//
+// A region that consumed PointerDown captures the pointer: until the button
+// comes up it receives PointerDrag every frame and then PointerUp, even when
+// the cursor has left it. That is what a slider knob or a text selection
+// needs.
 type PointerHandler interface {
 	HandlePointer(ev PointerEvent) bool
+}
+
+// Mods are the modifier keys held during a KeyEvent.
+type Mods struct {
+	Shift, Ctrl, Alt, Meta bool
+}
+
+// Cmd reports the platform's command modifier: Meta (⌘) on macOS, Ctrl
+// elsewhere. Shortcuts such as select-all and paste check it.
+func (m Mods) Cmd() bool {
+	if runtime.GOOS == "darwin" {
+		return m.Meta
+	}
+	return m.Ctrl
 }
 
 // KeyKind says what a KeyEvent reports.
@@ -45,13 +69,24 @@ type KeyEvent struct {
 	Kind KeyKind
 	Key  ebiten.Key // for KeyPress
 	Text string     // for KeyText
+	Mods Mods       // for KeyPress
 }
 
 // KeyHandler receives keyboard events while its region has focus. A region
 // gains focus when a button goes down inside it and loses it when the button
-// goes down elsewhere or the region disappears.
+// goes down elsewhere or the region disappears. A held key repeats: after a
+// short delay it delivers KeyPress again every few frames.
 type KeyHandler interface {
 	HandleKey(ev KeyEvent)
+}
+
+// TickHandler is a KeyHandler that also needs to run once per frame while it
+// has focus, before that frame's keys are delivered: a text editor drives the
+// platform IME this way. Returning true reports that the IME consumed this
+// frame's input, and the KeyPress and KeyText events are then withheld.
+type TickHandler interface {
+	KeyHandler
+	HandleTick() (consumed bool)
 }
 
 // frameInput is everything the runtime read from the platform this frame.
@@ -60,8 +95,9 @@ type frameInput struct {
 	down  []ebiten.MouseButton
 	up    []ebiten.MouseButton
 	wheel Point
-	keys  []ebiten.Key
+	keys  []ebiten.Key // just pressed, plus repeats of held keys
 	text  string
+	mods  Mods
 }
 
 // inputState routes frameInput to the regions painted last frame. Regions
@@ -74,6 +110,7 @@ type inputState struct {
 	pressed    *hitRegion
 	pressedBtn ebiten.MouseButton
 	focused    *hitRegion
+	cursor     ebiten.CursorShapeType // what the hovered region asked for
 }
 
 func (in *inputState) dispatch(f frameInput) {
@@ -90,16 +127,33 @@ func (in *inputState) dispatch(f frameInput) {
 	}
 	in.hovered = now
 
+	in.cursor = ebiten.CursorShapeDefault
+	if r := in.topmost(func(r *hitRegion) bool { return r.cursor != 0 && r.rect.Contains(f.pos) }); r != nil {
+		in.cursor = r.cursor
+	}
+
 	for _, b := range f.down {
 		ev := PointerEvent{Kind: PointerDown, Pos: f.pos, Button: b}
 		in.pressed, in.pressedBtn = in.send(ev), b
 		in.setFocus(in.findKey(f.pos))
 	}
+	if in.pressed != nil && len(f.down) == 0 && len(f.up) == 0 {
+		if cur := in.findPointer(in.pressed.rect); cur != nil {
+			cur.pointer.HandlePointer(PointerEvent{Kind: PointerDrag, Pos: f.pos, Button: in.pressedBtn})
+		}
+	}
 	for _, b := range f.up {
 		ev := PointerEvent{Kind: PointerUp, Pos: f.pos, Button: b}
-		in.send(ev)
-		if p := in.pressed; p != nil && b == in.pressedBtn && p.rect.Contains(f.pos) {
-			if cur := in.findRect(p.rect); cur != nil {
+		p := in.pressed
+		if p == nil || b != in.pressedBtn {
+			in.send(ev)
+			continue
+		}
+		// The region that took the press gets the release, wherever the
+		// cursor is, and a tap if it is still inside.
+		if cur := in.findPointer(p.rect); cur != nil {
+			cur.pointer.HandlePointer(ev)
+			if p.rect.Contains(f.pos) {
 				cur.pointer.HandlePointer(PointerEvent{Kind: PointerTap, Pos: f.pos, Button: b})
 			}
 		}
@@ -110,17 +164,28 @@ func (in *inputState) dispatch(f frameInput) {
 	}
 
 	if in.focused != nil {
-		cur := in.findRect(in.focused.rect)
-		if cur == nil || cur.key == nil {
+		cur := in.findKeyRect(in.focused.rect)
+		if cur == nil {
 			in.setFocus(nil)
-		} else {
-			in.focused = cur
-			for _, k := range f.keys {
-				cur.key.HandleKey(KeyEvent{Kind: KeyPress, Key: k})
+			return
+		}
+		if prev := in.focused.key; !sameHandler(prev, cur.key) {
+			// The tree was rebuilt: the region is the same, the widget new.
+			if ad, ok := cur.key.(focusAdopter); ok {
+				ad.adoptFocus(prev)
+			} else {
+				cur.key.HandleKey(KeyEvent{Kind: KeyFocus})
 			}
-			if f.text != "" {
-				cur.key.HandleKey(KeyEvent{Kind: KeyText, Text: f.text})
-			}
+		}
+		in.focused = cur
+		if th, ok := cur.key.(TickHandler); ok && th.HandleTick() {
+			return
+		}
+		for _, k := range f.keys {
+			cur.key.HandleKey(KeyEvent{Kind: KeyPress, Key: k, Mods: f.mods})
+		}
+		if f.text != "" {
+			cur.key.HandleKey(KeyEvent{Kind: KeyText, Text: f.text})
 		}
 	}
 }
@@ -149,9 +214,14 @@ func (in *inputState) findKey(p Point) *hitRegion {
 	return in.topmost(func(r *hitRegion) bool { return r.key != nil && r.rect.Contains(p) })
 }
 
-// findRect returns the topmost region painted exactly at rect.
-func (in *inputState) findRect(rect Rect) *hitRegion {
-	return in.topmost(func(r *hitRegion) bool { return r.rect == rect })
+// findPointer returns the topmost pointer region painted exactly at rect.
+func (in *inputState) findPointer(rect Rect) *hitRegion {
+	return in.topmost(func(r *hitRegion) bool { return r.pointer != nil && r.rect == rect })
+}
+
+// findKeyRect returns the topmost key region painted exactly at rect.
+func (in *inputState) findKeyRect(rect Rect) *hitRegion {
+	return in.topmost(func(r *hitRegion) bool { return r.key != nil && r.rect == rect })
 }
 
 func (in *inputState) setFocus(r *hitRegion) {
@@ -167,6 +237,23 @@ func (in *inputState) setFocus(r *hitRegion) {
 	in.focused = r
 }
 
+// focusAdopter is a KeyHandler that can take over from the handler that had
+// focus at the same Rect before a rebuild, carrying its caret and selection
+// across. TextInput implements it.
+type focusAdopter interface {
+	adoptFocus(prev KeyHandler)
+}
+
+// sameHandler compares two handlers, treating uncomparable ones as different.
+func sameHandler(a, b KeyHandler) (same bool) {
+	defer func() {
+		if recover() != nil {
+			same = false
+		}
+	}()
+	return a == b
+}
+
 func sameRegion(a, b *hitRegion) bool {
 	if a == nil || b == nil {
 		return a == b
@@ -178,10 +265,12 @@ func sameRegion(a, b *hitRegion) bool {
 // or Tap. It takes no space of its own: the child's Rect is the hit region.
 type PointerWidget struct {
 	child    Widget
+	cursor   ebiten.CursorShapeType
 	onDown   func(PointerEvent)
 	onUp     func(PointerEvent)
 	onTap    func()
 	onMove   func(PointerEvent)
+	onDrag   func(PointerEvent)
 	onEnter  func()
 	onExit   func()
 	onScroll func(Point)
@@ -206,6 +295,17 @@ func (p *PointerWidget) OnUp(fn func(PointerEvent)) *PointerWidget { p.onUp = fn
 // OnMove fires every frame the cursor is inside the child.
 func (p *PointerWidget) OnMove(fn func(PointerEvent)) *PointerWidget { p.onMove = fn; return p }
 
+// OnDrag fires every frame a button pressed inside the child is still held,
+// with the cursor's current position, inside or out. OnUp ends it.
+func (p *PointerWidget) OnDrag(fn func(PointerEvent)) *PointerWidget { p.onDrag = fn; return p }
+
+// Cursor sets the mouse cursor shown while the pointer is over the child,
+// such as ebiten.CursorShapePointer for something clickable.
+func (p *PointerWidget) Cursor(shape ebiten.CursorShapeType) *PointerWidget {
+	p.cursor = shape
+	return p
+}
+
 // OnEnter fires when the cursor enters the child.
 func (p *PointerWidget) OnEnter(fn func()) *PointerWidget { p.onEnter = fn; return p }
 
@@ -227,12 +327,17 @@ func (p *PointerWidget) HandlePointer(ev PointerEvent) bool {
 		if p.onDown != nil {
 			p.onDown(ev)
 		}
-		return p.onDown != nil || p.onTap != nil
+		return p.onDown != nil || p.onTap != nil || p.onDrag != nil
 	case PointerUp:
 		if p.onUp != nil {
 			p.onUp(ev)
 		}
-		return p.onUp != nil || p.onTap != nil
+		return p.onUp != nil || p.onTap != nil || p.onDrag != nil
+	case PointerDrag:
+		if p.onDrag != nil {
+			p.onDrag(ev)
+		}
+		return p.onDrag != nil
 	case PointerTap:
 		if p.onTap != nil {
 			p.onTap()
@@ -268,6 +373,9 @@ func (p *PointerWidget) Layout(c Constraints, env Env) Size { return p.child.Lay
 // Paint implements Widget.
 func (p *PointerWidget) Paint(dst *Canvas, r Rect) {
 	dst.HitPointer(r, p)
+	if p.cursor != 0 {
+		dst.HitCursor(r, p.cursor)
+	}
 	p.child.Paint(dst, r)
 }
 

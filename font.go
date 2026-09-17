@@ -25,11 +25,35 @@ func LoadFont(data []byte) (*Font, error) {
 	return &Font{src: src}, nil
 }
 
-// LoadFontFile parses the TTF or OTF file at path.
+// LoadFontCollection parses a TTC or OTC collection into one Font per face.
+func LoadFontCollection(data []byte) ([]*Font, error) {
+	srcs, err := text.NewGoTextFaceSourcesFromCollection(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("ggui: load font collection: %w", err)
+	}
+	fonts := make([]*Font, len(srcs))
+	for i, src := range srcs {
+		fonts[i] = &Font{src: src}
+	}
+	return fonts, nil
+}
+
+// LoadFontFile parses the font file at path: a TTF or OTF, or the first
+// face of a TTC or OTC collection.
 func LoadFontFile(path string) (*Font, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("ggui: load font: %w", err)
+	}
+	if strings.HasPrefix(string(data[:min(4, len(data))]), "ttcf") {
+		fonts, err := LoadFontCollection(data)
+		if err != nil {
+			return nil, err
+		}
+		if len(fonts) == 0 {
+			return nil, fmt.Errorf("ggui: load font: %s holds no faces", path)
+		}
+		return fonts[0], nil
 	}
 	return LoadFont(data)
 }
