@@ -469,24 +469,78 @@ func (t *TextInputWidget) Semantics() (Role, string) {
 // two: the first description of a handler in a frame is the one kept.
 func (t *TextInputWidget) Describe() Node {
 	role, name := t.Semantics()
-	return Node{
+	lo, hi := t.ed.selection()
+	n := Node{
 		Role:     role,
 		Name:     name,
-		Value:    t.value.Peek(),
+		Value:    t.ed.text,
 		Disabled: t.disabled,
-		Actions:  ActionFocus | ActionSetValue,
+		Actions:  ActionFocus | ActionSetValue | ActionSetSelection,
+		SelStart: lo,
+		SelEnd:   hi,
 	}
+	// A screen reader reads a field character by character and line by
+	// line, and needs to know where each of them went. Working that out
+	// costs a measurement per character, so it is only done while
+	// something is attached that will ask; see axDetail. A password is
+	// left out of it entirely: its shape on screen is bullets, and its
+	// contents are not for reading out.
+	if axDetail() && !t.password {
+		n.Runs = t.runs()
+	}
+	return n
+}
+
+// runs freezes the editor's layout into the tree: one entry per line, with
+// the position of every character boundary on it.
+//
+// The geometry is where the editor last painted, not where it is about to:
+// describing happens before the paint that would move it, and ui.TextField
+// describes this widget from the box around it, a step earlier still. A
+// field that moved or scrolled this frame therefore reports character
+// positions one frame behind, which is a frame that has not been shown yet.
+func (t *TextInputWidget) runs() []TextRun {
+	spans := t.spans(t.ed.text)
+	out := make([]TextRun, 0, len(spans))
+	h := t.height()
+	for i, sp := range spans {
+		x, y := t.rect.Origin.X, t.rect.Origin.Y
+		if t.multiline {
+			y += float64(i)*t.spacing() - t.scroll
+		} else {
+			x -= t.scroll
+		}
+		line := t.ed.text[sp.start:sp.end]
+		r := TextRun{Start: sp.start, End: sp.end, Rect: Rct(Pt(x, y), Sz(t.advance(line), h))}
+		for b := sp.start; ; b = nextRune(t.ed.text, b) {
+			r.Stops = append(r.Stops, TextStop{Byte: b, X: t.advance(t.ed.text[sp.start:b])})
+			if b >= sp.end {
+				break
+			}
+		}
+		out = append(out, r)
+	}
+	return out
 }
 
 // Act implements Actor: the platform's text API replaces the contents
-// outright, which is what a dictation or a braille display does.
+// outright, which is what a dictation or a braille display does, and moves
+// the caret, which is what a screen reader does as it reads along.
 func (t *TextInputWidget) Act(a Action) bool {
-	if a.Kind != ActionSetValue || t.disabled {
+	if t.disabled {
 		return false
 	}
-	t.ed.setText(a.Text)
-	t.commit()
-	return true
+	switch a.Kind {
+	case ActionSetValue:
+		t.ed.setText(a.Text)
+		t.commit()
+		return true
+	case ActionSetSelection:
+		t.ed.moveTo(a.SelStart, false)
+		t.ed.moveTo(a.SelEnd, true)
+		return true
+	}
+	return false
 }
 
 // ConsumesKey implements KeyConsumer: editing keys stay with the editor.
@@ -631,6 +685,9 @@ func (t *TextInputWidget) Layout(c Constraints, env Env) Size {
 
 // Paint implements Widget.
 func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
+	// Where it is being painted is recorded first: describing it reports
+	// where its characters are, which is measured from here.
+	t.rect, t.scale = r, dst.Scale()
 	// A disabled editor takes no input but is still read out.
 	dst.Describe(r, t)
 	if !t.disabled {
@@ -638,7 +695,6 @@ func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
 		dst.HitKey(r, t)
 		dst.HitCursor(r, ebiten.CursorShapeText)
 	}
-	t.rect, t.scale = r, dst.Scale()
 	if t.value.Peek() != t.ed.text {
 		// Written through the signal since the layout: the enclosing
 		// Cached must measure again.

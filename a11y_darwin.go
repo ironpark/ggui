@@ -3,6 +3,7 @@
 package ggui
 
 import (
+	"math"
 	"reflect"
 	"runtime"
 	"structs"
@@ -258,6 +259,15 @@ func init() {
 			{Cmd: axSelSetValue, Fn: axElementSetValue},
 			{Cmd: axSelSetFocused, Fn: axElementSetFocused},
 			{Cmd: objc.RegisterName("isAccessibilitySelectorAllowed:"), Fn: axElementSelectorAllowed},
+			{Cmd: axSelNumberOfCharacters, Fn: axElementCharacterCount},
+			{Cmd: axSelSelectedText, Fn: axElementSelectedText},
+			{Cmd: axSelSelectedTextRange, Fn: axElementSelectedRange},
+			{Cmd: axSelSetSelectedTextRange, Fn: axElementSetSelectedRange},
+			{Cmd: axSelStringForRange, Fn: axElementStringForRange},
+			{Cmd: axSelRangeForLine, Fn: axElementRangeForLine},
+			{Cmd: axSelLineForIndex, Fn: axElementLineForIndex},
+			{Cmd: axSelFrameForRange, Fn: axElementFrameForRange},
+			{Cmd: axSelInsertionPointLine, Fn: axElementInsertionLine},
 		},
 	)
 	if err != nil {
@@ -732,12 +742,18 @@ func axElementSetFocused(self objc.ID, _ objc.SEL, on bool) {
 // Without it every element on the one registered class would advertise
 // every action, since the class responds to all of them.
 func axElementSelectorAllowed(self objc.ID, _ objc.SEL, sel objc.SEL) bool {
+	_, _, n, ok := axSelf(self)
+	if !ok {
+		return false
+	}
+	if axTextSelector(sel) {
+		return axTextual(n.Node)
+	}
 	a, isAction := axActOfSel(sel)
 	if !isAction {
 		return true
 	}
-	_, _, n, ok := axSelf(self)
-	return ok && axAllows(n.Node, a)
+	return axAllows(n.Node, a)
 }
 
 // axActOfSel maps an AppKit action selector onto the action it asks for.
@@ -763,4 +779,144 @@ func axActOfSel(sel objc.SEL) (axAct, bool) {
 		return axSetFocus, true
 	}
 	return 0, false
+}
+
+// The text protocol. Without it VoiceOver knows a text field is there and
+// will not read a word of what is in it: reading a field means asking for
+// its characters, its lines and the rectangle a range of it covers, in
+// UTF-16 offsets. Every answer comes out of the node the last frame froze,
+// which carries the selection and, while this is being asked, the layout.
+
+type nsRange struct {
+	_        structs.HostLayout
+	location uint
+	length   uint
+}
+
+// axNotFound is NSNotFound: the answer to a question about a range that
+// does not exist.
+const axNotFound = uint(math.MaxInt)
+
+var (
+	axSelNumberOfCharacters   = objc.RegisterName("accessibilityNumberOfCharacters")
+	axSelSelectedText         = objc.RegisterName("accessibilitySelectedText")
+	axSelSelectedTextRange    = objc.RegisterName("accessibilitySelectedTextRange")
+	axSelSetSelectedTextRange = objc.RegisterName("setAccessibilitySelectedTextRange:")
+	axSelStringForRange       = objc.RegisterName("accessibilityStringForRange:")
+	axSelRangeForLine         = objc.RegisterName("accessibilityRangeForLine:")
+	axSelLineForIndex         = objc.RegisterName("accessibilityLineForIndex:")
+	axSelFrameForRange        = objc.RegisterName("accessibilityFrameForRange:")
+	axSelInsertionPointLine   = objc.RegisterName("accessibilityInsertionPointLineNumber")
+)
+
+// axTextSelector reports whether a selector belongs to the text protocol,
+// which only a text field should be seen to answer.
+func axTextSelector(sel objc.SEL) bool {
+	switch sel {
+	case axSelNumberOfCharacters, axSelSelectedText, axSelSelectedTextRange,
+		axSelSetSelectedTextRange, axSelStringForRange, axSelRangeForLine,
+		axSelLineForIndex, axSelFrameForRange, axSelInsertionPointLine:
+		return true
+	}
+	return false
+}
+
+// axText returns the node behind an element when it is a text field, which
+// is the only kind that answers any of this.
+func axText(self objc.ID) (*axBridge, SemNode, bool) {
+	b, _, n, ok := axSelf(self)
+	if !ok || !axTextual(n.Node) {
+		return nil, SemNode{}, false
+	}
+	return b, n, true
+}
+
+func axElementCharacterCount(self objc.ID, _ objc.SEL) int {
+	_, n, ok := axText(self)
+	if !ok {
+		return 0
+	}
+	return axCharCount(n.Node)
+}
+
+func axElementSelectedText(self objc.ID, _ objc.SEL) objc.ID {
+	_, n, ok := axText(self)
+	if !ok {
+		return 0
+	}
+	return nsString(axSelected(n.Node))
+}
+
+func axElementSelectedRange(self objc.ID, _ objc.SEL) nsRange {
+	_, n, ok := axText(self)
+	if !ok {
+		return nsRange{location: axNotFound}
+	}
+	loc, length := axSelection(n.Node)
+	return nsRange{location: uint(loc), length: uint(length)}
+}
+
+// axElementSetSelectedRange moves the caret, which is how a screen reader
+// reads along a field. Like every other action it is queued and answered at
+// once; the next frame's tree shows where the caret ended up.
+func axElementSetSelectedRange(self objc.ID, _ objc.SEL, r nsRange) {
+	b, n, ok := axText(self)
+	if !ok || r.location >= axNotFound || !axAllows(n.Node, axSetSelection) {
+		return
+	}
+	start, end := axByteRange(n.Node, int(r.location), int(r.length))
+	b.perform(n.ID, Action{Kind: ActionSetSelection, SelStart: start, SelEnd: end})
+}
+
+func axElementStringForRange(self objc.ID, _ objc.SEL, r nsRange) objc.ID {
+	_, n, ok := axText(self)
+	if !ok || r.location >= axNotFound {
+		return 0
+	}
+	return nsString(axStringForRange(n.Node, int(r.location), int(r.length)))
+}
+
+func axElementRangeForLine(self objc.ID, _ objc.SEL, line int) nsRange {
+	_, n, ok := axText(self)
+	if !ok {
+		return nsRange{location: axNotFound}
+	}
+	loc, length, has := axRangeForLine(n.Node, line)
+	if !has {
+		return nsRange{location: axNotFound}
+	}
+	return nsRange{location: uint(loc), length: uint(length)}
+}
+
+func axElementLineForIndex(self objc.ID, _ objc.SEL, index int) int {
+	_, n, ok := axText(self)
+	if !ok {
+		return 0
+	}
+	return axLineForIndex(n.Node, index)
+}
+
+func axElementInsertionLine(self objc.ID, _ objc.SEL) int {
+	_, n, ok := axText(self)
+	if !ok {
+		return 0
+	}
+	return axInsertionLine(n.Node)
+}
+
+func axElementFrameForRange(self objc.ID, _ objc.SEL, r nsRange) nsRect {
+	b, n, ok := axText(self)
+	if !ok || r.location >= axNotFound {
+		return nsRect{}
+	}
+	d, is := b.plat.(*darwinAX)
+	if !is || d.container == 0 {
+		return nsRect{}
+	}
+	box := axRectForRange(n, int(r.location), int(r.length))
+	h := objc.Send[nsRect](d.container, axSelBounds).size.height
+	return axToScreen(d.container, nsRect{
+		origin: nsPoint{x: box.Origin.X, y: h - (box.Origin.Y + box.Size.H)},
+		size:   nsSize{width: box.Size.W, height: box.Size.H},
+	})
 }

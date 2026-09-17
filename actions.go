@@ -22,6 +22,12 @@ type Action struct {
 	Kind ActionSet // exactly one of the action bits
 	Text string    // the new contents, for ActionSetValue on a text field
 	Num  float64   // the new number, for ActionSetValue on a slider
+
+	// The byte range to select, for ActionSetSelection. An empty range is
+	// a caret. Bytes, not characters: the platform counts in whatever its
+	// own text API uses and the bridge converts, so that a widget never
+	// has to know what UTF-16 is.
+	SelStart, SelEnd int
 }
 
 // Actor is a widget that carries out an action aimed at it. A widget needs

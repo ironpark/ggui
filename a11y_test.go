@@ -460,3 +460,183 @@ func TestAXPressReachesTheWidget(t *testing.T) {
 		t.Errorf("rung %d times, want 1", w.rung)
 	}
 }
+
+func TestAXUTF16OffsetsCountSurrogatePairs(t *testing.T) {
+	// A platform text API counts in UTF-16 and ggui stores UTF-8, and the
+	// two disagree the moment anything outside the basic plane appears.
+	s := "aé😀b" // 1 + 2 + 4 + 1 bytes, 1 + 1 + 2 + 1 code units
+	if got := axUTF16Len(s); got != 5 {
+		t.Errorf("axUTF16Len = %d, want 5", got)
+	}
+	for _, c := range []struct{ u, b int }{{0, 0}, {1, 1}, {2, 3}, {4, 7}, {5, 8}, {9, 8}, {-1, 0}} {
+		if got := axByteAt(s, c.u); got != c.b {
+			t.Errorf("axByteAt(%d) = %d, want %d", c.u, got, c.b)
+		}
+	}
+	// Halfway into a surrogate pair is not a place a caret can be, so it
+	// resolves to the start of the rune.
+	if got := axByteAt(s, 3); got != 3 {
+		t.Errorf("axByteAt(3) = %d, want the start of the emoji (3)", got)
+	}
+	for _, c := range []struct{ b, u int }{{0, 0}, {1, 1}, {3, 2}, {7, 4}, {8, 5}} {
+		if got := axUTF16At(s, c.b); got != c.u {
+			t.Errorf("axUTF16At(%d) = %d, want %d", c.b, got, c.u)
+		}
+	}
+	n := Node{Value: s, SelStart: 1, SelEnd: 7}
+	if loc, length := axSelection(n); loc != 1 || length != 3 {
+		t.Errorf("selection = %d+%d, want 1+3 in UTF-16", loc, length)
+	}
+	if got := axSelected(n); got != "é😀" {
+		t.Errorf("selected text = %q, want %q", got, "é😀")
+	}
+	if a, b := axByteRange(n, 1, 3); a != 1 || b != 7 {
+		t.Errorf("byte range = %d..%d, want 1..7", a, b)
+	}
+}
+
+// axDetailed runs a frame with the detail a text field only freezes while
+// something is reading it, and puts the flag back.
+func axDetailed(t *testing.T, p *Probe) *SemTree {
+	t.Helper()
+	axWantsDetail.Store(true)
+	t.Cleanup(func() { axWantsDetail.Store(false) })
+	return p.Semantics()
+}
+
+func TestAXTextFieldSaysWhereItsCharactersAre(t *testing.T) {
+	value := State("hello world")
+	w := TextInput(value)
+	p := NewProbe(w, Sz(300, 40))
+	defer p.Close()
+
+	field, ok := axDetailed(t, p).Find(RoleTextField, "")
+	if !ok {
+		t.Fatal("no text field in the tree")
+	}
+	if got := axCharCount(field.Node); got != 11 {
+		t.Errorf("character count = %d, want 11", got)
+	}
+	if got := axStringForRange(field.Node, 6, 5); got != "world" {
+		t.Errorf("string for range = %q, want %q", got, "world")
+	}
+	if len(field.Runs) != 1 {
+		t.Fatalf("%d runs, want one line", len(field.Runs))
+	}
+	if n := len(field.Runs[0].Stops); n != 12 {
+		t.Errorf("%d stops, want one per character boundary (12)", n)
+	}
+	// The caret sits at the end after TextInput loaded the value, and the
+	// field is one line, so that is where the insertion point is.
+	if got := axInsertionLine(field.Node); got != 0 {
+		t.Errorf("insertion line = %d, want 0", got)
+	}
+	if loc, length, has := axRangeForLine(field.Node, 0); !has || loc != 0 || length != 11 {
+		t.Errorf("line 0 = %d+%d, %v; want the whole field", loc, length, has)
+	}
+	if _, _, has := axRangeForLine(field.Node, 3); has {
+		t.Error("a field with one line answered for line 3")
+	}
+	// A character's box is inside the field, is not empty, and moves right
+	// as the offset does.
+	first := axRectForRange(field, 0, 1)
+	later := axRectForRange(field, 6, 1)
+	if first.Empty() || later.Empty() {
+		t.Fatalf("character boxes = %v, %v; want real rectangles", first, later)
+	}
+	if later.Origin.X <= first.Origin.X {
+		t.Errorf("character 6 at x=%g is not right of character 0 at x=%g", later.Origin.X, first.Origin.X)
+	}
+	if first.Origin.X < field.Full.Origin.X || later.Origin.X > field.Full.Origin.X+field.Full.Size.W {
+		t.Errorf("character boxes fell outside the field %v", field.Full)
+	}
+}
+
+func TestAXTextDetailIsOnlyFrozenWhenSomethingIsReading(t *testing.T) {
+	p := NewProbe(TextInput(State("hello")), Sz(300, 40))
+	defer p.Close()
+	field, ok := p.Semantics().Find(RoleTextField, "")
+	if !ok {
+		t.Fatal("no text field")
+	}
+	if field.Runs != nil {
+		t.Error("the layout was frozen with nobody reading it; that is a measurement per character per frame")
+	}
+	// The selection is cheap and always there, so that the caret is known
+	// the moment a bridge attaches.
+	if field.SelEnd != len("hello") {
+		t.Errorf("caret = %d, want the end of the text", field.SelEnd)
+	}
+	// Without a layout the field is still one line covering everything.
+	if loc, length, has := axRangeForLine(field.Node, 0); !has || loc != 0 || length != 5 {
+		t.Errorf("line 0 = %d+%d, %v; want the whole field", loc, length, has)
+	}
+	if got := axRectForRange(field, 0, 1); got != field.Full {
+		t.Errorf("rect for range = %v, want the whole field %v", got, field.Full)
+	}
+}
+
+func TestAXPasswordKeepsItsShapeToItself(t *testing.T) {
+	p := NewProbe(TextInput(State("hunter2")).Password(), Sz(300, 40))
+	defer p.Close()
+	field, _ := axDetailed(t, p).Find(RoleTextField, "")
+	if field.Runs != nil {
+		t.Error("a password field froze its character positions")
+	}
+}
+
+func TestAXSetSelectionMovesTheCaret(t *testing.T) {
+	w := TextInput(State("hello world"))
+	p := NewProbe(w, Sz(300, 40))
+	defer p.Close()
+	field, ok := p.Semantics().Find(RoleTextField, "")
+	if !ok {
+		t.Fatal("no text field")
+	}
+	if !axAllows(field.Node, axSetSelection) {
+		t.Fatal("a text field does not offer its selection")
+	}
+	start, end := axByteRange(field.Node, 6, 5)
+	p.Perform(field.ID, Action{Kind: ActionSetSelection, SelStart: start, SelEnd: end})
+	after, _ := p.Semantics().Find(RoleTextField, "")
+	if after.SelStart != 6 || after.SelEnd != 11 {
+		t.Errorf("selection = %d..%d, want 6..11", after.SelStart, after.SelEnd)
+	}
+	if got := axSelected(after.Node); got != "world" {
+		t.Errorf("selected = %q, want %q", got, "world")
+	}
+}
+
+func TestAXMultilineFieldReportsItsLines(t *testing.T) {
+	w := TextInput(State("one\ntwo\nthree")).Multiline()
+	p := NewProbe(w, Sz(300, 100))
+	defer p.Close()
+	field, ok := axDetailed(t, p).Find(RoleTextField, "")
+	if !ok {
+		t.Fatal("no text field")
+	}
+	if len(field.Runs) != 3 {
+		t.Fatalf("%d runs, want three lines:\n%v", len(field.Runs), field.Runs)
+	}
+	for i, want := range []string{"one", "two", "three"} {
+		loc, length, has := axRangeForLine(field.Node, i)
+		if !has {
+			t.Fatalf("no line %d", i)
+		}
+		if got := axStringForRange(field.Node, loc, length); got != want {
+			t.Errorf("line %d = %q, want %q", i, got, want)
+		}
+	}
+	// A byte on the second line is on line 1, and the lines go down the
+	// screen in order.
+	if got := axLineForIndex(field.Node, 5); got != 1 {
+		t.Errorf("line for offset 5 = %d, want 1", got)
+	}
+	if field.Runs[1].Rect.Origin.Y <= field.Runs[0].Rect.Origin.Y {
+		t.Error("the second line is not below the first")
+	}
+	// The caret loaded at the end of the text, which is the last line.
+	if got := axInsertionLine(field.Node); got != 2 {
+		t.Errorf("insertion line = %d, want 2", got)
+	}
+}

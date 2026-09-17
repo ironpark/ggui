@@ -53,6 +53,7 @@ const (
 	ActionSelect                               // make this the chosen tab, option or row
 	ActionFocus                                // move keyboard focus here
 	ActionScrollIntoView                       // bring the node into view
+	ActionSetSelection                         // move the caret or the selection in a text field
 )
 
 // Has reports whether every action in b is in a.
@@ -76,6 +77,51 @@ type Node struct {
 	Now         float64  // where the value sits in it, or an item's place in a list
 	Actions     ActionSet
 	Offscreen   bool // clipped out of view, but present with its true bounds
+
+	// A text field carries where its caret and selection are, in bytes
+	// into Value, and -- while something is reading the tree closely
+	// enough to want it -- how Value was laid out on screen. A platform
+	// text API asks for characters, lines and the rectangle a range covers
+	// from a thread that must not touch the live widget, so the answers
+	// are frozen into the snapshot with everything else.
+	SelStart, SelEnd int
+	Runs             []TextRun
+}
+
+// TextRun is one painted line of a text node: which bytes of Node.Value it
+// covers, where it went, and where every character boundary inside it
+// landed. Rect is in the same coordinates as SemNode.Full, and a stop's X
+// is measured from Rect.Origin.X.
+type TextRun struct {
+	Start, End int
+	Rect       Rect
+	Stops      []TextStop
+}
+
+// TextStop is one character boundary within a run: a byte offset into
+// Node.Value and the horizontal position it sits at. There is one for every
+// rune boundary in the run, including both ends, so a caret between any two
+// characters has a position.
+type TextStop struct {
+	Byte int
+	X    float64
+}
+
+// At returns the horizontal position of byte offset b within the run,
+// clamped to its ends. A byte in the middle of a rune takes that rune's
+// starting position, which is where a caret would be drawn.
+func (r TextRun) At(b int) float64 {
+	if len(r.Stops) == 0 {
+		return 0
+	}
+	last := r.Stops[0]
+	for _, s := range r.Stops {
+		if s.Byte > b {
+			break
+		}
+		last = s
+	}
+	return last.X
 }
 
 // Describer is a handler that describes itself fully, beyond the Role and
