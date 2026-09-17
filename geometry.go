@@ -60,6 +60,9 @@ func Loose(s Size) Constraints {
 // Max returns the largest size c permits.
 func (c Constraints) Max() Size { return Size{W: c.MaxW, H: c.MaxH} }
 
+// Loosen returns c with its minimums dropped: anything up to c.Max() passes.
+func (c Constraints) Loosen() Constraints { return Loose(c.Max()) }
+
 // Constrain clamps s so that it satisfies c.
 func (c Constraints) Constrain(s Size) Size {
 	return Size{

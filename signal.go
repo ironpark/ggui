@@ -132,7 +132,7 @@ func (s *Signal[T]) Map[U any](fn func(T) U) *Memo[U] {
 // so everything watching the whole value still sees the change. T should be a
 // value type; sel must return a pointer into the value it was given.
 func (s *Signal[T]) Field[U any](sel func(*T) *U) Lens[T, U] {
-	return Field(Cell[T](s), sel)
+	return field(s, sel)
 }
 
 // Lens returns a read-write view of the part of s's value that get selects.
@@ -142,9 +142,9 @@ func (s *Signal[T]) Lens[U any](get func(T) U, set func(T, U) T) Lens[T, U] {
 	return Lens[T, U]{src: s, get: get, set: set}
 }
 
-// Field builds a Lens onto one field of any Cell. Signal.Field and Lens.Field
-// are the usual way to call it.
-func Field[T, U any](src Cell[T], sel func(*T) *U) Lens[T, U] {
+// field builds a Lens onto one field of any Cell; Signal.Field and Lens.Field
+// are its two entry points.
+func field[T, U any](src Cell[T], sel func(*T) *U) Lens[T, U] {
 	return Lens[T, U]{
 		src: src,
 		get: func(t T) U { return *sel(&t) },
@@ -152,8 +152,8 @@ func Field[T, U any](src Cell[T], sel func(*T) *U) Lens[T, U] {
 	}
 }
 
-// Lens is a read-write view onto part of a Cell's value, produced by Field or
-// Signal.Lens. Reads track the underlying value; writes go through it, so
+// Lens is a read-write view onto part of a Cell's value, produced by
+// Signal.Field or Signal.Lens. Reads track the underlying value; writes go through it, so
 // everything watching the whole value still sees the change. A Lens is itself
 // a Cell, so views nest: state.Field(...).Field(...).
 type Lens[T, U any] struct {
@@ -166,9 +166,7 @@ type Lens[T, U any] struct {
 func (l Lens[T, U]) Get() U { return l.get(l.src.Get()) }
 
 // Set writes v back through the underlying Cell.
-func (l Lens[T, U]) Set(v U) {
-	l.src.Update(func(t T) T { return l.set(t, v) })
-}
+func (l Lens[T, U]) Set(v U) { l.Update(func(U) U { return v }) }
 
 // Update applies fn to the selected part and writes the result back.
 func (l Lens[T, U]) Update(fn func(U) U) {
@@ -177,12 +175,7 @@ func (l Lens[T, U]) Update(fn func(U) U) {
 
 // Field narrows the view to one field of the selected part.
 func (l Lens[T, U]) Field[V any](sel func(*U) *V) Lens[U, V] {
-	return Field(Cell[U](l), sel)
-}
-
-// Lens narrows the view with an explicit getter and setter.
-func (l Lens[T, U]) Lens[V any](get func(U) V, set func(U, V) U) Lens[U, V] {
-	return Lens[U, V]{src: l, get: get, set: set}
+	return field(l, sel)
 }
 
 // Map returns a Memo holding fn applied to the selected part.

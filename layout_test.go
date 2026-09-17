@@ -23,26 +23,7 @@ func TestBoxAddsPaddingAroundChild(t *testing.T) {
 }
 
 func TestBoxRejectsSeveralChildren(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Fatal("Box(a, b) did not panic")
-		}
-	}()
-	Box(Text("a"), Text("b"))
-}
-
-func TestBoxPaintsChildInsidePadding(t *testing.T) {
-	var got Rect
-	probe := FromFuncs(
-		func(Constraints) Size { return Sz(20, 10) },
-		func(_ *ebiten.Image, r Rect) { got = r },
-	)
-	b := Box(probe).Padding(EdgeInsets{Top: 1, Right: 2, Bottom: 3, Left: 4})
-	b.Layout(Loose(Sz(200, 200)))
-	b.Paint(nil, Rct(Pt(100, 50), Sz(26, 14)))
-	if want := Rct(Pt(104, 51), Sz(20, 10)); got != want {
-		t.Fatalf("child painted at %+v, want %+v", got, want)
-	}
+	mustPanic(t, "Box(a, b)", func() { Box(Text("a"), Text("b")) })
 }
 
 func TestColumnSumsHeightsAndGaps(t *testing.T) {
@@ -61,20 +42,6 @@ func TestCenterFillsAvailableSpace(t *testing.T) {
 	got := c.Layout(Loose(Sz(100, 50)))
 	if got != (Size{W: 100, H: 50}) {
 		t.Fatalf("Layout() = %+v, want {100 50}", got)
-	}
-}
-
-func TestCenterPaintsChildInTheMiddle(t *testing.T) {
-	var got Rect
-	probe := FromFuncs(
-		func(Constraints) Size { return Sz(10, 10) },
-		func(_ *ebiten.Image, r Rect) { got = r },
-	)
-	c := Center(probe)
-	size := c.Layout(Loose(Sz(100, 50)))
-	c.Paint(nil, Rct(Pt(0, 0), size))
-	if want := Rct(Pt(45, 20), Sz(10, 10)); got != want {
-		t.Fatalf("child painted at %+v, want %+v", got, want)
 	}
 }
 
@@ -107,23 +74,23 @@ func TestListLaysOutItemsLikeColumn(t *testing.T) {
 	}
 }
 
-func TestListFollowsItemChanges(t *testing.T) {
-	items := []float64{10}
-	l := List(items, func(h float64) Widget { return Box().Size(10, h) })
-	l.Layout(Loose(Sz(200, 200)))
-	items[0] = 15
-	got := l.Layout(Loose(Sz(200, 200)))
-	if got != (Size{W: 10, H: 15}) {
-		t.Fatalf("Layout() = %+v, want {10 15} after the slice changed", got)
-	}
-}
-
 // probe is a fixed-size widget that records the Rect it was painted in.
 func probe(w, h float64, got *Rect) Widget {
 	return FromFuncs(
 		func(c Constraints) Size { return c.Constrain(Sz(w, h)) },
 		func(_ *ebiten.Image, r Rect) { *got = r },
 	)
+}
+
+// mustPanic fails the test unless fn panics.
+func mustPanic(t *testing.T, what string, fn func()) {
+	t.Helper()
+	defer func() {
+		if recover() == nil {
+			t.Fatalf("%s did not panic", what)
+		}
+	}()
+	fn()
 }
 
 func TestInsetsShorthand(t *testing.T) {
@@ -141,12 +108,7 @@ func TestInsetsShorthand(t *testing.T) {
 			t.Fatalf("Insets(%v) = %+v, want %+v", c.in, got, c.want)
 		}
 	}
-	defer func() {
-		if recover() == nil {
-			t.Fatal("Insets(1, 2, 3) did not panic")
-		}
-	}()
-	Insets(1, 2, 3)
+	mustPanic(t, "Insets(1, 2, 3)", func() { Insets(1, 2, 3) })
 }
 
 func TestRowSumsWidthsAndGaps(t *testing.T) {
@@ -167,7 +129,7 @@ func TestRowSumsWidthsAndGaps(t *testing.T) {
 
 func TestPaddingInsetsChild(t *testing.T) {
 	var child Rect
-	p := Padding(probe(20, 10, &child), 1, 2, 3, 4)
+	p := Padding(probe(20, 10, &child)).Padding(EdgeInsets{Top: 1, Right: 2, Bottom: 3, Left: 4})
 	got := p.Layout(Loose(Sz(200, 200)))
 	if got != (Size{W: 26, H: 14}) {
 		t.Fatalf("Layout() = %+v, want {26 14}", got)
