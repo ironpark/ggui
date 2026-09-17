@@ -89,22 +89,22 @@ func TestEasingEndpoints(t *testing.T) {
 }
 
 func TestMotionRetargetsMidway(t *testing.T) {
-	var m motion
+	var m Motion
 	t0 := time.Unix(0, 0)
-	m.moveTo(0, t0, 100*time.Millisecond) // first target: no animation
-	if m.value(t0) != 0 {
+	m.MoveTo(0, t0, 100*time.Millisecond) // first target: no animation
+	if m.Value(t0) != 0 {
 		t.Fatal("initial value")
 	}
-	m.moveTo(1, t0, 100*time.Millisecond)
-	mid := m.value(t0.Add(50 * time.Millisecond))
+	m.MoveTo(1, t0, 100*time.Millisecond)
+	mid := m.Value(t0.Add(50 * time.Millisecond))
 	if mid <= 0 || mid >= 1 {
 		t.Fatalf("mid = %v", mid)
 	}
-	m.moveTo(0, t0.Add(50*time.Millisecond), 100*time.Millisecond)
-	if got := m.value(t0.Add(50 * time.Millisecond)); got != mid {
+	m.MoveTo(0, t0.Add(50*time.Millisecond), 100*time.Millisecond)
+	if got := m.Value(t0.Add(50 * time.Millisecond)); got != mid {
 		t.Fatalf("retarget jumped from %v to %v", mid, got)
 	}
-	if m.value(t0.Add(time.Second)) != 0 {
+	if m.Value(t0.Add(time.Second)) != 0 {
 		t.Fatal("did not arrive")
 	}
 }

@@ -143,9 +143,9 @@ ggui.Center(
 ```
 
 Current set: `Text`, `Box`, `Padding`, `Column`, `Row`, `Flex`/`Expanded`/`Spacer`,
-`Stack`, `Align`, `Center`, `Scroll`, `Divider`, `Pointer`/`Tap`, `Focus`, `For`,
-`List`, and the controls `Button`, `Checkbox`, `Radio`, `Switch`, `Slider`,
-`TextField` (see Controls). `List` is a column built from your own slice:
+`Stack`, `Align`, `Center`, `Scroll`, `TextInput`, `Pointer`/`Tap`, `Focus`,
+`For` and `List`; the themed controls live in the `ui` package (see Controls).
+`List` is a column built from your own slice:
 
 ```go
 ggui.List(rows, func(r Row) ggui.Widget { return ggui.Text(r.Title) }).Gap(4)
@@ -181,8 +181,12 @@ own, and `SetDefaultFont` makes one the default.
 
 ## Controls
 
-The ready-made interactive widgets bind to a signal the way Svelte's `bind:`
-does: the control writes it, and writing it moves the control.
+The ready-made interactive widgets live in `github.com/ironpark/ggui/ui`,
+apart from the core the way Flutter's `material` sits on `widgets`: the core
+is the layout, reactivity and input machinery, `ui` is one opinionated set
+built on its public API, and a set of your own can be built the same way.
+Each control binds to a signal the way Svelte's `bind:` does: the control
+writes it, and writing it moves the control.
 
 ```go
 name := ggui.State("")
@@ -191,24 +195,27 @@ size := ggui.State(0.5)
 plan := ggui.State("free")
 
 ggui.Column(
-	ggui.TextField(name).Placeholder("Your name").OnSubmit(save),
-	ggui.Checkbox(agree, "I agree"),
-	ggui.Switch(dark, "Dark mode"),
-	ggui.Slider(size, 0, 1).Step(0.1),
-	ggui.Row(ggui.Radio(plan, "free", "Free"), ggui.Radio(plan, "pro", "Pro")).Gap(8),
-	ggui.Row(ggui.Button("Save", save), ggui.Button("Cancel", cancel).Secondary()).Gap(8),
+	ui.TextField(name).Placeholder("Your name").OnSubmit(save),
+	ui.Checkbox(agree, "I agree"),
+	ui.Switch(dark, "Dark mode"),
+	ui.Slider(size, 0, 1).Step(0.1),
+	ggui.Row(ui.Radio(plan, "free", "Free"), ui.Radio(plan, "pro", "Pro")).Gap(8),
+	ggui.Row(ui.Button("Save", save), ui.Button("Cancel", cancel).Secondary()).Gap(8),
+	ui.Divider(),
 ).Gap(12)
 ```
 
-`Button(label, onTap)` is the primary button; `.Secondary()` quiets it,
-`.Disabled(v)` greys it out, `ButtonOf(child, onTap)` wraps any content.
-Every control has `.Disabled(v)`. They take their colors from the theme in
-their `Env` at layout time, keep hover and press state in the widget itself,
-and read their signal in `Paint`, so nothing rebuilds for a hover or a tick.
-Buttons and text fields set the mouse cursor.
+`ui.Button(label, onTap)` is the primary button; `.Secondary()` quiets it,
+`.Disabled(v)` greys it out, `.Pad(...)` overrides the theme's padding,
+`ui.ButtonOf(child, onTap)` wraps any content. Every control has
+`.Disabled(v)`. They take their colors from the theme in their `Env` at
+layout time, keep hover and press state in the widget itself, and read their
+signal in `Paint`, so nothing rebuilds for a hover or a tick. Buttons and
+text fields set the mouse cursor.
 
-**Text input.** `TextField(value)` is a single-line editor in a themed box;
-`TextInput(value)` is the bare editor for a box of your own. Text arrives
+**Text input.** `ui.TextField(value)` is a single-line editor in a themed
+box; `ggui.TextInput(value)` is the bare editor for a box of your own, and
+part of the core because it is a primitive like `Text`. Text arrives
 through the platform IME (Ebitengine's `exp/textinput`), so composed scripts
 such as Korean and Japanese work, with the composition shown underlined in
 place. Arrows move (Shift selects, Alt or Ctrl jumps words, ⌘ on macOS reaches
@@ -217,7 +224,7 @@ clipboard, Enter fires `.OnSubmit`. Click places the caret, drag selects,
 double-click selects a word, triple-click everything. `.Placeholder(s)`,
 `.Password()`, `.OnChange(fn)` and `.MinWidth(w)` tune it. The editor keeps
 its caret and selection across a rebuild of the tree, and `.Input()` on a
-`TextField` reaches the editor for `Focused()`.
+`ui.TextField` reaches the editor for `Focused()`.
 
 The built-in font covers Latin, Greek and Cyrillic; load one with the glyphs
 you type (`examples/todo` picks a system CJK font) with `LoadFontFile`, which
@@ -238,8 +245,9 @@ width.Set(120) // slides there over 200ms; Jump(v) skips the motion
 A tween restarts from wherever it is when retargeted; a spring keeps its
 momentum, overshoots a little and settles (`.Stiffness`, `.Damping`). Easings:
 `EaseLinear`, `EaseIn`, `EaseOut`, `EaseInOut`. The runtime steps running
-animations once per frame, before effects are flushed. `Switch` slides its
-knob the same way, inside `Paint`, without a signal.
+animations once per frame, before effects are flushed. For a look that moves
+inside one widget, `Motion` is the same tween driven from `Paint` with the
+current time and no signal; `ui.Switch` slides its knob with one.
 
 ## Styling
 
@@ -315,6 +323,15 @@ one region. A `KeyHandler` that also implements `TickHandler` runs once per
 frame while focused, which is how `TextInput` drives the IME. `dst.Clip(r)`
 returns a Canvas that draws and registers regions only inside `r`.
 
+**Testing** needs no window: `NewProbe(w, size)` runs the runtime's frame
+steps headlessly, and `Click`, `Press`, `Move`, `Release`, `Scroll`, `Type`
+and `Text` route input through the same hit regions and focus as the app.
+
+```go
+p := ggui.NewProbe(ui.Checkbox(on, "x"), ggui.Sz(200, 30))
+p.Click(ggui.Pt(5, 5)) // on.Peek() is now true
+```
+
 ## HiDPI
 
 Widgets work in logical pixels; the screen is allocated at the monitor's
@@ -348,9 +365,9 @@ dot := ggui.FromFuncs(
 ├── signal.go     Reactivity: Signal, Memo, Effect, dependency tracking
 ├── widget.go     Widget interface, Builder, Component/Reactive, Children
 ├── widgets.go    Built-in layout and drawing widgets
-├── controls.go   Button, Checkbox, Radio, Switch, Slider, TextField, Divider
 ├── editor.go     TextInput: the text editor and its IME driver
-├── anim.go       Tween, Spring, easings, the per-frame animator
+├── anim.go       Tween, Spring, Motion, easings, the per-frame animator
+├── probe.go      Probe: headless frame driver for tests
 ├── style.go      TextStyle, Env, Key, Theme
 ├── for.go        For: keyed, reactive list
 ├── canvas.go     Canvas: paint target plus the frame's hit regions
@@ -358,6 +375,7 @@ dot := ggui.FromFuncs(
 ├── clipboard.go  System clipboard for cut, copy and paste
 ├── font.go       Font loading, default font, text wrapping
 ├── geometry.go   Point, Size, Rect, Constraints
+├── ui/           Button, Checkbox, Radio, Switch, Slider, TextField, Divider
 └── examples/     Runnable apps: counter, todo
 ```
 

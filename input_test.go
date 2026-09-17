@@ -7,6 +7,12 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
+// clickAt presses and releases the left button at p.
+func clickAt(in *inputState, p Point) {
+	in.dispatch(frameInput{pos: p, down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.dispatch(frameInput{pos: p, up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+}
+
 // paintFrame lays out and paints w into a fresh region list, the way App
 // does once per frame, and points in at it.
 func paintFrame(in *inputState, w Widget, size Size) {

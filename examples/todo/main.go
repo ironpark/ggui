@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/ui"
 )
 
 // Todo is a struct of signals: each row's title and done flag are cells of
@@ -113,7 +114,7 @@ func main() {
 	row := func(item *ggui.Signal[*Todo]) ggui.Widget {
 		td := item.Peek()
 		return ggui.Row(
-			ggui.Checkbox(td.Done, ""),
+			ui.Checkbox(td.Done, ""),
 			ggui.Expanded(ggui.Reactive(func() ggui.Widget {
 				t := ggui.UseTheme()
 				text := ggui.Text(td.Title.Get())
@@ -122,7 +123,7 @@ func main() {
 				}
 				return text
 			})),
-			ggui.Button("×", func() { remove(td.ID) }).Secondary().Pad(2, 8),
+			ui.Button("×", func() { remove(td.ID) }).Secondary().Pad(2, 8),
 		).Gap(8).Align(ggui.AlignCenter)
 	}
 
@@ -132,11 +133,11 @@ func main() {
 			ggui.Row(
 				ggui.Text("todo").Style(t.Title),
 				ggui.Spacer(),
-				ggui.Switch(dark, "Dark"),
+				ui.Switch(dark, "Dark"),
 			).Align(ggui.AlignCenter),
 			ggui.Row(
-				ggui.Expanded(ggui.TextField(draft).Placeholder("What needs doing?").OnSubmit(add)),
-				ggui.Button("Add", func() { add("") }),
+				ggui.Expanded(ui.TextField(draft).Placeholder("What needs doing?").OnSubmit(add)),
+				ui.Button("Add", func() { add("") }),
 			).Gap(t.Space).Align(ggui.AlignCenter),
 			ggui.Reactive(func() ggui.Widget {
 				const width = 480 - 2*3*8 // the card's inner width
@@ -148,17 +149,17 @@ func main() {
 			ggui.Expanded(ggui.Scroll(
 				ggui.For(visible, func(td *Todo) int { return td.ID }, row).Gap(t.Space/2),
 			)),
-			ggui.Divider(),
+			ui.Divider(),
 			ggui.Row(
 				ggui.Styled(ggui.Reactive(func() ggui.Widget {
 					c := counts.Get()
 					return ggui.Text(fmt.Sprintf("%d left", c[0]-c[1])).NoWrap()
 				})).Color(t.Muted),
 				ggui.Spacer(),
-				ggui.Radio(show, all, "All"),
-				ggui.Radio(show, active, "Active"),
-				ggui.Radio(show, done, "Done"),
-				ggui.Button("Clear done", clearDone).Secondary(),
+				ui.Radio(show, all, "All"),
+				ui.Radio(show, active, "Active"),
+				ui.Radio(show, done, "Done"),
+				ui.Button("Clear done", clearDone).Secondary(),
 			).Gap(t.Space).Align(ggui.AlignCenter),
 		).Gap(t.Space*1.5)).Pad(t.Space*3).Fill(t.Surface).Radius(t.Radius*2).Size(480, 540))
 	})

@@ -315,7 +315,4 @@ func TestTextInputFillsBoundedWidth(t *testing.T) {
 	if got := w.Layout(Loose(Sz(Unbounded, 100)), Env{}); got.W != 120 {
 		t.Fatalf("unbounded width = %v, want the 120 minimum", got.W)
 	}
-	if got := TextField(State("")).Layout(Loose(Sz(300, 100)), Env{}); got.W != 300 || got.H <= 20 {
-		t.Fatalf("TextField = %v, want full width and padded height", got)
-	}
 }

@@ -232,19 +232,28 @@ func (s *Sprung[T]) step(now time.Time) bool {
 	return true
 }
 
-// motion is a tween that widgets run inside Paint, for looks that move
-// (a switch knob sliding over) without a signal or a rebuild: value(now)
-// reports where it is, and moving to a new target starts from wherever the
-// previous move had got to.
-type motion struct {
+// Motion is a tween a widget runs inside Paint, for looks that move (a
+// switch knob sliding over) without a signal or a rebuild. The zero value is
+// ready: the first MoveTo sets the position without animating, later ones
+// ease to the target with EaseOut, starting from wherever the previous move
+// had got to, and Value reports where it is at a given time.
+//
+//	func (s *knob) Paint(dst *ggui.Canvas, r ggui.Rect) {
+//		now := time.Now()
+//		s.pos.MoveTo(target, now, 150*time.Millisecond)
+//		x := r.Origin.X + s.pos.Value(now)*r.Size.W
+//		...
+//	}
+type Motion struct {
 	from, to float64
 	start    time.Time
 	duration time.Duration
 	init     bool
 }
 
-// to retargets the motion, starting from its current position at now.
-func (m *motion) moveTo(target float64, now time.Time, d time.Duration) {
+// MoveTo retargets the motion, starting from its position at now and
+// arriving after d.
+func (m *Motion) MoveTo(target float64, now time.Time, d time.Duration) {
 	if !m.init {
 		m.from, m.to, m.init = target, target, true
 		return
@@ -252,10 +261,11 @@ func (m *motion) moveTo(target float64, now time.Time, d time.Duration) {
 	if target == m.to {
 		return
 	}
-	m.from, m.to, m.start, m.duration = m.value(now), target, now, d
+	m.from, m.to, m.start, m.duration = m.Value(now), target, now, d
 }
 
-func (m *motion) value(now time.Time) float64 {
+// Value returns the position at now.
+func (m *Motion) Value(now time.Time) float64 {
 	if m.duration <= 0 || m.from == m.to {
 		return m.to
 	}

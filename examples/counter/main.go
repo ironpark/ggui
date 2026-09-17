@@ -11,6 +11,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/ui"
 )
 
 // model holds one signal per piece of state. Each field is its own reactive
@@ -51,8 +52,8 @@ func main() {
 						return ggui.Text(label.Get()).Style(t.Title)
 					}),
 					ggui.Row(
-						ggui.Button("-", func() { ggui.Add(count, -step.Get()) }).Pad(6, 16),
-						ggui.Button("+", func() { ggui.Add(count, step.Get()) }).Pad(6, 16),
+						ui.Button("-", func() { ggui.Add(count, -step.Get()) }).Pad(6, 16),
+						ui.Button("+", func() { ggui.Add(count, step.Get()) }).Pad(6, 16),
 					).Gap(t.Space).Justify(ggui.JustifyCenter),
 					ggui.Styled(ggui.Reactive(func() ggui.Widget {
 						return ggui.List(hints.Get(), func(s string) ggui.Widget {
