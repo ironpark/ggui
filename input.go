@@ -105,7 +105,6 @@ type frameInput struct {
 // or focused region is matched across frames by its handler when the widget
 // survived, or by Rect when a rebuild replaced it, so a widget that moves
 // while dragged keeps the drag and a tap completes across a rebuild.
-
 type inputState struct {
 	regions []hitRegion
 
