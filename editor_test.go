@@ -316,3 +316,58 @@ func TestTextInputFillsBoundedWidth(t *testing.T) {
 		t.Fatalf("unbounded width = %v, want the 120 minimum", got.W)
 	}
 }
+
+func TestTextInputMultilineWrapsGrowsAndNavigates(t *testing.T) {
+	useFakeIME(t)
+	w := TextInput(State("")).Multiline()
+	one := w.Layout(Loose(Sz(200, Unbounded)), Env{})
+	if one.H != w.linesHeight(3) || one.W != 200 {
+		t.Fatalf("empty multiline is %v, want 3 lines tall and 200 wide", one)
+	}
+	long := "the quick brown fox jumps over the lazy dog and keeps on running far away"
+	w.value.Set(long)
+	grown := w.Layout(Loose(Sz(200, Unbounded)), Env{})
+	spans := w.spans(long)
+	if len(spans) < 3 || grown.H != w.linesHeight(len(spans)) {
+		t.Fatalf("wrapped into %d lines at height %v", len(spans), grown.H)
+	}
+	if fixed := w.Layout(Tight(Sz(200, 30)), Env{}); fixed.H != 30 {
+		t.Fatalf("a tight height was not honoured: %v", fixed)
+	}
+
+	var in inputState
+	paintFrame(&in, w, Sz(200, grown.H))
+	in.dispatch(frameInput{pos: Pt(1, 5), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.dispatch(frameInput{pos: Pt(1, 5), up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	if !w.focused || w.ed.caret != 0 {
+		t.Fatalf("click at the top left: focused %v caret %d", w.focused, w.ed.caret)
+	}
+	typeKeys(&in, Mods{}, ebiten.KeyEnd)
+	if w.ed.caret != spans[0].end {
+		t.Fatalf("End went to %d, want the end of the first line %d", w.ed.caret, spans[0].end)
+	}
+	typeKeys(&in, Mods{}, ebiten.KeyArrowDown)
+	if got := lineOf(spans, w.ed.caret); got != 1 {
+		t.Fatalf("Down landed on line %d", got)
+	}
+	typeKeys(&in, Mods{}, ebiten.KeyHome)
+	if w.ed.caret != spans[1].start {
+		t.Fatalf("Home on line 2 went to %d, want %d", w.ed.caret, spans[1].start)
+	}
+	typeKeys(&in, Mods{}, ebiten.KeyEnter)
+	if got := w.value.Peek(); got[spans[1].start] != '\n' {
+		t.Fatalf("Enter did not insert a line break: %q", got)
+	}
+	submitted := ""
+	w.OnSubmit(func(s string) { submitted = s })
+	typeKeys(&in, Mods{Meta: true, Ctrl: true}, ebiten.KeyEnter)
+	if submitted == "" {
+		t.Fatal("Cmd+Enter did not submit")
+	}
+	// A click on the second line lands there.
+	paintFrame(&in, w, Sz(200, grown.H))
+	in.dispatch(frameInput{pos: Pt(5, w.spacing()+2), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	if got := lineOf(w.spans(w.ed.text), w.ed.caret); got != 1 {
+		t.Fatalf("click on the second line put the caret on line %d", got)
+	}
+}

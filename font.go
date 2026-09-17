@@ -158,3 +158,84 @@ func breakRunes(word string, face text.Face, maxW float64) []string {
 	}
 	return append(pieces, string(cur))
 }
+
+// lineSpan is one drawn line of a wrapped string as byte offsets: the text
+// drawn is s[start:end]. A hard line break or the spaces a soft break fell
+// on sit between one span's end and the next one's start.
+type lineSpan struct{ start, end int }
+
+// wrapSpans is wrapText for an editor: the same breaks, as offsets into s
+// rather than copies, so a caret position maps to a line and back.
+func wrapSpans(s string, face text.Face, maxW float64) []lineSpan {
+	var out []lineSpan
+	start := 0
+	for {
+		stop := len(s)
+		if i := strings.IndexByte(s[start:], '\n'); i >= 0 {
+			stop = start + i
+		}
+		for _, sp := range wrapParagraph(s[start:stop], face, maxW) {
+			out = append(out, lineSpan{start + sp.start, start + sp.end})
+		}
+		if stop == len(s) {
+			return out
+		}
+		start = stop + 1
+	}
+}
+
+// wrapParagraph wraps text without hard breaks: greedily by words, and
+// between runes when a word alone is wider than maxW.
+func wrapParagraph(p string, face text.Face, maxW float64) []lineSpan {
+	if maxW <= 0 || lineWidth(p, face) <= maxW {
+		return []lineSpan{{0, len(p)}}
+	}
+	var lines []lineSpan
+	lineStart, lineEnd := 0, 0 // the line being filled: its first byte and the end of its last word
+	i := 0
+	for i < len(p) {
+		for i < len(p) && (p[i] == ' ' || p[i] == '\t') {
+			i++
+		}
+		if i == len(p) {
+			break
+		}
+		wstart := i
+		for i < len(p) && p[i] != ' ' && p[i] != '\t' {
+			i++
+		}
+		wend := i
+		if lineEnd > lineStart && lineWidth(p[lineStart:wend], face) > maxW {
+			// Does not fit after what is on the line: break before it.
+			lines = append(lines, lineSpan{lineStart, lineEnd})
+			lineStart, lineEnd = wstart, wstart
+		}
+		if lineWidth(p[lineStart:wend], face) <= maxW {
+			lineEnd = wend
+			continue
+		}
+		// A word wider than the line, alone on it: break between runes.
+		for j := lineStart; j < wend; {
+			k := nextRune(p, j)
+			if k < wend && lineWidth(p[lineStart:nextRune(p, k)], face) > maxW {
+				lines = append(lines, lineSpan{lineStart, k})
+				lineStart, j = k, k
+				continue
+			}
+			j = k
+		}
+		lineEnd = wend
+	}
+	return append(lines, lineSpan{lineStart, lineEnd})
+}
+
+// lineOf returns the index of the span that holds byte offset pos: the
+// last one starting at or before it.
+func lineOf(spans []lineSpan, pos int) int {
+	for i := len(spans) - 1; i > 0; i-- {
+		if spans[i].start <= pos {
+			return i
+		}
+	}
+	return 0
+}

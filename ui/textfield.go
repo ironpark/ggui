@@ -31,7 +31,15 @@ func (f *TextFieldWidget) Password() *TextFieldWidget { f.input.Password(); retu
 // width to it.
 func (f *TextFieldWidget) MinWidth(w float64) *TextFieldWidget { f.input.MinWidth(w); return f }
 
-// OnSubmit fires with the value when Enter is pressed.
+// Multiline wraps the text and grows the field by the line; Enter breaks
+// the line and ⌘/Ctrl+Enter submits.
+func (f *TextFieldWidget) Multiline() *TextFieldWidget { f.input.Multiline(); return f }
+
+// Lines sets the fewest lines a Multiline field is tall.
+func (f *TextFieldWidget) Lines(n int) *TextFieldWidget { f.input.Lines(n); return f }
+
+// OnSubmit fires with the value when Enter is pressed, or ⌘/Ctrl+Enter
+// when Multiline.
 func (f *TextFieldWidget) OnSubmit(fn func(string)) *TextFieldWidget { f.input.OnSubmit(fn); return f }
 
 // OnChange fires with the value after every edit.

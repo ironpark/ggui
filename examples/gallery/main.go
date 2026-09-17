@@ -17,6 +17,7 @@ func main() {
 	dark := ggui.State(false)
 	name := ggui.State("")
 	size := ggui.State(16.0)
+	notes := ggui.State("")
 	notify := ggui.State(true)
 	plan := ggui.State("free")
 	tags := ggui.State([]string{"go", "gui", "ebiten", "signals", "flutter", "svelte", "layout", "hidpi"})
@@ -60,6 +61,7 @@ func main() {
 
 			section("Text", ggui.Column(
 				ui.TextField(name).Placeholder("Type here, IME works"),
+				ui.TextField(notes).Placeholder("Notes: Enter breaks the line, ⌘+Enter submits").Lines(3),
 				ggui.Reactive(func() ggui.Widget {
 					s := size.Get()
 					return ggui.Text(fmt.Sprintf("Hello, %s", or(name.Get(), "stranger"))).Size(s)

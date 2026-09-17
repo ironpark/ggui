@@ -3,6 +3,7 @@ package ggui
 import (
 	"image"
 	"image/color"
+	"math"
 	"strings"
 	"time"
 	"unicode"
@@ -211,9 +212,10 @@ func nextWord(s string, i int) int {
 	return i
 }
 
-// TextInputWidget is a single-line text editor bound to a Signal[string]:
-// typing writes the signal, and writing the signal updates the text. Build
-// one with TextInput. It draws only the text, selection and caret; TextField
+// TextInputWidget is a text editor bound to a Signal[string]: typing writes
+// the signal, and writing the signal updates the text. Build one with
+// TextInput. It is one line that scrolls sideways until Multiline makes it
+// wrap and grow. It draws only the text, selection and caret; TextField
 // adds the themed box around it.
 //
 // Text comes in through the platform IME (exp/textinput), so composed
@@ -221,12 +223,16 @@ func nextWord(s string, i int) int {
 // underlined in place. Keys: arrows (with Shift to select, Alt or Ctrl to
 // jump words, ⌘ on macOS to reach the ends), Home and End, Backspace and
 // Delete, ⌘/Ctrl+A, C, X and V, Enter for OnSubmit. Double-click selects a
-// word, triple-click everything, dragging selects a range.
+// word, triple-click everything, dragging selects a range. A Multiline
+// editor adds Up and Down, Home and End within the line, Enter for a line
+// break and ⌘/Ctrl+Enter for OnSubmit.
 type TextInputWidget struct {
 	value       *Signal[string]
 	placeholder string
 	style       TextStyle
 	password    bool
+	multiline   bool
+	minLines    int
 	minWidth    float64
 	onSubmit    func(string)
 	onChange    func(string)
@@ -241,7 +247,8 @@ type TextInputWidget struct {
 	imeEnd      int
 	imeErr      error
 
-	scroll    float64 // how far the text is shifted left to show the caret
+	scroll    float64 // how far the text is shifted left, or up when multiline, to show the caret
+	width     float64 // the wrap width from the last Layout, when multiline
 	blink     time.Time
 	clicks    int
 	lastClick time.Time
@@ -276,6 +283,24 @@ func (t *TextInputWidget) Style(ts TextStyle) *TextInputWidget { t.style = t.sty
 // MinWidth sets the width the editor asks for when its parent leaves the
 // width to it; it fills a bounded width.
 func (t *TextInputWidget) MinWidth(w float64) *TextInputWidget { t.minWidth = w; return t }
+
+// Multiline wraps the text at the editor's width and grows it by the line,
+// starting at three lines tall; see Lines. Enter inserts a line break and
+// ⌘/Ctrl+Enter submits.
+func (t *TextInputWidget) Multiline() *TextInputWidget {
+	t.multiline = true
+	if t.minLines == 0 {
+		t.minLines = 3
+	}
+	return t
+}
+
+// Lines sets the fewest lines a Multiline editor is tall, and makes the
+// editor Multiline.
+func (t *TextInputWidget) Lines(n int) *TextInputWidget {
+	t.multiline, t.minLines = true, max(n, 1)
+	return t
+}
 
 // OnSubmit fires with the value when Enter is pressed.
 func (t *TextInputWidget) OnSubmit(fn func(string)) *TextInputWidget { t.onSubmit = fn; return t }
@@ -320,6 +345,28 @@ func (t *TextInputWidget) height() float64 {
 	return m.HAscent + m.HDescent
 }
 
+// spacing is the distance between baselines when multiline.
+func (t *TextInputWidget) spacing() float64 {
+	st := t.resolved
+	if st.Font == nil {
+		st = t.style.resolved()
+	}
+	return st.Size * st.LineHeight
+}
+
+// spans wraps s at the editor's width, or leaves it one line.
+func (t *TextInputWidget) spans(s string) []lineSpan {
+	if !t.multiline {
+		return []lineSpan{{0, len(s)}}
+	}
+	return wrapSpans(s, t.face(1), t.width)
+}
+
+// linesHeight is the height of n wrapped lines.
+func (t *TextInputWidget) linesHeight(n int) float64 {
+	return float64(max(n, 1)-1)*t.spacing() + t.height()
+}
+
 // Layout implements Widget.
 func (t *TextInputWidget) Layout(c Constraints, env Env) Size {
 	t.resolved = env.Text().Merge(t.style).resolved()
@@ -328,7 +375,13 @@ func (t *TextInputWidget) Layout(c Constraints, env Env) Size {
 	if v := t.value.Peek(); v != t.ed.text {
 		t.ed.setText(v)
 	}
-	return c.Constrain(Sz(bounded(c.MaxW, t.minWidth), t.height()))
+	w := bounded(c.MaxW, t.minWidth)
+	if !t.multiline {
+		return c.Constrain(Sz(w, t.height()))
+	}
+	t.width = max(c.MinW, w)
+	n := max(len(t.spans(t.ed.text)), t.minLines)
+	return c.Constrain(Sz(t.width, t.linesHeight(n)))
 }
 
 // Paint implements Widget.
@@ -337,6 +390,10 @@ func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
 	dst.HitKey(r, t)
 	dst.HitCursor(r, ebiten.CursorShapeText)
 	t.rect, t.scale = r, dst.Scale()
+	if t.multiline {
+		t.paintLines(dst, r)
+		return
+	}
 
 	shown, caret := t.rendered()
 	h := t.height()
@@ -388,26 +445,137 @@ func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
 	}
 }
 
-// indexAt returns the byte offset in the text nearest to logical x.
-func (t *TextInputWidget) indexAt(x float64) int {
-	local := x - t.rect.Origin.X + t.scroll
-	best, bestDist := 0, local
-	if bestDist < 0 {
-		bestDist = -bestDist
+// paintLines is Paint for a Multiline editor: wrapped lines that scroll
+// vertically to keep the caret in view.
+func (t *TextInputWidget) paintLines(dst *Canvas, r Rect) {
+	t.width = r.Size.W
+	shown, caret := t.rendered()
+	spans := t.spans(shown)
+	li := lineOf(spans, caret)
+	caretX := t.advance(shown[spans[li].start:caret])
+	caretY := float64(li) * t.spacing()
+	h := t.height()
+	t.scroll = clamp(t.scroll, 0, max(t.linesHeight(len(spans))-r.Size.H, 0))
+	if caretY+h-t.scroll > r.Size.H {
+		t.scroll = caretY + h - r.Size.H
 	}
-	for i := 0; i <= len(t.ed.text); i = nextRune(t.ed.text, i) {
-		d := t.advance(t.ed.text[:i]) - local
-		if d < 0 {
-			d = -d
+	if caretY-t.scroll < 0 {
+		t.scroll = caretY
+	}
+	x0, y0 := r.Origin.X, r.Origin.Y-t.scroll
+	t.caretPx = image.Rect(
+		int(dst.px(x0+caretX)), int(dst.px(y0+caretY)),
+		int(dst.px(x0+caretX))+1, int(dst.px(y0+caretY+h)),
+	)
+	if dst == nil || dst.Image == nil {
+		return
+	}
+	clip := dst.Clip(r)
+	lineY := func(i int) float64 { return y0 + float64(i)*t.spacing() }
+
+	// eachLine calls fn with the part of [lo, hi) that falls on each line,
+	// as x offsets, extending to the line's end when the range runs on.
+	eachLine := func(lo, hi int, fn func(i int, a, b float64)) {
+		for i, sp := range spans {
+			if hi < sp.start || lo > sp.end {
+				continue
+			}
+			a, b := max(lo, sp.start), min(hi, sp.end)
+			ax, bx := t.advance(shown[sp.start:a]), t.advance(shown[sp.start:b])
+			if hi > sp.end && i+1 < len(spans) {
+				bx += t.advance(" ")
+			}
+			fn(i, ax, bx)
 		}
+	}
+
+	if t.focused && t.composition == "" && t.ed.hasSelection() {
+		lo, hi := t.ed.selection()
+		eachLine(lo, hi, func(i int, a, b float64) {
+			clip.FillRect(Rct(Pt(x0+a, lineY(i)), Sz(b-a, h)), t.selection)
+		})
+	}
+
+	op := &text.DrawOptions{}
+	if shown == "" && t.placeholder != "" {
+		op.GeoM.Translate(dst.px(x0), dst.px(y0))
+		op.ColorScale.ScaleWithColor(t.muted)
+		text.Draw(clip.Image, t.placeholder, t.face(dst.Scale()), op)
+	} else {
+		op.ColorScale.ScaleWithColor(t.resolved.Color)
+		for i, sp := range spans {
+			if lineY(i)+h < r.Origin.Y || lineY(i) > r.Origin.Y+r.Size.H {
+				continue
+			}
+			op.GeoM.Reset()
+			op.GeoM.Translate(dst.px(x0), dst.px(lineY(i)))
+			text.Draw(clip.Image, t.display(shown[sp.start:sp.end]), t.face(dst.Scale()), op)
+		}
+	}
+
+	if t.composition != "" {
+		lo, _ := t.ed.selection()
+		eachLine(lo, lo+len(t.composition), func(i int, a, b float64) {
+			clip.FillRect(Rct(Pt(x0+a, lineY(i)+h-1), Sz(b-a, 1)), t.resolved.Color)
+		})
+	}
+
+	if t.focused && (time.Since(t.blink)/(530*time.Millisecond))%2 == 0 {
+		clip.FillRect(Rct(Pt(x0+caretX, y0+caretY), Sz(1, h)), t.resolved.Color)
+	}
+}
+
+// indexAt returns the byte offset in the text nearest to a logical point.
+func (t *TextInputWidget) indexAt(p Point) int {
+	spans := t.spans(t.ed.text)
+	li := 0
+	if t.multiline {
+		li = clamp(int((p.Y-t.rect.Origin.Y+t.scroll)/t.spacing()), 0, len(spans)-1)
+	}
+	x := p.X - t.rect.Origin.X
+	if !t.multiline {
+		x += t.scroll
+	}
+	return t.indexInLine(spans[li], x)
+}
+
+// indexInLine returns the offset within sp whose x position is nearest x.
+func (t *TextInputWidget) indexInLine(sp lineSpan, x float64) int {
+	best, bestDist := sp.start, math.Inf(1)
+	for i := sp.start; ; i = nextRune(t.ed.text, i) {
+		d := math.Abs(t.advance(t.ed.text[sp.start:i]) - x)
 		if d < bestDist {
 			best, bestDist = i, d
 		}
-		if i == len(t.ed.text) {
+		if i >= sp.end {
 			break
 		}
 	}
 	return best
+}
+
+// moveLine moves the caret to the nearest position on the line above
+// (dir < 0) or below, keeping its x.
+func (t *TextInputWidget) moveLine(dir int, extend bool) {
+	spans := t.spans(t.ed.text)
+	li := lineOf(spans, t.ed.caret)
+	x := t.advance(t.ed.text[spans[li].start:t.ed.caret])
+	to := li + dir
+	switch {
+	case to < 0:
+		t.ed.moveTo(0, extend)
+	case to >= len(spans):
+		t.ed.moveTo(len(t.ed.text), extend)
+	default:
+		t.ed.moveTo(t.indexInLine(spans[to], x), extend)
+	}
+}
+
+// lineBounds returns the start and end of the line the caret is on.
+func (t *TextInputWidget) lineBounds() (int, int) {
+	spans := t.spans(t.ed.text)
+	sp := spans[lineOf(spans, t.ed.caret)]
+	return sp.start, sp.end
 }
 
 // commit writes the editor's text to the signal after an edit.
@@ -529,10 +697,24 @@ func (t *TextInputWidget) key(k ebiten.Key, m Mods) {
 	switch k {
 	case ebiten.KeyEnter, ebiten.KeyNumpadEnter:
 		t.ime.Confirm()
+		if t.multiline && !m.Cmd() {
+			t.ed.replace("\n")
+			break
+		}
 		if t.onSubmit != nil {
 			t.onSubmit(t.ed.text)
 		}
 		return
+	case ebiten.KeyArrowUp, ebiten.KeyArrowDown:
+		if !t.multiline {
+			return
+		}
+		t.ime.Confirm()
+		if m.Meta {
+			t.ed.moveTo(pick(k == ebiten.KeyArrowUp, 0, len(t.ed.text)), m.Shift)
+		} else {
+			t.moveLine(pick(k == ebiten.KeyArrowUp, -1, 1), m.Shift)
+		}
 	case ebiten.KeyEscape:
 		t.ime.Cancel()
 		t.ed.moveTo(t.ed.caret, false)
@@ -550,12 +732,13 @@ func (t *TextInputWidget) key(k ebiten.Key, m Mods) {
 		} else {
 			t.ed.moveBy(dir, word, m.Shift)
 		}
-	case ebiten.KeyHome:
+	case ebiten.KeyHome, ebiten.KeyEnd:
 		t.ime.Confirm()
-		t.ed.moveTo(0, m.Shift)
-	case ebiten.KeyEnd:
-		t.ime.Confirm()
-		t.ed.moveTo(len(t.ed.text), m.Shift)
+		lo, hi := 0, len(t.ed.text)
+		if t.multiline && !m.Cmd() {
+			lo, hi = t.lineBounds()
+		}
+		t.ed.moveTo(pick(k == ebiten.KeyHome, lo, hi), m.Shift)
 	case ebiten.KeyA:
 		if m.Cmd() {
 			t.ime.Confirm()
@@ -576,8 +759,11 @@ func (t *TextInputWidget) key(k ebiten.Key, m Mods) {
 	case ebiten.KeyV:
 		if m.Cmd() {
 			t.ime.Confirm()
-			s := strings.ReplaceAll(currentClipboard().Read(), "\n", " ")
-			s = strings.ReplaceAll(s, "\r", "")
+			s := strings.ReplaceAll(currentClipboard().Read(), "\r\n", "\n")
+			s = strings.ReplaceAll(s, "\r", "\n")
+			if !t.multiline {
+				s = strings.ReplaceAll(s, "\n", " ")
+			}
 			t.ed.replace(s)
 		}
 	default:
@@ -602,7 +788,7 @@ func (t *TextInputWidget) HandlePointer(ev PointerEvent) bool {
 			t.clicks = 1
 		}
 		t.lastClick, t.lastPos = now, ev.Pos
-		idx := t.indexAt(ev.Pos.X)
+		idx := t.indexAt(ev.Pos)
 		switch t.clicks {
 		case 1:
 			t.ed.moveTo(idx, false)
@@ -615,7 +801,7 @@ func (t *TextInputWidget) HandlePointer(ev PointerEvent) bool {
 		return true
 	case PointerDrag:
 		if t.clicks == 1 {
-			t.ed.moveTo(t.indexAt(ev.Pos.X), true)
+			t.ed.moveTo(t.indexAt(ev.Pos), true)
 			t.blink = time.Now()
 		}
 		return true
@@ -638,7 +824,7 @@ func (t *TextInputWidget) Adopt(prev any) {
 		return
 	}
 	p.ime.Confirm()
-	t.ed, t.scroll, t.focused = p.ed, p.scroll, p.focused
+	t.ed, t.scroll, t.width, t.focused = p.ed, p.scroll, p.width, p.focused
 	t.clicks, t.lastClick, t.lastPos = p.clicks, p.lastClick, p.lastPos
 	if p.ed.text != t.value.Peek() {
 		t.ed.setText(t.value.Peek())
