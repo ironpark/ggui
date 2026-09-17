@@ -373,8 +373,4 @@ func TestAppLaysOutOnlyWhenSomethingChanged(t *testing.T) {
 	if !a.needsLayout(Sz(200, 100)) {
 		t.Fatal("a signal write must lay out")
 	}
-	a.root = a.build()
-	if !a.needsLayout(Sz(200, 100)) {
-		t.Fatal("a rebuilt root must lay out")
-	}
 }

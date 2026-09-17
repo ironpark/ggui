@@ -13,10 +13,13 @@ type ForWidget[T any, K comparable] struct {
 	items   []T
 	keys    []K
 	entries map[K]*forEntry[T]
+	stale   bool    // items changed since children was last filled
 	extent  float64 // fixed main-axis size per item; 0 lays every child out
 
-	// The virtual path: the range of items laid out this frame.
+	// The virtual path: the range of items laid out this frame and their
+	// widgets; sizes and offsets are indexed the same way.
 	first, last int
+	visible     []Widget
 }
 
 type forEntry[T any] struct {
@@ -70,7 +73,7 @@ func For[T any, K comparable](items Reader[[]T], key func(T) K, build func(*Sign
 					delete(f.entries, k)
 				}
 			}
-			f.items, f.keys = list, keys
+			f.items, f.keys, f.stale = list, keys, true
 		})
 	})
 	return f
@@ -91,10 +94,6 @@ func (f *ForWidget[T, K]) ItemExtent(v float64) *ForWidget[T, K] { f.extent = v;
 // Len returns the number of items the list currently holds.
 func (f *ForWidget[T, K]) Len() int { return len(f.items) }
 
-// Built returns how many children exist, which with ItemExtent is the
-// number that have been in view.
-func (f *ForWidget[T, K]) Built() int { return len(f.entries) }
-
 // entry returns the child for item i, building it on first use.
 func (f *ForWidget[T, K]) entry(i int) *forEntry[T] {
 	k := f.keys[i]
@@ -113,9 +112,12 @@ func (f *ForWidget[T, K]) entry(i int) *forEntry[T] {
 func (f *ForWidget[T, K]) Layout(c Constraints, env Env) Size {
 	n := len(f.items)
 	if f.extent <= 0 {
-		f.children = resize(f.children, n)
-		for i := range n {
-			f.children[i] = f.entry(i).widget
+		if f.stale {
+			f.children = resize(f.children, n)
+			for i := range n {
+				f.children[i] = f.entry(i).widget
+			}
+			f.stale = false
 		}
 		return f.layout(c, env)
 	}
@@ -128,34 +130,27 @@ func (f *ForWidget[T, K]) Layout(c Constraints, env Env) Size {
 		f.first = clamp(int(math.Floor(vp.Offset/pitch)), 0, n)
 		f.last = clamp(int(math.Ceil((vp.Offset+vp.Extent)/pitch)), f.first, n)
 	}
-	f.sizes = resize(f.sizes, n)
-	f.offsets = resize(f.offsets, n)
+	shown := f.last - f.first
+	f.visible = resize(f.visible, shown)
+	f.sizes = resize(f.sizes, shown)
+	f.offsets = resize(f.offsets, shown)
 	crossMax := f.cross(c.Max())
-	var crossMin float64
-	if f.align == AlignStretch {
-		crossMin = bounded(crossMax, 0)
-	}
+	crossMin := f.stretched(crossMax, 0)
 	var crossUsed float64
-	for i := f.first; i < f.last; i++ {
-		f.sizes[i] = f.entry(i).widget.Layout(f.constraints(f.extent, f.extent, crossMin, crossMax), env)
-		crossUsed = max(crossUsed, f.cross(f.sizes[i]))
-		if f.horizontal {
-			f.offsets[i] = Pt(float64(i)*pitch, 0)
-		} else {
-			f.offsets[i] = Pt(0, float64(i)*pitch)
-		}
+	for j := range shown {
+		w := f.entry(f.first + j).widget
+		f.visible[j] = w
+		f.sizes[j] = w.Layout(f.constraints(f.extent, f.extent, crossMin, crossMax), env)
+		crossUsed = max(crossUsed, f.cross(f.sizes[j]))
 	}
-	cross := crossUsed
-	if f.align == AlignStretch {
-		cross = bounded(crossMax, crossUsed)
-	}
-	result := c.Constrain(f.size(total, cross))
-	for i := f.first; i < f.last; i++ {
-		off := (f.cross(result) - f.cross(f.sizes[i])) * f.crossFraction()
+	result := c.Constrain(f.size(total, f.stretched(crossMax, crossUsed)))
+	for j, s := range f.sizes {
+		main := float64(f.first+j) * pitch
+		off := (f.cross(result) - f.cross(s)) * f.crossFraction()
 		if f.horizontal {
-			f.offsets[i].Y = off
+			f.offsets[j] = Pt(main, off)
 		} else {
-			f.offsets[i].X = off
+			f.offsets[j] = Pt(off, main)
 		}
 	}
 	return result
@@ -167,7 +162,7 @@ func (f *ForWidget[T, K]) Paint(dst *Canvas, r Rect) {
 		f.paint(dst, r)
 		return
 	}
-	for i := f.first; i < f.last; i++ {
-		dst.Paint(f.entries[f.keys[i]].widget, Rct(r.Origin.Add(f.offsets[i]), f.sizes[i]))
+	for j, w := range f.visible {
+		dst.Paint(w, Rct(r.Origin.Add(f.offsets[j]), f.sizes[j]))
 	}
 }

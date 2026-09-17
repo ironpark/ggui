@@ -161,8 +161,8 @@ func TestForWithItemExtentBuildsOnlyTheViewport(t *testing.T) {
 	size := s.Layout(Tight(Sz(100, 100)), Env{})
 	s.Paint(nil, Rct(Pt(0, 0), size))
 	// 1000 rows of 24 pitch: 23996 tall; a 100-tall window shows rows 0..5.
-	if f.Len() != 1000 || f.Built() != 5 || builds != 5 {
-		t.Fatalf("len %d built %d builds %d, want 1000, 5, 5", f.Len(), f.Built(), builds)
+	if f.Len() != 1000 || len(f.entries) != 5 || builds != 5 {
+		t.Fatalf("len %d built %d builds %d, want 1000, 5, 5", f.Len(), len(f.entries), builds)
 	}
 	if s.childSize.H != 23996 {
 		t.Fatalf("content height %v, want 23996", s.childSize.H)
@@ -173,8 +173,8 @@ func TestForWithItemExtentBuildsOnlyTheViewport(t *testing.T) {
 	offset.Set(12000) // exactly row 500: rows 500..504 come into view
 	size = s.Layout(Tight(Sz(100, 100)), Env{})
 	s.Paint(nil, Rct(Pt(0, 0), size))
-	if f.Built() != 10 || f.first != 500 || f.last != 505 {
-		t.Fatalf("built %d, range [%d,%d); want 10 built and [500,505)", f.Built(), f.first, f.last)
+	if len(f.entries) != 10 || f.first != 500 || f.last != 505 {
+		t.Fatalf("built %d, range [%d,%d); want 10 built and [500,505)", len(f.entries), f.first, f.last)
 	}
 	if rects[500] != Rct(Pt(0, 500*24-12000), Sz(50, 20)) {
 		t.Fatalf("row 500 painted at %+v, want y=0 with the offset applied", rects[500])
@@ -189,7 +189,7 @@ func TestForWithoutViewportLaysOutEverything(t *testing.T) {
 	})
 	defer dispose()
 	got := f.Layout(Loose(Sz(100, 1000)), Env{})
-	if got != Sz(10, 90) || f.Built() != 3 {
-		t.Fatalf("size %v built %d, want 10x90 and 3", got, f.Built())
+	if got != Sz(10, 90) || len(f.entries) != 3 {
+		t.Fatalf("size %v built %d, want 10x90 and 3", got, len(f.entries))
 	}
 }

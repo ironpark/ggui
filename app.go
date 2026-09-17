@@ -53,7 +53,6 @@ type App struct {
 	inspect bool
 
 	// Layout runs only when something could have moved; see needsLayout.
-	laidOut  Widget
 	laidSize Size
 	laidGen  uint64
 	rootSize Size
@@ -191,16 +190,17 @@ func (a *App) Draw(screen *ebiten.Image) {
 }
 
 // needsLayout reports whether the tree must be laid out again for a window
-// of the given logical size, and records that it will be: when the root was
-// rebuilt, the window changed size, or a Signal was written or RequestLayout
-// called since the last layout. Hover and press live outside signals and
-// only change how a widget paints, so a still frame costs no layout.
+// of the given logical size, and records that it will be: when the window
+// changed size, or a Signal was written or RequestLayout called since the
+// last layout. A rebuilt root is covered, since only a Signal write rebuilds
+// it. Hover and press live outside signals and only change how a widget
+// paints, so a still frame costs no layout.
 func (a *App) needsLayout(logical Size) bool {
 	gen := layoutGen.Load()
-	if a.root == a.laidOut && logical == a.laidSize && gen == a.laidGen {
+	if logical == a.laidSize && gen == a.laidGen {
 		return false
 	}
-	a.laidOut, a.laidSize, a.laidGen = a.root, logical, gen
+	a.laidSize, a.laidGen = logical, gen
 	return true
 }
 

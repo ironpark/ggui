@@ -383,16 +383,23 @@ func (f *flow) constraints(mainMin, mainMax, crossMin, crossMax float64) Constra
 	return Constraints{MinH: mainMin, MaxH: mainMax, MinW: crossMin, MaxW: crossMax}
 }
 
+// stretched returns the cross-axis size to give a child (v = 0) or the
+// flow itself (v = the widest child): with AlignStretch it fills the
+// available cross space when that is bounded.
+func (f *flow) stretched(crossMax, v float64) float64 {
+	if f.align == AlignStretch {
+		return bounded(crossMax, v)
+	}
+	return v
+}
+
 func (f *flow) layout(c Constraints, env Env) Size {
 	n := len(f.children)
 	f.sizes = resize(f.sizes, n)
 	f.offsets = resize(f.offsets, n)
 
 	mainMax, crossMax := f.main(c.Max()), f.cross(c.Max())
-	var crossMin float64
-	if f.align == AlignStretch {
-		crossMin = bounded(crossMax, 0)
-	}
+	crossMin := f.stretched(crossMax, 0)
 
 	var gaps float64
 	if n > 1 {
@@ -430,11 +437,7 @@ func (f *flow) layout(c Constraints, env Env) Size {
 	if totalFlex > 0 || f.justify != JustifyStart {
 		mainTotal = bounded(mainMax, content)
 	}
-	crossTotal := crossUsed
-	if f.align == AlignStretch {
-		crossTotal = bounded(crossMax, crossUsed)
-	}
-	result := c.Constrain(f.size(mainTotal, crossTotal))
+	result := c.Constrain(f.size(mainTotal, f.stretched(crossMax, crossUsed)))
 
 	lead, between := 0.0, f.gap
 	if slack := max(f.main(result)-content, 0); n > 0 {
@@ -744,7 +747,7 @@ func (s *ScrollWidget) Layout(c Constraints, env Env) Size {
 	} else {
 		inner.H = Unbounded
 	}
-	vp := Viewport{Offset: s.position(), Extent: bounded(s.extent(c.Max()), Unbounded), Horizontal: s.horizontal}
+	vp := Viewport{Offset: s.position(), Extent: s.extent(c.Max()), Horizontal: s.horizontal}
 	s.childSize = s.child.Layout(Loose(inner), env.With(viewportKey, vp))
 	s.viewport = c.Constrain(Sz(bounded(c.MaxW, s.childSize.W), bounded(c.MaxH, s.childSize.H)))
 	s.scrollTo(s.position())
