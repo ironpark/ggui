@@ -166,6 +166,16 @@ func (t *TextWidget) Size(px float64) *TextWidget { t.style.Size = px; return t 
 // LineHeight sets the distance between baselines as a multiple of Size.
 func (t *TextWidget) LineHeight(mult float64) *TextWidget { t.style.LineHeight = mult; return t }
 
+// Set replaces the text. A widget that changes what it shows outside a
+// rebuild calls it from Layout; TextOf does from an effect.
+func (t *TextWidget) Set(s string) *TextWidget {
+	if s != t.value {
+		t.value = s
+		t.cache.invalidate()
+	}
+	return t
+}
+
 // NoWrap keeps the text on one line per hard line break, however wide.
 func (t *TextWidget) NoWrap() *TextWidget { t.wrap = false; return t }
 
@@ -206,6 +216,7 @@ func (t *TextWidget) Layout(c Constraints, env Env) Size {
 		base = base.Merge(env.Theme().Caption)
 	}
 	t.resolved = base.Merge(t.style).resolved()
+	t.resolved.Size *= env.TextScale()
 	face := t.faceAt(1)
 	key := wrapKey{value: t.value, font: t.resolved.Font, size: t.resolved.Size, maxW: pick(t.wrap, c.MaxW, 0)}
 	if key != t.wrapped {
@@ -812,7 +823,7 @@ func (s *ScrollWidget) Adopt(prev any) {
 // is given. The offset lives in the widget and carries across a rebuild;
 // bind it to a Signal with Offset to read or set it.
 func Scroll(child Widget) *ScrollWidget {
-	return &ScrollWidget{child: child, speed: 20, bar: color.RGBA{0x80, 0x80, 0x80, 0x80}}
+	return &ScrollWidget{child: child, speed: 20, bar: color.RGBA{0x80, 0x80, 0x80, 0x80}, id: autoID()}
 }
 
 // Horizontal scrolls along the x axis instead of the y axis.
@@ -910,6 +921,19 @@ func (s *ScrollWidget) paintBar(dst *Canvas, r Rect) {
 // target, in window coordinates, to be inside it. Focus moved by the
 // keyboard calls it.
 func (s *ScrollWidget) Reveal(target Rect) {
+	// Only a target inside the content, which may lie beyond the window
+	// along the axis but not across it.
+	content := Rct(s.rect.Origin, s.childSize)
+	if s.horizontal {
+		content.Origin.X -= s.position()
+		content.Size.H = s.rect.Size.H
+	} else {
+		content.Origin.Y -= s.position()
+		content.Size.W = s.rect.Size.W
+	}
+	if !content.Contains(target.Origin) {
+		return
+	}
 	lo, hi := target.Origin.Y-s.rect.Origin.Y, target.Origin.Y+target.Size.H-s.rect.Origin.Y
 	extent := s.rect.Size.H
 	if s.horizontal {

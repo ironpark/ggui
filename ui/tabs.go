@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"time"
+
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 )
@@ -18,6 +20,7 @@ type TabsWidget struct {
 	hover            int // the label under the pointer, or -1
 
 	theme     ggui.Theme
+	motion    time.Duration
 	headerH   float64
 	pad       ggui.EdgeInsets
 	bodySize  ggui.Size
@@ -39,6 +42,7 @@ func Tab(label string, content ggui.Widget) TabPage { return TabPage{Label: labe
 func Tabs(selected ggui.Binding[int], tabs ...TabPage) *TabsWidget {
 	t := &TabsWidget{selected: selected, tabs: tabs, hover: -1}
 	t.Role = ggui.RoleTabs
+	t.AutoKey()
 	for _, tab := range tabs {
 		t.labels = append(t.labels, ggui.Text(tab.Label).NoWrap())
 	}
@@ -70,6 +74,7 @@ func (t *TabsWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t.Sync()
 	th := env.Theme()
 	t.theme = th
+	t.motion = env.Motion(knobDuration)
 	t.pad = th.ButtonPad
 	t.labelSize = t.labelSize[:0]
 	t.headerH = 0
@@ -121,8 +126,8 @@ func (t *TabsWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X, lineY), ggui.Sz(r.Size.W, 1)), th.Border)
 	if cur >= 0 {
 		lr := t.labelRect[cur]
-		x := dst.Ease(ggui.Anchor{Rect: header}, underlineSlot, lr.Origin.X, knobDuration)
-		w := dst.Ease(ggui.Anchor{Rect: header}, widthSlot, lr.Size.W, knobDuration)
+		x := dst.Ease(ggui.Anchor{Rect: header}, underlineSlot, lr.Origin.X, t.motion)
+		w := dst.Ease(ggui.Anchor{Rect: header}, widthSlot, lr.Size.W, t.motion)
 		dst.FillRoundRect(ggui.Rct(ggui.Pt(x, lineY-1), ggui.Sz(w, 2)), 1, pick(t.Inert, th.Muted, th.Accent))
 		t.FocusRing(dst, lr, th.Radius, th.Accent)
 		dst.Paint(t.tabs[cur].Content, ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+t.headerH), t.bodySize))

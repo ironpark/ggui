@@ -154,6 +154,7 @@ type MenuItemWidget struct {
 func MenuItem(label string, onTap func()) *MenuItemWidget {
 	it := &MenuItemWidget{text: ggui.Text(label).NoWrap(), onTap: onTap}
 	it.Role, it.Name = ggui.RoleMenuItem, label
+	it.AutoKey()
 	return it
 }
 

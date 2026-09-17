@@ -2,8 +2,10 @@ package ggui
 
 import (
 	"cmp"
+	"fmt"
 	"math"
 	"slices"
+	"time"
 )
 
 // ForWidget is a keyed, reactive list: it watches a Reader of items, keeps one
@@ -23,6 +25,12 @@ type ForWidget[T any, K comparable] struct {
 	cache   *CachedWidget
 	extent  float64 // fixed main-axis size per item; 0 lays every child out
 
+	// Transition wraps every row; removed rows then leave through it.
+	transition func(Widget) *TransitionWidget
+	leaving    []*forEntry[T]
+	leaveKeys  []K
+	reduced    bool
+
 	// The virtual path: the range of items laid out this frame and their
 	// widgets; sizes and offsets are indexed the same way.
 	first, last int
@@ -34,6 +42,16 @@ type forEntry[T any] struct {
 	widget  Widget
 	dispose func()
 	seen    uint64 // the last frame the entry was laid out
+
+	// While leaving: the row's last index, and when it was removed.
+	index int
+	since time.Time
+}
+
+// transition returns the row's Transition, when For wraps rows in one.
+func (e *forEntry[T]) transition() *TransitionWidget {
+	t, _ := e.widget.(*TransitionWidget)
+	return t
 }
 
 // For builds one child per item and reuses it while the item's key stays in
@@ -78,15 +96,61 @@ func For[T any, K comparable](items Reader[[]T], key func(T) K, build func(Reade
 			}
 			for k, e := range f.entries {
 				if !seen[k] {
-					e.dispose()
-					delete(f.entries, k)
+					f.remove(k, e)
 				}
+			}
+			// A key that came back while its row was leaving keeps the row.
+			for i := 0; i < len(f.leaving); i++ {
+				if !seen[f.leaveKeys[i]] {
+					continue
+				}
+				f.entries[f.leaveKeys[i]] = f.leaving[i]
+				f.leaving[i].transition().drive(1, false)
+				f.leaving = slices.Delete(f.leaving, i, i+1)
+				f.leaveKeys = slices.Delete(f.leaveKeys, i, i+1)
+				i--
 			}
 			f.items, f.keys, f.stale = list, keys, true
 			f.cache.invalidate()
 		})
 	})
 	return f
+}
+
+// remove takes the row for k out of the list: disposed at once, or kept
+// while it plays its Transition backwards.
+func (f *ForWidget[T, K]) remove(k K, e *forEntry[T]) {
+	delete(f.entries, k)
+	if f.transition == nil || f.extent > 0 || f.reduced || e.transition() == nil {
+		e.dispose()
+		return
+	}
+	e.index = slices.Index(f.keys, k)
+	e.since = clock()
+	f.leaving = append(f.leaving, e)
+	f.leaveKeys = append(f.leaveKeys, k)
+}
+
+// Transition wraps every row in the Transition wrap returns, so a row
+// plays its enter animation when it appears and the same animation
+// backwards when its item is removed, inert to input meanwhile, the way
+// Presence does for one child. It applies without ItemExtent; a
+// virtualized list removes rows at once.
+//
+//	ggui.For(todos, key, row).Transition(func(w ggui.Widget) *ggui.TransitionWidget {
+//		return ggui.Transition(w).Fade().Slide(-16, 0)
+//	})
+func (f *ForWidget[T, K]) Transition(wrap func(Widget) *TransitionWidget) *ForWidget[T, K] {
+	f.transition = wrap
+	return f
+}
+
+// Each is For over comparable items keyed by their own value, for a list
+// whose items are ids or names.
+//
+//	ggui.Each(tags, func(tag ggui.Reader[string]) ggui.Widget { return ggui.TextOf(tag) })
+func Each[T comparable](items Reader[[]T], build func(Reader[T]) Widget) *ForWidget[T, T] {
+	return For(items, func(t T) T { return t }, build)
 }
 
 // Gap sets the space between consecutive children.
@@ -110,7 +174,7 @@ func (f *ForWidget[T, K]) ItemExtent(v float64) *ForWidget[T, K] { f.extent = v;
 // Retain keeps at most n rows that are out of view mounted, with
 // ItemExtent inside a Scroll; the rest are disposed and rebuilt, with fresh
 // local state, when they scroll back in. Without it every row once built
-// stays. A row with focus or a pointer capture is not exempt.
+// stays. A row holding focus or a pointer capture is never evicted.
 func (f *ForWidget[T, K]) Retain(n int) *ForWidget[T, K] { f.retain = n; return f }
 
 // Len returns the number of items the list currently holds.
@@ -123,7 +187,14 @@ func (f *ForWidget[T, K]) entry(i int) *forEntry[T] {
 	if e == nil {
 		e = &forEntry[T]{item: State(f.items[i])}
 		withOwner(f.owner, func() {
-			e.dispose = Root(func() { e.widget = f.build(e.item) })
+			e.dispose = rootWith(nil, fmt.Sprint(k), func() {
+				e.widget = f.build(e.item)
+				if f.transition != nil {
+					t := f.transition(e.widget)
+					t.id = forRowKey[K]{k} // the row keeps its animation when it moves
+					e.widget = t
+				}
+			})
 		})
 		f.entries[k] = e
 	}
@@ -133,14 +204,16 @@ func (f *ForWidget[T, K]) entry(i int) *forEntry[T] {
 // Layout implements Widget.
 func (f *ForWidget[T, K]) Layout(c Constraints, env Env) Size {
 	f.cache, _ = env.Get(cacheOwner)
+	f.reduced = env.ReducedMotion()
 	n := len(f.items)
 	if f.extent <= 0 {
-		if f.stale {
+		if f.stale || len(f.leaving) > 0 {
 			f.children = resize(f.children, n)
 			for i := range n {
 				f.children[i] = f.entry(i).widget
 			}
 			f.stale = false
+			f.placeLeaving()
 		}
 		return f.layout(c, env)
 	}
@@ -184,6 +257,49 @@ func (f *ForWidget[T, K]) Layout(c Constraints, env Env) Size {
 	return result
 }
 
+// groupOf returns the entry whose widget w is, for eviction.
+func (f *ForWidget[T, K]) groupOf(w Widget) any {
+	for _, e := range f.entries {
+		if e.widget == w {
+			return e
+		}
+	}
+	return nil
+}
+
+// forRowKey identifies a row's Transition by its item key.
+type forRowKey[K comparable] struct{ k K }
+
+// placeLeaving puts the rows on their way out back among the children at
+// their old places, drives their Transitions by the time since removal,
+// and drops the ones that finished. The list lays out every frame while
+// any is leaving.
+func (f *ForWidget[T, K]) placeLeaving() {
+	now := clock()
+	for i := 0; i < len(f.leaving); i++ {
+		e := f.leaving[i]
+		t := e.transition()
+		p := 1.0
+		if t.duration > 0 {
+			p = 1 - float64(now.Sub(e.since))/float64(t.duration)
+		}
+		if p <= 0 {
+			e.dispose()
+			f.leaving = slices.Delete(f.leaving, i, i+1)
+			f.leaveKeys = slices.Delete(f.leaveKeys, i, i+1)
+			i--
+			continue
+		}
+		t.drive(p, true)
+		at := min(max(e.index, 0), len(f.children))
+		f.children = slices.Insert(f.children, at, e.widget)
+	}
+	if len(f.leaving) > 0 {
+		requestLayout()
+		f.cache.invalidate()
+	}
+}
+
 // evict disposes offscreen entries beyond Retain, oldest first.
 func (f *ForWidget[T, K]) evict() {
 	if f.retain <= 0 {
@@ -191,7 +307,7 @@ func (f *ForWidget[T, K]) evict() {
 	}
 	var out []K
 	for k, e := range f.entries {
-		if e.seen != f.frame {
+		if e.seen != f.frame && !busy[e] {
 			out = append(out, k)
 		}
 	}
@@ -208,10 +324,13 @@ func (f *ForWidget[T, K]) evict() {
 // Paint implements Widget.
 func (f *ForWidget[T, K]) Paint(dst *Canvas, r Rect) {
 	if f.extent <= 0 {
-		f.paint(dst, r)
+		for i, child := range f.children {
+			dst.inGroup(f.groupOf(child), func() { dst.Paint(child, Rct(r.Origin.Add(f.offsets[i]), f.sizes[i])) })
+		}
 		return
 	}
 	for j, w := range f.visible {
-		dst.Paint(w, Rct(r.Origin.Add(f.offsets[j]), f.sizes[j]))
+		e := f.entries[f.keys[f.first+j]]
+		dst.inGroup(e, func() { dst.Paint(w, Rct(r.Origin.Add(f.offsets[j]), f.sizes[j])) })
 	}
 }

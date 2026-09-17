@@ -23,6 +23,7 @@ func Button(label string, onTap func()) *ButtonWidget {
 	b := &ButtonWidget{onTap: onTap, label: ggui.Text(label).NoWrap()}
 	b.box = ggui.Box(b.label)
 	b.Role, b.Name = ggui.RoleButton, label
+	b.AutoKey()
 	return b
 }
 
@@ -31,6 +32,7 @@ func Button(label string, onTap func()) *ButtonWidget {
 func ButtonOf(child ggui.Widget, onTap func()) *ButtonWidget {
 	b := &ButtonWidget{onTap: onTap, box: ggui.Box(child)}
 	b.Role = ggui.RoleButton
+	b.AutoKey()
 	return b
 }
 

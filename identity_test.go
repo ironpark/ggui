@@ -1,6 +1,10 @@
 package ggui
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/hajimehoshi/ebiten/v2"
+)
 
 func TestKeyedSurvivesParentRebuild(t *testing.T) {
 	parentDep := State(0)
@@ -159,5 +163,100 @@ func TestCachedTextInputFollowsSignal(t *testing.T) {
 	p.Frame()
 	if in.ed.text != "bbbbbbbb" {
 		t.Fatalf("editor shows %q", in.ed.text)
+	}
+}
+
+func TestKeyedGivesControlsAnIdentity(t *testing.T) {
+	v := State("hello")
+	extra := State(false)
+	rebuild := State(0)
+	var in *TextInputWidget
+	p := ProbeBuilder(func() Widget {
+		form := Keyed("form", func() Builder {
+			return func() Widget {
+				rebuild.Get()
+				in = TextInput(v)
+				return in
+			}
+		})
+		if extra.Get() {
+			// A sibling appears above, so the field moves; its parent
+			// rebuilt too, so it is a new widget.
+			return Column(Box().Size(10, 10), form)
+		}
+		return Column(form)
+	}, Sz(200, 100))
+	defer p.Close()
+	p.Frame()
+	if in.HitID() == nil {
+		t.Fatal("a TextInput built inside Keyed has no identity")
+	}
+	p.Click(Pt(2, 5))
+	p.Type(Mods{}, ebiten.KeyArrowRight, ebiten.KeyArrowRight)
+	first := in
+	if first.ed.caret != 2 {
+		t.Fatalf("caret %d before the rebuild, want 2", first.ed.caret)
+	}
+	extra.Set(true)
+	rebuild.Set(1) // the keyed component's builder re-runs as well
+	p.Frame()
+	p.Frame()
+	p.Type(Mods{}, ebiten.KeyArrowRight)
+	if in == first || in.HitID() != first.HitID() {
+		t.Fatal("the field was not rebuilt with the same identity")
+	}
+	if in.ed.caret != 3 || !in.Focused() || !p.Focused() {
+		t.Fatalf("caret %d focused %v after the field moved and rebuilt; want the caret and focus kept", in.ed.caret, in.Focused())
+	}
+}
+
+func TestDuplicateKeyPanics(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("two Keyed with one key in a build did not panic")
+		}
+	}()
+	dispose := Effect(func() {
+		Keyed("k", func() Builder { return func() Widget { return Box() } })
+		Keyed("k", func() Builder { return func() Widget { return Box() } })
+	})
+	defer dispose()
+}
+
+func TestTabReachesAControlOutsideTheScrollWindow(t *testing.T) {
+	items := Column(Focus(Box().Size(50, 50)), Focus(Box().Size(50, 50)), Focus(Box().Size(50, 50)))
+	sc := Scroll(items)
+	p := NewProbe(sc, Sz(50, 40))
+	defer p.Close()
+	p.Type(Mods{}, ebiten.KeyTab, ebiten.KeyTab, ebiten.KeyTab)
+	if sc.offset != 110 {
+		t.Fatalf("offset = %v after tabbing to the third, fully hidden item; want 110", sc.offset)
+	}
+}
+
+func TestRetainKeepsTheFocusedRow(t *testing.T) {
+	items := State([]int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9})
+	built := map[int]int{}
+	list := For(items, func(i int) int { return i }, func(r Reader[int]) Widget {
+		built[r.Get()]++
+		return Focus(Box().Size(50, 10))
+	}).ItemExtent(10).Retain(1)
+	sc := Scroll(list)
+	p := NewProbe(sc, Sz(50, 30))
+	defer p.Close()
+	p.Click(Pt(5, 5)) // focus row 0
+	p.Scroll(Pt(5, 5), Pt(0, -5))
+	p.Frame()
+	p.Frame()
+	if sc.offset < 30 {
+		t.Fatalf("offset %v, want the first rows out of view", sc.offset)
+	}
+	p.Scroll(Pt(5, 5), Pt(0, 5)) // back up
+	p.Frame()
+	if built[0] != 1 {
+		t.Fatalf("row 0 built %d times: the focused row was evicted", built[0])
+	}
+	if built[1]+built[2] < 3 {
+		t.Fatalf("rows 1 and 2 built %d and %d times: one unfocused row should have been evicted with Retain(1)", built[1], built[2])
 	}
 }

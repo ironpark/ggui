@@ -54,9 +54,18 @@ type Interactive struct {
 	Role         Role   // what the control is, for Probe.Find and the inspector
 	Name         string // what it is called: the text on it, or what a Label setter gave
 
-	id        any
+	id        any // from Key
+	auto      any // from the keyed component it was constructed in
 	inertWhen Reader[bool]
 }
+
+// SetName names the control for Probe.Find and the inspector when nothing
+// on it does; ui.Field uses it to hand its label to the input inside.
+func (s *Interactive) SetName(name string) { s.Name = name }
+
+// AutoKey takes the identity the keyed component being built gives the
+// control, if any; a constructor calls it. Key overrides it.
+func (s *Interactive) AutoKey() { s.auto = autoID() }
 
 // Semantics implements Semantic.
 func (s *Interactive) Semantics() (Role, string) { return s.Role, s.Name }
@@ -81,12 +90,17 @@ func (s *Interactive) Sync() {
 // keeps its state. Without one its Rect identifies it.
 func (s *Interactive) Key(k any) { s.id = k }
 
-// HitID implements Identified.
-func (s *Interactive) HitID() any { return s.id }
+// HitID implements Identified: the Key, else what AutoKey took, else nil.
+func (s *Interactive) HitID() any {
+	if s.id != nil {
+		return s.id
+	}
+	return s.auto
+}
 
 // Anchor returns where to retain state for r: the control's ID when it has
 // one, else r.
-func (s *Interactive) Anchor(r Rect) Anchor { return Anchor{Rect: r, ID: s.id} }
+func (s *Interactive) Anchor(r Rect) Anchor { return Anchor{Rect: r, ID: s.HitID()} }
 
 func (s *Interactive) state() *Interactive { return s }
 

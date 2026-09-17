@@ -35,10 +35,12 @@ type SelectWidget[T comparable] struct {
 func Select[T comparable](value ggui.Binding[T], options []T) *SelectWidget[T] {
 	s := &SelectWidget[T]{value: value, options: options, minWidth: 0, highlight: -1}
 	s.Role = ggui.RoleSelect
+	s.AutoKey()
 	s.box = ggui.Box()
 	rows := make([]ggui.Widget, len(options))
 	for i := range options {
 		it := &selectItem[T]{owner: s, index: i}
+		it.AutoKey()
 		s.items = append(s.items, it)
 		rows[i] = it
 	}

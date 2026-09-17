@@ -110,8 +110,9 @@ func consumes(h KeyHandler, ev KeyEvent) bool {
 }
 
 // Revealer is a container that can scroll to show a Rect: Scroll is one.
-// Focus moved by the keyboard into a region asks the containers around it
-// to reveal it.
+// Focus moved by the keyboard into a region asks every Revealer painted to
+// reveal it, in window coordinates; one that does not contain r ignores
+// the call.
 type Revealer interface {
 	Reveal(r Rect)
 }
@@ -211,7 +212,20 @@ func keep(r *hitRegion) *hitRegion {
 	return &c
 }
 
+// busy holds the groups (For entries) whose regions have focus or a
+// pointer capture after the last dispatch, so For.Retain leaves them be.
+// It is process-wide, as one window drives input.
+var busy = map[any]bool{}
+
 func (in *inputState) dispatch(f frameInput) {
+	defer func() {
+		clear(busy)
+		for _, r := range []*hitRegion{in.focused, in.pressed} {
+			if r != nil && r.group != nil {
+				busy[r.group] = true
+			}
+		}
+	}()
 	in.updateTrap()
 	// Hover: the topmost region that claims PointerMove is the hovered one.
 	move := PointerEvent{Kind: PointerMove, Pos: f.pos}
@@ -449,11 +463,11 @@ func (in *inputState) focus(r *hitRegion, keyboard bool) {
 	in.focused = keep(r)
 }
 
-// reveal asks every Revealer painted around target to scroll it into view.
+// reveal asks every Revealer painted to scroll target into view; each
+// decides whether target is inside its content.
 func (in *inputState) reveal(target Rect) {
 	for i := range in.regions {
-		r := &in.regions[i]
-		if v, ok := r.pointer.(Revealer); ok && !r.rect.Intersect(target).Empty() {
+		if v, ok := in.regions[i].pointer.(Revealer); ok {
 			v.Reveal(target)
 		}
 	}
@@ -471,7 +485,9 @@ func (in *inputState) moveFocus(dir int) {
 		if r.key == nil || (scope != nil && (r.scope == nil || r.scope.owner != scope.owner)) {
 			continue
 		}
-		if in.focused != nil && r.rect == in.focused.rect {
+		// The focused region may have moved since it was recorded, as
+		// after a Reveal, so match the handler before the Rect.
+		if in.focused != nil && (sameAny(r.key, in.focused.key) || (in.focused.id != nil && r.id == in.focused.id) || r.rect == in.focused.rect) {
 			cur = len(keyed)
 		}
 		keyed = append(keyed, r)

@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"fmt"
 	"reflect"
 	"slices"
 	"sync"
@@ -60,6 +61,59 @@ type effect struct {
 	// re-run and go when a run no longer claims them, or with the effect.
 	keyed   map[any]*mounted
 	claimed map[any]bool
+
+	// Identity for what is constructed under this effect: keyRoot is the
+	// key of the Keyed or Mount instance this effect is the root of, path
+	// is the effect's place under the nearest such root, by construction
+	// order, and seq counts what the current run constructed.
+	keyRoot any
+	path    string
+	seq     int
+}
+
+// autoKey is the identity a widget gets from the keyed component it was
+// constructed in: the component's key and the widget's place, by
+// construction order, under it. It is the same across the component's
+// rebuilds, so the widget's hit region, retained state and adoption
+// follow it without a Key of its own.
+type autoKey struct {
+	root any
+	path string
+}
+
+// autoID returns the identity for a widget being constructed now: nil
+// outside a keyed component.
+func autoID() any {
+	o := currentOwner()
+	if o == nil {
+		return nil
+	}
+	var root any
+	for r := o; r != nil; r = r.owner {
+		if r.keyRoot != nil {
+			root = r.keyRoot
+			break
+		}
+	}
+	if root == nil {
+		return nil
+	}
+	k := autoKey{root: root, path: o.path + "/" + itoa(o.seq)}
+	o.seq++
+	return k
+}
+
+// place gives e its path under owner: owner's path plus e's construction
+// ordinal, or elem when the caller names it, as For does with the item key.
+func (e *effect) place(owner *effect, elem string) {
+	if owner == nil {
+		return
+	}
+	if elem == "" {
+		elem = itoa(owner.seq)
+		owner.seq++
+	}
+	e.path = owner.path + "/" + elem
 }
 
 // claim returns the mounted component under key, marking it as still in
@@ -67,6 +121,9 @@ type effect struct {
 func (e *effect) claim(key any) *mounted {
 	if e.claimed == nil {
 		e.claimed = map[any]bool{}
+	}
+	if e.claimed[key] {
+		panic(fmt.Sprintf("ggui: key %v used twice in one build", key))
 	}
 	e.claimed[key] = true
 	return e.keyed[key]
@@ -367,6 +424,7 @@ func Effect(fn func()) (dispose func()) {
 	deps.mu.Unlock()
 	if e.owner != nil {
 		e.owner.children = append(e.owner.children, e)
+		e.place(e.owner, "")
 	}
 	effects.add(e)
 	// A panic in fn must not leave a half-built effect registered.
@@ -385,8 +443,13 @@ func Effect(fn func()) (dispose func()) {
 // and components fn creates live until the returned dispose is called or the
 // enclosing owner is disposed. It is how a container keeps children alive
 // across its own re-runs; For uses it per key.
-func Root(fn func()) (dispose func()) {
-	r := &effect{}
+func Root(fn func()) (dispose func()) { return rootWith(nil, "", fn) }
+
+// rootWith is Root for a root that is the instance of a keyed component
+// (key) or has a name of its own under its owner (elem), for the
+// identities autoID derives.
+func rootWith(key any, elem string, fn func()) (dispose func()) {
+	r := &effect{keyRoot: key}
 	deps.mu.Lock()
 	r.owner = deps.owner
 	prevListener, prevOwner := deps.listener, deps.owner
@@ -394,6 +457,7 @@ func Root(fn func()) (dispose func()) {
 	deps.mu.Unlock()
 	if r.owner != nil {
 		r.owner.children = append(r.owner.children, r)
+		r.place(r.owner, elem)
 	}
 	ok := false
 	defer func() {
@@ -459,6 +523,7 @@ func Untrack(fn func()) {
 
 func runEffect(e *effect) {
 	e.reset()
+	e.seq = 0
 
 	deps.mu.Lock()
 	prevListener, prevOwner := deps.listener, deps.owner

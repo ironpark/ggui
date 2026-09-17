@@ -2,6 +2,7 @@ package ui
 
 import (
 	"image/color"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
@@ -17,11 +18,13 @@ type toggle struct {
 	labelSize ggui.Size
 	glyph     ggui.Size
 	theme     ggui.Theme
+	motion    time.Duration // knobDuration, or zero under reduced motion
 }
 
 func (g *toggle) layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	g.Sync()
 	g.theme = env.Theme()
+	g.motion = env.Motion(knobDuration)
 	size := g.glyph
 	if g.label != nil {
 		g.label.Color(pick[color.Color](g.Inert, g.theme.Muted, nil))

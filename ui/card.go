@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"time"
+
 	"github.com/ironpark/ggui"
 )
 
@@ -67,6 +69,7 @@ type ProgressWidget struct {
 	value  ggui.Reader[float64]
 	height float64
 	theme  ggui.Theme
+	motion time.Duration
 }
 
 // Progress creates a bar that shows value, a fraction from 0 to 1, read
@@ -83,13 +86,14 @@ func (p *ProgressWidget) Height(h float64) *ProgressWidget { p.height = h; retur
 // Layout implements Widget.
 func (p *ProgressWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	p.theme = env.Theme()
+	p.motion = env.Motion(knobDuration)
 	return c.Constrain(ggui.Sz(bounded(c.MaxW, defaultStripe), p.height))
 }
 
 // Paint implements Widget.
 func (p *ProgressWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := p.theme
-	v := dst.Ease(ggui.Anchor{Rect: r}, progressSlot, clamp(p.value.Get(), 0, 1), knobDuration)
+	v := dst.Ease(ggui.Anchor{Rect: r}, progressSlot, clamp(p.value.Get(), 0, 1), p.motion)
 	dst.FillRoundRect(r, r.Size.H/2, t.Border)
 	if w := r.Size.W * v; w > 0 {
 		dst.FillRoundRect(ggui.Rct(r.Origin, ggui.Sz(w, r.Size.H)), r.Size.H/2, t.Accent)

@@ -43,6 +43,9 @@ func (f *TextFieldWidget) Placeholder(s string) *TextFieldWidget { f.input.Place
 // serves until one is set.
 func (f *TextFieldWidget) Label(s string) *TextFieldWidget { f.input.Label(s); return f }
 
+// SetName is Label, for Field.
+func (f *TextFieldWidget) SetName(s string) { f.input.Label(s) }
+
 // Password masks every rune with a bullet.
 func (f *TextFieldWidget) Password() *TextFieldWidget { f.input.Password(); return f }
 

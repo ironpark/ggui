@@ -3,6 +3,7 @@ package ggui
 import (
 	"image/color"
 	"sync/atomic"
+	"time"
 )
 
 // Styling has three layers. A TextStyle is a value: build one, merge others
@@ -117,6 +118,38 @@ func (e Env) WithTheme(t Theme) Env {
 	})
 }
 
+// TextScaleKey holds the factor every Text and TextInput multiplies its
+// size by, for a user who asked for larger text: Provide it above the tree
+// or a subtree. Env.TextScale reads it, 1 by default.
+var TextScaleKey = NewKey[float64]("text scale")
+
+// ReducedMotionKey asks widgets not to animate: transitions land at once,
+// eased motions jump. Provide it above the tree; Env.Motion reads it.
+var ReducedMotionKey = NewKey[bool]("reduced motion")
+
+// TextScale returns the factor text sizes are multiplied by under e.
+func (e Env) TextScale() float64 {
+	if s, ok := e.Get(TextScaleKey); ok && s > 0 {
+		return s
+	}
+	return 1
+}
+
+// ReducedMotion reports whether the tree under e asked for no animation.
+func (e Env) ReducedMotion() bool {
+	r, _ := e.Get(ReducedMotionKey)
+	return r
+}
+
+// Motion returns d, or zero when the tree under e asked for reduced
+// motion: what a widget hands to Ease or a Transition.
+func (e Env) Motion(d time.Duration) time.Duration {
+	if e.ReducedMotion() {
+		return 0
+	}
+	return d
+}
+
 // Key names a value that can travel down the tree in an Env. Make one per
 // concept with NewKey; the type parameter keeps reads and writes in step.
 type Key[T any] struct {
@@ -229,6 +262,38 @@ type Theme struct {
 	ItemPad   EdgeInsets // around one row of a list or menu
 	CardPad   EdgeInsets // inside a card
 	PanelPad  EdgeInsets // inside a popup panel, around its items
+
+	ext *tokenNode // extension tokens, a persistent list; see Set
+}
+
+// tokenNode is one extension token; the list is shared between the themes
+// derived from one another and never mutated.
+type tokenNode struct {
+	key  any
+	val  any
+	next *tokenNode
+}
+
+// Set returns t with v stored under k, a token of the caller's own that
+// travels with the theme: a control set's colors, a brand's spacing. t is
+// not changed, so a theme can be derived from another.
+//
+//	var DangerColor = ggui.NewKey[color.Color]("danger")
+//	theme = theme.Set(DangerColor, color.RGBA{0xd3, 0x2f, 0x2f, 0xff})
+func (t Theme) Set[T any](k Key[T], v T) Theme {
+	t.ext = &tokenNode{key: k, val: v, next: t.ext}
+	return t
+}
+
+// Get returns the token stored under k, if Set stored one.
+func (t Theme) Get[T any](k Key[T]) (T, bool) {
+	for n := t.ext; n != nil; n = n.next {
+		if n.key == any(k) {
+			return n.val.(T), true
+		}
+	}
+	var zero T
+	return zero, false
 }
 
 // DefaultTheme is a light theme in Go Regular.

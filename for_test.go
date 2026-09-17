@@ -1,6 +1,9 @@
 package ggui
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 // layoutFor lays a For out with room for everything, which is when its
 // children are built.
@@ -191,5 +194,51 @@ func TestForWithoutViewportLaysOutEverything(t *testing.T) {
 	got := f.Layout(Loose(Sz(100, 1000)), Env{})
 	if got != Sz(10, 90) || len(f.entries) != 3 {
 		t.Fatalf("size %v built %d, want 10x90 and 3", got, len(f.entries))
+	}
+}
+
+func TestForRowsLeaveThroughTheirTransition(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	defer SetClock(func() time.Time { return now })()
+	items := State([]int{1, 2, 3})
+	painted := map[int]Rect{}
+	list := For(items, func(i int) int { return i }, func(r Reader[int]) Widget {
+		i := r.Get()
+		return FromFuncs(
+			func(c Constraints, _ Env) Size { return c.Constrain(Sz(50, 10)) },
+			func(_ *Canvas, rect Rect) { painted[i] = rect },
+		)
+	}).Transition(func(w Widget) *TransitionWidget {
+		return Transition(w).Slide(-20, 0).Easing(EaseLinear).Duration(100 * time.Millisecond)
+	})
+	p := NewProbe(list, Sz(100, 100))
+	defer p.Close()
+	p.Frame()
+	now = now.Add(time.Second)
+	p.Frame()
+	if painted[2].Origin.X != 0 || painted[2].Origin.Y != 10 {
+		t.Fatalf("row 2 at %+v once settled, want in place", painted[2])
+	}
+	Remove(items, func(i int) bool { return i == 2 })
+	clear(painted)
+	p.Frame()
+	if _, ok := painted[2]; !ok {
+		t.Fatal("the removed row vanished at once instead of leaving")
+	}
+	if painted[3].Origin.Y != 20 {
+		t.Fatalf("row 3 at %+v while row 2 leaves, want still below it", painted[3])
+	}
+	now = now.Add(50 * time.Millisecond)
+	clear(painted)
+	p.Frame()
+	if r := painted[2]; r.Origin.X != -10 {
+		t.Fatalf("leaving row at %+v halfway, want slid 10 out", r)
+	}
+	now = now.Add(time.Second)
+	clear(painted)
+	p.Frame()
+	p.Frame()
+	if _, ok := painted[2]; ok || painted[3].Origin.Y != 10 {
+		t.Fatalf("after leaving: row 2 painted %v, row 3 at %+v", ok, painted[3])
 	}
 }

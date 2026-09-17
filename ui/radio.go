@@ -19,6 +19,7 @@ type RadioWidget[T comparable] struct {
 func Radio[T comparable](selected ggui.Binding[T], value T, label string) *RadioWidget[T] {
 	r := &RadioWidget[T]{selected: selected, value: value}
 	r.Role, r.Name = ggui.RoleRadio, label
+	r.AutoKey()
 	r.glyph = ggui.Sz(controlSize, controlSize)
 	if label != "" {
 		r.label = ggui.Text(label)

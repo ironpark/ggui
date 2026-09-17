@@ -2,6 +2,7 @@ package ui
 
 import (
 	"math"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
@@ -17,6 +18,7 @@ type CollapsibleWidget struct {
 	ggui.Interactive
 
 	theme     ggui.Theme
+	motion    time.Duration
 	pad       ggui.EdgeInsets
 	titleSize ggui.Size
 	headerH   float64
@@ -29,6 +31,7 @@ type CollapsibleWidget struct {
 func Collapsible(open ggui.Binding[bool], title string, content ggui.Widget) *CollapsibleWidget {
 	c := &CollapsibleWidget{open: open, title: ggui.Text(title).NoWrap(), content: content}
 	c.Role, c.Name = ggui.RoleDisclosure, title
+	c.AutoKey()
 	c.body = ggui.Presence(open, ggui.Transition(content).Fade().Slide(0, -6).Duration(knobDuration))
 	return c
 }
@@ -49,6 +52,7 @@ func (c *CollapsibleWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 	c.Sync()
 	t := env.Theme()
 	c.theme = t
+	c.motion = env.Motion(knobDuration)
 	c.pad = t.FieldPad
 	c.title.Color(pick(c.Inert, t.Muted, t.Fg))
 	c.titleSize = c.title.Layout(ggui.Loose(ggui.Sz(max(cs.MaxW-c.pad.Left-c.pad.Right-controlSize-controlGap, 0), cs.MaxH)), env)
@@ -67,7 +71,7 @@ func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.FillRoundRect(header, t.Radius, t.Surface)
 	}
 	// The chevron turns from pointing right (0) to pointing down (1).
-	v := dst.Ease(c.Anchor(header), chevronSlot, pick(c.open.Peek(), 1.0, 0.0), knobDuration)
+	v := dst.Ease(c.Anchor(header), chevronSlot, pick(c.open.Peek(), 1.0, 0.0), c.motion)
 	cx, cy := r.Origin.X+c.pad.Left+controlSize*0.4, r.Origin.Y+c.headerH/2
 	rot := func(x, y float64) ggui.Point {
 		a := v * math.Pi / 2

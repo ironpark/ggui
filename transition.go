@@ -10,9 +10,10 @@ import (
 // slides or scales from a starting state to its place over Duration. Build
 // one with Transition, and use Presence to animate a child out as well.
 //
-// Whether the child is new is judged by its Rect (or Key) against the
-// previous frame, so a Builder that rebuilds every frame does not restart
-// the animation; a widget that appears at a new place plays it.
+// Whether the child is new is judged against the previous frame by the
+// identity a keyed component gives the transition, else by its Rect, so a
+// Builder that rebuilds every frame does not restart the animation; a
+// widget that appears at a new place plays it.
 type TransitionWidget struct {
 	child    Widget
 	fade     bool
@@ -20,12 +21,13 @@ type TransitionWidget struct {
 	from     float64 // starting scale, 0 for none
 	duration time.Duration
 	ease     Easing
-	key      any
+	id       any // from the keyed component it was constructed in
 
 	// Presence drives progress from outside.
 	driven   bool
 	progress float64
 	leaving  bool
+	reduced  bool // the Env asked for no animation
 
 	buf *ebiten.Image // offscreen, for fade and scale
 }
@@ -36,7 +38,7 @@ type transitionStart struct{ at time.Time }
 // Transition wraps child in an enter animation: a fade over 200ms until
 // Fade, Slide or Scale say otherwise.
 func Transition(child Widget) *TransitionWidget {
-	return &TransitionWidget{child: child, duration: 200 * time.Millisecond, ease: EaseOut}
+	return &TransitionWidget{child: child, duration: 200 * time.Millisecond, ease: EaseOut, id: autoID()}
 }
 
 // Fade animates opacity from transparent.
@@ -54,11 +56,6 @@ func (t *TransitionWidget) Duration(d time.Duration) *TransitionWidget { t.durat
 // Easing sets the curve; see EaseLinear, EaseIn, EaseOut, EaseInOut.
 func (t *TransitionWidget) Easing(e Easing) *TransitionWidget { t.ease = e; return t }
 
-// Key identifies the child across frames instead of its Rect, so a child
-// that moves keeps its animation and a new child at an old place plays
-// one.
-func (t *TransitionWidget) Key(k any) *TransitionWidget { t.key = k; return t }
-
 // effects reports whether any visual is set; a bare Transition fades.
 func (t *TransitionWidget) effects() (fade bool, slide bool, scale bool) {
 	fade = t.fade || (!t.fade && t.dx == 0 && t.dy == 0 && t.from == 0)
@@ -72,15 +69,22 @@ func (t *TransitionWidget) drive(progress float64, leaving bool) {
 }
 
 // Layout implements Widget.
-func (t *TransitionWidget) Layout(c Constraints, env Env) Size { return t.child.Layout(c, env) }
+func (t *TransitionWidget) Layout(c Constraints, env Env) Size {
+	t.reduced = env.ReducedMotion()
+	return t.child.Layout(c, env)
+}
 
 // Paint implements Widget.
 func (t *TransitionWidget) Paint(dst *Canvas, r Rect) {
 	p := t.progress
-	if !t.driven {
+	if t.reduced {
+		// Reduced motion: in place at once; a leaving child is still inert
+		// until Presence removes it.
+		p = 1
+	} else if !t.driven {
 		now := clock()
 		start := now
-		at := Anchor{Rect: r, ID: t.key}
+		at := Anchor{Rect: r, ID: t.id}
 		if s, ok := dst.Retained(at, transitionSlot); ok {
 			start = s.at
 		}

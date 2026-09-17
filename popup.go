@@ -31,7 +31,7 @@ var popupKey = NewKey[*PopupWidget]("popup")
 
 // Popup creates a closed popup that opens content next to anchor.
 func Popup(anchor, content Widget) *PopupWidget {
-	return &PopupWidget{anchor: anchor, content: content, gap: 4}
+	return &PopupWidget{anchor: anchor, content: content, gap: 4, id: autoID()}
 }
 
 // Bind stores the open state in sig: writing it opens or closes the popup,

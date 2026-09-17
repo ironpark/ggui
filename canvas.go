@@ -28,6 +28,7 @@ type Canvas struct {
 	clipped bool
 	inert   bool        // registers no hit regions: a widget on its way out
 	scope   *focusScope // the focus trap regions are registered under, if any
+	group   any         // what regions painted now belong to, for For's eviction
 
 	// Root-only frame state.
 	logical    Size // the window in logical pixels, for Size
@@ -366,7 +367,7 @@ func (c *Canvas) Clip(r Rect) *Canvas {
 	if c == nil {
 		return nil
 	}
-	child := &Canvas{parent: c, clip: r, clipped: true, scale: c.scale, inert: c.inert, scope: c.scope}
+	child := &Canvas{parent: c, clip: r, clipped: true, scale: c.scale, inert: c.inert, scope: c.scope, group: c.group}
 	if c.clipped {
 		child.clip = c.clip.Intersect(r)
 	}
@@ -388,7 +389,12 @@ func (c *Canvas) add(h hitRegion) {
 	if c.clipped {
 		h.rect = h.rect.Intersect(c.clip)
 		if h.rect.Empty() {
-			return
+			if h.key == nil {
+				return
+			}
+			// A key region outside the clip stays registered with no area,
+			// so Tab can reach it and Reveal can scroll it into view.
+			h.rect = Rect{Origin: h.full.Origin}
 		}
 	}
 	root := c
@@ -447,6 +453,20 @@ type hitRegion struct {
 	scope   *focusScope // the focus trap the region was painted in, if any
 	role    Role        // from a Semantic handler
 	label   string
+	group   any // set by inGroup: the For entry that painted it
+}
+
+// inGroup paints through fn with every region it registers marked as
+// belonging to g, so input can report whether g holds focus or a capture.
+func (c *Canvas) inGroup(g any, fn func()) {
+	if c == nil {
+		fn()
+		return
+	}
+	prev := c.group
+	c.group = g
+	defer func() { c.group = prev }()
+	fn()
 }
 
 // focusScope is a focus trap for one frame: while regions carrying it
@@ -517,7 +537,7 @@ func (c *Canvas) HitKey(r Rect, h KeyHandler) {
 func (c *Canvas) region(r Rect, h any, reg hitRegion) hitRegion {
 	reg.rect, reg.id = r, idOf(h)
 	if c != nil {
-		reg.scope = c.scope
+		reg.scope, reg.group = c.scope, c.group
 	}
 	if s, ok := h.(Semantic); ok {
 		reg.role, reg.label = s.Semantics()

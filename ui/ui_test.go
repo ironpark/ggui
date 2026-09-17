@@ -535,3 +535,24 @@ func TestDialogKeyboardFlow(t *testing.T) {
 		t.Fatal("a click on the scrim did not close the dialog")
 	}
 }
+
+func TestFieldNamesAndReportsErrors(t *testing.T) {
+	email := ggui.State("")
+	errText := ggui.State("")
+	f := ui.Field("Email", ui.TextField(email)).Help("Work address").Error(errText)
+	p := ggui.NewProbe(f, ggui.Sz(300, 100))
+	defer p.Close()
+	if _, ok := p.FindRole(ggui.RoleTextField, "Email"); !ok {
+		t.Fatal("the field's label did not name the input")
+	}
+	loose := ggui.Loose(ggui.Sz(300, 300))
+	plain := f.Layout(loose, ggui.Env{})
+	errText.Set("Required")
+	withErr := f.Layout(loose, ggui.Env{})
+	if withErr.H != plain.H {
+		t.Fatalf("height %v with an error, %v with help; the error takes the help's line", withErr.H, plain.H)
+	}
+	if bare := ui.Field("Name", ui.TextField(email)).Layout(loose, ggui.Env{}); bare.H >= plain.H {
+		t.Fatalf("a field without help is %v tall, with help %v", bare.H, plain.H)
+	}
+}

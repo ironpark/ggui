@@ -73,8 +73,14 @@ func (c *ComponentWidget) run(build Builder) {
 // Keyed is a Component that survives a rebuild of its parent: the owner
 // effect keeps one instance per key across its runs, so a run that
 // constructs Keyed with the same key gets the mounted instance back, with
-// its local state, effects and focus. Keys are unique within one Builder.
-// An instance the next run does not construct again is disposed.
+// its local state, effects and focus. Keys are unique within one Builder;
+// a key used twice in one run panics. An instance the next run does not
+// construct again is disposed.
+//
+// Controls, TextInput, Scroll, Popup and Transition constructed inside a
+// keyed component take an identity from it, the key plus their place in
+// construction order, so they keep hit regions, retained state and
+// adoption across the component's rebuilds without a Key of their own.
 func Keyed(key any, setup func() Builder) *ComponentWidget {
 	return Mount(key, struct{}{}, func(*Signal[struct{}]) Builder { return setup() })
 }
@@ -104,7 +110,7 @@ func Mount[P any](key any, props P, setup func(*Signal[P]) Builder) *ComponentWi
 		}
 		// Under no owner: the instance belongs to the registry, not to the
 		// run that constructed it, so the parent's re-run leaves it alone.
-		withOwner(nil, func() { m.dispose = Root(func() { c.run(setup(sig)) }) })
+		withOwner(nil, func() { m.dispose = rootWith(key, "", func() { c.run(setup(sig)) }) })
 	}
 	m.dispose = func() {}
 	owner.keep(key, m)

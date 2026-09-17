@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"testing"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
@@ -369,5 +370,95 @@ func TestTextInputMultilineWrapsGrowsAndNavigates(t *testing.T) {
 	in.dispatch(frameInput{pos: Pt(5, w.spacing()+2), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
 	if got := lineOf(w.spans(w.ed.text), w.ed.caret); got != 1 {
 		t.Fatalf("click on the second line put the caret on line %d", got)
+	}
+}
+
+func TestCaretStepsByGrapheme(t *testing.T) {
+	var e textEditor
+	// e + combining acute, a family emoji joined with ZWJ, a flag pair, CRLF.
+	e.setText("é\U0001F468‍\U0001F469\U0001F1F0\U0001F1F7\r\nx")
+	e.moveTo(0, false)
+	steps := []int{}
+	for e.caret < len(e.text) {
+		e.moveBy(1, false, false)
+		steps = append(steps, e.caret)
+	}
+	if len(steps) != 5 {
+		t.Fatalf("%d steps over the text, want 5 clusters: %v", len(steps), steps)
+	}
+	e.moveTo(len(e.text), false)
+	e.backspace(false)
+	e.backspace(false)
+	if e.text != "é\U0001F468‍\U0001F469\U0001F1F0\U0001F1F7" {
+		t.Fatalf("after two backspaces: %q", e.text)
+	}
+	e.backspace(false)
+	if e.text != "é\U0001F468‍\U0001F469" {
+		t.Fatalf("backspace over the flag pair: %q", e.text)
+	}
+	e.moveTo(0, false)
+	e.moveBy(1, false, false)
+	if e.caret != len("é") {
+		t.Fatalf("caret %d after one step, want past the combining mark", e.caret)
+	}
+}
+
+func TestUndoRedo(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	defer SetClock(func() time.Time { return now })()
+	var e textEditor
+	e.replace("a")
+	e.replace("b")
+	e.replace("c") // one word typed quickly: one step
+	now = now.Add(time.Second)
+	e.replace(" ")
+	now = now.Add(time.Second)
+	e.replace("d")
+	if e.text != "abc d" {
+		t.Fatalf("text %q", e.text)
+	}
+	e.Undo()
+	if e.text != "abc " {
+		t.Fatalf("after one undo %q, want the last letter gone", e.text)
+	}
+	e.Undo()
+	e.Undo()
+	if e.text != "" || e.caret != 0 {
+		t.Fatalf("after three undos %q caret %d, want empty", e.text, e.caret)
+	}
+	if e.Undo() {
+		t.Fatal("undo with nothing to undo reported true")
+	}
+	e.Redo()
+	if e.text != "abc" {
+		t.Fatalf("after redo %q, want abc", e.text)
+	}
+	e.replace("!")
+	if e.Redo() {
+		t.Fatal("an edit did not clear the redo stack")
+	}
+}
+
+func TestUndoKeys(t *testing.T) {
+	v := State("hello")
+	in := TextInput(v)
+	p := NewProbe(in, Sz(200, 30))
+	defer p.Close()
+	p.Click(Pt(190, 10))
+	p.Type(Mods{}, ebiten.KeyBackspace, ebiten.KeyBackspace)
+	if v.Peek() != "hel" {
+		t.Fatalf("value %q after two backspaces", v.Peek())
+	}
+	cmd := Mods{Meta: true}
+	if !runtimeIsDarwin() {
+		cmd = Mods{Ctrl: true}
+	}
+	p.Type(cmd, ebiten.KeyZ)
+	if v.Peek() != "hell" {
+		t.Fatalf("value %q after undo, want hell", v.Peek())
+	}
+	p.Type(Mods{Shift: cmd.Shift || true, Meta: cmd.Meta, Ctrl: cmd.Ctrl}, ebiten.KeyZ)
+	if v.Peek() != "hel" {
+		t.Fatalf("value %q after redo, want hel", v.Peek())
 	}
 }

@@ -21,6 +21,70 @@ type textEditor struct {
 	text   string
 	anchor int
 	caret  int
+
+	// Undo history: snapshots taken before each edit, and the ones undone.
+	// Insertions typed in quick succession share one snapshot.
+	undo, redo []editSnapshot
+	lastEdit   time.Time
+	lastInsert bool
+}
+
+// editSnapshot is the editor's state before an edit.
+type editSnapshot struct {
+	text          string
+	anchor, caret int
+}
+
+// maxUndo bounds the history.
+const maxUndo = 200
+
+// undoCoalesce is how close two typed insertions must be to undo as one.
+const undoCoalesce = 700 * time.Millisecond
+
+// record takes a snapshot before an edit that replaces the selection with
+// s. A plain insertion right after another joins the previous step, so a
+// word typed undoes at once, while deletions and pastes stand alone.
+func (e *textEditor) record(s string) {
+	now := clock()
+	insert := s != "" && !e.hasSelection() && utf8.RuneCountInString(s) == 1
+	if insert && e.lastInsert && now.Sub(e.lastEdit) < undoCoalesce && len(e.undo) > 0 {
+		e.lastEdit = now
+		return
+	}
+	e.undo = append(e.undo, editSnapshot{e.text, e.anchor, e.caret})
+	if len(e.undo) > maxUndo {
+		e.undo = e.undo[1:]
+	}
+	e.redo = e.redo[:0]
+	e.lastEdit, e.lastInsert = now, insert
+}
+
+// Undo restores the state before the last edit and reports whether there
+// was one.
+func (e *textEditor) Undo() bool {
+	if len(e.undo) == 0 {
+		return false
+	}
+	e.redo = append(e.redo, editSnapshot{e.text, e.anchor, e.caret})
+	e.restore(e.undo[len(e.undo)-1])
+	e.undo = e.undo[:len(e.undo)-1]
+	return true
+}
+
+// Redo reapplies the last undone edit and reports whether there was one.
+func (e *textEditor) Redo() bool {
+	if len(e.redo) == 0 {
+		return false
+	}
+	e.undo = append(e.undo, editSnapshot{e.text, e.anchor, e.caret})
+	e.restore(e.redo[len(e.redo)-1])
+	e.redo = e.redo[:len(e.redo)-1]
+	return true
+}
+
+func (e *textEditor) restore(s editSnapshot) {
+	e.text, e.anchor, e.caret = s.text, s.anchor, s.caret
+	e.lastInsert = false
 }
 
 func (e *textEditor) setText(s string) {
@@ -51,6 +115,7 @@ func (e *textEditor) selected() string {
 
 // replace puts s in place of the selection and leaves the caret after it.
 func (e *textEditor) replace(s string) {
+	e.record(s)
 	lo, hi := e.selection()
 	e.text = e.text[:lo] + s + e.text[hi:]
 	e.caret = lo + len(s)
@@ -79,29 +144,114 @@ func (e *textEditor) moveBy(dir int, word, extend bool) {
 	case dir < 0 && word:
 		pos = prevWord(e.text, pos)
 	case dir < 0:
-		pos = prevRune(e.text, pos)
+		pos = prevGrapheme(e.text, pos)
 	case word:
 		pos = nextWord(e.text, pos)
 	default:
-		pos = nextRune(e.text, pos)
+		pos = nextGrapheme(e.text, pos)
 	}
 	e.moveTo(pos, extend)
 }
 
-// backspace deletes the selection, or the rune or word before the caret.
+// backspace deletes the selection, or the grapheme or word before the caret.
 func (e *textEditor) backspace(word bool) {
 	if !e.hasSelection() {
-		e.anchor = pick(word, prevWord(e.text, e.caret), prevRune(e.text, e.caret))
+		e.anchor = pick(word, prevWord(e.text, e.caret), prevGrapheme(e.text, e.caret))
 	}
 	e.replace("")
 }
 
-// deleteForward deletes the selection, or the rune or word after the caret.
+// deleteForward deletes the selection, or the grapheme or word after the caret.
 func (e *textEditor) deleteForward(word bool) {
 	if !e.hasSelection() {
-		e.anchor = pick(word, nextWord(e.text, e.caret), nextRune(e.text, e.caret))
+		e.anchor = pick(word, nextWord(e.text, e.caret), nextGrapheme(e.text, e.caret))
 	}
 	e.replace("")
+}
+
+// Grapheme clusters, approximately: the caret and Backspace step over a
+// base rune together with what attaches to it. Without a segmentation
+// table this covers what shows up in practice: combining marks, variation
+// selectors, emoji modifiers and tags, zero-width-joiner sequences, CRLF,
+// and regional indicator pairs. Conjoining Hangul jamo are handled too,
+// though text from an IME arrives precomposed.
+
+// extends reports whether r attaches to the rune before it.
+func extends(r rune) bool {
+	switch {
+	case unicode.Is(unicode.M, r): // combining marks
+		return true
+	case r >= 0xFE00 && r <= 0xFE0F, r >= 0xE0100 && r <= 0xE01EF: // variation selectors
+		return true
+	case r >= 0x1F3FB && r <= 0x1F3FF: // emoji skin tones
+		return true
+	case r >= 0xE0020 && r <= 0xE007F: // emoji tags
+		return true
+	case r == 0x200D, r == 0x200C: // zero-width joiner and non-joiner
+		return true
+	case r >= 0x1160 && r <= 0x11FF: // Hangul jamo vowels and trailing consonants
+		return true
+	}
+	return false
+}
+
+func isRegionalIndicator(r rune) bool { return r >= 0x1F1E6 && r <= 0x1F1FF }
+
+// nextGrapheme returns the byte offset after the cluster starting at i.
+func nextGrapheme(s string, i int) int {
+	if i >= len(s) {
+		return len(s)
+	}
+	r, n := utf8.DecodeRuneInString(s[i:])
+	j := i + n
+	if r == '\r' && j < len(s) && s[j] == '\n' {
+		return j + 1
+	}
+	if isRegionalIndicator(r) {
+		if r2, n2 := utf8.DecodeRuneInString(s[j:]); isRegionalIndicator(r2) {
+			return j + n2
+		}
+		return j
+	}
+	for j < len(s) {
+		r2, n2 := utf8.DecodeRuneInString(s[j:])
+		if !extends(r2) {
+			break
+		}
+		j += n2
+		if r2 == 0x200D && j < len(s) {
+			// What follows a joiner belongs to the cluster.
+			_, n3 := utf8.DecodeRuneInString(s[j:])
+			j += n3
+		}
+	}
+	return j
+}
+
+// prevGrapheme returns the byte offset of the cluster ending at i.
+func prevGrapheme(s string, i int) int {
+	if i <= 0 {
+		return 0
+	}
+	if s[i-1] == '\n' {
+		if i >= 2 && s[i-2] == '\r' {
+			return i - 2
+		}
+		return i - 1
+	}
+	// Walk clusters from the start of the line; text fields are short.
+	start := i
+	for start > 0 && s[start-1] != '\n' {
+		start--
+	}
+	for j := start; j < i; {
+		k := nextGrapheme(s, j)
+		if k >= i {
+			return j
+		}
+		j = k
+	}
+	return prevRune(s, i)
 }
 
 func (e *textEditor) selectAll() { e.anchor, e.caret = 0, len(e.text) }
@@ -241,6 +391,7 @@ type TextInputWidget struct {
 	onChange     func(string)
 	disabled     bool
 	disabledWhen Reader[bool]
+	id           any
 
 	ed      textEditor
 	focused bool
@@ -270,7 +421,7 @@ type TextInputWidget struct {
 
 // TextInput creates an editor bound to value.
 func TextInput(value Binding[string]) *TextInputWidget {
-	t := &TextInputWidget{value: value, minWidth: 120}
+	t := &TextInputWidget{value: value, minWidth: 120, id: autoID()}
 	t.ime = newIME(t)
 	t.ed.setText(value.Peek())
 	t.ed.moveTo(len(t.ed.text), false)
@@ -290,6 +441,17 @@ func (t *TextInputWidget) Placeholder(s string) *TextInputWidget { t.placeholder
 // Label names the field for Probe.Find and the inspector; the placeholder
 // serves until one is set.
 func (t *TextInputWidget) Label(s string) *TextInputWidget { t.label = s; return t }
+
+// SetName is Label, for a container that names what it holds.
+func (t *TextInputWidget) SetName(name string) { t.label = name }
+
+// Key gives the editor an identity, so a rebuilt one that also moved keeps
+// its caret and focus. Without one the keyed component it was built in
+// identifies it, else its Rect.
+func (t *TextInputWidget) Key(k any) *TextInputWidget { t.id = k; return t }
+
+// HitID implements Identified.
+func (t *TextInputWidget) HitID() any { return t.id }
 
 // Semantics implements Semantic.
 func (t *TextInputWidget) Semantics() (Role, string) {
@@ -414,6 +576,7 @@ func (t *TextInputWidget) Layout(c Constraints, env Env) Size {
 		t.disabled = t.disabledWhen.Get()
 	}
 	t.resolved = env.Text().Merge(t.style).resolved()
+	t.resolved.Size *= env.TextScale()
 	t.cache, _ = env.Get(cacheOwner)
 	th := env.Theme()
 	if t.disabled {
@@ -816,6 +979,23 @@ func (t *TextInputWidget) key(k ebiten.Key, m Mods) {
 			}
 			t.ed.replace("")
 		}
+	case ebiten.KeyZ:
+		if !m.Cmd() {
+			return
+		}
+		t.ime.Confirm()
+		if m.Shift {
+			if !t.ed.Redo() {
+				return
+			}
+		} else if !t.ed.Undo() {
+			return
+		}
+	case ebiten.KeyY:
+		if !m.Cmd() || runtimeIsDarwin() || !t.ed.Redo() {
+			return
+		}
+		t.ime.Confirm()
 	case ebiten.KeyV:
 		if m.Cmd() {
 			t.ime.Confirm()

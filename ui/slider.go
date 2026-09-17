@@ -26,6 +26,7 @@ type SliderWidget struct {
 func Slider(value ggui.Binding[float64], lo, hi float64) *SliderWidget {
 	s := &SliderWidget{value: value, min: lo, max: hi}
 	s.Role = ggui.RoleSlider
+	s.AutoKey()
 	return s
 }
 

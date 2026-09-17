@@ -118,7 +118,8 @@ func button(label string, onTap func()) ggui.Widget {
 
 **Keyed lists** — `For(items, key, build)` watches a `Reader[[]T]` and keeps
 one child per key, so reordering or editing the list reuses the children and
-whatever state they hold. Each child receives its item as a `Reader[T]` that
+whatever state they hold; `Each(items, build)` keys comparable items by
+their own value. Each child receives its item as a `Reader[T]` that
 follows the list; read it reactively and edit through the model:
 
 ```go
@@ -132,8 +133,11 @@ A child is built the first time it is laid out. `.ItemExtent(h)` fixes every
 child's height (width, with `.Horizontal()`), and then inside a `Scroll` only
 the rows in view are built, laid out and painted, so a list of tens of
 thousands of items costs what the visible ones do; `.Retain(n)` keeps at
-most n rows that scrolled out of view mounted and rebuilds the rest when
-they return. `List(items, build)` is
+most n rows that scrolled out of view mounted, never one holding focus or
+a capture, and rebuilds the rest when they return. `.Transition(wrap)`
+wraps every row in the `Transition` that `wrap` returns, so a new row plays
+its enter animation and a removed row plays it backwards before it goes,
+inert to input meanwhile. `List(items, build)` is
 the plain version for a slice you have in hand: one child per item, rebuilt
 with the parent. `Root(fn)` is what `For` uses per key,
 an owner that never re-runs, for containers of your own that keep children
@@ -295,9 +299,15 @@ place. Arrows move (Shift selects, Alt or Ctrl jumps words, ⌘ on macOS reaches
 the ends), Home/End, Backspace/Delete, ⌘/Ctrl+A, C, X and V through the system
 clipboard, Enter fires `.OnSubmit`. Click places the caret, drag selects,
 double-click selects a word, triple-click everything. `.Placeholder(s)`,
-`.Password()`, `.OnChange(fn)` and `.MinWidth(w)` tune it. The editor keeps
-its caret and selection across a rebuild of the tree, and `.Input()` on a
-`ui.TextField` reaches the editor for `Focused()`.
+`.Password()`, `.OnChange(fn)` and `.MinWidth(w)` tune it. ⌘/Ctrl+Z undoes
+and ⌘+Shift+Z or Ctrl+Y redoes, with letters typed in quick succession
+undone as one word. The caret and Backspace step over grapheme clusters,
+so a flag, a family emoji or a letter with a combining mark is one step.
+The editor keeps its caret and selection across a rebuild of the tree, and
+`.Input()` on a `ui.TextField` reaches the editor for `Focused()`.
+`ui.Field(label, input)` puts a caption above any control and `.Help(s)`
+below it, shows `.Error(reader)` in its place while the reader is not
+empty, and names the control after the label for `Probe.Find`.
 
 The built-in font covers Latin, Greek and Cyrillic. Glyphs a font lacks are
 drawn from its fallbacks: `SystemFonts()`, the CJK and wide-coverage fonts
@@ -348,8 +358,9 @@ current time and no signal; `ui.Switch` slides its knob with one.
 
 **Transitions.** `Transition(child).Fade().Slide(dx, dy).Scale(from)` plays
 an enter animation when the child first appears, over `.Duration(d)` with
-`.Easing(e)`. Whether it is new is judged against the previous frame by Rect
-(or `.Key(k)`), so a Builder that rebuilds every frame does not restart it.
+`.Easing(e)`. Whether it is new is judged against the previous frame by the
+identity a keyed component gives it, else by Rect, so a Builder that
+rebuilds every frame does not restart it.
 `Presence(show, child)` keeps the child on screen when `show` turns false,
 inert to input, and runs the same animation backwards before removing it:
 
@@ -388,6 +399,12 @@ the same way: `Provide(key, v, child)` stores `v` under a `Key[T]` from
 named text styles (`Text`, `Title`, `Caption`), sizes (`Radius`, `Space`)
 and the paddings the controls use (`ButtonPad`, `FieldPad`, `ItemPad`,
 `CardPad`, `PanelPad`), so a custom control can match the built-in ones.
+`t.Set(key, v)` adds a token of your own under a `Key`, without changing
+`t`, and `t.Get(key)` reads it back; `ui.DangerColor` is one. Two `Env`
+keys speak for the user: `Provide(TextScaleKey, 1.5, tree)` scales every
+`Text` and `TextInput`, and `Provide(ReducedMotionKey, true, tree)` lands
+transitions at once and makes the controls' eased motions jump, through
+`env.Motion(d)`.
 `UseTheme()` reads it at build time and subscribes the enclosing Builder;
 `SetTheme(t)` swaps it and rebuilds only what read it. `DefaultTheme()` is
 light, `DarkTheme()` dark, and a window with no `Background` follows the
@@ -472,8 +489,11 @@ or an animation in flight: the built-in controls, `TextInput`, `Scroll` and
 `Popup` all do, which is why flipping a `ui.Switch` that rebuilds its own
 subtree still slides the knob. The region is matched by the handler's
 identity when it implements `Identified`, else by `Rect`; `.Key(k)` on a
-control, `Scroll` or `Popup` sets one, so a widget rebuilt and moved in the
-same frame keeps its state. `ggui.Interactive` is the shared body of a
+control, `TextInput`, `Scroll` or `Popup` sets one, so a widget rebuilt and
+moved in the same frame keeps its state. Inside a `Keyed` or `Mount`
+component every one of those gets an identity for free, the component's
+key plus its place in construction order, so a keyed form keeps focus and
+carets through its own rebuilds with no keys on the fields. `ggui.Interactive` is the shared body of a
 control: embed it, call `Hit` from `Paint` and `Pointer` and `Keyboard` from
 the handlers, and hover, press, focus, the focus ring and adoption come with
 it; `ui` is built on it.
