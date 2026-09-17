@@ -27,7 +27,7 @@ func (g *toggle) layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	g.motion = env.Motion(knobDuration)
 	size := g.glyph
 	if g.label != nil {
-		g.label.Color(pick[color.Color](g.Inert, g.theme.Muted, nil))
+		g.label.Color(pick[color.Color](g.Inert, g.theme.MutedFg, nil))
 		g.labelSize = g.label.Layout(ggui.Loose(ggui.Sz(max(c.MaxW-size.W-controlGap, 0), c.MaxH)), env)
 		size.W += controlGap + g.labelSize.W
 		size.H = max(size.H, g.labelSize.H)

@@ -182,7 +182,7 @@ func (c *CalendarWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	c.cellH = max(36, c.theme.Text.Size+16)
 	cell := ggui.Loose(ggui.Sz(w/7, c.cellH))
 	for i, label := range c.weekdayText {
-		c.weekdaySize[i] = label.Set(c.weekdays[(i+int(c.weekStart))%7]).Color(c.theme.Muted).Layout(cell, env)
+		c.weekdaySize[i] = label.Set(c.weekdays[(i+int(c.weekStart))%7]).Color(c.theme.MutedFg).Layout(cell, env)
 	}
 	selected := c.date(c.value.Peek())
 	start := month.AddDate(0, 0, -(int(month.Weekday())-int(c.weekStart)+7)%7)
@@ -194,10 +194,10 @@ func (c *CalendarWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 		d.Inert = !c.enabled(d.date)
 		col := c.theme.Fg
 		if d.Inert || d.date.Month() != month.Month() {
-			col = c.theme.Muted
+			col = c.theme.MutedFg
 		}
 		if selected.Equal(d.date) {
-			col = c.theme.OnAccent
+			col = c.theme.PrimaryFg
 		}
 		d.size = d.text.Set(strconv.Itoa(d.date.Day())).Color(col).Layout(cell, env)
 	}
@@ -316,12 +316,12 @@ func (d *calendarDay) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.HitCursor(r, ebiten.CursorShapePointer)
 	}
 	if c.date(c.value.Peek()).Equal(d.date) {
-		dst.FillRoundRect(r, t.Radius, t.Accent)
+		dst.FillRoundRect(r, t.Radius, t.Primary)
 	} else if d.Hovered {
-		dst.FillRoundRect(r, t.Radius, mutedSurface(t))
+		dst.FillRoundRect(r, t.Radius, t.Muted)
 	}
 	if c.Focused && c.active.Equal(d.date) {
-		dst.StrokeRoundRect(r, t.Radius, 2, t.Accent)
+		dst.StrokeRoundRect(r, t.Radius, 2, t.Primary)
 	}
 	dst.Paint(d.text, ggui.Rct(ggui.Pt(r.Origin.X+(r.Size.W-d.size.W)/2, r.Origin.Y+(r.Size.H-d.size.H)/2), d.size))
 }

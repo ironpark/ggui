@@ -200,12 +200,12 @@ func (r *tableRow[T, K]) paint(dst *ggui.Canvas, rc ggui.Rect) {
 		case r.chosen():
 			dst.FillRect(rc, th.Selection)
 		case r.Hovered:
-			dst.FillRect(rc, subtle(th))
+			dst.FillRect(rc, th.Muted)
 		}
 	}
 	dst.Paint(r.box, rc)
 	dst.FillRect(ggui.Rct(ggui.Pt(rc.Origin.X, rc.Origin.Y+rc.Size.H-1), ggui.Sz(rc.Size.W, 1)), th.Border)
-	r.FocusRing(dst, rc, th.Radius, focusColor(th))
+	r.FocusRing(dst, rc, th.Radius, th.Ring)
 }
 
 func (r *tableRow[T, K]) pick() {

@@ -110,10 +110,6 @@ func (m *pointerMotion) drifted(p ggui.Point) bool {
 	return m.moved(p) && seen
 }
 
-// subtle is a quiet surface for hover states and secondary content. It is the
-// same token as a muted surface, so theming SurfaceMuted moves every one.
-func subtle(t ggui.Theme) color.Color { return mutedSurface(t) }
-
 func mix(a, b color.Color, amount float64) color.Color {
 	if a == nil {
 		return b

@@ -119,7 +119,7 @@ func newGallery() (ggui.Builder, func(), func()) {
 					return ggui.Text(fmt.Sprintf("Hello, %s", or(name.Get(), "stranger"))).Size(size.Get())
 				}),
 				ggui.Row(
-					ggui.Text("Size").Color(t.Muted),
+					ggui.Text("Size").Color(t.MutedFg),
 					ggui.Expanded(ui.Slider(size, 10, 40).Step(1)),
 					ggui.Textf("%2.0f", size).NoWrap(),
 				).Space(1),
@@ -226,7 +226,7 @@ func newGallery() (ggui.Builder, func(), func()) {
 				ui.Tab("Details", ggui.Column(
 					ui.Collapsible(more, "More options", ggui.Column(
 						ui.Checkbox(notify, "Send notifications"),
-						ggui.Text("Folded content fades and slides.").Color(t.Muted),
+						ggui.Text("Folded content fades and slides.").Color(t.MutedFg),
 					).Space(1)),
 				)),
 				ui.Tab("About", ggui.Text("Tabs lay out only the page they show; Left and Right switch while focused.")),
@@ -236,7 +236,7 @@ func newGallery() (ggui.Builder, func(), func()) {
 				ui.Switch(details, "Show details"),
 				ggui.Presence(details, ggui.Transition(
 					ggui.Box(ggui.Text("Slides and fades in, and back out when hidden. A leaving widget takes no input.")).
-						Fill(t.Surface).Radius(t.Radius).Pad(t.Space),
+						Fill(t.Card).Radius(t.Radius).Pad(t.Space),
 				).Slide(0, -8).Fade()),
 			).Space(1).Align(ggui.AlignStretch)),
 
@@ -280,8 +280,8 @@ func newGallery() (ggui.Builder, func(), func()) {
 			).Space(1).Align(ggui.AlignStretch)),
 
 			section("Grid", ggui.Cached(ggui.Grid(4,
-				swatch("Bg", t.Bg), swatch("Surface", t.Surface), swatch("Field", t.Field), swatch("Border", t.Border),
-				swatch("Accent", t.Accent), swatch("AccentHover", t.AccentHover), swatch("Muted", t.Muted), swatch("Fg", t.Fg),
+				swatch("Bg", t.Bg), swatch("Card", t.Card), swatch("Input", t.Input), swatch("Border", t.Border),
+				swatch("Accent", t.Primary), swatch("AccentHover", t.PrimaryHover), swatch("Muted", t.MutedFg), swatch("Fg", t.Fg),
 			).Space(1))),
 		}
 		return galleryPage(dark, search, category, scroll, func() { paletteOpen.Set(true) }, entries)

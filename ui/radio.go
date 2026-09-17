@@ -67,17 +67,17 @@ func (r *RadioWidget[T]) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 	switch {
 	case r.Inert:
 		dst.FillCircle(center, radius, t.Border)
-		dst.FillCircle(center, radius-1, t.Surface)
+		dst.FillCircle(center, radius-1, t.Card)
 		if on {
-			dst.FillCircle(center, radius*0.4, t.Muted)
+			dst.FillCircle(center, radius*0.4, t.MutedFg)
 		}
 	case on:
-		dst.FillCircle(center, radius, pick(r.Hovered, t.AccentHover, t.Accent))
-		dst.FillCircle(center, radius-1, t.Field)
-		dst.FillCircle(center, radius*0.45, t.Accent)
+		dst.FillCircle(center, radius, pick(r.Hovered, t.PrimaryHover, t.Primary))
+		dst.FillCircle(center, radius-1, t.Input)
+		dst.FillCircle(center, radius*0.45, t.Primary)
 	default:
-		dst.FillCircle(center, radius, pick(r.Hovered, t.Accent, t.Border))
-		dst.FillCircle(center, radius-1, t.Field)
+		dst.FillCircle(center, radius, pick(r.Hovered, t.Primary, t.Border))
+		dst.FillCircle(center, radius-1, t.Input)
 	}
-	r.FocusRing(dst, box, radius, focusColor(t))
+	r.FocusRing(dst, box, radius, t.Ring)
 }

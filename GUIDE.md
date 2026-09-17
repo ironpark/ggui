@@ -674,13 +674,24 @@ the same way: `Provide(key, v, child)` stores `v` under a `Key[T]` from
 
 ### Theme tokens
 
-`Theme` holds colors (`Fg`, `Bg`, `Surface`,
-`Field`, `Border`, `Accent`, `AccentHover`, `OnAccent`, `Selection`, `Muted`),
-named text styles (`Text`, `Title`, `Caption`), sizes (`Radius`, `Space`)
-and the paddings the controls use (`ButtonPad`, `FieldPad`, `ItemPad`,
-`CardPad`, `PanelPad`), so a custom control can match the built-in ones.
-`t.Set(key, v)` adds a token of your own under a `Key`, without changing
-`t`, and `t.Get(key)` reads it back; `ui.DangerColor` is one.
+`Theme`'s colors follow shadcn/ui's semantic tokens, so a palette written
+for shadcn ports across a variable at a time: `Bg`/`Fg`, `Card`, `Popover`,
+`Primary`/`PrimaryFg` (with `PrimaryHover`), `Secondary`/`SecondaryFg`,
+`Muted`/`MutedFg`, `Destructive`/`DestructiveFg`, `Border`, `Input`, `Ring`,
+plus `Selection` and the modal `Scrim`. Each pair is a surface and the
+foreground drawn on it: `Muted` is the quiet surface behind a hover, and
+`MutedFg` the grey of secondary text.
+
+Elevation is three tokens in the order a surface rises off the page:
+`CardShadow`, `PanelShadow` and `OverlayShadow`. Sizes are `Radius` with
+`RadiusSm` for rows and pills and `RadiusLg` for cards, dialogs and toasts,
+plus `Space`, `BorderWidth` and `MenuWidth`. The controls' paddings are
+`ButtonPad`, `FieldPad`, `ItemPad`, `CardPad`, `PanelPad` and `TabPad`, and
+the state tints are `HoverMix`, `PressMix` and `DisabledMix`, so a custom
+control can match the built-in ones.
+
+`t.Set(key, v)` still adds a token of your own under a `Key`, without
+changing `t`, and `t.Get(key)` reads it back.
 
 Two `Env` keys support accessibility preferences: `Provide(TextScaleKey, 1.5, tree)` scales every
 `Text` and `TextInput`, and `Provide(ReducedMotionKey, true, tree)` lands
@@ -1005,32 +1016,31 @@ and ggui's existing APIs.
 
 | Element | Appearance and configuration |
 | --- | --- |
-| Buttons | Primary by default; `Secondary()` / `Outline()` keeps the established outlined appearance. `Muted()` adds a subdued fill, `Ghost()` removes the resting surface, and `Destructive()` uses `DangerColor`. Variants preserve pointer, keyboard and accessibility behavior. |
+| Buttons | Primary by default; `Secondary()` / `Outline()` keeps the established outlined appearance. `Muted()` adds a subdued fill, `Ghost()` removes the resting surface, and `Destructive()` uses the theme's `Destructive` color. Variants preserve pointer, keyboard and accessibility behavior. |
 | Focus | Controls use a separate, softer focus color. Text fields add an outer halo while editing. |
 | Tabs | A muted rounded strip with an animated raised selection; `.Line()` opts into the underline treatment. Reduced-motion settings still apply. |
 | Cards and floating panels | Cards receive a subtle shadow; menus, select lists, comboboxes and date pickers use a stronger shared panel shadow. Dialogs use a larger radius and deeper elevation. |
 | Labels and notices | Field labels use the body size; help text remains smaller. Alerts use body-size descriptions and tighter title spacing. |
 | Badges and calendar | Badges use small rounded corners. Calendar month navigation uses ghost buttons, with a centered month heading and contrasting selected-date text. |
 
-Theme extension tokens allow the same choices to follow a brand without changing
-individual widgets: `ui.SurfaceMuted`, `ui.FocusColor`, `ui.PanelShadow`, and
-`ui.CardShadow`. Defaults derive surface/focus colors from the inherited theme,
-so custom themes and dark mode remain supported.
+These choices follow a brand by changing the theme rather than the widgets.
+The tokens the control set reads are ordinary `Theme` fields, so a derived
+theme is a struct literal away.
 
 ```go
-theme := ggui.DefaultTheme().
-    Set(ui.FocusColor, color.Color(color.NRGBA{R: 140, G: 165, B: 230, A: 255})).
-    Set(ui.PanelShadow, ggui.ShadowStyle{Offset: ggui.Pt(0, 4), Blur: 12, Color: color.NRGBA{A: 45}})
+theme := ggui.DefaultTheme()
+theme.Ring = color.NRGBA{R: 140, G: 165, B: 230, A: 255}
+theme.PanelShadow = ggui.ShadowStyle{Offset: ggui.Pt(0, 4), Blur: 12, Color: color.NRGBA{A: 45}}
 // Disable default card elevation globally, or call Card(...).Shadow() locally.
-theme = theme.Set(ui.CardShadow, ggui.ShadowStyle{})
+theme.CardShadow = ggui.ShadowStyle{}
 ggui.SetTheme(theme)
 ```
 
 
 ### Command and menu presentation
 
-Menu panels default to 224 logical pixels rather than stretching across the
-window. `Menu(...).Width(w)` overrides this. Menubars inset their triggers and
+Menu panels default to the theme's `MenuWidth` (224 logical pixels) rather
+than stretching across the window. `Menu(...).Width(w)` overrides this. Menubars inset their triggers and
 show a focus outline only for keyboard focus; pointer hover and the open menu
 use the shared muted surface.
 

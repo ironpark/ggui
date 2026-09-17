@@ -31,12 +31,12 @@ func (c *CardWidget) Pad(sides ...float64) *CardWidget { c.box.Pad(sides...); c.
 func (c *CardWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	t := env.Theme()
 	if !c.shadowSet {
-		c.box.Shadow(cardShadow(t))
+		c.box.Shadow(t.CardShadow)
 	}
 	if !c.pad {
 		c.box.Padding(t.CardPad)
 	}
-	c.box.Fill(t.Surface).Border(1, t.Border).Radius(t.Radius + 4)
+	c.box.Fill(t.Card).Border(t.BorderWidth, t.Border).Radius(t.RadiusLg)
 	return c.box.Layout(cs, env)
 }
 
@@ -66,7 +66,7 @@ func (b *BadgeWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := env.Theme()
 	b.theme = t
 	b.pad = ggui.Insets(2, t.Space*0.75)
-	b.text.Style(t.Caption).Color(pick(b.accent, t.OnAccent, t.Fg))
+	b.text.Style(t.Caption).Color(pick(b.accent, t.PrimaryFg, t.Fg))
 	b.size = b.text.Layout(b.pad.Shrink(c).Loosen(), env)
 	return c.Constrain(b.pad.Inflate(b.size))
 }
@@ -74,7 +74,7 @@ func (b *BadgeWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 // Paint implements Widget.
 func (b *BadgeWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := b.theme
-	dst.FillRoundRect(r, min(t.Radius*.75, r.Size.H/2), pick(b.accent, t.Accent, mutedSurface(t)))
+	dst.FillRoundRect(r, min(t.RadiusSm, r.Size.H/2), pick(b.accent, t.Primary, t.Muted))
 	dst.Paint(b.text, ggui.Rct(ggui.Pt(r.Origin.X+b.pad.Left, r.Origin.Y+(r.Size.H-b.size.H)/2), b.size))
 }
 
@@ -111,6 +111,6 @@ func (p *ProgressWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Leaf(r, ggui.Node{Role: ggui.RoleProgress, Min: 0, Max: 1, Now: v})
 	dst.FillRoundRect(r, r.Size.H/2, t.Border)
 	if w := r.Size.W * v; w > 0 {
-		dst.FillRoundRect(ggui.Rct(r.Origin, ggui.Sz(w, r.Size.H)), r.Size.H/2, t.Accent)
+		dst.FillRoundRect(ggui.Rct(r.Origin, ggui.Sz(w, r.Size.H)), r.Size.H/2, t.Primary)
 	}
 }

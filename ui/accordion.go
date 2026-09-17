@@ -148,7 +148,7 @@ func (a *AccordionWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	var width, height float64
 	for i, item := range a.items {
 		h := a.headers[i]
-		h.text.Color(pick(item.disabled, a.theme.Muted, a.theme.Fg))
+		h.text.Color(pick(item.disabled, a.theme.MutedFg, a.theme.Fg))
 		h.size = h.text.Layout(ggui.Loose(ggui.Sz(max(c.MaxW-24, 0), ggui.Unbounded)), env)
 		a.heights[i] = h.size.H + 32
 		width = max(width, h.size.W+24)
@@ -186,12 +186,12 @@ func (a *AccordionWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 			dst.HitCursor(rect, ebiten.CursorShapePointer)
 		}
 		if h.Hovered {
-			dst.FillRoundRect(rect, t.Radius, subtle(t))
+			dst.FillRoundRect(rect, t.Radius, t.Muted)
 		}
-		chevron(dst, ggui.Pt(rect.Origin.X+rect.Size.W-8, y+a.heights[i]/2), pick(a.isOpen(i), -2.0, 2.0), t.Muted)
+		chevron(dst, ggui.Pt(rect.Origin.X+rect.Size.W-8, y+a.heights[i]/2), pick(a.isOpen(i), -2.0, 2.0), t.MutedFg)
 		dst.Paint(h.text, ggui.Rct(ggui.Pt(rect.Origin.X, y+16), h.size))
 		if i == a.active {
-			a.FocusRing(dst, rect, t.Radius, focusColor(t))
+			a.FocusRing(dst, rect, t.Radius, t.Ring)
 		}
 		y += a.heights[i]
 		if a.isOpen(i) {

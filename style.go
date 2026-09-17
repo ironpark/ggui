@@ -244,24 +244,45 @@ type Theme struct {
 	Title   TextStyle // merged onto Text for headings
 	Caption TextStyle // merged onto Text for small secondary text
 
-	Fg, Bg      color.Color // default text and window colors
-	Surface     color.Color // panels and cards
-	Field       color.Color // text fields and other inputs
-	Border      color.Color // outlines of inputs and dividers
-	Accent      color.Color // primary buttons, checked controls, focus rings
-	AccentHover color.Color
-	OnAccent    color.Color // text and marks drawn on Accent
-	Selection   color.Color // selected text
-	Muted       color.Color // secondary text, placeholders, disabled controls
+	// Colors follow shadcn/ui's semantic tokens: a surface, and the
+	// foreground drawn on it. The comment on each names the CSS variable it
+	// answers to, so a palette written for shadcn ports across directly.
+	Bg, Fg                     color.Color // --background / --foreground
+	Card                       color.Color // --card: cards and other raised inline surfaces
+	Popover                    color.Color // --popover: menus, dialogs and anything floating
+	Primary, PrimaryFg         color.Color // --primary / --primary-foreground
+	PrimaryHover               color.Color // Primary under the pointer
+	Secondary, SecondaryFg     color.Color // --secondary / --secondary-foreground
+	Muted, MutedFg             color.Color // --muted / --muted-foreground
+	Destructive, DestructiveFg color.Color // --destructive / --destructive-foreground
+	Border                     color.Color // --border: outlines of inputs and dividers
+	Input                      color.Color // --input: the surface a text field or select paints
+	Ring                       color.Color // --ring: the focus halo, separate from Primary
+	Selection                  color.Color // selected text
+	Scrim                      color.Color // dims the window behind a modal
 
-	Radius float64 // corner radius for boxes that ask for one
-	Space  float64 // the unit gaps and padding are multiples of
+	// Elevation, in the order a surface rises off the page.
+	CardShadow    ShadowStyle // cards and the raised tab
+	PanelShadow   ShadowStyle // menus, select lists, date pickers, toasts
+	OverlayShadow ShadowStyle // dialogs
+
+	Radius   float64 // --radius: corner radius for boxes that ask for one
+	RadiusSm float64 // rows and pills inside a rounded container
+	RadiusLg float64 // cards, dialogs and toasts
+
+	Space       float64 // the unit gaps and padding are multiples of
+	BorderWidth float64 // the line Box.Border and the controls draw
+	MenuWidth   float64 // a dropdown menu panel, which does not stretch
 
 	ButtonPad EdgeInsets // inside a button
 	FieldPad  EdgeInsets // inside a text field, select or other input
 	ItemPad   EdgeInsets // around one row of a list or menu
 	CardPad   EdgeInsets // inside a card
 	PanelPad  EdgeInsets // inside a popup panel, around its items
+	TabPad    EdgeInsets // inside one tab label
+
+	// How far a state tints the color it starts from, as Mix takes it.
+	HoverMix, PressMix, DisabledMix float64
 
 	ext *tokenNode // extension tokens, a persistent list; see Set
 }
@@ -297,39 +318,66 @@ func (t Theme) Get[T any](k Key[T]) (T, bool) {
 }
 
 // DefaultTheme is a neutral light theme inspired by shadcn/ui, in Go Regular.
+// The palette is shadcn's zinc scale, so its CSS variables map across a token
+// at a time.
 func DefaultTheme() Theme {
-	fg := color.RGBA{0x18, 0x18, 0x1b, 0xff}
-	muted := color.RGBA{0x71, 0x71, 0x7a, 0xff}
+	fg := color.RGBA{0x18, 0x18, 0x1b, 0xff}      // zinc-900
+	quiet := color.RGBA{0xf4, 0xf4, 0xf5, 0xff}   // zinc-100
+	mutedFg := color.RGBA{0x71, 0x71, 0x7a, 0xff} // zinc-500
+	nearWhite := color.RGBA{0xfa, 0xfa, 0xfa, 0xff}
 	return Theme{
 		Text:    TextStyle{Size: 14, Color: fg, LineHeight: 1.4},
 		Title:   TextStyle{Size: 24},
-		Caption: TextStyle{Size: 12, Color: muted},
-		Fg:      fg, Bg: color.White, Surface: color.White, Field: color.White,
-		Border: color.RGBA{0xe4, 0xe4, 0xe7, 0xff},
-		Accent: fg, AccentHover: color.RGBA{0x3f, 0x3f, 0x46, 0xff},
-		OnAccent:  color.RGBA{0xfa, 0xfa, 0xfa, 0xff},
-		Selection: color.RGBA{0xd4, 0xd4, 0xd8, 0xff},
-		Muted:     muted, Radius: 8, Space: 8,
+		Caption: TextStyle{Size: 12, Color: mutedFg},
+
+		Bg: color.White, Fg: fg,
+		Card: color.White, Popover: color.White,
+		Primary: fg, PrimaryFg: nearWhite,
+		PrimaryHover: color.RGBA{0x3f, 0x3f, 0x46, 0xff}, // zinc-700
+		Secondary:    quiet, SecondaryFg: fg,
+		Muted: quiet, MutedFg: mutedFg,
+		Destructive: color.RGBA{0xd3, 0x2f, 0x2f, 0xff}, DestructiveFg: nearWhite,
+		Border:    color.RGBA{0xe4, 0xe4, 0xe7, 0xff}, // zinc-200
+		Input:     color.White,
+		Ring:      color.RGBA{0xa1, 0xa1, 0xaa, 0xff}, // zinc-400
+		Selection: color.RGBA{0xd4, 0xd4, 0xd8, 0xff}, // zinc-300
+		Scrim:     color.NRGBA{A: 0x60},
+
+		CardShadow:    ShadowStyle{Offset: Pt(0, 1), Blur: 2, Color: color.NRGBA{A: 15}},
+		PanelShadow:   ShadowStyle{Offset: Pt(0, 4), Blur: 10, Color: color.NRGBA{A: 26}},
+		OverlayShadow: ShadowStyle{Offset: Pt(0, 12), Blur: 28, Color: color.NRGBA{A: 65}},
+
+		Radius: 8, RadiusSm: 6, RadiusLg: 12,
+		Space: 8, BorderWidth: 1, MenuWidth: 224,
+
 		ButtonPad: Insets(8, 16), FieldPad: Insets(8, 12),
 		ItemPad: Insets(6, 8), CardPad: Insets(24), PanelPad: Insets(4),
+		TabPad: Insets(5, 10),
+
+		HoverMix: .06, PressMix: .08, DisabledMix: .55,
 	}
 }
 
 // DarkTheme is a dark counterpart of DefaultTheme.
 func DarkTheme() Theme {
 	t := DefaultTheme()
+	dark := color.RGBA{0x18, 0x18, 0x1b, 0xff}  // zinc-900
+	quiet := color.RGBA{0x27, 0x27, 0x2a, 0xff} // zinc-800
 	t.Fg = color.RGBA{0xfa, 0xfa, 0xfa, 0xff}
 	t.Text.Color = t.Fg
-	t.Bg = color.RGBA{0x09, 0x09, 0x0b, 0xff}
-	t.Surface = color.RGBA{0x18, 0x18, 0x1b, 0xff}
-	t.Field = color.RGBA{0x20, 0x20, 0x23, 0xff}
+	t.Bg = color.RGBA{0x09, 0x09, 0x0b, 0xff} // zinc-950
+	t.Card, t.Popover = dark, dark
+	t.Input = color.RGBA{0x20, 0x20, 0x23, 0xff}
 	t.Border = color.RGBA{0x32, 0x32, 0x36, 0xff}
-	t.Accent = color.RGBA{0xe4, 0xe4, 0xe7, 0xff}
-	t.AccentHover = color.RGBA{0xd4, 0xd4, 0xd8, 0xff}
-	t.OnAccent = color.RGBA{0x18, 0x18, 0x1b, 0xff}
+	t.Primary = color.RGBA{0xe4, 0xe4, 0xe7, 0xff}
+	t.PrimaryHover = color.RGBA{0xd4, 0xd4, 0xd8, 0xff}
+	t.PrimaryFg = dark
+	t.Secondary, t.SecondaryFg = quiet, t.Fg
+	t.Muted = quiet
+	t.MutedFg = color.RGBA{0xa1, 0xa1, 0xaa, 0xff} // zinc-400
+	t.Ring = color.RGBA{0x71, 0x71, 0x7a, 0xff}    // zinc-500
 	t.Selection = color.RGBA{0x3f, 0x3f, 0x46, 0xff}
-	t.Muted = color.RGBA{0xa1, 0xa1, 0xaa, 0xff}
-	t.Caption.Color = t.Muted
+	t.Caption.Color = t.MutedFg
 	return t
 }
 

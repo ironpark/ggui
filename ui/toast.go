@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"image/color"
 	"slices"
 	"time"
 
@@ -26,7 +25,7 @@ func Toast(title, description string) ToastMessage {
 // Duration sets the lifetime. Zero or negative durations require manual dismissal.
 func (t ToastMessage) Duration(d time.Duration) ToastMessage { t.duration = d; return t }
 
-// Destructive uses the DangerColor for the notice.
+// Destructive uses the theme's Destructive color for the notice.
 func (t ToastMessage) Destructive() ToastMessage { t.destructive = true; return t }
 
 // Action adds a button that dismisses the toast before running fn.
@@ -234,7 +233,7 @@ func (t *ToasterWidget) paintNotices(dst *ggui.Canvas) {
 			clip.Image = t.buffer
 		}
 		// Shadow stays outside the panel's own clipping rectangle.
-		clip.Shadow(rect, theme.Radius+4, ggui.ShadowStyle{Offset: ggui.Pt(0, 4), Blur: 8, Color: color.NRGBA{A: 35}})
+		clip.Shadow(rect, theme.RadiusLg, theme.PanelShadow)
 		clip = clip.Clip(rect)
 		clip.HitPointer(rect, toastHover{e})
 		// A notice is a live region: it appeared without the user asking,
@@ -281,23 +280,23 @@ type toastPanel struct {
 func (p *toastPanel) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	p.theme = env.Theme()
 	t := p.theme
-	accent := t.Accent
+	accent := t.Primary
 	mark := "✓"
 	if p.destructive {
-		accent = dangerColor(t)
+		accent = t.Destructive
 		mark = "!"
 	}
 	p.title.Style(t.Text).Color(t.Fg)
-	p.description.Style(t.Caption).Color(t.Muted)
+	p.description.Style(t.Caption).Color(t.MutedFg)
 	parts := []ggui.Widget{p.title, p.description}
 	if p.entry.action != nil {
 		parts = append(parts, ggui.Row(p.entry.action))
 	}
 	text := ggui.Column(parts...).Gap(4).Align(ggui.AlignStretch)
 	p.body = ggui.Box(ggui.Row(
-		ggui.Box(ggui.Center(ggui.Text(mark).Color(t.OnAccent).Size(14))).Size(24, 24).Fill(accent).Radius(12),
+		ggui.Box(ggui.Center(ggui.Text(mark).Color(t.PrimaryFg).Size(14))).Size(24, 24).Fill(accent).Radius(12),
 		ggui.Expanded(text), p.entry.dismiss,
-	).Gap(12).Align(ggui.AlignStart)).Pad(16).Fill(t.Surface).Border(1, t.Border).Radius(t.Radius + 4)
+	).Gap(12).Align(ggui.AlignStart)).Pad(t.Space*2).Fill(t.Popover).Border(t.BorderWidth, t.Border).Radius(t.RadiusLg)
 	return p.body.Layout(c, env)
 }
 
@@ -308,9 +307,9 @@ func (p *toastPanel) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		return
 	}
 	fraction := max(0, min(1, float64(e.remaining)/float64(e.duration)))
-	accent := p.theme.Accent
+	accent := p.theme.Primary
 	if p.destructive {
-		accent = dangerColor(p.theme)
+		accent = p.theme.Destructive
 	}
 	dst.FillRoundRect(ggui.Rct(r.Origin.Add(ggui.Pt(16.0, r.Size.H-5)), ggui.Sz((r.Size.W-32)*fraction, 2.0)), 1, accent)
 }

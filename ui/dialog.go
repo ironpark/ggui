@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"image/color"
-
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 )
@@ -84,7 +82,7 @@ func (d *DialogWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if d.title != nil {
 		body = ggui.Column(d.title, d.content).Gap(t.Space * 2).Align(ggui.AlignStretch)
 	}
-	d.panel = ggui.Box(body).Padding(t.CardPad).Fill(t.Surface).Border(1, t.Border).Radius(t.Radius + 4).Shadow(overlayShadow(t))
+	d.panel = ggui.Box(body).Padding(t.CardPad).Fill(t.Popover).Border(t.BorderWidth, t.Border).Radius(t.RadiusLg).Shadow(t.OverlayShadow)
 	if d.compact {
 		d.panel.Pad(0)
 	}
@@ -118,7 +116,7 @@ func (d *DialogWidget) paintPanel(dst *ggui.Canvas) {
 	}
 	d.rect = ggui.Rct(at, size)
 
-	dst.FillRect(ggui.Rect{Size: screen}, color.RGBA{0, 0, 0, 0x60})
+	dst.FillRect(ggui.Rect{Size: screen}, d.theme.Scrim)
 	dst.HitPointer(ggui.Rect{Size: screen}, dialogScrim{d})
 	// The panel is the node; the scrim is a way of taking clicks, not an
 	// element, so it describes nothing.

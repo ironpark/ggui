@@ -56,13 +56,13 @@ func (s *SwitchWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	box := s.paint(dst, r, s)
 	on := s.on.Peek()
 	k := dst.Ease(s.Anchor(box), knobSlot, pick(on, 1.0, 0.0), s.motion)
-	track := pick(on, pick(s.Hovered, t.AccentHover, t.Accent), pick(s.Hovered, t.Muted, t.Border))
+	track := pick(on, pick(s.Hovered, t.PrimaryHover, t.Primary), pick(s.Hovered, t.MutedFg, t.Border))
 	if s.Inert {
 		track = t.Border
 	}
 	dst.FillRoundRect(box, box.Size.H/2, track)
 	radius := box.Size.H/2 - 2
 	x := box.Origin.X + 2 + radius + k*(box.Size.W-4-2*radius)
-	dst.FillCircle(ggui.Pt(x, box.Origin.Y+box.Size.H/2), radius, pick(s.Inert, t.Muted, pick(on, t.OnAccent, color.Color(color.White))))
-	s.FocusRing(dst, box, box.Size.H/2, focusColor(t))
+	dst.FillCircle(ggui.Pt(x, box.Origin.Y+box.Size.H/2), radius, pick(s.Inert, t.MutedFg, pick(on, t.PrimaryFg, color.Color(color.White))))
+	s.FocusRing(dst, box, box.Size.H/2, t.Ring)
 }

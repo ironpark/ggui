@@ -188,19 +188,19 @@ func (c *CommandWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	search := ggui.Padding(ggui.Row(commandSearchIcon{c}, ggui.Expanded(c.field)).Gap(0), 0, 8)
 	parts := []ggui.Widget{search, Divider(), results}
 	if c.insetSearch {
-		search = ggui.Padding(ggui.Box(search).Fill(mutedSurface(t)).Radius(t.Radius), 8, 8, 0, 8)
+		search = ggui.Padding(ggui.Box(search).Fill(t.Muted).Radius(t.Radius), 8, 8, 0, 8)
 		parts = []ggui.Widget{search, results}
 	}
 	if c.hints {
 		parts = append(parts, Divider(), ggui.Padding(ggui.Caption("↑↓ Navigate   ↵ Select"), 8, 12))
 	}
 	c.body = ggui.Column(parts...).Gap(0).Align(ggui.AlignStretch)
-	c.panel = ggui.Box(c.body).Fill(t.Surface).Border(1, t.Border).Radius(t.Radius)
+	c.panel = ggui.Box(c.body).Fill(t.Popover).Border(t.BorderWidth, t.Border).Radius(t.Radius)
 	if c.borderless {
 		c.panel.Border(0, nil)
 	}
 	if _, ok := ggui.PopupOf(env); ok {
-		c.panel.Shadow(panelShadow(t))
+		c.panel.Shadow(t.PanelShadow)
 	}
 	return c.panel.Layout(cs, env)
 }
@@ -288,7 +288,7 @@ func (i commandSearchIcon) Layout(cs ggui.Constraints, _ ggui.Env) ggui.Size {
 	return cs.Constrain(ggui.Sz(18, 18))
 }
 func (i commandSearchIcon) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	col := i.c.theme.Muted
+	col := i.c.theme.MutedFg
 	center := ggui.Pt(r.Origin.X+8, r.Origin.Y+r.Size.H/2-1)
 	dst.StrokeRoundRect(ggui.Rct(center.Add(ggui.Pt(-4, -4)), ggui.Sz(8, 8)), 4, 1.4, col)
 	dst.StrokeLine(center.Add(ggui.Pt(3, 3)), center.Add(ggui.Pt(7, 7)), 1.4, col)

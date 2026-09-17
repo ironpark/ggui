@@ -92,7 +92,7 @@ func (b *MenubarWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		r.Size.W = min(r.Size.W, b.naturalWidth)
 	}
 	dst.Describe(r, b)
-	dst.FillRoundRect(r, b.theme.Radius, b.theme.Surface)
+	dst.FillRoundRect(r, b.theme.Radius, b.theme.Card)
 	dst.StrokeRoundRect(r, b.theme.Radius, 1, b.theme.Border)
 	dst.Paint(b.popup, r)
 }
@@ -192,7 +192,7 @@ func (a menubarAnchor) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		b.rects[i] = rr
 		m.button.box.Fill(nil).Border(0, nil)
 		if (b.popup.IsOpen() && b.active == i) || m.button.Hovered {
-			m.button.box.Fill(mutedSurface(b.theme))
+			m.button.box.Fill(b.theme.Muted)
 		}
 		dst.Describe(rr, m.button)
 		dst.Paint(m.button.box, rr)
@@ -201,7 +201,7 @@ func (a menubarAnchor) Paint(dst *ggui.Canvas, r ggui.Rect) {
 			dst.HitCursor(rr, ebiten.CursorShapePointer)
 		}
 		if b.Focused && b.FocusVisible && i == b.active {
-			dst.StrokeRoundRect(rr, b.theme.Radius, 2, focusColor(b.theme))
+			dst.StrokeRoundRect(rr, b.theme.Radius, 2, b.theme.Ring)
 		}
 		x += rr.Size.W
 	}
@@ -218,7 +218,7 @@ func (p menubarPanel) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		return ggui.Size{}
 	}
 	t := env.Theme()
-	return panelBox(b.menus[b.active].panel, t).Layout(c, env)
+	return b.menus[b.active].chrome(t).Layout(c, env)
 }
 func (p menubarPanel) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	b := p.b

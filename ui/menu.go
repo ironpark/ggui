@@ -8,12 +8,14 @@ import (
 // MenuWidget is a button that opens a list of actions. Build one with Menu
 // or MenuOf, with MenuItem and MenuDivider as the entries.
 type MenuWidget struct {
-	button  *ButtonWidget
-	popup   *ggui.PopupWidget
-	panel   *ggui.BoxWidget
-	items   []*MenuItemWidget
-	current int // the item the keyboard is on while open, or -1
-	theme   ggui.Theme
+	button   *ButtonWidget
+	popup    *ggui.PopupWidget
+	panel    *ggui.BoxWidget
+	items    []*MenuItemWidget
+	current  int // the item the keyboard is on while open, or -1
+	width    float64
+	widthSet bool
+	theme    ggui.Theme
 }
 
 // Menu creates a secondary button labelled label that opens entries below
@@ -65,13 +67,17 @@ func (m *MenuWidget) init(entries []ggui.Widget) {
 			m.items = append(m.items, it)
 		}
 	}
-	m.panel = ggui.Box(ggui.Column(entries...).Align(ggui.AlignStretch)).Width(224)
+	m.panel = ggui.Box(ggui.Column(entries...).Align(ggui.AlignStretch))
 	m.popup = ggui.Popup(m.button, m.panel).Keys(m).Owner(m.button)
 	m.button.Expands(m.popup.IsOpen).Opens(m)
 }
 
 // Width sets the popup panel width, constrained to the available space.
-func (m *MenuWidget) Width(w float64) *MenuWidget { m.panel.Width(max(w, 0)); return m }
+// Without one the panel takes the theme's MenuWidth.
+func (m *MenuWidget) Width(w float64) *MenuWidget {
+	m.width, m.widthSet = max(w, 0), true
+	return m
+}
 
 // Popup returns the popup the entries open in.
 func (m *MenuWidget) Popup() *ggui.PopupWidget { return m.popup }
@@ -107,7 +113,7 @@ func (m *MenuWidget) Act(a ggui.Action) bool {
 func (m *MenuWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := env.Theme()
 	m.theme = t
-	panelBox(m.panel, t)
+	m.chrome(t)
 	return m.popup.Layout(c, env)
 }
 
@@ -150,6 +156,12 @@ func (m *MenuWidget) HandleKey(ev ggui.KeyEvent) {
 	default:
 		m.button.HandleKey(ev)
 	}
+}
+
+// chrome dresses the panel. A menubar and a context menu paint the panel
+// through their own popup, so the width lives here rather than in Layout.
+func (m *MenuWidget) chrome(t ggui.Theme) *ggui.BoxWidget {
+	return panelBox(m.panel, t).Width(pick(m.widthSet, m.width, t.MenuWidth))
 }
 
 // step moves the keyboard highlight by dir, skipping disabled items.
@@ -255,11 +267,11 @@ func (it *MenuItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	it.theme = t
 	it.popup, _ = ggui.PopupOf(env)
 	it.pad = t.ItemPad
-	it.text.Color(pick(it.Inert, t.Muted, t.Fg))
+	it.text.Color(pick(it.Inert, t.MutedFg, t.Fg))
 	inner := it.pad.Shrink(c).Loosen()
 	gap := 0.0
 	if it.shortcut != nil {
-		it.shortcut.Color(t.Muted)
+		it.shortcut.Color(t.MutedFg)
 		it.shortcutSize = it.shortcut.Layout(inner, env)
 		gap = 24
 	}
@@ -277,7 +289,7 @@ func (it *MenuItemWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.HitPointer(r, it)
 		dst.HitCursor(r, ebiten.CursorShapePointer)
 		if it.active || (it.onHover == nil && it.Hovered) {
-			dst.FillRoundRect(r, t.Radius*0.75, mutedSurface(t))
+			dst.FillRoundRect(r, t.RadiusSm, t.Muted)
 		}
 	}
 	if it.shortcut != nil {

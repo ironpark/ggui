@@ -114,7 +114,7 @@ func galleryPage(dark *ggui.Signal[bool], search, category *ggui.Signal[string],
 		ggui.Caption("Explore the building blocks. Try an interaction, adjust the theme, make it yours."),
 		ggui.Row(ggui.Expanded(field), ui.Button("Commands", commands).Secondary()).Gap(12),
 		ggui.Wrap(filters...).Gap(8),
-	).Gap(14).Align(ggui.AlignStretch)).Pad(24, 28).Fill(theme.Surface)
+	).Gap(14).Align(ggui.AlignStretch)).Pad(24, 28).Fill(theme.Card)
 	footer := ggui.Padding(ggui.Row(
 		ggui.Caption(fmt.Sprintf("%d of %d previews", len(cards), total)), ggui.Spacer(),
 		ggui.Caption("⌘K  Commands   ·   Tab  Navigate   ·   F1  Inspect"),

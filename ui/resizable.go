@@ -134,7 +134,7 @@ func (r *ResizableWidget) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 	handle.Origin = handle.Origin.Add(rect.Origin)
 	r.Hit(dst, handle, r, pick(r.vertical, ebiten.CursorShapeNSResize, ebiten.CursorShapeEWResize))
 	active := !r.Inert && (r.Hovered || r.Pressed)
-	col := pick(active, r.theme.Muted, r.theme.Border)
+	col := pick(active, r.theme.MutedFg, r.theme.Border)
 	center := ggui.Pt(handle.Origin.X+handle.Size.W/2, handle.Origin.Y+handle.Size.H/2)
 	line := ggui.Rct(ggui.Pt(center.X-.5, handle.Origin.Y), ggui.Sz(1, handle.Size.H))
 	if r.vertical {
@@ -148,19 +148,19 @@ func (r *ResizableWidget) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 			w, h = min(24.0, handle.Size.W), 8
 		}
 		grip := ggui.Rct(ggui.Pt(center.X-w/2, center.Y-h/2), ggui.Sz(w, h))
-		dst.FillRoundRect(grip, 3, r.theme.Surface)
+		dst.FillRoundRect(grip, 3, r.theme.Card)
 		dst.StrokeRoundRect(grip, 3, 1, col)
 		for _, offset := range []float64{-4, 0, 4} {
 			if r.vertical && w >= 16 {
-				dst.FillCircle(ggui.Pt(center.X+offset, center.Y), .8, r.theme.Muted)
+				dst.FillCircle(ggui.Pt(center.X+offset, center.Y), .8, r.theme.MutedFg)
 			}
 			if !r.vertical && h >= 16 {
-				dst.FillCircle(ggui.Pt(center.X, center.Y+offset), .8, r.theme.Muted)
+				dst.FillCircle(ggui.Pt(center.X, center.Y+offset), .8, r.theme.MutedFg)
 			}
 		}
 		focus = grip
 	}
-	r.FocusRing(dst, focus, 3, focusColor(r.theme))
+	r.FocusRing(dst, focus, 3, r.theme.Ring)
 }
 
 // ConsumesKey implements ggui.KeyConsumer.

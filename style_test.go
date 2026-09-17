@@ -113,7 +113,7 @@ func TestSetThemeRebuildsReaders(t *testing.T) {
 	old := theme.Peek()
 	defer SetTheme(old)
 	builds := 0
-	dispose := Effect(func() { builds++; _ = UseTheme().Accent })
+	dispose := Effect(func() { builds++; _ = UseTheme().Primary })
 	defer dispose()
 	SetTheme(DarkTheme())
 	effects.flush()

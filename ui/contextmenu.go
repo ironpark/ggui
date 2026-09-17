@@ -82,7 +82,7 @@ func (c *ContextMenuWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 	}
 	c.theme = env.Theme()
 	t := c.theme
-	panelBox(c.menu.panel, t)
+	c.menu.chrome(t)
 	return c.Popup().Layout(cs, env)
 }
 
@@ -101,7 +101,7 @@ func (c *ContextMenuWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if !c.Inert {
 		dst.HitPointer(r, c)
 	}
-	c.FocusRing(dst, r, c.theme.Radius, focusColor(c.theme))
+	c.FocusRing(dst, r, c.theme.Radius, c.theme.Ring)
 }
 
 // HandlePointer implements ggui.PointerHandler.

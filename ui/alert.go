@@ -15,7 +15,7 @@ func Alert(title, description string) *AlertWidget {
 	return &AlertWidget{title: ggui.Text(title), description: ggui.Text(description)}
 }
 
-// Destructive uses the theme's DangerColor for the heading and border.
+// Destructive uses the theme's Destructive color for the heading and border.
 func (a *AlertWidget) Destructive() *AlertWidget { a.destructive = true; return a }
 
 // Action places a widget below the notice, such as a retry button.
@@ -26,15 +26,15 @@ func (a *AlertWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := env.Theme()
 	fg, border := t.Fg, t.Border
 	if a.destructive {
-		fg, border = dangerColor(t), mix(t.Border, dangerColor(t), .3)
+		fg, border = t.Destructive, mix(t.Border, t.Destructive, .3)
 	}
 	a.title.Style(t.Text).Color(fg)
-	a.description.Style(t.Text).Color(t.Muted)
+	a.description.Style(t.Text).Color(t.MutedFg)
 	parts := []ggui.Widget{a.title, a.description}
 	if a.action != nil {
 		parts = append(parts, a.action)
 	}
-	a.box = ggui.Box(ggui.Column(parts...).Gap(t.Space/2)).Pad(16).Fill(t.Surface).Border(1, border).Radius(t.Radius)
+	a.box = ggui.Box(ggui.Column(parts...).Gap(t.Space/2)).Pad(t.Space*2).Fill(t.Card).Border(t.BorderWidth, border).Radius(t.Radius)
 	return a.box.Layout(c, env)
 }
 

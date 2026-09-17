@@ -146,16 +146,16 @@ func (s *SliderWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	x0, x1 := r.Origin.X+sliderKnob, r.Origin.X+r.Size.W-sliderKnob
 	kx := x0 + (x1-x0)*s.fraction()
 	dst.FillRoundRect(ggui.Rct(ggui.Pt(x0, cy-2), ggui.Sz(x1-x0, 4)), 2, t.Border)
-	accent := pick(s.Inert, t.Muted, pick(s.Hovered || s.Pressed, t.AccentHover, t.Accent))
+	accent := pick(s.Inert, t.MutedFg, pick(s.Hovered || s.Pressed, t.PrimaryHover, t.Primary))
 	dst.FillRoundRect(ggui.Rct(ggui.Pt(x0, cy-2), ggui.Sz(kx-x0, 4)), 2, accent)
 	radius := float64(sliderKnob)
 	if s.Hovered || s.Pressed {
 		radius++
 	}
 	dst.FillCircle(ggui.Pt(kx, cy), radius, accent)
-	dst.FillCircle(ggui.Pt(kx, cy), radius-1.5, t.Surface)
+	dst.FillCircle(ggui.Pt(kx, cy), radius-1.5, t.Card)
 	if s.Focused && s.FocusVisible {
-		dst.StrokeRoundRect(ggui.Rct(ggui.Pt(kx-radius-2, cy-radius-2), ggui.Sz(2*radius+4, 2*radius+4)), radius+2, 2, t.Accent)
+		dst.StrokeRoundRect(ggui.Rct(ggui.Pt(kx-radius-2, cy-radius-2), ggui.Sz(2*radius+4, 2*radius+4)), radius+2, 2, t.Primary)
 	}
 }
 

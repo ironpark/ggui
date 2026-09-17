@@ -84,7 +84,7 @@ func (c *CollapsibleWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 	c.theme = t
 	c.motion = env.Motion(knobDuration)
 	c.pad = t.FieldPad
-	c.title.Color(pick(c.Inert, t.Muted, t.Fg))
+	c.title.Color(pick(c.Inert, t.MutedFg, t.Fg))
 	c.titleSize = c.title.Layout(ggui.Loose(ggui.Sz(max(cs.MaxW-c.pad.Left-c.pad.Right-controlSize-controlGap, 0), cs.MaxH)), env)
 	c.headerH = c.titleSize.H + c.pad.Top + c.pad.Bottom
 	body := ggui.Constraints{MinW: cs.MinW, MaxW: cs.MaxW, MaxH: max(cs.MaxH-c.headerH, 0)}
@@ -98,7 +98,7 @@ func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	header := ggui.Rct(r.Origin, ggui.Sz(r.Size.W, c.headerH))
 	c.Hit(dst, header, c, ebiten.CursorShapePointer)
 	if c.Hovered && !c.Inert {
-		dst.FillRoundRect(header, t.Radius, subtle(t))
+		dst.FillRoundRect(header, t.Radius, t.Muted)
 	}
 	// The chevron turns from pointing right (0) to pointing down (1).
 	v := dst.Ease(c.Anchor(header), chevronSlot, pick(c.open.Peek(), 1.0, 0.0), c.motion)
@@ -108,10 +108,10 @@ func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		return ggui.Pt(cx+x*math.Cos(a)-y*math.Sin(a), cy+x*math.Sin(a)+y*math.Cos(a))
 	}
 	tip := rot(2, 0)
-	dst.StrokeLine(rot(-2, -4), tip, 1.5, t.Muted)
-	dst.StrokeLine(tip, rot(-2, 4), 1.5, t.Muted)
+	dst.StrokeLine(rot(-2, -4), tip, 1.5, t.MutedFg)
+	dst.StrokeLine(tip, rot(-2, 4), 1.5, t.MutedFg)
 	dst.Paint(c.title, ggui.Rct(ggui.Pt(r.Origin.X+c.pad.Left+controlSize+controlGap, r.Origin.Y+c.pad.Top), c.titleSize))
-	c.FocusRing(dst, header, t.Radius, focusColor(t))
+	c.FocusRing(dst, header, t.Radius, t.Ring)
 	dst.Paint(c.body, ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+c.headerH), c.bodySize))
 }
 

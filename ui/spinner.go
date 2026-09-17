@@ -40,6 +40,6 @@ func (s *SpinnerWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	for i := range 24 {
 		a := phase + float64(i)*math.Pi*1.5/24
 		b := phase + float64(i+1)*math.Pi*1.5/24
-		dst.StrokeLine(ggui.Pt(cx+radius*math.Cos(a), cy+radius*math.Sin(a)), ggui.Pt(cx+radius*math.Cos(b), cy+radius*math.Sin(b)), stroke, s.theme.Accent)
+		dst.StrokeLine(ggui.Pt(cx+radius*math.Cos(a), cy+radius*math.Sin(a)), ggui.Pt(cx+radius*math.Cos(b), cy+radius*math.Sin(b)), stroke, s.theme.Primary)
 	}
 }

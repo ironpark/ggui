@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"image/color"
-
 	"github.com/ironpark/ggui"
 )
 
@@ -28,19 +26,6 @@ type Named interface {
 	Semantics() (ggui.Role, string)
 }
 
-// DangerColor is the theme token for errors and destructive actions; a
-// theme without it uses a red.
-var DangerColor = ggui.NewKey[color.Color]("danger color")
-
-var red = color.RGBA{0xd3, 0x2f, 0x2f, 0xff}
-
-func dangerColor(t ggui.Theme) color.Color {
-	if c, ok := t.Get(DangerColor); ok {
-		return c
-	}
-	return red
-}
-
 // Field puts label above input.
 //
 //	ui.Field("Email", ui.TextField(email).Placeholder("you@example.com")).
@@ -61,16 +46,16 @@ func Field(label string, input ggui.Widget) *FieldWidget {
 func (f *FieldWidget) Help(s string) *FieldWidget { f.help = s; return f }
 
 // Error follows r: while it is not empty it is shown under the input in
-// the DangerColor, in place of the help text, without a rebuild.
+// the theme's Destructive color, in place of the help text, without a rebuild.
 func (f *FieldWidget) Error(r ggui.Reader[string]) *FieldWidget { f.err = r; return f }
 
 // Layout implements Widget.
 func (f *FieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := env.Theme()
-	note, col := f.help, t.Muted
+	note, col := f.help, t.MutedFg
 	if f.err != nil {
 		if e := f.err.Get(); e != "" {
-			note, col = e, dangerColor(t)
+			note, col = e, t.Destructive
 		}
 	}
 	f.caption.Style(t.Text).Color(t.Fg)

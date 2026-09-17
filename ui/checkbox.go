@@ -58,21 +58,21 @@ func (c *CheckboxWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	radius := t.Radius * 0.4
 	switch {
 	case c.Inert:
-		dst.FillRoundRect(box, radius, t.Surface)
+		dst.FillRoundRect(box, radius, t.Card)
 		dst.StrokeRoundRect(box, radius, 1, t.Border)
 	case on:
-		dst.FillRoundRect(box, radius, pick(c.Hovered, t.AccentHover, t.Accent))
+		dst.FillRoundRect(box, radius, pick(c.Hovered, t.PrimaryHover, t.Primary))
 	default:
-		dst.FillRoundRect(box, radius, t.Field)
-		dst.StrokeRoundRect(box, radius, 1, pick(c.Hovered, t.Accent, t.Border))
+		dst.FillRoundRect(box, radius, t.Input)
+		dst.StrokeRoundRect(box, radius, 1, pick(c.Hovered, t.Primary, t.Border))
 	}
 	if on {
 		at := func(x, y float64) ggui.Point {
 			return ggui.Pt(box.Origin.X+x*box.Size.W, box.Origin.Y+y*box.Size.H)
 		}
-		col := pick(c.Inert, t.Muted, t.OnAccent)
+		col := pick(c.Inert, t.MutedFg, t.PrimaryFg)
 		dst.StrokeLine(at(0.24, 0.52), at(0.43, 0.72), 2, col)
 		dst.StrokeLine(at(0.41, 0.72), at(0.78, 0.30), 2, col)
 	}
-	c.FocusRing(dst, box, radius, focusColor(t))
+	c.FocusRing(dst, box, radius, t.Ring)
 }

@@ -133,9 +133,9 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := env.Theme()
 	s.theme = t
 	s.pad = t.FieldPad
-	s.box.Radius(t.Radius).Fill(t.Field)
+	s.box.Radius(t.Radius).Fill(t.Input)
 	panelBox(s.list, t)
-	s.text = ggui.Text(s.label(s.value.Peek())).NoWrap().Color(pick[color.Color](s.Inert, t.Muted, t.Fg))
+	s.text = ggui.Text(s.label(s.value.Peek())).NoWrap().Color(pick[color.Color](s.Inert, t.MutedFg, t.Fg))
 	// As wide as the widest option, so the field does not resize as the
 	// value changes, and never wider than the row wants unless told to.
 	widest := 0.0
@@ -154,14 +154,14 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 	t := s.theme
 	open := s.popup.IsOpen()
-	s.box.Border(1, pick(open || s.Focused, focusColor(t), t.Border))
+	s.box.Border(t.BorderWidth, pick(open || s.Focused, t.Ring, t.Border))
 	s.Hit(dst, r, s, ebiten.CursorShapePointer)
 	dst.Paint(s.box, r)
 	dst.Clip(r).Paint(s.text, ggui.Rct(ggui.Pt(r.Origin.X+s.pad.Left, r.Origin.Y+(r.Size.H-s.textSize.H)/2), s.textSize))
 	// Chevron, pointing down, or up while open.
 	center := ggui.Pt(r.Origin.X+r.Size.W-t.Space-controlSize*0.3, r.Origin.Y+r.Size.H/2)
-	chevron(dst, center, pick(open, -2.0, 2.0), pick(s.Inert, t.Muted, t.Fg))
-	s.FocusRing(dst, r, t.Radius, focusColor(t))
+	chevron(dst, center, pick(open, -2.0, 2.0), pick(s.Inert, t.MutedFg, t.Fg))
+	s.FocusRing(dst, r, t.Radius, t.Ring)
 }
 
 // Paint implements Widget.
@@ -296,14 +296,14 @@ func (it *selectItem[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.HitPointer(r, it)
 	dst.HitCursor(r, ebiten.CursorShapePointer)
 	if it.Hovered || it.active {
-		dst.FillRoundRect(r, t.Radius*0.75, mutedSurface(t))
+		dst.FillRoundRect(r, t.RadiusSm, t.Muted)
 	}
 	at := ggui.Pt(r.Origin.X+it.pad.Left+controlSize+controlGap, r.Origin.Y+(r.Size.H-it.textSize.H)/2)
 	dst.Paint(it.text, ggui.Rct(at, it.textSize))
 	if it.index == it.owner.index() {
 		x, y := r.Origin.X+it.pad.Left, r.Origin.Y+r.Size.H/2
-		dst.StrokeLine(ggui.Pt(x+2, y), ggui.Pt(x+6, y+4), 2, t.Accent)
-		dst.StrokeLine(ggui.Pt(x+6, y+4), ggui.Pt(x+13, y-4), 2, t.Accent)
+		dst.StrokeLine(ggui.Pt(x+2, y), ggui.Pt(x+6, y+4), 2, t.Primary)
+		dst.StrokeLine(ggui.Pt(x+6, y+4), ggui.Pt(x+13, y-4), 2, t.Primary)
 	}
 }
 

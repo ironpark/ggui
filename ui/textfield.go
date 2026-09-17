@@ -89,7 +89,7 @@ func (f *TextFieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if f.plain {
 		f.box.Fill(nil).Pad(10, 8)
 	} else {
-		f.box.Fill(pick(f.Inert, t.Surface, t.Field)).Padding(t.FieldPad)
+		f.box.Fill(pick(f.Inert, t.Card, t.Input)).Padding(t.FieldPad)
 	}
 	return f.box.Layout(c, env)
 }
@@ -101,7 +101,7 @@ func (f *TextFieldWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if f.plain {
 		f.box.Border(0, nil)
 	} else {
-		f.box.Border(1, pick(f.input.Focused(), focusColor(f.theme), f.theme.Border))
+		f.box.Border(f.theme.BorderWidth, pick(f.input.Focused(), f.theme.Ring, f.theme.Border))
 		if f.input.Focused() && !f.Inert {
 			fieldHalo(dst, r, f.theme.Radius, f.theme)
 		}

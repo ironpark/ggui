@@ -28,17 +28,16 @@ type buttonStyle struct {
 func (v buttonVariant) resolve(t ggui.Theme) buttonStyle {
 	switch v {
 	case variantOutline:
-		return buttonStyle{fill: t.Surface, hover: mutedSurface(t), border: t.Border, label: t.Fg, elevated: true}
+		return buttonStyle{fill: t.Card, hover: t.Muted, border: t.Border, label: t.Fg, elevated: true}
 	case variantMuted:
-		m := mutedSurface(t)
-		return buttonStyle{fill: m, hover: mix(m, t.Fg, .06), label: t.Fg}
+		return buttonStyle{fill: t.Secondary, hover: mix(t.Secondary, t.Fg, t.HoverMix), label: t.SecondaryFg}
 	case variantGhost:
-		return buttonStyle{hover: mutedSurface(t), label: t.Fg}
+		return buttonStyle{hover: t.Muted, label: t.Fg}
 	case variantDestructive:
-		d := dangerColor(t)
-		return buttonStyle{fill: d, hover: mix(d, t.Surface, .12), label: color.White, elevated: true}
+		d := t.Destructive
+		return buttonStyle{fill: d, hover: mix(d, t.Card, t.HoverMix*2), label: t.DestructiveFg, elevated: true}
 	}
-	return buttonStyle{fill: t.Accent, hover: t.AccentHover, label: t.OnAccent, elevated: true}
+	return buttonStyle{fill: t.Primary, hover: t.PrimaryHover, label: t.PrimaryFg, elevated: true}
 }
 
 // ButtonWidget is a clickable box with a label. Build one with Button.
@@ -136,7 +135,7 @@ func (b *ButtonWidget) Muted() *ButtonWidget { b.variant = variantMuted; return 
 // Ghost omits the resting background and border for a lightweight action.
 func (b *ButtonWidget) Ghost() *ButtonWidget { b.variant = variantGhost; return b }
 
-// Destructive uses DangerColor for an irreversible action.
+// Destructive uses the theme's Destructive color for an irreversible action.
 func (b *ButtonWidget) Destructive() *ButtonWidget { b.variant = variantDestructive; return b }
 
 // Disabled greys the button out and ignores the pointer while v is true.
@@ -163,7 +162,7 @@ func (b *ButtonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	b.box.Radius(t.Radius)
 	b.style = b.variant.resolve(t)
 	if b.label != nil {
-		b.label.Color(pick(b.Inert, mix(b.style.label, t.Surface, .5), b.style.label))
+		b.label.Color(pick(b.Inert, mix(b.style.label, t.Card, t.DisabledMix), b.style.label))
 	}
 	return b.box.Layout(c, env)
 }
@@ -176,22 +175,22 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		fill = st.hover
 	}
 	if b.Pressed && b.Hovered && !b.Inert {
-		fill = mix(fill, t.Fg, .08)
+		fill = mix(fill, t.Fg, t.PressMix)
 	}
 	if b.Inert && fill != nil {
-		fill = mix(fill, t.Surface, .55)
+		fill = mix(fill, t.Card, t.DisabledMix)
 	}
 	b.box.Border(0, nil)
 	if border != nil {
-		b.box.Border(1, border)
+		b.box.Border(t.BorderWidth, border)
 	}
 	b.box.Fill(fill)
 	if st.elevated && !b.Inert {
-		dst.Shadow(r, t.Radius, cardShadow(t))
+		dst.Shadow(r, t.Radius, t.CardShadow)
 	}
 	b.Hit(dst, r, b, ebiten.CursorShapePointer)
 	dst.Paint(b.box, r)
-	b.FocusRing(dst, r, t.Radius, focusColor(t))
+	b.FocusRing(dst, r, t.Radius, t.Ring)
 }
 
 // HandleKey implements KeyHandler: Space or Enter presses the button.
