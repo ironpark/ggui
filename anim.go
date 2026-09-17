@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"math"
+	"slices"
 	"sync"
 	"time"
 )
@@ -58,10 +59,8 @@ var anims animator
 func (a *animator) add(s stepper) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	for _, x := range a.list {
-		if x == s {
-			return
-		}
+	if slices.Contains(a.list, s) {
+		return
 	}
 	a.list = append(a.list, s)
 }

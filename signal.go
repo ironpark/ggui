@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"reflect"
+	"slices"
 	"sync"
 	"sync/atomic"
 )
@@ -53,8 +54,8 @@ func (e *effect) reset() {
 		c.dispose()
 	}
 	e.children = nil
-	for i := len(e.cleanups) - 1; i >= 0; i-- {
-		e.cleanups[i]()
+	for _, v := range slices.Backward(e.cleanups) {
+		v()
 	}
 	e.cleanups = nil
 	for _, s := range e.sources {

@@ -236,7 +236,7 @@ func wrapLine(line string, face text.Face, maxW float64) []string {
 	}
 	var lines []string
 	cur := ""
-	for _, word := range strings.Fields(line) {
+	for word := range strings.FieldsSeq(line) {
 		cand := word
 		if cur != "" {
 			cand = cur + " " + word
