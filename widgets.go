@@ -6,7 +6,6 @@ import (
 	"slices"
 
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
-	"github.com/hajimehoshi/ebiten/v2/vector"
 )
 
 // Built-in widgets follow one shape: a constructor takes what the widget
@@ -108,12 +107,16 @@ func (t *TextWidget) NoWrap() *TextWidget { t.wrap = false; return t }
 // 0.5 centered, 1 right.
 func (t *TextWidget) Align(x float64) *TextWidget { t.align = x; return t }
 
-func (t *TextWidget) face() text.Face {
+func (t *TextWidget) face() text.Face { return t.faceAt(1) }
+
+// faceAt returns the face at the widget's size times scale, so that on a
+// HiDPI Canvas glyphs are rasterized at full resolution instead of scaled up.
+func (t *TextWidget) faceAt(scale float64) text.Face {
 	f := t.font
 	if f == nil {
 		f = fallbackFont()
 	}
-	return f.face(t.size)
+	return f.face(t.size * scale)
 }
 
 // spacing is the distance between baselines.
@@ -142,11 +145,16 @@ func (t *TextWidget) Layout(c Constraints) Size {
 
 // Paint implements Widget.
 func (t *TextWidget) Paint(dst *Canvas, r Rect) {
-	face := t.face()
+	if dst == nil || dst.Image == nil {
+		return
+	}
+	scale := dst.scale()
+	face := t.faceAt(scale)
 	for i, line := range t.lines {
 		op := &text.DrawOptions{}
 		x := r.Origin.X + (r.Size.W-t.widths[i])*t.align
-		op.GeoM.Translate(x, r.Origin.Y+float64(i)*t.spacing())
+		y := r.Origin.Y + float64(i)*t.spacing()
+		op.GeoM.Translate(x*scale, y*scale)
 		if t.color != nil {
 			op.ColorScale.ScaleWithColor(t.color)
 		}
@@ -227,12 +235,7 @@ func (b *BoxWidget) Layout(c Constraints) Size {
 
 // Paint implements Widget.
 func (b *BoxWidget) Paint(dst *Canvas, r Rect) {
-	if b.fill != nil {
-		vector.DrawFilledRect(dst.Image,
-			float32(r.Origin.X), float32(r.Origin.Y),
-			float32(r.Size.W), float32(r.Size.H),
-			b.fill, true)
-	}
+	dst.FillRect(r, b.fill)
 	if b.child != nil {
 		b.child.Paint(dst, Rct(r.Origin.Add(Pt(b.padding.Left, b.padding.Top)), b.childSize))
 	}
@@ -671,13 +674,11 @@ func (s *ScrollWidget) paintBar(dst *Canvas, r Rect) {
 	const thickness, margin, minThumb = 3.0, 2.0, 16.0
 	thumb := max(track*track/content, minThumb)
 	at := (track - thumb) * s.position() / s.maxOffset()
-	var x, y, w, h float64
 	if s.horizontal {
-		x, y, w, h = r.Origin.X+at, r.Origin.Y+r.Size.H-thickness-margin, thumb, thickness
+		dst.FillRect(Rct(Pt(r.Origin.X+at, r.Origin.Y+r.Size.H-thickness-margin), Sz(thumb, thickness)), s.bar)
 	} else {
-		x, y, w, h = r.Origin.X+r.Size.W-thickness-margin, r.Origin.Y+at, thickness, thumb
+		dst.FillRect(Rct(Pt(r.Origin.X+r.Size.W-thickness-margin, r.Origin.Y+at), Sz(thickness, thumb)), s.bar)
 	}
-	vector.DrawFilledRect(dst.Image, float32(x), float32(y), float32(w), float32(h), s.bar, true)
 }
 
 // HandlePointer implements PointerHandler: wheel movement along the scroll

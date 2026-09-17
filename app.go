@@ -4,6 +4,7 @@ package ggui
 
 import (
 	"image/color"
+	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
@@ -46,11 +47,12 @@ type App struct {
 
 	canvas Canvas
 	input  inputState
+	scale  float64 // screen pixels per logical pixel
 }
 
 // New creates an App that renders the tree returned by build.
 func New(cfg Config, build Builder) *App {
-	return &App{cfg: cfg.withDefaults(), build: build}
+	return &App{cfg: cfg.withDefaults(), build: build, scale: 1}
 }
 
 // Run opens the window and blocks until it closes.
@@ -83,17 +85,19 @@ func (a *App) Update() error {
 	for _, fn := range a.frame {
 		fn()
 	}
-	a.input.dispatch(readInput())
+	a.input.dispatch(readInput(a.scale))
 	effects.flush()
 	return nil
 }
 
 var mouseButtons = []ebiten.MouseButton{ebiten.MouseButtonLeft, ebiten.MouseButtonRight, ebiten.MouseButtonMiddle}
 
-// readInput gathers this frame's input from the platform.
-func readInput() frameInput {
+// readInput gathers this frame's input from the platform, with positions
+// converted from screen pixels to logical pixels.
+func readInput(scale float64) frameInput {
 	var f frameInput
-	f.pos = Pt(ebiten.CursorPosition())
+	x, y := ebiten.CursorPosition()
+	f.pos = Pt(float64(x)/scale, float64(y)/scale)
 	for _, b := range mouseButtons {
 		if inpututil.IsMouseButtonJustPressed(b) {
 			f.down = append(f.down, b)
@@ -114,14 +118,26 @@ func (a *App) Draw(screen *ebiten.Image) {
 	if a.root == nil {
 		return
 	}
-	a.canvas.Image, a.canvas.hits = screen, a.canvas.hits[:0]
+	a.canvas.Image, a.canvas.Scale, a.canvas.hits = screen, a.scale, a.canvas.hits[:0]
 	b := screen.Bounds()
-	size := a.root.Layout(Tight(Sz(b.Dx(), b.Dy())))
+	logical := Sz(float64(b.Dx())/a.scale, float64(b.Dy())/a.scale)
+	size := a.root.Layout(Tight(logical))
 	a.root.Paint(&a.canvas, Rect{Size: size})
 	a.input.regions = a.canvas.hits
 }
 
-// Layout implements ebiten.Game.
+// LayoutF implements ebiten.LayoutFer: the screen is sized in physical
+// pixels so that a HiDPI monitor gets a sharp image, while widgets keep
+// working in logical pixels.
+func (a *App) LayoutF(outsideWidth, outsideHeight float64) (float64, float64) {
+	if s := ebiten.Monitor().DeviceScaleFactor(); s > 0 {
+		a.scale = s
+	}
+	return outsideWidth * a.scale, outsideHeight * a.scale
+}
+
+// Layout implements ebiten.Game. Ebitengine calls LayoutF instead.
 func (a *App) Layout(outsideWidth, outsideHeight int) (int, int) {
-	return outsideWidth, outsideHeight
+	w, h := a.LayoutF(float64(outsideWidth), float64(outsideHeight))
+	return int(math.Ceil(w)), int(math.Ceil(h))
 }

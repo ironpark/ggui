@@ -208,6 +208,16 @@ To make your own widget interactive, implement `PointerHandler` or
 `Paint`. `dst.Clip(r)` returns a Canvas that draws and registers regions only
 inside `r`.
 
+## HiDPI
+
+Widgets work in logical pixels; the screen is allocated at the monitor's
+device scale factor so a Retina display gets a sharp image. `Canvas.Scale`
+holds the factor, and drawing goes through it: `dst.FillRect(r, c)` fills a
+logical `Rect`, `dst.Px(v)` converts a length, `dst.Geo(at)` is the transform
+for `DrawImageOptions`, and text rasterizes its face at the scaled size rather
+than scaling the pixels. A custom widget that draws with Ebitengine directly
+should do the same.
+
 **Custom widgets** — implement `Layout` and `Paint`. `Paint` receives the
 `Rect` to draw in, so a leaf widget stores nothing between the two calls; a
 container remembers only where its children go. `FromFuncs` wraps two closures
@@ -217,7 +227,7 @@ when a named type is overkill:
 dot := ggui.FromFuncs(
 	func(c ggui.Constraints) ggui.Size { return c.Constrain(ggui.Sz(8, 8)) },
 	func(dst *ggui.Canvas, r ggui.Rect) {
-		vector.DrawFilledCircle(dst.Image, float32(r.Origin.X+4), float32(r.Origin.Y+4), 4, fg, true)
+		vector.DrawFilledCircle(dst.Image, dst.Px(r.Origin.X+4), dst.Px(r.Origin.Y+4), dst.Px(4), fg, true)
 	},
 )
 ```
