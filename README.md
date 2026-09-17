@@ -58,32 +58,29 @@ A `Memo` notifies its readers only when the result actually differs, and a chain
 of them settles within a single frame. Create memos once, next to the signals
 they derive from — not inside a `Builder`, which runs again on every rebuild.
 
-**Cells and fields** — `Signal.Field` hands one field of a value out as its
-own read-write cell, so a single state struct can be passed to components
-field by field. Pick the field by pointer; writes copy the struct, assign
-through the pointer and store the copy, so watchers of the whole value still
-fire:
+**State as a struct of signals** — keep one signal per piece of state and
+group them in a plain struct. Each field is its own reactive cell, so a change
+to one re-runs only what read it, and components take exactly the signals they
+need:
 
 ```go
-state := ggui.State(model{})
-count := state.Field(func(m *model) *int { return &m.Count })
-ggui.Add(count, 1) // writes back through state
+type model struct {
+	Count *ggui.Signal[int]
+	Step  *ggui.Signal[int]
+}
+state := model{Count: ggui.State(0), Step: ggui.State(1)}
+ggui.Add(state.Count, state.Step.Get())
 ```
 
-Fields nest (`state.Field(...).Field(...)`), and `Signal.Lens(get, set)` covers
-the rare projection that is computed rather than stored. `Toggle` and `Add`
-are the two one-line updates that come up constantly.
-
-`*Signal[T]` and `Lens[T, U]` are both `Cell[T]` (`Get`, `Set`, `Update`), so
-a component can take a `Cell[int]` without caring where it came from. All of
-them plus `*Memo[T]` satisfy `Reader[T]`, so `Watch`, `Combine` and your own
-helpers accept any of them.
+`Toggle` and `Add` are the two one-line updates that come up constantly.
+`*Signal[T]` and `*Memo[T]` both satisfy `Reader[T]`, so `Watch`, `Combine`
+and your own helpers accept either.
 
 **Builders** — a component is a `func() ggui.Widget`. The runtime runs it inside
 an effect, so the tree rebuilds when the signals it read change.
 
 **Widgets** — a `Widget` is asked for a size under `Constraints`, then asked to
-paint into the `Rect` its parent assigned. Constraints flow down, sizes flow up.
+paint into the `Rect` its parent assigned on a `Canvas`. Constraints flow down, sizes flow up.
 Every built-in follows one shape: a constructor takes what the widget cannot
 do without, chainable setters take the rest, so the code reads as the tree it
 builds:
@@ -99,8 +96,9 @@ ggui.Center(
 )
 ```
 
-Current set: `Text`, `Box`, `Padding`, `Column`, `Row`, `Stack`, `Align`,
-`Center`, and `List` — a column built from your own slice:
+Current set: `Text`, `Box`, `Padding`, `Column`, `Row`, `Flex`/`Expanded`/`Spacer`,
+`Stack`, `Align`, `Center`, `Pointer`/`Tap`, `Focus`, and `List` — a column built
+from your own slice:
 
 ```go
 ggui.List(rows, func(r Row) ggui.Widget { return ggui.Text(r.Title) }).Gap(4)
@@ -112,9 +110,50 @@ shorthand, on its own or on a `Box`: `Padding(w, 8)`, `Padding(w, 4, 12)`,
 `Box(w).Pad(1, 2, 3, 4)`. `Stack` layers children at the top-left corner, sized
 to the largest one unless `.Expand()` is set. `Align` fills its space and
 places the child by fraction, `Align(w).At(0.25, 1)` or with the edge setters,
-`Align(w).Bottom().Right()`; `Center` is `Align` at (0.5, 0.5). Geometry constructors
-are numeric-generic: `ggui.Sz(w, h)` and `ggui.Pt(x, y)` take ints or floats
-without a cast.
+`Align(w).Bottom().Right()`; `Center` is `Align` at (0.5, 0.5). Geometry
+constructors are numeric-generic: `ggui.Sz(w, h)` and `ggui.Pt(x, y)` take
+ints or floats without a cast.
+
+**Row and Column** hug their children by default. `Expanded(child)` and
+`Flex(child, weight)` share whatever main-axis space the rigid children leave,
+`Spacer()` is an empty `Expanded`, and `.Justify(...)` distributes slack
+(`JustifyCenter`, `JustifyEnd`, `SpaceBetween`, `SpaceAround`, `SpaceEvenly`).
+Any of those makes the widget fill its main axis. `.Align(...)` places
+children across the axis (`AlignCenter`, `AlignEnd`, `AlignStretch`).
+
+```go
+ggui.Row(ggui.Text("Title"), ggui.Spacer(), ggui.Text("3 items")).Align(ggui.AlignCenter)
+```
+
+**Text** wraps at spaces to the width it is given, and between runes when a
+word is wider than the line, so scripts without spaces wrap too. `.Size(px)`,
+`.Color(c)`, `.Font(f)`, `.LineHeight(mult)`, `.Align(0.5)` and `.NoWrap()`
+adjust it. The built-in font is Go Regular; `LoadFont(ttf)` or
+`LoadFontFile(path)` load your own, and `SetDefaultFont` makes one the default.
+
+## Input
+
+Interactive widgets register the `Rect` they painted as a hit region on the
+`Canvas`. Each frame the runtime routes the pointer to the topmost region
+under it, and a region that does not handle an event lets it fall through to
+the one beneath, so a tap target does not block scrolling.
+
+```go
+hovered := ggui.State(false)
+button := ggui.Pointer(ggui.Box(ggui.Text("+")).Pad(6, 16)).
+	OnTap(func() { ggui.Add(count, 1) }).
+	OnHover(hovered.Set)
+```
+
+`Pointer` has `OnTap`, `OnDown`, `OnUp`, `OnMove`, `OnEnter`, `OnExit`,
+`OnHover` and `OnScroll`; `Tap(child, fn)` is the one-callback shortcut.
+A tap is a press and a release inside the same region, matched by `Rect`, so
+a tree rebuilt in between still completes it. `Focus(child)` takes keyboard
+focus when clicked and delivers `OnKey`, `OnText` and `OnFocus`. Global
+shortcuts still go in `App.OnFrame`.
+
+To make your own widget interactive, implement `PointerHandler` or
+`KeyHandler` and call `dst.Hit(r, w)` from `Paint`.
 
 **Custom widgets** — implement `Layout` and `Paint`. `Paint` receives the
 `Rect` to draw in, so a leaf widget stores nothing between the two calls; a
@@ -124,8 +163,8 @@ when a named type is overkill:
 ```go
 dot := ggui.FromFuncs(
 	func(c ggui.Constraints) ggui.Size { return c.Constrain(ggui.Sz(8, 8)) },
-	func(dst *ebiten.Image, r ggui.Rect) {
-		vector.DrawFilledCircle(dst, float32(r.Origin.X+4), float32(r.Origin.Y+4), 4, fg, true)
+	func(dst *ggui.Canvas, r ggui.Rect) {
+		vector.DrawFilledCircle(dst.Image, float32(r.Origin.X+4), float32(r.Origin.Y+4), 4, fg, true)
 	},
 )
 ```
@@ -134,9 +173,12 @@ dot := ggui.FromFuncs(
 
 ```
 ├── app.go        App runtime: window setup, frame loop, ebiten.Game
-├── signal.go     Reactivity: Signal, Memo, Lens/Field, Effect, dependency tracking
+├── signal.go     Reactivity: Signal, Memo, Effect, dependency tracking
 ├── widget.go     Widget interface, Builder, Children
 ├── widgets.go    Built-in widgets
+├── canvas.go     Canvas: paint target plus the frame's hit regions
+├── input.go      Pointer and keyboard events, Pointer/Tap/Focus widgets
+├── font.go       Font loading, default font, text wrapping
 ├── geometry.go   Point, Size, Rect, Constraints
 └── examples/     Runnable apps
 ```

@@ -170,109 +170,13 @@ func TestMemoDisposeStopsRecomputation(t *testing.T) {
 	}
 }
 
-func TestLensReadsAndWritesThrough(t *testing.T) {
-	type model struct {
-		Count int
-		Step  int
-	}
-	state := State(model{Step: 2})
-	count := state.Lens(
-		func(m model) int { return m.Count },
-		func(m model, n int) model { m.Count = n; return m },
-	)
-
-	if got := count.Get(); got != 0 {
-		t.Fatalf("Get() = %d, want 0", got)
-	}
-	count.Set(5)
-	if got := state.Get(); got != (model{Count: 5, Step: 2}) {
-		t.Fatalf("state = %+v, want the rest of the value preserved", got)
-	}
-	count.Update(func(n int) int { return n + 1 })
-	if got := count.Get(); got != 6 {
-		t.Fatalf("Get() = %d, want 6", got)
-	}
-}
-
-func TestFieldReadsAndWritesThrough(t *testing.T) {
-	type model struct{ Count, Step int }
-	state := State(model{Step: 2})
-	count := state.Field(func(m *model) *int { return &m.Count })
-
-	if got := count.Get(); got != 0 {
-		t.Fatalf("Get() = %d, want 0", got)
-	}
-	count.Set(5)
-	if got := state.Get(); got != (model{Count: 5, Step: 2}) {
-		t.Fatalf("state = %+v, want the rest of the value preserved", got)
-	}
-	Add(count, 3)
-	if got := count.Get(); got != 8 {
-		t.Fatalf("Get() = %d, want 8", got)
-	}
-}
-
-func TestFieldNestsThroughLenses(t *testing.T) {
-	type pos struct{ X, Y int }
-	type model struct {
-		Cursor pos
-		On     bool
-	}
-	state := State(model{})
-	x := state.Field(func(m *model) *pos { return &m.Cursor }).
-		Field(func(p *pos) *int { return &p.X })
-	on := state.Field(func(m *model) *bool { return &m.On })
-
-	var seen []model
-	dispose := Effect(func() { seen = append(seen, state.Get()) })
-	defer dispose()
-
-	x.Set(4)
+func TestToggleAndAdd(t *testing.T) {
+	on := State(false)
+	n := State(1.5)
 	Toggle(on)
-	effects.flush()
-	want := model{Cursor: pos{X: 4}, On: true}
-	if got := state.Get(); got != want {
-		t.Fatalf("state = %+v, want %+v", got, want)
-	}
-	if len(seen) != 2 || seen[1] != want {
-		t.Fatalf("seen = %v, want the whole-value effect to re-run once with %+v", seen, want)
-	}
-}
-
-func TestCellAcceptsSignalAndLens(t *testing.T) {
-	type model struct{ N int }
-	state := State(model{})
-	var cells = []Cell[int]{
-		State(1),
-		state.Field(func(m *model) *int { return &m.N }),
-	}
-	for _, c := range cells {
-		Add(c, 2)
-	}
-	if got := cells[0].Get(); got != 3 {
-		t.Fatalf("signal = %d, want 3", got)
-	}
-	if got := state.Get().N; got != 2 {
-		t.Fatalf("state.N = %d, want 2", got)
-	}
-}
-
-func TestLensTracksWholeValue(t *testing.T) {
-	type model struct{ Count, Step int }
-	state := State(model{})
-	count := state.Lens(
-		func(m model) int { return m.Count },
-		func(m model, n int) model { m.Count = n; return m },
-	)
-
-	var seen []int
-	dispose := Effect(func() { seen = append(seen, count.Get()) })
-	defer dispose()
-
-	count.Set(7)
-	effects.flush()
-	if len(seen) != 2 || seen[1] != 7 {
-		t.Fatalf("seen = %v, want the effect to re-run through the lens", seen)
+	Add(n, 2)
+	if !on.Get() || n.Get() != 3.5 {
+		t.Fatalf("on = %v, n = %v; want true, 3.5", on.Get(), n.Get())
 	}
 }
 

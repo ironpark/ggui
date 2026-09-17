@@ -3,10 +3,8 @@ package ggui
 import (
 	"image/color"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	"github.com/hajimehoshi/ebiten/v2/vector"
-	"golang.org/x/image/font/basicfont"
 )
 
 // Built-in widgets follow one shape: a constructor takes what the widget
@@ -18,13 +16,13 @@ import (
 // reads as the tree it builds. Widget types end in Widget so the short names
 // stay free for the constructors.
 
-// defaultFace is the placeholder font until font loading lands.
-var defaultFace = text.NewGoXFace(basicfont.Face7x13)
-
 // EdgeInsets is padding on the four sides of a box.
 type EdgeInsets struct {
 	Top, Right, Bottom, Left float64
 }
+
+// All returns insets with the same value on every side.
+func All(v float64) EdgeInsets { return Insets(v) }
 
 // Insets builds EdgeInsets with CSS shorthand: one value for every side, two
 // for vertical then horizontal, four for top, right, bottom, left.
@@ -61,36 +59,88 @@ func (e EdgeInsets) Inflate(s Size) Size {
 func (e EdgeInsets) horizontal() float64 { return e.Left + e.Right }
 func (e EdgeInsets) vertical() float64   { return e.Top + e.Bottom }
 
-// TextWidget draws a single line of text. Build one with Text.
+// TextWidget draws text, wrapping it to the width it is given. Build one
+// with Text.
 type TextWidget struct {
-	value string
-	color color.Color
+	value      string
+	color      color.Color
+	font       *Font
+	size       float64
+	lineHeight float64
+	wrap       bool
+	align      float64
+
+	lines   []string
+	spacing float64
 }
 
-// Text draws s on a single line.
-func Text(s string) *TextWidget { return &TextWidget{value: s} }
+// Text draws s in the default font at DefaultTextSize, wrapping at spaces
+// when it is wider than the space it gets.
+func Text(s string) *TextWidget {
+	return &TextWidget{value: s, size: DefaultTextSize, lineHeight: 1.2, wrap: true}
+}
 
 // Color sets the text color.
 func (t *TextWidget) Color(c color.Color) *TextWidget { t.color = c; return t }
 
+// Font sets the face; nil means the default font.
+func (t *TextWidget) Font(f *Font) *TextWidget { t.font = f; return t }
+
+// Size sets the font size in pixels.
+func (t *TextWidget) Size(px float64) *TextWidget { t.size = px; return t }
+
+// LineHeight sets the distance between baselines as a multiple of Size.
+func (t *TextWidget) LineHeight(mult float64) *TextWidget { t.lineHeight = mult; return t }
+
+// NoWrap keeps the text on one line per hard line break, however wide.
+func (t *TextWidget) NoWrap() *TextWidget { t.wrap = false; return t }
+
+// Align places each line within the widget's width by fraction: 0 is left,
+// 0.5 centered, 1 right.
+func (t *TextWidget) Align(x float64) *TextWidget { t.align = x; return t }
+
+func (t *TextWidget) face() text.Face {
+	f := t.font
+	if f == nil {
+		f = defaultFont
+	}
+	return f.face(t.size)
+}
+
 // Layout implements Widget.
 func (t *TextWidget) Layout(c Constraints) Size {
-	w, h := text.Measure(t.value, defaultFace, 0)
+	face := t.face()
+	t.spacing = t.size * t.lineHeight
+	if t.wrap {
+		t.lines = wrapText(t.value, face, c.MaxW)
+	} else {
+		t.lines = wrapText(t.value, face, 0)
+	}
+	var w float64
+	for _, line := range t.lines {
+		w = max(w, lineWidth(line, face))
+	}
+	m := face.Metrics()
+	h := float64(len(t.lines)-1)*t.spacing + m.HAscent + m.HDescent
 	return c.Constrain(Sz(w, h))
 }
 
 // Paint implements Widget.
-func (t *TextWidget) Paint(dst *ebiten.Image, r Rect) {
-	op := &text.DrawOptions{}
-	op.GeoM.Translate(r.Origin.X, r.Origin.Y)
-	if t.color != nil {
-		op.ColorScale.ScaleWithColor(t.color)
+func (t *TextWidget) Paint(dst *Canvas, r Rect) {
+	face := t.face()
+	for i, line := range t.lines {
+		op := &text.DrawOptions{}
+		x := r.Origin.X + (r.Size.W-lineWidth(line, face))*t.align
+		op.GeoM.Translate(x, r.Origin.Y+float64(i)*t.spacing)
+		if t.color != nil {
+			op.ColorScale.ScaleWithColor(t.color)
+		}
+		text.Draw(dst.Image, line, face, op)
 	}
-	text.Draw(dst, t.value, defaultFace, op)
 }
 
 // BoxWidget paints a rectangle and lays an optional child inside its padding.
-// Build one with Box, or with Padding when only the insets matter.
+// Build one with Box.
 type BoxWidget struct {
 	fill    color.Color
 	padding EdgeInsets
@@ -115,20 +165,13 @@ func Box(child ...Widget) *BoxWidget {
 	return b
 }
 
-// Padding surrounds child with empty space, in the CSS shorthand Insets
-// accepts: Padding(w, 8), Padding(w, 4, 12) or Padding(w, 1, 2, 3, 4). It is
-// Box(child).Pad(sides...), so Fill and the other Box setters still chain.
-func Padding(child Widget, sides ...float64) *BoxWidget {
-	return Box(child).Pad(sides...)
-}
-
 // Fill sets the background color. Nil paints nothing.
 func (b *BoxWidget) Fill(c color.Color) *BoxWidget { b.fill = c; return b }
 
 // Pad sets padding with the CSS shorthand Insets accepts.
 func (b *BoxWidget) Pad(sides ...float64) *BoxWidget { b.padding = Insets(sides...); return b }
 
-// Padding sets per-side padding from an EdgeInsets.
+// Padding sets per-side padding.
 func (b *BoxWidget) Padding(e EdgeInsets) *BoxWidget { b.padding = e; return b }
 
 // Size fixes both dimensions. Zero leaves that dimension to the child.
@@ -144,7 +187,7 @@ func (b *BoxWidget) Height(h float64) *BoxWidget { b.height = h; return b }
 func (b *BoxWidget) Layout(c Constraints) Size {
 	b.childSize = Size{}
 	if b.child != nil {
-		b.childSize = b.child.Layout(b.padding.Shrink(c).Loosen())
+		b.childSize = b.child.Layout(Loose(b.padding.Shrink(c).Max()))
 	}
 	want := b.padding.Inflate(b.childSize)
 	if b.width > 0 {
@@ -157,9 +200,9 @@ func (b *BoxWidget) Layout(c Constraints) Size {
 }
 
 // Paint implements Widget.
-func (b *BoxWidget) Paint(dst *ebiten.Image, r Rect) {
+func (b *BoxWidget) Paint(dst *Canvas, r Rect) {
 	if b.fill != nil {
-		vector.DrawFilledRect(dst,
+		vector.DrawFilledRect(dst.Image,
 			float32(r.Origin.X), float32(r.Origin.Y),
 			float32(r.Size.W), float32(r.Size.H),
 			b.fill, true)
@@ -169,72 +212,265 @@ func (b *BoxWidget) Paint(dst *ebiten.Image, r Rect) {
 	}
 }
 
-// FlowWidget lays its children out along one axis, separated by a gap. Build
-// one with Column or Row, the two orientations of it.
-type FlowWidget struct {
-	horizontal bool
-	gap        float64
-	children   []Widget
+// PaddingWidget surrounds one child with empty space. Build one with Padding.
+type PaddingWidget struct {
+	insets EdgeInsets
+	child  Widget
 
-	sizes []Size
+	childSize Size
 }
 
-// Column stacks children top to bottom.
-func Column(children ...Widget) *FlowWidget {
-	return &FlowWidget{children: children}
+// Padding surrounds child with the CSS shorthand Insets accepts:
+// Padding(w, 8), Padding(w, 4, 12) or Padding(w, 1, 2, 3, 4).
+func Padding(child Widget, sides ...float64) *PaddingWidget {
+	return &PaddingWidget{child: child, insets: Insets(sides...)}
 }
 
-// Row lines children up left to right.
-func Row(children ...Widget) *FlowWidget {
-	return &FlowWidget{horizontal: true, children: children}
-}
-
-// List builds one child per item and stacks them like a Column. It is
-// Column(Children(items, item)...) for the common case.
-func List[T any](items []T, item func(T) Widget) *FlowWidget {
-	return Column(Children(items, item)...)
-}
-
-// Gap sets the space between consecutive children.
-func (f *FlowWidget) Gap(v float64) *FlowWidget { f.gap = v; return f }
+// Insets sets per-side padding from an EdgeInsets.
+func (p *PaddingWidget) Insets(e EdgeInsets) *PaddingWidget { p.insets = e; return p }
 
 // Layout implements Widget.
-func (f *FlowWidget) Layout(c Constraints) Size {
-	f.sizes = f.sizes[:0]
-	var total Size
-	remaining := c.Max()
-	for i, child := range f.children {
-		s := child.Layout(Loose(remaining))
-		f.sizes = append(f.sizes, s)
-		gap := f.gap
-		if i == len(f.children)-1 {
-			gap = 0
-		}
-		if f.horizontal {
-			total.W += s.W + gap
-			total.H = max(total.H, s.H)
-			remaining.W -= s.W + gap
-		} else {
-			total.H += s.H + gap
-			total.W = max(total.W, s.W)
-			remaining.H -= s.H + gap
-		}
-	}
-	return c.Constrain(total)
+func (p *PaddingWidget) Layout(c Constraints) Size {
+	p.childSize = p.child.Layout(p.insets.Shrink(c))
+	return c.Constrain(p.insets.Inflate(p.childSize))
 }
 
 // Paint implements Widget.
-func (f *FlowWidget) Paint(dst *ebiten.Image, r Rect) {
-	at := r.Origin
+func (p *PaddingWidget) Paint(dst *Canvas, r Rect) {
+	p.child.Paint(dst, Rct(r.Origin.Add(Pt(p.insets.Left, p.insets.Top)), p.childSize))
+}
+
+// Justify distributes a Row's or Column's children along its main axis. Any
+// value but JustifyStart makes the widget fill the main axis so there is
+// space to distribute.
+type Justify int
+
+const (
+	JustifyStart  Justify = iota // packed at the start (the default)
+	JustifyCenter                // packed in the middle
+	JustifyEnd                   // packed at the end
+	SpaceBetween                 // free space split between children
+	SpaceAround                  // free space split around each child
+	SpaceEvenly                  // free space split evenly, edges included
+)
+
+// CrossAlign places a Row's or Column's children across its main axis.
+type CrossAlign int
+
+const (
+	AlignStart   CrossAlign = iota // top of a Row, left of a Column (the default)
+	AlignCenter                    // centered across
+	AlignEnd                       // bottom of a Row, right of a Column
+	AlignStretch                   // stretched to the widget's cross size, which fills the space given
+)
+
+// flow lays children out along one axis. Column and Row are the two
+// orientations of it. FlexWidget children share whatever main-axis space the
+// others leave, weighted by their flex.
+type flow struct {
+	horizontal bool
+	gap        float64
+	justify    Justify
+	align      CrossAlign
+	children   []Widget
+
+	sizes   []Size
+	offsets []Point
+}
+
+func (f *flow) main(s Size) float64  { return pick(f.horizontal, s.W, s.H) }
+func (f *flow) cross(s Size) float64 { return pick(f.horizontal, s.H, s.W) }
+
+func (f *flow) size(main, cross float64) Size {
+	if f.horizontal {
+		return Size{W: main, H: cross}
+	}
+	return Size{W: cross, H: main}
+}
+
+func (f *flow) constraints(mainMin, mainMax, crossMin, crossMax float64) Constraints {
+	if f.horizontal {
+		return Constraints{MinW: mainMin, MaxW: mainMax, MinH: crossMin, MaxH: crossMax}
+	}
+	return Constraints{MinH: mainMin, MaxH: mainMax, MinW: crossMin, MaxW: crossMax}
+}
+
+func (f *flow) layout(c Constraints) Size {
+	n := len(f.children)
+	f.sizes = append(f.sizes[:0], make([]Size, n)...)
+	f.offsets = append(f.offsets[:0], make([]Point, n)...)
+
+	mainMax, crossMax := f.main(c.Max()), f.cross(c.Max())
+	var crossMin float64
+	if f.align == AlignStretch {
+		crossMin = crossMax
+	}
+
+	var gaps float64
+	if n > 1 {
+		gaps = f.gap * float64(n-1)
+	}
+
+	// Rigid children first, each offered what is left; then flex children
+	// split the remainder by weight.
+	used := gaps
+	var totalFlex float64
 	for i, child := range f.children {
-		child.Paint(dst, Rct(at, f.sizes[i]))
-		if f.horizontal {
-			at.X += f.sizes[i].W + f.gap
-		} else {
-			at.Y += f.sizes[i].H + f.gap
+		if fw, ok := child.(*FlexWidget); ok && fw.flex > 0 {
+			totalFlex += fw.flex
+			continue
+		}
+		f.sizes[i] = child.Layout(f.constraints(0, max(mainMax-used, 0), crossMin, crossMax))
+		used += f.main(f.sizes[i])
+	}
+	free := max(mainMax-used, 0)
+	for i, child := range f.children {
+		if fw, ok := child.(*FlexWidget); ok && fw.flex > 0 {
+			extent := free * fw.flex / totalFlex
+			f.sizes[i] = child.Layout(f.constraints(extent, extent, crossMin, crossMax))
 		}
 	}
+
+	content := gaps
+	var crossUsed float64
+	for _, s := range f.sizes {
+		content += f.main(s)
+		crossUsed = max(crossUsed, f.cross(s))
+	}
+	mainTotal := content
+	if totalFlex > 0 || f.justify != JustifyStart {
+		mainTotal = mainMax
+	}
+	crossTotal := crossUsed
+	if f.align == AlignStretch {
+		crossTotal = crossMax
+	}
+	result := c.Constrain(f.size(mainTotal, crossTotal))
+
+	lead, between := 0.0, f.gap
+	if slack := max(f.main(result)-content, 0); n > 0 {
+		switch f.justify {
+		case JustifyCenter:
+			lead = slack / 2
+		case JustifyEnd:
+			lead = slack
+		case SpaceBetween:
+			if n > 1 {
+				between += slack / float64(n-1)
+			}
+		case SpaceAround:
+			lead = slack / float64(n) / 2
+			between += slack / float64(n)
+		case SpaceEvenly:
+			lead = slack / float64(n+1)
+			between += slack / float64(n+1)
+		}
+	}
+	pos := lead
+	for i, s := range f.sizes {
+		crossOff := (f.cross(result) - f.cross(s)) * f.crossFraction()
+		if f.horizontal {
+			f.offsets[i] = Pt(pos, crossOff)
+		} else {
+			f.offsets[i] = Pt(crossOff, pos)
+		}
+		pos += f.main(s) + between
+	}
+	return result
 }
+
+func (f *flow) crossFraction() float64 {
+	switch f.align {
+	case AlignCenter:
+		return 0.5
+	case AlignEnd:
+		return 1
+	}
+	return 0
+}
+
+func (f *flow) paint(dst *Canvas, r Rect) {
+	for i, child := range f.children {
+		child.Paint(dst, Rct(r.Origin.Add(f.offsets[i]), f.sizes[i]))
+	}
+}
+
+func pick[T any](cond bool, a, b T) T {
+	if cond {
+		return a
+	}
+	return b
+}
+
+// ColumnWidget stacks its children vertically. Build one with Column.
+type ColumnWidget struct{ flow }
+
+// Column stacks children top to bottom.
+func Column(children ...Widget) *ColumnWidget {
+	return &ColumnWidget{flow{children: children}}
+}
+
+// Gap sets the space between consecutive children.
+func (col *ColumnWidget) Gap(v float64) *ColumnWidget { col.gap = v; return col }
+
+// Justify distributes children along the vertical axis.
+func (col *ColumnWidget) Justify(j Justify) *ColumnWidget { col.justify = j; return col }
+
+// Align places children horizontally within the column.
+func (col *ColumnWidget) Align(a CrossAlign) *ColumnWidget { col.align = a; return col }
+
+// Layout implements Widget.
+func (col *ColumnWidget) Layout(c Constraints) Size { return col.layout(c) }
+
+// Paint implements Widget.
+func (col *ColumnWidget) Paint(dst *Canvas, r Rect) { col.paint(dst, r) }
+
+// RowWidget lines its children up horizontally. Build one with Row.
+type RowWidget struct{ flow }
+
+// Row lines children up left to right.
+func Row(children ...Widget) *RowWidget {
+	return &RowWidget{flow{horizontal: true, children: children}}
+}
+
+// Gap sets the space between consecutive children.
+func (row *RowWidget) Gap(v float64) *RowWidget { row.gap = v; return row }
+
+// Justify distributes children along the horizontal axis.
+func (row *RowWidget) Justify(j Justify) *RowWidget { row.justify = j; return row }
+
+// Align places children vertically within the row.
+func (row *RowWidget) Align(a CrossAlign) *RowWidget { row.align = a; return row }
+
+// Layout implements Widget.
+func (row *RowWidget) Layout(c Constraints) Size { return row.layout(c) }
+
+// Paint implements Widget.
+func (row *RowWidget) Paint(dst *Canvas, r Rect) { row.paint(dst, r) }
+
+// FlexWidget marks a child of a Row or Column as one that takes a share of
+// the leftover main-axis space. Anywhere else it is transparent. Build one
+// with Flex, Expanded or Spacer.
+type FlexWidget struct {
+	flex  float64
+	child Widget
+}
+
+// Flex gives child weight shares of the space its Row or Column has left
+// after the rigid children are placed.
+func Flex(child Widget, weight float64) *FlexWidget { return &FlexWidget{flex: weight, child: child} }
+
+// Expanded is Flex with weight 1.
+func Expanded(child Widget) *FlexWidget { return Flex(child, 1) }
+
+// Spacer is an empty Expanded: it pushes its neighbours apart.
+func Spacer() *FlexWidget { return Expanded(Box()) }
+
+// Layout implements Widget.
+func (f *FlexWidget) Layout(c Constraints) Size { return f.child.Layout(c) }
+
+// Paint implements Widget.
+func (f *FlexWidget) Paint(dst *Canvas, r Rect) { f.child.Paint(dst, r) }
 
 // StackWidget layers its children on top of each other, first at the bottom.
 // Build one with Stack.
@@ -246,7 +482,8 @@ type StackWidget struct {
 }
 
 // Stack layers children in order, all anchored at the top-left corner. It is
-// as large as its largest child unless Expand is set.
+// as large as its largest child unless Expand is set. Wrap a child in Align
+// to place it elsewhere.
 func Stack(children ...Widget) *StackWidget {
 	return &StackWidget{children: children}
 }
@@ -260,7 +497,7 @@ func (st *StackWidget) Layout(c Constraints) Size {
 	st.sizes = st.sizes[:0]
 	var total Size
 	for _, child := range st.children {
-		s := child.Layout(c.Loosen())
+		s := child.Layout(Loose(c.Max()))
 		st.sizes = append(st.sizes, s)
 		total.W = max(total.W, s.W)
 		total.H = max(total.H, s.H)
@@ -272,7 +509,7 @@ func (st *StackWidget) Layout(c Constraints) Size {
 }
 
 // Paint implements Widget.
-func (st *StackWidget) Paint(dst *ebiten.Image, r Rect) {
+func (st *StackWidget) Paint(dst *Canvas, r Rect) {
 	for i, child := range st.children {
 		child.Paint(dst, Rct(r.Origin, st.sizes[i]))
 	}
@@ -312,14 +549,41 @@ func (a *AlignWidget) Bottom() *AlignWidget { a.y = 1; return a }
 
 // Layout implements Widget.
 func (a *AlignWidget) Layout(c Constraints) Size {
-	a.childSize = a.child.Layout(c.Loosen())
+	a.childSize = a.child.Layout(Loose(c.Max()))
 	return c.Max()
 }
 
 // Paint implements Widget.
-func (a *AlignWidget) Paint(dst *ebiten.Image, r Rect) {
+func (a *AlignWidget) Paint(dst *Canvas, r Rect) {
 	a.child.Paint(dst, Rct(
 		r.Origin.Add(Pt((r.Size.W-a.childSize.W)*a.x, (r.Size.H-a.childSize.H)*a.y)),
 		a.childSize,
 	))
 }
+
+// ListWidget is a Column driven by data: one child per item, built by the
+// item function. Children are rebuilt each layout pass, so the list stays in
+// step with the slice it was given. Build one with List.
+type ListWidget[T any] struct {
+	items []T
+	item  func(T) Widget
+
+	col ColumnWidget
+}
+
+// List builds one child per item and stacks them like a Column.
+func List[T any](items []T, item func(T) Widget) *ListWidget[T] {
+	return &ListWidget[T]{items: items, item: item}
+}
+
+// Gap sets the space between consecutive items.
+func (l *ListWidget[T]) Gap(v float64) *ListWidget[T] { l.col.gap = v; return l }
+
+// Layout implements Widget.
+func (l *ListWidget[T]) Layout(c Constraints) Size {
+	l.col.children = Children(l.items, l.item)
+	return l.col.Layout(c)
+}
+
+// Paint implements Widget.
+func (l *ListWidget[T]) Paint(dst *Canvas, r Rect) { l.col.Paint(dst, r) }

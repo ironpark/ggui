@@ -6,6 +6,7 @@ import (
 	"image/color"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
 // Config describes the window an App opens.
@@ -33,8 +34,9 @@ func (c Config) withDefaults() Config {
 	return c
 }
 
-// App drives one window: it flushes reactive effects, rebuilds the tree when
-// state changed, then lays out and paints it.
+// App drives one window. Each frame it routes input to the regions painted
+// last frame, flushes reactive effects (which rebuilds the tree when state
+// changed), then lays out and paints, collecting the next frame's regions.
 type App struct {
 	cfg   Config
 	build Builder
@@ -42,6 +44,9 @@ type App struct {
 	root  Widget
 	frame []func()
 	dirty bool
+
+	hits  []hitRegion
+	input inputState
 }
 
 // New creates an App that renders the tree returned by build.
@@ -70,8 +75,9 @@ func (a *App) Run() error {
 	return ebiten.RunGame(a)
 }
 
-// OnFrame registers fn to run once per frame, before effects are flushed.
-// It is the seam for input handling until dedicated event widgets exist.
+// OnFrame registers fn to run once per frame, before input is dispatched
+// and effects are flushed. Use it for global shortcuts and per-frame work
+// that no widget owns; Pointer and Focus cover input aimed at a widget.
 func (a *App) OnFrame(fn func()) {
 	a.frame = append(a.frame, fn)
 }
@@ -81,8 +87,29 @@ func (a *App) Update() error {
 	for _, fn := range a.frame {
 		fn()
 	}
+	a.input.dispatch(readInput())
 	effects.flush()
 	return nil
+}
+
+var mouseButtons = []ebiten.MouseButton{ebiten.MouseButtonLeft, ebiten.MouseButtonRight, ebiten.MouseButtonMiddle}
+
+// readInput gathers this frame's input from the platform.
+func readInput() frameInput {
+	var f frameInput
+	f.pos = Pt(ebiten.CursorPosition())
+	for _, b := range mouseButtons {
+		if inpututil.IsMouseButtonJustPressed(b) {
+			f.down = append(f.down, b)
+		}
+		if inpututil.IsMouseButtonJustReleased(b) {
+			f.up = append(f.up, b)
+		}
+	}
+	f.wheel = Pt(ebiten.Wheel())
+	f.keys = inpututil.AppendJustPressedKeys(nil)
+	f.text = string(ebiten.AppendInputChars(nil))
+	return f
 }
 
 // Draw implements ebiten.Game.
@@ -91,9 +118,12 @@ func (a *App) Draw(screen *ebiten.Image) {
 	if a.root == nil {
 		return
 	}
+	a.hits = a.hits[:0]
+	canvas := &Canvas{Image: screen, hits: &a.hits}
 	b := screen.Bounds()
 	size := a.root.Layout(Tight(Sz(b.Dx(), b.Dy())))
-	a.root.Paint(screen, Rect{Size: size})
+	a.root.Paint(canvas, Rect{Size: size})
+	a.input.regions = a.hits
 	a.dirty = false
 }
 

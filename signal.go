@@ -20,19 +20,10 @@ type effect struct {
 	dirty bool
 }
 
-// Reader is the read side of a reactive value. *Signal, *Memo and Lens all
-// satisfy it, so helpers such as Watch and Combine accept any of them.
+// Reader is the read side of a reactive value. *Signal and *Memo both
+// satisfy it, so helpers such as Watch and Combine accept either.
 type Reader[T any] interface {
 	Get() T
-}
-
-// Cell is a read-write reactive value. *Signal and Lens satisfy it, so a
-// component can take a Cell[int] and not care whether it was handed a whole
-// Signal or one field of a larger state.
-type Cell[T any] interface {
-	Reader[T]
-	Set(T)
-	Update(func(T) T)
 }
 
 // Signal is a reactive value. Reads inside an Effect subscribe to it; writes
@@ -122,72 +113,11 @@ func (s *Signal[T]) Map[U any](fn func(T) U) *Memo[U] {
 	return Derived(func() U { return fn(s.Get()) })
 }
 
-// Field returns a read-write view of one field of s's value. sel picks the
-// field by pointer, so a struct can be sliced into reactive cells one line
-// each:
-//
-//	count := state.Field(func(m *model) *int { return &m.Count })
-//
-// Writes copy the whole value, assign through the pointer and store the copy,
-// so everything watching the whole value still sees the change. T should be a
-// value type; sel must return a pointer into the value it was given.
-func (s *Signal[T]) Field[U any](sel func(*T) *U) Lens[T, U] {
-	return field(s, sel)
-}
+// Toggle flips a boolean signal.
+func Toggle(s *Signal[bool]) { s.Update(func(b bool) bool { return !b }) }
 
-// Lens returns a read-write view of the part of s's value that get selects.
-// Reach for it when the part is computed rather than a plain field; for a
-// field, Field needs one closure instead of two.
-func (s *Signal[T]) Lens[U any](get func(T) U, set func(T, U) T) Lens[T, U] {
-	return Lens[T, U]{src: s, get: get, set: set}
-}
-
-// field builds a Lens onto one field of any Cell; Signal.Field and Lens.Field
-// are its two entry points.
-func field[T, U any](src Cell[T], sel func(*T) *U) Lens[T, U] {
-	return Lens[T, U]{
-		src: src,
-		get: func(t T) U { return *sel(&t) },
-		set: func(t T, v U) T { *sel(&t) = v; return t },
-	}
-}
-
-// Lens is a read-write view onto part of a Cell's value, produced by
-// Signal.Field or Signal.Lens. Reads track the underlying value; writes go through it, so
-// everything watching the whole value still sees the change. A Lens is itself
-// a Cell, so views nest: state.Field(...).Field(...).
-type Lens[T, U any] struct {
-	src Cell[T]
-	get func(T) U
-	set func(T, U) T
-}
-
-// Get returns the selected part and subscribes the running Effect, if any.
-func (l Lens[T, U]) Get() U { return l.get(l.src.Get()) }
-
-// Set writes v back through the underlying Cell.
-func (l Lens[T, U]) Set(v U) { l.Update(func(U) U { return v }) }
-
-// Update applies fn to the selected part and writes the result back.
-func (l Lens[T, U]) Update(fn func(U) U) {
-	l.src.Update(func(t T) T { return l.set(t, fn(l.get(t))) })
-}
-
-// Field narrows the view to one field of the selected part.
-func (l Lens[T, U]) Field[V any](sel func(*U) *V) Lens[U, V] {
-	return field(l, sel)
-}
-
-// Map returns a Memo holding fn applied to the selected part.
-func (l Lens[T, U]) Map[V any](fn func(U) V) *Memo[V] {
-	return Derived(func() V { return fn(l.Get()) })
-}
-
-// Toggle flips a boolean cell.
-func Toggle(c Cell[bool]) { c.Update(func(b bool) bool { return !b }) }
-
-// Add adds d to a numeric cell.
-func Add[N Number](c Cell[N], d N) { c.Update(func(n N) N { return n + d }) }
+// Add adds d to a numeric signal.
+func Add[N Number](s *Signal[N], d N) { s.Update(func(n N) N { return n + d }) }
 
 // Memo is a derived value: it recomputes when one of the signals its function
 // read changes, and notifies its own readers only when the result differs.

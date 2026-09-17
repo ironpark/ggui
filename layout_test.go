@@ -1,10 +1,6 @@
 package ggui
 
-import (
-	"testing"
-
-	"github.com/hajimehoshi/ebiten/v2"
-)
+import "testing"
 
 func TestConstraintsConstrain(t *testing.T) {
 	c := Constraints{MinW: 10, MinH: 10, MaxW: 100, MaxH: 100}
@@ -78,7 +74,7 @@ func TestListLaysOutItemsLikeColumn(t *testing.T) {
 func probe(w, h float64, got *Rect) Widget {
 	return FromFuncs(
 		func(c Constraints) Size { return c.Constrain(Sz(w, h)) },
-		func(_ *ebiten.Image, r Rect) { *got = r },
+		func(_ *Canvas, r Rect) { *got = r },
 	)
 }
 
@@ -129,7 +125,7 @@ func TestRowSumsWidthsAndGaps(t *testing.T) {
 
 func TestPaddingInsetsChild(t *testing.T) {
 	var child Rect
-	p := Padding(probe(20, 10, &child)).Padding(EdgeInsets{Top: 1, Right: 2, Bottom: 3, Left: 4})
+	p := Padding(probe(20, 10, &child), 1, 2, 3, 4)
 	got := p.Layout(Loose(Sz(200, 200)))
 	if got != (Size{W: 26, H: 14}) {
 		t.Fatalf("Layout() = %+v, want {26 14}", got)
@@ -198,4 +194,85 @@ func TestStateInfersTypeFromLiteral(t *testing.T) {
 	var _ *Signal[string] = State("??")
 	var _ *Signal[float64] = State[float64](0)
 	var _ *Signal[Widget] = State[Widget](nil)
+}
+
+func TestExpandedTakesLeftoverMainAxis(t *testing.T) {
+	var a, b, c Rect
+	row := Row(
+		probe(10, 10, &a),
+		Expanded(probe(1, 10, &b)),
+		Flex(probe(1, 10, &c), 3),
+	).Gap(5)
+	got := row.Layout(Loose(Sz(100, 50)))
+	if got != (Size{W: 100, H: 10}) {
+		t.Fatalf("Layout() = %+v, want to fill the width {100 10}", got)
+	}
+	row.Paint(nil, Rct(Pt(0, 0), got))
+	// 100 - 10 - 2*5 = 80 free, split 1:3.
+	if b.Size.W != 20 || c.Size.W != 60 {
+		t.Fatalf("flex widths = %v, %v; want 20, 60", b.Size.W, c.Size.W)
+	}
+	if b.Origin.X != 15 || c.Origin.X != 40 {
+		t.Fatalf("flex origins = %v, %v; want 15, 40", b.Origin.X, c.Origin.X)
+	}
+}
+
+func TestSpacerPushesNeighboursApart(t *testing.T) {
+	var last Rect
+	row := Row(Box().Size(10, 10), Spacer(), probe(10, 10, &last))
+	row.Paint(nil, Rct(Pt(0, 0), row.Layout(Loose(Sz(100, 10)))))
+	if last.Origin.X != 90 {
+		t.Fatalf("last child at x=%v, want 90", last.Origin.X)
+	}
+}
+
+func TestJustifyDistributesSlack(t *testing.T) {
+	cases := []struct {
+		name string
+		j    Justify
+		want []float64 // y of each of three 10-high children in 100
+	}{
+		{"start", JustifyStart, []float64{0, 10, 20}},
+		{"center", JustifyCenter, []float64{35, 45, 55}},
+		{"end", JustifyEnd, []float64{70, 80, 90}},
+		{"between", SpaceBetween, []float64{0, 45, 90}},
+		{"around", SpaceAround, []float64{70.0 / 6, 70.0/6 + 10 + 70.0/3, 70.0/6 + 20 + 2*70.0/3}},
+		{"evenly", SpaceEvenly, []float64{17.5, 45, 72.5}},
+	}
+	for _, c := range cases {
+		var got [3]Rect
+		col := Column(probe(10, 10, &got[0]), probe(10, 10, &got[1]), probe(10, 10, &got[2])).Justify(c.j)
+		size := col.Layout(Loose(Sz(50, 100)))
+		if c.j != JustifyStart && size.H != 100 {
+			t.Fatalf("%s: Layout() = %+v, want to fill the height", c.name, size)
+		}
+		col.Paint(nil, Rct(Pt(0, 0), size))
+		for i, want := range c.want {
+			if d := got[i].Origin.Y - want; d > 1e-9 || d < -1e-9 {
+				t.Fatalf("%s: child %d at y=%v, want %v", c.name, i, got[i].Origin.Y, want)
+			}
+		}
+	}
+}
+
+func TestCrossAlignPlacesAndStretches(t *testing.T) {
+	var got Rect
+	row := Row(Box().Size(10, 40), probe(10, 10, &got)).Align(AlignCenter)
+	row.Paint(nil, Rct(Pt(0, 0), row.Layout(Loose(Sz(100, 100)))))
+	if got.Origin.Y != 15 {
+		t.Fatalf("centered child at y=%v, want 15", got.Origin.Y)
+	}
+
+	row = Row(probe(10, 10, &got)).Align(AlignStretch)
+	size := row.Layout(Loose(Sz(100, 60)))
+	row.Paint(nil, Rct(Pt(0, 0), size))
+	if size.H != 60 || got.Size.H != 60 {
+		t.Fatalf("stretch: row %v, child %v; want both 60 high", size.H, got.Size.H)
+	}
+}
+
+func TestFlexIsTransparentOutsideAFlow(t *testing.T) {
+	if got := Expanded(Box().Size(7, 7)).Layout(Loose(Sz(100, 100))); got != (Size{W: 7, H: 7}) {
+		t.Fatalf("Layout() = %+v, want the child's {7 7}", got)
+	}
 }

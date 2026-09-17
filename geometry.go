@@ -40,6 +40,13 @@ type Rect struct {
 // Rct returns the Rect at origin with size.
 func Rct(origin Point, size Size) Rect { return Rect{Origin: origin, Size: size} }
 
+// Contains reports whether p lies inside r. The top and left edges are
+// inside, the bottom and right edges are not.
+func (r Rect) Contains(p Point) bool {
+	return p.X >= r.Origin.X && p.X < r.Origin.X+r.Size.W &&
+		p.Y >= r.Origin.Y && p.Y < r.Origin.Y+r.Size.H
+}
+
 // Constraints bound the size a widget may choose during layout, the same way
 // Flutter's BoxConstraints flow down the tree while sizes flow back up.
 type Constraints struct {
