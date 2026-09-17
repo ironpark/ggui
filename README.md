@@ -8,7 +8,7 @@
 
 Powered by [Ebitengine](https://ebiten.org).
 
-[Quick start](#quick-start) · [Examples](#examples) · [Guide](GUIDE.md) · [Accessibility](#accessibility) · [Development](#development)
+[Demos](#demos) · [Quick start](#quick-start) · [Examples](#examples) · [Guide](GUIDE.md) · [Accessibility](#accessibility) · [Development](#development)
 
 </div>
 
@@ -33,6 +33,20 @@ and controls that bind directly to your data.
 | Text and input | IME composition, grapheme-aware editing, clipboard support, and font fallbacks. |
 | Motion and themes | Tweens, springs, transitions, light/dark themes, and inherited style tokens. |
 | Developer tools | Headless interaction tests with `Probe` and an in-app widget inspector. |
+
+## Demos
+
+**Todo** — add tasks, mark them complete, and switch themes.
+
+![Todo app: adding tasks, completing tasks and switching to dark mode](assets/demos/todo.gif)
+
+**Component gallery** — explore reactive controls, search components, and try
+animated notifications with undo actions.
+
+![Component gallery: text input, themes, animated toasts with undo, and tabs](assets/demos/gallery.gif)
+
+Recorded from the running macOS examples, driven through the native accessibility
+API. The demo builds use `AccessibilityAlways`.
 
 ## Quick start
 

@@ -524,6 +524,10 @@ component setup, and call it on the UI thread. Include the host once in the
 tree, register `ggui.OnCleanup(toaster.Close)` in setup, then call
 `toaster.Push(ui.Toast(title, description).Action("Undo", undo))` from UI callbacks.
 Notifications do not steal focus and pause their timeout while hovered or focused.
+They fade and slide in and out, and the stack moves smoothly when notices change.
+Reduced motion skips these animations. Timed notices show their remaining lifetime;
+`.Duration(0)` keeps a notice until dismissed. `Dismiss` immediately removes its
+interaction and excludes it from `Len`, while its exit animation finishes.
 
 ## Animation
 

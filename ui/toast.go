@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"image/color"
 	"slices"
 	"time"
 
+	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 )
 
@@ -45,17 +47,26 @@ type ToasterWidget struct {
 	limit   int
 	closed  bool
 	env     ggui.Env
+	buffer  *ebiten.Image
 }
 type toastEntry struct {
-	id              ToastID
-	title           string
-	panel           *AlertWidget
-	dismiss, action *ButtonWidget
-	remaining       time.Duration
-	persistent      bool
-	last            time.Time
-	hover           bool
+	id               ToastID
+	title            string
+	panel            *toastPanel
+	dismiss, action  *ButtonWidget
+	remaining        time.Duration
+	persistent       bool
+	last             time.Time
+	hover            bool
+	leaving          bool
+	exitAt           time.Time
+	motion, position ggui.Motion
+	duration         time.Duration
 }
+
+// Stable identity prevents motion from announcing the same live region again.
+func (e *toastEntry) HitID() any          { return e }
+func (e *toastEntry) Describe() ggui.Node { return ggui.Node{Role: ggui.RoleStatus, Name: e.title} }
 
 // NewToaster creates a queue with room for three notices. Keep it outside the
 // rebuilding Builder, or create it in Component setup and register
@@ -65,6 +76,9 @@ func NewToaster() *ToasterWidget { return &ToasterWidget{limit: 3} }
 // Limit sets the queue size (at least one); excess oldest notices are discarded.
 func (t *ToasterWidget) Limit(n int) *ToasterWidget { t.limit = max(1, n); t.trim(); return t }
 func (t *ToasterWidget) trim() {
+	if len(t.entries) > t.limit {
+		t.entries = slices.DeleteFunc(t.entries, func(e *toastEntry) bool { return e.leaving })
+	}
 	if len(t.entries) > t.limit {
 		t.entries = slices.Delete(t.entries, 0, len(t.entries)-t.limit)
 	}
@@ -77,39 +91,63 @@ func (t *ToasterWidget) Push(message ToastMessage) ToastID {
 	}
 	t.next++
 	e := &toastEntry{id: t.next, title: message.title, remaining: message.duration, persistent: message.duration <= 0, last: ggui.Now()}
-	e.dismiss = Button("Dismiss", func() { t.Dismiss(e.id) }).Secondary().Label("Dismiss " + message.title)
+	e.motion.MoveTo(0, e.last, 0)
+	e.duration = message.duration
+	e.dismiss = Button("×", func() { t.Dismiss(e.id) }).Secondary().Pad(2, 8).Label("Dismiss " + message.title)
 	e.dismiss.Key(e)
-	actions := []ggui.Widget{}
+
 	if message.actionLabel != "" {
 		e.action = Button(message.actionLabel, func() {
+			if e.leaving {
+				return
+			}
 			t.Dismiss(e.id)
 			if message.action != nil {
 				message.action()
 			}
 		}).Secondary()
 		e.action.Key(&e.action)
-		actions = append(actions, e.action)
+
 	}
-	actions = append(actions, e.dismiss)
-	e.panel = Alert(message.title, message.description).Action(ggui.Wrap(actions...).Space(.5))
-	if message.destructive {
-		e.panel.Destructive()
-	}
+	e.panel = &toastPanel{entry: e, title: ggui.Text(message.title), description: ggui.Text(message.description), destructive: message.destructive}
 	t.entries = append(t.entries, e)
 	t.trim()
 	return e.id
 }
 
-// Dismiss removes the notice with id. An unknown ID is a no-op.
+const toastMotionDuration = 240 * time.Millisecond
+
+// Dismiss starts the exit animation. The notice immediately stops accepting
+// input and no longer counts toward Len. An unknown ID is a no-op.
 func (t *ToasterWidget) Dismiss(id ToastID) {
-	t.entries = slices.DeleteFunc(t.entries, func(e *toastEntry) bool { return e.id == id })
+	for _, e := range t.entries {
+		if e.id == id && !e.leaving {
+			e.leaving, e.exitAt = true, ggui.Now()
+		}
+	}
 }
 
-// Len returns queued notices; expiration is processed when the host paints.
-func (t *ToasterWidget) Len() int { return len(t.entries) }
+// Len returns active notices, excluding those finishing their exit animation.
+// Expiration is processed when the host paints.
+func (t *ToasterWidget) Len() int {
+	n := 0
+	for _, e := range t.entries {
+		if !e.leaving {
+			n++
+		}
+	}
+	return n
+}
 
 // Clear drops all notifications and their callbacks.
-func (t *ToasterWidget) Clear() { clear(t.entries); t.entries = nil }
+func (t *ToasterWidget) Clear() {
+	clear(t.entries)
+	t.entries = nil
+	if t.buffer != nil {
+		t.buffer.Deallocate()
+		t.buffer = nil
+	}
+}
 
 // Close drops the queue and rejects future Push calls. It is safe to call twice.
 func (t *ToasterWidget) Close() { t.closed = true; t.Clear() }
@@ -127,18 +165,26 @@ func (t *ToasterWidget) Paint(dst *ggui.Canvas, _ ggui.Rect) {
 	}
 	now := ggui.Now()
 	t.entries = slices.DeleteFunc(t.entries, func(e *toastEntry) bool {
+		if e.leaving {
+			return t.env.ReducedMotion() || now.Sub(e.exitAt) >= toastMotionDuration
+		}
 		paused := e.hover || e.dismiss.Focused || e.dismiss.Hovered || (e.action != nil && (e.action.Focused || e.action.Hovered))
 		if !e.persistent && !paused {
 			e.remaining -= max(time.Duration(0), now.Sub(e.last))
 		}
 		e.last = now
-		return !e.persistent && e.remaining <= 0
+		if !e.persistent && e.remaining <= 0 {
+			e.leaving, e.exitAt = true, now
+			return t.env.ReducedMotion()
+		}
+		return false
 	})
 	if len(t.entries) > 0 {
 		dst.Overlay(t.paintNotices)
 	}
 }
 func (t *ToasterWidget) paintNotices(dst *ggui.Canvas) {
+	now := ggui.Now()
 	screen := dst.Size()
 	theme := t.env.Theme()
 	margin := theme.Space * 2
@@ -153,15 +199,60 @@ func (t *ToasterWidget) paintNotices(dst *ggui.Canvas) {
 			break
 		}
 		size := e.panel.Layout(ggui.Constraints{MinW: width, MaxW: width, MaxH: bottom - margin}, t.env)
-		rect := ggui.Rct(ggui.Pt(screen.W-margin-size.W, bottom-size.H), size)
-		clip := dst.Clip(rect)
+		targetY := bottom - size.H
+		duration := t.env.Motion(toastMotionDuration)
+		e.position.MoveTo(targetY, now, duration)
+		target := 1.0
+		if e.leaving {
+			target = 0
+		}
+		e.motion.MoveTo(target, now, duration)
+		progress := e.motion.Value(now)
+		if t.env.ReducedMotion() {
+			progress = target
+		}
+		y := e.position.Value(now)
+		if t.env.ReducedMotion() {
+			y = targetY
+		}
+		rect := ggui.Rct(ggui.Pt(screen.W-margin-size.W+(1-progress)*32, y), size)
+		clip := dst.Clip(ggui.Rct(ggui.Pt(0, 0), screen))
+		if e.leaving {
+			clip = clip.Inert()
+		}
+		output := clip.Image
+		fading := progress < 1 && output != nil
+		if fading {
+			bounds := output.Bounds()
+			if t.buffer == nil || t.buffer.Bounds().Size() != bounds.Size() {
+				if t.buffer != nil {
+					t.buffer.Deallocate()
+				}
+				t.buffer = ebiten.NewImage(bounds.Dx(), bounds.Dy())
+			}
+			t.buffer.Clear()
+			clip.Image = t.buffer
+		}
+		// Shadow stays outside the panel's own clipping rectangle.
+		for layer := 3; layer >= 1; layer-- {
+			shadow := ggui.Rct(rect.Origin.Add(ggui.Pt(float64(-layer), float64(layer*2))), ggui.Sz(rect.Size.W+float64(layer*2), rect.Size.H+float64(layer)))
+			clip.FillRoundRect(shadow, theme.Radius+4, color.NRGBA{A: uint8(5 + progress*5)})
+		}
+		clip = clip.Clip(rect)
 		clip.HitPointer(rect, toastHover{e})
 		// A notice is a live region: it appeared without the user asking,
 		// so it is announced where it stands rather than waited for.
-		clip.Node(rect, ggui.Node{Role: ggui.RoleStatus, Name: e.title}, func(clip *ggui.Canvas) {
+		clip.DescribeNode(rect, e, func(clip *ggui.Canvas) {
 			clip.Paint(e.panel, rect)
 		})
-		bottom -= size.H + theme.Space
+		if fading {
+			options := &ebiten.DrawImageOptions{}
+			options.ColorScale.ScaleAlpha(float32(progress))
+			output.DrawImage(t.buffer, options)
+		}
+		if !e.leaving {
+			bottom -= size.H + theme.Space
+		}
 	}
 }
 
@@ -178,4 +269,51 @@ func (h toastHover) HandlePointer(ev ggui.PointerEvent) bool {
 		return false
 	}
 	return true
+}
+
+// toastPanel is deliberately compact: a status marker, text hierarchy, an
+// optional action, and a named close button. Colors follow the current theme.
+type toastPanel struct {
+	entry              *toastEntry
+	title, description *ggui.TextWidget
+	destructive        bool
+	body               ggui.Widget
+	theme              ggui.Theme
+}
+
+func (p *toastPanel) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	p.theme = env.Theme()
+	t := p.theme
+	accent := t.Accent
+	mark := "✓"
+	if p.destructive {
+		accent = dangerColor(t)
+		mark = "!"
+	}
+	p.title.Style(t.Text).Color(t.Fg)
+	p.description.Style(t.Caption).Color(t.Muted)
+	parts := []ggui.Widget{p.title, p.description}
+	if p.entry.action != nil {
+		parts = append(parts, ggui.Row(p.entry.action))
+	}
+	text := ggui.Column(parts...).Gap(4).Align(ggui.AlignStretch)
+	p.body = ggui.Box(ggui.Row(
+		ggui.Box(ggui.Center(ggui.Text(mark).Color(t.OnAccent).Size(14))).Size(24, 24).Fill(accent).Radius(12),
+		ggui.Expanded(text), p.entry.dismiss,
+	).Gap(12).Align(ggui.AlignStart)).Pad(16).Fill(t.Surface).Border(1, t.Border).Radius(t.Radius + 4)
+	return p.body.Layout(c, env)
+}
+
+func (p *toastPanel) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	dst.Paint(p.body, r)
+	e := p.entry
+	if e.persistent || e.duration <= 0 {
+		return
+	}
+	fraction := max(0, min(1, float64(e.remaining)/float64(e.duration)))
+	accent := p.theme.Accent
+	if p.destructive {
+		accent = dangerColor(p.theme)
+	}
+	dst.FillRoundRect(ggui.Rct(r.Origin.Add(ggui.Pt(16.0, r.Size.H-5)), ggui.Sz((r.Size.W-32)*fraction, 2.0)), 1, accent)
 }
