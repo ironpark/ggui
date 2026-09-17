@@ -13,7 +13,7 @@ type ForWidget[T any, K comparable] struct {
 	items   []T
 	keys    []K
 	entries map[K]*forEntry[T]
-	stale   bool    // items changed since children was last filled
+	stale   bool // items changed since children was last filled
 	cache   *CachedWidget
 	extent  float64 // fixed main-axis size per item; 0 lays every child out
 
