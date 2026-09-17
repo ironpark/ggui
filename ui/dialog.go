@@ -11,17 +11,18 @@ import (
 // one with Dialog. It takes no space where it sits in the tree; put it
 // anywhere.
 type DialogWidget struct {
-	compact bool
-	open    ggui.Binding[bool]
-	content ggui.Widget
-	title   *ggui.TextWidget
-	name    string
-	panel   *ggui.BoxWidget
-	width   float64
-	onClose func()
-	theme   ggui.Theme
-	env     ggui.Env
-	rect    ggui.Rect
+	compact     bool
+	dismissible bool
+	open        ggui.Binding[bool]
+	content     ggui.Widget
+	title       *ggui.TextWidget
+	name        string
+	panel       *ggui.BoxWidget
+	width       float64
+	onClose     func()
+	theme       ggui.Theme
+	env         ggui.Env
+	rect        ggui.Rect
 }
 
 // Dialog creates a dialog that shows content while open is true.
@@ -32,7 +33,7 @@ type DialogWidget struct {
 //		ggui.Row(ui.Button("Delete", del), ui.Button("Cancel", func() { confirm.Set(false) }).Outline()),
 //	)).Title("Confirm")
 func Dialog(open ggui.Binding[bool], content ggui.Widget) *DialogWidget {
-	d := &DialogWidget{open: open, content: content, width: 360}
+	d := &DialogWidget{open: open, content: content, width: 360, dismissible: true}
 	return d
 }
 
@@ -45,6 +46,12 @@ func (d *DialogWidget) Title(s string) *DialogWidget {
 
 // Named sets an accessible name without adding a visible heading.
 func (d *DialogWidget) Named(name string) *DialogWidget { d.name = name; return d }
+
+// Dismissible says whether a click on the scrim closes the dialog; it does
+// by default. A confirmation that must be answered sets it false and closes
+// itself from its own buttons, as AlertDialog does. Escape closes either
+// way, so the keyboard is never shut in.
+func (d *DialogWidget) Dismissible(v bool) *DialogWidget { d.dismissible = v; return d }
 
 // Compact removes the outer padding for content with its own spacing.
 func (d *DialogWidget) Compact() *DialogWidget { d.compact = true; return d }
@@ -133,7 +140,7 @@ func (d *DialogWidget) paintPanel(dst *ggui.Canvas) {
 type dialogScrim struct{ d *DialogWidget }
 
 func (s dialogScrim) HandlePointer(ev ggui.PointerEvent) bool {
-	if ev.Kind == ggui.PointerDown && ev.Button == ebiten.MouseButtonLeft {
+	if ev.Kind == ggui.PointerDown && ev.Button == ebiten.MouseButtonLeft && s.d.dismissible {
 		s.d.Close()
 	}
 	return true

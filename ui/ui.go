@@ -121,3 +121,14 @@ func mix(a, b color.Color, amount float64) color.Color {
 	blend := func(x, y uint32) uint8 { return uint8((float64(x)*(1-amount) + float64(y)*amount) / 257) }
 	return color.RGBA{blend(ar, br), blend(ag, bg), blend(ab, bb), blend(aa, ba)}
 }
+
+// fade returns c with every channel scaled by f, which dims a premultiplied
+// color without changing its hue: a scrim that arrives with its sheet.
+func fade(c color.Color, f float64) color.Color {
+	if c == nil {
+		return nil
+	}
+	r, g, b, a := c.RGBA()
+	scale := func(v uint32) uint8 { return uint8(clamp(float64(v>>8)*f, 0, 255)) }
+	return color.RGBA{scale(r), scale(g), scale(b), scale(a)}
+}
