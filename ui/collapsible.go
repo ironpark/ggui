@@ -60,6 +60,23 @@ func (c *CollapsibleWidget) Describe() ggui.Node {
 	}
 }
 
+// Act implements ggui.Actor: expanding and collapsing say which way to go,
+// where pressing only says to change.
+func (c *CollapsibleWidget) Act(a ggui.Action) bool {
+	if c.Inert {
+		return false
+	}
+	switch a.Kind {
+	case ggui.ActionExpand:
+		c.open.Set(true)
+	case ggui.ActionCollapse:
+		c.open.Set(false)
+	default:
+		return false
+	}
+	return true
+}
+
 // Layout implements Widget.
 func (c *CollapsibleWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	c.Sync()

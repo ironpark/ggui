@@ -217,6 +217,15 @@ func (r *tableRow[T, K]) pick() {
 	}
 }
 
+// Act implements ggui.Actor: selecting the row.
+func (r *tableRow[T, K]) Act(a ggui.Action) bool {
+	if r.Inert || !r.table.selectable() || (a.Kind != ggui.ActionSelect && a.Kind != ggui.ActionPress) {
+		return false
+	}
+	r.pick()
+	return true
+}
+
 // HandleKey implements KeyHandler: Space or Enter selects the row.
 func (r *tableRow[T, K]) HandleKey(ev ggui.KeyEvent) { r.Keyboard(ev, r.pick) }
 

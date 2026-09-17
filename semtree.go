@@ -19,10 +19,13 @@ import (
 // Identified ID when it has one, so a control that was rebuilt and moved in
 // the same frame keeps its identity, and the Rect it painted otherwise --
 // the same pair, in the same order, that Canvas.adopt matches hit regions
-// by, rather than a second matcher that could disagree with the first.
+// by, rather than a second matcher that could disagree with the first. The
+// Role comes along because a container and the one child that fills it do
+// share a Rect: a For list item and the row inside it.
 type NodeID struct {
 	ID   any
 	Rect Rect
+	Role Role
 }
 
 // SemNode is one element of a published SemTree: what the widget said about
@@ -174,7 +177,7 @@ func buildSemTree(c *Canvas, focused *hitRegion) *SemTree {
 		e := &c.sem[i]
 		t.nodes[i] = SemNode{
 			Node:   e.node,
-			ID:     NodeID{ID: e.id, Rect: e.full},
+			ID:     NodeID{ID: e.id, Rect: e.full, Role: e.node.Role},
 			Rect:   e.rect,
 			Full:   e.full,
 			Parent: e.parent - 1,

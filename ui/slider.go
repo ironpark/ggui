@@ -84,6 +84,30 @@ func (s *SliderWidget) Describe() ggui.Node {
 	}
 }
 
+// Act implements ggui.Actor: an assistive technology steps the value or
+// sets it outright, and each ends with the commit a key press would.
+func (s *SliderWidget) Act(a ggui.Action) bool {
+	if s.Inert {
+		return false
+	}
+	step := s.step
+	if step <= 0 {
+		step = (s.max - s.min) / 100
+	}
+	switch a.Kind {
+	case ggui.ActionIncrement:
+		s.set(s.value.Peek() + step)
+	case ggui.ActionDecrement:
+		s.set(s.value.Peek() - step)
+	case ggui.ActionSetValue:
+		s.set(a.Num)
+	default:
+		return false
+	}
+	s.commit()
+	return true
+}
+
 // Layout implements Widget.
 func (s *SliderWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	s.Sync()

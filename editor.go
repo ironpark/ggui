@@ -478,6 +478,17 @@ func (t *TextInputWidget) Describe() Node {
 	}
 }
 
+// Act implements Actor: the platform's text API replaces the contents
+// outright, which is what a dictation or a braille display does.
+func (t *TextInputWidget) Act(a Action) bool {
+	if a.Kind != ActionSetValue || t.disabled {
+		return false
+	}
+	t.ed.setText(a.Text)
+	t.commit()
+	return true
+}
+
 // ConsumesKey implements KeyConsumer: editing keys stay with the editor.
 // Escape passes through unless it cancelled composition or OnKey consumed it.
 func (t *TextInputWidget) ConsumesKey(ev KeyEvent) bool {

@@ -74,6 +74,32 @@ func (s *SelectWidget[T]) Describe() ggui.Node {
 	}
 }
 
+// Act implements ggui.Actor: opening and closing the list, and choosing
+// the option a Select action names by value.
+func (s *SelectWidget[T]) Act(a ggui.Action) bool {
+	if s.Inert {
+		return false
+	}
+	switch a.Kind {
+	case ggui.ActionExpand:
+		s.highlight = s.index()
+		s.popup.Show()
+	case ggui.ActionCollapse:
+		s.popup.Hide()
+	case ggui.ActionSetValue, ggui.ActionSelect:
+		for i, o := range s.options {
+			if s.label(o) == a.Text {
+				s.choose(i)
+				return true
+			}
+		}
+		return false
+	default:
+		return false
+	}
+	return true
+}
+
 // Named names the dropdown for Probe.Find and the inspector.
 func (s *SelectWidget[T]) Named(name string) *SelectWidget[T] { s.Name = name; return s }
 
@@ -283,6 +309,15 @@ func (it *selectItem[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.StrokeLine(ggui.Pt(x+2, y), ggui.Pt(x+6, y+4), 2, t.Accent)
 		dst.StrokeLine(ggui.Pt(x+6, y+4), ggui.Pt(x+13, y-4), 2, t.Accent)
 	}
+}
+
+// Act implements ggui.Actor: choosing this option.
+func (it *selectItem[T]) Act(a ggui.Action) bool {
+	if it.Inert || (a.Kind != ggui.ActionSelect && a.Kind != ggui.ActionPress) {
+		return false
+	}
+	it.owner.choose(it.index)
+	return true
 }
 
 func (it *selectItem[T]) HandlePointer(ev ggui.PointerEvent) bool {

@@ -49,6 +49,8 @@ type frameLoop struct {
 	laidGen  uint64
 	rootSize Size
 
+	notices []Announcement // queued by Announce, drained by the bridge
+
 	// The last frame's finished accessibility tree. It is published at the
 	// end of a frame and read from anywhere, including a thread that is not
 	// this one, which is why it is a pointer swap and not a buffer.
@@ -61,6 +63,27 @@ type frameLoop struct {
 // so that everyone else can.
 func (r *frameLoop) publishSemantics(c *Canvas, focused *hitRegion) {
 	r.sem.Store(buildSemTree(c, focused))
+}
+
+// announce queues something to say out loud. It shares the post lock, as
+// it is called from the same places and just as rarely.
+func (r *frameLoop) announce(a Announcement) {
+	if a.Text == "" {
+		return
+	}
+	r.postMu.Lock()
+	r.notices = append(r.notices, a)
+	r.postMu.Unlock()
+}
+
+// takeAnnouncements empties the queue. Nothing calls it yet; the platform
+// bridge will, from whichever thread it speaks on.
+func (r *frameLoop) takeAnnouncements() []Announcement {
+	r.postMu.Lock()
+	out := r.notices
+	r.notices = nil
+	r.postMu.Unlock()
+	return out
 }
 
 // semantics returns the last published tree, or an empty one before the
@@ -98,7 +121,7 @@ func (r *frameLoop) close() {
 	}
 	r.root = nil
 	r.postMu.Lock()
-	r.posted = nil
+	r.posted, r.notices = nil, nil
 	r.postMu.Unlock()
 }
 

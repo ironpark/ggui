@@ -56,7 +56,7 @@ func (m *MenuWidget) init(entries []ggui.Widget) {
 	}
 	m.panel = ggui.Box(ggui.Column(entries...).Align(ggui.AlignStretch))
 	m.popup = ggui.Popup(m.button, m.panel).Keys(m).Owner(m.button)
-	m.button.Expands(m.popup.IsOpen)
+	m.button.Expands(m.popup.IsOpen).Opens(m)
 }
 
 // Popup returns the popup the entries open in.
@@ -69,6 +69,21 @@ func (m *MenuWidget) toggle() {
 	}
 	m.current = -1
 	m.popup.Show()
+}
+
+// Act implements ggui.Actor. The node is the button's, so the button hands
+// the action on to the menu that owns it.
+func (m *MenuWidget) Act(a ggui.Action) bool {
+	switch a.Kind {
+	case ggui.ActionExpand:
+		m.current = -1
+		m.popup.Show()
+	case ggui.ActionCollapse:
+		m.popup.Hide()
+	default:
+		return false
+	}
+	return true
 }
 
 // Layout implements Widget.

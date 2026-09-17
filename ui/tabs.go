@@ -201,6 +201,15 @@ func (l tabLabel) Describe() ggui.Node {
 	}
 }
 
+// Act implements ggui.Actor: showing this tab's page.
+func (l tabLabel) Act(a ggui.Action) bool {
+	if l.t.Inert || (a.Kind != ggui.ActionSelect && a.Kind != ggui.ActionPress) {
+		return false
+	}
+	l.t.pick(l.i)
+	return true
+}
+
 func (l tabLabel) HandlePointer(ev ggui.PointerEvent) bool {
 	switch ev.Kind {
 	case ggui.PointerEnter, ggui.PointerMove:

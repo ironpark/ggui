@@ -231,6 +231,24 @@ func (h *accordionHeader) Describe() ggui.Node {
 	}
 }
 
+// Act implements ggui.Actor.
+func (h *accordionHeader) Act(a ggui.Action) bool {
+	if h.Inert {
+		return false
+	}
+	open := h.owner.isOpen(h.index)
+	switch {
+	case a.Kind == ggui.ActionExpand && !open, a.Kind == ggui.ActionCollapse && open, a.Kind == ggui.ActionPress:
+		h.owner.active = h.index
+		h.owner.toggle(h.index)
+	case a.Kind == ggui.ActionExpand, a.Kind == ggui.ActionCollapse:
+		// Already the way round it was asked to be.
+	default:
+		return false
+	}
+	return true
+}
+
 func (h *accordionHeader) HandlePointer(ev ggui.PointerEvent) bool {
 	if ev.Kind == ggui.PointerDown && ev.Button == ebiten.MouseButtonLeft {
 		h.owner.active = h.index

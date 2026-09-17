@@ -16,6 +16,7 @@ type ButtonWidget struct {
 	secondary bool
 	padded    bool
 	expands   func() bool
+	opener    ggui.Actor
 	theme     ggui.Theme
 }
 
@@ -45,6 +46,25 @@ func (b *ButtonWidget) Label(s string) *ButtonWidget { b.Name = s; return b }
 // menu button or a combobox trigger; a plain button does not expand at all,
 // which is not the same as being closed.
 func (b *ButtonWidget) Expands(open func() bool) *ButtonWidget { b.expands = open; return b }
+
+// Opens hands the expand and collapse actions to the widget that owns the
+// popup, since the button describes the node but does not hold it.
+func (b *ButtonWidget) Opens(a ggui.Actor) *ButtonWidget { b.opener = a; return b }
+
+// Act implements ggui.Actor.
+func (b *ButtonWidget) Act(a ggui.Action) bool {
+	if b.Inert {
+		return false
+	}
+	if b.opener != nil && b.opener.Act(a) {
+		return true
+	}
+	if a.Kind == ggui.ActionPress && b.onTap != nil {
+		b.onTap()
+		return true
+	}
+	return false
+}
 
 // Describe implements ggui.Describer.
 func (b *ButtonWidget) Describe() ggui.Node {
