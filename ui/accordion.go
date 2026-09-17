@@ -143,21 +143,20 @@ func (a *AccordionWidget) Adopt(prev any) {
 func (a *AccordionWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	a.env, a.theme = env, env.Theme()
 	a.laidOpen = slices.Clone(a.open.Get())
-	t := a.theme
 	a.sizes = make([]ggui.Size, len(a.items))
 	a.heights = make([]float64, len(a.items))
 	var width, height float64
 	for i, item := range a.items {
 		h := a.headers[i]
-		h.text.Color(pick(item.disabled, t.Muted, t.Fg))
-		h.size = h.text.Layout(ggui.Loose(ggui.Sz(max(c.MaxW-t.FieldPad.Left-t.FieldPad.Right-24, 0), ggui.Unbounded)), env)
-		a.heights[i] = h.size.H + t.FieldPad.Top + t.FieldPad.Bottom
-		width = max(width, h.size.W+t.FieldPad.Left+t.FieldPad.Right+24)
+		h.text.Color(pick(item.disabled, a.theme.Muted, a.theme.Fg))
+		h.size = h.text.Layout(ggui.Loose(ggui.Sz(max(c.MaxW-24, 0), ggui.Unbounded)), env)
+		a.heights[i] = h.size.H + 32
+		width = max(width, h.size.W+24)
 		height += a.heights[i]
 		if a.isOpen(i) {
 			a.sizes[i] = item.content.Layout(ggui.Loose(ggui.Sz(c.MaxW, ggui.Unbounded)), env)
 			width = max(width, a.sizes[i].W)
-			height += a.sizes[i].H
+			height += a.sizes[i].H + 16
 		}
 	}
 	return c.Constrain(ggui.Sz(width, height))
@@ -189,24 +188,25 @@ func (a *AccordionWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		if h.Hovered {
 			dst.FillRoundRect(rect, t.Radius, subtle(t))
 		}
-		x, cy := rect.Origin.X+t.FieldPad.Left+6, y+a.heights[i]/2
+		x, cy := rect.Origin.X+rect.Size.W-8, y+a.heights[i]/2
+		direction := 1.0
 		if a.isOpen(i) {
-			dst.StrokeLine(ggui.Pt(x-3, cy-2), ggui.Pt(x, cy+2), 1.5, t.Muted)
-			dst.StrokeLine(ggui.Pt(x, cy+2), ggui.Pt(x+3, cy-2), 1.5, t.Muted)
-		} else {
-			dst.StrokeLine(ggui.Pt(x-2, cy-3), ggui.Pt(x+2, cy), 1.5, t.Muted)
-			dst.StrokeLine(ggui.Pt(x+2, cy), ggui.Pt(x-2, cy+3), 1.5, t.Muted)
+			direction = -1
 		}
-		dst.Paint(h.text, ggui.Rct(ggui.Pt(rect.Origin.X+t.FieldPad.Left+24, y+t.FieldPad.Top), h.size))
+		dst.StrokeLine(ggui.Pt(x-4, cy-2*direction), ggui.Pt(x, cy+2*direction), 1.5, t.Muted)
+		dst.StrokeLine(ggui.Pt(x, cy+2*direction), ggui.Pt(x+4, cy-2*direction), 1.5, t.Muted)
+		dst.Paint(h.text, ggui.Rct(ggui.Pt(rect.Origin.X, y+16), h.size))
 		if i == a.active {
-			a.FocusRing(dst, rect, t.Radius, t.Accent)
+			a.FocusRing(dst, rect, t.Radius, focusColor(t))
 		}
 		y += a.heights[i]
 		if a.isOpen(i) {
 			dst.Paint(item.content, ggui.Rct(ggui.Pt(r.Origin.X, y), a.sizes[i]))
-			y += a.sizes[i].H
+			y += a.sizes[i].H + 16
 		}
-		dst.StrokeLine(ggui.Pt(r.Origin.X, y), ggui.Pt(r.Origin.X+r.Size.W, y), 1, t.Border)
+		if i < len(a.items)-1 {
+			dst.StrokeLine(ggui.Pt(r.Origin.X, y), ggui.Pt(r.Origin.X+r.Size.W, y), 1, t.Border)
+		}
 	}
 }
 

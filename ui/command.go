@@ -13,10 +13,18 @@ type CommandEntry struct {
 	run      func()
 	keywords []string
 	disabled bool
+	shortcut string
+	group    string
 }
 
 // CommandItem creates an action. Labels need not be unique.
 func CommandItem(label string, run func()) CommandEntry { return CommandEntry{label: label, run: run} }
+
+// Group labels a contiguous group of entries. Empty groups disappear when filtering.
+func (e CommandEntry) Group(name string) CommandEntry { e.group = name; return e }
+
+// Shortcut displays a key hint without registering a global shortcut.
+func (e CommandEntry) Shortcut(s string) CommandEntry { e.shortcut = s; return e }
 
 // Keywords adds search terms that are not displayed.
 func (e CommandEntry) Keywords(terms ...string) CommandEntry {
@@ -30,22 +38,26 @@ func (e CommandEntry) Disabled(v bool) CommandEntry { e.disabled = v; return e }
 // CommandWidget is an inline search field and scrollable action list. Put it in
 // Dialog for a command palette. Query state belongs to the caller.
 type CommandWidget struct {
-	query       ggui.Binding[string]
-	entries     []CommandEntry
-	items       []*MenuItemWidget
-	field       *TextFieldWidget
-	results     *commandResults
-	scroll      *ggui.ScrollWidget
-	offset      *ggui.Signal[float64]
-	panel       *ggui.BoxWidget
-	body        *ggui.ColumnWidget
-	matched     []int
-	highlight   int
-	lastQuery   string
-	initialized bool
-	height      float64
-	env         ggui.Env
-	rects       []ggui.Rect
+	query              ggui.Binding[string]
+	entries            []CommandEntry
+	items              []*MenuItemWidget
+	field              *TextFieldWidget
+	results            *commandResults
+	scroll             *ggui.ScrollWidget
+	offset             *ggui.Signal[float64]
+	panel              *ggui.BoxWidget
+	body               *ggui.ColumnWidget
+	matched            []int
+	highlight          int
+	lastQuery          string
+	initialized        bool
+	height             float64
+	stable, borderless bool
+	hints              bool
+	insetSearch        bool
+	theme              ggui.Theme
+	env                ggui.Env
+	rects              []ggui.Rect
 }
 
 // Command filters labels and Keywords by case-insensitive substring. Up/Down
@@ -57,13 +69,25 @@ func Command(query ggui.Binding[string], entries ...CommandEntry) *CommandWidget
 	if c.field.input.HitID() == nil {
 		c.field.input.Key(c)
 	}
+	c.field.plain = true
 	c.results = &commandResults{owner: c}
 	c.scroll = ggui.Scroll(c.results).Offset(c.offset)
 	c.rects = make([]ggui.Rect, len(entries))
 	for i, e := range entries {
-		c.items = append(c.items, MenuItem(e.label, func() { c.choose(i) }).Disabled(e.disabled))
+		item := MenuItem(e.label, func() { c.choose(i) }).Disabled(e.disabled)
+		if e.shortcut != "" {
+			item.Shortcut(e.shortcut)
+		}
+		item.onHover = func() { c.highlight = i }
+		c.items = append(c.items, item)
 	}
 	return c
+}
+
+// CommandDialog creates a compact, accessible command palette. The command
+// owns its spacing; no visible dialog title is added.
+func CommandDialog(open ggui.Binding[bool], command *CommandWidget) *DialogWidget {
+	return Dialog(open, command.Borderless().InsetSearch()).Compact().Named("Commands").Width(440)
 }
 
 // Placeholder sets the search hint.
@@ -71,6 +95,18 @@ func (c *CommandWidget) Placeholder(s string) *CommandWidget { c.field.Placehold
 
 // Label names the search field for tests and the inspector.
 func (c *CommandWidget) Label(s string) *CommandWidget { c.field.Label(s); return c }
+
+// InsetSearch gives the search field a muted, rounded background.
+func (c *CommandWidget) InsetSearch() *CommandWidget { c.insetSearch = true; return c }
+
+// Hints shows a compact keyboard navigation footer.
+func (c *CommandWidget) Hints() *CommandWidget { c.hints = true; return c }
+
+// Borderless removes the outer border when a Dialog or another panel supplies it.
+func (c *CommandWidget) Borderless() *CommandWidget { c.borderless = true; return c }
+
+// StableHeight reserves Height pixels even when filtering leaves fewer results.
+func (c *CommandWidget) StableHeight() *CommandWidget { c.stable = true; return c }
 
 // Height limits the results area, excluding the search field and padding.
 func (c *CommandWidget) Height(h float64) *CommandWidget { c.height = max(0, h); return c }
@@ -141,11 +177,31 @@ func (c *CommandWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	c.env = env
 	c.filter()
 	t := env.Theme()
+	c.theme = t
 	inner := t.PanelPad.Shrink(cs)
 	natural := c.results.Layout(ggui.Loose(ggui.Sz(inner.MaxW, ggui.Unbounded)), env)
-	results := ggui.Box(c.scroll).Height(min(c.height, natural.H))
-	c.body = ggui.Column(c.field, results).Gap(t.Space / 2).Align(ggui.AlignStretch)
-	c.panel = ggui.Box(c.body).Padding(t.PanelPad).Fill(t.Surface).Border(1, t.Border).Radius(t.Radius)
+	height := min(c.height, natural.H)
+	if c.stable {
+		height = c.height
+	}
+	results := ggui.Box(c.scroll).Height(height + 8).Pad(4)
+	search := ggui.Padding(ggui.Row(commandSearchIcon{c}, ggui.Expanded(c.field)).Gap(0), 0, 8)
+	parts := []ggui.Widget{search, Divider(), results}
+	if c.insetSearch {
+		search = ggui.Padding(ggui.Box(search).Fill(mutedSurface(t)).Radius(t.Radius), 8, 8, 0, 8)
+		parts = []ggui.Widget{search, results}
+	}
+	if c.hints {
+		parts = append(parts, Divider(), ggui.Padding(ggui.Caption("↑↓ Navigate   ↵ Select"), 8, 12))
+	}
+	c.body = ggui.Column(parts...).Gap(0).Align(ggui.AlignStretch)
+	c.panel = ggui.Box(c.body).Fill(t.Surface).Border(1, t.Border).Radius(t.Radius)
+	if c.borderless {
+		c.panel.Border(0, nil)
+	}
+	if _, ok := ggui.PopupOf(env); ok {
+		c.panel.Shadow(panelShadow(t))
+	}
 	return c.panel.Layout(cs, env)
 }
 
@@ -153,20 +209,46 @@ func (c *CommandWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 func (c *CommandWidget) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(c.panel, r) }
 
 type commandResults struct {
-	owner *CommandWidget
-	sizes []ggui.Size
-	empty *ggui.TextWidget
+	owner        *CommandWidget
+	sizes        []ggui.Size
+	headings     []ggui.Widget
+	headingSizes []ggui.Size
+	empty        *ggui.TextWidget
 }
 
 func (r *commandResults) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	c := r.owner
 	r.sizes = r.sizes[:0]
+	r.headings = r.headings[:0]
+	r.headingSizes = r.headingSizes[:0]
 	if len(c.matched) == 0 {
 		r.empty = ggui.Caption("No results")
-		return r.empty.Layout(cs, env)
+		size := r.empty.Layout(cs.Loosen(), env)
+		height := max(64, size.H+24)
+		if c.stable {
+			height = max(height, c.height)
+		}
+		return cs.Constrain(ggui.Sz(bounded(cs.MaxW, size.W), height))
 	}
 	var w, h float64
-	for _, i := range c.matched {
+	previous := ""
+	for j, i := range c.matched {
+		var heading ggui.Widget
+		var hs ggui.Size
+		group := c.entries[i].group
+		if group != "" && (j == 0 || group != previous) {
+			label := ggui.Padding(ggui.Caption(group), 6, 8)
+			heading = label
+			if j > 0 {
+				heading = ggui.Column(MenuDivider(), label).Gap(0).Align(ggui.AlignStretch)
+			}
+			hs = heading.Layout(ggui.Loose(ggui.Sz(cs.MaxW, ggui.Unbounded)), env)
+		}
+		previous = group
+		r.headings = append(r.headings, heading)
+		r.headingSizes = append(r.headingSizes, hs)
+		h += hs.H
+		w = max(w, hs.W)
 		sz := c.items[i].Layout(ggui.Loose(ggui.Sz(cs.MaxW, ggui.Unbounded)), env)
 		r.sizes = append(r.sizes, sz)
 		w = max(w, sz.W)
@@ -177,15 +259,33 @@ func (r *commandResults) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 func (r *commandResults) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 	c := r.owner
 	if len(c.matched) == 0 {
-		dst.Paint(r.empty, rect)
+		s := r.empty.Layout(ggui.Loose(rect.Size), c.env)
+		dst.Paint(r.empty, ggui.Rct(ggui.Pt(rect.Origin.X+(rect.Size.W-s.W)/2, rect.Origin.Y+(rect.Size.H-s.H)/2), s))
 		return
 	}
 	y := rect.Origin.Y
 	for j, i := range c.matched {
+		if r.headings[j] != nil {
+			dst.Paint(r.headings[j], ggui.Rct(ggui.Pt(rect.Origin.X, y), ggui.Sz(rect.Size.W, r.headingSizes[j].H)))
+			y += r.headingSizes[j].H
+		}
 		at := ggui.Rct(ggui.Pt(rect.Origin.X, y), ggui.Sz(rect.Size.W, r.sizes[j].H))
 		c.rects[i] = at
 		c.items[i].active = i == c.highlight
 		dst.Paint(c.items[i], at)
 		y += r.sizes[j].H
 	}
+}
+
+// A drawn search glyph avoids relying on font coverage for an icon character.
+type commandSearchIcon struct{ c *CommandWidget }
+
+func (i commandSearchIcon) Layout(cs ggui.Constraints, _ ggui.Env) ggui.Size {
+	return cs.Constrain(ggui.Sz(18, 18))
+}
+func (i commandSearchIcon) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	col := i.c.theme.Muted
+	center := ggui.Pt(r.Origin.X+8, r.Origin.Y+r.Size.H/2-1)
+	dst.StrokeRoundRect(ggui.Rct(center.Add(ggui.Pt(-4, -4)), ggui.Sz(8, 8)), 4, 1.4, col)
+	dst.StrokeLine(center.Add(ggui.Pt(3, 3)), center.Add(ggui.Pt(7, 7)), 1.4, col)
 }

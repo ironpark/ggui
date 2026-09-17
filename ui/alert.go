@@ -26,15 +26,15 @@ func (a *AlertWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := env.Theme()
 	fg, border := t.Fg, t.Border
 	if a.destructive {
-		fg, border = dangerColor(t), dangerColor(t)
+		fg, border = dangerColor(t), mix(t.Border, dangerColor(t), .3)
 	}
 	a.title.Style(t.Text).Color(fg)
-	a.description.Style(t.Caption).Color(t.Muted)
+	a.description.Style(t.Text).Color(t.Muted)
 	parts := []ggui.Widget{a.title, a.description}
 	if a.action != nil {
 		parts = append(parts, a.action)
 	}
-	a.box = ggui.Box(ggui.Column(parts...).Gap(t.Space)).Padding(t.CardPad).Fill(t.Surface).Border(1, border).Radius(t.Radius)
+	a.box = ggui.Box(ggui.Column(parts...).Gap(t.Space/2)).Pad(16).Fill(t.Surface).Border(1, border).Radius(t.Radius)
 	return a.box.Layout(c, env)
 }
 

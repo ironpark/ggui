@@ -22,6 +22,7 @@ type PopupWidget struct {
 	owner   any
 	onClose func()
 	id      any
+	point   *Point
 
 	env         Env
 	contentSize Size
@@ -53,6 +54,7 @@ func (p *PopupWidget) HitID() any { return p.id }
 func (p *PopupWidget) Adopt(prev any) {
 	if q, ok := prev.(*PopupWidget); ok && p.bound == nil {
 		p.open = q.IsOpen()
+		p.point = q.point
 	}
 }
 
@@ -101,6 +103,13 @@ func (p *PopupWidget) SetOpen(v bool) {
 // Show opens the popup.
 func (p *PopupWidget) Show() { p.SetOpen(true) }
 
+// ShowAt opens at a window-coordinate point instead of the anchor's edge.
+// The point remains in effect until AnchorPosition is called.
+func (p *PopupWidget) ShowAt(at Point) { p.point = &at; p.Show() }
+
+// AnchorPosition restores placement relative to the anchor widget.
+func (p *PopupWidget) AnchorPosition() { p.point = nil }
+
 // Hide closes the popup.
 func (p *PopupWidget) Hide() { p.SetOpen(false) }
 
@@ -138,7 +147,13 @@ func (p *PopupWidget) paintContent(dst *Canvas, anchor Rect) {
 	if screen == (Size{}) {
 		screen = Sz(Unbounded, Unbounded)
 	}
+	if p.point != nil {
+		anchor = Rct(Pt(clamp(p.point.X, 0, screen.W), clamp(p.point.Y, 0, screen.H)), Size{})
+	}
 	maxW := max(screen.W-anchor.Origin.X, anchor.Size.W)
+	if p.point != nil {
+		maxW = screen.W
+	}
 	natural := p.content.Layout(Constraints{MinW: anchor.Size.W, MaxW: maxW, MaxH: Unbounded}, p.env)
 	below := screen.H - (anchor.Origin.Y + anchor.Size.H + p.gap)
 	above := anchor.Origin.Y - p.gap

@@ -39,6 +39,15 @@ func MenuOf(content ggui.Widget, entries ...ggui.Widget) *MenuWidget {
 // Label names a MenuOf for Probe.Find and the inspector.
 func (m *MenuWidget) Label(s string) *MenuWidget { m.button.Name = s; return m }
 
+// Disabled disables this menu's trigger and closes it.
+func (m *MenuWidget) Disabled(v bool) *MenuWidget {
+	m.button.Disabled(v)
+	if v {
+		m.popup.Hide()
+	}
+	return m
+}
+
 // Semantics implements ggui.Semantic through the button.
 func (m *MenuWidget) Semantics() (ggui.Role, string) { return m.button.Semantics() }
 
@@ -51,13 +60,18 @@ func (m *MenuWidget) init(entries []ggui.Widget) {
 	for _, e := range entries {
 		if it, ok := e.(*MenuItemWidget); ok {
 			it.menu = m
+			index := len(m.items)
+			it.onHover = func() { m.current = index }
 			m.items = append(m.items, it)
 		}
 	}
-	m.panel = ggui.Box(ggui.Column(entries...).Align(ggui.AlignStretch))
+	m.panel = ggui.Box(ggui.Column(entries...).Align(ggui.AlignStretch)).Width(224)
 	m.popup = ggui.Popup(m.button, m.panel).Keys(m).Owner(m.button)
 	m.button.Expands(m.popup.IsOpen).Opens(m)
 }
+
+// Width sets the popup panel width, constrained to the available space.
+func (m *MenuWidget) Width(w float64) *MenuWidget { m.panel.Width(max(w, 0)); return m }
 
 // Popup returns the popup the entries open in.
 func (m *MenuWidget) Popup() *ggui.PopupWidget { return m.popup }
@@ -74,6 +88,9 @@ func (m *MenuWidget) toggle() {
 // Act implements ggui.Actor. The node is the button's, so the button hands
 // the action on to the menu that owns it.
 func (m *MenuWidget) Act(a ggui.Action) bool {
+	if m.button.Inert {
+		return false
+	}
 	switch a.Kind {
 	case ggui.ActionExpand:
 		m.current = -1
@@ -90,7 +107,7 @@ func (m *MenuWidget) Act(a ggui.Action) bool {
 func (m *MenuWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := env.Theme()
 	m.theme = t
-	m.panel.Fill(t.Surface).Border(1, t.Border).Radius(t.Radius).Padding(t.PanelPad)
+	m.panel.Shadow(panelShadow(t)).Fill(t.Surface).Border(1, t.Border).Radius(t.Radius).Padding(t.PanelPad)
 	return m.popup.Layout(c, env)
 }
 
@@ -155,10 +172,15 @@ func (m *MenuWidget) Adopt(prev any) {
 // MenuItemWidget is one action in a Menu. Build one with MenuItem.
 type MenuItemWidget struct {
 	ggui.Interactive
-	text   *ggui.TextWidget
-	onTap  func()
-	menu   *MenuWidget
-	active bool
+	text         *ggui.TextWidget
+	onTap        func()
+	menu         *MenuWidget
+	active       bool
+	shortcut     *ggui.TextWidget
+	shortcutSize ggui.Size
+	onHover      func()
+	lastPointer  ggui.Point
+	hasPointer   bool
 
 	pad      ggui.EdgeInsets
 	textSize ggui.Size
@@ -171,6 +193,12 @@ func MenuItem(label string, onTap func()) *MenuItemWidget {
 	it := &MenuItemWidget{text: ggui.Text(label).NoWrap(), onTap: onTap}
 	it.Role, it.Name = ggui.RoleMenuItem, label
 	it.AutoKey()
+	return it
+}
+
+// Shortcut displays a right-aligned key hint; it does not register a shortcut.
+func (it *MenuItemWidget) Shortcut(s string) *MenuItemWidget {
+	it.shortcut = ggui.Caption(s).NoWrap()
 	return it
 }
 
@@ -206,8 +234,16 @@ func (it *MenuItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	it.popup, _ = ggui.PopupOf(env)
 	it.pad = t.ItemPad
 	it.text.Color(pick(it.Inert, t.Muted, t.Fg))
-	it.textSize = it.text.Layout(it.pad.Shrink(c).Loosen(), env)
-	return c.Constrain(it.pad.Inflate(it.textSize))
+	inner := it.pad.Shrink(c).Loosen()
+	gap := 0.0
+	if it.shortcut != nil {
+		it.shortcut.Color(t.Muted)
+		it.shortcutSize = it.shortcut.Layout(inner, env)
+		gap = 24
+	}
+	inner.MaxW = max(0, inner.MaxW-it.shortcutSize.W-gap)
+	it.textSize = it.text.Layout(inner, env)
+	return c.Constrain(it.pad.Inflate(ggui.Sz(it.textSize.W+it.shortcutSize.W+gap, max(it.textSize.H, it.shortcutSize.H))))
 }
 
 // Paint implements Widget.
@@ -218,17 +254,23 @@ func (it *MenuItemWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if !it.Inert {
 		dst.HitPointer(r, it)
 		dst.HitCursor(r, ebiten.CursorShapePointer)
-		if it.Hovered || it.active {
-			dst.FillRoundRect(r, t.Radius*0.75, t.Selection)
+		if it.active || (it.onHover == nil && it.Hovered) {
+			dst.FillRoundRect(r, t.Radius*0.75, mutedSurface(t))
 		}
 	}
-	dst.Paint(it.text, ggui.Rct(ggui.Pt(r.Origin.X+it.pad.Left, r.Origin.Y+(r.Size.H-it.textSize.H)/2), it.textSize))
+	if it.shortcut != nil {
+		dst.Paint(it.shortcut, ggui.Rct(ggui.Pt(r.Origin.X+r.Size.W-it.pad.Right-it.shortcutSize.W, r.Origin.Y+(r.Size.H-it.shortcutSize.H)/2), it.shortcutSize))
+	}
+	dst.Clip(r).Paint(it.text, ggui.Rct(ggui.Pt(r.Origin.X+it.pad.Left, r.Origin.Y+(r.Size.H-it.textSize.H)/2), it.textSize))
 }
 
 // HandlePointer implements PointerHandler.
 func (it *MenuItemWidget) HandlePointer(ev ggui.PointerEvent) bool {
-	if (ev.Kind == ggui.PointerEnter || ev.Kind == ggui.PointerMove) && it.menu != nil {
-		it.menu.current = -1
+	if ev.Kind == ggui.PointerMove {
+		if (!it.hasPointer || it.lastPointer != ev.Pos) && !it.Inert && it.onHover != nil {
+			it.onHover()
+		}
+		it.lastPointer, it.hasPointer = ev.Pos, true
 	}
 	return it.Pointer(ev, it.run)
 }

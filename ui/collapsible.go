@@ -111,7 +111,7 @@ func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.StrokeLine(rot(-2, -4), tip, 1.5, t.Muted)
 	dst.StrokeLine(tip, rot(-2, 4), 1.5, t.Muted)
 	dst.Paint(c.title, ggui.Rct(ggui.Pt(r.Origin.X+c.pad.Left+controlSize+controlGap, r.Origin.Y+c.pad.Top), c.titleSize))
-	c.FocusRing(dst, header, t.Radius, t.Accent)
+	c.FocusRing(dst, header, t.Radius, focusColor(t))
 	dst.Paint(c.body, ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+c.headerH), c.bodySize))
 }
 

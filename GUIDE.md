@@ -446,9 +446,9 @@ returns them all.
 
 | Control | Behavior |
 | --- | --- |
-| `ui.Tabs(selected, ui.Tab("One", page), ...)` | Displays the selected index, with an animated underline and Left/Right navigation. Only the active page is laid out. |
+| `ui.Tabs(selected, ui.Tab("One", page), ...)` | Displays the selected index, with an animated segmented selection and Left/Right navigation; `.Line()` uses an underline. Only the active page is laid out. |
 | `ui.Collapsible(open, "Title", content)` | Animates an expandable section with `Presence`. |
-| `ui.Card(child)` | Adds a surface, border, radius, and padding. |
+| `ui.Card(child)` | Adds a surface, border, radius, padding and subtle shadow. |
 | `ui.Badge("new")` | Displays a small label; `.Accent()` emphasizes it. |
 | `ui.Progress(value)` | Eases toward a fraction from a `Reader[float64]`. |
 | `ui.Dialog(open, content)` | Shows a modal while the binding is true; see [focus scopes](#focus-scopes). |
@@ -481,7 +481,82 @@ step the value while it is closed), Enter picks, Escape closes.
 secondary button that opens a list of actions the same way; an item runs
 its function and closes the menu.
 
+`ui.ContextMenu(content, entries...)` attaches the same `MenuItem` and
+`MenuDivider` entries to a secondary-click target. Right-click opens at the
+pointer, with placement adjusted to fit the window. Left clicks and scrolling
+continue to the wrapped content. Use `.Named("File actions")` for its accessible
+name; `.Disabled(true)` disables the menu while keeping the content usable.
+
+Tab focuses the wrapper, then Shift+F10, Enter or Space opens it. Up/Down wrap
+through enabled items, Home/End jump to the first/last enabled item, and
+Enter/Space runs the highlighted action. Escape or an outside click closes it.
+Accessibility clients can expand/collapse the menu and press its items. Keep
+the instance in a persistent tree or assign a stable `.Key(...)` across rebuilds.
+Nested submenus are not yet supported.
+
+```go
+ui.ContextMenu(ggui.Text("Project notes"),
+    ui.MenuItem("Open", openNotes),
+    ui.MenuDivider(),
+    ui.MenuItem("Archive", archiveNotes),
+).Named("Project notes actions")
+```
+
 ## Additional UI components
+
+### Menubar
+
+`ui.Menubar(ui.Menu("File", entries...), ui.Menu("Edit", entries...))` creates
+an in-window menu strip with one keyboard tab stop and one shared popup. Menus
+passed to a bar belong to it and should not also be painted independently.
+`.Named(name)` names the strip; `Menu.Disabled(true)` disables a top-level menu.
+
+Left/Right wrap across enabled menus. Enter/Space or Down opens the first enabled
+action; Up opens the last. Within an open menu, Up/Down move through enabled
+actions and Home/End go to the first/last. Left/Right switch menus without closing
+the popup. Hovering another trigger also switches menus. Escape and outside
+clicks dismiss it; selection runs the action and restores focus to the bar.
+Use a persistent instance or a stable `Key` across rebuilds. This is an in-window
+control, not the macOS system menu bar; nested submenus are not included.
+
+### Calendar and date picker
+
+`ui.Calendar(date)` binds a `Binding[time.Time]` to a single civil date. A zero
+value means no selection; the initial view shows today. External value changes
+update the visible month without invoking `OnChange`. User selection stores
+midnight in `.Location(...)` (default `time.Local`); selecting the same civil
+date preserves the original value and does not invoke `OnChange`.
+
+```go
+date := ggui.State(time.Time{})
+calendar := ui.Calendar(date).
+    WeekStartsOn(time.Monday).
+    Bounds(firstAllowedDate, lastAllowedDate).
+    DisabledDate(func(d time.Time) bool { return d.Weekday() == time.Sunday })
+picker := ui.DatePicker(date).Named("Due date").OnChange(saveDate)
+picker.Calendar().WeekStartsOn(time.Monday)
+```
+
+Bounds are inclusive; zero endpoints are unbounded. Dates are interpreted in
+the configured timezone. Reversed bounds allow no selections. Arrow keys move
+the focused day by one day or week; Home/End move within the configured week;
+PageUp/PageDown change month, clamping the day for shorter months. Navigation
+does not select or modify the binding. Disabled dates can receive the keyboard
+highlight for orientation, but Enter/Space and accessibility selection cannot
+select them. Month controls and the date grid are separate tab stops.
+
+`.WeekdayLabels([7]string{...})` takes Sunday-to-Saturday labels;
+`.MonthLabel(fn)` formats the heading. `.Disabled(true)` disables the calendar.
+The calendar includes six weeks, with adjacent-month dates muted but selectable.
+Keep it persistent or give it a stable `Key` when rebuilding.
+
+`ui.DatePicker(date)` opens the same calendar in a popup. `.Calendar()` exposes
+its bounds, timezone, localization and disabled-date settings. `.Format(fn)`
+formats the trigger value, and `.Placeholder(text)` replaces "Choose date" for
+an empty value. Selecting a date closes the popup, including the current date;
+Escape or an outside click cancels navigation without changing the value.
+`.Disabled(true)` closes and disables the picker. `.Key(key)` preserves its
+state across rebuilds. Date ranges and editable date text are not included.
 
 ### Notices and loading states
 
@@ -887,3 +962,110 @@ why something sits where it does.
 ---
 
 [Back to top](#ggui-guide) · [README](README.md) · [Development commands](README.md#development)
+
+
+### GPU shadows
+
+`Box.Shadow(styles...)` and `ui.Card(...).Shadow(styles...)` paint outer shadows
+before the surface. Multiple styles form layers; calling `.Shadow()` clears them.
+For custom drawing, use `canvas.Shadow(rect, cornerRadius, style)`.
+
+```go
+ui.Card(content).Shadow(ggui.ShadowStyle{
+    Offset: ggui.Pt(0, 6),
+    Blur:   12,
+    Spread: 0,
+    Color:  color.NRGBA{A: 50},
+})
+```
+
+All distances are logical pixels and scale with the display. Positive spread
+expands the silhouette; negative spread contracts it. Nil or transparent colors
+skip rendering. Blur is a smooth feather distance on both sides of the edge;
+zero gives a sharp, antialiased shadow. This is a rounded-rectangle distance-field
+approximation, not a Gaussian blur of the content or image alpha.
+
+The renderer lazily shares one Ebitengine Kage shader. Each visible shadow layer
+uses one `DrawRectShader` call, with no intermediate textures, blur passes or CPU
+rasterization. Draw bounds are intersected with the target before rendering.
+Cost still grows with visible pixel area and overlapping layers.
+
+Shadows do not reserve layout space or create hit regions. Add padding/gaps when
+needed; parent clipping and window bounds still clip them. The gallery's Shadows
+preview compares subtle, floating and colored treatments. Toast uses this same
+renderer, including its existing fade animation.
+
+
+### Component appearance
+
+The control set follows the visual hierarchy of [shadcn/ui's semantic theme
+colors](https://ui.shadcn.com/docs/theming), [segmented tabs](https://ui.shadcn.com/docs/components/tabs)
+and [cards](https://ui.shadcn.com/docs/components/card), adapted to native drawing
+and ggui's existing APIs.
+
+| Element | Appearance and configuration |
+| --- | --- |
+| Buttons | Primary by default; `Secondary()` / `Outline()` keeps the established outlined appearance. `Muted()` adds a subdued fill, `Ghost()` removes the resting surface, and `Destructive()` uses `DangerColor`. Variants preserve pointer, keyboard and accessibility behavior. |
+| Focus | Controls use a separate, softer focus color. Text fields add an outer halo while editing. |
+| Tabs | A muted rounded strip with an animated raised selection; `.Line()` opts into the underline treatment. Reduced-motion settings still apply. |
+| Cards and floating panels | Cards receive a subtle shadow; menus, select lists, comboboxes and date pickers use a stronger shared panel shadow. Dialogs use a larger radius and deeper elevation. |
+| Labels and notices | Field labels use the body size; help text remains smaller. Alerts use body-size descriptions and tighter title spacing. |
+| Badges and calendar | Badges use small rounded corners. Calendar month navigation uses ghost buttons, with a centered month heading and contrasting selected-date text. |
+
+Theme extension tokens allow the same choices to follow a brand without changing
+individual widgets: `ui.SurfaceMuted`, `ui.FocusColor`, `ui.PanelShadow`, and
+`ui.CardShadow`. Defaults derive surface/focus colors from the inherited theme,
+so custom themes and dark mode remain supported.
+
+```go
+theme := ggui.DefaultTheme().
+    Set(ui.FocusColor, color.Color(color.NRGBA{R: 140, G: 165, B: 230, A: 255})).
+    Set(ui.PanelShadow, ggui.ShadowStyle{Offset: ggui.Pt(0, 4), Blur: 12, Color: color.NRGBA{A: 45}})
+// Disable default card elevation globally, or call Card(...).Shadow() locally.
+theme = theme.Set(ui.CardShadow, ggui.ShadowStyle{})
+ggui.SetTheme(theme)
+```
+
+
+### Command and menu presentation
+
+Menu panels default to 224 logical pixels rather than stretching across the
+window. `Menu(...).Width(w)` overrides this. Menubars inset their triggers and
+show a focus outline only for keyboard focus; pointer hover and the open menu
+use the shared muted surface.
+
+Command uses an integrated search header and divider. For a dialog palette,
+`.Borderless().Height(144).StableHeight().Hints()` avoids nested panel borders,
+keeps the popup from moving as search results change, and shows a keyboard-help
+footer. Without `StableHeight`, the results shrink to their content. Empty
+results display a centered message. Pointer movement updates the same selection
+used by Enter; a stationary pointer no longer resets keyboard menu navigation.
+
+`MenuItem(...).Shortcut("⌘N")` and `CommandItem(...).Shortcut("⌘N")` display
+right-aligned hints only. Register the actual shortcut with `App.Shortcut`.
+
+For a compact command palette, use `ui.CommandDialog(open, command)`. It supplies
+an accessible "Commands" name without a visible heading, removes the surrounding
+dialog padding, and gives the search field a muted inset background. Use
+`.Named("...")` on the returned dialog to customize its accessible name.
+
+```go
+ui.CommandDialog(open, ui.Command(query,
+    ui.CommandItem("Change theme", changeTheme).Group("Appearance"),
+    ui.CommandItem("Show notification", notify).Group("Actions"),
+).Height(176).StableHeight().Hints())
+```
+
+`CommandEntry.Group` labels consecutive entries. Filtering hides headings with no
+matching entries, and keyboard navigation skips headings. `Command.InsetSearch()`
+also enables the rounded search treatment for inline commands.
+`Menubar.Compact()` keeps the painted strip at its content width inside a stretched
+layout; omit it for a full-width application menu bar.
+
+Navigation uses restrained selection styles: Pagination outlines only the current
+page and uses ghost buttons for other pages, with ellipses indicating hidden
+ranges. Its current page is also exposed as selected to accessibility clients.
+Accordion places its chevron on the right, aligns header and body text, and adds
+space beneath expanded content. Tabs uses a compact segmented strip; wrap the
+content in a Card only when a separate content surface is needed. Menubar and
+ContextMenu share the same subdued floating-panel shadow.

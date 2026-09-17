@@ -74,5 +74,5 @@ func (c *CheckboxWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.StrokeLine(at(0.24, 0.52), at(0.43, 0.72), 2, col)
 		dst.StrokeLine(at(0.41, 0.72), at(0.78, 0.30), 2, col)
 	}
-	c.FocusRing(dst, box, radius, t.Accent)
+	c.FocusRing(dst, box, radius, focusColor(t))
 }

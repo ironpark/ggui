@@ -205,7 +205,7 @@ func (r *tableRow[T, K]) paint(dst *ggui.Canvas, rc ggui.Rect) {
 	}
 	dst.Paint(r.box, rc)
 	dst.FillRect(ggui.Rct(ggui.Pt(rc.Origin.X, rc.Origin.Y+rc.Size.H-1), ggui.Sz(rc.Size.W, 1)), th.Border)
-	r.FocusRing(dst, rc, th.Radius, th.Accent)
+	r.FocusRing(dst, rc, th.Radius, focusColor(th))
 }
 
 func (r *tableRow[T, K]) pick() {

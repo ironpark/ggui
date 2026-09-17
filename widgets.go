@@ -325,6 +325,7 @@ func (e *EnvWidget) Paint(dst *Canvas, r Rect) { dst.Paint(e.child, r) }
 // BoxWidget paints a rectangle and lays an optional child inside its padding.
 // Build one with Box.
 type BoxWidget struct {
+	shadows     []ShadowStyle
 	fill        color.Color
 	radius      float64
 	borderWidth float64
@@ -353,6 +354,13 @@ func Box(child ...Widget) *BoxWidget {
 
 // Fill sets the background color. Nil paints nothing.
 func (b *BoxWidget) Fill(c color.Color) *BoxWidget { b.fill = c; return b }
+
+// Shadow replaces the outer shadow layers. Calling it without arguments clears
+// them. Shadows paint in argument order and do not reserve layout space.
+func (b *BoxWidget) Shadow(styles ...ShadowStyle) *BoxWidget {
+	b.shadows = append([]ShadowStyle(nil), styles...)
+	return b
+}
 
 // Radius rounds the corners of the fill and border.
 func (b *BoxWidget) Radius(r float64) *BoxWidget { b.radius = r; return b }
@@ -407,6 +415,9 @@ func (b *BoxWidget) Layout(c Constraints, env Env) Size {
 
 // Paint implements Widget.
 func (b *BoxWidget) Paint(dst *Canvas, r Rect) {
+	for _, s := range b.shadows {
+		dst.Shadow(r, b.radius, s)
+	}
 	dst.FillRoundRect(r, b.radius, b.fill)
 	if b.borderWidth > 0 {
 		dst.StrokeRoundRect(r, b.radius, b.borderWidth, b.borderColor)

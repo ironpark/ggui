@@ -10,6 +10,7 @@ import (
 // TabsWidget shows one of several pages, picked by a row of labels above.
 // Build one with Tabs.
 type TabsWidget struct {
+	line     bool
 	selected ggui.Binding[int]
 	tabs     []TabPage
 	onChange func(int)
@@ -49,6 +50,9 @@ func Tabs(selected ggui.Binding[int], tabs ...TabPage) *TabsWidget {
 	return t
 }
 
+// Line uses the underline-style strip instead of the default segmented surface.
+func (t *TabsWidget) Line() *TabsWidget { t.line = true; return t }
+
 // Disabled greys the strip out and ignores input while v is true; the
 // selected page stays.
 func (t *TabsWidget) Disabled(v bool) *TabsWidget { t.Inert = v; return t }
@@ -75,7 +79,7 @@ func (t *TabsWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	th := env.Theme()
 	t.theme = th
 	t.motion = env.Motion(knobDuration)
-	t.pad = th.ButtonPad
+	t.pad = ggui.Insets(5, 10)
 	t.labelSize = t.labelSize[:0]
 	t.headerH = 0
 	cur := t.index()
@@ -85,13 +89,13 @@ func (t *TabsWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		t.labelSize = append(t.labelSize, s)
 		t.headerH = max(t.headerH, s.H+t.pad.Top+t.pad.Bottom)
 	}
-	t.headerH++ // the divider
+	t.headerH += 14 // three-pixel inset on each side, then eight pixels to content
 	t.bodySize = ggui.Size{}
 	if cur >= 0 {
 		body := ggui.Constraints{MinW: c.MinW, MaxW: c.MaxW, MinH: max(c.MinH-t.headerH, 0), MaxH: max(c.MaxH-t.headerH, 0)}
 		t.bodySize = t.tabs[cur].Content.Layout(body, env)
 	}
-	var w float64
+	w := 6.0
 	for _, s := range t.labelSize {
 		w += s.W + t.pad.Left + t.pad.Right
 	}
@@ -106,17 +110,37 @@ func (t *TabsWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 }
 
 func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
+	dst = dst.Clip(r)
 	th := t.theme
-	header := ggui.Rct(r.Origin, ggui.Sz(r.Size.W, t.headerH))
+	header := ggui.Rct(r.Origin, ggui.Sz(r.Size.W, t.headerH-8))
 	if !t.Inert {
 		dst.HitKey(header, t)
 	}
 	t.labelRect = t.labelRect[:0]
-	x := r.Origin.X
+	x := r.Origin.X + 3
 	cur := t.index()
 	hover := pick(t.Inert, -1, t.hover)
+	width := 6.0
+	for _, s := range t.labelSize {
+		width += s.W + t.pad.Left + t.pad.Right
+	}
+	if !t.line {
+		dst.FillRoundRect(ggui.Rct(r.Origin, ggui.Sz(min(width, r.Size.W), header.Size.H)), th.Radius, mutedSurface(th))
+		if cur >= 0 {
+			target := r.Origin.X + 3
+			for i := 0; i < cur; i++ {
+				target += t.labelSize[i].W + t.pad.Left + t.pad.Right
+			}
+			sx := dst.Ease(ggui.Anchor{Rect: header}, underlineSlot, target, t.motion)
+			sw := dst.Ease(ggui.Anchor{Rect: header}, widthSlot, t.labelSize[cur].W+t.pad.Left+t.pad.Right, t.motion)
+			active := ggui.Rct(ggui.Pt(sx, r.Origin.Y+3), ggui.Sz(sw, header.Size.H-6))
+			dst.Shadow(active, max(th.Radius-2, 0), cardShadow(th))
+			dst.FillRoundRect(active, max(th.Radius-2, 0), th.Surface)
+		}
+	}
+
 	for i, s := range t.labelSize {
-		lr := ggui.Rct(ggui.Pt(x, r.Origin.Y), ggui.Sz(s.W+t.pad.Left+t.pad.Right, t.headerH-1))
+		lr := ggui.Rct(ggui.Pt(x, r.Origin.Y+3), ggui.Sz(s.W+t.pad.Left+t.pad.Right, header.Size.H-6))
 		t.labelRect = append(t.labelRect, lr)
 		dst.Describe(lr, tabLabel{t, i})
 		if !t.Inert {
@@ -126,17 +150,21 @@ func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		if i == hover && i != cur {
 			dst.FillRoundRect(lr, th.Radius, subtle(th))
 		}
-		dst.Paint(t.labels[i], ggui.Rct(ggui.Pt(x+t.pad.Left, r.Origin.Y+t.pad.Top), s))
+		dst.Paint(t.labels[i], ggui.Rct(ggui.Pt(x+t.pad.Left, r.Origin.Y+3+t.pad.Top), s))
 		x += lr.Size.W
 	}
-	lineY := r.Origin.Y + t.headerH - 1
-	dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X, lineY), ggui.Sz(r.Size.W, 1)), th.Border)
+	lineY := r.Origin.Y + header.Size.H - 1
+	if t.line {
+		dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X, lineY), ggui.Sz(r.Size.W, 1)), th.Border)
+	}
 	if cur >= 0 {
 		lr := t.labelRect[cur]
-		x := dst.Ease(ggui.Anchor{Rect: header}, underlineSlot, lr.Origin.X, t.motion)
-		w := dst.Ease(ggui.Anchor{Rect: header}, widthSlot, lr.Size.W, t.motion)
-		dst.FillRoundRect(ggui.Rct(ggui.Pt(x, lineY-1), ggui.Sz(w, 2)), 1, pick(t.Inert, th.Muted, th.Accent))
-		t.FocusRing(dst, lr, th.Radius, th.Accent)
+		if t.line {
+			x := dst.Ease(ggui.Anchor{Rect: header}, underlineSlot, lr.Origin.X, t.motion)
+			w := dst.Ease(ggui.Anchor{Rect: header}, widthSlot, lr.Size.W, t.motion)
+			dst.FillRoundRect(ggui.Rct(ggui.Pt(x, lineY-1), ggui.Sz(w, 2)), 1, pick(t.Inert, th.Muted, th.Accent))
+		}
+		t.FocusRing(dst, lr, th.Radius, focusColor(th))
 		dst.Paint(t.tabs[cur].Content, ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+t.headerH), t.bodySize))
 	}
 }

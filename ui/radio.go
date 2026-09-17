@@ -79,5 +79,5 @@ func (r *RadioWidget[T]) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 		dst.FillCircle(center, radius, pick(r.Hovered, t.Accent, t.Border))
 		dst.FillCircle(center, radius-1, t.Field)
 	}
-	r.FocusRing(dst, box, radius, t.Accent)
+	r.FocusRing(dst, box, radius, focusColor(t))
 }

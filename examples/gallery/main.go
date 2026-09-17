@@ -9,6 +9,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
@@ -26,6 +27,10 @@ type Person struct {
 
 func newGallery() (ggui.Builder, func(), func()) {
 	dark := ggui.State(false)
+	selectedDate := ggui.State(time.Now())
+	calendar := ui.Calendar(selectedDate).WeekStartsOn(time.Monday)
+	datePicker := ui.DatePicker(selectedDate).Named("Appointment date")
+	datePicker.Calendar().WeekStartsOn(time.Monday)
 	search := ggui.State("")
 	category := ggui.State("All")
 	scroll := ggui.State(0.0)
@@ -94,6 +99,9 @@ func newGallery() (ggui.Builder, func(), func()) {
 		entries := []ggui.Widget{
 			section("Buttons", ggui.Column(
 				ggui.Wrap(ui.Button("Save changes", func() { toasts.Push(ui.Toast("Saved", "Your changes are stored.")) }), ui.Button("Secondary", func() { toasts.Push(ui.Toast("Secondary action", "Outline buttons support quieter actions.")) }).Secondary(), ui.Button("Disabled", nil).Disabled(true)).Gap(8),
+				ggui.Wrap(ui.Button("Muted", nil).Muted(), ui.Button("Ghost", nil).Ghost(), ui.Button("Delete", func() {
+					toasts.Push(ui.Toast("Destructive action", "A red button makes the intent clear.").Destructive())
+				}).Destructive()).Gap(8),
 				ggui.Wrap(ui.Badge("Draft"), ui.Badge("Published").Accent(), ggui.Tooltip(ui.Button("Hover for help", nil).Secondary(), "Tooltips add context to an action.")).Gap(8),
 			).Gap(16)),
 
@@ -131,6 +139,28 @@ func newGallery() (ggui.Builder, func(), func()) {
 				).Space(1),
 			).Space(1)),
 
+			section("Shadows", ggui.Padding(ggui.Wrap(
+				ui.Card(ggui.Text("Subtle")).Shadow(ggui.ShadowStyle{Offset: ggui.Pt(0, 2), Blur: 4, Color: color.NRGBA{A: 40}}),
+				ui.Card(ggui.Text("Floating")).Shadow(ggui.ShadowStyle{Offset: ggui.Pt(0, 6), Blur: 12, Color: color.NRGBA{A: 55}}),
+				ui.Card(ggui.Text("Colored")).Shadow(ggui.ShadowStyle{Offset: ggui.Pt(0, 4), Blur: 16, Spread: 2, Color: color.NRGBA{R: 70, G: 100, B: 230, A: 85}}),
+			).Gap(24), 20)),
+			section("Menubar", ui.Menubar(
+				ui.Menu("File", ui.MenuItem("New document", func() { toasts.Push(ui.Toast("Created", "A new document is ready.")) }), ui.MenuItem("Export", nil).Disabled(true)),
+				ui.Menu("Edit", ui.MenuItem("Undo edit", func() { toasts.Push(ui.Toast("Undone", "The last edit was reverted.")) })),
+				ui.Menu("View", ui.MenuItem("Switch theme", func() { ggui.Toggle(dark) })),
+			).Compact()),
+			section("Calendar", calendar),
+			section("Date picker", datePicker),
+			section("Context menu", ui.ContextMenu(
+				ggui.Box(ggui.Column(ggui.Title("Project notes"), ggui.Caption("Right-click here, or use Tab then Shift+F10.")).Space(1)).Pad(24).Border(1, t.Border).Radius(t.Radius),
+				ui.MenuItem("Open notes", func() {
+					toasts.Push(ui.Toast("Notes opened", "Context-menu actions work with keyboard and pointer input."))
+				}),
+				ui.MenuItem("Share notes", nil).Disabled(true),
+				ui.MenuDivider(),
+				ui.MenuItem("Archive notes", func() { toasts.Push(ui.Toast("Notes archived", "Your project notes have been archived.")) }),
+			).Named("Project notes actions")),
+
 			section("Notices and empty states", ggui.Column(
 				ui.Alert("Changes saved", "Your settings are up to date."),
 				ui.Alert("Connection interrupted", "You can retry without losing your work.").Destructive().
@@ -159,11 +189,11 @@ func newGallery() (ggui.Builder, func(), func()) {
 				ui.Combobox(fruit, []string{"Apple", "Banana", "Cherry", "Durian", "Grape", "Mango", "Orange"}).Named("Search fruit"),
 				ui.Button("Commands…", func() { paletteOpen.Set(true) }).Secondary(),
 			).Space(1)),
-			ui.Dialog(paletteOpen, ui.Command(commandQuery,
-				ui.CommandItem("Toggle dark theme", func() { ggui.Toggle(dark); paletteOpen.Set(false) }).Keywords("appearance", "light"),
-				ui.CommandItem("Reset text size", func() { size.Set(16); paletteOpen.Set(false) }).Keywords("font"),
-				ui.CommandItem("Show notification", func() { toasts.Push(ui.Toast("Done", "The command ran successfully.")); paletteOpen.Set(false) }),
-			)).Title("Commands"),
+			ui.CommandDialog(paletteOpen, ui.Command(commandQuery,
+				ui.CommandItem("Toggle dark theme", func() { ggui.Toggle(dark); paletteOpen.Set(false) }).Keywords("appearance", "light").Group("Appearance"),
+				ui.CommandItem("Reset text size", func() { size.Set(16); paletteOpen.Set(false) }).Keywords("font").Group("Appearance"),
+				ui.CommandItem("Show notification", func() { toasts.Push(ui.Toast("Done", "The command ran successfully.")); paletteOpen.Set(false) }).Group("Actions"),
+			).Height(176).StableHeight().Hints()),
 
 			section("Resizable", ggui.Box(ui.Resizable(split,
 				ggui.Center(ggui.Text("Sidebar")),
@@ -181,7 +211,7 @@ func newGallery() (ggui.Builder, func(), func()) {
 			).Space(1)),
 			toasts,
 
-			section("Tabs", ui.Card(ui.Tabs(tab,
+			section("Tabs", ui.Tabs(tab,
 				ui.Tab("Overview", ggui.Column(
 					ggui.Row(ggui.Text("Status"), ui.Badge("stable"), ui.Badge("new").Accent()).Space(1),
 					ui.Progress(progress), // reads the signal every frame: no Reactive needed
@@ -197,7 +227,7 @@ func newGallery() (ggui.Builder, func(), func()) {
 					).Space(1)),
 				)),
 				ui.Tab("About", ggui.Text("Tabs lay out only the page they show; Left and Right switch while focused.")),
-			))),
+			)),
 
 			section("Transition", ggui.Column(
 				ui.Switch(details, "Show details"),

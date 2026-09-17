@@ -13,6 +13,7 @@ import (
 // one with Dialog. It takes no space where it sits in the tree; put it
 // anywhere.
 type DialogWidget struct {
+	compact bool
 	open    ggui.Binding[bool]
 	content ggui.Widget
 	title   *ggui.TextWidget
@@ -40,9 +41,15 @@ func Dialog(open ggui.Binding[bool], content ggui.Widget) *DialogWidget {
 // Title puts a heading above the content, which also names the dialog for
 // Probe.Find.
 func (d *DialogWidget) Title(s string) *DialogWidget {
-	d.title, d.name = ggui.Title(s), s
+	d.title, d.name = ggui.Title(s).Size(18), s
 	return d
 }
+
+// Named sets an accessible name without adding a visible heading.
+func (d *DialogWidget) Named(name string) *DialogWidget { d.name = name; return d }
+
+// Compact removes the outer padding for content with its own spacing.
+func (d *DialogWidget) Compact() *DialogWidget { d.compact = true; return d }
 
 // Width sets the panel's width; it shrinks to fit a narrower window.
 func (d *DialogWidget) Width(w float64) *DialogWidget { d.width = w; return d }
@@ -75,9 +82,12 @@ func (d *DialogWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	d.theme, d.env = t, env
 	body := d.content
 	if d.title != nil {
-		body = ggui.Column(d.title, d.content).Gap(t.Space).Align(ggui.AlignStretch)
+		body = ggui.Column(d.title, d.content).Gap(t.Space * 2).Align(ggui.AlignStretch)
 	}
-	d.panel = ggui.Box(body).Padding(t.CardPad).Fill(t.Surface).Border(1, t.Border).Radius(t.Radius)
+	d.panel = ggui.Box(body).Padding(t.CardPad).Fill(t.Surface).Border(1, t.Border).Radius(t.Radius + 4).Shadow(ggui.ShadowStyle{Offset: ggui.Pt(0, 12), Blur: 28, Color: color.NRGBA{A: 65}})
+	if d.compact {
+		d.panel.Pad(0)
+	}
 	return c.Constrain(ggui.Size{})
 }
 

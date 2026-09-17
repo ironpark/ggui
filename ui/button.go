@@ -10,14 +10,17 @@ import (
 // ButtonWidget is a clickable box with a label. Build one with Button.
 type ButtonWidget struct {
 	ggui.Interactive
-	label     *ggui.TextWidget
-	box       *ggui.BoxWidget
-	onTap     func()
-	secondary bool
-	padded    bool
-	expands   func() bool
-	opener    ggui.Actor
-	theme     ggui.Theme
+	label                     *ggui.TextWidget
+	box                       *ggui.BoxWidget
+	onTap                     func()
+	secondary                 bool
+	ghost, muted, destructive bool
+	padded                    bool
+	selected                  bool // current item for composite navigation controls
+	expands                   func() bool
+	opener                    ggui.Actor
+	value                     func() string // optional accessible value for composite triggers
+	theme                     ggui.Theme
 }
 
 // Button creates a primary button: Accent background, OnAccent label.
@@ -72,6 +75,7 @@ func (b *ButtonWidget) Describe() ggui.Node {
 		Role:     b.Role,
 		Name:     b.Name,
 		Disabled: b.Inert,
+		Selected: b.selected,
 		Actions:  ggui.ActionPress | ggui.ActionFocus,
 	}
 	if b.expands != nil {
@@ -79,12 +83,35 @@ func (b *ButtonWidget) Describe() ggui.Node {
 		n.Expanded = ggui.Expandable(open)
 		n.Actions |= pick(open, ggui.ActionCollapse, ggui.ActionExpand)
 	}
+	if b.value != nil {
+		n.Value = b.value()
+	}
 	return n
 }
 
 // Secondary makes the button quiet: Surface background with a border and
 // the normal text color, for actions that are not the main one.
-func (b *ButtonWidget) Secondary() *ButtonWidget { b.secondary = true; return b }
+func (b *ButtonWidget) Secondary() *ButtonWidget {
+	b.secondary = true
+	b.ghost, b.muted, b.destructive = false, false, false
+	return b
+}
+
+// Outline is an alias for Secondary, preserving the established outline style.
+func (b *ButtonWidget) Outline() *ButtonWidget { return b.Secondary() }
+
+// Muted uses a subdued filled surface for a supporting action.
+func (b *ButtonWidget) Muted() *ButtonWidget { b.Secondary(); b.muted = true; return b }
+
+// Ghost omits the resting background and border for a lightweight action.
+func (b *ButtonWidget) Ghost() *ButtonWidget { b.Secondary(); b.ghost = true; return b }
+
+// Destructive uses DangerColor for an irreversible action.
+func (b *ButtonWidget) Destructive() *ButtonWidget {
+	b.secondary, b.ghost, b.muted = false, false, false
+	b.destructive = true
+	return b
+}
 
 // Disabled greys the button out and ignores the pointer while v is true.
 func (b *ButtonWidget) Disabled(v bool) *ButtonWidget { b.Inert = v; return b }
@@ -111,9 +138,11 @@ func (b *ButtonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if b.label != nil {
 		switch {
 		case b.Inert:
-			b.label.Color(t.Muted)
+			b.label.Color(pick(b.secondary, mix(t.Fg, t.Surface, .5), mix(pick[color.Color](b.destructive, color.White, t.OnAccent), t.Surface, .5)))
 		case b.secondary:
 			b.label.Color(t.Fg)
+		case b.destructive:
+			b.label.Color(color.White)
 		default:
 			b.label.Color(t.OnAccent)
 		}
@@ -124,27 +153,47 @@ func (b *ButtonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 // Paint implements Widget.
 func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := b.theme
-	var fill color.Color
-	b.box.Border(0, nil)
+	fill, border := t.Accent, color.Color(nil)
 	switch {
-	case b.Inert:
-		fill = pick(b.secondary, subtle(t), mix(t.Accent, t.Surface, .65))
-		if b.secondary {
-			b.box.Border(1, t.Border)
-		}
+	case b.ghost:
+		fill = nil
+	case b.muted:
+		fill = mutedSurface(t)
 	case b.secondary:
-		fill = pick(b.Hovered, subtle(t), t.Surface)
-		b.box.Border(1, t.Border)
-	default:
-		fill = pick(b.Hovered, t.AccentHover, t.Accent)
+		fill = t.Surface
+		border = t.Border
+	case b.destructive:
+		fill = dangerColor(t)
+	}
+	if b.Hovered && !b.Inert {
+		switch {
+		case b.ghost, b.secondary:
+			fill = mutedSurface(t)
+		case b.muted:
+			fill = mix(mutedSurface(t), t.Fg, .06)
+		case b.destructive:
+			fill = mix(fill, t.Surface, .12)
+		default:
+			fill = t.AccentHover
+		}
 	}
 	if b.Pressed && b.Hovered && !b.Inert {
-		fill = tint(fill, pressTint)
+		fill = mix(fill, t.Fg, .08)
+	}
+	if b.Inert && fill != nil {
+		fill = mix(fill, t.Surface, .55)
+	}
+	b.box.Border(0, nil)
+	if border != nil {
+		b.box.Border(1, border)
 	}
 	b.box.Fill(fill)
+	if !b.ghost && !b.muted && !b.Inert {
+		dst.Shadow(r, t.Radius, cardShadow(t))
+	}
 	b.Hit(dst, r, b, ebiten.CursorShapePointer)
 	dst.Paint(b.box, r)
-	b.FocusRing(dst, r, t.Radius, t.Accent)
+	b.FocusRing(dst, r, t.Radius, focusColor(t))
 }
 
 // HandleKey implements KeyHandler: Space or Enter presses the button.

@@ -12,8 +12,16 @@ func Card(child ggui.Widget) *CardWidget { return &CardWidget{box: ggui.Box(chil
 
 // CardWidget is a themed panel. Build one with Card.
 type CardWidget struct {
-	box *ggui.BoxWidget
-	pad bool
+	box       *ggui.BoxWidget
+	pad       bool
+	shadowSet bool
+}
+
+// Shadow sets outer shadow layers without changing the card's layout.
+func (c *CardWidget) Shadow(styles ...ggui.ShadowStyle) *CardWidget {
+	c.shadowSet = true
+	c.box.Shadow(styles...)
+	return c
 }
 
 // Pad overrides the theme's padding, with the shorthand Insets accepts.
@@ -22,6 +30,9 @@ func (c *CardWidget) Pad(sides ...float64) *CardWidget { c.box.Pad(sides...); c.
 // Layout implements Widget.
 func (c *CardWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	t := env.Theme()
+	if !c.shadowSet {
+		c.box.Shadow(cardShadow(t))
+	}
 	if !c.pad {
 		c.box.Padding(t.CardPad)
 	}
@@ -63,7 +74,7 @@ func (b *BadgeWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 // Paint implements Widget.
 func (b *BadgeWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := b.theme
-	dst.FillRoundRect(r, r.Size.H/2, pick(b.accent, t.Accent, subtle(t)))
+	dst.FillRoundRect(r, min(t.Radius*.75, r.Size.H/2), pick(b.accent, t.Accent, mutedSurface(t)))
 	dst.Paint(b.text, ggui.Rct(ggui.Pt(r.Origin.X+b.pad.Left, r.Origin.Y+(r.Size.H-b.size.H)/2), b.size))
 }
 

@@ -73,7 +73,7 @@ func (f *FieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 			note, col = e, dangerColor(t)
 		}
 	}
-	f.caption.Style(t.Caption).Color(t.Fg)
+	f.caption.Style(t.Text).Color(t.Fg)
 	f.note.Set(note).Style(t.Caption).Color(col)
 	parts := []ggui.Widget{f.caption, f.input}
 	if note != "" {

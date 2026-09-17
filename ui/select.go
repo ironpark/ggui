@@ -134,7 +134,7 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	s.theme = t
 	s.pad = t.FieldPad
 	s.box.Radius(t.Radius).Fill(t.Field)
-	s.list.Fill(t.Surface).Border(1, t.Border).Radius(t.Radius).Padding(t.PanelPad)
+	s.list.Shadow(panelShadow(t)).Fill(t.Surface).Border(1, t.Border).Radius(t.Radius).Padding(t.PanelPad)
 	s.text = ggui.Text(s.label(s.value.Peek())).NoWrap().Color(pick[color.Color](s.Inert, t.Muted, t.Fg))
 	// As wide as the widest option, so the field does not resize as the
 	// value changes, and never wider than the row wants unless told to.
@@ -154,7 +154,7 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 	t := s.theme
 	open := s.popup.IsOpen()
-	s.box.Border(1, pick(open || s.Focused, t.Accent, t.Border))
+	s.box.Border(1, pick(open || s.Focused, focusColor(t), t.Border))
 	s.Hit(dst, r, s, ebiten.CursorShapePointer)
 	dst.Paint(s.box, r)
 	dst.Clip(r).Paint(s.text, ggui.Rct(ggui.Pt(r.Origin.X+s.pad.Left, r.Origin.Y+(r.Size.H-s.textSize.H)/2), s.textSize))
@@ -165,7 +165,7 @@ func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 	col := pick(s.Inert, t.Muted, t.Fg)
 	dst.StrokeLine(ggui.Pt(cx-4, cy-dy), ggui.Pt(cx, cy+dy), 1.5, col)
 	dst.StrokeLine(ggui.Pt(cx, cy+dy), ggui.Pt(cx+4, cy-dy), 1.5, col)
-	s.FocusRing(dst, r, t.Radius, t.Accent)
+	s.FocusRing(dst, r, t.Radius, focusColor(t))
 }
 
 // Paint implements Widget.
@@ -300,7 +300,7 @@ func (it *selectItem[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.HitPointer(r, it)
 	dst.HitCursor(r, ebiten.CursorShapePointer)
 	if it.Hovered || it.active {
-		dst.FillRoundRect(r, t.Radius*0.75, t.Selection)
+		dst.FillRoundRect(r, t.Radius*0.75, mutedSurface(t))
 	}
 	at := ggui.Pt(r.Origin.X+it.pad.Left+controlSize+controlGap, r.Origin.Y+(r.Size.H-it.textSize.H)/2)
 	dst.Paint(it.text, ggui.Rct(at, it.textSize))

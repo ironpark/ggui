@@ -13,6 +13,7 @@ type TextFieldWidget struct {
 	input            *ggui.TextInputWidget
 	box              *ggui.BoxWidget
 	theme            ggui.Theme
+	plain            bool
 }
 
 // TextField creates a text field bound to value.
@@ -85,6 +86,9 @@ func (f *TextFieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := env.Theme()
 	f.theme = t
 	f.box.Padding(t.FieldPad).Radius(t.Radius).Fill(pick(f.Inert, t.Surface, t.Field))
+	if f.plain {
+		f.box.Fill(nil).Pad(10, 8)
+	}
 	return f.box.Layout(c, env)
 }
 
@@ -92,7 +96,13 @@ func (f *TextFieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 func (f *TextFieldWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// The whole box, padding included, focuses and clicks into the editor.
 	f.Hit(dst, r, f.input, ebiten.CursorShapeText)
-	f.box.Border(1, pick(f.input.Focused(), f.theme.Accent, f.theme.Border))
+	f.box.Border(1, pick(f.input.Focused(), focusColor(f.theme), f.theme.Border))
+	if f.input.Focused() && !f.Inert && !f.plain {
+		fieldHalo(dst, r, f.theme.Radius, f.theme)
+	}
+	if f.plain {
+		f.box.Border(0, nil)
+	}
 	dst.Paint(f.box, r)
 }
 

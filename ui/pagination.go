@@ -6,7 +6,7 @@ import (
 )
 
 // PaginationWidget navigates a one-based page binding. It does not slice data.
-// At most five numbered buttons are shown, plus Previous and Next.
+// At most five numbered buttons are shown, plus Previous, Next and ellipses for hidden pages.
 type PaginationWidget struct {
 	page           ggui.Binding[int]
 	pages          ggui.Reader[int]
@@ -22,8 +22,8 @@ type PaginationWidget struct {
 // Out-of-range page values are clamped for display, without writing the binding.
 func Pagination(page ggui.Binding[int], pages ggui.Reader[int]) *PaginationWidget {
 	p := &PaginationWidget{page: page, pages: pages}
-	p.previous = Button("Previous", func() { p.move(-1) }).Secondary()
-	p.next = Button("Next", func() { p.move(1) }).Secondary()
+	p.previous = Button("‹ Previous", func() { p.move(-1) }).Label("Previous").Ghost().Pad(6, 10)
+	p.next = Button("Next ›", func() { p.move(1) }).Label("Next").Ghost().Pad(6, 10)
 	for i := range p.numbers {
 		p.numbers[i] = Button("", func() { p.selectPage(p.targets[i]) })
 	}
@@ -63,15 +63,26 @@ func (p *PaginationWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	p.next.Disabled(p.disabled || n == 0 || current == n)
 	children := []ggui.Widget{p.previous}
 	start := max(1, min(current-2, n-4))
+	if start > 1 {
+		children = append(children, ggui.Padding(ggui.Text("…"), 6, 4))
+	}
 	for i := range min(n, len(p.numbers)) {
 		target := start + i
 		p.targets[i] = target
 		b := p.numbers[i]
 		b.label.Set(fmt.Sprint(target))
 		b.SetName(fmt.Sprintf("Page %d", target))
-		b.secondary = target != current
-		b.Disabled(p.disabled).Pad(env.Theme().ButtonPad.Top, env.Theme().Space)
+		b.selected = target == current
+		if target == current {
+			b.Outline()
+		} else {
+			b.Ghost()
+		}
+		b.Disabled(p.disabled).Pad(6, 10)
 		children = append(children, b)
+	}
+	if start+len(p.numbers) <= n {
+		children = append(children, ggui.Padding(ggui.Text("…"), 6, 4))
 	}
 	children = append(children, p.next)
 	p.row = ggui.Wrap(children...).Gap(env.Theme().Space / 2)

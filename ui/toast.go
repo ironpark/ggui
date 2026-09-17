@@ -93,7 +93,7 @@ func (t *ToasterWidget) Push(message ToastMessage) ToastID {
 	e := &toastEntry{id: t.next, title: message.title, remaining: message.duration, persistent: message.duration <= 0, last: ggui.Now()}
 	e.motion.MoveTo(0, e.last, 0)
 	e.duration = message.duration
-	e.dismiss = Button("×", func() { t.Dismiss(e.id) }).Secondary().Pad(2, 8).Label("Dismiss " + message.title)
+	e.dismiss = Button("×", func() { t.Dismiss(e.id) }).Ghost().Pad(2, 8).Label("Dismiss " + message.title)
 	e.dismiss.Key(e)
 
 	if message.actionLabel != "" {
@@ -234,10 +234,7 @@ func (t *ToasterWidget) paintNotices(dst *ggui.Canvas) {
 			clip.Image = t.buffer
 		}
 		// Shadow stays outside the panel's own clipping rectangle.
-		for layer := 3; layer >= 1; layer-- {
-			shadow := ggui.Rct(rect.Origin.Add(ggui.Pt(float64(-layer), float64(layer*2))), ggui.Sz(rect.Size.W+float64(layer*2), rect.Size.H+float64(layer)))
-			clip.FillRoundRect(shadow, theme.Radius+4, color.NRGBA{A: uint8(5 + progress*5)})
-		}
+		clip.Shadow(rect, theme.Radius+4, ggui.ShadowStyle{Offset: ggui.Pt(0, 4), Blur: 8, Color: color.NRGBA{A: 35}})
 		clip = clip.Clip(rect)
 		clip.HitPointer(rect, toastHover{e})
 		// A notice is a live region: it appeared without the user asking,

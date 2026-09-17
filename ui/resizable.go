@@ -160,7 +160,7 @@ func (r *ResizableWidget) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 		}
 		focus = grip
 	}
-	r.FocusRing(dst, focus, 3, r.theme.Accent)
+	r.FocusRing(dst, focus, 3, focusColor(r.theme))
 }
 
 // ConsumesKey implements ggui.KeyConsumer.

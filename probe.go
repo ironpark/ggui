@@ -236,8 +236,13 @@ func (p *Probe) Release(pos Point) {
 
 // Click presses and releases the left button at pos.
 func (p *Probe) Click(pos Point) {
-	p.Press(pos)
-	p.Release(pos)
+	p.ClickButton(pos, ebiten.MouseButtonLeft)
+}
+
+// ClickButton presses and releases the specified mouse button at pos.
+func (p *Probe) ClickButton(pos Point, button ebiten.MouseButton) {
+	p.dispatch(frameInput{pos: pos, down: []ebiten.MouseButton{button}})
+	p.dispatch(frameInput{pos: pos, up: []ebiten.MouseButton{button}})
 }
 
 // Scroll turns the wheel by delta over pos.

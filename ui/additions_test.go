@@ -22,6 +22,9 @@ func TestPaginationNavigation(t *testing.T) {
 		t.Fatal("previous changed the first page")
 	}
 	p.Tap("Page 3")
+	if node, ok := p.Semantics().Find(ggui.RoleButton, "Page 3"); !ok || !node.Selected {
+		t.Fatal("current page is not marked selected")
+	}
 	if page.Peek() != 3 || changes != 1 {
 		t.Fatal("numbered navigation failed")
 	}
