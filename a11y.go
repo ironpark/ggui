@@ -148,15 +148,17 @@ type axBridge struct {
 
 // start binds the bridge to its platform. It is called once, from the first
 // frame, because the platform half needs a window to attach to and there is
-// none before Run.
-func (b *axBridge) start(a *App, mode AccessibilityMode) {
+// none before Run. act is what an assistive technology's request to press or
+// focus something ends up calling; the bridge takes the function rather than
+// the App so that nothing here has to know what an App is.
+func (b *axBridge) start(act func(NodeID, Action), mode AccessibilityMode) {
 	b.mode = mode
 	if mode == AccessibilityOff {
 		return
 	}
-	b.plat = newAXPlatform(a)
+	b.plat = newAXPlatform()
 	if b.plat != nil {
-		b.act = a.Perform
+		b.act = act
 		axAttach(b)
 	}
 }

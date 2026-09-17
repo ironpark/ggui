@@ -42,9 +42,9 @@ import (
 
 // theAX is the bridge the Objective-C methods answer from. A class is
 // registered once per process and its methods are plain functions with
-// nowhere to keep a receiver, so the one App that started a bridge puts
-// itself here. A second App would replace it, which is the same limit the
-// IME already has.
+// nowhere to keep a receiver, so the bridge that started puts itself here.
+// A second one would replace it, which is the same limit the IME already
+// has.
 var theAX atomic.Pointer[axBridge]
 
 type nsPoint struct {
@@ -133,7 +133,6 @@ func nsArray(ids []objc.ID) objc.ID {
 // darwinAX is the platform half of the bridge: the container view, and the
 // three things the portable half asks of it.
 type darwinAX struct {
-	app       *App
 	container objc.ID
 }
 
@@ -143,7 +142,7 @@ func axAttach(b *axBridge) { theAX.Store(b) }
 // newAXPlatform returns the macOS bridge. Nothing is created here: the
 // window does not exist until Run has started, so the container is attached
 // from the first poll that finds the app running.
-func newAXPlatform(a *App) axPlatform { return &darwinAX{app: a} }
+func newAXPlatform() axPlatform { return &darwinAX{} }
 
 // active reports whether VoiceOver is running, and takes the chance to
 // attach the container view, which is work only the main thread may do.

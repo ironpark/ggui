@@ -96,7 +96,7 @@ func (a *App) Run() error {
 		ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	}
 	a.start()
-	a.a11y.start(a, a.cfg.Accessibility)
+	a.a11y.start(a.Perform, a.cfg.Accessibility)
 	appRunning.Store(true)
 	// Holding a key on macOS pops up the accent menu, as it does in every
 	// text field on the platform; text editing relies on it.
