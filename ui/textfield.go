@@ -9,15 +9,23 @@ import (
 // border that turns Accent while focused, the theme's padding and radius.
 // Build one with TextField.
 type TextFieldWidget struct {
-	input *ggui.TextInputWidget
-	box   *ggui.BoxWidget
-	theme ggui.Theme
+	input    *ggui.TextInputWidget
+	box      *ggui.BoxWidget
+	disabled bool
+	theme    ggui.Theme
 }
 
 // TextField creates a text field bound to value.
 func TextField(value *ggui.Signal[string]) *TextFieldWidget {
 	f := &TextFieldWidget{input: ggui.TextInput(value)}
 	f.box = ggui.Box(f.input)
+	return f
+}
+
+// Disabled greys the field out and ignores input while v is true.
+func (f *TextFieldWidget) Disabled(v bool) *TextFieldWidget {
+	f.disabled = v
+	f.input.Disabled(v)
 	return f
 }
 
@@ -52,16 +60,18 @@ func (f *TextFieldWidget) Input() *ggui.TextInputWidget { return f.input }
 func (f *TextFieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := env.Theme()
 	f.theme = t
-	f.box.Pad(t.Space*0.75, t.Space).Radius(t.Radius).Fill(t.Field)
+	f.box.Padding(t.FieldPad).Radius(t.Radius).Fill(pick(f.disabled, t.Surface, t.Field))
 	return f.box.Layout(c, env)
 }
 
 // Paint implements Widget.
 func (f *TextFieldWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// The whole box, padding included, focuses and clicks into the editor.
-	dst.HitPointer(r, f.input)
-	dst.HitKey(r, f.input)
-	dst.HitCursor(r, ebiten.CursorShapeText)
+	if !f.disabled {
+		dst.HitPointer(r, f.input)
+		dst.HitKey(r, f.input)
+		dst.HitCursor(r, ebiten.CursorShapeText)
+	}
 	f.box.Border(1, pick(f.input.Focused(), f.theme.Accent, f.theme.Border))
 	dst.Paint(f.box, r)
 }

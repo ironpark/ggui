@@ -388,3 +388,49 @@ func TestSwitchKnobEasesOnTheClock(t *testing.T) {
 		t.Fatal("switch did not turn off")
 	}
 }
+
+func TestMenuKeysSkipDisabledItems(t *testing.T) {
+	ran := ""
+	m := ui.Menu("File",
+		ui.MenuItem("New", func() { ran = "new" }).Disabled(true),
+		ui.MenuItem("Open", func() { ran = "open" }),
+		ui.MenuItem("Quit", func() { ran = "quit" }).Disabled(true),
+	)
+	p := ggui.NewProbe(ggui.Column(m), ggui.Sz(300, 300))
+	p.Frame()
+	p.Click(ggui.Pt(10, 10)) // focus and open
+	p.Type(ggui.Mods{}, ebiten.KeyArrowDown, ebiten.KeyEnter)
+	if ran != "open" {
+		t.Fatalf("Down, Enter ran %q, want open (the first enabled item)", ran)
+	}
+	p.Type(ggui.Mods{}, ebiten.KeyArrowUp, ebiten.KeyEnter)
+	if ran != "open" {
+		t.Fatalf("Up, Enter ran %q, want open (the only enabled item, wrapping)", ran)
+	}
+}
+
+func TestDisabledTextFieldTakesNoInput(t *testing.T) {
+	v := ggui.State("")
+	f := ui.TextField(v).Disabled(true)
+	p := ggui.NewProbe(f, ggui.Sz(200, 40))
+	p.Click(ggui.Pt(10, 10))
+	p.Text("x")
+	if v.Peek() != "" || p.Focused() {
+		t.Fatalf("value %q focused %v after clicking and typing into a disabled field", v.Peek(), p.Focused())
+	}
+	if p.Cursor() != ebiten.CursorShapeDefault {
+		t.Fatalf("cursor = %v over a disabled field, want default", p.Cursor())
+	}
+}
+
+func TestSliderReportsChanges(t *testing.T) {
+	v := ggui.State(0.0)
+	var got []float64
+	s := ui.Slider(v, 0, 100).Step(10).OnChange(func(x float64) { got = append(got, x) })
+	p := ggui.NewProbe(s, ggui.Sz(116, 20))
+	p.Click(ggui.Pt(8+50, 10))
+	p.Type(ggui.Mods{}, ebiten.KeyArrowRight, ebiten.KeyArrowRight)
+	if len(got) != 3 || got[0] != 50 || got[2] != 70 {
+		t.Fatalf("OnChange saw %v, want [50 60 70]", got)
+	}
+}

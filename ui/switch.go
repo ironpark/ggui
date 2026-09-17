@@ -7,7 +7,8 @@ import (
 // SwitchWidget is a sliding on/off toggle. Build one with Switch.
 type SwitchWidget struct {
 	toggle
-	on *ggui.Signal[bool]
+	on       *ggui.Signal[bool]
+	onChange func(bool)
 }
 
 // Switch binds a toggle to on; a click flips it and the knob slides over.
@@ -17,9 +18,17 @@ func Switch(on *ggui.Signal[bool], label string) *SwitchWidget {
 	if label != "" {
 		s.label = ggui.Text(label)
 	}
-	s.onTap = func() { ggui.Toggle(on) }
+	s.onTap = func() {
+		ggui.Toggle(on)
+		if s.onChange != nil {
+			s.onChange(on.Peek())
+		}
+	}
 	return s
 }
+
+// OnChange fires with the new value after a click flipped it.
+func (s *SwitchWidget) OnChange(fn func(bool)) *SwitchWidget { s.onChange = fn; return s }
 
 // Disabled greys the switch out and ignores the pointer while v is true.
 func (s *SwitchWidget) Disabled(v bool) *SwitchWidget { s.disabled = v; return s }

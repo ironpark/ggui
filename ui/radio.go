@@ -10,6 +10,7 @@ type RadioWidget[T comparable] struct {
 	toggle
 	selected *ggui.Signal[T]
 	value    T
+	onChange func(T)
 }
 
 // Radio creates a round option that is filled while selected holds value
@@ -21,9 +22,20 @@ func Radio[T comparable](selected *ggui.Signal[T], value T, label string) *Radio
 	if label != "" {
 		r.label = ggui.Text(label)
 	}
-	r.onTap = func() { selected.Set(value) }
+	r.onTap = func() {
+		if selected.Peek() == value {
+			return
+		}
+		selected.Set(value)
+		if r.onChange != nil {
+			r.onChange(value)
+		}
+	}
 	return r
 }
+
+// OnChange fires with value after a click selected this option.
+func (r *RadioWidget[T]) OnChange(fn func(T)) *RadioWidget[T] { r.onChange = fn; return r }
 
 // Disabled greys the option out and ignores the pointer while v is true.
 func (r *RadioWidget[T]) Disabled(v bool) *RadioWidget[T] { r.disabled = v; return r }

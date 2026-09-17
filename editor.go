@@ -236,6 +236,7 @@ type TextInputWidget struct {
 	minWidth    float64
 	onSubmit    func(string)
 	onChange    func(string)
+	disabled    bool
 
 	ed      textEditor
 	focused bool
@@ -271,6 +272,10 @@ func TextInput(value *Signal[string]) *TextInputWidget {
 	t.ed.moveTo(len(t.ed.text), false)
 	return t
 }
+
+// Disabled shows the text in the muted color and takes no input while v
+// is true.
+func (t *TextInputWidget) Disabled(v bool) *TextInputWidget { t.disabled = v; return t }
 
 // Placeholder sets the muted text shown while the value is empty.
 func (t *TextInputWidget) Placeholder(s string) *TextInputWidget { t.placeholder = s; return t }
@@ -373,6 +378,10 @@ func (t *TextInputWidget) Layout(c Constraints, env Env) Size {
 	t.resolved = env.Text().Merge(t.style).resolved()
 	t.cache, _ = env.Get(cacheOwner)
 	th := env.Theme()
+	if t.disabled {
+		t.resolved.Color = th.Muted
+		t.focused = false
+	}
 	t.muted, t.selection = th.Muted, th.Selection
 	if v := t.value.Peek(); v != t.ed.text {
 		t.ed.setText(v)
@@ -388,9 +397,11 @@ func (t *TextInputWidget) Layout(c Constraints, env Env) Size {
 
 // Paint implements Widget.
 func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
-	dst.HitPointer(r, t)
-	dst.HitKey(r, t)
-	dst.HitCursor(r, ebiten.CursorShapeText)
+	if !t.disabled {
+		dst.HitPointer(r, t)
+		dst.HitKey(r, t)
+		dst.HitCursor(r, ebiten.CursorShapeText)
+	}
 	t.rect, t.scale = r, dst.Scale()
 	if t.multiline {
 		t.paintLines(dst, r)

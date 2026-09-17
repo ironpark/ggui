@@ -61,7 +61,7 @@ func (m *MenuWidget) toggle() {
 func (m *MenuWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := env.Theme()
 	m.theme = t
-	m.panel.Fill(t.Surface).Border(1, t.Border).Radius(t.Radius).Pad(t.Space * 0.5)
+	m.panel.Fill(t.Surface).Border(1, t.Border).Radius(t.Radius).Pad(t.ItemPad.Top)
 	return m.popup.Layout(c, env)
 }
 
@@ -95,12 +95,7 @@ func (m *MenuWidget) HandleKey(ev ggui.KeyEvent) {
 		if !open {
 			m.toggle()
 		}
-		dir := pick(ev.Key == ebiten.KeyArrowUp, -1, 1)
-		if m.current < 0 {
-			m.current = pick(dir < 0, len(m.items)-1, 0)
-		} else {
-			m.current = (m.current + dir + len(m.items)) % len(m.items)
-		}
+		m.step(pick(ev.Key == ebiten.KeyArrowUp, -1, 1))
 	case ebiten.KeyEnter, ebiten.KeyNumpadEnter, ebiten.KeySpace:
 		if open && m.current >= 0 {
 			m.items[m.current].run()
@@ -109,6 +104,24 @@ func (m *MenuWidget) HandleKey(ev ggui.KeyEvent) {
 		m.button.HandleKey(ev)
 	default:
 		m.button.HandleKey(ev)
+	}
+}
+
+// step moves the keyboard highlight by dir, skipping disabled items and
+// wrapping around; with nothing highlighted it starts from the near end.
+func (m *MenuWidget) step(dir int) {
+	n := len(m.items)
+	i := m.current
+	for range n {
+		if i < 0 {
+			i = pick(dir < 0, n-1, 0)
+		} else {
+			i = (i + dir + n) % n
+		}
+		if !m.items[i].disabled {
+			m.current = i
+			return
+		}
 	}
 }
 
@@ -165,7 +178,7 @@ func (it *MenuItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := env.Theme()
 	it.theme = t
 	it.popup, _ = ggui.PopupOf(env)
-	it.pad = ggui.Insets(t.Space*0.5, t.Space)
+	it.pad = t.ItemPad
 	it.text.Color(pick(it.disabled, t.Muted, t.Fg))
 	it.textSize = it.text.Layout(it.pad.Shrink(c).Loosen(), env)
 	return c.Constrain(it.pad.Inflate(it.textSize))

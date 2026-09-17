@@ -16,6 +16,7 @@ type TabsWidget struct {
 	labelSize []ggui.Size
 	hovered   int // the label under the pointer, or -1
 	focus     focusState
+	disabled  bool
 
 	theme     ggui.Theme
 	headerH   float64
@@ -44,6 +45,10 @@ func Tabs(selected *ggui.Signal[int], tabs ...TabPage) *TabsWidget {
 	return t
 }
 
+// Disabled greys the strip out and ignores input while v is true; the
+// selected page stays.
+func (t *TabsWidget) Disabled(v bool) *TabsWidget { t.disabled = v; return t }
+
 // OnChange fires with the new index after the user picks a page.
 func (t *TabsWidget) OnChange(fn func(int)) *TabsWidget { t.onChange = fn; return t }
 
@@ -68,12 +73,12 @@ func (t *TabsWidget) pick(i int) {
 func (t *TabsWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	th := env.Theme()
 	t.theme = th
-	t.pad = ggui.Insets(th.Space*0.75, th.Space*1.5)
+	t.pad = th.ButtonPad
 	t.labelSize = t.labelSize[:0]
 	t.headerH = 0
 	cur := t.index()
 	for i, l := range t.labels {
-		l.Color(pick(i == cur, th.Fg, th.Muted))
+		l.Color(pick(i == cur && !t.disabled, th.Fg, th.Muted))
 		s := l.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env)
 		t.labelSize = append(t.labelSize, s)
 		t.headerH = max(t.headerH, s.H+t.pad.Top+t.pad.Bottom)
@@ -95,16 +100,20 @@ func (t *TabsWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 func (t *TabsWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	th := t.theme
 	header := ggui.Rct(r.Origin, ggui.Sz(r.Size.W, t.headerH))
-	dst.HitKey(header, t)
+	if !t.disabled {
+		dst.HitKey(header, t)
+	}
 	t.labelRect = t.labelRect[:0]
 	x := r.Origin.X
 	cur := t.index()
 	for i, s := range t.labelSize {
 		lr := ggui.Rct(ggui.Pt(x, r.Origin.Y), ggui.Sz(s.W+t.pad.Left+t.pad.Right, t.headerH-1))
 		t.labelRect = append(t.labelRect, lr)
-		dst.HitPointer(lr, tabLabel{t, i})
-		dst.HitCursor(lr, ebiten.CursorShapePointer)
-		if i == t.hovered && i != cur {
+		if !t.disabled {
+			dst.HitPointer(lr, tabLabel{t, i})
+			dst.HitCursor(lr, ebiten.CursorShapePointer)
+		}
+		if i == t.hovered && i != cur && !t.disabled {
 			dst.FillRoundRect(lr, th.Radius, th.Surface)
 		}
 		dst.Paint(t.labels[i], ggui.Rct(ggui.Pt(x+t.pad.Left, r.Origin.Y+t.pad.Top), s))
@@ -116,7 +125,7 @@ func (t *TabsWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		lr := t.labelRect[cur]
 		x := motion(dst, header, underlineSlot, lr.Origin.X)
 		w := motion(dst, header, widthSlot, lr.Size.W)
-		dst.FillRoundRect(ggui.Rct(ggui.Pt(x, lineY-1), ggui.Sz(w, 2)), 1, th.Accent)
+		dst.FillRoundRect(ggui.Rct(ggui.Pt(x, lineY-1), ggui.Sz(w, 2)), 1, pick(t.disabled, th.Muted, th.Accent))
 		if t.focus.focused && t.focus.ring {
 			t.focus.paintRing(dst, lr, th.Radius, th)
 		}

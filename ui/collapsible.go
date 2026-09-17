@@ -32,14 +32,17 @@ func Collapsible(open *ggui.Signal[bool], title string, content ggui.Widget) *Co
 	return c
 }
 
+// Disabled greys the header out and ignores input while v is true.
+func (c *CollapsibleWidget) Disabled(v bool) *CollapsibleWidget { c.disabled = v; return c }
+
 func (c *CollapsibleWidget) toggle() { ggui.Toggle(c.open) }
 
 // Layout implements Widget.
 func (c *CollapsibleWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	t := env.Theme()
 	c.theme = t
-	c.pad = ggui.Insets(t.Space*0.75, t.Space)
-	c.title.Color(t.Fg)
+	c.pad = t.FieldPad
+	c.title.Color(pick(c.disabled, t.Muted, t.Fg))
 	c.titleSize = c.title.Layout(ggui.Loose(ggui.Sz(max(cs.MaxW-c.pad.Left-c.pad.Right-controlSize-controlGap, 0), cs.MaxH)), env)
 	c.headerH = c.titleSize.H + c.pad.Top + c.pad.Bottom
 	body := ggui.Constraints{MinW: cs.MinW, MaxW: cs.MaxW, MaxH: max(cs.MaxH-c.headerH, 0)}
@@ -52,7 +55,7 @@ func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := c.theme
 	header := ggui.Rct(r.Origin, ggui.Sz(r.Size.W, c.headerH))
 	c.hit(dst, header, c, ebiten.CursorShapePointer)
-	if c.hovered {
+	if c.hovered && !c.disabled {
 		dst.FillRoundRect(header, t.Radius, t.Surface)
 	}
 	// The chevron turns from pointing right (0) to pointing down (1).

@@ -127,8 +127,9 @@ func (e Env) Get[T any](k Key[T]) (T, bool) {
 // Theme is the app's design tokens. Read it at build time with UseTheme;
 // Text starts from Theme.Text through the root Env.
 type Theme struct {
-	Text  TextStyle // the base every Text inherits
-	Title TextStyle // merged onto Text for headings
+	Text    TextStyle // the base every Text inherits
+	Title   TextStyle // merged onto Text for headings
+	Caption TextStyle // merged onto Text for small secondary text
 
 	Fg, Bg      color.Color // default text and window colors
 	Surface     color.Color // panels and cards
@@ -142,6 +143,11 @@ type Theme struct {
 
 	Radius float64 // corner radius for boxes that ask for one
 	Space  float64 // the unit gaps and padding are multiples of
+
+	ButtonPad EdgeInsets // inside a button
+	FieldPad  EdgeInsets // inside a text field, select or other input
+	ItemPad   EdgeInsets // around one row of a list or menu
+	CardPad   EdgeInsets // inside a card or panel
 }
 
 // DefaultTheme is a light theme in Go Regular.
@@ -150,6 +156,7 @@ func DefaultTheme() Theme {
 	return Theme{
 		Text:        TextStyle{Size: DefaultTextSize, Color: fg},
 		Title:       TextStyle{Size: 24},
+		Caption:     TextStyle{Size: 12, Color: color.RGBA{0x6b, 0x72, 0x7c, 0xff}},
 		Fg:          fg,
 		Bg:          color.White,
 		Surface:     color.RGBA{0xf2, 0xf3, 0xf5, 0xff},
@@ -162,6 +169,10 @@ func DefaultTheme() Theme {
 		Muted:       color.RGBA{0x6b, 0x72, 0x7c, 0xff},
 		Radius:      6,
 		Space:       8,
+		ButtonPad:   Insets(6, 16),
+		FieldPad:    Insets(6, 8),
+		ItemPad:     Insets(4, 8),
+		CardPad:     Insets(16),
 	}
 }
 
@@ -179,6 +190,7 @@ func DarkTheme() Theme {
 	t.OnAccent = color.RGBA{0x0e, 0x12, 0x1a, 0xff}
 	t.Selection = color.RGBA{0x4f, 0x8c, 0xff, 0x60}
 	t.Muted = color.RGBA{0x8a, 0x90, 0x9c, 0xff}
+	t.Caption.Color = t.Muted
 	return t
 }
 

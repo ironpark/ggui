@@ -67,9 +67,9 @@ func (s *SelectWidget[T]) Popup() *ggui.PopupWidget { return s.popup }
 func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := env.Theme()
 	s.theme = t
-	s.pad = ggui.Insets(t.Space*0.75, t.Space)
+	s.pad = t.FieldPad
 	s.box.Radius(t.Radius).Fill(t.Field)
-	s.list.Fill(t.Surface).Border(1, t.Border).Radius(t.Radius).Pad(t.Space * 0.5)
+	s.list.Fill(t.Surface).Border(1, t.Border).Radius(t.Radius).Pad(t.ItemPad.Top)
 	s.text = ggui.Text(s.label(s.value.Peek())).NoWrap().Color(pick[color.Color](s.disabled, t.Muted, t.Fg))
 	// As wide as the widest option, so the field does not resize as the
 	// value changes, and never wider than the row wants unless told to.
@@ -217,7 +217,7 @@ type selectItem[T comparable] struct {
 
 func (it *selectItem[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := env.Theme()
-	it.pad = ggui.Insets(t.Space*0.5, t.Space)
+	it.pad = t.ItemPad
 	it.text.Color(t.Fg)
 	it.textSize = it.text.Layout(it.pad.Shrink(c).Loosen(), env)
 	return c.Constrain(it.pad.Inflate(ggui.Sz(it.textSize.W+controlSize+controlGap, it.textSize.H)))

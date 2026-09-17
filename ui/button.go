@@ -49,7 +49,7 @@ func (b *ButtonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := env.Theme()
 	b.theme = t
 	if !b.padded {
-		b.box.Pad(t.Space*0.75, t.Space*2)
+		b.box.Padding(t.ButtonPad)
 	}
 	b.box.Radius(t.Radius)
 	if b.label != nil {

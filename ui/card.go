@@ -21,7 +21,7 @@ func (c *CardWidget) Pad(sides ...float64) *CardWidget { c.box.Pad(sides...); c.
 func (c *CardWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	t := env.Theme()
 	if !c.pad {
-		c.box.Pad(t.Space * 2)
+		c.box.Padding(t.CardPad)
 	}
 	c.box.Fill(t.Surface).Border(1, t.Border).Radius(t.Radius)
 	return c.box.Layout(cs, env)
@@ -40,7 +40,7 @@ type BadgeWidget struct {
 }
 
 // Badge creates a muted pill labelled s; Accent colors it.
-func Badge(s string) *BadgeWidget { return &BadgeWidget{text: ggui.Text(s).NoWrap().Size(11)} }
+func Badge(s string) *BadgeWidget { return &BadgeWidget{text: ggui.Text(s).NoWrap()} }
 
 // Accent fills the badge with the accent color.
 func (b *BadgeWidget) Accent() *BadgeWidget { b.accent = true; return b }
@@ -50,7 +50,7 @@ func (b *BadgeWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := env.Theme()
 	b.theme = t
 	b.pad = ggui.Insets(2, t.Space*0.75)
-	b.text.Color(pick(b.accent, t.OnAccent, t.Fg))
+	b.text.Style(t.Caption).Color(pick(b.accent, t.OnAccent, t.Fg))
 	b.size = b.text.Layout(b.pad.Shrink(c).Loosen(), env)
 	return c.Constrain(b.pad.Inflate(b.size))
 }

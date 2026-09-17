@@ -14,6 +14,7 @@ type SliderWidget struct {
 	value    *ggui.Signal[float64]
 	min, max float64
 	step     float64
+	onChange func(float64)
 
 	theme ggui.Theme
 	rect  ggui.Rect
@@ -27,6 +28,21 @@ func Slider(value *ggui.Signal[float64], lo, hi float64) *SliderWidget {
 
 // Step snaps the value to multiples of s from the range's start.
 func (s *SliderWidget) Step(step float64) *SliderWidget { s.step = step; return s }
+
+// OnChange fires with the new value after a drag or key press moved it.
+func (s *SliderWidget) OnChange(fn func(float64)) *SliderWidget { s.onChange = fn; return s }
+
+// set stores v, clamped to the range, and reports the change.
+func (s *SliderWidget) set(v float64) {
+	v = clamp(v, min(s.min, s.max), max(s.min, s.max))
+	if v == s.value.Peek() {
+		return
+	}
+	s.value.Set(v)
+	if s.onChange != nil {
+		s.onChange(v)
+	}
+}
 
 // Disabled greys the slider out and ignores the pointer while v is true.
 func (s *SliderWidget) Disabled(v bool) *SliderWidget { s.disabled = v; return s }
@@ -56,7 +72,7 @@ func (s *SliderWidget) setFromX(x float64) {
 	if s.step > 0 {
 		v = s.min + math.Round((v-s.min)/s.step)*s.step
 	}
-	s.value.Set(clamp(v, min(s.min, s.max), max(s.min, s.max)))
+	s.set(v)
 }
 
 // Paint implements Widget.
@@ -99,8 +115,7 @@ func (s *SliderWidget) HandleKey(ev ggui.KeyEvent) {
 	default:
 		return
 	}
-	lo, hi := min(s.min, s.max), max(s.min, s.max)
-	s.value.Set(clamp(s.value.Peek()+step, lo, hi))
+	s.set(s.value.Peek() + step)
 }
 
 // HandlePointer implements PointerHandler: a left press jumps to the

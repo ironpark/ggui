@@ -242,10 +242,15 @@ ggui.Column(
 `ui.Button(label, onTap)` is the primary button; `.Secondary()` quiets it,
 `.Disabled(v)` greys it out, `.Pad(...)` overrides the theme's padding,
 `ui.ButtonOf(child, onTap)` wraps any content. Every control has
-`.Disabled(v)`. They take their colors from the theme in their `Env` at
-layout time, keep hover and press state in the widget itself, and read their
-signal in `Paint`, so nothing rebuilds for a hover or a tick. Buttons and
-text fields set the mouse cursor.
+`.Disabled(v)`, and every control that changes a signal has `.OnChange(fn)`
+for the value the user picked. They take their colors and padding from the
+theme in their `Env` at layout time, keep hover and press state in the
+widget itself, and read their signal in `Paint`, so nothing rebuilds for a
+hover or a tick. Buttons and text fields set the mouse cursor. Anything
+that eases, such as a switch knob or a tab underline, keeps its `Motion` in
+the Canvas with `Retain`, so it keeps moving through a rebuild; animations
+read the clock through `ggui.Now()`, which `ggui.SetClock` replaces in
+tests.
 
 **Text input.** `ui.TextField(value)` is an editor in a themed box;
 `ggui.TextInput(value)` is the bare editor for a box of your own, and part
@@ -345,7 +350,9 @@ the same way: `Provide(key, v, child)` stores `v` under a `Key[T]` from
 
 **Tokens live in a theme.** `Theme` holds colors (`Fg`, `Bg`, `Surface`,
 `Field`, `Border`, `Accent`, `AccentHover`, `OnAccent`, `Selection`, `Muted`),
-named text styles (`Text`, `Title`) and sizes (`Radius`, `Space`).
+named text styles (`Text`, `Title`, `Caption`), sizes (`Radius`, `Space`)
+and the paddings the controls use (`ButtonPad`, `FieldPad`, `ItemPad`,
+`CardPad`), so a custom control can match the built-in ones.
 `UseTheme()` reads it at build time and subscribes the enclosing Builder;
 `SetTheme(t)` swaps it and rebuilds only what read it. `DefaultTheme()` is
 light, `DarkTheme()` dark, and a window with no `Background` follows the

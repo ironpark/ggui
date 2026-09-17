@@ -54,7 +54,7 @@ func main() {
 		swatch := func(label string, c color.Color) ggui.Widget {
 			return ggui.Column(
 				ggui.Box().Height(28).Fill(c).Radius(t.Radius).Border(1, t.Border),
-				ggui.Text(label).Size(11).Color(t.Muted),
+				ggui.Text(label).Style(t.Caption),
 			).Gap(2).Align(ggui.AlignStretch)
 		}
 		return ggui.Scroll(ggui.Padding(ggui.Column(
@@ -142,7 +142,7 @@ func main() {
 				ui.Button("Save", func() {}),
 				ui.Button("Reset", func() { name.Set(""); size.Set(16) }).Secondary(),
 				ggui.Spacer(),
-				ggui.Text("F1 toggles the inspector, Tab moves focus").Color(t.Muted).Size(12),
+				ggui.Text("F1 toggles the inspector, Tab moves focus").Style(t.Caption),
 			).Gap(t.Space).Align(ggui.AlignCenter),
 		).Gap(t.Space*2), t.Space*3))
 	})
