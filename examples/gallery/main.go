@@ -83,7 +83,7 @@ func main() {
 					ui.Radio(plan, "team", "Team").Disabled(true),
 				).Gap(t.Space*2),
 				ggui.Row(
-					ui.Select(fruit, []string{"Apple", "Banana", "Cherry", "Durian"}, func(s string) string { return s }).MinWidth(140),
+					ui.Select(fruit, []string{"Apple", "Banana", "Cherry", "Durian"}, func(s string) string { return s }),
 					ui.Menu("Actions",
 						ui.MenuItem("Reset text size", func() { size.Set(16) }),
 						ui.MenuItem("Clear name", func() { name.Set("") }),

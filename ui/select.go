@@ -34,7 +34,7 @@ type SelectWidget[T comparable] struct {
 // label. Space or Enter opens it, the arrow keys move through the options
 // (or change the value directly while closed) and Escape closes it.
 func Select[T comparable](value *ggui.Signal[T], options []T, label func(T) string) *SelectWidget[T] {
-	s := &SelectWidget[T]{value: value, options: options, label: label, minWidth: defaultStripe, highlight: -1}
+	s := &SelectWidget[T]{value: value, options: options, label: label, minWidth: 0, highlight: -1}
 	s.box = ggui.Box()
 	rows := make([]ggui.Widget, len(options))
 	for i := range options {
@@ -55,8 +55,8 @@ func SelectStrings(value *ggui.Signal[string], options ...string) *SelectWidget[
 // Disabled greys the dropdown out and ignores input while v is true.
 func (s *SelectWidget[T]) Disabled(v bool) *SelectWidget[T] { s.disabled = v; return s }
 
-// MinWidth sets the width the field asks for when its parent leaves the
-// width to it; it fills a bounded width.
+// MinWidth sets the least width the field asks for; it is otherwise as
+// wide as its widest option, and fills a tight width.
 func (s *SelectWidget[T]) MinWidth(w float64) *SelectWidget[T] { s.minWidth = w; return s }
 
 // OnChange fires with the new value after the user picks one.
@@ -73,7 +73,14 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	s.box.Radius(t.Radius).Fill(t.Field)
 	s.list.Fill(t.Surface).Border(1, t.Border).Radius(t.Radius).Pad(t.Space * 0.5)
 	s.text = ggui.Text(s.label(s.value.Peek())).NoWrap().Color(pick[color.Color](s.disabled, t.Muted, t.Fg))
-	w := max(c.MinW, bounded(c.MaxW, s.minWidth))
+	// As wide as the widest option, so the field does not resize as the
+	// value changes, and never wider than the row wants unless told to.
+	widest := 0.0
+	for _, it := range s.items {
+		widest = max(widest, it.text.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env).W)
+	}
+	natural := widest + s.pad.Left + s.pad.Right + controlSize + controlGap
+	w := clamp(max(natural, s.minWidth), c.MinW, c.MaxW)
 	s.textSize = s.text.Layout(ggui.Loose(ggui.Sz(max(w-s.pad.Left-s.pad.Right-controlSize-controlGap, 0), c.MaxH)), env)
 	inner := ggui.Constraints{MinW: w, MaxW: w, MinH: c.MinH, MaxH: c.MaxH}
 	return s.popup.Layout(inner, env)
