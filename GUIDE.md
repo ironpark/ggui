@@ -948,11 +948,23 @@ its start time in slots.
 
 ## Inspector
 
-`Config{Inspector: ebiten.KeyF1}` binds a key that toggles an overlay
-outlining every widget painted through `Canvas.Paint`, colored by depth, and
-naming the one under the cursor with its size and position;
-`App.Inspector(on)` does the same from code. It is the quickest way to see
-why something sits where it does.
+`Config{Inspector: ebiten.KeyF1}` binds a key that toggles a development
+overlay in the shape of a browser's element panel; `App.Inspector(on)` does
+the same from code. It is the quickest way to see why something sits where
+it does.
+
+Every widget painted through `Canvas.Paint` is outlined and colored by
+depth, and the tree of them is listed down the right-hand side with each
+one's size. Moving the pointer selects the innermost widget under it, scrolls
+the tree to that row, and describes it underneath: its type, its size and
+position, its depth, and the accessibility node there with everything it sits
+inside of.
+
+Clicking a row pins the selection, so it survives moving the pointer away —
+the only way to read anything about a widget that exists only while hovered.
+Clicking the header goes back to following the pointer, and the wheel scrolls
+the tree. The panel takes only the pointer events that land on it, so the app
+underneath keeps working while the inspector is open.
 
 ## Repository layout
 

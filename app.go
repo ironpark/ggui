@@ -54,6 +54,7 @@ type App struct {
 	a11y   axBridge
 
 	inspect bool
+	insp    inspector
 }
 
 // New creates an App that renders the tree returned by build.
@@ -160,7 +161,11 @@ func (a *App) Update() error {
 	}
 	f := a.readInput()
 	a.canvas.pointer, a.canvas.hasPointer = f.pos, true
-	a.input.dispatch(f)
+	// The inspector's panel takes what lands on it, so that reading the
+	// tree does not also drive the app underneath it.
+	if !a.inspect || !a.insp.input(f) {
+		a.input.dispatch(f)
+	}
 	if a.input.cursor != a.cursor {
 		a.cursor = a.input.cursor
 		ebiten.SetCursorShape(a.cursor)
@@ -243,7 +248,9 @@ func (a *App) Draw(screen *ebiten.Image) {
 	a.publishSemantics(&a.canvas, a.input.focused)
 	a.a11y.publish(a.semantics(), a.takeAnnouncements())
 	if a.inspect {
-		paintInspector(&a.canvas)
+		a.insp.paint(&a.canvas)
+	} else {
+		a.insp.panel = Rect{} // nothing to intercept while it is off
 	}
 	a.spare = a.canvas.prev
 	a.input.regions = a.canvas.hits
