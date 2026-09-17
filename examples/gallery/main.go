@@ -20,6 +20,9 @@ func main() {
 	notes := ggui.State("")
 	fruit := ggui.State("Banana")
 	details := ggui.State(true)
+	tab := ggui.State(0)
+	more := ggui.State(false)
+	progress := ggui.State(0.3)
 	notify := ggui.State(true)
 	plan := ggui.State("free")
 	tags := ggui.State([]string{"go", "gui", "ebiten", "signals", "flutter", "svelte", "layout", "hidpi"})
@@ -93,6 +96,24 @@ func main() {
 					ggui.Reactive(func() ggui.Widget { return ggui.Text("picked " + fruit.Get()).Color(t.Muted) }),
 				).Gap(t.Space).Align(ggui.AlignCenter),
 			).Gap(t.Space)),
+
+			section("Tabs", ui.Card(ui.Tabs(tab,
+				ui.Tab("Overview", ggui.Column(
+					ggui.Row(ggui.Text("Status"), ui.Badge("stable"), ui.Badge("new").Accent()).Gap(t.Space).Align(ggui.AlignCenter),
+					ggui.Reactive(func() ggui.Widget { return ui.Progress(progress) }),
+					ggui.Row(
+						ui.Button("+10%", func() { progress.Set(min(progress.Peek()+0.1, 1)) }).Secondary(),
+						ui.Button("Reset", func() { progress.Set(0) }).Secondary(),
+					).Gap(t.Space),
+				).Gap(t.Space).Align(ggui.AlignStretch)),
+				ui.Tab("Details", ggui.Column(
+					ui.Collapsible(more, "More options", ggui.Column(
+						ui.Checkbox(notify, "Send notifications"),
+						ggui.Text("Folded content fades and slides.").Color(t.Muted),
+					).Gap(t.Space)),
+				)),
+				ui.Tab("About", ggui.Text("Tabs lay out only the page they show; Left and Right switch while focused.")),
+			))),
 
 			section("Transition", ggui.Column(
 				ui.Switch(details, "Show details"),

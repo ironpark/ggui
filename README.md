@@ -273,6 +273,15 @@ on a `Font` chooses a chain of your own and `NoFallback()` turns it off.
 `LoadFontFile` also reads the first face of a `.ttc`; `LoadFontCollection`
 returns them all.
 
+**Tabs, Collapsible, Card, Badge, Progress.** `ui.Tabs(selected,
+ui.Tab("One", page), ...)` shows the page whose index the signal holds,
+with an animated underline and Left/Right while focused; only that page is
+laid out. `ui.Collapsible(open, "Title", content)` folds content under a
+clickable header, animating it with `Presence`. `ui.Card(child)` is a
+Surface panel with border, radius and padding; `ui.Badge("new")` a small
+pill (`.Accent()`); `ui.Progress(value)` a bar that eases to a fraction
+read from a `Reader[float64]` every frame.
+
 **Select and Menu.** `ui.Select(value, options, label)` (or
 `ui.SelectStrings(value, "a", "b")`) is a dropdown bound to a signal: a click
 or Space opens the list in a `Popup`, the arrow keys move through it (or
@@ -489,7 +498,8 @@ why something sits where it does.
 ├── font.go       Font loading, default font, text wrapping
 ├── geometry.go   Point, Size, Rect, Constraints
 ├── ui/           One file per control: Button, Checkbox, Radio, Switch,
-│                 Slider, TextField, Select, Menu, Divider
+│                 Slider, TextField, Select, Menu, Tabs, Collapsible,
+│                 Card, Badge, Progress, Divider
 └── examples/     Runnable apps: counter, todo, gallery
 ```
 

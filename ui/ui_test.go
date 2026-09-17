@@ -291,3 +291,77 @@ func TestMenuRunsItemsAndClosesOnEscape(t *testing.T) {
 		t.Fatal("Escape did not close the menu")
 	}
 }
+
+func TestTabsSwitchByClickAndKeys(t *testing.T) {
+	sel := ggui.State(0)
+	var a, b ggui.Rect
+	tabs := ui.Tabs(sel, ui.Tab("One", probe(80, 30, &a)), ui.Tab("Two", probe(80, 30, &b)))
+	p := ggui.NewProbe(ggui.Column(tabs), ggui.Sz(300, 200))
+	p.Frame()
+	if a == (ggui.Rect{}) || b != (ggui.Rect{}) {
+		t.Fatalf("first page %+v second %+v; want only the first painted", a, b)
+	}
+	// The second label sits right of the first; click near its middle.
+	p.Click(ggui.Pt(80, 12))
+	if sel.Peek() != 1 {
+		t.Fatalf("selected %d after clicking the second label", sel.Peek())
+	}
+	a = ggui.Rect{}
+	p.Frame()
+	if b == (ggui.Rect{}) || a != (ggui.Rect{}) {
+		t.Fatal("second page not shown alone after the switch")
+	}
+	p.Type(ggui.Mods{}, ebiten.KeyArrowRight)
+	if sel.Peek() != 0 {
+		t.Fatalf("Right wrapped to %d, want 0", sel.Peek())
+	}
+	p.Type(ggui.Mods{}, ebiten.KeyEnd)
+	if sel.Peek() != 1 {
+		t.Fatalf("End went to %d, want 1", sel.Peek())
+	}
+}
+
+func TestCollapsibleTogglesAndHidesContent(t *testing.T) {
+	open := ggui.State(false)
+	var body ggui.Rect
+	c := ui.Collapsible(open, "Details", probe(80, 40, &body))
+	p := ggui.NewProbe(ggui.Column(c), ggui.Sz(300, 200))
+	p.Frame()
+	closed := c.Layout(ggui.Loose(ggui.Sz(300, 200)), ggui.Env{})
+	if body != (ggui.Rect{}) {
+		t.Fatal("content painted while closed")
+	}
+	p.Click(ggui.Pt(20, 10))
+	if !open.Peek() {
+		t.Fatal("click on the header did not open")
+	}
+	p.Frame()
+	opened := c.Layout(ggui.Loose(ggui.Sz(300, 200)), ggui.Env{})
+	if body == (ggui.Rect{}) || opened.H < closed.H+40 {
+		t.Fatalf("content %+v, height %v -> %v; want content shown below the header", body, closed.H, opened.H)
+	}
+	p.Type(ggui.Mods{}, ebiten.KeySpace)
+	if open.Peek() {
+		t.Fatal("Space did not close")
+	}
+}
+
+func TestCardBadgeProgressLayout(t *testing.T) {
+	v := ggui.State(0.5)
+	tree := ggui.Column(ui.Card(ggui.Text("x")), ui.Badge("new").Accent(), ui.Progress(v))
+	p := ggui.NewProbe(tree, ggui.Sz(200, 200))
+	if s := p.Frame(); s.W != 200 {
+		t.Fatalf("size %v", s)
+	}
+	if got := ui.Progress(v).Layout(ggui.Loose(ggui.Sz(120, 100)), ggui.Env{}); got != ggui.Sz(120, 6) {
+		t.Fatalf("progress %v, want 120x6", got)
+	}
+}
+
+// probe is a fixed-size leaf that records where it was painted.
+func probe(w, h float64, got *ggui.Rect) ggui.Widget {
+	return ggui.FromFuncs(
+		func(c ggui.Constraints, _ ggui.Env) ggui.Size { return c.Constrain(ggui.Sz(w, h)) },
+		func(_ *ggui.Canvas, r ggui.Rect) { *got = r },
+	)
+}
