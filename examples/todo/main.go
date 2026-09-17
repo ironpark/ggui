@@ -6,9 +6,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -34,7 +31,6 @@ const (
 )
 
 func main() {
-	useSystemFont()
 
 	todos := ggui.State([]*Todo{})
 	draft := ggui.State("")
@@ -170,30 +166,3 @@ func main() {
 	}
 }
 
-// useSystemFont swaps in a font with CJK glyphs when the platform has one,
-// so text typed through the IME shows up. Go Regular, the built-in default,
-// covers Latin, Greek and Cyrillic only.
-func useSystemFont() {
-	var candidates []string
-	switch runtime.GOOS {
-	case "darwin":
-		candidates = []string{
-			"/System/Library/Fonts/AppleSDGothicNeo.ttc",
-			"/System/Library/Fonts/Supplemental/AppleGothic.ttf",
-		}
-	case "windows":
-		candidates = []string{filepath.Join(os.Getenv("WINDIR"), "Fonts", "malgun.ttf")}
-	default:
-		candidates = []string{
-			"/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
-			"/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-			"/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
-		}
-	}
-	for _, path := range candidates {
-		if f, err := ggui.LoadFontFile(path); err == nil {
-			ggui.SetDefaultFont(f)
-			return
-		}
-	}
-}

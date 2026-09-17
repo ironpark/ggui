@@ -264,9 +264,14 @@ double-click selects a word, triple-click everything. `.Placeholder(s)`,
 its caret and selection across a rebuild of the tree, and `.Input()` on a
 `ui.TextField` reaches the editor for `Focused()`.
 
-The built-in font covers Latin, Greek and Cyrillic; load one with the glyphs
-you type (`examples/todo` picks a system CJK font) with `LoadFontFile`, which
-also reads the first face of a `.ttc`, or `LoadFontCollection`.
+The built-in font covers Latin, Greek and Cyrillic. Glyphs a font lacks are
+drawn from its fallbacks: `SystemFonts()`, the CJK and wide-coverage fonts
+found at well-known paths on macOS, Windows and Linux (plus any files in
+the `GGUI_FONTS` environment variable), so Korean, Japanese and Chinese
+render out of the box on a machine that has such a font. `Fallback(fonts...)`
+on a `Font` chooses a chain of your own and `NoFallback()` turns it off.
+`LoadFontFile` also reads the first face of a `.ttc`; `LoadFontCollection`
+returns them all.
 
 **Select and Menu.** `ui.Select(value, options, label)` (or
 `ui.SelectStrings(value, "a", "b")`) is a dropdown bound to a signal: a click
