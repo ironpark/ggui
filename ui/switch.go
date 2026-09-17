@@ -17,7 +17,6 @@ func Switch(on ggui.Binding[bool], label string) *SwitchWidget {
 	s := &SwitchWidget{on: on}
 	s.Role, s.Name = ggui.RoleSwitch, label
 	s.AutoKey()
-	s.glyph = ggui.Sz(switchWidth, switchHeight)
 	if label != "" {
 		s.label = ggui.Text(label)
 	}
@@ -48,7 +47,9 @@ func (s *SwitchWidget) Describe() ggui.Node {
 }
 
 // Layout implements Widget.
-func (s *SwitchWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size { return s.layout(c, env) }
+func (s *SwitchWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	return s.layout(c, env, ggui.Sz(switchWidth, switchHeight))
+}
 
 // Paint implements Widget.
 func (s *SwitchWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {

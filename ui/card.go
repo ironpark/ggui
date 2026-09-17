@@ -100,7 +100,7 @@ func (p *ProgressWidget) Height(h float64) *ProgressWidget { p.height = h; retur
 // Layout implements Widget.
 func (p *ProgressWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	p.theme = env.Theme()
-	p.motion = env.Motion(knobDuration)
+	p.motion = env.Motion(env.Theme().MotionFast)
 	return c.Constrain(ggui.Sz(bounded(c.MaxW, defaultStripe), p.height))
 }
 

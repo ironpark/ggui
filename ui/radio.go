@@ -20,7 +20,6 @@ func Radio[T comparable](selected ggui.Binding[T], value T, label string) *Radio
 	r := &RadioWidget[T]{selected: selected, value: value}
 	r.Role, r.Name = ggui.RoleRadio, label
 	r.AutoKey()
-	r.glyph = ggui.Sz(controlSize, controlSize)
 	if label != "" {
 		r.label = ggui.Text(label)
 	}
@@ -55,7 +54,9 @@ func (r *RadioWidget[T]) Describe() ggui.Node {
 }
 
 // Layout implements Widget.
-func (r *RadioWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size { return r.layout(c, env) }
+func (r *RadioWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	return r.layout(c, env, squareGlyph(env.Theme()))
+}
 
 // Paint implements Widget.
 func (r *RadioWidget[T]) Paint(dst *ggui.Canvas, rect ggui.Rect) {

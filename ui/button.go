@@ -28,7 +28,7 @@ type buttonStyle struct {
 func (v buttonVariant) resolve(t ggui.Theme) buttonStyle {
 	switch v {
 	case variantOutline:
-		return buttonStyle{fill: t.Card, hover: t.Muted, border: t.Border, label: t.Fg, elevated: true}
+		return buttonStyle{fill: t.Bg, hover: t.Muted, border: t.Border, label: t.Fg, elevated: true}
 	case variantMuted:
 		return buttonStyle{fill: t.Secondary, hover: mix(t.Secondary, t.Fg, t.HoverMix), label: t.SecondaryFg}
 	case variantGhost:

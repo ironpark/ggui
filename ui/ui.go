@@ -14,20 +14,19 @@ import (
 	"fmt"
 	"image/color"
 	"math"
-	"time"
 
 	"github.com/ironpark/ggui"
 )
 
 const (
-	controlSize   = 16 // checkbox and radio glyphs
-	controlGap    = 8  // between a glyph and its label
 	sliderKnob    = 8
 	switchWidth   = 36
 	switchHeight  = 20
-	knobDuration  = 150 * time.Millisecond
 	defaultStripe = 160 // a slider's width when nothing bounds it
 )
+
+// squareGlyph is the box a checkbox or radio draws itself in.
+func squareGlyph(t ggui.Theme) ggui.Size { return ggui.Sz(t.ControlSize, t.ControlSize) }
 
 // sprint is the default option label.
 func sprint[T any](v T) string { return fmt.Sprint(v) }

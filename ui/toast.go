@@ -114,8 +114,6 @@ func (t *ToasterWidget) Push(message ToastMessage) ToastID {
 	return e.id
 }
 
-const toastMotionDuration = 240 * time.Millisecond
-
 // Dismiss starts the exit animation. The notice immediately stops accepting
 // input and no longer counts toward Len. An unknown ID is a no-op.
 func (t *ToasterWidget) Dismiss(id ToastID) {
@@ -165,7 +163,7 @@ func (t *ToasterWidget) Paint(dst *ggui.Canvas, _ ggui.Rect) {
 	now := ggui.Now()
 	t.entries = slices.DeleteFunc(t.entries, func(e *toastEntry) bool {
 		if e.leaving {
-			return t.env.ReducedMotion() || now.Sub(e.exitAt) >= toastMotionDuration
+			return t.env.ReducedMotion() || now.Sub(e.exitAt) >= t.env.Theme().MotionSlow
 		}
 		paused := e.hover || e.dismiss.Focused || e.dismiss.Hovered || (e.action != nil && (e.action.Focused || e.action.Hovered))
 		if !e.persistent && !paused {
@@ -199,7 +197,7 @@ func (t *ToasterWidget) paintNotices(dst *ggui.Canvas) {
 		}
 		size := e.panel.Layout(ggui.Constraints{MinW: width, MaxW: width, MaxH: bottom - margin}, t.env)
 		targetY := bottom - size.H
-		duration := t.env.Motion(toastMotionDuration)
+		duration := t.env.Motion(t.env.Theme().MotionSlow)
 		e.position.MoveTo(targetY, now, duration)
 		target := 1.0
 		if e.leaving {

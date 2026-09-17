@@ -17,7 +17,6 @@ func Checkbox(checked ggui.Binding[bool], label string) *CheckboxWidget {
 	c := &CheckboxWidget{checked: checked}
 	c.Role, c.Name = ggui.RoleCheckbox, label
 	c.AutoKey()
-	c.glyph = ggui.Sz(controlSize, controlSize)
 	if label != "" {
 		c.label = ggui.Text(label)
 	}
@@ -47,7 +46,7 @@ func (c *CheckboxWidget) Describe() ggui.Node {
 
 // Layout implements Widget.
 func (c *CheckboxWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
-	return c.layout(cs, env)
+	return c.layout(cs, env, squareGlyph(env.Theme()))
 }
 
 // Paint implements Widget.

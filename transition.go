@@ -157,7 +157,11 @@ func Presence(show Reader[bool], child Widget) Widget {
 			}
 		})
 		p := Tween(initial, t.duration).Easing(t.ease)
-		Watch(show, func(v bool) { p.Set(pick(v, 1.0, 0.0)) })
+		// Read the duration at the toggle rather than at setup, so a
+		// Duration set from Layout — a theme token, say — is not frozen to
+		// whatever it was on the first frame. Tweened.Set reads it here too,
+		// so nothing changes under a run already in flight.
+		Watch(show, func(v bool) { p.Duration(t.duration).Set(pick(v, 1.0, 0.0)) })
 		return func() Widget {
 			shown, v := show.Get(), p.Get()
 			if !shown && v == 0 {

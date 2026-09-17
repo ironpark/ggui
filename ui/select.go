@@ -142,9 +142,9 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	for _, it := range s.items {
 		widest = max(widest, it.text.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env).W)
 	}
-	natural := widest + s.pad.Left + s.pad.Right + controlSize + controlGap
+	natural := widest + s.pad.Left + s.pad.Right + t.ControlSize + t.ControlGap
 	w := clamp(max(natural, s.minWidth), c.MinW, c.MaxW)
-	s.textSize = s.text.Layout(ggui.Loose(ggui.Sz(max(w-s.pad.Left-s.pad.Right-controlSize-controlGap, 0), c.MaxH)), env)
+	s.textSize = s.text.Layout(ggui.Loose(ggui.Sz(max(w-s.pad.Left-s.pad.Right-t.ControlSize-t.ControlGap, 0), c.MaxH)), env)
 	inner := ggui.Constraints{MinW: w, MaxW: w, MinH: c.MinH, MaxH: c.MaxH}
 	return s.popup.Layout(inner, env)
 }
@@ -159,7 +159,7 @@ func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Paint(s.box, r)
 	dst.Clip(r).Paint(s.text, ggui.Rct(ggui.Pt(r.Origin.X+s.pad.Left, r.Origin.Y+(r.Size.H-s.textSize.H)/2), s.textSize))
 	// Chevron, pointing down, or up while open.
-	center := ggui.Pt(r.Origin.X+r.Size.W-t.Space-controlSize*0.3, r.Origin.Y+r.Size.H/2)
+	center := ggui.Pt(r.Origin.X+r.Size.W-t.Space-t.ControlSize*0.3, r.Origin.Y+r.Size.H/2)
 	chevron(dst, center, pick(open, -2.0, 2.0), pick(s.Inert, t.MutedFg, t.Fg))
 	s.FocusRing(dst, r, t.Radius, t.Ring)
 }
@@ -276,7 +276,7 @@ func (it *selectItem[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	it.pad = t.ItemPad
 	it.text.Color(t.Fg)
 	it.textSize = it.text.Layout(it.pad.Shrink(c).Loosen(), env)
-	return c.Constrain(it.pad.Inflate(ggui.Sz(it.textSize.W+controlSize+controlGap, it.textSize.H)))
+	return c.Constrain(it.pad.Inflate(ggui.Sz(it.textSize.W+t.ControlSize+t.ControlGap, it.textSize.H)))
 }
 
 // Describe implements ggui.Describer: whether this option is the value.
@@ -298,7 +298,7 @@ func (it *selectItem[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if it.Hovered || it.active {
 		dst.FillRoundRect(r, t.RadiusSm, t.Muted)
 	}
-	at := ggui.Pt(r.Origin.X+it.pad.Left+controlSize+controlGap, r.Origin.Y+(r.Size.H-it.textSize.H)/2)
+	at := ggui.Pt(r.Origin.X+it.pad.Left+t.ControlSize+t.ControlGap, r.Origin.Y+(r.Size.H-it.textSize.H)/2)
 	dst.Paint(it.text, ggui.Rct(at, it.textSize))
 	if it.index == it.owner.index() {
 		x, y := r.Origin.X+it.pad.Left, r.Origin.Y+r.Size.H/2

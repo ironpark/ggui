@@ -73,7 +73,8 @@ func TestCheckboxTogglesSignal(t *testing.T) {
 	}
 	size := c.Layout(ggui.Loose(ggui.Sz(200, 30)), ggui.Env{})
 	label := ggui.Text("label").Layout(ggui.Loose(ggui.Sz(200, 30)), ggui.Env{})
-	if size.W != 16+8+label.W {
+	th := ggui.DefaultTheme()
+	if size.W != th.ControlSize+th.ControlGap+label.W {
 		t.Fatalf("checkbox width %v, want glyph + gap + label %v", size.W, label.W)
 	}
 }

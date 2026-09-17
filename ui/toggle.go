@@ -18,18 +18,21 @@ type toggle struct {
 	labelSize ggui.Size
 	glyph     ggui.Size
 	theme     ggui.Theme
-	motion    time.Duration // knobDuration, or zero under reduced motion
+	motion    time.Duration // MotionFast, or zero under reduced motion
 }
 
-func (g *toggle) layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+// layout takes the glyph size because each embedder sizes its own: a
+// checkbox and a radio are square control glyphs, a switch is a track.
+func (g *toggle) layout(c ggui.Constraints, env ggui.Env, glyph ggui.Size) ggui.Size {
 	g.Sync()
 	g.theme = env.Theme()
-	g.motion = env.Motion(knobDuration)
+	g.motion = env.Motion(g.theme.MotionFast)
+	g.glyph = glyph
 	size := g.glyph
 	if g.label != nil {
 		g.label.Color(pick[color.Color](g.Inert, g.theme.MutedFg, nil))
-		g.labelSize = g.label.Layout(ggui.Loose(ggui.Sz(max(c.MaxW-size.W-controlGap, 0), c.MaxH)), env)
-		size.W += controlGap + g.labelSize.W
+		g.labelSize = g.label.Layout(ggui.Loose(ggui.Sz(max(c.MaxW-size.W-g.theme.ControlGap, 0), c.MaxH)), env)
+		size.W += g.theme.ControlGap + g.labelSize.W
 		size.H = max(size.H, g.labelSize.H)
 	}
 	return c.Constrain(size)
@@ -40,7 +43,7 @@ func (g *toggle) layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 func (g *toggle) paint(dst *ggui.Canvas, r ggui.Rect, handler ggui.Control) ggui.Rect {
 	g.Hit(dst, r, handler, ebiten.CursorShapePointer)
 	if g.label != nil {
-		at := ggui.Pt(r.Origin.X+g.glyph.W+controlGap, r.Origin.Y+(r.Size.H-g.labelSize.H)/2)
+		at := ggui.Pt(r.Origin.X+g.glyph.W+g.theme.ControlGap, r.Origin.Y+(r.Size.H-g.labelSize.H)/2)
 		dst.Paint(g.label, ggui.Rct(at, g.labelSize))
 	}
 	return ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+(r.Size.H-g.glyph.H)/2), g.glyph)

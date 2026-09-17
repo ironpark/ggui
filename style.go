@@ -239,6 +239,10 @@ func (e Env) Get[T any](k Key[T]) (T, bool) {
 
 // Theme is the app's design tokens. Read it at build time with UseTheme;
 // Text starts from Theme.Text through the root Env.
+//
+// Derive a theme from DefaultTheme or DarkTheme rather than writing a Theme
+// literal: a zero field is a zero size, not an inherited one, so a literal
+// that omits ControlSize paints no checkbox.
 type Theme struct {
 	Text    TextStyle // the base every Text inherits
 	Title   TextStyle // merged onto Text for headings
@@ -272,6 +276,8 @@ type Theme struct {
 
 	Space       float64 // the unit gaps and padding are multiples of
 	BorderWidth float64 // the line Box.Border and the controls draw
+	ControlSize float64 // a checkbox or radio glyph
+	ControlGap  float64 // between a glyph and its label
 	MenuWidth   float64 // a dropdown menu panel, which does not stretch
 
 	ButtonPad EdgeInsets // inside a button
@@ -280,6 +286,9 @@ type Theme struct {
 	CardPad   EdgeInsets // inside a card
 	PanelPad  EdgeInsets // inside a popup panel, around its items
 	TabPad    EdgeInsets // inside one tab label
+
+	MotionFast time.Duration // knobs, tab indicators, collapsing content
+	MotionSlow time.Duration // entrances and exits
 
 	// How far a state tints the color it starts from, as Mix takes it.
 	HoverMix, PressMix, DisabledMix float64
@@ -348,12 +357,13 @@ func DefaultTheme() Theme {
 		OverlayShadow: ShadowStyle{Offset: Pt(0, 12), Blur: 28, Color: color.NRGBA{A: 65}},
 
 		Radius: 8, RadiusSm: 6, RadiusLg: 12,
-		Space: 8, BorderWidth: 1, MenuWidth: 224,
+		Space: 8, BorderWidth: 1, ControlSize: 16, ControlGap: 8, MenuWidth: 224,
 
 		ButtonPad: Insets(8, 16), FieldPad: Insets(8, 12),
 		ItemPad: Insets(6, 8), CardPad: Insets(24), PanelPad: Insets(4),
 		TabPad: Insets(5, 10),
 
+		MotionFast: 150 * time.Millisecond, MotionSlow: 240 * time.Millisecond,
 		HoverMix: .06, PressMix: .08, DisabledMix: .55,
 	}
 }

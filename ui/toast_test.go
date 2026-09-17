@@ -13,7 +13,7 @@ func TestToastExitIsAnimatedAndInert(t *testing.T) {
 	p.Advance(0)
 	id := host.Push(Toast("Saved", "Your changes are stored.").Duration(0))
 	p.Advance(0)
-	p.Advance(toastMotionDuration)
+	p.Advance(ggui.DefaultTheme().MotionSlow)
 	host.Dismiss(id)
 	p.Advance(0)
 	if host.Len() != 0 || len(host.entries) != 1 {
@@ -22,12 +22,12 @@ func TestToastExitIsAnimatedAndInert(t *testing.T) {
 	if _, ok := p.Find("Dismiss Saved"); ok {
 		t.Fatal("exiting toast is still interactive")
 	}
-	p.Advance(toastMotionDuration / 2)
+	p.Advance(ggui.DefaultTheme().MotionSlow / 2)
 	v := host.entries[0].motion.Value(ggui.Now())
 	if v <= 0 || v >= 1 {
 		t.Fatalf("exit progress = %v, want an intermediate value", v)
 	}
-	p.Advance(toastMotionDuration)
+	p.Advance(ggui.DefaultTheme().MotionSlow)
 	if len(host.entries) != 0 {
 		t.Fatal("exit did not release the notice")
 	}
