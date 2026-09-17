@@ -88,7 +88,7 @@ func (b *BreadcrumbWidget) build() {
 			// ButtonOf rather than Button, so the label stays this
 			// widget's to color: a link is muted until it is the page.
 			b.muted = append(b.muted, label)
-			link := ButtonOf(label, c.onTap).Ghost().Pad(0, 2).Label(c.label)
+			link := ButtonOf(label, c.onTap).Ghost().Pad(0, 2).Named(c.label)
 			link.Role = ggui.RoleLink
 			parts = append(parts, link)
 		}

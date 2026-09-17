@@ -9,9 +9,13 @@ import (
 )
 
 func galleryProbe(size ggui.Size) *ggui.Probe {
-	build, setup, commands := newGallery()
-	p := ggui.ProbeBuilder(build, size).Setup(setup)
-	p.Shortcut("cmd+k", commands)
+	var p *ggui.Probe
+	dispose := ggui.Root(func() {
+		build, setup, commands := newGallery()
+		p = ggui.ProbeBuilder(build, size).Setup(setup)
+		p.Shortcut("cmd+k", commands)
+	})
+	p.Setup(func() { ggui.OnCleanup(dispose) })
 	p.Frame()
 	return p
 }

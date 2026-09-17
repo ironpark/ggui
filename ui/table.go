@@ -104,9 +104,9 @@ func (t *TableWidget[T, K]) Height(h float64) *TableWidget[T, K] {
 	return t
 }
 
-// Label names each row for Probe.Find and the inspector; the default is
+// RowName names each row for Probe.Find and the inspector; the default is
 // the key.
-func (t *TableWidget[T, K]) Label(fn func(T) string) *TableWidget[T, K] { t.label = fn; return t }
+func (t *TableWidget[T, K]) RowName(fn func(T) string) *TableWidget[T, K] { t.label = fn; return t }
 
 func (t *TableWidget[T, K]) selectable() bool { return t.selected != nil || t.onSelect != nil }
 

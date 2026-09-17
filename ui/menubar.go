@@ -24,7 +24,7 @@ type MenubarWidget struct {
 // Up/Down and Enter/Space open actions. Escape closes without invoking an action.
 func Menubar(menus ...*MenuWidget) *MenubarWidget {
 	b := &MenubarWidget{menus: menus, active: 0, sizes: make([]ggui.Size, len(menus)), rects: make([]ggui.Rect, len(menus))}
-	b.Role, b.Name = ggui.RoleToolbar, "Menubar"
+	b.Role = ggui.RoleToolbar
 	b.AutoKey()
 	b.popup = ggui.Popup(menubarAnchor{b}, menubarPanel{b}).Keys(b).Owner(b).Gap(4)
 	for i, m := range menus {
@@ -62,6 +62,9 @@ func (b *MenubarWidget) toggle(i int) {
 
 // Layout implements ggui.Widget.
 func (b *MenubarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	for _, m := range b.menus {
+		m.button.Sync()
+	}
 	b.theme = env.Theme()
 	if len(b.menus) > 0 && b.menus[b.active].button.Inert {
 		b.popup.Hide()
@@ -269,3 +272,8 @@ func (t menubarTarget) HandlePointer(e ggui.PointerEvent) bool {
 }
 
 func (t menubarTarget) Semantics() (ggui.Role, string) { return t.b.menus[t.i].button.Semantics() }
+
+func (b *MenubarWidget) name() string { return pick(b.Name != "", b.Name, "Menubar") }
+
+// Semantics implements ggui.Semantic, including the built-in fallback name.
+func (b *MenubarWidget) Semantics() (ggui.Role, string) { return b.Role, b.name() }

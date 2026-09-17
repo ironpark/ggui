@@ -121,7 +121,7 @@ func TestAvatarFallsBackToInitials(t *testing.T) {
 func TestInputGroupFocusesTheEditorFromItsPadding(t *testing.T) {
 	value := ggui.State("ab")
 	visits := 0
-	group := ui.InputGroup(ggui.TextInput(value).Label("Site")).
+	group := ui.InputGroup(ggui.TextInput(value).Named("Site")).
 		Leading(ggui.Text("https://")).
 		Trailing(ui.Button("Go", func() { visits++ }).Ghost())
 	p := ggui.NewProbe(group, ggui.Sz(320, 44))

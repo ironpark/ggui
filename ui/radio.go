@@ -31,7 +31,7 @@ func Radio[T comparable](selected ggui.Binding[T], value T, label string) *Radio
 func (r *RadioWidget[T]) OnChange(fn func(T)) *RadioWidget[T] { r.onChange = fn; return r }
 
 // Disabled greys the option out and ignores the pointer while v is true.
-func (r *RadioWidget[T]) Disabled(v bool) *RadioWidget[T] { r.Inert = v; return r }
+func (r *RadioWidget[T]) Disabled(v bool) *RadioWidget[T] { r.SetInert(v); return r }
 
 // DisabledWhen follows r for Disabled without a rebuild.
 func (r *RadioWidget[T]) DisabledWhen(when ggui.Reader[bool]) *RadioWidget[T] {

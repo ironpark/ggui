@@ -19,11 +19,11 @@ type FieldWidget struct {
 	column  *ggui.ColumnWidget
 }
 
-// Named is a control that can be given a name: every ui control and
-// TextInput.
+// Named is a control that accepts an explicit name. HasName excludes
+// placeholders and built-in fallback names.
 type Named interface {
 	SetName(string)
-	Semantics() (ggui.Role, string)
+	HasName() bool
 }
 
 // Field puts label above input.
@@ -33,7 +33,7 @@ type Named interface {
 func Field(label string, input ggui.Widget) *FieldWidget {
 	f := &FieldWidget{label: label, input: input}
 	if n, ok := input.(Named); ok {
-		if _, name := n.Semantics(); name == "" {
+		if !n.HasName() {
 			n.SetName(label)
 		}
 	}

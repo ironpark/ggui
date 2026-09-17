@@ -65,7 +65,7 @@ type CommandWidget struct {
 // composition and normal editing keys stay with TextInput.
 func Command(query ggui.Binding[string], entries ...CommandEntry) *CommandWidget {
 	c := &CommandWidget{query: query, entries: append([]CommandEntry(nil), entries...), highlight: -1, height: 200, offset: ggui.State(0.0)}
-	c.field = TextField(query).Placeholder("Search commands…").Label("Search commands").OnKey(c.key)
+	c.field = TextField(query).Placeholder("Search commands…").Named("Search commands").OnKey(c.key)
 	if c.field.input.HitID() == nil {
 		c.field.input.Key(c)
 	}
@@ -93,8 +93,8 @@ func CommandDialog(open ggui.Binding[bool], command *CommandWidget) *DialogWidge
 // Placeholder sets the search hint.
 func (c *CommandWidget) Placeholder(s string) *CommandWidget { c.field.Placeholder(s); return c }
 
-// Label names the search field for tests and the inspector.
-func (c *CommandWidget) Label(s string) *CommandWidget { c.field.Label(s); return c }
+// Named names the search field for tests and the inspector.
+func (c *CommandWidget) Named(s string) *CommandWidget { c.field.Named(s); return c }
 
 // InsetSearch gives the search field a muted, rounded background.
 func (c *CommandWidget) InsetSearch() *CommandWidget { c.insetSearch = true; return c }

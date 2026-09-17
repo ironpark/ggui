@@ -8,6 +8,7 @@ import (
 // PaginationWidget navigates a one-based page binding. It does not slice data.
 // At most five numbered buttons are shown, plus Previous, Next and ellipses for hidden pages.
 type PaginationWidget struct {
+	ggui.Interactive
 	page           ggui.Binding[int]
 	pages          ggui.Reader[int]
 	previous, next *ButtonWidget
@@ -16,7 +17,6 @@ type PaginationWidget struct {
 	gaps           [2]ggui.Widget // the leading and trailing ellipses
 	children       []ggui.Widget
 	row            *ggui.WrapWidget
-	disabled       bool
 	onChange       func(int)
 }
 
@@ -24,8 +24,8 @@ type PaginationWidget struct {
 // Out-of-range page values are clamped for display, without writing the binding.
 func Pagination(page ggui.Binding[int], pages ggui.Reader[int]) *PaginationWidget {
 	p := &PaginationWidget{page: page, pages: pages}
-	p.previous = Button("‹ Previous", func() { p.move(-1) }).Label("Previous").Ghost().Pad(6, 10)
-	p.next = Button("Next ›", func() { p.move(1) }).Label("Next").Ghost().Pad(6, 10)
+	p.previous = Button("‹ Previous", func() { p.move(-1) }).Named("Previous").Ghost().Pad(6, 10)
+	p.next = Button("Next ›", func() { p.move(1) }).Named("Next").Ghost().Pad(6, 10)
 	for i := range p.numbers {
 		p.numbers[i] = Button("", func() { p.selectPage(p.targets[i]) })
 	}
@@ -37,14 +37,7 @@ func Pagination(page ggui.Binding[int], pages ggui.Reader[int]) *PaginationWidge
 
 // Disabled disables all navigation.
 func (p *PaginationWidget) Disabled(v bool) *PaginationWidget {
-	p.disabled = v
-	n := max(p.pages.Get(), 0)
-	current := p.current(n)
-	p.previous.Disabled(v || n == 0 || current == 1)
-	p.next.Disabled(v || n == 0 || current == n)
-	for _, b := range p.numbers {
-		b.Disabled(v)
-	}
+	p.SetInert(v)
 	return p
 }
 
@@ -55,17 +48,18 @@ func (p *PaginationWidget) current(n int) int { return min(max(p.page.Peek(), 1)
 func (p *PaginationWidget) move(delta int)    { p.selectPage(p.current(max(p.pages.Get(), 0)) + delta) }
 func (p *PaginationWidget) selectPage(page int) {
 	n := max(p.pages.Get(), 0)
-	if !p.disabled && page >= 1 && page <= n {
+	if !p.Inert && page >= 1 && page <= n {
 		setChanged(p.page, page, p.onChange)
 	}
 }
 
 // Layout implements ggui.Widget.
 func (p *PaginationWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	p.Sync()
 	n := max(p.pages.Get(), 0)
 	current := p.current(n)
-	p.previous.Disabled(p.disabled || n == 0 || current == 1)
-	p.next.Disabled(p.disabled || n == 0 || current == n)
+	p.previous.Disabled(p.Inert || n == 0 || current == 1)
+	p.next.Disabled(p.Inert || n == 0 || current == n)
 	children := append(p.children[:0], p.previous)
 	start := max(1, min(current-2, n-4))
 	if start > 1 {
@@ -83,7 +77,7 @@ func (p *PaginationWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		} else {
 			b.Ghost()
 		}
-		b.Disabled(p.disabled).Pad(6, 10)
+		b.Disabled(p.Inert).Pad(6, 10)
 		children = append(children, b)
 	}
 	if start+len(p.numbers) <= n {
@@ -96,3 +90,9 @@ func (p *PaginationWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 
 // Paint implements ggui.Widget.
 func (p *PaginationWidget) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(p.row, r) }
+
+// DisabledWhen follows r for all navigation buttons without rebuilding.
+func (p *PaginationWidget) DisabledWhen(r ggui.Reader[bool]) *PaginationWidget {
+	p.InertWhen(r)
+	return p
+}

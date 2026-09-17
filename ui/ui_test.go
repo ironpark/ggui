@@ -152,9 +152,9 @@ func TestTextFieldFocusesFromItsPadding(t *testing.T) {
 	if got := f.Layout(ggui.Loose(ggui.Sz(300, 100)), ggui.Env{}); got.W != 300 || got.H <= 20 {
 		t.Fatalf("TextField = %v, want full width and padded height", got)
 	}
-	f.Label("Name")
+	f.Named("Name")
 	if _, ok := p.FindRole(ggui.RoleTextField, "Name"); !ok {
-		t.Fatal("Label did not rename the field")
+		t.Fatal("Named did not rename the field")
 	}
 }
 
@@ -467,7 +467,7 @@ func TestDisabledTextFieldTakesNoInput(t *testing.T) {
 func TestSliderReportsChanges(t *testing.T) {
 	v := ggui.State(0.0)
 	var got []float64
-	s := ui.Slider(v, 0, 100).Step(10).Label("volume").OnChange(func(x float64) { got = append(got, x) })
+	s := ui.Slider(v, 0, 100).Step(10).Named("volume").OnChange(func(x float64) { got = append(got, x) })
 	p := ggui.NewProbe(s, ggui.Sz(116, 20))
 	defer p.Close()
 	p.Click(onTrack(find(t, p, ggui.RoleSlider, "volume"), 0.5))

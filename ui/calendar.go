@@ -39,10 +39,10 @@ type CalendarWidget struct {
 func Calendar(value ggui.Binding[time.Time]) *CalendarWidget {
 	c := &CalendarWidget{value: value, location: time.Local, weekStart: time.Sunday,
 		weekdays: [7]string{"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"}, monthLabel: func(t time.Time) string { return t.Format("January 2006") }}
-	c.Role, c.Name = ggui.RoleGroup, "Calendar"
+	c.Role = ggui.RoleGroup
 	c.AutoKey()
-	c.previous = Button("‹", func() { c.moveMonth(-1) }).Ghost().Label("Previous month")
-	c.next = Button("›", func() { c.moveMonth(1) }).Ghost().Label("Next month")
+	c.previous = Button("‹", func() { c.moveMonth(-1) }).Ghost().Named("Previous month")
+	c.next = Button("›", func() { c.moveMonth(1) }).Ghost().Named("Next month")
 	c.title = ggui.Text("").NoWrap()
 	c.header = ggui.Row(c.previous, ggui.Expanded(ggui.Center(c.title)), c.next).Gap(8)
 	for i := range c.days {
@@ -104,7 +104,7 @@ func (c *CalendarWidget) DisabledDate(fn func(time.Time) bool) *CalendarWidget {
 }
 
 // Disabled disables navigation and date selection.
-func (c *CalendarWidget) Disabled(v bool) *CalendarWidget { c.Inert = v; return c }
+func (c *CalendarWidget) Disabled(v bool) *CalendarWidget { c.SetInert(v); return c }
 
 // OnChange runs only after a user selects a different civil date.
 func (c *CalendarWidget) OnChange(fn func(time.Time)) *CalendarWidget { c.onChange = fn; return c }
@@ -206,7 +206,7 @@ func (c *CalendarWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 
 // Paint implements ggui.Widget.
 func (c *CalendarWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	dst.Node(r, ggui.Node{Role: ggui.RoleGroup, Name: c.Name}, func(dst *ggui.Canvas) {
+	dst.Node(r, ggui.Node{Role: ggui.RoleGroup, Name: c.name(), Disabled: c.Inert}, func(dst *ggui.Canvas) {
 		dst.Paint(c.header, ggui.Rct(r.Origin, ggui.Sz(r.Size.W, c.headerSize.H)))
 		y := r.Origin.Y + c.headerSize.H + 8
 		w := r.Size.W / 7
@@ -325,3 +325,11 @@ func (d *calendarDay) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	dst.Paint(d.text, ggui.Rct(ggui.Pt(r.Origin.X+(r.Size.W-d.size.W)/2, r.Origin.Y+(r.Size.H-d.size.H)/2), d.size))
 }
+
+// DisabledWhen follows r for Disabled without rebuilding the control.
+func (c *CalendarWidget) DisabledWhen(r ggui.Reader[bool]) *CalendarWidget { c.InertWhen(r); return c }
+
+func (c *CalendarWidget) name() string { return pick(c.Name != "", c.Name, "Calendar") }
+
+// Semantics implements ggui.Semantic, including the built-in fallback name.
+func (c *CalendarWidget) Semantics() (ggui.Role, string) { return c.Role, c.name() }

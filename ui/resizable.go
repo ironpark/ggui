@@ -30,7 +30,7 @@ type ResizableWidget struct {
 // 320x200 logical pixels as its fallback under an unbounded parent.
 func Resizable(fraction ggui.Binding[float64], first, second ggui.Widget) *ResizableWidget {
 	r := &ResizableWidget{fraction: fraction, first: first, second: second}
-	r.Role, r.Name = ggui.RoleSeparator, "Resize panels"
+	r.Role = ggui.RoleSeparator
 	r.AutoKey()
 	if r.HitID() == nil {
 		r.Key(r)
@@ -53,11 +53,11 @@ func (r *ResizableWidget) MinSizes(first, second float64) *ResizableWidget {
 	return r
 }
 
-// Label names the divider for tests and the inspector.
-func (r *ResizableWidget) Label(s string) *ResizableWidget { r.Name = s; return r }
+// Named names the divider for tests and the inspector.
+func (r *ResizableWidget) Named(s string) *ResizableWidget { r.Name = s; return r }
 
 // Disabled prevents dragging and keyboard resizing.
-func (r *ResizableWidget) Disabled(v bool) *ResizableWidget { r.Inert = v; return r }
+func (r *ResizableWidget) Disabled(v bool) *ResizableWidget { r.SetInert(v); return r }
 
 // OnChange reports the new fraction after a drag or keyboard resize.
 func (r *ResizableWidget) OnChange(fn func(float64)) *ResizableWidget { r.onChange = fn; return r }
@@ -81,6 +81,7 @@ func (r *ResizableWidget) axis(p ggui.Point) float64 {
 
 // Layout implements ggui.Widget.
 func (r *ResizableWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	r.Sync()
 	r.env, r.theme = env, env.Theme()
 	size := c.Constrain(ggui.Sz(bounded(c.MaxW, 320), bounded(c.MaxH, 200)))
 	main := size.W
@@ -225,3 +226,14 @@ func (r *ResizableWidget) Adopt(prev any) {
 		r.dragOffset = p.dragOffset
 	}
 }
+
+// DisabledWhen follows r for Disabled without rebuilding the control.
+func (r *ResizableWidget) DisabledWhen(when ggui.Reader[bool]) *ResizableWidget {
+	r.InertWhen(when)
+	return r
+}
+
+func (r *ResizableWidget) name() string { return pick(r.Name != "", r.Name, "Resize panels") }
+
+// Semantics implements ggui.Semantic, including the built-in fallback name.
+func (r *ResizableWidget) Semantics() (ggui.Role, string) { return r.Role, r.name() }

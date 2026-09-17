@@ -123,6 +123,11 @@ func (e Env) WithTheme(t Theme) Env {
 // or a subtree. Env.TextScale reads it, 1 by default.
 var TextScaleKey = NewKey[float64]("text scale")
 
+// InputDisabled disables TextInput editing in a subtree without replacing the
+// editor's own Disabled or DisabledWhen setting. Containers combine inherited
+// and local values with OR; false must not enable an already-disabled ancestor.
+var InputDisabled = NewKey[bool]("input disabled")
+
 // ReducedMotionKey asks widgets not to animate: transitions land at once,
 // eased motions jump. Provide it above the tree; Env.Motion reads it.
 var ReducedMotionKey = NewKey[bool]("reduced motion")
@@ -163,8 +168,14 @@ func NewKey[T any](name string) Key[T] { return Key[T]{id: new(byte), name: name
 // With returns e with v stored under k for the subtree below. Storing the
 // value already there, by ==, leaves e unchanged, and storing the value
 // stored last frame under the same parent yields the same revision, so
-// caches below a Provide rebuilt every frame hold.
+// caches below a Provide rebuilt every frame hold. InputDisabled is cumulative:
+// once true in an ancestor, a descendant cannot clear it.
 func (e Env) With[T any](k Key[T], v T) Env {
+	if k.id == InputDisabled.id {
+		if disabled, _ := e.Get(InputDisabled); disabled {
+			return e
+		}
+	}
 	if cur, ok := e.Get(k); ok && sameAny(cur, v) {
 		return e
 	}

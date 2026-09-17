@@ -25,27 +25,31 @@ func TextField(value ggui.Binding[string]) *TextFieldWidget {
 
 // Disabled greys the field out and ignores input while v is true.
 func (f *TextFieldWidget) Disabled(v bool) *TextFieldWidget {
-	f.Inert = v
-	f.input.Disabled(v)
+	f.SetInert(v)
 	return f
 }
 
 // DisabledWhen follows r for Disabled without a rebuild.
 func (f *TextFieldWidget) DisabledWhen(r ggui.Reader[bool]) *TextFieldWidget {
 	f.InertWhen(r)
-	f.input.DisabledWhen(r)
 	return f
 }
 
 // Placeholder sets the muted text shown while the value is empty.
 func (f *TextFieldWidget) Placeholder(s string) *TextFieldWidget { f.input.Placeholder(s); return f }
 
-// Label names the field for Probe.Find and the inspector; the placeholder
+// Named names the field for Probe.Find and the inspector; the placeholder
 // serves until one is set.
-func (f *TextFieldWidget) Label(s string) *TextFieldWidget { f.input.Label(s); return f }
+func (f *TextFieldWidget) Named(s string) *TextFieldWidget { f.input.Named(s); return f }
 
-// SetName is Label, for Field.
-func (f *TextFieldWidget) SetName(s string) { f.input.Label(s) }
+// SetName is Named, for Field.
+func (f *TextFieldWidget) SetName(s string) { f.input.Named(s) }
+
+// HasName reports whether the editor has an explicit name.
+func (f *TextFieldWidget) HasName() bool { return f.input.HasName() }
+
+// Semantics reports the same name and role as the editor.
+func (f *TextFieldWidget) Semantics() (ggui.Role, string) { return f.input.Semantics() }
 
 // Password masks every rune with a bullet.
 func (f *TextFieldWidget) Password() *TextFieldWidget { f.input.Password(); return f }
@@ -90,14 +94,22 @@ func (f *TextFieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	} else {
 		fieldBox(f.box, t, f.input.Focused(), f.Inert)
 	}
-	return f.box.Layout(c, env)
+	size := f.box.Layout(c, env.With(ggui.InputDisabled, f.Inert))
+	if !f.plain {
+		fieldBox(f.box, t, f.input.Focused(), f.input.IsDisabled())
+	}
+	return size
 }
 
 // Paint implements Widget.
 func (f *TextFieldWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// The whole box, padding included, focuses and clicks into the editor.
-	f.Hit(dst, r, f.input, ebiten.CursorShapeText)
-	if !f.plain && f.input.Focused() && !f.Inert {
+	if f.input.IsDisabled() {
+		dst.Describe(r, f.input)
+	} else {
+		f.Hit(dst, r, f.input, ebiten.CursorShapeText)
+	}
+	if !f.plain && f.input.Focused() && !f.input.IsDisabled() {
 		fieldHalo(dst, r, f.theme.Radius, f.theme)
 	}
 	dst.Paint(f.box, r)

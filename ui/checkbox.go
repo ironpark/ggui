@@ -25,7 +25,7 @@ func Checkbox(checked ggui.Binding[bool], label string) *CheckboxWidget {
 }
 
 // Disabled greys the box out and ignores the pointer while v is true.
-func (c *CheckboxWidget) Disabled(v bool) *CheckboxWidget { c.Inert = v; return c }
+func (c *CheckboxWidget) Disabled(v bool) *CheckboxWidget { c.SetInert(v); return c }
 
 // DisabledWhen follows r for Disabled without a rebuild.
 func (c *CheckboxWidget) DisabledWhen(r ggui.Reader[bool]) *CheckboxWidget { c.InertWhen(r); return c }

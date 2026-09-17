@@ -34,7 +34,7 @@ var filterNames = [...]string{"All", "Active", "Done"}
 
 const maxTitle = 60
 
-func main() {
+func newTodoApp() *ggui.App {
 	todos := ggui.State([]*Todo{})
 	draft := ggui.State("")
 	show := ggui.State(all)
@@ -126,7 +126,7 @@ func main() {
 			ggui.Row(
 				ggui.Textf("%d left", left).AsCaption().NoWrap(),
 				ggui.Spacer(),
-				ui.Radios(show, []filter{all, active, done}).Label(func(f filter) string { return filterNames[f] }),
+				ui.Radios(show, []filter{all, active, done}).Format(func(f filter) string { return filterNames[f] }),
 				ggui.Tooltip(
 					ui.Button("Clear done", func() { confirm.Set(true) }).Outline().DisabledWhen(noneDone),
 					"Removes every finished item (⌘/Ctrl+K)",
@@ -162,7 +162,19 @@ func main() {
 		})
 		ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme())
 	})
-	if err := app.Run(); err != nil {
+	return app
+}
+
+func run() error {
+	var app *ggui.App
+	dispose := ggui.Root(func() { app = newTodoApp() })
+	defer dispose()
+	defer app.Close()
+	return app.Run()
+}
+
+func main() {
+	if err := run(); err != nil {
 		log.Fatal(err)
 	}
 }

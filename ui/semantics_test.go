@@ -54,7 +54,7 @@ button "Save" disabled
 // one element.
 func TestSemanticsTextFieldIsOneNode(t *testing.T) {
 	value := ggui.State("Ada")
-	tree := semantics(t, ui.TextField(value).Label("Name"), ggui.Sz(200, 60))
+	tree := semantics(t, ui.TextField(value).Named("Name"), ggui.Sz(200, 60))
 	if n := len(tree.FindAll(ggui.RoleTextField)); n != 1 {
 		t.Fatalf("%d text field nodes, want 1:\n%s", n, tree)
 	}
@@ -167,7 +167,7 @@ accordion "Accordion"
 }
 
 func TestSemanticsSliderReportsItsRange(t *testing.T) {
-	tree := semantics(t, ui.Slider(ggui.State(4.0), 0, 10).Label("Volume"), ggui.Sz(200, 40))
+	tree := semantics(t, ui.Slider(ggui.State(4.0), 0, 10).Named("Volume"), ggui.Sz(200, 40))
 	n := node(t, tree, ggui.RoleSlider, "Volume")
 	if n.Min != 0 || n.Max != 10 || n.Now != 4 {
 		t.Errorf("range = %g..%g at %g, want 0..10 at 4", n.Min, n.Max, n.Now)

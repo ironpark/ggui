@@ -96,6 +96,14 @@ app.Setup(func() {
 })
 ```
 
+A computation created without an owner has process lifetime until explicitly
+disposed; `App.Close` does not dispose it. Builders do own their `Map` and
+`Derived` computations: those are disposed before the next rebuild rather than
+accumulating. Keeping such a Memo outside its owner leaves it frozen at its last
+value after disposal. Use `app.Setup` for app-owned computations, or wrap model
+construction in `Root`, defer its returned cleanup, and run the app after the
+Root callback returns. The todo and gallery examples show this pattern.
+
 Create component-local state and cleanup in component setup; see
 [builders and components](#builders-and-components).
 
@@ -125,10 +133,18 @@ notifies readers only when something was removed.
 | --- | --- | --- |
 | `Reader[T]` | `Get()` | Signals, memos, and animated values. |
 | `Binding[T]` | `Get()`, `Peek()`, `Set(T)` | Signals, lenses, tweens, and springs. |
+| `Writable[T]` | `Binding[T]` plus `Update(func(T) T)` | Signals, lenses, and custom immediately writable values. |
 
 Use a `Reader` for display-only data and a `Binding` when a control needs to
 write back. `Watch` and `Combine` accept readers, so computed values work as
 inputs too. A slider can bind to a spring just as it binds to a signal.
+
+`Toggle`, `Add`, `Append`, and `Remove` accept `Writable` values, including
+lenses. `Signal.Update` and `Lens.Update` read without subscribing, then write
+back on the UI thread. A removal that matches nothing does not write or notify.
+Tweens and springs are bindings but not writable values: increment their target
+explicitly with `motion.Set(motion.Target() + delta)`, since `Peek()` returns the
+current animated position.
 
 A lens exposes one field of a struct signal as a binding:
 
@@ -361,7 +377,7 @@ ggui.Column(
 	ui.Checkbox(agree, "I agree"),
 	ui.Switch(dark, "Dark mode"),
 	ui.Slider(size, 0, 1).Step(0.1),
-	ui.Radios(plan, []string{"free", "pro"}).Label(strings.ToTitle),
+	ui.Radios(plan, []string{"free", "pro"}).Format(strings.ToTitle),
 	ggui.Row(ui.Button("Save", save), ui.Button("Cancel", cancel).Outline()).Gap(8),
 	ui.Divider(),
 ).Gap(12)
@@ -380,6 +396,23 @@ Common options on interactive controls include:
 | `.Disabled(v)` | Disable interaction. |
 | `.DisabledWhen(reader)` | Follow a reactive disabled state without rebuilding. |
 | `.OnChange(fn)` | Observe a user-selected value on controls that expose this callback. |
+
+Every control widget with `Disabled` also supports `DisabledWhen`. The last
+setting wins: `Disabled(false)` removes a previous `DisabledWhen` binding;
+`DisabledWhen(busy)` replaces the static setting. Composite controls evaluate
+their own binding and apply the result to their internal controls. Disabling a
+popup control also closes its popup. Item configuration values such as
+`CommandEntry` keep their static `Disabled` option.
+
+Use `.Named(name)` for a control's accessible and Probe name. `Field` supplies
+its label only when the control has no explicit name, taking precedence over a
+placeholder or built-in fallback. Labels passed to constructors such as
+`Button("Save", save)` are explicit names. Custom controls can participate by
+implementing `ui.Named` (`SetName(string)` and `HasName() bool`); `HasName` must
+exclude placeholders and fallback names. `Semantics` reports the resolved name.
+Use `.Format(fn)` for option text on Select, Combobox, Radios, and ToggleGroup,
+and `.RowName(fn)` for a table row's accessible name.
+
 | `.OnCommit(fn)` | Observe completed editing on sliders and text fields. |
 | `.Pad(...)` | Override padding on controls such as buttons. |
 
@@ -462,7 +495,7 @@ widget, and `.W(px)`, `.Grow(flex)` and `.Right()` size and align a
 column. `.Selected(binding)` highlights the row whose key the binding
 holds and sets it on a click or Space, `.OnSelect(fn)` gets the item,
 `.Height(h)` scrolls the body under a fixed heading and lays out only the
-rows in view, and `.Label(fn)` names rows for `Probe.Find`.
+rows in view, and `.RowName(fn)` names rows for `Probe.Find`.
 
 ```go
 ui.Table(people, func(p Person) int { return p.ID },
@@ -474,7 +507,7 @@ ui.Table(people, func(p Person) int { return p.ID },
 ### Select and menu
 
 `ui.Select(value, options)` is a dropdown bound to a
-signal, labelled through `fmt.Sprint` or `.Label(fn)`: a click
+signal, labelled through `fmt.Sprint` or `.Format(fn)`: a click
 or Space opens the list in a `Popup`, the arrow keys move through it (or
 step the value while it is closed), Enter picks, Escape closes.
 `ui.Menu("File", ui.MenuItem("New", fn), ui.MenuDivider(), ...)` is a
@@ -555,7 +588,9 @@ its bounds, timezone, localization and disabled-date settings. `.Format(fn)`
 formats the trigger value, and `.Placeholder(text)` replaces "Choose date" for
 an empty value. Selecting a date closes the popup, including the current date;
 Escape or an outside click cancels navigation without changing the value.
-`.Disabled(true)` closes and disables the picker. `.Key(key)` preserves its
+`.Disabled(true)` closes and disables the picker. DatePicker owns the disabled
+state of the Calendar returned by `.Calendar()`; configure `Disabled` or
+`DisabledWhen` on the picker, not that internal calendar. `.Key(key)` preserves its
 state across rebuilds. Date ranges and editable date text are not included.
 
 ### Notices and loading states
@@ -660,7 +695,7 @@ nothing more, so every child keeps its own tab stop and its own action. Ghost
 buttons suit it, since the strip draws the border they would each draw.
 
 `ui.ToggleGroup(value, options)` is a segmented single choice: one option of
-several, bound the way `ui.Select` and `ui.Radios` are. `.Label(fn)` sets how
+several, bound the way `ui.Select` and `ui.Radios` are. `.Format(fn)` sets how
 an option is shown, `.Vertical()` stacks the segments, and `.OnChange(fn)`
 reports user changes. The group is one tab stop, as a set of radio buttons is:
 Left and Right (Up and Down when vertical) move the choice and wrap, Home and
@@ -712,6 +747,14 @@ ggui.Row(
 	ui.Item("Backups", "Last run 2 hours ago").Action(ui.Button("Run", run).Outline()),
 ).Space(1)
 ```
+
+`InputGroup.Disabled` and `DisabledWhen` disable the editor as well as its
+chrome. Leading and trailing addon controls remain independent. The editor's own
+settings are preserved: it is disabled if either it or its group is disabled.
+Custom containers can pass `ggui.InputDisabled` through `Env` or `Provide`;
+TextInput combines that inherited value with its own settings. A descendant
+`false` cannot clear an ancestor's `true`. Disabled editors remain in the
+accessibility tree and reject pointer, keyboard, and accessibility edits.
 
 ## Animation
 
@@ -835,8 +878,8 @@ content)` is a centered modal on a scrim that takes the clicks, with
 ### Roles and labels
 
 Every control carries a `Role` and a name: a button's text, a
-checkbox's label, a field's `Label` or placeholder; `ButtonOf`, `Slider`
-and `Select` take one through `.Label` or `.Named`. The inspector shows
+checkbox's label, a field's `Named` or placeholder; `ButtonOf`, `Slider`
+and `Select` take one through `.Named`. The inspector shows
 them, and tests find controls by them.
 
 ### Custom input handlers
@@ -885,8 +928,8 @@ Set `Config.Accessibility` when creating the app:
 | `AccessibilityOff` | Disable the native bridge. |
 
 Give controls meaningful labels. Buttons use their text, checkboxes use their
-labels, and fields use a label or placeholder; custom content may need `.Named`
-or `.Label`. Roles and names also help the inspector and `Probe` identify widgets.
+labels, and fields use a label or placeholder; custom content may need `.Named`.
+Roles and names also help the inspector and `Probe` identify widgets.
 
 Apply text scaling or reduced motion through inherited values:
 

@@ -21,7 +21,8 @@ type DatePickerWidget struct {
 func DatePicker(value ggui.Binding[time.Time]) *DatePickerWidget {
 	d := &DatePickerWidget{value: value, placeholder: "Choose date", format: func(t time.Time) string { return t.Format("2006-01-02") }}
 	d.calendar = Calendar(value)
-	d.button = Button("", func() { d.popup.Toggle() }).Outline().Label("Choose date")
+	d.button = Button("", func() { d.popup.Toggle() }).Outline()
+	d.button.defaultName = "Choose date"
 	d.button.value = func() string {
 		if v := d.value.Peek(); !v.IsZero() {
 			return d.format(d.calendar.date(v))
@@ -43,6 +44,7 @@ type datePickerKey struct {
 }
 
 // Calendar exposes date bounds, localization, week start and change callbacks.
+// DatePicker owns its disabled state; configure Disabled/DisabledWhen on the picker.
 func (d *DatePickerWidget) Calendar() *CalendarWidget { return d.calendar }
 
 // Popup exposes the popup's open state.
@@ -58,7 +60,7 @@ func (d *DatePickerWidget) Key(key any) *DatePickerWidget {
 
 // Named names the trigger for accessibility and Probe.
 func (d *DatePickerWidget) Named(s string) *DatePickerWidget {
-	d.button.Label(s)
+	d.button.Named(s)
 	d.calendar.Named(s)
 	return d
 }
@@ -108,6 +110,11 @@ func (d *DatePickerWidget) Act(a ggui.Action) bool {
 
 // Layout implements ggui.Widget.
 func (d *DatePickerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	d.button.Sync()
+	if d.button.Inert {
+		d.popup.Hide()
+	}
+	d.calendar.Disabled(d.button.Inert)
 	t := env.Theme()
 	panelBox(d.panel, t)
 	text := d.placeholder
@@ -120,3 +127,18 @@ func (d *DatePickerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 
 // Paint implements ggui.Widget.
 func (d *DatePickerWidget) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(d.popup, r) }
+
+// SetName names the trigger for Field.
+func (d *DatePickerWidget) SetName(s string) { d.Named(s) }
+
+// HasName reports whether the trigger has an explicit name.
+func (d *DatePickerWidget) HasName() bool { return d.button.HasName() }
+
+// Semantics reports the trigger's role and resolved name.
+func (d *DatePickerWidget) Semantics() (ggui.Role, string) { return d.button.Semantics() }
+
+// DisabledWhen follows r and closes the popup while disabled.
+func (d *DatePickerWidget) DisabledWhen(r ggui.Reader[bool]) *DatePickerWidget {
+	d.button.DisabledWhen(r)
+	return d
+}

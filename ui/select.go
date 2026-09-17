@@ -29,7 +29,7 @@ type SelectWidget[T comparable] struct {
 }
 
 // Select creates a dropdown bound to value, showing each option through
-// fmt.Sprint until Label says otherwise. Space or Enter opens it, the arrow
+// fmt.Sprint until Format says otherwise. Space or Enter opens it, the arrow
 // keys move through the options (or change the value directly while closed)
 // and Escape closes it.
 func Select[T comparable](value ggui.Binding[T], options []T) *SelectWidget[T] {
@@ -46,11 +46,11 @@ func Select[T comparable](value ggui.Binding[T], options []T) *SelectWidget[T] {
 	}
 	s.list = ggui.Box(ggui.Column(rows...).Align(ggui.AlignStretch))
 	s.popup = ggui.Popup(selectAnchor[T]{s}, s.list).Keys(s).Owner(s)
-	return s.Label(sprint[T])
+	return s.Format(sprint[T])
 }
 
-// Label sets how each option is shown.
-func (s *SelectWidget[T]) Label(fn func(T) string) *SelectWidget[T] {
+// Format sets how each option is shown.
+func (s *SelectWidget[T]) Format(fn func(T) string) *SelectWidget[T] {
 	s.label = fn
 	for i, it := range s.items {
 		it.Role, it.Name = ggui.RoleOption, fn(s.options[i])
@@ -109,7 +109,7 @@ func (s *SelectWidget[T]) ConsumesKey(ev ggui.KeyEvent) bool {
 }
 
 // Disabled greys the dropdown out and ignores input while v is true.
-func (s *SelectWidget[T]) Disabled(v bool) *SelectWidget[T] { s.Inert = v; return s }
+func (s *SelectWidget[T]) Disabled(v bool) *SelectWidget[T] { s.SetInert(v); return s }
 
 // DisabledWhen follows r for Disabled without a rebuild.
 func (s *SelectWidget[T]) DisabledWhen(r ggui.Reader[bool]) *SelectWidget[T] {
@@ -130,6 +130,9 @@ func (s *SelectWidget[T]) Popup() *ggui.PopupWidget { return s.popup }
 // Layout implements Widget.
 func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	s.Sync()
+	if s.Inert {
+		s.popup.Hide()
+	}
 	t := env.Theme()
 	s.theme = t
 	s.pad = t.FieldPad

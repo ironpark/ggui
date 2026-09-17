@@ -21,6 +21,7 @@ type InputGroupWidget struct {
 	row               *ggui.RowWidget
 	box               *ggui.BoxWidget
 	theme             ggui.Theme
+	effectiveDisabled bool
 	focused           func() bool
 }
 
@@ -35,11 +36,7 @@ func InputGroup(input ggui.Widget) *InputGroupWidget {
 	if f, ok := input.(interface{ Focused() bool }); ok {
 		g.focused = f.Focused
 	}
-	if n, ok := input.(Named); ok {
-		if _, name := n.Semantics(); name != "" {
-			g.Name = name
-		}
-	}
+
 	g.AutoKey()
 	return g
 }
@@ -54,7 +51,7 @@ func (g *InputGroupWidget) Trailing(w ggui.Widget) *InputGroupWidget { g.trailin
 func (g *InputGroupWidget) Named(s string) *InputGroupWidget {
 	g.Name = s
 	if n, ok := g.input.(Named); ok {
-		if _, name := n.Semantics(); name == "" {
+		if !n.HasName() {
 			n.SetName(s)
 		}
 	}
@@ -64,9 +61,25 @@ func (g *InputGroupWidget) Named(s string) *InputGroupWidget {
 // SetName is Named, for Field.
 func (g *InputGroupWidget) SetName(s string) { g.Named(s) }
 
-// Disabled greys the group out while v is true. The editor and the addons
-// keep their own Disabled: this one is the chrome's.
-func (g *InputGroupWidget) Disabled(v bool) *InputGroupWidget { g.Inert = v; return g }
+// HasName reports an explicit name on the group or its editor.
+func (g *InputGroupWidget) HasName() bool {
+	if n, ok := g.input.(Named); ok && n.HasName() {
+		return true
+	}
+	return g.Interactive.HasName()
+}
+
+// Semantics reports the editor's resolved name, including its placeholder.
+func (g *InputGroupWidget) Semantics() (ggui.Role, string) {
+	if s, ok := g.input.(ggui.Semantic); ok {
+		return s.Semantics()
+	}
+	return g.Interactive.Semantics()
+}
+
+// Disabled greys the group out and disables its editor. Addon controls remain
+// independent. The editor's own Disabled and DisabledWhen settings are preserved.
+func (g *InputGroupWidget) Disabled(v bool) *InputGroupWidget { g.SetInert(v); return g }
 
 // DisabledWhen follows r for Disabled without a rebuild.
 func (g *InputGroupWidget) DisabledWhen(r ggui.Reader[bool]) *InputGroupWidget {
@@ -80,6 +93,8 @@ func (g *InputGroupWidget) hasFocus() bool { return g.focused != nil && g.focuse
 // Layout implements ggui.Widget.
 func (g *InputGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	g.Sync()
+	inherited, _ := env.Get(ggui.InputDisabled)
+	g.effectiveDisabled = g.Inert || inherited
 	t := env.Theme()
 	g.theme = t
 	if g.row == nil {
@@ -87,7 +102,7 @@ func (g *InputGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		if g.leading != nil {
 			parts = append(parts, g.leading)
 		}
-		parts = append(parts, ggui.Expanded(g.input))
+		parts = append(parts, ggui.Expanded(groupInput{g}))
 		if g.trailing != nil {
 			parts = append(parts, g.trailing)
 		}
@@ -95,8 +110,13 @@ func (g *InputGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		g.box = ggui.Box(g.row)
 	}
 	g.row.Gap(t.Space)
-	fieldBox(g.box, t, g.hasFocus(), g.Inert)
-	return g.box.Layout(c, env)
+	fieldBox(g.box, t, g.hasFocus(), g.effectiveDisabled)
+	size := g.box.Layout(c, env)
+	if editor, ok := g.input.(interface{ IsDisabled() bool }); ok {
+		g.effectiveDisabled = g.effectiveDisabled || editor.IsDisabled()
+	}
+	fieldBox(g.box, t, g.hasFocus(), g.effectiveDisabled)
+	return size
 }
 
 // Paint implements ggui.Widget.
@@ -105,12 +125,24 @@ func (g *InputGroupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// The chrome takes the click first so that the padding around the
 	// editor focuses it, and the addons, painted after, sit on top.
 	if h, ok := g.input.(ggui.Control); ok {
-		g.Hit(dst, r, h, ebiten.CursorShapeText)
+		if g.effectiveDisabled {
+			dst.Describe(r, h)
+		} else {
+			g.Hit(dst, r, h, ebiten.CursorShapeText)
+		}
 	} else {
 		dst.Describe(r, g)
 	}
-	if g.hasFocus() && !g.Inert {
+	if g.hasFocus() && !g.effectiveDisabled {
 		fieldHalo(dst, r, t.Radius, t)
 	}
 	dst.Paint(g.box, r)
 }
+
+// groupInput applies inherited disabling only to the editor, not its addons.
+type groupInput struct{ group *InputGroupWidget }
+
+func (w groupInput) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	return w.group.input.Layout(c, env.With(ggui.InputDisabled, w.group.Inert))
+}
+func (w groupInput) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(w.group.input, r) }

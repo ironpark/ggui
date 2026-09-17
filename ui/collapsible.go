@@ -39,7 +39,7 @@ func Collapsible(open ggui.Binding[bool], title string, content ggui.Widget) *Co
 }
 
 // Disabled greys the header out and ignores input while v is true.
-func (c *CollapsibleWidget) Disabled(v bool) *CollapsibleWidget { c.Inert = v; return c }
+func (c *CollapsibleWidget) Disabled(v bool) *CollapsibleWidget { c.SetInert(v); return c }
 
 // DisabledWhen follows r for Disabled without a rebuild.
 func (c *CollapsibleWidget) DisabledWhen(r ggui.Reader[bool]) *CollapsibleWidget {

@@ -30,8 +30,8 @@ func Slider(value ggui.Binding[float64], lo, hi float64) *SliderWidget {
 	return s
 }
 
-// Label names the slider for Probe.Find and the inspector.
-func (s *SliderWidget) Label(name string) *SliderWidget { s.Name = name; return s }
+// Named names the slider for Probe.Find and the inspector.
+func (s *SliderWidget) Named(name string) *SliderWidget { s.Name = name; return s }
 
 // ConsumesKey implements ggui.KeyConsumer: the arrow keys move the value.
 func (s *SliderWidget) ConsumesKey(ev ggui.KeyEvent) bool {
@@ -64,7 +64,7 @@ func (s *SliderWidget) commit() {
 }
 
 // Disabled greys the slider out and ignores the pointer while v is true.
-func (s *SliderWidget) Disabled(v bool) *SliderWidget { s.Inert = v; return s }
+func (s *SliderWidget) Disabled(v bool) *SliderWidget { s.SetInert(v); return s }
 
 // DisabledWhen follows r for Disabled without a rebuild.
 func (s *SliderWidget) DisabledWhen(r ggui.Reader[bool]) *SliderWidget { s.InertWhen(r); return s }

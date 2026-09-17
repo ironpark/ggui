@@ -72,7 +72,7 @@ type Interactive struct {
 	Focused      bool
 	FocusVisible bool   // focus arrived by keyboard: draw the ring
 	Role         Role   // what the control is, for Probe.Find and the inspector
-	Name         string // what it is called: the text on it, or what a Label setter gave
+	Name         string // what it is called: the text on it, or what a Named setter gave
 
 	id        any // from Key
 	auto      any // from the keyed component it was constructed in
@@ -82,6 +82,18 @@ type Interactive struct {
 // SetName names the control for Probe.Find and the inspector when nothing
 // on it does; ui.Field uses it to hand its label to the input inside.
 func (s *Interactive) SetName(name string) { s.Name = name }
+
+// HasName reports whether the control has an explicit name.
+func (s *Interactive) HasName() bool { return s.Name != "" }
+
+// SetInert sets disabled state and replaces any InertWhen binding.
+func (s *Interactive) SetInert(v bool) {
+	if s.inertWhen != nil || s.Inert != v {
+		requestLayout()
+	}
+	s.inertWhen = nil
+	s.Inert = v
+}
 
 // AutoKey takes the identity the keyed component being built gives the
 // control, if any; a constructor calls it. Key overrides it.
@@ -96,7 +108,7 @@ func (s *Interactive) ConsumesKey(ev KeyEvent) bool { return Activates(ev) }
 
 // InertWhen makes the control follow r for Inert: a control reads it in
 // Layout and Paint through Sync, so nothing rebuilds when it changes.
-func (s *Interactive) InertWhen(r Reader[bool]) { s.inertWhen = r }
+func (s *Interactive) InertWhen(r Reader[bool]) { s.inertWhen = r; requestLayout() }
 
 // Sync refreshes Inert from InertWhen, if set. Call it at the start of
 // Layout and Paint.

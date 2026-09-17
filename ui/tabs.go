@@ -62,7 +62,7 @@ func (t *TabsWidget) Line() *TabsWidget { t.line = true; return t }
 
 // Disabled greys the strip out and ignores input while v is true; the
 // selected page stays.
-func (t *TabsWidget) Disabled(v bool) *TabsWidget { t.Inert = v; return t }
+func (t *TabsWidget) Disabled(v bool) *TabsWidget { t.SetInert(v); return t }
 
 // OnChange fires with the new index after the user picks a page.
 func (t *TabsWidget) OnChange(fn func(int)) *TabsWidget { t.onChange = fn; return t }
@@ -246,3 +246,6 @@ func (l tabLabel) Adopt(prev any) {
 		l.t.hover = l.i
 	}
 }
+
+// DisabledWhen follows r for Disabled without rebuilding the control.
+func (t *TabsWidget) DisabledWhen(r ggui.Reader[bool]) *TabsWidget { t.InertWhen(r); return t }

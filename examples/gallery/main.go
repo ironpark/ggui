@@ -315,7 +315,7 @@ func newGallery() (ggui.Builder, func(), func()) {
 					ui.Button("Cut", nil).Ghost(),
 					ui.Button("Paste", nil).Ghost(),
 				),
-				ui.InputGroup(ggui.TextInput(site).Placeholder("example.com").Label("Site")).
+				ui.InputGroup(ggui.TextInput(site).Placeholder("example.com").Named("Site")).
 					Leading(ggui.Text("https://").Color(t.MutedFg)).
 					Trailing(ui.Button("Go", nil).Ghost()),
 			).Space(1).Align(ggui.AlignStretch)),
@@ -348,7 +348,7 @@ func newGallery() (ggui.Builder, func(), func()) {
 						id := r.Get().ID
 						return ui.Button("×", func() { ggui.Remove(people, func(p Person) bool { return p.ID == id }) }).Outline().Pad(0, 8)
 					}).W(32),
-				).Selected(chosen).Label(func(p Person) string { return p.Name }).Height(160),
+				).Selected(chosen).RowName(func(p Person) string { return p.Name }).Height(160),
 				ggui.Textf("selected: %s. Click a row, or Tab to it and press Space; the body scrolls under the heading.", chosenName).AsCaption(),
 			).Space(1).Align(ggui.AlignStretch)),
 
@@ -368,12 +368,21 @@ func newGallery() (ggui.Builder, func(), func()) {
 	return build, setup, func() { paletteOpen.Set(true) }
 }
 
+func run() error {
+	var app *ggui.App
+	dispose := ggui.Root(func() {
+		build, setup, commands := newGallery()
+		app = ggui.New(ggui.Config{Title: "ggui · gallery", Width: 1180, Height: 820, Resizable: true, Inspector: ebiten.KeyF1}, build)
+		app.Setup(setup)
+		app.Shortcut("cmd+k", commands)
+	})
+	defer dispose()
+	defer app.Close()
+	return app.Run()
+}
+
 func main() {
-	build, setup, commands := newGallery()
-	app := ggui.New(ggui.Config{Title: "ggui · gallery", Width: 1180, Height: 820, Resizable: true, Inspector: ebiten.KeyF1}, build)
-	app.Setup(setup)
-	app.Shortcut("cmd+k", commands)
-	if err := app.Run(); err != nil {
+	if err := run(); err != nil {
 		log.Fatal(err)
 	}
 }

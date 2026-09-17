@@ -68,7 +68,7 @@ type SidebarWidget struct {
 //	).Header(ggui.Title("Acme")).Collapsed(narrow)
 func Sidebar(selected ggui.Binding[string], entries ...SidebarEntry) *SidebarWidget {
 	s := &SidebarWidget{selected: selected, entries: entries, width: 240, active: -1, hover: -1}
-	s.Role, s.Name = ggui.RoleTabs, "Sidebar"
+	s.Role = ggui.RoleTabs
 	s.AutoKey()
 	if s.HitID() == nil {
 		s.Key(s)
@@ -107,7 +107,7 @@ func (s *SidebarWidget) Footer(w ggui.Widget) *SidebarWidget { s.footer = w; ret
 func (s *SidebarWidget) Collapsed(r ggui.Reader[bool]) *SidebarWidget { s.collapsed = r; return s }
 
 // Disabled greys the column out and ignores input while v is true.
-func (s *SidebarWidget) Disabled(v bool) *SidebarWidget { s.Inert = v; return s }
+func (s *SidebarWidget) Disabled(v bool) *SidebarWidget { s.SetInert(v); return s }
 
 // OnChange fires with the key after the user went to another destination.
 func (s *SidebarWidget) OnChange(fn func(string)) *SidebarWidget { s.onChange = fn; return s }
@@ -338,3 +338,11 @@ func (it sidebarItem) Adopt(prev any) {
 		it.s.hover = it.i
 	}
 }
+
+// DisabledWhen follows r for Disabled without rebuilding the control.
+func (s *SidebarWidget) DisabledWhen(r ggui.Reader[bool]) *SidebarWidget { s.InertWhen(r); return s }
+
+func (s *SidebarWidget) name() string { return pick(s.Name != "", s.Name, "Sidebar") }
+
+// Semantics implements ggui.Semantic, including the built-in fallback name.
+func (s *SidebarWidget) Semantics() (ggui.Role, string) { return s.Role, s.name() }

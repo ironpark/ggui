@@ -30,7 +30,7 @@ var knobSlot = ggui.NewSlot[*ggui.Motion]("knobSlot")
 func (s *SwitchWidget) OnChange(fn func(bool)) *SwitchWidget { s.onChange = fn; return s }
 
 // Disabled greys the switch out and ignores the pointer while v is true.
-func (s *SwitchWidget) Disabled(v bool) *SwitchWidget { s.Inert = v; return s }
+func (s *SwitchWidget) Disabled(v bool) *SwitchWidget { s.SetInert(v); return s }
 
 // DisabledWhen follows r for Disabled without a rebuild.
 func (s *SwitchWidget) DisabledWhen(r ggui.Reader[bool]) *SwitchWidget { s.InertWhen(r); return s }

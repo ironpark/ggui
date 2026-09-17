@@ -378,22 +378,23 @@ func nextWord(s string, i int) int {
 // editor adds Up and Down, Home and End within the line, Enter for a line
 // break and ⌘/Ctrl+Enter for OnSubmit.
 type TextInputWidget struct {
-	value        Binding[string]
-	placeholder  string
-	label        string
-	style        TextStyle
-	password     bool
-	multiline    bool
-	minLines     int
-	minWidth     float64
-	onSubmit     func(string)
-	onCommit     func(string)
-	onChange     func(string)
-	onKey        func(KeyEvent) bool
-	escapeUsed   bool
-	disabled     bool
-	disabledWhen Reader[bool]
-	id           any
+	value             Binding[string]
+	placeholder       string
+	label             string
+	style             TextStyle
+	password          bool
+	multiline         bool
+	minLines          int
+	minWidth          float64
+	onSubmit          func(string)
+	onCommit          func(string)
+	onChange          func(string)
+	onKey             func(KeyEvent) bool
+	escapeUsed        bool
+	disabled          bool
+	inheritedDisabled bool
+	disabledWhen      Reader[bool]
+	id                any
 
 	ed      textEditor
 	focused bool
@@ -431,21 +432,37 @@ func TextInput(value Binding[string]) *TextInputWidget {
 }
 
 // DisabledWhen follows r for Disabled without a rebuild.
-func (t *TextInputWidget) DisabledWhen(r Reader[bool]) *TextInputWidget { t.disabledWhen = r; return t }
+func (t *TextInputWidget) DisabledWhen(r Reader[bool]) *TextInputWidget {
+	t.disabledWhen = r
+	requestLayout()
+	return t
+}
 
 // Disabled shows the text in the muted color and takes no input while v
 // is true.
-func (t *TextInputWidget) Disabled(v bool) *TextInputWidget { t.disabled = v; return t }
+func (t *TextInputWidget) Disabled(v bool) *TextInputWidget {
+	t.disabledWhen = nil
+	t.disabled = v
+	requestLayout()
+	return t
+}
 
 // Placeholder sets the muted text shown while the value is empty.
 func (t *TextInputWidget) Placeholder(s string) *TextInputWidget { t.placeholder = s; return t }
 
-// Label names the field for Probe.Find and the inspector; the placeholder
+// Named names the field for Probe.Find and the inspector; the placeholder
 // serves until one is set.
-func (t *TextInputWidget) Label(s string) *TextInputWidget { t.label = s; return t }
+func (t *TextInputWidget) Named(s string) *TextInputWidget { t.label = s; return t }
 
-// SetName is Label, for a container that names what it holds.
+// SetName is Named, for a container that names what it holds.
 func (t *TextInputWidget) SetName(name string) { t.label = name }
+
+// HasName reports whether an explicit name was supplied, excluding Placeholder.
+func (t *TextInputWidget) HasName() bool { return t.label != "" }
+
+// IsDisabled reports the effective state, including InputDisabled inherited at
+// the most recent Layout. It does not subscribe to the disabled binding.
+func (t *TextInputWidget) IsDisabled() bool { return t.disabled || t.inheritedDisabled }
 
 // Key gives the editor an identity, so a rebuilt one that also moved keeps
 // its caret and focus. Without one the keyed component it was built in
@@ -474,7 +491,7 @@ func (t *TextInputWidget) Describe() Node {
 		Role:     role,
 		Name:     name,
 		Value:    t.ed.text,
-		Disabled: t.disabled,
+		Disabled: t.IsDisabled(),
 		Actions:  ActionFocus | ActionSetValue | ActionSetSelection,
 		SelStart: lo,
 		SelEnd:   hi,
@@ -527,7 +544,7 @@ func (t *TextInputWidget) runs() []TextRun {
 // outright, which is what a dictation or a braille display does, and moves
 // the caret, which is what a screen reader does as it reads along.
 func (t *TextInputWidget) Act(a Action) bool {
-	if t.disabled {
+	if t.IsDisabled() {
 		return false
 	}
 	switch a.Kind {
@@ -660,6 +677,7 @@ func (t *TextInputWidget) linesHeight(n int) float64 {
 
 // Layout implements Widget.
 func (t *TextInputWidget) Layout(c Constraints, env Env) Size {
+	t.inheritedDisabled, _ = env.Get(InputDisabled)
 	if t.disabledWhen != nil {
 		t.disabled = t.disabledWhen.Get()
 	}
@@ -667,7 +685,7 @@ func (t *TextInputWidget) Layout(c Constraints, env Env) Size {
 	t.resolved.Size *= env.TextScale()
 	t.cache, _ = env.Get(cacheOwner)
 	th := env.Theme()
-	if t.disabled {
+	if t.IsDisabled() {
 		t.resolved.Color = th.MutedFg
 	}
 	t.muted, t.selection = th.MutedFg, th.Selection
@@ -690,7 +708,7 @@ func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
 	t.rect, t.scale = r, dst.Scale()
 	// A disabled editor takes no input but is still read out.
 	dst.Describe(r, t)
-	if !t.disabled {
+	if !t.IsDisabled() {
 		dst.HitPointer(r, t)
 		dst.HitKey(r, t)
 		dst.HitCursor(r, ebiten.CursorShapeText)
@@ -979,7 +997,7 @@ func (t *TextInputWidget) imeReplace(before, text, after string) {
 
 // HandleTick implements TickHandler: it runs the IME while focused.
 func (t *TextInputWidget) HandleTick() bool {
-	if !t.focused {
+	if !t.focused || t.IsDisabled() {
 		return false
 	}
 	handled, err := t.ime.Update()
@@ -991,6 +1009,9 @@ func (t *TextInputWidget) HandleTick() bool {
 
 // HandleKey implements KeyHandler.
 func (t *TextInputWidget) HandleKey(ev KeyEvent) {
+	if t.IsDisabled() && ev.Kind != KeyBlur {
+		return
+	}
 	switch ev.Kind {
 	case KeyFocus:
 		t.focused = true
@@ -1112,6 +1133,9 @@ func (t *TextInputWidget) key(k ebiten.Key, m Mods) {
 // HandlePointer implements PointerHandler: clicks place the caret, drags
 // and repeated clicks select.
 func (t *TextInputWidget) HandlePointer(ev PointerEvent) bool {
+	if t.IsDisabled() {
+		return false
+	}
 	switch ev.Kind {
 	case PointerDown:
 		if ev.Button != ebiten.MouseButtonLeft {

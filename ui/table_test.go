@@ -23,7 +23,7 @@ func table(rows ggui.Reader[[]person]) (*ui.TableWidget[person, int], *ggui.Sign
 	t := ui.Table(rows, func(p person) int { return p.ID },
 		ui.TextCol("Name", func(p person) string { return p.Name }),
 		ui.TextCol("Age", func(p person) string { return strconv.Itoa(p.Age) }).W(60).Right(),
-	).Selected(chosen).Label(func(p person) string { return p.Name })
+	).Selected(chosen).RowName(func(p person) string { return p.Name })
 	return t, chosen
 }
 

@@ -40,7 +40,7 @@ func TestActLeavesDisabledControlsAlone(t *testing.T) {
 func TestActStepsASlider(t *testing.T) {
 	value := ggui.State(5.0)
 	committed := 0.0
-	p := ggui.NewProbe(ui.Slider(value, 0, 10).Step(1).Label("Vol").OnCommit(func(v float64) { committed = v }), ggui.Sz(200, 40))
+	p := ggui.NewProbe(ui.Slider(value, 0, 10).Step(1).Named("Vol").OnCommit(func(v float64) { committed = v }), ggui.Sz(200, 40))
 	defer p.Close()
 	act(t, p, ggui.RoleSlider, "Vol", ggui.Action{Kind: ggui.ActionIncrement})
 	if value.Peek() != 6 || committed != 6 {
@@ -114,7 +114,7 @@ func TestActSelectsATabAndARow(t *testing.T) {
 
 func TestActSetsATextFieldOutright(t *testing.T) {
 	value := ggui.State("Ada")
-	p := ggui.NewProbe(ui.TextField(value).Label("Name"), ggui.Sz(200, 60))
+	p := ggui.NewProbe(ui.TextField(value).Named("Name"), ggui.Sz(200, 60))
 	defer p.Close()
 	act(t, p, ggui.RoleTextField, "Name", ggui.Action{Kind: ggui.ActionSetValue, Text: "Alan"})
 	if value.Peek() != "Alan" {

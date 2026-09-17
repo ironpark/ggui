@@ -36,6 +36,7 @@ func Combobox[T comparable](value ggui.Binding[T], options []T) *ComboboxWidget[
 		}
 	}).Outline()
 	c.button.Role = ggui.RoleCombobox
+	c.button.defaultName = "Choose option"
 	if c.button.HitID() == nil {
 		c.button.Key(c)
 	}
@@ -43,14 +44,14 @@ func Combobox[T comparable](value ggui.Binding[T], options []T) *ComboboxWidget[
 	for i, v := range options {
 		entries[i] = CommandItem(c.label(v), func() { setChanged(c.value, v, c.onChange); c.popup.Hide() })
 	}
-	c.search = Command(c.query, entries...).Label("Search options").Placeholder("Search options…")
+	c.search = Command(c.query, entries...).Named("Search options").Placeholder("Search options…")
 	c.popup = ggui.Popup(c.button, ggui.Box(c.search).Width(280)).Owner(c.button)
 	c.button.Expands(c.popup.IsOpen)
 	return c
 }
 
-// Label formats the options and selected value. Configure it before layout.
-func (c *ComboboxWidget[T]) Label(fn func(T) string) *ComboboxWidget[T] {
+// Format formats the options and selected value. Configure it before layout.
+func (c *ComboboxWidget[T]) Format(fn func(T) string) *ComboboxWidget[T] {
 	c.label = fn
 	for i, v := range c.options {
 		label := fn(v)
@@ -85,6 +86,10 @@ func (c *ComboboxWidget[T]) Popup() *ggui.PopupWidget { return c.popup }
 
 // Layout implements ggui.Widget.
 func (c *ComboboxWidget[T]) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
+	c.button.Sync()
+	if c.button.Inert {
+		c.popup.Hide()
+	}
 	label := c.placeholder
 	for _, v := range c.options {
 		if v == c.value.Peek() {
@@ -93,11 +98,23 @@ func (c *ComboboxWidget[T]) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 		}
 	}
 	c.button.label.Set(label + "  ▾")
-	if c.button.Name == "" {
-		c.button.Name = "Choose option"
-	}
 	return c.popup.Layout(cs, env)
 }
 
 // Paint implements ggui.Widget.
 func (c *ComboboxWidget[T]) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(c.popup, r) }
+
+// SetName names the trigger for Field.
+func (c *ComboboxWidget[T]) SetName(s string) { c.Named(s) }
+
+// HasName reports whether the trigger has an explicit name.
+func (c *ComboboxWidget[T]) HasName() bool { return c.button.HasName() }
+
+// Semantics reports the trigger's role and resolved name.
+func (c *ComboboxWidget[T]) Semantics() (ggui.Role, string) { return c.button.Semantics() }
+
+// DisabledWhen follows r and closes the popup while disabled.
+func (c *ComboboxWidget[T]) DisabledWhen(r ggui.Reader[bool]) *ComboboxWidget[T] {
+	c.button.DisabledWhen(r)
+	return c
+}

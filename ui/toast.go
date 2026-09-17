@@ -92,7 +92,7 @@ func (t *ToasterWidget) Push(message ToastMessage) ToastID {
 	e := &toastEntry{id: t.next, title: message.title, remaining: message.duration, persistent: message.duration <= 0, last: ggui.Now()}
 	e.motion.MoveTo(0, e.last, 0)
 	e.duration = message.duration
-	e.dismiss = Button("×", func() { t.Dismiss(e.id) }).Ghost().Pad(2, 8).Label("Dismiss " + message.title)
+	e.dismiss = Button("×", func() { t.Dismiss(e.id) }).Ghost().Pad(2, 8).Named("Dismiss " + message.title)
 	e.dismiss.Key(e)
 
 	if message.actionLabel != "" {

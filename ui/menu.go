@@ -38,8 +38,8 @@ func MenuOf(content ggui.Widget, entries ...ggui.Widget) *MenuWidget {
 	return m
 }
 
-// Label names a MenuOf for Probe.Find and the inspector.
-func (m *MenuWidget) Label(s string) *MenuWidget { m.button.Name = s; return m }
+// Named names a MenuOf for Probe.Find and the inspector.
+func (m *MenuWidget) Named(s string) *MenuWidget { m.button.Name = s; return m }
 
 // Disabled disables this menu's trigger and closes it.
 func (m *MenuWidget) Disabled(v bool) *MenuWidget {
@@ -111,6 +111,10 @@ func (m *MenuWidget) Act(a ggui.Action) bool {
 
 // Layout implements Widget.
 func (m *MenuWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	m.button.Sync()
+	if m.button.Inert {
+		m.popup.Hide()
+	}
 	t := env.Theme()
 	m.theme = t
 	m.chrome(t)
@@ -237,7 +241,7 @@ func (it *MenuItemWidget) Shortcut(s string) *MenuItemWidget {
 }
 
 // Disabled greys the item out and ignores it while v is true.
-func (it *MenuItemWidget) Disabled(v bool) *MenuItemWidget { it.Inert = v; return it }
+func (it *MenuItemWidget) Disabled(v bool) *MenuItemWidget { it.SetInert(v); return it }
 
 // DisabledWhen follows r for Disabled without a rebuild.
 func (it *MenuItemWidget) DisabledWhen(r ggui.Reader[bool]) *MenuItemWidget {
@@ -308,4 +312,16 @@ func (it *MenuItemWidget) HandlePointer(ev ggui.PointerEvent) bool {
 		it.onHover()
 	}
 	return it.Pointer(ev, it.run)
+}
+
+// SetName names the trigger for Field.
+func (m *MenuWidget) SetName(s string) { m.Named(s) }
+
+// HasName reports whether the trigger has an explicit name.
+func (m *MenuWidget) HasName() bool { return m.button.HasName() }
+
+// DisabledWhen follows r and closes the popup while disabled.
+func (m *MenuWidget) DisabledWhen(r ggui.Reader[bool]) *MenuWidget {
+	m.button.DisabledWhen(r)
+	return m
 }

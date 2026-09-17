@@ -43,7 +43,7 @@ type AccordionWidget struct {
 // others; Multiple permits independent sections. Clicking an open section closes it.
 func Accordion(open ggui.Binding[[]string], items ...AccordionSection) *AccordionWidget {
 	a := &AccordionWidget{open: open, items: append([]AccordionSection(nil), items...), active: -1}
-	a.Role, a.Name = ggui.RoleAccordion, "Accordion"
+	a.Role = ggui.RoleAccordion
 	a.AutoKey()
 	if a.HitID() == nil {
 		a.Key(a)
@@ -68,8 +68,8 @@ func Accordion(open ggui.Binding[[]string], items ...AccordionSection) *Accordio
 // Multiple allows more than one open section.
 func (a *AccordionWidget) Multiple() *AccordionWidget { a.multiple = true; return a }
 
-// Label names the group keyboard target.
-func (a *AccordionWidget) Label(s string) *AccordionWidget { a.Name = s; return a }
+// Named names the group keyboard target.
+func (a *AccordionWidget) Named(s string) *AccordionWidget { a.Name = s; return a }
 
 // OnChange reports a copy of the open keys after a user toggles a header.
 func (a *AccordionWidget) OnChange(fn func([]string)) *AccordionWidget { a.onChange = fn; return a }
@@ -249,3 +249,8 @@ func (h *accordionHeader) HandlePointer(ev ggui.PointerEvent) bool {
 	}
 	return h.Pointer(ev, func() { h.owner.toggle(h.index) })
 }
+
+func (a *AccordionWidget) name() string { return pick(a.Name != "", a.Name, "Accordion") }
+
+// Semantics implements ggui.Semantic, including the built-in fallback name.
+func (a *AccordionWidget) Semantics() (ggui.Role, string) { return a.Role, a.name() }

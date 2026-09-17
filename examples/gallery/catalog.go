@@ -100,14 +100,14 @@ func galleryPage(dark *ggui.Signal[bool], search, category *ggui.Signal[string],
 	counts["All"] = total
 	var filters []ggui.Widget
 	for _, label := range []string{"All", "Inputs", "Navigation", "Feedback", "Layout", "Data"} {
-		button := ui.Button(fmt.Sprintf("%s  %d", label, counts[label]), func() { category.Set(label); scroll.Set(0) }).Label(label)
+		button := ui.Button(fmt.Sprintf("%s  %d", label, counts[label]), func() { category.Set(label); scroll.Set(0) }).Named(label)
 		button.Key("category-" + label)
 		if label != selected {
 			button.Outline()
 		}
 		filters = append(filters, button)
 	}
-	field := ui.TextField(search).Label("Search components").Placeholder("Search components…").OnChange(func(string) { scroll.Set(0) })
+	field := ui.TextField(search).Named("Search components").Placeholder("Search components…").OnChange(func(string) { scroll.Set(0) })
 	field.Input().Key("gallery-search")
 	var content ggui.Widget = &previewGrid{children: cards}
 	if len(cards) == 0 {

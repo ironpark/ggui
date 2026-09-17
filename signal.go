@@ -191,6 +191,13 @@ type Binding[T any] interface {
 	Set(T)
 }
 
+// Writable is a binding with immediate read-modify-write semantics. Signals and
+// lenses implement it; animated bindings do not. Updates belong on the UI thread.
+type Writable[T any] interface {
+	Binding[T]
+	Update(func(T) T)
+}
+
 // Lens is a two-way view of part of a Signal's value. Build one with
 // Signal.Lens.
 type Lens[U any] struct {
@@ -222,6 +229,10 @@ func (l *Lens[U]) Peek() U { return l.peek() }
 
 // Set stores the part into the whole.
 func (l *Lens[U]) Set(v U) { l.set(v) }
+
+// Update applies fn to the current part and writes it through to the whole.
+// Like Signal.Update it belongs on the UI thread.
+func (l *Lens[U]) Update(fn func(U) U) { l.Set(fn(l.Peek())) }
 
 // GetAny returns the value as any and subscribes, for Sprintf.
 func (l *Lens[U]) GetAny() any { return l.Get() }
@@ -336,27 +347,28 @@ func (s *Signal[T]) Update(fn func(T) T) {
 }
 
 // Map returns a Memo holding fn applied to s's value, recomputed whenever s
-// changes. Create it once, next to the Signal: every call registers an effect,
-// so calling it inside a Builder would add one per rebuild.
+// changes. Its effect belongs to the current owner: a Builder disposes it
+// before rebuilding, so retaining that Memo outside the build leaves a frozen
+// value. Without an owner, call Dispose explicitly; App.Close does not own it.
 func (s *Signal[T]) Map[U any](fn func(T) U) *Memo[U] {
 	return Derived(func() U { return fn(s.Get()) })
 }
 
-// Toggle flips a boolean signal.
-func Toggle(s *Signal[bool]) { s.Update(func(b bool) bool { return !b }) }
+// Toggle flips a writable boolean.
+func Toggle(s Writable[bool]) { s.Update(func(b bool) bool { return !b }) }
 
-// Add adds d to a numeric signal.
-func Add[N Number](s *Signal[N], d N) { s.Update(func(n N) N { return n + d }) }
+// Add adds d to a writable number.
+func Add[N Number](s Writable[N], d N) { s.Update(func(n N) N { return n + d }) }
 
-// Append adds items to the end of a slice signal, in a new slice so the
+// Append adds items to a writable slice, in a new slice so the
 // change is noticed.
-func Append[T any](s *Signal[[]T], items ...T) {
+func Append[T any](s Writable[[]T], items ...T) {
 	s.Update(func(ts []T) []T { return append(ts[:len(ts):len(ts)], items...) })
 }
 
-// Remove drops every item of a slice signal that drop accepts, into a new
+// Remove drops every item of a writable slice that drop accepts, into a new
 // slice. Nothing is set, so nothing notifies, when no item matched.
-func Remove[T any](s *Signal[[]T], drop func(T) bool) {
+func Remove[T any](s Writable[[]T], drop func(T) bool) {
 	ts := s.Peek()
 	out := ts[:0:0]
 	for _, t := range ts {
@@ -377,8 +389,10 @@ type Memo[T any] struct {
 }
 
 // Derived creates a Memo computed by fn. fn runs once immediately, and again on
-// the frame after any signal it read changes. Like Signal.Map, create it once
-// rather than inside a Builder.
+// the frame after any signal it read changes. The current owner disposes it
+// before re-running or closing. A Memo retained outside that owner then keeps
+// its last value. Without an owner, call Dispose explicitly or create it in Root;
+// App.Close does not dispose computations created outside the app's owner.
 func Derived[T any](fn func() T) *Memo[T] {
 	var zero T
 	m := &Memo[T]{sig: State(zero)}

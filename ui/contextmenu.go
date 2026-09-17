@@ -21,7 +21,7 @@ type ContextMenuWidget struct {
 // MenuItem and MenuDivider, with the same arrow navigation as Menu.
 func ContextMenu(content ggui.Widget, entries ...ggui.Widget) *ContextMenuWidget {
 	c := &ContextMenuWidget{content: content, menu: Menu("", entries...)}
-	c.Role, c.Name = ggui.RoleMenu, "Context menu"
+	c.Role = ggui.RoleMenu
 	c.AutoKey()
 	c.menu.popup = ggui.Popup(content, c.menu.panel).Gap(0).Keys(c).Owner(c)
 	return c
@@ -32,7 +32,7 @@ func (c *ContextMenuWidget) Named(name string) *ContextMenuWidget { c.Name = nam
 
 // Disabled disables menu invocation while leaving the wrapped content usable.
 func (c *ContextMenuWidget) Disabled(v bool) *ContextMenuWidget {
-	c.Inert = v
+	c.SetInert(v)
 	if v {
 		c.menu.popup.Hide()
 	}
@@ -53,7 +53,7 @@ func (c *ContextMenuWidget) open(at ggui.Point) {
 
 // Describe exposes menu invocation to accessibility clients.
 func (c *ContextMenuWidget) Describe() ggui.Node {
-	return ggui.Node{Role: c.Role, Name: c.Name, Disabled: c.Inert,
+	return ggui.Node{Role: c.Role, Name: c.name(), Disabled: c.Inert,
 		Expanded: ggui.Expandable(c.Popup().IsOpen()),
 		Actions:  ggui.ActionFocus | ggui.ActionPress | ggui.ActionExpand | ggui.ActionCollapse}
 }
@@ -172,3 +172,14 @@ func (c *ContextMenuWidget) Adopt(prev any) {
 		}
 	}
 }
+
+// DisabledWhen follows r for Disabled without rebuilding the control.
+func (c *ContextMenuWidget) DisabledWhen(r ggui.Reader[bool]) *ContextMenuWidget {
+	c.InertWhen(r)
+	return c
+}
+
+func (c *ContextMenuWidget) name() string { return pick(c.Name != "", c.Name, "Context menu") }
+
+// Semantics implements ggui.Semantic, including the built-in fallback name.
+func (c *ContextMenuWidget) Semantics() (ggui.Role, string) { return c.Role, c.name() }

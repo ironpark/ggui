@@ -110,13 +110,13 @@ type ToggleGroupWidget[T comparable] struct {
 }
 
 // ToggleGroup creates one segment per option, bound to value and labelled
-// through fmt.Sprint until Label says otherwise.
+// through fmt.Sprint until Format says otherwise.
 //
 //	align := ggui.State("left")
 //	ui.ToggleGroup(align, []string{"left", "center", "right"})
 func ToggleGroup[T comparable](value ggui.Binding[T], options []T) *ToggleGroupWidget[T] {
 	g := &ToggleGroupWidget[T]{value: value, options: options, hover: -1}
-	g.Role, g.Name = ggui.RoleGroup, "Options"
+	g.Role = ggui.RoleGroup
 	g.AutoKey()
 	if g.HitID() == nil {
 		g.Key(g)
@@ -128,8 +128,8 @@ func ToggleGroup[T comparable](value ggui.Binding[T], options []T) *ToggleGroupW
 	return g
 }
 
-// Label sets how each option is shown and named.
-func (g *ToggleGroupWidget[T]) Label(fn func(T) string) *ToggleGroupWidget[T] {
+// Format sets how each option is shown and named.
+func (g *ToggleGroupWidget[T]) Format(fn func(T) string) *ToggleGroupWidget[T] {
 	for i, o := range g.options {
 		g.names[i] = fn(o)
 		g.labels[i].Set(g.names[i])
@@ -144,7 +144,7 @@ func (g *ToggleGroupWidget[T]) Named(s string) *ToggleGroupWidget[T] { g.Name = 
 func (g *ToggleGroupWidget[T]) Vertical() *ToggleGroupWidget[T] { g.vertical = true; return g }
 
 // Disabled greys every segment out and ignores input while v is true.
-func (g *ToggleGroupWidget[T]) Disabled(v bool) *ToggleGroupWidget[T] { g.Inert = v; return g }
+func (g *ToggleGroupWidget[T]) Disabled(v bool) *ToggleGroupWidget[T] { g.SetInert(v); return g }
 
 // DisabledWhen follows r for Disabled without a rebuild.
 func (g *ToggleGroupWidget[T]) DisabledWhen(r ggui.Reader[bool]) *ToggleGroupWidget[T] {
@@ -317,3 +317,8 @@ func (s toggleSegment[T]) Adopt(prev any) {
 		s.g.hover = s.i
 	}
 }
+
+func (g *ToggleGroupWidget[T]) name() string { return pick(g.Name != "", g.Name, "Options") }
+
+// Semantics implements ggui.Semantic, including the built-in fallback name.
+func (g *ToggleGroupWidget[T]) Semantics() (ggui.Role, string) { return g.Role, g.name() }

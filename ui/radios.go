@@ -5,6 +5,7 @@ import "github.com/ironpark/ggui"
 // RadiosWidget is a group of Radio options built from a list of values.
 // Build one with Radios.
 type RadiosWidget[T comparable] struct {
+	ggui.Interactive
 	radios []*RadioWidget[T]
 	row    *ggui.RowWidget
 	column *ggui.ColumnWidget // set by Vertical
@@ -13,11 +14,12 @@ type RadiosWidget[T comparable] struct {
 }
 
 // Radios creates one Radio per option, bound to selected and labelled
-// through fmt.Sprint until Label says otherwise, side by side with a theme
+// through fmt.Sprint until Format says otherwise, side by side with a theme
 // gap between them. It is the Select signature for a choice small enough to
 // show all at once.
 func Radios[T comparable](selected ggui.Binding[T], options []T) *RadiosWidget[T] {
 	g := &RadiosWidget[T]{}
+	g.Role = ggui.RoleGroup
 	for _, o := range options {
 		g.radios = append(g.radios, Radio(selected, o, sprint(o)))
 	}
@@ -25,8 +27,8 @@ func Radios[T comparable](selected ggui.Binding[T], options []T) *RadiosWidget[T
 	return g
 }
 
-// Label sets how each option is shown.
-func (g *RadiosWidget[T]) Label(fn func(T) string) *RadiosWidget[T] {
+// Format sets how each option is shown.
+func (g *RadiosWidget[T]) Format(fn func(T) string) *RadiosWidget[T] {
 	for _, r := range g.radios {
 		r.Name = fn(r.value)
 		r.label = ggui.Text(r.Name)
@@ -49,17 +51,13 @@ func (g *RadiosWidget[T]) Gap(v float64) *RadiosWidget[T] { g.gap, g.gapSet = v,
 
 // Disabled greys every option out and ignores input while v is true.
 func (g *RadiosWidget[T]) Disabled(v bool) *RadiosWidget[T] {
-	for _, r := range g.radios {
-		r.Disabled(v)
-	}
+	g.SetInert(v)
 	return g
 }
 
 // DisabledWhen follows r for Disabled without a rebuild.
 func (g *RadiosWidget[T]) DisabledWhen(r ggui.Reader[bool]) *RadiosWidget[T] {
-	for _, x := range g.radios {
-		x.DisabledWhen(r)
-	}
+	g.InertWhen(r)
 	return g
 }
 
@@ -73,6 +71,10 @@ func (g *RadiosWidget[T]) OnChange(fn func(T)) *RadiosWidget[T] {
 
 // Layout implements Widget.
 func (g *RadiosWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	g.Sync()
+	for _, r := range g.radios {
+		r.Disabled(g.Inert)
+	}
 	t := env.Theme()
 	if g.column != nil {
 		return g.column.Gap(pick(g.gapSet, g.gap, t.Space)).Layout(c, env)
@@ -83,7 +85,7 @@ func (g *RadiosWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 // Paint implements Widget. The options are one group, so a screen reader
 // says how many there are and which of them is chosen.
 func (g *RadiosWidget[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	dst.Node(r, ggui.Node{Role: ggui.RoleGroup, Min: 1, Max: float64(len(g.radios))}, func(dst *ggui.Canvas) {
+	dst.Node(r, ggui.Node{Role: ggui.RoleGroup, Name: g.Name, Disabled: g.Inert, Min: 1, Max: float64(len(g.radios))}, func(dst *ggui.Canvas) {
 		if g.column != nil {
 			dst.Paint(g.column, r)
 			return
@@ -91,3 +93,6 @@ func (g *RadiosWidget[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.Paint(g.row, r)
 	})
 }
+
+// Named sets the accessible name of the radio group, without renaming its options.
+func (g *RadiosWidget[T]) Named(s string) *RadiosWidget[T] { g.SetName(s); return g }

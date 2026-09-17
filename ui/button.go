@@ -43,17 +43,18 @@ func (v buttonVariant) resolve(t ggui.Theme) buttonStyle {
 // ButtonWidget is a clickable box with a label. Build one with Button.
 type ButtonWidget struct {
 	ggui.Interactive
-	label    *ggui.TextWidget
-	box      *ggui.BoxWidget
-	onTap    func()
-	variant  buttonVariant
-	style    buttonStyle
-	padded   bool
-	selected bool // current item for composite navigation controls
-	expands  func() bool
-	opener   ggui.Actor
-	value    func() string // optional accessible value for composite triggers
-	theme    ggui.Theme
+	label       *ggui.TextWidget
+	box         *ggui.BoxWidget
+	onTap       func()
+	defaultName string
+	variant     buttonVariant
+	style       buttonStyle
+	padded      bool
+	selected    bool // current item for composite navigation controls
+	expands     func() bool
+	opener      ggui.Actor
+	value       func() string // optional accessible value for composite triggers
+	theme       ggui.Theme
 }
 
 // Button creates a primary button: Accent background, OnAccent label.
@@ -66,7 +67,7 @@ func Button(label string, onTap func()) *ButtonWidget {
 }
 
 // ButtonOf creates a button around any content instead of a text label.
-// Give it a Label, since nothing on it says what it is.
+// Give it a name with Named, since nothing on it says what it is.
 func ButtonOf(child ggui.Widget, onTap func()) *ButtonWidget {
 	b := &ButtonWidget{onTap: onTap, box: ggui.Box(child)}
 	b.Role = ggui.RoleButton
@@ -74,9 +75,9 @@ func ButtonOf(child ggui.Widget, onTap func()) *ButtonWidget {
 	return b
 }
 
-// Label names the button for Probe.Find and the inspector; Button takes
+// Named names the button for Probe.Find and the inspector; Button takes
 // its text, ButtonOf needs one.
-func (b *ButtonWidget) Label(s string) *ButtonWidget { b.Name = s; return b }
+func (b *ButtonWidget) Named(s string) *ButtonWidget { b.Name = s; return b }
 
 // Expands makes the button report whether what it opens is showing, for a
 // menu button or a combobox trigger; a plain button does not expand at all,
@@ -106,7 +107,7 @@ func (b *ButtonWidget) Act(a ggui.Action) bool {
 func (b *ButtonWidget) Describe() ggui.Node {
 	n := ggui.Node{
 		Role:     b.Role,
-		Name:     b.Name,
+		Name:     b.name(),
 		Disabled: b.Inert,
 		Selected: b.selected,
 		Actions:  ggui.ActionPress | ggui.ActionFocus,
@@ -142,7 +143,7 @@ func (b *ButtonWidget) Ghost() *ButtonWidget { b.variant = variantGhost; return 
 func (b *ButtonWidget) Destructive() *ButtonWidget { b.variant = variantDestructive; return b }
 
 // Disabled greys the button out and ignores the pointer while v is true.
-func (b *ButtonWidget) Disabled(v bool) *ButtonWidget { b.Inert = v; return b }
+func (b *ButtonWidget) Disabled(v bool) *ButtonWidget { b.SetInert(v); return b }
 
 // DisabledWhen follows r for Disabled without a rebuild.
 func (b *ButtonWidget) DisabledWhen(r ggui.Reader[bool]) *ButtonWidget { b.InertWhen(r); return b }
@@ -201,3 +202,8 @@ func (b *ButtonWidget) HandleKey(ev ggui.KeyEvent) { b.Keyboard(ev, b.onTap) }
 
 // HandlePointer implements PointerHandler.
 func (b *ButtonWidget) HandlePointer(ev ggui.PointerEvent) bool { return b.Pointer(ev, b.onTap) }
+
+func (b *ButtonWidget) name() string { return pick(b.Name != "", b.Name, b.defaultName) }
+
+// Semantics implements ggui.Semantic, including a composite trigger's fallback.
+func (b *ButtonWidget) Semantics() (ggui.Role, string) { return b.Role, b.name() }
