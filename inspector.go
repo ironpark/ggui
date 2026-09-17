@@ -3,6 +3,8 @@ package ggui
 import (
 	"fmt"
 	"image/color"
+	"math"
+	"strconv"
 	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -226,7 +228,7 @@ func (in *inspector) paint(dst *Canvas) {
 		}
 		indent := min(float64(e.depth)*8, textW/2)
 		drawLine(dst, face, e.name, x+indent, ry, col)
-		dims := fmt.Sprintf("%g×%g", e.rect.Size.W, e.rect.Size.H)
+		dims := num(e.rect.Size.W) + "×" + num(e.rect.Size.H)
 		drawLine(dst, face, dims, in.panel.Origin.X+width-inspectPad-dst.dp(text.Advance(dims, face)), ry, pick[color.Color](i == sel, color.White, inspectDim))
 	}
 
@@ -251,7 +253,7 @@ func (in *inspector) details(dst *Canvas, sel int) []string {
 	e := &dst.trace[sel]
 	lines := []string{
 		e.name,
-		fmt.Sprintf(" %g×%g at %g,%g   depth %d", e.rect.Size.W, e.rect.Size.H, e.rect.Origin.X, e.rect.Origin.Y, e.depth),
+		fmt.Sprintf(" %s×%s at %s,%s   depth %d", num(e.rect.Size.W), num(e.rect.Size.H), num(e.rect.Origin.X), num(e.rect.Origin.Y), e.depth),
 	}
 	center := Pt(e.rect.Origin.X+e.rect.Size.W/2, e.rect.Origin.Y+e.rect.Size.H/2)
 	if chain := semanticChain(dst, center); len(chain) > 0 {
@@ -261,6 +263,13 @@ func (in *inspector) details(dst *Canvas, sel int) []string {
 		}
 	}
 	return lines
+}
+
+// num formats a length the way a ruler would. Layout arithmetic leaves
+// 35.516000000000005 behind and %g prints every digit of it, which buries
+// the number that was being read.
+func num(v float64) string {
+	return strconv.FormatFloat(math.Round(v*100)/100, 'f', -1, 64)
 }
 
 func rule(dst *Canvas, panel Rect, y float64) {
