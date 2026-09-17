@@ -99,7 +99,7 @@ func galleryPage(dark *ggui.Signal[bool], search, category *ggui.Signal[string],
 		button := ui.Button(fmt.Sprintf("%s  %d", label, counts[label]), func() { category.Set(label); scroll.Set(0) }).Label(label)
 		button.Key("category-" + label)
 		if label != selected {
-			button.Secondary()
+			button.Outline()
 		}
 		filters = append(filters, button)
 	}
@@ -112,7 +112,7 @@ func galleryPage(dark *ggui.Signal[bool], search, category *ggui.Signal[string],
 	header := ggui.Box(ggui.Column(
 		ggui.Row(ggui.Title("Component gallery").Size(28), ggui.Spacer(), ui.Switch(dark, "Dark mode")).Gap(16),
 		ggui.Caption("Explore the building blocks. Try an interaction, adjust the theme, make it yours."),
-		ggui.Row(ggui.Expanded(field), ui.Button("Commands", commands).Secondary()).Gap(12),
+		ggui.Row(ggui.Expanded(field), ui.Button("Commands", commands).Outline()).Gap(12),
 		ggui.Wrap(filters...).Gap(8),
 	).Gap(14).Align(ggui.AlignStretch)).Pad(24, 28).Fill(theme.Card)
 	footer := ggui.Padding(ggui.Row(

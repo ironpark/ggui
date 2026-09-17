@@ -104,7 +104,7 @@ func (t *ToasterWidget) Push(message ToastMessage) ToastID {
 			if message.action != nil {
 				message.action()
 			}
-		}).Secondary()
+		}).Outline()
 		e.action.Key(&e.action)
 
 	}

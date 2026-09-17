@@ -98,7 +98,7 @@ func main() {
 		return ggui.Row(
 			ui.Checkbox(td.Done, ""),
 			ggui.Expanded(ggui.When(td.Done, ggui.TextOf(td.Title).AsCaption(), ggui.TextOf(td.Title))),
-			ui.Button("×", func() { remove(td.ID) }).Secondary().Pad(2, 8),
+			ui.Button("×", func() { remove(td.ID) }).Outline().Pad(2, 8),
 		).Space(1)
 	}
 
@@ -128,7 +128,7 @@ func main() {
 				ggui.Spacer(),
 				ui.Radios(show, []filter{all, active, done}).Label(func(f filter) string { return filterNames[f] }),
 				ggui.Tooltip(
-					ui.Button("Clear done", func() { confirm.Set(true) }).Secondary().DisabledWhen(noneDone),
+					ui.Button("Clear done", func() { confirm.Set(true) }).Outline().DisabledWhen(noneDone),
 					"Removes every finished item (⌘/Ctrl+K)",
 				),
 			).Space(1),
@@ -138,7 +138,7 @@ func main() {
 				ggui.Textf("Remove %d finished item(s)?", counts.Map(func(c [2]int) int { return c[1] })),
 				ggui.Row(
 					ui.Button("Remove", clearDone),
-					ui.Button("Cancel", func() { confirm.Set(false) }).Secondary(),
+					ui.Button("Cancel", func() { confirm.Set(false) }).Outline(),
 				).Space(1).Justify(ggui.JustifyEnd),
 			).Space(1.5).Align(ggui.AlignStretch)).Title("Clear done"),
 		).Space(1.5)).Pad(24)).Size(480, 540))

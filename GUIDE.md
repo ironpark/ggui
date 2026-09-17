@@ -362,14 +362,14 @@ ggui.Column(
 	ui.Switch(dark, "Dark mode"),
 	ui.Slider(size, 0, 1).Step(0.1),
 	ui.Radios(plan, []string{"free", "pro"}).Label(strings.ToTitle),
-	ggui.Row(ui.Button("Save", save), ui.Button("Cancel", cancel).Secondary()).Gap(8),
+	ggui.Row(ui.Button("Save", save), ui.Button("Cancel", cancel).Outline()).Gap(8),
 	ui.Divider(),
 ).Gap(12)
 ```
 
 ### Buttons and shared options
 
-`ui.Button(label, onTap)` creates a primary button. Use `.Secondary()` for a
+`ui.Button(label, onTap)` creates a primary button. Use `.Outline()` for a
 secondary action or `ui.ButtonOf(child, onTap)` for custom content.
 `ui.Radio(plan, value, label)` creates one radio option; `ui.Radios` builds a group.
 
@@ -1016,7 +1016,7 @@ and ggui's existing APIs.
 
 | Element | Appearance and configuration |
 | --- | --- |
-| Buttons | Primary by default; `Secondary()` / `Outline()` keeps the established outlined appearance. `Muted()` adds a subdued fill, `Ghost()` removes the resting surface, and `Destructive()` uses the theme's `Destructive` color. Variants preserve pointer, keyboard and accessibility behavior. |
+| Buttons | Primary by default; `Outline()` draws a border around the background. `Muted()` adds a subdued fill, `Ghost()` removes the resting surface, and `Destructive()` uses the theme's `Destructive` color. Variants preserve pointer, keyboard and accessibility behavior. |
 | Focus | Controls use a separate, softer focus color. Text fields add an outer halo while editing. |
 | Tabs | A muted rounded strip with an animated raised selection; `.Line()` opts into the underline treatment. Reduced-motion settings still apply. |
 | Cards and floating panels | Cards receive a subtle shadow; menus, select lists, comboboxes and date pickers use a stronger shared panel shadow. Dialogs use a larger radius and deeper elevation. |

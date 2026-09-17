@@ -105,11 +105,11 @@ func newGallery() (ggui.Builder, func(), func()) {
 		}
 		entries := []ggui.Widget{
 			section("Buttons", ggui.Column(
-				ggui.Wrap(ui.Button("Save changes", func() { toasts.Push(ui.Toast("Saved", "Your changes are stored.")) }), ui.Button("Secondary", func() { toasts.Push(ui.Toast("Secondary action", "Outline buttons support quieter actions.")) }).Secondary(), ui.Button("Disabled", nil).Disabled(true)).Gap(8),
+				ggui.Wrap(ui.Button("Save changes", func() { toasts.Push(ui.Toast("Saved", "Your changes are stored.")) }), ui.Button("Outline", func() { toasts.Push(ui.Toast("Outline action", "Outline buttons support quieter actions.")) }).Outline(), ui.Button("Disabled", nil).Disabled(true)).Gap(8),
 				ggui.Wrap(ui.Button("Muted", nil).Muted(), ui.Button("Ghost", nil).Ghost(), ui.Button("Delete", func() {
 					toasts.Push(ui.Toast("Destructive action", "A red button makes the intent clear.").Destructive())
 				}).Destructive()).Gap(8),
-				ggui.Wrap(ui.Badge("Draft"), ui.Badge("Published").Accent(), ggui.Tooltip(ui.Button("Hover for help", nil).Secondary(), "Tooltips add context to an action.")).Gap(8),
+				ggui.Wrap(ui.Badge("Draft"), ui.Badge("Published").Accent(), ggui.Tooltip(ui.Button("Hover for help", nil).Outline(), "Tooltips add context to an action.")).Gap(8),
 			).Gap(16)),
 
 			section("Text", ggui.Column(
@@ -167,7 +167,7 @@ func newGallery() (ggui.Builder, func(), func()) {
 			section("Notices and empty states", ggui.Column(
 				ui.Alert("Changes saved", "Your settings are up to date."),
 				ui.Alert("Connection interrupted", "You can retry without losing your work.").Destructive().
-					Action(ui.Button("Retry", func() { progress.Set(0) }).Secondary()),
+					Action(ui.Button("Retry", func() { progress.Set(0) }).Outline()),
 				ui.Empty("No attachments", "Add a file to get started.").
 					Media(ui.Badge("Files")).Action(ui.Button("Add sample", func() { progress.Set(1) })),
 			).Space(1).Align(ggui.AlignStretch)),
@@ -190,7 +190,7 @@ func newGallery() (ggui.Builder, func(), func()) {
 
 			section("Search and commands", ggui.Wrap(
 				ui.Combobox(fruit, []string{"Apple", "Banana", "Cherry", "Durian", "Grape", "Mango", "Orange"}).Named("Search fruit"),
-				ui.Button("Commands…", func() { paletteOpen.Set(true) }).Secondary(),
+				ui.Button("Commands…", func() { paletteOpen.Set(true) }).Outline(),
 			).Space(1)),
 			ui.CommandDialog(paletteOpen, ui.Command(commandQuery,
 				ui.CommandItem("Toggle dark theme", func() { ggui.Toggle(dark); paletteOpen.Set(false) }).Keywords("appearance", "light").Group("Appearance"),
@@ -204,13 +204,13 @@ func newGallery() (ggui.Builder, func(), func()) {
 			).WithHandle().MinSizes(100, 140)).Height(200).Border(1, t.Border).Radius(t.Radius)),
 
 			section("Toast", ggui.Wrap(
-				ui.Button("Notify", func() { toasts.Push(ui.Toast("Saved", "Your changes are stored.")) }).Secondary(),
+				ui.Button("Notify", func() { toasts.Push(ui.Toast("Saved", "Your changes are stored.")) }).Outline(),
 				ui.Button("Notify with action", func() {
 					toasts.Push(ui.Toast("Item removed", "You can undo this change.").Action("Undo", func() { toasts.Push(ui.Toast("Restored", "The item is back.")) }))
-				}).Secondary(),
+				}).Outline(),
 				ui.Button("Persistent error", func() {
 					toasts.Push(ui.Toast("Upload failed", "Dismiss this message when you are ready.").Destructive().Duration(0))
-				}).Secondary(),
+				}).Outline(),
 			).Space(1)),
 			toasts,
 
@@ -219,8 +219,8 @@ func newGallery() (ggui.Builder, func(), func()) {
 					ggui.Row(ggui.Text("Status"), ui.Badge("stable"), ui.Badge("new").Accent()).Space(1),
 					ui.Progress(progress), // reads the signal every frame: no Reactive needed
 					ggui.Row(
-						ui.Button("+10%", func() { progress.Set(min(progress.Peek()+0.1, 1)) }).Secondary(),
-						ui.Button("Reset", func() { progress.Set(0) }).Secondary(),
+						ui.Button("+10%", func() { progress.Set(min(progress.Peek()+0.1, 1)) }).Outline(),
+						ui.Button("Reset", func() { progress.Set(0) }).Outline(),
 					).Space(1),
 				).Space(1).Align(ggui.AlignStretch)),
 				ui.Tab("Details", ggui.Column(
@@ -242,7 +242,7 @@ func newGallery() (ggui.Builder, func(), func()) {
 
 			section("Dialog", ggui.Column(
 				ggui.Row(
-					ui.Button("Reset form…", func() { confirm.Set(true) }).Secondary(),
+					ui.Button("Reset form…", func() { confirm.Set(true) }).Outline(),
 					ggui.Textf("reset %d times", cleared).AsCaption(),
 				).Space(1),
 				// Dialog takes no space where it sits; it paints over the
@@ -252,7 +252,7 @@ func newGallery() (ggui.Builder, func(), func()) {
 					ggui.Text("Clear the name, the email and the text size?"),
 					ggui.Row(
 						ui.Button("Reset", reset),
-						ui.Button("Cancel", func() { confirm.Set(false) }).Secondary(),
+						ui.Button("Cancel", func() { confirm.Set(false) }).Outline(),
 					).Space(1).Justify(ggui.JustifyEnd),
 				).Space(1.5).Align(ggui.AlignStretch)).Title("Reset?"),
 			).Space(1)),
@@ -260,7 +260,7 @@ func newGallery() (ggui.Builder, func(), func()) {
 			section("Wrap", ggui.View(tags, func(list []string) *ggui.WrapWidget {
 				return ggui.Wrap(ggui.Children(list, func(tag string) ggui.Widget {
 					return ggui.Tooltip(
-						ui.Button(tag+"  ×", func() { ggui.Remove(tags, func(s string) bool { return s == tag }) }).Secondary().Pad(4, 10),
+						ui.Button(tag+"  ×", func() { ggui.Remove(tags, func(s string) bool { return s == tag }) }).Outline().Pad(4, 10),
 						"Click to remove",
 					)
 				})...).Space(0.5)
@@ -273,7 +273,7 @@ func newGallery() (ggui.Builder, func(), func()) {
 					ui.TextCol("Age", func(p Person) string { return strconv.Itoa(p.Age) }).W(48).Right(),
 					ui.Col("", func(r ggui.Reader[Person]) ggui.Widget {
 						id := r.Get().ID
-						return ui.Button("×", func() { ggui.Remove(people, func(p Person) bool { return p.ID == id }) }).Secondary().Pad(0, 8)
+						return ui.Button("×", func() { ggui.Remove(people, func(p Person) bool { return p.ID == id }) }).Outline().Pad(0, 8)
 					}).W(32),
 				).Selected(chosen).Label(func(p Person) string { return p.Name }).Height(160),
 				ggui.Textf("selected: %s. Click a row, or Tab to it and press Space; the body scrolls under the heading.", chosenName).AsCaption(),

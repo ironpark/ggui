@@ -122,12 +122,9 @@ func (b *ButtonWidget) Describe() ggui.Node {
 	return n
 }
 
-// Secondary makes the button quiet: Surface background with a border and
+// Outline draws the button as a border around the window's background, with
 // the normal text color, for actions that are not the main one.
-func (b *ButtonWidget) Secondary() *ButtonWidget { b.variant = variantOutline; return b }
-
-// Outline is an alias for Secondary, preserving the established outline style.
-func (b *ButtonWidget) Outline() *ButtonWidget { return b.Secondary() }
+func (b *ButtonWidget) Outline() *ButtonWidget { b.variant = variantOutline; return b }
 
 // Muted uses a subdued filled surface for a supporting action.
 func (b *ButtonWidget) Muted() *ButtonWidget { b.variant = variantMuted; return b }

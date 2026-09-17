@@ -29,7 +29,7 @@ type DialogWidget struct {
 //	confirm := ggui.State(false)
 //	ui.Dialog(confirm, ggui.Column(
 //		ggui.Text("Delete the file?"),
-//		ggui.Row(ui.Button("Delete", del), ui.Button("Cancel", func() { confirm.Set(false) }).Secondary()),
+//		ggui.Row(ui.Button("Delete", del), ui.Button("Cancel", func() { confirm.Set(false) }).Outline()),
 //	)).Title("Confirm")
 func Dialog(open ggui.Binding[bool], content ggui.Widget) *DialogWidget {
 	d := &DialogWidget{open: open, content: content, width: 360}

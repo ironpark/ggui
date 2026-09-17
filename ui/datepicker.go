@@ -21,7 +21,7 @@ type DatePickerWidget struct {
 func DatePicker(value ggui.Binding[time.Time]) *DatePickerWidget {
 	d := &DatePickerWidget{value: value, placeholder: "Choose date", format: func(t time.Time) string { return t.Format("2006-01-02") }}
 	d.calendar = Calendar(value)
-	d.button = Button("", func() { d.popup.Toggle() }).Secondary().Label("Choose date")
+	d.button = Button("", func() { d.popup.Toggle() }).Outline().Label("Choose date")
 	d.button.value = func() string {
 		if v := d.value.Peek(); !v.IsZero() {
 			return d.format(d.calendar.date(v))

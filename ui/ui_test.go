@@ -169,7 +169,7 @@ func TestDividerFillsItsAxis(t *testing.T) {
 
 func TestControlsPaintOnNilCanvas(t *testing.T) {
 	widgets := []ggui.Widget{
-		ui.Button("b", nil), ui.Button("b", nil).Secondary(), ui.ButtonOf(ggui.Box().Size(4, 4), nil),
+		ui.Button("b", nil), ui.Button("b", nil).Outline(), ui.ButtonOf(ggui.Box().Size(4, 4), nil),
 		ui.Checkbox(ggui.State(true), "c"), ui.Radio(ggui.State(1), 1, "r"), ui.Switch(ggui.State(true), "s"),
 		ui.Slider(ggui.State(0.5), 0, 1), ui.TextField(ggui.State("x")), ui.Divider(),
 		ui.Dialog(ggui.State(true), ggui.Text("d")).Title("t"),
@@ -500,7 +500,7 @@ func TestDialogKeyboardFlow(t *testing.T) {
 		ui.Button("Other", nil),
 		ui.Dialog(open, ggui.Row(
 			ui.Button("Delete", func() { deleted = true; open.Set(false) }),
-			ui.Button("Cancel", func() { open.Set(false) }).Secondary(),
+			ui.Button("Cancel", func() { open.Set(false) }).Outline(),
 		)).Title("Confirm"),
 	)
 	p := ggui.NewProbe(tree, ggui.Sz(400, 300))

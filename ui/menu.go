@@ -23,7 +23,7 @@ type MenuWidget struct {
 // items, Enter runs one and Escape closes it.
 func Menu(label string, entries ...ggui.Widget) *MenuWidget {
 	m := &MenuWidget{current: -1}
-	m.button = Button(label, m.toggle).Secondary()
+	m.button = Button(label, m.toggle).Outline()
 	m.button.Role = ggui.RoleMenu
 	m.init(entries)
 	return m
@@ -32,7 +32,7 @@ func Menu(label string, entries ...ggui.Widget) *MenuWidget {
 // MenuOf is Menu with any content as the button's face.
 func MenuOf(content ggui.Widget, entries ...ggui.Widget) *MenuWidget {
 	m := &MenuWidget{current: -1}
-	m.button = ButtonOf(content, m.toggle).Secondary()
+	m.button = ButtonOf(content, m.toggle).Outline()
 	m.button.Role = ggui.RoleMenu
 	m.init(entries)
 	return m

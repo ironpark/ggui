@@ -34,7 +34,7 @@ func Combobox[T comparable](value ggui.Binding[T], options []T) *ComboboxWidget[
 			}
 			c.popup.Show()
 		}
-	}).Secondary()
+	}).Outline()
 	c.button.Role = ggui.RoleCombobox
 	if c.button.HitID() == nil {
 		c.button.Key(c)
