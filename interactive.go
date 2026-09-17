@@ -32,6 +32,7 @@ const (
 	RoleTabs       Role = "tabs"
 	RoleDisclosure Role = "disclosure"
 	RoleDialog     Role = "dialog"
+	RoleRow        Role = "row"
 )
 
 // Semantic is a handler that reports a role and a label for its region;

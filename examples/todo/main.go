@@ -1,6 +1,7 @@
 // Command todo is a small but complete ggui app: a text field with IME
-// input, a keyed list that keeps each row's widgets across edits, controls
-// bound to signals, a tweened progress bar and a theme switch.
+// input under a labelled Field, a keyed list that keeps each row's widgets
+// across edits and animates rows in and out, controls bound to signals, a
+// tweened progress bar, a confirm Dialog and a theme switch.
 package main
 
 import (
@@ -29,28 +30,20 @@ const (
 	done
 )
 
-func main() {
+var filterNames = [...]string{"All", "Active", "Done"}
 
+const maxTitle = 60
+
+func main() {
 	todos := ggui.State([]*Todo{})
 	draft := ggui.State("")
 	show := ggui.State(all)
 	dark := ggui.State(false)
+	confirm := ggui.State(false)
 	nextID := 1
 
-	add := func(string) {
-		title := strings.TrimSpace(draft.Peek())
-		if title == "" {
-			return
-		}
-		t := &Todo{ID: nextID, Title: ggui.State(title), Done: ggui.State(false)}
-		nextID++
-		ggui.Append(todos, t)
-		draft.Set("")
-	}
-	remove := func(id int) { ggui.Remove(todos, func(t *Todo) bool { return t.ID == id }) }
-	clearDone := func() { ggui.Remove(todos, func(t *Todo) bool { return t.Done.Peek() }) }
-
-	// Derived views. visible follows the list, the filter and every Done flag.
+	// Derived views. visible follows the list, the filter and every Done
+	// flag; the others are cheap reductions over the list.
 	visible := ggui.Derived(func() []*Todo {
 		f := show.Get()
 		var out []*Todo
@@ -71,8 +64,35 @@ func main() {
 		}
 		return [2]int{n, d}
 	})
+	left := counts.Map(func(c [2]int) int { return c[0] - c[1] })
+	anyDone := counts.Map(func(c [2]int) bool { return c[1] > 0 })
+	noneDone := counts.Map(func(c [2]int) bool { return c[1] == 0 })
+	draftError := draft.Map(func(s string) string {
+		if len([]rune(s)) > maxTitle {
+			return "Keep it short: at most 60 characters"
+		}
+		return ""
+	})
 	progress := ggui.Tween(0.0, 300*time.Millisecond)
 
+	add := func() {
+		title := strings.TrimSpace(draft.Peek())
+		if title == "" || draftError.Peek() != "" {
+			return
+		}
+		t := &Todo{ID: nextID, Title: ggui.State(title), Done: ggui.State(false)}
+		nextID++
+		ggui.Append(todos, t)
+		draft.Set("")
+	}
+	remove := func(id int) { ggui.Remove(todos, func(t *Todo) bool { return t.ID == id }) }
+	clearDone := func() {
+		ggui.Remove(todos, func(t *Todo) bool { return t.Done.Peek() })
+		confirm.Set(false)
+	}
+
+	// row builds one keyed row once; the checkbox and text follow the
+	// row's own signals afterwards without a rebuild.
 	row := func(item ggui.Reader[*Todo]) ggui.Widget {
 		td := item.Get()
 		return ggui.Row(
@@ -81,8 +101,6 @@ func main() {
 			ui.Button("×", func() { remove(td.ID) }).Secondary().Pad(2, 8),
 		).Space(1)
 	}
-
-	left := counts.Map(func(c [2]int) int { return c[0] - c[1] })
 
 	// The root Builder reads nothing reactive: theme comes from the Env at
 	// layout, and the parts that change are islands.
@@ -93,22 +111,43 @@ func main() {
 				ggui.Spacer(),
 				ui.Switch(dark, "Dark"),
 			),
-			ggui.Row(
-				ggui.Expanded(ui.TextField(draft).Placeholder("What needs doing?").OnSubmit(add)),
-				ui.Button("Add", func() { add("") }),
-			).Space(1),
+			ui.Field("New item", ggui.Row(
+				ggui.Expanded(ui.TextField(draft).Placeholder("What needs doing?").OnSubmit(func(string) { add() })),
+				ui.Button("Add", add),
+			).Space(1)).Help("Enter adds it").Error(draftError),
 			ui.Progress(progress).Height(4),
 			ggui.Expanded(ggui.Scroll(
-				ggui.For(visible, func(td *Todo) int { return td.ID }, row).Space(0.5).ItemExtent(28),
+				ggui.For(visible, func(td *Todo) int { return td.ID }, row).Space(0.5).
+					Transition(func(w ggui.Widget) *ggui.TransitionWidget {
+						return ggui.Transition(w).Fade().Slide(-16, 0)
+					}),
 			)),
 			ui.Divider(),
 			ggui.Row(
 				ggui.Textf("%d left", left).AsCaption().NoWrap(),
 				ggui.Spacer(),
-				ui.Radios(show, []filter{all, active, done}).Label(func(f filter) string { return [...]string{"All", "Active", "Done"}[f] }),
-				ggui.Tooltip(ui.Button("Clear done", clearDone).Secondary(), "Removes every finished item"),
+				ui.Radios(show, []filter{all, active, done}).Label(func(f filter) string { return filterNames[f] }),
+				ggui.Tooltip(
+					ui.Button("Clear done", func() { confirm.Set(true) }).Secondary().DisabledWhen(noneDone),
+					"Removes every finished item (⌘/Ctrl+K)",
+				),
 			).Space(1),
+			// The dialog takes no space here; it paints over the window
+			// while confirm is true, and Escape or the scrim closes it.
+			ui.Dialog(confirm, ggui.Column(
+				ggui.Textf("Remove %d finished item(s)?", counts.Map(func(c [2]int) int { return c[1] })),
+				ggui.Row(
+					ui.Button("Remove", clearDone),
+					ui.Button("Cancel", func() { confirm.Set(false) }).Secondary(),
+				).Space(1).Justify(ggui.JustifyEnd),
+			).Space(1.5).Align(ggui.AlignStretch)).Title("Clear done"),
 		).Space(1.5)).Pad(24)).Size(480, 540))
+	})
+
+	app.Shortcut("cmd+k", func() {
+		if anyDone.Peek() {
+			confirm.Set(true)
+		}
 	})
 
 	// Watchers run under the app's root owner through Setup, so Close

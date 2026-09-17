@@ -386,6 +386,12 @@ func Derived[T any](fn func() T) *Memo[T] {
 	return m
 }
 
+// Map derives a value from any reactive source; Signal.Map and Memo.Map are
+// the same for a source whose type is known.
+func Map[T, U any](r Reader[T], fn func(T) U) *Memo[U] {
+	return Derived(func() U { return fn(r.Get()) })
+}
+
 // Combine derives a value from two reactive sources.
 func Combine[A, B, C any](a Reader[A], b Reader[B], fn func(A, B) C) *Memo[C] {
 	return Derived(func() C { return fn(a.Get(), b.Get()) })

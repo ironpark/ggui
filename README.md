@@ -35,10 +35,12 @@ app.OnKey(func(ev ggui.KeyEvent) bool {
 app.Run()
 ```
 
-Run it: `make run` (or `go run ./examples/counter`). `make run-todo` runs a
-fuller app: a text field with IME input, a keyed list, controls bound to
-signals, a tweened progress bar and a theme switch. `make run-gallery` shows
-every layout widget and control on one page.
+Run it: `make run` (or `go run ./examples/counter`); its `main_test.go`
+drives the same UI headlessly with a `Probe`. `make run-todo` runs a fuller
+app: a labelled text field with IME input and validation, a keyed list with
+row transitions, controls bound to signals, a tweened progress bar, a
+confirm dialog and a theme switch. `make run-gallery` shows every layout
+widget and control on one page.
 
 ## Concepts
 
@@ -329,6 +331,22 @@ read from a `Reader[float64]` every frame. `ui.Dialog(open, content)` is
 a modal panel over a scrim, shown while the bound signal is true; see
 Input for how it holds focus.
 
+**Table.** `ui.Table(rows, key, cols...)` is a keyed list of rows under a
+heading row: `ui.TextCol(title, func(T) string)` is a text column that
+follows its item, `ui.Col(title, func(Reader[T]) Widget)` holds any
+widget, and `.W(px)`, `.Grow(flex)` and `.Right()` size and align a
+column. `.Selected(binding)` highlights the row whose key the binding
+holds and sets it on a click or Space, `.OnSelect(fn)` gets the item,
+`.Height(h)` scrolls the body under a fixed heading and lays out only the
+rows in view, and `.Label(fn)` names rows for `Probe.Find`.
+
+```go
+ui.Table(people, func(p Person) int { return p.ID },
+	ui.TextCol("Name", func(p Person) string { return p.Name }),
+	ui.TextCol("Age", func(p Person) string { return strconv.Itoa(p.Age) }).W(60).Right(),
+).Selected(chosen).Height(240)
+```
+
 **Select and Menu.** `ui.Select(value, options)` is a dropdown bound to a
 signal, labelled through `fmt.Sprint` or `.Label(fn)`: a click
 or Space opens the list in a `Popup`, the arrow keys move through it (or
@@ -597,7 +615,7 @@ why something sits where it does.
 │                 composition keeps its first jamo after a commit; aliases upstream elsewhere
 ├── ui/           One file per control: Button, Checkbox, Radio, Switch,
 │                 Slider, TextField, Select, Menu, Tabs, Collapsible,
-│                 Dialog, Card, Badge, Progress, Divider
+│                 Dialog, Table, Card, Badge, Progress, Divider
 └── examples/     Runnable apps: counter, todo, gallery
 ```
 
