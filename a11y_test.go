@@ -52,7 +52,7 @@ func axRoots(nodes ...SemNode) *SemTree {
 
 func axNode(role Role, name string, id any, r Rect) SemNode {
 	return SemNode{
-		Node: Node{Role: role, Name: name},
+		Role: role, Name: name,
 		ID:   NodeID{ID: id, Rect: r, Role: role},
 		Rect: r,
 		Full: r,
@@ -276,9 +276,9 @@ func TestAXHitTestFindsTheDeepestNode(t *testing.T) {
 func axHitTree() *SemTree {
 	t := &SemTree{focused: -1}
 	t.nodes = []SemNode{
-		{Node: Node{Role: RoleGroup}, Full: Rct(Pt(0, 0), Sz(100, 100)), Parent: -1, Children: []int{1, 2}},
-		{Node: Node{Role: RoleButton}, Full: Rct(Pt(10, 10), Sz(50, 50)), Parent: 0},
-		{Node: Node{Role: RoleButton, Offscreen: true}, Full: Rct(Pt(10, 110), Sz(50, 50)), Parent: 0},
+		{Role: RoleGroup, Full: Rct(Pt(0, 0), Sz(100, 100)), Parent: -1, Children: []int{1, 2}},
+		{Role: RoleButton, Full: Rct(Pt(10, 10), Sz(50, 50)), Parent: 0},
+		{Role: RoleButton, Offscreen: true, Full: Rct(Pt(10, 110), Sz(50, 50)), Parent: 0},
 	}
 	t.roots = []int{0}
 	return t

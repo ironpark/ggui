@@ -36,6 +36,11 @@ func Tri(v bool) Tristate {
 // Expandable returns a pointer to v, for Node.Expanded: a nil Expanded
 // means the node does not expand at all, which is not the same as being
 // expandable and closed.
+//
+// go fix offers to inline this into new(v) at every call site. Decline it:
+// the name is the point. A bare new(open) beside Role and Name says nothing
+// about the three states Expanded has, and this is the only place the
+// difference between "closed" and "does not expand" is written down.
 func Expandable(v bool) *bool { return &v }
 
 // ActionSet is the set of actions a node accepts, as a bitset. A node

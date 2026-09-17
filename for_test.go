@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"maps"
 	"testing"
 	"time"
 )
@@ -271,9 +272,7 @@ func TestForPaintGroupsFollowRows(t *testing.T) {
 			p.Advance(0)
 			p.Advance(time.Second)
 			original := map[int]*forEntry[int]{}
-			for k, e := range list.entries {
-				original[k] = e
-			}
+			maps.Copy(original, list.entries)
 			check := func(want ...int) {
 				t.Helper()
 				painted = nil

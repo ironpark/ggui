@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -289,8 +290,8 @@ func drawLine(dst *Canvas, face text.Face, s string, x, y float64, col color.Col
 // that a tab is inside a strip or an option inside its combobox.
 func semanticChain(dst *Canvas, p Point) []string {
 	found := -1
-	for i := len(dst.sem) - 1; i >= 0; i-- {
-		if !dst.sem[i].node.Offscreen && dst.sem[i].rect.Contains(p) {
+	for i, v := range slices.Backward(dst.sem) {
+		if !v.node.Offscreen && v.rect.Contains(p) {
 			found = i
 			break
 		}
@@ -303,8 +304,8 @@ func semanticChain(dst *Canvas, p Point) []string {
 		chain = append(chain, i)
 	}
 	lines := make([]string, 0, len(chain))
-	for i := len(chain) - 1; i >= 0; i-- {
-		e := &dst.sem[chain[i]]
+	for i, c := range slices.Backward(chain) {
+		e := &dst.sem[c]
 		n := SemNode{Node: e.node}
 		lines = append(lines, fmt.Sprintf("%s%s %q%s",
 			strings.Repeat("  ", len(chain)-1-i), e.node.Role, e.node.Name, n.flags()))

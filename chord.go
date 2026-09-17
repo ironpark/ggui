@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"errors"
+	"maps"
 	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -124,14 +125,12 @@ func keyNames() map[string]ebiten.Key {
 			keyTable[strings.ToLower(name)] = k
 		}
 	}
-	for alias, k := range map[string]ebiten.Key{
+	maps.Copy(keyTable, map[string]ebiten.Key{
 		"esc": ebiten.KeyEscape, "return": ebiten.KeyEnter, "up": ebiten.KeyArrowUp,
 		"down": ebiten.KeyArrowDown, "left": ebiten.KeyArrowLeft, "right": ebiten.KeyArrowRight,
 		"plus": ebiten.KeyEqual, "minus": ebiten.KeyMinus, "del": ebiten.KeyDelete,
 		"pgup": ebiten.KeyPageUp, "pgdn": ebiten.KeyPageDown, "bksp": ebiten.KeyBackspace,
-	} {
-		keyTable[alias] = k
-	}
+	})
 	return keyTable
 }
 

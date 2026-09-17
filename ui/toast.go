@@ -190,8 +190,7 @@ func (t *ToasterWidget) paintNotices(dst *ggui.Canvas) {
 	}
 	width := min(360.0, max(0, screen.W-margin*2))
 	bottom := screen.H - margin
-	for i := len(t.entries) - 1; i >= 0; i-- {
-		e := t.entries[i]
+	for _, e := range slices.Backward(t.entries) {
 		if bottom <= margin {
 			break
 		}

@@ -32,7 +32,7 @@ func TestAXEmptyEditorValue(t *testing.T) {
 		{"populated editor", RoleTextField, "hello", false},
 		{"button without value", RoleButton, "", true},
 	} {
-		tree := axRoots(SemNode{Node: Node{Role: tc.role, Value: tc.value, Actions: ActionSetValue}})
+		tree := axRoots(SemNode{Role: tc.role, Value: tc.value, Actions: ActionSetValue})
 		b.cur.Store(newAXFrame(tree))
 		e := objc.ID(b.element(axKeyOf(tree.At(0).ID)))
 		value := e.Send(objc.RegisterName("accessibilityValue"))

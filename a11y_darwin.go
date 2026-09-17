@@ -200,7 +200,7 @@ func axAppWindow() objc.ID {
 	}
 	windows := axIDNSApplication.Send(axSelSharedApplication).Send(axSelWindows)
 	count := objc.Send[uint](windows, axSelCount)
-	for i := uint(0); i < count; i++ {
+	for i := range count {
 		window := windows.Send(axSelObjectAtIndex, i)
 		content := window.Send(axSelContentView)
 		if content != 0 && objc.Send[bool](content, axSelIsKindOfClass, contentClass) {

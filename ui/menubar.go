@@ -139,10 +139,9 @@ func (b *MenubarWidget) HandleKey(e ggui.KeyEvent) {
 		if b.popup.IsOpen() {
 			b.menus[b.active].jump(pick(e.Key == ebiten.KeyHome, 1, -1))
 		} else {
-			b.active = stepIndex(-1, pick(e.Key == ebiten.KeyHome, 1, -1), len(b.menus), func(i int) bool { return !b.menus[i].button.Inert })
-			if b.active < 0 {
-				b.active = 0
-			}
+			dir := pick(e.Key == ebiten.KeyHome, 1, -1)
+			enabled := func(i int) bool { return !b.menus[i].button.Inert }
+			b.active = max(stepIndex(-1, dir, len(b.menus), enabled), 0)
 		}
 	default:
 		if ggui.Activates(e) {
