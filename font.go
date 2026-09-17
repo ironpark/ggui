@@ -12,7 +12,8 @@ import (
 
 // Font is a loaded TrueType or OpenType face, usable at any size.
 type Font struct {
-	src *text.GoTextFaceSource
+	src   *text.GoTextFaceSource
+	faces map[float64]text.Face // one face per size, reused across frames
 }
 
 // LoadFont parses TTF or OTF bytes.
@@ -45,21 +46,35 @@ func MustFont(data []byte) *Font {
 // DefaultTextSize is the size Text uses until Size is set.
 const DefaultTextSize = 14
 
-var defaultFont = MustFont(goregular.TTF)
+var defaultFont *Font
 
 // SetDefaultFont replaces the font Text uses when none is set. The built-in
 // default is Go Regular, which covers Latin, Greek and Cyrillic; load a font
 // with the glyphs you need for anything else.
 func SetDefaultFont(f *Font) { defaultFont = f }
 
-func (f *Font) face(size float64) text.Face {
-	return &text.GoTextFace{Source: f.src, Size: size}
+// fallbackFont returns the font Text uses when none is set, parsing the
+// built-in one on first use so a program that draws no text never pays for it.
+func fallbackFont() *Font {
+	if defaultFont == nil {
+		defaultFont = MustFont(goregular.TTF)
+	}
+	return defaultFont
 }
 
-func lineWidth(s string, face text.Face) float64 {
-	w, _ := text.Measure(s, face, 0)
-	return w
+func (f *Font) face(size float64) text.Face {
+	if face, ok := f.faces[size]; ok {
+		return face
+	}
+	face := &text.GoTextFace{Source: f.src, Size: size}
+	if f.faces == nil {
+		f.faces = make(map[float64]text.Face)
+	}
+	f.faces[size] = face
+	return face
 }
+
+func lineWidth(s string, face text.Face) float64 { return text.Advance(s, face) }
 
 // wrapText breaks s into lines no wider than maxW. Hard line breaks are kept;
 // soft breaks fall on spaces, or between runes when a single word is wider

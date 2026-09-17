@@ -9,10 +9,9 @@ import (
 // paintFrame lays out and paints w into a fresh region list, the way App
 // does once per frame, and points in at it.
 func paintFrame(in *inputState, w Widget, size Size) {
-	var hits []hitRegion
-	c := &Canvas{hits: &hits}
-	w.Paint(c, Rct(Pt(0, 0), w.Layout(Tight(size))))
-	in.regions = hits
+	var c Canvas
+	w.Paint(&c, Rct(Pt(0, 0), w.Layout(Tight(size))))
+	in.regions = c.hits
 }
 
 func TestTapFiresOnDownAndUpInside(t *testing.T) {
@@ -140,14 +139,4 @@ func TestFocusLostWhenRegionDisappears(t *testing.T) {
 	if !blurred || in.focused != nil {
 		t.Fatalf("blurred = %v, focused = %v; want blur and no focus", blurred, in.focused)
 	}
-}
-
-func TestHitRequiresAHandler(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Fatal("Hit with a plain value did not panic")
-		}
-	}()
-	var hits []hitRegion
-	(&Canvas{hits: &hits}).Hit(Rect{}, 42)
 }

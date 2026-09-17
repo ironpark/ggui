@@ -43,15 +43,14 @@ type App struct {
 
 	root  Widget
 	frame []func()
-	dirty bool
 
-	hits  []hitRegion
-	input inputState
+	canvas Canvas
+	input  inputState
 }
 
 // New creates an App that renders the tree returned by build.
 func New(cfg Config, build Builder) *App {
-	return &App{cfg: cfg.withDefaults(), build: build, dirty: true}
+	return &App{cfg: cfg.withDefaults(), build: build}
 }
 
 // Run opens the window and blocks until it closes.
@@ -67,11 +66,8 @@ func (a *App) Run() error {
 		ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	}
 	// The tree is rebuilt through an Effect, so every signal read during build
-	// marks the App dirty when it changes.
-	Effect(func() {
-		a.root = a.build()
-		a.dirty = true
-	})
+	// rebuilds the tree when it changes.
+	Effect(func() { a.root = a.build() })
 	return ebiten.RunGame(a)
 }
 
@@ -118,13 +114,11 @@ func (a *App) Draw(screen *ebiten.Image) {
 	if a.root == nil {
 		return
 	}
-	a.hits = a.hits[:0]
-	canvas := &Canvas{Image: screen, hits: &a.hits}
+	a.canvas.Image, a.canvas.hits = screen, a.canvas.hits[:0]
 	b := screen.Bounds()
 	size := a.root.Layout(Tight(Sz(b.Dx(), b.Dy())))
-	a.root.Paint(canvas, Rect{Size: size})
-	a.input.regions = a.hits
-	a.dirty = false
+	a.root.Paint(&a.canvas, Rect{Size: size})
+	a.input.regions = a.canvas.hits
 }
 
 // Layout implements ebiten.Game.

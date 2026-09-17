@@ -4,12 +4,13 @@ import "github.com/hajimehoshi/ebiten/v2"
 
 // Canvas is what a Widget paints into: the target image plus the frame's list
 // of interactive regions. Widgets that react to input register the Rect they
-// painted with Hit; the runtime dispatches the next frame's events to those
-// regions, topmost (last painted) first.
+// painted with HitPointer or HitKey; the runtime dispatches the next frame's
+// events to those regions, topmost (last painted) first. A nil Canvas paints
+// nothing and collects nothing, which is what layout tests want.
 type Canvas struct {
 	Image *ebiten.Image
 
-	hits *[]hitRegion // nil outside the runtime, e.g. in tests
+	hits []hitRegion
 }
 
 type hitRegion struct {
@@ -18,18 +19,18 @@ type hitRegion struct {
 	key     KeyHandler
 }
 
-// Hit registers r as an interactive region. handler must implement
-// PointerHandler, KeyHandler or both. Regions painted later sit on top of
-// earlier ones, so a container registers itself before painting its children.
-func (c *Canvas) Hit(r Rect, handler any) {
-	if c == nil || c.hits == nil {
-		return
+// HitPointer registers r as a region that receives pointer events. Regions
+// painted later sit on top of earlier ones, so a container registers itself
+// before painting its children.
+func (c *Canvas) HitPointer(r Rect, h PointerHandler) {
+	if c != nil {
+		c.hits = append(c.hits, hitRegion{rect: r, pointer: h})
 	}
-	h := hitRegion{rect: r}
-	h.pointer, _ = handler.(PointerHandler)
-	h.key, _ = handler.(KeyHandler)
-	if h.pointer == nil && h.key == nil {
-		panic("ggui: Hit handler implements neither PointerHandler nor KeyHandler")
+}
+
+// HitKey registers r as a region that receives keyboard events while focused.
+func (c *Canvas) HitKey(r Rect, h KeyHandler) {
+	if c != nil {
+		c.hits = append(c.hits, hitRegion{rect: r, key: h})
 	}
-	*c.hits = append(*c.hits, h)
 }

@@ -125,37 +125,33 @@ func (in *inputState) dispatch(f frameInput) {
 	}
 }
 
-// send offers ev to regions under it from the top down until one consumes it
-// and returns that region, or nil.
-func (in *inputState) send(ev PointerEvent) *hitRegion {
+// topmost returns the last region painted that match accepts, or nil. Later
+// regions sit on top of earlier ones, so the scan runs backwards.
+func (in *inputState) topmost(match func(*hitRegion) bool) *hitRegion {
 	for i := len(in.regions) - 1; i >= 0; i-- {
-		r := &in.regions[i]
-		if r.pointer != nil && r.rect.Contains(ev.Pos) && r.pointer.HandlePointer(ev) {
+		if r := &in.regions[i]; match(r) {
 			return r
 		}
 	}
 	return nil
+}
+
+// send offers ev to regions under it from the top down until one consumes it
+// and returns that region, or nil.
+func (in *inputState) send(ev PointerEvent) *hitRegion {
+	return in.topmost(func(r *hitRegion) bool {
+		return r.pointer != nil && r.rect.Contains(ev.Pos) && r.pointer.HandlePointer(ev)
+	})
 }
 
 // findKey returns the topmost region with a KeyHandler under p.
 func (in *inputState) findKey(p Point) *hitRegion {
-	for i := len(in.regions) - 1; i >= 0; i-- {
-		r := &in.regions[i]
-		if r.key != nil && r.rect.Contains(p) {
-			return r
-		}
-	}
-	return nil
+	return in.topmost(func(r *hitRegion) bool { return r.key != nil && r.rect.Contains(p) })
 }
 
 // findRect returns the topmost region painted exactly at rect.
 func (in *inputState) findRect(rect Rect) *hitRegion {
-	for i := len(in.regions) - 1; i >= 0; i-- {
-		if in.regions[i].rect == rect {
-			return &in.regions[i]
-		}
-	}
-	return nil
+	return in.topmost(func(r *hitRegion) bool { return r.rect == rect })
 }
 
 func (in *inputState) setFocus(r *hitRegion) {
@@ -271,7 +267,7 @@ func (p *PointerWidget) Layout(c Constraints) Size { return p.child.Layout(c) }
 
 // Paint implements Widget.
 func (p *PointerWidget) Paint(dst *Canvas, r Rect) {
-	dst.Hit(r, p)
+	dst.HitPointer(r, p)
 	p.child.Paint(dst, r)
 }
 
@@ -324,6 +320,6 @@ func (f *FocusWidget) Layout(c Constraints) Size { return f.child.Layout(c) }
 
 // Paint implements Widget.
 func (f *FocusWidget) Paint(dst *Canvas, r Rect) {
-	dst.Hit(r, f)
+	dst.HitKey(r, f)
 	f.child.Paint(dst, r)
 }

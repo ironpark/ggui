@@ -43,12 +43,11 @@ func buttonWidget(label string, hovered *ggui.Signal[bool], onTap func()) ggui.W
 
 func main() {
 	state := model{Count: ggui.State(0), Step: ggui.State(1)}
-	count, step := state.Count, state.Step
 	minusHover, plusHover := ggui.State(false), ggui.State(false)
 
 	// Map derives text from a cell; it recomputes only when the cell changes.
-	label := count.Map(func(n int) string { return fmt.Sprintf("count: %d", n) })
-	hints := ggui.Combine(count, step, func(n, s int) []string {
+	label := state.Count.Map(func(n int) string { return fmt.Sprintf("count: %d", n) })
+	hints := ggui.Combine(state.Count, state.Step, func(n, s int) []string {
 		return []string{
 			fmt.Sprintf("click a button or press space to add %d", s),
 			fmt.Sprintf("up/down changes the step (now %d)", s),
@@ -68,8 +67,8 @@ func main() {
 				ggui.Column(
 					ggui.Text(label.Get()).Color(fg).Size(28),
 					ggui.Row(
-						buttonWidget("-", minusHover, func() { ggui.Add(count, -step.Get()) }),
-						buttonWidget("+", plusHover, func() { ggui.Add(count, step.Get()) }),
+						buttonWidget("-", minusHover, func() { ggui.Add(state.Count, -state.Step.Get()) }),
+						buttonWidget("+", plusHover, func() { ggui.Add(state.Count, state.Step.Get()) }),
 					).Gap(8).Justify(ggui.JustifyCenter),
 					ggui.List(hints.Get(), func(s string) ggui.Widget {
 						return ggui.Text(s).Color(dim)
@@ -82,11 +81,11 @@ func main() {
 	app.OnFrame(func() {
 		switch {
 		case inpututil.IsKeyJustPressed(ebiten.KeySpace):
-			ggui.Add(count, step.Get())
+			ggui.Add(state.Count, state.Step.Get())
 		case inpututil.IsKeyJustPressed(ebiten.KeyArrowUp):
-			ggui.Add(step, 1)
+			ggui.Add(state.Step, 1)
 		case inpututil.IsKeyJustPressed(ebiten.KeyArrowDown):
-			step.Update(func(s int) int { return max(s-1, 1) })
+			state.Step.Update(func(s int) int { return max(s-1, 1) })
 		}
 	})
 
