@@ -14,6 +14,7 @@ type ForWidget[T any, K comparable] struct {
 	keys    []K
 	entries map[K]*forEntry[T]
 	stale   bool    // items changed since children was last filled
+	cache   *CachedWidget
 	extent  float64 // fixed main-axis size per item; 0 lays every child out
 
 	// The virtual path: the range of items laid out this frame and their
@@ -74,6 +75,7 @@ func For[T any, K comparable](items Reader[[]T], key func(T) K, build func(*Sign
 				}
 			}
 			f.items, f.keys, f.stale = list, keys, true
+			f.cache.invalidate()
 		})
 	})
 	return f
@@ -110,6 +112,7 @@ func (f *ForWidget[T, K]) entry(i int) *forEntry[T] {
 
 // Layout implements Widget.
 func (f *ForWidget[T, K]) Layout(c Constraints, env Env) Size {
+	f.cache, _ = env.Get(cacheOwner)
 	n := len(f.items)
 	if f.extent <= 0 {
 		if f.stale {

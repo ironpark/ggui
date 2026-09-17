@@ -254,6 +254,7 @@ type TextInputWidget struct {
 	lastClick time.Time
 	lastPos   Point
 
+	cache     *CachedWidget
 	resolved  TextStyle
 	muted     color.Color
 	selection color.Color
@@ -370,6 +371,7 @@ func (t *TextInputWidget) linesHeight(n int) float64 {
 // Layout implements Widget.
 func (t *TextInputWidget) Layout(c Constraints, env Env) Size {
 	t.resolved = env.Text().Merge(t.style).resolved()
+	t.cache, _ = env.Get(cacheOwner)
 	th := env.Theme()
 	t.muted, t.selection = th.Muted, th.Selection
 	if v := t.value.Peek(); v != t.ed.text {
@@ -585,6 +587,9 @@ func (t *TextInputWidget) commit() {
 		return
 	}
 	t.value.Set(t.ed.text)
+	if t.multiline {
+		t.cache.invalidate()
+	}
 	if t.onChange != nil {
 		t.onChange(t.ed.text)
 	}

@@ -148,9 +148,10 @@ ggui.Center(
 ```
 
 Current set: `Text`, `Box`, `Padding`, `Column`, `Row`, `Flex`/`Expanded`/`Spacer`,
-`Wrap`, `Grid`, `Stack`, `Align`, `Center`, `Scroll`, `TextInput`, `Tooltip`,
-`Pointer`/`Tap`, `Focus`, `For` and `List`; the themed controls live in the
-`ui` package (see Controls).
+`Wrap`, `Grid`, `Stack`, `Align`, `Center`, `Scroll`, `Image`, `TextInput`,
+`Tooltip`, `Popup`, `Transition`/`Presence`, `Cached`, `Pointer`/`Tap`,
+`Focus`, `For` and `List`; the themed controls live in the `ui` package (see
+Controls).
 `List` is a column built from your own slice:
 
 ```go
@@ -189,6 +190,21 @@ tight so columns line up, with rows as tall as their tallest cell.
 rested on it for half a second (`.Delay(d)`). It registers no hit region, so
 the child gets every event, and it paints through `Canvas.Overlay`, above
 everything else.
+
+**Popup(anchor, content)** floats content below its anchor (above it when
+there is no room), painted through `Canvas.Overlay` over a scrim: a press
+anywhere outside closes it and reaches nothing underneath. `Show`, `Hide`,
+`Toggle` and `IsOpen` drive it, or `.Bind(sig)` keeps the state in a
+`Signal[bool]`; `.Keys(h)` keeps keyboard focus on the widget that opened it
+while the pointer is in the content, and a widget inside can find its popup
+with `PopupOf(env)` to close it after acting. `ui.Select` and `ui.Menu` are
+built on it.
+
+**Image(img)** draws an `*ebiten.Image` at its natural size, shrinking to
+the room it gets with its aspect ratio kept; `.Size`, `.Width` or `.Height`
+fix it, and `.Fit(FitContain | FitCover | FitFill | FitNone)` says how it
+sits in a box of another shape. `DecodeImage(bytes)` and
+`LoadImageFile(path)` read PNG, JPEG and GIF.
 
 **Text** wraps at spaces to the width it is given, and between runes when a
 word is wider than the line, so scripts without spaces wrap too. `.Size(px)`,
@@ -231,9 +247,13 @@ layout time, keep hover and press state in the widget itself, and read their
 signal in `Paint`, so nothing rebuilds for a hover or a tick. Buttons and
 text fields set the mouse cursor.
 
-**Text input.** `ui.TextField(value)` is a single-line editor in a themed
-box; `ggui.TextInput(value)` is the bare editor for a box of your own, and
-part of the core because it is a primitive like `Text`. Text arrives
+**Text input.** `ui.TextField(value)` is an editor in a themed box;
+`ggui.TextInput(value)` is the bare editor for a box of your own, and part
+of the core because it is a primitive like `Text`. Either is one line that
+scrolls sideways until `.Multiline()` (or `.Lines(n)`, the fewest lines it
+is tall) makes it wrap at its width and grow by the line, with Up and Down
+between lines, Home and End within one, Enter for a line break and
+⌘/Ctrl+Enter for `OnSubmit`. Text arrives
 through the platform IME (Ebitengine's `exp/textinput`), so composed scripts
 such as Korean and Japanese work, with the composition shown underlined in
 place. Arrows move (Shift selects, Alt or Ctrl jumps words, ⌘ on macOS reaches
@@ -247,6 +267,14 @@ its caret and selection across a rebuild of the tree, and `.Input()` on a
 The built-in font covers Latin, Greek and Cyrillic; load one with the glyphs
 you type (`examples/todo` picks a system CJK font) with `LoadFontFile`, which
 also reads the first face of a `.ttc`, or `LoadFontCollection`.
+
+**Select and Menu.** `ui.Select(value, options, label)` (or
+`ui.SelectStrings(value, "a", "b")`) is a dropdown bound to a signal: a click
+or Space opens the list in a `Popup`, the arrow keys move through it (or
+step the value while it is closed), Enter picks, Escape closes.
+`ui.Menu("File", ui.MenuItem("New", fn), ui.MenuDivider(), ...)` is a
+secondary button that opens a list of actions the same way; an item runs
+its function and closes the menu.
 
 ## Animation
 
@@ -266,6 +294,17 @@ momentum, overshoots a little and settles (`.Stiffness`, `.Damping`). Easings:
 animations once per frame, before effects are flushed. For a look that moves
 inside one widget, `Motion` is the same tween driven from `Paint` with the
 current time and no signal; `ui.Switch` slides its knob with one.
+
+**Transitions.** `Transition(child).Fade().Slide(dx, dy).Scale(from)` plays
+an enter animation when the child first appears, over `.Duration(d)` with
+`.Easing(e)`. Whether it is new is judged against the previous frame by Rect
+(or `.Key(k)`), so a Builder that rebuilds every frame does not restart it.
+`Presence(show, child)` keeps the child on screen when `show` turns false,
+inert to input, and runs the same animation backwards before removing it:
+
+```go
+ggui.Presence(open, ggui.Transition(panel).Slide(0, -8).Fade())
+```
 
 ## Styling
 
@@ -401,6 +440,18 @@ else. A custom widget that keeps size-affecting state outside signals calls
 `Scroll` also tells its subtree the window it shows through the `Env`
 (`ScrollViewport(env)`), which is how `For` virtualizes.
 
+`Cached(child)` narrows the skip to a subtree: it returns its last size
+while the constraints, inherited style, theme and viewport are unchanged and
+nothing inside asked for a layout. `Reactive`, `For`, `Scroll` and
+`TextInput` ask when they change; a custom widget whose size depends on
+state outside a signal calls `InvalidateLayout(env)` with the Env it was
+laid out under. Wrap the panels that do not change together in it.
+
+State that has no signal and must outlive a rebuild can be kept on the
+Canvas: `dst.Retain(r, key, v)` stores a value under the widget's Rect for
+the next frame and `dst.Retained(r, key)` reads what was stored last frame.
+Tooltip keeps its hover timer and Transition its start time that way.
+
 ## Inspector
 
 `Config{Inspector: ebiten.KeyF1}` binds a key that toggles an overlay
@@ -420,6 +471,10 @@ why something sits where it does.
 ├── anim.go       Tween, Spring, Motion, easings, the per-frame animator
 ├── probe.go      Probe: headless frame driver for tests
 ├── tooltip.go    Tooltip
+├── popup.go      Popup: anchored overlay with a closing scrim
+├── transition.go Transition and Presence: enter and leave animations
+├── cache.go      Cached: per-subtree layout cache
+├── image.go      Image widget and image loading
 ├── inspector.go  The widget inspector overlay
 ├── style.go      TextStyle, Env, Key, Theme
 ├── for.go        For: keyed, reactive list
@@ -428,7 +483,8 @@ why something sits where it does.
 ├── clipboard.go  System clipboard for cut, copy and paste
 ├── font.go       Font loading, default font, text wrapping
 ├── geometry.go   Point, Size, Rect, Constraints
-├── ui/           Button, Checkbox, Radio, Switch, Slider, TextField, Divider
+├── ui/           One file per control: Button, Checkbox, Radio, Switch,
+│                 Slider, TextField, Select, Menu, Divider
 └── examples/     Runnable apps: counter, todo, gallery
 ```
 

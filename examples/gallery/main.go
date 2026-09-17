@@ -111,10 +111,10 @@ func main() {
 				})...).Gap(t.Space / 2)
 			})),
 
-			section("Grid", ggui.Grid(4,
+			section("Grid", ggui.Cached(ggui.Grid(4,
 				swatch("Bg", t.Bg), swatch("Surface", t.Surface), swatch("Field", t.Field), swatch("Border", t.Border),
 				swatch("Accent", t.Accent), swatch("AccentHover", t.AccentHover), swatch("Muted", t.Muted), swatch("Fg", t.Fg),
-			).Gap(t.Space)),
+			).Gap(t.Space))),
 
 			ui.Divider(),
 			ggui.Row(

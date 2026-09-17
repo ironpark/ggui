@@ -20,6 +20,7 @@ type Builder func() Widget
 // Component or Reactive.
 type ComponentWidget struct {
 	child Widget
+	cache *CachedWidget // the nearest Cached above, told on every rebuild
 }
 
 // Component runs setup once, in the enclosing effect, and then runs the
@@ -48,12 +49,18 @@ func Component(setup func() Builder) *ComponentWidget {
 // parent's Builder static so the components it holds survive.
 func Reactive(build Builder) *ComponentWidget {
 	c := &ComponentWidget{}
-	Effect(func() { c.child = build() })
+	Effect(func() {
+		c.child = build()
+		c.cache.invalidate()
+	})
 	return c
 }
 
 // Layout implements Widget.
-func (c *ComponentWidget) Layout(cs Constraints, env Env) Size { return c.child.Layout(cs, env) }
+func (c *ComponentWidget) Layout(cs Constraints, env Env) Size {
+	c.cache, _ = env.Get(cacheOwner)
+	return c.child.Layout(cs, env)
+}
 
 // Paint implements Widget.
 func (c *ComponentWidget) Paint(dst *Canvas, r Rect) { dst.Paint(c.child, r) }

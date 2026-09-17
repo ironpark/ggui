@@ -693,6 +693,8 @@ type ScrollWidget struct {
 
 	childSize Size
 	viewport  Size
+	laidAt    float64 // the offset the child was last laid out for
+	cache     *CachedWidget
 }
 
 // Scroll lets child take any height and scrolls it within the space Scroll
@@ -737,6 +739,9 @@ func (s *ScrollWidget) scrollTo(v float64) {
 		s.offset = v
 		RequestLayout() // what a virtualized child shows depends on it
 	}
+	if v != s.laidAt {
+		s.cache.invalidate()
+	}
 }
 
 // Layout implements Widget.
@@ -747,7 +752,9 @@ func (s *ScrollWidget) Layout(c Constraints, env Env) Size {
 	} else {
 		inner.H = Unbounded
 	}
-	vp := Viewport{Offset: s.position(), Extent: s.extent(c.Max()), Horizontal: s.horizontal}
+	s.cache, _ = env.Get(cacheOwner)
+	s.laidAt = s.position()
+	vp := Viewport{Offset: s.laidAt, Extent: s.extent(c.Max()), Horizontal: s.horizontal}
 	s.childSize = s.child.Layout(Loose(inner), env.With(viewportKey, vp))
 	s.viewport = c.Constrain(Sz(bounded(c.MaxW, s.childSize.W), bounded(c.MaxH, s.childSize.H)))
 	s.scrollTo(s.position())
@@ -756,6 +763,11 @@ func (s *ScrollWidget) Layout(c Constraints, env Env) Size {
 
 // Paint implements Widget.
 func (s *ScrollWidget) Paint(dst *Canvas, r Rect) {
+	if s.position() != s.laidAt {
+		// Written through the bound signal since the layout: a virtualized
+		// child must be laid out again for the new window.
+		s.cache.invalidate()
+	}
 	dst.HitPointer(r, s)
 	origin := r.Origin
 	if s.horizontal {
