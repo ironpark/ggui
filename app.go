@@ -178,6 +178,7 @@ func (a *App) Draw(screen *ebiten.Image) {
 	logical := Sz(a.canvas.dp(float64(b.Dx())), a.canvas.dp(float64(b.Dy())))
 	a.canvas.tracing, a.canvas.trace = a.inspect, a.canvas.trace[:0]
 	a.canvas.logical = logical
+	a.canvas.nextFrame()
 	if a.needsLayout(logical) {
 		a.rootSize = a.root.Layout(Tight(logical), rootEnv())
 	}

@@ -14,10 +14,11 @@ import "github.com/hajimehoshi/ebiten/v2"
 // Every input method paints a frame first, as the runtime would have before
 // the event, and flushes effects afterwards.
 type Probe struct {
-	root Widget
-	size Size
-	in   inputState
-	env  Env
+	root   Widget
+	size   Size
+	in     inputState
+	env    Env
+	canvas Canvas
 
 	pointer    Point
 	hasPointer bool
@@ -32,7 +33,10 @@ func NewProbe(w Widget, size Size) *Probe {
 // hit regions the next event is routed to. It returns the root's size.
 func (p *Probe) Frame() Size {
 	effects.flush()
-	c := Canvas{prev: p.in.regions, pointer: p.pointer, hasPointer: p.hasPointer, logical: p.size}
+	c := &p.canvas
+	c.prev, c.hits = c.hits, nil
+	c.pointer, c.hasPointer, c.logical = p.pointer, p.hasPointer, p.size
+	c.nextFrame()
 	s := p.root.Layout(Tight(p.size), p.env)
 	c.Paint(p.root, Rect{Size: s})
 	c.paintOverlays()

@@ -25,6 +25,7 @@ type Canvas struct {
 	parent  *Canvas     // set on a Clip; hit regions go to the root
 	clip    Rect
 	clipped bool
+	inert   bool // registers no hit regions: a widget on its way out
 
 	// Root-only frame state.
 	logical    Size // the window in logical pixels, for Size
@@ -34,6 +35,59 @@ type Canvas struct {
 	trace      []traceEntry // every Paint call, when the inspector is on
 	tracing    bool
 	depth      int
+	keeps      map[retainKey]any // Retain this frame
+	prevKeeps  map[retainKey]any // Retain last frame, read by Retained
+}
+
+// retainKey identifies a Retain slot: the Rect painted, or a key the
+// widget chose.
+type retainKey struct {
+	rect Rect
+	key  any
+}
+
+// Retain stores v for the next frame under r, or under key when that is
+// not nil, and Retained returns what was stored under the same slot last
+// frame. It is how a widget rebuilt every frame keeps state that has no
+// signal: a Tooltip's hover timer, a Transition's start time. A slot
+// nobody retains again is dropped, so state follows the widget's Rect and
+// goes away with it.
+func (c *Canvas) Retain(r Rect, key any, v any) {
+	if c == nil {
+		return
+	}
+	root := c.root()
+	if root.keeps == nil {
+		root.keeps = make(map[retainKey]any)
+	}
+	root.keeps[retainKey{r, key}] = v
+}
+
+// Retained returns what Retain stored under r, or key, last frame.
+func (c *Canvas) Retained(r Rect, key any) any {
+	if c == nil {
+		return nil
+	}
+	return c.root().prevKeeps[retainKey{r, key}]
+}
+
+// nextFrame moves this frame's retained values to last frame's place and
+// clears the current slots, ready for a paint.
+func (c *Canvas) nextFrame() {
+	c.prevKeeps, c.keeps = c.keeps, c.prevKeeps
+	clear(c.keeps)
+}
+
+// Inert returns a Canvas that draws where c does but registers no hit
+// regions, for a widget that is leaving and must not take input.
+func (c *Canvas) Inert() *Canvas {
+	if c == nil {
+		return nil
+	}
+	child := *c
+	child.parent, child.inert = c, true
+	child.overlays, child.trace, child.keeps, child.prevKeeps = nil, nil, nil, nil
+	return &child
 }
 
 // traceEntry is one widget's Rect as painted, for the inspector.
@@ -252,7 +306,7 @@ func (c *Canvas) Clip(r Rect) *Canvas {
 	if c == nil {
 		return nil
 	}
-	child := &Canvas{parent: c, clip: r, clipped: true, scale: c.scale}
+	child := &Canvas{parent: c, clip: r, clipped: true, scale: c.scale, inert: c.inert}
 	if c.clipped {
 		child.clip = c.clip.Intersect(r)
 	}
@@ -267,7 +321,7 @@ func (c *Canvas) Clip(r Rect) *Canvas {
 // so Pointer(Focus(w)) or a widget that calls HitPointer and HitKey for the
 // same Rect is one region with both handlers.
 func (c *Canvas) add(h hitRegion) {
-	if c == nil {
+	if c == nil || c.inert {
 		return
 	}
 	if c.clipped {

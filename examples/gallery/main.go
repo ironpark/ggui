@@ -19,6 +19,7 @@ func main() {
 	size := ggui.State(16.0)
 	notes := ggui.State("")
 	fruit := ggui.State("Banana")
+	details := ggui.State(true)
 	notify := ggui.State(true)
 	plan := ggui.State("free")
 	tags := ggui.State([]string{"go", "gui", "ebiten", "signals", "flutter", "svelte", "layout", "hidpi"})
@@ -92,6 +93,14 @@ func main() {
 					ggui.Reactive(func() ggui.Widget { return ggui.Text("picked " + fruit.Get()).Color(t.Muted) }),
 				).Gap(t.Space).Align(ggui.AlignCenter),
 			).Gap(t.Space)),
+
+			section("Transition", ggui.Column(
+				ui.Switch(details, "Show details"),
+				ggui.Presence(details, ggui.Transition(
+					ggui.Box(ggui.Text("Slides and fades in, and back out when hidden. A leaving widget takes no input.")).
+						Fill(t.Surface).Radius(t.Radius).Pad(t.Space),
+				).Slide(0, -8).Fade()),
+			).Gap(t.Space).Align(ggui.AlignStretch)),
 
 			section("Wrap", ggui.Reactive(func() ggui.Widget {
 				return ggui.Wrap(ggui.Children(tags.Get(), func(tag string) ggui.Widget {

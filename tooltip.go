@@ -10,15 +10,20 @@ type TooltipWidget struct {
 	delay time.Duration
 	pad   EdgeInsets
 
-	tipSize  Size
-	theme    Theme
-	hovering bool
-	since    time.Time
+	tipSize Size
+	theme   Theme
 }
+
+// tooltipHover is the hover timer, retained on the Canvas by Rect so a
+// tooltip rebuilt every frame still opens.
+type tooltipHover struct{ since time.Time }
+
+var tooltipSlot = new(byte) // the Retain key, shared by every tooltip
 
 // Tooltip wraps child and shows text below it once the cursor has hovered
 // for half a second. It takes no space and registers no hit region, so it
-// never steals events from the child.
+// never steals events from the child, and the hover timer is retained on
+// the Canvas, so it survives the widget being rebuilt.
 func Tooltip(child Widget, text string) *TooltipWidget {
 	return &TooltipWidget{child: child, tip: Text(text).Size(12), delay: 500 * time.Millisecond}
 }
@@ -40,14 +45,15 @@ func (t *TooltipWidget) Paint(dst *Canvas, r Rect) {
 	dst.Paint(t.child, r)
 	p, ok := dst.Pointer()
 	if !ok || !r.Contains(p) {
-		t.hovering = false
 		return
 	}
 	now := time.Now()
-	if !t.hovering {
-		t.hovering, t.since = true, now
+	since := now
+	if h, ok := dst.Retained(r, tooltipSlot).(tooltipHover); ok {
+		since = h.since
 	}
-	if now.Sub(t.since) < t.delay {
+	dst.Retain(r, tooltipSlot, tooltipHover{since})
+	if now.Sub(since) < t.delay {
 		return
 	}
 	dst.Overlay(func(dst *Canvas) { t.paintTip(dst, r) })
