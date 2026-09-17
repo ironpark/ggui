@@ -70,7 +70,9 @@ var (
 	axSelInit                 = objc.RegisterName("init")
 	axSelRelease              = objc.RegisterName("release")
 	axSelSharedApplication    = objc.RegisterName("sharedApplication")
-	axSelMainWindow           = objc.RegisterName("mainWindow")
+	axSelWindows              = objc.RegisterName("windows")
+	axSelCount                = objc.RegisterName("count")
+	axSelObjectAtIndex        = objc.RegisterName("objectAtIndex:")
 	axSelContentView          = objc.RegisterName("contentView")
 	axSelAddSubview           = objc.RegisterName("addSubview:")
 	axSelBounds               = objc.RegisterName("bounds")
@@ -170,7 +172,7 @@ func (d *darwinAX) attach() {
 	if d.container != 0 {
 		return
 	}
-	window := axIDNSApplication.Send(axSelSharedApplication).Send(axSelMainWindow)
+	window := axAppWindow()
 	if window == 0 {
 		return
 	}
@@ -184,6 +186,29 @@ func (d *darwinAX) attach() {
 	view.Send(axSelSetAutoresizingMask, uint(2|16))
 	content.Send(axSelAddSubview, view)
 	d.container = view
+}
+
+// axAppWindow finds Ebitengine's window even before the app becomes active.
+// NSApplication.mainWindow can be nil on background launches. Do not fall
+// back to an arbitrary NSWindow: AppKit also owns panels and helper windows.
+// Ebitengine's GLFW backend installs a GLFWContentView on its single window.
+// Resolve the class here because GLFW registers it when the window is created.
+// Like attach, this must run on the main thread.
+func axAppWindow() objc.ID {
+	contentClass := objc.GetClass("GLFWContentView")
+	if contentClass == 0 {
+		return 0
+	}
+	windows := axIDNSApplication.Send(axSelSharedApplication).Send(axSelWindows)
+	count := objc.Send[uint](windows, axSelCount)
+	for i := uint(0); i < count; i++ {
+		window := windows.Send(axSelObjectAtIndex, i)
+		content := window.Send(axSelContentView)
+		if content != 0 && objc.Send[bool](content, axSelIsKindOfClass, contentClass) {
+			return window
+		}
+	}
+	return 0
 }
 
 // element makes the accessibility object for one node, carrying its handle.
@@ -376,7 +401,10 @@ func axElementValue(self objc.ID, _ objc.SEL) objc.ID {
 	if v, num := axNumber(n.Node); num {
 		return nsNumber(v)
 	}
-	if n.Value == "" {
+	// An empty editor still has an AXValue. Returning nil makes AppKit omit
+	// the attribute, so accessibility clients cannot set an initially empty
+	// field even though setAccessibilityValue: is allowed.
+	if n.Value == "" && !axTextual(n.Node) {
 		return 0
 	}
 	return nsString(n.Value)
