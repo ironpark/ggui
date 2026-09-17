@@ -50,6 +50,12 @@ func main() {
 	tab := ggui.State(0)
 	more := ggui.State(false)
 	progress := ggui.State(0.3)
+	page, pageCount := ggui.State(1), ggui.State(12)
+	accordionOpen := ggui.State([]string{"intro"})
+	split := ggui.State(.35)
+	commandQuery := ggui.State("")
+	paletteOpen := ggui.State(false)
+	toasts := ui.NewToaster()
 	notify := ggui.State(true)
 	plan := ggui.State("free")
 	tags := ggui.State([]string{"go", "gui", "ebiten", "signals", "flutter", "svelte", "layout", "hidpi"})
@@ -121,6 +127,56 @@ func main() {
 					ggui.Textf("picked %s", fruit).AsCaption(),
 				).Space(1),
 			).Space(1)),
+
+			section("Notices and empty states", ggui.Column(
+				ui.Alert("Changes saved", "Your settings are up to date."),
+				ui.Alert("Connection interrupted", "You can retry without losing your work.").Destructive().
+					Action(ui.Button("Retry", func() { progress.Set(0) }).Secondary()),
+				ui.Empty("No attachments", "Add a file to get started.").
+					Media(ui.Badge("Files")).Action(ui.Button("Add sample", func() { progress.Set(1) })),
+			).Space(1).Align(ggui.AlignStretch)),
+
+			section("Loading and shortcuts", ggui.Column(
+				ggui.Row(ui.Spinner(), ggui.Text("Loading…"), ui.Kbd("Ctrl"), ui.Kbd("K")).Space(1),
+				ggui.Row(ui.Skeleton(40, 40).Circle(), ggui.Column(ui.Skeleton(180, 14), ui.Skeleton(120, 14)).Space(1)).Space(1),
+			).Space(1)),
+
+			section("Pagination", ggui.Column(
+				ui.Pagination(page, pageCount),
+				ggui.Textf("Page %d — bind this value to your data query or slice.", page).AsCaption(),
+			).Space(1)),
+
+			section("Accordion", ui.Accordion(accordionOpen,
+				ui.AccordionItem("intro", "How does it work?", ggui.Text("Use the arrow keys to choose a header, then Enter to expand it.")),
+				ui.AccordionItem("keys", "Keyboard controls", ggui.Row(ui.Kbd("Up / Down"), ui.Kbd("Home / End"), ui.Kbd("Enter")).Space(1)),
+				ui.AccordionItem("disabled", "Unavailable section", ggui.Text("Hidden")).Disabled(true),
+			)),
+
+			section("Search and commands", ggui.Row(
+				ui.Combobox(fruit, []string{"Apple", "Banana", "Cherry", "Durian", "Grape", "Mango", "Orange"}).Named("Search fruit"),
+				ui.Button("Commands…", func() { paletteOpen.Set(true) }).Secondary(),
+			).Space(1)),
+			ui.Dialog(paletteOpen, ui.Command(commandQuery,
+				ui.CommandItem("Toggle dark theme", func() { ggui.Toggle(dark); paletteOpen.Set(false) }).Keywords("appearance", "light"),
+				ui.CommandItem("Reset text size", func() { size.Set(16); paletteOpen.Set(false) }).Keywords("font"),
+				ui.CommandItem("Show notification", func() { toasts.Push(ui.Toast("Done", "The command ran successfully.")); paletteOpen.Set(false) }),
+			)).Title("Commands"),
+
+			section("Resizable", ggui.Box(ui.Resizable(split,
+				ui.Card(ggui.Text("Navigation pane")),
+				ui.Card(ggui.Text("Drag the divider, or Tab to it and use the arrow keys.")),
+			).MinSizes(100, 140)).Height(140)),
+
+			section("Toast", ggui.Wrap(
+				ui.Button("Notify", func() { toasts.Push(ui.Toast("Saved", "Your changes are stored.")) }).Secondary(),
+				ui.Button("Notify with action", func() {
+					toasts.Push(ui.Toast("Item removed", "You can undo this change.").Action("Undo", func() { toasts.Push(ui.Toast("Restored", "The item is back.")) }))
+				}).Secondary(),
+				ui.Button("Persistent error", func() {
+					toasts.Push(ui.Toast("Upload failed", "Dismiss this message when you are ready.").Destructive().Duration(0))
+				}).Secondary(),
+			).Space(1)),
+			toasts,
 
 			section("Tabs", ui.Card(ui.Tabs(tab,
 				ui.Tab("Overview", ggui.Column(
@@ -202,7 +258,11 @@ func main() {
 		).Space(2), t.Space*3))
 	})
 
-	app.Setup(func() { ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme()) })
+	app.Setup(func() {
+		ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme())
+		ggui.OnCleanup(toasts.Close)
+	})
+	app.Shortcut("cmd+k", func() { paletteOpen.Set(true) })
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}

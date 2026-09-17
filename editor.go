@@ -389,6 +389,8 @@ type TextInputWidget struct {
 	onSubmit     func(string)
 	onCommit     func(string)
 	onChange     func(string)
+	onKey        func(KeyEvent) bool
+	escapeUsed   bool
 	disabled     bool
 	disabledWhen Reader[bool]
 	id           any
@@ -461,10 +463,10 @@ func (t *TextInputWidget) Semantics() (Role, string) {
 	return RoleTextField, t.placeholder
 }
 
-// ConsumesKey implements KeyConsumer: an editor takes every key but Escape
-// while it has focus, so a bare-key shortcut never types over it.
+// ConsumesKey implements KeyConsumer: editing keys stay with the editor.
+// Escape passes through unless it cancelled composition or OnKey consumed it.
 func (t *TextInputWidget) ConsumesKey(ev KeyEvent) bool {
-	return ev.Kind == KeyPress && ev.Key != ebiten.KeyEscape
+	return ev.Kind == KeyPress && (ev.Key != ebiten.KeyEscape || t.escapeUsed)
 }
 
 // Password masks every rune with a bullet.
@@ -510,6 +512,12 @@ func (t *TextInputWidget) committed() {
 
 // OnChange fires with the value after every edit, after the signal is set.
 func (t *TextInputWidget) OnChange(fn func(string)) *TextInputWidget { t.onChange = fn; return t }
+
+// OnKey handles a key press before editor commands when no IME composition is
+// active. Return true to consume it. Focus, text and IME events stay with the
+// editor. This lets searchable lists use Up, Down and Enter without replacing
+// the editor's platform input driver.
+func (t *TextInputWidget) OnKey(fn func(KeyEvent) bool) *TextInputWidget { t.onKey = fn; return t }
 
 // Focused reports whether the editor has keyboard focus.
 func (t *TextInputWidget) Focused() bool { return t.focused }
@@ -910,6 +918,11 @@ func (t *TextInputWidget) HandleKey(ev KeyEvent) {
 	case KeyText:
 		// Text arrives through the IME, on every platform.
 	case KeyPress:
+		t.escapeUsed = ev.Key == ebiten.KeyEscape && t.composition != ""
+		if t.composition == "" && t.onKey != nil && t.onKey(ev) {
+			t.escapeUsed = ev.Key == ebiten.KeyEscape
+			return
+		}
 		t.key(ev.Key, ev.Mods)
 	}
 }

@@ -60,6 +60,12 @@ func (f *TextFieldWidget) Multiline() *TextFieldWidget { f.input.Multiline(); re
 // Lines sets the fewest lines a Multiline field is tall.
 func (f *TextFieldWidget) Lines(n int) *TextFieldWidget { f.input.Lines(n); return f }
 
+// OnKey handles non-composing key presses before the editor; return true to consume.
+func (f *TextFieldWidget) OnKey(fn func(ggui.KeyEvent) bool) *TextFieldWidget {
+	f.input.OnKey(fn)
+	return f
+}
+
 // OnSubmit fires with the value when Enter is pressed, or ⌘/Ctrl+Enter
 // when Multiline.
 func (f *TextFieldWidget) OnSubmit(fn func(string)) *TextFieldWidget { f.input.OnSubmit(fn); return f }

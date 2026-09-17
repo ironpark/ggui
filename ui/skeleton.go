@@ -1,0 +1,41 @@
+package ui
+
+import (
+	"math"
+
+	"github.com/ironpark/ggui"
+)
+
+// SkeletonWidget reserves space while content loads. It pulses unless motion is reduced.
+type SkeletonWidget struct {
+	width, height   float64
+	theme           ggui.Theme
+	reduced, circle bool
+}
+
+// Skeleton creates a placeholder with a requested size in logical pixels.
+func Skeleton(width, height float64) *SkeletonWidget {
+	return &SkeletonWidget{width: max(0, width), height: max(0, height)}
+}
+
+// Circle rounds the placeholder into a pill, or a circle when square.
+func (s *SkeletonWidget) Circle() *SkeletonWidget { s.circle = true; return s }
+
+// Layout implements ggui.Widget.
+func (s *SkeletonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	s.theme, s.reduced = env.Theme(), env.ReducedMotion()
+	return c.Constrain(ggui.Sz(s.width, s.height))
+}
+
+// Paint implements ggui.Widget.
+func (s *SkeletonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	radius := s.theme.Radius
+	if s.circle {
+		radius = min(r.Size.W, r.Size.H) / 2
+	}
+	factor := 1.0
+	if !s.reduced {
+		factor = .9 + .1*math.Cos(float64(ggui.Now().UnixMilli()%1600)*2*math.Pi/1600)
+	}
+	dst.FillRoundRect(r, radius, tint(s.theme.Border, factor))
+}

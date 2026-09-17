@@ -462,3 +462,28 @@ func TestUndoKeys(t *testing.T) {
 		t.Fatalf("value %q after redo, want hel", v.Peek())
 	}
 }
+
+func TestTextInputKeyHookLeavesCompositionWithIME(t *testing.T) {
+	old := newIME
+	newIME = func(w *TextInputWidget) ime { return &fakeIME{t: w} }
+	defer func() { newIME = old }()
+	calls := 0
+	w := TextInput(State("")).OnKey(func(ev KeyEvent) bool { calls++; return ev.Key == ebiten.KeyArrowDown })
+	w.HandleKey(KeyEvent{Kind: KeyPress, Key: ebiten.KeyArrowDown})
+	if calls != 1 {
+		t.Fatal("key hook did not receive navigation")
+	}
+	w.imeComposition("ㅎ", len("ㅎ"))
+	w.HandleKey(KeyEvent{Kind: KeyPress, Key: ebiten.KeyArrowDown})
+	if calls != 1 {
+		t.Fatal("hook intercepted an IME composition")
+	}
+	w.HandleKey(KeyEvent{Kind: KeyPress, Key: ebiten.KeyEscape})
+	if calls != 1 || !w.ConsumesKey(KeyEvent{Kind: KeyPress, Key: ebiten.KeyEscape}) {
+		t.Fatal("composition Escape escaped to a popup")
+	}
+	w.HandleKey(KeyEvent{Kind: KeyPress, Key: ebiten.KeyEscape})
+	if calls != 2 || w.ConsumesKey(KeyEvent{Kind: KeyPress, Key: ebiten.KeyEscape}) {
+		t.Fatal("ordinary Escape was not released")
+	}
+}
