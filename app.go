@@ -241,7 +241,7 @@ func (a *App) Draw(screen *ebiten.Image) {
 	a.canvas.Paint(a.root, Rect{Size: a.rootSize})
 	a.canvas.paintOverlays()
 	a.publishSemantics(&a.canvas, a.input.focused)
-	a.a11y.publish(a.semantics())
+	a.a11y.publish(a.semantics(), a.takeAnnouncements())
 	if a.inspect {
 		paintInspector(&a.canvas)
 	}

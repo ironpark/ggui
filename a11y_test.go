@@ -13,6 +13,8 @@ type axFake struct {
 	made    []int64
 	freed   []uintptr
 	asked   int
+	notes   []axNote
+	flushes int
 	handles map[uintptr]int64
 }
 
@@ -30,6 +32,8 @@ func (f *axFake) element(handle int64) uintptr {
 }
 
 func (f *axFake) release(elems []uintptr) { f.freed = append(f.freed, elems...) }
+
+func (f *axFake) notify(notes []axNote) { f.notes = append(f.notes, notes...); f.flushes++ }
 
 // axRoots builds a tree of unnested nodes, which is all the element cache
 // and the gating care about.
@@ -85,7 +89,7 @@ func TestAXElementsAreStableAndSweptByLiveness(t *testing.T) {
 	b := &axBridge{plat: f, mode: AccessibilityAlways}
 	keep := axNode(RoleButton, "keep", "keep", Rct(Pt(0, 0), Sz(10, 10)))
 	goes := axNode(RoleButton, "goes", "goes", Rct(Pt(0, 20), Sz(10, 10)))
-	b.publish(axRoots(keep, goes))
+	b.publish(axRoots(keep, goes), nil)
 
 	e1 := b.element(axKeyOf(keep.ID))
 	e2 := b.element(axKeyOf(goes.ID))
@@ -100,7 +104,7 @@ func TestAXElementsAreStableAndSweptByLiveness(t *testing.T) {
 	// nothing released. Only liveness is diffed.
 	moved := keep
 	moved.Name, moved.Full, moved.ID.Rect = "renamed", Rct(Pt(5, 5), Sz(20, 20)), Rct(Pt(5, 5), Sz(20, 20))
-	b.publish(axRoots(moved))
+	b.publish(axRoots(moved), nil)
 	if len(f.freed) != 1 || f.freed[0] != e2 {
 		t.Errorf("freed = %v, want just the node that disappeared (%d)", f.freed, e2)
 	}
@@ -119,13 +123,13 @@ func TestAXStaleHandleResolvesToNothing(t *testing.T) {
 	f := newAXFake(true)
 	b := &axBridge{plat: f, mode: AccessibilityAlways}
 	gone := axNode(RoleButton, "gone", "gone", Rct(Pt(0, 0), Sz(10, 10)))
-	b.publish(axRoots(gone))
+	b.publish(axRoots(gone), nil)
 	e := b.element(axKeyOf(gone.ID))
 	stale := f.handles[e]
 
-	b.publish(axRoots())
+	b.publish(axRoots(), nil)
 	next := axNode(RoleButton, "next", "next", Rct(Pt(0, 0), Sz(10, 10)))
-	b.publish(axRoots(next))
+	b.publish(axRoots(next), nil)
 	if b.element(axKeyOf(next.ID)) == 0 {
 		t.Fatal("the new node got no element")
 	}
@@ -139,7 +143,7 @@ func TestAXGatingCostsNothingWhileNobodyIsListening(t *testing.T) {
 	b := &axBridge{plat: f, mode: AccessibilityAuto}
 	n := axNode(RoleButton, "x", "x", Rct(Pt(0, 0), Sz(10, 10)))
 	for range axPollFrames * 2 {
-		b.publish(axRoots(n))
+		b.publish(axRoots(n), nil)
 	}
 	if b.frame() != nil {
 		t.Error("a tree was published while no assistive technology was attached")
@@ -152,7 +156,7 @@ func TestAXGatingCostsNothingWhileNobodyIsListening(t *testing.T) {
 	// element rather than holding them for a listener that has gone.
 	f.on = true
 	for range axPollFrames + 1 {
-		b.publish(axRoots(n))
+		b.publish(axRoots(n), nil)
 	}
 	if b.frame() == nil {
 		t.Fatal("nothing was published after VoiceOver attached")
@@ -160,7 +164,7 @@ func TestAXGatingCostsNothingWhileNobodyIsListening(t *testing.T) {
 	e := b.element(axKeyOf(n.ID))
 	f.on = false
 	for range axPollFrames + 1 {
-		b.publish(axRoots(n))
+		b.publish(axRoots(n), nil)
 	}
 	if len(f.freed) != 1 || f.freed[0] != e {
 		t.Errorf("freed = %v, want the one element (%d) dropped on detach", f.freed, e)
@@ -173,7 +177,7 @@ func TestAXOffNeverTouchesThePlatform(t *testing.T) {
 	if b.plat != nil {
 		t.Fatal("AccessibilityOff built a platform bridge")
 	}
-	b.publish(axRoots(axNode(RoleButton, "x", "x", Rct(Pt(0, 0), Sz(10, 10)))))
+	b.publish(axRoots(axNode(RoleButton, "x", "x", Rct(Pt(0, 0), Sz(10, 10)))), nil)
 	if b.frame() != nil {
 		t.Error("AccessibilityOff published a tree")
 	}
@@ -278,4 +282,181 @@ func axHitTree() *SemTree {
 	}
 	t.roots = []int{0}
 	return t
+}
+
+// axParent builds a container holding the given children, which is what the
+// selection notification needs: it says which of a container's children is
+// now the chosen one, so it goes to the container.
+func axParent(parent SemNode, kids ...SemNode) *SemTree {
+	t := &SemTree{focused: -1}
+	parent.Parent = -1
+	for i := range kids {
+		kids[i].Parent = 0
+		parent.Children = append(parent.Children, i+1)
+	}
+	t.nodes = append(append(t.nodes, parent), kids...)
+	t.roots = []int{0}
+	return t
+}
+
+func axKinds(notes []axNote) []axNotice {
+	out := make([]axNotice, len(notes))
+	for i, n := range notes {
+		out[i] = n.kind
+	}
+	return out
+}
+
+func axFrameOf(t *SemTree) *axFrame { return newAXFrame(t) }
+
+func TestAXDiffSaysOnlyWhatChanged(t *testing.T) {
+	one := axNode(RoleCheckbox, "a", "a", Rct(Pt(0, 0), Sz(10, 10)))
+	one.Checked = TriOff
+	two := axNode(RoleCheckbox, "b", "b", Rct(Pt(0, 20), Sz(10, 10)))
+	first := axFrameOf(axRoots(one, two))
+
+	if got := axKinds(axDiff(nil, first)); len(got) != 1 || got[0] != axLayoutChanged {
+		t.Errorf("the first tree = %v, want one layout change", got)
+	}
+	// A frame in which nothing moved says nothing. This is the common case
+	// and the one that must not chatter at sixty frames a second.
+	if got := axDiff(first, axFrameOf(axRoots(one, two))); len(got) != 0 {
+		t.Errorf("an unchanged tree = %v, want nothing", got)
+	}
+
+	ticked := one
+	ticked.Checked = TriOn
+	notes := axDiff(first, axFrameOf(axRoots(ticked, two)))
+	if len(notes) != 1 || notes[0].kind != axValueChanged || notes[0].key != axKeyOf(one.ID) {
+		t.Errorf("ticking = %v, want one value change on the check box", notes)
+	}
+	// A rename is not spoken: the node is read again when it is reached,
+	// and a rebuild that rewrote every label would talk over the user.
+	renamed := one
+	renamed.Name = "different"
+	if got := axDiff(first, axFrameOf(axRoots(renamed, two))); len(got) != 0 {
+		t.Errorf("renaming = %v, want nothing", got)
+	}
+
+	if got := axKinds(axDiff(first, axFrameOf(axRoots(one)))); len(got) != 1 || got[0] != axLayoutChanged {
+		t.Errorf("removing a node = %v, want one layout change", got)
+	}
+}
+
+func TestAXDiffReportsFocusAndSelection(t *testing.T) {
+	list := axNode(RoleList, "", "list", Rct(Pt(0, 0), Sz(50, 50)))
+	a := axNode(RoleOption, "a", "a", Rct(Pt(0, 0), Sz(50, 20)))
+	b := axNode(RoleOption, "b", "b", Rct(Pt(0, 20), Sz(50, 20)))
+	a.Selected = true
+	before := axFrameOf(axParent(list, a, b))
+
+	a.Selected, b.Selected = false, true
+	notes := axDiff(before, axFrameOf(axParent(list, a, b)))
+	if len(notes) != 2 {
+		t.Fatalf("notes = %v, want one per option whose selection moved", notes)
+	}
+	for _, n := range notes {
+		if n.kind != axSelectionChanged || n.key != axKeyOf(list.ID) {
+			t.Errorf("note = %v, want a selection change addressed to the list", n)
+		}
+	}
+
+	// Focus is compared by identity, so a rebuild that shifted every node
+	// along is not a focus move.
+	focused := axParent(list, a, b)
+	focused.focused = 1
+	moved := axDiff(before, axFrameOf(focused))
+	if len(moved) == 0 || moved[len(moved)-1].kind != axFocusChanged {
+		t.Fatalf("notes = %v, want a focus change last", moved)
+	}
+	same := axParent(list, a, b)
+	same.focused = 1
+	if got := axDiff(axFrameOf(focused), axFrameOf(same)); len(got) != 0 {
+		t.Errorf("focus that stayed put = %v, want nothing", got)
+	}
+}
+
+func TestAXNotifiesOncePerFrameAndOnlyWhenThereIsNews(t *testing.T) {
+	f := newAXFake(true)
+	b := &axBridge{plat: f, mode: AccessibilityAlways}
+	n := axNode(RoleSlider, "vol", "vol", Rct(Pt(0, 0), Sz(10, 10)))
+	b.publish(axRoots(n), nil)
+	if f.flushes != 1 {
+		t.Fatalf("flushes = %d, want the first tree to be announced once", f.flushes)
+	}
+	for range 10 {
+		b.publish(axRoots(n), nil)
+	}
+	if f.flushes != 1 {
+		t.Errorf("flushes = %d after ten still frames, want 1", f.flushes)
+	}
+	n.Now = 5
+	b.publish(axRoots(n), []Announcement{{Text: "muted", Politeness: Assertive}})
+	if f.flushes != 2 {
+		t.Fatalf("flushes = %d, want one hop for the frame that changed", f.flushes)
+	}
+	last := f.notes[len(f.notes)-1]
+	if last.kind != axAnnouncement || last.text != "muted" || !last.loud || !last.root {
+		t.Errorf("announcement = %v, want an assertive one addressed to the window", last)
+	}
+}
+
+func TestAXActionsAreOnlyWhatTheNodeClaims(t *testing.T) {
+	slider := Node{Role: RoleSlider, Actions: ActionIncrement | ActionDecrement | ActionFocus}
+	if axAllows(slider, axPress) {
+		t.Error("a slider offered a press it never claimed")
+	}
+	if !axAllows(slider, axIncrement) || !axAllows(slider, axDecrement) {
+		t.Error("a slider withheld the actions it claimed")
+	}
+	// A disabled control is in the tree to be read out, not to be worked:
+	// everything but looking at it is refused.
+	off := Node{Role: RoleButton, Actions: ActionPress | ActionFocus, Disabled: true}
+	if axAllows(off, axPress) || axAllows(off, axConfirm) {
+		t.Error("a disabled button could be pressed")
+	}
+	if !axAllows(off, axSetFocus) {
+		t.Error("a disabled button could not even be focused")
+	}
+	if axActOf(axConfirm) != ActionPress || axActOf(axShowMenu) != ActionExpand {
+		t.Error("the AppKit actions map onto the wrong ggui ones")
+	}
+}
+
+// axBell counts presses, and says so, which is what the round trip through
+// the bridge has to arrive at.
+type axBell struct {
+	Interactive
+	rung int
+}
+
+func (b *axBell) Layout(c Constraints, _ Env) Size { return c.Constrain(Sz(40, 20)) }
+func (b *axBell) Paint(dst *Canvas, r Rect)        { b.Hit(dst, r, b, 0) }
+func (b *axBell) HandlePointer(PointerEvent) bool  { return true }
+func (b *axBell) HandleKey(ev KeyEvent)            { b.Keyboard(ev, func() { b.rung++ }) }
+
+func TestAXPressReachesTheWidget(t *testing.T) {
+	// The whole path, minus Objective-C: an element resolves its node out
+	// of the published tree, asks the app to press it, and the next frame
+	// shows that it was.
+	w := &axBell{}
+	w.Role, w.Name = RoleButton, "ring"
+	p := NewProbe(w, Sz(100, 100))
+	defer p.Close()
+
+	f := newAXFake(true)
+	b := &axBridge{plat: f, mode: AccessibilityAlways, act: p.Perform}
+	b.publish(p.Semantics(), nil)
+
+	node, ok := b.frame().tree.Find(RoleButton, "ring")
+	if !ok {
+		t.Fatal("the button is not in the published tree")
+	}
+	if !axAllows(node.Node, axPress) {
+		t.Fatal("the button does not offer a press")
+	}
+	b.perform(node.ID, Action{Kind: ActionPress})
+	if w.rung != 1 {
+		t.Errorf("rung %d times, want 1", w.rung)
+	}
 }

@@ -10,6 +10,7 @@ import (
 	"unsafe"
 
 	"github.com/ebitengine/purego"
+	"github.com/ebitengine/purego/cstrings"
 	"github.com/ebitengine/purego/objc"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -216,6 +217,8 @@ func init() {
 		panic("ggui: " + err.Error())
 	}
 	purego.RegisterLibFunc(&axRoleDescription, appkit, "NSAccessibilityRoleDescription")
+	purego.RegisterLibFunc(&axPost, appkit, "NSAccessibilityPostNotification")
+	purego.RegisterLibFunc(&axPostWithUserInfo, appkit, "NSAccessibilityPostNotificationWithUserInfo")
 
 	axClassElement, err = objc.RegisterClass(
 		"GgUIAccessibilityElement",
@@ -246,6 +249,15 @@ func init() {
 			{Cmd: objc.RegisterName("isAccessibilitySelected"), Fn: axElementSelected},
 			{Cmd: objc.RegisterName("isAccessibilityExpanded"), Fn: axElementExpanded},
 			{Cmd: objc.RegisterName("accessibilityHitTest:"), Fn: axElementHitTest},
+			{Cmd: axSelPerformPress, Fn: axElementPress},
+			{Cmd: axSelPerformConfirm, Fn: axElementConfirm},
+			{Cmd: axSelPerformIncrement, Fn: axElementIncrement},
+			{Cmd: axSelPerformDecrement, Fn: axElementDecrement},
+			{Cmd: axSelPerformShowMenu, Fn: axElementShowMenu},
+			{Cmd: axSelPerformPick, Fn: axElementPick},
+			{Cmd: axSelSetValue, Fn: axElementSetValue},
+			{Cmd: axSelSetFocused, Fn: axElementSetFocused},
+			{Cmd: objc.RegisterName("isAccessibilitySelectorAllowed:"), Fn: axElementSelectorAllowed},
 		},
 	)
 	if err != nil {
@@ -539,4 +551,216 @@ func axHitTestAt(b *axBridge, p nsPoint) objc.ID {
 		return 0
 	}
 	return objc.ID(b.element(axKeyOf(f.tree.At(i).ID)))
+}
+
+// Notifications are how an assistive technology hears about a change it did
+// not ask for. They must be posted from the main thread, so a frame's worth
+// is batched and delivered in one hop, and only when there is something to
+// deliver: a still frame, or a frame that only moved pixels, costs nothing.
+
+var (
+	axSelDictionary    = objc.RegisterName("dictionaryWithObjects:forKeys:count:")
+	axSelNumberWithInt = objc.RegisterName("numberWithInt:")
+	axSelIsKindOfClass = objc.RegisterName("isKindOfClass:")
+	axSelDoubleValue   = objc.RegisterName("doubleValue")
+
+	axSelPerformPress     = objc.RegisterName("accessibilityPerformPress")
+	axSelPerformIncrement = objc.RegisterName("accessibilityPerformIncrement")
+	axSelPerformDecrement = objc.RegisterName("accessibilityPerformDecrement")
+	axSelPerformShowMenu  = objc.RegisterName("accessibilityPerformShowMenu")
+	axSelPerformPick      = objc.RegisterName("accessibilityPerformPick")
+	axSelPerformConfirm   = objc.RegisterName("accessibilityPerformConfirm")
+	axSelSetValue         = objc.RegisterName("setAccessibilityValue:")
+	axSelSetFocused       = objc.RegisterName("setAccessibilityFocused:")
+)
+
+// axPost and axPostWithUserInfo are AppKit's own posting functions. The
+// notification names are the values of the NSAccessibility*Notification
+// constants, which, like the role names, are part of the API.
+var (
+	axPost             func(element, notification uintptr)
+	axPostWithUserInfo func(element, notification, userInfo uintptr)
+)
+
+// axNoticeName is the AppKit notification for a kind of change.
+func axNoticeName(k axNotice) string {
+	switch k {
+	case axValueChanged:
+		return "AXValueChanged"
+	case axSelectionChanged:
+		return "AXSelectedChildrenChanged"
+	case axFocusChanged:
+		return "AXFocusedUIElementChanged"
+	case axAnnouncement:
+		return "AXAnnouncementRequested"
+	}
+	return "AXLayoutChanged"
+}
+
+// axPriority maps Politeness onto NSAccessibilityPriorityLevel: medium for
+// a polite announcement, which waits its turn, and high for an assertive
+// one, which interrupts.
+func axPriority(loud bool) int32 {
+	if loud {
+		return 90
+	}
+	return 50
+}
+
+// notify posts a frame's notifications in one hop to the main thread, which
+// is the only thread they may be posted from. Elements are resolved here
+// rather than in the diff, because making one is also main-thread work.
+func (d *darwinAX) notify(notes []axNote) {
+	if !appRunning.Load() {
+		return
+	}
+	ebiten.RunOnMainThread(func() {
+		b := theAX.Load()
+		if b == nil || d.container == 0 {
+			return
+		}
+		for _, n := range notes {
+			d.post(b, n)
+		}
+	})
+}
+
+// post delivers one notification. It runs on the main thread.
+func (d *darwinAX) post(b *axBridge, n axNote) {
+	target := d.container
+	if !n.root {
+		e := b.element(n.key)
+		if e == 0 {
+			return
+		}
+		target = objc.ID(e)
+	}
+	if n.kind != axAnnouncement {
+		axPost(uintptr(target), uintptr(nsString(axNoticeName(n.kind))))
+		return
+	}
+	// An announcement is addressed to the window rather than to an element:
+	// it is not about anything on screen, which is the whole reason a live
+	// region needs one.
+	window := d.container.Send(axSelWindow)
+	if window == 0 {
+		window = target
+	}
+	values := []objc.ID{nsString(n.text), objc.ID(axClassNSNumber).Send(axSelNumberWithInt, axPriority(n.loud))}
+	keys := []objc.ID{nsString("AXAnnouncementKey"), nsString("AXPriorityKey")}
+	info := objc.ID(objc.GetClass("NSDictionary")).Send(axSelDictionary,
+		unsafe.Pointer(&values[0]), unsafe.Pointer(&keys[0]), 2)
+	runtime.KeepAlive(values)
+	runtime.KeepAlive(keys)
+	axPostWithUserInfo(uintptr(window), uintptr(nsString("AXAnnouncementRequested")), uintptr(info))
+}
+
+// axPerform hands one action to the app and answers the platform at once,
+// without waiting to find out what came of it. The result says only that
+// the action was accepted, which is all a caller blocking the main thread
+// can safely be told; the next frame's tree says what actually happened.
+func axPerform(self objc.ID, a axAct, act Action) bool {
+	b, _, n, ok := axSelf(self)
+	if !ok || !axAllows(n.Node, a) {
+		return false
+	}
+	act.Kind = axActOf(a)
+	b.perform(n.ID, act)
+	return true
+}
+
+func axElementPress(self objc.ID, _ objc.SEL) bool {
+	return axPerform(self, axPress, Action{})
+}
+
+func axElementConfirm(self objc.ID, _ objc.SEL) bool {
+	return axPerform(self, axConfirm, Action{})
+}
+
+func axElementIncrement(self objc.ID, _ objc.SEL) bool {
+	return axPerform(self, axIncrement, Action{})
+}
+
+func axElementDecrement(self objc.ID, _ objc.SEL) bool {
+	return axPerform(self, axDecrement, Action{})
+}
+
+func axElementShowMenu(self objc.ID, _ objc.SEL) bool {
+	return axPerform(self, axShowMenu, Action{})
+}
+
+func axElementPick(self objc.ID, _ objc.SEL) bool {
+	return axPerform(self, axPick, Action{})
+}
+
+// axElementSetValue takes whatever the platform's text or numeric API
+// replaced the value with. A slider is given a number and everything else a
+// string, which is what dictation and a braille display send.
+func axElementSetValue(self objc.ID, _ objc.SEL, v objc.ID) {
+	if _, _, _, ok := axSelf(self); !ok || v == 0 {
+		return
+	}
+	var act Action
+	if v.Send(axSelIsKindOfClass, axClassNSString) != 0 {
+		act.Text = cstrings.NSStringToString(v)
+	} else {
+		act.Num = objc.Send[float64](v, axSelDoubleValue)
+	}
+	axPerform(self, axSetValue, act)
+}
+
+// axElementSetFocused moves keyboard focus onto the node, and scrolls it
+// into view first when it is clipped out of one: focus is what VoiceOver
+// uses to walk the tree, and a node it cannot see must be brought where the
+// sighted user can. Unfocusing is left alone; ggui moves focus, it does not
+// clear it.
+func axElementSetFocused(self objc.ID, _ objc.SEL, on bool) {
+	if !on {
+		return
+	}
+	_, _, n, ok := axSelf(self)
+	if ok && n.Offscreen && n.Actions.Has(ActionScrollIntoView) {
+		if b := theAX.Load(); b != nil {
+			b.perform(n.ID, Action{Kind: ActionScrollIntoView})
+		}
+	}
+	axPerform(self, axSetFocus, Action{})
+}
+
+// axElementSelectorAllowed is how AppKit asks which actions this element
+// offers, and so what an assistive technology puts in front of the user.
+// Without it every element on the one registered class would advertise
+// every action, since the class responds to all of them.
+func axElementSelectorAllowed(self objc.ID, _ objc.SEL, sel objc.SEL) bool {
+	a, isAction := axActOfSel(sel)
+	if !isAction {
+		return true
+	}
+	_, _, n, ok := axSelf(self)
+	return ok && axAllows(n.Node, a)
+}
+
+// axActOfSel maps an AppKit action selector onto the action it asks for.
+// The selectors are compared by value rather than by name: a SEL is unique
+// for a name, so the ones registered at startup are the ones that arrive.
+func axActOfSel(sel objc.SEL) (axAct, bool) {
+	switch sel {
+	case axSelPerformPress:
+		return axPress, true
+	case axSelPerformConfirm:
+		return axConfirm, true
+	case axSelPerformIncrement:
+		return axIncrement, true
+	case axSelPerformDecrement:
+		return axDecrement, true
+	case axSelPerformShowMenu:
+		return axShowMenu, true
+	case axSelPerformPick:
+		return axPick, true
+	case axSelSetValue:
+		return axSetValue, true
+	case axSelSetFocused:
+		return axSetFocus, true
+	}
+	return 0, false
 }

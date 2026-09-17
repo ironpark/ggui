@@ -112,6 +112,11 @@ type axPlatform interface {
 	// gone. It may be called from the frame goroutine and must marshal
 	// itself to wherever the platform requires.
 	release(elems []uintptr)
+	// notify delivers a frame's worth of notifications. It is called from
+	// the frame goroutine, at most once a frame and never with an empty
+	// list, so a platform that must hop to a particular thread to post
+	// them pays for exactly one hop per frame that had something to say.
+	notify(notes []axNote)
 }
 
 // axPollFrames is how often AccessibilityAuto asks whether an assistive
@@ -132,6 +137,11 @@ type axBridge struct {
 
 	cur atomic.Pointer[axFrame]
 
+	// prev is last frame's, for the diff. Only the frame goroutine
+	// touches it, so it needs neither the lock nor the atomic.
+	prev *axFrame
+	act  func(NodeID, Action)
+
 	mu    sync.Mutex
 	elems axElems
 }
@@ -146,24 +156,36 @@ func (b *axBridge) start(a *App, mode AccessibilityMode) {
 	}
 	b.plat = newAXPlatform(a)
 	if b.plat != nil {
+		b.act = a.Perform
 		axAttach(b)
 	}
 }
 
-// publish makes t the tree every query is answered from, and retires the
-// elements of the nodes that are no longer in it. It runs at the end of a
+// publish makes t the tree every query is answered from, retires the
+// elements of the nodes that are no longer in it, and hands the platform
+// what changed along with whatever Announce queued. It runs at the end of a
 // frame, on the frame goroutine, and returns without waiting for anything.
-func (b *axBridge) publish(t *SemTree) {
+//
+// notices is drained by the caller whether or not the bridge is listening,
+// so that an app nobody is reading does not accumulate a queue of things it
+// will never say.
+func (b *axBridge) publish(t *SemTree, notices []Announcement) {
 	if b.plat == nil || !b.enabled() {
+		b.prev = nil
 		return
 	}
 	f := newAXFrame(t)
+	notes := append(axDiff(b.prev, f), axSpeak(notices)...)
 	b.cur.Store(f)
+	b.prev = f
 	b.mu.Lock()
 	gone := b.elems.sweep(f.index)
 	b.mu.Unlock()
 	if len(gone) > 0 {
 		b.plat.release(gone)
+	}
+	if len(notes) > 0 {
+		b.plat.notify(notes)
 	}
 }
 
@@ -196,6 +218,7 @@ func (b *axBridge) enabled() bool {
 // goes quiet.
 func (b *axBridge) clear() {
 	b.cur.Store(nil)
+	b.prev = nil
 	b.mu.Lock()
 	gone := b.elems.sweep(nil)
 	b.mu.Unlock()
@@ -240,6 +263,15 @@ func (b *axBridge) node(handle int64) (SemNode, bool) {
 		return SemNode{}, false
 	}
 	return f.at(k)
+}
+
+// perform hands an action to the app, which queues it onto the frame
+// goroutine and returns at once. Nothing here waits for it: see the note at
+// the top of actions.go for why waiting is the one thing that deadlocks.
+func (b *axBridge) perform(id NodeID, a Action) {
+	if b.act != nil {
+		b.act(id, a)
+	}
 }
 
 // axElems is the element cache: one platform object per live node, held
@@ -492,4 +524,187 @@ func axHitTest(t *SemTree, p Point) int {
 		walk(r)
 	}
 	return found
+}
+
+// axNotice is the kind of thing that happened, which the platform turns
+// into whatever notification it posts for it.
+type axNotice uint8
+
+const (
+	axLayoutChanged    axNotice = iota // elements came or went
+	axValueChanged                     // a node that stayed reports something else
+	axSelectionChanged                 // a child of some container became the chosen one
+	axFocusChanged                     // keyboard focus moved
+	axAnnouncement                     // something to say out loud, from Announce
+)
+
+// axNote is one notification waiting to be posted. It names a node by key
+// rather than by element, so that the whole diff can be worked out on the
+// frame goroutine and only turned into platform objects at the moment it is
+// delivered, on the thread that may make them.
+type axNote struct {
+	kind axNotice
+	key  axKey  // the node it is about, when root is false
+	root bool   // post on the container instead: the change is the window's
+	text string // what to say, for axAnnouncement
+	loud bool   // interrupt rather than wait, for axAnnouncement
+}
+
+// axDiff works out what an assistive technology must be told about the step
+// from one published tree to the next. It is deliberately shallow: an
+// element answers every question from the current tree whenever it is
+// asked, so nothing has to be pushed except the fact that an answer would
+// now be different, and only for the handful of things a screen reader acts
+// on rather than re-reads.
+//
+// The notes come back in paint order within a kind, and layout before
+// values before focus, so that VoiceOver has the new tree before it is told
+// where to go in it.
+func axDiff(prev, next *axFrame) []axNote {
+	if next == nil {
+		return nil
+	}
+	if prev == nil {
+		return []axNote{{kind: axLayoutChanged, root: true}}
+	}
+	var layout bool
+	var values, selections []axNote
+	for i := range next.tree.Len() {
+		n := next.tree.At(i)
+		k := axKeyOf(n.ID)
+		j, was := prev.index[k]
+		if !was || next.index[k] != int32(i) {
+			// Either the node is new, or it lost a key collision this
+			// frame and is not an element of its own; both are the tree
+			// having changed shape.
+			layout = layout || !was
+			continue
+		}
+		o := prev.tree.At(int(j))
+		if axSpeaks(o.Node, n.Node) {
+			values = append(values, axNote{kind: axValueChanged, key: k})
+		}
+		if o.Selected != n.Selected {
+			selections = append(selections, axParentNote(next, n))
+		}
+	}
+	layout = layout || len(prev.index) != len(next.index)
+
+	var out []axNote
+	if layout {
+		out = append(out, axNote{kind: axLayoutChanged, root: true})
+	}
+	out = append(out, values...)
+	out = append(out, selections...)
+	if before, now := axFocusKey(prev), axFocusKey(next); before != now {
+		if _, ok := next.tree.Focused(); ok {
+			out = append(out, axNote{kind: axFocusChanged, key: now})
+		}
+	}
+	return out
+}
+
+// axSpeaks reports whether what a node says about itself changed in a way a
+// screen reader would repeat. The name is not among them: a node that is
+// renamed is read again the next time it is reached, and announcing every
+// label that a rebuild happened to rewrite would talk over the user.
+func axSpeaks(before, after Node) bool {
+	if before.Value != after.Value || before.Checked != after.Checked || before.Now != after.Now {
+		return true
+	}
+	return axExpanded(before) != axExpanded(after)
+}
+
+// axExpanded folds Node.Expanded into a comparable tri-state: -1 for a node
+// that does not expand at all, 0 closed, 1 open.
+func axExpanded(n Node) int {
+	if n.Expanded == nil {
+		return -1
+	}
+	if *n.Expanded {
+		return 1
+	}
+	return 0
+}
+
+// axParentNote is the selection note for a node: it goes to whatever
+// contains it, since the notification says which of a container's children
+// is now the chosen one, and to the container itself for a root.
+func axParentNote(f *axFrame, n SemNode) axNote {
+	if n.Parent < 0 {
+		return axNote{kind: axSelectionChanged, root: true}
+	}
+	return axNote{kind: axSelectionChanged, key: axKeyOf(f.tree.At(n.Parent).ID)}
+}
+
+// axFocusKey is the key of the focused node, or the zero key when nothing
+// is focused. Comparing the keys rather than the indices is what keeps a
+// rebuild that shifted everything along from looking like a focus move.
+func axFocusKey(f *axFrame) axKey {
+	n, ok := f.tree.Focused()
+	if !ok {
+		return axKey{}
+	}
+	return axKeyOf(n.ID)
+}
+
+// axSpeak turns the queue Announce filled into notes. Politeness survives
+// as loud, which the platform half maps onto whatever priority it has.
+func axSpeak(notices []Announcement) []axNote {
+	out := make([]axNote, 0, len(notices))
+	for _, a := range notices {
+		out = append(out, axNote{kind: axAnnouncement, root: true, text: a.Text, loud: a.Politeness == Assertive})
+	}
+	return out
+}
+
+// axAct is one of the actions a platform accessibility API asks an element
+// to carry out, named here rather than by its selector so that which
+// actions a node offers is decided in plain Go.
+type axAct uint8
+
+const (
+	axPress axAct = iota
+	axIncrement
+	axDecrement
+	axShowMenu
+	axPick
+	axConfirm
+	axSetValue
+	axSetFocus
+)
+
+// axActOf is the ggui action an AppKit action asks for. Confirm is a press:
+// it is what Return does to the focused element, which is what Space
+// already does to every ggui control. Show menu is an expansion, which is
+// what opening a combobox or a select is.
+func axActOf(a axAct) ActionSet {
+	switch a {
+	case axPress, axConfirm:
+		return ActionPress
+	case axIncrement:
+		return ActionIncrement
+	case axDecrement:
+		return ActionDecrement
+	case axShowMenu:
+		return ActionExpand
+	case axPick:
+		return ActionSelect
+	case axSetValue:
+		return ActionSetValue
+	case axSetFocus:
+		return ActionFocus
+	}
+	return 0
+}
+
+// axAllows reports whether a node offers an action, which is what decides
+// the list an assistive technology shows the user: only what Node.Actions
+// claims, and nothing at all on a disabled control except being looked at.
+func axAllows(n Node, a axAct) bool {
+	kind := axActOf(a)
+	if kind == 0 || !n.Actions.Has(kind) {
+		return false
+	}
+	return !n.Disabled || kind == ActionFocus
 }
