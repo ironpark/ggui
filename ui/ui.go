@@ -158,20 +158,44 @@ func (s *interactive) Adopt(prev any) {
 // where it is now. The Motion lives in the Canvas under r and slot rather
 // than in the widget, so a control rebuilt every frame keeps animating
 // without an Adopt.
+// Each widget declares its own slot, a `new(byte)` var, per animated value.
 func motion(dst *ggui.Canvas, r ggui.Rect, slot any, target float64) float64 {
 	now := ggui.Now()
-	m, _ := dst.Retained(r, slot).(ggui.Motion)
+	m, ok := dst.Retained(r, slot).(*ggui.Motion)
+	if !ok {
+		m = new(ggui.Motion)
+	}
 	m.MoveTo(target, now, knobDuration)
-	v := m.Value(now)
 	dst.Retain(r, slot, m)
-	return v
+	return m.Value(now)
 }
 
-// Slots for motion; each names one animated value within a widget's Rect.
-var (
-	knobSlot      = new(byte)
-	chevronSlot   = new(byte)
-	underlineSlot = new(byte)
-	widthSlot     = new(byte)
-	progressSlot  = new(byte)
-)
+// setChanged stores v in s if it differs and then reports it to fn, which
+// may be nil. It is the shape every control's OnChange follows.
+func setChanged[T comparable](s *ggui.Signal[T], v T, fn func(T)) {
+	if s.Peek() == v {
+		return
+	}
+	s.Set(v)
+	if fn != nil {
+		fn(v)
+	}
+}
+
+// stepIndex moves cur by dir through n items, wrapping around and skipping
+// items enabled rejects; from -1 it starts at the near end. It returns cur
+// when nothing is enabled.
+func stepIndex(cur, dir, n int, enabled func(int) bool) int {
+	i := cur
+	for range n {
+		if i < 0 {
+			i = pick(dir < 0, n-1, 0)
+		} else {
+			i = (i + dir + n) % n
+		}
+		if enabled == nil || enabled(i) {
+			return i
+		}
+	}
+	return cur
+}

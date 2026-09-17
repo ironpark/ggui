@@ -69,7 +69,7 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	s.theme = t
 	s.pad = t.FieldPad
 	s.box.Radius(t.Radius).Fill(t.Field)
-	s.list.Fill(t.Surface).Border(1, t.Border).Radius(t.Radius).Pad(t.ItemPad.Top)
+	s.list.Fill(t.Surface).Border(1, t.Border).Radius(t.Radius).Padding(t.PanelPad)
 	s.text = ggui.Text(s.label(s.value.Peek())).NoWrap().Color(pick[color.Color](s.disabled, t.Muted, t.Fg))
 	// As wide as the widest option, so the field does not resize as the
 	// value changes, and never wider than the row wants unless told to.
@@ -125,10 +125,7 @@ func (s *SelectWidget[T]) choose(i int) {
 	if i < 0 || i >= len(s.options) {
 		return
 	}
-	s.value.Set(s.options[i])
-	if s.onChange != nil {
-		s.onChange(s.options[i])
-	}
+	setChanged(s.value, s.options[i], s.onChange)
 	s.popup.Hide()
 }
 
@@ -168,12 +165,9 @@ func (s *SelectWidget[T]) HandleKey(ev ggui.KeyEvent) {
 		}
 		dir := pick(ev.Key == ebiten.KeyArrowUp, -1, 1)
 		if open {
-			s.highlight = (max(s.highlight, 0) + dir + len(s.options)) % len(s.options)
-			if s.highlight < 0 {
-				s.highlight = 0
-			}
+			s.highlight = stepIndex(s.highlight, dir, len(s.options), nil)
 		} else {
-			s.choose((max(s.index(), 0) + dir + len(s.options)) % len(s.options))
+			s.choose(stepIndex(s.index(), dir, len(s.options), nil))
 		}
 	}
 }

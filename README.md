@@ -359,7 +359,7 @@ the same way: `Provide(key, v, child)` stores `v` under a `Key[T]` from
 `Field`, `Border`, `Accent`, `AccentHover`, `OnAccent`, `Selection`, `Muted`),
 named text styles (`Text`, `Title`, `Caption`), sizes (`Radius`, `Space`)
 and the paddings the controls use (`ButtonPad`, `FieldPad`, `ItemPad`,
-`CardPad`), so a custom control can match the built-in ones.
+`CardPad`, `PanelPad`), so a custom control can match the built-in ones.
 `UseTheme()` reads it at build time and subscribes the enclosing Builder;
 `SetTheme(t)` swaps it and rebuilds only what read it. `DefaultTheme()` is
 light, `DarkTheme()` dark, and a window with no `Background` follows the

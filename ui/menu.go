@@ -61,7 +61,7 @@ func (m *MenuWidget) toggle() {
 func (m *MenuWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := env.Theme()
 	m.theme = t
-	m.panel.Fill(t.Surface).Border(1, t.Border).Radius(t.Radius).Pad(t.ItemPad.Top)
+	m.panel.Fill(t.Surface).Border(1, t.Border).Radius(t.Radius).Padding(t.PanelPad)
 	return m.popup.Layout(c, env)
 }
 
@@ -107,22 +107,9 @@ func (m *MenuWidget) HandleKey(ev ggui.KeyEvent) {
 	}
 }
 
-// step moves the keyboard highlight by dir, skipping disabled items and
-// wrapping around; with nothing highlighted it starts from the near end.
+// step moves the keyboard highlight by dir, skipping disabled items.
 func (m *MenuWidget) step(dir int) {
-	n := len(m.items)
-	i := m.current
-	for range n {
-		if i < 0 {
-			i = pick(dir < 0, n-1, 0)
-		} else {
-			i = (i + dir + n) % n
-		}
-		if !m.items[i].disabled {
-			m.current = i
-			return
-		}
-	}
+	m.current = stepIndex(m.current, dir, len(m.items), func(i int) bool { return !m.items[i].disabled })
 }
 
 // Adopt implements ggui.Adopter: an open menu carries across a rebuild.

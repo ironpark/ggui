@@ -34,14 +34,7 @@ func (s *SliderWidget) OnChange(fn func(float64)) *SliderWidget { s.onChange = f
 
 // set stores v, clamped to the range, and reports the change.
 func (s *SliderWidget) set(v float64) {
-	v = clamp(v, min(s.min, s.max), max(s.min, s.max))
-	if v == s.value.Peek() {
-		return
-	}
-	s.value.Set(v)
-	if s.onChange != nil {
-		s.onChange(v)
-	}
+	setChanged(s.value, clamp(v, min(s.min, s.max), max(s.min, s.max)), s.onChange)
 }
 
 // Disabled greys the slider out and ignores the pointer while v is true.

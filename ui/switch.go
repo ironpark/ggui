@@ -18,14 +18,11 @@ func Switch(on *ggui.Signal[bool], label string) *SwitchWidget {
 	if label != "" {
 		s.label = ggui.Text(label)
 	}
-	s.onTap = func() {
-		ggui.Toggle(on)
-		if s.onChange != nil {
-			s.onChange(on.Peek())
-		}
-	}
+	s.onTap = func() { setChanged(on, !on.Peek(), s.onChange) }
 	return s
 }
+
+var knobSlot = new(byte)
 
 // OnChange fires with the new value after a click flipped it.
 func (s *SwitchWidget) OnChange(fn func(bool)) *SwitchWidget { s.onChange = fn; return s }

@@ -75,6 +75,8 @@ func Progress(value ggui.Reader[float64]) *ProgressWidget {
 	return &ProgressWidget{value: value, height: 6}
 }
 
+var progressSlot = new(byte)
+
 // Height sets the bar's thickness.
 func (p *ProgressWidget) Height(h float64) *ProgressWidget { p.height = h; return p }
 

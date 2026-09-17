@@ -12,11 +12,10 @@ type TabsWidget struct {
 	tabs     []TabPage
 	onChange func(int)
 
-	labels    []*ggui.TextWidget
-	labelSize []ggui.Size
-	hovered   int // the label under the pointer, or -1
-	focus     focusState
-	disabled  bool
+	interactive // hovered is unused; hover holds the label instead
+	labels      []*ggui.TextWidget
+	labelSize   []ggui.Size
+	hover       int // the label under the pointer, or -1
 
 	theme     ggui.Theme
 	headerH   float64
@@ -38,7 +37,7 @@ func Tab(label string, content ggui.Widget) TabPage { return TabPage{Label: labe
 // Click or Space picks the label under the pointer; Left and Right move
 // while the strip has focus. Only the selected page is laid out.
 func Tabs(selected *ggui.Signal[int], tabs ...TabPage) *TabsWidget {
-	t := &TabsWidget{selected: selected, tabs: tabs, hovered: -1}
+	t := &TabsWidget{selected: selected, tabs: tabs, hover: -1}
 	for _, tab := range tabs {
 		t.labels = append(t.labels, ggui.Text(tab.Label).NoWrap())
 	}
@@ -60,12 +59,8 @@ func (t *TabsWidget) index() int {
 }
 
 func (t *TabsWidget) pick(i int) {
-	if i < 0 || i >= len(t.tabs) || i == t.index() {
-		return
-	}
-	t.selected.Set(i)
-	if t.onChange != nil {
-		t.onChange(i)
+	if i >= 0 && i < len(t.tabs) {
+		setChanged(t.selected, i, t.onChange)
 	}
 }
 
@@ -106,6 +101,7 @@ func (t *TabsWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t.labelRect = t.labelRect[:0]
 	x := r.Origin.X
 	cur := t.index()
+	hover := pick(t.disabled, -1, t.hover)
 	for i, s := range t.labelSize {
 		lr := ggui.Rct(ggui.Pt(x, r.Origin.Y), ggui.Sz(s.W+t.pad.Left+t.pad.Right, t.headerH-1))
 		t.labelRect = append(t.labelRect, lr)
@@ -113,7 +109,7 @@ func (t *TabsWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 			dst.HitPointer(lr, tabLabel{t, i})
 			dst.HitCursor(lr, ebiten.CursorShapePointer)
 		}
-		if i == t.hovered && i != cur && !t.disabled {
+		if i == hover && i != cur {
 			dst.FillRoundRect(lr, th.Radius, th.Surface)
 		}
 		dst.Paint(t.labels[i], ggui.Rct(ggui.Pt(x+t.pad.Left, r.Origin.Y+t.pad.Top), s))
@@ -126,9 +122,7 @@ func (t *TabsWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		x := motion(dst, header, underlineSlot, lr.Origin.X)
 		w := motion(dst, header, widthSlot, lr.Size.W)
 		dst.FillRoundRect(ggui.Rct(ggui.Pt(x, lineY-1), ggui.Sz(w, 2)), 1, pick(t.disabled, th.Muted, th.Accent))
-		if t.focus.focused && t.focus.ring {
-			t.focus.paintRing(dst, lr, th.Radius, th)
-		}
+		t.focus.paintRing(dst, lr, th.Radius, th)
 		dst.Paint(t.tabs[cur].Content, ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+t.headerH), t.bodySize))
 	}
 }
@@ -153,10 +147,16 @@ func (t *TabsWidget) HandleKey(ev ggui.KeyEvent) {
 
 // Adopt implements ggui.Adopter.
 func (t *TabsWidget) Adopt(prev any) {
+	t.interactive.Adopt(prev)
 	if p, ok := prev.(*TabsWidget); ok {
-		t.hovered, t.focus = p.hovered, p.focus
+		t.hover = p.hover
 	}
 }
+
+var (
+	underlineSlot = new(byte)
+	widthSlot     = new(byte)
+)
 
 // tabLabel is the pointer handler for one label.
 type tabLabel struct {
@@ -167,10 +167,10 @@ type tabLabel struct {
 func (l tabLabel) HandlePointer(ev ggui.PointerEvent) bool {
 	switch ev.Kind {
 	case ggui.PointerEnter, ggui.PointerMove:
-		l.t.hovered = l.i
+		l.t.hover = l.i
 	case ggui.PointerExit:
-		if l.t.hovered == l.i {
-			l.t.hovered = -1
+		if l.t.hover == l.i {
+			l.t.hover = -1
 		}
 	case ggui.PointerTap:
 		if ev.Button == ebiten.MouseButtonLeft {
@@ -183,7 +183,7 @@ func (l tabLabel) HandlePointer(ev ggui.PointerEvent) bool {
 }
 
 func (l tabLabel) Adopt(prev any) {
-	if p, ok := prev.(tabLabel); ok && p.t.hovered == p.i {
-		l.t.hovered = l.i
+	if p, ok := prev.(tabLabel); ok && p.t.hover == p.i {
+		l.t.hover = l.i
 	}
 }

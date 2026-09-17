@@ -60,7 +60,6 @@ func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	// The chevron turns from pointing right (0) to pointing down (1).
 	v := motion(dst, header, chevronSlot, pick(c.open.Peek(), 1.0, 0.0))
-	// The chevron turns from pointing right to pointing down.
 	cx, cy := r.Origin.X+c.pad.Left+controlSize*0.4, r.Origin.Y+c.headerH/2
 	rot := func(x, y float64) ggui.Point {
 		a := v * math.Pi / 2
@@ -76,6 +75,8 @@ func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 
 // HandleKey implements KeyHandler: Space or Enter toggles.
 func (c *CollapsibleWidget) HandleKey(ev ggui.KeyEvent) { c.key(ev, c.toggle) }
+
+var chevronSlot = new(byte)
 
 // HandlePointer implements PointerHandler.
 func (c *CollapsibleWidget) HandlePointer(ev ggui.PointerEvent) bool { return c.pointer(ev, c.toggle) }

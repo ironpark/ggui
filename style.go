@@ -147,16 +147,18 @@ type Theme struct {
 	ButtonPad EdgeInsets // inside a button
 	FieldPad  EdgeInsets // inside a text field, select or other input
 	ItemPad   EdgeInsets // around one row of a list or menu
-	CardPad   EdgeInsets // inside a card or panel
+	CardPad   EdgeInsets // inside a card
+	PanelPad  EdgeInsets // inside a popup panel, around its items
 }
 
 // DefaultTheme is a light theme in Go Regular.
 func DefaultTheme() Theme {
 	fg := color.RGBA{0x1f, 0x23, 0x28, 0xff}
+	muted := color.RGBA{0x6b, 0x72, 0x7c, 0xff}
 	return Theme{
 		Text:        TextStyle{Size: DefaultTextSize, Color: fg},
 		Title:       TextStyle{Size: 24},
-		Caption:     TextStyle{Size: 12, Color: color.RGBA{0x6b, 0x72, 0x7c, 0xff}},
+		Caption:     TextStyle{Size: 12, Color: muted},
 		Fg:          fg,
 		Bg:          color.White,
 		Surface:     color.RGBA{0xf2, 0xf3, 0xf5, 0xff},
@@ -166,13 +168,14 @@ func DefaultTheme() Theme {
 		AccentHover: color.RGBA{0x24, 0x5c, 0xc7, 0xff},
 		OnAccent:    color.White,
 		Selection:   color.RGBA{0x2f, 0x6f, 0xeb, 0x50},
-		Muted:       color.RGBA{0x6b, 0x72, 0x7c, 0xff},
+		Muted:       muted,
 		Radius:      6,
 		Space:       8,
 		ButtonPad:   Insets(6, 16),
 		FieldPad:    Insets(6, 8),
 		ItemPad:     Insets(4, 8),
 		CardPad:     Insets(16),
+		PanelPad:    Insets(4),
 	}
 }
 

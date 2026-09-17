@@ -22,15 +22,7 @@ func Radio[T comparable](selected *ggui.Signal[T], value T, label string) *Radio
 	if label != "" {
 		r.label = ggui.Text(label)
 	}
-	r.onTap = func() {
-		if selected.Peek() == value {
-			return
-		}
-		selected.Set(value)
-		if r.onChange != nil {
-			r.onChange(value)
-		}
-	}
+	r.onTap = func() { setChanged(selected, value, r.onChange) }
 	return r
 }
 

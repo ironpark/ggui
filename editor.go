@@ -380,7 +380,6 @@ func (t *TextInputWidget) Layout(c Constraints, env Env) Size {
 	th := env.Theme()
 	if t.disabled {
 		t.resolved.Color = th.Muted
-		t.focused = false
 	}
 	t.muted, t.selection = th.Muted, th.Selection
 	if v := t.value.Peek(); v != t.ed.text {

@@ -119,6 +119,21 @@ type inputState struct {
 	shortcuts []func(KeyEvent) bool // App.OnKey handlers, tried before the focused widget
 }
 
+// withoutShortcuts returns keys less those a shortcut consumed, copying
+// only once one has.
+func (in *inputState) withoutShortcuts(keys []ebiten.Key, mods Mods) []ebiten.Key {
+	out, copied := keys, false
+	for i, k := range keys {
+		switch taken := in.shortcut(k, mods); {
+		case taken && !copied:
+			out, copied = slices.Clone(keys[:i]), true
+		case !taken && copied:
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
 // shortcut offers a key press to the OnKey handlers and reports whether
 // one consumed it.
 func (in *inputState) shortcut(k ebiten.Key, mods Mods) bool {
@@ -193,8 +208,8 @@ func (in *inputState) dispatch(f frameInput) {
 		f.keys = slices.Delete(slices.Clone(f.keys), i, i+1)
 		in.moveFocus(pick(f.mods.Shift, -1, 1))
 	}
-	if len(in.shortcuts) > 0 && len(f.keys) > 0 {
-		f.keys = slices.DeleteFunc(slices.Clone(f.keys), func(k ebiten.Key) bool { return in.shortcut(k, f.mods) })
+	if len(in.shortcuts) > 0 {
+		f.keys = in.withoutShortcuts(f.keys, f.mods)
 	}
 
 	if in.focused != nil {

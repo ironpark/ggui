@@ -9,10 +9,10 @@ import (
 // border that turns Accent while focused, the theme's padding and radius.
 // Build one with TextField.
 type TextFieldWidget struct {
-	input    *ggui.TextInputWidget
-	box      *ggui.BoxWidget
-	disabled bool
-	theme    ggui.Theme
+	interactive // only disabled is used; the editor tracks its own focus
+	input       *ggui.TextInputWidget
+	box         *ggui.BoxWidget
+	theme       ggui.Theme
 }
 
 // TextField creates a text field bound to value.
@@ -67,11 +67,7 @@ func (f *TextFieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 // Paint implements Widget.
 func (f *TextFieldWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// The whole box, padding included, focuses and clicks into the editor.
-	if !f.disabled {
-		dst.HitPointer(r, f.input)
-		dst.HitKey(r, f.input)
-		dst.HitCursor(r, ebiten.CursorShapeText)
-	}
+	f.hit(dst, r, f.input, ebiten.CursorShapeText)
 	f.box.Border(1, pick(f.input.Focused(), f.theme.Accent, f.theme.Border))
 	dst.Paint(f.box, r)
 }
