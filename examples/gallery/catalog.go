@@ -33,6 +33,10 @@ var previewDetails = map[string]previewInfo{
 	"Wrap":                     {"Layout", "Removable tags that flow naturally onto the next line."},
 	"Table":                    {"Data", "Selectable rows, flexible columns and row actions."},
 	"Grid":                     {"Data", "The shared color palette, presented in a responsive grid."},
+	"Sheets and drawers":       {"Navigation", "Edge-anchored modal panels that slide in and hand focus back."},
+	"Sidebar":                  {"Navigation", "A keyed navigation column and the trail to the page it shows."},
+	"Groups and addons":        {"Inputs", "Segmented choices, joined actions and a field with prefix and suffix."},
+	"Profile and media":        {"Layout", "Avatars, list rows, hover previews and fixed aspect ratios."},
 }
 
 type componentPreview struct {

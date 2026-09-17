@@ -186,3 +186,47 @@ func TestGalleryControlFlows(t *testing.T) {
 		t.Fatal("splitter drag did not move")
 	}
 }
+
+// TestGalleryNavigationAndOverlays drives the previews added for the
+// navigation, grouping and composition components in the real tree, where
+// they share a window with everything else.
+func TestGalleryNavigationAndOverlays(t *testing.T) {
+	p := galleryProbe(ggui.Sz(1180, 820))
+	defer p.Close()
+
+	searchGallery(p, "Sidebar")
+	p.Tap("Sent")
+	p.Type(ggui.Mods{}, ebiten.KeyArrowDown, ebiten.KeyEnter)
+	p.Tap("Home")
+
+	searchGallery(p, "Groups and addons")
+	p.Tap("right")
+	if node, ok := p.Semantics().Find(ggui.RoleRadio, "right"); !ok || node.Checked != ggui.TriOn {
+		t.Fatal("the toggle group did not take the click")
+	}
+	p.Tap("Cut")
+
+	searchGallery(p, "Sheets and drawers")
+	p.Tap("Open filters")
+	p.Advance(400 * time.Millisecond)
+	if _, ok := p.Find("Apply"); !ok {
+		t.Fatal("the filters sheet did not open")
+	}
+	p.Tap("Apply")
+	p.Advance(400 * time.Millisecond)
+	if _, ok := p.Find("Apply"); ok {
+		t.Fatal("the filters sheet is still taking input after it left")
+	}
+
+	searchGallery(p, "Dialog")
+	p.Tap("Remove row…")
+	p.Frame()
+	p.Click(ggui.Pt(8, 8))
+	if _, ok := p.Find("Remove"); !ok {
+		t.Fatal("a click beside the confirmation dismissed it")
+	}
+	p.Tap("Remove")
+	if _, ok := p.Find("Remove"); ok {
+		t.Fatal("the confirmation stayed open after it was answered")
+	}
+}

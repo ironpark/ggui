@@ -68,6 +68,11 @@ func newGallery() (ggui.Builder, func(), func()) {
 	notify := ggui.State(true)
 	plan := ggui.State("free")
 	tags := ggui.State([]string{"go", "gui", "ebiten", "signals", "flutter", "svelte", "layout", "hidpi"})
+	nav := ggui.State("inbox")
+	align := ggui.State("center")
+	site := ggui.State("")
+	filtersOpen, drawerOpen, removeOpen := ggui.State(false), ggui.State(false), ggui.State(false)
+	removed := ggui.State(0)
 
 	// emailError follows the field and is empty while the address looks
 	// right; Field shows it in place of the help text.
@@ -84,6 +89,28 @@ func newGallery() (ggui.Builder, func(), func()) {
 		ui.Menu("Edit", ui.MenuItem("Undo edit", func() { toasts.Push(ui.Toast("Undone", "The last edit was reverted.")) })),
 		ui.Menu("View", ui.MenuItem("Switch theme", func() { ggui.Toggle(dark) })),
 	).Compact()
+	// The sheets, the drawer, the confirmation and the sidebar own state that
+	// has to outlive a rebuild -- an animation in flight, the highlighted
+	// destination -- so they are built once, beside the signals they bind.
+	filtersSheet := ui.Sheet(filtersOpen, ggui.Column(
+		ui.Checkbox(notify, "Only unread"),
+		ui.Radios(plan, []string{"free", "pro", "team"}).Vertical(),
+		ui.Button("Apply", func() { filtersOpen.Set(false) }),
+	).Space(1.5).Align(ggui.AlignStretch)).Title("Filters").Size(280)
+	shareDrawer := ui.Drawer(drawerOpen, ggui.Column(
+		ggui.Text("A drawer rises from the bottom edge with a grab handle."),
+		ui.Button("Close", func() { drawerOpen.Set(false) }).Outline(),
+	).Space(1.5).Align(ggui.AlignStretch)).Title("Share")
+	removeDialog := ui.AlertDialog(removeOpen, "Remove the row?", "A click beside this question will not dismiss it.").
+		Confirm("Remove", func() { ggui.Add(removed, 1) }).Destructive()
+	navBar := ui.Sidebar(nav,
+		ui.SidebarSection("Mail"),
+		ui.SidebarItem("inbox", "Inbox"),
+		ui.SidebarItem("sent", "Sent"),
+		ui.SidebarItem("spam", "Spam").Disabled(true),
+		ui.SidebarSection("Workspace"),
+		ui.SidebarItem("settings", "Settings"),
+	).Width(150)
 	reset := func() {
 		name.Set("")
 		email.Set("")
@@ -255,7 +282,53 @@ func newGallery() (ggui.Builder, func(), func()) {
 						ui.Button("Cancel", func() { confirm.Set(false) }).Outline(),
 					).Space(1).Justify(ggui.JustifyEnd),
 				).Space(1.5).Align(ggui.AlignStretch)).Title("Reset?"),
+				ggui.Row(
+					ui.Button("Remove row…", func() { removeOpen.Set(true) }).Destructive(),
+					ggui.Textf("removed %d times", removed).AsCaption(),
+				).Space(1),
+				removeDialog,
 			).Space(1)),
+
+			section("Sheets and drawers", ggui.Column(
+				ggui.Wrap(
+					ui.Button("Open filters", func() { filtersOpen.Set(true) }).Outline(),
+					ui.Button("Open drawer", func() { drawerOpen.Set(true) }).Outline(),
+				).Space(1),
+				ggui.Caption("A scrim takes the clicks, Tab stays inside, and Escape hands focus back."),
+			).Space(1)),
+			filtersSheet, shareDrawer,
+
+			section("Sidebar", ggui.Column(
+				ui.Breadcrumb(
+					ui.Crumb("Home", func() { nav.Set("inbox") }),
+					ui.Crumb("Mail", func() { nav.Set("inbox") }),
+					ui.Crumb("Message", nil),
+				),
+				ggui.Box(ggui.Row(navBar, ggui.Expanded(ggui.Center(ggui.TextOf(nav))))).
+					Height(180).Border(1, t.Border).Radius(t.Radius),
+			).Space(1).Align(ggui.AlignStretch)),
+
+			section("Groups and addons", ggui.Column(
+				ui.ToggleGroup(align, []string{"left", "center", "right"}),
+				ui.ButtonGroup(
+					ui.Button("Copy", nil).Ghost(),
+					ui.Button("Cut", nil).Ghost(),
+					ui.Button("Paste", nil).Ghost(),
+				),
+				ui.InputGroup(ggui.TextInput(site).Placeholder("example.com").Label("Site")).
+					Leading(ggui.Text("https://").Color(t.MutedFg)).
+					Trailing(ui.Button("Go", nil).Ghost()),
+			).Space(1).Align(ggui.AlignStretch)),
+
+			section("Profile and media", ggui.Column(
+				ui.Item("Ada Lovelace", "Analytical engine").
+					Media(ui.Avatar("Ada Lovelace").Size(32)).
+					Action(ui.HoverCard(
+						ui.Button("Details", nil).Outline(),
+						ggui.Column(ggui.Title("Ada Lovelace").Size(16), ggui.Caption("Rest the cursor to preview.")).Gap(4),
+					)).Outline(),
+				ui.AspectRatio(16.0/9, ggui.Box(ggui.Center(ggui.Caption("16 : 9"))).Fill(t.Muted).Radius(t.Radius)),
+			).Space(1).Align(ggui.AlignStretch)),
 
 			section("Wrap", ggui.View(tags, func(list []string) *ggui.WrapWidget {
 				return ggui.Wrap(ggui.Children(list, func(tag string) ggui.Widget {
