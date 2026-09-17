@@ -68,10 +68,12 @@ type TextWidget struct {
 	wrap       bool
 	align      float64
 
-	// Layout caches the wrapped lines and their widths, and re-wraps only
-	// when the text, the face or the width it must fit in changes.
+	// Layout caches the wrapped lines, their widths and the size they add up
+	// to, and re-measures only when the text, the face or the width it must
+	// fit in changes.
 	lines   []string
 	widths  []float64
+	natural Size
 	wrapped wrapKey
 }
 
@@ -107,8 +109,6 @@ func (t *TextWidget) NoWrap() *TextWidget { t.wrap = false; return t }
 // 0.5 centered, 1 right.
 func (t *TextWidget) Align(x float64) *TextWidget { t.align = x; return t }
 
-func (t *TextWidget) face() text.Face { return t.faceAt(1) }
-
 // faceAt returns the face at the widget's size times scale, so that on a
 // HiDPI Canvas glyphs are rasterized at full resolution instead of scaled up.
 func (t *TextWidget) faceAt(scale float64) text.Face {
@@ -124,23 +124,23 @@ func (t *TextWidget) spacing() float64 { return t.size * t.lineHeight }
 
 // Layout implements Widget.
 func (t *TextWidget) Layout(c Constraints) Size {
-	face := t.face()
+	face := t.faceAt(1)
 	key := wrapKey{value: t.value, face: face, maxW: pick(t.wrap, c.MaxW, 0)}
 	if key != t.wrapped {
 		t.wrapped = key
 		t.lines = wrapText(key.value, key.face, key.maxW)
 		t.widths = t.widths[:0]
+		var w float64
 		for _, line := range t.lines {
-			t.widths = append(t.widths, lineWidth(line, face))
+			lw := lineWidth(line, face)
+			t.widths = append(t.widths, lw)
+			w = max(w, lw)
 		}
+		m := face.Metrics()
+		h := float64(len(t.lines)-1)*t.spacing() + m.HAscent + m.HDescent
+		t.natural = Sz(w, h)
 	}
-	var w float64
-	for _, lw := range t.widths {
-		w = max(w, lw)
-	}
-	m := face.Metrics()
-	h := float64(len(t.lines)-1)*t.spacing() + m.HAscent + m.HDescent
-	return c.Constrain(Sz(w, h))
+	return c.Constrain(t.natural)
 }
 
 // Paint implements Widget.
@@ -148,16 +148,16 @@ func (t *TextWidget) Paint(dst *Canvas, r Rect) {
 	if dst == nil || dst.Image == nil {
 		return
 	}
-	scale := dst.scale()
-	face := t.faceAt(scale)
+	face := t.faceAt(dst.Scale())
+	op := &text.DrawOptions{}
+	if t.color != nil {
+		op.ColorScale.ScaleWithColor(t.color)
+	}
 	for i, line := range t.lines {
-		op := &text.DrawOptions{}
 		x := r.Origin.X + (r.Size.W-t.widths[i])*t.align
 		y := r.Origin.Y + float64(i)*t.spacing()
-		op.GeoM.Translate(x*scale, y*scale)
-		if t.color != nil {
-			op.ColorScale.ScaleWithColor(t.color)
-		}
+		op.GeoM.Reset()
+		op.GeoM.Translate(dst.px(x), dst.px(y))
 		text.Draw(dst.Image, line, face, op)
 	}
 }
@@ -668,7 +668,7 @@ func (s *ScrollWidget) Paint(dst *Canvas, r Rect) {
 
 func (s *ScrollWidget) paintBar(dst *Canvas, r Rect) {
 	track, content := s.extent(r.Size), s.extent(s.childSize)
-	if s.bar == nil || dst == nil || dst.Image == nil || content <= track {
+	if content <= track {
 		return
 	}
 	const thickness, margin, minThumb = 3.0, 2.0, 16.0

@@ -211,8 +211,8 @@ inside `r`.
 ## HiDPI
 
 Widgets work in logical pixels; the screen is allocated at the monitor's
-device scale factor so a Retina display gets a sharp image. `Canvas.Scale`
-holds the factor, and drawing goes through it: `dst.FillRect(r, c)` fills a
+device scale factor so a Retina display gets a sharp image. `dst.Scale()`
+returns the factor, and drawing goes through it: `dst.FillRect(r, c)` fills a
 logical `Rect`, `dst.Px(v)` converts a length, `dst.Geo(at)` is the transform
 for `DrawImageOptions`, and text rasterizes its face at the scaled size rather
 than scaling the pixels. A custom widget that draws with Ebitengine directly

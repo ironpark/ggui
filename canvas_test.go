@@ -8,7 +8,7 @@ import (
 )
 
 func TestCanvasScaleConvertsToImagePixels(t *testing.T) {
-	c := &Canvas{Scale: 2}
+	c := &Canvas{scale: 2}
 	if got := c.Px(7.5); got != 15 {
 		t.Fatalf("Px(7.5) = %v at scale 2, want 15", got)
 	}
@@ -21,14 +21,14 @@ func TestCanvasScaleConvertsToImagePixels(t *testing.T) {
 		t.Fatalf("Geo maps (1,1) to (%v,%v), want (22,42)", x, y)
 	}
 	var zero Canvas
-	if zero.scale() != 1 || (*Canvas)(nil).scale() != 1 {
+	if zero.Scale() != 1 || (*Canvas)(nil).Scale() != 1 {
 		t.Fatal("zero and nil canvases must scale by 1")
 	}
 }
 
 func TestClipKeepsScale(t *testing.T) {
-	c := &Canvas{Scale: 2}
-	if got := c.Clip(Rct(Pt(0, 0), Sz(10, 10))).Scale; got != 2 {
+	c := &Canvas{scale: 2}
+	if got := c.Clip(Rct(Pt(0, 0), Sz(10, 10))).Scale(); got != 2 {
 		t.Fatalf("clipped canvas scale = %v, want 2", got)
 	}
 }

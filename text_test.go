@@ -39,7 +39,7 @@ func TestTextBreaksLongWordsBetweenRunes(t *testing.T) {
 		t.Fatalf("%d lines, want at least 4", len(w.lines))
 	}
 	for _, l := range w.lines {
-		if lineWidth(l, w.face()) > full.W/4 {
+		if lineWidth(l, w.faceAt(1)) > full.W/4 {
 			t.Fatalf("line %q is wider than the limit", l)
 		}
 	}

@@ -17,35 +17,40 @@ import (
 type Canvas struct {
 	Image *ebiten.Image
 
-	// Scale is the number of Image pixels per logical pixel: the monitor's
-	// device scale factor on a HiDPI screen, 1 elsewhere. Layout and Rects
-	// are in logical pixels; anything drawn on Image must be scaled by it.
-	// FillRect, Geo and Px do that; text scales its face size instead.
-	Scale float64
-
+	scale   float64
 	hits    []hitRegion
 	parent  *Canvas // set on a Clip; hit regions go to the root
 	clip    Rect
 	clipped bool
 }
 
-func (c *Canvas) scale() float64 {
-	if c == nil || c.Scale == 0 {
+// Scale is the number of Image pixels per logical pixel: the monitor's device
+// scale factor on a HiDPI screen, 1 elsewhere, and 1 for a canvas that was
+// never given one. Layout and Rects are in logical pixels; anything drawn on
+// Image must be scaled by it. FillRect, Geo and Px do that; text scales its
+// face size instead.
+func (c *Canvas) Scale() float64 {
+	if c == nil || c.scale == 0 {
 		return 1
 	}
-	return c.Scale
+	return c.scale
 }
 
+// px and dp convert a length between logical and Image pixels. Every
+// conversion in the framework goes through this pair.
+func (c *Canvas) px(v float64) float64 { return v * c.Scale() }
+func (c *Canvas) dp(v float64) float64 { return v / c.Scale() }
+
 // Px converts a logical length or coordinate to Image pixels.
-func (c *Canvas) Px(v float64) float32 { return float32(v * c.scale()) }
+func (c *Canvas) Px(v float64) float32 { return float32(c.px(v)) }
 
 // Geo returns the transform that maps a widget's own logical coordinates,
 // with its origin at, onto Image pixels. Use it in DrawImageOptions.
 func (c *Canvas) Geo(at Point) ebiten.GeoM {
 	var g ebiten.GeoM
-	s := c.scale()
+	s := c.Scale()
 	g.Scale(s, s)
-	g.Translate(at.X*s, at.Y*s)
+	g.Translate(c.px(at.X), c.px(at.Y))
 	return g
 }
 
@@ -54,15 +59,14 @@ func (c *Canvas) FillRect(r Rect, col color.Color) {
 	if c == nil || c.Image == nil || col == nil {
 		return
 	}
-	vector.DrawFilledRect(c.Image, c.Px(r.Origin.X), c.Px(r.Origin.Y), c.Px(r.Size.W), c.Px(r.Size.H), col, true)
+	vector.FillRect(c.Image, c.Px(r.Origin.X), c.Px(r.Origin.Y), c.Px(r.Size.W), c.Px(r.Size.H), col, true)
 }
 
 // physical returns the Image pixels r covers, rounded outwards.
 func (c *Canvas) physical(r Rect) image.Rectangle {
-	s := c.scale()
 	return image.Rect(
-		int(math.Floor(r.Origin.X*s)), int(math.Floor(r.Origin.Y*s)),
-		int(math.Ceil((r.Origin.X+r.Size.W)*s)), int(math.Ceil((r.Origin.Y+r.Size.H)*s)),
+		int(math.Floor(c.px(r.Origin.X))), int(math.Floor(c.px(r.Origin.Y))),
+		int(math.Ceil(c.px(r.Origin.X+r.Size.W))), int(math.Ceil(c.px(r.Origin.Y+r.Size.H))),
 	)
 }
 
@@ -72,7 +76,7 @@ func (c *Canvas) Clip(r Rect) *Canvas {
 	if c == nil {
 		return nil
 	}
-	child := &Canvas{parent: c, clip: r, clipped: true, Scale: c.Scale}
+	child := &Canvas{parent: c, clip: r, clipped: true, scale: c.scale}
 	if c.clipped {
 		child.clip = c.clip.Intersect(r)
 	}

@@ -45,14 +45,13 @@ type App struct {
 	root  Widget
 	frame []func()
 
-	canvas Canvas
+	canvas Canvas // also holds the frame's screen-pixels-per-logical-pixel scale
 	input  inputState
-	scale  float64 // screen pixels per logical pixel
 }
 
 // New creates an App that renders the tree returned by build.
 func New(cfg Config, build Builder) *App {
-	return &App{cfg: cfg.withDefaults(), build: build, scale: 1}
+	return &App{cfg: cfg.withDefaults(), build: build}
 }
 
 // Run opens the window and blocks until it closes.
@@ -85,7 +84,7 @@ func (a *App) Update() error {
 	for _, fn := range a.frame {
 		fn()
 	}
-	a.input.dispatch(readInput(a.scale))
+	a.input.dispatch(a.readInput())
 	effects.flush()
 	return nil
 }
@@ -94,10 +93,10 @@ var mouseButtons = []ebiten.MouseButton{ebiten.MouseButtonLeft, ebiten.MouseButt
 
 // readInput gathers this frame's input from the platform, with positions
 // converted from screen pixels to logical pixels.
-func readInput(scale float64) frameInput {
+func (a *App) readInput() frameInput {
 	var f frameInput
 	x, y := ebiten.CursorPosition()
-	f.pos = Pt(float64(x)/scale, float64(y)/scale)
+	f.pos = Pt(a.canvas.dp(float64(x)), a.canvas.dp(float64(y)))
 	for _, b := range mouseButtons {
 		if inpututil.IsMouseButtonJustPressed(b) {
 			f.down = append(f.down, b)
@@ -118,9 +117,9 @@ func (a *App) Draw(screen *ebiten.Image) {
 	if a.root == nil {
 		return
 	}
-	a.canvas.Image, a.canvas.Scale, a.canvas.hits = screen, a.scale, a.canvas.hits[:0]
+	a.canvas.Image, a.canvas.hits = screen, a.canvas.hits[:0]
 	b := screen.Bounds()
-	logical := Sz(float64(b.Dx())/a.scale, float64(b.Dy())/a.scale)
+	logical := Sz(a.canvas.dp(float64(b.Dx())), a.canvas.dp(float64(b.Dy())))
 	size := a.root.Layout(Tight(logical))
 	a.root.Paint(&a.canvas, Rect{Size: size})
 	a.input.regions = a.canvas.hits
@@ -131,9 +130,9 @@ func (a *App) Draw(screen *ebiten.Image) {
 // working in logical pixels.
 func (a *App) LayoutF(outsideWidth, outsideHeight float64) (float64, float64) {
 	if s := ebiten.Monitor().DeviceScaleFactor(); s > 0 {
-		a.scale = s
+		a.canvas.scale = s
 	}
-	return outsideWidth * a.scale, outsideHeight * a.scale
+	return a.canvas.px(outsideWidth), a.canvas.px(outsideHeight)
 }
 
 // Layout implements ebiten.Game. Ebitengine calls LayoutF instead.
