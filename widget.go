@@ -6,7 +6,7 @@ package ggui
 // before Paint in a frame, so a widget keeps only what the Rect cannot tell
 // it, such as where its children go. Leaf widgets usually keep nothing at all.
 type Widget interface {
-	Layout(c Constraints) Size
+	Layout(c Constraints, env Env) Size
 	Paint(dst *Canvas, r Rect)
 }
 
@@ -53,7 +53,7 @@ func Reactive(build Builder) *ComponentWidget {
 }
 
 // Layout implements Widget.
-func (c *ComponentWidget) Layout(cs Constraints) Size { return c.child.Layout(cs) }
+func (c *ComponentWidget) Layout(cs Constraints, env Env) Size { return c.child.Layout(cs, env) }
 
 // Paint implements Widget.
 func (c *ComponentWidget) Paint(dst *Canvas, r Rect) { c.child.Paint(dst, r) }
@@ -71,15 +71,15 @@ func Children[T any](items []T, build func(T) Widget) []Widget {
 }
 
 type widgetFunc struct {
-	layout func(Constraints) Size
+	layout func(Constraints, Env) Size
 	paint  func(*Canvas, Rect)
 }
 
-func (w widgetFunc) Layout(c Constraints) Size { return w.layout(c) }
-func (w widgetFunc) Paint(dst *Canvas, r Rect) { w.paint(dst, r) }
+func (w widgetFunc) Layout(c Constraints, env Env) Size { return w.layout(c, env) }
+func (w widgetFunc) Paint(dst *Canvas, r Rect)          { w.paint(dst, r) }
 
 // FromFuncs builds a Widget from a layout and a paint function, for one-off
 // widgets that do not deserve a named type.
-func FromFuncs(layout func(Constraints) Size, paint func(*Canvas, Rect)) Widget {
+func FromFuncs(layout func(Constraints, Env) Size, paint func(*Canvas, Rect)) Widget {
 	return widgetFunc{layout: layout, paint: paint}
 }

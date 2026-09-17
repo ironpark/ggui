@@ -263,7 +263,7 @@ func (p *PointerWidget) HandlePointer(ev PointerEvent) bool {
 }
 
 // Layout implements Widget.
-func (p *PointerWidget) Layout(c Constraints) Size { return p.child.Layout(c) }
+func (p *PointerWidget) Layout(c Constraints, env Env) Size { return p.child.Layout(c, env) }
 
 // Paint implements Widget.
 func (p *PointerWidget) Paint(dst *Canvas, r Rect) {
@@ -316,7 +316,7 @@ func (f *FocusWidget) HandleKey(ev KeyEvent) {
 }
 
 // Layout implements Widget.
-func (f *FocusWidget) Layout(c Constraints) Size { return f.child.Layout(c) }
+func (f *FocusWidget) Layout(c Constraints, env Env) Size { return f.child.Layout(c, env) }
 
 // Paint implements Widget.
 func (f *FocusWidget) Paint(dst *Canvas, r Rect) {

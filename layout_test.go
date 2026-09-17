@@ -12,7 +12,7 @@ func TestConstraintsConstrain(t *testing.T) {
 
 func TestBoxAddsPaddingAroundChild(t *testing.T) {
 	b := Box(Box().Size(20, 10)).Pad(5)
-	got := b.Layout(Loose(Sz(200, 200)))
+	got := b.Layout(Loose(Sz(200, 200)), Env{})
 	if got != (Size{W: 30, H: 20}) {
 		t.Fatalf("Layout() = %+v, want {30 20}", got)
 	}
@@ -27,7 +27,7 @@ func TestColumnSumsHeightsAndGaps(t *testing.T) {
 		Box().Size(10, 10),
 		Box().Size(30, 20),
 	).Gap(4)
-	got := col.Layout(Loose(Sz(200, 200)))
+	got := col.Layout(Loose(Sz(200, 200)), Env{})
 	if got != (Size{W: 30, H: 34}) {
 		t.Fatalf("Layout() = %+v, want {30 34}", got)
 	}
@@ -35,7 +35,7 @@ func TestColumnSumsHeightsAndGaps(t *testing.T) {
 
 func TestCenterFillsAvailableSpace(t *testing.T) {
 	c := Center(Box().Size(10, 10))
-	got := c.Layout(Loose(Sz(100, 50)))
+	got := c.Layout(Loose(Sz(100, 50)), Env{})
 	if got != (Size{W: 100, H: 50}) {
 		t.Fatalf("Layout() = %+v, want {100 50}", got)
 	}
@@ -57,14 +57,14 @@ func TestChildrenBuildsOnePerItem(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("len(Children()) = %d, want 2", len(got))
 	}
-	if s := got[1].Layout(Loose(Sz(100, 100))); s != (Size{W: 5, H: 20}) {
+	if s := got[1].Layout(Loose(Sz(100, 100)), Env{}); s != (Size{W: 5, H: 20}) {
 		t.Fatalf("second child = %+v, want {5 20}", s)
 	}
 }
 
 func TestListLaysOutItemsLikeColumn(t *testing.T) {
 	l := List([]float64{10, 20}, func(h float64) Widget { return Box().Size(30, h) }).Gap(4)
-	got := l.Layout(Loose(Sz(200, 200)))
+	got := l.Layout(Loose(Sz(200, 200)), Env{})
 	if got != (Size{W: 30, H: 34}) {
 		t.Fatalf("Layout() = %+v, want {30 34}", got)
 	}
@@ -73,7 +73,7 @@ func TestListLaysOutItemsLikeColumn(t *testing.T) {
 // probe is a fixed-size widget that records the Rect it was painted in.
 func probe(w, h float64, got *Rect) Widget {
 	return FromFuncs(
-		func(c Constraints) Size { return c.Constrain(Sz(w, h)) },
+		func(c Constraints, _ Env) Size { return c.Constrain(Sz(w, h)) },
 		func(_ *Canvas, r Rect) { *got = r },
 	)
 }
@@ -113,7 +113,7 @@ func TestRowSumsWidthsAndGaps(t *testing.T) {
 		Box().Size(10, 10),
 		probe(30, 20, &second),
 	).Gap(4)
-	got := row.Layout(Loose(Sz(200, 200)))
+	got := row.Layout(Loose(Sz(200, 200)), Env{})
 	if got != (Size{W: 44, H: 20}) {
 		t.Fatalf("Layout() = %+v, want {44 20}", got)
 	}
@@ -126,7 +126,7 @@ func TestRowSumsWidthsAndGaps(t *testing.T) {
 func TestPaddingInsetsChild(t *testing.T) {
 	var child Rect
 	p := Padding(probe(20, 10, &child), 1, 2, 3, 4)
-	got := p.Layout(Loose(Sz(200, 200)))
+	got := p.Layout(Loose(Sz(200, 200)), Env{})
 	if got != (Size{W: 26, H: 14}) {
 		t.Fatalf("Layout() = %+v, want {26 14}", got)
 	}
@@ -138,7 +138,7 @@ func TestPaddingInsetsChild(t *testing.T) {
 
 func TestPaddingShrinksChildConstraints(t *testing.T) {
 	p := Padding(Box().Size(500, 500), 10)
-	got := p.Layout(Loose(Sz(100, 100)))
+	got := p.Layout(Loose(Sz(100, 100)), Env{})
 	if got != (Size{W: 100, H: 100}) {
 		t.Fatalf("Layout() = %+v, want the child clamped inside {100 100}", got)
 	}
@@ -147,7 +147,7 @@ func TestPaddingShrinksChildConstraints(t *testing.T) {
 func TestStackHugsLargestChildAndLayersAtOrigin(t *testing.T) {
 	var a, b Rect
 	st := Stack(probe(10, 30, &a), probe(20, 5, &b))
-	got := st.Layout(Loose(Sz(200, 200)))
+	got := st.Layout(Loose(Sz(200, 200)), Env{})
 	if got != (Size{W: 20, H: 30}) {
 		t.Fatalf("Layout() = %+v, want {20 30}", got)
 	}
@@ -159,7 +159,7 @@ func TestStackHugsLargestChildAndLayersAtOrigin(t *testing.T) {
 
 func TestStackExpandFillsSpace(t *testing.T) {
 	st := Stack(Box().Size(10, 10)).Expand()
-	if got := st.Layout(Loose(Sz(200, 100))); got != (Size{W: 200, H: 100}) {
+	if got := st.Layout(Loose(Sz(200, 100)), Env{}); got != (Size{W: 200, H: 100}) {
 		t.Fatalf("Layout() = %+v, want {200 100}", got)
 	}
 }
@@ -178,7 +178,7 @@ func TestAlignPlacesChildByFraction(t *testing.T) {
 	for _, c := range cases {
 		var got Rect
 		c.w.child = probe(10, 10, &got)
-		size := c.w.Layout(Loose(Sz(100, 50)))
+		size := c.w.Layout(Loose(Sz(100, 50)), Env{})
 		if size != (Size{W: 100, H: 50}) {
 			t.Fatalf("%s: Layout() = %+v, want to fill {100 50}", c.name, size)
 		}
@@ -203,7 +203,7 @@ func TestExpandedTakesLeftoverMainAxis(t *testing.T) {
 		Expanded(probe(1, 10, &b)),
 		Flex(probe(1, 10, &c), 3),
 	).Gap(5)
-	got := row.Layout(Loose(Sz(100, 50)))
+	got := row.Layout(Loose(Sz(100, 50)), Env{})
 	if got != (Size{W: 100, H: 10}) {
 		t.Fatalf("Layout() = %+v, want to fill the width {100 10}", got)
 	}
@@ -220,7 +220,7 @@ func TestExpandedTakesLeftoverMainAxis(t *testing.T) {
 func TestSpacerPushesNeighboursApart(t *testing.T) {
 	var last Rect
 	row := Row(Box().Size(10, 10), Spacer(), probe(10, 10, &last))
-	row.Paint(nil, Rct(Pt(0, 0), row.Layout(Loose(Sz(100, 10)))))
+	row.Paint(nil, Rct(Pt(0, 0), row.Layout(Loose(Sz(100, 10)), Env{})))
 	if last.Origin.X != 90 {
 		t.Fatalf("last child at x=%v, want 90", last.Origin.X)
 	}
@@ -242,7 +242,7 @@ func TestJustifyDistributesSlack(t *testing.T) {
 	for _, c := range cases {
 		var got [3]Rect
 		col := Column(probe(10, 10, &got[0]), probe(10, 10, &got[1]), probe(10, 10, &got[2])).Justify(c.j)
-		size := col.Layout(Loose(Sz(50, 100)))
+		size := col.Layout(Loose(Sz(50, 100)), Env{})
 		if c.j != JustifyStart && size.H != 100 {
 			t.Fatalf("%s: Layout() = %+v, want to fill the height", c.name, size)
 		}
@@ -258,13 +258,13 @@ func TestJustifyDistributesSlack(t *testing.T) {
 func TestCrossAlignPlacesAndStretches(t *testing.T) {
 	var got Rect
 	row := Row(Box().Size(10, 40), probe(10, 10, &got)).Align(AlignCenter)
-	row.Paint(nil, Rct(Pt(0, 0), row.Layout(Loose(Sz(100, 100)))))
+	row.Paint(nil, Rct(Pt(0, 0), row.Layout(Loose(Sz(100, 100)), Env{})))
 	if got.Origin.Y != 15 {
 		t.Fatalf("centered child at y=%v, want 15", got.Origin.Y)
 	}
 
 	row = Row(probe(10, 10, &got)).Align(AlignStretch)
-	size := row.Layout(Loose(Sz(100, 60)))
+	size := row.Layout(Loose(Sz(100, 60)), Env{})
 	row.Paint(nil, Rct(Pt(0, 0), size))
 	if size.H != 60 || got.Size.H != 60 {
 		t.Fatalf("stretch: row %v, child %v; want both 60 high", size.H, got.Size.H)
@@ -272,7 +272,7 @@ func TestCrossAlignPlacesAndStretches(t *testing.T) {
 }
 
 func TestFlexIsTransparentOutsideAFlow(t *testing.T) {
-	if got := Expanded(Box().Size(7, 7)).Layout(Loose(Sz(100, 100))); got != (Size{W: 7, H: 7}) {
+	if got := Expanded(Box().Size(7, 7)).Layout(Loose(Sz(100, 100)), Env{}); got != (Size{W: 7, H: 7}) {
 		t.Fatalf("Layout() = %+v, want the child's {7 7}", got)
 	}
 }
@@ -280,10 +280,10 @@ func TestFlexIsTransparentOutsideAFlow(t *testing.T) {
 func TestFixedBoxGivesChildTightConstraints(t *testing.T) {
 	var got Constraints
 	child := FromFuncs(
-		func(c Constraints) Size { got = c; return c.Constrain(Sz(1, 1)) },
+		func(c Constraints, _ Env) Size { got = c; return c.Constrain(Sz(1, 1)) },
 		func(*Canvas, Rect) {},
 	)
-	Box(child).Width(100).Pad(10).Layout(Loose(Sz(500, 500)))
+	Box(child).Width(100).Pad(10).Layout(Loose(Sz(500, 500)), Env{})
 	if got.MinW != 80 || got.MaxW != 80 {
 		t.Fatalf("child width constraints = [%v, %v], want tight 80", got.MinW, got.MaxW)
 	}
@@ -300,7 +300,7 @@ func TestContentCentersInsideFixedBox(t *testing.T) {
 			Row(probe(20, 10, &row)).Justify(JustifyCenter),
 		).Align(AlignCenter),
 	).Width(200).Pad(20)
-	size := b.Layout(Loose(Sz(1000, 1000)))
+	size := b.Layout(Loose(Sz(1000, 1000)), Env{})
 	b.Paint(nil, Rct(Pt(0, 0), size))
 	if size.W != 200 {
 		t.Fatalf("box is %v wide, want 200", size.W)

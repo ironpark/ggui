@@ -6,8 +6,8 @@ import (
 )
 
 func TestTextHeightFollowsLines(t *testing.T) {
-	one := Text("a").Layout(Loose(Sz(1000, 1000)))
-	two := Text("a\nb").Layout(Loose(Sz(1000, 1000)))
+	one := Text("a").Layout(Loose(Sz(1000, 1000)), Env{})
+	two := Text("a\nb").Layout(Loose(Sz(1000, 1000)), Env{})
 	if one.H <= 0 || two.H <= one.H {
 		t.Fatalf("heights %v and %v, want one line shorter than two", one.H, two.H)
 	}
@@ -18,11 +18,11 @@ func TestTextHeightFollowsLines(t *testing.T) {
 
 func TestTextWrapsAtSpaces(t *testing.T) {
 	w := Text("aaa bbb ccc")
-	wide := w.Layout(Loose(Sz(1000, 1000)))
+	wide := w.Layout(Loose(Sz(1000, 1000)), Env{})
 	if len(w.lines) != 1 {
 		t.Fatalf("wide: %d lines, want 1", len(w.lines))
 	}
-	narrow := w.Layout(Loose(Sz(wide.W*0.7, 1000)))
+	narrow := w.Layout(Loose(Sz(wide.W*0.7, 1000)), Env{})
 	if len(w.lines) != 2 || w.lines[0] != "aaa bbb" || w.lines[1] != "ccc" {
 		t.Fatalf("narrow: lines = %q, want [aaa bbb, ccc]", w.lines)
 	}
@@ -33,8 +33,8 @@ func TestTextWrapsAtSpaces(t *testing.T) {
 
 func TestTextBreaksLongWordsBetweenRunes(t *testing.T) {
 	w := Text(strings.Repeat("x", 40))
-	full := w.Layout(Loose(Sz(1000, 1000)))
-	w.Layout(Loose(Sz(full.W/4, 1000)))
+	full := w.Layout(Loose(Sz(1000, 1000)), Env{})
+	w.Layout(Loose(Sz(full.W/4, 1000)), Env{})
 	if len(w.lines) < 4 {
 		t.Fatalf("%d lines, want at least 4", len(w.lines))
 	}
@@ -47,15 +47,15 @@ func TestTextBreaksLongWordsBetweenRunes(t *testing.T) {
 
 func TestTextNoWrapKeepsOneLine(t *testing.T) {
 	w := Text("aaa bbb ccc").NoWrap()
-	w.Layout(Loose(Sz(5, 1000)))
+	w.Layout(Loose(Sz(5, 1000)), Env{})
 	if len(w.lines) != 1 {
 		t.Fatalf("%d lines, want 1", len(w.lines))
 	}
 }
 
 func TestTextSizeScalesLayout(t *testing.T) {
-	small := Text("hello").Size(10).Layout(Loose(Sz(1000, 1000)))
-	big := Text("hello").Size(20).Layout(Loose(Sz(1000, 1000)))
+	small := Text("hello").Size(10).Layout(Loose(Sz(1000, 1000)), Env{})
+	big := Text("hello").Size(20).Layout(Loose(Sz(1000, 1000)), Env{})
 	if big.W <= small.W || big.H <= small.H {
 		t.Fatalf("size 20 = %+v not larger than size 10 = %+v", big, small)
 	}

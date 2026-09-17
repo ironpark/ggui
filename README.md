@@ -122,8 +122,9 @@ lives as long as its parent's tree keeps it, so keep a parent's `Builder` free
 of signal reads and put the parts that change in islands; then the components
 it holds, and their state, survive.
 
-**Widgets** — a `Widget` is asked for a size under `Constraints`, then asked to
-paint into the `Rect` its parent assigned on a `Canvas`. Constraints flow down, sizes flow up.
+**Widgets** — a `Widget` is asked for a size under `Constraints` and an `Env`
+of inherited values, then asked to paint into the `Rect` its parent assigned
+on a `Canvas`. Constraints flow down, sizes flow up.
 Every built-in follows one shape: a constructor takes what the widget cannot
 do without, chainable setters take the rest, so the code reads as the tree it
 builds:
@@ -170,9 +171,43 @@ ggui.Row(ggui.Text("Title"), ggui.Spacer(), ggui.Text("3 items")).Align(ggui.Ali
 
 **Text** wraps at spaces to the width it is given, and between runes when a
 word is wider than the line, so scripts without spaces wrap too. `.Size(px)`,
-`.Color(c)`, `.Font(f)`, `.LineHeight(mult)`, `.Align(0.5)` and `.NoWrap()`
-adjust it. The built-in font is Go Regular; `LoadFont(ttf)` or
-`LoadFontFile(path)` load your own, and `SetDefaultFont` makes one the default.
+`.Color(c)`, `.Font(f)`, `.LineHeight(mult)`, `.Style(ts)`, `.Align(0.5)` and
+`.NoWrap()` adjust it; what is not set is inherited (see Styling). The
+built-in font is Go Regular; `LoadFont(ttf)` or `LoadFontFile(path)` load your
+own, and `SetDefaultFont` makes one the default.
+
+## Styling
+
+Three layers, each a plain value.
+
+**Styles are values.** `TextStyle{Font, Size, Color, LineHeight}` is what
+`Text`'s setters write into; a zero field means "inherit". `a.Merge(b)` lays
+the set fields of `b` over `a`, so a heading is `Text(s).Style(t.Title)` and a
+one-off tweak is `Text(s).Style(t.Title).Color(red)`.
+
+**Styles inherit through the tree.** Every widget lays out under an `Env`
+that flows down from the root, like CSS inheritance. `Styled(child)` sets the
+text style everything below starts from, and a `Text`'s own setters still win:
+
+```go
+ggui.Styled(ggui.Column(ggui.Text("a"), ggui.Text("b").Size(18))).Color(t.Muted).Size(12)
+```
+
+The root `Env` starts from the theme's `Text`, so a bare `Text(s)` already
+looks right. Inheritance happens at layout time, so it works with the eager
+construction of Go: no closures around subtrees. Your own inherited values go
+the same way: `Provide(key, v, child)` stores `v` under a `Key[T]` from
+`NewKey`, and a widget reads it back with `env.Get(key)` in `Layout`.
+
+**Tokens live in a theme.** `Theme` holds colors (`Fg`, `Bg`, `Surface`,
+`Accent`, `AccentHover`, `Muted`), named text styles (`Text`, `Title`) and
+sizes (`Radius`, `Space`). `UseTheme()` reads it at build time and subscribes
+the enclosing Builder; `SetTheme(t)` swaps it and rebuilds only what read it.
+`DefaultTheme()` is light, `DarkTheme()` dark, and a window with no
+`Background` follows the theme's `Bg`. State-dependent looks are a signal in a
+`Component`: the button in `examples/counter` picks `Accent` or `AccentHover`
+from a `hovered` signal. `Box` decorates with `.Fill`, `.Radius(r)` and
+`.Border(w, c)`.
 
 ## Input
 
@@ -218,14 +253,15 @@ for `DrawImageOptions`, and text rasterizes its face at the scaled size rather
 than scaling the pixels. A custom widget that draws with Ebitengine directly
 should do the same.
 
-**Custom widgets** — implement `Layout` and `Paint`. `Paint` receives the
-`Rect` to draw in, so a leaf widget stores nothing between the two calls; a
-container remembers only where its children go. `FromFuncs` wraps two closures
+**Custom widgets** — implement `Layout` and `Paint`. `Layout` receives the
+`Env` to pass on to children unchanged; `Paint` receives the `Rect` to draw
+in, so a leaf widget stores nothing between the two calls and a container
+remembers only where its children go. `FromFuncs` wraps two closures
 when a named type is overkill:
 
 ```go
 dot := ggui.FromFuncs(
-	func(c ggui.Constraints) ggui.Size { return c.Constrain(ggui.Sz(8, 8)) },
+	func(c ggui.Constraints, _ ggui.Env) ggui.Size { return c.Constrain(ggui.Sz(8, 8)) },
 	func(dst *ggui.Canvas, r ggui.Rect) {
 		vector.DrawFilledCircle(dst.Image, dst.Px(r.Origin.X+4), dst.Px(r.Origin.Y+4), dst.Px(4), fg, true)
 	},
@@ -239,6 +275,7 @@ dot := ggui.FromFuncs(
 ├── signal.go     Reactivity: Signal, Memo, Effect, dependency tracking
 ├── widget.go     Widget interface, Builder, Component/Reactive, Children
 ├── widgets.go    Built-in widgets
+├── style.go      TextStyle, Env, Key, Theme
 ├── for.go        For: keyed, reactive list
 ├── canvas.go     Canvas: paint target plus the frame's hit regions
 ├── input.go      Pointer and keyboard events, Pointer/Tap/Focus widgets

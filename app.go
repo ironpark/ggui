@@ -16,7 +16,7 @@ type Config struct {
 	Width      int
 	Height     int
 	Resizable  bool
-	Background color.Color
+	Background color.Color // nil follows the theme's Bg
 }
 
 func (c Config) withDefaults() Config {
@@ -28,9 +28,6 @@ func (c Config) withDefaults() Config {
 	}
 	if c.Height == 0 {
 		c.Height = 600
-	}
-	if c.Background == nil {
-		c.Background = color.White
 	}
 	return c
 }
@@ -113,14 +110,18 @@ func (a *App) readInput() frameInput {
 
 // Draw implements ebiten.Game.
 func (a *App) Draw(screen *ebiten.Image) {
-	screen.Fill(a.cfg.Background)
+	bg := a.cfg.Background
+	if bg == nil {
+		bg = theme.Peek().Bg
+	}
+	screen.Fill(bg)
 	if a.root == nil {
 		return
 	}
 	a.canvas.Image, a.canvas.hits = screen, a.canvas.hits[:0]
 	b := screen.Bounds()
 	logical := Sz(a.canvas.dp(float64(b.Dx())), a.canvas.dp(float64(b.Dy())))
-	size := a.root.Layout(Tight(logical))
+	size := a.root.Layout(Tight(logical), rootEnv())
 	a.root.Paint(&a.canvas, Rect{Size: size})
 	a.input.regions = a.canvas.hits
 }

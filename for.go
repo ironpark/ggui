@@ -77,7 +77,7 @@ func (f *ForWidget[T, K]) Gap(v float64) *ForWidget[T, K] { f.gap = v; return f 
 func (f *ForWidget[T, K]) Horizontal() *ForWidget[T, K] { f.horizontal = true; return f }
 
 // Layout implements Widget.
-func (f *ForWidget[T, K]) Layout(c Constraints) Size { return f.layout(c) }
+func (f *ForWidget[T, K]) Layout(c Constraints, env Env) Size { return f.layout(c, env) }
 
 // Paint implements Widget.
 func (f *ForWidget[T, K]) Paint(dst *Canvas, r Rect) { f.paint(dst, r) }

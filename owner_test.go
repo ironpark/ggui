@@ -176,7 +176,7 @@ func TestComponentRunsSetupOnceAndKeepsState(t *testing.T) {
 	if setups != 1 || builds != 2 {
 		t.Fatalf("setups = %d, builds = %d; want 1 and 2", setups, builds)
 	}
-	if got := c.Layout(Loose(Sz(100, 100))); got.W != 7 {
+	if got := c.Layout(Loose(Sz(100, 100)), Env{}); got.W != 7 {
 		t.Fatalf("component laid out at %v wide, want 7 from its own state", got.W)
 	}
 }

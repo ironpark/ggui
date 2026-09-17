@@ -62,6 +62,54 @@ func (c *Canvas) FillRect(r Rect, col color.Color) {
 	vector.FillRect(c.Image, c.Px(r.Origin.X), c.Px(r.Origin.Y), c.Px(r.Size.W), c.Px(r.Size.H), col, true)
 }
 
+// roundRect traces r with corners of the given logical radius, in Image
+// pixels. A zero radius traces a plain rectangle.
+func (c *Canvas) roundRect(r Rect, radius float64) *vector.Path {
+	x, y, w, h := c.Px(r.Origin.X), c.Px(r.Origin.Y), c.Px(r.Size.W), c.Px(r.Size.H)
+	rad := min(c.Px(radius), w/2, h/2)
+	var p vector.Path
+	p.MoveTo(x+rad, y)
+	p.LineTo(x+w-rad, y)
+	p.ArcTo(x+w, y, x+w, y+rad, rad)
+	p.LineTo(x+w, y+h-rad)
+	p.ArcTo(x+w, y+h, x+w-rad, y+h, rad)
+	p.LineTo(x+rad, y+h)
+	p.ArcTo(x, y+h, x, y+h-rad, rad)
+	p.LineTo(x, y+rad)
+	p.ArcTo(x, y, x+rad, y, rad)
+	p.Close()
+	return &p
+}
+
+func pathOptions(col color.Color) *vector.DrawPathOptions {
+	op := &vector.DrawPathOptions{AntiAlias: true}
+	op.ColorScale.ScaleWithColor(col)
+	return op
+}
+
+// FillRoundRect fills the logical Rect r with col, with corners rounded by
+// radius. A zero radius is FillRect.
+func (c *Canvas) FillRoundRect(r Rect, radius float64, col color.Color) {
+	if c == nil || c.Image == nil || col == nil {
+		return
+	}
+	if radius <= 0 {
+		c.FillRect(r, col)
+		return
+	}
+	vector.FillPath(c.Image, c.roundRect(r, radius), &vector.FillOptions{}, pathOptions(col))
+}
+
+// StrokeRoundRect draws a line of logical width w in col just inside r,
+// with corners rounded by radius.
+func (c *Canvas) StrokeRoundRect(r Rect, radius, w float64, col color.Color) {
+	if c == nil || c.Image == nil || col == nil || w <= 0 {
+		return
+	}
+	inset := Rct(r.Origin.Add(Pt(w/2, w/2)), Sz(r.Size.W-w, r.Size.H-w))
+	vector.StrokePath(c.Image, c.roundRect(inset, max(radius-w/2, 0)), &vector.StrokeOptions{Width: c.Px(w)}, pathOptions(col))
+}
+
 // physical returns the Image pixels r covers, rounded outwards.
 func (c *Canvas) physical(r Rect) image.Rectangle {
 	return image.Rect(

@@ -48,7 +48,7 @@ func TestFillRectAndTextTolerateNilTargets(t *testing.T) {
 	(*Canvas)(nil).FillRect(Rect{}, nil)
 	(&Canvas{}).FillRect(Rct(Pt(0, 0), Sz(1, 1)), nil)
 	w := Text("x")
-	w.Layout(Loose(Sz(100, 100)))
+	w.Layout(Loose(Sz(100, 100)), Env{})
 	w.Paint(nil, Rct(Pt(0, 0), Sz(10, 10)))
 	w.Paint(&Canvas{}, Rct(Pt(0, 0), Sz(10, 10)))
 }

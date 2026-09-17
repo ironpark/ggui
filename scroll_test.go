@@ -18,7 +18,7 @@ func tall(taps *int, painted *[3]Rect) Widget {
 func TestScrollGivesChildUnboundedHeightAndFillsViewport(t *testing.T) {
 	var painted [3]Rect
 	s := Scroll(tall(nil, &painted))
-	got := s.Layout(Loose(Sz(100, 120)))
+	got := s.Layout(Loose(Sz(100, 120)), Env{})
 	if got != (Size{W: 100, H: 120}) {
 		t.Fatalf("Layout() = %+v, want the viewport {100 120}", got)
 	}
@@ -30,7 +30,7 @@ func TestScrollGivesChildUnboundedHeightAndFillsViewport(t *testing.T) {
 func TestScrollWheelMovesAndClamps(t *testing.T) {
 	var painted [3]Rect
 	s := Scroll(tall(nil, &painted)).Speed(10)
-	size := s.Layout(Loose(Sz(100, 120)))
+	size := s.Layout(Loose(Sz(100, 120)), Env{})
 	var in inputState
 	paint := func() {
 		var c Canvas
@@ -39,19 +39,19 @@ func TestScrollWheelMovesAndClamps(t *testing.T) {
 	}
 	paint()
 	in.dispatch(frameInput{pos: Pt(50, 50), wheel: Pt(0, -5)}) // wheel down: content moves up
-	s.Layout(Loose(Sz(100, 120)))
+	s.Layout(Loose(Sz(100, 120)), Env{})
 	paint()
 	if painted[0].Origin.Y != -50 {
 		t.Fatalf("first child at y=%v after scrolling 50, want -50", painted[0].Origin.Y)
 	}
 	in.dispatch(frameInput{pos: Pt(50, 50), wheel: Pt(0, -100)})
-	s.Layout(Loose(Sz(100, 120)))
+	s.Layout(Loose(Sz(100, 120)), Env{})
 	paint()
 	if painted[0].Origin.Y != -180 {
 		t.Fatalf("first child at y=%v, want clamped to -(300-120) = -180", painted[0].Origin.Y)
 	}
 	in.dispatch(frameInput{pos: Pt(50, 50), wheel: Pt(0, 100)})
-	s.Layout(Loose(Sz(100, 120)))
+	s.Layout(Loose(Sz(100, 120)), Env{})
 	if s.position() != 0 {
 		t.Fatalf("offset = %v after scrolling back past the top, want 0", s.position())
 	}
@@ -61,7 +61,7 @@ func TestScrollClipsHitRegions(t *testing.T) {
 	taps := 0
 	var painted [3]Rect
 	s := Scroll(tall(&taps, &painted)).Speed(10)
-	size := s.Layout(Loose(Sz(100, 120)))
+	size := s.Layout(Loose(Sz(100, 120)), Env{})
 	var in inputState
 	paint := func() {
 		var c Canvas
@@ -82,7 +82,7 @@ func TestScrollClipsHitRegions(t *testing.T) {
 		t.Fatalf("taps = %d on the visible part, want 1", taps)
 	}
 	in.dispatch(frameInput{pos: Pt(50, 50), wheel: Pt(0, -10)}) // scroll by 100
-	s.Layout(Loose(Sz(100, 120)))
+	s.Layout(Loose(Sz(100, 120)), Env{})
 	paint()
 	click(Pt(50, 50)) // now the tappable box fills the viewport top
 	if taps != 2 {
@@ -95,7 +95,7 @@ func TestScrollOffsetBinding(t *testing.T) {
 	pos := State(0.0)
 	s := Scroll(tall(nil, &painted)).Offset(pos)
 	pos.Set(1000)
-	size := s.Layout(Loose(Sz(100, 120)))
+	size := s.Layout(Loose(Sz(100, 120)), Env{})
 	if pos.Peek() != 180 {
 		t.Fatalf("bound offset = %v after layout, want clamped 180", pos.Peek())
 	}
@@ -136,7 +136,7 @@ func TestFillingWidgetsFallBackToContentWhenUnbounded(t *testing.T) {
 		"flex":    Column(Expanded(Box().Size(10, 10))),
 	}
 	for name, w := range cases {
-		got := w.Layout(unb)
+		got := w.Layout(unb, Env{})
 		if got.H != 10 {
 			t.Fatalf("%s: height %v under an unbounded axis, want the content's 10", name, got.H)
 		}

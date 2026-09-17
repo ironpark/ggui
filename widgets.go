@@ -58,49 +58,53 @@ func (e EdgeInsets) horizontal() float64 { return e.Left + e.Right }
 func (e EdgeInsets) vertical() float64   { return e.Top + e.Bottom }
 
 // TextWidget draws text, wrapping it to the width it is given. Build one
-// with Text.
+// with Text. Its style is resolved at layout: the Env's inherited TextStyle,
+// then the widget's own setters on top, then built-in defaults for whatever
+// is still unset.
 type TextWidget struct {
-	value      string
-	color      color.Color
-	font       *Font
-	size       float64
-	lineHeight float64
-	wrap       bool
-	align      float64
+	value string
+	style TextStyle
+	wrap  bool
+	align float64
 
 	// Layout caches the wrapped lines, their widths and the size they add up
 	// to, and re-measures only when the text, the face or the width it must
 	// fit in changes.
-	lines   []string
-	widths  []float64
-	natural Size
-	wrapped wrapKey
+	resolved TextStyle
+	lines    []string
+	widths   []float64
+	natural  Size
+	wrapped  wrapKey
 }
 
 // wrapKey is the input wrapText was last run with.
 type wrapKey struct {
 	value string
-	face  text.Face
+	font  *Font
+	size  float64
 	maxW  float64
 }
 
-// Text draws s in the default font at DefaultTextSize, wrapping at spaces
-// when it is wider than the space it gets.
+// Text draws s in the inherited style, wrapping at spaces when it is wider
+// than the space it gets.
 func Text(s string) *TextWidget {
-	return &TextWidget{value: s, size: DefaultTextSize, lineHeight: 1.2, wrap: true}
+	return &TextWidget{value: s, wrap: true}
 }
 
-// Color sets the text color.
-func (t *TextWidget) Color(c color.Color) *TextWidget { t.color = c; return t }
+// Style merges ts onto the widget's own style.
+func (t *TextWidget) Style(ts TextStyle) *TextWidget { t.style = t.style.Merge(ts); return t }
 
-// Font sets the face; nil means the default font.
-func (t *TextWidget) Font(f *Font) *TextWidget { t.font = f; return t }
+// Color sets the text color.
+func (t *TextWidget) Color(c color.Color) *TextWidget { t.style.Color = c; return t }
+
+// Font sets the face; nil inherits.
+func (t *TextWidget) Font(f *Font) *TextWidget { t.style.Font = f; return t }
 
 // Size sets the font size in pixels.
-func (t *TextWidget) Size(px float64) *TextWidget { t.size = px; return t }
+func (t *TextWidget) Size(px float64) *TextWidget { t.style.Size = px; return t }
 
 // LineHeight sets the distance between baselines as a multiple of Size.
-func (t *TextWidget) LineHeight(mult float64) *TextWidget { t.lineHeight = mult; return t }
+func (t *TextWidget) LineHeight(mult float64) *TextWidget { t.style.LineHeight = mult; return t }
 
 // NoWrap keeps the text on one line per hard line break, however wide.
 func (t *TextWidget) NoWrap() *TextWidget { t.wrap = false; return t }
@@ -109,26 +113,36 @@ func (t *TextWidget) NoWrap() *TextWidget { t.wrap = false; return t }
 // 0.5 centered, 1 right.
 func (t *TextWidget) Align(x float64) *TextWidget { t.align = x; return t }
 
-// faceAt returns the face at the widget's size times scale, so that on a
+// current is the resolved style from the last Layout, or the widget's own
+// style over the defaults before any Layout has run.
+func (t *TextWidget) current() TextStyle {
+	if t.resolved.Font == nil {
+		return t.style.resolved()
+	}
+	return t.resolved
+}
+
+// faceAt returns the face at the resolved size times scale, so that on a
 // HiDPI Canvas glyphs are rasterized at full resolution instead of scaled up.
 func (t *TextWidget) faceAt(scale float64) text.Face {
-	f := t.font
-	if f == nil {
-		f = fallbackFont()
-	}
-	return f.face(t.size * scale)
+	st := t.current()
+	return st.Font.face(st.Size * scale)
 }
 
 // spacing is the distance between baselines.
-func (t *TextWidget) spacing() float64 { return t.size * t.lineHeight }
+func (t *TextWidget) spacing() float64 {
+	st := t.current()
+	return st.Size * st.LineHeight
+}
 
 // Layout implements Widget.
-func (t *TextWidget) Layout(c Constraints) Size {
+func (t *TextWidget) Layout(c Constraints, env Env) Size {
+	t.resolved = env.Text().Merge(t.style).resolved()
 	face := t.faceAt(1)
-	key := wrapKey{value: t.value, face: face, maxW: pick(t.wrap, c.MaxW, 0)}
+	key := wrapKey{value: t.value, font: t.resolved.Font, size: t.resolved.Size, maxW: pick(t.wrap, c.MaxW, 0)}
 	if key != t.wrapped {
 		t.wrapped = key
-		t.lines = wrapText(key.value, key.face, key.maxW)
+		t.lines = wrapText(key.value, face, key.maxW)
 		t.widths = t.widths[:0]
 		var w float64
 		for _, line := range t.lines {
@@ -137,8 +151,7 @@ func (t *TextWidget) Layout(c Constraints) Size {
 			w = max(w, lw)
 		}
 		m := face.Metrics()
-		h := float64(len(t.lines)-1)*t.spacing() + m.HAscent + m.HDescent
-		t.natural = Sz(w, h)
+		t.natural = Sz(w, float64(len(t.lines)-1)*t.spacing()+m.HAscent+m.HDescent)
 	}
 	return c.Constrain(t.natural)
 }
@@ -150,9 +163,7 @@ func (t *TextWidget) Paint(dst *Canvas, r Rect) {
 	}
 	face := t.faceAt(dst.Scale())
 	op := &text.DrawOptions{}
-	if t.color != nil {
-		op.ColorScale.ScaleWithColor(t.color)
-	}
+	op.ColorScale.ScaleWithColor(t.current().Color)
 	for i, line := range t.lines {
 		x := r.Origin.X + (r.Size.W-t.widths[i])*t.align
 		y := r.Origin.Y + float64(i)*t.spacing()
@@ -162,14 +173,73 @@ func (t *TextWidget) Paint(dst *Canvas, r Rect) {
 	}
 }
 
+// StyledWidget sets the text style its subtree inherits. Build one with
+// Styled.
+type StyledWidget struct {
+	style TextStyle
+	child Widget
+}
+
+// Styled gives every Text below child a new base style: what the setters
+// here set, over what was inherited from above. A Text's own setters still
+// win over it.
+//
+//	Styled(Column(Text("a"), Text("b"))).Color(muted).Size(12)
+func Styled(child Widget) *StyledWidget { return &StyledWidget{child: child} }
+
+// Style merges ts onto the style the subtree inherits.
+func (s *StyledWidget) Style(ts TextStyle) *StyledWidget { s.style = s.style.Merge(ts); return s }
+
+// Color sets the inherited text color.
+func (s *StyledWidget) Color(c color.Color) *StyledWidget { s.style.Color = c; return s }
+
+// Font sets the inherited font.
+func (s *StyledWidget) Font(f *Font) *StyledWidget { s.style.Font = f; return s }
+
+// Size sets the inherited font size.
+func (s *StyledWidget) Size(px float64) *StyledWidget { s.style.Size = px; return s }
+
+// LineHeight sets the inherited line height.
+func (s *StyledWidget) LineHeight(mult float64) *StyledWidget { s.style.LineHeight = mult; return s }
+
+// Layout implements Widget.
+func (s *StyledWidget) Layout(c Constraints, env Env) Size {
+	return s.child.Layout(c, env.WithText(s.style))
+}
+
+// Paint implements Widget.
+func (s *StyledWidget) Paint(dst *Canvas, r Rect) { s.child.Paint(dst, r) }
+
+// EnvWidget hands its child a modified Env. Build one with Provide.
+type EnvWidget struct {
+	with  func(Env) Env
+	child Widget
+}
+
+// Provide stores v under k for the subtree below child, where any widget can
+// read it back from its Env with Get. It is how your own inherited values
+// (a form's disabled state, a list's density) travel down the tree.
+func Provide[T any](k Key[T], v T, child Widget) *EnvWidget {
+	return &EnvWidget{with: func(e Env) Env { return e.With(k, v) }, child: child}
+}
+
+// Layout implements Widget.
+func (e *EnvWidget) Layout(c Constraints, env Env) Size { return e.child.Layout(c, e.with(env)) }
+
+// Paint implements Widget.
+func (e *EnvWidget) Paint(dst *Canvas, r Rect) { e.child.Paint(dst, r) }
+
 // BoxWidget paints a rectangle and lays an optional child inside its padding.
 // Build one with Box.
 type BoxWidget struct {
-	fill    color.Color
-	padding EdgeInsets
-	width   float64 // 0 means "as small as the child allows"
-	height  float64
-	child   Widget
+	fill        color.Color
+	radius      float64
+	borderWidth float64
+	borderColor color.Color
+	padding     EdgeInsets
+	width       float64 // 0 means "as small as the child allows"
+	height      float64
+	child       Widget
 
 	childSize Size
 }
@@ -191,6 +261,15 @@ func Box(child ...Widget) *BoxWidget {
 // Fill sets the background color. Nil paints nothing.
 func (b *BoxWidget) Fill(c color.Color) *BoxWidget { b.fill = c; return b }
 
+// Radius rounds the corners of the fill and border.
+func (b *BoxWidget) Radius(r float64) *BoxWidget { b.radius = r; return b }
+
+// Border draws a line of width w in color c just inside the edge.
+func (b *BoxWidget) Border(w float64, c color.Color) *BoxWidget {
+	b.borderWidth, b.borderColor = w, c
+	return b
+}
+
 // Pad sets padding with the CSS shorthand Insets accepts.
 func (b *BoxWidget) Pad(sides ...float64) *BoxWidget { b.padding = Insets(sides...); return b }
 
@@ -207,7 +286,7 @@ func (b *BoxWidget) Width(w float64) *BoxWidget { b.width = w; return b }
 func (b *BoxWidget) Height(h float64) *BoxWidget { b.height = h; return b }
 
 // Layout implements Widget.
-func (b *BoxWidget) Layout(c Constraints) Size {
+func (b *BoxWidget) Layout(c Constraints, env Env) Size {
 	// A fixed dimension is passed down tight, so a child that centers or
 	// justifies does so within the box rather than the space around it.
 	inner := b.padding.Shrink(c).Loosen()
@@ -221,7 +300,7 @@ func (b *BoxWidget) Layout(c Constraints) Size {
 	}
 	b.childSize = Size{}
 	if b.child != nil {
-		b.childSize = b.child.Layout(inner)
+		b.childSize = b.child.Layout(inner, env)
 	}
 	want := b.padding.Inflate(b.childSize)
 	if b.width > 0 {
@@ -235,7 +314,10 @@ func (b *BoxWidget) Layout(c Constraints) Size {
 
 // Paint implements Widget.
 func (b *BoxWidget) Paint(dst *Canvas, r Rect) {
-	dst.FillRect(r, b.fill)
+	dst.FillRoundRect(r, b.radius, b.fill)
+	if b.borderWidth > 0 {
+		dst.StrokeRoundRect(r, b.radius, b.borderWidth, b.borderColor)
+	}
 	if b.child != nil {
 		b.child.Paint(dst, Rct(r.Origin.Add(Pt(b.padding.Left, b.padding.Top)), b.childSize))
 	}
@@ -301,7 +383,7 @@ func (f *flow) constraints(mainMin, mainMax, crossMin, crossMax float64) Constra
 	return Constraints{MinH: mainMin, MaxH: mainMax, MinW: crossMin, MaxW: crossMax}
 }
 
-func (f *flow) layout(c Constraints) Size {
+func (f *flow) layout(c Constraints, env Env) Size {
 	n := len(f.children)
 	f.sizes = resize(f.sizes, n)
 	f.offsets = resize(f.offsets, n)
@@ -327,14 +409,14 @@ func (f *flow) layout(c Constraints) Size {
 			totalFlex += fw.flex
 			continue
 		}
-		f.sizes[i] = child.Layout(f.constraints(0, max(mainMax-used, 0), crossMin, crossMax))
+		f.sizes[i] = child.Layout(f.constraints(0, max(mainMax-used, 0), crossMin, crossMax), env)
 		used += f.main(f.sizes[i])
 	}
 	free := max(mainMax-used, 0)
 	for i, child := range f.children {
 		if fw, ok := child.(*FlexWidget); ok && fw.flex > 0 && flexible {
 			extent := free * fw.flex / totalFlex
-			f.sizes[i] = child.Layout(f.constraints(extent, extent, crossMin, crossMax))
+			f.sizes[i] = child.Layout(f.constraints(extent, extent, crossMin, crossMax), env)
 		}
 	}
 
@@ -434,7 +516,7 @@ func (col *ColumnWidget) Justify(j Justify) *ColumnWidget { col.justify = j; ret
 func (col *ColumnWidget) Align(a CrossAlign) *ColumnWidget { col.align = a; return col }
 
 // Layout implements Widget.
-func (col *ColumnWidget) Layout(c Constraints) Size { return col.layout(c) }
+func (col *ColumnWidget) Layout(c Constraints, env Env) Size { return col.layout(c, env) }
 
 // Paint implements Widget.
 func (col *ColumnWidget) Paint(dst *Canvas, r Rect) { col.paint(dst, r) }
@@ -457,7 +539,7 @@ func (row *RowWidget) Justify(j Justify) *RowWidget { row.justify = j; return ro
 func (row *RowWidget) Align(a CrossAlign) *RowWidget { row.align = a; return row }
 
 // Layout implements Widget.
-func (row *RowWidget) Layout(c Constraints) Size { return row.layout(c) }
+func (row *RowWidget) Layout(c Constraints, env Env) Size { return row.layout(c, env) }
 
 // Paint implements Widget.
 func (row *RowWidget) Paint(dst *Canvas, r Rect) { row.paint(dst, r) }
@@ -481,7 +563,7 @@ func Expanded(child Widget) *FlexWidget { return Flex(child, 1) }
 func Spacer() *FlexWidget { return Expanded(Box()) }
 
 // Layout implements Widget.
-func (f *FlexWidget) Layout(c Constraints) Size { return f.child.Layout(c) }
+func (f *FlexWidget) Layout(c Constraints, env Env) Size { return f.child.Layout(c, env) }
 
 // Paint implements Widget.
 func (f *FlexWidget) Paint(dst *Canvas, r Rect) { f.child.Paint(dst, r) }
@@ -507,11 +589,11 @@ func Stack(children ...Widget) *StackWidget {
 func (st *StackWidget) Expand() *StackWidget { st.expand = true; return st }
 
 // Layout implements Widget.
-func (st *StackWidget) Layout(c Constraints) Size {
+func (st *StackWidget) Layout(c Constraints, env Env) Size {
 	st.sizes = st.sizes[:0]
 	var total Size
 	for _, child := range st.children {
-		s := child.Layout(c.Loosen())
+		s := child.Layout(c.Loosen(), env)
 		st.sizes = append(st.sizes, s)
 		total.W = max(total.W, s.W)
 		total.H = max(total.H, s.H)
@@ -562,8 +644,8 @@ func (a *AlignWidget) Top() *AlignWidget { a.y = 0; return a }
 func (a *AlignWidget) Bottom() *AlignWidget { a.y = 1; return a }
 
 // Layout implements Widget.
-func (a *AlignWidget) Layout(c Constraints) Size {
-	a.childSize = a.child.Layout(c.Loosen())
+func (a *AlignWidget) Layout(c Constraints, env Env) Size {
+	a.childSize = a.child.Layout(c.Loosen(), env)
 	return c.Constrain(Sz(bounded(c.MaxW, a.childSize.W), bounded(c.MaxH, a.childSize.H)))
 }
 
@@ -640,14 +722,14 @@ func (s *ScrollWidget) scrollTo(v float64) {
 }
 
 // Layout implements Widget.
-func (s *ScrollWidget) Layout(c Constraints) Size {
+func (s *ScrollWidget) Layout(c Constraints, env Env) Size {
 	inner := c.Max()
 	if s.horizontal {
 		inner.W = Unbounded
 	} else {
 		inner.H = Unbounded
 	}
-	s.childSize = s.child.Layout(Loose(inner))
+	s.childSize = s.child.Layout(Loose(inner), env)
 	s.viewport = c.Constrain(Sz(bounded(c.MaxW, s.childSize.W), bounded(c.MaxH, s.childSize.H)))
 	s.scrollTo(s.position())
 	return s.viewport

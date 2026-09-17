@@ -10,7 +10,7 @@ import (
 // does once per frame, and points in at it.
 func paintFrame(in *inputState, w Widget, size Size) {
 	var c Canvas
-	w.Paint(&c, Rct(Pt(0, 0), w.Layout(Tight(size))))
+	w.Paint(&c, Rct(Pt(0, 0), w.Layout(Tight(size), Env{})))
 	in.regions = c.hits
 }
 
