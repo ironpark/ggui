@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	"golang.org/x/image/font/gofont/goregular"
 )
 
 func TestCanvasScaleConvertsToImagePixels(t *testing.T) {
@@ -34,7 +35,7 @@ func TestClipKeepsScale(t *testing.T) {
 }
 
 func TestTextRasterizesAtScaledSize(t *testing.T) {
-	w := Text("x").Size(14)
+	w := Text("x").Font(MustFont(goregular.TTF).NoFallback()).Size(14)
 	face, ok := w.faceAt(2).(*text.GoTextFace)
 	if !ok || face.Size != 28 {
 		t.Fatalf("face at scale 2 = %+v, want a GoTextFace of size 28", face)
