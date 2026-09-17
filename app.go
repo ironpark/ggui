@@ -19,6 +19,11 @@ type Config struct {
 	Resizable  bool
 	Background color.Color // nil follows the theme's Bg
 	Inspector  ebiten.Key  // a key that toggles the widget inspector; zero for none
+
+	// Accessibility says when the app talks to the platform's
+	// accessibility API. The zero value waits for an assistive technology
+	// to attach and costs nothing while none has; see AccessibilityMode.
+	Accessibility AccessibilityMode
 }
 
 func (c Config) withDefaults() Config {
@@ -46,6 +51,7 @@ type App struct {
 	spare  []hitRegion
 	input  inputState
 	cursor ebiten.CursorShapeType
+	a11y   axBridge
 
 	inspect bool
 }
@@ -90,6 +96,7 @@ func (a *App) Run() error {
 		ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	}
 	a.start()
+	a.a11y.start(a, a.cfg.Accessibility)
 	appRunning.Store(true)
 	// Holding a key on macOS pops up the accent menu, as it does in every
 	// text field on the platform; text editing relies on it.
@@ -234,6 +241,7 @@ func (a *App) Draw(screen *ebiten.Image) {
 	a.canvas.Paint(a.root, Rect{Size: a.rootSize})
 	a.canvas.paintOverlays()
 	a.publishSemantics(&a.canvas, a.input.focused)
+	a.a11y.publish(a.semantics())
 	if a.inspect {
 		paintInspector(&a.canvas)
 	}
