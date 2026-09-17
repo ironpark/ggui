@@ -20,7 +20,6 @@ type AvatarWidget struct {
 	square   bool
 	theme    ggui.Theme
 	textSize ggui.Size
-	photo    *ggui.ImageWidget
 }
 
 // Avatar creates a 40-pixel circle showing the initials of name.
@@ -45,7 +44,7 @@ func initialsOf(name string) string {
 	return strings.ToUpper(string(first) + string(last))
 }
 
-// Image sets the portrait. It is drawn to cover the circle, so a photo of
+// Image sets the portrait. It is drawn to cover the avatar, so a photo of
 // any shape is cropped rather than squashed.
 func (a *AvatarWidget) Image(img *ebiten.Image) *AvatarWidget { a.img = img; return a }
 
@@ -65,10 +64,6 @@ func (a *AvatarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	size := c.Constrain(ggui.Sz(a.side, a.side))
 	a.initials.Style(a.theme.Text).Size(max(size.H*0.4, 1)).Color(a.theme.MutedFg).Align(.5)
 	a.textSize = a.initials.Layout(ggui.Loose(size), env)
-	if a.img != nil && a.square {
-		a.photo = ggui.Image(a.img).Fit(ggui.FitCover).Size(size.W, size.H)
-		a.photo.Layout(ggui.Tight(size), env)
-	}
 	return size
 }
 
@@ -85,11 +80,8 @@ func (a *AvatarWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.Paint(a.initials, ggui.Rct(at, a.textSize))
 		return
 	}
-	if a.square {
-		dst.Clip(r).Paint(a.photo, r)
-		return
-	}
-	cut := circleCut(a.img, int(math.Ceil(float64(dst.Px(min(r.Size.W, r.Size.H))))))
+	side := int(math.Ceil(float64(dst.Px(min(r.Size.W, r.Size.H)))))
+	cut := roundedCut(a.img, side, float64(dst.Px(radius)))
 	if cut == nil {
 		return
 	}
@@ -102,36 +94,46 @@ func (a *AvatarWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Image.DrawImage(cut, op)
 }
 
-// circleCuts holds the round crops made so far, so an avatar rebuilt every
-// frame does not allocate a texture every frame. It is read and written on
-// the UI goroutine alone, as painting is, and cleared wholesale once it has
-// grown past what one screen of avatars could need.
-var circleCuts = map[circleKey]*ebiten.Image{}
-
-type circleKey struct {
-	src  *ebiten.Image
-	side int
+// cutKey names one crop: the image it came from, the square of device
+// pixels it was scaled to, and the corner radius it was cut with.
+type cutKey struct {
+	src          *ebiten.Image
+	side, radius int
 }
 
-// circleCut returns src scaled to cover a side-by-side square and cut to the
-// circle inscribed in it.
-func circleCut(src *ebiten.Image, side int) *ebiten.Image {
-	if src == nil || side <= 0 {
+// Crops live in two generations: the ones asked for since the last sweep,
+// and the ones from the sweep before. A crop nobody has asked for in two
+// sweeps is freed, so a list longer than the cache loses its coldest crops
+// rather than all of them at once, and an avatar rebuilt every frame
+// allocates no texture at all. Both maps belong to the UI goroutine, as
+// painting does.
+var liveCuts, coldCuts = map[cutKey]*ebiten.Image{}, map[cutKey]*ebiten.Image{}
+
+// cutGeneration is how many crops are made before the cold generation is
+// freed; the warm ones are promoted back and survive.
+const cutGeneration = 64
+
+// roundedCut returns src scaled to cover a side-by-side square and cut to
+// the rounded rectangle of the given radius, which at half the side is a
+// circle. It is how an avatar gets a round photo at all: the canvas clips
+// to rectangles and nothing else, so the shape has to come from an alpha
+// mask multiplied into the image.
+func roundedCut(src *ebiten.Image, side int, radius float64) *ebiten.Image {
+	b := src.Bounds()
+	if side <= 0 || b.Dx() == 0 || b.Dy() == 0 {
 		return nil
 	}
-	key := circleKey{src, side}
-	if cut, ok := circleCuts[key]; ok {
+	key := cutKey{src, side, int(math.Round(radius))}
+	if cut, ok := liveCuts[key]; ok {
 		return cut
 	}
-	if len(circleCuts) > 64 {
-		for k, img := range circleCuts {
-			img.Deallocate()
-			delete(circleCuts, k)
-		}
+	if cut, ok := coldCuts[key]; ok {
+		liveCuts[key] = cut
+		delete(coldCuts, key)
+		return cut
 	}
-	b := src.Bounds()
-	if b.Dx() == 0 || b.Dy() == 0 {
-		return nil
+	if len(liveCuts) >= cutGeneration {
+		sweepCuts()
 	}
 	cut := ebiten.NewImage(side, side)
 	k := max(float64(side)/float64(b.Dx()), float64(side)/float64(b.Dy()))
@@ -139,12 +141,20 @@ func circleCut(src *ebiten.Image, side int) *ebiten.Image {
 	op.GeoM.Scale(k, k)
 	op.GeoM.Translate((float64(side)-float64(b.Dx())*k)/2, (float64(side)-float64(b.Dy())*k)/2)
 	cut.DrawImage(src, op)
-	// Keeping only what the circle covers: an alpha mask multiplied in,
-	// since the canvas clips to rectangles and nothing else.
 	mask := ebiten.NewImage(side, side)
-	(&ggui.Canvas{Image: mask}).FillCircle(ggui.Pt(float64(side)/2, float64(side)/2), float64(side)/2, color.White)
+	(&ggui.Canvas{Image: mask}).FillRoundRect(ggui.Rect{Size: ggui.Sz(side, side)}, radius, color.White)
 	cut.DrawImage(mask, &ebiten.DrawImageOptions{Blend: ebiten.BlendDestinationIn})
 	mask.Deallocate()
-	circleCuts[key] = cut
+	liveCuts[key] = cut
 	return cut
+}
+
+// sweepCuts frees what has gone two generations unasked for and starts a
+// generation over.
+func sweepCuts() {
+	for k, img := range coldCuts {
+		img.Deallocate()
+		delete(coldCuts, k)
+	}
+	liveCuts, coldCuts = coldCuts, liveCuts
 }

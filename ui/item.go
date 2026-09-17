@@ -11,6 +11,8 @@ type ItemWidget struct {
 	title, description *ggui.TextWidget
 	media, action      ggui.Widget
 	outline            bool
+	text               *ggui.ColumnWidget
+	row                *ggui.RowWidget
 	box                *ggui.BoxWidget
 }
 
@@ -36,24 +38,40 @@ func (i *ItemWidget) Action(w ggui.Widget) *ItemWidget { i.action = w; return i 
 // Outline draws the row as a bordered card rather than bare text.
 func (i *ItemWidget) Outline() *ItemWidget { i.outline = true; return i }
 
-// Layout implements ggui.Widget.
-func (i *ItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	t := env.Theme()
-	i.title.Style(t.Text).Color(t.Fg)
-	text := []ggui.Widget{i.title}
+// build makes the row once. An item is a list row, so a fifty-row list
+// would otherwise allocate its whole tree afresh on every frame; the shape
+// is fixed at construction, and only the styling follows the theme.
+func (i *ItemWidget) build() {
+	text := []ggui.Widget{ggui.Widget(i.title)}
 	if i.description != nil {
-		i.description.Style(t.Caption).Color(t.MutedFg)
 		text = append(text, i.description)
 	}
+	i.text = ggui.Column(text...).Align(ggui.AlignStretch)
 	parts := []ggui.Widget{}
 	if i.media != nil {
 		parts = append(parts, i.media)
 	}
-	parts = append(parts, ggui.Expanded(ggui.Column(text...).Gap(t.Space/4).Align(ggui.AlignStretch)))
+	parts = append(parts, ggui.Expanded(i.text))
 	if i.action != nil {
 		parts = append(parts, i.action)
 	}
-	i.box = ggui.Box(ggui.Row(parts...).Gap(t.Space * 1.5)).Padding(t.ItemPad)
+	i.row = ggui.Row(parts...)
+	i.box = ggui.Box(i.row)
+}
+
+// Layout implements ggui.Widget.
+func (i *ItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	if i.box == nil {
+		i.build()
+	}
+	t := env.Theme()
+	i.title.Style(t.Text).Color(t.Fg)
+	if i.description != nil {
+		i.description.Style(t.Caption).Color(t.MutedFg)
+	}
+	i.text.Gap(t.Space / 4)
+	i.row.Gap(t.Space * 1.5)
+	i.box.Padding(t.ItemPad)
 	if i.outline {
 		i.box.Fill(t.Card).Border(t.BorderWidth, t.Border).Radius(t.Radius).Padding(t.CardPad)
 	}

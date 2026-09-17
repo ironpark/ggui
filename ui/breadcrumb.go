@@ -102,6 +102,12 @@ func (b *BreadcrumbWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		b.build()
 	}
 	t := env.Theme()
+	for _, w := range b.muted {
+		w.Style(t.Text).Color(t.MutedFg)
+	}
+	if b.current != nil {
+		b.current.Style(t.Text).Color(t.Fg)
+	}
 	return b.row.Gap(t.Space/2).Layout(c, env)
 }
 

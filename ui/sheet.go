@@ -1,18 +1,15 @@
 package ui
 
-import (
-	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/ironpark/ggui"
-)
+import "github.com/ironpark/ggui"
 
-// SheetSide says which edge a sheet slides in from.
-type SheetSide int
+// sheetSide says which edge a sheet slides in from.
+type sheetSide int
 
 const (
-	SheetRight  SheetSide = iota // the default
-	SheetLeft                    //
-	SheetTop                     //
-	SheetBottom                  // what Drawer uses
+	sheetRight sheetSide = iota // the default
+	sheetLeft
+	sheetTop
+	sheetBottom // what Drawer uses
 )
 
 // SheetWidget is a modal panel anchored to an edge of the window: a scrim
@@ -26,21 +23,11 @@ const (
 // simply constructed once beside the signal it binds -- animates, and one
 // rebuilt from scratch every frame appears and goes at once, as Dialog does.
 type SheetWidget struct {
-	open    ggui.Binding[bool]
-	content ggui.Widget
-	title   *ggui.TextWidget
-	name    string
-	side    SheetSide
-	extent  float64
-	compact bool
-	handle  bool
-	onClose func()
-
-	panel *ggui.BoxWidget
-	theme ggui.Theme
-	env   ggui.Env
-	rect  ggui.Rect
-	slide ggui.Motion
+	modal
+	side   sheetSide
+	extent float64
+	handle bool
+	slide  ggui.Motion
 }
 
 // Sheet creates a panel that shows content along the window's right edge
@@ -49,7 +36,9 @@ type SheetWidget struct {
 //	filters := ggui.State(false)
 //	ui.Sheet(filters, filterForm).Title("Filters").Left()
 func Sheet(open ggui.Binding[bool], content ggui.Widget) *SheetWidget {
-	return &SheetWidget{open: open, content: content, extent: 320}
+	s := &SheetWidget{extent: 320}
+	s.open, s.content, s.dismissible = open, content, true
+	return s
 }
 
 // Drawer is a Sheet that rises from the bottom edge, with the grab handle
@@ -62,10 +51,7 @@ func Drawer(open ggui.Binding[bool], content ggui.Widget) *SheetWidget {
 
 // Title puts a heading above the content, which also names the sheet for
 // Probe.Find.
-func (s *SheetWidget) Title(v string) *SheetWidget {
-	s.title, s.name = ggui.Title(v).Size(18), v
-	return s
-}
+func (s *SheetWidget) Title(v string) *SheetWidget { s.setTitle(v); return s }
 
 // Named sets an accessible name without adding a visible heading.
 func (s *SheetWidget) Named(name string) *SheetWidget { s.name = name; return s }
@@ -73,21 +59,21 @@ func (s *SheetWidget) Named(name string) *SheetWidget { s.name = name; return s 
 // Compact removes the outer padding for content with its own spacing.
 func (s *SheetWidget) Compact() *SheetWidget { s.compact = true; return s }
 
-// Side anchors the sheet to an edge; Left, Right, Top and Bottom are the
-// shorthands for it.
-func (s *SheetWidget) Side(v SheetSide) *SheetWidget { s.side = v; return s }
+// Dismissible says whether a click on the scrim closes the sheet; it does
+// by default. Escape closes either way.
+func (s *SheetWidget) Dismissible(v bool) *SheetWidget { s.dismissible = v; return s }
 
 // Left anchors the sheet to the left edge.
-func (s *SheetWidget) Left() *SheetWidget { return s.Side(SheetLeft) }
+func (s *SheetWidget) Left() *SheetWidget { s.side = sheetLeft; return s }
 
 // Right anchors the sheet to the right edge, which is where it starts.
-func (s *SheetWidget) Right() *SheetWidget { return s.Side(SheetRight) }
+func (s *SheetWidget) Right() *SheetWidget { s.side = sheetRight; return s }
 
 // Top anchors the sheet to the top edge.
-func (s *SheetWidget) Top() *SheetWidget { return s.Side(SheetTop) }
+func (s *SheetWidget) Top() *SheetWidget { s.side = sheetTop; return s }
 
 // Bottom anchors the sheet to the bottom edge.
-func (s *SheetWidget) Bottom() *SheetWidget { return s.Side(SheetBottom) }
+func (s *SheetWidget) Bottom() *SheetWidget { s.side = sheetBottom; return s }
 
 // Size sets how far the sheet reaches from its edge: its width on the left
 // or right, its height on the top or bottom. It shrinks to fit a smaller
@@ -97,38 +83,13 @@ func (s *SheetWidget) Size(v float64) *SheetWidget { s.extent = max(0, v); retur
 // OnClose fires when the sheet closes, however it closed.
 func (s *SheetWidget) OnClose(fn func()) *SheetWidget { s.onClose = fn; return s }
 
-// Close closes the sheet.
-func (s *SheetWidget) Close() {
-	if !s.open.Peek() {
-		return
-	}
-	s.open.Set(false)
-	if s.onClose != nil {
-		s.onClose()
-	}
-}
-
-// Rect returns where the panel was last painted.
-func (s *SheetWidget) Rect() ggui.Rect { return s.rect }
-
-// Semantics implements ggui.Semantic.
-func (s *SheetWidget) Semantics() (ggui.Role, string) { return ggui.RoleDialog, s.name }
-
 // horizontal reports whether the sheet slides along the x axis.
-func (s *SheetWidget) horizontal() bool { return s.side == SheetLeft || s.side == SheetRight }
+func (s *SheetWidget) horizontal() bool { return s.side == sheetLeft || s.side == sheetRight }
 
-// Layout implements ggui.Widget: the sheet takes no room in the tree.
+// Layout implements ggui.Widget: the sheet takes no room in the tree. The
+// panel gets no border or radius: it is flush with the edge it came from.
 func (s *SheetWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	t := env.Theme()
-	s.theme, s.env = t, env
-	body := s.content
-	if s.title != nil {
-		body = ggui.Column(s.title, s.content).Gap(t.Space * 2).Align(ggui.AlignStretch)
-	}
-	s.panel = ggui.Box(body).Padding(t.CardPad).Fill(t.Popover).Shadow(t.OverlayShadow)
-	if s.compact {
-		s.panel.Pad(0)
-	}
+	s.build(env)
 	return c.Constrain(ggui.Size{})
 }
 
@@ -163,52 +124,26 @@ func (s *SheetWidget) paintPanel(dst *ggui.Canvas, v float64, open bool) {
 	size := s.panel.Layout(cs, s.env)
 	var at ggui.Point
 	switch s.side {
-	case SheetLeft:
+	case sheetLeft:
 		at = ggui.Pt(-(1-v)*size.W, 0)
-	case SheetTop:
+	case sheetTop:
 		at = ggui.Pt(0, -(1-v)*size.H)
-	case SheetBottom:
+	case sheetBottom:
 		at = ggui.Pt(0, screen.H-size.H+(1-v)*size.H)
 	default:
 		at = ggui.Pt(screen.W-size.W+(1-v)*size.W, 0)
 	}
-	s.rect = ggui.Rct(at, size)
 
 	// A sheet on its way out is a picture: it must not take the click that
 	// lands where it used to be, nor hold focus it is about to give back.
 	if !open {
 		dst = dst.Inert()
 	}
-	dst.FillRect(ggui.Rect{Size: screen}, fade(t.Scrim, v))
-	dst.HitPointer(ggui.Rect{Size: screen}, sheetScrim{s})
-	dst.DescribeNode(s.rect, s, func(dst *ggui.Canvas) {
-		dst.FocusTrap(s, s.Close, func(dst *ggui.Canvas) {
-			dst.HitPointer(s.rect, sheetSink{s})
-			dst.Paint(s.panel, s.rect)
-			if s.handle {
-				grip := ggui.Sz(36.0, 4.0)
-				at := ggui.Pt(s.rect.Origin.X+(s.rect.Size.W-grip.W)/2, s.rect.Origin.Y+t.Space/2)
-				dst.FillRoundRect(ggui.Rct(at, grip), grip.H/2, t.Border)
-			}
-		})
-	})
-}
-
-// sheetScrim covers the window under an open sheet: a press closes it and
-// nothing reaches what is beneath.
-type sheetScrim struct{ s *SheetWidget }
-
-func (c sheetScrim) HandlePointer(ev ggui.PointerEvent) bool {
-	if ev.Kind == ggui.PointerDown && ev.Button == ebiten.MouseButtonLeft {
-		c.s.Close()
+	rect := ggui.Rct(at, size)
+	s.paint(dst, screen, rect, fade(t.Scrim, v), s)
+	if s.handle {
+		grip := ggui.Sz(36.0, 4.0)
+		at := ggui.Pt(rect.Origin.X+(rect.Size.W-grip.W)/2, rect.Origin.Y+t.Space/2)
+		dst.FillRoundRect(ggui.Rct(at, grip), grip.H/2, t.Border)
 	}
-	return true
 }
-
-// sheetSink keeps presses inside the panel from reaching the scrim and
-// names the panel for Probe.Find.
-type sheetSink struct{ s *SheetWidget }
-
-func (c sheetSink) HandlePointer(ev ggui.PointerEvent) bool { return ev.Kind != ggui.PointerScroll }
-
-func (c sheetSink) Semantics() (ggui.Role, string) { return c.s.Semantics() }

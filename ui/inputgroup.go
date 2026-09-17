@@ -74,6 +74,9 @@ func (g *InputGroupWidget) DisabledWhen(r ggui.Reader[bool]) *InputGroupWidget {
 	return g
 }
 
+// hasFocus reports whether the editor inside has the keyboard.
+func (g *InputGroupWidget) hasFocus() bool { return g.focused != nil && g.focused() }
+
 // Layout implements ggui.Widget.
 func (g *InputGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	g.Sync()
@@ -92,15 +95,13 @@ func (g *InputGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		g.box = ggui.Box(g.row)
 	}
 	g.row.Gap(t.Space)
-	g.box.Padding(t.FieldPad).Radius(t.Radius).Fill(pick(g.Inert, t.Card, t.Input))
+	fieldBox(g.box, t, g.hasFocus(), g.Inert)
 	return g.box.Layout(c, env)
 }
 
 // Paint implements ggui.Widget.
 func (g *InputGroupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := g.theme
-	focused := g.focused != nil && g.focused()
-	g.box.Border(t.BorderWidth, pick(focused, t.Ring, t.Border))
 	// The chrome takes the click first so that the padding around the
 	// editor focuses it, and the addons, painted after, sit on top.
 	if h, ok := g.input.(ggui.Control); ok {
@@ -108,7 +109,7 @@ func (g *InputGroupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	} else {
 		dst.Describe(r, g)
 	}
-	if focused && !g.Inert {
+	if g.hasFocus() && !g.Inert {
 		fieldHalo(dst, r, t.Radius, t)
 	}
 	dst.Paint(g.box, r)

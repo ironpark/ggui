@@ -238,21 +238,7 @@ func (l tabLabel) Act(a ggui.Action) bool {
 }
 
 func (l tabLabel) HandlePointer(ev ggui.PointerEvent) bool {
-	switch ev.Kind {
-	case ggui.PointerEnter, ggui.PointerMove:
-		l.t.hover = l.i
-	case ggui.PointerExit:
-		if l.t.hover == l.i {
-			l.t.hover = -1
-		}
-	case ggui.PointerTap:
-		if ev.Button == ebiten.MouseButtonLeft {
-			l.t.pick(l.i)
-		}
-	case ggui.PointerScroll:
-		return false
-	}
-	return true
+	return hoverPick(ev, l.i, &l.t.hover, func() { l.t.pick(l.i) })
 }
 
 func (l tabLabel) Adopt(prev any) {

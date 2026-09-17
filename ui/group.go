@@ -18,8 +18,6 @@ type ButtonGroupWidget struct {
 
 	theme ggui.Theme
 	sizes []ggui.Size
-	size  ggui.Size
-	cross float64
 }
 
 // ButtonGroup lines children up in one strip.
@@ -42,22 +40,20 @@ func (g *ButtonGroupWidget) Named(s string) *ButtonGroupWidget { g.name = s; ret
 func (g *ButtonGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	g.theme = env.Theme()
 	g.sizes = g.sizes[:0]
-	var main float64
-	g.cross = 0
+	var main, cross float64
 	for _, child := range g.children {
 		s := child.Layout(c.Loosen(), env)
 		g.sizes = append(g.sizes, s)
 		if g.vertical {
-			main, g.cross = main+s.H, max(g.cross, s.W)
+			main, cross = main+s.H, max(cross, s.W)
 		} else {
-			main, g.cross = main+s.W, max(g.cross, s.H)
+			main, cross = main+s.W, max(cross, s.H)
 		}
 	}
 	if n := len(g.children); n > 1 {
 		main += float64(n-1) * g.theme.BorderWidth
 	}
-	g.size = c.Constrain(pick(g.vertical, ggui.Sz(g.cross, main), ggui.Sz(main, g.cross)))
-	return g.size
+	return c.Constrain(pick(g.vertical, ggui.Sz(cross, main), ggui.Sz(main, cross)))
 }
 
 // Paint implements ggui.Widget. The strip is one group, so a screen reader
@@ -110,7 +106,7 @@ type ToggleGroupWidget[T comparable] struct {
 	sizes []ggui.Size
 	rects []ggui.Rect
 	pad   ggui.EdgeInsets
-	size  ggui.Size
+	cur   int // the chosen segment, found once a frame by paint
 }
 
 // ToggleGroup creates one segment per option, bound to value and labelled
@@ -195,8 +191,7 @@ func (g *ToggleGroupWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Siz
 		}
 	}
 	main, cross = main+2*tabInset, cross+2*tabInset
-	g.size = c.Constrain(pick(g.vertical, ggui.Sz(cross, main), ggui.Sz(main, cross)))
-	return g.size
+	return c.Constrain(pick(g.vertical, ggui.Sz(cross, main), ggui.Sz(main, cross)))
 }
 
 // Paint implements ggui.Widget. The group is one node holding a segment
@@ -213,7 +208,10 @@ func (g *ToggleGroupWidget[T]) paint(dst *ggui.Canvas, r ggui.Rect) {
 	if !g.Inert && len(g.options) > 0 {
 		dst.HitKey(r, g)
 	}
-	cur, hover := g.index(), pick(g.Inert, -1, g.hover)
+	// Layout is skipped on a still frame, so the chosen segment is found
+	// here, where the segments' own nodes read it back.
+	g.cur = g.index()
+	cur, hover := g.cur, pick(g.Inert, -1, g.hover)
 	g.rects = g.rects[:0]
 	at := r.Origin.Add(ggui.Pt(tabInset, tabInset))
 	cross := pick(g.vertical, r.Size.W, r.Size.H) - 2*tabInset
@@ -290,11 +288,12 @@ func (s toggleSegment[T]) Semantics() (ggui.Role, string) { return ggui.RoleRadi
 // Describe implements ggui.Describer: a segment is one of a set, and says
 // whether it is the one chosen.
 func (s toggleSegment[T]) Describe() ggui.Node {
+	chosen := s.i == s.g.cur
 	return ggui.Node{
 		Role:     ggui.RoleRadio,
 		Name:     s.g.names[s.i],
-		Checked:  ggui.Tri(s.i == s.g.index()),
-		Selected: s.i == s.g.index(),
+		Checked:  ggui.Tri(chosen),
+		Selected: chosen,
 		Disabled: s.g.Inert,
 		Actions:  ggui.ActionSelect | ggui.ActionPress | ggui.ActionFocus,
 	}
@@ -310,21 +309,7 @@ func (s toggleSegment[T]) Act(a ggui.Action) bool {
 }
 
 func (s toggleSegment[T]) HandlePointer(ev ggui.PointerEvent) bool {
-	switch ev.Kind {
-	case ggui.PointerEnter, ggui.PointerMove:
-		s.g.hover = s.i
-	case ggui.PointerExit:
-		if s.g.hover == s.i {
-			s.g.hover = -1
-		}
-	case ggui.PointerTap:
-		if ev.Button == ebiten.MouseButtonLeft {
-			s.g.pick(s.i)
-		}
-	case ggui.PointerScroll:
-		return false
-	}
-	return true
+	return hoverPick(ev, s.i, &s.g.hover, func() { s.g.pick(s.i) })
 }
 
 func (s toggleSegment[T]) Adopt(prev any) {

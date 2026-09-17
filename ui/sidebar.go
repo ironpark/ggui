@@ -51,12 +51,11 @@ type SidebarWidget struct {
 	hover            int
 
 	theme                  ggui.Theme
-	env                    ggui.Env
+	cur                    int // the current destination, found once a frame by paint
 	labelSize              []ggui.Size
 	rowH                   []float64
 	headerSize, footerSize ggui.Size
 	hidden                 bool
-	size                   ggui.Size
 }
 
 // Sidebar creates a navigation column bound to the key of the chosen item.
@@ -141,11 +140,10 @@ func (s *SidebarWidget) current() int {
 func (s *SidebarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	s.Sync()
 	t := env.Theme()
-	s.theme, s.env = t, env
+	s.theme = t
 	s.hidden = s.collapsed != nil && s.collapsed.Get()
 	if s.hidden {
-		s.size = c.Constrain(ggui.Size{})
-		return s.size
+		return c.Constrain(ggui.Size{})
 	}
 	w := min(s.width, c.MaxW)
 	inner := ggui.Constraints{MaxW: max(w-t.Space*2, 0), MaxH: ggui.Unbounded}
@@ -178,8 +176,7 @@ func (s *SidebarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		height += s.footerSize.H + t.Space
 	}
 	height += t.Space
-	s.size = c.Constrain(ggui.Sz(w, max(bounded(c.MaxH, height), height)))
-	return s.size
+	return c.Constrain(ggui.Sz(w, max(bounded(c.MaxH, height), height)))
 }
 
 // Paint implements ggui.Widget. The column is one node holding a
@@ -205,7 +202,10 @@ func (s *SidebarWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.Paint(s.header, ggui.Rct(ggui.Pt(x, y), ggui.Sz(w, s.headerSize.H)))
 		y += s.headerSize.H + t.Space
 	}
-	cur, hover := s.current(), pick(s.Inert, -1, s.hover)
+	// Layout is skipped on a still frame, so the current destination is
+	// found here, where the items' own nodes read it back.
+	s.cur = s.current()
+	cur, hover := s.cur, pick(s.Inert, -1, s.hover)
 	for i, e := range s.entries {
 		row := ggui.Rct(ggui.Pt(x, y), ggui.Sz(w, s.rowH[i]))
 		label := ggui.Rct(ggui.Pt(x+t.ItemPad.Left, y+(s.rowH[i]-s.labelSize[i].H)/2), s.labelSize[i])
@@ -309,7 +309,7 @@ func (it sidebarItem) Describe() ggui.Node {
 	return ggui.Node{
 		Role:     ggui.RoleTab,
 		Name:     e.label,
-		Selected: it.i == it.s.current(),
+		Selected: it.i == it.s.cur,
 		Disabled: e.disabled || it.s.Inert,
 		Actions:  ggui.ActionSelect | ggui.ActionPress | ggui.ActionFocus,
 	}
@@ -325,23 +325,12 @@ func (it sidebarItem) Act(a ggui.Action) bool {
 }
 
 func (it sidebarItem) HandlePointer(ev ggui.PointerEvent) bool {
-	switch ev.Kind {
-	case ggui.PointerEnter, ggui.PointerMove:
-		it.s.hover = it.i
-	case ggui.PointerExit:
-		if it.s.hover == it.i {
-			it.s.hover = -1
-		}
-	case ggui.PointerDown:
+	// The press moves the highlight even when the release lands elsewhere,
+	// so the arrow keys carry on from where the pointer went.
+	if ev.Kind == ggui.PointerDown {
 		it.s.active = it.i
-	case ggui.PointerTap:
-		if ev.Button == ebiten.MouseButtonLeft {
-			it.s.goTo(it.i)
-		}
-	case ggui.PointerScroll:
-		return false
 	}
-	return true
+	return hoverPick(ev, it.i, &it.s.hover, func() { it.s.goTo(it.i) })
 }
 
 func (it sidebarItem) Adopt(prev any) {

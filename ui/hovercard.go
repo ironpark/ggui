@@ -55,12 +55,16 @@ func (h *HoverCardWidget) Width(w float64) *HoverCardWidget { h.width = w; retur
 func (h *HoverCardWidget) Named(s string) *HoverCardWidget { h.name = s; return h }
 
 // Layout implements ggui.Widget: the card takes no room, so the anchor's
-// size is the widget's.
+// size is the widget's. The card itself is not measured here -- it is out
+// of sight on all but a few frames, and measuring it would mean a layout
+// pass over the whole content every frame to answer a question nobody is
+// asking yet. Paint measures it once it is about to show.
 func (h *HoverCardWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	h.env, h.theme = env, env.Theme()
-	h.panel = panelBox(ggui.Box(h.content), h.theme).Radius(h.theme.RadiusLg)
-	w := max(h.width, 0)
-	h.size = h.panel.Layout(ggui.Constraints{MinW: w, MaxW: w, MaxH: ggui.Unbounded}, env)
+	if h.panel == nil {
+		h.panel = ggui.Box(h.content)
+	}
+	panelBox(h.panel, h.theme).Radius(h.theme.RadiusLg)
 	return h.anchor.Layout(c, env)
 }
 
@@ -84,6 +88,8 @@ func (h *HoverCardWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.Retain(at, hoverCardSlot, hoverCardState{since: state.since})
 		return
 	}
+	w := max(h.width, 0)
+	h.size = h.panel.Layout(ggui.Constraints{MinW: w, MaxW: w, MaxH: ggui.Unbounded}, h.env)
 	panel := h.place(dst.Size(), r)
 	dst.Retain(at, hoverCardSlot, hoverCardState{since: state.since, panel: panel})
 	dst.Overlay(func(dst *ggui.Canvas) {

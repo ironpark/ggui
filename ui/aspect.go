@@ -11,7 +11,6 @@ import (
 type AspectRatioWidget struct {
 	child ggui.Widget
 	ratio float64
-	size  ggui.Size
 }
 
 // AspectRatio sizes child to ratio, its width divided by its height: 16.0/9
@@ -42,11 +41,11 @@ func (a *AspectRatioWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 			h, w = c.MaxH, c.MaxH*ratio
 		}
 	}
-	a.size = c.Constrain(ggui.Sz(w, h))
+	size := c.Constrain(ggui.Sz(w, h))
 	if a.child != nil {
-		a.child.Layout(ggui.Tight(a.size), env)
+		a.child.Layout(ggui.Tight(size), env)
 	}
-	return a.size
+	return size
 }
 
 // Paint implements ggui.Widget.

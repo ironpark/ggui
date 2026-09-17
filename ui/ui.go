@@ -15,6 +15,7 @@ import (
 	"image/color"
 	"math"
 
+	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 )
 
@@ -47,15 +48,22 @@ func bounded(v, fallback float64) float64 {
 
 func clamp(v, lo, hi float64) float64 { return min(max(v, lo), hi) }
 
-// tint darkens (f < 1) or lightens (f > 1) an opaque color.
-func tint(c color.Color, f float64) color.Color {
+// channels returns c with its color scaled by f and its alpha by fa.
+func channels(c color.Color, f, fa float64) color.Color {
 	if c == nil {
 		return nil
 	}
 	r, g, b, a := c.RGBA()
-	scale := func(v uint32) uint8 { return uint8(clamp(float64(v>>8)*f, 0, 255)) }
-	return color.RGBA{scale(r), scale(g), scale(b), uint8(a >> 8)}
+	scale := func(v uint32, by float64) uint8 { return uint8(clamp(float64(v>>8)*by, 0, 255)) }
+	return color.RGBA{scale(r, f), scale(g, f), scale(b, f), scale(a, fa)}
 }
+
+// tint darkens (f < 1) or lightens (f > 1) an opaque color.
+func tint(c color.Color, f float64) color.Color { return channels(c, f, 1) }
+
+// fade dims a color toward nothing. Every channel goes, alpha included,
+// because a premultiplied color stays premultiplied only if they all do.
+func fade(c color.Color, f float64) color.Color { return channels(c, f, f) }
 
 // setChanged stores v in s if it differs and then reports it to fn, which
 // may be nil. It is the shape every control's OnChange follows.
@@ -109,6 +117,28 @@ func (m *pointerMotion) drifted(p ggui.Point) bool {
 	return m.moved(p) && seen
 }
 
+// hoverPick is the pointer body a group's items share: the hovered index
+// follows the pointer, a left click picks, and the wheel passes through to
+// whatever scrolls behind. A tab strip, a toggle group and a sidebar all
+// track which of their rows the pointer is on this way.
+func hoverPick(ev ggui.PointerEvent, i int, hover *int, pick func()) bool {
+	switch ev.Kind {
+	case ggui.PointerEnter, ggui.PointerMove:
+		*hover = i
+	case ggui.PointerExit:
+		if *hover == i {
+			*hover = -1
+		}
+	case ggui.PointerTap:
+		if ev.Button == ebiten.MouseButtonLeft {
+			pick()
+		}
+	case ggui.PointerScroll:
+		return false
+	}
+	return true
+}
+
 func mix(a, b color.Color, amount float64) color.Color {
 	if a == nil {
 		return b
@@ -120,15 +150,4 @@ func mix(a, b color.Color, amount float64) color.Color {
 	br, bg, bb, ba := b.RGBA()
 	blend := func(x, y uint32) uint8 { return uint8((float64(x)*(1-amount) + float64(y)*amount) / 257) }
 	return color.RGBA{blend(ar, br), blend(ag, bg), blend(ab, bb), blend(aa, ba)}
-}
-
-// fade returns c with every channel scaled by f, which dims a premultiplied
-// color without changing its hue: a scrim that arrives with its sheet.
-func fade(c color.Color, f float64) color.Color {
-	if c == nil {
-		return nil
-	}
-	r, g, b, a := c.RGBA()
-	scale := func(v uint32) uint8 { return uint8(clamp(float64(v>>8)*f, 0, 255)) }
-	return color.RGBA{scale(r), scale(g), scale(b), scale(a)}
 }
