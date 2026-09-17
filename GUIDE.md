@@ -20,7 +20,7 @@ represent application callbacks, data, or colors.
 | Render a changing or large collection | [Keyed lists](#keyed-lists) |
 | Arrange and display content | [Widgets and layout](#widgets-and-layout) |
 | Build forms and interactive screens | [Controls](#controls) · [Additional UI components](#additional-ui-components) |
-| Customize appearance and motion | [Styling](#styling) · [Animation](#animation) |
+| Customize appearance and motion | [STYLING.md](STYLING.md) · [Animation](#animation) |
 | Handle keys, pointer input, and focus | [Input](#input) |
 | Support assistive technology | [Accessibility](#accessibility) |
 | Verify behavior without a window | [Testing](#testing) |
@@ -334,7 +334,7 @@ sits in a box of another shape. `DecodeImage(bytes)` and
 `Text` wraps at spaces to the width it is given, and between runes when a
 word is wider than the line, so scripts without spaces wrap too. `.Size(px)`,
 `.Color(c)`, `.Font(f)`, `.LineHeight(mult)`, `.Style(ts)`, `.Align(0.5)` and
-`.NoWrap()` adjust it; what is not set is inherited (see Styling). The
+`.NoWrap()` adjust it; what is not set is inherited (see [STYLING.md](STYLING.md)). The
 built-in font is Go Regular; `LoadFont(ttf)` or `LoadFontFile(path)` load your
 own, and `SetDefaultFont` makes one the default.
 
@@ -750,69 +750,21 @@ ggui.Presence(open, ggui.Transition(panel).Slide(0, -8).Fade())
 
 ## Styling
 
-Styling has three layers: local widget styles, inherited values in `Env`, and
-shared theme tokens. A widget's explicit setters override inherited text styles.
-
-### Local styles
-
-`TextStyle{Font, Size, Color, LineHeight}` is what
-`Text`'s setters write into; a zero field means "inherit". `a.Merge(b)` lays
-the set fields of `b` over `a`, so a heading is `Text(s).Style(t.Title)` and a
-one-off tweak is `Text(s).Style(t.Title).Color(red)`.
-
-### Inherited styles
-
-Every widget lays out under an `Env`
-that flows down from the root, like CSS inheritance. `Styled(child)` sets the
-text style everything below starts from, and a `Text`'s own setters still win:
+Styling has three layers: a widget's own setters, values inherited through the
+`Env`, and the theme's tokens. A widget's setters win over what it inherited,
+and inheritance is resolved at layout time, so a theme swap reaches widgets
+built long before it.
 
 ```go
-ggui.Styled(ggui.Column(ggui.Text("a"), ggui.Text("b").Size(18))).Color(t.Muted).Size(12)
+ggui.Text("Heading").Style(t.Title).Color(brand)   // local
+ggui.Styled(page).Color(t.MutedFg).Size(12)        // inherited
+ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme())
 ```
 
-The root `Env` starts from the theme's `Text`, so a bare `Text(s)` already
-looks right; `Title(s)` and `Caption(s)` take the theme's named styles from
-the Env at layout.
-
-`.Space(n)` on Column, Row, Wrap, Grid and For is n times
-the theme's `Space`, and `Themed(t, child)` gives a subtree its own theme,
-so a Builder rarely needs `UseTheme` at all. Inheritance happens at layout time, so it works with the eager
-construction of Go: no closures around subtrees. Your own inherited values go
-the same way: `Provide(key, v, child)` stores `v` under a `Key[T]` from
-`NewKey`, and a widget reads it back with `env.Get(key)` in `Layout`.
-
-### Theme tokens
-
-`Theme`'s colors follow shadcn/ui's semantic tokens, so a palette written
-for shadcn ports across a variable at a time: `Bg`/`Fg`, `Card`, `Popover`,
-`Primary`/`PrimaryFg` (with `PrimaryHover`), `Secondary`/`SecondaryFg`,
-`Muted`/`MutedFg`, `Destructive`/`DestructiveFg`, `Border`, `Input`, `Ring`,
-plus `Selection` and the modal `Scrim`. Each pair is a surface and the
-foreground drawn on it: `Muted` is the quiet surface behind a hover, and
-`MutedFg` the grey of secondary text.
-
-Elevation is three tokens in the order a surface rises off the page:
-`CardShadow`, `PanelShadow` and `OverlayShadow`. Sizes are `Radius` with
-`RadiusSm` for rows and pills and `RadiusLg` for cards, dialogs and toasts,
-plus `Space`, `BorderWidth` and `MenuWidth`. The controls' paddings are
-`ButtonPad`, `FieldPad`, `ItemPad`, `CardPad`, `PanelPad` and `TabPad`, and
-the state tints are `HoverMix`, `PressMix` and `DisabledMix`, so a custom
-control can match the built-in ones.
-
-`t.Set(key, v)` still adds a token of your own under a `Key`, without
-changing `t`, and `t.Get(key)` reads it back.
-
-Two `Env` keys support accessibility preferences: `Provide(TextScaleKey, 1.5, tree)` scales every
-`Text` and `TextInput`, and `Provide(ReducedMotionKey, true, tree)` lands
-transitions at once and makes the controls' eased motions jump, through
-`env.Motion(d)`.
-
-`UseTheme()` reads it at build time and subscribes the enclosing Builder;
-`SetTheme(t)` swaps it and rebuilds only what read it. `DefaultTheme()` is
-light, `DarkTheme()` dark, and a window with no `Background` follows the
-theme's `Bg`. The theme also travels in the `Env`, where `env.Theme()` gives a
-custom widget the tokens at layout time, the way the built-in controls get
-theirs. `Box` decorates with `.Fill`, `.Radius(r)` and `.Border(w, c)`.
+**[STYLING.md](STYLING.md) is the full reference**: every theme token with its
+shadcn/ui variable and its light and dark value, how a `TextStyle` resolves,
+deriving a theme without the zero-field trap, tokens of your own, styling a
+custom widget, and the two accessibility preferences.
 
 ## Input
 
@@ -946,7 +898,7 @@ ggui.Provide(ggui.TextScaleKey, 1.5,
 
 Text scaling affects `Text` and `TextInput`. Reduced motion makes transitions and
 control motion complete immediately. Custom controls can respect it through
-`env.Motion(d)`.
+`env.Motion(d)`; see [STYLING.md](STYLING.md#accessibility-preferences).
 
 ## Testing
 
@@ -1086,7 +1038,7 @@ underneath keeps working while the inspector is open.
 | Text editing and fonts | [editor.go](editor.go), [font.go](font.go), [internal/textinput/](internal/textinput/) |
 | Input and shortcuts | [input.go](input.go), [chord.go](chord.go), [clipboard.go](clipboard.go) |
 | Accessibility and semantics | [a11y.go](a11y.go), [a11y_darwin.go](a11y_darwin.go), [semantics.go](semantics.go) |
-| Styling and animation | [style.go](style.go), [anim.go](anim.go), [transition.go](transition.go) |
+| Styling and animation | [style.go](style.go), [anim.go](anim.go), [transition.go](transition.go) — see [STYLING.md](STYLING.md) |
 | Overlays and images | [popup.go](popup.go), [tooltip.go](tooltip.go), [image.go](image.go) |
 | Testing and diagnostics | [probe.go](probe.go), [inspector.go](inspector.go), [cache.go](cache.go) |
 | Runnable applications | [examples/](examples/) |

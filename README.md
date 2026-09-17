@@ -150,7 +150,7 @@ tools such as Accessibility Inspector, or `AccessibilityOff` to disable it.
 
 Widgets also provide keyboard navigation, focus handling, semantic roles and
 labels, text scaling, and reduced-motion settings. See the guide's
-[input](GUIDE.md#input) and [styling](GUIDE.md#styling) sections.
+[input](GUIDE.md#input) section and [STYLING.md](STYLING.md).
 
 ## Documentation
 
@@ -158,7 +158,7 @@ labels, text scaling, and reduced-motion settings. See the guide's
 | --- | --- |
 | State and components | [Signals, ownership, builders, and keyed lists](GUIDE.md#concepts) |
 | Layout and controls | [Widgets and layout](GUIDE.md#widgets-and-layout) · [Controls](GUIDE.md#controls) · [Additional controls](GUIDE.md#additional-ui-components) |
-| Look and feel | [Animation](GUIDE.md#animation) · [Styling](GUIDE.md#styling) · [HiDPI](GUIDE.md#hidpi) |
+| Look and feel | [Styling](STYLING.md) · [Animation](GUIDE.md#animation) · [HiDPI](GUIDE.md#hidpi) |
 | Interaction and testing | [Input](GUIDE.md#input) · [Headless testing](GUIDE.md#testing) · [Inspector](GUIDE.md#inspector) |
 | Internals | [Frame lifecycle](GUIDE.md#frames) · [Repository layout](GUIDE.md#repository-layout) |
 
