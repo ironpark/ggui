@@ -55,7 +55,7 @@ func (m *MenuWidget) init(entries []ggui.Widget) {
 		}
 	}
 	m.panel = ggui.Box(ggui.Column(entries...).Align(ggui.AlignStretch))
-	m.popup = ggui.Popup(m.button, m.panel).Keys(m)
+	m.popup = ggui.Popup(m.button, m.panel).Keys(m).Owner(m.button)
 }
 
 // Popup returns the popup the entries open in.
@@ -197,6 +197,8 @@ func (it *MenuItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 // Paint implements Widget.
 func (it *MenuItemWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := it.theme
+	// A disabled item takes no input but is still part of the menu.
+	dst.Describe(r, it)
 	if !it.Inert {
 		dst.HitPointer(r, it)
 		dst.HitCursor(r, ebiten.CursorShapePointer)

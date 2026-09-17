@@ -165,6 +165,10 @@ func (a *AccordionWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 
 // Paint implements ggui.Widget.
 func (a *AccordionWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	dst.DescribeNode(r, a, func(dst *ggui.Canvas) { a.paint(dst, r) })
+}
+
+func (a *AccordionWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 	if !slices.Equal(a.laidOpen, a.open.Peek()) {
 		ggui.Invalidate(a.env)
 	}
@@ -177,6 +181,7 @@ func (a *AccordionWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	for i, item := range a.items {
 		h := a.headers[i]
 		rect := ggui.Rct(ggui.Pt(r.Origin.X, y), ggui.Sz(r.Size.W, a.heights[i]))
+		dst.Describe(rect, h)
 		if !item.disabled {
 			dst.HitPointer(rect, h)
 			dst.HitCursor(rect, ebiten.CursorShapePointer)
@@ -211,6 +216,19 @@ type accordionHeader struct {
 	index int
 	text  *ggui.TextWidget
 	size  ggui.Size
+}
+
+// Describe implements ggui.Describer: a header reports whether its section
+// is open, so expand and collapse mean something.
+func (h *accordionHeader) Describe() ggui.Node {
+	open := h.owner.isOpen(h.index)
+	return ggui.Node{
+		Role:     ggui.RoleDisclosure,
+		Name:     h.Name,
+		Expanded: ggui.Expandable(open),
+		Disabled: h.Inert,
+		Actions:  ggui.ActionPress | ggui.ActionFocus | pick(open, ggui.ActionCollapse, ggui.ActionExpand),
+	}
 }
 
 func (h *accordionHeader) HandlePointer(ev ggui.PointerEvent) bool {

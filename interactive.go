@@ -12,9 +12,10 @@ type Control interface {
 	KeyHandler
 }
 
-// Role says what kind of control a region is, for tests and the inspector;
-// the ui package fills it in. There is no platform accessibility bridge
-// yet, so the consumers are Probe.Find, Probe.FindRole and the inspector.
+// Role says what kind of element a node or region is. The ui package fills
+// it in; Probe.Find, the inspector and the semantics tree read it. The
+// control roles name things the user acts on, the rest name content and
+// structure a screen reader still has to read out.
 type Role string
 
 const (
@@ -36,6 +37,21 @@ const (
 	RoleAccordion  Role = "accordion"
 	RoleCombobox   Role = "combobox"
 	RoleSeparator  Role = "separator"
+
+	// Content and structure: these describe what is on screen rather than
+	// what takes input, so they live in the semantics tree alone and never
+	// register a hit region.
+	RoleText     Role = "text"
+	RoleHeading  Role = "heading"
+	RoleImage    Role = "image"
+	RoleList     Role = "list"
+	RoleListItem Role = "listitem"
+	RoleGroup    Role = "group"
+	RoleProgress Role = "progress"
+	RoleLink     Role = "link"
+	RoleToolbar  Role = "toolbar"
+	RoleStatus   Role = "status"
+	RoleWindow   Role = "window"
 )
 
 // Semantic is a handler that reports a role and a label for its region;
@@ -108,9 +124,14 @@ func (s *Interactive) Anchor(r Rect) Anchor { return Anchor{Rect: r, ID: s.HitID
 
 func (s *Interactive) state() *Interactive { return s }
 
-// Hit registers r for pointer, keys and the cursor, unless Inert.
+// Hit registers r for pointer, keys and the cursor, unless Inert, and
+// describes the control into the frame's semantics tree either way. A
+// disabled control takes no input, which is why the regions are skipped,
+// but it is still on screen and a screen reader must still read it out,
+// which is why the node is not.
 func (s *Interactive) Hit(dst *Canvas, r Rect, h Control, cursor ebiten.CursorShapeType) {
 	s.Sync()
+	dst.Describe(r, h)
 	if s.Inert {
 		return
 	}

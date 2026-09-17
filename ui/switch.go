@@ -36,6 +36,17 @@ func (s *SwitchWidget) Disabled(v bool) *SwitchWidget { s.Inert = v; return s }
 // DisabledWhen follows r for Disabled without a rebuild.
 func (s *SwitchWidget) DisabledWhen(r ggui.Reader[bool]) *SwitchWidget { s.InertWhen(r); return s }
 
+// Describe implements ggui.Describer: a switch reports whether it is on.
+func (s *SwitchWidget) Describe() ggui.Node {
+	return ggui.Node{
+		Role:     ggui.RoleSwitch,
+		Name:     s.Name,
+		Checked:  ggui.Tri(s.on.Peek()),
+		Disabled: s.Inert,
+		Actions:  ggui.ActionPress | ggui.ActionFocus,
+	}
+}
+
 // Layout implements Widget.
 func (s *SwitchWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size { return s.layout(c, env) }
 

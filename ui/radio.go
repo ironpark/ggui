@@ -40,6 +40,20 @@ func (r *RadioWidget[T]) DisabledWhen(when ggui.Reader[bool]) *RadioWidget[T] {
 	return r
 }
 
+// Describe implements ggui.Describer: an option reports whether the group
+// currently holds its value.
+func (r *RadioWidget[T]) Describe() ggui.Node {
+	on := r.selected.Peek() == r.value
+	return ggui.Node{
+		Role:     ggui.RoleRadio,
+		Name:     r.Name,
+		Checked:  ggui.Tri(on),
+		Selected: on,
+		Disabled: r.Inert,
+		Actions:  ggui.ActionPress | ggui.ActionSelect | ggui.ActionFocus,
+	}
+}
+
 // Layout implements Widget.
 func (r *RadioWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size { return r.layout(c, env) }
 

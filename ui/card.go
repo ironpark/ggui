@@ -29,8 +29,11 @@ func (c *CardWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	return c.box.Layout(cs, env)
 }
 
-// Paint implements Widget.
-func (c *CardWidget) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(c.box, r) }
+// Paint implements Widget. A card groups what is inside it, which a
+// screen reader announces as a region it can step over.
+func (c *CardWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	dst.Node(r, ggui.Node{Role: ggui.RoleGroup}, func(dst *ggui.Canvas) { dst.Paint(c.box, r) })
+}
 
 // BadgeWidget is a small pill of text. Build one with Badge.
 type BadgeWidget struct {
@@ -94,6 +97,7 @@ func (p *ProgressWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 func (p *ProgressWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := p.theme
 	v := dst.Ease(ggui.Anchor{Rect: r}, progressSlot, clamp(p.value.Get(), 0, 1), p.motion)
+	dst.Leaf(r, ggui.Node{Role: ggui.RoleProgress, Min: 0, Max: 1, Now: v})
 	dst.FillRoundRect(r, r.Size.H/2, t.Border)
 	if w := r.Size.W * v; w > 0 {
 		dst.FillRoundRect(ggui.Rct(r.Origin, ggui.Sz(w, r.Size.H)), r.Size.H/2, t.Accent)

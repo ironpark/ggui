@@ -220,6 +220,7 @@ func (a *App) Draw(screen *ebiten.Image) {
 	a.canvas.tracing, a.canvas.trace = a.inspect, a.canvas.trace[:0]
 	a.canvas.logical = logical
 	a.canvas.nextFrame()
+	a.canvas.resetSemantics()
 	if a.needsLayout(logical) {
 		a.rootSize = a.root.Layout(Tight(logical), rootEnv())
 	}

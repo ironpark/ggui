@@ -178,7 +178,21 @@ func (r *tableRow[T, K]) chosen() bool {
 	return r.table.selected != nil && r.table.selected.Get() == r.key
 }
 
+// Describe implements ggui.Describer: a row reports whether it is the
+// selected one. Its cells describe themselves inside it.
+func (r *tableRow[T, K]) Describe() ggui.Node {
+	n := ggui.Node{Role: ggui.RoleRow, Name: r.Name, Selected: r.chosen(), Disabled: r.Inert}
+	if r.table.selectable() {
+		n.Actions = ggui.ActionSelect | ggui.ActionPress | ggui.ActionFocus
+	}
+	return n
+}
+
 func (r *tableRow[T, K]) Paint(dst *ggui.Canvas, rc ggui.Rect) {
+	dst.DescribeNode(rc, r, func(dst *ggui.Canvas) { r.paint(dst, rc) })
+}
+
+func (r *tableRow[T, K]) paint(dst *ggui.Canvas, rc ggui.Rect) {
 	th := r.theme
 	if r.table.selectable() {
 		r.Hit(dst, rc, r, ebiten.CursorShapePointer)

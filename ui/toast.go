@@ -48,6 +48,7 @@ type ToasterWidget struct {
 }
 type toastEntry struct {
 	id              ToastID
+	title           string
 	panel           *AlertWidget
 	dismiss, action *ButtonWidget
 	remaining       time.Duration
@@ -75,7 +76,7 @@ func (t *ToasterWidget) Push(message ToastMessage) ToastID {
 		return 0
 	}
 	t.next++
-	e := &toastEntry{id: t.next, remaining: message.duration, persistent: message.duration <= 0, last: ggui.Now()}
+	e := &toastEntry{id: t.next, title: message.title, remaining: message.duration, persistent: message.duration <= 0, last: ggui.Now()}
 	e.dismiss = Button("Dismiss", func() { t.Dismiss(e.id) }).Secondary().Label("Dismiss " + message.title)
 	e.dismiss.Key(e)
 	actions := []ggui.Widget{}
@@ -155,7 +156,11 @@ func (t *ToasterWidget) paintNotices(dst *ggui.Canvas) {
 		rect := ggui.Rct(ggui.Pt(screen.W-margin-size.W, bottom-size.H), size)
 		clip := dst.Clip(rect)
 		clip.HitPointer(rect, toastHover{e})
-		clip.Paint(e.panel, rect)
+		// A notice is a live region: it appeared without the user asking,
+		// so it is announced where it stands rather than waited for.
+		clip.Node(rect, ggui.Node{Role: ggui.RoleStatus, Name: e.title}, func(clip *ggui.Canvas) {
+			clip.Paint(e.panel, rect)
+		})
 		bottom -= size.H + theme.Space
 	}
 }

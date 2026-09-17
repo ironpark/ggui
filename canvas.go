@@ -34,12 +34,27 @@ type Canvas struct {
 	logical    Size // the window in logical pixels, for Size
 	pointer    Point
 	hasPointer bool
-	overlays   []func(*Canvas)
+	overlays   []overlay
 	trace      []traceEntry // every Paint call, when the inspector is on
 	tracing    bool
 	depth      int
 	keeps      map[retainKey]any // Retain this frame
 	prevKeeps  map[retainKey]any // Retain last frame, read by Retained
+
+	// The frame's accessibility tree, kept apart from hits: input scans
+	// hits on every pointer event, and most of what a screen reader reads
+	// takes no input at all. semParent and semLast are indices into sem
+	// plus one, so a zero value means none.
+	sem       []semNode
+	semIndex  map[any]int // handler to index plus one, for Describe and SemanticRef
+	semParent int         // the node being painted into
+	semLast   int         // the node most recently recorded
+}
+
+// overlay is one deferred paint and the semantics node it belongs under.
+type overlay struct {
+	fn    func(*Canvas)
+	owner SemRef
 }
 
 // Slot names one value a widget retains on the Canvas between frames,
@@ -132,6 +147,7 @@ func (c *Canvas) Inert() *Canvas {
 	child := *c
 	child.parent, child.inert = c, true
 	child.overlays, child.trace, child.keeps, child.prevKeeps = nil, nil, nil, nil
+	child.sem, child.semIndex = nil, nil
 	return &child
 }
 
@@ -194,12 +210,21 @@ func (c *Canvas) Pointer() (Point, bool) {
 // Overlay schedules fn to paint after the whole tree has, on the root
 // Canvas, unclipped and above everything: tooltips, popups and menus go
 // there. Hit regions fn registers sit on top of the tree's.
-func (c *Canvas) Overlay(fn func(dst *Canvas)) {
+//
+// An overlay paints long after its widget did, so what it describes would
+// otherwise stand beside the whole tree rather than inside it. Pass the
+// owner a SemanticRef gave to attach it where it belongs: a dropdown's
+// option list under the combobox that opened it.
+func (c *Canvas) Overlay(fn func(dst *Canvas), owner ...SemRef) {
 	if c == nil {
 		return
 	}
 	root := c.root()
-	root.overlays = append(root.overlays, fn)
+	var under SemRef
+	if len(owner) > 0 {
+		under = owner[0]
+	}
+	root.overlays = append(root.overlays, overlay{fn: fn, owner: under})
 }
 
 // Size returns the logical size of the window being painted, or zero for
@@ -220,7 +245,8 @@ func (c *Canvas) Size() Size {
 // queue themselves, and clears the queue.
 func (c *Canvas) paintOverlays() {
 	for i := 0; i < len(c.overlays); i++ {
-		c.overlays[i](c)
+		o := c.overlays[i]
+		c.scoped(o.owner, o.fn)
 	}
 	c.overlays = c.overlays[:0]
 }

@@ -105,6 +105,7 @@ func (p *Probe) Frame() Size {
 	c.prev, c.hits = c.hits, nil
 	c.pointer, c.hasPointer, c.logical = p.pointer, p.hasPointer, p.size
 	c.nextFrame()
+	c.resetSemantics()
 	if p.needsLayout(p.size) {
 		p.rootSize = p.root.Layout(Tight(p.size), p.env)
 	}

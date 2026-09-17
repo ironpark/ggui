@@ -237,6 +237,14 @@ func (t *TextWidget) Layout(c Constraints, env Env) Size {
 
 // Paint implements Widget.
 func (t *TextWidget) Paint(dst *Canvas, r Rect) {
+	// Text is half of what a screen reader reads, and none of it takes
+	// input, so it goes in the semantics tree and never in the hit list,
+	// which input scans backwards on every pointer event. Text a control
+	// already painted as its own label is that control's name, not an
+	// element of its own, so it stays quiet there.
+	if t.value != "" && !dst.named(r) {
+		dst.Leaf(r, Node{Role: pick(t.role == roleTitle, RoleHeading, RoleText), Name: t.value})
+	}
 	if dst == nil || dst.Image == nil {
 		return
 	}
@@ -898,7 +906,9 @@ func (s *ScrollWidget) Paint(dst *Canvas, r Rect) {
 	} else {
 		origin.Y -= s.position()
 	}
-	dst.Clip(r).Paint(s.child, Rct(origin, s.childSize))
+	dst.Node(r, Node{Role: RoleGroup, Actions: ActionScrollIntoView}, func(dst *Canvas) {
+		dst.Clip(r).Paint(s.child, Rct(origin, s.childSize))
+	})
 	s.paintBar(dst, r)
 }
 

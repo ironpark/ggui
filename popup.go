@@ -19,6 +19,7 @@ type PopupWidget struct {
 	bound   Binding[bool]
 	gap     float64
 	keys    KeyHandler
+	owner   any
 	onClose func()
 	id      any
 
@@ -63,6 +64,12 @@ func (p *PopupWidget) HandlePointer(PointerEvent) bool { return false }
 // the popup keeps keyboard focus on h (the widget that opened it) instead
 // of blurring it.
 func (p *PopupWidget) Keys(h KeyHandler) *PopupWidget { p.keys = h; return p }
+
+// Owner names the widget the content belongs to in the accessibility
+// tree: the combobox or menu button that opened it. Without one the
+// content, which paints through Overlay long after the tree did, would
+// stand beside the whole tree instead of inside its opener.
+func (p *PopupWidget) Owner(h any) *PopupWidget { p.owner = h; return p }
 
 // OnClose fires when the popup closes, however it closed.
 func (p *PopupWidget) OnClose(fn func()) *PopupWidget { p.onClose = fn; return p }
@@ -121,7 +128,7 @@ func (p *PopupWidget) Paint(dst *Canvas, r Rect) {
 	if !p.IsOpen() {
 		return
 	}
-	dst.Overlay(func(dst *Canvas) { p.paintContent(dst, r) })
+	dst.Overlay(func(dst *Canvas) { p.paintContent(dst, r) }, dst.SemanticRef(p.owner))
 }
 
 // paintContent lays the content out for the room around the anchor and

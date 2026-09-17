@@ -29,6 +29,7 @@ type ImageWidget struct {
 	width  float64
 	height float64
 	filter ebiten.Filter
+	alt    string
 }
 
 // Image draws img. With no Size it asks for the image's natural size in
@@ -57,6 +58,11 @@ func (w *ImageWidget) Height(v float64) *ImageWidget { w.height = v; return w }
 
 // Filter sets how pixels are sampled when scaled; the default is linear.
 func (w *ImageWidget) Filter(f ebiten.Filter) *ImageWidget { w.filter = f; return w }
+
+// Alt describes the image for a screen reader. Without one the image is
+// decorative and stays out of the accessibility tree entirely, which is
+// what an icon beside a label that already says the same thing wants.
+func (w *ImageWidget) Alt(s string) *ImageWidget { w.alt = s; return w }
 
 // natural is the image's size in logical pixels.
 func (w *ImageWidget) natural() Size {
@@ -118,6 +124,9 @@ func (w *ImageWidget) placement(r Rect) Rect {
 
 // Paint implements Widget.
 func (w *ImageWidget) Paint(dst *Canvas, r Rect) {
+	if w.alt != "" {
+		dst.Leaf(r, Node{Role: RoleImage, Name: w.alt})
+	}
 	if dst == nil || dst.Image == nil || w.img == nil {
 		return
 	}

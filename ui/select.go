@@ -45,7 +45,7 @@ func Select[T comparable](value ggui.Binding[T], options []T) *SelectWidget[T] {
 		rows[i] = it
 	}
 	s.list = ggui.Box(ggui.Column(rows...).Align(ggui.AlignStretch))
-	s.popup = ggui.Popup(selectAnchor[T]{s}, s.list).Keys(s)
+	s.popup = ggui.Popup(selectAnchor[T]{s}, s.list).Keys(s).Owner(s)
 	return s.Label(sprint[T])
 }
 
@@ -57,6 +57,21 @@ func (s *SelectWidget[T]) Label(fn func(T) string) *SelectWidget[T] {
 		it.text = ggui.Text(it.Name).NoWrap()
 	}
 	return s
+}
+
+// Describe implements ggui.Describer: the chosen option and whether the
+// list is showing. The options themselves paint through the popup's
+// overlay and hang under this node, not beside the tree.
+func (s *SelectWidget[T]) Describe() ggui.Node {
+	return ggui.Node{
+		Role:     ggui.RoleSelect,
+		Name:     s.Name,
+		Value:    s.label(s.value.Peek()),
+		Expanded: ggui.Expandable(s.popup.IsOpen()),
+		Disabled: s.Inert,
+		Actions: ggui.ActionPress | ggui.ActionFocus | ggui.ActionSelect |
+			pick(s.popup.IsOpen(), ggui.ActionCollapse, ggui.ActionExpand),
+	}
 }
 
 // Named names the dropdown for Probe.Find and the inspector.
@@ -242,8 +257,20 @@ func (it *selectItem[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	return c.Constrain(it.pad.Inflate(ggui.Sz(it.textSize.W+controlSize+controlGap, it.textSize.H)))
 }
 
+// Describe implements ggui.Describer: whether this option is the value.
+func (it *selectItem[T]) Describe() ggui.Node {
+	return ggui.Node{
+		Role:     ggui.RoleOption,
+		Name:     it.Name,
+		Selected: it.index == it.owner.index(),
+		Disabled: it.Inert,
+		Actions:  ggui.ActionSelect | ggui.ActionPress | ggui.ActionFocus,
+	}
+}
+
 func (it *selectItem[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := it.owner.theme
+	dst.Describe(r, it)
 	dst.HitPointer(r, it)
 	dst.HitCursor(r, ebiten.CursorShapePointer)
 	if it.Hovered || it.active {

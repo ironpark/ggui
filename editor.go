@@ -463,6 +463,21 @@ func (t *TextInputWidget) Semantics() (Role, string) {
 	return RoleTextField, t.placeholder
 }
 
+// Describe implements Describer: the field, its contents and whether it
+// takes input. ui.TextField describes the padded box it draws around this
+// editor with the same handler, which is why the two are one node and not
+// two: the first description of a handler in a frame is the one kept.
+func (t *TextInputWidget) Describe() Node {
+	role, name := t.Semantics()
+	return Node{
+		Role:     role,
+		Name:     name,
+		Value:    t.value.Peek(),
+		Disabled: t.disabled,
+		Actions:  ActionFocus | ActionSetValue,
+	}
+}
+
 // ConsumesKey implements KeyConsumer: editing keys stay with the editor.
 // Escape passes through unless it cancelled composition or OnKey consumed it.
 func (t *TextInputWidget) ConsumesKey(ev KeyEvent) bool {
@@ -605,6 +620,8 @@ func (t *TextInputWidget) Layout(c Constraints, env Env) Size {
 
 // Paint implements Widget.
 func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
+	// A disabled editor takes no input but is still read out.
+	dst.Describe(r, t)
 	if !t.disabled {
 		dst.HitPointer(r, t)
 		dst.HitKey(r, t)

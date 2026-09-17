@@ -69,6 +69,21 @@ func (s *SliderWidget) Disabled(v bool) *SliderWidget { s.Inert = v; return s }
 // DisabledWhen follows r for Disabled without a rebuild.
 func (s *SliderWidget) DisabledWhen(r ggui.Reader[bool]) *SliderWidget { s.InertWhen(r); return s }
 
+// Describe implements ggui.Describer: a slider reports its range and where
+// in it the value sits, which is what a screen reader reads out and what an
+// increment or decrement action steps through.
+func (s *SliderWidget) Describe() ggui.Node {
+	return ggui.Node{
+		Role:     ggui.RoleSlider,
+		Name:     s.Name,
+		Min:      min(s.min, s.max),
+		Max:      max(s.min, s.max),
+		Now:      s.value.Peek(),
+		Disabled: s.Inert,
+		Actions:  ggui.ActionIncrement | ggui.ActionDecrement | ggui.ActionSetValue | ggui.ActionFocus,
+	}
+}
+
 // Layout implements Widget.
 func (s *SliderWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	s.Sync()

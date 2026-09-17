@@ -98,8 +98,14 @@ func (t *TabsWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	return c.Constrain(ggui.Sz(max(w, t.bodySize.W), t.headerH+t.bodySize.H))
 }
 
-// Paint implements Widget.
+// Paint implements Widget. The strip is one semantics node holding a tab
+// per label, which no amount of looking at the hit regions could tell:
+// the header's key region and the labels' pointer regions are siblings.
 func (t *TabsWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	dst.DescribeNode(r, t, func(dst *ggui.Canvas) { t.paint(dst, r) })
+}
+
+func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 	th := t.theme
 	header := ggui.Rct(r.Origin, ggui.Sz(r.Size.W, t.headerH))
 	if !t.Inert {
@@ -112,6 +118,7 @@ func (t *TabsWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	for i, s := range t.labelSize {
 		lr := ggui.Rct(ggui.Pt(x, r.Origin.Y), ggui.Sz(s.W+t.pad.Left+t.pad.Right, t.headerH-1))
 		t.labelRect = append(t.labelRect, lr)
+		dst.Describe(lr, tabLabel{t, i})
 		if !t.Inert {
 			dst.HitPointer(lr, tabLabel{t, i})
 			dst.HitCursor(lr, ebiten.CursorShapePointer)
@@ -182,6 +189,17 @@ type tabLabel struct {
 
 // Semantics implements ggui.Semantic: each label is a tab.
 func (l tabLabel) Semantics() (ggui.Role, string) { return ggui.RoleTab, l.t.tabs[l.i].Label }
+
+// Describe implements ggui.Describer: which tab is the shown one.
+func (l tabLabel) Describe() ggui.Node {
+	return ggui.Node{
+		Role:     ggui.RoleTab,
+		Name:     l.t.tabs[l.i].Label,
+		Selected: l.i == l.t.index(),
+		Disabled: l.t.Inert,
+		Actions:  ggui.ActionSelect | ggui.ActionPress | ggui.ActionFocus,
+	}
+}
 
 func (l tabLabel) HandlePointer(ev ggui.PointerEvent) bool {
 	switch ev.Kind {

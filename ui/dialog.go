@@ -110,9 +110,13 @@ func (d *DialogWidget) paintPanel(dst *ggui.Canvas) {
 
 	dst.FillRect(ggui.Rect{Size: screen}, color.RGBA{0, 0, 0, 0x60})
 	dst.HitPointer(ggui.Rect{Size: screen}, dialogScrim{d})
-	dst.FocusTrap(d, d.Close, func(dst *ggui.Canvas) {
-		dst.HitPointer(d.rect, dialogSink{d})
-		dst.Paint(d.panel, d.rect)
+	// The panel is the node; the scrim is a way of taking clicks, not an
+	// element, so it describes nothing.
+	dst.DescribeNode(d.rect, d, func(dst *ggui.Canvas) {
+		dst.FocusTrap(d, d.Close, func(dst *ggui.Canvas) {
+			dst.HitPointer(d.rect, dialogSink{d})
+			dst.Paint(d.panel, d.rect)
+		})
 	})
 }
 

@@ -34,6 +34,17 @@ func (c *CheckboxWidget) DisabledWhen(r ggui.Reader[bool]) *CheckboxWidget { c.I
 // OnChange fires with the new value after a click toggled it.
 func (c *CheckboxWidget) OnChange(fn func(bool)) *CheckboxWidget { c.onChange = fn; return c }
 
+// Describe implements ggui.Describer: a checkbox reports its tick.
+func (c *CheckboxWidget) Describe() ggui.Node {
+	return ggui.Node{
+		Role:     ggui.RoleCheckbox,
+		Name:     c.Name,
+		Checked:  ggui.Tri(c.checked.Peek()),
+		Disabled: c.Inert,
+		Actions:  ggui.ActionPress | ggui.ActionFocus,
+	}
+}
+
 // Layout implements Widget.
 func (c *CheckboxWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	return c.layout(cs, env)

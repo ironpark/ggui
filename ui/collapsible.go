@@ -47,6 +47,19 @@ func (c *CollapsibleWidget) DisabledWhen(r ggui.Reader[bool]) *CollapsibleWidget
 
 func (c *CollapsibleWidget) toggle() { c.open.Set(!c.open.Peek()) }
 
+// Describe implements ggui.Describer: a disclosure reports whether its
+// content is showing, so the expand and collapse actions mean something.
+func (c *CollapsibleWidget) Describe() ggui.Node {
+	open := c.open.Peek()
+	return ggui.Node{
+		Role:     ggui.RoleDisclosure,
+		Name:     c.Name,
+		Expanded: ggui.Expandable(open),
+		Disabled: c.Inert,
+		Actions:  ggui.ActionPress | ggui.ActionFocus | pick(open, ggui.ActionCollapse, ggui.ActionExpand),
+	}
+}
+
 // Layout implements Widget.
 func (c *CollapsibleWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	c.Sync()

@@ -318,16 +318,29 @@ func (f *ForWidget[T, K]) evict() {
 	}
 }
 
-// Paint implements Widget.
+// Paint implements Widget. The list describes itself as a list of Len
+// items and each row as the item it is, so "item 3 of 200" can be said of
+// a virtualized list where only a dozen rows exist at all.
 func (f *ForWidget[T, K]) Paint(dst *Canvas, r Rect) {
-	if f.extent <= 0 {
-		for i, child := range f.children {
-			dst.inGroup(f.childEntries[i], func() { dst.Paint(child, Rct(r.Origin.Add(f.offsets[i]), f.sizes[i])) })
+	n := len(f.items)
+	dst.Node(r, Node{Role: RoleList, Min: 1, Max: float64(n)}, func(dst *Canvas) {
+		if f.extent <= 0 {
+			for i, child := range f.children {
+				rc := Rct(r.Origin.Add(f.offsets[i]), f.sizes[i])
+				dst.inGroup(f.childEntries[i], func() { f.paintRow(dst, child, rc, i, n) })
+			}
+			return
 		}
-		return
-	}
-	for j, w := range f.visible {
-		e := f.entries[f.keys[f.first+j]]
-		dst.inGroup(e, func() { dst.Paint(w, Rct(r.Origin.Add(f.offsets[j]), f.sizes[j])) })
-	}
+		for j, w := range f.visible {
+			e := f.entries[f.keys[f.first+j]]
+			rc := Rct(r.Origin.Add(f.offsets[j]), f.sizes[j])
+			dst.inGroup(e, func() { f.paintRow(dst, w, rc, f.first+j, n) })
+		}
+	})
+}
+
+// paintRow paints one row inside a list item that knows its place.
+func (f *ForWidget[T, K]) paintRow(dst *Canvas, w Widget, rc Rect, i, n int) {
+	item := Node{Role: RoleListItem, Min: 1, Now: float64(i + 1), Max: float64(n)}
+	dst.Node(rc, item, func(dst *Canvas) { dst.Paint(w, rc) })
 }
