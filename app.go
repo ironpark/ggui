@@ -45,6 +45,7 @@ type App struct {
 	frame []func()
 
 	canvas Canvas // also holds the frame's screen-pixels-per-logical-pixel scale
+	spare  []hitRegion
 	input  inputState
 	cursor ebiten.CursorShapeType
 }
@@ -150,11 +151,16 @@ func (a *App) Draw(screen *ebiten.Image) {
 	if a.root == nil {
 		return
 	}
-	a.canvas.Image, a.canvas.hits = screen, a.canvas.hits[:0]
+	// Last frame's regions stay readable while this frame paints, for
+	// Adopter handoff, and input keeps routing to them until the paint is
+	// done; the buffer freed two frames ago takes the new ones.
+	a.canvas.Image = screen
+	a.canvas.prev, a.canvas.hits = a.canvas.hits, a.spare[:0]
 	b := screen.Bounds()
 	logical := Sz(a.canvas.dp(float64(b.Dx())), a.canvas.dp(float64(b.Dy())))
 	size := a.root.Layout(Tight(logical), rootEnv())
 	a.root.Paint(&a.canvas, Rect{Size: size})
+	a.spare = a.canvas.prev
 	a.input.regions = a.canvas.hits
 }
 

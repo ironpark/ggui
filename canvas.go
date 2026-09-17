@@ -19,9 +19,20 @@ type Canvas struct {
 
 	scale   float64
 	hits    []hitRegion
-	parent  *Canvas // set on a Clip; hit regions go to the root
+	prev    []hitRegion // last frame's regions, for Adopter handoff
+	parent  *Canvas     // set on a Clip; hit regions go to the root
 	clip    Rect
 	clipped bool
+}
+
+// Adopter is a handler that can take over from the handler that occupied
+// the same Rect in the previous frame. When a rebuild replaces a widget,
+// the new one is handed the old one as it registers its region, so hover,
+// press, caret or an animation in flight carry across the rebuild instead
+// of resetting. prev is the previous PointerHandler or KeyHandler; check
+// its type and copy what applies.
+type Adopter interface {
+	Adopt(prev any)
 }
 
 // Scale is the number of Image pixels per logical pixel: the monitor's device
@@ -168,10 +179,44 @@ func (c *Canvas) add(h hitRegion) {
 	for root.parent != nil {
 		root = root.parent
 	}
+	root.adopt(&h)
 	if n := len(root.hits); n > 0 && root.hits[n-1].merge(h) {
 		return
 	}
 	root.hits = append(root.hits, h)
+}
+
+// adopt hands h's new handlers the ones that held the same Rect last frame.
+func (c *Canvas) adopt(h *hitRegion) {
+	if len(c.prev) == 0 {
+		return
+	}
+	var old *hitRegion
+	for i := len(c.prev) - 1; i >= 0; i-- {
+		if c.prev[i].rect == h.rect {
+			old = &c.prev[i]
+			break
+		}
+	}
+	if old == nil {
+		return
+	}
+	if a, ok := h.pointer.(Adopter); ok && old.pointer != nil && !sameAny(old.pointer, h.pointer) {
+		a.Adopt(old.pointer)
+	}
+	if a, ok := h.key.(Adopter); ok && old.key != nil && !sameAny(old.key, h.key) && !sameAny(h.key, h.pointer) {
+		a.Adopt(old.key)
+	}
+}
+
+// sameAny compares two handlers, treating uncomparable ones as different.
+func sameAny(a, b any) (same bool) {
+	defer func() {
+		if recover() != nil {
+			same = false
+		}
+	}()
+	return a == b
 }
 
 type hitRegion struct {

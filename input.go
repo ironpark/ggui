@@ -106,11 +106,22 @@ type frameInput struct {
 type inputState struct {
 	regions []hitRegion
 
+	// These are copies: regions is rebuilt every frame in a reused buffer,
+	// so a pointer into it would soon describe a different region.
 	hovered    *hitRegion
 	pressed    *hitRegion
 	pressedBtn ebiten.MouseButton
 	focused    *hitRegion
 	cursor     ebiten.CursorShapeType // what the hovered region asked for
+}
+
+// keep returns a copy of r that outlives the regions buffer.
+func keep(r *hitRegion) *hitRegion {
+	if r == nil {
+		return nil
+	}
+	c := *r
+	return &c
 }
 
 func (in *inputState) dispatch(f frameInput) {
@@ -125,7 +136,7 @@ func (in *inputState) dispatch(f frameInput) {
 			now.pointer.HandlePointer(PointerEvent{Kind: PointerEnter, Pos: f.pos})
 		}
 	}
-	in.hovered = now
+	in.hovered = keep(now)
 
 	in.cursor = ebiten.CursorShapeDefault
 	if r := in.topmost(func(r *hitRegion) bool { return r.cursor != 0 && r.rect.Contains(f.pos) }); r != nil {
@@ -134,7 +145,7 @@ func (in *inputState) dispatch(f frameInput) {
 
 	for _, b := range f.down {
 		ev := PointerEvent{Kind: PointerDown, Pos: f.pos, Button: b}
-		in.pressed, in.pressedBtn = in.send(ev), b
+		in.pressed, in.pressedBtn = keep(in.send(ev)), b
 		in.setFocus(in.findKey(f.pos))
 	}
 	if in.pressed != nil && len(f.down) == 0 && len(f.up) == 0 {
@@ -169,15 +180,15 @@ func (in *inputState) dispatch(f frameInput) {
 			in.setFocus(nil)
 			return
 		}
-		if prev := in.focused.key; !sameHandler(prev, cur.key) {
+		if prev := in.focused.key; !sameAny(prev, cur.key) {
 			// The tree was rebuilt: the region is the same, the widget new.
-			if ad, ok := cur.key.(focusAdopter); ok {
-				ad.adoptFocus(prev)
-			} else {
+			// An Adopter already took the old one's state over during paint;
+			// anything else is told it has focus now.
+			if _, ok := cur.key.(Adopter); !ok {
 				cur.key.HandleKey(KeyEvent{Kind: KeyFocus})
 			}
 		}
-		in.focused = cur
+		in.focused = keep(cur)
 		if th, ok := cur.key.(TickHandler); ok && th.HandleTick() {
 			return
 		}
@@ -234,24 +245,7 @@ func (in *inputState) setFocus(r *hitRegion) {
 	if r != nil && r.key != nil {
 		r.key.HandleKey(KeyEvent{Kind: KeyFocus})
 	}
-	in.focused = r
-}
-
-// focusAdopter is a KeyHandler that can take over from the handler that had
-// focus at the same Rect before a rebuild, carrying its caret and selection
-// across. TextInput implements it.
-type focusAdopter interface {
-	adoptFocus(prev KeyHandler)
-}
-
-// sameHandler compares two handlers, treating uncomparable ones as different.
-func sameHandler(a, b KeyHandler) (same bool) {
-	defer func() {
-		if recover() != nil {
-			same = false
-		}
-	}()
-	return a == b
+	in.focused = keep(r)
 }
 
 func sameRegion(a, b *hitRegion) bool {

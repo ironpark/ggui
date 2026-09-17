@@ -323,6 +323,13 @@ one region. A `KeyHandler` that also implements `TickHandler` runs once per
 frame while focused, which is how `TextInput` drives the IME. `dst.Clip(r)`
 returns a Canvas that draws and registers regions only inside `r`.
 
+A rebuild replaces widgets, and with them the state they hold. A handler that
+implements `Adopter` is handed the handler that held the same `Rect` in the
+previous frame as it registers its region, so it can copy hover, press, a
+caret or an animation in flight: the built-in controls and `TextInput` all
+do, which is why flipping a `ui.Switch` that rebuilds its own subtree still
+slides the knob.
+
 **Testing** needs no window: `NewProbe(w, size)` runs the runtime's frame
 steps headlessly, and `Click`, `Press`, `Move`, `Release`, `Scroll`, `Type`
 and `Text` route input through the same hit regions and focus as the app.

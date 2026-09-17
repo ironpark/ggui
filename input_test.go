@@ -16,7 +16,7 @@ func clickAt(in *inputState, p Point) {
 // paintFrame lays out and paints w into a fresh region list, the way App
 // does once per frame, and points in at it.
 func paintFrame(in *inputState, w Widget, size Size) {
-	var c Canvas
+	c := Canvas{prev: in.regions}
 	w.Paint(&c, Rct(Pt(0, 0), w.Layout(Tight(size), Env{})))
 	in.regions = c.hits
 }
@@ -200,6 +200,57 @@ func TestCursorFollowsTopmostRegion(t *testing.T) {
 	in.dispatch(frameInput{pos: Pt(150, 150)})
 	if in.cursor != ebiten.CursorShapeDefault {
 		t.Fatalf("cursor = %v outside, want default", in.cursor)
+	}
+}
+
+func TestPressedRegionSurvivesBufferReuse(t *testing.T) {
+	var drags int
+	w := Row(
+		Pointer(Box().Size(50, 50)).OnDrag(func(PointerEvent) { drags++ }),
+		Pointer(Box().Size(50, 50)).OnDrag(func(PointerEvent) { t.Fatal("drag went to the wrong region") }),
+	)
+	var in inputState
+	paintFrame(&in, w, Sz(100, 50))
+	in.dispatch(frameInput{pos: Pt(10, 10), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	// The runtime repaints into the same buffer; the pressed region must
+	// not follow whatever lands at its old index.
+	in.regions[0], in.regions[1] = in.regions[1], in.regions[0]
+	in.dispatch(frameInput{pos: Pt(10, 10)})
+	if drags != 1 {
+		t.Fatalf("drags = %d, want 1 on the region that took the press", drags)
+	}
+}
+
+func TestAdopterTakesOverAtTheSameRect(t *testing.T) {
+	build := func() *adopting { return &adopting{} }
+	var in inputState
+	first := build()
+	paintFrame(&in, first, Sz(50, 50))
+	first.n = 7
+	second := build()
+	paintFrame(&in, second, Sz(50, 50))
+	if second.n != 7 || second.from != first {
+		t.Fatalf("second adopted n = %d from %p, want 7 from the first", second.n, second.from)
+	}
+	third := build()
+	paintFrame(&in, Padding(third, 10), Sz(70, 70)) // a different Rect: nothing to adopt
+	if third.from != nil {
+		t.Fatal("adopted across different Rects")
+	}
+}
+
+// adopting is a 50x50 pointer region that carries n across rebuilds.
+type adopting struct {
+	n    int
+	from *adopting
+}
+
+func (a *adopting) Layout(c Constraints, _ Env) Size { return c.Constrain(Sz(50, 50)) }
+func (a *adopting) Paint(dst *Canvas, r Rect)        { dst.HitPointer(r, a) }
+func (a *adopting) HandlePointer(PointerEvent) bool  { return true }
+func (a *adopting) Adopt(prev any) {
+	if p, ok := prev.(*adopting); ok {
+		a.n, a.from = p.n, p
 	}
 }
 

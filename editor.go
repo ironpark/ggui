@@ -630,16 +630,18 @@ func near(a, b Point) bool {
 	return dx*dx+dy*dy < 16
 }
 
-// adoptFocus implements focusAdopter: a rebuilt editor at the same Rect
-// carries on with the previous one's caret and selection.
-func (t *TextInputWidget) adoptFocus(prev KeyHandler) {
-	if p, ok := prev.(*TextInputWidget); ok {
-		p.ime.Confirm()
-		t.ed, t.scroll = p.ed, p.scroll
-		if p.ed.text != t.value.Peek() {
-			t.ed.setText(t.value.Peek())
-		}
+// Adopt implements Adopter: a rebuilt editor at the same Rect carries on
+// with the previous one's focus, caret and selection.
+func (t *TextInputWidget) Adopt(prev any) {
+	p, ok := prev.(*TextInputWidget)
+	if !ok {
+		return
 	}
-	t.focused = true
+	p.ime.Confirm()
+	t.ed, t.scroll, t.focused = p.ed, p.scroll, p.focused
+	t.clicks, t.lastClick, t.lastPos = p.clicks, p.lastClick, p.lastPos
+	if p.ed.text != t.value.Peek() {
+		t.ed.setText(t.value.Peek())
+	}
 	t.blink = time.Now()
 }

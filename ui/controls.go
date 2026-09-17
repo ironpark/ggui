@@ -141,6 +141,13 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	b.box.Paint(dst, r)
 }
 
+// Adopt implements ggui.Adopter: hover and press carry across a rebuild.
+func (b *ButtonWidget) Adopt(prev any) {
+	if p, ok := prev.(*ButtonWidget); ok {
+		b.hovered, b.pressed = p.hovered, p.pressed
+	}
+}
+
 // HandlePointer implements PointerHandler.
 func (b *ButtonWidget) HandlePointer(ev ggui.PointerEvent) bool {
 	switch ev.Kind {
@@ -199,6 +206,15 @@ func (g *toggle) paint(dst *ggui.Canvas, r ggui.Rect, handler ggui.PointerHandle
 		g.label.Paint(dst, ggui.Rct(at, g.labelSize))
 	}
 	return ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+(r.Size.H-g.glyph.H)/2), g.glyph)
+}
+
+func (g *toggle) state() *toggle { return g }
+
+// Adopt implements ggui.Adopter: hover carries across a rebuild.
+func (g *toggle) Adopt(prev any) {
+	if p, ok := prev.(interface{ state() *toggle }); ok {
+		g.hovered = p.state().hovered
+	}
 }
 
 func (g *toggle) handle(ev ggui.PointerEvent) bool {
@@ -376,6 +392,15 @@ func (s *SwitchWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.FillCircle(ggui.Pt(x, box.Origin.Y+box.Size.H/2), radius, pick(s.disabled, t.Surface, t.Field))
 }
 
+// Adopt implements ggui.Adopter: the knob keeps sliding across a rebuild,
+// which matters because flipping a switch often rebuilds what holds it.
+func (s *SwitchWidget) Adopt(prev any) {
+	s.toggle.Adopt(prev)
+	if p, ok := prev.(*SwitchWidget); ok {
+		s.knob = p.knob
+	}
+}
+
 // HandlePointer implements PointerHandler.
 func (s *SwitchWidget) HandlePointer(ev ggui.PointerEvent) bool { return s.handle(ev) }
 
@@ -452,6 +477,13 @@ func (s *SliderWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	dst.FillCircle(ggui.Pt(kx, cy), radius, accent)
 	dst.FillCircle(ggui.Pt(kx, cy), radius-3, t.Field)
+}
+
+// Adopt implements ggui.Adopter: a drag in progress carries across a rebuild.
+func (s *SliderWidget) Adopt(prev any) {
+	if p, ok := prev.(*SliderWidget); ok {
+		s.hovered, s.pressed = p.hovered, p.pressed
+	}
 }
 
 // HandlePointer implements PointerHandler.

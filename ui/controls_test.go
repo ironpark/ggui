@@ -142,3 +142,43 @@ func TestControlsPaintOnNilCanvas(t *testing.T) {
 		w.Paint(nil, ggui.Rct(ggui.Pt(0, 0), w.Layout(ggui.Loose(ggui.Sz(200, 50)), ggui.Env{})))
 	}
 }
+
+func TestSwitchKeepsSlidingAcrossRebuild(t *testing.T) {
+	on := ggui.State(false)
+	// The switch sits in a subtree that rebuilds when it is flipped, as a
+	// theme toggle does.
+	tree := ggui.Reactive(func() ggui.Widget {
+		on.Get()
+		return ui.Switch(on, "")
+	})
+	p := ggui.NewProbe(tree, ggui.Sz(100, 30))
+	p.Frame()
+	p.Click(ggui.Pt(5, 5))
+	p.Frame() // the rebuilt switch adopts the old knob mid-slide
+	p.Move(ggui.Pt(5, 5))
+	if !on.Peek() {
+		t.Fatal("switch did not turn on")
+	}
+	// A second flip right away must start from wherever the knob was,
+	// which is not yet the far end.
+	p.Click(ggui.Pt(5, 5))
+	p.Frame()
+	if on.Peek() {
+		t.Fatal("switch did not turn off")
+	}
+}
+
+func TestSliderDragSurvivesRebuild(t *testing.T) {
+	v := ggui.State(0.0)
+	tree := ggui.Reactive(func() ggui.Widget {
+		v.Get() // every change rebuilds the slider
+		return ui.Slider(v, 0, 100)
+	})
+	p := ggui.NewProbe(tree, ggui.Sz(116, 20))
+	p.Press(ggui.Pt(8+20, 10))
+	p.Move(ggui.Pt(8+60, 10))
+	p.Move(ggui.Pt(8+90, 10))
+	if v.Peek() != 90 {
+		t.Fatalf("value = %v after dragging through rebuilds, want 90", v.Peek())
+	}
+}
