@@ -25,7 +25,6 @@ const (
 	sliderKnob    = 8
 	switchWidth   = 36
 	switchHeight  = 20
-	pressTint     = 0.85
 	knobDuration  = 150 * time.Millisecond
 	defaultStripe = 160 // a slider's width when nothing bounds it
 )
@@ -89,9 +88,31 @@ func stepIndex(cur, dir, n int, enabled func(int) bool) int {
 	return cur
 }
 
-// subtle is a quiet surface for hover states and secondary content. Deriving it
-// from theme colors keeps custom themes working without extra required tokens.
-func subtle(t ggui.Theme) color.Color { return mix(t.Surface, t.Fg, .05) }
+// pointerMotion reports whether the pointer actually moved. PointerMove is
+// synthesized every frame, so hover competing with a keyboard highlight has to
+// ignore a pointer that is standing still.
+type pointerMotion struct {
+	last ggui.Point
+	seen bool
+}
+
+// moved reports whether the pointer is somewhere new; a first sighting counts.
+func (m *pointerMotion) moved(p ggui.Point) bool {
+	was, seen := m.last, m.seen
+	m.last, m.seen = p, true
+	return !seen || was != p
+}
+
+// drifted is moved without the first sighting, so a menu opened from the
+// keyboard is not stolen by a pointer that has not actually moved.
+func (m *pointerMotion) drifted(p ggui.Point) bool {
+	seen := m.seen
+	return m.moved(p) && seen
+}
+
+// subtle is a quiet surface for hover states and secondary content. It is the
+// same token as a muted surface, so theming SurfaceMuted moves every one.
+func subtle(t ggui.Theme) color.Color { return mutedSurface(t) }
 
 func mix(a, b color.Color, amount float64) color.Color {
 	if a == nil {

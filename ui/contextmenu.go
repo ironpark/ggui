@@ -23,7 +23,7 @@ func ContextMenu(content ggui.Widget, entries ...ggui.Widget) *ContextMenuWidget
 	c := &ContextMenuWidget{content: content, menu: Menu("", entries...)}
 	c.Role, c.Name = ggui.RoleMenu, "Context menu"
 	c.AutoKey()
-	c.menu.popup = ggui.Popup(contextAnchor{c}, c.menu.panel).Gap(0).Keys(c).Owner(c)
+	c.menu.popup = ggui.Popup(content, c.menu.panel).Gap(0).Keys(c).Owner(c)
 	return c
 }
 
@@ -47,11 +47,7 @@ func (c *ContextMenuWidget) open(at ggui.Point) {
 		return
 	}
 	c.at = &at
-	for _, it := range c.menu.items {
-		it.Sync()
-	}
-	c.menu.current = -1
-	c.menu.step(1)
+	c.menu.reopen()
 	c.menu.popup.ShowAt(at)
 }
 
@@ -86,7 +82,7 @@ func (c *ContextMenuWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 	}
 	c.theme = env.Theme()
 	t := c.theme
-	c.menu.panel.Shadow(panelShadow(t)).Fill(t.Surface).Border(1, t.Border).Radius(t.Radius).Padding(t.PanelPad)
+	panelBox(c.menu.panel, t)
 	return c.Popup().Layout(cs, env)
 }
 
@@ -152,14 +148,12 @@ func (c *ContextMenuWidget) HandleKey(ev ggui.KeyEvent) {
 	case ebiten.KeyArrowUp:
 		c.menu.step(-1)
 	case ebiten.KeyHome:
-		c.menu.current = -1
-		c.menu.step(1)
+		c.menu.jump(1)
 	case ebiten.KeyEnd:
-		c.menu.current = -1
-		c.menu.step(-1)
+		c.menu.jump(-1)
 	default:
-		if ggui.Activates(ev) && c.menu.current >= 0 {
-			c.menu.items[c.menu.current].run()
+		if ggui.Activates(ev) {
+			c.menu.activate()
 		}
 	}
 }
@@ -178,10 +172,3 @@ func (c *ContextMenuWidget) Adopt(prev any) {
 		}
 	}
 }
-
-type contextAnchor struct{ c *ContextMenuWidget }
-
-func (a contextAnchor) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
-	return a.c.content.Layout(cs, env)
-}
-func (a contextAnchor) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(a.c.content, r) }

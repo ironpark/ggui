@@ -15,8 +15,7 @@ type MenubarWidget struct {
 	sizes        []ggui.Size
 	rects        []ggui.Rect
 	theme        ggui.Theme
-	pointer      ggui.Point
-	hasPointer   bool
+	motion       pointerMotion
 	compact      bool
 	naturalWidth float64
 }
@@ -49,12 +48,7 @@ func (b *MenubarWidget) open(i int) {
 		return
 	}
 	b.active = i
-	m := b.menus[i]
-	for _, it := range m.items {
-		it.Sync()
-	}
-	m.current = -1
-	m.step(1)
+	b.menus[i].reopen()
 	r := b.rects[i]
 	b.popup.ShowAt(r.Origin.Add(ggui.Pt(0, r.Size.H)))
 }
@@ -81,7 +75,7 @@ func (b *MenubarWidget) Adopt(prev any) {
 	b.Interactive.Adopt(prev)
 	if p, ok := prev.(*MenubarWidget); ok && p.active < len(b.menus) && p.active >= 0 && !b.menus[p.active].button.Inert {
 		b.active = p.active
-		b.pointer, b.hasPointer = p.pointer, p.hasPointer
+		b.motion = p.motion
 		if p.popup.IsOpen() {
 			b.open(b.active)
 			current := p.menus[p.active].current
@@ -136,17 +130,14 @@ func (b *MenubarWidget) HandleKey(e ggui.KeyEvent) {
 		if !b.popup.IsOpen() {
 			b.open(b.active)
 			if e.Key == ebiten.KeyArrowUp {
-				b.menus[b.active].current = -1
-				b.menus[b.active].step(-1)
+				b.menus[b.active].jump(-1)
 			}
 		} else {
 			b.menus[b.active].step(pick(e.Key == ebiten.KeyArrowUp, -1, 1))
 		}
 	case ebiten.KeyHome, ebiten.KeyEnd:
 		if b.popup.IsOpen() {
-			m := b.menus[b.active]
-			m.current = -1
-			m.step(pick(e.Key == ebiten.KeyHome, 1, -1))
+			b.menus[b.active].jump(pick(e.Key == ebiten.KeyHome, 1, -1))
 		} else {
 			b.active = stepIndex(-1, pick(e.Key == ebiten.KeyHome, 1, -1), len(b.menus), func(i int) bool { return !b.menus[i].button.Inert })
 			if b.active < 0 {
@@ -158,10 +149,7 @@ func (b *MenubarWidget) HandleKey(e ggui.KeyEvent) {
 			if !b.popup.IsOpen() {
 				b.open(b.active)
 			} else {
-				m := b.menus[b.active]
-				if m.current >= 0 {
-					m.items[m.current].run()
-				}
+				b.menus[b.active].activate()
 			}
 		}
 	}
@@ -230,7 +218,7 @@ func (p menubarPanel) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		return ggui.Size{}
 	}
 	t := env.Theme()
-	return b.menus[b.active].panel.Shadow(panelShadow(t)).Fill(t.Surface).Border(1, t.Border).Radius(t.Radius).Padding(t.PanelPad).Layout(c, env)
+	return panelBox(b.menus[b.active].panel, t).Layout(c, env)
 }
 func (p menubarPanel) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	b := p.b
@@ -266,9 +254,7 @@ func (t menubarTarget) HandlePointer(e ggui.PointerEvent) bool {
 		t.b.menus[t.i].button.Hovered = false
 		return true
 	case ggui.PointerMove:
-		moved := t.b.hasPointer && t.b.pointer != e.Pos
-		t.b.pointer, t.b.hasPointer = e.Pos, true
-		if moved && t.b.popup.IsOpen() && t.b.active != t.i {
+		if t.b.motion.drifted(e.Pos) && t.b.popup.IsOpen() && t.b.active != t.i {
 			t.b.open(t.i)
 		}
 		return true

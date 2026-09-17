@@ -13,6 +13,8 @@ type PaginationWidget struct {
 	previous, next *ButtonWidget
 	numbers        [5]*ButtonWidget
 	targets        [5]int
+	gaps           [2]ggui.Widget // the leading and trailing ellipses
+	children       []ggui.Widget
 	row            *ggui.WrapWidget
 	disabled       bool
 	onChange       func(int)
@@ -26,6 +28,9 @@ func Pagination(page ggui.Binding[int], pages ggui.Reader[int]) *PaginationWidge
 	p.next = Button("Next ›", func() { p.move(1) }).Label("Next").Ghost().Pad(6, 10)
 	for i := range p.numbers {
 		p.numbers[i] = Button("", func() { p.selectPage(p.targets[i]) })
+	}
+	for i := range p.gaps {
+		p.gaps[i] = ggui.Padding(ggui.Text("…"), 6, 4)
 	}
 	return p
 }
@@ -61,10 +66,10 @@ func (p *PaginationWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	current := p.current(n)
 	p.previous.Disabled(p.disabled || n == 0 || current == 1)
 	p.next.Disabled(p.disabled || n == 0 || current == n)
-	children := []ggui.Widget{p.previous}
+	children := append(p.children[:0], p.previous)
 	start := max(1, min(current-2, n-4))
 	if start > 1 {
-		children = append(children, ggui.Padding(ggui.Text("…"), 6, 4))
+		children = append(children, p.gaps[0])
 	}
 	for i := range min(n, len(p.numbers)) {
 		target := start + i
@@ -82,10 +87,10 @@ func (p *PaginationWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		children = append(children, b)
 	}
 	if start+len(p.numbers) <= n {
-		children = append(children, ggui.Padding(ggui.Text("…"), 6, 4))
+		children = append(children, p.gaps[1])
 	}
-	children = append(children, p.next)
-	p.row = ggui.Wrap(children...).Gap(env.Theme().Space / 2)
+	p.children = append(children, p.next)
+	p.row = ggui.Wrap(p.children...).Gap(env.Theme().Space / 2)
 	return p.row.Layout(c, env)
 }
 

@@ -134,7 +134,7 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	s.theme = t
 	s.pad = t.FieldPad
 	s.box.Radius(t.Radius).Fill(t.Field)
-	s.list.Shadow(panelShadow(t)).Fill(t.Surface).Border(1, t.Border).Radius(t.Radius).Padding(t.PanelPad)
+	panelBox(s.list, t)
 	s.text = ggui.Text(s.label(s.value.Peek())).NoWrap().Color(pick[color.Color](s.Inert, t.Muted, t.Fg))
 	// As wide as the widest option, so the field does not resize as the
 	// value changes, and never wider than the row wants unless told to.
@@ -159,12 +159,8 @@ func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Paint(s.box, r)
 	dst.Clip(r).Paint(s.text, ggui.Rct(ggui.Pt(r.Origin.X+s.pad.Left, r.Origin.Y+(r.Size.H-s.textSize.H)/2), s.textSize))
 	// Chevron, pointing down, or up while open.
-	cx := r.Origin.X + r.Size.W - t.Space - controlSize*0.3
-	cy := r.Origin.Y + r.Size.H/2
-	dy := pick(open, -2.0, 2.0)
-	col := pick(s.Inert, t.Muted, t.Fg)
-	dst.StrokeLine(ggui.Pt(cx-4, cy-dy), ggui.Pt(cx, cy+dy), 1.5, col)
-	dst.StrokeLine(ggui.Pt(cx, cy+dy), ggui.Pt(cx+4, cy-dy), 1.5, col)
+	center := ggui.Pt(r.Origin.X+r.Size.W-t.Space-controlSize*0.3, r.Origin.Y+r.Size.H/2)
+	chevron(dst, center, pick(open, -2.0, 2.0), pick(s.Inert, t.Muted, t.Fg))
 	s.FocusRing(dst, r, t.Radius, focusColor(t))
 }
 

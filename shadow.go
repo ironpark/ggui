@@ -49,8 +49,7 @@ type shadowGeometry struct {
 }
 
 func (c *Canvas) shadowGeometry(r Rect, radius float64, s ShadowStyle) (shadowGeometry, bool) {
-	values := []float64{r.Origin.X, r.Origin.Y, r.Size.W, r.Size.H, radius, s.Offset.X, s.Offset.Y, s.Blur, s.Spread, c.Scale()}
-	for _, v := range values {
+	for _, v := range [...]float64{r.Origin.X, r.Origin.Y, r.Size.W, r.Size.H, radius, s.Offset.X, s.Offset.Y, s.Blur, s.Spread, c.Scale()} {
 		if math.IsNaN(v) || math.IsInf(v, 0) {
 			return shadowGeometry{}, false
 		}
@@ -76,7 +75,16 @@ func (c *Canvas) shadowGeometry(r Rect, radius float64, s ShadowStyle) (shadowGe
 		return shadowGeometry{}, false
 	}
 	bounds := image.Rect(int(math.Floor(left)), int(math.Floor(top)), int(math.Ceil(right)), int(math.Ceil(bottom))).Intersect(target)
-	return shadowGeometry{bounds: bounds, center: [2]float32{float32(cx - float64(bounds.Min.X)), float32(cy - float64(bounds.Min.Y))}, half: [2]float32{float32(hw), float32(hh)}, radius: float32(min(max(min(max(radius, 0), r.Size.W/2, r.Size.H/2)+s.Spread, 0)*scale, hw, hh)), feather: float32(feather)}, !bounds.Empty()
+	// The corner never exceeds half the rect, grows with the spread and, once
+	// scaled, never exceeds half the silhouette.
+	corner := max(min(max(radius, 0), r.Size.W/2, r.Size.H/2)+s.Spread, 0)
+	return shadowGeometry{
+		bounds:  bounds,
+		center:  [2]float32{float32(cx - float64(bounds.Min.X)), float32(cy - float64(bounds.Min.Y))},
+		half:    [2]float32{float32(hw), float32(hh)},
+		radius:  float32(min(corner*scale, hw, hh)),
+		feather: float32(feather),
+	}, !bounds.Empty()
 }
 
 // Shadow draws a soft rounded-rectangle silhouette behind a surface. Paint the

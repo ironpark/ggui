@@ -1,7 +1,7 @@
 package ui
 
 import (
-	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -11,24 +11,27 @@ import (
 // CalendarWidget selects a single civil date. Navigation does not change value.
 type CalendarWidget struct {
 	ggui.Interactive
-	value               ggui.Binding[time.Time]
-	active, month, last time.Time
-	location            *time.Location
-	weekStart           time.Weekday
-	weekdays            [7]string
-	monthLabel          func(time.Time) string
-	disabledDate        func(time.Time) bool
-	onChange            func(time.Time)
-	onPick              func()
-	min, max            time.Time
-	days                [42]*calendarDay
-	previous, next      *ButtonWidget
-	title               *ggui.TextWidget
-	header              ggui.Widget
-	theme               ggui.Theme
-	env                 ggui.Env
-	headerSize          ggui.Size
-	cellH               float64
+	value           ggui.Binding[time.Time]
+	active, last    time.Time
+	location        *time.Location
+	weekStart       time.Weekday
+	weekdays        [7]string
+	monthLabel      func(time.Time) string
+	disabledDate    func(time.Time) bool
+	onChange        func(time.Time)
+	onPick          func()
+	min, max        time.Time
+	lowest, highest time.Time // min and max normalized, refreshed each layout
+	days            [42]*calendarDay
+	weekdayText     [7]*ggui.TextWidget
+	weekdaySize     [7]ggui.Size
+	previous, next  *ButtonWidget
+	title           *ggui.TextWidget
+	header          ggui.Widget
+	theme           ggui.Theme
+	env             ggui.Env
+	headerSize      ggui.Size
+	cellH           float64
 }
 
 // Calendar binds a date; zero means no selection. Dates are interpreted in
@@ -43,8 +46,11 @@ func Calendar(value ggui.Binding[time.Time]) *CalendarWidget {
 	c.title = ggui.Text("").NoWrap()
 	c.header = ggui.Row(c.previous, ggui.Expanded(ggui.Center(c.title)), c.next).Gap(8)
 	for i := range c.days {
-		c.days[i] = &calendarDay{owner: c}
+		c.days[i] = &calendarDay{owner: c, text: ggui.Text("").NoWrap()}
 		c.days[i].Role = ggui.RoleOption
+	}
+	for i := range c.weekdayText {
+		c.weekdayText[i] = ggui.Text("").NoWrap()
 	}
 	return c
 }
@@ -110,11 +116,16 @@ func (c *CalendarWidget) date(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, c.location)
 }
 func (c *CalendarWidget) enabled(t time.Time) bool {
-	return !c.Inert && (c.min.IsZero() || !t.Before(c.date(c.min))) && (c.max.IsZero() || !t.After(c.date(c.max))) && (c.disabledDate == nil || !c.disabledDate(t))
+	return !c.Inert && (c.lowest.IsZero() || !t.Before(c.lowest)) && (c.highest.IsZero() || !t.After(c.highest)) && (c.disabledDate == nil || !c.disabledDate(t))
 }
+
+// month is the first of the browsed month; the browsed date defines it.
+func (c *CalendarWidget) month() time.Time {
+	return time.Date(c.active.Year(), c.active.Month(), 1, 0, 0, 0, 0, c.location)
+}
+
 func (c *CalendarWidget) show(t time.Time) {
 	c.active = t
-	c.month = time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, c.location)
 	ggui.Invalidate(c.env)
 }
 func (c *CalendarWidget) syncDate() {
@@ -133,7 +144,7 @@ func (c *CalendarWidget) moveMonth(n int) {
 		return
 	}
 	c.syncDate()
-	m := c.month.AddDate(0, n, 0)
+	m := c.month().AddDate(0, n, 0)
 	last := m.AddDate(0, 1, -1).Day()
 	c.show(m.AddDate(0, 0, min(c.active.Day(), last)-1))
 }
@@ -160,27 +171,35 @@ func (c *CalendarWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	c.env = env
 	c.theme = env.Theme()
 	c.syncDate()
-	c.title.Set(c.monthLabel(c.month))
+	c.lowest, c.highest = c.date(c.min), c.date(c.max)
+	month := c.month()
+	c.title.Set(c.monthLabel(month))
 	c.previous.Disabled(c.Inert)
 	c.next.Disabled(c.Inert)
 	w := cs.Constrain(ggui.Sz(294, 0)).W
 	headerHeight := c.previous.Layout(ggui.Loose(ggui.Sz(w, cs.MaxH)), env).H
 	c.headerSize = c.header.Layout(ggui.Loose(ggui.Sz(w, headerHeight)), env)
 	c.cellH = max(36, c.theme.Text.Size+16)
-	start := c.month.AddDate(0, 0, -(int(c.month.Weekday())-int(c.weekStart)+7)%7)
+	cell := ggui.Loose(ggui.Sz(w/7, c.cellH))
+	for i, label := range c.weekdayText {
+		c.weekdaySize[i] = label.Set(c.weekdays[(i+int(c.weekStart))%7]).Color(c.theme.Muted).Layout(cell, env)
+	}
+	selected := c.date(c.value.Peek())
+	start := month.AddDate(0, 0, -(int(month.Weekday())-int(c.weekStart)+7)%7)
 	for i, d := range c.days {
-		d.date = start.AddDate(0, 0, i)
-		d.Name = d.date.Format("2006-01-02")
+		if date := start.AddDate(0, 0, i); !date.Equal(d.date) {
+			d.date = date
+			d.Name = date.Format("2006-01-02")
+		}
 		d.Inert = !c.enabled(d.date)
 		col := c.theme.Fg
-		if d.Inert || d.date.Month() != c.month.Month() {
+		if d.Inert || d.date.Month() != month.Month() {
 			col = c.theme.Muted
 		}
-		if c.date(c.value.Peek()).Equal(d.date) {
+		if selected.Equal(d.date) {
 			col = c.theme.OnAccent
 		}
-		d.text = ggui.Text(fmt.Sprint(d.date.Day())).NoWrap().Color(col)
-		d.size = d.text.Layout(ggui.Loose(ggui.Sz(w/7, c.cellH)), env)
+		d.size = d.text.Set(strconv.Itoa(d.date.Day())).Color(col).Layout(cell, env)
 	}
 	return cs.Constrain(ggui.Sz(w, c.headerSize.H+7*c.cellH+8))
 }
@@ -195,13 +214,13 @@ func (c *CalendarWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		if !c.Inert {
 			dst.HitKey(grid, c)
 		}
-		for i := range 7 {
-			label := ggui.Text(c.weekdays[(i+int(c.weekStart))%7]).Color(c.theme.Muted).NoWrap()
-			s := label.Layout(ggui.Loose(ggui.Sz(w, c.cellH)), c.env)
+		for i, label := range c.weekdayText {
+			s := c.weekdaySize[i]
 			dst.Paint(label, ggui.Rct(ggui.Pt(r.Origin.X+float64(i)*w+(w-s.W)/2, y+(c.cellH-s.H)/2), s))
 		}
+		cells := dst.Clip(r)
 		for i, d := range c.days {
-			dst.Clip(r).Paint(d, ggui.Rct(ggui.Pt(r.Origin.X+float64(i%7)*w, y+float64(i/7+1)*c.cellH), ggui.Sz(w, c.cellH)))
+			cells.Paint(d, ggui.Rct(ggui.Pt(r.Origin.X+float64(i%7)*w, y+float64(i/7+1)*c.cellH), ggui.Sz(w, c.cellH)))
 		}
 	})
 }
@@ -258,7 +277,7 @@ func (c *CalendarWidget) HandleKey(e ggui.KeyEvent) {
 func (c *CalendarWidget) Adopt(prev any) {
 	c.Interactive.Adopt(prev)
 	if p, ok := prev.(*CalendarWidget); ok && p.location == c.location {
-		c.active, c.month, c.last = p.active, p.month, p.last
+		c.active, c.last = p.active, p.last
 		c.syncDate()
 	}
 }

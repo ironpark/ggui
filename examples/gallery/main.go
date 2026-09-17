@@ -77,6 +77,13 @@ func newGallery() (ggui.Builder, func(), func()) {
 		}
 		return "An address needs an @"
 	})
+	// The menubar owns its menus' open state, so it outlives a rebuild the
+	// same way the calendar and the date picker do.
+	menubar := ui.Menubar(
+		ui.Menu("File", ui.MenuItem("New document", func() { toasts.Push(ui.Toast("Created", "A new document is ready.")) }), ui.MenuItem("Export", nil).Disabled(true)),
+		ui.Menu("Edit", ui.MenuItem("Undo edit", func() { toasts.Push(ui.Toast("Undone", "The last edit was reverted.")) })),
+		ui.Menu("View", ui.MenuItem("Switch theme", func() { ggui.Toggle(dark) })),
+	).Compact()
 	reset := func() {
 		name.Set("")
 		email.Set("")
@@ -144,11 +151,7 @@ func newGallery() (ggui.Builder, func(), func()) {
 				ui.Card(ggui.Text("Floating")).Shadow(ggui.ShadowStyle{Offset: ggui.Pt(0, 6), Blur: 12, Color: color.NRGBA{A: 55}}),
 				ui.Card(ggui.Text("Colored")).Shadow(ggui.ShadowStyle{Offset: ggui.Pt(0, 4), Blur: 16, Spread: 2, Color: color.NRGBA{R: 70, G: 100, B: 230, A: 85}}),
 			).Gap(24), 20)),
-			section("Menubar", ui.Menubar(
-				ui.Menu("File", ui.MenuItem("New document", func() { toasts.Push(ui.Toast("Created", "A new document is ready.")) }), ui.MenuItem("Export", nil).Disabled(true)),
-				ui.Menu("Edit", ui.MenuItem("Undo edit", func() { toasts.Push(ui.Toast("Undone", "The last edit was reverted.")) })),
-				ui.Menu("View", ui.MenuItem("Switch theme", func() { ggui.Toggle(dark) })),
-			).Compact()),
+			section("Menubar", menubar),
 			section("Calendar", calendar),
 			section("Date picker", datePicker),
 			section("Context menu", ui.ContextMenu(

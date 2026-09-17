@@ -147,11 +147,11 @@ func (p *PopupWidget) paintContent(dst *Canvas, anchor Rect) {
 	if screen == (Size{}) {
 		screen = Sz(Unbounded, Unbounded)
 	}
-	if p.point != nil {
-		anchor = Rct(Pt(clamp(p.point.X, 0, screen.W), clamp(p.point.Y, 0, screen.H)), Size{})
-	}
 	maxW := max(screen.W-anchor.Origin.X, anchor.Size.W)
 	if p.point != nil {
+		// Point placement is clamped to the screen, so the whole width is
+		// available regardless of where the anchor happened to be.
+		anchor = Rct(Pt(clamp(p.point.X, 0, screen.W), clamp(p.point.Y, 0, screen.H)), Size{})
 		maxW = screen.W
 	}
 	natural := p.content.Layout(Constraints{MinW: anchor.Size.W, MaxW: maxW, MaxH: Unbounded}, p.env)

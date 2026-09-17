@@ -7,20 +7,54 @@ import (
 	"github.com/ironpark/ggui"
 )
 
+// buttonVariant selects a button's look. One value replaces a set of flags
+// that would otherwise have to be kept mutually exclusive by hand.
+type buttonVariant int
+
+const (
+	variantPrimary buttonVariant = iota
+	variantOutline
+	variantMuted
+	variantGhost
+	variantDestructive
+)
+
+// buttonStyle is a variant resolved against a theme.
+type buttonStyle struct {
+	fill, hover, border, label color.Color
+	elevated                   bool
+}
+
+func (v buttonVariant) resolve(t ggui.Theme) buttonStyle {
+	switch v {
+	case variantOutline:
+		return buttonStyle{fill: t.Surface, hover: mutedSurface(t), border: t.Border, label: t.Fg, elevated: true}
+	case variantMuted:
+		m := mutedSurface(t)
+		return buttonStyle{fill: m, hover: mix(m, t.Fg, .06), label: t.Fg}
+	case variantGhost:
+		return buttonStyle{hover: mutedSurface(t), label: t.Fg}
+	case variantDestructive:
+		d := dangerColor(t)
+		return buttonStyle{fill: d, hover: mix(d, t.Surface, .12), label: color.White, elevated: true}
+	}
+	return buttonStyle{fill: t.Accent, hover: t.AccentHover, label: t.OnAccent, elevated: true}
+}
+
 // ButtonWidget is a clickable box with a label. Build one with Button.
 type ButtonWidget struct {
 	ggui.Interactive
-	label                     *ggui.TextWidget
-	box                       *ggui.BoxWidget
-	onTap                     func()
-	secondary                 bool
-	ghost, muted, destructive bool
-	padded                    bool
-	selected                  bool // current item for composite navigation controls
-	expands                   func() bool
-	opener                    ggui.Actor
-	value                     func() string // optional accessible value for composite triggers
-	theme                     ggui.Theme
+	label    *ggui.TextWidget
+	box      *ggui.BoxWidget
+	onTap    func()
+	variant  buttonVariant
+	style    buttonStyle
+	padded   bool
+	selected bool // current item for composite navigation controls
+	expands  func() bool
+	opener   ggui.Actor
+	value    func() string // optional accessible value for composite triggers
+	theme    ggui.Theme
 }
 
 // Button creates a primary button: Accent background, OnAccent label.
@@ -91,27 +125,19 @@ func (b *ButtonWidget) Describe() ggui.Node {
 
 // Secondary makes the button quiet: Surface background with a border and
 // the normal text color, for actions that are not the main one.
-func (b *ButtonWidget) Secondary() *ButtonWidget {
-	b.secondary = true
-	b.ghost, b.muted, b.destructive = false, false, false
-	return b
-}
+func (b *ButtonWidget) Secondary() *ButtonWidget { b.variant = variantOutline; return b }
 
 // Outline is an alias for Secondary, preserving the established outline style.
 func (b *ButtonWidget) Outline() *ButtonWidget { return b.Secondary() }
 
 // Muted uses a subdued filled surface for a supporting action.
-func (b *ButtonWidget) Muted() *ButtonWidget { b.Secondary(); b.muted = true; return b }
+func (b *ButtonWidget) Muted() *ButtonWidget { b.variant = variantMuted; return b }
 
 // Ghost omits the resting background and border for a lightweight action.
-func (b *ButtonWidget) Ghost() *ButtonWidget { b.Secondary(); b.ghost = true; return b }
+func (b *ButtonWidget) Ghost() *ButtonWidget { b.variant = variantGhost; return b }
 
 // Destructive uses DangerColor for an irreversible action.
-func (b *ButtonWidget) Destructive() *ButtonWidget {
-	b.secondary, b.ghost, b.muted = false, false, false
-	b.destructive = true
-	return b
-}
+func (b *ButtonWidget) Destructive() *ButtonWidget { b.variant = variantDestructive; return b }
 
 // Disabled greys the button out and ignores the pointer while v is true.
 func (b *ButtonWidget) Disabled(v bool) *ButtonWidget { b.Inert = v; return b }
@@ -135,47 +161,19 @@ func (b *ButtonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		b.box.Padding(t.ButtonPad)
 	}
 	b.box.Radius(t.Radius)
+	b.style = b.variant.resolve(t)
 	if b.label != nil {
-		switch {
-		case b.Inert:
-			b.label.Color(pick(b.secondary, mix(t.Fg, t.Surface, .5), mix(pick[color.Color](b.destructive, color.White, t.OnAccent), t.Surface, .5)))
-		case b.secondary:
-			b.label.Color(t.Fg)
-		case b.destructive:
-			b.label.Color(color.White)
-		default:
-			b.label.Color(t.OnAccent)
-		}
+		b.label.Color(pick(b.Inert, mix(b.style.label, t.Surface, .5), b.style.label))
 	}
 	return b.box.Layout(c, env)
 }
 
 // Paint implements Widget.
 func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	t := b.theme
-	fill, border := t.Accent, color.Color(nil)
-	switch {
-	case b.ghost:
-		fill = nil
-	case b.muted:
-		fill = mutedSurface(t)
-	case b.secondary:
-		fill = t.Surface
-		border = t.Border
-	case b.destructive:
-		fill = dangerColor(t)
-	}
+	t, st := b.theme, b.style
+	fill, border := st.fill, st.border
 	if b.Hovered && !b.Inert {
-		switch {
-		case b.ghost, b.secondary:
-			fill = mutedSurface(t)
-		case b.muted:
-			fill = mix(mutedSurface(t), t.Fg, .06)
-		case b.destructive:
-			fill = mix(fill, t.Surface, .12)
-		default:
-			fill = t.AccentHover
-		}
+		fill = st.hover
 	}
 	if b.Pressed && b.Hovered && !b.Inert {
 		fill = mix(fill, t.Fg, .08)
@@ -188,7 +186,7 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		b.box.Border(1, border)
 	}
 	b.box.Fill(fill)
-	if !b.ghost && !b.muted && !b.Inert {
+	if st.elevated && !b.Inert {
 		dst.Shadow(r, t.Radius, cardShadow(t))
 	}
 	b.Hit(dst, r, b, ebiten.CursorShapePointer)

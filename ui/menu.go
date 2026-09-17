@@ -107,7 +107,7 @@ func (m *MenuWidget) Act(a ggui.Action) bool {
 func (m *MenuWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := env.Theme()
 	m.theme = t
-	m.panel.Shadow(panelShadow(t)).Fill(t.Surface).Border(1, t.Border).Radius(t.Radius).Padding(t.PanelPad)
+	panelBox(m.panel, t)
 	return m.popup.Layout(c, env)
 }
 
@@ -143,8 +143,7 @@ func (m *MenuWidget) HandleKey(ev ggui.KeyEvent) {
 		}
 		m.step(pick(ev.Key == ebiten.KeyArrowUp, -1, 1))
 	case ebiten.KeyEnter, ebiten.KeyNumpadEnter, ebiten.KeySpace:
-		if open && m.current >= 0 {
-			m.items[m.current].run()
+		if open && m.activate() {
 			return
 		}
 		m.button.HandleKey(ev)
@@ -156,6 +155,30 @@ func (m *MenuWidget) HandleKey(ev ggui.KeyEvent) {
 // step moves the keyboard highlight by dir, skipping disabled items.
 func (m *MenuWidget) step(dir int) {
 	m.current = stepIndex(m.current, dir, len(m.items), func(i int) bool { return !m.items[i].Inert })
+}
+
+// jump restarts the highlight from the near end, for Home and End.
+func (m *MenuWidget) jump(dir int) {
+	m.current = -1
+	m.step(dir)
+}
+
+// reopen refreshes the items and highlights the first one. Owners that show
+// the panel through their own popup call it in place of toggle.
+func (m *MenuWidget) reopen() {
+	for _, it := range m.items {
+		it.Sync()
+	}
+	m.jump(1)
+}
+
+// activate runs the highlighted item and reports whether there was one.
+func (m *MenuWidget) activate() bool {
+	if m.current < 0 {
+		return false
+	}
+	m.items[m.current].run()
+	return true
 }
 
 // Adopt implements ggui.Adopter: an open menu carries across a rebuild.
@@ -179,8 +202,7 @@ type MenuItemWidget struct {
 	shortcut     *ggui.TextWidget
 	shortcutSize ggui.Size
 	onHover      func()
-	lastPointer  ggui.Point
-	hasPointer   bool
+	motion       pointerMotion
 
 	pad      ggui.EdgeInsets
 	textSize ggui.Size
@@ -261,16 +283,17 @@ func (it *MenuItemWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if it.shortcut != nil {
 		dst.Paint(it.shortcut, ggui.Rct(ggui.Pt(r.Origin.X+r.Size.W-it.pad.Right-it.shortcutSize.W, r.Origin.Y+(r.Size.H-it.shortcutSize.H)/2), it.shortcutSize))
 	}
-	dst.Clip(r).Paint(it.text, ggui.Rct(ggui.Pt(r.Origin.X+it.pad.Left, r.Origin.Y+(r.Size.H-it.textSize.H)/2), it.textSize))
+	text := dst
+	if it.textSize.W > r.Size.W-it.pad.Left-it.pad.Right-it.shortcutSize.W {
+		text = dst.Clip(r)
+	}
+	text.Paint(it.text, ggui.Rct(ggui.Pt(r.Origin.X+it.pad.Left, r.Origin.Y+(r.Size.H-it.textSize.H)/2), it.textSize))
 }
 
 // HandlePointer implements PointerHandler.
 func (it *MenuItemWidget) HandlePointer(ev ggui.PointerEvent) bool {
-	if ev.Kind == ggui.PointerMove {
-		if (!it.hasPointer || it.lastPointer != ev.Pos) && !it.Inert && it.onHover != nil {
-			it.onHover()
-		}
-		it.lastPointer, it.hasPointer = ev.Pos, true
+	if ev.Kind == ggui.PointerMove && it.motion.moved(ev.Pos) && !it.Inert && it.onHover != nil {
+		it.onHover()
 	}
 	return it.Pointer(ev, it.run)
 }

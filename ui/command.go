@@ -208,27 +208,34 @@ func (c *CommandWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 // Paint implements ggui.Widget.
 func (c *CommandWidget) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(c.panel, r) }
 
+// commandRow is one matched entry, with the group heading above it when the
+// group changes. Keeping the three together stops them drifting out of step.
+type commandRow struct {
+	heading     ggui.Widget
+	headingSize ggui.Size
+	size        ggui.Size
+}
+
 type commandResults struct {
-	owner        *CommandWidget
-	sizes        []ggui.Size
-	headings     []ggui.Widget
-	headingSizes []ggui.Size
-	empty        *ggui.TextWidget
+	owner     *CommandWidget
+	rows      []commandRow
+	empty     *ggui.TextWidget
+	emptySize ggui.Size
 }
 
 func (r *commandResults) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	c := r.owner
-	r.sizes = r.sizes[:0]
-	r.headings = r.headings[:0]
-	r.headingSizes = r.headingSizes[:0]
+	r.rows = r.rows[:0]
 	if len(c.matched) == 0 {
-		r.empty = ggui.Caption("No results")
-		size := r.empty.Layout(cs.Loosen(), env)
-		height := max(64, size.H+24)
+		if r.empty == nil {
+			r.empty = ggui.Caption("No results")
+		}
+		r.emptySize = r.empty.Layout(cs.Loosen(), env)
+		height := max(64, r.emptySize.H+24)
 		if c.stable {
 			height = max(height, c.height)
 		}
-		return cs.Constrain(ggui.Sz(bounded(cs.MaxW, size.W), height))
+		return cs.Constrain(ggui.Sz(bounded(cs.MaxW, r.emptySize.W), height))
 	}
 	var w, h float64
 	previous := ""
@@ -245,35 +252,32 @@ func (r *commandResults) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 			hs = heading.Layout(ggui.Loose(ggui.Sz(cs.MaxW, ggui.Unbounded)), env)
 		}
 		previous = group
-		r.headings = append(r.headings, heading)
-		r.headingSizes = append(r.headingSizes, hs)
-		h += hs.H
-		w = max(w, hs.W)
 		sz := c.items[i].Layout(ggui.Loose(ggui.Sz(cs.MaxW, ggui.Unbounded)), env)
-		r.sizes = append(r.sizes, sz)
-		w = max(w, sz.W)
-		h += sz.H
+		r.rows = append(r.rows, commandRow{heading: heading, headingSize: hs, size: sz})
+		w = max(w, hs.W, sz.W)
+		h += hs.H + sz.H
 	}
 	return cs.Constrain(ggui.Sz(bounded(cs.MaxW, w), h))
 }
 func (r *commandResults) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 	c := r.owner
 	if len(c.matched) == 0 {
-		s := r.empty.Layout(ggui.Loose(rect.Size), c.env)
+		s := r.emptySize
 		dst.Paint(r.empty, ggui.Rct(ggui.Pt(rect.Origin.X+(rect.Size.W-s.W)/2, rect.Origin.Y+(rect.Size.H-s.H)/2), s))
 		return
 	}
 	y := rect.Origin.Y
 	for j, i := range c.matched {
-		if r.headings[j] != nil {
-			dst.Paint(r.headings[j], ggui.Rct(ggui.Pt(rect.Origin.X, y), ggui.Sz(rect.Size.W, r.headingSizes[j].H)))
-			y += r.headingSizes[j].H
+		row := r.rows[j]
+		if row.heading != nil {
+			dst.Paint(row.heading, ggui.Rct(ggui.Pt(rect.Origin.X, y), ggui.Sz(rect.Size.W, row.headingSize.H)))
+			y += row.headingSize.H
 		}
-		at := ggui.Rct(ggui.Pt(rect.Origin.X, y), ggui.Sz(rect.Size.W, r.sizes[j].H))
+		at := ggui.Rct(ggui.Pt(rect.Origin.X, y), ggui.Sz(rect.Size.W, row.size.H))
 		c.rects[i] = at
 		c.items[i].active = i == c.highlight
 		dst.Paint(c.items[i], at)
-		y += r.sizes[j].H
+		y += row.size.H
 	}
 }
 

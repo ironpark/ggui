@@ -7,6 +7,11 @@ import (
 	"github.com/ironpark/ggui"
 )
 
+const (
+	tabInset = 3.0 // strip padding all round the label row
+	tabGap   = 8.0 // between the strip and the page below it
+)
+
 // TabsWidget shows one of several pages, picked by a row of labels above.
 // Build one with Tabs.
 type TabsWidget struct {
@@ -23,6 +28,8 @@ type TabsWidget struct {
 	theme     ggui.Theme
 	motion    time.Duration
 	headerH   float64
+	stripW    float64   // the strip's natural width, inset included
+	labelX    []float64 // each label's offset from the strip's left inset
 	pad       ggui.EdgeInsets
 	bodySize  ggui.Size
 	labelRect []ggui.Rect
@@ -80,26 +87,25 @@ func (t *TabsWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t.theme = th
 	t.motion = env.Motion(knobDuration)
 	t.pad = ggui.Insets(5, 10)
-	t.labelSize = t.labelSize[:0]
-	t.headerH = 0
+	t.labelSize, t.labelX = t.labelSize[:0], t.labelX[:0]
+	t.headerH, t.stripW = 0, 0
 	cur := t.index()
 	for i, l := range t.labels {
 		l.Color(pick(i == cur && !t.Inert, th.Fg, th.Muted))
 		s := l.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env)
 		t.labelSize = append(t.labelSize, s)
+		t.labelX = append(t.labelX, t.stripW)
+		t.stripW += s.W + t.pad.Left + t.pad.Right
 		t.headerH = max(t.headerH, s.H+t.pad.Top+t.pad.Bottom)
 	}
-	t.headerH += 14 // three-pixel inset on each side, then eight pixels to content
+	t.stripW += 2 * tabInset
+	t.headerH += 2*tabInset + tabGap
 	t.bodySize = ggui.Size{}
 	if cur >= 0 {
 		body := ggui.Constraints{MinW: c.MinW, MaxW: c.MaxW, MinH: max(c.MinH-t.headerH, 0), MaxH: max(c.MaxH-t.headerH, 0)}
 		t.bodySize = t.tabs[cur].Content.Layout(body, env)
 	}
-	w := 6.0
-	for _, s := range t.labelSize {
-		w += s.W + t.pad.Left + t.pad.Right
-	}
-	return c.Constrain(ggui.Sz(max(w, t.bodySize.W), t.headerH+t.bodySize.H))
+	return c.Constrain(ggui.Sz(max(t.stripW, t.bodySize.W), t.headerH+t.bodySize.H))
 }
 
 // Paint implements Widget. The strip is one semantics node holding a tab
@@ -112,35 +118,28 @@ func (t *TabsWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst = dst.Clip(r)
 	th := t.theme
-	header := ggui.Rct(r.Origin, ggui.Sz(r.Size.W, t.headerH-8))
+	header := ggui.Rct(r.Origin, ggui.Sz(r.Size.W, t.headerH-tabGap))
 	if !t.Inert {
 		dst.HitKey(header, t)
 	}
 	t.labelRect = t.labelRect[:0]
-	x := r.Origin.X + 3
+	x := r.Origin.X + tabInset
 	cur := t.index()
 	hover := pick(t.Inert, -1, t.hover)
-	width := 6.0
-	for _, s := range t.labelSize {
-		width += s.W + t.pad.Left + t.pad.Right
-	}
 	if !t.line {
-		dst.FillRoundRect(ggui.Rct(r.Origin, ggui.Sz(min(width, r.Size.W), header.Size.H)), th.Radius, mutedSurface(th))
+		dst.FillRoundRect(ggui.Rct(r.Origin, ggui.Sz(min(t.stripW, r.Size.W), header.Size.H)), th.Radius, mutedSurface(th))
 		if cur >= 0 {
-			target := r.Origin.X + 3
-			for i := 0; i < cur; i++ {
-				target += t.labelSize[i].W + t.pad.Left + t.pad.Right
-			}
+			target := x + t.labelX[cur]
 			sx := dst.Ease(ggui.Anchor{Rect: header}, underlineSlot, target, t.motion)
 			sw := dst.Ease(ggui.Anchor{Rect: header}, widthSlot, t.labelSize[cur].W+t.pad.Left+t.pad.Right, t.motion)
-			active := ggui.Rct(ggui.Pt(sx, r.Origin.Y+3), ggui.Sz(sw, header.Size.H-6))
+			active := ggui.Rct(ggui.Pt(sx, r.Origin.Y+tabInset), ggui.Sz(sw, header.Size.H-2*tabInset))
 			dst.Shadow(active, max(th.Radius-2, 0), cardShadow(th))
 			dst.FillRoundRect(active, max(th.Radius-2, 0), th.Surface)
 		}
 	}
 
 	for i, s := range t.labelSize {
-		lr := ggui.Rct(ggui.Pt(x, r.Origin.Y+3), ggui.Sz(s.W+t.pad.Left+t.pad.Right, header.Size.H-6))
+		lr := ggui.Rct(ggui.Pt(x, r.Origin.Y+tabInset), ggui.Sz(s.W+t.pad.Left+t.pad.Right, header.Size.H-2*tabInset))
 		t.labelRect = append(t.labelRect, lr)
 		dst.Describe(lr, tabLabel{t, i})
 		if !t.Inert {
@@ -150,7 +149,7 @@ func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		if i == hover && i != cur {
 			dst.FillRoundRect(lr, th.Radius, subtle(th))
 		}
-		dst.Paint(t.labels[i], ggui.Rct(ggui.Pt(x+t.pad.Left, r.Origin.Y+3+t.pad.Top), s))
+		dst.Paint(t.labels[i], ggui.Rct(ggui.Pt(x+t.pad.Left, r.Origin.Y+tabInset+t.pad.Top), s))
 		x += lr.Size.W
 	}
 	lineY := r.Origin.Y + header.Size.H - 1

@@ -84,7 +84,7 @@ func (d *DialogWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if d.title != nil {
 		body = ggui.Column(d.title, d.content).Gap(t.Space * 2).Align(ggui.AlignStretch)
 	}
-	d.panel = ggui.Box(body).Padding(t.CardPad).Fill(t.Surface).Border(1, t.Border).Radius(t.Radius + 4).Shadow(ggui.ShadowStyle{Offset: ggui.Pt(0, 12), Blur: 28, Color: color.NRGBA{A: 65}})
+	d.panel = ggui.Box(body).Padding(t.CardPad).Fill(t.Surface).Border(1, t.Border).Radius(t.Radius + 4).Shadow(overlayShadow(t))
 	if d.compact {
 		d.panel.Pad(0)
 	}

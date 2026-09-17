@@ -358,7 +358,7 @@ func (b *BoxWidget) Fill(c color.Color) *BoxWidget { b.fill = c; return b }
 // Shadow replaces the outer shadow layers. Calling it without arguments clears
 // them. Shadows paint in argument order and do not reserve layout space.
 func (b *BoxWidget) Shadow(styles ...ShadowStyle) *BoxWidget {
-	b.shadows = append([]ShadowStyle(nil), styles...)
+	b.shadows = append(b.shadows[:0], styles...)
 	return b
 }
 

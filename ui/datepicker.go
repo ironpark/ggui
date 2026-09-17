@@ -35,6 +35,13 @@ func DatePicker(value ggui.Binding[time.Time]) *DatePickerWidget {
 	return d
 }
 
+// datePickerKey keeps the trigger, calendar and popup keys distinct while all
+// three derive from the one key the caller gave.
+type datePickerKey struct {
+	part string
+	id   any
+}
+
 // Calendar exposes date bounds, localization, week start and change callbacks.
 func (d *DatePickerWidget) Calendar() *CalendarWidget { return d.calendar }
 
@@ -43,18 +50,9 @@ func (d *DatePickerWidget) Popup() *ggui.PopupWidget { return d.popup }
 
 // Key preserves trigger focus, popup state and the browsed month across rebuilds.
 func (d *DatePickerWidget) Key(key any) *DatePickerWidget {
-	d.button.Key(struct {
-		Part string
-		ID   any
-	}{"date-trigger", key})
-	d.calendar.Key(struct {
-		Part string
-		ID   any
-	}{"date-calendar", key})
-	d.popup.Key(struct {
-		Part string
-		ID   any
-	}{"date-popup", key})
+	d.button.Key(datePickerKey{"trigger", key})
+	d.calendar.Key(datePickerKey{"calendar", key})
+	d.popup.Key(datePickerKey{"popup", key})
 	return d
 }
 
@@ -111,7 +109,7 @@ func (d *DatePickerWidget) Act(a ggui.Action) bool {
 // Layout implements ggui.Widget.
 func (d *DatePickerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := env.Theme()
-	d.panel.Shadow(panelShadow(t)).Fill(t.Surface).Border(1, t.Border).Radius(t.Radius).Padding(t.PanelPad)
+	panelBox(d.panel, t)
 	text := d.placeholder
 	if v := d.value.Get(); !v.IsZero() {
 		text = d.format(d.calendar.date(v))
