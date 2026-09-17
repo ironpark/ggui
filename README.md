@@ -25,10 +25,12 @@ app := ggui.New(ggui.Config{Title: "counter", Width: 480, Height: 320}, func() g
 	return ggui.Center(ggui.Text(label.Get()))
 })
 
-app.OnFrame(func() {
-	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
-		count.Update(func(n int) int { return n + 1 })
+app.OnKey(func(ev ggui.KeyEvent) bool {
+	if ev.Key == ebiten.KeySpace {
+		ggui.Add(count, 1)
+		return true
 	}
+	return false
 })
 
 app.Run()
@@ -81,7 +83,10 @@ state := model{Count: ggui.State(0), Step: ggui.State(1)}
 ggui.Add(state.Count, state.Step.Get())
 ```
 
-`Toggle` and `Add` are the two one-line updates that come up constantly.
+`Toggle`, `Add`, `Append` and `Remove` are the one-line updates that come up
+constantly; `Remove(items, func(t T) bool)` drops what matches into a new
+slice and notifies only if something went. `BindTheme(dark, on, off)`
+follows a boolean signal with the theme.
 `*Signal[T]` and `*Memo[T]` both satisfy `Reader[T]`, so `Watch`, `Combine`
 and your own helpers accept either.
 
@@ -173,10 +178,12 @@ ints or floats without a cast.
 `Spacer()` is an empty `Expanded`, and `.Justify(...)` distributes slack
 (`JustifyCenter`, `JustifyEnd`, `SpaceBetween`, `SpaceAround`, `SpaceEvenly`).
 Any of those makes the widget fill its main axis. `.Align(...)` places
-children across the axis (`AlignCenter`, `AlignEnd`, `AlignStretch`).
+children across the axis (`AlignStart`, `AlignCenter`, `AlignEnd`,
+`AlignStretch`); a Row centers by default, a Column starts at the left.
 
 ```go
-ggui.Row(ggui.Text("Title"), ggui.Spacer(), ggui.Text("3 items")).Align(ggui.AlignCenter)
+ggui.Row(ggui.Text("Title"), ggui.Spacer(), ggui.Text("3 items")) // centered on its height
+ggui.Column(ggui.Text("a"), ggui.Text("b")).Align(ggui.AlignStretch)
 ```
 
 **Wrap and Grid** cover the two other common arrangements. `Wrap` flows
@@ -233,7 +240,7 @@ ggui.Column(
 	ui.Checkbox(agree, "I agree"),
 	ui.Switch(dark, "Dark mode"),
 	ui.Slider(size, 0, 1).Step(0.1),
-	ggui.Row(ui.Radio(plan, "free", "Free"), ui.Radio(plan, "pro", "Pro")).Gap(8),
+	ui.Radios(plan, []string{"free", "pro"}, strings.ToTitle), // or one ui.Radio(plan, value, label) at a time
 	ggui.Row(ui.Button("Save", save), ui.Button("Cancel", cancel).Secondary()).Gap(8),
 	ui.Divider(),
 ).Gap(12)
@@ -395,7 +402,8 @@ and Meta (`Mods.Cmd()` is ⌘ on macOS and Ctrl elsewhere). Tab and Shift+Tab
 move focus through the key regions in paint order; focus that arrived that
 way is reported with `Key` set to `KeyTab`, which is when the controls draw
 a focus ring. Buttons press on Space or Enter, toggles flip, sliders step
-with the arrows. Global shortcuts still go in `App.OnFrame`.
+with the arrows. Global shortcuts go in `App.OnKey`, which sees every key
+press before the focused widget and keeps the ones it returns true for.
 
 To make your own widget interactive, implement `PointerHandler` or
 `KeyHandler` and call `dst.HitPointer(r, w)`, `dst.HitKey(r, w)` or

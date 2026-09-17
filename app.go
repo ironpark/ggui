@@ -84,10 +84,19 @@ func (a *App) Run() error {
 }
 
 // OnFrame registers fn to run once per frame, before input is dispatched
-// and effects are flushed. Use it for global shortcuts and per-frame work
-// that no widget owns; Pointer and Focus cover input aimed at a widget.
+// and effects are flushed, for per-frame work that no widget owns. OnKey
+// covers global shortcuts; Pointer and Focus cover input aimed at a widget.
 func (a *App) OnFrame(fn func()) {
 	a.frame = append(a.frame, fn)
+}
+
+// OnKey registers a global shortcut: fn sees every key press, with its
+// modifiers, before the focused widget does, and a press it returns true
+// for goes no further. A held key repeats into it as it would into a
+// widget. Keep the keys it takes away from a text field in mind: returning
+// true for Space while one is focused would eat the space bar.
+func (a *App) OnKey(fn func(KeyEvent) bool) {
+	a.input.shortcuts = append(a.input.shortcuts, fn)
 }
 
 // Inspector turns the widget inspector on or off: an overlay that outlines

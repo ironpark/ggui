@@ -188,6 +188,27 @@ func Toggle(s *Signal[bool]) { s.Update(func(b bool) bool { return !b }) }
 // Add adds d to a numeric signal.
 func Add[N Number](s *Signal[N], d N) { s.Update(func(n N) N { return n + d }) }
 
+// Append adds items to the end of a slice signal, in a new slice so the
+// change is noticed.
+func Append[T any](s *Signal[[]T], items ...T) {
+	s.Update(func(ts []T) []T { return append(ts[:len(ts):len(ts)], items...) })
+}
+
+// Remove drops every item of a slice signal that drop accepts, into a new
+// slice. Nothing is set, so nothing notifies, when no item matched.
+func Remove[T any](s *Signal[[]T], drop func(T) bool) {
+	ts := s.Peek()
+	out := ts[:0:0]
+	for _, t := range ts {
+		if !drop(t) {
+			out = append(out, t)
+		}
+	}
+	if len(out) != len(ts) {
+		s.Set(out)
+	}
+}
+
 // Memo is a derived value: it recomputes when one of the signals its function
 // read changes, and notifies its own readers only when the result differs.
 type Memo[T any] struct {

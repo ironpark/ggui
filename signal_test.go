@@ -225,3 +225,25 @@ func TestSignalWritesAdvanceTheLayoutGeneration(t *testing.T) {
 		t.Fatal("RequestLayout must request layout")
 	}
 }
+
+func TestAppendAndRemoveOnSliceSignals(t *testing.T) {
+	s := State([]int{1, 2, 3})
+	runs := 0
+	dispose := Effect(func() { s.Get(); runs++ })
+	defer dispose()
+	Append(s, 4, 5)
+	effects.flush()
+	Remove(s, func(n int) bool { return n%2 == 0 })
+	effects.flush()
+	if got := s.Peek(); len(got) != 3 || got[0] != 1 || got[1] != 3 || got[2] != 5 {
+		t.Fatalf("slice = %v, want [1 3 5]", got)
+	}
+	if runs != 3 {
+		t.Fatalf("effect ran %d times, want 3 (initial, append, remove)", runs)
+	}
+	Remove(s, func(int) bool { return false })
+	effects.flush()
+	if runs != 3 {
+		t.Fatalf("effect ran %d times after a Remove that matched nothing, want still 3", runs)
+	}
+}

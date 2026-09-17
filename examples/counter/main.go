@@ -1,7 +1,7 @@
 // Command counter is a minimal ggui app: a struct of signals for state,
 // derived text built with generic methods, a theme for the look, and the
 // built-in Button. Click the buttons or press space to count; up/down
-// changes the step; T flips the theme.
+// changes the step; T flips the theme, through App.OnKey.
 package main
 
 import (
@@ -9,7 +9,6 @@ import (
 	"log"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 )
@@ -24,7 +23,8 @@ type model struct {
 func main() {
 	state := model{Count: ggui.State(0), Step: ggui.State(1)}
 	count, step := state.Count, state.Step
-	ggui.SetTheme(ggui.DarkTheme())
+	dark := ggui.State(true)
+	ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme())
 
 	// Map derives text from a cell; it recomputes only when the cell changes.
 	label := count.Map(func(n int) string { return fmt.Sprintf("count: %d", n) })
@@ -66,23 +66,20 @@ func main() {
 		)
 	})
 
-	dark := true
-	app.OnFrame(func() {
-		switch {
-		case inpututil.IsKeyJustPressed(ebiten.KeySpace):
+	app.OnKey(func(ev ggui.KeyEvent) bool {
+		switch ev.Key {
+		case ebiten.KeySpace:
 			ggui.Add(count, step.Get())
-		case inpututil.IsKeyJustPressed(ebiten.KeyArrowUp):
+		case ebiten.KeyArrowUp:
 			ggui.Add(step, 1)
-		case inpututil.IsKeyJustPressed(ebiten.KeyArrowDown):
+		case ebiten.KeyArrowDown:
 			step.Update(func(s int) int { return max(s-1, 1) })
-		case inpututil.IsKeyJustPressed(ebiten.KeyT):
-			dark = !dark
-			if dark {
-				ggui.SetTheme(ggui.DarkTheme())
-			} else {
-				ggui.SetTheme(ggui.DefaultTheme())
-			}
+		case ebiten.KeyT:
+			ggui.Toggle(dark)
+		default:
+			return false
 		}
+		return true
 	})
 
 	if err := app.Run(); err != nil {

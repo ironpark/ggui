@@ -27,24 +27,7 @@ func main() {
 	plan := ggui.State("free")
 	tags := ggui.State([]string{"go", "gui", "ebiten", "signals", "flutter", "svelte", "layout", "hidpi"})
 
-	ggui.Watch(dark, func(on bool) {
-		if on {
-			ggui.SetTheme(ggui.DarkTheme())
-		} else {
-			ggui.SetTheme(ggui.DefaultTheme())
-		}
-	})
-	removeTag := func(tag string) {
-		tags.Update(func(ts []string) []string {
-			out := ts[:0:0]
-			for _, t := range ts {
-				if t != tag {
-					out = append(out, t)
-				}
-			}
-			return out
-		})
-	}
+	ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme())
 
 	app := ggui.New(ggui.Config{Title: "ggui · gallery", Width: 640, Height: 640, Resizable: true, Inspector: ebiten.KeyF1}, func() ggui.Widget {
 		t := ggui.UseTheme()
@@ -62,7 +45,7 @@ func main() {
 				ggui.Text("gallery").Style(t.Title),
 				ggui.Spacer(),
 				ggui.Tooltip(ui.Switch(dark, "Dark"), "Swaps the theme; every widget re-reads it"),
-			).Align(ggui.AlignCenter),
+			),
 
 			section("Text", ggui.Column(
 				ui.TextField(name).Placeholder("Type here, IME works"),
@@ -75,32 +58,28 @@ func main() {
 					ggui.Text("Size").Color(t.Muted),
 					ggui.Expanded(ui.Slider(size, 10, 40).Step(1)),
 					ggui.Reactive(func() ggui.Widget { return ggui.Text(fmt.Sprintf("%2.0f", size.Get())).NoWrap() }),
-				).Gap(t.Space).Align(ggui.AlignCenter),
+				).Gap(t.Space),
 			).Gap(t.Space)),
 
 			section("Choices", ggui.Column(
 				ui.Checkbox(notify, "Send notifications"),
+				ui.RadioStrings(plan, "free", "pro", "team"),
 				ggui.Row(
-					ui.Radio(plan, "free", "Free"),
-					ui.Radio(plan, "pro", "Pro"),
-					ui.Radio(plan, "team", "Team").Disabled(true),
-				).Gap(t.Space*2),
-				ggui.Row(
-					ui.Select(fruit, []string{"Apple", "Banana", "Cherry", "Durian"}, func(s string) string { return s }),
+					ui.SelectStrings(fruit, "Apple", "Banana", "Cherry", "Durian"),
 					ui.Menu("Actions",
 						ui.MenuItem("Reset text size", func() { size.Set(16) }),
 						ui.MenuItem("Clear name", func() { name.Set("") }),
 						ui.MenuDivider(),
-						ui.MenuItem("Toggle dark", func() { dark.Set(!dark.Peek()) }),
+						ui.MenuItem("Toggle dark", func() { ggui.Toggle(dark) }),
 					),
 					ggui.Reactive(func() ggui.Widget { return ggui.Text("picked " + fruit.Get()).Color(t.Muted) }),
-				).Gap(t.Space).Align(ggui.AlignCenter),
+				).Gap(t.Space),
 			).Gap(t.Space)),
 
 			section("Tabs", ui.Card(ui.Tabs(tab,
 				ui.Tab("Overview", ggui.Column(
-					ggui.Row(ggui.Text("Status"), ui.Badge("stable"), ui.Badge("new").Accent()).Gap(t.Space).Align(ggui.AlignCenter),
-					ggui.Reactive(func() ggui.Widget { return ui.Progress(progress) }),
+					ggui.Row(ggui.Text("Status"), ui.Badge("stable"), ui.Badge("new").Accent()).Gap(t.Space),
+					ui.Progress(progress), // reads the signal every frame: no Reactive needed
 					ggui.Row(
 						ui.Button("+10%", func() { progress.Set(min(progress.Peek()+0.1, 1)) }).Secondary(),
 						ui.Button("Reset", func() { progress.Set(0) }).Secondary(),
@@ -126,7 +105,7 @@ func main() {
 			section("Wrap", ggui.Reactive(func() ggui.Widget {
 				return ggui.Wrap(ggui.Children(tags.Get(), func(tag string) ggui.Widget {
 					return ggui.Tooltip(
-						ui.Button(tag+"  ×", func() { removeTag(tag) }).Secondary().Pad(4, 10),
+						ui.Button(tag+"  ×", func() { ggui.Remove(tags, func(s string) bool { return s == tag }) }).Secondary().Pad(4, 10),
 						"Click to remove",
 					)
 				})...).Gap(t.Space / 2)
@@ -143,7 +122,7 @@ func main() {
 				ui.Button("Reset", func() { name.Set(""); size.Set(16) }).Secondary(),
 				ggui.Spacer(),
 				ggui.Text("F1 toggles the inspector, Tab moves focus").Style(t.Caption),
-			).Gap(t.Space).Align(ggui.AlignCenter),
+			).Gap(t.Space),
 		).Gap(t.Space*2), t.Space*3))
 	})
 

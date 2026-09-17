@@ -45,31 +45,11 @@ func main() {
 		}
 		t := &Todo{ID: nextID, Title: ggui.State(title), Done: ggui.State(false)}
 		nextID++
-		todos.Update(func(ts []*Todo) []*Todo { return append(ts, t) })
+		ggui.Append(todos, t)
 		draft.Set("")
 	}
-	remove := func(id int) {
-		todos.Update(func(ts []*Todo) []*Todo {
-			out := ts[:0:0]
-			for _, t := range ts {
-				if t.ID != id {
-					out = append(out, t)
-				}
-			}
-			return out
-		})
-	}
-	clearDone := func() {
-		todos.Update(func(ts []*Todo) []*Todo {
-			out := ts[:0:0]
-			for _, t := range ts {
-				if !t.Done.Peek() {
-					out = append(out, t)
-				}
-			}
-			return out
-		})
-	}
+	remove := func(id int) { ggui.Remove(todos, func(t *Todo) bool { return t.ID == id }) }
+	clearDone := func() { ggui.Remove(todos, func(t *Todo) bool { return t.Done.Peek() }) }
 
 	// Derived views. visible follows the list, the filter and every Done flag.
 	visible := ggui.Derived(func() []*Todo {
@@ -100,13 +80,7 @@ func main() {
 		}
 		progress.Set(float64(c[1]) / float64(c[0]))
 	})
-	ggui.Watch(dark, func(on bool) {
-		if on {
-			ggui.SetTheme(ggui.DarkTheme())
-		} else {
-			ggui.SetTheme(ggui.DefaultTheme())
-		}
-	})
+	ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme())
 
 	row := func(item *ggui.Signal[*Todo]) ggui.Widget {
 		td := item.Peek()
@@ -121,7 +95,7 @@ func main() {
 				return text
 			})),
 			ui.Button("×", func() { remove(td.ID) }).Secondary().Pad(2, 8),
-		).Gap(8).Align(ggui.AlignCenter)
+		).Gap(8)
 	}
 
 	app := ggui.New(ggui.Config{Title: "ggui · todo", Width: 520, Height: 600, Resizable: true, Inspector: ebiten.KeyF1}, func() ggui.Widget {
@@ -131,18 +105,12 @@ func main() {
 				ggui.Text("todo").Style(t.Title),
 				ggui.Spacer(),
 				ui.Switch(dark, "Dark"),
-			).Align(ggui.AlignCenter),
+			),
 			ggui.Row(
 				ggui.Expanded(ui.TextField(draft).Placeholder("What needs doing?").OnSubmit(add)),
 				ui.Button("Add", func() { add("") }),
-			).Gap(t.Space).Align(ggui.AlignCenter),
-			ggui.Reactive(func() ggui.Widget {
-				const width = 480 - 2*3*8 // the card's inner width
-				return ggui.Stack(
-					ggui.Box().Size(width, 4).Fill(t.Border).Radius(2),
-					ggui.Box().Size(max(progress.Get()*width, 0), 4).Fill(t.Accent).Radius(2),
-				)
-			}),
+			).Gap(t.Space),
+			ui.Progress(progress).Height(4),
 			ggui.Expanded(ggui.Scroll(
 				ggui.For(visible, func(td *Todo) int { return td.ID }, row).Gap(t.Space/2).ItemExtent(28),
 			)),
@@ -153,11 +121,9 @@ func main() {
 					return ggui.Text(fmt.Sprintf("%d left", c[0]-c[1])).NoWrap()
 				})).Color(t.Muted),
 				ggui.Spacer(),
-				ui.Radio(show, all, "All"),
-				ui.Radio(show, active, "Active"),
-				ui.Radio(show, done, "Done"),
+				ui.Radios(show, []filter{all, active, done}, func(f filter) string { return [...]string{"All", "Active", "Done"}[f] }),
 				ggui.Tooltip(ui.Button("Clear done", clearDone).Secondary(), "Removes every finished item"),
-			).Gap(t.Space).Align(ggui.AlignCenter),
+			).Gap(t.Space),
 		).Gap(t.Space*1.5)).Pad(t.Space*3).Fill(t.Surface).Radius(t.Radius*2).Size(480, 540))
 	})
 

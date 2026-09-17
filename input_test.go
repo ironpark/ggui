@@ -344,3 +344,21 @@ func TestInspectorTracesPaintedWidgets(t *testing.T) {
 		t.Fatalf("innermost rect = %+v", c.trace[3].rect)
 	}
 }
+
+func TestOnKeyRunsBeforeTheFocusedWidgetAndCanConsume(t *testing.T) {
+	var log []string
+	w := &keyed{&log, "a"}
+	p := NewProbe(w, Sz(50, 50))
+	p.Click(Pt(10, 10))
+	seen := 0
+	p.OnKey(func(ev KeyEvent) bool { seen++; return ev.Key == ebiten.KeyF1 })
+	p.Type(Mods{}, ebiten.KeyF1, ebiten.KeyA)
+	if seen != 2 {
+		t.Fatalf("shortcut saw %d keys, want 2", seen)
+	}
+	log = log[len(log):]
+	p.Type(Mods{}, ebiten.KeyF1)
+	if len(log) != 0 {
+		t.Fatalf("widget got %v for a consumed key, want nothing", log)
+	}
+}

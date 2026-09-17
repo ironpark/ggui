@@ -51,6 +51,9 @@ func (p *Probe) dispatch(f frameInput) {
 	effects.flush()
 }
 
+// OnKey registers a global shortcut, as App.OnKey does.
+func (p *Probe) OnKey(fn func(KeyEvent) bool) { p.in.shortcuts = append(p.in.shortcuts, fn) }
+
 // Move puts the pointer at pos with no buttons held, which drives hover,
 // cursor shape and, after Press, dragging.
 func (p *Probe) Move(pos Point) { p.dispatch(frameInput{pos: pos}) }

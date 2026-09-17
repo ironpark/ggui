@@ -201,6 +201,15 @@ var theme = State(DefaultTheme()).WithEqual(nil)
 // SetTheme replaces the theme. Builders that read it through UseTheme rebuild.
 func SetTheme(t Theme) { theme.Set(t) }
 
+// BindTheme follows a boolean signal with the theme: on while it is true,
+// off otherwise, starting now. It returns a dispose function, like Watch.
+//
+//	dark := ggui.State(false)
+//	ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme())
+func BindTheme(sw Reader[bool], on, off Theme) (dispose func()) {
+	return Watch(sw, func(v bool) { SetTheme(pick(v, on, off)) })
+}
+
 // UseTheme returns the current theme and, inside a Builder or Effect,
 // subscribes it to theme changes.
 func UseTheme() Theme { return theme.Get() }

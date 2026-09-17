@@ -434,3 +434,15 @@ func TestSliderReportsChanges(t *testing.T) {
 		t.Fatalf("OnChange saw %v, want [50 60 70]", got)
 	}
 }
+
+func TestRadiosSelectAndReport(t *testing.T) {
+	sel := ggui.State("a")
+	var got string
+	g := ui.RadioStrings(sel, "a", "b", "c").Vertical().OnChange(func(s string) { got = s })
+	p := ggui.NewProbe(g, ggui.Sz(100, 100))
+	p.Frame()
+	p.Click(ggui.Pt(5, 2*(18+8)+9)) // the third glyph: 18 tall, theme gap 8
+	if sel.Peek() != "c" || got != "c" {
+		t.Fatalf("selected %q reported %q after clicking the last radio, want c", sel.Peek(), got)
+	}
+}

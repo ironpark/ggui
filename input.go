@@ -115,6 +115,19 @@ type inputState struct {
 	pressedBtn ebiten.MouseButton
 	focused    *hitRegion
 	cursor     ebiten.CursorShapeType // what the hovered region asked for
+
+	shortcuts []func(KeyEvent) bool // App.OnKey handlers, tried before the focused widget
+}
+
+// shortcut offers a key press to the OnKey handlers and reports whether
+// one consumed it.
+func (in *inputState) shortcut(k ebiten.Key, mods Mods) bool {
+	for _, fn := range in.shortcuts {
+		if fn(KeyEvent{Kind: KeyPress, Key: k, Mods: mods}) {
+			return true
+		}
+	}
+	return false
 }
 
 // keep returns a copy of r that outlives the regions buffer.
@@ -179,6 +192,9 @@ func (in *inputState) dispatch(f frameInput) {
 	if i := slices.Index(f.keys, ebiten.KeyTab); i >= 0 {
 		f.keys = slices.Delete(slices.Clone(f.keys), i, i+1)
 		in.moveFocus(pick(f.mods.Shift, -1, 1))
+	}
+	if len(in.shortcuts) > 0 && len(f.keys) > 0 {
+		f.keys = slices.DeleteFunc(slices.Clone(f.keys), func(k ebiten.Key) bool { return in.shortcut(k, f.mods) })
 	}
 
 	if in.focused != nil {

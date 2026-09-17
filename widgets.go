@@ -346,8 +346,8 @@ const (
 type CrossAlign int
 
 const (
-	AlignStart   CrossAlign = iota // top of a Row, left of a Column (the default)
-	AlignCenter                    // centered across
+	AlignStart   CrossAlign = iota // top of a Row, left of a Column (a Column's default)
+	AlignCenter                    // centered across (a Row's default)
 	AlignEnd                       // bottom of a Row, right of a Column
 	AlignStretch                   // stretched to the widget's cross size, which fills the space given
 )
@@ -527,9 +527,10 @@ func (col *ColumnWidget) Paint(dst *Canvas, r Rect) { col.paint(dst, r) }
 // RowWidget lines its children up horizontally. Build one with Row.
 type RowWidget struct{ flow }
 
-// Row lines children up left to right.
+// Row lines children up left to right, centered on the row's height; a
+// Column starts its children at the left.
 func Row(children ...Widget) *RowWidget {
-	return &RowWidget{flow{horizontal: true, children: children}}
+	return &RowWidget{flow{horizontal: true, align: AlignCenter, children: children}}
 }
 
 // Gap sets the space between consecutive children.
