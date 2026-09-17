@@ -183,7 +183,7 @@ func TestButtonStylesPreserveActivationAndDisabledState(t *testing.T) {
 		apply func(*ui.ButtonWidget) *ui.ButtonWidget
 	}{
 		{"outline", func(b *ui.ButtonWidget) *ui.ButtonWidget { return b.Outline() }},
-		{"muted", func(b *ui.ButtonWidget) *ui.ButtonWidget { return b.Muted() }},
+		{"secondary", func(b *ui.ButtonWidget) *ui.ButtonWidget { return b.Secondary() }},
 		{"ghost", func(b *ui.ButtonWidget) *ui.ButtonWidget { return b.Ghost() }},
 		{"destructive", func(b *ui.ButtonWidget) *ui.ButtonWidget { return b.Destructive() }},
 	} {

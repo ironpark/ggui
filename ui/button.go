@@ -14,7 +14,7 @@ type buttonVariant int
 const (
 	variantPrimary buttonVariant = iota
 	variantOutline
-	variantMuted
+	variantSecondary
 	variantGhost
 	variantDestructive
 )
@@ -29,7 +29,7 @@ func (v buttonVariant) resolve(t ggui.Theme) buttonStyle {
 	switch v {
 	case variantOutline:
 		return buttonStyle{fill: t.Bg, hover: t.Muted, border: t.Border, label: t.Fg, elevated: true}
-	case variantMuted:
+	case variantSecondary:
 		return buttonStyle{fill: t.Secondary, hover: mix(t.Secondary, t.Fg, t.HoverMix), label: t.SecondaryFg}
 	case variantGhost:
 		return buttonStyle{hover: t.Muted, label: t.Fg}
@@ -126,8 +126,14 @@ func (b *ButtonWidget) Describe() ggui.Node {
 // the normal text color, for actions that are not the main one.
 func (b *ButtonWidget) Outline() *ButtonWidget { b.variant = variantOutline; return b }
 
-// Muted uses a subdued filled surface for a supporting action.
-func (b *ButtonWidget) Muted() *ButtonWidget { b.variant = variantMuted; return b }
+// Secondary fills the button with the theme's Secondary surface, for a
+// supporting action that should still read as a button.
+func (b *ButtonWidget) Secondary() *ButtonWidget { b.variant = variantSecondary; return b }
+
+// Muted is the former name of Secondary.
+//
+// Deprecated: use Secondary.
+func (b *ButtonWidget) Muted() *ButtonWidget { return b.Secondary() }
 
 // Ghost omits the resting background and border for a lightweight action.
 func (b *ButtonWidget) Ghost() *ButtonWidget { b.variant = variantGhost; return b }

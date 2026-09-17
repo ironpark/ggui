@@ -106,7 +106,7 @@ func newGallery() (ggui.Builder, func(), func()) {
 		entries := []ggui.Widget{
 			section("Buttons", ggui.Column(
 				ggui.Wrap(ui.Button("Save changes", func() { toasts.Push(ui.Toast("Saved", "Your changes are stored.")) }), ui.Button("Outline", func() { toasts.Push(ui.Toast("Outline action", "Outline buttons support quieter actions.")) }).Outline(), ui.Button("Disabled", nil).Disabled(true)).Gap(8),
-				ggui.Wrap(ui.Button("Muted", nil).Muted(), ui.Button("Ghost", nil).Ghost(), ui.Button("Delete", func() {
+				ggui.Wrap(ui.Button("Secondary", nil).Secondary(), ui.Button("Ghost", nil).Ghost(), ui.Button("Delete", func() {
 					toasts.Push(ui.Toast("Destructive action", "A red button makes the intent clear.").Destructive())
 				}).Destructive()).Gap(8),
 				ggui.Wrap(ui.Badge("Draft"), ui.Badge("Published").Accent(), ggui.Tooltip(ui.Button("Hover for help", nil).Outline(), "Tooltips add context to an action.")).Gap(8),
