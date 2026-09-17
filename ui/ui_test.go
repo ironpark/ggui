@@ -206,3 +206,21 @@ func TestControlsWorkFromTheKeyboard(t *testing.T) {
 		t.Fatalf("slider = %v after right, right, left; want 55", v.Peek())
 	}
 }
+
+func TestSliderKeepsDraggingWhenItMoves(t *testing.T) {
+	// The value it writes changes a widget above it, so every drag frame
+	// moves the slider itself; capture must follow the widget, not its Rect.
+	v := ggui.State(0.0)
+	tree := ggui.Column(
+		ggui.Reactive(func() ggui.Widget { return ggui.Box().Size(10, 10+v.Get()) }),
+		ui.Slider(v, 0, 100),
+	)
+	p := ggui.NewProbe(tree, ggui.Sz(216, 300))
+	p.Press(ggui.Pt(8+20, 20))
+	first := v.Peek()
+	p.Move(ggui.Pt(8+100, 20))
+	p.Move(ggui.Pt(8+150, 20))
+	if v.Peek() <= first+40 {
+		t.Fatalf("value %v after dragging to the right from %v: the moved slider lost the drag", v.Peek(), first)
+	}
+}

@@ -101,9 +101,11 @@ type frameInput struct {
 	mods  Mods
 }
 
-// inputState routes frameInput to the regions painted last frame. Regions
-// are matched across frames by Rect, so a tree rebuilt between a press and
-// a release still completes the tap.
+// inputState routes frameInput to the regions painted last frame. A pressed
+// or focused region is matched across frames by its handler when the widget
+// survived, or by Rect when a rebuild replaced it, so a widget that moves
+// while dragged keeps the drag and a tap completes across a rebuild.
+
 type inputState struct {
 	regions []hitRegion
 
@@ -150,7 +152,7 @@ func (in *inputState) dispatch(f frameInput) {
 		in.setFocus(in.findKey(f.pos))
 	}
 	if in.pressed != nil && len(f.down) == 0 && len(f.up) == 0 {
-		if cur := in.findPointer(in.pressed.rect); cur != nil {
+		if cur := in.findPointer(in.pressed); cur != nil {
 			cur.pointer.HandlePointer(PointerEvent{Kind: PointerDrag, Pos: f.pos, Button: in.pressedBtn})
 		}
 	}
@@ -163,9 +165,9 @@ func (in *inputState) dispatch(f frameInput) {
 		}
 		// The region that took the press gets the release, wherever the
 		// cursor is, and a tap if it is still inside.
-		if cur := in.findPointer(p.rect); cur != nil {
+		if cur := in.findPointer(p); cur != nil {
 			cur.pointer.HandlePointer(ev)
-			if p.rect.Contains(f.pos) {
+			if cur.rect.Contains(f.pos) {
 				cur.pointer.HandlePointer(PointerEvent{Kind: PointerTap, Pos: f.pos, Button: b})
 			}
 		}
@@ -181,7 +183,7 @@ func (in *inputState) dispatch(f frameInput) {
 	}
 
 	if in.focused != nil {
-		cur := in.findKeyRect(in.focused.rect)
+		cur := in.findKeyRegion(in.focused)
 		if cur == nil {
 			in.setFocus(nil)
 			return
@@ -231,14 +233,22 @@ func (in *inputState) findKey(p Point) *hitRegion {
 	return in.topmost(func(r *hitRegion) bool { return r.key != nil && r.rect.Contains(p) })
 }
 
-// findPointer returns the topmost pointer region painted exactly at rect.
-func (in *inputState) findPointer(rect Rect) *hitRegion {
-	return in.topmost(func(r *hitRegion) bool { return r.pointer != nil && r.rect == rect })
+// findPointer returns the region that continues p this frame: the one
+// with the same handler, wherever it moved to, or else the topmost pointer
+// region painted exactly where p was, which is a rebuilt widget.
+func (in *inputState) findPointer(p *hitRegion) *hitRegion {
+	if r := in.topmost(func(r *hitRegion) bool { return r.pointer != nil && sameAny(r.pointer, p.pointer) }); r != nil {
+		return r
+	}
+	return in.topmost(func(r *hitRegion) bool { return r.pointer != nil && r.rect == p.rect })
 }
 
-// findKeyRect returns the topmost key region painted exactly at rect.
-func (in *inputState) findKeyRect(rect Rect) *hitRegion {
-	return in.topmost(func(r *hitRegion) bool { return r.key != nil && r.rect == rect })
+// findKeyRegion is findPointer for a key region.
+func (in *inputState) findKeyRegion(p *hitRegion) *hitRegion {
+	if r := in.topmost(func(r *hitRegion) bool { return r.key != nil && sameAny(r.key, p.key) }); r != nil {
+		return r
+	}
+	return in.topmost(func(r *hitRegion) bool { return r.key != nil && r.rect == p.rect })
 }
 
 func (in *inputState) setFocus(r *hitRegion) { in.focus(r, false) }
