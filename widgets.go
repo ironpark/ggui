@@ -208,7 +208,7 @@ func (s *StyledWidget) Layout(c Constraints, env Env) Size {
 }
 
 // Paint implements Widget.
-func (s *StyledWidget) Paint(dst *Canvas, r Rect) { s.child.Paint(dst, r) }
+func (s *StyledWidget) Paint(dst *Canvas, r Rect) { dst.Paint(s.child, r) }
 
 // EnvWidget hands its child a modified Env. Build one with Provide.
 type EnvWidget struct {
@@ -227,7 +227,7 @@ func Provide[T any](k Key[T], v T, child Widget) *EnvWidget {
 func (e *EnvWidget) Layout(c Constraints, env Env) Size { return e.child.Layout(c, e.with(env)) }
 
 // Paint implements Widget.
-func (e *EnvWidget) Paint(dst *Canvas, r Rect) { e.child.Paint(dst, r) }
+func (e *EnvWidget) Paint(dst *Canvas, r Rect) { dst.Paint(e.child, r) }
 
 // BoxWidget paints a rectangle and lays an optional child inside its padding.
 // Build one with Box.
@@ -319,7 +319,7 @@ func (b *BoxWidget) Paint(dst *Canvas, r Rect) {
 		dst.StrokeRoundRect(r, b.radius, b.borderWidth, b.borderColor)
 	}
 	if b.child != nil {
-		b.child.Paint(dst, Rct(r.Origin.Add(Pt(b.padding.Left, b.padding.Top)), b.childSize))
+		dst.Paint(b.child, Rct(r.Origin.Add(Pt(b.padding.Left, b.padding.Top)), b.childSize))
 	}
 }
 
@@ -480,7 +480,7 @@ func (f *flow) crossFraction() float64 {
 
 func (f *flow) paint(dst *Canvas, r Rect) {
 	for i, child := range f.children {
-		child.Paint(dst, Rct(r.Origin.Add(f.offsets[i]), f.sizes[i]))
+		dst.Paint(child, Rct(r.Origin.Add(f.offsets[i]), f.sizes[i]))
 	}
 }
 
@@ -566,7 +566,7 @@ func Spacer() *FlexWidget { return Expanded(Box()) }
 func (f *FlexWidget) Layout(c Constraints, env Env) Size { return f.child.Layout(c, env) }
 
 // Paint implements Widget.
-func (f *FlexWidget) Paint(dst *Canvas, r Rect) { f.child.Paint(dst, r) }
+func (f *FlexWidget) Paint(dst *Canvas, r Rect) { dst.Paint(f.child, r) }
 
 // StackWidget layers its children on top of each other, first at the bottom.
 // Build one with Stack.
@@ -607,7 +607,7 @@ func (st *StackWidget) Layout(c Constraints, env Env) Size {
 // Paint implements Widget.
 func (st *StackWidget) Paint(dst *Canvas, r Rect) {
 	for i, child := range st.children {
-		child.Paint(dst, Rct(r.Origin, st.sizes[i]))
+		dst.Paint(child, Rct(r.Origin, st.sizes[i]))
 	}
 }
 
@@ -651,7 +651,7 @@ func (a *AlignWidget) Layout(c Constraints, env Env) Size {
 
 // Paint implements Widget.
 func (a *AlignWidget) Paint(dst *Canvas, r Rect) {
-	a.child.Paint(dst, Rct(
+	dst.Paint(a.child, Rct(
 		r.Origin.Add(Pt((r.Size.W-a.childSize.W)*a.x, (r.Size.H-a.childSize.H)*a.y)),
 		a.childSize,
 	))
@@ -744,7 +744,7 @@ func (s *ScrollWidget) Paint(dst *Canvas, r Rect) {
 	} else {
 		origin.Y -= s.position()
 	}
-	s.child.Paint(dst.Clip(r), Rct(origin, s.childSize))
+	dst.Clip(r).Paint(s.child, Rct(origin, s.childSize))
 	s.paintBar(dst, r)
 }
 
@@ -775,4 +775,150 @@ func (s *ScrollWidget) HandlePointer(ev PointerEvent) bool {
 	}
 	s.scrollTo(s.position() - delta*s.speed)
 	return true
+}
+
+// WrapWidget lines its children up like a Row and starts a new line when
+// the next child would not fit. Build one with Wrap.
+type WrapWidget struct {
+	children []Widget
+	gap      float64 // between children on a line
+	runGap   float64 // between lines
+	align    CrossAlign
+
+	sizes   []Size
+	offsets []Point
+}
+
+// Wrap flows children left to right, wrapping onto new lines at the width
+// it is given, the way words fill a paragraph; tags and toolbars want it.
+func Wrap(children ...Widget) *WrapWidget { return &WrapWidget{children: children} }
+
+// Gap sets the space between children on a line and between lines.
+func (w *WrapWidget) Gap(v float64) *WrapWidget { w.gap, w.runGap = v, v; return w }
+
+// RunGap sets the space between lines alone.
+func (w *WrapWidget) RunGap(v float64) *WrapWidget { w.runGap = v; return w }
+
+// Align places children vertically within their line.
+func (w *WrapWidget) Align(a CrossAlign) *WrapWidget { w.align = a; return w }
+
+// Layout implements Widget.
+func (w *WrapWidget) Layout(c Constraints, env Env) Size {
+	n := len(w.children)
+	w.sizes = resize(w.sizes, n)
+	w.offsets = resize(w.offsets, n)
+	for i, child := range w.children {
+		w.sizes[i] = child.Layout(Loose(Sz(c.MaxW, c.MaxH)), env)
+	}
+	var x, y, lineH, width float64
+	start := 0
+	place := func(end int) {
+		for i := start; i < end; i++ {
+			w.offsets[i].Y = y + (lineH-w.sizes[i].H)*w.crossFraction()
+		}
+	}
+	for i, s := range w.sizes {
+		if i > start && x+s.W > c.MaxW {
+			place(i)
+			width = max(width, x-w.gap)
+			y += lineH + w.runGap
+			x, lineH, start = 0, 0, i
+		}
+		w.offsets[i].X = x
+		x += s.W + w.gap
+		lineH = max(lineH, s.H)
+	}
+	place(n)
+	if n > 0 {
+		width = max(width, x-w.gap)
+		y += lineH
+	}
+	return c.Constrain(Sz(width, y))
+}
+
+func (w *WrapWidget) crossFraction() float64 {
+	switch w.align {
+	case AlignCenter:
+		return 0.5
+	case AlignEnd:
+		return 1
+	}
+	return 0
+}
+
+// Paint implements Widget.
+func (w *WrapWidget) Paint(dst *Canvas, r Rect) {
+	for i, child := range w.children {
+		dst.Paint(child, Rct(r.Origin.Add(w.offsets[i]), w.sizes[i]))
+	}
+}
+
+// GridWidget lays its children out in equal-width columns. Build one with
+// Grid.
+type GridWidget struct {
+	cols     int
+	children []Widget
+	gap      float64
+	rowGap   float64
+
+	sizes   []Size
+	offsets []Point
+	cellW   float64
+}
+
+// Grid places children in rows of cols cells, left to right then top to
+// bottom. Each column takes an equal share of the width; each row is as
+// tall as its tallest cell, and children are given the cell width tight, so
+// text and boxes align down the columns.
+func Grid(cols int, children ...Widget) *GridWidget {
+	return &GridWidget{cols: max(cols, 1), children: children}
+}
+
+// Gap sets the space between columns and between rows.
+func (g *GridWidget) Gap(v float64) *GridWidget { g.gap, g.rowGap = v, v; return g }
+
+// RowGap sets the space between rows alone.
+func (g *GridWidget) RowGap(v float64) *GridWidget { g.rowGap = v; return g }
+
+// Layout implements Widget.
+func (g *GridWidget) Layout(c Constraints, env Env) Size {
+	n := len(g.children)
+	g.sizes = resize(g.sizes, n)
+	g.offsets = resize(g.offsets, n)
+	cols := g.cols
+	if math.IsInf(c.MaxW, 1) {
+		// No width to share: every column is as wide as the widest child.
+		g.cellW = 0
+		for i, child := range g.children {
+			g.sizes[i] = child.Layout(Loose(Sz(Unbounded, Unbounded)), env)
+			g.cellW = max(g.cellW, g.sizes[i].W)
+		}
+	} else {
+		g.cellW = max((c.MaxW-g.gap*float64(cols-1))/float64(cols), 0)
+	}
+	cell := Constraints{MinW: g.cellW, MaxW: g.cellW, MaxH: Unbounded}
+	var y float64
+	for row := 0; row*cols < n; row++ {
+		var rowH float64
+		for col := 0; col < cols && row*cols+col < n; col++ {
+			i := row*cols + col
+			g.sizes[i] = g.children[i].Layout(cell, env)
+			g.offsets[i] = Pt(float64(col)*(g.cellW+g.gap), y)
+			rowH = max(rowH, g.sizes[i].H)
+		}
+		y += rowH
+		if (row+1)*cols < n {
+			y += g.rowGap
+		}
+	}
+	usedCols := min(cols, n)
+	width := float64(usedCols)*g.cellW + g.gap*float64(max(usedCols-1, 0))
+	return c.Constrain(Sz(width, y))
+}
+
+// Paint implements Widget.
+func (g *GridWidget) Paint(dst *Canvas, r Rect) {
+	for i, child := range g.children {
+		dst.Paint(child, Rct(r.Origin.Add(g.offsets[i]), g.sizes[i]))
+	}
 }

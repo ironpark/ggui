@@ -311,3 +311,47 @@ func TestContentCentersInsideFixedBox(t *testing.T) {
 		t.Fatalf("text at x=%v, row child at x=%v; want 80 and 90", text.Origin.X, row.Origin.X)
 	}
 }
+
+func TestWrapBreaksLinesAtWidth(t *testing.T) {
+	w := Wrap(
+		Box().Size(40, 10), Box().Size(40, 20), Box().Size(40, 10),
+		Box().Size(40, 10),
+	).Gap(5)
+	got := w.Layout(Loose(Sz(100, 200)), Env{})
+	// 40+5+40 = 85 fits, a third would be 130: two per line, two lines of
+	// heights 20 and 10 with a 5 run gap.
+	if got != (Size{W: 85, H: 35}) {
+		t.Fatalf("Layout() = %+v, want {85 35}", got)
+	}
+	if w.offsets[2] != Pt(0, 25) || w.offsets[3] != Pt(45, 25) {
+		t.Fatalf("second line at %v %v, want (0,25) (45,25)", w.offsets[2], w.offsets[3])
+	}
+	w.Align(AlignCenter)
+	w.Layout(Loose(Sz(100, 200)), Env{})
+	if w.offsets[0].Y != 5 {
+		t.Fatalf("centered first child at y=%v in a 20-tall line, want 5", w.offsets[0].Y)
+	}
+	if got := Wrap(Box().Size(40, 10), Box().Size(40, 10)).Layout(Loose(Sz(Unbounded, 10)), Env{}); got.W != 80 {
+		t.Fatalf("unbounded width gave %v, want one line of 80", got)
+	}
+}
+
+func TestGridSharesWidthAndSizesRows(t *testing.T) {
+	var cell Rect
+	g := Grid(3,
+		Box().Size(10, 10), Box().Size(10, 30), Box().Size(10, 10),
+		probe(10, 10, &cell),
+	).Gap(6)
+	got := g.Layout(Loose(Sz(96, 200)), Env{})
+	// (96 - 2*6)/3 = 28 per column; rows 30 and 10 with a 6 gap.
+	if got != (Size{W: 96, H: 46}) {
+		t.Fatalf("Layout() = %+v, want {96 46}", got)
+	}
+	g.Paint(nil, Rct(Pt(0, 0), got))
+	if cell != Rct(Pt(0, 36), Sz(28, 10)) {
+		t.Fatalf("fourth cell at %+v, want (0,36) 28x10 with the width given tight", cell)
+	}
+	if got := Grid(2, Box().Size(30, 10), Box().Size(10, 10)).Layout(Loose(Sz(Unbounded, 10)), Env{}); got.W != 60 {
+		t.Fatalf("unbounded width gave %v, want 2 columns of the widest child", got)
+	}
+}

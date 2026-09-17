@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"fmt"
 	"runtime"
 	"testing"
 
@@ -258,5 +259,88 @@ func TestModsCmdIsPlatformSpecific(t *testing.T) {
 	m := Mods{Meta: true}
 	if m.Cmd() != (runtime.GOOS == "darwin") {
 		t.Fatalf("Meta counts as Cmd = %v on %s", m.Cmd(), runtime.GOOS)
+	}
+}
+
+// keyed is a 50x50 focusable region that records focus events.
+type keyed struct {
+	log *[]string
+	id  string
+}
+
+func (k *keyed) Layout(c Constraints, _ Env) Size { return c.Constrain(Sz(50, 50)) }
+func (k *keyed) Paint(dst *Canvas, r Rect)        { dst.HitKey(r, k) }
+func (k *keyed) HandleKey(ev KeyEvent) {
+	switch ev.Kind {
+	case KeyFocus:
+		*k.log = append(*k.log, k.id+pick(ev.Key == ebiten.KeyTab, "+tab", ""))
+	case KeyBlur:
+		*k.log = append(*k.log, "-"+k.id)
+	case KeyPress:
+		*k.log = append(*k.log, k.id+":"+ev.Key.String())
+	}
+}
+
+func TestTabMovesFocusInPaintOrder(t *testing.T) {
+	var log []string
+	w := Row(&keyed{&log, "a"}, Box().Size(50, 50), &keyed{&log, "b"}, &keyed{&log, "c"})
+	var in inputState
+	paintFrame(&in, w, Sz(200, 50))
+	tab := func(shift bool) { in.dispatch(frameInput{keys: []ebiten.Key{ebiten.KeyTab}, mods: Mods{Shift: shift}}) }
+	tab(false)
+	tab(false)
+	tab(false)
+	tab(false) // wraps
+	tab(true)  // back
+	want := []string{"a+tab", "-a", "b+tab", "-b", "c+tab", "-c", "a+tab", "-a", "c+tab"}
+	if fmt.Sprint(log) != fmt.Sprint(want) {
+		t.Fatalf("focus log = %v\nwant %v", log, want)
+	}
+	log = nil
+	in.dispatch(frameInput{keys: []ebiten.Key{ebiten.KeyTab, ebiten.KeyA}})
+	if fmt.Sprint(log) != fmt.Sprint([]string{"-c", "a+tab", "a:A"}) {
+		t.Fatalf("Tab must move focus and be withheld, other keys delivered: %v", log)
+	}
+	clickAt(&in, Pt(125, 25))
+	if log[len(log)-1] != "b" {
+		t.Fatalf("mouse focus must not carry the tab mark: %v", log)
+	}
+}
+
+func TestTooltipAppearsAfterHover(t *testing.T) {
+	tip := Tooltip(Box().Size(50, 50), "hint").Delay(0)
+	var c Canvas
+	c.Paint(tip, Rct(Pt(0, 0), tip.Layout(Loose(Sz(100, 100)), Env{})))
+	if len(c.overlays) != 0 {
+		t.Fatal("tooltip queued without a pointer")
+	}
+	c.pointer, c.hasPointer = Pt(10, 10), true
+	c.Paint(tip, Rct(Pt(0, 0), Sz(50, 50)))
+	if len(c.overlays) != 1 {
+		t.Fatalf("%d overlays with the pointer inside, want 1", len(c.overlays))
+	}
+	c.paintOverlays()
+	if len(c.overlays) != 0 {
+		t.Fatal("overlays not cleared")
+	}
+	c.pointer = Pt(80, 80)
+	c.Paint(tip, Rct(Pt(0, 0), Sz(50, 50)))
+	if len(c.overlays) != 0 {
+		t.Fatal("tooltip queued with the pointer outside")
+	}
+}
+
+func TestInspectorTracesPaintedWidgets(t *testing.T) {
+	c := Canvas{tracing: true}
+	w := Column(Box().Size(10, 10), Padding(Box().Size(10, 10), 5))
+	c.Paint(w, Rct(Pt(0, 0), w.Layout(Loose(Sz(100, 100)), Env{})))
+	if len(c.trace) != 4 {
+		t.Fatalf("%d traced widgets, want 4", len(c.trace))
+	}
+	if c.trace[0].name != "Column" || c.trace[0].depth != 0 || c.trace[3].depth != 2 {
+		t.Fatalf("trace = %+v", c.trace)
+	}
+	if c.trace[3].rect != Rct(Pt(5, 15), Sz(10, 10)) {
+		t.Fatalf("innermost rect = %+v", c.trace[3].rect)
 	}
 }

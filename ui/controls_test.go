@@ -182,3 +182,27 @@ func TestSliderDragSurvivesRebuild(t *testing.T) {
 		t.Fatalf("value = %v after dragging through rebuilds, want 90", v.Peek())
 	}
 }
+
+func TestControlsWorkFromTheKeyboard(t *testing.T) {
+	taps := 0
+	on := ggui.State(false)
+	v := ggui.State(50.0)
+	tree := ggui.Column(
+		ui.Button("go", func() { taps++ }),
+		ui.Checkbox(on, "c"),
+		ui.Slider(v, 0, 100).Step(5),
+	).Gap(4)
+	p := ggui.NewProbe(tree, ggui.Sz(200, 120))
+	p.Type(ggui.Mods{}, ebiten.KeyTab, ebiten.KeyEnter)
+	if taps != 1 {
+		t.Fatalf("taps = %d after Tab, Enter; want 1", taps)
+	}
+	p.Type(ggui.Mods{}, ebiten.KeyTab, ebiten.KeySpace)
+	if !on.Peek() {
+		t.Fatal("Space did not toggle the focused checkbox")
+	}
+	p.Type(ggui.Mods{}, ebiten.KeyTab, ebiten.KeyArrowRight, ebiten.KeyArrowRight, ebiten.KeyArrowLeft)
+	if v.Peek() != 55 {
+		t.Fatalf("slider = %v after right, right, left; want 55", v.Peek())
+	}
+}

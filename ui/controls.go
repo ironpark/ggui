@@ -66,7 +66,38 @@ type ButtonWidget struct {
 	padded    bool
 
 	hovered, pressed bool
+	focus            focusState
 	theme            ggui.Theme
+}
+
+// focusState is the keyboard focus a control holds, and whether to show it:
+// a ring is drawn only for focus that arrived by keyboard.
+type focusState struct {
+	focused bool
+	ring    bool
+}
+
+func (f *focusState) handle(ev ggui.KeyEvent) {
+	switch ev.Kind {
+	case ggui.KeyFocus:
+		f.focused, f.ring = true, ev.Key == ebiten.KeyTab
+	case ggui.KeyBlur:
+		f.focused, f.ring = false, false
+	}
+}
+
+// activates reports whether ev is the key press that triggers a control.
+func activates(ev ggui.KeyEvent) bool {
+	return ev.Kind == ggui.KeyPress && (ev.Key == ebiten.KeySpace || ev.Key == ebiten.KeyEnter)
+}
+
+// paintRing outlines r in the accent color when focus is visible.
+func (f *focusState) paintRing(dst *ggui.Canvas, r ggui.Rect, radius float64, t ggui.Theme) {
+	if !f.focused || !f.ring {
+		return
+	}
+	ring := ggui.Rct(r.Origin.Add(ggui.Pt(-2, -2)), ggui.Sz(r.Size.W+4, r.Size.H+4))
+	dst.StrokeRoundRect(ring, radius+2, 2, t.Accent)
 }
 
 // Button creates a primary button: Accent background, OnAccent label.
@@ -136,15 +167,25 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	b.box.Fill(fill)
 	if !b.disabled {
 		dst.HitPointer(r, b)
+		dst.HitKey(r, b)
 		dst.HitCursor(r, ebiten.CursorShapePointer)
 	}
-	b.box.Paint(dst, r)
+	dst.Paint(b.box, r)
+	b.focus.paintRing(dst, r, t.Radius, t)
+}
+
+// HandleKey implements KeyHandler: Space or Enter presses the button.
+func (b *ButtonWidget) HandleKey(ev ggui.KeyEvent) {
+	b.focus.handle(ev)
+	if activates(ev) && b.onTap != nil {
+		b.onTap()
+	}
 }
 
 // Adopt implements ggui.Adopter: hover and press carry across a rebuild.
 func (b *ButtonWidget) Adopt(prev any) {
 	if p, ok := prev.(*ButtonWidget); ok {
-		b.hovered, b.pressed = p.hovered, p.pressed
+		b.hovered, b.pressed, b.focus = p.hovered, p.pressed, p.focus
 	}
 }
 
@@ -175,6 +216,7 @@ type toggle struct {
 	label    *ggui.TextWidget
 	disabled bool
 	hovered  bool
+	focus    focusState
 	onTap    func()
 
 	labelSize ggui.Size
@@ -194,26 +236,41 @@ func (g *toggle) layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	return c.Constrain(size)
 }
 
+// control is what a toggle's concrete widget implements.
+type control interface {
+	ggui.PointerHandler
+	ggui.KeyHandler
+}
+
 // paint registers the region and paints the label, and returns the Rect the
 // glyph should be drawn in.
-func (g *toggle) paint(dst *ggui.Canvas, r ggui.Rect, handler ggui.PointerHandler) ggui.Rect {
+func (g *toggle) paint(dst *ggui.Canvas, r ggui.Rect, handler control) ggui.Rect {
 	if !g.disabled {
 		dst.HitPointer(r, handler)
+		dst.HitKey(r, handler)
 		dst.HitCursor(r, ebiten.CursorShapePointer)
 	}
 	if g.label != nil {
 		at := ggui.Pt(r.Origin.X+g.glyph.W+controlGap, r.Origin.Y+(r.Size.H-g.labelSize.H)/2)
-		g.label.Paint(dst, ggui.Rct(at, g.labelSize))
+		dst.Paint(g.label, ggui.Rct(at, g.labelSize))
 	}
 	return ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+(r.Size.H-g.glyph.H)/2), g.glyph)
 }
 
 func (g *toggle) state() *toggle { return g }
 
-// Adopt implements ggui.Adopter: hover carries across a rebuild.
+// Adopt implements ggui.Adopter: hover and focus carry across a rebuild.
 func (g *toggle) Adopt(prev any) {
 	if p, ok := prev.(interface{ state() *toggle }); ok {
-		g.hovered = p.state().hovered
+		g.hovered, g.focus = p.state().hovered, p.state().focus
+	}
+}
+
+// HandleKey implements KeyHandler: Space or Enter toggles.
+func (g *toggle) HandleKey(ev ggui.KeyEvent) {
+	g.focus.handle(ev)
+	if activates(ev) && g.onTap != nil {
+		g.onTap()
 	}
 }
 
@@ -292,6 +349,7 @@ func (c *CheckboxWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.StrokeLine(at(0.24, 0.52), at(0.43, 0.72), 2, col)
 		dst.StrokeLine(at(0.41, 0.72), at(0.78, 0.30), 2, col)
 	}
+	c.focus.paintRing(dst, box, radius, t)
 }
 
 // HandlePointer implements PointerHandler.
@@ -345,6 +403,7 @@ func (r *RadioWidget[T]) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 		dst.FillCircle(center, radius, pick(r.hovered, t.Accent, t.Border))
 		dst.FillCircle(center, radius-1, t.Field)
 	}
+	r.focus.paintRing(dst, box, radius, t)
 }
 
 // HandlePointer implements PointerHandler.
@@ -390,6 +449,7 @@ func (s *SwitchWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	radius := box.Size.H/2 - 2
 	x := box.Origin.X + 2 + radius + k*(box.Size.W-4-2*radius)
 	dst.FillCircle(ggui.Pt(x, box.Origin.Y+box.Size.H/2), radius, pick(s.disabled, t.Surface, t.Field))
+	s.focus.paintRing(dst, box, box.Size.H/2, t)
 }
 
 // Adopt implements ggui.Adopter: the knob keeps sliding across a rebuild,
@@ -413,6 +473,7 @@ type SliderWidget struct {
 	disabled bool
 
 	hovered, pressed bool
+	focus            focusState
 	theme            ggui.Theme
 	rect             ggui.Rect
 }
@@ -463,6 +524,7 @@ func (s *SliderWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	s.rect = r
 	if !s.disabled {
 		dst.HitPointer(r, s)
+		dst.HitKey(r, s)
 		dst.HitCursor(r, ebiten.CursorShapePointer)
 	}
 	cy := r.Origin.Y + r.Size.H/2
@@ -477,12 +539,37 @@ func (s *SliderWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	dst.FillCircle(ggui.Pt(kx, cy), radius, accent)
 	dst.FillCircle(ggui.Pt(kx, cy), radius-3, t.Field)
+	if s.focus.focused && s.focus.ring {
+		dst.StrokeRoundRect(ggui.Rct(ggui.Pt(kx-radius-2, cy-radius-2), ggui.Sz(2*radius+4, 2*radius+4)), radius+2, 2, t.Accent)
+	}
+}
+
+// HandleKey implements KeyHandler: the arrow keys nudge the value by one
+// step, or a hundredth of the range without one.
+func (s *SliderWidget) HandleKey(ev ggui.KeyEvent) {
+	s.focus.handle(ev)
+	if ev.Kind != ggui.KeyPress {
+		return
+	}
+	step := s.step
+	if step <= 0 {
+		step = (s.max - s.min) / 100
+	}
+	switch ev.Key {
+	case ebiten.KeyArrowLeft, ebiten.KeyArrowDown:
+		step = -step
+	case ebiten.KeyArrowRight, ebiten.KeyArrowUp:
+	default:
+		return
+	}
+	lo, hi := min(s.min, s.max), max(s.min, s.max)
+	s.value.Set(clamp(s.value.Peek()+step, lo, hi))
 }
 
 // Adopt implements ggui.Adopter: a drag in progress carries across a rebuild.
 func (s *SliderWidget) Adopt(prev any) {
 	if p, ok := prev.(*SliderWidget); ok {
-		s.hovered, s.pressed = p.hovered, p.pressed
+		s.hovered, s.pressed, s.focus = p.hovered, p.pressed, p.focus
 	}
 }
 
@@ -561,7 +648,7 @@ func (f *TextFieldWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.HitKey(r, f.input)
 	dst.HitCursor(r, ebiten.CursorShapeText)
 	f.box.Border(1, pick(f.input.Focused(), f.theme.Accent, f.theme.Border))
-	f.box.Paint(dst, r)
+	dst.Paint(f.box, r)
 }
 
 // DividerWidget is a one-pixel line in the theme's Border color. Build one

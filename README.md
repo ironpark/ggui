@@ -36,7 +36,8 @@ app.Run()
 
 Run it: `make run` (or `go run ./examples/counter`). `make run-todo` runs a
 fuller app: a text field with IME input, a keyed list, controls bound to
-signals, a tweened progress bar and a theme switch.
+signals, a tweened progress bar and a theme switch. `make run-gallery` shows
+every layout widget and control on one page.
 
 ## Concepts
 
@@ -143,8 +144,9 @@ ggui.Center(
 ```
 
 Current set: `Text`, `Box`, `Padding`, `Column`, `Row`, `Flex`/`Expanded`/`Spacer`,
-`Stack`, `Align`, `Center`, `Scroll`, `TextInput`, `Pointer`/`Tap`, `Focus`,
-`For` and `List`; the themed controls live in the `ui` package (see Controls).
+`Wrap`, `Grid`, `Stack`, `Align`, `Center`, `Scroll`, `TextInput`, `Tooltip`,
+`Pointer`/`Tap`, `Focus`, `For` and `List`; the themed controls live in the
+`ui` package (see Controls).
 `List` is a column built from your own slice:
 
 ```go
@@ -171,6 +173,18 @@ children across the axis (`AlignCenter`, `AlignEnd`, `AlignStretch`).
 ```go
 ggui.Row(ggui.Text("Title"), ggui.Spacer(), ggui.Text("3 items")).Align(ggui.AlignCenter)
 ```
+
+**Wrap and Grid** cover the two other common arrangements. `Wrap` flows
+children left to right and starts a new line where the next one would not
+fit, for tags and toolbars; `.Gap(v)` spaces both axes, `.RunGap(v)` the
+lines alone, `.Align(...)` places children within their line. `Grid(cols,
+...)` deals children into equal-width columns, each given its cell width
+tight so columns line up, with rows as tall as their tallest cell.
+
+**Tooltip(child, text)** shows text below the child once the cursor has
+rested on it for half a second (`.Delay(d)`). It registers no hit region, so
+the child gets every event, and it paints through `Canvas.Overlay`, above
+everything else.
 
 **Text** wraps at spaces to the width it is given, and between runes when a
 word is wider than the line, so scripts without spaces wrap too. `.Size(px)`,
@@ -313,15 +327,20 @@ the pointer: it gets `OnDrag` every frame until the release, wherever the
 cursor went, which is what a slider or a text selection needs. `Focus(child)`
 takes keyboard focus when clicked and delivers `OnKey`, `OnText` and
 `OnFocus`; a held key repeats, and `KeyEvent.Mods` carries Shift, Ctrl, Alt
-and Meta (`Mods.Cmd()` is ⌘ on macOS and Ctrl elsewhere). Global shortcuts
-still go in `App.OnFrame`.
+and Meta (`Mods.Cmd()` is ⌘ on macOS and Ctrl elsewhere). Tab and Shift+Tab
+move focus through the key regions in paint order; focus that arrived that
+way is reported with `Key` set to `KeyTab`, which is when the controls draw
+a focus ring. Buttons press on Space or Enter, toggles flip, sliders step
+with the arrows. Global shortcuts still go in `App.OnFrame`.
 
 To make your own widget interactive, implement `PointerHandler` or
 `KeyHandler` and call `dst.HitPointer(r, w)`, `dst.HitKey(r, w)` or
 `dst.HitCursor(r, shape)` from `Paint`; calls for the same `Rect` merge into
 one region. A `KeyHandler` that also implements `TickHandler` runs once per
 frame while focused, which is how `TextInput` drives the IME. `dst.Clip(r)`
-returns a Canvas that draws and registers regions only inside `r`.
+returns a Canvas that draws and registers regions only inside `r`,
+`dst.Pointer()` is where the cursor is, and `dst.Overlay(fn)` paints above
+the tree once it is done.
 
 A rebuild replaces widgets, and with them the state they hold. A handler that
 implements `Adopter` is handed the handler that held the same `Rect` in the
@@ -353,8 +372,9 @@ that draws with Ebitengine directly should do the same.
 **Custom widgets** — implement `Layout` and `Paint`. `Layout` receives the
 `Env` to pass on to children unchanged; `Paint` receives the `Rect` to draw
 in, so a leaf widget stores nothing between the two calls and a container
-remembers only where its children go. `FromFuncs` wraps two closures
-when a named type is overkill:
+remembers only where its children go. A container paints its children with
+`dst.Paint(child, r)` rather than `child.Paint(dst, r)`, so the inspector
+sees them. `FromFuncs` wraps two closures when a named type is overkill:
 
 ```go
 dot := ggui.FromFuncs(
@@ -364,6 +384,14 @@ dot := ggui.FromFuncs(
 	},
 )
 ```
+
+## Inspector
+
+`Config{Inspector: ebiten.KeyF1}` binds a key that toggles an overlay
+outlining every widget painted through `Canvas.Paint`, colored by depth, and
+naming the one under the cursor with its size and position;
+`App.Inspector(on)` does the same from code. It is the quickest way to see
+why something sits where it does.
 
 ## Layout
 
@@ -375,6 +403,8 @@ dot := ggui.FromFuncs(
 ├── editor.go     TextInput: the text editor and its IME driver
 ├── anim.go       Tween, Spring, Motion, easings, the per-frame animator
 ├── probe.go      Probe: headless frame driver for tests
+├── tooltip.go    Tooltip
+├── inspector.go  The widget inspector overlay
 ├── style.go      TextStyle, Env, Key, Theme
 ├── for.go        For: keyed, reactive list
 ├── canvas.go     Canvas: paint target plus the frame's hit regions
@@ -383,7 +413,7 @@ dot := ggui.FromFuncs(
 ├── font.go       Font loading, default font, text wrapping
 ├── geometry.go   Point, Size, Rect, Constraints
 ├── ui/           Button, Checkbox, Radio, Switch, Slider, TextField, Divider
-└── examples/     Runnable apps: counter, todo
+└── examples/     Runnable apps: counter, todo, gallery
 ```
 
 ## Development
@@ -392,4 +422,5 @@ dot := ggui.FromFuncs(
 make        # fmt + vet + test
 make run    # the counter example
 make run-todo
+make run-gallery
 ```

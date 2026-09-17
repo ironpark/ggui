@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 )
@@ -127,7 +128,7 @@ func main() {
 		).Gap(8).Align(ggui.AlignCenter)
 	}
 
-	app := ggui.New(ggui.Config{Title: "ggui · todo", Width: 520, Height: 600, Resizable: true}, func() ggui.Widget {
+	app := ggui.New(ggui.Config{Title: "ggui · todo", Width: 520, Height: 600, Resizable: true, Inspector: ebiten.KeyF1}, func() ggui.Widget {
 		t := ggui.UseTheme()
 		return ggui.Center(ggui.Box(ggui.Column(
 			ggui.Row(
@@ -159,7 +160,7 @@ func main() {
 				ui.Radio(show, all, "All"),
 				ui.Radio(show, active, "Active"),
 				ui.Radio(show, done, "Done"),
-				ui.Button("Clear done", clearDone).Secondary(),
+				ggui.Tooltip(ui.Button("Clear done", clearDone).Secondary(), "Removes every finished item"),
 			).Gap(t.Space).Align(ggui.AlignCenter),
 		).Gap(t.Space*1.5)).Pad(t.Space*3).Fill(t.Surface).Radius(t.Radius*2).Size(480, 540))
 	})

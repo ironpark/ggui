@@ -1,6 +1,6 @@
 GO ?= go
 
-.PHONY: all build test vet fmt tidy run run-todo clean
+.PHONY: all build test vet fmt tidy run run-todo run-gallery clean
 
 all: fmt vet test
 
@@ -24,6 +24,9 @@ run:
 
 run-todo:
 	$(GO) run ./examples/todo
+
+run-gallery:
+	$(GO) run ./examples/gallery
 
 clean:
 	$(GO) clean

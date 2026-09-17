@@ -4,6 +4,8 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"reflect"
+	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/vector"
@@ -23,6 +25,100 @@ type Canvas struct {
 	parent  *Canvas     // set on a Clip; hit regions go to the root
 	clip    Rect
 	clipped bool
+
+	// Root-only frame state.
+	pointer    Point
+	hasPointer bool
+	overlays   []func(*Canvas)
+	trace      []traceEntry // every Paint call, when the inspector is on
+	tracing    bool
+	depth      int
+}
+
+// traceEntry is one widget's Rect as painted, for the inspector.
+type traceEntry struct {
+	rect  Rect
+	depth int
+	name  string
+}
+
+// root returns the Canvas a Clip chain started from.
+func (c *Canvas) root() *Canvas {
+	for c.parent != nil {
+		c = c.parent
+	}
+	return c
+}
+
+// Paint paints w into r. Containers paint their children through it rather
+// than calling w.Paint directly, so the inspector can show every widget's
+// Rect. A nil Canvas paints w with a nil Canvas.
+func (c *Canvas) Paint(w Widget, r Rect) {
+	if c == nil {
+		w.Paint(nil, r)
+		return
+	}
+	root := c.root()
+	if root.tracing {
+		root.trace = append(root.trace, traceEntry{rect: r, depth: root.depth, name: widgetName(w)})
+		root.depth++
+		defer func() { root.depth-- }()
+	}
+	w.Paint(c, r)
+}
+
+// widgetName is a widget's type for the inspector: Box for *ggui.BoxWidget.
+func widgetName(w Widget) string {
+	t := reflect.TypeOf(w)
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	name := t.Name()
+	if i := strings.Index(name, "["); i >= 0 {
+		name = name[:i]
+	}
+	return strings.TrimSuffix(name, "Widget")
+}
+
+// Pointer returns where the mouse cursor was when this frame began, in
+// logical pixels, and whether it is known. Widgets that react to hovering
+// without a hit region, such as Tooltip, read it in Paint.
+func (c *Canvas) Pointer() (Point, bool) {
+	if c == nil {
+		return Point{}, false
+	}
+	root := c.root()
+	return root.pointer, root.hasPointer
+}
+
+// Overlay schedules fn to paint after the whole tree has, on the root
+// Canvas, unclipped and above everything: tooltips, popups and menus go
+// there. Hit regions fn registers sit on top of the tree's.
+func (c *Canvas) Overlay(fn func(dst *Canvas)) {
+	if c == nil {
+		return
+	}
+	root := c.root()
+	root.overlays = append(root.overlays, fn)
+}
+
+// Size returns the logical size of the Image, or zero for a Canvas without
+// one.
+func (c *Canvas) Size() Size {
+	if c == nil || c.Image == nil {
+		return Size{}
+	}
+	b := c.root().Image.Bounds()
+	return Sz(c.dp(float64(b.Dx())), c.dp(float64(b.Dy())))
+}
+
+// paintOverlays runs the overlays queued this frame, including ones they
+// queue themselves, and clears the queue.
+func (c *Canvas) paintOverlays() {
+	for i := 0; i < len(c.overlays); i++ {
+		c.overlays[i](c)
+	}
+	c.overlays = c.overlays[:0]
 }
 
 // Adopter is a handler that can take over from the handler that occupied

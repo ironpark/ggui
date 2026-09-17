@@ -19,6 +19,7 @@ type Config struct {
 	Height     int
 	Resizable  bool
 	Background color.Color // nil follows the theme's Bg
+	Inspector  ebiten.Key  // a key that toggles the widget inspector; zero for none
 }
 
 func (c Config) withDefaults() Config {
@@ -48,6 +49,8 @@ type App struct {
 	spare  []hitRegion
 	input  inputState
 	cursor ebiten.CursorShapeType
+
+	inspect bool
 }
 
 // New creates an App that renders the tree returned by build.
@@ -83,12 +86,22 @@ func (a *App) OnFrame(fn func()) {
 	a.frame = append(a.frame, fn)
 }
 
+// Inspector turns the widget inspector on or off: an overlay that outlines
+// every widget painted through Canvas.Paint and names the one under the
+// cursor with its size and position. Config.Inspector binds it to a key.
+func (a *App) Inspector(on bool) { a.inspect = on }
+
 // Update implements ebiten.Game.
 func (a *App) Update() error {
 	for _, fn := range a.frame {
 		fn()
 	}
-	a.input.dispatch(a.readInput())
+	if a.cfg.Inspector != 0 && inpututil.IsKeyJustPressed(a.cfg.Inspector) {
+		a.inspect = !a.inspect
+	}
+	f := a.readInput()
+	a.canvas.pointer, a.canvas.hasPointer = f.pos, true
+	a.input.dispatch(f)
 	if a.input.cursor != a.cursor {
 		a.cursor = a.input.cursor
 		ebiten.SetCursorShape(a.cursor)
@@ -158,8 +171,13 @@ func (a *App) Draw(screen *ebiten.Image) {
 	a.canvas.prev, a.canvas.hits = a.canvas.hits, a.spare[:0]
 	b := screen.Bounds()
 	logical := Sz(a.canvas.dp(float64(b.Dx())), a.canvas.dp(float64(b.Dy())))
+	a.canvas.tracing, a.canvas.trace = a.inspect, a.canvas.trace[:0]
 	size := a.root.Layout(Tight(logical), rootEnv())
-	a.root.Paint(&a.canvas, Rect{Size: size})
+	a.canvas.Paint(a.root, Rect{Size: size})
+	a.canvas.paintOverlays()
+	if a.inspect {
+		paintInspector(&a.canvas)
+	}
 	a.spare = a.canvas.prev
 	a.input.regions = a.canvas.hits
 }

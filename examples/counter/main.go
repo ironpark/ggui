@@ -43,6 +43,7 @@ func main() {
 		Width:     480,
 		Height:    320,
 		Resizable: true,
+		Inspector: ebiten.KeyF1,
 	}, func() ggui.Widget {
 		t := ggui.UseTheme()
 		return ggui.Center(

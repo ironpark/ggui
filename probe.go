@@ -18,6 +18,9 @@ type Probe struct {
 	size Size
 	in   inputState
 	env  Env
+
+	pointer    Point
+	hasPointer bool
 }
 
 // NewProbe creates a Probe that lays w out at size under the current theme.
@@ -29,14 +32,16 @@ func NewProbe(w Widget, size Size) *Probe {
 // hit regions the next event is routed to. It returns the root's size.
 func (p *Probe) Frame() Size {
 	effects.flush()
-	c := Canvas{prev: p.in.regions}
+	c := Canvas{prev: p.in.regions, pointer: p.pointer, hasPointer: p.hasPointer}
 	s := p.root.Layout(Tight(p.size), p.env)
-	p.root.Paint(&c, Rect{Size: s})
+	c.Paint(p.root, Rect{Size: s})
+	c.paintOverlays()
 	p.in.regions = c.hits
 	return s
 }
 
 func (p *Probe) dispatch(f frameInput) {
+	p.pointer, p.hasPointer = f.pos, true
 	p.Frame()
 	p.in.dispatch(f)
 	effects.flush()

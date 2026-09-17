@@ -56,7 +56,7 @@ func Reactive(build Builder) *ComponentWidget {
 func (c *ComponentWidget) Layout(cs Constraints, env Env) Size { return c.child.Layout(cs, env) }
 
 // Paint implements Widget.
-func (c *ComponentWidget) Paint(dst *Canvas, r Rect) { c.child.Paint(dst, r) }
+func (c *ComponentWidget) Paint(dst *Canvas, r Rect) { dst.Paint(c.child, r) }
 
 // Children builds one Widget per item. It is the bridge from data to tree for
 // any widget that takes children:

@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"runtime"
+	"slices"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
@@ -174,6 +175,11 @@ func (in *inputState) dispatch(f frameInput) {
 		in.send(PointerEvent{Kind: PointerScroll, Pos: f.pos, Scroll: f.wheel})
 	}
 
+	if i := slices.Index(f.keys, ebiten.KeyTab); i >= 0 {
+		f.keys = slices.Delete(slices.Clone(f.keys), i, i+1)
+		in.moveFocus(pick(f.mods.Shift, -1, 1))
+	}
+
 	if in.focused != nil {
 		cur := in.findKeyRect(in.focused.rect)
 		if cur == nil {
@@ -235,7 +241,12 @@ func (in *inputState) findKeyRect(rect Rect) *hitRegion {
 	return in.topmost(func(r *hitRegion) bool { return r.key != nil && r.rect == rect })
 }
 
-func (in *inputState) setFocus(r *hitRegion) {
+func (in *inputState) setFocus(r *hitRegion) { in.focus(r, false) }
+
+// focus moves keyboard focus to r. A move made with the keyboard is
+// reported with Key set to KeyTab, so a control can show a focus ring only
+// then, as browsers do with :focus-visible.
+func (in *inputState) focus(r *hitRegion, keyboard bool) {
 	if sameRegion(r, in.focused) {
 		return
 	}
@@ -243,9 +254,41 @@ func (in *inputState) setFocus(r *hitRegion) {
 		in.focused.key.HandleKey(KeyEvent{Kind: KeyBlur})
 	}
 	if r != nil && r.key != nil {
-		r.key.HandleKey(KeyEvent{Kind: KeyFocus})
+		ev := KeyEvent{Kind: KeyFocus}
+		if keyboard {
+			ev.Key = ebiten.KeyTab
+		}
+		r.key.HandleKey(ev)
 	}
 	in.focused = keep(r)
+}
+
+// moveFocus steps focus through the key regions in paint order, wrapping
+// at the ends: Tab is dir 1, Shift+Tab is -1.
+func (in *inputState) moveFocus(dir int) {
+	var keyed []*hitRegion
+	cur := -1
+	for i := range in.regions {
+		r := &in.regions[i]
+		if r.key == nil {
+			continue
+		}
+		if in.focused != nil && r.rect == in.focused.rect {
+			cur = len(keyed)
+		}
+		keyed = append(keyed, r)
+	}
+	if len(keyed) == 0 {
+		return
+	}
+	next := 0
+	if dir < 0 {
+		next = len(keyed) - 1
+	}
+	if cur >= 0 {
+		next = (cur + dir + len(keyed)) % len(keyed)
+	}
+	in.focus(keyed[next], true)
 }
 
 func sameRegion(a, b *hitRegion) bool {
@@ -370,7 +413,7 @@ func (p *PointerWidget) Paint(dst *Canvas, r Rect) {
 	if p.cursor != 0 {
 		dst.HitCursor(r, p.cursor)
 	}
-	p.child.Paint(dst, r)
+	dst.Paint(p.child, r)
 }
 
 // FocusWidget gives its child keyboard focus when clicked. Build one with
@@ -423,5 +466,5 @@ func (f *FocusWidget) Layout(c Constraints, env Env) Size { return f.child.Layou
 // Paint implements Widget.
 func (f *FocusWidget) Paint(dst *Canvas, r Rect) {
 	dst.HitKey(r, f)
-	f.child.Paint(dst, r)
+	dst.Paint(f.child, r)
 }
