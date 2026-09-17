@@ -182,7 +182,7 @@ func (a *AccordionWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 			dst.HitCursor(rect, ebiten.CursorShapePointer)
 		}
 		if h.Hovered {
-			dst.FillRoundRect(rect, t.Radius, t.Surface)
+			dst.FillRoundRect(rect, t.Radius, subtle(t))
 		}
 		x, cy := rect.Origin.X+t.FieldPad.Left+6, y+a.heights[i]/2
 		if a.isOpen(i) {

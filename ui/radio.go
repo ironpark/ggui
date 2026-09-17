@@ -59,7 +59,8 @@ func (r *RadioWidget[T]) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 		}
 	case on:
 		dst.FillCircle(center, radius, pick(r.Hovered, t.AccentHover, t.Accent))
-		dst.FillCircle(center, radius*0.4, t.OnAccent)
+		dst.FillCircle(center, radius-1, t.Field)
+		dst.FillCircle(center, radius*0.45, t.Accent)
 	default:
 		dst.FillCircle(center, radius, pick(r.Hovered, t.Accent, t.Border))
 		dst.FillCircle(center, radius-1, t.Field)

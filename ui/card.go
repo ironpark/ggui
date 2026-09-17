@@ -25,7 +25,7 @@ func (c *CardWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	if !c.pad {
 		c.box.Padding(t.CardPad)
 	}
-	c.box.Fill(t.Surface).Border(1, t.Border).Radius(t.Radius)
+	c.box.Fill(t.Surface).Border(1, t.Border).Radius(t.Radius + 4)
 	return c.box.Layout(cs, env)
 }
 
@@ -60,7 +60,7 @@ func (b *BadgeWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 // Paint implements Widget.
 func (b *BadgeWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := b.theme
-	dst.FillRoundRect(r, r.Size.H/2, pick(b.accent, t.Accent, t.Border))
+	dst.FillRoundRect(r, r.Size.H/2, pick(b.accent, t.Accent, subtle(t)))
 	dst.Paint(b.text, ggui.Rct(ggui.Pt(r.Origin.X+b.pad.Left, r.Origin.Y+(r.Size.H-b.size.H)/2), b.size))
 }
 

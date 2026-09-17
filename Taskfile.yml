@@ -1,0 +1,116 @@
+version: '3'
+
+vars:
+  GO: '{{default "go" .GO}}'
+
+tasks:
+  default:
+    desc: Format, vet, and test
+    cmds:
+      - task: all
+
+  all:
+    cmds:
+      - task: fmt
+      - task: vet
+      - task: test
+
+  build:
+    desc: Build all packages
+    cmds:
+      - '"{{.GO}}" build ./...'
+
+  test:
+    desc: Run all tests
+    cmds:
+      - '"{{.GO}}" test ./...'
+
+  vet:
+    desc: Run Go static checks
+    cmds:
+      - '"{{.GO}}" vet ./...'
+
+  fmt:
+    desc: Format Go sources
+    cmds:
+      - '"{{.GO}}" fmt ./...'
+
+  tidy:
+    desc: Tidy Go dependencies
+    cmds:
+      - '"{{.GO}}" mod tidy'
+
+  bundle:
+    desc: Build a macOS app bundle (EXAMPLE=counter, todo, or gallery)
+    vars:
+      EXAMPLE: '{{default "counter" .EXAMPLE}}'
+    requires:
+      vars:
+        - name: EXAMPLE
+          enum: [counter, todo, gallery]
+    preconditions:
+      - sh: 'test "$(uname -s)" = Darwin'
+        msg: App bundles require macOS.
+    cmds:
+      - |
+        mkdir -p 'bin/ggui-{{.EXAMPLE}}.app/Contents/MacOS'
+        "{{.GO}}" build -o 'bin/ggui-{{.EXAMPLE}}.app/Contents/MacOS/ggui-{{.EXAMPLE}}' './examples/{{.EXAMPLE}}'
+      - |
+        cat > 'bin/ggui-{{.EXAMPLE}}.app/Contents/Info.plist' <<'PLIST'
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+          <key>CFBundleExecutable</key>
+          <string>ggui-{{.EXAMPLE}}</string>
+          <key>CFBundleIdentifier</key>
+          <string>io.github.ironpark.ggui.{{.EXAMPLE}}</string>
+          <key>CFBundleName</key>
+          <string>ggui-{{.EXAMPLE}}</string>
+          <key>CFBundleDisplayName</key>
+          <string>ggui · {{.EXAMPLE}}</string>
+          <key>CFBundlePackageType</key>
+          <string>APPL</string>
+          <key>CFBundleInfoDictionaryVersion</key>
+          <string>6.0</string>
+          <key>CFBundleShortVersionString</key>
+          <string>0.1.0</string>
+          <key>CFBundleVersion</key>
+          <string>1</string>
+          <key>NSHighResolutionCapable</key>
+          <true/>
+        </dict>
+        </plist>
+        PLIST
+      - "plutil -lint 'bin/ggui-{{.EXAMPLE}}.app/Contents/Info.plist'"
+
+  run:
+    desc: Bundle and launch the counter example
+    cmds:
+      - task: launch
+        vars: {EXAMPLE: counter}
+
+  run-todo:
+    desc: Bundle and launch the todo example
+    cmds:
+      - task: launch
+        vars: {EXAMPLE: todo}
+
+  run-gallery:
+    desc: Bundle and launch the component gallery
+    cmds:
+      - task: launch
+        vars: {EXAMPLE: gallery}
+
+  launch:
+    internal: true
+    cmds:
+      - task: bundle
+        vars: {EXAMPLE: '{{.EXAMPLE}}'}
+      - "open -n 'bin/ggui-{{.EXAMPLE}}.app'"
+
+  clean:
+    desc: Clean Go build artifacts and app bundles
+    cmds:
+      - '"{{.GO}}" clean'
+      - rm -rf bin

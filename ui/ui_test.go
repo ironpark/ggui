@@ -50,7 +50,7 @@ func TestButtonSizesFromThemePadding(t *testing.T) {
 	got := ui.Button("go", nil).Layout(ggui.Loose(ggui.Sz(300, 300)), ggui.Env{})
 	text := ggui.Text("go").Layout(ggui.Loose(ggui.Sz(300, 300)), ggui.Env{})
 	th := ggui.DefaultTheme()
-	if got.W != text.W+th.Space*4 || got.H != text.H+th.Space*1.5 {
+	if got.W != text.W+th.ButtonPad.Left+th.ButtonPad.Right || got.H != text.H+th.ButtonPad.Top+th.ButtonPad.Bottom {
 		t.Fatalf("button %v around text %v, want theme padding", got, text)
 	}
 	padded := ui.Button("go", nil).Pad(1).Layout(ggui.Loose(ggui.Sz(300, 300)), ggui.Env{})
@@ -73,7 +73,7 @@ func TestCheckboxTogglesSignal(t *testing.T) {
 	}
 	size := c.Layout(ggui.Loose(ggui.Sz(200, 30)), ggui.Env{})
 	label := ggui.Text("label").Layout(ggui.Loose(ggui.Sz(200, 30)), ggui.Env{})
-	if size.W != 18+8+label.W {
+	if size.W != 16+8+label.W {
 		t.Fatalf("checkbox width %v, want glyph + gap + label %v", size.W, label.W)
 	}
 }

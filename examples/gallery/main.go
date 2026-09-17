@@ -24,8 +24,12 @@ type Person struct {
 	Age  int
 }
 
-func main() {
+func newGallery() (ggui.Builder, func(), func()) {
 	dark := ggui.State(false)
+	search := ggui.State("")
+	category := ggui.State("All")
+	scroll := ggui.State(0.0)
+	verticalSplit := ggui.State(.45)
 	people := ggui.State([]Person{
 		{1, "Ada", "Engineer", 36}, {2, "Grace", "Admiral", 45}, {3, "Linus", "Kernel", 28},
 		{4, "Ken", "Plan 9", 60}, {5, "Rob", "Gopher", 62}, {6, "Barbara", "Architect", 57},
@@ -76,10 +80,10 @@ func main() {
 		confirm.Set(false)
 	}
 
-	app := ggui.New(ggui.Config{Title: "ggui · gallery", Width: 640, Height: 640, Resizable: true, Inspector: ebiten.KeyF1}, func() ggui.Widget {
+	build := func() ggui.Widget {
 		t := ggui.UseTheme()
 		section := func(title string, body ggui.Widget) ggui.Widget {
-			return ggui.Column(ggui.Title(title).Size(16), body).Space(1)
+			return preview(title, body)
 		}
 		swatch := func(label string, c color.Color) ggui.Widget {
 			return ggui.Column(
@@ -87,12 +91,11 @@ func main() {
 				ggui.Caption(label),
 			).Gap(2).Align(ggui.AlignStretch)
 		}
-		return ggui.Scroll(ggui.Padding(ggui.Column(
-			ggui.Row(
-				ggui.Title("gallery"),
-				ggui.Spacer(),
-				ggui.Tooltip(ui.Switch(dark, "Dark"), "Swaps the theme; every widget re-reads it"),
-			),
+		entries := []ggui.Widget{
+			section("Buttons", ggui.Column(
+				ggui.Wrap(ui.Button("Save changes", func() { toasts.Push(ui.Toast("Saved", "Your changes are stored.")) }), ui.Button("Secondary", func() { toasts.Push(ui.Toast("Secondary action", "Outline buttons support quieter actions.")) }).Secondary(), ui.Button("Disabled", nil).Disabled(true)).Gap(8),
+				ggui.Wrap(ui.Badge("Draft"), ui.Badge("Published").Accent(), ggui.Tooltip(ui.Button("Hover for help", nil).Secondary(), "Tooltips add context to an action.")).Gap(8),
+			).Gap(16)),
 
 			section("Text", ggui.Column(
 				ui.TextField(name).Placeholder("Type here, IME works"),
@@ -116,8 +119,8 @@ func main() {
 			section("Choices", ggui.Column(
 				ui.Checkbox(notify, "Send notifications"),
 				ui.Radios(plan, []string{"free", "pro", "team"}),
-				ggui.Row(
-					ui.Select(fruit, []string{"Apple", "Banana", "Cherry", "Durian"}),
+				ggui.Wrap(
+					ui.Select(fruit, []string{"Apple", "Banana", "Cherry", "Durian"}).Named("Choose fruit"),
 					ui.Menu("Actions",
 						ui.MenuItem("Reset text size", func() { size.Set(16) }),
 						ui.MenuItem("Clear name", func() { name.Set("") }),
@@ -152,7 +155,7 @@ func main() {
 				ui.AccordionItem("disabled", "Unavailable section", ggui.Text("Hidden")).Disabled(true),
 			)),
 
-			section("Search and commands", ggui.Row(
+			section("Search and commands", ggui.Wrap(
 				ui.Combobox(fruit, []string{"Apple", "Banana", "Cherry", "Durian", "Grape", "Mango", "Orange"}).Named("Search fruit"),
 				ui.Button("Commands…", func() { paletteOpen.Set(true) }).Secondary(),
 			).Space(1)),
@@ -163,9 +166,9 @@ func main() {
 			)).Title("Commands"),
 
 			section("Resizable", ggui.Box(ui.Resizable(split,
-				ui.Card(ggui.Text("Navigation pane")),
-				ui.Card(ggui.Text("Drag the divider, or Tab to it and use the arrow keys.")),
-			).MinSizes(100, 140)).Height(140)),
+				ggui.Center(ggui.Text("Sidebar")),
+				ui.Resizable(verticalSplit, ggui.Center(ggui.Text("Header")), ggui.Center(ggui.Text("Content"))).Vertical().WithHandle().MinSizes(48, 48),
+			).WithHandle().MinSizes(100, 140)).Height(200).Border(1, t.Border).Radius(t.Radius)),
 
 			section("Toast", ggui.Wrap(
 				ui.Button("Notify", func() { toasts.Push(ui.Toast("Saved", "Your changes are stored.")) }).Secondary(),
@@ -206,7 +209,7 @@ func main() {
 
 			section("Dialog", ggui.Column(
 				ggui.Row(
-					ui.Button("Reset everything…", func() { confirm.Set(true) }).Secondary(),
+					ui.Button("Reset form…", func() { confirm.Set(true) }).Secondary(),
 					ggui.Textf("reset %d times", cleared).AsCaption(),
 				).Space(1),
 				// Dialog takes no space where it sits; it paints over the
@@ -247,22 +250,23 @@ func main() {
 				swatch("Bg", t.Bg), swatch("Surface", t.Surface), swatch("Field", t.Field), swatch("Border", t.Border),
 				swatch("Accent", t.Accent), swatch("AccentHover", t.AccentHover), swatch("Muted", t.Muted), swatch("Fg", t.Fg),
 			).Space(1))),
+		}
+		return galleryPage(dark, search, category, scroll, func() { paletteOpen.Set(true) }, entries)
 
-			ui.Divider(),
-			ggui.Row(
-				ui.Button("Save", func() {}),
-				ui.Button("Reset", func() { confirm.Set(true) }).Secondary(),
-				ggui.Spacer(),
-				ggui.Caption("F1 toggles the inspector, Tab moves focus"),
-			).Space(1),
-		).Space(2), t.Space*3))
-	})
+	}
 
-	app.Setup(func() {
+	setup := func() {
 		ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme())
 		ggui.OnCleanup(toasts.Close)
-	})
-	app.Shortcut("cmd+k", func() { paletteOpen.Set(true) })
+	}
+	return build, setup, func() { paletteOpen.Set(true) }
+}
+
+func main() {
+	build, setup, commands := newGallery()
+	app := ggui.New(ggui.Config{Title: "ggui · gallery", Width: 1180, Height: 820, Resizable: true, Inspector: ebiten.KeyF1}, build)
+	app.Setup(setup)
+	app.Shortcut("cmd+k", commands)
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}

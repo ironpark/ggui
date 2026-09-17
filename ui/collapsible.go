@@ -68,7 +68,7 @@ func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	header := ggui.Rct(r.Origin, ggui.Sz(r.Size.W, c.headerH))
 	c.Hit(dst, header, c, ebiten.CursorShapePointer)
 	if c.Hovered && !c.Inert {
-		dst.FillRoundRect(header, t.Radius, t.Surface)
+		dst.FillRoundRect(header, t.Radius, subtle(t))
 	}
 	// The chevron turns from pointing right (0) to pointing down (1).
 	v := dst.Ease(c.Anchor(header), chevronSlot, pick(c.open.Peek(), 1.0, 0.0), c.motion)

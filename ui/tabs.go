@@ -117,7 +117,7 @@ func (t *TabsWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 			dst.HitCursor(lr, ebiten.CursorShapePointer)
 		}
 		if i == hover && i != cur {
-			dst.FillRoundRect(lr, th.Radius, th.Surface)
+			dst.FillRoundRect(lr, th.Radius, subtle(th))
 		}
 		dst.Paint(t.labels[i], ggui.Rct(ggui.Pt(x+t.pad.Left, r.Origin.Y+t.pad.Top), s))
 		x += lr.Size.W

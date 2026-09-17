@@ -135,7 +135,7 @@ func TestComboboxSelectionAndEscape(t *testing.T) {
 
 func TestResizableCaptureLimitsAndKeyboard(t *testing.T) {
 	fraction := ggui.State(.5)
-	r := ui.Resizable(fraction, ggui.Box(), ggui.Box()).MinSizes(40, 60)
+	r := ui.Resizable(fraction, ggui.Box(), ggui.Box()).WithHandle().MinSizes(40, 60)
 	p := ggui.NewProbe(r, ggui.Sz(208, 100))
 	defer p.Close()
 	at := find(t, p, ggui.RoleSeparator, "Resize panels").Center()
@@ -175,7 +175,7 @@ func TestResizableCaptureLimitsAndKeyboard(t *testing.T) {
 
 func TestResizableVertical(t *testing.T) {
 	fraction := ggui.State(.5)
-	p := ggui.NewProbe(ui.Resizable(fraction, ggui.Box(), ggui.Box()).Vertical(), ggui.Sz(100, 208))
+	p := ggui.NewProbe(ui.Resizable(fraction, ggui.Box(), ggui.Box()).Vertical().WithHandle(), ggui.Sz(100, 208))
 	defer p.Close()
 	p.Tap("Resize panels")
 	p.Type(ggui.Mods{}, ebiten.KeyArrowDown)

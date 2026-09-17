@@ -296,48 +296,39 @@ func (t Theme) Get[T any](k Key[T]) (T, bool) {
 	return zero, false
 }
 
-// DefaultTheme is a light theme in Go Regular.
+// DefaultTheme is a neutral light theme inspired by shadcn/ui, in Go Regular.
 func DefaultTheme() Theme {
-	fg := color.RGBA{0x1f, 0x23, 0x28, 0xff}
-	muted := color.RGBA{0x6b, 0x72, 0x7c, 0xff}
+	fg := color.RGBA{0x18, 0x18, 0x1b, 0xff}
+	muted := color.RGBA{0x71, 0x71, 0x7a, 0xff}
 	return Theme{
-		Text:        TextStyle{Size: DefaultTextSize, Color: fg},
-		Title:       TextStyle{Size: 24},
-		Caption:     TextStyle{Size: 12, Color: muted},
-		Fg:          fg,
-		Bg:          color.White,
-		Surface:     color.RGBA{0xf2, 0xf3, 0xf5, 0xff},
-		Field:       color.White,
-		Border:      color.RGBA{0xd0, 0xd4, 0xda, 0xff},
-		Accent:      color.RGBA{0x2f, 0x6f, 0xeb, 0xff},
-		AccentHover: color.RGBA{0x24, 0x5c, 0xc7, 0xff},
-		OnAccent:    color.White,
-		Selection:   color.RGBA{0x2f, 0x6f, 0xeb, 0x50},
-		Muted:       muted,
-		Radius:      6,
-		Space:       8,
-		ButtonPad:   Insets(6, 16),
-		FieldPad:    Insets(6, 8),
-		ItemPad:     Insets(4, 8),
-		CardPad:     Insets(16),
-		PanelPad:    Insets(4),
+		Text:    TextStyle{Size: 14, Color: fg, LineHeight: 1.4},
+		Title:   TextStyle{Size: 24},
+		Caption: TextStyle{Size: 12, Color: muted},
+		Fg:      fg, Bg: color.White, Surface: color.White, Field: color.White,
+		Border: color.RGBA{0xe4, 0xe4, 0xe7, 0xff},
+		Accent: fg, AccentHover: color.RGBA{0x3f, 0x3f, 0x46, 0xff},
+		OnAccent:  color.RGBA{0xfa, 0xfa, 0xfa, 0xff},
+		Selection: color.RGBA{0xd4, 0xd4, 0xd8, 0xff},
+		Muted:     muted, Radius: 8, Space: 8,
+		ButtonPad: Insets(8, 16), FieldPad: Insets(8, 12),
+		ItemPad: Insets(6, 8), CardPad: Insets(24), PanelPad: Insets(4),
 	}
 }
 
 // DarkTheme is a dark counterpart of DefaultTheme.
 func DarkTheme() Theme {
 	t := DefaultTheme()
-	t.Fg = color.RGBA{0xe6, 0xe8, 0xec, 0xff}
+	t.Fg = color.RGBA{0xfa, 0xfa, 0xfa, 0xff}
 	t.Text.Color = t.Fg
-	t.Bg = color.RGBA{0x14, 0x16, 0x1a, 0xff}
-	t.Surface = color.RGBA{0x23, 0x27, 0x2f, 0xff}
-	t.Field = color.RGBA{0x1a, 0x1d, 0x23, 0xff}
-	t.Border = color.RGBA{0x3a, 0x40, 0x4c, 0xff}
-	t.Accent = color.RGBA{0x4f, 0x8c, 0xff, 0xff}
-	t.AccentHover = color.RGBA{0x6c, 0x9f, 0xff, 0xff}
-	t.OnAccent = color.RGBA{0x0e, 0x12, 0x1a, 0xff}
-	t.Selection = color.RGBA{0x4f, 0x8c, 0xff, 0x60}
-	t.Muted = color.RGBA{0x8a, 0x90, 0x9c, 0xff}
+	t.Bg = color.RGBA{0x09, 0x09, 0x0b, 0xff}
+	t.Surface = color.RGBA{0x18, 0x18, 0x1b, 0xff}
+	t.Field = color.RGBA{0x20, 0x20, 0x23, 0xff}
+	t.Border = color.RGBA{0x32, 0x32, 0x36, 0xff}
+	t.Accent = color.RGBA{0xe4, 0xe4, 0xe7, 0xff}
+	t.AccentHover = color.RGBA{0xd4, 0xd4, 0xd8, 0xff}
+	t.OnAccent = color.RGBA{0x18, 0x18, 0x1b, 0xff}
+	t.Selection = color.RGBA{0x3f, 0x3f, 0x46, 0xff}
+	t.Muted = color.RGBA{0xa1, 0xa1, 0xaa, 0xff}
 	t.Caption.Color = t.Muted
 	return t
 }

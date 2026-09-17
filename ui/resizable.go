@@ -15,6 +15,7 @@ type ResizableWidget struct {
 	laidFraction                        float64
 	fraction                            ggui.Binding[float64]
 	first, second                       ggui.Widget
+	withHandle                          bool
 	vertical                            bool
 	minFirst, minSecond                 float64
 	onChange                            func(float64)
@@ -39,6 +40,10 @@ func Resizable(fraction ggui.Binding[float64], first, second ggui.Widget) *Resiz
 
 // Vertical stacks the panes above and below each other.
 func (r *ResizableWidget) Vertical() *ResizableWidget { r.vertical = true; return r }
+
+// WithHandle displays a small grip at the center of the divider.
+// The divider keeps its full drag target even without a visible grip.
+func (r *ResizableWidget) WithHandle() *ResizableWidget { r.withHandle = true; return r }
 
 // MinSizes sets the minimum extent of each pane in logical pixels. If both
 // cannot fit, available space is distributed in proportion to these minima.
@@ -128,9 +133,34 @@ func (r *ResizableWidget) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 	handle := r.handle
 	handle.Origin = handle.Origin.Add(rect.Origin)
 	r.Hit(dst, handle, r, pick(r.vertical, ebiten.CursorShapeNSResize, ebiten.CursorShapeEWResize))
-	col := pick(r.Hovered || r.Pressed, r.theme.Accent, r.theme.Border)
-	dst.FillRoundRect(handle, 2, col)
-	r.FocusRing(dst, handle, 2, r.theme.Accent)
+	active := !r.Inert && (r.Hovered || r.Pressed)
+	col := pick(active, r.theme.Muted, r.theme.Border)
+	center := ggui.Pt(handle.Origin.X+handle.Size.W/2, handle.Origin.Y+handle.Size.H/2)
+	line := ggui.Rct(ggui.Pt(center.X-.5, handle.Origin.Y), ggui.Sz(1, handle.Size.H))
+	if r.vertical {
+		line = ggui.Rct(ggui.Pt(handle.Origin.X, center.Y-.5), ggui.Sz(handle.Size.W, 1))
+	}
+	dst.FillRect(line, col)
+	focus := handle
+	if r.withHandle {
+		w, h := 8.0, min(24.0, handle.Size.H)
+		if r.vertical {
+			w, h = min(24.0, handle.Size.W), 8
+		}
+		grip := ggui.Rct(ggui.Pt(center.X-w/2, center.Y-h/2), ggui.Sz(w, h))
+		dst.FillRoundRect(grip, 3, r.theme.Surface)
+		dst.StrokeRoundRect(grip, 3, 1, col)
+		for _, offset := range []float64{-4, 0, 4} {
+			if r.vertical && w >= 16 {
+				dst.FillCircle(ggui.Pt(center.X+offset, center.Y), .8, r.theme.Muted)
+			}
+			if !r.vertical && h >= 16 {
+				dst.FillCircle(ggui.Pt(center.X, center.Y+offset), .8, r.theme.Muted)
+			}
+		}
+		focus = grip
+	}
+	r.FocusRing(dst, focus, 3, r.theme.Accent)
 }
 
 // ConsumesKey implements ggui.KeyConsumer.

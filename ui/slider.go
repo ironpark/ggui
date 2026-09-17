@@ -114,7 +114,7 @@ func (s *SliderWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		radius++
 	}
 	dst.FillCircle(ggui.Pt(kx, cy), radius, accent)
-	dst.FillCircle(ggui.Pt(kx, cy), radius-3, t.Field)
+	dst.FillCircle(ggui.Pt(kx, cy), radius-1.5, t.Surface)
 	if s.Focused && s.FocusVisible {
 		dst.StrokeRoundRect(ggui.Rct(ggui.Pt(kx-radius-2, cy-radius-2), ggui.Sz(2*radius+4, 2*radius+4)), radius+2, 2, t.Accent)
 	}

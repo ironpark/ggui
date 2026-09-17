@@ -2,6 +2,7 @@ package ui
 
 import (
 	"github.com/ironpark/ggui"
+	"image/color"
 )
 
 // SwitchWidget is a sliding on/off toggle. Build one with Switch.
@@ -51,6 +52,6 @@ func (s *SwitchWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.FillRoundRect(box, box.Size.H/2, track)
 	radius := box.Size.H/2 - 2
 	x := box.Origin.X + 2 + radius + k*(box.Size.W-4-2*radius)
-	dst.FillCircle(ggui.Pt(x, box.Origin.Y+box.Size.H/2), radius, pick(s.Inert, t.Surface, t.Field))
+	dst.FillCircle(ggui.Pt(x, box.Origin.Y+box.Size.H/2), radius, pick(s.Inert, t.Muted, pick(on, t.OnAccent, color.Color(color.White))))
 	s.FocusRing(dst, box, box.Size.H/2, t.Accent)
 }

@@ -186,7 +186,7 @@ func (r *tableRow[T, K]) Paint(dst *ggui.Canvas, rc ggui.Rect) {
 		case r.chosen():
 			dst.FillRect(rc, th.Selection)
 		case r.Hovered:
-			dst.FillRect(rc, th.Surface)
+			dst.FillRect(rc, subtle(th))
 		}
 	}
 	dst.Paint(r.box, rc)

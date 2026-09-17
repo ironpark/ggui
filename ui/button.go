@@ -86,9 +86,12 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	b.box.Border(0, nil)
 	switch {
 	case b.Inert:
-		fill = t.Surface
+		fill = pick(b.secondary, subtle(t), mix(t.Accent, t.Surface, .65))
+		if b.secondary {
+			b.box.Border(1, t.Border)
+		}
 	case b.secondary:
-		fill = pick(b.Hovered, t.Border, t.Surface)
+		fill = pick(b.Hovered, subtle(t), t.Surface)
 		b.box.Border(1, t.Border)
 	default:
 		fill = pick(b.Hovered, t.AccentHover, t.Accent)

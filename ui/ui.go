@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	controlSize   = 18 // checkbox and radio glyphs
+	controlSize   = 16 // checkbox and radio glyphs
 	controlGap    = 8  // between a glyph and its label
 	sliderKnob    = 8
 	switchWidth   = 36
@@ -87,4 +87,21 @@ func stepIndex(cur, dir, n int, enabled func(int) bool) int {
 		}
 	}
 	return cur
+}
+
+// subtle is a quiet surface for hover states and secondary content. Deriving it
+// from theme colors keeps custom themes working without extra required tokens.
+func subtle(t ggui.Theme) color.Color { return mix(t.Surface, t.Fg, .05) }
+
+func mix(a, b color.Color, amount float64) color.Color {
+	if a == nil {
+		return b
+	}
+	if b == nil {
+		return a
+	}
+	ar, ag, ab, aa := a.RGBA()
+	br, bg, bb, ba := b.RGBA()
+	blend := func(x, y uint32) uint8 { return uint8((float64(x)*(1-amount) + float64(y)*amount) / 257) }
+	return color.RGBA{blend(ar, br), blend(ag, bg), blend(ab, bb), blend(aa, ba)}
 }

@@ -44,7 +44,7 @@ func (c *CheckboxWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := c.theme
 	box := c.paint(dst, r, c)
 	on := c.checked.Peek()
-	radius := t.Radius * 0.6
+	radius := t.Radius * 0.4
 	switch {
 	case c.Inert:
 		dst.FillRoundRect(box, radius, t.Surface)
