@@ -5,19 +5,59 @@ import (
 	"sync"
 )
 
-// tracker collects the signals read while a reactive computation runs, so that
-// the computation can be re-run when any of them changes. This mirrors Svelte's
-// automatic dependency tracking: nothing is declared, reads are observed.
+// tracker holds the running computation. listener is the effect that reads
+// subscribe to (nil inside Untrack); owner is the effect that newly created
+// effects belong to, so that they are disposed when it re-runs or is
+// disposed. This mirrors Svelte's automatic dependency tracking and Solid's
+// ownership tree: nothing is declared, reads and creations are observed.
 type tracker struct {
-	mu      sync.Mutex
-	current *effect
+	mu       sync.Mutex
+	listener *effect
+	owner    *effect
 }
 
 var deps tracker
 
+// source is anything an effect can subscribe to.
+type source interface {
+	unsubscribe(e *effect)
+}
+
 type effect struct {
-	fn    func()
-	dirty bool
+	fn       func()
+	dirty    bool
+	disposed bool
+
+	owner    *effect
+	children []*effect
+	cleanups []func()
+	sources  []source
+}
+
+// reset undoes everything the last run set up: child effects, cleanups and
+// subscriptions. It runs before each re-run and on dispose.
+func (e *effect) reset() {
+	for _, c := range e.children {
+		c.dispose()
+	}
+	e.children = nil
+	for i := len(e.cleanups) - 1; i >= 0; i-- {
+		e.cleanups[i]()
+	}
+	e.cleanups = nil
+	for _, s := range e.sources {
+		s.unsubscribe(e)
+	}
+	e.sources = nil
+}
+
+func (e *effect) dispose() {
+	if e.disposed {
+		return
+	}
+	e.disposed = true
+	e.reset()
+	effects.remove(e)
 }
 
 // Reader is the read side of a reactive value. *Signal and *Memo both
@@ -67,15 +107,31 @@ func (s *Signal[T]) WithEqual(eq func(a, b T) bool) *Signal[T] {
 // Get returns the current value and subscribes the running Effect, if any.
 func (s *Signal[T]) Get() T {
 	deps.mu.Lock()
-	e := deps.current
+	e := deps.listener
 	deps.mu.Unlock()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if e != nil {
-		s.subs[e] = struct{}{}
+	if e != nil && !e.disposed {
+		if _, ok := s.subs[e]; !ok {
+			s.subs[e] = struct{}{}
+			e.sources = append(e.sources, s)
+		}
 	}
 	return s.val
+}
+
+// Peek returns the current value without subscribing the running Effect.
+func (s *Signal[T]) Peek() T {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.val
+}
+
+func (s *Signal[T]) unsubscribe(e *effect) {
+	s.mu.Lock()
+	delete(s.subs, e)
+	s.mu.Unlock()
 }
 
 // Set stores v and invalidates every subscriber. A write equal to the current
@@ -144,6 +200,9 @@ func Combine[A, B, C any](a Reader[A], b Reader[B], fn func(A, B) C) *Memo[C] {
 // Get returns the memoized value and subscribes the running Effect, if any.
 func (m *Memo[T]) Get() T { return m.sig.Get() }
 
+// Peek returns the memoized value without subscribing the running Effect.
+func (m *Memo[T]) Peek() T { return m.sig.Peek() }
+
 // Dispose stops recomputation. Readers keep seeing the last computed value.
 func (m *Memo[T]) Dispose() { m.dispose() }
 
@@ -159,25 +218,65 @@ func Watch[T any](src Reader[T], fn func(T)) (dispose func()) {
 }
 
 // Effect runs fn immediately and again whenever a Signal it read has changed.
-// It returns a dispose function; re-runs are driven by the frame loop.
+// Subscriptions are collected afresh on every run, so an effect follows only
+// what it read last time. An Effect created while another effect runs belongs
+// to it: it is disposed when the owner re-runs or is disposed, so effects and
+// Derived values created inside a Builder do not pile up across rebuilds.
+// Effect returns a dispose function; re-runs are driven by the frame loop.
 func Effect(fn func()) (dispose func()) {
 	e := &effect{fn: fn}
-	runEffect(e)
+	deps.mu.Lock()
+	e.owner = deps.owner
+	deps.mu.Unlock()
+	if e.owner != nil {
+		e.owner.children = append(e.owner.children, e)
+	}
 	effects.add(e)
-	return func() { effects.remove(e) }
+	runEffect(e)
+	return e.dispose
+}
+
+// OnCleanup registers fn to run before the enclosing Effect re-runs and when
+// it is disposed. Call it from inside an Effect, a Builder or a Component
+// setup, for timers, subscriptions and anything else that must be undone.
+func OnCleanup(fn func()) {
+	deps.mu.Lock()
+	o := deps.owner
+	deps.mu.Unlock()
+	if o == nil {
+		panic("ggui: OnCleanup called outside an Effect")
+	}
+	o.cleanups = append(o.cleanups, fn)
+}
+
+// Untrack runs fn without subscribing the running Effect to the signals fn
+// reads. Effects created inside still belong to the running Effect.
+func Untrack(fn func()) {
+	deps.mu.Lock()
+	prev := deps.listener
+	deps.listener = nil
+	deps.mu.Unlock()
+	defer func() {
+		deps.mu.Lock()
+		deps.listener = prev
+		deps.mu.Unlock()
+	}()
+	fn()
 }
 
 func runEffect(e *effect) {
+	e.reset()
+
 	deps.mu.Lock()
-	prev := deps.current
-	deps.current = e
+	prevListener, prevOwner := deps.listener, deps.owner
+	deps.listener, deps.owner = e, e
 	deps.mu.Unlock()
 
 	e.dirty = false
 	e.fn()
 
 	deps.mu.Lock()
-	deps.current = prev
+	deps.listener, deps.owner = prevListener, prevOwner
 	deps.mu.Unlock()
 }
 
@@ -220,7 +319,7 @@ func (s *effectSet) flush() {
 
 		ran := false
 		for _, e := range list {
-			if e.dirty {
+			if e.dirty && !e.disposed {
 				runEffect(e)
 				ran = true
 			}

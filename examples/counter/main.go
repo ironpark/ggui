@@ -1,6 +1,6 @@
 // Command counter is a minimal ggui app: a struct of signals for state,
-// derived text built with generic methods, and buttons that react to the
-// pointer. Click the buttons or press space to count; up/down changes the
+// derived text built with generic methods, and buttons with hover state of
+// their own. Click the buttons or press space to count; up/down changes the
 // step.
 package main
 
@@ -29,25 +29,30 @@ var (
 	hover  = color.RGBA{0x4c, 0x54, 0x63, 0xff}
 )
 
-// buttonWidget is a component: a plain function from state to Widget. The
-// hovered signal lives outside so it survives rebuilds.
-func buttonWidget(label string, hovered *ggui.Signal[bool], onTap func()) ggui.Widget {
-	bg := button
-	if hovered.Get() {
-		bg = hover
-	}
-	return ggui.Pointer(
-		ggui.Box(ggui.Text(label).Color(fg).Size(18)).Pad(6, 16).Fill(bg),
-	).OnTap(onTap).OnHover(hovered.Set)
+// buttonWidget is a Component: setup runs once and owns the hover state, the
+// Builder it returns re-runs when hovered changes, and nothing else does.
+func buttonWidget(label string, onTap func()) ggui.Widget {
+	return ggui.Component(func() ggui.Builder {
+		hovered := ggui.State(false)
+		return func() ggui.Widget {
+			bg := button
+			if hovered.Get() {
+				bg = hover
+			}
+			return ggui.Pointer(
+				ggui.Box(ggui.Text(label).Color(fg).Size(18)).Pad(6, 16).Fill(bg),
+			).OnTap(onTap).OnHover(hovered.Set)
+		}
+	})
 }
 
 func main() {
 	state := model{Count: ggui.State(0), Step: ggui.State(1)}
-	minusHover, plusHover := ggui.State(false), ggui.State(false)
+	count, step := state.Count, state.Step
 
 	// Map derives text from a cell; it recomputes only when the cell changes.
-	label := state.Count.Map(func(n int) string { return fmt.Sprintf("count: %d", n) })
-	hints := ggui.Combine(state.Count, state.Step, func(n, s int) []string {
+	label := count.Map(func(n int) string { return fmt.Sprintf("count: %d", n) })
+	hints := ggui.Combine(count, step, func(n, s int) []string {
 		return []string{
 			fmt.Sprintf("click a button or press space to add %d", s),
 			fmt.Sprintf("up/down changes the step (now %d)", s),
@@ -55,6 +60,9 @@ func main() {
 		}
 	})
 
+	// The root Builder reads no signals, so it runs once. The parts that
+	// change are Reactive islands; the buttons keep their hover state because
+	// the root never rebuilds them.
 	app := ggui.New(ggui.Config{
 		Title:      "ggui · counter",
 		Width:      480,
@@ -65,14 +73,18 @@ func main() {
 		return ggui.Center(
 			ggui.Box(
 				ggui.Column(
-					ggui.Text(label.Get()).Color(fg).Size(28),
+					ggui.Reactive(func() ggui.Widget {
+						return ggui.Text(label.Get()).Color(fg).Size(28)
+					}),
 					ggui.Row(
-						buttonWidget("-", minusHover, func() { ggui.Add(state.Count, -state.Step.Get()) }),
-						buttonWidget("+", plusHover, func() { ggui.Add(state.Count, state.Step.Get()) }),
+						buttonWidget("-", func() { ggui.Add(count, -step.Get()) }),
+						buttonWidget("+", func() { ggui.Add(count, step.Get()) }),
 					).Gap(8).Justify(ggui.JustifyCenter),
-					ggui.List(hints.Get(), func(s string) ggui.Widget {
-						return ggui.Text(s).Color(dim)
-					}).Gap(4),
+					ggui.Reactive(func() ggui.Widget {
+						return ggui.List(hints.Get(), func(s string) ggui.Widget {
+							return ggui.Text(s).Color(dim)
+						}).Gap(4)
+					}),
 				).Gap(12).Align(ggui.AlignCenter),
 			).Pad(24).Fill(panel).Width(320),
 		)
@@ -81,11 +93,11 @@ func main() {
 	app.OnFrame(func() {
 		switch {
 		case inpututil.IsKeyJustPressed(ebiten.KeySpace):
-			ggui.Add(state.Count, state.Step.Get())
+			ggui.Add(count, step.Get())
 		case inpututil.IsKeyJustPressed(ebiten.KeyArrowUp):
-			ggui.Add(state.Step, 1)
+			ggui.Add(step, 1)
 		case inpututil.IsKeyJustPressed(ebiten.KeyArrowDown):
-			state.Step.Update(func(s int) int { return max(s-1, 1) })
+			step.Update(func(s int) int { return max(s-1, 1) })
 		}
 	})
 

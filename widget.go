@@ -10,9 +10,53 @@ type Widget interface {
 	Paint(dst *Canvas, r Rect)
 }
 
-// Builder turns state into a Widget tree. A component in this framework is a
-// plain Go function of this shape; it re-runs when the signals it reads change.
+// Builder turns state into a Widget tree. It runs inside an Effect, so it
+// re-runs when the signals it reads change. A plain function that returns a
+// Widget is the simplest component; Component and Reactive give a subtree its
+// own Effect so it rebuilds without its parent.
 type Builder func() Widget
+
+// ComponentWidget is a subtree with its own rebuild boundary. Build one with
+// Component or Reactive.
+type ComponentWidget struct {
+	child Widget
+}
+
+// Component runs setup once, in the enclosing effect, and then runs the
+// Builder it returns in an effect of its own. State created in setup lives
+// as long as the parent's tree keeps this component; only the Builder re-runs
+// when the signals it reads change:
+//
+//	func button(label string, onTap func()) ggui.Widget {
+//		return ggui.Component(func() ggui.Builder {
+//			hovered := ggui.State(false)
+//			return func() ggui.Widget {
+//				return ggui.Pointer(ggui.Text(label)).OnTap(onTap).OnHover(hovered.Set)
+//			}
+//		})
+//	}
+//
+// setup runs untracked, so signals it reads do not subscribe the parent.
+func Component(setup func() Builder) *ComponentWidget {
+	var build Builder
+	Untrack(func() { build = setup() })
+	return Reactive(build)
+}
+
+// Reactive gives build an effect of its own: when the signals it reads
+// change, this subtree rebuilds and the parent does not. Use it to keep a
+// parent's Builder static so the components it holds survive.
+func Reactive(build Builder) *ComponentWidget {
+	c := &ComponentWidget{}
+	Effect(func() { c.child = build() })
+	return c
+}
+
+// Layout implements Widget.
+func (c *ComponentWidget) Layout(cs Constraints) Size { return c.child.Layout(cs) }
+
+// Paint implements Widget.
+func (c *ComponentWidget) Paint(dst *Canvas, r Rect) { c.child.Paint(dst, r) }
 
 // Children builds one Widget per item. It is the bridge from data to tree for
 // any widget that takes children:

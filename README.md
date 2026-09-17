@@ -55,8 +55,14 @@ pretty := total.Map(func(v float64) string { return fmt.Sprintf("$%.2f", v) })
 ```
 
 A `Memo` notifies its readers only when the result actually differs, and a chain
-of them settles within a single frame. Create memos once, next to the signals
-they derive from — not inside a `Builder`, which runs again on every rebuild.
+of them settles within a single frame.
+
+**Ownership** — an `Effect` or `Derived` created while another effect runs
+belongs to it and is disposed when the owner re-runs or is disposed, so
+nothing piles up across rebuilds. Subscriptions are collected afresh on every
+run, so an effect follows only what it read last time. `OnCleanup(fn)` runs
+before the enclosing effect re-runs and when it is disposed; `Untrack(fn)` and
+`Peek()` read without subscribing.
 
 **State as a struct of signals** — keep one signal per piece of state and
 group them in a plain struct. Each field is its own reactive cell, so a change
@@ -76,8 +82,28 @@ ggui.Add(state.Count, state.Step.Get())
 `*Signal[T]` and `*Memo[T]` both satisfy `Reader[T]`, so `Watch`, `Combine`
 and your own helpers accept either.
 
-**Builders** — a component is a `func() ggui.Widget`. The runtime runs it inside
-an effect, so the tree rebuilds when the signals it read change.
+**Builders and components** — a `Builder` is a `func() ggui.Widget`. It runs
+inside an effect, so the tree it returns is rebuilt when the signals it read
+change. That is the whole of it for a small app. To rebuild less, give a
+subtree its own boundary:
+
+```go
+func button(label string, onTap func()) ggui.Widget {
+	return ggui.Component(func() ggui.Builder {
+		hovered := ggui.State(false) // setup: runs once, owns local state
+		return func() ggui.Widget {  // build: re-runs when hovered changes
+			return ggui.Pointer(ggui.Text(label)).OnTap(onTap).OnHover(hovered.Set)
+		}
+	})
+}
+```
+
+`Component(setup)` runs setup once, untracked, and the `Builder` it returns in
+an effect of its own. `Reactive(build)` is the same without setup: an island
+that rebuilds when its signals change while the parent stays put. A component
+lives as long as its parent's tree keeps it, so keep a parent's `Builder` free
+of signal reads and put the parts that change in islands; then the components
+it holds, and their state, survive.
 
 **Widgets** — a `Widget` is asked for a size under `Constraints`, then asked to
 paint into the `Rect` its parent assigned on a `Canvas`. Constraints flow down, sizes flow up.
@@ -174,7 +200,7 @@ dot := ggui.FromFuncs(
 ```
 ├── app.go        App runtime: window setup, frame loop, ebiten.Game
 ├── signal.go     Reactivity: Signal, Memo, Effect, dependency tracking
-├── widget.go     Widget interface, Builder, Children
+├── widget.go     Widget interface, Builder, Component/Reactive, Children
 ├── widgets.go    Built-in widgets
 ├── canvas.go     Canvas: paint target plus the frame's hit regions
 ├── input.go      Pointer and keyboard events, Pointer/Tap/Focus widgets
