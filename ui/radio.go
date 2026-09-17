@@ -8,7 +8,7 @@ import (
 // Radio.
 type RadioWidget[T comparable] struct {
 	toggle
-	selected *ggui.Signal[T]
+	selected ggui.Binding[T]
 	value    T
 	onChange func(T)
 }
@@ -16,7 +16,7 @@ type RadioWidget[T comparable] struct {
 // Radio creates a round option that is filled while selected holds value
 // and selects it when clicked. Every Radio bound to the same signal is one
 // group.
-func Radio[T comparable](selected *ggui.Signal[T], value T, label string) *RadioWidget[T] {
+func Radio[T comparable](selected ggui.Binding[T], value T, label string) *RadioWidget[T] {
 	r := &RadioWidget[T]{selected: selected, value: value}
 	r.glyph = ggui.Sz(controlSize, controlSize)
 	if label != "" {
@@ -31,6 +31,12 @@ func (r *RadioWidget[T]) OnChange(fn func(T)) *RadioWidget[T] { r.onChange = fn;
 
 // Disabled greys the option out and ignores the pointer while v is true.
 func (r *RadioWidget[T]) Disabled(v bool) *RadioWidget[T] { r.Inert = v; return r }
+
+// DisabledWhen follows r for Disabled without a rebuild.
+func (r *RadioWidget[T]) DisabledWhen(when ggui.Reader[bool]) *RadioWidget[T] {
+	r.InertWhen(when)
+	return r
+}
 
 // Layout implements Widget.
 func (r *RadioWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size { return r.layout(c, env) }

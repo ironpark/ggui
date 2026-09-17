@@ -15,7 +15,7 @@ type PopupWidget struct {
 	anchor  Widget
 	content Widget
 	open    bool
-	bound   *Signal[bool]
+	bound   Binding[bool]
 	gap     float64
 	keys    KeyHandler
 	onClose func()
@@ -35,7 +35,7 @@ func Popup(anchor, content Widget) *PopupWidget {
 
 // Bind stores the open state in sig: writing it opens or closes the popup,
 // and the popup writes it when it closes itself.
-func (p *PopupWidget) Bind(sig *Signal[bool]) *PopupWidget { p.bound = sig; return p }
+func (p *PopupWidget) Bind(sig Binding[bool]) *PopupWidget { p.bound = sig; return p }
 
 // Gap sets the space between the anchor and the content.
 func (p *PopupWidget) Gap(v float64) *PopupWidget { p.gap = v; return p }

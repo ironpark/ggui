@@ -8,28 +8,26 @@ import (
 // with Checkbox.
 type CheckboxWidget struct {
 	toggle
-	checked  *ggui.Signal[bool]
+	checked  ggui.Binding[bool]
 	onChange func(bool)
 }
 
 // Checkbox binds a tick box to checked; a click toggles it. label may be "".
-func Checkbox(checked *ggui.Signal[bool], label string) *CheckboxWidget {
+func Checkbox(checked ggui.Binding[bool], label string) *CheckboxWidget {
 	c := &CheckboxWidget{checked: checked}
 	c.glyph = ggui.Sz(controlSize, controlSize)
 	if label != "" {
 		c.label = ggui.Text(label)
 	}
-	c.onTap = func() {
-		ggui.Toggle(checked)
-		if c.onChange != nil {
-			c.onChange(checked.Peek())
-		}
-	}
+	c.onTap = func() { setChanged(checked, !checked.Peek(), c.onChange) }
 	return c
 }
 
 // Disabled greys the box out and ignores the pointer while v is true.
 func (c *CheckboxWidget) Disabled(v bool) *CheckboxWidget { c.Inert = v; return c }
+
+// DisabledWhen follows r for Disabled without a rebuild.
+func (c *CheckboxWidget) DisabledWhen(r ggui.Reader[bool]) *CheckboxWidget { c.InertWhen(r); return c }
 
 // OnChange fires with the new value after a click toggled it.
 func (c *CheckboxWidget) OnChange(fn func(bool)) *CheckboxWidget { c.onChange = fn; return c }

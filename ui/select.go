@@ -11,7 +11,7 @@ import (
 // signal. Build one with Select or SelectStrings.
 type SelectWidget[T comparable] struct {
 	ggui.Interactive
-	value    *ggui.Signal[T]
+	value    ggui.Binding[T]
 	options  []T
 	label    func(T) string
 	minWidth float64
@@ -32,7 +32,7 @@ type SelectWidget[T comparable] struct {
 // fmt.Sprint until Label says otherwise. Space or Enter opens it, the arrow
 // keys move through the options (or change the value directly while closed)
 // and Escape closes it.
-func Select[T comparable](value *ggui.Signal[T], options []T) *SelectWidget[T] {
+func Select[T comparable](value ggui.Binding[T], options []T) *SelectWidget[T] {
 	s := &SelectWidget[T]{value: value, options: options, minWidth: 0, highlight: -1}
 	s.box = ggui.Box()
 	rows := make([]ggui.Widget, len(options))
@@ -58,6 +58,12 @@ func (s *SelectWidget[T]) Label(fn func(T) string) *SelectWidget[T] {
 // Disabled greys the dropdown out and ignores input while v is true.
 func (s *SelectWidget[T]) Disabled(v bool) *SelectWidget[T] { s.Inert = v; return s }
 
+// DisabledWhen follows r for Disabled without a rebuild.
+func (s *SelectWidget[T]) DisabledWhen(r ggui.Reader[bool]) *SelectWidget[T] {
+	s.InertWhen(r)
+	return s
+}
+
 // MinWidth sets the least width the field asks for; it is otherwise as
 // wide as its widest option, and fills a tight width.
 func (s *SelectWidget[T]) MinWidth(w float64) *SelectWidget[T] { s.minWidth = w; return s }
@@ -70,6 +76,7 @@ func (s *SelectWidget[T]) Popup() *ggui.PopupWidget { return s.popup }
 
 // Layout implements Widget.
 func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	s.Sync()
 	t := env.Theme()
 	s.theme = t
 	s.pad = t.FieldPad
@@ -215,6 +222,7 @@ type selectItem[T comparable] struct {
 }
 
 func (it *selectItem[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	it.Sync()
 	t := env.Theme()
 	it.pad = t.ItemPad
 	it.text.Color(t.Fg)

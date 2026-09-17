@@ -16,7 +16,7 @@ func TestForReusesChildrenByKey(t *testing.T) {
 	setups := 0
 	var f Widget
 	dispose := Effect(func() {
-		f = For(items, func(t todo) int { return t.ID }, func(it *Signal[todo]) Widget {
+		f = For(items, func(t todo) int { return t.ID }, func(it Reader[todo]) Widget {
 			return Component(func() Builder {
 				setups++
 				return func() Widget { return Text(it.Get().Name) }
@@ -48,7 +48,7 @@ func TestForUpdatesItemSignalInPlace(t *testing.T) {
 	builds := 0
 	var f Widget
 	dispose := Effect(func() {
-		f = For(items, func(t todo) int { return t.ID }, func(it *Signal[todo]) Widget {
+		f = For(items, func(t todo) int { return t.ID }, func(it Reader[todo]) Widget {
 			return Reactive(func() Widget { builds++; return Text(it.Get().Name) })
 		})
 	})
@@ -70,7 +70,7 @@ func TestForDisposesRemovedAndAllOnParentRebuild(t *testing.T) {
 	var f Widget
 	dispose := Effect(func() {
 		parentDep.Get()
-		f = For(items, func(t todo) int { return t.ID }, func(it *Signal[todo]) Widget {
+		f = For(items, func(t todo) int { return t.ID }, func(it Reader[todo]) Widget {
 			OnCleanup(func() { cleanups++ })
 			return Box()
 		})
@@ -94,7 +94,7 @@ func TestForDoesNotRebuildOnParentSignals(t *testing.T) {
 	setups := 0
 	var f Widget
 	dispose := Effect(func() {
-		f = For(items, func(t todo) int { return t.ID }, func(it *Signal[todo]) Widget {
+		f = For(items, func(t todo) int { return t.ID }, func(it Reader[todo]) Widget {
 			setups++
 			return Box()
 		})
@@ -115,7 +115,7 @@ func TestForRejectsDuplicateKeys(t *testing.T) {
 			t.Fatal("duplicate keys did not panic")
 		}
 	}()
-	For(State([]todo{{1, "a"}, {1, "b"}}), func(t todo) int { return t.ID }, func(*Signal[todo]) Widget { return Box() })
+	For(State([]todo{{1, "a"}, {1, "b"}}), func(t todo) int { return t.ID }, func(Reader[todo]) Widget { return Box() })
 }
 
 func TestRootOutlivesOwnerRerunsUntilDisposed(t *testing.T) {
@@ -150,9 +150,9 @@ func TestForWithItemExtentBuildsOnlyTheViewport(t *testing.T) {
 	var f *ForWidget[todo, int]
 	rects := make([]Rect, len(list)) // where each row was painted, by ID
 	dispose := Effect(func() {
-		f = For(items, func(t todo) int { return t.ID }, func(it *Signal[todo]) Widget {
+		f = For(items, func(t todo) int { return t.ID }, func(it Reader[todo]) Widget {
 			builds++
-			return probe(50, 20, &rects[it.Peek().ID])
+			return probe(50, 20, &rects[it.Get().ID])
 		}).ItemExtent(20).Gap(4)
 	})
 	defer dispose()
@@ -185,7 +185,7 @@ func TestForWithoutViewportLaysOutEverything(t *testing.T) {
 	items := State([]todo{{1, "a"}, {2, "b"}, {3, "c"}})
 	var f *ForWidget[todo, int]
 	dispose := Effect(func() {
-		f = For(items, func(t todo) int { return t.ID }, func(*Signal[todo]) Widget { return Box().Size(10, 5) }).ItemExtent(30)
+		f = For(items, func(t todo) int { return t.ID }, func(Reader[todo]) Widget { return Box().Size(10, 5) }).ItemExtent(30)
 	})
 	defer dispose()
 	got := f.Layout(Loose(Sz(100, 1000)), Env{})

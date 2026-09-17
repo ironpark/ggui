@@ -227,16 +227,18 @@ func nextWord(s string, i int) int {
 // editor adds Up and Down, Home and End within the line, Enter for a line
 // break and ⌘/Ctrl+Enter for OnSubmit.
 type TextInputWidget struct {
-	value       *Signal[string]
-	placeholder string
-	style       TextStyle
-	password    bool
-	multiline   bool
-	minLines    int
-	minWidth    float64
-	onSubmit    func(string)
-	onChange    func(string)
-	disabled    bool
+	value        Binding[string]
+	placeholder  string
+	style        TextStyle
+	password     bool
+	multiline    bool
+	minLines     int
+	minWidth     float64
+	onSubmit     func(string)
+	onCommit     func(string)
+	onChange     func(string)
+	disabled     bool
+	disabledWhen Reader[bool]
 
 	ed      textEditor
 	focused bool
@@ -265,13 +267,16 @@ type TextInputWidget struct {
 }
 
 // TextInput creates an editor bound to value.
-func TextInput(value *Signal[string]) *TextInputWidget {
+func TextInput(value Binding[string]) *TextInputWidget {
 	t := &TextInputWidget{value: value, minWidth: 120}
 	t.ime = newIME(t)
 	t.ed.setText(value.Peek())
 	t.ed.moveTo(len(t.ed.text), false)
 	return t
 }
+
+// DisabledWhen follows r for Disabled without a rebuild.
+func (t *TextInputWidget) DisabledWhen(r Reader[bool]) *TextInputWidget { t.disabledWhen = r; return t }
 
 // Disabled shows the text in the muted color and takes no input while v
 // is true.
@@ -310,6 +315,16 @@ func (t *TextInputWidget) Lines(n int) *TextInputWidget {
 
 // OnSubmit fires with the value when Enter is pressed.
 func (t *TextInputWidget) OnSubmit(fn func(string)) *TextInputWidget { t.onSubmit = fn; return t }
+
+// OnCommit fires with the value when the editor loses focus or submits,
+// for work too costly to do on every keystroke.
+func (t *TextInputWidget) OnCommit(fn func(string)) *TextInputWidget { t.onCommit = fn; return t }
+
+func (t *TextInputWidget) committed() {
+	if t.onCommit != nil {
+		t.onCommit(t.ed.text)
+	}
+}
 
 // OnChange fires with the value after every edit, after the signal is set.
 func (t *TextInputWidget) OnChange(fn func(string)) *TextInputWidget { t.onChange = fn; return t }
@@ -375,6 +390,9 @@ func (t *TextInputWidget) linesHeight(n int) float64 {
 
 // Layout implements Widget.
 func (t *TextInputWidget) Layout(c Constraints, env Env) Size {
+	if t.disabledWhen != nil {
+		t.disabled = t.disabledWhen.Get()
+	}
 	t.resolved = env.Text().Merge(t.style).resolved()
 	t.cache, _ = env.Get(cacheOwner)
 	th := env.Theme()
@@ -705,6 +723,7 @@ func (t *TextInputWidget) HandleKey(ev KeyEvent) {
 	case KeyBlur:
 		t.ime.Confirm()
 		t.focused = false
+		t.committed()
 	case KeyText:
 		// Text arrives through the IME, on every platform.
 	case KeyPress:
@@ -724,6 +743,7 @@ func (t *TextInputWidget) key(k ebiten.Key, m Mods) {
 		if t.onSubmit != nil {
 			t.onSubmit(t.ed.text)
 		}
+		t.committed()
 		return
 	case ebiten.KeyArrowUp, ebiten.KeyArrowDown:
 		if !t.multiline {

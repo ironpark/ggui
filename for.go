@@ -1,6 +1,10 @@
 package ggui
 
-import "math"
+import (
+	"cmp"
+	"math"
+	"slices"
+)
 
 // ForWidget is a keyed, reactive list: it watches a Reader of items, keeps one
 // child per key across changes, and hands each child its item as a Signal so
@@ -8,7 +12,9 @@ import "math"
 type ForWidget[T any, K comparable] struct {
 	flow
 	key     func(T) K
-	build   func(*Signal[T]) Widget
+	build   func(Reader[T]) Widget
+	retain  int // offscreen rows kept mounted with ItemExtent; 0 keeps all
+	frame   uint64
 	owner   *effect
 	items   []T
 	keys    []K
@@ -27,20 +33,22 @@ type forEntry[T any] struct {
 	item    *Signal[T]
 	widget  Widget
 	dispose func()
+	seen    uint64 // the last frame the entry was laid out
 }
 
 // For builds one child per item and reuses it while the item's key stays in
 // the list, so state inside a child (a Component's signals, a Scroll's
 // offset) survives reordering and updates. Each child gets its item as a
-// *Signal[T] that For writes whenever the item changes; read it reactively.
+// Reader[T] that follows the list; read it reactively, and edit through the
+// model (a struct of signals, or a Lens on the list) rather than the row.
 // Children lay out like a Column; Gap and Horizontal adjust that. A child is
 // built the first time it is laid out, so with ItemExtent inside a Scroll
 // only the items in view exist at all.
 //
-//	ggui.For(todos, func(t Todo) int { return t.ID }, func(t *ggui.Signal[Todo]) ggui.Widget {
+//	ggui.For(todos, func(t Todo) int { return t.ID }, func(t ggui.Reader[Todo]) ggui.Widget {
 //		return todoRow(t)
 //	})
-func For[T any, K comparable](items Reader[[]T], key func(T) K, build func(*Signal[T]) Widget) *ForWidget[T, K] {
+func For[T any, K comparable](items Reader[[]T], key func(T) K, build func(Reader[T]) Widget) *ForWidget[T, K] {
 	f := &ForWidget[T, K]{key: key, build: build, entries: map[K]*forEntry[T]{}}
 	// The outer effect reads nothing, so it only ever runs once and is
 	// disposed with its owner; the entries belong to it. The inner effect
@@ -99,6 +107,12 @@ func (f *ForWidget[T, K]) Horizontal() *ForWidget[T, K] { f.horizontal = true; r
 // thousands of rows costs what the visible ones do.
 func (f *ForWidget[T, K]) ItemExtent(v float64) *ForWidget[T, K] { f.extent = v; return f }
 
+// Retain keeps at most n rows that are out of view mounted, with
+// ItemExtent inside a Scroll; the rest are disposed and rebuilt, with fresh
+// local state, when they scroll back in. Without it every row once built
+// stays. A row with focus or a pointer capture is not exempt.
+func (f *ForWidget[T, K]) Retain(n int) *ForWidget[T, K] { f.retain = n; return f }
+
 // Len returns the number of items the list currently holds.
 func (f *ForWidget[T, K]) Len() int { return len(f.items) }
 
@@ -141,6 +155,7 @@ func (f *ForWidget[T, K]) Layout(c Constraints, env Env) Size {
 		f.last = clamp(int(math.Ceil((vp.Offset+vp.Extent)/pitch)), f.first, n)
 	}
 	shown := f.last - f.first
+	f.frame++
 	f.visible = resize(f.visible, shown)
 	f.sizes = resize(f.sizes, shown)
 	f.offsets = resize(f.offsets, shown)
@@ -148,12 +163,15 @@ func (f *ForWidget[T, K]) Layout(c Constraints, env Env) Size {
 	crossMin := f.stretched(crossMax, 0)
 	var crossUsed float64
 	for j := range shown {
-		w := f.entry(f.first + j).widget
+		e := f.entry(f.first + j)
+		e.seen = f.frame
+		w := e.widget
 		f.visible[j] = w
 		f.sizes[j] = w.Layout(f.constraints(f.extent, f.extent, crossMin, crossMax), env)
 		crossUsed = max(crossUsed, f.cross(f.sizes[j]))
 	}
 	result := c.Constrain(f.size(total, f.stretched(crossMax, crossUsed)))
+	f.evict()
 	for j, s := range f.sizes {
 		main := float64(f.first+j) * pitch
 		off := (f.cross(result) - f.cross(s)) * f.crossFraction()
@@ -164,6 +182,27 @@ func (f *ForWidget[T, K]) Layout(c Constraints, env Env) Size {
 		}
 	}
 	return result
+}
+
+// evict disposes offscreen entries beyond Retain, oldest first.
+func (f *ForWidget[T, K]) evict() {
+	if f.retain <= 0 {
+		return
+	}
+	var out []K
+	for k, e := range f.entries {
+		if e.seen != f.frame {
+			out = append(out, k)
+		}
+	}
+	if len(out) <= f.retain {
+		return
+	}
+	slices.SortFunc(out, func(a, b K) int { return cmp.Compare(f.entries[a].seen, f.entries[b].seen) })
+	for _, k := range out[:len(out)-f.retain] {
+		f.entries[k].dispose()
+		delete(f.entries, k)
+	}
 }
 
 // Paint implements Widget.

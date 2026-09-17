@@ -8,7 +8,7 @@ import (
 // TabsWidget shows one of several pages, picked by a row of labels above.
 // Build one with Tabs.
 type TabsWidget struct {
-	selected *ggui.Signal[int]
+	selected ggui.Binding[int]
 	tabs     []TabPage
 	onChange func(int)
 
@@ -36,7 +36,7 @@ func Tab(label string, content ggui.Widget) TabPage { return TabPage{Label: labe
 // Tabs creates a tab strip bound to selected, the index of the page shown.
 // Click or Space picks the label under the pointer; Left and Right move
 // while the strip has focus. Only the selected page is laid out.
-func Tabs(selected *ggui.Signal[int], tabs ...TabPage) *TabsWidget {
+func Tabs(selected ggui.Binding[int], tabs ...TabPage) *TabsWidget {
 	t := &TabsWidget{selected: selected, tabs: tabs, hover: -1}
 	for _, tab := range tabs {
 		t.labels = append(t.labels, ggui.Text(tab.Label).NoWrap())
@@ -66,6 +66,7 @@ func (t *TabsWidget) pick(i int) {
 
 // Layout implements Widget.
 func (t *TabsWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	t.Sync()
 	th := env.Theme()
 	t.theme = th
 	t.pad = th.ButtonPad

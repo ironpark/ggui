@@ -61,7 +61,7 @@ func tint(c color.Color, f float64) color.Color {
 
 // setChanged stores v in s if it differs and then reports it to fn, which
 // may be nil. It is the shape every control's OnChange follows.
-func setChanged[T comparable](s *ggui.Signal[T], v T, fn func(T)) {
+func setChanged[T comparable](s ggui.Binding[T], v T, fn func(T)) {
 	if s.Peek() == v {
 		return
 	}

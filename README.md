@@ -87,7 +87,15 @@ constantly; `Remove(items, func(t T) bool)` drops what matches into a new
 slice and notifies only if something went. `BindTheme(dark, on, off)`
 follows a boolean signal with the theme.
 `*Signal[T]` and `*Memo[T]` both satisfy `Reader[T]`, so `Watch`, `Combine`
-and your own helpers accept either.
+and your own helpers accept either. `Binding[T]` adds `Peek` and `Set`: it is
+what a control binds to, and `*Signal`, `*Tweened`, `*Sprung` and `*Lens`
+all are one, so a slider can drive a spring. `sig.Lens(get, set)` is a
+`Binding` onto part of a struct held in one signal:
+
+```go
+form := ggui.State(Form{})
+ui.TextField(form.Lens(func(f Form) string { return f.Name }, func(f Form, v string) Form { f.Name = v; return f }))
+```
 
 **Builders and components** — a `Builder` is a `func() ggui.Widget`. It runs
 inside an effect, so the tree it returns is rebuilt when the signals it read
@@ -107,20 +115,22 @@ func button(label string, onTap func()) ggui.Widget {
 
 **Keyed lists** — `For(items, key, build)` watches a `Reader[[]T]` and keeps
 one child per key, so reordering or editing the list reuses the children and
-whatever state they hold. Each child receives its item as a `*Signal[T]` that
-`For` writes on every change; read it reactively:
+whatever state they hold. Each child receives its item as a `Reader[T]` that
+follows the list; read it reactively and edit through the model:
 
 ```go
 ggui.Scroll(ggui.For(todos, func(t Todo) int { return t.ID },
-	func(t *ggui.Signal[Todo]) ggui.Widget {
-		return ggui.Reactive(func() ggui.Widget { return ggui.Text(t.Get().Title) })
+	func(t ggui.Reader[Todo]) ggui.Widget {
+		return ggui.View(t, func(t Todo) *ggui.TextWidget { return ggui.Text(t.Title) })
 	}).Gap(4))
 ```
 
 A child is built the first time it is laid out. `.ItemExtent(h)` fixes every
 child's height (width, with `.Horizontal()`), and then inside a `Scroll` only
 the rows in view are built, laid out and painted, so a list of tens of
-thousands of items costs what the visible ones do. `List(items, build)` is
+thousands of items costs what the visible ones do; `.Retain(n)` keeps at
+most n rows that scrolled out of view mounted and rebuilds the rest when
+they return. `List(items, build)` is
 the plain version for a slice you have in hand: one child per item, rebuilt
 with the parent. `Root(fn)` is what `For` uses per key,
 an owner that never re-runs, for containers of your own that keep children
@@ -257,8 +267,10 @@ ggui.Column(
 `ui.Button(label, onTap)` is the primary button; `.Secondary()` quiets it,
 `.Disabled(v)` greys it out, `.Pad(...)` overrides the theme's padding,
 `ui.ButtonOf(child, onTap)` wraps any content. Every control has
-`.Disabled(v)`, and every control that changes a signal has `.OnChange(fn)`
-for the value the user picked. They take their colors and padding from the
+`.Disabled(v)` and `.DisabledWhen(reader)`, which follows a `Reader[bool]`
+without a rebuild, and every control that changes a signal has
+`.OnChange(fn)` for the value the user picked; `Slider` and the text fields
+add `.OnCommit(fn)` for the end of a drag, a blur or a submit. They take their colors and padding from the
 theme in their `Env` at layout time, keep hover and press state in the
 widget itself, and read their signal in `Paint`, so nothing rebuilds for a
 hover or a tick. Buttons and text fields set the mouse cursor. Anything

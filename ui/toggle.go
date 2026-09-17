@@ -20,6 +20,7 @@ type toggle struct {
 }
 
 func (g *toggle) layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	g.Sync()
 	g.theme = env.Theme()
 	size := g.glyph
 	if g.label != nil {

@@ -16,7 +16,7 @@ type TextFieldWidget struct {
 }
 
 // TextField creates a text field bound to value.
-func TextField(value *ggui.Signal[string]) *TextFieldWidget {
+func TextField(value ggui.Binding[string]) *TextFieldWidget {
 	f := &TextFieldWidget{input: ggui.TextInput(value)}
 	f.box = ggui.Box(f.input)
 	return f
@@ -26,6 +26,13 @@ func TextField(value *ggui.Signal[string]) *TextFieldWidget {
 func (f *TextFieldWidget) Disabled(v bool) *TextFieldWidget {
 	f.Inert = v
 	f.input.Disabled(v)
+	return f
+}
+
+// DisabledWhen follows r for Disabled without a rebuild.
+func (f *TextFieldWidget) DisabledWhen(r ggui.Reader[bool]) *TextFieldWidget {
+	f.InertWhen(r)
+	f.input.DisabledWhen(r)
 	return f
 }
 
@@ -53,11 +60,15 @@ func (f *TextFieldWidget) OnSubmit(fn func(string)) *TextFieldWidget { f.input.O
 // OnChange fires with the value after every edit.
 func (f *TextFieldWidget) OnChange(fn func(string)) *TextFieldWidget { f.input.OnChange(fn); return f }
 
+// OnCommit fires with the value when the field loses focus or submits.
+func (f *TextFieldWidget) OnCommit(fn func(string)) *TextFieldWidget { f.input.OnCommit(fn); return f }
+
 // Input returns the editor inside, for Focused and the editor's own setters.
 func (f *TextFieldWidget) Input() *ggui.TextInputWidget { return f.input }
 
 // Layout implements Widget.
 func (f *TextFieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	f.Sync()
 	t := env.Theme()
 	f.theme = t
 	f.box.Padding(t.FieldPad).Radius(t.Radius).Fill(pick(f.Inert, t.Surface, t.Field))

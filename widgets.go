@@ -779,7 +779,7 @@ type ScrollWidget struct {
 	horizontal bool
 	speed      float64
 	bar        color.Color
-	bound      *Signal[float64]
+	bound      Binding[float64]
 	offset     float64
 	id         any
 
@@ -826,7 +826,7 @@ func (s *ScrollWidget) Bar(c color.Color) *ScrollWidget { s.bar = c; return s }
 // Offset binds the scroll position to sig: wheel input writes it, and
 // writing it scrolls. Use it to keep the position across rebuilds or to
 // scroll programmatically.
-func (s *ScrollWidget) Offset(sig *Signal[float64]) *ScrollWidget { s.bound = sig; return s }
+func (s *ScrollWidget) Offset(sig Binding[float64]) *ScrollWidget { s.bound = sig; return s }
 
 func (s *ScrollWidget) extent(sz Size) float64 { return pick(s.horizontal, sz.W, sz.H) }
 

@@ -45,7 +45,7 @@ func TestCachedNestsAndFollowsScrollAndFor(t *testing.T) {
 	items := State([]todo{{1, "a"}})
 	var list Widget
 	dispose := Effect(func() {
-		list = For(items, func(t todo) int { return t.ID }, func(*Signal[todo]) Widget { return leaf })
+		list = For(items, func(t todo) int { return t.ID }, func(Reader[todo]) Widget { return leaf })
 	})
 	defer dispose()
 	inner := Cached(list)

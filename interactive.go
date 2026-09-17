@@ -24,7 +24,20 @@ type Interactive struct {
 	Focused      bool
 	FocusVisible bool // focus arrived by keyboard: draw the ring
 
-	id any
+	id        any
+	inertWhen Reader[bool]
+}
+
+// InertWhen makes the control follow r for Inert: a control reads it in
+// Layout and Paint through Sync, so nothing rebuilds when it changes.
+func (s *Interactive) InertWhen(r Reader[bool]) { s.inertWhen = r }
+
+// Sync refreshes Inert from InertWhen, if set. Call it at the start of
+// Layout and Paint.
+func (s *Interactive) Sync() {
+	if s.inertWhen != nil {
+		s.Inert = s.inertWhen.Get()
+	}
 }
 
 // Key gives the control an identity, so a rebuilt one that also moved
@@ -42,6 +55,7 @@ func (s *Interactive) state() *Interactive { return s }
 
 // Hit registers r for pointer, keys and the cursor, unless Inert.
 func (s *Interactive) Hit(dst *Canvas, r Rect, h Control, cursor ebiten.CursorShapeType) {
+	s.Sync()
 	if s.Inert {
 		return
 	}

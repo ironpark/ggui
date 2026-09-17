@@ -145,6 +145,12 @@ func MenuItem(label string, onTap func()) *MenuItemWidget {
 // Disabled greys the item out and ignores it while v is true.
 func (it *MenuItemWidget) Disabled(v bool) *MenuItemWidget { it.Inert = v; return it }
 
+// DisabledWhen follows r for Disabled without a rebuild.
+func (it *MenuItemWidget) DisabledWhen(r ggui.Reader[bool]) *MenuItemWidget {
+	it.InertWhen(r)
+	return it
+}
+
 // MenuDivider is a line between groups of items.
 func MenuDivider() ggui.Widget { return ggui.Padding(Divider(), 4, 0) }
 
@@ -162,6 +168,7 @@ func (it *MenuItemWidget) run() {
 
 // Layout implements Widget.
 func (it *MenuItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	it.Sync()
 	t := env.Theme()
 	it.theme = t
 	it.popup, _ = ggui.PopupOf(env)

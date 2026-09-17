@@ -16,7 +16,7 @@ type RadiosWidget[T comparable] struct {
 // through fmt.Sprint until Label says otherwise, side by side with a theme
 // gap between them. It is the Select signature for a choice small enough to
 // show all at once.
-func Radios[T comparable](selected *ggui.Signal[T], options []T) *RadiosWidget[T] {
+func Radios[T comparable](selected ggui.Binding[T], options []T) *RadiosWidget[T] {
 	g := &RadiosWidget[T]{}
 	for _, o := range options {
 		g.radios = append(g.radios, Radio(selected, o, sprint(o)))
@@ -50,6 +50,14 @@ func (g *RadiosWidget[T]) Gap(v float64) *RadiosWidget[T] { g.gap, g.gapSet = v,
 func (g *RadiosWidget[T]) Disabled(v bool) *RadiosWidget[T] {
 	for _, r := range g.radios {
 		r.Disabled(v)
+	}
+	return g
+}
+
+// DisabledWhen follows r for Disabled without a rebuild.
+func (g *RadiosWidget[T]) DisabledWhen(r ggui.Reader[bool]) *RadiosWidget[T] {
+	for _, x := range g.radios {
+		x.DisabledWhen(r)
 	}
 	return g
 }

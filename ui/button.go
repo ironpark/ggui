@@ -37,6 +37,9 @@ func (b *ButtonWidget) Secondary() *ButtonWidget { b.secondary = true; return b 
 // Disabled greys the button out and ignores the pointer while v is true.
 func (b *ButtonWidget) Disabled(v bool) *ButtonWidget { b.Inert = v; return b }
 
+// DisabledWhen follows r for Disabled without a rebuild.
+func (b *ButtonWidget) DisabledWhen(r ggui.Reader[bool]) *ButtonWidget { b.InertWhen(r); return b }
+
 // Pad overrides the theme's padding, with the shorthand Insets accepts.
 func (b *ButtonWidget) Pad(sides ...float64) *ButtonWidget {
 	b.box.Pad(sides...)
@@ -46,6 +49,7 @@ func (b *ButtonWidget) Pad(sides ...float64) *ButtonWidget {
 
 // Layout implements Widget.
 func (b *ButtonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	b.Sync()
 	t := env.Theme()
 	b.theme = t
 	if !b.padded {

@@ -126,6 +126,49 @@ type Reader[T any] interface {
 	Get() T
 }
 
+// Binding is a reactive value that can be written as well as read: what a
+// control binds to. *Signal, *Lens, *Tweened and *Sprung satisfy it.
+type Binding[T any] interface {
+	Reader[T]
+	Peek() T
+	Set(T)
+}
+
+// Lens is a two-way view of part of a Signal's value. Build one with
+// Signal.Lens.
+type Lens[U any] struct {
+	get  func() U
+	peek func() U
+	set  func(U)
+}
+
+// Lens returns a Binding onto the part of s's value that get selects: Get
+// subscribes through s, and Set reads s, applies set to store the new part
+// and writes the whole back. It is how a control binds to one field of a
+// struct held in a single signal.
+//
+//	name := form.Lens(func(f Form) string { return f.Name }, func(f Form, v string) Form { f.Name = v; return f })
+//	ui.TextField(name)
+func (s *Signal[T]) Lens[U any](get func(T) U, set func(T, U) T) *Lens[U] {
+	return &Lens[U]{
+		get:  func() U { return get(s.Get()) },
+		peek: func() U { return get(s.Peek()) },
+		set:  func(u U) { s.Set(set(s.Peek(), u)) },
+	}
+}
+
+// Get returns the part and subscribes the running Effect.
+func (l *Lens[U]) Get() U { return l.get() }
+
+// Peek returns the part without subscribing.
+func (l *Lens[U]) Peek() U { return l.peek() }
+
+// Set stores the part into the whole.
+func (l *Lens[U]) Set(v U) { l.set(v) }
+
+// GetAny returns the value as any and subscribes, for Sprintf.
+func (l *Lens[U]) GetAny() any { return l.Get() }
+
 // anyReader is what Sprintf looks for among its arguments: a reactive value
 // read without its type.
 type anyReader interface{ GetAny() any }

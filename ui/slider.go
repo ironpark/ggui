@@ -11,10 +11,11 @@ import (
 // Slider.
 type SliderWidget struct {
 	ggui.Interactive
-	value    *ggui.Signal[float64]
+	value    ggui.Binding[float64]
 	min, max float64
 	step     float64
 	onChange func(float64)
+	onCommit func(float64)
 
 	theme ggui.Theme
 	rect  ggui.Rect
@@ -22,7 +23,7 @@ type SliderWidget struct {
 
 // Slider binds a horizontal slider to value, clamped to [lo, hi]. It fills
 // the width it is given.
-func Slider(value *ggui.Signal[float64], lo, hi float64) *SliderWidget {
+func Slider(value ggui.Binding[float64], lo, hi float64) *SliderWidget {
 	return &SliderWidget{value: value, min: lo, max: hi}
 }
 
@@ -37,11 +38,25 @@ func (s *SliderWidget) set(v float64) {
 	setChanged(s.value, clamp(v, min(s.min, s.max), max(s.min, s.max)), s.onChange)
 }
 
+// OnCommit fires with the value when a drag ends or a key press moved it,
+// for work too costly to do on every frame of a drag.
+func (s *SliderWidget) OnCommit(fn func(float64)) *SliderWidget { s.onCommit = fn; return s }
+
+func (s *SliderWidget) commit() {
+	if s.onCommit != nil {
+		s.onCommit(s.value.Peek())
+	}
+}
+
 // Disabled greys the slider out and ignores the pointer while v is true.
 func (s *SliderWidget) Disabled(v bool) *SliderWidget { s.Inert = v; return s }
 
+// DisabledWhen follows r for Disabled without a rebuild.
+func (s *SliderWidget) DisabledWhen(r ggui.Reader[bool]) *SliderWidget { s.InertWhen(r); return s }
+
 // Layout implements Widget.
 func (s *SliderWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	s.Sync()
 	s.theme = env.Theme()
 	return c.Constrain(ggui.Sz(bounded(c.MaxW, defaultStripe), sliderKnob*2+4))
 }
@@ -109,6 +124,7 @@ func (s *SliderWidget) HandleKey(ev ggui.KeyEvent) {
 		return
 	}
 	s.set(s.value.Peek() + step)
+	s.commit()
 }
 
 // HandlePointer implements PointerHandler: a left press jumps to the
@@ -123,6 +139,10 @@ func (s *SliderWidget) HandlePointer(ev ggui.PointerEvent) bool {
 	case ggui.PointerDrag:
 		if s.Pressed {
 			s.setFromX(ev.Pos.X)
+		}
+	case ggui.PointerUp:
+		if s.Pressed {
+			s.commit()
 		}
 	}
 	return s.Pointer(ev, nil)

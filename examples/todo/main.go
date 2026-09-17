@@ -81,8 +81,8 @@ func main() {
 	})
 	ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme())
 
-	row := func(item *ggui.Signal[*Todo]) ggui.Widget {
-		td := item.Peek()
+	row := func(item ggui.Reader[*Todo]) ggui.Widget {
+		td := item.Get()
 		return ggui.Row(
 			ui.Checkbox(td.Done, ""),
 			ggui.Expanded(ggui.When(td.Done, ggui.TextOf(td.Title).AsCaption(), ggui.TextOf(td.Title))),

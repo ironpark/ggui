@@ -10,7 +10,7 @@ import (
 // CollapsibleWidget is a titled section that folds its content away.
 // Build one with Collapsible.
 type CollapsibleWidget struct {
-	open    *ggui.Signal[bool]
+	open    ggui.Binding[bool]
 	title   *ggui.TextWidget
 	content ggui.Widget
 	body    ggui.Widget // content behind Presence, so it animates out
@@ -26,7 +26,7 @@ type CollapsibleWidget struct {
 // Collapsible creates a section whose content shows while open is true.
 // The header toggles it on click, Space or Enter; the content fades and
 // slides in and out.
-func Collapsible(open *ggui.Signal[bool], title string, content ggui.Widget) *CollapsibleWidget {
+func Collapsible(open ggui.Binding[bool], title string, content ggui.Widget) *CollapsibleWidget {
 	c := &CollapsibleWidget{open: open, title: ggui.Text(title).NoWrap(), content: content}
 	c.body = ggui.Presence(open, ggui.Transition(content).Fade().Slide(0, -6).Duration(knobDuration))
 	return c
@@ -35,10 +35,17 @@ func Collapsible(open *ggui.Signal[bool], title string, content ggui.Widget) *Co
 // Disabled greys the header out and ignores input while v is true.
 func (c *CollapsibleWidget) Disabled(v bool) *CollapsibleWidget { c.Inert = v; return c }
 
-func (c *CollapsibleWidget) toggle() { ggui.Toggle(c.open) }
+// DisabledWhen follows r for Disabled without a rebuild.
+func (c *CollapsibleWidget) DisabledWhen(r ggui.Reader[bool]) *CollapsibleWidget {
+	c.InertWhen(r)
+	return c
+}
+
+func (c *CollapsibleWidget) toggle() { c.open.Set(!c.open.Peek()) }
 
 // Layout implements Widget.
 func (c *CollapsibleWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
+	c.Sync()
 	t := env.Theme()
 	c.theme = t
 	c.pad = t.FieldPad
