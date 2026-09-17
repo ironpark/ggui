@@ -47,13 +47,37 @@ func Component(setup func() Builder) *ComponentWidget {
 // Reactive gives build an effect of its own: when the signals it reads
 // change, this subtree rebuilds and the parent does not. Use it to keep a
 // parent's Builder static so the components it holds survive.
-func Reactive(build Builder) *ComponentWidget {
+func Reactive[W Widget](build func() W) *ComponentWidget {
 	c := &ComponentWidget{}
 	Effect(func() {
 		c.child = build()
 		c.cache.invalidate()
 	})
 	return c
+}
+
+// View builds a widget from a reactive value and rebuilds it when the value
+// changes, with the widget type inferred from the constructor:
+//
+//	ggui.View(label, ggui.Text)
+//	ggui.View(rows, func(r []Row) *ggui.ColumnWidget { return ggui.List(r, rowWidget) })
+func View[T any, W Widget](r Reader[T], build func(T) W) Widget {
+	return Reactive(func() Widget { return build(r.Get()) })
+}
+
+// When shows then while cond is true and otherwise (or nothing) while it is
+// false. Both are built once; only the choice is reactive.
+func When(cond Reader[bool], then Widget, otherwise ...Widget) Widget {
+	var other Widget = Box()
+	if len(otherwise) > 0 {
+		other = otherwise[0]
+	}
+	return Reactive(func() Widget {
+		if cond.Get() {
+			return then
+		}
+		return other
+	})
 }
 
 // Layout implements Widget.

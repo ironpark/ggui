@@ -79,6 +79,16 @@ type Reader[T any] interface {
 	Get() T
 }
 
+// anyReader is what Sprintf looks for among its arguments: a reactive value
+// read without its type.
+type anyReader interface{ GetAny() any }
+
+// GetAny returns the value as any and subscribes, for Sprintf.
+func (s *Signal[T]) GetAny() any { return s.Get() }
+
+// GetAny returns the value as any and subscribes, for Sprintf.
+func (m *Memo[T]) GetAny() any { return m.Get() }
+
 // Signal is a reactive value. Reads inside an Effect subscribe to it; writes
 // mark every subscriber dirty so the next frame recomputes them.
 type Signal[T any] struct {

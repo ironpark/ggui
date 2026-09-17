@@ -229,7 +229,7 @@ func TestSliderKeepsDraggingWhenItMoves(t *testing.T) {
 func TestSelectOpensPicksAndClosesWithPointerAndKeys(t *testing.T) {
 	v := ggui.State("b")
 	changes := 0
-	sel := ui.SelectStrings(v, "a", "b", "c").OnChange(func(string) { changes++ })
+	sel := ui.Select(v, []string{"a", "b", "c"}).OnChange(func(string) { changes++ })
 	tree := ggui.Column(ggui.Padding(sel, 10))
 	p := ggui.NewProbe(tree, ggui.Sz(300, 300))
 	field := p.Frame()
@@ -438,7 +438,7 @@ func TestSliderReportsChanges(t *testing.T) {
 func TestRadiosSelectAndReport(t *testing.T) {
 	sel := ggui.State("a")
 	var got string
-	g := ui.RadioStrings(sel, "a", "b", "c").Vertical().OnChange(func(s string) { got = s })
+	g := ui.Radios(sel, []string{"a", "b", "c"}).Vertical().OnChange(func(s string) { got = s })
 	p := ggui.NewProbe(g, ggui.Sz(100, 100))
 	p.Frame()
 	p.Click(ggui.Pt(5, 2*(18+8)+9)) // the third glyph: 18 tall, theme gap 8

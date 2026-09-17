@@ -1,5 +1,5 @@
 // Command counter is a minimal ggui app: a struct of signals for state,
-// derived text built with generic methods, a theme for the look, and the
+// reactive text through Textf and View, a theme for the look, and the
 // built-in Button. Click the buttons or press space to count; up/down
 // changes the step; T flips the theme, through App.OnKey.
 package main
@@ -26,8 +26,6 @@ func main() {
 	dark := ggui.State(true)
 	ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme())
 
-	// Map derives text from a cell; it recomputes only when the cell changes.
-	label := count.Map(func(n int) string { return fmt.Sprintf("count: %d", n) })
 	hints := ggui.Combine(count, step, func(n, s int) []string {
 		return []string{
 			fmt.Sprintf("click a button or press space to add %d", s),
@@ -36,8 +34,8 @@ func main() {
 		}
 	})
 
-	// The root Builder reads only the theme, so it runs once per theme. The
-	// parts that change are Reactive islands.
+	// The root Builder reads nothing reactive, so it runs once. Textf and
+	// View are the islands that follow the signals.
 	app := ggui.New(ggui.Config{
 		Title:     "ggui · counter",
 		Width:     480,
@@ -45,24 +43,19 @@ func main() {
 		Resizable: true,
 		Inspector: ebiten.KeyF1,
 	}, func() ggui.Widget {
-		t := ggui.UseTheme()
 		return ggui.Center(
-			ggui.Box(
+			ggui.Box(ui.Card(
 				ggui.Column(
-					ggui.Reactive(func() ggui.Widget {
-						return ggui.Text(label.Get()).Style(t.Title)
-					}),
+					ggui.Textf("count: %d", count).AsTitle(),
 					ggui.Row(
 						ui.Button("-", func() { ggui.Add(count, -step.Get()) }).Pad(6, 16),
 						ui.Button("+", func() { ggui.Add(count, step.Get()) }).Pad(6, 16),
-					).Gap(t.Space).Justify(ggui.JustifyCenter),
-					ggui.Styled(ggui.Reactive(func() ggui.Widget {
-						return ggui.List(hints.Get(), func(s string) ggui.Widget {
-							return ggui.Text(s)
-						}).Gap(t.Space / 2)
-					})).Color(t.Muted),
-				).Gap(t.Space * 1.5).Align(ggui.AlignCenter),
-			).Pad(t.Space * 3).Fill(t.Surface).Radius(t.Radius * 2).Width(360),
+					).Space(1).Justify(ggui.JustifyCenter),
+					ggui.View(hints, func(h []string) *ggui.ColumnWidget {
+						return ggui.List(h, func(s string) ggui.Widget { return ggui.Caption(s) }).Space(0.5)
+					}),
+				).Space(1.5).Align(ggui.AlignCenter),
+			).Pad(24)).Width(360),
 		)
 	})
 

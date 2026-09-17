@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"fmt"
 	"image/color"
 	"math"
 	"slices"
@@ -66,6 +67,8 @@ type TextWidget struct {
 	style TextStyle
 	wrap  bool
 	align float64
+	role  textRole
+	cache *CachedWidget
 
 	// Layout caches the wrapped lines, their widths and the size they add up
 	// to, and re-measures only when the text, the face or the width it must
@@ -85,10 +88,67 @@ type wrapKey struct {
 	maxW  float64
 }
 
+// textRole picks a named style from the theme at layout.
+type textRole int
+
+const (
+	roleNone textRole = iota
+	roleTitle
+	roleCaption
+)
+
 // Text draws s in the inherited style, wrapping at spaces when it is wider
 // than the space it gets.
 func Text(s string) *TextWidget {
 	return &TextWidget{value: s, wrap: true}
+}
+
+// Title draws s in the theme's Title style, resolved from the Env at layout,
+// so a heading needs no UseTheme.
+func Title(s string) *TextWidget { return &TextWidget{value: s, wrap: true, role: roleTitle} }
+
+// Caption draws s in the theme's Caption style, resolved from the Env at
+// layout.
+func Caption(s string) *TextWidget { return &TextWidget{value: s, wrap: true, role: roleCaption} }
+
+// AsTitle gives the text the theme's Title style, under its own setters.
+func (t *TextWidget) AsTitle() *TextWidget { t.role = roleTitle; return t }
+
+// AsCaption gives the text the theme's Caption style, under its own setters.
+func (t *TextWidget) AsCaption() *TextWidget { t.role = roleCaption; return t }
+
+// TextOf draws the string r holds and follows it: the effect it owns lives
+// in the enclosing Builder and is disposed with it. It is a TextWidget, so
+// every setter chains.
+func TextOf(r Reader[string]) *TextWidget {
+	t := Text("")
+	Effect(func() {
+		t.value = r.Get()
+		t.cache.invalidate()
+	})
+	return t
+}
+
+// Textf is TextOf over Sprintf: a formatted text that follows the reactive
+// values among its arguments.
+//
+//	ggui.Textf("count: %d", count).Style(t.Title)
+func Textf(format string, args ...any) *TextWidget { return TextOf(Sprintf(format, args...)) }
+
+// Sprintf formats like fmt.Sprintf and recomputes when a reactive argument
+// (a Signal, Memo, Tweened or Sprung) changes; other arguments pass through.
+func Sprintf(format string, args ...any) *Memo[string] {
+	vals := make([]any, len(args))
+	return Derived(func() string {
+		for i, a := range args {
+			if r, ok := a.(anyReader); ok {
+				vals[i] = r.GetAny()
+			} else {
+				vals[i] = a
+			}
+		}
+		return fmt.Sprintf(format, vals...)
+	})
 }
 
 // Style merges ts onto the widget's own style.
@@ -137,7 +197,15 @@ func (t *TextWidget) spacing() float64 {
 
 // Layout implements Widget.
 func (t *TextWidget) Layout(c Constraints, env Env) Size {
-	t.resolved = env.Text().Merge(t.style).resolved()
+	t.cache, _ = env.Get(cacheOwner)
+	base := env.Text()
+	switch t.role {
+	case roleTitle:
+		base = base.Merge(env.Theme().Title)
+	case roleCaption:
+		base = base.Merge(env.Theme().Caption)
+	}
+	t.resolved = base.Merge(t.style).resolved()
 	face := t.faceAt(1)
 	key := wrapKey{value: t.value, font: t.resolved.Font, size: t.resolved.Size, maxW: pick(t.wrap, c.MaxW, 0)}
 	if key != t.wrapped {
@@ -221,6 +289,12 @@ type EnvWidget struct {
 // (a form's disabled state, a list's density) travel down the tree.
 func Provide[T any](k Key[T], v T, child Widget) *EnvWidget {
 	return &EnvWidget{with: func(e Env) Env { return e.With(k, v) }, child: child}
+}
+
+// Themed lays child out under theme t instead of the app's, for a panel
+// that keeps its own look.
+func Themed(t Theme, child Widget) *EnvWidget {
+	return &EnvWidget{with: func(e Env) Env { return e.WithTheme(t).WithText(t.Text) }, child: child}
 }
 
 // Layout implements Widget.
@@ -358,6 +432,7 @@ const (
 type flow struct {
 	horizontal bool
 	gap        float64
+	space      float64 // gap in theme Space units, when set
 	justify    Justify
 	align      CrossAlign
 	children   []Widget
@@ -393,7 +468,16 @@ func (f *flow) stretched(crossMax, v float64) float64 {
 	return v
 }
 
+// gapFor returns the gap to use: Space times the theme's unit, else Gap.
+func (f *flow) gapFor(env Env) float64 {
+	if f.space > 0 {
+		return f.space * env.Theme().Space
+	}
+	return f.gap
+}
+
 func (f *flow) layout(c Constraints, env Env) Size {
+	gap := f.gapFor(env)
 	n := len(f.children)
 	f.sizes = resize(f.sizes, n)
 	f.offsets = resize(f.offsets, n)
@@ -403,7 +487,7 @@ func (f *flow) layout(c Constraints, env Env) Size {
 
 	var gaps float64
 	if n > 1 {
-		gaps = f.gap * float64(n-1)
+		gaps = gap * float64(n-1)
 	}
 
 	// Rigid children first, each offered what is left; then flex children
@@ -439,7 +523,7 @@ func (f *flow) layout(c Constraints, env Env) Size {
 	}
 	result := c.Constrain(f.size(mainTotal, f.stretched(crossMax, crossUsed)))
 
-	lead, between := 0.0, f.gap
+	lead, between := 0.0, gap
 	if slack := max(f.main(result)-content, 0); n > 0 {
 		switch f.justify {
 		case JustifyCenter:
@@ -512,6 +596,9 @@ func Column(children ...Widget) *ColumnWidget {
 // Gap sets the space between consecutive children.
 func (col *ColumnWidget) Gap(v float64) *ColumnWidget { col.gap = v; return col }
 
+// Space sets the gap to n times the theme's Space, resolved at layout.
+func (col *ColumnWidget) Space(n float64) *ColumnWidget { col.space = n; return col }
+
 // Justify distributes children along the vertical axis.
 func (col *ColumnWidget) Justify(j Justify) *ColumnWidget { col.justify = j; return col }
 
@@ -535,6 +622,9 @@ func Row(children ...Widget) *RowWidget {
 
 // Gap sets the space between consecutive children.
 func (row *RowWidget) Gap(v float64) *RowWidget { row.gap = v; return row }
+
+// Space sets the gap to n times the theme's Space, resolved at layout.
+func (row *RowWidget) Space(n float64) *RowWidget { row.space = n; return row }
 
 // Justify distributes children along the horizontal axis.
 func (row *RowWidget) Justify(j Justify) *RowWidget { row.justify = j; return row }
@@ -815,6 +905,7 @@ type WrapWidget struct {
 	children []Widget
 	gap      float64 // between children on a line
 	runGap   float64 // between lines
+	space    float64 // both, in theme units, when set
 	align    CrossAlign
 
 	sizes   []Size
@@ -831,11 +922,18 @@ func (w *WrapWidget) Gap(v float64) *WrapWidget { w.gap, w.runGap = v, v; return
 // RunGap sets the space between lines alone.
 func (w *WrapWidget) RunGap(v float64) *WrapWidget { w.runGap = v; return w }
 
+// Space sets both gaps to n times the theme's Space, resolved at layout.
+func (w *WrapWidget) Space(n float64) *WrapWidget { w.space = n; return w }
+
 // Align places children vertically within their line.
 func (w *WrapWidget) Align(a CrossAlign) *WrapWidget { w.align = a; return w }
 
 // Layout implements Widget.
 func (w *WrapWidget) Layout(c Constraints, env Env) Size {
+	if w.space > 0 {
+		w.gap = w.space * env.Theme().Space
+		w.runGap = w.gap
+	}
 	n := len(w.children)
 	w.sizes = resize(w.sizes, n)
 	w.offsets = resize(w.offsets, n)
@@ -892,6 +990,7 @@ type GridWidget struct {
 	children []Widget
 	gap      float64
 	rowGap   float64
+	space    float64 // both, in theme units, when set
 
 	sizes   []Size
 	offsets []Point
@@ -912,8 +1011,15 @@ func (g *GridWidget) Gap(v float64) *GridWidget { g.gap, g.rowGap = v, v; return
 // RowGap sets the space between rows alone.
 func (g *GridWidget) RowGap(v float64) *GridWidget { g.rowGap = v; return g }
 
+// Space sets both gaps to n times the theme's Space, resolved at layout.
+func (g *GridWidget) Space(n float64) *GridWidget { g.space = n; return g }
+
 // Layout implements Widget.
 func (g *GridWidget) Layout(c Constraints, env Env) Size {
+	if g.space > 0 {
+		g.gap = g.space * env.Theme().Space
+		g.rowGap = g.gap
+	}
 	n := len(g.children)
 	g.sizes = resize(g.sizes, n)
 	g.offsets = resize(g.offsets, n)

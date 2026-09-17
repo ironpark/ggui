@@ -84,6 +84,12 @@ func For[T any, K comparable](items Reader[[]T], key func(T) K, build func(*Sign
 // Gap sets the space between consecutive children.
 func (f *ForWidget[T, K]) Gap(v float64) *ForWidget[T, K] { f.gap = v; return f }
 
+// Space sets the gap to n times the theme's Space, resolved at layout.
+func (f *ForWidget[T, K]) Space(n float64) *ForWidget[T, K] { f.space = n; return f }
+
+// Align places children across the list's axis.
+func (f *ForWidget[T, K]) Align(a CrossAlign) *ForWidget[T, K] { f.align = a; return f }
+
 // Horizontal lays the children out like a Row instead of a Column.
 func (f *ForWidget[T, K]) Horizontal() *ForWidget[T, K] { f.horizontal = true; return f }
 
@@ -126,8 +132,9 @@ func (f *ForWidget[T, K]) Layout(c Constraints, env Env) Size {
 	}
 
 	// Fixed extents: size from the count, lay out only what a Scroll shows.
-	pitch := f.extent + f.gap
-	total := max(float64(n)*pitch-f.gap, 0)
+	gap := f.gapFor(env)
+	pitch := f.extent + gap
+	total := max(float64(n)*pitch-gap, 0)
 	f.first, f.last = 0, n
 	if vp, ok := ScrollViewport(env); ok && vp.Horizontal == f.horizontal && n > 0 {
 		f.first = clamp(int(math.Floor(vp.Offset/pitch)), 0, n)

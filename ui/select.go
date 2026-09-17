@@ -29,25 +29,30 @@ type SelectWidget[T comparable] struct {
 }
 
 // Select creates a dropdown bound to value, showing each option through
-// label. Space or Enter opens it, the arrow keys move through the options
-// (or change the value directly while closed) and Escape closes it.
-func Select[T comparable](value *ggui.Signal[T], options []T, label func(T) string) *SelectWidget[T] {
-	s := &SelectWidget[T]{value: value, options: options, label: label, minWidth: 0, highlight: -1}
+// fmt.Sprint until Label says otherwise. Space or Enter opens it, the arrow
+// keys move through the options (or change the value directly while closed)
+// and Escape closes it.
+func Select[T comparable](value *ggui.Signal[T], options []T) *SelectWidget[T] {
+	s := &SelectWidget[T]{value: value, options: options, minWidth: 0, highlight: -1}
 	s.box = ggui.Box()
 	rows := make([]ggui.Widget, len(options))
 	for i := range options {
-		it := &selectItem[T]{owner: s, index: i, text: ggui.Text(label(options[i])).NoWrap()}
+		it := &selectItem[T]{owner: s, index: i}
 		s.items = append(s.items, it)
 		rows[i] = it
 	}
 	s.list = ggui.Box(ggui.Column(rows...).Align(ggui.AlignStretch))
 	s.popup = ggui.Popup(selectAnchor[T]{s}, s.list).Keys(s)
-	return s
+	return s.Label(sprint[T])
 }
 
-// SelectStrings is Select for plain strings, labelled as they are.
-func SelectStrings(value *ggui.Signal[string], options ...string) *SelectWidget[string] {
-	return Select(value, options, func(s string) string { return s })
+// Label sets how each option is shown.
+func (s *SelectWidget[T]) Label(fn func(T) string) *SelectWidget[T] {
+	s.label = fn
+	for i, it := range s.items {
+		it.text = ggui.Text(fn(s.options[i])).NoWrap()
+	}
+	return s
 }
 
 // Disabled greys the dropdown out and ignores input while v is true.

@@ -19,10 +19,9 @@ headers on Linux).
 
 ```go
 count := ggui.State(0)
-label := count.Map(func(n int) string { return fmt.Sprintf("count: %d", n) })
 
 app := ggui.New(ggui.Config{Title: "counter", Width: 480, Height: 320}, func() ggui.Widget {
-	return ggui.Center(ggui.Text(label.Get()))
+	return ggui.Center(ggui.Textf("count: %d", count))
 })
 
 app.OnKey(func(ev ggui.KeyEvent) bool {
@@ -129,7 +128,13 @@ alive across their own updates.
 
 `Component(setup)` runs setup once, untracked, and the `Builder` it returns in
 an effect of its own. `Reactive(build)` is the same without setup: an island
-that rebuilds when its signals change while the parent stays put. A component
+that rebuilds when its signals change while the parent stays put.
+`View(reader, build)` is the island for one value, with the widget type
+inferred from the constructor (`ggui.View(name, ggui.Text)`), and
+`When(cond, then, else)` picks between two widgets built once. For text,
+`TextOf(reader)` and `Textf("%d left", count)` are real `Text` widgets that
+follow their signals, so every setter still chains; `Sprintf` is the `Memo`
+underneath. A component
 lives as long as its parent's tree keeps it, so keep a parent's `Builder` free
 of signal reads and put the parts that change in islands; then the components
 it holds, and their state, survive.
@@ -240,7 +245,7 @@ ggui.Column(
 	ui.Checkbox(agree, "I agree"),
 	ui.Switch(dark, "Dark mode"),
 	ui.Slider(size, 0, 1).Step(0.1),
-	ui.Radios(plan, []string{"free", "pro"}, strings.ToTitle), // or one ui.Radio(plan, value, label) at a time
+	ui.Radios(plan, []string{"free", "pro"}).Label(strings.ToTitle), // or one ui.Radio(plan, value, label) at a time
 	ggui.Row(ui.Button("Save", save), ui.Button("Cancel", cancel).Secondary()).Gap(8),
 	ui.Divider(),
 ).Gap(12)
@@ -294,8 +299,8 @@ Surface panel with border, radius and padding; `ui.Badge("new")` a small
 pill (`.Accent()`); `ui.Progress(value)` a bar that eases to a fraction
 read from a `Reader[float64]` every frame.
 
-**Select and Menu.** `ui.Select(value, options, label)` (or
-`ui.SelectStrings(value, "a", "b")`) is a dropdown bound to a signal: a click
+**Select and Menu.** `ui.Select(value, options)` is a dropdown bound to a
+signal, labelled through `fmt.Sprint` or `.Label(fn)`: a click
 or Space opens the list in a `Popup`, the arrow keys move through it (or
 step the value while it is closed), Enter picks, Escape closes.
 `ui.Menu("File", ui.MenuItem("New", fn), ui.MenuDivider(), ...)` is a
@@ -350,7 +355,10 @@ ggui.Styled(ggui.Column(ggui.Text("a"), ggui.Text("b").Size(18))).Color(t.Muted)
 ```
 
 The root `Env` starts from the theme's `Text`, so a bare `Text(s)` already
-looks right. Inheritance happens at layout time, so it works with the eager
+looks right; `Title(s)` and `Caption(s)` take the theme's named styles from
+the Env at layout, `.Space(n)` on Column, Row, Wrap, Grid and For is n times
+the theme's `Space`, and `Themed(t, child)` gives a subtree its own theme,
+so a Builder rarely needs `UseTheme` at all. Inheritance happens at layout time, so it works with the eager
 construction of Go: no closures around subtrees. Your own inherited values go
 the same way: `Provide(key, v, child)` stores `v` under a `Key[T]` from
 `NewKey`, and a widget reads it back with `env.Get(key)` in `Layout`.

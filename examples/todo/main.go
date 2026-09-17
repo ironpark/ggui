@@ -4,7 +4,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -86,45 +85,38 @@ func main() {
 		td := item.Peek()
 		return ggui.Row(
 			ui.Checkbox(td.Done, ""),
-			ggui.Expanded(ggui.Reactive(func() ggui.Widget {
-				t := ggui.UseTheme()
-				text := ggui.Text(td.Title.Get())
-				if td.Done.Get() {
-					text.Color(t.Muted)
-				}
-				return text
-			})),
+			ggui.Expanded(ggui.When(td.Done, ggui.TextOf(td.Title).AsCaption(), ggui.TextOf(td.Title))),
 			ui.Button("×", func() { remove(td.ID) }).Secondary().Pad(2, 8),
-		).Gap(8)
+		).Space(1)
 	}
 
+	left := counts.Map(func(c [2]int) int { return c[0] - c[1] })
+
+	// The root Builder reads nothing reactive: theme comes from the Env at
+	// layout, and the parts that change are islands.
 	app := ggui.New(ggui.Config{Title: "ggui · todo", Width: 520, Height: 600, Resizable: true, Inspector: ebiten.KeyF1}, func() ggui.Widget {
-		t := ggui.UseTheme()
-		return ggui.Center(ggui.Box(ggui.Column(
+		return ggui.Center(ggui.Box(ui.Card(ggui.Column(
 			ggui.Row(
-				ggui.Text("todo").Style(t.Title),
+				ggui.Title("todo"),
 				ggui.Spacer(),
 				ui.Switch(dark, "Dark"),
 			),
 			ggui.Row(
 				ggui.Expanded(ui.TextField(draft).Placeholder("What needs doing?").OnSubmit(add)),
 				ui.Button("Add", func() { add("") }),
-			).Gap(t.Space),
+			).Space(1),
 			ui.Progress(progress).Height(4),
 			ggui.Expanded(ggui.Scroll(
-				ggui.For(visible, func(td *Todo) int { return td.ID }, row).Gap(t.Space/2).ItemExtent(28),
+				ggui.For(visible, func(td *Todo) int { return td.ID }, row).Space(0.5).ItemExtent(28),
 			)),
 			ui.Divider(),
 			ggui.Row(
-				ggui.Styled(ggui.Reactive(func() ggui.Widget {
-					c := counts.Get()
-					return ggui.Text(fmt.Sprintf("%d left", c[0]-c[1])).NoWrap()
-				})).Color(t.Muted),
+				ggui.Textf("%d left", left).AsCaption().NoWrap(),
 				ggui.Spacer(),
-				ui.Radios(show, []filter{all, active, done}, func(f filter) string { return [...]string{"All", "Active", "Done"}[f] }),
+				ui.Radios(show, []filter{all, active, done}).Label(func(f filter) string { return [...]string{"All", "Active", "Done"}[f] }),
 				ggui.Tooltip(ui.Button("Clear done", clearDone).Secondary(), "Removes every finished item"),
-			).Gap(t.Space),
-		).Gap(t.Space*1.5)).Pad(t.Space*3).Fill(t.Surface).Radius(t.Radius*2).Size(480, 540))
+			).Space(1),
+		).Space(1.5)).Pad(24)).Size(480, 540))
 	})
 
 	if err := app.Run(); err != nil {

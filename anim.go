@@ -113,6 +113,9 @@ func (t *Tweened[T]) Get() T { return t.sig.Get() }
 // Peek returns the current value without subscribing.
 func (t *Tweened[T]) Peek() T { return t.sig.Peek() }
 
+// GetAny returns the value as any and subscribes, for Sprintf.
+func (t *Tweened[T]) GetAny() any { return t.Get() }
+
 // Target returns where the value is heading.
 func (t *Tweened[T]) Target() T { return t.to }
 
@@ -184,6 +187,9 @@ func (s *Sprung[T]) Get() T { return s.sig.Get() }
 
 // Peek returns the current value without subscribing.
 func (s *Sprung[T]) Peek() T { return s.sig.Peek() }
+
+// GetAny returns the value as any and subscribes, for Sprintf.
+func (s *Sprung[T]) GetAny() any { return s.Get() }
 
 // Target returns where the value is heading.
 func (s *Sprung[T]) Target() T { return T(s.to) }

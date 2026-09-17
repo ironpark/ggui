@@ -11,6 +11,7 @@
 package ui
 
 import (
+	"fmt"
 	"image/color"
 	"math"
 	"time"
@@ -29,6 +30,9 @@ const (
 	knobDuration  = 150 * time.Millisecond
 	defaultStripe = 160 // a slider's width when nothing bounds it
 )
+
+// sprint is the default option label.
+func sprint[T any](v T) string { return fmt.Sprint(v) }
 
 func pick[T any](cond bool, a, b T) T {
 	if cond {

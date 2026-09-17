@@ -13,24 +13,28 @@ type RadiosWidget[T comparable] struct {
 }
 
 // Radios creates one Radio per option, bound to selected and labelled
-// through label, side by side with a theme gap between them. It is the
-// Select signature for a choice small enough to show all at once.
-func Radios[T comparable](selected *ggui.Signal[T], options []T, label func(T) string) *RadiosWidget[T] {
+// through fmt.Sprint until Label says otherwise, side by side with a theme
+// gap between them. It is the Select signature for a choice small enough to
+// show all at once.
+func Radios[T comparable](selected *ggui.Signal[T], options []T) *RadiosWidget[T] {
 	g := &RadiosWidget[T]{}
 	for _, o := range options {
-		g.radios = append(g.radios, Radio(selected, o, label(o)))
+		g.radios = append(g.radios, Radio(selected, o, sprint(o)))
 	}
 	g.row = ggui.Row(g.children()...)
 	return g
 }
 
-func (g *RadiosWidget[T]) children() []ggui.Widget {
-	return ggui.Children(g.radios, func(r *RadioWidget[T]) ggui.Widget { return r })
+// Label sets how each option is shown.
+func (g *RadiosWidget[T]) Label(fn func(T) string) *RadiosWidget[T] {
+	for _, r := range g.radios {
+		r.label = ggui.Text(fn(r.value))
+	}
+	return g
 }
 
-// RadioStrings is Radios for plain strings, labelled as they are.
-func RadioStrings(selected *ggui.Signal[string], options ...string) *RadiosWidget[string] {
-	return Radios(selected, options, func(s string) string { return s })
+func (g *RadiosWidget[T]) children() []ggui.Widget {
+	return ggui.Children(g.radios, func(r *RadioWidget[T]) ggui.Widget { return r })
 }
 
 // Vertical stacks the options instead of lining them up.

@@ -51,28 +51,27 @@ func main() {
 				ui.TextField(name).Placeholder("Type here, IME works"),
 				ui.TextField(notes).Placeholder("Notes: Enter breaks the line, ⌘+Enter submits").Lines(3),
 				ggui.Reactive(func() ggui.Widget {
-					s := size.Get()
-					return ggui.Text(fmt.Sprintf("Hello, %s", or(name.Get(), "stranger"))).Size(s)
+					return ggui.Text(fmt.Sprintf("Hello, %s", or(name.Get(), "stranger"))).Size(size.Get())
 				}),
 				ggui.Row(
 					ggui.Text("Size").Color(t.Muted),
 					ggui.Expanded(ui.Slider(size, 10, 40).Step(1)),
-					ggui.Reactive(func() ggui.Widget { return ggui.Text(fmt.Sprintf("%2.0f", size.Get())).NoWrap() }),
+					ggui.Textf("%2.0f", size).NoWrap(),
 				).Gap(t.Space),
 			).Gap(t.Space)),
 
 			section("Choices", ggui.Column(
 				ui.Checkbox(notify, "Send notifications"),
-				ui.RadioStrings(plan, "free", "pro", "team"),
+				ui.Radios(plan, []string{"free", "pro", "team"}),
 				ggui.Row(
-					ui.SelectStrings(fruit, "Apple", "Banana", "Cherry", "Durian"),
+					ui.Select(fruit, []string{"Apple", "Banana", "Cherry", "Durian"}),
 					ui.Menu("Actions",
 						ui.MenuItem("Reset text size", func() { size.Set(16) }),
 						ui.MenuItem("Clear name", func() { name.Set("") }),
 						ui.MenuDivider(),
 						ui.MenuItem("Toggle dark", func() { ggui.Toggle(dark) }),
 					),
-					ggui.Reactive(func() ggui.Widget { return ggui.Text("picked " + fruit.Get()).Color(t.Muted) }),
+					ggui.Textf("picked %s", fruit).AsCaption(),
 				).Gap(t.Space),
 			).Gap(t.Space)),
 
@@ -102,13 +101,13 @@ func main() {
 				).Slide(0, -8).Fade()),
 			).Gap(t.Space).Align(ggui.AlignStretch)),
 
-			section("Wrap", ggui.Reactive(func() ggui.Widget {
-				return ggui.Wrap(ggui.Children(tags.Get(), func(tag string) ggui.Widget {
+			section("Wrap", ggui.View(tags, func(list []string) *ggui.WrapWidget {
+				return ggui.Wrap(ggui.Children(list, func(tag string) ggui.Widget {
 					return ggui.Tooltip(
 						ui.Button(tag+"  ×", func() { ggui.Remove(tags, func(s string) bool { return s == tag }) }).Secondary().Pad(4, 10),
 						"Click to remove",
 					)
-				})...).Gap(t.Space / 2)
+				})...).Space(0.5)
 			})),
 
 			section("Grid", ggui.Cached(ggui.Grid(4,
