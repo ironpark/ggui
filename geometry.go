@@ -30,11 +30,15 @@ type Size struct {
 // Sz returns the Size w by h, whatever numeric type they are.
 func Sz[T Number](w, h T) Size { return Size{W: float64(w), H: float64(h)} }
 
-// Rect is an axis-aligned rectangle anchored at Origin.
+// Rect is an axis-aligned rectangle anchored at Origin. Paint receives one:
+// the origin its parent chose and the size its own Layout returned.
 type Rect struct {
 	Origin Point
 	Size   Size
 }
+
+// Rct returns the Rect at origin with size.
+func Rct(origin Point, size Size) Rect { return Rect{Origin: origin, Size: size} }
 
 // Constraints bound the size a widget may choose during layout, the same way
 // Flutter's BoxConstraints flow down the tree while sizes flow back up.
@@ -52,6 +56,9 @@ func Tight(s Size) Constraints {
 func Loose(s Size) Constraints {
 	return Constraints{MaxW: s.W, MaxH: s.H}
 }
+
+// Max returns the largest size c permits.
+func (c Constraints) Max() Size { return Size{W: c.MaxW, H: c.MaxH} }
 
 // Constrain clamps s so that it satisfies c.
 func (c Constraints) Constrain(s Size) Size {

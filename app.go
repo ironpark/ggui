@@ -92,8 +92,8 @@ func (a *App) Draw(screen *ebiten.Image) {
 		return
 	}
 	b := screen.Bounds()
-	a.root.Layout(Tight(Sz(b.Dx(), b.Dy())))
-	a.root.Paint(screen, Pt(0, 0))
+	size := a.root.Layout(Tight(Sz(b.Dx(), b.Dy())))
+	a.root.Paint(screen, Rect{Size: size})
 	a.dirty = false
 }
 

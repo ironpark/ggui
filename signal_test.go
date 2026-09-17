@@ -8,7 +8,7 @@ import (
 )
 
 func TestSignalGetSet(t *testing.T) {
-	s := NewSignal(1)
+	s := State(1)
 	if got := s.Get(); got != 1 {
 		t.Fatalf("Get() = %d, want 1", got)
 	}
@@ -19,7 +19,7 @@ func TestSignalGetSet(t *testing.T) {
 }
 
 func TestEffectRerunsOnChange(t *testing.T) {
-	s := NewSignal("a")
+	s := State("a")
 	var seen []string
 	dispose := Effect(func() { seen = append(seen, s.Get()) })
 	defer dispose()
@@ -42,7 +42,7 @@ func TestEffectRerunsOnChange(t *testing.T) {
 }
 
 func TestEffectDisposeStopsUpdates(t *testing.T) {
-	s := NewSignal(0)
+	s := State(0)
 	runs := 0
 	dispose := Effect(func() { s.Get(); runs++ })
 	dispose()
@@ -55,14 +55,14 @@ func TestEffectDisposeStopsUpdates(t *testing.T) {
 }
 
 func TestUntrackedReadDoesNotSubscribe(t *testing.T) {
-	s := NewSignal(0)
+	s := State(0)
 	s.Get() // outside any effect
 	s.Set(1)
 	effects.flush() // must not panic on a nil subscriber
 }
 
 func TestSetSkipsEqualValue(t *testing.T) {
-	s := NewSignal(1)
+	s := State(1)
 	runs := 0
 	dispose := Effect(func() { s.Get(); runs++ })
 	defer dispose()
@@ -80,7 +80,7 @@ func TestSetSkipsEqualValue(t *testing.T) {
 }
 
 func TestSetNotifiesForUncomparableValue(t *testing.T) {
-	s := NewSignal([]int{1})
+	s := State([]int{1})
 	runs := 0
 	dispose := Effect(func() { s.Get(); runs++ })
 	defer dispose()
@@ -93,7 +93,7 @@ func TestSetNotifiesForUncomparableValue(t *testing.T) {
 }
 
 func TestWithEqualOverridesComparison(t *testing.T) {
-	s := NewSignal([]int{1}).WithEqual(slices.Equal)
+	s := State([]int{1}).WithEqual(slices.Equal)
 	runs := 0
 	dispose := Effect(func() { s.Get(); runs++ })
 	defer dispose()
@@ -106,7 +106,7 @@ func TestWithEqualOverridesComparison(t *testing.T) {
 }
 
 func TestSignalMapDerivesValue(t *testing.T) {
-	n := NewSignal(2)
+	n := State(2)
 	label := n.Map(func(v int) string { return strconv.Itoa(v * 10) })
 	defer label.Dispose()
 
@@ -121,7 +121,7 @@ func TestSignalMapDerivesValue(t *testing.T) {
 }
 
 func TestMemoChainSettlesInOneFlush(t *testing.T) {
-	n := NewSignal(1)
+	n := State(1)
 	doubled := n.Map(func(v int) int { return v * 2 })
 	defer doubled.Dispose()
 	label := doubled.Map(func(v int) string { return strconv.Itoa(v) })
@@ -139,7 +139,7 @@ func TestMemoChainSettlesInOneFlush(t *testing.T) {
 }
 
 func TestMemoRecomputesOnlyWhenSourceChanges(t *testing.T) {
-	n := NewSignal(1)
+	n := State(1)
 	runs := 0
 	m := n.Map(func(v int) int { runs++; return v % 2 })
 	defer m.Dispose()
@@ -159,7 +159,7 @@ func TestMemoRecomputesOnlyWhenSourceChanges(t *testing.T) {
 }
 
 func TestMemoDisposeStopsRecomputation(t *testing.T) {
-	n := NewSignal(1)
+	n := State(1)
 	m := n.Map(func(v int) int { return v + 1 })
 	m.Dispose()
 
@@ -175,7 +175,7 @@ func TestLensReadsAndWritesThrough(t *testing.T) {
 		Count int
 		Step  int
 	}
-	state := NewSignal(model{Step: 2})
+	state := State(model{Step: 2})
 	count := state.Lens(
 		func(m model) int { return m.Count },
 		func(m model, n int) model { m.Count = n; return m },
@@ -194,9 +194,72 @@ func TestLensReadsAndWritesThrough(t *testing.T) {
 	}
 }
 
+func TestFieldReadsAndWritesThrough(t *testing.T) {
+	type model struct{ Count, Step int }
+	state := State(model{Step: 2})
+	count := state.Field(func(m *model) *int { return &m.Count })
+
+	if got := count.Get(); got != 0 {
+		t.Fatalf("Get() = %d, want 0", got)
+	}
+	count.Set(5)
+	if got := state.Get(); got != (model{Count: 5, Step: 2}) {
+		t.Fatalf("state = %+v, want the rest of the value preserved", got)
+	}
+	Add(count, 3)
+	if got := count.Get(); got != 8 {
+		t.Fatalf("Get() = %d, want 8", got)
+	}
+}
+
+func TestFieldNestsThroughLenses(t *testing.T) {
+	type pos struct{ X, Y int }
+	type model struct {
+		Cursor pos
+		On     bool
+	}
+	state := State(model{})
+	x := state.Field(func(m *model) *pos { return &m.Cursor }).
+		Field(func(p *pos) *int { return &p.X })
+	on := state.Field(func(m *model) *bool { return &m.On })
+
+	var seen []model
+	dispose := Effect(func() { seen = append(seen, state.Get()) })
+	defer dispose()
+
+	x.Set(4)
+	Toggle(on)
+	effects.flush()
+	want := model{Cursor: pos{X: 4}, On: true}
+	if got := state.Get(); got != want {
+		t.Fatalf("state = %+v, want %+v", got, want)
+	}
+	if len(seen) != 2 || seen[1] != want {
+		t.Fatalf("seen = %v, want the whole-value effect to re-run once with %+v", seen, want)
+	}
+}
+
+func TestCellAcceptsSignalAndLens(t *testing.T) {
+	type model struct{ N int }
+	state := State(model{})
+	var cells = []Cell[int]{
+		State(1),
+		state.Field(func(m *model) *int { return &m.N }),
+	}
+	for _, c := range cells {
+		Add(c, 2)
+	}
+	if got := cells[0].Get(); got != 3 {
+		t.Fatalf("signal = %d, want 3", got)
+	}
+	if got := state.Get().N; got != 2 {
+		t.Fatalf("state.N = %d, want 2", got)
+	}
+}
+
 func TestLensTracksWholeValue(t *testing.T) {
 	type model struct{ Count, Step int }
-	state := NewSignal(model{})
+	state := State(model{})
 	count := state.Lens(
 		func(m model) int { return m.Count },
 		func(m model, n int) model { m.Count = n; return m },
@@ -214,8 +277,8 @@ func TestLensTracksWholeValue(t *testing.T) {
 }
 
 func TestCombineDerivesFromTwoSources(t *testing.T) {
-	a := NewSignal(2)
-	b := NewSignal("x")
+	a := State(2)
+	b := State("x")
 	joined := Combine(a, b, func(n int, s string) string { return strings.Repeat(s, n) })
 	defer joined.Dispose()
 
@@ -230,7 +293,7 @@ func TestCombineDerivesFromTwoSources(t *testing.T) {
 }
 
 func TestWatchRunsOnChange(t *testing.T) {
-	s := NewSignal(0)
+	s := State(0)
 	var seen []int
 	dispose := Watch(s, func(v int) { seen = append(seen, v) })
 	defer dispose()

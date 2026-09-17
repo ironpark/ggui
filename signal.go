@@ -26,6 +26,15 @@ type Reader[T any] interface {
 	Get() T
 }
 
+// Cell is a read-write reactive value. *Signal and Lens satisfy it, so a
+// component can take a Cell[int] and not care whether it was handed a whole
+// Signal or one field of a larger state.
+type Cell[T any] interface {
+	Reader[T]
+	Set(T)
+	Update(func(T) T)
+}
+
 // Signal is a reactive value. Reads inside an Effect subscribe to it; writes
 // mark every subscriber dirty so the next frame recomputes them.
 type Signal[T any] struct {
@@ -35,9 +44,12 @@ type Signal[T any] struct {
 	subs map[*effect]struct{}
 }
 
-// NewSignal creates a Signal holding v. When T is comparable, writing an equal
+// State creates a Signal holding v. T is inferred from the argument, so
+// State(0) is a *Signal[int] and State("") a *Signal[string]; name it
+// explicitly (State[float64](0), State[Widget](nil)) when the literal would
+// infer the wrong type or none at all. When T is comparable, writing an equal
 // value is a no-op; see WithEqual to supply equality for other types.
-func NewSignal[T any](v T) *Signal[T] {
+func State[T any](v T) *Signal[T] {
 	return &Signal[T]{val: v, eq: comparableEqual[T](), subs: map[*effect]struct{}{}}
 }
 
@@ -53,7 +65,7 @@ func comparableEqual[T any]() func(a, b T) bool {
 }
 
 // WithEqual sets the test Set uses to drop redundant writes, and returns s so
-// it can be chained onto NewSignal. Passing nil makes every write notify.
+// it can be chained onto State. Passing nil makes every write notify.
 func (s *Signal[T]) WithEqual(eq func(a, b T) bool) *Signal[T] {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -107,26 +119,45 @@ func (s *Signal[T]) Update(fn func(T) T) {
 // changes. Create it once, next to the Signal: every call registers an effect,
 // so calling it inside a Builder would add one per rebuild.
 func (s *Signal[T]) Map[U any](fn func(T) U) *Memo[U] {
-	return Derive(func() U { return fn(s.Get()) })
+	return Derived(func() U { return fn(s.Get()) })
+}
+
+// Field returns a read-write view of one field of s's value. sel picks the
+// field by pointer, so a struct can be sliced into reactive cells one line
+// each:
+//
+//	count := state.Field(func(m *model) *int { return &m.Count })
+//
+// Writes copy the whole value, assign through the pointer and store the copy,
+// so everything watching the whole value still sees the change. T should be a
+// value type; sel must return a pointer into the value it was given.
+func (s *Signal[T]) Field[U any](sel func(*T) *U) Lens[T, U] {
+	return Field(Cell[T](s), sel)
 }
 
 // Lens returns a read-write view of the part of s's value that get selects.
-// Writing through the Lens applies set to the whole value, so a struct field
-// can be handed out as its own reactive cell:
-//
-//	count := state.Lens(
-//		func(m model) int { return m.Count },
-//		func(m model, n int) model { m.Count = n; return m },
-//	)
+// Reach for it when the part is computed rather than a plain field; for a
+// field, Field needs one closure instead of two.
 func (s *Signal[T]) Lens[U any](get func(T) U, set func(T, U) T) Lens[T, U] {
 	return Lens[T, U]{src: s, get: get, set: set}
 }
 
-// Lens is a read-write view onto part of a Signal's value, produced by
-// Signal.Lens. Reads track the underlying Signal; writes go through it, so
-// everything watching the whole value still sees the change.
+// Field builds a Lens onto one field of any Cell. Signal.Field and Lens.Field
+// are the usual way to call it.
+func Field[T, U any](src Cell[T], sel func(*T) *U) Lens[T, U] {
+	return Lens[T, U]{
+		src: src,
+		get: func(t T) U { return *sel(&t) },
+		set: func(t T, v U) T { *sel(&t) = v; return t },
+	}
+}
+
+// Lens is a read-write view onto part of a Cell's value, produced by Field or
+// Signal.Lens. Reads track the underlying value; writes go through it, so
+// everything watching the whole value still sees the change. A Lens is itself
+// a Cell, so views nest: state.Field(...).Field(...).
 type Lens[T, U any] struct {
-	src *Signal[T]
+	src Cell[T]
 	get func(T) U
 	set func(T, U) T
 }
@@ -134,7 +165,7 @@ type Lens[T, U any] struct {
 // Get returns the selected part and subscribes the running Effect, if any.
 func (l Lens[T, U]) Get() U { return l.get(l.src.Get()) }
 
-// Set writes v back into the underlying Signal.
+// Set writes v back through the underlying Cell.
 func (l Lens[T, U]) Set(v U) {
 	l.src.Update(func(t T) T { return l.set(t, v) })
 }
@@ -144,10 +175,26 @@ func (l Lens[T, U]) Update(fn func(U) U) {
 	l.src.Update(func(t T) T { return l.set(t, fn(l.get(t))) })
 }
 
+// Field narrows the view to one field of the selected part.
+func (l Lens[T, U]) Field[V any](sel func(*U) *V) Lens[U, V] {
+	return Field(Cell[U](l), sel)
+}
+
+// Lens narrows the view with an explicit getter and setter.
+func (l Lens[T, U]) Lens[V any](get func(U) V, set func(U, V) U) Lens[U, V] {
+	return Lens[U, V]{src: l, get: get, set: set}
+}
+
 // Map returns a Memo holding fn applied to the selected part.
 func (l Lens[T, U]) Map[V any](fn func(U) V) *Memo[V] {
-	return Derive(func() V { return fn(l.Get()) })
+	return Derived(func() V { return fn(l.Get()) })
 }
+
+// Toggle flips a boolean cell.
+func Toggle(c Cell[bool]) { c.Update(func(b bool) bool { return !b }) }
+
+// Add adds d to a numeric cell.
+func Add[N Number](c Cell[N], d N) { c.Update(func(n N) N { return n + d }) }
 
 // Memo is a derived value: it recomputes when one of the signals its function
 // read changes, and notifies its own readers only when the result differs.
@@ -156,19 +203,19 @@ type Memo[T any] struct {
 	dispose func()
 }
 
-// Derive creates a Memo computed by fn. fn runs once immediately, and again on
+// Derived creates a Memo computed by fn. fn runs once immediately, and again on
 // the frame after any signal it read changes. Like Signal.Map, create it once
 // rather than inside a Builder.
-func Derive[T any](fn func() T) *Memo[T] {
+func Derived[T any](fn func() T) *Memo[T] {
 	var zero T
-	m := &Memo[T]{sig: NewSignal(zero)}
+	m := &Memo[T]{sig: State(zero)}
 	m.dispose = Effect(func() { m.sig.Set(fn()) })
 	return m
 }
 
 // Combine derives a value from two reactive sources.
 func Combine[A, B, C any](a Reader[A], b Reader[B], fn func(A, B) C) *Memo[C] {
-	return Derive(func() C { return fn(a.Get(), b.Get()) })
+	return Derived(func() C { return fn(a.Get(), b.Get()) })
 }
 
 // Get returns the memoized value and subscribes the running Effect, if any.
@@ -179,7 +226,7 @@ func (m *Memo[T]) Dispose() { m.dispose() }
 
 // Map chains another derivation onto m.
 func (m *Memo[T]) Map[U any](fn func(T) U) *Memo[U] {
-	return Derive(func() U { return fn(m.Get()) })
+	return Derived(func() U { return fn(m.Get()) })
 }
 
 // Watch runs fn with src's value now, and again whenever it changes. It returns

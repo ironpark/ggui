@@ -1,5 +1,5 @@
 // Command counter is a minimal ggui app: one struct of state, sliced into
-// reactive fields with lenses, and derived text built with generic methods.
+// reactive fields with Field, and derived text built with generic methods.
 // Click or press space to count; up/down changes the step.
 package main
 
@@ -19,17 +19,11 @@ type model struct {
 }
 
 func main() {
-	state := ggui.NewSignal(model{Step: 1})
+	state := ggui.State(model{Step: 1})
 
-	// Lenses hand out a field of the state as its own read-write cell.
-	count := state.Lens(
-		func(m model) int { return m.Count },
-		func(m model, n int) model { m.Count = n; return m },
-	)
-	step := state.Lens(
-		func(m model) int { return m.Step },
-		func(m model, n int) model { m.Step = n; return m },
-	)
+	// Field hands out one field of the state as its own read-write cell.
+	count := state.Field(func(m *model) *int { return &m.Count })
+	step := state.Field(func(m *model) *int { return &m.Step })
 
 	// Map derives text from a cell; it recomputes only when the cell changes.
 	label := count.Map(func(n int) string { return fmt.Sprintf("count: %d", n) })
@@ -42,8 +36,9 @@ func main() {
 	})
 
 	var (
-		fg  = color.White
-		dim = color.RGBA{0x8a, 0x90, 0x9c, 0xff}
+		fg    = color.White
+		dim   = color.RGBA{0x8a, 0x90, 0x9c, 0xff}
+		panel = color.RGBA{0x23, 0x27, 0x2f, 0xff}
 	)
 
 	app := ggui.New(ggui.Config{
@@ -53,34 +48,25 @@ func main() {
 		Resizable:  true,
 		Background: color.RGBA{0x14, 0x16, 0x1a, 0xff},
 	}, func() ggui.Widget {
-		return &ggui.Center{
-			Child: &ggui.Box{
-				Color:   color.RGBA{0x23, 0x27, 0x2f, 0xff},
-				Padding: ggui.All(24),
-				Child: &ggui.Column{
-					Gap: 8,
-					Children: []ggui.Widget{
-						&ggui.Text{Value: label.Get(), Color: fg},
-						&ggui.List[string]{
-							Gap:   4,
-							Items: hints.Get(),
-							Item: func(s string) ggui.Widget {
-								return &ggui.Text{Value: s, Color: dim}
-							},
-						},
-					},
-				},
-			},
-		}
+		return ggui.Center(
+			ggui.Box(
+				ggui.Column(
+					ggui.Text(label.Get()).Color(fg),
+					ggui.List(hints.Get(), func(s string) ggui.Widget {
+						return ggui.Text(s).Color(dim)
+					}).Gap(4),
+				).Gap(8),
+			).Pad(24).Fill(panel),
+		)
 	})
 
 	app.OnFrame(func() {
 		switch {
 		case inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft),
 			inpututil.IsKeyJustPressed(ebiten.KeySpace):
-			count.Update(func(n int) int { return n + step.Get() })
+			ggui.Add(count, step.Get())
 		case inpututil.IsKeyJustPressed(ebiten.KeyArrowUp):
-			step.Update(func(s int) int { return s + 1 })
+			ggui.Add(step, 1)
 		case inpututil.IsKeyJustPressed(ebiten.KeyArrowDown):
 			step.Update(func(s int) int { return max(s-1, 1) })
 		}
