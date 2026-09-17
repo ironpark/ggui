@@ -32,7 +32,7 @@ func NewProbe(w Widget, size Size) *Probe {
 // hit regions the next event is routed to. It returns the root's size.
 func (p *Probe) Frame() Size {
 	effects.flush()
-	c := Canvas{prev: p.in.regions, pointer: p.pointer, hasPointer: p.hasPointer}
+	c := Canvas{prev: p.in.regions, pointer: p.pointer, hasPointer: p.hasPointer, logical: p.size}
 	s := p.root.Layout(Tight(p.size), p.env)
 	c.Paint(p.root, Rect{Size: s})
 	c.paintOverlays()

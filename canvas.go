@@ -27,6 +27,7 @@ type Canvas struct {
 	clipped bool
 
 	// Root-only frame state.
+	logical    Size // the window in logical pixels, for Size
 	pointer    Point
 	hasPointer bool
 	overlays   []func(*Canvas)
@@ -102,13 +103,17 @@ func (c *Canvas) Overlay(fn func(dst *Canvas)) {
 	root.overlays = append(root.overlays, fn)
 }
 
-// Size returns the logical size of the Image, or zero for a Canvas without
-// one.
+// Size returns the logical size of the window being painted, or zero for
+// a Canvas that was given none.
 func (c *Canvas) Size() Size {
-	if c == nil || c.Image == nil {
+	if c == nil {
 		return Size{}
 	}
-	b := c.root().Image.Bounds()
+	root := c.root()
+	if root.logical != (Size{}) || root.Image == nil {
+		return root.logical
+	}
+	b := root.Image.Bounds()
 	return Sz(c.dp(float64(b.Dx())), c.dp(float64(b.Dy())))
 }
 

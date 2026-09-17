@@ -1,0 +1,159 @@
+package ggui
+
+// PopupWidget shows content floating over the tree, anchored below (or,
+// when there is no room, above) its anchor widget: the base of dropdowns
+// and menus. Build one with Popup. The anchor is laid out and painted in
+// place; while the popup is open the content is painted through
+// Canvas.Overlay, above everything, and a click anywhere outside it closes
+// it without reaching what was clicked.
+//
+// Whether the popup is open lives in the widget, so keep it alive (in a
+// Component, or adopted across rebuilds by the widget that owns it) or
+// bind it to a Signal with Bind. Widgets inside the content can find the
+// popup with PopupOf and close it after acting.
+type PopupWidget struct {
+	anchor  Widget
+	content Widget
+	open    bool
+	bound   *Signal[bool]
+	gap     float64
+	keys    KeyHandler
+	onClose func()
+
+	env         Env
+	contentSize Size
+	rect        Rect // where the content was last painted
+}
+
+var popupKey = NewKey[*PopupWidget]("popup")
+
+// Popup creates a closed popup that opens content next to anchor.
+func Popup(anchor, content Widget) *PopupWidget {
+	return &PopupWidget{anchor: anchor, content: content, gap: 4}
+}
+
+// Bind stores the open state in sig: writing it opens or closes the popup,
+// and the popup writes it when it closes itself.
+func (p *PopupWidget) Bind(sig *Signal[bool]) *PopupWidget { p.bound = sig; return p }
+
+// Gap sets the space between the anchor and the content.
+func (p *PopupWidget) Gap(v float64) *PopupWidget { p.gap = v; return p }
+
+// Keys registers h as the key handler over the content, so a click inside
+// the popup keeps keyboard focus on h (the widget that opened it) instead
+// of blurring it.
+func (p *PopupWidget) Keys(h KeyHandler) *PopupWidget { p.keys = h; return p }
+
+// OnClose fires when the popup closes, however it closed.
+func (p *PopupWidget) OnClose(fn func()) *PopupWidget { p.onClose = fn; return p }
+
+// IsOpen reports whether the content is showing.
+func (p *PopupWidget) IsOpen() bool {
+	if p.bound != nil {
+		return p.bound.Peek()
+	}
+	return p.open
+}
+
+// SetOpen opens or closes the popup.
+func (p *PopupWidget) SetOpen(v bool) {
+	was := p.IsOpen()
+	if p.bound != nil {
+		p.bound.Set(v)
+	} else {
+		p.open = v
+	}
+	if was && !v {
+		RequestLayout()
+		if p.onClose != nil {
+			p.onClose()
+		}
+	}
+}
+
+// Show opens the popup.
+func (p *PopupWidget) Show() { p.SetOpen(true) }
+
+// Hide closes the popup.
+func (p *PopupWidget) Hide() { p.SetOpen(false) }
+
+// Toggle opens a closed popup and closes an open one.
+func (p *PopupWidget) Toggle() { p.SetOpen(!p.IsOpen()) }
+
+// Rect returns where the content was last painted, for a widget that
+// positions itself relative to the popup.
+func (p *PopupWidget) Rect() Rect { return p.rect }
+
+// PopupOf returns the popup whose content the widget laid out under env is
+// part of, if any. A menu item closes its menu this way.
+func PopupOf(env Env) (*PopupWidget, bool) { return env.Get(popupKey) }
+
+// Layout implements Widget.
+func (p *PopupWidget) Layout(c Constraints, env Env) Size {
+	p.env = env.With(popupKey, p)
+	return p.anchor.Layout(c, env)
+}
+
+// Paint implements Widget.
+func (p *PopupWidget) Paint(dst *Canvas, r Rect) {
+	dst.Paint(p.anchor, r)
+	if !p.IsOpen() {
+		return
+	}
+	dst.Overlay(func(dst *Canvas) { p.paintContent(dst, r) })
+}
+
+// paintContent lays the content out for the room around the anchor and
+// paints it, on a scrim that closes the popup when clicked.
+func (p *PopupWidget) paintContent(dst *Canvas, anchor Rect) {
+	screen := dst.Size()
+	if screen == (Size{}) {
+		screen = Sz(Unbounded, Unbounded)
+	}
+	maxW := max(screen.W-anchor.Origin.X, anchor.Size.W)
+	natural := p.content.Layout(Constraints{MinW: anchor.Size.W, MaxW: maxW, MaxH: Unbounded}, p.env)
+	below := screen.H - (anchor.Origin.Y + anchor.Size.H + p.gap)
+	above := anchor.Origin.Y - p.gap
+	room, y := below, anchor.Origin.Y+anchor.Size.H+p.gap
+	if natural.H > below && above > below {
+		room = above
+		y = max(anchor.Origin.Y-p.gap-min(natural.H, above), 0)
+	}
+	size := natural
+	if size.H > room {
+		size = p.content.Layout(Constraints{MinW: anchor.Size.W, MaxW: maxW, MaxH: max(room, 0)}, p.env)
+	}
+	x := anchor.Origin.X
+	if screen.W != Unbounded {
+		x = clamp(x, 0, max(screen.W-size.W, 0))
+	}
+	p.contentSize = size
+	p.rect = Rct(Pt(x, y), size)
+
+	dst.HitPointer(Rect{Size: screen}, popupScrim{p})
+	dst.HitPointer(p.rect, popupSink{})
+	if p.keys != nil {
+		dst.HitKey(p.rect, p.keys)
+	}
+	dst.Paint(p.content, p.rect)
+}
+
+// popupScrim covers the window under an open popup: a press closes the
+// popup and goes no further, while hovering and scrolling pass through.
+type popupScrim struct{ p *PopupWidget }
+
+func (s popupScrim) HandlePointer(ev PointerEvent) bool {
+	switch ev.Kind {
+	case PointerDown:
+		s.p.Hide()
+		return true
+	case PointerUp, PointerTap:
+		return true
+	}
+	return false
+}
+
+// popupSink keeps presses inside the content from reaching the scrim.
+type popupSink struct{}
+
+func (popupSink) HandlePointer(ev PointerEvent) bool { return ev.Kind != PointerScroll }

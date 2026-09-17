@@ -18,6 +18,7 @@ func main() {
 	name := ggui.State("")
 	size := ggui.State(16.0)
 	notes := ggui.State("")
+	fruit := ggui.State("Banana")
 	notify := ggui.State(true)
 	plan := ggui.State("free")
 	tags := ggui.State([]string{"go", "gui", "ebiten", "signals", "flutter", "svelte", "layout", "hidpi"})
@@ -80,6 +81,16 @@ func main() {
 					ui.Radio(plan, "pro", "Pro"),
 					ui.Radio(plan, "team", "Team").Disabled(true),
 				).Gap(t.Space*2),
+				ggui.Row(
+					ui.Select(fruit, []string{"Apple", "Banana", "Cherry", "Durian"}, func(s string) string { return s }).MinWidth(140),
+					ui.Menu("Actions",
+						ui.MenuItem("Reset text size", func() { size.Set(16) }),
+						ui.MenuItem("Clear name", func() { name.Set("") }),
+						ui.MenuDivider(),
+						ui.MenuItem("Toggle dark", func() { dark.Set(!dark.Peek()) }),
+					),
+					ggui.Reactive(func() ggui.Widget { return ggui.Text("picked " + fruit.Get()).Color(t.Muted) }),
+				).Gap(t.Space).Align(ggui.AlignCenter),
 			).Gap(t.Space)),
 
 			section("Wrap", ggui.Reactive(func() ggui.Widget {

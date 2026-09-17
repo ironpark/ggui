@@ -259,6 +259,12 @@ func (in *inputState) focus(r *hitRegion, keyboard bool) {
 	if sameRegion(r, in.focused) {
 		return
 	}
+	if r != nil && in.focused != nil && sameAny(r.key, in.focused.key) {
+		// The same widget in another region, such as a dropdown's list
+		// under its field: focus stays, without a blur.
+		in.focused = keep(r)
+		return
+	}
 	if in.focused != nil && in.focused.key != nil {
 		in.focused.key.HandleKey(KeyEvent{Kind: KeyBlur})
 	}

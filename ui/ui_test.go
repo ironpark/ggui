@@ -224,3 +224,70 @@ func TestSliderKeepsDraggingWhenItMoves(t *testing.T) {
 		t.Fatalf("value %v after dragging to the right from %v: the moved slider lost the drag", v.Peek(), first)
 	}
 }
+
+func TestSelectOpensPicksAndClosesWithPointerAndKeys(t *testing.T) {
+	v := ggui.State("b")
+	changes := 0
+	sel := ui.SelectStrings(v, "a", "b", "c").OnChange(func(string) { changes++ })
+	tree := ggui.Column(ggui.Padding(sel, 10))
+	p := ggui.NewProbe(tree, ggui.Sz(300, 300))
+	field := p.Frame()
+	_ = field
+	p.Click(ggui.Pt(50, 20))
+	if !sel.Popup().IsOpen() {
+		t.Fatal("a click did not open the list")
+	}
+	p.Frame()
+	list := sel.Popup().Rect()
+	if list.Origin.Y < 20 || list.Size.W < 160 {
+		t.Fatalf("list at %+v, want below the field and at least as wide", list)
+	}
+	// The third row is the last third of the list.
+	rowH := list.Size.H / 3
+	p.Click(ggui.Pt(list.Origin.X+20, list.Origin.Y+rowH*2.5))
+	if v.Peek() != "c" || changes != 1 || sel.Popup().IsOpen() {
+		t.Fatalf("value %q changes %d open %v after clicking the third row", v.Peek(), changes, sel.Popup().IsOpen())
+	}
+	// Keyboard: focus is on the field; Down while closed steps the value.
+	p.Type(ggui.Mods{}, ebiten.KeyArrowDown)
+	if v.Peek() != "a" {
+		t.Fatalf("Down wrapped to %q, want a", v.Peek())
+	}
+	p.Type(ggui.Mods{}, ebiten.KeySpace, ebiten.KeyArrowDown, ebiten.KeyEnter)
+	if v.Peek() != "b" || sel.Popup().IsOpen() {
+		t.Fatalf("Space, Down, Enter gave %q open %v; want b and closed", v.Peek(), sel.Popup().IsOpen())
+	}
+	p.Type(ggui.Mods{}, ebiten.KeySpace)
+	p.Click(ggui.Pt(250, 250))
+	if sel.Popup().IsOpen() {
+		t.Fatal("a click outside did not close the list")
+	}
+}
+
+func TestMenuRunsItemsAndClosesOnEscape(t *testing.T) {
+	ran := ""
+	m := ui.Menu("File", ui.MenuItem("New", func() { ran = "new" }), ui.MenuDivider(), ui.MenuItem("Quit", func() { ran = "quit" }))
+	p := ggui.NewProbe(ggui.Column(m), ggui.Sz(300, 300))
+	p.Frame()
+	p.Click(ggui.Pt(10, 10))
+	if !m.Popup().IsOpen() {
+		t.Fatal("click did not open the menu")
+	}
+	p.Frame()
+	panel := m.Popup().Rect()
+	if panel.Origin.Y < 20 {
+		t.Fatalf("panel at %+v overlaps the button", panel)
+	}
+	p.Click(ggui.Pt(panel.Origin.X+10, panel.Origin.Y+12))
+	if ran != "new" || m.Popup().IsOpen() {
+		t.Fatalf("ran %q open %v after clicking the first item", ran, m.Popup().IsOpen())
+	}
+	p.Type(ggui.Mods{}, ebiten.KeyArrowDown, ebiten.KeyArrowDown, ebiten.KeyEnter)
+	if ran != "quit" {
+		t.Fatalf("Down, Down, Enter ran %q, want quit", ran)
+	}
+	p.Type(ggui.Mods{}, ebiten.KeyArrowDown, ebiten.KeyEscape)
+	if m.Popup().IsOpen() {
+		t.Fatal("Escape did not close the menu")
+	}
+}
