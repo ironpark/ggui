@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"image/color"
+	"math"
 	"slices"
 
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
@@ -199,9 +200,20 @@ func (b *BoxWidget) Height(h float64) *BoxWidget { b.height = h; return b }
 
 // Layout implements Widget.
 func (b *BoxWidget) Layout(c Constraints) Size {
+	// A fixed dimension is passed down tight, so a child that centers or
+	// justifies does so within the box rather than the space around it.
+	inner := b.padding.Shrink(c).Loosen()
+	if b.width > 0 {
+		w := max(clamp(b.width, c.MinW, c.MaxW)-b.padding.horizontal(), 0)
+		inner.MinW, inner.MaxW = w, w
+	}
+	if b.height > 0 {
+		h := max(clamp(b.height, c.MinH, c.MaxH)-b.padding.vertical(), 0)
+		inner.MinH, inner.MaxH = h, h
+	}
 	b.childSize = Size{}
 	if b.child != nil {
-		b.childSize = b.child.Layout(b.padding.Shrink(c).Loosen())
+		b.childSize = b.child.Layout(inner)
 	}
 	want := b.padding.Inflate(b.childSize)
 	if b.width > 0 {
@@ -294,7 +306,7 @@ func (f *flow) layout(c Constraints) Size {
 	mainMax, crossMax := f.main(c.Max()), f.cross(c.Max())
 	var crossMin float64
 	if f.align == AlignStretch {
-		crossMin = crossMax
+		crossMin = bounded(crossMax, 0)
 	}
 
 	var gaps float64
@@ -306,8 +318,9 @@ func (f *flow) layout(c Constraints) Size {
 	// split the remainder by weight.
 	used := gaps
 	var totalFlex float64
+	flexible := !math.IsInf(mainMax, 1) // no leftover to share on an unbounded axis
 	for i, child := range f.children {
-		if fw, ok := child.(*FlexWidget); ok && fw.flex > 0 {
+		if fw, ok := child.(*FlexWidget); ok && fw.flex > 0 && flexible {
 			totalFlex += fw.flex
 			continue
 		}
@@ -316,7 +329,7 @@ func (f *flow) layout(c Constraints) Size {
 	}
 	free := max(mainMax-used, 0)
 	for i, child := range f.children {
-		if fw, ok := child.(*FlexWidget); ok && fw.flex > 0 {
+		if fw, ok := child.(*FlexWidget); ok && fw.flex > 0 && flexible {
 			extent := free * fw.flex / totalFlex
 			f.sizes[i] = child.Layout(f.constraints(extent, extent, crossMin, crossMax))
 		}
@@ -330,11 +343,11 @@ func (f *flow) layout(c Constraints) Size {
 	}
 	mainTotal := content
 	if totalFlex > 0 || f.justify != JustifyStart {
-		mainTotal = mainMax
+		mainTotal = bounded(mainMax, content)
 	}
 	crossTotal := crossUsed
 	if f.align == AlignStretch {
-		crossTotal = crossMax
+		crossTotal = bounded(crossMax, crossUsed)
 	}
 	result := c.Constrain(f.size(mainTotal, crossTotal))
 
@@ -501,7 +514,7 @@ func (st *StackWidget) Layout(c Constraints) Size {
 		total.H = max(total.H, s.H)
 	}
 	if st.expand {
-		total = c.Max()
+		total = Sz(bounded(c.MaxW, total.W), bounded(c.MaxH, total.H))
 	}
 	return c.Constrain(total)
 }
@@ -548,7 +561,7 @@ func (a *AlignWidget) Bottom() *AlignWidget { a.y = 1; return a }
 // Layout implements Widget.
 func (a *AlignWidget) Layout(c Constraints) Size {
 	a.childSize = a.child.Layout(c.Loosen())
-	return c.Max()
+	return c.Constrain(Sz(bounded(c.MaxW, a.childSize.W), bounded(c.MaxH, a.childSize.H)))
 }
 
 // Paint implements Widget.
@@ -563,4 +576,120 @@ func (a *AlignWidget) Paint(dst *Canvas, r Rect) {
 // what it returns: every Column setter applies to it.
 func List[T any](items []T, item func(T) Widget) *ColumnWidget {
 	return Column(Children(items, item)...)
+}
+
+// ScrollWidget shows a window onto a child that may be taller (or, with
+// Horizontal, wider) than the space it has, and moves that window with the
+// wheel. Build one with Scroll.
+type ScrollWidget struct {
+	child      Widget
+	horizontal bool
+	speed      float64
+	bar        color.Color
+	bound      *Signal[float64]
+	offset     float64
+
+	childSize Size
+	viewport  Size
+}
+
+// Scroll lets child take any height and scrolls it within the space Scroll
+// is given. The offset lives in the widget, so keep the widget alive (a
+// static parent, or a Component) or bind it to a Signal with Offset.
+func Scroll(child Widget) *ScrollWidget {
+	return &ScrollWidget{child: child, speed: 20, bar: color.RGBA{0x80, 0x80, 0x80, 0x80}}
+}
+
+// Horizontal scrolls along the x axis instead of the y axis.
+func (s *ScrollWidget) Horizontal() *ScrollWidget { s.horizontal = true; return s }
+
+// Speed sets how many pixels one wheel unit moves.
+func (s *ScrollWidget) Speed(px float64) *ScrollWidget { s.speed = px; return s }
+
+// Bar sets the scrollbar color; nil hides the bar.
+func (s *ScrollWidget) Bar(c color.Color) *ScrollWidget { s.bar = c; return s }
+
+// Offset binds the scroll position to sig: wheel input writes it, and
+// writing it scrolls. Use it to keep the position across rebuilds or to
+// scroll programmatically.
+func (s *ScrollWidget) Offset(sig *Signal[float64]) *ScrollWidget { s.bound = sig; return s }
+
+func (s *ScrollWidget) extent(sz Size) float64 { return pick(s.horizontal, sz.W, sz.H) }
+
+func (s *ScrollWidget) maxOffset() float64 {
+	return max(s.extent(s.childSize)-s.extent(s.viewport), 0)
+}
+
+func (s *ScrollWidget) position() float64 {
+	if s.bound != nil {
+		return s.bound.Peek()
+	}
+	return s.offset
+}
+
+func (s *ScrollWidget) scrollTo(v float64) {
+	v = clamp(v, 0, s.maxOffset())
+	if s.bound != nil {
+		s.bound.Set(v)
+	} else {
+		s.offset = v
+	}
+}
+
+// Layout implements Widget.
+func (s *ScrollWidget) Layout(c Constraints) Size {
+	inner := c.Max()
+	if s.horizontal {
+		inner.W = Unbounded
+	} else {
+		inner.H = Unbounded
+	}
+	s.childSize = s.child.Layout(Loose(inner))
+	s.viewport = c.Constrain(Sz(bounded(c.MaxW, s.childSize.W), bounded(c.MaxH, s.childSize.H)))
+	s.scrollTo(s.position())
+	return s.viewport
+}
+
+// Paint implements Widget.
+func (s *ScrollWidget) Paint(dst *Canvas, r Rect) {
+	dst.HitPointer(r, s)
+	origin := r.Origin
+	if s.horizontal {
+		origin.X -= s.position()
+	} else {
+		origin.Y -= s.position()
+	}
+	s.child.Paint(dst.Clip(r), Rct(origin, s.childSize))
+	s.paintBar(dst, r)
+}
+
+func (s *ScrollWidget) paintBar(dst *Canvas, r Rect) {
+	track, content := s.extent(r.Size), s.extent(s.childSize)
+	if s.bar == nil || dst == nil || dst.Image == nil || content <= track {
+		return
+	}
+	const thickness, margin, minThumb = 3.0, 2.0, 16.0
+	thumb := max(track*track/content, minThumb)
+	at := (track - thumb) * s.position() / s.maxOffset()
+	var x, y, w, h float64
+	if s.horizontal {
+		x, y, w, h = r.Origin.X+at, r.Origin.Y+r.Size.H-thickness-margin, thumb, thickness
+	} else {
+		x, y, w, h = r.Origin.X+r.Size.W-thickness-margin, r.Origin.Y+at, thickness, thumb
+	}
+	vector.DrawFilledRect(dst.Image, float32(x), float32(y), float32(w), float32(h), s.bar, true)
+}
+
+// HandlePointer implements PointerHandler: wheel movement along the scroll
+// axis moves the window.
+func (s *ScrollWidget) HandlePointer(ev PointerEvent) bool {
+	if ev.Kind != PointerScroll {
+		return false
+	}
+	delta := pick(s.horizontal, ev.Scroll.X, ev.Scroll.Y)
+	if delta == 0 || s.maxOffset() == 0 {
+		return false
+	}
+	s.scrollTo(s.position() - delta*s.speed)
+	return true
 }

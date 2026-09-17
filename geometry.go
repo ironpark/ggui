@@ -1,6 +1,9 @@
 package ggui
 
-import "cmp"
+import (
+	"cmp"
+	"math"
+)
 
 // Number is any built-in numeric type. The geometry constructors take one so
 // that pixel counts from Ebitengine (int) and layout math (float64) can be
@@ -40,11 +43,40 @@ type Rect struct {
 // Rct returns the Rect at origin with size.
 func Rct(origin Point, size Size) Rect { return Rect{Origin: origin, Size: size} }
 
+// Intersect returns the overlap of r and o, or an empty Rect when they do
+// not overlap.
+func (r Rect) Intersect(o Rect) Rect {
+	x0 := max(r.Origin.X, o.Origin.X)
+	y0 := max(r.Origin.Y, o.Origin.Y)
+	x1 := min(r.Origin.X+r.Size.W, o.Origin.X+o.Size.W)
+	y1 := min(r.Origin.Y+r.Size.H, o.Origin.Y+o.Size.H)
+	if x1 <= x0 || y1 <= y0 {
+		return Rect{}
+	}
+	return Rect{Origin: Point{x0, y0}, Size: Size{x1 - x0, y1 - y0}}
+}
+
+// Empty reports whether r has no area.
+func (r Rect) Empty() bool { return r.Size.W <= 0 || r.Size.H <= 0 }
+
 // Contains reports whether p lies inside r. The top and left edges are
 // inside, the bottom and right edges are not.
 func (r Rect) Contains(p Point) bool {
 	return p.X >= r.Origin.X && p.X < r.Origin.X+r.Size.W &&
 		p.Y >= r.Origin.Y && p.Y < r.Origin.Y+r.Size.H
+}
+
+// Unbounded is the maximum a Scroll gives its child along the scroll axis:
+// take whatever you need. Widgets that would fill the space they are given
+// fall back to their content size on an unbounded axis.
+var Unbounded = math.Inf(1)
+
+// bounded returns v, or fallback when v is Unbounded.
+func bounded(v, fallback float64) float64 {
+	if math.IsInf(v, 1) {
+		return fallback
+	}
+	return v
 }
 
 // Constraints bound the size a widget may choose during layout, the same way

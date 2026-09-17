@@ -232,8 +232,64 @@ func Effect(fn func()) (dispose func()) {
 		e.owner.children = append(e.owner.children, e)
 	}
 	effects.add(e)
+	// A panic in fn must not leave a half-built effect registered.
+	ok := false
+	defer func() {
+		if !ok {
+			e.dispose()
+		}
+	}()
 	runEffect(e)
+	ok = true
 	return e.dispose
+}
+
+// Root runs fn untracked under a fresh owner that never re-runs, so effects
+// and components fn creates live until the returned dispose is called or the
+// enclosing owner is disposed. It is how a container keeps children alive
+// across its own re-runs; For uses it per key.
+func Root(fn func()) (dispose func()) {
+	r := &effect{}
+	deps.mu.Lock()
+	r.owner = deps.owner
+	prevListener, prevOwner := deps.listener, deps.owner
+	deps.listener, deps.owner = nil, r
+	deps.mu.Unlock()
+	if r.owner != nil {
+		r.owner.children = append(r.owner.children, r)
+	}
+	ok := false
+	defer func() {
+		deps.mu.Lock()
+		deps.listener, deps.owner = prevListener, prevOwner
+		deps.mu.Unlock()
+		if !ok {
+			r.dispose()
+		}
+	}()
+	fn()
+	ok = true
+	return r.dispose
+}
+
+// withOwner runs fn with owner as the current owner and no listener.
+func withOwner(owner *effect, fn func()) {
+	deps.mu.Lock()
+	prevListener, prevOwner := deps.listener, deps.owner
+	deps.listener, deps.owner = nil, owner
+	deps.mu.Unlock()
+	defer func() {
+		deps.mu.Lock()
+		deps.listener, deps.owner = prevListener, prevOwner
+		deps.mu.Unlock()
+	}()
+	fn()
+}
+
+func currentOwner() *effect {
+	deps.mu.Lock()
+	defer deps.mu.Unlock()
+	return deps.owner
 }
 
 // OnCleanup registers fn to run before the enclosing Effect re-runs and when
@@ -271,13 +327,14 @@ func runEffect(e *effect) {
 	prevListener, prevOwner := deps.listener, deps.owner
 	deps.listener, deps.owner = e, e
 	deps.mu.Unlock()
+	defer func() {
+		deps.mu.Lock()
+		deps.listener, deps.owner = prevListener, prevOwner
+		deps.mu.Unlock()
+	}()
 
 	e.dirty = false
 	e.fn()
-
-	deps.mu.Lock()
-	deps.listener, deps.owner = prevListener, prevOwner
-	deps.mu.Unlock()
 }
 
 type effectSet struct {

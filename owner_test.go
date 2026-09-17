@@ -219,3 +219,25 @@ func TestComponentDisposedWithParent(t *testing.T) {
 		t.Fatalf("setups = %d, builds = %d; want 2 setups and 1 live builder", setups, builds)
 	}
 }
+
+func TestPanicInEffectLeavesNoResidue(t *testing.T) {
+	effects.mu.Lock()
+	before := len(effects.list)
+	effects.mu.Unlock()
+	func() {
+		defer func() { recover() }()
+		Effect(func() {
+			Effect(func() {})
+			panic("boom")
+		})
+	}()
+	if o := currentOwner(); o != nil {
+		t.Fatal("owner left set after a panicking effect")
+	}
+	effects.mu.Lock()
+	after := len(effects.list)
+	effects.mu.Unlock()
+	if after != before {
+		t.Fatalf("%d effects left registered after a panicking effect, want 0", after-before)
+	}
+}

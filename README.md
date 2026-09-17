@@ -98,6 +98,23 @@ func button(label string, onTap func()) ggui.Widget {
 }
 ```
 
+**Keyed lists** — `For(items, key, build)` watches a `Reader[[]T]` and keeps
+one child per key, so reordering or editing the list reuses the children and
+whatever state they hold. Each child receives its item as a `*Signal[T]` that
+`For` writes on every change; read it reactively:
+
+```go
+ggui.Scroll(ggui.For(todos, func(t Todo) int { return t.ID },
+	func(t *ggui.Signal[Todo]) ggui.Widget {
+		return ggui.Reactive(func() ggui.Widget { return ggui.Text(t.Get().Title) })
+	}).Gap(4))
+```
+
+`List(items, build)` is the plain version for a slice you have in hand: one
+child per item, rebuilt with the parent. `Root(fn)` is what `For` uses per key,
+an owner that never re-runs, for containers of your own that keep children
+alive across their own updates.
+
 `Component(setup)` runs setup once, untracked, and the `Builder` it returns in
 an effect of its own. `Reactive(build)` is the same without setup: an island
 that rebuilds when its signals change while the parent stays put. A component
@@ -123,8 +140,8 @@ ggui.Center(
 ```
 
 Current set: `Text`, `Box`, `Padding`, `Column`, `Row`, `Flex`/`Expanded`/`Spacer`,
-`Stack`, `Align`, `Center`, `Pointer`/`Tap`, `Focus`, and `List` — a column built
-from your own slice:
+`Stack`, `Align`, `Center`, `Scroll`, `Pointer`/`Tap`, `Focus`, `For`, and `List` —
+a column built from your own slice:
 
 ```go
 ggui.List(rows, func(r Row) ggui.Widget { return ggui.Text(r.Title) }).Gap(4)
@@ -171,6 +188,14 @@ button := ggui.Pointer(ggui.Box(ggui.Text("+")).Pad(6, 16)).
 	OnHover(hovered.Set)
 ```
 
+`Scroll(child)` gives its child `Unbounded` height (or width, with
+`.Horizontal()`), shows a window onto it, moves that window with the wheel and
+clips both drawing and hit regions to the window. `.Offset(sig)` binds the
+position to a `Signal[float64]` for programmatic scrolling or to keep it across
+rebuilds; `.Speed(px)` and `.Bar(color)` tune it. Widgets that fill their space
+fall back to their content size on an unbounded axis, so `Center`, `Expanded`
+and `.Justify` inside a `Scroll` do not blow up.
+
 `Pointer` has `OnTap`, `OnDown`, `OnUp`, `OnMove`, `OnEnter`, `OnExit`,
 `OnHover` and `OnScroll`; `Tap(child, fn)` is the one-callback shortcut.
 A tap is a press and a release inside the same region, matched by `Rect`, so
@@ -179,7 +204,9 @@ focus when clicked and delivers `OnKey`, `OnText` and `OnFocus`. Global
 shortcuts still go in `App.OnFrame`.
 
 To make your own widget interactive, implement `PointerHandler` or
-`KeyHandler` and call `dst.Hit(r, w)` from `Paint`.
+`KeyHandler` and call `dst.HitPointer(r, w)` or `dst.HitKey(r, w)` from
+`Paint`. `dst.Clip(r)` returns a Canvas that draws and registers regions only
+inside `r`.
 
 **Custom widgets** — implement `Layout` and `Paint`. `Paint` receives the
 `Rect` to draw in, so a leaf widget stores nothing between the two calls; a
@@ -202,6 +229,7 @@ dot := ggui.FromFuncs(
 ├── signal.go     Reactivity: Signal, Memo, Effect, dependency tracking
 ├── widget.go     Widget interface, Builder, Component/Reactive, Children
 ├── widgets.go    Built-in widgets
+├── for.go        For: keyed, reactive list
 ├── canvas.go     Canvas: paint target plus the frame's hit regions
 ├── input.go      Pointer and keyboard events, Pointer/Tap/Focus widgets
 ├── font.go       Font loading, default font, text wrapping

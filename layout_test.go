@@ -276,3 +276,38 @@ func TestFlexIsTransparentOutsideAFlow(t *testing.T) {
 		t.Fatalf("Layout() = %+v, want the child's {7 7}", got)
 	}
 }
+
+func TestFixedBoxGivesChildTightConstraints(t *testing.T) {
+	var got Constraints
+	child := FromFuncs(
+		func(c Constraints) Size { got = c; return c.Constrain(Sz(1, 1)) },
+		func(*Canvas, Rect) {},
+	)
+	Box(child).Width(100).Pad(10).Layout(Loose(Sz(500, 500)))
+	if got.MinW != 80 || got.MaxW != 80 {
+		t.Fatalf("child width constraints = [%v, %v], want tight 80", got.MinW, got.MaxW)
+	}
+	if got.MinH != 0 || got.MaxH != 480 {
+		t.Fatalf("child height constraints = [%v, %v], want loose up to 480", got.MinH, got.MaxH)
+	}
+}
+
+func TestContentCentersInsideFixedBox(t *testing.T) {
+	var text, row Rect
+	b := Box(
+		Column(
+			probe(40, 10, &text),
+			Row(probe(20, 10, &row)).Justify(JustifyCenter),
+		).Align(AlignCenter),
+	).Width(200).Pad(20)
+	size := b.Layout(Loose(Sz(1000, 1000)))
+	b.Paint(nil, Rct(Pt(0, 0), size))
+	if size.W != 200 {
+		t.Fatalf("box is %v wide, want 200", size.W)
+	}
+	// Inner width is 160: the text centers at 20 + (160-40)/2, the row's
+	// child at 20 + (160-20)/2.
+	if text.Origin.X != 80 || row.Origin.X != 90 {
+		t.Fatalf("text at x=%v, row child at x=%v; want 80 and 90", text.Origin.X, row.Origin.X)
+	}
+}
