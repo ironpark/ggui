@@ -75,7 +75,7 @@ func Progress(value ggui.Reader[float64]) *ProgressWidget {
 	return &ProgressWidget{value: value, height: 6}
 }
 
-var progressSlot = new(byte)
+var progressSlot = ggui.NewSlot[*ggui.Motion]("progressSlot")
 
 // Height sets the bar's thickness.
 func (p *ProgressWidget) Height(h float64) *ProgressWidget { p.height = h; return p }
@@ -89,7 +89,7 @@ func (p *ProgressWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 // Paint implements Widget.
 func (p *ProgressWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := p.theme
-	v := motion(dst, r, progressSlot, clamp(p.value.Get(), 0, 1))
+	v := dst.Ease(ggui.Anchor{Rect: r}, progressSlot, clamp(p.value.Get(), 0, 1), knobDuration)
 	dst.FillRoundRect(r, r.Size.H/2, t.Border)
 	if w := r.Size.W * v; w > 0 {
 		dst.FillRoundRect(ggui.Rct(r.Origin, ggui.Sz(w, r.Size.H)), r.Size.H/2, t.Accent)

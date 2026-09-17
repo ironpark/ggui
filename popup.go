@@ -19,6 +19,7 @@ type PopupWidget struct {
 	gap     float64
 	keys    KeyHandler
 	onClose func()
+	id      any
 
 	env         Env
 	contentSize Size
@@ -38,6 +39,24 @@ func (p *PopupWidget) Bind(sig *Signal[bool]) *PopupWidget { p.bound = sig; retu
 
 // Gap sets the space between the anchor and the content.
 func (p *PopupWidget) Gap(v float64) *PopupWidget { p.gap = v; return p }
+
+// Key gives the popup an identity, so a rebuilt one that also moved keeps
+// its open state. Without one the anchor's Rect identifies it.
+func (p *PopupWidget) Key(k any) *PopupWidget { p.id = k; return p }
+
+// HitID implements Identified.
+func (p *PopupWidget) HitID() any { return p.id }
+
+// Adopt implements Adopter: a rebuilt popup stays open.
+func (p *PopupWidget) Adopt(prev any) {
+	if q, ok := prev.(*PopupWidget); ok && p.bound == nil {
+		p.open = q.IsOpen()
+	}
+}
+
+// HandlePointer implements PointerHandler for the anchor region, which
+// exists only so a rebuilt popup can adopt: it consumes nothing.
+func (p *PopupWidget) HandlePointer(PointerEvent) bool { return false }
 
 // Keys registers h as the key handler over the content, so a click inside
 // the popup keeps keyboard focus on h (the widget that opened it) instead
@@ -64,7 +83,7 @@ func (p *PopupWidget) SetOpen(v bool) {
 		p.open = v
 	}
 	if was && !v {
-		RequestLayout()
+		Invalidate(p.env)
 		if p.onClose != nil {
 			p.onClose()
 		}
@@ -96,6 +115,7 @@ func (p *PopupWidget) Layout(c Constraints, env Env) Size {
 
 // Paint implements Widget.
 func (p *PopupWidget) Paint(dst *Canvas, r Rect) {
+	dst.HitPointer(r, p)
 	dst.Paint(p.anchor, r)
 	if !p.IsOpen() {
 		return

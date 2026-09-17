@@ -10,7 +10,7 @@ import (
 // SliderWidget picks a number in a range by dragging a knob. Build one with
 // Slider.
 type SliderWidget struct {
-	interactive
+	ggui.Interactive
 	value    *ggui.Signal[float64]
 	min, max float64
 	step     float64
@@ -38,7 +38,7 @@ func (s *SliderWidget) set(v float64) {
 }
 
 // Disabled greys the slider out and ignores the pointer while v is true.
-func (s *SliderWidget) Disabled(v bool) *SliderWidget { s.disabled = v; return s }
+func (s *SliderWidget) Disabled(v bool) *SliderWidget { s.Inert = v; return s }
 
 // Layout implements Widget.
 func (s *SliderWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
@@ -72,20 +72,20 @@ func (s *SliderWidget) setFromX(x float64) {
 func (s *SliderWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := s.theme
 	s.rect = r
-	s.hit(dst, r, s, ebiten.CursorShapePointer)
+	s.Hit(dst, r, s, ebiten.CursorShapePointer)
 	cy := r.Origin.Y + r.Size.H/2
 	x0, x1 := r.Origin.X+sliderKnob, r.Origin.X+r.Size.W-sliderKnob
 	kx := x0 + (x1-x0)*s.fraction()
 	dst.FillRoundRect(ggui.Rct(ggui.Pt(x0, cy-2), ggui.Sz(x1-x0, 4)), 2, t.Border)
-	accent := pick(s.disabled, t.Muted, pick(s.hovered || s.pressed, t.AccentHover, t.Accent))
+	accent := pick(s.Inert, t.Muted, pick(s.Hovered || s.Pressed, t.AccentHover, t.Accent))
 	dst.FillRoundRect(ggui.Rct(ggui.Pt(x0, cy-2), ggui.Sz(kx-x0, 4)), 2, accent)
 	radius := float64(sliderKnob)
-	if s.hovered || s.pressed {
+	if s.Hovered || s.Pressed {
 		radius++
 	}
 	dst.FillCircle(ggui.Pt(kx, cy), radius, accent)
 	dst.FillCircle(ggui.Pt(kx, cy), radius-3, t.Field)
-	if s.focus.focused && s.focus.ring {
+	if s.Focused && s.FocusVisible {
 		dst.StrokeRoundRect(ggui.Rct(ggui.Pt(kx-radius-2, cy-radius-2), ggui.Sz(2*radius+4, 2*radius+4)), radius+2, 2, t.Accent)
 	}
 }
@@ -93,7 +93,7 @@ func (s *SliderWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 // HandleKey implements KeyHandler: the arrow keys nudge the value by one
 // step, or a hundredth of the range without one.
 func (s *SliderWidget) HandleKey(ev ggui.KeyEvent) {
-	s.focus.handle(ev)
+	s.Keyboard(ev, nil)
 	if ev.Kind != ggui.KeyPress {
 		return
 	}
@@ -121,11 +121,11 @@ func (s *SliderWidget) HandlePointer(ev ggui.PointerEvent) bool {
 		}
 		s.setFromX(ev.Pos.X)
 	case ggui.PointerDrag:
-		if s.pressed {
+		if s.Pressed {
 			s.setFromX(ev.Pos.X)
 		}
 	}
-	return s.pointer(ev, nil)
+	return s.Pointer(ev, nil)
 }
 
 // TextFieldWidget is a TextInput in a themed box: Field background, a

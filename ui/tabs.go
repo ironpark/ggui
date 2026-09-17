@@ -12,10 +12,10 @@ type TabsWidget struct {
 	tabs     []TabPage
 	onChange func(int)
 
-	interactive // hovered is unused; hover holds the label instead
-	labels      []*ggui.TextWidget
-	labelSize   []ggui.Size
-	hover       int // the label under the pointer, or -1
+	ggui.Interactive // hovered is unused; hover holds the label instead
+	labels           []*ggui.TextWidget
+	labelSize        []ggui.Size
+	hover            int // the label under the pointer, or -1
 
 	theme     ggui.Theme
 	headerH   float64
@@ -46,7 +46,7 @@ func Tabs(selected *ggui.Signal[int], tabs ...TabPage) *TabsWidget {
 
 // Disabled greys the strip out and ignores input while v is true; the
 // selected page stays.
-func (t *TabsWidget) Disabled(v bool) *TabsWidget { t.disabled = v; return t }
+func (t *TabsWidget) Disabled(v bool) *TabsWidget { t.Inert = v; return t }
 
 // OnChange fires with the new index after the user picks a page.
 func (t *TabsWidget) OnChange(fn func(int)) *TabsWidget { t.onChange = fn; return t }
@@ -73,7 +73,7 @@ func (t *TabsWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t.headerH = 0
 	cur := t.index()
 	for i, l := range t.labels {
-		l.Color(pick(i == cur && !t.disabled, th.Fg, th.Muted))
+		l.Color(pick(i == cur && !t.Inert, th.Fg, th.Muted))
 		s := l.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env)
 		t.labelSize = append(t.labelSize, s)
 		t.headerH = max(t.headerH, s.H+t.pad.Top+t.pad.Bottom)
@@ -95,17 +95,17 @@ func (t *TabsWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 func (t *TabsWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	th := t.theme
 	header := ggui.Rct(r.Origin, ggui.Sz(r.Size.W, t.headerH))
-	if !t.disabled {
+	if !t.Inert {
 		dst.HitKey(header, t)
 	}
 	t.labelRect = t.labelRect[:0]
 	x := r.Origin.X
 	cur := t.index()
-	hover := pick(t.disabled, -1, t.hover)
+	hover := pick(t.Inert, -1, t.hover)
 	for i, s := range t.labelSize {
 		lr := ggui.Rct(ggui.Pt(x, r.Origin.Y), ggui.Sz(s.W+t.pad.Left+t.pad.Right, t.headerH-1))
 		t.labelRect = append(t.labelRect, lr)
-		if !t.disabled {
+		if !t.Inert {
 			dst.HitPointer(lr, tabLabel{t, i})
 			dst.HitCursor(lr, ebiten.CursorShapePointer)
 		}
@@ -119,17 +119,17 @@ func (t *TabsWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X, lineY), ggui.Sz(r.Size.W, 1)), th.Border)
 	if cur >= 0 {
 		lr := t.labelRect[cur]
-		x := motion(dst, header, underlineSlot, lr.Origin.X)
-		w := motion(dst, header, widthSlot, lr.Size.W)
-		dst.FillRoundRect(ggui.Rct(ggui.Pt(x, lineY-1), ggui.Sz(w, 2)), 1, pick(t.disabled, th.Muted, th.Accent))
-		t.focus.paintRing(dst, lr, th.Radius, th)
+		x := dst.Ease(ggui.Anchor{Rect: header}, underlineSlot, lr.Origin.X, knobDuration)
+		w := dst.Ease(ggui.Anchor{Rect: header}, widthSlot, lr.Size.W, knobDuration)
+		dst.FillRoundRect(ggui.Rct(ggui.Pt(x, lineY-1), ggui.Sz(w, 2)), 1, pick(t.Inert, th.Muted, th.Accent))
+		t.FocusRing(dst, lr, th.Radius, th.Accent)
 		dst.Paint(t.tabs[cur].Content, ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+t.headerH), t.bodySize))
 	}
 }
 
 // HandleKey implements KeyHandler: Left and Right move between pages.
 func (t *TabsWidget) HandleKey(ev ggui.KeyEvent) {
-	t.focus.handle(ev)
+	t.Keyboard(ev, nil)
 	if ev.Kind != ggui.KeyPress || len(t.tabs) == 0 {
 		return
 	}
@@ -147,15 +147,15 @@ func (t *TabsWidget) HandleKey(ev ggui.KeyEvent) {
 
 // Adopt implements ggui.Adopter.
 func (t *TabsWidget) Adopt(prev any) {
-	t.interactive.Adopt(prev)
+	t.Interactive.Adopt(prev)
 	if p, ok := prev.(*TabsWidget); ok {
 		t.hover = p.hover
 	}
 }
 
 var (
-	underlineSlot = new(byte)
-	widthSlot     = new(byte)
+	underlineSlot = ggui.NewSlot[*ggui.Motion]("underlineSlot")
+	widthSlot     = ggui.NewSlot[*ggui.Motion]("widthSlot")
 )
 
 // tabLabel is the pointer handler for one label.

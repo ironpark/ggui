@@ -22,13 +22,13 @@ func Switch(on *ggui.Signal[bool], label string) *SwitchWidget {
 	return s
 }
 
-var knobSlot = new(byte)
+var knobSlot = ggui.NewSlot[*ggui.Motion]("knobSlot")
 
 // OnChange fires with the new value after a click flipped it.
 func (s *SwitchWidget) OnChange(fn func(bool)) *SwitchWidget { s.onChange = fn; return s }
 
 // Disabled greys the switch out and ignores the pointer while v is true.
-func (s *SwitchWidget) Disabled(v bool) *SwitchWidget { s.disabled = v; return s }
+func (s *SwitchWidget) Disabled(v bool) *SwitchWidget { s.Inert = v; return s }
 
 // Layout implements Widget.
 func (s *SwitchWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size { return s.layout(c, env) }
@@ -38,14 +38,14 @@ func (s *SwitchWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := s.theme
 	box := s.paint(dst, r, s)
 	on := s.on.Peek()
-	k := motion(dst, box, knobSlot, pick(on, 1.0, 0.0))
-	track := pick(on, pick(s.hovered, t.AccentHover, t.Accent), pick(s.hovered, t.Muted, t.Border))
-	if s.disabled {
+	k := dst.Ease(s.Anchor(box), knobSlot, pick(on, 1.0, 0.0), knobDuration)
+	track := pick(on, pick(s.Hovered, t.AccentHover, t.Accent), pick(s.Hovered, t.Muted, t.Border))
+	if s.Inert {
 		track = t.Border
 	}
 	dst.FillRoundRect(box, box.Size.H/2, track)
 	radius := box.Size.H/2 - 2
 	x := box.Origin.X + 2 + radius + k*(box.Size.W-4-2*radius)
-	dst.FillCircle(ggui.Pt(x, box.Origin.Y+box.Size.H/2), radius, pick(s.disabled, t.Surface, t.Field))
-	s.focus.paintRing(dst, box, box.Size.H/2, t)
+	dst.FillCircle(ggui.Pt(x, box.Origin.Y+box.Size.H/2), radius, pick(s.Inert, t.Surface, t.Field))
+	s.FocusRing(dst, box, box.Size.H/2, t.Accent)
 }

@@ -220,7 +220,7 @@ func TestSignalWritesAdvanceTheLayoutGeneration(t *testing.T) {
 	if layoutGen.Load() != before+1 {
 		t.Fatal("a write must request layout")
 	}
-	RequestLayout()
+	Invalidate(Env{})
 	if layoutGen.Load() != before+2 {
 		t.Fatal("RequestLayout must request layout")
 	}

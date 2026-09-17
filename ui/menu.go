@@ -71,7 +71,7 @@ func (m *MenuWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		it.active = i == m.current
 	}
 	dst.Paint(m.popup, r)
-	if !m.button.disabled {
+	if !m.button.Inert {
 		// On top of the button's own region, so the arrow keys reach the
 		// menu; everything else is passed on to the button.
 		dst.HitKey(r, m)
@@ -109,7 +109,7 @@ func (m *MenuWidget) HandleKey(ev ggui.KeyEvent) {
 
 // step moves the keyboard highlight by dir, skipping disabled items.
 func (m *MenuWidget) step(dir int) {
-	m.current = stepIndex(m.current, dir, len(m.items), func(i int) bool { return !m.items[i].disabled })
+	m.current = stepIndex(m.current, dir, len(m.items), func(i int) bool { return !m.items[i].Inert })
 }
 
 // Adopt implements ggui.Adopter: an open menu carries across a rebuild.
@@ -125,7 +125,7 @@ func (m *MenuWidget) Adopt(prev any) {
 
 // MenuItemWidget is one action in a Menu. Build one with MenuItem.
 type MenuItemWidget struct {
-	interactive
+	ggui.Interactive
 	text   *ggui.TextWidget
 	onTap  func()
 	menu   *MenuWidget
@@ -143,13 +143,13 @@ func MenuItem(label string, onTap func()) *MenuItemWidget {
 }
 
 // Disabled greys the item out and ignores it while v is true.
-func (it *MenuItemWidget) Disabled(v bool) *MenuItemWidget { it.disabled = v; return it }
+func (it *MenuItemWidget) Disabled(v bool) *MenuItemWidget { it.Inert = v; return it }
 
 // MenuDivider is a line between groups of items.
 func MenuDivider() ggui.Widget { return ggui.Padding(Divider(), 4, 0) }
 
 func (it *MenuItemWidget) run() {
-	if it.disabled {
+	if it.Inert {
 		return
 	}
 	if it.onTap != nil {
@@ -166,7 +166,7 @@ func (it *MenuItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	it.theme = t
 	it.popup, _ = ggui.PopupOf(env)
 	it.pad = t.ItemPad
-	it.text.Color(pick(it.disabled, t.Muted, t.Fg))
+	it.text.Color(pick(it.Inert, t.Muted, t.Fg))
 	it.textSize = it.text.Layout(it.pad.Shrink(c).Loosen(), env)
 	return c.Constrain(it.pad.Inflate(it.textSize))
 }
@@ -174,10 +174,10 @@ func (it *MenuItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 // Paint implements Widget.
 func (it *MenuItemWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := it.theme
-	if !it.disabled {
+	if !it.Inert {
 		dst.HitPointer(r, it)
 		dst.HitCursor(r, ebiten.CursorShapePointer)
-		if it.hovered || it.active {
+		if it.Hovered || it.active {
 			dst.FillRoundRect(r, t.Radius*0.75, t.Selection)
 		}
 	}
@@ -189,5 +189,5 @@ func (it *MenuItemWidget) HandlePointer(ev ggui.PointerEvent) bool {
 	if (ev.Kind == ggui.PointerEnter || ev.Kind == ggui.PointerMove) && it.menu != nil {
 		it.menu.current = -1
 	}
-	return it.pointer(ev, it.run)
+	return it.Pointer(ev, it.run)
 }

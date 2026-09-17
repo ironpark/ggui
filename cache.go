@@ -5,11 +5,11 @@ package ggui
 // still frame; Cached narrows that to a subtree, so a signal write in one
 // panel does not re-measure every other panel.
 //
-// The cache holds while the constraints, the inherited text style, the
-// theme and the enclosing Scroll's viewport are the same as last time and
-// nothing inside asked for a layout. Reactive, For, Scroll and TextInput
-// ask when they change; a custom widget whose size depends on state
-// outside a signal calls InvalidateLayout with the Env it was laid out
+// The cache holds while the constraints and everything inherited through
+// the Env (text style, theme, Scroll viewport, Provide values) are the same
+// as last time and nothing inside asked for a layout. Reactive, For, Scroll
+// and TextInput ask when they change; a custom widget whose size depends on
+// state outside a signal calls Invalidate with the Env it was laid out
 // under.
 type CachedWidget struct {
 	child Widget
@@ -18,16 +18,8 @@ type CachedWidget struct {
 	dirty bool
 	valid bool
 	cons  Constraints
-	key   cacheKey
+	rev   uint64 // the Env revision the size was measured under
 	size  Size
-}
-
-// cacheKey is the part of an Env a layout can depend on.
-type cacheKey struct {
-	text  TextStyle
-	theme Theme
-	vp    Viewport
-	hasVP bool
 }
 
 var cacheOwner = NewKey[*CachedWidget]("layoutCache")
@@ -42,26 +34,14 @@ func (c *CachedWidget) invalidate() {
 	}
 }
 
-// InvalidateLayout tells the nearest Cached above the widget laid out
-// under env that its subtree must be measured again. It is a no-op when
-// there is none; RequestLayout is still needed for App to run a layout at
-// all when no signal was written.
-func InvalidateLayout(env Env) {
-	if c, ok := env.Get(cacheOwner); ok {
-		c.invalidate()
-	}
-}
-
 // Layout implements Widget.
 func (c *CachedWidget) Layout(cs Constraints, env Env) Size {
-	vp, hasVP := env.Get(viewportKey)
-	key := cacheKey{text: env.Text(), theme: env.Theme(), vp: vp, hasVP: hasVP}
 	c.outer, _ = env.Get(cacheOwner)
-	if c.valid && !c.dirty && cs == c.cons && key == c.key {
+	if c.valid && !c.dirty && cs == c.cons && env.rev == c.rev {
 		return c.size
 	}
 	c.size = c.child.Layout(cs, env.With(cacheOwner, c))
-	c.cons, c.key, c.valid, c.dirty = cs, key, true, false
+	c.cons, c.rev, c.valid, c.dirty = cs, env.rev, true, false
 	return c.size
 }
 

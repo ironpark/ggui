@@ -10,7 +10,7 @@ import (
 // SelectWidget is a dropdown that picks one of a list of values into a
 // signal. Build one with Select or SelectStrings.
 type SelectWidget[T comparable] struct {
-	interactive
+	ggui.Interactive
 	value    *ggui.Signal[T]
 	options  []T
 	label    func(T) string
@@ -56,7 +56,7 @@ func (s *SelectWidget[T]) Label(fn func(T) string) *SelectWidget[T] {
 }
 
 // Disabled greys the dropdown out and ignores input while v is true.
-func (s *SelectWidget[T]) Disabled(v bool) *SelectWidget[T] { s.disabled = v; return s }
+func (s *SelectWidget[T]) Disabled(v bool) *SelectWidget[T] { s.Inert = v; return s }
 
 // MinWidth sets the least width the field asks for; it is otherwise as
 // wide as its widest option, and fills a tight width.
@@ -75,7 +75,7 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	s.pad = t.FieldPad
 	s.box.Radius(t.Radius).Fill(t.Field)
 	s.list.Fill(t.Surface).Border(1, t.Border).Radius(t.Radius).Padding(t.PanelPad)
-	s.text = ggui.Text(s.label(s.value.Peek())).NoWrap().Color(pick[color.Color](s.disabled, t.Muted, t.Fg))
+	s.text = ggui.Text(s.label(s.value.Peek())).NoWrap().Color(pick[color.Color](s.Inert, t.Muted, t.Fg))
 	// As wide as the widest option, so the field does not resize as the
 	// value changes, and never wider than the row wants unless told to.
 	widest := 0.0
@@ -94,18 +94,18 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 	t := s.theme
 	open := s.popup.IsOpen()
-	s.box.Border(1, pick(open || s.focus.focused, t.Accent, t.Border))
-	s.hit(dst, r, s, ebiten.CursorShapePointer)
+	s.box.Border(1, pick(open || s.Focused, t.Accent, t.Border))
+	s.Hit(dst, r, s, ebiten.CursorShapePointer)
 	dst.Paint(s.box, r)
 	dst.Clip(r).Paint(s.text, ggui.Rct(ggui.Pt(r.Origin.X+s.pad.Left, r.Origin.Y+(r.Size.H-s.textSize.H)/2), s.textSize))
 	// Chevron, pointing down, or up while open.
 	cx := r.Origin.X + r.Size.W - t.Space - controlSize*0.3
 	cy := r.Origin.Y + r.Size.H/2
 	dy := pick(open, -2.0, 2.0)
-	col := pick(s.disabled, t.Muted, t.Fg)
+	col := pick(s.Inert, t.Muted, t.Fg)
 	dst.StrokeLine(ggui.Pt(cx-4, cy-dy), ggui.Pt(cx, cy+dy), 1.5, col)
 	dst.StrokeLine(ggui.Pt(cx, cy+dy), ggui.Pt(cx+4, cy-dy), 1.5, col)
-	s.focus.paintRing(dst, r, t.Radius, t)
+	s.FocusRing(dst, r, t.Radius, t.Accent)
 }
 
 // Paint implements Widget.
@@ -145,7 +145,7 @@ func (s *SelectWidget[T]) toggle() {
 
 // HandleKey implements KeyHandler.
 func (s *SelectWidget[T]) HandleKey(ev ggui.KeyEvent) {
-	s.focus.handle(ev)
+	s.Keyboard(ev, nil)
 	if ev.Kind == ggui.KeyBlur {
 		s.popup.Hide()
 	}
@@ -153,7 +153,7 @@ func (s *SelectWidget[T]) HandleKey(ev ggui.KeyEvent) {
 		return
 	}
 	open := s.popup.IsOpen()
-	if activates(ev) {
+	if ggui.Activates(ev) {
 		if open && s.highlight >= 0 {
 			s.choose(s.highlight)
 		} else {
@@ -179,7 +179,7 @@ func (s *SelectWidget[T]) HandleKey(ev ggui.KeyEvent) {
 
 // Adopt implements ggui.Adopter: an open list carries across a rebuild.
 func (s *SelectWidget[T]) Adopt(prev any) {
-	s.interactive.Adopt(prev)
+	s.Interactive.Adopt(prev)
 	if p, ok := prev.(*SelectWidget[T]); ok {
 		s.highlight = p.highlight
 		if p.popup.IsOpen() {
@@ -189,7 +189,7 @@ func (s *SelectWidget[T]) Adopt(prev any) {
 }
 
 // HandlePointer implements PointerHandler.
-func (s *SelectWidget[T]) HandlePointer(ev ggui.PointerEvent) bool { return s.pointer(ev, s.toggle) }
+func (s *SelectWidget[T]) HandlePointer(ev ggui.PointerEvent) bool { return s.Pointer(ev, s.toggle) }
 
 // selectAnchor is the popup's anchor: the field, painted by its Select.
 type selectAnchor[T comparable] struct{ s *SelectWidget[T] }
@@ -204,7 +204,7 @@ func (a selectAnchor[T]) Paint(dst *ggui.Canvas, r ggui.Rect) { a.s.paintField(d
 
 // selectItem is one option row in the open list.
 type selectItem[T comparable] struct {
-	interactive
+	ggui.Interactive
 	owner  *SelectWidget[T]
 	index  int
 	text   *ggui.TextWidget
@@ -226,7 +226,7 @@ func (it *selectItem[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := it.owner.theme
 	dst.HitPointer(r, it)
 	dst.HitCursor(r, ebiten.CursorShapePointer)
-	if it.hovered || it.active {
+	if it.Hovered || it.active {
 		dst.FillRoundRect(r, t.Radius*0.75, t.Selection)
 	}
 	at := ggui.Pt(r.Origin.X+it.pad.Left+controlSize+controlGap, r.Origin.Y+(r.Size.H-it.textSize.H)/2)
@@ -242,5 +242,5 @@ func (it *selectItem[T]) HandlePointer(ev ggui.PointerEvent) bool {
 	if ev.Kind == ggui.PointerEnter || ev.Kind == ggui.PointerMove {
 		it.owner.highlight = it.index
 	}
-	return it.pointer(ev, func() { it.owner.choose(it.index) })
+	return it.Pointer(ev, func() { it.owner.choose(it.index) })
 }

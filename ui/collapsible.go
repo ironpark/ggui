@@ -14,7 +14,7 @@ type CollapsibleWidget struct {
 	title   *ggui.TextWidget
 	content ggui.Widget
 	body    ggui.Widget // content behind Presence, so it animates out
-	interactive
+	ggui.Interactive
 
 	theme     ggui.Theme
 	pad       ggui.EdgeInsets
@@ -33,7 +33,7 @@ func Collapsible(open *ggui.Signal[bool], title string, content ggui.Widget) *Co
 }
 
 // Disabled greys the header out and ignores input while v is true.
-func (c *CollapsibleWidget) Disabled(v bool) *CollapsibleWidget { c.disabled = v; return c }
+func (c *CollapsibleWidget) Disabled(v bool) *CollapsibleWidget { c.Inert = v; return c }
 
 func (c *CollapsibleWidget) toggle() { ggui.Toggle(c.open) }
 
@@ -42,7 +42,7 @@ func (c *CollapsibleWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 	t := env.Theme()
 	c.theme = t
 	c.pad = t.FieldPad
-	c.title.Color(pick(c.disabled, t.Muted, t.Fg))
+	c.title.Color(pick(c.Inert, t.Muted, t.Fg))
 	c.titleSize = c.title.Layout(ggui.Loose(ggui.Sz(max(cs.MaxW-c.pad.Left-c.pad.Right-controlSize-controlGap, 0), cs.MaxH)), env)
 	c.headerH = c.titleSize.H + c.pad.Top + c.pad.Bottom
 	body := ggui.Constraints{MinW: cs.MinW, MaxW: cs.MaxW, MaxH: max(cs.MaxH-c.headerH, 0)}
@@ -54,12 +54,12 @@ func (c *CollapsibleWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := c.theme
 	header := ggui.Rct(r.Origin, ggui.Sz(r.Size.W, c.headerH))
-	c.hit(dst, header, c, ebiten.CursorShapePointer)
-	if c.hovered && !c.disabled {
+	c.Hit(dst, header, c, ebiten.CursorShapePointer)
+	if c.Hovered && !c.Inert {
 		dst.FillRoundRect(header, t.Radius, t.Surface)
 	}
 	// The chevron turns from pointing right (0) to pointing down (1).
-	v := motion(dst, header, chevronSlot, pick(c.open.Peek(), 1.0, 0.0))
+	v := dst.Ease(c.Anchor(header), chevronSlot, pick(c.open.Peek(), 1.0, 0.0), knobDuration)
 	cx, cy := r.Origin.X+c.pad.Left+controlSize*0.4, r.Origin.Y+c.headerH/2
 	rot := func(x, y float64) ggui.Point {
 		a := v * math.Pi / 2
@@ -69,14 +69,14 @@ func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.StrokeLine(rot(-2, -4), tip, 1.5, t.Muted)
 	dst.StrokeLine(tip, rot(-2, 4), 1.5, t.Muted)
 	dst.Paint(c.title, ggui.Rct(ggui.Pt(r.Origin.X+c.pad.Left+controlSize+controlGap, r.Origin.Y+c.pad.Top), c.titleSize))
-	c.focus.paintRing(dst, header, t.Radius, t)
+	c.FocusRing(dst, header, t.Radius, t.Accent)
 	dst.Paint(c.body, ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+c.headerH), c.bodySize))
 }
 
 // HandleKey implements KeyHandler: Space or Enter toggles.
-func (c *CollapsibleWidget) HandleKey(ev ggui.KeyEvent) { c.key(ev, c.toggle) }
+func (c *CollapsibleWidget) HandleKey(ev ggui.KeyEvent) { c.Keyboard(ev, c.toggle) }
 
-var chevronSlot = new(byte)
+var chevronSlot = ggui.NewSlot[*ggui.Motion]("chevronSlot")
 
 // HandlePointer implements PointerHandler.
-func (c *CollapsibleWidget) HandlePointer(ev ggui.PointerEvent) bool { return c.pointer(ev, c.toggle) }
+func (c *CollapsibleWidget) HandlePointer(ev ggui.PointerEvent) bool { return c.Pointer(ev, c.toggle) }

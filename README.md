@@ -126,8 +126,11 @@ with the parent. `Root(fn)` is what `For` uses per key,
 an owner that never re-runs, for containers of your own that keep children
 alive across their own updates.
 
-`Component(setup)` runs setup once, untracked, and the `Builder` it returns in
-an effect of its own. `Reactive(build)` is the same without setup: an island
+`Component(setup)` runs setup once, at the component's first layout, and
+the `Builder` it returns in an effect of its own. A parent rebuild makes a
+new one; `Keyed(key, setup)` survives that: the enclosing builder keeps one
+instance per key across its runs, and `Mount(key, props, setup)` hands the
+props to setup as a `Signal` it writes on every rebuild. `Reactive(build)` is the same without setup: an island
 that rebuilds when its signals change while the parent stays put.
 `View(reader, build)` is the island for one value, with the widget type
 inferred from the constructor (`ggui.View(name, ggui.Text)`), and
@@ -391,9 +394,9 @@ button := ggui.Pointer(ggui.Box(ggui.Text("+")).Pad(6, 16)).
 
 `Scroll(child)` gives its child `Unbounded` height (or width, with
 `.Horizontal()`), shows a window onto it, moves that window with the wheel and
-clips both drawing and hit regions to the window. `.Offset(sig)` binds the
-position to a `Signal[float64]` for programmatic scrolling or to keep it across
-rebuilds; `.Speed(px)` and `.Bar(color)` tune it. Widgets that fill their space
+clips both drawing and hit regions to the window. The offset carries across
+a rebuild; `.Offset(sig)` binds it to a `Signal[float64]` for programmatic
+scrolling; `.Speed(px)` and `.Bar(color)` tune it. Widgets that fill their space
 fall back to their content size on an unbounded axis, so `Center`, `Expanded`
 and `.Justify` inside a `Scroll` do not blow up.
 
@@ -423,11 +426,17 @@ returns a Canvas that draws and registers regions only inside `r`,
 the tree once it is done.
 
 A rebuild replaces widgets, and with them the state they hold. A handler that
-implements `Adopter` is handed the handler that held the same `Rect` in the
-previous frame as it registers its region, so it can copy hover, press, a
-caret or an animation in flight: the built-in controls and `TextInput` all
-do, which is why flipping a `ui.Switch` that rebuilds its own subtree still
-slides the knob.
+implements `Adopter` is handed the handler that held the same region in the
+previous frame as it registers its own, so it can copy hover, press, a caret
+or an animation in flight: the built-in controls, `TextInput`, `Scroll` and
+`Popup` all do, which is why flipping a `ui.Switch` that rebuilds its own
+subtree still slides the knob. The region is matched by the handler's
+identity when it implements `Identified`, else by `Rect`; `.Key(k)` on a
+control, `Scroll` or `Popup` sets one, so a widget rebuilt and moved in the
+same frame keeps its state. `ggui.Interactive` is the shared body of a
+control: embed it, call `Hit` from `Paint` and `Pointer` and `Keyboard` from
+the handlers, and hover, press, focus, the focus ring and adoption come with
+it; `ui` is built on it.
 
 **Testing** needs no window: `NewProbe(w, size)` runs the runtime's frame
 steps headlessly, and `Click`, `Press`, `Move`, `Release`, `Scroll`, `Type`
@@ -473,21 +482,23 @@ was rebuilt, the window changed size, a `Signal` was written, or
 `RequestLayout()` was called. Hover and press live outside signals and only
 change how a widget paints, so a still frame costs a paint and nothing
 else. A custom widget that keeps size-affecting state outside signals calls
-`RequestLayout()` when that state changes; `Scroll` does for its offset. A
+`Invalidate(env)` when that state changes; `Scroll` does for its offset. A
 `Scroll` also tells its subtree the window it shows through the `Env`
 (`ScrollViewport(env)`), which is how `For` virtualizes.
 
 `Cached(child)` narrows the skip to a subtree: it returns its last size
-while the constraints, inherited style, theme and viewport are unchanged and
-nothing inside asked for a layout. `Reactive`, `For`, `Scroll` and
-`TextInput` ask when they change; a custom widget whose size depends on
-state outside a signal calls `InvalidateLayout(env)` with the Env it was
-laid out under. Wrap the panels that do not change together in it.
+while the constraints and everything inherited through the `Env` are
+unchanged and nothing inside asked for a layout. `Reactive`, `For`, `Scroll`
+and `TextInput` ask when they change; a custom widget whose size depends on
+state outside a signal calls `Invalidate(env)` with the Env it was laid out
+under. Wrap the panels that do not change together in it.
 
 State that has no signal and must outlive a rebuild can be kept on the
-Canvas: `dst.Retain(r, key, v)` stores a value under the widget's Rect for
-the next frame and `dst.Retained(r, key)` reads what was stored last frame.
-Tooltip keeps its hover timer and Transition its start time that way.
+Canvas under a typed `Slot`: `dst.Retain(anchor, slot, v)` stores a value
+for the next frame and `dst.Retained(anchor, slot)` reads what was stored
+last frame, where the `Anchor` is the widget's ID or its Rect. `dst.Ease`
+is a `Motion` kept that way. Tooltip keeps its hover timer and Transition
+its start time in slots.
 
 ## Inspector
 

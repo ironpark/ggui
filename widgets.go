@@ -781,6 +781,7 @@ type ScrollWidget struct {
 	bar        color.Color
 	bound      *Signal[float64]
 	offset     float64
+	id         any
 
 	childSize Size
 	viewport  Size
@@ -788,9 +789,27 @@ type ScrollWidget struct {
 	cache     *CachedWidget
 }
 
+// Key gives the scroll an identity, so a rebuilt one that also moved keeps
+// its offset. Without one its Rect identifies it.
+func (s *ScrollWidget) Key(k any) *ScrollWidget { s.id = k; return s }
+
+// HitID implements Identified.
+func (s *ScrollWidget) HitID() any { return s.id }
+
+// Adopt implements Adopter: a rebuilt scroll keeps its offset.
+func (s *ScrollWidget) Adopt(prev any) {
+	if p, ok := prev.(*ScrollWidget); ok && s.bound == nil {
+		s.offset = p.position()
+		if s.offset != s.laidAt {
+			s.cache.invalidate()
+			requestLayout()
+		}
+	}
+}
+
 // Scroll lets child take any height and scrolls it within the space Scroll
-// is given. The offset lives in the widget, so keep the widget alive (a
-// static parent, or a Component) or bind it to a Signal with Offset.
+// is given. The offset lives in the widget and carries across a rebuild;
+// bind it to a Signal with Offset to read or set it.
 func Scroll(child Widget) *ScrollWidget {
 	return &ScrollWidget{child: child, speed: 20, bar: color.RGBA{0x80, 0x80, 0x80, 0x80}}
 }
@@ -828,7 +847,7 @@ func (s *ScrollWidget) scrollTo(v float64) {
 		s.bound.Set(v)
 	} else if v != s.offset {
 		s.offset = v
-		RequestLayout() // what a virtualized child shows depends on it
+		requestLayout() // what a virtualized child shows depends on it
 	}
 	if v != s.laidAt {
 		s.cache.invalidate()

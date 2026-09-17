@@ -402,6 +402,11 @@ func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
 		dst.HitCursor(r, ebiten.CursorShapeText)
 	}
 	t.rect, t.scale = r, dst.Scale()
+	if t.value.Peek() != t.ed.text {
+		// Written through the signal since the layout: the enclosing
+		// Cached must measure again.
+		t.cache.invalidate()
+	}
 	if t.multiline {
 		t.paintLines(dst, r)
 		return

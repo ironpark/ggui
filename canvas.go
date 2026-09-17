@@ -6,6 +6,7 @@ import (
 	"math"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/vector"
@@ -39,20 +40,45 @@ type Canvas struct {
 	prevKeeps  map[retainKey]any // Retain last frame, read by Retained
 }
 
-// retainKey identifies a Retain slot: the Rect painted, or a key the
-// widget chose.
-type retainKey struct {
-	rect Rect
-	key  any
+// Slot names one value a widget retains on the Canvas between frames,
+// typed like an Env Key. Make one per animated value or timer with
+// NewSlot, as a package variable.
+type Slot[T any] struct {
+	id   *byte
+	name string
 }
 
-// Retain stores v for the next frame under r, or under key when that is
-// not nil, and Retained returns what was stored under the same slot last
-// frame. It is how a widget rebuilt every frame keeps state that has no
-// signal: a Tooltip's hover timer, a Transition's start time. A slot
-// nobody retains again is dropped, so state follows the widget's Rect and
-// goes away with it.
-func (c *Canvas) Retain(r Rect, key any, v any) {
+// NewSlot creates a distinct Slot; name is for messages only.
+func NewSlot[T any](name string) Slot[T] { return Slot[T]{id: new(byte), name: name} }
+
+// Anchor is what retained state is attached to: the widget's ID when it
+// has one, so the state follows it wherever it moves, or else the Rect it
+// painted.
+type Anchor struct {
+	Rect Rect
+	ID   any
+}
+
+// retainKey identifies a Retain slot: the anchor and the slot.
+type retainKey struct {
+	rect Rect
+	id   any
+	slot *byte
+}
+
+func (a Anchor) key(slot *byte) retainKey {
+	if a.ID != nil {
+		return retainKey{id: a.ID, slot: slot}
+	}
+	return retainKey{rect: a.Rect, slot: slot}
+}
+
+// Retain stores v for the next frame under at and s, and Retained returns
+// what was stored under the same pair last frame. It is how a widget
+// rebuilt every frame keeps state that has no signal: a Tooltip's hover
+// timer, a Transition's start time. A slot nobody retains again is
+// dropped, so state goes away with the widget.
+func (c *Canvas) Retain[T any](at Anchor, s Slot[T], v T) {
 	if c == nil {
 		return
 	}
@@ -60,15 +86,31 @@ func (c *Canvas) Retain(r Rect, key any, v any) {
 	if root.keeps == nil {
 		root.keeps = make(map[retainKey]any)
 	}
-	root.keeps[retainKey{r, key}] = v
+	root.keeps[at.key(s.id)] = v
 }
 
-// Retained returns what Retain stored under r, or key, last frame.
-func (c *Canvas) Retained(r Rect, key any) any {
+// Retained returns what Retain stored under at and s last frame.
+func (c *Canvas) Retained[T any](at Anchor, s Slot[T]) (T, bool) {
 	if c == nil {
-		return nil
+		var zero T
+		return zero, false
 	}
-	return c.root().prevKeeps[retainKey{r, key}]
+	v, ok := c.root().prevKeeps[at.key(s.id)].(T)
+	return v, ok
+}
+
+// Ease moves a Motion retained under at and s toward target over d and
+// returns where it is now, so a control rebuilt every frame keeps
+// animating; a switch knob and a tab underline use it.
+func (c *Canvas) Ease(at Anchor, s Slot[*Motion], target float64, d time.Duration) float64 {
+	now := Now()
+	m, ok := c.Retained(at, s)
+	if !ok {
+		m = new(Motion)
+	}
+	m.MoveTo(target, now, d)
+	c.Retain(at, s, m)
+	return m.Value(now)
 }
 
 // nextFrame moves this frame's retained values to last frame's place and
@@ -76,6 +118,7 @@ func (c *Canvas) Retained(r Rect, key any) any {
 func (c *Canvas) nextFrame() {
 	c.prevKeeps, c.keeps = c.keeps, c.prevKeeps
 	clear(c.keeps)
+	rotateEnvMemo()
 }
 
 // Inert returns a Canvas that draws where c does but registers no hit
@@ -180,14 +223,30 @@ func (c *Canvas) paintOverlays() {
 	c.overlays = c.overlays[:0]
 }
 
-// Adopter is a handler that can take over from the handler that occupied
-// the same Rect in the previous frame. When a rebuild replaces a widget,
-// the new one is handed the old one as it registers its region, so hover,
-// press, caret or an animation in flight carry across the rebuild instead
-// of resetting. prev is the previous PointerHandler or KeyHandler; check
-// its type and copy what applies.
+// Adopter is a handler that can take over from the handler that held the
+// same region in the previous frame: the one with the same ID, or else the
+// one at the same Rect. When a rebuild replaces a widget, the new one is
+// handed the old one as it registers its region, so hover, press, caret or
+// an animation in flight carry across the rebuild instead of resetting.
+// prev is the previous PointerHandler or KeyHandler; check its type and
+// copy what applies.
 type Adopter interface {
 	Adopt(prev any)
+}
+
+// Identified is a handler with an identity of its own. A region it
+// registers is matched to last frame's by that ID before its Rect, so a
+// widget that is rebuilt and moved in the same frame keeps its state, and
+// an unrelated widget painted where it was does not take it.
+type Identified interface {
+	HitID() any
+}
+
+func idOf(h any) any {
+	if i, ok := h.(Identified); ok {
+		return i.HitID()
+	}
+	return nil
 }
 
 // Scale is the number of Image pixels per logical pixel: the monitor's device
@@ -341,15 +400,17 @@ func (c *Canvas) add(h hitRegion) {
 	root.hits = append(root.hits, h)
 }
 
-// adopt hands h's new handlers the ones that held the same Rect last frame.
+// adopt hands h's new handlers the ones that held the same region last
+// frame: by ID when h has one, else by Rect.
 func (c *Canvas) adopt(h *hitRegion) {
 	if len(c.prev) == 0 {
 		return
 	}
 	var old *hitRegion
 	for i := len(c.prev) - 1; i >= 0; i-- {
-		if c.prev[i].rect == h.rect {
-			old = &c.prev[i]
+		p := &c.prev[i]
+		if h.id != nil && p.id == h.id || h.id == nil && p.id == nil && p.rect == h.rect {
+			old = p
 			break
 		}
 	}
@@ -376,6 +437,7 @@ func sameAny(a, b any) (same bool) {
 
 type hitRegion struct {
 	rect    Rect
+	id      any // from an Identified handler, else nil
 	pointer PointerHandler
 	key     KeyHandler
 	cursor  ebiten.CursorShapeType
@@ -383,7 +445,7 @@ type hitRegion struct {
 
 // merge folds o into r when they share a Rect and o only adds what r lacks.
 func (r *hitRegion) merge(o hitRegion) bool {
-	if r.rect != o.rect ||
+	if r.rect != o.rect || (o.id != nil && r.id != nil && o.id != r.id) ||
 		(o.pointer != nil && r.pointer != nil) ||
 		(o.key != nil && r.key != nil) ||
 		(o.cursor != 0 && r.cursor != 0) {
@@ -398,6 +460,9 @@ func (r *hitRegion) merge(o hitRegion) bool {
 	if o.cursor != 0 {
 		r.cursor = o.cursor
 	}
+	if o.id != nil {
+		r.id = o.id
+	}
 	return true
 }
 
@@ -405,12 +470,12 @@ func (r *hitRegion) merge(o hitRegion) bool {
 // painted later sit on top of earlier ones, so a container registers itself
 // before painting its children.
 func (c *Canvas) HitPointer(r Rect, h PointerHandler) {
-	c.add(hitRegion{rect: r, pointer: h})
+	c.add(hitRegion{rect: r, id: idOf(h), pointer: h})
 }
 
 // HitKey registers r as a region that receives keyboard events while focused.
 func (c *Canvas) HitKey(r Rect, h KeyHandler) {
-	c.add(hitRegion{rect: r, key: h})
+	c.add(hitRegion{rect: r, id: idOf(h), key: h})
 }
 
 // HitCursor asks for the mouse cursor to take shape while it is over r.

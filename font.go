@@ -178,7 +178,7 @@ var defaultFont *Font
 // with the glyphs you need for anything else.
 func SetDefaultFont(f *Font) {
 	defaultFont = f
-	RequestLayout()
+	requestLayout()
 }
 
 // fallbackFont returns the font Text uses when none is set, parsing the

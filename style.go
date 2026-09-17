@@ -1,6 +1,9 @@
 package ggui
 
-import "image/color"
+import (
+	"image/color"
+	"sync/atomic"
+)
 
 // Styling has three layers. A TextStyle is a value: build one, merge others
 // onto it, hand it to Text or Styled. An Env flows down the tree at layout
@@ -62,7 +65,14 @@ type Env struct {
 	vals     *envNode
 	theme    Theme
 	hasTheme bool
+	rev      uint64 // advanced by every change; Cached compares it
 }
+
+// envRev numbers every distinct Env, so a layout cache can tell whether
+// anything inherited changed without comparing the values themselves.
+var envRev atomic.Uint64
+
+func nextRev() uint64 { return envRev.Add(1) }
 
 type envNode struct {
 	key  any
@@ -76,9 +86,17 @@ func (e Env) Text() TextStyle { return e.text }
 
 // WithText returns e with s merged onto the inherited text style.
 func (e Env) WithText(s TextStyle) Env {
-	e.text = e.text.Merge(s)
-	return e
+	merged := e.text.Merge(s)
+	if sameAny(merged, e.text) {
+		return e
+	}
+	return e.derive(textKey, merged, func() Env {
+		e.text, e.rev = merged, nextRev()
+		return e
+	})
 }
+
+var textKey, themeKey = new(byte), new(byte)
 
 // Theme returns the theme the tree is laid out under: what the runtime put
 // in the root Env, or DefaultTheme for an Env made by hand, as in tests.
@@ -93,8 +111,10 @@ func (e Env) Theme() Theme {
 
 // WithTheme returns e with t as the theme for the subtree below.
 func (e Env) WithTheme(t Theme) Env {
-	e.theme, e.hasTheme = t, true
-	return e
+	return e.derive(themeKey, t, func() Env {
+		e.theme, e.hasTheme, e.rev = t, true, nextRev()
+		return e
+	})
 }
 
 // Key names a value that can travel down the tree in an Env. Make one per
@@ -107,10 +127,70 @@ type Key[T any] struct {
 // NewKey creates a distinct Key; name is for messages only.
 func NewKey[T any](name string) Key[T] { return Key[T]{id: new(byte), name: name} }
 
-// With returns e with v stored under k for the subtree below.
+// With returns e with v stored under k for the subtree below. Storing the
+// value already there, by ==, leaves e unchanged, and storing the value
+// stored last frame under the same parent yields the same revision, so
+// caches below a Provide rebuilt every frame hold.
 func (e Env) With[T any](k Key[T], v T) Env {
-	e.vals = &envNode{key: k, val: v, next: e.vals}
-	return e
+	if cur, ok := e.Get(k); ok && sameAny(cur, v) {
+		return e
+	}
+	return e.derive(k, v, func() Env {
+		e.vals = &envNode{key: k, val: v, next: e.vals}
+		e.rev = nextRev()
+		return e
+	})
+}
+
+// derivedKey names an Env derived from another: the parent's revision and
+// what was added.
+type derivedKey struct {
+	from uint64
+	key  any
+	val  any
+}
+
+// envMemo remembers the Envs derived this frame and last, so the same
+// derivation yields the same revision frame after frame. Canvas.nextFrame
+// rotates it.
+var envMemo struct {
+	cur, prev map[derivedKey]Env
+}
+
+func rotateEnvMemo() {
+	envMemo.prev, envMemo.cur = envMemo.cur, envMemo.prev
+	clear(envMemo.cur)
+}
+
+// derive returns the Env derived from e with key and val last frame or
+// this one, else fn's. A val that cannot be hashed is never memoized.
+func (e Env) derive(key, val any, fn func() Env) (out Env) {
+	k := derivedKey{e.rev, key, val}
+	memoized := true
+	func() {
+		defer func() {
+			if recover() != nil {
+				memoized = false
+			}
+		}()
+		var ok bool
+		if out, ok = envMemo.cur[k]; ok {
+			return
+		}
+		if out, ok = envMemo.prev[k]; ok {
+			return
+		}
+		ok = false
+		out = fn()
+		if envMemo.cur == nil {
+			envMemo.cur = map[derivedKey]Env{}
+		}
+		envMemo.cur[k] = out
+	}()
+	if !memoized {
+		return fn()
+	}
+	return out
 }
 
 // Get returns the nearest value stored under k, if any ancestor set one.
@@ -202,7 +282,11 @@ func DarkTheme() Theme {
 var theme = State(DefaultTheme()).WithEqual(nil)
 
 // SetTheme replaces the theme. Builders that read it through UseTheme rebuild.
-func SetTheme(t Theme) { theme.Set(t) }
+func SetTheme(t Theme) { theme.Set(t); themeGen.Add(1) }
+
+// themeGen counts SetTheme calls, so rootEnv is rebuilt, with a new
+// revision, only when the theme changed.
+var themeGen atomic.Uint64
 
 // BindTheme follows a boolean signal with the theme: on while it is true,
 // off otherwise, starting now. It returns a dispose function, like Watch.
@@ -217,8 +301,18 @@ func BindTheme(sw Reader[bool], on, off Theme) (dispose func()) {
 // subscribes it to theme changes.
 func UseTheme() Theme { return theme.Get() }
 
-// rootEnv is the Env the runtime lays the tree out under.
+// rootEnv is the Env the runtime lays the tree out under. It is the same
+// value frame after frame until SetTheme, so caches below it hold.
 func rootEnv() Env {
-	t := theme.Peek()
-	return Env{}.WithTheme(t).WithText(t.Text)
+	gen := themeGen.Load()
+	if !rootCache.env.hasTheme || rootCache.gen != gen {
+		t := theme.Peek()
+		rootCache.env, rootCache.gen = Env{}.WithTheme(t).WithText(t.Text), gen
+	}
+	return rootCache.env
+}
+
+var rootCache struct {
+	gen uint64
+	env Env
 }

@@ -13,10 +13,20 @@ import (
 // frame regardless.
 var layoutGen atomic.Uint64
 
-// RequestLayout asks the runtime to lay the tree out again next frame. A
-// Signal write does this by itself; call it for state a widget keeps
-// outside signals when that state changes its size or its children's.
-func RequestLayout() { layoutGen.Add(1) }
+// requestLayout asks the runtime to lay the tree out again next frame.
+func requestLayout() { layoutGen.Add(1) }
+
+// Invalidate tells the runtime that the widget laid out under env changed
+// size, or its children did: the tree is laid out again next frame and the
+// nearest Cached above the widget measures its subtree afresh. A Signal
+// write does the first half by itself; a widget that keeps size-affecting
+// state outside signals calls Invalidate when that state changes.
+func Invalidate(env Env) {
+	requestLayout()
+	if c, ok := env.Get(cacheOwner); ok {
+		c.invalidate()
+	}
+}
 
 // tracker holds the running computation. listener is the effect that reads
 // subscribe to (nil inside Untrack); owner is the effect that newly created
@@ -45,6 +55,39 @@ type effect struct {
 	children []*effect
 	cleanups []func()
 	sources  []source
+
+	// Keyed components mounted during this effect's runs. They outlive a
+	// re-run and go when a run no longer claims them, or with the effect.
+	keyed   map[any]*mounted
+	claimed map[any]bool
+}
+
+// claim returns the mounted component under key, marking it as still in
+// use by this run, or nil.
+func (e *effect) claim(key any) *mounted {
+	if e.claimed == nil {
+		e.claimed = map[any]bool{}
+	}
+	e.claimed[key] = true
+	return e.keyed[key]
+}
+
+func (e *effect) keep(key any, m *mounted) {
+	if e.keyed == nil {
+		e.keyed = map[any]*mounted{}
+	}
+	e.keyed[key] = m
+}
+
+// sweep disposes the keyed components the last run did not claim.
+func (e *effect) sweep() {
+	for k, m := range e.keyed {
+		if !e.claimed[k] {
+			m.dispose()
+			delete(e.keyed, k)
+		}
+	}
+	clear(e.claimed)
 }
 
 // reset undoes everything the last run set up: child effects, cleanups and
@@ -70,6 +113,10 @@ func (e *effect) dispose() {
 	}
 	e.disposed = true
 	e.reset()
+	for _, m := range e.keyed {
+		m.dispose()
+	}
+	e.keyed = nil
 	effects.remove(e)
 }
 
@@ -380,6 +427,7 @@ func runEffect(e *effect) {
 
 	e.dirty = false
 	e.fn()
+	e.sweep()
 }
 
 type effectSet struct {

@@ -171,6 +171,7 @@ func TestComponentRunsSetupOnceAndKeepsState(t *testing.T) {
 		})
 	})
 	defer dispose()
+	c.Layout(Loose(Sz(100, 100)), Env{}) // mounts
 	local.Set(7)
 	effects.flush()
 	if setups != 1 || builds != 2 {
@@ -184,14 +185,16 @@ func TestComponentRunsSetupOnceAndKeepsState(t *testing.T) {
 func TestComponentSetupDoesNotSubscribeParent(t *testing.T) {
 	dep := State(0)
 	parentBuilds := 0
+	var c *ComponentWidget
 	dispose := Effect(func() {
 		parentBuilds++
-		Component(func() Builder {
+		c = Component(func() Builder {
 			dep.Get() // read during setup
 			return func() Widget { return Box() }
 		})
 	})
 	defer dispose()
+	c.Layout(Loose(Sz(100, 100)), Env{})
 	dep.Set(1)
 	effects.flush()
 	if parentBuilds != 1 {
@@ -202,16 +205,19 @@ func TestComponentSetupDoesNotSubscribeParent(t *testing.T) {
 func TestComponentDisposedWithParent(t *testing.T) {
 	parentDep, leaf := State(0), State(0)
 	setups, builds := 0, 0
+	var c *ComponentWidget
 	dispose := Effect(func() {
 		parentDep.Get()
-		Component(func() Builder {
+		c = Component(func() Builder {
 			setups++
 			return func() Widget { builds++; leaf.Get(); return Box() }
 		})
 	})
 	defer dispose()
+	c.Layout(Loose(Sz(100, 100)), Env{})
 	parentDep.Set(1)
 	effects.flush()
+	c.Layout(Loose(Sz(100, 100)), Env{})
 	builds = 0
 	leaf.Set(1)
 	effects.flush()

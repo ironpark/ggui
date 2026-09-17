@@ -270,7 +270,10 @@ func (in *inputState) findPointer(p *hitRegion) *hitRegion {
 	if r := in.topmost(func(r *hitRegion) bool { return r.pointer != nil && sameAny(r.pointer, p.pointer) }); r != nil {
 		return r
 	}
-	return in.topmost(func(r *hitRegion) bool { return r.pointer != nil && r.rect == p.rect })
+	if p.id != nil {
+		return in.topmost(func(r *hitRegion) bool { return r.pointer != nil && r.id == p.id })
+	}
+	return in.topmost(func(r *hitRegion) bool { return r.pointer != nil && r.id == nil && r.rect == p.rect })
 }
 
 // findKeyRegion is findPointer for a key region.
@@ -278,7 +281,10 @@ func (in *inputState) findKeyRegion(p *hitRegion) *hitRegion {
 	if r := in.topmost(func(r *hitRegion) bool { return r.key != nil && sameAny(r.key, p.key) }); r != nil {
 		return r
 	}
-	return in.topmost(func(r *hitRegion) bool { return r.key != nil && r.rect == p.rect })
+	if p.id != nil {
+		return in.topmost(func(r *hitRegion) bool { return r.key != nil && r.id == p.id })
+	}
+	return in.topmost(func(r *hitRegion) bool { return r.key != nil && r.id == nil && r.rect == p.rect })
 }
 
 func (in *inputState) setFocus(r *hitRegion) { in.focus(r, false) }

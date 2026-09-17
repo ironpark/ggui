@@ -80,10 +80,11 @@ func (t *TransitionWidget) Paint(dst *Canvas, r Rect) {
 	if !t.driven {
 		now := clock()
 		start := now
-		if s, ok := dst.Retained(r, t.slot()).(transitionStart); ok {
+		at := Anchor{Rect: r, ID: t.key}
+		if s, ok := dst.Retained(at, transitionSlot); ok {
 			start = s.at
 		}
-		dst.Retain(r, t.slot(), transitionStart{start})
+		dst.Retain(at, transitionSlot, transitionStart{start})
 		p = 1
 		if t.duration > 0 {
 			p = clamp(float64(now.Sub(start))/float64(t.duration), 0, 1)
@@ -130,15 +131,7 @@ func (t *TransitionWidget) Paint(dst *Canvas, r Rect) {
 	dst.Image.DrawImage(t.buf, op)
 }
 
-// slot is the Retain key: the chosen Key, or the widget's Rect alone.
-func (t *TransitionWidget) slot() any {
-	if t.key != nil {
-		return retainKey{key: t.key}
-	}
-	return transitionSlot
-}
-
-var transitionSlot = new(byte)
+var transitionSlot = NewSlot[transitionStart]("transition start")
 
 // Presence keeps child on screen while it animates out. While show is
 // true the child is laid out and painted as usual, playing its enter

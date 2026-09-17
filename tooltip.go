@@ -18,7 +18,7 @@ type TooltipWidget struct {
 // tooltip rebuilt every frame still opens.
 type tooltipHover struct{ since time.Time }
 
-var tooltipSlot = new(byte) // the Retain key, shared by every tooltip
+var tooltipSlot = NewSlot[tooltipHover]("tooltip hover")
 
 // Tooltip wraps child and shows text below it once the cursor has hovered
 // for half a second. It takes no space and registers no hit region, so it
@@ -49,10 +49,10 @@ func (t *TooltipWidget) Paint(dst *Canvas, r Rect) {
 	}
 	now := clock()
 	since := now
-	if h, ok := dst.Retained(r, tooltipSlot).(tooltipHover); ok {
+	if h, ok := dst.Retained(Anchor{Rect: r}, tooltipSlot); ok {
 		since = h.since
 	}
-	dst.Retain(r, tooltipSlot, tooltipHover{since})
+	dst.Retain(Anchor{Rect: r}, tooltipSlot, tooltipHover{since})
 	if now.Sub(since) < t.delay {
 		return
 	}
