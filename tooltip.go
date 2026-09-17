@@ -47,7 +47,7 @@ func (t *TooltipWidget) Paint(dst *Canvas, r Rect) {
 	if !ok || !r.Contains(p) {
 		return
 	}
-	now := time.Now()
+	now := clock()
 	since := now
 	if h, ok := dst.Retained(r, tooltipSlot).(tooltipHover); ok {
 		since = h.since

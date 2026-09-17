@@ -10,10 +10,10 @@ import (
 // SelectWidget is a dropdown that picks one of a list of values into a
 // signal. Build one with Select or SelectStrings.
 type SelectWidget[T comparable] struct {
+	interactive
 	value    *ggui.Signal[T]
 	options  []T
 	label    func(T) string
-	disabled bool
 	minWidth float64
 	onChange func(T)
 
@@ -25,8 +25,6 @@ type SelectWidget[T comparable] struct {
 	pad       ggui.EdgeInsets
 	textSize  ggui.Size
 	highlight int // the option the keyboard is on while open, or -1
-	hovered   bool
-	focus     focusState
 	theme     ggui.Theme
 }
 
@@ -92,11 +90,7 @@ func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 	t := s.theme
 	open := s.popup.IsOpen()
 	s.box.Border(1, pick(open || s.focus.focused, t.Accent, t.Border))
-	if !s.disabled {
-		dst.HitPointer(r, s)
-		dst.HitKey(r, s)
-		dst.HitCursor(r, ebiten.CursorShapePointer)
-	}
+	s.hit(dst, r, s, ebiten.CursorShapePointer)
 	dst.Paint(s.box, r)
 	dst.Clip(r).Paint(s.text, ggui.Rct(ggui.Pt(r.Origin.X+s.pad.Left, r.Origin.Y+(r.Size.H-s.textSize.H)/2), s.textSize))
 	// Chevron, pointing down, or up while open.
@@ -157,13 +151,15 @@ func (s *SelectWidget[T]) HandleKey(ev ggui.KeyEvent) {
 		return
 	}
 	open := s.popup.IsOpen()
-	switch ev.Key {
-	case ebiten.KeySpace, ebiten.KeyEnter, ebiten.KeyNumpadEnter:
+	if activates(ev) {
 		if open && s.highlight >= 0 {
 			s.choose(s.highlight)
 		} else {
 			s.toggle()
 		}
+		return
+	}
+	switch ev.Key {
 	case ebiten.KeyEscape:
 		s.popup.Hide()
 	case ebiten.KeyArrowUp, ebiten.KeyArrowDown:
@@ -182,11 +178,11 @@ func (s *SelectWidget[T]) HandleKey(ev ggui.KeyEvent) {
 	}
 }
 
-// Adopt implements ggui.Adopter: an open list and hover carry across a
-// rebuild.
+// Adopt implements ggui.Adopter: an open list carries across a rebuild.
 func (s *SelectWidget[T]) Adopt(prev any) {
+	s.interactive.Adopt(prev)
 	if p, ok := prev.(*SelectWidget[T]); ok {
-		s.hovered, s.focus, s.highlight = p.hovered, p.focus, p.highlight
+		s.highlight = p.highlight
 		if p.popup.IsOpen() {
 			s.popup.Show()
 		}
@@ -194,21 +190,7 @@ func (s *SelectWidget[T]) Adopt(prev any) {
 }
 
 // HandlePointer implements PointerHandler.
-func (s *SelectWidget[T]) HandlePointer(ev ggui.PointerEvent) bool {
-	switch ev.Kind {
-	case ggui.PointerEnter, ggui.PointerMove:
-		s.hovered = true
-	case ggui.PointerExit:
-		s.hovered = false
-	case ggui.PointerTap:
-		if ev.Button == ebiten.MouseButtonLeft {
-			s.toggle()
-		}
-	case ggui.PointerScroll:
-		return false
-	}
-	return true
-}
+func (s *SelectWidget[T]) HandlePointer(ev ggui.PointerEvent) bool { return s.pointer(ev, s.toggle) }
 
 // selectAnchor is the popup's anchor: the field, painted by its Select.
 type selectAnchor[T comparable] struct{ s *SelectWidget[T] }
@@ -223,11 +205,11 @@ func (a selectAnchor[T]) Paint(dst *ggui.Canvas, r ggui.Rect) { a.s.paintField(d
 
 // selectItem is one option row in the open list.
 type selectItem[T comparable] struct {
-	owner   *SelectWidget[T]
-	index   int
-	text    *ggui.TextWidget
-	hovered bool
-	active  bool // highlighted from the keyboard
+	interactive
+	owner  *SelectWidget[T]
+	index  int
+	text   *ggui.TextWidget
+	active bool // highlighted from the keyboard
 
 	pad      ggui.EdgeInsets
 	textSize ggui.Size
@@ -257,25 +239,9 @@ func (it *selectItem[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 }
 
-func (it *selectItem[T]) Adopt(prev any) {
-	if p, ok := prev.(*selectItem[T]); ok {
-		it.hovered = p.hovered
-	}
-}
-
 func (it *selectItem[T]) HandlePointer(ev ggui.PointerEvent) bool {
-	switch ev.Kind {
-	case ggui.PointerEnter, ggui.PointerMove:
-		it.hovered = true
+	if ev.Kind == ggui.PointerEnter || ev.Kind == ggui.PointerMove {
 		it.owner.highlight = it.index
-	case ggui.PointerExit:
-		it.hovered = false
-	case ggui.PointerTap:
-		if ev.Button == ebiten.MouseButtonLeft {
-			it.owner.choose(it.index)
-		}
-	case ggui.PointerScroll:
-		return false
 	}
-	return true
+	return it.pointer(ev, func() { it.owner.choose(it.index) })
 }

@@ -8,8 +8,7 @@ import (
 func TestTransitionSlidesInOnceAndNotOnRebuild(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	now := base
-	clock = func() time.Time { return now }
-	defer func() { clock = time.Now }()
+	defer SetClock(func() time.Time { return now })()
 
 	var got Rect
 	tick := State(0)

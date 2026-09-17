@@ -125,12 +125,11 @@ func (m *MenuWidget) Adopt(prev any) {
 
 // MenuItemWidget is one action in a Menu. Build one with MenuItem.
 type MenuItemWidget struct {
-	text     *ggui.TextWidget
-	onTap    func()
-	disabled bool
-	menu     *MenuWidget
-	hovered  bool
-	active   bool
+	interactive
+	text   *ggui.TextWidget
+	onTap  func()
+	menu   *MenuWidget
+	active bool
 
 	pad      ggui.EdgeInsets
 	textSize ggui.Size
@@ -185,29 +184,10 @@ func (it *MenuItemWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Paint(it.text, ggui.Rct(ggui.Pt(r.Origin.X+it.pad.Left, r.Origin.Y+(r.Size.H-it.textSize.H)/2), it.textSize))
 }
 
-// Adopt implements ggui.Adopter.
-func (it *MenuItemWidget) Adopt(prev any) {
-	if p, ok := prev.(*MenuItemWidget); ok {
-		it.hovered = p.hovered
-	}
-}
-
 // HandlePointer implements PointerHandler.
 func (it *MenuItemWidget) HandlePointer(ev ggui.PointerEvent) bool {
-	switch ev.Kind {
-	case ggui.PointerEnter, ggui.PointerMove:
-		it.hovered = true
-		if it.menu != nil {
-			it.menu.current = -1
-		}
-	case ggui.PointerExit:
-		it.hovered = false
-	case ggui.PointerTap:
-		if ev.Button == ebiten.MouseButtonLeft {
-			it.run()
-		}
-	case ggui.PointerScroll:
-		return false
+	if (ev.Kind == ggui.PointerEnter || ev.Kind == ggui.PointerMove) && it.menu != nil {
+		it.menu.current = -1
 	}
-	return true
+	return it.pointer(ev, it.run)
 }

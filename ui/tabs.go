@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"time"
-
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 )
@@ -18,8 +16,6 @@ type TabsWidget struct {
 	labelSize []ggui.Size
 	hovered   int // the label under the pointer, or -1
 	focus     focusState
-	underline ggui.Motion // x of the active underline, animated
-	width     ggui.Motion
 
 	theme     ggui.Theme
 	headerH   float64
@@ -117,11 +113,10 @@ func (t *TabsWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	lineY := r.Origin.Y + t.headerH - 1
 	dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X, lineY), ggui.Sz(r.Size.W, 1)), th.Border)
 	if cur >= 0 {
-		now := time.Now()
 		lr := t.labelRect[cur]
-		t.underline.MoveTo(lr.Origin.X, now, knobDuration)
-		t.width.MoveTo(lr.Size.W, now, knobDuration)
-		dst.FillRoundRect(ggui.Rct(ggui.Pt(t.underline.Value(now), lineY-1), ggui.Sz(t.width.Value(now), 2)), 1, th.Accent)
+		x := motion(dst, header, underlineSlot, lr.Origin.X)
+		w := motion(dst, header, widthSlot, lr.Size.W)
+		dst.FillRoundRect(ggui.Rct(ggui.Pt(x, lineY-1), ggui.Sz(w, 2)), 1, th.Accent)
 		if t.focus.focused && t.focus.ring {
 			t.focus.paintRing(dst, lr, th.Radius, th)
 		}
@@ -150,7 +145,7 @@ func (t *TabsWidget) HandleKey(ev ggui.KeyEvent) {
 // Adopt implements ggui.Adopter.
 func (t *TabsWidget) Adopt(prev any) {
 	if p, ok := prev.(*TabsWidget); ok {
-		t.hovered, t.focus, t.underline, t.width = p.hovered, p.focus, p.underline, p.width
+		t.hovered, t.focus = p.hovered, p.focus
 	}
 }
 

@@ -582,7 +582,7 @@ func (t *TextInputWidget) lineBounds() (int, int) {
 
 // commit writes the editor's text to the signal after an edit.
 func (t *TextInputWidget) commit() {
-	t.blink = time.Now()
+	t.blink = clock()
 	if t.ed.text == t.value.Peek() {
 		return
 	}
@@ -652,7 +652,7 @@ func (t *TextInputWidget) imeSession() *textinput.SessionOptions {
 // imeComposition shows preedit text at the caret; "" clears it.
 func (t *TextInputWidget) imeComposition(text string, caret int) {
 	t.composition, t.compCaret = text, caret
-	t.blink = time.Now()
+	t.blink = clock()
 }
 
 // imeCommit inserts committed text in place of the selection.
@@ -686,7 +686,7 @@ func (t *TextInputWidget) HandleKey(ev KeyEvent) {
 	switch ev.Kind {
 	case KeyFocus:
 		t.focused = true
-		t.blink = time.Now()
+		t.blink = clock()
 	case KeyBlur:
 		t.ime.Confirm()
 		t.focused = false
@@ -786,7 +786,7 @@ func (t *TextInputWidget) HandlePointer(ev PointerEvent) bool {
 			return false
 		}
 		t.ime.Confirm()
-		now := time.Now()
+		now := clock()
 		if now.Sub(t.lastClick) < 400*time.Millisecond && near(ev.Pos, t.lastPos) {
 			t.clicks++
 		} else {
@@ -807,7 +807,7 @@ func (t *TextInputWidget) HandlePointer(ev PointerEvent) bool {
 	case PointerDrag:
 		if t.clicks == 1 {
 			t.ed.moveTo(t.indexAt(ev.Pos), true)
-			t.blink = time.Now()
+			t.blink = clock()
 		}
 		return true
 	case PointerUp, PointerTap, PointerMove, PointerEnter, PointerExit:
@@ -834,5 +834,5 @@ func (t *TextInputWidget) Adopt(prev any) {
 	if p.ed.text != t.value.Peek() {
 		t.ed.setText(t.value.Peek())
 	}
-	t.blink = time.Now()
+	t.blink = clock()
 }

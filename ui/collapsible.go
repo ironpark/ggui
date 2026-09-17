@@ -2,7 +2,6 @@ package ui
 
 import (
 	"math"
-	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
@@ -15,10 +14,7 @@ type CollapsibleWidget struct {
 	title   *ggui.TextWidget
 	content ggui.Widget
 	body    ggui.Widget // content behind Presence, so it animates out
-
-	hovered bool
-	focus   focusState
-	chevron ggui.Motion // 0 pointing right, 1 pointing down
+	interactive
 
 	theme     ggui.Theme
 	pad       ggui.EdgeInsets
@@ -36,7 +32,7 @@ func Collapsible(open *ggui.Signal[bool], title string, content ggui.Widget) *Co
 	return c
 }
 
-func (c *CollapsibleWidget) toggle() { c.open.Set(!c.open.Peek()) }
+func (c *CollapsibleWidget) toggle() { ggui.Toggle(c.open) }
 
 // Layout implements Widget.
 func (c *CollapsibleWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
@@ -55,15 +51,12 @@ func (c *CollapsibleWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := c.theme
 	header := ggui.Rct(r.Origin, ggui.Sz(r.Size.W, c.headerH))
-	dst.HitPointer(header, c)
-	dst.HitKey(header, c)
-	dst.HitCursor(header, ebiten.CursorShapePointer)
+	c.hit(dst, header, c, ebiten.CursorShapePointer)
 	if c.hovered {
 		dst.FillRoundRect(header, t.Radius, t.Surface)
 	}
-	now := time.Now()
-	c.chevron.MoveTo(pick(c.open.Peek(), 1.0, 0.0), now, knobDuration)
-	v := c.chevron.Value(now)
+	// The chevron turns from pointing right (0) to pointing down (1).
+	v := motion(dst, header, chevronSlot, pick(c.open.Peek(), 1.0, 0.0))
 	// The chevron turns from pointing right to pointing down.
 	cx, cy := r.Origin.X+c.pad.Left+controlSize*0.4, r.Origin.Y+c.headerH/2
 	rot := func(x, y float64) ggui.Point {
@@ -79,33 +72,7 @@ func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 }
 
 // HandleKey implements KeyHandler: Space or Enter toggles.
-func (c *CollapsibleWidget) HandleKey(ev ggui.KeyEvent) {
-	c.focus.handle(ev)
-	if activates(ev) {
-		c.toggle()
-	}
-}
-
-// Adopt implements ggui.Adopter.
-func (c *CollapsibleWidget) Adopt(prev any) {
-	if p, ok := prev.(*CollapsibleWidget); ok {
-		c.hovered, c.focus, c.chevron = p.hovered, p.focus, p.chevron
-	}
-}
+func (c *CollapsibleWidget) HandleKey(ev ggui.KeyEvent) { c.key(ev, c.toggle) }
 
 // HandlePointer implements PointerHandler.
-func (c *CollapsibleWidget) HandlePointer(ev ggui.PointerEvent) bool {
-	switch ev.Kind {
-	case ggui.PointerEnter, ggui.PointerMove:
-		c.hovered = true
-	case ggui.PointerExit:
-		c.hovered = false
-	case ggui.PointerTap:
-		if ev.Button == ebiten.MouseButtonLeft {
-			c.toggle()
-		}
-	case ggui.PointerScroll:
-		return false
-	}
-	return true
-}
+func (c *CollapsibleWidget) HandlePointer(ev ggui.PointerEvent) bool { return c.pointer(ev, c.toggle) }

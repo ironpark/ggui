@@ -9,16 +9,13 @@ import (
 
 // ButtonWidget is a clickable box with a label. Build one with Button.
 type ButtonWidget struct {
+	interactive
 	label     *ggui.TextWidget
 	box       *ggui.BoxWidget
 	onTap     func()
 	secondary bool
-	disabled  bool
 	padded    bool
-
-	hovered, pressed bool
-	focus            focusState
-	theme            ggui.Theme
+	theme     ggui.Theme
 }
 
 // Button creates a primary button: Accent background, OnAccent label.
@@ -82,51 +79,17 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	default:
 		fill = pick(b.hovered, t.AccentHover, t.Accent)
 	}
-	if b.pressed && !b.disabled {
+	if b.pressed && b.hovered && !b.disabled {
 		fill = tint(fill, pressTint)
 	}
 	b.box.Fill(fill)
-	if !b.disabled {
-		dst.HitPointer(r, b)
-		dst.HitKey(r, b)
-		dst.HitCursor(r, ebiten.CursorShapePointer)
-	}
+	b.hit(dst, r, b, ebiten.CursorShapePointer)
 	dst.Paint(b.box, r)
 	b.focus.paintRing(dst, r, t.Radius, t)
 }
 
 // HandleKey implements KeyHandler: Space or Enter presses the button.
-func (b *ButtonWidget) HandleKey(ev ggui.KeyEvent) {
-	b.focus.handle(ev)
-	if activates(ev) && b.onTap != nil {
-		b.onTap()
-	}
-}
-
-// Adopt implements ggui.Adopter: hover and press carry across a rebuild.
-func (b *ButtonWidget) Adopt(prev any) {
-	if p, ok := prev.(*ButtonWidget); ok {
-		b.hovered, b.pressed, b.focus = p.hovered, p.pressed, p.focus
-	}
-}
+func (b *ButtonWidget) HandleKey(ev ggui.KeyEvent) { b.key(ev, b.onTap) }
 
 // HandlePointer implements PointerHandler.
-func (b *ButtonWidget) HandlePointer(ev ggui.PointerEvent) bool {
-	switch ev.Kind {
-	case ggui.PointerEnter, ggui.PointerMove:
-		b.hovered = true
-	case ggui.PointerExit:
-		b.hovered, b.pressed = false, false
-	case ggui.PointerDown:
-		b.pressed = ev.Button == ebiten.MouseButtonLeft
-	case ggui.PointerUp:
-		b.pressed = false
-	case ggui.PointerTap:
-		if ev.Button == ebiten.MouseButtonLeft && b.onTap != nil {
-			b.onTap()
-		}
-	case ggui.PointerScroll:
-		return false
-	}
-	return true
-}
+func (b *ButtonWidget) HandlePointer(ev ggui.PointerEvent) bool { return b.pointer(ev, b.onTap) }

@@ -6,7 +6,6 @@ import (
 	"image/color"
 	"math"
 	"sync/atomic"
-	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
@@ -111,7 +110,7 @@ func (a *App) Update() error {
 		a.cursor = a.input.cursor
 		ebiten.SetCursorShape(a.cursor)
 	}
-	anims.step(time.Now())
+	anims.step(clock())
 	effects.flush()
 	return nil
 }

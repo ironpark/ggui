@@ -6,9 +6,6 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
-// clock is time.Now, replaced in tests.
-var clock = time.Now
-
 // TransitionWidget animates its child in when it first appears: it fades,
 // slides or scales from a starting state to its place over Duration. Build
 // one with Transition, and use Presence to animate a child out as well.

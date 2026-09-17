@@ -2,6 +2,7 @@ package ui_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
@@ -364,4 +365,26 @@ func probe(w, h float64, got *ggui.Rect) ggui.Widget {
 		func(c ggui.Constraints, _ ggui.Env) ggui.Size { return c.Constrain(ggui.Sz(w, h)) },
 		func(_ *ggui.Canvas, r ggui.Rect) { *got = r },
 	)
+}
+
+func TestSwitchKnobEasesOnTheClock(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	defer ggui.SetClock(func() time.Time { return now })()
+	on := ggui.State(false)
+	// Rebuilt on every flip: the knob's motion must live in the Canvas,
+	// not the widget.
+	tree := ggui.Reactive(func() ggui.Widget { on.Get(); return ui.Switch(on, "") })
+	p := ggui.NewProbe(tree, ggui.Sz(100, 30))
+	p.Frame()
+	p.Click(ggui.Pt(5, 5))
+	if !on.Peek() {
+		t.Fatal("switch did not turn on")
+	}
+	p.Frame()
+	now = now.Add(50 * time.Millisecond)
+	p.Frame()
+	p.Click(ggui.Pt(5, 5)) // flips back from mid-slide
+	if on.Peek() {
+		t.Fatal("switch did not turn off")
+	}
 }

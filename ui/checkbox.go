@@ -65,6 +65,3 @@ func (c *CheckboxWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	c.focus.paintRing(dst, box, radius, t)
 }
-
-// HandlePointer implements PointerHandler.
-func (c *CheckboxWidget) HandlePointer(ev ggui.PointerEvent) bool { return c.handle(ev) }

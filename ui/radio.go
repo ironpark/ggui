@@ -54,6 +54,3 @@ func (r *RadioWidget[T]) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 	}
 	r.focus.paintRing(dst, box, radius, t)
 }
-
-// HandlePointer implements PointerHandler.
-func (r *RadioWidget[T]) HandlePointer(ev ggui.PointerEvent) bool { return r.handle(ev) }

@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"time"
-
 	"github.com/ironpark/ggui"
 )
 
@@ -68,7 +66,6 @@ func (b *BadgeWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 type ProgressWidget struct {
 	value  ggui.Reader[float64]
 	height float64
-	fill   ggui.Motion
 	theme  ggui.Theme
 }
 
@@ -90,19 +87,9 @@ func (p *ProgressWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 // Paint implements Widget.
 func (p *ProgressWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := p.theme
-	now := time.Now()
-	v := clamp(p.value.Get(), 0, 1)
-	// The motion is retained on the Canvas: a bar rebuilt every frame
-	// still eases, and it registers no region to adopt through.
-	if m, ok := dst.Retained(r, progressSlot).(ggui.Motion); ok {
-		p.fill = m
-	}
-	p.fill.MoveTo(v, now, knobDuration)
-	dst.Retain(r, progressSlot, p.fill)
+	v := motion(dst, r, progressSlot, clamp(p.value.Get(), 0, 1))
 	dst.FillRoundRect(r, r.Size.H/2, t.Border)
-	if w := r.Size.W * p.fill.Value(now); w > 0 {
+	if w := r.Size.W * v; w > 0 {
 		dst.FillRoundRect(ggui.Rct(r.Origin, ggui.Sz(w, r.Size.H)), r.Size.H/2, t.Accent)
 	}
 }
-
-var progressSlot = new(byte)

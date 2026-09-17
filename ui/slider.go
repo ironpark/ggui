@@ -10,15 +10,13 @@ import (
 // SliderWidget picks a number in a range by dragging a knob. Build one with
 // Slider.
 type SliderWidget struct {
+	interactive
 	value    *ggui.Signal[float64]
 	min, max float64
 	step     float64
-	disabled bool
 
-	hovered, pressed bool
-	focus            focusState
-	theme            ggui.Theme
-	rect             ggui.Rect
+	theme ggui.Theme
+	rect  ggui.Rect
 }
 
 // Slider binds a horizontal slider to value, clamped to [lo, hi]. It fills
@@ -65,11 +63,7 @@ func (s *SliderWidget) setFromX(x float64) {
 func (s *SliderWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := s.theme
 	s.rect = r
-	if !s.disabled {
-		dst.HitPointer(r, s)
-		dst.HitKey(r, s)
-		dst.HitCursor(r, ebiten.CursorShapePointer)
-	}
+	s.hit(dst, r, s, ebiten.CursorShapePointer)
 	cy := r.Origin.Y + r.Size.H/2
 	x0, x1 := r.Origin.X+sliderKnob, r.Origin.X+r.Size.W-sliderKnob
 	kx := x0 + (x1-x0)*s.fraction()
@@ -109,36 +103,21 @@ func (s *SliderWidget) HandleKey(ev ggui.KeyEvent) {
 	s.value.Set(clamp(s.value.Peek()+step, lo, hi))
 }
 
-// Adopt implements ggui.Adopter: a drag in progress carries across a rebuild.
-func (s *SliderWidget) Adopt(prev any) {
-	if p, ok := prev.(*SliderWidget); ok {
-		s.hovered, s.pressed, s.focus = p.hovered, p.pressed, p.focus
-	}
-}
-
-// HandlePointer implements PointerHandler.
+// HandlePointer implements PointerHandler: a left press jumps to the
+// pointer and a drag from there follows it, past the ends included.
 func (s *SliderWidget) HandlePointer(ev ggui.PointerEvent) bool {
 	switch ev.Kind {
-	case ggui.PointerEnter, ggui.PointerMove:
-		s.hovered = true
-	case ggui.PointerExit:
-		s.hovered = false
 	case ggui.PointerDown:
 		if ev.Button != ebiten.MouseButtonLeft {
 			return false
 		}
-		s.pressed = true
 		s.setFromX(ev.Pos.X)
 	case ggui.PointerDrag:
 		if s.pressed {
 			s.setFromX(ev.Pos.X)
 		}
-	case ggui.PointerUp:
-		s.pressed = false
-	case ggui.PointerScroll:
-		return false
 	}
-	return true
+	return s.pointer(ev, nil)
 }
 
 // TextFieldWidget is a TextInput in a themed box: Field background, a

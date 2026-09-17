@@ -74,7 +74,7 @@ func (f *focusState) handle(ev ggui.KeyEvent) {
 
 // activates reports whether ev is the key press that triggers a control.
 func activates(ev ggui.KeyEvent) bool {
-	return ev.Kind == ggui.KeyPress && (ev.Key == ebiten.KeySpace || ev.Key == ebiten.KeyEnter)
+	return ev.Kind == ggui.KeyPress && (ev.Key == ebiten.KeySpace || ev.Key == ebiten.KeyEnter || ev.Key == ebiten.KeyNumpadEnter)
 }
 
 // paintRing outlines r in the accent color when focus is visible.
@@ -85,3 +85,93 @@ func (f *focusState) paintRing(dst *ggui.Canvas, r ggui.Rect, radius float64, t 
 	ring := ggui.Rct(r.Origin.Add(ggui.Pt(-2, -2)), ggui.Sz(r.Size.W+4, r.Size.H+4))
 	dst.StrokeRoundRect(ring, radius+2, 2, t.Accent)
 }
+
+// control is a widget that takes both pointer and keyboard input.
+type control interface {
+	ggui.PointerHandler
+	ggui.KeyHandler
+}
+
+// interactive is the input state every control shares: whether it takes
+// input, hover, press and keyboard focus. A control embeds it and calls
+// hit, pointer and key from its Paint and handlers; Adopt then carries the
+// state across a rebuild for free.
+type interactive struct {
+	disabled         bool
+	hovered, pressed bool
+	focus            focusState
+}
+
+func (s *interactive) state() *interactive { return s }
+
+// hit registers r for pointer, keys and the cursor, unless disabled.
+func (s *interactive) hit(dst *ggui.Canvas, r ggui.Rect, h control, cursor ebiten.CursorShapeType) {
+	if s.disabled {
+		return
+	}
+	dst.HitPointer(r, h)
+	dst.HitKey(r, h)
+	dst.HitCursor(r, cursor)
+}
+
+// pointer tracks hover and press and calls onTap on a left click. Press
+// is cleared by PointerUp, not by leaving, so a drag that strays outside
+// keeps going. Scroll is left to whatever is behind.
+func (s *interactive) pointer(ev ggui.PointerEvent, onTap func()) bool {
+	switch ev.Kind {
+	case ggui.PointerEnter, ggui.PointerMove:
+		s.hovered = true
+	case ggui.PointerExit:
+		s.hovered = false
+	case ggui.PointerDown:
+		s.pressed = ev.Button == ebiten.MouseButtonLeft
+	case ggui.PointerUp:
+		s.pressed = false
+	case ggui.PointerTap:
+		if ev.Button == ebiten.MouseButtonLeft && onTap != nil {
+			onTap()
+		}
+	case ggui.PointerScroll:
+		return false
+	}
+	return true
+}
+
+// key tracks focus and calls onActivate for Space or Enter.
+func (s *interactive) key(ev ggui.KeyEvent, onActivate func()) {
+	s.focus.handle(ev)
+	if activates(ev) && onActivate != nil {
+		onActivate()
+	}
+}
+
+// Adopt implements ggui.Adopter: hover, press and focus carry across a
+// rebuild. Disabled is the new widget's to decide.
+func (s *interactive) Adopt(prev any) {
+	if p, ok := prev.(interface{ state() *interactive }); ok {
+		q := p.state()
+		s.hovered, s.pressed, s.focus = q.hovered, q.pressed, q.focus
+	}
+}
+
+// motion eases a value retained on the Canvas toward target and returns
+// where it is now. The Motion lives in the Canvas under r and slot rather
+// than in the widget, so a control rebuilt every frame keeps animating
+// without an Adopt.
+func motion(dst *ggui.Canvas, r ggui.Rect, slot any, target float64) float64 {
+	now := ggui.Now()
+	m, _ := dst.Retained(r, slot).(ggui.Motion)
+	m.MoveTo(target, now, knobDuration)
+	v := m.Value(now)
+	dst.Retain(r, slot, m)
+	return v
+}
+
+// Slots for motion; each names one animated value within a widget's Rect.
+var (
+	knobSlot      = new(byte)
+	chevronSlot   = new(byte)
+	underlineSlot = new(byte)
+	widthSlot     = new(byte)
+	progressSlot  = new(byte)
+)
