@@ -10,8 +10,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/exp/textinput"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	"github.com/ironpark/ggui/internal/textinput"
 )
 
 // textEditor is the model behind TextInput: a string and a selection. The
@@ -218,7 +218,8 @@ func nextWord(s string, i int) int {
 // wrap and grow. It draws only the text, selection and caret; TextField
 // adds the themed box around it.
 //
-// Text comes in through the platform IME (exp/textinput), so composed
+// Text comes in through the platform IME (a patched copy of Ebitengine's
+// exp/textinput, in internal/textinput), so composed
 // scripts such as Korean and Japanese work, with the composition shown
 // underlined in place. Keys: arrows (with Shift to select, Alt or Ctrl to
 // jump words, ⌘ on macOS to reach the ends), Home and End, Backspace and

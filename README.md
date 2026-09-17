@@ -573,6 +573,8 @@ why something sits where it does.
 ├── clipboard.go  System clipboard for cut, copy and paste
 ├── font.go       Font loading, default font, text wrapping
 ├── geometry.go   Point, Size, Rect, Constraints
+├── internal/textinput/  Ebitengine's exp/textinput, patched on macOS so a Korean
+│                 composition keeps its first jamo after a commit; aliases upstream elsewhere
 ├── ui/           One file per control: Button, Checkbox, Radio, Switch,
 │                 Slider, TextField, Select, Menu, Tabs, Collapsible,
 │                 Dialog, Card, Badge, Progress, Divider
