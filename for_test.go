@@ -242,3 +242,74 @@ func TestForRowsLeaveThroughTheirTransition(t *testing.T) {
 		t.Fatalf("after leaving: row 2 painted %v, row 3 at %+v", ok, painted[3])
 	}
 }
+
+func TestForPaintGroupsFollowRows(t *testing.T) {
+	for _, animate := range []bool{false, true} {
+		name := "immediate"
+		if animate {
+			name = "transition"
+		}
+		t.Run(name, func(t *testing.T) {
+			items := State([]int{1, 2, 3})
+			var list *ForWidget[int, int]
+			var painted []int
+			groups := map[int]any{}
+			p := ProbeBuilder(func() Widget {
+				list = For(items, func(id int) int { return id }, func(item Reader[int]) Widget {
+					id := item.Get()
+					return FromFuncs(
+						func(c Constraints, _ Env) Size { return c.Constrain(Sz(20, 10)) },
+						func(dst *Canvas, _ Rect) { painted = append(painted, id); groups[id] = dst.group },
+					)
+				})
+				if animate {
+					list.Transition(func(w Widget) *TransitionWidget { return Transition(w).Slide(-10, 0).Duration(100 * time.Millisecond) })
+				}
+				return list
+			}, Sz(100, 100))
+			defer p.Close()
+			p.Advance(0)
+			p.Advance(time.Second)
+			original := map[int]*forEntry[int]{}
+			for k, e := range list.entries {
+				original[k] = e
+			}
+			check := func(want ...int) {
+				t.Helper()
+				painted = nil
+				clear(groups)
+				p.Frame()
+				if len(painted) != len(want) {
+					t.Fatalf("painted %v, want %v", painted, want)
+				}
+				for i, id := range want {
+					if painted[i] != id || groups[id] != original[id] {
+						t.Fatalf("painted %v: row %d has group %v, want %p", painted, id, groups[id], original[id])
+					}
+				}
+			}
+			check(1, 2, 3)
+			items.Set([]int{3, 2, 1})
+			check(3, 2, 1)
+			items.Set([]int{3, 1})
+			if animate {
+				check(3, 2, 1)
+				p.Advance(50 * time.Millisecond)
+				check(3, 2, 1)
+				// Restoring a leaving key reuses its entry without duplicating it.
+				items.Set([]int{2, 1, 3})
+				check(2, 1, 3)
+				items.Set([]int{1, 3})
+				check(2, 1, 3)
+				p.Advance(time.Second)
+				check(1, 3)
+			} else {
+				check(3, 1)
+			}
+			items.Set(nil)
+			p.Frame()
+			p.Advance(time.Second)
+			check()
+		})
+	}
+}

@@ -510,7 +510,7 @@ identity when it implements `Identified`, else by `Rect`; `.Key(k)` on a
 control, `TextInput`, `Scroll` or `Popup` sets one, so a widget rebuilt and
 moved in the same frame keeps its state. Inside a `Keyed` or `Mount`
 component every one of those gets an identity for free, the component's
-key plus its place in construction order, so a keyed form keeps focus and
+mount instance plus its place in construction order, so a keyed form keeps focus and
 carets through its own rebuilds with no keys on the fields. `ggui.Interactive` is the shared body of a
 control: embed it, call `Hit` from `Paint` and `Pointer` and `Keyboard` from
 the handlers, and hover, press, focus, the focus ring and adoption come with
@@ -524,6 +524,10 @@ and `Text` route input through the same hit regions and focus as the app.
 p := ggui.NewProbe(ui.Checkbox(on, "x"), ggui.Sz(200, 30))
 p.Click(ggui.Pt(5, 5)) // on.Peek() is now true
 ```
+
+Probes share the process-wide reactive runtime, theme and clock. Run Probe
+tests serially (do not use `t.Parallel`) and close each probe with
+`defer p.Close()`.
 
 ## HiDPI
 

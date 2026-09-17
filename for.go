@@ -31,6 +31,9 @@ type ForWidget[T any, K comparable] struct {
 	leaveKeys  []K
 	reduced    bool
 
+	// Entries in the same paint order as children, including leaving rows.
+	childEntries []*forEntry[T]
+
 	// The virtual path: the range of items laid out this frame and their
 	// widgets; sizes and offsets are indexed the same way.
 	first, last int
@@ -208,9 +211,12 @@ func (f *ForWidget[T, K]) Layout(c Constraints, env Env) Size {
 	n := len(f.items)
 	if f.extent <= 0 {
 		if f.stale || len(f.leaving) > 0 {
+			clear(f.childEntries)
+			f.childEntries = resize(f.childEntries, n)
 			f.children = resize(f.children, n)
 			for i := range n {
-				f.children[i] = f.entry(i).widget
+				e := f.entry(i)
+				f.children[i], f.childEntries[i] = e.widget, e
 			}
 			f.stale = false
 			f.placeLeaving()
@@ -257,16 +263,6 @@ func (f *ForWidget[T, K]) Layout(c Constraints, env Env) Size {
 	return result
 }
 
-// groupOf returns the entry whose widget w is, for eviction.
-func (f *ForWidget[T, K]) groupOf(w Widget) any {
-	for _, e := range f.entries {
-		if e.widget == w {
-			return e
-		}
-	}
-	return nil
-}
-
 // forRowKey identifies a row's Transition by its item key.
 type forRowKey[K comparable] struct{ k K }
 
@@ -293,6 +289,7 @@ func (f *ForWidget[T, K]) placeLeaving() {
 		t.drive(p, true)
 		at := min(max(e.index, 0), len(f.children))
 		f.children = slices.Insert(f.children, at, e.widget)
+		f.childEntries = slices.Insert(f.childEntries, at, e)
 	}
 	if len(f.leaving) > 0 {
 		requestLayout()
@@ -325,7 +322,7 @@ func (f *ForWidget[T, K]) evict() {
 func (f *ForWidget[T, K]) Paint(dst *Canvas, r Rect) {
 	if f.extent <= 0 {
 		for i, child := range f.children {
-			dst.inGroup(f.groupOf(child), func() { dst.Paint(child, Rct(r.Origin.Add(f.offsets[i]), f.sizes[i])) })
+			dst.inGroup(f.childEntries[i], func() { dst.Paint(child, Rct(r.Origin.Add(f.offsets[i]), f.sizes[i])) })
 		}
 		return
 	}

@@ -78,7 +78,7 @@ func (c *ComponentWidget) run(build Builder) {
 // construct again is disposed.
 //
 // Controls, TextInput, Scroll, Popup and Transition constructed inside a
-// keyed component take an identity from it, the key plus their place in
+// keyed component take an identity from it, the mount instance plus their place in
 // construction order, so they keep hit regions, retained state and
 // adoption across the component's rebuilds without a Key of their own.
 func Keyed(key any, setup func() Builder) *ComponentWidget {
@@ -110,7 +110,7 @@ func Mount[P any](key any, props P, setup func(*Signal[P]) Builder) *ComponentWi
 		}
 		// Under no owner: the instance belongs to the registry, not to the
 		// run that constructed it, so the parent's re-run leaves it alone.
-		withOwner(nil, func() { m.dispose = rootWith(key, "", func() { c.run(setup(sig)) }) })
+		withOwner(nil, func() { m.dispose = rootWith(m, "", func() { c.run(setup(sig)) }) })
 	}
 	m.dispose = func() {}
 	owner.keep(key, m)

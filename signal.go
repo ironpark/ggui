@@ -63,7 +63,7 @@ type effect struct {
 	claimed map[any]bool
 
 	// Identity for what is constructed under this effect: keyRoot is the
-	// key of the Keyed or Mount instance this effect is the root of, path
+	// identity of the Keyed or Mount instance this effect is the root of, path
 	// is the effect's place under the nearest such root, by construction
 	// order, and seq counts what the current run constructed.
 	keyRoot any
@@ -72,7 +72,7 @@ type effect struct {
 }
 
 // autoKey is the identity a widget gets from the keyed component it was
-// constructed in: the component's key and the widget's place, by
+// constructed in: the component's mount instance and the widget's place, by
 // construction order, under it. It is the same across the component's
 // rebuilds, so the widget's hit region, retained state and adoption
 // follow it without a Key of its own.
@@ -452,10 +452,10 @@ func Effect(fn func()) (dispose func()) {
 func Root(fn func()) (dispose func()) { return rootWith(nil, "", fn) }
 
 // rootWith is Root for a root that is the instance of a keyed component
-// (key) or has a name of its own under its owner (elem), for the
+// (identity) or has a name of its own under its owner (elem), for the
 // identities autoID derives.
-func rootWith(key any, elem string, fn func()) (dispose func()) {
-	r := &effect{keyRoot: key}
+func rootWith(identity any, elem string, fn func()) (dispose func()) {
+	r := &effect{keyRoot: identity}
 	deps.mu.Lock()
 	r.owner = deps.owner
 	prevListener, prevOwner := deps.listener, deps.owner
