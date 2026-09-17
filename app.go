@@ -127,6 +127,13 @@ func (a *App) Shortcut(chord string, fn func()) *ShortcutHandle {
 	return a.input.addShortcut(chord, fn)
 }
 
+// Semantics returns the accessibility tree as the last frame left it. The
+// tree is finished and frozen, so it may be read from any goroutine and
+// held for as long as it is useful; the next frame publishes another rather
+// than changing this one. It is what a platform accessibility bridge
+// answers a query from, since the live frame belongs to the UI goroutine.
+func (a *App) Semantics() *SemTree { return a.semantics() }
+
 // Inspector turns the widget inspector on or off: an overlay that outlines
 // every widget painted through Canvas.Paint and names the one under the
 // cursor with its size and position. Config.Inspector binds it to a key.
@@ -226,6 +233,7 @@ func (a *App) Draw(screen *ebiten.Image) {
 	}
 	a.canvas.Paint(a.root, Rect{Size: a.rootSize})
 	a.canvas.paintOverlays()
+	a.publishSemantics(&a.canvas, a.input.focused)
 	if a.inspect {
 		paintInspector(&a.canvas)
 	}

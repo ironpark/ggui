@@ -15,6 +15,7 @@ type ButtonWidget struct {
 	onTap     func()
 	secondary bool
 	padded    bool
+	expands   func() bool
 	theme     ggui.Theme
 }
 
@@ -39,6 +40,27 @@ func ButtonOf(child ggui.Widget, onTap func()) *ButtonWidget {
 // Label names the button for Probe.Find and the inspector; Button takes
 // its text, ButtonOf needs one.
 func (b *ButtonWidget) Label(s string) *ButtonWidget { b.Name = s; return b }
+
+// Expands makes the button report whether what it opens is showing, for a
+// menu button or a combobox trigger; a plain button does not expand at all,
+// which is not the same as being closed.
+func (b *ButtonWidget) Expands(open func() bool) *ButtonWidget { b.expands = open; return b }
+
+// Describe implements ggui.Describer.
+func (b *ButtonWidget) Describe() ggui.Node {
+	n := ggui.Node{
+		Role:     b.Role,
+		Name:     b.Name,
+		Disabled: b.Inert,
+		Actions:  ggui.ActionPress | ggui.ActionFocus,
+	}
+	if b.expands != nil {
+		open := b.expands()
+		n.Expanded = ggui.Expandable(open)
+		n.Actions |= pick(open, ggui.ActionCollapse, ggui.ActionExpand)
+	}
+	return n
+}
 
 // Secondary makes the button quiet: Surface background with a border and
 // the normal text color, for actions that are not the main one.

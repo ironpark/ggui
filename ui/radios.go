@@ -80,11 +80,14 @@ func (g *RadiosWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	return g.row.Gap(pick(g.gapSet, g.gap, t.Space*2)).Layout(c, env)
 }
 
-// Paint implements Widget.
+// Paint implements Widget. The options are one group, so a screen reader
+// says how many there are and which of them is chosen.
 func (g *RadiosWidget[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	if g.column != nil {
-		dst.Paint(g.column, r)
-		return
-	}
-	dst.Paint(g.row, r)
+	dst.Node(r, ggui.Node{Role: ggui.RoleGroup, Min: 1, Max: float64(len(g.radios))}, func(dst *ggui.Canvas) {
+		if g.column != nil {
+			dst.Paint(g.column, r)
+			return
+		}
+		dst.Paint(g.row, r)
+	})
 }

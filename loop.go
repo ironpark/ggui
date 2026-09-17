@@ -3,6 +3,7 @@ package ggui
 import (
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -47,6 +48,28 @@ type frameLoop struct {
 	laidSize Size
 	laidGen  uint64
 	rootSize Size
+
+	// The last frame's finished accessibility tree. It is published at the
+	// end of a frame and read from anywhere, including a thread that is not
+	// this one, which is why it is a pointer swap and not a buffer.
+	sem atomic.Pointer[SemTree]
+}
+
+// publishSemantics freezes what the frame just painted into a tree and
+// makes it the one readers see. focused is the region holding keyboard
+// focus, which only the UI goroutine may look at, mirrored into the tree
+// so that everyone else can.
+func (r *frameLoop) publishSemantics(c *Canvas, focused *hitRegion) {
+	r.sem.Store(buildSemTree(c, focused))
+}
+
+// semantics returns the last published tree, or an empty one before the
+// first frame.
+func (r *frameLoop) semantics() *SemTree {
+	if t := r.sem.Load(); t != nil {
+		return t
+	}
+	return &SemTree{focused: -1}
 }
 
 // start runs the setup functions and the builder under a fresh root owner.

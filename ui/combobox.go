@@ -44,7 +44,8 @@ func Combobox[T comparable](value ggui.Binding[T], options []T) *ComboboxWidget[
 		entries[i] = CommandItem(c.label(v), func() { setChanged(c.value, v, c.onChange); c.popup.Hide() })
 	}
 	c.search = Command(c.query, entries...).Label("Search options").Placeholder("Search options…")
-	c.popup = ggui.Popup(c.button, ggui.Box(c.search).Width(280))
+	c.popup = ggui.Popup(c.button, ggui.Box(c.search).Width(280)).Owner(c.button)
+	c.button.Expands(c.popup.IsOpen)
 	return c
 }
 

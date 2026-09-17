@@ -56,6 +56,7 @@ func (m *MenuWidget) init(entries []ggui.Widget) {
 	}
 	m.panel = ggui.Box(ggui.Column(entries...).Align(ggui.AlignStretch))
 	m.popup = ggui.Popup(m.button, m.panel).Keys(m).Owner(m.button)
+	m.button.Expands(m.popup.IsOpen)
 }
 
 // Popup returns the popup the entries open in.

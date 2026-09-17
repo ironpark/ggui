@@ -111,6 +111,7 @@ func (p *Probe) Frame() Size {
 	}
 	c.Paint(p.root, Rect{Size: p.rootSize})
 	c.paintOverlays()
+	p.publishSemantics(c, p.in.focused)
 	p.in.regions = c.hits
 	return p.rootSize
 }
@@ -153,6 +154,15 @@ func (p *Probe) OnKey(fn func(KeyEvent) bool) { p.in.shortcuts = append(p.in.sho
 
 // Shortcut registers a chord, as App.Shortcut does.
 func (p *Probe) Shortcut(chord string, fn func()) *ShortcutHandle { return p.in.addShortcut(chord, fn) }
+
+// Semantics runs a frame and returns the accessibility tree it published:
+// every element on screen, nested as the widgets described it, including
+// the ones Probe.Find cannot see because they take no input. A test asserts
+// its shape with String.
+func (p *Probe) Semantics() *SemTree {
+	p.Frame()
+	return p.semantics()
+}
 
 // Found is a region a Find located: where it is and what it is.
 type Found struct {

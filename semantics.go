@@ -247,7 +247,9 @@ func (c *Canvas) addSem(r Rect, n Node, h any) SemRef {
 // named reports whether the element painted just before r, under the same
 // parent, is a control that covers it: a button's own label, a checkbox's
 // text. Such text is part of the control's name, not an element beside it,
-// so TextWidget stays quiet inside one.
+// so TextWidget stays quiet inside one. The comparison is against the
+// control's unclipped bounds, so a row scrolled out of view does not
+// suddenly grow a text node of its own.
 func (c *Canvas) named(r Rect) bool {
 	if c == nil {
 		return false
@@ -257,7 +259,7 @@ func (c *Canvas) named(r Rect) bool {
 		return false
 	}
 	last := &root.sem[root.semLast-1]
-	return last.parent == root.semParent && last.node.Role.control() && covers(last.rect, r)
+	return last.parent == root.semParent && last.node.Role.control() && covers(last.full, r)
 }
 
 // covers reports whether outer wholly contains inner.
