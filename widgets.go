@@ -663,6 +663,20 @@ func List[T any](items []T, item func(T) Widget) *ColumnWidget {
 	return Column(Children(items, item)...)
 }
 
+// Viewport is what a Scroll tells the subtree it lays out: how far along
+// the scroll axis the window starts and how long it is, in logical pixels.
+// A list that knows its items' sizes can then lay out only the ones in
+// view; For does with ItemExtent.
+type Viewport struct {
+	Offset, Extent float64
+	Horizontal     bool
+}
+
+var viewportKey = NewKey[Viewport]("viewport")
+
+// ScrollViewport returns the window of the nearest enclosing Scroll, if any.
+func ScrollViewport(env Env) (Viewport, bool) { return env.Get(viewportKey) }
+
 // ScrollWidget shows a window onto a child that may be taller (or, with
 // Horizontal, wider) than the space it has, and moves that window with the
 // wheel. Build one with Scroll.
@@ -716,8 +730,9 @@ func (s *ScrollWidget) scrollTo(v float64) {
 	v = clamp(v, 0, s.maxOffset())
 	if s.bound != nil {
 		s.bound.Set(v)
-	} else {
+	} else if v != s.offset {
 		s.offset = v
+		RequestLayout() // what a virtualized child shows depends on it
 	}
 }
 
@@ -729,7 +744,8 @@ func (s *ScrollWidget) Layout(c Constraints, env Env) Size {
 	} else {
 		inner.H = Unbounded
 	}
-	s.childSize = s.child.Layout(Loose(inner), env)
+	vp := Viewport{Offset: s.position(), Extent: bounded(s.extent(c.Max()), Unbounded), Horizontal: s.horizontal}
+	s.childSize = s.child.Layout(Loose(inner), env.With(viewportKey, vp))
 	s.viewport = c.Constrain(Sz(bounded(c.MaxW, s.childSize.W), bounded(c.MaxH, s.childSize.H)))
 	s.scrollTo(s.position())
 	return s.viewport

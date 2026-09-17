@@ -51,6 +51,12 @@ type App struct {
 	cursor ebiten.CursorShapeType
 
 	inspect bool
+
+	// Layout runs only when something could have moved; see needsLayout.
+	laidOut  Widget
+	laidSize Size
+	laidGen  uint64
+	rootSize Size
 }
 
 // New creates an App that renders the tree returned by build.
@@ -172,14 +178,30 @@ func (a *App) Draw(screen *ebiten.Image) {
 	b := screen.Bounds()
 	logical := Sz(a.canvas.dp(float64(b.Dx())), a.canvas.dp(float64(b.Dy())))
 	a.canvas.tracing, a.canvas.trace = a.inspect, a.canvas.trace[:0]
-	size := a.root.Layout(Tight(logical), rootEnv())
-	a.canvas.Paint(a.root, Rect{Size: size})
+	if a.needsLayout(logical) {
+		a.rootSize = a.root.Layout(Tight(logical), rootEnv())
+	}
+	a.canvas.Paint(a.root, Rect{Size: a.rootSize})
 	a.canvas.paintOverlays()
 	if a.inspect {
 		paintInspector(&a.canvas)
 	}
 	a.spare = a.canvas.prev
 	a.input.regions = a.canvas.hits
+}
+
+// needsLayout reports whether the tree must be laid out again for a window
+// of the given logical size, and records that it will be: when the root was
+// rebuilt, the window changed size, or a Signal was written or RequestLayout
+// called since the last layout. Hover and press live outside signals and
+// only change how a widget paints, so a still frame costs no layout.
+func (a *App) needsLayout(logical Size) bool {
+	gen := layoutGen.Load()
+	if a.root == a.laidOut && logical == a.laidSize && gen == a.laidGen {
+		return false
+	}
+	a.laidOut, a.laidSize, a.laidGen = a.root, logical, gen
+	return true
 }
 
 // LayoutF implements ebiten.LayoutFer: the screen is sized in physical

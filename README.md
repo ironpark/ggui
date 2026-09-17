@@ -113,8 +113,12 @@ ggui.Scroll(ggui.For(todos, func(t Todo) int { return t.ID },
 	}).Gap(4))
 ```
 
-`List(items, build)` is the plain version for a slice you have in hand: one
-child per item, rebuilt with the parent. `Root(fn)` is what `For` uses per key,
+A child is built the first time it is laid out. `.ItemExtent(h)` fixes every
+child's height (width, with `.Horizontal()`), and then inside a `Scroll` only
+the rows in view are built, laid out and painted, so a list of tens of
+thousands of items costs what the visible ones do. `List(items, build)` is
+the plain version for a slice you have in hand: one child per item, rebuilt
+with the parent. `Root(fn)` is what `For` uses per key,
 an owner that never re-runs, for containers of your own that keep children
 alive across their own updates.
 
@@ -384,6 +388,18 @@ dot := ggui.FromFuncs(
 	},
 )
 ```
+
+## Frames
+
+Every frame the runtime routes input, steps animations, flushes effects and
+paints. It lays the tree out only when something could have moved: the root
+was rebuilt, the window changed size, a `Signal` was written, or
+`RequestLayout()` was called. Hover and press live outside signals and only
+change how a widget paints, so a still frame costs a paint and nothing
+else. A custom widget that keeps size-affecting state outside signals calls
+`RequestLayout()` when that state changes; `Scroll` does for its offset. A
+`Scroll` also tells its subtree the window it shows through the `Env`
+(`ScrollViewport(env)`), which is how `For` virtualizes.
 
 ## Inspector
 

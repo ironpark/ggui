@@ -355,3 +355,26 @@ func TestGridSharesWidthAndSizesRows(t *testing.T) {
 		t.Fatalf("unbounded width gave %v, want 2 columns of the widest child", got)
 	}
 }
+
+func TestAppLaysOutOnlyWhenSomethingChanged(t *testing.T) {
+	a := New(Config{}, func() Widget { return Box() })
+	a.root = a.build()
+	size := Sz(100, 100)
+	if !a.needsLayout(size) {
+		t.Fatal("first frame must lay out")
+	}
+	if a.needsLayout(size) {
+		t.Fatal("a still frame must not lay out")
+	}
+	if !a.needsLayout(Sz(200, 100)) || a.needsLayout(Sz(200, 100)) {
+		t.Fatal("a resize must lay out once")
+	}
+	State(0).Set(1)
+	if !a.needsLayout(Sz(200, 100)) {
+		t.Fatal("a signal write must lay out")
+	}
+	a.root = a.build()
+	if !a.needsLayout(Sz(200, 100)) {
+		t.Fatal("a rebuilt root must lay out")
+	}
+}

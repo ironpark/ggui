@@ -208,3 +208,20 @@ func TestWatchRunsOnChange(t *testing.T) {
 		t.Fatalf("seen = %v, want [0 1]", seen)
 	}
 }
+
+func TestSignalWritesAdvanceTheLayoutGeneration(t *testing.T) {
+	s := State(1)
+	before := layoutGen.Load()
+	s.Set(1)
+	if layoutGen.Load() != before {
+		t.Fatal("an equal write must not request layout")
+	}
+	s.Set(2)
+	if layoutGen.Load() != before+1 {
+		t.Fatal("a write must request layout")
+	}
+	RequestLayout()
+	if layoutGen.Load() != before+2 {
+		t.Fatal("RequestLayout must request layout")
+	}
+}

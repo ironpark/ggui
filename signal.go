@@ -3,7 +3,19 @@ package ggui
 import (
 	"reflect"
 	"sync"
+	"sync/atomic"
 )
+
+// layoutGen counts the changes that can move something on screen: every
+// Signal write and every RequestLayout. The runtime lays the tree out again
+// only when it has advanced, or the window changed size, and paints every
+// frame regardless.
+var layoutGen atomic.Uint64
+
+// RequestLayout asks the runtime to lay the tree out again next frame. A
+// Signal write does this by itself; call it for state a widget keeps
+// outside signals when that state changes its size or its children's.
+func RequestLayout() { layoutGen.Add(1) }
 
 // tracker holds the running computation. listener is the effect that reads
 // subscribe to (nil inside Untrack); owner is the effect that newly created
@@ -143,6 +155,7 @@ func (s *Signal[T]) Set(v T) {
 		return
 	}
 	s.val = v
+	layoutGen.Add(1)
 	subs := make([]*effect, 0, len(s.subs))
 	for e := range s.subs {
 		subs = append(subs, e)

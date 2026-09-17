@@ -75,7 +75,10 @@ var defaultFont *Font
 // SetDefaultFont replaces the font Text uses when none is set. The built-in
 // default is Go Regular, which covers Latin, Greek and Cyrillic; load a font
 // with the glyphs you need for anything else.
-func SetDefaultFont(f *Font) { defaultFont = f }
+func SetDefaultFont(f *Font) {
+	defaultFont = f
+	RequestLayout()
+}
 
 // fallbackFont returns the font Text uses when none is set, parsing the
 // built-in one on first use so a program that draws no text never pays for it.

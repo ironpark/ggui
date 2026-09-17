@@ -148,7 +148,7 @@ func main() {
 				)
 			}),
 			ggui.Expanded(ggui.Scroll(
-				ggui.For(visible, func(td *Todo) int { return td.ID }, row).Gap(t.Space/2),
+				ggui.For(visible, func(td *Todo) int { return td.ID }, row).Gap(t.Space/2).ItemExtent(28),
 			)),
 			ui.Divider(),
 			ggui.Row(
