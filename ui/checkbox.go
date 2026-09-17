@@ -4,6 +4,7 @@ import (
 	"github.com/ironpark/ggui"
 )
 
+// CheckboxWidget is a box that is ticked while its signal is true. Build one
 // with Checkbox.
 type CheckboxWidget struct {
 	toggle

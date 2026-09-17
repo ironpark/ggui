@@ -4,6 +4,7 @@ import (
 	"github.com/ironpark/ggui"
 )
 
+// DividerWidget is a one-pixel line in the theme's Border color. Build one
 // with Divider.
 type DividerWidget struct {
 	vertical bool

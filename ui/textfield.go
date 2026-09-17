@@ -5,6 +5,8 @@ import (
 	"github.com/ironpark/ggui"
 )
 
+// TextFieldWidget is a TextInput in a themed box: Field background, a
+// border that turns Accent while focused, the theme's padding and radius.
 // Build one with TextField.
 type TextFieldWidget struct {
 	input *ggui.TextInputWidget
