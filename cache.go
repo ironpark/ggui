@@ -29,6 +29,9 @@ func Cached(child Widget) *CachedWidget { return &CachedWidget{child: child} }
 
 // invalidate marks this cache and every one above it stale.
 func (c *CachedWidget) invalidate() {
+	// The runtime lays out only when something moved; a stale cache is
+	// such a thing even when no Signal was written.
+	requestLayout()
 	for ; c != nil && !c.dirty; c = c.outer {
 		c.dirty = true
 	}

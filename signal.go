@@ -8,7 +8,7 @@ import (
 )
 
 // layoutGen counts the changes that can move something on screen: every
-// Signal write and every RequestLayout. The runtime lays the tree out again
+// Signal write and every Invalidate. The runtime lays the tree out again
 // only when it has advanced, or the window changed size, and paints every
 // frame regardless.
 var layoutGen atomic.Uint64
@@ -268,7 +268,9 @@ func (s *Signal[T]) Set(v T) {
 	}
 }
 
-// Update applies fn to the current value and stores the result.
+// Update applies fn to the current value and stores the result. Like Set
+// it belongs on the UI thread; it is not an atomic read-modify-write for
+// goroutines, which hand their result back with App.Post.
 func (s *Signal[T]) Update(fn func(T) T) {
 	s.mu.Lock()
 	cur := s.val
@@ -503,8 +505,9 @@ const maxFlushPasses = 16
 
 // flush re-runs every dirty effect, repeating until the tree is quiet so that a
 // Memo feeding another effect lands in the same frame. Called once per frame by
-// the runtime.
-func (s *effectSet) flush() {
+// the runtime. It reports false when the effects were still dirty after
+// maxFlushPasses, which only a cycle causes.
+func (s *effectSet) flush() (settled bool) {
 	for range maxFlushPasses {
 		s.mu.Lock()
 		list := append([]*effect(nil), s.list...)
@@ -518,7 +521,8 @@ func (s *effectSet) flush() {
 			}
 		}
 		if !ran {
-			return
+			return true
 		}
 	}
+	return false
 }

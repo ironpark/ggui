@@ -66,7 +66,10 @@ belongs to it and is disposed when the owner re-runs or is disposed, so
 nothing piles up across rebuilds. Subscriptions are collected afresh on every
 run, so an effect follows only what it read last time. `OnCleanup(fn)` runs
 before the enclosing effect re-runs and when it is disposed; `Untrack(fn)` and
-`Peek()` read without subscribing.
+`Peek()` read without subscribing. The app itself is the root owner:
+`app.Setup(fn)` runs `fn` under it before the first build, which is where
+a `main` puts its `Watch` and `BindTheme` calls, and `app.Close()`
+disposes everything built under it and ends `Run`.
 
 **State as a struct of signals** — keep one signal per piece of state and
 group them in a plain struct. Each field is its own reactive cell, so a change
@@ -491,7 +494,7 @@ dot := ggui.FromFuncs(
 Every frame the runtime routes input, steps animations, flushes effects and
 paints. It lays the tree out only when something could have moved: the root
 was rebuilt, the window changed size, a `Signal` was written, or
-`RequestLayout()` was called. Hover and press live outside signals and only
+`Invalidate` was called. Hover and press live outside signals and only
 change how a widget paints, so a still frame costs a paint and nothing
 else. A custom widget that keeps size-affecting state outside signals calls
 `Invalidate(env)` when that state changes; `Scroll` does for its offset. A
@@ -523,7 +526,8 @@ why something sits where it does.
 ## Layout
 
 ```
-├── app.go        App runtime: window setup, frame loop, ebiten.Game
+├── app.go        App: window setup, ebiten.Game, Setup, Post, Close
+├── loop.go       The frame loop App and Probe share: root owner, posted work, layout skip
 ├── signal.go     Reactivity: Signal, Memo, Effect, dependency tracking
 ├── widget.go     Widget interface, Builder, Component/Reactive, Children
 ├── widgets.go    Built-in layout and drawing widgets

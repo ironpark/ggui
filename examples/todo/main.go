@@ -72,14 +72,6 @@ func main() {
 		return [2]int{n, d}
 	})
 	progress := ggui.Tween(0.0, 300*time.Millisecond)
-	ggui.Watch(counts, func(c [2]int) {
-		if c[0] == 0 {
-			progress.Set(0)
-			return
-		}
-		progress.Set(float64(c[1]) / float64(c[0]))
-	})
-	ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme())
 
 	row := func(item ggui.Reader[*Todo]) ggui.Widget {
 		td := item.Get()
@@ -119,6 +111,18 @@ func main() {
 		).Space(1.5)).Pad(24)).Size(480, 540))
 	})
 
+	// Watchers run under the app's root owner through Setup, so Close
+	// disposes them with everything else.
+	app.Setup(func() {
+		ggui.Watch(counts, func(c [2]int) {
+			if c[0] == 0 {
+				progress.Set(0)
+				return
+			}
+			progress.Set(float64(c[1]) / float64(c[0]))
+		})
+		ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme())
+	})
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}

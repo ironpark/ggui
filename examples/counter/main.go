@@ -24,7 +24,6 @@ func main() {
 	state := model{Count: ggui.State(0), Step: ggui.State(1)}
 	count, step := state.Count, state.Step
 	dark := ggui.State(true)
-	ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme())
 
 	hints := ggui.Combine(count, step, func(n, s int) []string {
 		return []string{
@@ -75,6 +74,9 @@ func main() {
 		return true
 	})
 
+	// Setup runs under the app's root owner, so the theme binding is
+	// disposed with the app.
+	app.Setup(func() { ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme()) })
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}

@@ -1,20 +1,27 @@
 package ggui
 
-import "github.com/hajimehoshi/ebiten/v2"
+import (
+	"time"
+
+	"github.com/hajimehoshi/ebiten/v2"
+)
 
 // Probe drives a widget tree without a window, for tests: it runs the same
-// per-frame steps as App (flush effects, lay out, paint, dispatch input)
-// against a Canvas that draws nothing, so hit regions, focus, keys and the
-// signals a widget writes can all be checked headlessly.
+// per-frame steps as App (posted work, input, animations, effects, layout
+// when something moved, paint) against a Canvas that draws nothing, so hit
+// regions, focus, keys and the signals a widget writes can all be checked
+// headlessly.
 //
 //	p := ggui.NewProbe(ui.Checkbox(on, "x"), ggui.Sz(200, 30))
+//	defer p.Close()
 //	p.Click(ggui.Pt(5, 5))
 //	// on.Peek() is now true
 //
 // Every input method paints a frame first, as the runtime would have before
-// the event, and flushes effects afterwards.
+// the event, and flushes effects afterwards. Effects that never settle
+// panic with ErrCycle.
 type Probe struct {
-	root   Widget
+	frameLoop
 	size   Size
 	in     inputState
 	env    Env
@@ -22,33 +29,122 @@ type Probe struct {
 
 	pointer    Point
 	hasPointer bool
+
+	now     time.Time // the probe's clock once Advance has been called
+	restore func()
 }
 
 // NewProbe creates a Probe that lays w out at size under the current theme.
+// The widget is held by a root owner, so effects it creates are disposed by
+// Close.
 func NewProbe(w Widget, size Size) *Probe {
-	return &Probe{root: w, size: size, env: rootEnv()}
+	return ProbeBuilder(func() Widget { return w }, size)
 }
 
-// Frame flushes effects, then lays out and paints the tree, collecting the
-// hit regions the next event is routed to. It returns the root's size.
+// ProbeBuilder creates a Probe from a Builder, as New does for an App: build
+// runs under a root owner and again whenever a signal it read changes, and
+// setup functions run first.
+//
+//	p := ggui.ProbeBuilder(func() ggui.Widget { return ggui.Textf("%d", n) }, ggui.Sz(100, 20))
+func ProbeBuilder(build Builder, size Size) *Probe {
+	p := &Probe{size: size, env: rootEnv()}
+	p.build = build
+	return p
+}
+
+// Setup registers fn to run under the probe's root owner before the first
+// build, as App.Setup does. Call it before the first frame.
+func (p *Probe) Setup(fn func()) *Probe {
+	p.setup = append(p.setup, fn)
+	return p
+}
+
+// Post queues fn to run before the next frame's input, as App.Post does.
+func (p *Probe) Post(fn func()) { p.post(fn) }
+
+// Close disposes the root owner and everything built under it, and puts
+// back the clock Advance replaced.
+func (p *Probe) Close() {
+	p.close()
+	if p.restore != nil {
+		p.restore()
+		p.restore = nil
+	}
+}
+
+// Resize changes the viewport; the next frame lays the tree out again.
+func (p *Probe) Resize(size Size) { p.size = size }
+
+// Flush runs effects until they settle, without a frame, for a test that
+// reads a Memo or a widget built by an effect before the first frame. It
+// panics with ErrCycle when they never settle.
+func (p *Probe) Flush() {
+	if p.dispose == nil && !p.closed {
+		p.start()
+	}
+	if !effects.flush() {
+		panic(ErrCycle)
+	}
+}
+
+// Frame runs one frame: posted work, animations, effects, then layout when
+// something moved and paint, collecting the hit regions the next event is
+// routed to. It returns the root's size.
 func (p *Probe) Frame() Size {
-	effects.flush()
+	if p.dispose == nil && !p.closed {
+		p.start()
+	}
+	p.runPosted()
+	if err := p.tick(p.clock()); err != nil {
+		panic(err)
+	}
+	if p.root == nil {
+		return Size{}
+	}
 	c := &p.canvas
 	c.prev, c.hits = c.hits, nil
 	c.pointer, c.hasPointer, c.logical = p.pointer, p.hasPointer, p.size
 	c.nextFrame()
-	s := p.root.Layout(Tight(p.size), p.env)
-	c.Paint(p.root, Rect{Size: s})
+	if p.needsLayout(p.size) {
+		p.rootSize = p.root.Layout(Tight(p.size), p.env)
+	}
+	c.Paint(p.root, Rect{Size: p.rootSize})
 	c.paintOverlays()
 	p.in.regions = c.hits
-	return s
+	return p.rootSize
+}
+
+// clock is what the probe's frames read: the time Advance set, else the
+// package clock.
+func (p *Probe) clock() time.Time {
+	if p.now.IsZero() {
+		return clock()
+	}
+	return p.now
+}
+
+// Advance moves the probe's clock forward by d and runs a frame, so
+// animations step by exactly d. The first call fixes the clock at the
+// current time and installs it with SetClock, so widgets that read Now
+// see the same time; Close restores the previous clock.
+//
+//	p.Advance(150 * time.Millisecond) // a 300ms tween is now halfway
+func (p *Probe) Advance(d time.Duration) {
+	if p.now.IsZero() {
+		p.now = clock()
+		p.restore = SetClock(func() time.Time { return p.now })
+	}
+	p.now = p.now.Add(d)
+	p.Frame()
 }
 
 func (p *Probe) dispatch(f frameInput) {
 	p.pointer, p.hasPointer = f.pos, true
 	p.Frame()
 	p.in.dispatch(f)
-	effects.flush()
+	if !effects.flush() {
+		panic(ErrCycle)
+	}
 }
 
 // OnKey registers a global shortcut, as App.OnKey does.

@@ -41,15 +41,15 @@ func TestPresenceKeepsChildInertWhileLeaving(t *testing.T) {
 	child := Tap(probe(50, 20, &got), func() { taps++ })
 	tree := Column(Presence(show, Transition(child).Slide(0, 40).Easing(EaseLinear).Duration(100*time.Millisecond)))
 	p := NewProbe(tree, Sz(100, 100))
+	defer p.Close()
 	p.Click(Pt(10, 10))
 	if got.Origin.Y != 0 || taps != 1 {
 		t.Fatalf("visible child at y=%v taps=%d; want in place and tappable", got.Origin.Y, taps)
 	}
 	show.Set(false)
-	effects.flush()
-	start := time.Now()
-	anims.step(start)
-	anims.step(start.Add(50 * time.Millisecond))
+	p.Advance(0) // the effect starts the tween
+	p.Advance(0) // the first step takes its start time
+	p.Advance(50 * time.Millisecond)
 	got = Rect{}
 	p.Click(Pt(10, 10))
 	if got == (Rect{}) || got.Origin.Y < 15 || got.Origin.Y > 25 {
@@ -58,15 +58,14 @@ func TestPresenceKeepsChildInertWhileLeaving(t *testing.T) {
 	if taps != 1 {
 		t.Fatal("a leaving child took a tap")
 	}
-	anims.step(start.Add(time.Second))
+	p.Advance(time.Second)
 	got = Rect{}
 	p.Frame()
 	if got != (Rect{}) {
 		t.Fatalf("child still painted after leaving: %+v", got)
 	}
 	show.Set(true)
-	effects.flush()
-	anims.step(start.Add(2 * time.Second))
+	p.Advance(time.Second)
 	got = Rect{}
 	p.Frame()
 	if got == (Rect{}) || got.Origin.Y != 40 {

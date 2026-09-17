@@ -27,8 +27,6 @@ func main() {
 	plan := ggui.State("free")
 	tags := ggui.State([]string{"go", "gui", "ebiten", "signals", "flutter", "svelte", "layout", "hidpi"})
 
-	ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme())
-
 	app := ggui.New(ggui.Config{Title: "ggui · gallery", Width: 640, Height: 640, Resizable: true, Inspector: ebiten.KeyF1}, func() ggui.Widget {
 		t := ggui.UseTheme()
 		section := func(title string, body ggui.Widget) ggui.Widget {
@@ -125,6 +123,7 @@ func main() {
 		).Gap(t.Space*2), t.Space*3))
 	})
 
+	app.Setup(func() { ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme()) })
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}

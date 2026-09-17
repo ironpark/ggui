@@ -6,27 +6,24 @@ func TestKeyedSurvivesParentRebuild(t *testing.T) {
 	parentDep := State(0)
 	setups := 0
 	var local *Signal[int]
-	var root Widget
-	dispose := Effect(func() {
+	p := ProbeBuilder(func() Widget {
 		parentDep.Get()
-		root = Column(Keyed("k", func() Builder {
+		return Column(Keyed("k", func() Builder {
 			setups++
 			local = State(3)
 			return func() Widget { return Box().Size(float64(local.Get()), 1) }
 		}))
-	})
-	defer dispose()
-	p := NewProbe(root, Sz(100, 100))
+	}, Sz(100, 100))
+	defer p.Close()
 	p.Frame()
 	local.Set(9)
 	parentDep.Set(1) // parent rebuilds; the keyed instance is claimed again
-	p.root = root
 	p.Frame()
-	p.root = root
 	p.Frame()
 	if setups != 1 {
 		t.Fatalf("setups = %d, want 1", setups)
 	}
+	root := p.root
 	c := root.(*ColumnWidget).children[0].(*ComponentWidget)
 	if got := c.Layout(Loose(Sz(100, 100)), Env{}).W; got != 9 {
 		t.Fatalf("width = %v, want 9 from the kept state", got)
@@ -60,18 +57,15 @@ func TestKeyedDisposedWhenUnclaimed(t *testing.T) {
 func TestMountUpdatesProps(t *testing.T) {
 	n := State(1)
 	var seen []int
-	var root Widget
-	dispose := Effect(func() {
-		root = Mount("m", n.Get(), func(p *Signal[int]) Builder {
+	p := ProbeBuilder(func() Widget {
+		return Mount("m", n.Get(), func(p *Signal[int]) Builder {
 			return func() Widget { seen = append(seen, p.Get()); return Box() }
 		})
-	})
-	defer dispose()
-	p := NewProbe(root, Sz(10, 10))
+	}, Sz(10, 10))
+	defer p.Close()
 	p.Frame()
 	n.Set(2)
 	p.Frame()
-	p.root = root
 	p.Frame()
 	if len(seen) != 2 || seen[1] != 2 {
 		t.Fatalf("builder saw %v, want [1 2]", seen)
@@ -80,22 +74,18 @@ func TestMountUpdatesProps(t *testing.T) {
 
 func TestScrollAdoptsOffsetAcrossRebuild(t *testing.T) {
 	dep := State(0)
-	var root Widget
-	dispose := Effect(func() {
+	p := ProbeBuilder(func() Widget {
 		dep.Get()
-		root = Scroll(Box().Size(50, 500))
-	})
-	defer dispose()
-	p := NewProbe(root, Sz(50, 100))
+		return Scroll(Box().Size(50, 500))
+	}, Sz(50, 100))
+	defer p.Close()
 	p.Scroll(Pt(10, 10), Pt(0, -3))
-	if off := root.(*ScrollWidget).offset; off != 60 {
+	if off := p.root.(*ScrollWidget).offset; off != 60 {
 		t.Fatalf("offset = %v, want 60", off)
 	}
 	dep.Set(1)
-	effects.flush()
-	p.root = root
 	p.Frame()
-	if off := root.(*ScrollWidget).offset; off != 60 {
+	if off := p.root.(*ScrollWidget).offset; off != 60 {
 		t.Fatalf("after rebuild offset = %v, want 60", off)
 	}
 }
@@ -118,11 +108,18 @@ func (k *keyedBox) Adopt(prev any) {
 
 func TestAdoptionFollowsIDNotRect(t *testing.T) {
 	a := &keyedBox{id: "a", count: 5}
-	p := NewProbe(Column(a, Box().Size(10, 10)), Sz(10, 100))
-	p.Frame()
-	// Rebuilt and moved: a2 has a's id at another Rect; b sits where a was.
 	a2, b := &keyedBox{id: "a"}, &keyedBox{id: "b"}
-	p.root = Column(b, a2)
+	gen := State(0)
+	p := ProbeBuilder(func() Widget {
+		if gen.Get() == 0 {
+			return Column(a, Box().Size(10, 10))
+		}
+		// Rebuilt and moved: a2 has a's id at another Rect; b sits where a was.
+		return Column(b, a2)
+	}, Sz(10, 100))
+	defer p.Close()
+	p.Frame()
+	gen.Set(1)
 	p.Frame()
 	if a2.count != 5 || b.count != 0 {
 		t.Fatalf("a2.count = %d, b.count = %d; want 5 and 0", a2.count, b.count)

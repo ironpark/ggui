@@ -38,10 +38,8 @@ func (c Config) withDefaults() Config {
 // last frame, flushes reactive effects (which rebuilds the tree when state
 // changed), then lays out and paints, collecting the next frame's regions.
 type App struct {
+	frameLoop
 	cfg   Config
-	build Builder
-
-	root  Widget
 	frame []func()
 
 	canvas Canvas // also holds the frame's screen-pixels-per-logical-pixel scale
@@ -50,17 +48,34 @@ type App struct {
 	cursor ebiten.CursorShapeType
 
 	inspect bool
-
-	// Layout runs only when something could have moved; see needsLayout.
-	laidSize Size
-	laidGen  uint64
-	rootSize Size
 }
 
 // New creates an App that renders the tree returned by build.
 func New(cfg Config, build Builder) *App {
-	return &App{cfg: cfg.withDefaults(), build: build}
+	a := &App{cfg: cfg.withDefaults()}
+	a.build = build
+	return a
 }
+
+// Setup registers fn to run under the app's root owner before the first
+// build, so the derived values, Watch and BindTheme calls a main function
+// makes have an owner and are disposed by Close. Call it before Run.
+//
+//	app.Setup(func() { ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme()) })
+func (a *App) Setup(fn func()) *App {
+	a.setup = append(a.setup, fn)
+	return a
+}
+
+// Post queues fn to run on the UI thread before the next frame's input.
+// It is the one way a goroutine may touch signals: do the work off the
+// thread, then Post the Set.
+func (a *App) Post(fn func()) { a.post(fn) }
+
+// Close disposes the root owner, and with it every effect, memo and
+// component the app created, and ends Run at the next frame. Call it from
+// the UI thread; from a goroutine, Post it.
+func (a *App) Close() { a.close() }
 
 // Run opens the window and blocks until it closes.
 func Run(cfg Config, build Builder) error {
@@ -74,9 +89,7 @@ func (a *App) Run() error {
 	if a.cfg.Resizable {
 		ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	}
-	// The tree is rebuilt through an Effect, so every signal read during build
-	// rebuilds the tree when it changes.
-	Effect(func() { a.root = a.build() })
+	a.start()
 	appRunning.Store(true)
 	// Holding a key on macOS pops up the accent menu, as it does in every
 	// text field on the platform; text editing relies on it.
@@ -106,9 +119,13 @@ func (a *App) Inspector(on bool) { a.inspect = on }
 
 // Update implements ebiten.Game.
 func (a *App) Update() error {
+	if a.closed {
+		return ebiten.Termination
+	}
 	for _, fn := range a.frame {
 		fn()
 	}
+	a.runPosted()
 	if a.cfg.Inspector != 0 && inpututil.IsKeyJustPressed(a.cfg.Inspector) {
 		a.inspect = !a.inspect
 	}
@@ -119,9 +136,10 @@ func (a *App) Update() error {
 		a.cursor = a.input.cursor
 		ebiten.SetCursorShape(a.cursor)
 	}
-	anims.step(clock())
-	effects.flush()
-	return nil
+	if a.closed {
+		return ebiten.Termination
+	}
+	return a.tick(clock())
 }
 
 // appRunning reports whether RunGame has started, which is when platform
@@ -197,21 +215,6 @@ func (a *App) Draw(screen *ebiten.Image) {
 	}
 	a.spare = a.canvas.prev
 	a.input.regions = a.canvas.hits
-}
-
-// needsLayout reports whether the tree must be laid out again for a window
-// of the given logical size, and records that it will be: when the window
-// changed size, or a Signal was written or RequestLayout called since the
-// last layout. A rebuilt root is covered, since only a Signal write rebuilds
-// it. Hover and press live outside signals and only change how a widget
-// paints, so a still frame costs no layout.
-func (a *App) needsLayout(logical Size) bool {
-	gen := layoutGen.Load()
-	if logical == a.laidSize && gen == a.laidGen {
-		return false
-	}
-	a.laidSize, a.laidGen = logical, gen
-	return true
 }
 
 // LayoutF implements ebiten.LayoutFer: the screen is sized in physical
