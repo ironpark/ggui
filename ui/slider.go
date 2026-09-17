@@ -24,7 +24,21 @@ type SliderWidget struct {
 // Slider binds a horizontal slider to value, clamped to [lo, hi]. It fills
 // the width it is given.
 func Slider(value ggui.Binding[float64], lo, hi float64) *SliderWidget {
-	return &SliderWidget{value: value, min: lo, max: hi}
+	s := &SliderWidget{value: value, min: lo, max: hi}
+	s.Role = ggui.RoleSlider
+	return s
+}
+
+// Label names the slider for Probe.Find and the inspector.
+func (s *SliderWidget) Label(name string) *SliderWidget { s.Name = name; return s }
+
+// ConsumesKey implements ggui.KeyConsumer: the arrow keys move the value.
+func (s *SliderWidget) ConsumesKey(ev ggui.KeyEvent) bool {
+	switch ev.Key {
+	case ebiten.KeyArrowLeft, ebiten.KeyArrowRight, ebiten.KeyArrowUp, ebiten.KeyArrowDown:
+		return ev.Kind == ggui.KeyPress
+	}
+	return false
 }
 
 // Step snaps the value to multiples of s from the range's start.

@@ -103,13 +103,28 @@ func (a *App) OnFrame(fn func()) {
 	a.frame = append(a.frame, fn)
 }
 
-// OnKey registers a global shortcut: fn sees every key press, with its
+// OnKey registers a global key handler: fn sees every key press, with its
 // modifiers, before the focused widget does, and a press it returns true
 // for goes no further. A held key repeats into it as it would into a
-// widget. Keep the keys it takes away from a text field in mind: returning
-// true for Space while one is focused would eat the space bar.
+// widget. Shortcut is the simpler form for one chord; OnKey is for what a
+// chord cannot say. Keep the keys it takes away from a text field in
+// mind: returning true for Space while one is focused would eat the space
+// bar.
 func (a *App) OnKey(fn func(KeyEvent) bool) {
 	a.input.shortcuts = append(a.input.shortcuts, fn)
+}
+
+// Shortcut runs fn on the chord, such as "cmd+s" or "escape"; see
+// ParseChord for the names. A chord with a modifier runs before the
+// focused widget and takes the key from it. A bare key reaches the focused
+// widget first, and the shortcut runs only when the widget did not consume
+// it (a text field consumes every key but Escape), unless the handle is
+// made Exclusive. It panics on a chord ParseChord rejects.
+//
+//	app.Shortcut("cmd+s", save)
+//	app.Shortcut("space", func() { ggui.Add(count, 1) })
+func (a *App) Shortcut(chord string, fn func()) *ShortcutHandle {
+	return a.input.addShortcut(chord, fn)
 }
 
 // Inspector turns the widget inspector on or off: an overlay that outlines

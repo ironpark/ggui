@@ -38,6 +38,7 @@ func Tab(label string, content ggui.Widget) TabPage { return TabPage{Label: labe
 // while the strip has focus. Only the selected page is laid out.
 func Tabs(selected ggui.Binding[int], tabs ...TabPage) *TabsWidget {
 	t := &TabsWidget{selected: selected, tabs: tabs, hover: -1}
+	t.Role = ggui.RoleTabs
 	for _, tab := range tabs {
 		t.labels = append(t.labels, ggui.Text(tab.Label).NoWrap())
 	}
@@ -146,6 +147,15 @@ func (t *TabsWidget) HandleKey(ev ggui.KeyEvent) {
 	}
 }
 
+// ConsumesKey implements ggui.KeyConsumer: the arrows, Home and End move.
+func (t *TabsWidget) ConsumesKey(ev ggui.KeyEvent) bool {
+	switch ev.Key {
+	case ebiten.KeyArrowLeft, ebiten.KeyArrowRight, ebiten.KeyArrowUp, ebiten.KeyArrowDown, ebiten.KeyHome, ebiten.KeyEnd:
+		return ev.Kind == ggui.KeyPress
+	}
+	return false
+}
+
 // Adopt implements ggui.Adopter.
 func (t *TabsWidget) Adopt(prev any) {
 	t.Interactive.Adopt(prev)
@@ -164,6 +174,9 @@ type tabLabel struct {
 	t *TabsWidget
 	i int
 }
+
+// Semantics implements ggui.Semantic: each label is a tab.
+func (l tabLabel) Semantics() (ggui.Role, string) { return ggui.RoleTab, l.t.tabs[l.i].Label }
 
 func (l tabLabel) HandlePointer(ev ggui.PointerEvent) bool {
 	switch ev.Kind {

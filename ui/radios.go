@@ -28,7 +28,8 @@ func Radios[T comparable](selected ggui.Binding[T], options []T) *RadiosWidget[T
 // Label sets how each option is shown.
 func (g *RadiosWidget[T]) Label(fn func(T) string) *RadiosWidget[T] {
 	for _, r := range g.radios {
-		r.label = ggui.Text(fn(r.value))
+		r.Name = fn(r.value)
+		r.label = ggui.Text(r.Name)
 	}
 	return g
 }

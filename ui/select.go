@@ -34,6 +34,7 @@ type SelectWidget[T comparable] struct {
 // and Escape closes it.
 func Select[T comparable](value ggui.Binding[T], options []T) *SelectWidget[T] {
 	s := &SelectWidget[T]{value: value, options: options, minWidth: 0, highlight: -1}
+	s.Role = ggui.RoleSelect
 	s.box = ggui.Box()
 	rows := make([]ggui.Widget, len(options))
 	for i := range options {
@@ -50,9 +51,18 @@ func Select[T comparable](value ggui.Binding[T], options []T) *SelectWidget[T] {
 func (s *SelectWidget[T]) Label(fn func(T) string) *SelectWidget[T] {
 	s.label = fn
 	for i, it := range s.items {
-		it.text = ggui.Text(fn(s.options[i])).NoWrap()
+		it.Role, it.Name = ggui.RoleOption, fn(s.options[i])
+		it.text = ggui.Text(it.Name).NoWrap()
 	}
 	return s
+}
+
+// Named names the dropdown for Probe.Find and the inspector.
+func (s *SelectWidget[T]) Named(name string) *SelectWidget[T] { s.Name = name; return s }
+
+// ConsumesKey implements ggui.KeyConsumer: Up and Down step or move.
+func (s *SelectWidget[T]) ConsumesKey(ev ggui.KeyEvent) bool {
+	return ev.Kind == ggui.KeyPress && (ggui.Activates(ev) || ev.Key == ebiten.KeyArrowUp || ev.Key == ebiten.KeyArrowDown)
 }
 
 // Disabled greys the dropdown out and ignores input while v is true.

@@ -30,6 +30,12 @@ func paintInspector(dst *Canvas) {
 	}
 	dst.FillRect(hit.rect, color.RGBA{0x1e, 0x88, 0xe5, 0x40})
 	label := fmt.Sprintf("%s  %g×%g  @ %g,%g", hit.name, hit.rect.Size.W, hit.rect.Size.H, hit.rect.Origin.X, hit.rect.Origin.Y)
+	for i := len(dst.hits) - 1; i >= 0; i-- {
+		if r := &dst.hits[i]; r.role != "" && r.rect.Contains(p) {
+			label += fmt.Sprintf("  [%s %q]", r.role, r.label)
+			break
+		}
+	}
 	face := fallbackFont().face(11 * dst.Scale())
 	w := dst.dp(text.Advance(label, face))
 	m := face.Metrics()

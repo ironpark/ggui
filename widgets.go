@@ -787,6 +787,7 @@ type ScrollWidget struct {
 	viewport  Size
 	laidAt    float64 // the offset the child was last laid out for
 	cache     *CachedWidget
+	rect      Rect // where the window was last painted
 }
 
 // Key gives the scroll an identity, so a rebuilt one that also moved keeps
@@ -878,6 +879,7 @@ func (s *ScrollWidget) Paint(dst *Canvas, r Rect) {
 		// child must be laid out again for the new window.
 		s.cache.invalidate()
 	}
+	s.rect = r
 	dst.HitPointer(r, s)
 	origin := r.Origin
 	if s.horizontal {
@@ -901,6 +903,24 @@ func (s *ScrollWidget) paintBar(dst *Canvas, r Rect) {
 		dst.FillRect(Rct(Pt(r.Origin.X+at, r.Origin.Y+r.Size.H-thickness-margin), Sz(thumb, thickness)), s.bar)
 	} else {
 		dst.FillRect(Rct(Pt(r.Origin.X+r.Size.W-thickness-margin, r.Origin.Y+at), Sz(thickness, thumb)), s.bar)
+	}
+}
+
+// Reveal implements Revealer: the window moves the least it must for
+// target, in window coordinates, to be inside it. Focus moved by the
+// keyboard calls it.
+func (s *ScrollWidget) Reveal(target Rect) {
+	lo, hi := target.Origin.Y-s.rect.Origin.Y, target.Origin.Y+target.Size.H-s.rect.Origin.Y
+	extent := s.rect.Size.H
+	if s.horizontal {
+		lo, hi = target.Origin.X-s.rect.Origin.X, target.Origin.X+target.Size.W-s.rect.Origin.X
+		extent = s.rect.Size.W
+	}
+	switch {
+	case lo < 0:
+		s.scrollTo(s.position() + lo)
+	case hi > extent:
+		s.scrollTo(s.position() + hi - extent)
 	}
 }
 

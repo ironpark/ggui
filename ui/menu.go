@@ -22,6 +22,7 @@ type MenuWidget struct {
 func Menu(label string, entries ...ggui.Widget) *MenuWidget {
 	m := &MenuWidget{current: -1}
 	m.button = Button(label, m.toggle).Secondary()
+	m.button.Role = ggui.RoleMenu
 	m.init(entries)
 	return m
 }
@@ -30,8 +31,20 @@ func Menu(label string, entries ...ggui.Widget) *MenuWidget {
 func MenuOf(content ggui.Widget, entries ...ggui.Widget) *MenuWidget {
 	m := &MenuWidget{current: -1}
 	m.button = ButtonOf(content, m.toggle).Secondary()
+	m.button.Role = ggui.RoleMenu
 	m.init(entries)
 	return m
+}
+
+// Label names a MenuOf for Probe.Find and the inspector.
+func (m *MenuWidget) Label(s string) *MenuWidget { m.button.Name = s; return m }
+
+// Semantics implements ggui.Semantic through the button.
+func (m *MenuWidget) Semantics() (ggui.Role, string) { return m.button.Semantics() }
+
+// ConsumesKey implements ggui.KeyConsumer: Up and Down open and move.
+func (m *MenuWidget) ConsumesKey(ev ggui.KeyEvent) bool {
+	return ev.Kind == ggui.KeyPress && (ggui.Activates(ev) || ev.Key == ebiten.KeyArrowUp || ev.Key == ebiten.KeyArrowDown)
 }
 
 func (m *MenuWidget) init(entries []ggui.Widget) {
@@ -139,7 +152,9 @@ type MenuItemWidget struct {
 
 // MenuItem creates an entry that runs onTap and closes the menu.
 func MenuItem(label string, onTap func()) *MenuItemWidget {
-	return &MenuItemWidget{text: ggui.Text(label).NoWrap(), onTap: onTap}
+	it := &MenuItemWidget{text: ggui.Text(label).NoWrap(), onTap: onTap}
+	it.Role, it.Name = ggui.RoleMenuItem, label
+	return it
 }
 
 // Disabled greys the item out and ignores it while v is true.

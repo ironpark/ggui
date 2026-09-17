@@ -28,6 +28,7 @@ type CollapsibleWidget struct {
 // slides in and out.
 func Collapsible(open ggui.Binding[bool], title string, content ggui.Widget) *CollapsibleWidget {
 	c := &CollapsibleWidget{open: open, title: ggui.Text(title).NoWrap(), content: content}
+	c.Role, c.Name = ggui.RoleDisclosure, title
 	c.body = ggui.Presence(open, ggui.Transition(content).Fade().Slide(0, -6).Duration(knobDuration))
 	return c
 }

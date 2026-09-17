@@ -14,6 +14,7 @@ type SwitchWidget struct {
 // Switch binds a toggle to on; a click flips it and the knob slides over.
 func Switch(on ggui.Binding[bool], label string) *SwitchWidget {
 	s := &SwitchWidget{on: on}
+	s.Role, s.Name = ggui.RoleSwitch, label
 	s.glyph = ggui.Sz(switchWidth, switchHeight)
 	if label != "" {
 		s.label = ggui.Text(label)

@@ -15,6 +15,7 @@ type CheckboxWidget struct {
 // Checkbox binds a tick box to checked; a click toggles it. label may be "".
 func Checkbox(checked ggui.Binding[bool], label string) *CheckboxWidget {
 	c := &CheckboxWidget{checked: checked}
+	c.Role, c.Name = ggui.RoleCheckbox, label
 	c.glyph = ggui.Sz(controlSize, controlSize)
 	if label != "" {
 		c.label = ggui.Text(label)

@@ -26,7 +26,8 @@ type Canvas struct {
 	parent  *Canvas     // set on a Clip; hit regions go to the root
 	clip    Rect
 	clipped bool
-	inert   bool // registers no hit regions: a widget on its way out
+	inert   bool        // registers no hit regions: a widget on its way out
+	scope   *focusScope // the focus trap regions are registered under, if any
 
 	// Root-only frame state.
 	logical    Size // the window in logical pixels, for Size
@@ -365,7 +366,7 @@ func (c *Canvas) Clip(r Rect) *Canvas {
 	if c == nil {
 		return nil
 	}
-	child := &Canvas{parent: c, clip: r, clipped: true, scale: c.scale, inert: c.inert}
+	child := &Canvas{parent: c, clip: r, clipped: true, scale: c.scale, inert: c.inert, scope: c.scope}
 	if c.clipped {
 		child.clip = c.clip.Intersect(r)
 	}
@@ -383,6 +384,7 @@ func (c *Canvas) add(h hitRegion) {
 	if c == nil || c.inert {
 		return
 	}
+	h.full = h.rect
 	if c.clipped {
 		h.rect = h.rect.Intersect(c.clip)
 		if h.rect.Empty() {
@@ -437,10 +439,39 @@ func sameAny(a, b any) (same bool) {
 
 type hitRegion struct {
 	rect    Rect
-	id      any // from an Identified handler, else nil
+	full    Rect // rect before clipping, for scrolling it into view
+	id      any  // from an Identified handler, else nil
 	pointer PointerHandler
 	key     KeyHandler
 	cursor  ebiten.CursorShapeType
+	scope   *focusScope // the focus trap the region was painted in, if any
+	role    Role        // from a Semantic handler
+	label   string
+}
+
+// focusScope is a focus trap for one frame: while regions carrying it
+// exist, Tab cycles within them and an unconsumed Escape calls escape.
+// Frames compare scopes by owner.
+type focusScope struct {
+	owner  any
+	escape func()
+}
+
+// FocusTrap paints through fn as a focus scope, which is what a dialog or
+// popup is: while any region fn registered exists, Tab and Shift+Tab move
+// only among those regions, focus is moved inside when the scope appears
+// and returned to where it was when the scope goes, and an Escape the
+// focused widget did not consume calls onEscape. owner identifies the
+// scope from frame to frame.
+func (c *Canvas) FocusTrap(owner any, onEscape func(), fn func(dst *Canvas)) {
+	if c == nil {
+		fn(nil)
+		return
+	}
+	prev := c.scope
+	c.scope = &focusScope{owner: owner, escape: onEscape}
+	defer func() { c.scope = prev }()
+	fn(c)
 }
 
 // merge folds o into r when they share a Rect and o only adds what r lacks.
@@ -463,6 +494,9 @@ func (r *hitRegion) merge(o hitRegion) bool {
 	if o.id != nil {
 		r.id = o.id
 	}
+	if o.role != "" {
+		r.role, r.label = o.role, o.label
+	}
 	return true
 }
 
@@ -470,15 +504,28 @@ func (r *hitRegion) merge(o hitRegion) bool {
 // painted later sit on top of earlier ones, so a container registers itself
 // before painting its children.
 func (c *Canvas) HitPointer(r Rect, h PointerHandler) {
-	c.add(hitRegion{rect: r, id: idOf(h), pointer: h})
+	c.add(c.region(r, h, hitRegion{pointer: h}))
 }
 
 // HitKey registers r as a region that receives keyboard events while focused.
 func (c *Canvas) HitKey(r Rect, h KeyHandler) {
-	c.add(hitRegion{rect: r, id: idOf(h), key: h})
+	c.add(c.region(r, h, hitRegion{key: h}))
+}
+
+// region fills in what every registration shares: the Rect, the handler's
+// identity and semantics, and the focus scope.
+func (c *Canvas) region(r Rect, h any, reg hitRegion) hitRegion {
+	reg.rect, reg.id = r, idOf(h)
+	if c != nil {
+		reg.scope = c.scope
+	}
+	if s, ok := h.(Semantic); ok {
+		reg.role, reg.label = s.Semantics()
+	}
+	return reg
 }
 
 // HitCursor asks for the mouse cursor to take shape while it is over r.
 func (c *Canvas) HitCursor(r Rect, shape ebiten.CursorShapeType) {
-	c.add(hitRegion{rect: r, cursor: shape})
+	c.add(c.region(r, nil, hitRegion{cursor: shape}))
 }

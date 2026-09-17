@@ -147,8 +147,67 @@ func (p *Probe) dispatch(f frameInput) {
 	}
 }
 
-// OnKey registers a global shortcut, as App.OnKey does.
+// OnKey registers a global key handler, as App.OnKey does.
 func (p *Probe) OnKey(fn func(KeyEvent) bool) { p.in.shortcuts = append(p.in.shortcuts, fn) }
+
+// Shortcut registers a chord, as App.Shortcut does.
+func (p *Probe) Shortcut(chord string, fn func()) *ShortcutHandle { return p.in.addShortcut(chord, fn) }
+
+// Found is a region a Find located: where it is and what it is.
+type Found struct {
+	Rect  Rect
+	Role  Role
+	Label string
+}
+
+// Center returns the middle of the region, where a click lands.
+func (f Found) Center() Point {
+	return Pt(f.Rect.Origin.X+f.Rect.Size.W/2, f.Rect.Origin.Y+f.Rect.Size.H/2)
+}
+
+// Find returns the first region painted with label, after running a
+// frame so the regions are current: a button by its text, a checkbox by
+// its label, a field by its Label or placeholder.
+func (p *Probe) Find(label string) (Found, bool) {
+	return p.FindRole("", label)
+}
+
+// FindRole returns the first region painted with role and label; either
+// may be empty to match any.
+func (p *Probe) FindRole(role Role, label string) (Found, bool) {
+	all := p.FindAll(role)
+	for _, f := range all {
+		if label == "" || f.Label == label {
+			return f, true
+		}
+	}
+	return Found{}, false
+}
+
+// FindAll returns every region painted with role, in paint order, or every
+// region with a role when role is empty.
+func (p *Probe) FindAll(role Role) []Found {
+	p.Frame()
+	var out []Found
+	for i := range p.in.regions {
+		r := &p.in.regions[i]
+		if r.role == "" || (role != "" && r.role != role) {
+			continue
+		}
+		out = append(out, Found{Rect: r.rect, Role: r.role, Label: r.label})
+	}
+	return out
+}
+
+// Tap clicks the middle of the first region labelled label, and panics
+// when there is none.
+func (p *Probe) Tap(label string) {
+	f, ok := p.Find(label)
+	if !ok {
+		panic("ggui: Probe.Tap: nothing labelled " + label)
+	}
+	p.Click(f.Center())
+}
 
 // Move puts the pointer at pos with no buttons held, which drives hover,
 // cursor shape and, after Press, dragging.

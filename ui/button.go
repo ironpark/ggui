@@ -22,13 +22,21 @@ type ButtonWidget struct {
 func Button(label string, onTap func()) *ButtonWidget {
 	b := &ButtonWidget{onTap: onTap, label: ggui.Text(label).NoWrap()}
 	b.box = ggui.Box(b.label)
+	b.Role, b.Name = ggui.RoleButton, label
 	return b
 }
 
 // ButtonOf creates a button around any content instead of a text label.
+// Give it a Label, since nothing on it says what it is.
 func ButtonOf(child ggui.Widget, onTap func()) *ButtonWidget {
-	return &ButtonWidget{onTap: onTap, box: ggui.Box(child)}
+	b := &ButtonWidget{onTap: onTap, box: ggui.Box(child)}
+	b.Role = ggui.RoleButton
+	return b
 }
+
+// Label names the button for Probe.Find and the inspector; Button takes
+// its text, ButtonOf needs one.
+func (b *ButtonWidget) Label(s string) *ButtonWidget { b.Name = s; return b }
 
 // Secondary makes the button quiet: Surface background with a border and
 // the normal text color, for actions that are not the main one.

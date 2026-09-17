@@ -49,11 +49,13 @@ type Mods struct {
 // Cmd reports the platform's command modifier: Meta (⌘) on macOS, Ctrl
 // elsewhere. Shortcuts such as select-all and paste check it.
 func (m Mods) Cmd() bool {
-	if runtime.GOOS == "darwin" {
+	if runtimeIsDarwin() {
 		return m.Meta
 	}
 	return m.Ctrl
 }
+
+func runtimeIsDarwin() bool { return runtime.GOOS == "darwin" }
 
 // KeyKind says what a KeyEvent reports.
 type KeyKind int
@@ -90,6 +92,30 @@ type TickHandler interface {
 	HandleTick() (consumed bool)
 }
 
+// KeyConsumer is a KeyHandler that can say which key presses it acts on,
+// before they are delivered. A bare-key shortcut runs only when the
+// focused handler does not consume the key, and an Escape the focused
+// handler does not consume closes the dialog or popup it is in. A handler
+// that does not implement it consumes nothing that way.
+type KeyConsumer interface {
+	ConsumesKey(ev KeyEvent) bool
+}
+
+// consumes reports whether h claims ev through KeyConsumer.
+func consumes(h KeyHandler, ev KeyEvent) bool {
+	if c, ok := h.(KeyConsumer); ok {
+		return c.ConsumesKey(ev)
+	}
+	return false
+}
+
+// Revealer is a container that can scroll to show a Rect: Scroll is one.
+// Focus moved by the keyboard into a region asks the containers around it
+// to reveal it.
+type Revealer interface {
+	Reveal(r Rect)
+}
+
 // frameInput is everything the runtime read from the platform this frame.
 type frameInput struct {
 	pos   Point
@@ -117,6 +143,37 @@ type inputState struct {
 	cursor     ebiten.CursorShapeType // what the hovered region asked for
 
 	shortcuts []func(KeyEvent) bool // App.OnKey handlers, tried before the focused widget
+	chords    []*ShortcutHandle     // App.Shortcut handlers
+
+	// A focus trap: while regions of a scope exist, Tab cycles within them
+	// and an unconsumed Escape goes to the scope. trapReturn is where focus
+	// was when the scope appeared, restored when it goes.
+	trap       any
+	trapReturn *hitRegion
+}
+
+// shortcut registers a chord.
+func (in *inputState) addShortcut(chord string, fn func()) *ShortcutHandle {
+	h := &ShortcutHandle{chord: MustChord(chord), fn: fn}
+	in.chords = append(in.chords, h)
+	return h
+}
+
+// runChords runs the shortcuts that match k, either the ones that go
+// before the focused widget (modified or exclusive) or the rest, and
+// reports whether one ran.
+func (in *inputState) runChords(k ebiten.Key, mods Mods, before bool) bool {
+	ran := false
+	ev := KeyEvent{Kind: KeyPress, Key: k, Mods: mods}
+	for _, h := range in.chords {
+		if h.removed || (h.chord.Modified() || h.exclusive) != before || !ev.Is(h.chord) {
+			continue
+		}
+		h.fn()
+		ran = true
+	}
+	in.chords = slices.DeleteFunc(in.chords, func(h *ShortcutHandle) bool { return h.removed })
+	return ran
 }
 
 // withoutShortcuts returns keys less those a shortcut consumed, copying
@@ -155,6 +212,7 @@ func keep(r *hitRegion) *hitRegion {
 }
 
 func (in *inputState) dispatch(f frameInput) {
+	in.updateTrap()
 	// Hover: the topmost region that claims PointerMove is the hovered one.
 	move := PointerEvent{Kind: PointerMove, Pos: f.pos}
 	now := in.send(move)
@@ -211,11 +269,19 @@ func (in *inputState) dispatch(f frameInput) {
 	if len(in.shortcuts) > 0 {
 		f.keys = in.withoutShortcuts(f.keys, f.mods)
 	}
+	if len(in.chords) > 0 {
+		f.keys = slices.DeleteFunc(slices.Clone(f.keys), func(k ebiten.Key) bool { return in.runChords(k, f.mods, true) })
+	}
 
-	if in.focused != nil {
+	if in.focused == nil {
+		in.afterFocused(f, nil)
+		return
+	}
+	{
 		cur := in.findKeyRegion(in.focused)
 		if cur == nil {
 			in.setFocus(nil)
+			in.afterFocused(f, nil)
 			return
 		}
 		if prev := in.focused.key; !sameAny(prev, cur.key) {
@@ -235,6 +301,73 @@ func (in *inputState) dispatch(f frameInput) {
 		}
 		if f.text != "" {
 			cur.key.HandleKey(KeyEvent{Kind: KeyText, Text: f.text})
+		}
+		in.afterFocused(f, cur.key)
+	}
+}
+
+// afterFocused runs what comes after the focused widget saw the keys: the
+// bare-key shortcuts and the trap's Escape, for keys the widget did not
+// consume.
+func (in *inputState) afterFocused(f frameInput, h KeyHandler) {
+	for _, k := range f.keys {
+		ev := KeyEvent{Kind: KeyPress, Key: k, Mods: f.mods}
+		if h != nil && consumes(h, ev) {
+			continue
+		}
+		if k == ebiten.KeyEscape && f.mods == (Mods{}) {
+			if s := in.activeScope(); s != nil && s.escape != nil {
+				s.escape()
+				continue
+			}
+		}
+		in.runChords(k, f.mods, false)
+	}
+}
+
+// activeScope returns the topmost focus scope painted this frame.
+func (in *inputState) activeScope() *focusScope {
+	if r := in.topmost(func(r *hitRegion) bool { return r.scope != nil }); r != nil {
+		return r.scope
+	}
+	return nil
+}
+
+// updateTrap notices a focus scope appearing or going. When one appears,
+// focus that is outside it moves to its first key region and where focus
+// was is remembered; when it goes, focus that went with it returns there.
+func (in *inputState) updateTrap() {
+	var owner any
+	if s := in.activeScope(); s != nil {
+		owner = s.owner
+	}
+	if owner == in.trap {
+		return
+	}
+	if owner == nil {
+		in.trap = nil
+		if in.focused == nil || in.findKeyRegion(in.focused) == nil {
+			if r := in.trapReturn; r != nil {
+				in.focus(in.findKeyRegion(r), false)
+			}
+		}
+		in.trapReturn = nil
+		return
+	}
+	if in.trap == nil {
+		in.trapReturn = keep(in.focused)
+	}
+	in.trap = owner
+	inside := func(r *hitRegion) bool { return r.scope != nil && r.scope.owner == owner }
+	if in.focused != nil {
+		if cur := in.findKeyRegion(in.focused); cur != nil && inside(cur) {
+			return
+		}
+	}
+	for i := range in.regions {
+		if r := &in.regions[i]; r.key != nil && inside(r) {
+			in.focus(r, false)
+			return
 		}
 	}
 }
@@ -309,20 +442,33 @@ func (in *inputState) focus(r *hitRegion, keyboard bool) {
 		ev := KeyEvent{Kind: KeyFocus}
 		if keyboard {
 			ev.Key = ebiten.KeyTab
+			in.reveal(r.full)
 		}
 		r.key.HandleKey(ev)
 	}
 	in.focused = keep(r)
 }
 
+// reveal asks every Revealer painted around target to scroll it into view.
+func (in *inputState) reveal(target Rect) {
+	for i := range in.regions {
+		r := &in.regions[i]
+		if v, ok := r.pointer.(Revealer); ok && !r.rect.Intersect(target).Empty() {
+			v.Reveal(target)
+		}
+	}
+}
+
 // moveFocus steps focus through the key regions in paint order, wrapping
-// at the ends: Tab is dir 1, Shift+Tab is -1.
+// at the ends: Tab is dir 1, Shift+Tab is -1. While a focus scope is
+// showing, only its regions take part.
 func (in *inputState) moveFocus(dir int) {
 	var keyed []*hitRegion
 	cur := -1
+	scope := in.activeScope()
 	for i := range in.regions {
 		r := &in.regions[i]
-		if r.key == nil {
+		if r.key == nil || (scope != nil && (r.scope == nil || r.scope.owner != scope.owner)) {
 			continue
 		}
 		if in.focused != nil && r.rect == in.focused.rect {

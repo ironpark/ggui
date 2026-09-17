@@ -315,7 +315,9 @@ laid out. `ui.Collapsible(open, "Title", content)` folds content under a
 clickable header, animating it with `Presence`. `ui.Card(child)` is a
 Surface panel with border, radius and padding; `ui.Badge("new")` a small
 pill (`.Accent()`); `ui.Progress(value)` a bar that eases to a fraction
-read from a `Reader[float64]` every frame.
+read from a `Reader[float64]` every frame. `ui.Dialog(open, content)` is
+a modal panel over a scrim, shown while the bound signal is true; see
+Input for how it holds focus.
 
 **Select and Menu.** `ui.Select(value, options)` is a dropdown bound to a
 signal, labelled through `fmt.Sprint` or `.Label(fn)`: a click
@@ -427,9 +429,32 @@ takes keyboard focus when clicked and delivers `OnKey`, `OnText` and
 and Meta (`Mods.Cmd()` is ⌘ on macOS and Ctrl elsewhere). Tab and Shift+Tab
 move focus through the key regions in paint order; focus that arrived that
 way is reported with `Key` set to `KeyTab`, which is when the controls draw
-a focus ring. Buttons press on Space or Enter, toggles flip, sliders step
-with the arrows. Global shortcuts go in `App.OnKey`, which sees every key
-press before the focused widget and keeps the ones it returns true for.
+a focus ring, and a `Scroll` around the new target scrolls it into view.
+Buttons press on Space or Enter, toggles flip, sliders step with the
+arrows.
+
+**Shortcuts** are chords: `app.Shortcut("cmd+s", save)` runs before the
+focused widget and takes the key from it, as every chord with a modifier
+does. A bare key such as `"space"` reaches the focused widget first and runs
+the shortcut only when the widget did not consume it, so Space on a focused
+button presses the button and a text field keeps every key but Escape;
+`.Exclusive()` on the handle makes a bare key run first too. A widget says
+what it consumes through `KeyConsumer`; `Interactive` claims Space and
+Enter and the controls with more keys claim those. `ParseChord` reads the
+names, `KeyEvent.Is(chord)` matches one in a handler, and `App.OnKey` stays
+for what a chord cannot say.
+
+**Focus scopes.** An open `Popup` and a `ui.Dialog` paint their content
+through `dst.FocusTrap`: while it shows, Tab cycles inside it, focus is
+moved in when it opens and returned to the opener when it closes, and an
+Escape the focused widget did not consume closes it. `ui.Dialog(open,
+content)` is a centered modal on a scrim that takes the clicks, with
+`.Title`, `.Width` and `.OnClose`.
+
+**Roles.** Every control carries a `Role` and a name: a button's text, a
+checkbox's label, a field's `Label` or placeholder; `ButtonOf`, `Slider`
+and `Select` take one through `.Label` or `.Named`. The inspector shows
+them, and tests find controls by them.
 
 To make your own widget interactive, implement `PointerHandler` or
 `KeyHandler` and call `dst.HitPointer(r, w)`, `dst.HitKey(r, w)` or
@@ -533,7 +558,8 @@ why something sits where it does.
 ├── widgets.go    Built-in layout and drawing widgets
 ├── editor.go     TextInput: the text editor and its IME driver
 ├── anim.go       Tween, Spring, Motion, easings, the per-frame animator
-├── probe.go      Probe: headless frame driver for tests
+├── probe.go      Probe: headless frame driver for tests, Find and Tap
+├── chord.go      Chord, ParseChord, ShortcutHandle
 ├── tooltip.go    Tooltip
 ├── popup.go      Popup: anchored overlay with a closing scrim
 ├── transition.go Transition and Presence: enter and leave animations
@@ -549,7 +575,7 @@ why something sits where it does.
 ├── geometry.go   Point, Size, Rect, Constraints
 ├── ui/           One file per control: Button, Checkbox, Radio, Switch,
 │                 Slider, TextField, Select, Menu, Tabs, Collapsible,
-│                 Card, Badge, Progress, Divider
+│                 Dialog, Card, Badge, Progress, Divider
 └── examples/     Runnable apps: counter, todo, gallery
 ```
 

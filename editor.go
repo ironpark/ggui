@@ -229,6 +229,7 @@ func nextWord(s string, i int) int {
 type TextInputWidget struct {
 	value        Binding[string]
 	placeholder  string
+	label        string
 	style        TextStyle
 	password     bool
 	multiline    bool
@@ -284,6 +285,24 @@ func (t *TextInputWidget) Disabled(v bool) *TextInputWidget { t.disabled = v; re
 
 // Placeholder sets the muted text shown while the value is empty.
 func (t *TextInputWidget) Placeholder(s string) *TextInputWidget { t.placeholder = s; return t }
+
+// Label names the field for Probe.Find and the inspector; the placeholder
+// serves until one is set.
+func (t *TextInputWidget) Label(s string) *TextInputWidget { t.label = s; return t }
+
+// Semantics implements Semantic.
+func (t *TextInputWidget) Semantics() (Role, string) {
+	if t.label != "" {
+		return RoleTextField, t.label
+	}
+	return RoleTextField, t.placeholder
+}
+
+// ConsumesKey implements KeyConsumer: an editor takes every key but Escape
+// while it has focus, so a bare-key shortcut never types over it.
+func (t *TextInputWidget) ConsumesKey(ev KeyEvent) bool {
+	return ev.Kind == KeyPress && ev.Key != ebiten.KeyEscape
+}
 
 // Password masks every rune with a bullet.
 func (t *TextInputWidget) Password() *TextInputWidget { t.password = true; return t }

@@ -1,7 +1,7 @@
 // Command counter is a minimal ggui app: a struct of signals for state,
 // reactive text through Textf and View, a theme for the look, and the
 // built-in Button. Click the buttons or press space to count; up/down
-// changes the step; T flips the theme, through App.OnKey.
+// changes the step; T flips the theme, through App.Shortcut.
 package main
 
 import (
@@ -58,21 +58,12 @@ func main() {
 		)
 	})
 
-	app.OnKey(func(ev ggui.KeyEvent) bool {
-		switch ev.Key {
-		case ebiten.KeySpace:
-			ggui.Add(count, step.Get())
-		case ebiten.KeyArrowUp:
-			ggui.Add(step, 1)
-		case ebiten.KeyArrowDown:
-			step.Update(func(s int) int { return max(s-1, 1) })
-		case ebiten.KeyT:
-			ggui.Toggle(dark)
-		default:
-			return false
-		}
-		return true
-	})
+	// Bare-key shortcuts reach the focused widget first: Space on a focused
+	// button presses the button, not this.
+	app.Shortcut("space", func() { ggui.Add(count, step.Peek()) })
+	app.Shortcut("up", func() { ggui.Add(step, 1) })
+	app.Shortcut("down", func() { step.Update(func(s int) int { return max(s-1, 1) }) })
+	app.Shortcut("t", func() { ggui.Toggle(dark) })
 
 	// Setup runs under the app's root owner, so the theme binding is
 	// disposed with the app.

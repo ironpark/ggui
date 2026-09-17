@@ -39,6 +39,10 @@ func (f *TextFieldWidget) DisabledWhen(r ggui.Reader[bool]) *TextFieldWidget {
 // Placeholder sets the muted text shown while the value is empty.
 func (f *TextFieldWidget) Placeholder(s string) *TextFieldWidget { f.input.Placeholder(s); return f }
 
+// Label names the field for Probe.Find and the inspector; the placeholder
+// serves until one is set.
+func (f *TextFieldWidget) Label(s string) *TextFieldWidget { f.input.Label(s); return f }
+
 // Password masks every rune with a bullet.
 func (f *TextFieldWidget) Password() *TextFieldWidget { f.input.Password(); return f }
 

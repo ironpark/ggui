@@ -5,7 +5,8 @@ package ggui
 // and menus. Build one with Popup. The anchor is laid out and painted in
 // place; while the popup is open the content is painted through
 // Canvas.Overlay, above everything, and a click anywhere outside it closes
-// it without reaching what was clicked.
+// it without reaching what was clicked. The content is a focus scope: Tab
+// cycles inside it, Escape closes it, and focus returns to the opener.
 //
 // Whether the popup is open lives in the widget, so keep it alive (in a
 // Component, or adopted across rebuilds by the widget that owns it) or
@@ -151,11 +152,14 @@ func (p *PopupWidget) paintContent(dst *Canvas, anchor Rect) {
 	p.rect = Rct(Pt(x, y), size)
 
 	dst.HitPointer(Rect{Size: screen}, popupScrim{p})
-	dst.HitPointer(p.rect, popupSink{})
-	if p.keys != nil {
-		dst.HitKey(p.rect, p.keys)
-	}
-	dst.Paint(p.content, p.rect)
+	// A focus scope: Tab stays inside the content and Escape closes.
+	dst.FocusTrap(p, p.Hide, func(dst *Canvas) {
+		dst.HitPointer(p.rect, popupSink{})
+		if p.keys != nil {
+			dst.HitKey(p.rect, p.keys)
+		}
+		dst.Paint(p.content, p.rect)
+	})
 }
 
 // popupScrim covers the window under an open popup: a press closes the

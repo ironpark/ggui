@@ -12,6 +12,34 @@ type Control interface {
 	KeyHandler
 }
 
+// Role says what kind of control a region is, for tests and the inspector;
+// the ui package fills it in. There is no platform accessibility bridge
+// yet, so the consumers are Probe.Find, Probe.FindRole and the inspector.
+type Role string
+
+const (
+	RoleButton     Role = "button"
+	RoleCheckbox   Role = "checkbox"
+	RoleRadio      Role = "radio"
+	RoleSwitch     Role = "switch"
+	RoleSlider     Role = "slider"
+	RoleTextField  Role = "textfield"
+	RoleSelect     Role = "select"
+	RoleOption     Role = "option"
+	RoleMenu       Role = "menu"
+	RoleMenuItem   Role = "menuitem"
+	RoleTab        Role = "tab"
+	RoleTabs       Role = "tabs"
+	RoleDisclosure Role = "disclosure"
+	RoleDialog     Role = "dialog"
+)
+
+// Semantic is a handler that reports a role and a label for its region;
+// Interactive implements it. Probe.Find looks regions up by them.
+type Semantic interface {
+	Semantics() (Role, string)
+}
+
 // Interactive is the input state a control shares with every other:
 // whether it takes input, hover, press, keyboard focus and whether that
 // focus should be shown. Embed it, call Hit from Paint and Pointer and
@@ -22,11 +50,20 @@ type Interactive struct {
 	Hovered      bool
 	Pressed      bool
 	Focused      bool
-	FocusVisible bool // focus arrived by keyboard: draw the ring
+	FocusVisible bool   // focus arrived by keyboard: draw the ring
+	Role         Role   // what the control is, for Probe.Find and the inspector
+	Name         string // what it is called: the text on it, or what a Label setter gave
 
 	id        any
 	inertWhen Reader[bool]
 }
+
+// Semantics implements Semantic.
+func (s *Interactive) Semantics() (Role, string) { return s.Role, s.Name }
+
+// ConsumesKey implements KeyConsumer: a control acts on Space and Enter.
+// A control that acts on more keys overrides it.
+func (s *Interactive) ConsumesKey(ev KeyEvent) bool { return Activates(ev) }
 
 // InertWhen makes the control follow r for Inert: a control reads it in
 // Layout and Paint through Sync, so nothing rebuilds when it changes.
