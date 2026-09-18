@@ -95,7 +95,9 @@ const waitForBuild = async () => {
 const download = async (expected) => {
   const resp = await fetch(mainWasmURL, { cache: 'default' });
   if (!resp.ok) throw new Error(await resp.text());
-  const total = Number(resp.headers.get('Content-Length')) || expected || 0;
+  // The reader hands over decoded bytes, so count against the size the
+  // server reported rather than Content-Length, which is the gzipped one.
+  const total = expected || Number(resp.headers.get('Content-Length')) || 0;
   if (!resp.body || !total) return resp;
   track.classList.remove('indeterminate');
   let loaded = 0;
