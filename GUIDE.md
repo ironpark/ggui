@@ -147,6 +147,38 @@ go func() {
 }()
 ```
 
+A component does not have the `App`, so it asks for the same thing with
+`UIThread()`. Call it while the tree is being built — in setup, a `Builder` or
+an `Effect` — and keep what it returns for the goroutine:
+
+```go
+func rows(load func() []Row) ggui.Widget {
+	return ggui.Component(func() ggui.Builder {
+		found, loading := ggui.State[[]Row](nil), ggui.State(true)
+		post := ggui.UIThread()
+		go func() {
+			r := load()
+			post(func() { found.Set(r); loading.Set(false) })
+		}()
+		return func() ggui.Widget {
+			if loading.Get() {
+				return ui.Spinner()
+			}
+			return ggui.Each(found, rowView)
+		}
+	})
+}
+```
+
+The posted function runs before the next frame's input, so the write lands on
+the UI goroutine and the subtree rebuilds from it. Keep the function as long as
+the work has results to report; work posted after the app closes is dropped,
+which is what a component disposed mid-flight relies on.
+
+ggui has no loading-state type of its own. A signal per piece of state — the
+value, whether it is still loading, what went wrong — composes with everything
+else here, and `ui.Spinner` and `ui.Skeleton` fill the waiting.
+
 Writing a signal from another goroutine races the frame, whatever the mutex
 inside `Signal` suggests: the dirty marks a write leaves are not guarded, and
 the frame may already have laid out the tree that write should have changed.

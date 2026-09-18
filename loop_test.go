@@ -185,3 +185,58 @@ func TestCloseRejectsLatePostedWork(t *testing.T) {
 		t.Fatal("closed probe retained work or announcements")
 	}
 }
+
+// The pattern UIThread exists for: a component starts work on a goroutine
+// and the result reaches its state on the UI goroutine, with no App handed
+// down from main.
+func TestUIThreadCarriesAResultBackIntoAComponent(t *testing.T) {
+	done := make(chan struct{})
+	var text *Signal[string]
+	p := ProbeBuilder(func() Widget {
+		return Component(func() Builder {
+			loaded := State("loading")
+			text = loaded
+			post := UIThread()
+			go func() {
+				post(func() { loaded.Set("done") })
+				close(done)
+			}()
+			return func() Widget { return Text(loaded.Get()) }
+		})
+	}, Sz(100, 20))
+	defer p.Close()
+
+	p.Frame() // first layout runs setup, which starts the goroutine
+	<-done
+	if got := text.Peek(); got != "loading" {
+		t.Fatalf("the posted write landed before a frame ran it: %q", got)
+	}
+	p.Frame()
+	if got := text.Peek(); got != "done" {
+		t.Fatalf("after a frame the value is %q, want done", got)
+	}
+}
+
+func TestUIThreadOutsideAFrameIsRefused(t *testing.T) {
+	p := ProbeBuilder(func() Widget { return Box() }, Sz(10, 10))
+	p.Frame()
+	p.Close()
+	defer func() {
+		if recover() == nil {
+			t.Fatal("UIThread outside a frame did not say so")
+		}
+	}()
+	UIThread()
+}
+
+func TestWorkPostedAfterCloseIsDropped(t *testing.T) {
+	var post func(func())
+	p := ProbeBuilder(func() Widget { post = UIThread(); return Box() }, Sz(10, 10))
+	p.Frame()
+	p.Close()
+	ran := false
+	post(func() { ran = true })
+	if ran {
+		t.Fatal("work posted to a closed app ran immediately")
+	}
+}

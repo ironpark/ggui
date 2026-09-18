@@ -136,9 +136,47 @@ func (r *frameLoop) semantics() *SemTree {
 	return &SemTree{focused: -1}
 }
 
+// running is the loop whose frame is executing: what UIThread hands out. It
+// is written on the UI goroutine at the start of a frame and read there too,
+// and is a pointer swap only so that a test holding two probes cannot tear
+// it. One app runs per process; a Probe is a test's, and the last one to
+// start a frame is the one a component built in that frame belongs to.
+var running atomic.Pointer[frameLoop]
+
+// UIThread returns the function that runs work on the UI goroutine of the
+// app being built now. It is App.Post reached from inside a component, where
+// the App itself is not at hand.
+//
+// Call UIThread while the tree is being built -- in a Component's setup, a
+// Builder or an Effect -- and call what it returns from the goroutine that
+// has the result:
+//
+//	ggui.Component(func() ggui.Builder {
+//		rows, loading := ggui.State[[]Row](nil), ggui.State(true)
+//		post := ggui.UIThread()
+//		go func() {
+//			found := fetch()
+//			post(func() { rows.Set(found); loading.Set(false) })
+//		}()
+//		return func() ggui.Widget { ... }
+//	})
+//
+// The function it returns is safe to keep and to call from anywhere, as
+// often as the work has results to report. Work posted after the app closes
+// is dropped. UIThread itself belongs on the UI goroutine and panics when no
+// app is building, where there would be nothing to post to.
+func UIThread() func(fn func()) {
+	r := running.Load()
+	if r == nil {
+		panic("ggui: UIThread called outside a frame; call it while the tree is being built, from setup, a Builder or an Effect")
+	}
+	return r.post
+}
+
 // start runs the setup functions and the builder under a fresh root owner.
 // Everything they create lives until close.
 func (r *frameLoop) start() {
+	running.Store(r)
 	r.dispose = Root(func() {
 		for _, fn := range r.setup {
 			fn()
@@ -161,6 +199,7 @@ func (r *frameLoop) close() {
 	r.closed = true
 	r.posted, r.notices = nil, nil
 	r.postMu.Unlock()
+	running.CompareAndSwap(r, nil)
 	if r.dispose != nil {
 		r.dispose()
 	}
@@ -195,6 +234,7 @@ func (r *frameLoop) runPosted() {
 // tick is the shared per-frame step after input: animations advance, then
 // effects run until quiet. It returns ErrCycle when they never are.
 func (r *frameLoop) tick(now time.Time) error {
+	running.Store(r)
 	anims.step(now)
 	if !effects.flush() {
 		return cycle()
