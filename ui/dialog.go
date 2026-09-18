@@ -56,7 +56,7 @@ func (d *DialogWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 
 // Paint implements Widget: an open dialog paints through Canvas.Overlay.
 func (d *DialogWidget) Paint(dst *ggui.Canvas, _ ggui.Rect) {
-	if !d.open.Peek() {
+	if !ggui.Untrack(d.open.Get) {
 		return
 	}
 	dst.Overlay(d.paintPanel)

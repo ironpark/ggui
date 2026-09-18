@@ -43,17 +43,17 @@ func Collapsible(open ggui.Binding[bool], title string, content ggui.Widget) *Co
 func (c *CollapsibleWidget) Disabled(v bool) *CollapsibleWidget { c.SetInert(v); return c }
 
 // DisabledWhen follows r for Disabled without a rebuild.
-func (c *CollapsibleWidget) DisabledWhen(r ggui.Reader[bool]) *CollapsibleWidget {
+func (c *CollapsibleWidget) DisabledWhen(r ggui.Readable[bool]) *CollapsibleWidget {
 	c.InertWhen(r)
 	return c
 }
 
-func (c *CollapsibleWidget) toggle() { c.open.Set(!c.open.Peek()) }
+func (c *CollapsibleWidget) toggle() { c.open.Set(!ggui.Untrack(c.open.Get)) }
 
 // Describe implements ggui.Describer: a disclosure reports whether its
 // content is showing, so the expand and collapse actions mean something.
 func (c *CollapsibleWidget) Describe() ggui.Node {
-	open := c.open.Peek()
+	open := ggui.Untrack(c.open.Get)
 	return ggui.Node{
 		Role:     ggui.RoleDisclosure,
 		Name:     c.Name,
@@ -106,7 +106,7 @@ func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.FillRoundRect(header, t.Radius, t.Muted)
 	}
 	// The chevron turns from pointing right (0) to pointing down (1).
-	v := dst.Ease(c.Anchor(header), chevronSlot, pick(c.open.Peek(), 1.0, 0.0), c.motion)
+	v := dst.Ease(c.Anchor(header), chevronSlot, pick(ggui.Untrack(c.open.Get), 1.0, 0.0), c.motion)
 	cx, cy := r.Origin.X+c.pad.Left+t.ControlSize*0.4, r.Origin.Y+c.headerH/2
 	paintIcon(dst, c.env, icons.ChevronRight, ggui.Rct(ggui.Pt(cx-8, cy-8), ggui.Sz(16, 16)), t.MutedFg, v*math.Pi/2)
 	dst.Paint(c.title, ggui.Rct(ggui.Pt(r.Origin.X+c.pad.Left+t.ControlSize+t.ControlGap, r.Origin.Y+c.pad.Top), c.titleSize))

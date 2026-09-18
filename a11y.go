@@ -43,7 +43,7 @@ const (
 )
 
 // axKey identifies a node from frame to frame, as NodeID does, but as
-// something a map will take: NodeID.ID is whatever a widget passed to Key
+// something a map will take: NodeID.ID is whatever a widget passed to KeyboardKey
 // and may be a slice, which would panic a lookup. A node with an identity
 // is keyed by it alone, so that moving does not make it a different
 // element; one without is keyed by the bounds it painted, which is the only

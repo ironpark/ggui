@@ -144,17 +144,20 @@ var transitionSlot = NewSlot[transitionStart]("transition start")
 // removed. child is a Transition, or is wrapped in a fading one.
 //
 //	ggui.Presence(open, ggui.Transition(panel).Slide(0, -8).Fade())
-func Presence(show Reader[bool], child Widget) Widget {
+func Presence(show Readable[bool], child Widget) Widget {
 	t, ok := child.(*TransitionWidget)
 	if !ok {
 		t = Transition(child).Fade()
 	}
-	return Component(func() Builder {
+	return Component(func() Widget {
 		var initial float64
-		Untrack(func() {
+		Untrack(func() struct {
+		} {
 			if show.Get() {
 				initial = 1
 			}
+			return struct {
+			}{}
 		})
 		p := Tween(initial, t.duration).Easing(t.ease)
 		// Read the duration at the toggle rather than at setup, so a
@@ -162,13 +165,13 @@ func Presence(show Reader[bool], child Widget) Widget {
 		// whatever it was on the first frame. Tweened.Set reads it here too,
 		// so nothing changes under a run already in flight.
 		Watch(show, func(v bool) { p.Duration(t.duration).Set(pick(v, 1.0, 0.0)) })
-		return func() Widget {
+		return Reactive(func() Widget {
 			shown, v := show.Get(), p.Get()
 			if !shown && v == 0 {
 				return Box()
 			}
 			t.drive(v, !shown)
 			return t
-		}
+		})
 	})
 }

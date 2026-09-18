@@ -86,7 +86,7 @@ func TestNamingDoesNotChangeOptionFormatting(t *testing.T) {
 func checkDisabled[W interface {
 	ggui.Widget
 	Disabled(bool) W
-	DisabledWhen(ggui.Reader[bool]) W
+	DisabledWhen(ggui.Readable[bool]) W
 }](t *testing.T, w W, role ggui.Role, name string) {
 	t.Helper()
 	busy := ggui.State(false)
@@ -172,7 +172,7 @@ func TestDisabledSettingsAcrossControls(t *testing.T) {
 
 func checkPopupDisabled[W interface {
 	ggui.Widget
-	DisabledWhen(ggui.Reader[bool]) W
+	DisabledWhen(ggui.Readable[bool]) W
 	Popup() *ggui.PopupWidget
 }](t *testing.T, w W) {
 	busy := ggui.State(false)
@@ -234,7 +234,7 @@ func TestInputGroupPreservesEditorBindingAndAddon(t *testing.T) {
 	p.Click(ggui.Pt(2, 20))
 	p.Type(ggui.Mods{}, ggui.KeyDelete)
 	p.Perform(n.ID, ggui.Action{Kind: ggui.ActionSetValue, Text: "changed"})
-	if value.Peek() != "abc" {
+	if ggui.Untrack(value.Get) != "abc" {
 		t.Fatal("disabled editor accepted input")
 	}
 	p.Tap("Addon")
@@ -252,7 +252,7 @@ func TestInputGroupPreservesEditorBindingAndAddon(t *testing.T) {
 	}
 	p.Tap("Editor")
 	p.Type(ggui.Mods{}, ggui.KeyBackspace)
-	if value.Peek() == "abc" {
+	if ggui.Untrack(value.Get) == "abc" {
 		t.Fatal("re-enabled editor did not accept input")
 	}
 }

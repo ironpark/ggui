@@ -13,7 +13,7 @@ import (
 //	p := ggui.NewProbe(ui.Checkbox(on, "x"), ggui.Sz(200, 30))
 //	defer p.Close()
 //	p.Click(ggui.Pt(5, 5))
-//	// on.Peek() is now true
+//	// ggui.Untrack(on.Get) is now true
 //
 // Every input method paints a frame first, as the runtime would have before
 // the event, and flushes effects afterwards. Effects that never settle
@@ -39,7 +39,7 @@ func NewProbe(w Widget, size Size) *Probe {
 }
 
 // ProbeBuilder creates a Probe from a Builder, as New does for an App: build
-// runs under a root owner and again whenever a signal it read changes, and
+// runs once under a root owner, and
 // setup functions run first.
 //
 //	p := ggui.ProbeBuilder(func() ggui.Widget { return ggui.Textf("%d", n) }, ggui.Sz(100, 20))
@@ -73,14 +73,14 @@ func (p *Probe) Close() {
 func (p *Probe) Resize(size Size) { p.size = size }
 
 // Flush runs effects until they settle, without a frame, for a test that
-// reads a Memo or a widget built by an effect before the first frame. It
+// reads a DerivedValue or a widget built by an effect before the first frame. It
 // panics with ErrCycle when they never settle.
 func (p *Probe) Flush() {
 	if p.dispose == nil && !p.closed {
 		p.start()
 	}
-	if !effects.flush() {
-		panic(cycle())
+	if err := p.settle(p.size); err != nil {
+		panic(err)
 	}
 }
 
@@ -103,8 +103,11 @@ func (p *Probe) Frame() Size {
 	c.pointer, c.hasPointer, c.logical = p.pointer, p.hasPointer, p.size
 	c.nextFrame()
 	c.resetSemantics()
-	if p.needsLayout(p.size) {
-		p.rootSize = p.root.Layout(Tight(p.size), rootEnv())
+	if err := p.settle(p.size); err != nil {
+		panic(err)
+	}
+	if p.closed || p.root == nil {
+		return Size{}
 	}
 	c.Paint(p.root, Rect{Size: p.rootSize})
 	c.paintOverlays()
@@ -144,8 +147,8 @@ func (p *Probe) dispatch(f frameInput) {
 	p.pointer, p.hasPointer = f.pos, true
 	p.Frame()
 	p.in.dispatch(f)
-	if !effects.flush() {
-		panic(cycle())
+	if err := p.settle(p.size); err != nil {
+		panic(err)
 	}
 }
 
@@ -249,9 +252,9 @@ func (p *Probe) ClickButton(pos Point, button MouseButton) {
 func (p *Probe) Scroll(pos, delta Point) { p.dispatch(frameInput{pos: pos, wheel: delta}) }
 
 // Type presses keys, one frame each, with mods held.
-func (p *Probe) Type(mods Mods, keys ...Key) {
+func (p *Probe) Type(mods Mods, keys ...KeyboardKey) {
 	for _, k := range keys {
-		p.dispatch(frameInput{keys: []Key{k}, mods: mods})
+		p.dispatch(frameInput{keys: []KeyboardKey{k}, mods: mods})
 	}
 }
 

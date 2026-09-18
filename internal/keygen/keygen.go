@@ -30,7 +30,7 @@ const (
 `)
 	for k := ebiten.Key(0); k <= ebiten.KeyMax; k++ {
 		if name := k.String(); name != "" {
-			fmt.Fprintf(&b, "\tKey%s Key = ebiten.Key%s\n", name, name)
+			fmt.Fprintf(&b, "\tKey%s KeyboardKey = ebiten.Key%s\n", name, name)
 		}
 	}
 	b.WriteString(")\n")

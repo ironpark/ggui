@@ -11,7 +11,7 @@ import (
 type PaginationWidget struct {
 	ggui.Interactive
 	page           ggui.Binding[int]
-	pages          ggui.Reader[int]
+	pages          ggui.Readable[int]
 	previous, next *ButtonWidget
 	numbers        [5]*ButtonWidget
 	targets        [5]int
@@ -23,7 +23,7 @@ type PaginationWidget struct {
 
 // Pagination creates navigation for pages pages. Zero or negative counts disable it.
 // Out-of-range page values are clamped for display, without writing the binding.
-func Pagination(page ggui.Binding[int], pages ggui.Reader[int]) *PaginationWidget {
+func Pagination(page ggui.Binding[int], pages ggui.Readable[int]) *PaginationWidget {
 	p := &PaginationWidget{page: page, pages: pages}
 	p.previous = ButtonOf(ggui.Row(Icon(icons.ChevronLeft), ggui.Text("Previous")).Gap(4), func() { p.move(-1) }).Named("Previous").Ghost().Pad(6, 10)
 	p.next = ButtonOf(ggui.Row(ggui.Text("Next"), Icon(icons.ChevronRight)).Gap(4), func() { p.move(1) }).Named("Next").Ghost().Pad(6, 10)
@@ -45,8 +45,10 @@ func (p *PaginationWidget) Disabled(v bool) *PaginationWidget {
 // OnChange runs after a user selects a different page.
 func (p *PaginationWidget) OnChange(fn func(int)) *PaginationWidget { p.onChange = fn; return p }
 
-func (p *PaginationWidget) current(n int) int { return min(max(p.page.Peek(), 1), max(n, 1)) }
-func (p *PaginationWidget) move(delta int)    { p.selectPage(p.current(max(p.pages.Get(), 0)) + delta) }
+func (p *PaginationWidget) current(n int) int {
+	return min(max(ggui.Untrack(p.page.Get), 1), max(n, 1))
+}
+func (p *PaginationWidget) move(delta int) { p.selectPage(p.current(max(p.pages.Get(), 0)) + delta) }
 func (p *PaginationWidget) selectPage(page int) {
 	n := max(p.pages.Get(), 0)
 	if !p.Inert && page >= 1 && page <= n {
@@ -93,7 +95,7 @@ func (p *PaginationWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 func (p *PaginationWidget) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(p.row, r) }
 
 // DisabledWhen follows r for all navigation buttons without rebuilding.
-func (p *PaginationWidget) DisabledWhen(r ggui.Reader[bool]) *PaginationWidget {
+func (p *PaginationWidget) DisabledWhen(r ggui.Readable[bool]) *PaginationWidget {
 	p.InertWhen(r)
 	return p
 }

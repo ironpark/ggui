@@ -50,8 +50,8 @@ func (b *BubbleWidget) Link(name string, fn func()) *BubbleWidget {
 	b.Name, b.action, b.Role = name, fn, ggui.RoleLink
 	return b
 }
-func (b *BubbleWidget) Disabled(v bool) *BubbleWidget                  { b.SetInert(v); return b }
-func (b *BubbleWidget) DisabledWhen(r ggui.Reader[bool]) *BubbleWidget { b.InertWhen(r); return b }
+func (b *BubbleWidget) Disabled(v bool) *BubbleWidget                    { b.SetInert(v); return b }
+func (b *BubbleWidget) DisabledWhen(r ggui.Readable[bool]) *BubbleWidget { b.InertWhen(r); return b }
 
 // Reactions places arbitrary content at the bottom end edge. Leave vertical
 // space between rows for the overlap. Use named buttons for interactive reactions.

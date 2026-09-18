@@ -70,7 +70,7 @@ func (t *TabsWidget) index() int {
 	if len(t.tabs) == 0 {
 		return -1
 	}
-	return int(clamp(float64(t.selected.Peek()), 0, float64(len(t.tabs)-1)))
+	return int(clamp(float64(ggui.Untrack(t.selected.Get)), 0, float64(len(t.tabs)-1)))
 }
 
 func (t *TabsWidget) pick(i int) {
@@ -247,4 +247,4 @@ func (l tabLabel) Adopt(prev any) {
 }
 
 // DisabledWhen follows r for Disabled without rebuilding the control.
-func (t *TabsWidget) DisabledWhen(r ggui.Reader[bool]) *TabsWidget { t.InertWhen(r); return t }
+func (t *TabsWidget) DisabledWhen(r ggui.Readable[bool]) *TabsWidget { t.InertWhen(r); return t }

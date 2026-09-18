@@ -16,24 +16,24 @@ func TestCalendarNavigationAndConstraints(t *testing.T) {
 	defer p.Close()
 	p.Tap("2024-01-31")
 	p.Type(ggui.Mods{}, ggui.KeyPageDown, ggui.KeyEnter)
-	if !value.Peek().Equal(date(2024, 2, 29)) || changes != 1 {
-		t.Fatal("leap month navigation", value.Peek(), changes)
+	if !ggui.Untrack(value.Get).Equal(date(2024, 2, 29)) || changes != 1 {
+		t.Fatal("leap month navigation", ggui.Untrack(value.Get), changes)
 	}
 	p.Type(ggui.Mods{}, ggui.KeyArrowRight, ggui.KeyEnter)
-	if !value.Peek().Equal(date(2024, 3, 1)) {
-		t.Fatal("month rollover", value.Peek())
+	if !ggui.Untrack(value.Get).Equal(date(2024, 3, 1)) {
+		t.Fatal("month rollover", ggui.Untrack(value.Get))
 	}
 	c.Bounds(date(2024, 3, 1), date(2024, 3, 10)).DisabledDate(func(d time.Time) bool { return d.Weekday() == time.Saturday })
 	p.Type(ggui.Mods{}, ggui.KeyArrowRight, ggui.KeyEnter)
-	if !value.Peek().Equal(date(2024, 3, 1)) {
+	if !ggui.Untrack(value.Get).Equal(date(2024, 3, 1)) {
 		t.Fatal("disabled date selected")
 	}
 	act(t, p, ggui.RoleOption, "2024-03-03", ggui.Action{Kind: ggui.ActionSelect})
-	if !value.Peek().Equal(date(2024, 3, 3)) {
+	if !ggui.Untrack(value.Get).Equal(date(2024, 3, 3)) {
 		t.Fatal("accessible selection")
 	}
 	act(t, p, ggui.RoleOption, "2024-03-11", ggui.Action{Kind: ggui.ActionSelect})
-	if !value.Peek().Equal(date(2024, 3, 3)) {
+	if !ggui.Untrack(value.Get).Equal(date(2024, 3, 3)) {
 		t.Fatal("out of bounds selection")
 	}
 	value.Set(date(2025, 12, 15))
@@ -44,7 +44,7 @@ func TestCalendarNavigationAndConstraints(t *testing.T) {
 	c.Disabled(true)
 	p.Frame()
 	p.Type(ggui.Mods{}, ggui.KeyArrowRight, ggui.KeyEnter)
-	if !value.Peek().Equal(date(2025, 12, 15)) {
+	if !ggui.Untrack(value.Get).Equal(date(2025, 12, 15)) {
 		t.Fatal("disabled calendar")
 	}
 }
@@ -57,8 +57,8 @@ func TestDatePickerSelectionAndCancel(t *testing.T) {
 	defer p.Close()
 	p.Tap("Due date")
 	p.Tap("2024-02-29")
-	if d.Popup().IsOpen() || !v.Peek().Equal(date(2024, 2, 29)) || n != 1 {
-		t.Fatal("selection", v.Peek(), n)
+	if d.Popup().IsOpen() || !ggui.Untrack(v.Get).Equal(date(2024, 2, 29)) || n != 1 {
+		t.Fatal("selection", ggui.Untrack(v.Get), n)
 	}
 	p.Type(ggui.Mods{}, ggui.KeyEnter)
 	if !d.Popup().IsOpen() {
@@ -127,20 +127,20 @@ func TestCalendarCivilDatesAndWeekStart(t *testing.T) {
 		t.Fatal("same civil date triggered callback")
 	}
 	p.Type(ggui.Mods{}, ggui.KeyArrowRight, ggui.KeyArrowRight, ggui.KeyEnter)
-	if v.Peek().Day() != 11 || v.Peek().Hour() != 0 || v.Peek().Location() != loc {
-		t.Fatal("DST date arithmetic", v.Peek())
+	if ggui.Untrack(v.Get).Day() != 11 || ggui.Untrack(v.Get).Hour() != 0 || ggui.Untrack(v.Get).Location() != loc {
+		t.Fatal("DST date arithmetic", ggui.Untrack(v.Get))
 	}
 	p.Type(ggui.Mods{}, ggui.KeyEnd, ggui.KeyEnter)
-	if v.Peek().Day() != 17 {
-		t.Fatal("Monday week end", v.Peek())
+	if ggui.Untrack(v.Get).Day() != 17 {
+		t.Fatal("Monday week end", ggui.Untrack(v.Get))
 	}
 	p.Type(ggui.Mods{}, ggui.KeyHome, ggui.KeyEnter)
-	if v.Peek().Day() != 11 {
-		t.Fatal("Monday week start", v.Peek())
+	if ggui.Untrack(v.Get).Day() != 11 {
+		t.Fatal("Monday week start", ggui.Untrack(v.Get))
 	}
 	v.Set(time.Time{})
 	p.Frame()
-	if !v.Peek().IsZero() {
+	if !ggui.Untrack(v.Get).IsZero() {
 		t.Fatal("layout changed empty selection")
 	}
 }

@@ -12,7 +12,7 @@ type FieldWidget struct {
 	label string
 	input ggui.Widget
 	help  string
-	err   ggui.Reader[string]
+	err   ggui.Readable[string]
 
 	caption *ggui.TextWidget
 	note    *ggui.TextWidget
@@ -47,7 +47,7 @@ func (f *FieldWidget) Help(s string) *FieldWidget { f.help = s; return f }
 
 // Error follows r: while it is not empty it is shown under the input in
 // the theme's Destructive color, in place of the help text, without a rebuild.
-func (f *FieldWidget) Error(r ggui.Reader[string]) *FieldWidget { f.err = r; return f }
+func (f *FieldWidget) Error(r ggui.Readable[string]) *FieldWidget { f.err = r; return f }
 
 // Layout implements Widget.
 func (f *FieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {

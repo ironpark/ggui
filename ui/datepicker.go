@@ -24,7 +24,7 @@ func DatePicker(value ggui.Binding[time.Time]) *DatePickerWidget {
 	d.button = Button("", func() { d.popup.Toggle() }).Outline()
 	d.button.defaultName = "Choose date"
 	d.button.value = func() string {
-		if v := d.value.Peek(); !v.IsZero() {
+		if v := ggui.Untrack(d.value.Get); !v.IsZero() {
 			return d.format(d.calendar.date(v))
 		}
 		return ""
@@ -138,7 +138,7 @@ func (d *DatePickerWidget) HasName() bool { return d.button.HasName() }
 func (d *DatePickerWidget) Semantics() (ggui.Role, string) { return d.button.Semantics() }
 
 // DisabledWhen follows r and closes the popup while disabled.
-func (d *DatePickerWidget) DisabledWhen(r ggui.Reader[bool]) *DatePickerWidget {
+func (d *DatePickerWidget) DisabledWhen(r ggui.Readable[bool]) *DatePickerWidget {
 	d.button.DisabledWhen(r)
 	return d
 }

@@ -190,10 +190,10 @@ func TestAlignPlacesChildByFraction(t *testing.T) {
 }
 
 func TestStateInfersTypeFromLiteral(t *testing.T) {
-	var _ *Signal[int] = State(0)
-	var _ *Signal[string] = State("??")
-	var _ *Signal[float64] = State[float64](0)
-	var _ *Signal[Widget] = State[Widget](nil)
+	var _ *StateValue[int] = State(0)
+	var _ *StateValue[string] = State("??")
+	var _ *StateValue[float64] = State[float64](0)
+	var _ *StateValue[Widget] = State[Widget](nil)
 }
 
 func TestExpandedTakesLeftoverMainAxis(t *testing.T) {

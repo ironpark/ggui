@@ -17,8 +17,8 @@ import (
 // their own, so ticking one box re-runs only what read that box.
 type Todo struct {
 	ID    int
-	Title *ggui.Signal[string]
-	Done  *ggui.Signal[bool]
+	Title *ggui.StateValue[string]
+	Done  *ggui.StateValue[bool]
 }
 
 type filter int
@@ -75,8 +75,8 @@ func newTodoApp() *ggui.App {
 	progress := ggui.Tween(0.0, 300*time.Millisecond)
 
 	add := func() {
-		title := strings.TrimSpace(draft.Peek())
-		if title == "" || draftError.Peek() != "" {
+		title := strings.TrimSpace(ggui.Untrack(draft.Get))
+		if title == "" || ggui.Untrack(draftError.Get) != "" {
 			return
 		}
 		t := &Todo{ID: nextID, Title: ggui.State(title), Done: ggui.State(false)}
@@ -86,17 +86,21 @@ func newTodoApp() *ggui.App {
 	}
 	remove := func(id int) { ggui.Remove(todos, func(t *Todo) bool { return t.ID == id }) }
 	clearDone := func() {
-		ggui.Remove(todos, func(t *Todo) bool { return t.Done.Peek() })
+		ggui.Remove(todos, func(t *Todo) bool { return ggui.Untrack(t.Done.Get) })
 		confirm.Set(false)
 	}
 
 	// row builds one keyed row once; the checkbox and text follow the
 	// row's own signals afterwards without a rebuild.
-	row := func(item ggui.Reader[*Todo]) ggui.Widget {
+	row := func(item ggui.Readable[*Todo]) ggui.Widget {
 		td := item.Get()
 		return ggui.Row(
 			ui.Checkbox(td.Done, ""),
-			ggui.Expanded(ggui.When(td.Done, ggui.TextOf(td.Title).AsCaption(), ggui.TextOf(td.Title))),
+			ggui.Expanded(ggui.If(td.Done, func() ggui.Widget {
+				return ggui.TextOf(td.Title).AsCaption()
+			}).Else(func() ggui.Widget {
+				return ggui.TextOf(td.Title)
+			})),
 			ui.Button("×", func() { remove(td.ID) }).Outline().Pad(2, 8),
 		).Space(1)
 	}
@@ -116,7 +120,7 @@ func newTodoApp() *ggui.App {
 			).Space(1)).Help("Enter adds it").Error(draftError),
 			ui.Progress(progress).Height(4),
 			ggui.Expanded(ggui.Scroll(
-				ggui.For(visible, func(td *Todo) int { return td.ID }, row).Space(0.5).
+				ggui.EachKeyed(visible, func(td *Todo) int { return td.ID }, func(item ggui.EachItem[*Todo]) ggui.Widget { return row(item.Value) }).Space(0.5).
 					Transition(func(w ggui.Widget) *ggui.TransitionWidget {
 						return ggui.Transition(w).Fade().Slide(-16, 0)
 					}),
@@ -144,7 +148,7 @@ func newTodoApp() *ggui.App {
 	})
 
 	app.Shortcut("cmd+k", func() {
-		if anyDone.Peek() {
+		if ggui.Untrack(anyDone.Get) {
 			confirm.Set(true)
 		}
 	})

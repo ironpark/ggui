@@ -76,9 +76,9 @@ const (
 // KeyEvent is a keyboard event delivered to the focused region.
 type KeyEvent struct {
 	Kind KeyKind
-	Key  Key    // for KeyPress
-	Text string // for KeyText
-	Mods Mods   // for KeyPress
+	Key  KeyboardKey // for KeyPress
+	Text string      // for KeyText
+	Mods Mods        // for KeyPress
 }
 
 // KeyHandler receives keyboard events while its region has focus. A region
@@ -130,7 +130,7 @@ type frameInput struct {
 	down  []MouseButton
 	up    []MouseButton
 	wheel Point
-	keys  []Key // just pressed, plus repeats of held keys
+	keys  []KeyboardKey // just pressed, plus repeats of held keys
 	text  string
 	mods  Mods
 }
@@ -175,7 +175,7 @@ func (in *inputState) addShortcut(chord string, fn func()) *ShortcutHandle {
 // runChords runs the shortcuts that match k, either the ones that go
 // before the focused widget (modified or exclusive) or the rest, and
 // reports whether one ran.
-func (in *inputState) runChords(k Key, mods Mods, before bool) bool {
+func (in *inputState) runChords(k KeyboardKey, mods Mods, before bool) bool {
 	ran := false
 	ev := KeyEvent{Kind: KeyPress, Key: k, Mods: mods}
 	for _, h := range in.chords {
@@ -191,7 +191,7 @@ func (in *inputState) runChords(k Key, mods Mods, before bool) bool {
 
 // withoutShortcuts returns keys less those a shortcut consumed, copying
 // only once one has.
-func (in *inputState) withoutShortcuts(keys []Key, mods Mods) []Key {
+func (in *inputState) withoutShortcuts(keys []KeyboardKey, mods Mods) []KeyboardKey {
 	out, copied := keys, false
 	for i, k := range keys {
 		switch taken := in.shortcut(k, mods); {
@@ -206,7 +206,7 @@ func (in *inputState) withoutShortcuts(keys []Key, mods Mods) []Key {
 
 // shortcut offers a key press to the OnKey handlers and reports whether
 // one consumed it.
-func (in *inputState) shortcut(k Key, mods Mods) bool {
+func (in *inputState) shortcut(k KeyboardKey, mods Mods) bool {
 	for _, fn := range in.shortcuts {
 		if fn(KeyEvent{Kind: KeyPress, Key: k, Mods: mods}) {
 			return true
@@ -224,8 +224,8 @@ func keep(r *hitRegion) *hitRegion {
 	return &c
 }
 
-// busy holds the groups (For entries) whose regions have focus or a
-// pointer capture after the last dispatch, so For.Retain leaves them be.
+// busy holds the groups (EachKeyed entries) whose regions have focus or a
+// pointer capture after the last dispatch, so EachKeyed.Retain leaves them be.
 // It is process-wide, as one window drives input.
 var busy = map[any]bool{}
 
@@ -307,7 +307,7 @@ func (in *inputState) dispatch(f frameInput) {
 		f.keys = in.withoutShortcuts(f.keys, f.mods)
 	}
 	if len(in.chords) > 0 {
-		f.keys = slices.DeleteFunc(slices.Clone(f.keys), func(k Key) bool { return in.runChords(k, f.mods, true) })
+		f.keys = slices.DeleteFunc(slices.Clone(f.keys), func(k KeyboardKey) bool { return in.runChords(k, f.mods, true) })
 	}
 
 	if in.focused == nil {
@@ -657,7 +657,7 @@ func (p *PointerWidget) Paint(dst *Canvas, r Rect) {
 // Focus.
 type FocusWidget struct {
 	child   Widget
-	onKey   func(Key)
+	onKey   func(KeyboardKey)
 	onText  func(string)
 	onFocus func(bool)
 }
@@ -667,7 +667,7 @@ type FocusWidget struct {
 func Focus(child Widget) *FocusWidget { return &FocusWidget{child: child} }
 
 // OnKey fires once per key press while focused.
-func (f *FocusWidget) OnKey(fn func(Key)) *FocusWidget { f.onKey = fn; return f }
+func (f *FocusWidget) OnKey(fn func(KeyboardKey)) *FocusWidget { f.onKey = fn; return f }
 
 // OnText fires with the characters typed this frame while focused.
 func (f *FocusWidget) OnText(fn func(string)) *FocusWidget { f.onText = fn; return f }

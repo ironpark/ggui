@@ -40,7 +40,7 @@ func TestControlBindsToLens(t *testing.T) {
 	dark := pv.Lens(func(p prefs) bool { return p.Dark }, func(p prefs, v bool) prefs { p.Dark = v; return p })
 	p := ggui.NewProbe(ui.Switch(dark, ""), ggui.Sz(100, 30))
 	p.Click(ggui.Pt(5, 5))
-	if !pv.Peek().Dark {
+	if !ggui.Untrack(pv.Get).Dark {
 		t.Fatal("switch did not write through the lens")
 	}
 }

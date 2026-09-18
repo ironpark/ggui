@@ -132,8 +132,8 @@ func TestInputGroupFocusesTheEditorFromItsPadding(t *testing.T) {
 		t.Fatal("clicking the chrome beside the editor did not focus it")
 	}
 	p.Type(ggui.Mods{}, ggui.KeyDelete)
-	if value.Peek() != "b" {
-		t.Fatalf("keys did not reach the editor: %q", value.Peek())
+	if ggui.Untrack(value.Get) != "b" {
+		t.Fatalf("keys did not reach the editor: %q", ggui.Untrack(value.Get))
 	}
 	p.Tap("Go")
 	if visits != 1 {
@@ -199,27 +199,27 @@ func TestToggleGroupPicksWithThePointerAndTheArrows(t *testing.T) {
 	p := ggui.NewProbe(g, ggui.Sz(300, 40))
 	defer p.Close()
 	p.Tap("center")
-	if value.Peek() != "center" || changes != 1 {
-		t.Fatalf("pointer: value=%q changes=%d", value.Peek(), changes)
+	if ggui.Untrack(value.Get) != "center" || changes != 1 {
+		t.Fatalf("pointer: value=%q changes=%d", ggui.Untrack(value.Get), changes)
 	}
 	if node, ok := p.Semantics().Find(ggui.RoleRadio, "center"); !ok || node.Checked != ggui.TriOn {
 		t.Fatal("the chosen segment is not marked")
 	}
 	p.Type(ggui.Mods{}, ggui.KeyArrowRight)
-	if value.Peek() != "right" {
-		t.Fatalf("right arrow: %q", value.Peek())
+	if ggui.Untrack(value.Get) != "right" {
+		t.Fatalf("right arrow: %q", ggui.Untrack(value.Get))
 	}
 	p.Type(ggui.Mods{}, ggui.KeyArrowRight)
-	if value.Peek() != "left" {
-		t.Fatalf("the choice does not wrap: %q", value.Peek())
+	if ggui.Untrack(value.Get) != "left" {
+		t.Fatalf("the choice does not wrap: %q", ggui.Untrack(value.Get))
 	}
 	p.Type(ggui.Mods{}, ggui.KeyEnd)
-	if value.Peek() != "right" {
-		t.Fatalf("End: %q", value.Peek())
+	if ggui.Untrack(value.Get) != "right" {
+		t.Fatalf("End: %q", ggui.Untrack(value.Get))
 	}
 	p.Type(ggui.Mods{}, ggui.KeyHome)
-	if value.Peek() != "left" {
-		t.Fatalf("Home: %q", value.Peek())
+	if ggui.Untrack(value.Get) != "left" {
+		t.Fatalf("Home: %q", ggui.Untrack(value.Get))
 	}
 	was := changes
 	p.Type(ggui.Mods{}, ggui.KeySpace)
@@ -252,7 +252,7 @@ func TestSheetSlidesInFromItsEdgeAndClosesOnTheScrim(t *testing.T) {
 		t.Fatalf("the sheet did not settle against the right edge: %+v", save)
 	}
 	p.Click(ggui.Pt(20, 150))
-	if open.Peek() {
+	if ggui.Untrack(open.Get) {
 		t.Fatal("a click on the scrim did not close the sheet")
 	}
 	p.Advance(400 * time.Millisecond)
@@ -284,16 +284,16 @@ func TestSidebarNavigatesWithThePointerAndTheArrows(t *testing.T) {
 	p := ggui.NewProbe(ggui.Row(bar, ggui.Expanded(ggui.Box())), ggui.Sz(600, 400))
 	defer p.Close()
 	p.Tap("Sent")
-	if page.Peek() != "sent" {
-		t.Fatalf("pointer: %q", page.Peek())
+	if ggui.Untrack(page.Get) != "sent" {
+		t.Fatalf("pointer: %q", ggui.Untrack(page.Get))
 	}
 	if _, ok := p.FindRole(ggui.RoleTab, "Spam"); ok {
 		t.Fatal("a disabled destination takes input")
 	}
 	p.Type(ggui.Mods{}, ggui.KeyArrowDown)
 	p.Type(ggui.Mods{}, ggui.KeyEnter)
-	if page.Peek() != "inbox" {
-		t.Fatalf("the arrows skip the heading and the disabled item: %q", page.Peek())
+	if ggui.Untrack(page.Get) != "inbox" {
+		t.Fatalf("the arrows skip the heading and the disabled item: %q", ggui.Untrack(page.Get))
 	}
 	if node, ok := p.Semantics().Find(ggui.RoleTab, "Inbox"); !ok || !node.Selected {
 		t.Fatal("the current destination is not marked")
@@ -320,23 +320,23 @@ func TestAlertDialogHasToBeAnswered(t *testing.T) {
 	defer p.Close()
 	p.Frame()
 	p.Click(ggui.Pt(4, 4))
-	if !open.Peek() || cancelled != 0 {
+	if !ggui.Untrack(open.Get) || cancelled != 0 {
 		t.Fatal("a click on the scrim dismissed the question")
 	}
 	p.Tap("Keep")
-	if open.Peek() || cancelled != 1 || deleted != 0 {
-		t.Fatalf("cancel: open=%v cancelled=%d deleted=%d", open.Peek(), cancelled, deleted)
+	if ggui.Untrack(open.Get) || cancelled != 1 || deleted != 0 {
+		t.Fatalf("cancel: open=%v cancelled=%d deleted=%d", ggui.Untrack(open.Get), cancelled, deleted)
 	}
 	open.Set(true)
 	p.Frame()
 	p.Tap("Delete")
-	if open.Peek() || deleted != 1 || cancelled != 1 {
-		t.Fatalf("confirm: open=%v cancelled=%d deleted=%d", open.Peek(), cancelled, deleted)
+	if ggui.Untrack(open.Get) || deleted != 1 || cancelled != 1 {
+		t.Fatalf("confirm: open=%v cancelled=%d deleted=%d", ggui.Untrack(open.Get), cancelled, deleted)
 	}
 	open.Set(true)
 	p.Frame()
 	p.Type(ggui.Mods{}, ggui.KeyEscape)
-	if open.Peek() || cancelled != 2 {
-		t.Fatalf("escape: open=%v cancelled=%d", open.Peek(), cancelled)
+	if ggui.Untrack(open.Get) || cancelled != 2 {
+		t.Fatalf("escape: open=%v cancelled=%d", ggui.Untrack(open.Get), cancelled)
 	}
 }

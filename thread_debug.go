@@ -11,7 +11,7 @@ import (
 )
 
 // Signals, effects, layout and paint all belong to the UI goroutine, and a
-// write from another one races the frame however carefully Signal locks its
+// write from another one races the frame however carefully StateValue locks its
 // own value: the dirty marks it leaves are not guarded at all, and the frame
 // may already have laid out the tree that write should have changed. A
 // goroutine hands its result back with App.Post instead.

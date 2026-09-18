@@ -9,14 +9,15 @@ func BenchmarkForFrame(b *testing.B) {
 	for _, n := range []int{1000, 10000} {
 		for _, changed := range []bool{false, true} {
 			b.Run(fmt.Sprintf("rows=%d/changed=%t", n, changed), func(b *testing.B) {
-				values := make([]*Signal[int], n)
+				values := make([]*StateValue[int], n)
 				ids := make([]int, n)
 				for i := range ids {
 					ids[i], values[i] = i, State(0)
 				}
 				items := State(ids)
 				p := ProbeBuilder(func() Widget {
-					return For(items, func(id int) int { return id }, func(item Reader[int]) Widget {
+					return EachKeyed(items, func(id int) int { return id }, func(rowItem EachItem[int]) Widget {
+						item := rowItem.Value
 						return Reactive(func() Widget { return Box().Size(float64(values[item.Get()].Get()%7+1), 1) })
 					})
 				}, Sz(100, 100))

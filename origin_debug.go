@@ -12,16 +12,16 @@ import (
 // the effect being registered, so that a cycle can name the effects it is
 // made of. Only this build records it; see ErrCycle.
 func effectOrigin() string {
-	var pcs [8]uintptr
-	n := runtime.Callers(3, pcs[:])
+	var pcs [32]uintptr
+	n := runtime.Callers(2, pcs[:])
 	frames := runtime.CallersFrames(pcs[:n])
 	for {
 		f, more := frames.Next()
-		if f.Function != "" && !isGgui(f.Function) {
+		if f.Function != "" && (strings.HasSuffix(f.File, "_test.go") || !isGgui(f.Function)) {
 			return f.File + ":" + strconv.Itoa(f.Line)
 		}
 		if !more {
-			// Everything on the stack is ggui's own: report the innermost
+			// Everything on the stack is ggui's own: report the last available
 			// frame rather than nothing, which still says where to look.
 			return f.File + ":" + strconv.Itoa(f.Line)
 		}

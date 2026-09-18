@@ -146,7 +146,7 @@ func (g *ToggleGroupWidget[T]) Vertical() *ToggleGroupWidget[T] { g.vertical = t
 func (g *ToggleGroupWidget[T]) Disabled(v bool) *ToggleGroupWidget[T] { g.SetInert(v); return g }
 
 // DisabledWhen follows r for Disabled without a rebuild.
-func (g *ToggleGroupWidget[T]) DisabledWhen(r ggui.Reader[bool]) *ToggleGroupWidget[T] {
+func (g *ToggleGroupWidget[T]) DisabledWhen(r ggui.Readable[bool]) *ToggleGroupWidget[T] {
 	g.InertWhen(r)
 	return g
 }
@@ -156,7 +156,7 @@ func (g *ToggleGroupWidget[T]) OnChange(fn func(T)) *ToggleGroupWidget[T] { g.on
 
 // index returns the segment the binding currently names, or -1.
 func (g *ToggleGroupWidget[T]) index() int {
-	cur := g.value.Peek()
+	cur := ggui.Untrack(g.value.Get)
 	for i, o := range g.options {
 		if o == cur {
 			return i

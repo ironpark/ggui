@@ -18,17 +18,17 @@ import (
 // model holds one signal per piece of state. Each field is its own reactive
 // cell, so a change to Count re-runs only what read Count.
 type model struct {
-	Count *ggui.Signal[int]
-	Step  *ggui.Signal[int]
-	Dark  *ggui.Signal[bool]
+	Count *ggui.StateValue[int]
+	Step  *ggui.StateValue[int]
+	Dark  *ggui.StateValue[bool]
 }
 
 func newModel() model {
 	return model{Count: ggui.State(0), Step: ggui.State(1), Dark: ggui.State(true)}
 }
 
-func (m model) add()  { ggui.Add(m.Count, m.Step.Peek()) }
-func (m model) sub()  { ggui.Add(m.Count, -m.Step.Peek()) }
+func (m model) add()  { ggui.Add(m.Count, ggui.Untrack(m.Step.Get)) }
+func (m model) sub()  { ggui.Add(m.Count, -ggui.Untrack(m.Step.Get)) }
 func (m model) up()   { ggui.Add(m.Step, 1) }
 func (m model) down() { m.Step.Update(func(s int) int { return max(s-1, 1) }) }
 

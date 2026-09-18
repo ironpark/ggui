@@ -44,7 +44,7 @@ type CommandWidget struct {
 	field              *TextFieldWidget
 	results            *commandResults
 	scroll             *ggui.ScrollWidget
-	offset             *ggui.Signal[float64]
+	offset             *ggui.StateValue[float64]
 	panel              *ggui.BoxWidget
 	body               *ggui.ColumnWidget
 	matched            []int

@@ -56,7 +56,7 @@ func (g *RadiosWidget[T]) Disabled(v bool) *RadiosWidget[T] {
 }
 
 // DisabledWhen follows r for Disabled without a rebuild.
-func (g *RadiosWidget[T]) DisabledWhen(r ggui.Reader[bool]) *RadiosWidget[T] {
+func (g *RadiosWidget[T]) DisabledWhen(r ggui.Readable[bool]) *RadiosWidget[T] {
 	g.InertWhen(r)
 	return g
 }

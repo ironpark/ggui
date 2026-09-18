@@ -34,7 +34,7 @@ func (r *RadioWidget[T]) OnChange(fn func(T)) *RadioWidget[T] { r.onChange = fn;
 func (r *RadioWidget[T]) Disabled(v bool) *RadioWidget[T] { r.SetInert(v); return r }
 
 // DisabledWhen follows r for Disabled without a rebuild.
-func (r *RadioWidget[T]) DisabledWhen(when ggui.Reader[bool]) *RadioWidget[T] {
+func (r *RadioWidget[T]) DisabledWhen(when ggui.Readable[bool]) *RadioWidget[T] {
 	r.InertWhen(when)
 	return r
 }
@@ -42,7 +42,7 @@ func (r *RadioWidget[T]) DisabledWhen(when ggui.Reader[bool]) *RadioWidget[T] {
 // Describe implements ggui.Describer: an option reports whether the group
 // currently holds its value.
 func (r *RadioWidget[T]) Describe() ggui.Node {
-	on := r.selected.Peek() == r.value
+	on := ggui.Untrack(r.selected.Get) == r.value
 	return ggui.Node{
 		Role:     ggui.RoleRadio,
 		Name:     r.Name,
@@ -64,7 +64,7 @@ func (r *RadioWidget[T]) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 	box := r.paint(dst, rect, r)
 	center := ggui.Pt(box.Origin.X+box.Size.W/2, box.Origin.Y+box.Size.H/2)
 	radius := box.Size.W / 2
-	on := r.selected.Peek() == r.value
+	on := ggui.Untrack(r.selected.Get) == r.value
 	switch {
 	case r.Inert:
 		dst.FillCircle(center, radius, t.Border)

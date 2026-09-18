@@ -11,7 +11,7 @@ func TestCloseDisposesEverythingBuilt(t *testing.T) {
 	n := State(0)
 	runs := 0
 	p := ProbeBuilder(func() Widget {
-		Effect(func() { n.Get(); runs++ })
+		observe(func() { n.Get(); runs++ })
 		return Box()
 	}, Sz(10, 10)).Setup(func() {
 		Watch(n, func(int) { runs++ })
@@ -38,7 +38,7 @@ func TestAdvanceStepsAnimations(t *testing.T) {
 	tw.Set(100)
 	p.Advance(0) // the first step takes the start time
 	p.Advance(250 * time.Millisecond)
-	if got := tw.Peek(); got != 25 {
+	if got := Untrack(tw.Get); got != 25 {
 		t.Fatalf("value after 250ms = %v, want 25", got)
 	}
 	if Now() != p.now {
@@ -49,7 +49,7 @@ func TestAdvanceStepsAnimations(t *testing.T) {
 func TestPostRunsBeforeTheFrame(t *testing.T) {
 	n := State(0)
 	var seen []int
-	p := ProbeBuilder(func() Widget { seen = append(seen, n.Get()); return Box() }, Sz(10, 10))
+	p := ProbeBuilder(func() Widget { return Reactive(func() Widget { seen = append(seen, n.Get()); return Box() }) }, Sz(10, 10))
 	defer p.Close()
 	p.Frame()
 	p.Post(func() { n.Set(1) })
@@ -62,7 +62,7 @@ func TestPostRunsBeforeTheFrame(t *testing.T) {
 func TestCycleIsReported(t *testing.T) {
 	n := State(0)
 	p := ProbeBuilder(func() Widget { return Box() }, Sz(10, 10)).Setup(func() {
-		Effect(func() { n.Set(n.Get() + 1) })
+		observe(func() { n.Set(n.Get() + 1) })
 	})
 	defer p.Close()
 	defer func() {
@@ -86,7 +86,7 @@ func TestCycleIsReported(t *testing.T) {
 func TestCycleSaysHowToNameTheEffects(t *testing.T) {
 	n := State(0)
 	p := ProbeBuilder(func() Widget { return Box() }, Sz(10, 10)).Setup(func() {
-		Effect(func() { n.Set(n.Get() + 1) })
+		observe(func() { n.Set(n.Get() + 1) })
 	})
 	defer p.Close()
 	defer func() {
@@ -110,7 +110,7 @@ func TestCycleSaysHowToNameTheEffects(t *testing.T) {
 }
 
 func TestProbeLayoutFollowsSetupAndThemeChanges(t *testing.T) {
-	old := theme.Peek()
+	old := Untrack(theme.Get)
 	defer SetTheme(old)
 	dark := State(true)
 	var seen Theme
@@ -191,9 +191,9 @@ func TestCloseRejectsLatePostedWork(t *testing.T) {
 // down from main.
 func TestUIThreadCarriesAResultBackIntoAComponent(t *testing.T) {
 	done := make(chan struct{})
-	var text *Signal[string]
+	var text *StateValue[string]
 	p := ProbeBuilder(func() Widget {
-		return Component(func() Builder {
+		return Component(func() Widget {
 			loaded := State("loading")
 			text = loaded
 			post := UIThread()
@@ -201,18 +201,18 @@ func TestUIThreadCarriesAResultBackIntoAComponent(t *testing.T) {
 				post(func() { loaded.Set("done") })
 				close(done)
 			}()
-			return func() Widget { return Text(loaded.Get()) }
+			return Reactive(func() Widget { return Text(loaded.Get()) })
 		})
 	}, Sz(100, 20))
 	defer p.Close()
 
 	p.Frame() // first layout runs setup, which starts the goroutine
 	<-done
-	if got := text.Peek(); got != "loading" {
+	if got := Untrack(text.Get); got != "loading" {
 		t.Fatalf("the posted write landed before a frame ran it: %q", got)
 	}
 	p.Frame()
-	if got := text.Peek(); got != "done" {
+	if got := Untrack(text.Get); got != "done" {
 		t.Fatalf("after a frame the value is %q, want done", got)
 	}
 }

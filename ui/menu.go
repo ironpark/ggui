@@ -243,7 +243,7 @@ func (it *MenuItemWidget) Shortcut(s string) *MenuItemWidget {
 func (it *MenuItemWidget) Disabled(v bool) *MenuItemWidget { it.SetInert(v); return it }
 
 // DisabledWhen follows r for Disabled without a rebuild.
-func (it *MenuItemWidget) DisabledWhen(r ggui.Reader[bool]) *MenuItemWidget {
+func (it *MenuItemWidget) DisabledWhen(r ggui.Readable[bool]) *MenuItemWidget {
 	it.InertWhen(r)
 	return it
 }
@@ -320,7 +320,7 @@ func (m *MenuWidget) SetName(s string) { m.Named(s) }
 func (m *MenuWidget) HasName() bool { return m.button.HasName() }
 
 // DisabledWhen follows r and closes the popup while disabled.
-func (m *MenuWidget) DisabledWhen(r ggui.Reader[bool]) *MenuWidget {
+func (m *MenuWidget) DisabledWhen(r ggui.Readable[bool]) *MenuWidget {
 	m.button.DisabledWhen(r)
 	return m
 }

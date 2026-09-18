@@ -94,8 +94,8 @@ func TestScrollOffsetBinding(t *testing.T) {
 	s := Scroll(tall(nil, &painted)).Offset(pos)
 	pos.Set(1000)
 	size := s.Layout(Loose(Sz(100, 120)), Env{})
-	if pos.Peek() != 180 {
-		t.Fatalf("bound offset = %v after layout, want clamped 180", pos.Peek())
+	if Untrack(pos.Get) != 180 {
+		t.Fatalf("bound offset = %v after layout, want clamped 180", Untrack(pos.Get))
 	}
 	s.Paint(nil, Rct(Pt(0, 0), size))
 	if painted[2].Origin.Y != 20 {

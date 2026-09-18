@@ -13,20 +13,20 @@ import (
 // the one Ebitengine calls Update and Draw on. A goroutine that has a
 // result hands it back with App.Post (Probe.Post in tests), and the posted
 // function runs on the UI thread before the next frame's input. The mutexes
-// inside Signal and the effect set are cheap protection against a stray
+// inside StateValue and the effect set are cheap protection against a stray
 // read from another goroutine, not a license to write from one: Set and
 // Update from a goroutine race with the frame, so post them instead.
 
 // ErrCycle is what App.Run returns, and Probe panics with, when the effects
-// of a frame never settle: an Effect writes a Signal that, through other
+// of a frame never settle: an Effect writes a StateValue that, through other
 // effects and memos, marks the same Effect dirty again. Break the loop with
-// Untrack or Peek on the read that should not subscribe.
+// Untrack on the read that should not subscribe.
 //
 // The value carries which effects the cycle runs through, so match it with
 // errors.Is(err, ggui.ErrCycle) rather than ==, and print the error itself
 // for the detail. Build with -tags ggui_debug and each one is named by the
 // file and line that created it.
-var ErrCycle = errors.New("ggui: effects did not settle after " + itoa(maxFlushPasses) + " passes; an Effect is writing a Signal it reads")
+var ErrCycle = errors.New("ggui: effects did not settle after " + itoa(maxFlushPasses) + " passes; an Effect is writing a StateValue it reads")
 
 // cycleError is ErrCycle with the effects that would not settle.
 type cycleError struct{ msg string }
@@ -78,6 +78,7 @@ type frameLoop struct {
 	build   Builder
 	setup   []func()
 	root    Widget
+	owner   *effect
 	dispose func()
 	closed  bool
 
@@ -143,34 +144,16 @@ func (r *frameLoop) semantics() *SemTree {
 // start a frame is the one a component built in that frame belongs to.
 var running atomic.Pointer[frameLoop]
 
-// UIThread returns the function that runs work on the UI goroutine of the
-// app being built now. It is App.Post reached from inside a component, where
-// the App itself is not at hand.
-//
-// Call UIThread while the tree is being built -- in a Component's setup, a
-// Builder or an Effect -- and call what it returns from the goroutine that
-// has the result:
-//
-//	ggui.Component(func() ggui.Builder {
-//		rows, loading := ggui.State[[]Row](nil), ggui.State(true)
-//		post := ggui.UIThread()
-//		go func() {
-//			found := fetch()
-//			post(func() { rows.Set(found); loading.Set(false) })
-//		}()
-//		return func() ggui.Widget { ... }
-//	})
-//
-// The function it returns is safe to keep and to call from anywhere, as
-// often as the work has results to report. Work posted after the app closes
-// is dropped. UIThread itself belongs on the UI goroutine and panics when no
-// app is building, where there would be nothing to post to.
-func UIThread() func(fn func()) {
-	r := running.Load()
-	if r == nil {
-		panic("ggui: UIThread called outside a frame; call it while the tree is being built, from setup, a Builder or an Effect")
+// UIThread returns the current owner's dispatcher. Capture it during app or
+// component setup, then call it from a worker to deliver immutable results.
+// App closure drops queued work; use Resource for component-scoped cancellation.
+func UIThread() func(func()) {
+	checkUIThread("UIThread")
+	owner := currentOwner()
+	if owner == nil || owner.loop == nil {
+		panic("ggui: UIThread requires an app or mounted component owner")
 	}
-	return r.post
+	return owner.loop.post
 }
 
 // start runs the setup functions and the builder under a fresh root owner.
@@ -178,12 +161,13 @@ func UIThread() func(fn func()) {
 func (r *frameLoop) start() {
 	running.Store(r)
 	r.dispose = Root(func() {
+		currentOwner().loop = r
+		r.owner = currentOwner()
 		for _, fn := range r.setup {
 			fn()
 		}
-		// The tree is rebuilt through an Effect, so every signal read
-		// during build rebuilds the tree when it changes.
-		Effect(func() { r.root = r.build() })
+		// Root setup runs once. Reactive blocks own subsequent updates.
+		r.root = r.build()
 	})
 	r.setup = nil
 }
@@ -244,8 +228,8 @@ func (r *frameLoop) tick(now time.Time) error {
 
 // needsLayout reports whether the tree must be laid out again for a
 // viewport of the given logical size, and records that it will be: when
-// the viewport changed size, or a Signal was written or Invalidate called
-// since the last layout. A rebuilt root is covered, since only a Signal
+// the viewport changed size, or a StateValue was written or Invalidate called
+// since the last layout. A rebuilt root is covered, since only a StateValue
 // write rebuilds it. Hover and press live outside signals and only change
 // how a widget paints, so a still frame costs no layout.
 func (r *frameLoop) needsLayout(logical Size) bool {
@@ -255,4 +239,29 @@ func (r *frameLoop) needsLayout(logical Size) bool {
 	}
 	r.laidSize, r.laidGen = logical, gen
 	return true
+}
+
+// settle completes structural work, including mounts discovered by layout,
+// before running user effects. Both App and Probe use this exact ordering.
+func (r *frameLoop) settle(size Size) error {
+	running.Store(r)
+	for range maxFlushPasses {
+		if r.closed {
+			return nil
+		}
+		if !effects.flush() {
+			return cycle()
+		}
+		before := stateGen
+		if r.root != nil && r.needsLayout(size) {
+			withOwner(r.owner, func() { r.rootSize = r.root.Layout(Tight(size), rootEnv()) })
+		}
+		if effects.dirtyGen != effects.settledGen || stateGen != before {
+			continue
+		}
+		if !effects.flushUsers(r) {
+			return nil
+		}
+	}
+	return cycle()
 }

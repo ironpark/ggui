@@ -50,7 +50,7 @@ type TranscriptVisibility struct {
 // first nonempty transcript opens at the end without painting at the wrong edge.
 type MessageScrollerWidget struct {
 	ggui.Interactive
-	source                                                        ggui.Reader[[]MessageEntry]
+	source                                                        ggui.Readable[[]MessageEntry]
 	rows                                                          []MessageEntry
 	starts                                                        []float64
 	sizes                                                         []ggui.Size
@@ -73,7 +73,7 @@ type MessageScrollerWidget struct {
 	pause                                                         func()
 }
 
-func MessageScroller(items ggui.Reader[[]MessageEntry]) *MessageScrollerWidget {
+func MessageScroller(items ggui.Readable[[]MessageEntry]) *MessageScrollerWidget {
 	s := &MessageScrollerWidget{source: items, height: 320, gap: 32, peek: 64, threshold: 8, opening: ScrollEnd, duration: 200 * time.Millisecond}
 	s.Role, s.Name = ggui.RoleGroup, "Conversation"
 	s.AutoKey()

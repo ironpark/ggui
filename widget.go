@@ -10,117 +10,42 @@ type Widget interface {
 	Paint(dst *Canvas, r Rect)
 }
 
-// Builder turns state into a Widget tree. It runs inside an Effect, so it
-// re-runs when the signals it reads change. A plain function that returns a
-// Widget is the simplest component; Component and Reactive give a subtree its
-// own Effect so it rebuilds without its parent.
+// Builder constructs a widget tree. App and Component setup run once;
+// Reactive and View explicitly rerun a builder when its dependencies change.
 type Builder func() Widget
 
 // ComponentWidget is a subtree with its own rebuild boundary. Build one with
-// Component, Keyed, Mount or Reactive.
+// Component, Key or Reactive.
 type ComponentWidget struct {
 	child Widget
 	// A rebuild boundary is a layout boundary too: the subtree is measured
 	// again when this component rebuilds, when the constraints or the
 	// inherited Env change, or when something inside calls Invalidate.
-	// Without it every Signal write re-measured the whole tree, since the
+	// Without it every StateValue write re-measured the whole tree, since the
 	// runtime lays out from the root whenever anything was written.
 	cw    CachedWidget
 	mount func() // runs setup at the first Layout; nil once mounted
 }
 
-// mounted is a keyed component's instance, kept by the owner effect across
-// its re-runs.
-type mounted struct {
-	comp    *ComponentWidget
-	props   any // *Signal[P]
-	dispose func()
-}
-
-// Component runs setup once, at the component's first Layout, and then
-// runs the Builder it returns in an effect of its own. State created in
-// setup lives as long as the parent's tree keeps this component: a rebuild
-// of the parent makes a new one (see Keyed to survive that). Only the
-// Builder re-runs when the signals it reads change:
-//
-//	func button(label string, onTap func()) ggui.Widget {
-//		return ggui.Component(func() ggui.Builder {
-//			hovered := ggui.State(false)
-//			return func() ggui.Widget {
-//				return ggui.Pointer(ggui.Text(label)).OnTap(onTap).OnHover(hovered.Set)
-//			}
-//		})
-//	}
-//
-// setup runs untracked under an owner of its own, so it may call OnCleanup
-// and the signals it reads do not subscribe the parent. A component that is
-// never laid out never runs setup.
-func Component(setup func() Builder) *ComponentWidget {
+// Component runs setup once when mounted. Reads in setup are untracked;
+// use bindings, View, Reactive or control-flow blocks for later changes.
+func Component(setup func() Widget) *ComponentWidget {
 	c := &ComponentWidget{}
 	owner := currentOwner()
 	c.mount = func() {
 		if owner != nil && owner.disposed {
 			return
 		}
-		withOwner(owner, func() { Root(func() { c.run(setup()) }) })
-	}
-	return c
-}
-
-// run starts the Builder's effect.
-func (c *ComponentWidget) run(build Builder) {
-	Effect(func() {
-		c.child = build()
-		c.cw.child = c.child
-		// Invalidate this component's cache and every one above it.
-		c.cw.invalidate()
-	})
-}
-
-// Keyed is a Component that survives a rebuild of its parent: the owner
-// effect keeps one instance per key across its runs, so a run that
-// constructs Keyed with the same key gets the mounted instance back, with
-// its local state, effects and focus. Keys are unique within one Builder;
-// a key used twice in one run panics. An instance the next run does not
-// construct again is disposed.
-//
-// Controls, TextInput, Scroll, Popup and Transition constructed inside a
-// keyed component take an identity from it, the mount instance plus their place in
-// construction order, so they keep hit regions, retained state and
-// adoption across the component's rebuilds without a Key of their own.
-func Keyed(key any, setup func() Builder) *ComponentWidget {
-	return Mount(key, struct{}{}, func(*Signal[struct{}]) Builder { return setup() })
-}
-
-// Mount is Keyed with props: the values the parent passes on each rebuild.
-// Setup receives them as a Signal that Mount writes on every claim, so read
-// props through it rather than capturing them.
-//
-//	ggui.Mount(id, todo, func(todo *ggui.Signal[Todo]) ggui.Builder {
-//		return func() ggui.Widget { return ggui.Text(todo.Get().Title) }
-//	})
-func Mount[P any](key any, props P, setup func(*Signal[P]) Builder) *ComponentWidget {
-	owner := currentOwner()
-	if owner == nil {
-		return Component(func() Builder { return setup(State(props)) })
-	}
-	if m := owner.claim(key); m != nil {
-		m.props.(*Signal[P]).Set(props)
-		return m.comp
-	}
-	sig := State(props)
-	c := &ComponentWidget{}
-	m := &mounted{comp: c, props: sig}
-	c.mount = func() {
-		if owner.disposed {
-			return
+		if owner == nil {
+			owner = currentOwner()
 		}
-		// Under no owner: the instance belongs to the registry, not to the
-		// run that constructed it, so the parent's re-run leaves it alone.
-		withOwner(nil, func() { m.dispose = rootWith(m, "", func() { c.run(setup(sig)) }) })
+		withOwner(owner, func() {
+			rootWith(c, "", func() {
+				c.child = setup()
+				c.cw.child = c.child
+			})
+		})
 	}
-	m.dispose = func() {}
-	owner.keep(key, m)
 	return c
 }
 
@@ -129,7 +54,7 @@ func Mount[P any](key any, props P, setup func(*Signal[P]) Builder) *ComponentWi
 // parent's Builder static so the components it holds survive.
 func Reactive[W Widget](build func() W) *ComponentWidget {
 	c := &ComponentWidget{}
-	Effect(func() {
+	observe(func() {
 		c.child = build()
 		c.cw.child = c.child
 		c.cw.invalidate()
@@ -142,72 +67,109 @@ func Reactive[W Widget](build func() W) *ComponentWidget {
 //
 //	ggui.View(label, ggui.Text)
 //	ggui.View(rows, func(r []Row) *ggui.ColumnWidget { return ggui.List(r, rowWidget) })
-func View[T any, W Widget](r Reader[T], build func(T) W) Widget {
+func View[T any, W Widget](r Readable[T], build func(T) W) Widget {
 	return Reactive(func() Widget { return build(r.Get()) })
 }
 
-// IfWidget shows the first branch whose condition holds, the Else branch
-// when none does, or nothing. Branches are constructed once, up front, so
-// the one shown keeps its state while the others wait. Build one with If.
+// IfWidget mounts only the selected branch and disposes it on exit.
 type IfWidget struct {
 	comp     *ComponentWidget
 	branches []ifBranch
-	other    Widget
+	other    func() Widget
+	mounted  bool
 }
-
 type ifBranch struct {
-	cond Reader[bool]
-	then Widget
+	cond Readable[bool]
+	then func() Widget
 }
 
-// If shows then while cond is true. ElseIf and Else add branches, read in
-// order; without an Else nothing is shown when no condition holds:
-//
-//	ggui.If(loading, ui.Spinner()).
-//		ElseIf(failed, ggui.Text("Could not load")).
-//		Else(ggui.View(rows, resultTable))
-//
-// The choice is made in an effect of its own that starts at the first
-// Layout, once the chain is complete, so every condition is subscribed and
-// the parent does not rebuild when one changes. A branch that can only be
-// constructed while its condition holds goes through Component, which
-// builds at the first Layout:
-//
-//	ggui.If(signedIn, ggui.Component(func() ggui.Builder {
-//		return func() ggui.Widget { return profile(user.Get()) }
-//	}))
-func If(cond Reader[bool], then Widget) *IfWidget {
+// If creates a conditional block. Finish configuring its branches before mount.
+func If(cond Readable[bool], then func() Widget) *IfWidget {
 	w := &IfWidget{branches: []ifBranch{{cond, then}}}
-	w.comp = Component(func() Builder { return w.pick })
+	w.comp = Component(func() Widget {
+		w.mounted = true
+		selected := Derived(func() int {
+			for i, branch := range w.branches {
+				if branch.cond.Get() {
+					return i
+				}
+			}
+			return len(w.branches)
+		})
+		return Key(selected, func(index int) Widget {
+			if index == len(w.branches) {
+				if w.other != nil {
+					return w.other()
+				}
+				return nil
+			}
+			return w.branches[index].then()
+		})
+	})
 	return w
 }
-
-// ElseIf adds a branch tried when every earlier condition is false.
-func (w *IfWidget) ElseIf(cond Reader[bool], then Widget) *IfWidget {
+func (w *IfWidget) ElseIf(cond Readable[bool], then func() Widget) *IfWidget {
+	if w.mounted {
+		panic("ggui: If configured after mount")
+	}
 	w.branches = append(w.branches, ifBranch{cond, then})
 	return w
 }
-
-// Else sets what is shown when no condition holds.
-func (w *IfWidget) Else(other Widget) *IfWidget { w.other = other; return w }
-
-// pick reads the conditions up to the first true one, so the effect re-runs
-// only when a condition that mattered changes.
-func (w *IfWidget) pick() Widget {
-	for _, b := range w.branches {
-		if b.cond.Get() {
-			return b.then
-		}
+func (w *IfWidget) Else(other func() Widget) *IfWidget {
+	if w.mounted {
+		panic("ggui: If configured after mount")
 	}
-	return w.other // nil lays out as nothing
+	w.other = other
+	return w
+}
+func (w *IfWidget) current() Widget { return blockChild(w.comp) }
+func (w *IfWidget) absent() bool    { return w.current() == nil }
+
+// blockChild unwraps component boundaries, including an empty branch.
+func blockChild(w Widget) Widget {
+	for {
+		c, ok := w.(*ComponentWidget)
+		if !ok {
+			return w
+		}
+		w = c.child
+	}
 }
 
-// current is the branch shown, for tests.
-func (w *IfWidget) current() Widget { return w.comp.child }
-
-// absent implements vacant: an If showing no branch takes no gap in a
-// Column, Row or Wrap, as if it were not there.
-func (w *IfWidget) absent() bool { return w.comp.child == nil }
+// Key recreates a subtree whenever its key changes. The branch factory is
+// untracked and runs once per key; it owns all computations it creates.
+func Key[K comparable](key Readable[K], build func(K) Widget) *ComponentWidget {
+	return Component(func() Widget {
+		c := &ComponentWidget{}
+		var previous K
+		var initialized bool
+		var dispose Cleanup
+		owner := currentOwner()
+		OnCleanup(func() {
+			if dispose != nil {
+				dispose()
+			}
+		})
+		observe(func() {
+			value := key.Get()
+			if initialized && value == previous {
+				return
+			}
+			if dispose != nil {
+				dispose()
+				dispose = nil
+			}
+			previous, initialized = value, true
+			withOwner(owner, func() {
+				// A unique root gives remounted controls fresh identities.
+				identity := new(int)
+				dispose = rootWith(identity, "", func() { c.child = build(value); c.cw.child = c.child })
+			})
+			c.cw.invalidate()
+		})
+		return c
+	})
+}
 
 // vacant is reported by a widget that currently shows nothing, so the flow
 // around it leaves out the gap it would otherwise place beside it. It is
@@ -232,18 +194,9 @@ func (w *IfWidget) Layout(c Constraints, env Env) Size {
 // lists the branch under the If rather than under an extra Component.
 func (w *IfWidget) Paint(dst *Canvas, r Rect) { w.comp.Paint(dst, r) }
 
-// When is If with a single Else: then while cond is true, otherwise (or
-// nothing) while it is false.
-func When(cond Reader[bool], then Widget, otherwise ...Widget) Widget {
-	w := If(cond, then)
-	if len(otherwise) > 0 {
-		w.Else(otherwise[0])
-	}
-	return w
-}
-
 // Layout implements Widget.
 func (c *ComponentWidget) Layout(cs Constraints, env Env) Size {
+	c.cw.outer, _ = env.Get(cacheOwner)
 	if c.mount != nil {
 		c.mount()
 		c.mount = nil
@@ -286,3 +239,5 @@ func (w widgetFunc) Paint(dst *Canvas, r Rect)          { w.paint(dst, r) }
 func FromFuncs(layout func(Constraints, Env) Size, paint func(*Canvas, Rect)) Widget {
 	return widgetFunc{layout: layout, paint: paint}
 }
+
+func (c *ComponentWidget) absent() bool { return blockChild(c) == nil }

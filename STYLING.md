@@ -82,7 +82,7 @@ right without anything wrapping it.
 
 `Themed(t, child)` gives a subtree a theme of its own — a preview pane showing
 the dark theme inside a light window, say. `.Space(n)` on `Column`, `Row`,
-`Wrap`, `Grid` and `For` is n times the theme's `Space`, resolved at layout,
+`Wrap`, `Grid` and `EachKeyed` is n times the theme's `Space`, resolved at layout,
 so gaps track the theme without a `UseTheme` either.
 
 Your own inherited values travel the same road. `NewEnvKey[T](name)` makes a key,
@@ -258,7 +258,7 @@ subtree, like a form's disabled state.
 | --- | --- |
 | `UseTheme()` | returns the theme and subscribes the enclosing Builder, so it rebuilds on a change |
 | `SetTheme(t)` | replaces the theme and rebuilds only what read it |
-| `BindTheme(sig, on, off)` | follows a `Reader[bool]`, swapping between two themes |
+| `BindTheme(sig, on, off)` | follows a `Readable[bool]`, swapping between two themes |
 | `Themed(t, child)` | gives one subtree a theme without touching the app's |
 | `env.Theme()` | the theme at layout time, for a widget |
 

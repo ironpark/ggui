@@ -9,7 +9,7 @@ import (
 // Chord is a key with modifiers, as a shortcut names it: "cmd+s",
 // "ctrl+shift+z", "escape". Parse one with ParseChord.
 type Chord struct {
-	Key  Key
+	Key  KeyboardKey
 	Mods Mods
 	// Cmd stands for the platform's command modifier: Meta on macOS, Ctrl
 	// elsewhere. A chord written with "cmd" matches through Mods.Cmd.
@@ -109,21 +109,21 @@ func MustChord(s string) Chord {
 	return c
 }
 
-var keyTable map[string]Key
+var keyTable map[string]KeyboardKey
 
 // keyNames maps every key's lower-cased Ebitengine name and a few aliases
 // to the key, built on first use.
-func keyNames() map[string]Key {
+func keyNames() map[string]KeyboardKey {
 	if keyTable != nil {
 		return keyTable
 	}
-	keyTable = map[string]Key{}
-	for k := Key(0); k <= KeyMax; k++ {
+	keyTable = map[string]KeyboardKey{}
+	for k := KeyboardKey(0); k <= KeyMax; k++ {
 		if name := k.String(); name != "" {
 			keyTable[strings.ToLower(name)] = k
 		}
 	}
-	maps.Copy(keyTable, map[string]Key{
+	maps.Copy(keyTable, map[string]KeyboardKey{
 		"esc": KeyEscape, "return": KeyEnter, "up": KeyArrowUp,
 		"down": KeyArrowDown, "left": KeyArrowLeft, "right": KeyArrowRight,
 		"plus": KeyEqual, "minus": KeyMinus, "del": KeyDelete,

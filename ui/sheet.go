@@ -96,7 +96,7 @@ func (s *SheetWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 // Paint implements ggui.Widget: the panel paints through Canvas.Overlay
 // while it is open, and while it is still on its way out.
 func (s *SheetWidget) Paint(dst *ggui.Canvas, _ ggui.Rect) {
-	open := s.open.Peek()
+	open := ggui.Untrack(s.open.Get)
 	now := ggui.Now()
 	s.slide.MoveTo(pick(open, 1.0, 0.0), now, s.env.Motion(s.theme.MotionSlow))
 	v := clamp(s.slide.Value(now), 0, 1)

@@ -80,7 +80,7 @@ func (b *BadgeWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 
 // ProgressWidget is a bar filled to a fraction. Build one with Progress.
 type ProgressWidget struct {
-	value  ggui.Reader[float64]
+	value  ggui.Readable[float64]
 	height float64
 	theme  ggui.Theme
 	motion time.Duration
@@ -88,7 +88,7 @@ type ProgressWidget struct {
 
 // Progress creates a bar that shows value, a fraction from 0 to 1, read
 // every frame, and eases toward it as it changes.
-func Progress(value ggui.Reader[float64]) *ProgressWidget {
+func Progress(value ggui.Readable[float64]) *ProgressWidget {
 	return &ProgressWidget{value: value, height: 6}
 }
 

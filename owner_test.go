@@ -8,9 +8,9 @@ import (
 func TestInnerEffectDisposedWhenOuterReruns(t *testing.T) {
 	outerDep, innerDep := State(0), State(0)
 	innerRuns := 0
-	dispose := Effect(func() {
+	dispose := observe(func() {
 		outerDep.Get()
-		Effect(func() { innerDep.Get(); innerRuns++ })
+		observe(func() { innerDep.Get(); innerRuns++ })
 	})
 	defer dispose()
 	if innerRuns != 1 {
@@ -33,9 +33,10 @@ func TestInnerEffectDisposedWhenOuterReruns(t *testing.T) {
 func TestDerivedInsideBuilderDoesNotAccumulate(t *testing.T) {
 	rebuild, n := State(0), State(1)
 	computes := 0
-	dispose := Effect(func() {
+	dispose := observe(func() {
 		rebuild.Get()
-		Derived(func() int { computes++; return n.Get() * 2 })
+		m := Derived(func() int { computes++; return n.Get() * 2 })
+		observe(func() { m.Get() })
 	})
 	defer dispose()
 	rebuild.Set(1)
@@ -52,7 +53,7 @@ func TestDerivedInsideBuilderDoesNotAccumulate(t *testing.T) {
 func TestSubscriptionsFollowTheLastRun(t *testing.T) {
 	flag, a := State(true), State(0)
 	runs := 0
-	dispose := Effect(func() {
+	dispose := observe(func() {
 		runs++
 		if flag.Get() {
 			a.Get()
@@ -75,7 +76,7 @@ func TestSubscriptionsFollowTheLastRun(t *testing.T) {
 func TestOnCleanupRunsBeforeRerunAndOnDispose(t *testing.T) {
 	dep := State(0)
 	var log []string
-	dispose := Effect(func() {
+	dispose := observe(func() {
 		v := dep.Get()
 		log = append(log, "run")
 		OnCleanup(func() { log = append(log, "cleanup") })
@@ -108,10 +109,15 @@ func TestOnCleanupOutsideEffectPanics(t *testing.T) {
 func TestUntrackAndPeekDoNotSubscribe(t *testing.T) {
 	a, b := State(0), State(0)
 	runs := 0
-	dispose := Effect(func() {
+	dispose := observe(func() {
 		runs++
-		Untrack(func() { a.Get() })
-		b.Peek()
+		Untrack(func() struct {
+		} {
+			a.Get()
+			return struct {
+			}{}
+		})
+		Untrack(b.Get)
 	})
 	defer dispose()
 	a.Set(1)
@@ -125,12 +131,12 @@ func TestUntrackAndPeekDoNotSubscribe(t *testing.T) {
 func TestFlushSkipsEffectsDisposedEarlierInThePass(t *testing.T) {
 	dep := State(0)
 	staleRuns := 0
-	dispose := Effect(func() {
+	dispose := observe(func() {
 		dep.Get()
-		gen := dep.Peek()
-		Effect(func() {
+		gen := Untrack(dep.Get)
+		observe(func() {
 			dep.Get()
-			if gen != dep.Peek() {
+			if gen != Untrack(dep.Get) {
 				staleRuns++ // a child from an older parent run fired
 			}
 		})
@@ -147,7 +153,7 @@ func TestReactiveRebuildsWithoutParent(t *testing.T) {
 	leaf := State("a")
 	parentBuilds, leafBuilds := 0, 0
 	var root Widget
-	dispose := Effect(func() {
+	dispose := observe(func() {
 		parentBuilds++
 		root = Column(Reactive(func() Widget { leafBuilds++; return Text(leaf.Get()) }))
 	})
@@ -164,13 +170,13 @@ func TestReactiveRebuildsWithoutParent(t *testing.T) {
 
 func TestComponentRunsSetupOnceAndKeepsState(t *testing.T) {
 	setups, builds := 0, 0
-	var local *Signal[int]
+	var local *StateValue[int]
 	var c *ComponentWidget
-	dispose := Effect(func() {
-		c = Component(func() Builder {
+	dispose := observe(func() {
+		c = Component(func() Widget {
 			setups++
 			local = State(0)
-			return func() Widget { builds++; return Box().Size(float64(local.Get()), 1) }
+			return Reactive(func() Widget { builds++; return Box().Size(float64(local.Get()), 1) })
 		})
 	})
 	defer dispose()
@@ -189,11 +195,11 @@ func TestComponentSetupDoesNotSubscribeParent(t *testing.T) {
 	dep := State(0)
 	parentBuilds := 0
 	var c *ComponentWidget
-	dispose := Effect(func() {
+	dispose := observe(func() {
 		parentBuilds++
-		c = Component(func() Builder {
+		c = Component(func() Widget {
 			dep.Get() // read during setup
-			return func() Widget { return Box() }
+			return Reactive(func() Widget { return Box() })
 		})
 	})
 	defer dispose()
@@ -209,11 +215,11 @@ func TestComponentDisposedWithParent(t *testing.T) {
 	parentDep, leaf := State(0), State(0)
 	setups, builds := 0, 0
 	var c *ComponentWidget
-	dispose := Effect(func() {
+	dispose := observe(func() {
 		parentDep.Get()
-		c = Component(func() Builder {
+		c = Component(func() Widget {
 			setups++
-			return func() Widget { builds++; leaf.Get(); return Box() }
+			return Reactive(func() Widget { builds++; leaf.Get(); return Box() })
 		})
 	})
 	defer dispose()
@@ -235,8 +241,8 @@ func TestPanicInEffectLeavesNoResidue(t *testing.T) {
 	effects.mu.Unlock()
 	func() {
 		defer func() { recover() }()
-		Effect(func() {
-			Effect(func() {})
+		observe(func() {
+			observe(func() {})
 			panic("boom")
 		})
 	}()
@@ -258,7 +264,7 @@ func TestDisposedChildrenLeaveOwnerInCreationOrder(t *testing.T) {
 	dispose := Root(func() {
 		owner = currentOwner()
 		for i := range 5 {
-			stops = append(stops, Effect(func() {
+			stops = append(stops, observe(func() {
 				OnCleanup(func() { cleaned = append(cleaned, i) })
 			}))
 		}
@@ -288,9 +294,9 @@ func TestChildCleanupCanDisposeSibling(t *testing.T) {
 	var stopSibling func()
 	var cleaned []int
 	dispose := Root(func() {
-		Effect(func() { OnCleanup(func() { cleaned = append(cleaned, 0); stopSibling() }) })
-		stopSibling = Effect(func() { OnCleanup(func() { cleaned = append(cleaned, 1) }) })
-		Effect(func() { OnCleanup(func() { cleaned = append(cleaned, 2) }) })
+		observe(func() { OnCleanup(func() { cleaned = append(cleaned, 0); stopSibling() }) })
+		stopSibling = observe(func() { OnCleanup(func() { cleaned = append(cleaned, 1) }) })
+		observe(func() { OnCleanup(func() { cleaned = append(cleaned, 2) }) })
 	})
 	defer dispose()
 	dispose()
@@ -305,7 +311,7 @@ func TestEffectRemovalPreservesExecutionOrder(t *testing.T) {
 	var stops []func()
 	dispose := Root(func() {
 		for i := range 5 {
-			stops = append(stops, Effect(func() { n.Get(); seen = append(seen, i) }))
+			stops = append(stops, observe(func() { n.Get(); seen = append(seen, i) }))
 		}
 	})
 	defer dispose()
@@ -332,32 +338,21 @@ func (p mountProps) Equal(o mountProps) bool {
 	return p.Title == o.Title && slices.Equal(p.Tags, o.Tags)
 }
 
-// Mount writes its props on every claim. A parent that rebuilds with props
-// equal to last time's must not rebuild the child, which is most of why the
-// child is mounted rather than constructed again.
-func TestMountDoesNotRebuildOnEqualProps(t *testing.T) {
+func TestEqualDerivedPropsDoNotRebuild(t *testing.T) {
 	tick := State(0)
 	builds := 0
 	p := ProbeBuilder(func() Widget {
-		tick.Get()
-		return Mount("row", mountProps{Title: "a", Tags: []string{"x"}},
-			func(props *Signal[mountProps]) Builder {
-				return func() Widget {
-					builds++
-					return Text(props.Get().Title)
-				}
-			})
+		props := Derived(func() mountProps { tick.Get(); return mountProps{Title: "a", Tags: []string{"x"}} })
+		return View(props, func(value mountProps) Widget { builds++; return Text(value.Title) })
 	}, Sz(200, 200))
 	defer p.Close()
 	p.Frame()
-
-	was := builds
 	for range 3 {
 		tick.Update(func(n int) int { return n + 1 })
 		p.Frame()
 	}
-	if builds != was {
-		t.Fatalf("child rebuilt %d times while its props did not change", builds-was)
+	if builds != 1 {
+		t.Fatalf("equal props rebuilt %d times", builds)
 	}
 }
 
@@ -366,7 +361,7 @@ func TestMountDoesNotRebuildOnEqualProps(t *testing.T) {
 func TestSignalWithoutEqualityNotifiesEveryWrite(t *testing.T) {
 	s := State([]int{1})
 	runs := 0
-	defer Effect(func() { s.Get(); runs++ })()
+	defer observe(func() { s.Get(); runs++ })()
 	s.Set([]int{1})
 	effects.flush()
 	if runs != 2 {

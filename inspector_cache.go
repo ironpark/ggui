@@ -64,7 +64,7 @@ func (in *inspector) panelSnapshot(dst *Canvas, shown []int, sel int) inspectPan
 	}
 	s := inspectPanelSnapshot{state: inspectPanelState{
 		panel: in.panel, scale: dst.Scale(), split: in.split, scroll: in.scroll, detailScroll: in.detailScroll, layoutScroll: in.layoutScroll,
-		pointer: pointer, hasPointer: hasPointer, dark: luminance(theme.Peek().Bg) < .5,
+		pointer: pointer, hasPointer: hasPointer, dark: luminance(Untrack(theme.Get).Bg) < .5,
 		pinned: in.pinned, picking: in.picking, copied: in.copied, filterFocus: in.filterFocus, selectFilter: in.selectFilter, outlines: in.outlines,
 		filter: in.filter, dock: in.dock, tab: in.tab, selected: sel, total: len(dst.trace), shown: len(shown), matches: in.matches,
 	}}

@@ -78,7 +78,7 @@ func (a *AccordionWidget) toggle(i int) {
 		return
 	}
 	key := a.items[i].key
-	next := slices.Clone(a.open.Peek())
+	next := slices.Clone(ggui.Untrack(a.open.Get))
 	if slices.Contains(next, key) {
 		next = slices.DeleteFunc(next, func(k string) bool { return k == key })
 	} else if a.multiple {
@@ -167,7 +167,7 @@ func (a *AccordionWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 }
 
 func (a *AccordionWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
-	if !slices.Equal(a.laidOpen, a.open.Peek()) {
+	if !slices.Equal(a.laidOpen, ggui.Untrack(a.open.Get)) {
 		ggui.Invalidate(a.env)
 	}
 	dst = dst.Clip(r)

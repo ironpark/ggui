@@ -29,7 +29,7 @@ func (f *TextFieldWidget) Disabled(v bool) *TextFieldWidget {
 }
 
 // DisabledWhen follows r for Disabled without a rebuild.
-func (f *TextFieldWidget) DisabledWhen(r ggui.Reader[bool]) *TextFieldWidget {
+func (f *TextFieldWidget) DisabledWhen(r ggui.Readable[bool]) *TextFieldWidget {
 	f.InertWhen(r)
 	return f
 }

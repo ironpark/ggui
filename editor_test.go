@@ -146,11 +146,11 @@ func useFakeIME(t *testing.T) {
 }
 
 // typeKeys dispatches key presses to the focused region.
-func typeKeys(in *inputState, mods Mods, keys ...Key) {
+func typeKeys(in *inputState, mods Mods, keys ...KeyboardKey) {
 	in.dispatch(frameInput{keys: keys, mods: mods})
 }
 
-func focusedInput(t *testing.T, value *Signal[string]) (*TextInputWidget, *inputState) {
+func focusedInput(t *testing.T, value *StateValue[string]) (*TextInputWidget, *inputState) {
 	t.Helper()
 	useFakeIME(t)
 	w := TextInput(value)
@@ -173,13 +173,13 @@ func TestTextInputEditsWriteTheSignal(t *testing.T) {
 		t.Fatalf("click past the end put the caret at %d, want %d", w.ed.caret, len("hello"))
 	}
 	typeKeys(in, Mods{}, KeyBackspace, KeyBackspace)
-	if value.Peek() != "hel" || changes != 2 {
-		t.Fatalf("value = %q after two backspaces, changes = %d", value.Peek(), changes)
+	if Untrack(value.Get) != "hel" || changes != 2 {
+		t.Fatalf("value = %q after two backspaces, changes = %d", Untrack(value.Get), changes)
 	}
 	typeKeys(in, Mods{Shift: true}, KeyHome)
 	typeKeys(in, Mods{}, KeyDelete)
-	if value.Peek() != "" {
-		t.Fatalf("shift+home then delete left %q", value.Peek())
+	if Untrack(value.Get) != "" {
+		t.Fatalf("shift+home then delete left %q", Untrack(value.Get))
 	}
 }
 
@@ -210,13 +210,13 @@ func TestTextInputSubmitAndClipboard(t *testing.T) {
 		t.Fatalf("clipboard = %q after select all + copy", clip.Read())
 	}
 	typeKeys(in, cmd, KeyX)
-	if value.Peek() != "" {
-		t.Fatalf("cut left %q", value.Peek())
+	if Untrack(value.Get) != "" {
+		t.Fatalf("cut left %q", Untrack(value.Get))
 	}
 	clip.Write("line1\nline2")
 	typeKeys(in, cmd, KeyV)
-	if value.Peek() != "line1 line2" {
-		t.Fatalf("paste gave %q, want newlines folded to spaces", value.Peek())
+	if Untrack(value.Get) != "line1 line2" {
+		t.Fatalf("paste gave %q, want newlines folded to spaces", Untrack(value.Get))
 	}
 	typeKeys(in, Mods{}, KeyEnter)
 	if len(submitted) != 1 || submitted[0] != "line1 line2" {
@@ -252,18 +252,18 @@ func TestTextInputComposesThenCommits(t *testing.T) {
 	typeKeys(in, Mods{}, KeyArrowLeft)
 	f := w.ime.(*fakeIME)
 	f.compose = "ㅎ"
-	in.dispatch(frameInput{keys: []Key{KeyBackspace}})
+	in.dispatch(frameInput{keys: []KeyboardKey{KeyBackspace}})
 	// The IME swallowed the key: nothing was deleted.
-	if value.Peek() != "ab" || w.composition != "ㅎ" {
-		t.Fatalf("value = %q composition = %q; the IME should have swallowed the key", value.Peek(), w.composition)
+	if Untrack(value.Get) != "ab" || w.composition != "ㅎ" {
+		t.Fatalf("value = %q composition = %q; the IME should have swallowed the key", Untrack(value.Get), w.composition)
 	}
 	if shown, caret := w.rendered(); shown != "aㅎb" || caret != 1+len("ㅎ") {
 		t.Fatalf("rendered = %q caret %d", shown, caret)
 	}
 	f.compose, f.commit = "", "한"
 	in.dispatch(frameInput{})
-	if value.Peek() != "a한b" || w.composition != "" || w.ed.caret != 1+len("한") {
-		t.Fatalf("value = %q composition = %q caret %d after commit", value.Peek(), w.composition, w.ed.caret)
+	if Untrack(value.Get) != "a한b" || w.composition != "" || w.ed.caret != 1+len("한") {
+		t.Fatalf("value = %q composition = %q caret %d after commit", Untrack(value.Get), w.composition, w.ed.caret)
 	}
 	// Moving the caret confirms whatever is being composed: the IME went
 	// idle with "ㄱ" still shown, and End commits it before moving.
@@ -271,8 +271,8 @@ func TestTextInputComposesThenCommits(t *testing.T) {
 	in.dispatch(frameInput{})
 	f.compose = ""
 	typeKeys(in, Mods{}, KeyEnd)
-	if value.Peek() != "a한ㄱb" || f.confirmed == 0 {
-		t.Fatalf("value = %q, confirmed %d times", value.Peek(), f.confirmed)
+	if Untrack(value.Get) != "a한ㄱb" || f.confirmed == 0 {
+		t.Fatalf("value = %q, confirmed %d times", Untrack(value.Get), f.confirmed)
 	}
 }
 
@@ -288,8 +288,8 @@ func TestTextInputSurvivesRebuildWithCaret(t *testing.T) {
 	second := build().(*TextInputWidget)
 	paintFrame(&in, second, Sz(200, 20))
 	typeKeys(&in, Mods{}, KeyBackspace)
-	if !second.Focused() || value.Peek() != "ac" {
-		t.Fatalf("rebuilt input focused = %v, value = %q; want focus and caret carried over", second.Focused(), value.Peek())
+	if !second.Focused() || Untrack(value.Get) != "ac" {
+		t.Fatalf("rebuilt input focused = %v, value = %q; want focus and caret carried over", second.Focused(), Untrack(value.Get))
 	}
 }
 
@@ -355,7 +355,7 @@ func TestTextInputMultilineWrapsGrowsAndNavigates(t *testing.T) {
 		t.Fatalf("Home on line 2 went to %d, want %d", w.ed.caret, spans[1].start)
 	}
 	typeKeys(&in, Mods{}, KeyEnter)
-	if got := w.value.Peek(); got[spans[1].start] != '\n' {
+	if got := Untrack(w.value.Get); got[spans[1].start] != '\n' {
 		t.Fatalf("Enter did not insert a line break: %q", got)
 	}
 	submitted := ""
@@ -445,20 +445,20 @@ func TestUndoKeys(t *testing.T) {
 	defer p.Close()
 	p.Click(Pt(190, 10))
 	p.Type(Mods{}, KeyBackspace, KeyBackspace)
-	if v.Peek() != "hel" {
-		t.Fatalf("value %q after two backspaces", v.Peek())
+	if Untrack(v.Get) != "hel" {
+		t.Fatalf("value %q after two backspaces", Untrack(v.Get))
 	}
 	cmd := Mods{Meta: true}
 	if !runtimeIsDarwin() {
 		cmd = Mods{Ctrl: true}
 	}
 	p.Type(cmd, KeyZ)
-	if v.Peek() != "hell" {
-		t.Fatalf("value %q after undo, want hell", v.Peek())
+	if Untrack(v.Get) != "hell" {
+		t.Fatalf("value %q after undo, want hell", Untrack(v.Get))
 	}
 	p.Type(Mods{Shift: cmd.Shift || true, Meta: cmd.Meta, Ctrl: cmd.Ctrl}, KeyZ)
-	if v.Peek() != "hel" {
-		t.Fatalf("value %q after redo, want hel", v.Peek())
+	if Untrack(v.Get) != "hel" {
+		t.Fatalf("value %q after redo, want hel", Untrack(v.Get))
 	}
 }
 

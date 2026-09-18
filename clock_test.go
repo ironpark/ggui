@@ -56,7 +56,7 @@ func TestProbeAdvanceStepsPastTheCap(t *testing.T) {
 	tw.Set(100)
 	p.Advance(0)                      // the first step takes the tween's start
 	p.Advance(250 * time.Millisecond) // far more than maxFrameStep
-	if got := tw.Peek(); got != 25 {
+	if got := Untrack(tw.Get); got != 25 {
 		t.Fatalf("tween at %v after advancing 250ms, want 25: a probe steps by exactly what it asked for", got)
 	}
 }

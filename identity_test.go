@@ -4,73 +4,69 @@ import (
 	"testing"
 )
 
-func TestKeyedSurvivesParentRebuild(t *testing.T) {
-	parentDep := State(0)
+func TestComponentSetupIsStable(t *testing.T) {
+	dep := State(0)
 	setups := 0
-	var local *Signal[int]
+	var local *StateValue[int]
 	p := ProbeBuilder(func() Widget {
-		parentDep.Get()
-		return Column(Keyed("k", func() Builder {
+		return Component(func() Widget {
 			setups++
+			dep.Get()
 			local = State(3)
-			return func() Widget { return Box().Size(float64(local.Get()), 1) }
-		}))
+			return View(local, func(n int) Widget { return Box().Size(float64(n), 1) })
+		})
 	}, Sz(100, 100))
 	defer p.Close()
 	p.Frame()
 	local.Set(9)
-	parentDep.Set(1) // parent rebuilds; the keyed instance is claimed again
+	dep.Set(1)
 	p.Frame()
-	p.Frame()
-	if setups != 1 {
-		t.Fatalf("setups = %d, want 1", setups)
-	}
-	root := p.root
-	c := root.(*ColumnWidget).children[0].(*ComponentWidget)
-	if got := c.Layout(Loose(Sz(100, 100)), Env{}).W; got != 9 {
-		t.Fatalf("width = %v, want 9 from the kept state", got)
+	if setups != 1 || local.Get() != 9 {
+		t.Fatal("setup reran or state was lost")
 	}
 }
 
-func TestKeyedDisposedWhenUnclaimed(t *testing.T) {
-	show := State(true)
-	cleanups := 0
-	var root Widget
-	dispose := Effect(func() {
-		if show.Get() {
-			root = Keyed("k", func() Builder {
-				OnCleanup(func() { cleanups++ })
-				return func() Widget { return Box() }
-			})
-		} else {
-			root = Box()
-		}
-	})
-	defer dispose()
-	p := NewProbe(root, Sz(10, 10))
+func TestKeyDisposesAndRecreates(t *testing.T) {
+	key := State(1)
+	setups, cleanups := 0, 0
+	p := ProbeBuilder(func() Widget {
+		return Key(key, func(int) Widget {
+			setups++
+			OnCleanup(func() { cleanups++ })
+			return Box()
+		})
+	}, Sz(10, 10))
 	p.Frame()
-	show.Set(false)
-	effects.flush()
-	if cleanups != 1 {
-		t.Fatalf("cleanups = %d, want 1", cleanups)
+	key.Set(1)
+	p.Frame()
+	if setups != 1 || cleanups != 0 {
+		t.Fatal("equal key remounted")
+	}
+	key.Set(2)
+	p.Frame()
+	if setups != 2 || cleanups != 1 {
+		t.Fatal("changed key did not remount")
+	}
+	p.Close()
+	if cleanups != 2 {
+		t.Fatal("close did not clean up")
 	}
 }
 
-func TestMountUpdatesProps(t *testing.T) {
+func TestComponentPropsAreReadable(t *testing.T) {
 	n := State(1)
 	var seen []int
 	p := ProbeBuilder(func() Widget {
-		return Mount("m", n.Get(), func(p *Signal[int]) Builder {
-			return func() Widget { seen = append(seen, p.Get()); return Box() }
+		return Component(func() Widget {
+			return View(n, func(value int) Widget { seen = append(seen, value); return Box() })
 		})
 	}, Sz(10, 10))
 	defer p.Close()
 	p.Frame()
 	n.Set(2)
 	p.Frame()
-	p.Frame()
 	if len(seen) != 2 || seen[1] != 2 {
-		t.Fatalf("builder saw %v, want [1 2]", seen)
+		t.Fatalf("props: %v", seen)
 	}
 }
 
@@ -113,11 +109,13 @@ func TestAdoptionFollowsIDNotRect(t *testing.T) {
 	a2, b := &keyedBox{id: "a"}, &keyedBox{id: "b"}
 	gen := State(0)
 	p := ProbeBuilder(func() Widget {
-		if gen.Get() == 0 {
-			return Column(a, Box().Size(10, 10))
-		}
-		// Rebuilt and moved: a2 has a's id at another Rect; b sits where a was.
-		return Column(b, a2)
+		return Reactive(func() Widget {
+			if gen.Get() == 0 {
+				return Column(a, Box().Size(10, 10))
+			}
+			// Rebuilt and moved: a2 has a's id at another Rect; b sits where a was.
+			return Column(b, a2)
+		})
 	}, Sz(10, 100))
 	defer p.Close()
 	p.Frame()
@@ -164,61 +162,29 @@ func TestCachedTextInputFollowsSignal(t *testing.T) {
 	}
 }
 
-func TestKeyedGivesControlsAnIdentity(t *testing.T) {
-	v := State("hello")
-	extra := State(false)
+func TestComponentGivesControlsStableIdentity(t *testing.T) {
+	value := State("hello")
 	rebuild := State(0)
-	var in *TextInputWidget
+	var input *TextInputWidget
 	p := ProbeBuilder(func() Widget {
-		form := Keyed("form", func() Builder {
-			return func() Widget {
-				rebuild.Get()
-				in = TextInput(v)
-				return in
-			}
+		return Component(func() Widget {
+			return Reactive(func() Widget { rebuild.Get(); input = TextInput(value); return input })
 		})
-		if extra.Get() {
-			// A sibling appears above, so the field moves; its parent
-			// rebuilt too, so it is a new widget.
-			return Column(Box().Size(10, 10), form)
-		}
-		return Column(form)
 	}, Sz(200, 100))
 	defer p.Close()
 	p.Frame()
-	if in.HitID() == nil {
-		t.Fatal("a TextInput built inside Keyed has no identity")
+	first := input
+	if first.HitID() == nil {
+		t.Fatal("missing identity")
 	}
 	p.Click(Pt(2, 5))
 	p.Type(Mods{}, KeyArrowRight, KeyArrowRight)
-	first := in
-	if first.ed.caret != 2 {
-		t.Fatalf("caret %d before the rebuild, want 2", first.ed.caret)
-	}
-	extra.Set(true)
-	rebuild.Set(1) // the keyed component's builder re-runs as well
-	p.Frame()
+	rebuild.Set(1)
 	p.Frame()
 	p.Type(Mods{}, KeyArrowRight)
-	if in == first || in.HitID() != first.HitID() {
-		t.Fatal("the field was not rebuilt with the same identity")
+	if first == input || first.HitID() != input.HitID() || input.ed.caret != 3 || !input.Focused() {
+		t.Fatal("rebuild lost identity, caret or focus")
 	}
-	if in.ed.caret != 3 || !in.Focused() || !p.Focused() {
-		t.Fatalf("caret %d focused %v after the field moved and rebuilt; want the caret and focus kept", in.ed.caret, in.Focused())
-	}
-}
-
-func TestDuplicateKeyPanics(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Fatal("two Keyed with one key in a build did not panic")
-		}
-	}()
-	dispose := Effect(func() {
-		Keyed("k", func() Builder { return func() Widget { return Box() } })
-		Keyed("k", func() Builder { return func() Widget { return Box() } })
-	})
-	defer dispose()
 }
 
 func TestTabReachesAControlOutsideTheScrollWindow(t *testing.T) {
@@ -235,7 +201,8 @@ func TestTabReachesAControlOutsideTheScrollWindow(t *testing.T) {
 func TestRetainKeepsTheFocusedRow(t *testing.T) {
 	items := State([]int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9})
 	built := map[int]int{}
-	list := For(items, func(i int) int { return i }, func(r Reader[int]) Widget {
+	list := EachKeyed(items, func(i int) int { return i }, func(rowItem EachItem[int]) Widget {
+		r := rowItem.Value
 		built[r.Get()]++
 		return Focus(Box().Size(50, 10))
 	}).ItemExtent(10).Retain(1)

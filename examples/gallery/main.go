@@ -166,7 +166,7 @@ func newGallery() (ggui.Builder, func(), func()) {
 				ggui.Text("Families 👨‍👩‍👧‍👦   Work 👩🏽‍💻   Keycaps 1️⃣ #️⃣").Size(20),
 				ui.TextField(emojiText).Named("Emoji text").Multiline().Lines(2),
 				ggui.TextOf(emojiText).Size(24),
-				ui.Button("Insert emoji sequence", func() { emojiText.Set(emojiText.Peek() + " 🏳️‍🌈 👨‍👩‍👧‍👦") }).Outline(),
+				ui.Button("Insert emoji sequence", func() { emojiText.Set(ggui.Untrack(emojiText.Get) + " 🏳️‍🌈 👨‍👩‍👧‍👦") }).Outline(),
 				ggui.Caption("Type, paste, select and delete: composed emoji stay together."),
 			).Gap(16).Align(ggui.AlignStretch)),
 			section("Buttons", ggui.Column(
@@ -246,7 +246,7 @@ func newGallery() (ggui.Builder, func(), func()) {
 				ui.Progress(download),
 				ggui.TextOf(download.Map(func(v float64) string { return fmt.Sprintf("Download: %.0f%%", v*100) })),
 				ggui.Wrap(
-					ui.Button("Advance download", func() { download.Set(min(1, download.Peek()+0.25)) }).DisabledWhen(download.Map(func(v float64) bool { return v >= 1 })),
+					ui.Button("Advance download", func() { download.Set(min(1, ggui.Untrack(download.Get)+0.25)) }).DisabledWhen(download.Map(func(v float64) bool { return v >= 1 })),
 					ui.Button("Restart download", func() { download.Set(0) }).Outline(),
 				).Gap(8),
 			).Space(1).Align(ggui.AlignStretch)),
@@ -301,7 +301,7 @@ func newGallery() (ggui.Builder, func(), func()) {
 					ggui.Row(ggui.Text("Status"), ui.Badge("stable"), ui.Badge("new").Accent()).Space(1),
 					ui.Progress(progress), // reads the signal every frame: no Reactive needed
 					ggui.Row(
-						ui.Button("+10%", func() { progress.Set(min(progress.Peek()+0.1, 1)) }).Outline(),
+						ui.Button("+10%", func() { progress.Set(min(ggui.Untrack(progress.Get)+0.1, 1)) }).Outline(),
 						ui.Button("Reset", func() { progress.Set(0) }).Outline(),
 					).Space(1),
 				).Space(1).Align(ggui.AlignStretch)),
@@ -376,7 +376,7 @@ func newGallery() (ggui.Builder, func(), func()) {
 				ui.InputGroup(ggui.TextInput(site).Placeholder("example.com").Named("Site")).
 					Leading(ggui.Text("https://").Color(t.MutedFg)).
 					Trailing(ui.Button("Go", func() {
-						if host := strings.TrimSpace(site.Peek()); host != "" {
+						if host := strings.TrimSpace(ggui.Untrack(site.Get)); host != "" {
 							sitePreview.Set("Preview: https://" + host)
 						} else {
 							sitePreview.Set("Enter a site first")
@@ -411,7 +411,7 @@ func newGallery() (ggui.Builder, func(), func()) {
 					ui.TextCol("Name", func(p Person) string { return p.Name }),
 					ui.TextCol("Role", func(p Person) string { return p.Role }).Grow(2),
 					ui.TextCol("Age", func(p Person) string { return strconv.Itoa(p.Age) }).W(48).Right(),
-					ui.Col("", func(r ggui.Reader[Person]) ggui.Widget {
+					ui.Col("", func(r ggui.Readable[Person]) ggui.Widget {
 						id := r.Get().ID
 						return ui.Button("×", func() { ggui.Remove(people, func(p Person) bool { return p.ID == id }) }).Outline().Pad(0, 8)
 					}).W(32),
@@ -425,13 +425,14 @@ func newGallery() (ggui.Builder, func(), func()) {
 			).Space(1))),
 		}
 		entries = append(entries, chatPreviews()...)
+		entries = append(entries, reactivityPreview())
 		return galleryPage(dark, search, category, scroll, func() { paletteOpen.Set(true) }, entries)
 
 	}
 
 	setup := func() {
 		notoemoji.Enable()
-		ggui.Effect(func() {
+		ggui.Effect(func() ggui.Cleanup {
 			preset := ggui.ThemePreset{Base: baseColor.Get(), Accent: accentColor.Get(), Style: themeStyle.Get()}
 			t := preset.Light()
 			if dark.Get() {
@@ -440,10 +441,11 @@ func newGallery() (ggui.Builder, func(), func()) {
 			fonts := chatFonts()
 			t.Text.Font, t.Title.Font = fonts[0], fonts[1]
 			ggui.SetTheme(t)
+			return nil
 		})
 		ggui.OnCleanup(toasts.Close)
 	}
-	return build, setup, func() { paletteOpen.Set(true) }
+	return func() ggui.Widget { return ggui.Reactive(build) }, setup, func() { paletteOpen.Set(true) }
 }
 
 func run() error {

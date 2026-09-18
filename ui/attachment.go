@@ -43,7 +43,7 @@ type AttachmentWidget struct {
 	actions                              []ggui.Widget
 	trigger                              *ButtonWidget
 	state                                AttachmentState
-	stateReader                          ggui.Reader[AttachmentState]
+	stateReader                          ggui.Readable[AttachmentState]
 	size                                 AttachmentSize
 	vertical                             bool
 	width                                float64
@@ -98,7 +98,7 @@ func (a *AttachmentWidget) State(s AttachmentState) *AttachmentWidget {
 }
 
 // StateOf follows an upload state without rebuilding the attachment.
-func (a *AttachmentWidget) StateOf(s ggui.Reader[AttachmentState]) *AttachmentWidget {
+func (a *AttachmentWidget) StateOf(s ggui.Readable[AttachmentState]) *AttachmentWidget {
 	a.stateReader = s
 	return a
 }

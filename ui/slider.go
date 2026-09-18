@@ -58,7 +58,7 @@ func (s *SliderWidget) OnCommit(fn func(float64)) *SliderWidget { s.onCommit = f
 
 func (s *SliderWidget) commit() {
 	if s.onCommit != nil {
-		s.onCommit(s.value.Peek())
+		s.onCommit(ggui.Untrack(s.value.Get))
 	}
 }
 
@@ -66,7 +66,7 @@ func (s *SliderWidget) commit() {
 func (s *SliderWidget) Disabled(v bool) *SliderWidget { s.SetInert(v); return s }
 
 // DisabledWhen follows r for Disabled without a rebuild.
-func (s *SliderWidget) DisabledWhen(r ggui.Reader[bool]) *SliderWidget { s.InertWhen(r); return s }
+func (s *SliderWidget) DisabledWhen(r ggui.Readable[bool]) *SliderWidget { s.InertWhen(r); return s }
 
 // Describe implements ggui.Describer: a slider reports its range and where
 // in it the value sits, which is what a screen reader reads out and what an
@@ -77,7 +77,7 @@ func (s *SliderWidget) Describe() ggui.Node {
 		Name:     s.Name,
 		Min:      min(s.min, s.max),
 		Max:      max(s.min, s.max),
-		Now:      s.value.Peek(),
+		Now:      ggui.Untrack(s.value.Get),
 		Disabled: s.Inert,
 		Actions:  ggui.ActionIncrement | ggui.ActionDecrement | ggui.ActionSetValue | ggui.ActionFocus,
 	}
@@ -95,9 +95,9 @@ func (s *SliderWidget) Act(a ggui.Action) bool {
 	}
 	switch a.Kind {
 	case ggui.ActionIncrement:
-		s.set(s.value.Peek() + step)
+		s.set(ggui.Untrack(s.value.Get) + step)
 	case ggui.ActionDecrement:
-		s.set(s.value.Peek() - step)
+		s.set(ggui.Untrack(s.value.Get) - step)
 	case ggui.ActionSetValue:
 		s.set(a.Num)
 	default:
@@ -119,7 +119,7 @@ func (s *SliderWidget) fraction() float64 {
 	if s.max == s.min {
 		return 0
 	}
-	return clamp((s.value.Peek()-s.min)/(s.max-s.min), 0, 1)
+	return clamp((ggui.Untrack(s.value.Get)-s.min)/(s.max-s.min), 0, 1)
 }
 
 // setFromX moves the value to where logical x falls on the track.
@@ -176,7 +176,7 @@ func (s *SliderWidget) HandleKey(ev ggui.KeyEvent) {
 	default:
 		return
 	}
-	s.set(s.value.Peek() + step)
+	s.set(ggui.Untrack(s.value.Get) + step)
 	s.commit()
 }
 

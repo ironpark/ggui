@@ -449,7 +449,7 @@ var themeGen atomic.Uint64
 //
 //	dark := ggui.State(false)
 //	ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme())
-func BindTheme(sw Reader[bool], on, off Theme) (dispose func()) {
+func BindTheme(sw Readable[bool], on, off Theme) (dispose func()) {
 	return Watch(sw, func(v bool) { SetTheme(pick(v, on, off)) })
 }
 
@@ -462,7 +462,7 @@ func UseTheme() Theme { return theme.Get() }
 func rootEnv() Env {
 	gen := themeGen.Load()
 	if !rootCache.env.hasTheme || rootCache.gen != gen {
-		t := theme.Peek()
+		t := Untrack(theme.Get)
 		rootCache.env, rootCache.gen = Env{}.WithTheme(t).WithText(t.Text), gen
 	}
 	return rootCache.env

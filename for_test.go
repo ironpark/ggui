@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// layoutFor lays a For out with room for everything, which is when its
+// layoutFor lays a EachKeyed out with room for everything, which is when its
 // children are built.
 func layoutFor(w Widget) { w.Layout(Loose(Sz(500, Unbounded)), Env{}) }
 
@@ -19,11 +19,12 @@ func TestForReusesChildrenByKey(t *testing.T) {
 	items := State([]todo{{1, "a"}, {2, "b"}})
 	setups := 0
 	var f Widget
-	dispose := Effect(func() {
-		f = For(items, func(t todo) int { return t.ID }, func(it Reader[todo]) Widget {
-			return Component(func() Builder {
+	dispose := observe(func() {
+		f = EachKeyed(items, func(t todo) int { return t.ID }, func(rowItem EachItem[todo]) Widget {
+			it := rowItem.Value
+			return Component(func() Widget {
 				setups++
-				return func() Widget { return Text(it.Get().Name) }
+				return Reactive(func() Widget { return Text(it.Get().Name) })
 			})
 		})
 	})
@@ -37,8 +38,8 @@ func TestForReusesChildrenByKey(t *testing.T) {
 	}
 	names := func() []string {
 		var out []string
-		for _, w := range f.(*ForWidget[todo, int]).children {
-			out = append(out, w.(*ComponentWidget).child.(*TextWidget).value)
+		for _, w := range f.(*EachWidget[todo, int]).children {
+			out = append(out, blockChild(w).(*TextWidget).value)
 		}
 		return out
 	}
@@ -51,8 +52,9 @@ func TestForUpdatesItemSignalInPlace(t *testing.T) {
 	items := State([]todo{{1, "a"}})
 	builds := 0
 	var f Widget
-	dispose := Effect(func() {
-		f = For(items, func(t todo) int { return t.ID }, func(it Reader[todo]) Widget {
+	dispose := observe(func() {
+		f = EachKeyed(items, func(t todo) int { return t.ID }, func(rowItem EachItem[todo]) Widget {
+			it := rowItem.Value
 			return Reactive(func() Widget { builds++; return Text(it.Get().Name) })
 		})
 	})
@@ -61,7 +63,7 @@ func TestForUpdatesItemSignalInPlace(t *testing.T) {
 	items.Set([]todo{{1, "renamed"}})
 	effects.flush()
 	layoutFor(f)
-	got := f.(*ForWidget[todo, int]).children[0].(*ComponentWidget).child.(*TextWidget).value
+	got := f.(*EachWidget[todo, int]).children[0].(*ComponentWidget).child.(*TextWidget).value
 	if got != "renamed" || builds != 2 {
 		t.Fatalf("child shows %q after %d builds, want renamed after 2", got, builds)
 	}
@@ -72,9 +74,9 @@ func TestForDisposesRemovedAndAllOnParentRebuild(t *testing.T) {
 	parentDep := State(0)
 	cleanups := 0
 	var f Widget
-	dispose := Effect(func() {
+	dispose := observe(func() {
 		parentDep.Get()
-		f = For(items, func(t todo) int { return t.ID }, func(it Reader[todo]) Widget {
+		f = EachKeyed(items, func(t todo) int { return t.ID }, func(rowItem EachItem[todo]) Widget {
 			OnCleanup(func() { cleanups++ })
 			return Box()
 		})
@@ -97,8 +99,8 @@ func TestForDoesNotRebuildOnParentSignals(t *testing.T) {
 	items := State([]todo{{1, "a"}})
 	setups := 0
 	var f Widget
-	dispose := Effect(func() {
-		f = For(items, func(t todo) int { return t.ID }, func(it Reader[todo]) Widget {
+	dispose := observe(func() {
+		f = EachKeyed(items, func(t todo) int { return t.ID }, func(rowItem EachItem[todo]) Widget {
 			setups++
 			return Box()
 		})
@@ -119,28 +121,28 @@ func TestForRejectsDuplicateKeys(t *testing.T) {
 			t.Fatal("duplicate keys did not panic")
 		}
 	}()
-	For(State([]todo{{1, "a"}, {1, "b"}}), func(t todo) int { return t.ID }, func(Reader[todo]) Widget { return Box() })
+	EachKeyed(State([]todo{{1, "a"}, {1, "b"}}), func(t todo) int { return t.ID }, func(EachItem[todo]) Widget { return Box() }).Layout(Loose(Sz(100, 100)), Env{})
 }
 
 func TestRootOutlivesOwnerRerunsUntilDisposed(t *testing.T) {
 	dep, inner := State(0), State(0)
 	innerRuns := 0
 	var disposeRoot func()
-	dispose := Effect(func() {
+	dispose := observe(func() {
 		dep.Get()
 		if disposeRoot == nil {
 			disposeRoot = Root(func() {
-				Effect(func() { inner.Get(); innerRuns++ })
+				observe(func() { inner.Get(); innerRuns++ })
 			})
 		}
 	})
 	defer dispose()
-	dep.Set(1) // owner re-runs; the Root was created by an older run, so it is disposed
+	dep.Set(1) // owner reruns; its persistent Root remains alive
 	effects.flush()
 	inner.Set(1)
 	effects.flush()
-	if innerRuns != 1 {
-		t.Fatalf("innerRuns = %d, want 1: a Root is owned by the run that created it", innerRuns)
+	if innerRuns != 2 {
+		t.Fatalf("innerRuns = %d, want 2: Root survives owner reruns", innerRuns)
 	}
 }
 
@@ -151,10 +153,11 @@ func TestForWithItemExtentBuildsOnlyTheViewport(t *testing.T) {
 	}
 	items := State(list)
 	builds := 0
-	var f *ForWidget[todo, int]
+	var f *EachWidget[todo, int]
 	rects := make([]Rect, len(list)) // where each row was painted, by ID
-	dispose := Effect(func() {
-		f = For(items, func(t todo) int { return t.ID }, func(it Reader[todo]) Widget {
+	dispose := observe(func() {
+		f = EachKeyed(items, func(t todo) int { return t.ID }, func(rowItem EachItem[todo]) Widget {
+			it := rowItem.Value
 			builds++
 			return probe(50, 20, &rects[it.Get().ID])
 		}).ItemExtent(20).Gap(4)
@@ -187,9 +190,9 @@ func TestForWithItemExtentBuildsOnlyTheViewport(t *testing.T) {
 
 func TestForWithoutViewportLaysOutEverything(t *testing.T) {
 	items := State([]todo{{1, "a"}, {2, "b"}, {3, "c"}})
-	var f *ForWidget[todo, int]
-	dispose := Effect(func() {
-		f = For(items, func(t todo) int { return t.ID }, func(Reader[todo]) Widget { return Box().Size(10, 5) }).ItemExtent(30)
+	var f *EachWidget[todo, int]
+	dispose := observe(func() {
+		f = EachKeyed(items, func(t todo) int { return t.ID }, func(EachItem[todo]) Widget { return Box().Size(10, 5) }).ItemExtent(30)
 	})
 	defer dispose()
 	got := f.Layout(Loose(Sz(100, 1000)), Env{})
@@ -203,7 +206,8 @@ func TestForRowsLeaveThroughTheirTransition(t *testing.T) {
 	defer SetClock(func() time.Time { return now })()
 	items := State([]int{1, 2, 3})
 	painted := map[int]Rect{}
-	list := For(items, func(i int) int { return i }, func(r Reader[int]) Widget {
+	list := EachKeyed(items, func(i int) int { return i }, func(rowItem EachItem[int]) Widget {
+		r := rowItem.Value
 		i := r.Get()
 		return FromFuncs(
 			func(c Constraints, _ Env) Size { return c.Constrain(Sz(50, 10)) },
@@ -252,11 +256,12 @@ func TestForPaintGroupsFollowRows(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			items := State([]int{1, 2, 3})
-			var list *ForWidget[int, int]
+			var list *EachWidget[int, int]
 			var painted []int
 			groups := map[int]any{}
 			p := ProbeBuilder(func() Widget {
-				list = For(items, func(id int) int { return id }, func(item Reader[int]) Widget {
+				list = EachKeyed(items, func(id int) int { return id }, func(rowItem EachItem[int]) Widget {
+					item := rowItem.Value
 					id := item.Get()
 					return FromFuncs(
 						func(c Constraints, _ Env) Size { return c.Constrain(Sz(20, 10)) },
@@ -318,10 +323,10 @@ func TestForEvictionReleasesOwnerChildren(t *testing.T) {
 	for i := range ids {
 		ids[i] = i
 	}
-	var f *ForWidget[int, int]
+	var f *EachWidget[int, int]
 	created, cleaned := 0, 0
 	dispose := Root(func() {
-		f = For(State(ids), func(i int) int { return i }, func(Reader[int]) Widget {
+		f = EachKeyed(State(ids), func(i int) int { return i }, func(EachItem[int]) Widget {
 			created++
 			OnCleanup(func() { cleaned++ })
 			return Box().Size(10, 20)

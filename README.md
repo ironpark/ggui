@@ -27,7 +27,7 @@ and controls that bind directly to your data.
 
 | Feature | What you get |
 | --- | --- |
-| Reactive state | Signals, derived values, and effects with automatic dependency tracking. |
+| Reactive state | State, lazy derived values, effects, and cancellable resources. |
 | Composable layouts | Rows, columns, flex, grids, stacks, scrolling, and virtualized keyed lists. |
 | Ready-made controls | Buttons, text fields, tables, tabs, dialogs, command search, and more. |
 | Text and input | IME composition, grapheme-aware editing, clipboard support, and font fallbacks. |
@@ -113,7 +113,7 @@ and launch macOS app bundles.
 | --- | --- | --- |
 | [Counter](examples/counter) | Reactive state, buttons, shortcuts, and theme switching. | `task run` |
 | [Todo](examples/todo) | IME text input, validation, keyed lists, transitions, and a confirm dialog. | `task run-todo` |
-| [Gallery](examples/gallery) | 36 searchable previews across Inputs, Navigation, Feedback, Layout, and Data. | `task run-gallery` |
+| [Gallery](examples/gallery) | Searchable previews across Inputs, Navigation, Feedback, Layout, and Data. | `task run-gallery` |
 
 On other platforms, use `go run ./examples/counter`, `go run ./examples/todo`,
 or `go run ./examples/gallery`. The gallery adapts from two columns to one in
@@ -131,7 +131,7 @@ headlessly with a `Probe`.
    configure layout and appearance.
 3. **Bind controls to state.** A control updates its binding, and changes to the
    binding update the control.
-4. **Scope reactive updates.** `Component`, `Reactive`, and `View` let parts of the
+4. **Scope reactive updates.** `Component`, `If`, `EachKeyed`, and `Await` let parts of the
    interface update independently.
 
 The core `ggui` package provides layout, reactivity, rendering, and input.

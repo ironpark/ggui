@@ -62,7 +62,7 @@ func (r *ResizableWidget) Disabled(v bool) *ResizableWidget { r.SetInert(v); ret
 // OnChange reports the new fraction after a drag or keyboard resize.
 func (r *ResizableWidget) OnChange(fn func(float64)) *ResizableWidget { r.onChange = fn; return r }
 func (r *ResizableWidget) value() float64 {
-	v := r.fraction.Peek()
+	v := ggui.Untrack(r.fraction.Get)
 	if math.IsNaN(v) {
 		v = .5
 	}
@@ -226,7 +226,7 @@ func (r *ResizableWidget) Adopt(prev any) {
 }
 
 // DisabledWhen follows r for Disabled without rebuilding the control.
-func (r *ResizableWidget) DisabledWhen(when ggui.Reader[bool]) *ResizableWidget {
+func (r *ResizableWidget) DisabledWhen(when ggui.Readable[bool]) *ResizableWidget {
 	r.InertWhen(when)
 	return r
 }

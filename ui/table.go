@@ -12,19 +12,19 @@ type Column[T any] struct {
 	Width float64 // fixed width in logical pixels; 0 shares the rest by Flex
 	Flex  float64 // share of the remaining width; 0 with Width 0 counts as 1
 	Align float64 // 0 left, 0.5 center, 1 right, for the heading and TextCol cells
-	Cell  func(ggui.Reader[T]) ggui.Widget
+	Cell  func(ggui.Readable[T]) ggui.Widget
 }
 
 // Col creates a column whose cells come from cell, which gets the row's
-// item as a Reader that follows the list.
-func Col[T any](title string, cell func(ggui.Reader[T]) ggui.Widget) Column[T] {
+// item as a Readable that follows the list.
+func Col[T any](title string, cell func(ggui.Readable[T]) ggui.Widget) Column[T] {
 	return Column[T]{Title: title, Cell: cell}
 }
 
 // TextCol creates a column of text taken from each item through text,
 // which follows the item without a rebuild.
 func TextCol[T any](title string, text func(T) string) Column[T] {
-	return Col(title, func(r ggui.Reader[T]) ggui.Widget {
+	return Col(title, func(r ggui.Readable[T]) ggui.Widget {
 		return ggui.TextOf(ggui.Map(r, text)).NoWrap()
 	})
 }
@@ -45,7 +45,7 @@ func (c Column[T]) Center() Column[T] { c.Align = 0.5; return c }
 // between rows, hover and selection. Build one with Table.
 type TableWidget[T any, K comparable] struct {
 	cols     []Column[T]
-	rows     ggui.Reader[[]T]
+	rows     ggui.Readable[[]T]
 	key      func(T) K
 	selected ggui.Binding[K]
 	onSelect func(T)
@@ -53,7 +53,7 @@ type TableWidget[T any, K comparable] struct {
 	height   float64
 	label    func(T) string
 
-	body    *ggui.ForWidget[T, K]
+	body    *ggui.EachWidget[T, K]
 	head    *ggui.RowWidget
 	headBox *ggui.BoxWidget
 	scroll  *ggui.ScrollWidget
@@ -69,7 +69,7 @@ type TableWidget[T any, K comparable] struct {
 //		ui.TextCol("Name", func(p Person) string { return p.Name }),
 //		ui.TextCol("Age", func(p Person) string { return strconv.Itoa(p.Age) }).W(60).Right(),
 //	).Selected(chosen).Height(240)
-func Table[T any, K comparable](rows ggui.Reader[[]T], key func(T) K, cols ...Column[T]) *TableWidget[T, K] {
+func Table[T any, K comparable](rows ggui.Readable[[]T], key func(T) K, cols ...Column[T]) *TableWidget[T, K] {
 	t := &TableWidget[T, K]{cols: cols, rows: rows, key: key, rowH: 32}
 	t.label = func(item T) string { return sprint(key(item)) }
 	heads := make([]ggui.Widget, len(cols))
@@ -78,7 +78,7 @@ func Table[T any, K comparable](rows ggui.Reader[[]T], key func(T) K, cols ...Co
 	}
 	t.head = ggui.Row(heads...)
 	t.headBox = ggui.Box(t.head)
-	t.body = ggui.For(rows, key, t.row).Gap(0).Align(ggui.AlignStretch)
+	t.body = ggui.EachKeyed(rows, key, func(row ggui.EachItem[T]) ggui.Widget { return t.row(row.Value) }).Gap(0).Align(ggui.AlignStretch).ItemExtent(t.rowH)
 	t.scroll = ggui.Scroll(t.body)
 	t.column = ggui.Column(t.headBox, t.body).Align(ggui.AlignStretch)
 	return t
@@ -93,7 +93,11 @@ func (t *TableWidget[T, K]) OnSelect(fn func(T)) *TableWidget[T, K] { t.onSelect
 
 // RowHeight fixes every row's height; the default is 32. With Height the
 // body then lays out only the rows in view.
-func (t *TableWidget[T, K]) RowHeight(h float64) *TableWidget[T, K] { t.rowH = h; return t }
+func (t *TableWidget[T, K]) RowHeight(h float64) *TableWidget[T, K] {
+	t.rowH = h
+	t.body.ItemExtent(h)
+	return t
+}
 
 // Height bounds the table and scrolls the body under a fixed heading.
 // Without it the table is as tall as its rows.
@@ -117,7 +121,7 @@ func (t *TableWidget[T, K]) cell(c Column[T], w ggui.Widget) ggui.Widget {
 	return ggui.Flex(w, pick(c.Flex > 0, c.Flex, 1))
 }
 
-func (t *TableWidget[T, K]) row(item ggui.Reader[T]) ggui.Widget {
+func (t *TableWidget[T, K]) row(item ggui.Readable[T]) ggui.Widget {
 	cells := make([]ggui.Widget, len(t.cols))
 	for i, c := range t.cols {
 		cells[i] = t.cell(c, c.Cell(item))
@@ -134,7 +138,6 @@ func (t *TableWidget[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t.theme = th
 	t.head.Gap(th.Space)
 	t.headBox.Padding(th.ItemPad)
-	t.body.ItemExtent(t.rowH)
 	if t.height > 0 {
 		h := min(t.height, c.MaxH)
 		c.MinH, c.MaxH = h, h
@@ -155,7 +158,7 @@ func (t *TableWidget[T, K]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 type tableRow[T any, K comparable] struct {
 	ggui.Interactive
 	table *TableWidget[T, K]
-	item  ggui.Reader[T]
+	item  ggui.Readable[T]
 	key   K
 	cells *ggui.RowWidget
 	box   *ggui.BoxWidget

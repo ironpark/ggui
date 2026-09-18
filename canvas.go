@@ -31,7 +31,7 @@ type Canvas struct {
 	clipped bool
 	inert   bool        // registers no hit regions: a widget on its way out
 	scope   *focusScope // the focus trap regions are registered under, if any
-	group   any         // what regions painted now belong to, for For's eviction
+	group   any         // what regions painted now belong to, for EachKeyed's eviction
 
 	// Root-only frame state.
 	logical     Size // the window in logical pixels, for Size
@@ -633,7 +633,7 @@ type hitRegion struct {
 	scope   *focusScope // the focus trap the region was painted in, if any
 	role    Role        // from a Semantic handler
 	label   string
-	group   any // set by inGroup: the For entry that painted it
+	group   any // set by inGroup: the EachKeyed entry that painted it
 }
 
 // inGroup paints through fn with every region it registers marked as

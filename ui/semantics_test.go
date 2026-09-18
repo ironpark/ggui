@@ -252,7 +252,8 @@ func TestSemanticsScrolledRowsStayWithTheirBounds(t *testing.T) {
 	for i := range rows {
 		rows[i] = "row " + strconv.Itoa(i)
 	}
-	list := ggui.Each(ggui.State(rows), func(s ggui.Reader[string]) ggui.Widget {
+	list := ggui.Each(ggui.State(rows), func(rowItem ggui.EachItem[string]) ggui.Widget {
+		s := rowItem.Value
 		return ui.Button(s.Get(), nil)
 	}).ItemExtent(20)
 	tree := semantics(t, ggui.Scroll(list), ggui.Sz(200, 60))

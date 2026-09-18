@@ -151,7 +151,7 @@ type semNode struct {
 	rect    Rect
 	full    Rect // before clipping, so an offscreen node still says where it is
 	scope   *focusScope
-	group   any // the For entry that painted it, as for a hit region
+	group   any // the EachKeyed entry that painted it, as for a hit region
 	id      any // from an Identified handler, else nil
 	handler any // the widget that described itself, for focus and dedup
 }

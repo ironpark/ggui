@@ -145,7 +145,7 @@ func (b *ButtonWidget) Destructive() *ButtonWidget { b.variant = variantDestruct
 func (b *ButtonWidget) Disabled(v bool) *ButtonWidget { b.SetInert(v); return b }
 
 // DisabledWhen follows r for Disabled without a rebuild.
-func (b *ButtonWidget) DisabledWhen(r ggui.Reader[bool]) *ButtonWidget { b.InertWhen(r); return b }
+func (b *ButtonWidget) DisabledWhen(r ggui.Readable[bool]) *ButtonWidget { b.InertWhen(r); return b }
 
 // Pad overrides the theme's padding, with the shorthand Insets accepts.
 func (b *ButtonWidget) Pad(sides ...float64) *ButtonWidget {

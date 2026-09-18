@@ -11,7 +11,7 @@ func BenchmarkIdleEffects(b *testing.B) {
 			value := State(0)
 			dispose := Root(func() {
 				for range n {
-					Effect(func() { value.Get() })
+					observe(func() { value.Get() })
 				}
 			})
 			defer dispose()
@@ -73,6 +73,26 @@ func BenchmarkFocusedNode(b *testing.B) {
 				if focusedNode(&c, &focused) != n-1 {
 					b.Fatal("focused node was lost")
 				}
+			}
+		})
+	}
+}
+
+func BenchmarkIdleUserEffects(b *testing.B) {
+	for _, n := range []int{1000, 10000} {
+		b.Run(fmt.Sprint(n), func(b *testing.B) {
+			value := State(0)
+			dispose := Root(func() {
+				for range n {
+					Effect(func() Cleanup { value.Get(); return nil })
+				}
+			})
+			defer dispose()
+			effects.flushUsers(nil)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				effects.flushUsers(nil)
 			}
 		})
 	}

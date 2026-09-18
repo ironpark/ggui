@@ -11,23 +11,19 @@ func TestKeyedIdentityAcrossParentsAndRemount(t *testing.T) {
 	rebuild, parent := ggui.State(0), ggui.State(0)
 	show := ggui.State(true)
 	var controls [2]*ui.CheckboxWidget
-	panel := func(index int, value *ggui.Signal[bool], label string) ggui.Widget {
-		return ggui.Component(func() ggui.Builder {
-			return func() ggui.Widget {
-				parent.Get()
-				if index == 0 && !show.Get() {
-					return ggui.Box()
-				}
-				return ggui.Keyed(1, func() ggui.Builder {
-					return func() ggui.Widget {
-						rebuild.Get()
-						controls[index] = ui.Checkbox(value, label)
-						return controls[index]
-					}
+	panel := func(index int, value *ggui.StateValue[bool], label string) ggui.Widget {
+		return ggui.Component(func() ggui.Widget {
+			visible := ggui.Derived(func() bool { parent.Get(); return index != 0 || show.Get() })
+			return ggui.If(visible, func() ggui.Widget {
+				return ggui.Reactive(func() ggui.Widget {
+					rebuild.Get()
+					controls[index] = ui.Checkbox(value, label)
+					return controls[index]
 				})
-			}
+			})
 		})
 	}
+
 	p := ggui.ProbeBuilder(func() ggui.Widget {
 		return ggui.Column(panel(0, left, "Left"), panel(1, right, "Right"))
 	}, ggui.Sz(300, 200))
@@ -43,7 +39,7 @@ func TestKeyedIdentityAcrossParentsAndRemount(t *testing.T) {
 		t.Fatal("static paint transferred focus between mounts")
 	}
 	p.Type(ggui.Mods{}, ggui.KeySpace)
-	if left.Peek() || right.Peek() {
+	if ggui.Untrack(left.Get) || ggui.Untrack(right.Get) {
 		t.Fatal("Space must toggle only the focused left checkbox")
 	}
 	parent.Set(1)
@@ -54,7 +50,7 @@ func TestKeyedIdentityAcrossParentsAndRemount(t *testing.T) {
 		t.Fatal("rebuilding a mounted component changed its ID")
 	}
 	p.Type(ggui.Mods{}, ggui.KeySpace)
-	if !left.Peek() || right.Peek() {
+	if !ggui.Untrack(left.Get) || ggui.Untrack(right.Get) {
 		t.Fatal("Space after rebuild must toggle only the left checkbox")
 	}
 	show.Set(false)

@@ -98,7 +98,7 @@ func (a *animator) step(now time.Time) {
 // Tweened is a value that eases from where it is to its target over a fixed
 // duration. Build one with Tween.
 type Tweened[T Number] struct {
-	sig      *Signal[T]
+	sig      *StateValue[T]
 	duration time.Duration
 	ease     Easing
 
@@ -131,9 +131,6 @@ func (t *Tweened[T]) Duration(d time.Duration) *Tweened[T] { t.duration = d; ret
 // Builder that reads it rebuilds as the value moves.
 func (t *Tweened[T]) Get() T { return t.sig.Get() }
 
-// Peek returns the current value without subscribing.
-func (t *Tweened[T]) Peek() T { return t.sig.Peek() }
-
 // GetAny returns the value as any and subscribes, for Sprintf.
 func (t *Tweened[T]) GetAny() any { return t.Get() }
 
@@ -145,7 +142,7 @@ func (t *Tweened[T]) Set(target T) {
 	if t.disposed {
 		return
 	}
-	t.from, t.to = t.sig.Peek(), target
+	t.from, t.to = Untrack(t.sig.Get), target
 	if t.duration <= 0 || t.from == t.to {
 		t.sig.Set(target)
 		t.running = false
@@ -194,7 +191,7 @@ func (t *Tweened[T]) step(now time.Time) bool {
 // it overshoots a little, keeps its momentum when the target changes, and
 // settles. Build one with Spring.
 type Sprung[T Number] struct {
-	sig       *Signal[T]
+	sig       *StateValue[T]
 	stiffness float64
 	damping   float64
 	precision float64
@@ -226,9 +223,6 @@ func (s *Sprung[T]) Damping(d float64) *Sprung[T] { s.damping = d; return s }
 
 // Get returns the current value and subscribes the running Effect.
 func (s *Sprung[T]) Get() T { return s.sig.Get() }
-
-// Peek returns the current value without subscribing.
-func (s *Sprung[T]) Peek() T { return s.sig.Peek() }
 
 // GetAny returns the value as any and subscribes, for Sprintf.
 func (s *Sprung[T]) GetAny() any { return s.Get() }

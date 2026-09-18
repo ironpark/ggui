@@ -361,7 +361,7 @@ func nextWord(s string, i int) int {
 	return i
 }
 
-// TextInputWidget is a text editor bound to a Signal[string]: typing writes
+// TextInputWidget is a text editor bound to a StateValue[string]: typing writes
 // the signal, and writing the signal updates the text. Build one with
 // TextInput. It is one line that scrolls sideways until Multiline makes it
 // wrap and grow. It draws only the text, selection and caret; TextField
@@ -392,7 +392,7 @@ type TextInputWidget struct {
 	escapeUsed        bool
 	disabled          bool
 	inheritedDisabled bool
-	disabledWhen      Reader[bool]
+	disabledWhen      Readable[bool]
 	id                any
 
 	ed      textEditor
@@ -425,13 +425,13 @@ type TextInputWidget struct {
 func TextInput(value Binding[string]) *TextInputWidget {
 	t := &TextInputWidget{value: value, minWidth: 120, id: autoID()}
 	t.ime = newIME(t)
-	t.ed.setText(value.Peek())
+	t.ed.setText(Untrack(value.Get))
 	t.ed.moveTo(len(t.ed.text), false)
 	// Follow the binding rather than polling it in Layout: a write from
 	// outside reaches the editor even when the layout above it is cached.
 	// The effect's first run is the value it was just built with, and the
 	// editor's own commit writes what ed already holds, so both are no-ops.
-	Effect(func() {
+	observe(func() {
 		v := value.Get()
 		if v == t.ed.text {
 			return
@@ -443,13 +443,13 @@ func TextInput(value Binding[string]) *TextInputWidget {
 }
 
 // DisabledWhen follows r for Disabled without a rebuild.
-func (t *TextInputWidget) DisabledWhen(r Reader[bool]) *TextInputWidget {
+func (t *TextInputWidget) DisabledWhen(r Readable[bool]) *TextInputWidget {
 	t.disabledWhen = r
 	// Reading r here rather than in Layout keeps the editor correct under a
 	// layout cache. Disabled changes colour and whether input is accepted,
 	// both settled in Paint, so nothing has to be measured again. A later
 	// Disabled call drops r, and this effect stops writing.
-	Effect(func() {
+	observe(func() {
 		v := r.Get()
 		if t.disabledWhen == r {
 			t.disabled = v
@@ -920,7 +920,7 @@ func (t *TextInputWidget) lineBounds() (int, int) {
 // commit writes the editor's text to the signal after an edit.
 func (t *TextInputWidget) commit() {
 	t.blink = Now()
-	if t.ed.text == t.value.Peek() {
+	if t.ed.text == Untrack(t.value.Get) {
 		return
 	}
 	t.value.Set(t.ed.text)
@@ -1043,7 +1043,7 @@ func (t *TextInputWidget) HandleKey(ev KeyEvent) {
 	}
 }
 
-func (t *TextInputWidget) key(k Key, m Mods) {
+func (t *TextInputWidget) key(k KeyboardKey, m Mods) {
 	word := m.Alt || (!m.Cmd() && m.Ctrl)
 	switch k {
 	case KeyEnter, KeyNumpadEnter:
@@ -1198,8 +1198,8 @@ func (t *TextInputWidget) Adopt(prev any) {
 	p.ime.Confirm()
 	t.ed, t.scroll, t.width, t.focused = p.ed, p.scroll, p.width, p.focused
 	t.clicks, t.lastClick, t.lastPos = p.clicks, p.lastClick, p.lastPos
-	if p.ed.text != t.value.Peek() {
-		t.ed.setText(t.value.Peek())
+	if p.ed.text != Untrack(t.value.Get) {
+		t.ed.setText(Untrack(t.value.Get))
 	}
 	t.blink = Now()
 }

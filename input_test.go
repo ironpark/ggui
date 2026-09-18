@@ -105,12 +105,12 @@ func TestUnhandledEventsFallThrough(t *testing.T) {
 }
 
 func TestFocusRoutesKeys(t *testing.T) {
-	var keys []Key
+	var keys []KeyboardKey
 	var typed string
 	var focus []bool
 	w := Row(
 		Focus(Box().Size(50, 50)).
-			OnKey(func(k Key) { keys = append(keys, k) }).
+			OnKey(func(k KeyboardKey) { keys = append(keys, k) }).
 			OnText(func(s string) { typed += s }).
 			OnFocus(func(b bool) { focus = append(focus, b) }),
 		Box().Size(50, 50),
@@ -118,17 +118,17 @@ func TestFocusRoutesKeys(t *testing.T) {
 	var in inputState
 	paintFrame(&in, w, Sz(100, 50))
 
-	in.dispatch(frameInput{pos: Pt(10, 10), keys: []Key{KeyA}})
+	in.dispatch(frameInput{pos: Pt(10, 10), keys: []KeyboardKey{KeyA}})
 	if len(keys) != 0 {
 		t.Fatal("keys delivered before any click")
 	}
 	in.dispatch(frameInput{pos: Pt(10, 10), down: []MouseButton{MouseButtonLeft}})
-	in.dispatch(frameInput{pos: Pt(10, 10), keys: []Key{KeyA}, text: "a"})
+	in.dispatch(frameInput{pos: Pt(10, 10), keys: []KeyboardKey{KeyA}, text: "a"})
 	if len(keys) != 1 || keys[0] != KeyA || typed != "a" {
 		t.Fatalf("keys = %v, typed = %q; want [KeyA] and \"a\"", keys, typed)
 	}
 	in.dispatch(frameInput{pos: Pt(75, 10), down: []MouseButton{MouseButtonLeft}})
-	in.dispatch(frameInput{pos: Pt(75, 10), keys: []Key{KeyB}})
+	in.dispatch(frameInput{pos: Pt(75, 10), keys: []KeyboardKey{KeyB}})
 	if len(keys) != 1 {
 		t.Fatalf("keys = %v, want none after clicking outside", keys)
 	}
@@ -287,7 +287,7 @@ func TestTabMovesFocusInPaintOrder(t *testing.T) {
 	w := Row(&keyed{&log, "a"}, Box().Size(50, 50), &keyed{&log, "b"}, &keyed{&log, "c"})
 	var in inputState
 	paintFrame(&in, w, Sz(200, 50))
-	tab := func(shift bool) { in.dispatch(frameInput{keys: []Key{KeyTab}, mods: Mods{Shift: shift}}) }
+	tab := func(shift bool) { in.dispatch(frameInput{keys: []KeyboardKey{KeyTab}, mods: Mods{Shift: shift}}) }
 	tab(false)
 	tab(false)
 	tab(false)
@@ -298,7 +298,7 @@ func TestTabMovesFocusInPaintOrder(t *testing.T) {
 		t.Fatalf("focus log = %v\nwant %v", log, want)
 	}
 	log = nil
-	in.dispatch(frameInput{keys: []Key{KeyTab, KeyA}})
+	in.dispatch(frameInput{keys: []KeyboardKey{KeyTab, KeyA}})
 	if fmt.Sprint(log) != fmt.Sprint([]string{"-c", "a+tab", "a:A"}) {
 		t.Fatalf("Tab must move focus and be withheld, other keys delivered: %v", log)
 	}

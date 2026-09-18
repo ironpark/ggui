@@ -12,7 +12,7 @@ func TestCachedSkipsLayoutUntilSomethingInsideChanges(t *testing.T) {
 	leaf := &counting{}
 	dep := State(0)
 	var inner Widget
-	dispose := Effect(func() {
+	dispose := observe(func() {
 		inner = Reactive(func() Widget { dep.Get(); return Column(leaf) })
 	})
 	defer dispose()
@@ -44,8 +44,8 @@ func TestCachedNestsAndFollowsScrollAndFor(t *testing.T) {
 	leaf := &counting{}
 	items := State([]todo{{1, "a"}})
 	var list Widget
-	dispose := Effect(func() {
-		list = For(items, func(t todo) int { return t.ID }, func(Reader[todo]) Widget { return leaf })
+	dispose := observe(func() {
+		list = EachKeyed(items, func(t todo) int { return t.ID }, func(EachItem[todo]) Widget { return leaf })
 	})
 	defer dispose()
 	inner := Cached(list)

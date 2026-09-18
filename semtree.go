@@ -23,7 +23,7 @@ import (
 // the same pair, in the same order, that Canvas.adopt matches hit regions
 // by, rather than a second matcher that could disagree with the first. The
 // Role comes along because a container and the one child that fills it do
-// share a Rect: a For list item and the row inside it.
+// share a Rect: a EachKeyed list item and the row inside it.
 // ID is an opaque identity token, not a copied description; keep identity
 // values stable while a widget or one of its snapshots is alive.
 type NodeID struct {

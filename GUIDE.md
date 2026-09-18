@@ -36,309 +36,224 @@ represent application callbacks, data, or colors.
 
 ### Signals
 
-`State(v)` creates a `*Signal[T]`, with `T` inferred from the initial value.
-Reads inside an effect or builder are tracked automatically. Writing a new
-value schedules updates only for computations that depend on it.
+`State(v)` creates a `*StateValue[T]`. `Get()` tracks a read inside a
+reactive computation; `Set(v)` and `Update(func(T) T)` publish changes.
+`Untrack(value.Get)` reads the current value without subscribing.
 
 ```go
 count := ggui.State(0)
-count.Set(2)
 count.Update(func(n int) int { return n + 1 })
-
-label := ggui.Textf("Count: %d", count) // follows future changes
+label := ggui.Textf("Count: %d", count)
 ```
 
-| Operation | Use it to… |
-| --- | --- |
-| `Get()` | Read a value and subscribe the current reactive computation. |
-| `Peek()` | Read the current value without subscribing. |
-| `Set(v)` | Replace the value. Equal values do not notify readers. |
-| `Update(fn)` | Compute the next value from the current one. |
-| `WithEqual(fn)` | Supply equality for values such as slices, or `nil` so every write notifies. |
-| `Untrack(fn)` | Run a block without collecting dependencies. |
+State is shallow: assigning `items.Get()[0].Name` does not publish a change.
+Copy slices/maps before changing them, then call `Set` or `Update`.
+`Append`, `Remove`, `Add`, and `Toggle` work with `Writable` values.
 
-Keep event callbacks focused on writes. Use tracked reads in the builder or
-computed value that should respond to a change.
-
-A write equal to the current value notifies no one. Equality is the type's own
-`Equal` method when it has one, and `==` otherwise, so a struct holding a slice
-or a map still drops redundant writes once it declares how to compare itself:
-
-```go
-type Props struct {
-	Title string
-	Tags  []string
-}
-
-func (p Props) Equal(o Props) bool {
-	return p.Title == o.Title && slices.Equal(p.Tags, o.Tags)
-}
-```
-
-This matters most for `Mount`, which writes its props on every claim: without
-it, a parent rebuild rebuilds the child even when nothing about it changed.
+Equality uses a type's `Equal(T) bool` method, otherwise `==` for comparable
+non-interface types. Other types notify on every write. `WithEqual(fn)`
+customizes comparison; `WithEqual(nil)` always notifies. Equality functions
+must be pure. Values with mutable references need immutable snapshots for
+meaningful comparisons.
 
 ### Derived values
 
-`Derived(fn)` caches a computed value and refreshes it when
-one of the signals `fn` read changes. `Signal.Map` is the common case, and
-`Combine` folds two sources into one:
+`Derived(func() T)` covers both Svelte `$derived` and `$derived.by`:
 
 ```go
-total := ggui.Combine(price, qty, func(p float64, n int) float64 { return p * float64(n) })
-pretty := total.Map(func(v float64) string { return fmt.Sprintf("$%.2f", v) })
-```
-
-A `Memo` notifies its readers only when the result actually differs, and a chain
-of them settles within a single frame.
-
-`Get()` settles the memo before it returns, so a reader never sees one derived
-value updated and another still holding last frame's result, whatever order the
-computations were created in. Reading a memo outside any effect, such as in an
-event callback, therefore runs its function at the call site when an input
-changed since the last frame. `Peek()` never recomputes: it is the read a
-goroutine may make.
-
-### Ownership and cleanup
-
-Effects and derived values created while an effect runs belong to that owner.
-They are disposed before the owner re-runs or when it is disposed. Dependencies
-are collected again on every run, so a computation follows only the signals it
-read most recently.
-
-| API | Lifetime behavior |
-| --- | --- |
-| `app.Setup(fn)` | Runs under the app's root owner before the first build. Use it for app-wide watchers and theme bindings. |
-| `OnCleanup(fn)` | Runs before the owning effect re-runs and when it is disposed. |
-| `app.Close()` | Disposes the app's owned computations and ends `Run`. `Run` also cleans up when the window closes or it returns an error. |
-| `Root(fn)` | Creates an owner that does not re-run, useful for custom containers that retain children. |
-
-For example, bind an app-wide theme before starting the app:
-
-```go
-dark := ggui.State(false)
-app.Setup(func() {
-	ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme())
+doubled := ggui.Derived(func() int { return count.Get() * 2 })
+total := ggui.Combine(price, qty, func(p float64, n int) float64 {
+    return p * float64(n)
 })
 ```
 
-A computation created without an owner has process lifetime until explicitly
-disposed; `App.Close` does not dispose it. Builders do own their `Map` and
-`Derived` computations: those are disposed before the next rebuild rather than
-accumulating. Keeping such a Memo outside its owner leaves it frozen at its last
-value after disposal. Use `app.Setup` for app-owned computations, or wrap model
-construction in `Root`, defer its returned cleanup, and run the app after the
-Root callback returns. The todo and gallery examples show this pattern.
+A `*DerivedValue[T]` computes on its first read and the next read after an
+input changes. Unread values do not run during a frame flush. Dependencies
+are recollected on each computation; `Get()` settles upstream values before
+returning. `Untrack(total.Get)` also returns the latest value.
 
-Create component-local state and cleanup in component setup; see
-[builders and components](#builders-and-components).
+Derived calculations must be pure: state writes and recursive derived cycles
+panic. `WithEqual` controls downstream notification, including slice results.
+`Map`, `StateValue.Map`, and `DerivedValue.Map` are convenience derivations.
+A derived value belongs to its creation owner; disposing that owner stops it.
+Unowned derivations must be explicitly disposed. A disposed value retains its
+last computed result (the zero value if it was never read).
+
+### Ownership and cleanup
+
+Create local state and work in `Component` setup. `Effect` requires an owner
+and runs after mount and layout, before paint. It returns a disposer and its
+callback returns a cleanup, or `nil`:
+
+```go
+ggui.Effect(func() ggui.Cleanup {
+    room := roomID.Get()
+    return subscribe(room)
+})
+```
+
+Cleanup runs untracked before another execution and on disposal. Multiple
+writes before the next update are coalesced. An effect disposed before its
+first execution never runs. `Watch(source, fn)` has the same deferred timing.
+Use `Derived` for computed state rather than copying it through effects.
+
+`OnCleanup(fn)` attaches cleanup directly to the current owner. `Root(fn)`
+creates a scope that survives its enclosing computation's reruns; it ends
+when its disposer is called or its parent is disposed. Disposers are
+idempotent. For app-wide effects, use `App.Setup` or `Probe.Setup`:
+
+```go
+app.Setup(func() {
+    ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme())
+})
+```
 
 ### Threads
 
-Signals, effects, layout, and paint all belong to the UI goroutine: the one
-Ebitengine calls `Update` and `Draw` on. A goroutine does its work off that
-thread and hands the result back with `App.Post`, which runs the function on
-the UI goroutine before the next frame's input:
-
-```go
-go func() {
-	rows, err := fetch()
-	app.Post(func() { result.Set(rows); loading.Set(false) })
-}()
-```
-
-A component does not have the `App`, so it asks for the same thing with
-`UIThread()`. Call it while the tree is being built — in setup, a `Builder` or
-an `Effect` — and keep what it returns for the goroutine:
-
-```go
-func rows(load func() []Row) ggui.Widget {
-	return ggui.Component(func() ggui.Builder {
-		found, loading := ggui.State[[]Row](nil), ggui.State(true)
-		post := ggui.UIThread()
-		go func() {
-			r := load()
-			post(func() { found.Set(r); loading.Set(false) })
-		}()
-		return func() ggui.Widget {
-			if loading.Get() {
-				return ui.Spinner()
-			}
-			return ggui.Each(found, rowView)
-		}
-	})
-}
-```
-
-The posted function runs before the next frame's input, so the write lands on
-the UI goroutine and the subtree rebuilds from it. Keep the function as long as
-the work has results to report; work posted after the app closes is dropped,
-which is what a component disposed mid-flight relies on.
-
-ggui has no loading-state type of its own. A signal per piece of state — the
-value, whether it is still loading, what went wrong — composes with everything
-else here, and `ui.Spinner` and `ui.Skeleton` fill the waiting.
-
-Writing a signal from another goroutine races the frame, whatever the mutex
-inside `Signal` suggests: the dirty marks a write leaves are not guarded, and
-the frame may already have laid out the tree that write should have changed.
-`Peek` is the one read that tolerates a stray goroutine.
-
-Build or test with `-tags ggui_debug` to have a write from the wrong goroutine
-panic where it happens, rather than corrupt a frame somewhere later. The tag
-costs nothing when it is not set, so leave it on in development and off in a
-release build.
-
-```
-go test -tags ggui_debug ./...
-```
-
-`Probe` does not arm the check: a test runs on its own goroutine and there is
-no frame racing it. The same tag makes `ErrCycle` name the effects a cycle
-turns; see [frame lifecycle](#frame-lifecycle).
-
-### State as a struct of signals
-
-Keep one signal per piece of state and
-group them in a plain struct. Each field is its own reactive cell, so a change
-to one re-runs only what read it, and components take exactly the signals they
-need:
-
-```go
-type model struct {
-	Count *ggui.Signal[int]
-	Step  *ggui.Signal[int]
-}
-state := model{Count: ggui.State(0), Step: ggui.State(1)}
-ggui.Add(state.Count, state.Step.Get())
-```
-
-Use `Toggle`, `Add`, `Append`, and `Remove` for common updates.
-`Remove(items, predicate)` creates a new slice without matching items and
-notifies readers only when something was removed.
+State reads/writes, derived calculations, effects, construction and layout
+belong to the UI goroutine. `Untrack` changes dependency collection, not
+thread safety. A worker receives an immutable input snapshot and posts its
+result with `App.Post`. Inside a mounted component or app setup,
+`UIThread()` returns the owner's dispatcher. Closing an app drops queued
+work; component-specific work must additionally check its lifetime, as
+`Resource` does automatically. Debug builds (`-tags ggui_debug`) diagnose
+reactive operations from the wrong goroutine while the app is running.
 
 ### Readers, bindings, and lenses
 
-| Interface | Methods | Typical values |
+| Interface | Methods | Use |
 | --- | --- | --- |
-| `Reader[T]` | `Get()` | Signals, memos, and animated values. |
-| `Binding[T]` | `Get()`, `Peek()`, `Set(T)` | Signals, lenses, tweens, and springs. |
-| `Writable[T]` | `Binding[T]` plus `Update(func(T) T)` | Signals, lenses, and custom immediately writable values. |
+| `Readable[T]` | `Get()` | Display-only data, including derived values. |
+| `Binding[T]` | `Get()`, `Set(T)` | Two-way controls and animated values. |
+| `Writable[T]` | `Binding[T]`, `Update(func(T) T)` | Immediate read-modify-write helpers. |
 
-Use a `Reader` for display-only data and a `Binding` when a control needs to
-write back. `Field` and `Lens` turn part of a struct signal into one. `Watch` and `Combine` accept readers, so computed values work as
-inputs too. A slider can bind to a spring just as it binds to a signal.
-
-`Toggle`, `Add`, `Append`, and `Remove` accept `Writable` values, including
-lenses. `Signal.Update` and `Lens.Update` read without subscribing, then write
-back on the UI thread. A removal that matches nothing does not write or notify.
-Tweens and springs are bindings but not writable values: increment their target
-explicitly with `motion.Set(motion.Target() + delta)`, since `Peek()` returns the
-current animated position.
-
-A lens exposes one field of a struct signal as a binding. `Field` is the
-common case, where the part can be pointed at:
+`Field` and `Lens` bind controls to parts of a state value:
 
 ```go
-type Form struct {
-	Name string
-}
-
-form := ggui.State(Form{})
+form := ggui.State(Form{Name: "Ada"})
 name := form.Field(func(f *Form) *string { return &f.Name })
-field := ui.TextField(name).Placeholder("Your name")
+field := ui.TextField(name)
 ```
 
-`Lens(get, set)` takes the two closures in full, for a part that is computed
-rather than addressed, such as a value held in a map or one that has to be
-converted on the way in and out:
-
-```go
-tags := form.Lens(
-	func(f Form) string { return strings.Join(f.Tags, ", ") },
-	func(f Form, v string) Form {
-		f.Tags = strings.Split(v, ", ")
-		return f
-	},
-)
-```
+`Field` copies the struct, not the nested objects it points to. Use `Lens`
+with explicit copy logic for nested mutable containers. Tweens and springs
+implement `Binding`, not `Writable`; use `Target()` when updating a motion's
+destination rather than its current animated value.
 
 ### Builders and components
 
-A `Builder` is a `func() ggui.Widget`. It runs inside an effect and rebuilds
-its tree when the signals it reads change. Give a subtree its own builder
-when it should update independently.
-
-`Component` separates setup, which runs once at first layout, from building,
-which re-runs when its tracked inputs change:
+`Component(func() Widget)` runs its setup once per mount, without tracking
+setup reads. The app's root constructor also runs once. Bind values to
+widgets or use explicit reactive blocks for subsequent changes:
 
 ```go
-func hoverLabel(label string) ggui.Widget {
-	return ggui.Component(func() ggui.Builder {
-		hovered := ggui.State(false) // setup: local state
-		return func() ggui.Widget {
-			text := label
-			if hovered.Get() { // tracked read: rebuild on hover changes
-				text += " · hovered"
-			}
-			return ggui.Pointer(ggui.Text(text)).OnHover(hovered.Set)
-		}
-	})
+func Counter() ggui.Widget {
+    return ggui.Component(func() ggui.Widget {
+        count := ggui.State(0)
+        return ggui.Column(
+            ggui.Textf("Count: %d", count),
+            ui.Button("Increment", func() { ggui.Add(count, 1) }),
+        )
+    })
 }
 ```
 
-Choose the smallest boundary that fits the job:
+`Text(count.Get())`-style snapshots do not subscribe setup. `TextOf`, `Textf`
+and reactive control bindings do. `View(source, build)` and `Reactive(build)`
+are explicit subtree replacement boundaries: their callbacks rerun and
+replace locally created state/work. Keep state outside these callbacks if
+it must survive their updates. Svelte's snippet `{@render}` has no special
+runtime counterpart; use ordinary Go functions to compose reusable widgets.
 
-| API | Use when… |
-| --- | --- |
-| `Component(setup)` | A subtree needs local state and cleanup. |
-| `Reactive(build)` | A subtree needs independent updates without setup. |
-| `View(reader, build)` | A subtree depends on one reactive value, e.g. `ggui.View(name, ggui.Text)`. |
-| `Keyed(key, setup)` | A component must survive its enclosing builder's rebuilds. |
-| `Mount(key, props, setup)` | A keyed component also needs updated props, passed to setup as a signal. Give the props type an `Equal` method so an unchanged parent rebuild does not rebuild the child. |
-| `If(cond, then).ElseIf(cond, then).Else(other)` | Conditions select between widgets constructed once; without `Else`, nothing shows and a Column, Row or Wrap places no gap there. `When(cond, then, else)` is the two-way form. |
-| `TextOf(reader)` / `Textf(format, readers...)` | Text should follow reactive values and retain chainable text setters. |
+### Conditional and key blocks
 
-`Sprintf` provides the memo behind reactive formatted text.
+```go
+ggui.If(signedIn, func() ggui.Widget {
+    return ProfileScreen()
+}).Else(func() ggui.Widget {
+    return LoginScreen()
+})
 
-> [!TIP]
-> A parent rebuild creates a new ordinary `Component`. Keep the parent's
-> builder free of tracked reads and put changing content in smaller reactive
-> subtrees, or use `Keyed` / `Mount` when local state must survive parent rebuilds.
+ggui.Key(documentID, func(id string) ggui.Widget {
+    return Editor(id)
+})
+```
+
+`If` creates only the active branch; `.ElseIf` and `.Else` add branches.
+Leaving a branch disposes its state, effects and resources. Returning creates
+a fresh instance. Reads in branch factories are untracked; use bindings or
+`View` inside them. `Key` recreates its subtree when its comparable key changes.
+Configure fluent blocks before mount; later configuration panics.
+
+The keyboard key type is `KeyboardKey`; constants such as `KeyEnter` and the
+`KeyEvent.Key` field retain their names. Widget `.Key(id)` setters still assign
+input identity and are distinct from the `Key` control-flow block.
 
 ### Keyed lists
 
-`For(items, key, build)` watches a `Reader[[]T]` and keeps one child per key.
-Reordering the list reuses each child's state. The child receives a `Reader[T]`
-that follows its current item; read it reactively and make edits through the model.
+`Each(items, row)` reuses rows by position and permits duplicate values.
+`EachKeyed(items, key, row)` preserves row identity across reordering:
 
 ```go
-ggui.Scroll(
-	ggui.For(todos, func(t Todo) int { return t.ID },
-		func(item ggui.Reader[Todo]) ggui.Widget {
-			return ggui.View(item, func(t Todo) *ggui.TextWidget {
-				return ggui.Text(t.Title)
-			})
-		},
-	).Gap(4),
-)
+ggui.EachKeyed(todos, func(t Todo) int { return t.ID },
+    func(row ggui.EachItem[Todo]) ggui.Widget {
+        return ggui.View(row.Value, func(t Todo) ggui.Widget {
+            return ggui.Text(t.Title)
+        })
+    },
+).Else(func() ggui.Widget { return ggui.Text("No items") })
 ```
 
-| Collection API | Identity and updates |
-| --- | --- |
-| `For(items, key, build)` | Reactive collection with an explicit key per item. |
-| `Each(items, build)` | Reactive collection of comparable items, keyed by their value. |
-| `List(items, build)` | Plain slice, rebuilt with its parent. |
-| `Children(items, build)` | Turns a plain slice into children for containers such as `Row`. |
+Each row gets reactive `Value` and `Index`. Its factory runs once per row
+instance. Duplicate keys panic before any row update is applied. Empty-list
+branches have their own lifetime. These blocks are layout widgets (vertical
+by default), not fragments spliced into their parent's children.
 
-A child is built on its first layout. For large lists inside `Scroll`, use
-`.ItemExtent(h)` to give every row a fixed height; with `.Horizontal()`, it sets
-width instead. Only visible rows need to be built, laid out, and painted.
+`Gap`, `Space`, `Align`, and `Horizontal` configure layout. `ItemExtent` inside
+`Scroll` virtualizes fixed-size rows; `Retain(n)` bounds offscreen instances.
+Evicted rows lose local state and are recreated when visible; focused or
+captured rows are retained. `Transition` preserves exiting rows until their
+animation completes; virtualization removes rows immediately.
 
-- `.Retain(n)` limits how many offscreen rows remain mounted. Rows holding focus
-  or pointer capture are never evicted; evicted rows rebuild when they return.
-- `.Transition(wrap)` wraps each row in an enter/leave transition. Removed rows
-  play the animation backwards and stop accepting input before disappearing.
+### Resources and await blocks
+
+`Resource(input, load, options...)` tracks input on the UI goroutine and runs
+`load(context.Context, input)` on a worker. Create it in app setup or a mounted
+component. Copy mutable input references before returning them from `input`.
+
+```go
+users := ggui.Resource(
+    func() string { return query.Get() },
+    func(ctx context.Context, q string) ([]User, error) {
+        return api.SearchUsers(ctx, q)
+    },
+)
+
+view := ggui.Await(users).
+    Pending(func() ggui.Widget { return ggui.Text("Searching…") }).
+    Then(func(value ggui.Readable[[]User]) ggui.Widget {
+        return ggui.EachKeyed(value, userID, userRow)
+    }).
+    Catch(func(err ggui.Readable[error]) ggui.Widget {
+        return ggui.Textf("Search failed: %v", err)
+    })
+```
+
+Input changes cancel the prior context. Request IDs and disposal checks
+prevent old completions from committing, even when a worker ignores
+cancellation. `Reload()` retries with the current input. `ResourceEqual(fn)`
+customizes input equality; `nil` restarts on every input notification.
+Resources execute independently of consumers; multiple `Await` blocks share
+one task. Unmounting a consumer does not cancel a resource owned elsewhere.
+
+`Await` accepts any `Readable[AsyncState[T]]`. A snapshot has `RequestID`,
+`Status` (`Pending`, `Ready`, `Failed`), `Value`, and `Err`. Zero values are
+valid successful results. Internally canceled requests do not display errors.
+Omitted branches are empty. Within one request and status, the branch and its
+reactive value are preserved; a new request creates a new branch even when
+its intermediate pending state is not painted. Retaining stale results while
+refreshing is not part of this API.
+
 
 ## Widgets and layout
 
@@ -431,7 +346,7 @@ everything else.
 there is no room), painted through `Canvas.Overlay` over a scrim: a press
 anywhere outside closes it and reaches nothing underneath. `Show`, `Hide`,
 `Toggle` and `IsOpen` drive it, or `.Bind(sig)` keeps the state in a
-`Signal[bool]`; `.Keys(h)` keeps keyboard focus on the widget that opened it
+`StateValue[bool]`; `.Keys(h)` keeps keyboard focus on the widget that opened it
 while the pointer is in the content, and a widget inside can find its popup
 with `PopupOf(env)` to close it after acting. `ui.Select` and `ui.Menu` are
 built on it.
@@ -608,14 +523,14 @@ the emoji font. Color glyphs retain their colors when text color changes.
 | `ui.Collapsible(open, "Title", content)` | Animates an expandable section with `Presence`. |
 | `ui.Card(child)` | Adds a surface, border, radius, padding and subtle shadow. |
 | `ui.Badge("new")` | Displays a small label; `.Accent()` emphasizes it. |
-| `ui.Progress(value)` | Eases toward a fraction from a `Reader[float64]`. |
+| `ui.Progress(value)` | Eases toward a fraction from a `Readable[float64]`. |
 | `ui.Dialog(open, content)` | Shows a modal while the binding is true; see [focus scopes](#focus-scopes). |
 
 ### Tables
 
 `ui.Table(rows, key, cols...)` is a keyed list of rows under a
 heading row: `ui.TextCol(title, func(T) string)` is a text column that
-follows its item, `ui.Col(title, func(Reader[T]) Widget)` holds any
+follows its item, `ui.Col(title, func(Readable[T]) Widget)` holds any
 widget, and `.W(px)`, `.Grow(flex)` and `.Right()` size and align a
 column. `.Selected(binding)` highlights the row whose key the binding
 holds and sets it on a click or Space, `.OnSelect(fn)` gets the item,
@@ -804,7 +719,7 @@ ui.Sidebar(page,
 	ui.SidebarItem("inbox", "Inbox"),
 	ui.SidebarItem("sent", "Sent"),
 	ui.SidebarItem("spam", "Spam").Disabled(true),
-).Header(ggui.Title("Acme")).Collapsed(narrow) // narrow is a Reader[bool]
+).Header(ggui.Title("Acme")).Collapsed(narrow) // narrow is a Readable[bool]
 ```
 
 The column is one keyboard tab stop: Up and Down move the highlight over the
@@ -885,7 +800,7 @@ accessibility tree and reject pointer, keyboard, and accessibility edits.
 
 `Tween(v, d)` and `Spring(v)` are values that move toward their target over
 time instead of jumping, after Svelte's `tweened` and `spring`. Both are
-`Reader`s, so an island that reads one rebuilds every frame the value moves:
+`Readable`s, so an island that reads one rebuilds every frame the value moves:
 
 ```go
 width := ggui.Tween(0.0, 200*time.Millisecond).Easing(ggui.EaseOut)
@@ -978,7 +893,7 @@ button := ggui.Pointer(ggui.Box(ggui.Text("+")).Pad(6, 16)).
 `Scroll(child)` gives its child `Unbounded` height (or width, with
 `.Horizontal()`), shows a window onto it, moves that window with the wheel and
 clips both drawing and hit regions to the window. The offset carries across
-a rebuild; `.Offset(sig)` binds it to a `Signal[float64]` for programmatic
+a rebuild; `.Offset(sig)` binds it to a `StateValue[float64]` for programmatic
 scrolling; `.Speed(px)` and `.Bar(color)` tune it. Widgets that fill their space
 fall back to their content size on an unbounded axis, so `Center`, `Expanded`
 and `.Justify` inside a `Scroll` do not blow up.
@@ -1059,8 +974,7 @@ or an animation in flight: the built-in controls, `TextInput`, `Scroll` and
 subtree still slides the knob. The region is matched by the handler's
 identity when it implements `Identified`, else by `Rect`; `.Key(k)` on a
 control, `TextInput`, `Scroll` or `Popup` sets one, so a widget rebuilt and
-moved in the same frame keeps its state. Inside a `Keyed` or `Mount`
-component every one of those gets an identity for free, the component's
+moved in the same frame keeps its state. Inside a `Component`, keyed row, or `Key` branch every one of those gets an identity for free, the component's
 mount instance plus its place in construction order, so a keyed form keeps focus and
 carets through its own rebuilds with no keys on the fields.
 
@@ -1122,7 +1036,7 @@ func TestCheckbox(t *testing.T) {
 	defer p.Close()
 
 	p.Tap("Enable alerts")
-	if !on.Peek() {
+	if !ggui.Untrack(on.Get) {
 		t.Fatal("expected alerts to be enabled after tapping the checkbox")
 	}
 }
@@ -1176,9 +1090,10 @@ dot := ggui.FromFuncs(
 
 ### Frame lifecycle
 
-Every frame the runtime routes input, steps animations, flushes effects and
-paints. It lays the tree out only when something could have moved: the root
-was rebuilt, the window changed size, a `Signal` was written, or
+Every frame the runtime routes input and steps animations, settles internal
+bindings and mounts, stabilizes layout, runs user effects, and then paints.
+Effect writes trigger another stabilization before paint. It lays the tree out only when something could have moved: the root
+was rebuilt, the window changed size, a `StateValue` was written, or
 `Invalidate` was called. Hover and press live outside signals and only
 change how a widget paints, so a still frame costs a paint and nothing
 else.
@@ -1186,7 +1101,7 @@ else.
 A custom widget that keeps size-affecting state outside signals calls
 `Invalidate(env)` when that state changes; `Scroll` does for its offset. A
 `Scroll` also tells its subtree the window it shows through the `Env`
-(`ScrollViewport(env)`), which is how `For` virtualizes.
+(`ScrollViewport(env)`), which is how `EachKeyed` virtualizes.
 
 Effects are flushed until they are quiet. An effect that writes a signal it
 reads, directly or through other effects and memos, never is: the frame gives
@@ -1196,28 +1111,29 @@ how many effects the cycle turns and how many there were in all. Build with
 `-tags ggui_debug` and each is named by the line that created it:
 
 ```
-ggui: effects did not settle after 16 passes; an Effect is writing a Signal it reads
+ggui: effects did not settle after 16 passes; an Effect is writing a StateValue it reads
   2 of 15 effects never settled
     - /src/app/total.go:31 (a derived value)
     - /src/app/cart.go:64
 ```
 
-Break the loop with `Peek` or `Untrack` on the read that should not
+Break the loop with `Untrack` on the read that should not
 subscribe.
 
 ### Layout caching
 
-A rebuild boundary is a layout boundary. `Component`, `Reactive`, `Keyed`
-and `Mount` each cache their subtree's size: they return it unchanged while
+A rebuild boundary is a layout boundary. `Component`, `Reactive`, and `Key` each cache their subtree's size: they return it unchanged while
 the constraints and everything inherited through the `Env` are the same as
-last time and nothing inside asked for a layout. A signal write in one panel
+last time, layout input versions match, and nothing inside asked for a layout.
+Measurement dependencies include untracked reads without adding reactive
+subscriptions. A signal write in one panel
 therefore measures that panel, not the whole window, even though the runtime
 lays out from the root whenever anything was written.
 
 `Cached(child)` is the same cache without a rebuild boundary, for a static
 subtree that sits under something that does rebuild.
 
-`For`, `Scroll` and `TextInput` ask for a layout when they change. A custom
+`EachKeyed`, `Scroll` and `TextInput` ask for a layout when they change. A custom
 widget whose size depends on state outside a signal **must** call
 `Invalidate(env)` with the Env it was laid out under; without it the widget
 keeps the size it was last measured at, since the cache above it has no

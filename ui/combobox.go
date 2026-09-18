@@ -11,7 +11,7 @@ type ComboboxWidget[T comparable] struct {
 	button      *ButtonWidget
 	popup       *ggui.PopupWidget
 	search      *CommandWidget
-	query       *ggui.Signal[string]
+	query       *ggui.StateValue[string]
 	onChange    func(T)
 }
 
@@ -27,7 +27,7 @@ func Combobox[T comparable](value ggui.Binding[T], options []T) *ComboboxWidget[
 			c.search.initialized = false
 			c.search.filter()
 			for i, v := range c.options {
-				if v == c.value.Peek() {
+				if v == ggui.Untrack(c.value.Get) {
 					c.search.highlight = i
 					break
 				}
@@ -92,7 +92,7 @@ func (c *ComboboxWidget[T]) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 	}
 	label := c.placeholder
 	for _, v := range c.options {
-		if v == c.value.Peek() {
+		if v == ggui.Untrack(c.value.Get) {
 			label = c.label(v)
 			break
 		}
@@ -114,7 +114,7 @@ func (c *ComboboxWidget[T]) HasName() bool { return c.button.HasName() }
 func (c *ComboboxWidget[T]) Semantics() (ggui.Role, string) { return c.button.Semantics() }
 
 // DisabledWhen follows r and closes the popup while disabled.
-func (c *ComboboxWidget[T]) DisabledWhen(r ggui.Reader[bool]) *ComboboxWidget[T] {
+func (c *ComboboxWidget[T]) DisabledWhen(r ggui.Readable[bool]) *ComboboxWidget[T] {
 	c.button.DisabledWhen(r)
 	return c
 }

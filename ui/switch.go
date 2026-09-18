@@ -20,7 +20,7 @@ func Switch(on ggui.Binding[bool], label string) *SwitchWidget {
 	if label != "" {
 		s.label = ggui.Text(label)
 	}
-	s.onTap = func() { setChanged(on, !on.Peek(), s.onChange) }
+	s.onTap = func() { setChanged(on, !ggui.Untrack(on.Get), s.onChange) }
 	return s
 }
 
@@ -33,14 +33,14 @@ func (s *SwitchWidget) OnChange(fn func(bool)) *SwitchWidget { s.onChange = fn; 
 func (s *SwitchWidget) Disabled(v bool) *SwitchWidget { s.SetInert(v); return s }
 
 // DisabledWhen follows r for Disabled without a rebuild.
-func (s *SwitchWidget) DisabledWhen(r ggui.Reader[bool]) *SwitchWidget { s.InertWhen(r); return s }
+func (s *SwitchWidget) DisabledWhen(r ggui.Readable[bool]) *SwitchWidget { s.InertWhen(r); return s }
 
 // Describe implements ggui.Describer: a switch reports whether it is on.
 func (s *SwitchWidget) Describe() ggui.Node {
 	return ggui.Node{
 		Role:     ggui.RoleSwitch,
 		Name:     s.Name,
-		Checked:  ggui.Tri(s.on.Peek()),
+		Checked:  ggui.Tri(ggui.Untrack(s.on.Get)),
 		Disabled: s.Inert,
 		Actions:  ggui.ActionPress | ggui.ActionFocus,
 	}
@@ -55,7 +55,7 @@ func (s *SwitchWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 func (s *SwitchWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := s.theme
 	box := s.paint(dst, r, s)
-	on := s.on.Peek()
+	on := ggui.Untrack(s.on.Get)
 	k := dst.Ease(s.Anchor(box), knobSlot, pick(on, 1.0, 0.0), s.motion)
 	track := pick(on, pick(s.Hovered, t.PrimaryHover, t.Primary), pick(s.Hovered, t.MutedFg, t.Border))
 	if s.Inert {

@@ -108,8 +108,8 @@ func TestEmojiPointerCaretAndBackspace(t *testing.T) {
 			w.rect = Rct(Point{}, Sz(300, 30))
 			w.HandlePointer(PointerEvent{Kind: PointerDown, Button: MouseButtonLeft, Pos: Pt(299, 10)})
 			w.HandleKey(KeyEvent{Kind: KeyPress, Key: KeyBackspace})
-			if value.Peek() != "" {
-				t.Fatalf("backspace left emoji fragments: %q", value.Peek())
+			if Untrack(value.Get) != "" {
+				t.Fatalf("backspace left emoji fragments: %q", Untrack(value.Get))
 			}
 		})
 	}

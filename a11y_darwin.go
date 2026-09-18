@@ -425,7 +425,7 @@ func axElementMaxValue(self objc.ID, _ objc.SEL) objc.ID {
 	return 0
 }
 
-// axElementIdentifier reports the identity a widget was given through Key,
+// axElementIdentifier reports the identity a widget was given through KeyboardKey,
 // when it is a string. It is what an automated test drives the app by, and
 // what Accessibility Inspector shows; a node keyed by something else has
 // none rather than a rendering of it.

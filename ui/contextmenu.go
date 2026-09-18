@@ -173,7 +173,7 @@ func (c *ContextMenuWidget) Adopt(prev any) {
 }
 
 // DisabledWhen follows r for Disabled without rebuilding the control.
-func (c *ContextMenuWidget) DisabledWhen(r ggui.Reader[bool]) *ContextMenuWidget {
+func (c *ContextMenuWidget) DisabledWhen(r ggui.Readable[bool]) *ContextMenuWidget {
 	c.InertWhen(r)
 	return c
 }

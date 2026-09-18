@@ -13,7 +13,7 @@ func TestOffThreadWriteIsReported(t *testing.T) {
 
 	s := State(0)
 	s.Set(1) // the UI goroutine: nothing to report
-	if s.Peek() != 1 {
+	if Untrack(s.Get) != 1 {
 		t.Fatalf("a write on the UI goroutine did not land")
 	}
 

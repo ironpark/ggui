@@ -81,7 +81,7 @@ func (g *InputGroupWidget) Semantics() (ggui.Role, string) {
 func (g *InputGroupWidget) Disabled(v bool) *InputGroupWidget { g.SetInert(v); return g }
 
 // DisabledWhen follows r for Disabled without a rebuild.
-func (g *InputGroupWidget) DisabledWhen(r ggui.Reader[bool]) *InputGroupWidget {
+func (g *InputGroupWidget) DisabledWhen(r ggui.Readable[bool]) *InputGroupWidget {
 	g.InertWhen(r)
 	return g
 }

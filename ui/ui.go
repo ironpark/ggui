@@ -1,5 +1,5 @@
 // Package ui is the standard control set for ggui: Button, Checkbox, Radio,
-// Switch, Slider, TextField and Divider. Each binds to a Signal the way
+// Switch, Slider, TextField and Divider. Each binds to a StateValue the way
 // Svelte's bind: does, takes its look from the Theme in its Env at layout
 // time, and keeps hover and press state in the widget itself, so nothing
 // rebuilds for a hover. Reading a bound signal happens in Paint, which runs
@@ -89,7 +89,7 @@ func edgeFade(dst *ggui.Canvas, r ggui.Rect, dx, dy float64, col color.Color, st
 // setChanged stores v in s if it differs and then reports it to fn, which
 // may be nil. It is the shape every control's OnChange follows.
 func setChanged[T comparable](s ggui.Binding[T], v T, fn func(T)) {
-	if s.Peek() == v {
+	if ggui.Untrack(s.Get) == v {
 		return
 	}
 	s.Set(v)

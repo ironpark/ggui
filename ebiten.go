@@ -11,12 +11,12 @@ import "github.com/hajimehoshi/ebiten/v2"
 
 //go:generate go run ./internal/keygen/cmd -o keys_gen.go
 
-// Key is a physical key on the keyboard, named for what it is on a US
+// KeyboardKey is a physical key on the keyboard, named for what it is on a US
 // layout. The constants are in keys_gen.go; Chord and KeyEvent carry them,
 // and ParseChord reads them from a string.
-type Key = ebiten.Key
+type KeyboardKey = ebiten.Key
 
-// KeyMax is the largest Key, for ranging over all of them.
+// KeyMax is the largest KeyboardKey, for ranging over all of them.
 const KeyMax = ebiten.KeyMax
 
 // CursorShape is what the pointer looks like over a region; a widget picks

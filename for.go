@@ -8,22 +8,27 @@ import (
 	"time"
 )
 
-// ForWidget is a keyed, reactive list: it watches a Reader of items, keeps one
-// child per key across changes, and hands each child its item as a Signal so
-// the child can react to updates on its own. Build one with For.
-type ForWidget[T any, K comparable] struct {
+// EachWidget is a keyed, reactive list: it watches a Readable of items, keeps one
+// child per key across changes, and hands each child its item as a StateValue so
+// the child can react to updates on its own. Build one with EachKeyed.
+type EachWidget[T any, K comparable] struct {
 	flow
-	key     func(T) K
-	build   func(Reader[T]) Widget
-	retain  int // offscreen rows kept mounted with ItemExtent; 0 keeps all
-	frame   uint64
-	owner   *effect
-	items   []T
-	keys    []K
-	entries map[K]*forEntry[T]
-	stale   bool // items changed since children was last filled
-	cache   *CachedWidget
-	extent  float64 // fixed main-axis size per item; 0 lays every child out
+	mount        *ComponentWidget
+	mounted      bool
+	emptyBuild   func() Widget
+	empty        Widget
+	emptyDispose Cleanup
+	key          func(int, T) K
+	build        func(EachItem[T]) Widget
+	retain       int // offscreen rows kept mounted with ItemExtent; 0 keeps all
+	frame        uint64
+	owner        *effect
+	items        []T
+	keys         []K
+	entries      map[K]*forEntry[T]
+	stale        bool // items changed since children was last filled
+	cache        *CachedWidget
+	extent       float64 // fixed main-axis size per item; 0 lays every child out
 
 	// Transition wraps every row; removed rows then leave through it.
 	transition func(Widget) *TransitionWidget
@@ -41,68 +46,78 @@ type ForWidget[T any, K comparable] struct {
 }
 
 type forEntry[T any] struct {
-	item    *Signal[T]
-	widget  Widget
-	dispose func()
-	seen    uint64 // the last frame the entry was laid out
+	item     *StateValue[T]
+	position *StateValue[int]
+	widget   Widget
+	dispose  func()
+	seen     uint64 // the last frame the entry was laid out
 
 	// While leaving: the row's last index, and when it was removed.
 	index int
 	since time.Time
 }
 
-// transition returns the row's Transition, when For wraps rows in one.
+// transition returns the row's Transition, when EachKeyed wraps rows in one.
 func (e *forEntry[T]) transition() *TransitionWidget {
 	t, _ := e.widget.(*TransitionWidget)
 	return t
 }
 
-// For builds one child per item and reuses it while the item's key stays in
-// the list, so state inside a child (a Component's signals, a Scroll's
-// offset) survives reordering and updates. Each child gets its item as a
-// Reader[T] that follows the list; read it reactively, and edit through the
-// model (a struct of signals, or a Lens on the list) rather than the row.
-// Children lay out like a Column; Gap and Horizontal adjust that. A child is
-// built the first time it is laid out, so with ItemExtent inside a Scroll
-// only the items in view exist at all.
-//
-//	ggui.For(todos, func(t Todo) int { return t.ID }, func(t ggui.Reader[Todo]) ggui.Widget {
-//		return todoRow(t)
-//	})
-func For[T any, K comparable](items Reader[[]T], key func(T) K, build func(Reader[T]) Widget) *ForWidget[T, K] {
-	f := &ForWidget[T, K]{key: key, build: build, entries: map[K]*forEntry[T]{}}
-	// The outer effect reads nothing, so it only ever runs once and is
-	// disposed with its owner; the entries belong to it. The inner effect
-	// follows items and is the only thing that re-runs.
-	Effect(func() {
+// EachItem exposes a row's current value and position without rebuilding it.
+type EachItem[T any] struct {
+	Value Readable[T]
+	Index Readable[int]
+}
+
+// EachKeyed reuses rows by a unique key and preserves their local state while
+// values and indices change. Factories run untracked once per row instance.
+// Rows lay out vertically unless Horizontal is set. ItemExtent virtualizes
+// fixed-size rows inside Scroll; Else mounts an empty-list branch.
+func EachKeyed[T any, K comparable](items Readable[[]T], key func(T) K, build func(EachItem[T]) Widget) *EachWidget[T, K] {
+	return each(items, func(_ int, value T) K { return key(value) }, build)
+}
+
+// Each reuses rows by position. Duplicate values are allowed.
+func Each[T any](items Readable[[]T], build func(EachItem[T]) Widget) *EachWidget[T, int] {
+	return each(items, func(index int, _ T) int { return index }, build)
+}
+
+func each[T any, K comparable](items Readable[[]T], key func(int, T) K, build func(EachItem[T]) Widget) *EachWidget[T, K] {
+	f := &EachWidget[T, K]{key: key, build: build, entries: map[K]*forEntry[T]{}}
+	f.mount = Component(func() Widget {
+		f.mounted = true
 		f.owner = currentOwner()
 		OnCleanup(func() {
 			for _, e := range f.entries {
 				e.dispose()
 			}
+			for _, e := range f.leaving {
+				e.dispose()
+			}
+			if f.emptyDispose != nil {
+				f.emptyDispose()
+			}
 			clear(f.entries)
+			f.leaving = nil
+			f.leaveKeys = nil
 		})
-		Effect(func() {
+		observe(func() {
 			list := items.Get()
 			seen := make(map[K]bool, len(list))
 			keys := make([]K, len(list))
-			for i, it := range list {
-				k := key(it)
+			// Validate before mutating any row, so duplicate keys cannot partially apply.
+			for i, value := range list {
+				k := key(i, value)
 				if seen[k] {
-					panic("ggui: For saw the same key twice")
+					panic("ggui: EachKeyed saw the same key twice")
 				}
-				seen[k] = true
-				keys[i] = k
-				if e := f.entries[k]; e != nil {
-					e.item.Set(it)
-				}
+				seen[k], keys[i] = true, k
 			}
 			for k, e := range f.entries {
 				if !seen[k] {
 					f.remove(k, e)
 				}
 			}
-			// A key that came back while its row was leaving keeps the row.
 			for i := 0; i < len(f.leaving); i++ {
 				if !seen[f.leaveKeys[i]] {
 					continue
@@ -113,16 +128,39 @@ func For[T any, K comparable](items Reader[[]T], key func(T) K, build func(Reade
 				f.leaveKeys = slices.Delete(f.leaveKeys, i, i+1)
 				i--
 			}
+			for i, k := range keys {
+				if e := f.entries[k]; e != nil {
+					e.item.Set(list[i])
+					e.position.Set(i)
+				}
+			}
+			if len(list) != 0 && f.emptyDispose != nil {
+				f.emptyDispose()
+				f.emptyDispose, f.empty = nil, nil
+			}
+			if len(list) == 0 && f.emptyBuild != nil && f.emptyDispose == nil {
+				withOwner(f.owner, func() { f.emptyDispose = rootWith(new(int), "", func() { f.empty = f.emptyBuild() }) })
+			}
 			f.items, f.keys, f.stale = list, keys, true
 			f.cache.invalidate()
 		})
+		return nil
 	})
+	return f
+}
+
+// Else mounts an empty-list branch. Configure it before the first layout.
+func (f *EachWidget[T, K]) Else(build func() Widget) *EachWidget[T, K] {
+	if f.mounted {
+		panic("ggui: Each configured after mount")
+	}
+	f.emptyBuild = build
 	return f
 }
 
 // remove takes the row for k out of the list: disposed at once, or kept
 // while it plays its Transition backwards.
-func (f *ForWidget[T, K]) remove(k K, e *forEntry[T]) {
+func (f *EachWidget[T, K]) remove(k K, e *forEntry[T]) {
 	delete(f.entries, k)
 	if f.transition == nil || f.extent > 0 || f.reduced || e.transition() == nil {
 		e.dispose()
@@ -140,58 +178,63 @@ func (f *ForWidget[T, K]) remove(k K, e *forEntry[T]) {
 // Presence does for one child. It applies without ItemExtent; a
 // virtualized list removes rows at once.
 //
-//	ggui.For(todos, key, row).Transition(func(w ggui.Widget) *ggui.TransitionWidget {
+//	ggui.EachKeyed(todos, key, row).Transition(func(w ggui.Widget) *ggui.TransitionWidget {
 //		return ggui.Transition(w).Fade().Slide(-16, 0)
 //	})
-func (f *ForWidget[T, K]) Transition(wrap func(Widget) *TransitionWidget) *ForWidget[T, K] {
+func (f *EachWidget[T, K]) Transition(wrap func(Widget) *TransitionWidget) *EachWidget[T, K] {
+	f.checkConfig()
 	f.transition = wrap
 	return f
 }
 
-// Each is For over comparable items keyed by their own value, for a list
-// whose items are ids or names.
-//
-//	ggui.Each(tags, func(tag ggui.Reader[string]) ggui.Widget { return ggui.TextOf(tag) })
-func Each[T comparable](items Reader[[]T], build func(Reader[T]) Widget) *ForWidget[T, T] {
-	return For(items, func(t T) T { return t }, build)
-}
-
 // Gap sets the space between consecutive children.
-func (f *ForWidget[T, K]) Gap(v float64) *ForWidget[T, K] { f.gap = v; return f }
+func (f *EachWidget[T, K]) Gap(v float64) *EachWidget[T, K] { f.checkConfig(); f.gap = v; return f }
 
 // Space sets the gap to n times the theme's Space, resolved at layout.
-func (f *ForWidget[T, K]) Space(n float64) *ForWidget[T, K] { f.space = n; return f }
+func (f *EachWidget[T, K]) Space(n float64) *EachWidget[T, K] { f.checkConfig(); f.space = n; return f }
 
 // Align places children across the list's axis.
-func (f *ForWidget[T, K]) Align(a CrossAlign) *ForWidget[T, K] { f.align = a; return f }
+func (f *EachWidget[T, K]) Align(a CrossAlign) *EachWidget[T, K] {
+	f.checkConfig()
+	f.align = a
+	return f
+}
 
 // Horizontal lays the children out like a Row instead of a Column.
-func (f *ForWidget[T, K]) Horizontal() *ForWidget[T, K] { f.horizontal = true; return f }
+func (f *EachWidget[T, K]) Horizontal() *EachWidget[T, K] {
+	f.checkConfig()
+	f.horizontal = true
+	return f
+}
 
 // ItemExtent fixes every child's height (width, with Horizontal) to v. The
 // list's size then follows from the count alone, and inside a Scroll only
 // the children in view are built, laid out and painted: a list of tens of
 // thousands of rows costs what the visible ones do.
-func (f *ForWidget[T, K]) ItemExtent(v float64) *ForWidget[T, K] { f.extent = v; return f }
+func (f *EachWidget[T, K]) ItemExtent(v float64) *EachWidget[T, K] {
+	f.checkConfig()
+	f.extent = v
+	return f
+}
 
 // Retain keeps at most n rows that are out of view mounted, with
 // ItemExtent inside a Scroll; the rest are disposed and rebuilt, with fresh
 // local state, when they scroll back in. Without it every row once built
 // stays. A row holding focus or a pointer capture is never evicted.
-func (f *ForWidget[T, K]) Retain(n int) *ForWidget[T, K] { f.retain = n; return f }
+func (f *EachWidget[T, K]) Retain(n int) *EachWidget[T, K] { f.checkConfig(); f.retain = n; return f }
 
 // Len returns the number of items the list currently holds.
-func (f *ForWidget[T, K]) Len() int { return len(f.items) }
+func (f *EachWidget[T, K]) Len() int { return len(f.items) }
 
 // entry returns the child for item i, building it on first use.
-func (f *ForWidget[T, K]) entry(i int) *forEntry[T] {
+func (f *EachWidget[T, K]) entry(i int) *forEntry[T] {
 	k := f.keys[i]
 	e := f.entries[k]
 	if e == nil {
-		e = &forEntry[T]{item: State(f.items[i])}
+		e = &forEntry[T]{item: State(f.items[i]), position: State(i)}
 		withOwner(f.owner, func() {
-			e.dispose = rootWith(nil, fmt.Sprint(k), func() {
-				e.widget = f.build(e.item)
+			e.dispose = rootWith(e, fmt.Sprint(k), func() {
+				e.widget = f.build(EachItem[T]{Value: e.item, Index: e.position})
 				if f.transition != nil {
 					t := f.transition(e.widget)
 					t.id = forRowKey[K]{k} // the row keeps its animation when it moves
@@ -205,8 +248,12 @@ func (f *ForWidget[T, K]) entry(i int) *forEntry[T] {
 }
 
 // Layout implements Widget.
-func (f *ForWidget[T, K]) Layout(c Constraints, env Env) Size {
+func (f *EachWidget[T, K]) Layout(c Constraints, env Env) Size {
 	f.cache, _ = env.Get(cacheOwner)
+	f.mount.Layout(c, env)
+	if len(f.items) == 0 && len(f.leaving) == 0 && f.empty != nil {
+		return f.empty.Layout(c, env)
+	}
 	f.reduced = env.ReducedMotion()
 	n := len(f.items)
 	if f.extent <= 0 {
@@ -220,6 +267,9 @@ func (f *ForWidget[T, K]) Layout(c Constraints, env Env) Size {
 			}
 			f.stale = false
 			f.placeLeaving()
+		}
+		if n == 0 && len(f.leaving) == 0 && f.empty != nil {
+			return f.empty.Layout(c, env)
 		}
 		return f.layout(c, env)
 	}
@@ -270,7 +320,7 @@ type forRowKey[K comparable] struct{ k K }
 // their old places, drives their Transitions by the time since removal,
 // and drops the ones that finished. The list lays out every frame while
 // any is leaving.
-func (f *ForWidget[T, K]) placeLeaving() {
+func (f *EachWidget[T, K]) placeLeaving() {
 	now := Now()
 	for i := 0; i < len(f.leaving); i++ {
 		e := f.leaving[i]
@@ -298,7 +348,7 @@ func (f *ForWidget[T, K]) placeLeaving() {
 }
 
 // evict disposes offscreen entries beyond Retain, oldest first.
-func (f *ForWidget[T, K]) evict() {
+func (f *EachWidget[T, K]) evict() {
 	if f.retain <= 0 {
 		return
 	}
@@ -321,7 +371,11 @@ func (f *ForWidget[T, K]) evict() {
 // Paint implements Widget. The list describes itself as a list of Len
 // items and each row as the item it is, so "item 3 of 200" can be said of
 // a virtualized list where only a dozen rows exist at all.
-func (f *ForWidget[T, K]) Paint(dst *Canvas, r Rect) {
+func (f *EachWidget[T, K]) Paint(dst *Canvas, r Rect) {
+	if len(f.items) == 0 && len(f.leaving) == 0 && f.empty != nil {
+		dst.Paint(f.empty, r)
+		return
+	}
 	n := len(f.items)
 	dst.Node(r, Node{Role: RoleList, Min: 1, Max: float64(n)}, func(dst *Canvas) {
 		if f.extent <= 0 {
@@ -340,7 +394,13 @@ func (f *ForWidget[T, K]) Paint(dst *Canvas, r Rect) {
 }
 
 // paintRow paints one row inside a list item that knows its place.
-func (f *ForWidget[T, K]) paintRow(dst *Canvas, w Widget, rc Rect, i, n int) {
+func (f *EachWidget[T, K]) paintRow(dst *Canvas, w Widget, rc Rect, i, n int) {
 	item := Node{Role: RoleListItem, Min: 1, Now: float64(i + 1), Max: float64(n)}
 	dst.Node(rc, item, func(dst *Canvas) { dst.Paint(w, rc) })
+}
+
+func (f *EachWidget[T, K]) checkConfig() {
+	if f.mounted {
+		panic("ggui: Each configured after mount")
+	}
 }

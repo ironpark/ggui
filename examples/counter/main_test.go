@@ -17,7 +17,7 @@ func TestCounter(t *testing.T) {
 	p.Tap("-")
 	p.Tap("+")
 	p.Tap("+")
-	if got := m.Count.Peek(); got != 1 {
+	if got := ggui.Untrack(m.Count.Get); got != 1 {
 		t.Fatalf("count after taps = %d, want 1", got)
 	}
 
@@ -25,12 +25,12 @@ func TestCounter(t *testing.T) {
 	// than the bare-key shortcut; either way it adds the step.
 	p.Type(ggui.Mods{}, ggui.KeyArrowUp, ggui.KeyArrowUp) // step 3
 	p.Type(ggui.Mods{}, ggui.KeySpace)
-	if got := m.Count.Peek(); got != 4 {
+	if got := ggui.Untrack(m.Count.Get); got != 4 {
 		t.Fatalf("count after space with step 3 = %d, want 4", got)
 	}
 
 	p.Type(ggui.Mods{}, ggui.KeyArrowDown, ggui.KeyArrowDown, ggui.KeyArrowDown) // clamps at 1
-	if got := m.Step.Peek(); got != 1 {
+	if got := ggui.Untrack(m.Step.Get); got != 1 {
 		t.Fatalf("step = %d, want 1", got)
 	}
 }

@@ -72,9 +72,9 @@ type Interactive struct {
 	Role         Role   // what the control is, for Probe.Find and the inspector
 	Name         string // what it is called: the text on it, or what a Named setter gave
 
-	id        any // from Key
+	id        any // from KeyboardKey
 	auto      any // from the keyed component it was constructed in
-	inertWhen Reader[bool]
+	inertWhen Readable[bool]
 }
 
 // SetName names the control for Probe.Find and the inspector when nothing
@@ -106,7 +106,7 @@ func (s *Interactive) ConsumesKey(ev KeyEvent) bool { return Activates(ev) }
 
 // InertWhen makes the control follow r for Inert: a control reads it in
 // Layout and Paint through Sync, so nothing rebuilds when it changes.
-func (s *Interactive) InertWhen(r Reader[bool]) { s.inertWhen = r; requestLayout() }
+func (s *Interactive) InertWhen(r Readable[bool]) { s.inertWhen = r; requestLayout() }
 
 // Sync refreshes Inert from InertWhen, if set. Call it at the start of
 // Layout and Paint.
@@ -120,7 +120,7 @@ func (s *Interactive) Sync() {
 // keeps its state. Without one its Rect identifies it.
 func (s *Interactive) Key(k any) { s.id = k }
 
-// HitID implements Identified: the Key, else what AutoKey took, else nil.
+// HitID implements Identified: the KeyboardKey, else what AutoKey took, else nil.
 func (s *Interactive) HitID() any {
 	if s.id != nil {
 		return s.id

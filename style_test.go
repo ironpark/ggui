@@ -99,7 +99,7 @@ func TestEnvIsAValue(t *testing.T) {
 }
 
 func TestRootEnvStartsFromTheme(t *testing.T) {
-	old := theme.Peek()
+	old := Untrack(theme.Get)
 	defer SetTheme(old)
 	SetTheme(Theme{Text: TextStyle{Size: 33, Color: red}, Bg: blue})
 	w := Text("x")
@@ -110,10 +110,10 @@ func TestRootEnvStartsFromTheme(t *testing.T) {
 }
 
 func TestSetThemeRebuildsReaders(t *testing.T) {
-	old := theme.Peek()
+	old := Untrack(theme.Get)
 	defer SetTheme(old)
 	builds := 0
-	dispose := Effect(func() { builds++; _ = UseTheme().Primary })
+	dispose := observe(func() { builds++; _ = UseTheme().Primary })
 	defer dispose()
 	SetTheme(DarkTheme())
 	effects.flush()

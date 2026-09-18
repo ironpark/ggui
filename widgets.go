@@ -121,9 +121,9 @@ func (t *TextWidget) AsCaption() *TextWidget { t.role = roleCaption; return t }
 // TextOf draws the string r holds and follows it: the effect it owns lives
 // in the enclosing Builder and is disposed with it. It is a TextWidget, so
 // every setter chains.
-func TextOf(r Reader[string]) *TextWidget {
+func TextOf(r Readable[string]) *TextWidget {
 	t := Text("")
-	Effect(func() {
+	observe(func() {
 		t.value = r.Get()
 		t.cache.invalidate()
 	})
@@ -137,8 +137,8 @@ func TextOf(r Reader[string]) *TextWidget {
 func Textf(format string, args ...any) *TextWidget { return TextOf(Sprintf(format, args...)) }
 
 // Sprintf formats like fmt.Sprintf and recomputes when a reactive argument
-// (a Signal, Memo, Tweened or Sprung) changes; other arguments pass through.
-func Sprintf(format string, args ...any) *Memo[string] {
+// (a StateValue, DerivedValue, Tweened or Sprung) changes; other arguments pass through.
+func Sprintf(format string, args ...any) *DerivedValue[string] {
 	vals := make([]any, len(args))
 	return Derived(func() string {
 		for i, a := range args {
@@ -803,7 +803,7 @@ func List[T any](items []T, item func(T) Widget) *ColumnWidget {
 // Viewport is what a Scroll tells the subtree it lays out: how far along
 // the scroll axis the window starts and how long it is, in logical pixels.
 // A list that knows its items' sizes can then lay out only the ones in
-// view; For does with ItemExtent.
+// view; EachKeyed does with ItemExtent.
 type Viewport struct {
 	Offset, Extent float64
 	Horizontal     bool
@@ -854,7 +854,7 @@ func (s *ScrollWidget) Adopt(prev any) {
 
 // Scroll lets child take any height and scrolls it within the space Scroll
 // is given. The offset lives in the widget and carries across a rebuild;
-// bind it to a Signal with Offset to read or set it.
+// bind it to a StateValue with Offset to read or set it.
 func Scroll(child Widget) *ScrollWidget {
 	return &ScrollWidget{child: child, speed: 20, id: autoID()}
 }
@@ -883,7 +883,7 @@ func (s *ScrollWidget) maxOffset() float64 {
 
 func (s *ScrollWidget) position() float64 {
 	if s.bound != nil {
-		return s.bound.Peek()
+		return Untrack(s.bound.Get)
 	}
 	return s.offset
 }

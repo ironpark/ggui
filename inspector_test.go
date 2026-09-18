@@ -112,12 +112,12 @@ func TestInspectorChipsAndKeys(t *testing.T) {
 	if !in.outlines {
 		t.Fatal("the Outlines chip did not turn the outlines on")
 	}
-	in.input(frameInput{pos: Pt(250, 100), keys: []Key{KeyArrowDown, KeyArrowDown, KeyArrowUp}})
+	in.input(frameInput{pos: Pt(250, 100), keys: []KeyboardKey{KeyArrowDown, KeyArrowDown, KeyArrowUp}})
 	if in.move != 1 {
 		t.Fatalf("move = %d, want the net arrow step of 1", in.move)
 	}
 	in.pinned = true
-	in.input(frameInput{pos: Pt(250, 100), keys: []Key{KeyEscape}})
+	in.input(frameInput{pos: Pt(250, 100), keys: []KeyboardKey{KeyEscape}})
 	if in.pinned {
 		t.Fatal("Escape did not release the pin")
 	}
@@ -185,15 +185,15 @@ func TestInspectorFoldsAndFilters(t *testing.T) {
 	if got := in.visible(tr); !slices.Equal(got, []int{0, 1, 2}) {
 		t.Fatalf("visible = %v while filtering, want the match and its ancestors", got)
 	}
-	in.input(frameInput{keys: []Key{KeyEscape}})
+	in.input(frameInput{keys: []KeyboardKey{KeyEscape}})
 	in.panel = Rct(Pt(0, 0), Sz(100, 100))
-	in.input(frameInput{pos: Pt(5, 5), keys: []Key{KeyEscape}})
+	in.input(frameInput{pos: Pt(5, 5), keys: []KeyboardKey{KeyEscape}})
 	if in.filter != "" {
 		t.Fatal("Escape did not clear the filter")
 	}
 	in.filterFocus, in.focus = true, true
 	in.input(frameInput{pos: Pt(5, 5), text: "Bu"})
-	in.input(frameInput{pos: Pt(5, 5), keys: []Key{KeyBackspace}})
+	in.input(frameInput{pos: Pt(5, 5), keys: []KeyboardKey{KeyBackspace}})
 	if in.filter != "B" {
 		t.Fatalf("filter = %q, want typed text minus one Backspace", in.filter)
 	}
@@ -409,7 +409,7 @@ func TestInspectorArrowNavigationRevealsPinnedRows(t *testing.T) {
 	var in inspector
 	in.paint(c)
 	in.focus = true
-	in.input(frameInput{keys: []Key{KeyEnd}})
+	in.input(frameInput{keys: []KeyboardKey{KeyEnd}})
 	in.paint(c)
 	if !in.pinned || in.sel.rect.Origin.Y != 99 || in.scroll <= 0 {
 		t.Fatal("keyboard selection did not scroll into view")

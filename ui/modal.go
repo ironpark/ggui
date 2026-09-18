@@ -31,7 +31,7 @@ func (m *modal) setTitle(s string) { m.title, m.name = ggui.Title(s).Size(18), s
 
 // Close closes the panel.
 func (m *modal) Close() {
-	if !m.open.Peek() {
+	if !ggui.Untrack(m.open.Get) {
 		return
 	}
 	m.open.Set(false)

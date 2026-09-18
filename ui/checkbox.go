@@ -21,7 +21,7 @@ func Checkbox(checked ggui.Binding[bool], label string) *CheckboxWidget {
 	if label != "" {
 		c.label = ggui.Text(label)
 	}
-	c.onTap = func() { setChanged(checked, !checked.Peek(), c.onChange) }
+	c.onTap = func() { setChanged(checked, !ggui.Untrack(checked.Get), c.onChange) }
 	return c
 }
 
@@ -29,7 +29,10 @@ func Checkbox(checked ggui.Binding[bool], label string) *CheckboxWidget {
 func (c *CheckboxWidget) Disabled(v bool) *CheckboxWidget { c.SetInert(v); return c }
 
 // DisabledWhen follows r for Disabled without a rebuild.
-func (c *CheckboxWidget) DisabledWhen(r ggui.Reader[bool]) *CheckboxWidget { c.InertWhen(r); return c }
+func (c *CheckboxWidget) DisabledWhen(r ggui.Readable[bool]) *CheckboxWidget {
+	c.InertWhen(r)
+	return c
+}
 
 // OnChange fires with the new value after a click toggled it.
 func (c *CheckboxWidget) OnChange(fn func(bool)) *CheckboxWidget { c.onChange = fn; return c }
@@ -39,7 +42,7 @@ func (c *CheckboxWidget) Describe() ggui.Node {
 	return ggui.Node{
 		Role:     ggui.RoleCheckbox,
 		Name:     c.Name,
-		Checked:  ggui.Tri(c.checked.Peek()),
+		Checked:  ggui.Tri(ggui.Untrack(c.checked.Get)),
 		Disabled: c.Inert,
 		Actions:  ggui.ActionPress | ggui.ActionFocus,
 	}
@@ -54,7 +57,7 @@ func (c *CheckboxWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 func (c *CheckboxWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := c.theme
 	box := c.paint(dst, r, c)
-	on := c.checked.Peek()
+	on := ggui.Untrack(c.checked.Get)
 	radius := t.Radius * 0.4
 	switch {
 	case c.Inert:

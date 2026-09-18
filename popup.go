@@ -10,7 +10,7 @@ package ggui
 //
 // Whether the popup is open lives in the widget, so keep it alive (in a
 // Component, or adopted across rebuilds by the widget that owns it) or
-// bind it to a Signal with Bind. Widgets inside the content can find the
+// bind it to a StateValue with Bind. Widgets inside the content can find the
 // popup with PopupOf and close it after acting.
 type PopupWidget struct {
 	anchor  Widget
@@ -79,7 +79,7 @@ func (p *PopupWidget) OnClose(fn func()) *PopupWidget { p.onClose = fn; return p
 // IsOpen reports whether the content is showing.
 func (p *PopupWidget) IsOpen() bool {
 	if p.bound != nil {
-		return p.bound.Peek()
+		return Untrack(p.bound.Get)
 	}
 	return p.open
 }
@@ -91,6 +91,9 @@ func (p *PopupWidget) SetOpen(v bool) {
 		p.bound.Set(v)
 	} else {
 		p.open = v
+	}
+	if was != v {
+		Invalidate(p.env)
 	}
 	if was && !v {
 		Invalidate(p.env)

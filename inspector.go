@@ -167,7 +167,7 @@ type inspectPalette struct {
 func inspectColors() inspectPalette {
 	// Devtools use a quiet neutral surface, independent of an app's accent.
 	// This keeps the tree and color-coded measurements readable in every theme.
-	if luminance(theme.Peek().Bg) < .5 {
+	if luminance(Untrack(theme.Get).Bg) < .5 {
 		return inspectPalette{
 			bg: color.NRGBA{27, 29, 34, 255}, edge: color.NRGBA{57, 61, 70, 255}, fg: color.NRGBA{222, 226, 233, 255},
 			dim: color.NRGBA{151, 160, 175, 255}, sel: color.NRGBA{43, 70, 104, 255}, selFg: color.NRGBA{221, 236, 255, 255},

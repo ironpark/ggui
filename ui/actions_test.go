@@ -43,17 +43,17 @@ func TestActStepsASlider(t *testing.T) {
 	p := ggui.NewProbe(ui.Slider(value, 0, 10).Step(1).Named("Vol").OnCommit(func(v float64) { committed = v }), ggui.Sz(200, 40))
 	defer p.Close()
 	act(t, p, ggui.RoleSlider, "Vol", ggui.Action{Kind: ggui.ActionIncrement})
-	if value.Peek() != 6 || committed != 6 {
-		t.Fatalf("value = %g, committed = %g, want 6", value.Peek(), committed)
+	if ggui.Untrack(value.Get) != 6 || committed != 6 {
+		t.Fatalf("value = %g, committed = %g, want 6", ggui.Untrack(value.Get), committed)
 	}
 	act(t, p, ggui.RoleSlider, "Vol", ggui.Action{Kind: ggui.ActionDecrement})
 	act(t, p, ggui.RoleSlider, "Vol", ggui.Action{Kind: ggui.ActionDecrement})
-	if value.Peek() != 4 {
-		t.Fatalf("value = %g, want 4", value.Peek())
+	if ggui.Untrack(value.Get) != 4 {
+		t.Fatalf("value = %g, want 4", ggui.Untrack(value.Get))
 	}
 	act(t, p, ggui.RoleSlider, "Vol", ggui.Action{Kind: ggui.ActionSetValue, Num: 99})
-	if value.Peek() != 10 {
-		t.Fatalf("value = %g, want the range's top", value.Peek())
+	if ggui.Untrack(value.Get) != 10 {
+		t.Fatalf("value = %g, want the range's top", ggui.Untrack(value.Get))
 	}
 }
 
@@ -62,17 +62,17 @@ func TestActExpandsAndCollapses(t *testing.T) {
 	p := ggui.NewProbe(ui.Collapsible(open, "More", ggui.Text("body")), ggui.Sz(200, 200))
 	defer p.Close()
 	act(t, p, ggui.RoleDisclosure, "More", ggui.Action{Kind: ggui.ActionExpand})
-	if !open.Peek() {
+	if !ggui.Untrack(open.Get) {
 		t.Fatal("expand did not open it")
 	}
 	// Expanding what is already open leaves it open, where a press would
 	// have shut it again.
 	act(t, p, ggui.RoleDisclosure, "More", ggui.Action{Kind: ggui.ActionExpand})
-	if !open.Peek() {
+	if !ggui.Untrack(open.Get) {
 		t.Fatal("expanding an open disclosure closed it")
 	}
 	act(t, p, ggui.RoleDisclosure, "More", ggui.Action{Kind: ggui.ActionCollapse})
-	if open.Peek() {
+	if ggui.Untrack(open.Get) {
 		t.Fatal("collapse did not close it")
 	}
 }
@@ -86,8 +86,8 @@ func TestActOpensAndChoosesInASelect(t *testing.T) {
 		t.Fatal("the list did not open")
 	}
 	act(t, p, ggui.RoleOption, "3", ggui.Action{Kind: ggui.ActionSelect})
-	if value.Peek() != 3 {
-		t.Fatalf("value = %d, want 3", value.Peek())
+	if ggui.Untrack(value.Get) != 3 {
+		t.Fatalf("value = %d, want 3", ggui.Untrack(value.Get))
 	}
 }
 
@@ -97,8 +97,8 @@ func TestActSelectsATabAndARow(t *testing.T) {
 	p := ggui.NewProbe(tabs, ggui.Sz(300, 200))
 	defer p.Close()
 	act(t, p, ggui.RoleTab, "Two", ggui.Action{Kind: ggui.ActionSelect})
-	if sel.Peek() != 1 {
-		t.Fatalf("tab = %d, want 1", sel.Peek())
+	if ggui.Untrack(sel.Get) != 1 {
+		t.Fatalf("tab = %d, want 1", ggui.Untrack(sel.Get))
 	}
 
 	chosen := ggui.State("")
@@ -107,8 +107,8 @@ func TestActSelectsATabAndARow(t *testing.T) {
 	q := ggui.NewProbe(table, ggui.Sz(300, 200))
 	defer q.Close()
 	act(t, q, ggui.RoleRow, "Alan", ggui.Action{Kind: ggui.ActionSelect})
-	if chosen.Peek() != "Alan" {
-		t.Fatalf("row = %q, want Alan", chosen.Peek())
+	if ggui.Untrack(chosen.Get) != "Alan" {
+		t.Fatalf("row = %q, want Alan", ggui.Untrack(chosen.Get))
 	}
 }
 
@@ -117,8 +117,8 @@ func TestActSetsATextFieldOutright(t *testing.T) {
 	p := ggui.NewProbe(ui.TextField(value).Named("Name"), ggui.Sz(200, 60))
 	defer p.Close()
 	act(t, p, ggui.RoleTextField, "Name", ggui.Action{Kind: ggui.ActionSetValue, Text: "Alan"})
-	if value.Peek() != "Alan" {
-		t.Fatalf("value = %q, want Alan", value.Peek())
+	if ggui.Untrack(value.Get) != "Alan" {
+		t.Fatalf("value = %q, want Alan", ggui.Untrack(value.Get))
 	}
 }
 

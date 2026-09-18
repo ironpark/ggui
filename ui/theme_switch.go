@@ -36,7 +36,7 @@ func (s *ThemeSwitchWidget) Disabled(v bool) *ThemeSwitchWidget {
 }
 
 // DisabledWhen follows a disabled-state binding without rebuilding.
-func (s *ThemeSwitchWidget) DisabledWhen(r ggui.Reader[bool]) *ThemeSwitchWidget {
+func (s *ThemeSwitchWidget) DisabledWhen(r ggui.Readable[bool]) *ThemeSwitchWidget {
 	s.SwitchWidget.DisabledWhen(r)
 	return s
 }
@@ -53,7 +53,7 @@ var themeSwitchSlot = ggui.NewSlot[*ggui.Motion]("themeSwitch")
 // Paint implements ggui.Widget.
 func (s *ThemeSwitchWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	box := s.paint(dst, r, s)
-	k := dst.Ease(s.Anchor(box), themeSwitchSlot, pick(s.on.Peek(), 1.0, 0.0), s.motion)
+	k := dst.Ease(s.Anchor(box), themeSwitchSlot, pick(ggui.Untrack(s.on.Get), 1.0, 0.0), s.motion)
 	// The celestial body is the thumb itself, with a softly shaded rim.
 	track := mix(color.NRGBA{R: 103, G: 187, B: 232, A: 255}, color.NRGBA{R: 33, G: 24, B: 79, A: 255}, k)
 	body := mix(color.NRGBA{R: 255, G: 220, B: 111, A: 255}, color.NRGBA{R: 255, G: 251, B: 252, A: 255}, k)

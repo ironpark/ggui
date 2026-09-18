@@ -45,7 +45,7 @@ type SidebarWidget struct {
 	onChange         func(string)
 	header, footer   ggui.Widget
 	width            float64
-	collapsed        ggui.Reader[bool]
+	collapsed        ggui.Readable[bool]
 	active           int
 	hover            int
 
@@ -103,7 +103,7 @@ func (s *SidebarWidget) Footer(w ggui.Widget) *SidebarWidget { s.footer = w; ret
 
 // Collapsed follows r: while it is true the column takes no width and
 // paints nothing, so a narrow window gives its space back to the content.
-func (s *SidebarWidget) Collapsed(r ggui.Reader[bool]) *SidebarWidget { s.collapsed = r; return s }
+func (s *SidebarWidget) Collapsed(r ggui.Readable[bool]) *SidebarWidget { s.collapsed = r; return s }
 
 // Disabled greys the column out and ignores input while v is true.
 func (s *SidebarWidget) Disabled(v bool) *SidebarWidget { s.SetInert(v); return s }
@@ -126,7 +126,7 @@ func (s *SidebarWidget) goTo(i int) {
 
 // current returns the entry the binding names, or -1.
 func (s *SidebarWidget) current() int {
-	key := s.selected.Peek()
+	key := ggui.Untrack(s.selected.Get)
 	for i, e := range s.entries {
 		if !e.section && e.key == key {
 			return i
@@ -346,7 +346,7 @@ func (it sidebarItem) Adopt(prev any) {
 }
 
 // DisabledWhen follows r for Disabled without rebuilding the control.
-func (s *SidebarWidget) DisabledWhen(r ggui.Reader[bool]) *SidebarWidget { s.InertWhen(r); return s }
+func (s *SidebarWidget) DisabledWhen(r ggui.Readable[bool]) *SidebarWidget { s.InertWhen(r); return s }
 
 func (s *SidebarWidget) name() string { return pick(s.Name != "", s.Name, "Sidebar") }
 

@@ -169,7 +169,7 @@ func TestMessageScrollerHistoryAnchorsAndRestore(t *testing.T) {
 	s.ScrollToMessage("2", ui.ScrollAlignStart)
 	p.Frame()
 	saved := s.Save()
-	data := append([]ui.MessageEntry{{ID: "older", Content: ggui.Box().Height(100)}}, rows.Peek()...)
+	data := append([]ui.MessageEntry{{ID: "older", Content: ggui.Box().Height(100)}}, ggui.Untrack(rows.Get)...)
 	rows.Set(data)
 	p.Frame()
 	if got := s.Save(); got.MessageID != saved.MessageID || got.Offset != saved.Offset {
@@ -255,7 +255,7 @@ func TestQuestionnaireValidationSkipSubmissionAndReset(t *testing.T) {
 	}
 	q.Reset()
 	p.Frame()
-	if len(answers.Peek()) != 0 || q.Error("three") != "" {
+	if len(ggui.Untrack(answers.Get)) != 0 || q.Error("three") != "" {
 		t.Fatal("reset did not restore initial state")
 	}
 	if current, total := q.Progress(); current != 1 || total != 3 {
@@ -271,17 +271,17 @@ func TestQuestionnaireKeyboardMultipleControlledAndDisabled(t *testing.T) {
 	defer p.Close()
 	p.Tap("B")
 	p.Type(ggui.Mods{}, ggui.KeyDigit2)
-	if len(answers.Peek()["multi"].Values) != 2 {
-		t.Fatal("multiple shortcut must skip disabled choices", answers.Peek())
+	if len(ggui.Untrack(answers.Get)["multi"].Values) != 2 {
+		t.Fatal("multiple shortcut must skip disabled choices", ggui.Untrack(answers.Get))
 	}
 	p.Tap("Submit")
 	p.Frame()
-	if active.Peek() != "single" {
+	if ggui.Untrack(active.Get) != "single" {
 		t.Fatal("submit did not return to first invalid step")
 	}
 	p.Tap("A")
 	p.Type(ggui.Mods{}, ggui.KeyEnter)
-	if active.Peek() != "multi" {
+	if ggui.Untrack(active.Get) != "multi" {
 		t.Fatal("Enter did not continue")
 	}
 	q.SetError("multi", "Choose fewer options")
@@ -315,7 +315,7 @@ func TestQuestionnaireFreeformDefaultsAndExternalErrors(t *testing.T) {
 	clip.Write("Custom answer")
 	ggui.SetClipboard(clip)
 	p.Type(ggui.Mods{Meta: true}, ggui.KeyV)
-	if a := answers.Peek()["one"]; len(a.Values) != 0 || a.Text != "Custom answer" {
+	if a := ggui.Untrack(answers.Get)["one"]; len(a.Values) != 0 || a.Text != "Custom answer" {
 		t.Fatal("single freeform did not replace fixed choice", a)
 	}
 	p.Type(ggui.Mods{Meta: true}, ggui.KeyEnter)
@@ -324,7 +324,7 @@ func TestQuestionnaireFreeformDefaultsAndExternalErrors(t *testing.T) {
 	}
 	q.Reset()
 	p.Frame()
-	if a := answers.Peek()["one"]; len(a.Values) != 1 || a.Values[0] != "a" || a.Text != "" {
+	if a := ggui.Untrack(answers.Get)["one"]; len(a.Values) != 1 || a.Values[0] != "a" || a.Text != "" {
 		t.Fatal("default answer not restored", a)
 	}
 }

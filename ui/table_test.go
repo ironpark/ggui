@@ -14,11 +14,11 @@ type person struct {
 	Age  int
 }
 
-func people() *ggui.Signal[[]person] {
+func people() *ggui.StateValue[[]person] {
 	return ggui.State([]person{{1, "Ada", 36}, {2, "Grace", 45}, {3, "Linus", 28}})
 }
 
-func table(rows ggui.Reader[[]person]) (*ui.TableWidget[person, int], *ggui.Signal[int]) {
+func table(rows ggui.Readable[[]person]) (*ui.TableWidget[person, int], *ggui.StateValue[int]) {
 	chosen := ggui.State(0)
 	t := ui.Table(rows, func(p person) int { return p.ID },
 		ui.TextCol("Name", func(p person) string { return p.Name }),
@@ -37,8 +37,8 @@ func TestTableRowsSelectOnClick(t *testing.T) {
 		t.Fatalf("rows = %d, want 3", got)
 	}
 	p.Tap("Grace")
-	if chosen.Peek() != 2 {
-		t.Fatalf("chosen = %d after tapping Grace, want 2", chosen.Peek())
+	if ggui.Untrack(chosen.Get) != 2 {
+		t.Fatalf("chosen = %d after tapping Grace, want 2", ggui.Untrack(chosen.Get))
 	}
 
 	// Rows follow the list: a removal drops its row, an edit updates it.

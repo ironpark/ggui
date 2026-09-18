@@ -24,7 +24,7 @@ func TestThemeTokens(t *testing.T) {
 func TestEachKeysByValue(t *testing.T) {
 	tags := State([]string{"a", "b"})
 	builds := 0
-	list := Each(tags, func(r Reader[string]) Widget { builds++; return TextOf(r) })
+	list := Each(tags, func(rowItem EachItem[string]) Widget { r := rowItem.Value; builds++; return TextOf(r) })
 	p := NewProbe(list, Sz(100, 100))
 	defer p.Close()
 	p.Frame()

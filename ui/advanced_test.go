@@ -22,34 +22,34 @@ func TestAccordionSelectionAndKeyboard(t *testing.T) {
 	p := ggui.NewProbe(a, ggui.Sz(300, 300))
 	defer p.Close()
 	p.Tap("Alpha")
-	if !slices.Equal(open.Peek(), []string{"a"}) {
-		t.Fatal(open.Peek())
+	if !slices.Equal(ggui.Untrack(open.Get), []string{"a"}) {
+		t.Fatal(ggui.Untrack(open.Get))
 	}
 	p.Type(ggui.Mods{}, ggui.KeyArrowDown, ggui.KeyEnter)
-	if !slices.Equal(open.Peek(), []string{"c"}) {
-		t.Fatalf("single mode/disabled skip: %v", open.Peek())
+	if !slices.Equal(ggui.Untrack(open.Get), []string{"c"}) {
+		t.Fatalf("single mode/disabled skip: %v", ggui.Untrack(open.Get))
 	}
 	p.Type(ggui.Mods{}, ggui.KeyHome, ggui.KeySpace)
-	if !slices.Equal(open.Peek(), []string{"a"}) {
-		t.Fatal("Home failed", open.Peek())
+	if !slices.Equal(ggui.Untrack(open.Get), []string{"a"}) {
+		t.Fatal("Home failed", ggui.Untrack(open.Get))
 	}
 	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyEnter)
 	if calls != 1 {
 		t.Fatal("open content is not keyboard reachable")
 	}
 	p.Tap("Alpha")
-	if len(open.Peek()) != 0 {
+	if len(ggui.Untrack(open.Get)) != 0 {
 		t.Fatal("second click did not collapse")
 	}
 	a.Multiple()
 	p.Tap("Alpha")
 	p.Tap("Charlie")
-	if !slices.Equal(open.Peek(), []string{"a", "c"}) {
-		t.Fatal("multiple mode", open.Peek())
+	if !slices.Equal(ggui.Untrack(open.Get), []string{"a", "c"}) {
+		t.Fatal("multiple mode", ggui.Untrack(open.Get))
 	}
 	p.Tap("Alpha")
-	if !slices.Equal(open.Peek(), []string{"c"}) {
-		t.Fatal("independent collapse", open.Peek())
+	if !slices.Equal(ggui.Untrack(open.Get), []string{"c"}) {
+		t.Fatal("independent collapse", ggui.Untrack(open.Get))
 	}
 	open.Set([]string{"a"})
 	p.Frame()
@@ -108,8 +108,8 @@ func TestComboboxSelectionAndEscape(t *testing.T) {
 	defer p.Close()
 	p.Tap("Fruit")
 	p.Type(ggui.Mods{}, ggui.KeyArrowDown, ggui.KeyEnter)
-	if value.Peek() != "Banana" || changes != 1 || c.Popup().IsOpen() {
-		t.Fatalf("selection: %s, %d, %v", value.Peek(), changes, c.Popup().IsOpen())
+	if ggui.Untrack(value.Get) != "Banana" || changes != 1 || c.Popup().IsOpen() {
+		t.Fatalf("selection: %s, %d, %v", ggui.Untrack(value.Get), changes, c.Popup().IsOpen())
 	}
 	// Closing restores focus to the trigger, so Enter opens it again.
 	p.Type(ggui.Mods{}, ggui.KeyEnter)
@@ -117,12 +117,12 @@ func TestComboboxSelectionAndEscape(t *testing.T) {
 		t.Fatal("focus did not return to the trigger")
 	}
 	p.Type(ggui.Mods{}, ggui.KeyEscape)
-	if value.Peek() != "Banana" || c.Popup().IsOpen() {
+	if ggui.Untrack(value.Get) != "Banana" || c.Popup().IsOpen() {
 		t.Fatal("Escape changed selection or did not close")
 	}
 	p.Tap("Fruit")
 	p.Tap("Cherry")
-	if value.Peek() != "Cherry" || changes != 2 {
+	if ggui.Untrack(value.Get) != "Cherry" || changes != 2 {
 		t.Fatal("pointer selection failed")
 	}
 	c.Disabled(true)
@@ -142,22 +142,22 @@ func TestResizableCaptureLimitsAndKeyboard(t *testing.T) {
 	p.Move(ggui.Pt(300.0, at.Y))
 	p.Move(ggui.Pt(400.0, at.Y))
 	p.Release(ggui.Pt(400.0, at.Y))
-	if math.Abs(fraction.Peek()-.7) > 1e-9 {
-		t.Fatal("drag did not clamp to second minimum", fraction.Peek())
+	if math.Abs(ggui.Untrack(fraction.Get)-.7) > 1e-9 {
+		t.Fatal("drag did not clamp to second minimum", ggui.Untrack(fraction.Get))
 	}
 	p.Type(ggui.Mods{}, ggui.KeyHome)
-	if math.Abs(fraction.Peek()-.2) > 1e-9 {
-		t.Fatal("keyboard focus lost while handle moved", fraction.Peek())
+	if math.Abs(ggui.Untrack(fraction.Get)-.2) > 1e-9 {
+		t.Fatal("keyboard focus lost while handle moved", ggui.Untrack(fraction.Get))
 	}
 	p.Type(ggui.Mods{Shift: true}, ggui.KeyArrowRight)
-	if math.Abs(fraction.Peek()-.3) > 1e-9 {
-		t.Fatal("keyboard step failed", fraction.Peek())
+	if math.Abs(ggui.Untrack(fraction.Get)-.3) > 1e-9 {
+		t.Fatal("keyboard step failed", ggui.Untrack(fraction.Get))
 	}
 	fraction.Set(.9)
 	p.Frame()
 	rect := find(t, p, ggui.RoleSeparator, "Resize panels").Rect
-	if math.Abs(rect.Origin.X-140) > 1e-9 || fraction.Peek() != .9 {
-		t.Fatal("external value not clamped for display", rect, fraction.Peek())
+	if math.Abs(rect.Origin.X-140) > 1e-9 || ggui.Untrack(fraction.Get) != .9 {
+		t.Fatal("external value not clamped for display", rect, ggui.Untrack(fraction.Get))
 	}
 	p.Resize(ggui.Sz(58, 40))
 	p.Frame()
@@ -178,11 +178,11 @@ func TestResizableVertical(t *testing.T) {
 	defer p.Close()
 	p.Tap("Resize panels")
 	p.Type(ggui.Mods{}, ggui.KeyArrowDown)
-	if math.Abs(fraction.Peek()-.51) > 1e-9 {
-		t.Fatal(fraction.Peek())
+	if math.Abs(ggui.Untrack(fraction.Get)-.51) > 1e-9 {
+		t.Fatal(ggui.Untrack(fraction.Get))
 	}
 	p.Type(ggui.Mods{}, ggui.KeyEnd)
-	if fraction.Peek() != 1 {
+	if ggui.Untrack(fraction.Get) != 1 {
 		t.Fatal("vertical End failed")
 	}
 }

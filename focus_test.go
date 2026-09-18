@@ -42,7 +42,7 @@ func TestKeyEventIs(t *testing.T) {
 // spaceEater is a focusable region that consumes Space.
 type spaceEater struct {
 	FocusWidget
-	seen []Key
+	seen []KeyboardKey
 }
 
 func (e *spaceEater) HandleKey(ev KeyEvent) {

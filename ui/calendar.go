@@ -153,7 +153,7 @@ func (c *CalendarWidget) choose(t time.Time) {
 		return
 	}
 	c.show(t)
-	if !c.date(c.value.Peek()).Equal(t) {
+	if !c.date(ggui.Untrack(c.value.Get)).Equal(t) {
 		c.value.Set(t)
 		c.last = t
 		if c.onChange != nil {
@@ -184,7 +184,7 @@ func (c *CalendarWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	for i, label := range c.weekdayText {
 		c.weekdaySize[i] = label.Set(c.weekdays[(i+int(c.weekStart))%7]).Color(c.theme.MutedFg).Layout(cell, env)
 	}
-	selected := c.date(c.value.Peek())
+	selected := c.date(ggui.Untrack(c.value.Get))
 	start := month.AddDate(0, 0, -(int(month.Weekday())-int(c.weekStart)+7)%7)
 	for i, d := range c.days {
 		if date := start.AddDate(0, 0, i); !date.Equal(d.date) {
@@ -292,7 +292,7 @@ type calendarDay struct {
 
 func (d *calendarDay) Layout(cs ggui.Constraints, _ ggui.Env) ggui.Size { return cs.Constrain(d.size) }
 func (d *calendarDay) Describe() ggui.Node {
-	return ggui.Node{Role: ggui.RoleOption, Name: d.Name, Selected: d.owner.date(d.owner.value.Peek()).Equal(d.date), Disabled: d.Inert, Actions: ggui.ActionPress | ggui.ActionSelect}
+	return ggui.Node{Role: ggui.RoleOption, Name: d.Name, Selected: d.owner.date(ggui.Untrack(d.owner.value.Get)).Equal(d.date), Disabled: d.Inert, Actions: ggui.ActionPress | ggui.ActionSelect}
 }
 func (d *calendarDay) Act(a ggui.Action) bool {
 	if !d.owner.enabled(d.date) || (a.Kind != ggui.ActionPress && a.Kind != ggui.ActionSelect) {
@@ -315,7 +315,7 @@ func (d *calendarDay) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.HitPointer(r, d)
 		dst.HitCursor(r, ggui.CursorShapePointer)
 	}
-	if c.date(c.value.Peek()).Equal(d.date) {
+	if c.date(ggui.Untrack(c.value.Get)).Equal(d.date) {
 		dst.FillRoundRect(r, t.Radius, t.Primary)
 	} else if d.Hovered {
 		dst.FillRoundRect(r, t.Radius, t.Muted)
@@ -327,7 +327,10 @@ func (d *calendarDay) Paint(dst *ggui.Canvas, r ggui.Rect) {
 }
 
 // DisabledWhen follows r for Disabled without rebuilding the control.
-func (c *CalendarWidget) DisabledWhen(r ggui.Reader[bool]) *CalendarWidget { c.InertWhen(r); return c }
+func (c *CalendarWidget) DisabledWhen(r ggui.Readable[bool]) *CalendarWidget {
+	c.InertWhen(r)
+	return c
+}
 
 func (c *CalendarWidget) name() string { return pick(c.Name != "", c.Name, "Calendar") }
 

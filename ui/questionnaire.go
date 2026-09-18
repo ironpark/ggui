@@ -56,7 +56,7 @@ type QuestionnaireWidget struct {
 	items          []Question
 	active         ggui.Binding[string]
 	initialItem    string
-	revision       *ggui.Signal[int]
+	revision       *ggui.StateValue[int]
 	errors         map[string]string
 	externalErrors map[string]string
 	view           ggui.Widget
@@ -72,7 +72,7 @@ type QuestionnaireWidget struct {
 }
 
 func Questionnaire(answers ggui.Binding[QuestionAnswers], items ...Question) *QuestionnaireWidget {
-	q := &QuestionnaireWidget{answers: answers, initial: cloneAnswers(answers.Peek()), revision: ggui.State(0), errors: map[string]string{}, externalErrors: map[string]string{}, submitLabel: "Submit", focusChoice: -1}
+	q := &QuestionnaireWidget{answers: answers, initial: cloneAnswers(ggui.Untrack(answers.Get)), revision: ggui.State(0), errors: map[string]string{}, externalErrors: map[string]string{}, submitLabel: "Submit", focusChoice: -1}
 	q.Role, q.Name = ggui.RoleGroup, "Questionnaire"
 	q.AutoKey()
 	q.SetItems(items...)
@@ -101,7 +101,7 @@ func (q *QuestionnaireWidget) Named(s string) *QuestionnaireWidget { q.Name = s;
 // Active binds navigation to a stable question name for resume and host control.
 func (q *QuestionnaireWidget) Active(v ggui.Binding[string]) *QuestionnaireWidget {
 	q.active = v
-	q.initialItem = v.Peek()
+	q.initialItem = ggui.Untrack(v.Get)
 	q.changed()
 	return q
 }
@@ -169,7 +169,7 @@ func (q *QuestionnaireWidget) current() int {
 	if q.active == nil {
 		return -1
 	}
-	name := q.active.Peek()
+	name := ggui.Untrack(q.active.Get)
 	first := -1
 	for i, item := range q.items {
 		if !item.Disabled {
@@ -184,7 +184,7 @@ func (q *QuestionnaireWidget) current() int {
 	return first
 }
 func (q *QuestionnaireWidget) answer(item Question) QuestionAnswer {
-	a := q.answers.Peek()[item.Name]
+	a := ggui.Untrack(q.answers.Get)[item.Name]
 
 	selected := a.Values
 	a.Values = nil
@@ -224,7 +224,7 @@ func (q *QuestionnaireWidget) Status(name string) QuestionStatus {
 }
 func (q *QuestionnaireWidget) store(item Question, a QuestionAnswer) {
 	before := q.Status(item.Name)
-	all := cloneAnswers(q.answers.Peek())
+	all := cloneAnswers(ggui.Untrack(q.answers.Get))
 	all[item.Name] = a
 	q.answers.Set(all)
 	delete(q.errors, item.Name)
@@ -263,7 +263,7 @@ func (q *QuestionnaireWidget) move(i int) {
 		return
 	}
 	name := q.items[i].Name
-	if name != q.active.Peek() {
+	if name != ggui.Untrack(q.active.Get) {
 		q.active.Set(name)
 		if q.onItem != nil {
 			q.onItem(name)
@@ -530,8 +530,7 @@ type questionTextBinding struct {
 	item Question
 }
 
-func (b questionTextBinding) Get() string  { b.q.answers.Get(); return b.Peek() }
-func (b questionTextBinding) Peek() string { return b.q.answer(b.item).Text }
+func (b questionTextBinding) Get() string { b.q.answers.Get(); return b.q.answer(b.item).Text }
 func (b questionTextBinding) Set(s string) {
 	a := b.q.answer(b.item)
 	a.Text = s

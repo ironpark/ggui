@@ -17,14 +17,14 @@ func TestPaginationNavigation(t *testing.T) {
 	if _, ok := p.Find("Previous"); ok {
 		t.Fatal("first page has an enabled Previous button")
 	}
-	if page.Peek() != 1 || changes != 0 {
+	if ggui.Untrack(page.Get) != 1 || changes != 0 {
 		t.Fatal("previous changed the first page")
 	}
 	p.Tap("Page 3")
 	if node, ok := p.Semantics().Find(ggui.RoleButton, "Page 3"); !ok || !node.Selected {
 		t.Fatal("current page is not marked selected")
 	}
-	if page.Peek() != 3 || changes != 1 {
+	if ggui.Untrack(page.Get) != 3 || changes != 1 {
 		t.Fatal("numbered navigation failed")
 	}
 	p.Type(ggui.Mods{}, ggui.KeySpace)
@@ -33,15 +33,15 @@ func TestPaginationNavigation(t *testing.T) {
 	}
 	p.Tap("Next")
 	p.Type(ggui.Mods{}, ggui.KeySpace)
-	if page.Peek() != 5 || changes != 3 {
-		t.Fatalf("keyboard navigation: page=%d changes=%d", page.Peek(), changes)
+	if ggui.Untrack(page.Get) != 5 || changes != 3 {
+		t.Fatalf("keyboard navigation: page=%d changes=%d", ggui.Untrack(page.Get), changes)
 	}
 	page.Set(12)
 	p.Frame()
 	if _, ok := p.Find("Next"); ok {
 		t.Fatal("last page has an enabled Next button")
 	}
-	if page.Peek() != 12 {
+	if ggui.Untrack(page.Get) != 12 {
 		t.Fatal("next moved past the last page")
 	}
 	nav.Disabled(true)
@@ -49,20 +49,20 @@ func TestPaginationNavigation(t *testing.T) {
 	if _, ok := p.Find("Previous"); ok {
 		t.Fatal("disabled navigation registers input")
 	}
-	if page.Peek() != 12 {
+	if ggui.Untrack(page.Get) != 12 {
 		t.Fatal("disabled navigation changed page")
 	}
 	nav.Disabled(false)
 	pages.Set(2)
 	p.Frame()
-	if page.Peek() != 12 {
+	if ggui.Untrack(page.Get) != 12 {
 		t.Fatal("layout wrote to the page binding")
 	}
 	if _, ok := p.Find("Page 3"); ok {
 		t.Fatal("stale page button after page count shrank")
 	}
 	p.Tap("Previous")
-	if page.Peek() != 1 {
+	if ggui.Untrack(page.Get) != 1 {
 		t.Fatal("navigation did not use clamped displayed page")
 	}
 	for _, n := range []int{0, -1} {
@@ -74,7 +74,7 @@ func TestPaginationNavigation(t *testing.T) {
 		if _, ok := p.Find("Previous"); ok {
 			t.Fatal("empty navigation enables Previous")
 		}
-		if page.Peek() != 1 {
+		if ggui.Untrack(page.Get) != 1 {
 			t.Fatal("empty pagination changed the binding")
 		}
 		if _, ok := p.Find("Page 1"); ok {

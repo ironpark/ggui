@@ -67,7 +67,7 @@ func (s *SelectWidget[T]) Describe() ggui.Node {
 	return ggui.Node{
 		Role:     ggui.RoleSelect,
 		Name:     s.Name,
-		Value:    s.label(s.value.Peek()),
+		Value:    s.label(ggui.Untrack(s.value.Get)),
 		Expanded: ggui.Expandable(s.popup.IsOpen()),
 		Disabled: s.Inert,
 		Actions: ggui.ActionPress | ggui.ActionFocus | ggui.ActionSelect |
@@ -113,7 +113,7 @@ func (s *SelectWidget[T]) ConsumesKey(ev ggui.KeyEvent) bool {
 func (s *SelectWidget[T]) Disabled(v bool) *SelectWidget[T] { s.SetInert(v); return s }
 
 // DisabledWhen follows r for Disabled without a rebuild.
-func (s *SelectWidget[T]) DisabledWhen(r ggui.Reader[bool]) *SelectWidget[T] {
+func (s *SelectWidget[T]) DisabledWhen(r ggui.Readable[bool]) *SelectWidget[T] {
 	s.InertWhen(r)
 	return s
 }
@@ -140,7 +140,7 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	s.pad = t.FieldPad
 	s.box.Radius(t.Radius).Fill(t.Input)
 	panelBox(s.list, t)
-	s.text = ggui.Text(s.label(s.value.Peek())).NoWrap().Color(pick[color.Color](s.Inert, t.MutedFg, t.Fg))
+	s.text = ggui.Text(s.label(ggui.Untrack(s.value.Get))).NoWrap().Color(pick[color.Color](s.Inert, t.MutedFg, t.Fg))
 	// As wide as the widest option, so the field does not resize as the
 	// value changes, and never wider than the row wants unless told to.
 	widest := 0.0
@@ -179,7 +179,7 @@ func (s *SelectWidget[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 }
 
 func (s *SelectWidget[T]) index() int {
-	v := s.value.Peek()
+	v := ggui.Untrack(s.value.Get)
 	for i, o := range s.options {
 		if o == v {
 			return i

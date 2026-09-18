@@ -171,7 +171,7 @@ func TestFocusedNodePrefersHandlerAndFallsBackAfterRebuild(t *testing.T) {
 
 func TestSemanticsListCountsItems(t *testing.T) {
 	items := State([]string{"a", "b", "c"})
-	tree := described(t, Each(items, func(s Reader[string]) Widget { return TextOf(s) }), Sz(100, 200))
+	tree := described(t, Each(items, func(rowItem EachItem[string]) Widget { s := rowItem.Value; return TextOf(s) }), Sz(100, 200))
 	list, ok := tree.Find(RoleList, "")
 	if !ok {
 		t.Fatalf("no list:\n%s", tree)
@@ -204,7 +204,7 @@ text "body"
 func TestSemanticsStagingReusePreservesOldTree(t *testing.T) {
 	rows := State([]string{"one", "two", "three"})
 	p := ProbeBuilder(func() Widget {
-		return Each(rows, func(s Reader[string]) Widget { return TextOf(s) })
+		return Each(rows, func(rowItem EachItem[string]) Widget { s := rowItem.Value; return TextOf(s) })
 	}, Sz(100, 200))
 	defer p.Close()
 	old := p.Semantics()

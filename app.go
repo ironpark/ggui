@@ -1,5 +1,5 @@
 // Package ggui is a cross-platform GUI framework for Go: Flutter's widget tree
-// and layout model, driven by SvelteKit-style reactivity, rendered by Ebitengine.
+// and layout model, driven by Svelte-style reactivity, rendered by Ebitengine.
 package ggui
 
 import (
@@ -18,7 +18,7 @@ type Config struct {
 	Height     int
 	Resizable  bool
 	Background color.Color // nil follows the theme's Bg
-	Inspector  Key         // a key that toggles the widget inspector; zero for none
+	Inspector  KeyboardKey // a key that toggles the widget inspector; zero for none
 
 	// Accessibility says when the app talks to the platform's
 	// accessibility API. The zero value waits for an assistive technology
@@ -40,9 +40,10 @@ func (c Config) withDefaults() Config {
 }
 
 // App drives one window. Each frame it routes input to the regions painted
-// last frame, flushes reactive effects (which rebuilds the tree when state
-// changed), then lays out and paints, collecting the next frame's regions.
+// last frame, settles reactive bindings and layout, runs user effects, then
+// paints and collects the next frame's regions. Root setup runs once.
 type App struct {
+	frameErr error
 	frameLoop
 	cfg   Config
 	frame []func()
@@ -187,6 +188,9 @@ func (a *App) SetInspector(o InspectorOptions) { a.insp.apply(o) }
 
 // Update implements ebiten.Game.
 func (a *App) Update() error {
+	if a.frameErr != nil {
+		return a.frameErr
+	}
 	if a.closed {
 		return ebiten.Termination
 	}
@@ -290,7 +294,7 @@ func (a *App) Draw(screen *ebiten.Image) {
 	frame.begin(clock())
 	bg := a.cfg.Background
 	if bg == nil {
-		bg = theme.Peek().Bg
+		bg = Untrack(theme.Get).Bg
 	}
 	screen.Fill(bg)
 	if a.root == nil {
@@ -308,8 +312,15 @@ func (a *App) Draw(screen *ebiten.Image) {
 	a.canvas.logical = logical
 	a.canvas.nextFrame()
 	a.canvas.resetSemantics()
-	if a.needsLayout(logical) {
-		a.rootSize = a.root.Layout(Tight(logical), rootEnv())
+	if err := a.settle(logical); err != nil {
+		a.frameErr = err
+		return
+	}
+	if a.closed || a.root == nil {
+		return
+	}
+	if a.cfg.Background == nil {
+		screen.Fill(Untrack(theme.Get).Bg)
 	}
 	a.canvas.Paint(a.root, Rect{Size: a.rootSize})
 	a.canvas.paintOverlays()

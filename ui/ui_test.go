@@ -67,8 +67,8 @@ func TestCheckboxTogglesSignal(t *testing.T) {
 	f := find(t, p, ggui.RoleCheckbox, "label")
 	p.Click(f.Rect.Origin.Add(ggui.Pt(2, 2)))                                          // on the glyph
 	p.Click(ggui.Pt(f.Rect.Origin.X+f.Rect.Size.W-2, f.Rect.Origin.Y+f.Rect.Size.H/2)) // on the label's end
-	if len(changed) != 2 || !changed[0] || changed[1] || on.Peek() {
-		t.Fatalf("changed = %v, on = %v", changed, on.Peek())
+	if len(changed) != 2 || !changed[0] || changed[1] || ggui.Untrack(on.Get) {
+		t.Fatalf("changed = %v, on = %v", changed, ggui.Untrack(on.Get))
 	}
 	size := c.Layout(ggui.Loose(ggui.Sz(200, 30)), ggui.Env{})
 	label := ggui.Text("label").Layout(ggui.Loose(ggui.Sz(200, 30)), ggui.Env{})
@@ -84,8 +84,8 @@ func TestRadioSelectsValue(t *testing.T) {
 	p := ggui.NewProbe(col, ggui.Sz(100, 60))
 	defer p.Close()
 	p.Tap("B")
-	if choice.Peek() != "b" {
-		t.Fatalf("choice = %q, want b", choice.Peek())
+	if ggui.Untrack(choice.Get) != "b" {
+		t.Fatalf("choice = %q, want b", ggui.Untrack(choice.Get))
 	}
 }
 
@@ -95,7 +95,7 @@ func TestSwitchToggles(t *testing.T) {
 	p := ggui.NewProbe(s, ggui.Sz(100, 30))
 	defer p.Close()
 	p.Click(find(t, p, ggui.RoleSwitch, "").Center())
-	if !on.Peek() {
+	if !ggui.Untrack(on.Get) {
 		t.Fatal("switch did not turn on")
 	}
 	if got := s.Layout(ggui.Loose(ggui.Sz(100, 30)), ggui.Env{}); got != ggui.Sz(36, 20) {
@@ -116,22 +116,22 @@ func TestSliderDragsBeyondItsRect(t *testing.T) {
 	defer p.Close()
 	track := find(t, p, ggui.RoleSlider, "")
 	p.Press(onTrack(track, 0.5))
-	if v.Peek() != 50 {
-		t.Fatalf("value = %v after pressing mid-track, want 50", v.Peek())
+	if ggui.Untrack(v.Get) != 50 {
+		t.Fatalf("value = %v after pressing mid-track, want 50", ggui.Untrack(v.Get))
 	}
 	p.Move(onTrack(track, 0.73))
-	if v.Peek() != 70 {
-		t.Fatalf("value = %v after dragging to 73%%, want 70 with step 10", v.Peek())
+	if ggui.Untrack(v.Get) != 70 {
+		t.Fatalf("value = %v after dragging to 73%%, want 70 with step 10", ggui.Untrack(v.Get))
 	}
 	far := onTrack(track, 5).Add(ggui.Pt(0, 300)) // dragged far outside
 	p.Move(far)
-	if v.Peek() != 100 {
-		t.Fatalf("value = %v after dragging past the end, want 100", v.Peek())
+	if ggui.Untrack(v.Get) != 100 {
+		t.Fatalf("value = %v after dragging past the end, want 100", ggui.Untrack(v.Get))
 	}
 	p.Release(far)
 	p.Move(far)
-	if v.Peek() != 100 {
-		t.Fatalf("value = %v after release", v.Peek())
+	if ggui.Untrack(v.Get) != 100 {
+		t.Fatalf("value = %v after release", ggui.Untrack(v.Get))
 	}
 }
 
@@ -190,14 +190,14 @@ func TestSwitchKeepsSlidingAcrossRebuild(t *testing.T) {
 	defer p.Close()
 	p.Tap("Dark")
 	p.Frame() // the rebuilt switch adopts the old knob mid-slide
-	if !on.Peek() {
+	if !ggui.Untrack(on.Get) {
 		t.Fatal("switch did not turn on")
 	}
 	// A second flip right away must start from wherever the knob was,
 	// which is not yet the far end.
 	p.Tap("Dark")
 	p.Frame()
-	if on.Peek() {
+	if ggui.Untrack(on.Get) {
 		t.Fatal("switch did not turn off")
 	}
 }
@@ -214,8 +214,8 @@ func TestSliderDragSurvivesRebuild(t *testing.T) {
 	p.Press(onTrack(track, 0.2))
 	p.Move(onTrack(track, 0.6))
 	p.Move(onTrack(track, 0.9))
-	if v.Peek() != 90 {
-		t.Fatalf("value = %v after dragging through rebuilds, want 90", v.Peek())
+	if ggui.Untrack(v.Get) != 90 {
+		t.Fatalf("value = %v after dragging through rebuilds, want 90", ggui.Untrack(v.Get))
 	}
 }
 
@@ -235,12 +235,12 @@ func TestControlsWorkFromTheKeyboard(t *testing.T) {
 		t.Fatalf("taps = %d after Tab, Enter; want 1", taps)
 	}
 	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeySpace)
-	if !on.Peek() {
+	if !ggui.Untrack(on.Get) {
 		t.Fatal("Space did not toggle the focused checkbox")
 	}
 	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyArrowRight, ggui.KeyArrowRight, ggui.KeyArrowLeft)
-	if v.Peek() != 55 {
-		t.Fatalf("slider = %v after right, right, left; want 55", v.Peek())
+	if ggui.Untrack(v.Get) != 55 {
+		t.Fatalf("slider = %v after right, right, left; want 55", ggui.Untrack(v.Get))
 	}
 }
 
@@ -256,11 +256,11 @@ func TestSliderKeepsDraggingWhenItMoves(t *testing.T) {
 	defer p.Close()
 	track := find(t, p, ggui.RoleSlider, "")
 	p.Press(onTrack(track, 0.1))
-	first := v.Peek()
+	first := ggui.Untrack(v.Get)
 	p.Move(onTrack(track, 0.5))
 	p.Move(onTrack(track, 0.75))
-	if v.Peek() <= first+40 {
-		t.Fatalf("value %v after dragging to the right from %v: the moved slider lost the drag", v.Peek(), first)
+	if ggui.Untrack(v.Get) <= first+40 {
+		t.Fatalf("value %v after dragging to the right from %v: the moved slider lost the drag", ggui.Untrack(v.Get), first)
 	}
 }
 
@@ -285,17 +285,17 @@ func TestSelectOpensPicksAndClosesWithPointerAndKeys(t *testing.T) {
 		t.Fatalf("%d options found, want 3", len(opts))
 	}
 	p.Tap("c")
-	if v.Peek() != "c" || changes != 1 || sel.Popup().IsOpen() {
-		t.Fatalf("value %q changes %d open %v after clicking the third row", v.Peek(), changes, sel.Popup().IsOpen())
+	if ggui.Untrack(v.Get) != "c" || changes != 1 || sel.Popup().IsOpen() {
+		t.Fatalf("value %q changes %d open %v after clicking the third row", ggui.Untrack(v.Get), changes, sel.Popup().IsOpen())
 	}
 	// Keyboard: focus is on the field; Down while closed steps the value.
 	p.Type(ggui.Mods{}, ggui.KeyArrowDown)
-	if v.Peek() != "a" {
-		t.Fatalf("Down wrapped to %q, want a", v.Peek())
+	if ggui.Untrack(v.Get) != "a" {
+		t.Fatalf("Down wrapped to %q, want a", ggui.Untrack(v.Get))
 	}
 	p.Type(ggui.Mods{}, ggui.KeySpace, ggui.KeyArrowDown, ggui.KeyEnter)
-	if v.Peek() != "b" || sel.Popup().IsOpen() {
-		t.Fatalf("Space, Down, Enter gave %q open %v; want b and closed", v.Peek(), sel.Popup().IsOpen())
+	if ggui.Untrack(v.Get) != "b" || sel.Popup().IsOpen() {
+		t.Fatalf("Space, Down, Enter gave %q open %v; want b and closed", ggui.Untrack(v.Get), sel.Popup().IsOpen())
 	}
 	p.Type(ggui.Mods{}, ggui.KeySpace)
 	size := p.Frame()
@@ -344,8 +344,8 @@ func TestTabsSwitchByClickAndKeys(t *testing.T) {
 		t.Fatalf("first page %+v second %+v; want only the first painted", a, b)
 	}
 	p.Tap("Two")
-	if sel.Peek() != 1 {
-		t.Fatalf("selected %d after clicking the second label", sel.Peek())
+	if ggui.Untrack(sel.Get) != 1 {
+		t.Fatalf("selected %d after clicking the second label", ggui.Untrack(sel.Get))
 	}
 	a = ggui.Rect{}
 	p.Frame()
@@ -353,12 +353,12 @@ func TestTabsSwitchByClickAndKeys(t *testing.T) {
 		t.Fatal("second page not shown alone after the switch")
 	}
 	p.Type(ggui.Mods{}, ggui.KeyArrowRight)
-	if sel.Peek() != 0 {
-		t.Fatalf("Right wrapped to %d, want 0", sel.Peek())
+	if ggui.Untrack(sel.Get) != 0 {
+		t.Fatalf("Right wrapped to %d, want 0", ggui.Untrack(sel.Get))
 	}
 	p.Type(ggui.Mods{}, ggui.KeyEnd)
-	if sel.Peek() != 1 {
-		t.Fatalf("End went to %d, want 1", sel.Peek())
+	if ggui.Untrack(sel.Get) != 1 {
+		t.Fatalf("End went to %d, want 1", ggui.Untrack(sel.Get))
 	}
 }
 
@@ -374,7 +374,7 @@ func TestCollapsibleTogglesAndHidesContent(t *testing.T) {
 		t.Fatal("content painted while closed")
 	}
 	p.Tap("Details")
-	if !open.Peek() {
+	if !ggui.Untrack(open.Get) {
 		t.Fatal("click on the header did not open")
 	}
 	p.Frame()
@@ -383,7 +383,7 @@ func TestCollapsibleTogglesAndHidesContent(t *testing.T) {
 		t.Fatalf("content %+v, height %v -> %v; want content shown below the header", body, closed.H, opened.H)
 	}
 	p.Type(ggui.Mods{}, ggui.KeySpace)
-	if open.Peek() {
+	if ggui.Untrack(open.Get) {
 		t.Fatal("Space did not close")
 	}
 }
@@ -417,12 +417,12 @@ func TestSwitchKnobEasesOnTheClock(t *testing.T) {
 	p := ggui.NewProbe(tree, ggui.Sz(100, 30))
 	defer p.Close()
 	p.Tap("Dark")
-	if !on.Peek() {
+	if !ggui.Untrack(on.Get) {
 		t.Fatal("switch did not turn on")
 	}
 	p.Advance(50 * time.Millisecond)
 	p.Tap("Dark") // flips back from mid-slide
-	if on.Peek() {
+	if ggui.Untrack(on.Get) {
 		t.Fatal("switch did not turn off")
 	}
 }
@@ -455,8 +455,8 @@ func TestDisabledTextFieldTakesNoInput(t *testing.T) {
 	size := p.Frame()
 	p.Click(ggui.Pt(size.W/2, size.H/2))
 	p.Text("x")
-	if v.Peek() != "" || p.Focused() {
-		t.Fatalf("value %q focused %v after clicking and typing into a disabled field", v.Peek(), p.Focused())
+	if ggui.Untrack(v.Get) != "" || p.Focused() {
+		t.Fatalf("value %q focused %v after clicking and typing into a disabled field", ggui.Untrack(v.Get), p.Focused())
 	}
 	if p.Cursor() != ggui.CursorShapeDefault {
 		t.Fatalf("cursor = %v over a disabled field, want default", p.Cursor())
@@ -483,8 +483,8 @@ func TestRadiosSelectAndReport(t *testing.T) {
 	p := ggui.NewProbe(g, ggui.Sz(100, 100))
 	defer p.Close()
 	p.Tap("c")
-	if sel.Peek() != "c" || got != "c" {
-		t.Fatalf("selected %q reported %q after clicking the last radio, want c", sel.Peek(), got)
+	if ggui.Untrack(sel.Get) != "c" || got != "c" {
+		t.Fatalf("selected %q reported %q after clicking the last radio, want c", ggui.Untrack(sel.Get), got)
 	}
 	if radios := p.FindAll(ggui.RoleRadio); len(radios) != 3 {
 		t.Fatalf("%d radios found, want 3", len(radios))
@@ -505,7 +505,7 @@ func TestDialogKeyboardFlow(t *testing.T) {
 	p := ggui.NewProbe(tree, ggui.Sz(400, 300))
 	defer p.Close()
 	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyEnter) // focus Open, press it
-	if !open.Peek() {
+	if !ggui.Untrack(open.Get) {
 		t.Fatal("Enter on the focused button did not open the dialog")
 	}
 	dialog := find(t, p, ggui.RoleDialog, "Confirm")
@@ -515,23 +515,23 @@ func TestDialogKeyboardFlow(t *testing.T) {
 	// Focus moved to the first button inside; Tab cycles inside the dialog
 	// and never reaches Other.
 	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyTab, ggui.KeyEnter)
-	if !deleted || open.Peek() {
-		t.Fatalf("deleted %v open %v after Tab, Tab, Enter; want Delete pressed", deleted, open.Peek())
+	if !deleted || ggui.Untrack(open.Get) {
+		t.Fatalf("deleted %v open %v after Tab, Tab, Enter; want Delete pressed", deleted, ggui.Untrack(open.Get))
 	}
 	// Focus returned to the opener.
 	p.Type(ggui.Mods{}, ggui.KeyEnter)
-	if !open.Peek() {
+	if !ggui.Untrack(open.Get) {
 		t.Fatal("focus did not return to the opener when the dialog closed")
 	}
 	p.Type(ggui.Mods{}, ggui.KeyEscape)
-	if open.Peek() {
+	if ggui.Untrack(open.Get) {
 		t.Fatal("Escape did not close the dialog")
 	}
 	open.Set(true)
 	p.Frame()
 	size := p.Frame()
 	p.Click(ggui.Pt(size.W-5, size.H-5)) // on the scrim
-	if open.Peek() {
+	if ggui.Untrack(open.Get) {
 		t.Fatal("a click on the scrim did not close the dialog")
 	}
 }
