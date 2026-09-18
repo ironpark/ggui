@@ -82,7 +82,10 @@ func (a *App) Post(fn func()) { a.post(fn) }
 // Close disposes the root owner, and with it every effect, memo and
 // component the app created, and ends Run at the next frame. Call it from
 // the UI thread; from a goroutine, Post it.
-func (a *App) Close() { a.close() }
+func (a *App) Close() {
+	a.insp.cache.release()
+	a.close()
+}
 
 // Run opens the window and blocks until it closes, disposing owned resources
 // on return, including when the engine returns an error.
@@ -150,7 +153,7 @@ func (a *App) Shortcut(chord string, fn func()) *ShortcutHandle {
 func (a *App) Semantics() *SemTree { return a.semantics() }
 
 // Inspector turns the widget inspector on or off: an overlay that outlines
-// every widget painted through Canvas.Paint and names the one under the
+// the selected widget painted through Canvas.Paint and names the one under the
 // cursor with its size and position. Config.Inspector binds it to a key.
 func (a *App) Inspector(on bool) {
 	a.inspect = on
@@ -166,6 +169,8 @@ func (a *App) Inspector(on bool) {
 		a.insp.copySource = nil
 		a.insp.visibleRows, a.insp.filterParents, a.insp.filterStack = nil, nil, nil
 		a.insp.filterKeep = nil
+		a.insp.visibility, a.insp.visibilityNext = nil, nil
+		a.insp.cache.release()
 		a.insp.focus = false
 		a.insp.filterFocus = false
 		a.insp.picking = false

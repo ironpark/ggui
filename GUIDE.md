@@ -1117,7 +1117,8 @@ drags that started outside the panel continue across it.
 | Ctrl/Cmd+Shift+D | Switch docking edge |
 | Ctrl/Cmd+Shift+O | Toggle all widget outlines |
 
-The inspector docks to the bottom by default. The toolbar switches between
+The inspector docks to the bottom by default and highlights only the selected
+widget. Use `ShowOutlines: true` to initially outline every widget. The toolbar switches between
 bottom and right docking, toggles outlines, and closes the inspector.
 Drag the panel edge to resize it or the tree divider to adjust the split.
 Wide bottom panels show tree, properties, and layout in three columns;
@@ -1127,7 +1128,7 @@ outlines are off. Custom widgets participate when painted through
 `Canvas.Paint`. `App.SetInspector` sets the initial docking and outline options:
 
 ```go
-app.SetInspector(ggui.InspectorOptions{Dock: ggui.InspectorBottom, HideOutlines: true})
+app.SetInspector(ggui.InspectorOptions{Dock: ggui.InspectorBottom})
 ```
 
 ## Repository layout

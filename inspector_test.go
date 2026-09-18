@@ -109,8 +109,8 @@ func TestInspectorChipsAndKeys(t *testing.T) {
 		t.Fatal("the Bottom chip did not dock the panel")
 	}
 	click(Pt(255, 25))
-	if !in.noOutlines {
-		t.Fatal("the Outlines chip did not turn the outlines off")
+	if !in.outlines {
+		t.Fatal("the Outlines chip did not turn the outlines on")
 	}
 	in.input(frameInput{pos: Pt(250, 100), keys: []ebiten.Key{ebiten.KeyArrowDown, ebiten.KeyArrowDown, ebiten.KeyArrowUp}})
 	if in.move != 1 {

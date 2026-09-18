@@ -115,7 +115,7 @@ func (in *inspector) input(f frameInput) bool {
 				in.dock = pick(in.dock == InspectorRight, InspectorBottom, InspectorRight)
 				return true
 			case ebiten.KeyO:
-				in.noOutlines = !in.noOutlines
+				in.outlines = !in.outlines
 				return true
 			}
 		}
@@ -226,7 +226,7 @@ func (in *inspector) act(c inspectChip) {
 	case inspectDockBottom:
 		in.dock = InspectorBottom
 	case inspectToggleOutlines:
-		in.noOutlines = !in.noOutlines
+		in.outlines = !in.outlines
 	case inspectUnpin:
 		in.picking = !in.picking
 		in.pinned = false

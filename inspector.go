@@ -17,9 +17,13 @@ const (
 
 // InspectorOptions configures the inspector. The toolbar changes the same
 // settings while it is open; dragging the panel edge adjusts its size.
-// The zero value docks bottom with outlines on.
+// The zero value docks bottom and highlights only the selected widget.
 type InspectorOptions struct {
 	Dock         InspectorDock
+	ShowOutlines bool
+	// HideOutlines overrides ShowOutlines.
+	//
+	// Deprecated: outlines are off by default.
 	HideOutlines bool
 }
 
@@ -100,13 +104,18 @@ const (
 )
 
 type inspector struct {
+	cache                              inspectorPanelCache
+	visibility                         []inspectVisibility
+	visibilityNext                     []inspectVisibility
+	matches                            int
+	visibilityFiltered                 bool
 	sel                                inspectKey
 	pinned                             bool
 	picking                            bool
 	capture                            bool // a picker/panel press owns its release, even outside the panel
 	scroll, detailScroll, layoutScroll float64
 	dock                               InspectorDock
-	noOutlines                         bool
+	outlines                           bool
 	move                               int
 	branch                             int // left/right tree navigation, resolved against the next trace
 	reveal                             bool
@@ -188,7 +197,9 @@ func withAlpha(c color.Color, a uint8) color.Color {
 	n.A = a
 	return n
 }
-func (in *inspector) apply(o InspectorOptions) { in.dock, in.noOutlines = o.Dock, o.HideOutlines }
+func (in *inspector) apply(o InspectorOptions) {
+	in.dock, in.outlines = o.Dock, o.ShowOutlines && !o.HideOutlines
+}
 
 func (in *inspector) find(tr []traceEntry) int {
 	if in.sel.id != nil {
@@ -255,6 +266,20 @@ func inspectMatches(e *traceEntry, filter string) bool {
 
 // visible returns scratch storage valid until the next call.
 func (in *inspector) visible(tr []traceEntry) []int {
+	in.visibilityNext = in.visibilityNext[:0]
+	in.matches = 0
+	for i := range tr {
+		match := in.filter != "" && inspectMatches(&tr[i], in.filter)
+		if match {
+			in.matches++
+		}
+		in.visibilityNext = append(in.visibilityNext, inspectVisibility{tr[i].depth, in.folded(&tr[i]), match})
+	}
+	if slices.Equal(in.visibility, in.visibilityNext) && in.visibility != nil && in.visibilityFiltered == (in.filter != "") {
+		return in.visibleRows
+	}
+	in.visibility, in.visibilityNext = in.visibilityNext, in.visibility
+	in.visibilityFiltered = in.filter != ""
 	out := in.visibleRows[:0]
 	defer func() { in.visibleRows = out }()
 	if in.filter != "" {
@@ -274,7 +299,7 @@ func (in *inspector) visible(tr []traceEntry) []int {
 				parents[i] = stack[len(stack)-1]
 			}
 			stack = append(stack, i)
-			keep[i] = inspectMatches(&tr[i], in.filter)
+			keep[i] = in.visibility[i].match
 		}
 		for i := len(tr) - 1; i >= 0; i-- {
 			if keep[i] && parents[i] >= 0 {

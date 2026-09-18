@@ -94,10 +94,10 @@ func (in *inspector) paint(dst *Canvas) {
 	in.lastTrace = dst.trace
 	in.copySource = dst
 	pal, face := inspectColors(), inspectorFace(dst)
-	in.chips = in.chips[:0]
-	in.rows = in.rows[:0]
 	sel, shown := in.selection(dst)
-	if !in.noOutlines {
+	// FPS and status hints remain live even when the panel image is reused.
+	defer in.paintStatus(dst, face, pal, sel)
+	if in.outlines {
 		for _, e := range dst.trace {
 			r := e.rect
 			if e.clipped {
@@ -111,6 +111,35 @@ func (in *inspector) paint(dst *Canvas) {
 	if sel >= 0 {
 		in.paintHighlight(dst, face, pal, sel)
 	}
+	if dst.Image != nil {
+		snapshot := in.panelSnapshot(dst, shown, sel)
+		if in.cache.image != nil && in.cache.snapshot.equal(snapshot) && !in.reveal {
+			in.cache.draw(dst)
+			return
+		}
+		bounds := dst.physical(in.panel)
+		if !bounds.Empty() {
+			if in.cache.image == nil || in.cache.image.Bounds() != bounds {
+				in.cache.release()
+				in.cache.image = ebiten.NewImageWithOptions(bounds, nil)
+			}
+			in.cache.image.Clear()
+			cached := *dst
+			cached.Image = in.cache.image
+			in.paintPanel(&cached, face, pal, sel, shown)
+			in.cache.snapshot = in.panelSnapshot(dst, shown, sel)
+			in.cache.draw(dst)
+			in.reveal = false
+			return
+		}
+	}
+	in.paintPanel(dst, face, pal, sel, shown)
+	in.reveal = false
+}
+
+func (in *inspector) paintPanel(dst *Canvas, face text.Face, pal inspectPalette, sel int, shown []int) {
+	in.chips = in.chips[:0]
+	in.rows = in.rows[:0]
 	panel := dst.Clip(in.panel)
 	panel.FillRect(in.panel, pal.bg)
 	panel.StrokeRoundRect(in.panel, 0, 1, pal.edge)
@@ -154,7 +183,6 @@ func (in *inspector) paint(dst *Canvas) {
 	} else {
 		panel.FillRect(Rct(Pt(body.Origin.X, in.divider.Origin.Y+2), Sz(body.Size.W, 1)), pal.edge)
 	}
-	in.paintStatus(panel, face, pal, sel)
 	in.reveal = false
 }
 
@@ -176,7 +204,7 @@ func (in *inspector) paintToolbar(dst *Canvas, face text.Face, pal inspectPalett
 		fittedLine(dst, face, stats, r.Origin.X+120, y+6, x-r.Origin.X-125, pal.dim)
 	}
 	for _, act := range []inspectAction{inspectToggleOutlines, inspectDockRight, inspectDockBottom, inspectClose} {
-		on := act == inspectToggleOutlines && !in.noOutlines || act == inspectDockRight && in.dock == InspectorRight || act == inspectDockBottom && in.dock == InspectorBottom
+		on := act == inspectToggleOutlines && in.outlines || act == inspectDockRight && in.dock == InspectorRight || act == inspectDockBottom && in.dock == InspectorBottom
 		in.tool(dst, face, pal, Rct(Pt(x, y), Sz(25, 25)), act, on)
 		x += 27
 	}
@@ -263,7 +291,9 @@ func (in *inspector) paintTree(dst *Canvas, face text.Face, pal inspectPalette, 
 	if len(shown) == 0 {
 		fittedLine(clip, face, "No matching widgets", r.Origin.X+12, r.Origin.Y+16, r.Size.W-24, pal.dim)
 	}
-	for at, i := range shown {
+	first, end := inspectRowRange(len(shown), in.scroll, r.Size.H)
+	for at := first; at < end; at++ {
+		i := shown[at]
 		y := r.Origin.Y + float64(at)*lh - in.scroll
 		if y+lh <= r.Origin.Y || y >= r.Origin.Y+r.Size.H {
 			continue
@@ -595,13 +625,7 @@ func (in *inspector) paintStatus(dst *Canvas, face text.Face, pal inspectPalette
 		status = "Pinned · ← → expand · ↑ ↓ navigate"
 	}
 	if in.filter != "" {
-		matches := 0
-		for i := range in.lastTrace {
-			if inspectMatches(&in.lastTrace[i], in.filter) {
-				matches++
-			}
-		}
-		status = fmt.Sprintf("%d matches · Esc clears the filter", matches)
+		status = fmt.Sprintf("%d matches · Esc clears the filter", in.matches)
 	}
 	if in.copied {
 		status = "Widget details copied"
