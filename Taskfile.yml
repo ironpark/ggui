@@ -25,6 +25,13 @@ tasks:
     cmds:
       - '"{{.GO}}" test ./...'
 
+  bench:
+    desc: Run benchmarks (COUNT=6 by default, for benchstat)
+    vars:
+      COUNT: '{{default 6 .COUNT}}'
+    cmds:
+      - '"{{.GO}}" test -run xxx -bench . -count {{.COUNT}} ./...'
+
   vet:
     desc: Run Go static checks
     cmds:

@@ -46,6 +46,13 @@ type Canvas struct {
 	keeps       map[retainKey]any // Retain this frame
 	prevKeeps   map[retainKey]any // Retain last frame, read by Retained
 
+	// Where last frame's regions are, for adopt. Built on the frame's
+	// first handoff and not at all in a frame with none, which is most
+	// of them: only a handful of widgets adopt.
+	prevByID    map[any]int  // id to its place in prev, the last one painted
+	prevByRect  map[Rect]int // the same for a region with no id
+	prevIndexed bool
+
 	// The frame's accessibility tree, kept apart from hits: input scans
 	// hits on every pointer event, and most of what a screen reader reads
 	// takes no input at all. semParent and semLast are indices into sem
@@ -141,6 +148,11 @@ func (c *Canvas) nextFrame() {
 	c.inputObservers = c.inputObservers[:0]
 	c.prevKeeps, c.keeps = c.keeps, c.prevKeeps
 	clear(c.keeps)
+	// prev is a different slice now, so what adopt knew about it is stale.
+	// The maps keep their storage for the next frame that needs them.
+	c.prevIndexed = false
+	clear(c.prevByID)
+	clear(c.prevByRect)
 	c.traceParent, c.traceRoots = 0, 0
 	rotateEnvMemo()
 }
@@ -540,14 +552,7 @@ func (c *Canvas) adopt(h *hitRegion) {
 	if !adoptsPointer && !adoptsKey {
 		return
 	}
-	var old *hitRegion
-	for i := len(c.prev) - 1; i >= 0; i-- {
-		p := &c.prev[i]
-		if h.id != nil && p.id == h.id || h.id == nil && p.id == nil && p.rect == h.rect {
-			old = p
-			break
-		}
-	}
+	old := c.lastFrame(h)
 	if old == nil {
 		return
 	}
@@ -558,6 +563,55 @@ func (c *Canvas) adopt(h *hitRegion) {
 		key.Adopt(old.key)
 	}
 }
+
+// lastFrame finds the region h takes over from: the one with the same ID,
+// or, when h has none, the one that held the same Rect. Where two match,
+// the one painted last wins, as it is the one on top.
+//
+// An ID the language cannot compare, which Interactive.Key accepts, matches
+// nothing rather than bringing the process down.
+func (c *Canvas) lastFrame(h *hitRegion) *hitRegion {
+	if !c.prevIndexed {
+		c.indexPrev()
+	}
+	if h.id != nil {
+		if !comparableID(h.id) {
+			return nil
+		}
+		if i, ok := c.prevByID[h.id]; ok {
+			return &c.prev[i]
+		}
+		return nil
+	}
+	if i, ok := c.prevByRect[h.rect]; ok {
+		return &c.prev[i]
+	}
+	return nil
+}
+
+// indexPrev records where each of last frame's regions is. Walking forward
+// leaves the last of any duplicates in the map, which is the one a scan
+// backwards from the end would have stopped at.
+func (c *Canvas) indexPrev() {
+	c.prevIndexed = true
+	if c.prevByID == nil {
+		c.prevByID = make(map[any]int, len(c.prev))
+		c.prevByRect = make(map[Rect]int, len(c.prev))
+	}
+	for i := range c.prev {
+		switch p := &c.prev[i]; {
+		case p.id == nil:
+			c.prevByRect[p.rect] = i
+		case comparableID(p.id):
+			c.prevByID[p.id] = i
+		}
+	}
+}
+
+// comparableID reports whether id may be used as a map key. A map operation
+// on a key the language cannot compare panics where == only would have if
+// the dynamic types matched, so both sides of the index check first.
+func comparableID(id any) bool { return reflect.TypeOf(id).Comparable() }
 
 // sameAny compares two handlers, treating uncomparable ones as different.
 func sameAny(a, b any) (same bool) {

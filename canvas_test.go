@@ -40,6 +40,51 @@ func TestAdoptPreservesHandlerKindsAndPaintOrder(t *testing.T) {
 	}
 }
 
+func TestAdoptTakesTheLastRegionWithTheSameID(t *testing.T) {
+	first, last, next := &adoptionCounter{}, &adoptionCounter{}, &adoptionCounter{}
+	id := new(byte)
+	c := Canvas{prev: []hitRegion{
+		{rect: Rct(Pt(0, 0), Sz(20, 20)), id: id, pointer: first},
+		{rect: Rct(Pt(50, 50), Sz(20, 20)), id: id, pointer: last},
+	}}
+	h := hitRegion{rect: Rct(Pt(90, 90), Sz(20, 20)), id: id, pointer: next}
+	c.adopt(&h)
+	if next.calls != 1 || next.from != last {
+		t.Fatalf("adopted %d times from %p, want once from %p", next.calls, next.from, last)
+	}
+}
+
+func TestAdoptSkipsIDsTheLanguageCannotCompare(t *testing.T) {
+	// Interactive.Key takes any value, so an ID may be a slice. Matching it
+	// is impossible, but it must not bring the frame down either.
+	old, next := &adoptionCounter{}, &adoptionCounter{}
+	r := Rct(Pt(0, 0), Sz(20, 20))
+	c := Canvas{prev: []hitRegion{{rect: r, id: []int{1}, pointer: old}}}
+	h := hitRegion{rect: r, id: []int{1}, pointer: next}
+	c.adopt(&h)
+	if next.calls != 0 {
+		t.Fatalf("adopted %d times from an uncomparable ID, want none", next.calls)
+	}
+}
+
+func TestAdoptIndexIsRebuiltEachFrame(t *testing.T) {
+	first, second := &adoptionCounter{}, &adoptionCounter{}
+	r := Rct(Pt(0, 0), Sz(20, 20))
+	c := Canvas{prev: []hitRegion{{rect: r, pointer: first}}}
+	h := hitRegion{rect: r, pointer: &adoptionCounter{}}
+	c.adopt(&h)
+
+	// The next frame's prev holds someone else at the same Rect.
+	c.prev, c.hits = []hitRegion{{rect: r, pointer: second}}, nil
+	c.nextFrame()
+	next := &adoptionCounter{}
+	h = hitRegion{rect: r, pointer: next}
+	c.adopt(&h)
+	if next.calls != 1 || next.from != second {
+		t.Fatalf("adopted %d times from %p, want once from %p", next.calls, next.from, second)
+	}
+}
+
 func TestCanvasScaleConvertsToImagePixels(t *testing.T) {
 	c := &Canvas{scale: 2}
 	if got := c.Px(7.5); got != 15 {

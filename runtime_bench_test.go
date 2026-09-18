@@ -45,6 +45,9 @@ func BenchmarkInteractiveRegistration(b *testing.B) {
 			b.ResetTimer()
 			for k := 0; k < b.N; k++ {
 				c.hits = c.hits[:0]
+				// A real frame starts here, so whatever adoption builds
+				// once per frame is built again and shows up in the number.
+				c.nextFrame()
 				c.resetSemantics()
 				for i := range next {
 					next[i].Hit(&c, Rct(Pt(0, float64(i)*20), Sz(100, 20)), &next[i], ebiten.CursorShapePointer)
