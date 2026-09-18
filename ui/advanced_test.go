@@ -297,3 +297,15 @@ func TestAdvancedBindingsInvalidateCachedLayout(t *testing.T) {
 		t.Fatal("cached splitter did not follow binding", r)
 	}
 }
+
+func TestResizableCapturesTouchDrag(t *testing.T) {
+	r := ui.Resizable(ggui.State(.5), ggui.Box(), ggui.Box()).Vertical()
+	var capturer ggui.TouchDragCapturer = r
+	if !capturer.CaptureTouchDrag() {
+		t.Fatal("resize handle allows parent touch scrolling")
+	}
+	r.Disabled(true)
+	if capturer.CaptureTouchDrag() {
+		t.Fatal("disabled resize handle captures touch dragging")
+	}
+}

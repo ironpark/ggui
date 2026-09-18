@@ -124,7 +124,7 @@ func galleryPage(dark *ggui.Signal[bool], search, category *ggui.Signal[string],
 		content = ui.Empty("No matching components", "Try a different search or explore another category.").Action(ui.Button("Clear filters", func() { search.Set(""); category.Set("All"); scroll.Set(0) }))
 	}
 	header := ggui.Box(ggui.Column(
-		ggui.Row(ggui.Title("Component gallery").Size(28), ggui.Spacer(), ui.Switch(dark, "Dark mode")).Gap(16),
+		ggui.Row(ggui.Title("Component gallery").Size(28), ggui.Spacer(), ui.ThemeSwitch(dark)).Gap(16),
 		ggui.Caption("Explore the building blocks. Try an interaction, adjust the theme, make it yours."),
 		ggui.Row(ggui.Expanded(field), ui.Button("Commands", commands).Outline()).Gap(12),
 		ggui.Wrap(filters...).Gap(8),

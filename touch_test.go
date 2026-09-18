@@ -108,3 +108,31 @@ func TestHorizontalTouchDragDoesNotScrollVerticalList(t *testing.T) {
 		t.Fatalf("horizontal drag stolen: offset=%v drags=%d", s.position(), drags)
 	}
 }
+
+type touchDragControl struct{ *PointerWidget }
+
+func (*touchDragControl) CaptureTouchDrag() bool { return true }
+func (w *touchDragControl) Paint(dst *Canvas, r Rect) {
+	dst.HitPointer(r, w)
+	dst.Paint(w.child, r)
+}
+
+func TestTouchCapturedControlDoesNotPanParent(t *testing.T) {
+	var in inputState
+	drags, ups := 0, 0
+	control := &touchDragControl{Pointer(Box().Size(100, 400)).
+		OnDrag(func(PointerEvent) { drags++ }).
+		OnUp(func(PointerEvent) { ups++ })}
+	s := Scroll(control)
+	paintFrame(&in, s, Sz(100, 100))
+	in.dispatch(frameInput{touch: true, pos: Pt(50, 80), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.dispatch(frameInput{touch: true, pos: Pt(50, 40)})
+	in.dispatch(frameInput{touch: true, pos: Pt(50, -20)})
+	in.dispatch(frameInput{touch: true, pos: Pt(50, -20), up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	if drags != 2 || ups != 1 || in.pressed != nil {
+		t.Fatalf("lost captured drag: drags=%d ups=%d pressed=%v", drags, ups, in.pressed)
+	}
+	if s.position() != 0 || in.touchPanning || in.touchMotion.target != nil {
+		t.Fatalf("captured control started scrolling: offset=%v", s.position())
+	}
+}

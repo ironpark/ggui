@@ -374,3 +374,41 @@ func TestMessageScrollerRestoreReplacesQueuedJump(t *testing.T) {
 		t.Fatal("queued jump overrode restored position", s.Position())
 	}
 }
+
+func TestAttachmentGroupTouchPixelsAndMomentum(t *testing.T) {
+	group := ui.AttachmentGroup(
+		ui.Attachment("One", "PDF").Width(180),
+		ui.Attachment("Two", "PDF").Width(180),
+		ui.Attachment("Three", "PDF").Width(180),
+	)
+	p := ggui.NewProbe(ggui.Column(group), ggui.Sz(230, 140))
+	defer p.Close()
+	p.Frame()
+	// A prior wheel snap must not fire while the finger holds the strip.
+	group.HandlePointer(ggui.PointerEvent{Kind: ggui.PointerScroll, Scroll: ggui.Pt(-1, 0)})
+	group.HandlePointer(ggui.PointerEvent{Kind: ggui.PointerScroll, Scroll: ggui.Pt(-15, 2), ScrollPixels: true})
+	if group.Position() != 35 {
+		t.Fatalf("touch distance was scaled: %v", group.Position())
+	}
+	p.Advance(200 * time.Millisecond)
+	if group.Position() != 35 {
+		t.Fatalf("touch hold snapped: %v", group.Position())
+	}
+	if group.HandlePointer(ggui.PointerEvent{Kind: ggui.PointerScroll, Scroll: ggui.Pt(0, -20), ScrollPixels: true}) || group.Position() != 35 {
+		t.Fatal("vertical touch was consumed by horizontal strip")
+	}
+	momentum := ggui.PointerEvent{Kind: ggui.PointerScroll, Scroll: ggui.Pt(-10, 0), ScrollPixels: true, ScrollMomentum: true}
+	if !group.HandlePointer(momentum) || group.Position() != 45 {
+		t.Fatalf("momentum distance was scaled: %v", group.Position())
+	}
+	momentum.Scroll.X = -10000
+	group.HandlePointer(momentum)
+	if group.HandlePointer(momentum) {
+		t.Fatal("momentum continued at the edge")
+	}
+	end := group.Position()
+	p.Advance(200 * time.Millisecond)
+	if group.Position() != end {
+		t.Fatal("momentum scheduled a wheel snap")
+	}
+}

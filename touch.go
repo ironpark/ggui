@@ -59,6 +59,13 @@ func (in *inputState) panTouch(f *frameInput) {
 		in.touchMotion = touchMotion{last: now, pos: f.pos}
 		return
 	}
+	if in.pressed != nil {
+		if cur := in.findPointer(in.pressed); cur != nil {
+			if capturer, ok := cur.pointer.(TouchDragCapturer); ok && capturer.CaptureTouchDrag() {
+				return
+			}
+		}
+	}
 	in.touchMotion.sample(now, f.pos)
 	delta := Pt(f.pos.X-in.touchLast.X, f.pos.Y-in.touchLast.Y)
 	if !in.touchPanning {

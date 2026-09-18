@@ -43,6 +43,12 @@ type PointerHandler interface {
 	HandlePointer(ev PointerEvent) bool
 }
 
+// TouchDragCapturer lets a pressed control retain touch drags instead of
+// allowing an enclosing scroll region to take over the gesture.
+type TouchDragCapturer interface {
+	CaptureTouchDrag() bool
+}
+
 // Mods are the modifier keys held during a KeyEvent.
 type Mods struct {
 	Shift, Ctrl, Alt, Meta bool
