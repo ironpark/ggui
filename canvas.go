@@ -401,10 +401,12 @@ func (c *Canvas) FillCircle(center Point, radius float64, col color.Color) {
 	if c == nil || c.Image == nil || col == nil || radius <= 0 {
 		return
 	}
-	if !c.visiblePaintBounds(Rct(center.Add(Pt(-radius, -radius)), Sz(2*radius, 2*radius)), 0) {
+	r := Rct(center.Add(Pt(-radius, -radius)), Sz(2*radius, 2*radius))
+	if !c.visiblePaintBounds(r, 0) {
 		return
 	}
-	vector.FillCircle(c.Image, c.Px(center.X), c.Px(center.Y), c.Px(radius), col, true)
+	// A circle is a rounded rectangle whose corner is its own half size.
+	c.shadeRoundRect(r, radius, 0, col)
 }
 
 // StrokeLine draws a line of logical width w from a to b in col.
@@ -416,33 +418,6 @@ func (c *Canvas) StrokeLine(a, b Point, w float64, col color.Color) {
 		return
 	}
 	vector.StrokeLine(c.Image, c.Px(a.X), c.Px(a.Y), c.Px(b.X), c.Px(b.Y), c.Px(w), col, true)
-}
-
-// Paths are borrowed per draw, rather than shared by Canvas copies. FillPath
-// copies the commands before returning; StrokePath does the same through its
-// intermediate fill path, so the input can then be reset and returned.
-var roundRectPaths = sync.Pool{New: func() any { return new(vector.Path) }}
-
-func releaseRoundRectPath(p *vector.Path) {
-	p.Reset()
-	roundRectPaths.Put(p)
-}
-
-// roundRect traces r with corners of the given logical radius, in Image
-// pixels. A zero radius traces a plain rectangle.
-func (c *Canvas) roundRect(p *vector.Path, r Rect, radius float64) {
-	x, y, w, h := c.Px(r.Origin.X), c.Px(r.Origin.Y), c.Px(r.Size.W), c.Px(r.Size.H)
-	rad := min(c.Px(radius), w/2, h/2)
-	p.MoveTo(x+rad, y)
-	p.LineTo(x+w-rad, y)
-	p.ArcTo(x+w, y, x+w, y+rad, rad)
-	p.LineTo(x+w, y+h-rad)
-	p.ArcTo(x+w, y+h, x+w-rad, y+h, rad)
-	p.LineTo(x+rad, y+h)
-	p.ArcTo(x, y+h, x, y+h-rad, rad)
-	p.LineTo(x, y+rad)
-	p.ArcTo(x, y, x+rad, y, rad)
-	p.Close()
 }
 
 func pathOptions(col color.Color) *vector.DrawPathOptions {
@@ -464,10 +439,7 @@ func (c *Canvas) FillRoundRect(r Rect, radius float64, col color.Color) {
 		c.FillRect(r, col)
 		return
 	}
-	p := roundRectPaths.Get().(*vector.Path)
-	defer releaseRoundRectPath(p)
-	c.roundRect(p, r, radius)
-	vector.FillPath(c.Image, p, &vector.FillOptions{}, pathOptions(col))
+	c.shadeRoundRect(r, radius, 0, col)
 }
 
 // StrokeRoundRect draws a line of logical width w in col just inside r,
@@ -476,16 +448,19 @@ func (c *Canvas) StrokeRoundRect(r Rect, radius, w float64, col color.Color) {
 	if c == nil || c.Image == nil || col == nil || w <= 0 || c.Image.Bounds().Empty() {
 		return
 	}
-	// Very thick strokes can produce inverted inset geometry; leave those
-	// to the renderer instead of assuming the result stays inside r.
 	if w <= r.Size.W && w <= r.Size.H && !c.visiblePaintBounds(r, w) {
 		return
 	}
+	// A border as thick as the box it outlines leaves no hole to draw
+	// around, so it is that box filled.
+	if w >= r.Size.W || w >= r.Size.H {
+		c.FillRoundRect(r, radius, col)
+		return
+	}
+	// The border straddles a rectangle inset by half its width, which is
+	// what keeps it just inside r.
 	inset := Rct(r.Origin.Add(Pt(w/2, w/2)), Sz(r.Size.W-w, r.Size.H-w))
-	p := roundRectPaths.Get().(*vector.Path)
-	defer releaseRoundRectPath(p)
-	c.roundRect(p, inset, max(radius-w/2, 0))
-	vector.StrokePath(c.Image, p, &vector.StrokeOptions{Width: c.Px(w)}, pathOptions(col))
+	c.shadeRoundRect(inset, max(radius-w/2, 0), w/2, col)
 }
 
 // physical returns the Image pixels r covers, rounded outwards.

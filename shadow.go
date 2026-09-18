@@ -68,13 +68,10 @@ func (c *Canvas) shadowGeometry(r Rect, radius float64, s ShadowStyle) (shadowGe
 	hw, hh := w*scale/2, h*scale/2
 	// Clip before converting to integers: large offscreen shadows need no large
 	// intermediate texture or unbounded draw quad.
-	target := c.Image.Bounds()
-	left, top := max(cx-hw-feather, float64(target.Min.X)), max(cy-hh-feather, float64(target.Min.Y))
-	right, bottom := min(cx+hw+feather, float64(target.Max.X)), min(cy+hh+feather, float64(target.Max.Y))
-	if right <= left || bottom <= top {
+	bounds, ok := sdfBounds(c.Image.Bounds(), cx, cy, hw, hh, feather)
+	if !ok {
 		return shadowGeometry{}, false
 	}
-	bounds := image.Rect(int(math.Floor(left)), int(math.Floor(top)), int(math.Ceil(right)), int(math.Ceil(bottom))).Intersect(target)
 	// The corner never exceeds half the rect, grows with the spread and, once
 	// scaled, never exceeds half the silhouette.
 	corner := max(min(max(radius, 0), r.Size.W/2, r.Size.H/2)+s.Spread, 0)
@@ -84,7 +81,7 @@ func (c *Canvas) shadowGeometry(r Rect, radius float64, s ShadowStyle) (shadowGe
 		half:    [2]float32{float32(hw), float32(hh)},
 		radius:  float32(min(corner*scale, hw, hh)),
 		feather: float32(feather),
-	}, !bounds.Empty()
+	}, true
 }
 
 // Shadow draws a soft rounded-rectangle silhouette behind a surface. Paint the
