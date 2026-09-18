@@ -59,10 +59,14 @@ func (in *inputState) panTouch(f *frameInput) {
 		in.touchMotion = touchMotion{last: now, pos: f.pos}
 		return
 	}
+	// Assert before re-resolving: the scan only pays off for the rare control
+	// that captures drags, and it runs on every frame of a held finger.
 	if in.pressed != nil {
-		if cur := in.findPointer(in.pressed); cur != nil {
-			if capturer, ok := cur.pointer.(TouchDragCapturer); ok && capturer.CaptureTouchDrag() {
-				return
+		if _, ok := in.pressed.pointer.(TouchDragCapturer); ok {
+			if cur := in.findPointer(in.pressed); cur != nil {
+				if capturer, ok := cur.pointer.(TouchDragCapturer); ok && capturer.CaptureTouchDrag() {
+					return
+				}
 			}
 		}
 	}

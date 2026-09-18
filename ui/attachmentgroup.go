@@ -109,16 +109,15 @@ func (g *AttachmentGroupWidget) HandlePointer(ev ggui.PointerEvent) bool {
 	if delta == 0 || g.limit() == 0 {
 		return false
 	}
-	before := g.offset
+	// Touch already supplies logical pixels. Keep finger tracking and inertia
+	// continuous; a wheel's delayed snap would fight both.
+	speed, settle := 20.0, ggui.Now().Add(120*time.Millisecond)
 	if ev.ScrollPixels {
-		// Touch already supplies logical pixels. Keep finger tracking and
-		// inertia continuous; a wheel's delayed snap would fight both.
-		g.scrollTo(before - delta)
-		g.settle = time.Time{}
-	} else {
-		g.scrollTo(before - delta*20)
-		g.settle = ggui.Now().Add(120 * time.Millisecond)
+		speed, settle = 1, time.Time{}
 	}
+	before := g.offset
+	g.scrollTo(before - delta*speed)
+	g.settle = settle
 	return !ev.ScrollMomentum || g.offset != before
 }
 func (g *AttachmentGroupWidget) step(direction int) {

@@ -31,13 +31,13 @@ func (s *ThemeSwitchWidget) OnChange(fn func(bool)) *ThemeSwitchWidget {
 
 // Disabled prevents pointer and keyboard changes.
 func (s *ThemeSwitchWidget) Disabled(v bool) *ThemeSwitchWidget {
-	s.SetInert(v)
+	s.SwitchWidget.Disabled(v)
 	return s
 }
 
 // DisabledWhen follows a disabled-state binding without rebuilding.
 func (s *ThemeSwitchWidget) DisabledWhen(r ggui.Reader[bool]) *ThemeSwitchWidget {
-	s.InertWhen(r)
+	s.SwitchWidget.DisabledWhen(r)
 	return s
 }
 
@@ -63,12 +63,9 @@ func (s *ThemeSwitchWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		body = mix(body, track, .4)
 		rim = mix(rim, track, .4)
 	}
-	// Layered low-opacity shadows lift the pill without a hard outline.
-	for i := 3; i >= 1; i-- {
-		d := float64(i)
-		shadow := ggui.Rct(box.Origin.Add(ggui.Pt(-d/2, d)), ggui.Sz(box.Size.W+d, box.Size.H))
-		dst.FillRoundRect(shadow, 18, fade(color.Black, pick(s.Inert, .01, .025)))
-	}
+	// A soft feather lifts the pill without a hard outline.
+	dst.Shadow(box, 18, ggui.ShadowStyle{Offset: ggui.Pt(0, 2), Blur: 3,
+		Color: fade(color.Black, pick(s.Inert, .03, .07))})
 	dst.FillRoundRect(box, 18, track)
 	at := func(x, y float64) ggui.Point { return box.Origin.Add(ggui.Pt(x, y)) }
 	// At night the moon rests on the left, revealing the stars to its right.
