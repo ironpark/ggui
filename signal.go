@@ -371,6 +371,9 @@ func (s *Signal[T]) Set(v T) {
 	for _, e := range subs {
 		e.dirty = true
 	}
+	if len(subs) > 0 {
+		effects.dirtyGen++
+	}
 }
 
 // Update applies fn to the current value and stores the result. Like Set
@@ -601,6 +604,11 @@ type effectSet struct {
 	mu          sync.Mutex
 	first, last *effect
 	count       int
+
+	// Like effect.dirty, these are confined to the UI thread. A signal
+	// write advances dirtyGen; only a quiet flush records settledGen.
+	// Effects run immediately when created, so registration needs no bump.
+	dirtyGen, settledGen uint64
 }
 
 var effects effectSet
@@ -647,6 +655,9 @@ const maxFlushPasses = 16
 // the runtime. It reports false when the effects were still dirty after
 // maxFlushPasses, which only a cycle causes.
 func (s *effectSet) flush() (settled bool) {
+	if s.dirtyGen == s.settledGen {
+		return true
+	}
 	for range maxFlushPasses {
 		s.mu.Lock()
 		list := make([]*effect, 0, s.count)
@@ -663,6 +674,9 @@ func (s *effectSet) flush() (settled bool) {
 			}
 		}
 		if !ran {
+			// Read after the quiet pass: cleanup and nested flushes may
+			// have written signals while earlier passes were running.
+			s.settledGen = s.dirtyGen
 			return true
 		}
 	}

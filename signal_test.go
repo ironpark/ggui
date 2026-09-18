@@ -41,6 +41,91 @@ func TestEffectRerunsOnChange(t *testing.T) {
 	}
 }
 
+func TestIdleEffectFlushDoesNotAllocate(t *testing.T) {
+	s := State(0)
+	dispose := Root(func() {
+		for range 100 {
+			Effect(func() { s.Get() })
+		}
+	})
+	defer dispose()
+	if !effects.flush() {
+		t.Fatal("initial flush did not settle")
+	}
+	if got := testing.AllocsPerRun(100, func() { effects.flush() }); got != 0 {
+		t.Fatalf("idle flush allocated %g times", got)
+	}
+}
+
+func TestEffectFlushIncludesCleanupWrites(t *testing.T) {
+	trigger, result := State(0), State(0)
+	var seen []int
+	dispose := Root(func() {
+		// The observer has already run when a later effect's cleanup
+		// writes, so settling requires another pass in creation order.
+		Effect(func() { seen = append(seen, result.Get()) })
+		Effect(func() {
+			trigger.Get()
+			OnCleanup(func() { result.Set(trigger.Peek()) })
+		})
+	})
+	defer dispose()
+	effects.flush()
+	for _, v := range []int{1, 2} {
+		trigger.Set(v)
+		if !effects.flush() {
+			t.Fatal("cleanup write did not settle")
+		}
+		effects.flush()
+	}
+	if !slices.Equal(seen, []int{0, 1, 2}) {
+		t.Fatalf("observer saw %v, want [0 1 2]", seen)
+	}
+}
+
+func TestEffectFlushIncludesWritesAfterNestedFlush(t *testing.T) {
+	trigger, before, after := State(0), State(0), State(0)
+	var seenBefore, seenAfter []int
+	dispose := Root(func() {
+		Effect(func() { seenBefore = append(seenBefore, before.Get()) })
+		Effect(func() { seenAfter = append(seenAfter, after.Get()) })
+		Effect(func() {
+			if v := trigger.Get(); v != 0 {
+				before.Set(v)
+				if !effects.flush() {
+					t.Fatal("nested flush did not settle")
+				}
+				after.Set(v)
+			}
+		})
+	})
+	defer dispose()
+	effects.flush()
+	trigger.Set(1)
+	if !effects.flush() {
+		t.Fatal("outer flush did not settle")
+	}
+	if !slices.Equal(seenBefore, []int{0, 1}) || !slices.Equal(seenAfter, []int{0, 1}) {
+		t.Fatalf("observers saw %v and %v, want [0 1] each", seenBefore, seenAfter)
+	}
+}
+
+func TestEffectCycleIsNotRecordedAsSettled(t *testing.T) {
+	effects.flush()
+	n := State(0)
+	dispose := Effect(func() { n.Set(n.Get() + 1) })
+	defer dispose()
+	for range 2 {
+		before := n.Peek()
+		if effects.flush() {
+			t.Fatal("cyclic effect was considered settled")
+		}
+		if n.Peek() <= before {
+			t.Fatal("flush skipped a cycle left pending by the previous flush")
+		}
+	}
+}
+
 func TestEffectDisposeStopsUpdates(t *testing.T) {
 	s := State(0)
 	runs := 0

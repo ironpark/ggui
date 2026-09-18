@@ -130,6 +130,47 @@ func TestSemanticsMirrorsFocus(t *testing.T) {
 	}
 }
 
+type uncomparableFocus []int
+
+func (uncomparableFocus) HandleKey(KeyEvent) {}
+
+func TestFocusedNodePrefersHandlerAndFallsBackAfterRebuild(t *testing.T) {
+	c := Canvas{}
+	r := Rct(Pt(0, 0), Sz(100, 20))
+	first, exact, rebuilt := &twice{}, &twice{}, &twice{}
+	for _, w := range []*twice{first, exact, rebuilt} {
+		w.Role = RoleTextField
+		w.Key("shared")
+	}
+	c.Describe(r, first)
+	c.Describe(r, exact)
+	for _, test := range []struct {
+		name string
+		hit  hitRegion
+		want int
+	}{
+		{"exact before identity", hitRegion{key: exact, id: "shared", rect: r}, 1},
+		{"rebuilt identity", hitRegion{key: rebuilt, id: "shared", rect: Rct(Pt(0, 50), r.Size)}, 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := focusedNode(&c, &test.hit); got != test.want {
+				t.Fatalf("focused node = %d, want %d", got, test.want)
+			}
+		})
+	}
+	// No handler index entry exists for a noncomparable handler; the
+	// unkeyed geometry fallback must still work without a map-key panic.
+	c.resetSemantics()
+	h := uncomparableFocus{1}
+	c.addSem(r, Node{Role: RoleTextField}, h)
+	if got := focusedNode(&c, &hitRegion{key: h, rect: r}); got != 0 {
+		t.Fatalf("uncomparable handler fallback = %d, want 0", got)
+	}
+	if got := focusedNode(&c, &hitRegion{key: &twice{}, rect: r}); got != 0 {
+		t.Fatalf("rebuilt unkeyed handler fallback = %d, want 0", got)
+	}
+}
+
 func TestSemanticsListCountsItems(t *testing.T) {
 	items := State([]string{"a", "b", "c"})
 	tree := described(t, Each(items, func(s Reader[string]) Widget { return TextOf(s) }), Sz(100, 200))

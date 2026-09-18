@@ -465,6 +465,11 @@ func (c *Canvas) adopt(h *hitRegion) {
 	if len(c.prev) == 0 {
 		return
 	}
+	pointer, adoptsPointer := h.pointer.(Adopter)
+	key, adoptsKey := h.key.(Adopter)
+	if !adoptsPointer && !adoptsKey {
+		return
+	}
 	var old *hitRegion
 	for i := len(c.prev) - 1; i >= 0; i-- {
 		p := &c.prev[i]
@@ -476,11 +481,11 @@ func (c *Canvas) adopt(h *hitRegion) {
 	if old == nil {
 		return
 	}
-	if a, ok := h.pointer.(Adopter); ok && old.pointer != nil && !sameAny(old.pointer, h.pointer) {
-		a.Adopt(old.pointer)
+	if adoptsPointer && old.pointer != nil && !sameAny(old.pointer, h.pointer) {
+		pointer.Adopt(old.pointer)
 	}
-	if a, ok := h.key.(Adopter); ok && old.key != nil && !sameAny(old.key, h.key) && !sameAny(h.key, h.pointer) {
-		a.Adopt(old.key)
+	if adoptsKey && old.key != nil && !sameAny(old.key, h.key) && !sameAny(h.key, h.pointer) {
+		key.Adopt(old.key)
 	}
 }
 

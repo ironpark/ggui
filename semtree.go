@@ -244,10 +244,8 @@ func focusedNode(c *Canvas, focused *hitRegion) int {
 	if focused == nil || focused.key == nil {
 		return -1
 	}
-	for i := range c.sem {
-		if sameAny(c.sem[i].handler, focused.key) {
-			return i
-		}
+	if i := c.semIndex[semKey(focused.key)]; i != 0 {
+		return i - 1
 	}
 	for i := range c.sem {
 		e := &c.sem[i]
