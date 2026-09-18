@@ -50,6 +50,7 @@ type App struct {
 	canvas Canvas // also holds the frame's screen-pixels-per-logical-pixel scale
 	spare  []hitRegion
 	input  inputState
+	touch  touchInput
 	cursor ebiten.CursorShapeType
 	a11y   axBridge
 
@@ -253,6 +254,11 @@ func (a *App) readInput() frameInput {
 			f.up = append(f.up, b)
 		}
 	}
+	ids := ebiten.AppendTouchIDs(nil)
+	a.touch.apply(&f, ids, func(id ebiten.TouchID) Point {
+		x, y := ebiten.TouchPosition(id)
+		return Pt(a.canvas.dp(float64(x)), a.canvas.dp(float64(y)))
+	})
 	wx, wy := ebiten.Wheel()
 	f.wheel = Pt(wx*wheelUnit, wy*wheelUnit)
 	for _, k := range inpututil.AppendPressedKeys(nil) {

@@ -998,8 +998,13 @@ func (s *ScrollWidget) HandlePointer(ev PointerEvent) bool {
 	if delta == 0 || s.maxOffset() == 0 {
 		return false
 	}
-	s.scrollTo(s.position() - delta*s.speed)
-	return true
+	speed := s.speed
+	if ev.ScrollPixels {
+		speed = 1
+	}
+	before := s.position()
+	s.scrollTo(before - delta*speed)
+	return !ev.ScrollMomentum || s.position() != before
 }
 
 // WrapWidget lines its children up like a Row and starts a new line when

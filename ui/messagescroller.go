@@ -330,13 +330,18 @@ func (s *MessageScrollerWidget) Describe() ggui.Node {
 	return ggui.Node{Role: ggui.RoleGroup, Name: s.Name, Actions: ggui.ActionFocus | ggui.ActionScrollIntoView}
 }
 func (s *MessageScrollerWidget) HandlePointer(ev ggui.PointerEvent) bool {
-	if ev.Kind != ggui.PointerScroll {
+	if ev.Kind != ggui.PointerScroll || ev.Scroll.Y == 0 {
 		return false
 	}
 	s.Pause()
 	s.anchor = ""
-	s.jump(s.offset-ev.Scroll.Y*20, false)
-	return s.limit() > 0
+	speed := 20.0
+	if ev.ScrollPixels {
+		speed = 1
+	}
+	before := s.offset
+	s.jump(before-ev.Scroll.Y*speed, false)
+	return s.limit() > 0 && (!ev.ScrollMomentum || s.offset != before)
 }
 func (s *MessageScrollerWidget) HandleKey(ev ggui.KeyEvent) {
 	s.Keyboard(ev, nil)

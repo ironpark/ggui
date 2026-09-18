@@ -23,10 +23,12 @@ const (
 
 // PointerEvent is a mouse or touch event delivered to a hit region.
 type PointerEvent struct {
-	Kind   PointerKind
-	Pos    Point // in window coordinates
-	Button ebiten.MouseButton
-	Scroll Point // wheel delta, for PointerScroll
+	Kind           PointerKind
+	Pos            Point // in window coordinates
+	Button         ebiten.MouseButton
+	Scroll         Point // wheel delta, for PointerScroll
+	ScrollPixels   bool  // Scroll is in logical pixels (touch panning), not wheel units
+	ScrollMomentum bool  // inertial scrolling; return false when no further movement is possible
 }
 
 // PointerHandler receives pointer events whose position fell inside the
@@ -119,6 +121,7 @@ type Revealer interface {
 
 // frameInput is everything the runtime read from the platform this frame.
 type frameInput struct {
+	touch bool
 	pos   Point
 	down  []ebiten.MouseButton
 	up    []ebiten.MouseButton
@@ -138,11 +141,15 @@ type inputState struct {
 
 	// These are copies: regions is rebuilt every frame in a reused buffer,
 	// so a pointer into it would soon describe a different region.
-	hovered    *hitRegion
-	pressed    *hitRegion
-	pressedBtn ebiten.MouseButton
-	focused    *hitRegion
-	cursor     ebiten.CursorShapeType // what the hovered region asked for
+	hovered               *hitRegion
+	pressed               *hitRegion
+	pressedBtn            ebiten.MouseButton
+	focused               *hitRegion
+	cursor                ebiten.CursorShapeType // what the hovered region asked for
+	touchStart, touchLast Point
+	touchScroll           *hitRegion
+	touchPanning          bool
+	touchMotion           touchMotion
 
 	shortcuts []func(KeyEvent) bool // App.OnKey handlers, tried before the focused widget
 	chords    []*ShortcutHandle     // App.Shortcut handlers
@@ -221,7 +228,7 @@ var busy = map[any]bool{}
 func (in *inputState) dispatch(f frameInput) {
 	defer func() {
 		clear(busy)
-		for _, r := range []*hitRegion{in.focused, in.pressed} {
+		for _, r := range []*hitRegion{in.focused, in.pressed, in.touchMotion.target} {
 			if r != nil && r.group != nil {
 				busy[r.group] = true
 			}
@@ -256,6 +263,7 @@ func (in *inputState) dispatch(f frameInput) {
 		in.cursor = r.cursor
 	}
 
+	in.panTouch(&f)
 	for _, b := range f.down {
 		ev := PointerEvent{Kind: PointerDown, Pos: f.pos, Button: b}
 		in.pressed, in.pressedBtn = keep(in.send(ev)), b
