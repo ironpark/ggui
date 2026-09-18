@@ -110,11 +110,12 @@ tasks:
       - "open -n 'bin/ggui-{{.EXAMPLE}}.app'"
 
   serve:
-    desc: Build an example for js/wasm and serve it (EXAMPLE=gallery, PORT=3000, WASM_OPT=-Oz)
+    desc: Build an example for js/wasm and serve it (EXAMPLE=gallery, PORT=3000, WASM_OPT=-Oz or empty to skip)
     vars:
       EXAMPLE: '{{default "gallery" .EXAMPLE}}'
       PORT: '{{default "3000" .PORT}}'
-      WASM_OPT: '{{default "" .WASM_OPT}}'
+      # Mirrors the server's own default; set WASM_OPT= to skip the pass.
+      WASM_OPT: '{{default "-O2" .WASM_OPT}}'
     requires:
       vars:
         - name: EXAMPLE
