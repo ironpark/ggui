@@ -19,8 +19,5 @@ go.work.sum
 .idea/
 .vscode/
 
-# Temporary..
-/docs
-
 # Local tool state (contains keys)
 /identity.json

@@ -8,7 +8,7 @@
 
 Powered by [Ebitengine](https://ebiten.org).
 
-[Demos](#demos) · [Quick start](#quick-start) · [Examples](#examples) · [Guide](GUIDE.md) · [Accessibility](#accessibility) · [Development](#development)
+[Demos](#demos) · [Quick start](#quick-start) · [Examples](#examples) · [Guide](docs/README.md) · [Accessibility](#accessibility) · [Development](#development)
 
 </div>
 
@@ -152,19 +152,25 @@ tools such as Accessibility Inspector, or `AccessibilityOff` to disable it.
 
 Widgets also provide keyboard navigation, focus handling, semantic roles and
 labels, text scaling, and reduced-motion settings. See the guide's
-[input](GUIDE.md#input) section and [STYLING.md](STYLING.md).
+[input](docs/input.md#input) section and [styling and themes](docs/styling.md).
 
 ## Documentation
 
+Start with the [documentation index](docs/README.md) for a guided reading path
+and the full topic list.
+
 | Topic | Read more |
 | --- | --- |
-| State and components | [Signals, ownership, builders, and keyed lists](GUIDE.md#concepts) |
-| Layout and controls | [Widgets and layout](GUIDE.md#widgets-and-layout) · [Controls](GUIDE.md#controls) · [Additional controls](GUIDE.md#additional-ui-components) |
-| Charts | [Native charts, options, examples and visual validation](CHARTS.md) |
-| Carousel & Input OTP | [Composition, interaction, examples and visual validation](CONTROLS.md) |
-| Look and feel | [Styling](STYLING.md) · [Animation](GUIDE.md#animation) · [HiDPI](GUIDE.md#hidpi) |
-| Interaction and testing | [Input](GUIDE.md#input) · [Headless testing](GUIDE.md#testing) · [Inspector](GUIDE.md#inspector) |
-| Internals | [Frame lifecycle](GUIDE.md#frames) · [Repository layout](GUIDE.md#repository-layout) |
+| State and components | [Signals, ownership, builders, and keyed lists](docs/reactivity.md#concepts) |
+| Layout and controls | [Widgets and layout](docs/layout.md#widgets-and-layout) · [Controls](docs/forms.md#controls) · [Additional controls](docs/data-and-navigation.md) |
+| Chat and questionnaires | [Attachments, conversations, transcript scrolling, and questionnaires](docs/chat.md) |
+| Feedback and composition | [Toasts, sheets, dialogs, and composition helpers](docs/feedback-and-composition.md) |
+| Fonts and icons | [Font fallbacks, emoji, and icon sets](docs/fonts.md) |
+| Charts | [Native charts, options, examples and visual validation](docs/charts.md) |
+| Carousel & Input OTP | [Composition, interaction, examples and visual validation](docs/carousel-and-otp.md) |
+| Look and feel | [Styling](docs/styling.md) · [Animation](docs/animation.md#animation) · [HiDPI](docs/rendering.md#hidpi) |
+| Interaction and testing | [Input](docs/input.md#input) · [Headless testing](docs/testing.md#testing) · [Inspector](docs/inspector.md#inspector) |
+| Internals | [Frame lifecycle](docs/rendering.md#frame-lifecycle) · [Repository layout](docs/development.md#repository-layout) |
 
 ## Development
 
@@ -185,3 +191,6 @@ binary. The bundles are local development builds; they are not distribution-sign
 or notarized. `task build`, `task test`, and the other Go maintenance tasks also
 work on other platforms; run examples there with `go run ./examples/<example>`.
 Override the Go executable with `task build GO=/path/to/go` when needed.
+
+See [Development](docs/development.md) for all commands, browser/WASM examples,
+debug builds, visual checks, and the repository map.

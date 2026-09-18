@@ -1,8 +1,21 @@
 # Carousel and Input OTP
 
+[Documentation](README.md) · [Project README](../README.md)
+
+Create swipeable slide collections and segmented code inputs with native keyboard and accessibility support.
+
+Examples use `ggui` and `ui` imports and application-defined placeholders.
+See [example conventions](README.md#start-here) before copying snippets.
+
 Native implementations of the [shadcn Carousel](https://ui.shadcn.com/docs/components/base/carousel)
 and [Input OTP](https://ui.shadcn.com/docs/components/base/input-otp) designs. They
 inherit ggui theme tokens and require no browser, JavaScript or new dependency.
+
+## On this page
+
+- [Carousel](#carousel)
+- [Input OTP](#input-otp)
+- [Examples and validation](#examples-and-validation)
 
 ## Carousel
 
@@ -17,8 +30,11 @@ carousel := ui.Carousel(slide,
 
 `Carousel` accepts arbitrary widgets, `CarouselItem` wrappers, or a
 `CarouselContent(items...)` group. Navigation buttons are included by default.
-The outer dimensions include 48px of space on either side for the buttons;
+When controls are shown, the outer dimensions include up to 48 logical pixels
+of space on either side for the buttons;
 vertical carousels reserve that space above and below instead.
+
+### Size and arrange slides
 
 - `CarouselItem(...).Basis(.5)` fits two slides. `BasisWhen(func(viewport
   ggui.Size) float64)` supports responsive fractions. Gap is subtracted from the
@@ -32,6 +48,8 @@ vertical carousels reserve that space above and below instead.
   back to bounded navigation when there are too few slides to fill the loop.
 - `Controls(false)` allows separate `CarouselPrevious(carousel)` and
   `CarouselNext(carousel)` widgets in your own layout.
+### Navigation and playback
+
 - `Next`, `Previous`, `ScrollTo`, `Selected`, `SnapCount`, `CanNext`,
   `CanPrevious` and `OnChange` provide programmatic control. Snap information
   becomes available after layout. External binding writes also move the strip.
@@ -43,6 +61,8 @@ vertical carousels reserve that space above and below instead.
   pause it. User interaction stops it until `Play()`; use
   `StopOnInteraction(false)` to resume automatically. `Pause()` stops it.
 - `Draggable(false)`, `Disabled` and `DisabledWhen` control interaction.
+
+### Motion and rendering
 
 Motion uses a closed-form version of Embla 8.6's default spring response
 (duration parameter 25, friction .68 at 60Hz). It settles within 1800ms;
@@ -83,6 +103,8 @@ compositions panic at layout instead of silently dropping editable characters.
 Groups/slots/separators are presentation specifications; the component is one
 native text field, with one Tab stop and one accessible value.
 
+### Accepted characters
+
 - ASCII digits are accepted by default. `Alphanumeric()` allows ASCII letters
   and digits. `Pattern(*regexp.Regexp)` matches each complete character;
   `Accept(func(rune) bool)` supports other alphabets, including Unicode.
@@ -90,6 +112,8 @@ native text field, with one Tab stop and one accessible value.
   number of Unicode code points. For example, pasting `123-456` gives `123456`.
   This normalization is a deliberate native adaptation of the reference's
   pattern validation. External binding writes should already be valid.
+### Editing and callbacks
+
 - Clicking an occupied slot selects that character for replacement. Dragging
   selects a range. Native arrow/selection, Home/End, Backspace/Delete,
   select-all, copy/cut/paste, undo/redo and IME editing remain available.
@@ -99,10 +123,12 @@ native text field, with one Tab stop and one accessible value.
 - `Invalid` / `InvalidWhen`, `Disabled` / `DisabledWhen`, `Placeholder`,
   `SlotSize` and `RTL` configure appearance and behavior. `ui.Field` provides
   labels, helper text and validation messages.
-- `Input()` exposes the underlying native editor. Its new `Filter`, `Select`,
+- `Input()` exposes the underlying native editor. Its `Filter`, `Select`,
   `EditingState` and `PaintCustom` hooks are also available for other segmented
   text presentations. Filtering covers IME, clipboard, undo and accessibility
   edits. Custom painting supplies the actual caret rectangle to the native IME.
+
+### Appearance and native limits
 
 Slots default to 32px with joined borders, rounded group ends and a focus ring
 around the active slot. The caret blinks at 500ms intervals and remains steady
@@ -111,6 +137,8 @@ order. Native font metrics remain ggui's. Browser-specific SMS autofill and
 password-manager integration are outside this native component's scope.
 
 ## Examples and validation
+
+Run from the repository root:
 
 ```sh
 go run ./examples/controls

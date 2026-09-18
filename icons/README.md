@@ -24,7 +24,7 @@ ggui.Provide(icons.SetKey, lucide.Set(), content)
 // Theme-level selection (configure both themes when using BindTheme):
 light := ggui.DefaultTheme().Set(icons.SetKey, customSet)
 dark := ggui.DarkTheme().Set(icons.SetKey, customSet)
-ggui.BindTheme(isDark, dark, light)
+app.Setup(func() { ggui.BindTheme(isDark, dark, light) })
 ```
 
 A set implements `Resolve(icons.Role) *icons.SVG`. Return nil for missing roles.

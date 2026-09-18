@@ -1,5 +1,12 @@
 # Charts
 
+[Documentation](README.md) · [Project README](../README.md)
+
+Create native charts, configure their appearance, and support interactive data exploration.
+
+Examples use `ggui` and `ui` imports and application-defined placeholders.
+See [example conventions](README.md#start-here) before copying snippets.
+
 `ui` provides native area, bar, line, pie/donut, radar and radial charts. They
 render through ggui's Canvas, inherit `Theme.Chart`, support pointer and keyboard
 exploration, and respect `ReducedMotionKey`. No WebView, JavaScript runtime or
@@ -9,6 +16,15 @@ The design and example datasets follow the [shadcn chart component](https://ui.s
 and [chart gallery](https://ui.shadcn.com/charts/area#charts). The Go API expresses
 the same chart options directly; it is not a Recharts API compatibility layer.
 Typography and control styling use the application's ggui theme.
+
+## On this page
+
+- [A first chart](#a-first-chart)
+- [Constructors and options](#constructors-and-options)
+- [Tooltip and legend components](#tooltip-and-legend-components)
+- [Interaction, updates and motion](#interaction-updates-and-motion)
+- [Efficiency](#efficiency)
+- [Complete reference catalog and visual validation](#complete-reference-catalog-and-visual-validation)
 
 ## A first chart
 
@@ -58,6 +74,8 @@ bounded width and default to 240 pixels tall (400 pixels wide when unbounded).
 `Height` sets a logical height. Use `ggui.Box` and the normal layout widgets to
 constrain size or create an aspect ratio.
 
+### Configure the plot
+
 - `Curve(ChartNatural | ChartLinear | ChartStep | ChartMonotone)` selects interpolation.
 - `Stack(ChartUnstacked | ChartStacked | ChartExpanded)` controls accumulation.
   Positive and negative stacks have separate baselines. Expanded stacks divide
@@ -68,6 +86,8 @@ constrain size or create an aspect ratio.
 - `Dots`, `Labels`, `LabelFormatter`, `DotPainter`, `LabelPainter` customize data
   marks. Painter contexts include the datum, series, value, position, plot rect,
   theme environment, resolved color and active state.
+- `Gradient(bool)` enables or disables area gradients; `StrokeWidth(px)` sets
+  the line width and `FillOpacity(fraction)` sets overall fill opacity.
 - `InnerRadius` and `OuterRadius` are fractions. `InnerRadius` is relative to the
   chart's outer radius; `OuterRadius` is relative to half the smaller chart
   dimension. Per-series radii support differently sized concentric pies.
@@ -76,6 +96,8 @@ constrain size or create an aspect ratio.
   `ActiveRing`, `RadialTrack` and `CornerRadius` customize polar charts.
 - `PolarGrid(ChartPolarGrid{...})` selects circular/polygonal grids, fill, ring
   count and spoke visibility. `TickPainter` customizes radar category labels.
+
+### Choose series and category colors
 
 `ChartSeries.Color` overrides its palette token. `ColorIndex` selects one of the
 five theme tokens (1-based); zero uses series order. `ThemeColor` can resolve a
@@ -106,11 +128,15 @@ can be placed outside the chart. Built-in legends wrap at narrow widths.
 
 ## Interaction, updates and motion
 
+### Explore and select data
+
 Charts are focusable. Left/right and up/down explore categories, Home/End jump
 to the ends, Enter selects, and Escape dismisses the transient tooltip. The
 selected category's values are exposed to assistive technology, including native
 increment/decrement actions. `OnSelect` handles pointer clicks and Enter.
 `ActiveIndex` controls persistent selection separately from hover.
+
+### Replace data
 
 `Data(newData)` copies the new data, resets transient/selected state, invalidates
 geometry and restarts the entrance. Do not mutate the original maps to update a
@@ -118,10 +144,13 @@ chart. Call `Data` on the UI thread, or create a chart inside `ggui.View` for a
 reactive data source. Configure layout options before mounting or rebuild through
 a reactive boundary when those options change.
 
+### Animate changes
+
 Entrances use the reference's ease curve. Duration is 400ms for bars and 1500ms
 for the other families; pies additionally wait 400ms before starting. Areas reveal
 horizontally, lines reveal by stroke length, bars grow, pies/radials sweep, and
-radars expand from the center. `Animation` and `AnimationDelay` override timing. `Animation(0)` disables entrance motion; `Replay`
+radars expand from the center. `Animation` and `AnimationDelay` override timing.
+`Animation(0)` disables entrance motion; `Replay`
 restarts it. Reduced motion immediately renders the final state. Data replacement
 replays entrance motion; arbitrary point-to-point data morphing is not implemented.
 
@@ -146,6 +175,8 @@ go test ./ui -run '^$' -bench BenchmarkChart -benchmem
 ```
 
 ## Complete reference catalog and visual validation
+
+Run from the repository root:
 
 ```sh
 go run ./examples/charts

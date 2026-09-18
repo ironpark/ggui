@@ -1,29 +1,41 @@
-# Styling
+# Styling and themes
 
-How a ggui app decides what things look like. Three layers do the work, and
-they are read in one order:
+[Documentation](README.md) · [Project README](../README.md)
+
+Customize local styles, inherited values, semantic colors, geometry, and motion.
+
+Examples use `ggui` and `ui` imports and application-defined placeholders.
+See [example conventions](README.md#start-here) before copying snippets.
+
+Choose the scope of a change before setting a style:
 
 | Layer | What it is | Set with | Read by |
 | --- | --- | --- | --- |
 | Local style | one widget's own font, size, color | `Text(s).Size(18).Color(c)` | that widget |
 | Inherited style | what a subtree starts from | `Styled(child)`, `Themed(t, child)`, `Provide(key, v, child)` | every widget below, at layout |
-| Theme | the app's tokens: colors, spacing, named text styles | `SetTheme(t)`, `BindTheme(sig, on, off)` | the whole tree, and `UseTheme()` in a Builder |
+| Theme | the app's tokens: colors, spacing, named text styles | `SetTheme(t)`, `BindTheme(sig, on, off)` | the tree at layout, and tracked computations using `UseTheme()` |
 
 A widget's own setters win over what it inherited, and what it inherited wins
 over the built-in defaults. Nothing is resolved at construction: the chain is
 walked during layout, so a theme swap or a `Styled` wrapper reaches widgets
 that were built long before it.
 
+## On this page
+
 - [Local styles](#local-styles)
 - [Inherited styles](#inherited-styles)
 - [Theme tokens](#theme-tokens)
-- [Theme presets](#theme-presets)
 - [Deriving a theme](#deriving-a-theme)
 - [Porting a shadcn/ui palette](#porting-a-shadcnui-palette)
 - [Tokens of your own](#tokens-of-your-own)
 - [Switching themes](#switching-themes)
 - [Styling a custom widget](#styling-a-custom-widget)
 - [Accessibility preferences](#accessibility-preferences)
+- [Theme presets](#theme-presets)
+- [GPU shadows](#gpu-shadows)
+- [Component appearance](#component-appearance)
+- [Applying styles and a theme switch](#applying-styles-and-a-theme-switch)
+- [Where it lives](#where-it-lives)
 
 ## Local styles
 
@@ -100,9 +112,12 @@ Two properties are worth knowing. An `Env` is a **value**: adding to it never
 changes the parent's, so there is no stack to unwind and no cleanup to forget.
 And inheritance happens at **layout time**, not construction time, which is
 what lets Go's eager evaluation work here at all — no closures wrapped around
-subtrees, no builder callbacks, just a tree that is walked once a frame.
+subtrees, no builder callbacks, widgets resolve inherited values whenever layout is needed.
 
 ## Theme tokens
+
+Defaults below describe `DefaultTheme()` and `DarkTheme()`. A `ThemePreset`
+may supply different colors and geometry.
 
 ### Colors
 
@@ -114,18 +129,30 @@ stays legible under any theme.
 | Token | CSS variable | For | Light | Dark |
 | --- | --- | --- | --- | --- |
 | `Bg` / `Fg` | `--background` / `--foreground` | the window and the text on it | white / zinc-900 | zinc-950 / zinc-50 |
-| `Card` | `--card` | cards and other raised inline surfaces | white | zinc-900 |
-| `Popover` | `--popover` | menus, dialogs, sheets, toasts | white | zinc-900 |
+| `Card` / `CardFg` | `--card` / `--card-foreground` | raised inline surfaces and their text | white / zinc-900 | zinc-900 / zinc-50 |
+| `Popover` / `PopoverFg` | `--popover` / `--popover-foreground` | floating surfaces and their text | white / zinc-900 | zinc-900 / zinc-50 |
 | `Primary` / `PrimaryFg` | `--primary` / `--primary-foreground` | the main action | zinc-900 / zinc-50 | zinc-200 / zinc-900 |
 | `PrimaryHover` | — | `Primary` under the pointer | zinc-700 | zinc-300 |
 | `Secondary` / `SecondaryFg` | `--secondary` / `--secondary-foreground` | a supporting action | zinc-100 / zinc-900 | zinc-800 / zinc-50 |
 | `Muted` / `MutedFg` | `--muted` / `--muted-foreground` | the quiet surface behind a hover; the grey of secondary text | zinc-100 / zinc-500 | zinc-800 / zinc-400 |
 | `Destructive` / `DestructiveFg` | `--destructive` / `--destructive-foreground` | an irreversible action | `#d32f2f` / zinc-50 | same |
 | `Border` | `--border` | outlines of inputs, dividers, hairlines | zinc-200 | `#323236` |
-| `Input` | `--input` | the surface a text field or select paints | white | `#202023` |
+| `Input` | — | the painted input surface | white | `#202023` |
+| `InputBorder` | `--input` | input outlines | zinc-200 | `#323236` |
+| `Accent` / `AccentFg` | `--accent` / `--accent-foreground` | highlighted surfaces and their text | zinc-100 / zinc-900 | zinc-800 / zinc-50 |
 | `Ring` | `--ring` | the focus halo, deliberately not `Primary` | zinc-400 | zinc-500 |
 | `Selection` | — | selected text | zinc-300 | zinc-700 |
 | `Scrim` | — | dims the window behind a modal | 38% black | same |
+
+The sidebar uses separate `Sidebar`/`SidebarFg`, `SidebarPrimary`/
+`SidebarPrimaryFg`, `SidebarAccent`/`SidebarAccentFg`, `SidebarBorder`, and
+`SidebarRing` tokens. The default sidebar reuses the matching page colors,
+with a near-white light surface and zinc-900 dark surface.
+
+`Chart` contains five optional series colors. Default themes leave them unset,
+so charts fall back to `Primary`; choose a `ThemePreset` or set `Chart` for a
+multicolor palette. `Chat` controls bubble, attachment, and questionnaire
+geometry; see [Theme presets](#theme-presets) and [Chat components](chat.md).
 
 ### Elevation
 
@@ -185,8 +212,7 @@ merged onto it for headings and small secondary text. See
 
 ## Deriving a theme
 
-**Always derive from `DefaultTheme()` or `DarkTheme()`. Never write a `Theme`
-literal.** A `Theme` has no "inherit" state the way `TextStyle` does: a field
+**Start from `DefaultTheme()`, `DarkTheme()`, or a `ThemePreset`.** A `Theme` has no "inherit" state the way `TextStyle` does: a field
 you leave out is a zero, and a zero `ControlSize` paints a checkbox with no
 box at all.
 
@@ -256,8 +282,8 @@ subtree, like a form's disabled state.
 
 | Call | Does |
 | --- | --- |
-| `UseTheme()` | returns the theme and subscribes the enclosing Builder, so it rebuilds on a change |
-| `SetTheme(t)` | replaces the theme and rebuilds only what read it |
+| `UseTheme()` | Read the global theme; inside a tracked computation such as `Reactive`, subscribe it to changes. |
+| `SetTheme(t)` | Replace the global theme, invalidate inherited layout, and notify tracked readers. |
 | `BindTheme(sig, on, off)` | follows a `Readable[bool]`, swapping between two themes |
 | `Themed(t, child)` | gives one subtree a theme without touching the app's |
 | `env.Theme()` | the theme at layout time, for a widget |
@@ -288,9 +314,10 @@ func (w *MyWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 }
 ```
 
-`UseTheme` subscribes a *Builder* and rebuilds it; a widget does not need
-rebuilding, because `Layout` runs again anyway and reads the current theme
-from the `Env`. Using it inside a widget would register an effect per layout.
+`UseTheme` reads the global theme signal; it does not create an effect.
+Use `env.Theme()` in a widget so local `Themed` overrides are respected.
+Use `UseTheme()` inside `Reactive` when constructing a subtree from the global
+theme. Reads in app root setup or `Component` setup do not make setup rerun.
 
 Keep what `Paint` needs on the struct, since `Paint` gets no `Env`. That is
 the pattern every control in the `ui` package follows, and it is why a theme
@@ -327,19 +354,6 @@ w.motion = env.Motion(t.MotionFast)   // zero under reduced motion
 Transitions then land at once and eased motions jump, without every widget
 having to know the preference exists.
 
-## Where it lives
-
-| Concern | File |
-| --- | --- |
-| `TextStyle`, `Env`, `Theme`, `DefaultTheme`, `DarkTheme` | [style.go](style.go) |
-| `Text`, `Title`, `Caption`, `Styled`, `Provide` | [widgets.go](widgets.go) |
-| Shadows | [shadow.go](shadow.go) |
-| Motion and transitions | [anim.go](anim.go), [transition.go](transition.go) |
-| The controls that consume the tokens | [ui/](ui/) |
-
-See [GUIDE.md](GUIDE.md) for the rest of the framework, and
-[GUIDE.md#animation](GUIDE.md#animation) for the values that move over time.
-
 ## Theme presets
 
 `ThemePreset` combines the [shadcn/ui semantic color tokens](https://ui.shadcn.com/docs/theming)
@@ -352,7 +366,7 @@ preset := ggui.ThemePreset{
     Accent: ggui.AccentBlue,
     Style: ggui.StyleRhea,
 }
-ggui.BindTheme(dark, preset.Dark(), preset.Light())
+app.Setup(func() { ggui.BindTheme(dark, preset.Dark(), preset.Light()) })
 
 // Returned Themes are independent values; customize after selecting a preset.
 theme := preset.Light()
@@ -391,3 +405,95 @@ The gallery's **Theme presets** preview switches base, accent and style for the
 whole gallery, and the dark-mode switch preserves all three choices. **Emoji**
 demonstrates color glyphs in labels and editable text. Gallery fonts and emoji
 assets are embedded, so the same previews run offline in native and WASM builds.
+
+## GPU shadows
+
+`Box.Shadow(styles...)` and `ui.Card(...).Shadow(styles...)` paint outer shadows
+before the surface. Multiple styles form layers; calling `.Shadow()` clears them.
+For custom drawing, use `canvas.Shadow(rect, cornerRadius, style)`.
+
+```go
+ui.Card(content).Shadow(ggui.ShadowStyle{
+    Offset: ggui.Pt(0, 6),
+    Blur:   12,
+    Spread: 0,
+    Color:  color.NRGBA{A: 50},
+})
+```
+
+All distances are logical pixels and scale with the display. Positive spread
+expands the silhouette; negative spread contracts it. Nil or transparent colors
+skip rendering. Blur is a smooth feather distance on both sides of the edge;
+zero gives a sharp, antialiased shadow. This is a rounded-rectangle distance-field
+approximation, not a Gaussian blur of the content or image alpha.
+
+The renderer lazily shares one Ebitengine Kage shader. Each visible shadow layer
+uses one `DrawRectShader` call, with no intermediate textures, blur passes or CPU
+rasterization. Draw bounds are intersected with the target before rendering.
+Cost still grows with visible pixel area and overlapping layers.
+
+Shadows do not reserve layout space or create hit regions. Add padding/gaps when
+needed; parent clipping and window bounds still clip them. The gallery's Shadows
+preview compares subtle, floating and colored treatments. Toast uses this same
+renderer, including its existing fade animation.
+
+## Component appearance
+
+The control set follows the visual hierarchy of [shadcn/ui's semantic theme
+colors](https://ui.shadcn.com/docs/theming), [segmented tabs](https://ui.shadcn.com/docs/components/tabs)
+and [cards](https://ui.shadcn.com/docs/components/card), adapted to native drawing
+and ggui's existing APIs.
+
+| Element | Appearance and configuration |
+| --- | --- |
+| Buttons | Primary by default; `Outline()` draws a border around the background. `Secondary()` adds a subdued fill, `Ghost()` removes the resting surface, and `Destructive()` uses the theme's `Destructive` color. Variants preserve pointer, keyboard and accessibility behavior. |
+| Focus | Controls use a separate, softer focus color. Text fields add an outer halo while editing. |
+| Tabs | A muted rounded strip with an animated raised selection; `.Line()` opts into the underline treatment. Reduced-motion settings still apply. |
+| Cards and floating panels | Cards receive a subtle shadow; menus, select lists, comboboxes and date pickers use a stronger shared panel shadow. Dialogs use a larger radius and deeper elevation. |
+| Labels and notices | Field labels use the body size; help text remains smaller. Alerts use body-size descriptions and tighter title spacing. |
+| Badges and calendar | Badges use small rounded corners. Calendar month navigation uses ghost buttons, with a centered month heading and contrasting selected-date text. |
+
+These choices follow a brand by changing the theme rather than the widgets.
+The controls read ordinary `Theme` fields. Start with a default or preset
+and override just the fields you need.
+
+```go
+theme := ggui.DefaultTheme()
+theme.Ring = color.NRGBA{R: 140, G: 165, B: 230, A: 255}
+theme.PanelShadow = ggui.ShadowStyle{Offset: ggui.Pt(0, 4), Blur: 12, Color: color.NRGBA{A: 45}}
+// Disable default card elevation globally, or call Card(...).Shadow() locally.
+theme.CardShadow = ggui.ShadowStyle{}
+ggui.SetTheme(theme)
+```
+
+## Applying styles and a theme switch
+
+Styling has three layers: a widget's own setters, values inherited through the
+`Env`, and the theme's tokens. A widget's setters win over what it inherited,
+and inheritance is resolved at layout time, so a theme swap reaches widgets
+built long before it.
+
+```go
+ggui.Text("Heading").Style(t.Title).Color(brand)   // local
+ggui.Styled(page).Color(t.MutedFg).Size(12)        // inherited
+app.Setup(func() { ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme()) })
+```
+
+Use `ui.ThemeSwitch(dark)` for a compact day/night control: the large sun thumb turns into
+a softly shaded full moon, with clouds fading into stars. `true` means dark
+mode. Bind the same signal with `BindTheme` as above to apply the theme. The
+control supports `.Named("Appearance")`, `.OnChange(fn)`, `.Disabled(v)`, and
+`.DisabledWhen(reader)`, plus Space/Enter and reduced-motion preferences.
+
+## Where it lives
+
+| Concern | File |
+| --- | --- |
+| `TextStyle`, `Env`, `Theme`, `DefaultTheme`, `DarkTheme` | [style.go](../style.go) |
+| `Text`, `Title`, `Caption`, `Styled`, `Provide` | [widgets.go](../widgets.go) |
+| Shadows | [shadow.go](../shadow.go) |
+| Motion and transitions | [anim.go](../anim.go), [transition.go](../transition.go) |
+| The controls that consume the tokens | [ui/](../ui/) |
+
+See [Documentation](README.md) for the rest of the framework, and
+[Animation](animation.md#animation) for the values that move over time.
