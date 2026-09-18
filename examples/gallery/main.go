@@ -56,6 +56,7 @@ func newGallery() (ggui.Builder, func(), func()) {
 		return "nobody"
 	})
 	name := ggui.State("")
+	carouselIndex, otpValue := ggui.State(0), ggui.State("")
 	email := ggui.State("")
 	confirm := ggui.State(false)
 	cleared := ggui.State(0)
@@ -427,6 +428,8 @@ func newGallery() (ggui.Builder, func(), func()) {
 		}
 		entries = append(entries, chatPreviews()...)
 		entries = append(entries, reactivityPreview())
+		entries = append(entries, preview("Carousel", ui.Carousel(carouselIndex, ui.Card(ggui.Center(ggui.Title("1"))), ui.Card(ggui.Center(ggui.Title("2"))), ui.Card(ggui.Center(ggui.Title("3")))).Height(180)))
+		entries = append(entries, preview("Input OTP", ui.Field("Verification code", ui.InputOTP(otpValue, 6).Groups(3, 3)).Help("Paste a code or edit individual slots.")))
 		entries = append(entries, preview("Charts", ggui.Column(
 			chartdemo.Build(chartdemo.Find("chart-area-gradient")).Legend(true),
 			ggui.Caption("Area, bar, line, pie, radar and radial charts. Run examples/charts for all variants."),

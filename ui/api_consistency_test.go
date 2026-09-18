@@ -20,6 +20,7 @@ func TestFieldNamePriority(t *testing.T) {
 		name string
 		make func() namedControl
 	}{
+		{"input OTP", func() namedControl { return ui.InputOTP(ggui.State(""), 6) }},
 		{"editor", func() namedControl { return ggui.TextInput(ggui.State("")).Placeholder("Hint") }},
 		{"textfield", func() namedControl { return ui.TextField(ggui.State("")).Placeholder("Hint") }},
 		{"combobox", func() namedControl { return ui.Combobox(ggui.State(1), []int{1, 2}) }},
@@ -120,6 +121,12 @@ func checkDisabled[W interface {
 }
 
 func TestDisabledSettingsAcrossControls(t *testing.T) {
+	t.Run("input OTP", func(t *testing.T) {
+		checkDisabled(t, ui.InputOTP(ggui.State(""), 6).Named("Code"), ggui.RoleTextField, "Code")
+	})
+	t.Run("carousel", func(t *testing.T) {
+		checkDisabled(t, ui.Carousel(ggui.State(0), ggui.Text("1"), ggui.Text("2")).Named("Slides"), ggui.RoleGroup, "Slides")
+	})
 	t.Run("button", func(t *testing.T) { checkDisabled(t, ui.Button("B", nil), ggui.RoleButton, "B") })
 	t.Run("checkbox", func(t *testing.T) { checkDisabled(t, ui.Checkbox(ggui.State(false), "C"), ggui.RoleCheckbox, "C") })
 	t.Run("switch", func(t *testing.T) { checkDisabled(t, ui.Switch(ggui.State(false), "S"), ggui.RoleSwitch, "S") })

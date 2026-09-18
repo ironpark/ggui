@@ -389,6 +389,7 @@ type TextInputWidget struct {
 	onCommit          func(string)
 	onChange          func(string)
 	onKey             func(KeyEvent) bool
+	filter            func(string) string
 	escapeUsed        bool
 	disabled          bool
 	inheritedDisabled bool
@@ -920,6 +921,13 @@ func (t *TextInputWidget) lineBounds() (int, int) {
 // commit writes the editor's text to the signal after an edit.
 func (t *TextInputWidget) commit() {
 	t.blink = Now()
+	if t.filter != nil {
+		// Map both selection boundaries through the same normalization, so
+		// removed characters cannot leave the caret beyond the accepted text.
+		a, c := len(t.filter(t.ed.text[:t.ed.anchor])), len(t.filter(t.ed.text[:t.ed.caret]))
+		t.ed.setText(t.filter(t.ed.text))
+		t.ed.anchor, t.ed.caret = t.ed.snap(a), t.ed.snap(c)
+	}
 	if t.ed.text == Untrack(t.value.Get) {
 		return
 	}

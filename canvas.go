@@ -37,6 +37,7 @@ type Canvas struct {
 	logical     Size // the window in logical pixels, for Size
 	pointer     Point
 	hasPointer  bool
+	focusBounds Rect // focused input region at the start of this paint
 	overlays    []overlay
 	trace       []traceEntry // every Paint call, when the inspector is on
 	tracing     bool
@@ -251,6 +252,13 @@ func (c *Canvas) Pointer() (Point, bool) {
 	}
 	root := c.root()
 	return root.pointer, root.hasPointer
+}
+
+// FocusWithin reports whether the focused input region overlaps r. Containers
+// use it to pause motion while a descendant (including a custom control) has
+// the keyboard. Like Pointer, it reads the state at the start of the paint.
+func (c *Canvas) FocusWithin(r Rect) bool {
+	return c != nil && !c.root().focusBounds.Intersect(r).Empty()
 }
 
 // Overlay schedules fn to paint after the whole tree has, on the root

@@ -11,6 +11,8 @@ import (
 type previewInfo struct{ category, description string }
 
 var previewDetails = map[string]previewInfo{
+	"Carousel":                 {"Navigation", "Swipeable slides, responsive sizing, looping, keyboard navigation and autoplay."},
+	"Input OTP":                {"Inputs", "Grouped code slots with native editing, paste, filtering and validation states."},
 	"Charts":                   {"Data", "Native GPU charts with themed tooltips, legends, curves, stacking and animations."},
 	"Reactive blocks":          {"Data", "Cancellable search, await branches, keyed row identity and component cleanup."},
 	"Theme presets":            {"Layout", "shadcn semantic tokens: seven base palettes, seventeen accents, Nova and Rhea geometry."},

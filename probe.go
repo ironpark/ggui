@@ -101,6 +101,10 @@ func (p *Probe) Frame() Size {
 	c := &p.canvas
 	c.prev, c.hits = c.hits, nil
 	c.pointer, c.hasPointer, c.logical = p.pointer, p.hasPointer, p.size
+	c.focusBounds = Rect{}
+	if p.in.focused != nil {
+		c.focusBounds = p.in.focused.rect
+	}
 	c.nextFrame()
 	c.resetSemantics()
 	if err := p.settle(p.size); err != nil {

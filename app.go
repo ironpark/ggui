@@ -310,6 +310,10 @@ func (a *App) Draw(screen *ebiten.Image) {
 	clear(a.canvas.trace)
 	a.canvas.tracing, a.canvas.trace = a.inspect, a.canvas.trace[:0]
 	a.canvas.logical = logical
+	a.canvas.focusBounds = Rect{}
+	if a.input.focused != nil {
+		a.canvas.focusBounds = a.input.focused.rect
+	}
 	a.canvas.nextFrame()
 	a.canvas.resetSemantics()
 	if err := a.settle(logical); err != nil {
