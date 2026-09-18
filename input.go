@@ -241,7 +241,7 @@ func (in *inputState) dispatch(f frameInput) {
 	in.updateCursor(f)
 	in.panTouch(&f)
 	in.dispatchPointer(f)
-	f.keys = in.consumeBindings(f)
+	f.keys = in.consumeBindings(f.keys, f.mods)
 	in.dispatchKeys(f)
 }
 
@@ -334,17 +334,16 @@ func (in *inputState) dispatchPointer(f frameInput) {
 // widget -- Tab, registered shortcuts and the chords that fire before the
 // focused widget sees them -- and returns what is left for the widget. The
 // frame's slice belongs to the caller of dispatch, so a removal clones it.
-func (in *inputState) consumeBindings(f frameInput) []KeyboardKey {
-	keys := f.keys
+func (in *inputState) consumeBindings(keys []KeyboardKey, mods Mods) []KeyboardKey {
 	if i := slices.Index(keys, KeyTab); i >= 0 {
 		keys = slices.Delete(slices.Clone(keys), i, i+1)
-		in.moveFocus(pick(f.mods.Shift, -1, 1))
+		in.moveFocus(pick(mods.Shift, -1, 1))
 	}
 	if len(in.shortcuts) > 0 {
-		keys = in.withoutShortcuts(keys, f.mods)
+		keys = in.withoutShortcuts(keys, mods)
 	}
 	if len(in.chords) > 0 {
-		keys = slices.DeleteFunc(slices.Clone(keys), func(k KeyboardKey) bool { return in.runChords(k, f.mods, true) })
+		keys = slices.DeleteFunc(slices.Clone(keys), func(k KeyboardKey) bool { return in.runChords(k, mods, true) })
 	}
 	return keys
 }

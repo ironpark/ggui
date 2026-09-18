@@ -1048,7 +1048,7 @@ func wordWise(m Mods) bool { return m.Alt || (!m.Cmd() && m.Ctrl) }
 // the editor does not act on, or one that bailed out (Undo with nothing to
 // undo, an arrow in a single-line field), leaves the value alone.
 func (t *TextInputWidget) key(k KeyboardKey, m Mods) {
-	if t.editKey(k, m) || t.moveKey(k, m) || t.clipboardKey(k, m) {
+	if t.editKey(k, m) || t.moveKey(k, m) || t.clipboardKey(k, m) || t.historyKey(k, m) {
 		t.commit()
 	}
 }
@@ -1057,7 +1057,6 @@ func (t *TextInputWidget) key(k KeyboardKey, m Mods) {
 // deletes. Enter in a single-line field submits instead, which commits
 // through committed rather than through the caller.
 func (t *TextInputWidget) editKey(k KeyboardKey, m Mods) bool {
-	word := wordWise(m)
 	switch k {
 	case KeyEnter, KeyNumpadEnter:
 		t.ime.Confirm()
@@ -1075,11 +1074,11 @@ func (t *TextInputWidget) editKey(k KeyboardKey, m Mods) bool {
 		return true
 	case KeyBackspace:
 		t.ime.Confirm()
-		t.ed.backspace(word)
+		t.ed.backspace(wordWise(m))
 		return true
 	case KeyDelete:
 		t.ime.Confirm()
-		t.ed.deleteForward(word)
+		t.ed.deleteForward(wordWise(m))
 		return true
 	}
 	return false
@@ -1089,7 +1088,6 @@ func (t *TextInputWidget) editKey(k KeyboardKey, m Mods) bool {
 // and Meta jumps to the ends of the text; in a multiline field Up and Down
 // step by line and Home and End stay within one.
 func (t *TextInputWidget) moveKey(k KeyboardKey, m Mods) bool {
-	word := wordWise(m)
 	switch k {
 	case KeyArrowUp, KeyArrowDown:
 		if !t.multiline {
@@ -1108,7 +1106,7 @@ func (t *TextInputWidget) moveKey(k KeyboardKey, m Mods) bool {
 		if m.Meta {
 			t.ed.moveTo(pick(dir < 0, 0, len(t.ed.text)), m.Shift)
 		} else {
-			t.ed.moveBy(dir, word, m.Shift)
+			t.ed.moveBy(dir, wordWise(m), m.Shift)
 		}
 		return true
 	case KeyHome, KeyEnd:
@@ -1123,10 +1121,9 @@ func (t *TextInputWidget) moveKey(k KeyboardKey, m Mods) bool {
 	return false
 }
 
-// clipboardKey handles the Cmd/Ctrl shortcuts: select all, copy, cut, paste,
-// undo and redo. A password field is never copied out of, though cutting
-// still deletes. Undo and redo report false with nothing left on the stack,
-// so an exhausted history writes nothing back.
+// clipboardKey handles the Cmd/Ctrl shortcuts that move text in and out of
+// the field: select all, copy, cut and paste. A password field is never
+// copied out of, though cutting still deletes.
 func (t *TextInputWidget) clipboardKey(k KeyboardKey, m Mods) bool {
 	switch k {
 	case KeyA:
@@ -1149,22 +1146,6 @@ func (t *TextInputWidget) clipboardKey(k KeyboardKey, m Mods) bool {
 			t.ed.replace("")
 		}
 		return true
-	case KeyZ:
-		if !m.Cmd() {
-			return false
-		}
-		t.ime.Confirm()
-		if m.Shift {
-			return t.ed.Redo()
-		}
-		return t.ed.Undo()
-	case KeyY:
-		// Ctrl+Y is redo everywhere but macOS, which uses Shift+Cmd+Z.
-		if !m.Cmd() || runtimeIsDarwin() || !t.ed.Redo() {
-			return false
-		}
-		t.ime.Confirm()
-		return true
 	case KeyV:
 		if m.Cmd() {
 			t.ime.Confirm()
@@ -1175,6 +1156,31 @@ func (t *TextInputWidget) clipboardKey(k KeyboardKey, m Mods) bool {
 			}
 			t.ed.replace(s)
 		}
+		return true
+	}
+	return false
+}
+
+// historyKey handles the Cmd/Ctrl shortcuts for undo and redo. Both report
+// false with nothing left on the stack, so an exhausted history writes
+// nothing back.
+func (t *TextInputWidget) historyKey(k KeyboardKey, m Mods) bool {
+	if !m.Cmd() {
+		return false
+	}
+	switch k {
+	case KeyZ:
+		t.ime.Confirm()
+		if m.Shift {
+			return t.ed.Redo()
+		}
+		return t.ed.Undo()
+	case KeyY:
+		// Ctrl+Y is redo everywhere but macOS, which uses Shift+Cmd+Z.
+		if runtimeIsDarwin() || !t.ed.Redo() {
+			return false
+		}
+		t.ime.Confirm()
 		return true
 	}
 	return false

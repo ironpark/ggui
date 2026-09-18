@@ -360,7 +360,7 @@ func curvePath(path *ggui.Path, points []ggui.Point, curve ChartCurve, move bool
 		}
 		return
 	}
-	slopes := make([]float64, n)
+	var slopes []float64
 	if curve == ChartMonotone {
 		slopes = monotoneSlopes(points)
 	}
