@@ -169,6 +169,9 @@ func textRuns(s string, face text.Face) iter.Seq2[string, text.Face] {
 }
 
 func drawText(dst *ebiten.Image, s string, face text.Face, options *text.DrawOptions) {
+	if dst == nil || dst.Bounds().Empty() {
+		return
+	}
 	if _, ok := face.(*emojiFace); !ok {
 		text.Draw(dst, s, face, options)
 		return

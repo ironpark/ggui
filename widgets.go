@@ -246,7 +246,7 @@ func (t *TextWidget) Paint(dst *Canvas, r Rect) {
 	if t.value != "" && !dst.named(r) {
 		dst.Leaf(r, Node{Role: pick(t.role == roleTitle, RoleHeading, RoleText), Name: t.value})
 	}
-	if dst == nil || dst.Image == nil {
+	if dst == nil || dst.Image == nil || dst.Image.Bounds().Empty() {
 		return
 	}
 	face := t.faceAt(dst.Scale())

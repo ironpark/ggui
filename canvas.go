@@ -341,9 +341,39 @@ func (c *Canvas) Geo(at Point) ebiten.GeoM {
 	return g
 }
 
+// visiblePaintBounds tests drawing only; callers must still collect input,
+// semantics and traces. Keep one physical pixel for antialiasing and round to
+// float32 like the vector API. Unusual geometry takes the original draw path.
+func (c *Canvas) visiblePaintBounds(r Rect, extra float64) bool {
+	if c == nil || c.Image == nil {
+		return false
+	}
+	bounds := c.Image.Bounds()
+	if bounds.Empty() {
+		return false
+	}
+	x, y, w, h := c.Px(r.Origin.X), c.Px(r.Origin.Y), c.Px(r.Size.W), c.Px(r.Size.H)
+	pad := c.px(extra) + 1
+	// Avoid culling huge coordinates where float32 intermediate rounding
+	// can exceed the one-pixel guard.
+	for _, v := range [...]float64{float64(x), float64(y), float64(w), float64(h), pad} {
+		if math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > 1<<20 {
+			return true
+		}
+	}
+	if w < 0 || h < 0 || pad < 1 {
+		return true
+	}
+	return float64(x+w)+pad > float64(bounds.Min.X) && float64(y+h)+pad > float64(bounds.Min.Y) &&
+		float64(x)-pad < float64(bounds.Max.X) && float64(y)-pad < float64(bounds.Max.Y)
+}
+
 // FillRect fills the logical Rect r with col.
 func (c *Canvas) FillRect(r Rect, col color.Color) {
 	if c == nil || c.Image == nil || col == nil {
+		return
+	}
+	if !c.visiblePaintBounds(r, 0) {
 		return
 	}
 	vector.FillRect(c.Image, c.Px(r.Origin.X), c.Px(r.Origin.Y), c.Px(r.Size.W), c.Px(r.Size.H), col, true)
@@ -354,12 +384,18 @@ func (c *Canvas) FillCircle(center Point, radius float64, col color.Color) {
 	if c == nil || c.Image == nil || col == nil || radius <= 0 {
 		return
 	}
+	if !c.visiblePaintBounds(Rct(center.Add(Pt(-radius, -radius)), Sz(2*radius, 2*radius)), 0) {
+		return
+	}
 	vector.FillCircle(c.Image, c.Px(center.X), c.Px(center.Y), c.Px(radius), col, true)
 }
 
 // StrokeLine draws a line of logical width w from a to b in col.
 func (c *Canvas) StrokeLine(a, b Point, w float64, col color.Color) {
-	if c == nil || c.Image == nil || col == nil || w <= 0 {
+	if c == nil || c.Image == nil || col == nil || w <= 0 || c.Image.Bounds().Empty() {
+		return
+	}
+	if !c.visiblePaintBounds(Rct(Pt(min(a.X, b.X), min(a.Y, b.Y)), Sz(math.Abs(b.X-a.X), math.Abs(b.Y-a.Y))), w/2) {
 		return
 	}
 	vector.StrokeLine(c.Image, c.Px(a.X), c.Px(a.Y), c.Px(b.X), c.Px(b.Y), c.Px(w), col, true)
@@ -404,6 +440,9 @@ func (c *Canvas) FillRoundRect(r Rect, radius float64, col color.Color) {
 	if c == nil || c.Image == nil || col == nil {
 		return
 	}
+	if !c.visiblePaintBounds(r, 0) {
+		return
+	}
 	if radius <= 0 {
 		c.FillRect(r, col)
 		return
@@ -417,7 +456,12 @@ func (c *Canvas) FillRoundRect(r Rect, radius float64, col color.Color) {
 // StrokeRoundRect draws a line of logical width w in col just inside r,
 // with corners rounded by radius.
 func (c *Canvas) StrokeRoundRect(r Rect, radius, w float64, col color.Color) {
-	if c == nil || c.Image == nil || col == nil || w <= 0 {
+	if c == nil || c.Image == nil || col == nil || w <= 0 || c.Image.Bounds().Empty() {
+		return
+	}
+	// Very thick strokes can produce inverted inset geometry; leave those
+	// to the renderer instead of assuming the result stays inside r.
+	if w <= r.Size.W && w <= r.Size.H && !c.visiblePaintBounds(r, w) {
 		return
 	}
 	inset := Rct(r.Origin.Add(Pt(w/2, w/2)), Sz(r.Size.W-w, r.Size.H-w))
