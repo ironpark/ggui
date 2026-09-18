@@ -113,7 +113,7 @@ and launch macOS app bundles.
 | --- | --- | --- |
 | [Counter](examples/counter) | Reactive state, buttons, shortcuts, and theme switching. | `task run` |
 | [Todo](examples/todo) | IME text input, validation, keyed lists, transitions, and a confirm dialog. | `task run-todo` |
-| [Gallery](examples/gallery) | 26 searchable previews across Inputs, Navigation, Feedback, Layout, and Data. | `task run-gallery` |
+| [Gallery](examples/gallery) | 28 searchable previews across Inputs, Navigation, Feedback, Layout, and Data. | `task run-gallery` |
 
 On other platforms, use `go run ./examples/counter`, `go run ./examples/todo`,
 or `go run ./examples/gallery`. The gallery adapts from two columns to one in

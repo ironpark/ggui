@@ -209,6 +209,7 @@ func TestGalleryNavigationAndOverlays(t *testing.T) {
 		t.Fatal("the toggle group did not take the click")
 	}
 	p.Tap("Cut")
+	p.Frame()
 
 	searchGallery(p, "Sheets and drawers")
 	p.Tap("Open filters")
@@ -232,5 +233,69 @@ func TestGalleryNavigationAndOverlays(t *testing.T) {
 	p.Tap("Remove")
 	if _, ok := p.Find("Remove"); ok {
 		t.Fatal("the confirmation stayed open after it was answered")
+	}
+}
+
+func TestGallerySupplementedComponents(t *testing.T) {
+	p := galleryProbe(ggui.Sz(1180, 820))
+	defer p.Close()
+
+	searchGallery(p, "Progress")
+	for range 4 {
+		p.Tap("Advance download")
+		p.Frame()
+	}
+	p.Advance(time.Second)
+	if n, ok := p.Semantics().Find(ggui.RoleProgress, ""); !ok || n.Now != 1 {
+		t.Fatalf("download did not reach completion: found=%v node=%+v", ok, n)
+	}
+	if _, ok := p.Find("Advance download"); ok {
+		t.Fatal("completed download still accepts advances")
+	}
+	p.Tap("Restart download")
+	p.Frame()
+	p.Advance(time.Second)
+	if n, ok := p.Semantics().Find(ggui.RoleProgress, ""); !ok || n.Now != 0 {
+		t.Fatal("download did not restart")
+	}
+
+	searchGallery(p, "Collapsible")
+	p.Tap("Delivery preferences")
+	p.Advance(400 * time.Millisecond)
+	p.Tap("Email delivery updates")
+	p.Tap("Delivery preferences")
+	p.Advance(400 * time.Millisecond)
+	if _, ok := p.Find("Email delivery updates"); ok {
+		t.Fatal("collapsed content still accepts input")
+	}
+	p.Tap("Delivery preferences")
+	p.Advance(400 * time.Millisecond)
+	if n, ok := p.Semantics().Find(ggui.RoleCheckbox, "Email delivery updates"); !ok || n.Checked != ggui.TriOff {
+		t.Fatal("delivery preference was lost on reopen")
+	}
+
+	searchGallery(p, "ToggleGroup")
+	p.Tap("right")
+	p.Tap("Lock alignment")
+	p.Frame()
+	if _, ok := p.Find("left"); ok {
+		t.Fatal("locked alignment remains interactive")
+	}
+	p.Tap("Lock alignment")
+	p.Frame()
+	if n, ok := p.Semantics().Find(ggui.RoleRadio, "right"); !ok || n.Checked != ggui.TriOn {
+		t.Fatal("alignment was lost when unlocking")
+	}
+	p.Tap("Cut")
+	p.Frame()
+	if _, ok := p.Semantics().Find(ggui.RoleText, "Cut selected"); !ok {
+		t.Fatal("button group action feedback missing")
+	}
+	p.Tap("Site")
+	pasteText(p, "example.com")
+	p.Tap("Go")
+	p.Frame()
+	if _, ok := p.Semantics().Find(ggui.RoleText, "Preview: https://example.com"); !ok {
+		t.Fatal("input group preview missing")
 	}
 }

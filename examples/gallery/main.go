@@ -71,6 +71,11 @@ func newGallery() (ggui.Builder, func(), func()) {
 	nav := ggui.State("inbox")
 	align := ggui.State("center")
 	site := ggui.State("")
+	groupAction := ggui.State("Choose an action")
+	sitePreview := ggui.State("Enter a site and press Go")
+	controlsLocked := ggui.State(false)
+	disclosureOpen := ggui.State(false)
+	download := ggui.State(0.0)
 	filtersOpen, drawerOpen, removeOpen := ggui.State(false), ggui.State(false), ggui.State(false)
 	removed := ggui.State(0)
 
@@ -204,6 +209,23 @@ func newGallery() (ggui.Builder, func(), func()) {
 				ggui.Row(ui.Skeleton(40, 40).Circle(), ggui.Column(ui.Skeleton(180, 14), ui.Skeleton(120, 14)).Space(1)).Space(1),
 			).Space(1)),
 
+			section("Progress", ggui.Column(
+				ui.Progress(download),
+				ggui.TextOf(download.Map(func(v float64) string { return fmt.Sprintf("Download: %.0f%%", v*100) })),
+				ggui.Wrap(
+					ui.Button("Advance download", func() { download.Set(min(1, download.Peek()+0.25)) }).DisabledWhen(download.Map(func(v float64) bool { return v >= 1 })),
+					ui.Button("Restart download", func() { download.Set(0) }).Outline(),
+				).Gap(8),
+			).Space(1).Align(ggui.AlignStretch)),
+
+			section("Collapsible", ggui.Column(
+				ui.Collapsible(disclosureOpen, "Delivery preferences", ggui.Column(
+					ui.Checkbox(notify, "Email delivery updates"),
+					ggui.Caption("Your selection is preserved when this section is closed."),
+				).Space(1)),
+				ui.Collapsible(ggui.State(false), "Unavailable preferences", ggui.Text("Not available")).Disabled(true),
+			).Space(1).Align(ggui.AlignStretch)),
+
 			section("Pagination", ggui.Column(
 				ui.Pagination(page, pageCount),
 				ggui.Textf("Page %d — bind this value to your data query or slice.", page).AsCaption(),
@@ -309,18 +331,30 @@ func newGallery() (ggui.Builder, func(), func()) {
 			).Space(1).Align(ggui.AlignStretch)),
 
 			section("Groups and addons", ggui.Column(
-				ui.ToggleGroup(align, []string{"left", "center", "right"}),
+				ui.Switch(controlsLocked, "Lock alignment"),
+				ui.ToggleGroup(align, []string{"left", "center", "right"}).Named("Text alignment").DisabledWhen(controlsLocked),
+				ggui.Textf("Alignment: %s", align),
 				ui.ButtonGroup(
-					ui.Button("Copy", nil).Ghost(),
-					ui.Button("Cut", nil).Ghost(),
-					ui.Button("Paste", nil).Ghost(),
+					ui.Button("Copy", func() { groupAction.Set("Copy selected") }).Ghost(),
+					ui.Button("Cut", func() { groupAction.Set("Cut selected") }).Ghost(),
+					ui.Button("Paste", func() { groupAction.Set("Paste selected") }).Ghost(),
 				),
+				ggui.TextOf(groupAction).AsCaption(),
 				ui.InputGroup(ggui.TextInput(site).Placeholder("example.com").Named("Site")).
 					Leading(ggui.Text("https://").Color(t.MutedFg)).
-					Trailing(ui.Button("Go", nil).Ghost()),
+					Trailing(ui.Button("Go", func() {
+						if host := strings.TrimSpace(site.Peek()); host != "" {
+							sitePreview.Set("Preview: https://" + host)
+						} else {
+							sitePreview.Set("Enter a site first")
+						}
+					}).Ghost()),
+				ggui.TextOf(sitePreview).AsCaption(),
 			).Space(1).Align(ggui.AlignStretch)),
 
 			section("Profile and media", ggui.Column(
+				ggui.Wrap(ui.Avatar("Ada Lovelace").Size(32), ui.Avatar("Grace Hopper").Size(48).Square(), ui.Avatar("").Named("Unknown person").Size(40)).Gap(12),
+				ggui.Caption("Avatar initials, square portraits and an unknown-person fallback."),
 				ui.Item("Ada Lovelace", "Analytical engine").
 					Media(ui.Avatar("Ada Lovelace").Size(32)).
 					Action(ui.HoverCard(

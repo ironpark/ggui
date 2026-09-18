@@ -24,7 +24,9 @@ var previewDetails = map[string]previewInfo{
 	"Notices and empty states": {"Feedback", "Alerts and helpful starting points for empty collections."},
 	"Loading and shortcuts":    {"Feedback", "Spinners, skeleton placeholders and keyboard hints."},
 	"Toast":                    {"Feedback", "Transient messages, undo actions and persistent errors."},
-	"Dialog":                   {"Feedback", "A focused confirmation flow with cancel and reset actions."},
+	"Dialog":                   {"Feedback", "Dialog and AlertDialog confirmation flows with cancel, reset and destructive actions."},
+	"Progress":                 {"Feedback", "A progress bar with completion, restart and reactive disabled state."},
+	"Collapsible":              {"Navigation", "An expandable section that preserves its controls, plus a disabled example."},
 	"Pagination":               {"Navigation", "Move through pages with a compact set of controls."},
 	"Accordion":                {"Navigation", "Expandable sections with keyboard navigation."},
 	"Tabs":                     {"Navigation", "Switch between related views without leaving the page."},
@@ -33,10 +35,10 @@ var previewDetails = map[string]previewInfo{
 	"Wrap":                     {"Layout", "Removable tags that flow naturally onto the next line."},
 	"Table":                    {"Data", "Selectable rows, flexible columns and row actions."},
 	"Grid":                     {"Data", "The shared color palette, presented in a responsive grid."},
-	"Sheets and drawers":       {"Navigation", "Edge-anchored modal panels that slide in and hand focus back."},
-	"Sidebar":                  {"Navigation", "A keyed navigation column and the trail to the page it shows."},
-	"Groups and addons":        {"Inputs", "Segmented choices, joined actions and a field with prefix and suffix."},
-	"Profile and media":        {"Layout", "Avatars, list rows, hover previews and fixed aspect ratios."},
+	"Sheets and drawers":       {"Navigation", "Sheet and Drawer: edge-anchored modal panels that slide in and hand focus back."},
+	"Sidebar":                  {"Navigation", "Sidebar navigation and a Breadcrumb trail with clickable ancestors."},
+	"Groups and addons":        {"Inputs", "ToggleGroup, ButtonGroup and InputGroup: reactive disabled choices, action feedback and URL previews."},
+	"Profile and media":        {"Layout", "Avatar sizes and fallbacks, Item rows, HoverCard previews and AspectRatio media."},
 }
 
 type componentPreview struct {
