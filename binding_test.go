@@ -140,3 +140,41 @@ func TestAnimatedBindingsAreNotWritable(t *testing.T) {
 		}
 	}
 }
+
+// Field is Lens with one closure instead of two: it reads and writes through
+// a pointer into a copy of the whole.
+func TestFieldLensReadsAndWritesThrough(t *testing.T) {
+	type form struct {
+		Name string
+		Age  int
+	}
+	f := State(form{Name: "a", Age: 1})
+	name := f.Field(func(v *form) *string { return &v.Name })
+
+	seen := ""
+	defer Watch(name, func(s string) { seen = s })()
+	if name.Get() != "a" || name.Peek() != "a" {
+		t.Fatalf("read %q/%q, want a", name.Get(), name.Peek())
+	}
+
+	name.Set("b")
+	effects.flush()
+	if got := f.Peek(); got.Name != "b" || got.Age != 1 {
+		t.Fatalf("writing the part left the whole as %+v", got)
+	}
+	if seen != "b" {
+		t.Fatalf("the watcher saw %q", seen)
+	}
+
+	name.Update(func(s string) string { return s + "!" })
+	if got := f.Peek().Name; got != "b!" {
+		t.Fatalf("Update through the field gave %q", got)
+	}
+
+	// Writing the whole is seen through the field.
+	f.Set(form{Name: "c", Age: 2})
+	effects.flush()
+	if name.Peek() != "c" || seen != "c" {
+		t.Fatalf("peek %q, watcher %q after the whole was replaced", name.Peek(), seen)
+	}
+}

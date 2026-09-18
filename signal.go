@@ -281,6 +281,25 @@ func (s *Signal[T]) Lens[U any](get func(T) U, set func(T, U) T) *Lens[U] {
 	}
 }
 
+// Field is Lens for a field that can be addressed: sel receives a copy of
+// the whole and returns a pointer to the part, which is both how the part is
+// read and where a write goes. It is the common case Lens covers with two
+// closures.
+//
+//	name := form.Field(func(f *Form) *string { return &f.Name })
+//	ui.TextField(name)
+func (s *Signal[T]) Field[U any](sel func(*T) *U) *Lens[U] {
+	return &Lens[U]{
+		get:  func() U { v := s.Get(); return *sel(&v) },
+		peek: func() U { v := s.Peek(); return *sel(&v) },
+		set: func(u U) {
+			v := s.Peek()
+			*sel(&v) = u
+			s.Set(v)
+		},
+	}
+}
+
 // Get returns the part and subscribes the running Effect.
 func (l *Lens[U]) Get() U { return l.get() }
 

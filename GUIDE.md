@@ -193,7 +193,7 @@ notifies readers only when something was removed.
 | `Writable[T]` | `Binding[T]` plus `Update(func(T) T)` | Signals, lenses, and custom immediately writable values. |
 
 Use a `Reader` for display-only data and a `Binding` when a control needs to
-write back. `Watch` and `Combine` accept readers, so computed values work as
+write back. `Field` and `Lens` turn part of a struct signal into one. `Watch` and `Combine` accept readers, so computed values work as
 inputs too. A slider can bind to a spring just as it binds to a signal.
 
 `Toggle`, `Add`, `Append`, and `Remove` accept `Writable` values, including
@@ -203,7 +203,8 @@ Tweens and springs are bindings but not writable values: increment their target
 explicitly with `motion.Set(motion.Target() + delta)`, since `Peek()` returns the
 current animated position.
 
-A lens exposes one field of a struct signal as a binding:
+A lens exposes one field of a struct signal as a binding. `Field` is the
+common case, where the part can be pointed at:
 
 ```go
 type Form struct {
@@ -211,14 +212,22 @@ type Form struct {
 }
 
 form := ggui.State(Form{})
-name := form.Lens(
-	func(f Form) string { return f.Name },
+name := form.Field(func(f *Form) *string { return &f.Name })
+field := ui.TextField(name).Placeholder("Your name")
+```
+
+`Lens(get, set)` takes the two closures in full, for a part that is computed
+rather than addressed, such as a value held in a map or one that has to be
+converted on the way in and out:
+
+```go
+tags := form.Lens(
+	func(f Form) string { return strings.Join(f.Tags, ", ") },
 	func(f Form, v string) Form {
-		f.Name = v
+		f.Tags = strings.Split(v, ", ")
 		return f
 	},
 )
-field := ui.TextField(name).Placeholder("Your name")
 ```
 
 ### Builders and components
