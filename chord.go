@@ -4,14 +4,12 @@ import (
 	"errors"
 	"maps"
 	"strings"
-
-	"github.com/hajimehoshi/ebiten/v2"
 )
 
 // Chord is a key with modifiers, as a shortcut names it: "cmd+s",
 // "ctrl+shift+z", "escape". Parse one with ParseChord.
 type Chord struct {
-	Key  ebiten.Key
+	Key  Key
 	Mods Mods
 	// Cmd stands for the platform's command modifier: Meta on macOS, Ctrl
 	// elsewhere. A chord written with "cmd" matches through Mods.Cmd.
@@ -111,25 +109,25 @@ func MustChord(s string) Chord {
 	return c
 }
 
-var keyTable map[string]ebiten.Key
+var keyTable map[string]Key
 
 // keyNames maps every key's lower-cased Ebitengine name and a few aliases
 // to the key, built on first use.
-func keyNames() map[string]ebiten.Key {
+func keyNames() map[string]Key {
 	if keyTable != nil {
 		return keyTable
 	}
-	keyTable = map[string]ebiten.Key{}
-	for k := ebiten.Key(0); k <= ebiten.KeyMax; k++ {
+	keyTable = map[string]Key{}
+	for k := Key(0); k <= KeyMax; k++ {
 		if name := k.String(); name != "" {
 			keyTable[strings.ToLower(name)] = k
 		}
 	}
-	maps.Copy(keyTable, map[string]ebiten.Key{
-		"esc": ebiten.KeyEscape, "return": ebiten.KeyEnter, "up": ebiten.KeyArrowUp,
-		"down": ebiten.KeyArrowDown, "left": ebiten.KeyArrowLeft, "right": ebiten.KeyArrowRight,
-		"plus": ebiten.KeyEqual, "minus": ebiten.KeyMinus, "del": ebiten.KeyDelete,
-		"pgup": ebiten.KeyPageUp, "pgdn": ebiten.KeyPageDown, "bksp": ebiten.KeyBackspace,
+	maps.Copy(keyTable, map[string]Key{
+		"esc": KeyEscape, "return": KeyEnter, "up": KeyArrowUp,
+		"down": KeyArrowDown, "left": KeyArrowLeft, "right": KeyArrowRight,
+		"plus": KeyEqual, "minus": KeyMinus, "del": KeyDelete,
+		"pgup": KeyPageUp, "pgdn": KeyPageDown, "bksp": KeyBackspace,
 	})
 	return keyTable
 }

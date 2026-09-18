@@ -2,8 +2,6 @@ package ggui
 
 import (
 	"image/color"
-
-	"github.com/hajimehoshi/ebiten/v2"
 )
 
 // Control is a widget that takes both pointer and keyboard input.
@@ -141,7 +139,7 @@ func (s *Interactive) state() *Interactive { return s }
 // disabled control takes no input, which is why the regions are skipped,
 // but it is still on screen and a screen reader must still read it out,
 // which is why the node is not.
-func (s *Interactive) Hit(dst *Canvas, r Rect, h Control, cursor ebiten.CursorShapeType) {
+func (s *Interactive) Hit(dst *Canvas, r Rect, h Control, cursor CursorShape) {
 	s.Sync()
 	dst.Describe(r, h)
 	if s.Inert {
@@ -162,11 +160,11 @@ func (s *Interactive) Pointer(ev PointerEvent, onTap func()) bool {
 	case PointerExit:
 		s.Hovered = false
 	case PointerDown:
-		s.Pressed = ev.Button == ebiten.MouseButtonLeft
+		s.Pressed = ev.Button == MouseButtonLeft
 	case PointerUp:
 		s.Pressed = false
 	case PointerTap:
-		if ev.Button == ebiten.MouseButtonLeft && onTap != nil {
+		if ev.Button == MouseButtonLeft && onTap != nil {
 			onTap()
 		}
 	case PointerScroll:
@@ -179,7 +177,7 @@ func (s *Interactive) Pointer(ev PointerEvent, onTap func()) bool {
 func (s *Interactive) Keyboard(ev KeyEvent, onActivate func()) {
 	switch ev.Kind {
 	case KeyFocus:
-		s.Focused, s.FocusVisible = true, ev.Key == ebiten.KeyTab
+		s.Focused, s.FocusVisible = true, ev.Key == KeyTab
 	case KeyBlur:
 		s.Focused, s.FocusVisible = false, false
 	}
@@ -191,7 +189,7 @@ func (s *Interactive) Keyboard(ev KeyEvent, onActivate func()) {
 // Activates reports whether ev is the key press that triggers a control:
 // Space or Enter.
 func Activates(ev KeyEvent) bool {
-	return ev.Kind == KeyPress && (ev.Key == ebiten.KeySpace || ev.Key == ebiten.KeyEnter || ev.Key == ebiten.KeyNumpadEnter)
+	return ev.Kind == KeyPress && (ev.Key == KeySpace || ev.Key == KeyEnter || ev.Key == KeyNumpadEnter)
 }
 
 // FocusRing outlines r in c when focus is visible.

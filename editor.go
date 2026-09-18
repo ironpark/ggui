@@ -9,7 +9,6 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	"github.com/ironpark/ggui/internal/textinput"
 )
@@ -563,7 +562,7 @@ func (t *TextInputWidget) Act(a Action) bool {
 // ConsumesKey implements KeyConsumer: editing keys stay with the editor.
 // Escape passes through unless it cancelled composition or OnKey consumed it.
 func (t *TextInputWidget) ConsumesKey(ev KeyEvent) bool {
-	return ev.Kind == KeyPress && (ev.Key != ebiten.KeyEscape || t.escapeUsed)
+	return ev.Kind == KeyPress && (ev.Key != KeyEscape || t.escapeUsed)
 }
 
 // Password masks every rune with a bullet.
@@ -711,7 +710,7 @@ func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
 	if !t.IsDisabled() {
 		dst.HitPointer(r, t)
 		dst.HitKey(r, t)
-		dst.HitCursor(r, ebiten.CursorShapeText)
+		dst.HitCursor(r, CursorShapeText)
 	}
 	if t.value.Peek() != t.ed.text {
 		// Written through the signal since the layout: the enclosing
@@ -1025,19 +1024,19 @@ func (t *TextInputWidget) HandleKey(ev KeyEvent) {
 	case KeyText:
 		// Text arrives through the IME, on every platform.
 	case KeyPress:
-		t.escapeUsed = ev.Key == ebiten.KeyEscape && t.composition != ""
+		t.escapeUsed = ev.Key == KeyEscape && t.composition != ""
 		if t.composition == "" && t.onKey != nil && t.onKey(ev) {
-			t.escapeUsed = ev.Key == ebiten.KeyEscape
+			t.escapeUsed = ev.Key == KeyEscape
 			return
 		}
 		t.key(ev.Key, ev.Mods)
 	}
 }
 
-func (t *TextInputWidget) key(k ebiten.Key, m Mods) {
+func (t *TextInputWidget) key(k Key, m Mods) {
 	word := m.Alt || (!m.Cmd() && m.Ctrl)
 	switch k {
-	case ebiten.KeyEnter, ebiten.KeyNumpadEnter:
+	case KeyEnter, KeyNumpadEnter:
 		t.ime.Confirm()
 		if t.multiline && !m.Cmd() {
 			t.ed.replace("\n")
@@ -1048,50 +1047,50 @@ func (t *TextInputWidget) key(k ebiten.Key, m Mods) {
 		}
 		t.committed()
 		return
-	case ebiten.KeyArrowUp, ebiten.KeyArrowDown:
+	case KeyArrowUp, KeyArrowDown:
 		if !t.multiline {
 			return
 		}
 		t.ime.Confirm()
 		if m.Meta {
-			t.ed.moveTo(pick(k == ebiten.KeyArrowUp, 0, len(t.ed.text)), m.Shift)
+			t.ed.moveTo(pick(k == KeyArrowUp, 0, len(t.ed.text)), m.Shift)
 		} else {
-			t.moveLine(pick(k == ebiten.KeyArrowUp, -1, 1), m.Shift)
+			t.moveLine(pick(k == KeyArrowUp, -1, 1), m.Shift)
 		}
-	case ebiten.KeyEscape:
+	case KeyEscape:
 		t.ime.Cancel()
 		t.ed.moveTo(t.ed.caret, false)
-	case ebiten.KeyBackspace:
+	case KeyBackspace:
 		t.ime.Confirm()
 		t.ed.backspace(word)
-	case ebiten.KeyDelete:
+	case KeyDelete:
 		t.ime.Confirm()
 		t.ed.deleteForward(word)
-	case ebiten.KeyArrowLeft, ebiten.KeyArrowRight:
+	case KeyArrowLeft, KeyArrowRight:
 		t.ime.Confirm()
-		dir := pick(k == ebiten.KeyArrowLeft, -1, 1)
+		dir := pick(k == KeyArrowLeft, -1, 1)
 		if m.Meta {
 			t.ed.moveTo(pick(dir < 0, 0, len(t.ed.text)), m.Shift)
 		} else {
 			t.ed.moveBy(dir, word, m.Shift)
 		}
-	case ebiten.KeyHome, ebiten.KeyEnd:
+	case KeyHome, KeyEnd:
 		t.ime.Confirm()
 		lo, hi := 0, len(t.ed.text)
 		if t.multiline && !m.Cmd() {
 			lo, hi = t.lineBounds()
 		}
-		t.ed.moveTo(pick(k == ebiten.KeyHome, lo, hi), m.Shift)
-	case ebiten.KeyA:
+		t.ed.moveTo(pick(k == KeyHome, lo, hi), m.Shift)
+	case KeyA:
 		if m.Cmd() {
 			t.ime.Confirm()
 			t.ed.selectAll()
 		}
-	case ebiten.KeyC:
+	case KeyC:
 		if m.Cmd() && t.ed.hasSelection() && !t.password {
 			currentClipboard().Write(t.ed.selected())
 		}
-	case ebiten.KeyX:
+	case KeyX:
 		if m.Cmd() && t.ed.hasSelection() {
 			t.ime.Confirm()
 			if !t.password {
@@ -1099,7 +1098,7 @@ func (t *TextInputWidget) key(k ebiten.Key, m Mods) {
 			}
 			t.ed.replace("")
 		}
-	case ebiten.KeyZ:
+	case KeyZ:
 		if !m.Cmd() {
 			return
 		}
@@ -1111,12 +1110,12 @@ func (t *TextInputWidget) key(k ebiten.Key, m Mods) {
 		} else if !t.ed.Undo() {
 			return
 		}
-	case ebiten.KeyY:
+	case KeyY:
 		if !m.Cmd() || runtimeIsDarwin() || !t.ed.Redo() {
 			return
 		}
 		t.ime.Confirm()
-	case ebiten.KeyV:
+	case KeyV:
 		if m.Cmd() {
 			t.ime.Confirm()
 			s := strings.ReplaceAll(currentClipboard().Read(), "\r\n", "\n")
@@ -1140,7 +1139,7 @@ func (t *TextInputWidget) HandlePointer(ev PointerEvent) bool {
 	}
 	switch ev.Kind {
 	case PointerDown:
-		if ev.Button != ebiten.MouseButtonLeft {
+		if ev.Button != MouseButtonLeft {
 			return false
 		}
 		t.ime.Confirm()

@@ -3,8 +3,6 @@ package ggui
 import (
 	"fmt"
 	"testing"
-
-	"github.com/hajimehoshi/ebiten/v2"
 )
 
 func BenchmarkIdleEffects(b *testing.B) {
@@ -38,7 +36,7 @@ func BenchmarkInteractiveRegistration(b *testing.B) {
 			for i := range old {
 				old[i].Key(i)
 				next[i].Key(i)
-				old[i].Hit(&c, Rct(Pt(0, float64(i)*20), Sz(100, 20)), &old[i], ebiten.CursorShapePointer)
+				old[i].Hit(&c, Rct(Pt(0, float64(i)*20), Sz(100, 20)), &old[i], CursorShapePointer)
 			}
 			c.prev, c.hits = c.hits, make([]hitRegion, 0, n)
 			b.ReportAllocs()
@@ -50,7 +48,7 @@ func BenchmarkInteractiveRegistration(b *testing.B) {
 				c.nextFrame()
 				c.resetSemantics()
 				for i := range next {
-					next[i].Hit(&c, Rct(Pt(0, float64(i)*20), Sz(100, 20)), &next[i], ebiten.CursorShapePointer)
+					next[i].Hit(&c, Rct(Pt(0, float64(i)*20), Sz(100, 20)), &next[i], CursorShapePointer)
 				}
 			}
 		})

@@ -28,14 +28,14 @@ func (t *touchInput) apply(f *frameInput, ids []ebiten.TouchID, position func(eb
 	f.touch = true
 	if !t.active {
 		t.id, t.active = ids[0], true
-		f.down = []ebiten.MouseButton{ebiten.MouseButtonLeft}
+		f.down = []MouseButton{MouseButtonLeft}
 	}
 	if slices.Contains(ids, t.id) {
 		t.pos = position(t.id)
 	} else {
 		// Ebitengine no longer exposes the position of a released touch.
 		// Keep its last position instead of releasing at the mouse cursor.
-		f.up = []ebiten.MouseButton{ebiten.MouseButtonLeft}
+		f.up = []MouseButton{MouseButtonLeft}
 		t.active, t.waiting = false, len(ids) != 0
 	}
 	f.pos = t.pos

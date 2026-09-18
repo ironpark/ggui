@@ -2,8 +2,6 @@ package ggui
 
 import (
 	"testing"
-
-	"github.com/hajimehoshi/ebiten/v2"
 )
 
 func TestKeyedSurvivesParentRebuild(t *testing.T) {
@@ -192,7 +190,7 @@ func TestKeyedGivesControlsAnIdentity(t *testing.T) {
 		t.Fatal("a TextInput built inside Keyed has no identity")
 	}
 	p.Click(Pt(2, 5))
-	p.Type(Mods{}, ebiten.KeyArrowRight, ebiten.KeyArrowRight)
+	p.Type(Mods{}, KeyArrowRight, KeyArrowRight)
 	first := in
 	if first.ed.caret != 2 {
 		t.Fatalf("caret %d before the rebuild, want 2", first.ed.caret)
@@ -201,7 +199,7 @@ func TestKeyedGivesControlsAnIdentity(t *testing.T) {
 	rebuild.Set(1) // the keyed component's builder re-runs as well
 	p.Frame()
 	p.Frame()
-	p.Type(Mods{}, ebiten.KeyArrowRight)
+	p.Type(Mods{}, KeyArrowRight)
 	if in == first || in.HitID() != first.HitID() {
 		t.Fatal("the field was not rebuilt with the same identity")
 	}
@@ -228,7 +226,7 @@ func TestTabReachesAControlOutsideTheScrollWindow(t *testing.T) {
 	sc := Scroll(items)
 	p := NewProbe(sc, Sz(50, 40))
 	defer p.Close()
-	p.Type(Mods{}, ebiten.KeyTab, ebiten.KeyTab, ebiten.KeyTab)
+	p.Type(Mods{}, KeyTab, KeyTab, KeyTab)
 	if sc.offset != 110 {
 		t.Fatalf("offset = %v after tabbing to the third, fully hidden item; want 110", sc.offset)
 	}

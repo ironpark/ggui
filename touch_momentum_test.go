@@ -4,8 +4,6 @@ import (
 	"math"
 	"testing"
 	"time"
-
-	"github.com/hajimehoshi/ebiten/v2"
 )
 
 func TestTouchFlingSpeedHoldAndInterruption(t *testing.T) {
@@ -17,7 +15,7 @@ func TestTouchFlingSpeedHoldAndInterruption(t *testing.T) {
 		s := Scroll(Box().Size(100, 10000))
 		paintFrame(&in, s, Sz(100, 100))
 		p := Pt(50, 80)
-		in.dispatch(frameInput{touch: true, pos: p, down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+		in.dispatch(frameInput{touch: true, pos: p, down: []MouseButton{MouseButtonLeft}})
 		for i := 0; i < 10; i++ {
 			now = now.Add(16 * time.Millisecond)
 			p.Y -= speed * .016
@@ -30,11 +28,11 @@ func TestTouchFlingSpeedHoldAndInterruption(t *testing.T) {
 			}
 		}
 		now = now.Add(16 * time.Millisecond)
-		in.dispatch(frameInput{touch: true, pos: p, up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+		in.dispatch(frameInput{touch: true, pos: p, up: []MouseButton{MouseButtonLeft}})
 		before := s.position()
 		if interrupt {
 			now = now.Add(16 * time.Millisecond)
-			in.dispatch(frameInput{touch: true, pos: Pt(50, 50), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+			in.dispatch(frameInput{touch: true, pos: Pt(50, 50), down: []MouseButton{MouseButtonLeft}})
 		}
 		for i := 0; i < 180; i++ {
 			now = now.Add(16 * time.Millisecond)

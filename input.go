@@ -3,8 +3,6 @@ package ggui
 import (
 	"runtime"
 	"slices"
-
-	"github.com/hajimehoshi/ebiten/v2"
 )
 
 // PointerKind says what a PointerEvent reports.
@@ -25,7 +23,7 @@ const (
 type PointerEvent struct {
 	Kind           PointerKind
 	Pos            Point // in window coordinates
-	Button         ebiten.MouseButton
+	Button         MouseButton
 	Scroll         Point // wheel delta, for PointerScroll
 	ScrollPixels   bool  // Scroll is in logical pixels (touch panning), not wheel units
 	ScrollMomentum bool  // inertial scrolling; return false when no further movement is possible
@@ -78,9 +76,9 @@ const (
 // KeyEvent is a keyboard event delivered to the focused region.
 type KeyEvent struct {
 	Kind KeyKind
-	Key  ebiten.Key // for KeyPress
-	Text string     // for KeyText
-	Mods Mods       // for KeyPress
+	Key  Key    // for KeyPress
+	Text string // for KeyText
+	Mods Mods   // for KeyPress
 }
 
 // KeyHandler receives keyboard events while its region has focus. A region
@@ -129,10 +127,10 @@ type Revealer interface {
 type frameInput struct {
 	touch bool
 	pos   Point
-	down  []ebiten.MouseButton
-	up    []ebiten.MouseButton
+	down  []MouseButton
+	up    []MouseButton
 	wheel Point
-	keys  []ebiten.Key // just pressed, plus repeats of held keys
+	keys  []Key // just pressed, plus repeats of held keys
 	text  string
 	mods  Mods
 }
@@ -149,9 +147,9 @@ type inputState struct {
 	// so a pointer into it would soon describe a different region.
 	hovered               *hitRegion
 	pressed               *hitRegion
-	pressedBtn            ebiten.MouseButton
+	pressedBtn            MouseButton
 	focused               *hitRegion
-	cursor                ebiten.CursorShapeType // what the hovered region asked for
+	cursor                CursorShape // what the hovered region asked for
 	touchStart, touchLast Point
 	touchScroll           *hitRegion
 	touchPanning          bool
@@ -177,7 +175,7 @@ func (in *inputState) addShortcut(chord string, fn func()) *ShortcutHandle {
 // runChords runs the shortcuts that match k, either the ones that go
 // before the focused widget (modified or exclusive) or the rest, and
 // reports whether one ran.
-func (in *inputState) runChords(k ebiten.Key, mods Mods, before bool) bool {
+func (in *inputState) runChords(k Key, mods Mods, before bool) bool {
 	ran := false
 	ev := KeyEvent{Kind: KeyPress, Key: k, Mods: mods}
 	for _, h := range in.chords {
@@ -193,7 +191,7 @@ func (in *inputState) runChords(k ebiten.Key, mods Mods, before bool) bool {
 
 // withoutShortcuts returns keys less those a shortcut consumed, copying
 // only once one has.
-func (in *inputState) withoutShortcuts(keys []ebiten.Key, mods Mods) []ebiten.Key {
+func (in *inputState) withoutShortcuts(keys []Key, mods Mods) []Key {
 	out, copied := keys, false
 	for i, k := range keys {
 		switch taken := in.shortcut(k, mods); {
@@ -208,7 +206,7 @@ func (in *inputState) withoutShortcuts(keys []ebiten.Key, mods Mods) []ebiten.Ke
 
 // shortcut offers a key press to the OnKey handlers and reports whether
 // one consumed it.
-func (in *inputState) shortcut(k ebiten.Key, mods Mods) bool {
+func (in *inputState) shortcut(k Key, mods Mods) bool {
 	for _, fn := range in.shortcuts {
 		if fn(KeyEvent{Kind: KeyPress, Key: k, Mods: mods}) {
 			return true
@@ -264,7 +262,7 @@ func (in *inputState) dispatch(f frameInput) {
 	}
 	in.hovered = keep(now)
 
-	in.cursor = ebiten.CursorShapeDefault
+	in.cursor = CursorShapeDefault
 	if r := in.topmost(func(r *hitRegion) bool { return r.cursor != 0 && r.rect.Contains(f.pos) }); r != nil {
 		in.cursor = r.cursor
 	}
@@ -301,7 +299,7 @@ func (in *inputState) dispatch(f frameInput) {
 		in.send(PointerEvent{Kind: PointerScroll, Pos: f.pos, Scroll: f.wheel})
 	}
 
-	if i := slices.Index(f.keys, ebiten.KeyTab); i >= 0 {
+	if i := slices.Index(f.keys, KeyTab); i >= 0 {
 		f.keys = slices.Delete(slices.Clone(f.keys), i, i+1)
 		in.moveFocus(pick(f.mods.Shift, -1, 1))
 	}
@@ -309,7 +307,7 @@ func (in *inputState) dispatch(f frameInput) {
 		f.keys = in.withoutShortcuts(f.keys, f.mods)
 	}
 	if len(in.chords) > 0 {
-		f.keys = slices.DeleteFunc(slices.Clone(f.keys), func(k ebiten.Key) bool { return in.runChords(k, f.mods, true) })
+		f.keys = slices.DeleteFunc(slices.Clone(f.keys), func(k Key) bool { return in.runChords(k, f.mods, true) })
 	}
 
 	if in.focused == nil {
@@ -354,7 +352,7 @@ func (in *inputState) afterFocused(f frameInput, h KeyHandler) {
 		if h != nil && consumes(h, ev) {
 			continue
 		}
-		if k == ebiten.KeyEscape && f.mods == (Mods{}) {
+		if k == KeyEscape && f.mods == (Mods{}) {
 			if s := in.activeScope(); s != nil && s.escape != nil {
 				s.escape()
 				continue
@@ -480,7 +478,7 @@ func (in *inputState) focus(r *hitRegion, keyboard bool) {
 	if r != nil && r.key != nil {
 		ev := KeyEvent{Kind: KeyFocus}
 		if keyboard {
-			ev.Key = ebiten.KeyTab
+			ev.Key = KeyTab
 			in.reveal(r.full)
 		}
 		r.key.HandleKey(ev)
@@ -541,7 +539,7 @@ func sameRegion(a, b *hitRegion) bool {
 // or Tap. It takes no space of its own: the child's Rect is the hit region.
 type PointerWidget struct {
 	child    Widget
-	cursor   ebiten.CursorShapeType
+	cursor   CursorShape
 	onDown   func(PointerEvent)
 	onUp     func(PointerEvent)
 	onTap    func()
@@ -576,8 +574,8 @@ func (p *PointerWidget) OnMove(fn func(PointerEvent)) *PointerWidget { p.onMove 
 func (p *PointerWidget) OnDrag(fn func(PointerEvent)) *PointerWidget { p.onDrag = fn; return p }
 
 // Cursor sets the mouse cursor shown while the pointer is over the child,
-// such as ebiten.CursorShapePointer for something clickable.
-func (p *PointerWidget) Cursor(shape ebiten.CursorShapeType) *PointerWidget {
+// such as CursorShapePointer for something clickable.
+func (p *PointerWidget) Cursor(shape CursorShape) *PointerWidget {
 	p.cursor = shape
 	return p
 }
@@ -659,7 +657,7 @@ func (p *PointerWidget) Paint(dst *Canvas, r Rect) {
 // Focus.
 type FocusWidget struct {
 	child   Widget
-	onKey   func(ebiten.Key)
+	onKey   func(Key)
 	onText  func(string)
 	onFocus func(bool)
 }
@@ -669,7 +667,7 @@ type FocusWidget struct {
 func Focus(child Widget) *FocusWidget { return &FocusWidget{child: child} }
 
 // OnKey fires once per key press while focused.
-func (f *FocusWidget) OnKey(fn func(ebiten.Key)) *FocusWidget { f.onKey = fn; return f }
+func (f *FocusWidget) OnKey(fn func(Key)) *FocusWidget { f.onKey = fn; return f }
 
 // OnText fires with the characters typed this frame while focused.
 func (f *FocusWidget) OnText(fn func(string)) *FocusWidget { f.onText = fn; return f }

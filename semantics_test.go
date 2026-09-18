@@ -3,8 +3,6 @@ package ggui
 import (
 	"strings"
 	"testing"
-
-	"github.com/hajimehoshi/ebiten/v2"
 )
 
 // described paints w at size through a Probe and returns the published tree.
@@ -69,7 +67,7 @@ type twice struct{ Interactive }
 
 func (t *twice) Layout(c Constraints, _ Env) Size { return c.Constrain(Sz(40, 20)) }
 func (t *twice) Paint(dst *Canvas, r Rect) {
-	t.Hit(dst, r, t, ebiten.CursorShapeText)
+	t.Hit(dst, r, t, CursorShapeText)
 	dst.Describe(Rct(r.Origin, Sz(20, 10)), t)
 }
 func (t *twice) HandlePointer(PointerEvent) bool { return true }

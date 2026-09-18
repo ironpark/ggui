@@ -18,7 +18,7 @@ type Config struct {
 	Height     int
 	Resizable  bool
 	Background color.Color // nil follows the theme's Bg
-	Inspector  ebiten.Key  // a key that toggles the widget inspector; zero for none
+	Inspector  Key         // a key that toggles the widget inspector; zero for none
 
 	// Accessibility says when the app talks to the platform's
 	// accessibility API. The zero value waits for an assistive technology
@@ -51,7 +51,7 @@ type App struct {
 	spare  []hitRegion
 	input  inputState
 	touch  touchInput
-	cursor ebiten.CursorShapeType
+	cursor CursorShape
 	a11y   axBridge
 
 	inspect bool
@@ -231,7 +231,7 @@ func (a *App) dispatchInput(f frameInput) {
 // services such as the IME may be used.
 var appRunning atomic.Bool
 
-var mouseButtons = []ebiten.MouseButton{ebiten.MouseButtonLeft, ebiten.MouseButtonRight, ebiten.MouseButtonMiddle}
+var mouseButtons = []MouseButton{MouseButtonLeft, MouseButtonRight, MouseButtonMiddle}
 
 // Key repeat, in frames: a held key delivers KeyPress again after
 // repeatDelay and then every repeatInterval frames.
@@ -268,10 +268,10 @@ func (a *App) readInput() frameInput {
 	}
 	f.text = string(ebiten.AppendInputChars(nil))
 	f.mods = Mods{
-		Shift: ebiten.IsKeyPressed(ebiten.KeyShift),
-		Ctrl:  ebiten.IsKeyPressed(ebiten.KeyControl),
-		Alt:   ebiten.IsKeyPressed(ebiten.KeyAlt),
-		Meta:  ebiten.IsKeyPressed(ebiten.KeyMeta),
+		Shift: ebiten.IsKeyPressed(KeyShift),
+		Ctrl:  ebiten.IsKeyPressed(KeyControl),
+		Alt:   ebiten.IsKeyPressed(KeyAlt),
+		Meta:  ebiten.IsKeyPressed(KeyMeta),
 	}
 	return f
 }

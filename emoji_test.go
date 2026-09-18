@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 )
 
@@ -107,8 +106,8 @@ func TestEmojiPointerCaretAndBackspace(t *testing.T) {
 				}
 			}
 			w.rect = Rct(Point{}, Sz(300, 30))
-			w.HandlePointer(PointerEvent{Kind: PointerDown, Button: ebiten.MouseButtonLeft, Pos: Pt(299, 10)})
-			w.HandleKey(KeyEvent{Kind: KeyPress, Key: ebiten.KeyBackspace})
+			w.HandlePointer(PointerEvent{Kind: PointerDown, Button: MouseButtonLeft, Pos: Pt(299, 10)})
+			w.HandleKey(KeyEvent{Kind: KeyPress, Key: KeyBackspace})
 			if value.Peek() != "" {
 				t.Fatalf("backspace left emoji fragments: %q", value.Peek())
 			}

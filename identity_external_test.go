@@ -1,7 +1,6 @@
 package ggui_test
 
 import (
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	"testing"
@@ -43,7 +42,7 @@ func TestKeyedIdentityAcrossParentsAndRemount(t *testing.T) {
 	if !controls[0].Focused || controls[1].Focused {
 		t.Fatal("static paint transferred focus between mounts")
 	}
-	p.Type(ggui.Mods{}, ebiten.KeySpace)
+	p.Type(ggui.Mods{}, ggui.KeySpace)
 	if left.Peek() || right.Peek() {
 		t.Fatal("Space must toggle only the focused left checkbox")
 	}
@@ -54,7 +53,7 @@ func TestKeyedIdentityAcrossParentsAndRemount(t *testing.T) {
 	if controls[0].HitID() != first {
 		t.Fatal("rebuilding a mounted component changed its ID")
 	}
-	p.Type(ggui.Mods{}, ebiten.KeySpace)
+	p.Type(ggui.Mods{}, ggui.KeySpace)
 	if !left.Peek() || right.Peek() {
 		t.Fatal("Space after rebuild must toggle only the left checkbox")
 	}

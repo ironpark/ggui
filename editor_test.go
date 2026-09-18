@@ -3,8 +3,6 @@ package ggui
 import (
 	"testing"
 	"time"
-
-	"github.com/hajimehoshi/ebiten/v2"
 )
 
 func TestEditorMovesByRuneAndWord(t *testing.T) {
@@ -148,7 +146,7 @@ func useFakeIME(t *testing.T) {
 }
 
 // typeKeys dispatches key presses to the focused region.
-func typeKeys(in *inputState, mods Mods, keys ...ebiten.Key) {
+func typeKeys(in *inputState, mods Mods, keys ...Key) {
 	in.dispatch(frameInput{keys: keys, mods: mods})
 }
 
@@ -158,8 +156,8 @@ func focusedInput(t *testing.T, value *Signal[string]) (*TextInputWidget, *input
 	w := TextInput(value)
 	var in inputState
 	paintFrame(&in, w, Sz(200, 20))
-	in.dispatch(frameInput{pos: Pt(190, 10), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
-	in.dispatch(frameInput{pos: Pt(190, 10), up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.dispatch(frameInput{pos: Pt(190, 10), down: []MouseButton{MouseButtonLeft}})
+	in.dispatch(frameInput{pos: Pt(190, 10), up: []MouseButton{MouseButtonLeft}})
 	if !w.Focused() {
 		t.Fatal("click did not focus the input")
 	}
@@ -174,12 +172,12 @@ func TestTextInputEditsWriteTheSignal(t *testing.T) {
 	if w.ed.caret != len("hello") {
 		t.Fatalf("click past the end put the caret at %d, want %d", w.ed.caret, len("hello"))
 	}
-	typeKeys(in, Mods{}, ebiten.KeyBackspace, ebiten.KeyBackspace)
+	typeKeys(in, Mods{}, KeyBackspace, KeyBackspace)
 	if value.Peek() != "hel" || changes != 2 {
 		t.Fatalf("value = %q after two backspaces, changes = %d", value.Peek(), changes)
 	}
-	typeKeys(in, Mods{Shift: true}, ebiten.KeyHome)
-	typeKeys(in, Mods{}, ebiten.KeyDelete)
+	typeKeys(in, Mods{Shift: true}, KeyHome)
+	typeKeys(in, Mods{}, KeyDelete)
 	if value.Peek() != "" {
 		t.Fatalf("shift+home then delete left %q", value.Peek())
 	}
@@ -206,21 +204,21 @@ func TestTextInputSubmitAndClipboard(t *testing.T) {
 	w, in := focusedInput(t, value)
 	w.OnSubmit(func(s string) { submitted = append(submitted, s) })
 	cmd := Mods{Meta: true, Ctrl: true}
-	typeKeys(in, cmd, ebiten.KeyA)
-	typeKeys(in, cmd, ebiten.KeyC)
+	typeKeys(in, cmd, KeyA)
+	typeKeys(in, cmd, KeyC)
 	if clip.Read() != "copy me" {
 		t.Fatalf("clipboard = %q after select all + copy", clip.Read())
 	}
-	typeKeys(in, cmd, ebiten.KeyX)
+	typeKeys(in, cmd, KeyX)
 	if value.Peek() != "" {
 		t.Fatalf("cut left %q", value.Peek())
 	}
 	clip.Write("line1\nline2")
-	typeKeys(in, cmd, ebiten.KeyV)
+	typeKeys(in, cmd, KeyV)
 	if value.Peek() != "line1 line2" {
 		t.Fatalf("paste gave %q, want newlines folded to spaces", value.Peek())
 	}
-	typeKeys(in, Mods{}, ebiten.KeyEnter)
+	typeKeys(in, Mods{}, KeyEnter)
 	if len(submitted) != 1 || submitted[0] != "line1 line2" {
 		t.Fatalf("submitted = %v", submitted)
 	}
@@ -230,15 +228,15 @@ func TestTextInputDragSelectsAndDoubleClickSelectsWord(t *testing.T) {
 	value := State("hello world")
 	w, in := focusedInput(t, value)
 	// Drag from the left edge to the far right selects everything.
-	in.dispatch(frameInput{pos: Pt(0, 10), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.dispatch(frameInput{pos: Pt(0, 10), down: []MouseButton{MouseButtonLeft}})
 	in.dispatch(frameInput{pos: Pt(199, 10)})
-	in.dispatch(frameInput{pos: Pt(199, 10), up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.dispatch(frameInput{pos: Pt(199, 10), up: []MouseButton{MouseButtonLeft}})
 	if w.ed.selected() != "hello world" {
 		t.Fatalf("drag selected %q, want everything", w.ed.selected())
 	}
 	click := func(p Point) {
-		in.dispatch(frameInput{pos: p, down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
-		in.dispatch(frameInput{pos: p, up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+		in.dispatch(frameInput{pos: p, down: []MouseButton{MouseButtonLeft}})
+		in.dispatch(frameInput{pos: p, up: []MouseButton{MouseButtonLeft}})
 	}
 	x := w.advance("hello wo")
 	click(Pt(x, 10))
@@ -251,10 +249,10 @@ func TestTextInputDragSelectsAndDoubleClickSelectsWord(t *testing.T) {
 func TestTextInputComposesThenCommits(t *testing.T) {
 	value := State("ab")
 	w, in := focusedInput(t, value)
-	typeKeys(in, Mods{}, ebiten.KeyArrowLeft)
+	typeKeys(in, Mods{}, KeyArrowLeft)
 	f := w.ime.(*fakeIME)
 	f.compose = "ㅎ"
-	in.dispatch(frameInput{keys: []ebiten.Key{ebiten.KeyBackspace}})
+	in.dispatch(frameInput{keys: []Key{KeyBackspace}})
 	// The IME swallowed the key: nothing was deleted.
 	if value.Peek() != "ab" || w.composition != "ㅎ" {
 		t.Fatalf("value = %q composition = %q; the IME should have swallowed the key", value.Peek(), w.composition)
@@ -272,7 +270,7 @@ func TestTextInputComposesThenCommits(t *testing.T) {
 	f.compose = "ㄱ"
 	in.dispatch(frameInput{})
 	f.compose = ""
-	typeKeys(in, Mods{}, ebiten.KeyEnd)
+	typeKeys(in, Mods{}, KeyEnd)
 	if value.Peek() != "a한ㄱb" || f.confirmed == 0 {
 		t.Fatalf("value = %q, confirmed %d times", value.Peek(), f.confirmed)
 	}
@@ -286,10 +284,10 @@ func TestTextInputSurvivesRebuildWithCaret(t *testing.T) {
 	first := build()
 	paintFrame(&in, first, Sz(200, 20))
 	clickAt(&in, Pt(100, 10))
-	typeKeys(&in, Mods{}, ebiten.KeyArrowLeft)
+	typeKeys(&in, Mods{}, KeyArrowLeft)
 	second := build().(*TextInputWidget)
 	paintFrame(&in, second, Sz(200, 20))
-	typeKeys(&in, Mods{}, ebiten.KeyBackspace)
+	typeKeys(&in, Mods{}, KeyBackspace)
 	if !second.Focused() || value.Peek() != "ac" {
 		t.Fatalf("rebuilt input focused = %v, value = %q; want focus and caret carried over", second.Focused(), value.Peek())
 	}
@@ -338,36 +336,36 @@ func TestTextInputMultilineWrapsGrowsAndNavigates(t *testing.T) {
 
 	var in inputState
 	paintFrame(&in, w, Sz(200, grown.H))
-	in.dispatch(frameInput{pos: Pt(1, 5), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
-	in.dispatch(frameInput{pos: Pt(1, 5), up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.dispatch(frameInput{pos: Pt(1, 5), down: []MouseButton{MouseButtonLeft}})
+	in.dispatch(frameInput{pos: Pt(1, 5), up: []MouseButton{MouseButtonLeft}})
 	if !w.focused || w.ed.caret != 0 {
 		t.Fatalf("click at the top left: focused %v caret %d", w.focused, w.ed.caret)
 	}
-	typeKeys(&in, Mods{}, ebiten.KeyEnd)
+	typeKeys(&in, Mods{}, KeyEnd)
 	if w.ed.caret != spans[0].end {
 		t.Fatalf("End went to %d, want the end of the first line %d", w.ed.caret, spans[0].end)
 	}
-	typeKeys(&in, Mods{}, ebiten.KeyArrowDown)
+	typeKeys(&in, Mods{}, KeyArrowDown)
 	if got := lineOf(spans, w.ed.caret); got != 1 {
 		t.Fatalf("Down landed on line %d", got)
 	}
-	typeKeys(&in, Mods{}, ebiten.KeyHome)
+	typeKeys(&in, Mods{}, KeyHome)
 	if w.ed.caret != spans[1].start {
 		t.Fatalf("Home on line 2 went to %d, want %d", w.ed.caret, spans[1].start)
 	}
-	typeKeys(&in, Mods{}, ebiten.KeyEnter)
+	typeKeys(&in, Mods{}, KeyEnter)
 	if got := w.value.Peek(); got[spans[1].start] != '\n' {
 		t.Fatalf("Enter did not insert a line break: %q", got)
 	}
 	submitted := ""
 	w.OnSubmit(func(s string) { submitted = s })
-	typeKeys(&in, Mods{Meta: true, Ctrl: true}, ebiten.KeyEnter)
+	typeKeys(&in, Mods{Meta: true, Ctrl: true}, KeyEnter)
 	if submitted == "" {
 		t.Fatal("Cmd+Enter did not submit")
 	}
 	// A click on the second line lands there.
 	paintFrame(&in, w, Sz(200, grown.H))
-	in.dispatch(frameInput{pos: Pt(5, w.spacing()+2), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.dispatch(frameInput{pos: Pt(5, w.spacing()+2), down: []MouseButton{MouseButtonLeft}})
 	if got := lineOf(w.spans(w.ed.text), w.ed.caret); got != 1 {
 		t.Fatalf("click on the second line put the caret on line %d", got)
 	}
@@ -445,7 +443,7 @@ func TestUndoKeys(t *testing.T) {
 	p := NewProbe(in, Sz(200, 30))
 	defer p.Close()
 	p.Click(Pt(190, 10))
-	p.Type(Mods{}, ebiten.KeyBackspace, ebiten.KeyBackspace)
+	p.Type(Mods{}, KeyBackspace, KeyBackspace)
 	if v.Peek() != "hel" {
 		t.Fatalf("value %q after two backspaces", v.Peek())
 	}
@@ -453,11 +451,11 @@ func TestUndoKeys(t *testing.T) {
 	if !runtimeIsDarwin() {
 		cmd = Mods{Ctrl: true}
 	}
-	p.Type(cmd, ebiten.KeyZ)
+	p.Type(cmd, KeyZ)
 	if v.Peek() != "hell" {
 		t.Fatalf("value %q after undo, want hell", v.Peek())
 	}
-	p.Type(Mods{Shift: cmd.Shift || true, Meta: cmd.Meta, Ctrl: cmd.Ctrl}, ebiten.KeyZ)
+	p.Type(Mods{Shift: cmd.Shift || true, Meta: cmd.Meta, Ctrl: cmd.Ctrl}, KeyZ)
 	if v.Peek() != "hel" {
 		t.Fatalf("value %q after redo, want hel", v.Peek())
 	}
@@ -468,22 +466,22 @@ func TestTextInputKeyHookLeavesCompositionWithIME(t *testing.T) {
 	newIME = func(w *TextInputWidget) ime { return &fakeIME{t: w} }
 	defer func() { newIME = old }()
 	calls := 0
-	w := TextInput(State("")).OnKey(func(ev KeyEvent) bool { calls++; return ev.Key == ebiten.KeyArrowDown })
-	w.HandleKey(KeyEvent{Kind: KeyPress, Key: ebiten.KeyArrowDown})
+	w := TextInput(State("")).OnKey(func(ev KeyEvent) bool { calls++; return ev.Key == KeyArrowDown })
+	w.HandleKey(KeyEvent{Kind: KeyPress, Key: KeyArrowDown})
 	if calls != 1 {
 		t.Fatal("key hook did not receive navigation")
 	}
 	w.imeComposition("ㅎ", len("ㅎ"))
-	w.HandleKey(KeyEvent{Kind: KeyPress, Key: ebiten.KeyArrowDown})
+	w.HandleKey(KeyEvent{Kind: KeyPress, Key: KeyArrowDown})
 	if calls != 1 {
 		t.Fatal("hook intercepted an IME composition")
 	}
-	w.HandleKey(KeyEvent{Kind: KeyPress, Key: ebiten.KeyEscape})
-	if calls != 1 || !w.ConsumesKey(KeyEvent{Kind: KeyPress, Key: ebiten.KeyEscape}) {
+	w.HandleKey(KeyEvent{Kind: KeyPress, Key: KeyEscape})
+	if calls != 1 || !w.ConsumesKey(KeyEvent{Kind: KeyPress, Key: KeyEscape}) {
 		t.Fatal("composition Escape escaped to a popup")
 	}
-	w.HandleKey(KeyEvent{Kind: KeyPress, Key: ebiten.KeyEscape})
-	if calls != 2 || w.ConsumesKey(KeyEvent{Kind: KeyPress, Key: ebiten.KeyEscape}) {
+	w.HandleKey(KeyEvent{Kind: KeyPress, Key: KeyEscape})
+	if calls != 2 || w.ConsumesKey(KeyEvent{Kind: KeyPress, Key: KeyEscape}) {
 		t.Fatal("ordinary Escape was not released")
 	}
 }

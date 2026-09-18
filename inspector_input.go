@@ -4,16 +4,14 @@ import (
 	"slices"
 	"strings"
 	"unicode/utf8"
-
-	"github.com/hajimehoshi/ebiten/v2"
 )
 
 func (in *inspector) input(f frameInput) bool {
 	if in.panel.Empty() {
 		return false
 	}
-	leftDown := slices.Contains(f.down, ebiten.MouseButtonLeft)
-	leftUp := slices.Contains(f.up, ebiten.MouseButtonLeft)
+	leftDown := slices.Contains(f.down, MouseButtonLeft)
+	leftUp := slices.Contains(f.up, MouseButtonLeft)
 	over := in.panel.Contains(f.pos) || in.edge.Contains(f.pos)
 	if in.drag != inspectNoDrag {
 		switch in.drag {
@@ -108,13 +106,13 @@ func (in *inspector) input(f frameInput) bool {
 	if f.mods.Cmd() && f.mods.Shift {
 		for _, k := range f.keys {
 			switch k {
-			case ebiten.KeyC:
+			case KeyC:
 				in.act(inspectChip{act: inspectUnpin})
 				return true
-			case ebiten.KeyD:
+			case KeyD:
 				in.dock = pick(in.dock == InspectorRight, InspectorBottom, InspectorRight)
 				return true
-			case ebiten.KeyO:
+			case KeyO:
 				in.outlines = !in.outlines
 				return true
 			}
@@ -122,7 +120,7 @@ func (in *inspector) input(f frameInput) bool {
 	}
 	// Find is available throughout the open inspector; typing itself only
 	// edits the filter after an explicit click or this shortcut.
-	if f.mods.Cmd() && slices.Contains(f.keys, ebiten.KeyF) {
+	if f.mods.Cmd() && slices.Contains(f.keys, KeyF) {
 		in.focus, in.filterFocus, in.selectFilter = true, true, true
 	}
 	if !over && !in.focus && !in.picking && !in.capture {
@@ -130,22 +128,22 @@ func (in *inspector) input(f frameInput) bool {
 	}
 	for _, k := range f.keys {
 		switch k {
-		case ebiten.KeyEscape:
+		case KeyEscape:
 			if in.filter != "" {
 				in.filter = ""
 				in.scroll = 0
 			} else {
 				in.picking, in.pinned, in.filterFocus, in.focus = false, false, false, false
 			}
-		case ebiten.KeyA:
+		case KeyA:
 			if in.filterFocus && f.mods.Cmd() {
 				in.selectFilter = true
 			}
-		case ebiten.KeyV:
+		case KeyV:
 			if in.filterFocus && f.mods.Cmd() {
 				in.typeFilter(currentClipboard().Read())
 			}
-		case ebiten.KeyC:
+		case KeyC:
 			if f.mods.Cmd() {
 				if in.filterFocus && in.selectFilter {
 					currentClipboard().Write(in.filter)
@@ -153,7 +151,7 @@ func (in *inspector) input(f frameInput) bool {
 					in.act(inspectChip{act: inspectCopy})
 				}
 			}
-		case ebiten.KeyBackspace:
+		case KeyBackspace:
 			if in.filterFocus && in.filter != "" {
 				if in.selectFilter {
 					in.filter = ""
@@ -164,33 +162,33 @@ func (in *inspector) input(f frameInput) bool {
 				in.selectFilter = false
 				in.scroll = 0
 			}
-		case ebiten.KeyArrowUp:
+		case KeyArrowUp:
 			in.move--
 			in.filterFocus = false
-		case ebiten.KeyArrowDown:
+		case KeyArrowDown:
 			in.move++
 			in.filterFocus = false
-		case ebiten.KeyArrowLeft:
+		case KeyArrowLeft:
 			if !in.filterFocus {
 				in.branch = -1
 			}
-		case ebiten.KeyArrowRight:
+		case KeyArrowRight:
 			if !in.filterFocus {
 				in.branch = 1
 			}
-		case ebiten.KeyHome:
+		case KeyHome:
 			if !in.filterFocus {
 				in.move = -int(^uint(0) >> 2)
 			}
-		case ebiten.KeyEnd:
+		case KeyEnd:
 			if !in.filterFocus {
 				in.move = int(^uint(0) >> 2)
 			}
-		case ebiten.KeyEnter:
+		case KeyEnter:
 			in.filterFocus = false
 			in.focus = true
 			in.reveal = true
-		case ebiten.KeyTab:
+		case KeyTab:
 			in.filterFocus = !in.filterFocus
 			in.focus = true
 		}
@@ -260,18 +258,18 @@ func (in *inspector) act(c inspectChip) {
 	}
 }
 func (in *inspector) sideBySide() bool { return in.dock == InspectorBottom && in.panel.Size.W >= 640 }
-func (in *inspector) cursor(p Point) (ebiten.CursorShapeType, bool) {
+func (in *inspector) cursor(p Point) (CursorShape, bool) {
 	switch {
 	case in.drag == inspectResizePanel || in.edge.Contains(p):
-		return pick(in.dock == InspectorBottom, ebiten.CursorShapeNSResize, ebiten.CursorShapeEWResize), true
+		return pick(in.dock == InspectorBottom, CursorShapeNSResize, CursorShapeEWResize), true
 	case in.drag == inspectResizeSplit || in.divider.Contains(p):
-		return pick(in.sideBySide(), ebiten.CursorShapeEWResize, ebiten.CursorShapeNSResize), true
+		return pick(in.sideBySide(), CursorShapeEWResize, CursorShapeNSResize), true
 	case in.filterRect.Contains(p):
-		return ebiten.CursorShapeText, true
+		return CursorShapeText, true
 	case in.panel.Contains(p):
-		return ebiten.CursorShapeDefault, true
+		return CursorShapeDefault, true
 	case in.picking:
-		return ebiten.CursorShapeCrosshair, true
+		return CursorShapeCrosshair, true
 	default:
 		return 0, false
 	}

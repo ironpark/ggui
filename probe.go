@@ -2,8 +2,6 @@ package ggui
 
 import (
 	"time"
-
-	"github.com/hajimehoshi/ebiten/v2"
 )
 
 // Probe drives a widget tree without a window, for tests: it runs the same
@@ -228,32 +226,32 @@ func (p *Probe) Move(pos Point) { p.dispatch(frameInput{pos: pos}) }
 
 // Press pushes the left button down at pos.
 func (p *Probe) Press(pos Point) {
-	p.dispatch(frameInput{pos: pos, down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	p.dispatch(frameInput{pos: pos, down: []MouseButton{MouseButtonLeft}})
 }
 
 // Release lets the left button go at pos.
 func (p *Probe) Release(pos Point) {
-	p.dispatch(frameInput{pos: pos, up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	p.dispatch(frameInput{pos: pos, up: []MouseButton{MouseButtonLeft}})
 }
 
 // Click presses and releases the left button at pos.
 func (p *Probe) Click(pos Point) {
-	p.ClickButton(pos, ebiten.MouseButtonLeft)
+	p.ClickButton(pos, MouseButtonLeft)
 }
 
 // ClickButton presses and releases the specified mouse button at pos.
-func (p *Probe) ClickButton(pos Point, button ebiten.MouseButton) {
-	p.dispatch(frameInput{pos: pos, down: []ebiten.MouseButton{button}})
-	p.dispatch(frameInput{pos: pos, up: []ebiten.MouseButton{button}})
+func (p *Probe) ClickButton(pos Point, button MouseButton) {
+	p.dispatch(frameInput{pos: pos, down: []MouseButton{button}})
+	p.dispatch(frameInput{pos: pos, up: []MouseButton{button}})
 }
 
 // Scroll turns the wheel by delta over pos.
 func (p *Probe) Scroll(pos, delta Point) { p.dispatch(frameInput{pos: pos, wheel: delta}) }
 
 // Type presses keys, one frame each, with mods held.
-func (p *Probe) Type(mods Mods, keys ...ebiten.Key) {
+func (p *Probe) Type(mods Mods, keys ...Key) {
 	for _, k := range keys {
-		p.dispatch(frameInput{keys: []ebiten.Key{k}, mods: mods})
+		p.dispatch(frameInput{keys: []Key{k}, mods: mods})
 	}
 }
 
@@ -262,7 +260,7 @@ func (p *Probe) Type(mods Mods, keys ...ebiten.Key) {
 func (p *Probe) Text(s string) { p.dispatch(frameInput{text: s}) }
 
 // Cursor returns the cursor shape the last event left the pointer with.
-func (p *Probe) Cursor() ebiten.CursorShapeType { return p.in.cursor }
+func (p *Probe) Cursor() CursorShape { return p.in.cursor }
 
 // Focused reports whether some region holds keyboard focus.
 func (p *Probe) Focused() bool { return p.in.focused != nil }

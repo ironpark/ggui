@@ -1,7 +1,6 @@
 package ggui_test
 
 import (
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	"testing"
@@ -37,7 +36,7 @@ func TestCompositeFocusRequestAndInputObserver(t *testing.T) {
 	if n, ok := p.Semantics().Focused(); !ok || n.Name != "Child" {
 		t.Fatal("focus request not applied", n)
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
 	if observed != 1 || actions != 1 {
 		t.Fatal("observer swallowed child keyboard input", observed, actions)
 	}
@@ -49,7 +48,7 @@ func TestCompositeFocusRequestAndInputObserver(t *testing.T) {
 	b.Disabled(true)
 	w.request = true
 	p.Frame()
-	p.Type(ggui.Mods{}, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
 	if actions != 2 {
 		t.Fatal("disabled requested target activated")
 	}
@@ -61,7 +60,7 @@ func TestInputObserversRespectModalScope(t *testing.T) {
 	p := ggui.NewProbe(ggui.Column(background, ui.Dialog(open, ui.Button("Modal", func() {}))), ggui.Sz(400, 300))
 	defer p.Close()
 	p.Tap("Modal")
-	p.Type(ggui.Mods{}, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
 	if observed != 0 {
 		t.Fatal("modal input reached background observer")
 	}

@@ -2,8 +2,6 @@ package ggui
 
 import (
 	"testing"
-
-	"github.com/hajimehoshi/ebiten/v2"
 )
 
 // tall is a 100x300 probe: three 100-high boxes with the middle one tappable.
@@ -69,8 +67,8 @@ func TestScrollClipsHitRegions(t *testing.T) {
 		in.regions = c.hits
 	}
 	click := func(p Point) {
-		in.dispatch(frameInput{pos: p, down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
-		in.dispatch(frameInput{pos: p, up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+		in.dispatch(frameInput{pos: p, down: []MouseButton{MouseButtonLeft}})
+		in.dispatch(frameInput{pos: p, up: []MouseButton{MouseButtonLeft}})
 	}
 	paint()
 	click(Pt(50, 150)) // the tappable box starts at y=100 but the viewport ends at 120

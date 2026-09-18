@@ -629,7 +629,7 @@ type hitRegion struct {
 	id      any  // from an Identified handler, else nil
 	pointer PointerHandler
 	key     KeyHandler
-	cursor  ebiten.CursorShapeType
+	cursor  CursorShape
 	scope   *focusScope // the focus trap the region was painted in, if any
 	role    Role        // from a Semantic handler
 	label   string
@@ -726,7 +726,7 @@ func (c *Canvas) region(r Rect, h any, reg hitRegion) hitRegion {
 }
 
 // HitCursor asks for the mouse cursor to take shape while it is over r.
-func (c *Canvas) HitCursor(r Rect, shape ebiten.CursorShapeType) {
+func (c *Canvas) HitCursor(r Rect, shape CursorShape) {
 	c.add(c.region(r, nil, hitRegion{cursor: shape}))
 }
 

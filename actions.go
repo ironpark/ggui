@@ -1,7 +1,5 @@
 package ggui
 
-import "github.com/hajimehoshi/ebiten/v2"
-
 // Actions come from outside the pointer and the keyboard: a screen reader
 // user activates a button from a rotor, drags a slider with a gesture that
 // never touches it, or types into a field through the platform's own text
@@ -134,12 +132,12 @@ func findSemNode(c *Canvas, id NodeID) *semNode {
 // such as a menu item, gets the tap instead.
 func press(e *semNode) bool {
 	if k, ok := e.handler.(KeyHandler); ok {
-		k.HandleKey(KeyEvent{Kind: KeyPress, Key: ebiten.KeySpace})
+		k.HandleKey(KeyEvent{Kind: KeyPress, Key: KeySpace})
 		return true
 	}
 	if p, ok := e.handler.(PointerHandler); ok {
 		at := Pt(e.full.Origin.X+e.full.Size.W/2, e.full.Origin.Y+e.full.Size.H/2)
-		p.HandlePointer(PointerEvent{Kind: PointerTap, Pos: at, Button: ebiten.MouseButtonLeft})
+		p.HandlePointer(PointerEvent{Kind: PointerTap, Pos: at, Button: MouseButtonLeft})
 		return true
 	}
 	return false

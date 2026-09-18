@@ -4,14 +4,12 @@ import (
 	"fmt"
 	"runtime"
 	"testing"
-
-	"github.com/hajimehoshi/ebiten/v2"
 )
 
 // clickAt presses and releases the left button at p.
 func clickAt(in *inputState, p Point) {
-	in.dispatch(frameInput{pos: p, down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
-	in.dispatch(frameInput{pos: p, up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.dispatch(frameInput{pos: p, down: []MouseButton{MouseButtonLeft}})
+	in.dispatch(frameInput{pos: p, up: []MouseButton{MouseButtonLeft}})
 }
 
 // paintFrame lays out and paints w into a fresh region list, the way App
@@ -29,18 +27,18 @@ func TestTapFiresOnDownAndUpInside(t *testing.T) {
 	paintFrame(&in, w, Sz(50, 100))
 
 	inside, outside := Pt(10, 75), Pt(10, 25)
-	in.dispatch(frameInput{pos: inside, down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
-	in.dispatch(frameInput{pos: inside, up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.dispatch(frameInput{pos: inside, down: []MouseButton{MouseButtonLeft}})
+	in.dispatch(frameInput{pos: inside, up: []MouseButton{MouseButtonLeft}})
 	if taps != 1 {
 		t.Fatalf("taps = %d after down+up inside, want 1", taps)
 	}
-	in.dispatch(frameInput{pos: inside, down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
-	in.dispatch(frameInput{pos: outside, up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.dispatch(frameInput{pos: inside, down: []MouseButton{MouseButtonLeft}})
+	in.dispatch(frameInput{pos: outside, up: []MouseButton{MouseButtonLeft}})
 	if taps != 1 {
 		t.Fatalf("taps = %d after releasing outside, want still 1", taps)
 	}
-	in.dispatch(frameInput{pos: outside, down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
-	in.dispatch(frameInput{pos: outside, up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.dispatch(frameInput{pos: outside, down: []MouseButton{MouseButtonLeft}})
+	in.dispatch(frameInput{pos: outside, up: []MouseButton{MouseButtonLeft}})
 	if taps != 1 {
 		t.Fatalf("taps = %d after clicking the plain box, want still 1", taps)
 	}
@@ -51,9 +49,9 @@ func TestTapSurvivesRebuildBetweenDownAndUp(t *testing.T) {
 	build := func() Widget { return Tap(Box().Size(50, 50), func() { taps++ }) }
 	var in inputState
 	paintFrame(&in, build(), Sz(50, 50))
-	in.dispatch(frameInput{pos: Pt(5, 5), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.dispatch(frameInput{pos: Pt(5, 5), down: []MouseButton{MouseButtonLeft}})
 	paintFrame(&in, build(), Sz(50, 50)) // state changed, tree rebuilt
-	in.dispatch(frameInput{pos: Pt(5, 5), up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.dispatch(frameInput{pos: Pt(5, 5), up: []MouseButton{MouseButtonLeft}})
 	if taps != 1 {
 		t.Fatalf("taps = %d, want 1 delivered to the rebuilt widget", taps)
 	}
@@ -65,8 +63,8 @@ func TestTopmostRegionWins(t *testing.T) {
 	var in inputState
 	paintFrame(&in, w, Sz(40, 40))
 	click := func(p Point) {
-		in.dispatch(frameInput{pos: p, down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
-		in.dispatch(frameInput{pos: p, up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+		in.dispatch(frameInput{pos: p, down: []MouseButton{MouseButtonLeft}})
+		in.dispatch(frameInput{pos: p, up: []MouseButton{MouseButtonLeft}})
 	}
 	click(Pt(20, 20))
 	click(Pt(2, 2))
@@ -104,12 +102,12 @@ func TestUnhandledEventsFallThrough(t *testing.T) {
 }
 
 func TestFocusRoutesKeys(t *testing.T) {
-	var keys []ebiten.Key
+	var keys []Key
 	var typed string
 	var focus []bool
 	w := Row(
 		Focus(Box().Size(50, 50)).
-			OnKey(func(k ebiten.Key) { keys = append(keys, k) }).
+			OnKey(func(k Key) { keys = append(keys, k) }).
 			OnText(func(s string) { typed += s }).
 			OnFocus(func(b bool) { focus = append(focus, b) }),
 		Box().Size(50, 50),
@@ -117,17 +115,17 @@ func TestFocusRoutesKeys(t *testing.T) {
 	var in inputState
 	paintFrame(&in, w, Sz(100, 50))
 
-	in.dispatch(frameInput{pos: Pt(10, 10), keys: []ebiten.Key{ebiten.KeyA}})
+	in.dispatch(frameInput{pos: Pt(10, 10), keys: []Key{KeyA}})
 	if len(keys) != 0 {
 		t.Fatal("keys delivered before any click")
 	}
-	in.dispatch(frameInput{pos: Pt(10, 10), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
-	in.dispatch(frameInput{pos: Pt(10, 10), keys: []ebiten.Key{ebiten.KeyA}, text: "a"})
-	if len(keys) != 1 || keys[0] != ebiten.KeyA || typed != "a" {
+	in.dispatch(frameInput{pos: Pt(10, 10), down: []MouseButton{MouseButtonLeft}})
+	in.dispatch(frameInput{pos: Pt(10, 10), keys: []Key{KeyA}, text: "a"})
+	if len(keys) != 1 || keys[0] != KeyA || typed != "a" {
 		t.Fatalf("keys = %v, typed = %q; want [KeyA] and \"a\"", keys, typed)
 	}
-	in.dispatch(frameInput{pos: Pt(75, 10), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
-	in.dispatch(frameInput{pos: Pt(75, 10), keys: []ebiten.Key{ebiten.KeyB}})
+	in.dispatch(frameInput{pos: Pt(75, 10), down: []MouseButton{MouseButtonLeft}})
+	in.dispatch(frameInput{pos: Pt(75, 10), keys: []Key{KeyB}})
 	if len(keys) != 1 {
 		t.Fatalf("keys = %v, want none after clicking outside", keys)
 	}
@@ -141,7 +139,7 @@ func TestFocusLostWhenRegionDisappears(t *testing.T) {
 	w := Focus(Box().Size(50, 50)).OnFocus(func(b bool) { blurred = !b })
 	var in inputState
 	paintFrame(&in, w, Sz(50, 50))
-	in.dispatch(frameInput{pos: Pt(10, 10), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.dispatch(frameInput{pos: Pt(10, 10), down: []MouseButton{MouseButtonLeft}})
 	paintFrame(&in, Box().Size(50, 50), Sz(50, 50))
 	in.dispatch(frameInput{pos: Pt(10, 10)})
 	if !blurred || in.focused != nil {
@@ -157,10 +155,10 @@ func TestPressedRegionCapturesDragAndRelease(t *testing.T) {
 		OnUp(func(PointerEvent) { ups++ })
 	var in inputState
 	paintFrame(&in, w, Sz(50, 50))
-	in.dispatch(frameInput{pos: Pt(10, 10), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.dispatch(frameInput{pos: Pt(10, 10), down: []MouseButton{MouseButtonLeft}})
 	in.dispatch(frameInput{pos: Pt(200, 200)})
 	in.dispatch(frameInput{pos: Pt(300, 300)})
-	in.dispatch(frameInput{pos: Pt(300, 300), up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.dispatch(frameInput{pos: Pt(300, 300), up: []MouseButton{MouseButtonLeft}})
 	in.dispatch(frameInput{pos: Pt(300, 300)})
 	if drags != 2 || last != Pt(300, 300) || ups != 1 {
 		t.Fatalf("drags = %d (last %v), ups = %d; want 2 drags outside and the release", drags, last, ups)
@@ -176,8 +174,8 @@ func TestPointerAroundFocusSharesOneRegion(t *testing.T) {
 	if len(in.regions) != 1 {
 		t.Fatalf("%d regions for one Rect, want 1 merged", len(in.regions))
 	}
-	in.dispatch(frameInput{pos: Pt(5, 5), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
-	in.dispatch(frameInput{pos: Pt(5, 5), up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.dispatch(frameInput{pos: Pt(5, 5), down: []MouseButton{MouseButtonLeft}})
+	in.dispatch(frameInput{pos: Pt(5, 5), up: []MouseButton{MouseButtonLeft}})
 	if taps != 1 || !focused {
 		t.Fatalf("taps = %d focused = %v", taps, focused)
 	}
@@ -185,21 +183,21 @@ func TestPointerAroundFocusSharesOneRegion(t *testing.T) {
 
 func TestCursorFollowsTopmostRegion(t *testing.T) {
 	w := Stack(
-		Pointer(Box().Size(100, 100)).Cursor(ebiten.CursorShapeCrosshair),
-		Pointer(Box().Size(50, 50)).Cursor(ebiten.CursorShapeText),
+		Pointer(Box().Size(100, 100)).Cursor(CursorShapeCrosshair),
+		Pointer(Box().Size(50, 50)).Cursor(CursorShapeText),
 	)
 	var in inputState
 	paintFrame(&in, w, Sz(100, 100))
 	in.dispatch(frameInput{pos: Pt(25, 25)})
-	if in.cursor != ebiten.CursorShapeText {
+	if in.cursor != CursorShapeText {
 		t.Fatalf("cursor = %v, want text from the top region", in.cursor)
 	}
 	in.dispatch(frameInput{pos: Pt(75, 75)})
-	if in.cursor != ebiten.CursorShapeCrosshair {
+	if in.cursor != CursorShapeCrosshair {
 		t.Fatalf("cursor = %v, want crosshair", in.cursor)
 	}
 	in.dispatch(frameInput{pos: Pt(150, 150)})
-	if in.cursor != ebiten.CursorShapeDefault {
+	if in.cursor != CursorShapeDefault {
 		t.Fatalf("cursor = %v outside, want default", in.cursor)
 	}
 }
@@ -212,7 +210,7 @@ func TestPressedRegionSurvivesBufferReuse(t *testing.T) {
 	)
 	var in inputState
 	paintFrame(&in, w, Sz(100, 50))
-	in.dispatch(frameInput{pos: Pt(10, 10), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.dispatch(frameInput{pos: Pt(10, 10), down: []MouseButton{MouseButtonLeft}})
 	// The runtime repaints into the same buffer; the pressed region must
 	// not follow whatever lands at its old index.
 	in.regions[0], in.regions[1] = in.regions[1], in.regions[0]
@@ -273,7 +271,7 @@ func (k *keyed) Paint(dst *Canvas, r Rect)        { dst.HitKey(r, k) }
 func (k *keyed) HandleKey(ev KeyEvent) {
 	switch ev.Kind {
 	case KeyFocus:
-		*k.log = append(*k.log, k.id+pick(ev.Key == ebiten.KeyTab, "+tab", ""))
+		*k.log = append(*k.log, k.id+pick(ev.Key == KeyTab, "+tab", ""))
 	case KeyBlur:
 		*k.log = append(*k.log, "-"+k.id)
 	case KeyPress:
@@ -286,7 +284,7 @@ func TestTabMovesFocusInPaintOrder(t *testing.T) {
 	w := Row(&keyed{&log, "a"}, Box().Size(50, 50), &keyed{&log, "b"}, &keyed{&log, "c"})
 	var in inputState
 	paintFrame(&in, w, Sz(200, 50))
-	tab := func(shift bool) { in.dispatch(frameInput{keys: []ebiten.Key{ebiten.KeyTab}, mods: Mods{Shift: shift}}) }
+	tab := func(shift bool) { in.dispatch(frameInput{keys: []Key{KeyTab}, mods: Mods{Shift: shift}}) }
 	tab(false)
 	tab(false)
 	tab(false)
@@ -297,7 +295,7 @@ func TestTabMovesFocusInPaintOrder(t *testing.T) {
 		t.Fatalf("focus log = %v\nwant %v", log, want)
 	}
 	log = nil
-	in.dispatch(frameInput{keys: []ebiten.Key{ebiten.KeyTab, ebiten.KeyA}})
+	in.dispatch(frameInput{keys: []Key{KeyTab, KeyA}})
 	if fmt.Sprint(log) != fmt.Sprint([]string{"-c", "a+tab", "a:A"}) {
 		t.Fatalf("Tab must move focus and be withheld, other keys delivered: %v", log)
 	}
@@ -351,13 +349,13 @@ func TestOnKeyRunsBeforeTheFocusedWidgetAndCanConsume(t *testing.T) {
 	p := NewProbe(w, Sz(50, 50))
 	p.Click(Pt(10, 10))
 	seen := 0
-	p.OnKey(func(ev KeyEvent) bool { seen++; return ev.Key == ebiten.KeyF1 })
-	p.Type(Mods{}, ebiten.KeyF1, ebiten.KeyA)
+	p.OnKey(func(ev KeyEvent) bool { seen++; return ev.Key == KeyF1 })
+	p.Type(Mods{}, KeyF1, KeyA)
 	if seen != 2 {
 		t.Fatalf("shortcut saw %d keys, want 2", seen)
 	}
 	log = log[len(log):]
-	p.Type(Mods{}, ebiten.KeyF1)
+	p.Type(Mods{}, KeyF1)
 	if len(log) != 0 {
 		t.Fatalf("widget got %v for a consumed key, want nothing", log)
 	}

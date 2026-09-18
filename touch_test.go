@@ -37,7 +37,7 @@ func TestTouchKeepsPrimaryAndWaitsForRemainingFingers(t *testing.T) {
 	var touch touchInput
 	position := func(id ebiten.TouchID) Point { return Pt(float64(id), 10) }
 	step := func(ids ...ebiten.TouchID) frameInput {
-		f := frameInput{down: []ebiten.MouseButton{ebiten.MouseButtonRight}}
+		f := frameInput{down: []MouseButton{MouseButtonRight}}
 		touch.apply(&f, ids, position)
 		return f
 	}
@@ -52,7 +52,7 @@ func TestTouchKeepsPrimaryAndWaitsForRemainingFingers(t *testing.T) {
 		t.Fatalf("remaining finger started a new press: %+v", f)
 	}
 	step()
-	if f := step(3); len(f.down) != 1 || f.down[0] != ebiten.MouseButtonLeft || f.pos != position(3) {
+	if f := step(3); len(f.down) != 1 || f.down[0] != MouseButtonLeft || f.pos != position(3) {
 		t.Fatalf("new gesture failed: %+v", f)
 	}
 }
@@ -102,7 +102,7 @@ func TestHorizontalTouchDragDoesNotScrollVerticalList(t *testing.T) {
 	drags := 0
 	s := Scroll(Pointer(Box().Size(100, 400)).OnDrag(func(PointerEvent) { drags++ }))
 	paintFrame(&in, s, Sz(100, 100))
-	in.dispatch(frameInput{touch: true, pos: Pt(10, 50), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.dispatch(frameInput{touch: true, pos: Pt(10, 50), down: []MouseButton{MouseButtonLeft}})
 	in.dispatch(frameInput{touch: true, pos: Pt(40, 51)})
 	if s.position() != 0 || drags != 1 || in.touchPanning {
 		t.Fatalf("horizontal drag stolen: offset=%v drags=%d", s.position(), drags)
@@ -125,10 +125,10 @@ func TestTouchCapturedControlDoesNotPanParent(t *testing.T) {
 		OnUp(func(PointerEvent) { ups++ })}
 	s := Scroll(control)
 	paintFrame(&in, s, Sz(100, 100))
-	in.dispatch(frameInput{touch: true, pos: Pt(50, 80), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.dispatch(frameInput{touch: true, pos: Pt(50, 80), down: []MouseButton{MouseButtonLeft}})
 	in.dispatch(frameInput{touch: true, pos: Pt(50, 40)})
 	in.dispatch(frameInput{touch: true, pos: Pt(50, -20)})
-	in.dispatch(frameInput{touch: true, pos: Pt(50, -20), up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.dispatch(frameInput{touch: true, pos: Pt(50, -20), up: []MouseButton{MouseButtonLeft}})
 	if drags != 2 || ups != 1 || in.pressed != nil {
 		t.Fatalf("lost captured drag: drags=%d ups=%d pressed=%v", drags, ups, in.pressed)
 	}

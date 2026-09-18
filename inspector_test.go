@@ -82,11 +82,11 @@ func TestInspectorPinsAndScrolls(t *testing.T) {
 	row := inspectRow{key: inspectKey{name: "Button", depth: 1, rect: Rct(Pt(0, 20), Sz(100, 20))}, index: 2, y: 60, h: 12}
 	in := &inspector{panel: Rct(Pt(200, 0), Sz(100, 300)), tree: Rct(Pt(200, 40), Sz(100, 260)), treeTop: 40, rows: []inspectRow{row}, chips: []inspectChip{{rect: Rct(Pt(210, 0), Sz(30, 30)), act: inspectUnpin}}}
 
-	in.input(frameInput{pos: Pt(250, 64), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.input(frameInput{pos: Pt(250, 64), down: []MouseButton{MouseButtonLeft}})
 	if !in.pinned || in.sel != row.key {
 		t.Fatalf("clicking a row did not pin it: pinned=%v sel=%+v", in.pinned, in.sel)
 	}
-	in.input(frameInput{pos: Pt(215, 10), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.input(frameInput{pos: Pt(215, 10), down: []MouseButton{MouseButtonLeft}})
 	if in.pinned {
 		t.Fatal("clicking the picker did not release the pin")
 	}
@@ -103,7 +103,7 @@ func TestInspectorChipsAndKeys(t *testing.T) {
 		{rect: Rct(Pt(210, 20), Sz(30, 12)), act: inspectDockBottom},
 		{rect: Rct(Pt(250, 20), Sz(30, 12)), act: inspectToggleOutlines},
 	}}
-	click := func(p Point) { in.input(frameInput{pos: p, down: []ebiten.MouseButton{ebiten.MouseButtonLeft}}) }
+	click := func(p Point) { in.input(frameInput{pos: p, down: []MouseButton{MouseButtonLeft}}) }
 	click(Pt(215, 25))
 	if in.dock != InspectorBottom {
 		t.Fatal("the Bottom chip did not dock the panel")
@@ -112,12 +112,12 @@ func TestInspectorChipsAndKeys(t *testing.T) {
 	if !in.outlines {
 		t.Fatal("the Outlines chip did not turn the outlines on")
 	}
-	in.input(frameInput{pos: Pt(250, 100), keys: []ebiten.Key{ebiten.KeyArrowDown, ebiten.KeyArrowDown, ebiten.KeyArrowUp}})
+	in.input(frameInput{pos: Pt(250, 100), keys: []Key{KeyArrowDown, KeyArrowDown, KeyArrowUp}})
 	if in.move != 1 {
 		t.Fatalf("move = %d, want the net arrow step of 1", in.move)
 	}
 	in.pinned = true
-	in.input(frameInput{pos: Pt(250, 100), keys: []ebiten.Key{ebiten.KeyEscape}})
+	in.input(frameInput{pos: Pt(250, 100), keys: []Key{KeyEscape}})
 	if in.pinned {
 		t.Fatal("Escape did not release the pin")
 	}
@@ -185,15 +185,15 @@ func TestInspectorFoldsAndFilters(t *testing.T) {
 	if got := in.visible(tr); !slices.Equal(got, []int{0, 1, 2}) {
 		t.Fatalf("visible = %v while filtering, want the match and its ancestors", got)
 	}
-	in.input(frameInput{keys: []ebiten.Key{ebiten.KeyEscape}})
+	in.input(frameInput{keys: []Key{KeyEscape}})
 	in.panel = Rct(Pt(0, 0), Sz(100, 100))
-	in.input(frameInput{pos: Pt(5, 5), keys: []ebiten.Key{ebiten.KeyEscape}})
+	in.input(frameInput{pos: Pt(5, 5), keys: []Key{KeyEscape}})
 	if in.filter != "" {
 		t.Fatal("Escape did not clear the filter")
 	}
 	in.filterFocus, in.focus = true, true
 	in.input(frameInput{pos: Pt(5, 5), text: "Bu"})
-	in.input(frameInput{pos: Pt(5, 5), keys: []ebiten.Key{ebiten.KeyBackspace}})
+	in.input(frameInput{pos: Pt(5, 5), keys: []Key{KeyBackspace}})
 	if in.filter != "B" {
 		t.Fatalf("filter = %q, want typed text minus one Backspace", in.filter)
 	}
@@ -335,8 +335,8 @@ func TestInspectorPickerConsumesPressAndRelease(t *testing.T) {
 	in := inspector{picking: true}
 	in.paint(c)
 	for _, f := range []frameInput{
-		{pos: Pt(20, 20), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}},
-		{pos: Pt(20, 20), up: []ebiten.MouseButton{ebiten.MouseButtonLeft}},
+		{pos: Pt(20, 20), down: []MouseButton{MouseButtonLeft}},
+		{pos: Pt(20, 20), up: []MouseButton{MouseButtonLeft}},
 	} {
 		if !in.input(f) {
 			t.Fatal("picker leaked a click to the inspected app")
@@ -360,7 +360,7 @@ func TestInspectorIndependentPanesAndFilterFocus(t *testing.T) {
 	if in.scroll != 0 || in.detailScroll != 2*inspectWheel || in.filter != "" {
 		t.Fatal("details input affected the tree or unfocused filter")
 	}
-	in.input(frameInput{pos: in.filterRect.Origin.Add(Pt(10.0, 10.0)), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.input(frameInput{pos: in.filterRect.Origin.Add(Pt(10.0, 10.0)), down: []MouseButton{MouseButtonLeft}})
 	in.input(frameInput{pos: Pt(20, 20), text: "Long"})
 	if in.filter != "Long" {
 		t.Fatal("focused filter stopped receiving text when pointer moved")
@@ -371,16 +371,16 @@ func TestInspectorResizesAndClampsPanel(t *testing.T) {
 	c := inspectorCanvas(Box(), Sz(1200, 800))
 	in := inspector{dock: InspectorRight}
 	in.paint(c)
-	in.input(frameInput{pos: in.edge.Origin.Add(Pt(2.0, 40.0)), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
-	in.input(frameInput{pos: Pt(-500, 40), up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.input(frameInput{pos: in.edge.Origin.Add(Pt(2.0, 40.0)), down: []MouseButton{MouseButtonLeft}})
+	in.input(frameInput{pos: Pt(-500, 40), up: []MouseButton{MouseButtonLeft}})
 	in.paint(c)
 	if in.panel.Size.W != 1200*.85 || in.drag != inspectNoDrag {
 		t.Fatalf("unbounded panel: %+v", in.panel)
 	}
 	in.act(inspectChip{act: inspectDockBottom})
 	in.paint(c)
-	in.input(frameInput{pos: in.edge.Origin.Add(Pt(40.0, 2.0)), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
-	in.input(frameInput{pos: Pt(40, 760), up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.input(frameInput{pos: in.edge.Origin.Add(Pt(40.0, 2.0)), down: []MouseButton{MouseButtonLeft}})
+	in.input(frameInput{pos: Pt(40, 760), up: []MouseButton{MouseButtonLeft}})
 	in.paint(c)
 	if in.panel.Size.H < 180 {
 		t.Fatal("panel collapsed below usable height")
@@ -409,7 +409,7 @@ func TestInspectorArrowNavigationRevealsPinnedRows(t *testing.T) {
 	var in inspector
 	in.paint(c)
 	in.focus = true
-	in.input(frameInput{keys: []ebiten.Key{ebiten.KeyEnd}})
+	in.input(frameInput{keys: []Key{KeyEnd}})
 	in.paint(c)
 	if !in.pinned || in.sel.rect.Origin.Y != 99 || in.scroll <= 0 {
 		t.Fatal("keyboard selection did not scroll into view")
@@ -451,13 +451,13 @@ func TestInspectorLetsApplicationCaptureFinish(t *testing.T) {
 	w := Pointer(Box()).OnDrag(func(PointerEvent) { drags++ })
 	paintFrame(&a.input, w, Sz(800, 600))
 	a.insp.paint(&Canvas{logical: Sz(800, 600)})
-	a.dispatchInput(frameInput{pos: Pt(20, 20), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	a.dispatchInput(frameInput{pos: Pt(20, 20), down: []MouseButton{MouseButtonLeft}})
 	if a.input.pressed == nil {
 		t.Fatal("app did not capture pointer")
 	}
 	p := a.insp.panel.Origin.Add(Pt(30, 100))
 	a.dispatchInput(frameInput{pos: p})
-	a.dispatchInput(frameInput{pos: p, up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	a.dispatchInput(frameInput{pos: p, up: []MouseButton{MouseButtonLeft}})
 	if a.input.pressed != nil || drags == 0 {
 		t.Fatal("inspector interrupted application drag")
 	}
