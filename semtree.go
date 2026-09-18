@@ -3,6 +3,7 @@ package ggui
 import (
 	"fmt"
 	"iter"
+	"slices"
 	"strings"
 )
 
@@ -12,7 +13,7 @@ import (
 // from the main thread while Ebitengine runs frames on a goroutine of its
 // own. Reading the live frame from there would be a race twice over, since
 // App.Draw swaps and reuses its buffers every frame. So every frame ends by
-// publishing a tree that is finished: allocated fresh, never written again,
+// publishing a tree that is finished: never written again after publication,
 // and handed out through an atomic pointer. A reader may keep one as long
 // as it likes.
 
@@ -23,6 +24,8 @@ import (
 // by, rather than a second matcher that could disagree with the first. The
 // Role comes along because a container and the one child that fills it do
 // share a Rect: a For list item and the row inside it.
+// ID is an opaque identity token, not a copied description; keep identity
+// values stable while a widget or one of its snapshots is alive.
 type NodeID struct {
 	ID   any
 	Rect Rect
@@ -191,11 +194,14 @@ func (n *SemNode) flags() string {
 	return b.String()
 }
 
-// buildSemTree freezes what a paint described into a tree that outlives the
-// frame. Everything is allocated here and nothing is reused, since the tree
-// published last frame may still be being read.
-func buildSemTree(c *Canvas, focused *hitRegion) *SemTree {
-	t := &SemTree{focused: -1}
+// buildSemTree reuses the last snapshot only when all observable values are
+// equal. Changed frames own fresh storage; readers can retain any old tree.
+func buildSemTree(c *Canvas, focused *hitRegion, prev *SemTree) *SemTree {
+	focus := focusedNode(c, focused)
+	if sameSemTree(c, focus, prev) {
+		return prev
+	}
+	t := &SemTree{focused: focus}
 	if len(c.sem) == 0 {
 		return t
 	}
@@ -203,7 +209,7 @@ func buildSemTree(c *Canvas, focused *hitRegion) *SemTree {
 	for i := range c.sem {
 		e := &c.sem[i]
 		t.nodes[i] = SemNode{
-			Node:   e.node,
+			Node:   freezeNode(e.node),
 			ID:     NodeID{ID: e.id, Rect: e.full, Role: e.node.Role},
 			Rect:   e.rect,
 			Full:   e.full,
@@ -233,8 +239,55 @@ func buildSemTree(c *Canvas, focused *hitRegion) *SemTree {
 			t.nodes[p].Children = append(t.nodes[p].Children, i)
 		}
 	}
-	t.focused = focusedNode(c, focused)
 	return t
+}
+
+// Parent indices and paint order fully determine roots and child lists.
+// Handlers, scopes and groups are frame-local and are not published.
+func sameSemTree(c *Canvas, focus int, prev *SemTree) bool {
+	if prev == nil || prev.focused != focus || len(prev.nodes) != len(c.sem) {
+		return false
+	}
+	for i := range c.sem {
+		a, b := &c.sem[i], &prev.nodes[i]
+		if a.parent-1 != b.Parent || a.rect != b.Rect || a.full != b.Full ||
+			!sameAny(a.id, b.ID.ID) || !sameNode(&a.node, &b.Node) {
+			return false
+		}
+	}
+	return true
+}
+
+func sameNode(a, b *Node) bool {
+	if a.Role != b.Role || a.Name != b.Name || a.Description != b.Description ||
+		a.Value != b.Value || a.Checked != b.Checked || a.Selected != b.Selected ||
+		a.Disabled != b.Disabled || a.Min != b.Min || a.Max != b.Max || a.Now != b.Now ||
+		a.Actions != b.Actions || a.Offscreen != b.Offscreen ||
+		a.SelStart != b.SelStart || a.SelEnd != b.SelEnd {
+		return false
+	}
+	if (a.Expanded == nil) != (b.Expanded == nil) ||
+		a.Expanded != nil && *a.Expanded != *b.Expanded {
+		return false
+	}
+	return (a.Runs == nil) == (b.Runs == nil) && slices.EqualFunc(a.Runs, b.Runs, func(a, b TextRun) bool {
+		return a.Start == b.Start && a.End == b.End && a.Rect == b.Rect &&
+			(a.Stops == nil) == (b.Stops == nil) && slices.Equal(a.Stops, b.Stops)
+	})
+}
+
+// Describers may reuse their buffers next frame. Detach every mutable part
+// of the description before publishing it to readers on other threads.
+func freezeNode(n Node) Node {
+	if n.Expanded != nil {
+		expanded := *n.Expanded
+		n.Expanded = &expanded
+	}
+	n.Runs = slices.Clone(n.Runs)
+	for i := range n.Runs {
+		n.Runs[i].Stops = slices.Clone(n.Runs[i].Stops)
+	}
+	return n
 }
 
 // focusedNode finds the node the focused hit region belongs to: by the

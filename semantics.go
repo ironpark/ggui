@@ -68,6 +68,8 @@ func (a ActionSet) Has(b ActionSet) bool { return a&b == b }
 // is called, and what may be done to it. A widget fills in only the fields
 // its role gives meaning to; the zero value of every other field says "not
 // applicable", which is why Expanded is a pointer and Checked has a TriNone.
+// Pointers and slices are borrowed until the frame finishes; the published
+// SemTree copies them, so a widget may reuse their storage next frame.
 type Node struct {
 	Role        Role
 	Name        string   // what the element is called, read first
@@ -132,7 +134,9 @@ func (r TextRun) At(b int) float64 {
 // Describer is a handler that describes itself fully, beyond the Role and
 // Name every Interactive carries. Canvas.Describe prefers it, so a slider
 // reports its range, a checkbox its tick and a combobox whether it is open
-// without any of that having to live on Interactive.
+// without any of that having to live on Interactive. Returned pointers and
+// slices must remain unchanged until the frame finishes. The published
+// snapshot owns copies, so the next frame may reuse the description buffers.
 type Describer interface {
 	Describe() Node
 }

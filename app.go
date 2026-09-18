@@ -143,9 +143,10 @@ func (a *App) Shortcut(chord string, fn func()) *ShortcutHandle {
 
 // Semantics returns the accessibility tree as the last frame left it. The
 // tree is finished and frozen, so it may be read from any goroutine and
-// held for as long as it is useful; the next frame publishes another rather
-// than changing this one. It is what a platform accessibility bridge
-// answers a query from, since the live frame belongs to the UI goroutine.
+// held for as long as it is useful; a changed frame publishes another rather
+// than changing this one. Unchanged descriptions reuse the snapshot. A platform
+// accessibility bridge answers queries from it, since the live frame belongs
+// to the UI goroutine.
 func (a *App) Semantics() *SemTree { return a.semantics() }
 
 // Inspector turns the widget inspector on or off: an overlay that outlines
@@ -162,7 +163,9 @@ func (a *App) Inspector(on bool) {
 		a.insp.collapsed = nil
 		a.insp.rows = nil
 		a.insp.chips = nil
-		a.insp.copyText = ""
+		a.insp.copySource = nil
+		a.insp.visibleRows, a.insp.filterParents, a.insp.filterStack = nil, nil, nil
+		a.insp.filterKeep = nil
 		a.insp.focus = false
 		a.insp.filterFocus = false
 		a.insp.picking = false

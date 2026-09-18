@@ -62,7 +62,7 @@ type frameLoop struct {
 // focus, which only the UI goroutine may look at, mirrored into the tree
 // so that everyone else can.
 func (r *frameLoop) publishSemantics(c *Canvas, focused *hitRegion) {
-	r.sem.Store(buildSemTree(c, focused))
+	r.sem.Store(buildSemTree(c, focused, r.sem.Load()))
 }
 
 // announce queues something to say out loud. It shares the post lock, as

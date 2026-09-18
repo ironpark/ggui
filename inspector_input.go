@@ -256,10 +256,7 @@ func (in *inspector) act(c inspectChip) {
 		in.closed = true
 		in.picking, in.filterFocus, in.focus = false, false, false
 	case inspectCopy:
-		if in.copyText != "" {
-			currentClipboard().Write(in.copyText)
-			in.copied = true
-		}
+		in.copySelection()
 	}
 }
 func (in *inspector) sideBySide() bool { return in.dock == InspectorBottom && in.panel.Size.W >= 640 }

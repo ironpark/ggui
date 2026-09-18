@@ -116,7 +116,7 @@ type inspector struct {
 	selectFilter                       bool
 	tab                                inspectAction
 	closed                             bool
-	copyText                           string
+	copySource                         *Canvas // borrowed, like lastTrace, until the next paint
 	copied                             bool
 
 	width, height, split                                   float64
@@ -133,6 +133,8 @@ type inspector struct {
 	rows                                                   []inspectRow
 	chips                                                  []inspectChip
 	lastTrace                                              []traceEntry // borrowed until the next paint; input runs before paint
+	visibleRows, filterParents, filterStack                []int
+	filterKeep                                             []bool
 }
 
 const (
@@ -250,14 +252,19 @@ func (in *inspector) folded(e *traceEntry) bool { return in.collapsed[foldKey(ke
 func inspectMatches(e *traceEntry, filter string) bool {
 	return strings.Contains(strings.ToLower(e.name+" "+inspectLabel(e)+" "+string(nodeOf(e.widget).Role)), strings.ToLower(filter))
 }
+
+// visible returns scratch storage valid until the next call.
 func (in *inspector) visible(tr []traceEntry) []int {
-	out := make([]int, 0, len(tr))
+	out := in.visibleRows[:0]
+	defer func() { in.visibleRows = out }()
 	if in.filter != "" {
 		// A reverse pass propagates matches to parents in linear time, even
 		// for deeply nested trees whose every name matches the filter.
-		keep := make([]bool, len(tr))
-		stack := make([]int, 0, 16)
-		parents := make([]int, len(tr))
+		in.filterKeep = resize(in.filterKeep, len(tr))
+		in.filterParents = resize(in.filterParents, len(tr))
+		keep, parents := in.filterKeep, in.filterParents
+		stack := in.filterStack[:0]
+		defer func() { in.filterStack = stack }()
 		for i, e := range tr {
 			for len(stack) > 0 && tr[stack[len(stack)-1]].depth >= e.depth {
 				stack = stack[:len(stack)-1]

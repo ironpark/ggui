@@ -176,6 +176,14 @@ func (b *axBridge) publish(t *SemTree, notices []Announcement) {
 		b.prev = nil
 		return
 	}
+	// Still poll for attach/detach above and deliver announcements below:
+	// neither depends on whether the semantic description changed.
+	if b.prev != nil && b.prev.tree == t {
+		if notes := axSpeak(notices); len(notes) > 0 {
+			b.plat.notify(notes)
+		}
+		return
+	}
 	f := newAXFrame(t)
 	notes := append(axDiff(b.prev, f), axSpeak(notices)...)
 	b.cur.Store(f)

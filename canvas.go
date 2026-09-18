@@ -6,6 +6,7 @@ import (
 	"math"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -208,9 +209,15 @@ func (c *Canvas) Paint(w Widget, r Rect) {
 	w.Paint(c, r)
 }
 
+var widgetNames sync.Map // reflect.Type -> string; names never change
+
 // widgetName is a widget's type for the inspector: Box for *ggui.BoxWidget.
 func widgetName(w Widget) string {
 	t := reflect.TypeOf(w)
+	if name, ok := widgetNames.Load(t); ok {
+		return name.(string)
+	}
+	original := t
 	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
@@ -218,7 +225,9 @@ func widgetName(w Widget) string {
 	if i := strings.Index(name, "["); i >= 0 {
 		name = name[:i]
 	}
-	return strings.TrimSuffix(name, "Widget")
+	name = strings.TrimSuffix(name, "Widget")
+	widgetNames.Store(original, name)
+	return name
 }
 
 // Pointer returns where the mouse cursor was when this frame began, in

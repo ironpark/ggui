@@ -469,7 +469,62 @@ func TestInspectorCloseReleasesWidgetReferences(t *testing.T) {
 	a.insp.selectEntry(c.trace, 0)
 	a.insp.paint(c)
 	a.Inspector(false)
-	if a.insp.sel.id != nil || a.insp.lastTrace != nil || a.insp.rows != nil || a.insp.chips != nil || a.insp.collapsed != nil {
+	if a.insp.sel.id != nil || a.insp.lastTrace != nil || a.insp.copySource != nil || a.insp.rows != nil || a.insp.chips != nil || a.insp.collapsed != nil {
 		t.Fatal("closed inspector retained widget references")
+	}
+}
+
+func TestInspectorCopyResolvesNewSelectionWithoutAnotherPaint(t *testing.T) {
+	old := currentClipboard()
+	defer SetClipboard(old)
+	mem := &MemoryClipboard{}
+	SetClipboard(mem)
+	one, two := Box(Text("one")).Pad(11), Box(Text("two")).Pad(22)
+	c := inspectorCanvas(Column(one, two), Sz(800, 600))
+	var in inspector
+	find := func(w Widget) int {
+		for i, e := range c.trace {
+			if e.widget == w {
+				return i
+			}
+		}
+		t.Fatal("widget missing from trace")
+		return -1
+	}
+	in.selectEntry(c.trace, find(one))
+	in.paint(c)
+	if mem.Read() != "" {
+		t.Fatal("paint wrote to the clipboard")
+	}
+	in.selectEntry(c.trace, find(two))
+	in.act(inspectChip{act: inspectCopy})
+	if !strings.Contains(mem.Read(), "padding: 22 22 22 22") || strings.Contains(mem.Read(), "padding: 11 11 11 11") {
+		t.Fatal("copy used details of the previous selection")
+	}
+	mem.Write("unchanged")
+	c.trace = nil
+	in.act(inspectChip{act: inspectCopy})
+	if mem.Read() != "unchanged" {
+		t.Fatal("copy used a removed widget")
+	}
+}
+
+func TestInspectorFilterScratchDoesNotKeepOldMatches(t *testing.T) {
+	in := inspector{filter: "text"}
+	tr := trace(entry("Column", 0, 0, 0, 100, 60), entry("Text", 1, 0, 0, 100, 20))
+	if got := in.visible(tr); len(got) != 2 {
+		t.Fatal("initial match missing")
+	}
+	tr[1].name = "Box"
+	if got := in.visible(tr); len(got) != 0 {
+		t.Fatalf("old filter matches survived buffer reuse: %v", got)
+	}
+	in.filter = "column"
+	if got := in.visible(tr[:1]); !slices.Equal(got, []int{0}) {
+		t.Fatalf("shrinking the trace retained old ancestors: %v", got)
+	}
+	in.filter = ""
+	if got := in.visible(tr); !slices.Equal(got, []int{0, 1}) {
+		t.Fatalf("clearing the filter lost rows: %v", got)
 	}
 }

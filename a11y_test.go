@@ -401,6 +401,31 @@ func TestAXNotifiesOncePerFrameAndOnlyWhenThereIsNews(t *testing.T) {
 	}
 }
 
+func TestAXReusedSnapshotStillAnnouncesAndPolls(t *testing.T) {
+	oldDetail := axWantsDetail.Load()
+	defer axWantsDetail.Store(oldDetail)
+	f := newAXFake(true)
+	b := &axBridge{plat: f, mode: AccessibilityAuto}
+	tree := axRoots(axNode(RoleButton, "save", "save", Rect{}))
+	b.publish(tree, nil)
+	first := b.frame()
+	elem := b.element(axKeyOf(tree.At(0).ID))
+	b.publish(tree, []Announcement{{Text: "saved", Politeness: Polite}})
+	if b.frame() != first || f.flushes != 2 || f.notes[len(f.notes)-1].text != "saved" {
+		t.Fatal("reused tree rebuilt the index or lost an announcement")
+	}
+	f.on, b.poll = false, 0
+	b.publish(tree, nil)
+	if b.frame() != nil || len(f.freed) != 1 || f.freed[0] != elem {
+		t.Fatal("reused tree prevented detach cleanup")
+	}
+	f.on, b.poll = true, 0
+	b.publish(tree, nil)
+	if b.frame() == nil || b.frame() == first || b.frame().tree != tree {
+		t.Fatal("same tree did not republish on reattach")
+	}
+}
+
 func TestAXActionsAreOnlyWhatTheNodeClaims(t *testing.T) {
 	slider := Node{Role: RoleSlider, Actions: ActionIncrement | ActionDecrement | ActionFocus}
 	if axAllows(slider, axPress) {

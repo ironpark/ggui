@@ -92,6 +92,7 @@ func (in *inspector) paint(dst *Canvas) {
 	}
 	in.bounds(dst.Size())
 	in.lastTrace = dst.trace
+	in.copySource = dst
 	pal, face := inspectColors(), inspectorFace(dst)
 	in.chips = in.chips[:0]
 	in.rows = in.rows[:0]
@@ -155,22 +156,6 @@ func (in *inspector) paint(dst *Canvas) {
 	}
 	in.paintStatus(panel, face, pal, sel)
 	in.reveal = false
-	in.copyText = ""
-	if sel >= 0 {
-		var b strings.Builder
-		fmt.Fprintf(&b, "%s\n", dst.trace[sel].name)
-		for _, tab := range []inspectAction{inspectTabLayout, inspectTabComputed, inspectTabSemantics} {
-			view := inspector{tab: tab}
-			for _, f := range view.details(dst, sel) {
-				if f.value == "" {
-					fmt.Fprintf(&b, "\n%s\n", f.key)
-				} else {
-					fmt.Fprintf(&b, "%s: %s\n", f.key, f.value)
-				}
-			}
-		}
-		in.copyText = b.String()
-	}
 }
 
 func (in *inspector) paintToolbar(dst *Canvas, face text.Face, pal inspectPalette) {

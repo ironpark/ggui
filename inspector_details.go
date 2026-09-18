@@ -13,6 +13,35 @@ type inspectField struct {
 	key, value string
 	number     bool
 }
+
+// Input runs before the next paint, so these are the most recently painted
+// trace and semantics. Serialize only when requested, resolving selection
+// again so a click followed by Copy does not copy the previous element.
+func (in *inspector) copySelection() {
+	dst := in.copySource
+	if dst == nil {
+		return
+	}
+	sel := in.find(dst.trace)
+	if sel < 0 {
+		return
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\n", dst.trace[sel].name)
+	for _, tab := range []inspectAction{inspectTabLayout, inspectTabComputed, inspectTabSemantics} {
+		view := inspector{tab: tab}
+		for _, f := range view.details(dst, sel) {
+			if f.value == "" {
+				fmt.Fprintf(&b, "\n%s\n", f.key)
+			} else {
+				fmt.Fprintf(&b, "%s: %s\n", f.key, f.value)
+			}
+		}
+	}
+	currentClipboard().Write(b.String())
+	in.copied = true
+}
+
 type inspectBox struct {
 	padding EdgeInsets
 	border  float64
