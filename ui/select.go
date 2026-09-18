@@ -5,6 +5,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/icons"
 )
 
 // SelectWidget is a dropdown that picks one of a list of values into a
@@ -26,6 +27,7 @@ type SelectWidget[T comparable] struct {
 	textSize  ggui.Size
 	highlight int // the option the keyboard is on while open, or -1
 	theme     ggui.Theme
+	env       ggui.Env
 }
 
 // Select creates a dropdown bound to value, showing each option through
@@ -135,6 +137,7 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	t := env.Theme()
 	s.theme = t
+	s.env = env
 	s.pad = t.FieldPad
 	s.box.Radius(t.Radius).Fill(t.Input)
 	panelBox(s.list, t)
@@ -164,7 +167,7 @@ func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Clip(r).Paint(s.text, ggui.Rct(ggui.Pt(r.Origin.X+s.pad.Left, r.Origin.Y+(r.Size.H-s.textSize.H)/2), s.textSize))
 	// Chevron, pointing down, or up while open.
 	center := ggui.Pt(r.Origin.X+r.Size.W-t.Space-t.ControlSize*0.3, r.Origin.Y+r.Size.H/2)
-	chevron(dst, center, pick(open, -2.0, 2.0), pick(s.Inert, t.MutedFg, t.Fg))
+	chevron(dst, s.env, center, pick(open, -2.0, 2.0), pick(s.Inert, t.MutedFg, t.Fg))
 	s.FocusRing(dst, r, t.Radius, t.Ring)
 }
 
@@ -306,8 +309,7 @@ func (it *selectItem[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Paint(it.text, ggui.Rct(at, it.textSize))
 	if it.index == it.owner.index() {
 		x, y := r.Origin.X+it.pad.Left, r.Origin.Y+r.Size.H/2
-		dst.StrokeLine(ggui.Pt(x+2, y), ggui.Pt(x+6, y+4), 2, t.Primary)
-		dst.StrokeLine(ggui.Pt(x+6, y+4), ggui.Pt(x+13, y-4), 2, t.Primary)
+		paintIcon(dst, it.owner.env, icons.Check, ggui.Rct(ggui.Pt(x, y-8), ggui.Sz(16, 16)), t.Primary, 0)
 	}
 }
 

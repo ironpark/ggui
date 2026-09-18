@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/icons"
 	"github.com/ironpark/ggui/ui"
 )
 
@@ -60,9 +61,9 @@ func newChatPreviews() func() []ggui.Widget {
 						ui.Attachment("office-reference.jpg", "JPG · 940 KB").Image(office, "Office").Vertical(),
 					).Named("Image attachments"),
 					ggui.When(showUpload, ui.Attachment("sales-dashboard.pdf", "Uploading · 64%").Media(ui.Spinner().Size(16)).State(ui.AttachmentUploading).
-						Actions(ui.AttachmentAction("Cancel upload", &chatIcon{kind: "close"}, func() { showUpload.Set(false); attachmentAction.Set("Upload cancelled.") }))),
-					ggui.When(showSource, ui.Attachment("message-renderer.tsx", "TypeScript · 12 KB").Media(&chatIcon{kind: "file"}).
-						Actions(ui.AttachmentAction("Remove source attachment", &chatIcon{kind: "close"}, func() { showSource.Set(false); attachmentAction.Set("Source attachment removed.") }))),
+						Actions(ui.AttachmentAction("Cancel upload", ui.Icon(icons.Close), func() { showUpload.Set(false); attachmentAction.Set("Upload cancelled.") }))),
+					ggui.When(showSource, ui.Attachment("message-renderer.tsx", "TypeScript · 12 KB").Media(ui.Icon(icons.File)).
+						Actions(ui.AttachmentAction("Remove source attachment", ui.Icon(icons.Close), func() { showSource.Set(false); attachmentAction.Set("Source attachment removed.") }))),
 				).Gap(12).Align(ggui.AlignStretch)),
 				ui.Select(upload, states).Named("Upload state"),
 				ui.Attachment("design-system.zip", "Choose an upload state above").Media(ggui.Text("ZIP").Size(11)).StateOf(upload).
@@ -70,9 +71,9 @@ func newChatPreviews() func() []ggui.Widget {
 				ggui.View(files, func(names []string) *ui.AttachmentGroupWidget {
 					cards := []*ui.AttachmentWidget{}
 					for _, name := range names {
-						cards = append(cards, ui.Attachment(name, "Ready to upload").State(ui.AttachmentIdle).Width(180).Media(&chatIcon{kind: "file"}).
+						cards = append(cards, ui.Attachment(name, "Ready to upload").State(ui.AttachmentIdle).Width(180).Media(ui.Icon(icons.File)).
 							Trigger("Preview "+name, func() { attachmentAction.Set("Preview opened: " + name) }).
-							Actions(ui.AttachmentAction("Remove "+name, &chatIcon{kind: "close"}, func() { ggui.Remove(files, func(v string) bool { return v == name }) })))
+							Actions(ui.AttachmentAction("Remove "+name, ui.Icon(icons.Close), func() { ggui.Remove(files, func(v string) bool { return v == name }) })))
 					}
 					return ui.AttachmentGroup(cards...).Named("Attached files")
 				}),
@@ -122,7 +123,7 @@ func newChatPreviews() func() []ggui.Widget {
 				ui.Marker(ggui.Text("Switched to a new branch")).Icon(&chatIcon{kind: "branch"}),
 				ui.Marker(ggui.Text("Thinking…")).Icon(ui.Spinner().Size(16)),
 				ui.Marker(ggui.Text("Conversation compacted")).Separator(),
-				ui.Marker(ggui.Text("Explored 4 files")).Icon(&chatIcon{kind: "search"}),
+				ui.Marker(ggui.Text("Explored 4 files")).Icon(ui.Icon(icons.Search)),
 			).Gap(32).Align(ggui.AlignStretch))),
 			preview("Message Scroller", ggui.Column(
 				chatSurface(ggui.Box(scroller).Border(1, t.Border).Radius(t.Radius)),

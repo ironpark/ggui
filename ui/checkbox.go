@@ -2,6 +2,7 @@ package ui
 
 import (
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/icons"
 )
 
 // CheckboxWidget is a box that is ticked while its signal is true. Build one
@@ -66,12 +67,7 @@ func (c *CheckboxWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.StrokeRoundRect(box, radius, 1, pick(c.Hovered, t.Primary, t.Border))
 	}
 	if on {
-		at := func(x, y float64) ggui.Point {
-			return ggui.Pt(box.Origin.X+x*box.Size.W, box.Origin.Y+y*box.Size.H)
-		}
-		col := pick(c.Inert, t.MutedFg, t.PrimaryFg)
-		dst.StrokeLine(at(0.24, 0.52), at(0.43, 0.72), 2, col)
-		dst.StrokeLine(at(0.41, 0.72), at(0.78, 0.30), 2, col)
+		paintIcon(dst, c.env, icons.Check, box, pick(c.Inert, t.MutedFg, t.PrimaryFg), 0)
 	}
 	c.FocusRing(dst, box, radius, t.Ring)
 }

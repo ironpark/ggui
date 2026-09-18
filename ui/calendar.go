@@ -6,6 +6,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/icons"
 )
 
 // CalendarWidget selects a single civil date. Navigation does not change value.
@@ -41,8 +42,8 @@ func Calendar(value ggui.Binding[time.Time]) *CalendarWidget {
 		weekdays: [7]string{"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"}, monthLabel: func(t time.Time) string { return t.Format("January 2006") }}
 	c.Role = ggui.RoleGroup
 	c.AutoKey()
-	c.previous = Button("‹", func() { c.moveMonth(-1) }).Ghost().Named("Previous month")
-	c.next = Button("›", func() { c.moveMonth(1) }).Ghost().Named("Next month")
+	c.previous = ButtonOf(Icon(icons.ChevronLeft), func() { c.moveMonth(-1) }).Ghost().Named("Previous month")
+	c.next = ButtonOf(Icon(icons.ChevronRight), func() { c.moveMonth(1) }).Ghost().Named("Next month")
 	c.title = ggui.Text("").NoWrap()
 	c.header = ggui.Row(c.previous, ggui.Expanded(ggui.Center(c.title)), c.next).Gap(8)
 	for i := range c.days {

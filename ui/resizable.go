@@ -5,6 +5,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/icons"
 )
 
 // ResizableWidget splits its space into two clipped panes with a draggable divider.
@@ -151,13 +152,8 @@ func (r *ResizableWidget) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 		grip := ggui.Rct(ggui.Pt(center.X-w/2, center.Y-h/2), ggui.Sz(w, h))
 		dst.FillRoundRect(grip, 3, r.theme.Card)
 		dst.StrokeRoundRect(grip, 3, 1, col)
-		for _, offset := range []float64{-4, 0, 4} {
-			if r.vertical && w >= 16 {
-				dst.FillCircle(ggui.Pt(center.X+offset, center.Y), .8, r.theme.MutedFg)
-			}
-			if !r.vertical && h >= 16 {
-				dst.FillCircle(ggui.Pt(center.X, center.Y+offset), .8, r.theme.MutedFg)
-			}
+		if max(w, h) >= 16 {
+			paintIcon(dst, r.env, icons.Grip, ggui.Rct(center.Add(ggui.Pt(-6, -6)), ggui.Sz(12, 12)), r.theme.MutedFg, pick(r.vertical, math.Pi/2, 0.0))
 		}
 		focus = grip
 	}

@@ -188,7 +188,7 @@ func (a *AccordionWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		if h.Hovered {
 			dst.FillRoundRect(rect, t.Radius, t.Muted)
 		}
-		chevron(dst, ggui.Pt(rect.Origin.X+rect.Size.W-8, y+a.heights[i]/2), pick(a.isOpen(i), -2.0, 2.0), t.MutedFg)
+		chevron(dst, a.env, ggui.Pt(rect.Origin.X+rect.Size.W-8, y+a.heights[i]/2), pick(a.isOpen(i), -2.0, 2.0), t.MutedFg)
 		dst.Paint(h.text, ggui.Rct(ggui.Pt(rect.Origin.X, y+16), h.size))
 		if i == a.active {
 			a.FocusRing(dst, rect, t.Radius, t.Ring)

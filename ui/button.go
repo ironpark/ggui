@@ -168,7 +168,7 @@ func (b *ButtonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if b.label != nil {
 		b.label.Color(pick(b.Inert, mix(b.style.label, t.Card, t.DisabledMix), b.style.label))
 	}
-	return b.box.Layout(c, env)
+	return b.box.Layout(c, env.WithText(ggui.TextStyle{Color: pick(b.Inert, mix(b.style.label, t.Card, t.DisabledMix), b.style.label)}))
 }
 
 // Paint implements Widget.

@@ -6,6 +6,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/icons"
 )
 
 // ToastMessage describes one notification. Push copies it into a Toaster.
@@ -92,7 +93,7 @@ func (t *ToasterWidget) Push(message ToastMessage) ToastID {
 	e := &toastEntry{id: t.next, title: message.title, remaining: message.duration, persistent: message.duration <= 0, last: ggui.Now()}
 	e.motion.MoveTo(0, e.last, 0)
 	e.duration = message.duration
-	e.dismiss = Button("×", func() { t.Dismiss(e.id) }).Ghost().Pad(2, 8).Named("Dismiss " + message.title)
+	e.dismiss = ButtonOf(Icon(icons.Close).Size(14), func() { t.Dismiss(e.id) }).Ghost().Pad(2, 8).Named("Dismiss " + message.title)
 	e.dismiss.Key(e)
 
 	if message.actionLabel != "" {
@@ -278,10 +279,10 @@ func (p *toastPanel) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	p.theme = env.Theme()
 	t := p.theme
 	accent := t.Primary
-	mark := "✓"
+	mark := icons.Check
 	if p.destructive {
 		accent = t.Destructive
-		mark = "!"
+		mark = icons.Alert
 	}
 	p.title.Style(t.Text).Color(t.Fg)
 	p.description.Style(t.Caption).Color(t.MutedFg)
@@ -291,7 +292,7 @@ func (p *toastPanel) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	text := ggui.Column(parts...).Gap(4).Align(ggui.AlignStretch)
 	p.body = ggui.Box(ggui.Row(
-		ggui.Box(ggui.Center(ggui.Text(mark).Color(t.PrimaryFg).Size(14))).Size(24, 24).Fill(accent).Radius(12),
+		ggui.Box(ggui.Center(Icon(mark).Color(t.PrimaryFg).Size(14))).Size(24, 24).Fill(accent).Radius(12),
 		ggui.Expanded(text), p.entry.dismiss,
 	).Gap(12).Align(ggui.AlignStart)).Pad(t.Space*2).Fill(t.Popover).Border(t.BorderWidth, t.Border).Radius(t.RadiusLg)
 	return p.body.Layout(c, env)

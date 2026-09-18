@@ -846,6 +846,20 @@ shadcn/ui variable and its light and dark value, how a `TextStyle` resolves,
 deriving a theme without the zero-field trap, tokens of your own, styling a
 custom widget, and the two accessibility preferences.
 
+## Icons
+
+`ui.Icon(icons.Search)` uses a shared semantic placeholder backed by embedded
+Lucide SVGs. Use `lucide.Icon("download")` to request an explicit bundled icon.
+Both support `.Size(20)`, `.Color(col)`, and `.Alt("Download")`.
+
+Provide `icons.SetKey` through `ggui.Provide` for a subtree, or store it in a
+`Theme` with `.Set(icons.SetKey, set)` to replace built-in control icons. Sets
+map roles such as `Check`, `Close`, and `ChevronDown` to parsed SVGs. Missing
+roles retain the Lucide defaults. Decorative icons stay out of accessibility;
+name the button that contains them, or use `Alt` for a standalone image.
+
+See [icons/README.md](icons/README.md) for custom SVG sets, precedence and caching.
+
 ## Input
 
 Interactive widgets register the `Rect` they painted as a hit region on the

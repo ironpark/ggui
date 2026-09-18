@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/icons"
 )
 
 // PaginationWidget navigates a one-based page binding. It does not slice data.
@@ -24,8 +25,8 @@ type PaginationWidget struct {
 // Out-of-range page values are clamped for display, without writing the binding.
 func Pagination(page ggui.Binding[int], pages ggui.Reader[int]) *PaginationWidget {
 	p := &PaginationWidget{page: page, pages: pages}
-	p.previous = Button("‹ Previous", func() { p.move(-1) }).Named("Previous").Ghost().Pad(6, 10)
-	p.next = Button("Next ›", func() { p.move(1) }).Named("Next").Ghost().Pad(6, 10)
+	p.previous = ButtonOf(ggui.Row(Icon(icons.ChevronLeft), ggui.Text("Previous")).Gap(4), func() { p.move(-1) }).Named("Previous").Ghost().Pad(6, 10)
+	p.next = ButtonOf(ggui.Row(ggui.Text("Next"), Icon(icons.ChevronRight)).Gap(4), func() { p.move(1) }).Named("Next").Ghost().Pad(6, 10)
 	for i := range p.numbers {
 		p.numbers[i] = Button("", func() { p.selectPage(p.targets[i]) })
 	}

@@ -395,3 +395,19 @@ func TestGalleryEmojiEditingAndThemePresets(t *testing.T) {
 		t.Fatal("preset was lost during dark mode switch")
 	}
 }
+
+func TestGalleryIconOverrideSurvivesThemeChange(t *testing.T) {
+	p := galleryProbe(ggui.Sz(1180, 900))
+	defer p.Close()
+	searchGallery(p, "Icons")
+	p.Tap("Replace check with plus")
+	p.Tap("Dark mode")
+	p.Frame()
+	if n, ok := p.Semantics().Find(ggui.RoleSwitch, "Replace check with plus"); !ok || n.Checked != ggui.Tri(true) {
+		t.Fatal("icon override reset on theme change")
+	}
+	p.Tap("Scoped icon override")
+	if n, ok := p.Semantics().Find(ggui.RoleCheckbox, "Scoped icon override"); !ok || n.Checked != ggui.Tri(false) {
+		t.Fatal("custom icons changed checkbox interaction")
+	}
+}

@@ -131,6 +131,7 @@ func newGallery() (ggui.Builder, func(), func()) {
 		confirm.Set(false)
 	}
 
+	iconDemo := iconPreview()
 	build := func() ggui.Widget {
 		t := ggui.UseTheme()
 		section := func(title string, body ggui.Widget) ggui.Widget {
@@ -158,6 +159,8 @@ func newGallery() (ggui.Builder, func(), func()) {
 				ui.Bubble(ggui.Text("Theme tokens also shape chat bubbles 👍")).End(),
 				ggui.TextOf(themeAction).AsCaption(),
 			).Gap(12).Align(ggui.AlignStretch)),
+			section("Icons", iconDemo),
+
 			section("Emoji", ggui.Column(
 				ggui.Text("Faces 😀 😭 🫩   Reactions 👍 🔥 👀").Size(22),
 				ggui.Text("Skin tones 👋🏻 👋🏽 👋🏿   Flags 🇰🇷 🇺🇸").Size(20),

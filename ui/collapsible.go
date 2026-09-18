@@ -6,6 +6,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/icons"
 )
 
 // CollapsibleWidget is a titled section that folds its content away.
@@ -19,6 +20,7 @@ type CollapsibleWidget struct {
 	ggui.Interactive
 
 	theme     ggui.Theme
+	env       ggui.Env
 	motion    time.Duration
 	pad       ggui.EdgeInsets
 	titleSize ggui.Size
@@ -84,6 +86,7 @@ func (c *CollapsibleWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 	c.Sync()
 	t := env.Theme()
 	c.theme = t
+	c.env = env
 	c.motion = env.Motion(t.MotionFast)
 	c.transition.Duration(t.MotionFast)
 	c.pad = t.FieldPad
@@ -106,13 +109,7 @@ func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// The chevron turns from pointing right (0) to pointing down (1).
 	v := dst.Ease(c.Anchor(header), chevronSlot, pick(c.open.Peek(), 1.0, 0.0), c.motion)
 	cx, cy := r.Origin.X+c.pad.Left+t.ControlSize*0.4, r.Origin.Y+c.headerH/2
-	rot := func(x, y float64) ggui.Point {
-		a := v * math.Pi / 2
-		return ggui.Pt(cx+x*math.Cos(a)-y*math.Sin(a), cy+x*math.Sin(a)+y*math.Cos(a))
-	}
-	tip := rot(2, 0)
-	dst.StrokeLine(rot(-2, -4), tip, 1.5, t.MutedFg)
-	dst.StrokeLine(tip, rot(-2, 4), 1.5, t.MutedFg)
+	paintIcon(dst, c.env, icons.ChevronRight, ggui.Rct(ggui.Pt(cx-8, cy-8), ggui.Sz(16, 16)), t.MutedFg, v*math.Pi/2)
 	dst.Paint(c.title, ggui.Rct(ggui.Pt(r.Origin.X+c.pad.Left+t.ControlSize+t.ControlGap, r.Origin.Y+c.pad.Top), c.titleSize))
 	c.FocusRing(dst, header, t.Radius, t.Ring)
 	dst.Paint(c.body, ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+c.headerH), c.bodySize))

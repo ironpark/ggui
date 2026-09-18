@@ -7,6 +7,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/icons"
 )
 
 // QuestionAnswer distinguishes unanswered, explicitly skipped and answered
@@ -584,6 +585,7 @@ type questionChoice struct {
 	shortcut string
 	body     ggui.Widget
 	theme    ggui.Theme
+	env      ggui.Env
 }
 
 func (c *questionChoice) selected() bool {
@@ -591,6 +593,7 @@ func (c *questionChoice) selected() bool {
 }
 func (c *questionChoice) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	c.theme = env.Theme()
+	c.env = env
 	text := []ggui.Widget{ggui.Text(c.option.Label).Font(env.Theme().Title.Font).Size(14).LineHeight(1.5).Color(pick(c.Inert, c.theme.MutedFg, c.theme.Fg))}
 	if c.option.Description != "" {
 		text = append(text, ggui.Text(c.option.Description).Size(14).LineHeight(1.5).Color(c.theme.MutedFg))
@@ -629,9 +632,7 @@ func (c *questionChoice) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.FillRoundRect(glyph, radius, pick(selected, t.Primary, t.Input))
 	dst.StrokeRoundRect(glyph, radius, 1, pick(selected, t.Primary, t.Border))
 	if selected && c.item.Multiple {
-		at := glyph.Origin
-		dst.StrokeLine(at.Add(ggui.Pt(4.0, 8.0)), at.Add(ggui.Pt(7.0, 11.0)), 1.5, t.PrimaryFg)
-		dst.StrokeLine(at.Add(ggui.Pt(7.0, 11.0)), at.Add(ggui.Pt(12.0, 5.0)), 1.5, t.PrimaryFg)
+		paintIcon(dst, c.env, icons.Check, glyph, t.PrimaryFg, 0)
 	} else if selected {
 		dst.FillCircle(glyph.Origin.Add(ggui.Pt(8, 8)), 4, t.PrimaryFg)
 	}

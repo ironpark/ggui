@@ -5,6 +5,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/icons"
 )
 
 // CommandEntry describes an action in a searchable command list.
@@ -288,8 +289,5 @@ func (i commandSearchIcon) Layout(cs ggui.Constraints, _ ggui.Env) ggui.Size {
 	return cs.Constrain(ggui.Sz(18, 18))
 }
 func (i commandSearchIcon) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	col := i.c.theme.MutedFg
-	center := ggui.Pt(r.Origin.X+8, r.Origin.Y+r.Size.H/2-1)
-	dst.StrokeRoundRect(ggui.Rct(center.Add(ggui.Pt(-4, -4)), ggui.Sz(8, 8)), 4, 1.4, col)
-	dst.StrokeLine(center.Add(ggui.Pt(3, 3)), center.Add(ggui.Pt(7, 7)), 1.4, col)
+	paintIcon(dst, i.c.env, icons.Search, r, i.c.theme.MutedFg, 0)
 }

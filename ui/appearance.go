@@ -4,6 +4,7 @@ import (
 	"image/color"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/icons"
 )
 
 // panelBox applies the chrome every floating surface shares: menus, context
@@ -23,11 +24,10 @@ func fieldBox(b *ggui.BoxWidget, t ggui.Theme, focused, inert bool) *ggui.BoxWid
 		Border(t.BorderWidth, pick(focused, t.Ring, colorOr(t.InputBorder, t.Border)))
 }
 
-// chevron draws the two-segment glyph a select and an accordion header share.
+// chevron resolves the directional role shared by selects and accordions.
 // dy points the tip down when positive and up when negative.
-func chevron(dst *ggui.Canvas, center ggui.Point, dy float64, col color.Color) {
-	dst.StrokeLine(ggui.Pt(center.X-4, center.Y-dy), ggui.Pt(center.X, center.Y+dy), 1.5, col)
-	dst.StrokeLine(ggui.Pt(center.X, center.Y+dy), ggui.Pt(center.X+4, center.Y-dy), 1.5, col)
+func chevron(dst *ggui.Canvas, env ggui.Env, center ggui.Point, dy float64, col color.Color) {
+	paintIcon(dst, env, pick(dy < 0, icons.ChevronUp, icons.ChevronDown), ggui.Rct(center.Add(ggui.Pt(-8, -8)), ggui.Sz(16, 16)), col, 0)
 }
 
 // fieldHalo draws the focus ring just outside a text field.
