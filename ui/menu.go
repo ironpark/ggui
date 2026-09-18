@@ -271,7 +271,7 @@ func (it *MenuItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	it.theme = t
 	it.popup, _ = ggui.PopupOf(env)
 	it.pad = t.ItemPad
-	it.text.Color(pick(it.Inert, t.MutedFg, t.Fg))
+	it.text.Color(pick(it.Inert, t.MutedFg, colorOr(t.PopoverFg, t.Fg)))
 	inner := it.pad.Shrink(c).Loosen()
 	gap := 0.0
 	if it.shortcut != nil {
@@ -293,7 +293,7 @@ func (it *MenuItemWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.HitPointer(r, it)
 		dst.HitCursor(r, ebiten.CursorShapePointer)
 		if it.active || (it.onHover == nil && it.Hovered) {
-			dst.FillRoundRect(r, t.RadiusSm, t.Muted)
+			dst.FillRoundRect(r, t.RadiusSm, colorOr(t.Accent, t.Muted))
 		}
 	}
 	if it.shortcut != nil {

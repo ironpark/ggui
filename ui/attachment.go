@@ -32,7 +32,7 @@ const (
 
 // AttachmentWidget presents a file's media, metadata and independent actions.
 // Its optional full-card trigger sits behind the actions in the hit order.
-// Geometry follows shadcn/ui's new-york attachment; colors follow the theme.
+// Geometry follows shadcn/ui's Rhea attachment; colors follow the theme.
 type AttachmentWidget struct {
 	title, description                   string
 	titleText, descriptionText           attachmentText
@@ -132,19 +132,24 @@ func (a *AttachmentWidget) uploadState() AttachmentState {
 
 func (a *AttachmentWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	a.theme, a.reduced, a.current = env.Theme(), env.ReducedMotion(), a.uploadState()
-	a.padX, a.padY, a.gap, a.radius, a.mediaSide = 10, 8, 8, 12, 40
+	a.padX, a.padY, a.gap, a.radius, a.mediaSide = 10, 8, 8, 16, 40
+	a.radius = a.theme.ChatTokens().AttachmentRadius
 	fontSize := 14.0
 	switch a.size {
 	case AttachmentSmall:
 		a.padX, a.padY, a.gap, a.mediaSide, fontSize = 8, 6, 10, 32, 12
 	case AttachmentExtraSmall:
-		a.padX, a.padY, a.gap, a.radius, a.mediaSide, fontSize = 6, 4, 6, 8, 28, 12
+		a.padX, a.padY, a.gap, a.radius, a.mediaSide, fontSize = 6, 4, 6, a.theme.ChatTokens().AttachmentXSRadius, 28, 12
 	}
 	hasMedia := a.media != nil || a.image != nil
 	if hasMedia {
 		a.padX = a.padY
 	}
+	// Reserve the border separately from content padding, like CSS border-box.
+	a.padX += 1
+	a.padY += 1
 	a.titleText.set(a.title, fontSize, a.theme.Fg)
+	a.titleText.text.Font(a.theme.Title.Font)
 	descColor := a.theme.MutedFg
 	if a.current == AttachmentError {
 		descColor = mix(a.theme.Destructive, a.theme.Card, .2)
@@ -255,7 +260,7 @@ func translated(r ggui.Rect, at ggui.Point) ggui.Rect { r.Origin = r.Origin.Add(
 func (a *AttachmentWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	state := a.uploadState()
 	t := a.theme
-	fill, border := t.Card, t.Border
+	fill, border := mix(t.Bg, t.Muted, .4), t.Border
 	if a.trigger != nil && a.trigger.Hovered {
 		fill = mix(t.Card, t.Muted, .5)
 	}

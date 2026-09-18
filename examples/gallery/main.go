@@ -13,6 +13,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/fonts/notoemoji"
 	"github.com/ironpark/ggui/ui"
 )
 
@@ -27,6 +28,11 @@ type Person struct {
 
 func newGallery() (ggui.Builder, func(), func()) {
 	dark := ggui.State(false)
+	baseColor := ggui.State(ggui.BaseNeutral)
+	accentColor := ggui.State(ggui.AccentBlue)
+	themeStyle := ggui.State(ggui.StyleRhea)
+	themeAction := ggui.State("Change a token preset or try the actions.")
+	emojiText := ggui.State("Hello 👋🏽  🇰🇷  👩🏽‍💻  1️⃣")
 	chatPreviews := newChatPreviews()
 	selectedDate := ggui.State(time.Now())
 	calendar := ui.Calendar(selectedDate).WeekStartsOn(time.Monday)
@@ -137,6 +143,30 @@ func newGallery() (ggui.Builder, func(), func()) {
 			).Gap(2).Align(ggui.AlignStretch)
 		}
 		entries := []ggui.Widget{
+			section("Theme presets", ggui.Column(
+				ggui.Text("Choose surfaces, accent and geometry independently. The whole gallery updates."),
+				ui.Field("Base color", ui.Select(baseColor, ggui.BaseColors()).Named("Theme base")),
+				ui.Field("Accent color", ui.Select(accentColor, ggui.AccentColors()).Named("Theme accent").Format(func(v ggui.AccentColor) string {
+					if v == "" {
+						return "base"
+					}
+					return string(v)
+				})),
+				ui.Field("Style", ui.Select(themeStyle, ggui.ThemeStyles()).Named("Theme style")),
+				ggui.Grid(4, swatch("Background", t.Bg), swatch("Primary", t.Primary), swatch("Secondary", t.Secondary), swatch("Accent", t.Accent), swatch("Card", t.Card), swatch("Border", t.Border), swatch("Input border", t.InputBorder), swatch("Ring", t.Ring)).Gap(8),
+				ggui.Row(ui.Button("Primary action", func() { themeAction.Set("Primary action selected.") }), ui.Button("Secondary action", func() { themeAction.Set("Secondary action selected.") }).Secondary()).Gap(8),
+				ui.Bubble(ggui.Text("Theme tokens also shape chat bubbles 👍")).End(),
+				ggui.TextOf(themeAction).AsCaption(),
+			).Gap(12).Align(ggui.AlignStretch)),
+			section("Emoji", ggui.Column(
+				ggui.Text("Faces 😀 😭 🫩   Reactions 👍 🔥 👀").Size(22),
+				ggui.Text("Skin tones 👋🏻 👋🏽 👋🏿   Flags 🇰🇷 🇺🇸").Size(20),
+				ggui.Text("Families 👨‍👩‍👧‍👦   Work 👩🏽‍💻   Keycaps 1️⃣ #️⃣").Size(20),
+				ui.TextField(emojiText).Named("Emoji text").Multiline().Lines(2),
+				ggui.TextOf(emojiText).Size(24),
+				ui.Button("Insert emoji sequence", func() { emojiText.Set(emojiText.Peek() + " 🏳️‍🌈 👨‍👩‍👧‍👦") }).Outline(),
+				ggui.Caption("Type, paste, select and delete: composed emoji stay together."),
+			).Gap(16).Align(ggui.AlignStretch)),
 			section("Buttons", ggui.Column(
 				ggui.Wrap(ui.Button("Save changes", func() { toasts.Push(ui.Toast("Saved", "Your changes are stored.")) }), ui.Button("Outline", func() { toasts.Push(ui.Toast("Outline action", "Outline buttons support quieter actions.")) }).Outline(), ui.Button("Disabled", nil).Disabled(true)).Gap(8),
 				ggui.Wrap(ui.Button("Secondary", nil).Secondary(), ui.Button("Ghost", nil).Ghost(), ui.Button("Delete", func() {
@@ -398,7 +428,17 @@ func newGallery() (ggui.Builder, func(), func()) {
 	}
 
 	setup := func() {
-		ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme())
+		notoemoji.Enable()
+		ggui.Effect(func() {
+			preset := ggui.ThemePreset{Base: baseColor.Get(), Accent: accentColor.Get(), Style: themeStyle.Get()}
+			t := preset.Light()
+			if dark.Get() {
+				t = preset.Dark()
+			}
+			fonts := chatFonts()
+			t.Text.Font, t.Title.Font = fonts[0], fonts[1]
+			ggui.SetTheme(t)
+		})
 		ggui.OnCleanup(toasts.Close)
 	}
 	return build, setup, func() { paletteOpen.Set(true) }

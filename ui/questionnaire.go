@@ -69,7 +69,6 @@ type QuestionnaireWidget struct {
 	onSubmit       func(QuestionAnswers)
 	onItem         func(string)
 	onStatus       func(string, QuestionStatus)
-	theme          ggui.Theme
 }
 
 func Questionnaire(answers ggui.Binding[QuestionAnswers], items ...Question) *QuestionnaireWidget {
@@ -376,7 +375,6 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 	q.revision.Get()
 	q.answers.Get()
 	q.active.Get()
-	q.theme = ggui.UseTheme()
 	q.choices = nil
 	q.input = nil
 	i := q.current()
@@ -385,10 +383,14 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 	}
 	item := q.items[i]
 	current, total := q.Progress()
-	body := []ggui.Widget{&questionProgress{ggui.Caption(fmt.Sprintf("Question %d of %d", current, total)), current, total}, ggui.Text(item.Title).AsTitle().Size(16)}
+	heading := []ggui.Widget{ggui.Text(item.Title).AsTitle().Size(16).LineHeight(1.5)}
 	if item.Description != "" {
-		body = append(body, ggui.Text(item.Description).Color(q.theme.MutedFg))
+		heading = append(heading, ggui.Text(item.Description).AsCaption().Size(14).LineHeight(1.5))
 	}
+	body := []ggui.Widget{ggui.Column(
+		&questionProgress{ggui.Caption(fmt.Sprintf("Question %d of %d", current, total)), current, total},
+		ggui.Column(heading...).Gap(2).Align(ggui.AlignStretch),
+	).Gap(20).Align(ggui.AlignStretch)}
 	rows := []ggui.Widget{}
 	shortcut := 0
 	for ci, choice := range item.Choices {
@@ -429,11 +431,11 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 			}
 			return false
 		})
-		rows = append(rows, q.input)
+		rows = append(rows, &questionInput{q.input})
 	}
 	body = append(body, ggui.Column(rows...).Gap(8).Align(ggui.AlignStretch))
 	if message := q.errors[item.Name]; message != "" {
-		body = append(body, ggui.Text(message).Color(q.theme.Destructive).Size(14))
+		body = append(body, &questionError{ggui.Text(message).Size(14)})
 	}
 	actions := []ggui.Widget{}
 	if current > 1 {
@@ -445,7 +447,7 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 	label := pick(current == total, q.submitLabel, "Next")
 	actions = append(actions, q.button(label, func() { q.Next() }, false))
 	body = append(body, &questionActions{children: actions, previous: current > 1})
-	return ggui.Column(body...).Gap(16).Align(ggui.AlignStretch)
+	return &questionStack{ggui.Column(body...).Align(ggui.AlignStretch)}
 }
 func (q *QuestionnaireWidget) button(label string, fn func(), outline bool) ggui.Widget {
 	b := Button(label, fn)
@@ -595,15 +597,17 @@ func (c *questionChoice) selected() bool {
 }
 func (c *questionChoice) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	c.theme = env.Theme()
-	text := []ggui.Widget{ggui.Text(c.option.Label).Color(pick(c.Inert, c.theme.MutedFg, c.theme.Fg))}
+	text := []ggui.Widget{ggui.Text(c.option.Label).Font(env.Theme().Title.Font).Size(14).LineHeight(1.5).Color(pick(c.Inert, c.theme.MutedFg, c.theme.Fg))}
 	if c.option.Description != "" {
-		text = append(text, ggui.Text(c.option.Description).Size(14).Color(c.theme.MutedFg))
+		text = append(text, ggui.Text(c.option.Description).Size(14).LineHeight(1.5).Color(c.theme.MutedFg))
 	}
-	parts := []ggui.Widget{ggui.Box().Width(16).Height(16), ggui.Expanded(ggui.Column(text...).Gap(2))}
+	parts := []ggui.Widget{ggui.Box().Width(16).Height(16), ggui.Expanded(ggui.Column(text...).Gap(c.theme.ChatTokens().QuestionTextGap))}
 	if c.shortcut != "" {
-		parts = append(parts, Kbd(c.shortcut))
+		parts = append(parts, ggui.Box(ggui.Center(ggui.Text(c.shortcut).Size(10).Color(c.theme.MutedFg))).
+			Width(20).Height(20).Radius(8).Fill(c.theme.Bg).Border(1, c.theme.Border))
 	}
-	c.body = ggui.Padding(ggui.Row(parts...).Gap(10), 10, 12)
+	tokens := c.theme.ChatTokens()
+	c.body = ggui.Box(ggui.Row(parts...).Gap(tokens.QuestionChoiceGap).Align(ggui.AlignStart)).Padding(tokens.QuestionChoicePadding)
 	s := c.body.Layout(cs, env)
 	s.H = max(44, s.H)
 	return cs.Constrain(s)
@@ -611,7 +615,7 @@ func (c *questionChoice) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 func (c *questionChoice) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := c.theme
 	selected := c.selected()
-	fill, border := t.Card, t.Border
+	fill, border := mix(t.Bg, t.Muted, .2), t.Border
 	if selected {
 		fill = t.Muted
 		border = mix(t.Primary, t.Card, .6)
@@ -621,11 +625,12 @@ func (c *questionChoice) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if c.q.errors[c.item.Name] != "" {
 		border = t.Destructive
 	}
-	dst.FillRoundRect(r, 8, fill)
-	dst.StrokeRoundRect(r, 8, 1, border)
+	tokens := t.ChatTokens()
+	dst.FillRoundRect(r, tokens.QuestionRadius, fill)
+	dst.StrokeRoundRect(r, tokens.QuestionRadius, 1, border)
 	c.Hit(dst, r, c, ebiten.CursorShapePointer)
 	dst.Paint(c.body, r)
-	glyph := ggui.Rct(r.Origin.Add(ggui.Pt(12.0, 12.0)), ggui.Sz(16, 16))
+	glyph := ggui.Rct(r.Origin.Add(ggui.Pt(tokens.QuestionChoicePadding.Left, tokens.QuestionChoicePadding.Top+2)), ggui.Sz(16, 16))
 	radius := pick(c.item.Multiple, 4.0, 8.0)
 	dst.FillRoundRect(glyph, radius, t.Input)
 	dst.StrokeRoundRect(glyph, radius, 1, pick(selected, t.Primary, t.Border))
@@ -640,7 +645,7 @@ func (c *questionChoice) Paint(dst *ggui.Canvas, r ggui.Rect) {
 			dst.FillCircle(glyph.Origin.Add(ggui.Pt(8, 8)), 4, t.PrimaryFg)
 		}
 	}
-	c.FocusRing(dst, r, 8, t.Ring)
+	c.FocusRing(dst, r, tokens.QuestionRadius, t.Ring)
 }
 func (c *questionChoice) HandlePointer(ev ggui.PointerEvent) bool {
 	if c.Inert {
@@ -727,3 +732,32 @@ func (a *questionActions) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	return a.body.Layout(c, env)
 }
 func (a *questionActions) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(a.body, r) }
+
+// The questionnaire input uses the compact 32px chrome from its reference,
+// while preserving the editor's normal focus, IME and clipboard handling.
+type questionInput struct{ *TextFieldWidget }
+
+func (f *questionInput) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	t := env.Theme()
+	t.FieldPad = ggui.Insets(5, 10)
+	t.Radius = t.ChatTokens().QuestionInputRadius
+	t.Input = mix(t.Bg, t.Input, .3)
+	c.MinH = min(c.MaxH, max(c.MinH, 32))
+	return f.TextFieldWidget.Layout(c, env.WithTheme(t))
+}
+
+// Theme-dependent presentation resolves at layout, including under Themed.
+// A palette swap must not reconstruct the editor or reset the answers.
+type questionStack struct{ *ggui.ColumnWidget }
+
+func (s *questionStack) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	s.Gap(env.Theme().ChatTokens().QuestionGap)
+	return s.ColumnWidget.Layout(c, env)
+}
+
+type questionError struct{ *ggui.TextWidget }
+
+func (e *questionError) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	e.Color(env.Theme().Destructive)
+	return e.TextWidget.Layout(c, env)
+}

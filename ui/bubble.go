@@ -96,7 +96,8 @@ func (b *BubbleWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		fg = mix(fg, b.theme.Card, b.theme.DisabledMix)
 	}
 	b.content.Size(14).LineHeight(1.625).Color(fg)
-	b.box.Pad(8, 12).Radius(12)
+	tokens := b.theme.ChatTokens()
+	b.box.Padding(tokens.BubblePadding).Radius(tokens.BubbleRadius)
 	maxW := c.MaxW * .8
 	if b.variant == "ghost" {
 		b.box.Pad(0).Radius(0)
@@ -104,7 +105,7 @@ func (b *BubbleWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	b.bodySize = b.box.Layout(ggui.Loose(ggui.Sz(maxW, c.MaxH)), env)
 	if b.reactionBox != nil {
-		b.reactionBox.Fill(b.theme.Muted).Border(3, b.theme.Card)
+		b.reactionBox.Fill(b.theme.Muted)
 		b.reactionSize = b.reactionBox.Layout(ggui.Loose(ggui.Sz(maxW, c.MaxH)), env)
 	}
 	return c.Constrain(ggui.Sz(bounded(c.MaxW, b.bodySize.W), b.bodySize.H))
@@ -136,7 +137,7 @@ func (b *BubbleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	dst.Paint(b.box, body)
 	if b.action != nil {
-		b.FocusRing(dst, body, 12, b.theme.Ring)
+		b.FocusRing(dst, body, b.theme.ChatTokens().BubbleRadius, b.theme.Ring)
 	}
 	if b.reactionBox != nil {
 		x := body.Origin.X + body.Size.W - b.reactionSize.W - 12
@@ -148,7 +149,10 @@ func (b *BubbleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		if b.reactionTop {
 			y = body.Origin.Y - b.reactionSize.H*.75
 		}
-		dst.Paint(b.reactionBox, ggui.Rct(ggui.Pt(x, y), b.reactionSize))
+		reaction := ggui.Rct(ggui.Pt(x, y), b.reactionSize)
+		// CSS rings sit outside the pill instead of consuming its content padding.
+		dst.FillRoundRect(ggui.Rct(reaction.Origin.Add(ggui.Pt(-3, -3)), ggui.Sz(reaction.Size.W+6, reaction.Size.H+6)), 100, b.theme.Card)
+		dst.Paint(b.reactionBox, reaction)
 	}
 }
 func (b *BubbleWidget) HandlePointer(ev ggui.PointerEvent) bool {

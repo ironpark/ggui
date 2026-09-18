@@ -255,6 +255,18 @@ func (e Env) Get[T any](k Key[T]) (T, bool) {
 // literal: a zero field is a zero size, not an inherited one, so a literal
 // that omits ControlSize paints no checkbox.
 type Theme struct {
+	// Additional shadcn semantic pairs. Nil values on hand-built legacy themes
+	// fall back to the existing general foreground/surface tokens in controls.
+	CardFg, PopoverFg                color.Color
+	Accent, AccentFg                 color.Color
+	InputBorder                      color.Color // CSS --input; Input below is the painted surface
+	Sidebar, SidebarFg               color.Color
+	SidebarPrimary, SidebarPrimaryFg color.Color
+	SidebarAccent, SidebarAccentFg   color.Color
+	SidebarBorder, SidebarRing       color.Color
+	Chart                            [5]color.Color
+	Chat                             ChatTokens
+
 	Text    TextStyle // the base every Text inherits
 	Title   TextStyle // merged onto Text for headings
 	Caption TextStyle // merged onto Text for small secondary text
@@ -346,6 +358,7 @@ func DefaultTheme() Theme {
 	mutedFg := color.RGBA{0x71, 0x71, 0x7a, 0xff} // zinc-500
 	nearWhite := color.RGBA{0xfa, 0xfa, 0xfa, 0xff}
 	return Theme{
+		Chat:    defaultChat(),
 		Text:    TextStyle{Size: 14, Color: fg, LineHeight: 1.4},
 		Title:   TextStyle{Size: 24},
 		Caption: TextStyle{Size: 12, Color: mutedFg},

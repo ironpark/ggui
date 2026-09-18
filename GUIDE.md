@@ -479,6 +479,28 @@ on a `Font` chooses a chain of your own and `NoFallback()` turns it off.
 `LoadFontFile` also reads the first face of a `.ttc`; `LoadFontCollection`
 returns them all.
 
+`Text` and `TextInput` render color emoji as part of ordinary strings. Emoji
+presentation selectors, skin tones, regional-indicator flags, keycaps and ZWJ
+sequences stay together when shaping, wrapping, moving the caret or deleting.
+Native apps use `SystemEmojiFont()` when available. For a predictable offline
+font, including WebAssembly:
+
+```go
+import "github.com/ironpark/ggui/fonts/notoemoji"
+
+notoemoji.Enable() // before building the app
+label := ggui.Text("Hello 👋🏽 · 🇰🇷 · 👩🏽‍💻 · 1️⃣")
+```
+
+The optional Noto package embeds approximately 10.7 MB of font data; apps that
+do not import it do not embed it. `SetEmojiFont(font)` selects a caller-owned
+CBDT/CBLC, sbix, COLRv0 or OpenType SVG font without replacing the text font.
+`SetEmojiFont(nil)` disables substitution; `SetEmojiFont(SystemEmojiFont())`
+restores the platform font. `Font.NoFallback()` opts that font out as well.
+Actual glyph coverage depends on the selected emoji font. Explicit text
+presentation (VS15) stays in the ordinary font; emoji presentation (VS16) uses
+the emoji font. Color glyphs retain their colors when text color changes.
+
 ### Containers and feedback
 
 | Control | Behavior |
@@ -1207,7 +1229,17 @@ and [Questionnaire](https://ui.shadcn.com/docs/components/base/questionnaire)
 contracts with native Go widgets, bindings and callbacks. Surface colors come
 from the current theme; typography uses the application's native font. The
 gallery has separate Attachment, Bubble, Message, Marker, Message Scroller and
-Questionnaire previews in both themes.
+Questionnaire previews in both themes. The chat surfaces follow the official
+Rhea demos (24px bubble corners, 16px attachment corners); the questionnaire
+follows the Nova demo. Bubble groups use 8px spacing, separate turns use 24–32px,
+and reaction rings sit outside the pill. Native text metrics are accounted for
+in the bubble padding.
+
+The gallery's reference scenes bundle Geist, the original demo photos/avatars,
+and the optional Noto Color Emoji font for consistent offline/native/WASM
+rendering. The gallery uses ThemePreset for its palette and geometry; library
+widgets continue to use the host theme and font. Sources and licenses are listed in
+[the asset notes](examples/gallery/assets/chat/README.md).
 
 ### Attachments
 

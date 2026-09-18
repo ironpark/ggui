@@ -82,10 +82,11 @@ type TextWidget struct {
 
 // wrapKey is the input wrapText was last run with.
 type wrapKey struct {
-	value string
-	font  *Font
-	size  float64
-	maxW  float64
+	generation uint64
+	value      string
+	font       *Font
+	size       float64
+	maxW       float64
 }
 
 // textRole picks a named style from the theme at layout.
@@ -218,7 +219,7 @@ func (t *TextWidget) Layout(c Constraints, env Env) Size {
 	t.resolved = base.Merge(t.style).resolved()
 	t.resolved.Size *= env.TextScale()
 	face := t.faceAt(1)
-	key := wrapKey{value: t.value, font: t.resolved.Font, size: t.resolved.Size, maxW: pick(t.wrap, c.MaxW, 0)}
+	key := wrapKey{generation: fontGeneration, value: t.value, font: t.resolved.Font, size: t.resolved.Size, maxW: pick(t.wrap, c.MaxW, 0)}
 	if key != t.wrapped {
 		t.wrapped = key
 		t.lines = wrapText(key.value, face, key.maxW)
@@ -256,7 +257,7 @@ func (t *TextWidget) Paint(dst *Canvas, r Rect) {
 		y := r.Origin.Y + float64(i)*t.spacing()
 		op.GeoM.Reset()
 		op.GeoM.Translate(dst.px(x), dst.px(y))
-		text.Draw(dst.Image, line, face, op)
+		drawText(dst.Image, line, face, op)
 	}
 }
 

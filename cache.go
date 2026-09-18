@@ -14,12 +14,13 @@ package ggui
 type CachedWidget struct {
 	child Widget
 
-	outer *CachedWidget // the nearest Cached above, told when this one is
-	dirty bool
-	valid bool
-	cons  Constraints
-	rev   uint64 // the Env revision the size was measured under
-	size  Size
+	outer   *CachedWidget // the nearest Cached above, told when this one is
+	dirty   bool
+	valid   bool
+	cons    Constraints
+	fontGen uint64
+	rev     uint64 // the Env revision the size was measured under
+	size    Size
 }
 
 var cacheOwner = NewKey[*CachedWidget]("layoutCache")
@@ -40,10 +41,11 @@ func (c *CachedWidget) invalidate() {
 // Layout implements Widget.
 func (c *CachedWidget) Layout(cs Constraints, env Env) Size {
 	c.outer, _ = env.Get(cacheOwner)
-	if c.valid && !c.dirty && cs == c.cons && env.rev == c.rev {
+	if c.valid && !c.dirty && cs == c.cons && env.rev == c.rev && c.fontGen == fontGeneration {
 		return c.size
 	}
 	c.size = c.child.Layout(cs, env.With(cacheOwner, c))
+	c.fontGen = fontGeneration
 	c.cons, c.rev, c.valid, c.dirty = cs, env.rev, true, false
 	return c.size
 }

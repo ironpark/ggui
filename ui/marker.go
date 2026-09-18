@@ -25,7 +25,7 @@ func (m *MarkerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	width := c.MaxW
 	m.iconSize = ggui.Size{}
 	if m.icon != nil {
-		m.iconSize = m.icon.Layout(ggui.Loose(ggui.Sz(16, 16)), env)
+		m.iconSize = m.icon.Layout(ggui.Loose(ggui.Sz(16, 16)), env.WithText(ggui.TextStyle{Color: m.theme.MutedFg}))
 		width = max(0, width-24)
 	}
 	if m.variant == "separator" {

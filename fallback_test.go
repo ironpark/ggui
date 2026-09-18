@@ -12,6 +12,9 @@ func TestKoreanFallsBackToASystemFont(t *testing.T) {
 		t.Skip("no system CJK font on this machine")
 	}
 	face := fallbackFont().face(14)
+	if ef, ok := face.(*emojiFace); ok {
+		face = ef.Face
+	}
 	if _, ok := face.(*text.MultiFace); !ok {
 		t.Fatalf("default face is %T, want a MultiFace with system fallbacks", face)
 	}

@@ -17,6 +17,7 @@ that were built long before it.
 - [Local styles](#local-styles)
 - [Inherited styles](#inherited-styles)
 - [Theme tokens](#theme-tokens)
+- [Theme presets](#theme-presets)
 - [Deriving a theme](#deriving-a-theme)
 - [Porting a shadcn/ui palette](#porting-a-shadcnui-palette)
 - [Tokens of your own](#tokens-of-your-own)
@@ -338,3 +339,55 @@ having to know the preference exists.
 
 See [GUIDE.md](GUIDE.md) for the rest of the framework, and
 [GUIDE.md#animation](GUIDE.md#animation) for the values that move over time.
+
+## Theme presets
+
+`ThemePreset` combines the [shadcn/ui semantic color tokens](https://ui.shadcn.com/docs/theming)
+with ggui's geometry tokens. Palette data is vendored locally; constructing a
+preset never needs a network connection.
+
+```go
+preset := ggui.ThemePreset{
+    Base: ggui.BaseNeutral,
+    Accent: ggui.AccentBlue,
+    Style: ggui.StyleRhea,
+}
+ggui.BindTheme(dark, preset.Dark(), preset.Light())
+
+// Returned Themes are independent values; customize after selecting a preset.
+theme := preset.Light()
+theme.Chat.BubbleRadius = 20
+theme.Chat.BubblePadding = ggui.Insets(10, 14)
+ggui.SetTheme(theme)
+```
+
+The zero preset uses Neutral/Nova with no accent override. `DefaultTheme()` and
+`DarkTheme()` preserve the existing ggui appearance.
+
+| Axis | Presets |
+| --- | --- |
+| `BaseColor` | Neutral, Stone, Zinc, Mauve, Olive, Mist, Taupe |
+| `AccentColor` | Base (no override), Amber, Blue, Cyan, Emerald, Fuchsia, Green, Indigo, Lime, Orange, Pink, Purple, Red, Rose, Sky, Teal, Violet, Yellow |
+| `ThemeStyle` | Nova, Rhea |
+
+`BaseColors()`, `AccentColors()` and `ThemeStyles()` return independent slices
+for pickers. Unknown enum names panic. An accent changes primary, secondary,
+chart and sidebar-primary tokens while preserving the selected base surfaces.
+Nova uses tighter corners and spacing; Rhea uses rounder controls, 24px bubble
+corners and 16px attachment corners. These are native token mappings for ggui's
+components, not CSS execution. `Theme.Chat` controls bubble padding/radius,
+attachment radii and questionnaire geometry. Fonts remain caller-configurable
+through `Theme.Text.Font` and `Theme.Title.Font`.
+
+The semantic additions are `CardFg`, `PopoverFg`, `Accent`/`AccentFg`,
+`InputBorder`, `Chart[5]` and `Sidebar`/`SidebarFg`, `SidebarPrimary`/
+`SidebarPrimaryFg`, `SidebarAccent`/`SidebarAccentFg`, `SidebarBorder` and
+`SidebarRing`. They preserve the corresponding shadcn roles, including alpha
+on dark borders. CSS `--input` maps to `InputBorder`; ggui's existing `Input`
+continues to mean the painted input surface. Color values are converted from
+OKLCH to sRGB, clipping out-of-gamut channels at the rendering boundary.
+
+The gallery's **Theme presets** preview switches base, accent and style for the
+whole gallery, and the dark-mode switch preserves all three choices. **Emoji**
+demonstrates color glyphs in labels and editable text. Gallery fonts and emoji
+assets are embedded, so the same previews run offline in native and WASM builds.

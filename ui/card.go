@@ -37,7 +37,7 @@ func (c *CardWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 		c.box.Padding(t.CardPad)
 	}
 	c.box.Fill(t.Card).Border(t.BorderWidth, t.Border).Radius(t.RadiusLg)
-	return c.box.Layout(cs, env)
+	return c.box.Layout(cs, env.WithText(ggui.TextStyle{Color: colorOr(t.CardFg, t.Fg)}))
 }
 
 // Paint implements Widget. A card groups what is inside it, which a

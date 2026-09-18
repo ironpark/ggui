@@ -22,6 +22,7 @@ type Font struct {
 	src        *text.GoTextFaceSource
 	fallbacks  []*Font
 	noFallback bool
+	generation uint64
 	faces      map[float64]text.Face // one face per size, reused across frames
 }
 
@@ -72,12 +73,16 @@ func LoadFontFile(path string) (*Font, error) {
 func (f *Font) Fallback(fonts ...*Font) *Font {
 	f.fallbacks = append(f.fallbacks, fonts...)
 	f.faces = nil
+	fontGeneration++
+	requestLayout()
 	return f
 }
 
 // NoFallback draws only f's own glyphs, with no system fonts behind it.
 func (f *Font) NoFallback() *Font {
 	f.noFallback, f.faces = true, nil
+	fontGeneration++
+	requestLayout()
 	return f
 }
 
@@ -178,6 +183,7 @@ var defaultFont *Font
 // with the glyphs you need for anything else.
 func SetDefaultFont(f *Font) {
 	defaultFont = f
+	fontGeneration++
 	requestLayout()
 }
 
@@ -191,6 +197,10 @@ func fallbackFont() *Font {
 }
 
 func (f *Font) face(size float64) text.Face {
+	if f.generation != fontGeneration {
+		f.faces = nil
+		f.generation = fontGeneration
+	}
 	if face, ok := f.faces[size]; ok {
 		return face
 	}
@@ -210,6 +220,9 @@ func (f *Font) face(size float64) text.Face {
 			face = m
 		}
 	}
+	if !f.noFallback {
+		face = withEmoji(face, size)
+	}
 	if f.faces == nil {
 		f.faces = make(map[float64]text.Face)
 	}
@@ -217,10 +230,14 @@ func (f *Font) face(size float64) text.Face {
 	return face
 }
 
-func lineWidth(s string, face text.Face) float64 { return text.Advance(s, face) }
+func lineWidth(s string, face text.Face) float64 {
+	width := 0.0
+	textRuns(s, face, func(run string, f text.Face) { width += text.Advance(run, f) })
+	return width
+}
 
 // wrapText breaks s into lines no wider than maxW. Hard line breaks are kept;
-// soft breaks fall on spaces, or between runes when a single word is wider
+// soft breaks fall on spaces, or between grapheme clusters when a single word is wider
 // than the line, which is what scripts written without spaces need.
 func wrapText(s string, face text.Face, maxW float64) []string {
 	var out []string
@@ -259,20 +276,19 @@ func wrapLine(line string, face text.Face, maxW float64) []string {
 }
 
 // breakRunes splits word into pieces no wider than maxW, never emptier than
-// one rune so progress is guaranteed.
+// one grapheme so progress is guaranteed.
 func breakRunes(word string, face text.Face, maxW float64) []string {
 	var pieces []string
-	var cur []rune
-	for _, r := range word {
-		cand := append(cur, r)
-		if len(cur) > 0 && lineWidth(string(cand), face) > maxW {
-			pieces = append(pieces, string(cur))
-			cur = []rune{r}
-			continue
+	start := 0
+	for i := 0; i < len(word); {
+		end := nextGrapheme(word, i)
+		if i > start && lineWidth(word[start:end], face) > maxW {
+			pieces = append(pieces, word[start:i])
+			start = i
 		}
-		cur = cand
+		i = end
 	}
-	return append(pieces, string(cur))
+	return append(pieces, word[start:])
 }
 
 // lineSpan is one drawn line of a wrapped string as byte offsets: the text
@@ -301,7 +317,7 @@ func wrapSpans(s string, face text.Face, maxW float64) []lineSpan {
 }
 
 // wrapParagraph wraps text without hard breaks: greedily by words, and
-// between runes when a word alone is wider than maxW.
+// between grapheme clusters when a word alone is wider than maxW.
 func wrapParagraph(p string, face text.Face, maxW float64) []lineSpan {
 	if maxW <= 0 || lineWidth(p, face) <= maxW {
 		return []lineSpan{{0, len(p)}}
@@ -330,10 +346,10 @@ func wrapParagraph(p string, face text.Face, maxW float64) []lineSpan {
 			lineEnd = wend
 			continue
 		}
-		// A word wider than the line, alone on it: break between runes.
+		// A word wider than the line, alone on it: break between grapheme clusters.
 		for j := lineStart; j < wend; {
-			k := nextRune(p, j)
-			if k < wend && lineWidth(p[lineStart:nextRune(p, k)], face) > maxW {
+			k := nextGrapheme(p, j)
+			if k < wend && lineWidth(p[lineStart:nextGrapheme(p, k)], face) > maxW {
 				lines = append(lines, lineSpan{lineStart, k})
 				lineStart, j = k, k
 				continue

@@ -304,16 +304,29 @@ func TestGalleryChatComponentFlows(t *testing.T) {
 	p := galleryProbe(ggui.Sz(1180, 900))
 	defer p.Close()
 	searchGallery(p, "Attachment")
+	p.Tap("Cancel upload")
+	if _, ok := p.Find("Cancel upload"); ok {
+		t.Fatal("cancelled upload still visible")
+	}
+	p.Tap("Remove source attachment")
+	if _, ok := p.Find("Remove source attachment"); ok {
+		t.Fatal("removed source still visible")
+	}
+	revealGallery(p, "Retry upload")
 	p.Tap("Retry upload")
 	if n, ok := p.Semantics().Find(ggui.RoleGroup, "design-system.zip"); !ok || n.Description != "uploading" {
 		t.Fatal("attachment lifecycle is not bound")
 	}
+	revealGallery(p, "Remove brief.pdf")
 	p.Tap("Remove brief.pdf")
 	if _, ok := p.Find("Remove brief.pdf"); ok {
 		t.Fatal("attachment removal failed")
 	}
+	revealGallery(p, "Restore attachments")
 	p.Tap("Restore attachments")
 	searchGallery(p, "Bubble")
+	revealGallery(p, "More bubble variants")
+	p.Tap("More bubble variants")
 	revealGallery(p, "Choose suggestion")
 	p.Tap("Choose suggestion")
 	if _, ok := p.Semantics().Find(ggui.RoleText, "Suggestion selected."); !ok {
@@ -331,7 +344,7 @@ func TestGalleryChatComponentFlows(t *testing.T) {
 	if _, ok := p.Semantics().Find(ggui.RoleText, "Choose an answer to continue."); !ok {
 		t.Fatal("questionnaire validation missing")
 	}
-	p.Tap("Activity timeline")
+	p.Tap("Tool call timeline")
 	p.Type(ggui.Mods{}, ebiten.KeyEnter)
 	p.Tap("Skip")
 	p.Tap("Audience")
@@ -341,7 +354,44 @@ func TestGalleryChatComponentFlows(t *testing.T) {
 		t.Fatal("questionnaire submission failed")
 	}
 	p.Tap("Reset questionnaire")
-	if _, ok := p.Find("Activity timeline"); !ok {
+	if _, ok := p.Find("Tool call timeline"); !ok {
 		t.Fatal("questionnaire reset failed")
+	}
+}
+
+func TestGalleryEmojiEditingAndThemePresets(t *testing.T) {
+	p := galleryProbe(ggui.Sz(1180, 900))
+	defer p.Close()
+	searchGallery(p, "Emoji")
+	p.Tap("Emoji text")
+	p.Type(ggui.Mods{Meta: true}, ebiten.KeyA)
+	pasteText(p, "Hello 👩🏽‍💻")
+	p.Type(ggui.Mods{}, ebiten.KeyBackspace)
+	if _, ok := p.Semantics().Find(ggui.RoleText, "Hello "); !ok {
+		t.Fatal("emoji backspace split or lost text")
+	}
+	p.Tap("Insert emoji sequence")
+	if _, ok := p.Semantics().Find(ggui.RoleText, "Hello  🏳️‍🌈 👨‍👩‍👧‍👦"); !ok {
+		t.Fatal("emoji sequence insertion did not update text")
+	}
+	searchGallery(p, "Theme presets")
+	p.Tap("Theme base")
+	p.Type(ggui.Mods{}, ebiten.KeyArrowDown, ebiten.KeyEnter)
+	p.Frame()
+	want := ggui.ThemePreset{Base: ggui.BaseStone, Accent: ggui.AccentBlue, Style: ggui.StyleRhea}.Light()
+	if ggui.UseTheme().Bg != want.Bg || ggui.UseTheme().Muted != want.Muted {
+		t.Fatal("base palette not applied")
+	}
+	p.Tap("Theme style")
+	p.Type(ggui.Mods{}, ebiten.KeyArrowUp, ebiten.KeyEnter)
+	p.Frame()
+	if ggui.UseTheme().Chat.BubbleRadius != 12 {
+		t.Fatal("Nova geometry not applied")
+	}
+	p.Tap("Dark mode")
+	p.Frame()
+	want = ggui.ThemePreset{Base: ggui.BaseStone, Accent: ggui.AccentBlue, Style: ggui.StyleNova}.Dark()
+	if ggui.UseTheme().Bg != want.Bg || ggui.UseTheme().Primary != want.Primary {
+		t.Fatal("preset was lost during dark mode switch")
 	}
 }

@@ -20,7 +20,7 @@ func panelBox(b *ggui.BoxWidget, t ggui.Theme) *ggui.BoxWidget {
 func fieldBox(b *ggui.BoxWidget, t ggui.Theme, focused, inert bool) *ggui.BoxWidget {
 	return b.Padding(t.FieldPad).Radius(t.Radius).
 		Fill(pick(inert, t.Card, t.Input)).
-		Border(t.BorderWidth, pick(focused, t.Ring, t.Border))
+		Border(t.BorderWidth, pick(focused, t.Ring, colorOr(t.InputBorder, t.Border)))
 }
 
 // chevron draws the two-segment glyph a select and an accordion header share.
@@ -33,4 +33,11 @@ func chevron(dst *ggui.Canvas, center ggui.Point, dy float64, col color.Color) {
 // fieldHalo draws the focus ring just outside a text field.
 func fieldHalo(dst *ggui.Canvas, r ggui.Rect, radius float64, t ggui.Theme) {
 	dst.StrokeRoundRect(ggui.Rct(r.Origin.Add(ggui.Pt(-2, -2)), ggui.Sz(r.Size.W+4, r.Size.H+4)), radius+2, 3, t.Ring)
+}
+
+func colorOr(value, fallback color.Color) color.Color {
+	if value != nil {
+		return value
+	}
+	return fallback
 }

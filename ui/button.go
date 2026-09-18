@@ -28,11 +28,11 @@ type buttonStyle struct {
 func (v buttonVariant) resolve(t ggui.Theme) buttonStyle {
 	switch v {
 	case variantOutline:
-		return buttonStyle{fill: t.Bg, hover: t.Muted, border: t.Border, label: t.Fg, elevated: true}
+		return buttonStyle{fill: t.Bg, hover: colorOr(t.Accent, t.Muted), border: t.Border, label: t.Fg, elevated: true}
 	case variantSecondary:
 		return buttonStyle{fill: t.Secondary, hover: mix(t.Secondary, t.Fg, t.HoverMix), label: t.SecondaryFg}
 	case variantGhost:
-		return buttonStyle{hover: t.Muted, label: t.Fg}
+		return buttonStyle{hover: colorOr(t.Accent, t.Muted), label: t.Fg}
 	case variantDestructive:
 		d := t.Destructive
 		return buttonStyle{fill: d, hover: mix(d, t.Card, t.HoverMix*2), label: t.DestructiveFg, elevated: true}

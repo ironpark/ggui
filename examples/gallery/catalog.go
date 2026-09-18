@@ -11,6 +11,8 @@ import (
 type previewInfo struct{ category, description string }
 
 var previewDetails = map[string]previewInfo{
+	"Theme presets":            {"Layout", "shadcn semantic tokens: seven base palettes, seventeen accents, Nova and Rhea geometry."},
+	"Emoji":                    {"Inputs", "Color emoji in ordinary text and editors, with skin tones, flags, keycaps and joined sequences."},
 	"Attachment":               {"Data", "File and image attachments, upload states, sizes, independent actions and snapping groups."},
 	"Bubble":                   {"Layout", "Seven conversation surfaces, sender alignment, reactions and expandable content."},
 	"Message":                  {"Layout", "Conversation rows with avatars, sender headers, delivery footers and shared files."},

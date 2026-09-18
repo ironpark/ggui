@@ -147,6 +147,7 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	natural := widest + s.pad.Left + s.pad.Right + t.ControlSize + t.ControlGap
 	w := clamp(max(natural, s.minWidth), c.MinW, c.MaxW)
+	s.list.Width(w) // the popup follows its trigger, not the window width
 	s.textSize = s.text.Layout(ggui.Loose(ggui.Sz(max(w-s.pad.Left-s.pad.Right-t.ControlSize-t.ControlGap, 0), c.MaxH)), env)
 	inner := ggui.Constraints{MinW: w, MaxW: w, MinH: c.MinH, MaxH: c.MaxH}
 	return s.popup.Layout(inner, env)
@@ -157,7 +158,7 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 	t := s.theme
 	open := s.popup.IsOpen()
-	s.box.Border(t.BorderWidth, pick(open || s.Focused, t.Ring, t.Border))
+	s.box.Border(t.BorderWidth, pick(open || s.Focused, t.Ring, colorOr(t.InputBorder, t.Border)))
 	s.Hit(dst, r, s, ebiten.CursorShapePointer)
 	dst.Paint(s.box, r)
 	dst.Clip(r).Paint(s.text, ggui.Rct(ggui.Pt(r.Origin.X+s.pad.Left, r.Origin.Y+(r.Size.H-s.textSize.H)/2), s.textSize))
@@ -277,7 +278,7 @@ func (it *selectItem[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	it.Sync()
 	t := env.Theme()
 	it.pad = t.ItemPad
-	it.text.Color(t.Fg)
+	it.text.Color(colorOr(t.PopoverFg, t.Fg))
 	it.textSize = it.text.Layout(it.pad.Shrink(c).Loosen(), env)
 	return c.Constrain(it.pad.Inflate(ggui.Sz(it.textSize.W+t.ControlSize+t.ControlGap, it.textSize.H)))
 }
@@ -299,7 +300,7 @@ func (it *selectItem[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.HitPointer(r, it)
 	dst.HitCursor(r, ebiten.CursorShapePointer)
 	if it.Hovered || it.active {
-		dst.FillRoundRect(r, t.RadiusSm, t.Muted)
+		dst.FillRoundRect(r, t.RadiusSm, colorOr(t.Accent, t.Muted))
 	}
 	at := ggui.Pt(r.Origin.X+it.pad.Left+t.ControlSize+t.ControlGap, r.Origin.Y+(r.Size.H-it.textSize.H)/2)
 	dst.Paint(it.text, ggui.Rct(at, it.textSize))

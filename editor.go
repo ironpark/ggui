@@ -636,7 +636,7 @@ func (t *TextInputWidget) face(scale float64) text.Face {
 }
 
 // advance is the logical width of s as drawn.
-func (t *TextInputWidget) advance(s string) float64 { return text.Advance(t.display(s), t.face(1)) }
+func (t *TextInputWidget) advance(s string) float64 { return lineWidth(t.display(s), t.face(1)) }
 
 // rendered is the text with the composition inserted where the caret is,
 // and the caret's offset into it.
@@ -754,10 +754,10 @@ func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
 	op.GeoM.Translate(dst.px(x0), dst.px(r.Origin.Y))
 	if shown == "" && t.placeholder != "" {
 		op.ColorScale.ScaleWithColor(t.muted)
-		text.Draw(clip.Image, t.placeholder, t.face(dst.Scale()), op)
+		drawText(clip.Image, t.placeholder, t.face(dst.Scale()), op)
 	} else {
 		op.ColorScale.ScaleWithColor(t.resolved.Color)
-		text.Draw(clip.Image, t.display(shown), t.face(dst.Scale()), op)
+		drawText(clip.Image, t.display(shown), t.face(dst.Scale()), op)
 	}
 
 	if t.composition != "" {
@@ -828,7 +828,7 @@ func (t *TextInputWidget) paintLines(dst *Canvas, r Rect) {
 	if shown == "" && t.placeholder != "" {
 		op.GeoM.Translate(dst.px(x0), dst.px(y0))
 		op.ColorScale.ScaleWithColor(t.muted)
-		text.Draw(clip.Image, t.placeholder, t.face(dst.Scale()), op)
+		drawText(clip.Image, t.placeholder, t.face(dst.Scale()), op)
 	} else {
 		op.ColorScale.ScaleWithColor(t.resolved.Color)
 		for i, sp := range spans {
@@ -837,7 +837,7 @@ func (t *TextInputWidget) paintLines(dst *Canvas, r Rect) {
 			}
 			op.GeoM.Reset()
 			op.GeoM.Translate(dst.px(x0), dst.px(lineY(i)))
-			text.Draw(clip.Image, t.display(shown[sp.start:sp.end]), t.face(dst.Scale()), op)
+			drawText(clip.Image, t.display(shown[sp.start:sp.end]), t.face(dst.Scale()), op)
 		}
 	}
 

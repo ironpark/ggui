@@ -230,7 +230,7 @@ func (in *inspector) paint(dst *Canvas) {
 		indent := min(float64(e.depth)*8, textW/2)
 		drawLine(dst, face, e.name, x+indent, ry, col)
 		dims := num(e.rect.Size.W) + "×" + num(e.rect.Size.H)
-		drawLine(dst, face, dims, in.panel.Origin.X+width-inspectPad-dst.dp(text.Advance(dims, face)), ry, pick[color.Color](i == sel, color.White, inspectDim))
+		drawLine(dst, face, dims, in.panel.Origin.X+width-inspectPad-dst.dp(lineWidth(dims, face)), ry, pick[color.Color](i == sel, color.White, inspectDim))
 	}
 
 	if len(detail) == 0 {
@@ -281,7 +281,7 @@ func drawLine(dst *Canvas, face text.Face, s string, x, y float64, col color.Col
 	op := &text.DrawOptions{}
 	op.ColorScale.ScaleWithColor(col)
 	op.GeoM.Translate(dst.px(x), dst.px(y))
-	text.Draw(dst.Image, s, face, op)
+	drawText(dst.Image, s, face, op)
 }
 
 // semanticChain describes the accessibility node under p and everything it

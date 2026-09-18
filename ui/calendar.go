@@ -132,7 +132,7 @@ func (c *CalendarWidget) syncDate() {
 	v := c.date(c.value.Get())
 	if c.active.IsZero() || !v.Equal(c.last) {
 		if v.IsZero() {
-			c.show(c.date(time.Now()))
+			c.show(c.date(ggui.Now()))
 		} else {
 			c.show(v)
 		}
