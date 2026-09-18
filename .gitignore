@@ -21,3 +21,6 @@ go.work.sum
 
 # Temporary..
 /docs
+
+# Local tool state (contains keys)
+/identity.json
