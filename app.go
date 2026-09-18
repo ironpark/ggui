@@ -209,7 +209,8 @@ func (a *App) readInput() frameInput {
 			f.up = append(f.up, b)
 		}
 	}
-	f.wheel = Pt(ebiten.Wheel())
+	wx, wy := ebiten.Wheel()
+	f.wheel = Pt(wx*wheelUnit, wy*wheelUnit)
 	for _, k := range inpututil.AppendPressedKeys(nil) {
 		if d := inpututil.KeyPressDuration(k); d == 1 || d > repeatDelay && (d-repeatDelay)%repeatInterval == 0 {
 			f.keys = append(f.keys, k)

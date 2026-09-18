@@ -849,7 +849,9 @@ func Scroll(child Widget) *ScrollWidget {
 // Horizontal scrolls along the x axis instead of the y axis.
 func (s *ScrollWidget) Horizontal() *ScrollWidget { s.horizontal = true; return s }
 
-// Speed sets how many pixels one wheel unit moves.
+// Speed sets how many pixels one wheel unit moves. A unit is one mouse
+// notch on the desktop; on the web, where browsers report pixels, it is
+// 20 CSS pixels, so the default matches the browser's own scrolling.
 func (s *ScrollWidget) Speed(px float64) *ScrollWidget { s.speed = px; return s }
 
 // Bar sets the scrollbar color; nil hides the bar.
