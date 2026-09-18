@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -22,7 +23,7 @@ func TestInspectorFindsPinnedAmongSiblings(t *testing.T) {
 		entry("Button", 1, 0, 20, 100, 20),
 		entry("Button", 1, 0, 40, 100, 20),
 	)
-	in := &inspector{sel: inspectKey{"Button", 1, Rct(Pt(0, 20), Sz(100, 20))}, pinned: true}
+	in := &inspector{sel: inspectKey{name: "Button", depth: 1, rect: Rct(Pt(0, 20), Sz(100, 20))}, pinned: true}
 	if got := in.find(tr); got != 2 {
 		t.Fatalf("find = %d, want the middle button at 2", got)
 	}
@@ -31,7 +32,7 @@ func TestInspectorFindsPinnedAmongSiblings(t *testing.T) {
 // A widget that moved is still the same widget: the exact match fails and
 // the looser one keeps the selection alive rather than dropping it.
 func TestInspectorFollowsAWidgetThatMoved(t *testing.T) {
-	in := &inspector{sel: inspectKey{"Button", 1, Rct(Pt(0, 20), Sz(100, 20))}, pinned: true}
+	in := &inspector{sel: inspectKey{name: "Button", depth: 1, rect: Rct(Pt(0, 20), Sz(100, 20))}, pinned: true}
 	moved := trace(entry("Column", 0, 0, 0, 100, 60), entry("Button", 1, 0, 33, 100, 20))
 	if got := in.find(moved); got != 1 {
 		t.Fatalf("find = %d, want the moved button at 1", got)
@@ -75,19 +76,19 @@ func TestInspectorConsumesOnlyItsOwnPanel(t *testing.T) {
 	}
 }
 
-// Clicking a row pins it; clicking the header goes back to following the
+// Clicking a row pins it; clicking the picker goes back to following the
 // pointer. The wheel scrolls the tree the way ScrollWidget reads it.
 func TestInspectorPinsAndScrolls(t *testing.T) {
-	row := inspectRow{key: inspectKey{"Button", 1, Rct(Pt(0, 20), Sz(100, 20))}, index: 2, y: 60, h: 12}
-	in := &inspector{panel: Rct(Pt(200, 0), Sz(100, 300)), treeTop: 40, rows: []inspectRow{row}}
+	row := inspectRow{key: inspectKey{name: "Button", depth: 1, rect: Rct(Pt(0, 20), Sz(100, 20))}, index: 2, y: 60, h: 12}
+	in := &inspector{panel: Rct(Pt(200, 0), Sz(100, 300)), tree: Rct(Pt(200, 40), Sz(100, 260)), treeTop: 40, rows: []inspectRow{row}, chips: []inspectChip{{rect: Rct(Pt(210, 0), Sz(30, 30)), act: inspectUnpin}}}
 
 	in.input(frameInput{pos: Pt(250, 64), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
 	if !in.pinned || in.sel != row.key {
 		t.Fatalf("clicking a row did not pin it: pinned=%v sel=%+v", in.pinned, in.sel)
 	}
-	in.input(frameInput{pos: Pt(250, 10), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.input(frameInput{pos: Pt(215, 10), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
 	if in.pinned {
-		t.Fatal("clicking the header did not release the pin")
+		t.Fatal("clicking the picker did not release the pin")
 	}
 	in.input(frameInput{pos: Pt(250, 100), wheel: Pt(0, -2)})
 	if in.scroll != 2*inspectWheel {
@@ -156,6 +157,7 @@ func TestInspectorDocksToTheBottom(t *testing.T) {
 	// with nothing selected, Down starts from the top.
 	c.hasPointer = false
 	in.pinned, in.move = false, 2
+	in.sel = inspectKey{}
 	in.paint(c)
 	if !in.pinned || in.sel.rect.Origin.Y != 1 {
 		t.Fatalf("arrow step did not pin the second row: pinned=%v sel=%+v", in.pinned, in.sel)
@@ -189,6 +191,7 @@ func TestInspectorFoldsAndFilters(t *testing.T) {
 	if in.filter != "" {
 		t.Fatal("Escape did not clear the filter")
 	}
+	in.filterFocus, in.focus = true, true
 	in.input(frameInput{pos: Pt(5, 5), text: "Bu"})
 	in.input(frameInput{pos: Pt(5, 5), keys: []ebiten.Key{ebiten.KeyBackspace}})
 	if in.filter != "B" {
@@ -217,7 +220,7 @@ func TestInspectorPaintsAndCullsTheTree(t *testing.T) {
 	for i := range 200 {
 		c.trace = append(c.trace, entry("Box", i%6, 0, float64(i), 40, 10))
 	}
-	var in inspector
+	in := inspector{dock: InspectorRight}
 	in.paint(c)
 
 	if in.panel.Size.W == 0 || in.panel.Origin.X+in.panel.Size.W != 400 {
@@ -260,5 +263,213 @@ func TestInspectorClampsScroll(t *testing.T) {
 	in.paint(c)
 	if in.scroll <= 0 || in.scroll >= 1e6 {
 		t.Fatalf("scroll = %v, want it clamped to the last page", in.scroll)
+	}
+}
+
+func inspectorCanvas(w Widget, size Size) *Canvas {
+	c := &Canvas{logical: size, tracing: true}
+	c.Paint(w, Rct(Point{}, w.Layout(Tight(size), rootEnv())))
+	return c
+}
+
+func TestInspectorTracksIdentityAcrossReorderAndRemoval(t *testing.T) {
+	one, two := Scroll(Box()).Key("one"), Scroll(Box()).Key("two")
+	c := inspectorCanvas(Column(one, two), Sz(800, 600))
+	selected := -1
+	for i := range c.trace {
+		if c.trace[i].widget == two {
+			selected = i
+		}
+	}
+	var in inspector
+	in.selectEntry(c.trace, selected)
+	moved := inspectorCanvas(Column(Scroll(Box()).Key("two"), Scroll(Box()).Key("one")), Sz(800, 600))
+	found := in.find(moved.trace)
+	if found < 0 || moved.trace[found].id != "two" {
+		t.Fatal("selection did not follow the keyed widget")
+	}
+	removed := inspectorCanvas(Column(Scroll(Box()).Key("one")), Sz(800, 600))
+	if in.find(removed.trace) != -1 {
+		t.Fatal("removed keyed widget selected its neighbour")
+	}
+}
+
+func TestInspectorResolvesRebuiltWidgetByStructuralPath(t *testing.T) {
+	build := func() Widget { return Column(Text("first"), Text("second")) }
+	c := inspectorCanvas(build(), Sz(800, 600))
+	var in inspector
+	in.selectEntry(c.trace, 2)
+	next := inspectorCanvas(build(), Sz(900, 700))
+	if got := in.find(next.trace); got != 2 {
+		t.Fatalf("selected %d, want second Text", got)
+	}
+}
+
+func TestInspectorSearchesLabelsAndRoles(t *testing.T) {
+	w := &twice{}
+	w.Role, w.Name = RoleButton, "Save document"
+	c := inspectorCanvas(Column(Text("Heading"), w), Sz(800, 600))
+	for _, query := range []string{"SAVE", "button"} {
+		in := inspector{filter: query}
+		shown := in.visible(c.trace)
+		if !slices.Equal(shown, []int{0, 2}) {
+			t.Fatalf("%q matched %v, want ancestor and named control", query, shown)
+		}
+	}
+}
+
+func TestInspectorPickerRespectsClipAndPaintOrder(t *testing.T) {
+	tr := trace(entry("Content", 0, 0, 0, 100, 100), entry("Hidden", 4, 0, 0, 100, 100))
+	tr[1].clipped, tr[1].clip = true, Rct(Pt(0, 0), Sz(10, 10))
+	if deepest(tr, Pt(50, 50)) != 0 {
+		t.Fatal("picked a clipped-out widget")
+	}
+	tr = append(tr, entry("Overlay", 0, 0, 0, 100, 100))
+	if deepest(tr, Pt(5, 5)) != 2 {
+		t.Fatal("picked an earlier deep child through a later overlay")
+	}
+}
+
+func TestInspectorPickerConsumesPressAndRelease(t *testing.T) {
+	c := inspectorCanvas(Box(), Sz(1000, 700))
+	in := inspector{picking: true}
+	in.paint(c)
+	for _, f := range []frameInput{
+		{pos: Pt(20, 20), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}},
+		{pos: Pt(20, 20), up: []ebiten.MouseButton{ebiten.MouseButtonLeft}},
+	} {
+		if !in.input(f) {
+			t.Fatal("picker leaked a click to the inspected app")
+		}
+	}
+	if !in.pinned || in.picking || in.capture {
+		t.Fatal("picker did not pin and finish its gesture")
+	}
+	if in.input(frameInput{pos: Pt(20, 20)}) {
+		t.Fatal("keyboard focus blocked subsequent app hover")
+	}
+}
+
+func TestInspectorIndependentPanesAndFilterFocus(t *testing.T) {
+	c := inspectorCanvas(Box(Text("Long value")).Pad(12), Sz(1200, 800))
+	in := inspector{dock: InspectorBottom}
+	in.selectEntry(c.trace, 0)
+	in.paint(c)
+	detailPoint := in.detail.Origin.Add(Pt(20.0, 60.0))
+	in.input(frameInput{pos: detailPoint, wheel: Pt(0, -2), text: "unexpected"})
+	if in.scroll != 0 || in.detailScroll != 2*inspectWheel || in.filter != "" {
+		t.Fatal("details input affected the tree or unfocused filter")
+	}
+	in.input(frameInput{pos: in.filterRect.Origin.Add(Pt(10.0, 10.0)), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.input(frameInput{pos: Pt(20, 20), text: "Long"})
+	if in.filter != "Long" {
+		t.Fatal("focused filter stopped receiving text when pointer moved")
+	}
+}
+
+func TestInspectorResizesAndClampsPanel(t *testing.T) {
+	c := inspectorCanvas(Box(), Sz(1200, 800))
+	in := inspector{dock: InspectorRight}
+	in.paint(c)
+	in.input(frameInput{pos: in.edge.Origin.Add(Pt(2.0, 40.0)), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.input(frameInput{pos: Pt(-500, 40), up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.paint(c)
+	if in.panel.Size.W != 1200*.85 || in.drag != inspectNoDrag {
+		t.Fatalf("unbounded panel: %+v", in.panel)
+	}
+	in.act(inspectChip{act: inspectDockBottom})
+	in.paint(c)
+	in.input(frameInput{pos: in.edge.Origin.Add(Pt(40.0, 2.0)), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.input(frameInput{pos: Pt(40, 760), up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	in.paint(c)
+	if in.panel.Size.H < 180 {
+		t.Fatal("panel collapsed below usable height")
+	}
+}
+
+func TestInspectorBoxModelUsesRealLayout(t *testing.T) {
+	box := Box(Box().Size(80, 30)).Pad(7, 11, 13, 17).Border(2, red)
+	c := &Canvas{logical: Sz(1200, 800), tracing: true}
+	c.Paint(box, Rct(Pt(20, 30), box.Layout(Loose(Sz(400, 400)), rootEnv())))
+	info := inspectedBox(c.trace, 0)
+	if !info.valid || info.padding != Insets(7, 11, 13, 17) || info.border != 2 || info.content != Sz(80, 30) {
+		t.Fatalf("incorrect box model: %+v", info)
+	}
+	in := inspector{tab: inspectTabComputed}
+	if !slices.ContainsFunc(in.details(c, 0), func(f inspectField) bool { return f.key == "border" && f.value == "2 px #ff0000" }) {
+		t.Fatal("computed properties missed the actual border")
+	}
+}
+
+func TestInspectorArrowNavigationRevealsPinnedRows(t *testing.T) {
+	c := &Canvas{logical: Sz(800, 600)}
+	for i := range 100 {
+		c.trace = append(c.trace, entry("Box", 0, 0, float64(i), 30, 10))
+	}
+	var in inspector
+	in.paint(c)
+	in.focus = true
+	in.input(frameInput{keys: []ebiten.Key{ebiten.KeyEnd}})
+	in.paint(c)
+	if !in.pinned || in.sel.rect.Origin.Y != 99 || in.scroll <= 0 {
+		t.Fatal("keyboard selection did not scroll into view")
+	}
+	in.input(frameInput{pos: in.tree.Origin.Add(Pt(20.0, 20.0)), wheel: Pt(0, 2)})
+	before := in.scroll
+	in.paint(c)
+	if in.scroll != before {
+		t.Fatal("pinned selection undid manual tree scrolling")
+	}
+}
+
+func TestInspectorCopyAndClose(t *testing.T) {
+	old := currentClipboard()
+	defer SetClipboard(old)
+	mem := &MemoryClipboard{}
+	SetClipboard(mem)
+	c := inspectorCanvas(Box(Text("Example")).Pad(12), Sz(1200, 800))
+	in := inspector{dock: InspectorBottom}
+	in.selectEntry(c.trace, 0)
+	in.paint(c)
+	in.act(inspectChip{act: inspectCopy})
+	if !strings.Contains(mem.Read(), "padding: 12 12 12 12") || !strings.Contains(mem.Read(), "width:") {
+		t.Fatal("copy missed widget properties")
+	}
+	a := New(Config{}, func() Widget { return Box() })
+	a.inspect = true
+	a.insp = in
+	a.insp.act(inspectChip{act: inspectClose})
+	a.dispatchInput(frameInput{pos: a.insp.panel.Origin})
+	if a.inspect || !a.insp.panel.Empty() {
+		t.Fatal("close button did not disable the inspector")
+	}
+}
+
+func TestInspectorLetsApplicationCaptureFinish(t *testing.T) {
+	a := &App{inspect: true}
+	drags := 0
+	w := Pointer(Box()).OnDrag(func(PointerEvent) { drags++ })
+	paintFrame(&a.input, w, Sz(800, 600))
+	a.insp.paint(&Canvas{logical: Sz(800, 600)})
+	a.dispatchInput(frameInput{pos: Pt(20, 20), down: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	if a.input.pressed == nil {
+		t.Fatal("app did not capture pointer")
+	}
+	p := a.insp.panel.Origin.Add(Pt(30, 100))
+	a.dispatchInput(frameInput{pos: p})
+	a.dispatchInput(frameInput{pos: p, up: []ebiten.MouseButton{ebiten.MouseButtonLeft}})
+	if a.input.pressed != nil || drags == 0 {
+		t.Fatal("inspector interrupted application drag")
+	}
+}
+
+func TestInspectorCloseReleasesWidgetReferences(t *testing.T) {
+	c := inspectorCanvas(Box(Text("temporary")), Sz(800, 600))
+	a := &App{inspect: true}
+	a.insp.selectEntry(c.trace, 0)
+	a.insp.paint(c)
+	a.Inspector(false)
+	if a.insp.sel.id != nil || a.insp.lastTrace != nil || a.insp.rows != nil || a.insp.chips != nil || a.insp.collapsed != nil {
+		t.Fatal("closed inspector retained widget references")
 	}
 }

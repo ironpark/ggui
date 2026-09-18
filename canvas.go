@@ -33,15 +33,17 @@ type Canvas struct {
 	group   any         // what regions painted now belong to, for For's eviction
 
 	// Root-only frame state.
-	logical    Size // the window in logical pixels, for Size
-	pointer    Point
-	hasPointer bool
-	overlays   []overlay
-	trace      []traceEntry // every Paint call, when the inspector is on
-	tracing    bool
-	depth      int
-	keeps      map[retainKey]any // Retain this frame
-	prevKeeps  map[retainKey]any // Retain last frame, read by Retained
+	logical     Size // the window in logical pixels, for Size
+	pointer     Point
+	hasPointer  bool
+	overlays    []overlay
+	trace       []traceEntry // every Paint call, when the inspector is on
+	tracing     bool
+	depth       int
+	traceParent int // index plus one of the widget currently painting
+	traceRoots  int
+	keeps       map[retainKey]any // Retain this frame
+	prevKeeps   map[retainKey]any // Retain last frame, read by Retained
 
 	// The frame's accessibility tree, kept apart from hits: input scans
 	// hits on every pointer event, and most of what a screen reader reads
@@ -138,6 +140,7 @@ func (c *Canvas) nextFrame() {
 	c.inputObservers = c.inputObservers[:0]
 	c.prevKeeps, c.keeps = c.keeps, c.prevKeeps
 	clear(c.keeps)
+	c.traceParent, c.traceRoots = 0, 0
 	rotateEnvMemo()
 }
 
@@ -156,9 +159,15 @@ func (c *Canvas) Inert() *Canvas {
 
 // traceEntry is one widget's Rect as painted, for the inspector.
 type traceEntry struct {
-	rect  Rect
-	depth int
-	name  string
+	rect     Rect
+	depth    int
+	name     string
+	widget   Widget
+	id       any
+	path     string
+	children int
+	clip     Rect
+	clipped  bool
 }
 
 // root returns the Canvas a Clip chain started from.
@@ -179,9 +188,22 @@ func (c *Canvas) Paint(w Widget, r Rect) {
 	}
 	root := c.root()
 	if root.tracing {
-		root.trace = append(root.trace, traceEntry{rect: r, depth: root.depth, name: widgetName(w)})
+		parent := root.traceParent
+		path := "/" + itoa(root.traceRoots)
+		if parent > 0 {
+			p := &root.trace[parent-1]
+			path = p.path + "/" + itoa(p.children)
+			p.children++
+		} else {
+			root.traceRoots++
+		}
+		root.trace = append(root.trace, traceEntry{
+			rect: r, depth: root.depth, name: widgetName(w), widget: w,
+			id: inspectComparable(idOf(w)), path: path, clip: c.clip, clipped: c.clipped,
+		})
+		root.traceParent = len(root.trace)
 		root.depth++
-		defer func() { root.depth-- }()
+		defer func() { root.depth--; root.traceParent = parent }()
 	}
 	w.Paint(c, r)
 }

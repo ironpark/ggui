@@ -151,7 +151,25 @@ func (a *App) Semantics() *SemTree { return a.semantics() }
 // Inspector turns the widget inspector on or off: an overlay that outlines
 // every widget painted through Canvas.Paint and names the one under the
 // cursor with its size and position. Config.Inspector binds it to a key.
-func (a *App) Inspector(on bool) { a.inspect = on }
+func (a *App) Inspector(on bool) {
+	a.inspect = on
+	a.insp.closed = false
+	if !on {
+		a.insp.panel = Rect{}
+		a.insp.lastTrace = nil
+		a.insp.sel = inspectKey{}
+		a.insp.pinned = false
+		a.insp.collapsed = nil
+		a.insp.rows = nil
+		a.insp.chips = nil
+		a.insp.copyText = ""
+		a.insp.focus = false
+		a.insp.filterFocus = false
+		a.insp.picking = false
+		a.insp.drag = inspectNoDrag
+		a.insp.capture = false
+	}
+}
 
 // SetInspector docks the inspector's panel and chooses whether it outlines
 // every widget; the panel's own toolbar changes the same settings.
@@ -167,23 +185,37 @@ func (a *App) Update() error {
 	}
 	a.runPosted()
 	if a.cfg.Inspector != 0 && inpututil.IsKeyJustPressed(a.cfg.Inspector) {
-		a.inspect = !a.inspect
+		a.Inspector(!a.inspect)
 	}
 	f := a.readInput()
 	a.canvas.pointer, a.canvas.hasPointer = f.pos, true
-	// The inspector's panel takes what lands on it, so that reading the
-	// tree does not also drive the app underneath it.
-	if !a.inspect || !a.insp.input(f) {
-		a.input.dispatch(f)
+	a.dispatchInput(f)
+	cursor := a.input.cursor
+	if a.inspect && a.input.pressed == nil {
+		if shape, ok := a.insp.cursor(f.pos); ok {
+			cursor = shape
+		}
 	}
-	if a.input.cursor != a.cursor {
-		a.cursor = a.input.cursor
+	if cursor != a.cursor {
+		a.cursor = cursor
 		ebiten.SetCursorShape(a.cursor)
 	}
 	if a.closed {
 		return ebiten.Termination
 	}
 	return a.tick(frame.begin(clock()))
+}
+
+// dispatchInput lets an existing app drag finish before the inspector can
+// take the pointer. Otherwise a release over its panel would leave a slider
+// or text selection captured indefinitely.
+func (a *App) dispatchInput(f frameInput) {
+	if !a.inspect || a.input.pressed != nil || !a.insp.input(f) {
+		a.input.dispatch(f)
+	}
+	if a.insp.closed {
+		a.Inspector(false)
+	}
 }
 
 // appRunning reports whether RunGame has started, which is when platform
@@ -251,6 +283,7 @@ func (a *App) Draw(screen *ebiten.Image) {
 	a.canvas.prev, a.canvas.hits = a.canvas.hits, a.spare[:0]
 	b := screen.Bounds()
 	logical := Sz(a.canvas.dp(float64(b.Dx())), a.canvas.dp(float64(b.Dy())))
+	clear(a.canvas.trace)
 	a.canvas.tracing, a.canvas.trace = a.inspect, a.canvas.trace[:0]
 	a.canvas.logical = logical
 	a.canvas.nextFrame()

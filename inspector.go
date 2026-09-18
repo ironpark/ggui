@@ -1,68 +1,70 @@
 package ggui
 
 import (
-	"fmt"
 	"image/color"
-	"math"
+	"reflect"
 	"slices"
-	"strconv"
 	"strings"
-	"unicode/utf8"
-
-	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/text/v2"
-	"github.com/hajimehoshi/ebiten/v2/vector"
 )
-
-// The inspector is a development overlay in the shape of a browser's element
-// panel: every widget the frame painted is outlined, the tree of them is
-// listed in a panel docked to the right or the bottom, and whichever one is
-// selected is described beside it. Moving the pointer selects; clicking a
-// row pins the selection so that it survives moving away, which is the only
-// way to read anything about a widget that is only there while hovered.
-//
-// It draws with Canvas primitives and the fallback font rather than with the
-// ui package, because ui is built on this one and cannot be imported back.
-// Its colors come from the theme, so it reads as part of the app it is
-// inspecting in light and dark alike.
 
 // InspectorDock is the edge the inspector's panel is docked to.
 type InspectorDock uint8
 
 const (
-	InspectorRight  InspectorDock = iota // a column down the right-hand side
-	InspectorBottom                      // a strip along the bottom, tree beside details
+	InspectorBottom InspectorDock = iota // tree beside details on wide panels
+	InspectorRight                       // tree above details
 )
 
-// InspectorOptions configures the inspector from code; the panel's toolbar
-// changes the same settings while it is open. The zero value docks right
-// with outlines on.
+// InspectorOptions configures the inspector. The toolbar changes the same
+// settings while it is open; dragging the panel edge adjusts its size.
+// The zero value docks bottom with outlines on.
 type InspectorOptions struct {
 	Dock         InspectorDock
-	HideOutlines bool // draw no outlines over the app, only the selection
+	HideOutlines bool
 }
 
-// inspectKey identifies a traced widget from frame to frame. The trace is
-// rebuilt from scratch every frame and carries no identity, so a pinned
-// selection is found again by what it looked like. Name and depth alone
-// would match every row of a list; the Rect is what separates them, and a
-// widget that moves is matched by the looser pass in find.
+// inspectKey prefers the widget's explicit identity, then its instance and
+// structural path. Geometry is only a fallback for traces without a widget.
 type inspectKey struct {
-	name  string
-	depth int
-	rect  Rect
+	name   string
+	depth  int
+	rect   Rect
+	id     any
+	path   string
+	stable bool
 }
 
-// inspectRow is one line of the tree panel, kept so that the next frame's
-// click knows what it landed on.
+func inspectComparable(v any) any {
+	if v != nil && reflect.ValueOf(v).Comparable() {
+		return v
+	}
+	return nil
+}
+
+func keyOf(e *traceEntry) inspectKey {
+	id := e.id
+	if id == nil {
+		id = inspectComparable(e.widget)
+	}
+	return inspectKey{name: e.name, depth: e.depth, rect: e.rect, id: id, path: e.path, stable: e.id != nil}
+}
+
+// Folding follows identity even when the widget moves or siblings reorder.
+func foldKey(k inspectKey) inspectKey {
+	if k.id != nil {
+		k.depth, k.rect, k.path = 0, Rect{}, ""
+	} else if k.path != "" {
+		k.depth, k.rect = 0, Rect{}
+	}
+	return k
+}
+
 type inspectRow struct {
 	key   inspectKey
 	index int
 	y, h  float64
 }
 
-// inspectAction is what a toolbar chip, a crumb or a disclosure triangle
-// does when clicked.
 type inspectAction uint8
 
 const (
@@ -70,206 +72,145 @@ const (
 	inspectDockBottom
 	inspectToggleOutlines
 	inspectUnpin
-	inspectPin         // pin the chip's key: a breadcrumb
-	inspectCollapse    // fold or unfold the chip's key's children
-	inspectClearFilter // empty the filter box
+	inspectPin
+	inspectCollapse
+	inspectClearFilter
 	inspectTabLayout
 	inspectTabSemantics
+	inspectTabComputed
+	inspectClose
+	inspectCopy
 )
 
-// inspectChip is one clickable area of the panel, kept for the next
-// frame's click.
 type inspectChip struct {
 	rect Rect
 	act  inspectAction
 	key  inspectKey
 }
 
-// inspector is what the overlay remembers between frames. The zero value
-// follows the pointer, docks right, outlines every widget, folds nothing
-// and is scrolled to the top.
-type inspector struct {
-	sel        inspectKey
-	pinned     bool
-	scroll     float64
-	dock       InspectorDock
-	noOutlines bool
-	move       int // arrow keys pressed since the last paint, resolved there
-	collapsed  map[inspectKey]bool
-	filter     string
-	tab        inspectAction // inspectTabLayout or inspectTabSemantics
+type inspectDrag uint8
 
-	// Written by paint, read by input on the following frame, the way
-	// every other hit region in this library works.
-	panel   Rect
-	treeTop float64
-	rows    []inspectRow
-	chips   []inspectChip
+const (
+	inspectNoDrag inspectDrag = iota
+	inspectResizePanel
+	inspectResizeSplit
+	inspectScrollTree
+	inspectScrollDetail
+	inspectScrollLayout
+)
+
+type inspector struct {
+	sel                                inspectKey
+	pinned                             bool
+	picking                            bool
+	capture                            bool // a picker/panel press owns its release, even outside the panel
+	scroll, detailScroll, layoutScroll float64
+	dock                               InspectorDock
+	noOutlines                         bool
+	move                               int
+	branch                             int // left/right tree navigation, resolved against the next trace
+	reveal                             bool
+	collapsed                          map[inspectKey]bool
+	filter                             string
+	filterFocus, focus                 bool
+	selectFilter                       bool
+	tab                                inspectAction
+	closed                             bool
+	copyText                           string
+	copied                             bool
+
+	width, height, split                                   float64
+	drag                                                   inspectDrag
+	dragStart                                              Point
+	dragValue                                              float64
+	layoutThumb, layoutBody                                Rect
+	layoutContent                                          float64
+	viewport                                               Size
+	panel, tree, detail, layout, filterRect, edge, divider Rect
+	treeThumb, detailThumb, detailBody                     Rect
+	treeContent, detailContent                             float64
+	treeTop                                                float64
+	rows                                                   []inspectRow
+	chips                                                  []inspectChip
+	lastTrace                                              []traceEntry // borrowed until the next paint; input runs before paint
 }
 
 const (
-	inspectPanelMax = 360 // the panel never takes more than this many points
-	inspectPad      = 8
-	inspectWheel    = 24 // points per wheel notch
-	inspectBar      = 4  // scrollbar thumb width
-	inspectIndent   = 12 // per depth level in the tree
+	inspectPad       = 10
+	inspectWheel     = 28
+	inspectBar       = 5
+	inspectIndent    = 14
+	inspectRowHeight = 23
 )
 
-// inspectDepth colors an outline by how deep the widget sits, so that nesting
-// reads at a glance.
 var inspectDepth = []color.Color{
-	color.RGBA{0xe5, 0x39, 0x35, 0xff}, color.RGBA{0xfb, 0x8c, 0x00, 0xff},
-	color.RGBA{0x43, 0xa0, 0x47, 0xff}, color.RGBA{0x1e, 0x88, 0xe5, 0xff},
-	color.RGBA{0x8e, 0x24, 0xaa, 0xff}, color.RGBA{0x00, 0x89, 0x7b, 0xff},
+	color.NRGBA{0x49, 0x86, 0xe8, 0xff}, color.NRGBA{0xa0, 0x6c, 0xd5, 0xff},
+	color.NRGBA{0x24, 0x9c, 0x89, 0xff}, color.NRGBA{0xd8, 0x8b, 0x42, 0xff},
 }
 
-// inspectPalette is the panel's colors for one frame, derived from the
-// theme so the panel belongs to the app it sits over.
 type inspectPalette struct {
 	bg, edge, fg, dim, sel, selFg, hover, chip, hi, key, num, field color.Color
+	padding, border, content                                        color.Color
 }
 
 func inspectColors() inspectPalette {
-	t := theme.Peek()
-	or := func(c, fallback color.Color) color.Color {
-		if c == nil {
-			return fallback
+	// Devtools use a quiet neutral surface, independent of an app's accent.
+	// This keeps the tree and color-coded measurements readable in every theme.
+	if luminance(theme.Peek().Bg) < .5 {
+		return inspectPalette{
+			bg: color.NRGBA{27, 29, 34, 255}, edge: color.NRGBA{57, 61, 70, 255}, fg: color.NRGBA{222, 226, 233, 255},
+			dim: color.NRGBA{151, 160, 175, 255}, sel: color.NRGBA{43, 70, 104, 255}, selFg: color.NRGBA{221, 236, 255, 255},
+			hover: color.NRGBA{37, 41, 49, 255}, chip: color.NRGBA{43, 47, 56, 255}, hi: color.NRGBA{77, 151, 242, 45},
+			key: color.NRGBA{195, 158, 238, 255}, num: color.NRGBA{131, 190, 253, 255}, field: color.NRGBA{22, 24, 29, 255},
+			padding: color.NRGBA{59, 94, 70, 255}, border: color.NRGBA{119, 91, 52, 255}, content: color.NRGBA{48, 78, 110, 255},
 		}
-		return c
 	}
-	card := or(t.Card, or(t.Bg, color.White))
-	fg := or(t.Fg, color.Black)
-	primary := or(t.Primary, fg)
-	dark := luminance(card) < .5
-	p := inspectPalette{
-		bg:    card,
-		edge:  or(t.Border, compositeColor(fg, card, .15)),
-		fg:    fg,
-		dim:   or(t.MutedFg, compositeColor(fg, card, .6)),
-		sel:   primary,
-		selFg: or(t.PrimaryFg, card),
-		hover: compositeColor(fg, card, .06),
-		chip:  compositeColor(fg, card, .08),
-		hi:    withAlpha(primary, 0x40),
-		field: compositeColor(fg, card, .04),
+	return inspectPalette{
+		bg: color.NRGBA{255, 255, 255, 255}, edge: color.NRGBA{220, 224, 231, 255}, fg: color.NRGBA{40, 46, 57, 255},
+		dim: color.NRGBA{112, 120, 134, 255}, sel: color.NRGBA{226, 239, 255, 255}, selFg: color.NRGBA{30, 80, 147, 255},
+		hover: color.NRGBA{244, 247, 251, 255}, chip: color.NRGBA{237, 240, 245, 255}, hi: color.NRGBA{66, 139, 233, 40},
+		key: color.NRGBA{134, 68, 160, 255}, num: color.NRGBA{30, 101, 187, 255}, field: color.NRGBA{247, 248, 251, 255},
+		padding: color.NRGBA{218, 239, 214, 255}, border: color.NRGBA{247, 222, 182, 255}, content: color.NRGBA{211, 232, 254, 255},
 	}
-	if dark {
-		p.key, p.num = color.RGBA{0xc5, 0x9c, 0xff, 0xff}, color.RGBA{0x7f, 0xc9, 0xff, 0xff}
-	} else {
-		p.key, p.num = color.RGBA{0x6f, 0x42, 0xc1, 0xff}, color.RGBA{0x0b, 0x5c, 0xb0, 0xff}
-	}
-	return p
 }
 
 func luminance(c color.Color) float64 {
+	if c == nil {
+		return 1
+	}
 	n := color.NRGBAModel.Convert(c).(color.NRGBA)
-	return (0.2126*float64(n.R) + 0.7152*float64(n.G) + 0.0722*float64(n.B)) / 255
+	return (.2126*float64(n.R) + .7152*float64(n.G) + .0722*float64(n.B)) / 255
 }
-
 func withAlpha(c color.Color, a uint8) color.Color {
 	n := color.NRGBAModel.Convert(c).(color.NRGBA)
 	n.A = a
 	return n
 }
+func (in *inspector) apply(o InspectorOptions) { in.dock, in.noOutlines = o.Dock, o.HideOutlines }
 
-// apply takes options set from code.
-func (in *inspector) apply(o InspectorOptions) {
-	in.dock, in.noOutlines = o.Dock, o.HideOutlines
-}
-
-// input takes the frame's pointer and key events while the pointer is over
-// the panel, so that scrolling the tree does not also scroll the app
-// underneath. It reports whether it consumed them; everywhere else the app
-// goes on working normally, which is the point of leaving the inspector on
-// while using it.
-func (in *inspector) input(f frameInput) bool {
-	if in.panel.Size.W == 0 || !in.panel.Contains(f.pos) {
-		return false
-	}
-	// Positive wheel scrolls up, as ScrollWidget reads it.
-	in.scroll -= f.wheel.Y * inspectWheel
-	for _, b := range f.down {
-		if b != ebiten.MouseButtonLeft {
-			continue
-		}
-		if i := slices.IndexFunc(in.chips, func(c inspectChip) bool { return c.rect.Contains(f.pos) }); i >= 0 {
-			in.act(in.chips[i])
-			continue
-		}
-		if f.pos.Y < in.treeTop {
-			in.pinned = false // the header is the way back to following
-			continue
-		}
-		for _, r := range in.rows {
-			if f.pos.Y >= r.y && f.pos.Y < r.y+r.h {
-				in.sel, in.pinned = r.key, true
-				break
+func (in *inspector) find(tr []traceEntry) int {
+	if in.sel.id != nil {
+		for i := range tr {
+			k := keyOf(&tr[i])
+			if k.name == in.sel.name && k.id == in.sel.id {
+				return i
 			}
 		}
+		if in.sel.stable {
+			return -1
+		} // a removed keyed row must not select its neighbour
 	}
-	for _, k := range f.keys {
-		switch k {
-		case ebiten.KeyArrowUp:
-			in.move--
-		case ebiten.KeyArrowDown:
-			in.move++
-		case ebiten.KeyBackspace:
-			if in.filter != "" {
-				_, n := utf8.DecodeLastRuneInString(in.filter)
-				in.filter = in.filter[:len(in.filter)-n]
-			}
-		case ebiten.KeyEscape:
-			if in.filter != "" {
-				in.filter = ""
-			} else {
-				in.pinned = false
+	if in.sel.path != "" {
+		for i := range tr {
+			if tr[i].path == in.sel.path && tr[i].name == in.sel.name {
+				return i
 			}
 		}
+		return -1
 	}
-	for _, r := range f.text {
-		if r >= ' ' {
-			in.filter += string(r)
-		}
-	}
-	return true
-}
-
-func (in *inspector) act(c inspectChip) {
-	switch c.act {
-	case inspectDockRight:
-		in.dock = InspectorRight
-	case inspectDockBottom:
-		in.dock = InspectorBottom
-	case inspectToggleOutlines:
-		in.noOutlines = !in.noOutlines
-	case inspectUnpin:
-		in.pinned = false
-	case inspectPin:
-		in.sel, in.pinned = c.key, true
-	case inspectCollapse:
-		if in.collapsed == nil {
-			in.collapsed = map[inspectKey]bool{}
-		}
-		if in.collapsed[c.key] {
-			delete(in.collapsed, c.key)
-		} else {
-			in.collapsed[c.key] = true
-		}
-	case inspectClearFilter:
-		in.filter = ""
-	case inspectTabLayout, inspectTabSemantics:
-		in.tab = c.act
-	}
-}
-
-// find locates the pinned widget in this frame's trace: the same name, depth
-// and place if it is still there, and otherwise the first widget of that
-// name and depth, so that a selection survives the thing it points at
-// moving. It returns -1 once there is no such widget at all.
-func (in *inspector) find(trace []traceEntry) int {
 	loose := -1
-	for i := range trace {
-		e := &trace[i]
+	for i := range tr {
+		e := &tr[i]
 		if e.name != in.sel.name || e.depth != in.sel.depth {
 			continue
 		}
@@ -283,53 +224,54 @@ func (in *inspector) find(trace []traceEntry) int {
 	return loose
 }
 
-// deepest returns the innermost widget painted under p, which is the one a
-// click would reach.
-func deepest(trace []traceEntry, p Point) int {
+func deepest(tr []traceEntry, p Point) int {
 	found := -1
-	for i := range trace {
-		e := &trace[i]
-		if e.rect.Contains(p) && (found < 0 || e.depth >= trace[found].depth) {
+	for i := range tr {
+		e := &tr[i]
+		if e.rect.Contains(p) && (!e.clipped || e.clip.Contains(p)) {
 			found = i
 		}
 	}
 	return found
 }
-
-func keyOf(e *traceEntry) inspectKey { return inspectKey{e.name, e.depth, e.rect} }
-
-// hasChildren reports whether entry i painted anything of its own.
-func hasChildren(trace []traceEntry, i int) bool {
-	return i+1 < len(trace) && trace[i+1].depth > trace[i].depth
-}
-
-// ancestors returns the entries above i, innermost first: the trace is in
-// paint order, so each one is the nearest earlier entry one level up.
-func ancestors(trace []traceEntry, i int) []int {
+func hasChildren(tr []traceEntry, i int) bool { return i+1 < len(tr) && tr[i+1].depth > tr[i].depth }
+func ancestors(tr []traceEntry, i int) []int {
 	var out []int
-	need := trace[i].depth - 1
+	need := tr[i].depth - 1
 	for j := i - 1; j >= 0 && need >= 0; j-- {
-		if trace[j].depth == need {
+		if tr[j].depth == need {
 			out = append(out, j)
 			need--
 		}
 	}
 	return out
 }
-
-// visible lists the trace entries the tree shows: everything not inside a
-// folded widget, or, while filtering, the matches and what they sit in.
-func (in *inspector) visible(trace []traceEntry) []int {
-	out := make([]int, 0, len(trace))
+func (in *inspector) folded(e *traceEntry) bool { return in.collapsed[foldKey(keyOf(e))] }
+func inspectMatches(e *traceEntry, filter string) bool {
+	return strings.Contains(strings.ToLower(e.name+" "+inspectLabel(e)+" "+string(nodeOf(e.widget).Role)), strings.ToLower(filter))
+}
+func (in *inspector) visible(tr []traceEntry) []int {
+	out := make([]int, 0, len(tr))
 	if in.filter != "" {
-		keep := make([]bool, len(trace))
-		needle := strings.ToLower(in.filter)
-		for i := range trace {
-			if strings.Contains(strings.ToLower(trace[i].name), needle) {
-				keep[i] = true
-				for _, a := range ancestors(trace, i) {
-					keep[a] = true
-				}
+		// A reverse pass propagates matches to parents in linear time, even
+		// for deeply nested trees whose every name matches the filter.
+		keep := make([]bool, len(tr))
+		stack := make([]int, 0, 16)
+		parents := make([]int, len(tr))
+		for i, e := range tr {
+			for len(stack) > 0 && tr[stack[len(stack)-1]].depth >= e.depth {
+				stack = stack[:len(stack)-1]
+			}
+			parents[i] = -1
+			if len(stack) > 0 {
+				parents[i] = stack[len(stack)-1]
+			}
+			stack = append(stack, i)
+			keep[i] = inspectMatches(&tr[i], in.filter)
+		}
+		for i := len(tr) - 1; i >= 0; i-- {
+			if keep[i] && parents[i] >= 0 {
+				keep[parents[i]] = true
 			}
 		}
 		for i, k := range keep {
@@ -340,458 +282,79 @@ func (in *inspector) visible(trace []traceEntry) []int {
 		return out
 	}
 	hideBelow := -1
-	for i := range trace {
-		e := &trace[i]
+	for i := range tr {
+		e := &tr[i]
 		if hideBelow >= 0 && e.depth > hideBelow {
 			continue
 		}
 		hideBelow = -1
 		out = append(out, i)
-		if in.collapsed[keyOf(e)] && hasChildren(trace, i) {
+		if in.folded(e) && hasChildren(tr, i) {
 			hideBelow = e.depth
 		}
 	}
 	return out
 }
 
-// paint draws the outlines, then the panel: toolbar, filter, tree with its
-// breadcrumb, and the details for the selection.
-func (in *inspector) paint(dst *Canvas) {
-	size := dst.Size()
-	if size == (Size{}) || len(dst.trace) == 0 {
-		in.panel, in.chips = Rect{}, in.chips[:0]
+func (in *inspector) selectEntry(tr []traceEntry, i int) {
+	if i < 0 || i >= len(tr) {
 		return
 	}
-	pal := inspectColors()
-	if !in.noOutlines {
-		for i := range dst.trace {
-			e := &dst.trace[i]
-			dst.StrokeRoundRect(e.rect, 0, 1, inspectDepth[e.depth%len(inspectDepth)])
-		}
+	in.sel, in.pinned, in.reveal = keyOf(&tr[i]), true, true
+	in.detailScroll, in.copied = 0, false
+	for _, a := range ancestors(tr, i) {
+		delete(in.collapsed, foldKey(keyOf(&tr[a])))
 	}
-
-	face := fallbackFont().face(11 * dst.Scale())
-	m := face.Metrics()
-	lh := dst.dp(m.HAscent+m.HDescent) + 4
-	if in.dock == InspectorBottom {
-		h := min(inspectPanelMax, size.H*0.45)
-		in.panel = Rct(Pt(0, size.H-h), Sz(size.W, h))
-	} else {
-		w := min(inspectPanelMax, size.W*0.42)
-		in.panel = Rct(Pt(size.W-w, 0), Sz(w, size.H))
-	}
-
-	// The pointer picks a widget only while it is over the app; over the
-	// panel it is reading, not aiming.
-	sel := -1
+}
+func (in *inspector) selection(dst *Canvas) (int, []int) {
+	tr := dst.trace
+	sel := in.find(tr)
 	pointer, hasPointer := dst.Pointer()
-	if hasPointer && !in.panel.Contains(pointer) {
-		sel = deepest(dst.trace, pointer)
-	}
-	if in.pinned {
-		if found := in.find(dst.trace); found >= 0 {
-			sel = found
-		} else {
-			in.pinned = false
+	if !in.pinned && hasPointer && !in.panel.Contains(pointer) {
+		if hit := deepest(tr, pointer); hit >= 0 {
+			sel = hit
 		}
 	}
-	// A widget the pointer found is unfolded to, the way an element panel
-	// reveals what the picker chose.
 	if sel >= 0 && !in.pinned && in.filter == "" {
-		for _, a := range ancestors(dst.trace, sel) {
-			delete(in.collapsed, keyOf(&dst.trace[a]))
+		for _, a := range ancestors(tr, sel) {
+			delete(in.collapsed, foldKey(keyOf(&tr[a])))
 		}
 	}
-	shown := in.visible(dst.trace)
-	// Arrow keys step through the rows as shown, and pin where they land so
-	// the pointer does not take it straight back.
+	if in.branch != 0 && sel >= 0 {
+		if in.branch < 0 {
+			if hasChildren(tr, sel) && !in.folded(&tr[sel]) {
+				in.act(inspectChip{act: inspectCollapse, key: keyOf(&tr[sel])})
+			} else if a := ancestors(tr, sel); len(a) > 0 {
+				sel = a[0]
+			}
+		} else if hasChildren(tr, sel) {
+			if in.folded(&tr[sel]) {
+				delete(in.collapsed, foldKey(keyOf(&tr[sel])))
+			} else {
+				sel++
+			}
+		}
+		in.selectEntry(tr, sel)
+	}
+	in.branch = 0
+	shown := in.visible(tr)
 	if in.move != 0 && len(shown) > 0 {
 		at := slices.Index(shown, sel)
 		if at < 0 {
 			at = pick(in.move < 0, len(shown), -1)
 		}
 		sel = shown[clamp(at+in.move, 0, len(shown)-1)]
-		in.pinned = true
-		in.move = 0
+		in.selectEntry(tr, sel)
 	}
+	in.move = 0
 	if sel >= 0 {
-		e := &dst.trace[sel]
-		dst.FillRect(e.rect, pal.hi)
-		dst.StrokeRoundRect(e.rect, 0, 1, pal.sel)
-		in.sel = keyOf(e)
-	}
-
-	panel := in.panel
-	dst.FillRect(panel, pal.bg)
-	if in.dock == InspectorBottom {
-		dst.FillRect(Rct(panel.Origin, Sz(panel.Size.W, 1)), pal.edge)
-	} else {
-		dst.FillRect(Rct(panel.Origin, Sz(1, panel.Size.H)), pal.edge)
-	}
-	in.chips = in.chips[:0]
-	y := in.paintToolbar(dst, panel, face, lh, pal)
-	y = in.paintFilter(dst, panel, face, lh, pal, y)
-	in.treeTop = y
-	dst.FillRect(Rct(Pt(panel.Origin.X, y), Sz(panel.Size.W, 1)), pal.edge)
-
-	// Below the filter the tree and the details share the panel: stacked
-	// in a right-hand column, side by side along the bottom.
-	bottom := panel.Origin.Y + panel.Size.H
-	detail := in.details(dst, sel)
-	var tree, det Rect
-	if in.dock == InspectorBottom {
-		tw := math.Round(min(panel.Size.W*0.5, 480))
-		tree = Rct(Pt(panel.Origin.X, y), Sz(tw, bottom-y))
-		det = Rct(Pt(panel.Origin.X+tw, y), Sz(panel.Size.W-tw, bottom-y))
-		dst.FillRect(Rct(Pt(det.Origin.X, y), Sz(1, bottom-y)), pal.edge)
-	} else {
-		detailH := 0.0
-		if sel >= 0 {
-			detailH = min(float64(len(detail)+1)*lh+3*inspectPad, panel.Size.H*0.45)
+		next := keyOf(&tr[sel])
+		if foldKey(next) != foldKey(in.sel) {
+			in.reveal = true
+			in.detailScroll, in.layoutScroll = 0, 0
+			in.copied = false
 		}
-		treeBottom := max(bottom-detailH, y)
-		tree = Rct(Pt(panel.Origin.X, y), Sz(panel.Size.W, treeBottom-y))
-		det = Rct(Pt(panel.Origin.X, treeBottom), Sz(panel.Size.W, bottom-treeBottom))
-		if sel >= 0 {
-			dst.FillRect(Rct(Pt(panel.Origin.X, treeBottom), Sz(panel.Size.W, 1)), pal.edge)
-		}
+		in.sel = next
 	}
-	crumbH := lh + 6
-	in.paintTree(dst, Rct(tree.Origin, Sz(tree.Size.W, max(tree.Size.H-crumbH, 0))), face, lh, pal, shown, sel, pointer, hasPointer)
-	in.paintCrumbs(dst, Rct(Pt(tree.Origin.X, tree.Origin.Y+tree.Size.H-crumbH), Sz(tree.Size.W, crumbH)), face, lh, pal, sel)
-	if sel >= 0 {
-		in.paintDetail(dst, det, face, lh, pal, detail)
-	}
-}
-
-// chip draws one toolbar button and remembers where it went.
-func (in *inspector) chip(dst *Canvas, face text.Face, lh float64, pal inspectPalette, x, y float64, label string, on bool, act inspectAction, key inspectKey) float64 {
-	w := textWidth(dst, face, label) + 12
-	r := Rct(Pt(x, y), Sz(w, lh+2))
-	dst.FillRoundRect(r, 4, pick(on, pal.sel, pal.chip))
-	drawLine(dst, face, label, x+6, y+1, pick(on, pal.selFg, pal.fg))
-	in.chips = append(in.chips, inspectChip{rect: r, act: act, key: key})
-	return x + w + 4
-}
-
-// paintToolbar draws the picker, dock and outline controls with the frame
-// cost at the far end, and returns where the next row starts.
-func (in *inspector) paintToolbar(dst *Canvas, panel Rect, face text.Face, lh float64, pal inspectPalette) float64 {
-	x := panel.Origin.X + inspectPad
-	y := panel.Origin.Y + inspectPad
-	x = in.chip(dst, face, lh, pal, x, y, pick(in.pinned, "Pinned", "Pick"), !in.pinned, inspectUnpin, inspectKey{})
-	x += 6
-	x = in.chip(dst, face, lh, pal, x, y, "Right", in.dock == InspectorRight, inspectDockRight, inspectKey{})
-	x = in.chip(dst, face, lh, pal, x, y, "Bottom", in.dock == InspectorBottom, inspectDockBottom, inspectKey{})
-	x += 6
-	in.chip(dst, face, lh, pal, x, y, "Outlines", !in.noOutlines, inspectToggleOutlines, inspectKey{})
-	stats := fmt.Sprintf("%d · %.0f fps", len(dst.trace), ebiten.ActualFPS())
-	drawLine(dst, face, stats, panel.Origin.X+panel.Size.W-inspectPad-textWidth(dst, face, stats), y+1, pal.dim)
-	return y + lh + 2 + inspectPad
-}
-
-// paintFilter draws the search box: what has been typed while the pointer
-// is over the panel, or a hint when nothing has.
-func (in *inspector) paintFilter(dst *Canvas, panel Rect, face text.Face, lh float64, pal inspectPalette, y float64) float64 {
-	r := Rct(Pt(panel.Origin.X+inspectPad, y), Sz(panel.Size.W-2*inspectPad, lh+4))
-	dst.FillRoundRect(r, 4, pal.field)
-	dst.StrokeRoundRect(r, 4, 1, pal.edge)
-	if in.filter == "" {
-		drawLine(dst, face, "Filter widgets…", r.Origin.X+6, y+2, pal.dim)
-	} else {
-		drawLine(dst, face, in.filter, r.Origin.X+6, y+2, pal.fg)
-		cx := r.Origin.X + r.Size.W - lh - 2
-		cr := Rct(Pt(cx, y+2), Sz(lh, lh))
-		drawLine(dst, face, "×", cx+(lh-textWidth(dst, face, "×"))/2, y+2, pal.dim)
-		in.chips = append(in.chips, inspectChip{rect: cr, act: inspectClearFilter})
-	}
-	return y + lh + 4 + inspectPad
-}
-
-// paintTree lists the shown entries in r, one row per widget indented by
-// depth with a disclosure triangle where there are children, with the
-// selection followed and the rows it laid out kept for the next click.
-func (in *inspector) paintTree(dst *Canvas, r Rect, face text.Face, lh float64, pal inspectPalette, shown []int, sel int, pointer Point, hasPointer bool) {
-	content := float64(len(shown)) * lh
-	// Follow the selection while it is the pointer's, so the tree keeps up
-	// without being dragged.
-	if at := slices.Index(shown, sel); at >= 0 && !in.pinned {
-		if top := float64(at) * lh; top < in.scroll {
-			in.scroll = top
-		} else if top+lh > in.scroll+r.Size.H {
-			in.scroll = top + lh - r.Size.H
-		}
-	}
-	in.scroll = clamp(in.scroll, 0, max(content-r.Size.H, 0))
-
-	clip := dst.Clip(r)
-	x := r.Origin.X + inspectPad
-	right := r.Origin.X + r.Size.W - inspectPad - inspectBar
-	bottom := r.Origin.Y + r.Size.H
-	in.rows = in.rows[:0]
-	for at, i := range shown {
-		ry := r.Origin.Y + float64(at)*lh - in.scroll
-		if ry+lh <= r.Origin.Y || ry >= bottom {
-			continue // above or below the window; nothing to draw
-		}
-		e := &dst.trace[i]
-		key := keyOf(e)
-		in.rows = append(in.rows, inspectRow{key: key, index: i, y: ry, h: lh})
-		row := Rct(Pt(r.Origin.X, ry), Sz(r.Size.W, lh))
-		fg, dim := pal.fg, pal.dim
-		if i == sel {
-			clip.FillRect(row, pal.sel)
-			fg, dim = pal.selFg, pal.selFg
-		} else if hasPointer && row.Contains(pointer) {
-			clip.FillRect(row, pal.hover)
-		}
-		indent := min(float64(e.depth)*inspectIndent, (right-x)/2)
-		tx := x + indent
-		if hasChildren(dst.trace, i) {
-			folded := in.collapsed[key] && in.filter == ""
-			triangle(clip, Pt(tx+5, ry+lh/2), folded, dim)
-			in.chips = append(in.chips, inspectChip{rect: Rct(Pt(tx-2, ry), Sz(14, lh)), act: inspectCollapse, key: key})
-		}
-		tx += 12
-		clip.FillCircle(Pt(tx+2, ry+lh/2), 2.5, inspectDepth[e.depth%len(inspectDepth)])
-		drawLine(clip, face, e.name, tx+8, ry+2, fg)
-		dims := num(e.rect.Size.W) + "×" + num(e.rect.Size.H)
-		drawLine(clip, face, dims, right-textWidth(dst, face, dims), ry+2, dim)
-	}
-	if content > r.Size.H {
-		th := max(r.Size.H*r.Size.H/content, 12)
-		ty := r.Origin.Y + (r.Size.H-th)*in.scroll/(content-r.Size.H)
-		dst.FillRoundRect(Rct(Pt(r.Origin.X+r.Size.W-inspectBar-2, ty), Sz(inspectBar, th)), 2, withAlpha(pal.fg, 0x40))
-	}
-}
-
-// triangle draws a disclosure marker: pointing right when folded, down
-// when open.
-func triangle(dst *Canvas, c Point, folded bool, col color.Color) {
-	var p vector.Path
-	const s = 3.5
-	if folded {
-		p.MoveTo(dst.Px(c.X-s/2), dst.Px(c.Y-s))
-		p.LineTo(dst.Px(c.X+s/2+1), dst.Px(c.Y))
-		p.LineTo(dst.Px(c.X-s/2), dst.Px(c.Y+s))
-	} else {
-		p.MoveTo(dst.Px(c.X-s), dst.Px(c.Y-s/2))
-		p.LineTo(dst.Px(c.X+s), dst.Px(c.Y-s/2))
-		p.LineTo(dst.Px(c.X), dst.Px(c.Y+s/2+1))
-	}
-	p.Close()
-	vector.FillPath(dst.Image, &p, &vector.FillOptions{}, pathOptions(col))
-}
-
-// paintCrumbs draws the selection's ancestry along the bottom of the tree,
-// outermost first, each crumb clickable to pin that ancestor.
-func (in *inspector) paintCrumbs(dst *Canvas, r Rect, face text.Face, lh float64, pal inspectPalette, sel int) {
-	dst.FillRect(Rct(r.Origin, Sz(r.Size.W, 1)), pal.edge)
-	if sel < 0 {
-		return
-	}
-	chain := ancestors(dst.trace, sel)
-	slices.Reverse(chain)
-	chain = append(chain, sel)
-	clip := dst.Clip(r)
-	x := r.Origin.X + inspectPad
-	y := r.Origin.Y + 3
-	// Keep the innermost crumbs in view when the chain is wider than the bar.
-	total := 0.0
-	for _, i := range chain {
-		total += textWidth(dst, face, dst.trace[i].name) + textWidth(dst, face, " › ")
-	}
-	if over := total - (r.Size.W - 2*inspectPad); over > 0 {
-		x -= over
-	}
-	for n, i := range chain {
-		e := &dst.trace[i]
-		w := textWidth(dst, face, e.name)
-		col := pal.dim
-		if i == sel {
-			col = pal.fg
-		}
-		drawLine(clip, face, e.name, x, y, col)
-		if i != sel {
-			in.chips = append(in.chips, inspectChip{rect: Rct(Pt(x, r.Origin.Y), Sz(w, r.Size.H)).Intersect(r), act: inspectPin, key: keyOf(e)})
-		}
-		x += w
-		if n < len(chain)-1 {
-			drawLine(clip, face, " › ", x, y, pal.dim)
-			x += textWidth(dst, face, " › ")
-		}
-	}
-}
-
-// inspectField is one line of the details: a key and its value, or a
-// section heading when the value is empty.
-type inspectField struct {
-	key, value string
-	number     bool // color the value as a number
-}
-
-// paintDetail draws the tab bar and the fields under it, keys in one color
-// and values aligned in a column after them.
-func (in *inspector) paintDetail(dst *Canvas, r Rect, face text.Face, lh float64, pal inspectPalette, fields []inspectField) {
-	x := r.Origin.X + inspectPad
-	y := r.Origin.Y + inspectPad/2
-	x2 := in.chip(dst, face, lh, pal, x, y, "Layout", in.tab != inspectTabSemantics, inspectTabLayout, inspectKey{})
-	in.chip(dst, face, lh, pal, x2, y, "Semantics", in.tab == inspectTabSemantics, inspectTabSemantics, inspectKey{})
-	y += lh + 2 + inspectPad/2
-	clip := dst.Clip(Rct(Pt(r.Origin.X, y), Sz(r.Size.W, r.Origin.Y+r.Size.H-y)))
-	keyW := 0.0
-	for _, f := range fields {
-		if f.value != "" {
-			keyW = max(keyW, textWidth(dst, face, f.key))
-		}
-	}
-	keyW = min(keyW, r.Size.W*0.4)
-	for _, f := range fields {
-		if f.value == "" {
-			y += 2
-			drawLine(clip, face, strings.ToUpper(f.key), x, y, pal.dim)
-			y += lh
-			continue
-		}
-		drawLine(clip, face, f.key, x+inspectPad, y, pal.key)
-		drawLine(clip, face, f.value, x+inspectPad+keyW+10, y, pick(f.number, pal.num, pal.fg))
-		y += lh
-	}
-}
-
-// details describes the selection for the current tab: its box and place
-// in the tree, or the accessibility node there and everything it sits
-// inside, which is what a screen reader walks.
-func (in *inspector) details(dst *Canvas, sel int) []inspectField {
-	if sel < 0 {
-		return nil
-	}
-	e := &dst.trace[sel]
-	if in.tab == inspectTabSemantics {
-		return in.semanticFields(dst, e)
-	}
-	kids := 0
-	for i := sel + 1; i < len(dst.trace) && dst.trace[i].depth > e.depth; i++ {
-		if dst.trace[i].depth == e.depth+1 {
-			kids++
-		}
-	}
-	parent := "—"
-	if a := ancestors(dst.trace, sel); len(a) > 0 {
-		parent = dst.trace[a[0]].name
-	}
-	return []inspectField{
-		{key: "Box"},
-		{"type", e.name, false},
-		{"x", num(e.rect.Origin.X), true},
-		{"y", num(e.rect.Origin.Y), true},
-		{"width", num(e.rect.Size.W), true},
-		{"height", num(e.rect.Size.H), true},
-		{key: "Tree"},
-		{"depth", strconv.Itoa(e.depth), true},
-		{"parent", parent, false},
-		{"children", strconv.Itoa(kids), true},
-	}
-}
-
-// semanticFields lists the accessibility node under the widget's center
-// and the chain above it.
-func (in *inspector) semanticFields(dst *Canvas, e *traceEntry) []inspectField {
-	center := Pt(e.rect.Origin.X+e.rect.Size.W/2, e.rect.Origin.Y+e.rect.Size.H/2)
-	found := semanticAt(dst, center)
-	if found < 0 {
-		return []inspectField{{key: "Node"}, {"role", "none", false}}
-	}
-	n := &dst.sem[found].node
-	out := []inspectField{{key: "Node"}, {"role", string(n.Role), false}}
-	add := func(k, v string) {
-		if v != "" {
-			out = append(out, inspectField{k, v, false})
-		}
-	}
-	add("name", n.Name)
-	add("description", n.Description)
-	add("value", n.Value)
-	switch n.Checked {
-	case TriOff:
-		add("checked", "false")
-	case TriOn:
-		add("checked", "true")
-	case TriMixed:
-		add("checked", "mixed")
-	}
-	if n.Expanded != nil {
-		add("expanded", strconv.FormatBool(*n.Expanded))
-	}
-	if n.Selected {
-		add("selected", "true")
-	}
-	if n.Disabled {
-		add("disabled", "true")
-	}
-	if n.Offscreen {
-		add("offscreen", "true")
-	}
-	if n.Min != 0 || n.Max != 0 || n.Now != 0 {
-		out = append(out, inspectField{"range", num(n.Min) + " – " + num(n.Max), true}, inspectField{"now", num(n.Now), true})
-	}
-	if chain := semanticChain(dst, center); len(chain) > 1 {
-		out = append(out, inspectField{key: "Path"})
-		for _, c := range chain[:len(chain)-1] {
-			out = append(out, inspectField{"", strings.TrimLeft(c, " "), false})
-		}
-	}
-	return out
-}
-
-// num formats a length the way a ruler would. Layout arithmetic leaves
-// 35.516000000000005 behind and %g prints every digit of it, which buries
-// the number that was being read.
-func num(v float64) string {
-	return strconv.FormatFloat(math.Round(v*100)/100, 'f', -1, 64)
-}
-
-func textWidth(dst *Canvas, face text.Face, s string) float64 {
-	return dst.dp(lineWidth(s, face))
-}
-
-func drawLine(dst *Canvas, face text.Face, s string, x, y float64, col color.Color) {
-	op := &text.DrawOptions{}
-	op.ColorScale.ScaleWithColor(col)
-	op.GeoM.Translate(dst.px(x), dst.px(y))
-	drawText(dst.Image, s, face, op)
-}
-
-// semanticAt returns the innermost accessibility node painted under p, or
-// -1: the last one described there, since parents describe before children.
-func semanticAt(dst *Canvas, p Point) int {
-	for i, v := range slices.Backward(dst.sem) {
-		if !v.node.Offscreen && v.rect.Contains(p) {
-			return i
-		}
-	}
-	return -1
-}
-
-// semanticChain describes the accessibility node under p and everything it
-// is inside of, outermost first and indented, which is what a screen reader
-// walks: the single role and label the inspector used to show could not say
-// that a tab is inside a strip or an option inside its combobox.
-func semanticChain(dst *Canvas, p Point) []string {
-	found := semanticAt(dst, p)
-	if found < 0 {
-		return nil
-	}
-	var chain []int
-	for i := found; i >= 0; i = dst.sem[i].parent - 1 {
-		chain = append(chain, i)
-	}
-	lines := make([]string, 0, len(chain))
-	for i, c := range slices.Backward(chain) {
-		e := &dst.sem[c]
-		n := SemNode{Node: e.node}
-		lines = append(lines, fmt.Sprintf("%s%s %q%s",
-			strings.Repeat("  ", len(chain)-1-i), e.node.Role, e.node.Name, n.flags()))
-	}
-	return lines
+	return sel, shown
 }
