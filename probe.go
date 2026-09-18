@@ -95,7 +95,7 @@ func (p *Probe) Frame() Size {
 		p.start()
 	}
 	p.runPosted()
-	if err := p.tick(p.clock()); err != nil {
+	if err := p.tick(frame.set(p.clock())); err != nil {
 		panic(err)
 	}
 	if p.root == nil {
@@ -118,8 +118,9 @@ func (p *Probe) Frame() Size {
 	return p.rootSize
 }
 
-// clock is what the probe's frames read: the time Advance set, else the
-// package clock.
+// clock is the raw time a probe's frame reads: the time Advance set, else
+// the package clock. Frames set the frame clock to it exactly, so a probe
+// steps by what the test asked for.
 func (p *Probe) clock() time.Time {
 	if p.now.IsZero() {
 		return clock()

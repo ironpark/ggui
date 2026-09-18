@@ -768,7 +768,7 @@ func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
 		clip.FillRect(Rct(Pt(x0+a, y), Sz(b-a, 1)), t.resolved.Color)
 	}
 
-	if t.focused && (time.Since(t.blink)/(530*time.Millisecond))%2 == 0 {
+	if t.focused && (Now().Sub(t.blink)/(530*time.Millisecond))%2 == 0 {
 		clip.FillRect(Rct(Pt(x0+caretX, r.Origin.Y), Sz(1, h)), t.resolved.Color)
 	}
 }
@@ -848,7 +848,7 @@ func (t *TextInputWidget) paintLines(dst *Canvas, r Rect) {
 		})
 	}
 
-	if t.focused && (time.Since(t.blink)/(530*time.Millisecond))%2 == 0 {
+	if t.focused && (Now().Sub(t.blink)/(530*time.Millisecond))%2 == 0 {
 		clip.FillRect(Rct(Pt(x0+caretX, y0+caretY), Sz(1, h)), t.resolved.Color)
 	}
 }
@@ -908,7 +908,7 @@ func (t *TextInputWidget) lineBounds() (int, int) {
 
 // commit writes the editor's text to the signal after an edit.
 func (t *TextInputWidget) commit() {
-	t.blink = clock()
+	t.blink = Now()
 	if t.ed.text == t.value.Peek() {
 		return
 	}
@@ -978,7 +978,7 @@ func (t *TextInputWidget) imeSession() *textinput.SessionOptions {
 // imeComposition shows preedit text at the caret; "" clears it.
 func (t *TextInputWidget) imeComposition(text string, caret int) {
 	t.composition, t.compCaret = text, caret
-	t.blink = clock()
+	t.blink = Now()
 }
 
 // imeCommit inserts committed text in place of the selection.
@@ -1015,7 +1015,7 @@ func (t *TextInputWidget) HandleKey(ev KeyEvent) {
 	switch ev.Kind {
 	case KeyFocus:
 		t.focused = true
-		t.blink = clock()
+		t.blink = Now()
 	case KeyBlur:
 		t.ime.Confirm()
 		t.focused = false
@@ -1158,12 +1158,12 @@ func (t *TextInputWidget) HandlePointer(ev PointerEvent) bool {
 		default:
 			t.ed.selectAll()
 		}
-		t.blink = now
+		t.blink = Now()
 		return true
 	case PointerDrag:
 		if t.clicks == 1 {
 			t.ed.moveTo(t.indexAt(ev.Pos), true)
-			t.blink = clock()
+			t.blink = Now()
 		}
 		return true
 	case PointerUp, PointerTap, PointerMove, PointerEnter, PointerExit:
@@ -1190,5 +1190,5 @@ func (t *TextInputWidget) Adopt(prev any) {
 	if p.ed.text != t.value.Peek() {
 		t.ed.setText(t.value.Peek())
 	}
-	t.blink = clock()
+	t.blink = Now()
 }

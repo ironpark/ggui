@@ -173,7 +173,7 @@ func (a *App) Update() error {
 	if a.closed {
 		return ebiten.Termination
 	}
-	return a.tick(clock())
+	return a.tick(frame.begin(clock()))
 }
 
 // appRunning reports whether RunGame has started, which is when platform
@@ -221,6 +221,10 @@ func (a *App) readInput() frameInput {
 
 // Draw implements ebiten.Game.
 func (a *App) Draw(screen *ebiten.Image) {
+	// Draw runs at the display's rate while Update runs at a fixed TPS, so
+	// the clock moves on again here: motion eased inside Paint is then as
+	// smooth as the screen allows, and frozen for the paint.
+	frame.begin(clock())
 	bg := a.cfg.Background
 	if bg == nil {
 		bg = theme.Peek().Bg

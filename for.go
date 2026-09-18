@@ -129,7 +129,7 @@ func (f *ForWidget[T, K]) remove(k K, e *forEntry[T]) {
 		return
 	}
 	e.index = slices.Index(f.keys, k)
-	e.since = clock()
+	e.since = Now()
 	f.leaving = append(f.leaving, e)
 	f.leaveKeys = append(f.leaveKeys, k)
 }
@@ -271,7 +271,7 @@ type forRowKey[K comparable] struct{ k K }
 // and drops the ones that finished. The list lays out every frame while
 // any is leaving.
 func (f *ForWidget[T, K]) placeLeaving() {
-	now := clock()
+	now := Now()
 	for i := 0; i < len(f.leaving); i++ {
 		e := f.leaving[i]
 		t := e.transition()

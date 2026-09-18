@@ -244,7 +244,7 @@ func (s *Sprung[T]) step(now time.Time) bool {
 // had got to, and Value reports where it is at a given time.
 //
 //	func (s *knob) Paint(dst *ggui.Canvas, r ggui.Rect) {
-//		now := time.Now()
+//		now := ggui.Now()
 //		s.pos.MoveTo(target, now, 150*time.Millisecond)
 //		x := r.Origin.X + s.pos.Value(now)*r.Size.W
 //		...

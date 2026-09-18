@@ -82,7 +82,7 @@ func (t *TransitionWidget) Paint(dst *Canvas, r Rect) {
 		// until Presence removes it.
 		p = 1
 	} else if !t.driven {
-		now := clock()
+		now := Now()
 		start := now
 		at := Anchor{Rect: r, ID: t.id}
 		if s, ok := dst.Retained(at, transitionSlot); ok {

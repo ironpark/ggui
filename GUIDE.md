@@ -418,7 +418,11 @@ and `.RowName(fn)` for a table row's accessible name.
 
 Controls obtain colors and spacing from the inherited theme. Hover and press
 state stay in the widget; animated details retain their motion across rebuilds.
-Animations use `ggui.Now()`, which `ggui.SetClock` can replace in tests.
+Animations use `ggui.Now()`: the frame's instant, sampled once per frame so
+everything animating agrees on the time, and moved on by at most 100ms per
+frame so a window that was hidden resumes instead of jumping. Read it rather
+than `time.Now` in a `Paint`. `ggui.SetClock` replaces the source in tests,
+and `Probe.Advance(d)` steps a headless frame by exactly `d`.
 
 ### Text input and validation
 
