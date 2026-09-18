@@ -132,7 +132,7 @@ func (a *AttachmentWidget) uploadState() AttachmentState {
 
 func (a *AttachmentWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	a.theme, a.reduced, a.current = env.Theme(), env.ReducedMotion(), a.uploadState()
-	a.padX, a.padY, a.gap, a.radius, a.mediaSide = 10, 8, 8, 16, 40
+	a.padX, a.padY, a.gap, a.mediaSide = 10, 8, 8, 40
 	a.radius = a.theme.ChatTokens().AttachmentRadius
 	fontSize := 14.0
 	switch a.size {
@@ -258,7 +258,7 @@ func (a *AttachmentWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 func translated(r ggui.Rect, at ggui.Point) ggui.Rect { r.Origin = r.Origin.Add(at); return r }
 
 func (a *AttachmentWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	state := a.uploadState()
+	state := a.current
 	t := a.theme
 	fill, border := mix(t.Bg, t.Muted, .4), t.Border
 	if a.trigger != nil && a.trigger.Hovered {
@@ -287,6 +287,10 @@ func (a *AttachmentWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 			// A moving highlight across the glyphs, rather than pulsing the whole card.
 			phase := float64(ggui.Now().UnixMilli()%2000) / 2000
 			center := (titleRect.Size.W+80)*phase - 40
+			highlight := t.Card
+			if red, green, blue, _ := t.Card.RGBA(); red+green+blue < 3*32768 {
+				highlight = color.White
+			}
 			for i := 0; i < 16; i++ {
 				x := center + float64(i)*4 - 32
 				band := ggui.Rct(titleRect.Origin.Add(ggui.Pt(x, 0.0)), ggui.Sz(4.0, titleRect.Size.H)).Intersect(titleRect)
@@ -294,11 +298,6 @@ func (a *AttachmentWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 					continue
 				}
 				strength := 1 - math.Abs(float64(i)-7.5)/8
-				highlight := t.Card
-				red, green, blue, _ := t.Card.RGBA()
-				if red+green+blue < 3*32768 {
-					highlight = color.White
-				}
 				a.titleText.text.Color(mix(t.Fg, highlight, .8*strength))
 				inner.Clip(band).Inert().Paint(a.titleText.text, titleRect)
 			}
@@ -349,8 +348,10 @@ func (a *AttachmentWidget) paintMedia(dst *ggui.Canvas, r ggui.Rect, state Attac
 // attachmentText clips and ellipsizes visually while keeping the complete name
 // in the semantics tree. Measurements use the same font and scale as drawing.
 type attachmentText struct {
-	text  *ggui.TextWidget
-	value string
+	text     *ggui.TextWidget
+	value    string
+	fitted   bool // truncation computed for value at fitWidth
+	fitWidth float64
 }
 
 func (t *attachmentText) set(value string, size float64, col color.Color) {
@@ -359,8 +360,13 @@ func (t *attachmentText) set(value string, size float64, col color.Color) {
 		t.text = ggui.Text(t.value).NoWrap()
 	}
 	t.text.Set(t.value).Size(size).LineHeight(1.25).Color(col)
+	t.fitted = false
 }
 func (t *attachmentText) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	if t.fitted && t.fitWidth == c.MaxW {
+		return t.text.Layout(c, env)
+	}
+	t.fitted, t.fitWidth = true, c.MaxW
 	t.text.Set(t.value)
 	natural := t.text.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env)
 	if natural.W > c.MaxW {

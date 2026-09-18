@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"embed"
-	"image"
 	"image/color"
 	_ "image/jpeg"
 	_ "image/png"
@@ -23,10 +21,7 @@ var chatFonts = sync.OnceValue(func() [2]*ggui.Font {
 		if err != nil {
 			panic(err)
 		}
-		fonts[i], err = ggui.LoadFont(data)
-		if err != nil {
-			panic(err)
-		}
+		fonts[i] = ggui.MustFont(data)
 	}
 	return fonts
 })
@@ -36,20 +31,17 @@ func chatImage(name string) *ebiten.Image {
 	if err != nil {
 		panic(err)
 	}
-	src, _, err := image.Decode(bytes.NewReader(data))
+	img, err := ggui.DecodeImage(data)
 	if err != nil {
 		panic(err)
 	}
-	img := ebiten.NewImageFromImage(src)
 	ggui.OnCleanup(img.Deallocate)
 	return img
 }
 
-// Reference scenes inherit the selected preset and share the gallery font.
+// Reference scenes inherit the selected preset, whose fonts main.go installs.
 func chatSurface(content ggui.Widget, maxWidth ...float64) ggui.Widget {
 	t := ggui.UseTheme()
-	fonts := chatFonts()
-	t.Text.Font, t.Title.Font = fonts[0], fonts[1]
 	t.Card = t.Bg // reaction rings cut out against the actual conversation surface
 	width := 384.0
 	if len(maxWidth) > 0 {

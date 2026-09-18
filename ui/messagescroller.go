@@ -71,12 +71,14 @@ type MessageScrollerWidget struct {
 	visibility                                                    TranscriptVisibility
 	onVisibility                                                  func(TranscriptVisibility)
 	startButton, endButton                                        *ButtonWidget
+	pause                                                         func()
 }
 
 func MessageScroller(items ggui.Reader[[]MessageEntry]) *MessageScrollerWidget {
 	s := &MessageScrollerWidget{source: items, height: 320, gap: 32, peek: 64, threshold: 8, opening: ScrollEnd, duration: 200 * time.Millisecond}
 	s.Role, s.Name = ggui.RoleGroup, "Conversation"
 	s.AutoKey()
+	s.pause = s.Pause
 	s.startButton = Button("↑", func() { s.ScrollToStart() }).Named("Scroll to start").Outline().Pad(4, 10)
 	s.endButton = Button("↓", func() { s.ScrollToEnd() }).Named("Scroll to end").Outline().Pad(4, 10)
 	return s
@@ -125,6 +127,12 @@ func (s *MessageScrollerWidget) Visibility() TranscriptVisibility {
 	return v
 }
 func (s *MessageScrollerWidget) limit() float64 { return max(0, s.total-s.viewport) }
+func (s *MessageScrollerWidget) index(id string) int {
+	return slices.IndexFunc(s.rows, func(row MessageEntry) bool { return row.ID == id })
+}
+
+// clearTargets drops every queued scroll destination; the caller sets its own.
+func (s *MessageScrollerWidget) clearTargets() { s.pendingID, s.restore, s.anchor = "", nil, "" }
 
 // Pause releases output following and smooth scrolling, without moving the reader.
 func (s *MessageScrollerWidget) Pause() { s.following = false; s.animStart = time.Time{} }
@@ -138,16 +146,12 @@ func (s *MessageScrollerWidget) jump(v float64, animate bool) {
 	}
 }
 func (s *MessageScrollerWidget) ScrollToStart() {
-	s.pendingID = ""
-	s.restore = nil
+	s.clearTargets()
 	s.Pause()
-	s.anchor = ""
 	s.jump(0, true)
 }
 func (s *MessageScrollerWidget) ScrollToEnd() {
-	s.pendingID = ""
-	s.restore = nil
-	s.anchor = ""
+	s.clearTargets()
 	s.following = s.auto
 	s.jump(s.limit(), true)
 }
@@ -156,9 +160,8 @@ func (s *MessageScrollerWidget) ScrollToEnd() {
 // stays pending until it arrives; later commands replace the pending target.
 func (s *MessageScrollerWidget) ScrollToMessage(id string, align ScrollAlignment) {
 	s.Pause()
-	s.anchor = ""
+	s.clearTargets()
 	s.pendingID, s.pendingAlign = id, align
-	s.restore = nil
 }
 func (s *MessageScrollerWidget) Save() TranscriptPosition {
 	for i, row := range s.rows {
@@ -169,8 +172,7 @@ func (s *MessageScrollerWidget) Save() TranscriptPosition {
 	return TranscriptPosition{Following: s.following}
 }
 func (s *MessageScrollerWidget) Restore(p TranscriptPosition) {
-	s.pendingID = ""
-	s.anchor = ""
+	s.clearTargets()
 	s.restore = &p
 	s.Pause()
 }
@@ -242,11 +244,8 @@ func (s *MessageScrollerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Si
 		if s.following && s.auto {
 			s.offset = s.limit()
 		} else {
-			for i, row := range rows {
-				if row.ID == saved.MessageID {
-					s.offset = s.starts[i] + saved.Offset
-					break
-				}
+			if i := s.index(saved.MessageID); i >= 0 {
+				s.offset = s.starts[i] + saved.Offset
 			}
 		}
 		if lastOld >= 0 {
@@ -259,15 +258,11 @@ func (s *MessageScrollerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Si
 			}
 		}
 	}
-	if s.anchor != "" {
-		for i, row := range rows {
-			if row.ID == s.anchor {
-				start := max(0, s.starts[i]-s.margin-s.peek)
-				s.total = max(s.total, start+s.viewport)
-				if s.following {
-					s.offset = max(start, s.limit())
-				}
-			}
+	if i := s.index(s.anchor); s.anchor != "" && i >= 0 {
+		start := max(0, s.starts[i]-s.margin-s.peek)
+		s.total = max(s.total, start+s.viewport)
+		if s.following {
+			s.offset = max(start, s.limit())
 		}
 	}
 	s.offset = clamp(s.offset, 0, s.limit())
@@ -279,24 +274,18 @@ func (s *MessageScrollerWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	s.rect = r
 	dst.HitPointer(r, s)
 	dst.HitKey(r, s)
-	dst.ObserveInput(r, s.Pause)
+	dst.ObserveInput(r, s.pause)
 	if s.restore != nil {
-		for i, row := range s.rows {
-			if row.ID == s.restore.MessageID {
-				s.jump(s.starts[i]+s.restore.Offset, false)
-				s.following = s.restore.Following && s.auto
-				s.restore = nil
-				break
-			}
+		if i := s.index(s.restore.MessageID); i >= 0 {
+			s.jump(s.starts[i]+s.restore.Offset, false)
+			s.following = s.restore.Following && s.auto
+			s.restore = nil
 		}
 	}
 	if s.pendingID != "" {
-		for i, row := range s.rows {
-			if row.ID == s.pendingID {
-				s.jump(s.target(i, s.pendingAlign), true)
-				s.pendingID = ""
-				break
-			}
+		if i := s.index(s.pendingID); i >= 0 {
+			s.jump(s.target(i, s.pendingAlign), true)
+			s.pendingID = ""
 		}
 	}
 	if !s.animStart.IsZero() {
@@ -321,9 +310,7 @@ func (s *MessageScrollerWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 			clip.Paint(row.Content, ggui.Rct(r.Origin.Add(ggui.Pt(0.0, y)), ggui.Sz(r.Size.W, s.sizes[i].H)))
 		}
 		if v.CanScrollEnd {
-			for i := 0; i < 12; i++ {
-				clip.FillRect(ggui.Rct(r.Origin.Add(ggui.Pt(0.0, r.Size.H-float64(i)-1)), ggui.Sz(r.Size.W, 1.0)), fade(s.theme.Card, .8*(1-float64(i)/12)))
-			}
+			edgeFade(clip, r, 0, -1, s.theme.Card, .8)
 		}
 		if v.CanScrollStart {
 			clip.Paint(s.startButton, ggui.Rct(r.Origin.Add(ggui.Pt((r.Size.W-32)/2, 16.0)), ggui.Sz(32, 32)))

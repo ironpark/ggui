@@ -457,23 +457,17 @@ func (q *QuestionnaireWidget) button(label string, fn func(), outline bool) ggui
 	return &questionButton{ButtonWidget: b, q: q}
 }
 func (q *QuestionnaireWidget) focusAnswer(direction, from int) {
-	targets := []int{}
-	for i, c := range q.choices {
-		if !c.Inert {
-			targets = append(targets, i)
+	// The text input, when present, is the slot after the last choice.
+	enabled := func(i int) bool {
+		if i < len(q.choices) {
+			return !q.choices[i].Inert
 		}
+		return q.input != nil
 	}
-	if q.input != nil {
-		targets = append(targets, len(q.choices))
-	}
-	if len(targets) == 0 {
+	next := stepIndex(from, direction, len(q.choices)+1, enabled)
+	if !enabled(next) {
 		return
 	}
-	at := slices.Index(targets, from)
-	if at < 0 {
-		at = pick(direction < 0, 0, -1)
-	}
-	next := targets[(at+direction+len(targets))%len(targets)]
 	q.pendingFocus = true
 	q.focusChoice = next
 	if next < len(q.choices) && !q.choices[next].item.Multiple {
@@ -632,18 +626,14 @@ func (c *questionChoice) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Paint(c.body, r)
 	glyph := ggui.Rct(r.Origin.Add(ggui.Pt(tokens.QuestionChoicePadding.Left, tokens.QuestionChoicePadding.Top+2)), ggui.Sz(16, 16))
 	radius := pick(c.item.Multiple, 4.0, 8.0)
-	dst.FillRoundRect(glyph, radius, t.Input)
+	dst.FillRoundRect(glyph, radius, pick(selected, t.Primary, t.Input))
 	dst.StrokeRoundRect(glyph, radius, 1, pick(selected, t.Primary, t.Border))
-	if selected {
-		if c.item.Multiple {
-			dst.FillRoundRect(glyph, radius, t.Primary)
-			at := glyph.Origin
-			dst.StrokeLine(at.Add(ggui.Pt(4.0, 8.0)), at.Add(ggui.Pt(7.0, 11.0)), 1.5, t.PrimaryFg)
-			dst.StrokeLine(at.Add(ggui.Pt(7.0, 11.0)), at.Add(ggui.Pt(12.0, 5.0)), 1.5, t.PrimaryFg)
-		} else {
-			dst.FillRoundRect(glyph, radius, t.Primary)
-			dst.FillCircle(glyph.Origin.Add(ggui.Pt(8, 8)), 4, t.PrimaryFg)
-		}
+	if selected && c.item.Multiple {
+		at := glyph.Origin
+		dst.StrokeLine(at.Add(ggui.Pt(4.0, 8.0)), at.Add(ggui.Pt(7.0, 11.0)), 1.5, t.PrimaryFg)
+		dst.StrokeLine(at.Add(ggui.Pt(7.0, 11.0)), at.Add(ggui.Pt(12.0, 5.0)), 1.5, t.PrimaryFg)
+	} else if selected {
+		dst.FillCircle(glyph.Origin.Add(ggui.Pt(8, 8)), 4, t.PrimaryFg)
 	}
 	c.FocusRing(dst, r, tokens.QuestionRadius, t.Ring)
 }

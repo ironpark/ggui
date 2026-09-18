@@ -6,7 +6,7 @@ import "github.com/ironpark/ggui"
 // The avatar rests beside the content above the footer. End reverses the row
 // and aligns its header, footer and a directly contained Bubble to the right.
 type MessageWidget struct {
-	content, avatar, header, footer              ggui.Widget
+	content, avatar                              ggui.Widget
 	headerView, footerView                       *ggui.StyledWidget
 	end                                          bool
 	bodySize, avatarSize, headerSize, footerSize ggui.Size
@@ -16,12 +16,10 @@ type MessageWidget struct {
 func Message(content ggui.Widget) *MessageWidget             { return &MessageWidget{content: content} }
 func (m *MessageWidget) Avatar(w ggui.Widget) *MessageWidget { m.avatar = w; return m }
 func (m *MessageWidget) Header(w ggui.Widget) *MessageWidget {
-	m.header = w
 	m.headerView = ggui.Styled(ggui.Padding(w, 0, 12))
 	return m
 }
 func (m *MessageWidget) Footer(w ggui.Widget) *MessageWidget {
-	m.footer = w
 	m.footerView = ggui.Styled(ggui.Padding(w, 0, 12))
 	return m
 }

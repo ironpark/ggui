@@ -260,8 +260,6 @@ func (a *App) Draw(screen *ebiten.Image) {
 		a.insp.panel = Rect{} // nothing to intercept while it is off
 	}
 	a.spare = a.canvas.prev
-	a.input.regions = a.canvas.hits
-	a.input.observers = a.canvas.inputObservers
 }
 
 // LayoutF implements ebiten.LayoutFer: the screen is sized in physical

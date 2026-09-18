@@ -65,6 +65,28 @@ func tint(c color.Color, f float64) color.Color { return channels(c, f, 1) }
 // because a premultiplied color stays premultiplied only if they all do.
 func fade(c color.Color, f float64) color.Color { return channels(c, f, f) }
 
+// edgeFade paints a 12px gradient from col at one edge of r to transparent.
+// (dx, dy) points inward from the opaque edge: (1, 0) fades from the left,
+// (-1, 0) from the right, (0, -1) from the bottom.
+func edgeFade(dst *ggui.Canvas, r ggui.Rect, dx, dy float64, col color.Color, strength float64) {
+	const width = 12
+	for i := 0; i < width; i++ {
+		alpha := strength * (1 - float64(i)/width)
+		strip := ggui.Rct(r.Origin, ggui.Sz(r.Size.W, 1.0))
+		switch {
+		case dx > 0:
+			strip = ggui.Rct(r.Origin.Add(ggui.Pt(float64(i), 0.0)), ggui.Sz(1.0, r.Size.H))
+		case dx < 0:
+			strip = ggui.Rct(r.Origin.Add(ggui.Pt(r.Size.W-float64(i)-1, 0.0)), ggui.Sz(1.0, r.Size.H))
+		case dy > 0:
+			strip = ggui.Rct(r.Origin.Add(ggui.Pt(0.0, float64(i))), ggui.Sz(r.Size.W, 1.0))
+		default:
+			strip = ggui.Rct(r.Origin.Add(ggui.Pt(0.0, r.Size.H-float64(i)-1)), ggui.Sz(r.Size.W, 1.0))
+		}
+		dst.FillRect(strip, fade(col, alpha))
+	}
+}
+
 // setChanged stores v in s if it differs and then reports it to fn, which
 // may be nil. It is the shape every control's OnChange follows.
 func setChanged[T comparable](s ggui.Binding[T], v T, fn func(T)) {

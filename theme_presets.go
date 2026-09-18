@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"slices"
 	"strings"
 	"sync"
 
@@ -95,11 +96,7 @@ func rheaChat() ChatTokens {
 	return ChatTokens{24, Insets(13, 13), 16, 12, 16, 20, 12, 4, Insets(12, 16), 16}
 }
 func defaultChat() ChatTokens {
-	t := novaChat()
-	r := rheaChat()
-	t.BubbleRadius, t.BubblePadding, t.AttachmentRadius, t.AttachmentXSRadius = r.BubbleRadius, r.BubblePadding, r.AttachmentRadius, r.AttachmentXSRadius
-	t.QuestionRadius, t.QuestionInputRadius = 10, 10
-	return t
+	return ChatTokens{24, Insets(13, 13), 16, 12, 10, 16, 10, 2, Insets(10, 12), 10}
 }
 
 // ChatTokens resolves an omitted Chat field for manually constructed Themes.
@@ -115,18 +112,10 @@ func (p ThemePreset) theme(dark bool) Theme {
 	if base == "" {
 		base = BaseNeutral
 	}
-	valid := false
-	for _, b := range BaseColors() {
-		valid = valid || base == b
-	}
-	if !valid {
+	if !slices.Contains(BaseColors(), base) {
 		panic("ggui: unknown theme base " + string(base))
 	}
-	valid = false
-	for _, a := range AccentColors() {
-		valid = valid || p.Accent == a
-	}
-	if !valid {
+	if !slices.Contains(AccentColors(), p.Accent) {
 		panic("ggui: unknown theme accent " + string(p.Accent))
 	}
 	t := DefaultTheme()

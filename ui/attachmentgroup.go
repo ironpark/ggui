@@ -86,15 +86,11 @@ func (g *AttachmentGroupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 			clipped.Paint(card, ggui.Rct(r.Origin.Add(ggui.Pt(g.starts[i]-g.offset, 4.0)), g.sizes[i]))
 		}
 		// Scroll-aware edge fades stay visual: they register no hit regions.
-		const fadeWidth = 12
-		for i := 0; i < fadeWidth; i++ {
-			alpha := .85 * (1 - float64(i)/fadeWidth)
-			if g.offset > 0 {
-				clipped.FillRect(ggui.Rct(r.Origin.Add(ggui.Pt(float64(i), 0.0)), ggui.Sz(1.0, r.Size.H)), fade(g.theme.Card, alpha))
-			}
-			if g.offset < g.limit() {
-				clipped.FillRect(ggui.Rct(r.Origin.Add(ggui.Pt(r.Size.W-float64(i)-1, 0.0)), ggui.Sz(1.0, r.Size.H)), fade(g.theme.Card, alpha))
-			}
+		if g.offset > 0 {
+			edgeFade(clipped, r, 1, 0, g.theme.Card, .85)
+		}
+		if g.offset < g.limit() {
+			edgeFade(clipped, r, -1, 0, g.theme.Card, .85)
 		}
 	})
 	g.FocusRing(dst, r, g.theme.Radius, g.theme.Ring)

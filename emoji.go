@@ -61,23 +61,50 @@ var systemEmoji = sync.OnceValue(func() *Font {
 // MultiFace's per-rune split of ZWJ, variation-selector and keycap sequences.
 type emojiFace struct {
 	text.Face
-	emoji text.Face
+	size     float64
+	emoji    text.Face
+	resolved bool
 }
 
 func withEmoji(face text.Face, size float64) text.Face {
+	if emojiFontSet && emojiFont == nil {
+		return face
+	}
+	return &emojiFace{Face: face, size: size}
+}
+
+// colorFace resolves the emoji font the first time a grapheme needs it, so
+// text without emoji never loads or parses the (large) system emoji font.
+func (ef *emojiFace) colorFace() text.Face {
+	if ef.resolved {
+		return ef.emoji
+	}
+	ef.resolved = true
 	f := emojiFont
 	if !emojiFontSet {
 		f = SystemEmojiFont()
 	}
 	if f == nil {
-		return face
+		return nil
 	}
-	ef := &text.GoTextFace{Source: f.src, Size: size}
-	m, em := face.Metrics(), ef.Metrics()
+	e := &text.GoTextFace{Source: f.src, Size: ef.size}
+	m, em := ef.Face.Metrics(), e.Metrics()
 	if h := em.HAscent + em.HDescent; h > 0 {
-		ef.Size *= (m.HAscent + m.HDescent) / h
+		e.Size *= (m.HAscent + m.HDescent) / h
 	}
-	return &emojiFace{Face: face, emoji: ef}
+	ef.emoji = e
+	return e
+}
+
+// mayHoldEmoji is a cheap byte scan: every emoji-presentation code point,
+// U+FE0F and U+20E3 encode with a lead byte of 0xE2 or above.
+func mayHoldEmoji(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 0xE2 {
+			return true
+		}
+	}
+	return false
 }
 
 func inEmojiRanges(r rune, ranges [][2]rune) bool {
@@ -110,7 +137,7 @@ func emojiCluster(s string) bool {
 // are preserved. A whole emoji grapheme always goes to the same font.
 func textRuns(s string, face text.Face, visit func(string, text.Face)) {
 	ef, ok := face.(*emojiFace)
-	if !ok {
+	if !ok || !mayHoldEmoji(s) {
 		visit(s, face)
 		return
 	}
@@ -120,7 +147,9 @@ func textRuns(s string, face text.Face, visit func(string, text.Face)) {
 		end := nextGrapheme(s, i)
 		chosen := ef.Face
 		if emojiCluster(s[i:end]) {
-			chosen = ef.emoji
+			if e := ef.colorFace(); e != nil {
+				chosen = e
+			}
 		}
 		if current != nil && chosen != current {
 			visit(s[start:i], current)
