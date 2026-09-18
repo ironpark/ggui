@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 )
@@ -104,7 +103,7 @@ func newTodoApp() *ggui.App {
 
 	// The root Builder reads nothing reactive: theme comes from the Env at
 	// layout, and the parts that change are islands.
-	app := ggui.New(ggui.Config{Title: "ggui · todo", Width: 520, Height: 600, Resizable: true, Inspector: ebiten.KeyF1}, func() ggui.Widget {
+	app := ggui.New(ggui.Config{Title: "ggui · todo", Width: 520, Height: 600, Resizable: true, Inspector: ggui.KeyF1}, func() ggui.Widget {
 		return ggui.Center(ggui.Box(ui.Card(ggui.Column(
 			ggui.Row(
 				ggui.Title("todo"),

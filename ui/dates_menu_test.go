@@ -1,7 +1,6 @@
 package ui_test
 
 import (
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	"testing"
@@ -16,16 +15,16 @@ func TestCalendarNavigationAndConstraints(t *testing.T) {
 	p := ggui.NewProbe(c, ggui.Sz(300, 350))
 	defer p.Close()
 	p.Tap("2024-01-31")
-	p.Type(ggui.Mods{}, ebiten.KeyPageDown, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyPageDown, ggui.KeyEnter)
 	if !value.Peek().Equal(date(2024, 2, 29)) || changes != 1 {
 		t.Fatal("leap month navigation", value.Peek(), changes)
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyArrowRight, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyArrowRight, ggui.KeyEnter)
 	if !value.Peek().Equal(date(2024, 3, 1)) {
 		t.Fatal("month rollover", value.Peek())
 	}
 	c.Bounds(date(2024, 3, 1), date(2024, 3, 10)).DisabledDate(func(d time.Time) bool { return d.Weekday() == time.Saturday })
-	p.Type(ggui.Mods{}, ebiten.KeyArrowRight, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyArrowRight, ggui.KeyEnter)
 	if !value.Peek().Equal(date(2024, 3, 1)) {
 		t.Fatal("disabled date selected")
 	}
@@ -44,7 +43,7 @@ func TestCalendarNavigationAndConstraints(t *testing.T) {
 	}
 	c.Disabled(true)
 	p.Frame()
-	p.Type(ggui.Mods{}, ebiten.KeyArrowRight, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyArrowRight, ggui.KeyEnter)
 	if !value.Peek().Equal(date(2025, 12, 15)) {
 		t.Fatal("disabled calendar")
 	}
@@ -61,11 +60,11 @@ func TestDatePickerSelectionAndCancel(t *testing.T) {
 	if d.Popup().IsOpen() || !v.Peek().Equal(date(2024, 2, 29)) || n != 1 {
 		t.Fatal("selection", v.Peek(), n)
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
 	if !d.Popup().IsOpen() {
 		t.Fatal("focus return")
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyEscape)
+	p.Type(ggui.Mods{}, ggui.KeyEscape)
 	if d.Popup().IsOpen() || n != 1 {
 		t.Fatal("cancel")
 	}
@@ -87,11 +86,11 @@ func TestMenubarSwitchAndKeyboard(t *testing.T) {
 	b := ui.Menubar(ui.Menu("File", ui.MenuItem("Unavailable", nil).Disabled(true), ui.MenuItem("New", func() { picked = "new" })), ui.Menu("Edit", ui.MenuItem("Copy", func() { picked = "copy" })))
 	p := ggui.NewProbe(ggui.Column(b, ui.Button("After", func() { after++ })), ggui.Sz(400, 300))
 	defer p.Close()
-	p.Type(ggui.Mods{}, ebiten.KeyTab, ebiten.KeyArrowDown, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyArrowDown, ggui.KeyEnter)
 	if picked != "new" || b.Popup().IsOpen() {
 		t.Fatal("keyboard initial action", picked)
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyArrowDown, ebiten.KeyArrowRight, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyArrowDown, ggui.KeyArrowRight, ggui.KeyEnter)
 	if picked != "copy" || b.Popup().IsOpen() {
 		t.Fatal("keyboard switch", picked)
 	}
@@ -103,11 +102,11 @@ func TestMenubarSwitchAndKeyboard(t *testing.T) {
 		t.Fatal("pointer item failed to close")
 	}
 	act(t, p, ggui.RoleMenu, "File", ggui.Action{Kind: ggui.ActionExpand})
-	p.Type(ggui.Mods{}, ebiten.KeyEscape)
+	p.Type(ggui.Mods{}, ggui.KeyEscape)
 	if b.Popup().IsOpen() {
 		t.Fatal("Escape")
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyTab, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyEnter)
 	if after != 1 {
 		t.Fatal("menubar must have one tab stop", after)
 	}
@@ -127,15 +126,15 @@ func TestCalendarCivilDatesAndWeekStart(t *testing.T) {
 	if n != 0 {
 		t.Fatal("same civil date triggered callback")
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyArrowRight, ebiten.KeyArrowRight, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyArrowRight, ggui.KeyArrowRight, ggui.KeyEnter)
 	if v.Peek().Day() != 11 || v.Peek().Hour() != 0 || v.Peek().Location() != loc {
 		t.Fatal("DST date arithmetic", v.Peek())
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyEnd, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyEnd, ggui.KeyEnter)
 	if v.Peek().Day() != 17 {
 		t.Fatal("Monday week end", v.Peek())
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyHome, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyHome, ggui.KeyEnter)
 	if v.Peek().Day() != 11 {
 		t.Fatal("Monday week start", v.Peek())
 	}
@@ -157,10 +156,10 @@ func TestMenubarDisabledAndRebuild(t *testing.T) {
 		return ggui.Column(b)
 	}, ggui.Sz(400, 300))
 	defer p.Close()
-	p.Type(ggui.Mods{}, ebiten.KeyTab, ebiten.KeyArrowDown)
+	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyArrowDown)
 	version.Set(1)
 	p.Frame()
-	p.Type(ggui.Mods{}, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
 	if calls != 1 || b.Popup().IsOpen() {
 		t.Fatal("rebuild or disabled skip", calls)
 	}
@@ -171,7 +170,7 @@ func TestMenubarKeyboardIgnoresStationaryPointer(t *testing.T) {
 	b := ui.Menubar(ui.Menu("File", ui.MenuItem("New", func() { chosen = "new" })), ui.Menu("Edit", ui.MenuItem("Copy", func() { chosen = "copy" })))
 	p := ggui.NewProbe(b, ggui.Sz(300, 200))
 	defer p.Close()
-	p.Type(ggui.Mods{}, ebiten.KeyTab, ebiten.KeyArrowRight, ebiten.KeyArrowDown, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyArrowRight, ggui.KeyArrowDown, ggui.KeyEnter)
 	if chosen != "copy" {
 		t.Fatal("stationary pointer overrode keyboard navigation", chosen)
 	}
@@ -193,7 +192,7 @@ func TestButtonStylesPreserveActivationAndDisabledState(t *testing.T) {
 			p := ggui.NewProbe(b, ggui.Sz(200, 60))
 			defer p.Close()
 			p.Tap("Action")
-			p.Type(ggui.Mods{}, ebiten.KeyEnter)
+			p.Type(ggui.Mods{}, ggui.KeyEnter)
 			act(t, p, ggui.RoleButton, "Action", ggui.Action{Kind: ggui.ActionPress})
 			if calls != 3 {
 				t.Fatal("style changed activation", calls)
@@ -228,7 +227,7 @@ func TestCommandHoverAndStableHeight(t *testing.T) {
 	p.Tap("Search commands")
 	two, _ := p.Find("Two")
 	p.Move(two.Center())
-	p.Type(ggui.Mods{}, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
 	if picked != "two" {
 		t.Fatal("hover did not update keyboard selection", picked)
 	}
@@ -239,7 +238,7 @@ func TestCommandHoverAndStableHeight(t *testing.T) {
 	if before.H != after.H {
 		t.Fatal("palette jumps while filtering", before, after)
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
 	if picked != "two" {
 		t.Fatal("empty command activated")
 	}

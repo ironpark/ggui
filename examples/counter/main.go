@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 )
@@ -78,7 +77,7 @@ func main() {
 		Width:     480,
 		Height:    320,
 		Resizable: true,
-		Inspector: ebiten.KeyF1,
+		Inspector: ggui.KeyF1,
 	}, m.build)
 	m.shortcuts(app)
 

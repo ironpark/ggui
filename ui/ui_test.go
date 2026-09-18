@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 )
@@ -30,7 +29,7 @@ func TestButtonTapsAndDisables(t *testing.T) {
 	}
 	at := find(t, p, ggui.RoleButton, "go").Center()
 	p.Move(at)
-	if p.Cursor() != ebiten.CursorShapePointer {
+	if p.Cursor() != ggui.CursorShapePointer {
 		t.Fatalf("cursor = %v over a button, want pointer", p.Cursor())
 	}
 	b.Disabled(true)
@@ -38,7 +37,7 @@ func TestButtonTapsAndDisables(t *testing.T) {
 	if taps != 1 {
 		t.Fatalf("taps = %d after a click on a disabled button, want 1", taps)
 	}
-	if p.Cursor() != ebiten.CursorShapeDefault {
+	if p.Cursor() != ggui.CursorShapeDefault {
 		t.Fatalf("cursor = %v over a disabled button, want default", p.Cursor())
 	}
 	if _, ok := p.Find("go"); ok {
@@ -146,7 +145,7 @@ func TestTextFieldFocusesFromItsPadding(t *testing.T) {
 	if !f.Input().Focused() || !p.Focused() {
 		t.Fatal("click in the padding did not focus the field")
 	}
-	if p.Cursor() != ebiten.CursorShapeText {
+	if p.Cursor() != ggui.CursorShapeText {
 		t.Fatalf("cursor = %v over a text field, want text", p.Cursor())
 	}
 	if got := f.Layout(ggui.Loose(ggui.Sz(300, 100)), ggui.Env{}); got.W != 300 || got.H <= 20 {
@@ -231,15 +230,15 @@ func TestControlsWorkFromTheKeyboard(t *testing.T) {
 	).Gap(4)
 	p := ggui.NewProbe(tree, ggui.Sz(200, 120))
 	defer p.Close()
-	p.Type(ggui.Mods{}, ebiten.KeyTab, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyEnter)
 	if taps != 1 {
 		t.Fatalf("taps = %d after Tab, Enter; want 1", taps)
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyTab, ebiten.KeySpace)
+	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeySpace)
 	if !on.Peek() {
 		t.Fatal("Space did not toggle the focused checkbox")
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyTab, ebiten.KeyArrowRight, ebiten.KeyArrowRight, ebiten.KeyArrowLeft)
+	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyArrowRight, ggui.KeyArrowRight, ggui.KeyArrowLeft)
 	if v.Peek() != 55 {
 		t.Fatalf("slider = %v after right, right, left; want 55", v.Peek())
 	}
@@ -290,15 +289,15 @@ func TestSelectOpensPicksAndClosesWithPointerAndKeys(t *testing.T) {
 		t.Fatalf("value %q changes %d open %v after clicking the third row", v.Peek(), changes, sel.Popup().IsOpen())
 	}
 	// Keyboard: focus is on the field; Down while closed steps the value.
-	p.Type(ggui.Mods{}, ebiten.KeyArrowDown)
+	p.Type(ggui.Mods{}, ggui.KeyArrowDown)
 	if v.Peek() != "a" {
 		t.Fatalf("Down wrapped to %q, want a", v.Peek())
 	}
-	p.Type(ggui.Mods{}, ebiten.KeySpace, ebiten.KeyArrowDown, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeySpace, ggui.KeyArrowDown, ggui.KeyEnter)
 	if v.Peek() != "b" || sel.Popup().IsOpen() {
 		t.Fatalf("Space, Down, Enter gave %q open %v; want b and closed", v.Peek(), sel.Popup().IsOpen())
 	}
-	p.Type(ggui.Mods{}, ebiten.KeySpace)
+	p.Type(ggui.Mods{}, ggui.KeySpace)
 	size := p.Frame()
 	p.Click(ggui.Pt(size.W-10, size.H-10)) // the far corner, outside the list
 	if sel.Popup().IsOpen() {
@@ -324,11 +323,11 @@ func TestMenuRunsItemsAndClosesOnEscape(t *testing.T) {
 	if ran != "new" || m.Popup().IsOpen() {
 		t.Fatalf("ran %q open %v after clicking the first item", ran, m.Popup().IsOpen())
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyArrowDown, ebiten.KeyArrowDown, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyArrowDown, ggui.KeyArrowDown, ggui.KeyEnter)
 	if ran != "quit" {
 		t.Fatalf("Down, Down, Enter ran %q, want quit", ran)
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyArrowDown, ebiten.KeyEscape)
+	p.Type(ggui.Mods{}, ggui.KeyArrowDown, ggui.KeyEscape)
 	if m.Popup().IsOpen() {
 		t.Fatal("Escape did not close the menu")
 	}
@@ -353,11 +352,11 @@ func TestTabsSwitchByClickAndKeys(t *testing.T) {
 	if b == (ggui.Rect{}) || a != (ggui.Rect{}) {
 		t.Fatal("second page not shown alone after the switch")
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyArrowRight)
+	p.Type(ggui.Mods{}, ggui.KeyArrowRight)
 	if sel.Peek() != 0 {
 		t.Fatalf("Right wrapped to %d, want 0", sel.Peek())
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyEnd)
+	p.Type(ggui.Mods{}, ggui.KeyEnd)
 	if sel.Peek() != 1 {
 		t.Fatalf("End went to %d, want 1", sel.Peek())
 	}
@@ -383,7 +382,7 @@ func TestCollapsibleTogglesAndHidesContent(t *testing.T) {
 	if body == (ggui.Rect{}) || opened.H < closed.H+40 {
 		t.Fatalf("content %+v, height %v -> %v; want content shown below the header", body, closed.H, opened.H)
 	}
-	p.Type(ggui.Mods{}, ebiten.KeySpace)
+	p.Type(ggui.Mods{}, ggui.KeySpace)
 	if open.Peek() {
 		t.Fatal("Space did not close")
 	}
@@ -438,11 +437,11 @@ func TestMenuKeysSkipDisabledItems(t *testing.T) {
 	p := ggui.NewProbe(ggui.Column(m), ggui.Sz(300, 300))
 	defer p.Close()
 	p.Tap("File") // focus and open
-	p.Type(ggui.Mods{}, ebiten.KeyArrowDown, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyArrowDown, ggui.KeyEnter)
 	if ran != "open" {
 		t.Fatalf("Down, Enter ran %q, want open (the first enabled item)", ran)
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyArrowUp, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyArrowUp, ggui.KeyEnter)
 	if ran != "open" {
 		t.Fatalf("Up, Enter ran %q, want open (the only enabled item, wrapping)", ran)
 	}
@@ -459,7 +458,7 @@ func TestDisabledTextFieldTakesNoInput(t *testing.T) {
 	if v.Peek() != "" || p.Focused() {
 		t.Fatalf("value %q focused %v after clicking and typing into a disabled field", v.Peek(), p.Focused())
 	}
-	if p.Cursor() != ebiten.CursorShapeDefault {
+	if p.Cursor() != ggui.CursorShapeDefault {
 		t.Fatalf("cursor = %v over a disabled field, want default", p.Cursor())
 	}
 }
@@ -471,7 +470,7 @@ func TestSliderReportsChanges(t *testing.T) {
 	p := ggui.NewProbe(s, ggui.Sz(116, 20))
 	defer p.Close()
 	p.Click(onTrack(find(t, p, ggui.RoleSlider, "volume"), 0.5))
-	p.Type(ggui.Mods{}, ebiten.KeyArrowRight, ebiten.KeyArrowRight)
+	p.Type(ggui.Mods{}, ggui.KeyArrowRight, ggui.KeyArrowRight)
 	if len(got) != 3 || got[0] != 50 || got[2] != 70 {
 		t.Fatalf("OnChange saw %v, want [50 60 70]", got)
 	}
@@ -505,7 +504,7 @@ func TestDialogKeyboardFlow(t *testing.T) {
 	)
 	p := ggui.NewProbe(tree, ggui.Sz(400, 300))
 	defer p.Close()
-	p.Type(ggui.Mods{}, ebiten.KeyTab, ebiten.KeyEnter) // focus Open, press it
+	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyEnter) // focus Open, press it
 	if !open.Peek() {
 		t.Fatal("Enter on the focused button did not open the dialog")
 	}
@@ -515,16 +514,16 @@ func TestDialogKeyboardFlow(t *testing.T) {
 	}
 	// Focus moved to the first button inside; Tab cycles inside the dialog
 	// and never reaches Other.
-	p.Type(ggui.Mods{}, ebiten.KeyTab, ebiten.KeyTab, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyTab, ggui.KeyEnter)
 	if !deleted || open.Peek() {
 		t.Fatalf("deleted %v open %v after Tab, Tab, Enter; want Delete pressed", deleted, open.Peek())
 	}
 	// Focus returned to the opener.
-	p.Type(ggui.Mods{}, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
 	if !open.Peek() {
 		t.Fatal("focus did not return to the opener when the dialog closed")
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyEscape)
+	p.Type(ggui.Mods{}, ggui.KeyEscape)
 	if open.Peek() {
 		t.Fatal("Escape did not close the dialog")
 	}

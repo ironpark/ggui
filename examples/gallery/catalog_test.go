@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	"testing"
@@ -89,7 +88,7 @@ func TestGallerySearchPasteAcrossRebuilds(t *testing.T) {
 	}
 	p.Tap("All")
 	p.Tap("Search components")
-	p.Type(ggui.Mods{Meta: true}, ebiten.KeyA)
+	p.Type(ggui.Mods{Meta: true}, ggui.KeyA)
 	pasteText(p, "Text")
 	if search.Peek() != "Text" {
 		t.Fatalf("second search text lost: %q", search.Peek())

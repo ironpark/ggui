@@ -917,6 +917,12 @@ Enter and the controls with more keys claim those. `ParseChord` reads the
 names, `KeyEvent.Is(chord)` matches one in a handler, and `App.OnKey` stays
 for what a chord cannot say.
 
+Keys, cursor shapes and mouse buttons carry ggui's own names: `ggui.KeyTab`,
+`ggui.CursorShapePointer`, `ggui.MouseButtonRight`. They are aliases for
+Ebitengine's, so they are the same values of the same types and an
+`ebiten.Key` still works wherever one is wanted; what they buy is that a
+widget, or an app, imports `ggui` alone.
+
 ### Focus scopes
 
 An open `Popup` and a `ui.Dialog` paint their content
@@ -1103,7 +1109,7 @@ its start time in slots.
 
 ## Inspector
 
-`Config{Inspector: ebiten.KeyF1}` binds a key that toggles a development
+`Config{Inspector: ggui.KeyF1}` binds a key that toggles a development
 overlay in the shape of a browser's element panel; `App.Inspector(on)` does
 the same from code. It is the quickest way to see why something sits where
 it does.

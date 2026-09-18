@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 )
@@ -24,11 +23,11 @@ func TestAttachmentIndependentActionsAndStates(t *testing.T) {
 		t.Fatal("action propagated to trigger", opened, removed)
 	}
 	p.Tap("Preview report")
-	p.Type(ggui.Mods{}, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
 	if opened != 2 {
 		t.Fatal("trigger pointer/keyboard", opened)
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyTab, ebiten.KeySpace)
+	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeySpace)
 	if removed != 2 {
 		t.Fatal("action not independently focusable")
 	}
@@ -66,19 +65,19 @@ func TestAttachmentSizesLongNamesAndGroup(t *testing.T) {
 	group := ui.AttachmentGroup(cards...)
 	p := ggui.NewProbe(ggui.Column(group), ggui.Sz(230, 140))
 	defer p.Close()
-	p.Type(ggui.Mods{}, ebiten.KeyTab, ebiten.KeyArrowRight)
+	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyArrowRight)
 	if group.Position() != 192 {
 		t.Fatal("keyboard must align next card", group.Position())
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyHome)
+	p.Type(ggui.Mods{}, ggui.KeyHome)
 	p.Scroll(ggui.Pt(100, 20), ggui.Pt(-8, 0))
 	p.Advance(200 * time.Millisecond)
 	if group.Position() != 192 {
 		t.Fatal("wheel must settle at snap point", group.Position())
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyHome)
+	p.Type(ggui.Mods{}, ggui.KeyHome)
 	for range 4 {
-		p.Type(ggui.Mods{}, ebiten.KeyTab)
+		p.Type(ggui.Mods{}, ggui.KeyTab)
 	}
 	if group.Position() == 0 {
 		t.Fatal("Tab did not reveal offscreen actions")
@@ -249,7 +248,7 @@ func TestQuestionnaireValidationSkipSubmissionAndReset(t *testing.T) {
 	clip := &ggui.MemoryClipboard{}
 	clip.Write("A useful answer")
 	ggui.SetClipboard(clip)
-	p.Type(ggui.Mods{Meta: true}, ebiten.KeyV)
+	p.Type(ggui.Mods{Meta: true}, ggui.KeyV)
 	p.Tap("Submit")
 	if submits != 1 {
 		t.Fatal("valid submission not delivered")
@@ -271,7 +270,7 @@ func TestQuestionnaireKeyboardMultipleControlledAndDisabled(t *testing.T) {
 	p := ggui.NewProbe(q, ggui.Sz(400, 400))
 	defer p.Close()
 	p.Tap("B")
-	p.Type(ggui.Mods{}, ebiten.KeyDigit2)
+	p.Type(ggui.Mods{}, ggui.KeyDigit2)
 	if len(answers.Peek()["multi"].Values) != 2 {
 		t.Fatal("multiple shortcut must skip disabled choices", answers.Peek())
 	}
@@ -281,7 +280,7 @@ func TestQuestionnaireKeyboardMultipleControlledAndDisabled(t *testing.T) {
 		t.Fatal("submit did not return to first invalid step")
 	}
 	p.Tap("A")
-	p.Type(ggui.Mods{}, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
 	if active.Peek() != "multi" {
 		t.Fatal("Enter did not continue")
 	}
@@ -315,11 +314,11 @@ func TestQuestionnaireFreeformDefaultsAndExternalErrors(t *testing.T) {
 	clip := &ggui.MemoryClipboard{}
 	clip.Write("Custom answer")
 	ggui.SetClipboard(clip)
-	p.Type(ggui.Mods{Meta: true}, ebiten.KeyV)
+	p.Type(ggui.Mods{Meta: true}, ggui.KeyV)
 	if a := answers.Peek()["one"]; len(a.Values) != 0 || a.Text != "Custom answer" {
 		t.Fatal("single freeform did not replace fixed choice", a)
 	}
-	p.Type(ggui.Mods{Meta: true}, ebiten.KeyEnter)
+	p.Type(ggui.Mods{Meta: true}, ggui.KeyEnter)
 	if submits != 1 {
 		t.Fatal("command enter not submitted")
 	}

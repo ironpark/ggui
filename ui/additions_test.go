@@ -3,7 +3,6 @@ package ui_test
 import (
 	"testing"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 )
@@ -28,12 +27,12 @@ func TestPaginationNavigation(t *testing.T) {
 	if page.Peek() != 3 || changes != 1 {
 		t.Fatal("numbered navigation failed")
 	}
-	p.Type(ggui.Mods{}, ebiten.KeySpace)
+	p.Type(ggui.Mods{}, ggui.KeySpace)
 	if changes != 1 {
 		t.Fatal("selecting the current page fired OnChange")
 	}
 	p.Tap("Next")
-	p.Type(ggui.Mods{}, ebiten.KeySpace)
+	p.Type(ggui.Mods{}, ggui.KeySpace)
 	if page.Peek() != 5 || changes != 3 {
 		t.Fatalf("keyboard navigation: page=%d changes=%d", page.Peek(), changes)
 	}
@@ -103,13 +102,13 @@ func TestNoticeActionsAndKeyboard(t *testing.T) {
 		)
 	}, ggui.Sz(320, 400))
 	defer p.Close()
-	p.Type(ggui.Mods{}, ebiten.KeyTab)
-	p.Type(ggui.Mods{}, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyTab)
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
 	if retries != 1 {
 		t.Fatal("alert action is not keyboard reachable")
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyTab)
-	p.Type(ggui.Mods{}, ebiten.KeySpace)
+	p.Type(ggui.Mods{}, ggui.KeyTab)
+	p.Type(ggui.Mods{}, ggui.KeySpace)
 	if creates != 1 {
 		t.Fatal("empty-state action is not keyboard reachable")
 	}

@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 )
@@ -233,7 +232,7 @@ func TestInputGroupPreservesEditorBindingAndAddon(t *testing.T) {
 		t.Fatal("disabled editor has hit regions")
 	}
 	p.Click(ggui.Pt(2, 20))
-	p.Type(ggui.Mods{}, ebiten.KeyDelete)
+	p.Type(ggui.Mods{}, ggui.KeyDelete)
 	p.Perform(n.ID, ggui.Action{Kind: ggui.ActionSetValue, Text: "changed"})
 	if value.Peek() != "abc" {
 		t.Fatal("disabled editor accepted input")
@@ -252,7 +251,7 @@ func TestInputGroupPreservesEditorBindingAndAddon(t *testing.T) {
 		t.Fatal("child binding no longer updates")
 	}
 	p.Tap("Editor")
-	p.Type(ggui.Mods{}, ebiten.KeyBackspace)
+	p.Type(ggui.Mods{}, ggui.KeyBackspace)
 	if value.Peek() == "abc" {
 		t.Fatal("re-enabled editor did not accept input")
 	}

@@ -1,7 +1,6 @@
 package ui_test
 
 import (
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	"testing"
@@ -22,7 +21,7 @@ func TestGroupedCommandFilteringAndNavigation(t *testing.T) {
 		t.Fatal("palette lost accessible name")
 	}
 	p.Tap("Search commands")
-	p.Type(ggui.Mods{}, ebiten.KeyArrowDown, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyArrowDown, ggui.KeyEnter)
 	if picked != "Beta" {
 		t.Fatalf("group headings or disabled row interrupted navigation: %s", picked)
 	}
@@ -31,7 +30,7 @@ func TestGroupedCommandFilteringAndNavigation(t *testing.T) {
 	if _, ok := p.Find("Alpha"); ok {
 		t.Fatal("filtered action remains visible")
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
 	if picked != "Beta" {
 		t.Fatal("filtered selection failed")
 	}

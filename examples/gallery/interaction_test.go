@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 	"testing"
 	"time"
@@ -22,7 +21,7 @@ func galleryProbe(size ggui.Size) *ggui.Probe {
 func searchGallery(p *ggui.Probe, query string) {
 	p.Tap("All")
 	p.Tap("Search components")
-	p.Type(ggui.Mods{Meta: true}, ebiten.KeyA)
+	p.Type(ggui.Mods{Meta: true}, ggui.KeyA)
 	pasteText(p, query)
 	p.Frame()
 }
@@ -44,10 +43,10 @@ func TestGalleryRealInteractions(t *testing.T) {
 	p.Tap("Send notifications")
 	p.Tap("pro")
 	p.Tap("Choose fruit")
-	p.Type(ggui.Mods{}, ebiten.KeyArrowDown, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyArrowDown, ggui.KeyEnter)
 	searchGallery(p, "Accordion")
 	p.Tap("Keyboard controls")
-	p.Type(ggui.Mods{}, ebiten.KeyArrowUp, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyArrowUp, ggui.KeyEnter)
 	searchGallery(p, "Resizable")
 	handles := p.FindAll(ggui.RoleSeparator)
 	if len(handles) != 2 {
@@ -55,13 +54,13 @@ func TestGalleryRealInteractions(t *testing.T) {
 	}
 	for _, h := range handles {
 		p.Click(h.Center())
-		p.Type(ggui.Mods{}, ebiten.KeyArrowRight, ebiten.KeyArrowDown)
+		p.Type(ggui.Mods{}, ggui.KeyArrowRight, ggui.KeyArrowDown)
 	}
-	p.Type(ggui.Mods{Meta: true}, ebiten.KeyK)
+	p.Type(ggui.Mods{Meta: true}, ggui.KeyK)
 	if _, ok := p.Find("Search commands"); !ok {
 		t.Fatal("command palette missing")
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyEscape)
+	p.Type(ggui.Mods{}, ggui.KeyEscape)
 	searchGallery(p, "Dialog")
 	p.Tap("Reset form…")
 	p.Tap("Cancel")
@@ -84,7 +83,7 @@ func pasteText(p *ggui.Probe, text string) {
 	clip := &ggui.MemoryClipboard{}
 	clip.Write(text)
 	ggui.SetClipboard(clip)
-	p.Type(ggui.Mods{Meta: true}, ebiten.KeyV)
+	p.Type(ggui.Mods{Meta: true}, ggui.KeyV)
 }
 
 func TestGallerySmallWindowPopups(t *testing.T) {
@@ -102,7 +101,7 @@ func TestGallerySmallWindowPopups(t *testing.T) {
 					t.Fatalf("command outside window: %+v", r)
 				}
 			}
-			p.Type(ggui.Mods{}, ebiten.KeyEscape)
+			p.Type(ggui.Mods{}, ggui.KeyEscape)
 			searchGallery(p, "Dialog")
 			// Tab reveals controls that start below the viewport on short windows.
 			revealGallery(p, "Reset form…")
@@ -123,7 +122,7 @@ func revealGallery(p *ggui.Probe, label string) {
 		if ok && !r.Rect.Empty() {
 			return
 		}
-		p.Type(ggui.Mods{}, ebiten.KeyTab)
+		p.Type(ggui.Mods{}, ggui.KeyTab)
 	}
 }
 
@@ -143,7 +142,7 @@ func TestGalleryControlFlows(t *testing.T) {
 	p.Tap("Search fruit")
 	p.Tap("Search options")
 	pasteText(p, "Mango")
-	p.Type(ggui.Mods{}, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
 	if _, ok := p.Find("Search options"); ok {
 		t.Fatal("combobox did not close after selection")
 	}
@@ -159,7 +158,7 @@ func TestGalleryControlFlows(t *testing.T) {
 	searchGallery(p, "Tabs")
 	p.Tap("Details")
 	p.Tap("More options")
-	p.Type(ggui.Mods{}, ebiten.KeyTab)
+	p.Type(ggui.Mods{}, ggui.KeyTab)
 	p.Tap("Overview")
 	p.Tap("+10%")
 	p.Tap("Reset")
@@ -200,7 +199,7 @@ func TestGalleryNavigationAndOverlays(t *testing.T) {
 
 	searchGallery(p, "Sidebar")
 	p.Tap("Sent")
-	p.Type(ggui.Mods{}, ebiten.KeyArrowDown, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyArrowDown, ggui.KeyEnter)
 	p.Tap("Home")
 
 	searchGallery(p, "Groups and addons")
@@ -345,7 +344,7 @@ func TestGalleryChatComponentFlows(t *testing.T) {
 		t.Fatal("questionnaire validation missing")
 	}
 	p.Tap("Tool call timeline")
-	p.Type(ggui.Mods{}, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
 	p.Tap("Skip")
 	p.Tap("Audience")
 	pasteText(p, "Support team")
@@ -364,9 +363,9 @@ func TestGalleryEmojiEditingAndThemePresets(t *testing.T) {
 	defer p.Close()
 	searchGallery(p, "Emoji")
 	p.Tap("Emoji text")
-	p.Type(ggui.Mods{Meta: true}, ebiten.KeyA)
+	p.Type(ggui.Mods{Meta: true}, ggui.KeyA)
 	pasteText(p, "Hello 👩🏽‍💻")
-	p.Type(ggui.Mods{}, ebiten.KeyBackspace)
+	p.Type(ggui.Mods{}, ggui.KeyBackspace)
 	if _, ok := p.Semantics().Find(ggui.RoleText, "Hello "); !ok {
 		t.Fatal("emoji backspace split or lost text")
 	}
@@ -376,14 +375,14 @@ func TestGalleryEmojiEditingAndThemePresets(t *testing.T) {
 	}
 	searchGallery(p, "Theme presets")
 	p.Tap("Theme base")
-	p.Type(ggui.Mods{}, ebiten.KeyArrowDown, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyArrowDown, ggui.KeyEnter)
 	p.Frame()
 	want := ggui.ThemePreset{Base: ggui.BaseStone, Accent: ggui.AccentBlue, Style: ggui.StyleRhea}.Light()
 	if ggui.UseTheme().Bg != want.Bg || ggui.UseTheme().Muted != want.Muted {
 		t.Fatal("base palette not applied")
 	}
 	p.Tap("Theme style")
-	p.Type(ggui.Mods{}, ebiten.KeyArrowUp, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyArrowUp, ggui.KeyEnter)
 	p.Frame()
 	if ggui.UseTheme().Chat.BubbleRadius != 12 {
 		t.Fatal("Nova geometry not applied")

@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 )
@@ -26,15 +25,15 @@ func TestAccordionSelectionAndKeyboard(t *testing.T) {
 	if !slices.Equal(open.Peek(), []string{"a"}) {
 		t.Fatal(open.Peek())
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyArrowDown, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyArrowDown, ggui.KeyEnter)
 	if !slices.Equal(open.Peek(), []string{"c"}) {
 		t.Fatalf("single mode/disabled skip: %v", open.Peek())
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyHome, ebiten.KeySpace)
+	p.Type(ggui.Mods{}, ggui.KeyHome, ggui.KeySpace)
 	if !slices.Equal(open.Peek(), []string{"a"}) {
 		t.Fatal("Home failed", open.Peek())
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyTab, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyEnter)
 	if calls != 1 {
 		t.Fatal("open content is not keyboard reachable")
 	}
@@ -68,16 +67,16 @@ func TestCommandFiltersAndSkipsDisabled(t *testing.T) {
 	p := ggui.NewProbe(ggui.Column(cmd), ggui.Sz(300, 260))
 	defer p.Close()
 	p.Tap("Search commands")
-	p.Type(ggui.Mods{}, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
 	if picked != "open" {
 		t.Fatal("initial enabled match", picked)
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyArrowDown, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyArrowDown, ggui.KeyEnter)
 	if picked != "save" {
 		t.Fatal("arrow navigation", picked)
 	}
 	query.Set("  FILE ")
-	p.Type(ggui.Mods{}, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
 	if picked != "open" {
 		t.Fatal("keyword matching failed")
 	}
@@ -89,7 +88,7 @@ func TestCommandFiltersAndSkipsDisabled(t *testing.T) {
 	find(t, p, ggui.RoleMenuItem, "Open")
 	query.Set("no match")
 	picked = ""
-	p.Type(ggui.Mods{}, ebiten.KeyArrowDown, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyArrowDown, ggui.KeyEnter)
 	if picked != "" {
 		t.Fatal("empty results ran an action")
 	}
@@ -108,16 +107,16 @@ func TestComboboxSelectionAndEscape(t *testing.T) {
 	p := ggui.NewProbe(ggui.Column(c, ui.Button("Outside", func() {})), ggui.Sz(360, 320))
 	defer p.Close()
 	p.Tap("Fruit")
-	p.Type(ggui.Mods{}, ebiten.KeyArrowDown, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyArrowDown, ggui.KeyEnter)
 	if value.Peek() != "Banana" || changes != 1 || c.Popup().IsOpen() {
 		t.Fatalf("selection: %s, %d, %v", value.Peek(), changes, c.Popup().IsOpen())
 	}
 	// Closing restores focus to the trigger, so Enter opens it again.
-	p.Type(ggui.Mods{}, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
 	if !c.Popup().IsOpen() {
 		t.Fatal("focus did not return to the trigger")
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyEscape)
+	p.Type(ggui.Mods{}, ggui.KeyEscape)
 	if value.Peek() != "Banana" || c.Popup().IsOpen() {
 		t.Fatal("Escape changed selection or did not close")
 	}
@@ -146,11 +145,11 @@ func TestResizableCaptureLimitsAndKeyboard(t *testing.T) {
 	if math.Abs(fraction.Peek()-.7) > 1e-9 {
 		t.Fatal("drag did not clamp to second minimum", fraction.Peek())
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyHome)
+	p.Type(ggui.Mods{}, ggui.KeyHome)
 	if math.Abs(fraction.Peek()-.2) > 1e-9 {
 		t.Fatal("keyboard focus lost while handle moved", fraction.Peek())
 	}
-	p.Type(ggui.Mods{Shift: true}, ebiten.KeyArrowRight)
+	p.Type(ggui.Mods{Shift: true}, ggui.KeyArrowRight)
 	if math.Abs(fraction.Peek()-.3) > 1e-9 {
 		t.Fatal("keyboard step failed", fraction.Peek())
 	}
@@ -178,11 +177,11 @@ func TestResizableVertical(t *testing.T) {
 	p := ggui.NewProbe(ui.Resizable(fraction, ggui.Box(), ggui.Box()).Vertical().WithHandle(), ggui.Sz(100, 208))
 	defer p.Close()
 	p.Tap("Resize panels")
-	p.Type(ggui.Mods{}, ebiten.KeyArrowDown)
+	p.Type(ggui.Mods{}, ggui.KeyArrowDown)
 	if math.Abs(fraction.Peek()-.51) > 1e-9 {
 		t.Fatal(fraction.Peek())
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyEnd)
+	p.Type(ggui.Mods{}, ggui.KeyEnd)
 	if fraction.Peek() != 1 {
 		t.Fatal("vertical End failed")
 	}
@@ -197,7 +196,7 @@ func TestToasterLifecycleAndNonmodalActions(t *testing.T) {
 	p.Advance(0)
 	p.Tap("Background")
 	toaster.Push(ui.Toast("Saved", "Changes stored").Duration(time.Second))
-	p.Type(ggui.Mods{}, ebiten.KeySpace)
+	p.Type(ggui.Mods{}, ggui.KeySpace)
 	if clicks != 2 {
 		t.Fatal("toast stole keyboard focus")
 	}
@@ -259,9 +258,9 @@ func TestCommandScrollsKeyboardHighlight(t *testing.T) {
 	defer p.Close()
 	p.Tap("Search commands")
 	for range 19 {
-		p.Type(ggui.Mods{}, ebiten.KeyArrowDown)
+		p.Type(ggui.Mods{}, ggui.KeyArrowDown)
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
 	if picked != 19 {
 		t.Fatal("last command was not selected", picked)
 	}

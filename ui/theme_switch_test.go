@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 )
@@ -20,14 +19,14 @@ func TestThemeSwitchPointerKeyboardAndDisabled(t *testing.T) {
 	if !dark.Peek() || s.Describe().Checked != ggui.Tri(true) {
 		t.Fatal("tap did not enable dark mode or update accessibility")
 	}
-	p.Type(ggui.Mods{}, ebiten.KeySpace)
+	p.Type(ggui.Mods{}, ggui.KeySpace)
 	if dark.Peek() || len(changes) != 2 || !changes[0] || changes[1] {
 		t.Fatalf("keyboard toggle: dark=%v changes=%v", dark.Peek(), changes)
 	}
 	disabled.Set(true)
 	p.Frame()
 	p.Click(ggui.Pt(32, 18))
-	p.Type(ggui.Mods{}, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
 	if dark.Peek() || len(changes) != 2 || !s.Describe().Disabled {
 		t.Fatal("disabled theme switch accepted input")
 	}
@@ -44,7 +43,7 @@ func TestThemeSwitchRebuildAndReducedMotion(t *testing.T) {
 			defer p.Close()
 			p.Tap("Dark mode")
 			p.Advance(80 * time.Millisecond)
-			p.Type(ggui.Mods{}, ebiten.KeyEnter)
+			p.Type(ggui.Mods{}, ggui.KeyEnter)
 			p.Advance(time.Second)
 			if dark.Peek() {
 				t.Fatal("rebuilt switch lost keyboard focus during transition")

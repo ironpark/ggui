@@ -3,7 +3,6 @@ package main
 import (
 	"testing"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 )
 
@@ -24,13 +23,13 @@ func TestCounter(t *testing.T) {
 
 	// The last tap left "+" focused, so Space presses that button rather
 	// than the bare-key shortcut; either way it adds the step.
-	p.Type(ggui.Mods{}, ebiten.KeyUp, ebiten.KeyUp) // step 3
-	p.Type(ggui.Mods{}, ebiten.KeySpace)
+	p.Type(ggui.Mods{}, ggui.KeyArrowUp, ggui.KeyArrowUp) // step 3
+	p.Type(ggui.Mods{}, ggui.KeySpace)
 	if got := m.Count.Peek(); got != 4 {
 		t.Fatalf("count after space with step 3 = %d, want 4", got)
 	}
 
-	p.Type(ggui.Mods{}, ebiten.KeyDown, ebiten.KeyDown, ebiten.KeyDown) // clamps at 1
+	p.Type(ggui.Mods{}, ggui.KeyArrowDown, ggui.KeyArrowDown, ggui.KeyArrowDown) // clamps at 1
 	if got := m.Step.Peek(); got != 1 {
 		t.Fatalf("step = %d, want 1", got)
 	}

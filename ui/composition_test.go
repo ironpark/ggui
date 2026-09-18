@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 )
@@ -132,7 +131,7 @@ func TestInputGroupFocusesTheEditorFromItsPadding(t *testing.T) {
 	if !p.Focused() {
 		t.Fatal("clicking the chrome beside the editor did not focus it")
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyDelete)
+	p.Type(ggui.Mods{}, ggui.KeyDelete)
 	if value.Peek() != "b" {
 		t.Fatalf("keys did not reach the editor: %q", value.Peek())
 	}
@@ -206,24 +205,24 @@ func TestToggleGroupPicksWithThePointerAndTheArrows(t *testing.T) {
 	if node, ok := p.Semantics().Find(ggui.RoleRadio, "center"); !ok || node.Checked != ggui.TriOn {
 		t.Fatal("the chosen segment is not marked")
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyArrowRight)
+	p.Type(ggui.Mods{}, ggui.KeyArrowRight)
 	if value.Peek() != "right" {
 		t.Fatalf("right arrow: %q", value.Peek())
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyArrowRight)
+	p.Type(ggui.Mods{}, ggui.KeyArrowRight)
 	if value.Peek() != "left" {
 		t.Fatalf("the choice does not wrap: %q", value.Peek())
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyEnd)
+	p.Type(ggui.Mods{}, ggui.KeyEnd)
 	if value.Peek() != "right" {
 		t.Fatalf("End: %q", value.Peek())
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyHome)
+	p.Type(ggui.Mods{}, ggui.KeyHome)
 	if value.Peek() != "left" {
 		t.Fatalf("Home: %q", value.Peek())
 	}
 	was := changes
-	p.Type(ggui.Mods{}, ebiten.KeySpace)
+	p.Type(ggui.Mods{}, ggui.KeySpace)
 	if changes != was {
 		t.Fatal("re-picking the current segment fired OnChange")
 	}
@@ -291,8 +290,8 @@ func TestSidebarNavigatesWithThePointerAndTheArrows(t *testing.T) {
 	if _, ok := p.FindRole(ggui.RoleTab, "Spam"); ok {
 		t.Fatal("a disabled destination takes input")
 	}
-	p.Type(ggui.Mods{}, ebiten.KeyArrowDown)
-	p.Type(ggui.Mods{}, ebiten.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyArrowDown)
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
 	if page.Peek() != "inbox" {
 		t.Fatalf("the arrows skip the heading and the disabled item: %q", page.Peek())
 	}
@@ -336,7 +335,7 @@ func TestAlertDialogHasToBeAnswered(t *testing.T) {
 	}
 	open.Set(true)
 	p.Frame()
-	p.Type(ggui.Mods{}, ebiten.KeyEscape)
+	p.Type(ggui.Mods{}, ggui.KeyEscape)
 	if open.Peek() || cancelled != 2 {
 		t.Fatalf("escape: open=%v cancelled=%d", open.Peek(), cancelled)
 	}
