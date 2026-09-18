@@ -172,8 +172,17 @@ func drawText(dst *ebiten.Image, s string, face text.Face, options *text.DrawOpt
 	if dst == nil || dst.Bounds().Empty() {
 		return
 	}
-	if _, ok := face.(*emojiFace); !ok {
+	ef, ok := face.(*emojiFace)
+	if !ok {
 		text.Draw(dst, s, face, options)
+		return
+	}
+	// Text with no emoji in it is one run in the fallback chain the wrapper
+	// holds, drawn where it was asked for. Saying so here skips the line
+	// metrics and the advance that only matter when runs have to be placed
+	// one after another, and most text a frame draws is this.
+	if !mayHoldEmoji(s) {
+		text.Draw(dst, s, ef.Face, options)
 		return
 	}
 	x := 0.0
