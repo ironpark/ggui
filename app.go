@@ -153,6 +153,10 @@ func (a *App) Semantics() *SemTree { return a.semantics() }
 // cursor with its size and position. Config.Inspector binds it to a key.
 func (a *App) Inspector(on bool) { a.inspect = on }
 
+// SetInspector docks the inspector's panel and chooses whether it outlines
+// every widget; the panel's own toolbar changes the same settings.
+func (a *App) SetInspector(o InspectorOptions) { a.insp.apply(o) }
+
 // Update implements ebiten.Game.
 func (a *App) Update() error {
 	if a.closed {

@@ -94,6 +94,71 @@ func TestInspectorPinsAndScrolls(t *testing.T) {
 	}
 }
 
+// The toolbar chips dock the panel and toggle the outlines; the arrow keys
+// and Escape step and release the pin.
+func TestInspectorChipsAndKeys(t *testing.T) {
+	in := &inspector{panel: Rct(Pt(200, 0), Sz(100, 300)), treeTop: 40, chips: []inspectChip{
+		{rect: Rct(Pt(210, 20), Sz(30, 12)), act: inspectDockBottom},
+		{rect: Rct(Pt(250, 20), Sz(30, 12)), act: inspectToggleOutlines},
+	}}
+	click := func(p Point) { in.input(frameInput{pos: p, down: []ebiten.MouseButton{ebiten.MouseButtonLeft}}) }
+	click(Pt(215, 25))
+	if in.dock != InspectorBottom {
+		t.Fatal("the Bottom chip did not dock the panel")
+	}
+	click(Pt(255, 25))
+	if !in.noOutlines {
+		t.Fatal("the Outlines chip did not turn the outlines off")
+	}
+	in.input(frameInput{pos: Pt(250, 100), keys: []ebiten.Key{ebiten.KeyArrowDown, ebiten.KeyArrowDown, ebiten.KeyArrowUp}})
+	if in.move != 1 {
+		t.Fatalf("move = %d, want the net arrow step of 1", in.move)
+	}
+	in.pinned = true
+	in.input(frameInput{pos: Pt(250, 100), keys: []ebiten.Key{ebiten.KeyEscape}})
+	if in.pinned {
+		t.Fatal("Escape did not release the pin")
+	}
+}
+
+// Docked to the bottom, the panel spans the width and the tree and details
+// sit side by side; without outlines, the app is left untouched apart from
+// the selection.
+func TestInspectorDocksToTheBottom(t *testing.T) {
+	img := ebiten.NewImage(400, 200)
+	defer img.Deallocate()
+	c := &Canvas{Image: img, scale: 1, logical: Sz(400, 200)}
+	c.pointer, c.hasPointer = Pt(25, 25), true
+	for i := range 50 {
+		c.trace = append(c.trace, entry("Box", i%6, 0, float64(i), 40, 10))
+	}
+	in := &inspector{}
+	in.apply(InspectorOptions{Dock: InspectorBottom, HideOutlines: true})
+	in.paint(c)
+	if in.panel.Origin.X != 0 || in.panel.Size.W != 400 || in.panel.Origin.Y+in.panel.Size.H != 200 {
+		t.Fatalf("panel is not docked to the bottom edge: %+v", in.panel)
+	}
+	if len(in.rows) == 0 {
+		t.Fatal("no rows laid out")
+	}
+	for _, r := range in.rows {
+		if r.y+r.h <= in.treeTop || r.y >= 200 {
+			t.Fatalf("row at %v is outside the tree area", r.y)
+		}
+	}
+	if len(in.chips) != 3 {
+		t.Fatalf("%d chips, want Right, Bottom and Outlines", len(in.chips))
+	}
+	// Arrow keys resolve against this frame's trace and pin where they land;
+	// with nothing selected, Down starts from the top.
+	c.hasPointer = false
+	in.pinned, in.move = false, 2
+	in.paint(c)
+	if !in.pinned || in.sel.rect.Origin.Y != 1 {
+		t.Fatalf("arrow step did not pin the second row: pinned=%v sel=%+v", in.pinned, in.sel)
+	}
+}
+
 // A whole pass over a real Canvas: the panel renders, the tree is laid out
 // and culled to what fits, and the rows it leaves behind are the ones the
 // next frame's click will hit.
