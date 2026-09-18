@@ -332,3 +332,71 @@ func TestAppendAndRemoveOnSliceSignals(t *testing.T) {
 		t.Fatalf("effect ran %d times after a Remove that matched nothing, want still 3", runs)
 	}
 }
+
+// A reader of two derived values must never see one of them updated and the
+// other not, whatever order the effects were created in. Here the Watch is
+// registered before the memo it reads, which is what an effect that outlives
+// a rebuilt memo ends up looking like.
+func TestReaderSeesNoPartialUpdate(t *testing.T) {
+	s := State(0)
+	var b *Memo[int]
+	var seen [][2]int
+
+	a := Derived(func() int { return s.Get() * 10 })
+	defer a.Dispose()
+	defer Watch(a, func(av int) {
+		if b != nil {
+			seen = append(seen, [2]int{av, b.Get()})
+		}
+	})()
+	b = Derived(func() int { return s.Get() * 100 })
+	defer b.Dispose()
+
+	s.Set(1)
+	effects.flush()
+	if len(seen) != 1 || seen[0] != [2]int{10, 100} {
+		t.Fatalf("watch saw %v, want one call with [10 100]", seen)
+	}
+}
+
+// The same, with the second value two derivations away from the signal: the
+// far memo is not itself marked by the write, only checked through the one
+// above it.
+func TestReaderSeesNoPartialUpdateThroughChain(t *testing.T) {
+	s := State(0)
+	var far *Memo[int]
+	var seen [][2]int
+
+	a := Derived(func() int { return s.Get() * 10 })
+	defer a.Dispose()
+	defer Watch(a, func(av int) {
+		if far != nil {
+			seen = append(seen, [2]int{av, far.Get()})
+		}
+	})()
+	near := Derived(func() int { return s.Get() * 100 })
+	defer near.Dispose()
+	far = near.Map(func(v int) int { return v + 1 })
+	defer far.Dispose()
+
+	s.Set(1)
+	effects.flush()
+	if len(seen) != 1 || seen[0] != [2]int{10, 101} {
+		t.Fatalf("watch saw %v, want one call with [10 101]", seen)
+	}
+}
+
+// A memo read from outside any effect, between writes, reports the value its
+// inputs imply now rather than the one the last flush left behind.
+func TestMemoReadOutsideEffectIsCurrent(t *testing.T) {
+	s := State(2)
+	m := Derived(func() int { return s.Get() * 3 })
+	defer m.Dispose()
+	if got := m.Get(); got != 6 {
+		t.Fatalf("got %d, want 6", got)
+	}
+	s.Set(5)
+	if got := m.Get(); got != 15 {
+		t.Fatalf("got %d before flush, want 15", got)
+	}
+}

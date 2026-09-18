@@ -73,6 +73,13 @@ pretty := total.Map(func(v float64) string { return fmt.Sprintf("$%.2f", v) })
 A `Memo` notifies its readers only when the result actually differs, and a chain
 of them settles within a single frame.
 
+`Get()` settles the memo before it returns, so a reader never sees one derived
+value updated and another still holding last frame's result, whatever order the
+computations were created in. Reading a memo outside any effect, such as in an
+event callback, therefore runs its function at the call site when an input
+changed since the last frame. `Peek()` never recomputes: it is the read a
+goroutine may make.
+
 ### Ownership and cleanup
 
 Effects and derived values created while an effect runs belong to that owner.

@@ -45,12 +45,35 @@ var deps tracker
 // source is anything an effect can subscribe to.
 type source interface {
 	unsubscribe(e *effect)
+	// producer is the memo effect that computes this source, or nil for a
+	// plain signal: how refresh finds the upstream to settle first.
+	producer() *effect
 }
+
+// downstream is a memo's value seen from its effect: the readers to carry
+// staleness on to.
+type downstream interface{ markSubsCheck() }
+
+// An effect is clean, or it may be stale. A Signal write marks its direct
+// subscribers dirty and everything downstream of a memo check: check means
+// "an input of yours may have changed", and is resolved by refreshing the
+// upstream memos, which turns it into dirty or back into clean. It is what
+// keeps a reader from seeing one input updated and another not.
+const (
+	stateClean uint8 = iota
+	stateCheck
+	stateDirty
+)
 
 type effect struct {
 	fn       func()
-	dirty    bool
+	state    uint8
+	running  bool
 	disposed bool
+
+	// cell is the memo's value this effect computes, if it is a memo's:
+	// what carries staleness on to the memo's own readers.
+	cell downstream
 
 	owner                    *effect
 	firstChild, lastChild    *effect
@@ -291,6 +314,10 @@ type Signal[T any] struct {
 	val  T
 	eq   func(a, b T) bool
 	subs map[*effect]struct{}
+
+	// memo is the effect that computes this value, when the signal is a
+	// Memo's cell rather than state someone writes.
+	memo *effect
 }
 
 // State creates a Signal holding v. T is inferred from the argument, so
@@ -346,6 +373,23 @@ func (s *Signal[T]) Peek() T {
 	return s.val
 }
 
+// producer implements source: non-nil only for a memo's cell.
+func (s *Signal[T]) producer() *effect { return s.memo }
+
+// markSubsCheck implements downstream: every reader of this memo may now be
+// stale. Collected under the lock and marked outside it, as Set does.
+func (s *Signal[T]) markSubsCheck() {
+	s.mu.Lock()
+	subs := make([]*effect, 0, len(s.subs))
+	for e := range s.subs {
+		subs = append(subs, e)
+	}
+	s.mu.Unlock()
+	for _, e := range subs {
+		markCheck(e)
+	}
+}
+
 func (s *Signal[T]) unsubscribe(e *effect) {
 	s.mu.Lock()
 	delete(s.subs, e)
@@ -369,7 +413,7 @@ func (s *Signal[T]) Set(v T) {
 	s.mu.Unlock()
 
 	for _, e := range subs {
-		e.dirty = true
+		markDirty(e)
 	}
 	if len(subs) > 0 {
 		effects.dirtyGen++
@@ -425,6 +469,7 @@ func Remove[T any](s Writable[[]T], drop func(T) bool) {
 // read changes, and notifies its own readers only when the result differs.
 type Memo[T any] struct {
 	sig     *Signal[T]
+	eff     *effect
 	dispose func()
 }
 
@@ -436,7 +481,8 @@ type Memo[T any] struct {
 func Derived[T any](fn func() T) *Memo[T] {
 	var zero T
 	m := &Memo[T]{sig: State(zero)}
-	m.dispose = Effect(func() { m.sig.Set(fn()) })
+	m.eff, m.dispose = effectWith(func() { m.sig.Set(fn()) })
+	m.sig.memo, m.eff.cell = m.eff, m.sig
 	return m
 }
 
@@ -452,9 +498,17 @@ func Combine[A, B, C any](a Reader[A], b Reader[B], fn func(A, B) C) *Memo[C] {
 }
 
 // Get returns the memoized value and subscribes the running Effect, if any.
-func (m *Memo[T]) Get() T { return m.sig.Get() }
+// A memo whose inputs changed earlier in this frame is recomputed here, so a
+// reader never sees one input updated and another not. Outside an effect
+// this means fn may run at the call site rather than at the next flush.
+func (m *Memo[T]) Get() T {
+	refresh(m.eff)
+	return m.sig.Get()
+}
 
-// Peek returns the memoized value without subscribing the running Effect.
+// Peek returns the memoized value without subscribing the running Effect,
+// and without recomputing it: Peek is the read a goroutine may make, and
+// running the computation here would make it a write.
 func (m *Memo[T]) Peek() T { return m.sig.Peek() }
 
 // Dispose stops recomputation. Readers keep seeing the last computed value.
@@ -478,6 +532,13 @@ func Watch[T any](src Reader[T], fn func(T)) (dispose func()) {
 // Derived values created inside a Builder do not pile up across rebuilds.
 // Effect returns a dispose function; re-runs are driven by the frame loop.
 func Effect(fn func()) (dispose func()) {
+	_, dispose = effectWith(fn)
+	return dispose
+}
+
+// effectWith is Effect, also handing back the effect itself for the runtime
+// pieces, Memo above all, that must settle it out of the flush's turn.
+func effectWith(fn func()) (*effect, func()) {
 	e := &effect{fn: fn}
 	deps.mu.Lock()
 	e.owner = deps.owner
@@ -496,7 +557,7 @@ func Effect(fn func()) (dispose func()) {
 	}()
 	runEffect(e)
 	ok = true
-	return e.dispose
+	return e, e.dispose
 }
 
 // Root runs fn untracked under a fresh owner that never re-runs, so effects
@@ -581,6 +642,56 @@ func Untrack(fn func()) {
 	fn()
 }
 
+// markDirty records that a signal this effect read has changed, and carries
+// check on to the readers of the memo it computes.
+func markDirty(e *effect) {
+	if e.state == stateDirty {
+		return
+	}
+	e.state = stateDirty
+	if e.cell != nil {
+		e.cell.markSubsCheck()
+	}
+}
+
+// markCheck records that an input of this effect may have changed. It stops
+// at an effect that is already dirty or already checked, so the walk is
+// linear and a cycle terminates.
+func markCheck(e *effect) {
+	if e.state != stateClean {
+		return
+	}
+	e.state = stateCheck
+	if e.cell != nil {
+		e.cell.markSubsCheck()
+	}
+}
+
+// refresh settles e now: a checked effect first settles the memos it read,
+// which makes it dirty if one of them actually changed, and a dirty effect
+// re-runs. It reports whether the effect ran, and leaves e clean either way.
+func refresh(e *effect) (ran bool) {
+	if e.disposed || e.running || e.state == stateClean {
+		return false
+	}
+	if e.state == stateCheck {
+		for _, src := range e.sources {
+			if p := src.producer(); p != nil {
+				refresh(p)
+				if e.state == stateDirty {
+					break
+				}
+			}
+		}
+	}
+	if e.state == stateDirty {
+		runEffect(e)
+		return true
+	}
+	e.state = stateClean
+	return false
+}
+
 func runEffect(e *effect) {
 	e.reset()
 	e.seq = 0
@@ -595,7 +706,8 @@ func runEffect(e *effect) {
 		deps.mu.Unlock()
 	}()
 
-	e.dirty = false
+	e.state, e.running = stateClean, true
+	defer func() { e.running = false }()
 	e.fn()
 	e.sweep()
 }
@@ -605,7 +717,7 @@ type effectSet struct {
 	first, last *effect
 	count       int
 
-	// Like effect.dirty, these are confined to the UI thread. A signal
+	// Like effect.state, these are confined to the UI thread. A signal
 	// write advances dirtyGen; only a quiet flush records settledGen.
 	// Effects run immediately when created, so registration needs no bump.
 	dirtyGen, settledGen uint64
@@ -668,8 +780,7 @@ func (s *effectSet) flush() (settled bool) {
 
 		ran := false
 		for _, e := range list {
-			if e.dirty && !e.disposed {
-				runEffect(e)
+			if refresh(e) {
 				ran = true
 			}
 		}
