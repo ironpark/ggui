@@ -73,7 +73,7 @@ func TestInspectorPanelSnapshotTracksLiveValues(t *testing.T) {
 	in := inspector{}
 	in.bounds(c.Size())
 	in.tree = Rct(Point{}, Sz(300, 100))
-	shown := in.visible(c.trace)
+	shown := in.visible(c.fs().trace)
 	original := in.panelSnapshot(c, shown, 0)
 	if !original.equal(in.panelSnapshot(c, shown, 0)) {
 		t.Fatal("identical values differ")
@@ -90,7 +90,7 @@ func TestInspectorPanelSnapshotTracksLiveValues(t *testing.T) {
 		{"tab", func() { in.tab = inspectTabComputed }, func() { in.tab = 0 }},
 		{"focus", func() { in.filterFocus = true }, func() { in.filterFocus = false }},
 		{"scale", func() { c.scale = 2 }, func() { c.scale = 1 }},
-		{"geometry", func() { c.trace[0].rect.Size.W++ }, func() { c.trace[0].rect.Size.W-- }},
+		{"geometry", func() { c.fs().trace[0].rect.Size.W++ }, func() { c.fs().trace[0].rect.Size.W-- }},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -104,10 +104,10 @@ func TestInspectorPanelSnapshotTracksLiveValues(t *testing.T) {
 	}
 	// Semantic buffers can change in place while widget identity stays the same.
 	c.resetSemantics()
-	c.Leaf(c.trace[0].rect, Node{Role: RoleButton, Name: "before"})
-	c.trace[0].widget = nil
+	c.Leaf(c.fs().trace[0].rect, Node{Role: RoleButton, Name: "before"})
+	c.fs().trace[0].widget = nil
 	before := in.panelSnapshot(c, shown, 0)
-	c.sem[0].node.Value = "changed"
+	c.fs().sem[0].node.Value = "changed"
 	if before.equal(in.panelSnapshot(c, shown, 0)) {
 		t.Fatal("cache missed live semantics")
 	}

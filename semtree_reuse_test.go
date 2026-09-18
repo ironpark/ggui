@@ -14,7 +14,7 @@ func TestSemTreeReusesEqualValuesAndFreezesDescriptions(t *testing.T) {
 	c.Leaf(Rct(Pt(0, 0), Sz(100, 20)), n)
 	first := buildSemTree(c, nil, nil)
 	// Equal contents in fresh buffers must compare by value.
-	c.sem[0].node = freezeNode(n)
+	c.fs().sem[0].node = freezeNode(n)
 	if next := buildSemTree(c, nil, first); next != first {
 		t.Fatal("equal description allocated a new snapshot")
 	}
@@ -22,7 +22,7 @@ func TestSemTreeReusesEqualValuesAndFreezesDescriptions(t *testing.T) {
 	expanded = true
 	runs[0].End = 3
 	runs[0].Stops[1].X = 30
-	c.sem[0].node = n
+	c.fs().sem[0].node = n
 	second := buildSemTree(c, nil, first)
 	if second == first || !*second.At(0).Expanded || second.At(0).Runs[0].Stops[1].X != 30 {
 		t.Fatal("new frame lost changed description values")
@@ -143,16 +143,16 @@ func TestSemTreeInvalidatesGeometryIdentityHierarchyAndFocus(t *testing.T) {
 		name string
 		edit func(*Canvas)
 	}{
-		{"clipped rect", func(c *Canvas) { c.sem[1].rect.Size.W-- }},
-		{"full rect", func(c *Canvas) { c.sem[1].full.Origin.Y++ }},
-		{"identity", func(c *Canvas) { c.sem[1].id = "new" }},
-		{"uncomparable identity", func(c *Canvas) { c.sem[1].id = []int{1} }},
-		{"parent", func(c *Canvas) { c.sem[1].parent = 0 }},
-		{"removed", func(c *Canvas) { c.sem = c.sem[:1] }},
+		{"clipped rect", func(c *Canvas) { c.fs().sem[1].rect.Size.W-- }},
+		{"full rect", func(c *Canvas) { c.fs().sem[1].full.Origin.Y++ }},
+		{"identity", func(c *Canvas) { c.fs().sem[1].id = "new" }},
+		{"uncomparable identity", func(c *Canvas) { c.fs().sem[1].id = []int{1} }},
+		{"parent", func(c *Canvas) { c.fs().sem[1].parent = 0 }},
+		{"removed", func(c *Canvas) { c.fs().sem = c.fs().sem[:1] }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			dst := *c
-			dst.sem = append([]semNode(nil), c.sem...)
+			dst.fs().sem = append([]semNode(nil), c.fs().sem...)
 			test.edit(&dst)
 			if buildSemTree(&dst, nil, base) == base {
 				t.Fatal("changed frame reused stale snapshot")

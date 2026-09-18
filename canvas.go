@@ -33,7 +33,18 @@ type Canvas struct {
 	scope   *focusScope // the focus trap regions are registered under, if any
 	group   any         // what regions painted now belong to, for EachKeyed's eviction
 
-	// Root-only frame state.
+	// frame is the state there is one of per frame rather than one per
+	// Canvas: it is reached through root, and only the root holds it. A
+	// Clip or an Inert child leaves this nil, which is what makes "root
+	// only" a property of the type rather than a rule to remember.
+	frame *frameState
+}
+
+// frameState is everything a frame accumulates once: what was painted, what
+// it retained, and the accessibility tree built alongside. Every Canvas in a
+// Clip chain reaches the same one through root, so a field added here is
+// shared by construction and needs no clearing when a child Canvas is made.
+type frameState struct {
 	logical     Size // the window in logical pixels, for Size
 	pointer     Point
 	hasPointer  bool
@@ -62,6 +73,17 @@ type Canvas struct {
 	semIndex  map[any]int // handler to index plus one, for Describe and SemanticRef
 	semParent int         // the node being painted into
 	semLast   int         // the node most recently recorded
+}
+
+// fs returns the frame state, creating it on the root's first use. A Canvas
+// with no parent is a root even before a frame has started, which is what a
+// Probe and the zero Canvas in App rely on.
+func (c *Canvas) fs() *frameState {
+	r := c.root()
+	if r.frame == nil {
+		r.frame = &frameState{}
+	}
+	return r.frame
 }
 
 // overlay is one deferred paint and the semantics node it belongs under.
@@ -112,11 +134,11 @@ func (c *Canvas) Retain[T any](at Anchor, s Slot[T], v T) {
 	if c == nil {
 		return
 	}
-	root := c.root()
-	if root.keeps == nil {
-		root.keeps = make(map[retainKey]any)
+	f := c.fs()
+	if f.keeps == nil {
+		f.keeps = make(map[retainKey]any)
 	}
-	root.keeps[at.key(s.id)] = v
+	f.keeps[at.key(s.id)] = v
 }
 
 // Retained returns what Retain stored under at and s last frame.
@@ -125,7 +147,7 @@ func (c *Canvas) Retained[T any](at Anchor, s Slot[T]) (T, bool) {
 		var zero T
 		return zero, false
 	}
-	v, ok := c.root().prevKeeps[at.key(s.id)].(T)
+	v, ok := c.fs().prevKeeps[at.key(s.id)].(T)
 	return v, ok
 }
 
@@ -147,14 +169,15 @@ func (c *Canvas) Ease(at Anchor, s Slot[*Motion], target float64, d time.Duratio
 // clears the current slots, ready for a paint.
 func (c *Canvas) nextFrame() {
 	c.inputObservers = c.inputObservers[:0]
-	c.prevKeeps, c.keeps = c.keeps, c.prevKeeps
-	clear(c.keeps)
+	f := c.fs()
+	f.prevKeeps, f.keeps = f.keeps, f.prevKeeps
+	clear(f.keeps)
 	// prev is a different slice now, so what adopt knew about it is stale.
 	// The maps keep their storage for the next frame that needs them.
-	c.prevIndexed = false
-	clear(c.prevByID)
-	clear(c.prevByRect)
-	c.traceParent, c.traceRoots = 0, 0
+	f.prevIndexed = false
+	clear(f.prevByID)
+	clear(f.prevByRect)
+	f.traceParent, f.traceRoots = 0, 0
 	rotateEnvMemo()
 }
 
@@ -164,12 +187,19 @@ func (c *Canvas) Inert() *Canvas {
 	if c == nil {
 		return nil
 	}
+	// Only the root holds frameState, so the copy's parent link is all it
+	// takes to leave the frame's overlays, trace, retained slots and
+	// semantics where they are: there is nothing here to clear.
 	child := *c
-	child.parent, child.inert = c, true
-	child.overlays, child.trace, child.keeps, child.prevKeeps = nil, nil, nil, nil
-	child.sem, child.semIndex = nil, nil
+	child.parent, child.inert, child.frame = c, true, nil
 	return &child
 }
+
+// frameTrace is every widget painted this frame, in paint order; the
+// inspector reads it. frameSem is the same for the accessibility tree.
+func (c *Canvas) frameTrace() []traceEntry { return c.fs().trace }
+
+func (c *Canvas) frameSem() []semNode { return c.fs().sem }
 
 // traceEntry is one widget's Rect as painted, for the inspector.
 type traceEntry struct {
@@ -200,24 +230,24 @@ func (c *Canvas) Paint(w Widget, r Rect) {
 		w.Paint(nil, r)
 		return
 	}
-	root := c.root()
-	if root.tracing {
-		parent := root.traceParent
-		path := "/" + itoa(root.traceRoots)
+	f := c.fs()
+	if f.tracing {
+		parent := f.traceParent
+		path := "/" + itoa(f.traceRoots)
 		if parent > 0 {
-			p := &root.trace[parent-1]
+			p := &f.trace[parent-1]
 			path = p.path + "/" + itoa(p.children)
 			p.children++
 		} else {
-			root.traceRoots++
+			f.traceRoots++
 		}
-		root.trace = append(root.trace, traceEntry{
-			rect: r, depth: root.depth, name: widgetName(w), widget: w,
+		f.trace = append(f.trace, traceEntry{
+			rect: r, depth: f.depth, name: widgetName(w), widget: w,
 			id: inspectComparable(idOf(w)), path: path, clip: c.clip, clipped: c.clipped,
 		})
-		root.traceParent = len(root.trace)
-		root.depth++
-		defer func() { root.depth--; root.traceParent = parent }()
+		f.traceParent = len(f.trace)
+		f.depth++
+		defer func() { f.depth--; f.traceParent = parent }()
 	}
 	w.Paint(c, r)
 }
@@ -250,15 +280,15 @@ func (c *Canvas) Pointer() (Point, bool) {
 	if c == nil {
 		return Point{}, false
 	}
-	root := c.root()
-	return root.pointer, root.hasPointer
+	f := c.fs()
+	return f.pointer, f.hasPointer
 }
 
 // FocusWithin reports whether the focused input region overlaps r. Containers
 // use it to pause motion while a descendant (including a custom control) has
 // the keyboard. Like Pointer, it reads the state at the start of the paint.
 func (c *Canvas) FocusWithin(r Rect) bool {
-	return c != nil && !c.root().focusBounds.Intersect(r).Empty()
+	return c != nil && !c.fs().focusBounds.Intersect(r).Empty()
 }
 
 // Overlay schedules fn to paint after the whole tree has, on the root
@@ -273,12 +303,12 @@ func (c *Canvas) Overlay(fn func(dst *Canvas), owner ...SemRef) {
 	if c == nil {
 		return
 	}
-	root := c.root()
 	var under SemRef
 	if len(owner) > 0 {
 		under = owner[0]
 	}
-	root.overlays = append(root.overlays, overlay{fn: fn, owner: under})
+	f := c.fs()
+	f.overlays = append(f.overlays, overlay{fn: fn, owner: under})
 }
 
 // Size returns the logical size of the window being painted, or zero for
@@ -288,8 +318,8 @@ func (c *Canvas) Size() Size {
 		return Size{}
 	}
 	root := c.root()
-	if root.logical != (Size{}) || root.Image == nil {
-		return root.logical
+	if f := c.fs(); f.logical != (Size{}) || root.Image == nil {
+		return f.logical
 	}
 	b := root.Image.Bounds()
 	return Sz(c.dp(float64(b.Dx())), c.dp(float64(b.Dy())))
@@ -298,11 +328,12 @@ func (c *Canvas) Size() Size {
 // paintOverlays runs the overlays queued this frame, including ones they
 // queue themselves, and clears the queue.
 func (c *Canvas) paintOverlays() {
-	for i := 0; i < len(c.overlays); i++ {
-		o := c.overlays[i]
+	f := c.fs()
+	for i := 0; i < len(f.overlays); i++ {
+		o := f.overlays[i]
 		c.scoped(o.owner, o.fn)
 	}
-	c.overlays = c.overlays[:0]
+	f.overlays = f.overlays[:0]
 }
 
 // Adopter is a handler that can take over from the handler that held the
@@ -579,19 +610,20 @@ func (c *Canvas) adopt(h *hitRegion) {
 // An ID the language cannot compare, which Interactive.Key accepts, matches
 // nothing rather than bringing the process down.
 func (c *Canvas) lastFrame(h *hitRegion) *hitRegion {
-	if !c.prevIndexed {
+	f := c.fs()
+	if !f.prevIndexed {
 		c.indexPrev()
 	}
 	if h.id != nil {
 		if !comparableID(h.id) {
 			return nil
 		}
-		if i, ok := c.prevByID[h.id]; ok {
+		if i, ok := f.prevByID[h.id]; ok {
 			return &c.prev[i]
 		}
 		return nil
 	}
-	if i, ok := c.prevByRect[h.rect]; ok {
+	if i, ok := f.prevByRect[h.rect]; ok {
 		return &c.prev[i]
 	}
 	return nil
@@ -601,17 +633,18 @@ func (c *Canvas) lastFrame(h *hitRegion) *hitRegion {
 // leaves the last of any duplicates in the map, which is the one a scan
 // backwards from the end would have stopped at.
 func (c *Canvas) indexPrev() {
-	c.prevIndexed = true
-	if c.prevByID == nil {
-		c.prevByID = make(map[any]int, len(c.prev))
-		c.prevByRect = make(map[Rect]int, len(c.prev))
+	f := c.fs()
+	f.prevIndexed = true
+	if f.prevByID == nil {
+		f.prevByID = make(map[any]int, len(c.prev))
+		f.prevByRect = make(map[Rect]int, len(c.prev))
 	}
 	for i := range c.prev {
 		switch p := &c.prev[i]; {
 		case p.id == nil:
-			c.prevByRect[p.rect] = i
+			f.prevByRect[p.rect] = i
 		case comparableID(p.id):
-			c.prevByID[p.id] = i
+			f.prevByID[p.id] = i
 		}
 	}
 }

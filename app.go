@@ -207,7 +207,8 @@ func (a *App) Update() error {
 		a.Inspector(!a.inspect)
 	}
 	f := a.readInput()
-	a.canvas.pointer, a.canvas.hasPointer = f.pos, true
+	cf := a.canvas.fs()
+	cf.pointer, cf.hasPointer = f.pos, true
 	a.dispatchInput(f)
 	cursor := a.input.cursor
 	if a.inspect && a.input.pressed == nil {
@@ -307,12 +308,13 @@ func (a *App) Draw(screen *ebiten.Image) {
 	a.canvas.prev, a.canvas.hits = a.canvas.hits, a.spare[:0]
 	b := screen.Bounds()
 	logical := Sz(a.canvas.dp(float64(b.Dx())), a.canvas.dp(float64(b.Dy())))
-	clear(a.canvas.trace)
-	a.canvas.tracing, a.canvas.trace = a.inspect, a.canvas.trace[:0]
-	a.canvas.logical = logical
-	a.canvas.focusBounds = Rect{}
+	f := a.canvas.fs()
+	clear(f.trace)
+	f.tracing, f.trace = a.inspect, f.trace[:0]
+	f.logical = logical
+	f.focusBounds = Rect{}
 	if a.input.focused != nil {
-		a.canvas.focusBounds = a.input.focused.rect
+		f.focusBounds = a.input.focused.rect
 	}
 	a.canvas.nextFrame()
 	a.canvas.resetSemantics()

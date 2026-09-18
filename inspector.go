@@ -339,7 +339,7 @@ func (in *inspector) selectEntry(tr []traceEntry, i int) {
 	}
 }
 func (in *inspector) selection(dst *Canvas) (int, []int) {
-	tr := dst.trace
+	tr := dst.frameTrace()
 	sel := in.find(tr)
 	pointer, hasPointer := dst.Pointer()
 	if !in.pinned && hasPointer && !in.panel.Contains(pointer) {

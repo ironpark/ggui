@@ -40,12 +40,13 @@ func TestVisiblePaintBounds(t *testing.T) {
 func TestEmptyClipRetainsTextSemanticsAndTrace(t *testing.T) {
 	img := ebiten.NewImage(100, 100)
 	defer img.Deallocate()
-	c := &Canvas{Image: img, tracing: true}
+	c := &Canvas{Image: img}
+	c.fs().tracing = true
 	txt := Text("offscreen text")
 	size := txt.Layout(Tight(Sz(100, 20)), rootEnv())
 	clipped := c.Clip(Rct(Pt(200, 200), Sz(10, 10)))
 	clipped.Paint(txt, Rct(Pt(200, 200), size))
-	if len(c.trace) != 1 || len(c.sem) != 1 || c.sem[0].node.Name != "offscreen text" {
+	if len(c.fs().trace) != 1 || len(c.fs().sem) != 1 || c.fs().sem[0].node.Name != "offscreen text" {
 		t.Fatal("drawing cull lost inspection or semantics")
 	}
 }

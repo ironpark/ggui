@@ -26,7 +26,7 @@ func (t *TextInputWidget) EditingState() TextInputState {
 	if t.composition != "" {
 		a = caret
 	}
-	return TextInputState{s, a, caret, t.focused, t.composition != ""}
+	return TextInputState{s, a, caret, t.Focused(), t.composition != ""}
 }
 
 // Select sets the selection at UTF-8 byte offsets, clamped to rune boundaries.

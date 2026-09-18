@@ -377,9 +377,13 @@ func nextWord(s string, i int) int {
 // editor adds Up and Down, Home and End within the line, Enter for a line
 // break and ⌘/Ctrl+Enter for OnSubmit.
 type TextInputWidget struct {
+	// Interactive carries the identity, name and disabled state every
+	// control shares. The editor drives focus itself rather than through
+	// Keyboard: a caret and an IME session are not a press.
+	Interactive
+
 	value             Binding[string]
 	placeholder       string
-	label             string
 	style             TextStyle
 	password          bool
 	multiline         bool
@@ -391,13 +395,9 @@ type TextInputWidget struct {
 	onKey             func(KeyEvent) bool
 	filter            func(string) string
 	escapeUsed        bool
-	disabled          bool
 	inheritedDisabled bool
-	disabledWhen      Readable[bool]
-	id                any
 
-	ed      textEditor
-	focused bool
+	ed textEditor
 
 	ime         ime
 	composition string
@@ -424,7 +424,9 @@ type TextInputWidget struct {
 
 // TextInput creates an editor bound to value.
 func TextInput(value Binding[string]) *TextInputWidget {
-	t := &TextInputWidget{value: value, minWidth: 120, id: autoID()}
+	t := &TextInputWidget{value: value, minWidth: 120}
+	t.Role = RoleTextField
+	t.AutoKey()
 	t.ime = newIME(t)
 	t.ed.setText(Untrack(value.Get))
 	t.ed.moveTo(len(t.ed.text), false)
@@ -443,28 +445,19 @@ func TextInput(value Binding[string]) *TextInputWidget {
 	return t
 }
 
-// DisabledWhen follows r for Disabled without a rebuild.
+// DisabledWhen follows r for Disabled without a rebuild. Like every other
+// control the editor reads r through Sync in Layout and Paint: Disabled
+// changes colour and whether input is accepted, both settled in Paint, so
+// nothing has to be measured again.
 func (t *TextInputWidget) DisabledWhen(r Readable[bool]) *TextInputWidget {
-	t.disabledWhen = r
-	// Reading r here rather than in Layout keeps the editor correct under a
-	// layout cache. Disabled changes colour and whether input is accepted,
-	// both settled in Paint, so nothing has to be measured again. A later
-	// Disabled call drops r, and this effect stops writing.
-	observe(func() {
-		v := r.Get()
-		if t.disabledWhen == r {
-			t.disabled = v
-		}
-	})
+	t.InertWhen(r)
 	return t
 }
 
 // Disabled shows the text in the muted color and takes no input while v
 // is true.
 func (t *TextInputWidget) Disabled(v bool) *TextInputWidget {
-	t.disabledWhen = nil
-	t.disabled = v
-	requestLayout()
+	t.SetInert(v)
 	return t
 }
 
@@ -473,30 +466,23 @@ func (t *TextInputWidget) Placeholder(s string) *TextInputWidget { t.placeholder
 
 // Named names the field for Probe.Find and the inspector; the placeholder
 // serves until one is set.
-func (t *TextInputWidget) Named(s string) *TextInputWidget { t.label = s; return t }
-
-// SetName is Named, for a container that names what it holds.
-func (t *TextInputWidget) SetName(name string) { t.label = name }
-
-// HasName reports whether an explicit name was supplied, excluding Placeholder.
-func (t *TextInputWidget) HasName() bool { return t.label != "" }
+// SetName and HasName come from Interactive, so a container that names what
+// it holds reaches the editor the same way it reaches any other control.
+func (t *TextInputWidget) Named(s string) *TextInputWidget { t.Name = s; return t }
 
 // IsDisabled reports the effective state, including InputDisabled inherited at
 // the most recent Layout. It does not subscribe to the disabled binding.
-func (t *TextInputWidget) IsDisabled() bool { return t.disabled || t.inheritedDisabled }
+func (t *TextInputWidget) IsDisabled() bool { return t.Inert || t.inheritedDisabled }
 
 // Key gives the editor an identity, so a rebuilt one that also moved keeps
 // its caret and focus. Without one the keyed component it was built in
 // identifies it, else its Rect.
-func (t *TextInputWidget) Key(k any) *TextInputWidget { t.id = k; return t }
-
-// HitID implements Identified.
-func (t *TextInputWidget) HitID() any { return t.id }
+func (t *TextInputWidget) Key(k any) *TextInputWidget { t.Interactive.Key(k); return t }
 
 // Semantics implements Semantic.
 func (t *TextInputWidget) Semantics() (Role, string) {
-	if t.label != "" {
-		return RoleTextField, t.label
+	if t.Name != "" {
+		return RoleTextField, t.Name
 	}
 	return RoleTextField, t.placeholder
 }
@@ -638,7 +624,7 @@ func (t *TextInputWidget) OnChange(fn func(string)) *TextInputWidget { t.onChang
 func (t *TextInputWidget) OnKey(fn func(KeyEvent) bool) *TextInputWidget { t.onKey = fn; return t }
 
 // Focused reports whether the editor has keyboard focus.
-func (t *TextInputWidget) Focused() bool { return t.focused }
+func (t *TextInputWidget) Focused() bool { return t.Interactive.Focused }
 
 // display returns s as drawn: itself, or bullets in password mode.
 func (t *TextInputWidget) display(s string) string {
@@ -698,6 +684,7 @@ func (t *TextInputWidget) linesHeight(n int) float64 {
 
 // Layout implements Widget.
 func (t *TextInputWidget) Layout(c Constraints, env Env) Size {
+	t.Sync()
 	t.inheritedDisabled, _ = env.Get(InputDisabled)
 	t.resolved = env.Text().Merge(t.style).resolved()
 	t.resolved.Size *= env.TextScale()
@@ -718,6 +705,7 @@ func (t *TextInputWidget) Layout(c Constraints, env Env) Size {
 
 // Paint implements Widget.
 func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
+	t.Sync()
 	// Where it is being painted is recorded first: describing it reports
 	// where its characters are, which is measured from here.
 	t.rect, t.scale = r, dst.Scale()
@@ -754,7 +742,7 @@ func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
 	}
 	clip := dst.Clip(r)
 
-	if t.focused && t.composition == "" && t.ed.hasSelection() {
+	if t.Focused() && t.composition == "" && t.ed.hasSelection() {
 		lo, hi := t.ed.selection()
 		a, b := t.advance(t.ed.text[:lo]), t.advance(t.ed.text[:hi])
 		clip.FillRect(Rct(Pt(x0+a, r.Origin.Y), Sz(b-a, h)), t.selection)
@@ -778,7 +766,7 @@ func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
 		clip.FillRect(Rct(Pt(x0+a, y), Sz(b-a, 1)), t.resolved.Color)
 	}
 
-	if t.focused && (Now().Sub(t.blink)/(530*time.Millisecond))%2 == 0 {
+	if t.Focused() && (Now().Sub(t.blink)/(530*time.Millisecond))%2 == 0 {
 		clip.FillRect(Rct(Pt(x0+caretX, r.Origin.Y), Sz(1, h)), t.resolved.Color)
 	}
 }
@@ -827,7 +815,7 @@ func (t *TextInputWidget) paintLines(dst *Canvas, r Rect) {
 		}
 	}
 
-	if t.focused && t.composition == "" && t.ed.hasSelection() {
+	if t.Focused() && t.composition == "" && t.ed.hasSelection() {
 		lo, hi := t.ed.selection()
 		eachLine(lo, hi, func(i int, a, b float64) {
 			clip.FillRect(Rct(Pt(x0+a, lineY(i)), Sz(b-a, h)), t.selection)
@@ -858,7 +846,7 @@ func (t *TextInputWidget) paintLines(dst *Canvas, r Rect) {
 		})
 	}
 
-	if t.focused && (Now().Sub(t.blink)/(530*time.Millisecond))%2 == 0 {
+	if t.Focused() && (Now().Sub(t.blink)/(530*time.Millisecond))%2 == 0 {
 		clip.FillRect(Rct(Pt(x0+caretX, y0+caretY), Sz(1, h)), t.resolved.Color)
 	}
 }
@@ -965,7 +953,7 @@ var newIME = func(t *TextInputWidget) ime {
 		}
 		t.imeCommit(commit.Text())
 	}
-	c.OnEndByUser = func() { t.focused = false }
+	c.OnEndByUser = func() { t.Interactive.Focused = false }
 	return c
 }
 
@@ -1016,7 +1004,7 @@ func (t *TextInputWidget) imeReplace(before, text, after string) {
 
 // HandleTick implements TickHandler: it runs the IME while focused.
 func (t *TextInputWidget) HandleTick() bool {
-	if !t.focused || t.IsDisabled() {
+	if !t.Focused() || t.IsDisabled() {
 		return false
 	}
 	handled, err := t.ime.Update()
@@ -1033,11 +1021,11 @@ func (t *TextInputWidget) HandleKey(ev KeyEvent) {
 	}
 	switch ev.Kind {
 	case KeyFocus:
-		t.focused = true
+		t.Interactive.Focused = true
 		t.blink = Now()
 	case KeyBlur:
 		t.ime.Confirm()
-		t.focused = false
+		t.Interactive.Focused = false
 		t.committed()
 	case KeyText:
 		// Text arrives through the IME, on every platform.
@@ -1204,7 +1192,8 @@ func (t *TextInputWidget) Adopt(prev any) {
 		return
 	}
 	p.ime.Confirm()
-	t.ed, t.scroll, t.width, t.focused = p.ed, p.scroll, p.width, p.focused
+	t.Interactive.Adopt(prev)
+	t.ed, t.scroll, t.width = p.ed, p.scroll, p.width
 	t.clicks, t.lastClick, t.lastPos = p.clicks, p.lastClick, p.lastPos
 	if p.ed.text != Untrack(t.value.Get) {
 		t.ed.setText(Untrack(t.value.Get))

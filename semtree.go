@@ -197,17 +197,18 @@ func (n *SemNode) flags() string {
 // buildSemTree reuses the last snapshot only when all observable values are
 // equal. Changed frames own fresh storage; readers can retain any old tree.
 func buildSemTree(c *Canvas, focused *hitRegion, prev *SemTree) *SemTree {
+	f := c.fs()
 	focus := focusedNode(c, focused)
 	if sameSemTree(c, focus, prev) {
 		return prev
 	}
 	t := &SemTree{focused: focus}
-	if len(c.sem) == 0 {
+	if len(f.sem) == 0 {
 		return t
 	}
-	t.nodes = make([]SemNode, len(c.sem))
-	for i := range c.sem {
-		e := &c.sem[i]
+	t.nodes = make([]SemNode, len(f.sem))
+	for i := range f.sem {
+		e := &f.sem[i]
 		t.nodes[i] = SemNode{
 			Node:   freezeNode(e.node),
 			ID:     NodeID{ID: e.id, Rect: e.full, Role: e.node.Role},
@@ -245,11 +246,12 @@ func buildSemTree(c *Canvas, focused *hitRegion, prev *SemTree) *SemTree {
 // Parent indices and paint order fully determine roots and child lists.
 // Handlers, scopes and groups are frame-local and are not published.
 func sameSemTree(c *Canvas, focus int, prev *SemTree) bool {
-	if prev == nil || prev.focused != focus || len(prev.nodes) != len(c.sem) {
+	f := c.fs()
+	if prev == nil || prev.focused != focus || len(prev.nodes) != len(f.sem) {
 		return false
 	}
-	for i := range c.sem {
-		a, b := &c.sem[i], &prev.nodes[i]
+	for i := range f.sem {
+		a, b := &f.sem[i], &prev.nodes[i]
 		if a.parent-1 != b.Parent || a.rect != b.Rect || a.full != b.Full ||
 			!sameAny(a.id, b.ID.ID) || !sameNode(&a.node, &b.Node) {
 			return false
@@ -297,11 +299,12 @@ func focusedNode(c *Canvas, focused *hitRegion) int {
 	if focused == nil || focused.key == nil {
 		return -1
 	}
-	if i := c.semIndex[semKey(focused.key)]; i != 0 {
+	f := c.fs()
+	if i := f.semIndex[semKey(focused.key)]; i != 0 {
 		return i - 1
 	}
-	for i := range c.sem {
-		e := &c.sem[i]
+	for i := range f.sem {
+		e := &f.sem[i]
 		if e.id != nil && e.id == focused.id || e.id == nil && focused.id == nil && e.rect == focused.rect {
 			return i
 		}

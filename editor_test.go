@@ -339,8 +339,8 @@ func TestTextInputMultilineWrapsGrowsAndNavigates(t *testing.T) {
 	paintFrame(&in, w, Sz(200, grown.H))
 	in.dispatch(frameInput{pos: Pt(1, 5), down: []MouseButton{MouseButtonLeft}})
 	in.dispatch(frameInput{pos: Pt(1, 5), up: []MouseButton{MouseButtonLeft}})
-	if !w.focused || w.ed.caret != 0 {
-		t.Fatalf("click at the top left: focused %v caret %d", w.focused, w.ed.caret)
+	if !w.Focused() || w.ed.caret != 0 {
+		t.Fatalf("click at the top left: focused %v caret %d", w.Focused(), w.ed.caret)
 	}
 	typeKeys(&in, Mods{}, KeyEnd)
 	if w.ed.caret != spans[0].end {

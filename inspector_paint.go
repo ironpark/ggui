@@ -91,14 +91,14 @@ func (in *inspector) paint(dst *Canvas) {
 		return
 	}
 	in.bounds(dst.Size())
-	in.lastTrace = dst.trace
+	in.lastTrace = dst.frameTrace()
 	in.copySource = dst
 	pal, face := inspectColors(), inspectorFace(dst)
 	sel, shown := in.selection(dst)
 	// FPS and status hints remain live even when the panel image is reused.
 	defer in.paintStatus(dst, face, pal, sel)
 	if in.outlines {
-		for _, e := range dst.trace {
+		for _, e := range dst.frameTrace() {
 			r := e.rect
 			if e.clipped {
 				r = r.Intersect(e.clip)
@@ -457,20 +457,20 @@ func (in *inspector) paintDetail(dst, source *Canvas, face text.Face, pal inspec
 	}
 	fields := in.details(source, sel)
 	if !in.layout.Empty() && in.tab != inspectTabSemantics {
-		fields = computedFields(&source.trace[sel])
+		fields = computedFields(&source.frameTrace()[sel])
 	}
 	boxH := 0.0
 	if in.layout.Empty() && in.tab != inspectTabSemantics && in.tab != inspectTabComputed {
-		boxH = inspectBoxHeight(inspectedBox(source.trace, sel))
+		boxH = inspectBoxHeight(inspectedBox(source.frameTrace(), sel))
 	}
 	in.detailContent = 32 + boxH + inspectFieldsHeight(fields) + 8
 	in.detailScroll = clamp(in.detailScroll, 0, max(in.detailContent-in.detailBody.Size.H, 0))
 	content := clip.Clip(in.detailBody)
 	cy := in.detailBody.Origin.Y + 10 - in.detailScroll
-	fittedLine(content, face, source.trace[sel].name, r.Origin.X+12, cy, r.Size.W-24, pal.fg)
+	fittedLine(content, face, source.frameTrace()[sel].name, r.Origin.X+12, cy, r.Size.W-24, pal.fg)
 	cy += 24
 	if boxH > 0 {
-		in.paintBox(content, face, pal, Rct(Pt(r.Origin.X+12, cy), Sz(r.Size.W-24, boxH)), inspectedBox(source.trace, sel))
+		in.paintBox(content, face, pal, Rct(Pt(r.Origin.X+12, cy), Sz(r.Size.W-24, boxH)), inspectedBox(source.frameTrace(), sel))
 		cy += boxH
 	}
 	paintInspectFields(content, face, pal, Rct(Pt(r.Origin.X, cy), Sz(r.Size.W, inspectFieldsHeight(fields))), fields)
@@ -566,7 +566,7 @@ func (in *inspector) paintLayout(dst, source *Canvas, face text.Face, pal inspec
 	if sel < 0 {
 		return
 	}
-	box := inspectedBox(source.trace, sel)
+	box := inspectedBox(source.frameTrace(), sel)
 	view := inspector{tab: inspectTabLayout}
 	fields := view.details(source, sel)
 	body := Rct(r.Origin.Add(Pt(0.0, 32.0)), Sz(r.Size.W, max(r.Size.H-32, 0)))
@@ -581,13 +581,13 @@ func (in *inspector) paintLayout(dst, source *Canvas, face text.Face, pal inspec
 	in.layoutThumb = inspectScrollbar(clip, body, content, in.layoutScroll, pal)
 }
 func (in *inspector) paintHighlight(dst *Canvas, face text.Face, pal inspectPalette, sel int) {
-	e := &dst.trace[sel]
+	e := &dst.frameTrace()[sel]
 	r := e.rect
 	clip := dst
 	if e.clipped {
 		clip = dst.Clip(e.clip)
 	}
-	box := inspectedBox(dst.trace, sel)
+	box := inspectedBox(dst.frameTrace(), sel)
 	if box.valid {
 		clip.FillRect(r, withAlpha(pal.padding, 100))
 		clip.FillRect(Rct(r.Origin.Add(Pt(box.padding.Left, box.padding.Top)), box.content), pal.hi)

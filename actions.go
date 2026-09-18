@@ -114,8 +114,9 @@ func perform(c *Canvas, in *inputState, id NodeID, act Action) bool {
 // Canvas.adopt matches a hit region: by identity when it has one, else by
 // the bounds it painted.
 func findSemNode(c *Canvas, id NodeID) *semNode {
-	for i := range c.sem {
-		e := &c.sem[i]
+	sem := c.fs().sem
+	for i := range sem {
+		e := &sem[i]
 		if e.node.Role != id.Role {
 			continue
 		}

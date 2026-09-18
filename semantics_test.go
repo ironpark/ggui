@@ -218,7 +218,7 @@ func TestSemanticsStagingReusePreservesOldTree(t *testing.T) {
 		t.Fatalf("new snapshot has stale nodes: %s", current)
 	}
 	// Shrinking must release references in unused staging slots as well.
-	for _, n := range p.canvas.sem[len(p.canvas.sem):cap(p.canvas.sem)] {
+	for _, n := range p.canvas.fs().sem[len(p.canvas.fs().sem):cap(p.canvas.fs().sem)] {
 		if n.handler != nil || n.node.Name != "" || n.node.Runs != nil {
 			t.Fatal("unused staging slot retains a previous frame's data")
 		}

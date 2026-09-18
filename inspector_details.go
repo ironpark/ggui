@@ -22,12 +22,12 @@ func (in *inspector) copySelection() {
 	if dst == nil {
 		return
 	}
-	sel := in.find(dst.trace)
+	sel := in.find(dst.frameTrace())
 	if sel < 0 {
 		return
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s\n", dst.trace[sel].name)
+	fmt.Fprintf(&b, "%s\n", dst.frameTrace()[sel].name)
 	for _, tab := range []inspectAction{inspectTabLayout, inspectTabComputed, inspectTabSemantics} {
 		view := inspector{tab: tab}
 		for _, f := range view.details(dst, sel) {
@@ -72,21 +72,21 @@ func inspectSemantic(dst *Canvas, e *traceEntry) int {
 	if e.widget == nil {
 		return semanticAt(dst, Pt(e.rect.Origin.X+e.rect.Size.W/2, e.rect.Origin.Y+e.rect.Size.H/2))
 	}
-	for i := range dst.sem {
-		if sameAny(dst.sem[i].handler, e.widget) {
+	for i := range dst.frameSem() {
+		if sameAny(dst.frameSem()[i].handler, e.widget) {
 			return i
 		}
 	}
 	n := nodeOf(e.widget)
-	for i := range dst.sem {
-		s := &dst.sem[i]
+	for i := range dst.frameSem() {
+		s := &dst.frameSem()[i]
 		if s.full == e.rect && s.node.Role == n.Role && s.node.Name == n.Name {
 			return i
 		}
 	}
 	if _, ok := e.widget.(*TextWidget); ok {
-		for i := range dst.sem {
-			if dst.sem[i].full == e.rect && dst.sem[i].node.Name == inspectLabel(e) {
+		for i := range dst.frameSem() {
+			if dst.frameSem()[i].full == e.rect && dst.frameSem()[i].node.Name == inspectLabel(e) {
 				return i
 			}
 		}
@@ -140,7 +140,7 @@ func (in *inspector) details(dst *Canvas, sel int) []inspectField {
 	if sel < 0 {
 		return nil
 	}
-	e := &dst.trace[sel]
+	e := &dst.frameTrace()[sel]
 	if in.tab == inspectTabSemantics {
 		return in.semanticFields(dst, e)
 	}
@@ -148,12 +148,12 @@ func (in *inspector) details(dst *Canvas, sel int) []inspectField {
 		return computedFields(e)
 	}
 	parent := "root"
-	if a := ancestors(dst.trace, sel); len(a) > 0 {
-		parent = dst.trace[a[0]].name
+	if a := ancestors(dst.frameTrace(), sel); len(a) > 0 {
+		parent = dst.frameTrace()[a[0]].name
 	}
 	kids := 0
-	for i := sel + 1; i < len(dst.trace) && dst.trace[i].depth > e.depth; i++ {
-		if dst.trace[i].depth == e.depth+1 {
+	for i := sel + 1; i < len(dst.frameTrace()) && dst.frameTrace()[i].depth > e.depth; i++ {
+		if dst.frameTrace()[i].depth == e.depth+1 {
 			kids++
 		}
 	}
@@ -210,7 +210,7 @@ func (in *inspector) semanticFields(dst *Canvas, e *traceEntry) []inspectField {
 	if found < 0 {
 		return []inspectField{{key: "Node"}, {"role", "none", false}}
 	}
-	n := &dst.sem[found].node
+	n := &dst.frameSem()[found].node
 	out := []inspectField{{key: "Node"}, {"role", string(n.Role), false}}
 	add := func(k, v string) {
 		if v != "" {
@@ -258,7 +258,7 @@ func num(v float64) string { return strconv.FormatFloat(math.Round(v*100)/100, '
 // semanticAt returns the innermost accessibility node painted under p, or
 // -1: the last one described there, since parents describe before children.
 func semanticAt(dst *Canvas, p Point) int {
-	for i, v := range slices.Backward(dst.sem) {
+	for i, v := range slices.Backward(dst.frameSem()) {
 		if !v.node.Offscreen && v.rect.Contains(p) {
 			return i
 		}
@@ -280,12 +280,12 @@ func semanticChain(dst *Canvas, p Point) []string {
 
 func semanticChainFrom(dst *Canvas, found int) []string {
 	var chain []int
-	for i := found; i >= 0; i = dst.sem[i].parent - 1 {
+	for i := found; i >= 0; i = dst.frameSem()[i].parent - 1 {
 		chain = append(chain, i)
 	}
 	lines := make([]string, 0, len(chain))
 	for i, c := range slices.Backward(chain) {
-		e := &dst.sem[c]
+		e := &dst.frameSem()[c]
 		n := SemNode{Node: e.node}
 		lines = append(lines, fmt.Sprintf("%s%s %q%s",
 			strings.Repeat("  ", len(chain)-1-i), e.node.Role, e.node.Name, n.flags()))

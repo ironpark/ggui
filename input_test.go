@@ -312,37 +312,38 @@ func TestTooltipAppearsAfterHover(t *testing.T) {
 	tip := Tooltip(Box().Size(50, 50), "hint").Delay(0)
 	var c Canvas
 	c.Paint(tip, Rct(Pt(0, 0), tip.Layout(Loose(Sz(100, 100)), Env{})))
-	if len(c.overlays) != 0 {
+	if len(c.fs().overlays) != 0 {
 		t.Fatal("tooltip queued without a pointer")
 	}
-	c.pointer, c.hasPointer = Pt(10, 10), true
+	c.fs().pointer, c.fs().hasPointer = Pt(10, 10), true
 	c.Paint(tip, Rct(Pt(0, 0), Sz(50, 50)))
-	if len(c.overlays) != 1 {
-		t.Fatalf("%d overlays with the pointer inside, want 1", len(c.overlays))
+	if len(c.fs().overlays) != 1 {
+		t.Fatalf("%d overlays with the pointer inside, want 1", len(c.fs().overlays))
 	}
 	c.paintOverlays()
-	if len(c.overlays) != 0 {
+	if len(c.fs().overlays) != 0 {
 		t.Fatal("overlays not cleared")
 	}
-	c.pointer = Pt(80, 80)
+	c.fs().pointer = Pt(80, 80)
 	c.Paint(tip, Rct(Pt(0, 0), Sz(50, 50)))
-	if len(c.overlays) != 0 {
+	if len(c.fs().overlays) != 0 {
 		t.Fatal("tooltip queued with the pointer outside")
 	}
 }
 
 func TestInspectorTracesPaintedWidgets(t *testing.T) {
-	c := Canvas{tracing: true}
+	c := Canvas{}
+	c.fs().tracing = true
 	w := Column(Box().Size(10, 10), Padding(Box().Size(10, 10), 5))
 	c.Paint(w, Rct(Pt(0, 0), w.Layout(Loose(Sz(100, 100)), Env{})))
-	if len(c.trace) != 4 {
-		t.Fatalf("%d traced widgets, want 4", len(c.trace))
+	if len(c.fs().trace) != 4 {
+		t.Fatalf("%d traced widgets, want 4", len(c.fs().trace))
 	}
-	if c.trace[0].name != "Column" || c.trace[0].depth != 0 || c.trace[3].depth != 2 {
-		t.Fatalf("trace = %+v", c.trace)
+	if c.fs().trace[0].name != "Column" || c.fs().trace[0].depth != 0 || c.fs().trace[3].depth != 2 {
+		t.Fatalf("trace = %+v", c.fs().trace)
 	}
-	if c.trace[3].rect != Rct(Pt(5, 15), Sz(10, 10)) {
-		t.Fatalf("innermost rect = %+v", c.trace[3].rect)
+	if c.fs().trace[3].rect != Rct(Pt(5, 15), Sz(10, 10)) {
+		t.Fatalf("innermost rect = %+v", c.fs().trace[3].rect)
 	}
 }
 

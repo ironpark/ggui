@@ -169,10 +169,11 @@ func (r SemRef) Valid() bool { return r.n != 0 }
 // snapshot, so this private staging buffer can be reused. Clear old entries
 // to release handlers and text data when the next frame has fewer nodes.
 func (c *Canvas) resetSemantics() {
-	clear(c.sem)
-	c.sem = c.sem[:0]
-	c.semParent, c.semLast = 0, 0
-	clear(c.semIndex)
+	f := c.fs()
+	clear(f.sem)
+	f.sem = f.sem[:0]
+	f.semParent, f.semLast = 0, 0
+	clear(f.semIndex)
 }
 
 // Leaf records n as an element at r with no children of its own.
@@ -216,7 +217,7 @@ func (c *Canvas) scoped(ref SemRef, fn func(dst *Canvas)) {
 		fn(nil)
 		return
 	}
-	root := c.root()
+	root := c.fs()
 	prev := root.semParent
 	if ref.n != 0 {
 		root.semParent = ref.n
@@ -232,7 +233,7 @@ func (c *Canvas) SemanticRef(h any) SemRef {
 	if c == nil || h == nil {
 		return SemRef{}
 	}
-	return SemRef{n: c.root().semIndex[semKey(h)]}
+	return SemRef{n: c.fs().semIndex[semKey(h)]}
 }
 
 // nodeOf is what a handler says about itself: its own Describe, else its
@@ -272,7 +273,7 @@ func (c *Canvas) addSem(r Rect, n Node, h any) SemRef {
 	if c == nil || c.inert {
 		return SemRef{}
 	}
-	root := c.root()
+	root := c.fs()
 	key := semKey(h)
 	if key != nil {
 		if i := root.semIndex[key]; i != 0 {
@@ -310,7 +311,7 @@ func (c *Canvas) named(r Rect) bool {
 	if c == nil {
 		return false
 	}
-	root := c.root()
+	root := c.fs()
 	if root.semLast == 0 {
 		return false
 	}

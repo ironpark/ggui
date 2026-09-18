@@ -66,19 +66,19 @@ func (in *inspector) panelSnapshot(dst *Canvas, shown []int, sel int) inspectPan
 		panel: in.panel, scale: dst.Scale(), split: in.split, scroll: in.scroll, detailScroll: in.detailScroll, layoutScroll: in.layoutScroll,
 		pointer: pointer, hasPointer: hasPointer, dark: luminance(Untrack(theme.Get).Bg) < .5,
 		pinned: in.pinned, picking: in.picking, copied: in.copied, filterFocus: in.filterFocus, selectFilter: in.selectFilter, outlines: in.outlines,
-		filter: in.filter, dock: in.dock, tab: in.tab, selected: sel, total: len(dst.trace), shown: len(shown), matches: in.matches,
+		filter: in.filter, dock: in.dock, tab: in.tab, selected: sel, total: len(dst.frameTrace()), shown: len(shown), matches: in.matches,
 	}}
 	row := func(i int) inspectPanelRow {
-		e := &dst.trace[i]
-		return inspectPanelRow{key: keyOf(e), label: inspectLabel(e), kind: inspectKind(e), index: i, folded: in.folded(e), children: hasChildren(dst.trace, i)}
+		e := &dst.frameTrace()[i]
+		return inspectPanelRow{key: keyOf(e), label: inspectLabel(e), kind: inspectKind(e), index: i, folded: in.folded(e), children: hasChildren(dst.frameTrace(), i)}
 	}
 	first, end := inspectRowRange(len(shown), in.scroll, in.tree.Size.H)
 	for _, i := range shown[first:end] {
 		s.rows = append(s.rows, row(i))
 	}
 	if sel >= 0 {
-		s.state.box = inspectedBox(dst.trace, sel)
-		for _, i := range ancestors(dst.trace, sel) {
+		s.state.box = inspectedBox(dst.frameTrace(), sel)
+		for _, i := range ancestors(dst.frameTrace(), sel) {
 			s.crumbs = append(s.crumbs, row(i))
 		}
 		s.crumbs = append(s.crumbs, row(sel))
