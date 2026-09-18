@@ -77,6 +77,36 @@ func TestIfPicksTheFirstTrueBranch(t *testing.T) {
 	}
 }
 
+// An If showing nothing is left out of its flow: no gap beside it in a
+// Column, Row or Wrap, and justification counts the children that are there.
+func TestIfShowingNothingTakesNoGap(t *testing.T) {
+	off := State(false)
+	col := Column(Box().Size(10, 10), If(off, Box().Size(10, 10)), Box().Size(10, 10)).Gap(4)
+	p := NewProbe(Align(col).At(0, 0), Sz(100, 100))
+	p.Frame()
+	if h := col.sizes[0].H + col.sizes[1].H + col.sizes[2].H; h != 20 || col.offsets[2].Y != 14 {
+		t.Fatalf("third child at y=%v with %v of content, want 14 after one box and one gap", col.offsets[2].Y, h)
+	}
+	off.Set(true)
+	p.Frame()
+	if got := col.offsets[2].Y; got != 28 {
+		t.Fatalf("third child at y=%v once shown, want 28 after two boxes and two gaps", got)
+	}
+
+	off.Set(false)
+	p.Frame()
+	row := Row(Box().Size(10, 10), If(off, Box().Size(10, 10)), Box().Size(10, 10)).Justify(SpaceBetween)
+	row.Layout(Tight(Sz(100, 10)), rootEnv())
+	if got := row.offsets[2].X; got != 90 {
+		t.Fatalf("space-between placed the last box at x=%v, want 90 with the absent child ignored", got)
+	}
+
+	wrap := Wrap(Box().Size(10, 10), If(off, Box().Size(10, 10)), Box().Size(10, 10)).Gap(4)
+	if w := wrap.Layout(Loose(Sz(100, 100)), rootEnv()).W; w != 24 {
+		t.Fatalf("wrap width = %v, want two boxes and one gap", w)
+	}
+}
+
 // Branches are constructed once and kept, so the one shown keeps its state
 // across being hidden; the choice rebuilds the If alone, not its parent.
 func TestIfKeepsBranchesAndRebuildsAlone(t *testing.T) {

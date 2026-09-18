@@ -197,8 +197,28 @@ func (w *IfWidget) pick() Widget {
 // current is the branch shown, for tests.
 func (w *IfWidget) current() Widget { return w.comp.child }
 
-// Layout implements Widget.
-func (w *IfWidget) Layout(c Constraints, env Env) Size { return w.comp.Layout(c, env) }
+// absent implements vacant: an If showing no branch takes no gap in a
+// Column, Row or Wrap, as if it were not there.
+func (w *IfWidget) absent() bool { return w.comp.child == nil }
+
+// vacant is reported by a widget that currently shows nothing, so the flow
+// around it leaves out the gap it would otherwise place beside it. It is
+// asked after the widget's Layout, which is when an If knows its branch.
+type vacant interface{ absent() bool }
+
+func isAbsent(w Widget) bool {
+	v, ok := w.(vacant)
+	return ok && v.absent()
+}
+
+// Layout implements Widget. Showing nothing, it takes no space at all.
+func (w *IfWidget) Layout(c Constraints, env Env) Size {
+	size := w.comp.Layout(c, env)
+	if w.comp.child == nil {
+		return Size{}
+	}
+	return size
+}
 
 // Paint implements Widget. The component paints directly, so the inspector
 // lists the branch under the If rather than under an extra Component.

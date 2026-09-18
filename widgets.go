@@ -516,16 +516,17 @@ func (f *flow) layout(c Constraints, env Env) Size {
 	mainMax, crossMax := f.main(c.Max()), f.cross(c.Max())
 	crossMin := f.stretched(crossMax, 0)
 
-	var gaps float64
-	if n > 1 {
-		gaps = gap * float64(n-1)
-	}
+	// Gaps go between the children that are there; a child showing nothing
+	// (see vacant) is only known to be absent once laid out, so the rigid
+	// pass reserves a gap for every child and settles the count after.
+	gaps := gap * float64(max(n-1, 0))
 
 	// Rigid children first, each offered what is left; then flex children
 	// split the remainder by weight.
 	used := gaps
 	var totalFlex float64
 	flexible := !math.IsInf(mainMax, 1) // no leftover to share on an unbounded axis
+	present := n
 	for i, child := range f.children {
 		if fw, ok := child.(*FlexWidget); ok && fw.flex > 0 && flexible {
 			totalFlex += fw.flex
@@ -533,6 +534,14 @@ func (f *flow) layout(c Constraints, env Env) Size {
 		}
 		f.sizes[i] = child.Layout(f.constraints(0, max(mainMax-used, 0), crossMin, crossMax), env)
 		used += f.main(f.sizes[i])
+		if isAbsent(child) {
+			present--
+		}
+	}
+	if present < n {
+		used -= gaps
+		gaps = gap * float64(max(present-1, 0))
+		used += gaps
 	}
 	free := max(mainMax-used, 0)
 	for i, child := range f.children {
@@ -555,22 +564,22 @@ func (f *flow) layout(c Constraints, env Env) Size {
 	result := c.Constrain(f.size(mainTotal, f.stretched(crossMax, crossUsed)))
 
 	lead, between := 0.0, gap
-	if slack := max(f.main(result)-content, 0); n > 0 {
+	if slack := max(f.main(result)-content, 0); present > 0 {
 		switch f.justify {
 		case JustifyCenter:
 			lead = slack / 2
 		case JustifyEnd:
 			lead = slack
 		case SpaceBetween:
-			if n > 1 {
-				between += slack / float64(n-1)
+			if present > 1 {
+				between += slack / float64(present-1)
 			}
 		case SpaceAround:
-			lead = slack / float64(n) / 2
-			between += slack / float64(n)
+			lead = slack / float64(present) / 2
+			between += slack / float64(present)
 		case SpaceEvenly:
-			lead = slack / float64(n+1)
-			between += slack / float64(n+1)
+			lead = slack / float64(present+1)
+			between += slack / float64(present+1)
 		}
 	}
 	pos := lead
@@ -580,6 +589,9 @@ func (f *flow) layout(c Constraints, env Env) Size {
 			f.offsets[i] = Pt(pos, crossOff)
 		} else {
 			f.offsets[i] = Pt(crossOff, pos)
+		}
+		if isAbsent(f.children[i]) {
+			continue // sits at pos with no size, and no gap after it
 		}
 		pos += f.main(s) + between
 	}
@@ -1035,6 +1047,10 @@ func (w *WrapWidget) Layout(c Constraints, env Env) Size {
 		}
 	}
 	for i, s := range w.sizes {
+		if isAbsent(w.children[i]) {
+			w.offsets[i].X = x
+			continue
+		}
 		if i > start && x+s.W > c.MaxW {
 			place(i)
 			width = max(width, x-w.gap)
