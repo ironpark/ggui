@@ -20,7 +20,10 @@ import (
 //	width.Set(120) // slides there over 200ms
 //
 // The runtime steps every running animation once per frame, before effects
-// are flushed.
+// are flushed. Tween and Spring created under an owner stop and release their
+// registration when that owner is disposed; their value then stays frozen.
+// Create component-local animations in setup so they survive builder reruns.
+// Animations created without an owner live until they settle or Jump stops them.
 
 // Easing maps normalized time in [0, 1] to normalized progress.
 type Easing func(t float64) float64
@@ -47,6 +50,7 @@ func EaseInOut(t float64) float64 {
 // stepper is an animation the runtime advances each frame.
 type stepper interface {
 	step(now time.Time) (running bool)
+	active() bool
 }
 
 type animator struct {
@@ -65,20 +69,29 @@ func (a *animator) add(s stepper) {
 	a.list = append(a.list, s)
 }
 
+// remove drops a stopped animation immediately, even if no more frames run.
+func (a *animator) remove(s stepper) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if i := slices.Index(a.list, s); i >= 0 {
+		a.list = slices.Delete(a.list, i, i+1)
+	}
+}
+
 // step advances every running animation and drops the ones that finished.
 func (a *animator) step(now time.Time) {
 	a.mu.Lock()
 	list := append([]stepper(nil), a.list...)
 	a.mu.Unlock()
 
-	var keep []stepper
 	for _, s := range list {
-		if s.step(now) {
-			keep = append(keep, s)
-		}
+		s.step(now)
 	}
+	// Filter the live list once: callbacks may have added or stopped other
+	// animations during step. Preserve new registrations, and avoid a
+	// quadratic series of removals when many animations finish together.
 	a.mu.Lock()
-	a.list = keep
+	a.list = slices.DeleteFunc(a.list, func(s stepper) bool { return !s.active() })
 	a.mu.Unlock()
 }
 
@@ -92,12 +105,20 @@ type Tweened[T Number] struct {
 	from, to T
 	start    time.Time
 	running  bool
+	disposed bool
 }
 
 // Tween creates a Tweened at v that takes d to reach each new target, with
 // EaseOut. T is inferred from v, so write Tween(0.0, d) for a float64.
 func Tween[T Number](v T, d time.Duration) *Tweened[T] {
-	return &Tweened[T]{sig: State(v), duration: d, ease: EaseOut, from: v, to: v}
+	t := &Tweened[T]{sig: State(v), duration: d, ease: EaseOut, from: v, to: v}
+	if currentOwner() != nil {
+		OnCleanup(func() {
+			t.disposed, t.running = true, false
+			anims.remove(t)
+		})
+	}
+	return t
 }
 
 // Easing sets the curve; see EaseLinear, EaseIn, EaseOut, EaseInOut.
@@ -121,10 +142,14 @@ func (t *Tweened[T]) Target() T { return t.to }
 
 // Set starts moving from the current value to target.
 func (t *Tweened[T]) Set(target T) {
+	if t.disposed {
+		return
+	}
 	t.from, t.to = t.sig.Peek(), target
 	if t.duration <= 0 || t.from == t.to {
 		t.sig.Set(target)
 		t.running = false
+		anims.remove(t)
 		return
 	}
 	t.start = time.Time{} // taken from the first step
@@ -134,9 +159,15 @@ func (t *Tweened[T]) Set(target T) {
 
 // Jump moves to v at once, with no animation.
 func (t *Tweened[T]) Jump(v T) {
+	if t.disposed {
+		return
+	}
 	t.from, t.to, t.running = v, v, false
+	anims.remove(t)
 	t.sig.Set(v)
 }
+
+func (t *Tweened[T]) active() bool { return t.running }
 
 func (t *Tweened[T]) step(now time.Time) bool {
 	if !t.running {
@@ -152,6 +183,9 @@ func (t *Tweened[T]) step(now time.Time) bool {
 		return false
 	}
 	f := t.ease(clamp(p, 0, 1))
+	if !t.running {
+		return false
+	}
 	t.sig.Set(T(float64(t.from) + (float64(t.to)-float64(t.from))*f))
 	return true
 }
@@ -168,12 +202,20 @@ type Sprung[T Number] struct {
 	pos, vel, to float64
 	last         time.Time
 	running      bool
+	disposed     bool
 }
 
 // Spring creates a Sprung at v. Stiffness and Damping tune the motion; the
 // defaults settle in a few hundred milliseconds with a slight overshoot.
 func Spring[T Number](v T) *Sprung[T] {
-	return &Sprung[T]{sig: State(v), stiffness: 170, damping: 18, precision: 0.01, pos: float64(v), to: float64(v)}
+	s := &Sprung[T]{sig: State(v), stiffness: 170, damping: 18, precision: 0.01, pos: float64(v), to: float64(v)}
+	if currentOwner() != nil {
+		OnCleanup(func() {
+			s.disposed, s.running = true, false
+			anims.remove(s)
+		})
+	}
+	return s
 }
 
 // Stiffness sets the spring constant: higher snaps faster.
@@ -196,6 +238,9 @@ func (s *Sprung[T]) Target() T { return T(s.to) }
 
 // Set retargets the spring; motion already under way carries over.
 func (s *Sprung[T]) Set(target T) {
+	if s.disposed {
+		return
+	}
 	s.to = float64(target)
 	if !s.running {
 		s.last = time.Time{}
@@ -206,9 +251,15 @@ func (s *Sprung[T]) Set(target T) {
 
 // Jump moves to v at once and stops.
 func (s *Sprung[T]) Jump(v T) {
+	if s.disposed {
+		return
+	}
 	s.pos, s.vel, s.to, s.running = float64(v), 0, float64(v), false
+	anims.remove(s)
 	s.sig.Set(v)
 }
+
+func (s *Sprung[T]) active() bool { return s.running }
 
 func (s *Sprung[T]) step(now time.Time) bool {
 	if !s.running {

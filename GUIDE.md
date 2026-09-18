@@ -84,7 +84,7 @@ read most recently.
 | --- | --- |
 | `app.Setup(fn)` | Runs under the app's root owner before the first build. Use it for app-wide watchers and theme bindings. |
 | `OnCleanup(fn)` | Runs before the owning effect re-runs and when it is disposed. |
-| `app.Close()` | Disposes the app's owned computations and ends `Run`. |
+| `app.Close()` | Disposes the app's owned computations and ends `Run`. `Run` also cleans up when the window closes or it returns an error. |
 | `Root(fn)` | Creates an owner that does not re-run, useful for custom containers that retain children. |
 
 For example, bind an app-wide theme before starting the app:
@@ -795,6 +795,11 @@ bar := ggui.Reactive(func() ggui.Widget {
 })
 width.Set(120) // slides there over 200ms; Jump(v) skips the motion
 ```
+
+Animations created inside an owner stop when it is disposed and keep their
+last value; `Set` and `Jump` on those disposed values do nothing. Create them
+in component setup or `App.Setup` to keep them across builder reruns. An
+animation created without an owner runs until it settles or `Jump` stops it.
 
 A tween restarts from wherever it is when retargeted; a spring keeps its
 momentum, overshoots a little and settles (`.Stiffness`, `.Damping`). Easings:

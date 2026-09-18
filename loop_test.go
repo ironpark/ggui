@@ -71,3 +71,80 @@ func TestCycleIsReported(t *testing.T) {
 	p.Frame()
 	t.Fatal("frame returned")
 }
+
+func TestProbeLayoutFollowsSetupAndThemeChanges(t *testing.T) {
+	old := theme.Peek()
+	defer SetTheme(old)
+	dark := State(true)
+	var seen Theme
+	w := FromFuncs(func(c Constraints, env Env) Size {
+		seen = env.Theme()
+		return c.Constrain(Sz(10, 10))
+	}, func(*Canvas, Rect) {})
+	p := NewProbe(Cached(w), Sz(20, 20)).Setup(func() {
+		BindTheme(dark, DarkTheme(), DefaultTheme())
+	})
+	defer p.Close()
+	p.Frame()
+	if seen.Bg != DarkTheme().Bg {
+		t.Fatal("first layout did not see the theme set by Setup")
+	}
+	dark.Set(false)
+	p.Frame()
+	if seen.Bg != DefaultTheme().Bg {
+		t.Fatal("cached layout did not follow the theme change")
+	}
+}
+
+func TestPostDefersRepostedWorkToNextFrame(t *testing.T) {
+	p := NewProbe(Box(), Sz(10, 10))
+	defer p.Close()
+	var seen []int
+	var again func()
+	again = func() {
+		seen = append(seen, 1)
+		// Bound the callback so a regression fails instead of hanging tests.
+		if len(seen) < 10 {
+			p.Post(again)
+		}
+	}
+	p.Post(again)
+	p.Post(func() { seen = append(seen, 2) })
+	p.Frame()
+	if len(seen) != 2 || seen[0] != 1 || seen[1] != 2 {
+		t.Fatalf("first frame ran %v, want [1 2]", seen)
+	}
+	p.Frame()
+	if len(seen) != 3 || seen[2] != 1 {
+		t.Fatalf("second frame ran %v, want [1 2 1]", seen)
+	}
+}
+
+func TestPostedCloseSkipsRemainingWork(t *testing.T) {
+	p := NewProbe(Box(), Sz(10, 10))
+	defer p.Close()
+	p.Post(p.Close)
+	p.Post(func() { t.Error("posted work ran after Close") })
+	p.Frame()
+}
+
+func TestCloseRejectsLatePostedWork(t *testing.T) {
+	p := NewProbe(Box(), Sz(10, 10))
+	defer p.Close()
+	p.Frame()
+	start, done := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(done)
+		<-start
+		for range 100 {
+			p.Post(func() { t.Error("work ran after Close") })
+			p.Announce("late", Polite)
+		}
+	}()
+	close(start)
+	p.Close()
+	<-done
+	if len(p.posted) != 0 || len(p.notices) != 0 {
+		t.Fatal("closed probe retained work or announcements")
+	}
+}

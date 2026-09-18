@@ -228,7 +228,7 @@ func TestComponentDisposedWithParent(t *testing.T) {
 
 func TestPanicInEffectLeavesNoResidue(t *testing.T) {
 	effects.mu.Lock()
-	before := len(effects.list)
+	before := effects.count
 	effects.mu.Unlock()
 	func() {
 		defer func() { recover() }()
@@ -241,9 +241,79 @@ func TestPanicInEffectLeavesNoResidue(t *testing.T) {
 		t.Fatal("owner left set after a panicking effect")
 	}
 	effects.mu.Lock()
-	after := len(effects.list)
+	after := effects.count
 	effects.mu.Unlock()
 	if after != before {
 		t.Fatalf("%d effects left registered after a panicking effect, want 0", after-before)
+	}
+}
+
+func TestDisposedChildrenLeaveOwnerInCreationOrder(t *testing.T) {
+	var owner *effect
+	var stops []func()
+	var cleaned []int
+	dispose := Root(func() {
+		owner = currentOwner()
+		for i := range 5 {
+			stops = append(stops, Effect(func() {
+				OnCleanup(func() { cleaned = append(cleaned, i) })
+			}))
+		}
+	})
+	defer dispose()
+	// Remove the middle, first, and last child; only 1 and 3 must remain.
+	for _, i := range []int{2, 0, 4} {
+		stops[i]()
+	}
+	if owner.firstChild == nil || owner.lastChild == nil ||
+		owner.firstChild.nextSibling != owner.lastChild ||
+		owner.lastChild.prevSibling != owner.firstChild ||
+		owner.firstChild.prevSibling != nil || owner.lastChild.nextSibling != nil {
+		t.Fatal("disposed children remain linked or surviving order changed")
+	}
+	cleaned = nil
+	dispose()
+	if len(cleaned) != 2 || cleaned[0] != 1 || cleaned[1] != 3 {
+		t.Fatalf("remaining cleanup order = %v, want [1 3]", cleaned)
+	}
+	if owner.firstChild != nil || owner.lastChild != nil {
+		t.Fatal("closed owner retains children")
+	}
+}
+
+func TestChildCleanupCanDisposeSibling(t *testing.T) {
+	var stopSibling func()
+	var cleaned []int
+	dispose := Root(func() {
+		Effect(func() { OnCleanup(func() { cleaned = append(cleaned, 0); stopSibling() }) })
+		stopSibling = Effect(func() { OnCleanup(func() { cleaned = append(cleaned, 1) }) })
+		Effect(func() { OnCleanup(func() { cleaned = append(cleaned, 2) }) })
+	})
+	defer dispose()
+	dispose()
+	if len(cleaned) != 3 || cleaned[0] != 0 || cleaned[1] != 1 || cleaned[2] != 2 {
+		t.Fatalf("cleanup skipped or repeated a sibling: %v", cleaned)
+	}
+}
+
+func TestEffectRemovalPreservesExecutionOrder(t *testing.T) {
+	n := State(0)
+	var seen []int
+	var stops []func()
+	dispose := Root(func() {
+		for i := range 5 {
+			stops = append(stops, Effect(func() { n.Get(); seen = append(seen, i) }))
+		}
+	})
+	defer dispose()
+	stops[1]()
+	stops[3]()
+	seen = nil
+	n.Set(1)
+	if !effects.flush() {
+		t.Fatal("effects did not settle")
+	}
+	if len(seen) != 3 || seen[0] != 0 || seen[1] != 2 || seen[2] != 4 {
+		t.Fatalf("effect order = %v, want [0 2 4]", seen)
 	}
 }

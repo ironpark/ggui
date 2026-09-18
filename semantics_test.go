@@ -157,3 +157,27 @@ text "body"
 		t.Fatalf("tree =\n%s\nwant\n%s", got, want)
 	}
 }
+
+func TestSemanticsStagingReusePreservesOldTree(t *testing.T) {
+	rows := State([]string{"one", "two", "three"})
+	p := ProbeBuilder(func() Widget {
+		return Each(rows, func(s Reader[string]) Widget { return TextOf(s) })
+	}, Sz(100, 200))
+	defer p.Close()
+	old := p.Semantics()
+	before := old.String()
+	rows.Set([]string{"new"})
+	current := p.Semantics()
+	if old.String() != before || old.At(0).Max != 3 {
+		t.Fatal("reusing staging nodes changed an already published tree")
+	}
+	if current.At(0).Max != 1 || !strings.Contains(current.String(), `"new"`) {
+		t.Fatalf("new snapshot has stale nodes: %s", current)
+	}
+	// Shrinking must release references in unused staging slots as well.
+	for _, n := range p.canvas.sem[len(p.canvas.sem):cap(p.canvas.sem)] {
+		if n.handler != nil || n.node.Name != "" || n.node.Runs != nil {
+			t.Fatal("unused staging slot retains a previous frame's data")
+		}
+	}
+}

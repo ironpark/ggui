@@ -72,7 +72,9 @@ func (r *frameLoop) announce(a Announcement) {
 		return
 	}
 	r.postMu.Lock()
-	r.notices = append(r.notices, a)
+	if !r.closed {
+		r.notices = append(r.notices, a)
+	}
 	r.postMu.Unlock()
 }
 
@@ -112,40 +114,42 @@ func (r *frameLoop) start() {
 // close disposes the root owner, and with it every effect, memo and
 // component the app created, then drops the tree.
 func (r *frameLoop) close() {
+	r.postMu.Lock()
 	if r.closed {
+		r.postMu.Unlock()
 		return
 	}
 	r.closed = true
+	r.posted, r.notices = nil, nil
+	r.postMu.Unlock()
 	if r.dispose != nil {
 		r.dispose()
 	}
 	r.root = nil
-	r.postMu.Lock()
-	r.posted, r.notices = nil, nil
-	r.postMu.Unlock()
 }
 
 // post queues fn to run on the UI thread before the next frame's input.
 func (r *frameLoop) post(fn func()) {
 	r.postMu.Lock()
-	r.posted = append(r.posted, fn)
+	if !r.closed {
+		r.posted = append(r.posted, fn)
+	}
 	r.postMu.Unlock()
 }
 
-// runPosted runs what post queued, in order, including what those
-// functions post themselves.
+// runPosted runs the work queued at the start of this frame, in order.
+// Work posted by a callback waits for the next frame so input and rendering
+// cannot be starved by a callback that posts itself again.
 func (r *frameLoop) runPosted() {
-	for {
-		r.postMu.Lock()
-		list := r.posted
-		r.posted = nil
-		r.postMu.Unlock()
-		if len(list) == 0 {
+	r.postMu.Lock()
+	list := r.posted
+	r.posted = nil
+	r.postMu.Unlock()
+	for _, fn := range list {
+		if r.closed {
 			return
 		}
-		for _, fn := range list {
-			fn()
-		}
+		fn()
 	}
 }
 

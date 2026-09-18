@@ -108,3 +108,86 @@ func TestMotionRetargetsMidway(t *testing.T) {
 		t.Fatal("did not arrive")
 	}
 }
+
+func TestAnimationCleanupOnlyStopsOwnedValues(t *testing.T) {
+	outside := Tween(0.0, time.Second).Easing(EaseLinear)
+	defer outside.Jump(0)
+	var tw *Tweened[float64]
+	var sp *Sprung[float64]
+	p := NewProbe(Box(), Sz(10, 10)).Setup(func() {
+		tw = Tween(0.0, time.Second).Easing(EaseLinear)
+		sp = Spring(0.0)
+	})
+	defer p.Close()
+	p.Frame()
+	tw.Set(100)
+	sp.Set(100)
+	outside.Set(100)
+	p.Advance(0)
+	p.Advance(100 * time.Millisecond)
+	tv, sv := tw.Peek(), sp.Peek()
+	p.Close()
+	for _, a := range anims.list {
+		if a == tw || a == sp {
+			t.Fatal("closed probe retains its animation")
+		}
+	}
+	// Stale handles cannot restart animations after the owner's cleanup.
+	tw.Set(200)
+	sp.Set(200)
+	tw.Jump(300)
+	sp.Jump(300)
+	anims.step(outside.start.Add(500 * time.Millisecond))
+	if tw.Peek() != tv || sp.Peek() != sv {
+		t.Fatal("a disposed owner's animation changed value")
+	}
+	if outside.Peek() != 50 {
+		t.Fatalf("unowned animation was stopped: %v", outside.Peek())
+	}
+}
+
+func TestAnimationCreatedDuringStepIsNotDropped(t *testing.T) {
+	second := Tween(0.0, time.Second).Easing(EaseLinear)
+	defer second.Jump(0)
+	first := Tween(0.0, time.Second).Easing(func(p float64) float64 {
+		if !second.running {
+			second.Set(10)
+		}
+		return p
+	})
+	defer first.Jump(0)
+	t0 := time.Unix(100, 0)
+	first.Set(10)
+	anims.step(t0)
+	anims.step(t0.Add(100 * time.Millisecond))
+	anims.step(t0.Add(200 * time.Millisecond))
+	if second.Peek() <= 0 {
+		t.Fatal("animation registered by an easing callback was lost")
+	}
+}
+
+func TestAnimationCanLoseOwnerDuringStep(t *testing.T) {
+	var tw *Tweened[float64]
+	var dispose func()
+	dispose = Root(func() {
+		tw = Tween(0.0, time.Second).Easing(func(p float64) float64 {
+			if p > 0 {
+				dispose()
+			}
+			return p
+		})
+	})
+	defer dispose()
+	tw.Set(100)
+	t0 := time.Unix(100, 0)
+	anims.step(t0)
+	anims.step(t0.Add(500 * time.Millisecond))
+	if tw.Peek() != 0 || tw.running {
+		t.Fatal("step updated an animation after its owner was disposed")
+	}
+	for _, s := range anims.list {
+		if s == tw {
+			t.Fatal("step restored the disposed animation's registration")
+		}
+	}
+}

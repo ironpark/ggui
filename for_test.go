@@ -312,3 +312,41 @@ func TestForPaintGroupsFollowRows(t *testing.T) {
 		})
 	}
 }
+
+func TestForEvictionReleasesOwnerChildren(t *testing.T) {
+	ids := make([]int, 1000)
+	for i := range ids {
+		ids[i] = i
+	}
+	var f *ForWidget[int, int]
+	created, cleaned := 0, 0
+	dispose := Root(func() {
+		f = For(State(ids), func(i int) int { return i }, func(Reader[int]) Widget {
+			created++
+			OnCleanup(func() { cleaned++ })
+			return Box().Size(10, 20)
+		}).ItemExtent(20).Retain(2)
+	})
+	defer dispose()
+	offset := State(0.0)
+	scroll := Scroll(f).Offset(offset)
+	for i := 0; i < len(ids); i += 5 {
+		offset.Set(float64(i * 20))
+		scroll.Layout(Tight(Sz(100, 100)), Env{})
+		count := 0
+		for c := f.owner.firstChild; c != nil; c = c.nextSibling {
+			if c.disposed {
+				t.Fatal("owner retains a disposed row")
+			}
+			count++
+		}
+		// One list-watching effect plus the visible and retained row roots.
+		if count != 1+len(f.entries) || len(f.entries) > 7 {
+			t.Fatalf("after row %d: %d children, %d entries", i, count, len(f.entries))
+		}
+	}
+	dispose()
+	if created != cleaned {
+		t.Fatalf("created %d rows but cleaned %d", created, cleaned)
+	}
+}

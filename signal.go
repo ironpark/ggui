@@ -52,10 +52,16 @@ type effect struct {
 	dirty    bool
 	disposed bool
 
-	owner    *effect
-	children []*effect
-	cleanups []func()
-	sources  []source
+	owner                    *effect
+	firstChild, lastChild    *effect
+	prevSibling, nextSibling *effect
+	cleanups                 []func()
+
+	// Registration and sibling links preserve creation order while allowing
+	// a disposed computation to leave both lists in constant time.
+	prevEffect, nextEffect *effect
+	registered             bool
+	sources                []source
 
 	// Keyed components mounted during this effect's runs. They outlive a
 	// re-run and go when a run no longer claims them, or with the effect.
@@ -147,13 +153,43 @@ func (e *effect) sweep() {
 	clear(e.claimed)
 }
 
+// attach appends a child to its owner's ordered list.
+func (e *effect) attach(owner *effect) {
+	e.owner = owner
+	e.prevSibling = owner.lastChild
+	if owner.lastChild != nil {
+		owner.lastChild.nextSibling = e
+	} else {
+		owner.firstChild = e
+	}
+	owner.lastChild = e
+}
+
+// detach releases the parent's reference before running cleanup. reset can
+// then consume its first child repeatedly, even if cleanup disposes siblings.
+func (e *effect) detach() {
+	if e.owner == nil {
+		return
+	}
+	if e.prevSibling != nil {
+		e.prevSibling.nextSibling = e.nextSibling
+	} else {
+		e.owner.firstChild = e.nextSibling
+	}
+	if e.nextSibling != nil {
+		e.nextSibling.prevSibling = e.prevSibling
+	} else {
+		e.owner.lastChild = e.prevSibling
+	}
+	e.owner, e.prevSibling, e.nextSibling = nil, nil, nil
+}
+
 // reset undoes everything the last run set up: child effects, cleanups and
 // subscriptions. It runs before each re-run and on dispose.
 func (e *effect) reset() {
-	for _, c := range e.children {
-		c.dispose()
+	for e.firstChild != nil {
+		e.firstChild.dispose()
 	}
-	e.children = nil
 	for _, v := range slices.Backward(e.cleanups) {
 		v()
 	}
@@ -169,6 +205,7 @@ func (e *effect) dispose() {
 		return
 	}
 	e.disposed = true
+	e.detach()
 	e.reset()
 	for _, m := range e.keyed {
 		m.dispose()
@@ -443,7 +480,7 @@ func Effect(fn func()) (dispose func()) {
 	e.owner = deps.owner
 	deps.mu.Unlock()
 	if e.owner != nil {
-		e.owner.children = append(e.owner.children, e)
+		e.attach(e.owner)
 		e.place(e.owner, "")
 	}
 	effects.add(e)
@@ -476,7 +513,7 @@ func rootWith(identity any, elem string, fn func()) (dispose func()) {
 	deps.listener, deps.owner = nil, r
 	deps.mu.Unlock()
 	if r.owner != nil {
-		r.owner.children = append(r.owner.children, r)
+		r.attach(r.owner)
 		r.place(r.owner, elem)
 	}
 	ok := false
@@ -561,27 +598,44 @@ func runEffect(e *effect) {
 }
 
 type effectSet struct {
-	mu   sync.Mutex
-	list []*effect
+	mu          sync.Mutex
+	first, last *effect
+	count       int
 }
 
 var effects effectSet
 
 func (s *effectSet) add(e *effect) {
 	s.mu.Lock()
-	s.list = append(s.list, e)
-	s.mu.Unlock()
+	defer s.mu.Unlock()
+	e.prevEffect, e.registered = s.last, true
+	if s.last != nil {
+		s.last.nextEffect = e
+	} else {
+		s.first = e
+	}
+	s.last = e
+	s.count++
 }
 
 func (s *effectSet) remove(e *effect) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i, x := range s.list {
-		if x == e {
-			s.list = append(s.list[:i], s.list[i+1:]...)
-			return
-		}
+	if !e.registered {
+		return
 	}
+	if e.prevEffect != nil {
+		e.prevEffect.nextEffect = e.nextEffect
+	} else {
+		s.first = e.nextEffect
+	}
+	if e.nextEffect != nil {
+		e.nextEffect.prevEffect = e.prevEffect
+	} else {
+		s.last = e.prevEffect
+	}
+	e.prevEffect, e.nextEffect, e.registered = nil, nil, false
+	s.count--
 }
 
 // maxFlushPasses bounds how far a change propagates through derived values in
@@ -595,7 +649,10 @@ const maxFlushPasses = 16
 func (s *effectSet) flush() (settled bool) {
 	for range maxFlushPasses {
 		s.mu.Lock()
-		list := append([]*effect(nil), s.list...)
+		list := make([]*effect, 0, s.count)
+		for e := s.first; e != nil; e = e.nextEffect {
+			list = append(list, e)
+		}
 		s.mu.Unlock()
 
 		ran := false

@@ -161,11 +161,12 @@ type SemRef struct{ n int } // index in sem, plus one
 func (r SemRef) Valid() bool { return r.n != 0 }
 
 // resetSemantics starts a new frame's tree. App.Draw and Probe.Frame call
-// it before painting; the array is freshly allocated rather than reused
-// because the snapshot published from the last frame is still being read,
-// possibly from another thread.
+// it before painting. buildSemTree copies nodes into a separate immutable
+// snapshot, so this private staging buffer can be reused. Clear old entries
+// to release handlers and text data when the next frame has fewer nodes.
 func (c *Canvas) resetSemantics() {
-	c.sem = nil
+	clear(c.sem)
+	c.sem = c.sem[:0]
 	c.semParent, c.semLast = 0, 0
 	clear(c.semIndex)
 }

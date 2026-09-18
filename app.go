@@ -76,7 +76,7 @@ func (a *App) Setup(fn func()) *App {
 
 // Post queues fn to run on the UI thread before the next frame's input.
 // It is the one way a goroutine may touch signals: do the work off the
-// thread, then Post the Set.
+// thread, then Post the Set. Work posted by a callback runs next frame.
 func (a *App) Post(fn func()) { a.post(fn) }
 
 // Close disposes the root owner, and with it every effect, memo and
@@ -84,13 +84,19 @@ func (a *App) Post(fn func()) { a.post(fn) }
 // the UI thread; from a goroutine, Post it.
 func (a *App) Close() { a.close() }
 
-// Run opens the window and blocks until it closes.
+// Run opens the window and blocks until it closes, disposing owned resources
+// on return, including when the engine returns an error.
 func Run(cfg Config, build Builder) error {
 	return New(cfg, build).Run()
 }
 
-// Run opens the window and blocks until it closes.
+// Run opens the window and blocks until it closes, disposing owned resources
+// on return, including when the engine returns an error.
 func (a *App) Run() error {
+	defer func() {
+		a.Close()
+		appRunning.Store(false)
+	}()
 	ebiten.SetWindowTitle(a.cfg.Title)
 	ebiten.SetWindowSize(a.cfg.Width, a.cfg.Height)
 	if a.cfg.Resizable {

@@ -24,7 +24,6 @@ type Probe struct {
 	frameLoop
 	size   Size
 	in     inputState
-	env    Env
 	canvas Canvas
 
 	pointer    Point
@@ -47,7 +46,7 @@ func NewProbe(w Widget, size Size) *Probe {
 //
 //	p := ggui.ProbeBuilder(func() ggui.Widget { return ggui.Textf("%d", n) }, ggui.Sz(100, 20))
 func ProbeBuilder(build Builder, size Size) *Probe {
-	p := &Probe{size: size, env: rootEnv()}
+	p := &Probe{size: size}
 	p.build = build
 	return p
 }
@@ -107,7 +106,7 @@ func (p *Probe) Frame() Size {
 	c.nextFrame()
 	c.resetSemantics()
 	if p.needsLayout(p.size) {
-		p.rootSize = p.root.Layout(Tight(p.size), p.env)
+		p.rootSize = p.root.Layout(Tight(p.size), rootEnv())
 	}
 	c.Paint(p.root, Rect{Size: p.rootSize})
 	c.paintOverlays()
