@@ -143,7 +143,10 @@ func (s *SidebarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t.Card, t.Fg = colorOr(t.Sidebar, t.Card), colorOr(t.SidebarFg, t.Fg)
 	t.Muted = colorOr(t.SidebarAccent, t.Muted)
 	t.Border, t.Ring = colorOr(t.SidebarBorder, t.Border), colorOr(t.SidebarRing, t.Ring)
-	env = env.WithText(ggui.TextStyle{Color: t.Fg})
+	// Children see the remapped palette, not only its text color, so a
+	// button or badge inside an item paints against the sidebar surface.
+	t.Text.Color = t.Fg
+	env = env.WithTheme(t).WithText(ggui.TextStyle{Color: t.Fg})
 	s.theme = t
 	s.hidden = s.collapsed != nil && s.collapsed.Get()
 	if s.hidden {

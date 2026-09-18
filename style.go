@@ -357,6 +357,8 @@ func DefaultTheme() Theme {
 	quiet := color.RGBA{0xf4, 0xf4, 0xf5, 0xff}   // zinc-100
 	mutedFg := color.RGBA{0x71, 0x71, 0x7a, 0xff} // zinc-500
 	nearWhite := color.RGBA{0xfa, 0xfa, 0xfa, 0xff}
+	border := color.RGBA{0xe4, 0xe4, 0xe7, 0xff} // zinc-200
+	ring := color.RGBA{0xa1, 0xa1, 0xaa, 0xff}   // zinc-400
 	return Theme{
 		Chat:    defaultChat(),
 		Text:    TextStyle{Size: 14, Color: fg, LineHeight: 1.4},
@@ -364,17 +366,27 @@ func DefaultTheme() Theme {
 		Caption: TextStyle{Size: 12, Color: mutedFg},
 
 		Bg: color.White, Fg: fg,
-		Card: color.White, Popover: color.White,
+		Card: color.White, CardFg: fg,
+		Popover: color.White, PopoverFg: fg,
 		Primary: fg, PrimaryFg: nearWhite,
 		PrimaryHover: color.RGBA{0x3f, 0x3f, 0x46, 0xff}, // zinc-700
 		Secondary:    quiet, SecondaryFg: fg,
 		Muted: quiet, MutedFg: mutedFg,
+		Accent: quiet, AccentFg: fg,
 		Destructive: color.RGBA{0xd3, 0x2f, 0x2f, 0xff}, DestructiveFg: nearWhite,
-		Border:    color.RGBA{0xe4, 0xe4, 0xe7, 0xff}, // zinc-200
-		Input:     color.White,
-		Ring:      color.RGBA{0xa1, 0xa1, 0xaa, 0xff}, // zinc-400
-		Selection: color.RGBA{0xd4, 0xd4, 0xd8, 0xff}, // zinc-300
-		Scrim:     color.NRGBA{A: 0x60},
+		Border:      border,
+		Input:       color.White,
+		InputBorder: border,
+		Ring:        ring,
+		Selection:   color.RGBA{0xd4, 0xd4, 0xd8, 0xff}, // zinc-300
+		Scrim:       color.NRGBA{A: 0x60},
+
+		// The sidebar palette follows shadcn: a near-white surface that
+		// reuses the page's foreground, accent, border and ring.
+		Sidebar: nearWhite, SidebarFg: fg,
+		SidebarPrimary: fg, SidebarPrimaryFg: nearWhite,
+		SidebarAccent: quiet, SidebarAccentFg: fg,
+		SidebarBorder: border, SidebarRing: ring,
 
 		CardShadow:    ShadowStyle{Offset: Pt(0, 1), Blur: 2, Color: color.NRGBA{A: 15}},
 		PanelShadow:   ShadowStyle{Offset: Pt(0, 4), Blur: 10, Color: color.NRGBA{A: 26}},
@@ -400,18 +412,24 @@ func DarkTheme() Theme {
 	t.Fg = color.RGBA{0xfa, 0xfa, 0xfa, 0xff}
 	t.Text.Color = t.Fg
 	t.Bg = color.RGBA{0x09, 0x09, 0x0b, 0xff} // zinc-950
-	t.Card, t.Popover = dark, dark
+	t.Card, t.CardFg, t.Popover, t.PopoverFg = dark, t.Fg, dark, t.Fg
 	t.Input = color.RGBA{0x20, 0x20, 0x23, 0xff}
 	t.Border = color.RGBA{0x32, 0x32, 0x36, 0xff}
+	t.InputBorder = t.Border
 	t.Primary = color.RGBA{0xe4, 0xe4, 0xe7, 0xff}
 	t.PrimaryHover = color.RGBA{0xd4, 0xd4, 0xd8, 0xff}
 	t.PrimaryFg = dark
 	t.Secondary, t.SecondaryFg = quiet, t.Fg
 	t.Muted = quiet
 	t.MutedFg = color.RGBA{0xa1, 0xa1, 0xaa, 0xff} // zinc-400
-	t.Ring = color.RGBA{0x71, 0x71, 0x7a, 0xff}    // zinc-500
+	t.Accent, t.AccentFg = quiet, t.Fg
+	t.Ring = color.RGBA{0x71, 0x71, 0x7a, 0xff} // zinc-500
 	t.Selection = color.RGBA{0x3f, 0x3f, 0x46, 0xff}
 	t.Caption.Color = t.MutedFg
+	t.Sidebar, t.SidebarFg = dark, t.Fg
+	t.SidebarPrimary, t.SidebarPrimaryFg = t.Primary, t.PrimaryFg
+	t.SidebarAccent, t.SidebarAccentFg = quiet, t.Fg
+	t.SidebarBorder, t.SidebarRing = t.Border, t.Ring
 	return t
 }
 
