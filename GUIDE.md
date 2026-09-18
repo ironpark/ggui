@@ -197,7 +197,7 @@ Choose the smallest boundary that fits the job:
 | `View(reader, build)` | A subtree depends on one reactive value, e.g. `ggui.View(name, ggui.Text)`. |
 | `Keyed(key, setup)` | A component must survive its enclosing builder's rebuilds. |
 | `Mount(key, props, setup)` | A keyed component also needs updated props, passed to setup as a signal. |
-| `When(cond, then, else)` | A condition selects between widgets constructed once. |
+| `If(cond, then).ElseIf(cond, then).Else(other)` | Conditions select between widgets constructed once; without `Else`, nothing shows. `When(cond, then, else)` is the two-way form. |
 | `TextOf(reader)` / `Textf(format, readers...)` | Text should follow reactive values and retain chainable text setters. |
 
 `Sprintf` provides the memo behind reactive formatted text.

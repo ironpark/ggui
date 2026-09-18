@@ -138,19 +138,80 @@ func View[T any, W Widget](r Reader[T], build func(T) W) Widget {
 	return Reactive(func() Widget { return build(r.Get()) })
 }
 
-// When shows then while cond is true and otherwise (or nothing) while it is
-// false. Both are built once; only the choice is reactive.
-func When(cond Reader[bool], then Widget, otherwise ...Widget) Widget {
-	var other Widget = Box()
-	if len(otherwise) > 0 {
-		other = otherwise[0]
-	}
-	return Reactive(func() Widget {
-		if cond.Get() {
-			return then
+// IfWidget shows the first branch whose condition holds, the Else branch
+// when none does, or nothing. Branches are constructed once, up front, so
+// the one shown keeps its state while the others wait. Build one with If.
+type IfWidget struct {
+	comp     *ComponentWidget
+	branches []ifBranch
+	other    Widget
+}
+
+type ifBranch struct {
+	cond Reader[bool]
+	then Widget
+}
+
+// If shows then while cond is true. ElseIf and Else add branches, read in
+// order; without an Else nothing is shown when no condition holds:
+//
+//	ggui.If(loading, ui.Spinner()).
+//		ElseIf(failed, ggui.Text("Could not load")).
+//		Else(ggui.View(rows, resultTable))
+//
+// The choice is made in an effect of its own that starts at the first
+// Layout, once the chain is complete, so every condition is subscribed and
+// the parent does not rebuild when one changes. A branch that can only be
+// constructed while its condition holds goes through Component, which
+// builds at the first Layout:
+//
+//	ggui.If(signedIn, ggui.Component(func() ggui.Builder {
+//		return func() ggui.Widget { return profile(user.Get()) }
+//	}))
+func If(cond Reader[bool], then Widget) *IfWidget {
+	w := &IfWidget{branches: []ifBranch{{cond, then}}}
+	w.comp = Component(func() Builder { return w.pick })
+	return w
+}
+
+// ElseIf adds a branch tried when every earlier condition is false.
+func (w *IfWidget) ElseIf(cond Reader[bool], then Widget) *IfWidget {
+	w.branches = append(w.branches, ifBranch{cond, then})
+	return w
+}
+
+// Else sets what is shown when no condition holds.
+func (w *IfWidget) Else(other Widget) *IfWidget { w.other = other; return w }
+
+// pick reads the conditions up to the first true one, so the effect re-runs
+// only when a condition that mattered changes.
+func (w *IfWidget) pick() Widget {
+	for _, b := range w.branches {
+		if b.cond.Get() {
+			return b.then
 		}
-		return other
-	})
+	}
+	return w.other // nil lays out as nothing
+}
+
+// current is the branch shown, for tests.
+func (w *IfWidget) current() Widget { return w.comp.child }
+
+// Layout implements Widget.
+func (w *IfWidget) Layout(c Constraints, env Env) Size { return w.comp.Layout(c, env) }
+
+// Paint implements Widget. The component paints directly, so the inspector
+// lists the branch under the If rather than under an extra Component.
+func (w *IfWidget) Paint(dst *Canvas, r Rect) { w.comp.Paint(dst, r) }
+
+// When is If with a single Else: then while cond is true, otherwise (or
+// nothing) while it is false.
+func When(cond Reader[bool], then Widget, otherwise ...Widget) Widget {
+	w := If(cond, then)
+	if len(otherwise) > 0 {
+		w.Else(otherwise[0])
+	}
+	return w
 }
 
 // Layout implements Widget.
