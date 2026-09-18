@@ -409,7 +409,8 @@ func (c *Canvas) FillCircle(center Point, radius float64, col color.Color) {
 	c.shadeRoundRect(r, radius, 0, col)
 }
 
-// StrokeLine draws a line of logical width w from a to b in col.
+// StrokeLine draws a line of logical width w from a to b in col. The ends
+// are cut square, so a line drawn in pieces joins up.
 func (c *Canvas) StrokeLine(a, b Point, w float64, col color.Color) {
 	if c == nil || c.Image == nil || col == nil || w <= 0 || c.Image.Bounds().Empty() {
 		return
@@ -417,7 +418,17 @@ func (c *Canvas) StrokeLine(a, b Point, w float64, col color.Color) {
 	if !c.visiblePaintBounds(Rct(Pt(min(a.X, b.X), min(a.Y, b.Y)), Sz(math.Abs(b.X-a.X), math.Abs(b.Y-a.Y))), w/2) {
 		return
 	}
-	vector.StrokeLine(c.Image, c.Px(a.X), c.Px(a.Y), c.Px(b.X), c.Px(b.Y), c.Px(w), col, true)
+	// A line along an axis is a rectangle, and a rectangle draws as one
+	// batched image rather than a shaded quad of its own. Rules, table
+	// borders and the straight runs of a dashed outline are all this.
+	switch {
+	case a.Y == b.Y:
+		c.FillRect(Rct(Pt(min(a.X, b.X), a.Y-w/2), Sz(math.Abs(b.X-a.X), w)), col)
+	case a.X == b.X:
+		c.FillRect(Rct(Pt(a.X-w/2, min(a.Y, b.Y)), Sz(w, math.Abs(b.Y-a.Y))), col)
+	default:
+		c.shadeSegment(a, b, w, col)
+	}
 }
 
 func pathOptions(col color.Color) *vector.DrawPathOptions {
