@@ -113,6 +113,7 @@ and launch macOS app bundles.
 | --- | --- | --- |
 | [Counter](examples/counter) | Reactive state, buttons, shortcuts, and theme switching. | `task run` |
 | [Todo](examples/todo) | IME text input, validation, keyed lists, transitions, and a confirm dialog. | `task run-todo` |
+| [Charts](examples/charts) | All 70 shadcn chart examples, interactive tooltips, themes and animation replay. | `go run ./examples/charts` |
 | [Gallery](examples/gallery) | Searchable previews across Inputs, Navigation, Feedback, Layout, and Data. | `task run-gallery` |
 
 On other platforms, use `go run ./examples/counter`, `go run ./examples/todo`,
@@ -158,6 +159,7 @@ labels, text scaling, and reduced-motion settings. See the guide's
 | --- | --- |
 | State and components | [Signals, ownership, builders, and keyed lists](GUIDE.md#concepts) |
 | Layout and controls | [Widgets and layout](GUIDE.md#widgets-and-layout) · [Controls](GUIDE.md#controls) · [Additional controls](GUIDE.md#additional-ui-components) |
+| Charts | [Native charts, options, examples and visual validation](CHARTS.md) |
 | Look and feel | [Styling](STYLING.md) · [Animation](GUIDE.md#animation) · [HiDPI](GUIDE.md#hidpi) |
 | Interaction and testing | [Input](GUIDE.md#input) · [Headless testing](GUIDE.md#testing) · [Inspector](GUIDE.md#inspector) |
 | Internals | [Frame lifecycle](GUIDE.md#frames) · [Repository layout](GUIDE.md#repository-layout) |

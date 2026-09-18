@@ -1,0 +1,4494 @@
+[
+  {
+    "name": "chart-area-axes",
+    "title": "Area Chart - Axes",
+    "description": "An area chart with axes",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186,
+        "mobile": 80
+      },
+      {
+        "month": "February",
+        "desktop": 305,
+        "mobile": 200
+      },
+      {
+        "month": "March",
+        "desktop": 237,
+        "mobile": 120
+      },
+      {
+        "month": "April",
+        "desktop": 73,
+        "mobile": 190
+      },
+      {
+        "month": "May",
+        "desktop": 209,
+        "mobile": 130
+      },
+      {
+        "month": "June",
+        "desktop": 214,
+        "mobile": 140
+      }
+    ],
+    "keys": [
+      "mobile",
+      "desktop"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1,
+      "mobile": 2
+    },
+    "stacked": true,
+    "opacities": {
+      "mobile": 0.4,
+      "desktop": 0.4
+    },
+    "subtitle": "Showing total visitors for the last 6 months"
+  },
+  {
+    "name": "chart-area-default",
+    "title": "Area Chart",
+    "description": "A simple area chart",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186
+      },
+      {
+        "month": "February",
+        "desktop": 305
+      },
+      {
+        "month": "March",
+        "desktop": 237
+      },
+      {
+        "month": "April",
+        "desktop": 73
+      },
+      {
+        "month": "May",
+        "desktop": 209
+      },
+      {
+        "month": "June",
+        "desktop": 214
+      }
+    ],
+    "keys": [
+      "desktop"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1
+    },
+    "stacked": false,
+    "opacities": {
+      "desktop": 0.4
+    },
+    "subtitle": "Showing total visitors for the last 6 months"
+  },
+  {
+    "name": "chart-area-gradient",
+    "title": "Area Chart - Gradient",
+    "description": "An area chart with gradient fill",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186,
+        "mobile": 80
+      },
+      {
+        "month": "February",
+        "desktop": 305,
+        "mobile": 200
+      },
+      {
+        "month": "March",
+        "desktop": 237,
+        "mobile": 120
+      },
+      {
+        "month": "April",
+        "desktop": 73,
+        "mobile": 190
+      },
+      {
+        "month": "May",
+        "desktop": 209,
+        "mobile": 130
+      },
+      {
+        "month": "June",
+        "desktop": 214,
+        "mobile": 140
+      }
+    ],
+    "keys": [
+      "mobile",
+      "desktop"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1,
+      "mobile": 2
+    },
+    "stacked": true,
+    "opacities": {
+      "mobile": 0.4,
+      "desktop": 0.4
+    },
+    "subtitle": "Showing total visitors for the last 6 months"
+  },
+  {
+    "name": "chart-area-icons",
+    "title": "Area Chart - Icons",
+    "description": "An area chart with icons",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186,
+        "mobile": 80
+      },
+      {
+        "month": "February",
+        "desktop": 305,
+        "mobile": 200
+      },
+      {
+        "month": "March",
+        "desktop": 237,
+        "mobile": 120
+      },
+      {
+        "month": "April",
+        "desktop": 73,
+        "mobile": 190
+      },
+      {
+        "month": "May",
+        "desktop": 209,
+        "mobile": 130
+      },
+      {
+        "month": "June",
+        "desktop": 214,
+        "mobile": 140
+      }
+    ],
+    "keys": [
+      "mobile",
+      "desktop"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1,
+      "mobile": 2
+    },
+    "stacked": true,
+    "opacities": {
+      "mobile": 0.4,
+      "desktop": 0.4
+    },
+    "subtitle": "Showing total visitors for the last 6 months"
+  },
+  {
+    "name": "chart-area-interactive",
+    "title": "Area Chart - Interactive",
+    "description": "An interactive area chart",
+    "data": [
+      {
+        "date": "2024-04-01",
+        "desktop": 222,
+        "mobile": 150
+      },
+      {
+        "date": "2024-04-02",
+        "desktop": 97,
+        "mobile": 180
+      },
+      {
+        "date": "2024-04-03",
+        "desktop": 167,
+        "mobile": 120
+      },
+      {
+        "date": "2024-04-04",
+        "desktop": 242,
+        "mobile": 260
+      },
+      {
+        "date": "2024-04-05",
+        "desktop": 373,
+        "mobile": 290
+      },
+      {
+        "date": "2024-04-06",
+        "desktop": 301,
+        "mobile": 340
+      },
+      {
+        "date": "2024-04-07",
+        "desktop": 245,
+        "mobile": 180
+      },
+      {
+        "date": "2024-04-08",
+        "desktop": 409,
+        "mobile": 320
+      },
+      {
+        "date": "2024-04-09",
+        "desktop": 59,
+        "mobile": 110
+      },
+      {
+        "date": "2024-04-10",
+        "desktop": 261,
+        "mobile": 190
+      },
+      {
+        "date": "2024-04-11",
+        "desktop": 327,
+        "mobile": 350
+      },
+      {
+        "date": "2024-04-12",
+        "desktop": 292,
+        "mobile": 210
+      },
+      {
+        "date": "2024-04-13",
+        "desktop": 342,
+        "mobile": 380
+      },
+      {
+        "date": "2024-04-14",
+        "desktop": 137,
+        "mobile": 220
+      },
+      {
+        "date": "2024-04-15",
+        "desktop": 120,
+        "mobile": 170
+      },
+      {
+        "date": "2024-04-16",
+        "desktop": 138,
+        "mobile": 190
+      },
+      {
+        "date": "2024-04-17",
+        "desktop": 446,
+        "mobile": 360
+      },
+      {
+        "date": "2024-04-18",
+        "desktop": 364,
+        "mobile": 410
+      },
+      {
+        "date": "2024-04-19",
+        "desktop": 243,
+        "mobile": 180
+      },
+      {
+        "date": "2024-04-20",
+        "desktop": 89,
+        "mobile": 150
+      },
+      {
+        "date": "2024-04-21",
+        "desktop": 137,
+        "mobile": 200
+      },
+      {
+        "date": "2024-04-22",
+        "desktop": 224,
+        "mobile": 170
+      },
+      {
+        "date": "2024-04-23",
+        "desktop": 138,
+        "mobile": 230
+      },
+      {
+        "date": "2024-04-24",
+        "desktop": 387,
+        "mobile": 290
+      },
+      {
+        "date": "2024-04-25",
+        "desktop": 215,
+        "mobile": 250
+      },
+      {
+        "date": "2024-04-26",
+        "desktop": 75,
+        "mobile": 130
+      },
+      {
+        "date": "2024-04-27",
+        "desktop": 383,
+        "mobile": 420
+      },
+      {
+        "date": "2024-04-28",
+        "desktop": 122,
+        "mobile": 180
+      },
+      {
+        "date": "2024-04-29",
+        "desktop": 315,
+        "mobile": 240
+      },
+      {
+        "date": "2024-04-30",
+        "desktop": 454,
+        "mobile": 380
+      },
+      {
+        "date": "2024-05-01",
+        "desktop": 165,
+        "mobile": 220
+      },
+      {
+        "date": "2024-05-02",
+        "desktop": 293,
+        "mobile": 310
+      },
+      {
+        "date": "2024-05-03",
+        "desktop": 247,
+        "mobile": 190
+      },
+      {
+        "date": "2024-05-04",
+        "desktop": 385,
+        "mobile": 420
+      },
+      {
+        "date": "2024-05-05",
+        "desktop": 481,
+        "mobile": 390
+      },
+      {
+        "date": "2024-05-06",
+        "desktop": 498,
+        "mobile": 520
+      },
+      {
+        "date": "2024-05-07",
+        "desktop": 388,
+        "mobile": 300
+      },
+      {
+        "date": "2024-05-08",
+        "desktop": 149,
+        "mobile": 210
+      },
+      {
+        "date": "2024-05-09",
+        "desktop": 227,
+        "mobile": 180
+      },
+      {
+        "date": "2024-05-10",
+        "desktop": 293,
+        "mobile": 330
+      },
+      {
+        "date": "2024-05-11",
+        "desktop": 335,
+        "mobile": 270
+      },
+      {
+        "date": "2024-05-12",
+        "desktop": 197,
+        "mobile": 240
+      },
+      {
+        "date": "2024-05-13",
+        "desktop": 197,
+        "mobile": 160
+      },
+      {
+        "date": "2024-05-14",
+        "desktop": 448,
+        "mobile": 490
+      },
+      {
+        "date": "2024-05-15",
+        "desktop": 473,
+        "mobile": 380
+      },
+      {
+        "date": "2024-05-16",
+        "desktop": 338,
+        "mobile": 400
+      },
+      {
+        "date": "2024-05-17",
+        "desktop": 499,
+        "mobile": 420
+      },
+      {
+        "date": "2024-05-18",
+        "desktop": 315,
+        "mobile": 350
+      },
+      {
+        "date": "2024-05-19",
+        "desktop": 235,
+        "mobile": 180
+      },
+      {
+        "date": "2024-05-20",
+        "desktop": 177,
+        "mobile": 230
+      },
+      {
+        "date": "2024-05-21",
+        "desktop": 82,
+        "mobile": 140
+      },
+      {
+        "date": "2024-05-22",
+        "desktop": 81,
+        "mobile": 120
+      },
+      {
+        "date": "2024-05-23",
+        "desktop": 252,
+        "mobile": 290
+      },
+      {
+        "date": "2024-05-24",
+        "desktop": 294,
+        "mobile": 220
+      },
+      {
+        "date": "2024-05-25",
+        "desktop": 201,
+        "mobile": 250
+      },
+      {
+        "date": "2024-05-26",
+        "desktop": 213,
+        "mobile": 170
+      },
+      {
+        "date": "2024-05-27",
+        "desktop": 420,
+        "mobile": 460
+      },
+      {
+        "date": "2024-05-28",
+        "desktop": 233,
+        "mobile": 190
+      },
+      {
+        "date": "2024-05-29",
+        "desktop": 78,
+        "mobile": 130
+      },
+      {
+        "date": "2024-05-30",
+        "desktop": 340,
+        "mobile": 280
+      },
+      {
+        "date": "2024-05-31",
+        "desktop": 178,
+        "mobile": 230
+      },
+      {
+        "date": "2024-06-01",
+        "desktop": 178,
+        "mobile": 200
+      },
+      {
+        "date": "2024-06-02",
+        "desktop": 470,
+        "mobile": 410
+      },
+      {
+        "date": "2024-06-03",
+        "desktop": 103,
+        "mobile": 160
+      },
+      {
+        "date": "2024-06-04",
+        "desktop": 439,
+        "mobile": 380
+      },
+      {
+        "date": "2024-06-05",
+        "desktop": 88,
+        "mobile": 140
+      },
+      {
+        "date": "2024-06-06",
+        "desktop": 294,
+        "mobile": 250
+      },
+      {
+        "date": "2024-06-07",
+        "desktop": 323,
+        "mobile": 370
+      },
+      {
+        "date": "2024-06-08",
+        "desktop": 385,
+        "mobile": 320
+      },
+      {
+        "date": "2024-06-09",
+        "desktop": 438,
+        "mobile": 480
+      },
+      {
+        "date": "2024-06-10",
+        "desktop": 155,
+        "mobile": 200
+      },
+      {
+        "date": "2024-06-11",
+        "desktop": 92,
+        "mobile": 150
+      },
+      {
+        "date": "2024-06-12",
+        "desktop": 492,
+        "mobile": 420
+      },
+      {
+        "date": "2024-06-13",
+        "desktop": 81,
+        "mobile": 130
+      },
+      {
+        "date": "2024-06-14",
+        "desktop": 426,
+        "mobile": 380
+      },
+      {
+        "date": "2024-06-15",
+        "desktop": 307,
+        "mobile": 350
+      },
+      {
+        "date": "2024-06-16",
+        "desktop": 371,
+        "mobile": 310
+      },
+      {
+        "date": "2024-06-17",
+        "desktop": 475,
+        "mobile": 520
+      },
+      {
+        "date": "2024-06-18",
+        "desktop": 107,
+        "mobile": 170
+      },
+      {
+        "date": "2024-06-19",
+        "desktop": 341,
+        "mobile": 290
+      },
+      {
+        "date": "2024-06-20",
+        "desktop": 408,
+        "mobile": 450
+      },
+      {
+        "date": "2024-06-21",
+        "desktop": 169,
+        "mobile": 210
+      },
+      {
+        "date": "2024-06-22",
+        "desktop": 317,
+        "mobile": 270
+      },
+      {
+        "date": "2024-06-23",
+        "desktop": 480,
+        "mobile": 530
+      },
+      {
+        "date": "2024-06-24",
+        "desktop": 132,
+        "mobile": 180
+      },
+      {
+        "date": "2024-06-25",
+        "desktop": 141,
+        "mobile": 190
+      },
+      {
+        "date": "2024-06-26",
+        "desktop": 434,
+        "mobile": 380
+      },
+      {
+        "date": "2024-06-27",
+        "desktop": 448,
+        "mobile": 490
+      },
+      {
+        "date": "2024-06-28",
+        "desktop": 149,
+        "mobile": 200
+      },
+      {
+        "date": "2024-06-29",
+        "desktop": 103,
+        "mobile": 160
+      },
+      {
+        "date": "2024-06-30",
+        "desktop": 446,
+        "mobile": 400
+      }
+    ],
+    "keys": [
+      "mobile",
+      "desktop"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1,
+      "mobile": 2
+    },
+    "stacked": true,
+    "opacities": {},
+    "subtitle": "Showing total visitors for the last 3 months"
+  },
+  {
+    "name": "chart-area-legend",
+    "title": "Area Chart - Legend",
+    "description": "An area chart with a legend",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186,
+        "mobile": 80
+      },
+      {
+        "month": "February",
+        "desktop": 305,
+        "mobile": 200
+      },
+      {
+        "month": "March",
+        "desktop": 237,
+        "mobile": 120
+      },
+      {
+        "month": "April",
+        "desktop": 73,
+        "mobile": 190
+      },
+      {
+        "month": "May",
+        "desktop": 209,
+        "mobile": 130
+      },
+      {
+        "month": "June",
+        "desktop": 214,
+        "mobile": 140
+      }
+    ],
+    "keys": [
+      "mobile",
+      "desktop"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1,
+      "mobile": 2
+    },
+    "stacked": true,
+    "opacities": {
+      "mobile": 0.4,
+      "desktop": 0.4
+    },
+    "subtitle": "Showing total visitors for the last 6 months"
+  },
+  {
+    "name": "chart-area-linear",
+    "title": "Area Chart - Linear",
+    "description": "A linear area chart",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186
+      },
+      {
+        "month": "February",
+        "desktop": 305
+      },
+      {
+        "month": "March",
+        "desktop": 237
+      },
+      {
+        "month": "April",
+        "desktop": 73
+      },
+      {
+        "month": "May",
+        "desktop": 209
+      },
+      {
+        "month": "June",
+        "desktop": 214
+      }
+    ],
+    "keys": [
+      "desktop"
+    ],
+    "curve": "linear",
+    "colors": {
+      "desktop": 1
+    },
+    "stacked": false,
+    "opacities": {
+      "desktop": 0.4
+    },
+    "subtitle": "Showing total visitors for the last 6 months"
+  },
+  {
+    "name": "chart-area-stacked-expand",
+    "title": "Area Chart - Stacked Expanded",
+    "description": "A stacked area chart with expand stacking",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186,
+        "mobile": 80,
+        "other": 45
+      },
+      {
+        "month": "February",
+        "desktop": 305,
+        "mobile": 200,
+        "other": 100
+      },
+      {
+        "month": "March",
+        "desktop": 237,
+        "mobile": 120,
+        "other": 150
+      },
+      {
+        "month": "April",
+        "desktop": 73,
+        "mobile": 190,
+        "other": 50
+      },
+      {
+        "month": "May",
+        "desktop": 209,
+        "mobile": 130,
+        "other": 100
+      },
+      {
+        "month": "June",
+        "desktop": 214,
+        "mobile": 140,
+        "other": 160
+      }
+    ],
+    "keys": [
+      "other",
+      "mobile",
+      "desktop"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1,
+      "mobile": 2,
+      "other": 3
+    },
+    "stacked": true,
+    "opacities": {
+      "other": 0.1,
+      "mobile": 0.4,
+      "desktop": 0.4
+    },
+    "subtitle": "Showing total visitors for the last 6months"
+  },
+  {
+    "name": "chart-area-stacked",
+    "title": "Area Chart - Stacked",
+    "description": "A stacked area chart",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186,
+        "mobile": 80
+      },
+      {
+        "month": "February",
+        "desktop": 305,
+        "mobile": 200
+      },
+      {
+        "month": "March",
+        "desktop": 237,
+        "mobile": 120
+      },
+      {
+        "month": "April",
+        "desktop": 73,
+        "mobile": 190
+      },
+      {
+        "month": "May",
+        "desktop": 209,
+        "mobile": 130
+      },
+      {
+        "month": "June",
+        "desktop": 214,
+        "mobile": 140
+      }
+    ],
+    "keys": [
+      "mobile",
+      "desktop"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1,
+      "mobile": 2
+    },
+    "stacked": true,
+    "opacities": {
+      "mobile": 0.4,
+      "desktop": 0.4
+    },
+    "subtitle": "Showing total visitors for the last 6 months"
+  },
+  {
+    "name": "chart-area-step",
+    "title": "Area Chart - Step",
+    "description": "A step area chart",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186
+      },
+      {
+        "month": "February",
+        "desktop": 305
+      },
+      {
+        "month": "March",
+        "desktop": 237
+      },
+      {
+        "month": "April",
+        "desktop": 73
+      },
+      {
+        "month": "May",
+        "desktop": 209
+      },
+      {
+        "month": "June",
+        "desktop": 214
+      }
+    ],
+    "keys": [
+      "desktop"
+    ],
+    "curve": "step",
+    "colors": {
+      "desktop": 1
+    },
+    "stacked": false,
+    "opacities": {
+      "desktop": 0.4
+    },
+    "subtitle": "Showing total visitors for the last 6 months"
+  },
+  {
+    "name": "chart-bar-active",
+    "title": "Bar Chart - Active",
+    "description": "A bar chart with an active bar",
+    "data": [
+      {
+        "browser": "chrome",
+        "visitors": 187,
+        "fill": "var(--color-chrome)"
+      },
+      {
+        "browser": "safari",
+        "visitors": 200,
+        "fill": "var(--color-safari)"
+      },
+      {
+        "browser": "firefox",
+        "visitors": 275,
+        "fill": "var(--color-firefox)"
+      },
+      {
+        "browser": "edge",
+        "visitors": 173,
+        "fill": "var(--color-edge)"
+      },
+      {
+        "browser": "other",
+        "visitors": 90,
+        "fill": "var(--color-other)"
+      }
+    ],
+    "keys": [
+      "visitors"
+    ],
+    "curve": "natural",
+    "colors": {
+      "chrome": 1,
+      "safari": 2,
+      "firefox": 3,
+      "edge": 4,
+      "other": 5
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-bar-default",
+    "title": "Bar Chart",
+    "description": "A bar chart",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186
+      },
+      {
+        "month": "February",
+        "desktop": 305
+      },
+      {
+        "month": "March",
+        "desktop": 237
+      },
+      {
+        "month": "April",
+        "desktop": 73
+      },
+      {
+        "month": "May",
+        "desktop": 209
+      },
+      {
+        "month": "June",
+        "desktop": 214
+      }
+    ],
+    "keys": [
+      "desktop"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-bar-horizontal",
+    "title": "Bar Chart - Horizontal",
+    "description": "A horizontal bar chart",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186
+      },
+      {
+        "month": "February",
+        "desktop": 305
+      },
+      {
+        "month": "March",
+        "desktop": 237
+      },
+      {
+        "month": "April",
+        "desktop": 73
+      },
+      {
+        "month": "May",
+        "desktop": 209
+      },
+      {
+        "month": "June",
+        "desktop": 214
+      }
+    ],
+    "keys": [
+      "desktop"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-bar-interactive",
+    "title": "Bar Chart - Interactive",
+    "description": "An interactive bar chart",
+    "data": [
+      {
+        "date": "2024-04-01",
+        "desktop": 222,
+        "mobile": 150
+      },
+      {
+        "date": "2024-04-02",
+        "desktop": 97,
+        "mobile": 180
+      },
+      {
+        "date": "2024-04-03",
+        "desktop": 167,
+        "mobile": 120
+      },
+      {
+        "date": "2024-04-04",
+        "desktop": 242,
+        "mobile": 260
+      },
+      {
+        "date": "2024-04-05",
+        "desktop": 373,
+        "mobile": 290
+      },
+      {
+        "date": "2024-04-06",
+        "desktop": 301,
+        "mobile": 340
+      },
+      {
+        "date": "2024-04-07",
+        "desktop": 245,
+        "mobile": 180
+      },
+      {
+        "date": "2024-04-08",
+        "desktop": 409,
+        "mobile": 320
+      },
+      {
+        "date": "2024-04-09",
+        "desktop": 59,
+        "mobile": 110
+      },
+      {
+        "date": "2024-04-10",
+        "desktop": 261,
+        "mobile": 190
+      },
+      {
+        "date": "2024-04-11",
+        "desktop": 327,
+        "mobile": 350
+      },
+      {
+        "date": "2024-04-12",
+        "desktop": 292,
+        "mobile": 210
+      },
+      {
+        "date": "2024-04-13",
+        "desktop": 342,
+        "mobile": 380
+      },
+      {
+        "date": "2024-04-14",
+        "desktop": 137,
+        "mobile": 220
+      },
+      {
+        "date": "2024-04-15",
+        "desktop": 120,
+        "mobile": 170
+      },
+      {
+        "date": "2024-04-16",
+        "desktop": 138,
+        "mobile": 190
+      },
+      {
+        "date": "2024-04-17",
+        "desktop": 446,
+        "mobile": 360
+      },
+      {
+        "date": "2024-04-18",
+        "desktop": 364,
+        "mobile": 410
+      },
+      {
+        "date": "2024-04-19",
+        "desktop": 243,
+        "mobile": 180
+      },
+      {
+        "date": "2024-04-20",
+        "desktop": 89,
+        "mobile": 150
+      },
+      {
+        "date": "2024-04-21",
+        "desktop": 137,
+        "mobile": 200
+      },
+      {
+        "date": "2024-04-22",
+        "desktop": 224,
+        "mobile": 170
+      },
+      {
+        "date": "2024-04-23",
+        "desktop": 138,
+        "mobile": 230
+      },
+      {
+        "date": "2024-04-24",
+        "desktop": 387,
+        "mobile": 290
+      },
+      {
+        "date": "2024-04-25",
+        "desktop": 215,
+        "mobile": 250
+      },
+      {
+        "date": "2024-04-26",
+        "desktop": 75,
+        "mobile": 130
+      },
+      {
+        "date": "2024-04-27",
+        "desktop": 383,
+        "mobile": 420
+      },
+      {
+        "date": "2024-04-28",
+        "desktop": 122,
+        "mobile": 180
+      },
+      {
+        "date": "2024-04-29",
+        "desktop": 315,
+        "mobile": 240
+      },
+      {
+        "date": "2024-04-30",
+        "desktop": 454,
+        "mobile": 380
+      },
+      {
+        "date": "2024-05-01",
+        "desktop": 165,
+        "mobile": 220
+      },
+      {
+        "date": "2024-05-02",
+        "desktop": 293,
+        "mobile": 310
+      },
+      {
+        "date": "2024-05-03",
+        "desktop": 247,
+        "mobile": 190
+      },
+      {
+        "date": "2024-05-04",
+        "desktop": 385,
+        "mobile": 420
+      },
+      {
+        "date": "2024-05-05",
+        "desktop": 481,
+        "mobile": 390
+      },
+      {
+        "date": "2024-05-06",
+        "desktop": 498,
+        "mobile": 520
+      },
+      {
+        "date": "2024-05-07",
+        "desktop": 388,
+        "mobile": 300
+      },
+      {
+        "date": "2024-05-08",
+        "desktop": 149,
+        "mobile": 210
+      },
+      {
+        "date": "2024-05-09",
+        "desktop": 227,
+        "mobile": 180
+      },
+      {
+        "date": "2024-05-10",
+        "desktop": 293,
+        "mobile": 330
+      },
+      {
+        "date": "2024-05-11",
+        "desktop": 335,
+        "mobile": 270
+      },
+      {
+        "date": "2024-05-12",
+        "desktop": 197,
+        "mobile": 240
+      },
+      {
+        "date": "2024-05-13",
+        "desktop": 197,
+        "mobile": 160
+      },
+      {
+        "date": "2024-05-14",
+        "desktop": 448,
+        "mobile": 490
+      },
+      {
+        "date": "2024-05-15",
+        "desktop": 473,
+        "mobile": 380
+      },
+      {
+        "date": "2024-05-16",
+        "desktop": 338,
+        "mobile": 400
+      },
+      {
+        "date": "2024-05-17",
+        "desktop": 499,
+        "mobile": 420
+      },
+      {
+        "date": "2024-05-18",
+        "desktop": 315,
+        "mobile": 350
+      },
+      {
+        "date": "2024-05-19",
+        "desktop": 235,
+        "mobile": 180
+      },
+      {
+        "date": "2024-05-20",
+        "desktop": 177,
+        "mobile": 230
+      },
+      {
+        "date": "2024-05-21",
+        "desktop": 82,
+        "mobile": 140
+      },
+      {
+        "date": "2024-05-22",
+        "desktop": 81,
+        "mobile": 120
+      },
+      {
+        "date": "2024-05-23",
+        "desktop": 252,
+        "mobile": 290
+      },
+      {
+        "date": "2024-05-24",
+        "desktop": 294,
+        "mobile": 220
+      },
+      {
+        "date": "2024-05-25",
+        "desktop": 201,
+        "mobile": 250
+      },
+      {
+        "date": "2024-05-26",
+        "desktop": 213,
+        "mobile": 170
+      },
+      {
+        "date": "2024-05-27",
+        "desktop": 420,
+        "mobile": 460
+      },
+      {
+        "date": "2024-05-28",
+        "desktop": 233,
+        "mobile": 190
+      },
+      {
+        "date": "2024-05-29",
+        "desktop": 78,
+        "mobile": 130
+      },
+      {
+        "date": "2024-05-30",
+        "desktop": 340,
+        "mobile": 280
+      },
+      {
+        "date": "2024-05-31",
+        "desktop": 178,
+        "mobile": 230
+      },
+      {
+        "date": "2024-06-01",
+        "desktop": 178,
+        "mobile": 200
+      },
+      {
+        "date": "2024-06-02",
+        "desktop": 470,
+        "mobile": 410
+      },
+      {
+        "date": "2024-06-03",
+        "desktop": 103,
+        "mobile": 160
+      },
+      {
+        "date": "2024-06-04",
+        "desktop": 439,
+        "mobile": 380
+      },
+      {
+        "date": "2024-06-05",
+        "desktop": 88,
+        "mobile": 140
+      },
+      {
+        "date": "2024-06-06",
+        "desktop": 294,
+        "mobile": 250
+      },
+      {
+        "date": "2024-06-07",
+        "desktop": 323,
+        "mobile": 370
+      },
+      {
+        "date": "2024-06-08",
+        "desktop": 385,
+        "mobile": 320
+      },
+      {
+        "date": "2024-06-09",
+        "desktop": 438,
+        "mobile": 480
+      },
+      {
+        "date": "2024-06-10",
+        "desktop": 155,
+        "mobile": 200
+      },
+      {
+        "date": "2024-06-11",
+        "desktop": 92,
+        "mobile": 150
+      },
+      {
+        "date": "2024-06-12",
+        "desktop": 492,
+        "mobile": 420
+      },
+      {
+        "date": "2024-06-13",
+        "desktop": 81,
+        "mobile": 130
+      },
+      {
+        "date": "2024-06-14",
+        "desktop": 426,
+        "mobile": 380
+      },
+      {
+        "date": "2024-06-15",
+        "desktop": 307,
+        "mobile": 350
+      },
+      {
+        "date": "2024-06-16",
+        "desktop": 371,
+        "mobile": 310
+      },
+      {
+        "date": "2024-06-17",
+        "desktop": 475,
+        "mobile": 520
+      },
+      {
+        "date": "2024-06-18",
+        "desktop": 107,
+        "mobile": 170
+      },
+      {
+        "date": "2024-06-19",
+        "desktop": 341,
+        "mobile": 290
+      },
+      {
+        "date": "2024-06-20",
+        "desktop": 408,
+        "mobile": 450
+      },
+      {
+        "date": "2024-06-21",
+        "desktop": 169,
+        "mobile": 210
+      },
+      {
+        "date": "2024-06-22",
+        "desktop": 317,
+        "mobile": 270
+      },
+      {
+        "date": "2024-06-23",
+        "desktop": 480,
+        "mobile": 530
+      },
+      {
+        "date": "2024-06-24",
+        "desktop": 132,
+        "mobile": 180
+      },
+      {
+        "date": "2024-06-25",
+        "desktop": 141,
+        "mobile": 190
+      },
+      {
+        "date": "2024-06-26",
+        "desktop": 434,
+        "mobile": 380
+      },
+      {
+        "date": "2024-06-27",
+        "desktop": 448,
+        "mobile": 490
+      },
+      {
+        "date": "2024-06-28",
+        "desktop": 149,
+        "mobile": 200
+      },
+      {
+        "date": "2024-06-29",
+        "desktop": 103,
+        "mobile": 160
+      },
+      {
+        "date": "2024-06-30",
+        "desktop": 446,
+        "mobile": 400
+      }
+    ],
+    "keys": [
+      "desktop",
+      "mobile"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 2,
+      "mobile": 1
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "Showing total visitors for the last 3 months"
+  },
+  {
+    "name": "chart-bar-label-custom",
+    "title": "Bar Chart - Custom Label",
+    "description": "A bar chart with a custom label",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186,
+        "mobile": 80
+      },
+      {
+        "month": "February",
+        "desktop": 305,
+        "mobile": 200
+      },
+      {
+        "month": "March",
+        "desktop": 237,
+        "mobile": 120
+      },
+      {
+        "month": "April",
+        "desktop": 73,
+        "mobile": 190
+      },
+      {
+        "month": "May",
+        "desktop": 209,
+        "mobile": 130
+      },
+      {
+        "month": "June",
+        "desktop": 214,
+        "mobile": 140
+      }
+    ],
+    "keys": [
+      "desktop"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 2,
+      "mobile": 2
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-bar-label",
+    "title": "Bar Chart - Label",
+    "description": "A bar chart with a label",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186
+      },
+      {
+        "month": "February",
+        "desktop": 305
+      },
+      {
+        "month": "March",
+        "desktop": 237
+      },
+      {
+        "month": "April",
+        "desktop": 73
+      },
+      {
+        "month": "May",
+        "desktop": 209
+      },
+      {
+        "month": "June",
+        "desktop": 214
+      }
+    ],
+    "keys": [
+      "desktop"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-bar-mixed",
+    "title": "Bar Chart - Mixed",
+    "description": "A mixed bar chart",
+    "data": [
+      {
+        "browser": "chrome",
+        "visitors": 275,
+        "fill": "var(--color-chrome)"
+      },
+      {
+        "browser": "safari",
+        "visitors": 200,
+        "fill": "var(--color-safari)"
+      },
+      {
+        "browser": "firefox",
+        "visitors": 187,
+        "fill": "var(--color-firefox)"
+      },
+      {
+        "browser": "edge",
+        "visitors": 173,
+        "fill": "var(--color-edge)"
+      },
+      {
+        "browser": "other",
+        "visitors": 90,
+        "fill": "var(--color-other)"
+      }
+    ],
+    "keys": [
+      "visitors"
+    ],
+    "curve": "natural",
+    "colors": {
+      "chrome": 1,
+      "safari": 2,
+      "firefox": 3,
+      "edge": 4,
+      "other": 5
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-bar-multiple",
+    "title": "Bar Chart - Multiple",
+    "description": "A multiple bar chart",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186,
+        "mobile": 80
+      },
+      {
+        "month": "February",
+        "desktop": 305,
+        "mobile": 200
+      },
+      {
+        "month": "March",
+        "desktop": 237,
+        "mobile": 120
+      },
+      {
+        "month": "April",
+        "desktop": 73,
+        "mobile": 190
+      },
+      {
+        "month": "May",
+        "desktop": 209,
+        "mobile": 130
+      },
+      {
+        "month": "June",
+        "desktop": 214,
+        "mobile": 140
+      }
+    ],
+    "keys": [
+      "desktop",
+      "mobile"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1,
+      "mobile": 2
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-bar-negative",
+    "title": "Bar Chart - Negative",
+    "description": "A bar chart with negative values",
+    "data": [
+      {
+        "month": "January",
+        "visitors": 186
+      },
+      {
+        "month": "February",
+        "visitors": 205
+      },
+      {
+        "month": "March",
+        "visitors": -207
+      },
+      {
+        "month": "April",
+        "visitors": 173
+      },
+      {
+        "month": "May",
+        "visitors": -209
+      },
+      {
+        "month": "June",
+        "visitors": 214
+      }
+    ],
+    "keys": [
+      "visitors"
+    ],
+    "curve": "natural",
+    "colors": {},
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-bar-stacked",
+    "title": "Bar Chart - Stacked + Legend",
+    "description": "A stacked bar chart with a legend",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186,
+        "mobile": 80
+      },
+      {
+        "month": "February",
+        "desktop": 305,
+        "mobile": 200
+      },
+      {
+        "month": "March",
+        "desktop": 237,
+        "mobile": 120
+      },
+      {
+        "month": "April",
+        "desktop": 73,
+        "mobile": 190
+      },
+      {
+        "month": "May",
+        "desktop": 209,
+        "mobile": 130
+      },
+      {
+        "month": "June",
+        "desktop": 214,
+        "mobile": 140
+      }
+    ],
+    "keys": [
+      "desktop",
+      "mobile"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1,
+      "mobile": 2
+    },
+    "stacked": true,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-line-default",
+    "title": "Line Chart",
+    "description": "A line chart",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186
+      },
+      {
+        "month": "February",
+        "desktop": 305
+      },
+      {
+        "month": "March",
+        "desktop": 237
+      },
+      {
+        "month": "April",
+        "desktop": 73
+      },
+      {
+        "month": "May",
+        "desktop": 209
+      },
+      {
+        "month": "June",
+        "desktop": 214
+      }
+    ],
+    "keys": [
+      "desktop"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-line-dots-colors",
+    "title": "Line Chart - Dots Colors",
+    "description": "A line chart with dots and colors",
+    "data": [
+      {
+        "browser": "chrome",
+        "visitors": 275,
+        "fill": "var(--color-chrome)"
+      },
+      {
+        "browser": "safari",
+        "visitors": 200,
+        "fill": "var(--color-safari)"
+      },
+      {
+        "browser": "firefox",
+        "visitors": 187,
+        "fill": "var(--color-firefox)"
+      },
+      {
+        "browser": "edge",
+        "visitors": 173,
+        "fill": "var(--color-edge)"
+      },
+      {
+        "browser": "other",
+        "visitors": 90,
+        "fill": "var(--color-other)"
+      }
+    ],
+    "keys": [
+      "visitors"
+    ],
+    "curve": "natural",
+    "colors": {
+      "visitors": 2,
+      "chrome": 1,
+      "safari": 2,
+      "firefox": 3,
+      "edge": 4,
+      "other": 5
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-line-dots-custom",
+    "title": "Line Chart - Custom Dots",
+    "description": "A line chart with custom dots",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186,
+        "mobile": 80
+      },
+      {
+        "month": "February",
+        "desktop": 305,
+        "mobile": 200
+      },
+      {
+        "month": "March",
+        "desktop": 237,
+        "mobile": 120
+      },
+      {
+        "month": "April",
+        "desktop": 73,
+        "mobile": 190
+      },
+      {
+        "month": "May",
+        "desktop": 209,
+        "mobile": 130
+      },
+      {
+        "month": "June",
+        "desktop": 214,
+        "mobile": 140
+      }
+    ],
+    "keys": [
+      "desktop"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1,
+      "mobile": 2
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-line-dots",
+    "title": "Line Chart - Dots",
+    "description": "A line chart with dots",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186,
+        "mobile": 80
+      },
+      {
+        "month": "February",
+        "desktop": 305,
+        "mobile": 200
+      },
+      {
+        "month": "March",
+        "desktop": 237,
+        "mobile": 120
+      },
+      {
+        "month": "April",
+        "desktop": 73,
+        "mobile": 190
+      },
+      {
+        "month": "May",
+        "desktop": 209,
+        "mobile": 130
+      },
+      {
+        "month": "June",
+        "desktop": 214,
+        "mobile": 140
+      }
+    ],
+    "keys": [
+      "desktop"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1,
+      "mobile": 2
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-line-interactive",
+    "title": "Line Chart - Interactive",
+    "description": "An interactive line chart",
+    "data": [
+      {
+        "date": "2024-04-01",
+        "desktop": 222,
+        "mobile": 150
+      },
+      {
+        "date": "2024-04-02",
+        "desktop": 97,
+        "mobile": 180
+      },
+      {
+        "date": "2024-04-03",
+        "desktop": 167,
+        "mobile": 120
+      },
+      {
+        "date": "2024-04-04",
+        "desktop": 242,
+        "mobile": 260
+      },
+      {
+        "date": "2024-04-05",
+        "desktop": 373,
+        "mobile": 290
+      },
+      {
+        "date": "2024-04-06",
+        "desktop": 301,
+        "mobile": 340
+      },
+      {
+        "date": "2024-04-07",
+        "desktop": 245,
+        "mobile": 180
+      },
+      {
+        "date": "2024-04-08",
+        "desktop": 409,
+        "mobile": 320
+      },
+      {
+        "date": "2024-04-09",
+        "desktop": 59,
+        "mobile": 110
+      },
+      {
+        "date": "2024-04-10",
+        "desktop": 261,
+        "mobile": 190
+      },
+      {
+        "date": "2024-04-11",
+        "desktop": 327,
+        "mobile": 350
+      },
+      {
+        "date": "2024-04-12",
+        "desktop": 292,
+        "mobile": 210
+      },
+      {
+        "date": "2024-04-13",
+        "desktop": 342,
+        "mobile": 380
+      },
+      {
+        "date": "2024-04-14",
+        "desktop": 137,
+        "mobile": 220
+      },
+      {
+        "date": "2024-04-15",
+        "desktop": 120,
+        "mobile": 170
+      },
+      {
+        "date": "2024-04-16",
+        "desktop": 138,
+        "mobile": 190
+      },
+      {
+        "date": "2024-04-17",
+        "desktop": 446,
+        "mobile": 360
+      },
+      {
+        "date": "2024-04-18",
+        "desktop": 364,
+        "mobile": 410
+      },
+      {
+        "date": "2024-04-19",
+        "desktop": 243,
+        "mobile": 180
+      },
+      {
+        "date": "2024-04-20",
+        "desktop": 89,
+        "mobile": 150
+      },
+      {
+        "date": "2024-04-21",
+        "desktop": 137,
+        "mobile": 200
+      },
+      {
+        "date": "2024-04-22",
+        "desktop": 224,
+        "mobile": 170
+      },
+      {
+        "date": "2024-04-23",
+        "desktop": 138,
+        "mobile": 230
+      },
+      {
+        "date": "2024-04-24",
+        "desktop": 387,
+        "mobile": 290
+      },
+      {
+        "date": "2024-04-25",
+        "desktop": 215,
+        "mobile": 250
+      },
+      {
+        "date": "2024-04-26",
+        "desktop": 75,
+        "mobile": 130
+      },
+      {
+        "date": "2024-04-27",
+        "desktop": 383,
+        "mobile": 420
+      },
+      {
+        "date": "2024-04-28",
+        "desktop": 122,
+        "mobile": 180
+      },
+      {
+        "date": "2024-04-29",
+        "desktop": 315,
+        "mobile": 240
+      },
+      {
+        "date": "2024-04-30",
+        "desktop": 454,
+        "mobile": 380
+      },
+      {
+        "date": "2024-05-01",
+        "desktop": 165,
+        "mobile": 220
+      },
+      {
+        "date": "2024-05-02",
+        "desktop": 293,
+        "mobile": 310
+      },
+      {
+        "date": "2024-05-03",
+        "desktop": 247,
+        "mobile": 190
+      },
+      {
+        "date": "2024-05-04",
+        "desktop": 385,
+        "mobile": 420
+      },
+      {
+        "date": "2024-05-05",
+        "desktop": 481,
+        "mobile": 390
+      },
+      {
+        "date": "2024-05-06",
+        "desktop": 498,
+        "mobile": 520
+      },
+      {
+        "date": "2024-05-07",
+        "desktop": 388,
+        "mobile": 300
+      },
+      {
+        "date": "2024-05-08",
+        "desktop": 149,
+        "mobile": 210
+      },
+      {
+        "date": "2024-05-09",
+        "desktop": 227,
+        "mobile": 180
+      },
+      {
+        "date": "2024-05-10",
+        "desktop": 293,
+        "mobile": 330
+      },
+      {
+        "date": "2024-05-11",
+        "desktop": 335,
+        "mobile": 270
+      },
+      {
+        "date": "2024-05-12",
+        "desktop": 197,
+        "mobile": 240
+      },
+      {
+        "date": "2024-05-13",
+        "desktop": 197,
+        "mobile": 160
+      },
+      {
+        "date": "2024-05-14",
+        "desktop": 448,
+        "mobile": 490
+      },
+      {
+        "date": "2024-05-15",
+        "desktop": 473,
+        "mobile": 380
+      },
+      {
+        "date": "2024-05-16",
+        "desktop": 338,
+        "mobile": 400
+      },
+      {
+        "date": "2024-05-17",
+        "desktop": 499,
+        "mobile": 420
+      },
+      {
+        "date": "2024-05-18",
+        "desktop": 315,
+        "mobile": 350
+      },
+      {
+        "date": "2024-05-19",
+        "desktop": 235,
+        "mobile": 180
+      },
+      {
+        "date": "2024-05-20",
+        "desktop": 177,
+        "mobile": 230
+      },
+      {
+        "date": "2024-05-21",
+        "desktop": 82,
+        "mobile": 140
+      },
+      {
+        "date": "2024-05-22",
+        "desktop": 81,
+        "mobile": 120
+      },
+      {
+        "date": "2024-05-23",
+        "desktop": 252,
+        "mobile": 290
+      },
+      {
+        "date": "2024-05-24",
+        "desktop": 294,
+        "mobile": 220
+      },
+      {
+        "date": "2024-05-25",
+        "desktop": 201,
+        "mobile": 250
+      },
+      {
+        "date": "2024-05-26",
+        "desktop": 213,
+        "mobile": 170
+      },
+      {
+        "date": "2024-05-27",
+        "desktop": 420,
+        "mobile": 460
+      },
+      {
+        "date": "2024-05-28",
+        "desktop": 233,
+        "mobile": 190
+      },
+      {
+        "date": "2024-05-29",
+        "desktop": 78,
+        "mobile": 130
+      },
+      {
+        "date": "2024-05-30",
+        "desktop": 340,
+        "mobile": 280
+      },
+      {
+        "date": "2024-05-31",
+        "desktop": 178,
+        "mobile": 230
+      },
+      {
+        "date": "2024-06-01",
+        "desktop": 178,
+        "mobile": 200
+      },
+      {
+        "date": "2024-06-02",
+        "desktop": 470,
+        "mobile": 410
+      },
+      {
+        "date": "2024-06-03",
+        "desktop": 103,
+        "mobile": 160
+      },
+      {
+        "date": "2024-06-04",
+        "desktop": 439,
+        "mobile": 380
+      },
+      {
+        "date": "2024-06-05",
+        "desktop": 88,
+        "mobile": 140
+      },
+      {
+        "date": "2024-06-06",
+        "desktop": 294,
+        "mobile": 250
+      },
+      {
+        "date": "2024-06-07",
+        "desktop": 323,
+        "mobile": 370
+      },
+      {
+        "date": "2024-06-08",
+        "desktop": 385,
+        "mobile": 320
+      },
+      {
+        "date": "2024-06-09",
+        "desktop": 438,
+        "mobile": 480
+      },
+      {
+        "date": "2024-06-10",
+        "desktop": 155,
+        "mobile": 200
+      },
+      {
+        "date": "2024-06-11",
+        "desktop": 92,
+        "mobile": 150
+      },
+      {
+        "date": "2024-06-12",
+        "desktop": 492,
+        "mobile": 420
+      },
+      {
+        "date": "2024-06-13",
+        "desktop": 81,
+        "mobile": 130
+      },
+      {
+        "date": "2024-06-14",
+        "desktop": 426,
+        "mobile": 380
+      },
+      {
+        "date": "2024-06-15",
+        "desktop": 307,
+        "mobile": 350
+      },
+      {
+        "date": "2024-06-16",
+        "desktop": 371,
+        "mobile": 310
+      },
+      {
+        "date": "2024-06-17",
+        "desktop": 475,
+        "mobile": 520
+      },
+      {
+        "date": "2024-06-18",
+        "desktop": 107,
+        "mobile": 170
+      },
+      {
+        "date": "2024-06-19",
+        "desktop": 341,
+        "mobile": 290
+      },
+      {
+        "date": "2024-06-20",
+        "desktop": 408,
+        "mobile": 450
+      },
+      {
+        "date": "2024-06-21",
+        "desktop": 169,
+        "mobile": 210
+      },
+      {
+        "date": "2024-06-22",
+        "desktop": 317,
+        "mobile": 270
+      },
+      {
+        "date": "2024-06-23",
+        "desktop": 480,
+        "mobile": 530
+      },
+      {
+        "date": "2024-06-24",
+        "desktop": 132,
+        "mobile": 180
+      },
+      {
+        "date": "2024-06-25",
+        "desktop": 141,
+        "mobile": 190
+      },
+      {
+        "date": "2024-06-26",
+        "desktop": 434,
+        "mobile": 380
+      },
+      {
+        "date": "2024-06-27",
+        "desktop": 448,
+        "mobile": 490
+      },
+      {
+        "date": "2024-06-28",
+        "desktop": 149,
+        "mobile": 200
+      },
+      {
+        "date": "2024-06-29",
+        "desktop": 103,
+        "mobile": 160
+      },
+      {
+        "date": "2024-06-30",
+        "desktop": 446,
+        "mobile": 400
+      }
+    ],
+    "keys": [
+      "desktop",
+      "mobile"
+    ],
+    "curve": "monotone",
+    "colors": {
+      "desktop": 1,
+      "mobile": 2
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "Showing total visitors for the last 3 months"
+  },
+  {
+    "name": "chart-line-label-custom",
+    "title": "Line Chart - Custom Label",
+    "description": "A line chart with a custom label",
+    "data": [
+      {
+        "browser": "chrome",
+        "visitors": 275,
+        "fill": "var(--color-chrome)"
+      },
+      {
+        "browser": "safari",
+        "visitors": 200,
+        "fill": "var(--color-safari)"
+      },
+      {
+        "browser": "firefox",
+        "visitors": 187,
+        "fill": "var(--color-firefox)"
+      },
+      {
+        "browser": "edge",
+        "visitors": 173,
+        "fill": "var(--color-edge)"
+      },
+      {
+        "browser": "other",
+        "visitors": 90,
+        "fill": "var(--color-other)"
+      }
+    ],
+    "keys": [
+      "visitors"
+    ],
+    "curve": "natural",
+    "colors": {
+      "visitors": 2,
+      "chrome": 1,
+      "safari": 2,
+      "firefox": 3,
+      "edge": 4,
+      "other": 5
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-line-label",
+    "title": "Line Chart - Label",
+    "description": "A line chart with a label",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186,
+        "mobile": 80
+      },
+      {
+        "month": "February",
+        "desktop": 305,
+        "mobile": 200
+      },
+      {
+        "month": "March",
+        "desktop": 237,
+        "mobile": 120
+      },
+      {
+        "month": "April",
+        "desktop": 73,
+        "mobile": 190
+      },
+      {
+        "month": "May",
+        "desktop": 209,
+        "mobile": 130
+      },
+      {
+        "month": "June",
+        "desktop": 214,
+        "mobile": 140
+      }
+    ],
+    "keys": [
+      "desktop"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1,
+      "mobile": 2
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-line-linear",
+    "title": "Line Chart - Linear",
+    "description": "A linear line chart",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186
+      },
+      {
+        "month": "February",
+        "desktop": 305
+      },
+      {
+        "month": "March",
+        "desktop": 237
+      },
+      {
+        "month": "April",
+        "desktop": 73
+      },
+      {
+        "month": "May",
+        "desktop": 209
+      },
+      {
+        "month": "June",
+        "desktop": 214
+      }
+    ],
+    "keys": [
+      "desktop"
+    ],
+    "curve": "linear",
+    "colors": {
+      "desktop": 1
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-line-multiple",
+    "title": "Line Chart - Multiple",
+    "description": "A multiple line chart",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186,
+        "mobile": 80
+      },
+      {
+        "month": "February",
+        "desktop": 305,
+        "mobile": 200
+      },
+      {
+        "month": "March",
+        "desktop": 237,
+        "mobile": 120
+      },
+      {
+        "month": "April",
+        "desktop": 73,
+        "mobile": 190
+      },
+      {
+        "month": "May",
+        "desktop": 209,
+        "mobile": 130
+      },
+      {
+        "month": "June",
+        "desktop": 214,
+        "mobile": 140
+      }
+    ],
+    "keys": [
+      "desktop",
+      "mobile"
+    ],
+    "curve": "monotone",
+    "colors": {
+      "desktop": 1,
+      "mobile": 2
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-line-step",
+    "title": "Line Chart - Step",
+    "description": "A line chart with step",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186
+      },
+      {
+        "month": "February",
+        "desktop": 305
+      },
+      {
+        "month": "March",
+        "desktop": 237
+      },
+      {
+        "month": "April",
+        "desktop": 73
+      },
+      {
+        "month": "May",
+        "desktop": 209
+      },
+      {
+        "month": "June",
+        "desktop": 214
+      }
+    ],
+    "keys": [
+      "desktop"
+    ],
+    "curve": "step",
+    "colors": {
+      "desktop": 1
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-pie-donut-active",
+    "title": "Pie Chart - Donut Active",
+    "description": "A donut chart with an active sector",
+    "data": [
+      {
+        "browser": "chrome",
+        "visitors": 275,
+        "fill": "var(--color-chrome)"
+      },
+      {
+        "browser": "safari",
+        "visitors": 200,
+        "fill": "var(--color-safari)"
+      },
+      {
+        "browser": "firefox",
+        "visitors": 187,
+        "fill": "var(--color-firefox)"
+      },
+      {
+        "browser": "edge",
+        "visitors": 173,
+        "fill": "var(--color-edge)"
+      },
+      {
+        "browser": "other",
+        "visitors": 90,
+        "fill": "var(--color-other)"
+      }
+    ],
+    "keys": [
+      "visitors"
+    ],
+    "curve": "natural",
+    "colors": {
+      "chrome": 1,
+      "safari": 2,
+      "firefox": 3,
+      "edge": 4,
+      "other": 5
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-pie-donut-text",
+    "title": "Pie Chart - Donut with Text",
+    "description": "A donut chart with text",
+    "data": [
+      {
+        "browser": "chrome",
+        "visitors": 275,
+        "fill": "var(--color-chrome)"
+      },
+      {
+        "browser": "safari",
+        "visitors": 200,
+        "fill": "var(--color-safari)"
+      },
+      {
+        "browser": "firefox",
+        "visitors": 287,
+        "fill": "var(--color-firefox)"
+      },
+      {
+        "browser": "edge",
+        "visitors": 173,
+        "fill": "var(--color-edge)"
+      },
+      {
+        "browser": "other",
+        "visitors": 190,
+        "fill": "var(--color-other)"
+      }
+    ],
+    "keys": [
+      "visitors"
+    ],
+    "curve": "natural",
+    "colors": {
+      "chrome": 1,
+      "safari": 2,
+      "firefox": 3,
+      "edge": 4,
+      "other": 5
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-pie-donut",
+    "title": "Pie Chart - Donut",
+    "description": "A donut chart",
+    "data": [
+      {
+        "browser": "chrome",
+        "visitors": 275,
+        "fill": "var(--color-chrome)"
+      },
+      {
+        "browser": "safari",
+        "visitors": 200,
+        "fill": "var(--color-safari)"
+      },
+      {
+        "browser": "firefox",
+        "visitors": 187,
+        "fill": "var(--color-firefox)"
+      },
+      {
+        "browser": "edge",
+        "visitors": 173,
+        "fill": "var(--color-edge)"
+      },
+      {
+        "browser": "other",
+        "visitors": 90,
+        "fill": "var(--color-other)"
+      }
+    ],
+    "keys": [
+      "visitors"
+    ],
+    "curve": "natural",
+    "colors": {
+      "chrome": 1,
+      "safari": 2,
+      "firefox": 3,
+      "edge": 4,
+      "other": 5
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-pie-interactive",
+    "title": "Pie Chart - Interactive",
+    "description": "An interactive pie chart",
+    "data": [
+      {
+        "month": "january",
+        "desktop": 186,
+        "fill": "var(--color-january)"
+      },
+      {
+        "month": "february",
+        "desktop": 305,
+        "fill": "var(--color-february)"
+      },
+      {
+        "month": "march",
+        "desktop": 237,
+        "fill": "var(--color-march)"
+      },
+      {
+        "month": "april",
+        "desktop": 173,
+        "fill": "var(--color-april)"
+      },
+      {
+        "month": "may",
+        "desktop": 209,
+        "fill": "var(--color-may)"
+      }
+    ],
+    "keys": [
+      "desktop"
+    ],
+    "curve": "natural",
+    "colors": {
+      "january": 1,
+      "february": 2,
+      "march": 3,
+      "april": 4,
+      "may": 5
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-pie-label-custom",
+    "title": "Pie Chart - Custom Label",
+    "description": "A pie chart with a custom label",
+    "data": [
+      {
+        "browser": "chrome",
+        "visitors": 275,
+        "fill": "var(--color-chrome)"
+      },
+      {
+        "browser": "safari",
+        "visitors": 200,
+        "fill": "var(--color-safari)"
+      },
+      {
+        "browser": "firefox",
+        "visitors": 187,
+        "fill": "var(--color-firefox)"
+      },
+      {
+        "browser": "edge",
+        "visitors": 173,
+        "fill": "var(--color-edge)"
+      },
+      {
+        "browser": "other",
+        "visitors": 90,
+        "fill": "var(--color-other)"
+      }
+    ],
+    "keys": [
+      "visitors"
+    ],
+    "curve": "natural",
+    "colors": {
+      "chrome": 1,
+      "safari": 2,
+      "firefox": 3,
+      "edge": 4,
+      "other": 5
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-pie-label-list",
+    "title": "Pie Chart - Label List",
+    "description": "A pie chart with a label list",
+    "data": [
+      {
+        "browser": "chrome",
+        "visitors": 275,
+        "fill": "var(--color-chrome)"
+      },
+      {
+        "browser": "safari",
+        "visitors": 200,
+        "fill": "var(--color-safari)"
+      },
+      {
+        "browser": "firefox",
+        "visitors": 187,
+        "fill": "var(--color-firefox)"
+      },
+      {
+        "browser": "edge",
+        "visitors": 173,
+        "fill": "var(--color-edge)"
+      },
+      {
+        "browser": "other",
+        "visitors": 90,
+        "fill": "var(--color-other)"
+      }
+    ],
+    "keys": [
+      "visitors"
+    ],
+    "curve": "natural",
+    "colors": {
+      "chrome": 1,
+      "safari": 2,
+      "firefox": 3,
+      "edge": 4,
+      "other": 5
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-pie-label",
+    "title": "Pie Chart - Label",
+    "description": "A pie chart with a label",
+    "data": [
+      {
+        "browser": "chrome",
+        "visitors": 275,
+        "fill": "var(--color-chrome)"
+      },
+      {
+        "browser": "safari",
+        "visitors": 200,
+        "fill": "var(--color-safari)"
+      },
+      {
+        "browser": "firefox",
+        "visitors": 187,
+        "fill": "var(--color-firefox)"
+      },
+      {
+        "browser": "edge",
+        "visitors": 173,
+        "fill": "var(--color-edge)"
+      },
+      {
+        "browser": "other",
+        "visitors": 90,
+        "fill": "var(--color-other)"
+      }
+    ],
+    "keys": [
+      "visitors"
+    ],
+    "curve": "natural",
+    "colors": {
+      "chrome": 1,
+      "safari": 2,
+      "firefox": 3,
+      "edge": 4,
+      "other": 5
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-pie-legend",
+    "title": "Pie Chart - Legend",
+    "description": "A pie chart with a legend",
+    "data": [
+      {
+        "browser": "chrome",
+        "visitors": 275,
+        "fill": "var(--color-chrome)"
+      },
+      {
+        "browser": "safari",
+        "visitors": 200,
+        "fill": "var(--color-safari)"
+      },
+      {
+        "browser": "firefox",
+        "visitors": 187,
+        "fill": "var(--color-firefox)"
+      },
+      {
+        "browser": "edge",
+        "visitors": 173,
+        "fill": "var(--color-edge)"
+      },
+      {
+        "browser": "other",
+        "visitors": 90,
+        "fill": "var(--color-other)"
+      }
+    ],
+    "keys": [
+      "visitors"
+    ],
+    "curve": "natural",
+    "colors": {
+      "chrome": 1,
+      "safari": 2,
+      "firefox": 3,
+      "edge": 4,
+      "other": 5
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-pie-separator-none",
+    "title": "Pie Chart - Separator None",
+    "description": "A pie chart with no separator",
+    "data": [
+      {
+        "browser": "chrome",
+        "visitors": 275,
+        "fill": "var(--color-chrome)"
+      },
+      {
+        "browser": "safari",
+        "visitors": 200,
+        "fill": "var(--color-safari)"
+      },
+      {
+        "browser": "firefox",
+        "visitors": 187,
+        "fill": "var(--color-firefox)"
+      },
+      {
+        "browser": "edge",
+        "visitors": 173,
+        "fill": "var(--color-edge)"
+      },
+      {
+        "browser": "other",
+        "visitors": 90,
+        "fill": "var(--color-other)"
+      }
+    ],
+    "keys": [
+      "visitors"
+    ],
+    "curve": "natural",
+    "colors": {
+      "chrome": 1,
+      "safari": 2,
+      "firefox": 3,
+      "edge": 4,
+      "other": 5
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-pie-simple",
+    "title": "Pie Chart",
+    "description": "A simple pie chart",
+    "data": [
+      {
+        "browser": "chrome",
+        "visitors": 275,
+        "fill": "var(--color-chrome)"
+      },
+      {
+        "browser": "safari",
+        "visitors": 200,
+        "fill": "var(--color-safari)"
+      },
+      {
+        "browser": "firefox",
+        "visitors": 187,
+        "fill": "var(--color-firefox)"
+      },
+      {
+        "browser": "edge",
+        "visitors": 173,
+        "fill": "var(--color-edge)"
+      },
+      {
+        "browser": "other",
+        "visitors": 90,
+        "fill": "var(--color-other)"
+      }
+    ],
+    "keys": [
+      "visitors"
+    ],
+    "curve": "natural",
+    "colors": {
+      "chrome": 1,
+      "safari": 2,
+      "firefox": 3,
+      "edge": 4,
+      "other": 5
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-pie-stacked",
+    "title": "Pie Chart - Stacked",
+    "description": "A pie chart with stacked sections",
+    "data": [
+      {
+        "month": "january",
+        "desktop": 186,
+        "fill": "var(--color-january)",
+        "mobile": 80
+      },
+      {
+        "month": "february",
+        "desktop": 305,
+        "fill": "var(--color-february)",
+        "mobile": 200
+      },
+      {
+        "month": "march",
+        "desktop": 237,
+        "fill": "var(--color-march)",
+        "mobile": 120
+      },
+      {
+        "month": "april",
+        "desktop": 173,
+        "fill": "var(--color-april)",
+        "mobile": 190
+      },
+      {
+        "month": "may",
+        "desktop": 209,
+        "fill": "var(--color-may)",
+        "mobile": 130
+      }
+    ],
+    "keys": [
+      "desktop",
+      "mobile"
+    ],
+    "curve": "natural",
+    "colors": {
+      "january": 1,
+      "february": 2,
+      "march": 3,
+      "april": 4,
+      "may": 5
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-radar-default",
+    "title": "Radar Chart",
+    "description": "A radar chart",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186
+      },
+      {
+        "month": "February",
+        "desktop": 305
+      },
+      {
+        "month": "March",
+        "desktop": 237
+      },
+      {
+        "month": "April",
+        "desktop": 273
+      },
+      {
+        "month": "May",
+        "desktop": 209
+      },
+      {
+        "month": "June",
+        "desktop": 214
+      }
+    ],
+    "keys": [
+      "desktop"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1
+    },
+    "stacked": false,
+    "opacities": {
+      "desktop": 0.6
+    },
+    "subtitle": "Showing total visitors for the last 6 months"
+  },
+  {
+    "name": "chart-radar-dots",
+    "title": "Radar Chart - Dots",
+    "description": "A radar chart with dots",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186
+      },
+      {
+        "month": "February",
+        "desktop": 305
+      },
+      {
+        "month": "March",
+        "desktop": 237
+      },
+      {
+        "month": "April",
+        "desktop": 273
+      },
+      {
+        "month": "May",
+        "desktop": 209
+      },
+      {
+        "month": "June",
+        "desktop": 214
+      }
+    ],
+    "keys": [
+      "desktop"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1
+    },
+    "stacked": false,
+    "opacities": {
+      "desktop": 0.6
+    },
+    "subtitle": "Showing total visitors for the last 6 months"
+  },
+  {
+    "name": "chart-radar-grid-circle-fill",
+    "title": "Radar Chart - Grid Circle Filled",
+    "description": "A radar chart with a grid and circle fill",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186
+      },
+      {
+        "month": "February",
+        "desktop": 285
+      },
+      {
+        "month": "March",
+        "desktop": 237
+      },
+      {
+        "month": "April",
+        "desktop": 203
+      },
+      {
+        "month": "May",
+        "desktop": 209
+      },
+      {
+        "month": "June",
+        "desktop": 264
+      }
+    ],
+    "keys": [
+      "desktop"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1
+    },
+    "stacked": false,
+    "opacities": {
+      "desktop": 0.5
+    },
+    "subtitle": "Showing total visitors for the last 6 months"
+  },
+  {
+    "name": "chart-radar-grid-circle-no-lines",
+    "title": "Radar Chart - Grid Circle - No lines",
+    "description": "A radar chart with a grid and circle fill",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186
+      },
+      {
+        "month": "February",
+        "desktop": 305
+      },
+      {
+        "month": "March",
+        "desktop": 237
+      },
+      {
+        "month": "April",
+        "desktop": 203
+      },
+      {
+        "month": "May",
+        "desktop": 209
+      },
+      {
+        "month": "June",
+        "desktop": 214
+      }
+    ],
+    "keys": [
+      "desktop"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1
+    },
+    "stacked": false,
+    "opacities": {
+      "desktop": 0.6
+    },
+    "subtitle": "Showing total visitors for the last 6 months"
+  },
+  {
+    "name": "chart-radar-grid-circle",
+    "title": "Radar Chart - Grid Circle",
+    "description": "A radar chart with a grid and circle",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186
+      },
+      {
+        "month": "February",
+        "desktop": 305
+      },
+      {
+        "month": "March",
+        "desktop": 237
+      },
+      {
+        "month": "April",
+        "desktop": 273
+      },
+      {
+        "month": "May",
+        "desktop": 209
+      },
+      {
+        "month": "June",
+        "desktop": 214
+      }
+    ],
+    "keys": [
+      "desktop"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1
+    },
+    "stacked": false,
+    "opacities": {
+      "desktop": 0.6
+    },
+    "subtitle": "Showing total visitors for the last 6 months"
+  },
+  {
+    "name": "chart-radar-grid-custom",
+    "title": "Radar Chart - Grid Custom",
+    "description": "A radar chart with a custom grid",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186
+      },
+      {
+        "month": "February",
+        "desktop": 305
+      },
+      {
+        "month": "March",
+        "desktop": 237
+      },
+      {
+        "month": "April",
+        "desktop": 273
+      },
+      {
+        "month": "May",
+        "desktop": 209
+      },
+      {
+        "month": "June",
+        "desktop": 214
+      }
+    ],
+    "keys": [
+      "desktop"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1
+    },
+    "stacked": false,
+    "opacities": {
+      "desktop": 0.6
+    },
+    "subtitle": "Showing total visitors for the last 6 months"
+  },
+  {
+    "name": "chart-radar-grid-fill",
+    "title": "Radar Chart - Grid Filled",
+    "description": "A radar chart with a grid filled",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186
+      },
+      {
+        "month": "February",
+        "desktop": 285
+      },
+      {
+        "month": "March",
+        "desktop": 237
+      },
+      {
+        "month": "April",
+        "desktop": 203
+      },
+      {
+        "month": "May",
+        "desktop": 209
+      },
+      {
+        "month": "June",
+        "desktop": 264
+      }
+    ],
+    "keys": [
+      "desktop"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1
+    },
+    "stacked": false,
+    "opacities": {
+      "desktop": 0.5
+    },
+    "subtitle": "Showing total visitors for the last 6 months"
+  },
+  {
+    "name": "chart-radar-grid-none",
+    "title": "Radar Chart - Grid None",
+    "description": "A radar chart with no grid",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186
+      },
+      {
+        "month": "February",
+        "desktop": 305
+      },
+      {
+        "month": "March",
+        "desktop": 237
+      },
+      {
+        "month": "April",
+        "desktop": 273
+      },
+      {
+        "month": "May",
+        "desktop": 209
+      },
+      {
+        "month": "June",
+        "desktop": 214
+      }
+    ],
+    "keys": [
+      "desktop"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1
+    },
+    "stacked": false,
+    "opacities": {
+      "desktop": 0.6
+    },
+    "subtitle": "Showing total visitors for the last 6 months"
+  },
+  {
+    "name": "chart-radar-icons",
+    "title": "Radar Chart - Icons",
+    "description": "A radar chart with icons",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186,
+        "mobile": 80
+      },
+      {
+        "month": "February",
+        "desktop": 305,
+        "mobile": 200
+      },
+      {
+        "month": "March",
+        "desktop": 237,
+        "mobile": 120
+      },
+      {
+        "month": "April",
+        "desktop": 73,
+        "mobile": 190
+      },
+      {
+        "month": "May",
+        "desktop": 209,
+        "mobile": 130
+      },
+      {
+        "month": "June",
+        "desktop": 214,
+        "mobile": 140
+      }
+    ],
+    "keys": [
+      "desktop",
+      "mobile"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1,
+      "mobile": 2
+    },
+    "stacked": false,
+    "opacities": {
+      "desktop": 0.6
+    },
+    "subtitle": "Showing total visitors for the last 6 months"
+  },
+  {
+    "name": "chart-radar-label-custom",
+    "title": "Radar Chart - Custom Label",
+    "description": "A radar chart with a custom label",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186,
+        "mobile": 80
+      },
+      {
+        "month": "February",
+        "desktop": 305,
+        "mobile": 200
+      },
+      {
+        "month": "March",
+        "desktop": 237,
+        "mobile": 120
+      },
+      {
+        "month": "April",
+        "desktop": 73,
+        "mobile": 190
+      },
+      {
+        "month": "May",
+        "desktop": 209,
+        "mobile": 130
+      },
+      {
+        "month": "June",
+        "desktop": 214,
+        "mobile": 140
+      }
+    ],
+    "keys": [
+      "desktop",
+      "mobile"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1,
+      "mobile": 2
+    },
+    "stacked": false,
+    "opacities": {
+      "desktop": 0.6
+    },
+    "subtitle": "Showing total visitors for the last 6 months"
+  },
+  {
+    "name": "chart-radar-legend",
+    "title": "Radar Chart - Legend",
+    "description": "A radar chart with a legend",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186,
+        "mobile": 80
+      },
+      {
+        "month": "February",
+        "desktop": 305,
+        "mobile": 200
+      },
+      {
+        "month": "March",
+        "desktop": 237,
+        "mobile": 120
+      },
+      {
+        "month": "April",
+        "desktop": 73,
+        "mobile": 190
+      },
+      {
+        "month": "May",
+        "desktop": 209,
+        "mobile": 130
+      },
+      {
+        "month": "June",
+        "desktop": 214,
+        "mobile": 140
+      }
+    ],
+    "keys": [
+      "desktop",
+      "mobile"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1,
+      "mobile": 2
+    },
+    "stacked": false,
+    "opacities": {
+      "desktop": 0.6
+    },
+    "subtitle": "Showing total visitors for the last 6 months"
+  },
+  {
+    "name": "chart-radar-lines-only",
+    "title": "Radar Chart - Lines Only",
+    "description": "A radar chart with lines only",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186,
+        "mobile": 160
+      },
+      {
+        "month": "February",
+        "desktop": 185,
+        "mobile": 170
+      },
+      {
+        "month": "March",
+        "desktop": 207,
+        "mobile": 180
+      },
+      {
+        "month": "April",
+        "desktop": 173,
+        "mobile": 160
+      },
+      {
+        "month": "May",
+        "desktop": 160,
+        "mobile": 190
+      },
+      {
+        "month": "June",
+        "desktop": 174,
+        "mobile": 204
+      }
+    ],
+    "keys": [
+      "desktop",
+      "mobile"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1,
+      "mobile": 2
+    },
+    "stacked": false,
+    "opacities": {
+      "desktop": 0.0,
+      "mobile": 0.0
+    },
+    "subtitle": "Showing total visitors for the last 6 months"
+  },
+  {
+    "name": "chart-radar-multiple",
+    "title": "Radar Chart - Multiple",
+    "description": "A radar chart with multiple data",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186,
+        "mobile": 80
+      },
+      {
+        "month": "February",
+        "desktop": 305,
+        "mobile": 200
+      },
+      {
+        "month": "March",
+        "desktop": 237,
+        "mobile": 120
+      },
+      {
+        "month": "April",
+        "desktop": 73,
+        "mobile": 190
+      },
+      {
+        "month": "May",
+        "desktop": 209,
+        "mobile": 130
+      },
+      {
+        "month": "June",
+        "desktop": 214,
+        "mobile": 140
+      }
+    ],
+    "keys": [
+      "desktop",
+      "mobile"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1,
+      "mobile": 2
+    },
+    "stacked": false,
+    "opacities": {
+      "desktop": 0.6
+    },
+    "subtitle": "Showing total visitors for the last 6 months"
+  },
+  {
+    "name": "chart-radar-radius",
+    "title": "Radar Chart - Radius Axis",
+    "description": "A radar chart with a radius axis",
+    "data": [
+      {
+        "month": "January",
+        "desktop": 186,
+        "mobile": 80
+      },
+      {
+        "month": "February",
+        "desktop": 305,
+        "mobile": 200
+      },
+      {
+        "month": "March",
+        "desktop": 237,
+        "mobile": 120
+      },
+      {
+        "month": "April",
+        "desktop": 73,
+        "mobile": 190
+      },
+      {
+        "month": "May",
+        "desktop": 209,
+        "mobile": 130
+      },
+      {
+        "month": "June",
+        "desktop": 214,
+        "mobile": 140
+      }
+    ],
+    "keys": [
+      "desktop",
+      "mobile"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1,
+      "mobile": 2
+    },
+    "stacked": false,
+    "opacities": {
+      "desktop": 0.6
+    },
+    "subtitle": "Showing total visitors for the last 6 months"
+  },
+  {
+    "name": "chart-radial-grid",
+    "title": "Radial Chart - Grid",
+    "description": "A radial chart with a grid",
+    "data": [
+      {
+        "browser": "chrome",
+        "visitors": 275,
+        "fill": "var(--color-chrome)"
+      },
+      {
+        "browser": "safari",
+        "visitors": 200,
+        "fill": "var(--color-safari)"
+      },
+      {
+        "browser": "firefox",
+        "visitors": 187,
+        "fill": "var(--color-firefox)"
+      },
+      {
+        "browser": "edge",
+        "visitors": 173,
+        "fill": "var(--color-edge)"
+      },
+      {
+        "browser": "other",
+        "visitors": 90,
+        "fill": "var(--color-other)"
+      }
+    ],
+    "keys": [
+      "visitors"
+    ],
+    "curve": "natural",
+    "colors": {
+      "chrome": 1,
+      "safari": 2,
+      "firefox": 3,
+      "edge": 4,
+      "other": 5
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-radial-label",
+    "title": "Radial Chart - Label",
+    "description": "A radial chart with a label",
+    "data": [
+      {
+        "browser": "chrome",
+        "visitors": 275,
+        "fill": "var(--color-chrome)"
+      },
+      {
+        "browser": "safari",
+        "visitors": 200,
+        "fill": "var(--color-safari)"
+      },
+      {
+        "browser": "firefox",
+        "visitors": 187,
+        "fill": "var(--color-firefox)"
+      },
+      {
+        "browser": "edge",
+        "visitors": 173,
+        "fill": "var(--color-edge)"
+      },
+      {
+        "browser": "other",
+        "visitors": 90,
+        "fill": "var(--color-other)"
+      }
+    ],
+    "keys": [
+      "visitors"
+    ],
+    "curve": "natural",
+    "colors": {
+      "chrome": 1,
+      "safari": 2,
+      "firefox": 3,
+      "edge": 4,
+      "other": 5
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-radial-shape",
+    "title": "Radial Chart - Shape",
+    "description": "A radial chart with a custom shape",
+    "data": [
+      {
+        "browser": "safari",
+        "visitors": 1260,
+        "fill": "var(--color-safari)"
+      }
+    ],
+    "keys": [
+      "visitors"
+    ],
+    "curve": "natural",
+    "colors": {
+      "safari": 2
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-radial-simple",
+    "title": "Radial Chart",
+    "description": "A radial chart",
+    "data": [
+      {
+        "browser": "chrome",
+        "visitors": 275,
+        "fill": "var(--color-chrome)"
+      },
+      {
+        "browser": "safari",
+        "visitors": 200,
+        "fill": "var(--color-safari)"
+      },
+      {
+        "browser": "firefox",
+        "visitors": 187,
+        "fill": "var(--color-firefox)"
+      },
+      {
+        "browser": "edge",
+        "visitors": 173,
+        "fill": "var(--color-edge)"
+      },
+      {
+        "browser": "other",
+        "visitors": 90,
+        "fill": "var(--color-other)"
+      }
+    ],
+    "keys": [
+      "visitors"
+    ],
+    "curve": "natural",
+    "colors": {
+      "chrome": 1,
+      "safari": 2,
+      "firefox": 3,
+      "edge": 4,
+      "other": 5
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-radial-stacked",
+    "title": "Radial Chart - Stacked",
+    "description": "A radial chart with stacked sections",
+    "data": [
+      {
+        "month": "january",
+        "mobile": 570,
+        "desktop": 1260
+      }
+    ],
+    "keys": [
+      "mobile",
+      "desktop"
+    ],
+    "curve": "natural",
+    "colors": {
+      "desktop": 1,
+      "mobile": 2
+    },
+    "stacked": true,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-radial-text",
+    "title": "Radial Chart - Text",
+    "description": "A radial chart with text",
+    "data": [
+      {
+        "browser": "safari",
+        "visitors": 200,
+        "fill": "var(--color-safari)"
+      }
+    ],
+    "keys": [
+      "visitors"
+    ],
+    "curve": "natural",
+    "colors": {
+      "safari": 2
+    },
+    "stacked": false,
+    "opacities": {},
+    "subtitle": "January - June 2024"
+  },
+  {
+    "name": "chart-tooltip-advanced",
+    "title": "Tooltip - Advanced",
+    "description": "A stacked bar chart with a legend",
+    "data": [
+      {
+        "date": "2024-07-15",
+        "running": 450,
+        "swimming": 300
+      },
+      {
+        "date": "2024-07-16",
+        "running": 380,
+        "swimming": 420
+      },
+      {
+        "date": "2024-07-17",
+        "running": 520,
+        "swimming": 120
+      },
+      {
+        "date": "2024-07-18",
+        "running": 140,
+        "swimming": 550
+      },
+      {
+        "date": "2024-07-19",
+        "running": 600,
+        "swimming": 350
+      },
+      {
+        "date": "2024-07-20",
+        "running": 480,
+        "swimming": 400
+      }
+    ],
+    "keys": [
+      "running",
+      "swimming"
+    ],
+    "curve": "natural",
+    "colors": {
+      "running": 1,
+      "swimming": 2
+    },
+    "stacked": true,
+    "opacities": {},
+    "subtitle": "Tooltip with custom formatter and total."
+  },
+  {
+    "name": "chart-tooltip-default",
+    "title": "Tooltip - Default",
+    "description": "A stacked bar chart with a legend",
+    "data": [
+      {
+        "date": "2024-07-15",
+        "running": 450,
+        "swimming": 300
+      },
+      {
+        "date": "2024-07-16",
+        "running": 380,
+        "swimming": 420
+      },
+      {
+        "date": "2024-07-17",
+        "running": 520,
+        "swimming": 120
+      },
+      {
+        "date": "2024-07-18",
+        "running": 140,
+        "swimming": 550
+      },
+      {
+        "date": "2024-07-19",
+        "running": 600,
+        "swimming": 350
+      },
+      {
+        "date": "2024-07-20",
+        "running": 480,
+        "swimming": 400
+      }
+    ],
+    "keys": [
+      "running",
+      "swimming"
+    ],
+    "curve": "natural",
+    "colors": {
+      "running": 1,
+      "swimming": 2
+    },
+    "stacked": true,
+    "opacities": {},
+    "subtitle": "Default tooltip with ChartTooltipContent."
+  },
+  {
+    "name": "chart-tooltip-formatter",
+    "title": "Tooltip - Formatter",
+    "description": "A stacked bar chart with a legend",
+    "data": [
+      {
+        "date": "2024-07-15",
+        "running": 450,
+        "swimming": 300
+      },
+      {
+        "date": "2024-07-16",
+        "running": 380,
+        "swimming": 420
+      },
+      {
+        "date": "2024-07-17",
+        "running": 520,
+        "swimming": 120
+      },
+      {
+        "date": "2024-07-18",
+        "running": 140,
+        "swimming": 550
+      },
+      {
+        "date": "2024-07-19",
+        "running": 600,
+        "swimming": 350
+      },
+      {
+        "date": "2024-07-20",
+        "running": 480,
+        "swimming": 400
+      }
+    ],
+    "keys": [
+      "running",
+      "swimming"
+    ],
+    "curve": "natural",
+    "colors": {
+      "running": 1,
+      "swimming": 2
+    },
+    "stacked": true,
+    "opacities": {},
+    "subtitle": "Tooltip with custom formatter ."
+  },
+  {
+    "name": "chart-tooltip-icons",
+    "title": "Tooltip - Icons",
+    "description": "A stacked bar chart with a legend",
+    "data": [
+      {
+        "date": "2024-07-15",
+        "running": 450,
+        "swimming": 300
+      },
+      {
+        "date": "2024-07-16",
+        "running": 380,
+        "swimming": 420
+      },
+      {
+        "date": "2024-07-17",
+        "running": 520,
+        "swimming": 120
+      },
+      {
+        "date": "2024-07-18",
+        "running": 140,
+        "swimming": 550
+      },
+      {
+        "date": "2024-07-19",
+        "running": 600,
+        "swimming": 350
+      },
+      {
+        "date": "2024-07-20",
+        "running": 480,
+        "swimming": 400
+      }
+    ],
+    "keys": [
+      "running",
+      "swimming"
+    ],
+    "curve": "natural",
+    "colors": {
+      "running": 1,
+      "swimming": 2
+    },
+    "stacked": true,
+    "opacities": {},
+    "subtitle": "Tooltip with icons."
+  },
+  {
+    "name": "chart-tooltip-indicator-line",
+    "title": "Tooltip - Line Indicator",
+    "description": "A stacked bar chart with a legend",
+    "data": [
+      {
+        "date": "2024-07-15",
+        "running": 450,
+        "swimming": 300
+      },
+      {
+        "date": "2024-07-16",
+        "running": 380,
+        "swimming": 420
+      },
+      {
+        "date": "2024-07-17",
+        "running": 520,
+        "swimming": 120
+      },
+      {
+        "date": "2024-07-18",
+        "running": 140,
+        "swimming": 550
+      },
+      {
+        "date": "2024-07-19",
+        "running": 600,
+        "swimming": 350
+      },
+      {
+        "date": "2024-07-20",
+        "running": 480,
+        "swimming": 400
+      }
+    ],
+    "keys": [
+      "running",
+      "swimming"
+    ],
+    "curve": "natural",
+    "colors": {
+      "running": 1,
+      "swimming": 2
+    },
+    "stacked": true,
+    "opacities": {},
+    "subtitle": "Tooltip with line indicator."
+  },
+  {
+    "name": "chart-tooltip-indicator-none",
+    "title": "Tooltip - No Indicator",
+    "description": "A stacked bar chart with a legend",
+    "data": [
+      {
+        "date": "2024-07-15",
+        "running": 450,
+        "swimming": 300
+      },
+      {
+        "date": "2024-07-16",
+        "running": 380,
+        "swimming": 420
+      },
+      {
+        "date": "2024-07-17",
+        "running": 520,
+        "swimming": 120
+      },
+      {
+        "date": "2024-07-18",
+        "running": 140,
+        "swimming": 550
+      },
+      {
+        "date": "2024-07-19",
+        "running": 600,
+        "swimming": 350
+      },
+      {
+        "date": "2024-07-20",
+        "running": 480,
+        "swimming": 400
+      }
+    ],
+    "keys": [
+      "running",
+      "swimming"
+    ],
+    "curve": "natural",
+    "colors": {
+      "running": 1,
+      "swimming": 2
+    },
+    "stacked": true,
+    "opacities": {},
+    "subtitle": "Tooltip with no indicator."
+  },
+  {
+    "name": "chart-tooltip-label-custom",
+    "title": "Tooltip - Custom label",
+    "description": "A stacked bar chart with a legend",
+    "data": [
+      {
+        "date": "2024-07-15",
+        "running": 450,
+        "swimming": 300
+      },
+      {
+        "date": "2024-07-16",
+        "running": 380,
+        "swimming": 420
+      },
+      {
+        "date": "2024-07-17",
+        "running": 520,
+        "swimming": 120
+      },
+      {
+        "date": "2024-07-18",
+        "running": 140,
+        "swimming": 550
+      },
+      {
+        "date": "2024-07-19",
+        "running": 600,
+        "swimming": 350
+      },
+      {
+        "date": "2024-07-20",
+        "running": 480,
+        "swimming": 400
+      }
+    ],
+    "keys": [
+      "running",
+      "swimming"
+    ],
+    "curve": "natural",
+    "colors": {
+      "running": 1,
+      "swimming": 2
+    },
+    "stacked": true,
+    "opacities": {},
+    "subtitle": "Tooltip with custom label from chartConfig."
+  },
+  {
+    "name": "chart-tooltip-label-formatter",
+    "title": "Tooltip - Label Formatter",
+    "description": "A stacked bar chart with a legend",
+    "data": [
+      {
+        "date": "2024-07-15",
+        "running": 450,
+        "swimming": 300
+      },
+      {
+        "date": "2024-07-16",
+        "running": 380,
+        "swimming": 420
+      },
+      {
+        "date": "2024-07-17",
+        "running": 520,
+        "swimming": 120
+      },
+      {
+        "date": "2024-07-18",
+        "running": 140,
+        "swimming": 550
+      },
+      {
+        "date": "2024-07-19",
+        "running": 600,
+        "swimming": 350
+      },
+      {
+        "date": "2024-07-20",
+        "running": 480,
+        "swimming": 400
+      }
+    ],
+    "keys": [
+      "running",
+      "swimming"
+    ],
+    "curve": "natural",
+    "colors": {
+      "running": 1,
+      "swimming": 2
+    },
+    "stacked": true,
+    "opacities": {},
+    "subtitle": "Tooltip with label formatter."
+  },
+  {
+    "name": "chart-tooltip-label-none",
+    "title": "Tooltip - No Label",
+    "description": "A stacked bar chart with a legend",
+    "data": [
+      {
+        "date": "2024-07-15",
+        "running": 450,
+        "swimming": 300
+      },
+      {
+        "date": "2024-07-16",
+        "running": 380,
+        "swimming": 420
+      },
+      {
+        "date": "2024-07-17",
+        "running": 520,
+        "swimming": 120
+      },
+      {
+        "date": "2024-07-18",
+        "running": 140,
+        "swimming": 550
+      },
+      {
+        "date": "2024-07-19",
+        "running": 600,
+        "swimming": 350
+      },
+      {
+        "date": "2024-07-20",
+        "running": 480,
+        "swimming": 400
+      }
+    ],
+    "keys": [
+      "running",
+      "swimming"
+    ],
+    "curve": "natural",
+    "colors": {
+      "running": 1,
+      "swimming": 2
+    },
+    "stacked": true,
+    "opacities": {},
+    "subtitle": "Tooltip with no label."
+  }
+]

@@ -13,6 +13,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/fonts/notoemoji"
+	"github.com/ironpark/ggui/internal/chartdemo"
 	"github.com/ironpark/ggui/ui"
 )
 
@@ -426,6 +427,10 @@ func newGallery() (ggui.Builder, func(), func()) {
 		}
 		entries = append(entries, chatPreviews()...)
 		entries = append(entries, reactivityPreview())
+		entries = append(entries, preview("Charts", ggui.Column(
+			chartdemo.Build(chartdemo.Find("chart-area-gradient")).Legend(true),
+			ggui.Caption("Area, bar, line, pie, radar and radial charts. Run examples/charts for all variants."),
+		).Gap(12)))
 		return galleryPage(dark, search, category, scroll, func() { paletteOpen.Set(true) }, entries)
 
 	}

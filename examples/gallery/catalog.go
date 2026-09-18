@@ -11,6 +11,7 @@ import (
 type previewInfo struct{ category, description string }
 
 var previewDetails = map[string]previewInfo{
+	"Charts":                   {"Data", "Native GPU charts with themed tooltips, legends, curves, stacking and animations."},
 	"Reactive blocks":          {"Data", "Cancellable search, await branches, keyed row identity and component cleanup."},
 	"Theme presets":            {"Layout", "shadcn semantic tokens: seven base palettes, seventeen accents, Nova and Rhea geometry."},
 	"Icons":                    {"Inputs", "Embedded Lucide SVGs, semantic placeholders and scoped icon-set overrides."},
