@@ -11,6 +11,12 @@ import (
 type previewInfo struct{ category, description string }
 
 var previewDetails = map[string]previewInfo{
+	"Attachment":               {"Data", "File and image attachments, upload states, sizes, independent actions and snapping groups."},
+	"Bubble":                   {"Layout", "Seven conversation surfaces, sender alignment, reactions and expandable content."},
+	"Message":                  {"Layout", "Conversation rows with avatars, sender headers, delivery footers and shared files."},
+	"Marker":                   {"Feedback", "Conversation status, system notes, labeled separators and bordered updates."},
+	"Message Scroller":         {"Data", "Anchored turns, streaming replies, reading position preservation and earlier history."},
+	"Questionnaire":            {"Inputs", "Single and multiple answers, freeform input, explicit skips, validation and keyboard shortcuts."},
 	"Buttons":                  {"Inputs", "Primary, secondary and disabled actions, badges and tooltips."},
 	"Text":                     {"Inputs", "Text input, multiline editing and a live typography preview."},
 	"Field":                    {"Inputs", "Labels, helper text and inline validation."},

@@ -111,8 +111,10 @@ func (p *Probe) Frame() Size {
 	}
 	c.Paint(p.root, Rect{Size: p.rootSize})
 	c.paintOverlays()
-	p.publishSemantics(c, p.in.focused)
 	p.in.regions = c.hits
+	p.in.observers = c.inputObservers
+	p.in.applyFocusRequest(c)
+	p.publishSemantics(c, p.in.focused)
 	return p.rootSize
 }
 

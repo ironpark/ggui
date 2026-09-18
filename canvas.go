@@ -18,7 +18,9 @@ import (
 // events to those regions, topmost (last painted) first. A nil Canvas paints
 // nothing and collects nothing, which is what layout tests want.
 type Canvas struct {
-	Image *ebiten.Image
+	Image          *ebiten.Image
+	focusRequest   KeyHandler
+	inputObservers []inputObserver
 
 	scale   float64
 	hits    []hitRegion
@@ -133,6 +135,7 @@ func (c *Canvas) Ease(at Anchor, s Slot[*Motion], target float64, d time.Duratio
 // nextFrame moves this frame's retained values to last frame's place and
 // clears the current slots, ready for a paint.
 func (c *Canvas) nextFrame() {
+	c.inputObservers = c.inputObservers[:0]
 	c.prevKeeps, c.keeps = c.keeps, c.prevKeeps
 	clear(c.keeps)
 	rotateEnvMemo()
@@ -574,4 +577,34 @@ func (c *Canvas) region(r Rect, h any, reg hitRegion) hitRegion {
 // HitCursor asks for the mouse cursor to take shape while it is over r.
 func (c *Canvas) HitCursor(r Rect, shape ebiten.CursorShapeType) {
 	c.add(c.region(r, nil, hitRegion{cursor: shape}))
+}
+
+// RequestFocus asks the frame to focus a painted, enabled key handler. Composite
+// controls use it after navigation or validation. Requests for absent controls
+// are ignored; normal focus trapping still applies.
+func (c *Canvas) RequestFocus(h KeyHandler) {
+	if c != nil && !c.inert {
+		c.root().focusRequest = h
+	}
+}
+
+type inputObserver struct {
+	rect   Rect
+	scope  *focusScope
+	notify func()
+}
+
+// ObserveInput is notified before a pointer press, wheel or keyboard input in
+// r, including input handled by descendants. It does not consume the event.
+// This lets a streaming viewport pause before a reader interacts with content.
+func (c *Canvas) ObserveInput(r Rect, notify func()) {
+	if c == nil || c.inert || notify == nil {
+		return
+	}
+	if c.clipped {
+		r = r.Intersect(c.clip)
+	}
+	if !r.Empty() {
+		c.root().inputObservers = append(c.root().inputObservers, inputObserver{r, c.scope, notify})
+	}
 }

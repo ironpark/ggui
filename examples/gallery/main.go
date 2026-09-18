@@ -27,6 +27,7 @@ type Person struct {
 
 func newGallery() (ggui.Builder, func(), func()) {
 	dark := ggui.State(false)
+	chatPreviews := newChatPreviews()
 	selectedDate := ggui.State(time.Now())
 	calendar := ui.Calendar(selectedDate).WeekStartsOn(time.Monday)
 	datePicker := ui.DatePicker(selectedDate).Named("Appointment date")
@@ -391,6 +392,7 @@ func newGallery() (ggui.Builder, func(), func()) {
 				swatch("Accent", t.Primary), swatch("AccentHover", t.PrimaryHover), swatch("Muted", t.MutedFg), swatch("Fg", t.Fg),
 			).Space(1))),
 		}
+		entries = append(entries, chatPreviews()...)
 		return galleryPage(dark, search, category, scroll, func() { paletteOpen.Set(true) }, entries)
 
 	}

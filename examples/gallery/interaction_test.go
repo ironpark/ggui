@@ -299,3 +299,49 @@ func TestGallerySupplementedComponents(t *testing.T) {
 		t.Fatal("input group preview missing")
 	}
 }
+
+func TestGalleryChatComponentFlows(t *testing.T) {
+	p := galleryProbe(ggui.Sz(1180, 900))
+	defer p.Close()
+	searchGallery(p, "Attachment")
+	p.Tap("Retry upload")
+	if n, ok := p.Semantics().Find(ggui.RoleGroup, "design-system.zip"); !ok || n.Description != "uploading" {
+		t.Fatal("attachment lifecycle is not bound")
+	}
+	p.Tap("Remove brief.pdf")
+	if _, ok := p.Find("Remove brief.pdf"); ok {
+		t.Fatal("attachment removal failed")
+	}
+	p.Tap("Restore attachments")
+	searchGallery(p, "Bubble")
+	revealGallery(p, "Choose suggestion")
+	p.Tap("Choose suggestion")
+	if _, ok := p.Semantics().Find(ggui.RoleText, "Suggestion selected."); !ok {
+		t.Fatal("suggestion action feedback missing")
+	}
+	searchGallery(p, "Message Scroller")
+	p.Tap("Send turn")
+	p.Tap("Stream reply")
+	p.Tap("Load earlier")
+	p.Tap("Save position")
+	p.Tap("Restore position")
+	searchGallery(p, "Questionnaire")
+	revealGallery(p, "Next")
+	p.Tap("Next")
+	if _, ok := p.Semantics().Find(ggui.RoleText, "Choose an answer to continue."); !ok {
+		t.Fatal("questionnaire validation missing")
+	}
+	p.Tap("Activity timeline")
+	p.Type(ggui.Mods{}, ebiten.KeyEnter)
+	p.Tap("Skip")
+	p.Tap("Audience")
+	pasteText(p, "Support team")
+	p.Tap("Save answers")
+	if _, ok := p.Semantics().Find(ggui.RoleText, "Saved 2 answers. Audience: Support team"); !ok {
+		t.Fatal("questionnaire submission failed")
+	}
+	p.Tap("Reset questionnaire")
+	if _, ok := p.Find("Activity timeline"); !ok {
+		t.Fatal("questionnaire reset failed")
+	}
+}

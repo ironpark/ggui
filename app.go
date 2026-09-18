@@ -245,6 +245,9 @@ func (a *App) Draw(screen *ebiten.Image) {
 	}
 	a.canvas.Paint(a.root, Rect{Size: a.rootSize})
 	a.canvas.paintOverlays()
+	a.input.regions = a.canvas.hits
+	a.input.observers = a.canvas.inputObservers
+	a.input.applyFocusRequest(&a.canvas)
 	a.publishSemantics(&a.canvas, a.input.focused)
 	a.a11y.publish(a.semantics(), a.takeAnnouncements())
 	if a.inspect {
@@ -254,6 +257,7 @@ func (a *App) Draw(screen *ebiten.Image) {
 	}
 	a.spare = a.canvas.prev
 	a.input.regions = a.canvas.hits
+	a.input.observers = a.canvas.inputObservers
 }
 
 // LayoutF implements ebiten.LayoutFer: the screen is sized in physical

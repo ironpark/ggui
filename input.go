@@ -133,7 +133,8 @@ type frameInput struct {
 // survived, or by Rect when a rebuild replaced it, so a widget that moves
 // while dragged keeps the drag and a tap completes across a rebuild.
 type inputState struct {
-	regions []hitRegion
+	regions   []hitRegion
+	observers []inputObserver
 
 	// These are copies: regions is rebuilt every frame in a reused buffer,
 	// so a pointer into it would soon describe a different region.
@@ -227,6 +228,16 @@ func (in *inputState) dispatch(f frameInput) {
 		}
 	}()
 	in.updateTrap()
+	for _, observer := range in.observers {
+		if scope := in.activeScope(); scope != nil && observer.scope != scope {
+			continue
+		}
+		pointer := (len(f.down) > 0 || f.wheel != (Point{})) && observer.rect.Contains(f.pos)
+		keyboard := (len(f.keys) > 0 || f.text != "") && in.focused != nil && !observer.rect.Intersect(in.focused.rect).Empty()
+		if pointer || keyboard {
+			observer.notify()
+		}
+	}
 	// Hover: the topmost region that claims PointerMove is the hovered one.
 	move := PointerEvent{Kind: PointerMove, Pos: f.pos}
 	now := in.send(move)
@@ -681,4 +692,22 @@ func (f *FocusWidget) Layout(c Constraints, env Env) Size { return f.child.Layou
 func (f *FocusWidget) Paint(dst *Canvas, r Rect) {
 	dst.HitKey(r, f)
 	dst.Paint(f.child, r)
+}
+
+func (in *inputState) applyFocusRequest(c *Canvas) {
+	h := c.focusRequest
+	c.focusRequest = nil
+	if h == nil {
+		return
+	}
+	for i := range in.regions {
+		r := &in.regions[i]
+		if sameAny(r.key, h) {
+			if scope := in.activeScope(); scope != nil && r.scope != scope {
+				return
+			}
+			in.focus(r, true)
+			return
+		}
+	}
 }
