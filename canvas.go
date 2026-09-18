@@ -369,6 +369,14 @@ func (c *Canvas) visiblePaintBounds(r Rect, extra float64) bool {
 }
 
 // FillRect fills the logical Rect r with col.
+//
+// A rectangle is drawn without anti-aliasing, which its axis-aligned edges
+// have no use for. That matters more than it sounds: ebiten draws an
+// anti-aliased shape by rendering it eight times into an offscreen stencil
+// buffer the size of the shape and compositing the result, which breaks the
+// batch both ways. A plain rectangle is instead one batched image, and most
+// of the large fills in a frame are rectangles: table rows, sidebars, text
+// selection, a modal's scrim.
 func (c *Canvas) FillRect(r Rect, col color.Color) {
 	if c == nil || c.Image == nil || col == nil {
 		return
@@ -376,7 +384,16 @@ func (c *Canvas) FillRect(r Rect, col color.Color) {
 	if !c.visiblePaintBounds(r, 0) {
 		return
 	}
-	vector.FillRect(c.Image, c.Px(r.Origin.X), c.Px(r.Origin.Y), c.Px(r.Size.W), c.Px(r.Size.H), col, true)
+	w, h := c.Px(r.Size.W), c.Px(r.Size.H)
+	// Without anti-aliasing a shape thinner than a pixel covers no pixel
+	// centre and disappears. A hairline divider asked for is drawn.
+	if r.Size.W > 0 {
+		w = max(w, 1)
+	}
+	if r.Size.H > 0 {
+		h = max(h, 1)
+	}
+	vector.FillRect(c.Image, c.Px(r.Origin.X), c.Px(r.Origin.Y), w, h, col, false)
 }
 
 // FillCircle fills a circle of logical radius around center with col.
