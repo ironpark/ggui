@@ -822,6 +822,7 @@ type ScrollWidget struct {
 	horizontal bool
 	speed      float64
 	bar        color.Color
+	barSet     bool
 	bound      Binding[float64]
 	offset     float64
 	id         any
@@ -855,7 +856,7 @@ func (s *ScrollWidget) Adopt(prev any) {
 // is given. The offset lives in the widget and carries across a rebuild;
 // bind it to a Signal with Offset to read or set it.
 func Scroll(child Widget) *ScrollWidget {
-	return &ScrollWidget{child: child, speed: 20, bar: color.RGBA{0x80, 0x80, 0x80, 0x80}, id: autoID()}
+	return &ScrollWidget{child: child, speed: 20, id: autoID()}
 }
 
 // Horizontal scrolls along the x axis instead of the y axis.
@@ -866,8 +867,8 @@ func (s *ScrollWidget) Horizontal() *ScrollWidget { s.horizontal = true; return 
 // 20 CSS pixels, so the default matches the browser's own scrolling.
 func (s *ScrollWidget) Speed(px float64) *ScrollWidget { s.speed = px; return s }
 
-// Bar sets the scrollbar color; nil hides the bar.
-func (s *ScrollWidget) Bar(c color.Color) *ScrollWidget { s.bar = c; return s }
+// Bar overrides the theme scrollbar color; nil hides the bar.
+func (s *ScrollWidget) Bar(c color.Color) *ScrollWidget { s.bar, s.barSet = c, true; return s }
 
 // Offset binds the scroll position to sig: wheel input writes it, and
 // writing it scrolls. Use it to keep the position across rebuilds or to
@@ -902,6 +903,9 @@ func (s *ScrollWidget) scrollTo(v float64) {
 
 // Layout implements Widget.
 func (s *ScrollWidget) Layout(c Constraints, env Env) Size {
+	if !s.barSet {
+		s.bar = env.Theme().MutedFg
+	}
 	inner := c.Max()
 	if s.horizontal {
 		inner.W = Unbounded

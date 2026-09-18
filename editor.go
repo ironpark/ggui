@@ -867,10 +867,12 @@ func (t *TextInputWidget) indexAt(p Point) int {
 	return t.indexInLine(spans[li], x)
 }
 
-// indexInLine returns the offset within sp whose x position is nearest x.
+// indexInLine returns the grapheme boundary within sp nearest x. Measuring
+// partial emoji sequences can give the same width as the whole glyph, so
+// rune boundaries would put the caret inside a joined emoji or modifier.
 func (t *TextInputWidget) indexInLine(sp lineSpan, x float64) int {
 	best, bestDist := sp.start, math.Inf(1)
-	for i := sp.start; ; i = nextRune(t.ed.text, i) {
+	for i := sp.start; ; i = nextGrapheme(t.ed.text, i) {
 		d := math.Abs(t.advance(t.ed.text[sp.start:i]) - x)
 		if d < bestDist {
 			best, bestDist = i, d

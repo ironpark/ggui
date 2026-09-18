@@ -142,3 +142,29 @@ func TestFillingWidgetsFallBackToContentWhenUnbounded(t *testing.T) {
 		}
 	}
 }
+
+func TestScrollBarFollowsThemeAndPreservesOverrides(t *testing.T) {
+	s := Scroll(Box().Size(100, 300))
+	for _, theme := range []Theme{DefaultTheme(), DarkTheme()} {
+		s.Layout(Tight(Sz(100, 100)), Env{}.WithTheme(theme))
+		if s.bar != theme.MutedFg {
+			t.Fatal("default scrollbar did not follow theme")
+		}
+	}
+	s.Layout(Tight(Sz(100, 100)), Env{}.WithTheme(DefaultTheme()))
+	r, g, b, a := s.bar.RGBA()
+	// Premultiplied channels plus white behind alpha must not become white.
+	if r+65535-a == 65535 && g+65535-a == 65535 && b+65535-a == 65535 {
+		t.Fatal("scrollbar disappears on white")
+	}
+	s.Bar(red)
+	s.Layout(Tight(Sz(100, 100)), Env{}.WithTheme(DarkTheme()))
+	if s.bar != red {
+		t.Fatal("theme replaced explicit scrollbar color")
+	}
+	s.Bar(nil)
+	s.Layout(Tight(Sz(100, 100)), Env{}.WithTheme(DefaultTheme()))
+	if s.bar != nil {
+		t.Fatal("theme made a hidden scrollbar visible")
+	}
+}
