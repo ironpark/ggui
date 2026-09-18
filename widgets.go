@@ -243,6 +243,16 @@ func (t *TextWidget) Paint(dst *Canvas, r Rect) {
 	// which input scans backwards on every pointer event. Text a control
 	// already painted as its own label is that control's name, not an
 	// element of its own, so it stays quiet there.
+	t.paintLines(dst, r, func(op *text.DrawOptions, x, y float64) {
+		op.GeoM.Translate(dst.px(x), dst.px(y))
+	})
+}
+
+// paintLines emits the semantics leaf, then draws every laid-out line with the
+// shared style and line-advance math. place positions one line: it receives the
+// freshly reset GeoM and the line's logical origin, so Paint translates and
+// PaintRotated translates, rotates and translates back.
+func (t *TextWidget) paintLines(dst *Canvas, r Rect, place func(op *text.DrawOptions, x, y float64)) {
 	if t.value != "" && !dst.named(r) {
 		dst.Leaf(r, Node{Role: pick(t.role == roleTitle, RoleHeading, RoleText), Name: t.value})
 	}
@@ -256,7 +266,7 @@ func (t *TextWidget) Paint(dst *Canvas, r Rect) {
 		x := r.Origin.X + (r.Size.W-t.widths[i])*t.align
 		y := r.Origin.Y + float64(i)*t.spacing()
 		op.GeoM.Reset()
-		op.GeoM.Translate(dst.px(x), dst.px(y))
+		place(op, x, y)
 		drawText(dst.Image, line, face, op)
 	}
 }

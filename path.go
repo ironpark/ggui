@@ -12,52 +12,57 @@ import (
 // Path is a reusable vector outline in logical pixels. Mutating a path invalidates
 // its device-scale cache. Like widgets, paths belong to the UI thread.
 type Path struct {
-	gradientMask   *ebiten.Image
-	gradientBounds Rect
-	gradientRect   image.Rectangle
-	gradientScale  float64
-	gradientDirty  bool
-	path           vector.Path
-	scaled         vector.Path
-	scale          float64
-	dirty          bool
+	gradientMask *ebiten.Image
+	gradientKey  gradientKey
+	gradientRev  uint64
+	path         vector.Path
+	scaled       vector.Path
+	scale        float64
+	scaledRev    uint64
+	// revision counts mutations. Each cache records the revision it was built
+	// from, so a new mutator only has to bump this one field to invalidate them
+	// all rather than remember a flag per cache.
+	revision uint64
+}
+
+// gradientKey is everything besides path geometry that the coverage mask depends on.
+type gradientKey struct {
+	bounds   Rect
+	coverage image.Rectangle
+	scale    float64
 }
 
 func (p *Path) MoveTo(x, y float64) {
 	p.path.MoveTo(float32(x), float32(y))
-	p.dirty = true
-	p.gradientDirty = true
+	p.revision++
 }
 func (p *Path) LineTo(x, y float64) {
 	p.path.LineTo(float32(x), float32(y))
-	p.dirty = true
-	p.gradientDirty = true
+	p.revision++
 }
 
 // QuadTo appends a quadratic Bezier segment.
 func (p *Path) QuadTo(x1, y1, x2, y2 float64) {
 	p.path.QuadTo(float32(x1), float32(y1), float32(x2), float32(y2))
-	p.dirty = true
-	p.gradientDirty = true
+	p.revision++
 }
 func (p *Path) CubicTo(x1, y1, x2, y2, x3, y3 float64) {
 	p.path.CubicTo(float32(x1), float32(y1), float32(x2), float32(y2), float32(x3), float32(y3))
-	p.dirty = true
-	p.gradientDirty = true
+	p.revision++
 }
-func (p *Path) Close() { p.path.Close(); p.dirty = true; p.gradientDirty = true }
-func (p *Path) Reset() { p.path.Reset(); p.dirty = true; p.gradientDirty = true }
+func (p *Path) Close() { p.path.Close(); p.revision++ }
+func (p *Path) Reset() { p.path.Reset(); p.revision++ }
 func (p *Path) device(scale float64) *vector.Path {
 	if scale == 1 {
 		return &p.path
 	}
-	if p.dirty || p.scale != scale {
+	if p.scaledRev != p.revision || p.scale != scale {
 		p.scaled.Reset()
 		op := &vector.AddPathOptions{}
 		op.GeoM.Scale(scale, scale)
 		p.scaled.AddPath(&p.path, op)
 		p.scale = scale
-		p.dirty = false
+		p.scaledRev = p.revision
 	}
 	return &p.scaled
 }
@@ -92,7 +97,8 @@ func (c *Canvas) FillPathGradient(path *Path, bounds Rect, top, bottom color.Col
 	if w <= 0 || h <= 0 {
 		return
 	}
-	if path.gradientDirty || path.gradientScale != scale || path.gradientBounds != bounds || path.gradientRect != coverage || path.gradientMask == nil {
+	key := gradientKey{bounds: bounds, coverage: coverage, scale: scale}
+	if path.gradientRev != path.revision || path.gradientKey != key || path.gradientMask == nil {
 		if path.gradientMask == nil || path.gradientMask.Bounds().Dx() != w || path.gradientMask.Bounds().Dy() != h {
 			if path.gradientMask != nil {
 				path.gradientMask.Deallocate()
@@ -106,10 +112,8 @@ func (c *Canvas) FillPathGradient(path *Path, bounds Rect, top, bottom color.Col
 		op.GeoM.Translate(-float64(coverage.Min.X), -float64(coverage.Min.Y))
 		local.AddPath(path.device(scale), op)
 		vector.FillPath(path.gradientMask, &local, nil, pathOptions(color.White))
-		path.gradientScale = scale
-		path.gradientBounds = bounds
-		path.gradientRect = coverage
-		path.gradientDirty = false
+		path.gradientKey = key
+		path.gradientRev = path.revision
 	}
 	rgba := func(col color.Color) [4]float32 {
 		r, g, b, a := col.RGBA()

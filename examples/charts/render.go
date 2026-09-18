@@ -70,19 +70,8 @@ func (g *renderGame) Draw(screen *ebiten.Image) {
 			content.Paint(dst, ggui.Rct(ggui.Pt(180., 180.), tipSize))
 		}
 		name := filepath.Join(g.directory, fmt.Sprintf("%s-%s-%04d.png", e.Name, mode, ms))
-		f, err := os.Create(name)
-		if err != nil {
+		if err := savePNG(name, img); err != nil {
 			g.err = err
-			return
-		}
-		err = png.Encode(f, img)
-		closeErr := f.Close()
-		if err != nil {
-			g.err = err
-			return
-		}
-		if closeErr != nil {
-			g.err = closeErr
 			return
 		}
 	}
@@ -93,6 +82,21 @@ func (g *renderGame) Draw(screen *ebiten.Image) {
 		g.done = true
 	}
 }
+
+// savePNG writes img to name, reporting either an encode or a close failure.
+func savePNG(name string, img *ebiten.Image) (err error) {
+	f, err := os.Create(name)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if closeErr := f.Close(); err == nil {
+			err = closeErr
+		}
+	}()
+	return png.Encode(f, img)
+}
+
 func renderCharts(directory string) error {
 	if err := os.MkdirAll(directory, 0755); err != nil {
 		return err

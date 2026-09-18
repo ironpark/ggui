@@ -30,25 +30,45 @@ type chartContent struct {
 	index   int
 	legend  bool
 	context ChartWidget
+	rows    []chartContentRow
 }
 
 func (w *chartContent) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
-	w.context = *w.chart
-	w.context.env = env
-	w.context.theme = env.Theme()
-	w.context.textCache = nil
+	// The legend and tooltip renderers are ChartWidget methods, but they read
+	// only the fields below. Listing them beats copying the whole widget: the
+	// standalone content then shares no interaction, animation or geometry
+	// state with the live chart, and a new ChartWidget field cannot silently
+	// join the copy.
+	c := w.chart
+	w.context = ChartWidget{
+		kind:           c.kind,
+		data:           c.data,
+		config:         c.config,
+		tooltip:        c.tooltip,
+		categoryColors: c.categoryColors,
+		active:         c.active,
+		env:            env,
+		theme:          env.Theme(),
+	}
 	if w.legend {
 		return cs.Constrain(ggui.Sz(bounded(cs.MaxW, 240), w.context.legendHeight(bounded(cs.MaxW, 240))))
 	}
-	_, size := w.context.tooltipRows(w.index)
+	rows, size := w.context.tooltipRows(w.index)
+	w.rows = rows
 	return cs.Constrain(size)
 }
 func (w *chartContent) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if w.legend {
 		w.context.paintLegend(dst, r)
 	} else {
-		w.context.paintTooltipContent(dst, r, w.index)
+		w.context.paintTooltipContent(dst, r, w.index, w.rows)
 	}
+}
+
+// categoryLegend reports whether the legend and tooltip name categories rather
+// than series, which pie and radial charts do when colored per category.
+func (c *ChartWidget) categoryLegend() bool {
+	return c.categoryColors && (c.kind == ChartPie || c.kind == ChartRadial)
 }
 
 type chartContentRow struct {
@@ -59,7 +79,7 @@ type chartContentRow struct {
 
 func (c *ChartWidget) legendRows() []chartContentRow {
 	rows := make([]chartContentRow, 0, len(c.config))
-	if c.categoryColors && (c.kind == ChartPie || c.kind == ChartRadial) {
+	if c.categoryLegend() {
 		for i, d := range c.data {
 			if len(c.config) > 0 {
 				rows = append(rows, chartContentRow{label: d.Label, col: c.pointColor(i, 0), icon: d.Icon})
@@ -126,7 +146,7 @@ func (c *ChartWidget) tooltipRows(index int) ([]chartContentRow, ggui.Size) {
 		}
 		label := seriesLabel(s)
 		icon := s.Icon
-		if c.categoryColors && (c.kind == ChartPie || c.kind == ChartRadial) {
+		if c.categoryLegend() {
 			label = c.data[index].Label
 			icon = c.data[index].Icon
 		}
@@ -143,10 +163,7 @@ func (c *ChartWidget) tooltipRows(index int) ([]chartContentRow, ggui.Size) {
 		height += 30
 	}
 	if !c.tooltip.HideLabel {
-		size := c.measuredText(c.tooltipLabel(index), 12, c.theme.Fg).size
-		width = max(width, size.W+20)
-	}
-	if !c.tooltip.HideLabel {
+		width = max(width, c.measuredText(c.tooltipLabel(index), 12, c.theme.Fg).size.W+20)
 		height += 22
 	}
 	return rows, ggui.Sz(width, height)
@@ -161,8 +178,10 @@ func (c *ChartWidget) tooltipLabel(index int) string {
 	}
 	return label
 }
-func (c *ChartWidget) paintTooltipContent(dst *ggui.Canvas, r ggui.Rect, index int) {
-	rows, _ := c.tooltipRows(index)
+
+// paintTooltipContent draws rows, which the caller sized with tooltipRows.
+// Taking them as a parameter keeps that measuring pass to once per frame.
+func (c *ChartWidget) paintTooltipContent(dst *ggui.Canvas, r ggui.Rect, index int, rows []chartContentRow) {
 	if len(rows) == 0 {
 		return
 	}
@@ -233,10 +252,10 @@ func (c *ChartWidget) paintTooltip(dst *ggui.Canvas, r ggui.Rect) {
 	if len(rows) == 0 {
 		return
 	}
-	p := c.plot.Origin.Add(ggui.Pt(c.plot.Size.W/2, c.plot.Size.H/2))
+	p := c.plot.Center()
 	if point, ok := dst.Pointer(); ok && c.Hovered {
 		p = point
-	} else if c.kind <= ChartLine && len(c.geometry.series) > 0 {
+	} else if !c.kind.polar() && len(c.geometry.series) > 0 {
 		p = chartPosition(c.plot, c.geometry.series[0].top[index])
 	}
 	bounds := dst.Size()
@@ -254,7 +273,7 @@ func (c *ChartWidget) paintTooltip(dst *ggui.Canvas, r ggui.Rect) {
 		if custom != nil {
 			overlay.Paint(custom, box)
 		} else {
-			c.paintTooltipContent(overlay, box, index)
+			c.paintTooltipContent(overlay, box, index, rows)
 		}
 	})
 }

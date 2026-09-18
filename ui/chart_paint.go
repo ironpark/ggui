@@ -43,7 +43,9 @@ func (c *ChartWidget) measuredText(text string, size float64, col color.Color) *
 	}
 	return t
 }
-func chartPath(dst *ggui.Canvas, points []ggui.Point, closed bool, fill, stroke color.Color, width float64) {
+
+// chartPath fills and strokes a closed polyline.
+func chartPath(dst *ggui.Canvas, points []ggui.Point, fill, stroke color.Color, width float64) {
 	if dst == nil || dst.Image == nil || len(points) < 2 {
 		return
 	}
@@ -52,9 +54,7 @@ func chartPath(dst *ggui.Canvas, points []ggui.Point, closed bool, fill, stroke 
 	for _, p := range points[1:] {
 		path.LineTo(p.X, p.Y)
 	}
-	if closed {
-		path.Close()
-	}
+	path.Close()
 	chartDrawPath(dst, &path, fill, stroke, width)
 }
 func chartDrawPath(dst *ggui.Canvas, path *ggui.Path, fill, stroke color.Color, width float64) {
@@ -68,13 +68,17 @@ func (c *ChartWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	c.geometryFor(r.Size)
 	c.plot = ggui.Rct(r.Origin.Add(ggui.Pt(12., 12.)), ggui.Sz(max(0, r.Size.W-24), max(0, r.Size.H-24)))
-	if c.kind > ChartLine {
+	if c.kind.polar() {
 		c.plot = r
 	}
+	// Measuring the legend shapes every label, so do it once and reuse the
+	// height for both the plot inset and the legend rect below.
+	legendH := 0.
 	if c.legend {
-		c.plot.Size.H = max(0, c.plot.Size.H-c.legendHeight(r.Size.W))
+		legendH = c.legendHeight(r.Size.W)
+		c.plot.Size.H = max(0, c.plot.Size.H-legendH)
 	}
-	if c.kind <= ChartLine {
+	if !c.kind.polar() {
 		if c.xAxis {
 			c.plot.Size.H = max(0, c.plot.Size.H-28)
 		}
@@ -88,18 +92,17 @@ func (c *ChartWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	progress := c.progress()
 	if len(c.data) == 0 || len(c.config) == 0 {
-		c.text(dst, "No data", r.Origin.Add(ggui.Pt(r.Size.W/2, r.Size.H/2-7)), 12, c.theme.MutedFg, .5)
+		c.text(dst, "No data", r.Center().Add(ggui.Pt(0., -7.)), 12, c.theme.MutedFg, .5)
 		return
 	}
-	if c.kind <= ChartLine {
+	if c.kind.polar() {
+		c.paintPolar(dst, progress)
+	} else {
 		c.paintAxes(dst)
 		c.paintCartesian(dst, progress)
-	} else {
-		c.paintPolar(dst, progress)
 	}
 	if c.legend {
-		h := c.legendHeight(r.Size.W)
-		c.paintLegend(dst, ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+r.Size.H-h), ggui.Sz(r.Size.W, h)))
+		c.paintLegend(dst, ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+r.Size.H-legendH), ggui.Sz(r.Size.W, legendH)))
 	}
 	if c.Focused && c.FocusVisible {
 		dst.StrokeRoundRect(r, 4, 2, c.theme.Ring)
@@ -108,6 +111,51 @@ func (c *ChartWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		c.paintTooltip(dst, r)
 	}
 }
+
+// paintBars draws one series of bars. Bars and curves are unrelated algorithms,
+// so paintCartesian dispatches here rather than inlining both in one loop.
+func (c *ChartWidget) paintBars(dst, clipped *ggui.Canvas, r ggui.Rect, s chartSeriesGeometry, j, m int, progress float64) {
+	n := len(c.data)
+	band := r.Size.W / float64(n)
+	if c.horizontal {
+		band = r.Size.H / float64(n)
+	}
+	groups := m
+	group := j
+	if c.stack != ChartUnstacked {
+		groups, group = 1, 0
+	}
+	width := max(.75, (band*.8)/float64(groups)-2)
+	offset := -band*.4 + float64(group)*band*.8/float64(groups) + 1
+	zero := -c.geometry.lo / (c.geometry.hi - c.geometry.lo)
+	for _, i := range s.indices {
+		if !s.valid[i] {
+			continue
+		}
+		top, base := s.top[i], s.base[i]
+		top.Y = zero + (top.Y-zero)*progress
+		base.Y = zero + (base.Y-zero)*progress
+		p, q := chartPosition(r, top), chartPosition(r, base)
+		bar := ggui.Rct(ggui.Pt(p.X+offset, min(p.Y, q.Y)), ggui.Sz(width, math.Abs(q.Y-p.Y)))
+		if c.horizontal {
+			x0 := r.Origin.X + base.Y*r.Size.W
+			x1 := r.Origin.X + top.Y*r.Size.W
+			bar = ggui.Rct(ggui.Pt(min(x0, x1), r.Origin.Y+top.X*r.Size.H+offset), ggui.Sz(math.Abs(x1-x0), width))
+			p = ggui.Pt(x1, bar.Origin.Y+width/2)
+		} else {
+			p.X = bar.Origin.X + width/2
+		}
+		col := c.pointColor(i, j)
+		if c.selected >= 0 && c.selected != i {
+			col = fade(col, .45)
+		}
+		c.paintBar(clipped, bar, i, j, col)
+		if c.labels && progress == 1 {
+			c.paintLabel(dst, c.context(i, j, p))
+		}
+	}
+}
+
 func (c *ChartWidget) paintAxes(dst *ggui.Canvas) {
 	r := c.plot
 	g := c.geometry
@@ -148,13 +196,7 @@ func (c *ChartWidget) paintAxes(dst *ggui.Canvas) {
 			i = int(math.Round(float64(tick) * float64(len(c.data)-1) / float64(count-1)))
 		}
 		d := c.data[i]
-		f := .5
-		if len(c.data) > 1 {
-			f = float64(i) / float64(len(c.data)-1)
-		}
-		if c.kind == ChartBar {
-			f = (float64(i) + .5) / float64(len(c.data))
-		}
+		f := c.categoryFraction(i)
 		label := d.Label
 		if c.tickFormat != nil {
 			label = c.tickFormat(label)
@@ -212,47 +254,7 @@ func (c *ChartWidget) paintCartesian(dst *ggui.Canvas, progress float64) {
 	clipped := dst.Clip(r)
 	for j, s := range c.geometry.series {
 		if c.kind == ChartBar {
-			band := r.Size.W / float64(n)
-			if c.horizontal {
-				band = r.Size.H / float64(n)
-			}
-			groups := m
-			if c.stack != ChartUnstacked {
-				groups = 1
-			}
-			width := max(.75, (band*.8)/float64(groups)-2)
-			for _, i := range s.indices {
-				if !s.valid[i] {
-					continue
-				}
-				top, base := s.top[i], s.base[i]
-				zero := -c.geometry.lo / (c.geometry.hi - c.geometry.lo)
-				top.Y = zero + (top.Y-zero)*progress
-				base.Y = zero + (base.Y-zero)*progress
-				group := j
-				if groups == 1 {
-					group = 0
-				}
-				offset := -band*.4 + float64(group)*band*.8/float64(groups) + 1
-				p, q := chartPosition(r, top), chartPosition(r, base)
-				bar := ggui.Rct(ggui.Pt(p.X+offset, min(p.Y, q.Y)), ggui.Sz(width, math.Abs(q.Y-p.Y)))
-				if c.horizontal {
-					x0 := r.Origin.X + base.Y*r.Size.W
-					x1 := r.Origin.X + top.Y*r.Size.W
-					bar = ggui.Rct(ggui.Pt(min(x0, x1), r.Origin.Y+top.X*r.Size.H+offset), ggui.Sz(math.Abs(x1-x0), width))
-					p = ggui.Pt(x1, bar.Origin.Y+width/2)
-				} else {
-					p.X = bar.Origin.X + width/2
-				}
-				col := c.pointColor(i, j)
-				if c.selected >= 0 && c.selected != i {
-					col = fade(col, .45)
-				}
-				c.paintBar(clipped, bar, i, j, col)
-				if c.labels && progress == 1 {
-					c.paintLabel(dst, c.context(i, j, p))
-				}
-			}
+			c.paintBars(dst, clipped, r, s, j, m, progress)
 			continue
 		}
 		reveal := clipped
@@ -267,6 +269,7 @@ func (c *ChartWidget) paintCartesian(dst *ggui.Canvas, progress float64) {
 			}
 		}
 		remaining := totalLength * progress
+		col, opacity := c.seriesColor(j), c.seriesOpacity(j)
 		for k := range c.curves[j] {
 			paths := &c.curves[j][k]
 			if c.kind == ChartLine && progress < 1 {
@@ -274,12 +277,12 @@ func (c *ChartWidget) paintCartesian(dst *ggui.Canvas, progress float64) {
 					break
 				}
 				if remaining < paths.length {
-					paths.strokePrefix(reveal, remaining, c.stroke, c.seriesColor(j))
+					paths.strokePrefix(reveal, remaining, c.stroke, col)
 					break
 				}
 				remaining -= paths.length
 			}
-			c.paintCurvePaths(reveal, paths, c.seriesColor(j), c.seriesOpacity(j))
+			c.paintCurvePaths(reveal, paths, col, opacity)
 		}
 
 		if progress == 1 && (c.dots || c.labels) {

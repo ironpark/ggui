@@ -65,12 +65,7 @@ func (c *ChartWidget) paintPolar(dst *ggui.Canvas, progress float64) {
 func (c *ChartWidget) paintPie(dst *ggui.Canvas, center ggui.Point, radius, progress float64) {
 	rings := len(c.config)
 	for j := range c.config {
-		total := 0.
-		for i := range c.data {
-			if v, ok := c.value(i, j); ok && v > 0 {
-				total += v
-			}
-		}
+		total := c.positiveTotal(j)
 		if total <= 0 {
 			continue
 		}
@@ -125,11 +120,7 @@ func (c *ChartWidget) paintRadial(dst *ggui.Canvas, center ggui.Point, radius, p
 	n := len(c.data)
 	if c.grid {
 		for k := 1; k <= 5; k++ {
-			points := make([]ggui.Point, 97)
-			for j := range points {
-				points[j] = polarPoint(center, radius*float64(k)/5, float64(j)*360/96)
-			}
-			chartPath(dst, points, true, nil, c.theme.Border, 1)
+			chartPath(dst, circlePoints(center, radius*float64(k)/5), nil, c.theme.Border, 1)
 		}
 	}
 
@@ -163,22 +154,22 @@ func (c *ChartWidget) paintRadial(dst *ggui.Canvas, center ggui.Point, radius, p
 		}
 		return
 	}
-	maximum := max(0, c.geometry.hi)
-	if n == 1 {
-		maximum = 0
-		for j := range c.config {
-			if v, ok := c.value(0, j); ok {
+	maximum := c.domainMax
+	if !c.domainSet {
+		maximum = max(0, c.geometry.hi)
+		if n == 1 {
+			maximum = 0
+			for j := range c.config {
+				if v, ok := c.value(0, j); ok {
+					maximum = max(maximum, v)
+				}
+			}
+		}
+		for i := range c.data {
+			if v, ok := c.value(i, 0); ok {
 				maximum = max(maximum, v)
 			}
 		}
-	}
-	for i := range c.data {
-		if v, ok := c.value(i, 0); ok {
-			maximum = max(maximum, v)
-		}
-	}
-	if c.domainSet {
-		maximum = c.domainMax
 	}
 	if maximum <= 0 {
 		return
@@ -224,29 +215,24 @@ func (c *ChartWidget) paintRadar(dst *ggui.Canvas, center ggui.Point, radius, pr
 				if grid.Fill && k == rings {
 					fill = fade(c.seriesColor(0), .2)
 				}
-				if grid.Circle {
-					points := make([]ggui.Point, 97)
+				points := circlePoints(center, r)
+				if !grid.Circle {
+					points = make([]ggui.Point, n)
 					for i := range points {
-						points[i] = polarPoint(center, r, float64(i)*360/96)
+						points[i] = polarPoint(center, r, radarAngle(i, n))
 					}
-					chartPath(dst, points, true, fill, c.theme.Border, 1)
-				} else {
-					points := make([]ggui.Point, n)
-					for i := range points {
-						points[i] = polarPoint(center, r, 90-float64(i)*360/float64(n))
-					}
-					chartPath(dst, points, true, fill, c.theme.Border, 1)
 				}
+				chartPath(dst, points, fill, c.theme.Border, 1)
 			}
 		}
 		if !grid.HideSpokes {
 			for i := range c.data {
-				dst.StrokeLine(center, polarPoint(center, radius, 90-float64(i)*360/float64(n)), 1, c.theme.Border)
+				dst.StrokeLine(center, polarPoint(center, radius, radarAngle(i, n)), 1, c.theme.Border)
 			}
 		}
 	}
 	for i, d := range c.data {
-		angle := 90 - float64(i)*360/float64(n)
+		angle := radarAngle(i, n)
 		p := polarPoint(center, radius+16, angle)
 		label := d.Label
 		if c.tickFormat != nil {
@@ -276,10 +262,10 @@ func (c *ChartWidget) paintRadar(dst *ggui.Canvas, center ggui.Point, radius, pr
 				v = 0
 			}
 			f := clamp((v-c.geometry.lo)/(c.geometry.hi-c.geometry.lo), 0, 1)
-			points[i] = polarPoint(center, radius*f*progress, 90-float64(i)*360/float64(n))
+			points[i] = polarPoint(center, radius*f*progress, radarAngle(i, n))
 		}
 		col := c.seriesColor(j)
-		chartPath(dst, points, true, fade(col, c.seriesOpacity(j)), col, c.stroke)
+		chartPath(dst, points, fade(col, c.seriesOpacity(j)), col, c.stroke)
 		if progress == 1 {
 			for i, p := range points {
 				if _, ok := c.value(i, j); !ok {

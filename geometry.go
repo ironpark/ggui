@@ -120,3 +120,6 @@ func clamp[T cmp.Ordered](v, lo, hi T) T {
 	}
 	return v
 }
+
+// Center returns the midpoint of the rectangle.
+func (r Rect) Center() Point { return r.Origin.Add(Pt(r.Size.W/2, r.Size.H/2)) }

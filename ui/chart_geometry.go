@@ -60,13 +60,7 @@ func (c *ChartWidget) geometryFor(size ggui.Size) {
 			}
 			g.lo = min(g.lo, base, base+v)
 			g.hi = max(g.hi, base, base+v)
-			x := .5
-			if n > 1 {
-				x = float64(i) / float64(n-1)
-			}
-			if c.kind == ChartBar {
-				x = (float64(i) + .5) / float64(n)
-			}
+			x := c.categoryFraction(i)
 			s.top[i] = ggui.Pt(x, base+v)
 			s.base[i] = ggui.Pt(x, base)
 		}
@@ -169,15 +163,66 @@ func polarPoint(center ggui.Point, radius, angle float64) ggui.Point {
 	a := angle * math.Pi / 180
 	return center.Add(ggui.Pt(radius*math.Cos(a), -radius*math.Sin(a)))
 }
+
+// circlePoints samples a full circle as a closed polyline. The radial grid and
+// the radar rings share it so both draw at one resolution.
+func circlePoints(center ggui.Point, radius float64) []ggui.Point {
+	const steps = 96
+	points := make([]ggui.Point, steps+1)
+	for i := range points {
+		points[i] = polarPoint(center, radius, float64(i)*360/steps)
+	}
+	return points
+}
+
+// radarAngle is the angle of the i'th of n radar spokes: the first points
+// straight up and the rest run clockwise. hitIndex inverts it.
+func radarAngle(i, n int) float64 { return 90 - float64(i)*360/float64(n) }
+
+// positiveTotal sums the positive values of one series. Pie and radial share it
+// with the hit test, so painting and hovering agree on what counts.
+func (c *ChartWidget) positiveTotal(j int) float64 {
+	total := 0.
+	for i := range c.data {
+		if v, ok := c.value(i, j); ok && v > 0 {
+			total += v
+		}
+	}
+	return total
+}
+
+// categoryFraction maps a category index to its 0..1 position across the plot.
+// Bars sit at the center of their band; every other kind sits on the gridline.
+// categoryIndex inverts it, so geometry, axis ticks and hit-testing cannot drift.
+func (c *ChartWidget) categoryFraction(i int) float64 {
+	n := len(c.data)
+	if c.kind == ChartBar {
+		return (float64(i) + .5) / float64(n)
+	}
+	if n > 1 {
+		return float64(i) / float64(n-1)
+	}
+	return .5
+}
+
+func (c *ChartWidget) categoryIndex(f float64) int {
+	n := len(c.data)
+	i := int(math.Round(f * float64(n-1)))
+	if c.kind == ChartBar {
+		i = int(f * float64(n))
+	}
+	return min(n-1, max(0, i))
+}
+
 func (c *ChartWidget) polarBounds() (ggui.Point, float64) {
-	return c.plot.Origin.Add(ggui.Pt(c.plot.Size.W/2, c.plot.Size.H/2)), max(0, min(c.plot.Size.W, c.plot.Size.H)/2*c.outer)
+	return c.plot.Center(), max(0, min(c.plot.Size.W, c.plot.Size.H)/2*c.outer)
 }
 func (c *ChartWidget) hitIndex(p ggui.Point) int {
 	if !c.plot.Contains(p) || len(c.data) == 0 || len(c.config) == 0 {
 		return -1
 	}
 	n := len(c.data)
-	if c.kind == ChartPie || c.kind == ChartRadial || c.kind == ChartRadar {
+	if c.kind.polar() {
 		center, radius := c.polarBounds()
 		dx, dy := p.X-center.X, center.Y-p.Y
 		distance := math.Hypot(dx, dy)
@@ -202,13 +247,7 @@ func (c *ChartWidget) hitIndex(p ggui.Point) int {
 		if c.kind == ChartRadial && c.stack == ChartUnstacked {
 			return min(n-1, max(0, int((distance-radius*c.inner)/(radius*(1-c.inner))*float64(n))))
 		}
-		total := 0.
-		for i := range c.data {
-			v, ok := c.value(i, 0)
-			if ok && v > 0 {
-				total += v
-			}
-		}
+		total := c.positiveTotal(0)
 		target := offset / math.Abs(sweep) * total
 		sum := 0.
 		for i := range c.data {
@@ -227,11 +266,7 @@ func (c *ChartWidget) hitIndex(p ggui.Point) int {
 	if c.horizontal {
 		f = (p.Y - c.plot.Origin.Y) / c.plot.Size.H
 	}
-	i := int(math.Round(f * float64(n-1)))
-	if c.kind == ChartBar {
-		i = int(f * float64(n))
-	}
-	return min(n-1, max(0, i))
+	return c.categoryIndex(f)
 }
 
 func mergeChartSamples(a, b []int) []int {

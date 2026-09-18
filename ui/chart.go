@@ -24,6 +24,11 @@ const (
 	ChartRadial
 )
 
+// polar reports whether the kind renders around a center rather than on x/y
+// axes. Kinds ask through this rather than comparing against ChartLine, so the
+// iota order of the block above stays an implementation detail.
+func (k ChartKind) polar() bool { return k == ChartPie || k == ChartRadar || k == ChartRadial }
+
 // ChartCurve controls interpolation between observations.
 type ChartCurve uint8
 
@@ -175,16 +180,14 @@ func ChartContainer(kind ChartKind, data []ChartDatum, config ChartConfig) *Char
 	c.Role = ggui.RoleGroup
 	c.Name = "Chart"
 	c.AutoKey()
-	if kind == ChartBar {
+	switch kind {
+	case ChartBar:
 		c.duration = 400 * time.Millisecond
-	}
-	if kind == ChartPie {
+	case ChartPie:
 		c.delay = 400 * time.Millisecond
-	}
-	if kind == ChartArea {
+	case ChartArea:
 		c.stroke = 1
-	}
-	if kind == ChartRadar {
+	case ChartRadar:
 		c.opacity = .6
 	}
 	c.Data(data)
@@ -327,7 +330,13 @@ func (c *ChartWidget) seriesColor(j int) color.Color {
 	if s.ColorIndex > 0 {
 		index = s.ColorIndex - 1
 	}
-	return colorOr(s.Color, colorOr(c.theme.Chart[index%5], c.theme.Primary))
+	return colorOr(s.Color, c.chartToken(index))
+}
+
+// chartToken picks the i'th palette token, wrapping, and falls back to the
+// primary color when the theme leaves the slot unset.
+func (c *ChartWidget) chartToken(i int) color.Color {
+	return colorOr(c.theme.Chart[i%len(c.theme.Chart)], c.theme.Primary)
 }
 func (c *ChartWidget) pointColor(i, j int) color.Color {
 	d := c.data[i]
@@ -335,10 +344,10 @@ func (c *ChartWidget) pointColor(i, j int) color.Color {
 		return d.Color
 	}
 	if d.ColorIndex > 0 {
-		return colorOr(c.theme.Chart[(d.ColorIndex-1)%5], c.theme.Primary)
+		return c.chartToken(d.ColorIndex - 1)
 	}
 	if c.categoryColors {
-		return colorOr(c.theme.Chart[i%5], c.theme.Primary)
+		return c.chartToken(i)
 	}
 	return c.seriesColor(j)
 }
@@ -485,6 +494,9 @@ func (c *ChartWidget) progress() float64 {
 		c.started = now
 	}
 	t := clamp(float64(now.Sub(c.started)-c.delay)/float64(c.duration), 0, 1)
+	if t == 0 || t == 1 {
+		return t
+	}
 	// Recharts' ease timing: cubic-bezier(.25,.1,.25,1).
 	lo, hi := 0., 1.
 	for range 12 {
@@ -497,8 +509,5 @@ func (c *ChartWidget) progress() float64 {
 		}
 	}
 	u := (lo + hi) / 2
-	if t == 0 || t == 1 {
-		return t
-	}
 	return 3*(1-u)*(1-u)*u*.1 + 3*(1-u)*u*u + u*u*u
 }
