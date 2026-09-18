@@ -15,6 +15,9 @@ func clickAt(in *inputState, p Point) {
 // paintFrame lays out and paints w into a fresh region list, the way App
 // does once per frame, and points in at it.
 func paintFrame(in *inputState, w Widget, size Size) {
+	// A frame settles its effects before it lays out, as the runtime's tick
+	// does: a widget that follows a binding has then seen the last write.
+	effects.flush()
 	c := Canvas{prev: in.regions}
 	w.Paint(&c, Rct(Pt(0, 0), w.Layout(Tight(size), Env{})))
 	in.regions = c.hits

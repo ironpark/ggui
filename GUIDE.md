@@ -1098,12 +1098,21 @@ A custom widget that keeps size-affecting state outside signals calls
 
 ### Layout caching
 
-`Cached(child)` narrows the skip to a subtree: it returns its last size
-while the constraints and everything inherited through the `Env` are
-unchanged and nothing inside asked for a layout. `Reactive`, `For`, `Scroll`
-and `TextInput` ask when they change; a custom widget whose size depends on
-state outside a signal calls `Invalidate(env)` with the Env it was laid out
-under. Wrap the panels that do not change together in it.
+A rebuild boundary is a layout boundary. `Component`, `Reactive`, `Keyed`
+and `Mount` each cache their subtree's size: they return it unchanged while
+the constraints and everything inherited through the `Env` are the same as
+last time and nothing inside asked for a layout. A signal write in one panel
+therefore measures that panel, not the whole window, even though the runtime
+lays out from the root whenever anything was written.
+
+`Cached(child)` is the same cache without a rebuild boundary, for a static
+subtree that sits under something that does rebuild.
+
+`For`, `Scroll` and `TextInput` ask for a layout when they change. A custom
+widget whose size depends on state outside a signal **must** call
+`Invalidate(env)` with the Env it was laid out under; without it the widget
+keeps the size it was last measured at, since the cache above it has no
+reason to measure again.
 
 ### Retained paint state
 

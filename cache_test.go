@@ -79,3 +79,44 @@ func TestCachedNestsAndFollowsScrollAndFor(t *testing.T) {
 		}
 	}
 }
+
+// countingLeaf records how often it was measured.
+type countingLeaf struct{ n int }
+
+func (c *countingLeaf) Layout(cs Constraints, env Env) Size {
+	c.n++
+	return cs.Constrain(Sz(10, 10))
+}
+func (c *countingLeaf) Paint(dst *Canvas, r Rect) {}
+
+// A rebuild boundary is a layout boundary: writing a signal one subtree reads
+// must not re-measure its siblings, even though the runtime lays out from the
+// root whenever anything was written.
+func TestRebuildBoundaryConfinesLayout(t *testing.T) {
+	a, b := State(0), State(0)
+	leafA, leafB := &countingLeaf{}, &countingLeaf{}
+	p := ProbeBuilder(func() Widget {
+		return Column(
+			Reactive(func() Widget { a.Get(); return leafA }),
+			Reactive(func() Widget { b.Get(); return leafB }),
+		)
+	}, Sz(200, 200))
+	defer p.Close()
+	p.Frame()
+
+	wasA, wasB := leafA.n, leafB.n
+	a.Set(1)
+	p.Frame()
+	if leafA.n == wasA {
+		t.Fatalf("the subtree that changed was not measured again")
+	}
+	if leafB.n != wasB {
+		t.Fatalf("the untouched subtree was measured %d more times", leafB.n-wasB)
+	}
+
+	wasA, wasB = leafA.n, leafB.n
+	p.Frame()
+	if leafA.n != wasA || leafB.n != wasB {
+		t.Fatalf("a still frame measured again: A+%d B+%d", leafA.n-wasA, leafB.n-wasB)
+	}
+}

@@ -2,8 +2,10 @@ package ggui
 
 // CachedWidget skips laying its subtree out again while nothing in it has
 // changed. Build one with Cached. App already skips the whole layout on a
-// still frame; Cached narrows that to a subtree, so a signal write in one
-// panel does not re-measure every other panel.
+// still frame, and every rebuild boundary -- Component, Reactive, Keyed and
+// Mount -- caches its own subtree, so a signal write in one panel does not
+// re-measure every other panel. Cached is for a static subtree that sits
+// under something which does rebuild.
 //
 // The cache holds while the constraints and everything inherited through
 // the Env (text style, theme, Scroll viewport, Provide values) are the same

@@ -427,13 +427,34 @@ func TextInput(value Binding[string]) *TextInputWidget {
 	t.ime = newIME(t)
 	t.ed.setText(value.Peek())
 	t.ed.moveTo(len(t.ed.text), false)
+	// Follow the binding rather than polling it in Layout: a write from
+	// outside reaches the editor even when the layout above it is cached.
+	// The effect's first run is the value it was just built with, and the
+	// editor's own commit writes what ed already holds, so both are no-ops.
+	Effect(func() {
+		v := value.Get()
+		if v == t.ed.text {
+			return
+		}
+		t.ed.setText(v)
+		t.cache.invalidate()
+	})
 	return t
 }
 
 // DisabledWhen follows r for Disabled without a rebuild.
 func (t *TextInputWidget) DisabledWhen(r Reader[bool]) *TextInputWidget {
 	t.disabledWhen = r
-	requestLayout()
+	// Reading r here rather than in Layout keeps the editor correct under a
+	// layout cache. Disabled changes colour and whether input is accepted,
+	// both settled in Paint, so nothing has to be measured again. A later
+	// Disabled call drops r, and this effect stops writing.
+	Effect(func() {
+		v := r.Get()
+		if t.disabledWhen == r {
+			t.disabled = v
+		}
+	})
 	return t
 }
 
@@ -677,9 +698,6 @@ func (t *TextInputWidget) linesHeight(n int) float64 {
 // Layout implements Widget.
 func (t *TextInputWidget) Layout(c Constraints, env Env) Size {
 	t.inheritedDisabled, _ = env.Get(InputDisabled)
-	if t.disabledWhen != nil {
-		t.disabled = t.disabledWhen.Get()
-	}
 	t.resolved = env.Text().Merge(t.style).resolved()
 	t.resolved.Size *= env.TextScale()
 	t.cache, _ = env.Get(cacheOwner)
@@ -688,9 +706,6 @@ func (t *TextInputWidget) Layout(c Constraints, env Env) Size {
 		t.resolved.Color = th.MutedFg
 	}
 	t.muted, t.selection = th.MutedFg, th.Selection
-	if v := t.value.Peek(); v != t.ed.text {
-		t.ed.setText(v)
-	}
 	w := bounded(c.MaxW, t.minWidth)
 	if !t.multiline {
 		return c.Constrain(Sz(w, t.height()))
@@ -711,11 +726,6 @@ func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
 		dst.HitPointer(r, t)
 		dst.HitKey(r, t)
 		dst.HitCursor(r, CursorShapeText)
-	}
-	if t.value.Peek() != t.ed.text {
-		// Written through the signal since the layout: the enclosing
-		// Cached must measure again.
-		t.cache.invalidate()
 	}
 	if t.multiline {
 		t.paintLines(dst, r)

@@ -20,8 +20,13 @@ type Builder func() Widget
 // Component, Keyed, Mount or Reactive.
 type ComponentWidget struct {
 	child Widget
-	cache *CachedWidget // the nearest Cached above, told on every rebuild
-	mount func()        // runs setup at the first Layout; nil once mounted
+	// A rebuild boundary is a layout boundary too: the subtree is measured
+	// again when this component rebuilds, when the constraints or the
+	// inherited Env change, or when something inside calls Invalidate.
+	// Without it every Signal write re-measured the whole tree, since the
+	// runtime lays out from the root whenever anything was written.
+	cw    CachedWidget
+	mount func() // runs setup at the first Layout; nil once mounted
 }
 
 // mounted is a keyed component's instance, kept by the owner effect across
@@ -66,7 +71,9 @@ func Component(setup func() Builder) *ComponentWidget {
 func (c *ComponentWidget) run(build Builder) {
 	Effect(func() {
 		c.child = build()
-		c.cache.invalidate()
+		c.cw.child = c.child
+		// Invalidate this component's cache and every one above it.
+		c.cw.invalidate()
 	})
 }
 
@@ -124,7 +131,8 @@ func Reactive[W Widget](build func() W) *ComponentWidget {
 	c := &ComponentWidget{}
 	Effect(func() {
 		c.child = build()
-		c.cache.invalidate()
+		c.cw.child = c.child
+		c.cw.invalidate()
 	})
 	return c
 }
@@ -236,7 +244,6 @@ func When(cond Reader[bool], then Widget, otherwise ...Widget) Widget {
 
 // Layout implements Widget.
 func (c *ComponentWidget) Layout(cs Constraints, env Env) Size {
-	c.cache, _ = env.Get(cacheOwner)
 	if c.mount != nil {
 		c.mount()
 		c.mount = nil
@@ -244,13 +251,13 @@ func (c *ComponentWidget) Layout(cs Constraints, env Env) Size {
 	if c.child == nil {
 		return cs.Constrain(Size{})
 	}
-	return c.child.Layout(cs, env)
+	return c.cw.Layout(cs, env)
 }
 
 // Paint implements Widget.
 func (c *ComponentWidget) Paint(dst *Canvas, r Rect) {
 	if c.child != nil {
-		dst.Paint(c.child, r)
+		dst.Paint(&c.cw, r)
 	}
 }
 
