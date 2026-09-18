@@ -418,6 +418,7 @@ func (s *Signal[T]) unsubscribe(e *effect) {
 // Set stores v and invalidates every subscriber. A write equal to the current
 // value changes nothing and notifies no one.
 func (s *Signal[T]) Set(v T) {
+	checkUIThread("Signal.Set")
 	s.mu.Lock()
 	if s.eq != nil && s.eq(s.val, v) {
 		s.mu.Unlock()

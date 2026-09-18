@@ -23,6 +23,7 @@ represent application callbacks, data, or colors.
 | Customize appearance and motion | [STYLING.md](STYLING.md) · [Animation](#animation) |
 | Handle keys, pointer input, and focus | [Input](#input) |
 | Support assistive technology | [Accessibility](#accessibility) |
+| Update state from a goroutine | [Threads](#threads) |
 | Verify behavior without a window | [Testing](#testing) |
 | Extend or debug the renderer | [Custom widgets](#custom-widgets) · [HiDPI](#hidpi) · [Frames](#frames) · [Inspector](#inspector) |
 | Navigate the implementation | [Repository layout](#repository-layout) |
@@ -131,6 +132,37 @@ Root callback returns. The todo and gallery examples show this pattern.
 
 Create component-local state and cleanup in component setup; see
 [builders and components](#builders-and-components).
+
+### Threads
+
+Signals, effects, layout, and paint all belong to the UI goroutine: the one
+Ebitengine calls `Update` and `Draw` on. A goroutine does its work off that
+thread and hands the result back with `App.Post`, which runs the function on
+the UI goroutine before the next frame's input:
+
+```go
+go func() {
+	rows, err := fetch()
+	app.Post(func() { result.Set(rows); loading.Set(false) })
+}()
+```
+
+Writing a signal from another goroutine races the frame, whatever the mutex
+inside `Signal` suggests: the dirty marks a write leaves are not guarded, and
+the frame may already have laid out the tree that write should have changed.
+`Peek` is the one read that tolerates a stray goroutine.
+
+Build or test with `-tags ggui_debug` to have a write from the wrong goroutine
+panic where it happens, rather than corrupt a frame somewhere later. The tag
+costs nothing when it is not set, so leave it on in development and off in a
+release build.
+
+```
+go test -tags ggui_debug ./...
+```
+
+`Probe` does not arm the check: a test runs on its own goroutine and there is
+no frame racing it.
 
 ### State as a struct of signals
 

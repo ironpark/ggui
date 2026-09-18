@@ -86,6 +86,7 @@ func (a *App) Post(fn func()) { a.post(fn) }
 func (a *App) Close() {
 	a.insp.cache.release()
 	a.close()
+	unmarkUIThread()
 }
 
 // Run opens the window and blocks until it closes, disposing owned resources
@@ -189,6 +190,11 @@ func (a *App) Update() error {
 	if a.closed {
 		return ebiten.Termination
 	}
+	// Frames run here, whichever goroutine Ebitengine calls this on. A Probe
+	// does not arm the check: it runs on its test's goroutine, and several
+	// live in one process, so there is no single UI goroutine to compare
+	// with and no frame racing the write either.
+	markUIThread()
 	for _, fn := range a.frame {
 		fn()
 	}
