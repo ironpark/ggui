@@ -69,6 +69,10 @@ func (c *CachedWidget) Paint(dst *Canvas, r Rect) { dst.Paint(c.child, r) }
 // Untrack read affects layout, but never subscribes the enclosing computation.
 type layoutSource interface{ layoutVersion() uint64 }
 
+// measuring is the cache the running Layout measures into, so a source read
+// during it is recorded against the right one. Layout is UI-goroutine work,
+// and the value is saved and restored around each nested measurement rather
+// than assigned outright.
 var measuring *CachedWidget
 
 func (c *CachedWidget) record(src layoutSource, version uint64) {

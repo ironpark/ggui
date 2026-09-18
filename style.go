@@ -197,6 +197,9 @@ type derivedKey struct {
 // envMemo remembers the Envs derived this frame and last, so the same
 // derivation yields the same revision frame after frame. Canvas.nextFrame
 // rotates it.
+// envMemo holds the Envs derived this frame and last, so a container that
+// derives the same Env every frame reuses it. Written from derive and
+// rotated once a frame, both during layout on the UI goroutine.
 var envMemo struct {
 	cur, prev map[derivedKey]Env
 }

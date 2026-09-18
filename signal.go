@@ -11,6 +11,13 @@ import (
 // StateValue write and every Invalidate. The runtime lays the tree out again
 // only when it has advanced, or the window changed size, and paints every
 // frame regardless.
+//
+// It is atomic and stateGen is not, which is the difference between the two:
+// requestLayout is reachable from anything that changes a size, and a stray
+// call from another goroutine should cost one extra layout rather than tear
+// the counter. stateGen is written only by store and read only by settle,
+// both on the UI goroutine under checkUIThread, and marks a state write that
+// happened during a layout so settle knows to go round again.
 var layoutGen atomic.Uint64
 var stateGen uint64
 
@@ -40,6 +47,10 @@ type tracker struct {
 	owner    *effect
 }
 
+// deps, effects and derivedDepth are the reactive system's one running
+// state: there is a single UI goroutine, and every entry point that reaches
+// them -- Get, Set, Derived, Effect -- runs under checkUIThread. deps takes
+// a mutex anyway because a read may cross into a Derived's own computation.
 var deps tracker
 
 // source is anything an effect can subscribe to.
@@ -489,6 +500,8 @@ type DerivedValue[T any] struct {
 	dispose func()
 }
 
+// derivedDepth is how deep the running computation is inside Derived, which
+// is what makes a state write in there a panic rather than a silent cycle.
 var derivedDepth int
 
 // Derived creates a lazy, read-only value. fn runs on the first Get and the

@@ -14,6 +14,10 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 )
 
+// The font state below belongs to the UI goroutine: every entry point that
+// writes it runs under checkUIThread, and fontGeneration is read from
+// CachedWidget.Layout to decide whether a measurement still holds. A font
+// loaded on another goroutine is handed over with App.Post.
 var emojiFont *Font
 var emojiFontSet bool
 var fontGeneration uint64
@@ -24,6 +28,7 @@ var fontGeneration uint64
 // emoji substitution; SetEmojiFont(SystemEmojiFont()) restores system rendering.
 // Like SetTheme, call on the UI thread or before creating the app.
 func SetEmojiFont(f *Font) {
+	checkUIThread("SetEmojiFont")
 	emojiFont, emojiFontSet = f, true
 	fontGeneration++
 	requestLayout()

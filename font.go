@@ -71,6 +71,7 @@ func LoadFontFile(path string) (*Font, error) {
 // Fallback appends fonts to draw the glyphs f lacks, in order of
 // preference. A Font with none set falls back to SystemFonts.
 func (f *Font) Fallback(fonts ...*Font) *Font {
+	checkUIThread("Font.Fallback")
 	f.fallbacks = append(f.fallbacks, fonts...)
 	f.faces = nil
 	fontGeneration++
@@ -80,6 +81,7 @@ func (f *Font) Fallback(fonts ...*Font) *Font {
 
 // NoFallback draws only f's own glyphs, with no system fonts behind it.
 func (f *Font) NoFallback() *Font {
+	checkUIThread("Font.NoFallback")
 	f.noFallback, f.faces = true, nil
 	fontGeneration++
 	requestLayout()
@@ -182,6 +184,7 @@ var defaultFont *Font
 // default is Go Regular, which covers Latin, Greek and Cyrillic; load a font
 // with the glyphs you need for anything else.
 func SetDefaultFont(f *Font) {
+	checkUIThread("SetDefaultFont")
 	defaultFont = f
 	fontGeneration++
 	requestLayout()
