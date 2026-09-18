@@ -1089,17 +1089,22 @@ the same from code. It is the quickest way to see why something sits where
 it does.
 
 Every widget painted through `Canvas.Paint` is outlined and colored by
-depth, and the tree of them is listed in a panel with each one's size.
-Moving the pointer selects the innermost widget under it, scrolls the tree
-to that row, and describes it: its type, its size and position, its depth,
-and the accessibility node there with everything it sits inside of.
+depth, and the tree of them is listed in a panel with each one's size, in
+the theme's colors. Moving the pointer picks the innermost widget under it,
+unfolds and scrolls the tree to that row, and describes it in the details
+pane: the Layout tab gives its box and its place in the tree, the Semantics
+tab the accessibility node there with its state and everything it sits
+inside of. A breadcrumb under the tree walks the selection's ancestry; each
+crumb pins that ancestor.
 
 Clicking a row pins the selection, so it survives moving the pointer away —
 the only way to read anything about a widget that exists only while hovered.
-With the pointer over the panel, the arrow keys step the pinned selection
-through the tree, Escape or the "Pinned" chip goes back to following the
-pointer, and the wheel scrolls the tree. The panel takes only the input that
-lands on it, so the app underneath keeps working while the inspector is open.
+Disclosure triangles fold a widget's children. With the pointer over the
+panel, typing filters the tree by widget name (Backspace edits, Escape
+clears), the arrow keys step the pinned selection through the rows shown,
+Escape or the "Pinned" chip goes back to picking with the pointer, and the
+wheel scrolls the tree. The panel takes only the input that lands on it, so
+the app underneath keeps working while the inspector is open.
 
 The toolbar docks the panel to the right (tree above details) or the bottom
 (tree beside details), and turns the outlines off when they get in the way

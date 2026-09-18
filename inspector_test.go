@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -125,9 +126,9 @@ func TestInspectorChipsAndKeys(t *testing.T) {
 // sit side by side; without outlines, the app is left untouched apart from
 // the selection.
 func TestInspectorDocksToTheBottom(t *testing.T) {
-	img := ebiten.NewImage(400, 200)
+	img := ebiten.NewImage(400, 400)
 	defer img.Deallocate()
-	c := &Canvas{Image: img, scale: 1, logical: Sz(400, 200)}
+	c := &Canvas{Image: img, scale: 1, logical: Sz(400, 400)}
 	c.pointer, c.hasPointer = Pt(25, 25), true
 	for i := range 50 {
 		c.trace = append(c.trace, entry("Box", i%6, 0, float64(i), 40, 10))
@@ -135,19 +136,21 @@ func TestInspectorDocksToTheBottom(t *testing.T) {
 	in := &inspector{}
 	in.apply(InspectorOptions{Dock: InspectorBottom, HideOutlines: true})
 	in.paint(c)
-	if in.panel.Origin.X != 0 || in.panel.Size.W != 400 || in.panel.Origin.Y+in.panel.Size.H != 200 {
+	if in.panel.Origin.X != 0 || in.panel.Size.W != 400 || in.panel.Origin.Y+in.panel.Size.H != 400 {
 		t.Fatalf("panel is not docked to the bottom edge: %+v", in.panel)
 	}
 	if len(in.rows) == 0 {
 		t.Fatal("no rows laid out")
 	}
 	for _, r := range in.rows {
-		if r.y+r.h <= in.treeTop || r.y >= 200 {
+		if r.y+r.h <= in.treeTop || r.y >= 400 {
 			t.Fatalf("row at %v is outside the tree area", r.y)
 		}
 	}
-	if len(in.chips) != 3 {
-		t.Fatalf("%d chips, want Right, Bottom and Outlines", len(in.chips))
+	for _, act := range []inspectAction{inspectUnpin, inspectDockRight, inspectDockBottom, inspectToggleOutlines} {
+		if !slices.ContainsFunc(in.chips, func(c inspectChip) bool { return c.act == act }) {
+			t.Fatalf("toolbar is missing chip %d", act)
+		}
 	}
 	// Arrow keys resolve against this frame's trace and pin where they land;
 	// with nothing selected, Down starts from the top.
@@ -156,6 +159,50 @@ func TestInspectorDocksToTheBottom(t *testing.T) {
 	in.paint(c)
 	if !in.pinned || in.sel.rect.Origin.Y != 1 {
 		t.Fatalf("arrow step did not pin the second row: pinned=%v sel=%+v", in.pinned, in.sel)
+	}
+}
+
+// Folding a widget hides what it painted; the filter shows matches with
+// what they sit in, ignoring folds; the pointer's pick unfolds down to it.
+func TestInspectorFoldsAndFilters(t *testing.T) {
+	tr := trace(
+		entry("Column", 0, 0, 0, 100, 60),
+		entry("Card", 1, 0, 0, 100, 20),
+		entry("Text", 2, 0, 0, 100, 10),
+		entry("Button", 1, 0, 20, 100, 20),
+	)
+	in := &inspector{}
+	if got := in.visible(tr); len(got) != 4 {
+		t.Fatalf("visible = %v, want all four", got)
+	}
+	in.act(inspectChip{act: inspectCollapse, key: keyOf(&tr[1])})
+	if got := in.visible(tr); !slices.Equal(got, []int{0, 1, 3}) {
+		t.Fatalf("visible = %v after folding Card, want [0 1 3]", got)
+	}
+	in.filter = "text"
+	if got := in.visible(tr); !slices.Equal(got, []int{0, 1, 2}) {
+		t.Fatalf("visible = %v while filtering, want the match and its ancestors", got)
+	}
+	in.input(frameInput{keys: []ebiten.Key{ebiten.KeyEscape}})
+	in.panel = Rct(Pt(0, 0), Sz(100, 100))
+	in.input(frameInput{pos: Pt(5, 5), keys: []ebiten.Key{ebiten.KeyEscape}})
+	if in.filter != "" {
+		t.Fatal("Escape did not clear the filter")
+	}
+	in.input(frameInput{pos: Pt(5, 5), text: "Bu"})
+	in.input(frameInput{pos: Pt(5, 5), keys: []ebiten.Key{ebiten.KeyBackspace}})
+	if in.filter != "B" {
+		t.Fatalf("filter = %q, want typed text minus one Backspace", in.filter)
+	}
+
+	img := ebiten.NewImage(400, 400)
+	defer img.Deallocate()
+	c := &Canvas{Image: img, scale: 1, logical: Sz(400, 400), trace: tr}
+	c.pointer, c.hasPointer = Pt(5, 5), true
+	in.filter = ""
+	in.paint(c)
+	if in.collapsed[keyOf(&tr[1])] {
+		t.Fatal("picking the Text did not unfold the Card above it")
 	}
 }
 
