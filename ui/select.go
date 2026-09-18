@@ -3,7 +3,6 @@ package ui
 import (
 	"image/color"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/icons"
 )
@@ -107,7 +106,7 @@ func (s *SelectWidget[T]) Named(name string) *SelectWidget[T] { s.Name = name; r
 
 // ConsumesKey implements ggui.KeyConsumer: Up and Down step or move.
 func (s *SelectWidget[T]) ConsumesKey(ev ggui.KeyEvent) bool {
-	return ev.Kind == ggui.KeyPress && (ggui.Activates(ev) || ev.Key == ebiten.KeyArrowUp || ev.Key == ebiten.KeyArrowDown)
+	return ev.Kind == ggui.KeyPress && (ggui.Activates(ev) || ev.Key == ggui.KeyArrowUp || ev.Key == ggui.KeyArrowDown)
 }
 
 // Disabled greys the dropdown out and ignores input while v is true.
@@ -162,7 +161,7 @@ func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 	t := s.theme
 	open := s.popup.IsOpen()
 	s.box.Border(t.BorderWidth, pick(open || s.Focused, t.Ring, colorOr(t.InputBorder, t.Border)))
-	s.Hit(dst, r, s, ebiten.CursorShapePointer)
+	s.Hit(dst, r, s, ggui.CursorShapePointer)
 	dst.Paint(s.box, r)
 	dst.Clip(r).Paint(s.text, ggui.Rct(ggui.Pt(r.Origin.X+s.pad.Left, r.Origin.Y+(r.Size.H-s.textSize.H)/2), s.textSize))
 	// Chevron, pointing down, or up while open.
@@ -225,13 +224,13 @@ func (s *SelectWidget[T]) HandleKey(ev ggui.KeyEvent) {
 		return
 	}
 	switch ev.Key {
-	case ebiten.KeyEscape:
+	case ggui.KeyEscape:
 		s.popup.Hide()
-	case ebiten.KeyArrowUp, ebiten.KeyArrowDown:
+	case ggui.KeyArrowUp, ggui.KeyArrowDown:
 		if len(s.options) == 0 {
 			return
 		}
-		dir := pick(ev.Key == ebiten.KeyArrowUp, -1, 1)
+		dir := pick(ev.Key == ggui.KeyArrowUp, -1, 1)
 		if open {
 			s.highlight = stepIndex(s.highlight, dir, len(s.options), nil)
 		} else {
@@ -301,7 +300,7 @@ func (it *selectItem[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := it.owner.theme
 	dst.Describe(r, it)
 	dst.HitPointer(r, it)
-	dst.HitCursor(r, ebiten.CursorShapePointer)
+	dst.HitCursor(r, ggui.CursorShapePointer)
 	if it.Hovered || it.active {
 		dst.FillRoundRect(r, t.RadiusSm, colorOr(t.Accent, t.Muted))
 	}

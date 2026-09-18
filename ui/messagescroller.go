@@ -5,7 +5,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 )
 
@@ -351,23 +350,23 @@ func (s *MessageScrollerWidget) HandleKey(ev ggui.KeyEvent) {
 	s.Pause()
 	s.anchor = ""
 	switch ev.Key {
-	case ebiten.KeyArrowUp:
+	case ggui.KeyArrowUp:
 		s.jump(s.offset-40, false)
-	case ebiten.KeyArrowDown:
+	case ggui.KeyArrowDown:
 		s.jump(s.offset+40, false)
-	case ebiten.KeyPageUp:
+	case ggui.KeyPageUp:
 		s.jump(s.offset-s.viewport*.9, false)
-	case ebiten.KeyPageDown:
+	case ggui.KeyPageDown:
 		s.jump(s.offset+s.viewport*.9, false)
-	case ebiten.KeyHome:
+	case ggui.KeyHome:
 		s.jump(0, false)
-	case ebiten.KeyEnd:
+	case ggui.KeyEnd:
 		s.ScrollToEnd()
 	}
 }
 func (s *MessageScrollerWidget) ConsumesKey(ev ggui.KeyEvent) bool {
 	switch ev.Key {
-	case ebiten.KeyArrowUp, ebiten.KeyArrowDown, ebiten.KeyPageUp, ebiten.KeyPageDown, ebiten.KeyHome, ebiten.KeyEnd:
+	case ggui.KeyArrowUp, ggui.KeyArrowDown, ggui.KeyPageUp, ggui.KeyPageDown, ggui.KeyHome, ggui.KeyEnd:
 		return ev.Kind == ggui.KeyPress
 	}
 	return false

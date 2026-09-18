@@ -4,7 +4,6 @@ import (
 	"image/color"
 	"time"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 )
 
@@ -43,7 +42,7 @@ func (g *toggle) layout(c ggui.Constraints, env ggui.Env, glyph ggui.Size) ggui.
 // paint registers the region and paints the label, and returns the Rect the
 // glyph should be drawn in.
 func (g *toggle) paint(dst *ggui.Canvas, r ggui.Rect, handler ggui.Control) ggui.Rect {
-	g.Hit(dst, r, handler, ebiten.CursorShapePointer)
+	g.Hit(dst, r, handler, ggui.CursorShapePointer)
 	if g.label != nil {
 		at := ggui.Pt(r.Origin.X+g.glyph.W+g.theme.ControlGap, r.Origin.Y+(r.Size.H-g.labelSize.H)/2)
 		dst.Paint(g.label, ggui.Rct(at, g.labelSize))

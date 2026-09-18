@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 )
 
@@ -195,7 +194,7 @@ func (r *tableRow[T, K]) Paint(dst *ggui.Canvas, rc ggui.Rect) {
 func (r *tableRow[T, K]) paint(dst *ggui.Canvas, rc ggui.Rect) {
 	th := r.theme
 	if r.table.selectable() {
-		r.Hit(dst, rc, r, ebiten.CursorShapePointer)
+		r.Hit(dst, rc, r, ggui.CursorShapePointer)
 		switch {
 		case r.chosen():
 			dst.FillRect(rc, th.Selection)

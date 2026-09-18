@@ -3,7 +3,6 @@ package ui
 import (
 	"image/color"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 )
 
@@ -192,7 +191,7 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if st.elevated && !b.Inert {
 		dst.Shadow(r, t.Radius, t.CardShadow)
 	}
-	b.Hit(dst, r, b, ebiten.CursorShapePointer)
+	b.Hit(dst, r, b, ggui.CursorShapePointer)
 	dst.Paint(b.box, r)
 	b.FocusRing(dst, r, t.Radius, t.Ring)
 }

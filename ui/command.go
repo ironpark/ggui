@@ -3,7 +3,6 @@ package ui
 import (
 	"strings"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/icons"
 )
@@ -150,11 +149,11 @@ func (c *CommandWidget) key(ev ggui.KeyEvent) bool {
 		return false
 	}
 	switch ev.Key {
-	case ebiten.KeyEnter, ebiten.KeyNumpadEnter:
+	case ggui.KeyEnter, ggui.KeyNumpadEnter:
 		c.filter()
 		c.choose(c.highlight)
 		return true
-	case ebiten.KeyArrowDown, ebiten.KeyArrowUp:
+	case ggui.KeyArrowDown, ggui.KeyArrowUp:
 		c.filter()
 		at := -1
 		for j, i := range c.matched {
@@ -163,7 +162,7 @@ func (c *CommandWidget) key(ev ggui.KeyEvent) bool {
 				break
 			}
 		}
-		next := stepIndex(at, pick(ev.Key == ebiten.KeyArrowUp, -1, 1), len(c.matched), func(j int) bool { return !c.entries[c.matched[j]].disabled })
+		next := stepIndex(at, pick(ev.Key == ggui.KeyArrowUp, -1, 1), len(c.matched), func(j int) bool { return !c.entries[c.matched[j]].disabled })
 		if next >= 0 {
 			c.highlight = c.matched[next]
 			c.scroll.Reveal(c.rects[c.highlight])

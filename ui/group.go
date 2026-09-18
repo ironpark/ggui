@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 )
 
@@ -223,7 +222,7 @@ func (g *ToggleGroupWidget[T]) paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.Describe(seg, toggleSegment[T]{g, i})
 		if !g.Inert {
 			dst.HitPointer(seg, toggleSegment[T]{g, i})
-			dst.HitCursor(seg, ebiten.CursorShapePointer)
+			dst.HitCursor(seg, ggui.CursorShapePointer)
 		}
 		switch {
 		case i == cur:
@@ -248,13 +247,13 @@ func (g *ToggleGroupWidget[T]) HandleKey(ev ggui.KeyEvent) {
 		return
 	}
 	switch ev.Key {
-	case ebiten.KeyArrowLeft, ebiten.KeyArrowUp:
+	case ggui.KeyArrowLeft, ggui.KeyArrowUp:
 		g.pick(stepIndex(g.index(), -1, len(g.options), nil))
-	case ebiten.KeyArrowRight, ebiten.KeyArrowDown:
+	case ggui.KeyArrowRight, ggui.KeyArrowDown:
 		g.pick(stepIndex(g.index(), 1, len(g.options), nil))
-	case ebiten.KeyHome:
+	case ggui.KeyHome:
 		g.pick(0)
-	case ebiten.KeyEnd:
+	case ggui.KeyEnd:
 		g.pick(len(g.options) - 1)
 	}
 }
@@ -262,7 +261,7 @@ func (g *ToggleGroupWidget[T]) HandleKey(ev ggui.KeyEvent) {
 // ConsumesKey implements ggui.KeyConsumer: the arrows, Home and End move.
 func (g *ToggleGroupWidget[T]) ConsumesKey(ev ggui.KeyEvent) bool {
 	switch ev.Key {
-	case ebiten.KeyArrowLeft, ebiten.KeyArrowRight, ebiten.KeyArrowUp, ebiten.KeyArrowDown, ebiten.KeyHome, ebiten.KeyEnd:
+	case ggui.KeyArrowLeft, ggui.KeyArrowRight, ggui.KeyArrowUp, ggui.KeyArrowDown, ggui.KeyHome, ggui.KeyEnd:
 		return ev.Kind == ggui.KeyPress
 	}
 	return g.Interactive.ConsumesKey(ev)

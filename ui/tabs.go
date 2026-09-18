@@ -3,7 +3,6 @@ package ui
 import (
 	"time"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 )
 
@@ -144,7 +143,7 @@ func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.Describe(lr, tabLabel{t, i})
 		if !t.Inert {
 			dst.HitPointer(lr, tabLabel{t, i})
-			dst.HitCursor(lr, ebiten.CursorShapePointer)
+			dst.HitCursor(lr, ggui.CursorShapePointer)
 		}
 		if i == hover && i != cur {
 			dst.FillRoundRect(lr, th.Radius, th.Muted)
@@ -175,13 +174,13 @@ func (t *TabsWidget) HandleKey(ev ggui.KeyEvent) {
 		return
 	}
 	switch ev.Key {
-	case ebiten.KeyArrowLeft, ebiten.KeyArrowUp:
+	case ggui.KeyArrowLeft, ggui.KeyArrowUp:
 		t.pick((t.index() + len(t.tabs) - 1) % len(t.tabs))
-	case ebiten.KeyArrowRight, ebiten.KeyArrowDown:
+	case ggui.KeyArrowRight, ggui.KeyArrowDown:
 		t.pick((t.index() + 1) % len(t.tabs))
-	case ebiten.KeyHome:
+	case ggui.KeyHome:
 		t.pick(0)
-	case ebiten.KeyEnd:
+	case ggui.KeyEnd:
 		t.pick(len(t.tabs) - 1)
 	}
 }
@@ -189,7 +188,7 @@ func (t *TabsWidget) HandleKey(ev ggui.KeyEvent) {
 // ConsumesKey implements ggui.KeyConsumer: the arrows, Home and End move.
 func (t *TabsWidget) ConsumesKey(ev ggui.KeyEvent) bool {
 	switch ev.Key {
-	case ebiten.KeyArrowLeft, ebiten.KeyArrowRight, ebiten.KeyArrowUp, ebiten.KeyArrowDown, ebiten.KeyHome, ebiten.KeyEnd:
+	case ggui.KeyArrowLeft, ggui.KeyArrowRight, ggui.KeyArrowUp, ggui.KeyArrowDown, ggui.KeyHome, ggui.KeyEnd:
 		return ev.Kind == ggui.KeyPress
 	}
 	return false

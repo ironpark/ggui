@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 )
 
@@ -106,7 +105,7 @@ func (c *ContextMenuWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 
 // HandlePointer implements ggui.PointerHandler.
 func (c *ContextMenuWidget) HandlePointer(ev ggui.PointerEvent) bool {
-	if c.Inert || ev.Button != ebiten.MouseButtonRight {
+	if c.Inert || ev.Button != ggui.MouseButtonRight {
 		return false
 	}
 	switch ev.Kind {
@@ -124,8 +123,8 @@ func (c *ContextMenuWidget) ConsumesKey(ev ggui.KeyEvent) bool {
 	if c.Inert || ev.Kind != ggui.KeyPress {
 		return false
 	}
-	return ggui.Activates(ev) || (ev.Key == ebiten.KeyF10 && ev.Mods.Shift) ||
-		(c.Popup().IsOpen() && (ev.Key == ebiten.KeyArrowDown || ev.Key == ebiten.KeyArrowUp || ev.Key == ebiten.KeyHome || ev.Key == ebiten.KeyEnd))
+	return ggui.Activates(ev) || (ev.Key == ggui.KeyF10 && ev.Mods.Shift) ||
+		(c.Popup().IsOpen() && (ev.Key == ggui.KeyArrowDown || ev.Key == ggui.KeyArrowUp || ev.Key == ggui.KeyHome || ev.Key == ggui.KeyEnd))
 }
 
 // HandleKey implements ggui.KeyHandler.
@@ -135,21 +134,21 @@ func (c *ContextMenuWidget) HandleKey(ev ggui.KeyEvent) {
 		return
 	}
 	if !c.Popup().IsOpen() {
-		if ggui.Activates(ev) || (ev.Key == ebiten.KeyF10 && ev.Mods.Shift) {
+		if ggui.Activates(ev) || (ev.Key == ggui.KeyF10 && ev.Mods.Shift) {
 			c.open(c.rect.Origin.Add(ggui.Pt(0, c.rect.Size.H)))
 		}
 		return
 	}
 	switch ev.Key {
-	case ebiten.KeyEscape:
+	case ggui.KeyEscape:
 		c.Popup().Hide()
-	case ebiten.KeyArrowDown:
+	case ggui.KeyArrowDown:
 		c.menu.step(1)
-	case ebiten.KeyArrowUp:
+	case ggui.KeyArrowUp:
 		c.menu.step(-1)
-	case ebiten.KeyHome:
+	case ggui.KeyHome:
 		c.menu.jump(1)
-	case ebiten.KeyEnd:
+	case ggui.KeyEnd:
 		c.menu.jump(-1)
 	default:
 		if ggui.Activates(ev) {

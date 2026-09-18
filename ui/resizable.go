@@ -3,7 +3,6 @@ package ui
 import (
 	"math"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/icons"
 )
@@ -134,7 +133,7 @@ func (r *ResizableWidget) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 	}
 	handle := r.handle
 	handle.Origin = handle.Origin.Add(rect.Origin)
-	r.Hit(dst, handle, r, pick(r.vertical, ebiten.CursorShapeNSResize, ebiten.CursorShapeEWResize))
+	r.Hit(dst, handle, r, pick(r.vertical, ggui.CursorShapeNSResize, ggui.CursorShapeEWResize))
 	active := !r.Inert && (r.Hovered || r.Pressed)
 	col := pick(active, r.theme.MutedFg, r.theme.Border)
 	center := ggui.Pt(handle.Origin.X+handle.Size.W/2, handle.Origin.Y+handle.Size.H/2)
@@ -165,13 +164,13 @@ func (r *ResizableWidget) ConsumesKey(ev ggui.KeyEvent) bool {
 	if ev.Kind != ggui.KeyPress {
 		return false
 	}
-	if ev.Key == ebiten.KeyHome || ev.Key == ebiten.KeyEnd {
+	if ev.Key == ggui.KeyHome || ev.Key == ggui.KeyEnd {
 		return true
 	}
 	if r.vertical {
-		return ev.Key == ebiten.KeyArrowUp || ev.Key == ebiten.KeyArrowDown
+		return ev.Key == ggui.KeyArrowUp || ev.Key == ggui.KeyArrowDown
 	}
-	return ev.Key == ebiten.KeyArrowLeft || ev.Key == ebiten.KeyArrowRight
+	return ev.Key == ggui.KeyArrowLeft || ev.Key == ggui.KeyArrowRight
 }
 
 // HandleKey implements ggui.KeyHandler.
@@ -185,11 +184,11 @@ func (r *ResizableWidget) HandleKey(ev ggui.KeyEvent) {
 		step = .1
 	}
 	switch ev.Key {
-	case ebiten.KeyHome:
+	case ggui.KeyHome:
 		r.set(r.lo)
-	case ebiten.KeyEnd:
+	case ggui.KeyEnd:
 		r.set(r.hi)
-	case ebiten.KeyArrowLeft, ebiten.KeyArrowUp:
+	case ggui.KeyArrowLeft, ggui.KeyArrowUp:
 		r.set(r.value() - step)
 	default:
 		r.set(r.value() + step)
@@ -206,7 +205,7 @@ func (r *ResizableWidget) HandlePointer(ev ggui.PointerEvent) bool {
 	}
 	switch ev.Kind {
 	case ggui.PointerDown:
-		if ev.Button != ebiten.MouseButtonLeft {
+		if ev.Button != ggui.MouseButtonLeft {
 			return false
 		}
 		r.dragOffset = r.axis(ev.Pos) - r.axis(r.rect.Origin) - r.available*r.value()

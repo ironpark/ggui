@@ -4,7 +4,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 )
 
@@ -145,17 +144,17 @@ func (g *AttachmentGroupWidget) HandleKey(ev ggui.KeyEvent) {
 		return
 	}
 	switch ev.Key {
-	case ebiten.KeyArrowLeft:
+	case ggui.KeyArrowLeft:
 		g.step(-1)
-	case ebiten.KeyArrowRight:
+	case ggui.KeyArrowRight:
 		g.step(1)
-	case ebiten.KeyHome:
+	case ggui.KeyHome:
 		g.scrollTo(0)
-	case ebiten.KeyEnd:
+	case ggui.KeyEnd:
 		g.scrollTo(g.limit())
-	case ebiten.KeyPageUp:
+	case ggui.KeyPageUp:
 		g.scrollTo(g.nearest(max(0, g.offset-g.viewport)))
-	case ebiten.KeyPageDown:
+	case ggui.KeyPageDown:
 		g.scrollTo(g.nearest(min(g.limit(), g.offset+g.viewport)))
 	}
 	g.settle = time.Time{}
@@ -165,7 +164,7 @@ func (g *AttachmentGroupWidget) ConsumesKey(ev ggui.KeyEvent) bool {
 		return false
 	}
 	switch ev.Key {
-	case ebiten.KeyArrowLeft, ebiten.KeyArrowRight, ebiten.KeyHome, ebiten.KeyEnd, ebiten.KeyPageUp, ebiten.KeyPageDown:
+	case ggui.KeyArrowLeft, ggui.KeyArrowRight, ggui.KeyHome, ggui.KeyEnd, ggui.KeyPageUp, ggui.KeyPageDown:
 		return true
 	}
 	return false

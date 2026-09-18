@@ -3,7 +3,6 @@ package ui
 import (
 	"math"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 )
 
@@ -36,7 +35,7 @@ func (s *SliderWidget) Named(name string) *SliderWidget { s.Name = name; return 
 // ConsumesKey implements ggui.KeyConsumer: the arrow keys move the value.
 func (s *SliderWidget) ConsumesKey(ev ggui.KeyEvent) bool {
 	switch ev.Key {
-	case ebiten.KeyArrowLeft, ebiten.KeyArrowRight, ebiten.KeyArrowUp, ebiten.KeyArrowDown:
+	case ggui.KeyArrowLeft, ggui.KeyArrowRight, ggui.KeyArrowUp, ggui.KeyArrowDown:
 		return ev.Kind == ggui.KeyPress
 	}
 	return false
@@ -141,7 +140,7 @@ func (s *SliderWidget) setFromX(x float64) {
 func (s *SliderWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := s.theme
 	s.rect = r
-	s.Hit(dst, r, s, ebiten.CursorShapePointer)
+	s.Hit(dst, r, s, ggui.CursorShapePointer)
 	cy := r.Origin.Y + r.Size.H/2
 	x0, x1 := r.Origin.X+sliderKnob, r.Origin.X+r.Size.W-sliderKnob
 	kx := x0 + (x1-x0)*s.fraction()
@@ -171,9 +170,9 @@ func (s *SliderWidget) HandleKey(ev ggui.KeyEvent) {
 		step = (s.max - s.min) / 100
 	}
 	switch ev.Key {
-	case ebiten.KeyArrowLeft, ebiten.KeyArrowDown:
+	case ggui.KeyArrowLeft, ggui.KeyArrowDown:
 		step = -step
-	case ebiten.KeyArrowRight, ebiten.KeyArrowUp:
+	case ggui.KeyArrowRight, ggui.KeyArrowUp:
 	default:
 		return
 	}
@@ -186,7 +185,7 @@ func (s *SliderWidget) HandleKey(ev ggui.KeyEvent) {
 func (s *SliderWidget) HandlePointer(ev ggui.PointerEvent) bool {
 	switch ev.Kind {
 	case ggui.PointerDown:
-		if ev.Button != ebiten.MouseButtonLeft {
+		if ev.Button != ggui.MouseButtonLeft {
 			return false
 		}
 		s.setFromX(ev.Pos.X)

@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 )
 
@@ -109,7 +108,7 @@ func (b *MenubarWidget) ConsumesKey(e ggui.KeyEvent) bool {
 		return false
 	}
 	switch e.Key {
-	case ebiten.KeyArrowLeft, ebiten.KeyArrowRight, ebiten.KeyArrowUp, ebiten.KeyArrowDown, ebiten.KeyHome, ebiten.KeyEnd:
+	case ggui.KeyArrowLeft, ggui.KeyArrowRight, ggui.KeyArrowUp, ggui.KeyArrowDown, ggui.KeyHome, ggui.KeyEnd:
 		return true
 	}
 	return ggui.Activates(e)
@@ -122,27 +121,27 @@ func (b *MenubarWidget) HandleKey(e ggui.KeyEvent) {
 		return
 	}
 	switch e.Key {
-	case ebiten.KeyEscape:
+	case ggui.KeyEscape:
 		b.popup.Hide()
-	case ebiten.KeyArrowLeft, ebiten.KeyArrowRight:
-		b.active = stepIndex(b.active, pick(e.Key == ebiten.KeyArrowLeft, -1, 1), len(b.menus), func(i int) bool { return !b.menus[i].button.Inert })
+	case ggui.KeyArrowLeft, ggui.KeyArrowRight:
+		b.active = stepIndex(b.active, pick(e.Key == ggui.KeyArrowLeft, -1, 1), len(b.menus), func(i int) bool { return !b.menus[i].button.Inert })
 		if b.popup.IsOpen() {
 			b.open(b.active)
 		}
-	case ebiten.KeyArrowDown, ebiten.KeyArrowUp:
+	case ggui.KeyArrowDown, ggui.KeyArrowUp:
 		if !b.popup.IsOpen() {
 			b.open(b.active)
-			if e.Key == ebiten.KeyArrowUp {
+			if e.Key == ggui.KeyArrowUp {
 				b.menus[b.active].jump(-1)
 			}
 		} else {
-			b.menus[b.active].step(pick(e.Key == ebiten.KeyArrowUp, -1, 1))
+			b.menus[b.active].step(pick(e.Key == ggui.KeyArrowUp, -1, 1))
 		}
-	case ebiten.KeyHome, ebiten.KeyEnd:
+	case ggui.KeyHome, ggui.KeyEnd:
 		if b.popup.IsOpen() {
-			b.menus[b.active].jump(pick(e.Key == ebiten.KeyHome, 1, -1))
+			b.menus[b.active].jump(pick(e.Key == ggui.KeyHome, 1, -1))
 		} else {
-			dir := pick(e.Key == ebiten.KeyHome, 1, -1)
+			dir := pick(e.Key == ggui.KeyHome, 1, -1)
 			enabled := func(i int) bool { return !b.menus[i].button.Inert }
 			b.active = max(stepIndex(-1, dir, len(b.menus), enabled), 0)
 		}
@@ -200,7 +199,7 @@ func (a menubarAnchor) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.Paint(m.button.box, rr)
 		if !m.button.Inert {
 			dst.HitPointer(rr, menubarTarget{b, i})
-			dst.HitCursor(rr, ebiten.CursorShapePointer)
+			dst.HitCursor(rr, ggui.CursorShapePointer)
 		}
 		if b.Focused && b.FocusVisible && i == b.active {
 			dst.StrokeRoundRect(rr, b.theme.Radius, 2, b.theme.Ring)
@@ -261,7 +260,7 @@ func (t menubarTarget) HandlePointer(e ggui.PointerEvent) bool {
 		}
 		return true
 	case ggui.PointerDown:
-		if e.Button == ebiten.MouseButtonLeft {
+		if e.Button == ggui.MouseButtonLeft {
 			t.b.toggle(t.i)
 		}
 		return true

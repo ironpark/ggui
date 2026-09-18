@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 )
 
@@ -55,7 +54,7 @@ func (m *MenuWidget) Semantics() (ggui.Role, string) { return m.button.Semantics
 
 // ConsumesKey implements ggui.KeyConsumer: Up and Down open and move.
 func (m *MenuWidget) ConsumesKey(ev ggui.KeyEvent) bool {
-	return ev.Kind == ggui.KeyPress && (ggui.Activates(ev) || ev.Key == ebiten.KeyArrowUp || ev.Key == ebiten.KeyArrowDown)
+	return ev.Kind == ggui.KeyPress && (ggui.Activates(ev) || ev.Key == ggui.KeyArrowUp || ev.Key == ggui.KeyArrowDown)
 }
 
 func (m *MenuWidget) init(entries []ggui.Widget) {
@@ -145,14 +144,14 @@ func (m *MenuWidget) HandleKey(ev ggui.KeyEvent) {
 	}
 	open := m.popup.IsOpen()
 	switch ev.Key {
-	case ebiten.KeyEscape:
+	case ggui.KeyEscape:
 		m.popup.Hide()
-	case ebiten.KeyArrowUp, ebiten.KeyArrowDown:
+	case ggui.KeyArrowUp, ggui.KeyArrowDown:
 		if !open {
 			m.toggle()
 		}
-		m.step(pick(ev.Key == ebiten.KeyArrowUp, -1, 1))
-	case ebiten.KeyEnter, ebiten.KeyNumpadEnter, ebiten.KeySpace:
+		m.step(pick(ev.Key == ggui.KeyArrowUp, -1, 1))
+	case ggui.KeyEnter, ggui.KeyNumpadEnter, ggui.KeySpace:
 		if open && m.activate() {
 			return
 		}
@@ -291,7 +290,7 @@ func (it *MenuItemWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Describe(r, it)
 	if !it.Inert {
 		dst.HitPointer(r, it)
-		dst.HitCursor(r, ebiten.CursorShapePointer)
+		dst.HitCursor(r, ggui.CursorShapePointer)
 		if it.active || (it.onHover == nil && it.Hovered) {
 			dst.FillRoundRect(r, t.RadiusSm, colorOr(t.Accent, t.Muted))
 		}

@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 )
 
@@ -225,7 +224,7 @@ func (s *SidebarWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.Describe(row, item)
 		if !s.Inert && !e.disabled {
 			dst.HitPointer(row, item)
-			dst.HitCursor(row, ebiten.CursorShapePointer)
+			dst.HitCursor(row, ggui.CursorShapePointer)
 		}
 		switch {
 		case i == cur:
@@ -253,13 +252,13 @@ func (s *SidebarWidget) HandleKey(ev ggui.KeyEvent) {
 		return
 	}
 	switch ev.Key {
-	case ebiten.KeyArrowDown:
+	case ggui.KeyArrowDown:
 		s.active = stepIndex(s.active, 1, len(s.entries), s.enabled)
-	case ebiten.KeyArrowUp:
+	case ggui.KeyArrowUp:
 		s.active = stepIndex(s.active, -1, len(s.entries), s.enabled)
-	case ebiten.KeyHome:
+	case ggui.KeyHome:
 		s.active = stepIndex(-1, 1, len(s.entries), s.enabled)
-	case ebiten.KeyEnd:
+	case ggui.KeyEnd:
 		s.active = stepIndex(-1, -1, len(s.entries), s.enabled)
 	}
 }
@@ -267,7 +266,7 @@ func (s *SidebarWidget) HandleKey(ev ggui.KeyEvent) {
 // ConsumesKey implements ggui.KeyConsumer.
 func (s *SidebarWidget) ConsumesKey(ev ggui.KeyEvent) bool {
 	switch ev.Key {
-	case ebiten.KeyArrowUp, ebiten.KeyArrowDown, ebiten.KeyHome, ebiten.KeyEnd:
+	case ggui.KeyArrowUp, ggui.KeyArrowDown, ggui.KeyHome, ggui.KeyEnd:
 		return ev.Kind == ggui.KeyPress
 	}
 	return s.Interactive.ConsumesKey(ev)

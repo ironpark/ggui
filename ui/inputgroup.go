@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 )
 
@@ -128,7 +127,7 @@ func (g *InputGroupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		if g.effectiveDisabled {
 			dst.Describe(r, h)
 		} else {
-			g.Hit(dst, r, h, ebiten.CursorShapeText)
+			g.Hit(dst, r, h, ggui.CursorShapeText)
 		}
 	} else {
 		dst.Describe(r, g)

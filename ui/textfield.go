@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 )
 
@@ -107,7 +106,7 @@ func (f *TextFieldWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if f.input.IsDisabled() {
 		dst.Describe(r, f.input)
 	} else {
-		f.Hit(dst, r, f.input, ebiten.CursorShapeText)
+		f.Hit(dst, r, f.input, ggui.CursorShapeText)
 	}
 	if !f.plain && f.input.Focused() && !f.input.IsDisabled() {
 		fieldHalo(dst, r, f.theme.Radius, f.theme)

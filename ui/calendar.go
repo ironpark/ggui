@@ -4,7 +4,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/icons"
 )
@@ -232,7 +231,7 @@ func (c *CalendarWidget) ConsumesKey(e ggui.KeyEvent) bool {
 		return false
 	}
 	switch e.Key {
-	case ebiten.KeyArrowLeft, ebiten.KeyArrowRight, ebiten.KeyArrowUp, ebiten.KeyArrowDown, ebiten.KeyHome, ebiten.KeyEnd, ebiten.KeyPageUp, ebiten.KeyPageDown:
+	case ggui.KeyArrowLeft, ggui.KeyArrowRight, ggui.KeyArrowUp, ggui.KeyArrowDown, ggui.KeyHome, ggui.KeyEnd, ggui.KeyPageUp, ggui.KeyPageDown:
 		return true
 	}
 	return ggui.Activates(e)
@@ -247,22 +246,22 @@ func (c *CalendarWidget) HandleKey(e ggui.KeyEvent) {
 	c.syncDate()
 	delta := 0
 	switch e.Key {
-	case ebiten.KeyArrowLeft:
+	case ggui.KeyArrowLeft:
 		delta = -1
-	case ebiten.KeyArrowRight:
+	case ggui.KeyArrowRight:
 		delta = 1
-	case ebiten.KeyArrowUp:
+	case ggui.KeyArrowUp:
 		delta = -7
-	case ebiten.KeyArrowDown:
+	case ggui.KeyArrowDown:
 		delta = 7
-	case ebiten.KeyHome:
+	case ggui.KeyHome:
 		delta = -(int(c.active.Weekday()) - int(c.weekStart) + 7) % 7
-	case ebiten.KeyEnd:
+	case ggui.KeyEnd:
 		delta = 6 - (int(c.active.Weekday())-int(c.weekStart)+7)%7
-	case ebiten.KeyPageUp:
+	case ggui.KeyPageUp:
 		c.moveMonth(-1)
 		return
-	case ebiten.KeyPageDown:
+	case ggui.KeyPageDown:
 		c.moveMonth(1)
 		return
 	default:
@@ -314,7 +313,7 @@ func (d *calendarDay) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Describe(r, d)
 	if !d.Inert {
 		dst.HitPointer(r, d)
-		dst.HitCursor(r, ebiten.CursorShapePointer)
+		dst.HitCursor(r, ggui.CursorShapePointer)
 	}
 	if c.date(c.value.Peek()).Equal(d.date) {
 		dst.FillRoundRect(r, t.Radius, t.Primary)

@@ -276,7 +276,7 @@ func (a *AttachmentWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Node(r, ggui.Node{Role: ggui.RoleGroup, Name: a.title, Description: string(state)}, func(dst *ggui.Canvas) {
 		// Register the full-card trigger before painting the independent actions.
 		if a.trigger != nil {
-			a.trigger.Hit(dst, r, a.trigger, ebiten.CursorShapePointer)
+			a.trigger.Hit(dst, r, a.trigger, ggui.CursorShapePointer)
 			a.trigger.FocusRing(dst, r, a.radius, t.Ring)
 		}
 		inner := dst.Clip(r)

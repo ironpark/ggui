@@ -5,7 +5,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/icons"
 )
@@ -422,12 +421,12 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 			Item string
 		}{q, item.Name})
 		q.input.OnKey(func(ev ggui.KeyEvent) bool {
-			if ev.Key == ebiten.KeyEnter && (ev.Mods.Ctrl || ev.Mods.Meta || strings.TrimSpace(q.answer(item).Text) != "") {
+			if ev.Key == ggui.KeyEnter && (ev.Mods.Ctrl || ev.Mods.Meta || strings.TrimSpace(q.answer(item).Text) != "") {
 				q.Next()
 				return true
 			}
-			if q.answer(item).Text == "" && (ev.Key == ebiten.KeyArrowUp || ev.Key == ebiten.KeyArrowDown) {
-				q.focusAnswer(pick(ev.Key == ebiten.KeyArrowUp, -1, 1), len(q.choices))
+			if q.answer(item).Text == "" && (ev.Key == ggui.KeyArrowUp || ev.Key == ggui.KeyArrowDown) {
+				q.focusAnswer(pick(ev.Key == ggui.KeyArrowUp, -1, 1), len(q.choices))
 				return true
 			}
 			return false
@@ -479,7 +478,7 @@ func (q *QuestionnaireWidget) shortcut(ev ggui.KeyEvent) bool {
 	if ev.Kind != ggui.KeyPress {
 		return false
 	}
-	if ev.Key == ebiten.KeyEnter && (ev.Mods.Ctrl || ev.Mods.Meta) {
+	if ev.Key == ggui.KeyEnter && (ev.Mods.Ctrl || ev.Mods.Meta) {
 		q.Next()
 		return true
 	}
@@ -559,17 +558,17 @@ type questionButton struct {
 
 func (b *questionButton) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	b.ButtonWidget.Paint(dst.Inert(), r)
-	b.Hit(dst, r, b, ebiten.CursorShapePointer)
+	b.Hit(dst, r, b, ggui.CursorShapePointer)
 }
 func (b *questionButton) HandleKey(ev ggui.KeyEvent) {
 	if b.q.shortcut(ev) {
 		return
 	}
-	if ev.Kind == ggui.KeyPress && ev.Key == ebiten.KeyArrowLeft {
+	if ev.Kind == ggui.KeyPress && ev.Key == ggui.KeyArrowLeft {
 		b.q.Previous()
 		return
 	}
-	if ev.Kind == ggui.KeyPress && ev.Key == ebiten.KeyArrowRight {
+	if ev.Kind == ggui.KeyPress && ev.Key == ggui.KeyArrowRight {
 		b.q.Next()
 		return
 	}
@@ -625,7 +624,7 @@ func (c *questionChoice) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	tokens := t.ChatTokens()
 	dst.FillRoundRect(r, tokens.QuestionRadius, fill)
 	dst.StrokeRoundRect(r, tokens.QuestionRadius, 1, border)
-	c.Hit(dst, r, c, ebiten.CursorShapePointer)
+	c.Hit(dst, r, c, ggui.CursorShapePointer)
 	dst.Paint(c.body, r)
 	glyph := ggui.Rct(r.Origin.Add(ggui.Pt(tokens.QuestionChoicePadding.Left, tokens.QuestionChoicePadding.Top+2)), ggui.Sz(16, 16))
 	radius := pick(c.item.Multiple, 4.0, 8.0)
@@ -653,19 +652,19 @@ func (c *questionChoice) HandleKey(ev ggui.KeyEvent) {
 	}
 	if ev.Kind == ggui.KeyPress {
 		switch ev.Key {
-		case ebiten.KeyArrowUp, ebiten.KeyArrowDown:
-			c.q.focusAnswer(pick(ev.Key == ebiten.KeyArrowUp, -1, 1), c.index)
+		case ggui.KeyArrowUp, ggui.KeyArrowDown:
+			c.q.focusAnswer(pick(ev.Key == ggui.KeyArrowUp, -1, 1), c.index)
 			return
-		case ebiten.KeyArrowLeft, ebiten.KeyArrowRight:
+		case ggui.KeyArrowLeft, ggui.KeyArrowRight:
 			if !c.item.Multiple {
-				c.q.focusAnswer(pick(ev.Key == ebiten.KeyArrowLeft, -1, 1), c.index)
-			} else if ev.Key == ebiten.KeyArrowLeft {
+				c.q.focusAnswer(pick(ev.Key == ggui.KeyArrowLeft, -1, 1), c.index)
+			} else if ev.Key == ggui.KeyArrowLeft {
 				c.q.Previous()
 			} else {
 				c.q.Next()
 			}
 			return
-		case ebiten.KeyEnter:
+		case ggui.KeyEnter:
 			if c.selected() {
 				c.q.Next()
 			} else {
@@ -678,7 +677,7 @@ func (c *questionChoice) HandleKey(ev ggui.KeyEvent) {
 }
 func (c *questionChoice) ConsumesKey(ev ggui.KeyEvent) bool {
 	switch ev.Key {
-	case ebiten.KeyArrowUp, ebiten.KeyArrowDown, ebiten.KeyArrowLeft, ebiten.KeyArrowRight:
+	case ggui.KeyArrowUp, ggui.KeyArrowDown, ggui.KeyArrowLeft, ggui.KeyArrowRight:
 		return ev.Kind == ggui.KeyPress
 	}
 	return c.Interactive.ConsumesKey(ev)

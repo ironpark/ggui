@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 	"image/color"
 )
@@ -133,7 +132,7 @@ func (b *BubbleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	b.content.Color(fg)
 	b.box.Fill(fill).Border(pick(border != nil, 1.0, 0.0), border)
 	if b.action != nil {
-		b.Hit(dst, body, b, ebiten.CursorShapePointer)
+		b.Hit(dst, body, b, ggui.CursorShapePointer)
 	}
 	dst.Paint(b.box, body)
 	if b.action != nil {

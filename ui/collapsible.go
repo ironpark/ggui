@@ -4,7 +4,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/icons"
 )
@@ -102,7 +101,7 @@ func (c *CollapsibleWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := c.theme
 	header := ggui.Rct(r.Origin, ggui.Sz(r.Size.W, c.headerH))
-	c.Hit(dst, header, c, ebiten.CursorShapePointer)
+	c.Hit(dst, header, c, ggui.CursorShapePointer)
 	if c.Hovered && !c.Inert {
 		dst.FillRoundRect(header, t.Radius, t.Muted)
 	}

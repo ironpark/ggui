@@ -3,7 +3,6 @@ package ui
 import (
 	"image/color"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 )
 
@@ -86,7 +85,7 @@ func (m *modal) paint(dst *ggui.Canvas, screen ggui.Size, rect ggui.Rect, scrim 
 type modalScrim struct{ m *modal }
 
 func (s modalScrim) HandlePointer(ev ggui.PointerEvent) bool {
-	if ev.Kind == ggui.PointerDown && ev.Button == ebiten.MouseButtonLeft && s.m.dismissible {
+	if ev.Kind == ggui.PointerDown && ev.Button == ggui.MouseButtonLeft && s.m.dismissible {
 		s.m.Close()
 	}
 	return true

@@ -15,7 +15,6 @@ import (
 	"image/color"
 	"math"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 )
 
@@ -152,7 +151,7 @@ func hoverPick(ev ggui.PointerEvent, i int, hover *int, pick func()) bool {
 			*hover = -1
 		}
 	case ggui.PointerTap:
-		if ev.Button == ebiten.MouseButtonLeft {
+		if ev.Button == ggui.MouseButtonLeft {
 			pick()
 		}
 	case ggui.PointerScroll:

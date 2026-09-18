@@ -3,7 +3,6 @@ package ui
 import (
 	"slices"
 
-	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 )
 
@@ -100,7 +99,7 @@ func (a *AccordionWidget) ConsumesKey(ev ggui.KeyEvent) bool {
 		return false
 	}
 	switch ev.Key {
-	case ebiten.KeyArrowUp, ebiten.KeyArrowDown, ebiten.KeyHome, ebiten.KeyEnd:
+	case ggui.KeyArrowUp, ggui.KeyArrowDown, ggui.KeyHome, ggui.KeyEnd:
 		return true
 	}
 	return ggui.Activates(ev)
@@ -114,13 +113,13 @@ func (a *AccordionWidget) HandleKey(ev ggui.KeyEvent) {
 	}
 	enabled := func(i int) bool { return !a.items[i].disabled }
 	switch ev.Key {
-	case ebiten.KeyArrowDown:
+	case ggui.KeyArrowDown:
 		a.active = stepIndex(a.active, 1, len(a.items), enabled)
-	case ebiten.KeyArrowUp:
+	case ggui.KeyArrowUp:
 		a.active = stepIndex(a.active, -1, len(a.items), enabled)
-	case ebiten.KeyHome:
+	case ggui.KeyHome:
 		a.active = stepIndex(-1, 1, len(a.items), enabled)
-	case ebiten.KeyEnd:
+	case ggui.KeyEnd:
 		a.active = stepIndex(-1, -1, len(a.items), enabled)
 	}
 }
@@ -183,7 +182,7 @@ func (a *AccordionWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.Describe(rect, h)
 		if !item.disabled {
 			dst.HitPointer(rect, h)
-			dst.HitCursor(rect, ebiten.CursorShapePointer)
+			dst.HitCursor(rect, ggui.CursorShapePointer)
 		}
 		if h.Hovered {
 			dst.FillRoundRect(rect, t.Radius, t.Muted)
@@ -244,7 +243,7 @@ func (h *accordionHeader) Act(a ggui.Action) bool {
 }
 
 func (h *accordionHeader) HandlePointer(ev ggui.PointerEvent) bool {
-	if ev.Kind == ggui.PointerDown && ev.Button == ebiten.MouseButtonLeft {
+	if ev.Kind == ggui.PointerDown && ev.Button == ggui.MouseButtonLeft {
 		h.owner.active = h.index
 	}
 	return h.Pointer(ev, func() { h.owner.toggle(h.index) })
