@@ -121,16 +121,16 @@ func (e Env) WithTheme(t Theme) Env {
 // TextScaleKey holds the factor every Text and TextInput multiplies its
 // size by, for a user who asked for larger text: Provide it above the tree
 // or a subtree. Env.TextScale reads it, 1 by default.
-var TextScaleKey = NewKey[float64]("text scale")
+var TextScaleKey = NewEnvKey[float64]("text scale")
 
 // InputDisabled disables TextInput editing in a subtree without replacing the
 // editor's own Disabled or DisabledWhen setting. Containers combine inherited
 // and local values with OR; false must not enable an already-disabled ancestor.
-var InputDisabled = NewKey[bool]("input disabled")
+var InputDisabled = NewEnvKey[bool]("input disabled")
 
 // ReducedMotionKey asks widgets not to animate: transitions land at once,
 // eased motions jump. Provide it above the tree; Env.Motion reads it.
-var ReducedMotionKey = NewKey[bool]("reduced motion")
+var ReducedMotionKey = NewEnvKey[bool]("reduced motion")
 
 // TextScale returns the factor text sizes are multiplied by under e.
 func (e Env) TextScale() float64 {
@@ -155,22 +155,22 @@ func (e Env) Motion(d time.Duration) time.Duration {
 	return d
 }
 
-// Key names a value that can travel down the tree in an Env. Make one per
-// concept with NewKey; the type parameter keeps reads and writes in step.
-type Key[T any] struct {
+// EnvKey names a value that can travel down the tree in an Env. Make one per
+// concept with NewEnvKey; the type parameter keeps reads and writes in step.
+type EnvKey[T any] struct {
 	id   *byte
 	name string
 }
 
-// NewKey creates a distinct Key; name is for messages only.
-func NewKey[T any](name string) Key[T] { return Key[T]{id: new(byte), name: name} }
+// NewEnvKey creates a distinct EnvKey; name is for messages only.
+func NewEnvKey[T any](name string) EnvKey[T] { return EnvKey[T]{id: new(byte), name: name} }
 
 // With returns e with v stored under k for the subtree below. Storing the
 // value already there, by ==, leaves e unchanged, and storing the value
 // stored last frame under the same parent yields the same revision, so
 // caches below a Provide rebuilt every frame hold. InputDisabled is cumulative:
 // once true in an ancestor, a descendant cannot clear it.
-func (e Env) With[T any](k Key[T], v T) Env {
+func (e Env) With[T any](k EnvKey[T], v T) Env {
 	if k.id == InputDisabled.id {
 		if disabled, _ := e.Get(InputDisabled); disabled {
 			return e
@@ -238,7 +238,7 @@ func (e Env) derive(key, val any, fn func() Env) (out Env) {
 }
 
 // Get returns the nearest value stored under k, if any ancestor set one.
-func (e Env) Get[T any](k Key[T]) (T, bool) {
+func (e Env) Get[T any](k EnvKey[T]) (T, bool) {
 	for n := e.vals; n != nil; n = n.next {
 		if n.key == any(k) {
 			return n.val.(T), true
@@ -331,15 +331,15 @@ type tokenNode struct {
 // travels with the theme: a control set's colors, a brand's spacing. t is
 // not changed, so a theme can be derived from another.
 //
-//	var DangerColor = ggui.NewKey[color.Color]("danger")
+//	var DangerColor = ggui.NewEnvKey[color.Color]("danger")
 //	theme = theme.Set(DangerColor, color.RGBA{0xd3, 0x2f, 0x2f, 0xff})
-func (t Theme) Set[T any](k Key[T], v T) Theme {
+func (t Theme) Set[T any](k EnvKey[T], v T) Theme {
 	t.ext = &tokenNode{key: k, val: v, next: t.ext}
 	return t
 }
 
 // Get returns the token stored under k, if Set stored one.
-func (t Theme) Get[T any](k Key[T]) (T, bool) {
+func (t Theme) Get[T any](k EnvKey[T]) (T, bool) {
 	for n := t.ext; n != nil; n = n.next {
 		if n.key == any(k) {
 			return n.val.(T), true

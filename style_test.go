@@ -66,8 +66,8 @@ func TestInheritedSizeChangesLayout(t *testing.T) {
 }
 
 func TestProvideAndGetTravelDownTheTree(t *testing.T) {
-	disabled := NewKey[bool]("disabled")
-	other := NewKey[bool]("other")
+	disabled := NewEnvKey[bool]("disabled")
+	other := NewEnvKey[bool]("other")
 	var seen, seenOther, ok, okOther bool
 	probe := FromFuncs(
 		func(c Constraints, env Env) Size {
@@ -87,7 +87,7 @@ func TestProvideAndGetTravelDownTheTree(t *testing.T) {
 }
 
 func TestEnvIsAValue(t *testing.T) {
-	k := NewKey[int]("n")
+	k := NewEnvKey[int]("n")
 	base := Env{}.With(k, 1)
 	child := base.With(k, 2)
 	if v, _ := base.Get(k); v != 1 {

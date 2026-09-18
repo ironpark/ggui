@@ -29,7 +29,7 @@ type PopupWidget struct {
 	rect        Rect // where the content was last painted
 }
 
-var popupKey = NewKey[*PopupWidget]("popup")
+var popupKey = NewEnvKey[*PopupWidget]("popup")
 
 // Popup creates a closed popup that opens content next to anchor.
 func Popup(anchor, content Widget) *PopupWidget {

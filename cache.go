@@ -23,7 +23,7 @@ type CachedWidget struct {
 	size    Size
 }
 
-var cacheOwner = NewKey[*CachedWidget]("layoutCache")
+var cacheOwner = NewEnvKey[*CachedWidget]("layoutCache")
 
 // Cached wraps child in a layout cache.
 func Cached(child Widget) *CachedWidget { return &CachedWidget{child: child} }

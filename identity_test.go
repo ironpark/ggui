@@ -131,7 +131,7 @@ func TestAdoptionFollowsIDNotRect(t *testing.T) {
 }
 
 func TestCachedSeesProvideChange(t *testing.T) {
-	k := NewKey[float64]("w")
+	k := NewEnvKey[float64]("w")
 	layouts := 0
 	leaf := FromFuncs(func(c Constraints, env Env) Size {
 		layouts++

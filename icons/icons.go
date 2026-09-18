@@ -40,7 +40,7 @@ type Map map[Role]*SVG
 func (m Map) Resolve(r Role) *SVG { return m[r] }
 
 // SetKey selects icons in an Env or Theme. Env overrides Theme per role.
-var SetKey = ggui.NewKey[Set]("icons")
+var SetKey = ggui.NewEnvKey[Set]("icons")
 
 // Resolve looks in the local Env, the theme, and finally fallback.
 func Resolve(env ggui.Env, fallback Set, role Role) *SVG {

@@ -70,7 +70,7 @@ type overlay struct {
 }
 
 // Slot names one value a widget retains on the Canvas between frames,
-// typed like an Env Key. Make one per animated value or timer with
+// typed like an EnvKey. Make one per animated value or timer with
 // NewSlot, as a package variable.
 type Slot[T any] struct {
 	id   *byte

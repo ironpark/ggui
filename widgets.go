@@ -307,7 +307,7 @@ type EnvWidget struct {
 // Provide stores v under k for the subtree below child, where any widget can
 // read it back from its Env with Get. It is how your own inherited values
 // (a form's disabled state, a list's density) travel down the tree.
-func Provide[T any](k Key[T], v T, child Widget) *EnvWidget {
+func Provide[T any](k EnvKey[T], v T, child Widget) *EnvWidget {
 	return &EnvWidget{with: func(e Env) Env { return e.With(k, v) }, child: child}
 }
 
@@ -809,7 +809,7 @@ type Viewport struct {
 	Horizontal     bool
 }
 
-var viewportKey = NewKey[Viewport]("viewport")
+var viewportKey = NewEnvKey[Viewport]("viewport")
 
 // ScrollViewport returns the window of the nearest enclosing Scroll, if any.
 func ScrollViewport(env Env) (Viewport, bool) { return env.Get(viewportKey) }

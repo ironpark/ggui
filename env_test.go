@@ -7,7 +7,7 @@ import (
 )
 
 func TestThemeTokens(t *testing.T) {
-	k := NewKey[color.Color]("danger")
+	k := NewEnvKey[color.Color]("danger")
 	base := DefaultTheme()
 	red := base.Set(k, color.Color(color.RGBA{0xd3, 0x2f, 0x2f, 0xff}))
 	if _, ok := base.Get(k); ok {

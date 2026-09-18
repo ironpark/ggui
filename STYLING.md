@@ -85,12 +85,12 @@ the dark theme inside a light window, say. `.Space(n)` on `Column`, `Row`,
 `Wrap`, `Grid` and `For` is n times the theme's `Space`, resolved at layout,
 so gaps track the theme without a `UseTheme` either.
 
-Your own inherited values travel the same road. `NewKey[T](name)` makes a key,
+Your own inherited values travel the same road. `NewEnvKey[T](name)` makes a key,
 `Provide(key, v, child)` stores a value under it, and a widget reads it back
 with `env.Get(key)` in `Layout`:
 
 ```go
-var Density = ggui.NewKey[float64]("density")
+var Density = ggui.NewEnvKey[float64]("density")
 
 ggui.Provide(Density, 0.75, page)      // above
 d, ok := env.Get(Density)              // inside a widget's Layout
@@ -240,7 +240,7 @@ brand can travel with it rather than beside it. `Set` returns a copy, so a
 theme can be derived from another without disturbing it:
 
 ```go
-var BrandGradient = ggui.NewKey[color.Color]("brand gradient")
+var BrandGradient = ggui.NewEnvKey[color.Color]("brand gradient")
 
 t = t.Set(BrandGradient, gradient)
 if c, ok := t.Get(BrandGradient); ok {

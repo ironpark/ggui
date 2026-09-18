@@ -8,7 +8,7 @@ import (
 
 // BubbleWidget is a chat surface. Message supplies avatar, header and footer;
 // Bubble supplies content, seven surface variants and optional edge reactions.
-var messageEndKey = ggui.NewKey[bool]("message end alignment")
+var messageEndKey = ggui.NewEnvKey[bool]("message end alignment")
 
 type BubbleWidget struct {
 	alignedEnd bool
