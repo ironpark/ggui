@@ -80,7 +80,7 @@ func (p *Probe) Flush() {
 		p.start()
 	}
 	if !effects.flush() {
-		panic(ErrCycle)
+		panic(cycle())
 	}
 }
 
@@ -145,7 +145,7 @@ func (p *Probe) dispatch(f frameInput) {
 	p.Frame()
 	p.in.dispatch(f)
 	if !effects.flush() {
-		panic(ErrCycle)
+		panic(cycle())
 	}
 }
 

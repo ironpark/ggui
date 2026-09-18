@@ -162,7 +162,8 @@ go test -tags ggui_debug ./...
 ```
 
 `Probe` does not arm the check: a test runs on its own goroutine and there is
-no frame racing it.
+no frame racing it. The same tag makes `ErrCycle` name the effects a cycle
+turns; see [frame lifecycle](#frame-lifecycle).
 
 ### State as a struct of signals
 
@@ -1154,6 +1155,23 @@ A custom widget that keeps size-affecting state outside signals calls
 `Invalidate(env)` when that state changes; `Scroll` does for its offset. A
 `Scroll` also tells its subtree the window it shows through the `Env`
 (`ScrollViewport(env)`), which is how `For` virtualizes.
+
+Effects are flushed until they are quiet. An effect that writes a signal it
+reads, directly or through other effects and memos, never is: the frame gives
+up, `App.Run` returns `ErrCycle` and `Probe` panics with it. Match it with
+`errors.Is(err, ggui.ErrCycle)` and print the error for the detail, which says
+how many effects the cycle turns and how many there were in all. Build with
+`-tags ggui_debug` and each is named by the line that created it:
+
+```
+ggui: effects did not settle after 16 passes; an Effect is writing a Signal it reads
+  2 of 15 effects never settled
+    - /src/app/total.go:31 (a derived value)
+    - /src/app/cart.go:64
+```
+
+Break the loop with `Peek` or `Untrack` on the read that should not
+subscribe.
 
 ### Layout caching
 

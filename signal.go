@@ -91,6 +91,10 @@ type effect struct {
 	keyed   map[any]*mounted
 	claimed map[any]bool
 
+	// Where this effect was created, in the ggui_debug build only: what
+	// lets ErrCycle name the effects a cycle is made of. Empty otherwise.
+	origin string
+
 	// Identity for what is constructed under this effect: keyRoot is the
 	// identity of the Keyed or Mount instance this effect is the root of, path
 	// is the effect's place under the nearest such root, by construction
@@ -578,7 +582,7 @@ func Effect(fn func()) (dispose func()) {
 // effectWith is Effect, also handing back the effect itself for the runtime
 // pieces, Memo above all, that must settle it out of the flush's turn.
 func effectWith(fn func()) (*effect, func()) {
-	e := &effect{fn: fn}
+	e := &effect{fn: fn, origin: effectOrigin()}
 	deps.mu.Lock()
 	e.owner = deps.owner
 	deps.mu.Unlock()
@@ -609,7 +613,7 @@ func Root(fn func()) (dispose func()) { return rootWith(nil, "", fn) }
 // (identity) or has a name of its own under its owner (elem), for the
 // identities autoID derives.
 func rootWith(identity any, elem string, fn func()) (dispose func()) {
-	r := &effect{keyRoot: identity}
+	r := &effect{keyRoot: identity, origin: effectOrigin()}
 	deps.mu.Lock()
 	r.owner = deps.owner
 	prevListener, prevOwner := deps.listener, deps.owner
@@ -760,6 +764,10 @@ type effectSet struct {
 	// write advances dirtyGen; only a quiet flush records settledGen.
 	// Effects run immediately when created, so registration needs no bump.
 	dirtyGen, settledGen uint64
+
+	// The effects the last pass ran, kept for ErrCycle. The slice is
+	// reused, so a settled frame allocates nothing for it.
+	lastPass []*effect
 }
 
 var effects effectSet
@@ -797,6 +805,17 @@ func (s *effectSet) remove(e *effect) {
 	s.count--
 }
 
+// unsettled returns the effects the last flush pass ran, which when the
+// passes ran out are the ones the cycle turns, with how many effects there
+// were in all. Reading the states afterwards would miss half of them: an
+// effect in a cycle is clean the moment after it runs and dirty the moment
+// after its partner does.
+func (s *effectSet) unsettled() (stuck []*effect, total int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastPass, s.count
+}
+
 // maxFlushPasses bounds how far a change propagates through derived values in
 // one frame. Chains settle in a pass or two; the cap only stops a cycle.
 const maxFlushPasses = 16
@@ -818,9 +837,11 @@ func (s *effectSet) flush() (settled bool) {
 		s.mu.Unlock()
 
 		ran := false
+		s.lastPass = s.lastPass[:0]
 		for _, e := range list {
 			if refresh(e) {
 				ran = true
+				s.lastPass = append(s.lastPass, e)
 			}
 		}
 		if !ran {

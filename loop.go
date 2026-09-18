@@ -2,6 +2,8 @@ package ggui
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -15,11 +17,48 @@ import (
 // read from another goroutine, not a license to write from one: Set and
 // Update from a goroutine race with the frame, so post them instead.
 
-// ErrCycle is the error App.Run returns, and Probe panics with, when the
-// effects of a frame never settle: an Effect writes a Signal that, through
-// other effects and memos, marks the same Effect dirty again. Break the
-// loop with Untrack or Peek on the read that should not subscribe.
+// ErrCycle is what App.Run returns, and Probe panics with, when the effects
+// of a frame never settle: an Effect writes a Signal that, through other
+// effects and memos, marks the same Effect dirty again. Break the loop with
+// Untrack or Peek on the read that should not subscribe.
+//
+// The value carries which effects the cycle runs through, so match it with
+// errors.Is(err, ggui.ErrCycle) rather than ==, and print the error itself
+// for the detail. Build with -tags ggui_debug and each one is named by the
+// file and line that created it.
 var ErrCycle = errors.New("ggui: effects did not settle after " + itoa(maxFlushPasses) + " passes; an Effect is writing a Signal it reads")
+
+// cycleError is ErrCycle with the effects that would not settle.
+type cycleError struct{ msg string }
+
+func (e *cycleError) Error() string { return e.msg }
+func (e *cycleError) Unwrap() error { return ErrCycle }
+
+// cycle describes the effects a flush just gave up on. It is built only on
+// that path, so a settled frame pays nothing for it.
+func cycle() error {
+	stuck, total := effects.unsettled()
+	var b strings.Builder
+	b.WriteString(ErrCycle.Error())
+	fmt.Fprintf(&b, "\n  %d of %d effects never settled", len(stuck), total)
+	named := 0
+	for _, e := range stuck {
+		where := e.origin
+		if where == "" {
+			continue
+		}
+		named++
+		b.WriteString("\n    - ")
+		b.WriteString(where)
+		if e.cell != nil {
+			b.WriteString(" (a derived value)")
+		}
+	}
+	if named == 0 {
+		b.WriteString("\n  Build with -tags ggui_debug to see where each was created.")
+	}
+	return &cycleError{msg: b.String()}
+}
 
 func itoa(n int) string {
 	if n == 0 {
@@ -158,7 +197,7 @@ func (r *frameLoop) runPosted() {
 func (r *frameLoop) tick(now time.Time) error {
 	anims.step(now)
 	if !effects.flush() {
-		return ErrCycle
+		return cycle()
 	}
 	return nil
 }

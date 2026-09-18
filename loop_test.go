@@ -1,6 +1,8 @@
 package ggui
 
 import (
+	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -64,8 +66,43 @@ func TestCycleIsReported(t *testing.T) {
 	})
 	defer p.Close()
 	defer func() {
-		if r := recover(); r != ErrCycle {
-			t.Fatalf("recovered %v, want ErrCycle", r)
+		r := recover()
+		err, ok := r.(error)
+		if !ok || !errors.Is(err, ErrCycle) {
+			t.Fatalf("recovered %v, want an error matching ErrCycle", r)
+		}
+		// The message says how much of the app is caught in the cycle, so
+		// that one stuck effect among many is not read as all of them.
+		if !strings.Contains(err.Error(), "never settled") {
+			t.Fatalf("the error does not say what did not settle: %v", err)
+		}
+	}()
+	p.Frame()
+	t.Fatal("frame returned")
+}
+
+// Without the debug build there are no creation sites to print, and the
+// error says where to get them.
+func TestCycleSaysHowToNameTheEffects(t *testing.T) {
+	n := State(0)
+	p := ProbeBuilder(func() Widget { return Box() }, Sz(10, 10)).Setup(func() {
+		Effect(func() { n.Set(n.Get() + 1) })
+	})
+	defer p.Close()
+	defer func() {
+		err, _ := recover().(error)
+		if err == nil {
+			t.Fatal("no cycle reported")
+		}
+		msg := err.Error()
+		if effectOrigin() == "" {
+			if !strings.Contains(msg, "ggui_debug") {
+				t.Fatalf("the error does not say how to name the effects: %v", msg)
+			}
+			return
+		}
+		if !strings.Contains(msg, "loop_test.go:") {
+			t.Fatalf("the debug build did not name the effect's creation site: %v", msg)
 		}
 	}()
 	p.Frame()
