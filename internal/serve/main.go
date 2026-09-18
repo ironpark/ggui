@@ -8,9 +8,15 @@
 //
 //	go run ./internal/serve -http :3000 ./examples/gallery
 //
-// Each build is also gzipped once, so a browser on a phone or at the end of
-// a tunnel fetches about half as many bytes; the page is unaware, because
-// the browser decodes Content-Encoding before the wasm is instantiated.
+// Each build is linked without its symbol table and DWARF, and gzipped once,
+// so a browser on a phone or at the end of a tunnel fetches about half as
+// many bytes; the page is unaware, because the browser decodes
+// Content-Encoding before the wasm is instantiated. Passing -wasm-opt runs
+// the binary through binaryen as well, which shrinks what the browser has to
+// compile but, gzip having already found most of the redundancy, saves
+// little over the wire: on a 35 MB binary, -O2 costs about seven seconds and
+// takes 0.4% off the bytes actually sent. It is off by default for that
+// reason.
 //
 // A successful build is kept for the life of the process; fetching /_rebuild
 // drops it so the next request compiles again. A failed build is not cached:
@@ -48,8 +54,10 @@ const mainWasm = "main.wasm"
 var indexHTML string
 
 var (
-	flagHTTP = flag.String("http", ":8080", "HTTP bind address to serve")
-	flagTags = flag.String("tags", "", "build tags, passed to go build")
+	flagHTTP    = flag.String("http", ":8080", "HTTP bind address to serve")
+	flagTags    = flag.String("tags", "", "build tags, passed to go build")
+	flagLDFlags = flag.String("ldflags", "-s -w", "linker flags; the default drops the symbol table and DWARF")
+	flagWasmOpt = flag.String("wasm-opt", "", `binaryen wasm-opt flags to run after building, e.g. "-O2" or "-Oz"; empty to skip`)
 )
 
 // build is one compilation of the target: in flight until done is closed,
@@ -69,7 +77,7 @@ type build struct {
 // failed is not kept, so the next request tries again; a build that
 // succeeded is served until invalidate drops it.
 type builder struct {
-	target, tags, dir string
+	target, tags, ldflags, wasmOpt, dir string
 
 	mu  sync.Mutex
 	cur *build
@@ -110,6 +118,9 @@ func (b *builder) run(bd *build) {
 	if b.tags != "" {
 		args = append(args, "-tags", b.tags)
 	}
+	if b.ldflags != "" {
+		args = append(args, "-ldflags", b.ldflags)
+	}
 	args = append(args, "-o", out, b.target)
 	log.Printf("GOOS=js GOARCH=wasm go %s", strings.Join(args, " "))
 
@@ -129,6 +140,16 @@ func (b *builder) run(bd *build) {
 	}
 	bd.path, bd.size = out, fi.Size()
 
+	// Optimizing is the caller's choice, since it costs seconds and the
+	// binary works either way.
+	if b.wasmOpt != "" {
+		if err := optimize(out, b.wasmOpt); err != nil {
+			log.Printf("wasm-opt: %v (serving the binary as built)", err)
+		} else if fi, err := os.Stat(out); err == nil {
+			bd.size = fi.Size()
+		}
+	}
+
 	// Compressing costs a fraction of what linking did, and every later
 	// request is served from the result.
 	if gz, n, err := compress(out); err != nil {
@@ -138,15 +159,61 @@ func (b *builder) run(bd *build) {
 	}
 
 	bd.elapsed = time.Since(start)
-	log.Printf("built %s in %s (%.1f MB%s)", b.target, bd.elapsed.Round(time.Millisecond),
-		float64(bd.size)/(1<<20), gzNote(bd))
+	log.Printf("built %s in %s (%.1f MB%s)", b.target, bd.elapsed.Round(time.Millisecond), mb(bd.size), gzNote(bd))
 }
+
+func mb(n int64) float64 { return float64(n) / (1 << 20) }
 
 func gzNote(bd *build) string {
 	if bd.gzSize == 0 {
 		return ""
 	}
-	return fmt.Sprintf(", %.1f MB gzipped", float64(bd.gzSize)/(1<<20))
+	return fmt.Sprintf(", %.1f MB gzipped", mb(bd.gzSize))
+}
+
+// wasmFeatures are the WebAssembly extensions the Go toolchain emits, which
+// wasm-opt refuses to read unless they are named. Only these: -all would also
+// let it write proposals no browser ships yet, and the binary then fails to
+// instantiate.
+var wasmFeatures = []string{
+	"--enable-bulk-memory",
+	"--enable-bulk-memory-opt",
+	"--enable-nontrapping-float-to-int",
+	"--enable-sign-ext",
+	"--enable-mutable-globals",
+}
+
+// optimize rewrites the binary in place with binaryen's wasm-opt.
+func optimize(path, flags string) error {
+	bin, err := exec.LookPath("wasm-opt")
+	if err != nil {
+		return errors.New("not on PATH (brew install binaryen)")
+	}
+	before, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	tmp := path + ".opt"
+	args := append(append([]string{}, wasmFeatures...), strings.Fields(flags)...)
+	args = append(args, path, "-o", tmp)
+
+	start := time.Now()
+	if msg, err := exec.Command(bin, args...).CombinedOutput(); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("%s%w", msg, err)
+	}
+	after, err := os.Stat(tmp)
+	if err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	log.Printf("wasm-opt %s: %.1f MB to %.1f MB in %s", flags, mb(before.Size()), mb(after.Size()),
+		time.Since(start).Round(time.Millisecond))
+	return nil
 }
 
 // compress writes a gzip copy beside the binary and returns its path and
@@ -345,7 +412,13 @@ func main() {
 	}
 	defer os.RemoveAll(dir)
 
-	s := &server{b: &builder{target: target, tags: *flagTags, dir: dir}}
+	s := &server{b: &builder{
+		target:  target,
+		tags:    *flagTags,
+		ldflags: *flagLDFlags,
+		wasmOpt: *flagWasmOpt,
+		dir:     dir,
+	}}
 	s.b.get() // compile now, so the first page load usually finds it done
 
 	srv := &http.Server{Addr: *flagHTTP, Handler: s}
