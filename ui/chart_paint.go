@@ -349,29 +349,7 @@ func curvePath(path *ggui.Path, points []ggui.Point, curve ChartCurve, move bool
 		return
 	}
 	if curve == ChartNatural && n > 2 {
-		// Solve the tridiagonal system for first Bezier control points.
-		control := make([]ggui.Point, n-1)
-		rhs := make([]ggui.Point, n-1)
-		diag := make([]float64, n-1)
-		rhs[0] = ggui.Pt(points[0].X+2*points[1].X, points[0].Y+2*points[1].Y)
-		diag[0] = 2
-		for i := 1; i < n-1; i++ {
-			a, b := 1., 4.
-			rhs[i] = ggui.Pt(4*points[i].X+2*points[i+1].X, 4*points[i].Y+2*points[i+1].Y)
-			if i == n-2 {
-				a = 2
-				b = 7
-				rhs[i] = ggui.Pt(8*points[i].X+points[i+1].X, 8*points[i].Y+points[i+1].Y)
-			}
-			factor := a / diag[i-1]
-			diag[i] = b - factor
-			rhs[i].X -= factor * rhs[i-1].X
-			rhs[i].Y -= factor * rhs[i-1].Y
-		}
-		control[n-2] = ggui.Pt(rhs[n-2].X/diag[n-2], rhs[n-2].Y/diag[n-2])
-		for i := n - 3; i >= 0; i-- {
-			control[i] = ggui.Pt((rhs[i].X-control[i+1].X)/diag[i], (rhs[i].Y-control[i+1].Y)/diag[i])
-		}
+		control := naturalControls(points)
 		for i := 0; i < n-1; i++ {
 			q := ggui.Pt((points[n-1].X+control[n-2].X)/2, (points[n-1].Y+control[n-2].Y)/2)
 			if i < n-2 {
@@ -384,19 +362,7 @@ func curvePath(path *ggui.Path, points []ggui.Point, curve ChartCurve, move bool
 	}
 	slopes := make([]float64, n)
 	if curve == ChartMonotone {
-		for i := range n {
-			if i == 0 {
-				slopes[i] = (points[1].Y - points[0].Y) / (points[1].X - points[0].X)
-			} else if i == n-1 {
-				slopes[i] = (points[i].Y - points[i-1].Y) / (points[i].X - points[i-1].X)
-			} else {
-				a := (points[i].Y - points[i-1].Y) / (points[i].X - points[i-1].X)
-				b := (points[i+1].Y - points[i].Y) / (points[i+1].X - points[i].X)
-				if a*b > 0 {
-					slopes[i] = math.Copysign(min(math.Abs(a), math.Abs(b), .5*math.Abs(a+b)), a)
-				}
-			}
-		}
+		slopes = monotoneSlopes(points)
 	}
 	for i := 1; i < n; i++ {
 		p, q := points[i-1], points[i]
@@ -413,6 +379,63 @@ func curvePath(path *ggui.Path, points []ggui.Point, curve ChartCurve, move bool
 			lineTo(q.X, q.Y)
 		}
 	}
+}
+
+// naturalControls returns the first Bezier control point of each segment of
+// the natural cubic spline through points, by solving the tridiagonal system
+// the spline's continuity conditions give. It expects at least three points.
+func naturalControls(points []ggui.Point) []ggui.Point {
+	n := len(points)
+	control := make([]ggui.Point, n-1)
+	rhs := make([]ggui.Point, n-1)
+	diag := make([]float64, n-1)
+	rhs[0] = ggui.Pt(points[0].X+2*points[1].X, points[0].Y+2*points[1].Y)
+	diag[0] = 2
+	// Forward sweep: eliminate the sub-diagonal, carrying the elimination
+	// into the right-hand side. The last row has the free-end coefficients.
+	for i := 1; i < n-1; i++ {
+		a, b := 1., 4.
+		rhs[i] = ggui.Pt(4*points[i].X+2*points[i+1].X, 4*points[i].Y+2*points[i+1].Y)
+		if i == n-2 {
+			a = 2
+			b = 7
+			rhs[i] = ggui.Pt(8*points[i].X+points[i+1].X, 8*points[i].Y+points[i+1].Y)
+		}
+		factor := a / diag[i-1]
+		diag[i] = b - factor
+		rhs[i].X -= factor * rhs[i-1].X
+		rhs[i].Y -= factor * rhs[i-1].Y
+	}
+	// Back substitution.
+	control[n-2] = ggui.Pt(rhs[n-2].X/diag[n-2], rhs[n-2].Y/diag[n-2])
+	for i := n - 3; i >= 0; i-- {
+		control[i] = ggui.Pt((rhs[i].X-control[i+1].X)/diag[i], (rhs[i].Y-control[i+1].Y)/diag[i])
+	}
+	return control
+}
+
+// monotoneSlopes returns the tangent at each point for a Fritsch-Carlson
+// monotone cubic: the harmonic-mean slope where the neighbouring segments
+// agree in direction, and zero at a turning point, so the curve never
+// overshoots a value the data does not have.
+func monotoneSlopes(points []ggui.Point) []float64 {
+	n := len(points)
+	slopes := make([]float64, n)
+	for i := range n {
+		switch {
+		case i == 0:
+			slopes[i] = (points[1].Y - points[0].Y) / (points[1].X - points[0].X)
+		case i == n-1:
+			slopes[i] = (points[i].Y - points[i-1].Y) / (points[i].X - points[i-1].X)
+		default:
+			a := (points[i].Y - points[i-1].Y) / (points[i].X - points[i-1].X)
+			b := (points[i+1].Y - points[i].Y) / (points[i+1].X - points[i].X)
+			if a*b > 0 {
+				slopes[i] = math.Copysign(min(math.Abs(a), math.Abs(b), .5*math.Abs(a+b)), a)
+			}
+		}
+	}
+	return slopes
 }
 
 type chartCurvePaths struct {

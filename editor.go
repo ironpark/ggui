@@ -1039,23 +1039,61 @@ func (t *TextInputWidget) HandleKey(ev KeyEvent) {
 	}
 }
 
+// wordWise reports whether m asks for the word-wise form of a motion or a
+// delete: Alt anywhere, or Ctrl where it is not standing in for Cmd.
+func wordWise(m Mods) bool { return m.Alt || (!m.Cmd() && m.Ctrl) }
+
+// key applies one key press. It is split by what the key does, and each
+// group reports whether anything it changed has to reach the binding: a key
+// the editor does not act on, or one that bailed out (Undo with nothing to
+// undo, an arrow in a single-line field), leaves the value alone.
 func (t *TextInputWidget) key(k KeyboardKey, m Mods) {
-	word := m.Alt || (!m.Cmd() && m.Ctrl)
+	if t.editKey(k, m) || t.moveKey(k, m) || t.clipboardKey(k, m) {
+		t.commit()
+	}
+}
+
+// editKey handles the keys that change the text: Enter, Escape and the two
+// deletes. Enter in a single-line field submits instead, which commits
+// through committed rather than through the caller.
+func (t *TextInputWidget) editKey(k KeyboardKey, m Mods) bool {
+	word := wordWise(m)
 	switch k {
 	case KeyEnter, KeyNumpadEnter:
 		t.ime.Confirm()
 		if t.multiline && !m.Cmd() {
 			t.ed.replace("\n")
-			break
+			return true
 		}
 		if t.onSubmit != nil {
 			t.onSubmit(t.ed.text)
 		}
 		t.committed()
-		return
+	case KeyEscape:
+		t.ime.Cancel()
+		t.ed.moveTo(t.ed.caret, false)
+		return true
+	case KeyBackspace:
+		t.ime.Confirm()
+		t.ed.backspace(word)
+		return true
+	case KeyDelete:
+		t.ime.Confirm()
+		t.ed.deleteForward(word)
+		return true
+	}
+	return false
+}
+
+// moveKey handles the keys that move the caret. Shift extends the selection
+// and Meta jumps to the ends of the text; in a multiline field Up and Down
+// step by line and Home and End stay within one.
+func (t *TextInputWidget) moveKey(k KeyboardKey, m Mods) bool {
+	word := wordWise(m)
+	switch k {
 	case KeyArrowUp, KeyArrowDown:
 		if !t.multiline {
-			return
+			return false
 		}
 		t.ime.Confirm()
 		if m.Meta {
@@ -1063,15 +1101,7 @@ func (t *TextInputWidget) key(k KeyboardKey, m Mods) {
 		} else {
 			t.moveLine(pick(k == KeyArrowUp, -1, 1), m.Shift)
 		}
-	case KeyEscape:
-		t.ime.Cancel()
-		t.ed.moveTo(t.ed.caret, false)
-	case KeyBackspace:
-		t.ime.Confirm()
-		t.ed.backspace(word)
-	case KeyDelete:
-		t.ime.Confirm()
-		t.ed.deleteForward(word)
+		return true
 	case KeyArrowLeft, KeyArrowRight:
 		t.ime.Confirm()
 		dir := pick(k == KeyArrowLeft, -1, 1)
@@ -1080,6 +1110,7 @@ func (t *TextInputWidget) key(k KeyboardKey, m Mods) {
 		} else {
 			t.ed.moveBy(dir, word, m.Shift)
 		}
+		return true
 	case KeyHome, KeyEnd:
 		t.ime.Confirm()
 		lo, hi := 0, len(t.ed.text)
@@ -1087,15 +1118,28 @@ func (t *TextInputWidget) key(k KeyboardKey, m Mods) {
 			lo, hi = t.lineBounds()
 		}
 		t.ed.moveTo(pick(k == KeyHome, lo, hi), m.Shift)
+		return true
+	}
+	return false
+}
+
+// clipboardKey handles the Cmd/Ctrl shortcuts: select all, copy, cut, paste,
+// undo and redo. A password field is never copied out of, though cutting
+// still deletes. Undo and redo report false with nothing left on the stack,
+// so an exhausted history writes nothing back.
+func (t *TextInputWidget) clipboardKey(k KeyboardKey, m Mods) bool {
+	switch k {
 	case KeyA:
 		if m.Cmd() {
 			t.ime.Confirm()
 			t.ed.selectAll()
 		}
+		return true
 	case KeyC:
 		if m.Cmd() && t.ed.hasSelection() && !t.password {
 			currentClipboard().Write(t.ed.selected())
 		}
+		return true
 	case KeyX:
 		if m.Cmd() && t.ed.hasSelection() {
 			t.ime.Confirm()
@@ -1104,23 +1148,23 @@ func (t *TextInputWidget) key(k KeyboardKey, m Mods) {
 			}
 			t.ed.replace("")
 		}
+		return true
 	case KeyZ:
 		if !m.Cmd() {
-			return
+			return false
 		}
 		t.ime.Confirm()
 		if m.Shift {
-			if !t.ed.Redo() {
-				return
-			}
-		} else if !t.ed.Undo() {
-			return
+			return t.ed.Redo()
 		}
+		return t.ed.Undo()
 	case KeyY:
+		// Ctrl+Y is redo everywhere but macOS, which uses Shift+Cmd+Z.
 		if !m.Cmd() || runtimeIsDarwin() || !t.ed.Redo() {
-			return
+			return false
 		}
 		t.ime.Confirm()
+		return true
 	case KeyV:
 		if m.Cmd() {
 			t.ime.Confirm()
@@ -1131,10 +1175,9 @@ func (t *TextInputWidget) key(k KeyboardKey, m Mods) {
 			}
 			t.ed.replace(s)
 		}
-	default:
-		return
+		return true
 	}
-	t.commit()
+	return false
 }
 
 // HandlePointer implements PointerHandler: clicks place the caret, drags

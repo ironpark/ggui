@@ -229,16 +229,37 @@ func keep(r *hitRegion) *hitRegion {
 // It is process-wide, as one window drives input.
 var busy = map[any]bool{}
 
+// dispatch turns one frame's raw input into handler calls, in the order the
+// frame needs them: what is under the pointer is settled before a press can
+// use it, presses before releases, and the keyboard last, because moving
+// focus with Tab changes who the remaining keys belong to.
 func (in *inputState) dispatch(f frameInput) {
-	defer func() {
-		clear(busy)
-		for _, r := range []*hitRegion{in.focused, in.pressed, in.touchMotion.target} {
-			if r != nil && r.group != nil {
-				busy[r.group] = true
-			}
-		}
-	}()
+	defer in.markBusyGroups()
 	in.updateTrap()
+	in.notifyObservers(f)
+	in.updateHover(f)
+	in.updateCursor(f)
+	in.panTouch(&f)
+	in.dispatchPointer(f)
+	f.keys = in.consumeBindings(f)
+	in.dispatchKeys(f)
+}
+
+// markBusyGroups records the groups holding focus or a pointer capture after
+// this dispatch, so EachKeyed.Retain leaves them be.
+func (in *inputState) markBusyGroups() {
+	clear(busy)
+	for _, r := range []*hitRegion{in.focused, in.pressed, in.touchMotion.target} {
+		if r != nil && r.group != nil {
+			busy[r.group] = true
+		}
+	}
+}
+
+// notifyObservers tells the regions watching for input that some arrived
+// inside them, or reached the widget that has focus. A trap in front of an
+// observer hides the input from it.
+func (in *inputState) notifyObservers(f frameInput) {
 	for _, observer := range in.observers {
 		if scope := in.activeScope(); scope != nil && observer.scope != scope {
 			continue
@@ -249,7 +270,11 @@ func (in *inputState) dispatch(f frameInput) {
 			observer.notify()
 		}
 	}
-	// Hover: the topmost region that claims PointerMove is the hovered one.
+}
+
+// updateHover moves hover to the topmost region that claims PointerMove,
+// sending the exit before the enter so the two never overlap.
+func (in *inputState) updateHover(f frameInput) {
 	move := PointerEvent{Kind: PointerMove, Pos: f.pos}
 	now := in.send(move)
 	if !sameRegion(now, in.hovered) {
@@ -261,13 +286,20 @@ func (in *inputState) dispatch(f frameInput) {
 		}
 	}
 	in.hovered = keep(now)
+}
 
+// updateCursor picks the shape of the topmost region asking for one.
+func (in *inputState) updateCursor(f frameInput) {
 	in.cursor = CursorShapeDefault
 	if r := in.topmost(func(r *hitRegion) bool { return r.cursor != 0 && r.rect.Contains(f.pos) }); r != nil {
 		in.cursor = r.cursor
 	}
+}
 
-	in.panTouch(&f)
+// dispatchPointer sends this frame's presses, drag, releases and wheel. The
+// region that took a press keeps the drag and the release wherever the
+// cursor goes, and gets a tap only if the release landed back inside it.
+func (in *inputState) dispatchPointer(f frameInput) {
 	for _, b := range f.down {
 		ev := PointerEvent{Kind: PointerDown, Pos: f.pos, Button: b}
 		in.pressed, in.pressedBtn = keep(in.send(ev)), b
@@ -285,8 +317,6 @@ func (in *inputState) dispatch(f frameInput) {
 			in.send(ev)
 			continue
 		}
-		// The region that took the press gets the release, wherever the
-		// cursor is, and a tap if it is still inside.
 		if cur := in.findPointer(p); cur != nil {
 			cur.pointer.HandlePointer(ev)
 			if cur.rect.Contains(f.pos) {
@@ -298,49 +328,60 @@ func (in *inputState) dispatch(f frameInput) {
 	if f.wheel != (Point{}) {
 		in.send(PointerEvent{Kind: PointerScroll, Pos: f.pos, Scroll: f.wheel})
 	}
+}
 
-	if i := slices.Index(f.keys, KeyTab); i >= 0 {
-		f.keys = slices.Delete(slices.Clone(f.keys), i, i+1)
+// consumeBindings takes the keys that belong to the runtime rather than to a
+// widget -- Tab, registered shortcuts and the chords that fire before the
+// focused widget sees them -- and returns what is left for the widget. The
+// frame's slice belongs to the caller of dispatch, so a removal clones it.
+func (in *inputState) consumeBindings(f frameInput) []KeyboardKey {
+	keys := f.keys
+	if i := slices.Index(keys, KeyTab); i >= 0 {
+		keys = slices.Delete(slices.Clone(keys), i, i+1)
 		in.moveFocus(pick(f.mods.Shift, -1, 1))
 	}
 	if len(in.shortcuts) > 0 {
-		f.keys = in.withoutShortcuts(f.keys, f.mods)
+		keys = in.withoutShortcuts(keys, f.mods)
 	}
 	if len(in.chords) > 0 {
-		f.keys = slices.DeleteFunc(slices.Clone(f.keys), func(k KeyboardKey) bool { return in.runChords(k, f.mods, true) })
+		keys = slices.DeleteFunc(slices.Clone(keys), func(k KeyboardKey) bool { return in.runChords(k, f.mods, true) })
 	}
+	return keys
+}
 
+// dispatchKeys hands the remaining keys and text to the focused widget, then
+// runs what the widget did not consume through afterFocused. A widget whose
+// tick handled the input this frame keeps the keys to itself.
+func (in *inputState) dispatchKeys(f frameInput) {
 	if in.focused == nil {
 		in.afterFocused(f, nil)
 		return
 	}
-	{
-		cur := in.findKeyRegion(in.focused)
-		if cur == nil {
-			in.setFocus(nil)
-			in.afterFocused(f, nil)
-			return
-		}
-		if prev := in.focused.key; !sameAny(prev, cur.key) {
-			// The tree was rebuilt: the region is the same, the widget new.
-			// An Adopter already took the old one's state over during paint;
-			// anything else is told it has focus now.
-			if _, ok := cur.key.(Adopter); !ok {
-				cur.key.HandleKey(KeyEvent{Kind: KeyFocus})
-			}
-		}
-		in.focused = keep(cur)
-		if th, ok := cur.key.(TickHandler); ok && th.HandleTick() {
-			return
-		}
-		for _, k := range f.keys {
-			cur.key.HandleKey(KeyEvent{Kind: KeyPress, Key: k, Mods: f.mods})
-		}
-		if f.text != "" {
-			cur.key.HandleKey(KeyEvent{Kind: KeyText, Text: f.text})
-		}
-		in.afterFocused(f, cur.key)
+	cur := in.findKeyRegion(in.focused)
+	if cur == nil {
+		in.setFocus(nil)
+		in.afterFocused(f, nil)
+		return
 	}
+	if prev := in.focused.key; !sameAny(prev, cur.key) {
+		// The tree was rebuilt: the region is the same, the widget new.
+		// An Adopter already took the old one's state over during paint;
+		// anything else is told it has focus now.
+		if _, ok := cur.key.(Adopter); !ok {
+			cur.key.HandleKey(KeyEvent{Kind: KeyFocus})
+		}
+	}
+	in.focused = keep(cur)
+	if th, ok := cur.key.(TickHandler); ok && th.HandleTick() {
+		return
+	}
+	for _, k := range f.keys {
+		cur.key.HandleKey(KeyEvent{Kind: KeyPress, Key: k, Mods: f.mods})
+	}
+	if f.text != "" {
+		cur.key.HandleKey(KeyEvent{Kind: KeyText, Text: f.text})
+	}
+	in.afterFocused(f, cur.key)
 }
 
 // afterFocused runs what comes after the focused widget saw the keys: the
