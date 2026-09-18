@@ -365,12 +365,21 @@ func (c *Canvas) StrokeLine(a, b Point, w float64, col color.Color) {
 	vector.StrokeLine(c.Image, c.Px(a.X), c.Px(a.Y), c.Px(b.X), c.Px(b.Y), c.Px(w), col, true)
 }
 
+// Paths are borrowed per draw, rather than shared by Canvas copies. FillPath
+// copies the commands before returning; StrokePath does the same through its
+// intermediate fill path, so the input can then be reset and returned.
+var roundRectPaths = sync.Pool{New: func() any { return new(vector.Path) }}
+
+func releaseRoundRectPath(p *vector.Path) {
+	p.Reset()
+	roundRectPaths.Put(p)
+}
+
 // roundRect traces r with corners of the given logical radius, in Image
 // pixels. A zero radius traces a plain rectangle.
-func (c *Canvas) roundRect(r Rect, radius float64) *vector.Path {
+func (c *Canvas) roundRect(p *vector.Path, r Rect, radius float64) {
 	x, y, w, h := c.Px(r.Origin.X), c.Px(r.Origin.Y), c.Px(r.Size.W), c.Px(r.Size.H)
 	rad := min(c.Px(radius), w/2, h/2)
-	var p vector.Path
 	p.MoveTo(x+rad, y)
 	p.LineTo(x+w-rad, y)
 	p.ArcTo(x+w, y, x+w, y+rad, rad)
@@ -381,7 +390,6 @@ func (c *Canvas) roundRect(r Rect, radius float64) *vector.Path {
 	p.LineTo(x, y+rad)
 	p.ArcTo(x, y, x+rad, y, rad)
 	p.Close()
-	return &p
 }
 
 func pathOptions(col color.Color) *vector.DrawPathOptions {
@@ -400,7 +408,10 @@ func (c *Canvas) FillRoundRect(r Rect, radius float64, col color.Color) {
 		c.FillRect(r, col)
 		return
 	}
-	vector.FillPath(c.Image, c.roundRect(r, radius), &vector.FillOptions{}, pathOptions(col))
+	p := roundRectPaths.Get().(*vector.Path)
+	defer releaseRoundRectPath(p)
+	c.roundRect(p, r, radius)
+	vector.FillPath(c.Image, p, &vector.FillOptions{}, pathOptions(col))
 }
 
 // StrokeRoundRect draws a line of logical width w in col just inside r,
@@ -410,7 +421,10 @@ func (c *Canvas) StrokeRoundRect(r Rect, radius, w float64, col color.Color) {
 		return
 	}
 	inset := Rct(r.Origin.Add(Pt(w/2, w/2)), Sz(r.Size.W-w, r.Size.H-w))
-	vector.StrokePath(c.Image, c.roundRect(inset, max(radius-w/2, 0)), &vector.StrokeOptions{Width: c.Px(w)}, pathOptions(col))
+	p := roundRectPaths.Get().(*vector.Path)
+	defer releaseRoundRectPath(p)
+	c.roundRect(p, inset, max(radius-w/2, 0))
+	vector.StrokePath(c.Image, p, &vector.StrokeOptions{Width: c.Px(w)}, pathOptions(col))
 }
 
 // physical returns the Image pixels r covers, rounded outwards.
