@@ -323,17 +323,36 @@ type Signal[T any] struct {
 // State creates a Signal holding v. T is inferred from the argument, so
 // State(0) is a *Signal[int] and State("") a *Signal[string]; name it
 // explicitly (State[float64](0), State[Widget](nil)) when the literal would
-// infer the wrong type or none at all. When T is comparable, writing an equal
-// value is a no-op; see WithEqual to supply equality for other types.
+// infer the wrong type or none at all. Writing an equal value is a no-op
+// when T has an Equal method or is comparable; see WithEqual to supply
+// equality for other types, or to pass nil so that every write notifies.
 func State[T any](v T) *Signal[T] {
 	return &Signal[T]{val: v, eq: comparableEqual[T](), subs: map[*effect]struct{}{}}
 }
 
-// comparableEqual returns == for comparable T and nil for everything else.
-// Interfaces are excluded: they compare fine until a dynamic value that does
+// equaler is the equality a type declares for itself, as time.Time does.
+// A value that has it is compared with it, so a struct holding a slice or a
+// map still drops redundant writes.
+type equaler[T any] interface{ Equal(T) bool }
+
+// comparableEqual returns the test Set uses to drop redundant writes: the
+// type's own Equal method, else == for comparable T, else nil. Interfaces
+// are excluded from ==: they compare fine until a dynamic value that does
 // not, at which point == panics.
 func comparableEqual[T any]() func(a, b T) bool {
 	t := reflect.TypeFor[T]()
+	if t.Implements(reflect.TypeFor[equaler[T]]()) {
+		return func(a, b T) bool {
+			// A nil pointer or interface has no receiver to ask.
+			av := reflect.ValueOf(&a).Elem()
+			if av.Kind() == reflect.Pointer || av.Kind() == reflect.Interface {
+				if av.IsNil() {
+					return reflect.ValueOf(&b).Elem().IsNil()
+				}
+			}
+			return any(a).(equaler[T]).Equal(b)
+		}
+	}
 	if t.Kind() == reflect.Interface || !t.Comparable() {
 		return nil
 	}

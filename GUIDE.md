@@ -53,11 +53,29 @@ label := ggui.Textf("Count: %d", count) // follows future changes
 | `Peek()` | Read the current value without subscribing. |
 | `Set(v)` | Replace the value. Equal values do not notify readers. |
 | `Update(fn)` | Compute the next value from the current one. |
-| `WithEqual(fn)` | Supply equality for values such as slices. |
+| `WithEqual(fn)` | Supply equality for values such as slices, or `nil` so every write notifies. |
 | `Untrack(fn)` | Run a block without collecting dependencies. |
 
 Keep event callbacks focused on writes. Use tracked reads in the builder or
 computed value that should respond to a change.
+
+A write equal to the current value notifies no one. Equality is the type's own
+`Equal` method when it has one, and `==` otherwise, so a struct holding a slice
+or a map still drops redundant writes once it declares how to compare itself:
+
+```go
+type Props struct {
+	Title string
+	Tags  []string
+}
+
+func (p Props) Equal(o Props) bool {
+	return p.Title == o.Title && slices.Equal(p.Tags, o.Tags)
+}
+```
+
+This matters most for `Mount`, which writes its props on every claim: without
+it, a parent rebuild rebuilds the child even when nothing about it changed.
 
 ### Derived values
 
@@ -203,7 +221,7 @@ Choose the smallest boundary that fits the job:
 | `Reactive(build)` | A subtree needs independent updates without setup. |
 | `View(reader, build)` | A subtree depends on one reactive value, e.g. `ggui.View(name, ggui.Text)`. |
 | `Keyed(key, setup)` | A component must survive its enclosing builder's rebuilds. |
-| `Mount(key, props, setup)` | A keyed component also needs updated props, passed to setup as a signal. |
+| `Mount(key, props, setup)` | A keyed component also needs updated props, passed to setup as a signal. Give the props type an `Equal` method so an unchanged parent rebuild does not rebuild the child. |
 | `If(cond, then).ElseIf(cond, then).Else(other)` | Conditions select between widgets constructed once; without `Else`, nothing shows and a Column, Row or Wrap places no gap there. `When(cond, then, else)` is the two-way form. |
 | `TextOf(reader)` / `Textf(format, readers...)` | Text should follow reactive values and retain chainable text setters. |
 

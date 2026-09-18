@@ -1,6 +1,9 @@
 package ggui
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestInnerEffectDisposedWhenOuterReruns(t *testing.T) {
 	outerDep, innerDep := State(0), State(0)
@@ -315,5 +318,58 @@ func TestEffectRemovalPreservesExecutionOrder(t *testing.T) {
 	}
 	if len(seen) != 3 || seen[0] != 0 || seen[1] != 2 || seen[2] != 4 {
 		t.Fatalf("effect order = %v, want [0 2 4]", seen)
+	}
+}
+
+// mountProps holds a slice, so == cannot compare it, and declares its own
+// equality instead.
+type mountProps struct {
+	Title string
+	Tags  []string
+}
+
+func (p mountProps) Equal(o mountProps) bool {
+	return p.Title == o.Title && slices.Equal(p.Tags, o.Tags)
+}
+
+// Mount writes its props on every claim. A parent that rebuilds with props
+// equal to last time's must not rebuild the child, which is most of why the
+// child is mounted rather than constructed again.
+func TestMountDoesNotRebuildOnEqualProps(t *testing.T) {
+	tick := State(0)
+	builds := 0
+	p := ProbeBuilder(func() Widget {
+		tick.Get()
+		return Mount("row", mountProps{Title: "a", Tags: []string{"x"}},
+			func(props *Signal[mountProps]) Builder {
+				return func() Widget {
+					builds++
+					return Text(props.Get().Title)
+				}
+			})
+	}, Sz(200, 200))
+	defer p.Close()
+	p.Frame()
+
+	was := builds
+	for range 3 {
+		tick.Update(func(n int) int { return n + 1 })
+		p.Frame()
+	}
+	if builds != was {
+		t.Fatalf("child rebuilt %d times while its props did not change", builds-was)
+	}
+}
+
+// A type without an Equal method and without comparable fields notifies on
+// every write, as it always has: there is nothing to compare it with.
+func TestSignalWithoutEqualityNotifiesEveryWrite(t *testing.T) {
+	s := State([]int{1})
+	runs := 0
+	defer Effect(func() { s.Get(); runs++ })()
+	s.Set([]int{1})
+	effects.flush()
+	if runs != 2 {
+		t.Fatalf("effect ran %d times, want a notification for an uncomparable write", runs)
 	}
 }
