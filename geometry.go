@@ -3,6 +3,8 @@ package ggui
 import (
 	"cmp"
 	"math"
+
+	"github.com/ironpark/ggui/internal/fn"
 )
 
 // Number is any built-in numeric type. The geometry constructors take one so
@@ -72,12 +74,7 @@ func (r Rect) Contains(p Point) bool {
 var Unbounded = math.Inf(1)
 
 // bounded returns v, or fallback when v is Unbounded.
-func bounded(v, fallback float64) float64 {
-	if math.IsInf(v, 1) {
-		return fallback
-	}
-	return v
-}
+func bounded(v, fallback float64) float64 { return fn.Bounded(v, fallback) }
 
 // Constraints bound the size a widget may choose during layout, the same way
 // Flutter's BoxConstraints flow down the tree while sizes flow back up.
@@ -111,15 +108,7 @@ func (c Constraints) Constrain(s Size) Size {
 }
 
 // clamp keeps v within [lo, hi]; lo wins when the bounds contradict.
-func clamp[T cmp.Ordered](v, lo, hi T) T {
-	if v < lo {
-		return lo
-	}
-	if v > hi {
-		return hi
-	}
-	return v
-}
+func clamp[T cmp.Ordered](v, lo, hi T) T { return fn.Clamp(v, lo, hi) }
 
 // Center returns the midpoint of the rectangle.
 func (r Rect) Center() Point { return r.Origin.Add(Pt(r.Size.W/2, r.Size.H/2)) }

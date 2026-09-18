@@ -418,6 +418,11 @@ func (c *ChartWidget) Act(a ggui.Action) bool {
 		if !finite(a.Num) {
 			return false
 		}
+		// An empty chart has no index to set: clamp would otherwise
+		// report 0, which is not a category either.
+		if len(c.data) == 0 {
+			return false
+		}
 		c.active = int(clamp(a.Num, 0, float64(len(c.data)-1)))
 	default:
 		return false

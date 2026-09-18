@@ -7,6 +7,8 @@ import (
 	"slices"
 
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
+
+	"github.com/ironpark/ggui/internal/fn"
 )
 
 // Built-in widgets follow one shape: a constructor takes what the widget
@@ -631,12 +633,8 @@ func resize[T any](s []T, n int) []T {
 	return s
 }
 
-func pick[T any](cond bool, a, b T) T {
-	if cond {
-		return a
-	}
-	return b
-}
+// pick is fn.Pick under the name the package reads it by.
+func pick[T any](cond bool, a, b T) T { return fn.Pick(cond, a, b) }
 
 // ColumnWidget stacks its children vertically. Build one with Column.
 type ColumnWidget struct{ flow }

@@ -11,11 +11,12 @@
 package ui
 
 import (
+	"cmp"
 	"fmt"
 	"image/color"
-	"math"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/fn"
 )
 
 const (
@@ -31,21 +32,13 @@ func squareGlyph(t ggui.Theme) ggui.Size { return ggui.Sz(t.ControlSize, t.Contr
 // sprint is the default option label.
 func sprint[T any](v T) string { return fmt.Sprint(v) }
 
-func pick[T any](cond bool, a, b T) T {
-	if cond {
-		return a
-	}
-	return b
-}
+// pick, bounded and clamp come from internal/fn, shared with ggui: see the
+// package comment there for why clamp's contradicting-bounds case matters.
+func pick[T any](cond bool, a, b T) T { return fn.Pick(cond, a, b) }
 
-func bounded(v, fallback float64) float64 {
-	if math.IsInf(v, 1) {
-		return fallback
-	}
-	return v
-}
+func bounded(v, fallback float64) float64 { return fn.Bounded(v, fallback) }
 
-func clamp(v, lo, hi float64) float64 { return min(max(v, lo), hi) }
+func clamp[T cmp.Ordered](v, lo, hi T) T { return fn.Clamp(v, lo, hi) }
 
 // channels returns c with its color scaled by f and its alpha by fa.
 func channels(c color.Color, f, fa float64) color.Color {
