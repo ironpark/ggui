@@ -109,6 +109,24 @@ tasks:
         vars: {EXAMPLE: '{{.EXAMPLE}}'}
       - "open -n 'bin/ggui-{{.EXAMPLE}}.app'"
 
+  serve:
+    desc: Build an example for js/wasm and serve it (EXAMPLE=gallery, PORT=3000)
+    vars:
+      EXAMPLE: '{{default "gallery" .EXAMPLE}}'
+      PORT: '{{default "3000" .PORT}}'
+    requires:
+      vars:
+        - name: EXAMPLE
+          enum: [counter, todo, gallery]
+    cmds:
+      - '"{{.GO}}" run ./internal/serve -http ":{{.PORT}}" "./examples/{{.EXAMPLE}}"'
+
+  serve-gallery:
+    desc: Serve the component gallery in a browser at http://localhost:3000
+    cmds:
+      - task: serve
+        vars: {EXAMPLE: gallery, PORT: 3000}
+
   clean:
     desc: Clean Go build artifacts and app bundles
     cmds:
