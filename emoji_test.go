@@ -25,7 +25,7 @@ func TestEmojiSequencesStayInOneColorGlyph(t *testing.T) {
 	face := fallbackFont().face(20)
 	for _, s := range []string{"👍", "👍🏽", "🇰🇷", "👩🏽‍💻", "👨‍👩‍👧‍👦", "1️⃣", "🏳️‍🌈", "❤️", "🫩"} {
 		t.Run(s, func(t *testing.T) {
-			textRuns(s, face, func(run string, f text.Face) {
+			for run, f := range textRuns(s, face) {
 				if run != s {
 					t.Fatalf("split sequence: %q", run)
 				}
@@ -33,7 +33,7 @@ func TestEmojiSequencesStayInOneColorGlyph(t *testing.T) {
 				if len(glyphs) != 1 || !glyphs[0].Colored() {
 					t.Fatalf("%q: expected one color glyph, got %d", s, len(glyphs))
 				}
-			})
+			}
 			if lineWidth(s, face) <= 0 {
 				t.Fatal("zero width")
 			}

@@ -55,7 +55,11 @@ button "Save" disabled
 func TestSemanticsTextFieldIsOneNode(t *testing.T) {
 	value := ggui.State("Ada")
 	tree := semantics(t, ui.TextField(value).Named("Name"), ggui.Sz(200, 60))
-	if n := len(tree.FindAll(ggui.RoleTextField)); n != 1 {
+	n := 0
+	for range tree.Nodes(ggui.RoleTextField) {
+		n++
+	}
+	if n != 1 {
 		t.Fatalf("%d text field nodes, want 1:\n%s", n, tree)
 	}
 	if n := node(t, tree, ggui.RoleTextField, "Name"); n.Value != "Ada" {

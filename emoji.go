@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"iter"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -135,31 +136,35 @@ func emojiCluster(s string) bool {
 
 // Keep adjacent text in a single shaping run, so kerning and script ligatures
 // are preserved. A whole emoji grapheme always goes to the same font.
-func textRuns(s string, face text.Face, visit func(string, text.Face)) {
-	ef, ok := face.(*emojiFace)
-	if !ok || !mayHoldEmoji(s) {
-		visit(s, face)
-		return
-	}
-	start := 0
-	var current text.Face
-	for i := 0; i < len(s); {
-		end := nextGrapheme(s, i)
-		chosen := ef.Face
-		if emojiCluster(s[i:end]) {
-			if e := ef.colorFace(); e != nil {
-				chosen = e
+func textRuns(s string, face text.Face) iter.Seq2[string, text.Face] {
+	return func(yield func(string, text.Face) bool) {
+		ef, ok := face.(*emojiFace)
+		if !ok || !mayHoldEmoji(s) {
+			yield(s, face)
+			return
+		}
+		start := 0
+		var current text.Face
+		for i := 0; i < len(s); {
+			end := nextGrapheme(s, i)
+			chosen := ef.Face
+			if emojiCluster(s[i:end]) {
+				if e := ef.colorFace(); e != nil {
+					chosen = e
+				}
 			}
+			if current != nil && chosen != current {
+				if !yield(s[start:i], current) {
+					return
+				}
+				start = i
+			}
+			current = chosen
+			i = end
 		}
-		if current != nil && chosen != current {
-			visit(s[start:i], current)
-			start = i
+		if current != nil {
+			yield(s[start:], current)
 		}
-		current = chosen
-		i = end
-	}
-	if current != nil {
-		visit(s[start:], current)
 	}
 }
 
@@ -170,7 +175,7 @@ func drawText(dst *ebiten.Image, s string, face text.Face, options *text.DrawOpt
 	}
 	x := 0.0
 	baseline := face.Metrics().HAscent
-	textRuns(s, face, func(run string, f text.Face) {
+	for run, f := range textRuns(s, face) {
 		op := text.DrawOptions{}
 		if options != nil {
 			op = *options
@@ -181,5 +186,5 @@ func drawText(dst *ebiten.Image, s string, face text.Face, options *text.DrawOpt
 		op.GeoM = local
 		text.Draw(dst, run, f, &op)
 		x += text.Advance(run, f)
-	})
+	}
 }

@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"fmt"
+	"iter"
 	"strings"
 )
 
@@ -73,37 +74,68 @@ func (t *SemTree) Focused() (SemNode, bool) {
 // Find returns the first node with the given role and name; either may be
 // empty to match any.
 func (t *SemTree) Find(role Role, name string) (SemNode, bool) {
-	for i := range t.nodes {
-		n := &t.nodes[i]
-		if (role == "" || n.Role == role) && (name == "" || n.Name == name) {
-			return *n, true
+	for _, n := range t.Nodes(role) {
+		if name == "" || n.Name == name {
+			return n, true
 		}
 	}
 	return SemNode{}, false
 }
 
-// FindAll returns every node with the given role, in paint order, or every
-// node when role is empty.
-func (t *SemTree) FindAll(role Role) []SemNode {
-	var out []SemNode
-	for i := range t.nodes {
-		if role == "" || t.nodes[i].Role == role {
-			out = append(out, t.nodes[i])
+// All yields every node with its index, in paint order.
+func (t *SemTree) All() iter.Seq2[int, SemNode] {
+	return func(yield func(int, SemNode) bool) {
+		for i := range t.nodes {
+			if !yield(i, t.nodes[i]) {
+				return
+			}
 		}
 	}
-	return out
 }
 
-// Ancestors returns node i and everything above it, innermost first. The
+// Nodes yields every node with the given role, in paint order, or every
+// node when role is empty. Collect with slices.Collect when a slice is needed.
+func (t *SemTree) Nodes(role Role) iter.Seq2[int, SemNode] {
+	return func(yield func(int, SemNode) bool) {
+		for i := range t.nodes {
+			if (role == "" || t.nodes[i].Role == role) && !yield(i, t.nodes[i]) {
+				return
+			}
+		}
+	}
+}
+
+// Ancestors yields node i and everything above it, innermost first. The
 // inspector shows the chain, and a bridge needs it to answer "what am I
 // inside of".
-func (t *SemTree) Ancestors(i int) []SemNode {
-	var out []SemNode
-	for i >= 0 {
-		out = append(out, t.nodes[i])
-		i = t.nodes[i].Parent
+func (t *SemTree) Ancestors(i int) iter.Seq2[int, SemNode] {
+	return func(yield func(int, SemNode) bool) {
+		for i >= 0 {
+			if !yield(i, t.nodes[i]) {
+				return
+			}
+			i = t.nodes[i].Parent
+		}
 	}
-	return out
+}
+
+// Walk yields node i and its whole subtree in paint order, each with its
+// depth below i, so a renderer can indent without recursing itself.
+func (t *SemTree) Walk(i int) iter.Seq2[int, int] {
+	return func(yield func(int, int) bool) {
+		t.walk(i, 0, yield)
+	}
+}
+func (t *SemTree) walk(i, depth int, yield func(int, int) bool) bool {
+	if !yield(i, depth) {
+		return false
+	}
+	for _, c := range t.nodes[i].Children {
+		if !t.walk(c, depth+1, yield) {
+			return false
+		}
+	}
+	return true
 }
 
 // String renders the tree as indented lines, one per node, with the flags a
@@ -111,22 +143,17 @@ func (t *SemTree) Ancestors(i int) []SemNode {
 // asserts the shape of the tree and not merely that something was present.
 func (t *SemTree) String() string {
 	var b strings.Builder
-	var walk func(i, depth int)
-	walk = func(i, depth int) {
-		n := &t.nodes[i]
-		b.WriteString(strings.Repeat("  ", depth))
-		b.WriteString(string(n.Role))
-		if n.Name != "" {
-			fmt.Fprintf(&b, " %q", n.Name)
-		}
-		b.WriteString(n.flags())
-		b.WriteByte('\n')
-		for _, c := range n.Children {
-			walk(c, depth+1)
-		}
-	}
 	for _, r := range t.roots {
-		walk(r, 0)
+		for i, depth := range t.Walk(r) {
+			n := &t.nodes[i]
+			b.WriteString(strings.Repeat("  ", depth))
+			b.WriteString(string(n.Role))
+			if n.Name != "" {
+				fmt.Fprintf(&b, " %q", n.Name)
+			}
+			b.WriteString(n.flags())
+			b.WriteByte('\n')
+		}
 	}
 	return b.String()
 }

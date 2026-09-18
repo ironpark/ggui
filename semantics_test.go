@@ -79,7 +79,11 @@ func TestSemanticsDescribesOneHandlerOnce(t *testing.T) {
 	w := &twice{}
 	w.Role, w.Name = RoleTextField, "Name"
 	tree := described(t, w, Sz(100, 100))
-	if n := len(tree.FindAll(RoleTextField)); n != 1 {
+	n := 0
+	for range tree.Nodes(RoleTextField) {
+		n++
+	}
+	if n != 1 {
 		t.Fatalf("%d textfield nodes, want 1:\n%s", n, tree)
 	}
 	if got := tree.At(0).Rect.Size; got == (Size{W: 20, H: 10}) {
