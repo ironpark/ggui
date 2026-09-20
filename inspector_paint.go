@@ -65,6 +65,29 @@ func inset(r Rect, v float64) Rect {
 	return Rct(r.Origin.Add(Pt(v, v)), Sz(max(r.Size.W-2*v, 0), max(r.Size.H-2*v, 0)))
 }
 
+// Panel chrome, in logical pixels: the toolbar above the body, the status
+// bar below it, and within the tree pane the filter field and breadcrumbs.
+const (
+	inspectToolbarH = 35
+	inspectStatusH  = 22
+	inspectFilterH  = 36
+	inspectCrumbH   = 24
+)
+
+// body is the panel between the toolbar and the status bar.
+func (in *inspector) body() Rect {
+	return Rct(Pt(in.panel.Origin.X, in.panel.Origin.Y+inspectToolbarH), Sz(in.panel.Size.W, max(in.panel.Size.H-inspectToolbarH-inspectStatusH, 0)))
+}
+
+// detailTab is the pane the details column shows: Layout moves to its own
+// column on wide panels, where the column defaults to Computed.
+func (in *inspector) detailTab() inspectTab {
+	if !in.layout.Empty() && in.tab == inspectTabLayout {
+		return inspectTabComputed
+	}
+	return in.tab
+}
+
 func (in *inspector) bounds(size Size) {
 	in.viewport = size
 	if in.dock == InspectorBottom {
@@ -112,8 +135,11 @@ func (in *inspector) paint(dst *Canvas) {
 		in.paintHighlight(dst, face, pal, sel)
 	}
 	if dst.Image != nil {
-		snapshot := in.panelSnapshot(dst, shown, sel)
+		// The snapshot is taken against last frame's layout; paintPanel may
+		// clamp or reveal the scroll, in which case it is taken again.
+		snapshot := in.panelSnapshot(dst, shown, sel, in.cache.spare)
 		if in.cache.image != nil && in.cache.snapshot.equal(snapshot) && !in.reveal {
+			in.cache.spare = snapshot
 			in.cache.draw(dst)
 			return
 		}
@@ -126,8 +152,12 @@ func (in *inspector) paint(dst *Canvas) {
 			in.cache.image.Clear()
 			cached := *dst
 			cached.Image = in.cache.image
+			before := in.scroll
 			in.paintPanel(&cached, face, pal, sel, shown)
-			in.cache.snapshot = in.panelSnapshot(dst, shown, sel)
+			if in.scroll != before || snapshot.state.tree != in.tree || snapshot.state.layout != in.layout {
+				snapshot = in.panelSnapshot(dst, shown, sel, snapshot)
+			}
+			in.cache.spare, in.cache.snapshot = in.cache.snapshot, snapshot
 			in.cache.draw(dst)
 			in.reveal = false
 			return
@@ -144,7 +174,7 @@ func (in *inspector) paintPanel(dst *Canvas, face text.Face, pal inspectPalette,
 	panel.FillRect(in.panel, pal.bg)
 	panel.StrokeRoundRect(in.panel, 0, 1, pal.edge)
 	in.paintToolbar(panel, face, pal)
-	body := Rct(Pt(in.panel.Origin.X, in.panel.Origin.Y+35), Sz(in.panel.Size.W, max(in.panel.Size.H-57, 0)))
+	body := in.body()
 	ratio := in.split
 	if ratio == 0 {
 		ratio = .46
@@ -168,11 +198,11 @@ func (in *inspector) paintPanel(dst *Canvas, face text.Face, pal inspectPalette,
 		in.divider = Rct(body.Origin.Add(Pt(0.0, h-2)), Sz(body.Size.W, 5))
 	}
 	in.paintFilter(panel, treePane, face, pal, shown)
-	in.tree = Rct(treePane.Origin.Add(Pt(0.0, 36.0)), Sz(treePane.Size.W, max(treePane.Size.H-60, 0)))
+	in.tree = Rct(treePane.Origin.Add(Pt(0.0, inspectFilterH)), Sz(treePane.Size.W, max(treePane.Size.H-inspectFilterH-inspectCrumbH, 0)))
 	in.treeTop = in.tree.Origin.Y
 	pointer, hasPointer := dst.Pointer()
 	in.paintTree(panel, face, pal, shown, sel, pointer, hasPointer)
-	crumb := Rct(Pt(treePane.Origin.X, treePane.Origin.Y+max(treePane.Size.H-24, 0)), Sz(treePane.Size.W, min(24.0, treePane.Size.H)))
+	crumb := Rct(Pt(treePane.Origin.X, treePane.Origin.Y+max(treePane.Size.H-inspectCrumbH, 0)), Sz(treePane.Size.W, min(inspectCrumbH, treePane.Size.H)))
 	in.paintCrumbs(panel, crumb, face, pal, sel)
 	in.paintDetail(panel, dst, face, pal, sel)
 	if !in.layout.Empty() {
@@ -187,9 +217,9 @@ func (in *inspector) paintPanel(dst *Canvas, face text.Face, pal inspectPalette,
 }
 
 func (in *inspector) paintToolbar(dst *Canvas, face text.Face, pal inspectPalette) {
-	r := Rct(in.panel.Origin, Sz(in.panel.Size.W, 35))
+	r := Rct(in.panel.Origin, Sz(in.panel.Size.W, inspectToolbarH))
 	dst.FillRect(r, pal.field)
-	dst.FillRect(Rct(Pt(r.Origin.X, r.Origin.Y+34), Sz(r.Size.W, 1)), pal.edge)
+	dst.FillRect(Rct(Pt(r.Origin.X, r.Origin.Y+inspectToolbarH-1), Sz(r.Size.W, 1)), pal.edge)
 	x, y := r.Origin.X+6, r.Origin.Y+5
 	in.tool(dst, face, pal, Rct(Pt(x, y), Sz(25, 25)), inspectUnpin, in.picking)
 	label := "Elements"
@@ -400,14 +430,14 @@ func (in *inspector) paintCrumbs(dst *Canvas, r Rect, face text.Face, pal inspec
 		}
 	}
 }
-func (in *inspector) tabButton(dst *Canvas, face text.Face, pal inspectPalette, x, y float64, label string, act inspectAction, on bool) float64 {
+func (in *inspector) tabButton(dst *Canvas, face text.Face, pal inspectPalette, x, y float64, label string, tab inspectTab, on bool) float64 {
 	w := textWidth(dst, face, label) + 18
 	r := Rct(Pt(x, y), Sz(w, 31))
 	if on {
 		dst.FillRect(Rct(Pt(x, y+29), Sz(w, 2)), pal.num)
 	}
 	drawLine(dst, face, label, x+9, y+10, pick(on, pal.num, pal.dim))
-	in.chips = append(in.chips, inspectChip{rect: r.Intersect(in.detail), act: act})
+	in.chips = append(in.chips, inspectChip{rect: r.Intersect(in.detail), act: inspectSelectTab, tab: tab})
 	return x + w
 }
 func (in *inspector) paintDetail(dst, source *Canvas, face text.Face, pal inspectPalette, sel int) {
@@ -416,10 +446,11 @@ func (in *inspector) paintDetail(dst, source *Canvas, face text.Face, pal inspec
 	clip.FillRect(Rct(r.Origin, Sz(r.Size.W, 32)), pal.field)
 	clip.FillRect(Rct(Pt(r.Origin.X, r.Origin.Y+31), Sz(r.Size.W, 1)), pal.edge)
 	x, y := r.Origin.X, r.Origin.Y
-	tabs := []inspectAction{inspectTabLayout, inspectTabComputed, inspectTabSemantics}
+	tabs := []inspectTab{inspectTabLayout, inspectTabComputed, inspectTabSemantics}
 	if !in.layout.Empty() {
 		tabs = tabs[1:]
 	}
+	shownTab := in.detailTab()
 	for _, tab := range tabs {
 		label := "Layout"
 		if tab == inspectTabComputed {
@@ -438,8 +469,7 @@ func (in *inspector) paintDetail(dst, source *Canvas, face text.Face, pal inspec
 				label = "A11y"
 			}
 		}
-		on := in.tab == tab || in.tab == 0 && tab == inspectTabLayout || !in.layout.Empty() && tab == inspectTabComputed && in.tab != inspectTabSemantics
-		x = in.tabButton(clip, face, pal, x, y, label, tab, on)
+		x = in.tabButton(clip, face, pal, x, y, label, tab, tab == shownTab)
 	}
 	if sel >= 0 && x < r.Origin.X+r.Size.W-28 {
 		in.tool(clip, face, pal, Rct(Pt(r.Origin.X+r.Size.W-28, y+3), Sz(25, 25)), inspectCopy, in.copied)
@@ -455,12 +485,9 @@ func (in *inspector) paintDetail(dst, source *Canvas, face text.Face, pal inspec
 		fittedLine(clip, face, message, r.Origin.X+12, y+54, r.Size.W-24, pal.dim)
 		return
 	}
-	fields := in.details(source, sel)
-	if !in.layout.Empty() && in.tab != inspectTabSemantics {
-		fields = computedFields(&source.frameTrace()[sel])
-	}
+	fields := inspectDetails(shownTab, source, sel)
 	boxH := 0.0
-	if in.layout.Empty() && in.tab != inspectTabSemantics && in.tab != inspectTabComputed {
+	if shownTab == inspectTabLayout {
 		boxH = inspectBoxHeight(inspectedBox(source.frameTrace(), sel))
 	}
 	in.detailContent = 32 + boxH + inspectFieldsHeight(fields) + 8
@@ -567,8 +594,7 @@ func (in *inspector) paintLayout(dst, source *Canvas, face text.Face, pal inspec
 		return
 	}
 	box := inspectedBox(source.frameTrace(), sel)
-	view := inspector{tab: inspectTabLayout}
-	fields := view.details(source, sel)
+	fields := inspectDetails(inspectTabLayout, source, sel)
 	body := Rct(r.Origin.Add(Pt(0.0, 32.0)), Sz(r.Size.W, max(r.Size.H-32, 0)))
 	content := inspectBoxHeight(box) + inspectFieldsHeight(fields) + 24
 	in.layoutBody, in.layoutContent = body, content
@@ -615,7 +641,7 @@ func (in *inspector) paintHighlight(dst *Canvas, face text.Face, pal inspectPale
 	fittedLine(dst, face, label, x+9, y+6, w-18, pal.fg)
 }
 func (in *inspector) paintStatus(dst *Canvas, face text.Face, pal inspectPalette, sel int) {
-	r := Rct(Pt(in.panel.Origin.X, in.panel.Origin.Y+in.panel.Size.H-22), Sz(in.panel.Size.W, 22))
+	r := Rct(Pt(in.panel.Origin.X, in.panel.Origin.Y+in.panel.Size.H-inspectStatusH), Sz(in.panel.Size.W, inspectStatusH))
 	dst.FillRect(r, pal.field)
 	dst.FillRect(Rct(r.Origin, Sz(r.Size.W, 1)), pal.edge)
 	status := "Click a row to pin · ⌘/Ctrl F to find"

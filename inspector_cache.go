@@ -26,23 +26,25 @@ type inspectPanelRow struct {
 }
 
 type inspectPanelState struct {
-	panel                                                                          Rect
-	scale, split, scroll, detailScroll, layoutScroll                               float64
-	pointer                                                                        Point
-	hasPointer, dark, pinned, picking, copied, filterFocus, selectFilter, outlines bool
-	filter                                                                         string
-	dock                                                                           InspectorDock
-	tab                                                                            inspectAction
-	selected, total, shown, matches                                                int
-	box                                                                            inspectBox
+	panel, tree, layout                                                Rect
+	scale, split, scroll, detailScroll, layoutScroll                   float64
+	hoverRow, hoverChip                                                int // what the pointer is over, not where it is
+	dark, pinned, picking, copied, filterFocus, selectFilter, outlines bool
+	filter                                                             string
+	dock                                                               InspectorDock
+	tab                                                                inspectTab
+	selected, total, shown, matches                                    int
+	box                                                                inspectBox
 }
 
 // Copy displayed values separately from widget identities: a widget can
 // mutate in place without changing identity or the layout generation.
+// Only the panes on screen are described: switching tabs changes state.tab,
+// so hidden panes need no fields.
 type inspectPanelSnapshot struct {
 	state        inspectPanelState
 	rows, crumbs []inspectPanelRow
-	fields       [3][]inspectField
+	fields       [2][]inspectField // details pane, layout column
 }
 
 func (a inspectPanelSnapshot) equal(b inspectPanelSnapshot) bool {
@@ -57,17 +59,23 @@ func (a inspectPanelSnapshot) equal(b inspectPanelSnapshot) bool {
 	return true
 }
 
-func (in *inspector) panelSnapshot(dst *Canvas, shown []int, sel int) inspectPanelSnapshot {
-	pointer, hasPointer := dst.Pointer()
-	if !hasPointer || !in.panel.Contains(pointer) {
-		pointer, hasPointer = Point{}, false
-	}
-	s := inspectPanelSnapshot{state: inspectPanelState{
-		panel: in.panel, scale: dst.Scale(), split: in.split, scroll: in.scroll, detailScroll: in.detailScroll, layoutScroll: in.layoutScroll,
-		pointer: pointer, hasPointer: hasPointer, dark: luminance(Untrack(theme.Get).Bg) < .5,
+// panelSnapshot describes the panel as the last paintPanel laid it out,
+// reusing buf's storage. Hover is keyed by the row and chip under the
+// pointer, so moving within one row does not repaint the panel.
+func (in *inspector) panelSnapshot(dst *Canvas, shown []int, sel int, buf inspectPanelSnapshot) inspectPanelSnapshot {
+	s := inspectPanelSnapshot{rows: buf.rows[:0], crumbs: buf.crumbs[:0]}
+	s.state = inspectPanelState{
+		panel: in.panel, tree: in.tree, layout: in.layout, scale: dst.Scale(), split: in.split, scroll: in.scroll, detailScroll: in.detailScroll, layoutScroll: in.layoutScroll,
+		hoverRow: -1, hoverChip: -1, dark: luminance(Untrack(theme.Get).Bg) < .5,
 		pinned: in.pinned, picking: in.picking, copied: in.copied, filterFocus: in.filterFocus, selectFilter: in.selectFilter, outlines: in.outlines,
 		filter: in.filter, dock: in.dock, tab: in.tab, selected: sel, total: len(dst.frameTrace()), shown: len(shown), matches: in.matches,
-	}}
+	}
+	if p, ok := dst.Pointer(); ok && in.panel.Contains(p) {
+		s.state.hoverChip = slices.IndexFunc(in.chips, func(c inspectChip) bool { return c.rect.Contains(p) })
+		if in.tree.Contains(p) {
+			s.state.hoverRow = slices.IndexFunc(in.rows, func(r inspectRow) bool { return p.Y >= r.y && p.Y < r.y+r.h })
+		}
+	}
 	row := func(i int) inspectPanelRow {
 		e := &dst.frameTrace()[i]
 		return inspectPanelRow{key: keyOf(e), label: inspectLabel(e), kind: inspectKind(e), index: i, folded: in.folded(e), children: hasChildren(dst.frameTrace(), i)}
@@ -82,9 +90,9 @@ func (in *inspector) panelSnapshot(dst *Canvas, shown []int, sel int) inspectPan
 			s.crumbs = append(s.crumbs, row(i))
 		}
 		s.crumbs = append(s.crumbs, row(sel))
-		for i, tab := range []inspectAction{inspectTabLayout, inspectTabComputed, inspectTabSemantics} {
-			view := inspector{tab: tab}
-			s.fields[i] = view.details(dst, sel)
+		s.fields[0] = inspectDetails(in.detailTab(), dst, sel)
+		if !in.layout.Empty() {
+			s.fields[1] = inspectDetails(inspectTabLayout, dst, sel)
 		}
 	}
 	return s
@@ -93,6 +101,7 @@ func (in *inspector) panelSnapshot(dst *Canvas, shown []int, sel int) inspectPan
 type inspectorPanelCache struct {
 	image    *ebiten.Image
 	snapshot inspectPanelSnapshot
+	spare    inspectPanelSnapshot // storage for the next comparison
 }
 
 func (c *inspectorPanelCache) release() {

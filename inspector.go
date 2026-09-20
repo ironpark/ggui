@@ -79,17 +79,30 @@ const (
 	inspectPin
 	inspectCollapse
 	inspectClearFilter
-	inspectTabLayout
-	inspectTabSemantics
-	inspectTabComputed
+	inspectSelectTab
 	inspectClose
 	inspectCopy
 )
+
+// inspectTab is a details pane. The zero value is the Layout tab, so a fresh
+// inspector needs no special case to show it.
+type inspectTab uint8
+
+const (
+	inspectTabLayout inspectTab = iota
+	inspectTabComputed
+	inspectTabSemantics
+)
+
+// inspectMoveEnd is a Home/End step: further than any tree can be long,
+// clamped to the last visible row.
+const inspectMoveEnd = 1 << 30
 
 type inspectChip struct {
 	rect Rect
 	act  inspectAction
 	key  inspectKey
+	tab  inspectTab // for inspectSelectTab
 }
 
 type inspectDrag uint8
@@ -123,7 +136,7 @@ type inspector struct {
 	filter                             string
 	filterFocus, focus                 bool
 	selectFilter                       bool
-	tab                                inspectAction
+	tab                                inspectTab
 	closed                             bool
 	copySource                         *Canvas // borrowed, like lastTrace, until the next paint
 	copied                             bool
@@ -201,6 +214,14 @@ func (in *inspector) apply(o InspectorOptions) {
 	in.dock, in.outlines = o.Dock, o.ShowOutlines && !o.HideOutlines
 }
 
+// reset forgets the session when the inspector closes: borrowed frame data,
+// selection, folds, scratch buffers and the panel image. Docking, outlines,
+// sizes and the chosen tab persist to the next open.
+func (in *inspector) reset() {
+	in.cache.release()
+	*in = inspector{dock: in.dock, outlines: in.outlines, width: in.width, height: in.height, split: in.split, tab: in.tab}
+}
+
 func (in *inspector) find(tr []traceEntry) int {
 	if in.sel.id != nil {
 		for i := range tr {
@@ -260,26 +281,40 @@ func ancestors(tr []traceEntry, i int) []int {
 	return out
 }
 func (in *inspector) folded(e *traceEntry) bool { return in.collapsed[foldKey(keyOf(e))] }
+
+// inspectMatches expects a lower-cased filter.
 func inspectMatches(e *traceEntry, filter string) bool {
-	return strings.Contains(strings.ToLower(e.name+" "+inspectLabel(e)+" "+string(nodeOf(e.widget).Role)), strings.ToLower(filter))
+	return strings.Contains(strings.ToLower(e.name+" "+inspectLabel(e)+" "+string(nodeOf(e.widget).Role)), filter)
 }
+
+// inspectFoldLimit bounds the collapsed map: folds of widgets that were not
+// painted this frame are dropped once the map outgrows it.
+const inspectFoldLimit = 128
 
 // visible returns scratch storage valid until the next call.
 func (in *inspector) visible(tr []traceEntry) []int {
 	in.visibilityNext = in.visibilityNext[:0]
 	in.matches = 0
+	filter, folds := strings.ToLower(in.filter), 0
 	for i := range tr {
-		match := in.filter != "" && inspectMatches(&tr[i], in.filter)
+		match := filter != "" && inspectMatches(&tr[i], filter)
 		if match {
 			in.matches++
 		}
-		in.visibilityNext = append(in.visibilityNext, inspectVisibility{tr[i].depth, in.folded(&tr[i]), match})
+		folded := in.folded(&tr[i])
+		if folded {
+			folds++
+		}
+		in.visibilityNext = append(in.visibilityNext, inspectVisibility{tr[i].depth, folded, match})
 	}
 	if slices.Equal(in.visibility, in.visibilityNext) && in.visibility != nil && in.visibilityFiltered == (in.filter != "") {
 		return in.visibleRows
 	}
 	in.visibility, in.visibilityNext = in.visibilityNext, in.visibility
 	in.visibilityFiltered = in.filter != ""
+	if len(in.collapsed) > inspectFoldLimit && folds < len(in.collapsed) {
+		in.pruneFolds(tr)
+	}
 	out := in.visibleRows[:0]
 	defer func() { in.visibleRows = out }()
 	if in.filter != "" {
@@ -326,6 +361,18 @@ func (in *inspector) visible(tr []traceEntry) []int {
 		}
 	}
 	return out
+}
+
+// pruneFolds keeps only folds of widgets in tr. Fold keys hold widget
+// instances, so a long session would otherwise pin every rebuilt widget.
+func (in *inspector) pruneFolds(tr []traceEntry) {
+	kept := make(map[inspectKey]bool, len(in.collapsed))
+	for i := range tr {
+		if k := foldKey(keyOf(&tr[i])); in.collapsed[k] {
+			kept[k] = true
+		}
+	}
+	in.collapsed = kept
 }
 
 func (in *inspector) selectEntry(tr []traceEntry, i int) {

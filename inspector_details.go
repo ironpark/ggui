@@ -28,9 +28,8 @@ func (in *inspector) copySelection() {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\n", dst.frameTrace()[sel].name)
-	for _, tab := range []inspectAction{inspectTabLayout, inspectTabComputed, inspectTabSemantics} {
-		view := inspector{tab: tab}
-		for _, f := range view.details(dst, sel) {
+	for _, tab := range []inspectTab{inspectTabLayout, inspectTabComputed, inspectTabSemantics} {
+		for _, f := range inspectDetails(tab, dst, sel) {
 			if f.value == "" {
 				fmt.Fprintf(&b, "\n%s\n", f.key)
 			} else {
@@ -136,15 +135,17 @@ func flowFields(f *flow) []inspectField {
 	}
 	return out
 }
-func (in *inspector) details(dst *Canvas, sel int) []inspectField {
+
+// inspectDetails lists the fields of one details pane for the selection.
+func inspectDetails(tab inspectTab, dst *Canvas, sel int) []inspectField {
 	if sel < 0 {
 		return nil
 	}
 	e := &dst.frameTrace()[sel]
-	if in.tab == inspectTabSemantics {
-		return in.semanticFields(dst, e)
+	if tab == inspectTabSemantics {
+		return semanticFields(dst, e)
 	}
-	if in.tab == inspectTabComputed {
+	if tab == inspectTabComputed {
 		return computedFields(e)
 	}
 	parent := "root"
@@ -205,7 +206,7 @@ func computedFields(e *traceEntry) []inspectField {
 }
 
 // semanticFields describes the widget's own accessibility node and ancestry.
-func (in *inspector) semanticFields(dst *Canvas, e *traceEntry) []inspectField {
+func semanticFields(dst *Canvas, e *traceEntry) []inspectField {
 	found := inspectSemantic(dst, e)
 	if found < 0 {
 		return []inspectField{{key: "Node"}, {"role", "none", false}}

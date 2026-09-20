@@ -33,8 +33,11 @@ The details panes show read-only runtime values:
 Click the search field to filter by type, accessible name, or role. With the
 panel focused, Up/Down and Home/End navigate visible rows; Left/Right fold,
 expand, or navigate ancestors and children. Each pane scrolls independently.
-Click outside the panel to return keyboard focus to the app; application
-drags that started outside the panel continue across it.
+While the panel has keyboard focus it consumes every key press, including
+ones it does not use. Click outside the panel to return keyboard focus to
+the app; application drags that started outside the panel continue across
+it. Closing the inspector clears the selection, folds and filter; docking,
+outlines, sizes and the chosen tab persist.
 
 | Shortcut (while open) | Action |
 | --- | --- |

@@ -399,7 +399,7 @@ func TestInspectorBoxModelUsesRealLayout(t *testing.T) {
 		t.Fatalf("incorrect box model: %+v", info)
 	}
 	in := inspector{tab: inspectTabComputed}
-	if !slices.ContainsFunc(in.details(c, 0), func(f inspectField) bool { return f.key == "border" && f.value == "2 px #ff0000" }) {
+	if !slices.ContainsFunc(inspectDetails(in.tab, c, 0), func(f inspectField) bool { return f.key == "border" && f.value == "2 px #ff0000" }) {
 		t.Fatal("computed properties missed the actual border")
 	}
 }

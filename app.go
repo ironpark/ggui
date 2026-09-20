@@ -167,23 +167,7 @@ func (a *App) Inspector(on bool) {
 	a.inspect = on
 	a.insp.closed = false
 	if !on {
-		a.insp.panel = Rect{}
-		a.insp.lastTrace = nil
-		a.insp.sel = inspectKey{}
-		a.insp.pinned = false
-		a.insp.collapsed = nil
-		a.insp.rows = nil
-		a.insp.chips = nil
-		a.insp.copySource = nil
-		a.insp.visibleRows, a.insp.filterParents, a.insp.filterStack = nil, nil, nil
-		a.insp.filterKeep = nil
-		a.insp.visibility, a.insp.visibilityNext = nil, nil
-		a.insp.cache.release()
-		a.insp.focus = false
-		a.insp.filterFocus = false
-		a.insp.picking = false
-		a.insp.drag = inspectNoDrag
-		a.insp.capture = false
+		a.insp.reset()
 	}
 }
 

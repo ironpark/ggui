@@ -25,7 +25,8 @@ func (in *inspector) input(f frameInput) bool {
 			if in.sideBySide() {
 				in.split = (f.pos.X - in.panel.Origin.X) / in.panel.Size.W
 			} else {
-				in.split = (f.pos.Y - in.panel.Origin.Y - 35) / max(in.panel.Size.H-57, 1)
+				body := in.body()
+				in.split = (f.pos.Y - body.Origin.Y) / max(body.Size.H, 1)
 			}
 			in.split = clamp(in.split, .25, .75)
 		case inspectScrollTree:
@@ -178,11 +179,11 @@ func (in *inspector) input(f frameInput) bool {
 			}
 		case KeyHome:
 			if !in.filterFocus {
-				in.move = -int(^uint(0) >> 2)
+				in.move = -inspectMoveEnd
 			}
 		case KeyEnd:
 			if !in.filterFocus {
-				in.move = int(^uint(0) >> 2)
+				in.move = inspectMoveEnd
 			}
 		case KeyEnter:
 			in.filterFocus = false
@@ -246,8 +247,8 @@ func (in *inspector) act(c inspectChip) {
 		in.filter = ""
 		in.scroll = 0
 		in.filterFocus = true
-	case inspectTabLayout, inspectTabComputed, inspectTabSemantics:
-		in.tab = c.act
+	case inspectSelectTab:
+		in.tab = c.tab
 		in.detailScroll = 0
 		in.copied = false
 	case inspectClose:

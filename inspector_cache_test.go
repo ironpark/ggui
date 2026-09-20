@@ -74,8 +74,8 @@ func TestInspectorPanelSnapshotTracksLiveValues(t *testing.T) {
 	in.bounds(c.Size())
 	in.tree = Rct(Point{}, Sz(300, 100))
 	shown := in.visible(c.fs().trace)
-	original := in.panelSnapshot(c, shown, 0)
-	if !original.equal(in.panelSnapshot(c, shown, 0)) {
+	original := in.panelSnapshot(c, shown, 0, inspectPanelSnapshot{})
+	if !original.equal(in.panelSnapshot(c, shown, 0, inspectPanelSnapshot{})) {
 		t.Fatal("identical values differ")
 	}
 	tests := []struct {
@@ -83,7 +83,7 @@ func TestInspectorPanelSnapshotTracksLiveValues(t *testing.T) {
 		change  func()
 		restore func()
 	}{
-		{"paint-only color", func() { box.fill = color.NRGBA{R: 123, A: 255} }, func() { box.fill = nil }},
+		{"computed color", func() { in.tab, box.fill = inspectTabComputed, color.NRGBA{R: 123, A: 255} }, func() { in.tab, box.fill = 0, nil }},
 		{"padding", func() { box.padding.Top++ }, func() { box.padding.Top-- }},
 		{"scroll", func() { in.scroll = 23 }, func() { in.scroll = 0 }},
 		{"filter", func() { in.filter = "hello" }, func() { in.filter = "" }},
@@ -94,22 +94,92 @@ func TestInspectorPanelSnapshotTracksLiveValues(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			before := in.panelSnapshot(c, shown, 0)
+			before := in.panelSnapshot(c, shown, 0, inspectPanelSnapshot{})
 			tc.change()
-			if before.equal(in.panelSnapshot(c, shown, 0)) {
+			if before.equal(in.panelSnapshot(c, shown, 0, inspectPanelSnapshot{})) {
 				t.Fatal("cache missed changed display")
 			}
 			tc.restore()
 		})
 	}
+	// A value only a hidden tab shows does not repaint the panel.
+	before := in.panelSnapshot(c, shown, 0, inspectPanelSnapshot{})
+	box.fill = color.NRGBA{R: 123, A: 255}
+	if !before.equal(in.panelSnapshot(c, shown, 0, inspectPanelSnapshot{})) {
+		t.Fatal("cache missed on a value the Layout tab does not show")
+	}
+	// Pointer motion within one row keeps the panel; crossing rows does not.
+	in.panel, in.rows = Rct(Point{}, c.Size()), []inspectRow{{y: 10, h: 23}, {y: 33, h: 23}}
+	c.fs().pointer, c.fs().hasPointer = Pt(20, 12), true
+	before = in.panelSnapshot(c, shown, 0, inspectPanelSnapshot{})
+	c.fs().pointer = Pt(60, 30)
+	if !before.equal(in.panelSnapshot(c, shown, 0, inspectPanelSnapshot{})) {
+		t.Fatal("cache missed pointer motion within a row")
+	}
+	c.fs().pointer = Pt(60, 40)
+	if before.equal(in.panelSnapshot(c, shown, 0, inspectPanelSnapshot{})) {
+		t.Fatal("cache missed the pointer crossing to another row")
+	}
+	c.fs().hasPointer = false
 	// Semantic buffers can change in place while widget identity stays the same.
+	in.tab = inspectTabSemantics
 	c.resetSemantics()
 	c.Leaf(c.fs().trace[0].rect, Node{Role: RoleButton, Name: "before"})
 	c.fs().trace[0].widget = nil
-	before := in.panelSnapshot(c, shown, 0)
+	before = in.panelSnapshot(c, shown, 0, inspectPanelSnapshot{})
 	c.fs().sem[0].node.Value = "changed"
-	if before.equal(in.panelSnapshot(c, shown, 0)) {
+	if before.equal(in.panelSnapshot(c, shown, 0, inspectPanelSnapshot{})) {
 		t.Fatal("cache missed live semantics")
+	}
+}
+
+// Wide bottom panels give Layout its own column; the details pane then
+// defaults to Computed and the Layout tab is not offered.
+func TestInspectorWidePanelShowsLayoutColumn(t *testing.T) {
+	c := inspectorCanvas(Box(Text("hello")).Pad(4), Sz(1400, 900))
+	in := inspector{}
+	in.paint(c)
+	if in.layout.Empty() {
+		t.Fatalf("no layout column on a %v panel", in.panel.Size)
+	}
+	if in.detailTab() != inspectTabComputed {
+		t.Fatalf("details show %d, want Computed beside the layout column", in.detailTab())
+	}
+	tabs := 0
+	for _, ch := range in.chips {
+		if ch.act == inspectSelectTab {
+			tabs++
+			if ch.tab == inspectTabLayout {
+				t.Fatal("Layout tab offered while it has its own column")
+			}
+		}
+	}
+	if tabs != 2 {
+		t.Fatalf("%d tabs, want Computed and Accessibility", tabs)
+	}
+	in.act(inspectChip{act: inspectSelectTab, tab: inspectTabSemantics})
+	in.paint(c)
+	if in.detailTab() != inspectTabSemantics {
+		t.Fatal("Accessibility tab did not take the details pane")
+	}
+	in.dock = InspectorRight
+	in.paint(c)
+	if !in.layout.Empty() {
+		t.Fatal("layout column survived docking right")
+	}
+}
+
+// Folds of widgets no longer painted are dropped once the map outgrows the
+// limit, so a long session does not pin every rebuilt widget.
+func TestInspectorPrunesStaleFolds(t *testing.T) {
+	tr := trace(entry("Column", 0, 0, 0, 100, 60), entry("Text", 1, 0, 0, 100, 10))
+	in := inspector{collapsed: map[inspectKey]bool{foldKey(keyOf(&tr[0])): true}}
+	for i := range inspectFoldLimit + 1 {
+		in.collapsed[inspectKey{name: "Gone", path: "/9/" + itoa(i)}] = true
+	}
+	in.visible(tr)
+	if len(in.collapsed) != 1 || !in.folded(&tr[0]) {
+		t.Fatalf("collapsed = %d entries, want only the painted fold", len(in.collapsed))
 	}
 }
 
