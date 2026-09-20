@@ -88,6 +88,11 @@ Enter and the controls with more keys claim those. `ParseChord` reads the
 names, `KeyEvent.Is(chord)` matches one in a handler, and `App.OnKey` stays
 for what a chord cannot say.
 
+`Shortcut`, `OnKey`, `OnFrame`, `Post`, `Perform`, `Announce`, `Semantics`
+and `Close` are the same on `App` and `Probe`, and the `Host` interface
+names that set, so a function that registers shortcuts takes a `ggui.Host`
+and serves both main and its tests.
+
 Keys, cursor shapes and mouse buttons carry ggui's own names: `ggui.KeyTab`,
 `ggui.CursorShapePointer`, `ggui.MouseButtonRight`. They are aliases for
 Ebitengine's, so they are the same values of the same types and an

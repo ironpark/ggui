@@ -61,9 +61,7 @@ func (m model) build() ggui.Widget {
 // shortcuts binds the keys. Bare-key shortcuts reach the focused widget
 // first: Space on a focused button presses the button, not this. Both App
 // and Probe offer Shortcut, so the test installs the same bindings.
-func (m model) shortcuts(s interface {
-	Shortcut(chord string, fn func()) *ggui.ShortcutHandle
-}) {
+func (m model) shortcuts(s ggui.Host) {
 	s.Shortcut("space", m.add)
 	s.Shortcut("up", m.up)
 	s.Shortcut("down", m.down)

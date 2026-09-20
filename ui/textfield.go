@@ -81,6 +81,21 @@ func (f *TextFieldWidget) OnChange(fn func(string)) *TextFieldWidget { f.input.O
 // OnCommit fires with the value when the field loses focus or submits.
 func (f *TextFieldWidget) OnCommit(fn func(string)) *TextFieldWidget { f.input.OnCommit(fn); return f }
 
+// Key gives the editor an identity, so a rebuilt field that also moved
+// keeps its caret and focus. The editor registers the field's regions, so
+// its identity is the one that counts, not Interactive's.
+func (f *TextFieldWidget) Key(k any) *TextFieldWidget { f.input.Key(k); return f }
+
+// Filter installs a prefix-preserving function every edit passes through;
+// see TextInputWidget.Filter.
+func (f *TextFieldWidget) Filter(fn func(string) string) *TextFieldWidget {
+	f.input.Filter(fn)
+	return f
+}
+
+// Style merges ts onto the editor's text style.
+func (f *TextFieldWidget) Style(ts ggui.TextStyle) *TextFieldWidget { f.input.Style(ts); return f }
+
 // Input returns the editor inside, for Focused and the editor's own setters.
 func (f *TextFieldWidget) Input() *ggui.TextInputWidget { return f.input }
 

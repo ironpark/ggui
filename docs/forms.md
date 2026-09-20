@@ -96,6 +96,12 @@ supply your own decoration. Both bind to a string value.
 | `.Lines(n)` | Enable multiline editing with at least `n` lines of height. |
 | `.OnChange(fn)` | Handle edits. |
 | `.OnSubmit(fn)` | Handle Enter in a single-line field or ⌘/Ctrl+Enter in a multiline field. |
+| `.Filter(fn)` | Pass every edit through a prefix-preserving function. |
+| `.Style(ts)` | Merge a text style onto the editor's. |
+| `.Key(k)` | Give the editor an identity that survives a rebuild that moved it. |
+
+Every chainable setter on `ggui.TextInput` has a namesake on `ui.TextField`;
+a test in the `ui` package keeps them in step.
 
 Editors support IME composition, with preedit text underlined in place.
 Caret movement and Backspace respect grapheme clusters, including combined

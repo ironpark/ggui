@@ -38,6 +38,7 @@ func TestCheckbox(t *testing.T) {
 | --- | --- |
 | `NewProbe(widget, size)` | Testing a widget constructed in advance. |
 | `ProbeBuilder(build, size)` | Testing app-style setup: the root builder runs once; use explicit reactive blocks for updates. |
+| `Host` | The surface `App` and `Probe` share (`Shortcut`, `OnKey`, `OnFrame`, `Post`, `Perform`, `Announce`, `Semantics`, `Close`), so the same setup function drives both. |
 | `Tap(label)`, `Find(label)`, `FindRole(role, label)` | Locating controls by semantics. |
 | `Click`, `Press`, `Move`, `Release`, `Scroll` | Pointer interaction. |
 | `Type`, `Text` | Key events and text entry. |

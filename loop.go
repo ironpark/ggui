@@ -118,8 +118,8 @@ func (r *frameLoop) announce(a Announcement) {
 	r.postMu.Unlock()
 }
 
-// takeAnnouncements empties the queue. Nothing calls it yet; the platform
-// bridge will, from whichever thread it speaks on.
+// takeAnnouncements empties the queue. App.Draw hands what it returns to
+// the accessibility bridge once a frame, after the tree is published.
 func (r *frameLoop) takeAnnouncements() []Announcement {
 	r.postMu.Lock()
 	out := r.notices

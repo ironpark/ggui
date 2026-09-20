@@ -29,6 +29,7 @@ type Probe struct {
 
 	now     time.Time // the probe's clock once Advance has been called
 	restore func()
+	frame   []func() // OnFrame handlers, run at the start of Frame
 }
 
 // NewProbe creates a Probe that lays w out at size under the current theme.
@@ -90,6 +91,9 @@ func (p *Probe) Flush() {
 func (p *Probe) Frame() Size {
 	if p.dispose == nil && !p.closed {
 		p.start()
+	}
+	for _, fn := range p.frame {
+		fn()
 	}
 	p.runPosted()
 	if err := p.tick(frame.set(p.clock())); err != nil {
@@ -156,6 +160,10 @@ func (p *Probe) dispatch(f frameInput) {
 		panic(err)
 	}
 }
+
+// OnFrame registers fn to run once per Frame, before posted work and
+// input, as App.OnFrame does.
+func (p *Probe) OnFrame(fn func()) { p.frame = append(p.frame, fn) }
 
 // OnKey registers a global key handler, as App.OnKey does.
 func (p *Probe) OnKey(fn func(KeyEvent) bool) { p.in.shortcuts = append(p.in.shortcuts, fn) }
