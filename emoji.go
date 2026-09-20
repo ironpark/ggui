@@ -5,13 +5,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"slices"
-	"strings"
 	"sync"
-	"unicode/utf8"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	"github.com/ironpark/ggui/internal/emojidata"
 )
 
 // The font state below belongs to the UI goroutine: every entry point that
@@ -102,49 +100,12 @@ func (ef *emojiFace) colorFace() text.Face {
 	return e
 }
 
-// mayHoldEmoji is a cheap byte scan: every emoji-presentation code point,
-// U+FE0F and U+20E3 encode with a lead byte of 0xE2 or above.
-func mayHoldEmoji(s string) bool {
-	for i := 0; i < len(s); i++ {
-		if s[i] >= 0xE2 {
-			return true
-		}
-	}
-	return false
-}
-
-func inEmojiRanges(r rune, ranges [][2]rune) bool {
-	_, ok := slices.BinarySearchFunc(ranges, r, func(p [2]rune, r rune) int {
-		if p[1] < r {
-			return -1
-		}
-		if p[0] > r {
-			return 1
-		}
-		return 0
-	})
-	return ok
-}
-func emojiCluster(s string) bool {
-	if strings.ContainsRune(s, '\ufe0e') {
-		return false
-	} // explicit text presentation
-	r, _ := utf8.DecodeRuneInString(s)
-	if strings.ContainsRune(s, '\u20e3') && (r == '#' || r == '*' || r >= '0' && r <= '9') {
-		return true
-	}
-	if strings.ContainsRune(s, '\ufe0f') {
-		return inEmojiRanges(r, emojiCodepoints[:])
-	}
-	return inEmojiRanges(r, emojiPresentation[:])
-}
-
 // Keep adjacent text in a single shaping run, so kerning and script ligatures
 // are preserved. A whole emoji grapheme always goes to the same font.
 func textRuns(s string, face text.Face) iter.Seq2[string, text.Face] {
 	return func(yield func(string, text.Face) bool) {
 		ef, ok := face.(*emojiFace)
-		if !ok || !mayHoldEmoji(s) {
+		if !ok || !emojidata.MayHold(s) {
 			yield(s, face)
 			return
 		}
@@ -153,7 +114,7 @@ func textRuns(s string, face text.Face) iter.Seq2[string, text.Face] {
 		for i := 0; i < len(s); {
 			end := nextGrapheme(s, i)
 			chosen := ef.Face
-			if emojiCluster(s[i:end]) {
+			if emojidata.IsCluster(s[i:end]) {
 				if e := ef.colorFace(); e != nil {
 					chosen = e
 				}
@@ -186,7 +147,7 @@ func drawText(dst *ebiten.Image, s string, face text.Face, options *text.DrawOpt
 	// holds, drawn where it was asked for. Saying so here skips the line
 	// metrics and the advance that only matter when runs have to be placed
 	// one after another, and most text a frame draws is this.
-	if !mayHoldEmoji(s) {
+	if !emojidata.MayHold(s) {
 		text.Draw(dst, s, ef.Face, options)
 		return
 	}
