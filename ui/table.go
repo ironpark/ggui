@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"time"
+
 	"github.com/ironpark/ggui"
 )
 
@@ -11,7 +13,7 @@ type Column[T any] struct {
 	Title string
 	Width float64 // fixed width in logical pixels; 0 shares the rest by Flex
 	Flex  float64 // share of the remaining width; 0 with Width 0 counts as 1
-	Align float64 // 0 left, 0.5 center, 1 right, for the heading and TextCol cells
+	Align float64 // 0 left, 0.5 center, 1 right, for headings and cells
 	Cell  func(ggui.Readable[T]) ggui.Widget
 }
 
@@ -35,10 +37,10 @@ func (c Column[T]) W(w float64) Column[T] { c.Width = w; return c }
 // Grow sets the column's share of the width left after the fixed ones.
 func (c Column[T]) Grow(flex float64) Column[T] { c.Flex = flex; return c }
 
-// Right aligns the heading and TextCol cells to the right, for numbers.
+// Right aligns the heading and cells to the right, for numbers.
 func (c Column[T]) Right() Column[T] { c.Align = 1; return c }
 
-// Center centers the heading and TextCol cells.
+// Center centers the heading and cells.
 func (c Column[T]) Center() Column[T] { c.Align = 0.5; return c }
 
 // TableWidget is a keyed list of rows under a heading row, with a line
@@ -70,15 +72,15 @@ type TableWidget[T any, K comparable] struct {
 //		ui.TextCol("Age", func(p Person) string { return strconv.Itoa(p.Age) }).W(60).Right(),
 //	).Selected(chosen).Height(240)
 func Table[T any, K comparable](rows ggui.Readable[[]T], key func(T) K, cols ...Column[T]) *TableWidget[T, K] {
-	t := &TableWidget[T, K]{cols: cols, rows: rows, key: key, rowH: 32}
+	t := &TableWidget[T, K]{cols: cols, rows: rows, key: key, rowH: 40}
 	t.label = func(item T) string { return sprint(key(item)) }
 	heads := make([]ggui.Widget, len(cols))
 	for i, c := range cols {
 		heads[i] = t.cell(c, ggui.Text(c.Title).NoWrap().Align(c.Align))
 	}
-	t.head = ggui.Row(heads...)
-	t.headBox = ggui.Box(t.head)
-	t.body = ggui.EachKeyed(rows, key, func(row ggui.EachItem[T]) ggui.Widget { return t.row(row.Value) }).Gap(0).Align(ggui.AlignStretch).ItemExtent(t.rowH)
+	t.head = ggui.Row(heads...).Align(ggui.AlignStretch)
+	t.headBox = ggui.Box(t.head).Height(40)
+	t.body = ggui.EachKeyed(rows, key, func(row ggui.EachItem[T]) ggui.Widget { return t.row(row) }).Gap(0).Align(ggui.AlignStretch).ItemExtent(t.rowH)
 	t.scroll = ggui.Scroll(t.body)
 	t.column = ggui.Column(t.headBox, t.body).Align(ggui.AlignStretch)
 	return t
@@ -91,9 +93,10 @@ func (t *TableWidget[T, K]) Selected(b ggui.Binding[K]) *TableWidget[T, K] { t.s
 // OnSelect fires with the item whose row was clicked or activated.
 func (t *TableWidget[T, K]) OnSelect(fn func(T)) *TableWidget[T, K] { t.onSelect = fn; return t }
 
-// RowHeight fixes every row's height; the default is 32. With Height the
+// RowHeight fixes every row's height; the default is 40. With Height the
 // body then lays out only the rows in view.
 func (t *TableWidget[T, K]) RowHeight(h float64) *TableWidget[T, K] {
+	h = max(1, h)
 	t.rowH = h
 	t.body.ItemExtent(h)
 	return t
@@ -115,18 +118,22 @@ func (t *TableWidget[T, K]) selectable() bool { return t.selected != nil || t.on
 
 // cell sizes w for column c: a fixed Box or a Flex share.
 func (t *TableWidget[T, K]) cell(c Column[T], w ggui.Widget) ggui.Widget {
+	// Align the whole cell, including custom widgets, and clip long content so
+	// it cannot paint or receive input in the adjacent column.
+	w = &tableCell{box: ggui.Box(ggui.Align(w).At(c.Align, .5)).Pad(8)}
 	if c.Width > 0 {
 		return ggui.Box(w).Width(c.Width)
 	}
 	return ggui.Flex(w, pick(c.Flex > 0, c.Flex, 1))
 }
 
-func (t *TableWidget[T, K]) row(item ggui.Readable[T]) ggui.Widget {
+func (t *TableWidget[T, K]) row(row ggui.EachItem[T]) ggui.Widget {
+	item := row.Value
 	cells := make([]ggui.Widget, len(t.cols))
 	for i, c := range t.cols {
 		cells[i] = t.cell(c, c.Cell(item))
 	}
-	r := &tableRow[T, K]{table: t, item: item, key: t.key(item.Get()), cells: ggui.Row(cells...)}
+	r := &tableRow[T, K]{table: t, item: item, index: row.Index, key: t.key(item.Get()), cells: ggui.Row(cells...)}
 	r.Role, r.Name = ggui.RoleRow, t.label(item.Get())
 	r.AutoKey()
 	return r
@@ -136,8 +143,7 @@ func (t *TableWidget[T, K]) row(item ggui.Readable[T]) ggui.Widget {
 func (t *TableWidget[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	th := env.Theme()
 	t.theme = th
-	t.head.Gap(th.Space)
-	t.headBox.Padding(th.ItemPad)
+	t.head.Gap(0)
 	if t.height > 0 {
 		h := min(t.height, c.MaxH)
 		c.MinH, c.MaxH = h, h
@@ -157,22 +163,27 @@ func (t *TableWidget[T, K]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 // tableRow is one row: its cells in a Row, hover and selection.
 type tableRow[T any, K comparable] struct {
 	ggui.Interactive
-	table *TableWidget[T, K]
-	item  ggui.Readable[T]
-	key   K
-	cells *ggui.RowWidget
-	box   *ggui.BoxWidget
-	theme ggui.Theme
+	table  *TableWidget[T, K]
+	item   ggui.Readable[T]
+	key    K
+	index  ggui.Readable[int]
+	motion time.Duration
+	cells  *ggui.RowWidget
+	box    *ggui.BoxWidget
+	theme  ggui.Theme
 }
 
 func (r *tableRow[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	th := env.Theme()
 	r.theme = th
-	r.cells.Gap(th.Space).Align(ggui.AlignCenter)
+	r.Sync()
+	r.Name = r.table.label(r.item.Get())
+	r.motion = env.Motion(th.MotionFast)
+	r.cells.Gap(0).Align(ggui.AlignStretch)
 	if r.box == nil {
 		r.box = ggui.Box(r.cells)
 	}
-	r.box.Padding(th.ItemPad)
+	r.box.Height(r.table.rowH)
 	return r.box.Layout(c, env)
 }
 
@@ -198,19 +209,30 @@ func (r *tableRow[T, K]) paint(dst *ggui.Canvas, rc ggui.Rect) {
 	th := r.theme
 	if r.table.selectable() {
 		r.Hit(dst, rc, r, ggui.CursorShapePointer)
-		switch {
-		case r.chosen():
-			dst.FillRect(rc, th.Selection)
-		case r.Hovered:
-			dst.FillRect(rc, th.Muted)
-		}
+	} else if !r.Inert {
+		dst.HitPointer(rc, r)
 	}
-	dst.Paint(r.box, rc)
-	dst.FillRect(ggui.Rct(ggui.Pt(rc.Origin.X, rc.Origin.Y+rc.Size.H-1), ggui.Sz(rc.Size.W, 1)), th.Border)
+	target := 0.0
+	if r.chosen() {
+		target = 1
+	} else if r.Hovered && !r.Inert {
+		target = .5
+	}
+	amount := dst.Ease(r.Anchor(rc), tableRowFillSlot, target, r.motion)
+	if amount > 0 {
+		dst.FillRect(rc, fade(th.Muted, amount))
+	}
+	dst.Clip(rc).Paint(r.box, rc)
+	if r.index.Get() < len(r.table.rows.Get())-1 {
+		dst.FillRect(ggui.Rct(ggui.Pt(rc.Origin.X, rc.Origin.Y+rc.Size.H-1), ggui.Sz(rc.Size.W, 1)), th.Border)
+	}
 	r.FocusRing(dst, rc, th.Radius, th.Ring)
 }
 
 func (r *tableRow[T, K]) pick() {
+	if r.Inert || !r.table.selectable() {
+		return
+	}
 	if r.table.selected != nil {
 		r.table.selected.Set(r.key)
 	}
@@ -229,7 +251,28 @@ func (r *tableRow[T, K]) Act(a ggui.Action) bool {
 }
 
 // HandleKey implements KeyHandler: Space or Enter selects the row.
-func (r *tableRow[T, K]) HandleKey(ev ggui.KeyEvent) { r.Keyboard(ev, r.pick) }
+func (r *tableRow[T, K]) HandleKey(ev ggui.KeyEvent) {
+	if r.Inert || !r.table.selectable() {
+		return
+	}
+	r.Keyboard(ev, r.pick)
+}
 
 // HandlePointer implements PointerHandler.
-func (r *tableRow[T, K]) HandlePointer(ev ggui.PointerEvent) bool { return r.Pointer(ev, r.pick) }
+func (r *tableRow[T, K]) HandlePointer(ev ggui.PointerEvent) bool {
+	if r.Inert {
+		return false
+	}
+	if !r.table.selectable() {
+		r.Pointer(ev, nil)
+		return false
+	}
+	return r.Pointer(ev, r.pick)
+}
+
+var tableRowFillSlot = ggui.NewSlot[*ggui.Motion]("table row fill")
+
+type tableCell struct{ box *ggui.BoxWidget }
+
+func (c *tableCell) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size { return c.box.Layout(cs, env) }
+func (c *tableCell) Paint(dst *ggui.Canvas, r ggui.Rect)                { dst.Clip(r).Paint(c.box, r) }

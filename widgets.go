@@ -824,7 +824,7 @@ func ScrollViewport(env Env) (Viewport, bool) { return env.Get(viewportKey) }
 
 // ScrollWidget shows a window onto a child that may be taller (or, with
 // Horizontal, wider) than the space it has, and moves that window with the
-// wheel. Build one with Scroll.
+// wheel or by dragging the scrollbar thumb. Build one with Scroll.
 type ScrollWidget struct {
 	child      Widget
 	horizontal bool
@@ -835,11 +835,16 @@ type ScrollWidget struct {
 	offset     float64
 	id         any
 
-	childSize Size
-	viewport  Size
-	laidAt    float64 // the offset the child was last laid out for
-	cache     *CachedWidget
-	rect      Rect // where the window was last painted
+	childSize             Size
+	viewport              Size
+	laidAt                float64 // the offset the child was last laid out for
+	cache                 *CachedWidget
+	rect                  Rect // where the window was last painted
+	thumbHit              Rect
+	barEnv                Env
+	thumbHovered          bool
+	dragging              bool
+	dragStart, dragOffset float64
 }
 
 // Key gives the scroll an identity, so a rebuilt one that also moved keeps
@@ -851,7 +856,12 @@ func (s *ScrollWidget) HitID() any { return s.id }
 
 // Adopt implements Adopter: a rebuilt scroll keeps its offset.
 func (s *ScrollWidget) Adopt(prev any) {
-	if p, ok := prev.(*ScrollWidget); ok && s.bound == nil {
+	if p, ok := prev.(*ScrollWidget); ok {
+		s.dragging, s.dragStart, s.dragOffset = p.dragging, p.dragStart, p.dragOffset
+		s.thumbHovered = p.thumbHovered
+		if s.bound != nil {
+			return
+		}
 		s.offset = p.position()
 		if s.offset != s.laidAt {
 			s.cache.invalidate()
@@ -911,6 +921,7 @@ func (s *ScrollWidget) scrollTo(v float64) {
 
 // Layout implements Widget.
 func (s *ScrollWidget) Layout(c Constraints, env Env) Size {
+	s.barEnv = env
 	if !s.barSet {
 		s.bar = env.Theme().MutedFg
 	}
@@ -950,20 +961,78 @@ func (s *ScrollWidget) Paint(dst *Canvas, r Rect) {
 	s.paintBar(dst, r)
 }
 
+func (s *ScrollWidget) thumbLength() float64 {
+	track := s.extent(s.rect.Size)
+	if s.extent(s.childSize) <= 0 {
+		return 0
+	}
+	return min(track, max(track*track/s.extent(s.childSize), 16))
+}
+
 func (s *ScrollWidget) paintBar(dst *Canvas, r Rect) {
+	s.thumbHit = Rect{}
 	track, content := s.extent(r.Size), s.extent(s.childSize)
-	if content <= track {
+	if s.bar == nil || content <= track || track <= 0 {
+		s.dragging, s.thumbHovered = false, false
 		return
 	}
-	const thickness, margin, minThumb = 3.0, 2.0, 16.0
-	thumb := max(track*track/content, minThumb)
-	at := (track - thumb) * s.position() / s.maxOffset()
-	if s.horizontal {
-		dst.FillRect(Rct(Pt(r.Origin.X+at, r.Origin.Y+r.Size.H-thickness-margin), Sz(thumb, thickness)), s.bar)
-	} else {
-		dst.FillRect(Rct(Pt(r.Origin.X+r.Size.W-thickness-margin, r.Origin.Y+at), Sz(thickness, thumb)), s.bar)
+	const margin, hitWidth = 2.0, 10.0
+	theme := s.barEnv.Theme()
+	active := s.thumbHovered || s.dragging
+	amount := dst.Ease(Anchor{Rect: r, ID: scrollThumb{s}.HitID()}, scrollThumbHoverSlot, pick(active, 1.0, 0.0), s.barEnv.Motion(theme.MotionFast))
+	thickness := 3 + 1.5*amount
+	fill := s.bar
+	if amount > 0 {
+		// Keep the thumb close to its resting gray, including while dragging.
+		tint := amount * pick(s.dragging, .28, .18)
+		r, g, b, a := s.bar.RGBA()
+		fr, fg, fb, fa := theme.Fg.RGBA()
+		blend := func(from, to uint32) uint16 {
+			return uint16(float64(from) + (float64(to)-float64(from))*tint)
+		}
+		fill = color.RGBA64{R: blend(r, fr), G: blend(g, fg), B: blend(b, fb), A: blend(a, fa)}
 	}
+	thumb := s.thumbLength()
+	at := (track - thumb) * s.position() / s.maxOffset()
+	var visual Rect
+	if s.horizontal {
+		visual = Rct(Pt(r.Origin.X+at, r.Origin.Y+r.Size.H-thickness-margin), Sz(thumb, thickness))
+		s.thumbHit = Rct(Pt(r.Origin.X+at, r.Origin.Y+max(0, r.Size.H-hitWidth)), Sz(thumb, min(hitWidth, r.Size.H)))
+	} else {
+		visual = Rct(Pt(r.Origin.X+r.Size.W-thickness-margin, r.Origin.Y+at), Sz(thickness, thumb))
+		s.thumbHit = Rct(Pt(r.Origin.X+max(0, r.Size.W-hitWidth), r.Origin.Y+at), Sz(min(hitWidth, r.Size.W), thumb))
+	}
+	// Register after the content so grabbing the thumb never activates a row.
+	dst.HitPointer(s.thumbHit, scrollThumb{s})
+	dst.HitCursor(s.thumbHit, CursorShapePointer)
+	dst.Clip(r).FillRoundRect(visual, thickness/2, fill)
 }
+
+// A separate handler keeps the thumb from being treated as a second scroll
+// viewport when keyboard focus asks enclosing Revealer widgets to move.
+type scrollThumb struct{ scroll *ScrollWidget }
+
+var scrollThumbHoverSlot = NewSlot[*Motion]("scroll thumb hover")
+
+func (h scrollThumb) HandlePointer(ev PointerEvent) bool {
+	switch ev.Kind {
+	case PointerMove, PointerEnter:
+		h.scroll.thumbHovered = h.scroll.thumbHit.Contains(ev.Pos)
+	case PointerExit:
+		h.scroll.thumbHovered = false
+	}
+	return h.scroll.HandlePointer(ev)
+}
+func (h scrollThumb) CaptureTouchDrag() bool { return h.scroll.dragging }
+func (h scrollThumb) HitID() any {
+	if h.scroll.id != nil {
+		return struct{ Thumb any }{h.scroll.id}
+	}
+	return struct{ Thumb Rect }{h.scroll.rect}
+}
+
+// CaptureTouchDrag keeps a thumb drag from becoming content panning.
+func (s *ScrollWidget) CaptureTouchDrag() bool { return s.dragging }
 
 // Reveal implements Revealer: the window moves the least it must for
 // target, in window coordinates, to be inside it. Focus moved by the
@@ -999,6 +1068,35 @@ func (s *ScrollWidget) Reveal(target Rect) {
 // HandlePointer implements PointerHandler: wheel movement along the scroll
 // axis moves the window.
 func (s *ScrollWidget) HandlePointer(ev PointerEvent) bool {
+	axis := pick(s.horizontal, ev.Pos.X, ev.Pos.Y)
+	switch ev.Kind {
+	case PointerDown:
+		if ev.Button != MouseButtonLeft || !s.thumbHit.Contains(ev.Pos) || s.extent(s.rect.Size) <= s.thumbLength() {
+			return false
+		}
+		s.dragging, s.dragStart, s.dragOffset = true, axis, s.position()
+		return true
+	case PointerDrag:
+		if !s.dragging {
+			return false
+		}
+		travel := s.extent(s.rect.Size) - s.thumbLength()
+		if travel > 0 {
+			s.scrollTo(s.dragOffset + (axis-s.dragStart)*s.maxOffset()/travel)
+		}
+		return true
+	case PointerUp:
+		if !s.dragging || ev.Button != MouseButtonLeft {
+			return false
+		}
+		s.dragging = false
+		return true
+	case PointerMove, PointerEnter:
+		return s.thumbHit.Contains(ev.Pos)
+	case PointerTap:
+		return s.thumbHit.Contains(ev.Pos)
+	}
+
 	if ev.Kind != PointerScroll {
 		return false
 	}

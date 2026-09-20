@@ -99,7 +99,7 @@ dialog "Confirm"
 func TestSemanticsSelectOwnsItsOptions(t *testing.T) {
 	value := ggui.State(2)
 	sel := ui.Select(value, []int{1, 2, 3}).Named("Count")
-	p := ggui.NewProbe(sel, ggui.Sz(200, 200))
+	p := ggui.NewProbe(ggui.Column(sel), ggui.Sz(200, 200))
 	defer p.Close()
 	wantTree(t, p.Semantics(), `
 select "Count" value="2" collapsed
@@ -109,9 +109,10 @@ select "Count" value="2" collapsed
 	// still belongs to the combobox that opened it.
 	wantTree(t, p.Semantics(), `
 select "Count" value="2" expanded
-  option "1"
-  option "2" selected
-  option "3"
+  group
+    option "1"
+    option "2" selected
+    option "3"
 `)
 }
 

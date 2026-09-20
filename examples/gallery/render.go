@@ -26,7 +26,7 @@ var auditNames = []string{
 
 // actionNames is the control each example activates for its alternate
 // state, and hoverNames the one the pointer rests on.
-var actionNames = map[string]string{"Accordion": "Keyboard controls", "Collapsible": "Delivery preferences", "Dialog": "Reset form…", "Sheets and drawers": "Open filters", "Date picker": "Appointment date", "Menubar": "File", "Choices": "Choose fruit", "Toast": "Notify", "Progress": "Advance download", "Tabs": "Details", "Search and commands": "Commands…", "Groups and addons": "Lock alignment", "Control states": "Enabled switch"}
+var actionNames = map[string]string{"Table": "Grace", "Accordion": "Keyboard controls", "Collapsible": "Delivery preferences", "Dialog": "Reset form…", "Sheets and drawers": "Open filters", "Date picker": "Appointment date", "Menubar": "File", "Choices": "Choose fruit", "Toast": "Notify", "Progress": "Advance download", "Tabs": "Details", "Search and commands": "Commands…", "Groups and addons": "Lock alignment", "Control states": "Enabled switch"}
 
 var hoverNames = map[string]string{"Buttons": "Hover for help", "Profile and media": "Details"}
 

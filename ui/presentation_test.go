@@ -210,3 +210,44 @@ func TestDisclosureStopsLayoutAfterSettling(t *testing.T) {
 		t.Fatalf("idle animation keeps invalidating layout: %d -> %d", settled, layouts)
 	}
 }
+
+func TestTableRowSelectionMotion(t *testing.T) {
+	for _, reduced := range []bool{false, true} {
+		selected := ggui.State(0)
+		tbl := Table(ggui.State([]int{1}), func(v int) int { return v }, TextCol("ID", func(int) string { return "one" })).Selected(selected)
+		row := tbl.row(ggui.EachItem[int]{Value: ggui.State(1), Index: ggui.State(0)}).(*tableRow[int, int])
+		var amount float64
+		watch := ggui.FromFuncs(row.Layout, func(dst *ggui.Canvas, rc ggui.Rect) {
+			dst.Paint(row, rc)
+			if m, ok := dst.Retained(row.Anchor(rc), tableRowFillSlot); ok {
+				amount = m.Value(ggui.Now())
+			}
+		})
+		p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, reduced, watch), ggui.Sz(200, 40))
+		p.Advance(0)
+		p.Frame()
+		selected.Set(1)
+		p.Frame()
+		p.Advance(30 * time.Millisecond)
+		p.Frame()
+		if reduced && amount != 1 {
+			t.Errorf("reduced motion: fill = %v", amount)
+		}
+		if !reduced && !(amount > 0 && amount < 1) {
+			t.Errorf("selection should interpolate: %v", amount)
+		}
+		p.Advance(time.Second)
+		p.Frame()
+		if amount != 1 {
+			t.Errorf("settled fill = %v", amount)
+		}
+		row.Inert = true
+		selected.Set(0)
+		row.HandleKey(ggui.KeyEvent{Kind: ggui.KeyPress, Key: ggui.KeyEnter})
+		row.HandlePointer(ggui.PointerEvent{Kind: ggui.PointerTap, Button: ggui.MouseButtonLeft})
+		if ggui.Untrack(selected.Get) != 0 {
+			t.Error("disabled row accepted input")
+		}
+		p.Close()
+	}
+}

@@ -20,6 +20,7 @@ type SelectWidget[T comparable] struct {
 	popup     *ggui.PopupWidget
 	text      *ggui.TextWidget
 	box       *ggui.BoxWidget // the field's fill and border
+	viewport  *selectViewport[T]
 	list      *ggui.BoxWidget // the open list's panel
 	items     []*selectItem[T]
 	pad       ggui.EdgeInsets
@@ -45,7 +46,10 @@ func Select[T comparable](value ggui.Binding[T], options []T) *SelectWidget[T] {
 		s.items = append(s.items, it)
 		rows[i] = it
 	}
-	s.list = ggui.Box(ggui.Column(rows...).Align(ggui.AlignStretch))
+	column := ggui.Column(rows...).Align(ggui.AlignStretch)
+	s.viewport = &selectViewport[T]{owner: s, column: column, offset: ggui.State(0.0)}
+	s.viewport.scroll = ggui.Scroll(column).Offset(s.viewport.offset)
+	s.list = ggui.Box(s.viewport)
 	s.popup = ggui.Popup(selectAnchor[T]{s}, s.list).Keys(s).Owner(s)
 	return s.Format(sprint[T])
 }
@@ -84,6 +88,7 @@ func (s *SelectWidget[T]) Act(a ggui.Action) bool {
 	switch a.Kind {
 	case ggui.ActionExpand:
 		s.highlight = s.index()
+		s.viewport.reveal = true
 		s.popup.Show()
 	case ggui.ActionCollapse:
 		s.popup.Hide()
@@ -202,6 +207,7 @@ func (s *SelectWidget[T]) toggle() {
 		return
 	}
 	s.highlight = s.index()
+	s.viewport.reveal = true
 	s.popup.Show()
 }
 
@@ -233,6 +239,7 @@ func (s *SelectWidget[T]) HandleKey(ev ggui.KeyEvent) {
 		dir := pick(ev.Key == ggui.KeyArrowUp, -1, 1)
 		if open {
 			s.highlight = stepIndex(s.highlight, dir, len(s.options), nil)
+			s.viewport.reveal = true
 		} else {
 			s.choose(stepIndex(s.index(), dir, len(s.options), nil))
 		}
@@ -244,6 +251,8 @@ func (s *SelectWidget[T]) Adopt(prev any) {
 	s.Interactive.Adopt(prev)
 	if p, ok := prev.(*SelectWidget[T]); ok {
 		s.highlight = p.highlight
+		s.viewport.offset.Set(ggui.Untrack(p.viewport.offset.Get))
+		s.viewport.reveal = p.viewport.reveal
 		if p.popup.IsOpen() {
 			s.popup.Show()
 		}
@@ -274,6 +283,7 @@ type selectItem[T comparable] struct {
 
 	pad      ggui.EdgeInsets
 	textSize ggui.Size
+	height   float64
 }
 
 func (it *selectItem[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
@@ -281,8 +291,12 @@ func (it *selectItem[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := env.Theme()
 	it.pad = t.ItemPad
 	it.text.Color(colorOr(t.PopoverFg, t.Fg))
-	it.textSize = it.text.Layout(it.pad.Shrink(c).Loosen(), env)
-	return c.Constrain(it.pad.Inflate(ggui.Sz(it.textSize.W+t.ControlSize+t.ControlGap, it.textSize.H)))
+	inner := it.pad.Shrink(c).Loosen()
+	inner.MaxW = max(0, inner.MaxW-t.ControlSize-t.ControlGap)
+	it.textSize = it.text.Layout(inner, env)
+	size := c.Constrain(it.pad.Inflate(ggui.Sz(it.textSize.W+t.ControlSize+t.ControlGap, it.textSize.H)))
+	it.height = size.H
+	return size
 }
 
 // Describe implements ggui.Describer: whether this option is the value.
@@ -305,7 +319,7 @@ func (it *selectItem[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.FillRoundRect(r, t.RadiusSm, colorOr(t.Accent, t.Muted))
 	}
 	at := ggui.Pt(r.Origin.X+it.pad.Left+t.ControlSize+t.ControlGap, r.Origin.Y+(r.Size.H-it.textSize.H)/2)
-	dst.Paint(it.text, ggui.Rct(at, it.textSize))
+	dst.Clip(r).Paint(it.text, ggui.Rct(at, it.textSize))
 	if it.index == it.owner.index() {
 		x, y := r.Origin.X+it.pad.Left, r.Origin.Y+r.Size.H/2
 		paintIcon(dst, it.owner.env, icons.Check, ggui.Rct(ggui.Pt(x, y-8), ggui.Sz(16, 16)), t.Primary, 0)
@@ -326,4 +340,43 @@ func (it *selectItem[T]) HandlePointer(ev ggui.PointerEvent) bool {
 		it.owner.highlight = it.index
 	}
 	return it.Pointer(ev, func() { it.owner.choose(it.index) })
+}
+
+// selectViewport measures the full list without changing its scroll position.
+// Popup first measures with unlimited height to choose above/below placement;
+// only the final painted viewport may clamp the scroll offset.
+type selectViewport[T comparable] struct {
+	owner  *SelectWidget[T]
+	column *ggui.ColumnWidget
+	scroll *ggui.ScrollWidget
+	offset *ggui.StateValue[float64]
+	reveal bool
+	env    ggui.Env
+}
+
+func (v *selectViewport[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	v.env = env
+	natural := v.column.Layout(ggui.Constraints{MinW: c.MinW, MaxW: c.MaxW, MaxH: ggui.Unbounded}, env)
+	return c.Constrain(natural)
+}
+
+func (v *selectViewport[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	if v.reveal {
+		v.reveal = false
+		top := 0.0
+		for i, item := range v.owner.items {
+			if i == v.owner.highlight {
+				offset := ggui.Untrack(v.offset.Get)
+				if top < offset {
+					v.offset.Set(top)
+				} else if top+item.height > offset+r.Size.H {
+					v.offset.Set(max(0, top+item.height-r.Size.H))
+				}
+				break
+			}
+			top += item.height
+		}
+	}
+	v.scroll.Layout(ggui.Constraints{MinW: r.Size.W, MaxW: r.Size.W, MinH: r.Size.H, MaxH: r.Size.H}, v.env)
+	dst.Paint(v.scroll, r)
 }

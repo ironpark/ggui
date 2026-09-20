@@ -166,3 +166,84 @@ func TestScrollBarFollowsThemeAndPreservesOverrides(t *testing.T) {
 		t.Fatal("theme made a hidden scrollbar visible")
 	}
 }
+
+func TestScrollThumbDrag(t *testing.T) {
+	for _, horizontal := range []bool{false, true} {
+		offset := State(0.0)
+		taps := 0
+		content := Sz(100, 500)
+		if horizontal {
+			content = Sz(500, 100)
+		}
+		s := Scroll(Tap(Box().Size(content.W, content.H), func() { taps++ })).Offset(offset)
+		if horizontal {
+			s.Horizontal()
+		}
+		var in inputState
+		paint := func() { paintFrame(&in, s, Sz(100, 100)) }
+		paint()
+		grab := s.thumbHit.Origin.Add(Pt(s.thumbHit.Size.W/2, s.thumbHit.Size.H/2))
+		in.dispatch(frameInput{pos: grab, down: []MouseButton{MouseButtonLeft}})
+		if !s.dragging || !s.CaptureTouchDrag() {
+			t.Fatal("thumb did not capture press")
+		}
+		delta := Pt(0, 40)
+		if horizontal {
+			delta = Pt(40, 0)
+		}
+		paint()
+		in.dispatch(frameInput{pos: grab.Add(delta)})
+		if got := Untrack(offset.Get); got != 200 {
+			t.Fatalf("horizontal=%v offset=%v, want 200", horizontal, got)
+		}
+		paint()
+		in.dispatch(frameInput{pos: Pt(1000, 1000)})
+		if got := Untrack(offset.Get); got != 400 {
+			t.Fatalf("drag outside should clamp to end, got %v", got)
+		}
+		paint()
+		in.dispatch(frameInput{pos: Pt(1000, 1000), up: []MouseButton{MouseButtonLeft}})
+		if s.dragging || taps != 0 {
+			t.Fatalf("dragging=%v content taps=%d", s.dragging, taps)
+		}
+		paint()
+		in.dispatch(frameInput{pos: Pt(0, 0)})
+		if Untrack(offset.Get) != 400 {
+			t.Fatal("scroll moved after release")
+		}
+	}
+}
+
+func TestScrollHiddenAndTinyThumb(t *testing.T) {
+	s := Scroll(Box().Size(100, 500)).Bar(nil)
+	var in inputState
+	paintFrame(&in, s, Sz(100, 100))
+	if s.HandlePointer(PointerEvent{Kind: PointerDown, Button: MouseButtonLeft, Pos: Pt(98, 5)}) {
+		t.Fatal("hidden scrollbar intercepted press")
+	}
+	s.Bar(DefaultTheme().MutedFg)
+	paintFrame(&in, s, Sz(100, 8))
+	if s.thumbLength() > 8 {
+		t.Fatal("thumb extends beyond tiny viewport")
+	}
+}
+
+func TestScrollThumbHoverAndDragFeedback(t *testing.T) {
+	s := Scroll(Box().Size(100, 500))
+	var in inputState
+	paintFrame(&in, s, Sz(100, 100))
+	at := s.thumbHit.Origin.Add(Pt(5, 5))
+	in.dispatch(frameInput{pos: at})
+	if !s.thumbHovered {
+		t.Fatal("thumb hover not activated")
+	}
+	in.dispatch(frameInput{pos: at, down: []MouseButton{MouseButtonLeft}})
+	in.dispatch(frameInput{pos: Pt(200, 200)})
+	if s.thumbHovered || !s.dragging {
+		t.Fatal("leaving thumb should retain drag feedback only")
+	}
+	in.dispatch(frameInput{pos: Pt(200, 200), up: []MouseButton{MouseButtonLeft}})
+	if s.thumbHovered || s.dragging {
+		t.Fatal("feedback remains after release outside")
+	}
+}

@@ -77,3 +77,44 @@ func TestTableHeightScrollsBody(t *testing.T) {
 		t.Fatal("last row not painted after scrolling to the end")
 	}
 }
+
+func TestTableAlignsCellsAndHonorsRowHeight(t *testing.T) {
+	for _, align := range []float64{0, .5, 1} {
+		var cellRect ggui.Rect
+		cell := ggui.FromFuncs(func(c ggui.Constraints, _ ggui.Env) ggui.Size {
+			return c.Constrain(ggui.Sz(10, 10))
+		}, func(_ *ggui.Canvas, r ggui.Rect) { cellRect = r })
+		col := ui.Col("Value", func(ggui.Readable[person]) ggui.Widget { return cell }).W(80)
+		col.Align = align
+		rows := ggui.State([]person{{ID: 1, Name: "Ada"}})
+		tbl := ui.Table(rows, func(p person) int { return p.ID },
+			ui.TextCol("Name", func(p person) string { return p.Name }), col,
+		).RowHeight(52)
+		p := ggui.NewProbe(tbl, ggui.Sz(300, 200))
+		p.Frame()
+		wantX := 228 + 54*align
+		if cellRect.Origin.X != wantX || cellRect.Origin.Y != 61 || cellRect.Size != ggui.Sz(10, 10) {
+			t.Errorf("align %v: cell = %+v, want 10x10 at (%v, 61)", align, cellRect, wantX)
+		}
+		p.Close()
+	}
+}
+
+func TestTableRowNameFollowsEdits(t *testing.T) {
+	rows := people()
+	tbl, chosen := table(rows)
+	p := ggui.NewProbe(tbl, ggui.Sz(300, 200))
+	defer p.Close()
+	p.Frame()
+	rows.Set([]person{{1, "Augusta", 37}, {2, "Grace", 45}})
+	if _, ok := p.Find("Ada"); ok {
+		t.Fatal("stale row name after edit")
+	}
+	if _, ok := p.Find("Augusta"); !ok {
+		t.Fatal("updated row name missing")
+	}
+	p.Tap("Augusta")
+	if ggui.Untrack(chosen.Get) != 1 {
+		t.Fatal("edited row lost its selection key")
+	}
+}

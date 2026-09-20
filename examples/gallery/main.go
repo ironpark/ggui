@@ -420,7 +420,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 					ui.Col("", func(r ggui.Readable[Person]) ggui.Widget {
 						id := r.Get().ID
 						return ui.Button("×", func() { ggui.Remove(people, func(p Person) bool { return p.ID == id }) }).Outline().Pad(0, 8)
-					}).W(32),
+					}).W(48),
 				).Selected(chosen).RowName(func(p Person) string { return p.Name }).Height(160),
 				ggui.Textf("selected: %s. Click a row, or Tab to it and press Space; the body scrolls under the heading.", chosenName).AsCaption(),
 			).Space(1).Align(ggui.AlignStretch)),
