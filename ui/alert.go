@@ -29,7 +29,7 @@ func (a *AlertWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		fg, border = t.Destructive, mix(t.Border, t.Destructive, .3)
 	}
 	a.title.Style(t.Text).Color(fg)
-	a.description.Style(t.Text).Color(t.MutedFg)
+	a.description.Style(t.Text).Color(pick(a.destructive, fade(t.Destructive, .9), t.MutedFg))
 	parts := []ggui.Widget{a.title, a.description}
 	if a.action != nil {
 		parts = append(parts, a.action)

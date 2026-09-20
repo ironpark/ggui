@@ -68,6 +68,14 @@ func (t *TransitionWidget) drive(progress float64, leaving bool) {
 	t.driven, t.progress, t.leaving = true, progress, leaving
 }
 
+// Progress drives the effect explicitly: zero is hidden, one is fully visible.
+// A leaving effect paints without accepting input. Call on each frame when
+// using a Motion to coordinate a panel and its backdrop.
+func (t *TransitionWidget) Progress(value float64, leaving bool) *TransitionWidget {
+	t.drive(clamp(value, 0, 1), leaving)
+	return t
+}
+
 // Layout implements Widget.
 func (t *TransitionWidget) Layout(c Constraints, env Env) Size {
 	t.reduced = env.ReducedMotion()
@@ -116,6 +124,9 @@ func (t *TransitionWidget) Paint(dst *Canvas, r Rect) {
 	// regions still register where the child painted itself.
 	b := dst.root().Image.Bounds()
 	if t.buf == nil || t.buf.Bounds().Size() != b.Size() {
+		if t.buf != nil {
+			t.buf.Deallocate()
+		}
 		t.buf = ebiten.NewImage(b.Dx(), b.Dy())
 	}
 	t.buf.Clear()

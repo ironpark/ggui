@@ -170,7 +170,7 @@ func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 // HandleKey implements KeyHandler: Left and Right move between pages.
 func (t *TabsWidget) HandleKey(ev ggui.KeyEvent) {
 	t.Keyboard(ev, nil)
-	if ev.Kind != ggui.KeyPress || len(t.tabs) == 0 {
+	if t.Inert || ev.Kind != ggui.KeyPress || len(t.tabs) == 0 {
 		return
 	}
 	switch ev.Key {

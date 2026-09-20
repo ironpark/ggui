@@ -4,6 +4,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"image/color"
 	"log"
@@ -26,7 +27,10 @@ type Person struct {
 	Age  int
 }
 
-func newGallery() (ggui.Builder, func(), func()) {
+func newGallery() (ggui.Builder, func(), func()) { return newGalleryPreview(nil) }
+
+// newGalleryPreview lets the visual audit render the same examples individually.
+func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, func(), func()) {
 	dark := ggui.State(false)
 	baseColor := ggui.State(ggui.BaseNeutral)
 	accentColor := ggui.State(ggui.AccentBlue)
@@ -434,6 +438,9 @@ func newGallery() (ggui.Builder, func(), func()) {
 			chartdemo.Build(chartdemo.Find("chart-area-gradient")).Legend(true),
 			ggui.Caption("Area, bar, line, pie, radar and radial charts. Run examples/charts for all variants."),
 		).Gap(12)))
+		if present != nil {
+			return present(entries)
+		}
 		return galleryPage(dark, search, category, scroll, func() { paletteOpen.Set(true) }, entries)
 
 	}
@@ -470,6 +477,15 @@ func run() error {
 }
 
 func main() {
+	renderDir := flag.String("render-dir", "", "Render existing component audit to a directory")
+	renderExamples := flag.String("render-examples", "", "Comma-separated gallery examples to render (default: all existing components)")
+	flag.Parse()
+	if *renderDir != "" {
+		if err := renderGalleryAudit(*renderDir, *renderExamples); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	if err := run(); err != nil {
 		log.Fatal(err)
 	}

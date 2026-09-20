@@ -65,7 +65,7 @@ func preview(title string, body ggui.Widget) *componentPreview {
 	return &componentPreview{
 		title: title, info: info,
 		Widget: ui.Card(ggui.Column(
-			ggui.Row(ggui.Title(title).Size(18), ggui.Spacer(), ui.Badge(info.category)).Gap(8),
+			ggui.Wrap(ggui.Title(title).Size(18), ui.Badge(info.category)).Gap(8),
 			ggui.Caption(info.description),
 			ui.Divider(),
 			body,

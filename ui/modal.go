@@ -67,6 +67,10 @@ func (m *modal) build(env ggui.Env) *ggui.BoxWidget {
 // rect inside a focus trap. owner is the widget the node belongs to, so a
 // screen reader and Probe.Find see the dialog or the sheet rather than this.
 func (m *modal) paint(dst *ggui.Canvas, screen ggui.Size, rect ggui.Rect, scrim color.Color, owner ggui.Semantic) {
+	m.paintContent(dst, screen, rect, scrim, owner, m.panel)
+}
+
+func (m *modal) paintContent(dst *ggui.Canvas, screen ggui.Size, rect ggui.Rect, scrim color.Color, owner ggui.Semantic, content ggui.Widget) {
 	m.rect = rect
 	dst.FillRect(ggui.Rect{Size: screen}, scrim)
 	dst.HitPointer(ggui.Rect{Size: screen}, modalScrim{m})
@@ -75,7 +79,7 @@ func (m *modal) paint(dst *ggui.Canvas, screen ggui.Size, rect ggui.Rect, scrim 
 	dst.DescribeNode(rect, owner, func(dst *ggui.Canvas) {
 		dst.FocusTrap(owner, m.Close, func(dst *ggui.Canvas) {
 			dst.HitPointer(rect, modalSink{owner})
-			dst.Paint(m.panel, rect)
+			dst.Paint(content, rect)
 		})
 	})
 }

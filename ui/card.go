@@ -74,7 +74,7 @@ func (b *BadgeWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 // Paint implements Widget.
 func (b *BadgeWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := b.theme
-	dst.FillRoundRect(r, min(t.RadiusSm, r.Size.H/2), pick(b.accent, t.Primary, t.Muted))
+	dst.FillRoundRect(r, r.Size.H/2, pick(b.accent, t.Primary, t.Muted))
 	dst.Paint(b.text, ggui.Rct(ggui.Pt(r.Origin.X+b.pad.Left, r.Origin.Y+(r.Size.H-b.size.H)/2), b.size))
 }
 

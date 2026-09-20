@@ -32,7 +32,7 @@ func chevron(dst *ggui.Canvas, env ggui.Env, center ggui.Point, dy float64, col 
 
 // fieldHalo draws the focus ring just outside a text field.
 func fieldHalo(dst *ggui.Canvas, r ggui.Rect, radius float64, t ggui.Theme) {
-	dst.StrokeRoundRect(ggui.Rct(r.Origin.Add(ggui.Pt(-2, -2)), ggui.Sz(r.Size.W+4, r.Size.H+4)), radius+2, 3, t.Ring)
+	dst.StrokeRoundRect(ggui.Rct(r.Origin.Add(ggui.Pt(-2, -2)), ggui.Sz(r.Size.W+4, r.Size.H+4)), radius+2, 3, fade(t.Ring, .5))
 }
 
 func colorOr(value, fallback color.Color) color.Color {

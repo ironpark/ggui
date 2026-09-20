@@ -19,6 +19,8 @@ type FieldWidget struct {
 	column  *ggui.ColumnWidget
 }
 
+var fieldInvalid = ggui.NewEnvKey[bool]("field invalid")
+
 // Named is a control that accepts an explicit name. HasName excludes
 // placeholders and built-in fallback names.
 type Named interface {
@@ -53,9 +55,11 @@ func (f *FieldWidget) Error(r ggui.Readable[string]) *FieldWidget { f.err = r; r
 func (f *FieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := env.Theme()
 	note, col := f.help, t.MutedFg
+	invalid := false
 	if f.err != nil {
 		if e := f.err.Get(); e != "" {
 			note, col = e, t.Destructive
+			invalid = true
 		}
 	}
 	f.caption.Style(t.Text).Color(t.Fg)
@@ -65,7 +69,7 @@ func (f *FieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		parts = append(parts, f.note)
 	}
 	f.column = ggui.Column(parts...).Gap(t.Space / 2).Align(ggui.AlignStretch)
-	return f.column.Layout(c, env)
+	return f.column.Layout(c, env.With(fieldInvalid, invalid))
 }
 
 // Paint implements Widget.

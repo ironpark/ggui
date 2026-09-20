@@ -31,7 +31,7 @@ func (g *toggle) layout(c ggui.Constraints, env ggui.Env, glyph ggui.Size) ggui.
 	g.glyph = glyph
 	size := g.glyph
 	if g.label != nil {
-		g.label.Color(pick[color.Color](g.Inert, g.theme.MutedFg, nil))
+		g.label.Color(pick[color.Color](g.Inert, fade(g.theme.Fg, .5), nil))
 		g.labelSize = g.label.Layout(ggui.Loose(ggui.Sz(max(c.MaxW-size.W-g.theme.ControlGap, 0), c.MaxH)), env)
 		size.W += g.theme.ControlGap + g.labelSize.W
 		size.H = max(size.H, g.labelSize.H)

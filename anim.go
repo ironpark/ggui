@@ -304,7 +304,8 @@ type Motion struct {
 // MoveTo retargets the motion, starting from its position at now and
 // arriving after d.
 func (m *Motion) MoveTo(target float64, now time.Time, d time.Duration) {
-	if !m.init {
+	if !m.init || d <= 0 {
+		m.duration = 0
 		m.from, m.to, m.init = target, target, true
 		return
 	}

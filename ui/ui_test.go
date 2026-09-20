@@ -378,6 +378,7 @@ func TestCollapsibleTogglesAndHidesContent(t *testing.T) {
 		t.Fatal("click on the header did not open")
 	}
 	p.Frame()
+	p.Advance(ggui.DefaultTheme().MotionFast)
 	opened := c.Layout(ggui.Loose(ggui.Sz(300, 200)), ggui.Env{})
 	if body == (ggui.Rect{}) || opened.H < closed.H+40 {
 		t.Fatalf("content %+v, height %v -> %v; want content shown below the header", body, closed.H, opened.H)

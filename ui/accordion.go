@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"math"
 	"slices"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/icons"
 )
 
 // AccordionSection describes a keyed disclosure and its persistent content.
@@ -141,9 +143,10 @@ func (a *AccordionWidget) Adopt(prev any) {
 // Layout implements ggui.Widget.
 func (a *AccordionWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	a.env, a.theme = env, env.Theme()
-	a.laidOpen = slices.Clone(a.open.Get())
-	a.sizes = make([]ggui.Size, len(a.items))
-	a.heights = make([]float64, len(a.items))
+	a.laidOpen = append(a.laidOpen[:0], a.open.Get()...)
+	a.sizes = slices.Grow(a.sizes[:0], len(a.items))[:len(a.items)]
+	clear(a.sizes)
+	a.heights = slices.Grow(a.heights[:0], len(a.items))[:len(a.items)]
 	var width, height float64
 	for i, item := range a.items {
 		h := a.headers[i]
@@ -152,10 +155,12 @@ func (a *AccordionWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		a.heights[i] = h.size.H + 32
 		width = max(width, h.size.W+24)
 		height += a.heights[i]
-		if a.isOpen(i) {
+		h.reveal.MoveTo(pick(a.isOpen(i), 1.0, 0.0), ggui.Now(), env.Motion(a.theme.MotionFast))
+		h.progress = h.reveal.Value(ggui.Now())
+		if a.isOpen(i) || h.progress > 0 {
 			a.sizes[i] = item.content.Layout(ggui.Loose(ggui.Sz(c.MaxW, ggui.Unbounded)), env)
 			width = max(width, a.sizes[i].W)
-			height += a.sizes[i].H + 16
+			height += (a.sizes[i].H + 16) * h.progress
 		}
 	}
 	return c.Constrain(ggui.Sz(width, height))
@@ -184,18 +189,26 @@ func (a *AccordionWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 			dst.HitPointer(rect, h)
 			dst.HitCursor(rect, ggui.CursorShapePointer)
 		}
-		if h.Hovered {
-			dst.FillRoundRect(rect, t.Radius, t.Muted)
+		if h.Hovered && !item.disabled {
+			dst.StrokeLine(ggui.Pt(rect.Origin.X, y+16+h.size.H-1), ggui.Pt(rect.Origin.X+h.size.W, y+16+h.size.H-1), 1, t.Fg)
 		}
-		chevron(dst, a.env, ggui.Pt(rect.Origin.X+rect.Size.W-8, y+a.heights[i]/2), pick(a.isOpen(i), -2.0, 2.0), t.MutedFg)
+		paintIcon(dst, a.env, icons.ChevronDown, ggui.Rct(ggui.Pt(rect.Origin.X+rect.Size.W-16, y+(a.heights[i]-16)/2), ggui.Sz(16, 16)), t.MutedFg, h.progress*math.Pi)
 		dst.Paint(h.text, ggui.Rct(ggui.Pt(rect.Origin.X, y+16), h.size))
 		if i == a.active {
 			a.FocusRing(dst, rect, t.Radius, t.Ring)
 		}
 		y += a.heights[i]
-		if a.isOpen(i) {
-			dst.Paint(item.content, ggui.Rct(ggui.Pt(r.Origin.X, y), a.sizes[i]))
-			y += a.sizes[i].H + 16
+		if h.progress != pick(a.isOpen(i), 1.0, 0.0) {
+			ggui.Invalidate(a.env)
+		}
+		if h.progress > 0 {
+			height := (a.sizes[i].H + 16) * h.progress
+			body := dst.Clip(ggui.Rct(ggui.Pt(r.Origin.X, y), ggui.Sz(r.Size.W, height)))
+			if !a.isOpen(i) {
+				body = body.Inert()
+			}
+			body.Paint(item.content, ggui.Rct(ggui.Pt(r.Origin.X, y), a.sizes[i]))
+			y += height
 		}
 		if i < len(a.items)-1 {
 			dst.StrokeLine(ggui.Pt(r.Origin.X, y), ggui.Pt(r.Origin.X+r.Size.W, y), 1, t.Border)
@@ -205,10 +218,12 @@ func (a *AccordionWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 
 type accordionHeader struct {
 	ggui.Interactive
-	owner *AccordionWidget
-	index int
-	text  *ggui.TextWidget
-	size  ggui.Size
+	owner    *AccordionWidget
+	index    int
+	text     *ggui.TextWidget
+	size     ggui.Size
+	reveal   ggui.Motion
+	progress float64
 }
 
 // Describe implements ggui.Describer: a header reports whether its section

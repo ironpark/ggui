@@ -6,10 +6,12 @@ import "github.com/ironpark/ggui"
 // everything else and takes the clicks, Tab stays inside, Escape or a
 // click on the scrim closes it, and focus returns to where it was. Build
 // one with Dialog. It takes no space where it sits in the tree; put it
-// anywhere.
+// anywhere. Keep the widget alive across rebuilds to preserve its animation.
 type DialogWidget struct {
 	modal
-	width float64
+	width  float64
+	effect *ggui.TransitionWidget
+	reveal ggui.Motion
 }
 
 // Dialog creates a dialog that shows content while open is true.
@@ -51,18 +53,29 @@ func (d *DialogWidget) OnClose(fn func()) *DialogWidget { d.onClose = fn; return
 func (d *DialogWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := env.Theme()
 	d.build(env).Border(t.BorderWidth, t.Border).Radius(t.RadiusLg)
+	if d.effect == nil {
+		d.effect = ggui.Transition(ggui.FromFuncs(
+			func(c ggui.Constraints, e ggui.Env) ggui.Size { return d.panel.Layout(c, e) },
+			func(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(d.panel, r) },
+		)).Fade().Scale(.95).Easing(ggui.EaseLinear)
+	}
 	return c.Constrain(ggui.Size{})
 }
 
 // Paint implements Widget: an open dialog paints through Canvas.Overlay.
 func (d *DialogWidget) Paint(dst *ggui.Canvas, _ ggui.Rect) {
-	if !ggui.Untrack(d.open.Get) {
+	open := ggui.Untrack(d.open.Get)
+	now := ggui.Now()
+	d.reveal.MoveTo(pick(open, 1.0, 0.0), now, d.env.Motion(d.theme.MotionFast))
+	v := d.reveal.Value(now)
+	if !open && v <= 0 {
+		d.rect = ggui.Rect{}
 		return
 	}
-	dst.Overlay(d.paintPanel)
+	dst.Overlay(func(dst *ggui.Canvas) { d.paintPanel(dst, v, open) })
 }
 
-func (d *DialogWidget) paintPanel(dst *ggui.Canvas) {
+func (d *DialogWidget) paintPanel(dst *ggui.Canvas, progress float64, open bool) {
 	t := d.theme
 	screen := dst.Size()
 	if screen == (ggui.Size{}) {
@@ -74,10 +87,14 @@ func (d *DialogWidget) paintPanel(dst *ggui.Canvas) {
 	if screen.H == ggui.Unbounded {
 		maxH = ggui.Unbounded
 	}
-	size := d.panel.Layout(ggui.Constraints{MinW: w, MaxW: w, MaxH: max(maxH, 0)}, d.env)
+	size := d.effect.Layout(ggui.Constraints{MinW: w, MaxW: w, MaxH: max(maxH, 0)}, d.env)
 	at := ggui.Pt((screen.W-size.W)/2, margin)
 	if screen.H != ggui.Unbounded {
 		at.Y = (screen.H - size.H) / 2
 	}
-	d.paint(dst, screen, ggui.Rct(at, size), t.Scrim, d)
+	if !open {
+		dst = dst.Inert()
+	}
+	d.effect.Progress(progress, !open)
+	d.paintContent(dst, screen, ggui.Rct(at, size), fade(t.Scrim, progress), d, d.effect)
 }

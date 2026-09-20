@@ -13,6 +13,7 @@ type TextFieldWidget struct {
 	box              *ggui.BoxWidget
 	theme            ggui.Theme
 	plain            bool
+	invalid          bool
 }
 
 // TextField creates a text field bound to value.
@@ -88,6 +89,7 @@ func (f *TextFieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	f.Sync()
 	t := env.Theme()
 	f.theme = t
+	f.invalid, _ = env.Get(fieldInvalid)
 	if f.plain {
 		f.box.Fill(nil).Pad(10, 8).Radius(t.Radius).Border(0, nil)
 	} else {
@@ -109,7 +111,14 @@ func (f *TextFieldWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		f.Hit(dst, r, f.input, ggui.CursorShapeText)
 	}
 	if !f.plain && f.input.Focused() && !f.input.IsDisabled() {
-		fieldHalo(dst, r, f.theme.Radius, f.theme)
+		t := f.theme
+		if f.invalid {
+			t.Ring = fade(t.Destructive, .4)
+		}
+		fieldHalo(dst, r, t.Radius, t)
+	}
+	if f.invalid && !f.plain {
+		f.box.Border(f.theme.BorderWidth, f.theme.Destructive)
 	}
 	dst.Paint(f.box, r)
 }

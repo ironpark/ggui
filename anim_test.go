@@ -191,3 +191,14 @@ func TestAnimationCanLoseOwnerDuringStep(t *testing.T) {
 		}
 	}
 }
+
+func TestMotionReducedWhileMoving(t *testing.T) {
+	now := time.Unix(100, 0)
+	var m Motion
+	m.MoveTo(0, now, time.Second)
+	m.MoveTo(1, now, time.Second)
+	m.MoveTo(1, now.Add(100*time.Millisecond), 0)
+	if m.Value(now.Add(100*time.Millisecond)) != 1 {
+		t.Fatal("zero duration must settle an existing target immediately")
+	}
+}

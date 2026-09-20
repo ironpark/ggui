@@ -20,18 +20,20 @@ type HoverCardWidget struct {
 	width           float64
 	name            string
 
-	panel *ggui.BoxWidget
-	env   ggui.Env
-	theme ggui.Theme
-	size  ggui.Size
+	panel  *ggui.BoxWidget
+	effect *ggui.TransitionWidget
+	env    ggui.Env
+	theme  ggui.Theme
+	size   ggui.Size
 }
 
 // hoverCardState is the open timer and the panel's last place, retained on
 // the Canvas so that a card rebuilt every frame neither forgets how long
 // the cursor has rested nor loses the cursor as it crosses onto the panel.
 type hoverCardState struct {
-	since time.Time
-	panel ggui.Rect
+	since  time.Time
+	panel  ggui.Rect
+	reveal ggui.Motion
 }
 
 var hoverCardSlot = ggui.NewSlot[hoverCardState]("hover card")
@@ -63,8 +65,9 @@ func (h *HoverCardWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	h.env, h.theme = env, env.Theme()
 	if h.panel == nil {
 		h.panel = ggui.Box(h.content)
+		h.effect = ggui.Transition(h.panel).Fade().Scale(.95).Easing(ggui.EaseLinear)
 	}
-	panelBox(h.panel, h.theme).Radius(h.theme.RadiusLg)
+	panelBox(h.panel, h.theme).Radius(h.theme.RadiusLg).Pad(h.theme.Space * 1.25)
 	return h.anchor.Layout(c, env)
 }
 
@@ -74,28 +77,44 @@ func (h *HoverCardWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	at := ggui.Anchor{Rect: r}
 	state, _ := dst.Retained(at, hoverCardSlot)
 	p, ok := dst.Pointer()
-	// The panel counts as the card too, so moving onto it keeps it open;
-	// its place is known only from the frame that painted it.
-	if !ok || !(r.Contains(p) || state.panel.Contains(p)) {
-		dst.Retain(at, hoverCardSlot, hoverCardState{})
-		return
-	}
 	now := ggui.Now()
-	if state.since.IsZero() {
+	// Include the small gap, so moving from the anchor into its preview
+	// doesn't dismiss the panel halfway across.
+	bridge := r
+	if state.panel.Size.H > 0 {
+		left, top := min(r.Origin.X, state.panel.Origin.X), min(r.Origin.Y, state.panel.Origin.Y)
+		right, bottom := max(r.Origin.X+r.Size.W, state.panel.Origin.X+state.panel.Size.W), max(r.Origin.Y+r.Size.H, state.panel.Origin.Y+state.panel.Size.H)
+		bridge = ggui.Rct(ggui.Pt(left, top), ggui.Sz(right-left, bottom-top))
+	}
+	hovered := ok && bridge.Contains(p)
+	if hovered && state.since.IsZero() {
 		state.since = now
 	}
-	if now.Sub(state.since) < h.delay {
-		dst.Retain(at, hoverCardSlot, hoverCardState{since: state.since})
+	if !hovered {
+		state.since = time.Time{}
+	}
+	open := hovered && now.Sub(state.since) >= h.delay
+	state.reveal.MoveTo(pick(open, 1.0, 0.0), now, h.env.Motion(h.theme.MotionFast))
+	progress := state.reveal.Value(now)
+	if !open && progress <= 0 {
+		state.panel = ggui.Rect{}
+		dst.Retain(at, hoverCardSlot, state)
 		return
 	}
 	w := max(h.width, 0)
-	h.size = h.panel.Layout(ggui.Constraints{MinW: w, MaxW: w, MaxH: ggui.Unbounded}, h.env)
+	if screen := dst.Size(); screen.W > 0 {
+		w = min(w, screen.W)
+	}
+	h.size = h.effect.Layout(ggui.Constraints{MinW: w, MaxW: w, MaxH: ggui.Unbounded}, h.env)
 	panel := h.place(dst.Size(), r)
-	dst.Retain(at, hoverCardSlot, hoverCardState{since: state.since, panel: panel})
+	state.panel = panel
+	dst.Retain(at, hoverCardSlot, state)
+	h.effect.Progress(progress, !open)
 	dst.Overlay(func(dst *ggui.Canvas) {
-		dst.DescribeNode(panel, hoverCardPanel{h}, func(dst *ggui.Canvas) {
-			dst.Paint(h.panel, panel)
-		})
+		if !open {
+			dst = dst.Inert()
+		}
+		dst.DescribeNode(panel, hoverCardPanel{h}, func(dst *ggui.Canvas) { dst.Paint(h.effect, panel) })
 	})
 }
 

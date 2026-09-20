@@ -21,6 +21,7 @@ type InputGroupWidget struct {
 	box               *ggui.BoxWidget
 	theme             ggui.Theme
 	effectiveDisabled bool
+	invalid           bool
 	focused           func() bool
 }
 
@@ -96,6 +97,7 @@ func (g *InputGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	g.effectiveDisabled = g.Inert || inherited
 	t := env.Theme()
 	g.theme = t
+	g.invalid, _ = env.Get(fieldInvalid)
 	if g.row == nil {
 		parts := []ggui.Widget{}
 		if g.leading != nil {
@@ -133,7 +135,13 @@ func (g *InputGroupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.Describe(r, g)
 	}
 	if g.hasFocus() && !g.effectiveDisabled {
+		if g.invalid {
+			t.Ring = fade(t.Destructive, .4)
+		}
 		fieldHalo(dst, r, t.Radius, t)
+	}
+	if g.invalid {
+		g.box.Border(t.BorderWidth, t.Destructive)
 	}
 	dst.Paint(g.box, r)
 }

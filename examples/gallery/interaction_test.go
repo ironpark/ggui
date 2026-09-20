@@ -326,6 +326,8 @@ func TestGalleryChatComponentFlows(t *testing.T) {
 	searchGallery(p, "Bubble")
 	revealGallery(p, "More bubble variants")
 	p.Tap("More bubble variants")
+	p.Frame()
+	p.Advance(ggui.DefaultTheme().MotionFast)
 	revealGallery(p, "Choose suggestion")
 	p.Tap("Choose suggestion")
 	if _, ok := p.Semantics().Find(ggui.RoleText, "Suggestion selected."); !ok {

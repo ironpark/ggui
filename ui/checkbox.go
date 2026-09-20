@@ -59,18 +59,15 @@ func (c *CheckboxWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	box := c.paint(dst, r, c)
 	on := ggui.Untrack(c.checked.Get)
 	radius := t.Radius * 0.4
-	switch {
-	case c.Inert:
-		dst.FillRoundRect(box, radius, t.Card)
-		dst.StrokeRoundRect(box, radius, 1, t.Border)
-	case on:
-		dst.FillRoundRect(box, radius, pick(c.Hovered, t.PrimaryHover, t.Primary))
-	default:
-		dst.FillRoundRect(box, radius, t.Input)
-		dst.StrokeRoundRect(box, radius, 1, pick(c.Hovered, t.Primary, t.Border))
-	}
+	opacity := pick(c.Inert, .5, 1.0)
+	fill, border := t.Input, colorOr(t.InputBorder, t.Border)
 	if on {
-		paintIcon(dst, c.env, icons.Check, box, pick(c.Inert, t.MutedFg, t.PrimaryFg), 0)
+		fill, border = t.Primary, t.Primary
+	}
+	dst.FillRoundRect(box, radius, fade(fill, opacity))
+	dst.StrokeRoundRect(box, radius, 1, fade(border, opacity))
+	if on {
+		paintIcon(dst, c.env, icons.Check, box, fade(t.PrimaryFg, opacity), 0)
 	}
 	c.FocusRing(dst, box, radius, t.Ring)
 }

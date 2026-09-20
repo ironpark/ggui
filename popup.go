@@ -27,13 +27,15 @@ type PopupWidget struct {
 	env         Env
 	contentSize Size
 	rect        Rect // where the content was last painted
+	reveal      Motion
+	effect      *TransitionWidget
 }
 
 var popupKey = NewEnvKey[*PopupWidget]("popup")
 
 // Popup creates a closed popup that opens content next to anchor.
 func Popup(anchor, content Widget) *PopupWidget {
-	return &PopupWidget{anchor: anchor, content: content, gap: 4, id: autoID()}
+	return &PopupWidget{anchor: anchor, content: content, gap: 4, id: autoID(), effect: Transition(content).Fade().Scale(.95).Easing(EaseLinear)}
 }
 
 // Bind stores the open state in sig: writing it opens or closes the popup,
@@ -52,9 +54,12 @@ func (p *PopupWidget) HitID() any { return p.id }
 
 // Adopt implements Adopter: a rebuilt popup stays open.
 func (p *PopupWidget) Adopt(prev any) {
-	if q, ok := prev.(*PopupWidget); ok && p.bound == nil {
-		p.open = q.IsOpen()
-		p.point = q.point
+	if q, ok := prev.(*PopupWidget); ok {
+		p.reveal = q.reveal
+		if p.bound == nil {
+			p.open = q.IsOpen()
+			p.point = q.point
+		}
 	}
 }
 
@@ -137,10 +142,20 @@ func (p *PopupWidget) Layout(c Constraints, env Env) Size {
 func (p *PopupWidget) Paint(dst *Canvas, r Rect) {
 	dst.HitPointer(r, p)
 	dst.Paint(p.anchor, r)
-	if !p.IsOpen() {
+	open := p.IsOpen()
+	now := Now()
+	p.reveal.MoveTo(pick(open, 1.0, 0.0), now, p.env.Motion(p.env.Theme().MotionFast))
+	progress := p.reveal.Value(now)
+	if !open && progress <= 0 {
 		return
 	}
-	dst.Overlay(func(dst *Canvas) { p.paintContent(dst, r) }, dst.SemanticRef(p.owner))
+	p.effect.Progress(progress, !open)
+	dst.Overlay(func(dst *Canvas) {
+		if !open {
+			dst = dst.Inert()
+		}
+		p.paintContent(dst, r)
+	}, dst.SemanticRef(p.owner))
 }
 
 // paintContent lays the content out for the room around the anchor and
@@ -157,7 +172,7 @@ func (p *PopupWidget) paintContent(dst *Canvas, anchor Rect) {
 		anchor = Rct(Pt(clamp(p.point.X, 0, screen.W), clamp(p.point.Y, 0, screen.H)), Size{})
 		maxW = screen.W
 	}
-	natural := p.content.Layout(Constraints{MinW: anchor.Size.W, MaxW: maxW, MaxH: Unbounded}, p.env)
+	natural := p.effect.Layout(Constraints{MinW: anchor.Size.W, MaxW: maxW, MaxH: Unbounded}, p.env)
 	below := screen.H - (anchor.Origin.Y + anchor.Size.H + p.gap)
 	above := anchor.Origin.Y - p.gap
 	room, y := below, anchor.Origin.Y+anchor.Size.H+p.gap
@@ -167,7 +182,7 @@ func (p *PopupWidget) paintContent(dst *Canvas, anchor Rect) {
 	}
 	size := natural
 	if size.H > room {
-		size = p.content.Layout(Constraints{MinW: anchor.Size.W, MaxW: maxW, MaxH: max(room, 0)}, p.env)
+		size = p.effect.Layout(Constraints{MinW: anchor.Size.W, MaxW: maxW, MaxH: max(room, 0)}, p.env)
 	}
 	x := anchor.Origin.X
 	if screen.W != Unbounded {
@@ -183,7 +198,7 @@ func (p *PopupWidget) paintContent(dst *Canvas, anchor Rect) {
 		if p.keys != nil {
 			dst.HitKey(p.rect, p.keys)
 		}
-		dst.Paint(p.content, p.rect)
+		dst.Paint(p.effect, p.rect)
 	})
 }
 

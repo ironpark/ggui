@@ -11,11 +11,11 @@ import (
 // CollapsibleWidget is a titled section that folds its content away.
 // Build one with Collapsible.
 type CollapsibleWidget struct {
-	open       ggui.Binding[bool]
-	title      *ggui.TextWidget
-	content    ggui.Widget
-	body       ggui.Widget // content behind Presence, so it animates out
-	transition *ggui.TransitionWidget
+	open     ggui.Binding[bool]
+	title    *ggui.TextWidget
+	content  ggui.Widget
+	reveal   ggui.Motion
+	progress float64
 	ggui.Interactive
 
 	theme     ggui.Theme
@@ -28,14 +28,12 @@ type CollapsibleWidget struct {
 }
 
 // Collapsible creates a section whose content shows while open is true.
-// The header toggles it on click, Space or Enter; the content fades and
-// slides in and out.
+// The header toggles it on click, Space or Enter; the content
+// reveals and clips vertically in and out.
 func Collapsible(open ggui.Binding[bool], title string, content ggui.Widget) *CollapsibleWidget {
 	c := &CollapsibleWidget{open: open, title: ggui.Text(title).NoWrap(), content: content}
 	c.Role, c.Name = ggui.RoleDisclosure, title
 	c.AutoKey()
-	c.transition = ggui.Transition(content).Fade().Slide(0, -6)
-	c.body = ggui.Presence(open, c.transition)
 	return c
 }
 
@@ -87,14 +85,18 @@ func (c *CollapsibleWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 	c.theme = t
 	c.env = env
 	c.motion = env.Motion(t.MotionFast)
-	c.transition.Duration(t.MotionFast)
+	c.reveal.MoveTo(pick(c.open.Get(), 1.0, 0.0), ggui.Now(), c.motion)
+	c.progress = c.reveal.Value(ggui.Now())
 	c.pad = t.FieldPad
 	c.title.Color(pick(c.Inert, t.MutedFg, t.Fg))
 	c.titleSize = c.title.Layout(ggui.Loose(ggui.Sz(max(cs.MaxW-c.pad.Left-c.pad.Right-t.ControlSize-t.ControlGap, 0), cs.MaxH)), env)
 	c.headerH = c.titleSize.H + c.pad.Top + c.pad.Bottom
 	body := ggui.Constraints{MinW: cs.MinW, MaxW: cs.MaxW, MaxH: max(cs.MaxH-c.headerH, 0)}
-	c.bodySize = c.body.Layout(body, env)
-	return cs.Constrain(ggui.Sz(max(c.titleSize.W+c.pad.Left+c.pad.Right+t.ControlSize+t.ControlGap, c.bodySize.W), c.headerH+c.bodySize.H))
+	c.bodySize = ggui.Size{}
+	if c.progress > 0 || c.open.Get() {
+		c.bodySize = c.content.Layout(body, env)
+	}
+	return cs.Constrain(ggui.Sz(max(c.titleSize.W+c.pad.Left+c.pad.Right+t.ControlSize+t.ControlGap, c.bodySize.W), c.headerH+c.bodySize.H*c.progress))
 }
 
 // Paint implements Widget.
@@ -111,7 +113,16 @@ func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	paintIcon(dst, c.env, icons.ChevronRight, ggui.Rct(ggui.Pt(cx-8, cy-8), ggui.Sz(16, 16)), t.MutedFg, v*math.Pi/2)
 	dst.Paint(c.title, ggui.Rct(ggui.Pt(r.Origin.X+c.pad.Left+t.ControlSize+t.ControlGap, r.Origin.Y+c.pad.Top), c.titleSize))
 	c.FocusRing(dst, header, t.Radius, t.Ring)
-	dst.Paint(c.body, ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+c.headerH), c.bodySize))
+	if c.progress != pick(ggui.Untrack(c.open.Get), 1.0, 0.0) {
+		ggui.Invalidate(c.env)
+	}
+	if c.progress > 0 {
+		body := dst.Clip(ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+c.headerH), ggui.Sz(r.Size.W, c.bodySize.H*c.progress)))
+		if !ggui.Untrack(c.open.Get) {
+			body = body.Inert()
+		}
+		body.Paint(c.content, ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+c.headerH), c.bodySize))
+	}
 }
 
 // HandleKey implements KeyHandler: Space or Enter toggles.

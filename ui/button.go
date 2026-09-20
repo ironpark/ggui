@@ -2,6 +2,7 @@ package ui
 
 import (
 	"image/color"
+	"time"
 
 	"github.com/ironpark/ggui"
 )
@@ -29,12 +30,14 @@ func (v buttonVariant) resolve(t ggui.Theme) buttonStyle {
 	case variantOutline:
 		return buttonStyle{fill: t.Bg, hover: colorOr(t.Accent, t.Muted), border: t.Border, label: t.Fg, elevated: true}
 	case variantSecondary:
-		return buttonStyle{fill: t.Secondary, hover: mix(t.Secondary, t.Fg, t.HoverMix), label: t.SecondaryFg}
+		return buttonStyle{fill: t.Secondary, hover: mix(t.Secondary, t.Fg, .05), label: t.SecondaryFg}
 	case variantGhost:
 		return buttonStyle{hover: colorOr(t.Accent, t.Muted), label: t.Fg}
 	case variantDestructive:
 		d := t.Destructive
-		return buttonStyle{fill: d, hover: mix(d, t.Card, t.HoverMix*2), label: t.DestructiveFg, elevated: true}
+		r, g, b, _ := t.Bg.RGBA()
+		opacity := pick(r+g+b < 3*32768, .2, .1)
+		return buttonStyle{fill: fade(d, opacity), hover: fade(d, opacity+.1), label: d}
 	}
 	return buttonStyle{fill: t.Primary, hover: t.PrimaryHover, label: t.PrimaryFg, elevated: true}
 }
@@ -53,6 +56,7 @@ type ButtonWidget struct {
 	expands     func() bool
 	opener      ggui.Actor
 	value       func() string // optional accessible value for composite triggers
+	motion      time.Duration
 	theme       ggui.Theme
 }
 
@@ -159,29 +163,33 @@ func (b *ButtonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	b.Sync()
 	t := env.Theme()
 	b.theme = t
+	b.motion = env.Motion(t.MotionFast)
 	if !b.padded {
 		b.box.Padding(t.ButtonPad)
 	}
 	b.box.Radius(t.Radius)
 	b.style = b.variant.resolve(t)
 	if b.label != nil {
-		b.label.Color(pick(b.Inert, mix(b.style.label, t.Card, t.DisabledMix), b.style.label))
+		b.label.Color(pick(b.Inert, fade(b.style.label, .5), b.style.label))
 	}
-	return b.box.Layout(c, env.WithText(ggui.TextStyle{Color: pick(b.Inert, mix(b.style.label, t.Card, t.DisabledMix), b.style.label)}))
+	return b.box.Layout(c, env.WithText(ggui.TextStyle{Color: pick(b.Inert, fade(b.style.label, .5), b.style.label)}))
 }
 
 // Paint implements Widget.
 func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t, st := b.theme, b.style
 	fill, border := st.fill, st.border
-	if b.Hovered && !b.Inert {
+	hover := dst.Ease(b.Anchor(r), buttonHoverSlot, pick(b.Hovered && !b.Inert, 1.0, 0.0), b.motion)
+	if hover >= 1 {
 		fill = st.hover
+	} else if hover > 0 {
+		fill = mix(colorOr(fill, color.Transparent), colorOr(st.hover, color.Transparent), hover)
 	}
 	if b.Pressed && b.Hovered && !b.Inert {
 		fill = mix(fill, t.Fg, t.PressMix)
 	}
 	if b.Inert && fill != nil {
-		fill = mix(fill, t.Card, t.DisabledMix)
+		fill = fade(fill, .5)
 	}
 	b.box.Border(0, nil)
 	if border != nil {
@@ -193,8 +201,14 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	b.Hit(dst, r, b, ggui.CursorShapePointer)
 	dst.Paint(b.box, r)
-	b.FocusRing(dst, r, t.Radius, t.Ring)
+	ring := t.Ring
+	if b.variant == variantDestructive {
+		ring = fade(t.Destructive, .4)
+	}
+	b.FocusRing(dst, r, t.Radius, ring)
 }
+
+var buttonHoverSlot = ggui.NewSlot[*ggui.Motion]("button hover")
 
 // HandleKey implements KeyHandler: Space or Enter presses the button.
 func (b *ButtonWidget) HandleKey(ev ggui.KeyEvent) { b.Keyboard(ev, b.onTap) }

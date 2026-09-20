@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"image/color"
 	"math"
 
 	"github.com/ironpark/ggui"
@@ -142,17 +143,18 @@ func (s *SliderWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	s.rect = r
 	s.Hit(dst, r, s, ggui.CursorShapePointer)
 	cy := r.Origin.Y + r.Size.H/2
-	x0, x1 := r.Origin.X+sliderKnob, r.Origin.X+r.Size.W-sliderKnob
+	knob := min(float64(sliderKnob), r.Size.W/2, r.Size.H/2)
+	x0, x1 := r.Origin.X+knob, r.Origin.X+r.Size.W-knob
 	kx := x0 + (x1-x0)*s.fraction()
 	dst.FillRoundRect(ggui.Rct(ggui.Pt(x0, cy-2), ggui.Sz(x1-x0, 4)), 2, t.Border)
-	accent := pick(s.Inert, t.MutedFg, pick(s.Hovered || s.Pressed, t.PrimaryHover, t.Primary))
+	accent := pick(s.Inert, fade(t.Primary, .5), t.Primary)
 	dst.FillRoundRect(ggui.Rct(ggui.Pt(x0, cy-2), ggui.Sz(kx-x0, 4)), 2, accent)
-	radius := float64(sliderKnob)
-	if s.Hovered || s.Pressed {
-		radius++
+	radius := knob
+	if !s.Inert && (s.Hovered || s.Pressed || (s.Focused && s.FocusVisible)) {
+		dst.StrokeRoundRect(ggui.Rct(ggui.Pt(kx-radius-2, cy-radius-2), ggui.Sz(2*radius+4, 2*radius+4)), radius+2, 4, fade(t.Ring, .3))
 	}
 	dst.FillCircle(ggui.Pt(kx, cy), radius, accent)
-	dst.FillCircle(ggui.Pt(kx, cy), radius-1.5, t.Card)
+	dst.FillCircle(ggui.Pt(kx, cy), max(radius-1, 0), pick(s.Inert, fade(color.White, .5), color.Color(color.White)))
 	if s.Focused && s.FocusVisible {
 		dst.StrokeRoundRect(ggui.Rct(ggui.Pt(kx-radius-2, cy-radius-2), ggui.Sz(2*radius+4, 2*radius+4)), radius+2, 2, t.Primary)
 	}
@@ -162,7 +164,7 @@ func (s *SliderWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 // step, or a hundredth of the range without one.
 func (s *SliderWidget) HandleKey(ev ggui.KeyEvent) {
 	s.Keyboard(ev, nil)
-	if ev.Kind != ggui.KeyPress {
+	if s.Inert || ev.Kind != ggui.KeyPress {
 		return
 	}
 	step := s.step
@@ -183,6 +185,9 @@ func (s *SliderWidget) HandleKey(ev ggui.KeyEvent) {
 // HandlePointer implements PointerHandler: a left press jumps to the
 // pointer and a drag from there follows it, past the ends included.
 func (s *SliderWidget) HandlePointer(ev ggui.PointerEvent) bool {
+	if s.Inert {
+		return false
+	}
 	switch ev.Kind {
 	case ggui.PointerDown:
 		if ev.Button != ggui.MouseButtonLeft {
