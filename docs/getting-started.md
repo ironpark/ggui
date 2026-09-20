@@ -36,7 +36,7 @@ shorthand when you do not need to register setup or shortcuts first.
 | `Width`, `Height` | `800`, `600` when zero | Initial window dimensions. |
 | `Resizable` | `false` | Allow the user to resize the window. |
 | `Background` | `nil` | Follow the theme's `Bg`; set a color to override it. |
-| `Inspector` | zero, disabled | Bind a key such as `ggui.KeyF1` to the [inspector](inspector.md). |
+| `Inspector` | zero, disabled | Bind a chord such as `"f1"` to the [inspector](inspector.md). |
 | `Accessibility` | `AccessibilityAuto` | Choose when the macOS [accessibility bridge](accessibility.md) is active. |
 
 ## Set up state and cleanup

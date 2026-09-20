@@ -467,7 +467,7 @@ func run() error {
 	var app *ggui.App
 	dispose := ggui.Root(func() {
 		build, setup, commands := newGallery()
-		app = ggui.New(ggui.Config{Title: "ggui · gallery", Width: 1180, Height: 820, Resizable: true, Inspector: ggui.KeyF1}, build)
+		app = ggui.New(ggui.Config{Title: "ggui · gallery", Width: 1180, Height: 820, Resizable: true, Inspector: "f1"}, build)
 		app.Setup(setup)
 		app.Shortcut("cmd+k", commands)
 	})

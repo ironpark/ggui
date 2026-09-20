@@ -9,7 +9,7 @@ See [example conventions](README.md#start-here) before copying snippets.
 
 ## Inspector
 
-`Config{Inspector: ggui.KeyF1}` binds a key that toggles a development
+`Config{Inspector: "f1"}` binds a key that toggles a development
 overlay in the shape of a browser's element panel; `App.Inspector(on)` does
 the same from code. It is the quickest way to see why something sits where
 it does.

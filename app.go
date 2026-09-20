@@ -18,7 +18,7 @@ type Config struct {
 	Height     int
 	Resizable  bool
 	Background color.Color // nil follows the theme's Bg
-	Inspector  KeyboardKey // a key that toggles the widget inspector; zero for none
+	Inspector  string      // a chord that toggles the widget inspector, such as "f1"; empty for none
 
 	// Accessibility says when the app talks to the platform's
 	// accessibility API. The zero value waits for an assistive technology
@@ -55,14 +55,20 @@ type App struct {
 	cursor CursorShape
 	a11y   axBridge
 
-	inspect bool
-	insp    inspector
+	inspect      bool
+	inspectChord Chord // parsed from cfg.Inspector; Key is zero for none
+	insp         inspector
 }
 
 // New creates an App that renders the tree returned by build.
 func New(cfg Config, build Builder) *App {
 	a := &App{cfg: cfg.withDefaults()}
 	a.build = build
+	if cfg.Inspector != "" {
+		// A chord rather than a KeyboardKey, whose zero value is KeyA and
+		// would have made "Inspector: ggui.KeyA" mean none.
+		a.inspectChord = MustChord(cfg.Inspector)
+	}
 	return a
 }
 
@@ -203,10 +209,11 @@ func (a *App) Update() error {
 		fn()
 	}
 	a.runPosted()
-	if a.cfg.Inspector != 0 && inpututil.IsKeyJustPressed(a.cfg.Inspector) {
+	f := a.readInput()
+	if a.cfg.Inspector != "" && inpututil.IsKeyJustPressed(a.inspectChord.Key) &&
+		(KeyEvent{Kind: KeyPress, Key: a.inspectChord.Key, Mods: f.mods}).Is(a.inspectChord) {
 		a.Inspector(!a.inspect)
 	}
-	f := a.readInput()
 	cf := a.canvas.fs()
 	cf.pointer, cf.hasPointer = f.pos, true
 	a.dispatchInput(f)

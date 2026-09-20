@@ -77,7 +77,7 @@ func main() {
 		Width:     480,
 		Height:    320,
 		Resizable: true,
-		Inspector: ggui.KeyF1,
+		Inspector: "f1",
 	}, m.build)
 	m.shortcuts(app)
 

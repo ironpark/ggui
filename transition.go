@@ -110,6 +110,10 @@ func (t *TransitionWidget) Paint(dst *Canvas, r Rect) {
 		}
 	}
 	if p >= 1 && !t.leaving {
+		// The buffer is screen-sized, so a list of rows that came in
+		// together would otherwise hold one full-screen texture each for
+		// as long as the rows live.
+		t.release()
 		dst.Paint(t.child, r)
 		return
 	}
@@ -154,6 +158,15 @@ func (t *TransitionWidget) Paint(dst *Canvas, r Rect) {
 }
 
 var transitionSlot = NewSlot[transitionStart]("transition start")
+
+// release frees the offscreen buffer; the next fade or scale allocates
+// another.
+func (t *TransitionWidget) release() {
+	if t.buf != nil {
+		t.buf.Deallocate()
+		t.buf = nil
+	}
+}
 
 // Presence keeps child on screen while it animates out. While show is
 // true the child is laid out and painted as usual, playing its enter
