@@ -82,7 +82,7 @@ children across the axis (`AlignStart`, `AlignCenter`, `AlignEnd`,
 at the left. `AlignBaseline` lines a Row's children up on their first text
 baseline, so a caption beside a title shares its baseline rather than its
 centre; a child with no text rests on that baseline by its bottom edge. A
-Column treats it as `AlignStart`.
+Column, `Wrap` or `Each` treats it as `AlignStart`.
 
 ```go
 ggui.Row(ggui.Title("Inbox"), ggui.Caption("12 unread")).Gap(8).Align(ggui.AlignBaseline)

@@ -439,12 +439,7 @@ func (b *BoxWidget) Layout(c Constraints, env Env) Size {
 }
 
 // Baseline implements Baseliner: the child's, below the top padding.
-func (b *BoxWidget) Baseline() (float64, bool) {
-	if b.child == nil {
-		return 0, false
-	}
-	return baselineAt(b.child, b.padding.Top)
-}
+func (b *BoxWidget) Baseline() (float64, bool) { return baselineAt(b.child, b.padding.Top) }
 
 // Paint implements Widget.
 func (b *BoxWidget) Paint(dst *Canvas, r Rect) {
@@ -487,7 +482,7 @@ const (
 	AlignCenter                     // centered across (a Row's default)
 	AlignEnd                        // bottom of a Row, right of a Column
 	AlignStretch                    // stretched to the widget's cross size, which fills the space given
-	AlignBaseline                   // a Row lines its children's first text baselines up; a Column treats it as AlignStart
+	AlignBaseline                   // a Row lines its children's first text baselines up; Column, Wrap and Each treat it as AlignStart
 )
 
 // flow lays children out along one axis. Column and Row are the two
@@ -503,19 +498,28 @@ type flow struct {
 
 	sizes   []Size
 	offsets []Point
-
-	// Where the flow's own baseline is, from the last layout: the shared
-	// one under AlignBaseline, else the first child's that has one.
-	base    float64
-	hasBase bool
+	bases   []float64 // per-child baselines under AlignBaseline; a child without one sits on its bottom edge
 }
 
 // byBaseline reports whether children are lined up on their baselines,
 // which only a Row does.
 func (f *flow) byBaseline() bool { return f.horizontal && f.align == AlignBaseline }
 
-// Baseline implements Baseliner.
-func (f *flow) Baseline() (float64, bool) { return f.base, f.hasBase }
+// Baseline implements Baseliner: the first child's that has one, moved by
+// where it went. Under AlignBaseline every child was placed on the shared
+// baseline, so that is what the first one reports.
+func (f *flow) Baseline() (float64, bool) {
+	for i, off := range f.offsets { // empty before the first layout
+		child := f.children[i]
+		if isAbsent(child) {
+			continue
+		}
+		if b, ok := baselineAt(child, off.Y); ok {
+			return b, true
+		}
+	}
+	return 0, false
+}
 
 func (f *flow) main(s Size) float64  { return pick(f.horizontal, s.W, s.H) }
 func (f *flow) cross(s Size) float64 { return pick(f.horizontal, s.H, s.W) }
@@ -557,6 +561,7 @@ func (f *flow) layout(c Constraints, env Env) Size {
 	n := len(f.children)
 	f.sizes = resize(f.sizes, n)
 	f.offsets = resize(f.offsets, n)
+	f.bases = resize(f.bases, n)
 
 	mainMax, crossMax := f.main(c.Max()), f.cross(c.Max())
 	crossMin := f.stretched(crossMax, 0)
@@ -608,14 +613,14 @@ func (f *flow) layout(c Constraints, env Env) Size {
 	var above, below float64
 	if f.byBaseline() {
 		for i, s := range f.sizes {
-			if isAbsent(f.children[i]) {
-				continue
-			}
 			b, ok := baselineOf(f.children[i])
 			if !ok {
 				b = s.H
 			}
-			above, below = max(above, b), max(below, s.H-b)
+			f.bases[i] = b
+			if !isAbsent(f.children[i]) {
+				above, below = max(above, b), max(below, s.H-b)
+			}
 		}
 		crossUsed = above + below
 	}
@@ -645,21 +650,10 @@ func (f *flow) layout(c Constraints, env Env) Size {
 		}
 	}
 	pos := lead
-	f.base, f.hasBase = 0, false
 	for i, s := range f.sizes {
 		crossOff := (f.cross(result) - f.cross(s)) * f.crossFraction()
 		if f.byBaseline() {
-			b, ok := baselineOf(f.children[i])
-			if !ok {
-				b = s.H
-			}
-			crossOff = above - b
-			f.base, f.hasBase = above, true
-		} else if !f.hasBase && !isAbsent(f.children[i]) {
-			// The first child that has a baseline lends it to the flow.
-			if b, ok := baselineOf(f.children[i]); ok {
-				f.base, f.hasBase = b+pick(f.horizontal, crossOff, pos), true
-			}
+			crossOff = above - f.bases[i]
 		}
 		if f.horizontal {
 			f.offsets[i] = Pt(pos, crossOff)

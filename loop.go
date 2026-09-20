@@ -84,6 +84,7 @@ type frameLoop struct {
 
 	postMu sync.Mutex
 	posted []func()
+	frame  []func() // OnFrame handlers, run at the start of every frame
 
 	laidSize Size
 	laidGen  uint64
@@ -197,6 +198,13 @@ func (r *frameLoop) post(fn func()) {
 		r.posted = append(r.posted, fn)
 	}
 	r.postMu.Unlock()
+}
+
+// runFrame runs the OnFrame handlers, in registration order.
+func (r *frameLoop) runFrame() {
+	for _, fn := range r.frame {
+		fn()
+	}
 }
 
 // runPosted runs the work queued at the start of this frame, in order.

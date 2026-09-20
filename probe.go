@@ -29,7 +29,6 @@ type Probe struct {
 
 	now     time.Time // the probe's clock once Advance has been called
 	restore func()
-	frame   []func() // OnFrame handlers, run at the start of Frame
 }
 
 // NewProbe creates a Probe that lays w out at size under the current theme.
@@ -92,9 +91,7 @@ func (p *Probe) Frame() Size {
 	if p.dispose == nil && !p.closed {
 		p.start()
 	}
-	for _, fn := range p.frame {
-		fn()
-	}
+	p.runFrame()
 	p.runPosted()
 	if err := p.tick(frame.set(p.clock())); err != nil {
 		panic(err)

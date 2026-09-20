@@ -45,8 +45,7 @@ func (c Config) withDefaults() Config {
 type App struct {
 	frameErr error
 	frameLoop
-	cfg   Config
-	frame []func()
+	cfg Config
 
 	canvas Canvas // also holds the frame's screen-pixels-per-logical-pixel scale
 	spare  []hitRegion
@@ -205,9 +204,7 @@ func (a *App) Update() error {
 	// live in one process, so there is no single UI goroutine to compare
 	// with and no frame racing the write either.
 	markUIThread()
-	for _, fn := range a.frame {
-		fn()
-	}
+	a.runFrame()
 	a.runPosted()
 	f := a.readInput()
 	if a.cfg.Inspector != "" && inpututil.IsKeyJustPressed(a.inspectChord.Key) &&

@@ -208,12 +208,7 @@ func (c *ComponentWidget) Layout(cs Constraints, env Env) Size {
 }
 
 // Baseline implements Baseliner: the mounted child's.
-func (c *ComponentWidget) Baseline() (float64, bool) {
-	if c.child == nil {
-		return 0, false
-	}
-	return baselineOf(c.child)
-}
+func (c *ComponentWidget) Baseline() (float64, bool) { return baselineOf(c.child) }
 
 // Baseline implements Baseliner: the shown branch's.
 func (w *IfWidget) Baseline() (float64, bool) { return w.comp.Baseline() }

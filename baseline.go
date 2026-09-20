@@ -17,7 +17,7 @@ type Baseliner interface {
 
 // baselineOf asks w for its baseline, or reports false when w cannot say.
 func baselineOf(w Widget) (float64, bool) {
-	if b, ok := w.(Baseliner); ok && w != nil {
+	if b, ok := w.(Baseliner); ok {
 		return b.Baseline()
 	}
 	return 0, false
