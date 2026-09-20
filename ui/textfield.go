@@ -117,6 +117,9 @@ func (f *TextFieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	return size
 }
 
+// Baseline implements ggui.Baseliner: the editor's, inside the padding.
+func (f *TextFieldWidget) Baseline() (float64, bool) { return f.box.Baseline() }
+
 // Paint implements Widget.
 func (f *TextFieldWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// The whole box, padding included, focuses and clicks into the editor.

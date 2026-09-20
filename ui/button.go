@@ -178,6 +178,9 @@ func (b *ButtonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	return b.box.Layout(c, env.WithText(ggui.TextStyle{Color: label}))
 }
 
+// Baseline implements ggui.Baseliner: the label's, inside the padding.
+func (b *ButtonWidget) Baseline() (float64, bool) { return b.box.Baseline() }
+
 // Paint implements Widget.
 func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t, st := b.theme, b.style

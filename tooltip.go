@@ -49,6 +49,9 @@ func (t *TooltipWidget) Layout(c Constraints, env Env) Size {
 	return t.child.Layout(c, env)
 }
 
+// Baseline implements Baseliner: the child's.
+func (t *TooltipWidget) Baseline() (float64, bool) { return baselineOf(t.child) }
+
 // Paint implements Widget.
 func (t *TooltipWidget) Paint(dst *Canvas, r Rect) {
 	dst.Paint(t.child, r)

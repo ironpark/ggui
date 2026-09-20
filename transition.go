@@ -83,6 +83,9 @@ func (t *TransitionWidget) Progress(value float64, leaving bool) *TransitionWidg
 	return t
 }
 
+// Baseline implements Baseliner: the child's, where it lands.
+func (t *TransitionWidget) Baseline() (float64, bool) { return baselineOf(t.child) }
+
 // Layout implements Widget.
 func (t *TransitionWidget) Layout(c Constraints, env Env) Size {
 	t.reduced = env.ReducedMotion()

@@ -78,7 +78,15 @@ by fraction (`.At(0.25, 1)`) or edge (`.Bottom().Right()`). `Center` places it a
 (`JustifyCenter`, `JustifyEnd`, `SpaceBetween`, `SpaceAround`, `SpaceEvenly`).
 Any of those makes the widget fill its main axis. `.Align(...)` places
 children across the axis (`AlignStart`, `AlignCenter`, `AlignEnd`,
-`AlignStretch`); a Row centers by default, a Column starts at the left.
+`AlignStretch`, `AlignBaseline`); a Row centers by default, a Column starts
+at the left. `AlignBaseline` lines a Row's children up on their first text
+baseline, so a caption beside a title shares its baseline rather than its
+centre; a child with no text rests on that baseline by its bottom edge. A
+Column treats it as `AlignStart`.
+
+```go
+ggui.Row(ggui.Title("Inbox"), ggui.Caption("12 unread")).Gap(8).Align(ggui.AlignBaseline)
+```
 
 ```go
 ggui.Row(ggui.Text("Title"), ggui.Spacer(), ggui.Text("3 items")) // centered on its height

@@ -79,6 +79,7 @@ type TextWidget struct {
 	lines    []string
 	widths   []float64
 	natural  Size
+	ascent   float64 // the first baseline, below the top
 	wrapped  wrapKey
 }
 
@@ -234,9 +235,14 @@ func (t *TextWidget) Layout(c Constraints, env Env) Size {
 		}
 		m := face.Metrics()
 		t.natural = Sz(w, float64(len(t.lines)-1)*t.spacing()+m.HAscent+m.HDescent)
+		t.ascent = m.HAscent
 	}
 	return c.Constrain(t.natural)
 }
+
+// Baseline implements Baseliner: the first line's baseline is its ascent
+// below the top, where paintLines puts the line.
+func (t *TextWidget) Baseline() (float64, bool) { return t.ascent, t.resolved.Font != nil }
 
 // Paint implements Widget.
 func (t *TextWidget) Paint(dst *Canvas, r Rect) {
@@ -307,6 +313,9 @@ func (s *StyledWidget) Layout(c Constraints, env Env) Size {
 	return s.child.Layout(c, env.WithText(s.style))
 }
 
+// Baseline implements Baseliner: the child's.
+func (s *StyledWidget) Baseline() (float64, bool) { return baselineOf(s.child) }
+
 // Paint implements Widget.
 func (s *StyledWidget) Paint(dst *Canvas, r Rect) { dst.Paint(s.child, r) }
 
@@ -331,6 +340,9 @@ func Themed(t Theme, child Widget) *EnvWidget {
 
 // Layout implements Widget.
 func (e *EnvWidget) Layout(c Constraints, env Env) Size { return e.child.Layout(c, e.with(env)) }
+
+// Baseline implements Baseliner: the child's.
+func (e *EnvWidget) Baseline() (float64, bool) { return baselineOf(e.child) }
 
 // Paint implements Widget.
 func (e *EnvWidget) Paint(dst *Canvas, r Rect) { dst.Paint(e.child, r) }
@@ -426,6 +438,14 @@ func (b *BoxWidget) Layout(c Constraints, env Env) Size {
 	return c.Constrain(want)
 }
 
+// Baseline implements Baseliner: the child's, below the top padding.
+func (b *BoxWidget) Baseline() (float64, bool) {
+	if b.child == nil {
+		return 0, false
+	}
+	return baselineAt(b.child, b.padding.Top)
+}
+
 // Paint implements Widget.
 func (b *BoxWidget) Paint(dst *Canvas, r Rect) {
 	for _, s := range b.shadows {
@@ -463,10 +483,11 @@ const (
 type CrossAlign int
 
 const (
-	AlignStart   CrossAlign = iota // top of a Row, left of a Column (a Column's default)
-	AlignCenter                    // centered across (a Row's default)
-	AlignEnd                       // bottom of a Row, right of a Column
-	AlignStretch                   // stretched to the widget's cross size, which fills the space given
+	AlignStart    CrossAlign = iota // top of a Row, left of a Column (a Column's default)
+	AlignCenter                     // centered across (a Row's default)
+	AlignEnd                        // bottom of a Row, right of a Column
+	AlignStretch                    // stretched to the widget's cross size, which fills the space given
+	AlignBaseline                   // a Row lines its children's first text baselines up; a Column treats it as AlignStart
 )
 
 // flow lays children out along one axis. Column and Row are the two
@@ -482,7 +503,19 @@ type flow struct {
 
 	sizes   []Size
 	offsets []Point
+
+	// Where the flow's own baseline is, from the last layout: the shared
+	// one under AlignBaseline, else the first child's that has one.
+	base    float64
+	hasBase bool
 }
+
+// byBaseline reports whether children are lined up on their baselines,
+// which only a Row does.
+func (f *flow) byBaseline() bool { return f.horizontal && f.align == AlignBaseline }
+
+// Baseline implements Baseliner.
+func (f *flow) Baseline() (float64, bool) { return f.base, f.hasBase }
 
 func (f *flow) main(s Size) float64  { return pick(f.horizontal, s.W, s.H) }
 func (f *flow) cross(s Size) float64 { return pick(f.horizontal, s.H, s.W) }
@@ -569,6 +602,23 @@ func (f *flow) layout(c Constraints, env Env) Size {
 		content += f.main(s)
 		crossUsed = max(crossUsed, f.cross(s))
 	}
+	// Under AlignBaseline the Row is as tall as the tallest part above
+	// any baseline plus the tallest part below one. A child with no
+	// baseline rests on the shared one by its bottom edge.
+	var above, below float64
+	if f.byBaseline() {
+		for i, s := range f.sizes {
+			if isAbsent(f.children[i]) {
+				continue
+			}
+			b, ok := baselineOf(f.children[i])
+			if !ok {
+				b = s.H
+			}
+			above, below = max(above, b), max(below, s.H-b)
+		}
+		crossUsed = above + below
+	}
 	mainTotal := content
 	if totalFlex > 0 || f.justify != JustifyStart {
 		mainTotal = bounded(mainMax, content)
@@ -595,8 +645,22 @@ func (f *flow) layout(c Constraints, env Env) Size {
 		}
 	}
 	pos := lead
+	f.base, f.hasBase = 0, false
 	for i, s := range f.sizes {
 		crossOff := (f.cross(result) - f.cross(s)) * f.crossFraction()
+		if f.byBaseline() {
+			b, ok := baselineOf(f.children[i])
+			if !ok {
+				b = s.H
+			}
+			crossOff = above - b
+			f.base, f.hasBase = above, true
+		} else if !f.hasBase && !isAbsent(f.children[i]) {
+			// The first child that has a baseline lends it to the flow.
+			if b, ok := baselineOf(f.children[i]); ok {
+				f.base, f.hasBase = b+pick(f.horizontal, crossOff, pos), true
+			}
+		}
 		if f.horizontal {
 			f.offsets[i] = Pt(pos, crossOff)
 		} else {
@@ -710,6 +774,9 @@ func Spacer() *FlexWidget { return Expanded(Box()) }
 // Layout implements Widget.
 func (f *FlexWidget) Layout(c Constraints, env Env) Size { return f.child.Layout(c, env) }
 
+// Baseline implements Baseliner: the child's.
+func (f *FlexWidget) Baseline() (float64, bool) { return baselineOf(f.child) }
+
 // Paint implements Widget.
 func (f *FlexWidget) Paint(dst *Canvas, r Rect) { dst.Paint(f.child, r) }
 
@@ -763,6 +830,7 @@ type AlignWidget struct {
 	child Widget
 
 	childSize Size
+	size      Size // what Layout returned, for Baseline
 }
 
 // Align fills the available space and places child in it, centered until At
@@ -791,7 +859,13 @@ func (a *AlignWidget) Bottom() *AlignWidget { a.y = 1; return a }
 // Layout implements Widget.
 func (a *AlignWidget) Layout(c Constraints, env Env) Size {
 	a.childSize = a.child.Layout(c.Loosen(), env)
-	return c.Constrain(Sz(bounded(c.MaxW, a.childSize.W), bounded(c.MaxH, a.childSize.H)))
+	a.size = c.Constrain(Sz(bounded(c.MaxW, a.childSize.W), bounded(c.MaxH, a.childSize.H)))
+	return a.size
+}
+
+// Baseline implements Baseliner: the child's, moved by where it sits.
+func (a *AlignWidget) Baseline() (float64, bool) {
+	return baselineAt(a.child, (a.size.H-a.childSize.H)*a.y)
 }
 
 // Paint implements Widget.

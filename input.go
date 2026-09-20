@@ -684,6 +684,9 @@ func (p *PointerWidget) HandlePointer(ev PointerEvent) bool {
 // Layout implements Widget.
 func (p *PointerWidget) Layout(c Constraints, env Env) Size { return p.child.Layout(c, env) }
 
+// Baseline implements Baseliner: the child's.
+func (p *PointerWidget) Baseline() (float64, bool) { return baselineOf(p.child) }
+
 // Paint implements Widget.
 func (p *PointerWidget) Paint(dst *Canvas, r Rect) {
 	dst.HitPointer(r, p)
@@ -739,6 +742,9 @@ func (f *FocusWidget) HandleKey(ev KeyEvent) {
 
 // Layout implements Widget.
 func (f *FocusWidget) Layout(c Constraints, env Env) Size { return f.child.Layout(c, env) }
+
+// Baseline implements Baseliner: the child's.
+func (f *FocusWidget) Baseline() (float64, bool) { return baselineOf(f.child) }
 
 // Paint implements Widget.
 func (f *FocusWidget) Paint(dst *Canvas, r Rect) {

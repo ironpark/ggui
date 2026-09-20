@@ -34,6 +34,13 @@ geometry, or child positions that `Paint` needs, because `Paint` receives only
 the canvas and assigned rectangle. Pass the `Env` to children, deriving a new
 value only when you intend to override inherited settings.
 
+A widget that shows text, or wraps one that does, may also implement
+`Baseliner`: `Baseline()` returns how far below the widget's top its first
+text baseline sits, valid after `Layout`. `Row.Align(AlignBaseline)` reads it.
+`Text` and `TextInput` report their font's ascent; `Box`, `Column`, `Align`
+and the wrappers report their first child's, moved by where the child is
+painted. A widget that does not implement it is aligned by its bottom edge.
+
 Paint children through `dst.Paint(child, r)` so the inspector can see them.
 For small widgets, `FromFuncs` wraps the two methods as closures:
 

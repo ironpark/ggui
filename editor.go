@@ -660,6 +660,14 @@ func (t *TextInputWidget) height() float64 {
 	return m.HAscent + m.HDescent
 }
 
+// Baseline implements Baseliner: the first line's, an ascent below the top.
+func (t *TextInputWidget) Baseline() (float64, bool) {
+	if t.resolved.Font == nil {
+		return 0, false
+	}
+	return t.face(1).Metrics().HAscent, true
+}
+
 // spacing is the distance between baselines when multiline.
 func (t *TextInputWidget) spacing() float64 {
 	st := t.resolved

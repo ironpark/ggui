@@ -207,6 +207,17 @@ func (c *ComponentWidget) Layout(cs Constraints, env Env) Size {
 	return c.cw.Layout(cs, env)
 }
 
+// Baseline implements Baseliner: the mounted child's.
+func (c *ComponentWidget) Baseline() (float64, bool) {
+	if c.child == nil {
+		return 0, false
+	}
+	return baselineOf(c.child)
+}
+
+// Baseline implements Baseliner: the shown branch's.
+func (w *IfWidget) Baseline() (float64, bool) { return w.comp.Baseline() }
+
 // Paint implements Widget.
 func (c *ComponentWidget) Paint(dst *Canvas, r Rect) {
 	if c.child != nil {

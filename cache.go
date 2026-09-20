@@ -65,6 +65,9 @@ func (c *CachedWidget) Layout(cs Constraints, env Env) Size {
 // Paint implements Widget.
 func (c *CachedWidget) Paint(dst *Canvas, r Rect) { dst.Paint(c.child, r) }
 
+// Baseline implements Baseliner: the child's.
+func (c *CachedWidget) Baseline() (float64, bool) { return baselineOf(c.child) }
+
 // Measurement dependencies are separate from reactive subscriptions: even an
 // Untrack read affects layout, but never subscribes the enclosing computation.
 type layoutSource interface{ layoutVersion() uint64 }
