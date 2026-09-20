@@ -315,6 +315,14 @@ func (m *Motion) MoveTo(target float64, now time.Time, d time.Duration) {
 	m.from, m.to, m.start, m.duration = m.Value(now), target, now, d
 }
 
+// Toggle moves toward one while on and zero while off, over d, and
+// returns the position at now: the progress of something revealing
+// itself. A widget that shows or hides a panel calls it once per frame.
+func (m *Motion) Toggle(on bool, now time.Time, d time.Duration) float64 {
+	m.MoveTo(pick(on, 1.0, 0.0), now, d)
+	return m.Value(now)
+}
+
 // Value returns the position at now.
 func (m *Motion) Value(now time.Time) float64 {
 	if m.duration <= 0 || m.from == m.to {

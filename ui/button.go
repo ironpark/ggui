@@ -35,8 +35,7 @@ func (v buttonVariant) resolve(t ggui.Theme) buttonStyle {
 		return buttonStyle{hover: colorOr(t.Accent, t.Muted), label: t.Fg}
 	case variantDestructive:
 		d := t.Destructive
-		r, g, b, _ := t.Bg.RGBA()
-		opacity := pick(r+g+b < 3*32768, .2, .1)
+		opacity := pick(isDark(t.Bg), .2, .1)
 		return buttonStyle{fill: fade(d, opacity), hover: fade(d, opacity+.1), label: d}
 	}
 	return buttonStyle{fill: t.Primary, hover: t.PrimaryHover, label: t.PrimaryFg, elevated: true}
@@ -169,10 +168,14 @@ func (b *ButtonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	b.box.Radius(t.Radius)
 	b.style = b.variant.resolve(t)
-	if b.label != nil {
-		b.label.Color(pick(b.Inert, fade(b.style.label, .5), b.style.label))
+	label := b.style.label
+	if b.Inert {
+		label = fade(label, .5)
 	}
-	return b.box.Layout(c, env.WithText(ggui.TextStyle{Color: pick(b.Inert, fade(b.style.label, .5), b.style.label)}))
+	if b.label != nil {
+		b.label.Color(label)
+	}
+	return b.box.Layout(c, env.WithText(ggui.TextStyle{Color: label}))
 }
 
 // Paint implements Widget.
@@ -203,7 +206,7 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Paint(b.box, r)
 	ring := t.Ring
 	if b.variant == variantDestructive {
-		ring = fade(t.Destructive, .4)
+		ring = destructiveRing(t)
 	}
 	b.FocusRing(dst, r, t.Radius, ring)
 }

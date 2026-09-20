@@ -5,6 +5,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -23,8 +24,15 @@ var auditNames = []string{
 	"Attachment", "Bubble", "Message", "Marker", "Message Scroller", "Questionnaire", "Control states",
 }
 
+// actionNames is the control each example activates for its alternate
+// state, and hoverNames the one the pointer rests on.
+var actionNames = map[string]string{"Accordion": "Keyboard controls", "Collapsible": "Delivery preferences", "Dialog": "Reset form…", "Sheets and drawers": "Open filters", "Date picker": "Appointment date", "Menubar": "File", "Choices": "Choose fruit", "Toast": "Notify", "Progress": "Advance download", "Tabs": "Details", "Search and commands": "Commands…", "Groups and addons": "Lock alignment", "Control states": "Enabled switch"}
+
+var hoverNames = map[string]string{"Buttons": "Hover for help", "Profile and media": "Details"}
+
 type galleryAudit struct {
 	dir   string
+	names []string
 	index int
 	err   error
 }
@@ -34,26 +42,26 @@ func (g *galleryAudit) Update() error {
 	if g.err != nil {
 		return g.err
 	}
-	if g.index == len(auditNames)*8 {
+	if g.index == len(g.names)*8 {
 		return ebiten.Termination
 	}
 	return nil
 }
 func (g *galleryAudit) Draw(screen *ebiten.Image) {
-	if g.err != nil || g.index >= len(auditNames)*8 {
+	if g.err != nil || g.index >= len(g.names)*8 {
 		return
 	}
-	name := auditNames[g.index%len(auditNames)]
-	dark := g.index/len(auditNames)%2 == 1
+	name := g.names[g.index%len(g.names)]
+	dark := g.index/len(g.names)%2 == 1
 	width := 640
-	if g.index/(len(auditNames)*2)%2 == 1 {
+	if g.index/(len(g.names)*2)%2 == 1 {
 		width = 320
 	}
 	now := time.Unix(100, 0)
 	restore := ggui.SetClock(func() time.Time { return now })
 	defer restore()
 	style := ggui.StyleNova
-	if g.index/(len(auditNames)*4) == 1 {
+	if g.index/(len(g.names)*4) == 1 {
 		style = ggui.StyleRhea
 	}
 	preset := ggui.ThemePreset{Base: ggui.BaseNeutral, Accent: ggui.AccentBlue, Style: style}
@@ -109,7 +117,6 @@ func (g *galleryAudit) Draw(screen *ebiten.Image) {
 	save("initial")
 	// Activate a real accessible control where the example has a meaningful
 	// alternate state. Capture both the transition and its settled appearance.
-	actionNames := map[string]string{"Accordion": "Keyboard controls", "Collapsible": "Delivery preferences", "Dialog": "Reset form…", "Sheets and drawers": "Open filters", "Date picker": "Appointment date", "Menubar": "File", "Choices": "Choose fruit", "Toast": "Notify", "Progress": "Advance download", "Tabs": "Details", "Search and commands": "Commands…", "Groups and addons": "Lock alignment", "Control states": "Enabled switch"}
 	if target, ok := actionNames[name]; ok {
 		node, found := app.Semantics().Find("", target)
 		if !found {
@@ -123,11 +130,7 @@ func (g *galleryAudit) Draw(screen *ebiten.Image) {
 		app.Perform(node.ID, ggui.Action{Kind: action})
 	}
 
-	if name == "Buttons" || name == "Profile and media" {
-		target := "Hover for help"
-		if name == "Profile and media" {
-			target = "Details"
-		}
+	if target, ok := hoverNames[name]; ok {
 		node, ok := app.Find(target)
 		if !ok {
 			g.err = fmt.Errorf("missing hover target %s", target)
@@ -164,23 +167,16 @@ func (g *galleryAudit) Draw(screen *ebiten.Image) {
 	g.index++
 }
 func renderGalleryAudit(dir, only string) error {
+	names := auditNames
 	if only != "" {
-		var selected []string
+		names = nil
 		for _, name := range strings.Split(only, ",") {
 			name = strings.TrimSpace(name)
-			found := false
-			for _, known := range auditNames {
-				if name == known {
-					found = true
-					break
-				}
-			}
-			if !found {
+			if !slices.Contains(auditNames, name) {
 				return fmt.Errorf("unknown audit example %q", name)
 			}
-			selected = append(selected, name)
+			names = append(names, name)
 		}
-		auditNames = selected
 	}
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
@@ -188,7 +184,7 @@ func renderGalleryAudit(dir, only string) error {
 
 	ebiten.SetWindowTitle("ggui existing component audit")
 	ebiten.SetWindowSize(640, 900)
-	return ebiten.RunGame(&galleryAudit{dir: dir})
+	return ebiten.RunGame(&galleryAudit{dir: dir, names: names})
 }
 
 func auditControlStates() ggui.Widget {

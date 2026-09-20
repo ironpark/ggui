@@ -147,6 +147,7 @@ func (a *AccordionWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	a.sizes = slices.Grow(a.sizes[:0], len(a.items))[:len(a.items)]
 	clear(a.sizes)
 	a.heights = slices.Grow(a.heights[:0], len(a.items))[:len(a.items)]
+	now, motion := ggui.Now(), env.Motion(a.theme.MotionFast)
 	var width, height float64
 	for i, item := range a.items {
 		h := a.headers[i]
@@ -155,9 +156,9 @@ func (a *AccordionWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		a.heights[i] = h.size.H + 32
 		width = max(width, h.size.W+24)
 		height += a.heights[i]
-		h.reveal.MoveTo(pick(a.isOpen(i), 1.0, 0.0), ggui.Now(), env.Motion(a.theme.MotionFast))
-		h.progress = h.reveal.Value(ggui.Now())
-		if a.isOpen(i) || h.progress > 0 {
+		h.open = a.isOpen(i)
+		h.progress = h.reveal.Toggle(h.open, now, motion)
+		if h.open || h.progress > 0 {
 			a.sizes[i] = item.content.Layout(ggui.Loose(ggui.Sz(c.MaxW, ggui.Unbounded)), env)
 			width = max(width, a.sizes[i].W)
 			height += (a.sizes[i].H + 16) * h.progress
@@ -198,18 +199,8 @@ func (a *AccordionWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 			a.FocusRing(dst, rect, t.Radius, t.Ring)
 		}
 		y += a.heights[i]
-		if h.progress != pick(a.isOpen(i), 1.0, 0.0) {
-			ggui.Invalidate(a.env)
-		}
-		if h.progress > 0 {
-			height := (a.sizes[i].H + 16) * h.progress
-			body := dst.Clip(ggui.Rct(ggui.Pt(r.Origin.X, y), ggui.Sz(r.Size.W, height)))
-			if !a.isOpen(i) {
-				body = body.Inert()
-			}
-			body.Paint(item.content, ggui.Rct(ggui.Pt(r.Origin.X, y), a.sizes[i]))
-			y += height
-		}
+		paintDisclosure(dst, a.env, item.content, ggui.Pt(r.Origin.X, y), r.Size.W, a.sizes[i], h.progress, h.open)
+		y += (a.sizes[i].H + 16) * h.progress
 		if i < len(a.items)-1 {
 			dst.StrokeLine(ggui.Pt(r.Origin.X, y), ggui.Pt(r.Origin.X+r.Size.W, y), 1, t.Border)
 		}
@@ -224,6 +215,7 @@ type accordionHeader struct {
 	size     ggui.Size
 	reveal   ggui.Motion
 	progress float64
+	open     bool // as laid out
 }
 
 // Describe implements ggui.Describer: a header reports whether its section

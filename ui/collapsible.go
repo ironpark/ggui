@@ -85,15 +85,15 @@ func (c *CollapsibleWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 	c.theme = t
 	c.env = env
 	c.motion = env.Motion(t.MotionFast)
-	c.reveal.MoveTo(pick(c.open.Get(), 1.0, 0.0), ggui.Now(), c.motion)
-	c.progress = c.reveal.Value(ggui.Now())
+	open := c.open.Get()
+	c.progress = c.reveal.Toggle(open, ggui.Now(), c.motion)
 	c.pad = t.FieldPad
 	c.title.Color(pick(c.Inert, t.MutedFg, t.Fg))
 	c.titleSize = c.title.Layout(ggui.Loose(ggui.Sz(max(cs.MaxW-c.pad.Left-c.pad.Right-t.ControlSize-t.ControlGap, 0), cs.MaxH)), env)
 	c.headerH = c.titleSize.H + c.pad.Top + c.pad.Bottom
 	body := ggui.Constraints{MinW: cs.MinW, MaxW: cs.MaxW, MaxH: max(cs.MaxH-c.headerH, 0)}
 	c.bodySize = ggui.Size{}
-	if c.progress > 0 || c.open.Get() {
+	if c.progress > 0 || open {
 		c.bodySize = c.content.Layout(body, env)
 	}
 	return cs.Constrain(ggui.Sz(max(c.titleSize.W+c.pad.Left+c.pad.Right+t.ControlSize+t.ControlGap, c.bodySize.W), c.headerH+c.bodySize.H*c.progress))
@@ -102,33 +102,24 @@ func (c *CollapsibleWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 // Paint implements Widget.
 func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := c.theme
+	open := ggui.Untrack(c.open.Get)
 	header := ggui.Rct(r.Origin, ggui.Sz(r.Size.W, c.headerH))
 	c.Hit(dst, header, c, ggui.CursorShapePointer)
 	if c.Hovered && !c.Inert {
 		dst.FillRoundRect(header, t.Radius, t.Muted)
 	}
-	// The chevron turns from pointing right (0) to pointing down (1).
-	v := dst.Ease(c.Anchor(header), chevronSlot, pick(ggui.Untrack(c.open.Get), 1.0, 0.0), c.motion)
+	// The chevron turns from pointing right (0) to pointing down (1) with
+	// the body it reveals.
+	v := c.progress
 	cx, cy := r.Origin.X+c.pad.Left+t.ControlSize*0.4, r.Origin.Y+c.headerH/2
 	paintIcon(dst, c.env, icons.ChevronRight, ggui.Rct(ggui.Pt(cx-8, cy-8), ggui.Sz(16, 16)), t.MutedFg, v*math.Pi/2)
 	dst.Paint(c.title, ggui.Rct(ggui.Pt(r.Origin.X+c.pad.Left+t.ControlSize+t.ControlGap, r.Origin.Y+c.pad.Top), c.titleSize))
 	c.FocusRing(dst, header, t.Radius, t.Ring)
-	if c.progress != pick(ggui.Untrack(c.open.Get), 1.0, 0.0) {
-		ggui.Invalidate(c.env)
-	}
-	if c.progress > 0 {
-		body := dst.Clip(ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+c.headerH), ggui.Sz(r.Size.W, c.bodySize.H*c.progress)))
-		if !ggui.Untrack(c.open.Get) {
-			body = body.Inert()
-		}
-		body.Paint(c.content, ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+c.headerH), c.bodySize))
-	}
+	paintDisclosure(dst, c.env, c.content, ggui.Pt(r.Origin.X, r.Origin.Y+c.headerH), r.Size.W, c.bodySize, c.progress, open)
 }
 
 // HandleKey implements KeyHandler: Space or Enter toggles.
 func (c *CollapsibleWidget) HandleKey(ev ggui.KeyEvent) { c.Keyboard(ev, c.toggle) }
-
-var chevronSlot = ggui.NewSlot[*ggui.Motion]("chevronSlot")
 
 // HandlePointer implements PointerHandler.
 func (c *CollapsibleWidget) HandlePointer(ev ggui.PointerEvent) bool { return c.Pointer(ev, c.toggle) }

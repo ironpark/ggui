@@ -69,7 +69,10 @@ func (f *FieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		parts = append(parts, f.note)
 	}
 	f.column = ggui.Column(parts...).Gap(t.Space / 2).Align(ggui.AlignStretch)
-	return f.column.Layout(c, env.With(fieldInvalid, invalid))
+	if invalid {
+		env = env.With(fieldInvalid, true)
+	}
+	return f.column.Layout(c, env)
 }
 
 // Paint implements Widget.

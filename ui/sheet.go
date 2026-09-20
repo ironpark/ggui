@@ -98,8 +98,7 @@ func (s *SheetWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 func (s *SheetWidget) Paint(dst *ggui.Canvas, _ ggui.Rect) {
 	open := ggui.Untrack(s.open.Get)
 	now := ggui.Now()
-	s.slide.MoveTo(pick(open, 1.0, 0.0), now, s.env.Motion(s.theme.MotionSlow))
-	v := clamp(s.slide.Value(now), 0, 1)
+	v := clamp(s.slide.Toggle(open, now, s.env.Motion(s.theme.MotionSlow)), 0, 1)
 	if !open && v <= 0.001 {
 		s.rect = ggui.Rect{}
 		return

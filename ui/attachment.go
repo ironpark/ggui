@@ -288,7 +288,7 @@ func (a *AttachmentWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 			phase := float64(ggui.Now().UnixMilli()%2000) / 2000
 			center := (titleRect.Size.W+80)*phase - 40
 			highlight := t.Card
-			if red, green, blue, _ := t.Card.RGBA(); red+green+blue < 3*32768 {
+			if isDark(t.Card) {
 				highlight = color.White
 			}
 			for i := 0; i < 16; i++ {

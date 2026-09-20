@@ -45,13 +45,13 @@ func channels(c color.Color, f, fa float64) color.Color {
 	if c == nil {
 		return nil
 	}
+	if f == 1 && fa == 1 {
+		return c
+	}
 	r, g, b, a := c.RGBA()
 	scale := func(v uint32, by float64) uint8 { return uint8(clamp(float64(v>>8)*by, 0, 255)) }
 	return color.RGBA{scale(r, f), scale(g, f), scale(b, f), scale(a, fa)}
 }
-
-// tint darkens (f < 1) or lightens (f > 1) an opaque color.
-func tint(c color.Color, f float64) color.Color { return channels(c, f, 1) }
 
 // fade dims a color toward nothing. Every channel goes, alpha included,
 // because a premultiplied color stays premultiplied only if they all do.

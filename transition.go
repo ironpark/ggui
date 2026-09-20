@@ -41,6 +41,13 @@ func Transition(child Widget) *TransitionWidget {
 	return &TransitionWidget{child: child, duration: 200 * time.Millisecond, ease: EaseOut, id: autoID()}
 }
 
+// PopIn is the entrance every floating panel shares: a fade with a slight
+// scale up, driven through Progress by a Motion. The easing is linear
+// because Motion.Value already eases; a curve here would apply twice.
+func PopIn(child Widget) *TransitionWidget {
+	return Transition(child).Fade().Scale(.95).Easing(EaseLinear)
+}
+
 // Fade animates opacity from transparent.
 func (t *TransitionWidget) Fade() *TransitionWidget { t.fade = true; return t }
 

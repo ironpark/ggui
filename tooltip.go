@@ -10,11 +10,10 @@ type TooltipWidget struct {
 	delay time.Duration
 	pad   EdgeInsets
 
-	box     *BoxWidget
-	effect  *TransitionWidget
-	env     Env
-	tipSize Size
-	theme   Theme
+	box    *BoxWidget
+	effect *TransitionWidget
+	env    Env
+	theme  Theme
 }
 
 // tooltipHover is the hover timer, retained on the Canvas by Rect so a
@@ -33,7 +32,7 @@ var tooltipSlot = NewSlot[tooltipHover]("tooltip hover")
 func Tooltip(child Widget, text string) *TooltipWidget {
 	t := &TooltipWidget{child: child, tip: Text(text).Size(12), delay: 500 * time.Millisecond}
 	t.box = Box(t.tip)
-	t.effect = Transition(t.box).Fade().Scale(.95).Easing(EaseLinear)
+	t.effect = PopIn(t.box)
 	return t
 }
 
@@ -66,8 +65,7 @@ func (t *TooltipWidget) Paint(dst *Canvas, r Rect) {
 		state.since = time.Time{}
 	}
 	open := focused || (hovered && now.Sub(state.since) >= t.delay)
-	state.reveal.MoveTo(pick(open, 1.0, 0.0), now, t.env.Motion(t.theme.MotionFast))
-	progress := state.reveal.Value(now)
+	progress := state.reveal.Toggle(open, now, t.env.Motion(t.theme.MotionFast))
 	dst.Retain(at, tooltipSlot, state)
 	if !open && progress <= 0 {
 		return
@@ -77,13 +75,14 @@ func (t *TooltipWidget) Paint(dst *Canvas, r Rect) {
 }
 
 func (t *TooltipWidget) paintTip(dst *Canvas, anchor Rect) {
+	screen := dst.Size()
 	maxW := 280 + t.pad.Left + t.pad.Right
-	if screen := dst.Size(); screen.W > 0 {
+	if screen.W > 0 {
 		maxW = min(maxW, screen.W)
 	}
 	size := t.effect.Layout(Loose(Sz(maxW, Unbounded)), t.env)
 	at := Pt(anchor.Origin.X+(anchor.Size.W-size.W)/2, anchor.Origin.Y+anchor.Size.H+4)
-	if screen := dst.Size(); screen != (Size{}) {
+	if screen != (Size{}) {
 		at.X = clamp(at.X, 0, max(screen.W-size.W, 0))
 		if at.Y+size.H > screen.H {
 			at.Y = max(anchor.Origin.Y-size.H-4, 0)

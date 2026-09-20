@@ -54,10 +54,10 @@ func (d *DialogWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := env.Theme()
 	d.build(env).Border(t.BorderWidth, t.Border).Radius(t.RadiusLg)
 	if d.effect == nil {
-		d.effect = ggui.Transition(ggui.FromFuncs(
+		d.effect = ggui.PopIn(ggui.FromFuncs(
 			func(c ggui.Constraints, e ggui.Env) ggui.Size { return d.panel.Layout(c, e) },
 			func(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(d.panel, r) },
-		)).Fade().Scale(.95).Easing(ggui.EaseLinear)
+		))
 	}
 	return c.Constrain(ggui.Size{})
 }
@@ -66,8 +66,7 @@ func (d *DialogWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 func (d *DialogWidget) Paint(dst *ggui.Canvas, _ ggui.Rect) {
 	open := ggui.Untrack(d.open.Get)
 	now := ggui.Now()
-	d.reveal.MoveTo(pick(open, 1.0, 0.0), now, d.env.Motion(d.theme.MotionFast))
-	v := d.reveal.Value(now)
+	v := d.reveal.Toggle(open, now, d.env.Motion(d.theme.MotionFast))
 	if !open && v <= 0 {
 		d.rect = ggui.Rect{}
 		return

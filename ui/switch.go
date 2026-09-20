@@ -57,12 +57,8 @@ func (s *SwitchWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	box := s.paint(dst, r, s)
 	on := ggui.Untrack(s.on.Get)
 	k := dst.Ease(s.Anchor(box), knobSlot, pick(on, 1.0, 0.0), s.motion)
-	track := pick(k >= 1, t.Primary, colorOr(t.InputBorder, t.Border))
-	thumb := pick(k >= 1, t.PrimaryFg, color.Color(color.White))
-	if k > 0 && k < 1 {
-		track = mix(colorOr(t.InputBorder, t.Border), t.Primary, k)
-		thumb = mix(color.White, t.PrimaryFg, k)
-	}
+	track := mix(colorOr(t.InputBorder, t.Border), t.Primary, k)
+	thumb := mix(color.White, t.PrimaryFg, k)
 	if s.Inert {
 		track = fade(track, .5)
 		thumb = fade(thumb, .5)

@@ -58,6 +58,15 @@ func (r Rect) Intersect(o Rect) Rect {
 	return Rect{Origin: Point{x0, y0}, Size: Size{x1 - x0, y1 - y0}}
 }
 
+// Union returns the smallest Rect covering both r and o.
+func (r Rect) Union(o Rect) Rect {
+	x0 := min(r.Origin.X, o.Origin.X)
+	y0 := min(r.Origin.Y, o.Origin.Y)
+	x1 := max(r.Origin.X+r.Size.W, o.Origin.X+o.Size.W)
+	y1 := max(r.Origin.Y+r.Size.H, o.Origin.Y+o.Size.H)
+	return Rect{Origin: Point{x0, y0}, Size: Size{x1 - x0, y1 - y0}}
+}
+
 // Empty reports whether r has no area.
 func (r Rect) Empty() bool { return r.Size.W <= 0 || r.Size.H <= 0 }
 

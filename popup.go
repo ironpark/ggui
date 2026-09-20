@@ -35,7 +35,7 @@ var popupKey = NewEnvKey[*PopupWidget]("popup")
 
 // Popup creates a closed popup that opens content next to anchor.
 func Popup(anchor, content Widget) *PopupWidget {
-	return &PopupWidget{anchor: anchor, content: content, gap: 4, id: autoID(), effect: Transition(content).Fade().Scale(.95).Easing(EaseLinear)}
+	return &PopupWidget{anchor: anchor, content: content, gap: 4, id: autoID(), effect: PopIn(content)}
 }
 
 // Bind stores the open state in sig: writing it opens or closes the popup,
@@ -144,8 +144,7 @@ func (p *PopupWidget) Paint(dst *Canvas, r Rect) {
 	dst.Paint(p.anchor, r)
 	open := p.IsOpen()
 	now := Now()
-	p.reveal.MoveTo(pick(open, 1.0, 0.0), now, p.env.Motion(p.env.Theme().MotionFast))
-	progress := p.reveal.Value(now)
+	progress := p.reveal.Toggle(open, now, p.env.Motion(p.env.Theme().MotionFast))
 	if !open && progress <= 0 {
 		return
 	}
