@@ -67,7 +67,7 @@ func Resource[I, T any](input func() I, load func(context.Context, I) (T, error)
 		Effect(func() Cleanup {
 			go func() {
 				value, err := load(ctx, value)
-				owner.loop.post(func() {
+				loopPost(owner)(func() {
 					if r.disposed || runner.disposed {
 						return
 					}

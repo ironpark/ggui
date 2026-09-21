@@ -47,14 +47,14 @@ func (c *CachedWidget) Layout(cs Constraints, env Env) Size {
 	if c.valid && !c.dirty && cs == c.cons && env.rev == c.rev && c.fontGen == fontGeneration && c.inputsEqual() {
 		if measuring != nil {
 			for src, version := range c.sources {
-				measuring.record(src, version)
+				measuring(src, version)
 			}
 		}
 		return c.size
 	}
 	clear(c.sources)
 	previous := measuring
-	measuring = c
+	measuring = c.record
 	defer func() { measuring = previous }()
 	c.size = c.child.Layout(cs, env.With(cacheOwner, c))
 	c.fontGen = fontGeneration
@@ -76,7 +76,7 @@ type layoutSource interface{ layoutVersion() uint64 }
 // during it is recorded against the right one. Layout is UI-goroutine work,
 // and the value is saved and restored around each nested measurement rather
 // than assigned outright.
-var measuring *CachedWidget
+var measuring func(src layoutSource, version uint64)
 
 func (c *CachedWidget) record(src layoutSource, version uint64) {
 	for ; c != nil; c = c.outer {
@@ -93,4 +93,16 @@ func (c *CachedWidget) inputsEqual() bool {
 		}
 	}
 	return true
+}
+
+// Invalidate tells the runtime that the widget laid out under env changed
+// size, or its children did: the tree is laid out again next frame and the
+// nearest Cached above the widget measures its subtree afresh. A StateValue
+// write does the first half by itself; a widget that keeps size-affecting
+// state outside signals calls Invalidate when that state changes.
+func Invalidate(env Env) {
+	requestLayout()
+	if c, ok := env.Get(cacheOwner); ok {
+		c.invalidate()
+	}
 }

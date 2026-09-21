@@ -10,7 +10,7 @@ func (s propertySource) layoutVersion() uint64 { return s.owner.Version() }
 func init() {
 	property.OnRead = func(owner *property.Owner) {
 		if measuring != nil {
-			measuring.record(propertySource{owner}, owner.Version())
+			measuring(propertySource{owner}, owner.Version())
 		}
 	}
 	property.OnChange = requestLayout

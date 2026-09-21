@@ -162,10 +162,25 @@ var running atomic.Pointer[frameLoop]
 func UIThread() func(func()) {
 	checkUIThread("UIThread")
 	owner := currentOwner()
-	if owner == nil || owner.loop == nil {
+	post := loopPost(owner)
+	if post == nil {
 		panic("ggui: UIThread requires an app or mounted component owner")
 	}
-	return owner.loop.post
+	return post
+}
+
+// loopPost is the owner's frame loop dispatcher, or nil when it has none.
+// An effect holds its loop as an opaque token, so this is the one place
+// that turns it back into the concrete loop.
+func loopPost(owner *effect) func(func()) {
+	if owner == nil {
+		return nil
+	}
+	l, _ := owner.loop.(*frameLoop)
+	if l == nil {
+		return nil
+	}
+	return l.post
 }
 
 // start runs the setup functions and the builder under a fresh root owner.

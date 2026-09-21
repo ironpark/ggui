@@ -24,18 +24,6 @@ var stateGen uint64
 // requestLayout asks the runtime to lay the tree out again next frame.
 func requestLayout() { layoutGen.Add(1) }
 
-// Invalidate tells the runtime that the widget laid out under env changed
-// size, or its children did: the tree is laid out again next frame and the
-// nearest Cached above the widget measures its subtree afresh. A StateValue
-// write does the first half by itself; a widget that keeps size-affecting
-// state outside signals calls Invalidate when that state changes.
-func Invalidate(env Env) {
-	requestLayout()
-	if c, ok := env.Get(cacheOwner); ok {
-		c.invalidate()
-	}
-}
-
 // tracker holds the running computation. listener is the effect that reads
 // subscribe to (nil inside Untrack); owner is the effect that newly created
 // effects belong to, so that they are disposed when it re-runs or is
@@ -81,9 +69,12 @@ type effect struct {
 	state      uint8
 	user       bool
 	persistent bool
-	loop       *frameLoop
-	running    bool
-	disposed   bool
+	// loop is the frame loop this effect belongs to, held only so that
+	// flushUsers can tell one loop's effects from another's. It is never
+	// dereferenced here, so the reactive core needs no frame loop type.
+	loop     any
+	running  bool
+	disposed bool
 
 	// cell is the memo's value this effect computes, if it is a memo's:
 	// what carries staleness on to the memo's own readers.
@@ -384,7 +375,7 @@ func (s *StateValue[T]) Get() T {
 		}
 	}
 	if measuring != nil {
-		measuring.record(s, s.version)
+		measuring(s, s.version)
 	}
 	return s.val
 }
