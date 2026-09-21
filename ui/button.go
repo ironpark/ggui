@@ -81,6 +81,9 @@ func ButtonOf(child ggui.Widget, onTap func()) *ButtonWidget {
 // its text, ButtonOf needs one.
 func (b *ButtonWidget) Named(s string) *ButtonWidget { b.Name = s; return b }
 
+// NamedWhen binds the button's name to r; see ggui.Interactive.NameWhen.
+func (b *ButtonWidget) NamedWhen(r ggui.Readable[string]) *ButtonWidget { b.NameWhen(r); return b }
+
 // Expands makes the button report whether what it opens is showing, for a
 // menu button or a combobox trigger; a plain button does not expand at all,
 // which is not the same as being closed.

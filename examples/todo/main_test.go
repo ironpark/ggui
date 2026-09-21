@@ -9,10 +9,14 @@ import (
 // TestTodo drives the app headlessly. Tap finds controls by their
 // accessible names, which the rows derive from their titles.
 func TestTodo(t *testing.T) {
-	m := newModel()
-	p := ggui.ProbeBuilder(m.build, ggui.Sz(520, 600))
+	// The model's derived values need an owner, as in main: a Root that
+	// the probe disposes with itself.
+	var m *model
+	dispose := ggui.Root(func() { m = newModel() })
+	p := ggui.ProbeBuilder(func() ggui.Widget { return build(m) }, ggui.Sz(520, 600))
+	p.Setup(func() { ggui.OnCleanup(dispose) })
 	defer p.Close()
-	m.shortcuts(p)
+	shortcuts(p, m)
 
 	if _, ok := p.Semantics().Find(ggui.RoleText, "Nothing here"); !ok {
 		t.Fatal("empty list should show the Empty state")
@@ -49,8 +53,11 @@ func TestTodo(t *testing.T) {
 	}
 	p.Tap("Edit: Buy milk") // focus the field
 	ggui.Untrack(m.Todos.Get)[0].Title.Set("Buy oat milk")
+	if _, ok := p.Find("Edit: Buy oat milk"); !ok {
+		t.Fatal("the editor's name did not follow the title")
+	}
 	p.Type(ggui.Mods{}, ggui.KeyEnter)
-	if _, ok := p.Find("Edit: Buy milk"); ok {
+	if _, ok := p.Find("Edit: Buy oat milk"); ok {
 		t.Fatal("Enter did not close the editor")
 	}
 	if _, ok := p.Find("Done: Buy oat milk"); !ok {

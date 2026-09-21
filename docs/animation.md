@@ -19,6 +19,10 @@ bar := ggui.Reactive(func() ggui.Widget {
 width.Set(120) // slides there over 200ms; Jump(v) skips the motion
 ```
 
+`TweenOf(source, d)` and `SpringOf(source)` follow a `Readable` instead of
+being set by hand: a progress bar bound to `TweenOf(fraction, d)` eases to
+each new fraction. They watch the source, so like `Watch` they need an owner.
+
 Animations created inside an owner stop when it is disposed and keep their
 last value; `Set` and `Jump` on those disposed values do nothing. Create them
 in component setup or `App.Setup` to keep them across builder reruns. An

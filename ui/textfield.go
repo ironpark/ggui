@@ -42,6 +42,12 @@ func (f *TextFieldWidget) Placeholder(s string) *TextFieldWidget { f.input.Place
 // serves until one is set.
 func (f *TextFieldWidget) Named(s string) *TextFieldWidget { f.input.Named(s); return f }
 
+// NamedWhen binds the field's name to r; see ggui.Interactive.NameWhen.
+func (f *TextFieldWidget) NamedWhen(r ggui.Readable[string]) *TextFieldWidget {
+	f.input.NamedWhen(r)
+	return f
+}
+
 // SetName is Named, for Field.
 func (f *TextFieldWidget) SetName(s string) { f.input.Named(s) }
 

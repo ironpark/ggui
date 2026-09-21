@@ -166,6 +166,42 @@ func TestAnimationCreatedDuringStepIsNotDropped(t *testing.T) {
 	}
 }
 
+// TweenOf and SpringOf start at the source's value and retarget as it
+// changes, through a Watch that their owner disposes.
+func TestTweenOfAndSpringOfFollowTheirSource(t *testing.T) {
+	anims.list = nil
+	src := State(10.0)
+	var tw *Tweened[float64]
+	var sp *Sprung[float64]
+	dispose := Root(func() {
+		tw = TweenOf(src, time.Second).Easing(EaseLinear)
+		sp = SpringOf(src)
+	})
+	if Untrack(tw.Get) != 10 || Untrack(sp.Get) != 10 {
+		t.Fatalf("start = %v, %v; want the source's 10", Untrack(tw.Get), Untrack(sp.Get))
+	}
+	effects.flushUsers(nil) // the first Watch run sets the target it already has
+	src.Set(110)
+	effects.flush()
+	effects.flushUsers(nil)
+	t0 := time.Unix(0, 0)
+	anims.step(t0)
+	anims.step(t0.Add(500 * time.Millisecond))
+	if got := Untrack(tw.Get); got != 60 {
+		t.Fatalf("tween halfway = %v, want 60", got)
+	}
+	if sp.Target() != 110 {
+		t.Fatalf("spring target = %v, want 110", sp.Target())
+	}
+	dispose()
+	src.Set(0)
+	effects.flush()
+	effects.flushUsers(nil)
+	if tw.Target() != 110 {
+		t.Fatal("a disposed TweenOf still followed its source")
+	}
+}
+
 func TestAnimationCanLoseOwnerDuringStep(t *testing.T) {
 	var tw *Tweened[float64]
 	var dispose func()

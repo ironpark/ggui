@@ -470,6 +470,9 @@ func (t *TextInputWidget) Placeholder(s string) *TextInputWidget { t.placeholder
 // it holds reaches the editor the same way it reaches any other control.
 func (t *TextInputWidget) Named(s string) *TextInputWidget { t.Name = s; return t }
 
+// NamedWhen binds the field's name to r; see Interactive.NameWhen.
+func (t *TextInputWidget) NamedWhen(r Readable[string]) *TextInputWidget { t.NameWhen(r); return t }
+
 // IsDisabled reports the effective state, including InputDisabled inherited at
 // the most recent Layout. It does not subscribe to the disabled binding.
 func (t *TextInputWidget) IsDisabled() bool { return t.Inert || t.inheritedDisabled }

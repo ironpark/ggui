@@ -20,6 +20,29 @@ func TestDisabledWhenFollowsSignalWithoutRebuild(t *testing.T) {
 	}
 }
 
+// A bound name follows its signal on the next frame, and a Field's label
+// does not replace it.
+func TestNamedWhenFollowsSignalWithoutRebuild(t *testing.T) {
+	name := ggui.State("Remove Buy milk")
+	b := ui.Button("×", nil).NamedWhen(name)
+	f := ui.Field("Label", ui.TextField(ggui.State("")).NamedWhen(name))
+	p := ggui.NewProbe(ggui.Column(b, f), ggui.Sz(200, 120))
+	defer p.Close()
+	if _, ok := p.FindRole(ggui.RoleButton, "Remove Buy milk"); !ok {
+		t.Fatal("button not found by its bound name")
+	}
+	if _, ok := p.FindRole(ggui.RoleTextField, "Remove Buy milk"); !ok {
+		t.Fatal("the Field label replaced the bound name")
+	}
+	name.Set("Remove Buy oat milk")
+	if _, ok := p.Find("Remove Buy oat milk"); !ok {
+		t.Fatal("name did not follow the signal")
+	}
+	if _, ok := p.Find("Remove Buy milk"); ok {
+		t.Fatal("old name still registered")
+	}
+}
+
 func TestSliderCommitsOnRelease(t *testing.T) {
 	v := ggui.State(0.0)
 	changes, commits := 0, 0

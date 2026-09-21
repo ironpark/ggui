@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/ironpark/ggui"
@@ -20,6 +21,8 @@ type Todo struct {
 	Done  *ggui.StateValue[bool]
 }
 
+func isDone(t *Todo) bool { return ggui.Untrack(t.Done.Get) }
+
 // filter chooses which rows the list shows.
 type filter int
 
@@ -31,13 +34,6 @@ const (
 
 func (f filter) String() string { return [...]string{"All", "Active", "Done"}[f] }
 
-// tally counts the list once for everything that needs a number from it.
-type tally struct{ total, done int }
-
-func (t tally) left() int         { return t.total - t.done }
-func (t tally) noneDone() bool    { return t.done == 0 }
-func (t tally) fraction() float64 { return float64(t.done) / float64(max(t.total, 1)) }
-
 const maxTitle = 60
 
 // titleError is the validation the field shows and add enforces.
@@ -48,19 +44,27 @@ func titleError(s string) string {
 	return ""
 }
 
-// model holds one signal per piece of state. The derived views below are
-// called from build, so they belong to the app's or the probe's root owner.
+// model holds one signal per piece of state and the views derived from
+// them. The derived values and the progress tween watch the signals, so
+// newModel runs under an owner (ggui.Root or Setup) that disposes them.
 type model struct {
 	Todos   *ggui.StateValue[[]*Todo]
 	Draft   *ggui.StateValue[string]
 	Show    *ggui.StateValue[filter]
 	Dark    *ggui.StateValue[bool]
 	Confirm *ggui.StateValue[bool]
-	nextID  int
+
+	Visible    *ggui.DerivedValue[[]*Todo] // the rows the filter lets through
+	Left       *ggui.DerivedValue[int]     // how many are not done
+	NoneDone   *ggui.DerivedValue[bool]
+	DraftError *ggui.DerivedValue[string]
+	Progress   *ggui.Tweened[float64] // eases toward the done fraction
+
+	nextID int
 }
 
 func newModel() *model {
-	return &model{
+	m := &model{
 		Todos:   ggui.State([]*Todo{}),
 		Draft:   ggui.State(""),
 		Show:    ggui.State(all),
@@ -68,6 +72,33 @@ func newModel() *model {
 		Confirm: ggui.State(false),
 		nextID:  1,
 	}
+	m.Visible = ggui.Derived(func() []*Todo {
+		f, todos := m.Show.Get(), m.Todos.Get()
+		out := make([]*Todo, 0, len(todos))
+		for _, t := range todos {
+			if f == all || (f == active) != t.Done.Get() {
+				out = append(out, t)
+			}
+		}
+		return out
+	})
+	// One pass counts the list for the three readers of its numbers.
+	type tally struct{ total, done int }
+	counts := ggui.Derived(func() tally {
+		var c tally
+		for _, t := range m.Todos.Get() {
+			c.total++
+			if t.Done.Get() {
+				c.done++
+			}
+		}
+		return c
+	})
+	m.Left = counts.Map(func(c tally) int { return c.total - c.done })
+	m.NoneDone = counts.Map(func(c tally) bool { return c.done == 0 })
+	m.Progress = ggui.TweenOf(counts.Map(func(c tally) float64 { return float64(c.done) / float64(max(c.total, 1)) }), 300*time.Millisecond)
+	m.DraftError = m.Draft.Map(titleError)
+	return m
 }
 
 // Actions. Each reads with Untrack: they run from handlers, not effects.
@@ -86,8 +117,6 @@ func (m *model) remove(id int) {
 	ggui.Remove(m.Todos, func(t *Todo) bool { return t.ID == id })
 }
 
-func isDone(t *Todo) bool { return ggui.Untrack(t.Done.Get) }
-
 func (m *model) clearDone() { ggui.Remove(m.Todos, isDone) }
 
 // askClearDone opens the confirmation when there is something to clear.
@@ -95,33 +124,4 @@ func (m *model) askClearDone() {
 	if slices.ContainsFunc(ggui.Untrack(m.Todos.Get), isDone) {
 		m.Confirm.Set(true)
 	}
-}
-
-// Derived views.
-
-// visible follows the list, the filter and every Done flag.
-func (m *model) visible() *ggui.DerivedValue[[]*Todo] {
-	return ggui.Derived(func() []*Todo {
-		f, todos := m.Show.Get(), m.Todos.Get()
-		out := make([]*Todo, 0, len(todos))
-		for _, t := range todos {
-			if f == all || (f == active) != t.Done.Get() {
-				out = append(out, t)
-			}
-		}
-		return out
-	})
-}
-
-func (m *model) tally() *ggui.DerivedValue[tally] {
-	return ggui.Derived(func() tally {
-		var c tally
-		for _, t := range m.Todos.Get() {
-			c.total++
-			if t.Done.Get() {
-				c.done++
-			}
-		}
-		return c
-	})
 }

@@ -112,8 +112,10 @@ content)` is a centered modal on a scrim that takes the clicks, with
 
 Every control carries a `Role` and a name: a button's text, a
 checkbox's label, a field's `Named` or placeholder; `ButtonOf`, `Slider`
-and `Select` take one through `.Named`. The inspector shows
-them, and tests find controls by them.
+and `Select` take one through `.Named`. `.NamedWhen(sig)` on a button or
+field, or `NameWhen` on any control built on `Interactive`, binds the name
+to a signal, so a row named after an editable title stays current without
+a rebuild. The inspector shows them, and tests find controls by them.
 
 ## Custom input handlers
 

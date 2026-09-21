@@ -121,6 +121,17 @@ func Tween[T Number](v T, d time.Duration) *Tweened[T] {
 	return t
 }
 
+// TweenOf creates a Tweened that follows src: it starts at src's value and
+// eases to each new one over d. It watches src, so like Watch it needs an
+// owner: create it in App.Setup or component setup.
+//
+//	bar := ui.Progress(ggui.TweenOf(fraction, 300*time.Millisecond))
+func TweenOf[T Number](src Readable[T], d time.Duration) *Tweened[T] {
+	t := Tween(Untrack(src.Get), d)
+	Watch(src, t.Set)
+	return t
+}
+
 // Easing sets the curve; see EaseLinear, EaseIn, EaseOut, EaseInOut.
 func (t *Tweened[T]) Easing(e Easing) *Tweened[T] { t.ease = e; return t }
 
@@ -212,6 +223,14 @@ func Spring[T Number](v T) *Sprung[T] {
 			anims.remove(s)
 		})
 	}
+	return s
+}
+
+// SpringOf creates a Sprung that follows src, as TweenOf does for a tween.
+// It needs an owner, like Watch.
+func SpringOf[T Number](src Readable[T]) *Sprung[T] {
+	s := Spring(Untrack(src.Get))
+	Watch(src, s.Set)
 	return s
 }
 

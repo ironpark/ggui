@@ -75,6 +75,7 @@ type Interactive struct {
 	id        any // from Key
 	auto      any // from the keyed component it was constructed in
 	inertWhen Readable[bool]
+	nameWhen  Readable[string]
 	lastInert bool // Inert as Sync last saw it, so a direct write is noticed
 }
 
@@ -82,8 +83,14 @@ type Interactive struct {
 // on it does; ui.Field uses it to hand its label to the input inside.
 func (s *Interactive) SetName(name string) { s.Name = name }
 
-// HasName reports whether the control has an explicit name.
-func (s *Interactive) HasName() bool { return s.Name != "" }
+// HasName reports whether the control has an explicit name, set or bound.
+func (s *Interactive) HasName() bool { return s.Name != "" || s.nameWhen != nil }
+
+// NameWhen makes the control's name follow r: Sync reads it before the
+// control describes itself, so the semantics, Probe.Find and the inspector
+// see the current value without a rebuild. It counts as an explicit name,
+// so a ui.Field label does not replace it.
+func (s *Interactive) NameWhen(r Readable[string]) { s.nameWhen = r; s.Name = Untrack(r.Get) }
 
 // SetInert sets disabled state and replaces any InertWhen binding.
 func (s *Interactive) SetInert(v bool) {
@@ -114,6 +121,9 @@ func (s *Interactive) InertWhen(r Readable[bool]) { s.inertWhen = r; requestLayo
 // is measured again in its new state either way. Call it at the start of
 // Layout and Paint.
 func (s *Interactive) Sync() {
+	if s.nameWhen != nil {
+		s.Name = s.nameWhen.Get()
+	}
 	if s.inertWhen != nil {
 		s.Inert = s.inertWhen.Get()
 	}
