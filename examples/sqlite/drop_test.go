@@ -9,15 +9,22 @@ import (
 	"github.com/ironpark/ggui"
 )
 
+// newProbe drives the app around m, sized like the desktop window.
+func newProbe(t *testing.T, m *model) *ggui.Probe {
+	t.Helper()
+	p := ggui.ProbeBuilder(func() ggui.Widget { return build(m) }, ggui.Sz(1000, 740))
+	t.Cleanup(p.Close)
+	return p
+}
+
 func TestDropOpensOriginalDatabase(t *testing.T) {
 	_, path := fixture(t)
 	m := newModel()
 	defer m.close()
-	p := ggui.ProbeBuilder(func() ggui.Widget { return build(m) }, ggui.Sz(1000, 740))
-	defer p.Close()
+	p := newProbe(t, m)
 	m.ReadOnly.Set(true)
 	p.DropPaths(ggui.Pt(500, 360), path)
-	if !m.Connected.Get() || m.Path.Get() != path || !m.Locked.Get() || len(m.Tables.Get()) != 3 {
+	if !m.Connected.Get() || m.Path.Get() != path || !m.Locked.Get() || len(m.Objects.Get()) != 3 {
 		t.Fatalf("drop did not open original database: %s %s", m.Path.Get(), m.Error.Get())
 	}
 	m.SQL.Set("DELETE FROM composite")
@@ -47,8 +54,7 @@ func TestInvalidDropsPreserveConnection(t *testing.T) {
 	defer m.close()
 	m.open(path)
 	before := m.db
-	p := ggui.ProbeBuilder(func() ggui.Widget { return build(m) }, ggui.Sz(1000, 740))
-	defer p.Close()
+	p := newProbe(t, m)
 	cases := []struct {
 		name string
 		drop func()

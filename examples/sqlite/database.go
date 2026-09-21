@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -42,12 +43,26 @@ type tableData struct {
 	KeyValues [][]any
 }
 
-func quote(s string) string                     { return `"` + strings.ReplaceAll(s, `"`, `""`) + `"` }
-func openDatabase(path string) (*sql.DB, error) { return openMode(path, false) }
-func openMode(path string, readOnly bool) (*sql.DB, error) {
+func quote(s string) string { return `"` + strings.ReplaceAll(s, `"`, `""`) + `"` }
+
+// index is the position of the named column in the result, or -1.
+func (r result) index(name string) int { return slices.Index(r.Columns, name) }
+
+// column is the named column of the table, if it has one.
+func (t tableData) column(name string) (column, bool) {
+	i := slices.IndexFunc(t.Columns, func(c column) bool { return c.Name == name })
+	if i < 0 {
+		return column{}, false
+	}
+	return t.Columns[i], true
+}
+
+// openMode opens the database and reads its catalog, which is what proves
+// the file is one.
+func openMode(path string, readOnly bool) (*sql.DB, []object, error) {
 	path, err := filepath.Abs(path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	mode := "rw"
 	if readOnly {
@@ -56,19 +71,17 @@ func openMode(path string, readOnly bool) (*sql.DB, error) {
 	u := url.URL{Scheme: "file", Path: path, RawQuery: "mode=" + mode + "&_pragma=foreign_keys(1)&_pragma=busy_timeout(1000)"}
 	db, err := sql.Open("sqlite", u.String())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	db.SetMaxOpenConns(1)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if _, err = db.ExecContext(ctx, "PRAGMA busy_timeout=1000"); err == nil {
-		_, err = objects(ctx, db)
-	}
+	os, err := objects(ctx, db)
 	if err != nil {
 		db.Close()
-		return nil, err
+		return nil, nil, err
 	}
-	return db, nil
+	return db, os, nil
 }
 func objects(ctx context.Context, db *sql.DB) ([]object, error) {
 	rows, err := db.QueryContext(ctx, `SELECT name,type,coalesce(sql,'') FROM sqlite_schema WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%' ORDER BY name`)
@@ -92,19 +105,30 @@ type querier interface {
 }
 
 func query(ctx context.Context, db querier, statement string, args ...any) (result, error) {
-	var out result
 	rows, err := db.QueryContext(ctx, statement, args...)
 	if err != nil {
-		return out, err
+		return result{}, err
 	}
-	defer rows.Close()
-	out.Columns, err = rows.Columns()
+	return scanRows(rows, false)
+}
+
+// scanRows reads up to rowLimit rows and closes rows. With drain, the rows
+// past the limit are stepped through rather than left unread, which is
+// what a statement with RETURNING needs to complete its writes.
+func scanRows(rows *sql.Rows, drain bool) (result, error) {
+	var out result
+	fail := func(err error) (result, error) { rows.Close(); return result{}, err }
+	columns, err := rows.Columns()
 	if err != nil {
-		return out, err
+		return fail(err)
 	}
+	out.Columns = columns
 	for rows.Next() {
 		if len(out.Rows) == rowLimit {
 			out.Limited = true
+			if drain {
+				continue
+			}
 			break
 		}
 		values := make([]any, len(out.Columns))
@@ -113,11 +137,18 @@ func query(ctx context.Context, db querier, statement string, args ...any) (resu
 			dest[i] = &values[i]
 		}
 		if err = rows.Scan(dest...); err != nil {
-			return result{}, err
+			return fail(err)
 		}
 		out.Rows = append(out.Rows, record{ID: len(out.Rows) + 1, Values: values})
 	}
-	return out, rows.Err()
+	err = rows.Err()
+	if closeErr := rows.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return result{}, err
+	}
+	return out, nil
 }
 
 type browseOptions struct {
@@ -126,9 +157,6 @@ type browseOptions struct {
 	Desc         bool
 }
 
-func loadTable(ctx context.Context, db *sql.DB, o object) (tableData, error) {
-	return loadPage(ctx, db, o, browseOptions{})
-}
 func loadPage(ctx context.Context, db *sql.DB, o object, opts browseOptions) (tableData, error) {
 	t := tableData{Object: o}
 	rows, err := db.QueryContext(ctx, `SELECT name,type,pk,hidden,"notnull",dflt_value FROM pragma_table_xinfo(?)`, o.Name)
@@ -193,16 +221,7 @@ func loadPage(ctx context.Context, db *sql.DB, o object, opts browseOptions) (ta
 	}
 	// Prefer an unshadowed rowid; WITHOUT ROWID tables fall back to their primary key.
 	if o.Kind == "table" {
-		for _, alias := range []string{"rowid", "_rowid_", "oid"} {
-			shadow := false
-			for _, c := range t.Columns {
-				if strings.EqualFold(c.Name, alias) {
-					shadow = true
-				}
-			}
-			if shadow {
-				continue
-			}
+		if alias := rowidAlias(t.Columns); alias != "" {
 			r, e := query(ctx, db, "SELECT "+alias+", * FROM "+quote(o.Name)+tail([]string{alias}), params...)
 			if e == nil {
 				t.Keys = []string{alias}
@@ -214,7 +233,6 @@ func loadPage(ctx context.Context, db *sql.DB, o object, opts browseOptions) (ta
 				t.Result = r
 				return t, nil
 			}
-			break
 		}
 		for _, c := range t.Columns {
 			if c.PK > 0 {
@@ -226,29 +244,33 @@ func loadPage(ctx context.Context, db *sql.DB, o object, opts browseOptions) (ta
 	for _, r := range t.Result.Rows {
 		var key []any
 		for _, name := range t.Keys {
-			for i, col := range t.Result.Columns {
-				if col == name {
-					key = append(key, r.Values[i])
-				}
+			if i := t.Result.index(name); i >= 0 {
+				key = append(key, r.Values[i])
 			}
 		}
 		t.KeyValues = append(t.KeyValues, key)
 	}
 	return t, err
 }
-func updateCell(ctx context.Context, db *sql.DB, t tableData, row, col int, value any) error {
-	if len(t.Keys) == 0 || row < 0 || row >= len(t.Result.Rows) || col < 0 || col >= len(t.Result.Columns) {
-		return fmt.Errorf("select an editable table cell")
-	}
-	name := t.Result.Columns[col]
-	for _, c := range t.Columns {
-		if c.Name == name && c.Hidden != 0 {
-			return fmt.Errorf("generated columns cannot be edited")
+
+// rowidAlias is the first rowid alias no column of the table shadows, or
+// empty when every one is taken.
+func rowidAlias(columns []column) string {
+	for _, alias := range []string{"rowid", "_rowid_", "oid"} {
+		shadowed := slices.ContainsFunc(columns, func(c column) bool { return strings.EqualFold(c.Name, alias) })
+		if !shadowed {
+			return alias
 		}
 	}
-	// Match the original row as well as its key to detect concurrent edits.
+	return ""
+}
+
+// rowMatch is the WHERE clause that finds one loaded row again: its key
+// and every displayed value, so a row changed since it was loaded is not
+// matched. It is what makes a stale edit or delete fail rather than land.
+func rowMatch(t tableData, row int) (string, []any) {
 	var terms []string
-	args := []any{value}
+	var args []any
 	for i, key := range t.Keys {
 		terms = append(terms, quote(key)+" IS ?")
 		args = append(args, t.KeyValues[row][i])
@@ -257,12 +279,18 @@ func updateCell(ctx context.Context, db *sql.DB, t tableData, row, col int, valu
 		terms = append(terms, quote(col)+" IS ?")
 		args = append(args, t.Result.Rows[row].Values[i])
 	}
+	return strings.Join(terms, " AND "), args
+}
+
+// execOne runs a statement in its own transaction and commits only if it
+// touched exactly one row.
+func execOne(ctx context.Context, db *sql.DB, statement string, args ...any) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	res, err := tx.ExecContext(ctx, "UPDATE "+quote(t.Object.Name)+" SET "+quote(name)+" = ? WHERE "+strings.Join(terms, " AND "), args...)
+	res, err := tx.ExecContext(ctx, statement, args...)
 	if err != nil {
 		return err
 	}
@@ -271,9 +299,21 @@ func updateCell(ctx context.Context, db *sql.DB, t tableData, row, col int, valu
 		return err
 	}
 	if n != 1 {
-		return fmt.Errorf("expected one row, matched %d; refresh before editing", n)
+		return fmt.Errorf("row changed; refresh and try again (matched %d)", n)
 	}
 	return tx.Commit()
+}
+
+func updateCell(ctx context.Context, db *sql.DB, t tableData, row, col int, value any) error {
+	if len(t.Keys) == 0 || row < 0 || row >= len(t.Result.Rows) || col < 0 || col >= len(t.Result.Columns) {
+		return fmt.Errorf("select an editable table cell")
+	}
+	name := t.Result.Columns[col]
+	if c, ok := t.column(name); ok && c.Hidden != 0 {
+		return fmt.Errorf("generated columns cannot be edited")
+	}
+	where, args := rowMatch(t, row)
+	return execOne(ctx, db, "UPDATE "+quote(t.Object.Name)+" SET "+quote(name)+" = ? WHERE "+where, append([]any{value}, args...)...)
 }
 func display(v any) string {
 	if v == nil {
@@ -299,38 +339,12 @@ func parseValue(kind, text string) (any, error) {
 	}
 }
 
-// The entire original row is matched, so a stale or ambiguous delete rolls back.
 func deleteRow(ctx context.Context, db *sql.DB, t tableData, row int) error {
 	if len(t.Keys) == 0 || row < 0 || row >= len(t.Result.Rows) {
 		return fmt.Errorf("select an editable row")
 	}
-	var terms []string
-	var args []any
-	for i, key := range t.Keys {
-		terms = append(terms, quote(key)+" IS ?")
-		args = append(args, t.KeyValues[row][i])
-	}
-	for i, name := range t.Result.Columns {
-		terms = append(terms, quote(name)+" IS ?")
-		args = append(args, t.Result.Rows[row].Values[i])
-	}
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	res, err := tx.ExecContext(ctx, "DELETE FROM "+quote(t.Object.Name)+" WHERE "+strings.Join(terms, " AND "), args...)
-	if err != nil {
-		return err
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if n != 1 {
-		return fmt.Errorf("row changed; refresh before deleting (matched %d)", n)
-	}
-	return tx.Commit()
+	where, args := rowMatch(t, row)
+	return execOne(ctx, db, "DELETE FROM "+quote(t.Object.Name)+" WHERE "+where, args...)
 }
 
 type inputValue struct{ Name, Kind, Text string }
@@ -345,13 +359,7 @@ func insertRow(ctx context.Context, db *sql.DB, t tableData, inputs []inputValue
 		if input.Kind == "DEFAULT" {
 			continue
 		}
-		valid := false
-		for _, col := range t.Columns {
-			if col.Name == input.Name && col.Hidden == 0 {
-				valid = true
-			}
-		}
-		if !valid {
+		if c, ok := t.column(input.Name); !ok || c.Hidden != 0 {
 			return fmt.Errorf("column %s is not writable", input.Name)
 		}
 		v, err := parseValue(input.Kind, input.Text)
@@ -397,33 +405,7 @@ func runSQL(ctx context.Context, db *sql.DB, statement string) (result, int64, e
 	if err != nil {
 		return out, 0, err
 	}
-	out.Columns, err = rows.Columns()
-	if err != nil {
-		rows.Close()
-		return out, 0, err
-	}
-	for rows.Next() {
-		if len(out.Rows) == rowLimit {
-			out.Limited = true
-			continue
-		}
-		values := make([]any, len(out.Columns))
-		dest := make([]any, len(values))
-		for i := range values {
-			dest[i] = &values[i]
-		}
-		if err = rows.Scan(dest...); err != nil {
-			rows.Close()
-			return result{}, 0, err
-		}
-		out.Rows = append(out.Rows, record{ID: len(out.Rows) + 1, Values: values})
-	}
-	err = rows.Err()
-	closeErr := rows.Close()
-	if err == nil {
-		err = closeErr
-	}
-	if err != nil {
+	if out, err = scanRows(rows, true); err != nil {
 		return result{}, 0, err
 	}
 	if err = tx.QueryRowContext(ctx, "SELECT total_changes()").Scan(&after); err != nil {

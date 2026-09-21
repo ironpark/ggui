@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -21,17 +22,16 @@ type draftField struct {
 }
 type model struct {
 	db      *sql.DB
-	opened  []*sql.DB // Workers append; close reads after Wait.
+	opened  []*sql.DB // Workers append; adopting removes on the UI thread; close reads after Wait.
 	post    func(func())
 	cancel  context.CancelFunc
 	workers sync.WaitGroup
 	closed  bool
 	current tableData
-	objects []object
 
 	Path, Status, Error, Table, Loaded, SQL, Schema      *ggui.StateValue[string]
 	Cell, Kind, Value, Search, Filter, Sort, QueryStatus *ggui.StateValue[string]
-	Tables                                               *ggui.StateValue[[]string]
+	Objects                                              *ggui.StateValue[[]object]
 	Data, QueryData                                      *ggui.StateValue[result]
 	Selected, Tab, Offset                                *ggui.StateValue[int]
 
@@ -59,7 +59,7 @@ func newModel() *model {
 		Filter:        ggui.State(""),
 		Sort:          ggui.State(""),
 		QueryStatus:   ggui.State("Run SQL to see results here."),
-		Tables:        ggui.State([]string{}),
+		Objects:       ggui.State([]object{}).WithEqual(slices.Equal),
 		Data:          ggui.State(result{}),
 		QueryData:     ggui.State(result{}),
 		Selected:      ggui.State(0),
@@ -100,7 +100,8 @@ func (m *model) close() {
 
 // Work receives immutable snapshots. Only its returned callback touches UI state.
 // Tests run synchronously; the app posts completions from a worker onto the UI thread.
-func (m *model) work(label string, fn func(context.Context) (func(), error)) {
+// An onFail runs on the UI thread after a failure is reported.
+func (m *model) work(label string, fn func(context.Context) (func(), error), onFail ...func()) {
 	if m.Busy.Get() || m.closed {
 		return
 	}
@@ -121,8 +122,8 @@ func (m *model) work(label string, fn func(context.Context) (func(), error)) {
 			if err != nil {
 				m.Error.Set(err.Error())
 				m.Status.Set(label + " failed")
-				if label == "Run SQL" {
-					m.QueryStatus.Set("Failed — previous results retained.")
+				for _, fail := range onFail {
+					fail()
 				}
 				return
 			}
@@ -150,14 +151,6 @@ func (m *model) stop() {
 		m.Status.Set("Canceling…")
 	}
 }
-func (m *model) setObjects(objects []object) {
-	m.objects = objects
-	names := []string{}
-	for _, o := range objects {
-		names = append(names, o.Name)
-	}
-	m.Tables.Set(names)
-}
 func (m *model) open(path string) {
 	if strings.TrimSpace(path) == "" {
 		m.Error.Set("Choose a database file.")
@@ -166,13 +159,8 @@ func (m *model) open(path string) {
 	ro := m.ReadOnly.Get()
 	old := m.db
 	m.work("Open database", func(ctx context.Context) (func(), error) {
-		db, err := openMode(path, ro)
+		db, os, err := openMode(path, ro)
 		if err != nil {
-			return nil, err
-		}
-		os, err := objects(ctx, db)
-		if err != nil {
-			db.Close()
 			return nil, err
 		}
 		m.opened = append(m.opened, db)
@@ -182,6 +170,7 @@ func (m *model) open(path string) {
 				old.Close()
 			}
 			m.db = db
+			m.opened = slices.DeleteFunc(m.opened, func(d *sql.DB) bool { return d == db })
 			m.Path.Set(path)
 			m.OpenPath.Set(path)
 			m.OpenDialog.Set(false)
@@ -197,7 +186,7 @@ func (m *model) open(path string) {
 			m.QueryStatus.Set("Run SQL to see results here.")
 			m.Locked.Set(ro)
 			m.Connected.Set(true)
-			m.setObjects(os)
+			m.Objects.Set(os)
 			m.Table.Set("")
 			m.Loaded.Set("")
 			m.current = tableData{}
@@ -297,36 +286,31 @@ func (m *model) browsePage(offset int) {
 		if err != nil {
 			return nil, err
 		}
-		for _, o := range os {
-			if o.Name == name {
-				data, err := loadPage(ctx, db, o, opts)
-				if err != nil {
-					return nil, err
-				}
-				return func() {
-					m.setObjects(os)
-					m.current = data
-					m.Loaded.Set(name)
-					m.Offset.Set(opts.Offset)
-					m.Data.Set(data.Result)
-					m.Schema.Set(o.Schema)
-					m.Selected.Set(0)
-					m.Editable.Set(len(data.Keys) > 0 && !m.Locked.Get())
-					m.Insertable.Set(o.Kind == "table" && !m.Locked.Get())
-					m.Status.Set(fmt.Sprintf("%s · %d rows loaded", name, len(data.Result.Rows)))
-				}, nil
-			}
+		i := slices.IndexFunc(os, func(o object) bool { return o.Name == name })
+		if i < 0 {
+			return nil, fmt.Errorf("table or view no longer exists; reopen the database to refresh the catalog")
 		}
-		return nil, fmt.Errorf("table or view no longer exists; reopen the database to refresh the catalog")
+		o := os[i]
+		data, err := loadPage(ctx, db, o, opts)
+		if err != nil {
+			return nil, err
+		}
+		return func() {
+			m.Objects.Set(os)
+			m.current = data
+			m.Loaded.Set(name)
+			m.Offset.Set(opts.Offset)
+			m.Data.Set(data.Result)
+			m.Schema.Set(o.Schema)
+			m.Selected.Set(0)
+			m.Editable.Set(len(data.Keys) > 0 && !m.Locked.Get())
+			m.Insertable.Set(o.Kind == "table" && !m.Locked.Get())
+			m.Status.Set(fmt.Sprintf("%s · %d rows loaded", name, len(data.Result.Rows)))
+		}, nil
 	})
 }
-func (m *model) apply() { m.browsePage(0) }
-func (m *model) page(delta int) {
-	if m.Busy.Get() {
-		return
-	}
-	m.browsePage(max(0, m.Offset.Get()+delta*rowLimit))
-}
+func (m *model) apply()         { m.browsePage(0) }
+func (m *model) page(delta int) { m.browsePage(max(0, m.Offset.Get()+delta*rowLimit)) }
 func (m *model) execute() {
 	if m.db == nil || m.Busy.Get() {
 		return
@@ -351,7 +335,7 @@ func (m *model) execute() {
 		}
 		return func() {
 			m.QueryData.Set(r)
-			m.setObjects(os)
+			m.Objects.Set(os)
 			note := fmt.Sprintf("%d rows · %d changes · %s", len(r.Rows), n, time.Since(started).Round(time.Millisecond))
 			if r.Limited {
 				note += " · showing first 500"
@@ -363,7 +347,7 @@ func (m *model) execute() {
 			m.Editable.Set(false)
 			m.Insertable.Set(false)
 		}, nil
-	})
+	}, func() { m.QueryStatus.Set("Failed — previous results retained.") })
 }
 func (m *model) edit() {
 	row := m.Selected.Get() - 1
@@ -385,28 +369,27 @@ func (m *model) loadCell() {
 	if row < 0 || row >= len(m.current.Result.Rows) {
 		return
 	}
-	for i, col := range m.current.Result.Columns {
-		if col == m.Cell.Get() {
-			v := m.current.Result.Rows[row].Values[i]
-			kind := "TEXT"
-			switch v.(type) {
-			case nil:
-				kind = "NULL"
-			case int64:
-				kind = "INTEGER"
-			case float64:
-				kind = "REAL"
-			case []byte:
-				kind = "BLOB"
-			}
-			m.Kind.Set(kind)
-			if v == nil {
-				m.Value.Set("")
-			} else {
-				m.Value.Set(display(v))
-			}
-			return
-		}
+	i := m.current.Result.index(m.Cell.Get())
+	if i < 0 {
+		return
+	}
+	v := m.current.Result.Rows[row].Values[i]
+	kind := "TEXT"
+	switch v.(type) {
+	case nil:
+		kind = "NULL"
+	case int64:
+		kind = "INTEGER"
+	case float64:
+		kind = "REAL"
+	case []byte:
+		kind = "BLOB"
+	}
+	m.Kind.Set(kind)
+	if v == nil {
+		m.Value.Set("")
+	} else {
+		m.Value.Set(display(v))
 	}
 }
 func (m *model) save() {
@@ -418,12 +401,7 @@ func (m *model) save() {
 		m.Error.Set(err.Error())
 		return
 	}
-	col := -1
-	for i, name := range m.current.Result.Columns {
-		if name == m.Cell.Get() {
-			col = i
-		}
-	}
+	col := m.current.Result.index(m.Cell.Get())
 	db, t, row := m.db, m.current, m.Selected.Get()-1
 	m.work("Save cell", func(ctx context.Context) (func(), error) {
 		if err := updateCell(ctx, db, t, row, col, value); err != nil {
@@ -458,7 +436,7 @@ func (m *model) add() {
 	m.Adding.Set(true)
 }
 func (m *model) insert() {
-	if m.Busy.Get() || !m.Insertable.Get() {
+	if !m.Insertable.Get() {
 		return
 	}
 	values := []inputValue{}
@@ -479,7 +457,7 @@ func (m *model) askDelete() {
 	}
 }
 func (m *model) delete() {
-	if m.Busy.Get() || !m.Editable.Get() {
+	if !m.Editable.Get() {
 		return
 	}
 	db, t, row := m.db, m.current, m.Selected.Get()-1

@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/icons/lucide"
@@ -101,50 +102,42 @@ func buildClient(m *model) ggui.Widget {
 
 func sidebarView(m *model) ggui.Widget {
 	t := ggui.UseTheme()
-	list := ggui.View(ggui.Combine(m.Tables, m.Search, func(names []string, search string) []string {
-		out := []string{}
-		for _, name := range names {
-			if strings.Contains(strings.ToLower(name), strings.ToLower(search)) {
-				out = append(out, name)
+	list := ggui.View(ggui.Combine(m.Objects, m.Search, func(objects []object, search string) []object {
+		out := []object{}
+		for _, o := range objects {
+			if strings.Contains(strings.ToLower(o.Name), strings.ToLower(search)) {
+				out = append(out, o)
 			}
 		}
 		return out
-	}), func(names []string) ggui.Widget {
-		if len(names) == 0 {
+	}), func(objects []object) ggui.Widget {
+		if len(objects) == 0 {
 			return ggui.Padding(ggui.Caption("No matching tables or views."), 12, 4)
 		}
 		rows := []ggui.Widget{}
 		for _, kind := range []string{"table", "view"} {
+			mark, title := "▦", "TABLES"
+			if kind == "view" {
+				mark, title = "◇", "VIEWS"
+			}
 			group := []ggui.Widget{}
-			for _, name := range names {
-				objectKind := "table"
-				for _, o := range m.objects {
-					if o.Name == name {
-						objectKind = o.Kind
-						break
-					}
-				}
-				if kind != objectKind {
+			for _, o := range objects {
+				if o.Kind != kind {
 					continue
 				}
-				group = append(group, ggui.View(m.Table, func(selected string) ggui.Widget {
-					mark := "▦"
-					if kind == "view" {
-						mark = "◇"
-					}
-					label := ggui.Row(ggui.Text(mark).Color(t.MutedFg), ggui.Expanded(ggui.Text(name).NoWrap())).Gap(10)
+				name := o.Name
+				label := ggui.Row(ggui.Text(mark).Color(t.MutedFg), ggui.Expanded(ggui.Text(name).NoWrap())).Gap(10)
+				// Only the rows whose selection changes rebuild.
+				selected := m.Table.Map(func(s string) bool { return s == name })
+				group = append(group, ggui.View(selected, func(selected bool) ggui.Widget {
 					b := ui.ButtonOf(label, func() { m.selectTable(name) }).Name(name).BindDisabled(m.Busy).Pad(9, 10)
-					if selected == name {
+					if selected {
 						return b.Secondary()
 					}
 					return b.Ghost()
 				}))
 			}
 			if len(group) > 0 {
-				title := "TABLES"
-				if kind == "view" {
-					title = "VIEWS"
-				}
 				rows = append(rows, ggui.Padding(ggui.Caption(fmt.Sprintf("%s  %d", title, len(group))), 12, 10, 6, 10))
 				rows = append(rows, group...)
 			}
@@ -276,10 +269,7 @@ func historyDialog(m *model) ggui.Widget {
 		}
 		rows := []ggui.Widget{}
 		for _, text := range history {
-			label := strings.Join(strings.Fields(text), " ")
-			if len([]rune(label)) > 90 {
-				label = string([]rune(label)[:90]) + "…"
-			}
+			label := truncate(strings.Join(strings.Fields(text), " "), 90)
 			rows = append(rows, ui.Button(label, func() { m.SQL.Set(text); m.HistoryOpen.Set(false); m.Tab.Set(2) }).Ghost().BindDisabled(m.Busy))
 		}
 		return ggui.Column(rows...).Gap(8).Align(ggui.AlignStretch)
@@ -294,25 +284,12 @@ func resultGrid(source ggui.Readable[result], selected *ggui.StateValue[int]) gg
 		cols := make([]ui.Column[record], len(r.Columns))
 		total := 0.0
 		for i, name := range r.Columns {
-			width := max(112.0, min(260.0, float64(len([]rune(name))*8+28)))
+			width := max(112.0, min(260.0, float64(utf8.RuneCountInString(name)*8+28)))
 			for _, row := range r.Rows[:min(30, len(r.Rows))] {
-				width = max(width, min(280, float64(len([]rune(display(row.Values[i])))*7+28)))
+				width = max(width, min(280, float64(utf8.RuneCountInString(cellText(row.Values[i]))*7+28)))
 			}
 			total += width
-			cols[i] = ui.TextCol(name, func(row record) string {
-				v := row.Values[i]
-				if v == nil {
-					return "NULL"
-				}
-				if b, ok := v.([]byte); ok {
-					return fmt.Sprintf("BLOB · %d bytes · %s", len(b), display(b))
-				}
-				s := strings.ReplaceAll(display(v), "\n", " ↵ ")
-				if len([]rune(s)) > 120 {
-					s = string([]rune(s)[:120]) + "…"
-				}
-				return s
-			}).Grow(width)
+			cols[i] = ui.TextCol(name, func(row record) string { return cellText(row.Values[i]) }).Grow(width)
 		}
 		table := ui.Table(ggui.State(r.Rows), func(row record) int { return row.ID }, cols...).BindSelected(selected).RowHeight(36)
 		box := ggui.Box(table)
@@ -326,6 +303,32 @@ func resultGrid(source ggui.Readable[result], selected *ggui.StateValue[int]) gg
 		}, func(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(scroll, r) })
 	})
 }
+
+// cellText is a value as a grid cell shows it: on one line, cut to what a
+// cell can show. A blob is summarized rather than hex-encoded whole, since
+// only its first bytes would be visible.
+func cellText(v any) string {
+	switch b := v.(type) {
+	case nil:
+		return "NULL"
+	case []byte:
+		head := display(b[:min(len(b), 24)])
+		if len(b) > 24 {
+			head += "…"
+		}
+		return fmt.Sprintf("BLOB · %d bytes · %s", len(b), head)
+	}
+	return truncate(strings.ReplaceAll(display(v), "\n", " ↵ "), 120)
+}
+
+// truncate cuts s to n runes, marking the cut.
+func truncate(s string, n int) string {
+	if utf8.RuneCountInString(s) <= n {
+		return s
+	}
+	return string([]rune(s)[:n]) + "…"
+}
+
 func cellEditor(m *model) ggui.Widget {
 	return ui.Dialog(m.Editing, ggui.Column(
 		ui.Field("Column", ui.Select(m.Cell).BindOptions(m.Data.Map(func(result) []string {
@@ -343,12 +346,8 @@ func cellEditor(m *model) ggui.Widget {
 			if !editable {
 				return true
 			}
-			for _, c := range m.current.Columns {
-				if c.Name == name {
-					return c.Hidden != 0
-				}
-			}
-			return true
+			c, ok := m.current.column(name)
+			return !ok || c.Hidden != 0
 		}), m.Busy, func(a, b bool) bool { return a || b }))).Gap(8).Justify(ggui.JustifyEnd),
 	).Gap(14).Align(ggui.AlignStretch)).Title("Cell details").Width(600)
 }

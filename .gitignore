@@ -10,10 +10,6 @@
 *.out
 coverage.*
 
-# Go workspace
-go.work
-go.work.sum
-
 # Editors / OS
 .DS_Store
 .idea/

@@ -12,6 +12,16 @@ import (
 	"github.com/ironpark/ggui"
 )
 
+// openDatabase and loadTable are the writable, first-page defaults the
+// tests ask for most.
+func openDatabase(path string) (*sql.DB, error) {
+	db, _, err := openMode(path, false)
+	return db, err
+}
+func loadTable(ctx context.Context, db *sql.DB, o object) (tableData, error) {
+	return loadPage(ctx, db, o, browseOptions{})
+}
+
 func fixture(t *testing.T) (*sql.DB, string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "sample #?.db")
@@ -233,7 +243,7 @@ func TestUnifiedSQL(t *testing.T) {
 	if _, _, err = runSQL(ctx, db, `SELECT 1; DELETE FROM sql_run`); err == nil {
 		t.Fatal("multi statement accepted")
 	}
-	ro, err := openMode(path, true)
+	ro, _, err := openMode(path, true)
 	if err != nil {
 		t.Fatal(err)
 	}
