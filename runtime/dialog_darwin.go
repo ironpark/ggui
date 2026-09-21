@@ -9,7 +9,7 @@ import (
 	"github.com/ebitengine/purego/objc"
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"github.com/ironpark/ggui/internal/cocoa"
+	"github.com/ironpark/ggui/internal/platform/cocoa"
 )
 
 // The macOS dialogs are NSOpenPanel and NSSavePanel. A panel is shown as a

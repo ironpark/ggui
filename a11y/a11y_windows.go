@@ -8,7 +8,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"github.com/ironpark/ggui/internal/win32"
+	"github.com/ironpark/ggui/internal/platform/win32"
 )
 
 // The Windows half of the accessibility bridge speaks UI Automation, from

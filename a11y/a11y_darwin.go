@@ -15,7 +15,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"github.com/ironpark/ggui/internal/cocoa"
+	"github.com/ironpark/ggui/internal/platform/cocoa"
 )
 
 // The macOS half of the accessibility bridge, in Objective-C reached

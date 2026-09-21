@@ -4,6 +4,19 @@
 *.dll
 *.so
 *.dylib
+*.wasm
+
+# `go build` inside an example directory drops a binary named after it.
+/examples/charts/charts
+/examples/controls/controls
+/examples/counter/counter
+/examples/custom/custom
+/examples/files/files
+/examples/gallery/gallery
+/examples/settings/settings
+/examples/sqlite/sqlite
+/examples/todo/todo
+/examples/workspace/workspace
 
 # Test & coverage
 *.test

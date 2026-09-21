@@ -10,7 +10,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"golang.org/x/sys/windows"
 
-	"github.com/ironpark/ggui/internal/win32"
+	"github.com/ironpark/ggui/internal/platform/win32"
 )
 
 // The Windows dialogs are the common dialogs of comdlg32 and the folder
