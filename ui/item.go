@@ -1,5 +1,7 @@
 package ui
 
+import "github.com/ironpark/ggui/internal/property"
+
 import "github.com/ironpark/ggui"
 
 // ItemWidget is one row of a list: media on the left, a title and an
@@ -8,6 +10,7 @@ import "github.com/ironpark/ggui"
 // chosen-option summary is made of; it takes no input of its own, so the
 // widget given to Action keeps its own keyboard and pointer behavior.
 type ItemWidget struct {
+	props              property.Owner
 	title, description *ggui.TextWidget
 	media, action      ggui.Widget
 	outline            bool
@@ -36,7 +39,11 @@ func (i *ItemWidget) Media(w ggui.Widget) *ItemWidget { i.media = w; return i }
 func (i *ItemWidget) Action(w ggui.Widget) *ItemWidget { i.action = w; return i }
 
 // Outline draws the row as a bordered card rather than bare text.
-func (i *ItemWidget) Outline() *ItemWidget { i.outline = true; return i }
+func (i *ItemWidget) Outline() *ItemWidget {
+	defer property.Watch(&i.props, &i.outline)()
+	i.outline = true
+	return i
+}
 
 // build makes the row once. An item is a list row, so a fifty-row list
 // would otherwise allocate its whole tree afresh on every frame; the shape
@@ -61,6 +68,7 @@ func (i *ItemWidget) build() {
 
 // Layout implements ggui.Widget.
 func (i *ItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer i.props.Layout()()
 	if i.box == nil {
 		i.build()
 	}

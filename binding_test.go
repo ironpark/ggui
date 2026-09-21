@@ -48,7 +48,7 @@ func TestForRetainEvictsOffscreenRows(t *testing.T) {
 		f = EachKeyed(src, func(i int) int { return i }, func(EachItem[int]) Widget { return Box().Size(10, 10) }).ItemExtent(10).Retain(2)
 	})
 	defer dispose()
-	p := NewProbe(Scroll(f).Offset(off), Sz(10, 50))
+	p := NewProbe(Scroll(f).BindOffset(off), Sz(10, 50))
 	p.Frame()
 	off.Set(500)
 	p.Frame()

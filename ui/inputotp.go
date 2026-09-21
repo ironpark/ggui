@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // InputOTPPart describes a group of slots or a visual separator. Parts are
@@ -39,6 +40,7 @@ type otpGroup struct{ rect ggui.Rect }
 // InputOTPWidget presents one editor as individually focused character slots.
 // It retains native IME, clipboard, undo, selection and accessibility editing.
 type InputOTPWidget struct {
+	props property.Owner
 	ggui.Interactive
 	input                *ggui.TextInputWidget
 	maxLength            int
@@ -105,6 +107,7 @@ func (o *InputOTPWidget) normalize(s string) string {
 // Groups replaces composition with joined groups separated by a minus sign.
 // Counts must add to MaxLength; invalid compositions panic during Layout.
 func (o *InputOTPWidget) Groups(counts ...int) *InputOTPWidget {
+	defer property.Watch(&o.props, &o.parts)()
 	o.parts = nil
 	index := 0
 	for i, n := range counts {
@@ -120,37 +123,57 @@ func (o *InputOTPWidget) Groups(counts ...int) *InputOTPWidget {
 	}
 	return o
 }
-func (o *InputOTPWidget) Named(s string) *InputOTPWidget  { o.SetName(s); return o }
-func (o *InputOTPWidget) SetName(s string)                { o.Name = s; o.input.Named(s) }
+func (o *InputOTPWidget) Name(s string) *InputOTPWidget   { o.SetName(s); return o }
+func (o *InputOTPWidget) SetName(s string)                { o.Interactive.SetName(s); o.input.Name(s) }
 func (o *InputOTPWidget) Disabled(v bool) *InputOTPWidget { o.SetInert(v); return o }
-func (o *InputOTPWidget) DisabledWhen(r ggui.Readable[bool]) *InputOTPWidget {
-	o.InertWhen(r)
+func (o *InputOTPWidget) BindDisabled(r ggui.Readable[bool]) *InputOTPWidget {
+	o.BindInert(r)
 	return o
 }
 func (o *InputOTPWidget) Invalid(v bool) *InputOTPWidget {
+	defer property.Watch(&o.props, &o.invalid)()
+	defer property.Watch(&o.props, &o.invalidWhen)()
 	o.invalid = v
 	o.invalidWhen = nil
 	return o
 }
-func (o *InputOTPWidget) InvalidWhen(r ggui.Readable[bool]) *InputOTPWidget {
-	o.invalidWhen = r
+func (o *InputOTPWidget) BindInvalid(r ggui.Readable[bool]) *InputOTPWidget {
+	property.Require(r, "BindInvalid")
+	if !property.Same(o.invalidWhen, r) {
+		o.invalidWhen = r
+		o.props.Changed()
+	}
 	return o
 }
-func (o *InputOTPWidget) RTL(v bool) *InputOTPWidget                 { o.rtl = v; return o }
-func (o *InputOTPWidget) SlotSize(s float64) *InputOTPWidget         { o.slotSize = max(1, s); return o }
-func (o *InputOTPWidget) Placeholder(s string) *InputOTPWidget       { o.placeholder = []rune(s); return o }
+func (o *InputOTPWidget) RTL(v bool) *InputOTPWidget {
+	defer property.Watch(&o.props, &o.rtl)()
+	o.rtl = v
+	return o
+}
+func (o *InputOTPWidget) SlotSize(s float64) *InputOTPWidget {
+	defer property.Watch(&o.props, &o.slotSize)()
+	o.slotSize = max(1, s)
+	return o
+}
+func (o *InputOTPWidget) Placeholder(s string) *InputOTPWidget {
+	defer property.Watch(&o.props, &o.placeholder)()
+	o.placeholder = []rune(s)
+	return o
+}
 func (o *InputOTPWidget) OnChange(fn func(string)) *InputOTPWidget   { o.onChange = fn; return o }
 func (o *InputOTPWidget) OnComplete(fn func(string)) *InputOTPWidget { o.onComplete = fn; return o }
 func (o *InputOTPWidget) OnSubmit(fn func(string)) *InputOTPWidget   { o.input.OnSubmit(fn); return o }
 
 // Alphanumeric accepts ASCII letters and digits.
 func (o *InputOTPWidget) Alphanumeric() *InputOTPWidget {
+	defer property.Watch(&o.props, &o.accept)()
 	o.accept = func(r rune) bool { return r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' }
 	return o
 }
 
 // Pattern accepts a character only if the expression matches that whole rune.
 func (o *InputOTPWidget) Pattern(pattern *regexp.Regexp) *InputOTPWidget {
+	defer property.Watch(&o.props, &o.accept)()
 	o.accept = func(r rune) bool {
 		if pattern == nil {
 			return true
@@ -166,10 +189,11 @@ func (o *InputOTPWidget) Accept(fn func(rune) bool) *InputOTPWidget { o.accept =
 // Input exposes the native editor for selection, submission and advanced use.
 func (o *InputOTPWidget) Input() *ggui.TextInputWidget { return o.input }
 func (o *InputOTPWidget) Layout(c ggui.Constraints, e ggui.Env) ggui.Size {
+	defer o.props.Layout()()
 	o.Sync()
 	o.env, o.theme, o.reduced = e, e.Theme(), e.ReducedMotion()
 	inherited, _ := e.Get(ggui.InputDisabled)
-	o.disabled = o.Inert || inherited
+	o.disabled = o.IsInert() || inherited
 	if o.invalidWhen != nil {
 		o.invalid = o.invalidWhen.Get()
 	}
@@ -239,7 +263,7 @@ func (o *InputOTPWidget) Layout(c ggui.Constraints, e ggui.Env) ggui.Size {
 	return size
 }
 func (o *InputOTPWidget) Semantics() (ggui.Role, string) {
-	return ggui.RoleTextField, pick(o.Name != "", o.Name, "One-time password")
+	return ggui.RoleTextField, pick(o.SemanticName() != "", o.SemanticName(), "One-time password")
 }
 func (o *InputOTPWidget) Describe() ggui.Node {
 	n := o.input.Describe()
@@ -304,7 +328,7 @@ func (o *InputOTPWidget) paintSlots(d *ggui.Canvas, r ggui.Rect, state ggui.Text
 			} else if i < len(o.placeholder) {
 				s = string(o.placeholder[i])
 			}
-			l.Set(s).Style(t.Text).Color(fg)
+			l.Content(s).Style(t.Text).Color(fg)
 			o.sizes[i] = l.Layout(ggui.Loose(ggui.Sz(o.slotSize, o.slotSize)), o.env)
 		}
 	}
@@ -443,4 +467,11 @@ func otpSlotBorder(d *ggui.Canvas, r ggui.Rect, radius, width float64, col color
 		}
 		d.Clip(half).StrokeRoundRect(r, pick(rounded, radius, 0.), width, col)
 	}
+}
+
+// BindName follows the accessible name on the same targets as Name.
+func (o *InputOTPWidget) BindName(r ggui.Readable[string]) *InputOTPWidget {
+	o.Interactive.BindName(r)
+	o.input.BindName(r)
+	return o
 }

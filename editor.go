@@ -10,6 +10,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
+
+	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/textinput"
 )
 
@@ -377,9 +379,12 @@ func nextWord(s string, i int) int {
 // editor adds Up and Down, Home and End within the line, Enter for a line
 // break and ⌘/Ctrl+Enter for OnSubmit.
 type TextInputWidget struct {
-	// Interactive carries the identity, name and disabled state every
-	// control shares. The editor drives focus itself rather than through
-	// Keyboard: a caret and an IME session are not a press.
+	props property.
+		// Interactive carries the identity, name and disabled state every
+		// control shares. The editor drives focus itself rather than through
+		// Keyboard: a caret and an IME session are not a press.
+		Owner
+
 	Interactive
 
 	value             Binding[string]
@@ -445,12 +450,12 @@ func TextInput(value Binding[string]) *TextInputWidget {
 	return t
 }
 
-// DisabledWhen follows r for Disabled without a rebuild. Like every other
+// BindDisabled follows r for Disabled without a rebuild. Like every other
 // control the editor reads r through Sync in Layout and Paint: Disabled
 // changes colour and whether input is accepted, both settled in Paint, so
 // nothing has to be measured again.
-func (t *TextInputWidget) DisabledWhen(r Readable[bool]) *TextInputWidget {
-	t.InertWhen(r)
+func (t *TextInputWidget) BindDisabled(r Readable[bool]) *TextInputWidget {
+	t.BindInert(r)
 	return t
 }
 
@@ -462,20 +467,27 @@ func (t *TextInputWidget) Disabled(v bool) *TextInputWidget {
 }
 
 // Placeholder sets the muted text shown while the value is empty.
-func (t *TextInputWidget) Placeholder(s string) *TextInputWidget { t.placeholder = s; return t }
+func (t *TextInputWidget) Placeholder(s string) *TextInputWidget {
+	defer property.Watch(&t.props, &t.placeholder)()
+	t.placeholder = s
+	return t
+}
 
-// Named names the field for Probe.Find and the inspector; the placeholder
+// Name names the field for Probe.Find and the inspector; the placeholder
 // serves until one is set.
 // SetName and HasName come from Interactive, so a container that names what
 // it holds reaches the editor the same way it reaches any other control.
-func (t *TextInputWidget) Named(s string) *TextInputWidget { t.Name = s; return t }
+func (t *TextInputWidget) Name(s string) *TextInputWidget { t.SetName(s); return t }
 
-// NamedWhen binds the field's name to r; see Interactive.NameWhen.
-func (t *TextInputWidget) NamedWhen(r Readable[string]) *TextInputWidget { t.NameWhen(r); return t }
+// BindName binds the field's name to r; see Interactive.BindName.
+func (t *TextInputWidget) BindName(r Readable[string]) *TextInputWidget {
+	t.Interactive.BindName(r)
+	return t
+}
 
 // IsDisabled reports the effective state, including InputDisabled inherited at
 // the most recent Layout. It does not subscribe to the disabled binding.
-func (t *TextInputWidget) IsDisabled() bool { return t.Inert || t.inheritedDisabled }
+func (t *TextInputWidget) IsDisabled() bool { return t.IsInert() || t.inheritedDisabled }
 
 // Key gives the editor an identity, so a rebuilt one that also moved keeps
 // its caret and focus. Without one the keyed component it was built in
@@ -484,8 +496,8 @@ func (t *TextInputWidget) Key(k any) *TextInputWidget { t.Interactive.SetKey(k);
 
 // Semantics implements Semantic.
 func (t *TextInputWidget) Semantics() (Role, string) {
-	if t.Name != "" {
-		return RoleTextField, t.Name
+	if t.SemanticName() != "" {
+		return RoleTextField, t.SemanticName()
 	}
 	return RoleTextField, t.placeholder
 }
@@ -580,11 +592,19 @@ func (t *TextInputWidget) ConsumesKey(ev KeyEvent) bool {
 func (t *TextInputWidget) Password() *TextInputWidget { t.password = true; return t }
 
 // Style merges ts onto the widget's own text style.
-func (t *TextInputWidget) Style(ts TextStyle) *TextInputWidget { t.style = t.style.Merge(ts); return t }
+func (t *TextInputWidget) Style(ts TextStyle) *TextInputWidget {
+	defer property.Watch(&t.props, &t.style)()
+	t.style = t.style.Merge(ts)
+	return t
+}
 
 // MinWidth sets the width the editor asks for when its parent leaves the
 // width to it; it fills a bounded width.
-func (t *TextInputWidget) MinWidth(w float64) *TextInputWidget { t.minWidth = w; return t }
+func (t *TextInputWidget) MinWidth(w float64) *TextInputWidget {
+	defer property.Watch(&t.props, &t.minWidth)()
+	t.minWidth = w
+	return t
+}
 
 // Multiline wraps the text at the editor's width and grows it by the line,
 // starting at three lines tall; see Lines. Enter inserts a line break and
@@ -600,6 +620,8 @@ func (t *TextInputWidget) Multiline() *TextInputWidget {
 // Lines sets the fewest lines a Multiline editor is tall, and makes the
 // editor Multiline.
 func (t *TextInputWidget) Lines(n int) *TextInputWidget {
+	defer property.Watch(&t.props, &t.minLines)()
+	defer property.Watch(&t.props, &t.multiline)()
 	t.multiline, t.minLines = true, max(n, 1)
 	return t
 }
@@ -695,6 +717,7 @@ func (t *TextInputWidget) linesHeight(n int) float64 {
 
 // Layout implements Widget.
 func (t *TextInputWidget) Layout(c Constraints, env Env) Size {
+	defer t.props.Layout()()
 	t.Sync()
 	t.inheritedDisabled, _ = env.Get(InputDisabled)
 	t.resolved = env.Text().Merge(t.style).resolved()

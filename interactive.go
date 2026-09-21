@@ -2,6 +2,8 @@ package ggui
 
 import (
 	"image/color"
+
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // Control is a widget that takes both pointer and keyboard input.
@@ -64,74 +66,73 @@ type Semantic interface {
 // Keyboard from the handlers, and the state carries across a rebuild
 // through Adopt for free. The ui package's controls are built on it.
 type Interactive struct {
-	Inert        bool // takes no input and draws muted
 	Hovered      bool
 	Pressed      bool
 	Focused      bool
-	FocusVisible bool   // focus arrived by keyboard: draw the ring
-	Role         Role   // what the control is, for Probe.Find and the inspector
-	Name         string // what it is called: the text on it, or what a Named setter gave
-
-	id        any // from SetKey
-	auto      any // from the keyed component it was constructed in
-	inertWhen Readable[bool]
-	nameWhen  Readable[string]
-	lastInert bool // Inert as Sync last saw it, so a direct write is noticed
+	FocusVisible bool
+	Role         Role
+	id           any
+	auto         any
+	properties   property.Owner
+	name         property.Value[string]
+	inert        property.Value[bool]
 }
 
-// SetName names the control for Probe.Find and the inspector when nothing
-// on it does; ui.Field uses it to hand its label to the input inside.
-func (s *Interactive) SetName(name string) { s.Name = name }
-
-// HasName reports whether the control has an explicit name, set or bound.
-func (s *Interactive) HasName() bool { return s.Name != "" || s.nameWhen != nil }
-
-// NameWhen makes the control's name follow r: Sync reads it before the
-// control describes itself, so the semantics, Probe.Find and the inspector
-// see the current value without a rebuild. It counts as an explicit name,
-// so a ui.Field label does not replace it.
-func (s *Interactive) NameWhen(r Readable[string]) { s.nameWhen = r; s.Name = Untrack(r.Get) }
-
-// SetInert sets disabled state and replaces any InertWhen binding.
-func (s *Interactive) SetInert(v bool) {
-	if s.inertWhen != nil || s.Inert != v {
-		requestLayout()
+// SetName sets the accessible name and removes a name binding.
+func (s *Interactive) SetName(name string) {
+	if s.name.Set(name) {
+		s.properties.Changed()
 	}
-	s.inertWhen = nil
-	s.Inert, s.lastInert = v, v
 }
+
+// SemanticName returns the resolved explicit name without a control's fallback.
+func (s *Interactive) SemanticName() string { s.properties.Read(); return s.name.Get() }
+
+// HasName reports whether a name was set or bound, including an empty binding.
+func (s *Interactive) HasName() bool { return s.name.Bound() || s.name.Current() != "" }
+
+// BindName borrows a non-nil name reader until SetName or another BindName.
+func (s *Interactive) BindName(r Readable[string]) {
+	if s.name.Bind(r, "BindName") {
+		s.properties.Changed()
+	}
+}
+
+// SetInert changes input availability and removes an inert binding.
+func (s *Interactive) SetInert(v bool) {
+	if s.inert.Set(v) {
+		s.properties.Changed()
+	}
+}
+
+// IsInert reports whether the control currently ignores input.
+func (s *Interactive) IsInert() bool { s.properties.Read(); return s.inert.Get() }
 
 // AutoKey takes the identity the keyed component being built gives the
 // control, if any; a constructor calls it. SetKey overrides it.
 func (s *Interactive) AutoKey() { s.auto = autoID() }
 
 // Semantics implements Semantic.
-func (s *Interactive) Semantics() (Role, string) { return s.Role, s.Name }
+func (s *Interactive) Semantics() (Role, string) {
+	return s.Role, s.SemanticName(
 
-// ConsumesKey implements KeyConsumer: a control acts on Space and Enter.
-// A control that acts on more keys overrides it.
+	// ConsumesKey implements KeyConsumer: a control acts on Space and Enter.
+	// A control that acts on more keys overrides it.
+	)
+}
+
 func (s *Interactive) ConsumesKey(ev KeyEvent) bool { return Activates(ev) }
 
-// InertWhen makes the control follow r for Inert: a control reads it in
-// Layout and Paint through Sync, so nothing rebuilds when it changes.
-func (s *Interactive) InertWhen(r Readable[bool]) { s.inertWhen = r; requestLayout() }
-
-// Sync refreshes Inert from InertWhen, if set, and asks for a layout when
-// Inert was written directly rather than through SetInert, so the control
-// is measured again in its new state either way. Call it at the start of
-// Layout and Paint.
-func (s *Interactive) Sync() {
-	if s.nameWhen != nil {
-		s.Name = s.nameWhen.Get()
-	}
-	if s.inertWhen != nil {
-		s.Inert = s.inertWhen.Get()
-	}
-	if s.Inert != s.lastInert {
-		s.lastInert = s.Inert
-		requestLayout()
+// BindInert borrows a non-nil reader for input availability.
+func (s *Interactive) BindInert(r Readable[bool]) {
+	if s.inert.Bind(r, "BindInert") {
+		s.properties.Changed()
 	}
 }
+
+// Sync resolves input properties in the current tracking scope. Layout and
+// Paint call it before consuming the control's state.
+func (s *Interactive) Sync() { s.properties.Read(); s.name.Get(); s.inert.Get() }
 
 // SetKey gives the control an identity, so a rebuilt one that also moved
 // keeps its state. Without one its Rect identifies it.
@@ -159,7 +160,7 @@ func (s *Interactive) state() *Interactive { return s }
 func (s *Interactive) Hit(dst *Canvas, r Rect, h Control, cursor CursorShape) {
 	s.Sync()
 	dst.Describe(r, h)
-	if s.Inert {
+	if s.IsInert() {
 		return
 	}
 	dst.HitPointer(r, h)

@@ -23,11 +23,11 @@ func TestFieldNamePriority(t *testing.T) {
 		{"input OTP", func() namedControl { return ui.InputOTP(ggui.State(""), 6) }},
 		{"editor", func() namedControl { return ggui.TextInput(ggui.State("")).Placeholder("Hint") }},
 		{"textfield", func() namedControl { return ui.TextField(ggui.State("")).Placeholder("Hint") }},
-		{"combobox", func() namedControl { return ui.Combobox(ggui.State(1), []int{1, 2}) }},
+		{"combobox", func() namedControl { return ui.Combobox(ggui.State(1)).Options([]int{1, 2}) }},
 		{"datepicker", func() namedControl { return ui.DatePicker(ggui.State(time.Time{})) }},
 		{"menu", func() namedControl { return ui.MenuOf(ggui.Text("Icon"), ui.MenuItem("Open", nil)) }},
-		{"radios", func() namedControl { return ui.Radios(ggui.State(1), []int{1, 2}) }},
-		{"toggle group", func() namedControl { return ui.ToggleGroup(ggui.State(1), []int{1, 2}) }},
+		{"radios", func() namedControl { return ui.Radios(ggui.State(1)).Options([]int{1, 2}) }},
+		{"toggle group", func() namedControl { return ui.ToggleGroup(ggui.State(1)).Options([]int{1, 2}) }},
 		{"calendar", func() namedControl { return ui.Calendar(ggui.State(time.Time{})) }},
 		{"accordion", func() namedControl {
 			return ui.Accordion(ggui.State([]string{}), ui.AccordionItem("a", "A", ggui.Text("Body")))
@@ -72,7 +72,7 @@ func TestFieldNamePriority(t *testing.T) {
 
 func TestNamingDoesNotChangeOptionFormatting(t *testing.T) {
 	selected := ggui.State(2)
-	s := ui.Select(selected, []int{1, 2}).Format(func(n int) string { return "Option " + strconv.Itoa(n) }).Named("Choice")
+	s := ui.Select(selected).Options([]int{1, 2}).Format(func(n int) string { return "Option " + strconv.Itoa(n) }).Name("Choice")
 	p := ggui.NewProbe(ui.Field("Outer", s), ggui.Sz(300, 300))
 	defer p.Close()
 	if n := node(t, p.Semantics(), ggui.RoleSelect, "Choice"); n.Value != "Option 2" {
@@ -87,11 +87,11 @@ func TestNamingDoesNotChangeOptionFormatting(t *testing.T) {
 func checkDisabled[W interface {
 	ggui.Widget
 	Disabled(bool) W
-	DisabledWhen(ggui.Readable[bool]) W
+	BindDisabled(ggui.Readable[bool]) W
 }](t *testing.T, w W, role ggui.Role, name string) {
 	t.Helper()
 	busy := ggui.State(false)
-	w.DisabledWhen(busy)
+	w.BindDisabled(busy)
 	p := ggui.NewProbe(w, ggui.Sz(500, 500))
 	defer p.Close()
 	check := func(want bool) {
@@ -108,12 +108,12 @@ func checkDisabled[W interface {
 	busy.Set(false)
 	busy.Set(true)
 	check(false)
-	w.Disabled(true).DisabledWhen(busy)
+	w.Disabled(true).BindDisabled(busy)
 	check(true)
 	busy.Set(false)
 	check(false)
 	replacement := ggui.State(false)
-	w.DisabledWhen(replacement)
+	w.BindDisabled(replacement)
 	busy.Set(true)
 	check(false)
 	replacement.Set(true)
@@ -122,31 +122,33 @@ func checkDisabled[W interface {
 
 func TestDisabledSettingsAcrossControls(t *testing.T) {
 	t.Run("input OTP", func(t *testing.T) {
-		checkDisabled(t, ui.InputOTP(ggui.State(""), 6).Named("Code"), ggui.RoleTextField, "Code")
+		checkDisabled(t, ui.InputOTP(ggui.State(""), 6).Name("Code"), ggui.RoleTextField, "Code")
 	})
 	t.Run("carousel", func(t *testing.T) {
-		checkDisabled(t, ui.Carousel(ggui.State(0), ggui.Text("1"), ggui.Text("2")).Named("Slides"), ggui.RoleGroup, "Slides")
+		checkDisabled(t, ui.Carousel(ggui.State(0), ggui.Text("1"), ggui.Text("2")).Name("Slides"), ggui.RoleGroup, "Slides")
 	})
 	t.Run("button", func(t *testing.T) { checkDisabled(t, ui.Button("B", nil), ggui.RoleButton, "B") })
 	t.Run("checkbox", func(t *testing.T) { checkDisabled(t, ui.Checkbox(ggui.State(false), "C"), ggui.RoleCheckbox, "C") })
 	t.Run("switch", func(t *testing.T) { checkDisabled(t, ui.Switch(ggui.State(false), "S"), ggui.RoleSwitch, "S") })
 	t.Run("radio", func(t *testing.T) { checkDisabled(t, ui.Radio(ggui.State(1), 1, "R"), ggui.RoleRadio, "R") })
-	t.Run("radios", func(t *testing.T) { checkDisabled(t, ui.Radios(ggui.State(1), []int{1, 2}), ggui.RoleRadio, "1") })
+	t.Run("radios", func(t *testing.T) {
+		checkDisabled(t, ui.Radios(ggui.State(1)).Options([]int{1, 2}), ggui.RoleRadio, "1")
+	})
 	t.Run("slider", func(t *testing.T) {
-		checkDisabled(t, ui.Slider(ggui.State(0.0), 0, 10).Named("S"), ggui.RoleSlider, "S")
+		checkDisabled(t, ui.Slider(ggui.State(0.0), 0, 10).Name("S"), ggui.RoleSlider, "S")
 	})
 	t.Run("editor", func(t *testing.T) {
-		checkDisabled(t, ggui.TextInput(ggui.State("")).Named("E"), ggui.RoleTextField, "E")
+		checkDisabled(t, ggui.TextInput(ggui.State("")).Name("E"), ggui.RoleTextField, "E")
 	})
-	t.Run("textfield", func(t *testing.T) { checkDisabled(t, ui.TextField(ggui.State("")).Named("E"), ggui.RoleTextField, "E") })
+	t.Run("textfield", func(t *testing.T) { checkDisabled(t, ui.TextField(ggui.State("")).Name("E"), ggui.RoleTextField, "E") })
 	t.Run("input group", func(t *testing.T) {
-		checkDisabled(t, ui.InputGroup(ggui.TextInput(ggui.State("")).Named("E")), ggui.RoleTextField, "E")
+		checkDisabled(t, ui.InputGroup(ggui.TextInput(ggui.State("")).Name("E")), ggui.RoleTextField, "E")
 	})
 	t.Run("select", func(t *testing.T) {
-		checkDisabled(t, ui.Select(ggui.State(1), []int{1, 2}).Named("S"), ggui.RoleSelect, "S")
+		checkDisabled(t, ui.Select(ggui.State(1)).Options([]int{1, 2}).Name("S"), ggui.RoleSelect, "S")
 	})
 	t.Run("combobox", func(t *testing.T) {
-		checkDisabled(t, ui.Combobox(ggui.State(1), []int{1, 2}), ggui.RoleCombobox, "Choose option")
+		checkDisabled(t, ui.Combobox(ggui.State(1)).Options([]int{1, 2}), ggui.RoleCombobox, "Choose option")
 	})
 	t.Run("datepicker", func(t *testing.T) {
 		checkDisabled(t, ui.DatePicker(ggui.State(time.Time{})), ggui.RoleButton, "Choose date")
@@ -174,16 +176,18 @@ func TestDisabledSettingsAcrossControls(t *testing.T) {
 	t.Run("collapsible", func(t *testing.T) {
 		checkDisabled(t, ui.Collapsible(ggui.State(true), "C", ggui.Text("Body")), ggui.RoleDisclosure, "C")
 	})
-	t.Run("toggle group", func(t *testing.T) { checkDisabled(t, ui.ToggleGroup(ggui.State(1), []int{1, 2}), ggui.RoleRadio, "1") })
+	t.Run("toggle group", func(t *testing.T) {
+		checkDisabled(t, ui.ToggleGroup(ggui.State(1)).Options([]int{1, 2}), ggui.RoleRadio, "1")
+	})
 }
 
 func checkPopupDisabled[W interface {
 	ggui.Widget
-	DisabledWhen(ggui.Readable[bool]) W
+	BindDisabled(ggui.Readable[bool]) W
 	Popup() *ggui.PopupWidget
 }](t *testing.T, w W) {
 	busy := ggui.State(false)
-	w.DisabledWhen(busy)
+	w.BindDisabled(busy)
 	p := ggui.NewProbe(w, ggui.Sz(500, 500))
 	defer p.Close()
 	p.Frame()
@@ -212,8 +216,8 @@ func checkPopupDisabled[W interface {
 }
 
 func TestReactiveDisabledClosesPopups(t *testing.T) {
-	t.Run("select", func(t *testing.T) { checkPopupDisabled(t, ui.Select(ggui.State(1), []int{1, 2})) })
-	t.Run("combobox", func(t *testing.T) { checkPopupDisabled(t, ui.Combobox(ggui.State(1), []int{1, 2})) })
+	t.Run("select", func(t *testing.T) { checkPopupDisabled(t, ui.Select(ggui.State(1)).Options([]int{1, 2})) })
+	t.Run("combobox", func(t *testing.T) { checkPopupDisabled(t, ui.Combobox(ggui.State(1)).Options([]int{1, 2})) })
 	t.Run("datepicker", func(t *testing.T) { checkPopupDisabled(t, ui.DatePicker(ggui.State(time.Time{}))) })
 	t.Run("menu", func(t *testing.T) { checkPopupDisabled(t, ui.Menu("M", ui.MenuItem("Open", nil))) })
 	t.Run("contextmenu", func(t *testing.T) {
@@ -224,9 +228,9 @@ func TestReactiveDisabledClosesPopups(t *testing.T) {
 func TestInputGroupPreservesEditorBindingAndAddon(t *testing.T) {
 	value := ggui.State("abc")
 	childDisabled, groupDisabled := ggui.State(false), ggui.State(false)
-	editor := ggui.TextInput(value).Named("Editor").DisabledWhen(childDisabled)
+	editor := ggui.TextInput(value).Name("Editor").BindDisabled(childDisabled)
 	clicks := 0
-	group := ui.InputGroup(editor).DisabledWhen(groupDisabled).Trailing(ui.Button("Addon", func() { clicks++ }))
+	group := ui.InputGroup(editor).BindDisabled(groupDisabled).Trailing(ui.Button("Addon", func() { clicks++ }))
 	p := ggui.NewProbe(group, ggui.Sz(400, 50))
 	defer p.Close()
 	p.Tap("Editor")
@@ -265,7 +269,7 @@ func TestInputGroupPreservesEditorBindingAndAddon(t *testing.T) {
 }
 
 func TestInheritedInputDisabledCannotBeClearedByDescendant(t *testing.T) {
-	editor := ggui.TextInput(ggui.State("value")).Named("Editor")
+	editor := ggui.TextInput(ggui.State("value")).Name("Editor")
 	w := ggui.Provide(ggui.InputDisabled, true, ggui.Provide(ggui.InputDisabled, false, ui.InputGroup(editor).Disabled(false)))
 	p := ggui.NewProbe(w, ggui.Sz(300, 50))
 	defer p.Close()
@@ -296,7 +300,7 @@ func TestPaginationDisabledDoesNotSubscribeBuilder(t *testing.T) {
 
 func TestDisabledMenuClosesSharedMenubarPopup(t *testing.T) {
 	busy := ggui.State(false)
-	menu := ui.Menu("File", ui.MenuItem("Open", nil)).DisabledWhen(busy)
+	menu := ui.Menu("File", ui.MenuItem("Open", nil)).BindDisabled(busy)
 	bar := ui.Menubar(menu)
 	p := ggui.NewProbe(bar, ggui.Sz(400, 300))
 	defer p.Close()
@@ -313,8 +317,8 @@ func TestDisabledMenuClosesSharedMenubarPopup(t *testing.T) {
 
 func TestTextFieldPreservesEditorDisabledBinding(t *testing.T) {
 	busy := ggui.State(true)
-	field := ui.TextField(ggui.State("text")).Named("Field")
-	field.Input().DisabledWhen(busy)
+	field := ui.TextField(ggui.State("text")).Name("Field")
+	field.Input().BindDisabled(busy)
 	p := ggui.NewProbe(field, ggui.Sz(300, 50))
 	defer p.Close()
 	if !node(t, p.Semantics(), ggui.RoleTextField, "Field").Disabled {
@@ -351,7 +355,7 @@ func TestInputGroupNamesFollowEditor(t *testing.T) {
 		t.Fatal("placeholder must be a fallback")
 	}
 	node(t, p.Semantics(), role, name)
-	editor.Named("Explicit")
+	editor.Name("Explicit")
 	ui.Field("Outer", group)
 	role, name = group.Semantics()
 	if !group.HasName() || name != "Explicit" {

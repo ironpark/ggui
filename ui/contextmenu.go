@@ -26,8 +26,8 @@ func ContextMenu(content ggui.Widget, entries ...ggui.Widget) *ContextMenuWidget
 	return c
 }
 
-// Named sets the accessible name of the context-menu target.
-func (c *ContextMenuWidget) Named(name string) *ContextMenuWidget { c.Name = name; return c }
+// Name sets the accessible name of the context-menu target.
+func (c *ContextMenuWidget) Name(name string) *ContextMenuWidget { c.SetName(name); return c }
 
 // Disabled disables menu invocation while leaving the wrapped content usable.
 func (c *ContextMenuWidget) Disabled(v bool) *ContextMenuWidget {
@@ -42,7 +42,7 @@ func (c *ContextMenuWidget) Disabled(v bool) *ContextMenuWidget {
 func (c *ContextMenuWidget) Popup() *ggui.PopupWidget { return c.menu.popup }
 
 func (c *ContextMenuWidget) open(at ggui.Point) {
-	if c.Inert {
+	if c.IsInert() {
 		return
 	}
 	c.at = &at
@@ -52,14 +52,14 @@ func (c *ContextMenuWidget) open(at ggui.Point) {
 
 // Describe exposes menu invocation to accessibility clients.
 func (c *ContextMenuWidget) Describe() ggui.Node {
-	return ggui.Node{Role: c.Role, Name: c.name(), Disabled: c.Inert,
+	return ggui.Node{Role: c.Role, Name: c.name(), Disabled: c.IsInert(),
 		Expanded: ggui.Expandable(c.Popup().IsOpen()),
 		Actions:  ggui.ActionFocus | ggui.ActionPress | ggui.ActionExpand | ggui.ActionCollapse}
 }
 
 // Act implements ggui.Actor.
 func (c *ContextMenuWidget) Act(a ggui.Action) bool {
-	if c.Inert {
+	if c.IsInert() {
 		return false
 	}
 	switch a.Kind {
@@ -76,7 +76,7 @@ func (c *ContextMenuWidget) Act(a ggui.Action) bool {
 // Layout implements ggui.Widget.
 func (c *ContextMenuWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	c.Sync()
-	if c.Inert {
+	if c.IsInert() {
 		c.Popup().Hide()
 	}
 	c.theme = env.Theme()
@@ -92,12 +92,12 @@ func (c *ContextMenuWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		it.active = i == c.menu.current
 	}
 	dst.Describe(r, c)
-	if !c.Inert {
+	if !c.IsInert() {
 		dst.HitKey(r, c)
 	}
 	dst.Paint(c.Popup(), r)
 	// Secondary clicks take precedence over child controls; other events pass on.
-	if !c.Inert {
+	if !c.IsInert() {
 		dst.HitPointer(r, c)
 	}
 	c.FocusRing(dst, r, c.theme.Radius, c.theme.Ring)
@@ -105,7 +105,7 @@ func (c *ContextMenuWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 
 // HandlePointer implements ggui.PointerHandler.
 func (c *ContextMenuWidget) HandlePointer(ev ggui.PointerEvent) bool {
-	if c.Inert || ev.Button != ggui.MouseButtonRight {
+	if c.IsInert() || ev.Button != ggui.MouseButtonRight {
 		return false
 	}
 	switch ev.Kind {
@@ -120,7 +120,7 @@ func (c *ContextMenuWidget) HandlePointer(ev ggui.PointerEvent) bool {
 
 // ConsumesKey implements ggui.KeyConsumer.
 func (c *ContextMenuWidget) ConsumesKey(ev ggui.KeyEvent) bool {
-	if c.Inert || ev.Kind != ggui.KeyPress {
+	if c.IsInert() || ev.Kind != ggui.KeyPress {
 		return false
 	}
 	return ggui.Activates(ev) || (ev.Key == ggui.KeyF10 && ev.Mods.Shift) ||
@@ -130,7 +130,7 @@ func (c *ContextMenuWidget) ConsumesKey(ev ggui.KeyEvent) bool {
 // HandleKey implements ggui.KeyHandler.
 func (c *ContextMenuWidget) HandleKey(ev ggui.KeyEvent) {
 	c.Keyboard(ev, nil)
-	if c.Inert || ev.Kind != ggui.KeyPress {
+	if c.IsInert() || ev.Kind != ggui.KeyPress {
 		return
 	}
 	if !c.Popup().IsOpen() {
@@ -160,7 +160,7 @@ func (c *ContextMenuWidget) HandleKey(ev ggui.KeyEvent) {
 // Adopt retains an open menu and its position across keyed rebuilds.
 func (c *ContextMenuWidget) Adopt(prev any) {
 	c.Interactive.Adopt(prev)
-	if p, ok := prev.(*ContextMenuWidget); ok && !c.Inert {
+	if p, ok := prev.(*ContextMenuWidget); ok && !c.IsInert() {
 		c.menu.current = p.menu.current
 		if c.menu.current >= len(c.menu.items) {
 			c.menu.current = -1
@@ -172,13 +172,15 @@ func (c *ContextMenuWidget) Adopt(prev any) {
 	}
 }
 
-// DisabledWhen follows r for Disabled without rebuilding the control.
-func (c *ContextMenuWidget) DisabledWhen(r ggui.Readable[bool]) *ContextMenuWidget {
-	c.InertWhen(r)
+// BindDisabled follows r for Disabled without rebuilding the control.
+func (c *ContextMenuWidget) BindDisabled(r ggui.Readable[bool]) *ContextMenuWidget {
+	c.BindInert(r)
 	return c
 }
 
-func (c *ContextMenuWidget) name() string { return pick(c.Name != "", c.Name, "Context menu") }
+func (c *ContextMenuWidget) name() string {
+	return pick(c.SemanticName() != "", c.SemanticName(), "Context menu")
+}
 
 // Semantics implements ggui.Semantic, including the built-in fallback name.
 func (c *ContextMenuWidget) Semantics() (ggui.Role, string) { return c.Role, c.name() }

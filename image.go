@@ -10,6 +10,8 @@ import (
 	"os"
 
 	"github.com/hajimehoshi/ebiten/v2"
+
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // ImageFit says how an image is placed in a box of another shape.
@@ -24,6 +26,7 @@ const (
 
 // ImageWidget draws an ebiten.Image. Build one with Image.
 type ImageWidget struct {
+	props  property.Owner
 	img    *ebiten.Image
 	fit    ImageFit
 	width  float64
@@ -41,28 +44,50 @@ func Image(img *ebiten.Image) *ImageWidget {
 
 // Fit sets how the image is placed when the box has another shape; the
 // default is FitContain.
-func (w *ImageWidget) Fit(f ImageFit) *ImageWidget { w.fit = f; return w }
+func (w *ImageWidget) Fit(f ImageFit) *ImageWidget {
+	defer property.Watch(&w.props, &w.fit)()
+	w.fit = f
+	return w
+}
 
 // Size fixes both dimensions. A zero dimension follows the other, keeping
 // the aspect ratio, or the image when both are zero.
 func (w *ImageWidget) Size(width, height float64) *ImageWidget {
+	defer property.Watch(&w.props, &w.height)()
+	defer property.Watch(&w.props, &w.width)()
 	w.width, w.height = width, height
 	return w
 }
 
 // Width fixes the width; the height follows the aspect ratio.
-func (w *ImageWidget) Width(v float64) *ImageWidget { w.width = v; return w }
+func (w *ImageWidget) Width(v float64) *ImageWidget {
+	defer property.Watch(&w.props, &w.width)()
+	w.width = v
+	return w
+}
 
 // Height fixes the height; the width follows the aspect ratio.
-func (w *ImageWidget) Height(v float64) *ImageWidget { w.height = v; return w }
+func (w *ImageWidget) Height(v float64) *ImageWidget {
+	defer property.Watch(&w.props, &w.height)()
+	w.height = v
+	return w
+}
 
 // Filter sets how pixels are sampled when scaled; the default is linear.
-func (w *ImageWidget) Filter(f ebiten.Filter) *ImageWidget { w.filter = f; return w }
+func (w *ImageWidget) Filter(f ebiten.Filter) *ImageWidget {
+	defer property.Watch(&w.props, &w.filter)()
+	w.filter = f
+	return w
+}
 
 // Alt describes the image for a screen reader. Without one the image is
 // decorative and stays out of the accessibility tree entirely, which is
 // what an icon beside a label that already says the same thing wants.
-func (w *ImageWidget) Alt(s string) *ImageWidget { w.alt = s; return w }
+func (w *ImageWidget) Alt(s string) *ImageWidget {
+	defer property.Watch(&w.props, &w.alt)()
+	w.alt = s
+	return w
+}
 
 // natural is the image's size in logical pixels.
 func (w *ImageWidget) natural() Size {
@@ -75,6 +100,7 @@ func (w *ImageWidget) natural() Size {
 
 // Layout implements Widget.
 func (w *ImageWidget) Layout(c Constraints, env Env) Size {
+	defer w.props.Layout()()
 	n := w.natural()
 	want := n
 	ratio := 1.0

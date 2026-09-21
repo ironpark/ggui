@@ -7,6 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // Threading: signals, effects, layout and paint all run on the UI thread,
@@ -262,7 +264,7 @@ func (r *frameLoop) settle(size Size) error {
 		}
 		before := stateGen
 		if r.root != nil && r.needsLayout(size) {
-			withOwner(r.owner, func() { r.rootSize = r.root.Layout(Tight(size), rootEnv()) })
+			withOwner(r.owner, func() { defer property.EnterLayout()(); r.rootSize = r.root.Layout(Tight(size), rootEnv()) })
 		}
 		if effects.dirtyGen != effects.settledGen || stateGen != before {
 			continue

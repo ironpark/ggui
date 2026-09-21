@@ -4,13 +4,15 @@ import (
 	"slices"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // ComboboxWidget is a searchable selection popup. Keep it mounted to retain its query.
 type ComboboxWidget[T comparable] struct {
+	props       property.Owner
 	value       ggui.Binding[T]
 	options     []T
-	optionsWhen ggui.Readable[[]T]
+	optionProp  property.Value[[]T]
 	label       func(T) string
 	placeholder string
 	button      *ButtonWidget
@@ -24,7 +26,7 @@ type ComboboxWidget[T comparable] struct {
 // Combobox creates a closed dropdown; its popup focuses a search field and
 // supports typing, Up/Down, Enter, pointer selection and Escape cancellation.
 // The options slice is shallow-copied.
-func Combobox[T comparable](value ggui.Binding[T], options []T) *ComboboxWidget[T] {
+func Combobox[T comparable](value ggui.Binding[T]) *ComboboxWidget[T] {
 	c := &ComboboxWidget[T]{value: value, label: sprint[T], placeholder: "Select…", query: ggui.State("")}
 	c.button = Button("", func() {
 		if c.popup.IsOpen() {
@@ -47,10 +49,10 @@ func Combobox[T comparable](value ggui.Binding[T], options []T) *ComboboxWidget[
 	if c.button.HitID() == nil {
 		c.button.Key(c)
 	}
-	c.search = Command(c.query).Named("Search options").Placeholder("Search options…")
+	c.search = Command(c.query).Name("Search options").Placeholder("Search options…")
 	c.popup = ggui.Popup(c.button, ggui.Box(c.search).Width(280)).Owner(c.button)
 	c.button.Expands(c.popup.IsOpen)
-	return c.Options(options)
+	return c
 }
 
 type comboboxKey struct {
@@ -69,28 +71,26 @@ func (c *ComboboxWidget[T]) Key(k any) *ComboboxWidget[T] {
 }
 
 // Options replaces the options with a shallow copy, including after mount,
-// and removes any OptionsWhen binding. The popup and search editor stay
+// and removes any BindOptions binding. The popup and search editor stay
 // mounted: open state and query are preserved, matches are refreshed and
 // the first match is highlighted. The value is never written and OnChange
 // is not called; an absent value displays Placeholder.
 func (c *ComboboxWidget[T]) Options(options []T) *ComboboxWidget[T] {
-	wasBound := c.optionsWhen != nil
-	c.optionsWhen = nil
-	if c.setOptions(options) || wasBound {
-		ggui.Invalidate(c.env)
+	changed := c.setOptions(options)
+	detached := c.optionProp.Set(c.options)
+	if changed || detached {
+		c.props.Changed()
 	}
 	return c
 }
 
-// OptionsWhen follows r at layout without rebuilding the control. Changes
+// BindOptions follows r at layout without rebuilding the control. Changes
 // use the same snapshot and selection rules as Options. The last setting
-// wins; nil stops following and keeps the current snapshot.
-func (c *ComboboxWidget[T]) OptionsWhen(r ggui.Readable[[]T]) *ComboboxWidget[T] {
-	if sameReadable(c.optionsWhen, r) {
-		return c
+// wins; r must be non-nil. Use Options to detach the source.
+func (c *ComboboxWidget[T]) BindOptions(r ggui.Readable[[]T]) *ComboboxWidget[T] {
+	if c.optionProp.Bind(r, "BindOptions") {
+		c.props.Changed()
 	}
-	c.optionsWhen = r
-	ggui.Invalidate(c.env)
 	return c
 }
 
@@ -113,18 +113,22 @@ func (c *ComboboxWidget[T]) Format(fn func(T) string) *ComboboxWidget[T] {
 	for i, v := range c.options {
 		label := fn(v)
 		c.search.entries[i].label = label
-		c.search.items[i].text.Set(label)
-		c.search.items[i].Name = label
+		c.search.items[i].text.Content(label)
+		c.search.items[i].SetName(label)
 	}
 	c.search.initialized = false
 	return c
 }
 
-// Named names the trigger; the selected value remains visible on it.
-func (c *ComboboxWidget[T]) Named(s string) *ComboboxWidget[T] { c.button.Name = s; return c }
+// Name names the trigger; the selected value remains visible on it.
+func (c *ComboboxWidget[T]) Name(s string) *ComboboxWidget[T] { c.button.SetName(s); return c }
 
 // Placeholder sets the trigger text when value is not in options.
-func (c *ComboboxWidget[T]) Placeholder(s string) *ComboboxWidget[T] { c.placeholder = s; return c }
+func (c *ComboboxWidget[T]) Placeholder(s string) *ComboboxWidget[T] {
+	defer property.Watch(&c.props, &c.placeholder)()
+	c.placeholder = s
+	return c
+}
 
 // Disabled disables the trigger and closes the popup.
 func (c *ComboboxWidget[T]) Disabled(v bool) *ComboboxWidget[T] {
@@ -143,12 +147,11 @@ func (c *ComboboxWidget[T]) Popup() *ggui.PopupWidget { return c.popup }
 
 // Layout implements ggui.Widget.
 func (c *ComboboxWidget[T]) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
+	defer c.props.Layout()()
 	c.env = env
-	if c.optionsWhen != nil {
-		c.setOptions(c.optionsWhen.Get())
-	}
+	c.setOptions(c.optionProp.Get())
 	c.button.Sync()
-	if c.button.Inert {
+	if c.button.IsInert() {
 		c.popup.Hide()
 	}
 	label := c.placeholder
@@ -158,7 +161,7 @@ func (c *ComboboxWidget[T]) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 			break
 		}
 	}
-	c.button.label.Set(label + "  ▾")
+	c.button.label.Content(label + "  ▾")
 	return c.popup.Layout(cs, env)
 }
 
@@ -166,7 +169,7 @@ func (c *ComboboxWidget[T]) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 func (c *ComboboxWidget[T]) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(c.popup, r) }
 
 // SetName names the trigger for Field.
-func (c *ComboboxWidget[T]) SetName(s string) { c.Named(s) }
+func (c *ComboboxWidget[T]) SetName(s string) { c.Name(s) }
 
 // HasName reports whether the trigger has an explicit name.
 func (c *ComboboxWidget[T]) HasName() bool { return c.button.HasName() }
@@ -174,8 +177,14 @@ func (c *ComboboxWidget[T]) HasName() bool { return c.button.HasName() }
 // Semantics reports the trigger's role and resolved name.
 func (c *ComboboxWidget[T]) Semantics() (ggui.Role, string) { return c.button.Semantics() }
 
-// DisabledWhen follows r and closes the popup while disabled.
-func (c *ComboboxWidget[T]) DisabledWhen(r ggui.Readable[bool]) *ComboboxWidget[T] {
-	c.button.DisabledWhen(r)
+// BindDisabled follows r and closes the popup while disabled.
+func (c *ComboboxWidget[T]) BindDisabled(r ggui.Readable[bool]) *ComboboxWidget[T] {
+	c.button.BindDisabled(r)
+	return c
+}
+
+// BindName follows the accessible name on the same targets as Name.
+func (c *ComboboxWidget[T]) BindName(r ggui.Readable[string]) *ComboboxWidget[T] {
+	c.button.BindName(r)
 	return c
 }

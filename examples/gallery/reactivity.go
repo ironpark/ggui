@@ -46,7 +46,7 @@ func reactivityPreview() ggui.Widget {
 			return ggui.Row(ui.Checkbox(selected, "Keep this row selected"), ggui.TextOf(ggui.Derived(func() string { return fmt.Sprintf("%d. %s", item.Index.Get()+1, item.Value.Get().Name) }))).Gap(8)
 		}
 		return ggui.Column(
-			ui.TextField(query).Named("Reactive search").Placeholder("Search names; type error to fail"),
+			ui.TextField(query).Name("Reactive search").Placeholder("Search names; type error to fail"),
 			ui.Button("Retry request", results.Reload).Outline(),
 			ggui.Await(results).
 				Pending(func() ggui.Widget { return ggui.Text("Searching…") }).

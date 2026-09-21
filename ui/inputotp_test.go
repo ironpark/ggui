@@ -1,10 +1,11 @@
 package ui
 
 import (
-	"github.com/ironpark/ggui"
 	"regexp"
 	"runtime"
 	"testing"
+
+	"github.com/ironpark/ggui"
 )
 
 func otpCmd() ggui.Mods {
@@ -53,7 +54,7 @@ func TestInputOTPPasteSelectionUndo(t *testing.T) {
 }
 func TestInputOTPAccessibilityAndExternalValue(t *testing.T) {
 	value := ggui.State("")
-	o := InputOTP(value, 4).Alphanumeric().Named("Code")
+	o := InputOTP(value, 4).Alphanumeric().Name("Code")
 	p := ggui.NewProbe(o, ggui.Sz(300, 80))
 	defer p.Close()
 	p.Frame()
@@ -100,7 +101,7 @@ func TestInputOTPCompositionSizesRTL(t *testing.T) {
 }
 func TestInputOTPInvalidAndDisabledBindings(t *testing.T) {
 	locked, bad := ggui.State(false), ggui.State(false)
-	o := InputOTP(ggui.State("123456"), 6).DisabledWhen(locked).InvalidWhen(bad)
+	o := InputOTP(ggui.State("123456"), 6).BindDisabled(locked).BindInvalid(bad)
 	p := ggui.NewProbe(o, ggui.Sz(300, 40))
 	defer p.Close()
 	p.Frame()

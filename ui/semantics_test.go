@@ -54,7 +54,7 @@ button "Save" disabled
 // one element.
 func TestSemanticsTextFieldIsOneNode(t *testing.T) {
 	value := ggui.State("Ada")
-	tree := semantics(t, ui.TextField(value).Named("Name"), ggui.Sz(200, 60))
+	tree := semantics(t, ui.TextField(value).Name("Name"), ggui.Sz(200, 60))
 	n := 0
 	for range tree.Nodes(ggui.RoleTextField) {
 		n++
@@ -98,7 +98,7 @@ dialog "Confirm"
 
 func TestSemanticsSelectOwnsItsOptions(t *testing.T) {
 	value := ggui.State(2)
-	sel := ui.Select(value, []int{1, 2, 3}).Named("Count")
+	sel := ui.Select(value).Options([]int{1, 2, 3}).Name("Count")
 	p := ggui.NewProbe(ggui.Column(sel), ggui.Sz(200, 200))
 	defer p.Close()
 	wantTree(t, p.Semantics(), `
@@ -130,7 +130,7 @@ menu "File" expanded
 }
 
 func TestSemanticsComboboxOwnsItsSearch(t *testing.T) {
-	c := ui.Combobox(ggui.State(1), []int{1, 2})
+	c := ui.Combobox(ggui.State(1)).Options([]int{1, 2})
 	p := ggui.NewProbe(c, ggui.Sz(400, 400))
 	defer p.Close()
 	p.Frame()
@@ -172,7 +172,7 @@ accordion "Accordion"
 }
 
 func TestSemanticsSliderReportsItsRange(t *testing.T) {
-	tree := semantics(t, ui.Slider(ggui.State(4.0), 0, 10).Named("Volume"), ggui.Sz(200, 40))
+	tree := semantics(t, ui.Slider(ggui.State(4.0), 0, 10).Name("Volume"), ggui.Sz(200, 40))
 	n := node(t, tree, ggui.RoleSlider, "Volume")
 	if n.Min != 0 || n.Max != 10 || n.Now != 4 {
 		t.Errorf("range = %g..%g at %g, want 0..10 at 4", n.Min, n.Max, n.Now)
@@ -200,7 +200,7 @@ radio "B" checked selected
 }
 
 func TestSemanticsRadiosAreOneGroup(t *testing.T) {
-	tree := semantics(t, ui.Radios(ggui.State(1), []int{1, 2}), ggui.Sz(200, 100))
+	tree := semantics(t, ui.Radios(ggui.State(1)).Options([]int{1, 2}), ggui.Sz(200, 100))
 	wantTree(t, tree, `
 group 0 of 1..2
   radio "1" checked selected
@@ -211,7 +211,7 @@ group 0 of 1..2
 func TestSemanticsTableRowsHoldTheirCells(t *testing.T) {
 	rows := ggui.State([]string{"Ada", "Alan"})
 	table := ui.Table(rows, func(s string) string { return s },
-		ui.TextCol("Name", func(s string) string { return s })).Selected(ggui.State("Alan"))
+		ui.TextCol("Name", func(s string) string { return s })).BindSelected(ggui.State("Alan"))
 	wantTree(t, semantics(t, table, ggui.Sz(300, 200)), `
 text "Name"
 list 0 of 1..2

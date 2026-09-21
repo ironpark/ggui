@@ -149,7 +149,7 @@ func TestDisabledSettersComeInPairs(t *testing.T) {
 		for _, decl := range file.Decls {
 			switch d := decl.(type) {
 			case *ast.FuncDecl:
-				if d.Name.Name != "Disabled" && d.Name.Name != "DisabledWhen" {
+				if d.Name.Name != "Disabled" && d.Name.Name != "BindDisabled" {
 					continue
 				}
 				recv := receiverType(d)
@@ -172,12 +172,68 @@ func TestDisabledSettersComeInPairs(t *testing.T) {
 
 	for name, got := range setters {
 		_, hasSet := got["Disabled"]
-		_, hasBind := got["DisabledWhen"]
+		_, hasBind := got["BindDisabled"]
 		switch {
 		case hasSet && !hasBind:
-			t.Errorf("%s has Disabled but no DisabledWhen: a caller cannot follow a signal without rebuilding it", name)
+			t.Errorf("%s has Disabled but no BindDisabled: a caller cannot follow a signal without rebuilding it", name)
 		case hasBind && !hasSet:
-			t.Errorf("%s has DisabledWhen but no Disabled: a caller cannot set the state outright", name)
+			t.Errorf("%s has BindDisabled but no Disabled: a caller cannot set the state outright", name)
 		}
+	}
+}
+
+// Reactive property methods are discoverable by one prefix and keep chaining
+// on the concrete widget. The literal counterpart uses the same value type.
+func TestBindingSettersHaveTypedFluentCounterparts(t *testing.T) {
+	fset := token.NewFileSet()
+	pkgs, err := parser.ParseDir(fset, ".", func(fi fs.FileInfo) bool { return !strings.HasSuffix(fi.Name(), "_test.go") }, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	methods := map[string]map[string]*ast.FuncDecl{}
+	print := func(n ast.Node) string { var b bytes.Buffer; format.Node(&b, fset, n); return b.String() }
+	for _, file := range pkgs["ui"].Files {
+		for _, decl := range file.Decls {
+			f, ok := decl.(*ast.FuncDecl)
+			if !ok || f.Recv == nil {
+				continue
+			}
+			typ := receiverType(f)
+			if methods[typ] == nil {
+				methods[typ] = map[string]*ast.FuncDecl{}
+			}
+			methods[typ][f.Name.Name] = f
+		}
+	}
+	checked := 0
+	for typ, ms := range methods {
+		for name, f := range ms {
+			if !strings.HasPrefix(name, "Bind") || f.Type.Params == nil || len(f.Type.Params.List) != 1 {
+				continue
+			}
+			arg, ok := f.Type.Params.List[0].Type.(*ast.IndexExpr)
+			if !ok {
+				continue
+			}
+			base := print(arg.X)
+			if base != "ggui.Readable" && base != "ggui.Binding" {
+				continue
+			}
+			checked++
+			if f.Type.Results == nil || len(f.Type.Results.List) != 1 || print(f.Type.Results.List[0].Type) != print(f.Recv.List[0].Type) {
+				t.Errorf("%s.%s must return its concrete receiver", typ, name)
+			}
+			literal := ms[strings.TrimPrefix(name, "Bind")]
+			if literal == nil || literal.Type.Params == nil || len(literal.Type.Params.List) != 1 {
+				t.Errorf("%s.%s has no literal counterpart", typ, name)
+				continue
+			}
+			if print(literal.Type.Params.List[0].Type) != print(arg.Index) {
+				t.Errorf("%s.%s literal type mismatch", typ, name)
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no bindings checked")
 	}
 }

@@ -6,7 +6,7 @@ import (
 )
 
 func TestTooltipKeyboardFocusAndNarrowViewport(t *testing.T) {
-	input := TextInput(State("")).Named("Editor")
+	input := TextInput(State("")).Name("Editor")
 	tip := Tooltip(input, "A longer explanation that must fit within a narrow window.")
 	p := NewProbe(tip, Sz(100, 200))
 	defer p.Close()

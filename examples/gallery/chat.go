@@ -29,7 +29,7 @@ func newChatPreviews() func() []ggui.Widget {
 		{ID: "hello", Content: ui.Message(ui.Bubble(ggui.Text("Can you review this patch?")).End()).End(), Anchor: true},
 		{ID: "reply", Content: ui.Message(ui.Bubble(ggui.Text("I will check the implementation and tests.")).Secondary()).Avatar(ui.Avatar("Reviewer").Size(32))},
 	})
-	scroller := ui.MessageScroller(rows).Height(260).AutoScroll(true).Named("Preview conversation")
+	scroller := ui.MessageScroller(rows).Height(260).AutoScroll(true).Name("Preview conversation")
 	sequence, history := 0, 0
 	var saved ui.TranscriptPosition
 	scrollNote := ggui.State("Scroll up to pause following. Jump to the end to resume.")
@@ -59,7 +59,7 @@ func newChatPreviews() func() []ggui.Widget {
 						ui.Attachment("workspace.png", "PNG · 820 KB").Image(thumb, "Workspace").Vertical().Trigger("Preview workspace", func() { attachmentAction.Set("Preview opened: workspace.png") }),
 						ui.Attachment("desk-reference.jpg", "JPG · 1.1 MB").Image(desk, "Desk").Vertical(),
 						ui.Attachment("office-reference.jpg", "JPG · 940 KB").Image(office, "Office").Vertical(),
-					).Named("Image attachments"), ggui.If(showUpload, func() ggui.Widget {
+					).Name("Image attachments"), ggui.If(showUpload, func() ggui.Widget {
 						return ui.Attachment("sales-dashboard.pdf", "Uploading · 64%").Media(ui.Spinner().Size(16)).State(ui.AttachmentUploading).
 							Actions(ui.AttachmentAction("Cancel upload", ui.Icon(icons.Close), func() { showUpload.Set(false); attachmentAction.Set("Upload cancelled.") }))
 					}), ggui.If(showSource, func() ggui.Widget {
@@ -67,8 +67,8 @@ func newChatPreviews() func() []ggui.Widget {
 							Actions(ui.AttachmentAction("Remove source attachment", ui.Icon(icons.Close), func() { showSource.Set(false); attachmentAction.Set("Source attachment removed.") }))
 					}),
 				).Gap(12).Align(ggui.AlignStretch)),
-				ui.Select(upload, states).Named("Upload state"),
-				ui.Attachment("design-system.zip", "Choose an upload state above").Media(ggui.Text("ZIP").Size(11)).StateOf(upload).
+				ui.Select(upload).Options(states).Name("Upload state"),
+				ui.Attachment("design-system.zip", "Choose an upload state above").Media(ggui.Text("ZIP").Size(11)).BindState(upload).
 					Actions(ui.AttachmentAction("Retry upload", ggui.Text("↻"), func() { upload.Set(ui.AttachmentUploading) })),
 				ggui.View(files, func(names []string) *ui.AttachmentGroupWidget {
 					cards := []*ui.AttachmentWidget{}
@@ -77,7 +77,7 @@ func newChatPreviews() func() []ggui.Widget {
 							Trigger("Preview "+name, func() { attachmentAction.Set("Preview opened: " + name) }).
 							Actions(ui.AttachmentAction("Remove "+name, ui.Icon(icons.Close), func() { ggui.Remove(files, func(v string) bool { return v == name }) })))
 					}
-					return ui.AttachmentGroup(cards...).Named("Attached files")
+					return ui.AttachmentGroup(cards...).Name("Attached files")
 				}),
 				ggui.TextOf(attachmentAction).AsCaption(),
 				ui.Button("Restore attachments", func() {
@@ -107,7 +107,7 @@ func newChatPreviews() func() []ggui.Widget {
 					ui.Bubble(ggui.Text("Choose this suggestion")).Outline().Action("Choose suggestion", func() { bubbleAction.Set("Suggestion selected.") }),
 					ui.Bubble(ggui.Text("Upload failed. Please retry.")).Destructive(),
 					ui.Bubble(ggui.Text("Ghost content uses the full width.")).Ghost(),
-					ui.Bubble(ui.Collapsible(expanded, "Show more", ggui.Text("Long content keeps its state."))).Secondary().Reactions(ui.ButtonOf(ggui.Textf("Like · %d", reaction), func() { ggui.Add(reaction, 1) }).Named("Like bubble").Ghost().Pad(2, 6)),
+					ui.Bubble(ui.Collapsible(expanded, "Show more", ggui.Text("Long content keeps its state."))).Secondary().Reactions(ui.ButtonOf(ggui.Textf("Like · %d", reaction), func() { ggui.Add(reaction, 1) }).Name("Like bubble").Ghost().Pad(2, 6)),
 					ggui.Padding(ggui.TextOf(bubbleAction).AsCaption(), 16, 0, 0, 0),
 				).Gap(16).Align(ggui.AlignStretch)),
 			).Gap(16).Align(ggui.AlignStretch)),

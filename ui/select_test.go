@@ -1,15 +1,16 @@
 package ui_test
 
 import (
-	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/ui"
 	"testing"
 	"time"
+
+	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/ui"
 )
 
 func TestSelectPopupStaysWithinTriggerWidth(t *testing.T) {
 	value := ggui.State("Alpha")
-	selectBox := ui.Select(value, []string{"Alpha", "Beta"}).Named("Choose option")
+	selectBox := ui.Select(value).Options([]string{"Alpha", "Beta"}).Name("Choose option")
 	p := ggui.NewProbe(ggui.Box(selectBox).Width(180), ggui.Sz(900, 400))
 	defer p.Close()
 	p.Tap("Choose option")
@@ -30,7 +31,7 @@ func TestSelectOverflowScrollsWithoutCollapsingOptions(t *testing.T) {
 	options := []string{"amber", "blue", "cyan", "green", "lime", "orange", "pink", "purple", "red", "rose", "teal", "yellow"}
 	for _, above := range []bool{false, true} {
 		value := ggui.State("lime")
-		selectBox := ui.Select(value, options).Named("Color")
+		selectBox := ui.Select(value).Options(options).Name("Color")
 		var root ggui.Widget = ggui.Column(selectBox).Align(ggui.AlignStretch)
 		if above {
 			root = ggui.Column(ggui.Box().Height(180), selectBox).Align(ggui.AlignStretch)
@@ -67,7 +68,7 @@ func TestSelectOverflowScrollsWithoutCollapsingOptions(t *testing.T) {
 func TestSelectKeyboardRevealsOverflowOption(t *testing.T) {
 	options := []string{"one", "two", "three", "four", "five", "six", "seven", "eight"}
 	value := ggui.State("one")
-	selectBox := ui.Select(value, options).Named("Number")
+	selectBox := ui.Select(value).Options(options).Name("Number")
 	p := ggui.NewProbe(ggui.Column(selectBox), ggui.Sz(180, 150))
 	defer p.Close()
 	p.Tap("Number")
@@ -91,11 +92,11 @@ func TestSelectionControlsOwnOptionSnapshots(t *testing.T) {
 			value := ggui.State("Beta")
 			var control ggui.Widget
 			if kind == "select" {
-				control = ui.Select(value, options).Named("Choice")
+				control = ui.Select(value).Options(options).Name("Choice")
 			} else if kind == "combobox" {
-				control = ui.Combobox(value, options).Named("Choice")
+				control = ui.Combobox(value).Options(options).Name("Choice")
 			} else {
-				control = ui.ToggleGroup(value, options)
+				control = ui.ToggleGroup(value).Options(options)
 			}
 			options[0] = "Mutated"
 			p := ggui.NewProbe(ggui.Column(control), ggui.Sz(300, 300))

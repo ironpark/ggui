@@ -247,7 +247,7 @@ func nodeOf(h any) Node {
 		n.Role, n.Name = s.Semantics()
 	}
 	if i, ok := h.(interface{ state() *Interactive }); ok {
-		n.Disabled = i.state().Inert
+		n.Disabled = i.state().IsInert()
 		n.Actions = ActionPress | ActionFocus
 	}
 	return n

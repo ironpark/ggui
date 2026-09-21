@@ -39,7 +39,7 @@ data := []ui.ChartDatum{
     {Label: "March", Values: map[string]float64{"desktop": 237, "mobile": 120}},
 }
 chart := ui.BarChart(data, config).
-    Named("Monthly visitors").
+    Name("Monthly visitors").
     Height(240).
     Legend(true).
     TickFormatter(func(s string) string { return s[:3] }).

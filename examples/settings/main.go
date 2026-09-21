@@ -97,14 +97,14 @@ func (m *model) build(post func(func())) ggui.Widget {
 		ggui.Title("Profile"),
 		ui.Field("Name", ui.TextField(name).Placeholder("How should we address you?")),
 		ui.Field("Email", ui.TextField(email).Placeholder("you@example.com")).
-			Help("Where receipts go").Error(m.Draft.Map(emailError)),
-		ui.Field("Volume", ui.Slider(volume, 0, 1).Step(0.05).Named("Volume")).
+			Help("Where receipts go").BindError(m.Draft.Map(emailError)),
+		ui.Field("Volume", ui.Slider(volume, 0, 1).Step(0.05).Name("Volume")).
 			Help("Notification sound level"),
 		ui.Switch(notify, "Email me about activity"),
 		ui.Divider(),
 		ggui.Row(
-			ui.Button("Save", func() { m.save(post) }).DisabledWhen(cannotSave),
-			ui.Button("Reset", m.reset).Outline().DisabledWhen(dirty.Map(func(d bool) bool { return !d })),
+			ui.Button("Save", func() { m.save(post) }).BindDisabled(cannotSave),
+			ui.Button("Reset", m.reset).Outline().BindDisabled(dirty.Map(func(d bool) bool { return !d })),
 			ggui.Spacer(),
 			ggui.TextOf(m.Status).AsCaption().NoWrap(),
 		).Space(1),

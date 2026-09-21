@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
+
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 )
@@ -197,7 +198,7 @@ func auditControlStates() ggui.Widget {
 		ggui.Wrap(ui.Switch(off, "Enabled switch"), ui.Switch(on, "Disabled on").Disabled(true), ui.Switch(ggui.State(false), "Disabled off").Disabled(true)).Gap(12),
 		ggui.Wrap(ui.Button("Primary", nil), ui.Button("Delete", nil).Destructive(), ui.Button("Disabled", nil).Disabled(true)).Gap(8),
 		ggui.Wrap(ui.ThemeSwitch(ggui.State(false)), ui.ThemeSwitch(ggui.State(true)).Disabled(true)).Gap(12),
-		ui.Field("Email", ui.TextField(text)).Error(ggui.State("Enter a valid email address.")),
+		ui.Field("Email", ui.TextField(text)).BindError(ggui.State("Enter a valid email address.")),
 		ui.Slider(ggui.State(.5), 0, 1).Disabled(true),
 		ui.Progress(ggui.State(.6)),
 	).Gap(20).Align(ggui.AlignStretch))

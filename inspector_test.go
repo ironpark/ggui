@@ -309,7 +309,8 @@ func TestInspectorResolvesRebuiltWidgetByStructuralPath(t *testing.T) {
 
 func TestInspectorSearchesLabelsAndRoles(t *testing.T) {
 	w := &twice{}
-	w.Role, w.Name = RoleButton, "Save document"
+	w.Role = RoleButton
+	w.SetName("Save document")
 	c := inspectorCanvas(Column(Text("Heading"), w), Sz(800, 600))
 	for _, query := range []string{"SAVE", "button"} {
 		in := inspector{filter: query}

@@ -14,6 +14,7 @@ import (
 // in the row; a button among the addons keeps its own keyboard and pointer
 // behavior, because the group registers its region before painting them.
 type InputGroupWidget struct {
+	nameChild bool
 	ggui.Interactive
 	input             ggui.Widget
 	leading, trailing ggui.Widget
@@ -47,19 +48,20 @@ func (g *InputGroupWidget) Leading(w ggui.Widget) *InputGroupWidget { g.leading 
 // Trailing places a widget after the editor.
 func (g *InputGroupWidget) Trailing(w ggui.Widget) *InputGroupWidget { g.trailing = w; return g }
 
-// Named names the group, and the editor inside it when that has no name.
-func (g *InputGroupWidget) Named(s string) *InputGroupWidget {
-	g.Name = s
+// Name names the group, and the editor inside it when that has no name.
+func (g *InputGroupWidget) Name(s string) *InputGroupWidget {
+	g.Interactive.SetName(s)
 	if n, ok := g.input.(Named); ok {
-		if !n.HasName() {
+		if g.nameChild || !n.HasName() {
+			g.nameChild = true
 			n.SetName(s)
 		}
 	}
 	return g
 }
 
-// SetName is Named, for Field.
-func (g *InputGroupWidget) SetName(s string) { g.Named(s) }
+// SetName is Name, for Field.
+func (g *InputGroupWidget) SetName(s string) { g.Name(s) }
 
 // HasName reports an explicit name on the group or its editor.
 func (g *InputGroupWidget) HasName() bool {
@@ -78,12 +80,12 @@ func (g *InputGroupWidget) Semantics() (ggui.Role, string) {
 }
 
 // Disabled greys the group out and disables its editor. Addon controls remain
-// independent. The editor's own Disabled and DisabledWhen settings are preserved.
+// independent. The editor's own Disabled and BindDisabled settings are preserved.
 func (g *InputGroupWidget) Disabled(v bool) *InputGroupWidget { g.SetInert(v); return g }
 
-// DisabledWhen follows r for Disabled without a rebuild.
-func (g *InputGroupWidget) DisabledWhen(r ggui.Readable[bool]) *InputGroupWidget {
-	g.InertWhen(r)
+// BindDisabled follows r for Disabled without a rebuild.
+func (g *InputGroupWidget) BindDisabled(r ggui.Readable[bool]) *InputGroupWidget {
+	g.BindInert(r)
 	return g
 }
 
@@ -92,9 +94,15 @@ func (g *InputGroupWidget) hasFocus() bool { return g.focused != nil && g.focuse
 
 // Layout implements ggui.Widget.
 func (g *InputGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	if g.nameChild {
+		if n, ok := g.input.(Named); ok {
+			n.SetName(g.SemanticName())
+		}
+	}
+
 	g.Sync()
 	inherited, _ := env.Get(ggui.InputDisabled)
-	g.effectiveDisabled = g.Inert || inherited
+	g.effectiveDisabled = g.IsInert() || inherited
 	t := env.Theme()
 	g.theme = t
 	g.invalid, _ = env.Get(fieldInvalid)
@@ -147,6 +155,6 @@ func (g *InputGroupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 type groupInput struct{ group *InputGroupWidget }
 
 func (w groupInput) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	return w.group.input.Layout(c, env.With(ggui.InputDisabled, w.group.Inert))
+	return w.group.input.Layout(c, env.With(ggui.InputDisabled, w.group.IsInert()))
 }
 func (w groupInput) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(w.group.input, r) }

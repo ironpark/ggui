@@ -1,10 +1,11 @@
 package ui_test
 
 import (
-	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/ui"
 	"testing"
 	"time"
+
+	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/ui"
 )
 
 func date(y int, m time.Month, d int) time.Time { return time.Date(y, m, d, 0, 0, 0, 0, time.UTC) }
@@ -51,7 +52,7 @@ func TestCalendarNavigationAndConstraints(t *testing.T) {
 func TestDatePickerSelectionAndCancel(t *testing.T) {
 	v := ggui.State(date(2024, 2, 1))
 	n := 0
-	d := ui.DatePicker(v).Named("Due date").OnChange(func(time.Time) { n++ })
+	d := ui.DatePicker(v).Name("Due date").OnChange(func(time.Time) { n++ })
 	d.Calendar().Location(time.UTC)
 	p := ggui.NewProbe(ggui.Column(d), ggui.Sz(380, 450))
 	defer p.Close()

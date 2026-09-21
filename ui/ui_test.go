@@ -151,9 +151,9 @@ func TestTextFieldFocusesFromItsPadding(t *testing.T) {
 	if got := f.Layout(ggui.Loose(ggui.Sz(300, 100)), ggui.Env{}); got.W != 300 || got.H <= 20 {
 		t.Fatalf("TextField = %v, want full width and padded height", got)
 	}
-	f.Named("Name")
+	f.Name("Name")
 	if _, ok := p.FindRole(ggui.RoleTextField, "Name"); !ok {
-		t.Fatal("Named did not rename the field")
+		t.Fatal("Name did not rename the field")
 	}
 }
 
@@ -267,7 +267,7 @@ func TestSliderKeepsDraggingWhenItMoves(t *testing.T) {
 func TestSelectOpensPicksAndClosesWithPointerAndKeys(t *testing.T) {
 	v := ggui.State("b")
 	changes := 0
-	sel := ui.Select(v, []string{"a", "b", "c"}).Named("letter").OnChange(func(string) { changes++ })
+	sel := ui.Select(v).Options([]string{"a", "b", "c"}).Name("letter").OnChange(func(string) { changes++ })
 	tree := ggui.Column(ggui.Padding(sel, 10))
 	p := ggui.NewProbe(tree, ggui.Sz(300, 300))
 	defer p.Close()
@@ -467,7 +467,7 @@ func TestDisabledTextFieldTakesNoInput(t *testing.T) {
 func TestSliderReportsChanges(t *testing.T) {
 	v := ggui.State(0.0)
 	var got []float64
-	s := ui.Slider(v, 0, 100).Step(10).Named("volume").OnChange(func(x float64) { got = append(got, x) })
+	s := ui.Slider(v, 0, 100).Step(10).Name("volume").OnChange(func(x float64) { got = append(got, x) })
 	p := ggui.NewProbe(s, ggui.Sz(116, 20))
 	defer p.Close()
 	p.Click(onTrack(find(t, p, ggui.RoleSlider, "volume"), 0.5))
@@ -480,7 +480,7 @@ func TestSliderReportsChanges(t *testing.T) {
 func TestRadiosSelectAndReport(t *testing.T) {
 	sel := ggui.State("a")
 	var got string
-	g := ui.Radios(sel, []string{"a", "b", "c"}).Vertical().OnChange(func(s string) { got = s })
+	g := ui.Radios(sel).Options([]string{"a", "b", "c"}).Vertical().OnChange(func(s string) { got = s })
 	p := ggui.NewProbe(g, ggui.Sz(100, 100))
 	defer p.Close()
 	p.Tap("c")
@@ -540,7 +540,7 @@ func TestDialogKeyboardFlow(t *testing.T) {
 func TestFieldNamesAndReportsErrors(t *testing.T) {
 	email := ggui.State("")
 	errText := ggui.State("")
-	f := ui.Field("Email", ui.TextField(email)).Help("Work address").Error(errText)
+	f := ui.Field("Email", ui.TextField(email)).Help("Work address").BindError(errText)
 	p := ggui.NewProbe(f, ggui.Sz(300, 100))
 	defer p.Close()
 	if _, ok := p.FindRole(ggui.RoleTextField, "Email"); !ok {

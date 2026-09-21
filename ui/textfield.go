@@ -29,27 +29,27 @@ func (f *TextFieldWidget) Disabled(v bool) *TextFieldWidget {
 	return f
 }
 
-// DisabledWhen follows r for Disabled without a rebuild.
-func (f *TextFieldWidget) DisabledWhen(r ggui.Readable[bool]) *TextFieldWidget {
-	f.InertWhen(r)
+// BindDisabled follows r for Disabled without a rebuild.
+func (f *TextFieldWidget) BindDisabled(r ggui.Readable[bool]) *TextFieldWidget {
+	f.BindInert(r)
 	return f
 }
 
 // Placeholder sets the muted text shown while the value is empty.
 func (f *TextFieldWidget) Placeholder(s string) *TextFieldWidget { f.input.Placeholder(s); return f }
 
-// Named names the field for Probe.Find and the inspector; the placeholder
+// Name names the field for Probe.Find and the inspector; the placeholder
 // serves until one is set.
-func (f *TextFieldWidget) Named(s string) *TextFieldWidget { f.input.Named(s); return f }
+func (f *TextFieldWidget) Name(s string) *TextFieldWidget { f.input.Name(s); return f }
 
-// NamedWhen binds the field's name to r; see ggui.Interactive.NameWhen.
-func (f *TextFieldWidget) NamedWhen(r ggui.Readable[string]) *TextFieldWidget {
-	f.input.NamedWhen(r)
+// BindName binds the field's name to r; see ggui.Interactive.BindName.
+func (f *TextFieldWidget) BindName(r ggui.Readable[string]) *TextFieldWidget {
+	f.input.BindName(r)
 	return f
 }
 
-// SetName is Named, for Field.
-func (f *TextFieldWidget) SetName(s string) { f.input.Named(s) }
+// SetName is Name, for Field.
+func (f *TextFieldWidget) SetName(s string) { f.input.Name(s) }
 
 // HasName reports whether the editor has an explicit name.
 func (f *TextFieldWidget) HasName() bool { return f.input.HasName() }
@@ -114,9 +114,9 @@ func (f *TextFieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if f.plain {
 		f.box.Fill(nil).Pad(10, 8).Radius(t.Radius).Border(0, nil)
 	} else {
-		fieldBox(f.box, t, f.input.Focused(), f.Inert)
+		fieldBox(f.box, t, f.input.Focused(), f.IsInert())
 	}
-	size := f.box.Layout(c, env.With(ggui.InputDisabled, f.Inert))
+	size := f.box.Layout(c, env.With(ggui.InputDisabled, f.IsInert()))
 	if !f.plain {
 		fieldBox(f.box, t, f.input.Focused(), f.input.IsDisabled())
 	}

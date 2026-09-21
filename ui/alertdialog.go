@@ -1,5 +1,7 @@
 package ui
 
+import "github.com/ironpark/ggui/internal/property"
+
 import "github.com/ironpark/ggui"
 
 // AlertDialogWidget is a confirmation that has to be answered: the scrim
@@ -10,6 +12,7 @@ import "github.com/ironpark/ggui"
 // whether to delete something should not be dismissed by a stray click
 // beside it.
 type AlertDialogWidget struct {
+	props              property.Owner
 	open               ggui.Binding[bool]
 	title, description string
 	confirmLabel       string
@@ -47,16 +50,24 @@ func (a *AlertDialogWidget) Confirm(label string, fn func()) *AlertDialogWidget 
 }
 
 // Cancel renames the cancelling button.
-func (a *AlertDialogWidget) Cancel(label string) *AlertDialogWidget { a.cancelLabel = label; return a }
+func (a *AlertDialogWidget) Cancel(label string) *AlertDialogWidget {
+	defer property.Watch(&a.props, &a.cancelLabel)()
+	a.cancelLabel = label
+	return a
+}
 
 // OnCancel fires when the dialog is cancelled, by the button or by Escape.
 func (a *AlertDialogWidget) OnCancel(fn func()) *AlertDialogWidget { a.onCancel = fn; return a }
 
 // Destructive draws the confirming button in the theme's Destructive color,
 // for an answer that cannot be taken back.
-func (a *AlertDialogWidget) Destructive() *AlertDialogWidget { a.destructive = true; return a }
+func (a *AlertDialogWidget) Destructive() *AlertDialogWidget {
+	defer property.Watch(&a.props, &a.destructive)()
+	a.destructive = true
+	return a
+}
 
-// Dialog returns the panel underneath, for Width, Named and Rect.
+// Dialog returns the panel underneath, for Width, Name and Rect.
 func (a *AlertDialogWidget) Dialog() *DialogWidget {
 	if a.dialog == nil {
 		a.build()
@@ -102,6 +113,7 @@ func (a *AlertDialogWidget) build() {
 
 // Layout implements ggui.Widget: the dialog takes no room in the tree.
 func (a *AlertDialogWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer a.props.Layout()()
 	if a.dialog == nil {
 		a.build()
 	}

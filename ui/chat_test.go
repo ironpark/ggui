@@ -14,7 +14,7 @@ import (
 func TestAttachmentIndependentActionsAndStates(t *testing.T) {
 	state := ggui.State(ui.AttachmentIdle)
 	opened, removed := 0, 0
-	file := ui.Attachment("report.pdf", "PDF · 2.4 MB").Media(ggui.Text("PDF")).StateOf(state).
+	file := ui.Attachment("report.pdf", "PDF · 2.4 MB").Media(ggui.Text("PDF")).BindState(state).
 		Trigger("Preview report", func() { opened++ }).Actions(ui.AttachmentAction("Remove report", ggui.Text("×"), func() { removed++ }))
 	p := ggui.NewProbe(ggui.Column(file), ggui.Sz(300, 120))
 	defer p.Close()
@@ -266,7 +266,7 @@ func TestQuestionnaireKeyboardMultipleControlledAndDisabled(t *testing.T) {
 	answers := ggui.State(ui.QuestionAnswers{})
 	active := ggui.State("multi")
 	items := []ui.Question{{Name: "single", Title: "Single", Required: true, Choices: []ui.QuestionOption{{Value: "a", Label: "A"}}}, {Name: "multi", Title: "Multiple", Required: true, Multiple: true, Choices: []ui.QuestionOption{{Value: "b", Label: "B"}, {Value: "off", Label: "Off", Disabled: true}, {Value: "c", Label: "C"}}}, {Name: "disabled", Title: "Hidden", Disabled: true}}
-	q := ui.Questionnaire(answers, items...).Active(active).Shortcuts(ui.QuestionNumbers)
+	q := ui.Questionnaire(answers, items...).BindActive(active).Shortcuts(ui.QuestionNumbers)
 	p := ggui.NewProbe(q, ggui.Sz(400, 400))
 	defer p.Close()
 	p.Tap("B")

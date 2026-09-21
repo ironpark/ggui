@@ -164,7 +164,7 @@ func TestForWithItemExtentBuildsOnlyTheViewport(t *testing.T) {
 	})
 	defer dispose()
 	offset := State(0.0)
-	s := Scroll(f).Offset(offset)
+	s := Scroll(f).BindOffset(offset)
 	size := s.Layout(Tight(Sz(100, 100)), Env{})
 	s.Paint(nil, Rct(Pt(0, 0), size))
 	// 1000 rows of 24 pitch: 23996 tall; a 100-tall window shows rows 0..5.
@@ -334,7 +334,7 @@ func TestForEvictionReleasesOwnerChildren(t *testing.T) {
 	})
 	defer dispose()
 	offset := State(0.0)
-	scroll := Scroll(f).Offset(offset)
+	scroll := Scroll(f).BindOffset(offset)
 	for i := 0; i < len(ids); i += 5 {
 		offset.Set(float64(i * 20))
 		scroll.Layout(Tight(Sz(100, 100)), Env{})

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/icons"
 )
@@ -25,8 +26,8 @@ type PaginationWidget struct {
 // Out-of-range page values are clamped for display, without writing the binding.
 func Pagination(page ggui.Binding[int], pages ggui.Readable[int]) *PaginationWidget {
 	p := &PaginationWidget{page: page, pages: pages}
-	p.previous = ButtonOf(ggui.Row(Icon(icons.ChevronLeft), ggui.Text("Previous")).Gap(4), func() { p.move(-1) }).Named("Previous").Ghost().Pad(6, 10)
-	p.next = ButtonOf(ggui.Row(ggui.Text("Next"), Icon(icons.ChevronRight)).Gap(4), func() { p.move(1) }).Named("Next").Ghost().Pad(6, 10)
+	p.previous = ButtonOf(ggui.Row(Icon(icons.ChevronLeft), ggui.Text("Previous")).Gap(4), func() { p.move(-1) }).Name("Previous").Ghost().Pad(6, 10)
+	p.next = ButtonOf(ggui.Row(ggui.Text("Next"), Icon(icons.ChevronRight)).Gap(4), func() { p.move(1) }).Name("Next").Ghost().Pad(6, 10)
 	for i := range p.numbers {
 		p.numbers[i] = Button("", func() { p.selectPage(p.targets[i]) })
 	}
@@ -51,7 +52,7 @@ func (p *PaginationWidget) current(n int) int {
 func (p *PaginationWidget) move(delta int) { p.selectPage(p.current(max(p.pages.Get(), 0)) + delta) }
 func (p *PaginationWidget) selectPage(page int) {
 	n := max(p.pages.Get(), 0)
-	if !p.Inert && page >= 1 && page <= n {
+	if !p.IsInert() && page >= 1 && page <= n {
 		setChanged(p.page, page, p.onChange)
 	}
 }
@@ -61,8 +62,8 @@ func (p *PaginationWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	p.Sync()
 	n := max(p.pages.Get(), 0)
 	current := p.current(n)
-	p.previous.Disabled(p.Inert || n == 0 || current == 1)
-	p.next.Disabled(p.Inert || n == 0 || current == n)
+	p.previous.Disabled(p.IsInert() || n == 0 || current == 1)
+	p.next.Disabled(p.IsInert() || n == 0 || current == n)
 	children := append(p.children[:0], p.previous)
 	start := max(1, min(current-2, n-4))
 	if start > 1 {
@@ -72,7 +73,7 @@ func (p *PaginationWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		target := start + i
 		p.targets[i] = target
 		b := p.numbers[i]
-		b.label.Set(fmt.Sprint(target))
+		b.label.Content(fmt.Sprint(target))
 		b.SetName(fmt.Sprintf("Page %d", target))
 		b.selected = target == current
 		if target == current {
@@ -80,7 +81,7 @@ func (p *PaginationWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		} else {
 			b.Ghost()
 		}
-		b.Disabled(p.Inert).Pad(6, 10)
+		b.Disabled(p.IsInert()).Pad(6, 10)
 		children = append(children, b)
 	}
 	if start+len(p.numbers) <= n {
@@ -94,8 +95,8 @@ func (p *PaginationWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 // Paint implements ggui.Widget.
 func (p *PaginationWidget) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(p.row, r) }
 
-// DisabledWhen follows r for all navigation buttons without rebuilding.
-func (p *PaginationWidget) DisabledWhen(r ggui.Readable[bool]) *PaginationWidget {
-	p.InertWhen(r)
+// BindDisabled follows r for all navigation buttons without rebuilding.
+func (p *PaginationWidget) BindDisabled(r ggui.Readable[bool]) *PaginationWidget {
+	p.BindInert(r)
 	return p
 }

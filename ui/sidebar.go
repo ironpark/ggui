@@ -2,6 +2,7 @@ package ui
 
 import (
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // SidebarEntry is one line of a Sidebar: a destination, or a heading over
@@ -38,6 +39,7 @@ func (e SidebarEntry) Disabled(v bool) SidebarEntry { e.disabled = v; return e }
 // which is what a narrow window wants; there is no icon rail, since an item
 // is named by its label alone.
 type SidebarWidget struct {
+	props            property.Owner
 	ggui.Interactive // hover holds the item under the pointer instead
 	selected         ggui.Binding[string]
 	entries          []SidebarEntry
@@ -45,7 +47,7 @@ type SidebarWidget struct {
 	onChange         func(string)
 	header, footer   ggui.Widget
 	width            float64
-	collapsed        ggui.Readable[bool]
+	collapsed        property.Value[bool]
 	active           int
 	hover            int
 
@@ -64,7 +66,7 @@ type SidebarWidget struct {
 //		ui.SidebarSection("Mail"),
 //		ui.SidebarItem("inbox", "Inbox"),
 //		ui.SidebarItem("sent", "Sent"),
-//	).Header(ggui.Title("Acme")).Collapsed(narrow)
+//	).Header(ggui.Title("Acme")).BindCollapsed(narrow)
 func Sidebar(selected ggui.Binding[string], entries ...SidebarEntry) *SidebarWidget {
 	s := &SidebarWidget{selected: selected, entries: entries, width: 240, active: -1, hover: -1}
 	s.Role = ggui.RoleTabs
@@ -89,10 +91,14 @@ func Sidebar(selected ggui.Binding[string], entries ...SidebarEntry) *SidebarWid
 }
 
 // Width sets how wide the column is in logical pixels.
-func (s *SidebarWidget) Width(w float64) *SidebarWidget { s.width = max(0, w); return s }
+func (s *SidebarWidget) Width(w float64) *SidebarWidget {
+	defer property.Watch(&s.props, &s.width)()
+	s.width = max(0, w)
+	return s
+}
 
-// Named sets the accessible name of the column.
-func (s *SidebarWidget) Named(name string) *SidebarWidget { s.Name = name; return s }
+// Name sets the accessible name of the column.
+func (s *SidebarWidget) Name(name string) *SidebarWidget { s.SetName(name); return s }
 
 // Header places a widget above the items: a product name, a workspace
 // switcher, a search box.
@@ -101,9 +107,22 @@ func (s *SidebarWidget) Header(w ggui.Widget) *SidebarWidget { s.header = w; ret
 // Footer places a widget below the items.
 func (s *SidebarWidget) Footer(w ggui.Widget) *SidebarWidget { s.footer = w; return s }
 
-// Collapsed follows r: while it is true the column takes no width and
+// BindCollapsed follows r: while it is true the column takes no width and
 // paints nothing, so a narrow window gives its space back to the content.
-func (s *SidebarWidget) Collapsed(r ggui.Readable[bool]) *SidebarWidget { s.collapsed = r; return s }
+func (s *SidebarWidget) BindCollapsed(r ggui.Readable[bool]) *SidebarWidget {
+	if s.collapsed.Bind(r, "BindCollapsed") {
+		s.props.Changed()
+	}
+	return s
+}
+
+// Collapsed sets a fixed collapsed state and detaches a reader.
+func (s *SidebarWidget) Collapsed(v bool) *SidebarWidget {
+	if s.collapsed.Set(v) {
+		s.props.Changed()
+	}
+	return s
+}
 
 // Disabled greys the column out and ignores input while v is true.
 func (s *SidebarWidget) Disabled(v bool) *SidebarWidget { s.SetInert(v); return s }
@@ -117,7 +136,7 @@ func (s *SidebarWidget) enabled(i int) bool {
 }
 
 func (s *SidebarWidget) goTo(i int) {
-	if i < 0 || i >= len(s.entries) || !s.enabled(i) || s.Inert {
+	if i < 0 || i >= len(s.entries) || !s.enabled(i) || s.IsInert() {
 		return
 	}
 	s.active = i
@@ -137,6 +156,7 @@ func (s *SidebarWidget) current() int {
 
 // Layout implements ggui.Widget.
 func (s *SidebarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer s.props.Layout()()
 	s.Sync()
 	t := env.Theme()
 	t.Card, t.Fg = colorOr(t.Sidebar, t.Card), colorOr(t.SidebarFg, t.Fg)
@@ -147,7 +167,7 @@ func (s *SidebarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t.Text.Color = t.Fg
 	env = env.WithTheme(t).WithText(ggui.TextStyle{Color: t.Fg})
 	s.theme = t
-	s.hidden = s.collapsed != nil && s.collapsed.Get()
+	s.hidden = s.collapsed.Get()
 	if s.hidden {
 		return c.Constrain(ggui.Size{})
 	}
@@ -166,7 +186,7 @@ func (s *SidebarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		switch {
 		case e.section:
 			l.Style(t.Caption).Color(t.MutedFg)
-		case e.disabled || s.Inert:
+		case e.disabled || s.IsInert():
 			l.Style(t.Text).Color(mix(t.MutedFg, t.Card, t.DisabledMix))
 		default:
 			l.Style(t.Text).Color(pick(i == cur, colorOr(t.SidebarAccentFg, t.Fg), t.MutedFg))
@@ -199,7 +219,7 @@ func (s *SidebarWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.FillRect(r, t.Card)
 	dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X+r.Size.W-t.BorderWidth, r.Origin.Y), ggui.Sz(t.BorderWidth, r.Size.H)), t.Border)
 	dst = dst.Clip(r)
-	if !s.Inert && s.active >= 0 {
+	if !s.IsInert() && s.active >= 0 {
 		dst.HitKey(r, s)
 	}
 	x, w := r.Origin.X+t.Space, max(r.Size.W-t.Space*2, 0)
@@ -211,7 +231,7 @@ func (s *SidebarWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 	// Layout is skipped on a still frame, so the current destination is
 	// found here, where the items' own nodes read it back.
 	s.cur = s.current()
-	cur, hover := s.cur, pick(s.Inert, -1, s.hover)
+	cur, hover := s.cur, pick(s.IsInert(), -1, s.hover)
 	for i, e := range s.entries {
 		row := ggui.Rct(ggui.Pt(x, y), ggui.Sz(w, s.rowH[i]))
 		label := ggui.Rct(ggui.Pt(x+t.ItemPad.Left, y+(s.rowH[i]-s.labelSize[i].H)/2), s.labelSize[i])
@@ -222,7 +242,7 @@ func (s *SidebarWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		}
 		item := sidebarItem{s, i}
 		dst.Describe(row, item)
-		if !s.Inert && !e.disabled {
+		if !s.IsInert() && !e.disabled {
 			dst.HitPointer(row, item)
 			dst.HitCursor(row, ggui.CursorShapePointer)
 		}
@@ -316,7 +336,7 @@ func (it sidebarItem) Describe() ggui.Node {
 		Role:     ggui.RoleTab,
 		Name:     e.label,
 		Selected: it.i == it.s.cur,
-		Disabled: e.disabled || it.s.Inert,
+		Disabled: e.disabled || it.s.IsInert(),
 		Actions:  ggui.ActionSelect | ggui.ActionPress | ggui.ActionFocus,
 	}
 }
@@ -345,10 +365,12 @@ func (it sidebarItem) Adopt(prev any) {
 	}
 }
 
-// DisabledWhen follows r for Disabled without rebuilding the control.
-func (s *SidebarWidget) DisabledWhen(r ggui.Readable[bool]) *SidebarWidget { s.InertWhen(r); return s }
+// BindDisabled follows r for Disabled without rebuilding the control.
+func (s *SidebarWidget) BindDisabled(r ggui.Readable[bool]) *SidebarWidget { s.BindInert(r); return s }
 
-func (s *SidebarWidget) name() string { return pick(s.Name != "", s.Name, "Sidebar") }
+func (s *SidebarWidget) name() string {
+	return pick(s.SemanticName() != "", s.SemanticName(), "Sidebar")
+}
 
 // Semantics implements ggui.Semantic, including the built-in fallback name.
 func (s *SidebarWidget) Semantics() (ggui.Role, string) { return s.Role, s.name() }

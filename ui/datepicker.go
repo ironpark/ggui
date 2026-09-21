@@ -4,10 +4,12 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // DatePickerWidget opens a Calendar in a focus-trapped popup.
 type DatePickerWidget struct {
+	props       property.Owner
 	value       ggui.Binding[time.Time]
 	calendar    *CalendarWidget
 	button      *ButtonWidget
@@ -44,7 +46,7 @@ type datePickerKey struct {
 }
 
 // Calendar exposes date bounds, localization, week start and change callbacks.
-// DatePicker owns its disabled state; configure Disabled/DisabledWhen on the picker.
+// DatePicker owns its disabled state; configure Disabled/BindDisabled on the picker.
 func (d *DatePickerWidget) Calendar() *CalendarWidget { return d.calendar }
 
 // Popup exposes the popup's open state.
@@ -58,15 +60,19 @@ func (d *DatePickerWidget) Key(key any) *DatePickerWidget {
 	return d
 }
 
-// Named names the trigger for accessibility and Probe.
-func (d *DatePickerWidget) Named(s string) *DatePickerWidget {
-	d.button.Named(s)
-	d.calendar.Named(s)
+// Name names the trigger for accessibility and Probe.
+func (d *DatePickerWidget) Name(s string) *DatePickerWidget {
+	d.button.Name(s)
+	d.calendar.Name(s)
 	return d
 }
 
 // Placeholder sets the text shown for a zero date.
-func (d *DatePickerWidget) Placeholder(s string) *DatePickerWidget { d.placeholder = s; return d }
+func (d *DatePickerWidget) Placeholder(s string) *DatePickerWidget {
+	defer property.Watch(&d.props, &d.placeholder)()
+	d.placeholder = s
+	return d
+}
 
 // Format customizes the selected date's display.
 func (d *DatePickerWidget) Format(fn func(time.Time) string) *DatePickerWidget {
@@ -94,7 +100,7 @@ func (d *DatePickerWidget) Disabled(v bool) *DatePickerWidget {
 
 // Act implements ggui.Actor for the trigger's expand/collapse actions.
 func (d *DatePickerWidget) Act(a ggui.Action) bool {
-	if d.button.Inert {
+	if d.button.IsInert() {
 		return false
 	}
 	switch a.Kind {
@@ -110,18 +116,19 @@ func (d *DatePickerWidget) Act(a ggui.Action) bool {
 
 // Layout implements ggui.Widget.
 func (d *DatePickerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer d.props.Layout()()
 	d.button.Sync()
-	if d.button.Inert {
+	if d.button.IsInert() {
 		d.popup.Hide()
 	}
-	d.calendar.Disabled(d.button.Inert)
+	d.calendar.Disabled(d.button.IsInert())
 	t := env.Theme()
 	panelBox(d.panel, t)
 	text := d.placeholder
 	if v := d.value.Get(); !v.IsZero() {
 		text = d.format(d.calendar.date(v))
 	}
-	d.button.label.Set(text)
+	d.button.label.Content(text)
 	return d.popup.Layout(c, env)
 }
 
@@ -129,7 +136,7 @@ func (d *DatePickerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 func (d *DatePickerWidget) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(d.popup, r) }
 
 // SetName names the trigger for Field.
-func (d *DatePickerWidget) SetName(s string) { d.Named(s) }
+func (d *DatePickerWidget) SetName(s string) { d.Name(s) }
 
 // HasName reports whether the trigger has an explicit name.
 func (d *DatePickerWidget) HasName() bool { return d.button.HasName() }
@@ -137,8 +144,15 @@ func (d *DatePickerWidget) HasName() bool { return d.button.HasName() }
 // Semantics reports the trigger's role and resolved name.
 func (d *DatePickerWidget) Semantics() (ggui.Role, string) { return d.button.Semantics() }
 
-// DisabledWhen follows r and closes the popup while disabled.
-func (d *DatePickerWidget) DisabledWhen(r ggui.Readable[bool]) *DatePickerWidget {
-	d.button.DisabledWhen(r)
+// BindDisabled follows r and closes the popup while disabled.
+func (d *DatePickerWidget) BindDisabled(r ggui.Readable[bool]) *DatePickerWidget {
+	d.button.BindDisabled(r)
+	return d
+}
+
+// BindName follows the accessible name on the same targets as Name.
+func (d *DatePickerWidget) BindName(r ggui.Readable[string]) *DatePickerWidget {
+	d.button.BindName(r)
+	d.calendar.BindName(r)
 	return d
 }

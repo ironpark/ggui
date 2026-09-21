@@ -5,10 +5,12 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/icons"
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // SpinnerWidget is an indeterminate loading indicator; reduced motion freezes it.
 type SpinnerWidget struct {
+	props   property.Owner
 	size    float64
 	theme   ggui.Theme
 	env     ggui.Env
@@ -19,10 +21,15 @@ type SpinnerWidget struct {
 func Spinner() *SpinnerWidget { return &SpinnerWidget{size: 20} }
 
 // Size sets the requested diameter in logical pixels.
-func (s *SpinnerWidget) Size(px float64) *SpinnerWidget { s.size = max(0, px); return s }
+func (s *SpinnerWidget) Size(px float64) *SpinnerWidget {
+	defer property.Watch(&s.props, &s.size)()
+	s.size = max(0, px)
+	return s
+}
 
 // Layout implements ggui.Widget.
 func (s *SpinnerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer s.props.Layout()()
 	s.env = env
 	s.theme, s.reduced = env.Theme(), env.ReducedMotion()
 	return c.Constrain(ggui.Sz(s.size, s.size))

@@ -36,12 +36,12 @@ widgets continue to use the host theme and font. Sources and licenses are listed
 ```go
 state := ggui.State(ui.AttachmentIdle)
 file := ui.Attachment("report.pdf", "PDF · 2.4 MB").
-    Media(ggui.Text("PDF").Size(11)).StateOf(state).
+    Media(ggui.Text("PDF").Size(11)).BindState(state).
     Trigger("Preview report.pdf", previewReport).
     Actions(ui.AttachmentAction("Remove report.pdf", ggui.Text("×"), removeReport))
 ```
 
-`State` sets a fixed state and replaces `StateOf`. The five states are `AttachmentIdle`
+`State` sets a fixed state and replaces `BindState`. The five states are `AttachmentIdle`
 (dashed border), `AttachmentUploading` and `AttachmentProcessing` (title shimmer),
 `AttachmentError` (destructive border/media/metadata), and `AttachmentDone` (default).
 Put an explicit failure reason in the description. Uploading is presentation
@@ -66,7 +66,7 @@ or assign a stable `Key` when preserving scroll across rebuilds.
 other treatments. Ghost has no frame or padding and can use the full width.
 `End()` aligns a bubble to the trailing side. `Action(name, fn)` or `Link(name, fn)`
 provides a focusable button/link surface; the host owns opening a URL. Both
-support `Disabled` and `DisabledWhen`.
+support `Disabled` and `BindDisabled`.
 
 `Reactions(widget)` overlaps the bottom end edge. `ReactionsTop()` and
 `ReactionsStart()` move it. Leave vertical space between rows; reactions can

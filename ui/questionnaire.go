@@ -7,6 +7,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/icons"
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // QuestionAnswer distinguishes unanswered, explicitly skipped and answered
@@ -50,11 +51,13 @@ const (
 // answers. Keep the widget alive to preserve local errors and reset defaults.
 // It composes inside cards, dialogs or sheets and performs no submission I/O.
 type QuestionnaireWidget struct {
+	props property.Owner
 	ggui.Interactive
 	answers        ggui.Binding[QuestionAnswers]
 	initial        QuestionAnswers
 	items          []Question
 	active         ggui.Binding[string]
+	localActive    *ggui.StateValue[string]
 	initialItem    string
 	revision       *ggui.StateValue[int]
 	errors         map[string]string
@@ -73,7 +76,8 @@ type QuestionnaireWidget struct {
 
 func Questionnaire(answers ggui.Binding[QuestionAnswers], items ...Question) *QuestionnaireWidget {
 	q := &QuestionnaireWidget{answers: answers, initial: cloneAnswers(ggui.Untrack(answers.Get)), revision: ggui.State(0), errors: map[string]string{}, externalErrors: map[string]string{}, submitLabel: "Submit", focusChoice: -1}
-	q.Role, q.Name = ggui.RoleGroup, "Questionnaire"
+	q.Role = ggui.RoleGroup
+	q.SetName("Questionnaire")
 	q.AutoKey()
 	q.SetItems(items...)
 	first := ""
@@ -83,7 +87,8 @@ func Questionnaire(answers ggui.Binding[QuestionAnswers], items ...Question) *Qu
 			break
 		}
 	}
-	q.active = ggui.State(first)
+	q.localActive = ggui.State(first)
+	q.active = q.localActive
 	q.initialItem = first
 	q.view = ggui.Reactive(q.build)
 	return q
@@ -96,21 +101,33 @@ func cloneAnswers(src QuestionAnswers) QuestionAnswers {
 	}
 	return dst
 }
-func (q *QuestionnaireWidget) Named(s string) *QuestionnaireWidget { q.Name = s; return q }
+func (q *QuestionnaireWidget) Name(s string) *QuestionnaireWidget { q.SetName(s); return q }
 
-// Active binds navigation to a stable question name for resume and host control.
-func (q *QuestionnaireWidget) Active(v ggui.Binding[string]) *QuestionnaireWidget {
+// BindActive binds navigation to a stable question name for resume and host control.
+func (q *QuestionnaireWidget) BindActive(v ggui.Binding[string]) *QuestionnaireWidget {
+	property.Require(v, "BindActive")
+	if property.Same(q.active, v) {
+		return q
+	}
 	q.active = v
 	q.initialItem = ggui.Untrack(v.Get)
 	q.changed()
 	return q
 }
 func (q *QuestionnaireWidget) Shortcuts(s QuestionnaireShortcuts) *QuestionnaireWidget {
+	if property.Equal(q.shortcuts, s) {
+		return q
+	}
+	defer property.Watch(&q.props, &q.shortcuts)()
 	q.shortcuts = s
 	q.changed()
 	return q
 }
 func (q *QuestionnaireWidget) SubmitLabel(s string) *QuestionnaireWidget {
+	if q.submitLabel == s {
+		return q
+	}
+	defer property.Watch(&q.props, &q.submitLabel)()
 	q.submitLabel = s
 	q.changed()
 	return q
@@ -396,8 +413,8 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 	for ci, choice := range item.Choices {
 		c := &questionChoice{q: q, item: item, option: choice, index: ci}
 		c.Role = pick(item.Multiple, ggui.RoleCheckbox, ggui.RoleRadio)
-		c.Name = choice.Label
-		c.Inert = choice.Disabled
+		c.SetName(choice.Label)
+		c.SetInert(choice.Disabled)
 		c.SetKey(struct {
 			Q           *QuestionnaireWidget
 			Item, Value string
@@ -415,7 +432,7 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 		rows = append(rows, c)
 	}
 	if item.InputLabel != "" {
-		q.input = TextField(questionTextBinding{q, item}).Named(item.InputLabel).Placeholder(item.Placeholder)
+		q.input = TextField(questionTextBinding{q, item}).Name(item.InputLabel).Placeholder(item.Placeholder)
 		q.input.Input().Key(struct {
 			Q    *QuestionnaireWidget
 			Item string
@@ -460,7 +477,7 @@ func (q *QuestionnaireWidget) focusAnswer(direction, from int) {
 	// The text input, when present, is the slot after the last choice.
 	enabled := func(i int) bool {
 		if i < len(q.choices) {
-			return !q.choices[i].Inert
+			return !q.choices[i].IsInert()
 		}
 		return q.input != nil
 	}
@@ -496,6 +513,7 @@ func (q *QuestionnaireWidget) shortcut(ev ggui.KeyEvent) bool {
 	return false
 }
 func (q *QuestionnaireWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer q.props.Layout()()
 	return q.view.Layout(c, env)
 }
 func (q *QuestionnaireWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
@@ -504,7 +522,7 @@ func (q *QuestionnaireWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		target := q.focusChoice
 		if target < 0 {
 			for i, c := range q.choices {
-				if !c.Inert {
+				if !c.IsInert() {
 					target = i
 					break
 				}
@@ -522,7 +540,7 @@ func (q *QuestionnaireWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 }
 func (q *QuestionnaireWidget) Describe() ggui.Node {
-	return ggui.Node{Role: ggui.RoleGroup, Name: q.Name}
+	return ggui.Node{Role: ggui.RoleGroup, Name: q.SemanticName()}
 }
 
 type questionTextBinding struct {
@@ -592,7 +610,7 @@ func (c *questionChoice) selected() bool {
 func (c *questionChoice) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	c.theme = env.Theme()
 	c.env = env
-	text := []ggui.Widget{ggui.Text(c.option.Label).Font(env.Theme().Title.Font).Size(14).LineHeight(1.5).Color(pick(c.Inert, c.theme.MutedFg, c.theme.Fg))}
+	text := []ggui.Widget{ggui.Text(c.option.Label).Font(env.Theme().Title.Font).Size(14).LineHeight(1.5).Color(pick(c.IsInert(), c.theme.MutedFg, c.theme.Fg))}
 	if c.option.Description != "" {
 		text = append(text, ggui.Text(c.option.Description).Size(14).LineHeight(1.5).Color(c.theme.MutedFg))
 	}
@@ -614,7 +632,7 @@ func (c *questionChoice) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if selected {
 		fill = t.Muted
 		border = mix(t.Primary, t.Card, .6)
-	} else if c.Hovered && !c.Inert {
+	} else if c.Hovered && !c.IsInert() {
 		fill = mix(t.Card, t.Muted, .5)
 	}
 	if c.q.errors[c.item.Name] != "" {
@@ -637,13 +655,13 @@ func (c *questionChoice) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	c.FocusRing(dst, r, tokens.QuestionRadius, t.Ring)
 }
 func (c *questionChoice) HandlePointer(ev ggui.PointerEvent) bool {
-	if c.Inert {
+	if c.IsInert() {
 		return false
 	}
 	return c.Pointer(ev, func() { c.q.selectChoice(c.index) })
 }
 func (c *questionChoice) HandleKey(ev ggui.KeyEvent) {
-	if c.Inert {
+	if c.IsInert() {
 		return
 	}
 	if c.q.shortcut(ev) {
@@ -682,10 +700,10 @@ func (c *questionChoice) ConsumesKey(ev ggui.KeyEvent) bool {
 	return c.Interactive.ConsumesKey(ev)
 }
 func (c *questionChoice) Describe() ggui.Node {
-	return ggui.Node{Role: c.Role, Name: c.Name, Description: c.option.Description, Checked: ggui.Tri(c.selected()), Disabled: c.Inert, Actions: ggui.ActionPress | ggui.ActionSelect | ggui.ActionFocus}
+	return ggui.Node{Role: c.Role, Name: c.SemanticName(), Description: c.option.Description, Checked: ggui.Tri(c.selected()), Disabled: c.IsInert(), Actions: ggui.ActionPress | ggui.ActionSelect | ggui.ActionFocus}
 }
 func (c *questionChoice) Act(a ggui.Action) bool {
-	if c.Inert || (a.Kind != ggui.ActionPress && a.Kind != ggui.ActionSelect) {
+	if c.IsInert() || (a.Kind != ggui.ActionPress && a.Kind != ggui.ActionSelect) {
 		return false
 	}
 	if a.Kind == ggui.ActionPress || !c.selected() {
@@ -749,4 +767,11 @@ type questionError struct{ *ggui.TextWidget }
 func (e *questionError) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	e.Color(env.Theme().Destructive)
 	return e.TextWidget.Layout(c, env)
+}
+
+// Active detaches navigation from its reader and selects a local question.
+func (q *QuestionnaireWidget) Active(v string) *QuestionnaireWidget {
+	q.localActive.Set(v)
+	q.initialItem = v
+	return q.BindActive(q.localActive)
 }

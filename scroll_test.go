@@ -91,7 +91,7 @@ func TestScrollClipsHitRegions(t *testing.T) {
 func TestScrollOffsetBinding(t *testing.T) {
 	var painted [3]Rect
 	pos := State(0.0)
-	s := Scroll(tall(nil, &painted)).Offset(pos)
+	s := Scroll(tall(nil, &painted)).BindOffset(pos)
 	pos.Set(1000)
 	size := s.Layout(Loose(Sz(100, 120)), Env{})
 	if Untrack(pos.Get) != 180 {
@@ -175,7 +175,7 @@ func TestScrollThumbDrag(t *testing.T) {
 		if horizontal {
 			content = Sz(500, 100)
 		}
-		s := Scroll(Tap(Box().Size(content.W, content.H), func() { taps++ })).Offset(offset)
+		s := Scroll(Tap(Box().Size(content.W, content.H), func() { taps++ })).BindOffset(offset)
 		if horizontal {
 			s.Horizontal()
 		}

@@ -60,7 +60,7 @@ vertical carousels reserve that space above and below instead.
 - `Autoplay(2*time.Second)` enables playback. Hover, keyboard focus and dragging
   pause it. User interaction stops it until `Play()`; use
   `StopOnInteraction(false)` to resume automatically. `Pause()` stops it.
-- `Draggable(false)`, `Disabled` and `DisabledWhen` control interaction.
+- `Draggable(false)`, `Disabled` and `BindDisabled` control interaction.
 
 ### Motion and rendering
 
@@ -82,7 +82,7 @@ through a reactive boundary when those options change.
 code := ggui.State("")
 input := ui.InputOTP(code, 6).
     Groups(3, 3).
-    Named("Verification code").
+    Name("Verification code").
     OnComplete(func(code string) { /* submit to your verification handler */ })
 ```
 
@@ -120,7 +120,7 @@ native text field, with one Tab stop and one accessible value.
 - `OnChange`, `OnComplete` and `OnSubmit` report edits, completion and Enter.
   Completion fires when an edit produces a new complete code, not on every frame
   or on an external binding write. Editing down to an incomplete code resets it.
-- `Invalid` / `InvalidWhen`, `Disabled` / `DisabledWhen`, `Placeholder`,
+- `Invalid` / `BindInvalid`, `Disabled` / `BindDisabled`, `Placeholder`,
   `SlotSize` and `RTL` configure appearance and behavior. `ui.Field` provides
   labels, helper text and validation messages.
 - `Input()` exposes the underlying native editor. Its `Filter`, `Select`,

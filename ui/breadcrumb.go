@@ -1,5 +1,7 @@
 package ui
 
+import "github.com/ironpark/ggui/internal/property"
+
 import "github.com/ironpark/ggui"
 
 // BreadcrumbEntry is one step of a trail; build it with Crumb.
@@ -27,10 +29,12 @@ func Crumb(label string, onTap func()) BreadcrumbEntry {
 // Each link is its own tab stop, as a row of links is; the trail itself is
 // a group, so a screen reader reads it as one thing.
 type BreadcrumbWidget struct {
-	crumbs    []BreadcrumbEntry
-	separator string
-	limit     int
-	name      string
+	nameReader ggui.Readable[string]
+	props      property.Owner
+	crumbs     []BreadcrumbEntry
+	separator  string
+	limit      int
+	name       string
 
 	row     *ggui.RowWidget
 	muted   []*ggui.TextWidget // separators and the steps behind the current one
@@ -44,15 +48,31 @@ func Breadcrumb(crumbs ...BreadcrumbEntry) *BreadcrumbWidget {
 }
 
 // Separator replaces the "/" drawn between steps.
-func (b *BreadcrumbWidget) Separator(s string) *BreadcrumbWidget { b.separator = s; return b }
+func (b *BreadcrumbWidget) Separator(s string) *BreadcrumbWidget {
+	defer property.Watch(&b.props, &b.separator)()
+	b.separator = s
+	return b
+}
 
-// Named sets the accessible name of the trail.
-func (b *BreadcrumbWidget) Named(s string) *BreadcrumbWidget { b.name = s; return b }
+// Name sets the accessible name of the trail.
+func (b *BreadcrumbWidget) Name(s string) *BreadcrumbWidget {
+	if b.nameReader != nil {
+		b.nameReader = nil
+		b.props.Changed()
+	}
+	defer property.Watch(&b.props, &b.name)()
+	b.name = s
+	return b
+}
 
 // Max keeps the trail to n crumbs: the first, an ellipsis standing for what
 // was left out, and the last n-2. A trail already that short is untouched,
 // and an n below three is ignored, since there would be nothing to elide.
-func (b *BreadcrumbWidget) Max(n int) *BreadcrumbWidget { b.limit = n; return b }
+func (b *BreadcrumbWidget) Max(n int) *BreadcrumbWidget {
+	defer property.Watch(&b.props, &b.limit)()
+	b.limit = n
+	return b
+}
 
 // shown returns the crumbs to draw, with the elided middle replaced by a
 // crumb whose label is an ellipsis and whose onTap is nil.
@@ -88,7 +108,7 @@ func (b *BreadcrumbWidget) build() {
 			// ButtonOf rather than Button, so the label stays this
 			// widget's to color: a link is muted until it is the page.
 			b.muted = append(b.muted, label)
-			link := ButtonOf(label, c.onTap).Ghost().Pad(0, 2).Named(c.label)
+			link := ButtonOf(label, c.onTap).Ghost().Pad(0, 2).Name(c.label)
 			link.Role = ggui.RoleLink
 			parts = append(parts, link)
 		}
@@ -98,6 +118,10 @@ func (b *BreadcrumbWidget) build() {
 
 // Layout implements ggui.Widget.
 func (b *BreadcrumbWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer b.props.Layout()()
+	if b.nameReader != nil {
+		b.name = b.nameReader.Get()
+	}
 	if b.row == nil {
 		b.build()
 	}
@@ -117,4 +141,14 @@ func (b *BreadcrumbWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Node(r, ggui.Node{Role: ggui.RoleGroup, Name: b.name}, func(dst *ggui.Canvas) {
 		dst.Paint(b.row, r)
 	})
+}
+
+// BindName follows a non-nil accessible-name reader.
+func (b *BreadcrumbWidget) BindName(r ggui.Readable[string]) *BreadcrumbWidget {
+	property.Require(r, "BindName")
+	if !property.Same(b.nameReader, r) {
+		b.nameReader = r
+		b.props.Changed()
+	}
+	return b
 }

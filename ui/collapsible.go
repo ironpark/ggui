@@ -32,7 +32,8 @@ type CollapsibleWidget struct {
 // reveals and clips vertically in and out.
 func Collapsible(open ggui.Binding[bool], title string, content ggui.Widget) *CollapsibleWidget {
 	c := &CollapsibleWidget{open: open, title: ggui.Text(title).NoWrap(), content: content}
-	c.Role, c.Name = ggui.RoleDisclosure, title
+	c.Role = ggui.RoleDisclosure
+	c.SetName(title)
 	c.AutoKey()
 	return c
 }
@@ -40,9 +41,9 @@ func Collapsible(open ggui.Binding[bool], title string, content ggui.Widget) *Co
 // Disabled greys the header out and ignores input while v is true.
 func (c *CollapsibleWidget) Disabled(v bool) *CollapsibleWidget { c.SetInert(v); return c }
 
-// DisabledWhen follows r for Disabled without a rebuild.
-func (c *CollapsibleWidget) DisabledWhen(r ggui.Readable[bool]) *CollapsibleWidget {
-	c.InertWhen(r)
+// BindDisabled follows r for Disabled without a rebuild.
+func (c *CollapsibleWidget) BindDisabled(r ggui.Readable[bool]) *CollapsibleWidget {
+	c.BindInert(r)
 	return c
 }
 
@@ -54,9 +55,9 @@ func (c *CollapsibleWidget) Describe() ggui.Node {
 	open := ggui.Untrack(c.open.Get)
 	return ggui.Node{
 		Role:     ggui.RoleDisclosure,
-		Name:     c.Name,
+		Name:     c.SemanticName(),
 		Expanded: ggui.Expandable(open),
-		Disabled: c.Inert,
+		Disabled: c.IsInert(),
 		Actions:  ggui.ActionPress | ggui.ActionFocus | pick(open, ggui.ActionCollapse, ggui.ActionExpand),
 	}
 }
@@ -64,7 +65,7 @@ func (c *CollapsibleWidget) Describe() ggui.Node {
 // Act implements ggui.Actor: expanding and collapsing say which way to go,
 // where pressing only says to change.
 func (c *CollapsibleWidget) Act(a ggui.Action) bool {
-	if c.Inert {
+	if c.IsInert() {
 		return false
 	}
 	switch a.Kind {
@@ -88,7 +89,7 @@ func (c *CollapsibleWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 	open := c.open.Get()
 	c.progress = c.reveal.Toggle(open, ggui.Now(), c.motion)
 	c.pad = t.FieldPad
-	c.title.Color(pick(c.Inert, t.MutedFg, t.Fg))
+	c.title.Color(pick(c.IsInert(), t.MutedFg, t.Fg))
 	c.titleSize = c.title.Layout(ggui.Loose(ggui.Sz(max(cs.MaxW-c.pad.Left-c.pad.Right-t.ControlSize-t.ControlGap, 0), cs.MaxH)), env)
 	c.headerH = c.titleSize.H + c.pad.Top + c.pad.Bottom
 	body := ggui.Constraints{MinW: cs.MinW, MaxW: cs.MaxW, MaxH: max(cs.MaxH-c.headerH, 0)}
@@ -105,7 +106,7 @@ func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	open := ggui.Untrack(c.open.Get)
 	header := ggui.Rct(r.Origin, ggui.Sz(r.Size.W, c.headerH))
 	c.Hit(dst, header, c, ggui.CursorShapePointer)
-	if c.Hovered && !c.Inert {
+	if c.Hovered && !c.IsInert() {
 		dst.FillRoundRect(header, t.Radius, t.Muted)
 	}
 	// The chevron turns from pointing right (0) to pointing down (1) with

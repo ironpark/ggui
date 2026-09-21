@@ -1,10 +1,13 @@
 package ggui
 
+import "github.com/ironpark/ggui/internal/property"
+
 import "time"
 
 // TooltipWidget shows a short text near its child after the cursor has
 // rested on it. Build one with Tooltip.
 type TooltipWidget struct {
+	props property.Owner
 	child Widget
 	tip   *TextWidget
 	delay time.Duration
@@ -37,10 +40,15 @@ func Tooltip(child Widget, text string) *TooltipWidget {
 }
 
 // Delay sets how long the cursor must rest before the tip appears.
-func (t *TooltipWidget) Delay(d time.Duration) *TooltipWidget { t.delay = d; return t }
+func (t *TooltipWidget) Delay(d time.Duration) *TooltipWidget {
+	defer property.Watch(&t.props, &t.delay)()
+	t.delay = d
+	return t
+}
 
 // Layout implements Widget.
 func (t *TooltipWidget) Layout(c Constraints, env Env) Size {
+	defer t.props.Layout()()
 	t.theme = env.Theme()
 	t.env = env
 	t.pad = Insets(t.theme.Space*.75, t.theme.Space*1.5)

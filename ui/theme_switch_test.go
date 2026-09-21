@@ -11,7 +11,7 @@ import (
 func TestThemeSwitchPointerKeyboardAndDisabled(t *testing.T) {
 	dark, disabled := ggui.State(false), ggui.State(false)
 	var changes []bool
-	s := ui.ThemeSwitch(dark).Named("Appearance").DisabledWhen(disabled).
+	s := ui.ThemeSwitch(dark).Name("Appearance").BindDisabled(disabled).
 		OnChange(func(v bool) { changes = append(changes, v) })
 	p := ggui.NewProbe(s, ggui.Sz(64, 36))
 	defer p.Close()

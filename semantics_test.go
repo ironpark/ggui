@@ -75,7 +75,8 @@ func (t *twice) HandleKey(KeyEvent)              {}
 
 func TestSemanticsDescribesOneHandlerOnce(t *testing.T) {
 	w := &twice{}
-	w.Role, w.Name = RoleTextField, "Name"
+	w.Role = RoleTextField
+	w.SetName("Name")
 	tree := described(t, w, Sz(100, 100))
 	n := 0
 	for range tree.Nodes(RoleTextField) {
@@ -118,7 +119,8 @@ func TestSemanticsMirrorsFocus(t *testing.T) {
 	}
 	// A described control is found by its handler, whatever it moved to.
 	w := &twice{}
-	w.Role, w.Name = RoleTextField, "Name"
+	w.Role = RoleTextField
+	w.SetName("Name")
 	q := NewProbe(w, Sz(100, 100))
 	defer q.Close()
 	q.Click(Pt(10, 5))

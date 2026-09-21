@@ -1,10 +1,13 @@
 package ui
 
+import "github.com/ironpark/ggui/internal/property"
+
 import "github.com/ironpark/ggui"
 
 // MarkerWidget is a muted conversation status, bordered update, or labeled
 // separator. Content may contain links/buttons; decorative icons are inert.
 type MarkerWidget struct {
+	props                 property.Owner
 	content               ggui.Widget
 	icon                  ggui.Widget
 	view                  *ggui.StyledWidget
@@ -17,9 +20,18 @@ func Marker(content ggui.Widget) *MarkerWidget {
 	return &MarkerWidget{content: content, view: ggui.Styled(content)}
 }
 func (m *MarkerWidget) Icon(w ggui.Widget) *MarkerWidget { m.icon = w; return m }
-func (m *MarkerWidget) Separator() *MarkerWidget         { m.variant = "separator"; return m }
-func (m *MarkerWidget) Border() *MarkerWidget            { m.variant = "border"; return m }
+func (m *MarkerWidget) Separator() *MarkerWidget {
+	defer property.Watch(&m.props, &m.variant)()
+	m.variant = "separator"
+	return m
+}
+func (m *MarkerWidget) Border() *MarkerWidget {
+	defer property.Watch(&m.props, &m.variant)()
+	m.variant = "border"
+	return m
+}
 func (m *MarkerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer m.props.Layout()()
 	m.theme = env.Theme()
 	m.view.Color(m.theme.MutedFg).Size(14)
 	width := c.MaxW

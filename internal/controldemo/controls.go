@@ -4,10 +4,11 @@ package controldemo
 
 import (
 	"fmt"
-	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/ui"
 	"strings"
 	"time"
+
+	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/ui"
 )
 
 var Names = []string{"carousel-demo", "carousel-size", "carousel-spacing", "carousel-orientation", "carousel-api", "carousel-plugin", "carousel-multiple", "carousel-rtl", "carousel-loop", "input-otp-demo", "input-otp-pattern", "input-otp-separator", "input-otp-disabled", "input-otp-controlled", "input-otp-invalid", "input-otp-four-digits", "input-otp-alphanumeric", "input-otp-form", "input-otp-rtl"}
@@ -55,7 +56,7 @@ func Build(name string) Demo {
 			}
 			items[i] = it
 		}
-		c := ui.Carousel(selected, ui.CarouselContent(items...)).Height(288).Named("Slides")
+		c := ui.Carousel(selected, ui.CarouselContent(items...)).Height(288).Name("Slides")
 		switch name {
 		case "carousel-size", "carousel-multiple":
 			c.Align(0).Height(180)
@@ -92,7 +93,7 @@ func Build(name string) Demo {
 		if name == "input-otp-four-digits" {
 			n = 4
 		}
-		o := ui.InputOTP(value, n).Named("Verification code")
+		o := ui.InputOTP(value, n).Name("Verification code")
 		d.OTP, d.Value = o, value
 		body := ggui.Widget(o)
 		switch name {
@@ -119,7 +120,7 @@ func Build(name string) Demo {
 		case "input-otp-form":
 			errorText := ggui.State("")
 			status := ggui.State("")
-			o.Groups(3, 3).InvalidWhen(errorText.Map(func(s string) bool { return s != "" })).OnChange(func(string) { errorText.Set(""); status.Set("") })
+			o.Groups(3, 3).BindInvalid(errorText.Map(func(s string) bool { return s != "" })).OnChange(func(string) { errorText.Set(""); status.Set("") })
 			verify := func() {
 				if len(value.Get()) != 6 {
 					errorText.Set("Enter all six digits.")
@@ -128,7 +129,7 @@ func Build(name string) Demo {
 				status.Set("Code complete — ready for your verification handler.")
 			}
 			o.OnSubmit(func(string) { verify() })
-			body = ggui.Column(ggui.Title("Verify your login"), ggui.Text("Enter the verification code we sent to m@example.com."), ui.Field("Verification code", o).Error(errorText), ggui.Row(ui.Button("Verify", verify), ui.Button("Resend code", func() { value.Set(""); status.Set("Demo code reset.") }).Outline()).Gap(12), ggui.Textf("%s", status).AsCaption()).Gap(16)
+			body = ggui.Column(ggui.Title("Verify your login"), ggui.Text("Enter the verification code we sent to m@example.com."), ui.Field("Verification code", o).BindError(errorText), ggui.Row(ui.Button("Verify", verify), ui.Button("Resend code", func() { value.Set(""); status.Set("Demo code reset.") }).Outline()).Gap(12), ggui.Textf("%s", status).AsCaption()).Gap(16)
 		}
 		d.Widget = ggui.Box(ggui.Center(body)).Height(288)
 	}

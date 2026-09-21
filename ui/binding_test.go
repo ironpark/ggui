@@ -7,25 +7,25 @@ import (
 	"github.com/ironpark/ggui/ui"
 )
 
-func TestDisabledWhenFollowsSignalWithoutRebuild(t *testing.T) {
+func TestBindDisabledFollowsSignalWithoutRebuild(t *testing.T) {
 	busy := ggui.State(false)
 	taps := 0
-	b := ui.Button("x", func() { taps++ }).DisabledWhen(busy)
+	b := ui.Button("x", func() { taps++ }).BindDisabled(busy)
 	p := ggui.NewProbe(b, ggui.Sz(100, 40))
 	p.Click(ggui.Pt(10, 10))
 	busy.Set(true)
 	p.Click(ggui.Pt(10, 10))
-	if taps != 1 || !b.Inert {
-		t.Fatalf("taps = %d, inert = %v; want 1 and true", taps, b.Inert)
+	if taps != 1 || !b.IsInert() {
+		t.Fatalf("taps = %d, inert = %v; want 1 and true", taps, b.IsInert())
 	}
 }
 
 // A bound name follows its signal on the next frame, and a Field's label
 // does not replace it.
-func TestNamedWhenFollowsSignalWithoutRebuild(t *testing.T) {
+func TestBindNameFollowsSignalWithoutRebuild(t *testing.T) {
 	name := ggui.State("Remove Buy milk")
-	b := ui.Button("×", nil).NamedWhen(name)
-	f := ui.Field("Label", ui.TextField(ggui.State("")).NamedWhen(name))
+	b := ui.Button("×", nil).BindName(name)
+	f := ui.Field("Label", ui.TextField(ggui.State("")).BindName(name))
 	p := ggui.NewProbe(ggui.Column(b, f), ggui.Sz(200, 120))
 	defer p.Close()
 	if _, ok := p.FindRole(ggui.RoleButton, "Remove Buy milk"); !ok {

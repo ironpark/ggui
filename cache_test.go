@@ -50,7 +50,7 @@ func TestCachedNestsAndFollowsScrollAndFor(t *testing.T) {
 	defer dispose()
 	inner := Cached(list)
 	offset := State(0.0)
-	s := Scroll(Column(inner, Box().Size(10, 500))).Offset(offset)
+	s := Scroll(Column(inner, Box().Size(10, 500))).BindOffset(offset)
 	outer := Cached(s)
 	env := rootEnv()
 	outer.Layout(Tight(Sz(100, 100)), env)

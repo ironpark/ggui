@@ -8,7 +8,7 @@ func TestInteractiveDirectInertWriteRequestsLayout(t *testing.T) {
 	var s Interactive
 	s.Sync()
 	before := layoutGen.Load()
-	s.Inert = true
+	s.SetInert(true)
 	s.Sync()
 	if layoutGen.Load() == before {
 		t.Fatal("direct Inert write not noticed by Sync")

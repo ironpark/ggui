@@ -137,6 +137,12 @@ work; component-specific work must additionally check its lifetime, as
 reactive operations from the wrong goroutine while the app is running. The
 [settings example](../examples/settings) saves on a worker this way.
 
+`TextOf` and `Textf` borrow their inputs and read during layout; constructing them
+creates no effect or derived value and requires no owner. `Textf` copies its
+argument list. `Content(text)` and `BindContent(reader)` replace any previous
+literal, reader or formatted source. `Sprintf` explicitly creates a derived
+string and follows the normal derived ownership rules.
+
 ## Readers, bindings, and lenses
 
 | Interface | Methods | Use |
@@ -145,7 +151,12 @@ reactive operations from the wrong goroutine while the app is running. The
 | `Binding[T]` | `Get()`, `Set(T)` | Two-way controls and animated values. |
 | `Writable[T]` | `Binding[T]`, `Update(func(T) T)` | Immediate read-modify-write helpers. |
 
-Layout bindings such as `DisabledWhen`, `NamedWhen` and `OptionsWhen` track
+`BindX` never owns or disposes its reader. A reader must outlive the widget that
+uses it. Nil, including a typed nil reader, is rejected; `X(value)` detaches it.
+`Const(value)` adapts a literal only where a reader is required, for example
+`ui.Progress(ggui.Const(0.5))`.
+
+Layout bindings such as `BindDisabled`, `BindName` and `BindOptions` track
 signal reads made inside a custom reader's `Get`, including under layout caches.
 A getter over plain, non-reactive storage cannot notify the UI: publish through
 a signal, or have the custom widget call `Invalidate` with its last layout Env.

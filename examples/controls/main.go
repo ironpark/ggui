@@ -36,7 +36,7 @@ func (m model) build() ggui.Widget {
 			ggui.Spacer(),
 			ui.Switch(m.Dark, "Dark theme"),
 		).Gap(12),
-		ui.Select(m.Selected, controldemo.Names).Named("Component example"),
+		ui.Select(m.Selected).Options(controldemo.Names).Name("Component example"),
 		// Key recreates the demo when the selection changes; the Select and
 		// the switch above stay as they are.
 		ggui.Key(m.Selected, func(name string) ggui.Widget { return controldemo.Build(name).Widget }),

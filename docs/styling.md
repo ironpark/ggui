@@ -482,8 +482,8 @@ app.Setup(func() { ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme()) }
 Use `ui.ThemeSwitch(dark)` for a compact day/night control: the large sun thumb turns into
 a softly shaded full moon, with clouds fading into stars. `true` means dark
 mode. Bind the same signal with `BindTheme` as above to apply the theme. The
-control supports `.Named("Appearance")`, `.OnChange(fn)`, `.Disabled(v)`, and
-`.DisabledWhen(reader)`, plus Space/Enter and reduced-motion preferences.
+control supports `.Name("Appearance")`, `.OnChange(fn)`, `.Disabled(v)`, and
+`.BindDisabled(reader)`, plus Space/Enter and reduced-motion preferences.
 
 ## Where it lives
 

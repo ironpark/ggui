@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // HoverCardWidget shows a panel of content near its anchor once the cursor
@@ -15,6 +16,8 @@ import (
 // so widgets inside it stay interactive, but nothing about it takes focus:
 // a hover card is an aside, and the keyboard never has to visit it.
 type HoverCardWidget struct {
+	nameReader      ggui.Readable[string]
+	props           property.Owner
 	anchor, content ggui.Widget
 	delay           time.Duration
 	width           float64
@@ -48,13 +51,29 @@ func HoverCard(anchor, content ggui.Widget) *HoverCardWidget {
 }
 
 // Delay sets how long the cursor must rest before the card appears.
-func (h *HoverCardWidget) Delay(d time.Duration) *HoverCardWidget { h.delay = d; return h }
+func (h *HoverCardWidget) Delay(d time.Duration) *HoverCardWidget {
+	defer property.Watch(&h.props, &h.delay)()
+	h.delay = d
+	return h
+}
 
 // Width sets the card's width in logical pixels.
-func (h *HoverCardWidget) Width(w float64) *HoverCardWidget { h.width = w; return h }
+func (h *HoverCardWidget) Width(w float64) *HoverCardWidget {
+	defer property.Watch(&h.props, &h.width)()
+	h.width = w
+	return h
+}
 
-// Named sets the accessible name of the card.
-func (h *HoverCardWidget) Named(s string) *HoverCardWidget { h.name = s; return h }
+// Name sets the accessible name of the card.
+func (h *HoverCardWidget) Name(s string) *HoverCardWidget {
+	if h.nameReader != nil {
+		h.nameReader = nil
+		h.props.Changed()
+	}
+	defer property.Watch(&h.props, &h.name)()
+	h.name = s
+	return h
+}
 
 // Layout implements ggui.Widget: the card takes no room, so the anchor's
 // size is the widget's. The card itself is not measured here -- it is out
@@ -62,6 +81,10 @@ func (h *HoverCardWidget) Named(s string) *HoverCardWidget { h.name = s; return 
 // pass over the whole content every frame to answer a question nobody is
 // asking yet. Paint measures it once it is about to show.
 func (h *HoverCardWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer h.props.Layout()()
+	if h.nameReader != nil {
+		h.name = h.nameReader.Get()
+	}
 	h.env, h.theme = env, env.Theme()
 	if h.panel == nil {
 		h.panel = ggui.Box(h.content)
@@ -134,3 +157,13 @@ func (h *HoverCardWidget) place(screen ggui.Size, anchor ggui.Rect) ggui.Rect {
 type hoverCardPanel struct{ h *HoverCardWidget }
 
 func (p hoverCardPanel) Semantics() (ggui.Role, string) { return ggui.RoleGroup, p.h.name }
+
+// BindName follows a non-nil accessible-name reader.
+func (h *HoverCardWidget) BindName(r ggui.Readable[string]) *HoverCardWidget {
+	property.Require(r, "BindName")
+	if !property.Same(h.nameReader, r) {
+		h.nameReader = r
+		h.props.Changed()
+	}
+	return h
+}

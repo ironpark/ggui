@@ -8,14 +8,11 @@ Examples use `ggui` and `ui` imports and application-defined placeholders.
 See [example conventions](README.md#start-here) before copying snippets.
 
 `Tween(v, d)` and `Spring(v)` move a value toward a target over time. Both
-implement `Binding`, so controls can read and set them. A `Reactive` callback
-that reads one reruns as the animated value changes:
+implement `Binding`, so controls can read and set them. Bind a property to animate it without rebuilding the widget:
 
 ```go
 width := ggui.Tween(0.0, 200*time.Millisecond).Easing(ggui.EaseOut)
-bar := ggui.Reactive(func() ggui.Widget {
-	return ggui.Box().Size(width.Get(), 4).Fill(accent)
-})
+bar := ggui.Box().BindWidth(width).Height(4).Fill(accent)
 width.Set(120) // slides there over 200ms; Jump(v) skips the motion
 ```
 

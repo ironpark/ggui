@@ -9,6 +9,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/icons"
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // ChartKind selects a native chart renderer. All kinds share config, tooltips,
@@ -129,6 +130,7 @@ type ChartPointContext struct {
 // snapshot of data; Data replaces it and invalidates cached geometry. Configure
 // a widget before mounting, or use a reactive boundary to replace its options.
 type ChartWidget struct {
+	props       property.Owner
 	pointer     pointerMotion
 	tickPaint   func(*ggui.Canvas, ChartPointContext)
 	activeRing  bool
@@ -178,7 +180,7 @@ func ChartContainer(kind ChartKind, data []ChartDatum, config ChartConfig) *Char
 		corner: 4, stroke: 2, opacity: .4, separators: true, tooltipCursor: true, duration: 1500 * time.Millisecond,
 		active: -1, selected: -1, cacheRevision: ^uint64(0)}
 	c.Role = ggui.RoleGroup
-	c.Name = "Chart"
+	c.SetName("Chart")
 	c.AutoKey()
 	switch kind {
 	case ChartBar:
@@ -211,10 +213,15 @@ func RadarChart(data []ChartDatum, config ChartConfig) *ChartWidget {
 func RadialChart(data []ChartDatum, config ChartConfig) *ChartWidget {
 	return ChartContainer(ChartRadial, data, config).InnerRadius(.25).CategoryColors(true)
 }
-func (c *ChartWidget) Named(s string) *ChartWidget { c.Name = s; return c }
+func (c *ChartWidget) Name(s string) *ChartWidget { c.SetName(s); return c }
 
 // Data copies input, preventing caller mutation from corrupting geometry caches.
 func (c *ChartWidget) Data(data []ChartDatum) *ChartWidget {
+	defer property.Watch(&c.props, &c.active)()
+	defer property.Watch(&c.props, &c.data)()
+	defer property.Watch(&c.props, &c.selected)()
+	defer property.Watch(&c.props, &c.started)()
+	defer property.Watch(&c.props, &c.textCache)()
 	c.data = make([]ChartDatum, len(data))
 	for i, d := range data {
 		c.data[i] = d
@@ -230,39 +237,108 @@ func (c *ChartWidget) Data(data []ChartDatum) *ChartWidget {
 	c.textCache = nil
 	return c
 }
-func (c *ChartWidget) Height(v float64) *ChartWidget      { c.height = max(0, v); return c }
-func (c *ChartWidget) Curve(v ChartCurve) *ChartWidget    { c.curve = v; c.revision++; return c }
-func (c *ChartWidget) Stack(v ChartStack) *ChartWidget    { c.stack = v; c.revision++; return c }
-func (c *ChartWidget) Horizontal(v bool) *ChartWidget     { c.horizontal = v; c.revision++; return c }
-func (c *ChartWidget) Grid(v bool) *ChartWidget           { c.grid = v; return c }
-func (c *ChartWidget) Axes(x, y bool) *ChartWidget        { c.xAxis = x; c.yAxis = y; c.revision++; return c }
-func (c *ChartWidget) Legend(v bool) *ChartWidget         { c.legend = v; c.revision++; return c }
-func (c *ChartWidget) Dots(v bool) *ChartWidget           { c.dots = v; return c }
-func (c *ChartWidget) Labels(v bool) *ChartWidget         { c.labels = v; return c }
-func (c *ChartWidget) Gradient(v bool) *ChartWidget       { c.gradient = v; return c }
-func (c *ChartWidget) CategoryColors(v bool) *ChartWidget { c.categoryColors = v; return c }
-func (c *ChartWidget) Separators(v bool) *ChartWidget     { c.separators = v; return c }
+func (c *ChartWidget) Height(v float64) *ChartWidget {
+	defer property.Watch(&c.props, &c.height)()
+	c.height = max(0, v)
+	return c
+}
+func (c *ChartWidget) Curve(v ChartCurve) *ChartWidget {
+	defer property.Watch(&c.props, &c.curve)()
+	c.curve = v
+	c.revision++
+	return c
+}
+func (c *ChartWidget) Stack(v ChartStack) *ChartWidget {
+	defer property.Watch(&c.props, &c.stack)()
+	c.stack = v
+	c.revision++
+	return c
+}
+func (c *ChartWidget) Horizontal(v bool) *ChartWidget { c.horizontal = v; c.revision++; return c }
+func (c *ChartWidget) Grid(v bool) *ChartWidget {
+	defer property.Watch(&c.props, &c.grid)()
+	c.grid = v
+	return c
+}
+func (c *ChartWidget) Axes(x, y bool) *ChartWidget {
+	defer property.Watch(&c.props, &c.xAxis)()
+	defer property.Watch(&c.props, &c.yAxis)()
+	c.xAxis = x
+	c.yAxis = y
+	c.revision++
+	return c
+}
+func (c *ChartWidget) Legend(v bool) *ChartWidget {
+	defer property.Watch(&c.props, &c.legend)()
+	c.legend = v
+	c.revision++
+	return c
+}
+func (c *ChartWidget) Dots(v bool) *ChartWidget {
+	defer property.Watch(&c.props, &c.dots)()
+	c.dots = v
+	return c
+}
+func (c *ChartWidget) Labels(v bool) *ChartWidget {
+	defer property.Watch(&c.props, &c.labels)()
+	c.labels = v
+	return c
+}
+func (c *ChartWidget) Gradient(v bool) *ChartWidget {
+	defer property.Watch(&c.props, &c.gradient)()
+	c.gradient = v
+	return c
+}
+func (c *ChartWidget) CategoryColors(v bool) *ChartWidget {
+	defer property.Watch(&c.props, &c.categoryColors)()
+	c.categoryColors = v
+	return c
+}
+func (c *ChartWidget) Separators(v bool) *ChartWidget {
+	defer property.Watch(&c.props, &c.separators)()
+	c.separators = v
+	return c
+}
 func (c *ChartWidget) InnerRadius(fraction float64) *ChartWidget {
+	defer property.Watch(&c.props, &c.inner)()
 	c.inner = clamp(fraction, 0, .95)
 	return c
 }
 func (c *ChartWidget) OuterRadius(fraction float64) *ChartWidget {
+	defer property.Watch(&c.props, &c.outer)()
 	c.outer = clamp(fraction, .05, 1)
 	return c
 }
 
 // Angles are degrees, counter-clockwise from three o'clock, like Recharts.
 func (c *ChartWidget) Angles(start, end float64) *ChartWidget {
+	defer property.Watch(&c.props, &c.endAngle)()
+	defer property.Watch(&c.props, &c.startAngle)()
 	if finite(start) && finite(end) {
 		c.startAngle = start
 		c.endAngle = start + clamp(end-start, -360, 360)
 	}
 	return c
 }
-func (c *ChartWidget) CornerRadius(v float64) *ChartWidget { c.corner = max(0, v); return c }
-func (c *ChartWidget) StrokeWidth(v float64) *ChartWidget  { c.stroke = max(0, v); return c }
-func (c *ChartWidget) FillOpacity(v float64) *ChartWidget  { c.opacity = clamp(v, 0, 1); return c }
+func (c *ChartWidget) CornerRadius(v float64) *ChartWidget {
+	defer property.Watch(&c.props, &c.corner)()
+	c.corner = max(0, v)
+	return c
+}
+func (c *ChartWidget) StrokeWidth(v float64) *ChartWidget {
+	defer property.Watch(&c.props, &c.stroke)()
+	c.stroke = max(0, v)
+	return c
+}
+func (c *ChartWidget) FillOpacity(v float64) *ChartWidget {
+	defer property.Watch(&c.props, &c.opacity)()
+	c.opacity = clamp(v, 0, 1)
+	return c
+}
 func (c *ChartWidget) Domain(lo, hi float64) *ChartWidget {
+	defer property.Watch(&c.props, &c.domainMax)()
+	defer property.Watch(&c.props, &c.domainMin)()
+	defer property.Watch(&c.props, &c.domainSet)()
 	c.domainSet = finite(lo) && finite(hi) && hi > lo
 	c.domainMin = lo
 	c.domainMax = hi
@@ -270,13 +346,27 @@ func (c *ChartWidget) Domain(lo, hi float64) *ChartWidget {
 	return c
 }
 func (c *ChartWidget) CenterText(value, label string) *ChartWidget {
+	defer property.Watch(&c.props, &c.centerLabel)()
+	defer property.Watch(&c.props, &c.centerValue)()
 	c.centerValue = value
 	c.centerLabel = label
 	return c
 }
-func (c *ChartWidget) PolarGrid(v ChartPolarGrid) *ChartWidget           { c.polarGrid = v; return c }
-func (c *ChartWidget) Tooltip(v ChartTooltipOptions) *ChartWidget        { c.tooltip = v; return c }
-func (c *ChartWidget) TooltipCursor(v bool) *ChartWidget                 { c.tooltipCursor = v; return c }
+func (c *ChartWidget) PolarGrid(v ChartPolarGrid) *ChartWidget {
+	defer property.Watch(&c.props, &c.polarGrid)()
+	c.polarGrid = v
+	return c
+}
+func (c *ChartWidget) Tooltip(v ChartTooltipOptions) *ChartWidget {
+	defer property.Watch(&c.props, &c.tooltip)()
+	c.tooltip = v
+	return c
+}
+func (c *ChartWidget) TooltipCursor(v bool) *ChartWidget {
+	defer property.Watch(&c.props, &c.tooltipCursor)()
+	c.tooltipCursor = v
+	return c
+}
 func (c *ChartWidget) TickFormatter(fn func(string) string) *ChartWidget { c.tickFormat = fn; return c }
 func (c *ChartWidget) LabelFormatter(fn func(ChartPointContext) string) *ChartWidget {
 	c.labelFormat = fn
@@ -296,15 +386,28 @@ func (c *ChartWidget) LabelPainter(fn func(*ggui.Canvas, ChartPointContext)) *Ch
 func (c *ChartWidget) OnSelect(fn func(int, ChartDatum)) *ChartWidget { c.onSelect = fn; return c }
 
 // ActiveIndex selects a persistent shape, independent of transient hover.
-func (c *ChartWidget) ActiveIndex(index int) *ChartWidget     { c.selected = index; return c }
-func (c *ChartWidget) Animation(d time.Duration) *ChartWidget { c.duration = max(0, d); return c }
+func (c *ChartWidget) ActiveIndex(index int) *ChartWidget {
+	defer property.Watch(&c.props, &c.selected)()
+	c.selected = index
+	return c
+}
+func (c *ChartWidget) Animation(d time.Duration) *ChartWidget {
+	defer property.Watch(&c.props, &c.duration)()
+	c.duration = max(0, d)
+	return c
+}
 
 // AnimationDelay overrides the entrance delay (400ms for pies, zero otherwise).
-func (c *ChartWidget) AnimationDelay(d time.Duration) *ChartWidget { c.delay = max(0, d); return c }
+func (c *ChartWidget) AnimationDelay(d time.Duration) *ChartWidget {
+	defer property.Watch(&c.props, &c.delay)()
+	c.delay = max(0, d)
+	return c
+}
 
 // Replay restarts the entrance without rebuilding or copying the data.
 func (c *ChartWidget) Replay() { c.started = time.Time{} }
 func (c *ChartWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
+	defer c.props.Layout()()
 	c.env = env
 	c.theme = env.Theme()
 	c.reduced = env.ReducedMotion()
@@ -365,16 +468,32 @@ func (c *ChartWidget) TickPainter(fn func(*ggui.Canvas, ChartPointContext)) *Cha
 }
 
 // ActiveRing draws an additional outer ring around a selected pie sector.
-func (c *ChartWidget) ActiveRing(v bool) *ChartWidget { c.activeRing = v; return c }
+func (c *ChartWidget) ActiveRing(v bool) *ChartWidget {
+	defer property.Watch(&c.props, &c.activeRing)()
+	c.activeRing = v
+	return c
+}
 
 // RadialTrack toggles the muted full-circle track behind radial bars.
-func (c *ChartWidget) RadialTrack(v bool) *ChartWidget { c.radialTrack = v; return c }
+func (c *ChartWidget) RadialTrack(v bool) *ChartWidget {
+	defer property.Watch(&c.props, &c.radialTrack)()
+	c.radialTrack = v
+	return c
+}
 
 // InsideLabels places pie labels inside sectors; otherwise labels sit outside.
-func (c *ChartWidget) InsideLabels(v bool) *ChartWidget { c.labelInside = v; return c }
+func (c *ChartWidget) InsideLabels(v bool) *ChartWidget {
+	defer property.Watch(&c.props, &c.labelInside)()
+	c.labelInside = v
+	return c
+}
 
 // DefaultTooltipIndex sets initial tooltip state without selecting a shape.
-func (c *ChartWidget) DefaultTooltipIndex(i int) *ChartWidget { c.active = i; return c }
+func (c *ChartWidget) DefaultTooltipIndex(i int) *ChartWidget {
+	defer property.Watch(&c.props, &c.active)()
+	c.active = i
+	return c
+}
 func (c *ChartWidget) formatValue(i, j int, v float64) string {
 	if c.tooltip.FormatValue != nil {
 		return c.tooltip.FormatValue(v, c.config[j], c.data[i])
@@ -401,7 +520,7 @@ func (c *ChartWidget) Describe() ggui.Node {
 			}
 		}
 	}
-	return ggui.Node{Role: ggui.RoleGroup, Name: c.Name, Value: b.String(), Description: "Chart. Use arrow keys to explore values; Enter selects a category.", Min: 0, Max: float64(max(0, len(c.data)-1)), Now: float64(max(0, i)), Actions: ggui.ActionFocus | ggui.ActionIncrement | ggui.ActionDecrement | ggui.ActionSetValue}
+	return ggui.Node{Role: ggui.RoleGroup, Name: c.SemanticName(), Value: b.String(), Description: "Chart. Use arrow keys to explore values; Enter selects a category.", Min: 0, Max: float64(max(0, len(c.data)-1)), Now: float64(max(0, i)), Actions: ggui.ActionFocus | ggui.ActionIncrement | ggui.ActionDecrement | ggui.ActionSetValue}
 }
 
 // Act lets assistive technologies explore chart categories without a pointer.

@@ -50,7 +50,7 @@ Register app-wide effects and theme bindings before calling `Run`:
 ```go
 dark := ggui.State(false)
 app := ggui.New(ggui.Config{Title: "Settings", Resizable: true}, func() ggui.Widget {
-    return ui.ThemeSwitch(dark).Named("Dark mode")
+    return ui.ThemeSwitch(dark).Name("Dark mode")
 })
 app.Setup(func() {
     ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme())

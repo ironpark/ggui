@@ -200,7 +200,7 @@ func computedFields(e *traceEntry) []inspectField {
 	}
 	if w, ok := e.widget.(interface{ state() *Interactive }); ok {
 		s := w.state()
-		out = append(out, inspectField{key: "Interaction"}, inspectField{"hovered", strconv.FormatBool(s.Hovered), false}, inspectField{"pressed", strconv.FormatBool(s.Pressed), false}, inspectField{"focused", strconv.FormatBool(s.Focused), false}, inspectField{"disabled", strconv.FormatBool(s.Inert), false})
+		out = append(out, inspectField{key: "Interaction"}, inspectField{"hovered", strconv.FormatBool(s.Hovered), false}, inspectField{"pressed", strconv.FormatBool(s.Pressed), false}, inspectField{"focused", strconv.FormatBool(s.Focused), false}, inspectField{"disabled", strconv.FormatBool(s.IsInert()), false})
 	}
 	return out
 }

@@ -191,7 +191,7 @@ func (f Found) Center() Point {
 
 // Find returns the first region painted with label, after running a
 // frame so the regions are current: a button by its text, a checkbox by
-// its label, a field by its Named setting or placeholder.
+// its label, a field by its Name setting or placeholder.
 func (p *Probe) Find(label string) (Found, bool) {
 	return p.FindRole("", label)
 }

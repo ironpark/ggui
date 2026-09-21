@@ -124,7 +124,7 @@ func (e Env) WithTheme(t Theme) Env {
 var TextScaleKey = NewEnvKey[float64]("text scale")
 
 // InputDisabled disables TextInput editing in a subtree without replacing the
-// editor's own Disabled or DisabledWhen setting. Containers combine inherited
+// editor's own Disabled or BindDisabled setting. Containers combine inherited
 // and local values with OR; false must not enable an already-disabled ancestor.
 var InputDisabled = NewEnvKey[bool]("input disabled")
 

@@ -47,7 +47,7 @@ func (m model) build() ggui.Widget {
 			ui.Button("Replay", m.replay),
 			ui.Switch(m.Dark, "Dark theme"),
 		).Gap(12),
-		ui.Select(m.Selected, chartdemo.Names()).Named("Chart example"),
+		ui.Select(m.Selected).Options(chartdemo.Names()).Name("Chart example"),
 		// Key recreates the card whenever the selection or the replay
 		// generation changes; the rest of the tree stays as it is.
 		ggui.Key(ggui.Combine(m.Selected, m.Generation, func(name string, gen int) cardKey { return cardKey{name, gen} }), func(k cardKey) ggui.Widget {

@@ -1,5 +1,7 @@
 package ggui
 
+import "github.com/ironpark/ggui/internal/property"
+
 // PopupWidget shows content floating over the tree, anchored below (or,
 // when there is no room, above) its anchor widget: the base of dropdowns
 // and menus. Build one with Popup. The anchor is laid out and painted in
@@ -10,9 +12,10 @@ package ggui
 //
 // Whether the popup is open lives in the widget, so keep it alive (in a
 // Component, or adopted across rebuilds by the widget that owns it) or
-// bind it to a StateValue with Bind. Widgets inside the content can find the
+// bind it to a StateValue with BindOpen. Widgets inside the content can find the
 // popup with PopupOf and close it after acting.
 type PopupWidget struct {
+	props   property.Owner
 	anchor  Widget
 	content Widget
 	open    bool
@@ -38,12 +41,38 @@ func Popup(anchor, content Widget) *PopupWidget {
 	return &PopupWidget{anchor: anchor, content: content, gap: 4, id: autoID(), effect: PopIn(content)}
 }
 
-// Bind stores the open state in sig: writing it opens or closes the popup,
+// BindOpen stores the open state in sig: writing it opens or closes the popup,
 // and the popup writes it when it closes itself.
-func (p *PopupWidget) Bind(sig Binding[bool]) *PopupWidget { p.bound = sig; return p }
+func (p *PopupWidget) BindOpen(sig Binding[bool]) *PopupWidget {
+	property.Require(sig, "BindOpen")
+	if !property.Same(p.bound, sig) {
+		p.bound = sig
+		p.props.Changed()
+	}
+	return p
+}
+
+// Open detaches an open-state binding and sets local popup visibility.
+func (p *PopupWidget) Open(v bool) *PopupWidget {
+	was := p.IsOpen()
+	detached := p.bound != nil
+	p.bound = nil
+	p.open = v
+	if detached || was != v {
+		p.props.Changed()
+	}
+	if was && !v && p.onClose != nil {
+		p.onClose()
+	}
+	return p
+}
 
 // Gap sets the space between the anchor and the content.
-func (p *PopupWidget) Gap(v float64) *PopupWidget { p.gap = v; return p }
+func (p *PopupWidget) Gap(v float64) *PopupWidget {
+	defer property.Watch(&p.props, &p.gap)()
+	p.gap = v
+	return p
+}
 
 // Key gives the popup an identity, so a rebuilt one that also moved keeps
 // its open state. Without one the anchor's Rect identifies it.
@@ -134,6 +163,7 @@ func PopupOf(env Env) (*PopupWidget, bool) { return env.Get(popupKey) }
 
 // Layout implements Widget.
 func (p *PopupWidget) Layout(c Constraints, env Env) Size {
+	defer p.props.Layout()()
 	p.env = env.With(popupKey, p)
 	return p.anchor.Layout(c, env)
 }

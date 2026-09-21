@@ -2,11 +2,13 @@ package ui
 
 import (
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // MenuWidget is a button that opens a list of actions. Build one with Menu
 // or MenuOf, with MenuItem and MenuDivider as the entries.
 type MenuWidget struct {
+	props    property.Owner
 	button   *ButtonWidget
 	popup    *ggui.PopupWidget
 	panel    *ggui.BoxWidget
@@ -37,8 +39,8 @@ func MenuOf(content ggui.Widget, entries ...ggui.Widget) *MenuWidget {
 	return m
 }
 
-// Named names a MenuOf for Probe.Find and the inspector.
-func (m *MenuWidget) Named(s string) *MenuWidget { m.button.Name = s; return m }
+// Name names a MenuOf for Probe.Find and the inspector.
+func (m *MenuWidget) Name(s string) *MenuWidget { m.button.SetName(s); return m }
 
 // Disabled disables this menu's trigger and closes it.
 func (m *MenuWidget) Disabled(v bool) *MenuWidget {
@@ -74,6 +76,8 @@ func (m *MenuWidget) init(entries []ggui.Widget) {
 // Width sets the popup panel width, constrained to the available space.
 // Without one the panel takes the theme's MenuWidth.
 func (m *MenuWidget) Width(w float64) *MenuWidget {
+	defer property.Watch(&m.props, &m.width)()
+	defer property.Watch(&m.props, &m.widthSet)()
 	m.width, m.widthSet = max(w, 0), true
 	return m
 }
@@ -93,7 +97,7 @@ func (m *MenuWidget) toggle() {
 // Act implements ggui.Actor. The node is the button's, so the button hands
 // the action on to the menu that owns it.
 func (m *MenuWidget) Act(a ggui.Action) bool {
-	if m.button.Inert {
+	if m.button.IsInert() {
 		return false
 	}
 	switch a.Kind {
@@ -110,8 +114,9 @@ func (m *MenuWidget) Act(a ggui.Action) bool {
 
 // Layout implements Widget.
 func (m *MenuWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer m.props.Layout()()
 	m.button.Sync()
-	if m.button.Inert {
+	if m.button.IsInert() {
 		m.popup.Hide()
 	}
 	t := env.Theme()
@@ -126,7 +131,7 @@ func (m *MenuWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		it.active = i == m.current
 	}
 	dst.Paint(m.popup, r)
-	if !m.button.Inert {
+	if !m.button.IsInert() {
 		// On top of the button's own region, so the arrow keys reach the
 		// menu; everything else is passed on to the button.
 		dst.HitKey(r, m)
@@ -169,7 +174,7 @@ func (m *MenuWidget) chrome(t ggui.Theme) *ggui.BoxWidget {
 
 // step moves the keyboard highlight by dir, skipping disabled items.
 func (m *MenuWidget) step(dir int) {
-	m.current = stepIndex(m.current, dir, len(m.items), func(i int) bool { return !m.items[i].Inert })
+	m.current = stepIndex(m.current, dir, len(m.items), func(i int) bool { return !m.items[i].IsInert() })
 }
 
 // jump restarts the highlight from the near end, for Home and End.
@@ -209,6 +214,7 @@ func (m *MenuWidget) Adopt(prev any) {
 
 // MenuItemWidget is one action in a Menu. Build one with MenuItem.
 type MenuItemWidget struct {
+	props property.Owner
 	ggui.Interactive
 	text         *ggui.TextWidget
 	onTap        func()
@@ -228,23 +234,29 @@ type MenuItemWidget struct {
 // MenuItem creates an entry that runs onTap and closes the menu.
 func MenuItem(label string, onTap func()) *MenuItemWidget {
 	it := &MenuItemWidget{text: ggui.Text(label).NoWrap(), onTap: onTap}
-	it.Role, it.Name = ggui.RoleMenuItem, label
+	it.Role = ggui.RoleMenuItem
+	it.SetName(label)
 	it.AutoKey()
 	return it
 }
 
 // Shortcut displays a right-aligned key hint; it does not register a shortcut.
 func (it *MenuItemWidget) Shortcut(s string) *MenuItemWidget {
-	it.shortcut = ggui.Caption(s).NoWrap()
+	defer property.Watch(&it.props, &it.shortcut)()
+	if it.shortcut == nil {
+		it.shortcut = ggui.Caption(s).NoWrap()
+	} else {
+		it.shortcut.Content(s)
+	}
 	return it
 }
 
 // Disabled greys the item out and ignores it while v is true.
 func (it *MenuItemWidget) Disabled(v bool) *MenuItemWidget { it.SetInert(v); return it }
 
-// DisabledWhen follows r for Disabled without a rebuild.
-func (it *MenuItemWidget) DisabledWhen(r ggui.Readable[bool]) *MenuItemWidget {
-	it.InertWhen(r)
+// BindDisabled follows r for Disabled without a rebuild.
+func (it *MenuItemWidget) BindDisabled(r ggui.Readable[bool]) *MenuItemWidget {
+	it.BindInert(r)
 	return it
 }
 
@@ -252,7 +264,7 @@ func (it *MenuItemWidget) DisabledWhen(r ggui.Readable[bool]) *MenuItemWidget {
 func MenuDivider() ggui.Widget { return ggui.Padding(Divider(), 4, 0) }
 
 func (it *MenuItemWidget) run() {
-	if it.Inert {
+	if it.IsInert() {
 		return
 	}
 	if it.onTap != nil {
@@ -265,12 +277,13 @@ func (it *MenuItemWidget) run() {
 
 // Layout implements Widget.
 func (it *MenuItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer it.props.Layout()()
 	it.Sync()
 	t := env.Theme()
 	it.theme = t
 	it.popup, _ = ggui.PopupOf(env)
 	it.pad = t.ItemPad
-	it.text.Color(pick(it.Inert, t.MutedFg, colorOr(t.PopoverFg, t.Fg)))
+	it.text.Color(pick(it.IsInert(), t.MutedFg, colorOr(t.PopoverFg, t.Fg)))
 	inner := it.pad.Shrink(c).Loosen()
 	gap := 0.0
 	if it.shortcut != nil {
@@ -288,7 +301,7 @@ func (it *MenuItemWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := it.theme
 	// A disabled item takes no input but is still part of the menu.
 	dst.Describe(r, it)
-	if !it.Inert {
+	if !it.IsInert() {
 		dst.HitPointer(r, it)
 		dst.HitCursor(r, ggui.CursorShapePointer)
 		if it.active || (it.onHover == nil && it.Hovered) {
@@ -307,20 +320,23 @@ func (it *MenuItemWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 
 // HandlePointer implements PointerHandler.
 func (it *MenuItemWidget) HandlePointer(ev ggui.PointerEvent) bool {
-	if ev.Kind == ggui.PointerMove && it.motion.moved(ev.Pos) && !it.Inert && it.onHover != nil {
+	if ev.Kind == ggui.PointerMove && it.motion.moved(ev.Pos) && !it.IsInert() && it.onHover != nil {
 		it.onHover()
 	}
 	return it.Pointer(ev, it.run)
 }
 
 // SetName names the trigger for Field.
-func (m *MenuWidget) SetName(s string) { m.Named(s) }
+func (m *MenuWidget) SetName(s string) { m.Name(s) }
 
 // HasName reports whether the trigger has an explicit name.
 func (m *MenuWidget) HasName() bool { return m.button.HasName() }
 
-// DisabledWhen follows r and closes the popup while disabled.
-func (m *MenuWidget) DisabledWhen(r ggui.Readable[bool]) *MenuWidget {
-	m.button.DisabledWhen(r)
+// BindDisabled follows r and closes the popup while disabled.
+func (m *MenuWidget) BindDisabled(r ggui.Readable[bool]) *MenuWidget {
+	m.button.BindDisabled(r)
 	return m
 }
+
+// BindName follows the accessible name on the same targets as Name.
+func (m *MenuWidget) BindName(r ggui.Readable[string]) *MenuWidget { m.button.BindName(r); return m }

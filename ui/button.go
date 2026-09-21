@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // buttonVariant selects a button's look. One value replaces a set of flags
@@ -43,6 +44,7 @@ func (v buttonVariant) resolve(t ggui.Theme) buttonStyle {
 
 // ButtonWidget is a clickable box with a label. Build one with Button.
 type ButtonWidget struct {
+	props property.Owner
 	ggui.Interactive
 	label       *ggui.TextWidget
 	box         *ggui.BoxWidget
@@ -63,13 +65,14 @@ type ButtonWidget struct {
 func Button(label string, onTap func()) *ButtonWidget {
 	b := &ButtonWidget{onTap: onTap, label: ggui.Text(label).NoWrap()}
 	b.box = ggui.Box(b.label)
-	b.Role, b.Name = ggui.RoleButton, label
+	b.Role = ggui.RoleButton
+	b.SetName(label)
 	b.AutoKey()
 	return b
 }
 
 // ButtonOf creates a button around any content instead of a text label.
-// Give it a name with Named, since nothing on it says what it is.
+// Give it a name with Name, since nothing on it says what it is.
 func ButtonOf(child ggui.Widget, onTap func()) *ButtonWidget {
 	b := &ButtonWidget{onTap: onTap, box: ggui.Box(child)}
 	b.Role = ggui.RoleButton
@@ -77,12 +80,15 @@ func ButtonOf(child ggui.Widget, onTap func()) *ButtonWidget {
 	return b
 }
 
-// Named names the button for Probe.Find and the inspector; Button takes
+// Name names the button for Probe.Find and the inspector; Button takes
 // its text, ButtonOf needs one.
-func (b *ButtonWidget) Named(s string) *ButtonWidget { b.Name = s; return b }
+func (b *ButtonWidget) Name(s string) *ButtonWidget { b.SetName(s); return b }
 
-// NamedWhen binds the button's name to r; see ggui.Interactive.NameWhen.
-func (b *ButtonWidget) NamedWhen(r ggui.Readable[string]) *ButtonWidget { b.NameWhen(r); return b }
+// BindName binds the button's name to r; see ggui.Interactive.BindName.
+func (b *ButtonWidget) BindName(r ggui.Readable[string]) *ButtonWidget {
+	b.Interactive.BindName(r)
+	return b
+}
 
 // Expands makes the button report whether what it opens is showing, for a
 // menu button or a combobox trigger; a plain button does not expand at all,
@@ -91,11 +97,15 @@ func (b *ButtonWidget) Expands(open func() bool) *ButtonWidget { b.expands = ope
 
 // Opens hands the expand and collapse actions to the widget that owns the
 // popup, since the button describes the node but does not hold it.
-func (b *ButtonWidget) Opens(a ggui.Actor) *ButtonWidget { b.opener = a; return b }
+func (b *ButtonWidget) Opens(a ggui.Actor) *ButtonWidget {
+	defer property.Watch(&b.props, &b.opener)()
+	b.opener = a
+	return b
+}
 
 // Act implements ggui.Actor.
 func (b *ButtonWidget) Act(a ggui.Action) bool {
-	if b.Inert {
+	if b.IsInert() {
 		return false
 	}
 	if b.opener != nil && b.opener.Act(a) {
@@ -113,7 +123,7 @@ func (b *ButtonWidget) Describe() ggui.Node {
 	n := ggui.Node{
 		Role:     b.Role,
 		Name:     b.name(),
-		Disabled: b.Inert,
+		Disabled: b.IsInert(),
 		Selected: b.selected,
 		Actions:  ggui.ActionPress | ggui.ActionFocus,
 	}
@@ -130,26 +140,43 @@ func (b *ButtonWidget) Describe() ggui.Node {
 
 // Outline draws the button as a border around the window's background, with
 // the normal text color, for actions that are not the main one.
-func (b *ButtonWidget) Outline() *ButtonWidget { b.variant = variantOutline; return b }
+func (b *ButtonWidget) Outline() *ButtonWidget {
+	defer property.Watch(&b.props, &b.variant)()
+	b.variant = variantOutline
+	return b
+}
 
 // Secondary fills the button with the theme's Secondary surface, for a
 // supporting action that should still read as a button.
-func (b *ButtonWidget) Secondary() *ButtonWidget { b.variant = variantSecondary; return b }
+func (b *ButtonWidget) Secondary() *ButtonWidget {
+	defer property.Watch(&b.props, &b.variant)()
+	b.variant = variantSecondary
+	return b
+}
 
 // Ghost omits the resting background and border for a lightweight action.
-func (b *ButtonWidget) Ghost() *ButtonWidget { b.variant = variantGhost; return b }
+func (b *ButtonWidget) Ghost() *ButtonWidget {
+	defer property.Watch(&b.props, &b.variant)()
+	b.variant = variantGhost
+	return b
+}
 
 // Destructive uses the theme's Destructive color for an irreversible action.
-func (b *ButtonWidget) Destructive() *ButtonWidget { b.variant = variantDestructive; return b }
+func (b *ButtonWidget) Destructive() *ButtonWidget {
+	defer property.Watch(&b.props, &b.variant)()
+	b.variant = variantDestructive
+	return b
+}
 
 // Disabled greys the button out and ignores the pointer while v is true.
 func (b *ButtonWidget) Disabled(v bool) *ButtonWidget { b.SetInert(v); return b }
 
-// DisabledWhen follows r for Disabled without a rebuild.
-func (b *ButtonWidget) DisabledWhen(r ggui.Readable[bool]) *ButtonWidget { b.InertWhen(r); return b }
+// BindDisabled follows r for Disabled without a rebuild.
+func (b *ButtonWidget) BindDisabled(r ggui.Readable[bool]) *ButtonWidget { b.BindInert(r); return b }
 
 // Pad overrides the theme's padding, with the shorthand Insets accepts.
 func (b *ButtonWidget) Pad(sides ...float64) *ButtonWidget {
+	defer property.Watch(&b.props, &b.padded)()
 	b.box.Pad(sides...)
 	b.padded = true
 	return b
@@ -157,6 +184,7 @@ func (b *ButtonWidget) Pad(sides ...float64) *ButtonWidget {
 
 // Layout implements Widget.
 func (b *ButtonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer b.props.Layout()()
 	b.Sync()
 	t := env.Theme()
 	b.theme = t
@@ -167,7 +195,7 @@ func (b *ButtonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	b.box.Radius(t.Radius)
 	b.style = b.variant.resolve(t)
 	label := b.style.label
-	if b.Inert {
+	if b.IsInert() {
 		label = fade(label, .5)
 	}
 	if b.label != nil {
@@ -183,16 +211,16 @@ func (b *ButtonWidget) Baseline() (float64, bool) { return b.box.Baseline() }
 func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t, st := b.theme, b.style
 	fill, border := st.fill, st.border
-	hover := dst.Ease(b.Anchor(r), buttonHoverSlot, pick(b.Hovered && !b.Inert, 1.0, 0.0), b.motion)
+	hover := dst.Ease(b.Anchor(r), buttonHoverSlot, pick(b.Hovered && !b.IsInert(), 1.0, 0.0), b.motion)
 	if hover >= 1 {
 		fill = st.hover
 	} else if hover > 0 {
 		fill = mix(colorOr(fill, color.Transparent), colorOr(st.hover, color.Transparent), hover)
 	}
-	if b.Pressed && b.Hovered && !b.Inert {
+	if b.Pressed && b.Hovered && !b.IsInert() {
 		fill = mix(fill, t.Fg, t.PressMix)
 	}
-	if b.Inert && fill != nil {
+	if b.IsInert() && fill != nil {
 		fill = fade(fill, .5)
 	}
 	b.box.Border(0, nil)
@@ -200,7 +228,7 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		b.box.Border(t.BorderWidth, border)
 	}
 	b.box.Fill(fill)
-	if st.elevated && !b.Inert {
+	if st.elevated && !b.IsInert() {
 		dst.Shadow(r, t.Radius, t.CardShadow)
 	}
 	b.Hit(dst, r, b, ggui.CursorShapePointer)
@@ -220,7 +248,9 @@ func (b *ButtonWidget) HandleKey(ev ggui.KeyEvent) { b.Keyboard(ev, b.onTap) }
 // HandlePointer implements PointerHandler.
 func (b *ButtonWidget) HandlePointer(ev ggui.PointerEvent) bool { return b.Pointer(ev, b.onTap) }
 
-func (b *ButtonWidget) name() string { return pick(b.Name != "", b.Name, b.defaultName) }
+func (b *ButtonWidget) name() string {
+	return pick(b.SemanticName() != "", b.SemanticName(), b.defaultName)
+}
 
 // Semantics implements ggui.Semantic, including a composite trigger's fallback.
 func (b *ButtonWidget) Semantics() (ggui.Role, string) { return b.Role, b.name() }

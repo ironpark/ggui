@@ -31,7 +31,8 @@ type dial struct {
 
 func newDial(value *ggui.StateValue[float64], name string) *dial {
 	d := &dial{value: value, needle: ggui.Spring(ggui.Untrack(value.Get))}
-	d.Role, d.Name = ggui.RoleSlider, name
+	d.Role = ggui.RoleSlider
+	d.SetName(name)
 	d.AutoKey()
 	return d
 }
@@ -123,7 +124,7 @@ func (d *dial) ConsumesKey(ev ggui.KeyEvent) bool {
 
 // Describe implements ggui.Describer: assistive technology sees a slider.
 func (d *dial) Describe() ggui.Node {
-	return ggui.Node{Role: ggui.RoleSlider, Name: d.Name, Min: 0, Max: 1, Now: ggui.Untrack(d.value.Get), Disabled: d.Inert, Actions: ggui.ActionFocus}
+	return ggui.Node{Role: ggui.RoleSlider, Name: d.SemanticName(), Min: 0, Max: 1, Now: ggui.Untrack(d.value.Get), Disabled: d.IsInert(), Actions: ggui.ActionFocus}
 }
 
 // disclosure shows its body only while open. The flag is an ordinary bool,
@@ -220,7 +221,7 @@ func (m *model) build() ggui.Widget {
 				picked := ggui.State(false)
 				return ui.Checkbox(picked, row.Value.Get().Name)
 			}).ItemExtent(rowHeight).Retain(24),
-		).Offset(m.Scroll)),
+		).BindOffset(m.Scroll)),
 	).Space(1.5).Align(ggui.AlignStretch)).Pad(24)
 }
 

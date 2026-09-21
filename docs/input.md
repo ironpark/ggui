@@ -38,7 +38,7 @@ button := ggui.Pointer(ggui.Box(ggui.Text("+")).Pad(6, 16)).
 `Scroll(child)` gives its child `Unbounded` height (or width, with
 `.Horizontal()`), shows a window onto it, moves that window with the wheel and
 clips both drawing and hit regions to the window. The offset carries across
-a rebuild; `.Offset(sig)` binds it to a `StateValue[float64]` for programmatic
+a rebuild; `.BindOffset(sig)` binds it to a `StateValue[float64]` for programmatic
 scrolling; `.Speed(px)` and `.Bar(color)` tune it. Widgets that fill their space
 fall back to their content size on an unbounded axis, so `Center`, `Expanded`
 and `.Justify` inside a `Scroll` do not blow up.
@@ -111,9 +111,9 @@ content)` is a centered modal on a scrim that takes the clicks, with
 ## Roles and labels
 
 Every control carries a `Role` and a name: a button's text, a
-checkbox's label, a field's `Named` or placeholder; `ButtonOf`, `Slider`
-and `Select` take one through `.Named`. `.NamedWhen(sig)` on a button or
-field, or `NameWhen` on any control built on `Interactive`, binds the name
+checkbox's label, a field's `Name` or placeholder; `ButtonOf`, `Slider`
+and `Select` take one through `.Name`. `.BindName(sig)` on a button or
+field, or `BindName` on any control built on `Interactive`, binds the name
 to a signal, so a row named after an editable title stays current without
 a rebuild. The inspector shows them, and tests find controls by them.
 

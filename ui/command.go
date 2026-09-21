@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/icons"
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // CommandEntry describes an action in a searchable command list.
@@ -38,6 +39,7 @@ func (e CommandEntry) Disabled(v bool) CommandEntry { e.disabled = v; return e }
 // CommandWidget is an inline search field and scrollable action list. Put it in
 // Dialog for a command palette. Query state belongs to the caller.
 type CommandWidget struct {
+	props              property.Owner
 	query              ggui.Binding[string]
 	entries            []CommandEntry
 	items              []*MenuItemWidget
@@ -65,13 +67,13 @@ type CommandWidget struct {
 // composition and normal editing keys stay with TextInput.
 func Command(query ggui.Binding[string], entries ...CommandEntry) *CommandWidget {
 	c := &CommandWidget{query: query, highlight: -1, height: 200, offset: ggui.State(0.0)}
-	c.field = TextField(query).Placeholder("Search commands…").Named("Search commands").OnKey(c.key)
+	c.field = TextField(query).Placeholder("Search commands…").Name("Search commands").OnKey(c.key)
 	if c.field.input.HitID() == nil {
 		c.field.input.Key(c)
 	}
 	c.field.plain = true
 	c.results = &commandResults{owner: c}
-	c.scroll = ggui.Scroll(c.results).Offset(c.offset)
+	c.scroll = ggui.Scroll(c.results).BindOffset(c.offset)
 	c.setEntries(entries)
 	return c
 }
@@ -99,29 +101,49 @@ func (c *CommandWidget) setEntries(entries []CommandEntry) {
 // CommandDialog creates a compact, accessible command palette. The command
 // owns its spacing; no visible dialog title is added.
 func CommandDialog(open ggui.Binding[bool], command *CommandWidget) *DialogWidget {
-	return Dialog(open, command.Borderless().InsetSearch()).Compact().Named("Commands").Width(440)
+	return Dialog(open, command.Borderless().InsetSearch()).Compact().Name("Commands").Width(440)
 }
 
 // Placeholder sets the search hint.
 func (c *CommandWidget) Placeholder(s string) *CommandWidget { c.field.Placeholder(s); return c }
 
-// Named names the search field for tests and the inspector.
-func (c *CommandWidget) Named(s string) *CommandWidget { c.field.Named(s); return c }
+// Name names the search field for tests and the inspector.
+func (c *CommandWidget) Name(s string) *CommandWidget { c.field.Name(s); return c }
 
 // InsetSearch gives the search field a muted, rounded background.
-func (c *CommandWidget) InsetSearch() *CommandWidget { c.insetSearch = true; return c }
+func (c *CommandWidget) InsetSearch() *CommandWidget {
+	defer property.Watch(&c.props, &c.insetSearch)()
+	c.insetSearch = true
+	return c
+}
 
 // Hints shows a compact keyboard navigation footer.
-func (c *CommandWidget) Hints() *CommandWidget { c.hints = true; return c }
+func (c *CommandWidget) Hints() *CommandWidget {
+	defer property.Watch(&c.props, &c.hints)()
+	c.hints = true
+	return c
+}
 
 // Borderless removes the outer border when a Dialog or another panel supplies it.
-func (c *CommandWidget) Borderless() *CommandWidget { c.borderless = true; return c }
+func (c *CommandWidget) Borderless() *CommandWidget {
+	defer property.Watch(&c.props, &c.borderless)()
+	c.borderless = true
+	return c
+}
 
 // StableHeight reserves Height pixels even when filtering leaves fewer results.
-func (c *CommandWidget) StableHeight() *CommandWidget { c.stable = true; return c }
+func (c *CommandWidget) StableHeight() *CommandWidget {
+	defer property.Watch(&c.props, &c.stable)()
+	c.stable = true
+	return c
+}
 
 // Height limits the results area, excluding the search field and padding.
-func (c *CommandWidget) Height(h float64) *CommandWidget { c.height = max(0, h); return c }
+func (c *CommandWidget) Height(h float64) *CommandWidget {
+	defer property.Watch(&c.props, &c.height)()
+	c.height = max(0, h)
+	return c
+}
 
 func (c *CommandWidget) filter() {
 	query := strings.ToLower(strings.TrimSpace(c.query.Get()))
@@ -186,6 +208,7 @@ func (c *CommandWidget) key(ev ggui.KeyEvent) bool {
 
 // Layout implements ggui.Widget.
 func (c *CommandWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
+	defer c.props.Layout()()
 	c.env = env
 	c.filter()
 	t := env.Theme()
@@ -301,4 +324,10 @@ func (i commandSearchIcon) Layout(cs ggui.Constraints, _ ggui.Env) ggui.Size {
 }
 func (i commandSearchIcon) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	paintIcon(dst, i.c.env, icons.Search, r, i.c.theme.MutedFg, 0)
+}
+
+// BindName follows the accessible name on the same targets as Name.
+func (c *CommandWidget) BindName(r ggui.Readable[string]) *CommandWidget {
+	c.field.BindName(r)
+	return c
 }

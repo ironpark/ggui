@@ -79,7 +79,7 @@ hairline between each pair; `.Vertical()` stacks them. It is a container and
 nothing more, so every child keeps its own tab stop and its own action. Ghost
 buttons suit it, since the strip draws the border they would each draw.
 
-`ui.ToggleGroup(value, options)` is a segmented single choice: one option of
+`ui.ToggleGroup(value).Options(options)` is a segmented single choice: one option of
 several, bound the way `ui.Select` and `ui.Radios` are. `.Format(fn)` sets how
 an option is shown, `.Vertical()` stacks the segments, and `.OnChange(fn)`
 reports user changes. The group is one tab stop, as a set of radio buttons is:
@@ -89,7 +89,7 @@ Each segment is announced as a radio that says whether it is the chosen one.
 
 ```go
 ui.ButtonGroup(ui.Button("Copy", copyIt).Ghost(), ui.Button("Paste", pasteIt).Ghost())
-ui.ToggleGroup(align, []string{"left", "center", "right"})
+ui.ToggleGroup(align).Options([]string{"left", "center", "right"})
 ```
 
 ## Confirmations
@@ -133,7 +133,7 @@ ggui.Row(
 ).Space(1)
 ```
 
-`InputGroup.Disabled` and `DisabledWhen` disable the editor as well as its
+`InputGroup.Disabled` and `BindDisabled` disable the editor as well as its
 chrome. Leading and trailing addon controls remain independent. The editor's own
 settings are preserved: it is disabled if either it or its group is disabled.
 Custom containers can pass `ggui.InputDisabled` through `Env` or `Provide`;

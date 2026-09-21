@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // Card is a Surface panel with a border, rounded corners and padding, for
@@ -12,6 +13,7 @@ func Card(child ggui.Widget) *CardWidget { return &CardWidget{box: ggui.Box(chil
 
 // CardWidget is a themed panel. Build one with Card.
 type CardWidget struct {
+	props     property.Owner
 	box       *ggui.BoxWidget
 	pad       bool
 	shadowSet bool
@@ -19,16 +21,23 @@ type CardWidget struct {
 
 // Shadow sets outer shadow layers without changing the card's layout.
 func (c *CardWidget) Shadow(styles ...ggui.ShadowStyle) *CardWidget {
+	defer property.Watch(&c.props, &c.shadowSet)()
 	c.shadowSet = true
 	c.box.Shadow(styles...)
 	return c
 }
 
 // Pad overrides the theme's padding, with the shorthand Insets accepts.
-func (c *CardWidget) Pad(sides ...float64) *CardWidget { c.box.Pad(sides...); c.pad = true; return c }
+func (c *CardWidget) Pad(sides ...float64) *CardWidget {
+	defer property.Watch(&c.props, &c.pad)()
+	c.box.Pad(sides...)
+	c.pad = true
+	return c
+}
 
 // Layout implements Widget.
 func (c *CardWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
+	defer c.props.Layout()()
 	t := env.Theme()
 	if !c.shadowSet {
 		c.box.Shadow(t.CardShadow)
@@ -48,6 +57,7 @@ func (c *CardWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 
 // BadgeWidget is a small pill of text. Build one with Badge.
 type BadgeWidget struct {
+	props  property.Owner
 	text   *ggui.TextWidget
 	accent bool
 	pad    ggui.EdgeInsets
@@ -59,10 +69,15 @@ type BadgeWidget struct {
 func Badge(s string) *BadgeWidget { return &BadgeWidget{text: ggui.Text(s).NoWrap()} }
 
 // Accent fills the badge with the accent color.
-func (b *BadgeWidget) Accent() *BadgeWidget { b.accent = true; return b }
+func (b *BadgeWidget) Accent() *BadgeWidget {
+	defer property.Watch(&b.props, &b.accent)()
+	b.accent = true
+	return b
+}
 
 // Layout implements Widget.
 func (b *BadgeWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer b.props.Layout()()
 	t := env.Theme()
 	b.theme = t
 	b.pad = ggui.Insets(2, t.Space*0.75)
@@ -80,6 +95,7 @@ func (b *BadgeWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 
 // ProgressWidget is a bar filled to a fraction. Build one with Progress.
 type ProgressWidget struct {
+	props  property.Owner
 	value  ggui.Readable[float64]
 	height float64
 	theme  ggui.Theme
@@ -95,10 +111,15 @@ func Progress(value ggui.Readable[float64]) *ProgressWidget {
 var progressSlot = ggui.NewSlot[*ggui.Motion]("progressSlot")
 
 // Height sets the bar's thickness.
-func (p *ProgressWidget) Height(h float64) *ProgressWidget { p.height = h; return p }
+func (p *ProgressWidget) Height(h float64) *ProgressWidget {
+	defer property.Watch(&p.props, &p.height)()
+	p.height = h
+	return p
+}
 
 // Layout implements Widget.
 func (p *ProgressWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer p.props.Layout()()
 	p.theme = env.Theme()
 	p.motion = env.Motion(env.Theme().MotionFast)
 	return c.Constrain(ggui.Sz(bounded(c.MaxW, defaultStripe), p.height))

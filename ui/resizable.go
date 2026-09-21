@@ -5,12 +5,14 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/icons"
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // ResizableWidget splits its space into two clipped panes with a draggable divider.
 // Nest splitters for more panes. The binding is the first pane's fraction of
 // available space, excluding the handle.
 type ResizableWidget struct {
+	props property.Owner
 	ggui.Interactive
 	laidFraction                        float64
 	fraction                            ggui.Binding[float64]
@@ -43,18 +45,24 @@ func (r *ResizableWidget) Vertical() *ResizableWidget { r.vertical = true; retur
 
 // WithHandle displays a small grip at the center of the divider.
 // The divider keeps its full drag target even without a visible grip.
-func (r *ResizableWidget) WithHandle() *ResizableWidget { r.withHandle = true; return r }
+func (r *ResizableWidget) WithHandle() *ResizableWidget {
+	defer property.Watch(&r.props, &r.withHandle)()
+	r.withHandle = true
+	return r
+}
 
 // MinSizes sets the minimum extent of each pane in logical pixels. If both
 // cannot fit, available space is distributed in proportion to these minima.
 func (r *ResizableWidget) MinSizes(first, second float64) *ResizableWidget {
+	defer property.Watch(&r.props, &r.minFirst)()
+	defer property.Watch(&r.props, &r.minSecond)()
 	r.minFirst = max(0, first)
 	r.minSecond = max(0, second)
 	return r
 }
 
-// Named names the divider for tests and the inspector.
-func (r *ResizableWidget) Named(s string) *ResizableWidget { r.Name = s; return r }
+// Name names the divider for tests and the inspector.
+func (r *ResizableWidget) Name(s string) *ResizableWidget { r.SetName(s); return r }
 
 // Disabled prevents dragging and keyboard resizing.
 func (r *ResizableWidget) Disabled(v bool) *ResizableWidget { r.SetInert(v); return r }
@@ -81,6 +89,7 @@ func (r *ResizableWidget) axis(p ggui.Point) float64 {
 
 // Layout implements ggui.Widget.
 func (r *ResizableWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer r.props.Layout()()
 	r.Sync()
 	r.env, r.theme = env, env.Theme()
 	size := c.Constrain(ggui.Sz(bounded(c.MaxW, 320), bounded(c.MaxH, 200)))
@@ -134,7 +143,7 @@ func (r *ResizableWidget) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 	handle := r.handle
 	handle.Origin = handle.Origin.Add(rect.Origin)
 	r.Hit(dst, handle, r, pick(r.vertical, ggui.CursorShapeNSResize, ggui.CursorShapeEWResize))
-	active := !r.Inert && (r.Hovered || r.Pressed)
+	active := !r.IsInert() && (r.Hovered || r.Pressed)
 	col := pick(active, r.theme.MutedFg, r.theme.Border)
 	center := ggui.Pt(handle.Origin.X+handle.Size.W/2, handle.Origin.Y+handle.Size.H/2)
 	line := ggui.Rct(ggui.Pt(center.X-.5, handle.Origin.Y), ggui.Sz(1, handle.Size.H))
@@ -176,7 +185,7 @@ func (r *ResizableWidget) ConsumesKey(ev ggui.KeyEvent) bool {
 // HandleKey implements ggui.KeyHandler.
 func (r *ResizableWidget) HandleKey(ev ggui.KeyEvent) {
 	r.Keyboard(ev, nil)
-	if r.Inert || !r.ConsumesKey(ev) {
+	if r.IsInert() || !r.ConsumesKey(ev) {
 		return
 	}
 	step := .01
@@ -196,11 +205,11 @@ func (r *ResizableWidget) HandleKey(ev ggui.KeyEvent) {
 }
 
 // CaptureTouchDrag keeps divider drags from panning an enclosing scroller.
-func (r *ResizableWidget) CaptureTouchDrag() bool { return !r.Inert }
+func (r *ResizableWidget) CaptureTouchDrag() bool { return !r.IsInert() }
 
 // HandlePointer implements ggui.PointerHandler; captures drag past the divider.
 func (r *ResizableWidget) HandlePointer(ev ggui.PointerEvent) bool {
-	if r.Inert {
+	if r.IsInert() {
 		return false
 	}
 	switch ev.Kind {
@@ -225,13 +234,15 @@ func (r *ResizableWidget) Adopt(prev any) {
 	}
 }
 
-// DisabledWhen follows r for Disabled without rebuilding the control.
-func (r *ResizableWidget) DisabledWhen(when ggui.Readable[bool]) *ResizableWidget {
-	r.InertWhen(when)
+// BindDisabled follows r for Disabled without rebuilding the control.
+func (r *ResizableWidget) BindDisabled(when ggui.Readable[bool]) *ResizableWidget {
+	r.BindInert(when)
 	return r
 }
 
-func (r *ResizableWidget) name() string { return pick(r.Name != "", r.Name, "Resize panels") }
+func (r *ResizableWidget) name() string {
+	return pick(r.SemanticName() != "", r.SemanticName(), "Resize panels")
+}
 
 // Semantics implements ggui.Semantic, including the built-in fallback name.
 func (r *ResizableWidget) Semantics() (ggui.Role, string) { return r.Role, r.name() }

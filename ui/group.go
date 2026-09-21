@@ -1,7 +1,10 @@
 package ui
 
 import (
+	"slices"
+
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // ButtonGroupWidget joins several controls into one bordered strip, with a
@@ -11,9 +14,11 @@ import (
 // its own keyboard behavior and its own action. Ghost buttons suit it best,
 // since the strip draws the border they would otherwise each draw.
 type ButtonGroupWidget struct {
-	children []ggui.Widget
-	vertical bool
-	name     string
+	nameReader ggui.Readable[string]
+	props      property.Owner
+	children   []ggui.Widget
+	vertical   bool
+	name       string
 
 	theme ggui.Theme
 	sizes []ggui.Size
@@ -32,11 +37,23 @@ func ButtonGroup(children ...ggui.Widget) *ButtonGroupWidget {
 // Vertical stacks the children instead of lining them up.
 func (g *ButtonGroupWidget) Vertical() *ButtonGroupWidget { g.vertical = true; return g }
 
-// Named sets the accessible name of the strip.
-func (g *ButtonGroupWidget) Named(s string) *ButtonGroupWidget { g.name = s; return g }
+// Name sets the accessible name of the strip.
+func (g *ButtonGroupWidget) Name(s string) *ButtonGroupWidget {
+	if g.nameReader != nil {
+		g.nameReader = nil
+		g.props.Changed()
+	}
+	defer property.Watch(&g.props, &g.name)()
+	g.name = s
+	return g
+}
 
 // Layout implements ggui.Widget.
 func (g *ButtonGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer g.props.Layout()()
+	if g.nameReader != nil {
+		g.name = g.nameReader.Get()
+	}
 	g.theme = env.Theme()
 	g.sizes = g.sizes[:0]
 	var main, cross float64
@@ -92,6 +109,11 @@ func (g *ButtonGroupWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 // (Up and Down when Vertical) move the choice and wrap around, Home and End
 // go to the ends, and Space or Enter re-picks where the choice already is.
 type ToggleGroupWidget[T comparable] struct {
+	optionProp     property.Value[[]T]
+	label          func(T) string
+	optionsVersion uint64
+
+	props            property.Owner
 	ggui.Interactive // hover holds the segment under the pointer instead
 	value            ggui.Binding[T]
 	options          []T
@@ -114,31 +136,64 @@ type ToggleGroupWidget[T comparable] struct {
 //
 //	align := ggui.State("left")
 //	ui.ToggleGroup(align, []string{"left", "center", "right"})
-func ToggleGroup[T comparable](value ggui.Binding[T], options []T) *ToggleGroupWidget[T] {
-	g := &ToggleGroupWidget[T]{value: value, options: append([]T(nil), options...), hover: -1}
+func ToggleGroup[T comparable](value ggui.Binding[T]) *ToggleGroupWidget[T] {
+	g := &ToggleGroupWidget[T]{value: value, label: sprint[T], hover: -1}
 	g.Role = ggui.RoleGroup
 	g.AutoKey()
 	if g.HitID() == nil {
 		g.Key(g)
 	}
-	for _, o := range options {
-		g.names = append(g.names, sprint(o))
-		g.labels = append(g.labels, ggui.Text(sprint(o)).NoWrap())
+	return g
+}
+
+// Options replaces the option snapshot without changing the selected value.
+func (g *ToggleGroupWidget[T]) Options(options []T) *ToggleGroupWidget[T] {
+	changed := g.setOptions(options)
+	detached := g.optionProp.Set(g.options)
+	if changed || detached {
+		g.props.Changed()
 	}
 	return g
+}
+
+// BindOptions follows a non-nil options reader during layout.
+func (g *ToggleGroupWidget[T]) BindOptions(r ggui.Readable[[]T]) *ToggleGroupWidget[T] {
+	if g.optionProp.Bind(r, "BindOptions") {
+		g.props.Changed()
+	}
+	return g
+}
+func (g *ToggleGroupWidget[T]) setOptions(options []T) bool {
+	if slices.Equal(g.options, options) {
+		return false
+	}
+	g.options = slices.Clone(options)
+	g.optionsVersion++
+	g.hover = -1
+	g.cur = -1
+	g.names = make([]string, len(options))
+	g.labels = make([]*ggui.TextWidget, len(options))
+	g.sizes = nil
+	g.rects = nil
+	for i, v := range options {
+		g.names[i] = g.label(v)
+		g.labels[i] = ggui.Text(g.names[i]).NoWrap()
+	}
+	return true
 }
 
 // Format sets how each option is shown and named.
 func (g *ToggleGroupWidget[T]) Format(fn func(T) string) *ToggleGroupWidget[T] {
+	g.label = fn
 	for i, o := range g.options {
 		g.names[i] = fn(o)
-		g.labels[i].Set(g.names[i])
+		g.labels[i].Content(g.names[i])
 	}
 	return g
 }
 
-// Named sets the accessible name of the group.
-func (g *ToggleGroupWidget[T]) Named(s string) *ToggleGroupWidget[T] { g.Name = s; return g }
+// Name sets the accessible name of the group.
+func (g *ToggleGroupWidget[T]) Name(s string) *ToggleGroupWidget[T] { g.SetName(s); return g }
 
 // Vertical stacks the segments instead of lining them up.
 func (g *ToggleGroupWidget[T]) Vertical() *ToggleGroupWidget[T] { g.vertical = true; return g }
@@ -146,9 +201,9 @@ func (g *ToggleGroupWidget[T]) Vertical() *ToggleGroupWidget[T] { g.vertical = t
 // Disabled greys every segment out and ignores input while v is true.
 func (g *ToggleGroupWidget[T]) Disabled(v bool) *ToggleGroupWidget[T] { g.SetInert(v); return g }
 
-// DisabledWhen follows r for Disabled without a rebuild.
-func (g *ToggleGroupWidget[T]) DisabledWhen(r ggui.Readable[bool]) *ToggleGroupWidget[T] {
-	g.InertWhen(r)
+// BindDisabled follows r for Disabled without a rebuild.
+func (g *ToggleGroupWidget[T]) BindDisabled(r ggui.Readable[bool]) *ToggleGroupWidget[T] {
+	g.BindInert(r)
 	return g
 }
 
@@ -167,13 +222,15 @@ func (g *ToggleGroupWidget[T]) index() int {
 }
 
 func (g *ToggleGroupWidget[T]) pick(i int) {
-	if i >= 0 && i < len(g.options) && !g.Inert {
+	if i >= 0 && i < len(g.options) && !g.IsInert() {
 		setChanged(g.value, g.options[i], g.onChange)
 	}
 }
 
 // Layout implements ggui.Widget.
 func (g *ToggleGroupWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer g.props.Layout()()
+	g.setOptions(g.optionProp.Get())
 	g.Sync()
 	t := env.Theme()
 	g.theme, g.pad = t, t.TabPad
@@ -181,7 +238,7 @@ func (g *ToggleGroupWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Siz
 	cur := g.index()
 	var main, cross float64
 	for i, l := range g.labels {
-		l.Color(pick(g.Inert, t.MutedFg, pick(i == cur, t.Fg, t.MutedFg)))
+		l.Color(pick(g.IsInert(), t.MutedFg, pick(i == cur, t.Fg, t.MutedFg)))
 		s := l.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env)
 		g.sizes = append(g.sizes, s)
 		if g.vertical {
@@ -205,13 +262,13 @@ func (g *ToggleGroupWidget[T]) paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := g.theme
 	dst = dst.Clip(r)
 	dst.FillRoundRect(r, t.Radius, t.Muted)
-	if !g.Inert && len(g.options) > 0 {
+	if !g.IsInert() && len(g.options) > 0 {
 		dst.HitKey(r, g)
 	}
 	// Layout is skipped on a still frame, so the chosen segment is found
 	// here, where the segments' own nodes read it back.
 	g.cur = g.index()
-	cur, hover := g.cur, pick(g.Inert, -1, g.hover)
+	cur, hover := g.cur, pick(g.IsInert(), -1, g.hover)
 	g.rects = g.rects[:0]
 	at := r.Origin.Add(ggui.Pt(tabInset, tabInset))
 	cross := pick(g.vertical, r.Size.W, r.Size.H) - 2*tabInset
@@ -220,9 +277,9 @@ func (g *ToggleGroupWidget[T]) paint(dst *ggui.Canvas, r ggui.Rect) {
 		main := pick(g.vertical, s.H+g.pad.Top+g.pad.Bottom, s.W+g.pad.Left+g.pad.Right)
 		seg := ggui.Rct(at, pick(g.vertical, ggui.Sz(cross, main), ggui.Sz(main, cross)))
 		g.rects = append(g.rects, seg)
-		dst.Describe(seg, toggleSegment[T]{g, i})
-		if !g.Inert {
-			dst.HitPointer(seg, toggleSegment[T]{g, i})
+		dst.Describe(seg, toggleSegment[T]{g: g, i: i, version: g.optionsVersion})
+		if !g.IsInert() {
+			dst.HitPointer(seg, toggleSegment[T]{g: g, i: i, version: g.optionsVersion})
 			dst.HitCursor(seg, ggui.CursorShapePointer)
 		}
 		switch {
@@ -278,30 +335,45 @@ func (g *ToggleGroupWidget[T]) Adopt(prev any) {
 
 // toggleSegment is one option's pointer handler and node.
 type toggleSegment[T comparable] struct {
-	g *ToggleGroupWidget[T]
-	i int
+	version uint64
+	g       *ToggleGroupWidget[T]
+	i       int
 }
 
 // Semantics implements ggui.Semantic.
-func (s toggleSegment[T]) Semantics() (ggui.Role, string) { return ggui.RoleRadio, s.g.names[s.i] }
+func (s toggleSegment[T]) Semantics() (ggui.Role, string) {
+	if !s.valid() {
+		return ggui.RoleRadio, ""
+	}
+	return ggui.RoleRadio, s.g.names[s.i]
+}
+func (s toggleSegment[T]) valid() bool {
+	return s.version == s.g.optionsVersion && s.i >= 0 && s.i < len(s.g.options)
+}
 
 // Describe implements ggui.Describer: a segment is one of a set, and says
 // whether it is the one chosen.
 func (s toggleSegment[T]) Describe() ggui.Node {
+	if !s.valid() {
+		return ggui.Node{Role: ggui.RoleRadio, Disabled: true}
+	}
 	chosen := s.i == s.g.cur
 	return ggui.Node{
 		Role:     ggui.RoleRadio,
 		Name:     s.g.names[s.i],
 		Checked:  ggui.Tri(chosen),
 		Selected: chosen,
-		Disabled: s.g.Inert,
+		Disabled: s.g.IsInert(),
 		Actions:  ggui.ActionSelect | ggui.ActionPress | ggui.ActionFocus,
 	}
 }
 
 // Act implements ggui.Actor.
 func (s toggleSegment[T]) Act(a ggui.Action) bool {
-	if s.g.Inert || (a.Kind != ggui.ActionSelect && a.Kind != ggui.ActionPress) {
+	if !s.valid() {
+		return false
+	}
+	if s.g.IsInert() || (a.Kind != ggui.ActionSelect && a.Kind != ggui.ActionPress) {
 		return false
 	}
 	s.g.pick(s.i)
@@ -309,16 +381,31 @@ func (s toggleSegment[T]) Act(a ggui.Action) bool {
 }
 
 func (s toggleSegment[T]) HandlePointer(ev ggui.PointerEvent) bool {
+	if !s.valid() {
+		return false
+	}
 	return hoverPick(ev, s.i, &s.g.hover, func() { s.g.pick(s.i) })
 }
 
 func (s toggleSegment[T]) Adopt(prev any) {
-	if p, ok := prev.(toggleSegment[T]); ok && p.g.hover == p.i {
+	if p, ok := prev.(toggleSegment[T]); ok && s.valid() && p.valid() && p.g.hover == p.i {
 		s.g.hover = s.i
 	}
 }
 
-func (g *ToggleGroupWidget[T]) name() string { return pick(g.Name != "", g.Name, "Options") }
+func (g *ToggleGroupWidget[T]) name() string {
+	return pick(g.SemanticName() != "", g.SemanticName(), "Options")
+}
 
 // Semantics implements ggui.Semantic, including the built-in fallback name.
 func (g *ToggleGroupWidget[T]) Semantics() (ggui.Role, string) { return g.Role, g.name() }
+
+// BindName follows a non-nil accessible-name reader.
+func (g *ButtonGroupWidget) BindName(r ggui.Readable[string]) *ButtonGroupWidget {
+	property.Require(r, "BindName")
+	if !property.Same(g.nameReader, r) {
+		g.nameReader = r
+		g.props.Changed()
+	}
+	return g
+}

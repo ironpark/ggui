@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // Column describes one column of a Table: its heading, how wide it is and
@@ -46,14 +47,16 @@ func (c Column[T]) Center() Column[T] { c.Align = 0.5; return c }
 // TableWidget is a keyed list of rows under a heading row, with a line
 // between rows, hover and selection. Build one with Table.
 type TableWidget[T any, K comparable] struct {
-	cols     []Column[T]
-	rows     ggui.Readable[[]T]
-	key      func(T) K
-	selected ggui.Binding[K]
-	onSelect func(T)
-	rowH     float64
-	height   float64
-	label    func(T) string
+	props         property.Owner
+	cols          []Column[T]
+	rows          ggui.Readable[[]T]
+	key           func(T) K
+	selected      ggui.Binding[K]
+	localSelected *ggui.StateValue[K]
+	onSelect      func(T)
+	rowH          float64
+	height        float64
+	label         func(T) string
 
 	body    *ggui.EachWidget[T, K]
 	head    *ggui.RowWidget
@@ -70,7 +73,7 @@ type TableWidget[T any, K comparable] struct {
 //	ui.Table(people, func(p Person) int { return p.ID },
 //		ui.TextCol("Name", func(p Person) string { return p.Name }),
 //		ui.TextCol("Age", func(p Person) string { return strconv.Itoa(p.Age) }).W(60).Right(),
-//	).Selected(chosen).Height(240)
+//	).BindSelected(chosen).Height(240)
 func Table[T any, K comparable](rows ggui.Readable[[]T], key func(T) K, cols ...Column[T]) *TableWidget[T, K] {
 	t := &TableWidget[T, K]{cols: cols, rows: rows, key: key, rowH: 40}
 	t.label = func(item T) string { return sprint(key(item)) }
@@ -86,9 +89,26 @@ func Table[T any, K comparable](rows ggui.Readable[[]T], key func(T) K, cols ...
 	return t
 }
 
-// Selected binds the key of the highlighted row: a click on a row sets
+// BindSelected binds the key of the highlighted row: a click on a row sets
 // it, and rows take focus so Space or Enter select too.
-func (t *TableWidget[T, K]) Selected(b ggui.Binding[K]) *TableWidget[T, K] { t.selected = b; return t }
+func (t *TableWidget[T, K]) BindSelected(b ggui.Binding[K]) *TableWidget[T, K] {
+	property.Require(b, "BindSelected")
+	if !property.Same(t.selected, b) {
+		t.selected = b
+		t.props.Changed()
+	}
+	return t
+}
+
+// Selected detaches a row-selection binding and selects a local row key.
+func (t *TableWidget[T, K]) Selected(v K) *TableWidget[T, K] {
+	if t.localSelected == nil {
+		t.localSelected = ggui.State(v)
+	} else {
+		t.localSelected.Set(v)
+	}
+	return t.BindSelected(t.localSelected)
+}
 
 // OnSelect fires with the item whose row was clicked or activated.
 func (t *TableWidget[T, K]) OnSelect(fn func(T)) *TableWidget[T, K] { t.onSelect = fn; return t }
@@ -96,6 +116,7 @@ func (t *TableWidget[T, K]) OnSelect(fn func(T)) *TableWidget[T, K] { t.onSelect
 // RowHeight fixes every row's height; the default is 40. With Height the
 // body then lays out only the rows in view.
 func (t *TableWidget[T, K]) RowHeight(h float64) *TableWidget[T, K] {
+	defer property.Watch(&t.props, &t.rowH)()
 	h = max(1, h)
 	t.rowH = h
 	t.body.ItemExtent(h)
@@ -105,8 +126,16 @@ func (t *TableWidget[T, K]) RowHeight(h float64) *TableWidget[T, K] {
 // Height bounds the table and scrolls the body under a fixed heading.
 // Without it the table is as tall as its rows.
 func (t *TableWidget[T, K]) Height(h float64) *TableWidget[T, K] {
+	defer property.Watch(&t.props, &t.column)()
+	defer property.Watch(&t.props, &t.height)()
+	if (t.height > 0) != (h > 0) {
+		if h > 0 {
+			t.column = ggui.Column(t.headBox, ggui.Expanded(t.scroll)).Align(ggui.AlignStretch)
+		} else {
+			t.column = ggui.Column(t.headBox, t.body).Align(ggui.AlignStretch)
+		}
+	}
 	t.height = h
-	t.column = ggui.Column(t.headBox, ggui.Expanded(t.scroll)).Align(ggui.AlignStretch)
 	return t
 }
 
@@ -134,13 +163,15 @@ func (t *TableWidget[T, K]) row(row ggui.EachItem[T]) ggui.Widget {
 		cells[i] = t.cell(c, c.Cell(item))
 	}
 	r := &tableRow[T, K]{table: t, item: item, index: row.Index, key: t.key(item.Get()), cells: ggui.Row(cells...)}
-	r.Role, r.Name = ggui.RoleRow, t.label(item.Get())
+	r.Role = ggui.RoleRow
+	r.SetName(t.label(item.Get()))
 	r.AutoKey()
 	return r
 }
 
 // Layout implements Widget.
 func (t *TableWidget[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer t.props.Layout()()
 	th := env.Theme()
 	t.theme = th
 	t.head.Gap(0)
@@ -177,7 +208,7 @@ func (r *tableRow[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	th := env.Theme()
 	r.theme = th
 	r.Sync()
-	r.Name = r.table.label(r.item.Get())
+	r.SetName(r.table.label(r.item.Get()))
 	r.motion = env.Motion(th.MotionFast)
 	r.cells.Gap(0).Align(ggui.AlignStretch)
 	if r.box == nil {
@@ -194,7 +225,7 @@ func (r *tableRow[T, K]) chosen() bool {
 // Describe implements ggui.Describer: a row reports whether it is the
 // selected one. Its cells describe themselves inside it.
 func (r *tableRow[T, K]) Describe() ggui.Node {
-	n := ggui.Node{Role: ggui.RoleRow, Name: r.Name, Selected: r.chosen(), Disabled: r.Inert}
+	n := ggui.Node{Role: ggui.RoleRow, Name: r.SemanticName(), Selected: r.chosen(), Disabled: r.IsInert()}
 	if r.table.selectable() {
 		n.Actions = ggui.ActionSelect | ggui.ActionPress | ggui.ActionFocus
 	}
@@ -209,13 +240,13 @@ func (r *tableRow[T, K]) paint(dst *ggui.Canvas, rc ggui.Rect) {
 	th := r.theme
 	if r.table.selectable() {
 		r.Hit(dst, rc, r, ggui.CursorShapePointer)
-	} else if !r.Inert {
+	} else if !r.IsInert() {
 		dst.HitPointer(rc, r)
 	}
 	target := 0.0
 	if r.chosen() {
 		target = 1
-	} else if r.Hovered && !r.Inert {
+	} else if r.Hovered && !r.IsInert() {
 		target = .5
 	}
 	amount := dst.Ease(r.Anchor(rc), tableRowFillSlot, target, r.motion)
@@ -230,7 +261,7 @@ func (r *tableRow[T, K]) paint(dst *ggui.Canvas, rc ggui.Rect) {
 }
 
 func (r *tableRow[T, K]) pick() {
-	if r.Inert || !r.table.selectable() {
+	if r.IsInert() || !r.table.selectable() {
 		return
 	}
 	if r.table.selected != nil {
@@ -243,7 +274,7 @@ func (r *tableRow[T, K]) pick() {
 
 // Act implements ggui.Actor: selecting the row.
 func (r *tableRow[T, K]) Act(a ggui.Action) bool {
-	if r.Inert || !r.table.selectable() || (a.Kind != ggui.ActionSelect && a.Kind != ggui.ActionPress) {
+	if r.IsInert() || !r.table.selectable() || (a.Kind != ggui.ActionSelect && a.Kind != ggui.ActionPress) {
 		return false
 	}
 	r.pick()
@@ -252,7 +283,7 @@ func (r *tableRow[T, K]) Act(a ggui.Action) bool {
 
 // HandleKey implements KeyHandler: Space or Enter selects the row.
 func (r *tableRow[T, K]) HandleKey(ev ggui.KeyEvent) {
-	if r.Inert || !r.table.selectable() {
+	if r.IsInert() || !r.table.selectable() {
 		return
 	}
 	r.Keyboard(ev, r.pick)
@@ -260,7 +291,7 @@ func (r *tableRow[T, K]) HandleKey(ev ggui.KeyEvent) {
 
 // HandlePointer implements PointerHandler.
 func (r *tableRow[T, K]) HandlePointer(ev ggui.PointerEvent) bool {
-	if r.Inert {
+	if r.IsInert() {
 		return false
 	}
 	if !r.table.selectable() {

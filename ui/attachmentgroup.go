@@ -25,13 +25,14 @@ type AttachmentGroupWidget struct {
 // Left/Right, Home/End and PageUp/PageDown scroll while the group is focused.
 func AttachmentGroup(cards ...*AttachmentWidget) *AttachmentGroupWidget {
 	g := &AttachmentGroupWidget{children: cards}
-	g.Role, g.Name = ggui.RoleGroup, "Attachments"
+	g.Role = ggui.RoleGroup
+	g.SetName("Attachments")
 	g.AutoKey()
 	return g
 }
 
-// Named names the scrollable strip for keyboard users and assistive technology.
-func (g *AttachmentGroupWidget) Named(s string) *AttachmentGroupWidget { g.Name = s; return g }
+// Name names the scrollable strip for keyboard users and assistive technology.
+func (g *AttachmentGroupWidget) Name(s string) *AttachmentGroupWidget { g.SetName(s); return g }
 
 // Position returns the current scroll offset in logical pixels.
 func (g *AttachmentGroupWidget) Position() float64  { return g.offset }
@@ -95,7 +96,7 @@ func (g *AttachmentGroupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	g.FocusRing(dst, r, g.theme.Radius, g.theme.Ring)
 }
 func (g *AttachmentGroupWidget) Describe() ggui.Node {
-	return ggui.Node{Role: ggui.RoleGroup, Name: g.Name, Actions: ggui.ActionFocus | ggui.ActionScrollIntoView}
+	return ggui.Node{Role: ggui.RoleGroup, Name: g.SemanticName(), Actions: ggui.ActionFocus | ggui.ActionScrollIntoView}
 }
 func (g *AttachmentGroupWidget) HandlePointer(ev ggui.PointerEvent) bool {
 	if ev.Kind != ggui.PointerScroll {

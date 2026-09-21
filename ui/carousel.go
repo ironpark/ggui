@@ -8,10 +8,12 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/icons"
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // CarouselItemWidget is one slide. Basis is a fraction of the viewport.
 type CarouselItemWidget struct {
+	props      property.Owner
 	child      ggui.Widget
 	basis      float64
 	responsive func(ggui.Size) float64
@@ -21,6 +23,7 @@ func CarouselItem(child ggui.Widget) *CarouselItemWidget {
 	return &CarouselItemWidget{child: child, basis: 1}
 }
 func (w *CarouselItemWidget) Basis(f float64) *CarouselItemWidget {
+	defer property.Watch(&w.props, &w.basis)()
 	w.basis = carouselBasis(f)
 	return w
 }
@@ -31,6 +34,7 @@ func (w *CarouselItemWidget) BasisWhen(fn func(ggui.Size) float64) *CarouselItem
 	return w
 }
 func (w *CarouselItemWidget) Layout(c ggui.Constraints, e ggui.Env) ggui.Size {
+	defer w.props.Layout()()
 	return w.child.Layout(c, e)
 }
 func (w *CarouselItemWidget) Paint(d *ggui.Canvas, r ggui.Rect) { d.Paint(w.child, r) }
@@ -61,6 +65,7 @@ func (w *CarouselContentWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 // Its binding selects a scroll snap (not necessarily an individual slide when
 // several slides fit). Only visible slides paint or register input regions.
 type CarouselWidget struct {
+	props property.Owner
 	ggui.Interactive
 	selected                                   ggui.Binding[int]
 	items                                      []*CarouselItemWidget
@@ -88,7 +93,8 @@ type CarouselWidget struct {
 // 48 logical pixels on either side, so controls never overflow their parent.
 func Carousel(selected ggui.Binding[int], items ...ggui.Widget) *CarouselWidget {
 	c := &CarouselWidget{selected: selected, height: 240, gap: 16, align: .5, controls: true, dragEnabled: true, duration: 1800 * time.Millisecond, stopOnInteraction: true}
-	c.Role, c.Name = ggui.RoleGroup, "Carousel"
+	c.Role = ggui.RoleGroup
+	c.SetName("Carousel")
 	c.AutoKey()
 	var add func(ggui.Widget)
 	add = func(w ggui.Widget) {
@@ -113,21 +119,53 @@ func Carousel(selected ggui.Binding[int], items ...ggui.Widget) *CarouselWidget 
 	c.prev, c.next = CarouselPrevious(c), CarouselNext(c)
 	return c
 }
-func (c *CarouselWidget) Named(s string) *CarouselWidget   { c.Name = s; return c }
-func (c *CarouselWidget) Height(h float64) *CarouselWidget { c.height = max(0, h); return c }
-func (c *CarouselWidget) Vertical() *CarouselWidget        { c.vertical = true; return c }
-func (c *CarouselWidget) RTL(v bool) *CarouselWidget       { c.rtl = v; return c }
-func (c *CarouselWidget) Loop(v bool) *CarouselWidget      { c.loop = v; return c }
-func (c *CarouselWidget) Controls(v bool) *CarouselWidget  { c.controls = v; return c }
-func (c *CarouselWidget) Draggable(v bool) *CarouselWidget { c.dragEnabled = v; return c }
-func (c *CarouselWidget) Gap(g float64) *CarouselWidget    { c.gap = max(0, g); return c }
+func (c *CarouselWidget) Name(s string) *CarouselWidget { c.SetName(s); return c }
+func (c *CarouselWidget) Height(h float64) *CarouselWidget {
+	defer property.Watch(&c.props, &c.height)()
+	c.height = max(0, h)
+	return c
+}
+func (c *CarouselWidget) Vertical() *CarouselWidget { c.vertical = true; return c }
+func (c *CarouselWidget) RTL(v bool) *CarouselWidget {
+	defer property.Watch(&c.props, &c.rtl)()
+	c.rtl = v
+	return c
+}
+func (c *CarouselWidget) Loop(v bool) *CarouselWidget {
+	defer property.Watch(&c.props, &c.loop)()
+	c.loop = v
+	return c
+}
+func (c *CarouselWidget) Controls(v bool) *CarouselWidget {
+	defer property.Watch(&c.props, &c.controls)()
+	c.controls = v
+	return c
+}
+func (c *CarouselWidget) Draggable(v bool) *CarouselWidget {
+	defer property.Watch(&c.props, &c.dragEnabled)()
+	c.dragEnabled = v
+	return c
+}
+func (c *CarouselWidget) Gap(g float64) *CarouselWidget {
+	defer property.Watch(&c.props, &c.gap)()
+	c.gap = max(0, g)
+	return c
+}
 
 // Align sets snap alignment: 0 start, .5 center (default), 1 end.
-func (c *CarouselWidget) Align(a float64) *CarouselWidget           { c.align = clamp(a, 0, 1); return c }
-func (c *CarouselWidget) Animation(d time.Duration) *CarouselWidget { c.duration = max(0, d); return c }
-func (c *CarouselWidget) Disabled(v bool) *CarouselWidget           { c.SetInert(v); return c }
-func (c *CarouselWidget) DisabledWhen(r ggui.Readable[bool]) *CarouselWidget {
-	c.InertWhen(r)
+func (c *CarouselWidget) Align(a float64) *CarouselWidget {
+	defer property.Watch(&c.props, &c.align)()
+	c.align = clamp(a, 0, 1)
+	return c
+}
+func (c *CarouselWidget) Animation(d time.Duration) *CarouselWidget {
+	defer property.Watch(&c.props, &c.duration)()
+	c.duration = max(0, d)
+	return c
+}
+func (c *CarouselWidget) Disabled(v bool) *CarouselWidget { c.SetInert(v); return c }
+func (c *CarouselWidget) BindDisabled(r ggui.Readable[bool]) *CarouselWidget {
+	c.BindInert(r)
 	return c
 }
 func (c *CarouselWidget) OnChange(fn func(int)) *CarouselWidget { c.onChange = fn; return c }
@@ -135,13 +173,22 @@ func (c *CarouselWidget) OnChange(fn func(int)) *CarouselWidget { c.onChange = f
 // Autoplay advances at interval, pauses while hovered/focused, and respects
 // reduced motion. User interaction stops playback until Play is called.
 func (c *CarouselWidget) Autoplay(interval time.Duration) *CarouselWidget {
+	defer property.Watch(&c.props, &c.autoplay)()
 	c.autoplay = max(0, interval)
 	return c
 }
-func (c *CarouselWidget) StopOnInteraction(v bool) *CarouselWidget { c.stopOnInteraction = v; return c }
-func (c *CarouselWidget) Play()                                    { c.stopped = false; c.lastAuto = ggui.Now() }
-func (c *CarouselWidget) Pause()                                   { c.stopped = true }
-func (c *CarouselWidget) SnapCount() int                           { return len(c.snaps) }
+func (c *CarouselWidget) StopOnInteraction(v bool) *CarouselWidget {
+	defer property.
+		Watch(
+			&c.props, &c.stopOnInteraction,
+		)()
+
+	c.stopOnInteraction = v
+	return c
+}
+func (c *CarouselWidget) Play()          { c.stopped = false; c.lastAuto = ggui.Now() }
+func (c *CarouselWidget) Pause()         { c.stopped = true }
+func (c *CarouselWidget) SnapCount() int { return len(c.snaps) }
 func (c *CarouselWidget) Selected() int {
 	if len(c.snaps) == 0 {
 		return -1
@@ -149,10 +196,10 @@ func (c *CarouselWidget) Selected() int {
 	return max(0, min(ggui.Untrack(c.selected.Get), len(c.snaps)-1))
 }
 func (c *CarouselWidget) CanPrevious() bool {
-	return !c.Inert && len(c.snaps) > 1 && (c.canLoop || c.Selected() > 0)
+	return !c.IsInert() && len(c.snaps) > 1 && (c.canLoop || c.Selected() > 0)
 }
 func (c *CarouselWidget) CanNext() bool {
-	return !c.Inert && len(c.snaps) > 1 && (c.canLoop || c.Selected() < len(c.snaps)-1)
+	return !c.IsInert() && len(c.snaps) > 1 && (c.canLoop || c.Selected() < len(c.snaps)-1)
 }
 func (c *CarouselWidget) Previous()          { c.scroll(c.Selected()-1, -1, true) }
 func (c *CarouselWidget) Next()              { c.scroll(c.Selected()+1, 1, true) }
@@ -173,7 +220,7 @@ func (c *CarouselWidget) interact() {
 	c.lastAuto = ggui.Now()
 }
 func (c *CarouselWidget) scroll(i, dir int, user bool) {
-	if c.Inert || len(c.snaps) == 0 {
+	if c.IsInert() || len(c.snaps) == 0 {
 		return
 	}
 	if user {
@@ -234,6 +281,7 @@ func (c *CarouselWidget) position() float64 {
 	return c.target + (c.from-c.target)*remaining
 }
 func (c *CarouselWidget) Layout(con ggui.Constraints, e ggui.Env) ggui.Size {
+	defer c.props.Layout()()
 	c.Sync()
 	c.env, c.theme, c.reduced = e, e.Theme(), e.ReducedMotion()
 	size := con.Constrain(ggui.Sz(bounded(con.MaxW, 416), c.height))
@@ -322,8 +370,8 @@ func (c *CarouselWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 	now := ggui.Now()
 	p, has := d.Pointer()
 	hover := has && r.Contains(p)
-	paused := c.Inert || c.reduced || c.dragging || hover || d.FocusWithin(r) || c.Focused || c.prev.Focused || c.next.Focused
-	if c.autoplay > 0 && !c.Inert {
+	paused := c.IsInert() || c.reduced || c.dragging || hover || d.FocusWithin(r) || c.Focused || c.prev.Focused || c.next.Focused
+	if c.autoplay > 0 && !c.IsInert() {
 		d.ObserveInput(r, c.interact)
 	}
 	if c.lastAuto.IsZero() || paused {
@@ -338,7 +386,7 @@ func (c *CarouselWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 		c.scroll(i, 1, false)
 	}
 	d.DescribeNode(r, c, func(d *ggui.Canvas) {
-		if !c.Inert {
+		if !c.IsInert() {
 			d.HitPointer(v, c)
 			d.HitKey(v, c)
 		}
@@ -398,10 +446,10 @@ func (c *CarouselWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 	})
 }
 func (c *CarouselWidget) Describe() ggui.Node {
-	return ggui.Node{Role: ggui.RoleGroup, Name: c.Name, Value: fmt.Sprintf("Slide %d of %d", c.Selected()+1, len(c.snaps)), Disabled: c.Inert, Min: 0, Max: float64(max(0, len(c.snaps)-1)), Now: float64(max(0, c.Selected())), Actions: ggui.ActionFocus | ggui.ActionIncrement | ggui.ActionDecrement | ggui.ActionSetValue}
+	return ggui.Node{Role: ggui.RoleGroup, Name: c.SemanticName(), Value: fmt.Sprintf("Slide %d of %d", c.Selected()+1, len(c.snaps)), Disabled: c.IsInert(), Min: 0, Max: float64(max(0, len(c.snaps)-1)), Now: float64(max(0, c.Selected())), Actions: ggui.ActionFocus | ggui.ActionIncrement | ggui.ActionDecrement | ggui.ActionSetValue}
 }
 func (c *CarouselWidget) Act(a ggui.Action) bool {
-	if c.Inert {
+	if c.IsInert() {
 		return false
 	}
 	switch a.Kind {
@@ -433,7 +481,7 @@ func (c *CarouselWidget) ConsumesKey(e ggui.KeyEvent) bool {
 }
 func (c *CarouselWidget) HandleKey(e ggui.KeyEvent) {
 	c.Keyboard(e, nil)
-	if c.Inert || !c.ConsumesKey(e) {
+	if c.IsInert() || !c.ConsumesKey(e) {
 		return
 	}
 	switch e.Key {
@@ -454,10 +502,10 @@ func (c *CarouselWidget) HandleKey(e ggui.KeyEvent) {
 	}
 }
 func (c *CarouselWidget) CaptureTouchDrag() bool {
-	return !c.Inert && c.dragEnabled && len(c.snaps) > 1
+	return !c.IsInert() && c.dragEnabled && len(c.snaps) > 1
 }
 func (c *CarouselWidget) HandlePointer(e ggui.PointerEvent) bool {
-	if c.Inert {
+	if c.IsInert() {
 		return false
 	}
 	switch e.Kind {
@@ -544,7 +592,8 @@ func CarouselPrevious(c *CarouselWidget) *CarouselNavigationWidget {
 func CarouselNext(c *CarouselWidget) *CarouselNavigationWidget { return carouselNavigation(c, false) }
 func carouselNavigation(c *CarouselWidget, prev bool) *CarouselNavigationWidget {
 	b := &CarouselNavigationWidget{carousel: c, previous: prev}
-	b.Role, b.Name = ggui.RoleButton, pick(prev, "Previous slide", "Next slide")
+	b.Role = ggui.RoleButton
+	b.SetName(pick(prev, "Previous slide", "Next slide"))
 	return b
 }
 func (b *CarouselNavigationWidget) Layout(c ggui.Constraints, e ggui.Env) ggui.Size {
@@ -568,14 +617,14 @@ func (b *CarouselNavigationWidget) activate() {
 	}
 }
 func (b *CarouselNavigationWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
-	b.Inert = !b.enabled()
+	b.SetInert(!b.enabled())
 	b.Hit(d, r, b, ggui.CursorShapePointer)
 	t := b.env.Theme()
 	fill, col, border := t.Bg, t.Fg, t.Border
-	if b.Hovered && !b.Inert {
+	if b.Hovered && !b.IsInert() {
 		fill = colorOr(t.Accent, t.Muted)
 	}
-	if b.Inert {
+	if b.IsInert() {
 		col = fade(col, .5)
 		border = fade(border, .5)
 	}
@@ -607,7 +656,7 @@ func (b *CarouselNavigationWidget) ConsumesKey(e ggui.KeyEvent) bool {
 	return ggui.Activates(e) || b.carousel.ConsumesKey(e)
 }
 func (b *CarouselNavigationWidget) Describe() ggui.Node {
-	return ggui.Node{Role: ggui.RoleButton, Name: b.Name, Disabled: !b.enabled(), Actions: ggui.ActionPress | ggui.ActionFocus}
+	return ggui.Node{Role: ggui.RoleButton, Name: b.SemanticName(), Disabled: !b.enabled(), Actions: ggui.ActionPress | ggui.ActionFocus}
 }
 func (b *CarouselNavigationWidget) Act(a ggui.Action) bool {
 	if a.Kind != ggui.ActionPress || !b.enabled() {

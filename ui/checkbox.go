@@ -16,7 +16,8 @@ type CheckboxWidget struct {
 // Checkbox binds a tick box to checked; a click toggles it. label may be "".
 func Checkbox(checked ggui.Binding[bool], label string) *CheckboxWidget {
 	c := &CheckboxWidget{checked: checked}
-	c.Role, c.Name = ggui.RoleCheckbox, label
+	c.Role = ggui.RoleCheckbox
+	c.SetName(label)
 	c.AutoKey()
 	if label != "" {
 		c.label = ggui.Text(label)
@@ -28,9 +29,9 @@ func Checkbox(checked ggui.Binding[bool], label string) *CheckboxWidget {
 // Disabled greys the box out and ignores the pointer while v is true.
 func (c *CheckboxWidget) Disabled(v bool) *CheckboxWidget { c.SetInert(v); return c }
 
-// DisabledWhen follows r for Disabled without a rebuild.
-func (c *CheckboxWidget) DisabledWhen(r ggui.Readable[bool]) *CheckboxWidget {
-	c.InertWhen(r)
+// BindDisabled follows r for Disabled without a rebuild.
+func (c *CheckboxWidget) BindDisabled(r ggui.Readable[bool]) *CheckboxWidget {
+	c.BindInert(r)
 	return c
 }
 
@@ -41,9 +42,9 @@ func (c *CheckboxWidget) OnChange(fn func(bool)) *CheckboxWidget { c.onChange = 
 func (c *CheckboxWidget) Describe() ggui.Node {
 	return ggui.Node{
 		Role:     ggui.RoleCheckbox,
-		Name:     c.Name,
+		Name:     c.SemanticName(),
 		Checked:  ggui.Tri(ggui.Untrack(c.checked.Get)),
-		Disabled: c.Inert,
+		Disabled: c.IsInert(),
 		Actions:  ggui.ActionPress | ggui.ActionFocus,
 	}
 }
@@ -59,7 +60,7 @@ func (c *CheckboxWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	box := c.paint(dst, r, c)
 	on := ggui.Untrack(c.checked.Get)
 	radius := t.Radius * 0.4
-	opacity := pick(c.Inert, .5, 1.0)
+	opacity := pick(c.IsInert(), .5, 1.0)
 	fill, border := t.Input, colorOr(t.InputBorder, t.Border)
 	if on {
 		fill, border = t.Primary, t.Primary

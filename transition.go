@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
+
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // TransitionWidget animates its child in when it first appears: it fades,
@@ -15,6 +17,7 @@ import (
 // Builder that rebuilds every frame does not restart the animation; a
 // widget that appears at a new place plays it.
 type TransitionWidget struct {
+	props    property.Owner
 	child    Widget
 	fade     bool
 	dx, dy   float64
@@ -49,19 +52,40 @@ func PopIn(child Widget) *TransitionWidget {
 }
 
 // Fade animates opacity from transparent.
-func (t *TransitionWidget) Fade() *TransitionWidget { t.fade = true; return t }
+func (t *TransitionWidget) Fade() *TransitionWidget {
+	defer property.Watch(&t.props, &t.fade)()
+	t.fade = true
+	return t
+}
 
 // Slide animates position from dx, dy away from the child's place.
-func (t *TransitionWidget) Slide(dx, dy float64) *TransitionWidget { t.dx, t.dy = dx, dy; return t }
+func (t *TransitionWidget) Slide(dx, dy float64) *TransitionWidget {
+	defer property.Watch(&t.props, &t.dx)()
+	defer property.Watch(&t.props, &t.dy)()
+	t.dx, t.dy = dx, dy
+	return t
+}
 
 // Scale animates size from the given factor around the child's center.
-func (t *TransitionWidget) Scale(from float64) *TransitionWidget { t.from = from; return t }
+func (t *TransitionWidget) Scale(from float64) *TransitionWidget {
+	defer property.Watch(&t.props, &t.from)()
+	t.from = from
+	return t
+}
 
 // Duration sets how long the animation takes.
-func (t *TransitionWidget) Duration(d time.Duration) *TransitionWidget { t.duration = d; return t }
+func (t *TransitionWidget) Duration(d time.Duration) *TransitionWidget {
+	defer property.Watch(&t.props, &t.duration)()
+	t.duration = d
+	return t
+}
 
 // Easing sets the curve; see EaseLinear, EaseIn, EaseOut, EaseInOut.
-func (t *TransitionWidget) Easing(e Easing) *TransitionWidget { t.ease = e; return t }
+func (t *TransitionWidget) Easing(e Easing) *TransitionWidget {
+	defer property.Watch(&t.props, &t.ease)()
+	t.ease = e
+	return t
+}
 
 // effects reports whether any visual is set; a bare Transition fades.
 func (t *TransitionWidget) effects() (fade bool, slide bool, scale bool) {
@@ -88,6 +112,7 @@ func (t *TransitionWidget) Baseline() (float64, bool) { return baselineOf(t.chil
 
 // Layout implements Widget.
 func (t *TransitionWidget) Layout(c Constraints, env Env) Size {
+	defer t.props.Layout()()
 	t.reduced = env.ReducedMotion()
 	return t.child.Layout(c, env)
 }

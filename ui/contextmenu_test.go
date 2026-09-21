@@ -1,9 +1,10 @@
 package ui_test
 
 import (
+	"testing"
+
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
-	"testing"
 )
 
 func TestContextMenuPointerKeyboardAndAccessibility(t *testing.T) {
@@ -11,7 +12,7 @@ func TestContextMenuPointerKeyboardAndAccessibility(t *testing.T) {
 	menu := ui.ContextMenu(ui.Button("Content", func() { clicks++ }),
 		ui.MenuItem("Unavailable", func() { t.Fatal("disabled action") }).Disabled(true),
 		ui.MenuItem("Copy", func() { picked = "copy" }), ui.MenuDivider(),
-		ui.MenuItem("Delete", func() { picked = "delete" })).Named("File actions")
+		ui.MenuItem("Delete", func() { picked = "delete" })).Name("File actions")
 	p := ggui.NewProbe(ggui.Column(menu, ui.Button("Outside", func() { clicks++ })), ggui.Sz(320, 300))
 	defer p.Close()
 	p.Tap("Content")
@@ -69,7 +70,7 @@ func TestContextMenuPointerKeyboardAndAccessibility(t *testing.T) {
 
 func TestContextMenuNoEnabledActions(t *testing.T) {
 	for _, entries := range [][]ggui.Widget{nil, {ui.MenuItem("Disabled", func() { t.Fatal("disabled action ran") }).Disabled(true)}} {
-		menu := ui.ContextMenu(ggui.Text("Target"), entries...).Named("Actions")
+		menu := ui.ContextMenu(ggui.Text("Target"), entries...).Name("Actions")
 		p := ggui.NewProbe(menu, ggui.Sz(300, 200))
 		act(t, p, ggui.RoleMenu, "Actions", ggui.Action{Kind: ggui.ActionExpand})
 		p.Type(ggui.Mods{}, ggui.KeyArrowUp, ggui.KeyArrowDown, ggui.KeyHome, ggui.KeyEnd, ggui.KeyEnter)

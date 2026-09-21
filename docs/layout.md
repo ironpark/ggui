@@ -37,23 +37,28 @@ ggui.Center(
 
 ## Configuration and runtime updates
 
-Configure widgets before their first layout unless a method explicitly supports
-runtime updates. Fluent setters such as `Box.Width`, `Row.Gap`, `Text.Size` and
-`Text.LineHeight` do not generally request layout or invalidate ancestor caches.
-Changing them after mount is not a supported way to update a screen.
+Value setters such as `Box.Width`, `Row.Gap`, `Text.Size`, `Text.LineHeight`,
+`Color` and `Placeholder` work after mount. Measurement-affecting changes refresh
+ancestor caches; paint-only values are used by the next paint. Repeating the
+same value does not schedule another layout.
 
-Use bindings for changing data and `View` or `Reactive` for changing structure
-or configuration. For example, create `Text("Hello").Size(size)` inside a
-`View(fontSize, ...)` callback to follow a font-size signal. Runtime operations
-such as `Text.Set`, control `Disabled`/`DisabledWhen`, popup `Show`/`Hide`, and
-Select/Combobox `Options`/`OptionsWhen` are documented separately. For scrolling,
-write the signal passed to `Scroll.Offset`.
+Use `X(value)` for a fixed value and `BindX(reader)` to follow a source. A literal
+setter removes the corresponding reader, even when its current value is equal.
+For example, `box.BindWidth(width).Size(100, 40)` detaches both dimensions;
+`box.Size(100, 40).BindWidth(width)` retains a height of 40. `Pad` and `Padding`
+write the same property; `Style` merges only its nonzero/non-nil fields.
 
-Custom widgets may configure their children just before laying them out. If
-their own non-reactive state changes the layout, retain the `Env` from Layout
-and call `Invalidate(env)`. It invalidates ancestor caches as well as requesting
-a frame layout. Widget mutation belongs on the UI goroutine; workers use
-`App.Post`.
+Tree structure, identity, orientation, input construction modes and formatter,
+renderer or event callback installation are configured before mount. Rebuild
+those with `View` or `Reactive`. `Text.Content`/`BindContent` replace a text
+source, while `Scroll.Offset(value)`/`BindOffset(binding)` select local or
+externally bound scroll position. Bind methods require non-nil readers.
+
+Custom parents may set child literals before measuring them. Install bindings
+in setup or UI handlers, not Layout or Paint. Built-in property revisions are
+tracked by layout caches without subscriptions. For custom non-reactive data,
+retain the layout `Env` and call `Invalidate(env)` when measurement changes.
+Widget mutation belongs on the UI goroutine; workers use `App.Post`.
 
 ## Choosing a layout
 
@@ -133,7 +138,7 @@ everything else.
 `Popup(anchor, content)` floats content below its anchor (above it when
 there is no room), painted through `Canvas.Overlay` over a scrim: a press
 anywhere outside closes it and reaches nothing underneath. `Show`, `Hide`,
-`Toggle` and `IsOpen` drive it, or `.Bind(sig)` keeps the state in a
+`Toggle` and `IsOpen` drive it, or `.BindOpen(sig)` keeps the state in a
 `StateValue[bool]`; `.Keys(h)` keeps keyboard focus on the widget that opened it
 while the pointer is in the content, and a widget inside can find its popup
 with `PopupOf(env)` to close it after acting. `ui.Select` and `ui.Menu` are

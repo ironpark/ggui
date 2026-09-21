@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/icons"
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // AccordionSection describes a keyed disclosure and its persistent content.
@@ -26,6 +27,7 @@ func (s AccordionSection) Disabled(v bool) AccordionSection { s.disabled = v; re
 // AccordionWidget groups disclosures under one keyboard tab stop. Up/Down,
 // Home/End select a header; Space/Enter toggle it. Open content remains tabbable.
 type AccordionWidget struct {
+	props property.Owner
 	ggui.Interactive
 	laidOpen []string
 	open     ggui.Binding[[]string]
@@ -56,7 +58,9 @@ func Accordion(open ggui.Binding[[]string], items ...AccordionSection) *Accordio
 		}
 		seen[item.key] = true
 		h := &accordionHeader{owner: a, index: i, text: ggui.Text(item.title)}
-		h.Role, h.Name, h.Inert = ggui.RoleDisclosure, item.title, item.disabled
+		h.Role = ggui.RoleDisclosure
+		h.SetName(item.title)
+		h.SetInert(item.disabled)
 		h.AutoKey()
 		a.headers = append(a.headers, h)
 		if a.active < 0 && !item.disabled {
@@ -67,10 +71,14 @@ func Accordion(open ggui.Binding[[]string], items ...AccordionSection) *Accordio
 }
 
 // Multiple allows more than one open section.
-func (a *AccordionWidget) Multiple() *AccordionWidget { a.multiple = true; return a }
+func (a *AccordionWidget) Multiple() *AccordionWidget {
+	defer property.Watch(&a.props, &a.multiple)()
+	a.multiple = true
+	return a
+}
 
-// Named names the group keyboard target.
-func (a *AccordionWidget) Named(s string) *AccordionWidget { a.Name = s; return a }
+// Name names the group keyboard target.
+func (a *AccordionWidget) Name(s string) *AccordionWidget { a.SetName(s); return a }
 
 // OnChange reports a copy of the open keys after a user toggles a header.
 func (a *AccordionWidget) OnChange(fn func([]string)) *AccordionWidget { a.onChange = fn; return a }
@@ -142,6 +150,7 @@ func (a *AccordionWidget) Adopt(prev any) {
 
 // Layout implements ggui.Widget.
 func (a *AccordionWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer a.props.Layout()()
 	a.env, a.theme = env, env.Theme()
 	a.laidOpen = append(a.laidOpen[:0], a.open.Get()...)
 	a.sizes = slices.Grow(a.sizes[:0], len(a.items))[:len(a.items)]
@@ -224,16 +233,16 @@ func (h *accordionHeader) Describe() ggui.Node {
 	open := h.owner.isOpen(h.index)
 	return ggui.Node{
 		Role:     ggui.RoleDisclosure,
-		Name:     h.Name,
+		Name:     h.SemanticName(),
 		Expanded: ggui.Expandable(open),
-		Disabled: h.Inert,
+		Disabled: h.IsInert(),
 		Actions:  ggui.ActionPress | ggui.ActionFocus | pick(open, ggui.ActionCollapse, ggui.ActionExpand),
 	}
 }
 
 // Act implements ggui.Actor.
 func (h *accordionHeader) Act(a ggui.Action) bool {
-	if h.Inert {
+	if h.IsInert() {
 		return false
 	}
 	open := h.owner.isOpen(h.index)
@@ -256,7 +265,9 @@ func (h *accordionHeader) HandlePointer(ev ggui.PointerEvent) bool {
 	return h.Pointer(ev, func() { h.owner.toggle(h.index) })
 }
 
-func (a *AccordionWidget) name() string { return pick(a.Name != "", a.Name, "Accordion") }
+func (a *AccordionWidget) name() string {
+	return pick(a.SemanticName() != "", a.SemanticName(), "Accordion")
+}
 
 // Semantics implements ggui.Semantic, including the built-in fallback name.
 func (a *AccordionWidget) Semantics() (ggui.Role, string) { return a.Role, a.name() }

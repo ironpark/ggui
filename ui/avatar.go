@@ -6,20 +6,24 @@ import (
 	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
+
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // AvatarWidget is a round portrait with a fallback: the person's initials on
 // the theme's muted surface until an image is given, and again if the image
 // turns out to be nil. Build one with Avatar.
 type AvatarWidget struct {
-	name     string
-	initials *ggui.TextWidget
-	img      *ebiten.Image
-	side     float64
-	square   bool
-	theme    ggui.Theme
-	textSize ggui.Size
+	nameReader ggui.Readable[string]
+	props      property.Owner
+	name       string
+	initials   *ggui.TextWidget
+	img        *ebiten.Image
+	side       float64
+	square     bool
+	theme      ggui.Theme
+	textSize   ggui.Size
 }
 
 // Avatar creates a 40-pixel circle showing the initials of name.
@@ -49,17 +53,37 @@ func initialsOf(name string) string {
 func (a *AvatarWidget) Image(img *ebiten.Image) *AvatarWidget { a.img = img; return a }
 
 // Size sets the diameter in logical pixels.
-func (a *AvatarWidget) Size(px float64) *AvatarWidget { a.side = max(0, px); return a }
+func (a *AvatarWidget) Size(px float64) *AvatarWidget {
+	defer property.Watch(&a.props, &a.side)()
+	a.side = max(0, px)
+	return a
+}
 
 // Square rounds the portrait to the theme's radius instead of a circle.
-func (a *AvatarWidget) Square() *AvatarWidget { a.square = true; return a }
+func (a *AvatarWidget) Square() *AvatarWidget {
+	defer property.Watch(&a.props, &a.square)()
+	a.square = true
+	return a
+}
 
-// Named replaces the name read out, for an avatar whose label already
+// Name replaces the name read out, for an avatar whose label already
 // appears beside it.
-func (a *AvatarWidget) Named(s string) *AvatarWidget { a.name = s; return a }
+func (a *AvatarWidget) Name(s string) *AvatarWidget {
+	if a.nameReader != nil {
+		a.nameReader = nil
+		a.props.Changed()
+	}
+	defer property.Watch(&a.props, &a.name)()
+	a.name = s
+	return a
+}
 
 // Layout implements ggui.Widget.
 func (a *AvatarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer a.props.Layout()()
+	if a.nameReader != nil {
+		a.name = a.nameReader.Get()
+	}
 	a.theme = env.Theme()
 	size := c.Constrain(ggui.Sz(a.side, a.side))
 	a.initials.Style(a.theme.Text).Size(max(size.H*0.4, 1)).Color(a.theme.MutedFg).Align(.5)
@@ -157,4 +181,14 @@ func sweepCuts() {
 		delete(coldCuts, k)
 	}
 	liveCuts, coldCuts = coldCuts, liveCuts
+}
+
+// BindName follows a non-nil accessible-name reader.
+func (a *AvatarWidget) BindName(r ggui.Readable[string]) *AvatarWidget {
+	property.Require(r, "BindName")
+	if !property.Same(a.nameReader, r) {
+		a.nameReader = r
+		a.props.Changed()
+	}
+	return a
 }

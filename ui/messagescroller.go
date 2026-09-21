@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // MessageEntry is a stable transcript row. Content can be a Message, Marker,
@@ -49,6 +50,7 @@ type TranscriptVisibility struct {
 // Keep it alive across transcript updates. AutoScroll defaults to false; the
 // first nonempty transcript opens at the end without painting at the wrong edge.
 type MessageScrollerWidget struct {
+	props property.Owner
 	ggui.Interactive
 	source                                                        ggui.Readable[[]MessageEntry]
 	rows                                                          []MessageEntry
@@ -75,20 +77,28 @@ type MessageScrollerWidget struct {
 
 func MessageScroller(items ggui.Readable[[]MessageEntry]) *MessageScrollerWidget {
 	s := &MessageScrollerWidget{source: items, height: 320, gap: 32, peek: 64, threshold: 8, opening: ScrollEnd, duration: 200 * time.Millisecond}
-	s.Role, s.Name = ggui.RoleGroup, "Conversation"
+	s.Role = ggui.RoleGroup
+	s.SetName("Conversation")
 	s.AutoKey()
 	s.pause = s.Pause
-	s.startButton = Button("↑", func() { s.ScrollToStart() }).Named("Scroll to start").Outline().Pad(4, 10)
-	s.endButton = Button("↓", func() { s.ScrollToEnd() }).Named("Scroll to end").Outline().Pad(4, 10)
+	s.startButton = Button("↑", func() { s.ScrollToStart() }).Name("Scroll to start").Outline().Pad(4, 10)
+	s.endButton = Button("↓", func() { s.ScrollToEnd() }).Name("Scroll to end").Outline().Pad(4, 10)
 	return s
 }
-func (s *MessageScrollerWidget) Named(v string) *MessageScrollerWidget { s.Name = v; return s }
+func (s *MessageScrollerWidget) Name(v string) *MessageScrollerWidget { s.SetName(v); return s }
 func (s *MessageScrollerWidget) Height(v float64) *MessageScrollerWidget {
+	defer property.Watch(&s.props, &s.height)()
 	s.height = max(0, v)
 	return s
 }
-func (s *MessageScrollerWidget) Gap(v float64) *MessageScrollerWidget { s.gap = max(0, v); return s }
+func (s *MessageScrollerWidget) Gap(v float64) *MessageScrollerWidget {
+	defer property.Watch(&s.props, &s.gap)()
+	s.gap = max(0, v)
+	return s
+}
 func (s *MessageScrollerWidget) AutoScroll(v bool) *MessageScrollerWidget {
+	defer property.Watch(&s.props, &s.auto)()
+	defer property.Watch(&s.props, &s.following)()
 	s.auto = v
 	if !v {
 		s.following = false
@@ -96,22 +106,27 @@ func (s *MessageScrollerWidget) AutoScroll(v bool) *MessageScrollerWidget {
 	return s
 }
 func (s *MessageScrollerWidget) Opening(v ScrollPosition) *MessageScrollerWidget {
+	defer property.Watch(&s.props, &s.opening)()
 	s.opening = v
 	return s
 }
 func (s *MessageScrollerWidget) ScrollMargin(v float64) *MessageScrollerWidget {
+	defer property.Watch(&s.props, &s.margin)()
 	s.margin = max(0, v)
 	return s
 }
 func (s *MessageScrollerWidget) PreviousPeek(v float64) *MessageScrollerWidget {
+	defer property.Watch(&s.props, &s.peek)()
 	s.peek = max(0, v)
 	return s
 }
 func (s *MessageScrollerWidget) EdgeThreshold(v float64) *MessageScrollerWidget {
+	defer property.Watch(&s.props, &s.threshold)()
 	s.threshold = max(0, v)
 	return s
 }
 func (s *MessageScrollerWidget) Animation(d time.Duration) *MessageScrollerWidget {
+	defer property.Watch(&s.props, &s.duration)()
 	s.duration = max(0, d)
 	return s
 }
@@ -194,6 +209,7 @@ func (s *MessageScrollerWidget) target(i int, align ScrollAlignment) float64 {
 	return start - s.margin
 }
 func (s *MessageScrollerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer s.props.Layout()()
 	saved := s.Save()
 	oldRows := s.rows
 	s.theme, s.reduced = env.Theme(), env.ReducedMotion()
@@ -326,7 +342,7 @@ func (s *MessageScrollerWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	s.FocusRing(dst, r, 0, s.theme.Ring)
 }
 func (s *MessageScrollerWidget) Describe() ggui.Node {
-	return ggui.Node{Role: ggui.RoleGroup, Name: s.Name, Actions: ggui.ActionFocus | ggui.ActionScrollIntoView}
+	return ggui.Node{Role: ggui.RoleGroup, Name: s.SemanticName(), Actions: ggui.ActionFocus | ggui.ActionScrollIntoView}
 }
 func (s *MessageScrollerWidget) HandlePointer(ev ggui.PointerEvent) bool {
 	if ev.Kind != ggui.PointerScroll || ev.Scroll.Y == 0 {

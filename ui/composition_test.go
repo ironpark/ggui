@@ -120,7 +120,7 @@ func TestAvatarFallsBackToInitials(t *testing.T) {
 func TestInputGroupFocusesTheEditorFromItsPadding(t *testing.T) {
 	value := ggui.State("ab")
 	visits := 0
-	group := ui.InputGroup(ggui.TextInput(value).Named("Site")).
+	group := ui.InputGroup(ggui.TextInput(value).Name("Site")).
 		Leading(ggui.Text("https://")).
 		Trailing(ui.Button("Go", func() { visits++ }).Ghost())
 	p := ggui.NewProbe(group, ggui.Sz(320, 44))
@@ -195,7 +195,7 @@ func TestButtonGroupJoinsChildrenWithoutTakingTheirInput(t *testing.T) {
 func TestToggleGroupPicksWithThePointerAndTheArrows(t *testing.T) {
 	value := ggui.State("left")
 	changes := 0
-	g := ui.ToggleGroup(value, []string{"left", "center", "right"}).OnChange(func(string) { changes++ })
+	g := ui.ToggleGroup(value).Options([]string{"left", "center", "right"}).OnChange(func(string) { changes++ })
 	p := ggui.NewProbe(g, ggui.Sz(300, 40))
 	defer p.Close()
 	p.Tap("center")
@@ -280,7 +280,7 @@ func TestSidebarNavigatesWithThePointerAndTheArrows(t *testing.T) {
 		ui.SidebarItem("inbox", "Inbox"),
 		ui.SidebarItem("sent", "Sent"),
 		ui.SidebarItem("spam", "Spam").Disabled(true),
-	).Collapsed(narrow)
+	).BindCollapsed(narrow)
 	p := ggui.NewProbe(ggui.Row(bar, ggui.Expanded(ggui.Box())), ggui.Sz(600, 400))
 	defer p.Close()
 	p.Tap("Sent")

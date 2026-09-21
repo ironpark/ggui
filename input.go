@@ -3,6 +3,8 @@ package ggui
 import (
 	"runtime"
 	"slices"
+
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // PointerKind says what a PointerEvent reports.
@@ -578,6 +580,7 @@ func sameRegion(a, b *hitRegion) bool {
 // PointerWidget makes its child react to the pointer. Build one with Pointer
 // or Tap. It takes no space of its own: the child's Rect is the hit region.
 type PointerWidget struct {
+	props    property.Owner
 	child    Widget
 	cursor   CursorShape
 	onDown   func(PointerEvent)
@@ -616,6 +619,7 @@ func (p *PointerWidget) OnDrag(fn func(PointerEvent)) *PointerWidget { p.onDrag 
 // Cursor sets the mouse cursor shown while the pointer is over the child,
 // such as CursorShapePointer for something clickable.
 func (p *PointerWidget) Cursor(shape CursorShape) *PointerWidget {
+	defer property.Watch(&p.props, &p.cursor)()
 	p.cursor = shape
 	return p
 }
@@ -682,7 +686,10 @@ func (p *PointerWidget) HandlePointer(ev PointerEvent) bool {
 }
 
 // Layout implements Widget.
-func (p *PointerWidget) Layout(c Constraints, env Env) Size { return p.child.Layout(c, env) }
+func (p *PointerWidget) Layout(c Constraints, env Env) Size {
+	defer p.props.Layout()()
+	return p.child.Layout(c, env)
+}
 
 // Baseline implements Baseliner: the child's.
 func (p *PointerWidget) Baseline() (float64, bool) { return baselineOf(p.child) }

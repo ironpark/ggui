@@ -5,11 +5,13 @@ import (
 	"math"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // SliderWidget picks a number in a range by dragging a knob. Build one with
 // Slider.
 type SliderWidget struct {
+	props property.Owner
 	ggui.Interactive
 	value    ggui.Binding[float64]
 	min, max float64
@@ -30,8 +32,8 @@ func Slider(value ggui.Binding[float64], lo, hi float64) *SliderWidget {
 	return s
 }
 
-// Named names the slider for Probe.Find and the inspector.
-func (s *SliderWidget) Named(name string) *SliderWidget { s.Name = name; return s }
+// Name names the slider for Probe.Find and the inspector.
+func (s *SliderWidget) Name(name string) *SliderWidget { s.SetName(name); return s }
 
 // ConsumesKey implements ggui.KeyConsumer: the arrow keys move the value.
 func (s *SliderWidget) ConsumesKey(ev ggui.KeyEvent) bool {
@@ -43,7 +45,11 @@ func (s *SliderWidget) ConsumesKey(ev ggui.KeyEvent) bool {
 }
 
 // Step snaps the value to multiples of s from the range's start.
-func (s *SliderWidget) Step(step float64) *SliderWidget { s.step = step; return s }
+func (s *SliderWidget) Step(step float64) *SliderWidget {
+	defer property.Watch(&s.props, &s.step)()
+	s.step = step
+	return s
+}
 
 // OnChange fires with the new value after a drag or key press moved it.
 func (s *SliderWidget) OnChange(fn func(float64)) *SliderWidget { s.onChange = fn; return s }
@@ -66,8 +72,8 @@ func (s *SliderWidget) commit() {
 // Disabled greys the slider out and ignores the pointer while v is true.
 func (s *SliderWidget) Disabled(v bool) *SliderWidget { s.SetInert(v); return s }
 
-// DisabledWhen follows r for Disabled without a rebuild.
-func (s *SliderWidget) DisabledWhen(r ggui.Readable[bool]) *SliderWidget { s.InertWhen(r); return s }
+// BindDisabled follows r for Disabled without a rebuild.
+func (s *SliderWidget) BindDisabled(r ggui.Readable[bool]) *SliderWidget { s.BindInert(r); return s }
 
 // Describe implements ggui.Describer: a slider reports its range and where
 // in it the value sits, which is what a screen reader reads out and what an
@@ -75,11 +81,11 @@ func (s *SliderWidget) DisabledWhen(r ggui.Readable[bool]) *SliderWidget { s.Ine
 func (s *SliderWidget) Describe() ggui.Node {
 	return ggui.Node{
 		Role:     ggui.RoleSlider,
-		Name:     s.Name,
+		Name:     s.SemanticName(),
 		Min:      min(s.min, s.max),
 		Max:      max(s.min, s.max),
 		Now:      ggui.Untrack(s.value.Get),
-		Disabled: s.Inert,
+		Disabled: s.IsInert(),
 		Actions:  ggui.ActionIncrement | ggui.ActionDecrement | ggui.ActionSetValue | ggui.ActionFocus,
 	}
 }
@@ -87,7 +93,7 @@ func (s *SliderWidget) Describe() ggui.Node {
 // Act implements ggui.Actor: an assistive technology steps the value or
 // sets it outright, and each ends with the commit a key press would.
 func (s *SliderWidget) Act(a ggui.Action) bool {
-	if s.Inert {
+	if s.IsInert() {
 		return false
 	}
 	step := s.step
@@ -110,6 +116,7 @@ func (s *SliderWidget) Act(a ggui.Action) bool {
 
 // Layout implements Widget.
 func (s *SliderWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer s.props.Layout()()
 	s.Sync()
 	s.theme = env.Theme()
 	return c.Constrain(ggui.Sz(bounded(c.MaxW, defaultStripe), sliderKnob*2+4))
@@ -147,14 +154,14 @@ func (s *SliderWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	x0, x1 := r.Origin.X+knob, r.Origin.X+r.Size.W-knob
 	kx := x0 + (x1-x0)*s.fraction()
 	dst.FillRoundRect(ggui.Rct(ggui.Pt(x0, cy-2), ggui.Sz(x1-x0, 4)), 2, t.Border)
-	accent := pick(s.Inert, fade(t.Primary, .5), t.Primary)
+	accent := pick(s.IsInert(), fade(t.Primary, .5), t.Primary)
 	dst.FillRoundRect(ggui.Rct(ggui.Pt(x0, cy-2), ggui.Sz(kx-x0, 4)), 2, accent)
 	radius := knob
-	if !s.Inert && (s.Hovered || s.Pressed || (s.Focused && s.FocusVisible)) {
+	if !s.IsInert() && (s.Hovered || s.Pressed || (s.Focused && s.FocusVisible)) {
 		dst.StrokeRoundRect(ggui.Rct(ggui.Pt(kx-radius-2, cy-radius-2), ggui.Sz(2*radius+4, 2*radius+4)), radius+2, 4, fade(t.Ring, .3))
 	}
 	dst.FillCircle(ggui.Pt(kx, cy), radius, accent)
-	dst.FillCircle(ggui.Pt(kx, cy), max(radius-1, 0), pick(s.Inert, fade(color.White, .5), color.Color(color.White)))
+	dst.FillCircle(ggui.Pt(kx, cy), max(radius-1, 0), pick(s.IsInert(), fade(color.White, .5), color.Color(color.White)))
 	if s.Focused && s.FocusVisible {
 		dst.StrokeRoundRect(ggui.Rct(ggui.Pt(kx-radius-2, cy-radius-2), ggui.Sz(2*radius+4, 2*radius+4)), radius+2, 2, t.Primary)
 	}
@@ -164,7 +171,7 @@ func (s *SliderWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 // step, or a hundredth of the range without one.
 func (s *SliderWidget) HandleKey(ev ggui.KeyEvent) {
 	s.Keyboard(ev, nil)
-	if s.Inert || ev.Kind != ggui.KeyPress {
+	if s.IsInert() || ev.Kind != ggui.KeyPress {
 		return
 	}
 	step := s.step
@@ -185,7 +192,7 @@ func (s *SliderWidget) HandleKey(ev ggui.KeyEvent) {
 // HandlePointer implements PointerHandler: a left press jumps to the
 // pointer and a drag from there follows it, past the ends included.
 func (s *SliderWidget) HandlePointer(ev ggui.PointerEvent) bool {
-	if s.Inert {
+	if s.IsInert() {
 		return false
 	}
 	switch ev.Kind {

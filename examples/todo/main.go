@@ -41,7 +41,7 @@ func composer(m *model) ggui.Widget {
 	return ui.Field("New item", ggui.Row(
 		ggui.Expanded(input),
 		ui.Button("Add", m.add),
-	).Space(1)).Help("Enter adds it").Error(m.DraftError)
+	).Space(1)).Help("Enter adds it").BindError(m.DraftError)
 }
 
 // list keys rows by ID so edits keep each row's widgets, slides rows in
@@ -57,12 +57,12 @@ func list(m *model) ggui.Widget {
 
 // row builds one keyed row once; the checkbox and text follow the row's
 // own signals afterwards without a rebuild, and so do the accessible names
-// of its controls, bound to the title through NameWhen.
+// of its controls, bound to the title through BindName.
 func row(m *model, td *Todo) ggui.Widget {
 	editing := ggui.State(false)
 	check := ui.Checkbox(td.Done, "")
-	check.NameWhen(ggui.Sprintf("Done: %s", td.Title)) // Checkbox names itself after its label; this one has none
-	remove := ui.Button("×", func() { m.remove(td.ID) }).NamedWhen(ggui.Sprintf("Remove %s", td.Title)).Outline().Pad(2, 8)
+	check.BindName(ggui.Sprintf("Done: %s", td.Title)) // Checkbox names itself after its label; this one has none
+	remove := ui.Button("×", func() { m.remove(td.ID) }).BindName(ggui.Sprintf("Remove %s", td.Title)).Outline().Pad(2, 8)
 	return ggui.Row(check, ggui.Expanded(title(td, editing)), remove).Space(1)
 }
 
@@ -72,7 +72,7 @@ func row(m *model, td *Todo) ggui.Widget {
 func title(td *Todo, editing *ggui.StateValue[bool]) ggui.Widget {
 	return ggui.If(editing, func() ggui.Widget {
 		return ui.TextField(td.Title).
-			NamedWhen(ggui.Sprintf("Edit: %s", td.Title)).
+			BindName(ggui.Sprintf("Edit: %s", td.Title)).
 			OnSubmit(func(string) { editing.Set(false) })
 	}).Else(func() ggui.Widget {
 		text := ggui.If(td.Done, func() ggui.Widget { return ggui.TextOf(td.Title).AsCaption() }).
@@ -83,11 +83,11 @@ func title(td *Todo, editing *ggui.StateValue[bool]) ggui.Widget {
 
 // footer shows what is left, the filter, and the clear action.
 func footer(m *model) ggui.Widget {
-	clear := ui.Button("Clear done", m.askClearDone).Outline().DisabledWhen(m.NoneDone)
+	clear := ui.Button("Clear done", m.askClearDone).Outline().BindDisabled(m.NoneDone)
 	return ggui.Row(
 		ggui.Textf("%d left", m.Left).AsCaption().NoWrap(),
 		ggui.Spacer(),
-		ui.Radios(m.Show, []filter{all, active, done}), // labelled through filter.String
+		ui.Radios(m.Show).Options([]filter{all, active, done}), // labelled through filter.String
 		ggui.Tooltip(clear, "Removes every finished item (⌘/Ctrl+K)"),
 	).Space(1)
 }

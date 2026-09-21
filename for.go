@@ -6,12 +6,15 @@ import (
 	"math"
 	"slices"
 	"time"
+
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // EachWidget is a keyed, reactive list: it watches a Readable of items, keeps one
 // child per key across changes, and hands each child its item as a StateValue so
 // the child can react to updates on its own. Build one with EachKeyed.
 type EachWidget[T any, K comparable] struct {
+	props property.Owner
 	flow
 	mount        *ComponentWidget
 	mounted      bool
@@ -188,14 +191,22 @@ func (f *EachWidget[T, K]) Transition(wrap func(Widget) *TransitionWidget) *Each
 }
 
 // Gap sets the space between consecutive children.
-func (f *EachWidget[T, K]) Gap(v float64) *EachWidget[T, K] { f.checkConfig(); f.gap = v; return f }
+func (f *EachWidget[T, K]) Gap(v float64) *EachWidget[T, K] {
+	defer property.Watch(&f.props, &f.gap)()
+	f.gap = v
+	return f
+}
 
 // Space sets the gap to n times the theme's Space, resolved at layout.
-func (f *EachWidget[T, K]) Space(n float64) *EachWidget[T, K] { f.checkConfig(); f.space = n; return f }
+func (f *EachWidget[T, K]) Space(n float64) *EachWidget[T, K] {
+	defer property.Watch(&f.props, &f.space)()
+	f.space = n
+	return f
+}
 
 // Align places children across the list's axis.
 func (f *EachWidget[T, K]) Align(a CrossAlign) *EachWidget[T, K] {
-	f.checkConfig()
+	defer property.Watch(&f.props, &f.align)()
 	f.align = a
 	return f
 }
@@ -212,7 +223,7 @@ func (f *EachWidget[T, K]) Horizontal() *EachWidget[T, K] {
 // the children in view are built, laid out and painted: a list of tens of
 // thousands of rows costs what the visible ones do.
 func (f *EachWidget[T, K]) ItemExtent(v float64) *EachWidget[T, K] {
-	f.checkConfig()
+	defer property.Watch(&f.props, &f.extent)()
 	f.extent = v
 	return f
 }
@@ -249,6 +260,7 @@ func (f *EachWidget[T, K]) entry(i int) *forEntry[T] {
 
 // Layout implements Widget.
 func (f *EachWidget[T, K]) Layout(c Constraints, env Env) Size {
+	defer f.props.Layout()()
 	f.cache, _ = env.Get(cacheOwner)
 	f.mount.Layout(c, env)
 	if len(f.items) == 0 && len(f.leaving) == 0 && f.empty != nil {

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/property"
 )
 
 const (
@@ -14,6 +15,7 @@ const (
 // TabsWidget shows one of several pages, picked by a row of labels above.
 // Build one with Tabs.
 type TabsWidget struct {
+	props    property.Owner
 	line     bool
 	selected ggui.Binding[int]
 	tabs     []TabPage
@@ -57,7 +59,11 @@ func Tabs(selected ggui.Binding[int], tabs ...TabPage) *TabsWidget {
 }
 
 // Line uses the underline-style strip instead of the default segmented surface.
-func (t *TabsWidget) Line() *TabsWidget { t.line = true; return t }
+func (t *TabsWidget) Line() *TabsWidget {
+	defer property.Watch(&t.props, &t.line)()
+	t.line = true
+	return t
+}
 
 // Disabled greys the strip out and ignores input while v is true; the
 // selected page stays.
@@ -81,6 +87,7 @@ func (t *TabsWidget) pick(i int) {
 
 // Layout implements Widget.
 func (t *TabsWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer t.props.Layout()()
 	t.Sync()
 	th := env.Theme()
 	t.theme = th
@@ -90,7 +97,7 @@ func (t *TabsWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t.headerH, t.stripW = 0, 0
 	cur := t.index()
 	for i, l := range t.labels {
-		l.Color(pick(i == cur && !t.Inert, th.Fg, th.MutedFg))
+		l.Color(pick(i == cur && !t.IsInert(), th.Fg, th.MutedFg))
 		s := l.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env)
 		t.labelSize = append(t.labelSize, s)
 		t.labelX = append(t.labelX, t.stripW)
@@ -118,13 +125,13 @@ func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst = dst.Clip(r)
 	th := t.theme
 	header := ggui.Rct(r.Origin, ggui.Sz(r.Size.W, t.headerH-tabGap))
-	if !t.Inert {
+	if !t.IsInert() {
 		dst.HitKey(header, t)
 	}
 	t.labelRect = t.labelRect[:0]
 	x := r.Origin.X + tabInset
 	cur := t.index()
-	hover := pick(t.Inert, -1, t.hover)
+	hover := pick(t.IsInert(), -1, t.hover)
 	if !t.line {
 		dst.FillRoundRect(ggui.Rct(r.Origin, ggui.Sz(min(t.stripW, r.Size.W), header.Size.H)), th.Radius, th.Muted)
 		if cur >= 0 {
@@ -141,7 +148,7 @@ func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		lr := ggui.Rct(ggui.Pt(x, r.Origin.Y+tabInset), ggui.Sz(s.W+t.pad.Left+t.pad.Right, header.Size.H-2*tabInset))
 		t.labelRect = append(t.labelRect, lr)
 		dst.Describe(lr, tabLabel{t, i})
-		if !t.Inert {
+		if !t.IsInert() {
 			dst.HitPointer(lr, tabLabel{t, i})
 			dst.HitCursor(lr, ggui.CursorShapePointer)
 		}
@@ -160,7 +167,7 @@ func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		if t.line {
 			x := dst.Ease(ggui.Anchor{Rect: header}, underlineSlot, lr.Origin.X, t.motion)
 			w := dst.Ease(ggui.Anchor{Rect: header}, widthSlot, lr.Size.W, t.motion)
-			dst.FillRoundRect(ggui.Rct(ggui.Pt(x, lineY-1), ggui.Sz(w, 2)), 1, pick(t.Inert, th.MutedFg, th.Primary))
+			dst.FillRoundRect(ggui.Rct(ggui.Pt(x, lineY-1), ggui.Sz(w, 2)), 1, pick(t.IsInert(), th.MutedFg, th.Primary))
 		}
 		t.FocusRing(dst, lr, th.Radius, th.Ring)
 		dst.Paint(t.tabs[cur].Content, ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+t.headerH), t.bodySize))
@@ -170,7 +177,7 @@ func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 // HandleKey implements KeyHandler: Left and Right move between pages.
 func (t *TabsWidget) HandleKey(ev ggui.KeyEvent) {
 	t.Keyboard(ev, nil)
-	if t.Inert || ev.Kind != ggui.KeyPress || len(t.tabs) == 0 {
+	if t.IsInert() || ev.Kind != ggui.KeyPress || len(t.tabs) == 0 {
 		return
 	}
 	switch ev.Key {
@@ -222,14 +229,14 @@ func (l tabLabel) Describe() ggui.Node {
 		Role:     ggui.RoleTab,
 		Name:     l.t.tabs[l.i].Label,
 		Selected: l.i == l.t.index(),
-		Disabled: l.t.Inert,
+		Disabled: l.t.IsInert(),
 		Actions:  ggui.ActionSelect | ggui.ActionPress | ggui.ActionFocus,
 	}
 }
 
 // Act implements ggui.Actor: showing this tab's page.
 func (l tabLabel) Act(a ggui.Action) bool {
-	if l.t.Inert || (a.Kind != ggui.ActionSelect && a.Kind != ggui.ActionPress) {
+	if l.t.IsInert() || (a.Kind != ggui.ActionSelect && a.Kind != ggui.ActionPress) {
 		return false
 	}
 	l.t.pick(l.i)
@@ -246,5 +253,5 @@ func (l tabLabel) Adopt(prev any) {
 	}
 }
 
-// DisabledWhen follows r for Disabled without rebuilding the control.
-func (t *TabsWidget) DisabledWhen(r ggui.Readable[bool]) *TabsWidget { t.InertWhen(r); return t }
+// BindDisabled follows r for Disabled without rebuilding the control.
+func (t *TabsWidget) BindDisabled(r ggui.Readable[bool]) *TabsWidget { t.BindInert(r); return t }

@@ -1,8 +1,9 @@
 package ui
 
 import (
-	"github.com/ironpark/ggui"
 	"image/color"
+
+	"github.com/ironpark/ggui"
 )
 
 // SwitchWidget is a sliding on/off toggle. Build one with Switch.
@@ -15,7 +16,8 @@ type SwitchWidget struct {
 // Switch binds a toggle to on; a click flips it and the knob slides over.
 func Switch(on ggui.Binding[bool], label string) *SwitchWidget {
 	s := &SwitchWidget{on: on}
-	s.Role, s.Name = ggui.RoleSwitch, label
+	s.Role = ggui.RoleSwitch
+	s.SetName(label)
 	s.AutoKey()
 	if label != "" {
 		s.label = ggui.Text(label)
@@ -32,16 +34,16 @@ func (s *SwitchWidget) OnChange(fn func(bool)) *SwitchWidget { s.onChange = fn; 
 // Disabled greys the switch out and ignores the pointer while v is true.
 func (s *SwitchWidget) Disabled(v bool) *SwitchWidget { s.SetInert(v); return s }
 
-// DisabledWhen follows r for Disabled without a rebuild.
-func (s *SwitchWidget) DisabledWhen(r ggui.Readable[bool]) *SwitchWidget { s.InertWhen(r); return s }
+// BindDisabled follows r for Disabled without a rebuild.
+func (s *SwitchWidget) BindDisabled(r ggui.Readable[bool]) *SwitchWidget { s.BindInert(r); return s }
 
 // Describe implements ggui.Describer: a switch reports whether it is on.
 func (s *SwitchWidget) Describe() ggui.Node {
 	return ggui.Node{
 		Role:     ggui.RoleSwitch,
-		Name:     s.Name,
+		Name:     s.SemanticName(),
 		Checked:  ggui.Tri(ggui.Untrack(s.on.Get)),
-		Disabled: s.Inert,
+		Disabled: s.IsInert(),
 		Actions:  ggui.ActionPress | ggui.ActionFocus,
 	}
 }
@@ -59,7 +61,7 @@ func (s *SwitchWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	k := dst.Ease(s.Anchor(box), knobSlot, pick(on, 1.0, 0.0), s.motion)
 	track := mix(colorOr(t.InputBorder, t.Border), t.Primary, k)
 	thumb := mix(color.White, t.PrimaryFg, k)
-	if s.Inert {
+	if s.IsInert() {
 		track = fade(track, .5)
 		thumb = fade(thumb, .5)
 	}

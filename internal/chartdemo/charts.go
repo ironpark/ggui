@@ -121,7 +121,7 @@ func Build(e Example) *ui.ChartWidget {
 		}
 	}
 
-	c := ui.ChartContainer(kind, data, config).Named(e.Title).Height(240).TickFormatter(short)
+	c := ui.ChartContainer(kind, data, config).Name(e.Title).Height(240).TickFormatter(short)
 	tooltip := ui.ChartTooltipOptions{}
 	if kind == ui.ChartArea {
 		tooltip.Indicator = ui.ChartIndicatorLine
@@ -321,7 +321,7 @@ func Card(e Example) ggui.Widget {
 	if strings.Contains(e.Name, "interactive") {
 		if strings.Contains(e.Name, "area") {
 			days := ggui.State("Last 3 months")
-			widgets = append(widgets, ui.Select(days, []string{"Last 3 months", "Last 30 days", "Last 7 days"}).OnChange(func(v string) {
+			widgets = append(widgets, ui.Select(days).Options([]string{"Last 3 months", "Last 30 days", "Last 7 days"}).OnChange(func(v string) {
 				copy := e
 				if v == "Last 30 days" {
 					copy.Data = e.Data[max(0, len(e.Data)-30):]
@@ -336,7 +336,7 @@ func Card(e Example) ggui.Widget {
 				names[i] = d.Label
 			}
 			selected := ggui.State(names[0])
-			widgets = append(widgets, ui.Select(selected, names).OnChange(func(s string) {
+			widgets = append(widgets, ui.Select(selected).Options(names).OnChange(func(s string) {
 				for i, name := range names {
 					if s == name {
 						chart.ActiveIndex(i)

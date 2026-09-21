@@ -36,7 +36,7 @@ func TestFluentSelectKeyKeepsOpenPopupAfterMovingRebuild(t *testing.T) {
 	var control *ui.SelectWidget[string]
 	p := ggui.ProbeBuilder(func() ggui.Widget {
 		return ggui.Reactive(func() ggui.Widget {
-			control = ui.Select(value, []string{"Alpha", "Beta"}).Key("select").Named("Choice")
+			control = ui.Select(value).Options([]string{"Alpha", "Beta"}).Key("select").Name("Choice")
 			return ggui.Column(ggui.Box().Height(offset.Get()), control)
 		})
 	}, ggui.Sz(350, 350))
@@ -59,7 +59,7 @@ func TestComboboxKeyKeepsPopupAndSearchFocusAfterMovingRebuild(t *testing.T) {
 	var control *ui.ComboboxWidget[string]
 	p := ggui.ProbeBuilder(func() ggui.Widget {
 		return ggui.Reactive(func() ggui.Widget {
-			control = ui.Combobox(value, []string{"Alpha", "Beta"}).Key("combobox").Named("Choice")
+			control = ui.Combobox(value).Options([]string{"Alpha", "Beta"}).Key("combobox").Name("Choice")
 			return ggui.Column(ggui.Box().Height(offset.Get()), control)
 		})
 	}, ggui.Sz(350, 400))
@@ -92,7 +92,7 @@ func (*layoutCounter) Paint(*ggui.Canvas, ggui.Rect) {}
 func TestControlConfigurationDoesNotCauseIdleLayouts(t *testing.T) {
 	leaf := &layoutCounter{}
 	p := ggui.ProbeBuilder(func() ggui.Widget {
-		return ggui.Column(ui.Button("Action", nil), ui.Select(ggui.State("a"), []string{"a", "b"}), leaf)
+		return ggui.Column(ui.Button("Action", nil), ui.Select(ggui.State("a")).Options([]string{"a", "b"}), leaf)
 	}, ggui.Sz(350, 300))
 	defer p.Close()
 	p.Frame()

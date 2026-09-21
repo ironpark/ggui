@@ -126,7 +126,7 @@ func galleryPage(dark *ggui.StateValue[bool], search, category *ggui.StateValue[
 	filters := ggui.View(category, func(selected string) *ggui.WrapWidget {
 		var buttons []ggui.Widget
 		for _, label := range []string{"All", "Inputs", "Navigation", "Feedback", "Layout", "Data"} {
-			button := ui.Button(fmt.Sprintf("%s  %d", label, counts[label]), func() { category.Set(label); scroll.Set(0) }).Named(label)
+			button := ui.Button(fmt.Sprintf("%s  %d", label, counts[label]), func() { category.Set(label); scroll.Set(0) }).Name(label)
 			if label != selected {
 				button.Outline()
 			}
@@ -134,7 +134,7 @@ func galleryPage(dark *ggui.StateValue[bool], search, category *ggui.StateValue[
 		}
 		return ggui.Wrap(buttons...).Gap(8)
 	})
-	field := ui.TextField(search).Named("Search components").Placeholder("Search components…").OnChange(func(string) { scroll.Set(0) })
+	field := ui.TextField(search).Name("Search components").Placeholder("Search components…").OnChange(func(string) { scroll.Set(0) })
 	header := ggui.Reactive(func() ggui.Widget {
 		theme := ggui.UseTheme()
 		return ggui.Box(ggui.Column(
@@ -154,7 +154,7 @@ func galleryPage(dark *ggui.StateValue[bool], search, category *ggui.StateValue[
 		ggui.Textf("%d of %d previews", shown.Map(func(cards []ggui.Widget) int { return len(cards) }), len(previews)).AsCaption(), ggui.Spacer(),
 		ggui.Caption("⌘K  Commands   ·   Tab  Navigate   ·   F1  Inspect"),
 	).Gap(12), 12, 28)
-	children := []ggui.Widget{header, ui.Divider(), ggui.Expanded(ggui.Scroll(ggui.Padding(content, 24, 28)).Offset(scroll)), ui.Divider(), footer}
+	children := []ggui.Widget{header, ui.Divider(), ggui.Expanded(ggui.Scroll(ggui.Padding(content, 24, 28)).BindOffset(scroll)), ui.Divider(), footer}
 	children = append(children, extras...)
 	return ggui.Column(children...).Align(ggui.AlignStretch)
 }

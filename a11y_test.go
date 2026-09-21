@@ -465,7 +465,8 @@ func TestAXPressReachesTheWidget(t *testing.T) {
 	// of the published tree, asks the app to press it, and the next frame
 	// shows that it was.
 	w := &axBell{}
-	w.Role, w.Name = RoleButton, "ring"
+	w.Role = RoleButton
+	w.SetName("ring")
 	p := NewProbe(w, Sz(100, 100))
 	defer p.Close()
 

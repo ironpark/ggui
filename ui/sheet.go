@@ -1,5 +1,7 @@
 package ui
 
+import "github.com/ironpark/ggui/internal/property"
+
 import "github.com/ironpark/ggui"
 
 // sheetSide says which edge a sheet slides in from.
@@ -23,6 +25,8 @@ const (
 // simply constructed once beside the signal it binds -- animates, and one
 // rebuilt from scratch every frame appears and goes at once, as Dialog does.
 type SheetWidget struct {
+	nameReader ggui.Readable[string]
+	props      property.Owner
 	modal
 	side   sheetSide
 	extent float64
@@ -53,32 +57,68 @@ func Drawer(open ggui.Binding[bool], content ggui.Widget) *SheetWidget {
 // Probe.Find.
 func (s *SheetWidget) Title(v string) *SheetWidget { s.setTitle(v); return s }
 
-// Named sets an accessible name without adding a visible heading.
-func (s *SheetWidget) Named(name string) *SheetWidget { s.name = name; return s }
+// Name sets an accessible name without adding a visible heading.
+func (s *SheetWidget) Name(name string) *SheetWidget {
+	if s.nameReader != nil {
+		s.nameReader = nil
+		s.props.Changed()
+	}
+	defer property.Watch(&s.props, &s.name)()
+	s.name = name
+	return s
+}
 
 // Compact removes the outer padding for content with its own spacing.
-func (s *SheetWidget) Compact() *SheetWidget { s.compact = true; return s }
+func (s *SheetWidget) Compact() *SheetWidget {
+	defer property.Watch(&s.props, &s.compact)()
+	s.compact = true
+	return s
+}
 
 // Dismissible says whether a click on the scrim closes the sheet; it does
 // by default. Escape closes either way.
-func (s *SheetWidget) Dismissible(v bool) *SheetWidget { s.dismissible = v; return s }
+func (s *SheetWidget) Dismissible(v bool) *SheetWidget {
+	defer property.Watch(&s.props, &s.dismissible)()
+	s.dismissible = v
+	return s
+}
 
 // Left anchors the sheet to the left edge.
-func (s *SheetWidget) Left() *SheetWidget { s.side = sheetLeft; return s }
+func (s *SheetWidget) Left() *SheetWidget {
+	defer property.Watch(&s.props, &s.side)()
+	s.side = sheetLeft
+	return s
+}
 
 // Right anchors the sheet to the right edge, which is where it starts.
-func (s *SheetWidget) Right() *SheetWidget { s.side = sheetRight; return s }
+func (s *SheetWidget) Right() *SheetWidget {
+	defer property.Watch(&s.props, &s.side)()
+	s.side = sheetRight
+	return s
+}
 
 // Top anchors the sheet to the top edge.
-func (s *SheetWidget) Top() *SheetWidget { s.side = sheetTop; return s }
+func (s *SheetWidget) Top() *SheetWidget {
+	defer property.Watch(&s.props, &s.side)()
+	s.side = sheetTop
+	return s
+}
 
 // Bottom anchors the sheet to the bottom edge.
-func (s *SheetWidget) Bottom() *SheetWidget { s.side = sheetBottom; return s }
+func (s *SheetWidget) Bottom() *SheetWidget {
+	defer property.Watch(&s.props, &s.side)()
+	s.side = sheetBottom
+	return s
+}
 
 // Size sets how far the sheet reaches from its edge: its width on the left
 // or right, its height on the top or bottom. It shrinks to fit a smaller
 // window.
-func (s *SheetWidget) Size(v float64) *SheetWidget { s.extent = max(0, v); return s }
+func (s *SheetWidget) Size(v float64) *SheetWidget {
+	defer property.Watch(&s.props, &s.extent)()
+	s.extent = max(0, v)
+	return s
+}
 
 // OnClose fires when the sheet closes, however it closed.
 func (s *SheetWidget) OnClose(fn func()) *SheetWidget { s.onClose = fn; return s }
@@ -89,6 +129,10 @@ func (s *SheetWidget) horizontal() bool { return s.side == sheetLeft || s.side =
 // Layout implements ggui.Widget: the sheet takes no room in the tree. The
 // panel gets no border or radius: it is flush with the edge it came from.
 func (s *SheetWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer s.props.Layout()()
+	if s.nameReader != nil {
+		s.name = s.nameReader.Get()
+	}
 	s.build(env)
 	return c.Constrain(ggui.Size{})
 }
@@ -145,4 +189,14 @@ func (s *SheetWidget) paintPanel(dst *ggui.Canvas, v float64, open bool) {
 		at := ggui.Pt(rect.Origin.X+(rect.Size.W-grip.W)/2, rect.Origin.Y+t.Space/2)
 		dst.FillRoundRect(ggui.Rct(at, grip), grip.H/2, t.Border)
 	}
+}
+
+// BindName follows a non-nil accessible-name reader.
+func (s *SheetWidget) BindName(r ggui.Readable[string]) *SheetWidget {
+	property.Require(r, "BindName")
+	if !property.Same(s.nameReader, r) {
+		s.nameReader = r
+		s.props.Changed()
+	}
+	return s
 }

@@ -1,9 +1,12 @@
 package ui
 
+import "github.com/ironpark/ggui/internal/property"
+
 import "github.com/ironpark/ggui"
 
 // AlertWidget is an inline notice with a title, description and optional action.
 type AlertWidget struct {
+	props              property.Owner
 	title, description *ggui.TextWidget
 	action             ggui.Widget
 	destructive        bool
@@ -16,13 +19,18 @@ func Alert(title, description string) *AlertWidget {
 }
 
 // Destructive uses the theme's Destructive color for the heading and border.
-func (a *AlertWidget) Destructive() *AlertWidget { a.destructive = true; return a }
+func (a *AlertWidget) Destructive() *AlertWidget {
+	defer property.Watch(&a.props, &a.destructive)()
+	a.destructive = true
+	return a
+}
 
 // Action places a widget below the notice, such as a retry button.
 func (a *AlertWidget) Action(w ggui.Widget) *AlertWidget { a.action = w; return a }
 
 // Layout implements ggui.Widget.
 func (a *AlertWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer a.props.Layout()()
 	t := env.Theme()
 	fg, border := t.Fg, t.Border
 	if a.destructive {

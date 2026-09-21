@@ -37,7 +37,7 @@ ggui.Column(
 	ui.Checkbox(agree, "I agree"),
 	ui.Switch(dark, "Dark mode"),
 	ui.Slider(size, 0, 1).Step(0.1),
-	ui.Radios(plan, []string{"free", "pro"}).Format(strings.ToTitle),
+	ui.Radios(plan).Options([]string{"free", "pro"}).Format(strings.ToTitle),
 	ggui.Row(ui.Button("Save", save), ui.Button("Cancel", cancel).Outline()).Gap(8),
 	ui.Divider(),
 ).Gap(12)
@@ -54,14 +54,14 @@ Common options on interactive controls include:
 | Option | Purpose |
 | --- | --- |
 | `.Disabled(v)` | Disable interaction. |
-| `.DisabledWhen(reader)` | Follow a reactive disabled state without rebuilding. |
+| `.BindDisabled(reader)` | Follow a reactive disabled state without rebuilding. |
 | `.OnChange(fn)` | Observe a user-selected value on controls that expose this callback. |
 | `.OnCommit(fn)` | Observe completed editing on sliders and text fields. |
 | `.Pad(...)` | Override padding on controls such as buttons. |
 
-Every control widget with `Disabled` also supports `DisabledWhen`. The last
-setting wins: `Disabled(false)` removes a previous `DisabledWhen` binding;
-`DisabledWhen(busy)` replaces the static setting. Composite controls evaluate
+Every control widget with `Disabled` also supports `BindDisabled`. The last
+setting wins: `Disabled(false)` removes a previous `BindDisabled` binding;
+`BindDisabled(busy)` replaces the static setting. Composite controls evaluate
 their own binding and apply the result to their internal controls. Disabling a
 popup control also closes its popup. Item configuration values such as
 `CommandEntry` keep their static `Disabled` option.
@@ -73,7 +73,7 @@ control's input state; it does not automatically key all children of a group.
 Combobox keys its trigger, popup and search editor separately; keep it mounted
 to preserve the search query.
 
-Use `.Named(name)` for a control's accessible and Probe name. `Field` supplies
+Use `.Name(name)` for a control's accessible and Probe name. `Field` supplies
 its label only when the control has no explicit name, taking precedence over a
 placeholder or built-in fallback. Labels passed to constructors such as
 `Button("Save", save)` are explicit names. Custom controls can participate by
@@ -133,7 +133,7 @@ name := ggui.State("")
 problem := ggui.State("")
 field := ui.Field("Name", ui.TextField(name)).
 	Help("Shown on your profile").
-	Error(problem)
+	BindError(problem)
 ```
 
 A nonempty error replaces the help text. The field label names the control

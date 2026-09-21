@@ -38,7 +38,8 @@ func TestPerformDoesNotWaitForTheUIGoroutine(t *testing.T) {
 
 func TestPerformFocusesAndScrollsIntoView(t *testing.T) {
 	w := &twice{}
-	w.Role, w.Name = RoleTextField, "Name"
+	w.Role = RoleTextField
+	w.SetName("Name")
 	tall := Column(Box().Size(40, 200), w)
 	p := NewProbe(Scroll(tall), Sz(100, 60))
 	defer p.Close()

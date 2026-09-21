@@ -1,11 +1,12 @@
 package ui_test
 
 import (
+	"testing"
+
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/icons"
 	"github.com/ironpark/ggui/icons/lucide"
 	"github.com/ironpark/ggui/ui"
-	"testing"
 )
 
 type observedIcons struct{ seen map[icons.Role]int }
@@ -18,7 +19,7 @@ func TestControlsResolveInheritedIcons(t *testing.T) {
 	set := &observedIcons{seen: map[icons.Role]int{}}
 	tree := ggui.Provide(icons.SetKey, icons.Set(set), ggui.Column(
 		ui.Checkbox(ggui.State(true), "Check"),
-		ui.Select(ggui.State("one"), []string{"one", "two"}),
+		ui.Select(ggui.State("one")).Options([]string{"one", "two"}),
 		ui.Collapsible(ggui.State(false), "More", ggui.Text("Body")),
 		ui.Spinner(), ui.Icon(icons.Close),
 	))

@@ -2,43 +2,36 @@
 
 [Documentation](README.md) · [Forms](forms.md) · [Layout](layout.md)
 
-The public API separates construction, reactive bindings and explicit runtime
-operations. These decisions apply to both built-in and custom controls.
+Set a literal with `X(value)`, follow a source with `BindX(reader)`, and pass a
+`Binding[T]` when a control edits a value. Both forms return the concrete widget
+so expressions chain. There is no public property wrapper.
 
-| Area | Decision | Reason |
-| --- | --- | --- |
-| Disabled state | Keep `Disabled` and `DisabledWhen` together on controls, including wrappers. | Consumers should not need to rebuild a control to disable it reactively. |
-| Input identity | Public control `Key` setters return their concrete pointer type. | Identity belongs inside normal widget expressions and fluent chains. |
-| Selection options | Own option snapshots; Select and Combobox offer `Options` and `OptionsWhen`. | External slice mutation must not separate displayed labels from selected values; list updates should preserve the mounted control. |
-| Formatted reactive text | Keep `GetAny` dispatch and adapt custom readers with `Derived(reader.Get)`. | Preserve the small `Readable` interface and avoid reflection or a redundant formatting adapter. |
-| Setter lifecycle | Configure before layout by default; document runtime operations explicitly. | Layout itself configures child widgets. Invalidating from every setter would cause unnecessary layouts on still frames. |
+```go
+ui.TextField(name).Name("Display name").BindDisabled(saving)
+ui.Select(selected).BindOptions(available)
+ggui.Box(ggui.TextOf(status)).Pad(24).BindWidth(width)
+```
 
-Combobox already supported `DisabledWhen`; the convention check now covers
-exported pointer-receiver setters rather than only direct `Interactive` embeds.
-Description values such as `CommandEntry` intentionally keep static options.
+| Area | Contract |
+| --- | --- |
+| Literal vs reader | Last assignment wins. X removes a reader even when the current values are equal. BindX requires a non-nil reader. |
+| Value setters | Work after mount, independently of whether BindX is available. Equal assignments are no-ops. |
+| Structural setup | Configure children, identity, orientation, input modes and formatter/renderer/event callbacks before mount; rebuild for changes. |
+| Compound setters | Size writes Width and Height; Pad writes Padding; Style writes only specified fields. |
+| Selection lists | Select, Combobox, Radios and ToggleGroup take the selected binding; Options or BindOptions provides an owned shallow snapshot. |
+| Text | Content and BindContent replace any source. TextOf and Textf pull during layout and own no computation. Sprintf explicitly creates a derived string. |
+| Names and disabled state | Use Name/BindName and Disabled/BindDisabled. Custom controls use Interactive.SetName/BindName and SetInert/BindInert/IsInert. |
+| Identity | Fluent Key returns the control. Custom controls use Interactive.SetKey. Configure keys before mount. |
 
-See [selection options](data-and-navigation.md#select-and-menu) for the complete
-replacement, missing-value, query and highlight rules. Snapshot ownership is
-shallow: nested referenced objects remain the application's responsibility.
-Static lists such as Radios can still be rebuilt with `View` when needed.
+Readers are borrowed, never disposed by a property. Keep their owners alive as
+long as the widgets using them. A custom Get that reads a signal participates in
+tracking; plain external storage still needs explicit invalidation. Readers do
+not need to be comparable. See [Layout](layout.md) and [Reactivity](reactivity.md)
+for lifecycle and cache details.
 
-Text layout caches include the resolved line height, so inherited line-spacing
-changes also update the measured height. This is required even when a widget
-keeps the same text, font, size and wrapping width.
+Bindings to writable view state include Scroll.BindOffset, Popup.BindOpen,
+Table.BindSelected and Questionnaire.BindActive. Their literal counterparts
+switch to local view state; user input can still change it.
 
-## Current API
-
-Controls expose fluent `Key(id)` methods. Custom control implementations set
-input identity through `Interactive.SetKey(id)`; `Interactive` itself does not
-provide a `Key` method. There are no aliases for the previous signatures.
-
-Use `Button.Secondary` for the secondary variant and
-`InspectorOptions.ShowOutlines` to enable outlines. Outlines are off by default.
-
-## Verification
-
-Convention tests cover disabled-state pairs and fluent keys, including inherited
-methods. Probe tests cover identity across moving rebuilds, popup state, keyboard
-navigation, option replacement under caches, search preservation and binding
-replacement. Text tests cover line-height changes and custom-reader formatting.
-An idle-frame test guards against configuration causing repeated layouts.
+Description values such as CommandEntry and AccordionSection are configuration
+values, not mounted widgets. Their setters keep their value semantics.

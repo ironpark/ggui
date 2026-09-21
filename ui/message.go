@@ -1,11 +1,14 @@
 package ui
 
+import "github.com/ironpark/ggui/internal/property"
+
 import "github.com/ironpark/ggui"
 
 // MessageWidget lays out a conversation row independently of its surface.
 // The avatar rests beside the content above the footer. End reverses the row
 // and aligns its header, footer and a directly contained Bubble to the right.
 type MessageWidget struct {
+	props                                        property.Owner
 	content, avatar                              ggui.Widget
 	headerView, footerView                       *ggui.StyledWidget
 	end                                          bool
@@ -23,11 +26,16 @@ func (m *MessageWidget) Footer(w ggui.Widget) *MessageWidget {
 	m.footerView = ggui.Styled(ggui.Padding(w, 0, 12))
 	return m
 }
-func (m *MessageWidget) End() *MessageWidget { m.end = true; return m }
+func (m *MessageWidget) End() *MessageWidget {
+	defer property.Watch(&m.props, &m.end)()
+	m.end = true
+	return m
+}
 func MessageGroup(messages ...ggui.Widget) *ggui.ColumnWidget {
 	return ggui.Column(messages...).Gap(8).Align(ggui.AlignStretch)
 }
 func (m *MessageWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer m.props.Layout()()
 	width := bounded(c.MaxW, 400)
 	m.avatarSize = ggui.Size{}
 	if m.avatar != nil {

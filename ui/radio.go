@@ -18,7 +18,8 @@ type RadioWidget[T comparable] struct {
 // group.
 func Radio[T comparable](selected ggui.Binding[T], value T, label string) *RadioWidget[T] {
 	r := &RadioWidget[T]{selected: selected, value: value}
-	r.Role, r.Name = ggui.RoleRadio, label
+	r.Role = ggui.RoleRadio
+	r.SetName(label)
 	r.AutoKey()
 	if label != "" {
 		r.label = ggui.Text(label)
@@ -33,9 +34,9 @@ func (r *RadioWidget[T]) OnChange(fn func(T)) *RadioWidget[T] { r.onChange = fn;
 // Disabled greys the option out and ignores the pointer while v is true.
 func (r *RadioWidget[T]) Disabled(v bool) *RadioWidget[T] { r.SetInert(v); return r }
 
-// DisabledWhen follows r for Disabled without a rebuild.
-func (r *RadioWidget[T]) DisabledWhen(when ggui.Readable[bool]) *RadioWidget[T] {
-	r.InertWhen(when)
+// BindDisabled follows r for Disabled without a rebuild.
+func (r *RadioWidget[T]) BindDisabled(when ggui.Readable[bool]) *RadioWidget[T] {
+	r.BindInert(when)
 	return r
 }
 
@@ -45,10 +46,10 @@ func (r *RadioWidget[T]) Describe() ggui.Node {
 	on := ggui.Untrack(r.selected.Get) == r.value
 	return ggui.Node{
 		Role:     ggui.RoleRadio,
-		Name:     r.Name,
+		Name:     r.SemanticName(),
 		Checked:  ggui.Tri(on),
 		Selected: on,
-		Disabled: r.Inert,
+		Disabled: r.IsInert(),
 		Actions:  ggui.ActionPress | ggui.ActionSelect | ggui.ActionFocus,
 	}
 }
@@ -65,7 +66,7 @@ func (r *RadioWidget[T]) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 	center := ggui.Pt(box.Origin.X+box.Size.W/2, box.Origin.Y+box.Size.H/2)
 	radius := box.Size.W / 2
 	on := ggui.Untrack(r.selected.Get) == r.value
-	opacity := pick(r.Inert, .5, 1.0)
+	opacity := pick(r.IsInert(), .5, 1.0)
 	border := colorOr(t.InputBorder, t.Border)
 	if on {
 		border = t.Primary

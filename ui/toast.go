@@ -5,8 +5,10 @@ import (
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
+
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/icons"
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // ToastMessage describes one notification. Push copies it into a Toaster.
@@ -42,6 +44,7 @@ type ToastID uint64
 // paints nonmodal notices at the bottom right. It has no timers or goroutines:
 // lifetimes advance with ggui.Now when painted. Call it only on the UI thread.
 type ToasterWidget struct {
+	props   property.Owner
 	entries []*toastEntry
 	next    ToastID
 	limit   int
@@ -74,7 +77,12 @@ func (e *toastEntry) Describe() ggui.Node { return ggui.Node{Role: ggui.RoleStat
 func NewToaster() *ToasterWidget { return &ToasterWidget{limit: 3} }
 
 // Limit sets the queue size (at least one); excess oldest notices are discarded.
-func (t *ToasterWidget) Limit(n int) *ToasterWidget { t.limit = max(1, n); t.trim(); return t }
+func (t *ToasterWidget) Limit(n int) *ToasterWidget {
+	defer property.Watch(&t.props, &t.limit)()
+	t.limit = max(1, n)
+	t.trim()
+	return t
+}
 func (t *ToasterWidget) trim() {
 	if len(t.entries) > t.limit {
 		t.entries = slices.DeleteFunc(t.entries, func(e *toastEntry) bool { return e.leaving })
@@ -93,7 +101,7 @@ func (t *ToasterWidget) Push(message ToastMessage) ToastID {
 	e := &toastEntry{id: t.next, title: message.title, remaining: message.duration, persistent: message.duration <= 0, last: ggui.Now()}
 	e.motion.MoveTo(0, e.last, 0)
 	e.duration = message.duration
-	e.dismiss = ButtonOf(Icon(icons.Close).Size(14), func() { t.Dismiss(e.id) }).Ghost().Pad(2, 8).Named("Dismiss " + message.title)
+	e.dismiss = ButtonOf(Icon(icons.Close).Size(14), func() { t.Dismiss(e.id) }).Ghost().Pad(2, 8).Name("Dismiss " + message.title)
 	e.dismiss.Key(e)
 
 	if message.actionLabel != "" {
@@ -152,6 +160,7 @@ func (t *ToasterWidget) Close() { t.closed = true; t.Clear() }
 
 // Layout implements ggui.Widget; put the host anywhere in the root tree.
 func (t *ToasterWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer t.props.Layout()()
 	t.env = env
 	return c.Constrain(ggui.Size{})
 }

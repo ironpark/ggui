@@ -40,7 +40,7 @@ func TestActLeavesDisabledControlsAlone(t *testing.T) {
 func TestActStepsASlider(t *testing.T) {
 	value := ggui.State(5.0)
 	committed := 0.0
-	p := ggui.NewProbe(ui.Slider(value, 0, 10).Step(1).Named("Vol").OnCommit(func(v float64) { committed = v }), ggui.Sz(200, 40))
+	p := ggui.NewProbe(ui.Slider(value, 0, 10).Step(1).Name("Vol").OnCommit(func(v float64) { committed = v }), ggui.Sz(200, 40))
 	defer p.Close()
 	act(t, p, ggui.RoleSlider, "Vol", ggui.Action{Kind: ggui.ActionIncrement})
 	if ggui.Untrack(value.Get) != 6 || committed != 6 {
@@ -79,7 +79,7 @@ func TestActExpandsAndCollapses(t *testing.T) {
 
 func TestActOpensAndChoosesInASelect(t *testing.T) {
 	value := ggui.State(1)
-	p := ggui.NewProbe(ggui.Column(ui.Select(value, []int{1, 2, 3}).Named("Count")), ggui.Sz(200, 300))
+	p := ggui.NewProbe(ggui.Column(ui.Select(value).Options([]int{1, 2, 3}).Name("Count")), ggui.Sz(200, 300))
 	defer p.Close()
 	act(t, p, ggui.RoleSelect, "Count", ggui.Action{Kind: ggui.ActionExpand})
 	if n, _ := p.Semantics().Find(ggui.RoleSelect, "Count"); n.Expanded == nil || !*n.Expanded {
@@ -103,7 +103,7 @@ func TestActSelectsATabAndARow(t *testing.T) {
 
 	chosen := ggui.State("")
 	table := ui.Table(ggui.State([]string{"Ada", "Alan"}), func(s string) string { return s },
-		ui.TextCol("Name", func(s string) string { return s })).Selected(chosen)
+		ui.TextCol("Name", func(s string) string { return s })).BindSelected(chosen)
 	q := ggui.NewProbe(table, ggui.Sz(300, 200))
 	defer q.Close()
 	act(t, q, ggui.RoleRow, "Alan", ggui.Action{Kind: ggui.ActionSelect})
@@ -114,7 +114,7 @@ func TestActSelectsATabAndARow(t *testing.T) {
 
 func TestActSetsATextFieldOutright(t *testing.T) {
 	value := ggui.State("Ada")
-	p := ggui.NewProbe(ui.TextField(value).Named("Name"), ggui.Sz(200, 60))
+	p := ggui.NewProbe(ui.TextField(value).Name("Name"), ggui.Sz(200, 60))
 	defer p.Close()
 	act(t, p, ggui.RoleTextField, "Name", ggui.Action{Kind: ggui.ActionSetValue, Text: "Alan"})
 	if ggui.Untrack(value.Get) != "Alan" {

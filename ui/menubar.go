@@ -2,11 +2,13 @@ package ui
 
 import (
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // MenubarWidget coordinates Menu triggers through one popup and one tab stop.
 // Menus belong exclusively to the bar; do not also paint them independently.
 type MenubarWidget struct {
+	props property.Owner
 	ggui.Interactive
 	menus        []*MenuWidget
 	active       int
@@ -34,16 +36,20 @@ func Menubar(menus ...*MenuWidget) *MenubarWidget {
 	return b
 }
 
-// Named sets the accessible name of the menu strip.
-func (b *MenubarWidget) Named(s string) *MenubarWidget { b.Name = s; return b }
+// Name sets the accessible name of the menu strip.
+func (b *MenubarWidget) Name(s string) *MenubarWidget { b.SetName(s); return b }
 
 // Compact paints the menu strip at its content width, even in a stretched layout.
-func (b *MenubarWidget) Compact() *MenubarWidget { b.compact = true; return b }
+func (b *MenubarWidget) Compact() *MenubarWidget {
+	defer property.Watch(&b.props, &b.compact)()
+	b.compact = true
+	return b
+}
 
 // Popup returns the shared popup.
 func (b *MenubarWidget) Popup() *ggui.PopupWidget { return b.popup }
 func (b *MenubarWidget) open(i int) {
-	if b.Inert || i < 0 || i >= len(b.menus) || b.menus[i].button.Inert {
+	if b.IsInert() || i < 0 || i >= len(b.menus) || b.menus[i].button.IsInert() {
 		return
 	}
 	b.active = i
@@ -61,13 +67,14 @@ func (b *MenubarWidget) toggle(i int) {
 
 // Layout implements ggui.Widget.
 func (b *MenubarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer b.props.Layout()()
 	for _, m := range b.menus {
 		m.button.Sync()
 	}
 	b.theme = env.Theme()
-	if len(b.menus) > 0 && b.menus[b.active].button.Inert {
+	if len(b.menus) > 0 && b.menus[b.active].button.IsInert() {
 		b.popup.Hide()
-		b.active = stepIndex(b.active, 1, len(b.menus), func(i int) bool { return !b.menus[i].button.Inert })
+		b.active = stepIndex(b.active, 1, len(b.menus), func(i int) bool { return !b.menus[i].button.IsInert() })
 	}
 	return b.popup.Layout(c, env)
 }
@@ -75,7 +82,7 @@ func (b *MenubarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 // Adopt retains the active menu and highlighted action across keyed rebuilds.
 func (b *MenubarWidget) Adopt(prev any) {
 	b.Interactive.Adopt(prev)
-	if p, ok := prev.(*MenubarWidget); ok && p.active < len(b.menus) && p.active >= 0 && !b.menus[p.active].button.Inert {
+	if p, ok := prev.(*MenubarWidget); ok && p.active < len(b.menus) && p.active >= 0 && !b.menus[p.active].button.IsInert() {
 		b.active = p.active
 		b.motion = p.motion
 		if p.popup.IsOpen() {
@@ -117,14 +124,14 @@ func (b *MenubarWidget) ConsumesKey(e ggui.KeyEvent) bool {
 // HandleKey implements ggui.KeyHandler.
 func (b *MenubarWidget) HandleKey(e ggui.KeyEvent) {
 	b.Keyboard(e, nil)
-	if b.Inert || e.Kind != ggui.KeyPress || len(b.menus) == 0 {
+	if b.IsInert() || e.Kind != ggui.KeyPress || len(b.menus) == 0 {
 		return
 	}
 	switch e.Key {
 	case ggui.KeyEscape:
 		b.popup.Hide()
 	case ggui.KeyArrowLeft, ggui.KeyArrowRight:
-		b.active = stepIndex(b.active, pick(e.Key == ggui.KeyArrowLeft, -1, 1), len(b.menus), func(i int) bool { return !b.menus[i].button.Inert })
+		b.active = stepIndex(b.active, pick(e.Key == ggui.KeyArrowLeft, -1, 1), len(b.menus), func(i int) bool { return !b.menus[i].button.IsInert() })
 		if b.popup.IsOpen() {
 			b.open(b.active)
 		}
@@ -142,7 +149,7 @@ func (b *MenubarWidget) HandleKey(e ggui.KeyEvent) {
 			b.menus[b.active].jump(pick(e.Key == ggui.KeyHome, 1, -1))
 		} else {
 			dir := pick(e.Key == ggui.KeyHome, 1, -1)
-			enabled := func(i int) bool { return !b.menus[i].button.Inert }
+			enabled := func(i int) bool { return !b.menus[i].button.IsInert() }
 			b.active = max(stepIndex(-1, dir, len(b.menus), enabled), 0)
 		}
 	default:
@@ -197,7 +204,7 @@ func (a menubarAnchor) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		}
 		dst.Describe(rr, m.button)
 		dst.Paint(m.button.box, rr)
-		if !m.button.Inert {
+		if !m.button.IsInert() {
 			dst.HitPointer(rr, menubarTarget{b, i})
 			dst.HitCursor(rr, ggui.CursorShapePointer)
 		}
@@ -232,7 +239,7 @@ func (p menubarPanel) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	dst.Paint(m.panel, r)
 	for i, rr := range b.rects {
-		if !b.menus[i].button.Inert {
+		if !b.menus[i].button.IsInert() {
 			dst.HitPointer(rr, menubarTarget{b, i})
 		}
 	}
@@ -244,7 +251,7 @@ type menubarTarget struct {
 }
 
 func (t menubarTarget) HandlePointer(e ggui.PointerEvent) bool {
-	if t.b.menus[t.i].button.Inert {
+	if t.b.menus[t.i].button.IsInert() {
 		return false
 	}
 	switch e.Kind {
@@ -272,7 +279,9 @@ func (t menubarTarget) HandlePointer(e ggui.PointerEvent) bool {
 
 func (t menubarTarget) Semantics() (ggui.Role, string) { return t.b.menus[t.i].button.Semantics() }
 
-func (b *MenubarWidget) name() string { return pick(b.Name != "", b.Name, "Menubar") }
+func (b *MenubarWidget) name() string {
+	return pick(b.SemanticName() != "", b.SemanticName(), "Menubar")
+}
 
 // Semantics implements ggui.Semantic, including the built-in fallback name.
 func (b *MenubarWidget) Semantics() (ggui.Role, string) { return b.Role, b.name() }

@@ -20,7 +20,7 @@ func iconPreview() ggui.Widget {
 	}
 	custom := icons.Map{icons.Check: plus}
 	return ggui.Column(
-		ui.Select(selected, []string{"Lucide", "Tabler", "Heroicons"}).Named("Icon library"),
+		ui.Select(selected).Options([]string{"Lucide", "Tabler", "Heroicons"}).Name("Icon library"),
 		// Key remounts the subtree when the library changes: the checkbox
 		// inside is rebuilt on purpose, so it picks up the new check glyph.
 		ggui.Key(selected, func(library string) ggui.Widget {

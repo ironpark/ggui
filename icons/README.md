@@ -16,7 +16,7 @@ import (
 ui.Icon(icons.Search).Size(20)                   // semantic, themeable
 lucide.Icon("download").Size(20)                // explicit library icon
 ui.Icon(icons.Download).Alt("Download")         // accessible image
-ui.ButtonOf(ui.Icon(icons.Close), close).Named("Close") // decorative icon
+ui.ButtonOf(ui.Icon(icons.Close), close).Name("Close") // decorative icon
 
 // Local subtree selection:
 ggui.Provide(icons.SetKey, lucide.Set(), content)

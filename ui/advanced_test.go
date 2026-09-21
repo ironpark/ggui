@@ -103,7 +103,7 @@ func TestCommandFiltersAndSkipsDisabled(t *testing.T) {
 func TestComboboxSelectionAndEscape(t *testing.T) {
 	value := ggui.State("Apple")
 	changes := 0
-	c := ui.Combobox(value, []string{"Apple", "Banana", "Cherry"}).Named("Fruit").OnChange(func(string) { changes++ })
+	c := ui.Combobox(value).Options([]string{"Apple", "Banana", "Cherry"}).Name("Fruit").OnChange(func(string) { changes++ })
 	p := ggui.NewProbe(ggui.Column(c, ui.Button("Outside", func() {})), ggui.Sz(360, 320))
 	defer p.Close()
 	p.Tap("Fruit")

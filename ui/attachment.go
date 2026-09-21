@@ -6,7 +6,9 @@ import (
 	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
+
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // AttachmentState is the caller-owned upload lifecycle. Attachment does not
@@ -34,6 +36,7 @@ const (
 // Its optional full-card trigger sits behind the actions in the hit order.
 // Geometry follows shadcn/ui's Rhea attachment; colors follow the theme.
 type AttachmentWidget struct {
+	props                                property.Owner
 	title, description                   string
 	titleText, descriptionText           attachmentText
 	media                                ggui.Widget
@@ -56,7 +59,7 @@ type AttachmentWidget struct {
 }
 
 // Attachment creates a completed, horizontal file card. Media and actions are
-// optional. State and StateOf change presentation without owning the upload.
+// optional. State and BindState change presentation without owning the upload.
 func Attachment(title, description string) *AttachmentWidget {
 	return &AttachmentWidget{title: title, description: description, state: AttachmentDone}
 }
@@ -86,36 +89,50 @@ func (a *AttachmentWidget) Trigger(name string, fn func()) *AttachmentWidget {
 	if fn == nil {
 		a.trigger = nil
 	} else {
-		a.trigger = ButtonOf(ggui.Box(), fn).Named(name).Ghost().Pad(0)
+		a.trigger = ButtonOf(ggui.Box(), fn).Name(name).Ghost().Pad(0)
 	}
 	return a
 }
 
-// State sets a fixed upload state, replacing a StateOf reader.
+// State sets a fixed upload state, replacing a BindState reader.
 func (a *AttachmentWidget) State(s AttachmentState) *AttachmentWidget {
+	defer property.Watch(&a.props, &a.state)()
+	defer property.Watch(&a.props, &a.stateReader)()
 	a.state, a.stateReader = s, nil
 	return a
 }
 
-// StateOf follows an upload state without rebuilding the attachment.
-func (a *AttachmentWidget) StateOf(s ggui.Readable[AttachmentState]) *AttachmentWidget {
-	a.stateReader = s
+// BindState follows an upload state without rebuilding the attachment.
+func (a *AttachmentWidget) BindState(r ggui.Readable[AttachmentState]) *AttachmentWidget {
+	property.Require(r, "BindState")
+	if !property.Same(a.stateReader, r) {
+		a.stateReader = r
+		a.props.Changed()
+	}
 	return a
 }
 
 // Size selects default, small or extra-small geometry.
-func (a *AttachmentWidget) Size(s AttachmentSize) *AttachmentWidget { a.size = s; return a }
+func (a *AttachmentWidget) Size(s AttachmentSize) *AttachmentWidget {
+	defer property.Watch(&a.props, &a.size)()
+	a.size = s
+	return a
+}
 
 // Vertical places square media above the metadata; actions overlay its top right.
 func (a *AttachmentWidget) Vertical() *AttachmentWidget { a.vertical = true; return a }
 
 // Width overrides the intrinsic card width, still constrained by its parent.
-func (a *AttachmentWidget) Width(px float64) *AttachmentWidget { a.width = max(0, px); return a }
+func (a *AttachmentWidget) Width(px float64) *AttachmentWidget {
+	defer property.Watch(&a.props, &a.width)()
+	a.width = max(0, px)
+	return a
+}
 
 // AttachmentAction is a 24px ghost action with an explicit accessible name.
 // content is usually an icon. Button setters can customize its style or state.
 func AttachmentAction(name string, content ggui.Widget, fn func()) *ButtonWidget {
-	return ButtonOf(ggui.Box(ggui.Center(content)).Width(24).Height(24), fn).Named(name).Ghost().Pad(0)
+	return ButtonOf(ggui.Box(ggui.Center(content)).Width(24).Height(24), fn).Name(name).Ghost().Pad(0)
 }
 
 func (a *AttachmentWidget) uploadState() AttachmentState {
@@ -131,6 +148,7 @@ func (a *AttachmentWidget) uploadState() AttachmentState {
 }
 
 func (a *AttachmentWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer a.props.Layout()()
 	a.theme, a.reduced, a.current = env.Theme(), env.ReducedMotion(), a.uploadState()
 	a.padX, a.padY, a.gap, a.mediaSide = 10, 8, 8, 40
 	a.radius = a.theme.ChatTokens().AttachmentRadius
@@ -359,7 +377,7 @@ func (t *attachmentText) set(value string, size float64, col color.Color) {
 	if t.text == nil {
 		t.text = ggui.Text(t.value).NoWrap()
 	}
-	t.text.Set(t.value).Size(size).LineHeight(1.25).Color(col)
+	t.text.Content(t.value).Size(size).LineHeight(1.25).Color(col)
 	t.fitted = false
 }
 func (t *attachmentText) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
@@ -367,21 +385,21 @@ func (t *attachmentText) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		return t.text.Layout(c, env)
 	}
 	t.fitted, t.fitWidth = true, c.MaxW
-	t.text.Set(t.value)
+	t.text.Content(t.value)
 	natural := t.text.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env)
 	if natural.W > c.MaxW {
 		runes := []rune(t.value)
 		lo, hi := 0, len(runes)
 		for lo < hi {
 			mid := (lo + hi + 1) / 2
-			t.text.Set(string(runes[:mid]) + "…")
+			t.text.Content(string(runes[:mid]) + "…")
 			if t.text.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env).W <= c.MaxW {
 				lo = mid
 			} else {
 				hi = mid - 1
 			}
 		}
-		t.text.Set(string(runes[:lo]) + "…")
+		t.text.Content(string(runes[:lo]) + "…")
 	}
 	return t.text.Layout(c, env)
 }

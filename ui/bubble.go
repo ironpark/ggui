@@ -1,8 +1,10 @@
 package ui
 
 import (
-	"github.com/ironpark/ggui"
 	"image/color"
+
+	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // BubbleWidget is a chat surface. Message supplies avatar, header and footer;
@@ -10,6 +12,7 @@ import (
 var messageEndKey = ggui.NewEnvKey[bool]("message end alignment")
 
 type BubbleWidget struct {
+	props      property.Owner
 	alignedEnd bool
 	ggui.Interactive
 	content                    *ggui.StyledWidget
@@ -31,27 +34,59 @@ func Bubble(content ggui.Widget) *BubbleWidget {
 	b.AutoKey()
 	return b
 }
-func (b *BubbleWidget) Secondary() *BubbleWidget   { b.variant = "secondary"; return b }
-func (b *BubbleWidget) Muted() *BubbleWidget       { b.variant = "muted"; return b }
-func (b *BubbleWidget) Tinted() *BubbleWidget      { b.variant = "tinted"; return b }
-func (b *BubbleWidget) Outline() *BubbleWidget     { b.variant = "outline"; return b }
-func (b *BubbleWidget) Ghost() *BubbleWidget       { b.variant = "ghost"; return b }
-func (b *BubbleWidget) Destructive() *BubbleWidget { b.variant = "destructive"; return b }
-func (b *BubbleWidget) End() *BubbleWidget         { b.end = true; return b }
+func (b *BubbleWidget) Secondary() *BubbleWidget {
+	defer property.Watch(&b.props, &b.variant)()
+	b.variant = "secondary"
+	return b
+}
+func (b *BubbleWidget) Muted() *BubbleWidget {
+	defer property.Watch(&b.props, &b.variant)()
+	b.variant = "muted"
+	return b
+}
+func (b *BubbleWidget) Tinted() *BubbleWidget {
+	defer property.Watch(&b.props, &b.variant)()
+	b.variant = "tinted"
+	return b
+}
+func (b *BubbleWidget) Outline() *BubbleWidget {
+	defer property.Watch(&b.props, &b.variant)()
+	b.variant = "outline"
+	return b
+}
+func (b *BubbleWidget) Ghost() *BubbleWidget {
+	defer property.Watch(&b.props, &b.variant)()
+	b.variant = "ghost"
+	return b
+}
+func (b *BubbleWidget) Destructive() *BubbleWidget {
+	defer property.Watch(&b.props, &b.variant)()
+	b.variant = "destructive"
+	return b
+}
+func (b *BubbleWidget) End() *BubbleWidget {
+	defer property.Watch(&b.props, &b.end)()
+	b.end = true
+	return b
+}
 
 // Action turns the surface into a named button without swallowing reaction clicks.
 func (b *BubbleWidget) Action(name string, fn func()) *BubbleWidget {
-	b.Name, b.action, b.Role = name, fn, ggui.RoleButton
+	b.SetName(name)
+	b.action = fn
+	b.Role = ggui.RoleButton
 	return b
 }
 
 // Link is a link-semantic action. The caller decides how to open the destination.
 func (b *BubbleWidget) Link(name string, fn func()) *BubbleWidget {
-	b.Name, b.action, b.Role = name, fn, ggui.RoleLink
+	b.SetName(name)
+	b.action = fn
+	b.Role = ggui.RoleLink
 	return b
 }
 func (b *BubbleWidget) Disabled(v bool) *BubbleWidget                    { b.SetInert(v); return b }
-func (b *BubbleWidget) DisabledWhen(r ggui.Readable[bool]) *BubbleWidget { b.InertWhen(r); return b }
+func (b *BubbleWidget) BindDisabled(r ggui.Readable[bool]) *BubbleWidget { b.BindInert(r); return b }
 
 // Reactions places arbitrary content at the bottom end edge. Leave vertical
 // space between rows for the overlap. Use named buttons for interactive reactions.
@@ -60,8 +95,16 @@ func (b *BubbleWidget) Reactions(w ggui.Widget) *BubbleWidget {
 	b.reactionBox = ggui.Box(w).Pad(2, 6).Radius(100)
 	return b
 }
-func (b *BubbleWidget) ReactionsTop() *BubbleWidget   { b.reactionTop = true; return b }
-func (b *BubbleWidget) ReactionsStart() *BubbleWidget { b.reactionStart = true; return b }
+func (b *BubbleWidget) ReactionsTop() *BubbleWidget {
+	defer property.Watch(&b.props, &b.reactionTop)()
+	b.reactionTop = true
+	return b
+}
+func (b *BubbleWidget) ReactionsStart() *BubbleWidget {
+	defer property.Watch(&b.props, &b.reactionStart)()
+	b.reactionStart = true
+	return b
+}
 
 // BubbleGroup stacks consecutive bubbles with shadcn's 8px gap.
 func BubbleGroup(bubbles ...ggui.Widget) *ggui.ColumnWidget {
@@ -86,12 +129,13 @@ func (b *BubbleWidget) colors() (fill, fg, border color.Color) {
 	return t.Primary, t.PrimaryFg, nil
 }
 func (b *BubbleWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer b.props.Layout()()
 	b.Sync()
 	inheritedEnd, _ := env.Get(messageEndKey)
 	b.alignedEnd = b.end || inheritedEnd
 	b.theme = env.Theme()
 	_, fg, _ := b.colors()
-	if b.Inert {
+	if b.IsInert() {
 		fg = mix(fg, b.theme.Card, b.theme.DisabledMix)
 	}
 	b.content.Size(14).LineHeight(1.625).Color(fg)
@@ -116,14 +160,14 @@ func (b *BubbleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		body.Origin.X += max(0, r.Size.W-body.Size.W)
 	}
 	fill, fg, border := b.colors()
-	if b.action != nil && b.Hovered && !b.Inert {
+	if b.action != nil && b.Hovered && !b.IsInert() {
 		if fill == nil {
 			fill = b.theme.Muted
 		} else {
 			fill = mix(fill, b.theme.Fg, .05)
 		}
 	}
-	if b.Inert {
+	if b.IsInert() {
 		if fill != nil {
 			fill = mix(fill, b.theme.Card, b.theme.DisabledMix)
 		}
@@ -155,23 +199,23 @@ func (b *BubbleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 }
 func (b *BubbleWidget) HandlePointer(ev ggui.PointerEvent) bool {
-	if b.Inert {
+	if b.IsInert() {
 		return false
 	}
 	return b.Pointer(ev, b.action)
 }
 func (b *BubbleWidget) HandleKey(ev ggui.KeyEvent) {
 	b.Keyboard(ev, func() {
-		if !b.Inert && b.action != nil {
+		if !b.IsInert() && b.action != nil {
 			b.action()
 		}
 	})
 }
 func (b *BubbleWidget) Describe() ggui.Node {
-	return ggui.Node{Role: b.Role, Name: b.Name, Disabled: b.Inert, Actions: ggui.ActionFocus | ggui.ActionPress}
+	return ggui.Node{Role: b.Role, Name: b.SemanticName(), Disabled: b.IsInert(), Actions: ggui.ActionFocus | ggui.ActionPress}
 }
 func (b *BubbleWidget) Act(a ggui.Action) bool {
-	if a.Kind != ggui.ActionPress || b.Inert || b.action == nil {
+	if a.Kind != ggui.ActionPress || b.IsInert() || b.action == nil {
 		return false
 	}
 	b.action()

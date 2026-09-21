@@ -20,7 +20,7 @@ Set `Config.Accessibility` when creating the app:
 | `AccessibilityOff` | Disable the native bridge. |
 
 Give controls meaningful labels. Buttons use their text, checkboxes use their
-labels, and fields use a label or placeholder; custom content may need `.Named`.
+labels, and fields use a label or placeholder; custom content may need `.Name`.
 Roles and names also help the inspector and `Probe` identify widgets.
 
 Apply text scaling or reduced motion through inherited values:

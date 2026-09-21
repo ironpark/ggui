@@ -9,6 +9,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 
 	"github.com/ironpark/ggui/internal/fn"
+	"github.com/ironpark/ggui/internal/property"
 )
 
 // Built-in widgets follow one shape: a constructor takes what the widget
@@ -18,9 +19,9 @@ import (
 //	Box(Text("hi").Color(fg)).Pad(8).Fill(bg)
 //
 // reads as the tree it builds. Widget types end in Widget so the short names
-// stay free for the constructors. Configure them before the first Layout,
-// unless a method documents runtime updates. Bindings and reactive builders
-// drive later changes; configuration setters do not generally invalidate caches.
+// stay free for the constructors. Value setters work after mount; BindX borrows
+// a reader and X replaces it with a literal. Configure structure, identity and
+// construction modes before the first Layout.
 
 // EdgeInsets is padding on the four sides of a box.
 type EdgeInsets struct {
@@ -67,12 +68,17 @@ func (e EdgeInsets) vertical() float64   { return e.Top + e.Bottom }
 // then the widget's own setters on top, then built-in defaults for whatever
 // is still unset.
 type TextWidget struct {
-	value string
-	style TextStyle
-	wrap  bool
-	align float64
-	role  textRole
-	cache *CachedWidget
+	props      property.Owner
+	value      string
+	content    property.Value[string]
+	format     string
+	formatArgs []any
+	formatted  bool
+	style      TextStyle
+	wrap       bool
+	align      float64
+	role       textRole
+	cache      *CachedWidget
 
 	// Layout caches the wrapped lines, their widths and the size they add up
 	// to, and re-measures only when the text, the face or the width it must
@@ -107,40 +113,43 @@ const (
 // Text draws s in the inherited style, wrapping at spaces when it is wider
 // than the space it gets.
 func Text(s string) *TextWidget {
-	return &TextWidget{value: s, wrap: true}
+	return (&TextWidget{wrap: true}).Content(s)
 }
 
 // Title draws s in the theme's Title style, resolved from the Env at layout,
 // so a heading needs no UseTheme.
-func Title(s string) *TextWidget { return &TextWidget{value: s, wrap: true, role: roleTitle} }
+func Title(s string) *TextWidget { return (&TextWidget{wrap: true, role: roleTitle}).Content(s) }
 
 // Caption draws s in the theme's Caption style, resolved from the Env at
 // layout.
-func Caption(s string) *TextWidget { return &TextWidget{value: s, wrap: true, role: roleCaption} }
+func Caption(s string) *TextWidget { return (&TextWidget{wrap: true, role: roleCaption}).Content(s) }
 
 // AsTitle gives the text the theme's Title style, under its own setters.
-func (t *TextWidget) AsTitle() *TextWidget { t.role = roleTitle; return t }
-
-// AsCaption gives the text the theme's Caption style, under its own setters.
-func (t *TextWidget) AsCaption() *TextWidget { t.role = roleCaption; return t }
-
-// TextOf draws the string r holds and follows it: the effect it owns lives
-// in the enclosing Builder and is disposed with it. It is a TextWidget, so
-// every setter chains.
-func TextOf(r Readable[string]) *TextWidget {
-	t := Text("")
-	observe(func() {
-		t.value = r.Get()
-		t.cache.invalidate()
-	})
+func (t *TextWidget) AsTitle() *TextWidget {
+	defer property.Watch(&t.props, &t.role)()
+	t.role = roleTitle
 	return t
 }
 
-// Textf is TextOf over Sprintf: a formatted text that follows the reactive
-// values among its arguments.
-//
-//	ggui.Textf("count: %d", count).Style(t.Title)
-func Textf(format string, args ...any) *TextWidget { return TextOf(Sprintf(format, args...)) }
+// AsCaption gives the text the theme's Caption style, under its own setters.
+func (t *TextWidget) AsCaption() *TextWidget {
+	defer property.Watch(&t.props, &t.role)()
+	t.role = roleCaption
+	return t
+}
+
+// TextOf borrows r and follows it during layout without owning a subscription.
+func TextOf(r Readable[string]) *TextWidget { return Text("").BindContent(r) }
+
+// Textf formats during layout, reading GetAny arguments like Sprintf. It copies
+// args and creates no computation; construction needs no owner.
+func Textf(format string, args ...any) *TextWidget {
+	t := Text("")
+	t.format = format
+	t.formatArgs = append([]any(nil), args...)
+	t.formatted = true
+	return t
+}
 
 // Sprintf formats like fmt.Sprintf, reading arguments that implement
 // GetAny() any on each computation. StateValue, DerivedValue, Lens, Tweened
@@ -148,51 +157,96 @@ func Textf(format string, args ...any) *TextWidget { return TextOf(Sprintf(forma
 // Readable's Get() alone is not enough. Adapt a custom Readable with
 // Derived(reader.Get), or format its Get() inside a Derived callback.
 func Sprintf(format string, args ...any) *DerivedValue[string] {
+	args = append([]any(nil), args...)
+	return Derived(func() string { return formatValues(format, args) })
+}
+func formatValues(format string, args []any) string {
 	vals := make([]any, len(args))
-	return Derived(func() string {
-		for i, a := range args {
-			if r, ok := a.(anyReader); ok {
-				vals[i] = r.GetAny()
-			} else {
-				vals[i] = a
-			}
+	for i, a := range args {
+		if r, ok := a.(anyReader); ok {
+			vals[i] = r.GetAny()
+		} else {
+			vals[i] = a
 		}
-		return fmt.Sprintf(format, vals...)
-	})
+	}
+	return fmt.Sprintf(format, vals...)
 }
 
 // Style merges ts onto the widget's own style.
-func (t *TextWidget) Style(ts TextStyle) *TextWidget { t.style = t.style.Merge(ts); return t }
+func (t *TextWidget) Style(ts TextStyle) *TextWidget {
+	defer property.Watch(&t.props, &t.style)()
+	t.style = t.style.Merge(ts)
+	return t
+}
 
 // Color sets the text color.
-func (t *TextWidget) Color(c color.Color) *TextWidget { t.style.Color = c; return t }
+func (t *TextWidget) Color(c color.Color) *TextWidget {
+	defer property.Watch(&t.props, &t.style)()
+	t.style.Color = c
+	return t
+}
 
 // Font sets the face; nil inherits.
-func (t *TextWidget) Font(f *Font) *TextWidget { t.style.Font = f; return t }
+func (t *TextWidget) Font(f *Font) *TextWidget {
+	defer property.Watch(&t.props, &t.style)()
+	t.style.Font = f
+	return t
+}
 
 // Size sets the font size in pixels.
-func (t *TextWidget) Size(px float64) *TextWidget { t.style.Size = px; return t }
+func (t *TextWidget) Size(px float64) *TextWidget {
+	defer property.Watch(&t.props, &t.style)()
+	t.style.Size = px
+	return t
+}
 
 // LineHeight sets the distance between baselines as a multiple of Size.
-func (t *TextWidget) LineHeight(mult float64) *TextWidget { t.style.LineHeight = mult; return t }
+func (t *TextWidget) LineHeight(mult float64) *TextWidget {
+	defer property.Watch(&t.props, &t.style)()
+	t.style.LineHeight = mult
+	return t
+}
 
-// Set replaces the text and invalidates layout when it changes, including
-// after mount. It runs on the UI goroutine. Custom widgets may call it before
-// laying out their label; TextOf follows its reader through an owned effect.
-func (t *TextWidget) Set(s string) *TextWidget {
-	if s != t.value {
-		t.value = s
-		t.cache.invalidate()
+// Content replaces any literal, reader or formatted source and refreshes
+// measurement when needed. Call it on the UI goroutine.
+func (t *TextWidget) Content(s string) *TextWidget {
+	changed := t.content.Set(s) || t.formatted || t.value != s
+	t.formatted = false
+	t.format = ""
+	t.formatArgs = nil
+	t.value = s
+	if changed {
+		t.props.Changed()
+	}
+	return t
+}
+
+// BindContent follows r during layout without owning a subscription.
+func (t *TextWidget) BindContent(r Readable[string]) *TextWidget {
+	changed := t.content.Bind(r, "BindContent") || t.formatted
+	t.formatted = false
+	t.format = ""
+	t.formatArgs = nil
+	if changed {
+		t.props.Changed()
 	}
 	return t
 }
 
 // NoWrap keeps the text on one line per hard line break, however wide.
-func (t *TextWidget) NoWrap() *TextWidget { t.wrap = false; return t }
+func (t *TextWidget) NoWrap() *TextWidget {
+	defer property.Watch(&t.props, &t.wrap)()
+	t.wrap = false
+	return t
+}
 
 // Align places each line within the widget's width by fraction: 0 is left,
 // 0.5 centered, 1 right.
-func (t *TextWidget) Align(x float64) *TextWidget { t.align = x; return t }
+func (t *TextWidget) Align(x float64) *TextWidget {
+	defer property.Watch(&t.props, &t.align)()
+	t.align = x
+	return t
+}
 
 // current is the resolved style from the last Layout, or the widget's own
 // style over the defaults before any Layout has run.
@@ -218,6 +272,12 @@ func (t *TextWidget) spacing() float64 {
 
 // Layout implements Widget.
 func (t *TextWidget) Layout(c Constraints, env Env) Size {
+	defer t.props.Layout()()
+	if t.formatted {
+		t.value = formatValues(t.format, t.formatArgs)
+	} else {
+		t.value = t.content.Get()
+	}
 	t.cache, _ = env.Get(cacheOwner)
 	base := env.Text()
 	switch t.role {
@@ -289,6 +349,7 @@ func (t *TextWidget) paintLines(dst *Canvas, r Rect, place func(op *text.DrawOpt
 // StyledWidget sets the text style its subtree inherits. Build one with
 // Styled.
 type StyledWidget struct {
+	props property.Owner
 	style TextStyle
 	child Widget
 }
@@ -301,22 +362,43 @@ type StyledWidget struct {
 func Styled(child Widget) *StyledWidget { return &StyledWidget{child: child} }
 
 // Style merges ts onto the style the subtree inherits.
-func (s *StyledWidget) Style(ts TextStyle) *StyledWidget { s.style = s.style.Merge(ts); return s }
+func (s *StyledWidget) Style(ts TextStyle) *StyledWidget {
+	defer property.Watch(&s.props, &s.style)()
+	s.style = s.style.Merge(ts)
+	return s
+}
 
 // Color sets the inherited text color.
-func (s *StyledWidget) Color(c color.Color) *StyledWidget { s.style.Color = c; return s }
+func (s *StyledWidget) Color(c color.Color) *StyledWidget {
+	defer property.Watch(&s.props, &s.style)()
+	s.style.Color = c
+	return s
+}
 
 // Font sets the inherited font.
-func (s *StyledWidget) Font(f *Font) *StyledWidget { s.style.Font = f; return s }
+func (s *StyledWidget) Font(f *Font) *StyledWidget {
+	defer property.Watch(&s.props, &s.style)()
+	s.style.Font = f
+	return s
+}
 
 // Size sets the inherited font size.
-func (s *StyledWidget) Size(px float64) *StyledWidget { s.style.Size = px; return s }
+func (s *StyledWidget) Size(px float64) *StyledWidget {
+	defer property.Watch(&s.props, &s.style)()
+	s.style.Size = px
+	return s
+}
 
 // LineHeight sets the inherited line height.
-func (s *StyledWidget) LineHeight(mult float64) *StyledWidget { s.style.LineHeight = mult; return s }
+func (s *StyledWidget) LineHeight(mult float64) *StyledWidget {
+	defer property.Watch(&s.props, &s.style)()
+	s.style.LineHeight = mult
+	return s
+}
 
 // Layout implements Widget.
 func (s *StyledWidget) Layout(c Constraints, env Env) Size {
+	defer s.props.Layout()()
 	return s.child.Layout(c, env.WithText(s.style))
 }
 
@@ -357,6 +439,9 @@ func (e *EnvWidget) Paint(dst *Canvas, r Rect) { dst.Paint(e.child, r) }
 // BoxWidget paints a rectangle and lays an optional child inside its padding.
 // Build one with Box.
 type BoxWidget struct {
+	widthProp   property.Value[float64]
+	heightProp  property.Value[float64]
+	props       property.Owner
 	shadows     []ShadowStyle
 	fill        color.Color
 	radius      float64
@@ -385,7 +470,10 @@ func Box(child ...Widget) *BoxWidget {
 }
 
 // Fill sets the background color. Nil paints nothing.
-func (b *BoxWidget) Fill(c color.Color) *BoxWidget { b.fill = c; return b }
+func (b *BoxWidget) Fill(c color.Color) *BoxWidget {
+	b.fill = c
+	return b
+}
 
 // Shadow replaces the outer shadow layers. Calling it without arguments clears
 // them. Shadows paint in argument order and do not reserve layout space.
@@ -395,7 +483,10 @@ func (b *BoxWidget) Shadow(styles ...ShadowStyle) *BoxWidget {
 }
 
 // Radius rounds the corners of the fill and border.
-func (b *BoxWidget) Radius(r float64) *BoxWidget { b.radius = r; return b }
+func (b *BoxWidget) Radius(r float64) *BoxWidget {
+	b.radius = r
+	return b
+}
 
 // Border draws a line of width w in color c just inside the edge.
 func (b *BoxWidget) Border(w float64, c color.Color) *BoxWidget {
@@ -404,22 +495,60 @@ func (b *BoxWidget) Border(w float64, c color.Color) *BoxWidget {
 }
 
 // Pad sets padding with the CSS shorthand Insets accepts.
-func (b *BoxWidget) Pad(sides ...float64) *BoxWidget { b.padding = Insets(sides...); return b }
+func (b *BoxWidget) Pad(sides ...float64) *BoxWidget {
+	defer property.Watch(&b.props, &b.padding)()
+	b.padding = Insets(sides...)
+	return b
+}
 
 // Padding sets per-side padding.
-func (b *BoxWidget) Padding(e EdgeInsets) *BoxWidget { b.padding = e; return b }
+func (b *BoxWidget) Padding(e EdgeInsets) *BoxWidget {
+	defer property.Watch(&b.props, &b.padding)()
+	b.padding = e
+	return b
+}
 
 // Size fixes both dimensions. Zero leaves that dimension to the child.
-func (b *BoxWidget) Size(w, h float64) *BoxWidget { b.width, b.height = w, h; return b }
+func (b *BoxWidget) Size(w, h float64) *BoxWidget { return b.Width(w).Height(h) }
 
 // Width fixes the width. Zero leaves it to the child.
-func (b *BoxWidget) Width(w float64) *BoxWidget { b.width = w; return b }
+func (b *BoxWidget) Width(w float64) *BoxWidget {
+	if b.widthProp.Set(w) {
+		b.props.Changed()
+	}
+	b.width = w
+	return b
+}
+
+// BindWidth follows a non-nil width reader without rebuilding the box.
+func (b *BoxWidget) BindWidth(r Readable[float64]) *BoxWidget {
+	if b.widthProp.Bind(r, "BindWidth") {
+		b.props.Changed()
+	}
+	return b
+}
 
 // Height fixes the height. Zero leaves it to the child.
-func (b *BoxWidget) Height(h float64) *BoxWidget { b.height = h; return b }
+func (b *BoxWidget) Height(h float64) *BoxWidget {
+	if b.heightProp.Set(h) {
+		b.props.Changed()
+	}
+	b.height = h
+	return b
+}
+
+// BindHeight follows a non-nil height reader without rebuilding the box.
+func (b *BoxWidget) BindHeight(r Readable[float64]) *BoxWidget {
+	if b.heightProp.Bind(r, "BindHeight") {
+		b.props.Changed()
+	}
+	return b
+}
 
 // Layout implements Widget.
 func (b *BoxWidget) Layout(c Constraints, env Env) Size {
+	defer b.props.Layout()()
+	b.width, b.height = b.widthProp.Get(), b.heightProp.Get()
 	// A fixed dimension is passed down tight, so a child that centers or
 	// justifies does so within the box rather than the space around it.
 	inner := b.padding.Shrink(c).Loosen()
@@ -702,54 +831,102 @@ func resize[T any](s []T, n int) []T {
 func pick[T any](cond bool, a, b T) T { return fn.Pick(cond, a, b) }
 
 // ColumnWidget stacks its children vertically. Build one with Column.
-type ColumnWidget struct{ flow }
+type ColumnWidget struct {
+	props property.
 
-// Column stacks children top to bottom.
+		// Column stacks children top to bottom.
+		Owner
+	flow
+}
+
 func Column(children ...Widget) *ColumnWidget {
-	return &ColumnWidget{flow{children: children}}
+	return &ColumnWidget{flow: flow{children: children}}
 }
 
 // Gap sets the space between consecutive children.
-func (col *ColumnWidget) Gap(v float64) *ColumnWidget { col.gap = v; return col }
+func (col *ColumnWidget) Gap(v float64) *ColumnWidget {
+	defer property.Watch(&col.props, &col.gap)()
+	col.gap = v
+	return col
+}
 
 // Space sets the gap to n times the theme's Space, resolved at layout.
-func (col *ColumnWidget) Space(n float64) *ColumnWidget { col.space = n; return col }
+func (col *ColumnWidget) Space(n float64) *ColumnWidget {
+	defer property.Watch(&col.props, &col.space)()
+	col.space = n
+	return col
+}
 
 // Justify distributes children along the vertical axis.
-func (col *ColumnWidget) Justify(j Justify) *ColumnWidget { col.justify = j; return col }
+func (col *ColumnWidget) Justify(j Justify) *ColumnWidget {
+	defer property.Watch(&col.props, &col.justify)()
+	col.justify = j
+	return col
+}
 
 // Align places children horizontally within the column.
-func (col *ColumnWidget) Align(a CrossAlign) *ColumnWidget { col.align = a; return col }
+func (col *ColumnWidget) Align(a CrossAlign) *ColumnWidget {
+	defer property.Watch(&col.props, &col.align)()
+	col.align = a
+	return col
+}
 
 // Layout implements Widget.
-func (col *ColumnWidget) Layout(c Constraints, env Env) Size { return col.layout(c, env) }
+func (col *ColumnWidget) Layout(c Constraints, env Env) Size {
+	defer col.props.Layout()()
+	return col.layout(c, env)
+}
 
 // Paint implements Widget.
 func (col *ColumnWidget) Paint(dst *Canvas, r Rect) { col.paint(dst, r) }
 
 // RowWidget lines its children up horizontally. Build one with Row.
-type RowWidget struct{ flow }
+type RowWidget struct {
+	props property.
 
-// Row lines children up left to right, centered on the row's height; a
-// Column starts its children at the left.
+		// Row lines children up left to right, centered on the row's height; a
+		// Column starts its children at the left.
+		Owner
+	flow
+}
+
 func Row(children ...Widget) *RowWidget {
-	return &RowWidget{flow{horizontal: true, align: AlignCenter, children: children}}
+	return &RowWidget{flow: flow{horizontal: true, align: AlignCenter, children: children}}
 }
 
 // Gap sets the space between consecutive children.
-func (row *RowWidget) Gap(v float64) *RowWidget { row.gap = v; return row }
+func (row *RowWidget) Gap(v float64) *RowWidget {
+	defer property.Watch(&row.props, &row.gap)()
+	row.gap = v
+	return row
+}
 
 // Space sets the gap to n times the theme's Space, resolved at layout.
-func (row *RowWidget) Space(n float64) *RowWidget { row.space = n; return row }
+func (row *RowWidget) Space(n float64) *RowWidget {
+	defer property.Watch(&row.props, &row.space)()
+	row.space = n
+	return row
+}
 
 // Justify distributes children along the horizontal axis.
-func (row *RowWidget) Justify(j Justify) *RowWidget { row.justify = j; return row }
+func (row *RowWidget) Justify(j Justify) *RowWidget {
+	defer property.Watch(&row.props, &row.justify)()
+	row.justify = j
+	return row
+}
 
 // Align places children vertically within the row.
-func (row *RowWidget) Align(a CrossAlign) *RowWidget { row.align = a; return row }
+func (row *RowWidget) Align(a CrossAlign) *RowWidget {
+	defer property.Watch(&row.props, &row.align)()
+	row.align = a
+	return row
+}
 
 // Layout implements Widget.
-func (row *RowWidget) Layout(c Constraints, env Env) Size { return row.layout(c, env) }
+func (row *RowWidget) Layout(c Constraints, env Env) Size {
+	defer row.props.Layout()()
+	return row.layout(c, env)
+}
 
 // Paint implements Widget.
 func (row *RowWidget) Paint(dst *Canvas, r Rect) { row.paint(dst, r) }
@@ -784,6 +961,7 @@ func (f *FlexWidget) Paint(dst *Canvas, r Rect) { dst.Paint(f.child, r) }
 // StackWidget layers its children on top of each other, first at the bottom.
 // Build one with Stack.
 type StackWidget struct {
+	props    property.Owner
 	expand   bool
 	children []Widget
 
@@ -799,10 +977,15 @@ func Stack(children ...Widget) *StackWidget {
 
 // Expand makes the stack fill the space it is given instead of hugging its
 // largest child.
-func (st *StackWidget) Expand() *StackWidget { st.expand = true; return st }
+func (st *StackWidget) Expand() *StackWidget {
+	defer property.Watch(&st.props, &st.expand)()
+	st.expand = true
+	return st
+}
 
 // Layout implements Widget.
 func (st *StackWidget) Layout(c Constraints, env Env) Size {
+	defer st.props.Layout()()
 	st.sizes = st.sizes[:0]
 	var total Size
 	for _, child := range st.children {
@@ -827,6 +1010,7 @@ func (st *StackWidget) Paint(dst *Canvas, r Rect) {
 // AlignWidget fills the space it is given and places one child within it.
 // Build one with Align or Center.
 type AlignWidget struct {
+	props property.Owner
 	x, y  float64
 	child Widget
 
@@ -843,22 +1027,44 @@ func Center(child Widget) *AlignWidget { return Align(child) }
 
 // At places the child at a fraction of the free space on each axis: (0, 0)
 // is the top-left corner, (1, 1) the bottom-right, (0.5, 0.5) the center.
-func (a *AlignWidget) At(x, y float64) *AlignWidget { a.x, a.y = x, y; return a }
+func (a *AlignWidget) At(x, y float64) *AlignWidget {
+	defer property.Watch(&a.props, &a.x)()
+	defer property.Watch(&a.props, &a.y)()
+	a.x, a.y = x, y
+	return a
+}
 
 // Left snaps the child to the left edge.
-func (a *AlignWidget) Left() *AlignWidget { a.x = 0; return a }
+func (a *AlignWidget) Left() *AlignWidget {
+	defer property.Watch(&a.props, &a.x)()
+	a.x = 0
+	return a
+}
 
 // Right snaps the child to the right edge.
-func (a *AlignWidget) Right() *AlignWidget { a.x = 1; return a }
+func (a *AlignWidget) Right() *AlignWidget {
+	defer property.Watch(&a.props, &a.x)()
+	a.x = 1
+	return a
+}
 
 // Top snaps the child to the top edge.
-func (a *AlignWidget) Top() *AlignWidget { a.y = 0; return a }
+func (a *AlignWidget) Top() *AlignWidget {
+	defer property.Watch(&a.props, &a.y)()
+	a.y = 0
+	return a
+}
 
 // Bottom snaps the child to the bottom edge.
-func (a *AlignWidget) Bottom() *AlignWidget { a.y = 1; return a }
+func (a *AlignWidget) Bottom() *AlignWidget {
+	defer property.Watch(&a.props, &a.y)()
+	a.y = 1
+	return a
+}
 
 // Layout implements Widget.
 func (a *AlignWidget) Layout(c Constraints, env Env) Size {
+	defer a.props.Layout()()
 	a.childSize = a.child.Layout(c.Loosen(), env)
 	a.size = c.Constrain(Sz(bounded(c.MaxW, a.childSize.W), bounded(c.MaxH, a.childSize.H)))
 	return a.size
@@ -901,6 +1107,7 @@ func ScrollViewport(env Env) (Viewport, bool) { return env.Get(viewportKey) }
 // Horizontal, wider) than the space it has, and moves that window with the
 // wheel or by dragging the scrollbar thumb. Build one with Scroll.
 type ScrollWidget struct {
+	props      property.Owner
 	child      Widget
 	horizontal bool
 	speed      float64
@@ -958,15 +1165,41 @@ func (s *ScrollWidget) Horizontal() *ScrollWidget { s.horizontal = true; return 
 // Speed sets how many pixels one wheel unit moves. A unit is one mouse
 // notch on the desktop; on the web, where browsers report pixels, it is
 // 20 CSS pixels, so the default matches the browser's own scrolling.
-func (s *ScrollWidget) Speed(px float64) *ScrollWidget { s.speed = px; return s }
+func (s *ScrollWidget) Speed(px float64) *ScrollWidget {
+	defer property.Watch(&s.props, &s.speed)()
+	s.speed = px
+	return s
+}
 
 // Bar overrides the theme scrollbar color; nil hides the bar.
-func (s *ScrollWidget) Bar(c color.Color) *ScrollWidget { s.bar, s.barSet = c, true; return s }
+func (s *ScrollWidget) Bar(c color.Color) *ScrollWidget {
+	defer property.Watch(&s.props, &s.bar)()
+	defer property.Watch(&s.props, &s.barSet)()
+	s.bar, s.barSet = c, true
+	return s
+}
 
-// Offset binds the scroll position to sig: wheel input writes it, and
+// BindOffset binds the scroll position to sig: wheel input writes it, and
 // writing it scrolls. Use it to keep the position across rebuilds or to
 // scroll programmatically.
-func (s *ScrollWidget) Offset(sig Binding[float64]) *ScrollWidget { s.bound = sig; return s }
+func (s *ScrollWidget) BindOffset(sig Binding[float64]) *ScrollWidget {
+	property.Require(sig, "BindOffset")
+	if !property.Same(s.bound, sig) {
+		s.bound = sig
+		s.props.Changed()
+	}
+	return s
+}
+
+// Offset detaches a binding and sets local scroll position, clamped at layout.
+func (s *ScrollWidget) Offset(v float64) *ScrollWidget {
+	if s.bound != nil || !property.Equal(s.offset, v) {
+		s.bound = nil
+		s.offset = v
+		s.props.Changed()
+	}
+	return s
+}
 
 func (s *ScrollWidget) extent(sz Size) float64 { return pick(s.horizontal, sz.W, sz.H) }
 
@@ -996,6 +1229,7 @@ func (s *ScrollWidget) scrollTo(v float64) {
 
 // Layout implements Widget.
 func (s *ScrollWidget) Layout(c Constraints, env Env) Size {
+	defer s.props.Layout()()
 	s.barEnv = env
 	if !s.barSet {
 		s.bar = env.Theme().MutedFg
@@ -1191,6 +1425,7 @@ func (s *ScrollWidget) HandlePointer(ev PointerEvent) bool {
 // WrapWidget lines its children up like a Row and starts a new line when
 // the next child would not fit. Build one with Wrap.
 type WrapWidget struct {
+	props    property.Owner
 	children []Widget
 	gap      float64 // between children on a line
 	runGap   float64 // between lines
@@ -1206,19 +1441,37 @@ type WrapWidget struct {
 func Wrap(children ...Widget) *WrapWidget { return &WrapWidget{children: children} }
 
 // Gap sets the space between children on a line and between lines.
-func (w *WrapWidget) Gap(v float64) *WrapWidget { w.gap, w.runGap = v, v; return w }
+func (w *WrapWidget) Gap(v float64) *WrapWidget {
+	defer property.Watch(&w.props, &w.gap)()
+	defer property.Watch(&w.props, &w.runGap)()
+	w.gap, w.runGap = v, v
+	return w
+}
 
 // RunGap sets the space between lines alone.
-func (w *WrapWidget) RunGap(v float64) *WrapWidget { w.runGap = v; return w }
+func (w *WrapWidget) RunGap(v float64) *WrapWidget {
+	defer property.Watch(&w.props, &w.runGap)()
+	w.runGap = v
+	return w
+}
 
 // Space sets both gaps to n times the theme's Space, resolved at layout.
-func (w *WrapWidget) Space(n float64) *WrapWidget { w.space = n; return w }
+func (w *WrapWidget) Space(n float64) *WrapWidget {
+	defer property.Watch(&w.props, &w.space)()
+	w.space = n
+	return w
+}
 
 // Align places children vertically within their line.
-func (w *WrapWidget) Align(a CrossAlign) *WrapWidget { w.align = a; return w }
+func (w *WrapWidget) Align(a CrossAlign) *WrapWidget {
+	defer property.Watch(&w.props, &w.align)()
+	w.align = a
+	return w
+}
 
 // Layout implements Widget.
 func (w *WrapWidget) Layout(c Constraints, env Env) Size {
+	defer w.props.Layout()()
 	if w.space > 0 {
 		w.gap = w.space * env.Theme().Space
 		w.runGap = w.gap
@@ -1279,6 +1532,7 @@ func (w *WrapWidget) Paint(dst *Canvas, r Rect) {
 // GridWidget lays its children out in equal-width columns. Build one with
 // Grid.
 type GridWidget struct {
+	props    property.Owner
 	cols     int
 	children []Widget
 	gap      float64
@@ -1299,16 +1553,30 @@ func Grid(cols int, children ...Widget) *GridWidget {
 }
 
 // Gap sets the space between columns and between rows.
-func (g *GridWidget) Gap(v float64) *GridWidget { g.gap, g.rowGap = v, v; return g }
+func (g *GridWidget) Gap(v float64) *GridWidget {
+	defer property.Watch(&g.props, &g.gap)()
+	defer property.Watch(&g.props, &g.rowGap)()
+	g.gap, g.rowGap = v, v
+	return g
+}
 
 // RowGap sets the space between rows alone.
-func (g *GridWidget) RowGap(v float64) *GridWidget { g.rowGap = v; return g }
+func (g *GridWidget) RowGap(v float64) *GridWidget {
+	defer property.Watch(&g.props, &g.rowGap)()
+	g.rowGap = v
+	return g
+}
 
 // Space sets both gaps to n times the theme's Space, resolved at layout.
-func (g *GridWidget) Space(n float64) *GridWidget { g.space = n; return g }
+func (g *GridWidget) Space(n float64) *GridWidget {
+	defer property.Watch(&g.props, &g.space)()
+	g.space = n
+	return g
+}
 
 // Layout implements Widget.
 func (g *GridWidget) Layout(c Constraints, env Env) Size {
+	defer g.props.Layout()()
 	if g.space > 0 {
 		g.gap = g.space * env.Theme().Space
 		g.rowGap = g.gap

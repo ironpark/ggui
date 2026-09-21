@@ -166,7 +166,7 @@ func TestFieldErrorPropagatesToInputChrome(t *testing.T) {
 	err := ggui.State("")
 	input := TextField(ggui.State(""))
 	group := InputGroup(ggui.TextInput(ggui.State("")))
-	p := ggui.NewProbe(ggui.Column(Field("Email", input).Error(err), Field("Website", group).Error(err)), ggui.Sz(320, 240))
+	p := ggui.NewProbe(ggui.Column(Field("Email", input).BindError(err), Field("Website", group).BindError(err)), ggui.Sz(320, 240))
 	defer p.Close()
 	p.Frame()
 	if input.invalid || group.invalid {
@@ -214,7 +214,7 @@ func TestDisclosureStopsLayoutAfterSettling(t *testing.T) {
 func TestTableRowSelectionMotion(t *testing.T) {
 	for _, reduced := range []bool{false, true} {
 		selected := ggui.State(0)
-		tbl := Table(ggui.State([]int{1}), func(v int) int { return v }, TextCol("ID", func(int) string { return "one" })).Selected(selected)
+		tbl := Table(ggui.State([]int{1}), func(v int) int { return v }, TextCol("ID", func(int) string { return "one" })).BindSelected(selected)
 		row := tbl.row(ggui.EachItem[int]{Value: ggui.State(1), Index: ggui.State(0)}).(*tableRow[int, int])
 		var amount float64
 		watch := ggui.FromFuncs(row.Layout, func(dst *ggui.Canvas, rc ggui.Rect) {
@@ -241,7 +241,7 @@ func TestTableRowSelectionMotion(t *testing.T) {
 		if amount != 1 {
 			t.Errorf("settled fill = %v", amount)
 		}
-		row.Inert = true
+		row.SetInert(true)
 		selected.Set(0)
 		row.HandleKey(ggui.KeyEvent{Kind: ggui.KeyPress, Key: ggui.KeyEnter})
 		row.HandlePointer(ggui.PointerEvent{Kind: ggui.PointerTap, Button: ggui.MouseButtonLeft})
