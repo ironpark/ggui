@@ -46,6 +46,8 @@ go run ./examples/todo
 go run ./examples/gallery
 go run ./examples/charts
 go run ./examples/controls
+go run ./examples/settings
+go run ./examples/custom
 ```
 
 On macOS, the following commands build and launch application bundles:

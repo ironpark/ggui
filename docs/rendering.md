@@ -42,7 +42,9 @@ and the wrappers report their first child's, moved by where the child is
 painted. A widget that does not implement it is aligned by its bottom edge.
 
 Paint children through `dst.Paint(child, r)` so the inspector can see them.
-For small widgets, `FromFuncs` wraps the two methods as closures:
+The [custom example](../examples/custom) builds a dial on `Interactive`, a
+disclosure that calls `Invalidate`, and a virtualized list. For small
+widgets, `FromFuncs` wraps the two methods as closures:
 
 ```go
 dot := ggui.FromFuncs(

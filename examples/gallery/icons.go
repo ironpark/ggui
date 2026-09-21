@@ -21,9 +21,11 @@ func iconPreview() ggui.Widget {
 	custom := icons.Map{icons.Check: plus}
 	return ggui.Column(
 		ui.Select(selected, []string{"Lucide", "Tabler", "Heroicons"}).Named("Icon library"),
-		ggui.Reactive(func() ggui.Widget {
+		// Key remounts the subtree when the library changes: the checkbox
+		// inside is rebuilt on purpose, so it picks up the new check glyph.
+		ggui.Key(selected, func(library string) ggui.Widget {
 			var set icons.Set = lucide.Set()
-			switch selected.Get() {
+			switch library {
 			case "Tabler":
 				set = tabler.Set()
 			case "Heroicons":
@@ -39,9 +41,9 @@ func iconPreview() ggui.Widget {
 			).Gap(14))
 		}),
 		ui.Switch(alternate, "Replace check with plus"),
-		ggui.Reactive(func() ggui.Widget {
+		ggui.Key(alternate, func(replaced bool) ggui.Widget {
 			var set icons.Set = lucide.Set()
-			if alternate.Get() {
+			if replaced {
 				set = custom
 			}
 			return ggui.Provide(icons.SetKey, set, ggui.Row(

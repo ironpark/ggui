@@ -133,23 +133,29 @@ func newChatPreviews() func() []ggui.Widget {
 					ui.Button("Send turn", func() {
 						sequence++
 						id := fmt.Sprintf("turn-%d", sequence)
-						next := slices.Clone(ggui.Untrack(rows.Get))
-						next = append(next, ui.MessageEntry{ID: id, Content: ui.Message(ui.Bubble(ggui.Text(fmt.Sprintf("Review request %d", sequence))).End()).End(), Anchor: true}, ui.MessageEntry{ID: id + "-reply", Content: ui.Message(ui.Bubble(ggui.Text("Starting the review…")).Secondary())})
-						rows.Set(next)
+						ggui.Append(rows,
+							ui.MessageEntry{ID: id, Content: ui.Message(ui.Bubble(ggui.Text(fmt.Sprintf("Review request %d", sequence))).End()).End(), Anchor: true},
+							ui.MessageEntry{ID: id + "-reply", Content: ui.Message(ui.Bubble(ggui.Text("Starting the review…")).Secondary())})
 					}),
 					ui.Button("Stream reply", func() {
-						next := slices.Clone(ggui.Untrack(rows.Get))
-						if len(next) == 0 {
+						if len(ggui.Untrack(rows.Get)) == 0 {
 							return
 						}
 						sequence++
-						i := len(next) - 1
-						next[i].Content = ui.Message(ui.Bubble(ggui.Text(fmt.Sprintf("Review in progress. Pass %d. ", sequence) + repeatReview(sequence))).Secondary())
-						rows.Set(next)
+						// Update copies the slice first: State is shallow, so editing
+						// the entry in place would not publish the change.
+						rows.Update(func(prev []ui.MessageEntry) []ui.MessageEntry {
+							next := slices.Clone(prev)
+							next[len(next)-1].Content = ui.Message(ui.Bubble(ggui.Text(fmt.Sprintf("Review in progress. Pass %d. ", sequence) + repeatReview(sequence))).Secondary())
+							return next
+						})
 					}).Outline(),
 					ui.Button("Load earlier", func() {
 						history++
-						rows.Set(append([]ui.MessageEntry{{ID: fmt.Sprintf("history-%d", history), Content: ui.Marker(ggui.Text(fmt.Sprintf("Earlier note %d: the reader stays in place.", history))).Border()}}, ggui.Untrack(rows.Get)...))
+						rows.Update(func(prev []ui.MessageEntry) []ui.MessageEntry {
+							note := ui.MessageEntry{ID: fmt.Sprintf("history-%d", history), Content: ui.Marker(ggui.Text(fmt.Sprintf("Earlier note %d: the reader stays in place.", history))).Border()}
+							return append([]ui.MessageEntry{note}, prev...)
+						})
 					}).Outline(),
 					ui.Button("Save position", func() { saved = scroller.Save(); scrollNote.Set("Saved the current reading position.") }).Outline(),
 					ui.Button("Restore position", func() { scroller.Restore(saved); scrollNote.Set("Restored the saved reading position.") }).Outline(),

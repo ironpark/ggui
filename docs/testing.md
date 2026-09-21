@@ -73,4 +73,7 @@ semantic state. Headless paint does not validate GPU pixels; use the
 [control](carousel-and-otp.md#examples-and-validation) render catalogs for
 visual checks.
 
-See the [counter tests](../examples/counter/main_test.go) for a full app example.
+See the [counter tests](../examples/counter/main_test.go) for a full app
+example, the [todo tests](../examples/todo/main_test.go) for keyed rows and a
+dialog, and the [settings tests](../examples/settings/main_test.go) for
+waiting on work posted from a worker.

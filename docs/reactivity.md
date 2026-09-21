@@ -118,7 +118,8 @@ result with `App.Post`. Inside a mounted component or app setup,
 `UIThread()` returns the owner's dispatcher. Closing an app drops queued
 work; component-specific work must additionally check its lifetime, as
 `Resource` does automatically. Debug builds (`-tags ggui_debug`) diagnose
-reactive operations from the wrong goroutine while the app is running.
+reactive operations from the wrong goroutine while the app is running. The
+[settings example](../examples/settings) saves on a worker this way.
 
 ## Readers, bindings, and lenses
 
@@ -137,7 +138,8 @@ field := ui.TextField(name)
 ```
 
 `Field` copies the struct, not the nested objects it points to. Use `Lens`
-with explicit copy logic for nested mutable containers. Tweens and springs
+with explicit copy logic for nested mutable containers. The
+[settings example](../examples/settings) binds a whole form this way. Tweens and springs
 implement `Binding`, not `Writable`; use `Target()` when updating a motion's
 destination rather than its current animated value.
 

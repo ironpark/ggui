@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/ironpark/ggui"
 	"testing"
 	"time"
+
+	"github.com/ironpark/ggui"
 )
 
 func galleryProbe(size ggui.Size) *ggui.Probe {

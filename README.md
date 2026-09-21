@@ -112,7 +112,9 @@ and launch macOS app bundles.
 | Example | Explore | Run on macOS |
 | --- | --- | --- |
 | [Counter](examples/counter) | Reactive state, buttons, shortcuts, and theme switching. | `task run` |
-| [Todo](examples/todo) | IME text input, validation, keyed lists, transitions, and a confirm dialog. | `task run-todo` |
+| [Todo](examples/todo) | IME text input, validation, keyed lists with inline editing, transitions, an empty state and an AlertDialog. | `task run-todo` |
+| [Settings](examples/settings) | One struct in one signal, Field lenses, a derived dirty flag, Styled text and a worker that posts its result back. | `go run ./examples/settings` |
+| [Custom widgets](examples/custom) | A dial built on Interactive with a Spring, a disclosure that calls Invalidate, and a 5,000-row virtualized list. | `go run ./examples/custom` |
 | [Charts](examples/charts) | All 70 shadcn chart examples, interactive tooltips, themes and animation replay. | `go run ./examples/charts` |
 | [Carousel & Input OTP](examples/controls) | Swipeable carousels and segmented code inputs, all shadcn variants and state previews. | `go run ./examples/controls` |
 | [Gallery](examples/gallery) | Searchable previews across Inputs, Navigation, Feedback, Layout, and Data. | `task run-gallery` |

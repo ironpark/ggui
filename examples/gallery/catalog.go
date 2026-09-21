@@ -95,52 +95,66 @@ func (g *previewGrid) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 }
 func (g *previewGrid) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(g.grid, r) }
 
+// galleryPage builds the chrome once. The filter row follows category, the
+// preview grid follows category and search, and the header's surface color
+// follows the theme; nothing else is rebuilt, so the search field keeps its
+// caret while typing and the scroll keeps its offset while filtering.
 func galleryPage(dark *ggui.StateValue[bool], search, category *ggui.StateValue[string], scroll *ggui.StateValue[float64], commands func(), entries []ggui.Widget) ggui.Widget {
-	return ggui.Reactive(func() ggui.Widget {
-		theme := ggui.UseTheme()
-		selected, query := category.Get(), search.Get()
-		var cards, overlays []ggui.Widget
-		counts := map[string]int{}
-		total := 0
-		for _, entry := range entries {
-			if p, ok := entry.(*componentPreview); ok {
-				total++
-				counts[p.info.category]++
-				if p.matches(selected, query) {
-					cards = append(cards, p)
-				}
-			} else {
-				overlays = append(overlays, entry)
+	var previews []*componentPreview
+	var extras []ggui.Widget
+	counts := map[string]int{}
+	for _, entry := range entries {
+		if p, ok := entry.(*componentPreview); ok {
+			previews = append(previews, p)
+			counts[p.info.category]++
+		} else {
+			extras = append(extras, entry)
+		}
+	}
+	counts["All"] = len(previews)
+	shown := ggui.Combine(category, search, func(selected, query string) []ggui.Widget {
+		var cards []ggui.Widget
+		for _, p := range previews {
+			if p.matches(selected, query) {
+				cards = append(cards, p)
 			}
 		}
-		counts["All"] = total
-		var filters []ggui.Widget
+		return cards
+	})
+	reset := func() { search.Set(""); category.Set("All"); scroll.Set(0) }
+
+	filters := ggui.View(category, func(selected string) *ggui.WrapWidget {
+		var buttons []ggui.Widget
 		for _, label := range []string{"All", "Inputs", "Navigation", "Feedback", "Layout", "Data"} {
 			button := ui.Button(fmt.Sprintf("%s  %d", label, counts[label]), func() { category.Set(label); scroll.Set(0) }).Named(label)
-			button.Key("category-" + label)
 			if label != selected {
 				button.Outline()
 			}
-			filters = append(filters, button)
+			buttons = append(buttons, button)
 		}
-		field := ui.TextField(search).Named("Search components").Placeholder("Search components…").OnChange(func(string) { scroll.Set(0) })
-		field.Input().Key("gallery-search")
-		var content ggui.Widget = &previewGrid{children: cards}
-		if len(cards) == 0 {
-			content = ui.Empty("No matching components", "Try a different search or explore another category.").Action(ui.Button("Clear filters", func() { search.Set(""); category.Set("All"); scroll.Set(0) }))
-		}
-		header := ggui.Box(ggui.Column(
+		return ggui.Wrap(buttons...).Gap(8)
+	})
+	field := ui.TextField(search).Named("Search components").Placeholder("Search components…").OnChange(func(string) { scroll.Set(0) })
+	header := ggui.Reactive(func() ggui.Widget {
+		theme := ggui.UseTheme()
+		return ggui.Box(ggui.Column(
 			ggui.Row(ggui.Title("Component gallery").Size(28), ggui.Spacer(), ui.ThemeSwitch(dark)).Gap(16),
 			ggui.Caption("Explore the building blocks. Try an interaction, adjust the theme, make it yours."),
 			ggui.Row(ggui.Expanded(field), ui.Button("Commands", commands).Outline()).Gap(12),
-			ggui.Wrap(filters...).Gap(8),
+			filters,
 		).Gap(14).Align(ggui.AlignStretch)).Pad(24, 28).Fill(theme.Card)
-		footer := ggui.Padding(ggui.Row(
-			ggui.Caption(fmt.Sprintf("%d of %d previews", len(cards), total)), ggui.Spacer(),
-			ggui.Caption("⌘K  Commands   ·   Tab  Navigate   ·   F1  Inspect"),
-		).Gap(12), 12, 28)
-		children := []ggui.Widget{header, ui.Divider(), ggui.Expanded(ggui.Scroll(ggui.Padding(content, 24, 28)).Key("gallery-previews").Offset(scroll)), ui.Divider(), footer}
-		children = append(children, overlays...)
-		return ggui.Column(children...).Align(ggui.AlignStretch)
 	})
+	content := ggui.View(shown, func(cards []ggui.Widget) ggui.Widget {
+		if len(cards) == 0 {
+			return ui.Empty("No matching components", "Try a different search or explore another category.").Action(ui.Button("Clear filters", reset))
+		}
+		return &previewGrid{children: cards}
+	})
+	footer := ggui.Padding(ggui.Row(
+		ggui.Textf("%d of %d previews", shown.Map(func(cards []ggui.Widget) int { return len(cards) }), len(previews)).AsCaption(), ggui.Spacer(),
+		ggui.Caption("⌘K  Commands   ·   Tab  Navigate   ·   F1  Inspect"),
+	).Gap(12), 12, 28)
+	children := []ggui.Widget{header, ui.Divider(), ggui.Expanded(ggui.Scroll(ggui.Padding(content, 24, 28)).Offset(scroll)), ui.Divider(), footer}
+	children = append(children, extras...)
+	return ggui.Column(children...).Align(ggui.AlignStretch)
 }

@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
-	"github.com/ironpark/ggui/ui"
 	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/ironpark/ggui/ui"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"

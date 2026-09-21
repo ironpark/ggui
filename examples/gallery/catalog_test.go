@@ -1,9 +1,10 @@
 package main
 
 import (
+	"testing"
+
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
-	"testing"
 )
 
 func TestGalleryFiltersAndGlobalActions(t *testing.T) {

@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
-	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/internal/controldemo"
 	"image/png"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/controldemo"
 )
 
 type controlsRender struct {
@@ -84,19 +85,9 @@ func (g *controlsRender) Draw(screen *ebiten.Image) {
 		p.Frame()
 		img.Fill(theme.Bg)
 		demo.Widget.Paint(&ggui.Canvas{Image: img}, ggui.Rct(ggui.Point{}, size))
-		file, err := os.Create(filepath.Join(g.directory, fmt.Sprintf("%s-%s-%d-%s.png", name, mode, width, state)))
-		if err != nil {
+		name := filepath.Join(g.directory, fmt.Sprintf("%s-%s-%d-%s.png", name, mode, width, state))
+		if err := savePNG(name, img); err != nil {
 			g.err = err
-			return
-		}
-		err = png.Encode(file, img)
-		closeErr := file.Close()
-		if err != nil {
-			g.err = err
-			return
-		}
-		if closeErr != nil {
-			g.err = closeErr
 			return
 		}
 	}
@@ -105,6 +96,21 @@ func (g *controlsRender) Draw(screen *ebiten.Image) {
 	g.index++
 	g.done = g.index == n*4
 }
+
+// savePNG writes img to name, reporting either an encode or a close failure.
+func savePNG(name string, img *ebiten.Image) (err error) {
+	f, err := os.Create(name)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if closeErr := f.Close(); err == nil {
+			err = closeErr
+		}
+	}()
+	return png.Encode(f, img)
+}
+
 func renderControls(directory string) error {
 	if err := os.MkdirAll(directory, 0755); err != nil {
 		return err
