@@ -17,15 +17,20 @@ tasks:
       - task: test
 
   build:
-    desc: Build all packages
+    desc: Build all packages, with and without the inspector
     cmds:
       - '"{{.GO}}" build ./...'
+      - '"{{.GO}}" build -tags ggui_inspector ./...'
       - '"{{.GO}}" build -C examples/sqlite ./...'
 
   test:
     desc: Run all tests, including the examples that are their own module
+    # Both configurations: the tagged run is the only one that exercises the
+    # inspector's own tests, the plain one the only one that proves the
+    # stub keeps an app running without it.
     cmds:
       - '"{{.GO}}" test ./...'
+      - '"{{.GO}}" test -tags ggui_inspector ./...'
       - '"{{.GO}}" test -C examples/sqlite ./...'
 
   bench:
@@ -39,6 +44,7 @@ tasks:
     desc: Run Go static checks
     cmds:
       - '"{{.GO}}" vet ./...'
+      - '"{{.GO}}" vet -tags ggui_inspector ./...'
       - '"{{.GO}}" vet -C examples/sqlite ./...'
 
   vet:windows:
@@ -51,6 +57,7 @@ tasks:
     # memory it points at was never Go's to lose track of.
     cmds:
       - 'GOOS=windows GOARCH=amd64 "{{.GO}}" vet -unsafeptr=false ./...'
+      - 'GOOS=windows GOARCH=amd64 "{{.GO}}" vet -unsafeptr=false -tags ggui_inspector ./...'
       - 'GOOS=windows GOARCH=arm64 "{{.GO}}" vet -unsafeptr=false ./...'
       - 'GOOS=windows GOARCH=amd64 "{{.GO}}" test -c -o /dev/null ./a11y'
       - 'GOOS=windows GOARCH=arm64 "{{.GO}}" test -c -o /dev/null ./a11y'
@@ -72,6 +79,8 @@ tasks:
     desc: Build a macOS app bundle (EXAMPLE=counter, todo, workspace, or gallery)
     vars:
       EXAMPLE: '{{default "counter" .EXAMPLE}}'
+      # Empty by default: a bundle is a release build. launch sets it.
+      TAGS: '{{default "" .TAGS}}'
     requires:
       vars:
         - name: EXAMPLE
@@ -82,7 +91,7 @@ tasks:
     cmds:
       - |
         mkdir -p 'bin/ggui-{{.EXAMPLE}}.app/Contents/MacOS'
-        "{{.GO}}" build -o 'bin/ggui-{{.EXAMPLE}}.app/Contents/MacOS/ggui-{{.EXAMPLE}}' './examples/{{.EXAMPLE}}'
+        "{{.GO}}" build {{if .TAGS}}-tags {{.TAGS}} {{end}}-o 'bin/ggui-{{.EXAMPLE}}.app/Contents/MacOS/ggui-{{.EXAMPLE}}' './examples/{{.EXAMPLE}}'
       - |
         cat > 'bin/ggui-{{.EXAMPLE}}.app/Contents/Info.plist' <<'PLIST'
         <?xml version="1.0" encoding="UTF-8"?>
@@ -138,9 +147,10 @@ tasks:
 
   launch:
     internal: true
+    # The run-* tasks are the development loop, so they get the inspector.
     cmds:
       - task: bundle
-        vars: {EXAMPLE: '{{.EXAMPLE}}'}
+        vars: {EXAMPLE: '{{.EXAMPLE}}', TAGS: ggui_inspector}
       - "open -n 'bin/ggui-{{.EXAMPLE}}.app'"
 
   serve:
@@ -148,6 +158,8 @@ tasks:
     vars:
       EXAMPLE: '{{default "gallery" .EXAMPLE}}'
       PORT: '{{default "3000" .PORT}}'
+      # The dev loop, so the served app gets the inspector by default.
+      TAGS: '{{default "ggui_inspector" .TAGS}}'
       # Mirrors the server's own default; set WASM_OPT= to skip the pass.
       WASM_OPT: '{{default "-O2" .WASM_OPT}}'
     requires:
@@ -155,7 +167,7 @@ tasks:
         - name: EXAMPLE
           enum: [counter, todo, workspace, gallery]
     cmds:
-      - '"{{.GO}}" run ./internal/tools/serve -http ":{{.PORT}}" -wasm-opt "{{.WASM_OPT}}" "./examples/{{.EXAMPLE}}"'
+      - '"{{.GO}}" run ./internal/tools/serve -http ":{{.PORT}}" -wasm-opt "{{.WASM_OPT}}" -tags "{{.TAGS}}" "./examples/{{.EXAMPLE}}"'
 
   serve-gallery:
     desc: Serve the component gallery in a browser at http://localhost:3000

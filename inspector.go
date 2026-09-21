@@ -1,30 +1,18 @@
+//go:build ggui_inspector
+
 package ggui
 
 import (
 	"image/color"
-	"reflect"
 	"slices"
 	"strings"
 )
 
-// InspectorDock is the edge the inspector's panel is docked to.
-type InspectorDock uint8
-
-const (
-	InspectorBottom InspectorDock = iota // tree beside details on wide panels
-	InspectorRight                       // tree above details
-)
-
-// InspectorOptions configures the inspector. The toolbar changes the same
-// settings while it is open; dragging the panel edge adjusts its size.
-// The zero value docks bottom and highlights only the selected widget.
-type InspectorOptions struct {
-	Dock         InspectorDock
-	ShowOutlines bool
-}
-
 // inspectKey prefers the widget's explicit identity, then its instance and
 // structural path. Geometry is only a fallback for traces without a widget.
+// inspectorEnabled reports whether this build contains the inspector.
+const inspectorEnabled = true
+
 type inspectKey struct {
 	name   string
 	depth  int
@@ -32,13 +20,6 @@ type inspectKey struct {
 	id     any
 	path   string
 	stable bool
-}
-
-func inspectComparable(v any) any {
-	if v != nil && reflect.ValueOf(v).Comparable() {
-		return v
-	}
-	return nil
 }
 
 func keyOf(e *traceEntry) inspectKey {

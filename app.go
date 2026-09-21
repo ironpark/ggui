@@ -94,7 +94,7 @@ func (a *App) Post(fn func()) { a.post(fn) }
 // component the app created, and ends Run at the next frame. Call it from
 // the UI thread; from a goroutine, Post it.
 func (a *App) Close() {
-	a.insp.cache.release()
+	a.insp.release()
 	a.close()
 	unmarkUIThread()
 }
@@ -181,8 +181,11 @@ func (a *App) SetDialogs(p runtime.FilePicker) *App {
 // Inspector turns the widget inspector on or off: an overlay that outlines
 // the selected widget painted through Canvas.Paint and names the one under the
 // cursor with its size and position. Config.Inspector binds it to a key.
+//
+// The inspector ships only in builds tagged ggui_inspector. Without the tag
+// this call is a no-op, so a release binary carries none of it.
 func (a *App) Inspector(on bool) {
-	a.inspect = on
+	a.inspect = on && inspectorEnabled
 	a.insp.closed = false
 	if !on {
 		a.insp.reset()
@@ -366,7 +369,7 @@ func (a *App) Draw(screen *ebiten.Image) {
 	if a.inspect {
 		a.insp.paint(&a.canvas)
 	} else {
-		a.insp.panel = Rect{} // nothing to intercept while it is off
+		a.insp.hide() // nothing to intercept while it is off
 	}
 	a.spare = a.canvas.prev
 }

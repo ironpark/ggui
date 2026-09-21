@@ -35,6 +35,16 @@ go test -tags ggui_debug ./...
 go run -tags ggui_debug ./examples/counter
 ```
 
+The [widget inspector](inspector.md) is behind its own tag, so that a
+release binary carries none of it:
+
+```sh
+go run -tags ggui_inspector ./examples/gallery
+```
+
+`task test`, `task build` and `task vet` each run both configurations, and
+the `task run-*` and `task serve` loops set the tag. `task bundle` does not.
+
 See [Testing](testing.md) for `Probe`, and [Rendering](rendering.md#frame-lifecycle)
 for diagnosing effects that fail to settle.
 
@@ -114,5 +124,5 @@ those guides as historical measurements; rerun them on your target hardware.
 | Accessibility and semantics | [a11y.go](../a11y.go), [a11y_darwin.go](../a11y_darwin.go), [semantics.go](../semantics.go) |
 | Styling and animation | [style.go](../style.go), [anim.go](../anim.go), [transition.go](../transition.go) — see [Styling and themes](styling.md) |
 | Overlays and images | [popup.go](../popup.go), [tooltip.go](../tooltip.go), [image.go](../image.go) |
-| Testing and diagnostics | [probe.go](../probe.go), [inspector.go](../inspector.go), [cache.go](../cache.go) |
+| Testing and diagnostics | [probe.go](../probe.go), [inspector.go](../inspector.go) (build tag `ggui_inspector`; [inspector_stub.go](../inspector_stub.go) otherwise), [cache.go](../cache.go) |
 | Runnable applications | [examples/](../examples/) |

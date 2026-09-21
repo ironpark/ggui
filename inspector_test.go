@@ -1,3 +1,5 @@
+//go:build ggui_inspector
+
 package ggui
 
 import (

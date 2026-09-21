@@ -1,3 +1,5 @@
+//go:build ggui_inspector
+
 package ggui
 
 import (
@@ -7,34 +9,12 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	"github.com/hajimehoshi/ebiten/v2/vector"
-	"golang.org/x/image/font/gofont/gomono"
 )
 
-var inspectFontOnce sync.Once
-var inspectFont *Font
-
-func inspectorFace(dst *Canvas) text.Face {
-	inspectFontOnce.Do(func() { inspectFont, _ = LoadFont(gomono.TTF) })
-	if inspectFont == nil {
-		return fallbackFont().face(12 * dst.Scale())
-	}
-	return inspectFont.face(12 * dst.Scale())
-}
-func textWidth(dst *Canvas, face text.Face, s string) float64 { return dst.dp(lineWidth(s, face)) }
-func drawLine(dst *Canvas, face text.Face, s string, x, y float64, col color.Color) {
-	if dst == nil || dst.Image == nil {
-		return
-	}
-	op := &text.DrawOptions{}
-	op.ColorScale.ScaleWithColor(col)
-	op.GeoM.Translate(dst.px(x), dst.px(y))
-	drawText(dst.Image, s, face, op)
-}
 func fitText(dst *Canvas, face text.Face, s string, width float64) string {
 	s = strings.ReplaceAll(strings.ReplaceAll(s, "\n", " "), "\t", " ")
 	if width <= 0 {
@@ -143,7 +123,7 @@ func (in *inspector) paint(dst *Canvas) {
 			in.cache.draw(dst)
 			return
 		}
-		bounds := dst.physical(in.panel)
+		bounds := panelBounds(dst, in.panel)
 		if !bounds.Empty() {
 			if in.cache.image == nil || in.cache.image.Bounds() != bounds {
 				in.cache.release()
@@ -391,7 +371,7 @@ func triangle(dst *Canvas, c Point, folded bool, col color.Color) {
 		p.LineTo(dst.Px(c.X), dst.Px(c.Y+s/2+1))
 	}
 	p.Close()
-	vector.FillPath(dst.Image, &p, &vector.FillOptions{}, pathOptions(col))
+	fillPath(dst, &p, col)
 }
 func inspectScrollbar(dst *Canvas, r Rect, content, scroll float64, pal inspectPalette) Rect {
 	if r.Empty() || content <= r.Size.H {

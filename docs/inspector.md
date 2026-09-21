@@ -14,6 +14,19 @@ overlay in the shape of a browser's element panel; `App.Inspector(on)` does
 the same from code. It is the quickest way to see why something sits where
 it does.
 
+The inspector is a development tool, so it ships only in builds tagged
+`ggui_inspector`:
+
+```sh
+go run -tags ggui_inspector ./yourapp
+```
+
+Without the tag a no-op stands in: the configuration above still compiles
+and `App.Inspector` still exists, but the call does nothing and none of the
+inspector — including its own monospaced font — reaches the binary. The
+`task run-*` and `task serve` development loops set the tag for you;
+`task bundle` does not, because that is the release path.
+
 The panel uses a compact, syntax-colored widget tree with type, accessible
 name, role or layout badges, and dimensions. Moving the pointer follows the
 frontmost visible widget. Click a tree row or breadcrumb to pin a selection;

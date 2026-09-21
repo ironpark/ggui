@@ -214,6 +214,15 @@ type traceEntry struct {
 	clipped  bool
 }
 
+// inspectComparable keeps a widget id only when it can be compared, so a
+// traceEntry stays usable as a map key however a widget was identified.
+func inspectComparable(v any) any {
+	if v != nil && reflect.ValueOf(v).Comparable() {
+		return v
+	}
+	return nil
+}
+
 // root returns the Canvas a Clip chain started from.
 func (c *Canvas) root() *Canvas {
 	for c.parent != nil {
