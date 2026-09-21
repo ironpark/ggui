@@ -1,6 +1,6 @@
-// Package chartdemo contains the shadcn chart examples, separate from the public
+// This catalog contains the shadcn chart examples, separate from the public
 // chart API. Data and example names follow shadcn/ui (MIT; see NOTICE).
-package chartdemo
+package main
 
 import (
 	_ "embed"
@@ -18,7 +18,7 @@ import (
 //go:embed fixtures.json
 var fixtureJSON []byte
 
-type Example struct {
+type chartExample struct {
 	Stacked                                   bool
 	Opacities                                 map[string]float64
 	Name, Title, Description, Curve, Subtitle string
@@ -27,29 +27,29 @@ type Example struct {
 	Colors                                    map[string]int
 }
 
-var Examples = load()
+var chartExamples = load()
 
-func load() []Example {
-	var out []Example
+func load() []chartExample {
+	var out []chartExample
 	if err := json.Unmarshal(fixtureJSON, &out); err != nil {
 		panic(err)
 	}
 	return out
 }
-func Names() []string {
-	out := make([]string, len(Examples))
-	for i, e := range Examples {
+func chartNames() []string {
+	out := make([]string, len(chartExamples))
+	for i, e := range chartExamples {
 		out[i] = e.Name
 	}
 	return out
 }
-func Find(name string) Example {
-	for _, e := range Examples {
+func findChart(name string) chartExample {
+	for _, e := range chartExamples {
 		if e.Name == name {
 			return e
 		}
 	}
-	return Examples[0]
+	return chartExamples[0]
 }
 func title(s string) string {
 	if s == "" {
@@ -66,7 +66,7 @@ func short(s string) string {
 	}
 	return title(s)
 }
-func Build(e Example) *ui.ChartWidget {
+func buildChart(e chartExample) *ui.ChartWidget {
 	kind := ui.ChartArea
 	switch strings.Split(e.Name, "-")[1] {
 	case "bar", "tooltip":
@@ -301,10 +301,10 @@ func Build(e Example) *ui.ChartWidget {
 	return c.Tooltip(tooltip)
 }
 
-// Card builds a complete example with interactive controls where the reference
+// chartCard builds a complete example with interactive controls where the reference
 // exposes a date range, series selector or persistent active category.
-func Card(e Example) ggui.Widget {
-	chart := Build(e)
+func chartCard(e chartExample) ggui.Widget {
+	chart := buildChart(e)
 	description := "January - June 2024"
 	footer := "Showing total visitors for the last 6 months"
 	if strings.Contains(e.Name, "area") || strings.Contains(e.Name, "radar") {
@@ -353,9 +353,9 @@ func Card(e Example) ggui.Widget {
 			widgets = append(widgets, ggui.Row(ui.Button("Desktop", func() { selection.Set("desktop") }), ui.Button("Mobile", func() { selection.Set("mobile") })).Gap(8))
 			widgets = append(widgets, ggui.View(selection, func(s string) *ui.ChartWidget {
 				if s == "mobile" {
-					return Build(mobile)
+					return buildChart(mobile)
 				}
-				return Build(desktop)
+				return buildChart(desktop)
 			}))
 			chart = nil
 		}
@@ -374,9 +374,9 @@ func Card(e Example) ggui.Widget {
 		}
 	}
 	column := ggui.Column(widgets...).Gap(12).Align(ggui.AlignStretch)
-	return Decorate(ui.Card(column).Pad(24))
+	return decorateChart(ui.Card(column).Pad(24))
 }
-func nextData(e Example) []ui.ChartDatum {
+func nextData(e chartExample) []ui.ChartDatum {
 	data := make([]ui.ChartDatum, len(e.Data))
 	for i, row := range e.Data {
 		data[i] = ui.ChartDatum{Values: map[string]float64{}}
@@ -412,5 +412,7 @@ func demoText(dst *ggui.Canvas, env ggui.Env, s string, p ggui.Point, col color.
 	dst.Paint(w, ggui.Rct(p, size))
 }
 
-// Decorate supplies the exact Lucide icons used by the reference examples.
-func Decorate(w ggui.Widget) ggui.Widget { return ggui.Provide(icons.SetKey, icons.Set(chartIcons), w) }
+// decorateChart supplies the exact Lucide icons used by the reference examples.
+func decorateChart(w ggui.Widget) ggui.Widget {
+	return ggui.Provide(icons.SetKey, icons.Set(chartIcons), w)
+}

@@ -12,7 +12,6 @@ import (
 	"log"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/internal/chartdemo"
 	"github.com/ironpark/ggui/ui"
 )
 
@@ -54,11 +53,11 @@ func (m model) build() ggui.Widget {
 			ui.Button("Replay", m.replay),
 			ui.Switch(m.Dark, "Dark theme"),
 		).Gap(12),
-		ui.Select(m.Selected).Options(chartdemo.Names()).Name("Chart example"),
+		ui.Select(m.Selected).Options(chartNames()).Name("Chart example"),
 		// Key recreates the card whenever the selection or the replay
 		// generation changes; the rest of the tree stays as it is.
 		ggui.Key(selection, func(key cardKey) ggui.Widget {
-			return chartdemo.Card(chartdemo.Find(key.name))
+			return chartCard(findChart(key.name))
 		}),
 		ggui.Caption("Arrow keys explore values · Enter selects · Replay restarts motion"),
 	).Gap(20).Align(ggui.AlignStretch)).Pad(24)

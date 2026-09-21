@@ -9,7 +9,6 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/internal/controldemo"
 )
 
 type controlsRender struct {
@@ -33,8 +32,8 @@ func (g *controlsRender) Draw(screen *ebiten.Image) {
 	if g.done || g.err != nil {
 		return
 	}
-	n := len(controldemo.Names)
-	name := controldemo.Names[g.index%n]
+	n := len(controlNames)
+	name := controlNames[g.index%n]
 	dark := g.index/n%2 == 1
 	width := 560
 	if g.index/(2*n) == 1 {
@@ -48,9 +47,9 @@ func (g *controlsRender) Draw(screen *ebiten.Image) {
 	now := time.Unix(100, 0)
 	restore := ggui.SetClock(func() time.Time { return now })
 	defer restore()
-	var demo controldemo.Demo
+	var demo controlDemo
 	p := ggui.ProbeBuilder(func() ggui.Widget {
-		demo = controldemo.Build(name)
+		demo = buildControl(name)
 		return ggui.Themed(theme, demo.Widget)
 	}, ggui.Sz(float64(width), 520))
 	defer p.Close()

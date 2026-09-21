@@ -12,7 +12,6 @@ import (
 	"log"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/internal/controldemo"
 	"github.com/ironpark/ggui/ui"
 )
 
@@ -36,10 +35,10 @@ func (m model) build() ggui.Widget {
 			ggui.Spacer(),
 			ui.Switch(m.Dark, "Dark theme"),
 		).Gap(12),
-		ui.Select(m.Selected).Options(controldemo.Names).Name("Component example"),
+		ui.Select(m.Selected).Options(controlNames).Name("Component example"),
 		// Key recreates the demo when the selection changes; the Select and
 		// the switch above stay as they are.
-		ggui.Key(m.Selected, func(name string) ggui.Widget { return controldemo.Build(name).Widget }),
+		ggui.Key(m.Selected, func(name string) ggui.Widget { return buildControl(name).Widget }),
 		ggui.Caption("Drag slides or use arrow keys · Paste a code or edit individual slots"),
 	).Gap(20).Align(ggui.AlignStretch)).Pad(24)
 }

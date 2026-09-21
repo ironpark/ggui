@@ -1,6 +1,6 @@
-// Package controldemo contains native adaptations of the shadcn Carousel and
+// This catalog contains native adaptations of the shadcn Carousel and
 // Input OTP documentation examples. No browser or runtime dependency is used.
-package controldemo
+package main
 
 import (
 	"fmt"
@@ -11,16 +11,16 @@ import (
 	"github.com/ironpark/ggui/ui"
 )
 
-var Names = []string{"carousel-demo", "carousel-size", "carousel-spacing", "carousel-orientation", "carousel-api", "carousel-plugin", "carousel-multiple", "carousel-rtl", "carousel-loop", "input-otp-demo", "input-otp-pattern", "input-otp-separator", "input-otp-disabled", "input-otp-controlled", "input-otp-invalid", "input-otp-four-digits", "input-otp-alphanumeric", "input-otp-form", "input-otp-rtl"}
+var controlNames = []string{"carousel-demo", "carousel-size", "carousel-spacing", "carousel-orientation", "carousel-api", "carousel-plugin", "carousel-multiple", "carousel-rtl", "carousel-loop", "input-otp-demo", "input-otp-pattern", "input-otp-separator", "input-otp-disabled", "input-otp-controlled", "input-otp-invalid", "input-otp-four-digits", "input-otp-alphanumeric", "input-otp-form", "input-otp-rtl"}
 
-type Demo struct {
+type controlDemo struct {
 	Widget   ggui.Widget
 	Carousel *ui.CarouselWidget
 	OTP      *ui.InputOTPWidget
 	Value    *ggui.StateValue[string]
 }
 
-func Title(name string) string {
+func controlTitle(name string) string {
 	words := strings.Split(name, "-")
 	for i, s := range words {
 		if s == "otp" {
@@ -35,8 +35,8 @@ func Title(name string) string {
 	}
 	return strings.Join(words, " ")
 }
-func Build(name string) Demo {
-	d := Demo{}
+func buildControl(name string) controlDemo {
+	d := controlDemo{}
 	if strings.HasPrefix(name, "carousel-") {
 		selected := ggui.State(0)
 		items := make([]ggui.Widget, 5)
@@ -133,6 +133,6 @@ func Build(name string) Demo {
 		}
 		d.Widget = ggui.Box(ggui.Center(body)).Height(288)
 	}
-	d.Widget = ui.Card(ggui.Column(ggui.Title(Title(name)).Size(20), ggui.Caption("Native ggui · shadcn reference"), d.Widget).Gap(20).Align(ggui.AlignStretch)).Pad(24)
+	d.Widget = ui.Card(ggui.Column(ggui.Title(controlTitle(name)).Size(20), ggui.Caption("Native ggui · shadcn reference"), d.Widget).Gap(20).Align(ggui.AlignStretch)).Pad(24)
 	return d
 }

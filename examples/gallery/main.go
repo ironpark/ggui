@@ -14,7 +14,6 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/fonts/notoemoji"
-	"github.com/ironpark/ggui/internal/chartdemo"
 	"github.com/ironpark/ggui/ui"
 )
 
@@ -465,7 +464,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 		entries = append(entries, preview("Carousel", ui.Carousel(carouselIndex, ui.Card(ggui.Center(ggui.Title("1"))), ui.Card(ggui.Center(ggui.Title("2"))), ui.Card(ggui.Center(ggui.Title("3")))).Height(180)))
 		entries = append(entries, preview("Input OTP", ui.Field("Verification code", ui.InputOTP(otpValue, 6).Groups(3, 3)).Help("Paste a code or edit individual slots.")))
 		entries = append(entries, preview("Charts", ggui.Column(
-			chartdemo.Build(chartdemo.Find("chart-area-gradient")).Legend(true),
+			chartPreview(),
 			ggui.Caption("Area, bar, line, pie, radar and radial charts. Run examples/charts for all variants."),
 		).Gap(12)))
 		if present != nil {

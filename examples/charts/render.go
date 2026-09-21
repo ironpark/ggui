@@ -10,7 +10,6 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/internal/chartdemo"
 	"github.com/ironpark/ggui/ui"
 )
 
@@ -37,8 +36,8 @@ func (g *renderGame) Draw(screen *ebiten.Image) {
 	if g.done || g.err != nil {
 		return
 	}
-	e := chartdemo.Examples[g.index%len(chartdemo.Examples)]
-	dark := g.index >= len(chartdemo.Examples)
+	e := chartExamples[g.index%len(chartExamples)]
+	dark := g.index >= len(chartExamples)
 	preset := ggui.ThemePreset{Base: ggui.BaseNeutral, Accent: ggui.AccentBlue}
 	theme := preset.Light()
 	mode := "light"
@@ -52,7 +51,7 @@ func (g *renderGame) Draw(screen *ebiten.Image) {
 	// Probe mounts reactive examples under an owner and cleans up subscriptions.
 	var w ggui.Widget
 	p := ggui.ProbeBuilder(func() ggui.Widget {
-		w = chartdemo.Card(e)
+		w = chartCard(e)
 		return ggui.Themed(theme, w)
 	}, ggui.Sz(480, 420))
 	p.Frame()
@@ -68,7 +67,7 @@ func (g *renderGame) Draw(screen *ebiten.Image) {
 		dst := &ggui.Canvas{Image: img}
 		w.Paint(dst, ggui.Rct(ggui.Point{}, size))
 		if strings.Contains(e.Name, "tooltip") {
-			content := chartdemo.Decorate(ui.ChartTooltipContent(chartdemo.Build(e), 1))
+			content := decorateChart(ui.ChartTooltipContent(buildChart(e), 1))
 			tipSize := content.Layout(ggui.Loose(ggui.Sz(400, 240)), env)
 			content.Paint(dst, ggui.Rct(ggui.Pt(180., 180.), tipSize))
 		}
@@ -81,7 +80,7 @@ func (g *renderGame) Draw(screen *ebiten.Image) {
 	screen.Fill(theme.Bg)
 	screen.DrawImage(img, nil)
 	g.index++
-	if g.index == 2*len(chartdemo.Examples) {
+	if g.index == 2*len(chartExamples) {
 		g.done = true
 	}
 }

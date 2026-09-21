@@ -1,4 +1,4 @@
-package chartdemo
+package main
 
 import (
 	"embed"
