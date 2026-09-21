@@ -24,6 +24,16 @@ var stateGen uint64
 // requestLayout asks the runtime to lay the tree out again next frame.
 func requestLayout() { layoutGen.Add(1) }
 
+// Measurement dependencies are separate from reactive subscriptions: even an
+// Untrack read affects layout, but never subscribes the enclosing computation.
+type layoutSource interface{ layoutVersion() uint64 }
+
+// measuring is the recorder a running Layout installs so that a signal
+// read during measurement is remembered as an input of that layout. It is
+// a func rather than the cache itself, so that the reactive core does not
+// name the layout cache.
+var measuring func(src layoutSource, version uint64)
+
 // tracker holds the running computation. listener is the effect that reads
 // subscribe to (nil inside Untrack); owner is the effect that newly created
 // effects belong to, so that they are disposed when it re-runs or is
@@ -112,6 +122,19 @@ type effect struct {
 type autoKey struct {
 	root any
 	path string
+}
+
+// itoa formats a small non-negative int. The reactive core keeps its own
+// rather than reaching into the frame loop's file for a digit loop.
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var b []byte
+	for ; n > 0; n /= 10 {
+		b = append([]byte{byte('0' + n%10)}, b...)
+	}
+	return string(b)
 }
 
 // autoID returns the identity for a widget being constructed now: nil
@@ -881,7 +904,7 @@ func (s *effectSet) flush() (settled bool) {
 
 // flushUsers executes one post-layout pass. Layout is settled again before
 // another pass, so effects never observe a partially mounted tree.
-func (s *effectSet) flushUsers(loop *frameLoop) bool {
+func (s *effectSet) flushUsers(loop any) bool {
 	if !s.userPending {
 		return false
 	}

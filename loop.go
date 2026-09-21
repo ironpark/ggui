@@ -65,17 +65,6 @@ func cycle() error {
 	return &cycleError{msg: b.String()}
 }
 
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b []byte
-	for ; n > 0; n /= 10 {
-		b = append([]byte{byte('0' + n%10)}, b...)
-	}
-	return string(b)
-}
-
 // Dialogs is the host's file dialogs: the platform's under an App, a
 // runtime.StubFilePicker under a Probe, or what App.SetDialogs installed.
 func (l *frameLoop) Dialogs() runtime.FilePicker { return l.dialogs }

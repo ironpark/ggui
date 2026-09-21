@@ -68,16 +68,10 @@ func (c *CachedWidget) Paint(dst *Canvas, r Rect) { dst.Paint(c.child, r) }
 // Baseline implements Baseliner: the child's.
 func (c *CachedWidget) Baseline() (float64, bool) { return baselineOf(c.child) }
 
-// Measurement dependencies are separate from reactive subscriptions: even an
-// Untrack read affects layout, but never subscribes the enclosing computation.
-type layoutSource interface{ layoutVersion() uint64 }
-
-// measuring is the cache the running Layout measures into, so a source read
-// during it is recorded against the right one. Layout is UI-goroutine work,
-// and the value is saved and restored around each nested measurement rather
-// than assigned outright.
-var measuring func(src layoutSource, version uint64)
-
+// record notes src as an input of this cache and every cache above it, so
+// that a change to src invalidates all of them. Layout installs it as the
+// reactive core's recorder for the duration of a measurement, saving and
+// restoring the previous one so that nested caches nest correctly.
 func (c *CachedWidget) record(src layoutSource, version uint64) {
 	for ; c != nil; c = c.outer {
 		if c.sources == nil {
