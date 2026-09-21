@@ -6,7 +6,7 @@
 //
 // Usage:
 //
-//	go run ./internal/serve -http :3000 ./examples/gallery
+//	go run ./internal/tools/serve -http :3000 ./examples/gallery
 //
 // Each build is linked without its symbol table and DWARF, run through
 // binaryen's wasm-opt, and gzipped once, so a browser on a phone or at the

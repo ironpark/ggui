@@ -155,7 +155,7 @@ tasks:
         - name: EXAMPLE
           enum: [counter, todo, workspace, gallery]
     cmds:
-      - '"{{.GO}}" run ./internal/serve -http ":{{.PORT}}" -wasm-opt "{{.WASM_OPT}}" "./examples/{{.EXAMPLE}}"'
+      - '"{{.GO}}" run ./internal/tools/serve -http ":{{.PORT}}" -wasm-opt "{{.WASM_OPT}}" "./examples/{{.EXAMPLE}}"'
 
   serve-gallery:
     desc: Serve the component gallery in a browser at http://localhost:3000

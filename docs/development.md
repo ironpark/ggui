@@ -86,7 +86,7 @@ it, the linked binary is served. To explicitly skip optimization, run the server
 directly (the Task default substitutes `-O2` for an empty option):
 
 ```sh
-go run ./internal/serve -http :3000 -wasm-opt="" ./examples/gallery
+go run ./internal/tools/serve -http :3000 -wasm-opt="" ./examples/gallery
 ```
 
 The server uses `go` from `PATH` for its child build, even when the Task launcher

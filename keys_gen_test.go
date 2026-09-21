@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/ironpark/ggui/internal/keygen"
+	"github.com/ironpark/ggui/internal/tools/keygen"
 )
 
 func TestKeyConstantsAreCurrent(t *testing.T) {

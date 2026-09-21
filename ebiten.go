@@ -9,7 +9,7 @@ import "github.com/hajimehoshi/ebiten/v2"
 // freely. What they do not do is hide Ebitengine; ggui renders with it, and
 // Canvas.Image is still an *ebiten.Image.
 
-//go:generate go run ./internal/keygen/cmd -o keys_gen.go
+//go:generate go run ./internal/tools/keygen/cmd -o keys_gen.go
 
 // KeyboardKey is a physical key on the keyboard, named for what it is on a US
 // layout. The constants are in keys_gen.go; Chord and KeyEvent carry them,
