@@ -1,4 +1,4 @@
-package ggui
+package a11y
 
 import (
 	"testing"
@@ -38,16 +38,15 @@ func (f *axFake) notify(notes []axNote) { f.notes = append(f.notes, notes...); f
 // axRoots builds a tree of unnested nodes, which is all the element cache
 // and the gating care about.
 func axRoots(nodes ...SemNode) *SemTree {
-	t := &SemTree{focused: -1}
-	for i, n := range nodes {
+	out := make([]SemNode, 0, len(nodes))
+	for _, n := range nodes {
 		n.Parent = -1
 		if n.ID.Role == "" {
 			n.ID.Role = n.Role
 		}
-		t.nodes = append(t.nodes, n)
-		t.roots = append(t.roots, i)
+		out = append(out, n)
 	}
-	return t
+	return Build(out, -1)
 }
 
 func axNode(role Role, name string, id any, r Rect) SemNode {
@@ -86,10 +85,10 @@ func TestAXKeyFollowsIdentityNotPosition(t *testing.T) {
 
 func TestAXElementsAreStableAndSweptByLiveness(t *testing.T) {
 	f := newAXFake(true)
-	b := &axBridge{plat: f, mode: AccessibilityAlways}
+	b := &Bridge{plat: f, mode: Always}
 	keep := axNode(RoleButton, "keep", "keep", Rct(Pt(0, 0), Sz(10, 10)))
 	goes := axNode(RoleButton, "goes", "goes", Rct(Pt(0, 20), Sz(10, 10)))
-	b.publish(axRoots(keep, goes), nil)
+	b.Publish(axRoots(keep, goes), nil)
 
 	e1 := b.element(axKeyOf(keep.ID))
 	e2 := b.element(axKeyOf(goes.ID))
@@ -104,7 +103,7 @@ func TestAXElementsAreStableAndSweptByLiveness(t *testing.T) {
 	// nothing released. Only liveness is diffed.
 	moved := keep
 	moved.Name, moved.Full, moved.ID.Rect = "renamed", Rct(Pt(5, 5), Sz(20, 20)), Rct(Pt(5, 5), Sz(20, 20))
-	b.publish(axRoots(moved), nil)
+	b.Publish(axRoots(moved), nil)
 	if len(f.freed) != 1 || f.freed[0] != e2 {
 		t.Errorf("freed = %v, want just the node that disappeared (%d)", f.freed, e2)
 	}
@@ -121,15 +120,15 @@ func TestAXStaleHandleResolvesToNothing(t *testing.T) {
 	// can outlive its node and even its slot. It must answer nothing
 	// rather than whatever moved in.
 	f := newAXFake(true)
-	b := &axBridge{plat: f, mode: AccessibilityAlways}
+	b := &Bridge{plat: f, mode: Always}
 	gone := axNode(RoleButton, "gone", "gone", Rct(Pt(0, 0), Sz(10, 10)))
-	b.publish(axRoots(gone), nil)
+	b.Publish(axRoots(gone), nil)
 	e := b.element(axKeyOf(gone.ID))
 	stale := f.handles[e]
 
-	b.publish(axRoots(), nil)
+	b.Publish(axRoots(), nil)
 	next := axNode(RoleButton, "next", "next", Rct(Pt(0, 0), Sz(10, 10)))
-	b.publish(axRoots(next), nil)
+	b.Publish(axRoots(next), nil)
 	if b.element(axKeyOf(next.ID)) == 0 {
 		t.Fatal("the new node got no element")
 	}
@@ -140,10 +139,10 @@ func TestAXStaleHandleResolvesToNothing(t *testing.T) {
 
 func TestAXGatingCostsNothingWhileNobodyIsListening(t *testing.T) {
 	f := newAXFake(false)
-	b := &axBridge{plat: f, mode: AccessibilityAuto}
+	b := &Bridge{plat: f, mode: Auto}
 	n := axNode(RoleButton, "x", "x", Rct(Pt(0, 0), Sz(10, 10)))
 	for range axPollFrames * 2 {
-		b.publish(axRoots(n), nil)
+		b.Publish(axRoots(n), nil)
 	}
 	if b.frame() != nil {
 		t.Error("a tree was published while no assistive technology was attached")
@@ -156,7 +155,7 @@ func TestAXGatingCostsNothingWhileNobodyIsListening(t *testing.T) {
 	// element rather than holding them for a listener that has gone.
 	f.on = true
 	for range axPollFrames + 1 {
-		b.publish(axRoots(n), nil)
+		b.Publish(axRoots(n), nil)
 	}
 	if b.frame() == nil {
 		t.Fatal("nothing was published after VoiceOver attached")
@@ -164,7 +163,7 @@ func TestAXGatingCostsNothingWhileNobodyIsListening(t *testing.T) {
 	e := b.element(axKeyOf(n.ID))
 	f.on = false
 	for range axPollFrames + 1 {
-		b.publish(axRoots(n), nil)
+		b.Publish(axRoots(n), nil)
 	}
 	if len(f.freed) != 1 || f.freed[0] != e {
 		t.Errorf("freed = %v, want the one element (%d) dropped on detach", f.freed, e)
@@ -172,26 +171,14 @@ func TestAXGatingCostsNothingWhileNobodyIsListening(t *testing.T) {
 }
 
 func TestAXOffNeverTouchesThePlatform(t *testing.T) {
-	b := &axBridge{mode: AccessibilityOff}
-	b.start(nil, AccessibilityOff)
+	b := &Bridge{mode: Off}
+	b.Start(nil, Off, func() bool { return true })
 	if b.plat != nil {
-		t.Fatal("AccessibilityOff built a platform bridge")
+		t.Fatal("Off built a platform bridge")
 	}
-	b.publish(axRoots(axNode(RoleButton, "x", "x", Rct(Pt(0, 0), Sz(10, 10)))), nil)
+	b.Publish(axRoots(axNode(RoleButton, "x", "x", Rct(Pt(0, 0), Sz(10, 10)))), nil)
 	if b.frame() != nil {
-		t.Error("AccessibilityOff published a tree")
-	}
-}
-
-func TestAXBoundsFlipTheYAxis(t *testing.T) {
-	// ggui measures down from the top of the window and Cocoa measures up
-	// from the bottom, and the bounds reported are the ones the node
-	// painted at, not the ones it was clipped to.
-	n := axNode(RoleButton, "b", nil, Rct(Pt(10, 20), Sz(30, 40)))
-	n.Rect, n.Offscreen = Rect{}, true
-	x, y, w, h := axBounds(n, 600)
-	if x != 10 || y != 600-60 || w != 30 || h != 40 {
-		t.Errorf("bounds = %g,%g %gx%g; want 10,540 30x40", x, y, w, h)
+		t.Error("Off published a tree")
 	}
 }
 
@@ -226,34 +213,6 @@ func TestAXValuesFollowTheRole(t *testing.T) {
 	}
 }
 
-func TestAXRolesCoverEveryRole(t *testing.T) {
-	all := []Role{
-		RoleButton, RoleCheckbox, RoleRadio, RoleSwitch, RoleSlider, RoleTextField,
-		RoleSelect, RoleOption, RoleMenu, RoleMenuItem, RoleTab, RoleTabs,
-		RoleDisclosure, RoleDialog, RoleRow, RoleAccordion, RoleCombobox,
-		RoleSeparator, RoleText, RoleHeading, RoleImage, RoleList, RoleListItem,
-		RoleGroup, RoleProgress, RoleLink, RoleToolbar, RoleStatus, RoleWindow,
-	}
-	for _, r := range all {
-		role, _ := axRole(r)
-		if role == "AXUnknown" {
-			t.Errorf("%s maps to no AppKit role", r)
-		}
-	}
-	if role, sub := axRole(RoleSwitch); role != "AXCheckBox" || sub != "AXSwitch" {
-		t.Errorf("switch = %s/%s, want AXCheckBox/AXSwitch", role, sub)
-	}
-	if role, sub := axRole(RoleTab); role != "AXRadioButton" || sub != "AXTabButton" {
-		t.Errorf("tab = %s/%s, want AXRadioButton/AXTabButton", role, sub)
-	}
-	if role, sub := axRole(RoleDialog); role != "AXWindow" || sub != "AXDialog" {
-		t.Errorf("dialog = %s/%s, want AXWindow/AXDialog", role, sub)
-	}
-	if role, _ := axRole(Role("nonsense")); role != "AXUnknown" {
-		t.Errorf("an unknown role mapped to %s", role)
-	}
-}
-
 func TestAXHitTestFindsTheDeepestNode(t *testing.T) {
 	// The array is in paint order, so a scan would answer with the last
 	// node painted; a hit test must answer with the innermost one.
@@ -274,29 +233,28 @@ func TestAXHitTestFindsTheDeepestNode(t *testing.T) {
 
 // axHitTree is a group with a visible child and a clipped one.
 func axHitTree() *SemTree {
-	t := &SemTree{focused: -1}
-	t.nodes = []SemNode{
-		{Role: RoleGroup, Full: Rct(Pt(0, 0), Sz(100, 100)), Parent: -1, Children: []int{1, 2}},
+	return Build([]SemNode{
+		{Role: RoleGroup, Full: Rct(Pt(0, 0), Sz(100, 100)), Parent: -1},
 		{Role: RoleButton, Full: Rct(Pt(10, 10), Sz(50, 50)), Parent: 0},
 		{Role: RoleButton, Offscreen: true, Full: Rct(Pt(10, 110), Sz(50, 50)), Parent: 0},
-	}
-	t.roots = []int{0}
-	return t
+	}, -1)
 }
 
 // axParent builds a container holding the given children, which is what the
 // selection notification needs: it says which of a container's children is
 // now the chosen one, so it goes to the container.
 func axParent(parent SemNode, kids ...SemNode) *SemTree {
-	t := &SemTree{focused: -1}
+	return axParentFocus(-1, parent, kids...)
+}
+
+// axParentFocus is axParent with one of the nodes holding keyboard focus,
+// named by its index in the tree.
+func axParentFocus(focus int, parent SemNode, kids ...SemNode) *SemTree {
 	parent.Parent = -1
 	for i := range kids {
 		kids[i].Parent = 0
-		parent.Children = append(parent.Children, i+1)
 	}
-	t.nodes = append(append(t.nodes, parent), kids...)
-	t.roots = []int{0}
-	return t
+	return Build(append([]SemNode{parent}, kids...), focus)
 }
 
 func axKinds(notes []axNote) []axNotice {
@@ -363,14 +321,12 @@ func TestAXDiffReportsFocusAndSelection(t *testing.T) {
 
 	// Focus is compared by identity, so a rebuild that shifted every node
 	// along is not a focus move.
-	focused := axParent(list, a, b)
-	focused.focused = 1
+	focused := axParentFocus(1, list, a, b)
 	moved := axDiff(before, axFrameOf(focused))
 	if len(moved) == 0 || moved[len(moved)-1].kind != axFocusChanged {
 		t.Fatalf("notes = %v, want a focus change last", moved)
 	}
-	same := axParent(list, a, b)
-	same.focused = 1
+	same := axParentFocus(1, list, a, b)
 	if got := axDiff(axFrameOf(focused), axFrameOf(same)); len(got) != 0 {
 		t.Errorf("focus that stayed put = %v, want nothing", got)
 	}
@@ -378,20 +334,20 @@ func TestAXDiffReportsFocusAndSelection(t *testing.T) {
 
 func TestAXNotifiesOncePerFrameAndOnlyWhenThereIsNews(t *testing.T) {
 	f := newAXFake(true)
-	b := &axBridge{plat: f, mode: AccessibilityAlways}
+	b := &Bridge{plat: f, mode: Always}
 	n := axNode(RoleSlider, "vol", "vol", Rct(Pt(0, 0), Sz(10, 10)))
-	b.publish(axRoots(n), nil)
+	b.Publish(axRoots(n), nil)
 	if f.flushes != 1 {
 		t.Fatalf("flushes = %d, want the first tree to be announced once", f.flushes)
 	}
 	for range 10 {
-		b.publish(axRoots(n), nil)
+		b.Publish(axRoots(n), nil)
 	}
 	if f.flushes != 1 {
 		t.Errorf("flushes = %d after ten still frames, want 1", f.flushes)
 	}
 	n.Now = 5
-	b.publish(axRoots(n), []Announcement{{Text: "muted", Politeness: Assertive}})
+	b.Publish(axRoots(n), []Announcement{{Text: "muted", Politeness: Assertive}})
 	if f.flushes != 2 {
 		t.Fatalf("flushes = %d, want one hop for the frame that changed", f.flushes)
 	}
@@ -405,22 +361,22 @@ func TestAXReusedSnapshotStillAnnouncesAndPolls(t *testing.T) {
 	oldDetail := axWantsDetail.Load()
 	defer axWantsDetail.Store(oldDetail)
 	f := newAXFake(true)
-	b := &axBridge{plat: f, mode: AccessibilityAuto}
+	b := &Bridge{plat: f, mode: Auto}
 	tree := axRoots(axNode(RoleButton, "save", "save", Rect{}))
-	b.publish(tree, nil)
+	b.Publish(tree, nil)
 	first := b.frame()
 	elem := b.element(axKeyOf(tree.At(0).ID))
-	b.publish(tree, []Announcement{{Text: "saved", Politeness: Polite}})
+	b.Publish(tree, []Announcement{{Text: "saved", Politeness: Polite}})
 	if b.frame() != first || f.flushes != 2 || f.notes[len(f.notes)-1].text != "saved" {
 		t.Fatal("reused tree rebuilt the index or lost an announcement")
 	}
 	f.on, b.poll = false, 0
-	b.publish(tree, nil)
+	b.Publish(tree, nil)
 	if b.frame() != nil || len(f.freed) != 1 || f.freed[0] != elem {
 		t.Fatal("reused tree prevented detach cleanup")
 	}
 	f.on, b.poll = true, 0
-	b.publish(tree, nil)
+	b.Publish(tree, nil)
 	if b.frame() == nil || b.frame() == first || b.frame().tree != tree {
 		t.Fatal("same tree did not republish on reattach")
 	}
@@ -448,31 +404,18 @@ func TestAXActionsAreOnlyWhatTheNodeClaims(t *testing.T) {
 	}
 }
 
-// axBell counts presses, and says so, which is what the round trip through
-// the bridge has to arrive at.
-type axBell struct {
-	Interactive
-	rung int
-}
-
-func (b *axBell) Layout(c Constraints, _ Env) Size { return c.Constrain(Sz(40, 20)) }
-func (b *axBell) Paint(dst *Canvas, r Rect)        { b.Hit(dst, r, b, 0) }
-func (b *axBell) HandlePointer(PointerEvent) bool  { return true }
-func (b *axBell) HandleKey(ev KeyEvent)            { b.Keyboard(ev, func() { b.rung++ }) }
-
-func TestAXPressReachesTheWidget(t *testing.T) {
-	// The whole path, minus Objective-C: an element resolves its node out
-	// of the published tree, asks the app to press it, and the next frame
-	// shows that it was.
-	w := &axBell{}
-	w.Role = RoleButton
-	w.SetName("ring")
-	p := NewProbe(w, Sz(100, 100))
-	defer p.Close()
-
-	f := newAXFake(true)
-	b := &axBridge{plat: f, mode: AccessibilityAlways, act: p.Perform}
-	b.publish(p.Semantics(), nil)
+func TestAXPressReachesTheApp(t *testing.T) {
+	// The bridge's half of the round trip: an element resolves its node
+	// out of the published tree and asks the app to press it. What the app
+	// then does to the widget is the other half, and is tested where the
+	// widgets are; see TestAXPressRingsTheWidget in the ggui package.
+	var got []Action
+	var at []NodeID
+	b := &Bridge{plat: newAXFake(true), mode: Always,
+		act: func(id NodeID, a Action) { at, got = append(at, id), append(got, a) }}
+	button := axNode(RoleButton, "ring", "bell", Rct(Pt(0, 0), Sz(40, 20)))
+	button.Actions = ActionPress | ActionFocus
+	b.Publish(axRoots(button), nil)
 
 	node, ok := b.frame().tree.Find(RoleButton, "ring")
 	if !ok {
@@ -482,8 +425,11 @@ func TestAXPressReachesTheWidget(t *testing.T) {
 		t.Fatal("the button does not offer a press")
 	}
 	b.perform(node.ID, Action{Kind: ActionPress})
-	if w.rung != 1 {
-		t.Errorf("rung %d times, want 1", w.rung)
+	if len(got) != 1 || got[0].Kind != ActionPress {
+		t.Fatalf("actions = %v, want one press", got)
+	}
+	if len(at) != 1 || at[0].ID != "bell" {
+		t.Errorf("press aimed at %v, want the button", at)
 	}
 }
 
@@ -510,159 +456,13 @@ func TestAXUTF16OffsetsCountSurrogatePairs(t *testing.T) {
 		}
 	}
 	n := Node{Value: s, SelStart: 1, SelEnd: 7}
-	if loc, length := axSelection(n); loc != 1 || length != 3 {
+	if loc, length := Selection(n); loc != 1 || length != 3 {
 		t.Errorf("selection = %d+%d, want 1+3 in UTF-16", loc, length)
 	}
-	if got := axSelected(n); got != "é😀" {
+	if got := Selected(n); got != "é😀" {
 		t.Errorf("selected text = %q, want %q", got, "é😀")
 	}
-	if a, b := axByteRange(n, 1, 3); a != 1 || b != 7 {
+	if a, b := ByteRange(n, 1, 3); a != 1 || b != 7 {
 		t.Errorf("byte range = %d..%d, want 1..7", a, b)
-	}
-}
-
-// axDetailed runs a frame with the detail a text field only freezes while
-// something is reading it, and puts the flag back.
-func axDetailed(t *testing.T, p *Probe) *SemTree {
-	t.Helper()
-	axWantsDetail.Store(true)
-	t.Cleanup(func() { axWantsDetail.Store(false) })
-	return p.Semantics()
-}
-
-func TestAXTextFieldSaysWhereItsCharactersAre(t *testing.T) {
-	value := State("hello world")
-	w := TextInput(value)
-	p := NewProbe(w, Sz(300, 40))
-	defer p.Close()
-
-	field, ok := axDetailed(t, p).Find(RoleTextField, "")
-	if !ok {
-		t.Fatal("no text field in the tree")
-	}
-	if got := axCharCount(field.Node); got != 11 {
-		t.Errorf("character count = %d, want 11", got)
-	}
-	if got := axStringForRange(field.Node, 6, 5); got != "world" {
-		t.Errorf("string for range = %q, want %q", got, "world")
-	}
-	if len(field.Runs) != 1 {
-		t.Fatalf("%d runs, want one line", len(field.Runs))
-	}
-	if n := len(field.Runs[0].Stops); n != 12 {
-		t.Errorf("%d stops, want one per character boundary (12)", n)
-	}
-	// The caret sits at the end after TextInput loaded the value, and the
-	// field is one line, so that is where the insertion point is.
-	if got := axInsertionLine(field.Node); got != 0 {
-		t.Errorf("insertion line = %d, want 0", got)
-	}
-	if loc, length, has := axRangeForLine(field.Node, 0); !has || loc != 0 || length != 11 {
-		t.Errorf("line 0 = %d+%d, %v; want the whole field", loc, length, has)
-	}
-	if _, _, has := axRangeForLine(field.Node, 3); has {
-		t.Error("a field with one line answered for line 3")
-	}
-	// A character's box is inside the field, is not empty, and moves right
-	// as the offset does.
-	first := axRectForRange(field, 0, 1)
-	later := axRectForRange(field, 6, 1)
-	if first.Empty() || later.Empty() {
-		t.Fatalf("character boxes = %v, %v; want real rectangles", first, later)
-	}
-	if later.Origin.X <= first.Origin.X {
-		t.Errorf("character 6 at x=%g is not right of character 0 at x=%g", later.Origin.X, first.Origin.X)
-	}
-	if first.Origin.X < field.Full.Origin.X || later.Origin.X > field.Full.Origin.X+field.Full.Size.W {
-		t.Errorf("character boxes fell outside the field %v", field.Full)
-	}
-}
-
-func TestAXTextDetailIsOnlyFrozenWhenSomethingIsReading(t *testing.T) {
-	p := NewProbe(TextInput(State("hello")), Sz(300, 40))
-	defer p.Close()
-	field, ok := p.Semantics().Find(RoleTextField, "")
-	if !ok {
-		t.Fatal("no text field")
-	}
-	if field.Runs != nil {
-		t.Error("the layout was frozen with nobody reading it; that is a measurement per character per frame")
-	}
-	// The selection is cheap and always there, so that the caret is known
-	// the moment a bridge attaches.
-	if field.SelEnd != len("hello") {
-		t.Errorf("caret = %d, want the end of the text", field.SelEnd)
-	}
-	// Without a layout the field is still one line covering everything.
-	if loc, length, has := axRangeForLine(field.Node, 0); !has || loc != 0 || length != 5 {
-		t.Errorf("line 0 = %d+%d, %v; want the whole field", loc, length, has)
-	}
-	if got := axRectForRange(field, 0, 1); got != field.Full {
-		t.Errorf("rect for range = %v, want the whole field %v", got, field.Full)
-	}
-}
-
-func TestAXPasswordKeepsItsShapeToItself(t *testing.T) {
-	p := NewProbe(TextInput(State("hunter2")).Password(), Sz(300, 40))
-	defer p.Close()
-	field, _ := axDetailed(t, p).Find(RoleTextField, "")
-	if field.Runs != nil {
-		t.Error("a password field froze its character positions")
-	}
-}
-
-func TestAXSetSelectionMovesTheCaret(t *testing.T) {
-	w := TextInput(State("hello world"))
-	p := NewProbe(w, Sz(300, 40))
-	defer p.Close()
-	field, ok := p.Semantics().Find(RoleTextField, "")
-	if !ok {
-		t.Fatal("no text field")
-	}
-	if !axAllows(field.Node, axSetSelection) {
-		t.Fatal("a text field does not offer its selection")
-	}
-	start, end := axByteRange(field.Node, 6, 5)
-	p.Perform(field.ID, Action{Kind: ActionSetSelection, SelStart: start, SelEnd: end})
-	after, _ := p.Semantics().Find(RoleTextField, "")
-	if after.SelStart != 6 || after.SelEnd != 11 {
-		t.Errorf("selection = %d..%d, want 6..11", after.SelStart, after.SelEnd)
-	}
-	if got := axSelected(after.Node); got != "world" {
-		t.Errorf("selected = %q, want %q", got, "world")
-	}
-}
-
-func TestAXMultilineFieldReportsItsLines(t *testing.T) {
-	w := TextInput(State("one\ntwo\nthree")).Multiline()
-	p := NewProbe(w, Sz(300, 100))
-	defer p.Close()
-	field, ok := axDetailed(t, p).Find(RoleTextField, "")
-	if !ok {
-		t.Fatal("no text field")
-	}
-	if len(field.Runs) != 3 {
-		t.Fatalf("%d runs, want three lines:\n%v", len(field.Runs), field.Runs)
-	}
-	for i, want := range []string{"one", "two", "three"} {
-		loc, length, has := axRangeForLine(field.Node, i)
-		if !has {
-			t.Fatalf("no line %d", i)
-		}
-		if got := axStringForRange(field.Node, loc, length); got != want {
-			t.Errorf("line %d = %q, want %q", i, got, want)
-		}
-	}
-	// A byte on the second line is on line 1, and the lines go down the
-	// screen in order.
-	if got := axLineForIndex(field.Node, 5); got != 1 {
-		t.Errorf("line for offset 5 = %d, want 1", got)
-	}
-	if field.Runs[1].Rect.Origin.Y <= field.Runs[0].Rect.Origin.Y {
-		t.Error("the second line is not below the first")
-	}
-	// The caret loaded at the end of the text, which is the last line.
-	if got := axInsertionLine(field.Node); got != 2 {
-		t.Errorf("insertion line = %d, want 2", got)
 	}
 }

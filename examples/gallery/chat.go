@@ -36,16 +36,56 @@ func newChatPreviews() func() []ggui.Widget {
 	answers := ggui.State(ui.QuestionAnswers{})
 	submission := ggui.State("Your answers stay local to this preview.")
 	questionnaire := ui.Questionnaire(answers,
-		ui.Question{Name: "scope", Title: "What should the agent build next?", Description: "Choose a direction or describe another task.", Required: true,
-			Choices: []ui.QuestionOption{{Value: "timeline", Label: "Tool call timeline", Description: "Show what the agent ran and what came back."}, {Value: "approvals", Label: "Approval checkpoints", Description: "Ask before sensitive or destructive actions."}, {Value: "handoffs", Label: "Sub-agent handoffs", Description: "Make delegated work and results easier to follow."}}, InputLabel: "Another feature", Placeholder: "Describe another feature…"},
-		ui.Question{Name: "updates", Title: "What should updates include?", Description: "Select multiple items, or explicitly skip this step.", Multiple: true,
-			Choices: []ui.QuestionOption{{Value: "progress", Label: "Progress updates"}, {Value: "decisions", Label: "Decisions"}, {Value: "risks", Label: "Risks"}}},
-		ui.Question{Name: "context", Title: "Who will use this?", Description: "Add a short audience description.", Required: true, InputLabel: "Audience", Placeholder: "EachKeyed example, our support team", Validate: func(a ui.QuestionAnswer) string {
-			if len([]rune(a.Text)) < 3 {
-				return "Please use at least three characters."
-			}
-			return ""
-		}},
+		ui.Question{
+			Name:        "scope",
+			Title:       "What should the agent build next?",
+			Description: "Choose a direction or describe another task.",
+			Required:    true,
+			Choices: []ui.QuestionOption{
+				{
+					Value:       "timeline",
+					Label:       "Tool call timeline",
+					Description: "Show what the agent ran and what came back.",
+				},
+				{
+					Value:       "approvals",
+					Label:       "Approval checkpoints",
+					Description: "Ask before sensitive or destructive actions.",
+				},
+				{
+					Value:       "handoffs",
+					Label:       "Sub-agent handoffs",
+					Description: "Make delegated work and results easier to follow.",
+				},
+			},
+			InputLabel:  "Another feature",
+			Placeholder: "Describe another feature…",
+		},
+		ui.Question{
+			Name:        "updates",
+			Title:       "What should updates include?",
+			Description: "Select multiple items, or explicitly skip this step.",
+			Multiple:    true,
+			Choices: []ui.QuestionOption{
+				{Value: "progress", Label: "Progress updates"},
+				{Value: "decisions", Label: "Decisions"},
+				{Value: "risks", Label: "Risks"},
+			},
+		},
+		ui.Question{
+			Name:        "context",
+			Title:       "Who will use this?",
+			Description: "Add a short audience description.",
+			Required:    true,
+			InputLabel:  "Audience",
+			Placeholder: "EachKeyed example, our support team",
+			Validate: func(a ui.QuestionAnswer) string {
+				if len([]rune(a.Text)) < 3 {
+					return "Please use at least three characters."
+				}
+				return ""
+			},
+		},
 	).Shortcuts(ui.QuestionLetters).SubmitLabel("Save answers").OnSubmit(func(a ui.QuestionAnswers) {
 		submission.Set(fmt.Sprintf("Saved %d answers. Audience: %s", len(a), a["context"].Text))
 	})
@@ -59,12 +99,20 @@ func newChatPreviews() func() []ggui.Widget {
 						ui.Attachment("workspace.png", "PNG · 820 KB").Image(thumb, "Workspace").Vertical().Trigger("Preview workspace", func() { attachmentAction.Set("Preview opened: workspace.png") }),
 						ui.Attachment("desk-reference.jpg", "JPG · 1.1 MB").Image(desk, "Desk").Vertical(),
 						ui.Attachment("office-reference.jpg", "JPG · 940 KB").Image(office, "Office").Vertical(),
-					).Name("Image attachments"), ggui.If(showUpload, func() ggui.Widget {
+					).Name("Image attachments"),
+					ggui.If(showUpload, func() ggui.Widget {
 						return ui.Attachment("sales-dashboard.pdf", "Uploading · 64%").Media(ui.Spinner().Size(16)).State(ui.AttachmentUploading).
-							Actions(ui.AttachmentAction("Cancel upload", ui.Icon(icons.Close), func() { showUpload.Set(false); attachmentAction.Set("Upload cancelled.") }))
-					}), ggui.If(showSource, func() ggui.Widget {
+							Actions(ui.AttachmentAction("Cancel upload", ui.Icon(icons.Close), func() {
+								showUpload.Set(false)
+								attachmentAction.Set("Upload cancelled.")
+							}))
+					}),
+					ggui.If(showSource, func() ggui.Widget {
 						return ui.Attachment("message-renderer.tsx", "TypeScript · 12 KB").Media(ui.Icon(icons.File)).
-							Actions(ui.AttachmentAction("Remove source attachment", ui.Icon(icons.Close), func() { showSource.Set(false); attachmentAction.Set("Source attachment removed.") }))
+							Actions(ui.AttachmentAction("Remove source attachment", ui.Icon(icons.Close), func() {
+								showSource.Set(false)
+								attachmentAction.Set("Source attachment removed.")
+							}))
 					}),
 				).Gap(12).Align(ggui.AlignStretch)),
 				ui.Select(upload).Options(states).Name("Upload state"),
@@ -157,11 +205,24 @@ func newChatPreviews() func() []ggui.Widget {
 							return append([]ui.MessageEntry{note}, prev...)
 						})
 					}).Outline(),
-					ui.Button("Save position", func() { saved = scroller.Save(); scrollNote.Set("Saved the current reading position.") }).Outline(),
-					ui.Button("Restore position", func() { scroller.Restore(saved); scrollNote.Set("Restored the saved reading position.") }).Outline(),
+					ui.Button("Save position", func() {
+						saved = scroller.Save()
+						scrollNote.Set("Saved the current reading position.")
+					}).Outline(),
+					ui.Button("Restore position", func() {
+						scroller.Restore(saved)
+						scrollNote.Set("Restored the saved reading position.")
+					}).Outline(),
 				).Gap(8), ggui.TextOf(scrollNote).AsCaption(),
 			).Gap(12).Align(ggui.AlignStretch)),
-			preview("Questionnaire", ggui.Column(chatSurface(questionnaire, 448), ggui.TextOf(submission).AsCaption(), ui.Button("Reset questionnaire", func() { questionnaire.Reset(); submission.Set("Your answers stay local to this preview.") }).Outline()).Gap(16).Align(ggui.AlignStretch)),
+			preview("Questionnaire", ggui.Column(
+				chatSurface(questionnaire, 448),
+				ggui.TextOf(submission).AsCaption(),
+				ui.Button("Reset questionnaire", func() {
+					questionnaire.Reset()
+					submission.Set("Your answers stay local to this preview.")
+				}).Outline(),
+			).Gap(16).Align(ggui.AlignStretch)),
 		}
 	}
 }

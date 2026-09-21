@@ -96,7 +96,7 @@ func TestUnhandledEventsFallThrough(t *testing.T) {
 	var in inputState
 	paintFrame(&in, w, Sz(50, 50))
 	in.dispatch(frameInput{pos: Pt(10, 10), wheel: Pt(0, -3)})
-	if scrolled != (Point{0, -3}) {
+	if scrolled != (Point{X: 0, Y: -3}) {
 		t.Fatalf("scroll reached %v, want {0 -3} through the tap region", scrolled)
 	}
 	if tapped {

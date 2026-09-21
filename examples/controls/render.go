@@ -49,7 +49,10 @@ func (g *controlsRender) Draw(screen *ebiten.Image) {
 	restore := ggui.SetClock(func() time.Time { return now })
 	defer restore()
 	var demo controldemo.Demo
-	p := ggui.ProbeBuilder(func() ggui.Widget { demo = controldemo.Build(name); return ggui.Themed(theme, demo.Widget) }, ggui.Sz(float64(width), 520))
+	p := ggui.ProbeBuilder(func() ggui.Widget {
+		demo = controldemo.Build(name)
+		return ggui.Themed(theme, demo.Widget)
+	}, ggui.Sz(float64(width), 520))
 	defer p.Close()
 	p.Frame()
 	env := ggui.Env{}.WithTheme(theme).WithText(theme.Text)

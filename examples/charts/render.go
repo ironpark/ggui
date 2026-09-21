@@ -8,11 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ironpark/ggui/ui"
-
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/chartdemo"
+	"github.com/ironpark/ggui/ui"
 )
 
 // renderGame exercises the real GPU renderer, independently of desktop capture.
@@ -52,7 +51,10 @@ func (g *renderGame) Draw(screen *ebiten.Image) {
 	defer restore()
 	// Probe mounts reactive examples under an owner and cleans up subscriptions.
 	var w ggui.Widget
-	p := ggui.ProbeBuilder(func() ggui.Widget { w = chartdemo.Card(e); return ggui.Themed(theme, w) }, ggui.Sz(480, 420))
+	p := ggui.ProbeBuilder(func() ggui.Widget {
+		w = chartdemo.Card(e)
+		return ggui.Themed(theme, w)
+	}, ggui.Sz(480, 420))
 	p.Frame()
 	defer p.Close()
 	env := ggui.Env{}.WithTheme(theme).WithText(theme.Text)

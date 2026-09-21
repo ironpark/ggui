@@ -24,7 +24,11 @@ type model struct {
 }
 
 func newModel() model {
-	return model{Count: ggui.State(0), Step: ggui.State(1), Dark: ggui.State(true)}
+	return model{
+		Count: ggui.State(0),
+		Step:  ggui.State(1),
+		Dark:  ggui.State(true),
+	}
 }
 
 func (m model) add()  { ggui.Add(m.Count, ggui.Untrack(m.Step.Get)) }
@@ -42,20 +46,21 @@ func (m model) build() ggui.Widget {
 			fmt.Sprintf("%d more to reach 100", max(100-n, 0)),
 		}
 	})
-	return ggui.Center(
-		ggui.Box(ui.Card(
-			ggui.Column(
-				ggui.Textf("count: %d", m.Count).AsTitle(),
-				ggui.Row(
-					ui.Button("-", m.sub).Pad(6, 16),
-					ui.Button("+", m.add).Pad(6, 16),
-				).Space(1).Justify(ggui.JustifyCenter),
-				ggui.View(hints, func(h []string) *ggui.ColumnWidget {
-					return ggui.List(h, func(s string) ggui.Widget { return ggui.Caption(s) }).Space(0.5)
-				}),
-			).Space(1.5).Align(ggui.AlignCenter),
-		).Pad(24)).Width(360),
-	)
+	buttons := ggui.Row(
+		ui.Button("-", m.sub).Pad(6, 16),
+		ui.Button("+", m.add).Pad(6, 16),
+	).Space(1).Justify(ggui.JustifyCenter)
+	help := ggui.View(hints, func(lines []string) *ggui.ColumnWidget {
+		return ggui.List(lines, func(line string) ggui.Widget {
+			return ggui.Caption(line)
+		}).Space(0.5)
+	})
+	content := ggui.Column(
+		ggui.Textf("count: %d", m.Count).AsTitle(),
+		buttons,
+		help,
+	).Space(1.5).Align(ggui.AlignCenter)
+	return ggui.Center(ggui.Box(ui.Card(content).Pad(24)).Width(360))
 }
 
 // shortcuts binds the keys. Bare-key shortcuts reach the focused widget

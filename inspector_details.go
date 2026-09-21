@@ -289,7 +289,7 @@ func semanticChainFrom(dst *Canvas, found int) []string {
 		e := &dst.frameSem()[c]
 		n := SemNode{Node: e.node}
 		lines = append(lines, fmt.Sprintf("%s%s %q%s",
-			strings.Repeat("  ", len(chain)-1-i), e.node.Role, e.node.Name, n.flags()))
+			strings.Repeat("  ", len(chain)-1-i), e.node.Role, e.node.Name, n.Flags()))
 	}
 	return lines
 }

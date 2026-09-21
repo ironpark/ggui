@@ -13,6 +13,7 @@ tasks:
     cmds:
       - task: fmt
       - task: vet
+      - task: vet:windows
       - task: test
 
   build:
@@ -37,6 +38,20 @@ tasks:
     cmds:
       - '"{{.GO}}" vet ./...'
 
+  vet:windows:
+    desc: Type-check and vet the Windows build from any host
+    # The Windows accessibility bridge is the one part of the tree that no
+    # other platform compiles, and it is cgo-free, so it can at least be
+    # built and vetted from here. unsafeptr is off because a COM method
+    # receives its out parameters as plain integers from the operating
+    # system: turning one back into a pointer is the whole job, and the
+    # memory it points at was never Go's to lose track of.
+    cmds:
+      - 'GOOS=windows GOARCH=amd64 "{{.GO}}" vet -unsafeptr=false ./...'
+      - 'GOOS=windows GOARCH=arm64 "{{.GO}}" vet -unsafeptr=false ./...'
+      - 'GOOS=windows GOARCH=amd64 "{{.GO}}" test -c -o /dev/null ./a11y'
+      - 'GOOS=windows GOARCH=arm64 "{{.GO}}" test -c -o /dev/null ./a11y'
+
   fmt:
     desc: Format Go sources
     cmds:
@@ -48,13 +63,13 @@ tasks:
       - '"{{.GO}}" mod tidy'
 
   bundle:
-    desc: Build a macOS app bundle (EXAMPLE=counter, todo, or gallery)
+    desc: Build a macOS app bundle (EXAMPLE=counter, todo, workspace, or gallery)
     vars:
       EXAMPLE: '{{default "counter" .EXAMPLE}}'
     requires:
       vars:
         - name: EXAMPLE
-          enum: [counter, todo, gallery]
+          enum: [counter, todo, workspace, gallery]
     preconditions:
       - sh: 'test "$(uname -s)" = Darwin'
         msg: App bundles require macOS.
@@ -103,6 +118,12 @@ tasks:
       - task: launch
         vars: {EXAMPLE: todo}
 
+  run-workspace:
+    desc: Bundle and launch the workspace dashboard
+    cmds:
+      - task: launch
+        vars: {EXAMPLE: workspace}
+
   run-gallery:
     desc: Bundle and launch the component gallery
     cmds:
@@ -126,7 +147,7 @@ tasks:
     requires:
       vars:
         - name: EXAMPLE
-          enum: [counter, todo, gallery]
+          enum: [counter, todo, workspace, gallery]
     cmds:
       - '"{{.GO}}" run ./internal/serve -http ":{{.PORT}}" -wasm-opt "{{.WASM_OPT}}" "./examples/{{.EXAMPLE}}"'
 

@@ -3,7 +3,56 @@ package ggui
 import (
 	"image/color"
 
+	"github.com/ironpark/ggui/a11y"
 	"github.com/ironpark/ggui/internal/property"
+)
+
+// Role says what kind of element a node or region is. The ui package fills
+// it in; Probe.Find, the inspector and the semantics tree read it. The
+// control roles name things the user acts on, the rest name content and
+// structure a screen reader still has to read out.
+//
+// It is defined in the a11y package, so that a bridge can read a role
+// without importing this one.
+type Role = a11y.Role
+
+// The control roles: things the user acts on.
+const (
+	RoleButton     = a11y.RoleButton
+	RoleCheckbox   = a11y.RoleCheckbox
+	RoleRadio      = a11y.RoleRadio
+	RoleSwitch     = a11y.RoleSwitch
+	RoleSlider     = a11y.RoleSlider
+	RoleTextField  = a11y.RoleTextField
+	RoleSelect     = a11y.RoleSelect
+	RoleOption     = a11y.RoleOption
+	RoleMenu       = a11y.RoleMenu
+	RoleMenuItem   = a11y.RoleMenuItem
+	RoleTab        = a11y.RoleTab
+	RoleTabs       = a11y.RoleTabs
+	RoleDisclosure = a11y.RoleDisclosure
+	RoleDialog     = a11y.RoleDialog
+	RoleRow        = a11y.RoleRow
+	RoleAccordion  = a11y.RoleAccordion
+	RoleCombobox   = a11y.RoleCombobox
+	RoleSeparator  = a11y.RoleSeparator
+)
+
+// Content and structure: these describe what is on screen rather than what
+// takes input, so they live in the semantics tree alone and never register
+// a hit region.
+const (
+	RoleText     = a11y.RoleText
+	RoleHeading  = a11y.RoleHeading
+	RoleImage    = a11y.RoleImage
+	RoleList     = a11y.RoleList
+	RoleListItem = a11y.RoleListItem
+	RoleGroup    = a11y.RoleGroup
+	RoleProgress = a11y.RoleProgress
+	RoleLink     = a11y.RoleLink
+	RoleToolbar  = a11y.RoleToolbar
+	RoleStatus   = a11y.RoleStatus
+	RoleWindow   = a11y.RoleWindow
 )
 
 // Control is a widget that takes both pointer and keyboard input.
@@ -11,48 +60,6 @@ type Control interface {
 	PointerHandler
 	KeyHandler
 }
-
-// Role says what kind of element a node or region is. The ui package fills
-// it in; Probe.Find, the inspector and the semantics tree read it. The
-// control roles name things the user acts on, the rest name content and
-// structure a screen reader still has to read out.
-type Role string
-
-const (
-	RoleButton     Role = "button"
-	RoleCheckbox   Role = "checkbox"
-	RoleRadio      Role = "radio"
-	RoleSwitch     Role = "switch"
-	RoleSlider     Role = "slider"
-	RoleTextField  Role = "textfield"
-	RoleSelect     Role = "select"
-	RoleOption     Role = "option"
-	RoleMenu       Role = "menu"
-	RoleMenuItem   Role = "menuitem"
-	RoleTab        Role = "tab"
-	RoleTabs       Role = "tabs"
-	RoleDisclosure Role = "disclosure"
-	RoleDialog     Role = "dialog"
-	RoleRow        Role = "row"
-	RoleAccordion  Role = "accordion"
-	RoleCombobox   Role = "combobox"
-	RoleSeparator  Role = "separator"
-
-	// Content and structure: these describe what is on screen rather than
-	// what takes input, so they live in the semantics tree alone and never
-	// register a hit region.
-	RoleText     Role = "text"
-	RoleHeading  Role = "heading"
-	RoleImage    Role = "image"
-	RoleList     Role = "list"
-	RoleListItem Role = "listitem"
-	RoleGroup    Role = "group"
-	RoleProgress Role = "progress"
-	RoleLink     Role = "link"
-	RoleToolbar  Role = "toolbar"
-	RoleStatus   Role = "status"
-	RoleWindow   Role = "window"
-)
 
 // Semantic is a handler that reports a role and a label for its region;
 // Interactive implements it. Probe.Find looks regions up by them.

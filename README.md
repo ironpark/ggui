@@ -21,7 +21,8 @@ and controls that bind directly to your data.
 
 > [!IMPORTANT]
 > **Early development:** APIs are working but subject to change.
-> Native accessibility support is currently **macOS only**.
+> Native accessibility support covers **macOS** and **Windows**; the Windows
+> bridge is new and not yet verified on hardware.
 
 ## At a glance
 
@@ -117,6 +118,7 @@ and launch macOS app bundles.
 | [Custom widgets](examples/custom) | A dial built on Interactive with a Spring, a disclosure that calls Invalidate, and a 5,000-row virtualized list. | `go run ./examples/custom` |
 | [Charts](examples/charts) | All 70 shadcn chart examples, interactive tooltips, themes and animation replay. | `go run ./examples/charts` |
 | [Carousel & Input OTP](examples/controls) | Swipeable carousels and segmented code inputs, all shadcn variants and state previews. | `go run ./examples/controls` |
+| [Workspace](examples/workspace) | A project dashboard combining searchable tables, form lenses, live options, dialogs, charts, animated progress, toasts, and theme switching. | `task run-workspace` |
 | [Gallery](examples/gallery) | Searchable previews across Inputs, Navigation, Feedback, Layout, and Data. | `task run-gallery` |
 
 On other platforms, use `go run ./examples/counter`, `go run ./examples/todo`,
@@ -144,9 +146,11 @@ also use to build your own controls.
 
 ## Accessibility
 
-**Native accessibility support is currently available on macOS only**, through
-the macOS accessibility bridge for VoiceOver and other assistive tools.
-Windows and Linux accessibility bridges are not yet implemented.
+**Native accessibility support covers macOS and Windows**: the macOS bridge
+speaks to VoiceOver and the other Cocoa assistive tools, and the Windows bridge
+is a UI Automation provider, which Windows also bridges to the older MSAA
+clients. A Linux bridge is not yet implemented. The Windows bridge is new and
+has not yet been exercised on Windows hardware.
 
 The default `AccessibilityAuto` mode activates the bridge when assistive
 technology attaches. Set `Config.Accessibility` to `AccessibilityAlways` for

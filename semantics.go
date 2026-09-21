@@ -1,6 +1,59 @@
 package ggui
 
-import "reflect"
+import "github.com/ironpark/ggui/a11y"
+
+// The description types live in the a11y package, which cannot import
+// this one, so that a bridge reads the same types a widget wrote rather
+// than a copy of them. These are those types under these names.
+type (
+	// Tristate is a checkbox-like state: not checkable, off, on or mixed.
+	Tristate = a11y.Tristate
+
+	// ActionSet is the set of actions a node claims to support.
+	ActionSet = a11y.ActionSet
+
+	// Node is what a widget says about itself: its role, name, value,
+	// state and the actions it offers.
+	Node = a11y.Node
+
+	// TextRun is one line of a text field's frozen layout.
+	TextRun = a11y.TextRun
+
+	// TextStop is one character boundary within a run.
+	TextStop = a11y.TextStop
+)
+
+// The tristate values.
+const (
+	TriNone  = a11y.TriNone
+	TriOff   = a11y.TriOff
+	TriOn    = a11y.TriOn
+	TriMixed = a11y.TriMixed
+)
+
+// The actions a node may offer.
+const (
+	ActionPress          = a11y.ActionPress
+	ActionIncrement      = a11y.ActionIncrement
+	ActionDecrement      = a11y.ActionDecrement
+	ActionSetValue       = a11y.ActionSetValue
+	ActionExpand         = a11y.ActionExpand
+	ActionCollapse       = a11y.ActionCollapse
+	ActionSelect         = a11y.ActionSelect
+	ActionFocus          = a11y.ActionFocus
+	ActionScrollIntoView = a11y.ActionScrollIntoView
+	ActionSetSelection   = a11y.ActionSetSelection
+)
+
+// Tri returns TriOn for true and TriOff for false, for a control whose
+// state is a plain boolean.
+func Tri(v bool) Tristate { return a11y.Tri(v) }
+
+// Expandable returns a pointer to v, for Node.Expanded.
+func Expandable(v bool) *bool { return a11y.Expandable(v) }
+
+// semKey returns h as a map key, or nil when h cannot be one.
+func semKey(h any) any { return a11y.Key(h) }
 
 // The accessibility tree is built explicitly, not inferred from the hit
 // regions. It cannot be inferred: layout containers register no region at
@@ -10,126 +63,6 @@ import "reflect"
 // pointer event. So widgets say what they are, in their own words, into an
 // array of their own: Canvas.Describe for a control that already has a
 // handler, Canvas.Leaf and Canvas.Node for everything else.
-
-// Tristate is a checkbox's state: on, off, or the mixed state a parent
-// checkbox shows when only some of its children are ticked. The zero value
-// says the node has no checked state at all, which is what every node that
-// is not a checkbox, radio or switch reports.
-type Tristate uint8
-
-const (
-	TriNone  Tristate = iota // not checkable
-	TriOff                   // checkable and not checked
-	TriOn                    // checked
-	TriMixed                 // partially checked
-)
-
-// Tri returns TriOn for true and TriOff for false, for a control whose
-// checked state is a plain bool.
-func Tri(v bool) Tristate {
-	if v {
-		return TriOn
-	}
-	return TriOff
-}
-
-// Expandable returns a pointer to v, for Node.Expanded: a nil Expanded
-// means the node does not expand at all, which is not the same as being
-// expandable and closed.
-//
-// go fix offers to inline this into new(v) at every call site. Decline it:
-// the name is the point. A bare new(open) beside Role and Name says nothing
-// about the three states Expanded has, and this is the only place the
-// difference between "closed" and "does not expand" is written down.
-func Expandable(v bool) *bool { return &v }
-
-// ActionSet is the set of actions a node accepts, as a bitset. A node
-// advertises what it supports so an assistive technology can offer it; see
-// Actor for the side that performs them.
-type ActionSet uint32
-
-const (
-	ActionPress          ActionSet = 1 << iota // activate: a button, a menu item, a checkbox
-	ActionIncrement                            // raise a slider or stepper by one step
-	ActionDecrement                            // lower it by one step
-	ActionSetValue                             // replace the value outright: a text field, a slider
-	ActionExpand                               // open a disclosure, accordion or combobox
-	ActionCollapse                             // close one
-	ActionSelect                               // make this the chosen tab, option or row
-	ActionFocus                                // move keyboard focus here
-	ActionScrollIntoView                       // bring the node into view
-	ActionSetSelection                         // move the caret or the selection in a text field
-)
-
-// Has reports whether every action in b is in a.
-func (a ActionSet) Has(b ActionSet) bool { return a&b == b }
-
-// Node describes one element of the accessibility tree: what it is, what it
-// is called, and what may be done to it. A widget fills in only the fields
-// its role gives meaning to; the zero value of every other field says "not
-// applicable", which is why Expanded is a pointer and Checked has a TriNone.
-// Pointers and slices are borrowed until the frame finishes; the published
-// SemTree copies them, so a widget may reuse their storage next frame.
-type Node struct {
-	Role        Role
-	Name        string   // what the element is called, read first
-	Description string   // the longer explanation, read after the name
-	Value       string   // a text field's contents, a select's current option
-	Checked     Tristate // checkbox, radio, switch
-	Expanded    *bool    // accordion, collapsible, combobox; nil is not expandable
-	Selected    bool     // tab, option, row
-	Disabled    bool     // from Interactive.Inert: present, but takes no input
-	Min         float64  // slider, progress: the bottom of the range
-	Max         float64  // the top of the range, or a list's item count
-	Now         float64  // where the value sits in it, or an item's place in a list
-	Actions     ActionSet
-	Offscreen   bool // clipped out of view, but present with its true bounds
-
-	// A text field carries where its caret and selection are, in bytes
-	// into Value, and -- while something is reading the tree closely
-	// enough to want it -- how Value was laid out on screen. A platform
-	// text API asks for characters, lines and the rectangle a range covers
-	// from a thread that must not touch the live widget, so the answers
-	// are frozen into the snapshot with everything else.
-	SelStart, SelEnd int
-	Runs             []TextRun
-}
-
-// TextRun is one painted line of a text node: which bytes of Node.Value it
-// covers, where it went, and where every character boundary inside it
-// landed. Rect is in the same coordinates as SemNode.Full, and a stop's X
-// is measured from Rect.Origin.X.
-type TextRun struct {
-	Start, End int
-	Rect       Rect
-	Stops      []TextStop
-}
-
-// TextStop is one character boundary within a run: a byte offset into
-// Node.Value and the horizontal position it sits at. There is one for every
-// rune boundary in the run, including both ends, so a caret between any two
-// characters has a position.
-type TextStop struct {
-	Byte int
-	X    float64
-}
-
-// At returns the horizontal position of byte offset b within the run,
-// clamped to its ends. A byte in the middle of a rune takes that rune's
-// starting position, which is where a caret would be drawn.
-func (r TextRun) At(b int) float64 {
-	if len(r.Stops) == 0 {
-		return 0
-	}
-	last := r.Stops[0]
-	for _, s := range r.Stops {
-		if s.Byte > b {
-			break
-		}
-		last = s
-	}
-	return last.X
-}
 
 // Describer is a handler that describes itself fully, beyond the Role and
 // Name every Interactive carries. Canvas.Describe prefers it, so a slider
@@ -253,18 +186,6 @@ func nodeOf(h any) Node {
 	return n
 }
 
-// semKey returns h as a map key, or nil when h cannot be one: a handler
-// holding a slice or a map would panic a lookup.
-func semKey(h any) any {
-	if h == nil {
-		return nil
-	}
-	if t := reflect.TypeOf(h); t == nil || !t.Comparable() {
-		return nil
-	}
-	return h
-}
-
 // addSem appends a node and returns a reference to it. A node clipped out
 // of view is kept and flagged Offscreen rather than dropped, with full
 // holding the bounds it would have had: an assistive technology scrolls to
@@ -316,7 +237,7 @@ func (c *Canvas) named(r Rect) bool {
 		return false
 	}
 	last := &root.sem[root.semLast-1]
-	return last.parent == root.semParent && last.node.Role.control() && covers(last.full, r)
+	return last.parent == root.semParent && a11y.Control(last.node.Role) && covers(last.full, r)
 }
 
 // covers reports whether outer wholly contains inner.
@@ -324,16 +245,4 @@ func covers(outer, inner Rect) bool {
 	return inner.Origin.X >= outer.Origin.X && inner.Origin.Y >= outer.Origin.Y &&
 		inner.Origin.X+inner.Size.W <= outer.Origin.X+outer.Size.W &&
 		inner.Origin.Y+inner.Size.H <= outer.Origin.Y+outer.Size.H
-}
-
-// control reports whether the role is one the user acts on, as opposed to
-// content or grouping. Text inside one belongs to it.
-func (r Role) control() bool {
-	switch r {
-	case RoleButton, RoleCheckbox, RoleRadio, RoleSwitch, RoleSlider, RoleTextField,
-		RoleSelect, RoleOption, RoleMenu, RoleMenuItem, RoleTab, RoleDisclosure,
-		RoleCombobox, RoleLink:
-		return true
-	}
-	return false
 }

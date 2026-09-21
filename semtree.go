@@ -1,10 +1,27 @@
 package ggui
 
 import (
-	"fmt"
-	"iter"
 	"slices"
-	"strings"
+
+	"github.com/ironpark/ggui/a11y"
+)
+
+// The tree types live in the a11y package, which cannot import this one,
+// so that a bridge reads the same types a widget wrote rather than a copy
+// of them. These are those types under these names.
+type (
+	// NodeID names one node in a published tree, well enough for an action
+	// aimed at it to find it again in the next one.
+	NodeID = a11y.NodeID
+
+	// SemNode is one node of a published tree: what a widget said about
+	// itself, where it went, and how it hangs among the others. Parent and
+	// Children are indices into the tree; Parent is -1 for a root.
+	SemNode = a11y.SemNode
+
+	// SemTree is one frame's finished semantic description, safe to read
+	// from any goroutine for as long as it is held.
+	SemTree = a11y.SemTree
 )
 
 // A platform accessibility API is a synchronous pull from a thread that is
@@ -17,183 +34,6 @@ import (
 // and handed out through an atomic pointer. A reader may keep one as long
 // as it likes.
 
-// NodeID identifies a node from frame to frame. It is the handler's
-// Identified ID when it has one, so a control that was rebuilt and moved in
-// the same frame keeps its identity, and the Rect it painted otherwise --
-// the same pair, in the same order, that Canvas.adopt matches hit regions
-// by, rather than a second matcher that could disagree with the first. The
-// Role comes along because a container and the one child that fills it do
-// share a Rect: a EachKeyed list item and the row inside it.
-// ID is an opaque identity token, not a copied description; keep identity
-// values stable while a widget or one of its snapshots is alive.
-type NodeID struct {
-	ID   any
-	Rect Rect
-	Role Role
-}
-
-// SemNode is one element of a published SemTree: what the widget said about
-// itself, where it went, and how it hangs among the others. Parent and
-// Children are indices into the tree; Parent is -1 for a root.
-type SemNode struct {
-	Node
-	ID       NodeID
-	Rect     Rect // as clipped, which is empty for an Offscreen node
-	Full     Rect // as painted, before clipping: where to scroll to
-	Parent   int
-	Children []int
-}
-
-// SemTree is one frame's accessibility tree, finished and frozen. Nothing
-// writes to it after App.Draw or Probe.Frame published it, so it is safe to
-// read from any goroutine and at any time; the slices it hands back are
-// shared with every other reader and must not be written to.
-type SemTree struct {
-	nodes   []SemNode
-	roots   []int
-	focused int // index of the node holding keyboard focus, or -1
-}
-
-// Len returns the number of nodes in the tree.
-func (t *SemTree) Len() int { return len(t.nodes) }
-
-// At returns node i, in paint order: a parent always comes before its
-// children, and siblings are in the order they were painted.
-func (t *SemTree) At(i int) SemNode { return t.nodes[i] }
-
-// Roots returns the indices of the nodes with no parent.
-func (t *SemTree) Roots() []int { return t.roots }
-
-// Focused returns the node that held keyboard focus when the frame was
-// published. Focus lives on the UI goroutine, so this mirror of it is the
-// only version a bridge may read.
-func (t *SemTree) Focused() (SemNode, bool) {
-	if t.focused < 0 {
-		return SemNode{}, false
-	}
-	return t.nodes[t.focused], true
-}
-
-// Find returns the first node with the given role and name; either may be
-// empty to match any.
-func (t *SemTree) Find(role Role, name string) (SemNode, bool) {
-	for _, n := range t.Nodes(role) {
-		if name == "" || n.Name == name {
-			return n, true
-		}
-	}
-	return SemNode{}, false
-}
-
-// All yields every node with its index, in paint order.
-func (t *SemTree) All() iter.Seq2[int, SemNode] {
-	return func(yield func(int, SemNode) bool) {
-		for i := range t.nodes {
-			if !yield(i, t.nodes[i]) {
-				return
-			}
-		}
-	}
-}
-
-// Nodes yields every node with the given role, in paint order, or every
-// node when role is empty. Collect with slices.Collect when a slice is needed.
-func (t *SemTree) Nodes(role Role) iter.Seq2[int, SemNode] {
-	return func(yield func(int, SemNode) bool) {
-		for i := range t.nodes {
-			if (role == "" || t.nodes[i].Role == role) && !yield(i, t.nodes[i]) {
-				return
-			}
-		}
-	}
-}
-
-// Ancestors yields node i and everything above it, innermost first. The
-// inspector shows the chain, and a bridge needs it to answer "what am I
-// inside of".
-func (t *SemTree) Ancestors(i int) iter.Seq2[int, SemNode] {
-	return func(yield func(int, SemNode) bool) {
-		for i >= 0 {
-			if !yield(i, t.nodes[i]) {
-				return
-			}
-			i = t.nodes[i].Parent
-		}
-	}
-}
-
-// Walk yields node i and its whole subtree in paint order, each with its
-// depth below i, so a renderer can indent without recursing itself.
-func (t *SemTree) Walk(i int) iter.Seq2[int, int] {
-	return func(yield func(int, int) bool) {
-		t.walk(i, 0, yield)
-	}
-}
-func (t *SemTree) walk(i, depth int, yield func(int, int) bool) bool {
-	if !yield(i, depth) {
-		return false
-	}
-	for _, c := range t.nodes[i].Children {
-		if !t.walk(c, depth+1, yield) {
-			return false
-		}
-	}
-	return true
-}
-
-// String renders the tree as indented lines, one per node, with the flags a
-// role gives meaning to. It is what a snapshot test compares, so that a test
-// asserts the shape of the tree and not merely that something was present.
-func (t *SemTree) String() string {
-	var b strings.Builder
-	for _, r := range t.roots {
-		for i, depth := range t.Walk(r) {
-			n := &t.nodes[i]
-			b.WriteString(strings.Repeat("  ", depth))
-			b.WriteString(string(n.Role))
-			if n.Name != "" {
-				fmt.Fprintf(&b, " %q", n.Name)
-			}
-			b.WriteString(n.flags())
-			b.WriteByte('\n')
-		}
-	}
-	return b.String()
-}
-
-// flags renders the state a node reports, leaving out whatever its role
-// gives no meaning to.
-func (n *SemNode) flags() string {
-	var b strings.Builder
-	if n.Value != "" {
-		fmt.Fprintf(&b, " value=%q", n.Value)
-	}
-	switch n.Checked {
-	case TriOff:
-		b.WriteString(" unchecked")
-	case TriOn:
-		b.WriteString(" checked")
-	case TriMixed:
-		b.WriteString(" mixed")
-	}
-	if n.Expanded != nil {
-		b.WriteString(pick(*n.Expanded, " expanded", " collapsed"))
-	}
-	if n.Selected {
-		b.WriteString(" selected")
-	}
-	if n.Disabled {
-		b.WriteString(" disabled")
-	}
-	if n.Offscreen {
-		b.WriteString(" offscreen")
-	}
-	if n.Max != 0 || n.Now != 0 {
-		fmt.Fprintf(&b, " %g of %g..%g", n.Now, n.Min, n.Max)
-	}
-	return b.String()
-}
-
 // buildSemTree reuses the last snapshot only when all observable values are
 // equal. Changed frames own fresh storage; readers can retain any old tree.
 func buildSemTree(c *Canvas, focused *hitRegion, prev *SemTree) *SemTree {
@@ -202,14 +42,13 @@ func buildSemTree(c *Canvas, focused *hitRegion, prev *SemTree) *SemTree {
 	if sameSemTree(c, focus, prev) {
 		return prev
 	}
-	t := &SemTree{focused: focus}
 	if len(f.sem) == 0 {
-		return t
+		return a11y.Build(nil, focus)
 	}
-	t.nodes = make([]SemNode, len(f.sem))
+	nodes := make([]SemNode, len(f.sem))
 	for i := range f.sem {
 		e := &f.sem[i]
-		t.nodes[i] = SemNode{
+		nodes[i] = SemNode{
 			Node:   freezeNode(e.node),
 			ID:     NodeID{ID: e.id, Rect: e.full, Role: e.node.Role},
 			Rect:   e.rect,
@@ -217,41 +56,18 @@ func buildSemTree(c *Canvas, focused *hitRegion, prev *SemTree) *SemTree {
 			Parent: e.parent - 1,
 		}
 	}
-	// Children in paint order. Counting first keeps this two passes and one
-	// allocation per parent, rather than growing every slice as it goes.
-	counts := make([]int, len(t.nodes))
-	for i := range t.nodes {
-		if p := t.nodes[i].Parent; p >= 0 {
-			counts[p]++
-		} else {
-			t.roots = append(t.roots, i)
-		}
-	}
-	kids := make([]int, len(t.nodes)-len(t.roots))
-	at := 0
-	for i := range t.nodes {
-		if counts[i] > 0 {
-			t.nodes[i].Children = kids[at : at : at+counts[i]]
-			at += counts[i]
-		}
-	}
-	for i := range t.nodes {
-		if p := t.nodes[i].Parent; p >= 0 {
-			t.nodes[p].Children = append(t.nodes[p].Children, i)
-		}
-	}
-	return t
+	return a11y.Build(nodes, focus)
 }
 
 // Parent indices and paint order fully determine roots and child lists.
 // Handlers, scopes and groups are frame-local and are not published.
 func sameSemTree(c *Canvas, focus int, prev *SemTree) bool {
 	f := c.fs()
-	if prev == nil || prev.focused != focus || len(prev.nodes) != len(f.sem) {
+	if prev == nil || prev.FocusIndex() != focus || prev.Len() != len(f.sem) {
 		return false
 	}
 	for i := range f.sem {
-		a, b := &f.sem[i], &prev.nodes[i]
+		a, b := &f.sem[i], prev.At(i)
 		if a.parent-1 != b.Parent || a.rect != b.Rect || a.full != b.Full ||
 			!sameAny(a.id, b.ID.ID) || !sameNode(&a.node, &b.Node) {
 			return false

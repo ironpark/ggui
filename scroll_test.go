@@ -109,7 +109,7 @@ func TestScrollDoesNotConsumeWheelWithNothingToScroll(t *testing.T) {
 	var in inputState
 	paintFrame(&in, s, Sz(100, 100))
 	in.dispatch(frameInput{pos: Pt(5, 5), wheel: Pt(0, -1)})
-	if got != (Point{0, -1}) {
+	if got != (Point{X: 0, Y: -1}) {
 		t.Fatalf("wheel did not fall through a scroll with no overflow: got %v", got)
 	}
 }

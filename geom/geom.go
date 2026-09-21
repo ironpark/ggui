@@ -1,0 +1,81 @@
+// Package geom is the geometry ggui measures in: a point, a size and a
+// rectangle, in logical pixels.
+//
+// Most programs never import it. The ggui package re-exports every name
+// here, so Point, Size and Rect are the same types under the same names
+// there. It is a package of its own because the accessibility bridges
+// measure in it too, and they sit below the package that runs them.
+package geom
+
+// Number is any built-in numeric type. The geometry constructors take one so
+// that pixel counts from Ebitengine (int) and layout math (float64) can be
+// mixed without a cast at every call site.
+type Number interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 |
+		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 |
+		~float32 | ~float64
+}
+
+// Point is a position in logical (device-independent) pixels.
+type Point struct {
+	X, Y float64
+}
+
+// Pt returns the Point at (x, y), whatever numeric type they are.
+func Pt[T Number](x, y T) Point { return Point{X: float64(x), Y: float64(y)} }
+
+// Add returns the component-wise sum of p and q.
+func (p Point) Add(q Point) Point { return Point{p.X + q.X, p.Y + q.Y} }
+
+// Size is a width/height pair in logical pixels.
+type Size struct {
+	W, H float64
+}
+
+// Sz returns the Size w by h, whatever numeric type they are.
+func Sz[T Number](w, h T) Size { return Size{W: float64(w), H: float64(h)} }
+
+// Rect is an axis-aligned rectangle anchored at Origin. Paint receives one:
+// the origin its parent chose and the size its own Layout returned.
+type Rect struct {
+	Origin Point
+	Size   Size
+}
+
+// Rct returns the Rect at origin with size.
+func Rct(origin Point, size Size) Rect { return Rect{Origin: origin, Size: size} }
+
+// Intersect returns the overlap of r and o, or an empty Rect when they do
+// not overlap.
+func (r Rect) Intersect(o Rect) Rect {
+	x0 := max(r.Origin.X, o.Origin.X)
+	y0 := max(r.Origin.Y, o.Origin.Y)
+	x1 := min(r.Origin.X+r.Size.W, o.Origin.X+o.Size.W)
+	y1 := min(r.Origin.Y+r.Size.H, o.Origin.Y+o.Size.H)
+	if x1 <= x0 || y1 <= y0 {
+		return Rect{}
+	}
+	return Rect{Origin: Point{x0, y0}, Size: Size{x1 - x0, y1 - y0}}
+}
+
+// Union returns the smallest Rect covering both r and o.
+func (r Rect) Union(o Rect) Rect {
+	x0 := min(r.Origin.X, o.Origin.X)
+	y0 := min(r.Origin.Y, o.Origin.Y)
+	x1 := max(r.Origin.X+r.Size.W, o.Origin.X+o.Size.W)
+	y1 := max(r.Origin.Y+r.Size.H, o.Origin.Y+o.Size.H)
+	return Rect{Origin: Point{x0, y0}, Size: Size{x1 - x0, y1 - y0}}
+}
+
+// Empty reports whether r has no area.
+func (r Rect) Empty() bool { return r.Size.W <= 0 || r.Size.H <= 0 }
+
+// Contains reports whether p lies inside r. The top and left edges are
+// inside, the bottom and right edges are not.
+func (r Rect) Contains(p Point) bool {
+	return p.X >= r.Origin.X && p.X < r.Origin.X+r.Size.W &&
+		p.Y >= r.Origin.Y && p.Y < r.Origin.Y+r.Size.H
+}
+
+// Center returns the midpoint of the rectangle.
+func (r Rect) Center() Point { return r.Origin.Add(Pt(r.Size.W/2, r.Size.H/2)) }

@@ -139,9 +139,6 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 	iconDemo := iconPreview()
 	build := func() ggui.Widget {
 		t := ggui.UseTheme()
-		section := func(title string, body ggui.Widget) ggui.Widget {
-			return preview(title, body)
-		}
 		swatch := func(label string, c color.Color) ggui.Widget {
 			return ggui.Column(
 				ggui.Box().Height(28).Fill(c).Radius(t.Radius).Border(1, t.Border),
@@ -149,7 +146,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 			).Gap(2).Align(ggui.AlignStretch)
 		}
 		entries := []ggui.Widget{
-			section("Theme presets", ggui.Column(
+			preview("Theme presets", ggui.Column(
 				ggui.Text("Choose surfaces, accent and geometry independently. The whole gallery updates."),
 				ui.Field("Base color", ui.Select(baseColor).Options(ggui.BaseColors()).Name("Theme base")),
 				ui.Field("Accent color", ui.Select(accentColor).Options(ggui.AccentColors()).Name("Theme accent").Format(func(v ggui.AccentColor) string {
@@ -159,14 +156,26 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 					return string(v)
 				})),
 				ui.Field("Style", ui.Select(themeStyle).Options(ggui.ThemeStyles()).Name("Theme style")),
-				ggui.Grid(4, swatch("Background", t.Bg), swatch("Primary", t.Primary), swatch("Secondary", t.Secondary), swatch("Accent", t.Accent), swatch("Card", t.Card), swatch("Border", t.Border), swatch("Input border", t.InputBorder), swatch("Ring", t.Ring)).Gap(8),
-				ggui.Row(ui.Button("Primary action", func() { themeAction.Set("Primary action selected.") }), ui.Button("Secondary action", func() { themeAction.Set("Secondary action selected.") }).Secondary()).Gap(8),
+				ggui.Grid(4,
+					swatch("Background", t.Bg),
+					swatch("Primary", t.Primary),
+					swatch("Secondary", t.Secondary),
+					swatch("Accent", t.Accent),
+					swatch("Card", t.Card),
+					swatch("Border", t.Border),
+					swatch("Input border", t.InputBorder),
+					swatch("Ring", t.Ring),
+				).Gap(8),
+				ggui.Row(
+					ui.Button("Primary action", func() { themeAction.Set("Primary action selected.") }),
+					ui.Button("Secondary action", func() { themeAction.Set("Secondary action selected.") }).Secondary(),
+				).Gap(8),
 				ui.Bubble(ggui.Text("Theme tokens also shape chat bubbles 👍")).End(),
 				ggui.TextOf(themeAction).AsCaption(),
 			).Gap(12).Align(ggui.AlignStretch)),
-			section("Icons", iconDemo),
+			preview("Icons", iconDemo),
 
-			section("Emoji", ggui.Column(
+			preview("Emoji", ggui.Column(
 				ggui.Text("Faces 😀 😭 🫩   Reactions 👍 🔥 👀").Size(22),
 				ggui.Text("Skin tones 👋🏻 👋🏽 👋🏿   Flags 🇰🇷 🇺🇸").Size(20),
 				ggui.Text("Families 👨‍👩‍👧‍👦   Work 👩🏽‍💻   Keycaps 1️⃣ #️⃣").Size(20),
@@ -175,15 +184,23 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 				ui.Button("Insert emoji sequence", func() { emojiText.Set(ggui.Untrack(emojiText.Get) + " 🏳️‍🌈 👨‍👩‍👧‍👦") }).Outline(),
 				ggui.Caption("Type, paste, select and delete: composed emoji stay together."),
 			).Gap(16).Align(ggui.AlignStretch)),
-			section("Buttons", ggui.Column(
-				ggui.Wrap(ui.Button("Save changes", func() { toasts.Push(ui.Toast("Saved", "Your changes are stored.")) }), ui.Button("Outline", func() { toasts.Push(ui.Toast("Outline action", "Outline buttons support quieter actions.")) }).Outline(), ui.Button("Disabled", nil).Disabled(true)).Gap(8),
+			preview("Buttons", ggui.Column(
+				ggui.Wrap(
+					ui.Button("Save changes", func() { toasts.Push(ui.Toast("Saved", "Your changes are stored.")) }),
+					ui.Button("Outline", func() { toasts.Push(ui.Toast("Outline action", "Outline buttons support quieter actions.")) }).Outline(),
+					ui.Button("Disabled", nil).Disabled(true),
+				).Gap(8),
 				ggui.Wrap(ui.Button("Secondary", nil).Secondary(), ui.Button("Ghost", nil).Ghost(), ui.Button("Delete", func() {
 					toasts.Push(ui.Toast("Destructive action", "A red button makes the intent clear.").Destructive())
 				}).Destructive()).Gap(8),
-				ggui.Wrap(ui.Badge("Draft"), ui.Badge("Published").Accent(), ggui.Tooltip(ui.Button("Hover for help", nil).Outline(), "Tooltips add context to an action.")).Gap(8),
+				ggui.Wrap(
+					ui.Badge("Draft"),
+					ui.Badge("Published").Accent(),
+					ggui.Tooltip(ui.Button("Hover for help", nil).Outline(), "Tooltips add context to an action."),
+				).Gap(8),
 			).Gap(16)),
 
-			section("Text", ggui.Column(
+			preview("Text", ggui.Column(
 				ui.TextField(name).Placeholder("Type here, IME works"),
 				ui.TextField(notes).Placeholder("Notes: Enter breaks the line, ⌘+Enter submits").Lines(3),
 				ggui.Reactive(func() ggui.Widget {
@@ -196,13 +213,13 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 				).Space(1),
 			).Space(1)),
 
-			section("Field", ggui.Column(
+			preview("Field", ggui.Column(
 				ui.Field("Email", ui.TextField(email).Placeholder("you@example.com")).
 					Help("Help text sits here until there is an error").BindError(emailError),
 				ui.Field("Text size", ui.Slider(size, 10, 40).Step(1)).Help("A Field labels any control"),
 			).Space(1).Align(ggui.AlignStretch)),
 
-			section("Choices", ggui.Column(
+			preview("Choices", ggui.Column(
 				ui.Checkbox(notify, "Send notifications"),
 				ui.Radios(plan).Options([]string{"free", "pro", "team"}),
 				ggui.Wrap(
@@ -217,15 +234,15 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 				).Space(1),
 			).Space(1)),
 
-			section("Shadows", ggui.Padding(ggui.Wrap(
+			preview("Shadows", ggui.Padding(ggui.Wrap(
 				ui.Card(ggui.Text("Subtle")).Shadow(ggui.ShadowStyle{Offset: ggui.Pt(0, 2), Blur: 4, Color: color.NRGBA{A: 40}}),
 				ui.Card(ggui.Text("Floating")).Shadow(ggui.ShadowStyle{Offset: ggui.Pt(0, 6), Blur: 12, Color: color.NRGBA{A: 55}}),
 				ui.Card(ggui.Text("Colored")).Shadow(ggui.ShadowStyle{Offset: ggui.Pt(0, 4), Blur: 16, Spread: 2, Color: color.NRGBA{R: 70, G: 100, B: 230, A: 85}}),
 			).Gap(24), 20)),
-			section("Menubar", menubar),
-			section("Calendar", calendar),
-			section("Date picker", datePicker),
-			section("Context menu", ui.ContextMenu(
+			preview("Menubar", menubar),
+			preview("Calendar", calendar),
+			preview("Date picker", datePicker),
+			preview("Context menu", ui.ContextMenu(
 				ggui.Box(ggui.Column(ggui.Title("Project notes"), ggui.Caption("Right-click here, or use Tab then Shift+F10.")).Space(1)).Pad(24).Border(1, t.Border).Radius(t.Radius),
 				ui.MenuItem("Open notes", func() {
 					toasts.Push(ui.Toast("Notes opened", "Context-menu actions work with keyboard and pointer input."))
@@ -235,7 +252,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 				ui.MenuItem("Archive notes", func() { toasts.Push(ui.Toast("Notes archived", "Your project notes have been archived.")) }),
 			).Name("Project notes actions")),
 
-			section("Notices and empty states", ggui.Column(
+			preview("Notices and empty states", ggui.Column(
 				ui.Alert("Changes saved", "Your settings are up to date."),
 				ui.Alert("Connection interrupted", "You can retry without losing your work.").Destructive().
 					Action(ui.Button("Retry", func() { progress.Set(0) }).Outline()),
@@ -243,12 +260,12 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 					Media(ui.Badge("Files")).Action(ui.Button("Add sample", func() { progress.Set(1) })),
 			).Space(1).Align(ggui.AlignStretch)),
 
-			section("Loading and shortcuts", ggui.Column(
+			preview("Loading and shortcuts", ggui.Column(
 				ggui.Row(ui.Spinner(), ggui.Text("Loading…"), ui.Kbd("Ctrl"), ui.Kbd("K")).Space(1),
 				ggui.Row(ui.Skeleton(40, 40).Circle(), ggui.Column(ui.Skeleton(180, 14), ui.Skeleton(120, 14)).Space(1)).Space(1),
 			).Space(1)),
 
-			section("Progress", ggui.Column(
+			preview("Progress", ggui.Column(
 				ui.Progress(download),
 				ggui.TextOf(download.Map(func(v float64) string { return fmt.Sprintf("Download: %.0f%%", v*100) })),
 				ggui.Wrap(
@@ -257,7 +274,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 				).Gap(8),
 			).Space(1).Align(ggui.AlignStretch)),
 
-			section("Collapsible", ggui.Column(
+			preview("Collapsible", ggui.Column(
 				ui.Collapsible(disclosureOpen, "Delivery preferences", ggui.Column(
 					ui.Checkbox(notify, "Email delivery updates"),
 					ggui.Caption("Your selection is preserved when this section is closed."),
@@ -265,33 +282,42 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 				ui.Collapsible(ggui.State(false), "Unavailable preferences", ggui.Text("Not available")).Disabled(true),
 			).Space(1).Align(ggui.AlignStretch)),
 
-			section("Pagination", ggui.Column(
+			preview("Pagination", ggui.Column(
 				ui.Pagination(page, pageCount),
 				ggui.Textf("Page %d — bind this value to your data query or slice.", page).AsCaption(),
 			).Space(1)),
 
-			section("Accordion", ui.Accordion(accordionOpen,
+			preview("Accordion", ui.Accordion(accordionOpen,
 				ui.AccordionItem("intro", "How does it work?", ggui.Text("Use the arrow keys to choose a header, then Enter to expand it.")),
 				ui.AccordionItem("keys", "Keyboard controls", ggui.Row(ui.Kbd("Up / Down"), ui.Kbd("Home / End"), ui.Kbd("Enter")).Space(1)),
 				ui.AccordionItem("disabled", "Unavailable section", ggui.Text("Hidden")).Disabled(true),
 			)),
 
-			section("Search and commands", ggui.Wrap(
+			preview("Search and commands", ggui.Wrap(
 				ui.Combobox(fruit).Options([]string{"Apple", "Banana", "Cherry", "Durian", "Grape", "Mango", "Orange"}).Name("Search fruit"),
 				ui.Button("Commands…", func() { paletteOpen.Set(true) }).Outline(),
 			).Space(1)),
 			ui.CommandDialog(paletteOpen, ui.Command(commandQuery,
-				ui.CommandItem("Toggle dark theme", func() { ggui.Toggle(dark); paletteOpen.Set(false) }).Keywords("appearance", "light").Group("Appearance"),
-				ui.CommandItem("Reset text size", func() { size.Set(16); paletteOpen.Set(false) }).Keywords("font").Group("Appearance"),
-				ui.CommandItem("Show notification", func() { toasts.Push(ui.Toast("Done", "The command ran successfully.")); paletteOpen.Set(false) }).Group("Actions"),
+				ui.CommandItem("Toggle dark theme", func() {
+					ggui.Toggle(dark)
+					paletteOpen.Set(false)
+				}).Keywords("appearance", "light").Group("Appearance"),
+				ui.CommandItem("Reset text size", func() {
+					size.Set(16)
+					paletteOpen.Set(false)
+				}).Keywords("font").Group("Appearance"),
+				ui.CommandItem("Show notification", func() {
+					toasts.Push(ui.Toast("Done", "The command ran successfully."))
+					paletteOpen.Set(false)
+				}).Group("Actions"),
 			).Height(176).StableHeight().Hints()),
 
-			section("Resizable", ggui.Box(ui.Resizable(split,
+			preview("Resizable", ggui.Box(ui.Resizable(split,
 				ggui.Center(ggui.Text("Sidebar")),
 				ui.Resizable(verticalSplit, ggui.Center(ggui.Text("Header")), ggui.Center(ggui.Text("Content"))).Vertical().WithHandle().MinSizes(48, 48),
 			).WithHandle().MinSizes(100, 140)).Height(200).Border(1, t.Border).Radius(t.Radius)),
 
-			section("Toast", ggui.Wrap(
+			preview("Toast", ggui.Wrap(
 				ui.Button("Notify", func() { toasts.Push(ui.Toast("Saved", "Your changes are stored.")) }).Outline(),
 				ui.Button("Notify with action", func() {
 					toasts.Push(ui.Toast("Item removed", "You can undo this change.").Action("Undo", func() { toasts.Push(ui.Toast("Restored", "The item is back.")) }))
@@ -302,7 +328,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 			).Space(1)),
 			toasts,
 
-			section("Tabs", ui.Tabs(tab,
+			preview("Tabs", ui.Tabs(tab,
 				ui.Tab("Overview", ggui.Column(
 					ggui.Row(ggui.Text("Status"), ui.Badge("stable"), ui.Badge("new").Accent()).Space(1),
 					ui.Progress(progress), // reads the signal every frame: no Reactive needed
@@ -320,7 +346,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 				ui.Tab("About", ggui.Text("Tabs lay out only the page they show; Left and Right switch while focused.")),
 			)),
 
-			section("Transition", ggui.Column(
+			preview("Transition", ggui.Column(
 				ui.Switch(details, "Show details"),
 				ggui.Presence(details, ggui.Transition(
 					ggui.Box(ggui.Text("Slides and fades in, and back out when hidden. A leaving widget takes no input.")).
@@ -328,7 +354,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 				).Slide(0, -8).Fade()),
 			).Space(1).Align(ggui.AlignStretch)),
 
-			section("Dialog", ggui.Column(
+			preview("Dialog", ggui.Column(
 				ggui.Row(
 					ui.Button("Reset form…", func() { confirm.Set(true) }).Outline(),
 					ggui.Textf("reset %d times", cleared).AsCaption(),
@@ -350,7 +376,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 				removeDialog,
 			).Space(1)),
 
-			section("Sheets and drawers", ggui.Column(
+			preview("Sheets and drawers", ggui.Column(
 				ggui.Wrap(
 					ui.Button("Open filters", func() { filtersOpen.Set(true) }).Outline(),
 					ui.Button("Open drawer", func() { drawerOpen.Set(true) }).Outline(),
@@ -359,7 +385,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 			).Space(1)),
 			filtersSheet, shareDrawer,
 
-			section("Sidebar", ggui.Column(
+			preview("Sidebar", ggui.Column(
 				ui.Breadcrumb(
 					ui.Crumb("Home", func() { nav.Set("inbox") }),
 					ui.Crumb("Mail", func() { nav.Set("inbox") }),
@@ -369,7 +395,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 					Height(180).Border(1, t.Border).Radius(t.Radius),
 			).Space(1).Align(ggui.AlignStretch)),
 
-			section("Groups and addons", ggui.Column(
+			preview("Groups and addons", ggui.Column(
 				ui.Switch(controlsLocked, "Lock alignment"),
 				ui.ToggleGroup(align).Options([]string{"left", "center", "right"}).Name("Text alignment").BindDisabled(controlsLocked),
 				ggui.Textf("Alignment: %s", align),
@@ -391,8 +417,12 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 				ggui.TextOf(sitePreview).AsCaption(),
 			).Space(1).Align(ggui.AlignStretch)),
 
-			section("Profile and media", ggui.Column(
-				ggui.Wrap(ui.Avatar("Ada Lovelace").Size(32), ui.Avatar("Grace Hopper").Size(48).Square(), ui.Avatar("").Name("Unknown person").Size(40)).Gap(12),
+			preview("Profile and media", ggui.Column(
+				ggui.Wrap(
+					ui.Avatar("Ada Lovelace").Size(32),
+					ui.Avatar("Grace Hopper").Size(48).Square(),
+					ui.Avatar("").Name("Unknown person").Size(40),
+				).Gap(12),
 				ggui.Caption("Avatar initials, square portraits and an unknown-person fallback."),
 				ui.Item("Ada Lovelace", "Analytical engine").
 					Media(ui.Avatar("Ada Lovelace").Size(32)).
@@ -403,7 +433,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 				ui.AspectRatio(16.0/9, ggui.Box(ggui.Center(ggui.Caption("16 : 9"))).Fill(t.Muted).Radius(t.Radius)),
 			).Space(1).Align(ggui.AlignStretch)),
 
-			section("Wrap", ggui.View(tags, func(list []string) *ggui.WrapWidget {
+			preview("Wrap", ggui.View(tags, func(list []string) *ggui.WrapWidget {
 				return ggui.Wrap(ggui.Children(list, func(tag string) ggui.Widget {
 					return ggui.Tooltip(
 						ui.Button(tag+"  ×", func() { ggui.Remove(tags, func(s string) bool { return s == tag }) }).Outline().Pad(4, 10),
@@ -412,7 +442,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 				})...).Space(0.5)
 			})),
 
-			section("Table", ggui.Column(
+			preview("Table", ggui.Column(
 				ui.Table(people, func(p Person) int { return p.ID },
 					ui.TextCol("Name", func(p Person) string { return p.Name }),
 					ui.TextCol("Role", func(p Person) string { return p.Role }).Grow(2),
@@ -425,7 +455,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 				ggui.Textf("selected: %s. Click a row, or Tab to it and press Space; the body scrolls under the heading.", chosenName).AsCaption(),
 			).Space(1).Align(ggui.AlignStretch)),
 
-			section("Grid", ggui.Cached(ggui.Grid(4,
+			preview("Grid", ggui.Cached(ggui.Grid(4,
 				swatch("Bg", t.Bg), swatch("Card", t.Card), swatch("Input", t.Input), swatch("Border", t.Border),
 				swatch("Accent", t.Primary), swatch("AccentHover", t.PrimaryHover), swatch("Muted", t.MutedFg), swatch("Fg", t.Fg),
 			).Space(1))),
@@ -467,7 +497,13 @@ func run() error {
 	var app *ggui.App
 	dispose := ggui.Root(func() {
 		build, setup, commands := newGallery()
-		app = ggui.New(ggui.Config{Title: "ggui · gallery", Width: 1180, Height: 820, Resizable: true, Inspector: "f1"}, build)
+		app = ggui.New(ggui.Config{
+			Title:     "ggui · gallery",
+			Width:     1180,
+			Height:    820,
+			Resizable: true,
+			Inspector: "f1",
+		}, build)
 		app.Setup(setup)
 		app.Shortcut("cmd+k", commands)
 	})

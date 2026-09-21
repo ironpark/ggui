@@ -1,5 +1,5 @@
 // Command controls is a native catalog of the shadcn Carousel and Input OTP
-// examples: a Select bound to the example name, a Reactive island that
+// examples: a Select bound to the example name, a keyed subtree that
 // rebuilds only the demo, and a theme switch through BindTheme. The
 // inspector opens on F1.
 //

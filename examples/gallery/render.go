@@ -95,7 +95,10 @@ func (g *galleryAudit) Draw(screen *ebiten.Image) {
 	defer app.Close()
 	img := ebiten.NewImage(width, 1200)
 	defer img.Deallocate()
-	draw := func() { img.Fill(theme.Bg); app.Draw(img) }
+	draw := func() {
+		img.Fill(theme.Bg)
+		app.Draw(img)
+	}
 	for frame := 0; frame < 3; frame++ {
 		draw()
 		now = now.Add(time.Second)
@@ -193,9 +196,17 @@ func auditControlStates() ggui.Widget {
 	text := ggui.State("invalid@example")
 	return ui.Card(ggui.Column(
 		ggui.Title("Control states"),
-		ggui.Wrap(ui.Checkbox(on, "Checked"), ui.Checkbox(on, "Disabled checked").Disabled(true), ui.Checkbox(ggui.State(false), "Disabled empty").Disabled(true)).Gap(12),
+		ggui.Wrap(
+			ui.Checkbox(on, "Checked"),
+			ui.Checkbox(on, "Disabled checked").Disabled(true),
+			ui.Checkbox(ggui.State(false), "Disabled empty").Disabled(true),
+		).Gap(12),
 		ggui.Wrap(ui.Radio(on, true, "Selected"), ui.Radio(on, true, "Disabled selected").Disabled(true)).Gap(12),
-		ggui.Wrap(ui.Switch(off, "Enabled switch"), ui.Switch(on, "Disabled on").Disabled(true), ui.Switch(ggui.State(false), "Disabled off").Disabled(true)).Gap(12),
+		ggui.Wrap(
+			ui.Switch(off, "Enabled switch"),
+			ui.Switch(on, "Disabled on").Disabled(true),
+			ui.Switch(ggui.State(false), "Disabled off").Disabled(true),
+		).Gap(12),
 		ggui.Wrap(ui.Button("Primary", nil), ui.Button("Delete", nil).Destructive(), ui.Button("Disabled", nil).Disabled(true)).Gap(8),
 		ggui.Wrap(ui.ThemeSwitch(ggui.State(false)), ui.ThemeSwitch(ggui.State(true)).Disabled(true)).Gap(12),
 		ui.Field("Email", ui.TextField(text)).BindError(ggui.State("Enter a valid email address.")),

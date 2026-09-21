@@ -3,6 +3,8 @@
 package ggui
 
 import (
+	"github.com/ironpark/ggui/a11y"
+
 	"image/color"
 	"math"
 	"sync/atomic"
@@ -52,7 +54,7 @@ type App struct {
 	input  inputState
 	touch  touchInput
 	cursor CursorShape
-	a11y   axBridge
+	ax     a11y.Bridge
 
 	inspect      bool
 	inspectChord Chord // parsed from cfg.Inspector; Key is zero for none
@@ -114,7 +116,7 @@ func (a *App) Run() error {
 		ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	}
 	a.start()
-	a.a11y.start(a.Perform, a.cfg.Accessibility)
+	a.ax.Start(a.Perform, a.cfg.Accessibility, appRunning.Load)
 	appRunning.Store(true)
 	// Holding a key on macOS pops up the accent menu, as it does in every
 	// text field on the platform; text editing relies on it.
@@ -226,6 +228,25 @@ func (a *App) dispatchInput(f frameInput) {
 	}
 }
 
+// AccessibilityMode says when an App talks to the platform's accessibility
+// API. It is defined by the bridge in the a11y package; these are the same
+// values under the names ggui has always used for them.
+type AccessibilityMode = a11y.Mode
+
+// When the bridge is active.
+const (
+	// AccessibilityAuto turns the bridge on while an assistive technology
+	// is attached, and off again when the last one leaves.
+	AccessibilityAuto = a11y.Auto
+
+	// AccessibilityAlways keeps the bridge active, which is what a tool
+	// such as Accessibility Inspector or a screenshot run needs.
+	AccessibilityAlways = a11y.Always
+
+	// AccessibilityOff disables the native bridge entirely.
+	AccessibilityOff = a11y.Off
+)
+
 // appRunning reports whether RunGame has started, which is when platform
 // services such as the IME may be used.
 var appRunning atomic.Bool
@@ -322,7 +343,7 @@ func (a *App) Draw(screen *ebiten.Image) {
 	a.input.observers = a.canvas.inputObservers
 	a.input.applyFocusRequest(&a.canvas)
 	a.publishSemantics(&a.canvas, a.input.focused)
-	a.a11y.publish(a.semantics(), a.takeAnnouncements())
+	a.ax.Publish(a.semantics(), a.takeAnnouncements())
 	if a.inspect {
 		a.insp.paint(&a.canvas)
 	} else {

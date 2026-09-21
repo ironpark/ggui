@@ -121,12 +121,19 @@ func galleryPage(dark *ggui.StateValue[bool], search, category *ggui.StateValue[
 		}
 		return cards
 	})
-	reset := func() { search.Set(""); category.Set("All"); scroll.Set(0) }
+	reset := func() {
+		search.Set("")
+		category.Set("All")
+		scroll.Set(0)
+	}
 
 	filters := ggui.View(category, func(selected string) *ggui.WrapWidget {
 		var buttons []ggui.Widget
 		for _, label := range []string{"All", "Inputs", "Navigation", "Feedback", "Layout", "Data"} {
-			button := ui.Button(fmt.Sprintf("%s  %d", label, counts[label]), func() { category.Set(label); scroll.Set(0) }).Name(label)
+			button := ui.Button(fmt.Sprintf("%s  %d", label, counts[label]), func() {
+				category.Set(label)
+				scroll.Set(0)
+			}).Name(label)
 			if label != selected {
 				button.Outline()
 			}

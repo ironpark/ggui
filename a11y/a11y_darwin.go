@@ -1,6 +1,6 @@
 //go:build darwin && !ios
 
-package ggui
+package a11y
 
 import (
 	"math"
@@ -45,7 +45,7 @@ import (
 // nowhere to keep a receiver, so the bridge that started puts itself here.
 // A second one would replace it, which is the same limit the IME already
 // has.
-var theAX atomic.Pointer[axBridge]
+var theAX atomic.Pointer[Bridge]
 
 type nsPoint struct {
 	_ structs.HostLayout
@@ -137,7 +137,7 @@ type darwinAX struct {
 }
 
 // axAttach makes b the bridge the Objective-C methods answer from.
-func axAttach(b *axBridge) { theAX.Store(b) }
+func axAttach(b *Bridge) { theAX.Store(b) }
 
 // newAXPlatform returns the macOS bridge. Nothing is created here: the
 // window does not exist until Run has started, so the container is attached
@@ -149,7 +149,7 @@ func newAXPlatform() axPlatform { return &darwinAX{} }
 // It is asked once a second, so the hop is nothing; asking every frame
 // would put a main-thread round trip in the middle of every paint.
 func (d *darwinAX) active() bool {
-	if !appRunning.Load() {
+	if b := theBridge(); b == nil || !b.running() {
 		return false
 	}
 	var on bool
@@ -321,7 +321,7 @@ func init() {
 // element stands for. Every method starts with it, and every one of them
 // answers nothing when it fails: an element outliving its node is normal,
 // since an assistive technology keeps the ones it was given.
-func axSelf(self objc.ID) (*axBridge, *axFrame, SemNode, bool) {
+func axSelf(self objc.ID) (*Bridge, *axFrame, SemNode, bool) {
 	b := theAX.Load()
 	if b == nil {
 		return nil, nil, SemNode{}, false
@@ -502,7 +502,7 @@ func axElementChildren(self objc.ID, _ objc.SEL) objc.ID {
 
 // axElements turns a list of node indices into the elements standing for
 // them, leaving out any the cache could not produce.
-func axElements(b *axBridge, f *axFrame, idx []int) []objc.ID {
+func axElements(b *Bridge, f *axFrame, idx []int) []objc.ID {
 	out := make([]objc.ID, 0, len(idx))
 	for _, i := range idx {
 		if e := b.element(axKeyOf(f.tree.At(i).ID)); e != 0 {
@@ -575,7 +575,7 @@ func axContainerMouseHitTest(objc.ID, objc.SEL, nsPoint) objc.ID { return 0 }
 
 // axHitTestAt answers a hit test, which arrives in screen coordinates and
 // must come back as the deepest element under the point, or nothing.
-func axHitTestAt(b *axBridge, p nsPoint) objc.ID {
+func axHitTestAt(b *Bridge, p nsPoint) objc.ID {
 	f := b.frame()
 	d, is := b.plat.(*darwinAX)
 	if f == nil || !is || d.container == 0 {
@@ -648,7 +648,7 @@ func axPriority(loud bool) int32 {
 // is the only thread they may be posted from. Elements are resolved here
 // rather than in the diff, because making one is also main-thread work.
 func (d *darwinAX) notify(notes []axNote) {
-	if !appRunning.Load() {
+	if b := theBridge(); b == nil || !b.running() {
 		return
 	}
 	ebiten.RunOnMainThread(func() {
@@ -663,7 +663,7 @@ func (d *darwinAX) notify(notes []axNote) {
 }
 
 // post delivers one notification. It runs on the main thread.
-func (d *darwinAX) post(b *axBridge, n axNote) {
+func (d *darwinAX) post(b *Bridge, n axNote) {
 	target := d.container
 	if !n.root {
 		e := b.element(n.key)
@@ -850,7 +850,7 @@ func axTextSelector(sel objc.SEL) bool {
 
 // axText returns the node behind an element when it is a text field, which
 // is the only kind that answers any of this.
-func axText(self objc.ID) (*axBridge, SemNode, bool) {
+func axText(self objc.ID) (*Bridge, SemNode, bool) {
 	b, _, n, ok := axSelf(self)
 	if !ok || !axTextual(n.Node) {
 		return nil, SemNode{}, false
@@ -863,7 +863,7 @@ func axElementCharacterCount(self objc.ID, _ objc.SEL) int {
 	if !ok {
 		return 0
 	}
-	return axCharCount(n.Node)
+	return CharCount(n.Node)
 }
 
 func axElementSelectedText(self objc.ID, _ objc.SEL) objc.ID {
@@ -871,7 +871,7 @@ func axElementSelectedText(self objc.ID, _ objc.SEL) objc.ID {
 	if !ok {
 		return 0
 	}
-	return nsString(axSelected(n.Node))
+	return nsString(Selected(n.Node))
 }
 
 func axElementSelectedRange(self objc.ID, _ objc.SEL) nsRange {
@@ -879,7 +879,7 @@ func axElementSelectedRange(self objc.ID, _ objc.SEL) nsRange {
 	if !ok {
 		return nsRange{location: axNotFound}
 	}
-	loc, length := axSelection(n.Node)
+	loc, length := Selection(n.Node)
 	return nsRange{location: uint(loc), length: uint(length)}
 }
 
@@ -891,7 +891,7 @@ func axElementSetSelectedRange(self objc.ID, _ objc.SEL, r nsRange) {
 	if !ok || r.location >= axNotFound || !axAllows(n.Node, axSetSelection) {
 		return
 	}
-	start, end := axByteRange(n.Node, int(r.location), int(r.length))
+	start, end := ByteRange(n.Node, int(r.location), int(r.length))
 	b.perform(n.ID, Action{Kind: ActionSetSelection, SelStart: start, SelEnd: end})
 }
 
@@ -900,7 +900,7 @@ func axElementStringForRange(self objc.ID, _ objc.SEL, r nsRange) objc.ID {
 	if !ok || r.location >= axNotFound {
 		return 0
 	}
-	return nsString(axStringForRange(n.Node, int(r.location), int(r.length)))
+	return nsString(StringForRange(n.Node, int(r.location), int(r.length)))
 }
 
 func axElementRangeForLine(self objc.ID, _ objc.SEL, line int) nsRange {
@@ -908,7 +908,7 @@ func axElementRangeForLine(self objc.ID, _ objc.SEL, line int) nsRange {
 	if !ok {
 		return nsRange{location: axNotFound}
 	}
-	loc, length, has := axRangeForLine(n.Node, line)
+	loc, length, has := RangeForLine(n.Node, line)
 	if !has {
 		return nsRange{location: axNotFound}
 	}
@@ -920,7 +920,7 @@ func axElementLineForIndex(self objc.ID, _ objc.SEL, index int) int {
 	if !ok {
 		return 0
 	}
-	return axLineForIndex(n.Node, index)
+	return LineForIndex(n.Node, index)
 }
 
 func axElementInsertionLine(self objc.ID, _ objc.SEL) int {
@@ -928,7 +928,7 @@ func axElementInsertionLine(self objc.ID, _ objc.SEL) int {
 	if !ok {
 		return 0
 	}
-	return axInsertionLine(n.Node)
+	return InsertionLine(n.Node)
 }
 
 func axElementFrameForRange(self objc.ID, _ objc.SEL, r nsRange) nsRect {
@@ -940,10 +940,102 @@ func axElementFrameForRange(self objc.ID, _ objc.SEL, r nsRange) nsRect {
 	if !is || d.container == 0 {
 		return nsRect{}
 	}
-	box := axRectForRange(n, int(r.location), int(r.length))
+	box := RectForRange(n, int(r.location), int(r.length))
 	h := objc.Send[nsRect](d.container, axSelBounds).size.height
 	return axToScreen(d.container, nsRect{
 		origin: nsPoint{x: box.Origin.X, y: h - (box.Origin.Y + box.Size.H)},
 		size:   nsSize{width: box.Size.W, height: box.Size.H},
 	})
 }
+
+// axRole maps a ggui role onto the role and subrole an AppKit accessibility
+// element reports. The names are the values of the NSAccessibility*Role
+// constants rather than the constants themselves, which are NSStrings that
+// would have to be looked up out of AppKit one at a time; they are part of
+// the API and do not change. An empty subrole means the element reports
+// none, which is the usual case.
+//
+// A few of these are not one-for-one, and the choice is the one that makes
+// VoiceOver say the right thing rather than the one that reads best in a
+// table. A switch is a check box with the switch subrole, because AppKit
+// has no switch role. A tab is a radio button with the tab subrole, which
+// is what a real NSTabView reports. A dialog is a window with the dialog
+// subrole, so that VoiceOver treats it as a thing to be dismissed.
+func axRole(r Role) (role, subrole string) {
+	switch r {
+	case RoleButton:
+		return "AXButton", ""
+	case RoleCheckbox:
+		return "AXCheckBox", ""
+	case RoleRadio:
+		return "AXRadioButton", ""
+	case RoleSwitch:
+		return "AXCheckBox", "AXSwitch"
+	case RoleSlider:
+		return "AXSlider", ""
+	case RoleTextField:
+		return "AXTextField", ""
+	case RoleSelect:
+		return "AXPopUpButton", ""
+	case RoleOption:
+		return "AXMenuItem", ""
+	case RoleMenu:
+		return "AXMenu", ""
+	case RoleMenuItem:
+		return "AXMenuItem", ""
+	case RoleTab:
+		return "AXRadioButton", "AXTabButton"
+	case RoleTabs:
+		return "AXTabGroup", ""
+	case RoleDisclosure:
+		return "AXDisclosureTriangle", ""
+	case RoleDialog:
+		return "AXWindow", "AXDialog"
+	case RoleRow, RoleListItem:
+		return "AXRow", ""
+	case RoleAccordion:
+		return "AXGroup", "AXDisclosureTriangle"
+	case RoleCombobox:
+		return "AXComboBox", ""
+	case RoleSeparator:
+		return "AXSplitter", ""
+	case RoleText:
+		return "AXStaticText", ""
+	case RoleHeading:
+		return "AXHeading", ""
+	case RoleImage:
+		return "AXImage", ""
+	case RoleList:
+		return "AXList", ""
+	case RoleProgress:
+		return "AXProgressIndicator", ""
+	case RoleLink:
+		return "AXLink", ""
+	case RoleToolbar:
+		return "AXToolbar", ""
+	case RoleStatus:
+		return "AXGroup", ""
+	case RoleWindow:
+		return "AXWindow", ""
+	case RoleGroup:
+		return "AXGroup", ""
+	}
+	return "AXUnknown", ""
+}
+
+// axBounds is the rectangle an element reports, in the window's own
+// coordinates: logical pixels, which are what AppKit calls points, with the
+// y axis flipped, since ggui measures down from the top of the window and
+// Cocoa measures up from the bottom. The caller turns the result into
+// screen coordinates, which is the one step that needs the window.
+//
+// The bounds are the ones the node painted at rather than the ones it was
+// clipped to, so that a row scrolled out of a list still says where it
+// would be; an element that is offscreen says so separately.
+func axBounds(n SemNode, viewHeight float64) (x, y, w, h float64) {
+	r := n.Full
+	return r.Origin.X, viewHeight - (r.Origin.Y + r.Size.H), r.Size.W, r.Size.H
+}
+
+// axCurrent is the bridge this platform answers from.
+func axCurrent() *Bridge { return theAX.Load() }

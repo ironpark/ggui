@@ -152,7 +152,7 @@ func TestStackHugsLargestChildAndLayersAtOrigin(t *testing.T) {
 		t.Fatalf("Layout() = %+v, want {20 30}", got)
 	}
 	st.Paint(nil, Rct(Pt(7, 9), got))
-	if a.Origin != (Point{7, 9}) || b.Origin != (Point{7, 9}) {
+	if a.Origin != (Point{X: 7, Y: 9}) || b.Origin != (Point{X: 7, Y: 9}) {
 		t.Fatalf("children painted at %+v and %+v, want both at {7 9}", a.Origin, b.Origin)
 	}
 }
@@ -170,10 +170,10 @@ func TestAlignPlacesChildByFraction(t *testing.T) {
 		w    *AlignWidget
 		want Point
 	}{
-		{"center", Center(nil), Point{45, 20}},
-		{"bottom right", Align(nil).Bottom().Right(), Point{90, 40}},
-		{"top left", Align(nil).Top().Left(), Point{0, 0}},
-		{"quarter", Align(nil).At(0.25, 1), Point{22.5, 40}},
+		{"center", Center(nil), Point{X: 45, Y: 20}},
+		{"bottom right", Align(nil).Bottom().Right(), Point{X: 90, Y: 40}},
+		{"top left", Align(nil).Top().Left(), Point{X: 0, Y: 0}},
+		{"quarter", Align(nil).At(0.25, 1), Point{X: 22.5, Y: 40}},
 	}
 	for _, c := range cases {
 		var got Rect

@@ -96,7 +96,10 @@ func newModel() *model {
 	})
 	m.Left = counts.Map(func(c tally) int { return c.total - c.done })
 	m.NoneDone = counts.Map(func(c tally) bool { return c.done == 0 })
-	m.Progress = ggui.TweenOf(counts.Map(func(c tally) float64 { return float64(c.done) / float64(max(c.total, 1)) }), 300*time.Millisecond)
+	completion := counts.Map(func(c tally) float64 {
+		return float64(c.done) / float64(max(c.total, 1))
+	})
+	m.Progress = ggui.TweenOf(completion, 300*time.Millisecond)
 	m.DraftError = m.Draft.Map(titleError)
 	return m
 }

@@ -8,7 +8,7 @@ import (
 
 func TestSemTreeReusesEqualValuesAndFreezesDescriptions(t *testing.T) {
 	expanded := false
-	runs := []TextRun{{Start: 0, End: 2, Rect: Rct(Pt(1, 2), Sz(20, 10)), Stops: []TextStop{{0, 0}, {2, 20}}}}
+	runs := []TextRun{{Start: 0, End: 2, Rect: Rct(Pt(1, 2), Sz(20, 10)), Stops: []TextStop{{Byte: 0, X: 0}, {Byte: 2, X: 20}}}}
 	n := Node{Role: RoleTextField, Name: "editor", Expanded: &expanded, Runs: runs}
 	c := &Canvas{}
 	c.Leaf(Rct(Pt(0, 0), Sz(100, 20)), n)
@@ -121,7 +121,7 @@ func TestNodeEqualityMatchesDeepEqual(t *testing.T) {
 	for range 1000 {
 		a := Node{Role: RoleTextField, Name: "a", Value: "xy", Expanded: Expandable(rng.IntN(2) == 0),
 			SelStart: rng.IntN(3), SelEnd: rng.IntN(3),
-			Runs: []TextRun{{Start: rng.IntN(3), End: rng.IntN(3), Stops: []TextStop{{rng.IntN(3), rng.Float64()}}}}}
+			Runs: []TextRun{{Start: rng.IntN(3), End: rng.IntN(3), Stops: []TextStop{{Byte: rng.IntN(3), X: rng.Float64()}}}}}
 		b := freezeNode(a)
 		if rng.IntN(2) == 0 {
 			b.Runs[0].Stops[0].X = rng.Float64()
@@ -161,7 +161,7 @@ func TestSemTreeInvalidatesGeometryIdentityHierarchyAndFocus(t *testing.T) {
 	}
 	focus := &hitRegion{key: w, rect: r}
 	next := buildSemTree(c, focus, base)
-	if next == base || next.focused != 1 || buildSemTree(c, nil, next) == next {
+	if next == base || next.FocusIndex() != 1 || buildSemTree(c, nil, next) == next {
 		t.Fatal("focus changes were not published")
 	}
 	empty := &Canvas{}

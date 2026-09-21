@@ -1,5 +1,5 @@
 // Command charts is a native catalog of the shadcn chart examples: a Select
-// bound to the example name, a Reactive island that rebuilds only the card,
+// bound to the example name, a keyed subtree that rebuilds only the card,
 // a Replay button that restarts the entry animation and a theme switch
 // through BindTheme. The inspector opens on F1.
 //
@@ -25,21 +25,28 @@ type model struct {
 }
 
 func newModel(name string, dark bool) model {
-	return model{Selected: ggui.State(name), Dark: ggui.State(dark), Generation: ggui.State(0)}
+	return model{
+		Selected:   ggui.State(name),
+		Dark:       ggui.State(dark),
+		Generation: ggui.State(0),
+	}
 }
 
 func (m model) replay() { ggui.Add(m.Generation, 1) }
 
 // cardKey is comparable, as Key requires.
 type cardKey struct {
-	name string
-	gen  int
+	name       string
+	generation int
 }
 
 // build is the root Builder. It reads nothing reactive, so it runs once;
 // the theme comes from the Env and the card is the island that follows the
 // selection.
 func (m model) build() ggui.Widget {
+	selection := ggui.Combine(m.Selected, m.Generation, func(name string, generation int) cardKey {
+		return cardKey{name: name, generation: generation}
+	})
 	return ggui.Box(ggui.Column(
 		ggui.Row(
 			ggui.Title("Charts"),
@@ -50,8 +57,8 @@ func (m model) build() ggui.Widget {
 		ui.Select(m.Selected).Options(chartdemo.Names()).Name("Chart example"),
 		// Key recreates the card whenever the selection or the replay
 		// generation changes; the rest of the tree stays as it is.
-		ggui.Key(ggui.Combine(m.Selected, m.Generation, func(name string, gen int) cardKey { return cardKey{name, gen} }), func(k cardKey) ggui.Widget {
-			return chartdemo.Card(chartdemo.Find(k.name))
+		ggui.Key(selection, func(key cardKey) ggui.Widget {
+			return chartdemo.Card(chartdemo.Find(key.name))
 		}),
 		ggui.Caption("Arrow keys explore values · Enter selects · Replay restarts motion"),
 	).Gap(20).Align(ggui.AlignStretch)).Pad(24)

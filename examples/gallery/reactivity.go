@@ -43,7 +43,13 @@ func reactivityPreview() ggui.Widget {
 		})
 		row := func(item ggui.EachItem[reactivePerson]) ggui.Widget {
 			selected := ggui.State(false)
-			return ggui.Row(ui.Checkbox(selected, "Keep this row selected"), ggui.TextOf(ggui.Derived(func() string { return fmt.Sprintf("%d. %s", item.Index.Get()+1, item.Value.Get().Name) }))).Gap(8)
+			label := ggui.Derived(func() string {
+				return fmt.Sprintf("%d. %s", item.Index.Get()+1, item.Value.Get().Name)
+			})
+			return ggui.Row(
+				ui.Checkbox(selected, "Keep this row selected"),
+				ggui.TextOf(label),
+			).Gap(8)
 		}
 		return ggui.Column(
 			ui.TextField(query).Name("Reactive search").Placeholder("Search names; type error to fail"),
@@ -56,7 +62,11 @@ func reactivityPreview() ggui.Widget {
 					}).Else(func() ggui.Widget { return ggui.Text("No matches") })
 				}).Catch(func(err ggui.Readable[error]) ggui.Widget { return ggui.Textf("%v", err) }),
 			ui.Button("Reverse keyed rows", func() {
-				people.Update(func(p []reactivePerson) []reactivePerson { out := slices.Clone(p); slices.Reverse(out); return out })
+				people.Update(func(p []reactivePerson) []reactivePerson {
+					out := slices.Clone(p)
+					slices.Reverse(out)
+					return out
+				})
 			}).Outline(),
 			ggui.EachKeyed(people, func(p reactivePerson) int { return p.ID }, row).Gap(4),
 			ui.Checkbox(shown, "Mount local counter"),

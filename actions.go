@@ -1,5 +1,27 @@
 package ggui
 
+import "github.com/ironpark/ggui/a11y"
+
+// The request types live in the a11y package, which cannot import this
+// one, so that a bridge raises the same types the app acts on rather than
+// copies of them. These are those types under these names.
+type (
+	// Action is one request aimed at a node.
+	Action = a11y.Action
+
+	// Politeness says how urgent an announcement is.
+	Politeness = a11y.Politeness
+
+	// Announcement is one thing to say out loud, queued by Announce.
+	Announcement = a11y.Announcement
+)
+
+// How urgent an announcement is.
+const (
+	Polite    = a11y.Polite
+	Assertive = a11y.Assertive
+)
+
 // Actions come from outside the pointer and the keyboard: a screen reader
 // user activates a button from a rotor, drags a slider with a gesture that
 // never touches it, or types into a field through the platform's own text
@@ -15,19 +37,6 @@ package ggui
 // wants. So an action is a request, never a question; read the result from
 // the next frame's tree.
 
-// Action is one request aimed at a node.
-type Action struct {
-	Kind ActionSet // exactly one of the action bits
-	Text string    // the new contents, for ActionSetValue on a text field
-	Num  float64   // the new number, for ActionSetValue on a slider
-
-	// The byte range to select, for ActionSetSelection. An empty range is
-	// a caret. Bytes, not characters: the platform counts in whatever its
-	// own text API uses and the bridge converts, so that a widget never
-	// has to know what UTF-16 is.
-	SelStart, SelEnd int
-}
-
 // Actor is a widget that carries out an action aimed at it. A widget needs
 // one only for what its own logic must do: pressing falls back to the key
 // press a control already acts on, and focusing and scrolling into view are
@@ -35,20 +44,6 @@ type Action struct {
 // handle, and the fallback runs instead.
 type Actor interface {
 	Act(a Action) bool
-}
-
-// Politeness says how urgent an announcement is.
-type Politeness int
-
-const (
-	Polite    Politeness = iota // said when the user is not in the middle of something
-	Assertive                   // said at once, interrupting
-)
-
-// Announcement is one thing to say out loud, queued by Announce.
-type Announcement struct {
-	Text       string
-	Politeness Politeness
 }
 
 // Announce queues text to be spoken. A tree diff cannot express "say this

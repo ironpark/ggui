@@ -1,6 +1,8 @@
 package ggui
 
 import (
+	"github.com/ironpark/ggui/a11y"
+
 	"image"
 	"image/color"
 	"math"
@@ -521,10 +523,11 @@ func (t *TextInputWidget) Describe() Node {
 	// A screen reader reads a field character by character and line by
 	// line, and needs to know where each of them went. Working that out
 	// costs a measurement per character, so it is only done while
-	// something is attached that will ask; see axDetail. A password is
+	// something is attached that will ask; see a11y.WantsDetail. A
+	// password is
 	// left out of it entirely: its shape on screen is bullets, and its
 	// contents are not for reading out.
-	if axDetail() && !t.password {
+	if a11y.WantsDetail() && !t.password {
 		n.Runs = t.runs()
 	}
 	return n

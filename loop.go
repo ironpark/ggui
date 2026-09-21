@@ -1,6 +1,8 @@
 package ggui
 
 import (
+	"github.com/ironpark/ggui/a11y"
+
 	"errors"
 	"fmt"
 	"strings"
@@ -137,7 +139,7 @@ func (r *frameLoop) semantics() *SemTree {
 	if t := r.sem.Load(); t != nil {
 		return t
 	}
-	return &SemTree{focused: -1}
+	return a11y.Build(nil, -1)
 }
 
 // running is the loop whose frame is executing: what UIThread hands out. It

@@ -1,6 +1,6 @@
-//go:build !darwin || ios
+//go:build (!darwin && !windows) || ios
 
-package ggui
+package a11y
 
 // newAXPlatform returns nothing: there is no accessibility bridge on this
 // platform yet, so App.Semantics publishes a tree every frame and nobody
@@ -10,4 +10,7 @@ func newAXPlatform() axPlatform { return nil }
 
 // axAttach has nowhere to put the bridge, since there is no platform half
 // to answer from.
-func axAttach(*axBridge) {}
+func axAttach(*Bridge) {}
+
+// axCurrent has no bridge to return: there is no platform half here.
+func axCurrent() *Bridge { return nil }

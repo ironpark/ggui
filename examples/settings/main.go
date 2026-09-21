@@ -41,8 +41,11 @@ type model struct {
 func newModel(persist func(Profile) error) *model {
 	initial := Profile{Name: "Ada", Email: "ada@example.com", Notify: true, Volume: 0.6}
 	return &model{
-		Draft: ggui.State(initial), Saved: ggui.State(initial),
-		Status: ggui.State("Saved"), Saving: ggui.State(false), persist: persist,
+		Draft:   ggui.State(initial),
+		Saved:   ggui.State(initial),
+		Status:  ggui.State("Saved"),
+		Saving:  ggui.State(false),
+		persist: persist,
 	}
 }
 
@@ -88,23 +91,27 @@ func (m *model) build(post func(func())) ggui.Widget {
 	email := m.Draft.Field(func(p *Profile) *string { return &p.Email })
 	notify := m.Draft.Field(func(p *Profile) *bool { return &p.Notify })
 	volume := m.Draft.Field(func(p *Profile) *float64 { return &p.Volume })
-	dirty := ggui.Combine(m.Draft, m.Saved, func(a, b Profile) bool { return a != b })
-	invalid := m.Draft.Map(func(p Profile) bool { return emailError(p) != "" })
-	cannotSave := ggui.Combine(dirty, invalid, func(d, i bool) bool { return !d || i })
-	cannotSave = ggui.Combine(cannotSave, m.Saving, func(c, s bool) bool { return c || s })
+	dirty := ggui.Combine(m.Draft, m.Saved, func(draft, saved Profile) bool { return draft != saved })
+	validation := m.Draft.Map(emailError)
+	cannotSave := ggui.Derived(func() bool {
+		return !dirty.Get() || validation.Get() != "" || m.Saving.Get()
+	})
+	cannotReset := dirty.Map(func(changed bool) bool { return !changed })
+	savedName := m.Saved.Field(func(p *Profile) *string { return &p.Name })
+	savedEmail := m.Saved.Field(func(p *Profile) *string { return &p.Email })
 
-	return ggui.Center(ggui.Box(ui.Card(ggui.Column(
+	form := ggui.Column(
 		ggui.Title("Profile"),
 		ui.Field("Name", ui.TextField(name).Placeholder("How should we address you?")),
 		ui.Field("Email", ui.TextField(email).Placeholder("you@example.com")).
-			Help("Where receipts go").BindError(m.Draft.Map(emailError)),
+			Help("Where receipts go").BindError(validation),
 		ui.Field("Volume", ui.Slider(volume, 0, 1).Step(0.05).Name("Volume")).
 			Help("Notification sound level"),
 		ui.Switch(notify, "Email me about activity"),
 		ui.Divider(),
 		ggui.Row(
 			ui.Button("Save", func() { m.save(post) }).BindDisabled(cannotSave),
-			ui.Button("Reset", m.reset).Outline().BindDisabled(dirty.Map(func(d bool) bool { return !d })),
+			ui.Button("Reset", m.reset).Outline().BindDisabled(cannotReset),
 			ggui.Spacer(),
 			ggui.TextOf(m.Status).AsCaption().NoWrap(),
 		).Space(1),
@@ -114,9 +121,10 @@ func (m *model) build(post func(func())) ggui.Widget {
 		// Reactive island or use Caption, which resolves at layout.
 		ggui.Styled(ggui.Column(
 			ggui.Textf("Draft: %s <%s>, notify=%t, volume=%.2f", name, email, notify, volume),
-			ggui.Textf("Saved: %s <%s>", m.Saved.Map(func(p Profile) string { return p.Name }), m.Saved.Map(func(p Profile) string { return p.Email })),
+			ggui.Textf("Saved: %s <%s>", savedName, savedEmail),
 		).Space(0.5)).Size(12).Color(ggui.UseTheme().MutedFg),
-	).Space(1.5).Align(ggui.AlignStretch)).Pad(24)).Width(440))
+	).Space(1.5).Align(ggui.AlignStretch)
+	return ggui.Center(ggui.Box(ui.Card(form).Pad(24)).Width(440))
 }
 
 // persistSlowly stands in for a backend: it takes a moment and refuses
@@ -132,8 +140,13 @@ func persistSlowly(p Profile) error {
 func main() {
 	m := newModel(persistSlowly)
 	var app *ggui.App
-	app = ggui.New(ggui.Config{Title: "ggui · settings", Width: 520, Height: 480, Resizable: true, Inspector: "f1"},
-		func() ggui.Widget { return m.build(app.Post) })
+	app = ggui.New(ggui.Config{
+		Title:     "ggui · settings",
+		Width:     520,
+		Height:    480,
+		Resizable: true,
+		Inspector: "f1",
+	}, func() ggui.Widget { return m.build(app.Post) })
 	app.Shortcut("cmd+s", func() { m.save(app.Post) })
 	if err := app.Run(); err != nil {
 		log.Fatal(err)

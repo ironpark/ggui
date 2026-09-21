@@ -21,7 +21,7 @@ import (
 // from the Env at layout, and every part that changes is bound to a signal
 // or a derived value on the model.
 func build(m *model) ggui.Widget {
-	return ggui.Center(ggui.Box(ui.Card(ggui.Column(
+	content := ggui.Column(
 		ggui.Row(ggui.Title("todo"), ggui.Spacer(), ui.Switch(m.Dark, "Dark")),
 		composer(m),
 		ui.Progress(m.Progress).Height(4),
@@ -32,7 +32,8 @@ func build(m *model) ggui.Widget {
 		// Confirm is true, closes itself, then runs the confirmation.
 		ui.AlertDialog(m.Confirm, "Clear done?", "Every finished item is removed.").
 			Confirm("Remove", m.clearDone).Destructive(),
-	).Space(1.5)).Pad(24)).Size(480, 540))
+	).Space(1.5)
+	return ggui.Center(ggui.Box(ui.Card(content).Pad(24)).Size(480, 540))
 }
 
 // composer is the field that adds an item; Enter and the button do the same.
@@ -66,7 +67,7 @@ func row(m *model, td *Todo) ggui.Widget {
 	return ggui.Row(check, ggui.Expanded(title(td, editing)), remove).Space(1)
 }
 
-// title shows the row's text, struck to a caption once done, and swaps in
+// title shows the row's text as a caption once done, and swaps in
 // a field bound to the same signal while editing. A tap starts editing;
 // Enter ends it.
 func title(td *Todo, editing *ggui.StateValue[bool]) ggui.Widget {
@@ -104,7 +105,13 @@ func run() error {
 	var app *ggui.App
 	dispose := ggui.Root(func() {
 		m := newModel()
-		app = ggui.New(ggui.Config{Title: "ggui · todo", Width: 520, Height: 600, Resizable: true, Inspector: "f1"}, func() ggui.Widget { return build(m) })
+		app = ggui.New(ggui.Config{
+			Title:     "ggui · todo",
+			Width:     520,
+			Height:    600,
+			Resizable: true,
+			Inspector: "f1",
+		}, func() ggui.Widget { return build(m) })
 		shortcuts(app, m)
 		// Setup runs under the app's root owner, so the theme binding is
 		// disposed with the app.
