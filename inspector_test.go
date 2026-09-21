@@ -545,3 +545,19 @@ func frameCanvas(img *ebiten.Image, logical Size) *Canvas {
 	c.fs().logical = logical
 	return c
 }
+
+func TestInspectorTracesPaintedWidgets(t *testing.T) {
+	c := Canvas{}
+	c.fs().tracing = true
+	w := Column(Box().Size(10, 10), Padding(Box().Size(10, 10), 5))
+	c.Paint(w, Rct(Pt(0, 0), w.Layout(Loose(Sz(100, 100)), Env{})))
+	if len(c.fs().trace) != 4 {
+		t.Fatalf("%d traced widgets, want 4", len(c.fs().trace))
+	}
+	if c.fs().trace[0].name != "Column" || c.fs().trace[0].depth != 0 || c.fs().trace[3].depth != 2 {
+		t.Fatalf("trace = %+v", c.fs().trace)
+	}
+	if c.fs().trace[3].rect != Rct(Pt(5, 15), Sz(10, 10)) {
+		t.Fatalf("innermost rect = %+v", c.fs().trace[3].rect)
+	}
+}

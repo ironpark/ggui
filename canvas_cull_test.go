@@ -46,8 +46,12 @@ func TestEmptyClipRetainsTextSemanticsAndTrace(t *testing.T) {
 	size := txt.Layout(Tight(Sz(100, 20)), rootEnv())
 	clipped := c.Clip(Rct(Pt(200, 200), Sz(10, 10)))
 	clipped.Paint(txt, Rct(Pt(200, 200), size))
-	if len(c.fs().trace) != 1 || len(c.fs().sem) != 1 || c.fs().sem[0].node.Name != "offscreen text" {
-		t.Fatal("drawing cull lost inspection or semantics")
+	if len(c.fs().sem) != 1 || c.fs().sem[0].node.Name != "offscreen text" {
+		t.Fatal("drawing cull lost semantics")
+	}
+	// The trace is only collected in a build that has the inspector.
+	if inspectorEnabled && len(c.fs().trace) != 1 {
+		t.Fatal("drawing cull lost inspection")
 	}
 }
 

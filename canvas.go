@@ -239,24 +239,29 @@ func (c *Canvas) Paint(w Widget, r Rect) {
 		w.Paint(nil, r)
 		return
 	}
-	f := c.fs()
-	if f.tracing {
-		parent := f.traceParent
-		path := "/" + itoa(f.traceRoots)
-		if parent > 0 {
-			p := &f.trace[parent-1]
-			path = p.path + "/" + itoa(p.children)
-			p.children++
-		} else {
-			f.traceRoots++
+	// The trace exists only for the inspector, so a build without it skips
+	// the frameState walk on every painted widget rather than testing a
+	// flag that can never be set.
+	if inspectorEnabled {
+		f := c.fs()
+		if f.tracing {
+			parent := f.traceParent
+			path := "/" + itoa(f.traceRoots)
+			if parent > 0 {
+				p := &f.trace[parent-1]
+				path = p.path + "/" + itoa(p.children)
+				p.children++
+			} else {
+				f.traceRoots++
+			}
+			f.trace = append(f.trace, traceEntry{
+				rect: r, depth: f.depth, name: widgetName(w), widget: w,
+				id: inspectComparable(idOf(w)), path: path, clip: c.clip, clipped: c.clipped,
+			})
+			f.traceParent = len(f.trace)
+			f.depth++
+			defer func() { f.depth--; f.traceParent = parent }()
 		}
-		f.trace = append(f.trace, traceEntry{
-			rect: r, depth: f.depth, name: widgetName(w), widget: w,
-			id: inspectComparable(idOf(w)), path: path, clip: c.clip, clipped: c.clipped,
-		})
-		f.traceParent = len(f.trace)
-		f.depth++
-		defer func() { f.depth--; f.traceParent = parent }()
 	}
 	w.Paint(c, r)
 }
