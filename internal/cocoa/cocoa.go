@@ -23,6 +23,7 @@ var (
 	selIsKindOfClass        = objc.RegisterName("isKindOfClass:")
 	selStringWithUTF8String = objc.RegisterName("stringWithUTF8String:")
 	selArrayWithObjects     = objc.RegisterName("arrayWithObjects:count:")
+	selArray                = objc.RegisterName("array")
 
 	classNSString = objc.ID(objc.GetClass("NSString"))
 	classNSArray  = objc.ID(objc.GetClass("NSArray"))
@@ -41,15 +42,33 @@ func String(s string) objc.ID {
 	return id
 }
 
+// Array returns ids as an autoreleased NSArray; an empty one for no ids.
+func Array(ids []objc.ID) objc.ID {
+	if len(ids) == 0 {
+		return classNSArray.Send(selArray)
+	}
+	arr := classNSArray.Send(selArrayWithObjects, unsafe.Pointer(&ids[0]), uint(len(ids)))
+	runtime.KeepAlive(ids)
+	return arr
+}
+
 // StringArray returns ss as an autoreleased NSArray of NSString.
 func StringArray(ss []string) objc.ID {
 	ids := make([]objc.ID, len(ss))
 	for i, s := range ss {
 		ids[i] = String(s)
 	}
-	arr := classNSArray.Send(selArrayWithObjects, unsafe.Pointer(&ids[0]), uint(len(ids)))
-	runtime.KeepAlive(ids)
-	return arr
+	return Array(ids)
+}
+
+// Objects returns the elements of an NSArray, in order.
+func Objects(arr objc.ID) []objc.ID {
+	n := objc.Send[uint](arr, selCount)
+	ids := make([]objc.ID, 0, n)
+	for i := range n {
+		ids = append(ids, arr.Send(selObjectAtIndex, i))
+	}
+	return ids
 }
 
 // AppWindow finds Ebitengine's window, which is the one whose content view
@@ -62,10 +81,7 @@ func AppWindow() objc.ID {
 	if contentClass == 0 {
 		return 0
 	}
-	windows := App().Send(selWindows)
-	n := objc.Send[uint](windows, selCount)
-	for i := range n {
-		window := windows.Send(selObjectAtIndex, i)
+	for _, window := range Objects(App().Send(selWindows)) {
 		content := window.Send(selContentView)
 		if content != 0 && objc.Send[bool](content, selIsKindOfClass, contentClass) {
 			return window

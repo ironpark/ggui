@@ -101,37 +101,26 @@ type StubFilePicker struct {
 	Asked []FileDialog
 }
 
-func (s *StubFilePicker) one(d FileDialog) (string, error) {
-	s.Asked = append(s.Asked, d)
-	if s.Err != nil {
-		return "", s.Err
-	}
-	if len(s.Paths) == 0 {
-		return "", ErrCanceled
-	}
-	return s.Paths[0], nil
-}
-
-// OpenFile implements FilePicker.
-func (s *StubFilePicker) OpenFile(d FileDialog) (string, error) { return s.one(d) }
-
-// OpenFiles implements FilePicker.
-func (s *StubFilePicker) OpenFiles(d FileDialog) ([]string, error) {
+// answer records the dialog and returns a copy of Paths, or Err.
+func (s *StubFilePicker) answer(d FileDialog) ([]string, error) {
 	s.Asked = append(s.Asked, d)
 	if s.Err != nil {
 		return nil, s.Err
 	}
-	if len(s.Paths) == 0 {
-		return nil, ErrCanceled
-	}
 	return append([]string(nil), s.Paths...), nil
 }
 
+// OpenFile implements FilePicker.
+func (s *StubFilePicker) OpenFile(d FileDialog) (string, error) { return first(s.answer(d)) }
+
+// OpenFiles implements FilePicker.
+func (s *StubFilePicker) OpenFiles(d FileDialog) ([]string, error) { return all(s.answer(d)) }
+
 // PickFolder implements FilePicker.
-func (s *StubFilePicker) PickFolder(d FileDialog) (string, error) { return s.one(d) }
+func (s *StubFilePicker) PickFolder(d FileDialog) (string, error) { return first(s.answer(d)) }
 
 // SaveFile implements FilePicker.
-func (s *StubFilePicker) SaveFile(d FileDialog) (string, error) { return s.one(d) }
+func (s *StubFilePicker) SaveFile(d FileDialog) (string, error) { return first(s.answer(d)) }
 
 // dialogKind is which dialog the platform half shows.
 type dialogKind uint8
@@ -171,11 +160,8 @@ func all(paths []string, err error) ([]string, error) {
 }
 
 func first(paths []string, err error) (string, error) {
-	if err != nil {
+	if paths, err = all(paths, err); err != nil {
 		return "", err
-	}
-	if len(paths) == 0 {
-		return "", ErrCanceled
 	}
 	return paths[0], nil
 }

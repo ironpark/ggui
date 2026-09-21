@@ -14,6 +14,8 @@ import (
 	"github.com/ebitengine/purego/objc"
 
 	"github.com/hajimehoshi/ebiten/v2"
+
+	"github.com/ironpark/ggui/internal/cocoa"
 )
 
 // The macOS half of the accessibility bridge, in Objective-C reached
@@ -58,37 +60,28 @@ type nsRect struct {
 }
 
 var (
-	axSelAlloc                = objc.RegisterName("alloc")
-	axSelInit                 = objc.RegisterName("init")
-	axSelRelease              = objc.RegisterName("release")
-	axSelSharedApplication    = objc.RegisterName("sharedApplication")
-	axSelWindows              = objc.RegisterName("windows")
-	axSelCount                = objc.RegisterName("count")
-	axSelObjectAtIndex        = objc.RegisterName("objectAtIndex:")
-	axSelContentView          = objc.RegisterName("contentView")
-	axSelAddSubview           = objc.RegisterName("addSubview:")
-	axSelBounds               = objc.RegisterName("bounds")
-	axSelSetFrame             = objc.RegisterName("setFrame:")
-	axSelSetAutoresizingMask  = objc.RegisterName("setAutoresizingMask:")
-	axSelWindow               = objc.RegisterName("window")
-	axSelConvertRectToView    = objc.RegisterName("convertRect:toView:")
-	axSelConvertRectFromView  = objc.RegisterName("convertRect:fromView:")
-	axSelConvertRectToScreen  = objc.RegisterName("convertRectToScreen:")
-	axSelConvertRectFromScr   = objc.RegisterName("convertRectFromScreen:")
-	axSelStringWithUTF8String = objc.RegisterName("stringWithUTF8String:")
-	axSelNumberWithDouble     = objc.RegisterName("numberWithDouble:")
-	axSelArray                = objc.RegisterName("array")
-	axSelArrayWithObjects     = objc.RegisterName("arrayWithObjects:count:")
-	axSelSharedWorkspace      = objc.RegisterName("sharedWorkspace")
-	axSelVoiceOverEnabled     = objc.RegisterName("isVoiceOverEnabled")
+	axSelAlloc               = objc.RegisterName("alloc")
+	axSelInit                = objc.RegisterName("init")
+	axSelRelease             = objc.RegisterName("release")
+	axSelContentView         = objc.RegisterName("contentView")
+	axSelAddSubview          = objc.RegisterName("addSubview:")
+	axSelBounds              = objc.RegisterName("bounds")
+	axSelSetFrame            = objc.RegisterName("setFrame:")
+	axSelSetAutoresizingMask = objc.RegisterName("setAutoresizingMask:")
+	axSelWindow              = objc.RegisterName("window")
+	axSelConvertRectToView   = objc.RegisterName("convertRect:toView:")
+	axSelConvertRectFromView = objc.RegisterName("convertRect:fromView:")
+	axSelConvertRectToScreen = objc.RegisterName("convertRectToScreen:")
+	axSelConvertRectFromScr  = objc.RegisterName("convertRectFromScreen:")
+	axSelNumberWithDouble    = objc.RegisterName("numberWithDouble:")
+	axSelSharedWorkspace     = objc.RegisterName("sharedWorkspace")
+	axSelVoiceOverEnabled    = objc.RegisterName("isVoiceOverEnabled")
 
 	axClassNSString = objc.GetClass("NSString")
 	axClassNSNumber = objc.GetClass("NSNumber")
-	axClassNSArray  = objc.GetClass("NSArray")
 	axClassNSView   = objc.GetClass("NSView")
 
-	axIDNSApplication = objc.ID(objc.GetClass("NSApplication"))
-	axIDNSWorkspace   = objc.ID(objc.GetClass("NSWorkspace"))
+	axIDNSWorkspace = objc.ID(objc.GetClass("NSWorkspace"))
 )
 
 // axRoleDescription is AppKit's own NSAccessibilityRoleDescription, which
@@ -97,29 +90,9 @@ var (
 // a translation of AppKit.
 var axRoleDescription func(role, subrole uintptr) uintptr
 
-// nsString returns s as an autoreleased NSString. The bytes are copied by
-// AppKit before the call returns, so the Go slice need only outlive it.
-func nsString(s string) objc.ID {
-	b := append([]byte(s), 0)
-	id := objc.ID(axClassNSString).Send(axSelStringWithUTF8String, unsafe.Pointer(&b[0]))
-	runtime.KeepAlive(b)
-	return id
-}
-
 // nsNumber returns v as an autoreleased NSNumber.
 func nsNumber(v float64) objc.ID {
 	return objc.ID(axClassNSNumber).Send(axSelNumberWithDouble, v)
-}
-
-// nsArray returns ids as an autoreleased NSArray, which is what every
-// accessibility attribute returning a list must be.
-func nsArray(ids []objc.ID) objc.ID {
-	if len(ids) == 0 {
-		return objc.ID(axClassNSArray).Send(axSelArray)
-	}
-	a := objc.ID(axClassNSArray).Send(axSelArrayWithObjects, unsafe.Pointer(&ids[0]), len(ids))
-	runtime.KeepAlive(ids)
-	return a
 }
 
 // darwinAX is the platform half of the bridge: the container view, and the
@@ -157,7 +130,7 @@ func (d *darwinAX) attach() {
 	if d.container != 0 {
 		return
 	}
-	window := axAppWindow()
+	window := cocoa.AppWindow()
 	if window == 0 {
 		return
 	}
@@ -171,29 +144,6 @@ func (d *darwinAX) attach() {
 	view.Send(axSelSetAutoresizingMask, uint(2|16))
 	content.Send(axSelAddSubview, view)
 	d.container = view
-}
-
-// axAppWindow finds Ebitengine's window even before the app becomes active.
-// NSApplication.mainWindow can be nil on background launches. Do not fall
-// back to an arbitrary NSWindow: AppKit also owns panels and helper windows.
-// Ebitengine's GLFW backend installs a GLFWContentView on its single window.
-// Resolve the class here because GLFW registers it when the window is created.
-// Like attach, this must run on the main thread.
-func axAppWindow() objc.ID {
-	contentClass := objc.GetClass("GLFWContentView")
-	if contentClass == 0 {
-		return 0
-	}
-	windows := axIDNSApplication.Send(axSelSharedApplication).Send(axSelWindows)
-	count := objc.Send[uint](windows, axSelCount)
-	for i := range count {
-		window := windows.Send(axSelObjectAtIndex, i)
-		content := window.Send(axSelContentView)
-		if content != 0 && objc.Send[bool](content, axSelIsKindOfClass, contentClass) {
-			return window
-		}
-	}
-	return 0
 }
 
 // element makes the accessibility object for one node, carrying its handle.
@@ -328,7 +278,7 @@ func axElementRole(self objc.ID, _ objc.SEL) objc.ID {
 		return 0
 	}
 	role, _ := axRole(n.Role)
-	return nsString(role)
+	return cocoa.String(role)
 }
 
 func axElementSubrole(self objc.ID, _ objc.SEL) objc.ID {
@@ -340,7 +290,7 @@ func axElementSubrole(self objc.ID, _ objc.SEL) objc.ID {
 	if sub == "" {
 		return 0
 	}
-	return nsString(sub)
+	return cocoa.String(sub)
 }
 
 func axElementRoleDescription(self objc.ID, _ objc.SEL) objc.ID {
@@ -351,9 +301,9 @@ func axElementRoleDescription(self objc.ID, _ objc.SEL) objc.ID {
 	role, sub := axRole(n.Role)
 	var subID objc.ID
 	if sub != "" {
-		subID = nsString(sub)
+		subID = cocoa.String(sub)
 	}
-	return objc.ID(axRoleDescription(uintptr(nsString(role)), uintptr(subID)))
+	return objc.ID(axRoleDescription(uintptr(cocoa.String(role)), uintptr(subID)))
 }
 
 func axElementLabel(self objc.ID, _ objc.SEL) objc.ID {
@@ -361,7 +311,7 @@ func axElementLabel(self objc.ID, _ objc.SEL) objc.ID {
 	if !ok || n.Name == "" {
 		return 0
 	}
-	return nsString(n.Name)
+	return cocoa.String(n.Name)
 }
 
 // axElementTitle reports no title, always. A label and a title both set are
@@ -375,7 +325,7 @@ func axElementHelp(self objc.ID, _ objc.SEL) objc.ID {
 	if !ok || n.Description == "" {
 		return 0
 	}
-	return nsString(n.Description)
+	return cocoa.String(n.Description)
 }
 
 func axElementValue(self objc.ID, _ objc.SEL) objc.ID {
@@ -392,7 +342,7 @@ func axElementValue(self objc.ID, _ objc.SEL) objc.ID {
 	if n.Value == "" && !axTextual(n.Node) {
 		return 0
 	}
-	return nsString(n.Value)
+	return cocoa.String(n.Value)
 }
 
 func axElementMinValue(self objc.ID, _ objc.SEL) objc.ID {
@@ -421,7 +371,7 @@ func axElementIdentifier(self objc.ID, _ objc.SEL) objc.ID {
 		return 0
 	}
 	if s, is := n.ID.ID.(string); is && s != "" {
-		return nsString(s)
+		return cocoa.String(s)
 	}
 	return 0
 }
@@ -481,9 +431,9 @@ func axElementParent(self objc.ID, _ objc.SEL) objc.ID {
 func axElementChildren(self objc.ID, _ objc.SEL) objc.ID {
 	b, f, n, ok := axSelf(self)
 	if !ok {
-		return nsArray(nil)
+		return cocoa.Array(nil)
 	}
-	return nsArray(axElements(b, f, n.Children))
+	return cocoa.Array(axElements(b, f, n.Children))
 }
 
 // axElements turns a list of node indices into the elements standing for
@@ -532,18 +482,18 @@ func axElementHitTest(self objc.ID, _ objc.SEL, p nsPoint) objc.ID {
 
 func axContainerIsElement(objc.ID, objc.SEL) bool { return false }
 
-func axContainerRole(objc.ID, objc.SEL) objc.ID { return nsString("AXGroup") }
+func axContainerRole(objc.ID, objc.SEL) objc.ID { return cocoa.String("AXGroup") }
 
 func axContainerChildren(_ objc.ID, _ objc.SEL) objc.ID {
 	b := current.Load()
 	if b == nil {
-		return nsArray(nil)
+		return cocoa.Array(nil)
 	}
 	f := b.frame()
 	if f == nil {
-		return nsArray(nil)
+		return cocoa.Array(nil)
 	}
-	return nsArray(axElements(b, f, f.tree.Roots()))
+	return cocoa.Array(axElements(b, f, f.tree.Roots()))
 }
 
 func axContainerHitTest(_ objc.ID, _ objc.SEL, p nsPoint) objc.ID {
@@ -656,7 +606,7 @@ func (d *darwinAX) post(b *Bridge, n axNote) {
 		target = objc.ID(e)
 	}
 	if n.kind != axAnnouncement {
-		axPost(uintptr(target), uintptr(nsString(axNoticeName(n.kind))))
+		axPost(uintptr(target), uintptr(cocoa.String(axNoticeName(n.kind))))
 		return
 	}
 	// An announcement is addressed to the window rather than to an element:
@@ -666,13 +616,13 @@ func (d *darwinAX) post(b *Bridge, n axNote) {
 	if window == 0 {
 		window = target
 	}
-	values := []objc.ID{nsString(n.text), objc.ID(axClassNSNumber).Send(axSelNumberWithInt, axPriority(n.loud))}
-	keys := []objc.ID{nsString("AXAnnouncementKey"), nsString("AXPriorityKey")}
+	values := []objc.ID{cocoa.String(n.text), objc.ID(axClassNSNumber).Send(axSelNumberWithInt, axPriority(n.loud))}
+	keys := []objc.ID{cocoa.String("AXAnnouncementKey"), cocoa.String("AXPriorityKey")}
 	info := objc.ID(objc.GetClass("NSDictionary")).Send(axSelDictionary,
 		unsafe.Pointer(&values[0]), unsafe.Pointer(&keys[0]), 2)
 	runtime.KeepAlive(values)
 	runtime.KeepAlive(keys)
-	axPostWithUserInfo(uintptr(window), uintptr(nsString("AXAnnouncementRequested")), uintptr(info))
+	axPostWithUserInfo(uintptr(window), uintptr(cocoa.String("AXAnnouncementRequested")), uintptr(info))
 }
 
 // axPerform hands one action to the app and answers the platform at once,
@@ -854,7 +804,7 @@ func axElementSelectedText(self objc.ID, _ objc.SEL) objc.ID {
 	if !ok {
 		return 0
 	}
-	return nsString(Selected(n.Node))
+	return cocoa.String(Selected(n.Node))
 }
 
 func axElementSelectedRange(self objc.ID, _ objc.SEL) nsRange {
@@ -883,7 +833,7 @@ func axElementStringForRange(self objc.ID, _ objc.SEL, r nsRange) objc.ID {
 	if !ok || r.location >= axNotFound {
 		return 0
 	}
-	return nsString(StringForRange(n.Node, int(r.location), int(r.length)))
+	return cocoa.String(StringForRange(n.Node, int(r.location), int(r.length)))
 }
 
 func axElementRangeForLine(self objc.ID, _ objc.SEL, line int) nsRange {

@@ -33,8 +33,6 @@ var (
 	selURL                        = objc.RegisterName("URL")
 	selURLs                       = objc.RegisterName("URLs")
 	selPath                       = objc.RegisterName("path")
-	selCount                      = objc.RegisterName("count")
-	selObjectAtIndex              = objc.RegisterName("objectAtIndex:")
 	selFileURLWithPath            = objc.RegisterName("fileURLWithPath:isDirectory:")
 	selBeginSheetModal            = objc.RegisterName("beginSheetModalForWindow:completionHandler:")
 	selRunModalForWindow          = objc.RegisterName("runModalForWindow:")
@@ -95,11 +93,10 @@ func runPanel(k dialogKind, d FileDialog) ([]string, error) {
 	if k == kindSave {
 		return []string{urlPath(panel.Send(selURL))}, nil
 	}
-	urls := panel.Send(selURLs)
-	n := objc.Send[uint](urls, selCount)
-	paths := make([]string, 0, n)
-	for i := range n {
-		paths = append(paths, urlPath(urls.Send(selObjectAtIndex, i)))
+	urls := cocoa.Objects(panel.Send(selURLs))
+	paths := make([]string, 0, len(urls))
+	for _, url := range urls {
+		paths = append(paths, urlPath(url))
 	}
 	return paths, nil
 }

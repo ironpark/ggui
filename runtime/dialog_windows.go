@@ -205,12 +205,8 @@ func filterSpec(filters []FileFilter) []uint16 {
 	}
 	var spec []uint16
 	for _, f := range filters {
-		patterns := make([]string, len(f.Extensions))
-		for i, ext := range f.Extensions {
-			patterns[i] = "*." + ext
-		}
-		pattern := strings.Join(patterns, ";")
-		if pattern == "" {
+		pattern := globs(f, ";")
+		if pattern == "*" {
 			pattern = "*.*"
 		}
 		spec = append(spec, utf16z(f.Name+" ("+pattern+")")...)
@@ -234,7 +230,8 @@ func utf16ptr(s string) *uint16 {
 	if s == "" {
 		return nil
 	}
-	return &utf16z(s)[0]
+	p, _ := windows.UTF16PtrFromString(s)
+	return p
 }
 
 // splitz splits a buffer of NUL-terminated wide strings ending in an empty
