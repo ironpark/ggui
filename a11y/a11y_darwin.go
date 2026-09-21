@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"runtime"
 	"structs"
-	"sync/atomic"
 	"unsafe"
 
 	"github.com/ebitengine/purego"
@@ -39,13 +38,6 @@ import (
 // handle that outlives its node resolves to nothing rather than to whatever
 // took its place. Every answer is read out of the last published SemTree,
 // on the thread that asked, without waiting for a frame.
-
-// theAX is the bridge the Objective-C methods answer from. A class is
-// registered once per process and its methods are plain functions with
-// nowhere to keep a receiver, so the bridge that started puts itself here.
-// A second one would replace it, which is the same limit the IME already
-// has.
-var theAX atomic.Pointer[Bridge]
 
 type nsPoint struct {
 	_ structs.HostLayout
@@ -136,9 +128,6 @@ type darwinAX struct {
 	container objc.ID
 }
 
-// axAttach makes b the bridge the Objective-C methods answer from.
-func axAttach(b *Bridge) { theAX.Store(b) }
-
 // newAXPlatform returns the macOS bridge. Nothing is created here: the
 // window does not exist until Run has started, so the container is attached
 // from the first poll that finds the app running.
@@ -149,9 +138,6 @@ func newAXPlatform() axPlatform { return &darwinAX{} }
 // It is asked once a second, so the hop is nothing; asking every frame
 // would put a main-thread round trip in the middle of every paint.
 func (d *darwinAX) active() bool {
-	if b := theBridge(); b == nil || !b.running() {
-		return false
-	}
 	var on bool
 	ebiten.RunOnMainThread(func() {
 		d.attach()
@@ -322,7 +308,7 @@ func init() {
 // answers nothing when it fails: an element outliving its node is normal,
 // since an assistive technology keeps the ones it was given.
 func axSelf(self objc.ID) (*Bridge, *axFrame, SemNode, bool) {
-	b := theAX.Load()
+	b := current.Load()
 	if b == nil {
 		return nil, nil, SemNode{}, false
 	}
@@ -549,7 +535,7 @@ func axContainerIsElement(objc.ID, objc.SEL) bool { return false }
 func axContainerRole(objc.ID, objc.SEL) objc.ID { return nsString("AXGroup") }
 
 func axContainerChildren(_ objc.ID, _ objc.SEL) objc.ID {
-	b := theAX.Load()
+	b := current.Load()
 	if b == nil {
 		return nsArray(nil)
 	}
@@ -561,7 +547,7 @@ func axContainerChildren(_ objc.ID, _ objc.SEL) objc.ID {
 }
 
 func axContainerHitTest(_ objc.ID, _ objc.SEL, p nsPoint) objc.ID {
-	b := theAX.Load()
+	b := current.Load()
 	if b == nil {
 		return 0
 	}
@@ -648,11 +634,8 @@ func axPriority(loud bool) int32 {
 // is the only thread they may be posted from. Elements are resolved here
 // rather than in the diff, because making one is also main-thread work.
 func (d *darwinAX) notify(notes []axNote) {
-	if b := theBridge(); b == nil || !b.running() {
-		return
-	}
 	ebiten.RunOnMainThread(func() {
-		b := theAX.Load()
+		b := current.Load()
 		if b == nil || d.container == 0 {
 			return
 		}
@@ -757,7 +740,7 @@ func axElementSetFocused(self objc.ID, _ objc.SEL, on bool) {
 	}
 	_, _, n, ok := axSelf(self)
 	if ok && n.Offscreen && n.Actions.Has(ActionScrollIntoView) {
-		if b := theAX.Load(); b != nil {
+		if b := current.Load(); b != nil {
 			b.perform(n.ID, Action{Kind: ActionScrollIntoView})
 		}
 	}
@@ -1036,6 +1019,3 @@ func axBounds(n SemNode, viewHeight float64) (x, y, w, h float64) {
 	r := n.Full
 	return r.Origin.X, viewHeight - (r.Origin.Y + r.Size.H), r.Size.W, r.Size.H
 }
-
-// axCurrent is the bridge this platform answers from.
-func axCurrent() *Bridge { return theAX.Load() }

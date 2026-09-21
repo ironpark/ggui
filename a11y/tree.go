@@ -52,6 +52,11 @@ func (t *SemTree) Len() int { return len(t.nodes) }
 // children, and siblings are in the order they were painted.
 func (t *SemTree) At(i int) SemNode { return t.nodes[i] }
 
+// Ref is At without the copy: a pointer into the tree's own storage, for a
+// caller that reads a field or two from many nodes. The tree is frozen, so
+// the pointer stays valid; what it points at must not be written.
+func (t *SemTree) Ref(i int) *SemNode { return &t.nodes[i] }
+
 // Roots returns the indices of the nodes with no parent.
 func (t *SemTree) Roots() []int { return t.roots }
 

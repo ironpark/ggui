@@ -67,7 +67,7 @@ func sameSemTree(c *Canvas, focus int, prev *SemTree) bool {
 		return false
 	}
 	for i := range f.sem {
-		a, b := &f.sem[i], prev.At(i)
+		a, b := &f.sem[i], prev.Ref(i)
 		if a.parent-1 != b.Parent || a.rect != b.Rect || a.full != b.Full ||
 			!sameAny(a.id, b.ID.ID) || !sameNode(&a.node, &b.Node) {
 			return false
@@ -116,7 +116,7 @@ func focusedNode(c *Canvas, focused *hitRegion) int {
 		return -1
 	}
 	f := c.fs()
-	if i := f.semIndex[semKey(focused.key)]; i != 0 {
+	if i := f.semIndex[a11y.Key(focused.key)]; i != 0 {
 		return i - 1
 	}
 	for i := range f.sem {

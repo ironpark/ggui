@@ -52,9 +52,6 @@ func Tri(v bool) Tristate { return a11y.Tri(v) }
 // Expandable returns a pointer to v, for Node.Expanded.
 func Expandable(v bool) *bool { return a11y.Expandable(v) }
 
-// semKey returns h as a map key, or nil when h cannot be one.
-func semKey(h any) any { return a11y.Key(h) }
-
 // The accessibility tree is built explicitly, not inferred from the hit
 // regions. It cannot be inferred: layout containers register no region at
 // all, one widget may register several regions at the same depth, a
@@ -166,7 +163,7 @@ func (c *Canvas) SemanticRef(h any) SemRef {
 	if c == nil || h == nil {
 		return SemRef{}
 	}
-	return SemRef{n: c.fs().semIndex[semKey(h)]}
+	return SemRef{n: c.fs().semIndex[a11y.Key(h)]}
 }
 
 // nodeOf is what a handler says about itself: its own Describe, else its
@@ -195,7 +192,7 @@ func (c *Canvas) addSem(r Rect, n Node, h any) SemRef {
 		return SemRef{}
 	}
 	root := c.fs()
-	key := semKey(h)
+	key := a11y.Key(h)
 	if key != nil {
 		if i := root.semIndex[key]; i != 0 {
 			return SemRef{n: i}

@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 )
@@ -67,16 +65,16 @@ func header(m *model) ggui.Widget {
 }
 
 func metrics(m *model) ggui.Widget {
-	card := func(label string, value ggui.Readable[string]) ggui.Widget {
+	card := func(label string, value ggui.Readable[int]) ggui.Widget {
 		return ggui.Box(ui.Card(ggui.Column(
 			ggui.Caption(label),
-			ggui.TextOf(value).AsTitle().Size(30),
+			ggui.Textf("%d", value).AsTitle().Size(30),
 		).Gap(6)).Pad(16)).BindWidth(m.CardWidth)
 	}
 	cards := []ggui.Widget{
-		card("All tasks", m.Summary.Map(func(s summary) string { return fmt.Sprint(s.Total) })),
-		card("In progress", m.Summary.Map(func(s summary) string { return fmt.Sprint(s.Active) })),
-		card("Completed", m.Summary.Map(func(s summary) string { return fmt.Sprint(s.Done) })),
+		card("All tasks", m.Summary.Map(func(s summary) int { return s.Total })),
+		card("In progress", m.Summary.Map(func(s summary) int { return s.Active })),
+		card("Completed", m.Summary.Map(func(s summary) int { return s.Done })),
 	}
 	return &adaptive{
 		breakpoint: 980,
@@ -88,10 +86,8 @@ func metrics(m *model) ggui.Widget {
 func taskList(m *model) ggui.Widget {
 	noSelection := m.Selected.Map(func(id int) bool { return id == 0 })
 	selectedTitle := ggui.Combine(m.Tasks, m.Selected, func(tasks []task, id int) string {
-		for _, item := range tasks {
-			if item.ID == id {
-				return "Selected: " + item.Title
-			}
+		if item, ok := findTask(tasks, id); ok {
+			return "Selected: " + item.Title
 		}
 		return "Select a row to edit or delete it."
 	})

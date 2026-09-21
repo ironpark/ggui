@@ -172,7 +172,7 @@ func TestAXGatingCostsNothingWhileNobodyIsListening(t *testing.T) {
 
 func TestAXOffNeverTouchesThePlatform(t *testing.T) {
 	b := &Bridge{mode: Off}
-	b.Start(nil, Off, func() bool { return true })
+	b.Start(nil, Off)
 	if b.plat != nil {
 		t.Fatal("Off built a platform bridge")
 	}

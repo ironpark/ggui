@@ -4,8 +4,9 @@ package a11y
 
 import (
 	"math"
-	"unicode/utf16"
 	"unsafe"
+
+	"golang.org/x/sys/windows"
 )
 
 // The provider methods: what UI Automation asks an element, answered from
@@ -42,24 +43,33 @@ func winElementAt(b *Bridge, f *axFrame, i int) uintptr {
 	if i < 0 || i >= f.tree.Len() {
 		return 0
 	}
-	return b.element(axKeyOf(f.tree.At(i).ID))
+	return b.element(axKeyOf(f.tree.Ref(i).ID))
 }
 
 // winIndexOf finds where a node sits in the frame it came from.
-func winIndexOf(f *axFrame, n SemNode) int {
+func winIndexOf(f *axFrame, n *SemNode) int {
 	if i, ok := f.index[axKeyOf(n.ID)]; ok {
 		return int(i)
 	}
 	return -1
 }
 
+// winChildren is the child list of a node, or the tree's roots for the
+// window's own element, which has no node.
+func winChildren(f *axFrame, n *SemNode) []int {
+	if n == nil {
+		return f.tree.Roots()
+	}
+	return n.Children
+}
+
 // winSiblings is the list a node appears in among its peers: its parent's
 // children, or the tree's roots when it has no parent.
-func winSiblings(f *axFrame, n SemNode) []int {
+func winSiblings(f *axFrame, n *SemNode) []int {
 	if n.Parent < 0 || n.Parent >= f.tree.Len() {
 		return f.tree.Roots()
 	}
-	return f.tree.At(n.Parent).Children
+	return f.tree.Ref(n.Parent).Children
 }
 
 // winFrame is the frame a query is answered from, or nil when the bridge
@@ -212,10 +222,7 @@ func winGetPropertyValue(this, propertyID, pRetVal uintptr) uintptr {
 		if n.Expanded == nil {
 			return sOK
 		}
-		if *n.Expanded {
-			return varI4(v, uiaExpanded)
-		}
-		return varI4(v, uiaCollapsed)
+		return varI4(v, winExpandStateOf(n.Node))
 	case uiaSelectionItemIsSelectedProperty:
 		if !winPattern(n.Node, ifSelectionItem) {
 			return sOK
@@ -288,44 +295,39 @@ func winNavigate(this, direction, ppRetVal uintptr) uintptr {
 	if f == nil {
 		return winHandOut(0, 0, ppRetVal)
 	}
-	root := winRoot.Load()
-	if o.handle == winRootHandle {
-		roots := f.tree.Roots()
-		var el uintptr
-		switch direction {
-		case uiaNavigateFirstChild:
-			if len(roots) > 0 {
-				el = winElementAt(b, f, roots[0])
-			}
-		case uiaNavigateLastChild:
-			if len(roots) > 0 {
-				el = winElementAt(b, f, roots[len(roots)-1])
-			}
-		}
-		return winHandOut(el, ifFragment, ppRetVal)
+	isRoot := o.handle == winRootHandle
+	if !isRoot && !ok {
+		return winHandOut(0, 0, ppRetVal)
 	}
-	if !ok {
+	var self *SemNode
+	if !isRoot {
+		self = &n
+	}
+	kids := winChildren(f, self)
+	switch direction {
+	case uiaNavigateFirstChild:
+		if len(kids) == 0 {
+			return winHandOut(0, 0, ppRetVal)
+		}
+		return winHandOut(winElementAt(b, f, kids[0]), ifFragment, ppRetVal)
+	case uiaNavigateLastChild:
+		if len(kids) == 0 {
+			return winHandOut(0, 0, ppRetVal)
+		}
+		return winHandOut(winElementAt(b, f, kids[len(kids)-1]), ifFragment, ppRetVal)
+	}
+	if isRoot {
 		return winHandOut(0, 0, ppRetVal)
 	}
 	switch direction {
 	case uiaNavigateParent:
 		if n.Parent < 0 {
-			return winHandOut(root, ifFragment, ppRetVal)
+			return winHandOut(winRoot.Load(), ifFragment, ppRetVal)
 		}
 		return winHandOut(winElementAt(b, f, n.Parent), ifFragment, ppRetVal)
-	case uiaNavigateFirstChild:
-		if len(n.Children) == 0 {
-			return winHandOut(0, 0, ppRetVal)
-		}
-		return winHandOut(winElementAt(b, f, n.Children[0]), ifFragment, ppRetVal)
-	case uiaNavigateLastChild:
-		if len(n.Children) == 0 {
-			return winHandOut(0, 0, ppRetVal)
-		}
-		return winHandOut(winElementAt(b, f, n.Children[len(n.Children)-1]), ifFragment, ppRetVal)
 	case uiaNavigateNextSibling, uiaNavigatePreviousSibling:
-		self := winIndexOf(f, n)
-		peers := winSiblings(f, n)
+		self := winIndexOf(f, &n)
+		peers := winSiblings(f, &n)
 		for at, p := range peers {
 			if p != self {
 				continue
@@ -521,7 +523,9 @@ func winValueGetValue(this, ppRetVal uintptr) uintptr {
 	return sOK
 }
 
-func winValueIsReadOnly(this, pRetVal uintptr) uintptr {
+// winIsReadOnly answers IsReadOnly for both the value and the range value
+// patterns, which agree on what it means: the node takes no SetValue.
+func winIsReadOnly(this, pRetVal uintptr) uintptr {
 	return winBoolOut(this, pRetVal, func(n Node) bool { return !axAllows(n, axSetValue) })
 }
 
@@ -558,64 +562,23 @@ func winRangeLargeChange(this, pRetVal uintptr) uintptr {
 	return winFloatOut(this, pRetVal, func(n Node) float64 { return (n.Max - n.Min) / 10 })
 }
 
-func winRangeIsReadOnly(this, pRetVal uintptr) uintptr {
-	return winBoolOut(this, pRetVal, func(n Node) bool { return !axAllows(n, axSetValue) })
-}
-
-func winToggle(this uintptr) uintptr {
-	return winAct(this, axPress, Action{Kind: ActionPress})
-}
-
+// winToggleState is the toggle pattern's one method of its own: Toggle
+// itself is a press, which is what Space does to a checkbox, so winInvoke
+// serves that slot too.
 func winToggleState(this, pRetVal uintptr) uintptr {
-	if pRetVal == 0 {
-		return ePointer
-	}
-	*(*int32)(unsafe.Pointer(pRetVal)) = uiaToggleOff
-	_, _, n, ok := selfOf(this)
-	if !ok {
-		return uiaElementNotAvailable
-	}
-	*(*int32)(unsafe.Pointer(pRetVal)) = winToggleOf(n.Node)
-	return sOK
+	return winI32Out(this, pRetVal, uiaToggleOff, winToggleOf)
 }
 
 func winExpand(this uintptr) uintptr {
 	return winAct(this, axShowMenu, Action{Kind: ActionExpand})
 }
 
-// winCollapse closes what Expand opened. Collapsing has no axAct of its
-// own, since AppKit asks for both through one action, so the check is done
-// here against the node's own claim.
 func winCollapse(this uintptr) uintptr {
-	_, b, n, ok := selfOf(this)
-	if !ok {
-		return uiaElementNotAvailable
-	}
-	if n.Disabled || !n.Actions.Has(ActionCollapse) {
-		return uiaInvalidOperation
-	}
-	b.perform(n.ID, Action{Kind: ActionCollapse})
-	return sOK
+	return winAct(this, axCollapse, Action{Kind: ActionCollapse})
 }
 
 func winExpandCollapseState(this, pRetVal uintptr) uintptr {
-	if pRetVal == 0 {
-		return ePointer
-	}
-	*(*int32)(unsafe.Pointer(pRetVal)) = uiaLeafNode
-	_, _, n, ok := selfOf(this)
-	if !ok {
-		return uiaElementNotAvailable
-	}
-	switch {
-	case n.Expanded == nil:
-		*(*int32)(unsafe.Pointer(pRetVal)) = uiaLeafNode
-	case *n.Expanded:
-		*(*int32)(unsafe.Pointer(pRetVal)) = uiaExpanded
-	default:
-		*(*int32)(unsafe.Pointer(pRetVal)) = uiaCollapsed
-	}
-	return sOK
+	return winI32Out(this, pRetVal, uiaLeafNode, winExpandStateOf)
 }
 
 func winSelect(this uintptr) uintptr {
@@ -680,19 +643,26 @@ func winFloatOut(this, pRetVal uintptr, of func(Node) float64) uintptr {
 	return sOK
 }
 
+// winI32Out answers an enum out parameter from the node, with what to say
+// when there is no node to ask.
+func winI32Out(this, pRetVal uintptr, none int32, of func(Node) int32) uintptr {
+	if pRetVal == 0 {
+		return ePointer
+	}
+	*(*int32)(unsafe.Pointer(pRetVal)) = none
+	_, _, n, ok := selfOf(this)
+	if !ok {
+		return uiaElementNotAvailable
+	}
+	*(*int32)(unsafe.Pointer(pRetVal)) = of(n.Node)
+	return sOK
+}
+
 // winFromBSTR reads a wide string the caller owns into a Go string. The
 // length prefix is ignored in favour of the terminator, which a BSTR from
 // SysAllocString always has.
 func winFromBSTR(p uintptr) string {
-	var u []uint16
-	for i := uintptr(0); ; i += 2 {
-		c := *(*uint16)(unsafe.Pointer(p + i))
-		if c == 0 {
-			break
-		}
-		u = append(u, c)
-	}
-	return string(utf16.Decode(u))
+	return windows.UTF16PtrToString((*uint16)(unsafe.Pointer(p)))
 }
 
 // --- window geometry ---

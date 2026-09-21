@@ -39,7 +39,7 @@ func (d *dial) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	d.rect = r
 	d.Hit(dst, r, d, ggui.CursorShapePointer)
 	t := d.theme
-	c := ggui.Pt(r.Origin.X+r.Size.W/2, r.Origin.Y+r.Size.H/2)
+	c := r.Center()
 	radius := min(r.Size.W, r.Size.H)/2 - 4
 	ring := t.Border
 	if d.Hovered || d.Pressed {
@@ -62,7 +62,7 @@ func angleOf(v float64) float64 { return (0.75 + 1.5*v) * math.Pi }
 // set moves the value to where p points from the centre and retargets the
 // needle; the spring, not the pointer, decides where it is drawn.
 func (d *dial) set(p ggui.Point) {
-	c := ggui.Pt(d.rect.Origin.X+d.rect.Size.W/2, d.rect.Origin.Y+d.rect.Size.H/2)
+	c := d.rect.Center()
 	a := math.Atan2(p.Y-c.Y, p.X-c.X)/math.Pi - 0.75 // turns past 7 o'clock
 	for a < 0 {
 		a += 2

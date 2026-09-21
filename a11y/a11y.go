@@ -141,7 +141,6 @@ type Bridge struct {
 	// touches it, so it needs neither the lock nor the atomic.
 	prev *axFrame
 	act  func(NodeID, Action)
-	run  func() bool
 
 	mu    sync.Mutex
 	elems axElems
@@ -152,24 +151,22 @@ type Bridge struct {
 // none before Run. act is what an assistive technology's request to press or
 // focus something ends up calling; the bridge takes the function rather than
 // the App so that nothing here has to know what an App is.
-func (b *Bridge) Start(act func(NodeID, Action), mode Mode, running func() bool) {
+func (b *Bridge) Start(act func(NodeID, Action), mode Mode) {
 	b.mode = mode
-	b.run = running
 	if mode == Off {
 		return
 	}
 	b.plat = newAXPlatform()
 	if b.plat != nil {
 		b.act = act
-		axAttach(b)
+		current.Store(b)
 	}
 }
 
-// running reports whether the app's frame loop has started, which is when
-// the platform half has a window to attach to. The bridge is told rather
-// than asking, so that nothing here depends on the package that runs the
-// loop.
-func (b *Bridge) running() bool { return b.run != nil && b.run() }
+// current is the bridge the platform half answers from. It is package-level
+// because the callbacks a platform registers have nowhere to carry a
+// receiver.
+var current atomic.Pointer[Bridge]
 
 // publish makes t the tree every query is answered from, retires the
 // elements of the nodes that are no longer in it, and hands the platform
@@ -364,13 +361,6 @@ func (e *axElems) keyOf(handle int64) (axKey, bool) {
 		return axKey{}, false
 	}
 	return s.key, true
-}
-
-// handleOf returns the handle held for a key, for tests and for the
-// notification flush, which speaks in keys and must end in elements.
-func (e *axElems) handleOf(key axKey) (int64, bool) {
-	h, ok := e.byKey[key]
-	return h, ok
 }
 
 // sweep retires every element whose node is not in live and returns them
@@ -603,6 +593,7 @@ const (
 	axSetValue
 	axSetFocus
 	axSetSelection
+	axCollapse
 )
 
 // axActOf is the ggui action an AppKit action asks for. Confirm is a press:
@@ -619,6 +610,8 @@ func axActOf(a axAct) ActionSet {
 		return ActionDecrement
 	case axShowMenu:
 		return ActionExpand
+	case axCollapse:
+		return ActionCollapse
 	case axPick:
 		return ActionSelect
 	case axSetValue:
@@ -795,8 +788,3 @@ func RectForRange(n SemNode, loc, length int) Rect {
 // button has no characters, and being asked for them would be answered with
 // the emptiness of a field rather than with nothing.
 func axTextual(n Node) bool { return n.Role == RoleTextField }
-
-// theBridge is the bridge the platform half answers from, whichever
-// platform this is. The platform files each keep their own pointer to it,
-// because the callbacks they register have nowhere to carry a receiver.
-func theBridge() *Bridge { return axCurrent() }

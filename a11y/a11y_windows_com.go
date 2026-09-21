@@ -31,7 +31,6 @@ const (
 	ePointer               = 0x80004003
 	eFail                  = 0x80004005
 	uiaElementNotAvailable = 0x80040201
-	uiaNotSupported        = 0x80040204
 	uiaInvalidOperation    = 0x80131509
 )
 
@@ -131,7 +130,7 @@ func selfOf(this uintptr) (*winObj, *Bridge, SemNode, bool) {
 	if !ok {
 		return nil, nil, SemNode{}, false
 	}
-	b := theWinAX.Load()
+	b := current.Load()
 	if b == nil {
 		return o, nil, SemNode{}, false
 	}
@@ -257,7 +256,7 @@ func (o *winObj) offers(k int) bool {
 	if root {
 		return false
 	}
-	b := theWinAX.Load()
+	b := current.Load()
 	if b == nil {
 		return false
 	}
@@ -273,19 +272,14 @@ func (o *winObj) offers(k int) bool {
 // same allocator UIA frees it with. An empty string still gets a BSTR,
 // since a property that is present but blank is not the same as absent.
 func winStr(s string) uintptr {
-	u := utf16OrEmpty(s)
-	p, _, _ := procSysAllocString.Call(uintptr(unsafe.Pointer(&u[0])))
-	return p
-}
-
-// utf16OrEmpty is UTF-16 with a terminator, never a zero-length slice, so
-// that taking the address of the first element is always allowed.
-func utf16OrEmpty(s string) []uint16 {
-	u, err := windows.UTF16FromString(s)
-	if err != nil || len(u) == 0 {
-		return []uint16{0}
+	u, err := windows.UTF16PtrFromString(s)
+	if err != nil {
+		// A NUL inside the string: hand over the empty string rather
+		// than a truncated one.
+		u = new(uint16)
 	}
-	return u
+	p, _, _ := procSysAllocString.Call(uintptr(unsafe.Pointer(u)))
+	return p
 }
 
 // winVariant is a VARIANT as the operating system lays one out. The union
@@ -389,19 +383,19 @@ func buildVtables() {
 	vtbls[ifValue] = table(
 		syscall.NewCallback(winValueSetValue),
 		syscall.NewCallback(winValueGetValue),
-		syscall.NewCallback(winValueIsReadOnly),
+		syscall.NewCallback(winIsReadOnly),
 	)
 	vtbls[ifRangeValue] = table(
 		winRangeSetValueEntry(),
 		syscall.NewCallback(winRangeGetValue),
-		syscall.NewCallback(winRangeIsReadOnly),
+		syscall.NewCallback(winIsReadOnly),
 		syscall.NewCallback(winRangeMaximum),
 		syscall.NewCallback(winRangeMinimum),
 		syscall.NewCallback(winRangeLargeChange),
 		syscall.NewCallback(winRangeSmallChange),
 	)
 	vtbls[ifToggle] = table(
-		syscall.NewCallback(winToggle),
+		syscall.NewCallback(winInvoke),
 		syscall.NewCallback(winToggleState),
 	)
 	vtbls[ifExpandCollapse] = table(
@@ -436,7 +430,6 @@ var (
 	procGetClassNameW     = dllUser32.NewProc("GetClassNameW")
 	procIsWindowVisible   = dllUser32.NewProc("IsWindowVisible")
 	procClientToScreen    = dllUser32.NewProc("ClientToScreen")
-	procScreenToClient    = dllUser32.NewProc("ScreenToClient")
 	procGetDpiForWindow   = dllUser32.NewProc("GetDpiForWindow")
 	procGetClientRect     = dllUser32.NewProc("GetClientRect")
 

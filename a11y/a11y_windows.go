@@ -26,14 +26,12 @@ import (
 // and the answers all come from the published frame, which is built to be
 // read from anywhere.
 
-// theWinAX is the bridge a provider method answers from, and winRoot and
-// winHWND are what the window procedure needs while answering
-// WM_GETOBJECT. They are package-level because a COM method and a window
-// procedure are plain C callbacks with nowhere to carry a receiver.
+// winRoot and winHWND are what the window procedure needs while answering
+// WM_GETOBJECT. They are package-level because a window procedure is a
+// plain C callback with nowhere to carry a receiver.
 var (
-	theWinAX atomic.Pointer[Bridge]
-	winRoot  atomic.Uintptr
-	winHWND  atomic.Uintptr
+	winRoot atomic.Uintptr
+	winHWND atomic.Uintptr
 )
 
 // Window messages, from winuser.h.
@@ -61,18 +59,11 @@ type windowsAX struct{}
 // newAXPlatform returns the UI Automation bridge.
 func newAXPlatform() axPlatform { return &windowsAX{} }
 
-// axAttach gives the platform half the bridge every provider method
-// answers from.
-func axAttach(b *Bridge) { theWinAX.Store(b) }
-
 // active reports whether any client is listening, and takes the chance to
 // find the window and subclass it, which is work only the thread that owns
 // the window may do. It is asked once a second, so the hop costs nothing,
 // and it keeps trying until the window exists.
 func (windowsAX) active() bool {
-	if b := theBridge(); b == nil || !b.running() {
-		return false
-	}
 	if winHWND.Load() == 0 {
 		ebiten.RunOnMainThread(winAttach)
 		if winHWND.Load() == 0 {
@@ -207,7 +198,7 @@ func (windowsAX) release(elems []uintptr) {
 // publish holds no lock across this call, so a re-entrant query that wants
 // the element cache gets it.
 func (windowsAX) notify(notes []axNote) {
-	b := theWinAX.Load()
+	b := current.Load()
 	if b == nil || winHWND.Load() == 0 {
 		return
 	}
@@ -287,13 +278,13 @@ func winPostValue(b *Bridge, el uintptr, k axKey) {
 	var old, fresh winVariant
 	prop := uintptr(uiaNameProperty)
 	switch {
-	case n.Checked != TriNone:
+	case winPattern(n.Node, ifToggle):
 		prop = uiaToggleToggleStateProperty
 		varI4(&fresh, winToggleOf(n.Node))
-	case n.Role == RoleSlider || n.Role == RoleProgress:
+	case winPattern(n.Node, ifRangeValue):
 		prop = uiaRangeValueValueProperty
 		varR8(&fresh, n.Now)
-	case n.Role == RoleTextField || n.Role == RoleSelect || n.Role == RoleCombobox:
+	case winPattern(n.Node, ifValue):
 		prop = uiaValueValueProperty
 		varStr(&fresh, n.Value)
 	default:
@@ -323,5 +314,14 @@ func winToggleOf(n Node) int32 {
 	return uiaToggleOff
 }
 
-// axCurrent is the bridge this platform answers from.
-func axCurrent() *Bridge { return theWinAX.Load() }
+// winExpandStateOf is the ExpandCollapseState an expandable node reports,
+// and a leaf for one that is not.
+func winExpandStateOf(n Node) int32 {
+	switch {
+	case n.Expanded == nil:
+		return uiaLeafNode
+	case *n.Expanded:
+		return uiaExpanded
+	}
+	return uiaCollapsed
+}

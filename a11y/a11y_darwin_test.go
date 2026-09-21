@@ -19,8 +19,8 @@ func TestAXEmptyEditorValue(t *testing.T) {
 	defer pool.Send(objc.RegisterName("drain"))
 
 	b := &Bridge{plat: &darwinAX{}}
-	previous := theAX.Swap(b)
-	defer theAX.Store(previous)
+	previous := current.Swap(b)
+	defer current.Store(previous)
 
 	for _, tc := range []struct {
 		name    string
