@@ -121,6 +121,3 @@ func (c *inspectorPanelCache) draw(dst *Canvas) {
 
 // release frees the panel cache; App calls it when the app closes.
 func (in *inspector) release() { in.cache.release() }
-
-// hide drops the panel rect so a closed inspector intercepts no input.
-func (in *inspector) hide() { in.panel = Rect{} }

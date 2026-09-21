@@ -20,7 +20,8 @@ tasks:
     desc: Build all packages, with and without the inspector
     cmds:
       - '"{{.GO}}" build ./...'
-      - '"{{.GO}}" build -tags ggui_inspector ./...'
+      # Only the root package has tagged files, so the second pass is scoped to it.
+      - '"{{.GO}}" build -tags ggui_inspector .'
       - '"{{.GO}}" build -C examples/sqlite ./...'
 
   test:
@@ -30,7 +31,7 @@ tasks:
     # stub keeps an app running without it.
     cmds:
       - '"{{.GO}}" test ./...'
-      - '"{{.GO}}" test -tags ggui_inspector ./...'
+      - '"{{.GO}}" test -tags ggui_inspector .'
       - '"{{.GO}}" test -C examples/sqlite ./...'
 
   bench:
@@ -44,7 +45,7 @@ tasks:
     desc: Run Go static checks
     cmds:
       - '"{{.GO}}" vet ./...'
-      - '"{{.GO}}" vet -tags ggui_inspector ./...'
+      - '"{{.GO}}" vet -tags ggui_inspector .'
       - '"{{.GO}}" vet -C examples/sqlite ./...'
 
   vet:windows:
@@ -57,7 +58,8 @@ tasks:
     # memory it points at was never Go's to lose track of.
     cmds:
       - 'GOOS=windows GOARCH=amd64 "{{.GO}}" vet -unsafeptr=false ./...'
-      - 'GOOS=windows GOARCH=amd64 "{{.GO}}" vet -unsafeptr=false -tags ggui_inspector ./...'
+      - 'GOOS=windows GOARCH=amd64 "{{.GO}}" vet -unsafeptr=false -tags ggui_inspector .'
+      - 'GOOS=windows GOARCH=arm64 "{{.GO}}" vet -unsafeptr=false -tags ggui_inspector .'
       - 'GOOS=windows GOARCH=arm64 "{{.GO}}" vet -unsafeptr=false ./...'
       - 'GOOS=windows GOARCH=amd64 "{{.GO}}" test -c -o /dev/null ./a11y'
       - 'GOOS=windows GOARCH=arm64 "{{.GO}}" test -c -o /dev/null ./a11y'

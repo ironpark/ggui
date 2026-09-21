@@ -8,11 +8,11 @@ import (
 	"strings"
 )
 
-// inspectKey prefers the widget's explicit identity, then its instance and
-// structural path. Geometry is only a fallback for traces without a widget.
 // inspectorEnabled reports whether this build contains the inspector.
 const inspectorEnabled = true
 
+// inspectKey prefers the widget's explicit identity, then its instance and
+// structural path. Geometry is only a fallback for traces without a widget.
 type inspectKey struct {
 	name   string
 	depth  int
@@ -194,6 +194,9 @@ func (in *inspector) apply(o InspectorOptions) {
 // reset forgets the session when the inspector closes: borrowed frame data,
 // selection, folds, scratch buffers and the panel image. Docking, outlines,
 // sizes and the chosen tab persist to the next open.
+// hide drops the panel rect so a closed inspector intercepts no input.
+func (in *inspector) hide() { in.panel = Rect{} }
+
 func (in *inspector) reset() {
 	in.cache.release()
 	*in = inspector{dock: in.dock, outlines: in.outlines, width: in.width, height: in.height, split: in.split, tab: in.tab}

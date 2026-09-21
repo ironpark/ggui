@@ -12,7 +12,6 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
-	"github.com/hajimehoshi/ebiten/v2/vector"
 )
 
 func fitText(dst *Canvas, face text.Face, s string, width float64) string {
@@ -356,22 +355,19 @@ func (in *inspector) paintTree(dst *Canvas, face text.Face, pal inspectPalette, 
 	in.treeThumb = inspectScrollbar(dst, r, in.treeContent, in.scroll, pal)
 }
 func triangle(dst *Canvas, c Point, folded bool, col color.Color) {
-	if dst == nil || dst.Image == nil {
-		return
-	}
-	var p vector.Path
+	var p Path
 	const s = 3.0
 	if folded {
-		p.MoveTo(dst.Px(c.X-s/2), dst.Px(c.Y-s))
-		p.LineTo(dst.Px(c.X+s/2+1), dst.Px(c.Y))
-		p.LineTo(dst.Px(c.X-s/2), dst.Px(c.Y+s))
+		p.MoveTo(c.X-s/2, c.Y-s)
+		p.LineTo(c.X+s/2+1, c.Y)
+		p.LineTo(c.X-s/2, c.Y+s)
 	} else {
-		p.MoveTo(dst.Px(c.X-s), dst.Px(c.Y-s/2))
-		p.LineTo(dst.Px(c.X+s), dst.Px(c.Y-s/2))
-		p.LineTo(dst.Px(c.X), dst.Px(c.Y+s/2+1))
+		p.MoveTo(c.X-s, c.Y-s/2)
+		p.LineTo(c.X+s, c.Y-s/2)
+		p.LineTo(c.X, c.Y+s/2+1)
 	}
 	p.Close()
-	fillPath(dst, &p, col)
+	dst.FillPath(&p, col)
 }
 func inspectScrollbar(dst *Canvas, r Rect, content, scroll float64, pal inspectPalette) Rect {
 	if r.Empty() || content <= r.Size.H {

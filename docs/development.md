@@ -124,5 +124,5 @@ those guides as historical measurements; rerun them on your target hardware.
 | Accessibility and semantics | [a11y.go](../a11y.go), [a11y_darwin.go](../a11y_darwin.go), [semantics.go](../semantics.go) |
 | Styling and animation | [style.go](../style.go), [anim.go](../anim.go), [transition.go](../transition.go) — see [Styling and themes](styling.md) |
 | Overlays and images | [popup.go](../popup.go), [tooltip.go](../tooltip.go), [image.go](../image.go) |
-| Testing and diagnostics | [probe.go](../probe.go), [inspector.go](../inspector.go) (build tag `ggui_inspector`; [inspector_stub.go](../inspector_stub.go) otherwise), [cache.go](../cache.go) |
+| Testing and diagnostics | [probe.go](../probe.go), [inspector.go](../inspector.go) (build tag `ggui_inspector`; [inspector_disabled.go](../inspector_disabled.go) otherwise), [cache.go](../cache.go) |
 | Runnable applications | [examples/](../examples/) |
