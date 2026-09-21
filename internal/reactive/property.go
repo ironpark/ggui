@@ -1,4 +1,4 @@
-package ggui
+package reactive
 
 import "github.com/ironpark/ggui/internal/property"
 
@@ -6,14 +6,14 @@ import "github.com/ironpark/ggui/internal/property"
 // Keeping this separate from signals avoids owning effects for configuration.
 type propertySource struct{ owner *property.Owner }
 
-func (s propertySource) layoutVersion() uint64 { return s.owner.Version() }
+func (s propertySource) LayoutVersion() uint64 { return s.owner.Version() }
 func init() {
 	property.OnRead = func(owner *property.Owner) {
-		if measuring != nil {
-			measuring(propertySource{owner}, owner.Version())
+		if Measuring != nil {
+			Measuring(propertySource{owner}, owner.Version())
 		}
 	}
-	property.OnChange = requestLayout
+	property.OnChange = RequestLayout
 }
 
 type constant[T any] struct{ value T }

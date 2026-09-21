@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"github.com/ironpark/ggui/internal/reactive"
 	"testing"
 	"time"
 )
@@ -325,7 +326,7 @@ func TestTextInputMultilineWrapsGrowsAndNavigates(t *testing.T) {
 	}
 	long := "the quick brown fox jumps over the lazy dog and keeps on running far away"
 	w.value.Set(long)
-	effects.flush() // the editor follows its binding through an effect
+	reactive.Flush() // the editor follows its binding through an effect
 	grown := w.Layout(Loose(Sz(200, Unbounded)), Env{})
 	spans := w.spans(long)
 	if len(spans) < 3 || grown.H != w.linesHeight(len(spans)) {

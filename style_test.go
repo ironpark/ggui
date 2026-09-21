@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"github.com/ironpark/ggui/internal/reactive"
 	"image/color"
 	"testing"
 )
@@ -113,10 +114,10 @@ func TestSetThemeRebuildsReaders(t *testing.T) {
 	old := Untrack(theme.Get)
 	defer SetTheme(old)
 	builds := 0
-	dispose := observe(func() { builds++; _ = UseTheme().Primary })
+	dispose := reactive.Observe(func() { builds++; _ = UseTheme().Primary })
 	defer dispose()
 	SetTheme(DarkTheme())
-	effects.flush()
+	reactive.Flush()
 	if builds != 2 {
 		t.Fatalf("builds = %d after SetTheme, want 2", builds)
 	}

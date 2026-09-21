@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"github.com/ironpark/ggui/internal/reactive"
 	"iter"
 	"os"
 	"path/filepath"
@@ -26,10 +27,10 @@ var fontGeneration uint64
 // emoji substitution; SetEmojiFont(SystemEmojiFont()) restores system rendering.
 // Like SetTheme, call on the UI thread or before creating the app.
 func SetEmojiFont(f *Font) {
-	checkUIThread("SetEmojiFont")
+	reactive.CheckUIThread("SetEmojiFont")
 	emojiFont, emojiFontSet = f, true
 	fontGeneration++
-	requestLayout()
+	reactive.RequestLayout()
 }
 
 // SystemEmojiFont finds the platform color emoji font once, or returns nil.

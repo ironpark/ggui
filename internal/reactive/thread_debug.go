@@ -1,6 +1,6 @@
 //go:build ggui_debug
 
-package ggui
+package reactive
 
 import (
 	"bytes"
@@ -37,19 +37,19 @@ func goID() int64 {
 	return 0
 }
 
-// markUIThread records the goroutine frames run on. Called at the top of
+// MarkUIThread records the goroutine frames run on. Called at the top of
 // every frame, so it follows a runtime that moves them.
-func markUIThread() { uiGoroutine.Store(goID()) }
+func MarkUIThread() { uiGoroutine.Store(goID()) }
 
-// unmarkUIThread disarms the check when the app closes, so a process that
+// UnmarkUIThread disarms the check when the app closes, so a process that
 // outlives its window, or a test that opens a second app, starts clean.
-func unmarkUIThread() { uiGoroutine.Store(0) }
+func UnmarkUIThread() { uiGoroutine.Store(0) }
 
-// checkUIThread panics when op is happening on a goroutine that is not the
+// CheckUIThread panics when op is happening on a goroutine that is not the
 // one running frames. Before the first frame there is nothing to compare
 // with, and the writes a main function makes while building its model are
 // on the goroutine that will run them.
-func checkUIThread(op string) {
+func CheckUIThread(op string) {
 	ui := uiGoroutine.Load()
 	if ui == 0 || ui == goID() {
 		return

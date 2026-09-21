@@ -3,6 +3,7 @@ package ggui
 import (
 	"bytes"
 	"fmt"
+	"github.com/ironpark/ggui/internal/reactive"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -71,20 +72,20 @@ func LoadFontFile(path string) (*Font, error) {
 // Fallback appends fonts to draw the glyphs f lacks, in order of
 // preference. A Font with none set falls back to SystemFonts.
 func (f *Font) Fallback(fonts ...*Font) *Font {
-	checkUIThread("Font.Fallback")
+	reactive.CheckUIThread("Font.Fallback")
 	f.fallbacks = append(f.fallbacks, fonts...)
 	f.faces = nil
 	fontGeneration++
-	requestLayout()
+	reactive.RequestLayout()
 	return f
 }
 
 // NoFallback draws only f's own glyphs, with no system fonts behind it.
 func (f *Font) NoFallback() *Font {
-	checkUIThread("Font.NoFallback")
+	reactive.CheckUIThread("Font.NoFallback")
 	f.noFallback, f.faces = true, nil
 	fontGeneration++
-	requestLayout()
+	reactive.RequestLayout()
 	return f
 }
 
@@ -184,10 +185,10 @@ var defaultFont *Font
 // default is Go Regular, which covers Latin, Greek and Cyrillic; load a font
 // with the glyphs you need for anything else.
 func SetDefaultFont(f *Font) {
-	checkUIThread("SetDefaultFont")
+	reactive.CheckUIThread("SetDefaultFont")
 	defaultFont = f
 	fontGeneration++
-	requestLayout()
+	reactive.RequestLayout()
 }
 
 // fallbackFont returns the font Text uses when none is set, parsing the

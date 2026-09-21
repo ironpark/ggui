@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"github.com/ironpark/ggui/internal/reactive"
 	"image/color"
 
 	"github.com/ironpark/ggui/a11y"
@@ -117,7 +118,7 @@ func (s *Interactive) IsInert() bool { s.properties.Read(); return s.inert.Get()
 
 // AutoKey takes the identity the keyed component being built gives the
 // control, if any; a constructor calls it. SetKey overrides it.
-func (s *Interactive) AutoKey() { s.auto = autoID() }
+func (s *Interactive) AutoKey() { s.auto = reactive.AutoID() }
 
 // Semantics implements Semantic.
 func (s *Interactive) Semantics() (Role, string) {

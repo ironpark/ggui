@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"github.com/ironpark/ggui/internal/reactive"
 	"slices"
 	"strconv"
 	"strings"
@@ -21,7 +22,7 @@ func TestSignalGetSet(t *testing.T) {
 func TestEffectRerunsOnChange(t *testing.T) {
 	s := State("a")
 	var seen []string
-	dispose := observe(func() { seen = append(seen, s.Get()) })
+	dispose := reactive.Observe(func() { seen = append(seen, s.Get()) })
 	defer dispose()
 
 	if len(seen) != 1 || seen[0] != "a" {
@@ -29,15 +30,15 @@ func TestEffectRerunsOnChange(t *testing.T) {
 	}
 
 	s.Set("b")
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	if len(seen) != 2 || seen[1] != "b" {
 		t.Fatalf("effect did not re-run after Set: %v", seen)
 	}
 
 	// A flush with nothing dirty must not re-run the effect.
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	if len(seen) != 2 {
 		t.Fatalf("effect re-ran while clean: %v", seen)
 	}
@@ -47,14 +48,14 @@ func TestIdleEffectFlushDoesNotAllocate(t *testing.T) {
 	s := State(0)
 	dispose := Root(func() {
 		for range 100 {
-			observe(func() { s.Get() })
+			reactive.Observe(func() { s.Get() })
 		}
 	})
 	defer dispose()
-	if !effects.flush() {
+	if !reactive.Flush() {
 		t.Fatal("initial flush did not settle")
 	}
-	if got := testing.AllocsPerRun(100, func() { effects.flush() }); got != 0 {
+	if got := testing.AllocsPerRun(100, func() { reactive.Flush() }); got != 0 {
 		t.Fatalf("idle flush allocated %g times", got)
 	}
 }
@@ -65,22 +66,22 @@ func TestEffectFlushIncludesCleanupWrites(t *testing.T) {
 	dispose := Root(func() {
 		// The observer has already run when a later effect's cleanup
 		// writes, so settling requires another pass in creation order.
-		observe(func() { seen = append(seen, result.Get()) })
-		observe(func() {
+		reactive.Observe(func() { seen = append(seen, result.Get()) })
+		reactive.Observe(func() {
 			trigger.Get()
 			OnCleanup(func() { result.Set(Untrack(trigger.Get)) })
 		})
 	})
 	defer dispose()
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	for _, v := range []int{1, 2} {
 		trigger.Set(v)
-		if !effects.flush() {
+		if !reactive.Flush() {
 			t.Fatal("cleanup write did not settle")
 		}
-		effects.flush()
-		effects.flushUsers(nil)
+		reactive.Flush()
+		reactive.FlushUsers(nil)
 	}
 	if !slices.Equal(seen, []int{0, 1, 2}) {
 		t.Fatalf("observer saw %v, want [0 1 2]", seen)
@@ -91,12 +92,12 @@ func TestEffectFlushIncludesWritesAfterNestedFlush(t *testing.T) {
 	trigger, before, after := State(0), State(0), State(0)
 	var seenBefore, seenAfter []int
 	dispose := Root(func() {
-		observe(func() { seenBefore = append(seenBefore, before.Get()) })
-		observe(func() { seenAfter = append(seenAfter, after.Get()) })
-		observe(func() {
+		reactive.Observe(func() { seenBefore = append(seenBefore, before.Get()) })
+		reactive.Observe(func() { seenAfter = append(seenAfter, after.Get()) })
+		reactive.Observe(func() {
 			if v := trigger.Get(); v != 0 {
 				before.Set(v)
-				if !effects.flush() {
+				if !reactive.Flush() {
 					t.Fatal("nested flush did not settle")
 				}
 				after.Set(v)
@@ -104,10 +105,10 @@ func TestEffectFlushIncludesWritesAfterNestedFlush(t *testing.T) {
 		})
 	})
 	defer dispose()
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	trigger.Set(1)
-	if !effects.flush() {
+	if !reactive.Flush() {
 		t.Fatal("outer flush did not settle")
 	}
 	if !slices.Equal(seenBefore, []int{0, 1}) || !slices.Equal(seenAfter, []int{0, 1}) {
@@ -116,14 +117,14 @@ func TestEffectFlushIncludesWritesAfterNestedFlush(t *testing.T) {
 }
 
 func TestEffectCycleIsNotRecordedAsSettled(t *testing.T) {
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	n := State(0)
-	dispose := observe(func() { n.Set(n.Get() + 1) })
+	dispose := reactive.Observe(func() { n.Set(n.Get() + 1) })
 	defer dispose()
 	for range 2 {
 		before := Untrack(n.Get)
-		if effects.flush() {
+		if reactive.Flush() {
 			t.Fatal("cyclic effect was considered settled")
 		}
 		if Untrack(n.Get) <= before {
@@ -135,12 +136,12 @@ func TestEffectCycleIsNotRecordedAsSettled(t *testing.T) {
 func TestEffectDisposeStopsUpdates(t *testing.T) {
 	s := State(0)
 	runs := 0
-	dispose := observe(func() { s.Get(); runs++ })
+	dispose := reactive.Observe(func() { s.Get(); runs++ })
 	dispose()
 
 	s.Set(1)
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	if runs != 1 {
 		t.Fatalf("runs = %d, want 1 after dispose", runs)
 	}
@@ -150,25 +151,25 @@ func TestUntrackedReadDoesNotSubscribe(t *testing.T) {
 	s := State(0)
 	s.Get() // outside any effect
 	s.Set(1)
-	effects.flush()
-	effects.flushUsers(nil) // must not panic on a nil subscriber
+	reactive.Flush()
+	reactive.FlushUsers(nil) // must not panic on a nil subscriber
 }
 
 func TestSetSkipsEqualValue(t *testing.T) {
 	s := State(1)
 	runs := 0
-	dispose := observe(func() { s.Get(); runs++ })
+	dispose := reactive.Observe(func() { s.Get(); runs++ })
 	defer dispose()
 
 	s.Set(1)
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	if runs != 1 {
 		t.Fatalf("runs = %d, want 1 after writing an equal value", runs)
 	}
 	s.Set(2)
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	if runs != 2 {
 		t.Fatalf("runs = %d, want 2 after writing a new value", runs)
 	}
@@ -177,12 +178,12 @@ func TestSetSkipsEqualValue(t *testing.T) {
 func TestSetNotifiesForUncomparableValue(t *testing.T) {
 	s := State([]int{1})
 	runs := 0
-	dispose := observe(func() { s.Get(); runs++ })
+	dispose := reactive.Observe(func() { s.Get(); runs++ })
 	defer dispose()
 
 	s.Set([]int{1})
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	if runs != 2 {
 		t.Fatalf("runs = %d, want 2: slices have no default equality", runs)
 	}
@@ -191,12 +192,12 @@ func TestSetNotifiesForUncomparableValue(t *testing.T) {
 func TestWithEqualOverridesComparison(t *testing.T) {
 	s := State([]int{1}).WithEqual(slices.Equal)
 	runs := 0
-	dispose := observe(func() { s.Get(); runs++ })
+	dispose := reactive.Observe(func() { s.Get(); runs++ })
 	defer dispose()
 
 	s.Set([]int{1})
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	if runs != 1 {
 		t.Fatalf("runs = %d, want 1 with a custom equality", runs)
 	}
@@ -211,8 +212,8 @@ func TestSignalMapDerivesValue(t *testing.T) {
 		t.Fatalf("Get() = %q, want %q", got, "20")
 	}
 	n.Set(3)
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	if got := label.Get(); got != "30" {
 		t.Fatalf("Get() = %q, want %q after Set", got, "30")
 	}
@@ -226,12 +227,12 @@ func TestMemoChainSettlesInOneFlush(t *testing.T) {
 	defer label.Dispose()
 
 	var seen []string
-	dispose := observe(func() { seen = append(seen, label.Get()) })
+	dispose := reactive.Observe(func() { seen = append(seen, label.Get()) })
 	defer dispose()
 
 	n.Set(21)
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	if len(seen) != 2 || seen[1] != "42" {
 		t.Fatalf("seen = %v, want the chain to settle in one flush", seen)
 	}
@@ -244,12 +245,12 @@ func TestMemoRecomputesOnlyWhenSourceChanges(t *testing.T) {
 	defer m.Dispose()
 
 	var seen []int
-	dispose := observe(func() { seen = append(seen, m.Get()) })
+	dispose := reactive.Observe(func() { seen = append(seen, m.Get()) })
 	defer dispose()
 
 	n.Set(3) // different source, same result: the reader must not re-run
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	if runs != 2 {
 		t.Fatalf("runs = %d, want 2 recomputes", runs)
 	}
@@ -265,8 +266,8 @@ func TestMemoDisposeStopsRecomputation(t *testing.T) {
 	m.Dispose()
 
 	n.Set(10)
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	if got := m.Get(); got != 2 {
 		t.Fatalf("Get() = %d, want the last value 2 after Dispose", got)
 	}
@@ -292,8 +293,8 @@ func TestCombineDerivesFromTwoSources(t *testing.T) {
 		t.Fatalf("Get() = %q, want %q", got, "xx")
 	}
 	b.Set("ab")
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	if got := joined.Get(); got != "abab" {
 		t.Fatalf("Get() = %q, want %q", got, "abab")
 	}
@@ -303,12 +304,12 @@ func TestWatchRunsOnChange(t *testing.T) {
 	s := State(0)
 	var seen []int
 	dispose := Root(func() { Watch(s, func(v int) { seen = append(seen, v) }) })
-	effects.flushUsers(nil)
+	reactive.FlushUsers(nil)
 	defer dispose()
 
 	s.Set(1)
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	if len(seen) != 2 || seen[0] != 0 || seen[1] != 1 {
 		t.Fatalf("seen = %v, want [0 1]", seen)
 	}
@@ -316,17 +317,17 @@ func TestWatchRunsOnChange(t *testing.T) {
 
 func TestSignalWritesAdvanceTheLayoutGeneration(t *testing.T) {
 	s := State(1)
-	before := layoutGen.Load()
+	before := reactive.LayoutGen()
 	s.Set(1)
-	if layoutGen.Load() != before {
+	if reactive.LayoutGen() != before {
 		t.Fatal("an equal write must not request layout")
 	}
 	s.Set(2)
-	if layoutGen.Load() != before+1 {
+	if reactive.LayoutGen() != before+1 {
 		t.Fatal("a write must request layout")
 	}
 	Invalidate(Env{})
-	if layoutGen.Load() != before+2 {
+	if reactive.LayoutGen() != before+2 {
 		t.Fatal("Invalidate must request layout")
 	}
 }
@@ -334,14 +335,14 @@ func TestSignalWritesAdvanceTheLayoutGeneration(t *testing.T) {
 func TestAppendAndRemoveOnSliceSignals(t *testing.T) {
 	s := State([]int{1, 2, 3})
 	runs := 0
-	dispose := observe(func() { s.Get(); runs++ })
+	dispose := reactive.Observe(func() { s.Get(); runs++ })
 	defer dispose()
 	Append(s, 4, 5)
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	Remove(s, func(n int) bool { return n%2 == 0 })
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	if got := Untrack(s.Get); len(got) != 3 || got[0] != 1 || got[1] != 3 || got[2] != 5 {
 		t.Fatalf("slice = %v, want [1 3 5]", got)
 	}
@@ -349,8 +350,8 @@ func TestAppendAndRemoveOnSliceSignals(t *testing.T) {
 		t.Fatalf("effect ran %d times, want 3 (initial, append, remove)", runs)
 	}
 	Remove(s, func(int) bool { return false })
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	if runs != 3 {
 		t.Fatalf("effect ran %d times after a Remove that matched nothing, want still 3", runs)
 	}
@@ -378,8 +379,8 @@ func TestReaderSeesNoPartialUpdate(t *testing.T) {
 	defer b.Dispose()
 
 	s.Set(1)
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	if len(seen) != 1 || seen[0] != [2]int{10, 100} {
 		t.Fatalf("watch saw %v, want one call with [10 100]", seen)
 	}
@@ -408,8 +409,8 @@ func TestReaderSeesNoPartialUpdateThroughChain(t *testing.T) {
 	defer far.Dispose()
 
 	s.Set(1)
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	if len(seen) != 1 || seen[0] != [2]int{10, 101} {
 		t.Fatalf("watch saw %v, want one call with [10 101]", seen)
 	}

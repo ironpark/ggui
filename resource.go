@@ -1,6 +1,10 @@
 package ggui
 
-import "context"
+import (
+	"context"
+
+	"github.com/ironpark/ggui/internal/reactive"
+)
 
 // AsyncStatus is the state of one asynchronous request.
 type AsyncStatus uint8
@@ -42,12 +46,12 @@ type ResourceValue[T any] struct {
 // it in an app/probe setup or a mounted Component. Mutable input references
 // must be copied by input before handing them to the worker.
 func Resource[I, T any](input func() I, load func(context.Context, I) (T, error), options ...ResourceOption[I]) *ResourceValue[T] {
-	checkUIThread("Resource")
-	owner := currentOwner()
-	if owner == nil || owner.loop == nil {
+	reactive.CheckUIThread("Resource")
+	owner := reactive.CurrentOwner()
+	if owner == nil || owner.Loop() == nil {
 		panic("ggui: Resource requires an app or mounted component owner")
 	}
-	opts := resourceOptions[I]{equal: comparableEqual[I]()}
+	opts := resourceOptions[I]{equal: reactive.ComparableEqual[I]()}
 	for _, option := range options {
 		option(&opts)
 	}
@@ -55,8 +59,8 @@ func Resource[I, T any](input func() I, load func(context.Context, I) (T, error)
 	r := &ResourceValue[T]{state: State(AsyncState[T]{Status: Pending}), reload: State(uint64(0))}
 	OnCleanup(func() { r.disposed = true })
 	var requestID uint64
-	var runner *effect
-	runner, _ = effectWith(func() {
+	var runner *reactive.Computation
+	runner, _ = reactive.EffectWith(func() {
 		value := source.Get()
 		r.reload.Get()
 		requestID++
@@ -68,12 +72,12 @@ func Resource[I, T any](input func() I, load func(context.Context, I) (T, error)
 			go func() {
 				value, err := load(ctx, value)
 				loopPost(owner)(func() {
-					if r.disposed || runner.disposed {
+					if r.disposed || runner.Disposed() {
 						return
 					}
 					// A model write can precede this posted result without a frame flush.
 					// Settle its input watcher first so that stale results cannot commit.
-					refresh(runner)
+					reactive.Refresh(runner)
 					if r.disposed || id != requestID || ctx.Err() != nil {
 						return
 					}
@@ -95,7 +99,7 @@ func (r *ResourceValue[T]) Get() AsyncState[T] { return r.state.Get() }
 
 // Reload starts a new request with the current input at the next update.
 func (r *ResourceValue[T]) Reload() {
-	checkUIThread("Resource.Reload")
+	reactive.CheckUIThread("Resource.Reload")
 	if !r.disposed {
 		r.reload.Update(func(n uint64) uint64 { return n + 1 })
 	}

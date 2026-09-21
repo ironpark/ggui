@@ -3,6 +3,7 @@ package ggui
 import (
 	"cmp"
 	"fmt"
+	"github.com/ironpark/ggui/internal/reactive"
 	"math"
 	"slices"
 	"time"
@@ -25,7 +26,7 @@ type EachWidget[T any, K comparable] struct {
 	build        func(EachItem[T]) Widget
 	retain       int // offscreen rows kept mounted with ItemExtent; 0 keeps all
 	frame        uint64
-	owner        *effect
+	owner        *reactive.Computation
 	items        []T
 	keys         []K
 	entries      map[K]*forEntry[T]
@@ -89,7 +90,7 @@ func each[T any, K comparable](items Readable[[]T], key func(int, T) K, build fu
 	f := &EachWidget[T, K]{key: key, build: build, entries: map[K]*forEntry[T]{}}
 	f.mount = Component(func() Widget {
 		f.mounted = true
-		f.owner = currentOwner()
+		f.owner = reactive.CurrentOwner()
 		OnCleanup(func() {
 			for _, e := range f.entries {
 				e.dispose()
@@ -104,7 +105,7 @@ func each[T any, K comparable](items Readable[[]T], key func(int, T) K, build fu
 			f.leaving = nil
 			f.leaveKeys = nil
 		})
-		observe(func() {
+		reactive.Observe(func() {
 			list := items.Get()
 			seen := make(map[K]bool, len(list))
 			keys := make([]K, len(list))
@@ -142,7 +143,7 @@ func each[T any, K comparable](items Readable[[]T], key func(int, T) K, build fu
 				f.emptyDispose, f.empty = nil, nil
 			}
 			if len(list) == 0 && f.emptyBuild != nil && f.emptyDispose == nil {
-				withOwner(f.owner, func() { f.emptyDispose = rootWith(new(int), "", func() { f.empty = f.emptyBuild() }) })
+				reactive.WithOwner(f.owner, func() { f.emptyDispose = reactive.RootWith(new(int), "", func() { f.empty = f.emptyBuild() }) })
 			}
 			f.items, f.keys, f.stale = list, keys, true
 			f.cache.invalidate()
@@ -243,8 +244,8 @@ func (f *EachWidget[T, K]) entry(i int) *forEntry[T] {
 	e := f.entries[k]
 	if e == nil {
 		e = &forEntry[T]{item: State(f.items[i]), position: State(i)}
-		withOwner(f.owner, func() {
-			e.dispose = rootWith(e, fmt.Sprint(k), func() {
+		reactive.WithOwner(f.owner, func() {
+			e.dispose = reactive.RootWith(e, fmt.Sprint(k), func() {
 				e.widget = f.build(EachItem[T]{Value: e.item, Index: e.position})
 				if f.transition != nil {
 					t := f.transition(e.widget)
@@ -354,7 +355,7 @@ func (f *EachWidget[T, K]) placeLeaving() {
 		f.childEntries = slices.Insert(f.childEntries, at, e)
 	}
 	if len(f.leaving) > 0 {
-		requestLayout()
+		reactive.RequestLayout()
 		f.cache.invalidate()
 	}
 }

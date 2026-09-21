@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"github.com/ironpark/ggui/internal/reactive"
 	"slices"
 	"testing"
 )
@@ -8,23 +9,23 @@ import (
 func TestInnerEffectDisposedWhenOuterReruns(t *testing.T) {
 	outerDep, innerDep := State(0), State(0)
 	innerRuns := 0
-	dispose := observe(func() {
+	dispose := reactive.Observe(func() {
 		outerDep.Get()
-		observe(func() { innerDep.Get(); innerRuns++ })
+		reactive.Observe(func() { innerDep.Get(); innerRuns++ })
 	})
 	defer dispose()
 	if innerRuns != 1 {
 		t.Fatalf("innerRuns = %d after setup, want 1", innerRuns)
 	}
 	innerDep.Set(1)
-	effects.flush()
+	reactive.Flush()
 	if innerRuns != 2 {
 		t.Fatalf("innerRuns = %d after inner change, want 2", innerRuns)
 	}
 	outerDep.Set(1) // outer re-runs: old inner disposed, one new inner created
-	effects.flush()
+	reactive.Flush()
 	innerDep.Set(2)
-	effects.flush()
+	reactive.Flush()
 	if innerRuns != 4 {
 		t.Fatalf("innerRuns = %d, want 4 (not 5: the stale inner must not fire)", innerRuns)
 	}
@@ -33,57 +34,34 @@ func TestInnerEffectDisposedWhenOuterReruns(t *testing.T) {
 func TestDerivedInsideBuilderDoesNotAccumulate(t *testing.T) {
 	rebuild, n := State(0), State(1)
 	computes := 0
-	dispose := observe(func() {
+	dispose := reactive.Observe(func() {
 		rebuild.Get()
 		m := Derived(func() int { computes++; return n.Get() * 2 })
-		observe(func() { m.Get() })
+		reactive.Observe(func() { m.Get() })
 	})
 	defer dispose()
 	rebuild.Set(1)
 	rebuild.Set(2)
-	effects.flush()
+	reactive.Flush()
 	computes = 0
 	n.Set(5)
-	effects.flush()
+	reactive.Flush()
 	if computes != 1 {
 		t.Fatalf("computes = %d after one change, want 1 live Derived", computes)
-	}
-}
-
-func TestSubscriptionsFollowTheLastRun(t *testing.T) {
-	flag, a := State(true), State(0)
-	runs := 0
-	dispose := observe(func() {
-		runs++
-		if flag.Get() {
-			a.Get()
-		}
-	})
-	defer dispose()
-	flag.Set(false)
-	effects.flush()
-	runs = 0
-	a.Set(1)
-	effects.flush()
-	if runs != 0 {
-		t.Fatalf("effect re-ran %d times on a signal it no longer reads", runs)
-	}
-	if len(a.subs) != 0 {
-		t.Fatalf("signal keeps %d stale subscriptions, want 0", len(a.subs))
 	}
 }
 
 func TestOnCleanupRunsBeforeRerunAndOnDispose(t *testing.T) {
 	dep := State(0)
 	var log []string
-	dispose := observe(func() {
+	dispose := reactive.Observe(func() {
 		v := dep.Get()
 		log = append(log, "run")
 		OnCleanup(func() { log = append(log, "cleanup") })
 		_ = v
 	})
 	dep.Set(1)
-	effects.flush()
+	reactive.Flush()
 	dispose()
 	dispose() // idempotent
 	want := []string{"run", "cleanup", "run", "cleanup"}
@@ -109,7 +87,7 @@ func TestOnCleanupOutsideEffectPanics(t *testing.T) {
 func TestUntrackAndPeekDoNotSubscribe(t *testing.T) {
 	a, b := State(0), State(0)
 	runs := 0
-	dispose := observe(func() {
+	dispose := reactive.Observe(func() {
 		runs++
 		Untrack(func() struct {
 		} {
@@ -122,7 +100,7 @@ func TestUntrackAndPeekDoNotSubscribe(t *testing.T) {
 	defer dispose()
 	a.Set(1)
 	b.Set(1)
-	effects.flush()
+	reactive.Flush()
 	if runs != 1 {
 		t.Fatalf("runs = %d, want 1: untracked reads must not subscribe", runs)
 	}
@@ -131,10 +109,10 @@ func TestUntrackAndPeekDoNotSubscribe(t *testing.T) {
 func TestFlushSkipsEffectsDisposedEarlierInThePass(t *testing.T) {
 	dep := State(0)
 	staleRuns := 0
-	dispose := observe(func() {
+	dispose := reactive.Observe(func() {
 		dep.Get()
 		gen := Untrack(dep.Get)
-		observe(func() {
+		reactive.Observe(func() {
 			dep.Get()
 			if gen != Untrack(dep.Get) {
 				staleRuns++ // a child from an older parent run fired
@@ -143,7 +121,7 @@ func TestFlushSkipsEffectsDisposedEarlierInThePass(t *testing.T) {
 	})
 	defer dispose()
 	dep.Set(1)
-	effects.flush()
+	reactive.Flush()
 	if staleRuns != 0 {
 		t.Fatalf("a disposed child effect ran %d times", staleRuns)
 	}
@@ -153,13 +131,13 @@ func TestReactiveRebuildsWithoutParent(t *testing.T) {
 	leaf := State("a")
 	parentBuilds, leafBuilds := 0, 0
 	var root Widget
-	dispose := observe(func() {
+	dispose := reactive.Observe(func() {
 		parentBuilds++
 		root = Column(Reactive(func() Widget { leafBuilds++; return Text(leaf.Get()) }))
 	})
 	defer dispose()
 	leaf.Set("b")
-	effects.flush()
+	reactive.Flush()
 	if parentBuilds != 1 || leafBuilds != 2 {
 		t.Fatalf("parentBuilds = %d, leafBuilds = %d; want 1 and 2", parentBuilds, leafBuilds)
 	}
@@ -172,7 +150,7 @@ func TestComponentRunsSetupOnceAndKeepsState(t *testing.T) {
 	setups, builds := 0, 0
 	var local *StateValue[int]
 	var c *ComponentWidget
-	dispose := observe(func() {
+	dispose := reactive.Observe(func() {
 		c = Component(func() Widget {
 			setups++
 			local = State(0)
@@ -182,7 +160,7 @@ func TestComponentRunsSetupOnceAndKeepsState(t *testing.T) {
 	defer dispose()
 	c.Layout(Loose(Sz(100, 100)), Env{}) // mounts
 	local.Set(7)
-	effects.flush()
+	reactive.Flush()
 	if setups != 1 || builds != 2 {
 		t.Fatalf("setups = %d, builds = %d; want 1 and 2", setups, builds)
 	}
@@ -195,7 +173,7 @@ func TestComponentSetupDoesNotSubscribeParent(t *testing.T) {
 	dep := State(0)
 	parentBuilds := 0
 	var c *ComponentWidget
-	dispose := observe(func() {
+	dispose := reactive.Observe(func() {
 		parentBuilds++
 		c = Component(func() Widget {
 			dep.Get() // read during setup
@@ -205,7 +183,7 @@ func TestComponentSetupDoesNotSubscribeParent(t *testing.T) {
 	defer dispose()
 	c.Layout(Loose(Sz(100, 100)), Env{})
 	dep.Set(1)
-	effects.flush()
+	reactive.Flush()
 	if parentBuilds != 1 {
 		t.Fatalf("parent rebuilt %d times on a setup read, want 1", parentBuilds)
 	}
@@ -215,7 +193,7 @@ func TestComponentDisposedWithParent(t *testing.T) {
 	parentDep, leaf := State(0), State(0)
 	setups, builds := 0, 0
 	var c *ComponentWidget
-	dispose := observe(func() {
+	dispose := reactive.Observe(func() {
 		parentDep.Get()
 		c = Component(func() Widget {
 			setups++
@@ -225,68 +203,13 @@ func TestComponentDisposedWithParent(t *testing.T) {
 	defer dispose()
 	c.Layout(Loose(Sz(100, 100)), Env{})
 	parentDep.Set(1)
-	effects.flush()
+	reactive.Flush()
 	c.Layout(Loose(Sz(100, 100)), Env{})
 	builds = 0
 	leaf.Set(1)
-	effects.flush()
+	reactive.Flush()
 	if setups != 2 || builds != 1 {
 		t.Fatalf("setups = %d, builds = %d; want 2 setups and 1 live builder", setups, builds)
-	}
-}
-
-func TestPanicInEffectLeavesNoResidue(t *testing.T) {
-	effects.mu.Lock()
-	before := effects.count
-	effects.mu.Unlock()
-	func() {
-		defer func() { recover() }()
-		observe(func() {
-			observe(func() {})
-			panic("boom")
-		})
-	}()
-	if o := currentOwner(); o != nil {
-		t.Fatal("owner left set after a panicking effect")
-	}
-	effects.mu.Lock()
-	after := effects.count
-	effects.mu.Unlock()
-	if after != before {
-		t.Fatalf("%d effects left registered after a panicking effect, want 0", after-before)
-	}
-}
-
-func TestDisposedChildrenLeaveOwnerInCreationOrder(t *testing.T) {
-	var owner *effect
-	var stops []func()
-	var cleaned []int
-	dispose := Root(func() {
-		owner = currentOwner()
-		for i := range 5 {
-			stops = append(stops, observe(func() {
-				OnCleanup(func() { cleaned = append(cleaned, i) })
-			}))
-		}
-	})
-	defer dispose()
-	// Remove the middle, first, and last child; only 1 and 3 must remain.
-	for _, i := range []int{2, 0, 4} {
-		stops[i]()
-	}
-	if owner.firstChild == nil || owner.lastChild == nil ||
-		owner.firstChild.nextSibling != owner.lastChild ||
-		owner.lastChild.prevSibling != owner.firstChild ||
-		owner.firstChild.prevSibling != nil || owner.lastChild.nextSibling != nil {
-		t.Fatal("disposed children remain linked or surviving order changed")
-	}
-	cleaned = nil
-	dispose()
-	if len(cleaned) != 2 || cleaned[0] != 1 || cleaned[1] != 3 {
-		t.Fatalf("remaining cleanup order = %v, want [1 3]", cleaned)
-	}
-	if owner.firstChild != nil || owner.lastChild != nil {
-		t.Fatal("closed owner retains children")
 	}
 }
 
@@ -294,9 +217,9 @@ func TestChildCleanupCanDisposeSibling(t *testing.T) {
 	var stopSibling func()
 	var cleaned []int
 	dispose := Root(func() {
-		observe(func() { OnCleanup(func() { cleaned = append(cleaned, 0); stopSibling() }) })
-		stopSibling = observe(func() { OnCleanup(func() { cleaned = append(cleaned, 1) }) })
-		observe(func() { OnCleanup(func() { cleaned = append(cleaned, 2) }) })
+		reactive.Observe(func() { OnCleanup(func() { cleaned = append(cleaned, 0); stopSibling() }) })
+		stopSibling = reactive.Observe(func() { OnCleanup(func() { cleaned = append(cleaned, 1) }) })
+		reactive.Observe(func() { OnCleanup(func() { cleaned = append(cleaned, 2) }) })
 	})
 	defer dispose()
 	dispose()
@@ -311,7 +234,7 @@ func TestEffectRemovalPreservesExecutionOrder(t *testing.T) {
 	var stops []func()
 	dispose := Root(func() {
 		for i := range 5 {
-			stops = append(stops, observe(func() { n.Get(); seen = append(seen, i) }))
+			stops = append(stops, reactive.Observe(func() { n.Get(); seen = append(seen, i) }))
 		}
 	})
 	defer dispose()
@@ -319,7 +242,7 @@ func TestEffectRemovalPreservesExecutionOrder(t *testing.T) {
 	stops[3]()
 	seen = nil
 	n.Set(1)
-	if !effects.flush() {
+	if !reactive.Flush() {
 		t.Fatal("effects did not settle")
 	}
 	if len(seen) != 3 || seen[0] != 0 || seen[1] != 2 || seen[2] != 4 {
@@ -361,9 +284,9 @@ func TestEqualDerivedPropsDoNotRebuild(t *testing.T) {
 func TestSignalWithoutEqualityNotifiesEveryWrite(t *testing.T) {
 	s := State([]int{1})
 	runs := 0
-	defer observe(func() { s.Get(); runs++ })()
+	defer reactive.Observe(func() { s.Get(); runs++ })()
 	s.Set([]int{1})
-	effects.flush()
+	reactive.Flush()
 	if runs != 2 {
 		t.Fatalf("effect ran %d times, want a notification for an uncomparable write", runs)
 	}

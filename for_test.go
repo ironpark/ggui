@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"github.com/ironpark/ggui/internal/reactive"
 	"maps"
 	"testing"
 	"time"
@@ -19,7 +20,7 @@ func TestForReusesChildrenByKey(t *testing.T) {
 	items := State([]todo{{1, "a"}, {2, "b"}})
 	setups := 0
 	var f Widget
-	dispose := observe(func() {
+	dispose := reactive.Observe(func() {
 		f = EachKeyed(items, func(t todo) int { return t.ID }, func(rowItem EachItem[todo]) Widget {
 			it := rowItem.Value
 			return Component(func() Widget {
@@ -31,7 +32,7 @@ func TestForReusesChildrenByKey(t *testing.T) {
 	defer dispose()
 	layoutFor(f)
 	items.Set([]todo{{2, "b"}, {1, "a"}, {3, "c"}})
-	effects.flush()
+	reactive.Flush()
 	layoutFor(f)
 	if setups != 3 {
 		t.Fatalf("setups = %d after reorder plus one new item, want 3", setups)
@@ -52,7 +53,7 @@ func TestForUpdatesItemSignalInPlace(t *testing.T) {
 	items := State([]todo{{1, "a"}})
 	builds := 0
 	var f Widget
-	dispose := observe(func() {
+	dispose := reactive.Observe(func() {
 		f = EachKeyed(items, func(t todo) int { return t.ID }, func(rowItem EachItem[todo]) Widget {
 			it := rowItem.Value
 			return Reactive(func() Widget { builds++; return Text(it.Get().Name) })
@@ -61,7 +62,7 @@ func TestForUpdatesItemSignalInPlace(t *testing.T) {
 	defer dispose()
 	layoutFor(f)
 	items.Set([]todo{{1, "renamed"}})
-	effects.flush()
+	reactive.Flush()
 	layoutFor(f)
 	got := f.(*EachWidget[todo, int]).children[0].(*ComponentWidget).child.(*TextWidget).value
 	if got != "renamed" || builds != 2 {
@@ -74,7 +75,7 @@ func TestForDisposesRemovedAndAllOnParentRebuild(t *testing.T) {
 	parentDep := State(0)
 	cleanups := 0
 	var f Widget
-	dispose := observe(func() {
+	dispose := reactive.Observe(func() {
 		parentDep.Get()
 		f = EachKeyed(items, func(t todo) int { return t.ID }, func(rowItem EachItem[todo]) Widget {
 			OnCleanup(func() { cleanups++ })
@@ -84,12 +85,12 @@ func TestForDisposesRemovedAndAllOnParentRebuild(t *testing.T) {
 	defer dispose()
 	layoutFor(f)
 	items.Set([]todo{{1, "a"}})
-	effects.flush()
+	reactive.Flush()
 	if cleanups != 1 {
 		t.Fatalf("cleanups = %d after removing one item, want 1", cleanups)
 	}
 	parentDep.Set(1)
-	effects.flush()
+	reactive.Flush()
 	if cleanups != 2 {
 		t.Fatalf("cleanups = %d after the parent rebuilt, want 2 (the survivor disposed)", cleanups)
 	}
@@ -99,7 +100,7 @@ func TestForDoesNotRebuildOnParentSignals(t *testing.T) {
 	items := State([]todo{{1, "a"}})
 	setups := 0
 	var f Widget
-	dispose := observe(func() {
+	dispose := reactive.Observe(func() {
 		f = EachKeyed(items, func(t todo) int { return t.ID }, func(rowItem EachItem[todo]) Widget {
 			setups++
 			return Box()
@@ -108,7 +109,7 @@ func TestForDoesNotRebuildOnParentSignals(t *testing.T) {
 	defer dispose()
 	layoutFor(f)
 	items.Set([]todo{{1, "a"}}) // equal slice contents, new slice: notifies
-	effects.flush()
+	reactive.Flush()
 	layoutFor(f)
 	if setups != 1 {
 		t.Fatalf("setups = %d, want 1: same key must reuse the child", setups)
@@ -128,19 +129,19 @@ func TestRootOutlivesOwnerRerunsUntilDisposed(t *testing.T) {
 	dep, inner := State(0), State(0)
 	innerRuns := 0
 	var disposeRoot func()
-	dispose := observe(func() {
+	dispose := reactive.Observe(func() {
 		dep.Get()
 		if disposeRoot == nil {
 			disposeRoot = Root(func() {
-				observe(func() { inner.Get(); innerRuns++ })
+				reactive.Observe(func() { inner.Get(); innerRuns++ })
 			})
 		}
 	})
 	defer dispose()
 	dep.Set(1) // owner reruns; its persistent Root remains alive
-	effects.flush()
+	reactive.Flush()
 	inner.Set(1)
-	effects.flush()
+	reactive.Flush()
 	if innerRuns != 2 {
 		t.Fatalf("innerRuns = %d, want 2: Root survives owner reruns", innerRuns)
 	}
@@ -155,7 +156,7 @@ func TestForWithItemExtentBuildsOnlyTheViewport(t *testing.T) {
 	builds := 0
 	var f *EachWidget[todo, int]
 	rects := make([]Rect, len(list)) // where each row was painted, by ID
-	dispose := observe(func() {
+	dispose := reactive.Observe(func() {
 		f = EachKeyed(items, func(t todo) int { return t.ID }, func(rowItem EachItem[todo]) Widget {
 			it := rowItem.Value
 			builds++
@@ -191,7 +192,7 @@ func TestForWithItemExtentBuildsOnlyTheViewport(t *testing.T) {
 func TestForWithoutViewportLaysOutEverything(t *testing.T) {
 	items := State([]todo{{1, "a"}, {2, "b"}, {3, "c"}})
 	var f *EachWidget[todo, int]
-	dispose := observe(func() {
+	dispose := reactive.Observe(func() {
 		f = EachKeyed(items, func(t todo) int { return t.ID }, func(EachItem[todo]) Widget { return Box().Size(10, 5) }).ItemExtent(30)
 	})
 	defer dispose()
@@ -339,8 +340,8 @@ func TestForEvictionReleasesOwnerChildren(t *testing.T) {
 		offset.Set(float64(i * 20))
 		scroll.Layout(Tight(Sz(100, 100)), Env{})
 		count := 0
-		for c := f.owner.firstChild; c != nil; c = c.nextSibling {
-			if c.disposed {
+		for _, c := range f.owner.Children() {
+			if c.Disposed() {
 				t.Fatal("owner retains a disposed row")
 			}
 			count++

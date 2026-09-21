@@ -1,12 +1,12 @@
 //go:build !ggui_debug
 
-package ggui
+package reactive
 
 // The UI-goroutine check costs nothing unless the ggui_debug build tag is
 // set; see thread_debug.go for what it does and why.
 
-func markUIThread() {}
+func MarkUIThread() {}
 
-func unmarkUIThread() {}
+func UnmarkUIThread() {}
 
-func checkUIThread(op string) {}
+func CheckUIThread(op string) {}

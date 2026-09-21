@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"errors"
+	"github.com/ironpark/ggui/internal/reactive"
 	"strings"
 	"testing"
 	"time"
@@ -11,7 +12,7 @@ func TestCloseDisposesEverythingBuilt(t *testing.T) {
 	n := State(0)
 	runs := 0
 	p := ProbeBuilder(func() Widget {
-		observe(func() { n.Get(); runs++ })
+		reactive.Observe(func() { n.Get(); runs++ })
 		return Box()
 	}, Sz(10, 10)).Setup(func() {
 		Watch(n, func(int) { runs++ })
@@ -22,7 +23,7 @@ func TestCloseDisposesEverythingBuilt(t *testing.T) {
 	}
 	p.Close()
 	n.Set(1)
-	if !effects.flush() {
+	if !reactive.Flush() {
 		t.Fatal("flush did not settle")
 	}
 	if runs != 2 {
@@ -62,7 +63,7 @@ func TestPostRunsBeforeTheFrame(t *testing.T) {
 func TestCycleIsReported(t *testing.T) {
 	n := State(0)
 	p := ProbeBuilder(func() Widget { return Box() }, Sz(10, 10)).Setup(func() {
-		observe(func() { n.Set(n.Get() + 1) })
+		reactive.Observe(func() { n.Set(n.Get() + 1) })
 	})
 	defer p.Close()
 	defer func() {
@@ -86,7 +87,7 @@ func TestCycleIsReported(t *testing.T) {
 func TestCycleSaysHowToNameTheEffects(t *testing.T) {
 	n := State(0)
 	p := ProbeBuilder(func() Widget { return Box() }, Sz(10, 10)).Setup(func() {
-		observe(func() { n.Set(n.Get() + 1) })
+		reactive.Observe(func() { n.Set(n.Get() + 1) })
 	})
 	defer p.Close()
 	defer func() {
@@ -95,7 +96,7 @@ func TestCycleSaysHowToNameTheEffects(t *testing.T) {
 			t.Fatal("no cycle reported")
 		}
 		msg := err.Error()
-		if effectOrigin() == "" {
+		if reactive.Origin() == "" {
 			if !strings.Contains(msg, "ggui_debug") {
 				t.Fatalf("the error does not say how to name the effects: %v", msg)
 			}

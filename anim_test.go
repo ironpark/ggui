@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"github.com/ironpark/ggui/internal/reactive"
 	"testing"
 	"time"
 )
@@ -45,12 +46,12 @@ func TestTweenDrivesEffects(t *testing.T) {
 	anims.list = nil
 	tw := Tween(0, 100*time.Millisecond)
 	runs := 0
-	observe(func() { tw.Get(); runs++ })
+	reactive.Observe(func() { tw.Get(); runs++ })
 	tw.Set(10)
 	t0 := time.Unix(0, 0)
 	anims.step(t0)
 	anims.step(t0.Add(50 * time.Millisecond))
-	effects.flush()
+	reactive.Flush()
 	if runs != 2 {
 		t.Fatalf("effect ran %d times, want 2 after the value moved", runs)
 	}
@@ -180,10 +181,10 @@ func TestTweenOfAndSpringOfFollowTheirSource(t *testing.T) {
 	if Untrack(tw.Get) != 10 || Untrack(sp.Get) != 10 {
 		t.Fatalf("start = %v, %v; want the source's 10", Untrack(tw.Get), Untrack(sp.Get))
 	}
-	effects.flushUsers(nil) // the first Watch run sets the target it already has
+	reactive.FlushUsers(nil) // the first Watch run sets the target it already has
 	src.Set(110)
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	t0 := time.Unix(0, 0)
 	anims.step(t0)
 	anims.step(t0.Add(500 * time.Millisecond))
@@ -195,8 +196,8 @@ func TestTweenOfAndSpringOfFollowTheirSource(t *testing.T) {
 	}
 	dispose()
 	src.Set(0)
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	if tw.Target() != 110 {
 		t.Fatal("a disposed TweenOf still followed its source")
 	}

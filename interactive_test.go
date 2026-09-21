@@ -1,21 +1,25 @@
 package ggui
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/ironpark/ggui/internal/reactive"
+)
 
 // A direct write to Inert, bypassing SetInert, still asks for a layout
 // once Sync sees it.
 func TestInteractiveDirectInertWriteRequestsLayout(t *testing.T) {
 	var s Interactive
 	s.Sync()
-	before := layoutGen.Load()
+	before := reactive.LayoutGen()
 	s.SetInert(true)
 	s.Sync()
-	if layoutGen.Load() == before {
+	if reactive.LayoutGen() == before {
 		t.Fatal("direct Inert write not noticed by Sync")
 	}
-	before = layoutGen.Load()
+	before = reactive.LayoutGen()
 	s.Sync()
-	if layoutGen.Load() != before {
+	if reactive.LayoutGen() != before {
 		t.Fatal("Sync requested a layout with nothing changed")
 	}
 }

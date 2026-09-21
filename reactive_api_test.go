@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"errors"
+	"github.com/ironpark/ggui/internal/reactive"
 	"reflect"
 	"slices"
 	"strings"
@@ -21,7 +22,7 @@ func TestDerivedIsLazyPureAndUntrackIsFresh(t *testing.T) {
 		t.Fatal("first read")
 	}
 	n.Set(2)
-	effects.flush()
+	reactive.Flush()
 	if calls != 1 {
 		t.Fatal("unobserved derived evaluated during flush")
 	}
@@ -230,7 +231,7 @@ func TestPublicEffectCycleReportsItsOrigin(t *testing.T) {
 		if !ok || !errors.Is(err, ErrCycle) {
 			t.Fatalf("expected ErrCycle, got %v", err)
 		}
-		if effectOrigin() != "" && !strings.Contains(err.Error(), "reactive_api_test.go:") {
+		if reactive.Origin() != "" && !strings.Contains(err.Error(), "reactive_api_test.go:") {
 			t.Fatalf("missing origin: %v", err)
 		}
 	}()

@@ -1,11 +1,16 @@
-package ggui
+package reactive
 
 import (
 	"reflect"
 	"slices"
 	"sync"
 	"sync/atomic"
+
+	"github.com/ironpark/ggui/geom"
 )
+
+// Number is geom.Number under the name Add already used for it.
+type Number = geom.Number
 
 // layoutGen counts the changes that can move something on screen: every
 // StateValue write and every Invalidate. The runtime lays the tree out again
@@ -13,57 +18,57 @@ import (
 // frame regardless.
 //
 // It is atomic and stateGen is not, which is the difference between the two:
-// requestLayout is reachable from anything that changes a size, and a stray
+// RequestLayout is reachable from anything that changes a size, and a stray
 // call from another goroutine should cost one extra layout rather than tear
 // the counter. stateGen is written only by store and read only by settle,
-// both on the UI goroutine under checkUIThread, and marks a state write that
+// both on the UI goroutine under CheckUIThread, and marks a state write that
 // happened during a layout so settle knows to go round again.
 var layoutGen atomic.Uint64
 var stateGen uint64
 
-// requestLayout asks the runtime to lay the tree out again next frame.
-func requestLayout() { layoutGen.Add(1) }
+// RequestLayout asks the runtime to lay the tree out again next frame.
+func RequestLayout() { layoutGen.Add(1) }
 
 // Measurement dependencies are separate from reactive subscriptions: even an
 // Untrack read affects layout, but never subscribes the enclosing computation.
-type layoutSource interface{ layoutVersion() uint64 }
+type LayoutSource interface{ LayoutVersion() uint64 }
 
-// measuring is the recorder a running Layout installs so that a signal
+// Measuring is the recorder a running Layout installs so that a signal
 // read during measurement is remembered as an input of that layout. It is
 // a func rather than the cache itself, so that the reactive core does not
 // name the layout cache.
-var measuring func(src layoutSource, version uint64)
+var Measuring func(src LayoutSource, version uint64)
 
-// tracker holds the running computation. listener is the effect that reads
-// subscribe to (nil inside Untrack); owner is the effect that newly created
+// tracker holds the running computation. listener is the Computation that reads
+// subscribe to (nil inside Untrack); owner is the Computation that newly created
 // effects belong to, so that they are disposed when it re-runs or is
 // disposed. This mirrors Svelte's automatic dependency tracking and Solid's
 // ownership tree: nothing is declared, reads and creations are observed.
 type tracker struct {
 	mu       sync.Mutex
-	listener *effect
-	owner    *effect
+	listener *Computation
+	owner    *Computation
 }
 
 // deps, effects and derivedDepth are the reactive system's one running
 // state: there is a single UI goroutine, and every entry point that reaches
-// them -- Get, Set, Derived, Effect -- runs under checkUIThread. deps takes
+// them -- Get, Set, Derived, Effect -- runs under CheckUIThread. deps takes
 // a mutex anyway because a read may cross into a Derived's own computation.
 var deps tracker
 
-// source is anything an effect can subscribe to.
+// source is anything an Computation can subscribe to.
 type source interface {
-	unsubscribe(e *effect)
-	// producer is the memo effect that computes this source, or nil for a
-	// plain signal: how refresh finds the upstream to settle first.
-	producer() *effect
+	unsubscribe(e *Computation)
+	// producer is the memo Computation that computes this source, or nil for a
+	// plain signal: how Refresh finds the upstream to settle first.
+	producer() *Computation
 }
 
-// downstream is a memo's value seen from its effect: the readers to carry
+// downstream is a memo's value seen from its Computation: the readers to carry
 // staleness on to.
 type downstream interface{ markSubsCheck() }
 
-// An effect is clean, or it may be stale. A StateValue write marks its direct
+// An Computation is clean, or it may be stale. A StateValue write marks its direct
 // subscribers dirty and everything downstream of a memo check: check means
 // "an input of yours may have changed", and is resolved by refreshing the
 // upstream memos, which turns it into dirty or back into clean. It is what
@@ -74,40 +79,40 @@ const (
 	stateDirty
 )
 
-type effect struct {
+type Computation struct {
 	fn         func()
 	state      uint8
 	user       bool
 	persistent bool
-	// loop is the frame loop this effect belongs to, held only so that
+	// loop is the frame loop this Computation belongs to, held only so that
 	// flushUsers can tell one loop's effects from another's. It is never
 	// dereferenced here, so the reactive core needs no frame loop type.
 	loop     any
 	running  bool
 	disposed bool
 
-	// cell is the memo's value this effect computes, if it is a memo's:
+	// cell is the memo's value this Computation computes, if it is a memo's:
 	// what carries staleness on to the memo's own readers.
 	cell downstream
 
-	owner                    *effect
-	firstChild, lastChild    *effect
-	prevSibling, nextSibling *effect
+	owner                    *Computation
+	firstChild, lastChild    *Computation
+	prevSibling, nextSibling *Computation
 	cleanups                 []func()
 
 	// Registration and sibling links preserve creation order while allowing
 	// a disposed computation to leave both lists in constant time.
-	prevEffect, nextEffect *effect
+	prevEffect, nextEffect *Computation
 	registered             bool
 	sources                []source
 
-	// Where this effect was created, in the ggui_debug build only: what
+	// Where this Computation was created, in the ggui_debug build only: what
 	// lets ErrCycle name the effects a cycle is made of. Empty otherwise.
 	origin string
 
-	// Identity for what is constructed under this effect: keyRoot is the
-	// identity of the mounted component or block this effect is the root of, path
-	// is the effect's place under the nearest such root, by construction
+	// Identity for what is constructed under this Computation: keyRoot is the
+	// identity of the mounted component or block this Computation is the root of, path
+	// is the Computation's place under the nearest such root, by construction
 	// order, and seq counts what the current run constructed.
 	keyRoot any
 	path    string
@@ -137,10 +142,10 @@ func itoa(n int) string {
 	return string(b)
 }
 
-// autoID returns the identity for a widget being constructed now: nil
+// AutoID returns the identity for a widget being constructed now: nil
 // outside a keyed component.
-func autoID() any {
-	o := currentOwner()
+func AutoID() any {
+	o := CurrentOwner()
 	if o == nil {
 		return nil
 	}
@@ -161,7 +166,7 @@ func autoID() any {
 
 // place gives e its path under owner: owner's path plus e's construction
 // ordinal, or elem when the caller names it, as EachKeyed does with the item key.
-func (e *effect) place(owner *effect, elem string) {
+func (e *Computation) place(owner *Computation, elem string) {
 	if owner == nil {
 		return
 	}
@@ -173,7 +178,7 @@ func (e *effect) place(owner *effect, elem string) {
 }
 
 // attach appends a child to its owner's ordered list.
-func (e *effect) attach(owner *effect) {
+func (e *Computation) attach(owner *Computation) {
 	e.owner = owner
 	e.prevSibling = owner.lastChild
 	if owner.lastChild != nil {
@@ -186,7 +191,7 @@ func (e *effect) attach(owner *effect) {
 
 // detach releases the parent's reference before running cleanup. reset can
 // then consume its first child repeatedly, even if cleanup disposes siblings.
-func (e *effect) detach() {
+func (e *Computation) detach() {
 	if e.owner == nil {
 		return
 	}
@@ -205,8 +210,8 @@ func (e *effect) detach() {
 
 // reset undoes everything the last run set up: child effects, cleanups and
 // subscriptions. It runs before each re-run and on dispose.
-func (e *effect) reset() {
-	var children []*effect
+func (e *Computation) reset() {
+	var children []*Computation
 	for child := e.firstChild; child != nil; child = child.nextSibling {
 		if e.disposed || !child.persistent {
 			children = append(children, child)
@@ -216,7 +221,7 @@ func (e *effect) reset() {
 		child.dispose()
 	}
 
-	withOwner(nil, func() {
+	WithOwner(nil, func() {
 		for _, v := range slices.Backward(e.cleanups) {
 			v()
 		}
@@ -228,7 +233,7 @@ func (e *effect) reset() {
 	e.sources = nil
 }
 
-func (e *effect) dispose() {
+func (e *Computation) dispose() {
 	if e.disposed {
 		return
 	}
@@ -310,9 +315,9 @@ func (l *Lens[U]) Update(fn func(U) U) { l.Set(fn(Untrack(l.Get))) }
 // GetAny returns the value as any and subscribes, for Sprintf.
 func (l *Lens[U]) GetAny() any { return l.Get() }
 
-// anyReader is what Sprintf looks for among its arguments: a reactive value
+// AnyReader is what Sprintf looks for among its arguments: a reactive value
 // read without its type.
-type anyReader interface{ GetAny() any }
+type AnyReader interface{ GetAny() any }
 
 // GetAny returns the value as any and subscribes, for Sprintf.
 func (s *StateValue[T]) GetAny() any { return s.Get() }
@@ -327,11 +332,11 @@ type StateValue[T any] struct {
 	val     T
 	version uint64
 	eq      func(a, b T) bool
-	subs    map[*effect]struct{}
+	subs    map[*Computation]struct{}
 
-	// memo is the effect that computes this value, when the signal is a
+	// memo is the Computation that computes this value, when the signal is a
 	// DerivedValue's cell rather than state someone writes.
-	memo *effect
+	memo *Computation
 }
 
 // State creates a StateValue holding v. T is inferred from the argument, so
@@ -341,7 +346,7 @@ type StateValue[T any] struct {
 // when T has an Equal method or is comparable; see WithEqual to supply
 // equality for other types, or to pass nil so that every write notifies.
 func State[T any](v T) *StateValue[T] {
-	return &StateValue[T]{val: v, eq: comparableEqual[T](), subs: map[*effect]struct{}{}}
+	return &StateValue[T]{val: v, eq: ComparableEqual[T](), subs: map[*Computation]struct{}{}}
 }
 
 // equaler is the equality a type declares for itself, as time.Time does.
@@ -349,11 +354,11 @@ func State[T any](v T) *StateValue[T] {
 // map still drops redundant writes.
 type equaler[T any] interface{ Equal(T) bool }
 
-// comparableEqual returns the test Set uses to drop redundant writes: the
+// ComparableEqual returns the test Set uses to drop redundant writes: the
 // type's own Equal method, else == for comparable T, else nil. Interfaces
 // are excluded from ==: they compare fine until a dynamic value that does
 // not, at which point == panics.
-func comparableEqual[T any]() func(a, b T) bool {
+func ComparableEqual[T any]() func(a, b T) bool {
 	t := reflect.TypeFor[T]()
 	if t.Implements(reflect.TypeFor[equaler[T]]()) {
 		return func(a, b T) bool {
@@ -384,7 +389,7 @@ func (s *StateValue[T]) WithEqual(eq func(a, b T) bool) *StateValue[T] {
 
 // Get returns the current value and subscribes the running Effect, if any.
 func (s *StateValue[T]) Get() T {
-	checkUIThread("StateValue.Get")
+	CheckUIThread("StateValue.Get")
 	deps.mu.Lock()
 	e := deps.listener
 	deps.mu.Unlock()
@@ -397,20 +402,20 @@ func (s *StateValue[T]) Get() T {
 			e.sources = append(e.sources, s)
 		}
 	}
-	if measuring != nil {
-		measuring(s, s.version)
+	if Measuring != nil {
+		Measuring(s, s.version)
 	}
 	return s.val
 }
 
 // producer implements source: non-nil only for a memo's cell.
-func (s *StateValue[T]) producer() *effect { return s.memo }
+func (s *StateValue[T]) producer() *Computation { return s.memo }
 
 // markSubsCheck implements downstream: every reader of this memo may now be
 // stale. Collected under the lock and marked outside it, as Set does.
 func (s *StateValue[T]) markSubsCheck() {
 	s.mu.Lock()
-	subs := make([]*effect, 0, len(s.subs))
+	subs := make([]*Computation, 0, len(s.subs))
 	for e := range s.subs {
 		subs = append(subs, e)
 	}
@@ -420,7 +425,7 @@ func (s *StateValue[T]) markSubsCheck() {
 	}
 }
 
-func (s *StateValue[T]) unsubscribe(e *effect) {
+func (s *StateValue[T]) unsubscribe(e *Computation) {
 	s.mu.Lock()
 	delete(s.subs, e)
 	s.mu.Unlock()
@@ -429,7 +434,7 @@ func (s *StateValue[T]) unsubscribe(e *effect) {
 // Set stores v and invalidates every subscriber. A write equal to the current
 // value changes nothing and notifies no one.
 func (s *StateValue[T]) Set(v T) {
-	checkUIThread("StateValue.Set")
+	CheckUIThread("StateValue.Set")
 	if derivedDepth > 0 {
 		panic("ggui: state write inside Derived")
 	}
@@ -437,7 +442,7 @@ func (s *StateValue[T]) Set(v T) {
 }
 
 func (s *StateValue[T]) store(v T) {
-	checkUIThread("StateValue.Set")
+	CheckUIThread("StateValue.Set")
 	s.mu.Lock()
 	if s.eq != nil && s.eq(s.val, v) {
 		s.mu.Unlock()
@@ -447,7 +452,7 @@ func (s *StateValue[T]) store(v T) {
 	stateGen++
 	s.version++
 	layoutGen.Add(1)
-	subs := make([]*effect, 0, len(s.subs))
+	subs := make([]*Computation, 0, len(s.subs))
 	for e := range s.subs {
 		subs = append(subs, e)
 	}
@@ -510,7 +515,7 @@ func Remove[T any](s Writable[[]T], drop func(T) bool) {
 // read changes, and notifies its own readers only when the result differs.
 type DerivedValue[T any] struct {
 	sig     *StateValue[T]
-	eff     *effect
+	eff     *Computation
 	dispose func()
 }
 
@@ -553,14 +558,14 @@ func Combine[A, B, C any](a Readable[A], b Readable[B], fn func(A, B) C) *Derive
 
 // Get returns the memoized value and subscribes the running Effect, if any.
 // A memo whose inputs changed earlier in this frame is recomputed here, so a
-// reader never sees one input updated and another not. Outside an effect
+// reader never sees one input updated and another not. Outside an Computation
 // this means fn may run at the call site rather than at the next flush.
 func (m *DerivedValue[T]) Get() T {
-	checkUIThread("DerivedValue.Get")
+	CheckUIThread("DerivedValue.Get")
 	if m.eff.running {
 		panic("ggui: cyclic Derived")
 	}
-	refresh(m.eff)
+	Refresh(m.eff)
 	return m.sig.Get()
 }
 
@@ -578,20 +583,20 @@ func Watch[T any](src Readable[T], fn func(T)) (dispose func()) {
 	return Effect(func() Cleanup { fn(src.Get()); return nil })
 }
 
-// observe is an immediate internal binding computation, not a user effect.
+// observe is an immediate internal binding computation, not a user Computation.
 func observe(fn func()) (dispose func()) {
-	_, dispose = effectWith(fn)
+	_, dispose = EffectWith(fn)
 	return dispose
 }
 
-// Cleanup releases an effect or a mounted resource. It may be nil.
+// Cleanup releases an Computation or a mounted resource. It may be nil.
 type Cleanup = func()
 
-// Effect schedules a side effect after layout. It belongs to the current
+// Effect schedules a side Computation after layout. It belongs to the current
 // owner; its cleanup runs untracked before another execution and on disposal.
 func Effect(fn func() Cleanup) Cleanup {
-	checkUIThread("Effect")
-	if currentOwner() == nil {
+	CheckUIThread("Effect")
+	if CurrentOwner() == nil {
 		panic("ggui: Effect requires an owner; use Component or Root")
 	}
 	e := newComputation(func() {
@@ -605,9 +610,9 @@ func Effect(fn func() Cleanup) Cleanup {
 	return e.dispose
 }
 
-func newComputation(fn func(), user bool) *effect {
-	e := &effect{fn: fn, user: user, origin: effectOrigin()}
-	if owner := currentOwner(); owner != nil {
+func newComputation(fn func(), user bool) *Computation {
+	e := &Computation{fn: fn, user: user, origin: effectOrigin()}
+	if owner := CurrentOwner(); owner != nil {
 		e.attach(owner)
 		e.place(owner, "")
 		e.loop = owner.loop
@@ -616,9 +621,9 @@ func newComputation(fn func(), user bool) *effect {
 	return e
 }
 
-// effectWith runs an internal binding immediately. User effects use a
+// EffectWith runs an internal binding immediately. User effects use a
 // separate post-layout phase and never drive widget construction.
-func effectWith(fn func()) (*effect, func()) {
+func EffectWith(fn func()) (*Computation, func()) {
 	e := newComputation(fn, false)
 	ok := false
 	defer func() {
@@ -636,14 +641,14 @@ func effectWith(fn func()) (*effect, func()) {
 // enclosing owner is disposed. It is how a container keeps children alive
 // across its own re-runs; EachKeyed uses it per key.
 func Root(fn func()) (dispose func()) {
-	return rootWith(nil, "", func() { currentOwner().persistent = true; fn() })
+	return RootWith(nil, "", func() { CurrentOwner().persistent = true; fn() })
 }
 
-// rootWith is Root for a root that is the instance of a keyed component
+// RootWith is Root for a root that is the instance of a keyed component
 // (identity) or has a name of its own under its owner (elem), for the
-// identities autoID derives.
-func rootWith(identity any, elem string, fn func()) (dispose func()) {
-	r := &effect{keyRoot: identity, origin: effectOrigin(), persistent: false}
+// identities AutoID derives.
+func RootWith(identity any, elem string, fn func()) (dispose func()) {
+	r := &Computation{keyRoot: identity, origin: effectOrigin(), persistent: false}
 	deps.mu.Lock()
 	r.owner = deps.owner
 	prevListener, prevOwner := deps.listener, deps.owner
@@ -668,8 +673,8 @@ func rootWith(identity any, elem string, fn func()) (dispose func()) {
 	return r.dispose
 }
 
-// withOwner runs fn with owner as the current owner and no listener.
-func withOwner(owner *effect, fn func()) {
+// WithOwner runs fn with owner as the current owner and no listener.
+func WithOwner(owner *Computation, fn func()) {
 	deps.mu.Lock()
 	prevListener, prevOwner := deps.listener, deps.owner
 	deps.listener, deps.owner = nil, owner
@@ -682,7 +687,7 @@ func withOwner(owner *effect, fn func()) {
 	fn()
 }
 
-func currentOwner() *effect {
+func CurrentOwner() *Computation {
 	deps.mu.Lock()
 	defer deps.mu.Unlock()
 	return deps.owner
@@ -699,7 +704,7 @@ func OnCleanup(fn func()) {
 		panic("ggui: OnCleanup requires an owner")
 	}
 	if o.disposed {
-		withOwner(nil, fn)
+		WithOwner(nil, fn)
 		return
 	}
 	o.cleanups = append(o.cleanups, fn)
@@ -720,9 +725,9 @@ func Untrack[T any](fn func() T) T {
 	return fn()
 }
 
-// markDirty records that a signal this effect read has changed, and carries
+// markDirty records that a signal this Computation read has changed, and carries
 // check on to the readers of the memo it computes.
-func markDirty(e *effect) {
+func markDirty(e *Computation) {
 	if e.user {
 		effects.userPending = true
 	}
@@ -735,10 +740,10 @@ func markDirty(e *effect) {
 	}
 }
 
-// markCheck records that an input of this effect may have changed. It stops
-// at an effect that is already dirty or already checked, so the walk is
+// markCheck records that an input of this Computation may have changed. It stops
+// at an Computation that is already dirty or already checked, so the walk is
 // linear and a cycle terminates.
-func markCheck(e *effect) {
+func markCheck(e *Computation) {
 	if e.user {
 		effects.userPending = true
 	}
@@ -751,17 +756,17 @@ func markCheck(e *effect) {
 	}
 }
 
-// refresh settles e now: a checked effect first settles the memos it read,
-// which makes it dirty if one of them actually changed, and a dirty effect
-// re-runs. It reports whether the effect ran, and leaves e clean either way.
-func refresh(e *effect) (ran bool) {
+// Refresh settles e now: a checked Computation first settles the memos it read,
+// which makes it dirty if one of them actually changed, and a dirty Computation
+// re-runs. It reports whether the Computation ran, and leaves e clean either way.
+func Refresh(e *Computation) (ran bool) {
 	if e.disposed || e.running || e.state == stateClean {
 		return false
 	}
 	if e.state == stateCheck {
 		for _, src := range e.sources {
 			if p := src.producer(); p != nil {
-				refresh(p)
+				Refresh(p)
 				if e.state == stateDirty {
 					break
 				}
@@ -776,7 +781,7 @@ func refresh(e *effect) (ran bool) {
 	return false
 }
 
-func runEffect(e *effect) {
+func runEffect(e *Computation) {
 	e.reset()
 	e.seq = 0
 
@@ -804,10 +809,10 @@ func runEffect(e *effect) {
 
 type effectSet struct {
 	mu          sync.Mutex
-	first, last *effect
+	first, last *Computation
 	count       int
 
-	// Like effect.state, these are confined to the UI thread. A signal
+	// Like Computation.state, these are confined to the UI thread. A signal
 	// write advances dirtyGen; only a quiet flush records settledGen.
 	// Internal bindings run immediately; new user effects explicitly mark work.
 	dirtyGen, settledGen uint64
@@ -815,12 +820,12 @@ type effectSet struct {
 
 	// The effects the last pass ran, kept for ErrCycle. The slice is
 	// reused, so a settled frame allocates nothing for it.
-	lastPass []*effect
+	lastPass []*Computation
 }
 
 var effects effectSet
 
-func (s *effectSet) add(e *effect) {
+func (s *effectSet) add(e *Computation) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	e.prevEffect, e.registered = s.last, true
@@ -833,7 +838,7 @@ func (s *effectSet) add(e *effect) {
 	s.count++
 }
 
-func (s *effectSet) remove(e *effect) {
+func (s *effectSet) remove(e *Computation) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !e.registered {
@@ -856,29 +861,29 @@ func (s *effectSet) remove(e *effect) {
 // unsettled returns the effects the last flush pass ran, which when the
 // passes ran out are the ones the cycle turns, with how many effects there
 // were in all. Reading the states afterwards would miss half of them: an
-// effect in a cycle is clean the moment after it runs and dirty the moment
+// Computation in a cycle is clean the moment after it runs and dirty the moment
 // after its partner does.
-func (s *effectSet) unsettled() (stuck []*effect, total int) {
+func (s *effectSet) unsettled() (stuck []*Computation, total int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.lastPass, s.count
 }
 
-// maxFlushPasses bounds how far a change propagates through derived values in
+// MaxFlushPasses bounds how far a change propagates through derived values in
 // one frame. Chains settle in a pass or two; the cap only stops a cycle.
-const maxFlushPasses = 16
+const MaxFlushPasses = 16
 
-// flush re-runs every dirty effect, repeating until the tree is quiet so that a
-// DerivedValue feeding another effect lands in the same frame. Called once per frame by
+// flush re-runs every dirty Computation, repeating until the tree is quiet so that a
+// DerivedValue feeding another Computation lands in the same frame. Called once per frame by
 // the runtime. It reports false when the effects were still dirty after
-// maxFlushPasses, which only a cycle causes.
+// MaxFlushPasses, which only a cycle causes.
 func (s *effectSet) flush() (settled bool) {
 	if s.dirtyGen == s.settledGen {
 		return true
 	}
-	for range maxFlushPasses {
+	for range MaxFlushPasses {
 		s.mu.Lock()
-		list := make([]*effect, 0, s.count)
+		list := make([]*Computation, 0, s.count)
 		for e := s.first; e != nil; e = e.nextEffect {
 			list = append(list, e)
 		}
@@ -887,7 +892,7 @@ func (s *effectSet) flush() (settled bool) {
 		ran := false
 		s.lastPass = s.lastPass[:0]
 		for _, e := range list {
-			if !e.user && e.cell == nil && refresh(e) {
+			if !e.user && e.cell == nil && Refresh(e) {
 				ran = true
 				s.lastPass = append(s.lastPass, e)
 			}
@@ -909,7 +914,7 @@ func (s *effectSet) flushUsers(loop any) bool {
 		return false
 	}
 	s.userPending = false
-	var pending []*effect
+	var pending []*Computation
 	for e := s.first; e != nil; e = e.nextEffect {
 		if e.user && e.state != stateClean {
 			if e.loop == nil || e.loop == loop {
@@ -922,7 +927,7 @@ func (s *effectSet) flushUsers(loop any) bool {
 	ran := false
 	s.lastPass = s.lastPass[:0]
 	for _, e := range pending {
-		if refresh(e) {
+		if Refresh(e) {
 			ran = true
 			s.lastPass = append(s.lastPass, e)
 		}
@@ -930,9 +935,72 @@ func (s *effectSet) flushUsers(loop any) bool {
 	return ran
 }
 
-func (s *StateValue[T]) layoutVersion() uint64 {
+func (s *StateValue[T]) LayoutVersion() uint64 {
 	if s.memo != nil {
-		refresh(s.memo)
+		Refresh(s.memo)
 	}
 	return s.version
+}
+
+// The frame loop drives the reactive core from the root package. These are
+// the entry points it needs; everything else here stays private.
+
+// Disposed reports whether this computation's owner has been torn down.
+func (e *Computation) Disposed() bool { return e.disposed }
+
+// Flush runs pending effects until quiet, reporting whether they settled.
+func Flush() bool { return effects.flush() }
+
+// FlushUsers runs one post-layout pass of the user effects belonging to
+// loop, reporting whether any ran.
+func FlushUsers(loop any) bool { return effects.flushUsers(loop) }
+
+// Unsettled names the effects still dirty after the last pass, for ErrCycle.
+func Unsettled() (stuck []*Computation, total int) { return effects.unsettled() }
+
+// Settled reports whether every write has been flushed.
+func Settled() bool { return effects.dirtyGen == effects.settledGen }
+
+// StateGen counts StateValue writes, so that a frame can tell whether one
+// happened while it was laying out.
+func StateGen() uint64 { return stateGen }
+
+// LayoutGen counts the changes that can move something on screen.
+func LayoutGen() uint64 { return layoutGen.Load() }
+
+// Origin is where this computation was created, in a ggui_debug build, and
+// Derived reports whether it computes a memo's value. Both are for the
+// ErrCycle message the frame loop builds.
+func (e *Computation) Origin() string { return e.origin }
+func (e *Computation) Derived() bool  { return e.cell != nil }
+
+// Loop and SetLoop carry the frame loop an effect belongs to. It is opaque
+// here: the reactive core only ever compares one against another.
+func (e *Computation) Loop() any     { return e.loop }
+func (e *Computation) SetLoop(v any) { e.loop = v }
+
+// Observe runs fn now and again when what it read changes, without making
+// it a user effect. It is Effect without the post-layout pass.
+func Observe(fn func()) (dispose func()) { return observe(fn) }
+
+// Children lists this computation's live children, oldest first. The
+// ownership tree is private; this is for a caller that only needs to see
+// what is still attached.
+func (e *Computation) Children() []*Computation {
+	var out []*Computation
+	for c := e.firstChild; c != nil; c = c.nextSibling {
+		out = append(out, c)
+	}
+	return out
+}
+
+// Origin is where the running effect was created, in a ggui_debug build.
+func Origin() string { return effectOrigin() }
+
+// Count is how many effects are registered, for a test asserting that a
+// construction or teardown left none behind.
+func Count() int {
+	effects.mu.Lock()
+	defer effects.mu.Unlock()
+	return effects.count
 }

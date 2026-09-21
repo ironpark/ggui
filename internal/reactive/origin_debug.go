@@ -1,6 +1,6 @@
 //go:build ggui_debug
 
-package ggui
+package reactive
 
 import (
 	"runtime"
@@ -9,7 +9,7 @@ import (
 )
 
 // effectOrigin returns the file and line outside this package that created
-// the effect being registered, so that a cycle can name the effects it is
+// the Computation being registered, so that a cycle can name the effects it is
 // made of. Only this build records it; see ErrCycle.
 func effectOrigin() string {
 	var pcs [32]uintptr
@@ -28,10 +28,15 @@ func effectOrigin() string {
 	}
 }
 
-// isGgui reports whether fn belongs to this package, as opposed to the ui
-// and icons packages built on it, whose frames are worth naming.
+// isGgui reports whether fn is ggui's own plumbing -- the root package or
+// one of its internals, including this one -- as opposed to the ui and
+// icons packages built on it, whose frames are worth naming.
 func isGgui(fn string) bool {
-	const pkg = "github.com/ironpark/ggui."
-	i := strings.LastIndex(fn, pkg)
-	return i >= 0 && !strings.Contains(fn[i+len(pkg):], "/")
+	const mod = "github.com/ironpark/ggui"
+	i := strings.LastIndex(fn, mod)
+	if i < 0 {
+		return false
+	}
+	rest := fn[i+len(mod):]
+	return strings.HasPrefix(rest, ".") || strings.HasPrefix(rest, "/internal/")
 }

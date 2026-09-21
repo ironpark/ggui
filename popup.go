@@ -1,6 +1,10 @@
 package ggui
 
-import "github.com/ironpark/ggui/internal/property"
+import (
+	"github.com/ironpark/ggui/internal/property"
+
+	"github.com/ironpark/ggui/internal/reactive"
+)
 
 // PopupWidget shows content floating over the tree, anchored below (or,
 // when there is no room, above) its anchor widget: the base of dropdowns
@@ -38,7 +42,7 @@ var popupKey = NewEnvKey[*PopupWidget]("popup")
 
 // Popup creates a closed popup that opens content next to anchor.
 func Popup(anchor, content Widget) *PopupWidget {
-	return &PopupWidget{anchor: anchor, content: content, gap: 4, id: autoID(), effect: PopIn(content)}
+	return &PopupWidget{anchor: anchor, content: content, gap: 4, id: reactive.AutoID(), effect: PopIn(content)}
 }
 
 // BindOpen stores the open state in sig: writing it opens or closes the popup,

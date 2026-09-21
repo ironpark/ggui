@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"github.com/ironpark/ggui/internal/reactive"
 	"testing"
 	"time"
 )
@@ -15,11 +16,11 @@ func TestLensReadsAndWritesThrough(t *testing.T) {
 	name := f.Lens(func(v form) string { return v.Name }, func(v form, s string) form { v.Name = s; return v })
 	var b Binding[string] = name
 	runs := 0
-	dispose := observe(func() { runs++; b.Get() })
+	dispose := reactive.Observe(func() { runs++; b.Get() })
 	defer dispose()
 	b.Set("bb")
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	if got := Untrack(f.Get); got.Name != "bb" || got.Age != 1 {
 		t.Fatalf("whole = %+v", got)
 	}
@@ -44,7 +45,7 @@ func TestForRetainEvictsOffscreenRows(t *testing.T) {
 	src := State(items)
 	var f *EachWidget[int, int]
 	off := State(0.0)
-	dispose := observe(func() {
+	dispose := reactive.Observe(func() {
 		f = EachKeyed(src, func(i int) int { return i }, func(EachItem[int]) Widget { return Box().Size(10, 10) }).ItemExtent(10).Retain(2)
 	})
 	defer dispose()
@@ -104,23 +105,23 @@ func TestWritableSlicesCopyAndSkipNoopRemoval(t *testing.T) {
 	state := State(model{Items: items, Other: 7})
 	lens := state.Lens(func(m model) []int { return m.Items }, func(m model, v []int) model { m.Items = v; return m })
 	runs := 0
-	dispose := observe(func() { state.Get(); runs++ })
+	dispose := reactive.Observe(func() { state.Get(); runs++ })
 	defer dispose()
 	Remove(lens, func(v int) bool { return v == 9 })
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	if runs != 1 {
 		t.Fatal("no-op remove notified readers")
 	}
 	Append(lens, 3)
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	if runs != 2 || items[:3][2] != 0 {
 		t.Fatal("append reused backing storage or missed notification")
 	}
 	Remove(lens, func(v int) bool { return v == 2 })
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	got := Untrack(state.Get)
 	if runs != 3 || len(got.Items) != 2 || got.Items[0] != 1 || got.Items[1] != 3 || got.Other != 7 {
 		t.Fatalf("result=%+v, runs=%d", got, runs)
@@ -161,8 +162,8 @@ func TestFieldLensReadsAndWritesThrough(t *testing.T) {
 	}
 
 	name.Set("b")
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	if got := Untrack(f.Get); got.Name != "b" || got.Age != 1 {
 		t.Fatalf("writing the part left the whole as %+v", got)
 	}
@@ -177,8 +178,8 @@ func TestFieldLensReadsAndWritesThrough(t *testing.T) {
 
 	// Writing the whole is seen through the field.
 	f.Set(form{Name: "c", Age: 2})
-	effects.flush()
-	effects.flushUsers(nil)
+	reactive.Flush()
+	reactive.FlushUsers(nil)
 	if Untrack(name.Get) != "c" || seen != "c" {
 		t.Fatalf("peek %q, watcher %q after the whole was replaced", Untrack(name.Get), seen)
 	}

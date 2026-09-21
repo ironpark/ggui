@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"github.com/ironpark/ggui/a11y"
+	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/runtime"
 
 	"errors"
@@ -31,7 +32,7 @@ import (
 // errors.Is(err, ggui.ErrCycle) rather than ==, and print the error itself
 // for the detail. Build with -tags ggui_debug and each one is named by the
 // file and line that created it.
-var ErrCycle = errors.New("ggui: effects did not settle after " + itoa(maxFlushPasses) + " passes; an Effect is writing a StateValue it reads")
+var ErrCycle = errors.New("ggui: effects did not settle after " + itoa(reactive.MaxFlushPasses) + " passes; an Effect is writing a StateValue it reads")
 
 // cycleError is ErrCycle with the effects that would not settle.
 type cycleError struct{ msg string }
@@ -42,20 +43,20 @@ func (e *cycleError) Unwrap() error { return ErrCycle }
 // cycle describes the effects a flush just gave up on. It is built only on
 // that path, so a settled frame pays nothing for it.
 func cycle() error {
-	stuck, total := effects.unsettled()
+	stuck, total := reactive.Unsettled()
 	var b strings.Builder
 	b.WriteString(ErrCycle.Error())
 	fmt.Fprintf(&b, "\n  %d of %d effects never settled", len(stuck), total)
 	named := 0
 	for _, e := range stuck {
-		where := e.origin
+		where := e.Origin()
 		if where == "" {
 			continue
 		}
 		named++
 		b.WriteString("\n    - ")
 		b.WriteString(where)
-		if e.cell != nil {
+		if e.Derived() {
 			b.WriteString(" (a derived value)")
 		}
 	}
@@ -76,7 +77,7 @@ type frameLoop struct {
 	build   Builder
 	setup   []func()
 	root    Widget
-	owner   *effect
+	owner   *reactive.Computation
 	dispose func()
 	closed  bool
 
@@ -149,8 +150,8 @@ var running atomic.Pointer[frameLoop]
 // component setup, then call it from a worker to deliver immutable results.
 // App closure drops queued work; use Resource for component-scoped cancellation.
 func UIThread() func(func()) {
-	checkUIThread("UIThread")
-	owner := currentOwner()
+	reactive.CheckUIThread("UIThread")
+	owner := reactive.CurrentOwner()
 	post := loopPost(owner)
 	if post == nil {
 		panic("ggui: UIThread requires an app or mounted component owner")
@@ -161,11 +162,22 @@ func UIThread() func(func()) {
 // loopPost is the owner's frame loop dispatcher, or nil when it has none.
 // An effect holds its loop as an opaque token, so this is the one place
 // that turns it back into the concrete loop.
-func loopPost(owner *effect) func(func()) {
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var b []byte
+	for ; n > 0; n /= 10 {
+		b = append([]byte{byte('0' + n%10)}, b...)
+	}
+	return string(b)
+}
+
+func loopPost(owner *reactive.Computation) func(func()) {
 	if owner == nil {
 		return nil
 	}
-	l, _ := owner.loop.(*frameLoop)
+	l, _ := owner.Loop().(*frameLoop)
 	if l == nil {
 		return nil
 	}
@@ -177,8 +189,8 @@ func loopPost(owner *effect) func(func()) {
 func (r *frameLoop) start() {
 	running.Store(r)
 	r.dispose = Root(func() {
-		currentOwner().loop = r
-		r.owner = currentOwner()
+		reactive.CurrentOwner().SetLoop(r)
+		r.owner = reactive.CurrentOwner()
 		for _, fn := range r.setup {
 			fn()
 		}
@@ -243,7 +255,7 @@ func (r *frameLoop) runPosted() {
 func (r *frameLoop) tick(now time.Time) error {
 	running.Store(r)
 	anims.step(now)
-	if !effects.flush() {
+	if !reactive.Flush() {
 		return cycle()
 	}
 	return nil
@@ -256,7 +268,7 @@ func (r *frameLoop) tick(now time.Time) error {
 // write rebuilds it. Hover and press live outside signals and only change
 // how a widget paints, so a still frame costs no layout.
 func (r *frameLoop) needsLayout(logical Size) bool {
-	gen := layoutGen.Load()
+	gen := reactive.LayoutGen()
 	if logical == r.laidSize && gen == r.laidGen {
 		return false
 	}
@@ -268,21 +280,21 @@ func (r *frameLoop) needsLayout(logical Size) bool {
 // before running user effects. Both App and Probe use this exact ordering.
 func (r *frameLoop) settle(size Size) error {
 	running.Store(r)
-	for range maxFlushPasses {
+	for range reactive.MaxFlushPasses {
 		if r.closed {
 			return nil
 		}
-		if !effects.flush() {
+		if !reactive.Flush() {
 			return cycle()
 		}
-		before := stateGen
+		before := reactive.StateGen()
 		if r.root != nil && r.needsLayout(size) {
-			withOwner(r.owner, func() { defer property.EnterLayout()(); r.rootSize = r.root.Layout(Tight(size), rootEnv()) })
+			reactive.WithOwner(r.owner, func() { defer property.EnterLayout()(); r.rootSize = r.root.Layout(Tight(size), rootEnv()) })
 		}
-		if effects.dirtyGen != effects.settledGen || stateGen != before {
+		if !reactive.Settled() || reactive.StateGen() != before {
 			continue
 		}
-		if !effects.flushUsers(r) {
+		if !reactive.FlushUsers(r) {
 			return nil
 		}
 	}

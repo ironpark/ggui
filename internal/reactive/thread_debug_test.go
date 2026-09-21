@@ -1,6 +1,6 @@
 //go:build ggui_debug
 
-package ggui
+package reactive
 
 import (
 	"strings"
@@ -8,8 +8,8 @@ import (
 )
 
 func TestOffThreadWriteIsReported(t *testing.T) {
-	markUIThread()
-	t.Cleanup(unmarkUIThread)
+	MarkUIThread()
+	t.Cleanup(UnmarkUIThread)
 
 	s := State(0)
 	s.Set(1) // the UI goroutine: nothing to report
@@ -32,7 +32,7 @@ func TestOffThreadWriteIsReported(t *testing.T) {
 }
 
 func TestWriteBeforeAnyFrameIsAllowed(t *testing.T) {
-	unmarkUIThread()
+	UnmarkUIThread()
 	done := make(chan any, 1)
 	go func() {
 		defer func() { done <- recover() }()

@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"fmt"
+	"github.com/ironpark/ggui/internal/reactive"
 	"testing"
 )
 
@@ -11,15 +12,15 @@ func BenchmarkIdleEffects(b *testing.B) {
 			value := State(0)
 			dispose := Root(func() {
 				for range n {
-					observe(func() { value.Get() })
+					reactive.Observe(func() { value.Get() })
 				}
 			})
 			defer dispose()
-			effects.flush()
+			reactive.Flush()
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				effects.flush()
+				reactive.Flush()
 			}
 			b.StopTimer()
 		})
@@ -88,11 +89,11 @@ func BenchmarkIdleUserEffects(b *testing.B) {
 				}
 			})
 			defer dispose()
-			effects.flushUsers(nil)
+			reactive.FlushUsers(nil)
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				effects.flushUsers(nil)
+				reactive.FlushUsers(nil)
 			}
 		})
 	}

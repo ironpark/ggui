@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"github.com/ironpark/ggui/internal/reactive"
 	"image/color"
 	"strings"
 	"testing"
@@ -109,13 +110,13 @@ func TestPropertyParentConfigurationConverges(t *testing.T) {
 }
 
 func TestTextPropertiesPullWithoutEffectsAndDetach(t *testing.T) {
-	start := effects.count
+	start := reactive.Count()
 	source := State("a")
 	args := []any{source, Const(3)}
 	a := TextOf(source)
 	b := Textf("%s %d", args...)
 	args[0] = "caller mutation"
-	if effects.count != start {
+	if reactive.Count() != start {
 		t.Fatal("text construction registered an effect")
 	}
 	p := NewProbe(Cached(Column(a, b)), Sz(300, 100))
@@ -141,7 +142,7 @@ func TestTextPropertiesPullWithoutEffectsAndDetach(t *testing.T) {
 		t.Fatal("BindContent did not replace formatting")
 	}
 	p.Close()
-	if effects.count != start {
+	if reactive.Count() != start {
 		t.Fatal("text leaked computations")
 	}
 	// Disposing a widget does not dispose a borrowed memo used elsewhere.

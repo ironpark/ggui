@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"github.com/ironpark/ggui/internal/reactive"
 	"os"
 	"strings"
 	"testing"
@@ -17,7 +18,7 @@ func useTestEmoji(t *testing.T) *Font {
 	f := MustFont(data)
 	old, set := emojiFont, emojiFontSet
 	SetEmojiFont(f)
-	t.Cleanup(func() { emojiFont, emojiFontSet = old, set; fontGeneration++; requestLayout() })
+	t.Cleanup(func() { emojiFont, emojiFontSet = old, set; fontGeneration++; reactive.RequestLayout() })
 	return f
 }
 func TestEmojiSequencesStayInOneColorGlyph(t *testing.T) {

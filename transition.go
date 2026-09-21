@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"github.com/ironpark/ggui/internal/reactive"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -41,7 +42,7 @@ type transitionStart struct{ at time.Time }
 // Transition wraps child in an enter animation: a fade over 200ms until
 // Fade, Slide or Scale say otherwise.
 func Transition(child Widget) *TransitionWidget {
-	return &TransitionWidget{child: child, duration: 200 * time.Millisecond, ease: EaseOut, id: autoID()}
+	return &TransitionWidget{child: child, duration: 200 * time.Millisecond, ease: EaseOut, id: reactive.AutoID()}
 }
 
 // PopIn is the entrance every floating panel shares: a fade with a slight

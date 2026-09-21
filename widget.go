@@ -1,5 +1,7 @@
 package ggui
 
+import "github.com/ironpark/ggui/internal/reactive"
+
 // Widget is the unit of composition. Layout asks it for a size under some
 // Constraints; Paint then hands it a Canvas and the Rect its parent assigned:
 // the origin the parent chose and the size Layout returned. Layout always runs
@@ -36,16 +38,16 @@ type ComponentWidget struct {
 // use bindings, View, Reactive or control-flow blocks for later changes.
 func Component(setup func() Widget) *ComponentWidget {
 	c := &ComponentWidget{}
-	owner := currentOwner()
+	owner := reactive.CurrentOwner()
 	c.mount = func() {
-		if owner != nil && owner.disposed {
+		if owner != nil && owner.Disposed() {
 			return
 		}
 		if owner == nil {
-			owner = currentOwner()
+			owner = reactive.CurrentOwner()
 		}
-		withOwner(owner, func() {
-			rootWith(c, "", func() {
+		reactive.WithOwner(owner, func() {
+			reactive.RootWith(c, "", func() {
 				c.child = setup()
 				c.cw.child = c.child
 			})
@@ -59,7 +61,7 @@ func Component(setup func() Widget) *ComponentWidget {
 // parent's Builder static so the components it holds survive.
 func Reactive[W Widget](build func() W) *ComponentWidget {
 	c := &ComponentWidget{}
-	observe(func() {
+	reactive.Observe(func() {
 		c.child = build()
 		c.cw.child = c.child
 		c.cw.invalidate()
@@ -149,13 +151,13 @@ func Key[K comparable](key Readable[K], build func(K) Widget) *ComponentWidget {
 		var previous K
 		var initialized bool
 		var dispose Cleanup
-		owner := currentOwner()
+		owner := reactive.CurrentOwner()
 		OnCleanup(func() {
 			if dispose != nil {
 				dispose()
 			}
 		})
-		observe(func() {
+		reactive.Observe(func() {
 			value := key.Get()
 			if initialized && value == previous {
 				return
@@ -165,10 +167,10 @@ func Key[K comparable](key Readable[K], build func(K) Widget) *ComponentWidget {
 				dispose = nil
 			}
 			previous, initialized = value, true
-			withOwner(owner, func() {
+			reactive.WithOwner(owner, func() {
 				// A unique root gives remounted controls fresh identities.
 				identity := new(int)
-				dispose = rootWith(identity, "", func() { c.child = build(value); c.cw.child = c.child })
+				dispose = reactive.RootWith(identity, "", func() { c.child = build(value); c.cw.child = c.child })
 			})
 			c.cw.invalidate()
 		})

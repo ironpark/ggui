@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"fmt"
+	"github.com/ironpark/ggui/internal/reactive"
 	"image/color"
 	"math"
 	"slices"
@@ -163,7 +164,7 @@ func Sprintf(format string, args ...any) *DerivedValue[string] {
 func formatValues(format string, args []any) string {
 	vals := make([]any, len(args))
 	for i, a := range args {
-		if r, ok := a.(anyReader); ok {
+		if r, ok := a.(reactive.AnyReader); ok {
 			vals[i] = r.GetAny()
 		} else {
 			vals[i] = a
@@ -1147,7 +1148,7 @@ func (s *ScrollWidget) Adopt(prev any) {
 		s.offset = p.position()
 		if s.offset != s.laidAt {
 			s.cache.invalidate()
-			requestLayout()
+			reactive.RequestLayout()
 		}
 	}
 }
@@ -1156,7 +1157,7 @@ func (s *ScrollWidget) Adopt(prev any) {
 // is given. The offset lives in the widget and carries across a rebuild;
 // bind it to a StateValue with Offset to read or set it.
 func Scroll(child Widget) *ScrollWidget {
-	return &ScrollWidget{child: child, speed: 20, id: autoID()}
+	return &ScrollWidget{child: child, speed: 20, id: reactive.AutoID()}
 }
 
 // Horizontal scrolls along the x axis instead of the y axis.
@@ -1220,7 +1221,7 @@ func (s *ScrollWidget) scrollTo(v float64) {
 		s.bound.Set(v)
 	} else if v != s.offset {
 		s.offset = v
-		requestLayout() // what a virtualized child shows depends on it
+		reactive.RequestLayout() // what a virtualized child shows depends on it
 	}
 	if v != s.laidAt {
 		s.cache.invalidate()

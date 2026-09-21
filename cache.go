@@ -1,5 +1,7 @@
 package ggui
 
+import "github.com/ironpark/ggui/internal/reactive"
+
 // CachedWidget skips laying its subtree out again while nothing in it has
 // changed. Build one with Cached. App already skips the whole layout on a
 // still frame. Component, Reactive and Key cache their own subtrees, so a
@@ -15,7 +17,7 @@ package ggui
 // under.
 type CachedWidget struct {
 	child   Widget
-	sources map[layoutSource]uint64
+	sources map[reactive.LayoutSource]uint64
 
 	outer   *CachedWidget // the nearest Cached above, told when this one is
 	dirty   bool
@@ -35,7 +37,7 @@ func Cached(child Widget) *CachedWidget { return &CachedWidget{child: child} }
 func (c *CachedWidget) invalidate() {
 	// The runtime lays out only when something moved; a stale cache is
 	// such a thing even when no StateValue was written.
-	requestLayout()
+	reactive.RequestLayout()
 	for ; c != nil; c = c.outer {
 		c.dirty = true
 	}
@@ -45,17 +47,17 @@ func (c *CachedWidget) invalidate() {
 func (c *CachedWidget) Layout(cs Constraints, env Env) Size {
 	c.outer, _ = env.Get(cacheOwner)
 	if c.valid && !c.dirty && cs == c.cons && env.rev == c.rev && c.fontGen == fontGeneration && c.inputsEqual() {
-		if measuring != nil {
+		if reactive.Measuring != nil {
 			for src, version := range c.sources {
-				measuring(src, version)
+				reactive.Measuring(src, version)
 			}
 		}
 		return c.size
 	}
 	clear(c.sources)
-	previous := measuring
-	measuring = c.record
-	defer func() { measuring = previous }()
+	previous := reactive.Measuring
+	reactive.Measuring = c.record
+	defer func() { reactive.Measuring = previous }()
 	c.size = c.child.Layout(cs, env.With(cacheOwner, c))
 	c.fontGen = fontGeneration
 	c.cons, c.rev, c.valid, c.dirty = cs, env.rev, true, false
@@ -72,17 +74,17 @@ func (c *CachedWidget) Baseline() (float64, bool) { return baselineOf(c.child) }
 // that a change to src invalidates all of them. Layout installs it as the
 // reactive core's recorder for the duration of a measurement, saving and
 // restoring the previous one so that nested caches nest correctly.
-func (c *CachedWidget) record(src layoutSource, version uint64) {
+func (c *CachedWidget) record(src reactive.LayoutSource, version uint64) {
 	for ; c != nil; c = c.outer {
 		if c.sources == nil {
-			c.sources = make(map[layoutSource]uint64)
+			c.sources = make(map[reactive.LayoutSource]uint64)
 		}
 		c.sources[src] = version
 	}
 }
 func (c *CachedWidget) inputsEqual() bool {
 	for src, version := range c.sources {
-		if src.layoutVersion() != version {
+		if src.LayoutVersion() != version {
 			return false
 		}
 	}
@@ -95,7 +97,7 @@ func (c *CachedWidget) inputsEqual() bool {
 // write does the first half by itself; a widget that keeps size-affecting
 // state outside signals calls Invalidate when that state changes.
 func Invalidate(env Env) {
-	requestLayout()
+	reactive.RequestLayout()
 	if c, ok := env.Get(cacheOwner); ok {
 		c.invalidate()
 	}

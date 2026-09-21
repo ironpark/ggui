@@ -1,6 +1,10 @@
 package ggui
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/ironpark/ggui/internal/reactive"
+)
 
 // counting is a leaf that counts its layouts.
 type counting struct{ layouts int }
@@ -12,7 +16,7 @@ func TestCachedSkipsLayoutUntilSomethingInsideChanges(t *testing.T) {
 	leaf := &counting{}
 	dep := State(0)
 	var inner Widget
-	dispose := observe(func() {
+	dispose := reactive.Observe(func() {
 		inner = Reactive(func() Widget { dep.Get(); return Column(leaf) })
 	})
 	defer dispose()
@@ -29,7 +33,7 @@ func TestCachedSkipsLayoutUntilSomethingInsideChanges(t *testing.T) {
 		t.Fatalf("leaf laid out %d times after a resize, want 2", leaf.layouts)
 	}
 	dep.Set(1)
-	effects.flush()
+	reactive.Flush()
 	tree.Layout(Tight(Sz(200, 100)), env)
 	if leaf.layouts != 3 {
 		t.Fatalf("leaf laid out %d times after a rebuild inside, want 3", leaf.layouts)
@@ -44,7 +48,7 @@ func TestCachedNestsAndFollowsScrollAndFor(t *testing.T) {
 	leaf := &counting{}
 	items := State([]todo{{1, "a"}})
 	var list Widget
-	dispose := observe(func() {
+	dispose := reactive.Observe(func() {
 		list = EachKeyed(items, func(t todo) int { return t.ID }, func(EachItem[todo]) Widget { return leaf })
 	})
 	defer dispose()
@@ -59,7 +63,7 @@ func TestCachedNestsAndFollowsScrollAndFor(t *testing.T) {
 		t.Fatalf("leaf laid out %d times, want 1", leaf.layouts)
 	}
 	items.Set([]todo{{1, "a"}, {2, "b"}})
-	effects.flush()
+	reactive.Flush()
 	outer.Layout(Tight(Sz(100, 100)), env)
 	if leaf.layouts != 3 {
 		t.Fatalf("leaf laid out %d times after the list grew through two caches, want 3", leaf.layouts)

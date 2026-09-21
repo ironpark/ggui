@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"github.com/ironpark/ggui/internal/reactive"
 	"math"
 	"slices"
 	"sync"
@@ -112,7 +113,7 @@ type Tweened[T Number] struct {
 // EaseOut. T is inferred from v, so write Tween(0.0, d) for a float64.
 func Tween[T Number](v T, d time.Duration) *Tweened[T] {
 	t := &Tweened[T]{sig: State(v), duration: d, ease: EaseOut, from: v, to: v}
-	if currentOwner() != nil {
+	if reactive.CurrentOwner() != nil {
 		OnCleanup(func() {
 			t.disposed, t.running = true, false
 			anims.remove(t)
@@ -217,7 +218,7 @@ type Sprung[T Number] struct {
 // defaults settle in a few hundred milliseconds with a slight overshoot.
 func Spring[T Number](v T) *Sprung[T] {
 	s := &Sprung[T]{sig: State(v), stiffness: 170, damping: 18, precision: 0.01, pos: float64(v), to: float64(v)}
-	if currentOwner() != nil {
+	if reactive.CurrentOwner() != nil {
 		OnCleanup(func() {
 			s.disposed, s.running = true, false
 			anims.remove(s)

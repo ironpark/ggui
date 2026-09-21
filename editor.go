@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"github.com/ironpark/ggui/a11y"
+	"github.com/ironpark/ggui/internal/reactive"
 
 	"image"
 	"image/color"
@@ -441,7 +442,7 @@ func TextInput(value Binding[string]) *TextInputWidget {
 	// outside reaches the editor even when the layout above it is cached.
 	// The effect's first run is the value it was just built with, and the
 	// editor's own commit writes what ed already holds, so both are no-ops.
-	observe(func() {
+	reactive.Observe(func() {
 		v := value.Get()
 		if v == t.ed.text {
 			return
