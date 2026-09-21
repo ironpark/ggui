@@ -14,10 +14,10 @@ import (
 
 func newProbe(t *testing.T) (*model, *ggui.Probe) {
 	t.Helper()
-	var m *model
-	p := ggui.ProbeBuilder(func() ggui.Widget { return m.build() }, ggui.Sz(560, 420))
+	m := newModel()
+	p := ggui.ProbeBuilder(m.build, ggui.Sz(560, 420))
 	t.Cleanup(p.Close)
-	m = newModel(p.Dialogs())
+	m.dialogs = p.Dialogs()
 	return m, p
 }
 

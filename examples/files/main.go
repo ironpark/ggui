@@ -22,16 +22,15 @@ import (
 // model is the list of files the app has been handed and a line about the
 // last thing that happened.
 type model struct {
-	dialogs runtime.FilePicker // the host's, so a test's stub answers too
+	dialogs runtime.FilePicker // the host's, set once it exists; see main
 	Files   *ggui.StateValue[[]string]
 	Status  *ggui.StateValue[string]
 }
 
-func newModel(dialogs runtime.FilePicker) *model {
+func newModel() *model {
 	return &model{
-		dialogs: dialogs,
-		Files:   ggui.State([]string(nil)),
-		Status:  ggui.State("Drop files onto the card, or open a dialog."),
+		Files:  ggui.State([]string(nil)),
+		Status: ggui.State("Drop files onto the card, or open a dialog."),
 	}
 }
 
@@ -128,14 +127,14 @@ func (m *model) build() ggui.Widget {
 }
 
 func main() {
-	var m *model
+	m := newModel()
 	app := ggui.New(ggui.Config{
 		Title:     "ggui · files",
 		Width:     560,
 		Height:    420,
 		Resizable: true,
-	}, func() ggui.Widget { return m.build() })
-	m = newModel(app.Dialogs())
+	}, m.build)
+	m.dialogs = app.Dialogs()
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}

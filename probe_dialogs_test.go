@@ -7,7 +7,7 @@ import (
 	"github.com/ironpark/ggui/runtime"
 )
 
-// A Probe answers dialogs with a stub that cancels until told otherwise,
+// A Probe answers dialogs with a stub that cancels until its Paths are set,
 // and records what was asked, so code written against Host runs headless.
 func TestProbeDialogsAreAStub(t *testing.T) {
 	p := NewProbe(Text("x"), Sz(10, 10))
@@ -24,8 +24,7 @@ func TestProbeDialogsAreAStub(t *testing.T) {
 	if got, err := h.Dialogs().SaveFile(runtime.FileDialog{}); err != nil || got != "/a" {
 		t.Fatalf("SaveFile = %q, %v", got, err)
 	}
-	p.SetDialogs(nil)
-	if fresh := p.Dialogs().(*runtime.StubFilePicker); len(fresh.Asked) != 0 {
-		t.Fatalf("SetDialogs(nil) kept the old stub: %+v", fresh.Asked)
+	if len(stub.Asked) != 2 {
+		t.Fatalf("Asked = %+v, want both dialogs recorded", stub.Asked)
 	}
 }

@@ -323,10 +323,13 @@ func cellText(v any) string {
 
 // truncate cuts s to n runes, marking the cut.
 func truncate(s string, n int) string {
-	if utf8.RuneCountInString(s) <= n {
-		return s
+	for i := range s {
+		if n == 0 {
+			return s[:i] + "…"
+		}
+		n--
 	}
-	return string([]rune(s)[:n]) + "…"
+	return s
 }
 
 func cellEditor(m *model) ggui.Widget {

@@ -8,8 +8,7 @@ It opens existing local databases without creating demo tables.
 
 The example is its own Go module, so `modernc.org/sqlite` stays out of the
 library's dependency graph; the root `go.work` lets the commands below run
-from the repository root. Note that `go test ./...` at the root does not
-descend into it.
+from the repository root, and `task test` covers it alongside the rest.
 
 ```sh
 go run ./examples/sqlite -db /path/to/database.sqlite

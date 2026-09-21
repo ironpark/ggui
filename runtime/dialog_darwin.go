@@ -3,6 +3,8 @@
 package runtime
 
 import (
+	"sync"
+
 	"github.com/ebitengine/purego/cstrings"
 	"github.com/ebitengine/purego/objc"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -47,9 +49,13 @@ var (
 const nsModalResponseOK = 1
 
 // sheetDone is the sheet's completion handler: the sheet has closed with a
-// response, and the modal loop runSheet started is told so.
-var sheetDone = cocoa.NewBlock(func(_ uintptr, response int) {
-	cocoa.App().Send(selStopModalWithCode, response)
+// response, and the modal loop runSheet started is told so. It is made on
+// first use, since a block takes a callback slot for the life of the
+// process and most apps never open a sheet.
+var sheetDone = sync.OnceValue(func() *cocoa.Block {
+	return cocoa.NewBlock(func(_ uintptr, response int) {
+		cocoa.App().Send(selStopModalWithCode, response)
+	})
 })
 
 // showDialog runs the panel on the main thread and waits for it.
@@ -93,9 +99,8 @@ func runPanel(k dialogKind, d FileDialog) ([]string, error) {
 	if k == kindSave {
 		return []string{urlPath(panel.Send(selURL))}, nil
 	}
-	urls := cocoa.Objects(panel.Send(selURLs))
-	paths := make([]string, 0, len(urls))
-	for _, url := range urls {
+	var paths []string
+	for url := range cocoa.Objects(panel.Send(selURLs)) {
 		paths = append(paths, urlPath(url))
 	}
 	return paths, nil
@@ -110,7 +115,7 @@ func runSheet(panel objc.ID) int {
 	if win == 0 {
 		return objc.Send[int](panel, selRunModal)
 	}
-	panel.Send(selBeginSheetModal, win, sheetDone.Ptr())
+	panel.Send(selBeginSheetModal, win, sheetDone().Ptr())
 	return objc.Send[int](cocoa.App(), selRunModalForWindow, panel)
 }
 

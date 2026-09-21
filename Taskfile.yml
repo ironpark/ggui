@@ -20,11 +20,13 @@ tasks:
     desc: Build all packages
     cmds:
       - '"{{.GO}}" build ./...'
+      - '"{{.GO}}" build -C examples/sqlite ./...'
 
   test:
-    desc: Run all tests
+    desc: Run all tests, including the examples that are their own module
     cmds:
       - '"{{.GO}}" test ./...'
+      - '"{{.GO}}" test -C examples/sqlite ./...'
 
   bench:
     desc: Run benchmarks (COUNT=6 by default, for benchstat)
@@ -37,6 +39,7 @@ tasks:
     desc: Run Go static checks
     cmds:
       - '"{{.GO}}" vet ./...'
+      - '"{{.GO}}" vet -C examples/sqlite ./...'
 
   vet:windows:
     desc: Type-check and vet the Windows build from any host
@@ -56,11 +59,14 @@ tasks:
     desc: Format Go sources
     cmds:
       - '"{{.GO}}" fmt ./...'
+      - '"{{.GO}}" fmt -C examples/sqlite ./...'
 
   tidy:
     desc: Tidy Go dependencies
     cmds:
       - '"{{.GO}}" mod tidy'
+      - '"{{.GO}}" mod tidy -C examples/sqlite'
+      - '"{{.GO}}" work sync'
 
   bundle:
     desc: Build a macOS app bundle (EXAMPLE=counter, todo, workspace, or gallery)

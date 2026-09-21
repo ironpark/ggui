@@ -7,6 +7,7 @@
 package cocoa
 
 import (
+	"iter"
 	"runtime"
 	"unsafe"
 
@@ -61,14 +62,17 @@ func StringArray(ss []string) objc.ID {
 	return Array(ids)
 }
 
-// Objects returns the elements of an NSArray, in order.
-func Objects(arr objc.ID) []objc.ID {
-	n := objc.Send[uint](arr, selCount)
-	ids := make([]objc.ID, 0, n)
-	for i := range n {
-		ids = append(ids, arr.Send(selObjectAtIndex, i))
+// Objects walks the elements of an NSArray, in order; a loop that breaks
+// asks for no more than it looked at.
+func Objects(arr objc.ID) iter.Seq[objc.ID] {
+	return func(yield func(objc.ID) bool) {
+		n := objc.Send[uint](arr, selCount)
+		for i := range n {
+			if !yield(arr.Send(selObjectAtIndex, i)) {
+				return
+			}
+		}
 	}
-	return ids
 }
 
 // AppWindow finds Ebitengine's window, which is the one whose content view
@@ -81,7 +85,7 @@ func AppWindow() objc.ID {
 	if contentClass == 0 {
 		return 0
 	}
-	for _, window := range Objects(App().Send(selWindows)) {
+	for window := range Objects(App().Send(selWindows)) {
 		content := window.Send(selContentView)
 		if content != 0 && objc.Send[bool](content, selIsKindOfClass, contentClass) {
 			return window

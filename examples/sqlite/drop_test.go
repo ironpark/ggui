@@ -14,7 +14,7 @@ func newProbe(t *testing.T, m *model) *ggui.Probe {
 	t.Helper()
 	p := ggui.ProbeBuilder(func() ggui.Widget { return build(m) }, ggui.Sz(1000, 740))
 	t.Cleanup(p.Close)
-	m.dialogs = p.Dialogs()
+	m.dialogs = p.Dialogs() // so a tapped Open or Export is a recorded cancel
 	return p
 }
 

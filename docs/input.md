@@ -168,8 +168,8 @@ posted work, not before `Run`.
 
 A `Probe` answers every dialog with a `runtime.StubFilePicker`, which
 returns fixed `Paths` and records what was asked, so a test sets the paths
-and taps the button; `SetDialogs` on either host installs any other
-`FilePicker`, for an app that draws its own.
+and taps the button. `App.SetDialogs` installs any other `FilePicker`,
+for an app that draws its own.
 
 ## Focus scopes
 
