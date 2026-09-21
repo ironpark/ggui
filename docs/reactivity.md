@@ -76,6 +76,22 @@ returning. `Untrack(total.Get)` also returns the latest value.
 Derived calculations must be pure: state writes and recursive derived cycles
 panic. `WithEqual` controls downstream notification, including slice results.
 `Map`, `StateValue.Map`, and `DerivedValue.Map` are convenience derivations.
+
+`Textf` and `Sprintf` unwrap arguments with `GetAny() any`: built-in state,
+derived values, lenses, tweens and springs all provide it. A custom
+`Readable[T]` with only `Get() T` is passed to `fmt.Sprintf` unchanged, rather
+than read automatically. Adapt it with an owned derived value:
+
+```go
+// Inside Component or app setup; reader is a custom Readable[int].
+label := ggui.Textf("Count: %d", ggui.Derived(reader.Get))
+```
+
+Alternatively, format `reader.Get()` inside a `Derived` callback and pass that
+string to `TextOf`. These keep the minimal `Readable` interface intact and use
+normal dependency tracking. A custom reader must read reactive sources from
+its `Get` method for changes to notify consumers.
+
 A derived value belongs to its creation owner; disposing that owner stops it.
 Unowned derivations must be explicitly disposed. A disposed value retains its
 last computed result (the zero value if it was never read).
@@ -128,6 +144,11 @@ reactive operations from the wrong goroutine while the app is running. The
 | `Readable[T]` | `Get()` | Display-only data, including derived values. |
 | `Binding[T]` | `Get()`, `Set(T)` | Two-way controls and animated values. |
 | `Writable[T]` | `Binding[T]`, `Update(func(T) T)` | Immediate read-modify-write helpers. |
+
+Layout bindings such as `DisabledWhen`, `NamedWhen` and `OptionsWhen` track
+signal reads made inside a custom reader's `Get`, including under layout caches.
+A getter over plain, non-reactive storage cannot notify the UI: publish through
+a signal, or have the custom widget call `Invalidate` with its last layout Env.
 
 `Field` and `Lens` bind controls to parts of a state value:
 

@@ -61,6 +61,34 @@ ui.Table(people, func(p Person) int { return p.ID },
 signal, labelled through `fmt.Sprint` or `.Format(fn)`: a click
 or Space opens the list in a `Popup`, the arrow keys move through it (or
 step the value while it is closed), Enter picks, Escape closes.
+
+Select and Combobox shallow-copy their option slices. `ToggleGroup` also keeps
+an owned snapshot; changing the caller's slice never replaces displayed options.
+Treat objects referenced by slice elements as immutable.
+
+For Select and Combobox, `.Options(items)` replaces the options after mount and
+`.OptionsWhen(reader)` follows a `Readable[[]T]` at layout:
+
+```go
+plans := ggui.State([]string{"free", "pro"})
+selected := ggui.State("free")
+picker := ui.Combobox(selected, nil).OptionsWhen(plans).Named("Plan")
+// Later, on the UI goroutine:
+plans.Set([]string{"free", "pro", "team"})
+```
+
+The last setting wins: `Options` detaches an earlier reader; `OptionsWhen(nil)`
+detaches it while retaining the current snapshot. Each changed list is copied;
+lists with the same elements in the same order keep their current rows. Neither
+method writes the value binding or calls `OnChange`. A value removed from the
+list remains formatted in Select; Combobox displays its placeholder.
+
+Updating the options keeps an open popup open. Select highlights the current
+value if present, otherwise nothing; the next Down/Up starts at the first/last
+option. Combobox retains its query and search editor, re-filters the new list,
+highlights the first match and resets result scrolling. Empty lists are valid.
+Configure `.Format(fn)` before layout; replacement options use that formatter.
+
 `ui.Menu("File", ui.MenuItem("New", fn), ui.MenuDivider(), ...)` is a
 secondary button that opens a list of actions the same way; an item runs
 its function and closes the menu.

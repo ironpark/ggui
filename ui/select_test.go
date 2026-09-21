@@ -83,3 +83,30 @@ func TestSelectKeyboardRevealsOverflowOption(t *testing.T) {
 		t.Fatal("keyboard did not select last option")
 	}
 }
+
+func TestSelectionControlsOwnOptionSnapshots(t *testing.T) {
+	for _, kind := range []string{"select", "combobox", "toggle group"} {
+		t.Run(kind, func(t *testing.T) {
+			options := []string{"Alpha", "Beta"}
+			value := ggui.State("Beta")
+			var control ggui.Widget
+			if kind == "select" {
+				control = ui.Select(value, options).Named("Choice")
+			} else if kind == "combobox" {
+				control = ui.Combobox(value, options).Named("Choice")
+			} else {
+				control = ui.ToggleGroup(value, options)
+			}
+			options[0] = "Mutated"
+			p := ggui.NewProbe(ggui.Column(control), ggui.Sz(300, 300))
+			defer p.Close()
+			if kind != "toggle group" {
+				p.Tap("Choice")
+			}
+			p.Tap("Alpha")
+			if got := ggui.Untrack(value.Get); got != "Alpha" {
+				t.Fatalf("picked %q from caller-mutated options; want Alpha", got)
+			}
+		})
+	}
+}

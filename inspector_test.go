@@ -135,7 +135,7 @@ func TestInspectorDocksToTheBottom(t *testing.T) {
 		c.fs().trace = append(c.fs().trace, entry("Box", i%6, 0, float64(i), 40, 10))
 	}
 	in := &inspector{}
-	in.apply(InspectorOptions{Dock: InspectorBottom, HideOutlines: true})
+	in.apply(InspectorOptions{Dock: InspectorBottom})
 	in.paint(c)
 	if in.panel.Origin.X != 0 || in.panel.Size.W != 400 || in.panel.Origin.Y+in.panel.Size.H != 400 {
 		t.Fatalf("panel is not docked to the bottom edge: %+v", in.panel)

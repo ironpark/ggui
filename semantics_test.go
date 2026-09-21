@@ -138,7 +138,7 @@ func TestFocusedNodePrefersHandlerAndFallsBackAfterRebuild(t *testing.T) {
 	first, exact, rebuilt := &twice{}, &twice{}, &twice{}
 	for _, w := range []*twice{first, exact, rebuilt} {
 		w.Role = RoleTextField
-		w.Key("shared")
+		w.SetKey("shared")
 	}
 	c.Describe(r, first)
 	c.Describe(r, exact)

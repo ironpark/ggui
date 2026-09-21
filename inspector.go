@@ -21,10 +21,6 @@ const (
 type InspectorOptions struct {
 	Dock         InspectorDock
 	ShowOutlines bool
-	// HideOutlines overrides ShowOutlines.
-	//
-	// Deprecated: outlines are off by default.
-	HideOutlines bool
 }
 
 // inspectKey prefers the widget's explicit identity, then its instance and
@@ -211,7 +207,7 @@ func withAlpha(c color.Color, a uint8) color.Color {
 	return n
 }
 func (in *inspector) apply(o InspectorOptions) {
-	in.dock, in.outlines = o.Dock, o.ShowOutlines && !o.HideOutlines
+	in.dock, in.outlines = o.Dock, o.ShowOutlines
 }
 
 // reset forgets the session when the inspector closes: borrowed frame data,

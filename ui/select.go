@@ -2,20 +2,22 @@ package ui
 
 import (
 	"image/color"
+	"slices"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/icons"
 )
 
 // SelectWidget is a dropdown that picks one of a list of values into a
-// signal. Build one with Select or SelectStrings.
+// signal. Build one with Select.
 type SelectWidget[T comparable] struct {
 	ggui.Interactive
-	value    ggui.Binding[T]
-	options  []T
-	label    func(T) string
-	minWidth float64
-	onChange func(T)
+	value       ggui.Binding[T]
+	options     []T
+	optionsWhen ggui.Readable[[]T]
+	label       func(T) string
+	minWidth    float64
+	onChange    func(T)
 
 	popup     *ggui.PopupWidget
 	text      *ggui.TextWidget
@@ -33,25 +35,65 @@ type SelectWidget[T comparable] struct {
 // Select creates a dropdown bound to value, showing each option through
 // fmt.Sprint until Format says otherwise. Space or Enter opens it, the arrow
 // keys move through the options (or change the value directly while closed)
-// and Escape closes it.
+// and Escape closes it. The options slice is shallow-copied.
 func Select[T comparable](value ggui.Binding[T], options []T) *SelectWidget[T] {
-	s := &SelectWidget[T]{value: value, options: options, minWidth: 0, highlight: -1}
+	s := &SelectWidget[T]{value: value, label: sprint[T], highlight: -1}
 	s.Role = ggui.RoleSelect
 	s.AutoKey()
 	s.box = ggui.Box()
-	rows := make([]ggui.Widget, len(options))
-	for i := range options {
-		it := &selectItem[T]{owner: s, index: i}
-		it.AutoKey()
-		s.items = append(s.items, it)
-		rows[i] = it
-	}
-	column := ggui.Column(rows...).Align(ggui.AlignStretch)
+	column := ggui.Column().Align(ggui.AlignStretch)
 	s.viewport = &selectViewport[T]{owner: s, column: column, offset: ggui.State(0.0)}
 	s.viewport.scroll = ggui.Scroll(column).Offset(s.viewport.offset)
 	s.list = ggui.Box(s.viewport)
 	s.popup = ggui.Popup(selectAnchor[T]{s}, s.list).Keys(s).Owner(s)
-	return s.Format(sprint[T])
+	return s.Options(options)
+}
+
+// Options replaces the options with a shallow copy, including after mount,
+// and removes any OptionsWhen binding. It leaves the value and open state
+// unchanged and does not call OnChange. If the value is absent it remains
+// displayed, with no highlighted option until keyboard or pointer input.
+func (s *SelectWidget[T]) Options(options []T) *SelectWidget[T] {
+	wasBound := s.optionsWhen != nil
+	s.optionsWhen = nil
+	if s.setOptions(options) || wasBound {
+		ggui.Invalidate(s.env)
+	}
+	return s
+}
+
+// OptionsWhen follows r at layout without rebuilding the control. Changes
+// use the same snapshot and selection rules as Options. The last setting
+// wins; nil stops following and keeps the current snapshot.
+func (s *SelectWidget[T]) OptionsWhen(r ggui.Readable[[]T]) *SelectWidget[T] {
+	if sameReadable(s.optionsWhen, r) {
+		return s
+	}
+	s.optionsWhen = r
+	ggui.Invalidate(s.env)
+	return s
+}
+
+func (s *SelectWidget[T]) setOptions(options []T) bool {
+	if slices.Equal(s.options, options) {
+		return false
+	}
+	s.options = slices.Clone(options)
+	s.items = make([]*selectItem[T], len(options))
+	rows := make([]ggui.Widget, len(options))
+	for i, value := range s.options {
+		name := s.label(value)
+		it := &selectItem[T]{owner: s, index: i, text: ggui.Text(name).NoWrap()}
+		it.Role, it.Name = ggui.RoleOption, name
+		// Replaced rows must not adopt a removed row's pointer state by position.
+		it.SetKey(it)
+		s.items[i], rows[i] = it, it
+	}
+	s.viewport.column = ggui.Column(rows...).Align(ggui.AlignStretch)
+	s.viewport.scroll = ggui.Scroll(s.viewport.column).Offset(s.viewport.offset)
+	s.highlight = s.index()
+	s.viewport.reveal = true
+	return true
 }
 
 // Format sets how each option is shown.
@@ -135,6 +177,9 @@ func (s *SelectWidget[T]) Popup() *ggui.PopupWidget { return s.popup }
 
 // Layout implements Widget.
 func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	if s.optionsWhen != nil {
+		s.setOptions(s.optionsWhen.Get())
+	}
 	s.Sync()
 	if s.Inert {
 		s.popup.Hide()

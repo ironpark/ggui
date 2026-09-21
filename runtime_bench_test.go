@@ -34,8 +34,8 @@ func BenchmarkInteractiveRegistration(b *testing.B) {
 			c := Canvas{}
 			old, next := make([]twice, n), make([]twice, n)
 			for i := range old {
-				old[i].Key(i)
-				next[i].Key(i)
+				old[i].SetKey(i)
+				next[i].SetKey(i)
 				old[i].Hit(&c, Rct(Pt(0, float64(i)*20), Sz(100, 20)), &old[i], CursorShapePointer)
 			}
 			c.prev, c.hits = c.hits, make([]hitRegion, 0, n)

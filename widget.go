@@ -5,6 +5,12 @@ package ggui
 // the origin the parent chose and the size Layout returned. Layout always runs
 // before Paint in a frame, so a widget keeps only what the Rect cannot tell
 // it, such as where its children go. Leaf widgets usually keep nothing at all.
+//
+// Unless a method documents runtime updates, configure widgets before their
+// first Layout. After mount, use bindings or rebuild a subtree with View or
+// Reactive. Configuration setters do not generally invalidate layout caches.
+// Custom widgets may configure their children before laying them out; when
+// their own non-reactive state affects layout, they call Invalidate.
 type Widget interface {
 	Layout(c Constraints, env Env) Size
 	Paint(dst *Canvas, r Rect)

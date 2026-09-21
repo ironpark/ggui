@@ -72,7 +72,7 @@ type Interactive struct {
 	Role         Role   // what the control is, for Probe.Find and the inspector
 	Name         string // what it is called: the text on it, or what a Named setter gave
 
-	id        any // from Key
+	id        any // from SetKey
 	auto      any // from the keyed component it was constructed in
 	inertWhen Readable[bool]
 	nameWhen  Readable[string]
@@ -102,7 +102,7 @@ func (s *Interactive) SetInert(v bool) {
 }
 
 // AutoKey takes the identity the keyed component being built gives the
-// control, if any; a constructor calls it. Key overrides it.
+// control, if any; a constructor calls it. SetKey overrides it.
 func (s *Interactive) AutoKey() { s.auto = autoID() }
 
 // Semantics implements Semantic.
@@ -133,11 +133,11 @@ func (s *Interactive) Sync() {
 	}
 }
 
-// Key gives the control an identity, so a rebuilt one that also moved
+// SetKey gives the control an identity, so a rebuilt one that also moved
 // keeps its state. Without one its Rect identifies it.
-func (s *Interactive) Key(k any) { s.id = k }
+func (s *Interactive) SetKey(k any) { s.id = k }
 
-// HitID implements Identified: what Key set, else what AutoKey took, else nil.
+// HitID implements Identified: what SetKey set, else what AutoKey took, else nil.
 func (s *Interactive) HitID() any {
 	if s.id != nil {
 		return s.id

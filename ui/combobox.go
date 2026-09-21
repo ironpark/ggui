@@ -1,11 +1,16 @@
 package ui
 
-import "github.com/ironpark/ggui"
+import (
+	"slices"
+
+	"github.com/ironpark/ggui"
+)
 
 // ComboboxWidget is a searchable selection popup. Keep it mounted to retain its query.
 type ComboboxWidget[T comparable] struct {
 	value       ggui.Binding[T]
 	options     []T
+	optionsWhen ggui.Readable[[]T]
 	label       func(T) string
 	placeholder string
 	button      *ButtonWidget
@@ -13,12 +18,14 @@ type ComboboxWidget[T comparable] struct {
 	search      *CommandWidget
 	query       *ggui.StateValue[string]
 	onChange    func(T)
+	env         ggui.Env
 }
 
 // Combobox creates a closed dropdown; its popup focuses a search field and
 // supports typing, Up/Down, Enter, pointer selection and Escape cancellation.
+// The options slice is shallow-copied.
 func Combobox[T comparable](value ggui.Binding[T], options []T) *ComboboxWidget[T] {
-	c := &ComboboxWidget[T]{value: value, options: append([]T(nil), options...), label: sprint[T], placeholder: "Select…", query: ggui.State("")}
+	c := &ComboboxWidget[T]{value: value, label: sprint[T], placeholder: "Select…", query: ggui.State("")}
 	c.button = Button("", func() {
 		if c.popup.IsOpen() {
 			c.popup.Hide()
@@ -40,14 +47,64 @@ func Combobox[T comparable](value ggui.Binding[T], options []T) *ComboboxWidget[
 	if c.button.HitID() == nil {
 		c.button.Key(c)
 	}
-	entries := make([]CommandEntry, len(options))
-	for i, v := range options {
-		entries[i] = CommandItem(c.label(v), func() { setChanged(c.value, v, c.onChange); c.popup.Hide() })
-	}
-	c.search = Command(c.query, entries...).Named("Search options").Placeholder("Search options…")
+	c.search = Command(c.query).Named("Search options").Placeholder("Search options…")
 	c.popup = ggui.Popup(c.button, ggui.Box(c.search).Width(280)).Owner(c.button)
 	c.button.Expands(c.popup.IsOpen)
+	return c.Options(options)
+}
+
+type comboboxKey struct {
+	part string
+	id   any
+}
+
+// Key gives the trigger, popup and search editor distinct identities derived
+// from k, retaining focus and popup state across rebuilds that move the control.
+// Keep the control mounted to retain its search query.
+func (c *ComboboxWidget[T]) Key(k any) *ComboboxWidget[T] {
+	c.button.Key(comboboxKey{"trigger", k})
+	c.popup.Key(comboboxKey{"popup", k})
+	c.search.field.Key(comboboxKey{"search", k})
 	return c
+}
+
+// Options replaces the options with a shallow copy, including after mount,
+// and removes any OptionsWhen binding. The popup and search editor stay
+// mounted: open state and query are preserved, matches are refreshed and
+// the first match is highlighted. The value is never written and OnChange
+// is not called; an absent value displays Placeholder.
+func (c *ComboboxWidget[T]) Options(options []T) *ComboboxWidget[T] {
+	wasBound := c.optionsWhen != nil
+	c.optionsWhen = nil
+	if c.setOptions(options) || wasBound {
+		ggui.Invalidate(c.env)
+	}
+	return c
+}
+
+// OptionsWhen follows r at layout without rebuilding the control. Changes
+// use the same snapshot and selection rules as Options. The last setting
+// wins; nil stops following and keeps the current snapshot.
+func (c *ComboboxWidget[T]) OptionsWhen(r ggui.Readable[[]T]) *ComboboxWidget[T] {
+	if sameReadable(c.optionsWhen, r) {
+		return c
+	}
+	c.optionsWhen = r
+	ggui.Invalidate(c.env)
+	return c
+}
+
+func (c *ComboboxWidget[T]) setOptions(options []T) bool {
+	if slices.Equal(c.options, options) {
+		return false
+	}
+	c.options = slices.Clone(options)
+	entries := make([]CommandEntry, len(options))
+	for i, v := range c.options {
+		entries[i] = CommandItem(c.label(v), func() { setChanged(c.value, v, c.onChange); c.popup.Hide() })
+	}
+	c.search.setEntries(entries)
+	return true
 }
 
 // Format formats the options and selected value. Configure it before layout.
@@ -86,6 +143,10 @@ func (c *ComboboxWidget[T]) Popup() *ggui.PopupWidget { return c.popup }
 
 // Layout implements ggui.Widget.
 func (c *ComboboxWidget[T]) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
+	c.env = env
+	if c.optionsWhen != nil {
+		c.setOptions(c.optionsWhen.Get())
+	}
 	c.button.Sync()
 	if c.button.Inert {
 		c.popup.Hide()

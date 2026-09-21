@@ -27,12 +27,33 @@ ggui.Center(
 
 ## On this page
 
+- [Configuration and runtime updates](#configuration-and-runtime-updates)
 - [Choosing a layout](#choosing-a-layout)
 - [Rows, columns, and flex](#rows-columns-and-flex)
 - [Wrap and grid](#wrap-and-grid)
 - [Tooltips and popups](#tooltips-and-popups)
 - [Images](#images)
 - [Text](#text)
+
+## Configuration and runtime updates
+
+Configure widgets before their first layout unless a method explicitly supports
+runtime updates. Fluent setters such as `Box.Width`, `Row.Gap`, `Text.Size` and
+`Text.LineHeight` do not generally request layout or invalidate ancestor caches.
+Changing them after mount is not a supported way to update a screen.
+
+Use bindings for changing data and `View` or `Reactive` for changing structure
+or configuration. For example, create `Text("Hello").Size(size)` inside a
+`View(fontSize, ...)` callback to follow a font-size signal. Runtime operations
+such as `Text.Set`, control `Disabled`/`DisabledWhen`, popup `Show`/`Hide`, and
+Select/Combobox `Options`/`OptionsWhen` are documented separately. For scrolling,
+write the signal passed to `Scroll.Offset`.
+
+Custom widgets may configure their children just before laying them out. If
+their own non-reactive state changes the layout, retain the `Env` from Layout
+and call `Invalidate(env)`. It invalidates ancestor caches as well as requesting
+a frame layout. Widget mutation belongs on the UI goroutine; workers use
+`App.Post`.
 
 ## Choosing a layout
 

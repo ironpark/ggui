@@ -45,6 +45,7 @@ from the repository root unless a guide says otherwise.
 | Support assistive technology | [Accessibility](accessibility.md) |
 | Test and inspect a UI | [Testing](testing.md) · [Widget inspector](inspector.md) |
 | Write a custom widget or understand rendering | [Custom widgets and rendering](rendering.md) |
+| Understand API conventions and runtime setters | [Public API conventions](api-conventions.md) |
 | Build examples, run checks, or navigate the source | [Development](development.md) |
 
 ## Package and asset references

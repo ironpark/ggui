@@ -18,9 +18,9 @@ func TestInspectorOutlinesAreOptIn(t *testing.T) {
 	if !in.outlines {
 		t.Fatal("explicit outlines ignored")
 	}
-	in.apply(InspectorOptions{ShowOutlines: true, HideOutlines: true})
+	in.apply(InspectorOptions{ShowOutlines: false})
 	if in.outlines {
-		t.Fatal("legacy hide option ignored")
+		t.Fatal("outlines did not turn off")
 	}
 }
 

@@ -66,6 +66,13 @@ their own binding and apply the result to their internal controls. Disabling a
 popup control also closes its popup. Item configuration values such as
 `CommandEntry` keep their static `Disabled` option.
 
+Public control `.Key(id)` setters return the concrete control, so identity can
+be assigned inline: `ui.Button("Save", save).Key("save").Outline()`. Configure
+keys before mount and use stable, comparable values. A key identifies the
+control's input state; it does not automatically key all children of a group.
+Combobox keys its trigger, popup and search editor separately; keep it mounted
+to preserve the search query.
+
 Use `.Named(name)` for a control's accessible and Probe name. `Field` supplies
 its label only when the control has no explicit name, taking precedence over a
 placeholder or built-in fallback. Labels passed to constructors such as

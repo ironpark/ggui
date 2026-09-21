@@ -145,4 +145,6 @@ carets through its own rebuilds with no keys on the fields.
 `ggui.Interactive` is the shared body of a
 control: embed it, call `Hit` from `Paint` and `Pointer` and `Keyboard` from
 the handlers, and hover, press, focus, the focus ring and adoption come with
-it; `ui` is built on it.
+it; `ui` is built on it. A custom control calls `Interactive.SetKey(id)` to
+assign an explicit identity and may expose its own fluent `Key(id)` method
+that returns the concrete control.

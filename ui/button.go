@@ -136,11 +136,6 @@ func (b *ButtonWidget) Outline() *ButtonWidget { b.variant = variantOutline; ret
 // supporting action that should still read as a button.
 func (b *ButtonWidget) Secondary() *ButtonWidget { b.variant = variantSecondary; return b }
 
-// Muted is the former name of Secondary.
-//
-// Deprecated: use Secondary.
-func (b *ButtonWidget) Muted() *ButtonWidget { return b.Secondary() }
-
 // Ghost omits the resting background and border for a lightweight action.
 func (b *ButtonWidget) Ghost() *ButtonWidget { b.variant = variantGhost; return b }
 

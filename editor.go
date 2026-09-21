@@ -480,7 +480,7 @@ func (t *TextInputWidget) IsDisabled() bool { return t.Inert || t.inheritedDisab
 // Key gives the editor an identity, so a rebuilt one that also moved keeps
 // its caret and focus. Without one the keyed component it was built in
 // identifies it, else its Rect.
-func (t *TextInputWidget) Key(k any) *TextInputWidget { t.Interactive.Key(k); return t }
+func (t *TextInputWidget) Key(k any) *TextInputWidget { t.Interactive.SetKey(k); return t }
 
 // Semantics implements Semantic.
 func (t *TextInputWidget) Semantics() (Role, string) {

@@ -607,7 +607,7 @@ func (c *Canvas) adopt(h *hitRegion) {
 // or, when h has none, the one that held the same Rect. Where two match,
 // the one painted last wins, as it is the one on top.
 //
-// An ID the language cannot compare, which Interactive.Key accepts, matches
+// An ID the language cannot compare, which Interactive.SetKey accepts, matches
 // nothing rather than bringing the process down.
 func (c *Canvas) lastFrame(h *hitRegion) *hitRegion {
 	f := c.fs()

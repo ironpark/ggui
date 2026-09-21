@@ -109,12 +109,13 @@ type ToggleGroupWidget[T comparable] struct {
 }
 
 // ToggleGroup creates one segment per option, bound to value and labelled
-// through fmt.Sprint until Format says otherwise.
+// through fmt.Sprint until Format says otherwise. The options slice is
+// shallow-copied; configure the group before layout.
 //
 //	align := ggui.State("left")
 //	ui.ToggleGroup(align, []string{"left", "center", "right"})
 func ToggleGroup[T comparable](value ggui.Binding[T], options []T) *ToggleGroupWidget[T] {
-	g := &ToggleGroupWidget[T]{value: value, options: options, hover: -1}
+	g := &ToggleGroupWidget[T]{value: value, options: append([]T(nil), options...), hover: -1}
 	g.Role = ggui.RoleGroup
 	g.AutoKey()
 	if g.HitID() == nil {

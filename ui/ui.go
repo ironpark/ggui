@@ -17,6 +17,7 @@ import (
 	"cmp"
 	"fmt"
 	"image/color"
+	"reflect"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/fn"
@@ -42,6 +43,16 @@ func pick[T any](cond bool, a, b T) T { return fn.Pick(cond, a, b) }
 func bounded(v, fallback float64) float64 { return fn.Bounded(v, fallback) }
 
 func clamp[T cmp.Ordered](v, lo, hi T) T { return fn.Clamp(v, lo, hi) }
+
+// sameReadable recognizes repeated bindings without requiring user-defined
+// readers to be comparable. Built-in readers have stable pointer identities;
+// a non-comparable reader is conservatively treated as a replacement.
+func sameReadable[T any](a, b ggui.Readable[T]) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return reflect.ValueOf(a).Comparable() && reflect.ValueOf(b).Comparable() && a == b
+}
 
 // channels returns c with its color scaled by f and its alpha by fa.
 func channels(c color.Color, f, fa float64) color.Color {

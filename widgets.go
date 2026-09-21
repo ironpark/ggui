@@ -18,7 +18,9 @@ import (
 //	Box(Text("hi").Color(fg)).Pad(8).Fill(bg)
 //
 // reads as the tree it builds. Widget types end in Widget so the short names
-// stay free for the constructors.
+// stay free for the constructors. Configure them before the first Layout,
+// unless a method documents runtime updates. Bindings and reactive builders
+// drive later changes; configuration setters do not generally invalidate caches.
 
 // EdgeInsets is padding on the four sides of a box.
 type EdgeInsets struct {
@@ -89,6 +91,7 @@ type wrapKey struct {
 	value      string
 	font       *Font
 	size       float64
+	lineHeight float64
 	maxW       float64
 }
 
@@ -139,8 +142,11 @@ func TextOf(r Readable[string]) *TextWidget {
 //	ggui.Textf("count: %d", count).Style(t.Title)
 func Textf(format string, args ...any) *TextWidget { return TextOf(Sprintf(format, args...)) }
 
-// Sprintf formats like fmt.Sprintf and recomputes when a reactive argument
-// (a StateValue, DerivedValue, Tweened or Sprung) changes; other arguments pass through.
+// Sprintf formats like fmt.Sprintf, reading arguments that implement
+// GetAny() any on each computation. StateValue, DerivedValue, Lens, Tweened
+// and Sprung implement that method. Other arguments pass through unchanged;
+// Readable's Get() alone is not enough. Adapt a custom Readable with
+// Derived(reader.Get), or format its Get() inside a Derived callback.
 func Sprintf(format string, args ...any) *DerivedValue[string] {
 	vals := make([]any, len(args))
 	return Derived(func() string {
@@ -170,8 +176,9 @@ func (t *TextWidget) Size(px float64) *TextWidget { t.style.Size = px; return t 
 // LineHeight sets the distance between baselines as a multiple of Size.
 func (t *TextWidget) LineHeight(mult float64) *TextWidget { t.style.LineHeight = mult; return t }
 
-// Set replaces the text. A widget that changes what it shows outside a
-// rebuild calls it from Layout; TextOf does from an effect.
+// Set replaces the text and invalidates layout when it changes, including
+// after mount. It runs on the UI goroutine. Custom widgets may call it before
+// laying out their label; TextOf follows its reader through an owned effect.
 func (t *TextWidget) Set(s string) *TextWidget {
 	if s != t.value {
 		t.value = s
@@ -222,7 +229,7 @@ func (t *TextWidget) Layout(c Constraints, env Env) Size {
 	t.resolved = base.Merge(t.style).resolved()
 	t.resolved.Size *= env.TextScale()
 	face := t.faceAt(1)
-	key := wrapKey{generation: fontGeneration, value: t.value, font: t.resolved.Font, size: t.resolved.Size, maxW: pick(t.wrap, c.MaxW, 0)}
+	key := wrapKey{generation: fontGeneration, value: t.value, font: t.resolved.Font, size: t.resolved.Size, lineHeight: t.resolved.LineHeight, maxW: pick(t.wrap, c.MaxW, 0)}
 	if key != t.wrapped {
 		t.wrapped = key
 		t.lines = wrapText(key.value, face, key.maxW)

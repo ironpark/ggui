@@ -398,7 +398,7 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 		c.Role = pick(item.Multiple, ggui.RoleCheckbox, ggui.RoleRadio)
 		c.Name = choice.Label
 		c.Inert = choice.Disabled
-		c.Key(struct {
+		c.SetKey(struct {
 			Q           *QuestionnaireWidget
 			Item, Value string
 		}{q, item.Name, choice.Value})

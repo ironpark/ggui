@@ -64,7 +64,7 @@ type CommandWidget struct {
 // wrap through enabled matches; Enter runs the highlighted action. IME
 // composition and normal editing keys stay with TextInput.
 func Command(query ggui.Binding[string], entries ...CommandEntry) *CommandWidget {
-	c := &CommandWidget{query: query, entries: append([]CommandEntry(nil), entries...), highlight: -1, height: 200, offset: ggui.State(0.0)}
+	c := &CommandWidget{query: query, highlight: -1, height: 200, offset: ggui.State(0.0)}
 	c.field = TextField(query).Placeholder("Search commands…").Named("Search commands").OnKey(c.key)
 	if c.field.input.HitID() == nil {
 		c.field.input.Key(c)
@@ -72,16 +72,28 @@ func Command(query ggui.Binding[string], entries ...CommandEntry) *CommandWidget
 	c.field.plain = true
 	c.results = &commandResults{owner: c}
 	c.scroll = ggui.Scroll(c.results).Offset(c.offset)
+	c.setEntries(entries)
+	return c
+}
+
+// setEntries refreshes results while retaining the editor, query and focus.
+// Combobox uses it when its options change; callers arrange a fresh layout.
+func (c *CommandWidget) setEntries(entries []CommandEntry) {
+	c.entries = append([]CommandEntry(nil), entries...)
+	c.items = nil
+	c.matched = nil
+	c.highlight = -1
+	c.initialized = false
 	c.rects = make([]ggui.Rect, len(entries))
 	for i, e := range entries {
 		item := MenuItem(e.label, func() { c.choose(i) }).Disabled(e.disabled)
+		item.Key(item)
 		if e.shortcut != "" {
 			item.Shortcut(e.shortcut)
 		}
 		item.onHover = func() { c.highlight = i }
 		c.items = append(c.items, item)
 	}
-	return c
 }
 
 // CommandDialog creates a compact, accessible command palette. The command

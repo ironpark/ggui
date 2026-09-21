@@ -61,6 +61,17 @@ func TestTextSizeScalesLayout(t *testing.T) {
 	}
 }
 
+func TestTextHeightFollowsInheritedLineHeight(t *testing.T) {
+	w := Text("first\nsecond\nthird")
+	c := Loose(Sz(1000, 1000))
+	env := Env{}.WithText(TextStyle{Size: 20, LineHeight: 1})
+	before := w.Layout(c, env)
+	after := w.Layout(c, env.WithText(TextStyle{LineHeight: 2}))
+	if after.W != before.W || after.H-before.H != 40 {
+		t.Fatalf("line spacing: before=%v after=%v; want unchanged width and 40 more height", before, after)
+	}
+}
+
 func TestLoadFontRejectsGarbage(t *testing.T) {
 	if _, err := LoadFont([]byte("not a font")); err == nil {
 		t.Fatal("LoadFont(garbage) = nil error")

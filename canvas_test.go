@@ -55,7 +55,7 @@ func TestAdoptTakesTheLastRegionWithTheSameID(t *testing.T) {
 }
 
 func TestAdoptSkipsIDsTheLanguageCannotCompare(t *testing.T) {
-	// Interactive.Key takes any value, so an ID may be a slice. Matching it
+	// Interactive.SetKey takes any value, so an ID may be a slice. Matching it
 	// is impossible, but it must not bring the frame down either.
 	old, next := &adoptionCounter{}, &adoptionCounter{}
 	r := Rct(Pt(0, 0), Sz(20, 20))
