@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"io/fs"
 	"time"
 )
 
@@ -168,6 +169,9 @@ func (p *Probe) OnKey(fn func(KeyEvent) bool) { p.in.shortcuts = append(p.in.sho
 // Shortcut registers a chord, as App.Shortcut does.
 func (p *Probe) Shortcut(chord string, fn func()) *ShortcutHandle { return p.in.addShortcut(chord, fn) }
 
+// OnDrop registers a handler for drops no zone took, as App.OnDrop does.
+func (p *Probe) OnDrop(fn func(DropEvent)) { p.in.drops = append(p.in.drops, fn) }
+
 // Semantics runs a frame and returns the accessibility tree it published:
 // every element on screen, nested as the widgets described it, including
 // the ones Probe.Find cannot see because they take no input. A test asserts
@@ -271,6 +275,19 @@ func (p *Probe) Type(mods Mods, keys ...KeyboardKey) {
 // Text delivers typed characters to the focused widget, as a platform
 // without an IME would.
 func (p *Probe) Text(s string) { p.dispatch(frameInput{text: s}) }
+
+// Drop drops the root entries of fsys onto the window at pos, as the desktop
+// would. A testing/fstest.MapFS is the easiest fsys to drop; the files it
+// carries have no Path and are read through DroppedFile.Open.
+func (p *Probe) Drop(pos Point, fsys fs.FS) {
+	p.dispatch(frameInput{pos: pos, drop: droppedFiles(fsys)})
+}
+
+// DropPaths drops real files or directories onto the window at pos. Each
+// file carries its absolute path and reads from its own directory.
+func (p *Probe) DropPaths(pos Point, paths ...string) {
+	p.dispatch(frameInput{pos: pos, drop: droppedPaths(paths)})
+}
 
 // Cursor returns the cursor shape the last event left the pointer with.
 func (p *Probe) Cursor() CursorShape { return p.in.cursor }

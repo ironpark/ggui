@@ -21,7 +21,9 @@ from the repository root unless a guide says otherwise.
 
 > [!IMPORTANT]
 > APIs are under active development. Native accessibility currently supports
-> **macOS only**; Windows and Linux bridges are not implemented.
+> **macOS and Windows**; the Linux bridge is not implemented. Native file
+> dialogs run on macOS, Windows, and desktops with `zenity` or `kdialog`
+> on `PATH`; elsewhere they report `runtime.ErrUnsupported`.
 
 ## Find a topic
 
@@ -42,6 +44,7 @@ from the repository root unless a guide says otherwise.
 | Load fonts, render emoji, or change icon sets | [Fonts, emoji, and icons](fonts.md) |
 | Animate values or entering/leaving content | [Animation](animation.md) |
 | Handle pointer input, shortcuts, scrolling, and focus | [Input and focus](input.md) |
+| Accept dropped files or open a native file dialog | [Drag and drop](input.md#drag-and-drop) · [File dialogs](input.md#native-file-dialogs) |
 | Support assistive technology | [Accessibility](accessibility.md) |
 | Test and inspect a UI | [Testing](testing.md) · [Widget inspector](inspector.md) |
 | Write a custom widget or understand rendering | [Custom widgets and rendering](rendering.md) |

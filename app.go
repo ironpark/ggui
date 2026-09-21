@@ -162,6 +162,10 @@ func (a *App) Shortcut(chord string, fn func()) *ShortcutHandle {
 // to the UI goroutine.
 func (a *App) Semantics() *SemTree { return a.semantics() }
 
+// OnDrop registers fn to receive files dropped onto the window that no
+// drop zone under the cursor took; see PointerWidget.OnDrop for zones.
+func (a *App) OnDrop(fn func(DropEvent)) { a.input.drops = append(a.input.drops, fn) }
+
 // Inspector turns the widget inspector on or off: an overlay that outlines
 // the selected widget painted through Canvas.Paint and names the one under the
 // cursor with its size and position. Config.Inspector binds it to a key.
@@ -287,6 +291,9 @@ func (a *App) readInput() frameInput {
 		}
 	}
 	f.text = string(ebiten.AppendInputChars(nil))
+	if fsys := ebiten.DroppedFiles(); fsys != nil {
+		f.drop = droppedFiles(fsys)
+	}
 	f.mods = Mods{
 		Shift: ebiten.IsKeyPressed(KeyShift),
 		Ctrl:  ebiten.IsKeyPressed(KeyControl),

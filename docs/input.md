@@ -14,6 +14,8 @@ See [example conventions](README.md#start-here) before copying snippets.
 - [Touch input](#touch-input)
 - [Pointer and keyboard events](#pointer-and-keyboard-events)
 - [Shortcuts](#shortcuts)
+- [Drag and drop](#drag-and-drop)
+- [Native file dialogs](#native-file-dialogs)
 - [Focus scopes](#focus-scopes)
 - [Roles and labels](#roles-and-labels)
 - [Custom input handlers](#custom-input-handlers)
@@ -88,8 +90,8 @@ Enter and the controls with more keys claim those. `ParseChord` reads the
 names, `KeyEvent.Is(chord)` matches one in a handler, and `App.OnKey` stays
 for what a chord cannot say.
 
-`Shortcut`, `OnKey`, `OnFrame`, `Post`, `Perform`, `Announce`, `Semantics`
-and `Close` are the same on `App` and `Probe`, and the `Host` interface
+`Shortcut`, `OnKey`, `OnDrop`, `OnFrame`, `Post`, `Perform`, `Announce`,
+`Semantics` and `Close` are the same on `App` and `Probe`, and the `Host` interface
 names that set, so a function that registers shortcuts takes a `ggui.Host`
 and serves both main and its tests.
 
@@ -98,6 +100,74 @@ Keys, cursor shapes and mouse buttons carry ggui's own names: `ggui.KeyTab`,
 Ebitengine's, so they are the same values of the same types and an
 `ebiten.Key` still works wherever one is wanted; what they buy is that a
 widget, or an app, imports `ggui` alone.
+
+## Drag and drop
+
+Files dragged from the desktop and dropped onto the window arrive as a
+`DropEvent`: the cursor position and a `DroppedFile` per item, each with
+its `Name`, its absolute `Path` where the platform has one, whether it is a
+`Dir`, and `Open()` to read it. In a browser there is no path, so `Open` is
+the one way in; `ev.Paths()` collects the paths that exist.
+
+A drop is routed like a pointer event. `Pointer(child).OnDrop(fn)` makes
+the child a drop zone: the topmost zone under the cursor takes the drop,
+and a `Pointer` without `OnDrop` lets it fall through to what is beneath.
+A drop no zone took reaches the handlers registered with `App.OnDrop`,
+which is where an app that accepts a drop anywhere listens.
+
+```go
+zone := ggui.Pointer(ui.Card(ggui.Text("Drop images here"))).
+	OnDrop(func(ev ggui.DropEvent) {
+		for _, f := range ev.Files {
+			if !f.Dir {
+				importImage(f)
+			}
+		}
+	})
+app.OnDrop(func(ev ggui.DropEvent) { openAll(ev.Paths()) })
+```
+
+A custom handler implements `DropHandler` beside `PointerHandler`; the
+region registered with `HitPointer` then receives `HandleDrop`, and returns
+false to let the drop pass. There is no drag-over event: the platform
+reports the drop itself and nothing before it, so a zone cannot highlight
+while a file hovers over it.
+
+In a test, `Probe.Drop(pos, fsys)` drops the root entries of any `fs.FS`, a
+`testing/fstest.MapFS` being the easiest, and `Probe.DropPaths(pos,
+paths...)` drops real files with their paths; see
+[examples/files](../examples/files) for both.
+
+## Native file dialogs
+
+The `runtime` package opens the platform's own file chooser, the one
+with the user's favourites and recent places, rather than a browser drawn
+by ggui. `Open`, `OpenMultiple`, `PickFolder` and `Save` each take an
+`Options` of title, starting directory, proposed file name and type
+`Filters`, and return the chosen path or `ErrCanceled`.
+
+```go
+path, err := runtime.OpenFile(runtime.FileDialog{
+	Title:   "Open a file",
+	Filters: []runtime.FileFilter{{Name: "Images", Extensions: []string{"png", "jpg"}}},
+})
+if errors.Is(err, runtime.ErrCanceled) {
+	return
+}
+```
+
+Every call is modal and blocks until the user picks or cancels. On macOS
+the panel is a sheet attached to the app's window, on Windows a modal
+dialog; both run on the window's thread, so the window stops repainting
+while one is up, which is how a modal dialog behaves there;
+elsewhere the panel is the `zenity` or `kdialog` program found on `PATH`,
+and where neither is, or in a browser, every call is `ErrUnsupported`. A
+dialog needs a running `App`: ask for one from a handler, a shortcut or
+posted work, not before `Run`.
+
+`runtime.SetFilePicker` replaces the dialogs with any `FilePicker`; the
+`runtime.StubFilePicker` answers every dialog with fixed paths and records what
+was asked, which is what a headless test installs.
 
 ## Focus scopes
 

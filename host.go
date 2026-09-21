@@ -21,6 +21,9 @@ type Host interface {
 	OnKey(fn func(KeyEvent) bool)
 	// Shortcut runs fn on the chord; see ParseChord for the names.
 	Shortcut(chord string, fn func()) *ShortcutHandle
+	// OnDrop registers a handler for files dropped onto the window that no
+	// drop zone under the cursor took.
+	OnDrop(fn func(DropEvent))
 	// Perform carries out an accessibility action on a node.
 	Perform(id NodeID, act Action)
 	// Announce queues text for assistive technology to speak.

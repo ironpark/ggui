@@ -135,6 +135,7 @@ type frameInput struct {
 	keys  []KeyboardKey // just pressed, plus repeats of held keys
 	text  string
 	mods  Mods
+	drop  []DroppedFile // files dropped onto the window this frame
 }
 
 // inputState routes frameInput to the regions painted last frame. A pressed
@@ -159,6 +160,7 @@ type inputState struct {
 
 	shortcuts []func(KeyEvent) bool // App.OnKey handlers, tried before the focused widget
 	chords    []*ShortcutHandle     // App.Shortcut handlers
+	drops     []func(DropEvent)     // Host.OnDrop handlers, for drops no region took
 
 	// A focus trap: while regions of a scope exist, Tab cycles within them
 	// and an unconsumed Escape goes to the scope. trapReturn is where focus
@@ -243,6 +245,9 @@ func (in *inputState) dispatch(f frameInput) {
 	in.updateCursor(f)
 	in.panTouch(&f)
 	in.dispatchPointer(f)
+	if len(f.drop) > 0 {
+		in.dispatchDrop(f)
+	}
 	f.keys = in.consumeBindings(f.keys, f.mods)
 	in.dispatchKeys(f)
 }
@@ -591,6 +596,7 @@ type PointerWidget struct {
 	onEnter  func()
 	onExit   func()
 	onScroll func(Point)
+	onDrop   func(DropEvent)
 }
 
 // Pointer wraps child in a hit region. Attach callbacks with the On methods;
@@ -637,6 +643,20 @@ func (p *PointerWidget) OnHover(fn func(bool)) *PointerWidget {
 
 // OnScroll fires with the wheel delta when the wheel moves over the child.
 func (p *PointerWidget) OnScroll(fn func(delta Point)) *PointerWidget { p.onScroll = fn; return p }
+
+// OnDrop fires when files are dropped onto the child from the desktop,
+// which makes the child a drop zone: a drop over it goes here rather than
+// to the handlers registered with Host.OnDrop.
+func (p *PointerWidget) OnDrop(fn func(DropEvent)) *PointerWidget { p.onDrop = fn; return p }
+
+// HandleDrop implements DropHandler.
+func (p *PointerWidget) HandleDrop(ev DropEvent) bool {
+	if p.onDrop == nil {
+		return false
+	}
+	p.onDrop(ev)
+	return true
+}
 
 // HandlePointer implements PointerHandler.
 func (p *PointerWidget) HandlePointer(ev PointerEvent) bool {
