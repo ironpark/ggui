@@ -1,5 +1,7 @@
 package ggui
 
+import "github.com/ironpark/ggui/runtime"
+
 // Host is what App and Probe have in common: the frame loop's surface for
 // code that should run the same under a window and under a test. Write
 // setup against it and hand either one in:
@@ -24,6 +26,9 @@ type Host interface {
 	// OnDrop registers a handler for files dropped onto the window that no
 	// drop zone under the cursor took.
 	OnDrop(fn func(DropEvent))
+	// Dialogs opens the file dialogs: the platform's under an App, a
+	// runtime.StubFilePicker under a Probe.
+	Dialogs() runtime.FilePicker
 	// Perform carries out an accessibility action on a node.
 	Perform(id NodeID, act Action)
 	// Announce queues text for assistive technology to speak.

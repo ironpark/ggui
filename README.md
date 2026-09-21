@@ -118,7 +118,7 @@ and launch macOS app bundles.
 | [Custom widgets](examples/custom) | A dial built on Interactive with a Spring, a disclosure that calls Invalidate, and a 5,000-row virtualized list. | `go run ./examples/custom` |
 | [Charts](examples/charts) | All 70 shadcn chart examples, interactive tooltips, themes and animation replay. | `go run ./examples/charts` |
 | [Carousel & Input OTP](examples/controls) | Swipeable carousels and segmented code inputs, all shadcn variants and state previews. | `go run ./examples/controls` |
-| [Files](examples/files) | Files dropped from the desktop and the native Open, Save and folder dialogs of the `runtime` package. | `go run ./examples/files` |
+| [Files](examples/files) | Files dropped from the desktop and the native Open, Save and folder dialogs reached through `Host.Dialogs`. | `go run ./examples/files` |
 | [Workspace](examples/workspace) | A project dashboard combining searchable tables, form lenses, live options, dialogs, charts, animated progress, toasts, and theme switching. | `task run-workspace` |
 | [SQLite](examples/sqlite) | A SQLite client with table browsing, filters, paging, typed edits, row creation/deletion, cancellable SQL, and CSV export. | `go run ./examples/sqlite` |
 | [Gallery](examples/gallery) | Searchable previews across Inputs, Navigation, Feedback, Layout, and Data. | `task run-gallery` |

@@ -9,6 +9,8 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"golang.org/x/sys/windows"
+
+	"github.com/ironpark/ggui/internal/win32"
 )
 
 // The Windows dialogs are the common dialogs of comdlg32 and the folder
@@ -101,10 +103,13 @@ type browseInfo struct {
 // showDialog runs the dialog on the main thread and waits for it.
 func showDialog(k dialogKind, d FileDialog) (paths []string, err error) {
 	ebiten.RunOnMainThread(func() {
+		// Owned by the app's window, the dialog is modal to it and centred
+		// on it; without one it stands on its own.
+		owner := win32.AppWindow()
 		if k == kindFolder {
-			paths, err = browseFolder(d)
+			paths, err = browseFolder(d, owner)
 		} else {
-			paths, err = fileDialog(k, d)
+			paths, err = fileDialog(k, d, owner)
 		}
 	})
 	return paths, err
@@ -113,12 +118,13 @@ func showDialog(k dialogKind, d FileDialog) (paths []string, err error) {
 // fileDialog runs GetOpenFileNameW or GetSaveFileNameW. The buffer the
 // dialog fills is a NUL-terminated string, or for a multiple selection the
 // directory followed by each name, each NUL-terminated, then an empty one.
-func fileDialog(k dialogKind, d FileDialog) ([]string, error) {
+func fileDialog(k dialogKind, d FileDialog, owner uintptr) ([]string, error) {
 	buf := make([]uint16, fileBufferLen)
 	if d.FileName != "" {
 		copy(buf, utf16z(d.FileName))
 	}
 	ofn := openFileName{
+		owner:      owner,
 		file:       &buf[0],
 		maxFile:    uint32(len(buf)),
 		flags:      ofnExplorer | ofnNoChangeDir | ofnPathMustExist,
@@ -170,7 +176,7 @@ func fileDialog(k dialogKind, d FileDialog) ([]string, error) {
 
 // browseFolder runs SHBrowseForFolderW, which hands back an item list that
 // SHGetPathFromIDListW turns into a path and CoTaskMemFree releases.
-func browseFolder(d FileDialog) ([]string, error) {
+func browseFolder(d FileDialog, owner uintptr) ([]string, error) {
 	// The new-style browser, the one with a tree that can be typed into,
 	// wants COM initialised on its thread. A second initialisation is a
 	// harmless S_FALSE, and a mismatch with an earlier one is also harmless
@@ -178,6 +184,7 @@ func browseFolder(d FileDialog) ([]string, error) {
 	procCoInitializeEx.Call(0, coinitApartmentThreaded)
 	display := make([]uint16, maxPath)
 	bi := browseInfo{
+		owner:       owner,
 		displayName: &display[0],
 		title:       utf16ptr(d.Title),
 		flags:       bifReturnOnlyFSDirs | bifNewDialogStyle,

@@ -5,10 +5,10 @@ package a11y
 import (
 	"sync/atomic"
 	"syscall"
-	"unsafe"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"golang.org/x/sys/windows"
+
+	"github.com/ironpark/ggui/internal/win32"
 )
 
 // The Windows half of the accessibility bridge speaks UI Automation, from
@@ -48,7 +48,6 @@ const winSubclassID = 1
 func init() {
 	buildVtables()
 	winSubclassProc = syscall.NewCallback(winSubclass)
-	winEnumProc = syscall.NewCallback(winEnumWindow)
 }
 
 // windowsAX is the platform half. It holds nothing: the window and the root
@@ -87,7 +86,7 @@ func winAttach() {
 	if winHWND.Load() != 0 {
 		return
 	}
-	h := winFindWindow()
+	h := win32.AppWindow()
 	if h == 0 {
 		return
 	}
@@ -99,47 +98,6 @@ func winAttach() {
 	winHWND.Store(h)
 	procSetWindowSubclass.Call(h, winSubclassProc, winSubclassID, 0)
 }
-
-// winFindWindow returns Ebitengine's window, or 0 while there is none.
-//
-// GLFW gives its real window and its hidden message window the same class
-// name, so the class alone is not enough to tell them apart: the message
-// window is one pixel square and never shown, so visibility is what
-// separates them. Do not fall back to any window of the thread; a file
-// dialog is one too.
-func winFindWindow() uintptr {
-	winFound = 0
-	tid, _, _ := procGetCurrentThreadID.Call()
-	procEnumThreadWindows.Call(tid, winEnumProc, 0)
-	return winFound
-}
-
-// winEnumProc is the enumeration callback, and winFound is where it leaves
-// its answer. Both are package-level because a callback is never freed and
-// the process may only ever have a few thousand: building one per attempt,
-// once a second until a window appears, would eventually exhaust them.
-// Only the main thread runs this, so the shared word needs no lock.
-var (
-	winEnumProc uintptr
-	winFound    uintptr
-)
-
-func winEnumWindow(h, _ uintptr) uintptr {
-	var name [32]uint16
-	n, _, _ := procGetClassNameW.Call(h, uintptr(unsafe.Pointer(&name[0])), uintptr(len(name)))
-	if n == 0 || windows.UTF16ToString(name[:n]) != winGLFWClass {
-		return 1
-	}
-	if vis, _, _ := procIsWindowVisible.Call(h); vis == 0 {
-		return 1
-	}
-	winFound = h
-	return 0
-}
-
-// winGLFWClass is the window class Ebitengine's GLFW registers, from
-// _GLFW_WNDCLASSNAME in its win32 platform header.
-const winGLFWClass = "GLFW30"
 
 // winSubclassProc is the window procedure that hands UI Automation the root
 // provider, created once because a callback is never freed.

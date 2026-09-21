@@ -10,14 +10,14 @@
 // platforms. Elsewhere the panel is the zenity or kdialog program, found on
 // PATH; where neither is, every call returns ErrUnsupported.
 //
-// A dialog needs a running App: it is asked for from a handler, a shortcut
-// or posted work, not before Run. A test replaces it with SetFilePicker.
+// A dialog is reached through the Host: App.Dialogs is the platform's
+// picker, and Probe.Dialogs a StubFilePicker, so code written against Host
+// runs under a window and under a test alike. A dialog needs a running
+// App: it is asked for from a handler, a shortcut or posted work, not
+// before Run.
 package runtime
 
-import (
-	"errors"
-	"sync"
-)
+import "errors"
 
 // FileFilter is one entry of a dialog's file type menu: a name and the
 // extensions it admits, without dots. A filter with no extensions admits
@@ -46,49 +46,22 @@ var ErrCanceled = errors.New("runtime: canceled")
 // ErrUnsupported is returned where the platform offers no dialog.
 var ErrUnsupported = errors.New("runtime: not supported on this platform")
 
-// OpenFile asks for one existing file and returns its path.
-func OpenFile(d FileDialog) (string, error) { return currentPicker().OpenFile(d) }
-
-// OpenFiles asks for one or more existing files and returns their paths.
-func OpenFiles(d FileDialog) ([]string, error) { return currentPicker().OpenFiles(d) }
-
-// PickFolder asks for one existing directory and returns its path.
-func PickFolder(d FileDialog) (string, error) { return currentPicker().PickFolder(d) }
-
-// SaveFile asks where to write a file and returns the path chosen. The
-// platform asks before handing back a path that already exists.
-func SaveFile(d FileDialog) (string, error) { return currentPicker().SaveFile(d) }
-
-// FilePicker is what the file dialog functions call. The default is the
-// platform's dialog; SetFilePicker replaces it.
+// FilePicker opens the file dialogs. NativeFilePicker is the platform's;
+// StubFilePicker answers from fixed paths, for tests.
 type FilePicker interface {
+	// OpenFile asks for one existing file and returns its path.
 	OpenFile(d FileDialog) (string, error)
+	// OpenFiles asks for one or more existing files and returns their paths.
 	OpenFiles(d FileDialog) ([]string, error)
+	// PickFolder asks for one existing directory and returns its path.
 	PickFolder(d FileDialog) (string, error)
+	// SaveFile asks where to write a file and returns the path chosen. The
+	// platform asks before handing back a path that already exists.
 	SaveFile(d FileDialog) (string, error)
 }
 
-var (
-	pickerMu sync.Mutex
-	picker   FilePicker = nativePicker{}
-)
-
-// SetFilePicker replaces the dialogs the package opens, for tests and for
-// a host that draws its own. A nil p restores the platform's.
-func SetFilePicker(p FilePicker) {
-	pickerMu.Lock()
-	defer pickerMu.Unlock()
-	if p == nil {
-		p = nativePicker{}
-	}
-	picker = p
-}
-
-func currentPicker() FilePicker {
-	pickerMu.Lock()
-	defer pickerMu.Unlock()
-	return picker
-}
+// NativeFilePicker returns the platform's file dialogs.
+func NativeFilePicker() FilePicker { return nativePicker{} }
 
 // StubFilePicker is a FilePicker that answers every dialog with fixed
 // paths, for tests. OpenFile, PickFolder and SaveFile return the first of

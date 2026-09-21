@@ -12,6 +12,7 @@ func run(path string, readOnly bool) error {
 	m.ReadOnly.Set(readOnly)
 	app := ggui.New(ggui.Config{Title: "ggui · SQLite", Width: 1280, Height: 900, Resizable: true, Inspector: "f1"}, func() ggui.Widget { return build(m) })
 	m.post = app.Post
+	m.dialogs = app.Dialogs()
 	app.Setup(func() {
 		ggui.BindTheme(m.Dark, clientTheme(true), clientTheme(false))
 		if path != "" {

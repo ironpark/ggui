@@ -1,10 +1,11 @@
 // Command files shows the two ways a file gets into a ggui app: dropped
 // onto the window from the desktop, or chosen in the platform's own file
 // dialog. Drop anything onto the card to list it; the buttons open the
-// native Open, Save and folder dialogs through the runtime package.
+// native Open, Save and folder dialogs through the host's Dialogs.
 //
 // The UI lives in build so main_test.go can drive it headlessly with a
-// Probe, dropping in-memory files and answering the dialogs with a Stub.
+// Probe, dropping in-memory files and answering the dialogs with the stub
+// a Probe carries.
 package main
 
 import (
@@ -21,14 +22,16 @@ import (
 // model is the list of files the app has been handed and a line about the
 // last thing that happened.
 type model struct {
-	Files  *ggui.StateValue[[]string]
-	Status *ggui.StateValue[string]
+	dialogs runtime.FilePicker // the host's, so a test's stub answers too
+	Files   *ggui.StateValue[[]string]
+	Status  *ggui.StateValue[string]
 }
 
-func newModel() *model {
+func newModel(dialogs runtime.FilePicker) *model {
 	return &model{
-		Files:  ggui.State([]string(nil)),
-		Status: ggui.State("Drop files onto the card, or open a dialog."),
+		dialogs: dialogs,
+		Files:   ggui.State([]string(nil)),
+		Status:  ggui.State("Drop files onto the card, or open a dialog."),
 	}
 }
 
@@ -54,22 +57,22 @@ var images = []runtime.FileFilter{
 }
 
 func (m *model) open() {
-	path, err := runtime.OpenFile(runtime.FileDialog{Title: "Open a file", Filters: images})
+	path, err := m.dialogs.OpenFile(runtime.FileDialog{Title: "Open a file", Filters: images})
 	m.report(err, path)
 }
 
 func (m *model) openMany() {
-	paths, err := runtime.OpenFiles(runtime.FileDialog{Title: "Open files"})
+	paths, err := m.dialogs.OpenFiles(runtime.FileDialog{Title: "Open files"})
 	m.report(err, paths...)
 }
 
 func (m *model) folder() {
-	path, err := runtime.PickFolder(runtime.FileDialog{Title: "Choose a folder"})
+	path, err := m.dialogs.PickFolder(runtime.FileDialog{Title: "Choose a folder"})
 	m.report(err, path)
 }
 
 func (m *model) save() {
-	path, err := runtime.SaveFile(runtime.FileDialog{Title: "Save as", FileName: "untitled.png", Filters: images})
+	path, err := m.dialogs.SaveFile(runtime.FileDialog{Title: "Save as", FileName: "untitled.png", Filters: images})
 	m.report(err, path)
 }
 
@@ -125,13 +128,14 @@ func (m *model) build() ggui.Widget {
 }
 
 func main() {
-	m := newModel()
+	var m *model
 	app := ggui.New(ggui.Config{
 		Title:     "ggui · files",
 		Width:     560,
 		Height:    420,
 		Resizable: true,
-	}, m.build)
+	}, func() ggui.Widget { return m.build() })
+	m = newModel(app.Dialogs())
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}

@@ -422,16 +422,12 @@ var (
 	dllComctl32 = windows.NewLazySystemDLL("comctl32.dll")
 	dllUIA      = windows.NewLazySystemDLL("uiautomationcore.dll")
 
-	procGlobalAlloc        = dllKernel32.NewProc("GlobalAlloc")
-	procGlobalFree         = dllKernel32.NewProc("GlobalFree")
-	procGetCurrentThreadID = dllKernel32.NewProc("GetCurrentThreadId")
+	procGlobalAlloc = dllKernel32.NewProc("GlobalAlloc")
+	procGlobalFree  = dllKernel32.NewProc("GlobalFree")
 
-	procEnumThreadWindows = dllUser32.NewProc("EnumThreadWindows")
-	procGetClassNameW     = dllUser32.NewProc("GetClassNameW")
-	procIsWindowVisible   = dllUser32.NewProc("IsWindowVisible")
-	procClientToScreen    = dllUser32.NewProc("ClientToScreen")
-	procGetDpiForWindow   = dllUser32.NewProc("GetDpiForWindow")
-	procGetClientRect     = dllUser32.NewProc("GetClientRect")
+	procClientToScreen  = dllUser32.NewProc("ClientToScreen")
+	procGetDpiForWindow = dllUser32.NewProc("GetDpiForWindow")
+	procGetClientRect   = dllUser32.NewProc("GetClientRect")
 
 	procSysAllocString        = dllOleAut32.NewProc("SysAllocString")
 	procSysFreeString         = dllOleAut32.NewProc("SysFreeString")

@@ -14,19 +14,19 @@ import (
 
 func newProbe(t *testing.T) (*model, *ggui.Probe) {
 	t.Helper()
-	m := newModel()
-	p := ggui.ProbeBuilder(m.build, ggui.Sz(560, 420))
+	var m *model
+	p := ggui.ProbeBuilder(func() ggui.Widget { return m.build() }, ggui.Sz(560, 420))
 	t.Cleanup(p.Close)
+	m = newModel(p.Dialogs())
 	return m, p
 }
 
-// The dialogs are answered by a Stub, so the test never opens a window;
-// the same picker is what an app's own tests would install.
+// The dialogs are answered by the Probe's stub, so the test never opens a
+// window; setting its Paths is all an app's own tests need do.
 func TestDialogsFillTheList(t *testing.T) {
-	stub := &runtime.StubFilePicker{Paths: []string{"/pictures/a.png", "/pictures/b.png"}}
-	runtime.SetFilePicker(stub)
-	defer runtime.SetFilePicker(nil)
 	m, p := newProbe(t)
+	stub := p.Dialogs().(*runtime.StubFilePicker)
+	stub.Paths = []string{"/pictures/a.png", "/pictures/b.png"}
 
 	p.Tap("Open…")
 	if got := ggui.Untrack(m.Files.Get); !slices.Equal(got, []string{"/pictures/a.png"}) {

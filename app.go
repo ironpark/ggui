@@ -3,14 +3,15 @@
 package ggui
 
 import (
-	"github.com/ironpark/ggui/a11y"
-
 	"image/color"
 	"math"
 	"sync/atomic"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
+
+	"github.com/ironpark/ggui/a11y"
+	"github.com/ironpark/ggui/runtime"
 )
 
 // Config describes the window an App opens.
@@ -47,7 +48,8 @@ func (c Config) withDefaults() Config {
 type App struct {
 	frameErr error
 	frameLoop
-	cfg Config
+	cfg     Config
+	dialogs runtime.FilePicker
 
 	canvas Canvas // also holds the frame's screen-pixels-per-logical-pixel scale
 	spare  []hitRegion
@@ -63,7 +65,7 @@ type App struct {
 
 // New creates an App that renders the tree returned by build.
 func New(cfg Config, build Builder) *App {
-	a := &App{cfg: cfg.withDefaults()}
+	a := &App{cfg: cfg.withDefaults(), dialogs: runtime.NativeFilePicker()}
 	a.build = build
 	if cfg.Inspector != "" {
 		// A chord rather than a KeyboardKey, whose zero value is KeyA and
@@ -165,6 +167,19 @@ func (a *App) Semantics() *SemTree { return a.semantics() }
 // OnDrop registers fn to receive files dropped onto the window that no
 // drop zone under the cursor took; see PointerWidget.OnDrop for zones.
 func (a *App) OnDrop(fn func(DropEvent)) { a.input.drops = append(a.input.drops, fn) }
+
+// Dialogs is the platform's file dialogs, or what SetDialogs installed.
+func (a *App) Dialogs() runtime.FilePicker { return a.dialogs }
+
+// SetDialogs replaces the file dialogs, for a host that draws its own. A
+// nil p restores the platform's.
+func (a *App) SetDialogs(p runtime.FilePicker) *App {
+	if p == nil {
+		p = runtime.NativeFilePicker()
+	}
+	a.dialogs = p
+	return a
+}
 
 // Inspector turns the widget inspector on or off: an overlay that outlines
 // the selected widget painted through Canvas.Paint and names the one under the

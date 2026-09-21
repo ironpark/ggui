@@ -140,14 +140,15 @@ paths...)` drops real files with their paths; see
 
 ## Native file dialogs
 
-The `runtime` package opens the platform's own file chooser, the one
-with the user's favourites and recent places, rather than a browser drawn
-by ggui. `Open`, `OpenMultiple`, `PickFolder` and `Save` each take an
-`Options` of title, starting directory, proposed file name and type
-`Filters`, and return the chosen path or `ErrCanceled`.
+`Host.Dialogs` opens the platform's own file chooser, the one with the
+user's favourites and recent places, rather than a browser drawn by ggui.
+It returns a `runtime.FilePicker`, whose `OpenFile`, `OpenFiles`,
+`PickFolder` and `SaveFile` each take a `runtime.FileDialog` of title,
+starting directory, proposed file name and type `Filters`, and return the
+chosen path or `runtime.ErrCanceled`.
 
 ```go
-path, err := runtime.OpenFile(runtime.FileDialog{
+path, err := app.Dialogs().OpenFile(runtime.FileDialog{
 	Title:   "Open a file",
 	Filters: []runtime.FileFilter{{Name: "Images", Extensions: []string{"png", "jpg"}}},
 })
@@ -165,9 +166,10 @@ and where neither is, or in a browser, every call is `ErrUnsupported`. A
 dialog needs a running `App`: ask for one from a handler, a shortcut or
 posted work, not before `Run`.
 
-`runtime.SetFilePicker` replaces the dialogs with any `FilePicker`; the
-`runtime.StubFilePicker` answers every dialog with fixed paths and records what
-was asked, which is what a headless test installs.
+A `Probe` answers every dialog with a `runtime.StubFilePicker`, which
+returns fixed `Paths` and records what was asked, so a test sets the paths
+and taps the button; `SetDialogs` on either host installs any other
+`FilePicker`, for an app that draws its own.
 
 ## Focus scopes
 

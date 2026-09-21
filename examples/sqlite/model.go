@@ -21,6 +21,7 @@ type draftField struct {
 	Kind, Value  *ggui.StateValue[string]
 }
 type model struct {
+	dialogs runtime.FilePicker // the host's; see main
 	db      *sql.DB
 	opened  []*sql.DB // Workers append; adopting removes on the UI thread; close reads after Wait.
 	post    func(func())
@@ -247,7 +248,7 @@ func (m *model) choose() {
 	if m.Busy.Get() {
 		return
 	}
-	path, err := runtime.OpenFile(runtime.FileDialog{Title: "Open SQLite database", Filters: []runtime.FileFilter{
+	path, err := m.dialogs.OpenFile(runtime.FileDialog{Title: "Open SQLite database", Filters: []runtime.FileFilter{
 		{Name: "SQLite databases", Extensions: []string{"db", "sqlite", "sqlite3", "db3"}},
 		{Name: "All files"},
 	}})
@@ -476,7 +477,7 @@ func (m *model) export(query bool) {
 	if len(r.Columns) == 0 || m.Busy.Get() {
 		return
 	}
-	path, err := runtime.SaveFile(runtime.FileDialog{Title: "Export displayed rows", FileName: "results.csv"})
+	path, err := m.dialogs.SaveFile(runtime.FileDialog{Title: "Export displayed rows", FileName: "results.csv"})
 	if errors.Is(err, runtime.ErrCanceled) {
 		return
 	}

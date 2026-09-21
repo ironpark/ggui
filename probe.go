@@ -3,6 +3,8 @@ package ggui
 import (
 	"io/fs"
 	"time"
+
+	"github.com/ironpark/ggui/runtime"
 )
 
 // Probe drives a widget tree without a window, for tests: it runs the same
@@ -30,6 +32,8 @@ type Probe struct {
 
 	now     time.Time // the probe's clock once Advance has been called
 	restore func()
+
+	dialogs runtime.FilePicker
 }
 
 // NewProbe creates a Probe that lays w out at size under the current theme.
@@ -45,7 +49,7 @@ func NewProbe(w Widget, size Size) *Probe {
 //
 //	p := ggui.ProbeBuilder(func() ggui.Widget { return ggui.Textf("%d", n) }, ggui.Sz(100, 20))
 func ProbeBuilder(build Builder, size Size) *Probe {
-	p := &Probe{size: size}
+	p := &Probe{size: size, dialogs: &runtime.StubFilePicker{}}
 	p.build = build
 	return p
 }
@@ -171,6 +175,21 @@ func (p *Probe) Shortcut(chord string, fn func()) *ShortcutHandle { return p.in.
 
 // OnDrop registers a handler for drops no zone took, as App.OnDrop does.
 func (p *Probe) OnDrop(fn func(DropEvent)) { p.in.drops = append(p.in.drops, fn) }
+
+// Dialogs is the picker the probe answers file dialogs with: a
+// runtime.StubFilePicker that cancels everything until its Paths are set,
+// or what SetDialogs installed.
+func (p *Probe) Dialogs() runtime.FilePicker { return p.dialogs }
+
+// SetDialogs replaces the picker, as App.SetDialogs does. A nil d restores
+// a fresh stub.
+func (p *Probe) SetDialogs(d runtime.FilePicker) *Probe {
+	if d == nil {
+		d = &runtime.StubFilePicker{}
+	}
+	p.dialogs = d
+	return p
+}
 
 // Semantics runs a frame and returns the accessibility tree it published:
 // every element on screen, nested as the widgets described it, including

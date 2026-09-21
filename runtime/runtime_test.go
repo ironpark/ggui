@@ -7,19 +7,17 @@ import (
 
 func TestStubAnswersEveryDialog(t *testing.T) {
 	s := &StubFilePicker{Paths: []string{"/a.txt", "/b.txt"}}
-	SetFilePicker(s)
-	defer SetFilePicker(nil)
 
-	if got, err := OpenFile(FileDialog{Title: "one"}); err != nil || got != "/a.txt" {
+	if got, err := s.OpenFile(FileDialog{Title: "one"}); err != nil || got != "/a.txt" {
 		t.Fatalf("OpenFile = %q, %v", got, err)
 	}
-	if got, err := OpenFiles(FileDialog{}); err != nil || len(got) != 2 {
+	if got, err := s.OpenFiles(FileDialog{}); err != nil || len(got) != 2 {
 		t.Fatalf("OpenFiles = %q, %v", got, err)
 	}
-	if got, err := PickFolder(FileDialog{}); err != nil || got != "/a.txt" {
+	if got, err := s.PickFolder(FileDialog{}); err != nil || got != "/a.txt" {
 		t.Fatalf("PickFolder = %q, %v", got, err)
 	}
-	if got, err := SaveFile(FileDialog{FileName: "x"}); err != nil || got != "/a.txt" {
+	if got, err := s.SaveFile(FileDialog{FileName: "x"}); err != nil || got != "/a.txt" {
 		t.Fatalf("SaveFile = %q, %v", got, err)
 	}
 	if len(s.Asked) != 4 || s.Asked[0].Title != "one" || s.Asked[3].FileName != "x" {
@@ -28,30 +26,26 @@ func TestStubAnswersEveryDialog(t *testing.T) {
 }
 
 func TestStubWithoutPathsCancels(t *testing.T) {
-	SetFilePicker(&StubFilePicker{})
-	defer SetFilePicker(nil)
-	if _, err := OpenFile(FileDialog{}); !errors.Is(err, ErrCanceled) {
+	s := &StubFilePicker{}
+	if _, err := s.OpenFile(FileDialog{}); !errors.Is(err, ErrCanceled) {
 		t.Fatalf("OpenFile err = %v, want ErrCanceled", err)
 	}
-	if _, err := OpenFiles(FileDialog{}); !errors.Is(err, ErrCanceled) {
+	if _, err := s.OpenFiles(FileDialog{}); !errors.Is(err, ErrCanceled) {
 		t.Fatalf("OpenFiles err = %v, want ErrCanceled", err)
 	}
 }
 
 func TestStubErrWins(t *testing.T) {
 	boom := errors.New("boom")
-	SetFilePicker(&StubFilePicker{Paths: []string{"/a"}, Err: boom})
-	defer SetFilePicker(nil)
-	if _, err := SaveFile(FileDialog{}); !errors.Is(err, boom) {
+	s := &StubFilePicker{Paths: []string{"/a"}, Err: boom}
+	if _, err := s.SaveFile(FileDialog{}); !errors.Is(err, boom) {
 		t.Fatalf("SaveFile err = %v, want boom", err)
 	}
 }
 
-func TestSetFilePickerNilRestoresNative(t *testing.T) {
-	SetFilePicker(&StubFilePicker{})
-	SetFilePicker(nil)
-	if _, ok := currentPicker().(nativePicker); !ok {
-		t.Fatalf("picker after SetFilePicker(nil) = %T, want nativePicker", currentPicker())
+func TestNativeFilePickerIsThePlatforms(t *testing.T) {
+	if _, ok := NativeFilePicker().(nativePicker); !ok {
+		t.Fatalf("NativeFilePicker() = %T, want nativePicker", NativeFilePicker())
 	}
 }
 
