@@ -71,3 +71,15 @@ func Remove[T any](s Writable[[]T], drop func(T) bool) { reactive.Remove(s, drop
 
 // Const returns a Readable that never changes.
 func Const[T any](v T) Readable[T] { return reactive.Const(v) }
+
+// Bind adapts a getter and setter pair into a Binding, for controls that
+// edit state owned by a model method rather than a signal.
+func Bind[T any](get func() T, set func(T)) Binding[T] { return &funcBinding[T]{get, set} }
+
+type funcBinding[T any] struct {
+	get func() T
+	set func(T)
+}
+
+func (b *funcBinding[T]) Get() T  { return b.get() }
+func (b *funcBinding[T]) Set(v T) { b.set(v) }

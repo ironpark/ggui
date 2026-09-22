@@ -93,11 +93,7 @@ func (c *CheckboxWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.FillRoundRect(box, radius, fade(fill, opacity))
 	dst.StrokeRoundRect(box, radius, 1, fade(border, opacity))
 	if on || mixed {
-		glyph := icons.Check
-		if mixed {
-			glyph = icons.Minus
-		}
-		paintIcon(dst, c.env, glyph, box, fade(t.PrimaryFg, opacity), 0)
+		paintIcon(dst, c.env, pick(mixed, icons.Minus, icons.Check), box, fade(t.PrimaryFg, opacity), 0)
 	}
 	c.FocusRing(dst, box, radius, t.Ring)
 }

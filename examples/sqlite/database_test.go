@@ -135,7 +135,7 @@ func TestUI(t *testing.T) {
 	if len(m.Data.Get().Rows) != 1 {
 		t.Fatal(m.Status.Get())
 	}
-	m.Selected.Set(1)
+	m.selectRow(1, true)
 	p.Tap("View / edit cell")
 	if !m.Editing.Get() {
 		t.Fatal("editor did not open")

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"cmp"
 	"fmt"
 	"maps"
 	"slices"
@@ -16,6 +17,33 @@ type TableSort struct {
 	Descending bool
 }
 
+// Toggle cycles id through ascending, descending and source order.
+func (s TableSort) Toggle(id string) TableSort {
+	switch {
+	case s.Column != id:
+		return TableSort{Column: id}
+	case !s.Descending:
+		return TableSort{Column: id, Descending: true}
+	default:
+		return TableSort{}
+	}
+}
+
+// Mark is the heading suffix that shows whether id orders the rows.
+func (s TableSort) Mark(id string) string {
+	if s.Column != id {
+		return " ↕"
+	}
+	return pick(s.Descending, " ↓", " ↑")
+}
+
+// sortHeading is a ghost heading button that toggles sorting by id and shows
+// the current direction from sort.
+func sortHeading(title string, sort ggui.Readable[TableSort], id string, toggle func()) *ButtonWidget {
+	text := ggui.TextOf(ggui.Derived(func() string { return title + sort.Get().Mark(id) })).NoWrap()
+	return ButtonOf(text, toggle).Ghost().Pad(0, 0).Name("Sort " + title)
+}
+
 // TableModel owns client-side DataTable operations independently of presentation.
 // Source rows and column IDs must have unique, stable keys. Treat returned slices
 // and maps as immutable. Construct the model once in component setup.
@@ -28,6 +56,7 @@ type TableModel[T any, K comparable] struct {
 	page, pageSize             *ggui.StateValue[int]
 	hidden                     *ggui.StateValue[map[string]bool]
 	selected                   *ggui.StateValue[map[K]bool]
+	search                     *ggui.DerivedValue[[][]string]
 	filtered, ordered, visible *ggui.DerivedValue[[]T]
 }
 
@@ -47,37 +76,47 @@ func NewTableModel[T any, K comparable](rows ggui.Readable[[]T], key func(T) K, 
 		}
 		ids[c.ID] = true
 	}
+	// Search text is lowered once per source change, not per keystroke.
+	m.search = ggui.Derived(func() [][]string {
+		rows := m.rows.Get()
+		texts := make([][]string, len(rows))
+		for i, r := range rows {
+			for _, c := range m.cols {
+				if c.Search != nil {
+					texts[i] = append(texts[i], strings.ToLower(c.Search(r)))
+				}
+			}
+		}
+		return texts
+	})
 	m.filtered = ggui.Derived(func() []T {
 		rows, q := m.rows.Get(), strings.ToLower(strings.TrimSpace(m.query.Get()))
 		if q == "" {
 			return rows
 		}
+		texts := m.search.Get()
 		result := make([]T, 0, len(rows))
-		for _, r := range rows {
-			for _, c := range m.cols {
-				if c.Search != nil && strings.Contains(strings.ToLower(c.Search(r)), q) {
-					result = append(result, r)
-					break
-				}
+		for i, r := range rows {
+			if slices.ContainsFunc(texts[i], func(t string) bool { return strings.Contains(t, q) }) {
+				result = append(result, r)
 			}
 		}
 		return result
 	})
 	m.ordered = ggui.Derived(func() []T {
 		rows, sort := m.filtered.Get(), m.sort.Get()
-		for _, c := range m.cols {
-			if c.ID == sort.Column && c.Compare != nil {
-				result := slices.Clone(rows)
-				slices.SortStableFunc(result, func(a, b T) int {
-					if sort.Descending {
-						return c.Compare(b, a)
-					}
-					return c.Compare(a, b)
-				})
-				return result
-			}
+		c := m.sortable(sort.Column)
+		if c == nil {
+			return rows
 		}
-		return rows
+		result := slices.Clone(rows)
+		slices.SortStableFunc(result, func(a, b T) int {
+			if sort.Descending {
+				return c.Compare(b, a)
+			}
+			return c.Compare(a, b)
+		})
+		return result
 	})
 	m.visible = ggui.Derived(func() []T {
 		rows := m.ordered.Get()
@@ -86,6 +125,27 @@ func NewTableModel[T any, K comparable](rows ggui.Readable[[]T], key func(T) K, 
 		return rows[start:min(start+size, len(rows))]
 	})
 	return m
+}
+
+// sortable returns the column with id when it has a comparator.
+func (m *TableModel[T, K]) sortable(id string) *Column[T] {
+	for i := range m.cols {
+		if m.cols[i].ID == id && m.cols[i].Compare != nil {
+			return &m.cols[i]
+		}
+	}
+	return nil
+}
+
+// countSelected returns how many of rows are selected.
+func (m *TableModel[T, K]) countSelected(rows []T) int {
+	selected, n := m.selected.Get(), 0
+	for _, r := range rows {
+		if selected[m.key(r)] {
+			n++
+		}
+	}
+	return n
 }
 
 // Rows returns the current page as a cached reactive reader.
@@ -110,35 +170,25 @@ func (m *TableModel[T, K]) Sort() TableSort { return m.sort.Get() }
 
 // ToggleSort cycles ascending, descending, source order for a sortable column.
 func (m *TableModel[T, K]) ToggleSort(id string) {
-	for _, c := range m.cols {
-		if c.ID == id && c.Compare != nil {
-			s := m.sort.Get()
-			if s.Column != id {
-				s = TableSort{Column: id}
-			} else if !s.Descending {
-				s.Descending = true
-			} else {
-				s = TableSort{}
-			}
-			m.sort.Set(s)
-			m.page.Set(1)
-			return
-		}
+	if m.sortable(id) == nil {
+		return
 	}
+	m.sort.Set(m.sort.Get().Toggle(id))
+	m.page.Set(1)
 }
 
 // PageCount is at least one, including when there are no matches.
 func (m *TableModel[T, K]) PageCount() int {
 	n := len(m.filtered.Get())
 	size := m.pageSize.Get()
-	return max(1, n/size+pick(n%size != 0, 1, 0))
+	return max(1, (n+size-1)/size)
 }
 
 // Page returns the one-based page, clamped after source changes.
-func (m *TableModel[T, K]) Page() int { return min(max(1, m.page.Get()), m.PageCount()) }
+func (m *TableModel[T, K]) Page() int { return clamp(m.page.Get(), 1, m.PageCount()) }
 
 // SetPage navigates to a one-based page.
-func (m *TableModel[T, K]) SetPage(page int) { m.page.Set(min(max(1, page), m.PageCount())) }
+func (m *TableModel[T, K]) SetPage(page int) { m.page.Set(clamp(page, 1, m.PageCount())) }
 
 // PageSize returns the maximum rows on a page.
 func (m *TableModel[T, K]) PageSize() int { return m.pageSize.Get() }
@@ -216,38 +266,23 @@ func (m *TableModel[T, K]) SelectedRows() []T {
 	}
 	return rows
 }
-func (m *TableModel[T, K]) pageSelection() (all, mixed bool) {
+
+// pageSelection reports whether every or only some rows on the page are selected.
+type pageSelection struct{ all, mixed bool }
+
+func (m *TableModel[T, K]) pageSelection() pageSelection {
 	rows := m.visible.Get()
-	selected := m.selected.Get()
-	n := 0
-	for _, r := range rows {
-		if selected[m.key(r)] {
-			n++
-		}
-	}
-	return len(rows) > 0 && n == len(rows), n > 0 && n < len(rows)
+	n := m.countSelected(rows)
+	return pageSelection{all: len(rows) > 0 && n == len(rows), mixed: n > 0 && n < len(rows)}
 }
 
-type tableBinding[V any] struct {
-	read  func() V
-	write func(V)
-}
-
-func (b tableBinding[V]) Get() V  { return b.read() }
-func (b tableBinding[V]) Set(v V) { b.write(v) }
-
-// DataTableWidget composes search, column visibility, row checkboxes, sortable
-// headings, empty results and pagination using existing native controls.
-type DataTableWidget[T any, K comparable] struct {
-	child ggui.Widget
-}
-
-// DataTable presents a TableModel. Columns may use arbitrary Col cells for row
-// menus, badges or actions. Keep the model outside reactive presentation rebuilds.
-func DataTable[T any, K comparable](m *TableModel[T, K]) *DataTableWidget[T, K] {
-	d := &DataTableWidget[T, K]{}
-	d.child = ggui.Component(func() ggui.Widget {
-		search := TextField(tableBinding[string]{m.Query, m.SetQuery}).Placeholder("Filter rows...").Name("Filter rows")
+// DataTable composes search, column visibility, row checkboxes, sortable
+// headings, empty results and pagination around a TableModel using existing
+// native controls. Columns may use arbitrary Col cells for row menus, badges or
+// actions. Keep the model outside reactive presentation rebuilds.
+func DataTable[T any, K comparable](m *TableModel[T, K]) ggui.Widget {
+	return ggui.Component(func() ggui.Widget {
+		search := TextField(ggui.Bind(m.Query, m.SetQuery)).Placeholder("Filter rows...").Name("Filter rows")
 		entries := make([]ggui.Widget, 0, len(m.cols))
 		for _, c := range m.cols {
 			title := c.Title
@@ -265,35 +300,26 @@ func DataTable[T any, K comparable](m *TableModel[T, K]) *DataTableWidget[T, K] 
 			entries = append(entries, item)
 		}
 		toolbar := ggui.Row(ggui.Expanded(search), Menu("Columns", entries...)).Gap(12)
+		isEmpty := ggui.Map(m.visible, func(rows []T) bool { return len(rows) == 0 })
+		page := ggui.Derived(m.pageSelection)
 		table := ggui.Reactive(func() ggui.Widget {
 			cols := []Column[T]{Col("", func(row ggui.Readable[T]) ggui.Widget {
 				key := m.key(row.Get())
-				return Checkbox(tableBinding[bool]{func() bool { return m.IsSelected(key) }, func(v bool) { m.Select(key, v) }}, "").Name(fmt.Sprintf("Select row %v", key))
+				return Checkbox(ggui.Bind(func() bool { return m.IsSelected(key) }, func(v bool) { m.Select(key, v) }), "").Name(fmt.Sprintf("Select row %v", key))
 			}).W(40)}
-			all := Checkbox(tableBinding[bool]{func() bool { all, _ := m.pageSelection(); return all }, m.SelectPage}, "").Name("Select page").BindIndeterminate(ggui.Derived(func() bool { _, mixed := m.pageSelection(); return mixed })).BindDisabled(ggui.Derived(func() bool { return len(m.visible.Get()) == 0 }))
-			cols[0].Header = all
+			cols[0].Header = Checkbox(ggui.Bind(func() bool { return page.Get().all }, m.SelectPage), "").Name("Select page").
+				BindIndeterminate(ggui.Map(page, func(p pageSelection) bool { return p.mixed })).BindDisabled(isEmpty)
 			// Only visibility rebuilds the table. Sorting and data changes update its
 			// keyed rows; heading labels read the sort state independently.
 			for _, c := range m.cols {
 				if m.ColumnVisible(c.ID) {
 					if c.Compare != nil {
-						id := c.ID
-						title := c.Title
-						c.Header = ButtonOf(ggui.TextOf(ggui.Derived(func() string {
-							s := m.Sort()
-							mark := " ↕"
-							if s.Column == id {
-								mark = pick(s.Descending, " ↓", " ↑")
-							}
-							return title + mark
-						})).NoWrap(), func() { m.ToggleSort(id) }).Ghost().Pad(0, 0).Name("Sort " + title)
+						c.Header = sortHeading(c.Title, m.sort, c.ID, func() { m.ToggleSort(c.ID) })
 					}
 					cols = append(cols, c)
 				}
 			}
-			t := Table(m.visible, m.key, cols...).RowHeight(48)
-			t.selectedRows = m.selected
-			isEmpty := ggui.Map(m.visible, func(rows []T) bool { return len(rows) == 0 })
+			t := Table(m.visible, m.key, cols...).RowHeight(48).BindSelectedRows(m.selected)
 			empty := ggui.View(isEmpty, func(empty bool) ggui.Widget {
 				if empty {
 					return ggui.Box().Height(96)
@@ -303,39 +329,22 @@ func DataTable[T any, K comparable](m *TableModel[T, K]) *DataTableWidget[T, K] 
 			box := ggui.Box(ggui.Column(t, empty).Align(ggui.AlignStretch))
 			minWidth := 0.0
 			for _, c := range cols {
-				if c.Width > 0 {
-					minWidth += c.Width
-				} else {
-					minWidth += 160
-				}
+				minWidth += cmp.Or(c.Width, 160)
 			}
 			return &dataTableFrame{minWidth: max(560, minWidth), box: box, scroll: ggui.Scroll(box).Horizontal(), isEmpty: isEmpty, message: ggui.Center(Caption("No results."))}
 		})
 		summary := ggui.TextOf(ggui.Derived(func() string {
-			selected := m.selected.Get()
 			rows := m.filtered.Get()
-			n := 0
-			for _, r := range rows {
-				if selected[m.key(r)] {
-					n++
-				}
-			}
-			return fmt.Sprintf("%d of %d row(s) selected.", n, len(rows))
+			return fmt.Sprintf("%d of %d row(s) selected.", m.countSelected(rows), len(rows))
 		})).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption)
-		page := ggui.TextOf(ggui.Derived(func() string { return fmt.Sprintf("Page %d of %d", m.Page(), m.PageCount()) })).NoWrap()
+		pageLabel := ggui.TextOf(ggui.Derived(func() string { return fmt.Sprintf("Page %d of %d", m.Page(), m.PageCount()) })).NoWrap()
 		previous := Button("Previous", func() { m.SetPage(m.Page() - 1) }).Outline().BindDisabled(ggui.Derived(func() bool { return m.Page() <= 1 }))
 		next := Button("Next", func() { m.SetPage(m.Page() + 1) }).Outline().BindDisabled(ggui.Derived(func() bool { return m.Page() >= m.PageCount() }))
-		size := ggui.Box(Select(tableBinding[int]{m.PageSize, m.SetPageSize}).Options([]int{5, 10, 20, 50}).Name("Rows per page")).Width(72)
-		footer := ggui.Wrap(summary, ggui.Row(Caption("Rows per page"), size).Gap(8).Align(ggui.AlignCenter), page, ggui.Row(previous, next).Gap(8)).Gap(12).Align(ggui.AlignCenter)
+		size := ggui.Box(Select(ggui.Bind(m.PageSize, m.SetPageSize)).Options([]int{5, 10, 20, 50}).Name("Rows per page")).Width(72)
+		footer := ggui.Wrap(summary, ggui.Row(Caption("Rows per page"), size).Gap(8).Align(ggui.AlignCenter), pageLabel, ggui.Row(previous, next).Gap(8)).Gap(12).Align(ggui.AlignCenter)
 		return ggui.Column(toolbar, table, footer).Gap(16).Align(ggui.AlignStretch)
 	})
-	return d
 }
-
-func (d *DataTableWidget[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	return d.child.Layout(c, env)
-}
-func (d *DataTableWidget[T, K]) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(d.child, r) }
 
 // A narrow container scrolls whole columns rather than crushing their text.
 type dataTableFrame struct {

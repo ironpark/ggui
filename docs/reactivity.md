@@ -154,7 +154,8 @@ string and follows the normal derived ownership rules.
 `BindX` never owns or disposes its reader. A reader must outlive the widget that
 uses it. Nil, including a typed nil reader, is rejected; `X(value)` detaches it.
 `Const(value)` adapts a literal only where a reader is required, for example
-`ui.Progress(ggui.Const(0.5))`.
+`ui.Progress(ggui.Const(0.5))`. `Bind(get, set)` adapts a getter and setter
+pair, typically model methods, where a control needs a `Binding[T]`.
 
 Layout bindings such as `BindDisabled`, `BindName` and `BindOptions` track
 signal reads made inside a custom reader's `Get`, including under layout caches.

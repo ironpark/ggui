@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"cmp"
 	"fmt"
+	"maps"
 	"math/big"
 	"strings"
 
@@ -70,6 +71,13 @@ func compareValue(a, b any) int {
 	}
 }
 func compareNumber(a, b any) int {
+	// Integers below 2^53 convert to float64 exactly, so skip big.Rat for them.
+	if n, ok := a.(int64); ok && n < 1<<53 && n > -(1<<53) {
+		return cmp.Compare(float64(n), b.(float64))
+	}
+	if n, ok := b.(int64); ok && n < 1<<53 && n > -(1<<53) {
+		return cmp.Compare(a.(float64), float64(n))
+	}
 	number := func(v any) *big.Rat {
 		if n, ok := v.(int64); ok {
 			return new(big.Rat).SetInt64(n)
@@ -135,25 +143,8 @@ func numericColumn(r result, index int) bool {
 
 // Selection is scoped to the loaded page; a single selected record remains the
 // editing target. Multiple selections never choose an arbitrary edit/delete target.
-type rowSelection struct {
-	model *model
-	id    int
-}
-
-func (s rowSelection) Get() bool   { return s.model.Selections.Get()[s.id] }
-func (s rowSelection) Set(on bool) { s.model.selectRow(s.id, on) }
-func (m *model) selectRow(id int, on bool) {
-	next := make(map[int]bool, len(m.Selections.Get())+1)
-	for key, value := range m.Selections.Get() {
-		if value {
-			next[key] = true
-		}
-	}
-	if on {
-		next[id] = true
-	} else {
-		delete(next, id)
-	}
+// Selected is kept in step with Selections here so it never needs a fallback.
+func (m *model) setSelections(next map[int]bool) {
 	m.Selections.Set(next)
 	target := 0
 	if len(next) == 1 {
@@ -163,16 +154,17 @@ func (m *model) selectRow(id int, on bool) {
 	}
 	m.Selected.Set(target)
 }
-func (m *model) clearSelection() { m.Selections.Set(map[int]bool{}); m.Selected.Set(0) }
-func (m *model) selectionCount() int {
-	if n := len(m.Selections.Get()); n > 0 {
-		return n
+func (m *model) selectRow(id int, on bool) {
+	next := maps.Clone(m.Selections.Get())
+	if on {
+		next[id] = true
+	} else {
+		delete(next, id)
 	}
-	if m.Selected.Get() > 0 {
-		return 1
-	}
-	return 0
+	m.setSelections(next)
 }
+func (m *model) clearSelection()     { m.setSelections(map[int]bool{}) }
+func (m *model) selectionCount() int { return len(m.Selections.Get()) }
 func (m *model) selectPage(on bool) {
 	next := map[int]bool{}
 	if on {
@@ -180,47 +172,35 @@ func (m *model) selectPage(on bool) {
 			next[row.ID] = true
 		}
 	}
-	m.Selections.Set(next)
-	target := 0
-	if len(next) == 1 {
-		for key := range next {
-			target = key
-		}
-	}
-	m.Selected.Set(target)
+	m.setSelections(next)
 }
-
-type pageSelection struct{ model *model }
-
-func (s pageSelection) Get() bool {
-	return len(s.model.Data.Get().Rows) > 0 && len(s.model.Selections.Get()) == len(s.model.Data.Get().Rows)
+func (m *model) pageSelected() bool {
+	rows := len(m.Data.Get().Rows)
+	return rows > 0 && len(m.Selections.Get()) == rows
 }
-func (s pageSelection) Set(on bool) { s.model.selectPage(on) }
 
 func (m *model) pageCount() int {
 	n, size := m.Total.Get(), max(1, m.PageSize.Get())
 	return max(1, (n+size-1)/size)
 }
-
-type databasePage struct{ model *model }
-
-func (b databasePage) Get() int { return b.model.Offset.Get()/max(1, b.model.PageSize.Get()) + 1 }
-func (b databasePage) Set(page int) {
-	m := b.model
+func (m *model) currentPage() int { return m.Offset.Get()/max(1, m.PageSize.Get()) + 1 }
+func (m *model) setPage(page int) {
 	if m.Busy.Get() {
 		return
 	}
 	page = min(max(1, page), m.pageCount())
 	m.browsePage((page - 1) * m.PageSize.Get())
 }
-
-type pageSizeBinding struct{ model *model }
-
-func (b pageSizeBinding) Get() int { return b.model.PageSize.Get() }
-func (b pageSizeBinding) Set(size int) {
-	m := b.model
+func (m *model) setPageSize(size int) {
 	if m.Busy.Get() {
 		return
 	}
 	m.browseSizedPage(0, min(rowLimit, max(1, size)))
+}
+
+// tableSort adapts the server-side sort state to a ui.TableSort reader.
+func (m *model) tableSort() ggui.Readable[ui.TableSort] {
+	return ggui.Combine(m.Sort, m.Desc, func(column string, desc bool) ui.TableSort {
+		return ui.TableSort{Column: column, Descending: desc}
+	})
 }

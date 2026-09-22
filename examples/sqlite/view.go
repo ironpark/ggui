@@ -175,7 +175,6 @@ func dataView(m *model, unavailable ggui.Readable[bool]) ggui.Widget {
 	editDisabled := ggui.Combine(ggui.Combine(m.Selected, m.Editable, func(row int, editable bool) bool { return row == 0 || !editable }), m.Busy, func(a, b bool) bool { return a || b })
 	filters := ggui.If(m.FilterOpen, func() ggui.Widget {
 		return ggui.Column(
-
 			ggui.Row(ui.Caption("Sort by"), ggui.Expanded(ui.Select(m.Sort).BindOptions(m.Data.Map(func(r result) []string { return append([]string{""}, r.Columns...) })).Name("Sort column").Format(func(name string) string {
 				if name == "" {
 					return "Default order"
@@ -210,8 +209,8 @@ func dataView(m *model, unavailable ggui.Readable[bool]) ggui.Widget {
 				}
 				return fmt.Sprintf("%d–%d of %d rows", m.Offset.Get()+1, m.Offset.Get()+len(m.Data.Get().Rows), m.Total.Get())
 			})).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
-			ggui.Row(ui.Caption("Rows per page"), ggui.Box(ui.Select(pageSizeBinding{m}).Options([]int{25, 50, 100, 250, 500}).Name("Rows per page").BindDisabled(unavailable)).Width(76)).Gap(8).Align(ggui.AlignCenter),
-			ui.Pagination(databasePage{m}, ggui.Derived(m.pageCount)).BindDisabled(unavailable),
+			ggui.Row(ui.Caption("Rows per page"), ggui.Box(ui.Select(ggui.Bind(m.PageSize.Get, m.setPageSize)).Options([]int{25, 50, 100, 250, 500}).Name("Rows per page").BindDisabled(unavailable)).Width(76)).Gap(8).Align(ggui.AlignCenter),
+			ui.Pagination(ggui.Bind(m.currentPage, m.setPage), ggui.Derived(m.pageCount)).BindDisabled(unavailable),
 		).Gap(12).Align(ggui.AlignCenter), 6, 10),
 	).Gap(0).Align(ggui.AlignStretch)
 }
@@ -275,31 +274,20 @@ func resultGrid(source ggui.Readable[result], m *model) ggui.Widget {
 			return ggui.Center(ui.Empty("Ready when you are", "Run a query to see its results here."))
 		}
 		cols := make([]ui.Column[record], len(r.Columns))
-		widths := make([]float64, len(r.Columns))
 		total := 0.0
+		sort := m.tableSort()
 		for i, name := range r.Columns {
 			width := max(128.0, min(280.0, float64(utf8.RuneCountInString(name)*8+80)))
 			for _, row := range r.Rows[:min(30, len(r.Rows))] {
 				width = max(width, min(280, float64(utf8.RuneCountInString(cellText(row.Values[i]))*7+28)))
 			}
 			total += width
-			widths[i] = width
 			cols[i] = resultColumn(i, name).Grow(width)
 			if numericColumn(r, i) {
 				cols[i] = cols[i].Right()
 			}
-			heading := ggui.TextOf(ggui.Derived(func() string {
-				mark := " ↕"
-				if m.Sort.Get() == name {
-					if m.Desc.Get() {
-						mark = " ↓"
-					} else {
-						mark = " ↑"
-					}
-				}
-				return name + mark
-			})).NoWrap()
 			meta, _ := m.current.column(name)
+			heading := ggui.TextOf(ggui.Derived(func() string { return name + sort.Get().Mark(name) })).NoWrap()
 			label := ggui.Row(heading, ui.Caption(strings.ToLower(meta.Type))).Gap(8).Align(ggui.AlignCenter)
 			if meta.PK > 0 {
 				label = ggui.Row(ggui.Text("◆").Color(uitheme.Use().Primary), label).Gap(6)
@@ -308,17 +296,17 @@ func resultGrid(source ggui.Readable[result], m *model) ggui.Widget {
 		}
 		cols = append([]ui.Column[record]{ui.Col("", func(row ggui.Readable[record]) ggui.Widget {
 			id := row.Get().ID
-			return ui.Checkbox(rowSelection{m, id}, "").Name(fmt.Sprintf("Select row %d", id)).BindDisabled(m.Busy)
+			return ui.Checkbox(ggui.Bind(func() bool { return m.Selections.Get()[id] }, func(on bool) { m.selectRow(id, on) }), "").Name(fmt.Sprintf("Select row %d", id)).BindDisabled(m.Busy)
 		}).W(32)}, cols...)
-		cols[0].Header = ui.Checkbox(pageSelection{m}, "").Name("Select page").BindDisabled(ggui.Derived(func() bool { return m.Busy.Get() || len(m.Data.Get().Rows) == 0 })).BindIndeterminate(ggui.Derived(func() bool { n := len(m.Selections.Get()); return n > 0 && n < len(m.Data.Get().Rows) }))
+		cols[0].Header = ui.Checkbox(ggui.Bind(m.pageSelected, m.selectPage), "").Name("Select page").BindDisabled(ggui.Derived(func() bool { return m.Busy.Get() || len(m.Data.Get().Rows) == 0 })).BindIndeterminate(ggui.Derived(func() bool { n := len(m.Selections.Get()); return n > 0 && n < len(m.Data.Get().Rows) }))
 		table := ui.Table(ggui.State(r.Rows), func(row record) int { return row.ID }, cols...).BindSelectedRows(m.Selections).OnSelect(func(row record) { m.selectRow(row.ID, !m.Selections.Get()[row.ID]) }).RowHeight(34)
 		border := uitheme.Use().Border
 		grid := ggui.FromFuncs(table.Layout, func(dst *ggui.Canvas, rc ggui.Rect) {
 			dst.Paint(table, rc)
 			x := rc.Origin.X + 32
 			dst.FillRect(ggui.Rct(ggui.Pt(x, rc.Origin.Y), ggui.Sz(1, rc.Size.H)), border)
-			for _, width := range widths[:max(0, len(widths)-1)] {
-				x += (rc.Size.W - 32) * width / total
+			for _, c := range cols[1 : len(cols)-1] {
+				x += (rc.Size.W - 32) * c.Flex / total
 				dst.FillRect(ggui.Rct(ggui.Pt(x, rc.Origin.Y), ggui.Sz(1, rc.Size.H)), border)
 			}
 		})
@@ -329,7 +317,9 @@ func resultGrid(source ggui.Readable[result], m *model) ggui.Widget {
 		// pagination visible while only the table body scrolls vertically.
 		return ggui.FromFuncs(func(c ggui.Constraints, env ggui.Env) ggui.Size {
 			table.Height(max(80, c.MaxH))
-			empty.Layout(ggui.Loose(ggui.Sz(c.MaxW, max(0, c.MaxH-40))), env)
+			if len(r.Rows) == 0 {
+				empty.Layout(ggui.Loose(ggui.Sz(c.MaxW, max(0, c.MaxH-40))), env)
+			}
 			box.Width(max(total+32, c.MaxW))
 			return scroll.Layout(c, env)
 		}, func(dst *ggui.Canvas, rc ggui.Rect) {

@@ -14,6 +14,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/runtime"
+	"github.com/ironpark/ggui/ui"
 )
 
 type draftField struct {
@@ -48,25 +49,26 @@ type model struct {
 
 func newModel() *model {
 	return &model{
-		Path:        ggui.State(""),
-		Status:      ggui.State("Open a SQLite database to get started."),
-		Error:       ggui.State(""),
-		Table:       ggui.State(""),
-		Loaded:      ggui.State(""),
-		SQL:         ggui.State("SELECT name, type FROM sqlite_schema ORDER BY name;"),
-		Schema:      ggui.State(""),
-		Cell:        ggui.State(""),
-		Kind:        ggui.State("TEXT"),
-		Value:       ggui.State(""),
-		Search:      ggui.State(""),
-		Filter:      ggui.State(""),
-		Sort:        ggui.State(""),
-		QueryStatus: ggui.State("Run SQL to see results here."),
-		Objects:     ggui.State([]object{}).WithEqual(slices.Equal),
-		Data:        ggui.State(result{}),
-		QueryData:   ggui.State(result{}),
-		Selected:    ggui.State(0),
-		Total:       ggui.State(0), PageSize: ggui.State(rowLimit),
+		Path:          ggui.State(""),
+		Status:        ggui.State("Open a SQLite database to get started."),
+		Error:         ggui.State(""),
+		Table:         ggui.State(""),
+		Loaded:        ggui.State(""),
+		SQL:           ggui.State("SELECT name, type FROM sqlite_schema ORDER BY name;"),
+		Schema:        ggui.State(""),
+		Cell:          ggui.State(""),
+		Kind:          ggui.State("TEXT"),
+		Value:         ggui.State(""),
+		Search:        ggui.State(""),
+		Filter:        ggui.State(""),
+		Sort:          ggui.State(""),
+		QueryStatus:   ggui.State("Run SQL to see results here."),
+		Objects:       ggui.State([]object{}).WithEqual(slices.Equal),
+		Data:          ggui.State(result{}),
+		QueryData:     ggui.State(result{}),
+		Selected:      ggui.State(0),
+		Total:         ggui.State(0),
+		PageSize:      ggui.State(rowLimit),
 		Selections:    ggui.State(map[int]bool{}),
 		Tab:           ggui.State(0),
 		Offset:        ggui.State(0),
@@ -321,15 +323,9 @@ func (m *model) sortColumn(name string) {
 	if m.Busy.Get() || m.db == nil || m.Data.Get().index(name) < 0 {
 		return
 	}
-	if m.Sort.Get() != name {
-		m.Sort.Set(name)
-		m.Desc.Set(false)
-	} else if !m.Desc.Get() {
-		m.Desc.Set(true)
-	} else {
-		m.Sort.Set("")
-		m.Desc.Set(false)
-	}
+	next := ui.TableSort{Column: m.Sort.Get(), Descending: m.Desc.Get()}.Toggle(name)
+	m.Sort.Set(next.Column)
+	m.Desc.Set(next.Descending)
 	m.apply()
 }
 

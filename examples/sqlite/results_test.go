@@ -166,7 +166,7 @@ func TestDatabasePaginationControls(t *testing.T) {
 	defer m.close()
 	m.open(path)
 	m.selectTable("pages")
-	pageSizeBinding{m}.Set(25)
+	m.setPageSize(25)
 	if m.Total.Get() != 63 || m.pageCount() != 3 || len(m.Data.Get().Rows) != 25 {
 		t.Fatal("page size/count")
 	}
@@ -187,7 +187,7 @@ func TestDatabasePaginationControls(t *testing.T) {
 	}
 	m.Filter.Set("")
 	m.apply()
-	databasePage{m}.Set(3)
+	m.setPage(3)
 	if _, err := db.Exec(`DELETE FROM pages WHERE id>2`); err != nil {
 		t.Fatal(err)
 	}
