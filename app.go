@@ -57,11 +57,11 @@ type App struct {
 	touch  touchInput
 	cursor CursorShape
 
-	window  *ggfx.Window           // the app's window, from StartEvent on
-	pending frameInput             // input gathered from events since the last frame
-	pos     Point                  // the last known pointer position, in logical pixels
-	keys    [KeyMax + 1]bool       // keys held, for Mods
-	touches map[ggfx.TouchID]Point // touches in progress, in logical pixels
+	window  atomic.Pointer[ggfx.Window] // the app's window, from StartEvent on; read by Post from any goroutine
+	pending frameInput                  // input gathered from events since the last frame
+	pos     Point                       // the last known pointer position, in logical pixels
+	keys    [KeyMax + 1]bool            // keys held, for Mods
+	touches map[ggfx.TouchID]Point      // touches in progress, in logical pixels
 	ax      a11y.Bridge
 	drags   bool // the platform's drag observer is installed
 
@@ -155,7 +155,7 @@ func (a *App) HandleEvent(ev ggfx.Event) error {
 		if err != nil {
 			return err
 		}
-		a.window = w
+		a.window.Store(w)
 	case ggfx.FrameEvent:
 		return a.runFrameEvent(ev)
 	case ggfx.KeyEvent:
@@ -215,8 +215,8 @@ func (a *App) HandleEvent(ev ggfx.Event) error {
 // requestFrame asks the window for a frame. It is safe from any goroutine
 // and before the window exists, when the first frame comes on its own.
 func (a *App) requestFrame() {
-	if a.window != nil {
-		a.window.RequestFrame()
+	if w := a.window.Load(); w != nil {
+		w.RequestFrame()
 	}
 }
 
@@ -340,7 +340,7 @@ func (a *App) runFrameEvent(ev ggfx.FrameEvent) error {
 	cursor := a.input.cursorOver(a.overlay, f.pos)
 	if cursor != a.cursor {
 		a.cursor = cursor
-		a.window.SetCursorShape(a.cursor)
+		ev.Window.SetCursorShape(a.cursor)
 	}
 	if a.closed {
 		return ggfx.Termination
@@ -356,7 +356,7 @@ func (a *App) runFrameEvent(ev ggfx.FrameEvent) error {
 		return ggfx.Termination
 	}
 	if a.wantsFrame(f) {
-		a.window.RequestFrame()
+		ev.Window.RequestFrame()
 	}
 	return nil
 }
