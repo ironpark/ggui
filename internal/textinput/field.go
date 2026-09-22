@@ -171,9 +171,7 @@ func (f *Field) HandleInputWithBounds(bounds image.Rectangle) (handled bool, err
 		if f.ch == nil {
 			// TODO: On iOS Safari, Start doesn't work as expected (#2898).
 			// Handle a click event and focus the textarea there.
-			if f.input == nil {
-				f.input = theTextInput
-			}
+			f.bind()
 			before, after := "", ""
 			f.mu.Lock()
 			before = f.text[:f.selectionStartInBytes]
@@ -286,10 +284,15 @@ func (f *Field) commit(state textInputState) {
 // There can be only one Field that is focused at the same time.
 // When Focus is called and there is already a focused field, Focus removes the focus of that.
 func (f *Field) Focus() {
+	f.bind()
+	focusField(f)
+}
+
+// bind ties the field to the window's text input on first use.
+func (f *Field) bind() {
 	if f.input == nil {
 		f.input = theTextInput
 	}
-	focusField(f)
 }
 
 // Blur removes the focus from the field.

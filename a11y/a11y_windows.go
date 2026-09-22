@@ -83,19 +83,25 @@ func (d *windowsAX) close() {
 	d.window = nil
 }
 
+// winAX is the Windows half of b, or nil.
+func winAX(b *Bridge) *windowsAX {
+	if b == nil {
+		return nil
+	}
+	p, _ := b.plat.(*windowsAX)
+	return p
+}
+
 func winHandle(b *Bridge) uintptr {
-	if b != nil {
-		if p, ok := b.plat.(*windowsAX); ok {
-			return p.hwnd.Load()
-		}
+	if p := winAX(b); p != nil {
+		return p.hwnd.Load()
 	}
 	return 0
 }
+
 func winRootFor(b *Bridge) uintptr {
-	if b != nil {
-		if p, ok := b.plat.(*windowsAX); ok {
-			return p.root.Load()
-		}
+	if p := winAX(b); p != nil {
+		return p.root.Load()
 	}
 	return 0
 }

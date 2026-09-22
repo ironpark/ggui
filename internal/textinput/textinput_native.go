@@ -66,6 +66,8 @@ func HandleEvent(event ggfx.Event) bool {
 			ReplacementStartInBytes: noReplacement, ReplacementEndInBytes: noReplacement})
 		return true
 	case ggfx.TextEvent:
+		// The window's entry is made here if need be: the first character
+		// can arrive in the frame that focuses the field it is for.
 		t := inputFor(e.Window)
 		st := textInputState{Text: e.Text, CommitKind: commitRegular,
 			ReplacementStartInBytes: noReplacement, ReplacementEndInBytes: noReplacement}
@@ -85,6 +87,18 @@ type textInputImpl struct {
 	window  *ggfx.Window
 	enabled bool
 	rect    image.Rectangle // the caret last handed to the window
+	before  string          // the context last handed to the window
+	after   string
+}
+
+// setContext passes the surrounding text on only when it changed; the
+// window method is a synchronous main-thread hop.
+func (t *textInputImpl) setContext(before, after string) {
+	if before == t.before && after == t.after {
+		return
+	}
+	t.before, t.after = before, after
+	t.window.SetTextInputContext(before, after)
 }
 
 // setRect passes the caret rectangle on only when it moved: the window
@@ -110,7 +124,7 @@ func (t *textInputImpl) Start(bounds image.Rectangle, before, after string) (<-c
 		return nil, nil
 	}
 	t.setRect(bounds)
-	t.window.SetTextInputContext(before, after)
+	t.setContext(before, after)
 	if !t.enabled {
 		t.window.SetTextInputEnabled(true)
 		t.enabled = true

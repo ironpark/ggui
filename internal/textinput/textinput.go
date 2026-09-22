@@ -327,39 +327,6 @@ func (t *textInput) abandonTarget() {
 	t.events.clearQueue()
 }
 
-// queueCarryTicks is how long after a session ends the states queued since
-// still count as belonging to the next session.
-const queueCarryTicks = 2
-
-// withinQueueCarry reports whether a session starting at tick follows one that
-// ended at lastEndTick closely enough to take over its queued states.
-// lastEndTick is 0 when no session has ended yet.
-//
-// The platform reports text whether or not a session is open, and a commit ends
-// the session, so the text typed while the application starts the next one is
-// queued. That text belongs to the next session: typing faster than one
-// character per tick would otherwise lose everything after the first. The two
-// are told apart by when the last session ended, as an application driving text
-// input starts the next session as soon as it observes the commit.
-func withinQueueCarry(lastEndTick, tick int64) bool {
-	if lastEndTick == 0 {
-		return false
-	}
-	return tick-lastEndTick <= queueCarryTicks
-}
-
-// queuedStatesBelong reports whether states reported at queuedTick are for a
-// session starting at tick, which is so in two cases: the previous session
-// ended within the carry window, or they were reported in the tick the session
-// starts in.
-//
-// The events of a tick are processed before the game updates, so text typed in
-// the same tick a session starts in was reported before the session existed.
-// It is what the application is starting the session for.
-func queuedStatesBelong(lastEndTick, queuedTick, tick int64) bool {
-	return withinQueueCarry(lastEndTick, tick) || queuedTick == tick
-}
-
 type textInputEvents struct {
 	ch   chan textInputState
 	done chan struct{}
@@ -371,20 +338,10 @@ type textInputEvents struct {
 	// queued behind that commit is for the next one.
 	sessionCommitted bool
 
-	// lastEndTick is the tick the last session ended at, or 0 before the first
-	// one ends.
-	lastEndTick int64
-
-	// queuedTick is the tick the queued states were reported in.
-	queuedTick int64
-
 	// endedByUser reports whether the last ending was the user ending text
 	// inputting from the platform side, e.g. by dismissing the virtual
 	// keyboard. Taken by the session observing the closed channel.
 	endedByUser bool
-
-	// tick overrides the tick source in tests. Production queues are target-scoped; tests may supply a logical clock.
-	tick func() int64
 
 	m sync.Mutex
 
@@ -422,33 +379,9 @@ func (s *textInputEvents) clearActiveSessionIf(active *session) {
 	}
 }
 
-// currentTick reports the current tick.
-func (s *textInputEvents) currentTick() int64 {
-	if s.tick != nil {
-		return s.tick()
-	}
-	return 1 // Event ownership lasts until the editable target changes, not a polling tick.
-}
-
-// carrying reports whether states queued now belong to the session about
-// to start: the previous one ended within the carry window, so what the
-// platform reported since (a composition that continued past a commit) is
-// this session's and must not be discarded.
-func (s *textInputEvents) carrying() bool {
-	s.m.Lock()
-	defer s.m.Unlock()
-	return withinQueueCarry(s.lastEndTick, s.currentTick())
-}
-
 func (s *textInputEvents) start() (ch chan textInputState, endFunc func()) {
 	s.m.Lock()
 	defer s.m.Unlock()
-
-	// States belonging to no session describe a target this one knows nothing
-	// about.
-	if !queuedStatesBelong(s.lastEndTick, s.queuedTick, s.currentTick()) {
-		s.queuedStates = s.queuedStates[:0]
-	}
 
 	if s.ch == nil {
 		// 10 should be enough for most cases.
@@ -507,7 +440,6 @@ func (s *textInputEvents) doEnd() {
 		// forward for as long as the application takes keyboard input.
 		return
 	}
-	s.lastEndTick = s.currentTick()
 	close(s.ch)
 	s.ch = nil
 	close(s.done)
@@ -523,18 +455,8 @@ func (s *textInputEvents) send(state textInputState) bool {
 	s.m.Lock()
 	defer s.m.Unlock()
 
-	if s.ch == nil {
-		// States left from an earlier tick are for a session that never
-		// started. Dropping them as the tick turns over bounds what is held to
-		// a single tick of typing, however long the application goes without
-		// opening a session.
-		tick := s.currentTick()
-		if !queuedStatesBelong(s.lastEndTick, s.queuedTick, tick) {
-			s.queuedStates = s.queuedStates[:0]
-		}
-		s.queuedTick = tick
-	}
-
+	// The queue is scoped to the editable target: the window's frame clears
+	// what no session took (WithWindow), so it never grows past one frame.
 	// Queueing first keeps states in the order they were reported, as an
 	// earlier one may still be queued behind a commit.
 	s.queuedStates = append(s.queuedStates, state)

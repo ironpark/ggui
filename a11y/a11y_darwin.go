@@ -214,10 +214,7 @@ var axElementBridges sync.Map // objc.ID -> *Bridge; retired elements resolve to
 // answers nothing when it fails: an element outliving its node is normal,
 // since an assistive technology keeps the ones it was given.
 func axSelf(self objc.ID) (*Bridge, *axFrame, SemNode, bool) {
-	owner, exists := axElementBridges.Load(self)
-	if !exists {
-		return nil, nil, SemNode{}, false
-	}
+	owner, _ := axElementBridges.Load(self)
 	b, _ := owner.(*Bridge)
 	if b == nil {
 		return nil, nil, SemNode{}, false

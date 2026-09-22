@@ -1,6 +1,7 @@
 package a11y
 
 import (
+	"github.com/ironpark/ggfx"
 	"testing"
 )
 
@@ -23,6 +24,9 @@ func newAXFake(on bool) *axFake {
 }
 
 func (f *axFake) active() bool { f.asked++; return f.on }
+
+func (f *axFake) setWindow(*Bridge, *ggfx.Window) {}
+func (f *axFake) close()                          {}
 
 func (f *axFake) element(handle int64) uintptr {
 	f.next++

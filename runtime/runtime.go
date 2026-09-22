@@ -60,8 +60,9 @@ type FilePicker interface {
 	SaveFile(d FileDialog) (string, error)
 }
 
-// NativeFilePicker returns the platform's file dialogs.
-func NativeFilePicker() FilePicker { return nativePicker{} }
+// NativeFilePicker returns the platform's file dialogs, attached to no
+// window; NativeFilePickerForWindow attaches them to one.
+func NativeFilePicker() FilePicker { return NativeFilePickerForWindow(nil) }
 
 // StubFilePicker is a FilePicker that answers every dialog with fixed
 // paths, for tests. OpenFile, PickFolder and SaveFile return the first of

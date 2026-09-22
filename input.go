@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"github.com/ironpark/ggfx"
 	"runtime"
 	"slices"
 
@@ -52,6 +53,16 @@ type TouchDragCapturer interface {
 // Mods are the modifier keys held during a KeyEvent.
 type Mods struct {
 	Shift, Ctrl, Alt, Meta bool
+}
+
+// or is the union of two modifier sets.
+func (m Mods) or(o Mods) Mods {
+	return Mods{Shift: m.Shift || o.Shift, Ctrl: m.Ctrl || o.Ctrl, Alt: m.Alt || o.Alt, Meta: m.Meta || o.Meta}
+}
+
+// modsFrom converts the modifiers ggfx reports with a key event.
+func modsFrom(k ggfx.KeyModifiers) Mods {
+	return Mods{Shift: k.Shift, Ctrl: k.Control, Alt: k.Alt, Meta: k.Meta}
 }
 
 // Cmd reports the platform's command modifier: Meta (⌘) on macOS, Ctrl

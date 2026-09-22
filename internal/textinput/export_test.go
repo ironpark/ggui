@@ -32,16 +32,6 @@ func ComputeReplacement(baseline, newText string, caretInBytes int) (string, int
 	return computeReplacement(baseline, newText, caretInBytes)
 }
 
-const QueueCarryTicks = queueCarryTicks
-
-func WithinQueueCarry(lastEndTick, tick int64) bool {
-	return withinQueueCarry(lastEndTick, tick)
-}
-
-func QueuedStatesBelong(lastEndTick, queuedTick, tick int64) bool {
-	return queuedStatesBelong(lastEndTick, queuedTick, tick)
-}
-
 type TextInputEvents = textInputEvents
 
 // TextInputState re-exports the internal state record so white-box tests can
@@ -56,13 +46,6 @@ const (
 	CommitRegular            = commitRegular
 	CommitWithPassthroughKey = commitWithPassthroughKey
 )
-
-// SetTick replaces the tick source these events date queue ownership from.
-func (s *TextInputEvents) SetTick(tick func() int64) {
-	s.m.Lock()
-	defer s.m.Unlock()
-	s.tick = tick
-}
 
 // QueuedStateCount reports how many states are held for a session to take.
 func (s *TextInputEvents) QueuedStateCount() int {
@@ -123,9 +106,6 @@ type DiffSender struct {
 // as a platform backend does on start.
 func NewDiffSender(textBeforeCaret, textAfterCaret string) *DiffSender {
 	d := &DiffSender{}
-	d.events.tick = func() int64 {
-		return 0
-	}
 	d.sender.events = &d.events
 	ch, end := d.events.start()
 	d.ch = ch
@@ -235,9 +215,6 @@ type PlatformStateHandler struct {
 // platform backend after seeding.
 func NewPlatformStateHandler(value string) *PlatformStateHandler {
 	h := &PlatformStateHandler{}
-	h.events.tick = func() int64 {
-		return 0
-	}
 	h.sender.events = &h.events
 	ch, _ := h.events.start()
 	h.ch = ch

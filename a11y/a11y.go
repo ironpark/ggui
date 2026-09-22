@@ -100,6 +100,10 @@ func (f *axFrame) at(k axKey) (SemNode, bool) {
 // Nothing above this line knows what an Objective-C object is, and nothing
 // below it knows what a widget is.
 type axPlatform interface {
+	// setWindow attaches the platform tree to w's native window, and close
+	// detaches it before the window goes away.
+	setWindow(b *Bridge, w *ggfx.Window)
+	close()
 	// active reports whether an assistive technology is attached. It is
 	// asked once a second rather than once a frame, since it is the one
 	// call the bridge makes while nothing is listening.
@@ -166,16 +170,16 @@ func (b *Bridge) Start(act func(NodeID, Action), mode Mode) {
 // SetWindow binds this bridge to its owning window. Call after Start and before
 // publishing its first tree.
 func (b *Bridge) SetWindow(w *ggfx.Window) {
-	if p, ok := b.plat.(interface{ setWindow(*Bridge, *ggfx.Window) }); ok {
-		p.setWindow(b, w)
+	if b.plat != nil {
+		b.plat.setWindow(b, w)
 	}
 }
 
 // Close detaches native callbacks and retires the tree before its window closes.
 func (b *Bridge) Close() {
 	b.clear()
-	if p, ok := b.plat.(interface{ close() }); ok {
-		p.close()
+	if b.plat != nil {
+		b.plat.close()
 	}
 }
 

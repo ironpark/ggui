@@ -176,13 +176,8 @@ func (a *App) HandleEvent(ev ggfx.Event) error {
 			// event itself, which sees a modifier the OS never reported as a
 			// key. Presses within one frame share the union, so a chord is
 			// not lost when its modifier was released before the frame ran.
-			m := a.mods()
-			m.Shift = m.Shift || ev.Modifiers.Shift
-			m.Ctrl = m.Ctrl || ev.Modifiers.Control
-			m.Alt = m.Alt || ev.Modifiers.Alt
-			m.Meta = m.Meta || ev.Modifiers.Meta
-			p := &a.pending.mods
-			p.Shift, p.Ctrl, p.Alt, p.Meta = p.Shift || m.Shift, p.Ctrl || m.Ctrl, p.Alt || m.Alt, p.Meta || m.Meta
+			m := a.mods().or(modsFrom(ev.Modifiers))
+			a.pending.mods = a.pending.mods.or(m)
 			a.pending.keys = append(a.pending.keys, ev.Key)
 			if a.cfg.Inspector != "" && !ev.Repeat &&
 				(KeyEvent{Kind: KeyPress, Key: ev.Key, Mods: m}).Is(a.inspectChord) {
@@ -459,9 +454,9 @@ func (a *App) takeInput() frameInput {
 	f := a.pending
 	a.pending = frameInput{}
 	f.pos = a.pos
-	if len(f.keys) == 0 {
-		f.mods = a.mods()
-	}
+	// The union gathered from the frame's key presses, or the held keys
+	// alone when there were none.
+	f.mods = f.mods.or(a.mods())
 	ids := make([]ggfx.TouchID, 0, len(a.touches))
 	for id := range a.touches {
 		ids = append(ids, id)
