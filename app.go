@@ -172,14 +172,20 @@ func (a *App) HandleEvent(ev ggfx.Event) error {
 			a.keys[ev.Key] = ev.Pressed
 		}
 		if ev.Pressed {
-			a.pending.mods = a.mods()
-			a.pending.mods.Shift = a.pending.mods.Shift || ev.Modifiers.Shift
-			a.pending.mods.Ctrl = a.pending.mods.Ctrl || ev.Modifiers.Control
-			a.pending.mods.Alt = a.pending.mods.Alt || ev.Modifiers.Alt
-			a.pending.mods.Meta = a.pending.mods.Meta || ev.Modifiers.Meta
+			// The modifiers of this press, from the held keys and from the
+			// event itself, which sees a modifier the OS never reported as a
+			// key. Presses within one frame share the union, so a chord is
+			// not lost when its modifier was released before the frame ran.
+			m := a.mods()
+			m.Shift = m.Shift || ev.Modifiers.Shift
+			m.Ctrl = m.Ctrl || ev.Modifiers.Control
+			m.Alt = m.Alt || ev.Modifiers.Alt
+			m.Meta = m.Meta || ev.Modifiers.Meta
+			p := &a.pending.mods
+			p.Shift, p.Ctrl, p.Alt, p.Meta = p.Shift || m.Shift, p.Ctrl || m.Ctrl, p.Alt || m.Alt, p.Meta || m.Meta
 			a.pending.keys = append(a.pending.keys, ev.Key)
 			if a.cfg.Inspector != "" && !ev.Repeat &&
-				(KeyEvent{Kind: KeyPress, Key: ev.Key, Mods: a.pending.mods}).Is(a.inspectChord) {
+				(KeyEvent{Kind: KeyPress, Key: ev.Key, Mods: m}).Is(a.inspectChord) {
 				a.Inspector(!a.inspect)
 			}
 		}
@@ -228,6 +234,8 @@ func (a *App) HandleEvent(ev ggfx.Event) error {
 		a.pending.drop = append(a.pending.drop, droppedFiles(ev.Files)...)
 		a.requestFrame()
 	case ggfx.CloseEvent:
+		// The window closes after this event. Dispose the tree and detach
+		// the native hooks first, while the window still exists.
 		a.Close()
 	case ggfx.FocusEvent:
 		if !ev.Focused {

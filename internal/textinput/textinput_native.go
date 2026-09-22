@@ -84,6 +84,18 @@ type textInputImpl struct {
 	events  *textInputEvents
 	window  *ggfx.Window
 	enabled bool
+	rect    image.Rectangle // the caret last handed to the window
+}
+
+// setRect passes the caret rectangle on only when it moved: the window
+// method is a synchronous main-thread hop, and the editor reports the
+// caret on every tick it is focused.
+func (t *textInputImpl) setRect(bounds image.Rectangle) {
+	if bounds == t.rect {
+		return
+	}
+	t.rect = bounds
+	t.window.SetTextInputRect(float64(bounds.Min.X), float64(bounds.Min.Y), float64(bounds.Dx()), float64(bounds.Dy()))
 }
 
 func (t *textInputImpl) markIMEDiscardNeeded() {
@@ -97,7 +109,7 @@ func (t *textInputImpl) Start(bounds image.Rectangle, before, after string) (<-c
 	if t.window == nil {
 		return nil, nil
 	}
-	t.window.SetTextInputRect(float64(bounds.Min.X), float64(bounds.Min.Y), float64(bounds.Dx()), float64(bounds.Dy()))
+	t.setRect(bounds)
 	t.window.SetTextInputContext(before, after)
 	if !t.enabled {
 		t.window.SetTextInputEnabled(true)
@@ -110,6 +122,6 @@ func (t *textInputImpl) Start(bounds image.Rectangle, before, after string) (<-c
 func UpdateCaret(bounds image.Rectangle) {
 	t := &theTextInput.impl
 	if t.window != nil && t.enabled {
-		t.window.SetTextInputRect(float64(bounds.Min.X), float64(bounds.Min.Y), float64(bounds.Dx()), float64(bounds.Dy()))
+		t.setRect(bounds)
 	}
 }
