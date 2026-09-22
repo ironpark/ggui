@@ -350,7 +350,8 @@ func (m *Motion) Toggle(on bool, now time.Time, d time.Duration) float64 {
 	return m.Value(now)
 }
 
-// Value returns the position at now.
+// Value returns the position at now. While the motion is still moving it
+// asks for another frame, so the caller may read now with FrameTime.
 func (m *Motion) Value(now time.Time) float64 {
 	if m.duration <= 0 || m.from == m.to {
 		return m.to
@@ -360,5 +361,6 @@ func (m *Motion) Value(now time.Time) float64 {
 		m.from = m.to
 		return m.to
 	}
+	frame.animate()
 	return m.from + (m.to-m.from)*EaseOut(clamp(p, 0, 1))
 }

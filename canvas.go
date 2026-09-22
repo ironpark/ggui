@@ -158,7 +158,7 @@ func (c *Canvas) Retained[T any](at Anchor, s Slot[T]) (T, bool) {
 // returns where it is now, so a control rebuilt every frame keeps
 // animating; a switch knob and a tab underline use it.
 func (c *Canvas) Ease(at Anchor, s Slot[*Motion], target float64, d time.Duration) float64 {
-	now := Now()
+	now := FrameTime()
 	m, ok := c.Retained(at, s)
 	if !ok {
 		m = new(Motion)

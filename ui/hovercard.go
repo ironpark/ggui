@@ -101,7 +101,7 @@ func (h *HoverCardWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	at := ggui.Anchor{Rect: r}
 	state, _ := dst.Retained(at, hoverCardSlot)
 	p, ok := dst.Pointer()
-	now := ggui.Now()
+	now := ggui.FrameTime()
 	// Include the small gap, so moving from the anchor into its preview
 	// doesn't dismiss the panel halfway across.
 	bridge := r
@@ -116,6 +116,9 @@ func (h *HoverCardWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		state.since = time.Time{}
 	}
 	open := hovered && now.Sub(state.since) >= h.delay
+	if hovered && !open {
+		ggui.WakeAt(state.since.Add(h.delay))
+	}
 	progress := state.reveal.Toggle(open, now, h.env.Motion(h.theme.MotionFast))
 	if !open && progress <= 0 {
 		state.panel = ggui.Rect{}

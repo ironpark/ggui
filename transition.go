@@ -126,7 +126,7 @@ func (t *TransitionWidget) Paint(dst *Canvas, r Rect) {
 		// until Presence removes it.
 		p = 1
 	} else if !t.driven {
-		now := Now()
+		now := FrameTime()
 		start := now
 		at := Anchor{Rect: r, ID: t.id}
 		if s, ok := dst.Retained(at, transitionSlot); ok {
@@ -136,6 +136,9 @@ func (t *TransitionWidget) Paint(dst *Canvas, r Rect) {
 		p = 1
 		if t.duration > 0 {
 			p = clamp(float64(now.Sub(start))/float64(t.duration), 0, 1)
+		}
+		if p < 1 {
+			frame.animate()
 		}
 	}
 	if p >= 1 && !t.leaving {

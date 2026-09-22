@@ -157,7 +157,7 @@ func (a *AccordionWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	a.sizes = slices.Grow(a.sizes[:0], len(a.items))[:len(a.items)]
 	clear(a.sizes)
 	a.heights = slices.Grow(a.heights[:0], len(a.items))[:len(a.items)]
-	now, motion := ggui.Now(), env.Motion(a.theme.MotionFast)
+	now, motion := ggui.FrameTime(), env.Motion(a.theme.MotionFast)
 	var width, height float64
 	for i, item := range a.items {
 		h := a.headers[i]

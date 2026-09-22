@@ -371,7 +371,10 @@ func (o *InputOTPWidget) paintSlots(d *ggui.Canvas, r ggui.Rect, state ggui.Text
 		o.labels[i].Color(col)
 		sz := o.sizes[i]
 		d.Clip(at).Paint(o.labels[i], ggui.Rct(at.Center().Add(ggui.Pt(-sz.W/2, -sz.H/2)), sz))
-		if i == active && selected && i >= len(runes) && !state.Composing && (o.reduced || (ggui.Now().Sub(o.blink)/(500*time.Millisecond))%2 == 0) {
+		if i == active && selected && i >= len(runes) && !state.Composing {
+			ggui.WakeAt(o.blink.Add((ggui.FrameTime().Sub(o.blink)/(500*time.Millisecond) + 1) * 500 * time.Millisecond))
+		}
+		if i == active && selected && i >= len(runes) && !state.Composing && (o.reduced || (ggui.FrameTime().Sub(o.blink)/(500*time.Millisecond))%2 == 0) {
 			d.FillRect(caret, fg)
 		}
 	}

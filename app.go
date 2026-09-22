@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"slices"
 	"sync/atomic"
+	"time"
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/a11y"
@@ -57,13 +58,14 @@ type App struct {
 	touch  touchInput
 	cursor CursorShape
 
-	window  atomic.Pointer[ggfx.Window] // the app's window, from StartEvent on; read by Post from any goroutine
-	pending frameInput                  // input gathered from events since the last frame
-	pos     Point                       // the last known pointer position, in logical pixels
-	keys    [KeyMax + 1]bool            // keys held, for Mods
-	touches map[ggfx.TouchID]Point      // touches in progress, in logical pixels
-	ax      a11y.Bridge
-	drags   bool // the platform's drag observer is installed
+	window    atomic.Pointer[ggfx.Window] // the app's window, from StartEvent on; read by Post from any goroutine
+	pending   frameInput                  // input gathered from events since the last frame
+	pos       Point                       // the last known pointer position, in logical pixels
+	wakeTimer *time.Timer
+	keys      [KeyMax + 1]bool       // keys held, for Mods
+	touches   map[ggfx.TouchID]Point // touches in progress, in logical pixels
+	ax        a11y.Bridge
+	drags     bool // the platform's drag observer is installed
 
 	inspect      bool
 	inspectChord Chord          // parsed from cfg.Inspector; Key is zero for none
@@ -357,6 +359,13 @@ func (a *App) runFrameEvent(ev ggfx.FrameEvent) error {
 	}
 	if a.wantsFrame(f) {
 		ev.Window.RequestFrame()
+	} else if wake := frame.takeWake(); !wake.IsZero() {
+		// A caret or a delayed tooltip changes at a known time; sleep
+		// until then rather than painting every frame.
+		if a.wakeTimer != nil {
+			a.wakeTimer.Stop()
+		}
+		a.wakeTimer = time.AfterFunc(max(wake.Sub(FrameTime()), 0), a.requestFrame)
 	}
 	return nil
 }

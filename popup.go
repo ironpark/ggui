@@ -176,7 +176,7 @@ func (p *PopupWidget) Paint(dst *Canvas, r Rect) {
 	dst.HitPointer(r, p)
 	dst.Paint(p.anchor, r)
 	open := p.IsOpen()
-	now := Now()
+	now := FrameTime()
 	progress := p.reveal.Toggle(open, now, p.env.Motion(p.env.PopupDuration()))
 	if !open && progress <= 0 {
 		return

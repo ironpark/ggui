@@ -72,7 +72,7 @@ func (t *TooltipWidget) Baseline() (float64, bool) {
 func (t *TooltipWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Paint(t.child, r)
 	p, ok := dst.Pointer()
-	now := ggui.Now()
+	now := ggui.FrameTime()
 	at := ggui.Anchor{Rect: r}
 	state, _ := dst.Retained(at, tooltipSlot)
 	focused := dst.FocusWithin(r)
@@ -84,6 +84,9 @@ func (t *TooltipWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		state.since = time.Time{}
 	}
 	open := focused || (hovered && now.Sub(state.since) >= t.delay)
+	if hovered && !open {
+		ggui.WakeAt(state.since.Add(t.delay))
+	}
 	progress := state.reveal.Toggle(open, now, t.env.Motion(t.theme.MotionFast))
 	dst.Retain(at, tooltipSlot, state)
 	if !open && progress <= 0 {

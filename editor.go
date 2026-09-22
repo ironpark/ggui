@@ -379,6 +379,9 @@ func nextWord(s string, i int) int {
 // word, triple-click everything, dragging selects a range. A Multiline
 // editor adds Up and Down, Home and End within the line, Enter for a line
 // break and ⌘/Ctrl+Enter for OnSubmit.
+// caretBlink is how long the caret shows and hides for.
+const caretBlink = 530 * time.Millisecond
+
 type TextInputWidget struct {
 	props property.
 		// Interactive carries the identity, name and disabled state every
@@ -802,8 +805,11 @@ func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
 		clip.FillRect(Rct(Pt(x0+a, y), Sz(b-a, 1)), t.resolved.Color)
 	}
 
-	if t.Focused() && (Now().Sub(t.blink)/(530*time.Millisecond))%2 == 0 {
-		clip.FillRect(Rct(Pt(x0+caretX, r.Origin.Y), Sz(1, h)), t.resolved.Color)
+	if t.Focused() {
+		if now := FrameTime(); (now.Sub(t.blink)/caretBlink)%2 == 0 {
+			clip.FillRect(Rct(Pt(x0+caretX, r.Origin.Y), Sz(1, h)), t.resolved.Color)
+		}
+		WakeAt(blinkWake(t.blink, FrameTime(), caretBlink))
 	}
 }
 
@@ -882,8 +888,11 @@ func (t *TextInputWidget) paintLines(dst *Canvas, r Rect) {
 		})
 	}
 
-	if t.Focused() && (Now().Sub(t.blink)/(530*time.Millisecond))%2 == 0 {
-		clip.FillRect(Rct(Pt(x0+caretX, y0+caretY), Sz(1, h)), t.resolved.Color)
+	if t.Focused() {
+		if now := FrameTime(); (now.Sub(t.blink)/caretBlink)%2 == 0 {
+			clip.FillRect(Rct(Pt(x0+caretX, y0+caretY), Sz(1, h)), t.resolved.Color)
+		}
+		WakeAt(blinkWake(t.blink, FrameTime(), caretBlink))
 	}
 }
 

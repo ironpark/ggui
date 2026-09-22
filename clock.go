@@ -26,17 +26,49 @@ type frameClock struct {
 	now  time.Time // the frozen instant Now returns
 	real time.Time // the raw reading now was last advanced from
 
-	// read reports whether Now was called since begin: something painted
-	// this frame depends on time, so the next frame must run without
-	// waiting for input.
+	// read reports whether something painted this frame depends on time,
+	// so the next frame must run without waiting for input: Now was called,
+	// or a Motion reported that it is still moving.
 	read bool
+
+	// wake is the earliest instant a widget asked to be painted again at,
+	// or zero. It is for looks that change at a known time, like a caret
+	// blink or a tooltip delay, which need no frame until then.
+	wake time.Time
 }
 
-// timeRead reports whether Now was called since the frame began.
+// timeRead reports whether the frame depends on time.
 func (f *frameClock) timeRead() bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.read
+}
+
+// animate marks the frame as depending on time.
+func (f *frameClock) animate() {
+	f.mu.Lock()
+	f.read = true
+	f.mu.Unlock()
+}
+
+// takeWake returns the earliest wake-up asked for this frame, or zero.
+func (f *frameClock) takeWake() time.Time {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	w := f.wake
+	f.wake = time.Time{}
+	return w
+}
+
+// peek returns the frame's instant without marking the frame as depending
+// on time, for callers that report their own motion.
+func (f *frameClock) peek() time.Time {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.now.IsZero() {
+		return clock()
+	}
+	return f.now
 }
 
 var frame frameClock
@@ -50,6 +82,7 @@ func (f *frameClock) begin(raw time.Time) time.Time {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.read = false
+	f.wake = time.Time{}
 	switch {
 	case f.now.IsZero():
 		f.now = raw
@@ -97,6 +130,32 @@ func (f *frameClock) instant() time.Time {
 // read Now rather than time.Now, which also lets tests step them with
 // Probe.Advance or SetClock.
 func Now() time.Time { return frame.instant() }
+
+// FrameTime is Now without the promise to paint again: reading it does not
+// keep the app animating. Use it for the instant handed to a Motion, which
+// asks for frames itself while it moves, or together with WakeAt.
+func FrameTime() time.Time { return frame.peek() }
+
+// WakeAt asks for a frame at t, for a look that changes at a known time
+// such as a caret blink or a tooltip delay. Nothing is painted before then
+// unless something else asks. The earliest request in a frame wins.
+func WakeAt(t time.Time) {
+	if t.IsZero() {
+		return
+	}
+	frame.mu.Lock()
+	if frame.wake.IsZero() || t.Before(frame.wake) {
+		frame.wake = t
+	}
+	frame.mu.Unlock()
+}
+
+// blinkWake returns when a caret that toggles every period since start next
+// changes, for WakeAt.
+func blinkWake(start, now time.Time, period time.Duration) time.Time {
+	n := now.Sub(start)/period + 1
+	return start.Add(n * period)
+}
 
 // SetClock replaces the raw time source behind Now and every animation,
 // and returns a function that restores the previous one. The frame clock

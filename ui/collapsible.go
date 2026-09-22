@@ -88,7 +88,7 @@ func (c *CollapsibleWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 	c.env = env
 	c.motion = env.Motion(t.MotionFast)
 	open := c.open.Get()
-	c.progress = c.reveal.Toggle(open, ggui.Now(), c.motion)
+	c.progress = c.reveal.Toggle(open, ggui.FrameTime(), c.motion)
 	c.pad = t.FieldPad
 	c.title.Color(pick(c.IsInert(), t.MutedFg, t.Fg))
 	c.titleSize = c.title.Layout(ggui.Loose(ggui.Sz(max(cs.MaxW-c.pad.Left-c.pad.Right-t.ControlSize-t.ControlGap, 0), cs.MaxH)), env)
