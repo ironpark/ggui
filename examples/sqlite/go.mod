@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	github.com/hajimehoshi/ebiten/v2 v2.10.2
-	github.com/ironpark/ggui v0.0.0-20260922052401-ff0e440b51d2
+	github.com/ironpark/ggui v0.0.0-20260922054418-d0d3561f30f7
 	modernc.org/sqlite v1.59.0
 )
 
