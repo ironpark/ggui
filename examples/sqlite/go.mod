@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	github.com/hajimehoshi/ebiten/v2 v2.10.2
-	github.com/ironpark/ggui v0.0.0
+	github.com/ironpark/ggui v0.0.0-20260922052401-ff0e440b51d2
 	modernc.org/sqlite v1.59.0
 )
 
@@ -29,5 +29,3 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
-
-replace github.com/ironpark/ggui => ../..

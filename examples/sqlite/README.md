@@ -16,6 +16,21 @@ go run ./examples/sqlite -db /path/to/database.sqlite -readonly
 # Or start without -db and drop a database onto the window.
 ```
 
+Outside the repository it runs straight from the module proxy:
+
+```sh
+go run github.com/ironpark/ggui/examples/sqlite@latest
+```
+
+For that to work the module must not use a `replace` directive, so its
+`go.mod` pins a published `github.com/ironpark/ggui` pseudo-version. Local
+builds use the workspace and ignore the pin. After pushing library changes the
+example depends on, bump it:
+
+```sh
+go get -C examples/sqlite github.com/ironpark/ggui@main
+```
+
 ## Opening a database
 
 Drop **one SQLite file anywhere in the window** or choose **Open database**.

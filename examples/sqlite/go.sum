@@ -20,6 +20,8 @@ github.com/hajimehoshi/ebiten/v2 v2.10.2 h1:uNMOpfb/pW7GQRMsSn/pxwrk9rNcgSaIdjKw
 github.com/hajimehoshi/ebiten/v2 v2.10.2/go.mod h1:47QNgyS/y2ZRkjVUvlGLx8a+F7MSjcn8/GsjcCZ9Rc8=
 github.com/hashicorp/golang-lru/v2 v2.0.7 h1:a+bsQ5rvGLjzHuww6tVxozPZFVghXaHOwFs4luLUK2k=
 github.com/hashicorp/golang-lru/v2 v2.0.7/go.mod h1:QeFd9opnmA6QUJc5vARoKUSoFhyfM2/ZepoAG6RGpeM=
+github.com/ironpark/ggui v0.0.0-20260922052401-ff0e440b51d2 h1:4+eWB76qjOTa8Xoe4+GKV+eRtuJSWP9gvuNDemrv9Vw=
+github.com/ironpark/ggui v0.0.0-20260922052401-ff0e440b51d2/go.mod h1:tySkxSK2hPqE8lHBQd62tFGpHu1epEC02EfBPDZPpMk=
 github.com/mattn/go-isatty v0.0.24 h1:tGZZoVgT/KiqK1c8ocVLeDS8BSWMRd47J3Lbz7vsReI=
 github.com/mattn/go-isatty v0.0.24/go.mod h1:nMCL3Zebbrt45jsMDgnfIwz6ydEQApk5oEI3HqDio6A=
 github.com/ncruces/go-strftime v1.0.0 h1:HMFp8mLCTPp341M/ZnA4qaf7ZlsbTc+miZjCLOFAw7w=

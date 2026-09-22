@@ -3,6 +3,7 @@ github.com/ebitengine/oto/v3 v3.5.0/go.mod h1:Elkm7yzTRns3w2efvibzVOoQ65YOwmec9a
 github.com/gen2brain/mpeg v0.6.2/go.mod h1:N37OJKAg3YeMfVqscgraoU6kwusr4pvA8aJK9QWPGiQ=
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
 github.com/hajimehoshi/go-mp3 v0.3.4/go.mod h1:fRtZraRFcWb0pu7ok0LqyFhCUrPeMsGRSVop0eemFmo=
+github.com/ironpark/ggui v0.0.0-20260922052401-ff0e440b51d2/go.mod h1:tySkxSK2hPqE8lHBQd62tFGpHu1epEC02EfBPDZPpMk=
 github.com/jakecoffman/cp/v2 v2.4.0/go.mod h1:6lPSBgxx6+//RIlSaMH3XaXtcCwPY1ZCJox1ThK5bZw=
 github.com/jfreymuth/oggvorbis v1.0.5/go.mod h1:1U4pqWmghcoVsCJJ4fRBKv9peUJMBHixthRlBeD6uII=
 github.com/jfreymuth/pulse v0.1.3/go.mod h1:cpYspI6YljhkUf1WLXLLDmeaaPFc3CnGLjDZf9dZ4no=
