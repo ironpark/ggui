@@ -8,6 +8,9 @@ import (
 	"strings"
 )
 
+// Debug reports whether this build records effect origins.
+const Debug = true
+
 // effectOrigin returns the file and line outside this package that created
 // the Computation being registered, so that a cycle can name the effects it is
 // made of. Only this build records it; see ErrCycle.

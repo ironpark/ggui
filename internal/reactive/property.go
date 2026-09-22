@@ -9,9 +9,7 @@ type propertySource struct{ owner *property.Owner }
 func (s propertySource) LayoutVersion() uint64 { return s.owner.Version() }
 func init() {
 	property.OnRead = func(owner *property.Owner) {
-		if Measuring != nil {
-			Measuring(propertySource{owner}, owner.Version())
-		}
+		Record(propertySource{owner}, owner.Version())
 	}
 	property.OnChange = RequestLayout
 }

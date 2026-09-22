@@ -5,6 +5,7 @@ package ggui
 import (
 	"image/color"
 	"slices"
+	"strconv"
 	"testing"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -177,7 +178,7 @@ func TestInspectorPrunesStaleFolds(t *testing.T) {
 	tr := trace(entry("Column", 0, 0, 0, 100, 60), entry("Text", 1, 0, 0, 100, 10))
 	in := inspector{collapsed: map[inspectKey]bool{foldKey(keyOf(&tr[0])): true}}
 	for i := range inspectFoldLimit + 1 {
-		in.collapsed[inspectKey{name: "Gone", path: "/9/" + itoa(i)}] = true
+		in.collapsed[inspectKey{name: "Gone", path: "/9/" + strconv.Itoa(i)}] = true
 	}
 	in.visible(tr)
 	if len(in.collapsed) != 1 || !in.folded(&tr[0]) {

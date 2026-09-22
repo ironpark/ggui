@@ -30,9 +30,7 @@ func TestSubscriptionsFollowTheLastRun(t *testing.T) {
 }
 
 func TestPanicInEffectLeavesNoResidue(t *testing.T) {
-	effects.mu.Lock()
-	before := effects.count
-	effects.mu.Unlock()
+	before := Count()
 	func() {
 		defer func() { recover() }()
 		Observe(func() {
@@ -43,9 +41,7 @@ func TestPanicInEffectLeavesNoResidue(t *testing.T) {
 	if o := CurrentOwner(); o != nil {
 		t.Fatal("owner left set after a panicking effect")
 	}
-	effects.mu.Lock()
-	after := effects.count
-	effects.mu.Unlock()
+	after := Count()
 	if after != before {
 		t.Fatalf("%d effects left registered after a panicking effect, want 0", after-before)
 	}

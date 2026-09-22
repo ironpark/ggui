@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"math"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -246,10 +247,10 @@ func (c *Canvas) Paint(w Widget, r Rect) {
 		f := c.fs()
 		if f.tracing {
 			parent := f.traceParent
-			path := "/" + itoa(f.traceRoots)
+			path := "/" + strconv.Itoa(f.traceRoots)
 			if parent > 0 {
 				p := &f.trace[parent-1]
-				path = p.path + "/" + itoa(p.children)
+				path = p.path + "/" + strconv.Itoa(p.children)
 				p.children++
 			} else {
 				f.traceRoots++

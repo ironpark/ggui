@@ -96,7 +96,7 @@ func TestCycleSaysHowToNameTheEffects(t *testing.T) {
 			t.Fatal("no cycle reported")
 		}
 		msg := err.Error()
-		if reactive.Origin() == "" {
+		if !reactive.Debug {
 			if !strings.Contains(msg, "ggui_debug") {
 				t.Fatalf("the error does not say how to name the effects: %v", msg)
 			}

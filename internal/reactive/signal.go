@@ -3,14 +3,12 @@ package reactive
 import (
 	"reflect"
 	"slices"
+	"strconv"
 	"sync"
 	"sync/atomic"
 
 	"github.com/ironpark/ggui/geom"
 )
-
-// Number is geom.Number under the name Add already used for it.
-type Number = geom.Number
 
 // layoutGen counts the changes that can move something on screen: every
 // StateValue write and every Invalidate. The runtime lays the tree out again
@@ -33,11 +31,30 @@ func RequestLayout() { layoutGen.Add(1) }
 // Untrack read affects layout, but never subscribes the enclosing computation.
 type LayoutSource interface{ LayoutVersion() uint64 }
 
-// Measuring is the recorder a running Layout installs so that a signal
+// measuring is the recorder a running Layout installs so that a signal
 // read during measurement is remembered as an input of that layout. It is
 // a func rather than the cache itself, so that the reactive core does not
 // name the layout cache.
-var Measuring func(src LayoutSource, version uint64)
+var measuring func(src LayoutSource, version uint64)
+
+// Measure runs fn with record installed as the layout recorder, restoring
+// whatever was installed before, so that nested layouts each see their own.
+func Measure(record func(src LayoutSource, version uint64), fn func()) {
+	previous := measuring
+	measuring = record
+	defer func() { measuring = previous }()
+	fn()
+}
+
+// Recording reports whether a layout recorder is installed.
+func Recording() bool { return measuring != nil }
+
+// Record reports a read of src at version to the running layout, if any.
+func Record(src LayoutSource, version uint64) {
+	if measuring != nil {
+		measuring(src, version)
+	}
+}
 
 // tracker holds the running computation. listener is the Computation that reads
 // subscribe to (nil inside Untrack); owner is the Computation that newly created
@@ -56,7 +73,7 @@ type tracker struct {
 // a mutex anyway because a read may cross into a Derived's own computation.
 var deps tracker
 
-// source is anything an Computation can subscribe to.
+// source is anything an effect can subscribe to.
 type source interface {
 	unsubscribe(e *Computation)
 	// producer is the memo Computation that computes this source, or nil for a
@@ -129,19 +146,6 @@ type autoKey struct {
 	path string
 }
 
-// itoa formats a small non-negative int. The reactive core keeps its own
-// rather than reaching into the frame loop's file for a digit loop.
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b []byte
-	for ; n > 0; n /= 10 {
-		b = append([]byte{byte('0' + n%10)}, b...)
-	}
-	return string(b)
-}
-
 // AutoID returns the identity for a widget being constructed now: nil
 // outside a keyed component.
 func AutoID() any {
@@ -159,7 +163,7 @@ func AutoID() any {
 	if root == nil {
 		return nil
 	}
-	k := autoKey{root: root, path: o.path + "/" + itoa(o.seq)}
+	k := autoKey{root: root, path: o.path + "/" + strconv.Itoa(o.seq)}
 	o.seq++
 	return k
 }
@@ -171,7 +175,7 @@ func (e *Computation) place(owner *Computation, elem string) {
 		return
 	}
 	if elem == "" {
-		elem = itoa(owner.seq)
+		elem = strconv.Itoa(owner.seq)
 		owner.seq++
 	}
 	e.path = owner.path + "/" + elem
@@ -402,9 +406,7 @@ func (s *StateValue[T]) Get() T {
 			e.sources = append(e.sources, s)
 		}
 	}
-	if Measuring != nil {
-		Measuring(s, s.version)
-	}
+	Record(s, s.version)
 	return s.val
 }
 
@@ -488,7 +490,7 @@ func (s *StateValue[T]) Map[U any](fn func(T) U) *DerivedValue[U] {
 func Toggle(s Writable[bool]) { s.Update(func(b bool) bool { return !b }) }
 
 // Add adds d to a writable number.
-func Add[N Number](s Writable[N], d N) { s.Update(func(n N) N { return n + d }) }
+func Add[N geom.Number](s Writable[N], d N) { s.Update(func(n N) N { return n + d }) }
 
 // Append adds items to a writable slice, in a new slice so the
 // change is noticed.
@@ -558,7 +560,7 @@ func Combine[A, B, C any](a Readable[A], b Readable[B], fn func(A, B) C) *Derive
 
 // Get returns the memoized value and subscribes the running Effect, if any.
 // A memo whose inputs changed earlier in this frame is recomputed here, so a
-// reader never sees one input updated and another not. Outside an Computation
+// reader never sees one input updated and another not. Outside an effect
 // this means fn may run at the call site rather than at the next flush.
 func (m *DerivedValue[T]) Get() T {
 	CheckUIThread("DerivedValue.Get")
@@ -583,16 +585,17 @@ func Watch[T any](src Readable[T], fn func(T)) (dispose func()) {
 	return Effect(func() Cleanup { fn(src.Get()); return nil })
 }
 
-// observe is an immediate internal binding computation, not a user Computation.
-func observe(fn func()) (dispose func()) {
+// Observe runs fn now and again when what it read changes, without making
+// it a user effect. It is Effect without the post-layout pass.
+func Observe(fn func()) (dispose func()) {
 	_, dispose = EffectWith(fn)
 	return dispose
 }
 
-// Cleanup releases an Computation or a mounted resource. It may be nil.
+// Cleanup releases an effect or a mounted resource. It may be nil.
 type Cleanup = func()
 
-// Effect schedules a side Computation after layout. It belongs to the current
+// Effect schedules a side effect after layout. It belongs to the current
 // owner; its cleanup runs untracked before another execution and on disposal.
 func Effect(fn func() Cleanup) Cleanup {
 	CheckUIThread("Effect")
@@ -741,7 +744,7 @@ func markDirty(e *Computation) {
 }
 
 // markCheck records that an input of this Computation may have changed. It stops
-// at an Computation that is already dirty or already checked, so the walk is
+// at an effect that is already dirty or already checked, so the walk is
 // linear and a cycle terminates.
 func markCheck(e *Computation) {
 	if e.user {
@@ -877,8 +880,10 @@ const MaxFlushPasses = 16
 // DerivedValue feeding another Computation lands in the same frame. Called once per frame by
 // the runtime. It reports false when the effects were still dirty after
 // MaxFlushPasses, which only a cycle causes.
+func (s *effectSet) settled() bool { return s.dirtyGen == s.settledGen }
+
 func (s *effectSet) flush() (settled bool) {
-	if s.dirtyGen == s.settledGen {
+	if s.settled() {
 		return true
 	}
 	for range MaxFlushPasses {
@@ -959,7 +964,7 @@ func FlushUsers(loop any) bool { return effects.flushUsers(loop) }
 func Unsettled() (stuck []*Computation, total int) { return effects.unsettled() }
 
 // Settled reports whether every write has been flushed.
-func Settled() bool { return effects.dirtyGen == effects.settledGen }
+func Settled() bool { return effects.settled() }
 
 // StateGen counts StateValue writes, so that a frame can tell whether one
 // happened while it was laying out.
@@ -968,20 +973,17 @@ func StateGen() uint64 { return stateGen }
 // LayoutGen counts the changes that can move something on screen.
 func LayoutGen() uint64 { return layoutGen.Load() }
 
-// Origin is where this computation was created, in a ggui_debug build, and
-// Derived reports whether it computes a memo's value. Both are for the
-// ErrCycle message the frame loop builds.
+// Origin is where this computation was created, in a ggui_debug build, for
+// the ErrCycle message the frame loop builds.
 func (e *Computation) Origin() string { return e.origin }
-func (e *Computation) Derived() bool  { return e.cell != nil }
+
+// Derived reports whether this computation computes a memo's value.
+func (e *Computation) Derived() bool { return e.cell != nil }
 
 // Loop and SetLoop carry the frame loop an effect belongs to. It is opaque
 // here: the reactive core only ever compares one against another.
 func (e *Computation) Loop() any     { return e.loop }
 func (e *Computation) SetLoop(v any) { e.loop = v }
-
-// Observe runs fn now and again when what it read changes, without making
-// it a user effect. It is Effect without the post-layout pass.
-func Observe(fn func()) (dispose func()) { return observe(fn) }
 
 // Children lists this computation's live children, oldest first. The
 // ownership tree is private; this is for a caller that only needs to see
@@ -993,9 +995,6 @@ func (e *Computation) Children() []*Computation {
 	}
 	return out
 }
-
-// Origin is where the running effect was created, in a ggui_debug build.
-func Origin() string { return effectOrigin() }
 
 // Count is how many effects are registered, for a test asserting that a
 // construction or teardown left none behind.

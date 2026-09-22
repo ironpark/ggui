@@ -7,6 +7,7 @@ import (
 
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -32,7 +33,7 @@ import (
 // errors.Is(err, ggui.ErrCycle) rather than ==, and print the error itself
 // for the detail. Build with -tags ggui_debug and each one is named by the
 // file and line that created it.
-var ErrCycle = errors.New("ggui: effects did not settle after " + itoa(reactive.MaxFlushPasses) + " passes; an Effect is writing a StateValue it reads")
+var ErrCycle = errors.New("ggui: effects did not settle after " + strconv.Itoa(reactive.MaxFlushPasses) + " passes; an Effect is writing a StateValue it reads")
 
 // cycleError is ErrCycle with the effects that would not settle.
 type cycleError struct{ msg string }
@@ -162,17 +163,6 @@ func UIThread() func(func()) {
 // loopPost is the owner's frame loop dispatcher, or nil when it has none.
 // An effect holds its loop as an opaque token, so this is the one place
 // that turns it back into the concrete loop.
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b []byte
-	for ; n > 0; n /= 10 {
-		b = append([]byte{byte('0' + n%10)}, b...)
-	}
-	return string(b)
-}
-
 func loopPost(owner *reactive.Computation) func(func()) {
 	if owner == nil {
 		return nil

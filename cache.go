@@ -47,18 +47,15 @@ func (c *CachedWidget) invalidate() {
 func (c *CachedWidget) Layout(cs Constraints, env Env) Size {
 	c.outer, _ = env.Get(cacheOwner)
 	if c.valid && !c.dirty && cs == c.cons && env.rev == c.rev && c.fontGen == fontGeneration && c.inputsEqual() {
-		if reactive.Measuring != nil {
+		if reactive.Recording() {
 			for src, version := range c.sources {
-				reactive.Measuring(src, version)
+				reactive.Record(src, version)
 			}
 		}
 		return c.size
 	}
 	clear(c.sources)
-	previous := reactive.Measuring
-	reactive.Measuring = c.record
-	defer func() { reactive.Measuring = previous }()
-	c.size = c.child.Layout(cs, env.With(cacheOwner, c))
+	reactive.Measure(c.record, func() { c.size = c.child.Layout(cs, env.With(cacheOwner, c)) })
 	c.fontGen = fontGeneration
 	c.cons, c.rev, c.valid, c.dirty = cs, env.rev, true, false
 	return c.size

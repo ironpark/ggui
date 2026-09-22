@@ -231,7 +231,7 @@ func TestPublicEffectCycleReportsItsOrigin(t *testing.T) {
 		if !ok || !errors.Is(err, ErrCycle) {
 			t.Fatalf("expected ErrCycle, got %v", err)
 		}
-		if reactive.Origin() != "" && !strings.Contains(err.Error(), "reactive_api_test.go:") {
+		if reactive.Debug && !strings.Contains(err.Error(), "reactive_api_test.go:") {
 			t.Fatalf("missing origin: %v", err)
 		}
 	}()
