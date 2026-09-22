@@ -79,6 +79,13 @@ func (a *animator) remove(s stepper) {
 	}
 }
 
+// active reports whether any animation is running.
+func (a *animator) active() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return len(a.list) > 0
+}
+
 // step advances every running animation and drops the ones that finished.
 func (a *animator) step(now time.Time) {
 	a.mu.Lock()

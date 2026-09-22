@@ -218,6 +218,13 @@ func (r *frameLoop) post(fn func()) {
 }
 
 // runFrame runs the OnFrame handlers, in registration order.
+// hasPosted reports whether work is waiting for the next frame.
+func (r *frameLoop) hasPosted() bool {
+	r.postMu.Lock()
+	defer r.postMu.Unlock()
+	return len(r.posted) > 0
+}
+
 func (r *frameLoop) runFrame() {
 	for _, fn := range r.frame {
 		fn()
