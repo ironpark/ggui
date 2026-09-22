@@ -3,17 +3,17 @@ module github.com/ironpark/ggui/examples/sqlite
 go 1.27.0
 
 require (
-	github.com/hajimehoshi/ebiten/v2 v2.10.2
-	github.com/ironpark/ggui v0.0.0-20260922054418-d0d3561f30f7
+	github.com/ironpark/ggfx v0.0.0-20260922083012-32c91ae9623e
+	github.com/ironpark/ggui v0.0.0-20260922084102-d037210ddcf6
 	modernc.org/sqlite v1.59.0
 )
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/ebitengine/gomobile v0.0.0-20260820040257-d11f821a26a6 // indirect
 	github.com/ebitengine/hideconsole v1.0.0 // indirect
 	github.com/ebitengine/purego v0.11.0 // indirect
 	github.com/go-text/typesetting v0.3.5 // indirect
+	github.com/gogpu/naga v0.19.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
