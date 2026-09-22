@@ -12,6 +12,7 @@ import (
 	"log"
 
 	"github.com/ironpark/ggui"
+	_ "github.com/ironpark/ggui/inspect/panel"
 	"github.com/ironpark/ggui/ui"
 )
 

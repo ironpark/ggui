@@ -1,9 +1,11 @@
 //go:build ggui_inspector
 
-package ggui
+package panel
 
 import (
 	"fmt"
+	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/fn"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -11,35 +13,36 @@ import (
 	"github.com/ironpark/ggui/inspect"
 )
 
-func (in *inspector) input(f frameInput) bool {
+// Input implements Overlay.
+func (in *View) Input(f ggui.OverlayInput) bool {
 	if in.panel.Empty() {
 		return false
 	}
-	leftDown := slices.Contains(f.down, MouseButtonLeft)
-	leftUp := slices.Contains(f.up, MouseButtonLeft)
-	over := in.panel.Contains(f.pos) || in.edge.Contains(f.pos)
+	leftDown := slices.Contains(f.Down, ggui.MouseButtonLeft)
+	leftUp := slices.Contains(f.Up, ggui.MouseButtonLeft)
+	over := in.panel.Contains(f.Pos) || in.edge.Contains(f.Pos)
 	if in.drag != inspectNoDrag {
 		switch in.drag {
 		case inspectResizePanel:
-			if in.dock == InspectorBottom {
-				in.height = in.viewport.H - f.pos.Y
+			if in.dock == ggui.InspectorBottom {
+				in.height = in.viewport.H - f.Pos.Y
 			} else {
-				in.width = in.viewport.W - f.pos.X
+				in.width = in.viewport.W - f.Pos.X
 			}
 		case inspectResizeSplit:
 			if in.sideBySide() {
-				in.split = (f.pos.X - in.panel.Origin.X) / in.panel.Size.W
+				in.split = (f.Pos.X - in.panel.Origin.X) / in.panel.Size.W
 			} else {
 				body := in.body()
-				in.split = (f.pos.Y - body.Origin.Y) / max(body.Size.H, 1)
+				in.split = (f.Pos.Y - body.Origin.Y) / max(body.Size.H, 1)
 			}
-			in.split = clamp(in.split, .25, .75)
+			in.split = fn.Clamp(in.split, .25, .75)
 		case inspectScrollTree:
-			in.scroll = in.dragValue + (f.pos.Y-in.dragStart.Y)*max(in.treeContent-in.tree.Size.H, 0)/max(in.tree.Size.H-in.treeThumb.Size.H, 1)
+			in.scroll = in.dragValue + (f.Pos.Y-in.dragStart.Y)*max(in.treeContent-in.tree.Size.H, 0)/max(in.tree.Size.H-in.treeThumb.Size.H, 1)
 		case inspectScrollLayout:
-			in.layoutScroll = in.dragValue + (f.pos.Y-in.dragStart.Y)*max(in.layoutContent-in.layoutBody.Size.H, 0)/max(in.layoutBody.Size.H-in.layoutThumb.Size.H, 1)
+			in.layoutScroll = in.dragValue + (f.Pos.Y-in.dragStart.Y)*max(in.layoutContent-in.layoutBody.Size.H, 0)/max(in.layoutBody.Size.H-in.layoutThumb.Size.H, 1)
 		case inspectScrollDetail:
-			in.detailScroll = in.dragValue + (f.pos.Y-in.dragStart.Y)*max(in.detailContent-in.detailBody.Size.H, 0)/max(in.detailBody.Size.H-in.detailThumb.Size.H, 1)
+			in.detailScroll = in.dragValue + (f.Pos.Y-in.dragStart.Y)*max(in.detailContent-in.detailBody.Size.H, 0)/max(in.detailBody.Size.H-in.detailThumb.Size.H, 1)
 		}
 		if leftUp {
 			in.drag = inspectNoDrag
@@ -49,7 +52,7 @@ func (in *inspector) input(f frameInput) bool {
 	}
 	// Picker clicks belong to devtools, including the release after pinning.
 	if in.picking && !over && leftDown {
-		in.selectEntry(in.frame, inspect.Deepest(in.nodes(), f.pos))
+		in.selectEntry(in.frame, inspect.Deepest(in.nodes(), f.Pos))
 		in.picking = false
 		in.capture = true
 		in.focus = true
@@ -65,28 +68,28 @@ func (in *inspector) input(f frameInput) bool {
 	}
 	if leftDown && over {
 		in.focus, in.capture = true, true
-		in.filterFocus = in.filterRect.Contains(f.pos)
+		in.filterFocus = in.filterRect.Contains(f.Pos)
 		in.selectFilter = false
 		switch {
-		case in.edge.Contains(f.pos):
+		case in.edge.Contains(f.Pos):
 			in.drag = inspectResizePanel
-		case in.divider.Contains(f.pos):
+		case in.divider.Contains(f.Pos):
 			in.drag = inspectResizeSplit
-		case in.treeThumb.Contains(f.pos):
+		case in.treeThumb.Contains(f.Pos):
 			in.drag = inspectScrollTree
 			in.dragValue = in.scroll
-		case in.layoutThumb.Contains(f.pos):
+		case in.layoutThumb.Contains(f.Pos):
 			in.drag = inspectScrollLayout
 			in.dragValue = in.layoutScroll
-		case in.detailThumb.Contains(f.pos):
+		case in.detailThumb.Contains(f.Pos):
 			in.drag = inspectScrollDetail
 			in.dragValue = in.detailScroll
 		default:
-			if i := slices.IndexFunc(in.chips, func(c inspectChip) bool { return c.rect.Contains(f.pos) }); i >= 0 {
+			if i := slices.IndexFunc(in.chips, func(c inspectChip) bool { return c.rect.Contains(f.Pos) }); i >= 0 {
 				in.act(in.chips[i])
-			} else if in.tree.Contains(f.pos) {
+			} else if in.tree.Contains(f.Pos) {
 				for _, r := range in.rows {
-					if f.pos.Y >= r.y && f.pos.Y < r.y+r.h {
+					if f.Pos.Y >= r.y && f.Pos.Y < r.y+r.h {
 						in.selectEntry(in.frame, r.index)
 						if len(in.nodes()) == 0 {
 							in.sel, in.pinned = r.key, true
@@ -96,29 +99,29 @@ func (in *inspector) input(f frameInput) bool {
 				}
 			}
 		}
-		in.dragStart = f.pos
+		in.dragStart = f.Pos
 	}
 	if over {
 		switch {
-		case in.detail.Contains(f.pos):
-			in.detailScroll -= f.wheel.Y * inspectWheel
-		case in.layout.Contains(f.pos):
-			in.layoutScroll -= f.wheel.Y * inspectWheel
-		case in.tree.Contains(f.pos):
-			in.scroll -= f.wheel.Y * inspectWheel
+		case in.detail.Contains(f.Pos):
+			in.detailScroll -= f.Wheel.Y * inspectWheel
+		case in.layout.Contains(f.Pos):
+			in.layoutScroll -= f.Wheel.Y * inspectWheel
+		case in.tree.Contains(f.Pos):
+			in.scroll -= f.Wheel.Y * inspectWheel
 		}
 	}
 	// Match the familiar devtools shortcuts without requiring pointer focus.
-	if f.mods.Cmd() && f.mods.Shift {
-		for _, k := range f.keys {
+	if f.Mods.Cmd() && f.Mods.Shift {
+		for _, k := range f.Keys {
 			switch k {
-			case KeyC:
+			case ggui.KeyC:
 				in.act(inspectChip{act: inspectUnpin})
 				return true
-			case KeyD:
-				in.dock = pick(in.dock == InspectorRight, InspectorBottom, InspectorRight)
+			case ggui.KeyD:
+				in.dock = fn.Pick(in.dock == ggui.InspectorRight, ggui.InspectorBottom, ggui.InspectorRight)
 				return true
-			case KeyO:
+			case ggui.KeyO:
 				in.outlines = !in.outlines
 				return true
 			}
@@ -126,38 +129,38 @@ func (in *inspector) input(f frameInput) bool {
 	}
 	// Find is available throughout the open inspector; typing itself only
 	// edits the filter after an explicit click or this shortcut.
-	if f.mods.Cmd() && slices.Contains(f.keys, KeyF) {
+	if f.Mods.Cmd() && slices.Contains(f.Keys, ggui.KeyF) {
 		in.focus, in.filterFocus, in.selectFilter = true, true, true
 	}
 	if !over && !in.focus && !in.picking && !in.capture {
 		return false
 	}
-	for _, k := range f.keys {
+	for _, k := range f.Keys {
 		switch k {
-		case KeyEscape:
+		case ggui.KeyEscape:
 			if in.filter != "" {
 				in.filter = ""
 				in.scroll = 0
 			} else {
 				in.picking, in.pinned, in.filterFocus, in.focus = false, false, false, false
 			}
-		case KeyA:
-			if in.filterFocus && f.mods.Cmd() {
+		case ggui.KeyA:
+			if in.filterFocus && f.Mods.Cmd() {
 				in.selectFilter = true
 			}
-		case KeyV:
-			if in.filterFocus && f.mods.Cmd() {
-				in.typeFilter(currentClipboard().Read())
+		case ggui.KeyV:
+			if in.filterFocus && f.Mods.Cmd() {
+				in.typeFilter(ggui.CurrentClipboard().Read())
 			}
-		case KeyC:
-			if f.mods.Cmd() {
+		case ggui.KeyC:
+			if f.Mods.Cmd() {
 				if in.filterFocus && in.selectFilter {
-					currentClipboard().Write(in.filter)
+					ggui.CurrentClipboard().Write(in.filter)
 				} else if !in.filterFocus {
 					in.act(inspectChip{act: inspectCopy})
 				}
 			}
-		case KeyBackspace:
+		case ggui.KeyBackspace:
 			if in.filterFocus && in.filter != "" {
 				if in.selectFilter {
 					in.filter = ""
@@ -168,44 +171,44 @@ func (in *inspector) input(f frameInput) bool {
 				in.selectFilter = false
 				in.scroll = 0
 			}
-		case KeyArrowUp:
+		case ggui.KeyArrowUp:
 			in.move--
 			in.filterFocus = false
-		case KeyArrowDown:
+		case ggui.KeyArrowDown:
 			in.move++
 			in.filterFocus = false
-		case KeyArrowLeft:
+		case ggui.KeyArrowLeft:
 			if !in.filterFocus {
 				in.branch = -1
 			}
-		case KeyArrowRight:
+		case ggui.KeyArrowRight:
 			if !in.filterFocus {
 				in.branch = 1
 			}
-		case KeyHome:
+		case ggui.KeyHome:
 			if !in.filterFocus {
 				in.move = -inspectMoveEnd
 			}
-		case KeyEnd:
+		case ggui.KeyEnd:
 			if !in.filterFocus {
 				in.move = inspectMoveEnd
 			}
-		case KeyEnter:
+		case ggui.KeyEnter:
 			in.filterFocus = false
 			in.focus = true
 			in.reveal = true
-		case KeyTab:
+		case ggui.KeyTab:
 			in.filterFocus = !in.filterFocus
 			in.focus = true
 		}
 	}
-	if in.filterFocus && !f.mods.Cmd() {
-		in.typeFilter(f.text)
+	if in.filterFocus && !f.Mods.Cmd() {
+		in.typeFilter(f.Text)
 	}
-	return over || in.picking || in.capture || len(f.keys) > 0 || f.text != ""
+	return over || in.picking || in.capture || len(f.Keys) > 0 || f.Text != ""
 }
 
-func (in *inspector) typeFilter(s string) {
+func (in *View) typeFilter(s string) {
 	s = strings.Map(func(r rune) rune {
 		if r < ' ' {
 			return -1
@@ -227,7 +230,7 @@ func (in *inspector) typeFilter(s string) {
 // Input runs before the next paint, so the frame held is the most recently
 // painted one. Serialize only when requested, resolving selection again so
 // a click followed by Copy does not copy the previous element.
-func (in *inspector) copySelection() {
+func (in *View) copySelection() {
 	fr := in.frame
 	if fr == nil {
 		return
@@ -247,16 +250,16 @@ func (in *inspector) copySelection() {
 			}
 		}
 	}
-	currentClipboard().Write(b.String())
+	ggui.CurrentClipboard().Write(b.String())
 	in.copied = true
 }
 
-func (in *inspector) act(c inspectChip) {
+func (in *View) act(c inspectChip) {
 	switch c.act {
 	case inspectDockRight:
-		in.dock = InspectorRight
+		in.dock = ggui.InspectorRight
 	case inspectDockBottom:
-		in.dock = InspectorBottom
+		in.dock = ggui.InspectorBottom
 	case inspectToggleOutlines:
 		in.outlines = !in.outlines
 	case inspectUnpin:
@@ -291,19 +294,21 @@ func (in *inspector) act(c inspectChip) {
 		in.copySelection()
 	}
 }
-func (in *inspector) sideBySide() bool { return in.dock == InspectorBottom && in.panel.Size.W >= 640 }
-func (in *inspector) cursor(p Point) (CursorShape, bool) {
+func (in *View) sideBySide() bool { return in.dock == ggui.InspectorBottom && in.panel.Size.W >= 640 }
+
+// Cursor implements Overlay.
+func (in *View) Cursor(p ggui.Point) (ggui.CursorShape, bool) {
 	switch {
 	case in.drag == inspectResizePanel || in.edge.Contains(p):
-		return pick(in.dock == InspectorBottom, CursorShapeNSResize, CursorShapeEWResize), true
+		return fn.Pick(in.dock == ggui.InspectorBottom, ggui.CursorShapeNSResize, ggui.CursorShapeEWResize), true
 	case in.drag == inspectResizeSplit || in.divider.Contains(p):
-		return pick(in.sideBySide(), CursorShapeEWResize, CursorShapeNSResize), true
+		return fn.Pick(in.sideBySide(), ggui.CursorShapeEWResize, ggui.CursorShapeNSResize), true
 	case in.filterRect.Contains(p):
-		return CursorShapeText, true
+		return ggui.CursorShapeText, true
 	case in.panel.Contains(p):
-		return CursorShapeDefault, true
+		return ggui.CursorShapeDefault, true
 	case in.picking:
-		return CursorShapeCrosshair, true
+		return ggui.CursorShapeCrosshair, true
 	default:
 		return 0, false
 	}

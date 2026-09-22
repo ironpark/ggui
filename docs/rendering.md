@@ -14,6 +14,7 @@ See [example conventions](README.md#start-here) before copying snippets.
 - [Frame lifecycle](#frame-lifecycle)
 - [Layout caching](#layout-caching)
 - [Retained paint state](#retained-paint-state)
+- [Overlays](#overlays)
 
 ## HiDPI
 
@@ -114,3 +115,30 @@ for the next frame and `dst.Retained(anchor, slot)` reads what was stored
 last frame, where the `Anchor` is the widget's ID or its Rect. `dst.Ease`
 is a `Motion` kept that way. Tooltip keeps its hover timer and Transition
 its start time in slots.
+
+## Overlays
+
+An `Overlay` is drawn over the whole window after the widget tree, and is
+offered each frame's input before any widget: a development panel, a frame
+counter, a recording banner. `App.SetOverlay(o)` installs one and
+`SetOverlay(nil)` removes it; the widget inspector installs itself there
+while it is on.
+
+```go
+type Overlay interface {
+	Paint(dst *Canvas)
+	Input(in OverlayInput) bool
+	Cursor(p Point) (CursorShape, bool)
+}
+```
+
+`Paint` draws imperatively with the Canvas shape and path methods, and with
+`DrawText` and `TextWidth`, which draw and measure one line in a `Font` at
+a logical size; a nil font is `DefaultFont()`. `Physical` gives a Rect in
+image pixels for an overlay that keeps an image of its own. `Input` returns
+true to keep the frame's input from the widgets; it is not offered while a
+widget holds a press, so a drag that began in the app finishes there.
+`Cursor` chooses the mouse cursor over the overlay. An overlay cannot be a
+widget: it paints after the frame's trace is complete and read back, so it
+must not paint through `Canvas.Paint`.
+

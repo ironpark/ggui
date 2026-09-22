@@ -14,6 +14,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/fonts/notoemoji"
+	_ "github.com/ironpark/ggui/inspect/panel"
 	"github.com/ironpark/ggui/ui"
 )
 

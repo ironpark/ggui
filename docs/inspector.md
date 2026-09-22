@@ -14,6 +14,13 @@ overlay in the shape of a browser's element panel; `App.Inspector(on)` does
 the same from code. It is the quickest way to see why something sits where
 it does.
 
+The panel lives in its own package and registers itself when imported, so
+an app that wants it imports it for that effect:
+
+```go
+import _ "github.com/ironpark/ggui/inspect/panel"
+```
+
 The inspector is a development tool, so it ships only in builds tagged
 `ggui_inspector`:
 
@@ -21,11 +28,12 @@ The inspector is a development tool, so it ships only in builds tagged
 go run -tags ggui_inspector ./yourapp
 ```
 
-Without the tag a no-op stands in: the configuration above still compiles
-and `App.Inspector` still exists, but the call does nothing and none of the
-panel — including its own monospaced font — reaches the binary. What stays
-in every build is small: the `inspect` package that models a frame, the
-`InspectFields` hooks on the built-in widgets, and `App.OnInspect`. The
+Without the tag a no-op stands in: the configuration above still compiles,
+the import is empty and `App.Inspector` still exists, but the call does
+nothing and none of the panel — including its own monospaced font — reaches
+the binary. What stays in every build is small: the `inspect` package that
+models a frame, the `InspectFields` hooks on the built-in widgets, and
+`App.OnInspect`, which works without the tag or the import. The
 `task run-*` and `task serve` development loops set the tag for you;
 `task bundle` does not, because that is the release path.
 
@@ -98,7 +106,10 @@ A `Field` with no value is a section heading; `Number` colors a measurement.
 
 The panel reads an `inspect.Frame`: the widgets as painted, in paint order
 with parents before children, and the accessibility tree published beside
-them. `App.OnInspect` hands the same frame to a function of your own after
+them, and draws itself as an [Overlay](rendering.md#overlays) through the
+public Canvas methods; `ggui.RegisterInspector` is how it, or a panel of
+your own, becomes what `App.Inspector` turns on. `App.OnInspect` hands the
+same frame to a function of your own after
 every painted frame, for a viewer that lives elsewhere, such as a tool in
 another process fed over a connection:
 
@@ -115,5 +126,6 @@ structural path. What costs a call into the widget is fetched through the
 frame's `Source` when asked: `Describe` for the label and role, `Details`
 for a pane's fields, `BoxOf` for the box model and `SemanticAt` for the
 accessibility node under a point. A viewer in another process implements
-`inspect.Source` over its connection to answer the same questions. Like the
-panel, `OnInspect` does nothing without the `ggui_inspector` tag.
+`inspect.Source` over its connection to answer the same questions. Frames
+are built only once a handler or a panel asks for them, so an app with
+neither pays nothing for the trace.

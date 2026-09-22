@@ -225,9 +225,9 @@ func (c *Canvas) Paint(w Widget, r Rect) {
 		w.Paint(nil, r)
 		return
 	}
-	// The trace exists only for the inspector, so a build without it skips
-	// the frameState walk on every painted widget rather than testing a
-	// flag that can never be set.
+	// The trace exists only for the inspector, so an app with no panel and
+	// no OnInspect handler skips the frameState walk on every painted
+	// widget for one test of a package flag.
 	if inspectorEnabled {
 		f := c.fs()
 		if f.tracing {

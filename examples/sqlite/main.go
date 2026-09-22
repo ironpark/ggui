@@ -4,6 +4,7 @@ package main
 import (
 	"flag"
 	"github.com/ironpark/ggui"
+	_ "github.com/ironpark/ggui/inspect/panel"
 	"log"
 )
 

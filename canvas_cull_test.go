@@ -41,6 +41,7 @@ func TestEmptyClipRetainsTextSemanticsAndTrace(t *testing.T) {
 	img := ebiten.NewImage(100, 100)
 	defer img.Deallocate()
 	c := &Canvas{Image: img}
+	inspectorEnabled = true
 	c.fs().tracing = true
 	txt := Text("offscreen text")
 	size := txt.Layout(Tight(Sz(100, 20)), rootEnv())
@@ -49,8 +50,8 @@ func TestEmptyClipRetainsTextSemanticsAndTrace(t *testing.T) {
 	if len(c.fs().sem) != 1 || c.fs().sem[0].node.Name != "offscreen text" {
 		t.Fatal("drawing cull lost semantics")
 	}
-	// The trace is only collected in a build that has the inspector.
-	if inspectorEnabled && len(c.fs().trace) != 1 {
+	// The trace is collected only once something asked for frames.
+	if len(c.fs().trace) != 1 {
 		t.Fatal("drawing cull lost inspection")
 	}
 }

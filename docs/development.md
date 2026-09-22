@@ -124,5 +124,5 @@ those guides as historical measurements; rerun them on your target hardware.
 | Accessibility and semantics | [a11y.go](../a11y.go), [a11y_darwin.go](../a11y_darwin.go), [semantics.go](../semantics.go) |
 | Styling and animation | [style.go](../style.go), [anim.go](../anim.go), [transition.go](../transition.go) — see [Styling and themes](styling.md) |
 | Overlays and images | [popup.go](../popup.go), [tooltip.go](../tooltip.go), [image.go](../image.go) |
-| Testing and diagnostics | [probe.go](../probe.go), [inspector.go](../inspector.go) (build tag `ggui_inspector`; [inspector_disabled.go](../inspector_disabled.go) otherwise), [inspect/](../inspect) (the frame model the panel and `App.OnInspect` share), [cache.go](../cache.go) |
+| Testing and diagnostics | [probe.go](../probe.go), [inspect/panel/](../inspect/panel) (the panel, build tag `ggui_inspector`), [inspector.go](../inspector.go) (its registration, and the frame built from the trace), [inspect/](../inspect) (the frame model the panel and `App.OnInspect` share), [overlay.go](../overlay.go) (the Overlay the panel draws as), [cache.go](../cache.go) |
 | Runnable applications | [examples/](../examples/) |

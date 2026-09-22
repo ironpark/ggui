@@ -8,6 +8,7 @@ import (
 	"log"
 
 	"github.com/ironpark/ggui"
+	_ "github.com/ironpark/ggui/inspect/panel"
 )
 
 func shortcuts(host ggui.Host, m *model) {

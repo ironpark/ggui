@@ -1,6 +1,8 @@
 package ggui
 
 import (
+	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggui/inspect"
 	"io/fs"
 	"time"
 
@@ -30,8 +32,27 @@ type Probe struct {
 	pointer    Point
 	hasPointer bool
 
+	overlay Overlay
+	sinks   []func(*inspect.Frame)
+
 	now     time.Time // the probe's clock once Advance has been called
 	restore func()
+}
+
+// SetOverlay installs o over the probe's window, as App.SetOverlay does:
+// it paints after every frame and is offered input first.
+func (p *Probe) SetOverlay(o Overlay) { p.overlay = o }
+
+// RenderTo draws every frame from now on into img, at one pixel per
+// logical pixel, for a test that looks at what was painted. Without it a
+// probe lays out and routes input but draws nothing.
+func (p *Probe) RenderTo(img *ebiten.Image) { p.canvas.Image = img }
+
+// OnInspect registers fn to receive every frame's inspect.Frame, as
+// App.OnInspect does.
+func (p *Probe) OnInspect(fn func(*inspect.Frame)) {
+	p.sinks = append(p.sinks, fn)
+	inspectorEnabled = true
 }
 
 // NewProbe creates a Probe that lays w out at size under the current theme.
@@ -107,6 +128,10 @@ func (p *Probe) Frame() Size {
 	c.prev, c.hits = c.hits, nil
 	f := c.fs()
 	f.pointer, f.hasPointer, f.logical = p.pointer, p.hasPointer, p.size
+	clear(f.trace)
+	clear(f.traceWidgets)
+	f.tracing = len(p.sinks) > 0
+	f.trace, f.traceWidgets = f.trace[:0], f.traceWidgets[:0]
 	f.focusBounds = Rect{}
 	if p.in.focused != nil {
 		f.focusBounds = p.in.focused.rect
@@ -125,6 +150,15 @@ func (p *Probe) Frame() Size {
 	p.in.observers = c.inputObservers
 	p.in.applyFocusRequest(c)
 	p.publishSemantics(c, p.in.focused)
+	if f.tracing {
+		fr := inspectFrame(c, p.semantics())
+		for _, fn := range p.sinks {
+			fn(fr)
+		}
+	}
+	if p.overlay != nil {
+		p.overlay.Paint(c)
+	}
 	return p.rootSize
 }
 
@@ -156,7 +190,7 @@ func (p *Probe) Advance(d time.Duration) {
 func (p *Probe) dispatch(f frameInput) {
 	p.pointer, p.hasPointer = f.pos, true
 	p.Frame()
-	p.in.dispatch(f)
+	p.in.dispatchOver(p.overlay, f)
 	if err := p.settle(p.size); err != nil {
 		panic(err)
 	}
@@ -302,7 +336,7 @@ func (p *Probe) DropPaths(pos Point, paths ...string) {
 }
 
 // Cursor returns the cursor shape the last event left the pointer with.
-func (p *Probe) Cursor() CursorShape { return p.in.cursor }
+func (p *Probe) Cursor() CursorShape { return p.in.cursorOver(p.overlay, p.pointer) }
 
 // Focused reports whether some region holds keyboard focus.
 func (p *Probe) Focused() bool { return p.in.focused != nil }

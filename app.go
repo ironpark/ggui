@@ -3,6 +3,7 @@
 package ggui
 
 import (
+	"github.com/ironpark/ggui/inspect"
 	"github.com/ironpark/ggui/internal/reactive"
 	"image/color"
 	"math"
@@ -23,7 +24,7 @@ type Config struct {
 	Height     int
 	Resizable  bool
 	Background color.Color // nil follows the theme's Bg
-	Inspector  string      // a chord that toggles the widget inspector, such as "f1"; empty for none
+	Inspector  string      // a chord that toggles the widget inspector, such as "f1"; empty for none. Import ggui/inspect/panel for the panel.
 
 	// Accessibility says when the app talks to the platform's
 	// accessibility API. The zero value waits for an assistive technology
@@ -61,8 +62,10 @@ type App struct {
 	drags  bool // the platform's drag observer is installed
 
 	inspect      bool
-	inspectChord Chord // parsed from cfg.Inspector; Key is zero for none
-	insp         inspector
+	inspectChord Chord          // parsed from cfg.Inspector; Key is zero for none
+	panel        InspectorPanel // the registered inspector, once wanted
+	sinks        []func(*inspect.Frame)
+	overlay      Overlay // drawn over every frame; the inspector while it is on
 }
 
 // New creates an App that renders the tree returned by build.
@@ -97,7 +100,9 @@ func (a *App) Post(fn func()) { a.post(fn) }
 // component the app created, and ends Run at the next frame. Call it from
 // the UI thread; from a goroutine, Post it.
 func (a *App) Close() {
-	a.insp.release()
+	if a.panel != nil {
+		a.panel.Release()
+	}
 	a.close()
 	reactive.UnmarkUIThread()
 }
@@ -184,20 +189,35 @@ func (a *App) SetDialogs(p runtime.FilePicker) *App {
 // Inspector turns the widget inspector on or off: an overlay that outlines
 // the selected widget painted through Canvas.Paint and names the one under the
 // cursor with its size and position. Config.Inspector binds it to a key.
+// On, it takes the window's one overlay slot, replacing whatever SetOverlay
+// installed; off, it leaves the slot empty.
 //
-// The inspector ships only in builds tagged ggui_inspector. Without the tag
-// this call is a no-op, so a release binary carries none of it.
+// The panel is the one registered with RegisterInspector, which importing
+// ggui/inspect/panel does, and that package ships only in builds tagged
+// ggui_inspector. Without the import or the tag this call is a no-op, so a
+// release binary carries none of it.
 func (a *App) Inspector(on bool) {
-	a.inspect = on && inspectorEnabled
-	a.insp.closed = false
-	if !on {
-		a.insp.reset()
+	panel := a.inspectorPanel()
+	a.inspect = on && panel != nil
+	if a.inspect {
+		a.overlay = panel
+		return
+	}
+	if panel != nil {
+		panel.Reset()
+		if a.overlay == panel {
+			a.overlay = nil
+		}
 	}
 }
 
 // SetInspector docks the inspector's panel and chooses whether it outlines
 // every widget; the panel's own toolbar changes the same settings.
-func (a *App) SetInspector(o InspectorOptions) { a.insp.apply(o) }
+func (a *App) SetInspector(o InspectorOptions) {
+	if panel := a.inspectorPanel(); panel != nil {
+		panel.Apply(o)
+	}
+}
 
 // Update implements ebiten.Game.
 func (a *App) Update() error {
@@ -222,12 +242,7 @@ func (a *App) Update() error {
 	cf := a.canvas.fs()
 	cf.pointer, cf.hasPointer = f.pos, true
 	a.dispatchInput(f)
-	cursor := a.input.cursor
-	if a.inspect && a.input.pressed == nil {
-		if shape, ok := a.insp.cursor(f.pos); ok {
-			cursor = shape
-		}
-	}
+	cursor := a.input.cursorOver(a.overlay, f.pos)
 	if cursor != a.cursor {
 		a.cursor = cursor
 		ebiten.SetCursorShape(a.cursor)
@@ -238,14 +253,12 @@ func (a *App) Update() error {
 	return a.tick(frame.begin(clock()))
 }
 
-// dispatchInput lets an existing app drag finish before the inspector can
-// take the pointer. Otherwise a release over its panel would leave a slider
-// or text selection captured indefinitely.
+// dispatchInput lets an existing app drag finish before the overlay can
+// take the pointer. Otherwise a release over the inspector's panel would
+// leave a slider or text selection captured indefinitely.
 func (a *App) dispatchInput(f frameInput) {
-	if !a.inspect || a.input.pressed != nil || !a.insp.input(f) {
-		a.input.dispatch(f)
-	}
-	if a.insp.closed {
+	a.input.dispatchOver(a.overlay, f)
+	if a.inspect && a.panel.Closed() {
 		a.Inspector(false)
 	}
 }
@@ -356,7 +369,7 @@ func (a *App) Draw(screen *ebiten.Image) {
 	f := a.canvas.fs()
 	clear(f.trace)
 	clear(f.traceWidgets)
-	f.tracing = a.inspect || a.insp.observed()
+	f.tracing = a.inspect || len(a.sinks) > 0
 	f.trace, f.traceWidgets = f.trace[:0], f.traceWidgets[:0]
 	f.logical = logical
 	f.focusBounds = Rect{}
@@ -383,9 +396,10 @@ func (a *App) Draw(screen *ebiten.Image) {
 	a.publishSemantics(&a.canvas, a.input.focused)
 	a.ax.Publish(a.semantics(), a.takeAnnouncements())
 	if f.tracing {
-		a.insp.finish(&a.canvas, a.semantics(), a.inspect)
-	} else {
-		a.insp.hide() // nothing to intercept while it is off
+		a.publishInspect(&a.canvas, a.semantics())
+	}
+	if a.overlay != nil {
+		a.overlay.Paint(&a.canvas)
 	}
 	a.spare = a.canvas.prev
 }

@@ -1,428 +1,285 @@
-//go:build ggui_inspector
-
 package ggui
 
 import (
-	"image/color"
-	"slices"
-	"strings"
+	"fmt"
+	"strconv"
 
 	"github.com/ironpark/ggui/inspect"
 )
 
-// inspectorEnabled reports whether this build contains the inspector.
-const inspectorEnabled = true
+// The widget inspector, as the root package knows it. The panel itself is
+// ggui/inspect/panel, an Overlay that registers here when imported and ships
+// only in builds tagged ggui_inspector. What is here compiles in every
+// build and is small: the public surface Config.Inspector, App.Inspector
+// and App.OnInspect rest on; the frame built for the panel from the trace
+// Canvas.Paint keeps, with an inspect.Source that answers from the widgets;
+// and what the built-in widgets say about themselves for the Computed
+// pane, through inspect.Fielder.
+//
+// Nothing here costs a release build anything but bytes: Canvas.Paint
+// keeps the trace only while inspectorEnabled is set, which a registered
+// panel or an OnInspect handler does.
 
-// inspectKey prefers the widget's explicit identity, then its instance and
-// structural path. Geometry is only a fallback for traces without a widget.
-type inspectKey struct {
-	name   string
-	depth  int
-	rect   Rect
-	id     any
-	path   string
-	stable bool
+// inspectorEnabled is set once anything wants frames: a registered panel or
+// an OnInspect handler. Canvas.Paint tests it before walking to the frame
+// state, so an app with neither pays one branch per painted widget.
+var inspectorEnabled bool
+
+// InspectorPanel is what an inspector implementation provides: an Overlay
+// that shows the frames it is handed. ggui/inspect/panel is one; importing it
+// registers it, and App.Inspector then turns it on and off.
+type InspectorPanel interface {
+	Overlay
+	// Frame hands over the frame just painted, for the next Paint.
+	Frame(fr *inspect.Frame)
+	// Apply changes the docking and outline settings.
+	Apply(InspectorOptions)
+	// Reset ends a session when the panel is turned off, forgetting its
+	// selection and everything borrowed from the last frame.
+	Reset()
+	// Release frees what the panel holds outside Go's memory, such as
+	// images, when the app closes.
+	Release()
+	// Closed reports that the panel asked to be turned off.
+	Closed() bool
 }
 
-func keyOf(e *inspect.Node) inspectKey {
-	id := e.ID
-	if id == nil {
-		id = e.Instance
+// newInspectorPanel makes the registered panel, or is nil when none is.
+var newInspectorPanel func() InspectorPanel
+
+// RegisterInspector installs the panel App.Inspector turns on. The
+// ggui/inspect/panel package calls it when imported; an inspector of one's own
+// calls it instead. nil unregisters.
+func RegisterInspector(fn func() InspectorPanel) {
+	newInspectorPanel = fn
+	inspectorEnabled = inspectorEnabled || fn != nil
+}
+
+// inspectorPanel is the app's panel, made on first need from the
+// registered constructor; nil when none is registered.
+func (a *App) inspectorPanel() InspectorPanel {
+	if a.panel == nil && newInspectorPanel != nil {
+		a.panel = newInspectorPanel()
 	}
-	return inspectKey{name: e.Name, depth: e.Depth, rect: e.Rect, id: id, path: e.Path, stable: e.ID != nil}
+	return a.panel
 }
 
-// Folding follows identity even when the widget moves or siblings reorder.
-func foldKey(k inspectKey) inspectKey {
-	if k.id != nil {
-		k.depth, k.rect, k.path = 0, Rect{}, ""
-	} else if k.path != "" {
-		k.depth, k.rect = 0, Rect{}
-	}
-	return k
+// OnInspect registers fn to receive every painted frame's inspect.Frame:
+// the widgets as painted and the accessibility tree beside them, as the
+// inspector's own panel sees them. It is for a viewer of one's own, such
+// as one in another process fed over a connection. The frame is valid
+// until fn returns and no longer, since the next frame reuses its buffers;
+// a viewer that keeps it copies it, and one that leaves the process calls
+// DescribeAll first. Unlike App.Inspector it needs no panel: the frames
+// are built whether or not ggui/inspect/panel is imported.
+func (a *App) OnInspect(fn func(*inspect.Frame)) {
+	a.sinks = append(a.sinks, fn)
+	inspectorEnabled = true
 }
 
-type inspectRow struct {
-	key   inspectKey
-	index int
-	y, h  float64
-}
-
-type inspectAction uint8
-
-const (
-	inspectDockRight inspectAction = iota
-	inspectDockBottom
-	inspectToggleOutlines
-	inspectUnpin
-	inspectPin
-	inspectCollapse
-	inspectClearFilter
-	inspectSelectTab
-	inspectClose
-	inspectCopy
-)
-
-// inspectTab is a details pane. The zero value is the Layout tab, so a fresh
-// inspector needs no special case to show it.
-type inspectTab = inspect.Tab
-
-const (
-	inspectTabLayout    = inspect.Layout
-	inspectTabComputed  = inspect.Computed
-	inspectTabSemantics = inspect.Semantics
-)
-
-// inspectMoveEnd is a Home/End step: further than any tree can be long,
-// clamped to the last visible row.
-const inspectMoveEnd = 1 << 30
-
-type inspectChip struct {
-	rect Rect
-	act  inspectAction
-	key  inspectKey
-	tab  inspectTab // for inspectSelectTab
-}
-
-type inspectDrag uint8
-
-const (
-	inspectNoDrag inspectDrag = iota
-	inspectResizePanel
-	inspectResizeSplit
-	inspectScrollTree
-	inspectScrollDetail
-	inspectScrollLayout
-)
-
-type inspector struct {
-	cache                              inspectorPanelCache
-	visibility                         []inspectVisibility
-	visibilityNext                     []inspectVisibility
-	matches                            int
-	visibilityFiltered                 bool
-	sel                                inspectKey
-	pinned                             bool
-	picking                            bool
-	capture                            bool // a picker/panel press owns its release, even outside the panel
-	scroll, detailScroll, layoutScroll float64
-	dock                               InspectorDock
-	outlines                           bool
-	move                               int
-	branch                             int // left/right tree navigation, resolved against the next trace
-	reveal                             bool
-	collapsed                          map[inspectKey]bool
-	filter                             string
-	filterFocus, focus                 bool
-	selectFilter                       bool
-	tab                                inspectTab
-	closed                             bool
-	copied                             bool
-	sinks                              []func(*inspect.Frame) // OnInspect handlers, kept across sessions
-
-	width, height, split                                   float64
-	drag                                                   inspectDrag
-	dragStart                                              Point
-	dragValue                                              float64
-	layoutThumb, layoutBody                                Rect
-	layoutContent                                          float64
-	viewport                                               Size
-	panel, tree, detail, layout, filterRect, edge, divider Rect
-	treeThumb, detailThumb, detailBody                     Rect
-	treeContent, detailContent                             float64
-	treeTop                                                float64
-	rows                                                   []inspectRow
-	chips                                                  []inspectChip
-	frame                                                  *inspect.Frame // borrowed until the next paint; input runs before paint
-	visibleRows, filterParents, filterStack                []int
-	filterKeep                                             []bool
-}
-
-const (
-	inspectPad       = 10
-	inspectWheel     = 28
-	inspectBar       = 5
-	inspectIndent    = 14
-	inspectRowHeight = 23
-)
-
-var inspectDepth = []color.Color{
-	color.NRGBA{0x49, 0x86, 0xe8, 0xff}, color.NRGBA{0xa0, 0x6c, 0xd5, 0xff},
-	color.NRGBA{0x24, 0x9c, 0x89, 0xff}, color.NRGBA{0xd8, 0x8b, 0x42, 0xff},
-}
-
-type inspectPalette struct {
-	bg, edge, fg, dim, sel, selFg, hover, chip, hi, key, num, field color.Color
-	padding, border, content                                        color.Color
-}
-
-func inspectColors() inspectPalette {
-	// Devtools use a quiet neutral surface, independent of an app's accent.
-	// This keeps the tree and color-coded measurements readable in every theme.
-	if luminance(Untrack(theme.Get).Bg) < .5 {
-		return inspectPalette{
-			bg: color.NRGBA{27, 29, 34, 255}, edge: color.NRGBA{57, 61, 70, 255}, fg: color.NRGBA{222, 226, 233, 255},
-			dim: color.NRGBA{151, 160, 175, 255}, sel: color.NRGBA{43, 70, 104, 255}, selFg: color.NRGBA{221, 236, 255, 255},
-			hover: color.NRGBA{37, 41, 49, 255}, chip: color.NRGBA{43, 47, 56, 255}, hi: color.NRGBA{77, 151, 242, 45},
-			key: color.NRGBA{195, 158, 238, 255}, num: color.NRGBA{131, 190, 253, 255}, field: color.NRGBA{22, 24, 29, 255},
-			padding: color.NRGBA{59, 94, 70, 255}, border: color.NRGBA{119, 91, 52, 255}, content: color.NRGBA{48, 78, 110, 255},
-		}
-	}
-	return inspectPalette{
-		bg: color.NRGBA{255, 255, 255, 255}, edge: color.NRGBA{220, 224, 231, 255}, fg: color.NRGBA{40, 46, 57, 255},
-		dim: color.NRGBA{112, 120, 134, 255}, sel: color.NRGBA{226, 239, 255, 255}, selFg: color.NRGBA{30, 80, 147, 255},
-		hover: color.NRGBA{244, 247, 251, 255}, chip: color.NRGBA{237, 240, 245, 255}, hi: color.NRGBA{66, 139, 233, 40},
-		key: color.NRGBA{134, 68, 160, 255}, num: color.NRGBA{30, 101, 187, 255}, field: color.NRGBA{247, 248, 251, 255},
-		padding: color.NRGBA{218, 239, 214, 255}, border: color.NRGBA{247, 222, 182, 255}, content: color.NRGBA{211, 232, 254, 255},
-	}
-}
-
-func luminance(c color.Color) float64 {
-	if c == nil {
-		return 1
-	}
-	n := color.NRGBAModel.Convert(c).(color.NRGBA)
-	return (.2126*float64(n.R) + .7152*float64(n.G) + .0722*float64(n.B)) / 255
-}
-func withAlpha(c color.Color, a uint8) color.Color {
-	n := color.NRGBAModel.Convert(c).(color.NRGBA)
-	n.A = a
-	return n
-}
-func (in *inspector) apply(o InspectorOptions) {
-	in.dock, in.outlines = o.Dock, o.ShowOutlines
-}
-
-// reset forgets the session when the inspector closes: borrowed frame data,
-// selection, folds, scratch buffers and the panel image. Docking, outlines,
-// sizes and the chosen tab persist to the next open.
-// hide drops the panel rect so a closed inspector intercepts no input.
-func (in *inspector) hide() { in.panel = Rect{} }
-
-func (in *inspector) reset() {
-	in.cache.release()
-	*in = inspector{dock: in.dock, outlines: in.outlines, width: in.width, height: in.height, split: in.split, tab: in.tab, sinks: in.sinks}
-}
-
-// observe adds an OnInspect handler.
-func (in *inspector) observe(fn func(*inspect.Frame)) { in.sinks = append(in.sinks, fn) }
-
-// observed reports whether anyone wants frames while the panel is closed.
-func (in *inspector) observed() bool { return len(in.sinks) > 0 }
-
-// finish ends a traced frame: the panel paints from it when it is open,
-// and every OnInspect handler receives it.
-func (in *inspector) finish(c *Canvas, sem *SemTree, open bool) {
+// publishInspect ends a traced frame: the panel is handed the frame when it
+// is on, and every OnInspect handler receives it.
+func (a *App) publishInspect(c *Canvas, sem *SemTree) {
 	fr := inspectFrame(c, sem)
-	if open {
-		in.paint(c, fr)
-	} else {
-		in.hide()
+	if a.inspect {
+		a.panel.Frame(fr)
 	}
-	for _, fn := range in.sinks {
+	for _, fn := range a.sinks {
 		fn(fr)
 	}
 }
 
-func (in *inspector) find(fr *inspect.Frame) int {
-	tr := fr.Nodes
-	if in.sel.id != nil {
-		for i := range tr {
-			k := keyOf(&tr[i])
-			if k.name == in.sel.name && k.id == in.sel.id {
-				return i
-			}
-		}
-		if in.sel.stable {
-			return -1
-		} // a removed keyed row must not select its neighbour
-	}
-	if in.sel.path != "" {
-		for i := range tr {
-			if tr[i].Path == in.sel.path && tr[i].Name == in.sel.name {
-				return i
-			}
-		}
-		return -1
-	}
-	loose := -1
-	for i := range tr {
-		e := &tr[i]
-		if e.Name != in.sel.name || e.Depth != in.sel.depth {
-			continue
-		}
-		if e.Rect == in.sel.rect {
-			return i
-		}
-		if loose < 0 {
-			loose = i
-		}
-	}
-	return loose
+// InspectorDock is the edge the inspector's panel is docked to.
+type InspectorDock uint8
+
+const (
+	InspectorBottom InspectorDock = iota // tree beside details on wide panels
+	InspectorRight                       // tree above details
+)
+
+// InspectorOptions configures the inspector. The toolbar changes the same
+// settings while it is open; dragging the panel edge adjusts its size.
+// The zero value docks bottom and highlights only the selected widget.
+type InspectorOptions struct {
+	Dock         InspectorDock
+	ShowOutlines bool
 }
 
-func (in *inspector) folded(e *inspect.Node) bool { return in.collapsed[foldKey(keyOf(e))] }
+// inspectSource implements inspect.Source over one frame's widgets.
+type inspectSource struct{ f *frameState }
 
-// num formats a measurement, as inspect.Num does.
-func num(v float64) string { return inspect.Num(v) }
-
-// nodes is the last painted frame's widgets, or none before the first paint.
-func (in *inspector) nodes() []inspect.Node {
-	if in.frame == nil {
+func (s inspectSource) widget(i int) Widget {
+	if i < 0 || i >= len(s.f.traceWidgets) {
 		return nil
 	}
-	return in.frame.Nodes
+	return s.f.traceWidgets[i]
 }
 
-// inspectFoldLimit bounds the collapsed map: folds of widgets that were not
-// painted this frame are dropped once the map outgrows it.
-const inspectFoldLimit = 128
+// Describe implements inspect.Source.
+func (s inspectSource) Describe(i int) (label, role string) {
+	w := s.widget(i)
+	if w == nil {
+		return "", ""
+	}
+	return inspectLabel(w), string(nodeOf(w).Role)
+}
 
-// visible returns scratch storage valid until the next call.
-func (in *inspector) visible(fr *inspect.Frame) []int {
-	tr := fr.Nodes
-	in.visibilityNext = in.visibilityNext[:0]
-	in.matches = 0
-	filter, folds := strings.ToLower(in.filter), 0
-	for i := range tr {
-		match := filter != "" && fr.Matches(i, filter)
-		if match {
-			in.matches++
-		}
-		folded := in.folded(&tr[i])
-		if folded {
-			folds++
-		}
-		in.visibilityNext = append(in.visibilityNext, inspectVisibility{tr[i].Depth, folded, match})
+// Fields implements inspect.Source: the widget's own fields, then how it
+// is being interacted with.
+func (s inspectSource) Fields(i int) []inspect.Field {
+	w := s.widget(i)
+	var out []inspect.Field
+	if f, ok := w.(inspect.Fielder); ok {
+		out = f.InspectFields()
 	}
-	if slices.Equal(in.visibility, in.visibilityNext) && in.visibility != nil && in.visibilityFiltered == (in.filter != "") {
-		return in.visibleRows
-	}
-	in.visibility, in.visibilityNext = in.visibilityNext, in.visibility
-	in.visibilityFiltered = in.filter != ""
-	if len(in.collapsed) > inspectFoldLimit && folds < len(in.collapsed) {
-		in.pruneFolds(tr)
-	}
-	out := in.visibleRows[:0]
-	defer func() { in.visibleRows = out }()
-	if in.filter != "" {
-		// A reverse pass propagates matches to parents in linear time, even
-		// for deeply nested trees whose every name matches the filter.
-		in.filterKeep = resize(in.filterKeep, len(tr))
-		in.filterParents = resize(in.filterParents, len(tr))
-		keep, parents := in.filterKeep, in.filterParents
-		stack := in.filterStack[:0]
-		defer func() { in.filterStack = stack }()
-		for i, e := range tr {
-			for len(stack) > 0 && tr[stack[len(stack)-1]].Depth >= e.Depth {
-				stack = stack[:len(stack)-1]
-			}
-			parents[i] = -1
-			if len(stack) > 0 {
-				parents[i] = stack[len(stack)-1]
-			}
-			stack = append(stack, i)
-			keep[i] = in.visibility[i].match
-		}
-		for i := len(tr) - 1; i >= 0; i-- {
-			if keep[i] && parents[i] >= 0 {
-				keep[parents[i]] = true
-			}
-		}
-		for i, k := range keep {
-			if k {
-				out = append(out, i)
-			}
-		}
-		return out
-	}
-	hideBelow := -1
-	for i := range tr {
-		e := &tr[i]
-		if hideBelow >= 0 && e.Depth > hideBelow {
-			continue
-		}
-		hideBelow = -1
-		out = append(out, i)
-		if in.folded(e) && inspect.HasChildren(tr, i) {
-			hideBelow = e.Depth
-		}
+	if w, ok := w.(interface{ state() *Interactive }); ok {
+		st := w.state()
+		out = append(out, inspect.Field{Key: "Interaction"}, inspect.Field{Key: "hovered", Value: fmtBool(st.Hovered)}, inspect.Field{Key: "pressed", Value: fmtBool(st.Pressed)}, inspect.Field{Key: "focused", Value: fmtBool(st.Focused)}, inspect.Field{Key: "disabled", Value: fmtBool(st.IsInert())})
 	}
 	return out
 }
 
-// pruneFolds keeps only folds of widgets in tr. Fold keys hold widget
-// instances, so a long session would otherwise pin every rebuilt widget.
-func (in *inspector) pruneFolds(tr []inspect.Node) {
-	kept := make(map[inspectKey]bool, len(in.collapsed))
-	for i := range tr {
-		if k := foldKey(keyOf(&tr[i])); in.collapsed[k] {
-			kept[k] = true
+func fmtBool(b bool) string { return pick(b, "true", "false") }
+
+// Semantic implements inspect.Source: the node the widget described, found
+// by the widget itself, else by matching bounds and name, else, for a
+// widget that described nothing, whatever is under its middle.
+func (s inspectSource) Semantic(i int) int {
+	if i < 0 || i >= len(s.f.trace) {
+		return -1
+	}
+	e, w := &s.f.trace[i], s.widget(i)
+	sem := s.f.sem
+	if w == nil {
+		for j := len(sem) - 1; j >= 0; j-- {
+			mid := Pt(e.Rect.Origin.X+e.Rect.Size.W/2, e.Rect.Origin.Y+e.Rect.Size.H/2)
+			if !sem[j].node.Offscreen && sem[j].rect.Contains(mid) {
+				return j
+			}
+		}
+		return -1
+	}
+	for j := range sem {
+		if sameAny(sem[j].handler, w) {
+			return j
 		}
 	}
-	in.collapsed = kept
+	n := nodeOf(w)
+	for j := range sem {
+		if sem[j].full == e.Rect && sem[j].node.Role == n.Role && sem[j].node.Name == n.Name {
+			return j
+		}
+	}
+	if _, ok := w.(*TextWidget); ok {
+		label := inspectLabel(w)
+		for j := range sem {
+			if sem[j].full == e.Rect && sem[j].node.Name == label {
+				return j
+			}
+		}
+	}
+	return -1
 }
 
-func (in *inspector) selectEntry(fr *inspect.Frame, i int) {
-	if fr == nil || i < 0 || i >= len(fr.Nodes) {
-		return
+// Box implements inspect.Source.
+func (s inspectSource) Box(i int) (inspect.Box, bool) {
+	if b, ok := s.widget(i).(*BoxWidget); ok {
+		return b.inspectBox(s.f.trace[i].Rect.Size), true
 	}
-	tr := fr.Nodes
-	in.sel, in.pinned, in.reveal = keyOf(&tr[i]), true, true
-	in.detailScroll, in.copied = 0, false
-	for _, a := range inspect.Ancestors(tr, i) {
-		delete(in.collapsed, foldKey(keyOf(&tr[a])))
-	}
+	return inspect.Box{}, false
 }
-func (in *inspector) selection(dst *Canvas, fr *inspect.Frame) (int, []int) {
-	tr := fr.Nodes
-	sel := in.find(fr)
-	pointer, hasPointer := dst.Pointer()
-	if !in.pinned && hasPointer && !in.panel.Contains(pointer) {
-		if hit := inspect.Deepest(tr, pointer); hit >= 0 {
-			sel = hit
-		}
+
+// inspectBox is a Box's box model as painted at size: its padding and
+// border around the child, or around the space left when it has none.
+func (b *BoxWidget) inspectBox(size Size) inspect.Box {
+	content := b.childSize
+	if b.child == nil {
+		content = Sz(max(size.W-b.padding.horizontal(), 0), max(size.H-b.padding.vertical(), 0))
 	}
-	if sel >= 0 && !in.pinned && in.filter == "" {
-		for _, a := range inspect.Ancestors(tr, sel) {
-			delete(in.collapsed, foldKey(keyOf(&tr[a])))
-		}
+	p := b.padding
+	return inspect.Box{Padding: inspect.Insets{Top: p.Top, Right: p.Right, Bottom: p.Bottom, Left: p.Left}, Border: b.borderWidth, Content: content, Valid: true}
+}
+
+// inspectLabel is what a widget is called: a Text's contents, else its
+// accessible name.
+func inspectLabel(w Widget) string {
+	if t, ok := w.(*TextWidget); ok {
+		return t.value
 	}
-	if in.branch != 0 && sel >= 0 {
-		if in.branch < 0 {
-			if inspect.HasChildren(tr, sel) && !in.folded(&tr[sel]) {
-				in.act(inspectChip{act: inspectCollapse, key: keyOf(&tr[sel])})
-			} else if a := inspect.Ancestors(tr, sel); len(a) > 0 {
-				sel = a[0]
-			}
-		} else if inspect.HasChildren(tr, sel) {
-			if in.folded(&tr[sel]) {
-				delete(in.collapsed, foldKey(keyOf(&tr[sel])))
-			} else {
-				sel++
-			}
-		}
-		in.selectEntry(fr, sel)
+	return nodeOf(w).Name
+}
+
+// inspectFrame is the frame the inspector reads for c, with sem as the
+// accessibility tree published for it.
+func inspectFrame(c *Canvas, sem *SemTree) *inspect.Frame {
+	f := c.fs()
+	return &inspect.Frame{Nodes: f.trace, Sem: sem, Source: inspectSource{f}}
+}
+
+// InspectFields implements inspect.Fielder.
+func (b *BoxWidget) InspectFields() []inspect.Field {
+	out := []inspect.Field{{Key: "Box style"}, {Key: "background", Value: inspect.Color(b.fill)}, {Key: "border", Value: inspect.Num(b.borderWidth) + " px " + inspect.Color(b.borderColor)}, {Key: "radius", Value: inspect.Num(b.radius) + " px", Number: true}, {Key: "padding", Value: fmt.Sprintf("%s %s %s %s", inspect.Num(b.padding.Top), inspect.Num(b.padding.Right), inspect.Num(b.padding.Bottom), inspect.Num(b.padding.Left)), Number: true}}
+	if b.width > 0 {
+		out = append(out, inspect.Field{Key: "fixed width", Value: inspect.Num(b.width) + " px", Number: true})
 	}
-	in.branch = 0
-	shown := in.visible(fr)
-	if in.move != 0 && len(shown) > 0 {
-		at := slices.Index(shown, sel)
-		if at < 0 {
-			at = pick(in.move < 0, len(shown), -1)
-		}
-		sel = shown[clamp(at+in.move, 0, len(shown)-1)]
-		in.selectEntry(fr, sel)
+	if b.height > 0 {
+		out = append(out, inspect.Field{Key: "fixed height", Value: inspect.Num(b.height) + " px", Number: true})
 	}
-	in.move = 0
-	if sel >= 0 {
-		next := keyOf(&tr[sel])
-		if foldKey(next) != foldKey(in.sel) {
-			in.reveal = true
-			in.detailScroll, in.layoutScroll = 0, 0
-			in.copied = false
-		}
-		in.sel = next
+	return out
+}
+
+// InspectFields implements inspect.Fielder.
+func (t *TextWidget) InspectFields() []inspect.Field {
+	return []inspect.Field{{Key: "Typography"}, {Key: "font size", Value: inspect.Num(t.resolved.Size) + " px", Number: true}, {Key: "line height", Value: inspect.Num(t.resolved.LineHeight), Number: true}, {Key: "color", Value: inspect.Color(t.resolved.Color)}, {Key: "wrap", Value: strconv.FormatBool(t.wrap)}, {Key: "lines", Value: strconv.Itoa(len(t.lines)), Number: true}}
+}
+
+// InspectFields implements inspect.Fielder.
+func (r *RowWidget) InspectFields() []inspect.Field { return r.flow.inspectFields() }
+
+// InspectFields implements inspect.Fielder.
+func (c *ColumnWidget) InspectFields() []inspect.Field { return c.flow.inspectFields() }
+
+func (f *flow) inspectFields() []inspect.Field {
+	justify := []string{"start", "center", "end", "space-between", "space-around", "space-evenly"}
+	align := []string{"start", "center", "end", "stretch"}
+	out := []inspect.Field{{Key: "Flex layout"}, {Key: "direction", Value: pick(f.horizontal, "row", "column")}, {Key: "justify", Value: justify[clamp(int(f.justify), 0, len(justify)-1)]}, {Key: "align", Value: align[clamp(int(f.align), 0, len(align)-1)]}}
+	if f.space > 0 {
+		return append(out, inspect.Field{Key: "gap token", Value: inspect.Num(f.space) + " × theme.space"})
 	}
-	return sel, shown
+	return append(out, inspect.Field{Key: "gap", Value: inspect.Num(f.gap) + " px", Number: true})
+}
+
+// InspectFields implements inspect.Fielder.
+func (g *GridWidget) InspectFields() []inspect.Field {
+	return []inspect.Field{{Key: "Grid layout"}, {Key: "columns", Value: strconv.Itoa(g.cols), Number: true}, {Key: "column width", Value: inspect.Num(g.cellW) + " px", Number: true}, {Key: "column gap", Value: inspect.Num(g.gap) + " px", Number: true}, {Key: "row gap", Value: inspect.Num(g.rowGap) + " px", Number: true}}
+}
+
+// InspectFields implements inspect.Fielder.
+func (w *WrapWidget) InspectFields() []inspect.Field {
+	return []inspect.Field{{Key: "Wrapping layout"}, {Key: "gap", Value: inspect.Num(w.gap) + " px", Number: true}, {Key: "run gap", Value: inspect.Num(w.runGap) + " px", Number: true}}
+}
+
+// InspectFields implements inspect.Fielder.
+func (s *ScrollWidget) InspectFields() []inspect.Field {
+	return []inspect.Field{{Key: "Scroll"}, {Key: "axis", Value: pick(s.horizontal, "horizontal", "vertical")}, {Key: "offset", Value: inspect.Num(s.position()) + " px", Number: true}, {Key: "content", Value: inspect.Num(s.childSize.W) + " × " + inspect.Num(s.childSize.H), Number: true}}
+}
+
+// InspectFields implements inspect.Fielder.
+func (f *FlexWidget) InspectFields() []inspect.Field {
+	return []inspect.Field{{Key: "flex", Value: inspect.Num(f.flex), Number: true}}
+}
+
+// inspectKind is the layout badge a tree row shows after a widget's name.
+func inspectKind(w Widget) string {
+	switch w.(type) {
+	case *RowWidget, *ColumnWidget:
+		return "flex"
+	case *WrapWidget:
+		return "wrap"
+	case *GridWidget:
+		return "grid"
+	case *ScrollWidget:
+		return "scroll"
+	}
+	return ""
 }
