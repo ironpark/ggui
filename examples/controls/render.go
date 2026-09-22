@@ -16,23 +16,10 @@ type controlsRender struct {
 	directory string
 	index     int
 	done      bool
-	err       error
 }
 
-func (g *controlsRender) Update() error {
-	if g.err != nil {
-		return g.err
-	}
-	if g.done {
-		return ggfx.Termination
-	}
-	return nil
-}
-func (g *controlsRender) Layout(int, int) (int, int) { return 560, 520 }
-func (g *controlsRender) Draw(screen *ggfx.Image) {
-	if g.done || g.err != nil {
-		return
-	}
+// step renders one control's four states and previews the last on screen.
+func (g *controlsRender) step(screen *ggfx.Image) error {
 	n := len(controlNames)
 	name := controlNames[g.index%n]
 	dark := g.index/n%2 == 1
@@ -90,14 +77,14 @@ func (g *controlsRender) Draw(screen *ggfx.Image) {
 		demo.Widget.Paint(&ggui.Canvas{Image: img}, ggui.Rct(ggui.Point{}, size))
 		name := filepath.Join(g.directory, fmt.Sprintf("%s-%s-%d-%s.png", name, mode, width, state))
 		if err := savePNG(name, img); err != nil {
-			g.err = err
-			return
+			return err
 		}
 	}
 	screen.Fill(theme.Bg)
 	screen.DrawImage(img, nil)
 	g.index++
 	g.done = g.index == n*4
+	return nil
 }
 
 // savePNG writes img to name, reporting either an encode or a close failure.
@@ -118,7 +105,11 @@ func renderControls(directory string) error {
 	if err := os.MkdirAll(directory, 0755); err != nil {
 		return err
 	}
-	ggfx.SetWindowTitle("ggui controls render validation")
-	ggfx.SetWindowSize(560, 520)
-	return ggfx.RunGame(&controlsRender{directory: directory})
+	g := &controlsRender{directory: directory}
+	return runRenderWindow("ggui controls render validation", 560, 520, func(screen *ggfx.Image) (bool, error) {
+		if err := g.step(screen); err != nil {
+			return false, err
+		}
+		return g.done, nil
+	})
 }

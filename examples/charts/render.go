@@ -19,24 +19,11 @@ import (
 type renderGame struct {
 	directory string
 	index     int
-	err       error
 	done      bool
 }
 
-func (g *renderGame) Update() error {
-	if g.err != nil {
-		return g.err
-	}
-	if g.done {
-		return ggfx.Termination
-	}
-	return nil
-}
-func (g *renderGame) Layout(int, int) (int, int) { return 480, 420 }
-func (g *renderGame) Draw(screen *ggfx.Image) {
-	if g.done || g.err != nil {
-		return
-	}
+// step renders one example into g.directory and previews it on screen.
+func (g *renderGame) step(screen *ggfx.Image) error {
 	e := chartExamples[g.index%len(chartExamples)]
 	dark := g.index >= len(chartExamples)
 	preset := uitheme.Preset{Base: uitheme.BaseNeutral, Accent: uitheme.AccentBlue}
@@ -74,8 +61,7 @@ func (g *renderGame) Draw(screen *ggfx.Image) {
 		}
 		name := filepath.Join(g.directory, fmt.Sprintf("%s-%s-%04d.png", e.Name, mode, ms))
 		if err := savePNG(name, img); err != nil {
-			g.err = err
-			return
+			return err
 		}
 	}
 	screen.Fill(theme.Bg)
@@ -84,6 +70,7 @@ func (g *renderGame) Draw(screen *ggfx.Image) {
 	if g.index == 2*len(chartExamples) {
 		g.done = true
 	}
+	return nil
 }
 
 // savePNG writes img to name, reporting either an encode or a close failure.
@@ -104,7 +91,11 @@ func renderCharts(directory string) error {
 	if err := os.MkdirAll(directory, 0755); err != nil {
 		return err
 	}
-	ggfx.SetWindowTitle("ggui chart render validation")
-	ggfx.SetWindowSize(480, 420)
-	return ggfx.RunGame(&renderGame{directory: directory})
+	g := &renderGame{directory: directory}
+	return runRenderWindow("ggui chart render validation", 480, 420, func(screen *ggfx.Image) (bool, error) {
+		if err := g.step(screen); err != nil {
+			return false, err
+		}
+		return g.done, nil
+	})
 }

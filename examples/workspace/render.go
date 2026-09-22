@@ -16,27 +16,8 @@ import (
 // widths. Run with -render-dir to review layout changes without screen capture.
 type workspaceRender struct {
 	directory string
-	done      bool
-	err       error
 }
 
-func (r *workspaceRender) Layout(int, int) (int, int) { return 320, 240 }
-func (r *workspaceRender) Update() error {
-	if r.err != nil {
-		return r.err
-	}
-	if r.done {
-		return ggfx.Termination
-	}
-	return nil
-}
-func (r *workspaceRender) Draw(_ *ggfx.Image) {
-	if r.done || r.err != nil {
-		return
-	}
-	r.err = r.render()
-	r.done = true
-}
 func (r *workspaceRender) render() error {
 	now := time.Unix(100, 0)
 	restore := ggui.SetClock(func() time.Time { return now })
@@ -99,7 +80,8 @@ func renderWorkspace(directory string) error {
 	if err := os.MkdirAll(directory, 0755); err != nil {
 		return err
 	}
-	ggfx.SetWindowSize(320, 240)
-	ggfx.SetWindowTitle("Workspace layout previews")
-	return ggfx.RunGame(&workspaceRender{directory: directory})
+	r := &workspaceRender{directory: directory}
+	return runRenderWindow("Workspace layout previews", 320, 240, func(*ggfx.Image) (bool, error) {
+		return true, r.render()
+	})
 }

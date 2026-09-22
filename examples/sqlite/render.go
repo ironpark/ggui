@@ -15,27 +15,8 @@ import (
 
 type clientRender struct {
 	directory, path string
-	done            bool
-	err             error
 }
 
-func (r *clientRender) Layout(int, int) (int, int) { return 320, 240 }
-func (r *clientRender) Update() error {
-	if r.err != nil {
-		return r.err
-	}
-	if r.done {
-		return ggfx.Termination
-	}
-	return nil
-}
-func (r *clientRender) Draw(*ggfx.Image) {
-	if r.done {
-		return
-	}
-	r.err = r.render()
-	r.done = true
-}
 func (r *clientRender) render() error {
 	now := time.Unix(100, 0)
 	restore := ggui.SetClock(func() time.Time { return now })
@@ -123,7 +104,8 @@ func renderClient(directory string) error {
 	if err != nil {
 		return err
 	}
-	ggfx.SetWindowSize(320, 240)
-	ggfx.SetWindowTitle("SQLite layout previews")
-	return ggfx.RunGame(&clientRender{directory: directory, path: path})
+	r := &clientRender{directory: directory, path: path}
+	return runRenderWindow("SQLite layout previews", 320, 240, func(*ggfx.Image) (bool, error) {
+		return true, r.render()
+	})
 }

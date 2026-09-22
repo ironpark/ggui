@@ -442,7 +442,7 @@ const (
 	AccessibilityOff = a11y.Off
 )
 
-// appRunning reports whether RunGame has started, which is when platform
+// appRunning reports whether Run has started, which is when platform
 // services such as the IME may be used.
 var appRunning atomic.Bool
 

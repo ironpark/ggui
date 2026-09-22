@@ -38,20 +38,8 @@ type galleryAudit struct {
 	err   error
 }
 
-func (g *galleryAudit) Layout(int, int) (int, int) { return 640, 900 }
-func (g *galleryAudit) Update() error {
-	if g.err != nil {
-		return g.err
-	}
-	if g.index == len(g.names)*8 {
-		return ggfx.Termination
-	}
-	return nil
-}
-func (g *galleryAudit) Draw(screen *ggfx.Image) {
-	if g.err != nil || g.index >= len(g.names)*8 {
-		return
-	}
+// step audits one example in one theme, style and width, and previews it.
+func (g *galleryAudit) step(screen *ggfx.Image) (bool, error) {
 	name := g.names[g.index%len(g.names)]
 	dark := g.index/len(g.names)%2 == 1
 	width := 640
@@ -124,8 +112,7 @@ func (g *galleryAudit) Draw(screen *ggfx.Image) {
 	if target, ok := actionNames[name]; ok {
 		node, found := app.Semantics().Find("", target)
 		if !found {
-			g.err = fmt.Errorf("%s: missing action %q", name, target)
-			return
+			return false, fmt.Errorf("%s: missing action %q", name, target)
 		}
 		action := ggui.ActionPress
 		if node.Actions&ggui.ActionExpand != 0 {
@@ -137,8 +124,7 @@ func (g *galleryAudit) Draw(screen *ggfx.Image) {
 	if target, ok := hoverNames[name]; ok {
 		node, ok := app.Find(target)
 		if !ok {
-			g.err = fmt.Errorf("missing hover target %s", target)
-			return
+			return false, fmt.Errorf("missing hover target %s", target)
 		}
 		app.Move(node.Center())
 		now = now.Add(600 * time.Millisecond)
@@ -193,6 +179,10 @@ func (g *galleryAudit) Draw(screen *ggfx.Image) {
 
 	screen.DrawImage(img, nil)
 	g.index++
+	if g.err != nil {
+		return false, g.err
+	}
+	return g.index == len(g.names)*8, nil
 }
 func renderGalleryAudit(dir, only string) error {
 	names := auditNames
@@ -210,9 +200,8 @@ func renderGalleryAudit(dir, only string) error {
 		return err
 	}
 
-	ggfx.SetWindowTitle("ggui existing component audit")
-	ggfx.SetWindowSize(640, 900)
-	return ggfx.RunGame(&galleryAudit{dir: dir, names: names})
+	g := &galleryAudit{dir: dir, names: names}
+	return runRenderWindow("ggui existing component audit", 640, 900, g.step)
 }
 
 func auditControlStates() ggui.Widget {
