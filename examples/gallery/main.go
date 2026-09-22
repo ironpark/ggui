@@ -51,6 +51,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 		{1, "Ada", "Engineer", 36}, {2, "Grace", "Admiral", 45}, {3, "Linus", "Kernel", 28},
 		{4, "Ken", "Plan 9", 60}, {5, "Rob", "Gopher", 62}, {6, "Barbara", "Architect", 57},
 	})
+	paymentTable := newPaymentTable()
 	chosen := ggui.State(0)
 	chosenName := ggui.Combine(people, chosen, func(ps []Person, id int) string {
 		for _, p := range ps {
@@ -442,6 +443,8 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 					)
 				})...).Space(0.5)
 			})),
+
+			preview("Data Table", paymentTable),
 
 			preview("Table", ggui.Column(
 				ui.Table(people, func(p Person) int { return p.ID },

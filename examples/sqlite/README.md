@@ -18,8 +18,8 @@ go run ./examples/sqlite -db /path/to/database.sqlite -readonly
 
 ## Opening a database
 
-Drop **one local SQLite file anywhere in the window**, choose **Open database**,
-or use **Open path** to paste a path. The file chooser includes SQLite filters
+Drop **one SQLite file anywhere in the window** or choose **Open database**.
+The file chooser includes SQLite filters
 and an All files option; drops accept any filename SQLite can open. The original
 file is opened in place, preserving access to its WAL/journal files.
 
@@ -36,11 +36,22 @@ drop itself is the first the app hears of it.
 The left sidebar groups tables and views and filters them by name. Selecting an
 object loads its first page. The main workspace keeps three separate tabs:
 
-- **Data** — browse 500 rows per page, filter text across columns, sort by a
-  column, and move between pages. **Filter / Sort** expands the filter controls.
+- **Data** — browse 25, 50, 100, 250 or 500 rows per page (default 500), filter text across columns, sort by a
+  column, and jump between numbered pages. The footer shows the loaded range
+  and the total matching row count. Page size changes return to page one; a
+  refresh clamps the page if rows were removed. Search is always visible; press Enter or **Apply**
+  to search the whole database. Click a column heading to cycle ascending,
+  descending and default order, or open **Sort**. Sorting starts on page
+  one and clears the previous selection. **More → Clear filters** resets search and sorting.
+  The compact toolbar also contains refresh, **More → Export CSV**,
+  **More → Query table**, and **Add row**.
   The grid uses the available window height with fixed headers and a persistent
-  pagination footer. Column widths adapt to the data; wide tables scroll horizontally. Select a row
-  to reveal the row actions and use **View / edit cell** to inspect its full value, including multiline
+  pagination footer. Column widths adapt to the data; wide tables scroll horizontally. The compact
+  grid uses 34 px rows, vertical dividers, declared column types and a green
+  primary-key marker. Select rows or their checkboxes independently; the heading checkbox selects
+  the loaded page and shows a mixed state for partial selection. **Deselect**
+  clears the set. Selection resets after loading another page or refreshing.
+  Select exactly one row to enable the row actions and use **View / edit cell** to inspect its full value, including multiline
   text and hexadecimal BLOBs. NULL is distinct from empty text.
 - **Structure** — inspect column types, primary keys, nullability, default
   values, generated columns and the object's CREATE statement.
@@ -49,6 +60,13 @@ object loads its first page. The main workspace keeps three separate tabs:
   the editor. The last 20 successful statements can be recalled from **Recent queries**.
   **Query table** prepares a safely quoted SELECT for the selected object.
   Table data and SQL results remain separate when switching tabs.
+  SQL results use `ui.DataTable`: search all loaded values, sort headings, hide
+  columns, select rows, and choose a page size (five by default). Search uses the
+  full value even when its cell is abbreviated. NULL, numbers, text and BLOBs
+  have distinct sort groups; INTEGER/REAL comparisons preserve integer precision.
+  Numeric columns align right and NULL cells use muted text. These controls operate
+  on the loaded result (at most 500 rows), without rerunning the SQL statement.
+  The result area scrolls vertically when the window cannot fit the whole page.
 
 **Add row** supplies an input for each writable column. DEFAULT omits the column
 so SQLite supplies its default (including an automatic INTEGER PRIMARY KEY).
@@ -71,7 +89,9 @@ executes one statement inside a transaction and commits only on success.
 The display keeps at most 500 result rows but consumes all RETURNING rows before
 committing. A result limit notice appears if more rows were returned.
 
-**Export CSV / Export results** exports only the displayed page/result, including
+**Export CSV** exports the loaded database page. **Export loaded results** exports
+the complete loaded SQL result, regardless of its local filter or visible DataTable
+page. Both include
 column headings. NULL and empty text both export as empty fields; BLOBs export
 as hexadecimal. Use SQL filters or LIMIT/OFFSET to select another result window.
 
@@ -112,8 +132,11 @@ Tests cover file paths and quoted identifiers, pagination/filtering/sorting,
 NULL/BLOB handling, composite and ambiguous keys, generated columns, defaults,
 foreign keys, read-only writes, rollback, RETURNING limits, cancellation,
 separate result state, CSV escaping, UI editing, window-wide file drops, invalid
-drop recovery, read-only drops, and quoted table-to-SQL navigation.
+drop recovery, read-only drops, quoted table-to-SQL navigation, heading-driven
+server sorting beyond the first page, result pagination and filtering, duplicate
+SQL column names, large integer comparisons, and searching abbreviated values.
 
 `database.go` holds SQLite access, `statement.go` checks statement boundaries,
-`model.go` coordinates asynchronous actions, and `view.go` builds the interface.
+`model.go` coordinates asynchronous actions, `results.go` adapts query values to
+DataTable columns, and `view.go` builds the interface.
 Driver reference: https://pkg.go.dev/modernc.org/sqlite

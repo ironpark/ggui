@@ -47,6 +47,7 @@ var previewDetails = map[string]previewInfo{
 	"Resizable":                {"Layout", "Drag either grip to resize nested horizontal and vertical panels."},
 	"Transition":               {"Layout", "Reveal content with a subtle fade and slide."},
 	"Wrap":                     {"Layout", "Removable tags that flow naturally onto the next line."},
+	"Data Table":               {"Data", "Search, sorting, column visibility, page selection and pagination."},
 	"Table":                    {"Data", "Selectable rows, flexible columns and row actions."},
 	"Grid":                     {"Data", "The shared color palette, presented in a responsive grid."},
 	"Sheets and drawers":       {"Navigation", "Sheet and Drawer: edge-anchored modal panels that slide in and hand focus back."},

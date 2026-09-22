@@ -21,13 +21,13 @@ var auditNames = []string{
 	"Buttons", "Text", "Field", "Choices", "Menubar", "Calendar", "Date picker",
 	"Context menu", "Search and commands", "Notices and empty states", "Loading and shortcuts",
 	"Toast", "Dialog", "Progress", "Collapsible", "Pagination", "Accordion", "Tabs", "Resizable",
-	"Table", "Sheets and drawers", "Sidebar", "Groups and addons", "Profile and media",
+	"Data Table", "Table", "Sheets and drawers", "Sidebar", "Groups and addons", "Profile and media",
 	"Attachment", "Bubble", "Message", "Marker", "Message Scroller", "Questionnaire", "Control states",
 }
 
 // actionNames is the control each example activates for its alternate
 // state, and hoverNames the one the pointer rests on.
-var actionNames = map[string]string{"Table": "Grace", "Accordion": "Keyboard controls", "Collapsible": "Delivery preferences", "Dialog": "Reset form…", "Sheets and drawers": "Open filters", "Date picker": "Appointment date", "Menubar": "File", "Choices": "Choose fruit", "Toast": "Notify", "Progress": "Advance download", "Tabs": "Details", "Search and commands": "Commands…", "Groups and addons": "Lock alignment", "Control states": "Enabled switch"}
+var actionNames = map[string]string{"Data Table": "Select row p2", "Table": "Grace", "Accordion": "Keyboard controls", "Collapsible": "Delivery preferences", "Dialog": "Reset form…", "Sheets and drawers": "Open filters", "Date picker": "Appointment date", "Menubar": "File", "Choices": "Choose fruit", "Toast": "Notify", "Progress": "Advance download", "Tabs": "Details", "Search and commands": "Commands…", "Groups and addons": "Lock alignment", "Control states": "Enabled switch"}
 
 var hoverNames = map[string]string{"Buttons": "Hover for help", "Profile and media": "Details"}
 
@@ -166,6 +166,30 @@ func (g *galleryAudit) Draw(screen *ebiten.Image) {
 	now = now.Add(60 * time.Millisecond)
 	draw()
 	save("exit")
+
+	if name == "Data Table" {
+		perform := func(label string, action ggui.Action) {
+			node, ok := app.Semantics().Find("", label)
+			if !ok {
+				g.err = fmt.Errorf("Data Table: missing %q", label)
+				return
+			}
+			app.Perform(node.ID, action)
+			draw()
+			now = now.Add(time.Second)
+			draw()
+		}
+		perform("Sort Email", ggui.Action{Kind: ggui.ActionPress})
+		save("sorted")
+		perform("Filter rows", ggui.Action{Kind: ggui.ActionSetValue, Text: "missing"})
+		save("empty")
+		perform("Filter rows", ggui.Action{Kind: ggui.ActionSetValue, Text: "example"})
+		save("filtered")
+		perform("Next", ggui.Action{Kind: ggui.ActionPress})
+		save("next-page")
+		perform("Columns", ggui.Action{Kind: ggui.ActionExpand})
+		save("columns")
+	}
 
 	screen.DrawImage(img, nil)
 	g.index++

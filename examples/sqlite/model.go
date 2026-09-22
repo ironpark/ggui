@@ -34,37 +34,40 @@ type model struct {
 	Cell, Kind, Value, Search, Filter, Sort, QueryStatus *ggui.StateValue[string]
 	Objects                                              *ggui.StateValue[[]object]
 	Data, QueryData                                      *ggui.StateValue[result]
+	Selections                                           *ggui.StateValue[map[int]bool]
+	Total, PageSize                                      *ggui.StateValue[int]
 	Selected, Tab, Offset                                *ggui.StateValue[int]
 
 	Editing, Adding, ConfirmDelete, Busy, Connected    *ggui.StateValue[bool]
 	ReadOnly, Locked, Dark, Desc, Editable, Insertable *ggui.StateValue[bool]
 	Draft                                              *ggui.StateValue[[]draftField]
 	History                                            *ggui.StateValue[[]string]
-	OpenDialog, FilterOpen, HistoryOpen                *ggui.StateValue[bool]
+	FilterOpen, HistoryOpen                            *ggui.StateValue[bool]
 	DropHover                                          *ggui.StateValue[bool] // files are being dragged over the window
-	OpenPath                                           *ggui.StateValue[string]
 }
 
 func newModel() *model {
 	return &model{
-		Path:          ggui.State(""),
-		Status:        ggui.State("Open a SQLite database to get started."),
-		Error:         ggui.State(""),
-		Table:         ggui.State(""),
-		Loaded:        ggui.State(""),
-		SQL:           ggui.State("SELECT name, type FROM sqlite_schema ORDER BY name;"),
-		Schema:        ggui.State(""),
-		Cell:          ggui.State(""),
-		Kind:          ggui.State("TEXT"),
-		Value:         ggui.State(""),
-		Search:        ggui.State(""),
-		Filter:        ggui.State(""),
-		Sort:          ggui.State(""),
-		QueryStatus:   ggui.State("Run SQL to see results here."),
-		Objects:       ggui.State([]object{}).WithEqual(slices.Equal),
-		Data:          ggui.State(result{}),
-		QueryData:     ggui.State(result{}),
-		Selected:      ggui.State(0),
+		Path:        ggui.State(""),
+		Status:      ggui.State("Open a SQLite database to get started."),
+		Error:       ggui.State(""),
+		Table:       ggui.State(""),
+		Loaded:      ggui.State(""),
+		SQL:         ggui.State("SELECT name, type FROM sqlite_schema ORDER BY name;"),
+		Schema:      ggui.State(""),
+		Cell:        ggui.State(""),
+		Kind:        ggui.State("TEXT"),
+		Value:       ggui.State(""),
+		Search:      ggui.State(""),
+		Filter:      ggui.State(""),
+		Sort:        ggui.State(""),
+		QueryStatus: ggui.State("Run SQL to see results here."),
+		Objects:     ggui.State([]object{}).WithEqual(slices.Equal),
+		Data:        ggui.State(result{}),
+		QueryData:   ggui.State(result{}),
+		Selected:    ggui.State(0),
+		Total:       ggui.State(0), PageSize: ggui.State(rowLimit),
+		Selections:    ggui.State(map[int]bool{}),
 		Tab:           ggui.State(0),
 		Offset:        ggui.State(0),
 		Editing:       ggui.State(false),
@@ -81,10 +84,8 @@ func newModel() *model {
 		Insertable:    ggui.State(false),
 		Draft:         ggui.State([]draftField{}),
 		History:       ggui.State([]string{}),
-		OpenDialog:    ggui.State(false),
 		FilterOpen:    ggui.State(false),
 		HistoryOpen:   ggui.State(false),
-		OpenPath:      ggui.State(""),
 	}
 }
 func (m *model) close() {
@@ -175,8 +176,6 @@ func (m *model) open(path string) {
 			m.db = db
 			m.opened = slices.DeleteFunc(m.opened, func(d *sql.DB) bool { return d == db })
 			m.Path.Set(path)
-			m.OpenPath.Set(path)
-			m.OpenDialog.Set(false)
 			m.Editing.Set(false)
 			m.Adding.Set(false)
 			m.ConfirmDelete.Set(false)
@@ -197,7 +196,8 @@ func (m *model) open(path string) {
 			m.QueryData.Set(result{})
 			m.Schema.Set("")
 			m.Offset.Set(0)
-			m.Selected.Set(0)
+			m.Total.Set(0)
+			m.clearSelection()
 			m.Editable.Set(false)
 			m.Insertable.Set(false)
 			m.History.Set(nil)
@@ -274,13 +274,14 @@ func (m *model) selectTable(name string) {
 	m.Tab.Set(0)
 	m.browsePage(0)
 }
-func (m *model) browse() { m.browsePage(m.Offset.Get()) }
-func (m *model) browsePage(offset int) {
+func (m *model) browse()               { m.browsePage(m.Offset.Get()) }
+func (m *model) browsePage(offset int) { m.browseSizedPage(offset, m.PageSize.Get()) }
+func (m *model) browseSizedPage(offset, size int) {
 	if m.db == nil || m.Busy.Get() {
 		return
 	}
 	name := m.Table.Get()
-	opts := browseOptions{Offset: offset, Filter: m.Filter.Get(), Sort: m.Sort.Get(), Desc: m.Desc.Get()}
+	opts := browseOptions{Offset: offset, PageSize: size, Filter: m.Filter.Get(), Sort: m.Sort.Get(), Desc: m.Desc.Get()}
 	db := m.db
 	m.Editable.Set(false)
 	m.Insertable.Set(false)
@@ -302,18 +303,38 @@ func (m *model) browsePage(offset int) {
 			m.Objects.Set(os)
 			m.current = data
 			m.Loaded.Set(name)
-			m.Offset.Set(opts.Offset)
+			m.PageSize.Set(size)
+			m.Offset.Set(data.Offset)
+			m.Total.Set(data.Total)
 			m.Data.Set(data.Result)
 			m.Schema.Set(o.Schema)
-			m.Selected.Set(0)
+			m.clearSelection()
 			m.Editable.Set(len(data.Keys) > 0 && !m.Locked.Get())
 			m.Insertable.Set(o.Kind == "table" && !m.Locked.Get())
 			m.Status.Set(fmt.Sprintf("%s · %d rows loaded", name, len(data.Result.Rows)))
 		}, nil
 	})
 }
+
+// sortColumn orders the database query, not just the currently loaded page.
+func (m *model) sortColumn(name string) {
+	if m.Busy.Get() || m.db == nil || m.Data.Get().index(name) < 0 {
+		return
+	}
+	if m.Sort.Get() != name {
+		m.Sort.Set(name)
+		m.Desc.Set(false)
+	} else if !m.Desc.Get() {
+		m.Desc.Set(true)
+	} else {
+		m.Sort.Set("")
+		m.Desc.Set(false)
+	}
+	m.apply()
+}
+
 func (m *model) apply()         { m.browsePage(0) }
-func (m *model) page(delta int) { m.browsePage(max(0, m.Offset.Get()+delta*rowLimit)) }
+func (m *model) page(delta int) { m.browsePage(max(0, m.Offset.Get()+delta*m.PageSize.Get())) }
 func (m *model) execute() {
 	if m.db == nil || m.Busy.Get() {
 		return
@@ -354,7 +375,7 @@ func (m *model) execute() {
 }
 func (m *model) edit() {
 	row := m.Selected.Get() - 1
-	if m.Busy.Get() || row < 0 || row >= len(m.current.Result.Rows) {
+	if m.Busy.Get() || len(m.Selections.Get()) > 1 || row < 0 || row >= len(m.current.Result.Rows) {
 		return
 	}
 	for _, c := range m.current.Columns {

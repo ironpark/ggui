@@ -11,6 +11,7 @@ See [example conventions](README.md#start-here) before copying snippets.
 
 - [Containers and feedback](#containers-and-feedback)
 - [Tables](#tables)
+- [Data tables](#data-tables)
 - [Select and menu](#select-and-menu)
 - [Menubar](#menubar)
 - [Calendar and date picker](#calendar-and-date-picker)
@@ -44,7 +45,7 @@ Choose unique keys, then configure columns and selection:
 | `.BindSelected(binding)` | Read and write the selected row key on click, Space, or Enter. |
 | `.OnSelect(fn)` | Receive the activated item. |
 | `.Height(h)` | Scroll the body beneath a fixed heading and virtualize rows. |
-| `.RowHeight(h)` | Set the fixed row height (default: 32 logical pixels). |
+| `.RowHeight(h)` | Set the fixed row height (default: 40 logical pixels). |
 | `.RowName(fn)` | Set each row's accessible name; otherwise the key is used. |
 
 Without `Height`, the table grows to fit all rows.
@@ -54,6 +55,66 @@ ui.Table(people, func(p Person) int { return p.ID },
 	ui.TextCol("Age", func(p Person) string { return strconv.Itoa(p.Age) }).W(60).Right(),
 ).BindSelected(chosen).Height(240)
 ```
+
+## Data tables
+
+`ui.NewTableModel(rows, key, columns...)` handles client-side data operations;
+`ui.DataTable(model)` presents search, sortable headings, column visibility,
+selection checkboxes, an empty state and pagination. It follows the
+[shadcn Data Table](https://ui.shadcn.com/docs/components/base/data-table)
+composition using native ggui widgets without a JavaScript dependency.
+
+Create the model once in component setup, outside a `Reactive` builder:
+
+```go
+model := ui.NewTableModel(people, func(p Person) int { return p.ID },
+    ui.TextCol("Name", func(p Person) string { return p.Name }).
+        Sortable(func(a, b Person) int { return strings.Compare(a.Name, b.Name) }),
+    ui.TextCol("Age", func(p Person) string { return strconv.Itoa(p.Age) }).
+        W(80).Right().Sortable(func(a, b Person) int { return cmp.Compare(a.Age, b.Age) }),
+)
+model.SetPageSize(10)
+return ui.DataTable(model)
+```
+
+Use `Col` for custom cells, including menus and row actions. `TextCol` supplies
+searchable text automatically; custom columns can set `Column.Search`.
+Columns use their title as an ID by default. Set `.Identified("actions")` for
+blank titles or titles that are not unique. Keys and column IDs must be unique
+and stable. `Column.Header` supplies a custom header for plain `Table` or a
+non-sortable DataTable column.
+
+| Model API | Behavior |
+| --- | --- |
+| `SetQuery(text)` / `Query()` | Case-insensitive substring search across searchable columns, including hidden ones. Resets to page one. |
+| `ToggleSort(id)` / `Sort()` | Ascending → descending → source order. Only `Sortable` columns participate. Resets to page one. |
+| `Rows()` / `FilteredRows()` | Reactive current-page rows / matching rows before sorting and paging. |
+| `SetPage(n)` / `Page()` / `PageCount()` | One-based pages, clamped to the available data. Empty results still have one page. |
+| `SetPageSize(n)` / `PageSize()` | At least one row per page; resets to page one. Default ten. |
+| `SetColumnVisible(id, visible)` / `ColumnVisible(id)` | Keeps at least one column visible. |
+| `Select(key, selected)` / `IsSelected(key)` | Selection by key, retained across search, sorting and paging. |
+| `SelectPage(selected)` | Changes only the current filtered page. |
+| `SelectedRows()` | Selected items still present in the source, in source order. |
+
+The header checkbox reports a mixed state when only some visible rows are
+selected. The footer count covers all filtered rows, across pages. Removing an
+item excludes it from `SelectedRows`; reintroducing the same key restores its
+selection. The shared Checkbox also supports `Indeterminate(bool)` and
+`BindIndeterminate(reader)` for custom presentations.
+
+Filtering and stable sorting are memoized separately; selection and page
+navigation do not repeat either operation. The source slice is never sorted in
+place. Current-page rows reuse `Table`'s keyed cells. Visibility changes rebuild
+the table structure. Treat model-returned slices as immutable. All mutations
+belong on the UI goroutine, like other ggui state.
+
+The default view scrolls horizontally on narrow screens, wraps footer controls,
+and uses the current theme's hover, focus and popup animations, including reduced
+motion. This model processes a local slice; server-side paging and multi-column
+sorting are outside this API. For a custom toolbar or server-driven table,
+compose the existing `Table`, fields and navigation controls directly.
+
+See `examples/gallery/datatable.go` for a payment table with row actions.
 
 ## Select and menu
 

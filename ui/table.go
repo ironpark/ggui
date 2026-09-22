@@ -12,11 +12,15 @@ import (
 // how a row's cell is built. Build one with Col or TextCol and tune it with
 // the setters.
 type Column[T any] struct {
-	Title string
-	Width float64 // fixed width in logical pixels; 0 shares the rest by Flex
-	Flex  float64 // share of the remaining width; 0 with Width 0 counts as 1
-	Align float64 // 0 left, 0.5 center, 1 right, for headings and cells
-	Cell  func(ggui.Readable[T]) ggui.Widget
+	Title   string
+	Header  ggui.Widget      // optional custom heading
+	ID      string           // stable DataTable column identifier; defaults to Title
+	Compare func(a, b T) int // optional ascending comparator
+	Search  func(T) string   // optional searchable text
+	Width   float64          // fixed width in logical pixels; 0 shares the rest by Flex
+	Flex    float64          // share of the remaining width; 0 with Width 0 counts as 1
+	Align   float64          // 0 left, 0.5 center, 1 right, for headings and cells
+	Cell    func(ggui.Readable[T]) ggui.Widget
 }
 
 // Col creates a column whose cells come from cell, which gets the row's
@@ -28,10 +32,18 @@ func Col[T any](title string, cell func(ggui.Readable[T]) ggui.Widget) Column[T]
 // TextCol creates a column of text taken from each item through text,
 // which follows the item without a rebuild.
 func TextCol[T any](title string, text func(T) string) Column[T] {
-	return Col(title, func(r ggui.Readable[T]) ggui.Widget {
+	c := Col(title, func(r ggui.Readable[T]) ggui.Widget {
 		return ggui.TextOf(ggui.Map(r, text)).NoWrap()
 	})
+	c.Search = text
+	return c
 }
+
+// Sortable enables DataTable sorting with an ascending comparator.
+func (c Column[T]) Sortable(compare func(T, T) int) Column[T] { c.Compare = compare; return c }
+
+// Identified gives a DataTable column a stable identifier independent of its title.
+func (c Column[T]) Identified(id string) Column[T] { c.ID = id; return c }
 
 // W fixes the column's width.
 func (c Column[T]) W(w float64) Column[T] { c.Width = w; return c }
@@ -54,6 +66,7 @@ type TableWidget[T any, K comparable] struct {
 	key           func(T) K
 	selected      ggui.Binding[K]
 	localSelected *ggui.StateValue[K]
+	selectedRows  ggui.Readable[map[K]bool]
 	onSelect      func(T)
 	rowH          float64
 	height        float64
@@ -80,7 +93,11 @@ func Table[T any, K comparable](rows ggui.Readable[[]T], key func(T) K, cols ...
 	t.label = func(item T) string { return sprint(key(item)) }
 	heads := make([]ggui.Widget, len(cols))
 	for i, c := range cols {
-		heads[i] = t.cell(c, ggui.Text(c.Title).NoWrap().Align(c.Align))
+		heading := c.Header
+		if heading == nil {
+			heading = ggui.Text(c.Title).NoWrap().Align(c.Align)
+		}
+		heads[i] = t.cell(c, heading)
 	}
 	t.head = ggui.Row(heads...).Align(ggui.AlignStretch)
 	t.headBox = ggui.Box(t.head).Height(40)
@@ -99,6 +116,22 @@ func (t *TableWidget[T, K]) BindSelected(b ggui.Binding[K]) *TableWidget[T, K] {
 		t.props.Changed()
 	}
 	return t
+}
+
+// BindSelectedRows follows a set of highlighted keys. Use OnSelect to define
+// how row activation changes the set; child controls may update it independently.
+func (t *TableWidget[T, K]) BindSelectedRows(r ggui.Readable[map[K]bool]) *TableWidget[T, K] {
+	property.Require(r, "BindSelectedRows")
+	if !property.Same(t.selectedRows, r) {
+		t.selectedRows = r
+		t.props.Changed()
+	}
+	return t
+}
+
+// SelectedRows replaces the highlighted-key reader with a literal set.
+func (t *TableWidget[T, K]) SelectedRows(rows map[K]bool) *TableWidget[T, K] {
+	return t.BindSelectedRows(ggui.Const(rows))
 }
 
 // Selected detaches a row-selection binding and selects a local row key.
@@ -220,7 +253,7 @@ func (r *tableRow[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 }
 
 func (r *tableRow[T, K]) chosen() bool {
-	return r.table.selected != nil && r.table.selected.Get() == r.key
+	return (r.table.selectedRows != nil && r.table.selectedRows.Get()[r.key]) || (r.table.selected != nil && r.table.selected.Get() == r.key)
 }
 
 // Describe implements ggui.Describer: a row reports whether it is the

@@ -84,7 +84,7 @@ func (r *clientRender) render() error {
 			case "edit":
 				m.Tab.Set(0)
 				m.browse()
-				m.Selected.Set(1)
+				m.selectRow(1, true)
 				m.edit()
 			case "insert":
 				m.Editing.Set(false)

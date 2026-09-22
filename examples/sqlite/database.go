@@ -36,11 +36,12 @@ type column struct {
 	Default    sql.NullString
 }
 type tableData struct {
-	Object    object
-	Columns   []column
-	Result    result
-	Keys      []string
-	KeyValues [][]any
+	Total, Offset int
+	Object        object
+	Columns       []column
+	Result        result
+	Keys          []string
+	KeyValues     [][]any
 }
 
 func quote(s string) string { return `"` + strings.ReplaceAll(s, `"`, `""`) + `"` }
@@ -116,6 +117,10 @@ func query(ctx context.Context, db querier, statement string, args ...any) (resu
 // past the limit are stepped through rather than left unread, which is
 // what a statement with RETURNING needs to complete its writes.
 func scanRows(rows *sql.Rows, drain bool) (result, error) {
+	return scanRowsLimit(rows, drain, rowLimit)
+}
+
+func scanRowsLimit(rows *sql.Rows, drain bool, limit int) (result, error) {
 	var out result
 	fail := func(err error) (result, error) { rows.Close(); return result{}, err }
 	columns, err := rows.Columns()
@@ -124,7 +129,7 @@ func scanRows(rows *sql.Rows, drain bool) (result, error) {
 	}
 	out.Columns = columns
 	for rows.Next() {
-		if len(out.Rows) == rowLimit {
+		if len(out.Rows) == limit {
 			out.Limited = true
 			if drain {
 				continue
@@ -152,6 +157,7 @@ func scanRows(rows *sql.Rows, drain bool) (result, error) {
 }
 
 type browseOptions struct {
+	PageSize     int
 	Offset       int
 	Filter, Sort string
 	Desc         bool
@@ -190,6 +196,22 @@ func loadPage(ctx context.Context, db *sql.DB, o object, opts browseOptions) (ta
 			suffix = " WHERE (" + strings.Join(terms, " OR ") + ")"
 		}
 	}
+	size := opts.PageSize
+	if size <= 0 {
+		size = rowLimit
+	}
+	size = min(size, rowLimit)
+	if err = db.QueryRowContext(ctx, "SELECT count(*) FROM "+quote(o.Name)+suffix, params...).Scan(&t.Total); err != nil {
+		return t, err
+	}
+	t.Offset = min(max(0, opts.Offset), max(0, (t.Total-1)/size)*size)
+	pageQuery := func(statement string) (result, error) {
+		rows, err := db.QueryContext(ctx, statement, params...)
+		if err != nil {
+			return result{}, err
+		}
+		return scanRowsLimit(rows, false, size)
+	}
 	order := func(keys []string) string {
 		var terms []string
 		for _, c := range t.Columns {
@@ -217,12 +239,12 @@ func loadPage(ctx context.Context, db *sql.DB, o object, opts browseOptions) (ta
 		return " ORDER BY " + strings.Join(terms, ",")
 	}
 	tail := func(keys []string) string {
-		return suffix + order(keys) + fmt.Sprintf(" LIMIT %d OFFSET %d", rowLimit+1, max(0, opts.Offset))
+		return suffix + order(keys) + fmt.Sprintf(" LIMIT %d OFFSET %d", size+1, t.Offset)
 	}
 	// Prefer an unshadowed rowid; WITHOUT ROWID tables fall back to their primary key.
 	if o.Kind == "table" {
 		if alias := rowidAlias(t.Columns); alias != "" {
-			r, e := query(ctx, db, "SELECT "+alias+", * FROM "+quote(o.Name)+tail([]string{alias}), params...)
+			r, e := pageQuery("SELECT " + alias + ", * FROM " + quote(o.Name) + tail([]string{alias}))
 			if e == nil {
 				t.Keys = []string{alias}
 				for i := range r.Rows {
@@ -240,7 +262,7 @@ func loadPage(ctx context.Context, db *sql.DB, o object, opts browseOptions) (ta
 			}
 		}
 	}
-	t.Result, err = query(ctx, db, "SELECT * FROM "+quote(o.Name)+tail(t.Keys), params...)
+	t.Result, err = pageQuery("SELECT * FROM " + quote(o.Name) + tail(t.Keys))
 	for _, r := range t.Result.Rows {
 		var key []any
 		for _, name := range t.Keys {
