@@ -7,6 +7,8 @@ import (
 	"slices"
 
 	"github.com/hajimehoshi/ebiten/v2"
+
+	"github.com/ironpark/ggui/inspect"
 )
 
 type inspectVisibility struct {
@@ -36,7 +38,7 @@ type inspectPanelState struct {
 	dock                                                               InspectorDock
 	tab                                                                inspectTab
 	selected, total, shown, matches                                    int
-	box                                                                inspectBox
+	box                                                                inspect.Box
 }
 
 // Copy displayed values separately from widget identities: a widget can
@@ -46,7 +48,7 @@ type inspectPanelState struct {
 type inspectPanelSnapshot struct {
 	state        inspectPanelState
 	rows, crumbs []inspectPanelRow
-	fields       [2][]inspectField // details pane, layout column
+	fields       [2][]inspect.Field // details pane, layout column
 }
 
 func (a inspectPanelSnapshot) equal(b inspectPanelSnapshot) bool {
@@ -64,13 +66,13 @@ func (a inspectPanelSnapshot) equal(b inspectPanelSnapshot) bool {
 // panelSnapshot describes the panel as the last paintPanel laid it out,
 // reusing buf's storage. Hover is keyed by the row and chip under the
 // pointer, so moving within one row does not repaint the panel.
-func (in *inspector) panelSnapshot(dst *Canvas, shown []int, sel int, buf inspectPanelSnapshot) inspectPanelSnapshot {
+func (in *inspector) panelSnapshot(dst *Canvas, fr *inspect.Frame, shown []int, sel int, buf inspectPanelSnapshot) inspectPanelSnapshot {
 	s := inspectPanelSnapshot{rows: buf.rows[:0], crumbs: buf.crumbs[:0]}
 	s.state = inspectPanelState{
 		panel: in.panel, tree: in.tree, layout: in.layout, scale: dst.Scale(), split: in.split, scroll: in.scroll, detailScroll: in.detailScroll, layoutScroll: in.layoutScroll,
 		hoverRow: -1, hoverChip: -1, dark: luminance(Untrack(theme.Get).Bg) < .5,
 		pinned: in.pinned, picking: in.picking, copied: in.copied, filterFocus: in.filterFocus, selectFilter: in.selectFilter, outlines: in.outlines,
-		filter: in.filter, dock: in.dock, tab: in.tab, selected: sel, total: len(dst.frameTrace()), shown: len(shown), matches: in.matches,
+		filter: in.filter, dock: in.dock, tab: in.tab, selected: sel, total: len(fr.Nodes), shown: len(shown), matches: in.matches,
 	}
 	if p, ok := dst.Pointer(); ok && in.panel.Contains(p) {
 		s.state.hoverChip = slices.IndexFunc(in.chips, func(c inspectChip) bool { return c.rect.Contains(p) })
@@ -79,22 +81,22 @@ func (in *inspector) panelSnapshot(dst *Canvas, shown []int, sel int, buf inspec
 		}
 	}
 	row := func(i int) inspectPanelRow {
-		e := &dst.frameTrace()[i]
-		return inspectPanelRow{key: keyOf(e), label: inspectLabel(e), kind: inspectKind(e), index: i, folded: in.folded(e), children: hasChildren(dst.frameTrace(), i)}
+		e := fr.Describe(i)
+		return inspectPanelRow{key: keyOf(e), label: e.Label, kind: fr.Badge(i), index: i, folded: in.folded(e), children: inspect.HasChildren(fr.Nodes, i)}
 	}
 	first, end := inspectRowRange(len(shown), in.scroll, in.tree.Size.H)
 	for _, i := range shown[first:end] {
 		s.rows = append(s.rows, row(i))
 	}
 	if sel >= 0 {
-		s.state.box = inspectedBox(dst.frameTrace(), sel)
-		for _, i := range ancestors(dst.frameTrace(), sel) {
+		s.state.box = fr.BoxOf(sel)
+		for _, i := range inspect.Ancestors(fr.Nodes, sel) {
 			s.crumbs = append(s.crumbs, row(i))
 		}
 		s.crumbs = append(s.crumbs, row(sel))
-		s.fields[0] = inspectDetails(in.detailTab(), dst, sel)
+		s.fields[0] = fr.Details(in.detailTab(), sel)
 		if !in.layout.Empty() {
-			s.fields[1] = inspectDetails(inspectTabLayout, dst, sel)
+			s.fields[1] = fr.Details(inspect.Layout, sel)
 		}
 	}
 	return s

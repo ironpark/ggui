@@ -4,15 +4,65 @@ package ggui
 
 import (
 	"fmt"
+	"image"
 	"image/color"
 	"math"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	"golang.org/x/image/font/gofont/gomono"
+
+	"github.com/ironpark/ggui/inspect"
 )
+
+// Every place the inspector reaches past ggui's public API to draw itself.
+//
+// It cannot draw the way a widget does: App.Draw leaves frameState.tracing
+// on while the inspector paints, and Canvas.Inert keeps the frame's trace
+// rather than detaching it, so a label painted through dst.Paint(Text(...))
+// would be appended to the trace the inspector is reading back mid-paint.
+// An overlay has to draw imperatively, and of that ggui exposes shapes and
+// paths but no text: no *Font-to-text.Face, no measurement, no draw.
+//
+// Collecting the reaches here keeps the rest of the inspector on public
+// calls, and leaves one file to consult if the panel ever moves into a
+// package of its own. What it reads is already public: the inspect.Frame
+// that App.OnInspect hands out, built in inspector_frame.go.
+
+var inspectFontOnce sync.Once
+var inspectFont *Font
+
+// inspectorFace is the inspector's own monospaced face, sized in physical
+// pixels. It falls back to ggui's default font if gomono fails to load.
+func inspectorFace(dst *Canvas) text.Face {
+	inspectFontOnce.Do(func() { inspectFont, _ = LoadFont(gomono.TTF) })
+	if inspectFont == nil {
+		return fallbackFont().face(12 * dst.Scale())
+	}
+	return inspectFont.face(12 * dst.Scale())
+}
+
+// textWidth measures s in logical pixels.
+func textWidth(dst *Canvas, face text.Face, s string) float64 { return dst.dp(lineWidth(s, face)) }
+
+// drawLine draws one unwrapped line with its top-left at the logical (x, y).
+func drawLine(dst *Canvas, face text.Face, s string, x, y float64, col color.Color) {
+	if dst == nil || dst.Image == nil {
+		return
+	}
+	op := &text.DrawOptions{}
+	op.ColorScale.ScaleWithColor(col)
+	op.GeoM.Translate(dst.px(x), dst.px(y))
+	drawText(dst.Image, s, face, op)
+}
+
+// panelBounds is r in the physical pixels the panel's cached image is
+// allocated in.
+func panelBounds(dst *Canvas, r Rect) image.Rectangle { return dst.physical(r) }
 
 func fitText(dst *Canvas, face text.Face, s string, width float64) string {
 	s = strings.ReplaceAll(strings.ReplaceAll(s, "\n", " "), "\t", " ")
@@ -87,26 +137,25 @@ func (in *inspector) bounds(size Size) {
 		in.edge = Rct(Pt(in.panel.Origin.X-3, 0), Sz(6, size.H))
 	}
 }
-func (in *inspector) paint(dst *Canvas) {
+func (in *inspector) paint(dst *Canvas, fr *inspect.Frame) {
 	if dst.Size().W <= 0 || dst.Size().H <= 0 {
 		in.panel = Rect{}
 		return
 	}
 	in.bounds(dst.Size())
-	in.lastTrace = dst.frameTrace()
-	in.copySource = dst
+	in.frame = fr
 	pal, face := inspectColors(), inspectorFace(dst)
-	sel, shown := in.selection(dst)
+	sel, shown := in.selection(dst, fr)
 	// FPS and status hints remain live even when the panel image is reused.
 	defer in.paintStatus(dst, face, pal, sel)
 	if in.outlines {
-		for _, e := range dst.frameTrace() {
-			r := e.rect
-			if e.clipped {
-				r = r.Intersect(e.clip)
+		for _, e := range fr.Nodes {
+			r := e.Rect
+			if e.Clipped {
+				r = r.Intersect(e.Clip)
 			}
 			if !r.Empty() {
-				dst.StrokeRoundRect(r, 0, 1, withAlpha(inspectDepth[e.depth%len(inspectDepth)], 100))
+				dst.StrokeRoundRect(r, 0, 1, withAlpha(inspectDepth[e.Depth%len(inspectDepth)], 100))
 			}
 		}
 	}
@@ -116,7 +165,7 @@ func (in *inspector) paint(dst *Canvas) {
 	if dst.Image != nil {
 		// The snapshot is taken against last frame's layout; paintPanel may
 		// clamp or reveal the scroll, in which case it is taken again.
-		snapshot := in.panelSnapshot(dst, shown, sel, in.cache.spare)
+		snapshot := in.panelSnapshot(dst, fr, shown, sel, in.cache.spare)
 		if in.cache.image != nil && in.cache.snapshot.equal(snapshot) && !in.reveal {
 			in.cache.spare = snapshot
 			in.cache.draw(dst)
@@ -134,7 +183,7 @@ func (in *inspector) paint(dst *Canvas) {
 			before := in.scroll
 			in.paintPanel(&cached, face, pal, sel, shown)
 			if in.scroll != before || snapshot.state.tree != in.tree || snapshot.state.layout != in.layout {
-				snapshot = in.panelSnapshot(dst, shown, sel, snapshot)
+				snapshot = in.panelSnapshot(dst, fr, shown, sel, snapshot)
 			}
 			in.cache.spare, in.cache.snapshot = in.cache.snapshot, snapshot
 			in.cache.draw(dst)
@@ -183,9 +232,9 @@ func (in *inspector) paintPanel(dst *Canvas, face text.Face, pal inspectPalette,
 	in.paintTree(panel, face, pal, shown, sel, pointer, hasPointer)
 	crumb := Rct(Pt(treePane.Origin.X, treePane.Origin.Y+max(treePane.Size.H-inspectCrumbH, 0)), Sz(treePane.Size.W, min(inspectCrumbH, treePane.Size.H)))
 	in.paintCrumbs(panel, crumb, face, pal, sel)
-	in.paintDetail(panel, dst, face, pal, sel)
+	in.paintDetail(panel, face, pal, sel)
 	if !in.layout.Empty() {
-		in.paintLayout(panel, dst, face, pal, sel)
+		in.paintLayout(panel, face, pal, sel)
 	}
 	if in.sideBySide() {
 		panel.FillRect(Rct(Pt(in.divider.Origin.X+2, body.Origin.Y), Sz(1, body.Size.H)), pal.edge)
@@ -209,7 +258,7 @@ func (in *inspector) paintToolbar(dst *Canvas, face text.Face, pal inspectPalett
 	dst.FillRect(Rct(Pt(x+32, r.Origin.Y+32), Sz(textWidth(dst, face, label)+4, 2)), pal.num)
 	x = r.Origin.X + r.Size.W - 112
 	if x-(r.Origin.X+110) > 70 {
-		stats := fmt.Sprintf("%d nodes", len(in.lastTrace))
+		stats := fmt.Sprintf("%d nodes", len(in.nodes()))
 		fittedLine(dst, face, stats, r.Origin.X+120, y+6, x-r.Origin.X-125, pal.dim)
 	}
 	for _, act := range []inspectAction{inspectToggleOutlines, inspectDockRight, inspectDockBottom, inspectClose} {
@@ -307,7 +356,7 @@ func (in *inspector) paintTree(dst *Canvas, face text.Face, pal inspectPalette, 
 		if y+lh <= r.Origin.Y || y >= r.Origin.Y+r.Size.H {
 			continue
 		}
-		e := &in.lastTrace[i]
+		e := in.frame.Describe(i)
 		key := keyOf(e)
 		in.rows = append(in.rows, inspectRow{key: key, index: i, y: y, h: lh})
 		row := Rct(Pt(r.Origin.X, y), Sz(r.Size.W, lh))
@@ -319,28 +368,28 @@ func (in *inspector) paintTree(dst *Canvas, face text.Face, pal inspectPalette, 
 		} else if hasPointer && row.Contains(pointer) {
 			clip.FillRect(row, pal.hover)
 		}
-		depth := min(float64(e.depth)*inspectIndent, max(r.Size.W*.3, 0))
+		depth := min(float64(e.Depth)*inspectIndent, max(r.Size.W*.3, 0))
 		x := r.Origin.X + 8 + depth
-		for d := 0; d < e.depth && float64(d)*inspectIndent < depth; d++ {
+		for d := 0; d < e.Depth && float64(d)*inspectIndent < depth; d++ {
 			gx := r.Origin.X + 14 + float64(d)*inspectIndent
 			clip.FillRect(Rct(Pt(gx, y), Sz(1, lh)), pal.edge)
 		}
-		if hasChildren(in.lastTrace, i) {
+		if inspect.HasChildren(in.frame.Nodes, i) {
 			triangle(clip, Pt(x+5, y+lh/2), in.folded(e) && in.filter == "", dim)
 			in.chips = append(in.chips, inspectChip{rect: Rct(Pt(x-2, y), Sz(15, lh)).Intersect(r), act: inspectCollapse, key: key})
 		}
 		x += 15
 		right := r.Origin.X + r.Size.W - 12
-		dims := num(e.rect.Size.W) + " × " + num(e.rect.Size.H)
+		dims := num(e.Rect.Size.W) + " × " + num(e.Rect.Size.H)
 		if r.Size.W >= 320 {
 			dw := textWidth(dst, face, dims)
 			drawLine(clip, face, dims, right-dw, y+5, dim)
 			right -= dw + 12
 		}
-		name := fitText(dst, face, e.name, max(right-x, 0))
+		name := fitText(dst, face, e.Name, max(right-x, 0))
 		drawLine(clip, face, name, x, y+5, fg)
 		x += textWidth(dst, face, name) + 7
-		if badge := inspectKind(e); badge != "" {
+		if badge := in.frame.Badge(i); badge != "" {
 			bw := textWidth(dst, face, badge) + 10
 			if x+bw < right {
 				clip.FillRoundRect(Rct(Pt(x, y+4), Sz(bw, 15)), 3, pal.chip)
@@ -348,7 +397,7 @@ func (in *inspector) paintTree(dst *Canvas, face text.Face, pal inspectPalette, 
 				x += bw + 7
 			}
 		}
-		if label := inspectLabel(e); label != "" {
+		if label := e.Label; label != "" {
 			fittedLine(clip, face, strconv.Quote(label), x, y+5, right-x, pal.dim)
 		}
 	}
@@ -386,18 +435,19 @@ func (in *inspector) paintCrumbs(dst *Canvas, r Rect, face text.Face, pal inspec
 	if sel < 0 {
 		return
 	}
-	chain := ancestors(in.lastTrace, sel)
+	nodes := in.frame.Nodes
+	chain := inspect.Ancestors(nodes, sel)
 	slices.Reverse(chain)
 	chain = append(chain, sel)
 	total := 0.0
 	for _, i := range chain {
-		total += textWidth(dst, face, in.lastTrace[i].name) + 18
+		total += textWidth(dst, face, nodes[i].Name) + 18
 	}
 	x := r.Origin.X + 8 - min(max(total-r.Size.W+8, 0), total)
 	for n, i := range chain {
-		e := &in.lastTrace[i]
-		w := textWidth(dst, face, e.name)
-		drawLine(clip, face, e.name, x, r.Origin.Y+6, pick(i == sel, pal.fg, pal.dim))
+		e := &nodes[i]
+		w := textWidth(dst, face, e.Name)
+		drawLine(clip, face, e.Name, x, r.Origin.Y+6, pick(i == sel, pal.fg, pal.dim))
 		in.chips = append(in.chips, inspectChip{rect: Rct(Pt(x, r.Origin.Y), Sz(w, r.Size.H)).Intersect(r), act: inspectPin, key: keyOf(e)})
 		x += w + 6
 		if n < len(chain)-1 {
@@ -416,32 +466,32 @@ func (in *inspector) tabButton(dst *Canvas, face text.Face, pal inspectPalette, 
 	in.chips = append(in.chips, inspectChip{rect: r.Intersect(in.detail), act: inspectSelectTab, tab: tab})
 	return x + w
 }
-func (in *inspector) paintDetail(dst, source *Canvas, face text.Face, pal inspectPalette, sel int) {
+func (in *inspector) paintDetail(dst *Canvas, face text.Face, pal inspectPalette, sel int) {
 	r := in.detail
 	clip := dst.Clip(r)
 	clip.FillRect(Rct(r.Origin, Sz(r.Size.W, 32)), pal.field)
 	clip.FillRect(Rct(Pt(r.Origin.X, r.Origin.Y+31), Sz(r.Size.W, 1)), pal.edge)
 	x, y := r.Origin.X, r.Origin.Y
-	tabs := []inspectTab{inspectTabLayout, inspectTabComputed, inspectTabSemantics}
+	tabs := []inspect.Tab{inspect.Layout, inspect.Computed, inspect.Semantics}
 	if !in.layout.Empty() {
 		tabs = tabs[1:]
 	}
 	shownTab := in.detailTab()
 	for _, tab := range tabs {
 		label := "Layout"
-		if tab == inspectTabComputed {
+		if tab == inspect.Computed {
 			label = "Computed"
 		}
-		if tab == inspectTabSemantics {
+		if tab == inspect.Semantics {
 			label = "Accessibility"
 		}
 		if r.Size.W < 330 {
 			switch tab {
-			case inspectTabLayout:
+			case inspect.Layout:
 				label = "Box"
-			case inspectTabComputed:
+			case inspect.Computed:
 				label = "Style"
-			case inspectTabSemantics:
+			case inspect.Semantics:
 				label = "A11y"
 			}
 		}
@@ -461,44 +511,45 @@ func (in *inspector) paintDetail(dst, source *Canvas, face text.Face, pal inspec
 		fittedLine(clip, face, message, r.Origin.X+12, y+54, r.Size.W-24, pal.dim)
 		return
 	}
-	fields := inspectDetails(shownTab, source, sel)
+	nodes := in.frame.Nodes
+	fields := in.frame.Details(shownTab, sel)
 	boxH := 0.0
-	if shownTab == inspectTabLayout {
-		boxH = inspectBoxHeight(inspectedBox(source.frameTrace(), sel))
+	if shownTab == inspect.Layout {
+		boxH = inspectBoxHeight(in.frame.BoxOf(sel))
 	}
 	in.detailContent = 32 + boxH + inspectFieldsHeight(fields) + 8
 	in.detailScroll = clamp(in.detailScroll, 0, max(in.detailContent-in.detailBody.Size.H, 0))
 	content := clip.Clip(in.detailBody)
 	cy := in.detailBody.Origin.Y + 10 - in.detailScroll
-	fittedLine(content, face, source.frameTrace()[sel].name, r.Origin.X+12, cy, r.Size.W-24, pal.fg)
+	fittedLine(content, face, nodes[sel].Name, r.Origin.X+12, cy, r.Size.W-24, pal.fg)
 	cy += 24
 	if boxH > 0 {
-		in.paintBox(content, face, pal, Rct(Pt(r.Origin.X+12, cy), Sz(r.Size.W-24, boxH)), inspectedBox(source.frameTrace(), sel))
+		in.paintBox(content, face, pal, Rct(Pt(r.Origin.X+12, cy), Sz(r.Size.W-24, boxH)), in.frame.BoxOf(sel))
 		cy += boxH
 	}
 	paintInspectFields(content, face, pal, Rct(Pt(r.Origin.X, cy), Sz(r.Size.W, inspectFieldsHeight(fields))), fields)
 	in.detailThumb = inspectScrollbar(clip, in.detailBody, in.detailContent, in.detailScroll, pal)
 }
-func inspectFieldsHeight(fields []inspectField) float64 {
+func inspectFieldsHeight(fields []inspect.Field) float64 {
 	h := 0.0
 	for _, f := range fields {
-		h += pick(f.value == "", 28.0, 23.0)
+		h += pick(f.Value == "", 28.0, 23.0)
 	}
 	return h
 }
-func paintInspectFields(dst *Canvas, face text.Face, pal inspectPalette, r Rect, fields []inspectField) {
+func paintInspectFields(dst *Canvas, face text.Face, pal inspectPalette, r Rect, fields []inspect.Field) {
 	y := r.Origin.Y
 	kw := min(112.0, r.Size.W*.42)
 	for _, f := range fields {
-		if f.value == "" {
+		if f.Value == "" {
 			dst.FillRect(Rct(Pt(r.Origin.X, y), Sz(r.Size.W, 25)), pal.field)
-			fittedLine(dst, face, f.key, r.Origin.X+12, y+6, r.Size.W-24, pal.dim)
+			fittedLine(dst, face, f.Key, r.Origin.X+12, y+6, r.Size.W-24, pal.dim)
 			y += 28
 			continue
 		}
-		fittedLine(dst, face, f.key, r.Origin.X+12, y+4, kw-15, pal.key)
+		fittedLine(dst, face, f.Key, r.Origin.X+12, y+4, kw-15, pal.key)
 		vx := r.Origin.X + kw + 8
-		value := f.value
+		value := f.Value
 		if strings.HasPrefix(value, "#") && (len(value) == 7 || len(value) == 9) {
 			if rgba, err := strconv.ParseUint(value[1:], 16, 32); err == nil {
 				var c color.NRGBA
@@ -512,30 +563,30 @@ func paintInspectFields(dst *Canvas, face text.Face, pal inspectPalette, r Rect,
 				vx += 17
 			}
 		}
-		fittedLine(dst, face, value, vx, y+4, r.Origin.X+r.Size.W-vx-12, pick(f.number, pal.num, pal.fg))
+		fittedLine(dst, face, value, vx, y+4, r.Origin.X+r.Size.W-vx-12, pick(f.Number, pal.num, pal.fg))
 		y += 23
 	}
 }
-func inspectBoxHeight(box inspectBox) float64 {
-	if box.valid {
+func inspectBoxHeight(box inspect.Box) float64 {
+	if box.Valid {
 		return 190
 	}
 	return 92
 }
-func (in *inspector) paintBox(dst *Canvas, face text.Face, pal inspectPalette, r Rect, box inspectBox) {
+func (in *inspector) paintBox(dst *Canvas, face text.Face, pal inspectPalette, r Rect, box inspect.Box) {
 	if r.Size.W < 60 {
 		return
 	}
 	label := "CONTENT BOUNDS"
-	if box.valid {
+	if box.Valid {
 		label = "BOX MODEL"
 	}
 	drawLine(dst, face, label, r.Origin.X, r.Origin.Y, pal.dim)
-	outer := Rct(Pt(r.Origin.X, r.Origin.Y+24), Sz(r.Size.W, pick(box.valid, 132.0, 44.0)))
-	if !box.valid {
+	outer := Rct(Pt(r.Origin.X, r.Origin.Y+24), Sz(r.Size.W, pick(box.Valid, 132.0, 44.0)))
+	if !box.Valid {
 		dst.FillRect(outer, pal.content)
 		dst.StrokeRoundRect(outer, 0, 1, pal.edge)
-		centerText(dst, face, num(box.content.W)+" × "+num(box.content.H), outer, pal.fg)
+		centerText(dst, face, num(box.Content.W)+" × "+num(box.Content.H), outer, pal.fg)
 		return
 	}
 	dst.FillRect(outer, pal.border)
@@ -547,20 +598,20 @@ func (in *inspector) paintBox(dst *Canvas, face text.Face, pal inspectPalette, r
 	dst.FillRect(content, pal.content)
 	dst.StrokeRoundRect(content, 0, 1, withAlpha(pal.dim, 100))
 	drawLine(dst, face, "border", outer.Origin.X+5, outer.Origin.Y+3, pal.fg)
-	centerText(dst, face, num(box.border), Rct(Pt(outer.Origin.X+outer.Size.W*.5-10, outer.Origin.Y), Sz(20, 17)), pal.fg)
+	centerText(dst, face, num(box.Border), Rct(Pt(outer.Origin.X+outer.Size.W*.5-10, outer.Origin.Y), Sz(20, 17)), pal.fg)
 	drawLine(dst, face, "padding", pad.Origin.X+5, pad.Origin.Y+3, pal.fg)
-	centerText(dst, face, num(box.padding.Top), Rct(Pt(content.Origin.X, pad.Origin.Y+13), Sz(content.Size.W, 15)), pal.fg)
-	centerText(dst, face, num(box.padding.Bottom), Rct(Pt(content.Origin.X, content.Origin.Y+content.Size.H), Sz(content.Size.W, 28)), pal.fg)
-	centerText(dst, face, num(box.padding.Left), Rct(Pt(pad.Origin.X, content.Origin.Y), Sz(32, content.Size.H)), pal.fg)
-	centerText(dst, face, num(box.padding.Right), Rct(Pt(content.Origin.X+content.Size.W, content.Origin.Y), Sz(32, content.Size.H)), pal.fg)
-	centerText(dst, face, num(box.content.W)+" × "+num(box.content.H), content, pal.fg)
+	centerText(dst, face, num(box.Padding.Top), Rct(Pt(content.Origin.X, pad.Origin.Y+13), Sz(content.Size.W, 15)), pal.fg)
+	centerText(dst, face, num(box.Padding.Bottom), Rct(Pt(content.Origin.X, content.Origin.Y+content.Size.H), Sz(content.Size.W, 28)), pal.fg)
+	centerText(dst, face, num(box.Padding.Left), Rct(Pt(pad.Origin.X, content.Origin.Y), Sz(32, content.Size.H)), pal.fg)
+	centerText(dst, face, num(box.Padding.Right), Rct(Pt(content.Origin.X+content.Size.W, content.Origin.Y), Sz(32, content.Size.H)), pal.fg)
+	centerText(dst, face, num(box.Content.W)+" × "+num(box.Content.H), content, pal.fg)
 	fittedLine(dst, face, "Border paints inside the bounds", r.Origin.X, r.Origin.Y+165, r.Size.W, pal.dim)
 }
 func centerText(dst *Canvas, face text.Face, s string, r Rect, c color.Color) {
 	s = fitText(dst, face, s, r.Size.W-4)
 	drawLine(dst, face, s, r.Origin.X+(r.Size.W-textWidth(dst, face, s))/2, r.Origin.Y+(r.Size.H-13)/2, c)
 }
-func (in *inspector) paintLayout(dst, source *Canvas, face text.Face, pal inspectPalette, sel int) {
+func (in *inspector) paintLayout(dst *Canvas, face text.Face, pal inspectPalette, sel int) {
 	r := in.layout
 	clip := dst.Clip(r)
 	clip.FillRect(Rct(r.Origin, Sz(1, r.Size.H)), pal.edge)
@@ -569,8 +620,8 @@ func (in *inspector) paintLayout(dst, source *Canvas, face text.Face, pal inspec
 	if sel < 0 {
 		return
 	}
-	box := inspectedBox(source.frameTrace(), sel)
-	fields := inspectDetails(inspectTabLayout, source, sel)
+	box := in.frame.BoxOf(sel)
+	fields := in.frame.Details(inspect.Layout, sel)
 	body := Rct(r.Origin.Add(Pt(0.0, 32.0)), Sz(r.Size.W, max(r.Size.H-32, 0)))
 	content := inspectBoxHeight(box) + inspectFieldsHeight(fields) + 24
 	in.layoutBody, in.layoutContent = body, content
@@ -583,28 +634,28 @@ func (in *inspector) paintLayout(dst, source *Canvas, face text.Face, pal inspec
 	in.layoutThumb = inspectScrollbar(clip, body, content, in.layoutScroll, pal)
 }
 func (in *inspector) paintHighlight(dst *Canvas, face text.Face, pal inspectPalette, sel int) {
-	e := &dst.frameTrace()[sel]
-	r := e.rect
+	e := &in.frame.Nodes[sel]
+	r := e.Rect
 	clip := dst
-	if e.clipped {
-		clip = dst.Clip(e.clip)
+	if e.Clipped {
+		clip = dst.Clip(e.Clip)
 	}
-	box := inspectedBox(dst.frameTrace(), sel)
-	if box.valid {
+	box := in.frame.BoxOf(sel)
+	if box.Valid {
 		clip.FillRect(r, withAlpha(pal.padding, 100))
-		clip.FillRect(Rct(r.Origin.Add(Pt(box.padding.Left, box.padding.Top)), box.content), pal.hi)
+		clip.FillRect(Rct(r.Origin.Add(Pt(box.Padding.Left, box.Padding.Top)), box.Content), pal.hi)
 	} else {
 		clip.FillRect(r, pal.hi)
 	}
 	clip.StrokeRoundRect(r, 0, 1.5, pal.num)
 	visible := r
-	if e.clipped {
-		visible = r.Intersect(e.clip)
+	if e.Clipped {
+		visible = r.Intersect(e.Clip)
 	}
 	if visible.Empty() {
 		return
 	}
-	label := e.name + "  " + num(r.Size.W) + " × " + num(r.Size.H)
+	label := e.Name + "  " + num(r.Size.W) + " × " + num(r.Size.H)
 	w := min(textWidth(dst, face, label)+18, dst.Size().W-12)
 	x := clamp(visible.Origin.X, 6, max(dst.Size().W-w-6, 6))
 	y := max(6.0, visible.Origin.Y-29)

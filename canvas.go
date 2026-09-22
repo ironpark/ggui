@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"github.com/ironpark/ggui/inspect"
 	"image"
 	"image/color"
 	"math"
@@ -46,18 +47,19 @@ type Canvas struct {
 // Clip chain reaches the same one through root, so a field added here is
 // shared by construction and needs no clearing when a child Canvas is made.
 type frameState struct {
-	logical     Size // the window in logical pixels, for Size
-	pointer     Point
-	hasPointer  bool
-	focusBounds Rect // focused input region at the start of this paint
-	overlays    []overlay
-	trace       []traceEntry // every Paint call, when the inspector is on
-	tracing     bool
-	depth       int
-	traceParent int // index plus one of the widget currently painting
-	traceRoots  int
-	keeps       map[retainKey]any // Retain this frame
-	prevKeeps   map[retainKey]any // Retain last frame, read by Retained
+	logical      Size // the window in logical pixels, for Size
+	pointer      Point
+	hasPointer   bool
+	focusBounds  Rect // focused input region at the start of this paint
+	overlays     []overlay
+	trace        []inspect.Node // every Paint call, when the inspector is on
+	traceWidgets []Widget       // the widget behind each trace node
+	tracing      bool
+	depth        int
+	traceParent  int // index plus one of the widget currently painting
+	traceRoots   int
+	keeps        map[retainKey]any // Retain this frame
+	prevKeeps    map[retainKey]any // Retain last frame, read by Retained
 
 	// Where last frame's regions are, for adopt. Built on the frame's
 	// first handoff and not at all in a frame with none, which is most
@@ -198,25 +200,8 @@ func (c *Canvas) Inert() *Canvas {
 
 // frameTrace is every widget painted this frame, in paint order; the
 // inspector reads it. frameSem is the same for the accessibility tree.
-func (c *Canvas) frameTrace() []traceEntry { return c.fs().trace }
-
-func (c *Canvas) frameSem() []semNode { return c.fs().sem }
-
-// traceEntry is one widget's Rect as painted, for the inspector.
-type traceEntry struct {
-	rect     Rect
-	depth    int
-	name     string
-	widget   Widget
-	id       any
-	path     string
-	children int
-	clip     Rect
-	clipped  bool
-}
-
-// inspectComparable keeps a widget id only when it can be compared, so a
-// traceEntry stays usable as a map key however a widget was identified.
+// inspectComparable keeps a widget id only when it can be compared, so an
+// inspect.Node stays usable as a map key however a widget was identified.
 func inspectComparable(v any) any {
 	if v != nil && reflect.ValueOf(v).Comparable() {
 		return v
@@ -250,15 +235,18 @@ func (c *Canvas) Paint(w Widget, r Rect) {
 			path := "/" + strconv.Itoa(f.traceRoots)
 			if parent > 0 {
 				p := &f.trace[parent-1]
-				path = p.path + "/" + strconv.Itoa(p.children)
-				p.children++
+				path = p.Path + "/" + strconv.Itoa(p.Children)
+				p.Children++
 			} else {
 				f.traceRoots++
 			}
-			f.trace = append(f.trace, traceEntry{
-				rect: r, depth: f.depth, name: widgetName(w), widget: w,
-				id: inspectComparable(idOf(w)), path: path, clip: c.clip, clipped: c.clipped,
-			})
+			n := inspect.Node{
+				Rect: r, Depth: f.depth, Name: widgetName(w), Kind: inspectKind(w),
+				ID: inspectComparable(idOf(w)), Instance: inspectComparable(w),
+				Path: path, Clip: c.clip, Clipped: c.clipped,
+			}
+			f.trace = append(f.trace, n)
+			f.traceWidgets = append(f.traceWidgets, w)
 			f.traceParent = len(f.trace)
 			f.depth++
 			defer func() { f.depth--; f.traceParent = parent }()

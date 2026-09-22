@@ -355,7 +355,9 @@ func (a *App) Draw(screen *ebiten.Image) {
 	logical := Sz(a.canvas.dp(float64(b.Dx())), a.canvas.dp(float64(b.Dy())))
 	f := a.canvas.fs()
 	clear(f.trace)
-	f.tracing, f.trace = a.inspect, f.trace[:0]
+	clear(f.traceWidgets)
+	f.tracing = a.inspect || a.insp.observed()
+	f.trace, f.traceWidgets = f.trace[:0], f.traceWidgets[:0]
 	f.logical = logical
 	f.focusBounds = Rect{}
 	if a.input.focused != nil {
@@ -380,8 +382,8 @@ func (a *App) Draw(screen *ebiten.Image) {
 	a.input.applyFocusRequest(&a.canvas)
 	a.publishSemantics(&a.canvas, a.input.focused)
 	a.ax.Publish(a.semantics(), a.takeAnnouncements())
-	if a.inspect {
-		a.insp.paint(&a.canvas)
+	if f.tracing {
+		a.insp.finish(&a.canvas, a.semantics(), a.inspect)
 	} else {
 		a.insp.hide() // nothing to intercept while it is off
 	}

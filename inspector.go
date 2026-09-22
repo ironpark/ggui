@@ -6,6 +6,8 @@ import (
 	"image/color"
 	"slices"
 	"strings"
+
+	"github.com/ironpark/ggui/inspect"
 )
 
 // inspectorEnabled reports whether this build contains the inspector.
@@ -22,12 +24,12 @@ type inspectKey struct {
 	stable bool
 }
 
-func keyOf(e *traceEntry) inspectKey {
-	id := e.id
+func keyOf(e *inspect.Node) inspectKey {
+	id := e.ID
 	if id == nil {
-		id = inspectComparable(e.widget)
+		id = e.Instance
 	}
-	return inspectKey{name: e.name, depth: e.depth, rect: e.rect, id: id, path: e.path, stable: e.id != nil}
+	return inspectKey{name: e.Name, depth: e.Depth, rect: e.Rect, id: id, path: e.Path, stable: e.ID != nil}
 }
 
 // Folding follows identity even when the widget moves or siblings reorder.
@@ -63,12 +65,12 @@ const (
 
 // inspectTab is a details pane. The zero value is the Layout tab, so a fresh
 // inspector needs no special case to show it.
-type inspectTab uint8
+type inspectTab = inspect.Tab
 
 const (
-	inspectTabLayout inspectTab = iota
-	inspectTabComputed
-	inspectTabSemantics
+	inspectTabLayout    = inspect.Layout
+	inspectTabComputed  = inspect.Computed
+	inspectTabSemantics = inspect.Semantics
 )
 
 // inspectMoveEnd is a Home/End step: further than any tree can be long,
@@ -115,8 +117,8 @@ type inspector struct {
 	selectFilter                       bool
 	tab                                inspectTab
 	closed                             bool
-	copySource                         *Canvas // borrowed, like lastTrace, until the next paint
 	copied                             bool
+	sinks                              []func(*inspect.Frame) // OnInspect handlers, kept across sessions
 
 	width, height, split                                   float64
 	drag                                                   inspectDrag
@@ -131,7 +133,7 @@ type inspector struct {
 	treeTop                                                float64
 	rows                                                   []inspectRow
 	chips                                                  []inspectChip
-	lastTrace                                              []traceEntry // borrowed until the next paint; input runs before paint
+	frame                                                  *inspect.Frame // borrowed until the next paint; input runs before paint
 	visibleRows, filterParents, filterStack                []int
 	filterKeep                                             []bool
 }
@@ -199,10 +201,31 @@ func (in *inspector) hide() { in.panel = Rect{} }
 
 func (in *inspector) reset() {
 	in.cache.release()
-	*in = inspector{dock: in.dock, outlines: in.outlines, width: in.width, height: in.height, split: in.split, tab: in.tab}
+	*in = inspector{dock: in.dock, outlines: in.outlines, width: in.width, height: in.height, split: in.split, tab: in.tab, sinks: in.sinks}
 }
 
-func (in *inspector) find(tr []traceEntry) int {
+// observe adds an OnInspect handler.
+func (in *inspector) observe(fn func(*inspect.Frame)) { in.sinks = append(in.sinks, fn) }
+
+// observed reports whether anyone wants frames while the panel is closed.
+func (in *inspector) observed() bool { return len(in.sinks) > 0 }
+
+// finish ends a traced frame: the panel paints from it when it is open,
+// and every OnInspect handler receives it.
+func (in *inspector) finish(c *Canvas, sem *SemTree, open bool) {
+	fr := inspectFrame(c, sem)
+	if open {
+		in.paint(c, fr)
+	} else {
+		in.hide()
+	}
+	for _, fn := range in.sinks {
+		fn(fr)
+	}
+}
+
+func (in *inspector) find(fr *inspect.Frame) int {
+	tr := fr.Nodes
 	if in.sel.id != nil {
 		for i := range tr {
 			k := keyOf(&tr[i])
@@ -216,7 +239,7 @@ func (in *inspector) find(tr []traceEntry) int {
 	}
 	if in.sel.path != "" {
 		for i := range tr {
-			if tr[i].path == in.sel.path && tr[i].name == in.sel.name {
+			if tr[i].Path == in.sel.path && tr[i].Name == in.sel.name {
 				return i
 			}
 		}
@@ -225,10 +248,10 @@ func (in *inspector) find(tr []traceEntry) int {
 	loose := -1
 	for i := range tr {
 		e := &tr[i]
-		if e.name != in.sel.name || e.depth != in.sel.depth {
+		if e.Name != in.sel.name || e.Depth != in.sel.depth {
 			continue
 		}
-		if e.rect == in.sel.rect {
+		if e.Rect == in.sel.rect {
 			return i
 		}
 		if loose < 0 {
@@ -238,33 +261,17 @@ func (in *inspector) find(tr []traceEntry) int {
 	return loose
 }
 
-func deepest(tr []traceEntry, p Point) int {
-	found := -1
-	for i := range tr {
-		e := &tr[i]
-		if e.rect.Contains(p) && (!e.clipped || e.clip.Contains(p)) {
-			found = i
-		}
-	}
-	return found
-}
-func hasChildren(tr []traceEntry, i int) bool { return i+1 < len(tr) && tr[i+1].depth > tr[i].depth }
-func ancestors(tr []traceEntry, i int) []int {
-	var out []int
-	need := tr[i].depth - 1
-	for j := i - 1; j >= 0 && need >= 0; j-- {
-		if tr[j].depth == need {
-			out = append(out, j)
-			need--
-		}
-	}
-	return out
-}
-func (in *inspector) folded(e *traceEntry) bool { return in.collapsed[foldKey(keyOf(e))] }
+func (in *inspector) folded(e *inspect.Node) bool { return in.collapsed[foldKey(keyOf(e))] }
 
-// inspectMatches expects a lower-cased filter.
-func inspectMatches(e *traceEntry, filter string) bool {
-	return strings.Contains(strings.ToLower(e.name+" "+inspectLabel(e)+" "+string(nodeOf(e.widget).Role)), filter)
+// num formats a measurement, as inspect.Num does.
+func num(v float64) string { return inspect.Num(v) }
+
+// nodes is the last painted frame's widgets, or none before the first paint.
+func (in *inspector) nodes() []inspect.Node {
+	if in.frame == nil {
+		return nil
+	}
+	return in.frame.Nodes
 }
 
 // inspectFoldLimit bounds the collapsed map: folds of widgets that were not
@@ -272,12 +279,13 @@ func inspectMatches(e *traceEntry, filter string) bool {
 const inspectFoldLimit = 128
 
 // visible returns scratch storage valid until the next call.
-func (in *inspector) visible(tr []traceEntry) []int {
+func (in *inspector) visible(fr *inspect.Frame) []int {
+	tr := fr.Nodes
 	in.visibilityNext = in.visibilityNext[:0]
 	in.matches = 0
 	filter, folds := strings.ToLower(in.filter), 0
 	for i := range tr {
-		match := filter != "" && inspectMatches(&tr[i], filter)
+		match := filter != "" && fr.Matches(i, filter)
 		if match {
 			in.matches++
 		}
@@ -285,7 +293,7 @@ func (in *inspector) visible(tr []traceEntry) []int {
 		if folded {
 			folds++
 		}
-		in.visibilityNext = append(in.visibilityNext, inspectVisibility{tr[i].depth, folded, match})
+		in.visibilityNext = append(in.visibilityNext, inspectVisibility{tr[i].Depth, folded, match})
 	}
 	if slices.Equal(in.visibility, in.visibilityNext) && in.visibility != nil && in.visibilityFiltered == (in.filter != "") {
 		return in.visibleRows
@@ -306,7 +314,7 @@ func (in *inspector) visible(tr []traceEntry) []int {
 		stack := in.filterStack[:0]
 		defer func() { in.filterStack = stack }()
 		for i, e := range tr {
-			for len(stack) > 0 && tr[stack[len(stack)-1]].depth >= e.depth {
+			for len(stack) > 0 && tr[stack[len(stack)-1]].Depth >= e.Depth {
 				stack = stack[:len(stack)-1]
 			}
 			parents[i] = -1
@@ -331,13 +339,13 @@ func (in *inspector) visible(tr []traceEntry) []int {
 	hideBelow := -1
 	for i := range tr {
 		e := &tr[i]
-		if hideBelow >= 0 && e.depth > hideBelow {
+		if hideBelow >= 0 && e.Depth > hideBelow {
 			continue
 		}
 		hideBelow = -1
 		out = append(out, i)
-		if in.folded(e) && hasChildren(tr, i) {
-			hideBelow = e.depth
+		if in.folded(e) && inspect.HasChildren(tr, i) {
+			hideBelow = e.Depth
 		}
 	}
 	return out
@@ -345,7 +353,7 @@ func (in *inspector) visible(tr []traceEntry) []int {
 
 // pruneFolds keeps only folds of widgets in tr. Fold keys hold widget
 // instances, so a long session would otherwise pin every rebuilt widget.
-func (in *inspector) pruneFolds(tr []traceEntry) {
+func (in *inspector) pruneFolds(tr []inspect.Node) {
 	kept := make(map[inspectKey]bool, len(in.collapsed))
 	for i := range tr {
 		if k := foldKey(keyOf(&tr[i])); in.collapsed[k] {
@@ -355,55 +363,56 @@ func (in *inspector) pruneFolds(tr []traceEntry) {
 	in.collapsed = kept
 }
 
-func (in *inspector) selectEntry(tr []traceEntry, i int) {
-	if i < 0 || i >= len(tr) {
+func (in *inspector) selectEntry(fr *inspect.Frame, i int) {
+	if fr == nil || i < 0 || i >= len(fr.Nodes) {
 		return
 	}
+	tr := fr.Nodes
 	in.sel, in.pinned, in.reveal = keyOf(&tr[i]), true, true
 	in.detailScroll, in.copied = 0, false
-	for _, a := range ancestors(tr, i) {
+	for _, a := range inspect.Ancestors(tr, i) {
 		delete(in.collapsed, foldKey(keyOf(&tr[a])))
 	}
 }
-func (in *inspector) selection(dst *Canvas) (int, []int) {
-	tr := dst.frameTrace()
-	sel := in.find(tr)
+func (in *inspector) selection(dst *Canvas, fr *inspect.Frame) (int, []int) {
+	tr := fr.Nodes
+	sel := in.find(fr)
 	pointer, hasPointer := dst.Pointer()
 	if !in.pinned && hasPointer && !in.panel.Contains(pointer) {
-		if hit := deepest(tr, pointer); hit >= 0 {
+		if hit := inspect.Deepest(tr, pointer); hit >= 0 {
 			sel = hit
 		}
 	}
 	if sel >= 0 && !in.pinned && in.filter == "" {
-		for _, a := range ancestors(tr, sel) {
+		for _, a := range inspect.Ancestors(tr, sel) {
 			delete(in.collapsed, foldKey(keyOf(&tr[a])))
 		}
 	}
 	if in.branch != 0 && sel >= 0 {
 		if in.branch < 0 {
-			if hasChildren(tr, sel) && !in.folded(&tr[sel]) {
+			if inspect.HasChildren(tr, sel) && !in.folded(&tr[sel]) {
 				in.act(inspectChip{act: inspectCollapse, key: keyOf(&tr[sel])})
-			} else if a := ancestors(tr, sel); len(a) > 0 {
+			} else if a := inspect.Ancestors(tr, sel); len(a) > 0 {
 				sel = a[0]
 			}
-		} else if hasChildren(tr, sel) {
+		} else if inspect.HasChildren(tr, sel) {
 			if in.folded(&tr[sel]) {
 				delete(in.collapsed, foldKey(keyOf(&tr[sel])))
 			} else {
 				sel++
 			}
 		}
-		in.selectEntry(tr, sel)
+		in.selectEntry(fr, sel)
 	}
 	in.branch = 0
-	shown := in.visible(tr)
+	shown := in.visible(fr)
 	if in.move != 0 && len(shown) > 0 {
 		at := slices.Index(shown, sel)
 		if at < 0 {
 			at = pick(in.move < 0, len(shown), -1)
 		}
 		sel = shown[clamp(at+in.move, 0, len(shown)-1)]
-		in.selectEntry(tr, sel)
+		in.selectEntry(fr, sel)
 	}
 	in.move = 0
 	if sel >= 0 {

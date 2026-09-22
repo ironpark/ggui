@@ -3,9 +3,12 @@
 package ggui
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/ironpark/ggui/inspect"
 )
 
 func (in *inspector) input(f frameInput) bool {
@@ -46,7 +49,7 @@ func (in *inspector) input(f frameInput) bool {
 	}
 	// Picker clicks belong to devtools, including the release after pinning.
 	if in.picking && !over && leftDown {
-		in.selectEntry(in.lastTrace, deepest(in.lastTrace, f.pos))
+		in.selectEntry(in.frame, inspect.Deepest(in.nodes(), f.pos))
 		in.picking = false
 		in.capture = true
 		in.focus = true
@@ -84,8 +87,8 @@ func (in *inspector) input(f frameInput) bool {
 			} else if in.tree.Contains(f.pos) {
 				for _, r := range in.rows {
 					if f.pos.Y >= r.y && f.pos.Y < r.y+r.h {
-						in.selectEntry(in.lastTrace, r.index)
-						if len(in.lastTrace) == 0 {
+						in.selectEntry(in.frame, r.index)
+						if len(in.nodes()) == 0 {
 							in.sel, in.pinned = r.key, true
 						}
 						break
@@ -220,6 +223,34 @@ func (in *inspector) typeFilter(s string) {
 	in.filter = string(runes[:min(len(runes), 256)])
 	in.scroll = 0
 }
+
+// Input runs before the next paint, so the frame held is the most recently
+// painted one. Serialize only when requested, resolving selection again so
+// a click followed by Copy does not copy the previous element.
+func (in *inspector) copySelection() {
+	fr := in.frame
+	if fr == nil {
+		return
+	}
+	sel := in.find(fr)
+	if sel < 0 {
+		return
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\n", fr.Nodes[sel].Name)
+	for _, tab := range []inspect.Tab{inspect.Layout, inspect.Computed, inspect.Semantics} {
+		for _, f := range fr.Details(tab, sel) {
+			if f.Value == "" {
+				fmt.Fprintf(&b, "\n%s\n", f.Key)
+			} else {
+				fmt.Fprintf(&b, "%s: %s\n", f.Key, f.Value)
+			}
+		}
+	}
+	currentClipboard().Write(b.String())
+	in.copied = true
+}
+
 func (in *inspector) act(c inspectChip) {
 	switch c.act {
 	case inspectDockRight:

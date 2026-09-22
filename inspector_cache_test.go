@@ -34,7 +34,7 @@ func TestInspectorVisibleCacheTracksFoldingAndFiltering(t *testing.T) {
 	if next := in.visible(tr); &first[0] != &next[0] {
 		t.Fatal("unchanged visible list was rebuilt")
 	}
-	in.collapsed = map[inspectKey]bool{foldKey(keyOf(&tr[0])): true}
+	in.collapsed = map[inspectKey]bool{foldKey(keyOf(&tr.Nodes[0])): true}
 	if got := in.visible(tr); !slices.Equal(got, []int{0}) {
 		t.Fatal(got)
 	}
@@ -42,7 +42,7 @@ func TestInspectorVisibleCacheTracksFoldingAndFiltering(t *testing.T) {
 	if got := in.visible(tr); !slices.Equal(got, []int{0, 1}) {
 		t.Fatal(got)
 	}
-	tr[1].name = "Gone"
+	tr.Nodes[1].Name = "Gone"
 	if got := in.visible(tr); len(got) != 0 {
 		t.Fatal("stale search result", got)
 	}
@@ -76,9 +76,9 @@ func TestInspectorPanelSnapshotTracksLiveValues(t *testing.T) {
 	in := inspector{}
 	in.bounds(c.Size())
 	in.tree = Rct(Point{}, Sz(300, 100))
-	shown := in.visible(c.fs().trace)
-	original := in.panelSnapshot(c, shown, 0, inspectPanelSnapshot{})
-	if !original.equal(in.panelSnapshot(c, shown, 0, inspectPanelSnapshot{})) {
+	shown := in.visible(inspectFrameOf(c))
+	original := in.panelSnapshot(c, inspectFrameOf(c), shown, 0, inspectPanelSnapshot{})
+	if !original.equal(in.panelSnapshot(c, inspectFrameOf(c), shown, 0, inspectPanelSnapshot{})) {
 		t.Fatal("identical values differ")
 	}
 	tests := []struct {
@@ -93,45 +93,45 @@ func TestInspectorPanelSnapshotTracksLiveValues(t *testing.T) {
 		{"tab", func() { in.tab = inspectTabComputed }, func() { in.tab = 0 }},
 		{"focus", func() { in.filterFocus = true }, func() { in.filterFocus = false }},
 		{"scale", func() { c.scale = 2 }, func() { c.scale = 1 }},
-		{"geometry", func() { c.fs().trace[0].rect.Size.W++ }, func() { c.fs().trace[0].rect.Size.W-- }},
+		{"geometry", func() { c.fs().trace[0].Rect.Size.W++ }, func() { c.fs().trace[0].Rect.Size.W-- }},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			before := in.panelSnapshot(c, shown, 0, inspectPanelSnapshot{})
+			before := in.panelSnapshot(c, inspectFrameOf(c), shown, 0, inspectPanelSnapshot{})
 			tc.change()
-			if before.equal(in.panelSnapshot(c, shown, 0, inspectPanelSnapshot{})) {
+			if before.equal(in.panelSnapshot(c, inspectFrameOf(c), shown, 0, inspectPanelSnapshot{})) {
 				t.Fatal("cache missed changed display")
 			}
 			tc.restore()
 		})
 	}
 	// A value only a hidden tab shows does not repaint the panel.
-	before := in.panelSnapshot(c, shown, 0, inspectPanelSnapshot{})
+	before := in.panelSnapshot(c, inspectFrameOf(c), shown, 0, inspectPanelSnapshot{})
 	box.fill = color.NRGBA{R: 123, A: 255}
-	if !before.equal(in.panelSnapshot(c, shown, 0, inspectPanelSnapshot{})) {
+	if !before.equal(in.panelSnapshot(c, inspectFrameOf(c), shown, 0, inspectPanelSnapshot{})) {
 		t.Fatal("cache missed on a value the Layout tab does not show")
 	}
 	// Pointer motion within one row keeps the panel; crossing rows does not.
 	in.panel, in.rows = Rct(Point{}, c.Size()), []inspectRow{{y: 10, h: 23}, {y: 33, h: 23}}
 	c.fs().pointer, c.fs().hasPointer = Pt(20, 12), true
-	before = in.panelSnapshot(c, shown, 0, inspectPanelSnapshot{})
+	before = in.panelSnapshot(c, inspectFrameOf(c), shown, 0, inspectPanelSnapshot{})
 	c.fs().pointer = Pt(60, 30)
-	if !before.equal(in.panelSnapshot(c, shown, 0, inspectPanelSnapshot{})) {
+	if !before.equal(in.panelSnapshot(c, inspectFrameOf(c), shown, 0, inspectPanelSnapshot{})) {
 		t.Fatal("cache missed pointer motion within a row")
 	}
 	c.fs().pointer = Pt(60, 40)
-	if before.equal(in.panelSnapshot(c, shown, 0, inspectPanelSnapshot{})) {
+	if before.equal(in.panelSnapshot(c, inspectFrameOf(c), shown, 0, inspectPanelSnapshot{})) {
 		t.Fatal("cache missed the pointer crossing to another row")
 	}
 	c.fs().hasPointer = false
 	// Semantic buffers can change in place while widget identity stays the same.
 	in.tab = inspectTabSemantics
 	c.resetSemantics()
-	c.Leaf(c.fs().trace[0].rect, Node{Role: RoleButton, Name: "before"})
-	c.fs().trace[0].widget = nil
-	before = in.panelSnapshot(c, shown, 0, inspectPanelSnapshot{})
+	c.Leaf(c.fs().trace[0].Rect, Node{Role: RoleButton, Name: "before"})
+	c.fs().traceWidgets[0] = nil
+	before = in.panelSnapshot(c, inspectFrameOf(c), shown, 0, inspectPanelSnapshot{})
 	c.fs().sem[0].node.Value = "changed"
-	if before.equal(in.panelSnapshot(c, shown, 0, inspectPanelSnapshot{})) {
+	if before.equal(in.panelSnapshot(c, inspectFrameOf(c), shown, 0, inspectPanelSnapshot{})) {
 		t.Fatal("cache missed live semantics")
 	}
 }
@@ -141,7 +141,7 @@ func TestInspectorPanelSnapshotTracksLiveValues(t *testing.T) {
 func TestInspectorWidePanelShowsLayoutColumn(t *testing.T) {
 	c := inspectorCanvas(Box(Text("hello")).Pad(4), Sz(1400, 900))
 	in := inspector{}
-	in.paint(c)
+	in.paint(c, inspectFrameOf(c))
 	if in.layout.Empty() {
 		t.Fatalf("no layout column on a %v panel", in.panel.Size)
 	}
@@ -161,12 +161,12 @@ func TestInspectorWidePanelShowsLayoutColumn(t *testing.T) {
 		t.Fatalf("%d tabs, want Computed and Accessibility", tabs)
 	}
 	in.act(inspectChip{act: inspectSelectTab, tab: inspectTabSemantics})
-	in.paint(c)
+	in.paint(c, inspectFrameOf(c))
 	if in.detailTab() != inspectTabSemantics {
 		t.Fatal("Accessibility tab did not take the details pane")
 	}
 	in.dock = InspectorRight
-	in.paint(c)
+	in.paint(c, inspectFrameOf(c))
 	if !in.layout.Empty() {
 		t.Fatal("layout column survived docking right")
 	}
@@ -176,12 +176,12 @@ func TestInspectorWidePanelShowsLayoutColumn(t *testing.T) {
 // limit, so a long session does not pin every rebuilt widget.
 func TestInspectorPrunesStaleFolds(t *testing.T) {
 	tr := trace(entry("Column", 0, 0, 0, 100, 60), entry("Text", 1, 0, 0, 100, 10))
-	in := inspector{collapsed: map[inspectKey]bool{foldKey(keyOf(&tr[0])): true}}
+	in := inspector{collapsed: map[inspectKey]bool{foldKey(keyOf(&tr.Nodes[0])): true}}
 	for i := range inspectFoldLimit + 1 {
 		in.collapsed[inspectKey{name: "Gone", path: "/9/" + strconv.Itoa(i)}] = true
 	}
 	in.visible(tr)
-	if len(in.collapsed) != 1 || !in.folded(&tr[0]) {
+	if len(in.collapsed) != 1 || !in.folded(&tr.Nodes[0]) {
 		t.Fatalf("collapsed = %d entries, want only the painted fold", len(in.collapsed))
 	}
 }
@@ -191,12 +191,12 @@ func TestInspectorCloseDropsPanelCache(t *testing.T) {
 	c.Image = ebiten.NewImage(800, 600)
 	defer c.Image.Deallocate()
 	a := &App{}
-	a.insp.paint(c)
+	a.insp.paint(c, inspectFrameOf(c))
 	if a.insp.cache.image == nil {
 		t.Fatal("panel not cached")
 	}
 	rows := a.insp.cache.snapshot.rows
-	a.insp.paint(c)
+	a.insp.paint(c, inspectFrameOf(c))
 	if len(rows) == 0 || &rows[0] != &a.insp.cache.snapshot.rows[0] {
 		t.Fatal("unchanged panel was redrawn")
 	}
