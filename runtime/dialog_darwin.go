@@ -7,7 +7,7 @@ import (
 
 	"github.com/ebitengine/purego/cstrings"
 	"github.com/ebitengine/purego/objc"
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 
 	"github.com/ironpark/ggui/internal/platform/cocoa"
 )
@@ -60,7 +60,7 @@ var sheetDone = sync.OnceValue(func() *cocoa.Block {
 
 // showDialog runs the panel on the main thread and waits for it.
 func showDialog(k dialogKind, d FileDialog) (paths []string, err error) {
-	ebiten.RunOnMainThread(func() { paths, err = runPanel(k, d) })
+	ggfx.RunOnMainThread(func() { paths, err = runPanel(k, d) })
 	return paths, err
 }
 

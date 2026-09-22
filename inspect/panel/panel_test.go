@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/inspect"
@@ -53,7 +53,7 @@ func (h *harness) frame() *inspect.Frame { h.p.Frame(); return h.fr }
 // rendered gives the probe an image to draw into.
 func (h *harness) rendered(t *testing.T, w, ht int) {
 	t.Helper()
-	img := ebiten.NewImage(w, ht)
+	img := ggfx.NewImage(w, ht)
 	t.Cleanup(img.Deallocate)
 	h.p.RenderTo(img)
 	h.p.Frame()

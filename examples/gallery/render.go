@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
@@ -44,11 +44,11 @@ func (g *galleryAudit) Update() error {
 		return g.err
 	}
 	if g.index == len(g.names)*8 {
-		return ebiten.Termination
+		return ggfx.Termination
 	}
 	return nil
 }
-func (g *galleryAudit) Draw(screen *ebiten.Image) {
+func (g *galleryAudit) Draw(screen *ggfx.Image) {
 	if g.err != nil || g.index >= len(g.names)*8 {
 		return
 	}
@@ -93,7 +93,7 @@ func (g *galleryAudit) Draw(screen *ebiten.Image) {
 		return build()
 	}, ggui.Sz(width, 1200))
 	defer app.Close()
-	img := ebiten.NewImage(width, 1200)
+	img := ggfx.NewImage(width, 1200)
 	defer img.Deallocate()
 	draw := func() {
 		img.Fill(theme.Bg)
@@ -210,9 +210,9 @@ func renderGalleryAudit(dir, only string) error {
 		return err
 	}
 
-	ebiten.SetWindowTitle("ggui existing component audit")
-	ebiten.SetWindowSize(640, 900)
-	return ebiten.RunGame(&galleryAudit{dir: dir, names: names})
+	ggfx.SetWindowTitle("ggui existing component audit")
+	ggfx.SetWindowSize(640, 900)
+	return ggfx.RunGame(&galleryAudit{dir: dir, names: names})
 }
 
 func auditControlStates() ggui.Widget {

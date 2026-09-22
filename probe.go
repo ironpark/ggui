@@ -4,7 +4,7 @@ import (
 	"io/fs"
 	"time"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/inspect"
 	"github.com/ironpark/ggui/runtime"
 )
@@ -46,7 +46,7 @@ func (p *Probe) SetOverlay(o Overlay) { p.overlay = o }
 // RenderTo draws every frame from now on into img, at one pixel per
 // logical pixel, for a test that looks at what was painted. Without it a
 // probe lays out and routes input but draws nothing.
-func (p *Probe) RenderTo(img *ebiten.Image) { p.canvas.Image = img }
+func (p *Probe) RenderTo(img *ggfx.Image) { p.canvas.Image = img }
 
 // OnInspect registers fn to receive every frame's inspect.Frame, as
 // App.OnInspect does.

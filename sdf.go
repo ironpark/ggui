@@ -6,7 +6,7 @@ import (
 	"math"
 	"sync"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 )
 
 // Rounded rectangles are drawn from a signed distance field rather than
@@ -22,30 +22,32 @@ import (
 // pixels; at zero the field is filled to its outline instead. Axis is the
 // unit vector the shape's own width runs along, so a line is this shape
 // turned to lie along it and a border is the band around one.
-const roundRectSource = `//kage:unit pixels
-package main
-var Center vec2
-var Axis vec2
-var HalfSize vec2
-var Radius float
-var Width float
-var Feather float
-var Tint vec4
-func Fragment(dst vec4, src vec2, color vec4) vec4 {
- p := src-Center
- local := vec2(dot(p,Axis),dot(p,vec2(-Axis.y,Axis.x)))
- q := abs(local)-HalfSize+vec2(Radius)
- distance := length(max(q,vec2(0)))+min(max(q.x,q.y),0)-Radius
- if Width > 0 {
-  distance = abs(distance)-Width
- }
- coverage := 1-smoothstep(-Feather,Feather,distance)
- return Tint*coverage
+const roundRectSource = `
+struct Uniforms {
+	center: vec2f,
+	axis: vec2f,
+	half_size: vec2f,
+	radius: f32,
+	width: f32,
+	feather: f32,
+	tint: vec4f,
+}
+@group(1) @binding(0) var<uniform> u: Uniforms;
+fn fragment(v: Vertex) -> vec4f {
+	let p = v.src_pos - u.center;
+	let local = vec2f(dot(p, u.axis), dot(p, vec2f(-u.axis.y, u.axis.x)));
+	let q = abs(local) - u.half_size + vec2f(u.radius);
+	var distance = length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0) - u.radius;
+	if (u.width > 0.0) {
+		distance = abs(distance) - u.width;
+	}
+	let coverage = 1.0 - smoothstep(-u.feather, u.feather, distance);
+	return u.tint * coverage;
 }
 `
 
-var sharedRoundRect = sync.OnceValue(func() *ebiten.Shader {
-	shader, err := ebiten.NewShader([]byte(roundRectSource))
+var sharedRoundRect = sync.OnceValue(func() *ggfx.Shader {
+	shader, err := ggfx.NewShader([]byte(roundRectSource))
 	if err != nil {
 		panic("ggui: compile round rect shader: " + err.Error())
 	}
@@ -102,15 +104,15 @@ func (c *Canvas) shade(f field, col color.Color) {
 	if !ok {
 		return
 	}
-	op := &ebiten.DrawRectShaderOptions{Uniforms: map[string]any{
-		"Center":   []float32{float32(f.centre.X - float64(bounds.Min.X)), float32(f.centre.Y - float64(bounds.Min.Y))},
-		"Axis":     []float32{float32(f.axis.X), float32(f.axis.Y)},
-		"HalfSize": []float32{float32(f.half.W), float32(f.half.H)},
+	op := &ggfx.DrawRectShaderOptions{Uniforms: map[string]any{
+		"center":    []float32{float32(f.centre.X - float64(bounds.Min.X)), float32(f.centre.Y - float64(bounds.Min.Y))},
+		"axis":      []float32{float32(f.axis.X), float32(f.axis.Y)},
+		"half_size": []float32{float32(f.half.W), float32(f.half.H)},
 		// A corner never exceeds half the shape, which is a circle.
-		"Radius":  float32(min(max(f.radius, 0), f.half.W, f.half.H)),
-		"Width":   float32(max(f.stroke, 0)),
-		"Feather": float32(feather),
-		"Tint":    []float32{float32(red) / 65535, float32(green) / 65535, float32(blue) / 65535, float32(alpha) / 65535},
+		"radius":  float32(min(max(f.radius, 0), f.half.W, f.half.H)),
+		"width":   float32(max(f.stroke, 0)),
+		"feather": float32(feather),
+		"tint":    []float32{float32(red) / 65535, float32(green) / 65535, float32(blue) / 65535, float32(alpha) / 65535},
 	}}
 	op.GeoM.Translate(float64(bounds.Min.X), float64(bounds.Min.Y))
 	c.Image.DrawRectShader(bounds.Dx(), bounds.Dy(), sharedRoundRect(), op)

@@ -7,7 +7,7 @@ import (
 	_ "image/png"
 	"sync"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
@@ -27,7 +27,7 @@ var chatFonts = sync.OnceValue(func() [2]*ggui.Font {
 	return fonts
 })
 
-func chatImage(name string) *ebiten.Image {
+func chatImage(name string) *ggfx.Image {
 	data, err := chatAssets.ReadFile("assets/chat/" + name)
 	if err != nil {
 		panic(err)

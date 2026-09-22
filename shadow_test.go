@@ -6,7 +6,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 )
 
 func TestShadowShaderCompiles(t *testing.T) {
@@ -18,7 +18,7 @@ func TestShadowShaderCompiles(t *testing.T) {
 	}
 }
 func TestShadowGeometryScaleClipAndSpread(t *testing.T) {
-	img := ebiten.NewImage(200, 200)
+	img := ggfx.NewImage(200, 200)
 	defer img.Deallocate()
 	c := &Canvas{Image: img, scale: 2}
 	s := ShadowStyle{Offset: Pt(3, 4), Blur: 5, Spread: 2, Color: color.Black}

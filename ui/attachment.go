@@ -5,7 +5,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
@@ -41,7 +41,7 @@ type AttachmentWidget struct {
 	titleText, descriptionText           attachmentText
 	media                                ggui.Widget
 	mediaView                            *ggui.StyledWidget
-	image                                *ebiten.Image
+	image                                *ggfx.Image
 	imageAlt                             string
 	actions                              []ggui.Widget
 	trigger                              *ButtonWidget
@@ -71,7 +71,7 @@ func (a *AttachmentWidget) Media(w ggui.Widget) *AttachmentWidget {
 }
 
 // Image sets a rounded, square, cover-cropped preview. Nil restores icon media.
-func (a *AttachmentWidget) Image(img *ebiten.Image, alt string) *AttachmentWidget {
+func (a *AttachmentWidget) Image(img *ggfx.Image, alt string) *AttachmentWidget {
 	a.image, a.imageAlt = img, alt
 	return a
 }
@@ -351,7 +351,7 @@ func (a *AttachmentWidget) paintMedia(dst *ggui.Canvas, r ggui.Rect, state Attac
 		if cut == nil {
 			return
 		}
-		op := &ebiten.DrawImageOptions{Filter: ebiten.FilterLinear}
+		op := &ggfx.DrawImageOptions{Filter: ggfx.FilterLinear}
 		op.GeoM.Scale(1/dst.Scale(), 1/dst.Scale())
 		op.GeoM.Concat(dst.Geo(r.Origin))
 		if state != AttachmentIdle && state != AttachmentDone {

@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"syscall"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 
 	"github.com/ironpark/ggui/internal/platform/win32"
 )
@@ -64,7 +64,7 @@ func newAXPlatform() axPlatform { return &windowsAX{} }
 // and it keeps trying until the window exists.
 func (windowsAX) active() bool {
 	if winHWND.Load() == 0 {
-		ebiten.RunOnMainThread(winAttach)
+		ggfx.RunOnMainThread(winAttach)
 		if winHWND.Load() == 0 {
 			return false
 		}
@@ -160,7 +160,7 @@ func (windowsAX) notify(notes []axNote) {
 	if b == nil || winHWND.Load() == 0 {
 		return
 	}
-	ebiten.RunOnMainThread(func() {
+	ggfx.RunOnMainThread(func() {
 		for _, n := range notes {
 			winPost(b, n)
 		}

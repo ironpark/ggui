@@ -6,7 +6,7 @@ import (
 	"math"
 	"slices"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/inspect"
 	"github.com/ironpark/ggui/internal/fn"
@@ -104,7 +104,7 @@ func (in *View) panelSnapshot(dst *ggui.Canvas, fr *inspect.Frame, shown []int, 
 }
 
 type inspectorPanelCache struct {
-	image    *ebiten.Image
+	image    *ggfx.Image
 	snapshot inspectPanelSnapshot
 	spare    inspectPanelSnapshot // storage for the next comparison
 }
@@ -116,7 +116,7 @@ func (c *inspectorPanelCache) release() {
 	*c = inspectorPanelCache{}
 }
 func (c *inspectorPanelCache) draw(dst *ggui.Canvas) {
-	op := &ebiten.DrawImageOptions{}
+	op := &ggfx.DrawImageOptions{}
 	b := c.image.Bounds()
 	op.GeoM.Translate(float64(b.Min.X), float64(b.Min.Y))
 	dst.Image.DrawImage(c.image, op)

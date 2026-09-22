@@ -7,8 +7,8 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggfx/text/v2"
 	"github.com/ironpark/ggui/internal/emojidata"
 	"github.com/ironpark/ggui/internal/reactive"
 )
@@ -135,7 +135,7 @@ func textRuns(s string, face text.Face) iter.Seq2[string, text.Face] {
 	}
 }
 
-func drawText(dst *ebiten.Image, s string, face text.Face, options *text.DrawOptions) {
+func drawText(dst *ggfx.Image, s string, face text.Face, options *text.DrawOptions) {
 	if dst == nil || dst.Bounds().Empty() {
 		return
 	}
@@ -159,7 +159,7 @@ func drawText(dst *ebiten.Image, s string, face text.Face, options *text.DrawOpt
 		if options != nil {
 			op = *options
 		}
-		var local ebiten.GeoM
+		var local ggfx.GeoM
 		local.Translate(x, baseline-f.Metrics().HAscent)
 		local.Concat(op.GeoM)
 		op.GeoM = local

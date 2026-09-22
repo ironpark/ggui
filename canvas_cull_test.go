@@ -4,11 +4,11 @@ import (
 	"math"
 	"testing"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 )
 
 func TestVisiblePaintBounds(t *testing.T) {
-	img := ebiten.NewImage(100, 100)
+	img := ggfx.NewImage(100, 100)
 	defer img.Deallocate()
 	c := (&Canvas{Image: img, scale: 2}).Clip(Rct(Pt(10, 10), Sz(20, 20)))
 	for _, tc := range []struct {
@@ -38,7 +38,7 @@ func TestVisiblePaintBounds(t *testing.T) {
 }
 
 func TestEmptyClipRetainsTextSemanticsAndTrace(t *testing.T) {
-	img := ebiten.NewImage(100, 100)
+	img := ggfx.NewImage(100, 100)
 	defer img.Deallocate()
 	c := &Canvas{Image: img}
 	inspectorEnabled = true
@@ -57,7 +57,7 @@ func TestEmptyClipRetainsTextSemanticsAndTrace(t *testing.T) {
 }
 
 func BenchmarkOffscreenPaintBounds(b *testing.B) {
-	img := ebiten.NewImage(100, 100)
+	img := ggfx.NewImage(100, 100)
 	defer img.Deallocate()
 	c := &Canvas{Image: img}
 	r := Rct(Pt(0, 500), Sz(120, 40))

@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/internal/tools/keygen"
 )
 
@@ -24,10 +24,10 @@ func TestKeyConstantsAreCurrent(t *testing.T) {
 }
 
 func TestKeyAliasesAreTheSameValues(t *testing.T) {
-	if KeyArrowUp != ebiten.KeyArrowUp || KeyEnter != ebiten.KeyEnter || KeyMax != ebiten.KeyMax {
+	if KeyArrowUp != ggfx.KeyArrowUp || KeyEnter != ggfx.KeyEnter || KeyMax != ggfx.KeyMax {
 		t.Fatal("a ggui key constant differs from the Ebitengine one it aliases")
 	}
-	if CursorShapePointer != ebiten.CursorShapePointer || MouseButtonRight != ebiten.MouseButtonRight {
+	if CursorShapePointer != ggfx.CursorShapePointer || MouseButtonRight != ggfx.MouseButtonRight {
 		t.Fatal("a cursor or button constant differs from the Ebitengine one it aliases")
 	}
 	// Chord parses the same names the constants are generated from, so

@@ -5,7 +5,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
@@ -19,7 +19,7 @@ type AvatarWidget struct {
 	props      property.Owner
 	name       string
 	initials   *ggui.TextWidget
-	img        *ebiten.Image
+	img        *ggfx.Image
 	side       float64
 	square     bool
 	theme      uitheme.Theme
@@ -50,7 +50,7 @@ func initialsOf(name string) string {
 
 // Image sets the portrait. It is drawn to cover the avatar, so a photo of
 // any shape is cropped rather than squashed.
-func (a *AvatarWidget) Image(img *ebiten.Image) *AvatarWidget { a.img = img; return a }
+func (a *AvatarWidget) Image(img *ggfx.Image) *AvatarWidget { a.img = img; return a }
 
 // Size sets the diameter in logical pixels.
 func (a *AvatarWidget) Size(px float64) *AvatarWidget {
@@ -111,7 +111,7 @@ func (a *AvatarWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	// The cut image is already in device pixels, so it is drawn one for
 	// one rather than through the canvas scale a second time.
-	op := &ebiten.DrawImageOptions{Filter: ebiten.FilterLinear}
+	op := &ggfx.DrawImageOptions{Filter: ggfx.FilterLinear}
 	s := dst.Scale()
 	op.GeoM.Scale(1/s, 1/s)
 	op.GeoM.Concat(dst.Geo(r.Origin))
@@ -121,7 +121,7 @@ func (a *AvatarWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 // cutKey names one crop: the image it came from, the square of device
 // pixels it was scaled to, and the corner radius it was cut with.
 type cutKey struct {
-	src          *ebiten.Image
+	src          *ggfx.Image
 	side, radius int
 }
 
@@ -131,7 +131,7 @@ type cutKey struct {
 // rather than all of them at once, and an avatar rebuilt every frame
 // allocates no texture at all. Both maps belong to the UI goroutine, as
 // painting does.
-var liveCuts, coldCuts = map[cutKey]*ebiten.Image{}, map[cutKey]*ebiten.Image{}
+var liveCuts, coldCuts = map[cutKey]*ggfx.Image{}, map[cutKey]*ggfx.Image{}
 
 // cutGeneration is how many crops are made before the cold generation is
 // freed; the warm ones are promoted back and survive.
@@ -142,7 +142,7 @@ const cutGeneration = 64
 // circle. It is how an avatar gets a round photo at all: the canvas clips
 // to rectangles and nothing else, so the shape has to come from an alpha
 // mask multiplied into the image.
-func roundedCut(src *ebiten.Image, side int, radius float64) *ebiten.Image {
+func roundedCut(src *ggfx.Image, side int, radius float64) *ggfx.Image {
 	b := src.Bounds()
 	if side <= 0 || b.Dx() == 0 || b.Dy() == 0 {
 		return nil
@@ -159,15 +159,15 @@ func roundedCut(src *ebiten.Image, side int, radius float64) *ebiten.Image {
 	if len(liveCuts) >= cutGeneration {
 		sweepCuts()
 	}
-	cut := ebiten.NewImage(side, side)
+	cut := ggfx.NewImage(side, side)
 	k := max(float64(side)/float64(b.Dx()), float64(side)/float64(b.Dy()))
-	op := &ebiten.DrawImageOptions{Filter: ebiten.FilterLinear}
+	op := &ggfx.DrawImageOptions{Filter: ggfx.FilterLinear}
 	op.GeoM.Scale(k, k)
 	op.GeoM.Translate((float64(side)-float64(b.Dx())*k)/2, (float64(side)-float64(b.Dy())*k)/2)
 	cut.DrawImage(src, op)
-	mask := ebiten.NewImage(side, side)
+	mask := ggfx.NewImage(side, side)
 	(&ggui.Canvas{Image: mask}).FillRoundRect(ggui.Rect{Size: ggui.Sz(side, side)}, radius, color.White)
-	cut.DrawImage(mask, &ebiten.DrawImageOptions{Blend: ebiten.BlendDestinationIn})
+	cut.DrawImage(mask, &ggfx.DrawImageOptions{Blend: ggfx.BlendDestinationIn})
 	mask.Deallocate()
 	liveCuts[key] = cut
 	return cut

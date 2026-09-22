@@ -9,7 +9,7 @@ import (
 	_ "image/png"  // registered for DecodeImage
 	"os"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 
 	"github.com/ironpark/ggui/internal/property"
 )
@@ -24,22 +24,22 @@ const (
 	FitNone                    // drawn at its natural size, centered, and clipped
 )
 
-// ImageWidget draws an ebiten.Image. Build one with Image.
+// ImageWidget draws an ggfx.Image. Build one with Image.
 type ImageWidget struct {
 	props  property.Owner
-	img    *ebiten.Image
+	img    *ggfx.Image
 	fit    ImageFit
 	width  float64
 	height float64
-	filter ebiten.Filter
+	filter ggfx.Filter
 	alt    string
 }
 
 // Image draws img. With no Size it asks for the image's natural size in
 // logical pixels, and scales down, keeping its aspect ratio, when the
 // parent gives it less room.
-func Image(img *ebiten.Image) *ImageWidget {
-	return &ImageWidget{img: img, filter: ebiten.FilterLinear}
+func Image(img *ggfx.Image) *ImageWidget {
+	return &ImageWidget{img: img, filter: ggfx.FilterLinear}
 }
 
 // Fit sets how the image is placed when the box has another shape; the
@@ -74,7 +74,7 @@ func (w *ImageWidget) Height(v float64) *ImageWidget {
 }
 
 // Filter sets how pixels are sampled when scaled; the default is linear.
-func (w *ImageWidget) Filter(f ebiten.Filter) *ImageWidget {
+func (w *ImageWidget) Filter(f ggfx.Filter) *ImageWidget {
 	defer property.Watch(&w.props, &w.filter)()
 	w.filter = f
 	return w
@@ -165,23 +165,23 @@ func (w *ImageWidget) Paint(dst *Canvas, r Rect) {
 	if at != r {
 		target = dst.Clip(r)
 	}
-	op := &ebiten.DrawImageOptions{Filter: w.filter}
+	op := &ggfx.DrawImageOptions{Filter: w.filter}
 	op.GeoM.Scale(at.Size.W/n.W, at.Size.H/n.H)
 	op.GeoM.Concat(dst.Geo(at.Origin))
 	target.Image.DrawImage(w.img, op)
 }
 
-// DecodeImage decodes PNG, JPEG or GIF bytes into an ebiten.Image.
-func DecodeImage(data []byte) (*ebiten.Image, error) {
+// DecodeImage decodes PNG, JPEG or GIF bytes into an ggfx.Image.
+func DecodeImage(data []byte) (*ggfx.Image, error) {
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("ggui: decode image: %w", err)
 	}
-	return ebiten.NewImageFromImage(img), nil
+	return ggfx.NewImageFromImage(img), nil
 }
 
 // LoadImageFile decodes the PNG, JPEG or GIF file at path.
-func LoadImageFile(path string) (*ebiten.Image, error) {
+func LoadImageFile(path string) (*ggfx.Image, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("ggui: load image: %w", err)

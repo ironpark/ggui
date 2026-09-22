@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
 	"github.com/srwiley/oksvg"
 	"github.com/srwiley/rasterx"
@@ -26,7 +26,7 @@ type SVG struct {
 }
 type raster struct {
 	size  int
-	image *ebiten.Image
+	image *ggfx.Image
 }
 
 // Parse compiles SVG paths once without creating GPU resources.
@@ -84,7 +84,7 @@ func (s *SVG) Draw(dst *ggui.Canvas, r ggui.Rect, col color.Color, rotation floa
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var img *ebiten.Image
+	var img *ggfx.Image
 	for i, c := range s.cache {
 		if c.size == size {
 			img = c.image
@@ -94,14 +94,14 @@ func (s *SVG) Draw(dst *ggui.Canvas, r ggui.Rect, col color.Color, rotation floa
 		}
 	}
 	if img == nil {
-		img = ebiten.NewImageFromImage(s.rasterize(size))
+		img = ggfx.NewImageFromImage(s.rasterize(size))
 		if len(s.cache) == 8 {
 			s.cache[0].image.Deallocate()
 			s.cache = s.cache[1:]
 		}
 		s.cache = append(s.cache, raster{size, img})
 	}
-	op := &ebiten.DrawImageOptions{Filter: ebiten.FilterLinear}
+	op := &ggfx.DrawImageOptions{Filter: ggfx.FilterLinear}
 	op.GeoM.Translate(-float64(size)/2, -float64(size)/2)
 	op.GeoM.Scale(side/float64(size), side/float64(size))
 	op.GeoM.Rotate(rotation)

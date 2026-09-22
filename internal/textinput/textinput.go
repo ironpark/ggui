@@ -64,7 +64,7 @@ import (
 	"unicode/utf16"
 	"unicode/utf8"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 )
 
 // noReplacement is the sentinel value for [textInputState.ReplacementStartInBytes]
@@ -161,7 +161,7 @@ func startTextInput(bounds image.Rectangle, textBeforeCaret, textAfterCaret stri
 // letterboxed game taken into account; this copy assumes the game fills the
 // window, as ggui's LayoutF makes it, and scales by the device scale factor.
 func caretBoundsInClientNativePixels(bounds image.Rectangle) image.Rectangle {
-	s := ebiten.Monitor().DeviceScaleFactor()
+	s := ggfx.Monitor().DeviceScaleFactor()
 	if s <= 0 {
 		s = 1
 	}
@@ -412,7 +412,7 @@ type textInputEvents struct {
 	// keyboard. Taken by the session observing the closed channel.
 	endedByUser bool
 
-	// tick overrides the tick source in tests. A nil tick means [ebiten.Tick].
+	// tick overrides the tick source in tests. A nil tick means [ggfx.Tick].
 	tick func() int64
 
 	m sync.Mutex
@@ -456,7 +456,7 @@ func (s *textInputEvents) currentTick() int64 {
 	if s.tick != nil {
 		return s.tick()
 	}
-	return ebiten.Tick()
+	return ggfx.Tick()
 }
 
 // carrying reports whether states queued now belong to the session about

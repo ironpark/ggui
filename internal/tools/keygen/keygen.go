@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"go/format"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 )
 
 // Generate returns the source of the key constant file, gofmt'd.
@@ -22,15 +22,15 @@ func Generate() ([]byte, error) {
 
 package ggui
 
-import "github.com/hajimehoshi/ebiten/v2"
+import "github.com/ironpark/ggfx"
 
 // The keys Ebitengine reports, by their US layout names. A key is a
 // physical place on the keyboard, not the character it produces.
 const (
 `)
-	for k := ebiten.Key(0); k <= ebiten.KeyMax; k++ {
+	for k := ggfx.Key(0); k <= ggfx.KeyMax; k++ {
 		if name := k.String(); name != "" {
-			fmt.Fprintf(&b, "\tKey%s KeyboardKey = ebiten.Key%s\n", name, name)
+			fmt.Fprintf(&b, "\tKey%s KeyboardKey = ggfx.Key%s\n", name, name)
 		}
 	}
 	b.WriteString(")\n")

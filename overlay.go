@@ -4,7 +4,7 @@ import (
 	"image"
 	"image/color"
 
-	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	"github.com/ironpark/ggfx/text/v2"
 )
 
 // An overlay is drawn over the whole window after the widget tree, and is

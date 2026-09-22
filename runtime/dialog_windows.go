@@ -7,7 +7,7 @@ import (
 	"strings"
 	"unsafe"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 	"golang.org/x/sys/windows"
 
 	"github.com/ironpark/ggui/internal/platform/win32"
@@ -102,7 +102,7 @@ type browseInfo struct {
 
 // showDialog runs the dialog on the main thread and waits for it.
 func showDialog(k dialogKind, d FileDialog) (paths []string, err error) {
-	ebiten.RunOnMainThread(func() {
+	ggfx.RunOnMainThread(func() {
 		// Owned by the app's window, the dialog is modal to it and centred
 		// on it; without one it stands on its own.
 		owner := win32.AppWindow()

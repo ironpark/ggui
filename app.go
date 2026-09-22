@@ -7,8 +7,8 @@ import (
 	"math"
 	"sync/atomic"
 
-	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/inpututil"
+	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggfx/inpututil"
 	"github.com/ironpark/ggui/a11y"
 	"github.com/ironpark/ggui/inspect"
 	"github.com/ironpark/ggui/internal/platform/drag"
@@ -123,17 +123,17 @@ func (a *App) Run() error {
 		a.Close()
 		appRunning.Store(false)
 	}()
-	ebiten.SetWindowTitle(a.cfg.Title)
-	ebiten.SetWindowSize(a.cfg.Width, a.cfg.Height)
+	ggfx.SetWindowTitle(a.cfg.Title)
+	ggfx.SetWindowSize(a.cfg.Width, a.cfg.Height)
 	if a.cfg.Resizable {
-		ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
+		ggfx.SetWindowResizingMode(ggfx.WindowResizingModeEnabled)
 	}
 	a.start()
 	a.ax.Start(a.Perform, a.cfg.Accessibility)
 	appRunning.Store(true)
 	// Holding a key on macOS pops up the accent menu, as it does in every
 	// text field on the platform; text editing relies on it.
-	return ebiten.RunGameWithOptions(a, &ebiten.RunGameOptions{ApplePressAndHoldEnabled: true})
+	return ggfx.RunGameWithOptions(a, &ggfx.RunGameOptions{ApplePressAndHoldEnabled: true})
 }
 
 // OnFrame registers fn to run once per frame, before input is dispatched
@@ -222,13 +222,13 @@ func (a *App) SetInspector(o InspectorOptions) {
 	}
 }
 
-// Update implements ebiten.Game.
+// Update implements ggfx.Game.
 func (a *App) Update() error {
 	if a.frameErr != nil {
 		return a.frameErr
 	}
 	if a.closed {
-		return ebiten.Termination
+		return ggfx.Termination
 	}
 	// Frames run here, whichever goroutine Ebitengine calls this on. A Probe
 	// does not arm the check: it runs on its test's goroutine, and several
@@ -248,10 +248,10 @@ func (a *App) Update() error {
 	cursor := a.input.cursorOver(a.overlay, f.pos)
 	if cursor != a.cursor {
 		a.cursor = cursor
-		ebiten.SetCursorShape(a.cursor)
+		ggfx.SetCursorShape(a.cursor)
 	}
 	if a.closed {
-		return ebiten.Termination
+		return ggfx.Termination
 	}
 	return a.tick(frame.begin(clock()))
 }
@@ -302,7 +302,7 @@ const (
 // converted from screen pixels to logical pixels.
 func (a *App) readInput() frameInput {
 	var f frameInput
-	x, y := ebiten.CursorPosition()
+	x, y := ggfx.CursorPosition()
 	f.pos = Pt(a.canvas.dp(float64(x)), a.canvas.dp(float64(y)))
 	for _, b := range mouseButtons {
 		if inpututil.IsMouseButtonJustPressed(b) {
@@ -312,26 +312,26 @@ func (a *App) readInput() frameInput {
 			f.up = append(f.up, b)
 		}
 	}
-	ids := ebiten.AppendTouchIDs(nil)
-	a.touch.apply(&f, ids, func(id ebiten.TouchID) Point {
-		x, y := ebiten.TouchPosition(id)
+	ids := ggfx.AppendTouchIDs(nil)
+	a.touch.apply(&f, ids, func(id ggfx.TouchID) Point {
+		x, y := ggfx.TouchPosition(id)
 		return Pt(a.canvas.dp(float64(x)), a.canvas.dp(float64(y)))
 	})
-	wx, wy := ebiten.Wheel()
+	wx, wy := ggfx.Wheel()
 	f.wheel = Pt(wx*wheelUnit, wy*wheelUnit)
 	for _, k := range inpututil.AppendPressedKeys(nil) {
 		if d := inpututil.KeyPressDuration(k); d == 1 || d > repeatDelay && (d-repeatDelay)%repeatInterval == 0 {
 			f.keys = append(f.keys, k)
 		}
 	}
-	f.text = string(ebiten.AppendInputChars(nil))
-	if fsys := ebiten.DroppedFiles(); fsys != nil {
+	f.text = string(ggfx.AppendInputChars(nil))
+	if fsys := ggfx.DroppedFiles(); fsys != nil {
 		f.drop = droppedFiles(fsys)
 	}
 	if !a.drags {
 		// The window's view exists once frames run, so the first frame
 		// installs the observer; the hop to the main thread happens once.
-		ebiten.RunOnMainThread(func() { a.drags = drag.Install() })
+		ggfx.RunOnMainThread(func() { a.drags = drag.Install() })
 	}
 	// The drag is in the view's points, which are logical pixels already;
 	// the cursor above is in the device pixels Layout asked for, so only it
@@ -340,16 +340,16 @@ func (a *App) readInput() frameInput {
 		f.drag, f.dragAt = true, Pt(x, y)
 	}
 	f.mods = Mods{
-		Shift: ebiten.IsKeyPressed(KeyShift),
-		Ctrl:  ebiten.IsKeyPressed(KeyControl),
-		Alt:   ebiten.IsKeyPressed(KeyAlt),
-		Meta:  ebiten.IsKeyPressed(KeyMeta),
+		Shift: ggfx.IsKeyPressed(KeyShift),
+		Ctrl:  ggfx.IsKeyPressed(KeyControl),
+		Alt:   ggfx.IsKeyPressed(KeyAlt),
+		Meta:  ggfx.IsKeyPressed(KeyMeta),
 	}
 	return f
 }
 
-// Draw implements ebiten.Game.
-func (a *App) Draw(screen *ebiten.Image) {
+// Draw implements ggfx.Game.
+func (a *App) Draw(screen *ggfx.Image) {
 	// Draw runs at the display's rate while Update runs at a fixed TPS, so
 	// the clock moves on again here: motion eased inside Paint is then as
 	// smooth as the screen allows, and frozen for the paint.
@@ -407,17 +407,17 @@ func (a *App) Draw(screen *ebiten.Image) {
 	a.spare = a.canvas.prev
 }
 
-// LayoutF implements ebiten.LayoutFer: the screen is sized in physical
+// LayoutF implements ggfx.LayoutFer: the screen is sized in physical
 // pixels so that a HiDPI monitor gets a sharp image, while widgets keep
 // working in logical pixels.
 func (a *App) LayoutF(outsideWidth, outsideHeight float64) (float64, float64) {
-	if s := ebiten.Monitor().DeviceScaleFactor(); s > 0 {
+	if s := ggfx.Monitor().DeviceScaleFactor(); s > 0 {
 		a.canvas.scale = s
 	}
 	return a.canvas.px(outsideWidth), a.canvas.px(outsideHeight)
 }
 
-// Layout implements ebiten.Game. Ebitengine calls LayoutF instead.
+// Layout implements ggfx.Game. Ebitengine calls LayoutF instead.
 func (a *App) Layout(outsideWidth, outsideHeight int) (int, int) {
 	w, h := a.LayoutF(float64(outsideWidth), float64(outsideHeight))
 	return int(math.Ceil(w)), int(math.Ceil(h))

@@ -25,7 +25,7 @@ import (
 	"github.com/ebitengine/purego/cstrings"
 	"github.com/ebitengine/purego/objc"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 )
 
 type textInputImpl struct {
@@ -39,7 +39,7 @@ func (t *textInputImpl) Start(bounds image.Rectangle, _, _ string) (<-chan textI
 	bounds = caretBoundsInClientNativePixels(bounds)
 	var ch <-chan textInputState
 	var end func()
-	ebiten.RunOnMainThread(func() {
+	ggfx.RunOnMainThread(func() {
 		ch, end = t.start(bounds)
 	})
 	return ch, end

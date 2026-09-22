@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
@@ -24,12 +24,12 @@ func (g *controlsRender) Update() error {
 		return g.err
 	}
 	if g.done {
-		return ebiten.Termination
+		return ggfx.Termination
 	}
 	return nil
 }
 func (g *controlsRender) Layout(int, int) (int, int) { return 560, 520 }
-func (g *controlsRender) Draw(screen *ebiten.Image) {
+func (g *controlsRender) Draw(screen *ggfx.Image) {
 	if g.done || g.err != nil {
 		return
 	}
@@ -57,7 +57,7 @@ func (g *controlsRender) Draw(screen *ebiten.Image) {
 	p.Frame()
 	env := theme.Apply(ggui.Env{}).WithText(theme.Text)
 	size := demo.Widget.Layout(ggui.Loose(ggui.Sz(float64(width), 800)), env)
-	img := ebiten.NewImage(width, int(size.H))
+	img := ggfx.NewImage(width, int(size.H))
 	defer img.Deallocate()
 	for i, state := range []string{"initial", "active", "complete", "end"} {
 		if i == 1 {
@@ -101,7 +101,7 @@ func (g *controlsRender) Draw(screen *ebiten.Image) {
 }
 
 // savePNG writes img to name, reporting either an encode or a close failure.
-func savePNG(name string, img *ebiten.Image) (err error) {
+func savePNG(name string, img *ggfx.Image) (err error) {
 	f, err := os.Create(name)
 	if err != nil {
 		return err
@@ -118,7 +118,7 @@ func renderControls(directory string) error {
 	if err := os.MkdirAll(directory, 0755); err != nil {
 		return err
 	}
-	ebiten.SetWindowTitle("ggui controls render validation")
-	ebiten.SetWindowSize(560, 520)
-	return ebiten.RunGame(&controlsRender{directory: directory})
+	ggfx.SetWindowTitle("ggui controls render validation")
+	ggfx.SetWindowSize(560, 520)
+	return ggfx.RunGame(&controlsRender{directory: directory})
 }

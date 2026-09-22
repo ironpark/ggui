@@ -4,7 +4,7 @@ import (
 	"github.com/ironpark/ggui/internal/reactive"
 	"time"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 
 	"github.com/ironpark/ggui/internal/property"
 )
@@ -33,7 +33,7 @@ type TransitionWidget struct {
 	leaving  bool
 	reduced  bool // the Env asked for no animation
 
-	buf *ebiten.Image // offscreen, for fade and scale
+	buf *ggfx.Image // offscreen, for fade and scale
 }
 
 // transitionStart is the start time, retained on the Canvas.
@@ -167,12 +167,12 @@ func (t *TransitionWidget) Paint(dst *Canvas, r Rect) {
 		if t.buf != nil {
 			t.buf.Deallocate()
 		}
-		t.buf = ebiten.NewImage(b.Dx(), b.Dy())
+		t.buf = ggfx.NewImage(b.Dx(), b.Dy())
 	}
 	t.buf.Clear()
 	off := &Canvas{parent: target, scale: dst.scale, inert: target.inert, Image: t.buf}
 	off.Paint(t.child, at)
-	op := &ebiten.DrawImageOptions{Filter: ebiten.FilterLinear}
+	op := &ggfx.DrawImageOptions{Filter: ggfx.FilterLinear}
 	if scale {
 		s := t.from + (1-t.from)*e
 		cx, cy := dst.px(at.Origin.X+at.Size.W/2), dst.px(at.Origin.Y+at.Size.H/2)

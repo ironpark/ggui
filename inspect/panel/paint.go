@@ -14,7 +14,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 	"golang.org/x/image/font/gofont/gomono"
 
 	"github.com/ironpark/ggui/inspect"
@@ -166,7 +166,7 @@ func (in *View) paint(dst *ggui.Canvas, fr *inspect.Frame) {
 		if !bounds.Empty() {
 			if in.cache.image == nil || in.cache.image.Bounds() != bounds {
 				in.cache.release()
-				in.cache.image = ebiten.NewImageWithOptions(bounds, nil)
+				in.cache.image = ggfx.NewImageWithOptions(bounds, nil)
 			}
 			in.cache.image.Clear()
 			cached := *dst
@@ -696,7 +696,7 @@ func (in *View) paintStatus(dst *ggui.Canvas, font *ggui.Font, pal inspectPalett
 			}
 		}
 	}
-	right := fmt.Sprintf("%.0f fps · %s×", ebiten.ActualFPS(), num(dst.Scale()))
+	right := fmt.Sprintf("%.0f fps · %s×", ggfx.ActualFPS(), num(dst.Scale()))
 	space := r.Size.W - 16
 	if r.Size.W > 600 {
 		drawLine(dst, font, right, r.Origin.X+r.Size.W-textWidth(dst, font, right)-10, r.Origin.Y+5, pal.dim)

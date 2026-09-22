@@ -3,18 +3,18 @@ package ggui
 import (
 	"slices"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 )
 
 // touchInput maps a primary finger to the single pointer used by widgets.
 // Once it lifts, wait for all fingers to lift before starting another press.
 type touchInput struct {
-	id              ebiten.TouchID
+	id              ggfx.TouchID
 	active, waiting bool
 	pos             Point
 }
 
-func (t *touchInput) apply(f *frameInput, ids []ebiten.TouchID, position func(ebiten.TouchID) Point) {
+func (t *touchInput) apply(f *frameInput, ids []ggfx.TouchID, position func(ggfx.TouchID) Point) {
 	if !t.active && !t.waiting && len(ids) == 0 {
 		return
 	}

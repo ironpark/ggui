@@ -13,7 +13,7 @@ import (
 	"github.com/ebitengine/purego/cstrings"
 	"github.com/ebitengine/purego/objc"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 
 	"github.com/ironpark/ggui/internal/platform/cocoa"
 )
@@ -112,7 +112,7 @@ func newAXPlatform() axPlatform { return &darwinAX{} }
 // would put a main-thread round trip in the middle of every paint.
 func (d *darwinAX) active() bool {
 	var on bool
-	ebiten.RunOnMainThread(func() {
+	ggfx.RunOnMainThread(func() {
 		d.attach()
 		on = axIDNSWorkspace.Send(axSelSharedWorkspace).Send(axSelVoiceOverEnabled) != 0
 	})
@@ -584,7 +584,7 @@ func axPriority(loud bool) int32 {
 // is the only thread they may be posted from. Elements are resolved here
 // rather than in the diff, because making one is also main-thread work.
 func (d *darwinAX) notify(notes []axNote) {
-	ebiten.RunOnMainThread(func() {
+	ggfx.RunOnMainThread(func() {
 		b := current.Load()
 		if b == nil || d.container == 0 {
 			return

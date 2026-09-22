@@ -3,7 +3,7 @@ package ggui
 import (
 	"math"
 
-	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	"github.com/ironpark/ggfx/text/v2"
 )
 
 // PaintRotated paints already-laid-out text clockwise around the center of r.

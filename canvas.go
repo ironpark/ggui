@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/vector"
+	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggfx/vector"
 )
 
 // Canvas is what a Widget paints into: the target image plus the frame's list
@@ -21,7 +21,7 @@ import (
 // events to those regions, topmost (last painted) first. A nil Canvas paints
 // nothing and collects nothing, which is what layout tests want.
 type Canvas struct {
-	Image          *ebiten.Image
+	Image          *ggfx.Image
 	focusRequest   KeyHandler
 	inputObservers []inputObserver
 
@@ -387,8 +387,8 @@ func (c *Canvas) Px(v float64) float32 { return float32(c.px(v)) }
 
 // Geo returns the transform that maps a widget's own logical coordinates,
 // with its origin at, onto Image pixels. Use it in DrawImageOptions.
-func (c *Canvas) Geo(at Point) ebiten.GeoM {
-	var g ebiten.GeoM
+func (c *Canvas) Geo(at Point) ggfx.GeoM {
+	var g ggfx.GeoM
 	s := c.Scale()
 	g.Scale(s, s)
 	g.Translate(c.px(at.X), c.px(at.Y))
@@ -547,7 +547,7 @@ func (c *Canvas) Clip(r Rect) *Canvas {
 		child.clip = c.clip.Intersect(r)
 	}
 	if c.Image != nil {
-		child.Image = c.Image.SubImage(c.physical(child.clip)).(*ebiten.Image)
+		child.Image = c.Image.SubImage(c.physical(child.clip)).(*ggfx.Image)
 	}
 	return child
 }

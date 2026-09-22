@@ -5,14 +5,14 @@ import (
 	"image/color"
 	"sync"
 
-	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/vector"
+	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggfx/vector"
 )
 
 // Path is a reusable vector outline in logical pixels. Mutating a path invalidates
 // its device-scale cache. Like widgets, paths belong to the UI thread.
 type Path struct {
-	gradientMask *ebiten.Image
+	gradientMask *ggfx.Image
 	gradientKey  gradientKey
 	gradientRev  uint64
 	path         vector.Path
@@ -103,7 +103,7 @@ func (c *Canvas) FillPathGradient(path *Path, bounds Rect, top, bottom color.Col
 			if path.gradientMask != nil {
 				path.gradientMask.Deallocate()
 			}
-			path.gradientMask = ebiten.NewImage(w, h)
+			path.gradientMask = ggfx.NewImage(w, h)
 		} else {
 			path.gradientMask.Clear()
 		}
@@ -119,26 +119,28 @@ func (c *Canvas) FillPathGradient(path *Path, bounds Rect, top, bottom color.Col
 		r, g, b, a := col.RGBA()
 		return [4]float32{float32(r) / 65535, float32(g) / 65535, float32(b) / 65535, float32(a) / 65535}
 	}
-	op := &ebiten.DrawRectShaderOptions{Uniforms: map[string]any{"Top": rgba(top), "Bottom": rgba(bottom), "Height": float32(bounds.Size.H * scale), "Offset": float32(float64(coverage.Min.Y) - bounds.Origin.Y*scale)}}
+	op := &ggfx.DrawRectShaderOptions{Uniforms: map[string]any{"top": rgba(top), "bottom": rgba(bottom), "height": float32(bounds.Size.H * scale), "offset": float32(float64(coverage.Min.Y) - bounds.Origin.Y*scale)}}
 	op.Images[0] = path.gradientMask
 	op.GeoM.Translate(float64(coverage.Min.X), float64(coverage.Min.Y))
 	c.Image.DrawRectShader(w, h, sharedPathGradient(), op)
 }
 
-const pathGradientSource = `//kage:unit pixels
-package main
-var Top vec4
-var Bottom vec4
-var Height float
-var Offset float
-func Fragment(dst vec4,src vec2,color vec4) vec4 {
- y := src.y-imageSrc0Origin().y+Offset
- return mix(Top,Bottom,clamp(y/Height,0,1))*imageSrc0At(src).a
+const pathGradientSource = `
+struct Uniforms {
+	top: vec4f,
+	bottom: vec4f,
+	height: f32,
+	offset: f32,
+}
+@group(1) @binding(0) var<uniform> u: Uniforms;
+fn fragment(v: Vertex) -> vec4f {
+	let y = v.src_pos.y - src0_origin().y + u.offset;
+	return mix(u.top, u.bottom, clamp(y / u.height, 0.0, 1.0)) * src0_at(v.src_pos).a;
 }
 `
 
-var sharedPathGradient = sync.OnceValue(func() *ebiten.Shader {
-	shader, err := ebiten.NewShader([]byte(pathGradientSource))
+var sharedPathGradient = sync.OnceValue(func() *ggfx.Shader {
+	shader, err := ggfx.NewShader([]byte(pathGradientSource))
 	if err != nil {
 		panic("ggui: compile path gradient: " + err.Error())
 	}

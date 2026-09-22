@@ -6,7 +6,7 @@ import (
 	"math"
 	"sync"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 )
 
 // ShadowStyle describes an outer, rounded-rectangle shadow in logical pixels.
@@ -19,23 +19,25 @@ type ShadowStyle struct {
 	Color        color.Color
 }
 
-const shadowSource = `//kage:unit pixels
-package main
-var Center vec2
-var HalfSize vec2
-var Radius float
-var Feather float
-var Tint vec4
-func Fragment(dst vec4, src vec2, color vec4) vec4 {
- q := abs(src-Center)-HalfSize+vec2(Radius)
- distance := length(max(q,vec2(0)))+min(max(q.x,q.y),0)-Radius
- coverage := 1-smoothstep(-Feather,Feather,distance)
- return Tint*coverage
+const shadowSource = `
+struct Uniforms {
+	center: vec2f,
+	half_size: vec2f,
+	radius: f32,
+	feather: f32,
+	tint: vec4f,
+}
+@group(1) @binding(0) var<uniform> u: Uniforms;
+fn fragment(v: Vertex) -> vec4f {
+	let q = abs(v.src_pos - u.center) - u.half_size + vec2f(u.radius);
+	let distance = length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0) - u.radius;
+	let coverage = 1.0 - smoothstep(-u.feather, u.feather, distance);
+	return u.tint * coverage;
 }
 `
 
-var sharedShadow = sync.OnceValue(func() *ebiten.Shader {
-	shader, err := ebiten.NewShader([]byte(shadowSource))
+var sharedShadow = sync.OnceValue(func() *ggfx.Shader {
+	shader, err := ggfx.NewShader([]byte(shadowSource))
 	if err != nil {
 		panic("ggui: compile shadow shader: " + err.Error())
 	}
@@ -100,9 +102,9 @@ func (c *Canvas) Shadow(r Rect, radius float64, s ShadowStyle) {
 	if !ok {
 		return
 	}
-	op := &ebiten.DrawRectShaderOptions{Uniforms: map[string]any{
-		"Center": g.center[:], "HalfSize": g.half[:], "Radius": g.radius, "Feather": g.feather,
-		"Tint": []float32{float32(red) / 65535, float32(green) / 65535, float32(blue) / 65535, float32(alpha) / 65535},
+	op := &ggfx.DrawRectShaderOptions{Uniforms: map[string]any{
+		"center": g.center[:], "half_size": g.half[:], "radius": g.radius, "feather": g.feather,
+		"tint": []float32{float32(red) / 65535, float32(green) / 65535, float32(blue) / 65535, float32(alpha) / 65535},
 	}}
 	op.GeoM.Translate(float64(g.bounds.Min.X), float64(g.bounds.Min.Y))
 	c.Image.DrawRectShader(g.bounds.Dx(), g.bounds.Dy(), sharedShadow(), op)

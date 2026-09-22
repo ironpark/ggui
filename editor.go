@@ -9,7 +9,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	"github.com/ironpark/ggfx/text/v2"
 	"github.com/ironpark/ggui/a11y"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"

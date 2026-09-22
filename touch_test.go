@@ -3,7 +3,7 @@ package ggui
 import (
 	"testing"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 )
 
 func TestTouchTapAndCapturedDrag(t *testing.T) {
@@ -15,18 +15,18 @@ func TestTouchTapAndCapturedDrag(t *testing.T) {
 		OnDrag(func(PointerEvent) { drags++ }).
 		OnUp(func(ev PointerEvent) { ups++; released = ev.Pos })
 	paintFrame(&in, w, Sz(50, 50))
-	step := func(ids []ebiten.TouchID, pos Point) {
+	step := func(ids []ggfx.TouchID, pos Point) {
 		f := frameInput{pos: Pt(999, 999)}
-		touch.apply(&f, ids, func(ebiten.TouchID) Point { return pos })
+		touch.apply(&f, ids, func(ggfx.TouchID) Point { return pos })
 		in.dispatch(f)
 	}
-	step([]ebiten.TouchID{0}, Pt(10, 10))
+	step([]ggfx.TouchID{0}, Pt(10, 10))
 	step(nil, Point{})
 	if taps != 1 || ups != 1 || released != Pt(10, 10) {
 		t.Fatalf("tap/release = %d/%d at %v", taps, ups, released)
 	}
-	step([]ebiten.TouchID{1}, Pt(10, 10))
-	step([]ebiten.TouchID{1}, Pt(80, 80))
+	step([]ggfx.TouchID{1}, Pt(10, 10))
+	step([]ggfx.TouchID{1}, Pt(80, 80))
 	step(nil, Point{})
 	if taps != 1 || ups != 2 || drags != 1 || released != Pt(80, 80) || in.pressed != nil {
 		t.Fatalf("captured drag: taps=%d ups=%d drags=%d release=%v", taps, ups, drags, released)
@@ -35,8 +35,8 @@ func TestTouchTapAndCapturedDrag(t *testing.T) {
 
 func TestTouchKeepsPrimaryAndWaitsForRemainingFingers(t *testing.T) {
 	var touch touchInput
-	position := func(id ebiten.TouchID) Point { return Pt(float64(id), 10) }
-	step := func(ids ...ebiten.TouchID) frameInput {
+	position := func(id ggfx.TouchID) Point { return Pt(float64(id), 10) }
+	step := func(ids ...ggfx.TouchID) frameInput {
 		f := frameInput{down: []MouseButton{MouseButtonRight}}
 		touch.apply(&f, ids, position)
 		return f
@@ -65,12 +65,12 @@ func TestTouchPanScrollsAndCancelsTap(t *testing.T) {
 	s := Scroll(child).Speed(99)
 	step := func(held bool, p Point) {
 		paintFrame(&in, s, Sz(100, 100))
-		var ids []ebiten.TouchID
+		var ids []ggfx.TouchID
 		if held {
-			ids = []ebiten.TouchID{1}
+			ids = []ggfx.TouchID{1}
 		}
 		f := frameInput{}
-		touch.apply(&f, ids, func(ebiten.TouchID) Point { return p })
+		touch.apply(&f, ids, func(ggfx.TouchID) Point { return p })
 		in.dispatch(f)
 	}
 	step(true, Pt(50, 80))

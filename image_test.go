@@ -3,11 +3,11 @@ package ggui
 import (
 	"testing"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 )
 
 func TestImageLayoutKeepsAspect(t *testing.T) {
-	img := ebiten.NewImage(200, 100)
+	img := ggfx.NewImage(200, 100)
 	cases := []struct {
 		name string
 		w    *ImageWidget
@@ -29,7 +29,7 @@ func TestImageLayoutKeepsAspect(t *testing.T) {
 }
 
 func TestImagePlacement(t *testing.T) {
-	img := ebiten.NewImage(200, 100)
+	img := ggfx.NewImage(200, 100)
 	box := Rct(Pt(0, 0), Sz(100, 100))
 	cases := []struct {
 		fit  ImageFit

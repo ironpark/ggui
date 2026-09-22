@@ -9,7 +9,7 @@
 // package is the upstream one.
 package textinput
 
-import "github.com/hajimehoshi/ebiten/v2/exp/textinput"
+import "github.com/ironpark/ggfx/exp/textinput"
 
 type (
 	Composer       = textinput.Composer

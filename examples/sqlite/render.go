@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
@@ -25,11 +25,11 @@ func (r *clientRender) Update() error {
 		return r.err
 	}
 	if r.done {
-		return ebiten.Termination
+		return ggfx.Termination
 	}
 	return nil
 }
-func (r *clientRender) Draw(*ebiten.Image) {
+func (r *clientRender) Draw(*ggfx.Image) {
 	if r.done {
 		return
 	}
@@ -49,7 +49,7 @@ func (r *clientRender) render() error {
 			p.Frame()
 			now = now.Add(time.Second)
 			p.Frame()
-			img := ebiten.NewImage(width, 900)
+			img := ggfx.NewImage(width, 900)
 			defer img.Deallocate()
 			img.Fill(ggui.Untrack(uitheme.Use).Bg)
 			p.Draw(img)
@@ -123,7 +123,7 @@ func renderClient(directory string) error {
 	if err != nil {
 		return err
 	}
-	ebiten.SetWindowSize(320, 240)
-	ebiten.SetWindowTitle("SQLite layout previews")
-	return ebiten.RunGame(&clientRender{directory: directory, path: path})
+	ggfx.SetWindowSize(320, 240)
+	ggfx.SetWindowTitle("SQLite layout previews")
+	return ggfx.RunGame(&clientRender{directory: directory, path: path})
 }

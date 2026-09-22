@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
@@ -26,11 +26,11 @@ func (r *workspaceRender) Update() error {
 		return r.err
 	}
 	if r.done {
-		return ebiten.Termination
+		return ggfx.Termination
 	}
 	return nil
 }
-func (r *workspaceRender) Draw(_ *ebiten.Image) {
+func (r *workspaceRender) Draw(_ *ggfx.Image) {
 	if r.done || r.err != nil {
 		return
 	}
@@ -57,7 +57,7 @@ func (r *workspaceRender) render() error {
 				bindTheme(m)
 			})
 			p.Frame()
-			img := ebiten.NewImage(width, 800)
+			img := ggfx.NewImage(width, 800)
 			save := func(name string) error {
 				p.Frame()
 				now = now.Add(time.Second)
@@ -99,7 +99,7 @@ func renderWorkspace(directory string) error {
 	if err := os.MkdirAll(directory, 0755); err != nil {
 		return err
 	}
-	ebiten.SetWindowSize(320, 240)
-	ebiten.SetWindowTitle("Workspace layout previews")
-	return ebiten.RunGame(&workspaceRender{directory: directory})
+	ggfx.SetWindowSize(320, 240)
+	ggfx.SetWindowTitle("Workspace layout previews")
+	return ggfx.RunGame(&workspaceRender{directory: directory})
 }

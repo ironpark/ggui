@@ -4,7 +4,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
@@ -50,7 +50,7 @@ type ToasterWidget struct {
 	limit   int
 	closed  bool
 	env     ggui.Env
-	buffer  *ebiten.Image
+	buffer  *ggfx.Image
 }
 type toastEntry struct {
 	id               ToastID
@@ -234,7 +234,7 @@ func (t *ToasterWidget) paintNotices(dst *ggui.Canvas) {
 				if t.buffer != nil {
 					t.buffer.Deallocate()
 				}
-				t.buffer = ebiten.NewImage(bounds.Dx(), bounds.Dy())
+				t.buffer = ggfx.NewImage(bounds.Dx(), bounds.Dy())
 			}
 			t.buffer.Clear()
 			clip.Image = t.buffer
@@ -249,7 +249,7 @@ func (t *ToasterWidget) paintNotices(dst *ggui.Canvas) {
 			clip.Paint(e.panel, rect)
 		})
 		if fading {
-			options := &ebiten.DrawImageOptions{}
+			options := &ggfx.DrawImageOptions{}
 			options.ColorScale.ScaleAlpha(float32(progress))
 			output.DrawImage(t.buffer, options)
 		}
