@@ -130,7 +130,7 @@ func (a Anchor) key(slot *byte) retainKey {
 
 // Retain stores v for the next frame under at and s, and Retained returns
 // what was stored under the same pair last frame. It is how a widget
-// rebuilt every frame keeps state that has no signal: a Tooltip's hover
+// rebuilt every frame keeps state that has no signal: a ui.Tooltip's hover
 // timer, a Transition's start time. A slot nobody retains again is
 // dropped, so state goes away with the widget.
 func (c *Canvas) Retain[T any](at Anchor, s Slot[T], v T) {
@@ -278,7 +278,7 @@ func widgetName(w Widget) string {
 
 // Pointer returns where the mouse cursor was when this frame began, in
 // logical pixels, and whether it is known. Widgets that react to hovering
-// without a hit region, such as Tooltip, read it in Paint.
+// without a hit region, such as ui.Tooltip, read it in Paint.
 func (c *Canvas) Pointer() (Point, bool) {
 	if c == nil {
 		return Point{}, false

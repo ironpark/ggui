@@ -251,3 +251,21 @@ func TestTableRowSelectionMotion(t *testing.T) {
 		p.Close()
 	}
 }
+
+func TestTooltipKeyboardFocusAndNarrowViewport(t *testing.T) {
+	input := ggui.TextInput(ggui.State("")).Name("Editor")
+	tip := Tooltip(input, "A longer explanation that must fit within a narrow window.")
+	p := ggui.NewProbe(tip, ggui.Sz(100, 200))
+	defer p.Close()
+	p.Advance(0)
+	p.Type(ggui.Mods{}, ggui.KeyTab)
+	p.Frame()
+	p.Advance(time.Second)
+	if _, ok := p.Semantics().Find(ggui.RoleText, "A longer explanation that must fit within a narrow window."); !ok {
+		t.Fatal("keyboard focus does not reveal tooltip")
+	}
+	size := tip.effect.Layout(ggui.Loose(ggui.Sz(100, ggui.Unbounded)), tip.env)
+	if size.W > 100 {
+		t.Fatalf("tooltip overflows: %v", size)
+	}
+}

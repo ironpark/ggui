@@ -31,7 +31,7 @@ ggui.Center(
 - [Choosing a layout](#choosing-a-layout)
 - [Rows, columns, and flex](#rows-columns-and-flex)
 - [Wrap and grid](#wrap-and-grid)
-- [Tooltips and popups](#tooltips-and-popups)
+- [Popups](#popups)
 - [Images](#images)
 - [Text](#text)
 
@@ -128,12 +128,7 @@ lines alone, `.Align(...)` places children within their line. `Grid(cols,
 ...)` deals children into equal-width columns, each given its cell width
 tight so columns line up, with rows as tall as their tallest cell.
 
-## Tooltips and popups
-
-`Tooltip(child, text)` shows text below the child once the cursor has
-rested on it for half a second (`.Delay(d)`). It registers no hit region, so
-the child gets every event, and it paints through `Canvas.Overlay`, above
-everything else.
+## Popups
 
 `Popup(anchor, content)` floats content below its anchor (above it when
 there is no room), painted through `Canvas.Overlay` over a scrim: a press
@@ -142,7 +137,8 @@ anywhere outside closes it and reaches nothing underneath. `Show`, `Hide`,
 `StateValue[bool]`; `.Keys(h)` keeps keyboard focus on the widget that opened it
 while the pointer is in the content, and a widget inside can find its popup
 with `PopupOf(env)` to close it after acting. `ui.Select` and `ui.Menu` are
-built on it.
+built on it. `ui.Tooltip` and `ui.HoverCard` paint through the same
+`Canvas.Overlay` without a scrim, so their anchors keep every event.
 
 ## Images
 

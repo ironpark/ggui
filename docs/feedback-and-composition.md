@@ -124,6 +124,7 @@ otherwise get rebuilt by hand in every application.
 | `ui.Item(title, description)` | One row of a list: `.Media(widget)` before the text, `.Action(widget)` after it, `.Outline()` for a bordered card. It takes no input, so the action keeps its own. |
 | `ui.Breadcrumb(crumbs...)` | The path to the page the user is on, built from `ui.Crumb(label, onTap)`. Every step but the last is a link with its own tab stop; `.Separator(s)` replaces the "/", and `.Max(n)` elides the middle behind an ellipsis. |
 | `ui.InputGroup(input)` | One field chrome around a bare `ggui.TextInput` and the widgets that flank it: `.Leading(widget)`, `.Trailing(widget)`. The group owns the border, fill, padding and focus ring, so it takes the editor rather than `ui.TextField`, which draws a box of its own. |
+| `ui.Tooltip(child, text)` | A line of help shown below the child once the cursor has rested on it for half a second (`.Delay(d)`), or while keyboard focus is within it. It registers no hit region, so the child gets every event, and paints through `Canvas.Overlay` above everything else. |
 | `ui.HoverCard(anchor, content)` | A panel of content shown near the anchor once the cursor has rested on it, and kept up while the cursor is on either one. `.Delay(d)` and `.Width(px)` tune it. Nothing about it takes focus: a hover card is an aside, and the keyboard never has to visit it. |
 
 ```go

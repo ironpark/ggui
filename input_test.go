@@ -309,29 +309,6 @@ func TestTabMovesFocusInPaintOrder(t *testing.T) {
 	}
 }
 
-func TestTooltipAppearsAfterHover(t *testing.T) {
-	tip := Tooltip(Box().Size(50, 50), "hint").Delay(0)
-	var c Canvas
-	c.Paint(tip, Rct(Pt(0, 0), tip.Layout(Loose(Sz(100, 100)), Env{})))
-	if len(c.fs().overlays) != 0 {
-		t.Fatal("tooltip queued without a pointer")
-	}
-	c.fs().pointer, c.fs().hasPointer = Pt(10, 10), true
-	c.Paint(tip, Rct(Pt(0, 0), Sz(50, 50)))
-	if len(c.fs().overlays) != 1 {
-		t.Fatalf("%d overlays with the pointer inside, want 1", len(c.fs().overlays))
-	}
-	c.paintOverlays()
-	if len(c.fs().overlays) != 0 {
-		t.Fatal("overlays not cleared")
-	}
-	c.fs().pointer = Pt(80, 80)
-	c.Paint(tip, Rct(Pt(0, 0), Sz(50, 50)))
-	if len(c.fs().overlays) != 0 {
-		t.Fatal("tooltip queued with the pointer outside")
-	}
-}
-
 func TestOnKeyRunsBeforeTheFocusedWidgetAndCanConsume(t *testing.T) {
 	var log []string
 	w := &keyed{&log, "a"}

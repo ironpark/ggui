@@ -196,7 +196,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 				ggui.Wrap(
 					ui.Badge("Draft"),
 					ui.Badge("Published").Accent(),
-					ggui.Tooltip(ui.Button("Hover for help", nil).Outline(), "Tooltips add context to an action."),
+					ui.Tooltip(ui.Button("Hover for help", nil).Outline(), "Tooltips add context to an action."),
 				).Gap(8),
 			).Gap(16)),
 
@@ -435,7 +435,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 
 			preview("Wrap", ggui.View(tags, func(list []string) *ggui.WrapWidget {
 				return ggui.Wrap(ggui.Children(list, func(tag string) ggui.Widget {
-					return ggui.Tooltip(
+					return ui.Tooltip(
 						ui.Button(tag+"  ×", func() { ggui.Remove(tags, func(s string) bool { return s == tag }) }).Outline().Pad(4, 10),
 						"Click to remove",
 					)

@@ -55,7 +55,7 @@ func header(m *model) ggui.Widget {
 	).Gap(8)
 	actions := ggui.Row(
 		ui.ThemeSwitch(m.Dark),
-		ggui.Tooltip(ui.Button("New task", m.create), "Create a task (⌘/Ctrl+N)"),
+		ui.Tooltip(ui.Button("New task", m.create), "Create a task (⌘/Ctrl+N)"),
 	).Gap(12).Align(ggui.AlignCenter)
 	return &adaptive{
 		breakpoint: 680,

@@ -90,7 +90,7 @@ func footer(m *model) ggui.Widget {
 		ggui.Textf("%d left", m.Left).AsCaption().NoWrap(),
 		ggui.Spacer(),
 		ui.Radios(m.Show).Options([]filter{all, active, done}), // labelled through filter.String
-		ggui.Tooltip(clear, "Removes every finished item (⌘/Ctrl+K)"),
+		ui.Tooltip(clear, "Removes every finished item (⌘/Ctrl+K)"),
 	).Space(1)
 }
 

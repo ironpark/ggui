@@ -167,6 +167,27 @@ func TestHoverCardWaitsForTheCursorToRest(t *testing.T) {
 	}
 }
 
+func TestTooltipAppearsAfterHover(t *testing.T) {
+	tip := ui.Tooltip(ggui.Box().Size(50, 50), "hint").Delay(0)
+	p := ggui.NewProbe(ggui.Column(tip, ggui.Spacer()), ggui.Sz(100, 100))
+	defer p.Close()
+	shown := func() bool {
+		_, ok := p.Semantics().Find(ggui.RoleText, "hint")
+		return ok
+	}
+	if shown() {
+		t.Fatal("tooltip up without a pointer")
+	}
+	p.Move(ggui.Pt(10, 10))
+	if !shown() {
+		t.Fatal("tooltip not up with the pointer inside")
+	}
+	p.Move(ggui.Pt(80, 80))
+	if shown() {
+		t.Fatal("tooltip up with the pointer outside")
+	}
+}
+
 func TestButtonGroupJoinsChildrenWithoutTakingTheirInput(t *testing.T) {
 	copies, pastes := 0, 0
 	g := ui.ButtonGroup(

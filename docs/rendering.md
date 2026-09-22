@@ -113,7 +113,7 @@ State that has no signal and must outlive a rebuild can be kept on the
 Canvas under a typed `Slot`: `dst.Retain(anchor, slot, v)` stores a value
 for the next frame and `dst.Retained(anchor, slot)` reads what was stored
 last frame, where the `Anchor` is the widget's ID or its Rect. `dst.Ease`
-is a `Motion` kept that way. Tooltip keeps its hover timer and Transition
+is a `Motion` kept that way. `ui.Tooltip` keeps its hover timer and Transition
 its start time in slots.
 
 ## Overlays
