@@ -25,6 +25,18 @@ type frameClock struct {
 	mu   sync.Mutex
 	now  time.Time // the frozen instant Now returns
 	real time.Time // the raw reading now was last advanced from
+
+	// read reports whether Now was called since begin: something painted
+	// this frame depends on time, so the next frame must run without
+	// waiting for input.
+	read bool
+}
+
+// timeRead reports whether Now was called since the frame began.
+func (f *frameClock) timeRead() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.read
 }
 
 var frame frameClock
@@ -37,6 +49,7 @@ var frame frameClock
 func (f *frameClock) begin(raw time.Time) time.Time {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.read = false
 	switch {
 	case f.now.IsZero():
 		f.now = raw
@@ -70,6 +83,7 @@ func (f *frameClock) reset() {
 func (f *frameClock) instant() time.Time {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.read = true
 	if f.now.IsZero() {
 		return clock()
 	}

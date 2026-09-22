@@ -362,10 +362,11 @@ func (a *App) runFrameEvent(ev ggfx.FrameEvent) error {
 }
 
 // wantsFrame reports whether the next frame must run without waiting for
-// input: an animation or a momentum scroll is moving, work is posted or
-// runs every frame, a touch is down, or files are being dragged over.
+// input: an animation or a momentum scroll is moving, a widget read the
+// clock while painting (a Motion, a caret blink), work is posted or runs
+// every frame, a touch is down, or files are being dragged over.
 func (a *App) wantsFrame(f frameInput) bool {
-	if anims.active() || len(a.frame) > 0 || a.hasPosted() {
+	if anims.active() || frame.timeRead() || len(a.frame) > 0 || a.hasPosted() {
 		return true
 	}
 	return f.drag || a.touch.active || a.touch.waiting || a.input.touchMotion.target != nil
