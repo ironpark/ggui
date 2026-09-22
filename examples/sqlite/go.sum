@@ -24,6 +24,8 @@ github.com/ironpark/ggfx v0.0.0-20260922143630-5a14656f5c03 h1:IgkH+NWbrgQeQtT21
 github.com/ironpark/ggfx v0.0.0-20260922143630-5a14656f5c03/go.mod h1:lp/zmzxrCDxnZSl6aBO0Wt96v+Lg+G9hxqMA1BPpwJQ=
 github.com/ironpark/ggfx v0.0.0-20260922151417-8340d4a477ca h1:t65DEzYqcbGBDOXr1Qch7JOti8zmhwGrG+c3rxXqxpI=
 github.com/ironpark/ggfx v0.0.0-20260922151417-8340d4a477ca/go.mod h1:lp/zmzxrCDxnZSl6aBO0Wt96v+Lg+G9hxqMA1BPpwJQ=
+github.com/ironpark/ggfx v0.0.0-20260922153954-b45ef5bbd3d1 h1:ZIGGzB1NqktbW3T9Ga++MQwMCfaDHCXFdTKnUiIlvDY=
+github.com/ironpark/ggfx v0.0.0-20260922153954-b45ef5bbd3d1/go.mod h1:lp/zmzxrCDxnZSl6aBO0Wt96v+Lg+G9hxqMA1BPpwJQ=
 github.com/ironpark/ggui v0.0.0-20260922084102-d037210ddcf6 h1:109QbOvQY2lYb/Rk61EFSanrNh1B1/+LVSUhPZECxyU=
 github.com/ironpark/ggui v0.0.0-20260922084102-d037210ddcf6/go.mod h1:0jHC9qi7YvcL2HNiTpm8k/Jicr95/DPI62TiR8ryWr0=
 github.com/mattn/go-isatty v0.0.24 h1:tGZZoVgT/KiqK1c8ocVLeDS8BSWMRd47J3Lbz7vsReI=

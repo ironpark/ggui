@@ -2,16 +2,16 @@ package main
 
 import "github.com/ironpark/ggfx"
 
-// runRenderWindow opens one window and calls step on every frame until step
-// reports that it is done or fails. A render harness needs a window because
-// the graphics driver draws and reads back pixels inside a frame; the window
-// only previews what is being written to disk.
+// runRenderWindow calls step on every frame until step reports that it is done
+// or fails. A render harness needs a window because the graphics driver draws
+// and reads back pixels inside a frame, but the window stays hidden: nothing is
+// shown, and the frames still run.
 func runRenderWindow(title string, width, height int, step func(screen *ggfx.Image) (done bool, err error)) error {
 	var window *ggfx.Window
 	return ggfx.Run(ggfx.HandlerFunc(func(ev ggfx.Event) error {
 		switch ev := ev.(type) {
 		case ggfx.StartEvent:
-			w, err := ggfx.NewWindow(&ggfx.WindowOptions{Title: title, Width: width, Height: height})
+			w, err := ggfx.NewWindow(&ggfx.WindowOptions{Title: title, Width: width, Height: height, Hidden: true})
 			if err != nil {
 				return err
 			}
