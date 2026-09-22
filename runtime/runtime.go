@@ -105,19 +105,31 @@ const (
 	kindSave
 )
 
+// NativeFilePickerForWindow binds dialogs to the caller's native window. The
+// getter runs before entering the native main-thread callback.
+func NativeFilePickerForWindow(window func() uintptr) FilePicker { return nativePicker{window: window} }
+
 // nativePicker is the platform's dialog. Each platform file supplies
 // showDialog, which returns the chosen paths or ErrCanceled.
-type nativePicker struct{}
+type nativePicker struct{ window func() uintptr }
 
-func (nativePicker) OpenFile(d FileDialog) (string, error) { return first(showDialog(kindOpen, d)) }
-
-func (nativePicker) OpenFiles(d FileDialog) ([]string, error) {
-	return all(showDialog(kindOpenMultiple, d))
+func (p nativePicker) show(k dialogKind, d FileDialog) ([]string, error) {
+	var owner uintptr
+	if p.window != nil {
+		owner = p.window()
+	}
+	return showDialog(k, d, owner)
 }
 
-func (nativePicker) PickFolder(d FileDialog) (string, error) { return first(showDialog(kindFolder, d)) }
+func (p nativePicker) OpenFile(d FileDialog) (string, error) { return first(p.show(kindOpen, d)) }
 
-func (nativePicker) SaveFile(d FileDialog) (string, error) { return first(showDialog(kindSave, d)) }
+func (p nativePicker) OpenFiles(d FileDialog) ([]string, error) {
+	return all(p.show(kindOpenMultiple, d))
+}
+
+func (p nativePicker) PickFolder(d FileDialog) (string, error) { return first(p.show(kindFolder, d)) }
+
+func (p nativePicker) SaveFile(d FileDialog) (string, error) { return first(p.show(kindSave, d)) }
 
 // all is what a platform half's answer means to a caller: a nil error with
 // nothing chosen is a cancel, which is what a dialog that never ran

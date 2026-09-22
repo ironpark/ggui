@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"runtime"
 	"structs"
+	"sync"
 	"unsafe"
 
 	"github.com/ebitengine/purego"
@@ -21,36 +22,17 @@ import (
 // The macOS half of the accessibility bridge, in Objective-C reached
 // through purego: the project builds without cgo and stays that way.
 //
-// The shape is the one internal/textinput already uses for the IME. An
-// invisible NSView is added over the window's content view, and everything
-// ggui paints is reported as that view's accessibility children. Nothing is
-// swizzled and GLFW's own view is left alone; the container simply refuses
-// the mouse, so that adding it changes nothing but what the accessibility
-// API can see.
-//
-// Every element is an NSAccessibilityElement subclass rather than a bare
-// NSObject implementing the informal protocol. The subclass is what AppKit
-// expects of an element that is not a view, it already conforms to
-// NSAccessibility so purego does not have to add the protocol by hand, and
-// its default answers are sensible for the handful of attributes below that
-// are not overridden.
-//
-// An element carries nothing but an integer handle in an instance variable.
-// It holds no pointer to Go memory, so nothing has to be pinned, and a
-// handle that outlives its node resolves to nothing rather than to whatever
-// took its place. Every answer is read out of the last published SemTree,
-// on the thread that asked, without waiting for a frame.
+// ggfx owns the native container view. This bridge supplies its tree through
+// per-window callbacks and owns only the accessibility element objects.
 
 type nsPoint struct {
-	_ structs.HostLayout
-	x float64
-	y float64
+	_    structs.HostLayout
+	x, y float64
 }
 
 type nsSize struct {
-	_      structs.HostLayout
-	width  float64
-	height float64
+	_             structs.HostLayout
+	width, height float64
 }
 
 type nsRect struct {
@@ -63,11 +45,7 @@ var (
 	axSelAlloc               = objc.RegisterName("alloc")
 	axSelInit                = objc.RegisterName("init")
 	axSelRelease             = objc.RegisterName("release")
-	axSelContentView         = objc.RegisterName("contentView")
-	axSelAddSubview          = objc.RegisterName("addSubview:")
 	axSelBounds              = objc.RegisterName("bounds")
-	axSelSetFrame            = objc.RegisterName("setFrame:")
-	axSelSetAutoresizingMask = objc.RegisterName("setAutoresizingMask:")
 	axSelWindow              = objc.RegisterName("window")
 	axSelConvertRectToView   = objc.RegisterName("convertRect:toView:")
 	axSelConvertRectFromView = objc.RegisterName("convertRect:fromView:")
@@ -79,7 +57,6 @@ var (
 
 	axClassNSString = objc.GetClass("NSString")
 	axClassNSNumber = objc.GetClass("NSNumber")
-	axClassNSView   = objc.GetClass("NSView")
 
 	axIDNSWorkspace = objc.ID(objc.GetClass("NSWorkspace"))
 )
@@ -99,57 +76,50 @@ func nsNumber(v float64) objc.ID {
 // three things the portable half asks of it.
 type darwinAX struct {
 	container objc.ID
+	bridge    *Bridge
+	window    *ggfx.Window
 }
 
 // newAXPlatform returns the macOS bridge. Nothing is created here: the
-// window does not exist until Run has started, so the container is attached
-// from the first poll that finds the app running.
+// window does not exist until Run has started; SetWindow attaches the container.
 func newAXPlatform() axPlatform { return &darwinAX{} }
 
-// active reports whether VoiceOver is running, and takes the chance to
-// attach the container view, which is work only the main thread may do.
+// active reports whether VoiceOver is running.
 // It is asked once a second, so the hop is nothing; asking every frame
 // would put a main-thread round trip in the middle of every paint.
 func (d *darwinAX) active() bool {
 	var on bool
 	ggfx.RunOnMainThread(func() {
-		d.attach()
 		on = axIDNSWorkspace.Send(axSelSharedWorkspace).Send(axSelVoiceOverEnabled) != 0
 	})
 	return on
 }
 
-// attach puts the container view over the window's content view, once. It
-// runs on the main thread.
-//
-// The view is added last, so it sits above the IME's own subview, and it
-// must therefore refuse the mouse: hitTest: returns nil, so a click lands
-// wherever it would have without it. It resizes with the content view, so
-// nothing has to touch its frame again.
-func (d *darwinAX) attach() {
-	if d.container != 0 {
-		return
+// setWindow uses the container owned by ggfx; ggui never inserts a view.
+func (d *darwinAX) setWindow(b *Bridge, w *ggfx.Window) {
+	d.bridge, d.window = b, w
+	d.container = objc.ID(w.AccessibilityView())
+	w.SetAccessibilityHandlers(func() uintptr {
+		f := b.frame()
+		if f == nil {
+			return uintptr(cocoa.Array(nil))
+		}
+		return uintptr(cocoa.Array(axElements(b, f, f.tree.Roots())))
+	}, func(x, y float64) uintptr { return uintptr(axHitTestAt(b, nsPoint{x: x, y: y})) })
+}
+
+func (d *darwinAX) close() {
+	if d.window != nil {
+		d.window.SetAccessibilityHandlers(nil, nil)
 	}
-	window := cocoa.AppWindow()
-	if window == 0 {
-		return
-	}
-	content := window.Send(axSelContentView)
-	if content == 0 {
-		return
-	}
-	view := objc.ID(axClassContainer).Send(axSelAlloc).Send(axSelInit)
-	view.Send(axSelSetFrame, objc.Send[nsRect](content, axSelBounds))
-	// NSViewWidthSizable | NSViewHeightSizable.
-	view.Send(axSelSetAutoresizingMask, uint(2|16))
-	content.Send(axSelAddSubview, view)
-	d.container = view
+	d.container, d.window = 0, nil
 }
 
 // element makes the accessibility object for one node, carrying its handle.
 func (d *darwinAX) element(handle int64) uintptr {
 	e := objc.ID(axClassElement).Send(axSelAlloc).Send(axSelInit)
 	e.SetIvar(axHandleIvar, objc.ID(handle))
+	axElementBridges.Store(e, d.bridge)
 	return uintptr(e)
 }
 
@@ -160,6 +130,7 @@ func (d *darwinAX) element(handle int64) uintptr {
 // main-thread round trip into any frame that removed a widget.
 func (d *darwinAX) release(elems []uintptr) {
 	for _, e := range elems {
+		axElementBridges.Delete(objc.ID(e))
 		objc.ID(e).Send(axSelRelease)
 	}
 }
@@ -168,8 +139,7 @@ func (d *darwinAX) release(elems []uintptr) {
 var axHandleIvar objc.Ivar
 
 var (
-	axClassElement   objc.Class
-	axClassContainer objc.Class
+	axClassElement objc.Class
 )
 
 func init() {
@@ -235,30 +205,20 @@ func init() {
 	}
 	axHandleIvar = axClassElement.InstanceVariable("handle")
 
-	axClassContainer, err = objc.RegisterClass(
-		"GgUIAccessibilityContainer",
-		axClassNSView,
-		nil,
-		nil,
-		[]objc.MethodDef{
-			{Cmd: objc.RegisterName("isAccessibilityElement"), Fn: axContainerIsElement},
-			{Cmd: objc.RegisterName("accessibilityRole"), Fn: axContainerRole},
-			{Cmd: objc.RegisterName("accessibilityChildren"), Fn: axContainerChildren},
-			{Cmd: objc.RegisterName("accessibilityHitTest:"), Fn: axContainerHitTest},
-			{Cmd: objc.RegisterName("hitTest:"), Fn: axContainerMouseHitTest},
-		},
-	)
-	if err != nil {
-		panic("ggui: " + err.Error())
-	}
 }
+
+var axElementBridges sync.Map // objc.ID -> *Bridge; retired elements resolve to nothing
 
 // axSelf returns the bridge, the frame being answered from and the node the
 // element stands for. Every method starts with it, and every one of them
 // answers nothing when it fails: an element outliving its node is normal,
 // since an assistive technology keeps the ones it was given.
 func axSelf(self objc.ID) (*Bridge, *axFrame, SemNode, bool) {
-	b := current.Load()
+	owner, exists := axElementBridges.Load(self)
+	if !exists {
+		return nil, nil, SemNode{}, false
+	}
+	b, _ := owner.(*Bridge)
 	if b == nil {
 		return nil, nil, SemNode{}, false
 	}
@@ -480,35 +440,6 @@ func axElementHitTest(self objc.ID, _ objc.SEL, p nsPoint) objc.ID {
 	return axHitTestAt(b, p)
 }
 
-func axContainerIsElement(objc.ID, objc.SEL) bool { return false }
-
-func axContainerRole(objc.ID, objc.SEL) objc.ID { return cocoa.String("AXGroup") }
-
-func axContainerChildren(_ objc.ID, _ objc.SEL) objc.ID {
-	b := current.Load()
-	if b == nil {
-		return cocoa.Array(nil)
-	}
-	f := b.frame()
-	if f == nil {
-		return cocoa.Array(nil)
-	}
-	return cocoa.Array(axElements(b, f, f.tree.Roots()))
-}
-
-func axContainerHitTest(_ objc.ID, _ objc.SEL, p nsPoint) objc.ID {
-	b := current.Load()
-	if b == nil {
-		return 0
-	}
-	return axHitTestAt(b, p)
-}
-
-// axContainerMouseHitTest refuses the mouse. The container covers the whole
-// window, so without this every click would land on it instead of on the
-// view Ebitengine draws and listens on.
-func axContainerMouseHitTest(objc.ID, objc.SEL, nsPoint) objc.ID { return 0 }
-
 // axHitTestAt answers a hit test, which arrives in screen coordinates and
 // must come back as the deepest element under the point, or nothing.
 func axHitTestAt(b *Bridge, p nsPoint) objc.ID {
@@ -585,7 +516,7 @@ func axPriority(loud bool) int32 {
 // rather than in the diff, because making one is also main-thread work.
 func (d *darwinAX) notify(notes []axNote) {
 	ggfx.RunOnMainThread(func() {
-		b := current.Load()
+		b := d.bridge
 		if b == nil || d.container == 0 {
 			return
 		}
@@ -688,9 +619,9 @@ func axElementSetFocused(self objc.ID, _ objc.SEL, on bool) {
 	if !on {
 		return
 	}
-	_, _, n, ok := axSelf(self)
+	b, _, n, ok := axSelf(self)
 	if ok && n.Offscreen && n.Actions.Has(ActionScrollIntoView) {
-		if b := current.Load(); b != nil {
+		if b != nil {
 			b.perform(n.ID, Action{Kind: ActionScrollIntoView})
 		}
 	}

@@ -9,8 +9,6 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"golang.org/x/sys/windows"
-
-	"github.com/ironpark/ggui/internal/platform/win32"
 )
 
 // The Windows dialogs are the common dialogs of comdlg32 and the folder
@@ -101,11 +99,10 @@ type browseInfo struct {
 }
 
 // showDialog runs the dialog on the main thread and waits for it.
-func showDialog(k dialogKind, d FileDialog) (paths []string, err error) {
+func showDialog(k dialogKind, d FileDialog, owner uintptr) (paths []string, err error) {
 	ggfx.RunOnMainThread(func() {
 		// Owned by the app's window, the dialog is modal to it and centred
 		// on it; without one it stands on its own.
-		owner := win32.AppWindow()
 		if k == kindFolder {
 			paths, err = browseFolder(d, owner)
 		} else {

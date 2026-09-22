@@ -1,6 +1,7 @@
 package a11y
 
 import (
+	"github.com/ironpark/ggfx"
 	"sync"
 	"sync/atomic"
 )
@@ -159,14 +160,24 @@ func (b *Bridge) Start(act func(NodeID, Action), mode Mode) {
 	b.plat = newAXPlatform()
 	if b.plat != nil {
 		b.act = act
-		current.Store(b)
 	}
 }
 
-// current is the bridge the platform half answers from. It is package-level
-// because the callbacks a platform registers have nowhere to carry a
-// receiver.
-var current atomic.Pointer[Bridge]
+// SetWindow binds this bridge to its owning window. Call after Start and before
+// publishing its first tree.
+func (b *Bridge) SetWindow(w *ggfx.Window) {
+	if p, ok := b.plat.(interface{ setWindow(*Bridge, *ggfx.Window) }); ok {
+		p.setWindow(b, w)
+	}
+}
+
+// Close detaches native callbacks and retires the tree before its window closes.
+func (b *Bridge) Close() {
+	b.clear()
+	if p, ok := b.plat.(interface{ close() }); ok {
+		p.close()
+	}
+}
 
 // publish makes t the tree every query is answered from, retires the
 // elements of the nodes that are no longer in it, and hands the platform

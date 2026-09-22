@@ -1,7 +1,7 @@
 //go:build darwin && !ios
 
 // Package cocoa is the little of AppKit that ggui's platform services
-// share: strings and arrays for Objective-C, the app's window, and a block
+// share: strings and arrays for Objective-C, the application, and a block
 // for the APIs that take a completion handler. Everything is reached
 // through purego, so the project stays free of cgo.
 package cocoa
@@ -17,11 +17,8 @@ import (
 
 var (
 	selSharedApplication    = objc.RegisterName("sharedApplication")
-	selWindows              = objc.RegisterName("windows")
 	selCount                = objc.RegisterName("count")
 	selObjectAtIndex        = objc.RegisterName("objectAtIndex:")
-	selContentView          = objc.RegisterName("contentView")
-	selIsKindOfClass        = objc.RegisterName("isKindOfClass:")
 	selStringWithUTF8String = objc.RegisterName("stringWithUTF8String:")
 	selArrayWithObjects     = objc.RegisterName("arrayWithObjects:count:")
 	selArray                = objc.RegisterName("array")
@@ -73,25 +70,6 @@ func Objects(arr objc.ID) iter.Seq[objc.ID] {
 			}
 		}
 	}
-}
-
-// AppWindow finds Ebitengine's window, which is the one whose content view
-// is GLFW's, or zero before it exists. NSApplication.mainWindow can be nil
-// on a background launch, and AppKit owns panels and helper windows too,
-// so nothing else will do. Like everything that touches a window, it must
-// run on the main thread.
-func AppWindow() objc.ID {
-	contentClass := objc.GetClass("GLFWContentView")
-	if contentClass == 0 {
-		return 0
-	}
-	for window := range Objects(App().Send(selWindows)) {
-		content := window.Send(selContentView)
-		if content != 0 && objc.Send[bool](content, selIsKindOfClass, contentClass) {
-			return window
-		}
-	}
-	return 0
 }
 
 // A completion handler is an Objective-C block, which purego cannot make,

@@ -4,11 +4,8 @@ package a11y
 
 import (
 	"sync/atomic"
-	"syscall"
 
 	"github.com/ironpark/ggfx"
-
-	"github.com/ironpark/ggui/internal/platform/win32"
 )
 
 // The Windows half of the accessibility bridge speaks UI Automation, from
@@ -26,116 +23,87 @@ import (
 // and the answers all come from the published frame, which is built to be
 // read from anywhere.
 
-// winRoot and winHWND are what the window procedure needs while answering
-// WM_GETOBJECT. They are package-level because a window procedure is a
-// plain C callback with nowhere to carry a receiver.
-var (
-	winRoot atomic.Uintptr
-	winHWND atomic.Uintptr
-)
+func init() { buildVtables() }
 
-// Window messages, from winuser.h.
-const (
-	wmDestroy   = 0x0002
-	wmNCDestroy = 0x0082
-	wmGetObject = 0x003D
-)
-
-// winSubclassID names this subclass among whatever else has subclassed the
-// window. Any constant will do as long as removing uses the same one.
-const winSubclassID = 1
-
-func init() {
-	buildVtables()
-	winSubclassProc = syscall.NewCallback(winSubclass)
+type windowsAX struct {
+	bridge     *Bridge
+	window     *ggfx.Window
+	root, hwnd atomic.Uintptr
 }
 
-// windowsAX is the platform half. It holds nothing: the window and the root
-// provider live in the atomics above, because the window procedure reaches
-// them from a callback that has no receiver.
-type windowsAX struct{}
-
-// newAXPlatform returns the UI Automation bridge.
 func newAXPlatform() axPlatform { return &windowsAX{} }
 
-// active reports whether any client is listening, and takes the chance to
-// find the window and subclass it, which is work only the thread that owns
-// the window may do. It is asked once a second, so the hop costs nothing,
-// and it keeps trying until the window exists.
-func (windowsAX) active() bool {
-	if winHWND.Load() == 0 {
-		ggfx.RunOnMainThread(winAttach)
-		if winHWND.Load() == 0 {
-			return false
+func (d *windowsAX) setWindow(b *Bridge, w *ggfx.Window) {
+	d.bridge, d.window = b, w
+	h := w.NativeHandle()
+	if h == 0 {
+		return
+	}
+	root := newWinObj(b, winRootHandle)
+	if root == 0 {
+		return
+	}
+	d.root.Store(root)
+	d.hwnd.Store(h)
+	w.SetGetObjectHandler(func(wparam, lparam uintptr) (uintptr, bool) {
+		if int32(uint32(lparam)) != uiaRootObjectID {
+			return 0, false
 		}
+		root := d.root.Load()
+		if root == 0 {
+			return 0, false
+		}
+		r, _, _ := procUiaReturnRawElementProvider.Call(h, wparam, lparam, root)
+		return r, true
+	})
+}
+
+func (d *windowsAX) active() bool {
+	if d.hwnd.Load() == 0 {
+		return false
 	}
 	on, _, _ := procUiaClientsAreListening.Call()
 	return on != 0
 }
 
-// winAttach finds Ebitengine's window and installs the subclass that
-// answers WM_GETOBJECT. It runs on the main thread, which is the one that
-// owns the window and therefore the only one whose windows are worth
-// enumerating.
-//
-// The subclass goes on as soon as the window is found rather than when a
-// client first asks, because WM_GETOBJECT arrives once: a client that asked
-// before the subclass existed sees nothing until it asks again, which may
-// be never.
-func winAttach() {
-	if winHWND.Load() != 0 {
-		return
+func (d *windowsAX) close() {
+	if d.window != nil {
+		d.window.SetGetObjectHandler(nil)
 	}
-	h := win32.AppWindow()
-	if h == 0 {
-		return
+	h := d.hwnd.Swap(0)
+	root := d.root.Swap(0)
+	if h != 0 {
+		ggfx.RunOnMainThread(func() { procUiaReturnRawElementProvider.Call(h, 0, 0, 0) })
 	}
-	root := newWinObj(winRootHandle)
-	if root == 0 {
-		return
+	if root != 0 {
+		winObjectBridges.Delete(root)
+		procUiaDisconnectProvider.Call(root)
+		comRelease(root)
 	}
-	winRoot.Store(root)
-	winHWND.Store(h)
-	procSetWindowSubclass.Call(h, winSubclassProc, winSubclassID, 0)
+	d.window = nil
 }
 
-// winSubclassProc is the window procedure that hands UI Automation the root
-// provider, created once because a callback is never freed.
-var winSubclassProc uintptr
-
-// winSubclass answers the one message that matters and passes on the rest.
-//
-// The two teardown messages are not optional. A window that goes away
-// without telling UI Automation leaves a client waiting on a provider that
-// will never answer, which is a hang on exit whenever a screen reader is
-// attached, and a subclass that outlives its window is a crash.
-func winSubclass(hwnd, msg, wparam, lparam, _, _ uintptr) uintptr {
-	switch msg {
-	case wmGetObject:
-		if int32(uint32(lparam)) == uiaRootObjectID {
-			if root := winRoot.Load(); root != 0 {
-				r, _, _ := procUiaReturnRawElementProvider.Call(hwnd, wparam, lparam, root)
-				return r
-			}
-		}
-	case wmDestroy:
-		procUiaReturnRawElementProvider.Call(hwnd, 0, 0, 0)
-	case wmNCDestroy:
-		procUiaReturnRawElementProvider.Call(hwnd, 0, 0, 0)
-		procRemoveWindowSubclass.Call(hwnd, winSubclassProc, winSubclassID)
-		winHWND.Store(0)
-		if root := winRoot.Swap(0); root != 0 {
-			comRelease(root)
+func winHandle(b *Bridge) uintptr {
+	if b != nil {
+		if p, ok := b.plat.(*windowsAX); ok {
+			return p.hwnd.Load()
 		}
 	}
-	r, _, _ := procDefSubclassProc.Call(hwnd, msg, wparam, lparam)
-	return r
+	return 0
+}
+func winRootFor(b *Bridge) uintptr {
+	if b != nil {
+		if p, ok := b.plat.(*windowsAX); ok {
+			return p.root.Load()
+		}
+	}
+	return 0
 }
 
 // element makes a provider object for one node, carrying its handle. The
 // bridge's cache holds the reference this returns; a copy handed to UI
 // Automation gets one of its own.
-func (windowsAX) element(handle int64) uintptr { return newWinObj(handle) }
+func (d *windowsAX) element(handle int64) uintptr { return newWinObj(d.bridge, handle) }
 
 // release tells UI Automation that these elements answer nothing more and
 // then drops the cache's reference. Disconnecting first is what keeps a
@@ -143,6 +111,7 @@ func (windowsAX) element(handle int64) uintptr { return newWinObj(handle) }
 // documented way to leak a whole tree into a screen reader.
 func (windowsAX) release(elems []uintptr) {
 	for _, e := range elems {
+		winObjectBridges.Delete(e)
 		procUiaDisconnectProvider.Call(e)
 		comRelease(e)
 	}
@@ -155,9 +124,9 @@ func (windowsAX) release(elems []uintptr) {
 //
 // publish holds no lock across this call, so a re-entrant query that wants
 // the element cache gets it.
-func (windowsAX) notify(notes []axNote) {
-	b := current.Load()
-	if b == nil || winHWND.Load() == 0 {
+func (d *windowsAX) notify(notes []axNote) {
+	b := d.bridge
+	if b == nil || winHandle(b) == 0 {
 		return
 	}
 	ggfx.RunOnMainThread(func() {
@@ -170,7 +139,7 @@ func (windowsAX) notify(notes []axNote) {
 // winPost raises the one event a note stands for. An element that has left
 // the tree between the diff and here simply says nothing.
 func winPost(b *Bridge, n axNote) {
-	root := winRoot.Load()
+	root := winRootFor(b)
 	if root == 0 {
 		return
 	}

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build darwin && !ios
+//go:build (darwin && !ios) || windows
 
 package textinput
 
@@ -85,6 +85,7 @@ func withFocusedField(fn func(f *Field)) bool {
 //
 // Deprecated: use [Composer] instead.
 type Field struct {
+	input *textInput
 	// mu guards text, selectionStartInBytes, selectionEndInBytes and state,
 	// which the platform's IME callbacks read on the platform thread while the
 	// game goroutine updates them.
@@ -170,7 +171,15 @@ func (f *Field) HandleInputWithBounds(bounds image.Rectangle) (handled bool, err
 		if f.ch == nil {
 			// TODO: On iOS Safari, Start doesn't work as expected (#2898).
 			// Handle a click event and focus the textarea there.
-			f.ch, f.end = startTextInput(bounds, "", "")
+			if f.input == nil {
+				f.input = theTextInput
+			}
+			before, after := "", ""
+			f.mu.Lock()
+			before = f.text[:f.selectionStartInBytes]
+			after = f.text[f.selectionEndInBytes:]
+			f.mu.Unlock()
+			f.ch, f.end = f.input.backend().Start(bounds, before, after)
 			// startTextInput returns nil for non-supported environments, or when unable to start text inputting for some reasons.
 			if f.ch == nil {
 				return handled, nil
@@ -188,7 +197,7 @@ func (f *Field) HandleInputWithBounds(bounds image.Rectangle) (handled bool, err
 				if !ok {
 					f.ch = nil
 					f.end = nil
-					if theTextInput.events.takeEndedByUser() {
+					if f.input.events.takeEndedByUser() {
 						// Keep f.state: the pending composition is committed
 						// below.
 						endedByUser = true
@@ -277,6 +286,9 @@ func (f *Field) commit(state textInputState) {
 // There can be only one Field that is focused at the same time.
 // When Focus is called and there is already a focused field, Focus removes the focus of that.
 func (f *Field) Focus() {
+	if f.input == nil {
+		f.input = theTextInput
+	}
 	focusField(f)
 }
 
@@ -319,7 +331,9 @@ func (f *Field) cleanUp() {
 		f.storeState(textInputState{})
 	}
 
-	theTextInput.events.clearQueue()
+	if f.input != nil {
+		f.input.abandonTarget()
+	}
 }
 
 // Selection returns the current selection range in bytes.

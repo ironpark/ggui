@@ -11,8 +11,8 @@ import (
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/a11y"
 	"github.com/ironpark/ggui/inspect"
-	"github.com/ironpark/ggui/internal/platform/drag"
 	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/internal/textinput"
 	"github.com/ironpark/ggui/runtime"
 )
 
@@ -65,7 +65,8 @@ type App struct {
 	keys      [KeyMax + 1]bool       // keys held, for Mods
 	touches   map[ggfx.TouchID]Point // touches in progress, in logical pixels
 	ax        a11y.Bridge
-	drags     bool // the platform's drag observer is installed
+	dragOver  bool
+	dragAt    Point
 
 	inspect      bool
 	inspectChord Chord          // parsed from cfg.Inspector; Key is zero for none
@@ -78,7 +79,7 @@ type App struct {
 func New(cfg Config, build Builder) *App {
 	a := &App{cfg: cfg.withDefaults()}
 	a.build = build
-	a.dialogs = runtime.NativeFilePicker()
+	a.dialogs = a.nativeFilePicker()
 	if cfg.Inspector != "" {
 		// A chord rather than a KeyboardKey, whose zero value is KeyA and
 		// would have made "Inspector: ggui.KeyA" mean none.
@@ -116,6 +117,10 @@ func (a *App) Close() {
 	if a.panel != nil {
 		a.panel.Release()
 	}
+	if w := a.window.Load(); w != nil {
+		textinput.CloseWindow(w)
+	}
+	a.ax.Close()
 	a.close()
 	reactive.UnmarkUIThread()
 	// The loop notices at its next frame.
@@ -158,6 +163,8 @@ func (a *App) HandleEvent(ev ggfx.Event) error {
 			return err
 		}
 		a.window.Store(w)
+		w.SetTextInputEnabled(false)
+		a.ax.SetWindow(w)
 	case ggfx.FrameEvent:
 		return a.runFrameEvent(ev)
 	case ggfx.KeyEvent:
@@ -165,15 +172,25 @@ func (a *App) HandleEvent(ev ggfx.Event) error {
 			a.keys[ev.Key] = ev.Pressed
 		}
 		if ev.Pressed {
+			a.pending.mods = a.mods()
+			a.pending.mods.Shift = a.pending.mods.Shift || ev.Modifiers.Shift
+			a.pending.mods.Ctrl = a.pending.mods.Ctrl || ev.Modifiers.Control
+			a.pending.mods.Alt = a.pending.mods.Alt || ev.Modifiers.Alt
+			a.pending.mods.Meta = a.pending.mods.Meta || ev.Modifiers.Meta
 			a.pending.keys = append(a.pending.keys, ev.Key)
 			if a.cfg.Inspector != "" && !ev.Repeat &&
-				(KeyEvent{Kind: KeyPress, Key: ev.Key, Mods: a.mods()}).Is(a.inspectChord) {
+				(KeyEvent{Kind: KeyPress, Key: ev.Key, Mods: a.pending.mods}).Is(a.inspectChord) {
 				a.Inspector(!a.inspect)
 			}
 		}
 		a.requestFrame()
+	case ggfx.CompositionEvent:
+		textinput.HandleEvent(ev)
+		a.requestFrame()
 	case ggfx.TextEvent:
-		a.pending.text += ev.Text
+		if !textinput.HandleEvent(ev) {
+			a.pending.text += ev.Text
+		}
 		a.requestFrame()
 	case ggfx.MouseMoveEvent:
 		a.pos = Pt(ev.X, ev.Y)
@@ -199,9 +216,19 @@ func (a *App) HandleEvent(ev ggfx.Event) error {
 			a.touches[ev.ID] = Pt(ev.X, ev.Y)
 		}
 		a.requestFrame()
+	case ggfx.DragEvent:
+		switch ev.Phase {
+		case ggfx.DragEntered, ggfx.DragMoved:
+			a.dragOver, a.dragAt = true, Pt(ev.X, ev.Y)
+		case ggfx.DragExited, ggfx.DragEnded:
+			a.dragOver = false
+		}
+		a.requestFrame()
 	case ggfx.DropEvent:
 		a.pending.drop = append(a.pending.drop, droppedFiles(ev.Files)...)
 		a.requestFrame()
+	case ggfx.CloseEvent:
+		a.Close()
 	case ggfx.FocusEvent:
 		if !ev.Focused {
 			// Releases are not reported while another window has the focus.
@@ -225,10 +252,10 @@ func (a *App) requestFrame() {
 // mods reports the modifier keys currently held.
 func (a *App) mods() Mods {
 	return Mods{
-		Shift: a.keys[KeyShift],
-		Ctrl:  a.keys[KeyControl],
-		Alt:   a.keys[KeyAlt],
-		Meta:  a.keys[KeyMeta],
+		Shift: a.keys[KeyShift] || a.keys[KeyShiftLeft] || a.keys[KeyShiftRight],
+		Ctrl:  a.keys[KeyControl] || a.keys[KeyControlLeft] || a.keys[KeyControlRight],
+		Alt:   a.keys[KeyAlt] || a.keys[KeyAltLeft] || a.keys[KeyAltRight],
+		Meta:  a.keys[KeyMeta] || a.keys[KeyMetaLeft] || a.keys[KeyMetaRight],
 	}
 }
 
@@ -279,7 +306,7 @@ func (a *App) OnDrop(fn func(DropEvent)) { a.input.drops = append(a.input.drops,
 // nil p restores the platform's.
 func (a *App) SetDialogs(p runtime.FilePicker) *App {
 	if p == nil {
-		p = runtime.NativeFilePicker()
+		p = a.nativeFilePicker()
 	}
 	a.dialogs = p
 	return a
@@ -333,6 +360,8 @@ func (a *App) runFrameEvent(ev ggfx.FrameEvent) error {
 	// live in one process, so there is no single UI goroutine to compare
 	// with and no frame racing the write either.
 	reactive.MarkUIThread()
+	restoreInput := textinput.WithWindow(ev.Window)
+	defer restoreInput()
 	a.runFrame()
 	a.runPosted()
 	f := a.takeInput()
@@ -422,22 +451,16 @@ func (a *App) takeInput() frameInput {
 	f := a.pending
 	a.pending = frameInput{}
 	f.pos = a.pos
-	f.mods = a.mods()
+	if len(f.keys) == 0 {
+		f.mods = a.mods()
+	}
 	ids := make([]ggfx.TouchID, 0, len(a.touches))
 	for id := range a.touches {
 		ids = append(ids, id)
 	}
 	slices.Sort(ids)
 	a.touch.apply(&f, ids, func(id ggfx.TouchID) Point { return a.touches[id] })
-	if !a.drags {
-		// The window's view exists once frames run, so the first frame
-		// installs the observer; the hop to the main thread happens once.
-		ggfx.RunOnMainThread(func() { a.drags = drag.Install() })
-	}
-	// The drag is in the view's points, which are logical pixels already.
-	if x, y, over := drag.Position(); over {
-		f.drag, f.dragAt = true, Pt(x, y)
-	}
+	f.drag, f.dragAt = a.dragOver, a.dragAt
 	return f
 }
 

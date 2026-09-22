@@ -59,13 +59,13 @@ var sheetDone = sync.OnceValue(func() *cocoa.Block {
 })
 
 // showDialog runs the panel on the main thread and waits for it.
-func showDialog(k dialogKind, d FileDialog) (paths []string, err error) {
-	ggfx.RunOnMainThread(func() { paths, err = runPanel(k, d) })
+func showDialog(k dialogKind, d FileDialog, owner uintptr) (paths []string, err error) {
+	ggfx.RunOnMainThread(func() { paths, err = runPanel(k, d, owner) })
 	return paths, err
 }
 
 // runPanel builds and runs one panel. It must run on the main thread.
-func runPanel(k dialogKind, d FileDialog) ([]string, error) {
+func runPanel(k dialogKind, d FileDialog, owner uintptr) ([]string, error) {
 	var panel objc.ID
 	if k == kindSave {
 		panel = classNSSavePanel.Send(selSavePanel)
@@ -93,7 +93,7 @@ func runPanel(k dialogKind, d FileDialog) ([]string, error) {
 		// still honoured; the replacement needs another framework loaded.
 		panel.Send(selSetAllowedFileTypes, cocoa.StringArray(exts))
 	}
-	if runSheet(panel) != nsModalResponseOK {
+	if runSheet(panel, objc.ID(owner)) != nsModalResponseOK {
 		return nil, ErrCanceled
 	}
 	if k == kindSave {
@@ -110,8 +110,7 @@ func runPanel(k dialogKind, d FileDialog) ([]string, error) {
 // user's answer, or runs it on its own when there is no window yet. The
 // completion handler stops the modal loop with the response, which is the
 // conventional way to make a sheet synchronous.
-func runSheet(panel objc.ID) int {
-	win := cocoa.AppWindow()
+func runSheet(panel, win objc.ID) int {
 	if win == 0 {
 		return objc.Send[int](panel, selRunModal)
 	}

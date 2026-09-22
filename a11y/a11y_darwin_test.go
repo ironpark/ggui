@@ -10,6 +10,35 @@ import (
 	"github.com/ebitengine/purego/objc"
 )
 
+func TestAXElementsResolveTheirOwningBridge(t *testing.T) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	pool := objc.ID(objc.GetClass("NSAutoreleasePool")).Send(axSelAlloc).Send(axSelInit)
+	defer pool.Send(objc.RegisterName("drain"))
+	var bridges [2]*Bridge
+	var elements [2]objc.ID
+	for i, value := range []string{"first window", "second window"} {
+		d := &darwinAX{}
+		b := &Bridge{plat: d}
+		d.bridge = b
+		bridges[i] = b
+		tree := axRoots(SemNode{Role: RoleTextField, Value: value})
+		b.cur.Store(newAXFrame(tree))
+		elements[i] = objc.ID(b.element(axKeyOf(tree.At(0).ID)))
+		defer b.clear()
+	}
+	for i, want := range []string{"first window", "second window"} {
+		got := cstrings.NSStringToString(elements[i].Send(objc.RegisterName("accessibilityValue")))
+		if got != want {
+			t.Fatalf("window %d value = %q, want %q", i, got, want)
+		}
+	}
+	bridges[0].clear()
+	if got := cstrings.NSStringToString(elements[1].Send(objc.RegisterName("accessibilityValue"))); got != "second window" {
+		t.Fatalf("closing first bridge changed second: %q", got)
+	}
+}
+
 // Exercise the actual Objective-C value returned to AppKit. An empty editor
 // must expose AXValue so clients can discover it and write the first text.
 func TestAXEmptyEditorValue(t *testing.T) {
@@ -19,8 +48,7 @@ func TestAXEmptyEditorValue(t *testing.T) {
 	defer pool.Send(objc.RegisterName("drain"))
 
 	b := &Bridge{plat: &darwinAX{}}
-	previous := current.Swap(b)
-	defer current.Store(previous)
+	b.plat.(*darwinAX).bridge = b
 
 	for _, tc := range []struct {
 		name    string

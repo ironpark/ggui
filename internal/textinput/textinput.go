@@ -12,13 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package textinput is ggui's copy of Ebitengine's exp/textinput, for
-// macOS: the upstream source with one patch, so that a session starting
-// right after a commit keeps the marked text the IME queued in the same key
-// press (a Korean composition otherwise loses its first jamo). See
-// textinput_other.go for every other platform, which uses the upstream
-// package. Below is the upstream documentation.
-//
 // Package textinput provides a text-inputting controller.
 // This package is experimental and the API might be changed in the future.
 //
@@ -52,7 +45,7 @@
 // during text inputting. When embedding EbitenView in a custom view
 // hierarchy, no ancestor view must prevent its descendants from taking
 // the focus.
-//go:build darwin && !ios
+//go:build (darwin && !ios) || windows
 
 package textinput
 
@@ -63,8 +56,6 @@ import (
 	"sync"
 	"unicode/utf16"
 	"unicode/utf8"
-
-	"github.com/ironpark/ggfx"
 )
 
 // noReplacement is the sentinel value for [textInputState.ReplacementStartInBytes]
@@ -152,20 +143,6 @@ type textInputState struct {
 // startTextInput returns nil and nil if the current environment doesn't support this package.
 func startTextInput(bounds image.Rectangle, textBeforeCaret, textAfterCaret string) (states <-chan textInputState, close func()) {
 	return theTextInput.backend().Start(bounds, textBeforeCaret, textAfterCaret)
-}
-
-// caretBoundsInClientNativePixels converts logical caret bounds to the client area's native pixels,
-// the coordinates the platform backends hand to the OS IME.
-//
-// Ebitengine does this through its internal ui package with the offset of a
-// letterboxed game taken into account; this copy assumes the game fills the
-// window, as ggui's LayoutF makes it, and scales by the device scale factor.
-func caretBoundsInClientNativePixels(bounds image.Rectangle) image.Rectangle {
-	s := ggfx.Monitor().DeviceScaleFactor()
-	if s <= 0 {
-		s = 1
-	}
-	return image.Rect(int(float64(bounds.Min.X)*s), int(float64(bounds.Min.Y)*s), int(float64(bounds.Max.X)*s), int(float64(bounds.Max.Y)*s))
 }
 
 func convertUTF16CountToByteCount(text string, c int) int {
@@ -317,7 +294,7 @@ func isLineBreak(r rune) bool {
 type textInputBackend interface {
 	// Start starts text inputting, with the same contract as [startTextInput].
 	// bounds is in logical pixels; a backend converts it to the coordinates it
-	// needs (e.g. [caretBoundsInClientNativePixels] for the OS IME).
+	// needs. Native ggfx hooks already take DIP.
 	Start(bounds image.Rectangle, textBeforeCaret, textAfterCaret string) (states <-chan textInputState, close func())
 
 	// markIMEDiscardNeeded records that the IME can still hold a composition
@@ -328,18 +305,12 @@ type textInputBackend interface {
 
 type textInput struct {
 	events textInputEvents
+	impl   textInputImpl
 }
 
-var theTextInput textInput
+var theTextInput = newTextInput(nil)
 
-// theTextInputImpl is the platform text-input backend, chosen at build time.
-var theTextInputImpl = textInputImpl{events: &theTextInput.events}
-
-// backend returns the text-input backend serving this process. Ebitengine
-// also has a VM guest backend; this copy has only the platform one.
-func (t *textInput) backend() textInputBackend {
-	return &theTextInputImpl
-}
+func (t *textInput) backend() textInputBackend { return &t.impl }
 
 // cancelSessionIfNeeded cancels the session owning the platform IME, if any.
 func (t *textInput) cancelSessionIfNeeded() {
@@ -412,7 +383,7 @@ type textInputEvents struct {
 	// keyboard. Taken by the session observing the closed channel.
 	endedByUser bool
 
-	// tick overrides the tick source in tests. A nil tick means [ggfx.Tick].
+	// tick overrides the tick source in tests. Production queues are target-scoped; tests may supply a logical clock.
 	tick func() int64
 
 	m sync.Mutex
@@ -456,7 +427,7 @@ func (s *textInputEvents) currentTick() int64 {
 	if s.tick != nil {
 		return s.tick()
 	}
-	return ggfx.Tick()
+	return 1 // Event ownership lasts until the editable target changes, not a polling tick.
 }
 
 // carrying reports whether states queued now belong to the session about

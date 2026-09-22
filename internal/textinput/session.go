@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build darwin && !ios
+//go:build (darwin && !ios) || windows
 
 package textinput
 
@@ -50,6 +50,7 @@ const (
 // even if the underlying composition state visible to platform IME query
 // callbacks is kept up to date.
 type session struct {
+	input  *textInput
 	ch     <-chan textInputState
 	end    func()
 	events *textInputEvents
@@ -151,6 +152,7 @@ func startSession(opts *SessionOptions) (*session, error) {
 		return nil, nil
 	}
 	s := &session{
+		input:           theTextInput,
 		ch:              ch,
 		end:             end,
 		events:          &theTextInput.events,
@@ -308,5 +310,7 @@ func (s *session) Cancel() {
 		return
 	}
 	s.markClosed(true)
-	theTextInput.abandonTarget()
+	if s.input != nil {
+		s.input.abandonTarget()
+	}
 }

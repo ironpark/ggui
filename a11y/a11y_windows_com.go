@@ -3,6 +3,7 @@
 package a11y
 
 import (
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"unsafe"
@@ -88,6 +89,14 @@ const (
 	ifCount
 )
 
+var winObjectBridges sync.Map // base COM address -> owning bridge
+
+func (o *winObj) bridge() *Bridge {
+	b, _ := winObjectBridges.Load(uintptr(unsafe.Pointer(o)))
+	bridge, _ := b.(*Bridge)
+	return bridge
+}
+
 // winObj is the shape of the memory a provider object occupies. It is never
 // allocated as a Go value: it is the template for reading and writing a
 // block of GlobalAlloc'd memory, whose address the operating system holds.
@@ -130,7 +139,7 @@ func selfOf(this uintptr) (*winObj, *Bridge, SemNode, bool) {
 	if !ok {
 		return nil, nil, SemNode{}, false
 	}
-	b := current.Load()
+	b := o.bridge()
 	if b == nil {
 		return o, nil, SemNode{}, false
 	}
@@ -148,7 +157,7 @@ const winRootHandle int64 = -1
 
 // newWinObj allocates a provider object for handle and returns the address
 // of its first interface, with one reference held by the caller.
-func newWinObj(handle int64) uintptr {
+func newWinObj(b *Bridge, handle int64) uintptr {
 	p := winAlloc(unsafe.Sizeof(winObj{}))
 	if p == 0 {
 		return 0
@@ -157,6 +166,7 @@ func newWinObj(handle int64) uintptr {
 	o.vtbl = vtbls
 	o.refs = 1
 	o.handle = handle
+	winObjectBridges.Store(p, b)
 	return p
 }
 
@@ -186,6 +196,7 @@ func comRelease(this uintptr) uintptr {
 	}
 	n := atomic.AddInt32(&o.refs, -1)
 	if n <= 0 {
+		winObjectBridges.Delete(uintptr(unsafe.Pointer(o)))
 		procGlobalFree.Call(uintptr(unsafe.Pointer(o)))
 		return 0
 	}
@@ -256,7 +267,7 @@ func (o *winObj) offers(k int) bool {
 	if root {
 		return false
 	}
-	b := current.Load()
+	b := o.bridge()
 	if b == nil {
 		return false
 	}
@@ -419,7 +430,6 @@ var (
 	dllUser32   = windows.NewLazySystemDLL("user32.dll")
 	dllKernel32 = windows.NewLazySystemDLL("kernel32.dll")
 	dllOleAut32 = windows.NewLazySystemDLL("oleaut32.dll")
-	dllComctl32 = windows.NewLazySystemDLL("comctl32.dll")
 	dllUIA      = windows.NewLazySystemDLL("uiautomationcore.dll")
 
 	procGlobalAlloc = dllKernel32.NewProc("GlobalAlloc")
@@ -433,10 +443,6 @@ var (
 	procSysFreeString         = dllOleAut32.NewProc("SysFreeString")
 	procSafeArrayCreateVector = dllOleAut32.NewProc("SafeArrayCreateVector")
 	procSafeArrayPutElement   = dllOleAut32.NewProc("SafeArrayPutElement")
-
-	procSetWindowSubclass    = dllComctl32.NewProc("SetWindowSubclass")
-	procRemoveWindowSubclass = dllComctl32.NewProc("RemoveWindowSubclass")
-	procDefSubclassProc      = dllComctl32.NewProc("DefSubclassProc")
 
 	procUiaReturnRawElementProvider = dllUIA.NewProc("UiaReturnRawElementProvider")
 	procUiaHostProviderFromHwnd     = dllUIA.NewProc("UiaHostProviderFromHwnd")

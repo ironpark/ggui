@@ -270,7 +270,7 @@ func winGetHostProvider(this, ppRetVal uintptr) uintptr {
 	if !ok || o.handle != winRootHandle {
 		return sOK
 	}
-	h := winHWND.Load()
+	h := winHandle(o.bridge())
 	if h == 0 {
 		return sOK
 	}
@@ -322,7 +322,7 @@ func winNavigate(this, direction, ppRetVal uintptr) uintptr {
 	switch direction {
 	case uiaNavigateParent:
 		if n.Parent < 0 {
-			return winHandOut(winRoot.Load(), ifFragment, ppRetVal)
+			return winHandOut(winRootFor(b), ifFragment, ppRetVal)
 		}
 		return winHandOut(winElementAt(b, f, n.Parent), ifFragment, ppRetVal)
 	case uiaNavigateNextSibling, uiaNavigatePreviousSibling:
@@ -376,11 +376,11 @@ func winBoundingRectangle(this, pRetVal uintptr) uintptr {
 	}
 	r := (*winRect)(unsafe.Pointer(pRetVal))
 	*r = winRect{}
-	o, _, n, ok := selfOf(this)
+	o, b, n, ok := selfOf(this)
 	if o == nil {
 		return eFail
 	}
-	h := winHWND.Load()
+	h := winHandle(b)
 	if h == 0 {
 		return sOK
 	}
@@ -425,8 +425,9 @@ func winSetFocus(this uintptr) uintptr {
 
 // winGetFragmentRoot is the window's element, for every element including
 // itself.
-func winGetFragmentRoot(_, ppRetVal uintptr) uintptr {
-	return winHandOut(winRoot.Load(), ifFragmentRoot, ppRetVal)
+func winGetFragmentRoot(this, ppRetVal uintptr) uintptr {
+	_, b, _, _ := selfOf(this)
+	return winHandOut(winRootFor(b), ifFragmentRoot, ppRetVal)
 }
 
 // --- IRawElementProviderFragmentRoot ---
@@ -442,7 +443,7 @@ func winGetFragmentRoot(_, ppRetVal uintptr) uintptr {
 func winElementFromPoint(this, xBits, yBits, ppRetVal uintptr) uintptr {
 	_, b, _, _ := selfOf(this)
 	f := winFrame(b)
-	h := winHWND.Load()
+	h := winHandle(b)
 	if f == nil || h == 0 {
 		return winHandOut(0, 0, ppRetVal)
 	}

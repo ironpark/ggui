@@ -1052,6 +1052,7 @@ func (t *TextInputWidget) HandleTick() bool {
 	if !t.Focused() || t.IsDisabled() {
 		return false
 	}
+	textinput.UpdateCaret(t.caretPx)
 	handled, err := t.ime.Update()
 	if err != nil {
 		t.imeErr = err

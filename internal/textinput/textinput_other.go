@@ -1,12 +1,7 @@
-//go:build !darwin || ios
+//go:build (!darwin || ios) && !windows
 
-// Package textinput is ggui's copy of Ebitengine's exp/textinput. On macOS
-// it is the package's source with one patch: a session that starts right
-// after a commit keeps the marked text the IME queued in the same key
-// press, so a Korean composition does not lose its first jamo (Ebitengine
-// issue with discardMarkedText in start; PR on hold). Ebitengine's other
-// platform backends need its internal packages, so everywhere else the
-// package is the upstream one.
+// Package textinput adapts ggfx's event-based desktop IME. Other platforms
+// retain exp/textinput's platform backend.
 package textinput
 
 import "github.com/ironpark/ggfx/exp/textinput"
