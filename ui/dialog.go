@@ -1,8 +1,10 @@
 package ui
 
-import "github.com/ironpark/ggui/internal/property"
-
-import "github.com/ironpark/ggui"
+import (
+	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/property"
+	uitheme "github.com/ironpark/ggui/ui/theme"
+)
 
 // DialogWidget is a modal panel centered over the window: a scrim dims
 // everything else and takes the clicks, Tab stays inside, Escape or a
@@ -79,7 +81,7 @@ func (d *DialogWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if d.nameReader != nil {
 		d.name = d.nameReader.Get()
 	}
-	t := env.Theme()
+	t := uitheme.From(env)
 	d.build(env).Border(t.BorderWidth, t.Border).Radius(t.RadiusLg)
 	if d.effect == nil {
 		d.effect = ggui.PopIn(ggui.FromFuncs(

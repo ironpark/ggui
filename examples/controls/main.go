@@ -14,6 +14,7 @@ import (
 	"github.com/ironpark/ggui"
 	_ "github.com/ironpark/ggui/inspect/panel"
 	"github.com/ironpark/ggui/ui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // model holds one signal per piece of state.
@@ -32,7 +33,7 @@ func newModel(name string, dark bool) model {
 func (m model) build() ggui.Widget {
 	return ggui.Box(ggui.Column(
 		ggui.Row(
-			ggui.Title("Carousel & Input OTP"),
+			ui.Title("Carousel & Input OTP"),
 			ggui.Spacer(),
 			ui.Switch(m.Dark, "Dark theme"),
 		).Gap(12),
@@ -40,7 +41,7 @@ func (m model) build() ggui.Widget {
 		// Key recreates the demo when the selection changes; the Select and
 		// the switch above stay as they are.
 		ggui.Key(m.Selected, func(name string) ggui.Widget { return buildControl(name).Widget }),
-		ggui.Caption("Drag slides or use arrow keys · Paste a code or edit individual slots"),
+		ui.Caption("Drag slides or use arrow keys · Paste a code or edit individual slots"),
 	).Gap(20).Align(ggui.AlignStretch)).Pad(24)
 }
 
@@ -68,8 +69,8 @@ func main() {
 	// Setup runs under the app's root owner, so the theme binding is
 	// disposed with the app. The app fills the window with the theme's
 	// background, so the tree needs no Fill of its own.
-	preset := ggui.ThemePreset{Base: ggui.BaseNeutral, Accent: ggui.AccentBlue}
-	app.Setup(func() { ggui.BindTheme(m.Dark, preset.Dark(), preset.Light()) })
+	preset := uitheme.Preset{Base: uitheme.BaseNeutral, Accent: uitheme.AccentBlue}
+	app.Setup(func() { uitheme.Bind(m.Dark, preset.Dark(), preset.Light()) })
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}

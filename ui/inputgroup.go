@@ -2,6 +2,7 @@ package ui
 
 import (
 	"github.com/ironpark/ggui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // InputGroupWidget draws one field chrome around an editor and the small
@@ -20,7 +21,7 @@ type InputGroupWidget struct {
 	leading, trailing ggui.Widget
 	row               *ggui.RowWidget
 	box               *ggui.BoxWidget
-	theme             ggui.Theme
+	theme             uitheme.Theme
 	effectiveDisabled bool
 	invalid           bool
 	focused           func() bool
@@ -103,7 +104,7 @@ func (g *InputGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	g.Sync()
 	inherited, _ := env.Get(ggui.InputDisabled)
 	g.effectiveDisabled = g.IsInert() || inherited
-	t := env.Theme()
+	t := uitheme.From(env)
 	g.theme = t
 	g.invalid, _ = env.Get(fieldInvalid)
 	if g.row == nil {

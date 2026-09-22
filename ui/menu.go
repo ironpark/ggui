@@ -3,6 +3,7 @@ package ui
 import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // MenuWidget is a button that opens a list of actions. Build one with Menu
@@ -16,7 +17,7 @@ type MenuWidget struct {
 	current  int // the item the keyboard is on while open, or -1
 	width    float64
 	widthSet bool
-	theme    ggui.Theme
+	theme    uitheme.Theme
 }
 
 // Menu creates a secondary button labelled label that opens entries below
@@ -119,7 +120,7 @@ func (m *MenuWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if m.button.IsInert() {
 		m.popup.Hide()
 	}
-	t := env.Theme()
+	t := uitheme.From(env)
 	m.theme = t
 	m.chrome(t)
 	return m.popup.Layout(c, env)
@@ -168,7 +169,7 @@ func (m *MenuWidget) HandleKey(ev ggui.KeyEvent) {
 
 // chrome dresses the panel. A menubar and a context menu paint the panel
 // through their own popup, so the width lives here rather than in Layout.
-func (m *MenuWidget) chrome(t ggui.Theme) *ggui.BoxWidget {
+func (m *MenuWidget) chrome(t uitheme.Theme) *ggui.BoxWidget {
 	return panelBox(m.panel, t).Width(pick(m.widthSet, m.width, t.MenuWidth))
 }
 
@@ -227,7 +228,7 @@ type MenuItemWidget struct {
 
 	pad      ggui.EdgeInsets
 	textSize ggui.Size
-	theme    ggui.Theme
+	theme    uitheme.Theme
 	popup    *ggui.PopupWidget
 }
 
@@ -244,7 +245,7 @@ func MenuItem(label string, onTap func()) *MenuItemWidget {
 func (it *MenuItemWidget) Shortcut(s string) *MenuItemWidget {
 	defer property.Watch(&it.props, &it.shortcut)()
 	if it.shortcut == nil {
-		it.shortcut = ggui.Caption(s).NoWrap()
+		it.shortcut = Caption(s).NoWrap()
 	} else {
 		it.shortcut.Content(s)
 	}
@@ -279,7 +280,7 @@ func (it *MenuItemWidget) run() {
 func (it *MenuItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer it.props.Layout()()
 	it.Sync()
-	t := env.Theme()
+	t := uitheme.From(env)
 	it.theme = t
 	it.popup, _ = ggui.PopupOf(env)
 	it.pad = t.ItemPad

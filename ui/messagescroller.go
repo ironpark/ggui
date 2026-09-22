@@ -7,6 +7,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // MessageEntry is a stable transcript row. Content can be a Message, Marker,
@@ -61,7 +62,7 @@ type MessageScrollerWidget struct {
 	opened, auto, following                                       bool
 	anchor                                                        string
 	rect                                                          ggui.Rect
-	theme                                                         ggui.Theme
+	theme                                                         uitheme.Theme
 	duration                                                      time.Duration
 	animFrom, animTo                                              float64
 	animStart                                                     time.Time
@@ -212,7 +213,7 @@ func (s *MessageScrollerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Si
 	defer s.props.Layout()()
 	saved := s.Save()
 	oldRows := s.rows
-	s.theme, s.reduced = env.Theme(), env.ReducedMotion()
+	s.theme, s.reduced = uitheme.From(env), env.ReducedMotion()
 	size := c.Constrain(ggui.Sz(bounded(c.MaxW, 400), min(c.MaxH, s.height)))
 	s.viewport = size.H
 	rows := s.source.Get()

@@ -5,7 +5,8 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/icons"
+	"github.com/ironpark/ggui/ui/icons"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // CollapsibleWidget is a titled section that folds its content away.
@@ -18,7 +19,7 @@ type CollapsibleWidget struct {
 	progress float64
 	ggui.Interactive
 
-	theme     ggui.Theme
+	theme     uitheme.Theme
 	env       ggui.Env
 	motion    time.Duration
 	pad       ggui.EdgeInsets
@@ -82,7 +83,7 @@ func (c *CollapsibleWidget) Act(a ggui.Action) bool {
 // Layout implements Widget.
 func (c *CollapsibleWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	c.Sync()
-	t := env.Theme()
+	t := uitheme.From(env)
 	c.theme = t
 	c.env = env
 	c.motion = env.Motion(t.MotionFast)

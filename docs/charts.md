@@ -46,8 +46,8 @@ chart := ui.BarChart(data, config).
     Tooltip(ui.ChartTooltipOptions{Indicator: ui.ChartIndicatorLine})
 
 panel := ui.Card(ggui.Column(
-    ggui.Title("Visitors"),
-    ggui.Caption("January – March"),
+    ui.Title("Visitors"),
+    ui.Caption("January – March"),
     chart,
 ).Gap(12).Align(ggui.AlignStretch))
 ```

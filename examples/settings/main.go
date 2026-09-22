@@ -17,6 +17,7 @@ import (
 	"github.com/ironpark/ggui"
 	_ "github.com/ironpark/ggui/inspect/panel"
 	"github.com/ironpark/ggui/ui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // Profile is a plain value. The form edits a copy in one signal and writes
@@ -102,7 +103,7 @@ func (m *model) build(post func(func())) ggui.Widget {
 	savedEmail := m.Saved.Field(func(p *Profile) *string { return &p.Email })
 
 	form := ggui.Column(
-		ggui.Title("Profile"),
+		ui.Title("Profile"),
 		ui.Field("Name", ui.TextField(name).Placeholder("How should we address you?")),
 		ui.Field("Email", ui.TextField(email).Placeholder("you@example.com")).
 			Help("Where receipts go").BindError(validation),
@@ -114,7 +115,7 @@ func (m *model) build(post func(func())) ggui.Widget {
 			ui.Button("Save", func() { m.save(post) }).BindDisabled(cannotSave),
 			ui.Button("Reset", m.reset).Outline().BindDisabled(cannotReset),
 			ggui.Spacer(),
-			ggui.TextOf(m.Status).AsCaption().NoWrap(),
+			ggui.TextOf(m.Status).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption).NoWrap(),
 		).Space(1),
 		// Styled sets the base style for everything below it: these lines
 		// are small and muted without a setter on each Text. The color is
@@ -123,7 +124,7 @@ func (m *model) build(post func(func())) ggui.Widget {
 		ggui.Styled(ggui.Column(
 			ggui.Textf("Draft: %s <%s>, notify=%t, volume=%.2f", name, email, notify, volume),
 			ggui.Textf("Saved: %s <%s>", savedName, savedEmail),
-		).Space(0.5)).Size(12).Color(ggui.UseTheme().MutedFg),
+		).Space(0.5)).Size(12).Color(uitheme.Use().MutedFg),
 	).Space(1.5).Align(ggui.AlignStretch)
 	return ggui.Center(ggui.Box(ui.Card(form).Pad(24)).Width(440))
 }

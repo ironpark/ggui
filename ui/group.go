@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // ButtonGroupWidget joins several controls into one bordered strip, with a
@@ -20,7 +21,7 @@ type ButtonGroupWidget struct {
 	vertical   bool
 	name       string
 
-	theme ggui.Theme
+	theme uitheme.Theme
 	sizes []ggui.Size
 }
 
@@ -54,7 +55,7 @@ func (g *ButtonGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if g.nameReader != nil {
 		g.name = g.nameReader.Get()
 	}
-	g.theme = env.Theme()
+	g.theme = uitheme.From(env)
 	g.sizes = g.sizes[:0]
 	var main, cross float64
 	for _, child := range g.children {
@@ -123,7 +124,7 @@ type ToggleGroupWidget[T comparable] struct {
 	vertical         bool
 	hover            int
 
-	theme ggui.Theme
+	theme uitheme.Theme
 	sizes []ggui.Size
 	rects []ggui.Rect
 	pad   ggui.EdgeInsets
@@ -232,7 +233,7 @@ func (g *ToggleGroupWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Siz
 	defer g.props.Layout()()
 	g.setOptions(g.optionProp.Get())
 	g.Sync()
-	t := env.Theme()
+	t := uitheme.From(env)
 	g.theme, g.pad = t, t.TabPad
 	g.sizes = g.sizes[:0]
 	cur := g.index()

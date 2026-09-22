@@ -1,6 +1,8 @@
 package ggui
 
-import "github.com/ironpark/ggui/internal/reactive"
+import (
+	"github.com/ironpark/ggui/internal/reactive"
+)
 
 // CachedWidget skips laying its subtree out again while nothing in it has
 // changed. Build one with Cached. App already skips the whole layout on a
@@ -10,7 +12,7 @@ import "github.com/ironpark/ggui/internal/reactive"
 // under something which does rebuild.
 //
 // The cache holds while the constraints and everything inherited through
-// the Env (text style, theme, Scroll viewport, Provide values) are the same
+// the Env (text style, Scroll viewport, Provide values) are the same
 // as last time and nothing inside asked for a layout. Reactive, EachKeyed, Scroll
 // and TextInput ask when they change; a custom widget whose size depends on
 // state outside a signal calls Invalidate with the Env it was laid out

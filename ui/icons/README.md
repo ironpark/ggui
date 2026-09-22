@@ -8,9 +8,10 @@ icon-library dependency.
 ```go
 import (
     "github.com/ironpark/ggui"
-    "github.com/ironpark/ggui/icons"
-    "github.com/ironpark/ggui/icons/lucide"
+    "github.com/ironpark/ggui/ui/icons"
+    "github.com/ironpark/ggui/ui/icons/lucide"
     "github.com/ironpark/ggui/ui"
+    "github.com/ironpark/ggui/ui/theme"
 )
 
 ui.Icon(icons.Search).Size(20)                   // semantic, themeable
@@ -21,10 +22,10 @@ ui.ButtonOf(ui.Icon(icons.Close), close).Name("Close") // decorative icon
 // Local subtree selection:
 ggui.Provide(icons.SetKey, lucide.Set(), content)
 
-// Theme-level selection (configure both themes when using BindTheme):
-light := ggui.DefaultTheme().Set(icons.SetKey, customSet)
-dark := ggui.DarkTheme().Set(icons.SetKey, customSet)
-app.Setup(func() { ggui.BindTheme(isDark, dark, light) })
+// Theme-level selection (configure both themes when using theme.Bind):
+light := theme.Default().Set(icons.SetKey, customSet)
+dark := theme.Dark().Set(icons.SetKey, customSet)
+app.Setup(func() { theme.Bind(isDark, dark, light) })
 ```
 
 A set implements `Resolve(icons.Role) *icons.SVG`. Return nil for missing roles.
@@ -71,15 +72,15 @@ maps all 17 semantic roles. Each embeds only a curated outline subset.
 
 | Package | Style | Source and license |
 | --- | --- | --- |
-| `icons/lucide` | Lucide outline | [Details](lucide/README.md) |
-| `icons/tabler` | Tabler outline | [Details](tabler/README.md) |
-| `icons/heroicons` | Heroicons 24px outline | [Details](heroicons/README.md) |
+| `ui/icons/lucide` | Lucide outline | [Details](lucide/README.md) |
+| `ui/icons/tabler` | Tabler outline | [Details](tabler/README.md) |
+| `ui/icons/heroicons` | Heroicons 24px outline | [Details](heroicons/README.md) |
 
 ```go
-import "github.com/ironpark/ggui/icons/tabler"
+import "github.com/ironpark/ggui/ui/icons/tabler"
 
 // Swap built-in control icons throughout the theme.
-light := ggui.DefaultTheme().Set(icons.SetKey, tabler.Set())
+light := theme.Default().Set(icons.SetKey, tabler.Set())
 // Or limit the selection to a subtree.
 ggui.Provide(icons.SetKey, tabler.Set(), content)
 ```

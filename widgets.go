@@ -2,15 +2,14 @@ package ggui
 
 import (
 	"fmt"
-	"github.com/ironpark/ggui/internal/reactive"
 	"image/color"
 	"math"
 	"slices"
 
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
-
 	"github.com/ironpark/ggui/internal/fn"
 	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/internal/reactive"
 )
 
 // Built-in widgets follow one shape: a constructor takes what the widget
@@ -69,17 +68,19 @@ func (e EdgeInsets) vertical() float64   { return e.Top + e.Bottom }
 // then the widget's own setters on top, then built-in defaults for whatever
 // is still unset.
 type TextWidget struct {
-	props      property.Owner
-	value      string
-	content    property.Value[string]
-	format     string
-	formatArgs []any
-	formatted  bool
-	style      TextStyle
-	wrap       bool
-	align      float64
-	role       textRole
-	cache      *CachedWidget
+	props         property.Owner
+	value         string
+	content       property.Value[string]
+	format        string
+	formatArgs    []any
+	formatted     bool
+	style         TextStyle
+	wrap          bool
+	align         float64
+	role          Role
+	styleKey      EnvKey[TextStyle]
+	styleFallback TextStyle
+	cache         *CachedWidget
 
 	// Layout caches the wrapped lines, their widths and the size they add up
 	// to, and re-measures only when the text, the face or the width it must
@@ -102,40 +103,29 @@ type wrapKey struct {
 	maxW       float64
 }
 
-// textRole picks a named style from the theme at layout.
-type textRole int
-
-const (
-	roleNone textRole = iota
-	roleTitle
-	roleCaption
-)
-
 // Text draws s in the inherited style, wrapping at spaces when it is wider
 // than the space it gets.
 func Text(s string) *TextWidget {
 	return (&TextWidget{wrap: true}).Content(s)
 }
 
-// Title draws s in the theme's Title style, resolved from the Env at layout,
-// so a heading needs no UseTheme.
-func Title(s string) *TextWidget { return (&TextWidget{wrap: true, role: roleTitle}).Content(s) }
-
-// Caption draws s in the theme's Caption style, resolved from the Env at
-// layout.
-func Caption(s string) *TextWidget { return (&TextWidget{wrap: true, role: roleCaption}).Content(s) }
-
-// AsTitle gives the text the theme's Title style, under its own setters.
-func (t *TextWidget) AsTitle() *TextWidget {
-	defer property.Watch(&t.props, &t.role)()
-	t.role = roleTitle
+// StyleKey selects an inherited text style, merged below explicit setters.
+// An optional fallback is used when the environment has no value for key.
+func (t *TextWidget) StyleKey(key EnvKey[TextStyle], fallback ...TextStyle) *TextWidget {
+	defer property.Watch(&t.props, &t.styleKey)()
+	defer property.Watch(&t.props, &t.styleFallback)()
+	t.styleKey = key
+	t.styleFallback = TextStyle{}
+	if len(fallback) > 0 {
+		t.styleFallback = fallback[0]
+	}
 	return t
 }
 
-// AsCaption gives the text the theme's Caption style, under its own setters.
-func (t *TextWidget) AsCaption() *TextWidget {
+// Role sets the accessibility role; the default is RoleText.
+func (t *TextWidget) Role(role Role) *TextWidget {
 	defer property.Watch(&t.props, &t.role)()
-	t.role = roleCaption
+	t.role = role
 	return t
 }
 
@@ -281,12 +271,11 @@ func (t *TextWidget) Layout(c Constraints, env Env) Size {
 	}
 	t.cache, _ = env.Get(cacheOwner)
 	base := env.Text()
-	switch t.role {
-	case roleTitle:
-		base = base.Merge(env.Theme().Title)
-	case roleCaption:
-		base = base.Merge(env.Theme().Caption)
+	style, ok := env.Get(t.styleKey)
+	if !ok {
+		style = t.styleFallback
 	}
+	base = base.Merge(style)
 	t.resolved = base.Merge(t.style).resolved()
 	t.resolved.Size *= env.TextScale()
 	face := t.faceAt(1)
@@ -330,7 +319,7 @@ func (t *TextWidget) Paint(dst *Canvas, r Rect) {
 // PaintRotated translates, rotates and translates back.
 func (t *TextWidget) paintLines(dst *Canvas, r Rect, place func(op *text.DrawOptions, x, y float64)) {
 	if t.value != "" && !dst.named(r) {
-		dst.Leaf(r, Node{Role: pick(t.role == roleTitle, RoleHeading, RoleText), Name: t.value})
+		dst.Leaf(r, Node{Role: pick(t.role != "", t.role, RoleText), Name: t.value})
 	}
 	if dst == nil || dst.Image == nil || dst.Image.Bounds().Empty() {
 		return
@@ -422,10 +411,10 @@ func Provide[T any](k EnvKey[T], v T, child Widget) *EnvWidget {
 	return &EnvWidget{with: func(e Env) Env { return e.With(k, v) }, child: child}
 }
 
-// Themed lays child out under theme t instead of the app's, for a panel
-// that keeps its own look.
-func Themed(t Theme, child Widget) *EnvWidget {
-	return &EnvWidget{with: func(e Env) Env { return e.WithTheme(t).WithText(t.Text) }, child: child}
+// WithEnv transforms the inherited environment for a subtree during layout.
+// The transform should be pure so equivalent layouts reuse environment revisions.
+func WithEnv(transform func(Env) Env, child Widget) *EnvWidget {
+	return &EnvWidget{with: transform, child: child}
 }
 
 // Layout implements Widget.
@@ -628,7 +617,7 @@ const (
 type flow struct {
 	horizontal bool
 	gap        float64
-	space      float64 // gap in theme Space units, when set
+	space      float64 // gap in environment spacing units, when set
 	justify    Justify
 	align      CrossAlign
 	children   []Widget
@@ -685,10 +674,10 @@ func (f *flow) stretched(crossMax, v float64) float64 {
 	return v
 }
 
-// gapFor returns the gap to use: Space times the theme's unit, else Gap.
+// gapFor returns the gap to use: Space times the environment unit, else Gap.
 func (f *flow) gapFor(env Env) float64 {
 	if f.space > 0 {
-		return f.space * env.Theme().Space
+		return f.space * env.Spacing()
 	}
 	return f.gap
 }
@@ -851,7 +840,7 @@ func (col *ColumnWidget) Gap(v float64) *ColumnWidget {
 	return col
 }
 
-// Space sets the gap to n times the theme's Space, resolved at layout.
+// Space sets the gap to n times the environment spacing unit, resolved at layout.
 func (col *ColumnWidget) Space(n float64) *ColumnWidget {
 	defer property.Watch(&col.props, &col.space)()
 	col.space = n
@@ -902,7 +891,7 @@ func (row *RowWidget) Gap(v float64) *RowWidget {
 	return row
 }
 
-// Space sets the gap to n times the theme's Space, resolved at layout.
+// Space sets the gap to n times the environment spacing unit, resolved at layout.
 func (row *RowWidget) Space(n float64) *RowWidget {
 	defer property.Watch(&row.props, &row.space)()
 	row.space = n
@@ -1172,7 +1161,7 @@ func (s *ScrollWidget) Speed(px float64) *ScrollWidget {
 	return s
 }
 
-// Bar overrides the theme scrollbar color; nil hides the bar.
+// Bar overrides the inherited scrollbar color; nil hides the bar.
 func (s *ScrollWidget) Bar(c color.Color) *ScrollWidget {
 	defer property.Watch(&s.props, &s.bar)()
 	defer property.Watch(&s.props, &s.barSet)()
@@ -1233,7 +1222,7 @@ func (s *ScrollWidget) Layout(c Constraints, env Env) Size {
 	defer s.props.Layout()()
 	s.barEnv = env
 	if !s.barSet {
-		s.bar = env.Theme().MutedFg
+		s.bar = env.ScrollStyle().Color
 	}
 	inner := c.Max()
 	if s.horizontal {
@@ -1287,16 +1276,16 @@ func (s *ScrollWidget) paintBar(dst *Canvas, r Rect) {
 		return
 	}
 	const margin, hitWidth = 2.0, 10.0
-	theme := s.barEnv.Theme()
+	style := s.barEnv.ScrollStyle()
 	active := s.thumbHovered || s.dragging
-	amount := dst.Ease(Anchor{Rect: r, ID: scrollThumb{s}.HitID()}, scrollThumbHoverSlot, pick(active, 1.0, 0.0), s.barEnv.Motion(theme.MotionFast))
+	amount := dst.Ease(Anchor{Rect: r, ID: scrollThumb{s}.HitID()}, scrollThumbHoverSlot, pick(active, 1.0, 0.0), s.barEnv.Motion(style.Duration))
 	thickness := 3 + 1.5*amount
 	fill := s.bar
 	if amount > 0 {
 		// Keep the thumb close to its resting gray, including while dragging.
 		tint := amount * pick(s.dragging, .28, .18)
 		r, g, b, a := s.bar.RGBA()
-		fr, fg, fb, fa := theme.Fg.RGBA()
+		fr, fg, fb, fa := style.HoverColor.RGBA()
 		blend := func(from, to uint32) uint16 {
 			return uint16(float64(from) + (float64(to)-float64(from))*tint)
 		}
@@ -1430,7 +1419,7 @@ type WrapWidget struct {
 	children []Widget
 	gap      float64 // between children on a line
 	runGap   float64 // between lines
-	space    float64 // both, in theme units, when set
+	space    float64 // both, in environment spacing units, when set
 	align    CrossAlign
 
 	sizes   []Size
@@ -1456,7 +1445,7 @@ func (w *WrapWidget) RunGap(v float64) *WrapWidget {
 	return w
 }
 
-// Space sets both gaps to n times the theme's Space, resolved at layout.
+// Space sets both gaps to n times the environment spacing unit, resolved at layout.
 func (w *WrapWidget) Space(n float64) *WrapWidget {
 	defer property.Watch(&w.props, &w.space)()
 	w.space = n
@@ -1474,7 +1463,7 @@ func (w *WrapWidget) Align(a CrossAlign) *WrapWidget {
 func (w *WrapWidget) Layout(c Constraints, env Env) Size {
 	defer w.props.Layout()()
 	if w.space > 0 {
-		w.gap = w.space * env.Theme().Space
+		w.gap = w.space * env.Spacing()
 		w.runGap = w.gap
 	}
 	n := len(w.children)
@@ -1538,7 +1527,7 @@ type GridWidget struct {
 	children []Widget
 	gap      float64
 	rowGap   float64
-	space    float64 // both, in theme units, when set
+	space    float64 // both, in environment spacing units, when set
 
 	sizes   []Size
 	offsets []Point
@@ -1568,7 +1557,7 @@ func (g *GridWidget) RowGap(v float64) *GridWidget {
 	return g
 }
 
-// Space sets both gaps to n times the theme's Space, resolved at layout.
+// Space sets both gaps to n times the environment spacing unit, resolved at layout.
 func (g *GridWidget) Space(n float64) *GridWidget {
 	defer property.Watch(&g.props, &g.space)()
 	g.space = n
@@ -1579,7 +1568,7 @@ func (g *GridWidget) Space(n float64) *GridWidget {
 func (g *GridWidget) Layout(c Constraints, env Env) Size {
 	defer g.props.Layout()()
 	if g.space > 0 {
-		g.gap = g.space * env.Theme().Space
+		g.gap = g.space * env.Spacing()
 		g.rowGap = g.gap
 	}
 	n := len(g.children)

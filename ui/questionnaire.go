@@ -6,8 +6,9 @@ import (
 	"strings"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/icons"
 	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/ui/icons"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // QuestionAnswer distinguishes unanswered, explicitly skipped and answered
@@ -400,12 +401,12 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 	}
 	item := q.items[i]
 	current, total := q.Progress()
-	heading := []ggui.Widget{ggui.Text(item.Title).AsTitle().Size(16).LineHeight(1.5)}
+	heading := []ggui.Widget{ggui.Text(item.Title).StyleKey(uitheme.TitleKey, uitheme.Default().Title).Role(ggui.RoleHeading).Size(16).LineHeight(1.5)}
 	if item.Description != "" {
-		heading = append(heading, ggui.Text(item.Description).AsCaption().Size(14).LineHeight(1.5))
+		heading = append(heading, ggui.Text(item.Description).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption).Size(14).LineHeight(1.5))
 	}
 	body := []ggui.Widget{ggui.Column(
-		&questionProgress{ggui.Caption(fmt.Sprintf("Question %d of %d", current, total)), current, total},
+		&questionProgress{Caption(fmt.Sprintf("Question %d of %d", current, total)), current, total},
 		ggui.Column(heading...).Gap(2).Align(ggui.AlignStretch),
 	).Gap(20).Align(ggui.AlignStretch)}
 	rows := []ggui.Widget{}
@@ -600,7 +601,7 @@ type questionChoice struct {
 	index    int
 	shortcut string
 	body     ggui.Widget
-	theme    ggui.Theme
+	theme    uitheme.Theme
 	env      ggui.Env
 }
 
@@ -608,9 +609,9 @@ func (c *questionChoice) selected() bool {
 	return slices.Contains(c.q.answer(c.item).Values, c.option.Value)
 }
 func (c *questionChoice) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
-	c.theme = env.Theme()
+	c.theme = uitheme.From(env)
 	c.env = env
-	text := []ggui.Widget{ggui.Text(c.option.Label).Font(env.Theme().Title.Font).Size(14).LineHeight(1.5).Color(pick(c.IsInert(), c.theme.MutedFg, c.theme.Fg))}
+	text := []ggui.Widget{ggui.Text(c.option.Label).Font(uitheme.From(env).Title.Font).Size(14).LineHeight(1.5).Color(pick(c.IsInert(), c.theme.MutedFg, c.theme.Fg))}
 	if c.option.Description != "" {
 		text = append(text, ggui.Text(c.option.Description).Size(14).LineHeight(1.5).Color(c.theme.MutedFg))
 	}
@@ -745,12 +746,12 @@ func (a *questionActions) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(a.bod
 type questionInput struct{ *TextFieldWidget }
 
 func (f *questionInput) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	t := env.Theme()
+	t := uitheme.From(env)
 	t.FieldPad = ggui.Insets(5, 10)
 	t.Radius = t.ChatTokens().QuestionInputRadius
 	t.Input = mix(t.Bg, t.Input, .3)
 	c.MinH = min(c.MaxH, max(c.MinH, 32))
-	return f.TextFieldWidget.Layout(c, env.WithTheme(t))
+	return f.TextFieldWidget.Layout(c, t.Apply(env))
 }
 
 // Theme-dependent presentation resolves at layout, including under Themed.
@@ -758,14 +759,14 @@ func (f *questionInput) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 type questionStack struct{ *ggui.ColumnWidget }
 
 func (s *questionStack) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	s.Gap(env.Theme().ChatTokens().QuestionGap)
+	s.Gap(uitheme.From(env).ChatTokens().QuestionGap)
 	return s.ColumnWidget.Layout(c, env)
 }
 
 type questionError struct{ *ggui.TextWidget }
 
 func (e *questionError) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	e.Color(env.Theme().Destructive)
+	e.Color(uitheme.From(env).Destructive)
 	return e.TextWidget.Layout(c, env)
 }
 

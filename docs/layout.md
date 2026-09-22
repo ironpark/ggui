@@ -111,7 +111,7 @@ centre; a child with no text rests on that baseline by its bottom edge. A
 Column, `Wrap` or `Each` treats it as `AlignStart`.
 
 ```go
-ggui.Row(ggui.Title("Inbox"), ggui.Caption("12 unread")).Gap(8).Align(ggui.AlignBaseline)
+ggui.Row(ui.Title("Inbox"), ui.Caption("12 unread")).Gap(8).Align(ggui.AlignBaseline)
 ```
 
 ```go

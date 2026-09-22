@@ -11,6 +11,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // renderGame exercises the real GPU renderer, independently of desktop capture.
@@ -38,7 +39,7 @@ func (g *renderGame) Draw(screen *ebiten.Image) {
 	}
 	e := chartExamples[g.index%len(chartExamples)]
 	dark := g.index >= len(chartExamples)
-	preset := ggui.ThemePreset{Base: ggui.BaseNeutral, Accent: ggui.AccentBlue}
+	preset := uitheme.Preset{Base: uitheme.BaseNeutral, Accent: uitheme.AccentBlue}
 	theme := preset.Light()
 	mode := "light"
 	if dark {
@@ -52,11 +53,11 @@ func (g *renderGame) Draw(screen *ebiten.Image) {
 	var w ggui.Widget
 	p := ggui.ProbeBuilder(func() ggui.Widget {
 		w = chartCard(e)
-		return ggui.Themed(theme, w)
+		return uitheme.With(theme, w)
 	}, ggui.Sz(480, 420))
 	p.Frame()
 	defer p.Close()
-	env := ggui.Env{}.WithTheme(theme).WithText(theme.Text)
+	env := theme.Apply(ggui.Env{}).WithText(theme.Text)
 	size := w.Layout(ggui.Loose(ggui.Sz(480, 600)), env)
 	img := ebiten.NewImage(480, int(size.H))
 	defer img.Deallocate()

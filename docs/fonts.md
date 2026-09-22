@@ -56,4 +56,4 @@ map roles such as `Check`, `Close`, and `ChevronDown` to parsed SVGs. Missing
 roles retain the Lucide defaults. Decorative icons stay out of accessibility;
 name the button that contains them, or use `Alt` for a standalone image.
 
-See [icons/README.md](../icons/README.md) for custom SVG sets, precedence and caching.
+See [ui/icons/README.md](../ui/icons/README.md) for custom SVG sets, precedence and caching.

@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 func build(m *model) ggui.Widget {
@@ -14,12 +15,12 @@ func build(m *model) ggui.Widget {
 		metrics(m),
 		ggui.Column(
 			ggui.Row(
-				ggui.Caption("RELEASE PROGRESS"),
+				ui.Caption("RELEASE PROGRESS"),
 				ggui.Spacer(),
 				ggui.Textf("%d of %d complete",
 					m.Summary.Map(func(s summary) int { return s.Done }),
 					m.Summary.Map(func(s summary) int { return s.Total }),
-				).AsCaption(),
+				).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
 			),
 			ui.Progress(m.Progress).Height(5),
 		).Gap(8).Align(ggui.AlignStretch),
@@ -28,7 +29,7 @@ func build(m *model) ggui.Widget {
 			ui.Tab("Insights", insights(m)),
 			ui.Tab("Settings", settings(m)),
 		).Line(),
-		ggui.Caption("⌘/Ctrl+N  New task · F1  Inspector · Changes last until the window closes."),
+		ui.Caption("⌘/Ctrl+N  New task · F1  Inspector · Changes last until the window closes."),
 	).Gap(16).Align(ggui.AlignStretch)
 
 	return ggui.Column(
@@ -49,9 +50,9 @@ func build(m *model) ggui.Widget {
 
 func header(m *model) ggui.Widget {
 	title := ggui.Column(
-		ggui.Row(ggui.Caption("PROJECT / LAUNCH"), ui.Badge("Local demo")).Gap(12),
-		ggui.Title("Launch workspace").Size(30),
-		ggui.Caption("A clear view of the work ahead."),
+		ggui.Row(ui.Caption("PROJECT / LAUNCH"), ui.Badge("Local demo")).Gap(12),
+		ui.Title("Launch workspace").Size(30),
+		ui.Caption("A clear view of the work ahead."),
 	).Gap(8)
 	actions := ggui.Row(
 		ui.ThemeSwitch(m.Dark),
@@ -67,8 +68,8 @@ func header(m *model) ggui.Widget {
 func metrics(m *model) ggui.Widget {
 	card := func(label string, value ggui.Readable[int]) ggui.Widget {
 		return ggui.Box(ui.Card(ggui.Column(
-			ggui.Caption(label),
-			ggui.Textf("%d", value).AsTitle().Size(30),
+			ui.Caption(label),
+			ggui.Textf("%d", value).StyleKey(uitheme.TitleKey, uitheme.Default().Title).Role(ggui.RoleHeading).Size(30),
 		).Gap(6)).Pad(16)).BindWidth(m.CardWidth)
 	}
 	cards := []ggui.Widget{
@@ -104,7 +105,7 @@ func taskList(m *model) ggui.Widget {
 			detail := ggui.Map(row.Value, func(item task) string { return item.Assignee + " · " + item.Status })
 			return ui.ButtonOf(ggui.Column(
 				ggui.TextOf(label),
-				ggui.TextOf(detail).AsCaption(),
+				ggui.TextOf(detail).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
 			).Gap(4).Align(ggui.AlignStretch), func() { m.Selected.Set(id) }).
 				BindName(label).Outline().Pad(12)
 		},
@@ -118,7 +119,7 @@ func taskList(m *model) ggui.Widget {
 		wide:       ggui.Row(ggui.Expanded(search), filters).Gap(16).Align(ggui.AlignCenter),
 		narrow:     ggui.Column(search, ggui.Align(filters).Left()).Gap(12).Align(ggui.AlignStretch),
 	}
-	selection := ggui.TextOf(selectedTitle).AsCaption()
+	selection := ggui.TextOf(selectedTitle).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption)
 	actions := ggui.Wrap(
 		ui.Button("Edit selected", m.edit).Outline().BindDisabled(noSelection),
 		ui.Button("Delete selected", m.askDelete).Outline().BindDisabled(noSelection),
@@ -130,9 +131,9 @@ func taskList(m *model) ggui.Widget {
 	}
 	return ui.Card(ggui.Column(
 		ggui.Row(
-			ggui.Title("Tasks").Size(20),
+			ui.Title("Tasks").Size(20),
 			ggui.Spacer(),
-			ggui.Textf("%d results", m.Visible.Map(func(tasks []task) int { return len(tasks) })).AsCaption(),
+			ggui.Textf("%d results", m.Visible.Map(func(tasks []task) int { return len(tasks) })).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
 		).Align(ggui.AlignCenter),
 		toolbar,
 		selectionBar,
@@ -184,8 +185,8 @@ func insights(m *model) ggui.Widget {
 	})
 	return ggui.Column(
 		ui.Card(ggui.Column(
-			ggui.Title("Work by status").Size(20),
-			ggui.Caption("All tasks in this workspace, independent of the current filter."),
+			ui.Title("Work by status").Size(20),
+			ui.Caption("All tasks in this workspace, independent of the current filter."),
 			chart,
 		).Gap(12).Align(ggui.AlignStretch)),
 		ui.Card(ui.Collapsible(ggui.State(true), "Recent activity", activity)),
@@ -195,13 +196,13 @@ func insights(m *model) ggui.Widget {
 func settings(m *model) ggui.Widget {
 	previewAssignee := ggui.State("Ada")
 	return ui.Card(ggui.Column(
-		ggui.Title("Workspace preferences").Size(20),
+		ui.Title("Workspace preferences").Size(20),
 		ui.Switch(m.Extended, "Include extended team"),
 		ui.Field("Available people", ui.Select(previewAssignee).BindOptions(m.Team).Name("Available people")).
 			Help("This list and the task editor share a live options source. Existing assignments are preserved."),
 		ui.Field("Metric card width", ui.Slider(m.CardWidth, 200, 360).Step(10).Name("Metric card width")).
 			Help("Adjust the desktop cards. Narrow windows use three compact, equal columns."),
-		ggui.Textf("Card width: %.0f px", m.CardWidth).AsCaption(),
+		ggui.Textf("Card width: %.0f px", m.CardWidth).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
 		ui.Alert("Try the inspector", "Press F1 to explore layout, hit regions, and the widget tree."),
 	).Gap(16).Align(ggui.AlignStretch))
 }

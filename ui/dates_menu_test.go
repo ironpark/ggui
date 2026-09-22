@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 func date(y int, m time.Month, d int) time.Time { return time.Date(y, m, d, 0, 0, 0, 0, time.UTC) }
@@ -232,7 +233,7 @@ func TestCommandHoverAndStableHeight(t *testing.T) {
 	if picked != "two" {
 		t.Fatal("hover did not update keyboard selection", picked)
 	}
-	env := ggui.Env{}.WithTheme(ggui.DefaultTheme())
+	env := uitheme.Default().Apply(ggui.Env{})
 	before := c.Layout(ggui.Loose(ggui.Sz(360, 500)), env)
 	q.Set("no results")
 	after := c.Layout(ggui.Loose(ggui.Sz(360, 500)), env)

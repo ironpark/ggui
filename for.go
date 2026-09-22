@@ -3,12 +3,12 @@ package ggui
 import (
 	"cmp"
 	"fmt"
-	"github.com/ironpark/ggui/internal/reactive"
 	"math"
 	"slices"
 	"time"
 
 	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/internal/reactive"
 )
 
 // EachWidget is a keyed, reactive list: it watches a Readable of items, keeps one
@@ -198,7 +198,7 @@ func (f *EachWidget[T, K]) Gap(v float64) *EachWidget[T, K] {
 	return f
 }
 
-// Space sets the gap to n times the theme's Space, resolved at layout.
+// Space sets the gap to n times the environment spacing unit, resolved at layout.
 func (f *EachWidget[T, K]) Space(n float64) *EachWidget[T, K] {
 	defer property.Watch(&f.props, &f.space)()
 	f.space = n

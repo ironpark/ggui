@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // find returns the region with role and label, or fails the test.
@@ -48,7 +49,7 @@ func TestButtonTapsAndDisables(t *testing.T) {
 func TestButtonSizesFromThemePadding(t *testing.T) {
 	got := ui.Button("go", nil).Layout(ggui.Loose(ggui.Sz(300, 300)), ggui.Env{})
 	text := ggui.Text("go").Layout(ggui.Loose(ggui.Sz(300, 300)), ggui.Env{})
-	th := ggui.DefaultTheme()
+	th := uitheme.Default()
 	if got.W != text.W+th.ButtonPad.Left+th.ButtonPad.Right || got.H != text.H+th.ButtonPad.Top+th.ButtonPad.Bottom {
 		t.Fatalf("button %v around text %v, want theme padding", got, text)
 	}
@@ -72,7 +73,7 @@ func TestCheckboxTogglesSignal(t *testing.T) {
 	}
 	size := c.Layout(ggui.Loose(ggui.Sz(200, 30)), ggui.Env{})
 	label := ggui.Text("label").Layout(ggui.Loose(ggui.Sz(200, 30)), ggui.Env{})
-	th := ggui.DefaultTheme()
+	th := uitheme.Default()
 	if size.W != th.ControlSize+th.ControlGap+label.W {
 		t.Fatalf("checkbox width %v, want glyph + gap + label %v", size.W, label.W)
 	}
@@ -378,7 +379,7 @@ func TestCollapsibleTogglesAndHidesContent(t *testing.T) {
 		t.Fatal("click on the header did not open")
 	}
 	p.Frame()
-	p.Advance(ggui.DefaultTheme().MotionFast)
+	p.Advance(uitheme.Default().MotionFast)
 	opened := c.Layout(ggui.Loose(ggui.Sz(300, 200)), ggui.Env{})
 	if body == (ggui.Rect{}) || opened.H < closed.H+40 {
 		t.Fatalf("content %+v, height %v -> %v; want content shown below the header", body, closed.H, opened.H)

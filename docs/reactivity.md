@@ -121,7 +121,7 @@ idempotent. For app-wide effects, use `App.Setup` or `Probe.Setup`:
 
 ```go
 app.Setup(func() {
-    ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme())
+    theme.Bind(dark, theme.Dark(), theme.Default())
 })
 ```
 

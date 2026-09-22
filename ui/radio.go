@@ -2,6 +2,7 @@ package ui
 
 import (
 	"github.com/ironpark/ggui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // RadioWidget is one option of a group that shares a signal. Build one with
@@ -56,7 +57,7 @@ func (r *RadioWidget[T]) Describe() ggui.Node {
 
 // Layout implements Widget.
 func (r *RadioWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	return r.layout(c, env, squareGlyph(env.Theme()))
+	return r.layout(c, env, squareGlyph(uitheme.From(env)))
 }
 
 // Paint implements Widget.

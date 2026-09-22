@@ -1,10 +1,11 @@
 package ui
 
 import (
-	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/icons"
-	"github.com/ironpark/ggui/icons/lucide"
 	"image/color"
+
+	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/icons/lucide"
 )
 
 // Icon is a shared semantic placeholder. Local Env and theme icon sets override

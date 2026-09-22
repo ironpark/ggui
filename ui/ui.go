@@ -20,6 +20,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/fn"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 const (
@@ -30,7 +31,7 @@ const (
 )
 
 // squareGlyph is the box a checkbox or radio draws itself in.
-func squareGlyph(t ggui.Theme) ggui.Size { return ggui.Sz(t.ControlSize, t.ControlSize) }
+func squareGlyph(t uitheme.Theme) ggui.Size { return ggui.Sz(t.ControlSize, t.ControlSize) }
 
 // sprint is the default option label.
 func sprint[T any](v T) string { return fmt.Sprint(v) }

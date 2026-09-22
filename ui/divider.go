@@ -2,13 +2,14 @@ package ui
 
 import (
 	"github.com/ironpark/ggui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // DividerWidget is a one-pixel line in the theme's Border color. Build one
 // with Divider.
 type DividerWidget struct {
 	vertical bool
-	theme    ggui.Theme
+	theme    uitheme.Theme
 }
 
 // Divider creates a horizontal rule that fills the width it is given.
@@ -19,7 +20,7 @@ func (d *DividerWidget) Vertical() *DividerWidget { d.vertical = true; return d 
 
 // Layout implements Widget.
 func (d *DividerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	d.theme = env.Theme()
+	d.theme = uitheme.From(env)
 	if d.vertical {
 		return c.Constrain(ggui.Sz(1, bounded(c.MaxH, 0)))
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/ironpark/ggui"
 	_ "github.com/ironpark/ggui/inspect/panel"
 	"github.com/ironpark/ggui/ui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // model holds one signal per piece of state. Bumping Generation changes the
@@ -49,7 +50,7 @@ func (m model) build() ggui.Widget {
 	})
 	return ggui.Box(ggui.Column(
 		ggui.Row(
-			ggui.Title("Charts"),
+			ui.Title("Charts"),
 			ggui.Spacer(),
 			ui.Button("Replay", m.replay),
 			ui.Switch(m.Dark, "Dark theme"),
@@ -60,7 +61,7 @@ func (m model) build() ggui.Widget {
 		ggui.Key(selection, func(key cardKey) ggui.Widget {
 			return chartCard(findChart(key.name))
 		}),
-		ggui.Caption("Arrow keys explore values · Enter selects · Replay restarts motion"),
+		ui.Caption("Arrow keys explore values · Enter selects · Replay restarts motion"),
 	).Gap(20).Align(ggui.AlignStretch)).Pad(24)
 }
 
@@ -88,8 +89,8 @@ func main() {
 	// Setup runs under the app's root owner, so the theme binding is
 	// disposed with the app. The app fills the window with the theme's
 	// background, so the tree needs no Fill of its own.
-	preset := ggui.ThemePreset{Base: ggui.BaseNeutral, Accent: ggui.AccentBlue}
-	app.Setup(func() { ggui.BindTheme(m.Dark, preset.Dark(), preset.Light()) })
+	preset := uitheme.Preset{Base: uitheme.BaseNeutral, Accent: uitheme.AccentBlue}
+	app.Setup(func() { uitheme.Bind(m.Dark, preset.Dark(), preset.Light()) })
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}

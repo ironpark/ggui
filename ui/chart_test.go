@@ -2,10 +2,12 @@ package ui
 
 import (
 	"fmt"
-	"github.com/ironpark/ggui"
 	"math"
 	"testing"
 	"time"
+
+	"github.com/ironpark/ggui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 func chartTestData() []ChartDatum {
@@ -213,7 +215,7 @@ func BenchmarkChartCachedPaint100K(b *testing.B) {
 
 func TestChartTooltipFormatsTotalAndLegendWrap(t *testing.T) {
 	c := BarChart(chartTestData(), chartTestConfig).Tooltip(ChartTooltipOptions{ShowTotal: true, Label: "Total visits in the selected month", FormatValue: func(v float64, _ ChartSeries, _ ChartDatum) string { return fmt.Sprintf("%.0f visitors", v) }})
-	c.Layout(ggui.Loose(ggui.Sz(400, 240)), ggui.Env{}.WithTheme(ggui.DefaultTheme()))
+	c.Layout(ggui.Loose(ggui.Sz(400, 240)), uitheme.Default().Apply(ggui.Env{}))
 	rows, size := c.tooltipRows(0)
 	if len(rows) != 2 || rows[0].value != "10 visitors" || size.H != 112 {
 		t.Fatalf("tooltip rows/size %v %v", rows, size)
@@ -222,8 +224,8 @@ func TestChartTooltipFormatsTotalAndLegendWrap(t *testing.T) {
 		t.Fatal("legend did not wrap")
 	}
 	standalone := ChartTooltipContent(c, 0)
-	dark := ggui.DarkTheme()
-	standalone.Layout(ggui.Loose(ggui.Sz(400, 240)), ggui.Env{}.WithTheme(dark))
+	dark := uitheme.Dark()
+	standalone.Layout(ggui.Loose(ggui.Sz(400, 240)), dark.Apply(ggui.Env{}))
 	if c.theme.Bg == dark.Bg {
 		t.Fatal("standalone content changed chart's theme")
 	}

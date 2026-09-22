@@ -3,6 +3,7 @@ package ui
 import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // MenubarWidget coordinates Menu triggers through one popup and one tab stop.
@@ -15,7 +16,7 @@ type MenubarWidget struct {
 	popup        *ggui.PopupWidget
 	sizes        []ggui.Size
 	rects        []ggui.Rect
-	theme        ggui.Theme
+	theme        uitheme.Theme
 	motion       pointerMotion
 	compact      bool
 	naturalWidth float64
@@ -71,7 +72,7 @@ func (b *MenubarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	for _, m := range b.menus {
 		m.button.Sync()
 	}
-	b.theme = env.Theme()
+	b.theme = uitheme.From(env)
 	if len(b.menus) > 0 && b.menus[b.active].button.IsInert() {
 		b.popup.Hide()
 		b.active = stepIndex(b.active, 1, len(b.menus), func(i int) bool { return !b.menus[i].button.IsInert() })
@@ -225,7 +226,7 @@ func (p menubarPanel) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if len(b.menus) == 0 {
 		return ggui.Size{}
 	}
-	t := env.Theme()
+	t := uitheme.From(env)
 	return b.menus[b.active].chrome(t).Layout(c, env)
 }
 func (p menubarPanel) Paint(dst *ggui.Canvas, r ggui.Rect) {

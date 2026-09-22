@@ -1,9 +1,6 @@
 package ggui
 
 import (
-	"github.com/ironpark/ggui/a11y"
-	"github.com/ironpark/ggui/internal/reactive"
-
 	"image"
 	"image/color"
 	"math"
@@ -13,8 +10,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
-
+	"github.com/ironpark/ggui/a11y"
 	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/textinput"
 )
 
@@ -727,11 +725,11 @@ func (t *TextInputWidget) Layout(c Constraints, env Env) Size {
 	t.resolved = env.Text().Merge(t.style).resolved()
 	t.resolved.Size *= env.TextScale()
 	t.cache, _ = env.Get(cacheOwner)
-	th := env.Theme()
+	style := env.EditorStyle()
 	if t.IsDisabled() {
-		t.resolved.Color = th.MutedFg
+		t.resolved.Color = style.Muted
 	}
-	t.muted, t.selection = th.MutedFg, th.Selection
+	t.muted, t.selection = style.Muted, style.Selection
 	w := bounded(c.MaxW, t.minWidth)
 	if !t.multiline {
 		return c.Constrain(Sz(w, t.height()))

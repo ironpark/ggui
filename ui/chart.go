@@ -8,8 +8,9 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/icons"
 	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/ui/icons"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // ChartKind selects a native chart renderer. All kinds share config, tooltips,
@@ -64,7 +65,7 @@ const (
 type ChartSeries struct {
 	// ColorIndex is a 1-based Theme.Chart token; zero uses the series order.
 	ColorIndex int
-	ThemeColor func(ggui.Theme) color.Color
+	ThemeColor func(uitheme.Theme) color.Color
 	// Optional per-series polar radii are fractions of the chart radius.
 	InnerRadius, OuterRadius float64
 	FillOpacity              *float64
@@ -159,7 +160,7 @@ type ChartWidget struct {
 	duration                                                       time.Duration
 	delay                                                          time.Duration
 	env                                                            ggui.Env
-	theme                                                          ggui.Theme
+	theme                                                          uitheme.Theme
 	reduced                                                        bool
 	active, selected                                               int
 	plot                                                           ggui.Rect
@@ -409,7 +410,7 @@ func (c *ChartWidget) Replay() { c.started = time.Time{} }
 func (c *ChartWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	defer c.props.Layout()()
 	c.env = env
-	c.theme = env.Theme()
+	c.theme = uitheme.From(env)
 	c.reduced = env.ReducedMotion()
 	c.textCache = nil
 	return cs.Constrain(ggui.Sz(bounded(cs.MaxW, 400), c.height))

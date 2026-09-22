@@ -7,6 +7,6 @@ accent palettes, with light/dark semantic tokens. Only TypeScript type syntax
 was removed. Source license: MIT, included in LICENSE.txt.
 
 The palette loader retains the original OKLCH values until conversion to sRGB.
-Nova/Rhea geometry mappings are in theme_presets.go, informed by:
+Nova/Rhea geometry mappings are in [presets.go](../../ui/theme/presets.go), informed by:
 https://github.com/shadcn-ui/ui/blob/main/apps/v4/registry/styles/style-nova.css
 https://github.com/shadcn-ui/ui/blob/main/apps/v4/registry/styles/style-rhea.css

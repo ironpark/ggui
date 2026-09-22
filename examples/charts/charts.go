@@ -11,8 +11,9 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/icons"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/ui/icons"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 //go:embed fixtures.json
@@ -228,14 +229,14 @@ func buildChart(e chartExample) *ui.ChartWidget {
 	}
 	if has("bar-label-custom") {
 		c.Axes(false, false).Grid(true).LabelPainter(func(dst *ggui.Canvas, ctx ui.ChartPointContext) {
-			demoText(dst, ctx.Env, short(ctx.Datum.Label), ggui.Pt(ctx.Plot.Origin.X+8, ctx.Position.Y-7), ctx.Env.Theme().PrimaryFg, 0)
-			demoText(dst, ctx.Env, fmt.Sprintf("%g", ctx.Value), ctx.Position.Add(ggui.Pt(8., -7.)), ctx.Env.Theme().Fg, 0)
+			demoText(dst, ctx.Env, short(ctx.Datum.Label), ggui.Pt(ctx.Plot.Origin.X+8, ctx.Position.Y-7), uitheme.From(ctx.Env).PrimaryFg, 0)
+			demoText(dst, ctx.Env, fmt.Sprintf("%g", ctx.Value), ctx.Position.Add(ggui.Pt(8., -7.)), uitheme.From(ctx.Env).Fg, 0)
 		})
 	}
 	if has("radar-label-custom") {
 		c.TickPainter(func(dst *ggui.Canvas, ctx ui.ChartPointContext) {
 			env := ctx.Env
-			w := ggui.Column(ggui.Text(fmt.Sprintf("%g / %g", ctx.Datum.Values["desktop"], ctx.Datum.Values["mobile"])).Size(12).Color(ctx.Color), ggui.Caption(ctx.Datum.Label).Size(11)).Align(ggui.AlignCenter)
+			w := ggui.Column(ggui.Text(fmt.Sprintf("%g / %g", ctx.Datum.Values["desktop"], ctx.Datum.Values["mobile"])).Size(12).Color(ctx.Color), ui.Caption(ctx.Datum.Label).Size(11)).Align(ggui.AlignCenter)
 			size := w.Layout(ggui.Loose(ggui.Sz(120, 50)), env)
 			dst.Paint(w, ggui.Rct(ctx.Position.Add(ggui.Pt(-size.W/2, -size.H/2)), size))
 		})
@@ -317,7 +318,7 @@ func chartCard(e chartExample) ggui.Widget {
 	if e.Subtitle != "" {
 		description = e.Subtitle
 	}
-	widgets := []ggui.Widget{ggui.Title(e.Title).Size(16), ggui.Caption(description)}
+	widgets := []ggui.Widget{ui.Title(e.Title).Size(16), ui.Caption(description)}
 	if strings.Contains(e.Name, "interactive") {
 		if strings.Contains(e.Name, "area") {
 			days := ggui.State("Last 3 months")
@@ -364,7 +365,7 @@ func chartCard(e chartExample) ggui.Widget {
 		widgets = append(widgets, chart)
 	}
 	if !strings.Contains(e.Name, "tooltip") {
-		widgets = append(widgets, ggui.Text("Trending up by 5.2% this month ↗").Size(14), ggui.Caption(footer))
+		widgets = append(widgets, ggui.Text("Trending up by 5.2% this month ↗").Size(14), ui.Caption(footer))
 	}
 	if strings.Contains(e.Name, "pie") || strings.Contains(e.Name, "radial") || strings.Contains(e.Name, "radar") {
 		for i, w := range widgets {

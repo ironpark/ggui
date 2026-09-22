@@ -4,8 +4,9 @@ import (
 	"math"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/icons"
 	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/ui/icons"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // ResizableWidget splits its space into two clipped panes with a draggable divider.
@@ -21,7 +22,7 @@ type ResizableWidget struct {
 	vertical                            bool
 	minFirst, minSecond                 float64
 	onChange                            func(float64)
-	theme                               ggui.Theme
+	theme                               uitheme.Theme
 	env                                 ggui.Env
 	rect, firstRect, secondRect, handle ggui.Rect
 	available, lo, hi, dragOffset       float64
@@ -91,7 +92,7 @@ func (r *ResizableWidget) axis(p ggui.Point) float64 {
 func (r *ResizableWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer r.props.Layout()()
 	r.Sync()
-	r.env, r.theme = env, env.Theme()
+	r.env, r.theme = env, uitheme.From(env)
 	size := c.Constrain(ggui.Sz(bounded(c.MaxW, 320), bounded(c.MaxH, 200)))
 	main := size.W
 	if r.vertical {

@@ -2,7 +2,8 @@ package main
 
 import (
 	"embed"
-	"github.com/ironpark/ggui/icons"
+
+	"github.com/ironpark/ggui/ui/icons"
 )
 
 //go:embed icons/*.svg

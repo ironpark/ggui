@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
-
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // This catalog deliberately excludes the recently added charts, Carousel and OTP,
@@ -61,18 +61,18 @@ func (g *galleryAudit) Draw(screen *ebiten.Image) {
 	now := time.Unix(100, 0)
 	restore := ggui.SetClock(func() time.Time { return now })
 	defer restore()
-	style := ggui.StyleNova
+	style := uitheme.StyleNova
 	if g.index/(len(g.names)*4) == 1 {
-		style = ggui.StyleRhea
+		style = uitheme.StyleRhea
 	}
-	preset := ggui.ThemePreset{Base: ggui.BaseNeutral, Accent: ggui.AccentBlue, Style: style}
+	preset := uitheme.Preset{Base: uitheme.BaseNeutral, Accent: uitheme.AccentBlue, Style: style}
 	theme := preset.Light()
 	mode := "light"
 	if dark {
 		theme = preset.Dark()
 		mode = "dark"
 	}
-	ggui.SetTheme(theme)
+	uitheme.Set(theme)
 	app := ggui.ProbeBuilder(func() ggui.Widget {
 		build, _, _ := newGalleryPreview(func(entries []ggui.Widget) ggui.Widget {
 			var widgets []ggui.Widget
@@ -195,7 +195,7 @@ func auditControlStates() ggui.Widget {
 	on, off := ggui.State(true), ggui.State(false)
 	text := ggui.State("invalid@example")
 	return ui.Card(ggui.Column(
-		ggui.Title("Control states"),
+		ui.Title("Control states"),
 		ggui.Wrap(
 			ui.Checkbox(on, "Checked"),
 			ui.Checkbox(on, "Disabled checked").Disabled(true),

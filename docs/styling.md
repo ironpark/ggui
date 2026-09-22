@@ -4,7 +4,8 @@
 
 Customize local styles, inherited values, semantic colors, geometry, and motion.
 
-Examples use `ggui` and `ui` imports and application-defined placeholders.
+Examples use `ggui`, `ui`, and `theme` (`github.com/ironpark/ggui/ui/theme`) imports and application-defined placeholders.
+See the [migration guide](../ui/theme/README.md) for the package/API changes.
 See [example conventions](README.md#start-here) before copying snippets.
 
 Choose the scope of a change before setting a style:
@@ -12,8 +13,8 @@ Choose the scope of a change before setting a style:
 | Layer | What it is | Set with | Read by |
 | --- | --- | --- | --- |
 | Local style | one widget's own font, size, color | `Text(s).Size(18).Color(c)` | that widget |
-| Inherited style | what a subtree starts from | `Styled(child)`, `Themed(t, child)`, `Provide(key, v, child)` | every widget below, at layout |
-| Theme | the app's tokens: colors, spacing, named text styles | `SetTheme(t)`, `BindTheme(sig, on, off)` | the tree at layout, and tracked computations using `UseTheme()` |
+| Inherited style | what a subtree starts from | `Styled(child)`, `theme.With(t, child)`, `Provide(key, v, child)` | every widget below, at layout |
+| Theme | the app's tokens: colors, spacing, named text styles | `theme.Set(t)`, `theme.Bind(sig, on, off)` | the tree at layout, and tracked computations using `theme.Use()` |
 
 A widget's own setters win over what it inherited, and what it inherited wins
 over the built-in defaults. Nothing is resolved at construction: the chain is
@@ -59,9 +60,9 @@ ggui.Text("Heading").Style(t.Title)              // the theme's heading
 ggui.Text("Heading").Style(t.Title).Color(brand) // the same, in one other color
 ```
 
-`Title(s)` and `Caption(s)` are shorthands for the same merge against the
+`ui.Title(s)` and `ui.Caption(s)` are shorthands for the same merge against the
 theme's named styles, resolved from the `Env` at layout, so a heading needs no
-`UseTheme`. Note that the named styles are *deltas*: `DefaultTheme().Title` is
+`theme.Use`. Note that the named styles are *deltas*: `theme.Default().Title` is
 `{Size: 24}` and nothing else, so a title inherits its font, color and line
 height from `Theme.Text`. Change `Theme.Text.Color` and the headings follow.
 
@@ -89,13 +90,15 @@ ggui.Styled(ggui.Column(
 )).Color(t.MutedFg).Size(12)
 ```
 
-The root `Env` starts from `Theme.Text`, so a bare `Text(s)` already looks
-right without anything wrapping it.
+Importing `ui/theme` (also imported by `ui`) installs the default UI environment.
+`theme.Set` and `theme.Bind` supply `Theme.Text` to the root `Env`, so a bare
+`ggui.Text(s)` inherits it. The core has no dependency on the theme package.
 
-`Themed(t, child)` gives a subtree a theme of its own — a preview pane showing
+`theme.With(t, child)` gives a subtree a theme of its own — a preview pane showing
 the dark theme inside a light window, say. `.Space(n)` on `Column`, `Row`,
-`Wrap`, `Grid` and `EachKeyed` is n times the theme's `Space`, resolved at layout,
-so gaps track the theme without a `UseTheme` either.
+`Wrap`, `Grid` and `EachKeyed` is n times `ggui.SpacingKey`, resolved at layout.
+The theme maps its `Space` token to this key, so gaps track the theme without
+a `theme.Use` call. Core-only applications can provide the spacing key directly.
 
 Your own inherited values travel the same road. `NewEnvKey[T](name)` makes a key,
 `Provide(key, v, child)` stores a value under it, and a widget reads it back
@@ -116,7 +119,7 @@ subtrees, no builder callbacks, widgets resolve inherited values whenever layout
 
 ## Theme tokens
 
-Defaults below describe `DefaultTheme()` and `DarkTheme()`. A `ThemePreset`
+Defaults below describe `theme.Default()` and `theme.Dark()`. A `theme.Preset`
 may supply different colors and geometry.
 
 ### Colors
@@ -150,7 +153,7 @@ The sidebar uses separate `Sidebar`/`SidebarFg`, `SidebarPrimary`/
 with a near-white light surface and zinc-900 dark surface.
 
 `Chart` contains five optional series colors. Default themes leave them unset,
-so charts fall back to `Primary`; choose a `ThemePreset` or set `Chart` for a
+so charts fall back to `Primary`; choose a `theme.Preset` or set `Chart` for a
 multicolor palette. `Chat` controls bubble, attachment, and questionnaire
 geometry; see [Theme presets](#theme-presets) and [Chat components](chat.md).
 
@@ -212,13 +215,13 @@ merged onto it for headings and small secondary text. See
 
 ## Deriving a theme
 
-**Start from `DefaultTheme()`, `DarkTheme()`, or a `ThemePreset`.** A `Theme` has no "inherit" state the way `TextStyle` does: a field
+**Start from `theme.Default()`, `theme.Dark()`, or a `theme.Preset`.** A `Theme` has no "inherit" state the way `TextStyle` does: a field
 you leave out is a zero, and a zero `ControlSize` paints a checkbox with no
 box at all.
 
 ```go
-func brandTheme() ggui.Theme {
-	t := ggui.DefaultTheme()
+func brandTheme() theme.Theme {
+	t := theme.Default()
 	t.Primary = color.RGBA{0x2f, 0x6f, 0xed, 0xff}
 	t.PrimaryHover = color.RGBA{0x25, 0x5a, 0xc4, 0xff}
 	t.PrimaryFg = color.White
@@ -247,7 +250,7 @@ variable by variable:
 // hex is four lines of your own; ggui takes any color.Color.
 func hex(s string) color.RGBA { ... }
 
-t := ggui.DefaultTheme()
+t := theme.Default()
 t.Bg, t.Fg = hex("#ffffff"), hex("#09090b")
 t.Primary, t.PrimaryFg = hex("#18181b"), hex("#fafafa")
 t.Border, t.Ring = hex("#e4e4e7"), hex("#a1a1aa")
@@ -282,17 +285,17 @@ subtree, like a form's disabled state.
 
 | Call | Does |
 | --- | --- |
-| `UseTheme()` | Read the global theme; inside a tracked computation such as `Reactive`, subscribe it to changes. |
-| `SetTheme(t)` | Replace the global theme, invalidate inherited layout, and notify tracked readers. |
-| `BindTheme(sig, on, off)` | follows a `Readable[bool]`, swapping between two themes |
-| `Themed(t, child)` | gives one subtree a theme without touching the app's |
-| `env.Theme()` | the theme at layout time, for a widget |
+| `theme.Use()` | Read the global theme; inside a tracked computation such as `Reactive`, subscribe it to changes. |
+| `theme.Set(t)` | Replace the global theme, invalidate inherited layout, and notify tracked readers. |
+| `theme.Bind(sig, on, off)` | follows a `Readable[bool]`, swapping between two themes |
+| `theme.With(t, child)` | gives one subtree a theme without touching the app's |
+| `theme.From(env)` | the theme at layout time, for a widget |
 
 The usual dark-mode switch is three lines:
 
 ```go
 dark := ggui.State(false)
-app.Setup(func() { ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme()) })
+app.Setup(func() { theme.Bind(dark, theme.Dark(), theme.Default()) })
 // somewhere in the tree:
 ui.Switch(dark, "Dark mode")
 ```
@@ -303,20 +306,20 @@ window follows along.
 
 ## Styling a custom widget
 
-Read the theme from the `Env` in `Layout`, not with `UseTheme`:
+Read the theme from the `Env` in `Layout`, not with `theme.Use`:
 
 ```go
 func (w *MyWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	t := env.Theme()
+	t := theme.From(env)
 	w.theme = t                    // Paint needs it too
 	w.pad = t.ItemPad
 	return c.Constrain(...)
 }
 ```
 
-`UseTheme` reads the global theme signal; it does not create an effect.
-Use `env.Theme()` in a widget so local `Themed` overrides are respected.
-Use `UseTheme()` inside `Reactive` when constructing a subtree from the global
+`theme.Use` reads the theme from the reactive root environment; it does not create an effect.
+Use `theme.From(env)` in a widget so local `theme.With` overrides are respected.
+Use `theme.Use()` inside `Reactive` when constructing a subtree from the global
 theme. Reads in app root setup or `Component` setup do not make setup rerun.
 
 Keep what `Paint` needs on the struct, since `Paint` gets no `Env`. That is
@@ -356,35 +359,35 @@ having to know the preference exists.
 
 ## Theme presets
 
-`ThemePreset` combines the [shadcn/ui semantic color tokens](https://ui.shadcn.com/docs/theming)
+`theme.Preset` combines the [shadcn/ui semantic color tokens](https://ui.shadcn.com/docs/theming)
 with ggui's geometry tokens. Palette data is vendored locally; constructing a
 preset never needs a network connection.
 
 ```go
-preset := ggui.ThemePreset{
-    Base: ggui.BaseNeutral,
-    Accent: ggui.AccentBlue,
-    Style: ggui.StyleRhea,
+preset := theme.Preset{
+    Base: theme.BaseNeutral,
+    Accent: theme.AccentBlue,
+    Style: theme.StyleRhea,
 }
-app.Setup(func() { ggui.BindTheme(dark, preset.Dark(), preset.Light()) })
+app.Setup(func() { theme.Bind(dark, preset.Dark(), preset.Light()) })
 
 // Returned Themes are independent values; customize after selecting a preset.
-theme := preset.Light()
-theme.Chat.BubbleRadius = 20
-theme.Chat.BubblePadding = ggui.Insets(10, 14)
-ggui.SetTheme(theme)
+t := preset.Light()
+t.Chat.BubbleRadius = 20
+t.Chat.BubblePadding = ggui.Insets(10, 14)
+theme.Set(t)
 ```
 
-The zero preset uses Neutral/Nova with no accent override. `DefaultTheme()` and
-`DarkTheme()` preserve the existing ggui appearance.
+The zero preset uses Neutral/Nova with no accent override. `theme.Default()` and
+`theme.Dark()` preserve the existing ggui appearance.
 
 | Axis | Presets |
 | --- | --- |
 | `BaseColor` | Neutral, Stone, Zinc, Mauve, Olive, Mist, Taupe |
 | `AccentColor` | Base (no override), Amber, Blue, Cyan, Emerald, Fuchsia, Green, Indigo, Lime, Orange, Pink, Purple, Red, Rose, Sky, Teal, Violet, Yellow |
-| `ThemeStyle` | Nova, Rhea |
+| `theme.Style` | Nova, Rhea |
 
-`BaseColors()`, `AccentColors()` and `ThemeStyles()` return independent slices
+`theme.BaseColors()`, `theme.AccentColors()` and `theme.Styles()` return independent slices
 for pickers. Unknown enum names panic. An accent changes primary, secondary,
 chart and sidebar-primary tokens while preserving the selected base surfaces.
 Nova uses tighter corners and spacing; Rhea uses rounder controls, 24px bubble
@@ -458,12 +461,12 @@ The controls read ordinary `Theme` fields. Start with a default or preset
 and override just the fields you need.
 
 ```go
-theme := ggui.DefaultTheme()
-theme.Ring = color.NRGBA{R: 140, G: 165, B: 230, A: 255}
-theme.PanelShadow = ggui.ShadowStyle{Offset: ggui.Pt(0, 4), Blur: 12, Color: color.NRGBA{A: 45}}
+t := theme.Default()
+t.Ring = color.NRGBA{R: 140, G: 165, B: 230, A: 255}
+t.PanelShadow = ggui.ShadowStyle{Offset: ggui.Pt(0, 4), Blur: 12, Color: color.NRGBA{A: 45}}
 // Disable default card elevation globally, or call Card(...).Shadow() locally.
-theme.CardShadow = ggui.ShadowStyle{}
-ggui.SetTheme(theme)
+t.CardShadow = ggui.ShadowStyle{}
+theme.Set(t)
 ```
 
 ## Applying styles and a theme switch
@@ -476,12 +479,12 @@ built long before it.
 ```go
 ggui.Text("Heading").Style(t.Title).Color(brand)   // local
 ggui.Styled(page).Color(t.MutedFg).Size(12)        // inherited
-app.Setup(func() { ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme()) })
+app.Setup(func() { theme.Bind(dark, theme.Dark(), theme.Default()) })
 ```
 
 Use `ui.ThemeSwitch(dark)` for a compact day/night control: the large sun thumb turns into
 a softly shaded full moon, with clouds fading into stars. `true` means dark
-mode. Bind the same signal with `BindTheme` as above to apply the theme. The
+mode. Bind the same signal with `theme.Bind` as above to apply the theme. The
 control supports `.Name("Appearance")`, `.OnChange(fn)`, `.Disabled(v)`, and
 `.BindDisabled(reader)`, plus Space/Enter and reduced-motion preferences.
 
@@ -489,8 +492,11 @@ control supports `.Name("Appearance")`, `.OnChange(fn)`, `.Disabled(v)`, and
 
 | Concern | File |
 | --- | --- |
-| `TextStyle`, `Env`, `Theme`, `DefaultTheme`, `DarkTheme` | [style.go](../style.go) |
-| `Text`, `Title`, `Caption`, `Styled`, `Provide` | [widgets.go](../widgets.go) |
+| `TextStyle`, `Env`, typed environment values | [style.go](../style.go) |
+| Root environment, editor/scrollbar styles, spacing and background | [environment.go](../environment.go) |
+| Theme tokens, defaults, presets and application | [ui/theme/](../ui/theme/) |
+| `Text`, `Styled`, `Provide`, `WithEnv` | [widgets.go](../widgets.go) |
+| `ui.Title`, `ui.Caption` | [ui/text.go](../ui/text.go) |
 | Shadows | [shadow.go](../shadow.go) |
 | Motion and transitions | [anim.go](../anim.go), [transition.go](../transition.go) |
 | The controls that consume the tokens | [ui/](../ui/) |

@@ -16,6 +16,7 @@ import (
 	"github.com/ironpark/ggui/fonts/notoemoji"
 	_ "github.com/ironpark/ggui/inspect/panel"
 	"github.com/ironpark/ggui/ui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // Person is a row of the table below. Rows are keyed by ID, so editing or
@@ -32,9 +33,9 @@ func newGallery() (ggui.Builder, func(), func()) { return newGalleryPreview(nil)
 // newGalleryPreview lets the visual audit render the same examples individually.
 func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, func(), func()) {
 	dark := ggui.State(false)
-	baseColor := ggui.State(ggui.BaseNeutral)
-	accentColor := ggui.State(ggui.AccentBlue)
-	themeStyle := ggui.State(ggui.StyleRhea)
+	baseColor := ggui.State(uitheme.BaseNeutral)
+	accentColor := ggui.State(uitheme.AccentBlue)
+	themeStyle := ggui.State(uitheme.StyleRhea)
 	themeAction := ggui.State("Change a token preset or try the actions.")
 	emojiText := ggui.State("Hello 👋🏽  🇰🇷  👩🏽‍💻  1️⃣")
 	chatPreviews := newChatPreviews()
@@ -138,24 +139,24 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 
 	iconDemo := iconPreview()
 	build := func() ggui.Widget {
-		t := ggui.UseTheme()
+		t := uitheme.Use()
 		swatch := func(label string, c color.Color) ggui.Widget {
 			return ggui.Column(
 				ggui.Box().Height(28).Fill(c).Radius(t.Radius).Border(1, t.Border),
-				ggui.Caption(label),
+				ui.Caption(label),
 			).Gap(2).Align(ggui.AlignStretch)
 		}
 		entries := []ggui.Widget{
 			preview("Theme presets", ggui.Column(
 				ggui.Text("Choose surfaces, accent and geometry independently. The whole gallery updates."),
-				ui.Field("Base color", ui.Select(baseColor).Options(ggui.BaseColors()).Name("Theme base")),
-				ui.Field("Accent color", ui.Select(accentColor).Options(ggui.AccentColors()).Name("Theme accent").Format(func(v ggui.AccentColor) string {
+				ui.Field("Base color", ui.Select(baseColor).Options(uitheme.BaseColors()).Name("Theme base")),
+				ui.Field("Accent color", ui.Select(accentColor).Options(uitheme.AccentColors()).Name("Theme accent").Format(func(v uitheme.AccentColor) string {
 					if v == "" {
 						return "base"
 					}
 					return string(v)
 				})),
-				ui.Field("Style", ui.Select(themeStyle).Options(ggui.ThemeStyles()).Name("Theme style")),
+				ui.Field("Style", ui.Select(themeStyle).Options(uitheme.Styles()).Name("Theme style")),
 				ggui.Grid(4,
 					swatch("Background", t.Bg),
 					swatch("Primary", t.Primary),
@@ -171,7 +172,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 					ui.Button("Secondary action", func() { themeAction.Set("Secondary action selected.") }).Secondary(),
 				).Gap(8),
 				ui.Bubble(ggui.Text("Theme tokens also shape chat bubbles 👍")).End(),
-				ggui.TextOf(themeAction).AsCaption(),
+				ggui.TextOf(themeAction).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
 			).Gap(12).Align(ggui.AlignStretch)),
 			preview("Icons", iconDemo),
 
@@ -182,7 +183,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 				ui.TextField(emojiText).Name("Emoji text").Multiline().Lines(2),
 				ggui.TextOf(emojiText).Size(24),
 				ui.Button("Insert emoji sequence", func() { emojiText.Set(ggui.Untrack(emojiText.Get) + " 🏳️‍🌈 👨‍👩‍👧‍👦") }).Outline(),
-				ggui.Caption("Type, paste, select and delete: composed emoji stay together."),
+				ui.Caption("Type, paste, select and delete: composed emoji stay together."),
 			).Gap(16).Align(ggui.AlignStretch)),
 			preview("Buttons", ggui.Column(
 				ggui.Wrap(
@@ -230,7 +231,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 						ui.MenuDivider(),
 						ui.MenuItem("Toggle dark", func() { ggui.Toggle(dark) }),
 					),
-					ggui.Textf("picked %s", fruit).AsCaption(),
+					ggui.Textf("picked %s", fruit).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
 				).Space(1),
 			).Space(1)),
 
@@ -243,7 +244,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 			preview("Calendar", calendar),
 			preview("Date picker", datePicker),
 			preview("Context menu", ui.ContextMenu(
-				ggui.Box(ggui.Column(ggui.Title("Project notes"), ggui.Caption("Right-click here, or use Tab then Shift+F10.")).Space(1)).Pad(24).Border(1, t.Border).Radius(t.Radius),
+				ggui.Box(ggui.Column(ui.Title("Project notes"), ui.Caption("Right-click here, or use Tab then Shift+F10.")).Space(1)).Pad(24).Border(1, t.Border).Radius(t.Radius),
 				ui.MenuItem("Open notes", func() {
 					toasts.Push(ui.Toast("Notes opened", "Context-menu actions work with keyboard and pointer input."))
 				}),
@@ -277,14 +278,14 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 			preview("Collapsible", ggui.Column(
 				ui.Collapsible(disclosureOpen, "Delivery preferences", ggui.Column(
 					ui.Checkbox(notify, "Email delivery updates"),
-					ggui.Caption("Your selection is preserved when this section is closed."),
+					ui.Caption("Your selection is preserved when this section is closed."),
 				).Space(1)),
 				ui.Collapsible(ggui.State(false), "Unavailable preferences", ggui.Text("Not available")).Disabled(true),
 			).Space(1).Align(ggui.AlignStretch)),
 
 			preview("Pagination", ggui.Column(
 				ui.Pagination(page, pageCount),
-				ggui.Textf("Page %d — bind this value to your data query or slice.", page).AsCaption(),
+				ggui.Textf("Page %d — bind this value to your data query or slice.", page).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
 			).Space(1)),
 
 			preview("Accordion", ui.Accordion(accordionOpen,
@@ -357,7 +358,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 			preview("Dialog", ggui.Column(
 				ggui.Row(
 					ui.Button("Reset form…", func() { confirm.Set(true) }).Outline(),
-					ggui.Textf("reset %d times", cleared).AsCaption(),
+					ggui.Textf("reset %d times", cleared).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
 				).Space(1),
 				// Dialog takes no space where it sits; it paints over the
 				// window while confirm is true. Escape, the scrim or Cancel
@@ -371,7 +372,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 				).Space(1.5).Align(ggui.AlignStretch)).Title("Reset?"),
 				ggui.Row(
 					ui.Button("Remove row…", func() { removeOpen.Set(true) }).Destructive(),
-					ggui.Textf("removed %d times", removed).AsCaption(),
+					ggui.Textf("removed %d times", removed).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
 				).Space(1),
 				removeDialog,
 			).Space(1)),
@@ -381,7 +382,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 					ui.Button("Open filters", func() { filtersOpen.Set(true) }).Outline(),
 					ui.Button("Open drawer", func() { drawerOpen.Set(true) }).Outline(),
 				).Space(1),
-				ggui.Caption("A scrim takes the clicks, Tab stays inside, and Escape hands focus back."),
+				ui.Caption("A scrim takes the clicks, Tab stays inside, and Escape hands focus back."),
 			).Space(1)),
 			filtersSheet, shareDrawer,
 
@@ -404,7 +405,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 					ui.Button("Cut", func() { groupAction.Set("Cut selected") }).Ghost(),
 					ui.Button("Paste", func() { groupAction.Set("Paste selected") }).Ghost(),
 				),
-				ggui.TextOf(groupAction).AsCaption(),
+				ggui.TextOf(groupAction).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
 				ui.InputGroup(ggui.TextInput(site).Placeholder("example.com").Name("Site")).
 					Leading(ggui.Text("https://").Color(t.MutedFg)).
 					Trailing(ui.Button("Go", func() {
@@ -414,7 +415,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 							sitePreview.Set("Enter a site first")
 						}
 					}).Ghost()),
-				ggui.TextOf(sitePreview).AsCaption(),
+				ggui.TextOf(sitePreview).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
 			).Space(1).Align(ggui.AlignStretch)),
 
 			preview("Profile and media", ggui.Column(
@@ -423,14 +424,14 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 					ui.Avatar("Grace Hopper").Size(48).Square(),
 					ui.Avatar("").Name("Unknown person").Size(40),
 				).Gap(12),
-				ggui.Caption("Avatar initials, square portraits and an unknown-person fallback."),
+				ui.Caption("Avatar initials, square portraits and an unknown-person fallback."),
 				ui.Item("Ada Lovelace", "Analytical engine").
 					Media(ui.Avatar("Ada Lovelace").Size(32)).
 					Action(ui.HoverCard(
 						ui.Button("Details", nil).Outline(),
-						ggui.Column(ggui.Title("Ada Lovelace").Size(16), ggui.Caption("Rest the cursor to preview.")).Gap(4),
+						ggui.Column(ui.Title("Ada Lovelace").Size(16), ui.Caption("Rest the cursor to preview.")).Gap(4),
 					)).Outline(),
-				ui.AspectRatio(16.0/9, ggui.Box(ggui.Center(ggui.Caption("16 : 9"))).Fill(t.Muted).Radius(t.Radius)),
+				ui.AspectRatio(16.0/9, ggui.Box(ggui.Center(ui.Caption("16 : 9"))).Fill(t.Muted).Radius(t.Radius)),
 			).Space(1).Align(ggui.AlignStretch)),
 
 			preview("Wrap", ggui.View(tags, func(list []string) *ggui.WrapWidget {
@@ -452,7 +453,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 						return ui.Button("×", func() { ggui.Remove(people, func(p Person) bool { return p.ID == id }) }).Outline().Pad(0, 8)
 					}).W(48),
 				).BindSelected(chosen).RowName(func(p Person) string { return p.Name }).Height(160),
-				ggui.Textf("selected: %s. Click a row, or Tab to it and press Space; the body scrolls under the heading.", chosenName).AsCaption(),
+				ggui.Textf("selected: %s. Click a row, or Tab to it and press Space; the body scrolls under the heading.", chosenName).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
 			).Space(1).Align(ggui.AlignStretch)),
 
 			preview("Grid", ggui.Cached(ggui.Grid(4,
@@ -462,11 +463,11 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 		}
 		entries = append(entries, chatPreviews()...)
 		entries = append(entries, reactivityPreview())
-		entries = append(entries, preview("Carousel", ui.Carousel(carouselIndex, ui.Card(ggui.Center(ggui.Title("1"))), ui.Card(ggui.Center(ggui.Title("2"))), ui.Card(ggui.Center(ggui.Title("3")))).Height(180)))
+		entries = append(entries, preview("Carousel", ui.Carousel(carouselIndex, ui.Card(ggui.Center(ui.Title("1"))), ui.Card(ggui.Center(ui.Title("2"))), ui.Card(ggui.Center(ui.Title("3")))).Height(180)))
 		entries = append(entries, preview("Input OTP", ui.Field("Verification code", ui.InputOTP(otpValue, 6).Groups(3, 3)).Help("Paste a code or edit individual slots.")))
 		entries = append(entries, preview("Charts", ggui.Column(
 			chartPreview(),
-			ggui.Caption("Area, bar, line, pie, radar and radial charts. Run examples/charts for all variants."),
+			ui.Caption("Area, bar, line, pie, radar and radial charts. Run examples/charts for all variants."),
 		).Gap(12)))
 		if present != nil {
 			return present(entries)
@@ -478,14 +479,14 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 	setup := func() {
 		notoemoji.Enable()
 		ggui.Effect(func() ggui.Cleanup {
-			preset := ggui.ThemePreset{Base: baseColor.Get(), Accent: accentColor.Get(), Style: themeStyle.Get()}
+			preset := uitheme.Preset{Base: baseColor.Get(), Accent: accentColor.Get(), Style: themeStyle.Get()}
 			t := preset.Light()
 			if dark.Get() {
 				t = preset.Dark()
 			}
 			fonts := chatFonts()
 			t.Text.Font, t.Title.Font = fonts[0], fonts[1]
-			ggui.SetTheme(t)
+			uitheme.Set(t)
 			return nil
 		})
 		ggui.OnCleanup(toasts.Close)

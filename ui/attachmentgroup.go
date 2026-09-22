@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // AttachmentGroupWidget is a horizontal attachment strip. Wheel movement snaps
@@ -18,7 +19,7 @@ type AttachmentGroupWidget struct {
 	offset, content, viewport float64
 	rect                      ggui.Rect
 	settle                    time.Time
-	theme                     ggui.Theme
+	theme                     uitheme.Theme
 }
 
 // AttachmentGroup lays cards out with a 12px gap and 4px vertical breathing room.
@@ -40,7 +41,7 @@ func (g *AttachmentGroupWidget) limit() float64     { return max(0, g.content-g.
 func (g *AttachmentGroupWidget) scrollTo(v float64) { g.offset = max(0, min(v, g.limit())) }
 
 func (g *AttachmentGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	g.theme = env.Theme()
+	g.theme = uitheme.From(env)
 	g.sizes, g.starts = g.sizes[:0], g.starts[:0]
 	width, height := 0.0, 0.0
 	for i, card := range g.children {

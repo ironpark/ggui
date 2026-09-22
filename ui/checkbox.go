@@ -2,7 +2,8 @@ package ui
 
 import (
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/icons"
+	"github.com/ironpark/ggui/ui/icons"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // CheckboxWidget is a box that is ticked while its signal is true. Build one
@@ -51,7 +52,7 @@ func (c *CheckboxWidget) Describe() ggui.Node {
 
 // Layout implements Widget.
 func (c *CheckboxWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
-	return c.layout(cs, env, squareGlyph(env.Theme()))
+	return c.layout(cs, env, squareGlyph(uitheme.From(env)))
 }
 
 // Paint implements Widget.

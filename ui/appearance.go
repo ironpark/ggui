@@ -4,12 +4,13 @@ import (
 	"image/color"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/icons"
+	"github.com/ironpark/ggui/ui/icons"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // panelBox applies the chrome every floating surface shares: menus, context
 // menus, the menubar, select lists and the date picker panel.
-func panelBox(b *ggui.BoxWidget, t ggui.Theme) *ggui.BoxWidget {
+func panelBox(b *ggui.BoxWidget, t uitheme.Theme) *ggui.BoxWidget {
 	return b.Shadow(t.PanelShadow).Fill(t.Popover).Border(t.BorderWidth, t.Border).Radius(t.Radius).Padding(t.PanelPad)
 }
 
@@ -18,7 +19,7 @@ func panelBox(b *ggui.BoxWidget, t ggui.Theme) *ggui.BoxWidget {
 // while the editor inside has the keyboard. A disabled field drops back to
 // the Card surface, so it reads as a surface rather than something to type
 // in.
-func fieldBox(b *ggui.BoxWidget, t ggui.Theme, focused, inert bool) *ggui.BoxWidget {
+func fieldBox(b *ggui.BoxWidget, t uitheme.Theme, focused, inert bool) *ggui.BoxWidget {
 	return b.Padding(t.FieldPad).Radius(t.Radius).
 		Fill(pick(inert, t.Card, t.Input)).
 		Border(t.BorderWidth, pick(focused, t.Ring, colorOr(t.InputBorder, t.Border)))
@@ -37,7 +38,7 @@ func fieldHalo(dst *ggui.Canvas, r ggui.Rect, radius float64, ring color.Color) 
 
 // fieldRing is the focus ring for a field: the theme's, or the destructive
 // one while the field is invalid.
-func fieldRing(t ggui.Theme, invalid bool) color.Color {
+func fieldRing(t uitheme.Theme, invalid bool) color.Color {
 	if invalid {
 		return destructiveRing(t)
 	}
@@ -46,7 +47,7 @@ func fieldRing(t ggui.Theme, invalid bool) color.Color {
 
 // destructiveRing is the focus ring of anything that warns: destructive
 // buttons and invalid fields.
-func destructiveRing(t ggui.Theme) color.Color { return fade(t.Destructive, .4) }
+func destructiveRing(t uitheme.Theme) color.Color { return fade(t.Destructive, .4) }
 
 // isDark reports whether c is closer to black than to white.
 func isDark(c color.Color) bool {

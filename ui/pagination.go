@@ -4,7 +4,8 @@ import (
 	"fmt"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/icons"
+	"github.com/ironpark/ggui/ui/icons"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // PaginationWidget navigates a one-based page binding. It does not slice data.
@@ -88,7 +89,7 @@ func (p *PaginationWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		children = append(children, p.gaps[1])
 	}
 	p.children = append(children, p.next)
-	p.row = ggui.Wrap(p.children...).Gap(env.Theme().Space / 2)
+	p.row = ggui.Wrap(p.children...).Gap(uitheme.From(env).Space / 2)
 	return p.row.Layout(c, env)
 }
 

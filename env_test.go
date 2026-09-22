@@ -1,25 +1,9 @@
 package ggui
 
 import (
-	"image/color"
 	"testing"
 	"time"
 )
-
-func TestThemeTokens(t *testing.T) {
-	k := NewEnvKey[color.Color]("danger")
-	base := DefaultTheme()
-	red := base.Set(k, color.Color(color.RGBA{0xd3, 0x2f, 0x2f, 0xff}))
-	if _, ok := base.Get(k); ok {
-		t.Fatal("Set changed its receiver")
-	}
-	if c, ok := red.Get(k); !ok || c != color.Color(color.RGBA{0xd3, 0x2f, 0x2f, 0xff}) {
-		t.Fatalf("Get = %v, %v", c, ok)
-	}
-	if got, _ := red.Set(k, color.Color(color.Black)).Get(k); got != color.Color(color.Black) {
-		t.Fatal("a later Set does not win")
-	}
-}
 
 func TestEachKeysByValue(t *testing.T) {
 	tags := State([]string{"a", "b"})

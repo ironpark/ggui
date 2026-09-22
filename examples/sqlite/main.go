@@ -3,9 +3,11 @@ package main
 
 import (
 	"flag"
+	"log"
+
 	"github.com/ironpark/ggui"
 	_ "github.com/ironpark/ggui/inspect/panel"
-	"log"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 func run(path string, readOnly bool) error {
@@ -15,7 +17,7 @@ func run(path string, readOnly bool) error {
 	m.post = app.Post
 	m.dialogs = app.Dialogs()
 	app.Setup(func() {
-		ggui.BindTheme(m.Dark, clientTheme(true), clientTheme(false))
+		uitheme.Bind(m.Dark, clientTheme(true), clientTheme(false))
 		if path != "" {
 			m.open(path)
 		}

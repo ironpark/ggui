@@ -1,7 +1,6 @@
 package ggui
 
 import (
-	"github.com/ironpark/ggui/internal/reactive"
 	"iter"
 	"os"
 	"path/filepath"
@@ -11,6 +10,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	"github.com/ironpark/ggui/internal/emojidata"
+	"github.com/ironpark/ggui/internal/reactive"
 )
 
 // The font state below belongs to the UI goroutine: every entry point that
@@ -25,7 +25,7 @@ var fontGeneration uint64
 // replace their Latin/CJK fonts. Use fonts/notoemoji for a portable embedded font,
 // or LoadFont for another CBDT, sbix, COLRv0 or OpenType SVG font. Nil disables
 // emoji substitution; SetEmojiFont(SystemEmojiFont()) restores system rendering.
-// Like SetTheme, call on the UI thread or before creating the app.
+// Like SetEnv, call on the UI thread or before creating the app.
 func SetEmojiFont(f *Font) {
 	reactive.CheckUIThread("SetEmojiFont")
 	emojiFont, emojiFontSet = f, true

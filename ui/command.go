@@ -4,8 +4,9 @@ import (
 	"strings"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/icons"
 	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/ui/icons"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // CommandEntry describes an action in a searchable command list.
@@ -57,7 +58,7 @@ type CommandWidget struct {
 	stable, borderless bool
 	hints              bool
 	insetSearch        bool
-	theme              ggui.Theme
+	theme              uitheme.Theme
 	env                ggui.Env
 	rects              []ggui.Rect
 }
@@ -211,7 +212,7 @@ func (c *CommandWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	defer c.props.Layout()()
 	c.env = env
 	c.filter()
-	t := env.Theme()
+	t := uitheme.From(env)
 	c.theme = t
 	inner := t.PanelPad.Shrink(cs)
 	natural := c.results.Layout(ggui.Loose(ggui.Sz(inner.MaxW, ggui.Unbounded)), env)
@@ -227,7 +228,7 @@ func (c *CommandWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 		parts = []ggui.Widget{search, results}
 	}
 	if c.hints {
-		parts = append(parts, Divider(), ggui.Padding(ggui.Caption("↑↓ Navigate   ↵ Select"), 8, 12))
+		parts = append(parts, Divider(), ggui.Padding(Caption("↑↓ Navigate   ↵ Select"), 8, 12))
 	}
 	c.body = ggui.Column(parts...).Gap(0).Align(ggui.AlignStretch)
 	c.panel = ggui.Box(c.body).Fill(t.Popover).Border(t.BorderWidth, t.Border).Radius(t.Radius)
@@ -263,7 +264,7 @@ func (r *commandResults) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	r.rows = r.rows[:0]
 	if len(c.matched) == 0 {
 		if r.empty == nil {
-			r.empty = ggui.Caption("No results")
+			r.empty = Caption("No results")
 		}
 		r.emptySize = r.empty.Layout(cs.Loosen(), env)
 		height := max(64, r.emptySize.H+24)
@@ -279,7 +280,7 @@ func (r *commandResults) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 		var hs ggui.Size
 		group := c.entries[i].group
 		if group != "" && (j == 0 || group != previous) {
-			label := ggui.Padding(ggui.Caption(group), 6, 8)
+			label := ggui.Padding(Caption(group), 6, 8)
 			heading = label
 			if j > 0 {
 				heading = ggui.Column(MenuDivider(), label).Gap(0).Align(ggui.AlignStretch)

@@ -20,7 +20,7 @@ in the bubble padding.
 
 The gallery's reference scenes bundle Geist, the original demo photos/avatars,
 and the optional Noto Color Emoji font for consistent offline/native/WASM
-rendering. The gallery uses ThemePreset for its palette and geometry; library
+rendering. The gallery uses theme.Preset for its palette and geometry; library
 widgets continue to use the host theme and font. Sources and licenses are listed in
 [the asset notes](../examples/gallery/assets/chat/README.md).
 

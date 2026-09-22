@@ -2,10 +2,11 @@ package ggui
 
 import (
 	"errors"
-	"github.com/ironpark/ggui/internal/reactive"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ironpark/ggui/internal/reactive"
 )
 
 func TestCloseDisposesEverythingBuilt(t *testing.T) {
@@ -110,27 +111,27 @@ func TestCycleSaysHowToNameTheEffects(t *testing.T) {
 	t.Fatal("frame returned")
 }
 
-func TestProbeLayoutFollowsSetupAndThemeChanges(t *testing.T) {
-	old := Untrack(theme.Get)
-	defer SetTheme(old)
+func TestProbeLayoutFollowsSetupAndEnvironmentChanges(t *testing.T) {
+	old := Untrack(UseEnv)
+	defer SetEnv(old)
 	dark := State(true)
-	var seen Theme
+	var seen float64
 	w := FromFuncs(func(c Constraints, env Env) Size {
-		seen = env.Theme()
+		seen = env.Spacing()
 		return c.Constrain(Sz(10, 10))
 	}, func(*Canvas, Rect) {})
 	p := NewProbe(Cached(w), Sz(20, 20)).Setup(func() {
-		BindTheme(dark, DarkTheme(), DefaultTheme())
+		Watch(dark, func(v bool) { SetEnv(Env{}.With(SpacingKey, pick(v, 12.0, 8.0))) })
 	})
 	defer p.Close()
 	p.Frame()
-	if seen.Bg != DarkTheme().Bg {
-		t.Fatal("first layout did not see the theme set by Setup")
+	if seen != 12 {
+		t.Fatal("first layout did not see the environment set by Setup")
 	}
 	dark.Set(false)
 	p.Frame()
-	if seen.Bg != DefaultTheme().Bg {
-		t.Fatal("cached layout did not follow the theme change")
+	if seen != 8 {
+		t.Fatal("cached layout did not follow the environment change")
 	}
 }
 

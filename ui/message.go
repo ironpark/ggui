@@ -1,8 +1,10 @@
 package ui
 
-import "github.com/ironpark/ggui/internal/property"
-
-import "github.com/ironpark/ggui"
+import (
+	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/property"
+	uitheme "github.com/ironpark/ggui/ui/theme"
+)
 
 // MessageWidget lays out a conversation row independently of its surface.
 // The avatar rests beside the content above the footer. End reverses the row
@@ -47,11 +49,11 @@ func (m *MessageWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	m.bodySize = m.content.Layout(loose, env.With(messageEndKey, m.end))
 	m.headerSize, m.footerSize = ggui.Size{}, ggui.Size{}
 	if m.headerView != nil {
-		m.headerView.Size(12).Color(env.Theme().MutedFg)
+		m.headerView.Size(12).Color(uitheme.From(env).MutedFg)
 		m.headerSize = m.headerView.Layout(loose, env)
 	}
 	if m.footerView != nil {
-		m.footerView.Size(12).Color(env.Theme().MutedFg)
+		m.footerView.Size(12).Color(uitheme.From(env).MutedFg)
 		m.footerSize = m.footerView.Layout(loose, env)
 	}
 	h := m.bodySize.H

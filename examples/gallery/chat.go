@@ -5,8 +5,9 @@ import (
 	"slices"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/icons"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/ui/icons"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // These previews keep transcript and questionnaire instances alive while the
@@ -91,7 +92,7 @@ func newChatPreviews() func() []ggui.Widget {
 	})
 
 	return func() []ggui.Widget {
-		t := ggui.UseTheme()
+		t := uitheme.Use()
 		return []ggui.Widget{
 			preview("Attachment", ggui.Column(
 				chatSurface(ggui.Column(
@@ -127,7 +128,7 @@ func newChatPreviews() func() []ggui.Widget {
 					}
 					return ui.AttachmentGroup(cards...).Name("Attached files")
 				}),
-				ggui.TextOf(attachmentAction).AsCaption(),
+				ggui.TextOf(attachmentAction).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
 				ui.Button("Restore attachments", func() {
 					showUpload.Set(true)
 					showSource.Set(true)
@@ -156,7 +157,7 @@ func newChatPreviews() func() []ggui.Widget {
 					ui.Bubble(ggui.Text("Upload failed. Please retry.")).Destructive(),
 					ui.Bubble(ggui.Text("Ghost content uses the full width.")).Ghost(),
 					ui.Bubble(ui.Collapsible(expanded, "Show more", ggui.Text("Long content keeps its state."))).Secondary().Reactions(ui.ButtonOf(ggui.Textf("Like · %d", reaction), func() { ggui.Add(reaction, 1) }).Name("Like bubble").Ghost().Pad(2, 6)),
-					ggui.Padding(ggui.TextOf(bubbleAction).AsCaption(), 16, 0, 0, 0),
+					ggui.Padding(ggui.TextOf(bubbleAction).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption), 16, 0, 0, 0),
 				).Gap(16).Align(ggui.AlignStretch)),
 			).Gap(16).Align(ggui.AlignStretch)),
 			preview("Message", chatSurface(ggui.Column(
@@ -213,11 +214,11 @@ func newChatPreviews() func() []ggui.Widget {
 						scroller.Restore(saved)
 						scrollNote.Set("Restored the saved reading position.")
 					}).Outline(),
-				).Gap(8), ggui.TextOf(scrollNote).AsCaption(),
+				).Gap(8), ggui.TextOf(scrollNote).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
 			).Gap(12).Align(ggui.AlignStretch)),
 			preview("Questionnaire", ggui.Column(
 				chatSurface(questionnaire, 448),
-				ggui.TextOf(submission).AsCaption(),
+				ggui.TextOf(submission).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
 				ui.Button("Reset questionnaire", func() {
 					questionnaire.Reset()
 					submission.Set("Your answers stay local to this preview.")

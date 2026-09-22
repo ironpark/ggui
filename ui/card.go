@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // Card is a Surface panel with a border, rounded corners and padding, for
@@ -38,7 +39,7 @@ func (c *CardWidget) Pad(sides ...float64) *CardWidget {
 // Layout implements Widget.
 func (c *CardWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	defer c.props.Layout()()
-	t := env.Theme()
+	t := uitheme.From(env)
 	if !c.shadowSet {
 		c.box.Shadow(t.CardShadow)
 	}
@@ -62,7 +63,7 @@ type BadgeWidget struct {
 	accent bool
 	pad    ggui.EdgeInsets
 	size   ggui.Size
-	theme  ggui.Theme
+	theme  uitheme.Theme
 }
 
 // Badge creates a muted pill labelled s; Accent colors it.
@@ -78,7 +79,7 @@ func (b *BadgeWidget) Accent() *BadgeWidget {
 // Layout implements Widget.
 func (b *BadgeWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer b.props.Layout()()
-	t := env.Theme()
+	t := uitheme.From(env)
 	b.theme = t
 	b.pad = ggui.Insets(2, t.Space*0.75)
 	b.text.Style(t.Caption).Color(pick(b.accent, t.PrimaryFg, t.Fg))
@@ -98,7 +99,7 @@ type ProgressWidget struct {
 	props  property.Owner
 	value  ggui.Readable[float64]
 	height float64
-	theme  ggui.Theme
+	theme  uitheme.Theme
 	motion time.Duration
 }
 
@@ -120,8 +121,8 @@ func (p *ProgressWidget) Height(h float64) *ProgressWidget {
 // Layout implements Widget.
 func (p *ProgressWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer p.props.Layout()()
-	p.theme = env.Theme()
-	p.motion = env.Motion(env.Theme().MotionFast)
+	p.theme = uitheme.From(env)
+	p.motion = env.Motion(uitheme.From(env).MotionFast)
 	return c.Constrain(ggui.Sz(bounded(c.MaxW, defaultStripe), p.height))
 }
 

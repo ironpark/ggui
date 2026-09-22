@@ -9,6 +9,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	_ "github.com/ironpark/ggui/inspect/panel"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 func shortcuts(host ggui.Host, m *model) {
@@ -49,6 +50,6 @@ func main() {
 }
 
 func bindTheme(m *model) {
-	preset := ggui.ThemePreset{Base: ggui.BaseNeutral, Accent: ggui.AccentBlue}
-	ggui.BindTheme(m.Dark, preset.Dark(), preset.Light())
+	preset := uitheme.Preset{Base: uitheme.BaseNeutral, Accent: uitheme.AccentBlue}
+	uitheme.Bind(m.Dark, preset.Dark(), preset.Light())
 }

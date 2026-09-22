@@ -1,6 +1,8 @@
 package ggui
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestTextfFollowsSignals(t *testing.T) {
 	n := State(1)
@@ -184,15 +186,17 @@ func TestIfIsDisposedWithItsParent(t *testing.T) {
 	}
 }
 
-func TestSpaceAndRoles(t *testing.T) {
-	th := DefaultTheme()
+func TestSpacingAndNamedTextStyles(t *testing.T) {
+	env := Env{}.With(SpacingKey, 12.0)
+	key := NewEnvKey[TextStyle]("heading")
+	env = env.With(key, TextStyle{Size: 24})
 	col := Column(Box().Size(10, 10), Box().Size(10, 10)).Space(2)
-	if h := col.Layout(Loose(Sz(100, 100)), rootEnv()).H; h != 20+2*th.Space {
+	if h := col.Layout(Loose(Sz(100, 100)), env).H; h != 20+2*env.Spacing() {
 		t.Fatalf("height = %v", h)
 	}
-	title := Title("x")
-	title.Layout(Loose(Sz(100, 100)), rootEnv())
-	if title.resolved.Size != th.Title.Size {
+	title := Text("x").StyleKey(key).Role(RoleHeading)
+	title.Layout(Loose(Sz(100, 100)), env)
+	if title.resolved.Size != 24 {
 		t.Fatalf("title size = %v", title.resolved.Size)
 	}
 }

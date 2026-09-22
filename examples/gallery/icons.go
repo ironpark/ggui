@@ -2,11 +2,11 @@ package main
 
 import (
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/icons"
-	"github.com/ironpark/ggui/icons/heroicons"
-	"github.com/ironpark/ggui/icons/lucide"
-	"github.com/ironpark/ggui/icons/tabler"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/icons/heroicons"
+	"github.com/ironpark/ggui/ui/icons/lucide"
+	"github.com/ironpark/ggui/ui/icons/tabler"
 )
 
 func iconPreview() ggui.Widget {
@@ -50,6 +50,6 @@ func iconPreview() ggui.Widget {
 				ui.Checkbox(checked, "Scoped icon override"), ui.Icon(icons.Close),
 			).Gap(16))
 		}),
-		ggui.Caption("The same placeholders follow the theme or a local icon set. Missing roles keep their defaults."),
+		ui.Caption("The same placeholders follow the theme or a local icon set. Missing roles keep their defaults."),
 	).Gap(14)
 }

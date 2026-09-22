@@ -7,8 +7,9 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/icons"
 	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/ui/icons"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // CarouselItemWidget is one slide. Basis is a fraction of the viewport.
@@ -77,7 +78,7 @@ type CarouselWidget struct {
 	stopped, stopOnInteraction                 bool
 	onChange                                   func(int)
 	env                                        ggui.Env
-	theme                                      ggui.Theme
+	theme                                      uitheme.Theme
 	reduced, canLoop                           bool
 	viewport                                   ggui.Rect
 	starts, extents, snaps                     []float64
@@ -283,7 +284,7 @@ func (c *CarouselWidget) position() float64 {
 func (c *CarouselWidget) Layout(con ggui.Constraints, e ggui.Env) ggui.Size {
 	defer c.props.Layout()()
 	c.Sync()
-	c.env, c.theme, c.reduced = e, e.Theme(), e.ReducedMotion()
+	c.env, c.theme, c.reduced = e, uitheme.From(e), e.ReducedMotion()
 	size := con.Constrain(ggui.Sz(bounded(con.MaxW, 416), c.height))
 	gutter := 0.
 	if c.controls {
@@ -619,7 +620,7 @@ func (b *CarouselNavigationWidget) activate() {
 func (b *CarouselNavigationWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 	b.SetInert(!b.enabled())
 	b.Hit(d, r, b, ggui.CursorShapePointer)
-	t := b.env.Theme()
+	t := uitheme.From(b.env)
 	fill, col, border := t.Bg, t.Fg, t.Border
 	if b.Hovered && !b.IsInert() {
 		fill = colorOr(t.Accent, t.Muted)

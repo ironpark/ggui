@@ -4,6 +4,7 @@ import (
 	"image/color"
 
 	"github.com/ironpark/ggui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // modal is the half of a modal panel that Dialog and Sheet share: what is
@@ -21,13 +22,13 @@ type modal struct {
 	onClose     func()
 
 	panel *ggui.BoxWidget
-	theme ggui.Theme
+	theme uitheme.Theme
 	env   ggui.Env
 	rect  ggui.Rect
 }
 
 // setTitle puts a heading above the content and names the panel with it.
-func (m *modal) setTitle(s string) { m.title, m.name = ggui.Title(s).Size(18), s }
+func (m *modal) setTitle(s string) { m.title, m.name = Title(s).Size(18), s }
 
 // Close closes the panel.
 func (m *modal) Close() {
@@ -50,7 +51,7 @@ func (m *modal) Semantics() (ggui.Role, string) { return ggui.RoleDialog, m.name
 // every floating thing uses. The caller finishes it with the border and
 // radius its own shape wants, and lays it out when it knows the room.
 func (m *modal) build(env ggui.Env) *ggui.BoxWidget {
-	t := env.Theme()
+	t := uitheme.From(env)
 	m.theme, m.env = t, env
 	body := m.content
 	if m.title != nil {

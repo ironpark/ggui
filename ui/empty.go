@@ -1,6 +1,9 @@
 package ui
 
-import "github.com/ironpark/ggui"
+import (
+	"github.com/ironpark/ggui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
+)
 
 // EmptyWidget presents an empty collection with optional media and an action.
 type EmptyWidget struct {
@@ -22,7 +25,7 @@ func (e *EmptyWidget) Action(w ggui.Widget) *EmptyWidget { e.action = w; return 
 
 // Layout implements ggui.Widget.
 func (e *EmptyWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	t := env.Theme()
+	t := uitheme.From(env)
 	e.title.Style(t.Text).Color(t.Fg)
 	e.description.Style(t.Caption).Color(t.MutedFg)
 	parts := []ggui.Widget{}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // Render the same widgets and interactions as the app at desktop and narrow
@@ -60,7 +61,7 @@ func (r *workspaceRender) render() error {
 			save := func(name string) error {
 				p.Frame()
 				now = now.Add(time.Second)
-				img.Fill(ggui.Untrack(ggui.UseTheme).Bg)
+				img.Fill(ggui.Untrack(uitheme.Use).Bg)
 				p.Draw(img)
 				file, err := os.Create(filepath.Join(r.directory, fmt.Sprintf("%s-%d-%s.png", mode, width, name)))
 				if err != nil {

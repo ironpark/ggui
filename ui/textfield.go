@@ -2,6 +2,7 @@ package ui
 
 import (
 	"github.com/ironpark/ggui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // TextFieldWidget is a TextInput in a themed box: Field background, a
@@ -11,7 +12,7 @@ type TextFieldWidget struct {
 	ggui.Interactive // only disabled is used; the editor tracks its own focus
 	input            *ggui.TextInputWidget
 	box              *ggui.BoxWidget
-	theme            ggui.Theme
+	theme            uitheme.Theme
 	plain            bool
 	invalid          bool
 }
@@ -108,7 +109,7 @@ func (f *TextFieldWidget) Input() *ggui.TextInputWidget { return f.input }
 // Layout implements Widget.
 func (f *TextFieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	f.Sync()
-	t := env.Theme()
+	t := uitheme.From(env)
 	f.theme = t
 	f.invalid, _ = env.Get(fieldInvalid)
 	if f.plain {

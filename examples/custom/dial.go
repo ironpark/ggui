@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/ironpark/ggui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // dial is a rotary control over a float in [0, 1]. Interactive supplies
@@ -13,7 +14,7 @@ type dial struct {
 	ggui.Interactive
 	value  *ggui.StateValue[float64]
 	needle *ggui.Sprung[float64] // eases toward value; Paint reads it
-	theme  ggui.Theme
+	theme  uitheme.Theme
 	rect   ggui.Rect
 }
 
@@ -28,7 +29,7 @@ func newDial(value *ggui.StateValue[float64], name string) *dial {
 // Layout resolves the theme now, because Paint receives only the canvas.
 func (d *dial) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	d.Sync()
-	d.theme = env.Theme()
+	d.theme = uitheme.From(env)
 	s := min(c.MaxW, c.MaxH, 160)
 	return c.Constrain(ggui.Sz(s, s))
 }

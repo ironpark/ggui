@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 func galleryProbe(size ggui.Size) *ggui.Probe {
@@ -328,7 +329,7 @@ func TestGalleryChatComponentFlows(t *testing.T) {
 	revealGallery(p, "More bubble variants")
 	p.Tap("More bubble variants")
 	p.Frame()
-	p.Advance(ggui.DefaultTheme().MotionFast)
+	p.Advance(uitheme.Default().MotionFast)
 	revealGallery(p, "Choose suggestion")
 	p.Tap("Choose suggestion")
 	if _, ok := p.Semantics().Find(ggui.RoleText, "Suggestion selected."); !ok {
@@ -380,20 +381,20 @@ func TestGalleryEmojiEditingAndThemePresets(t *testing.T) {
 	p.Tap("Theme base")
 	p.Type(ggui.Mods{}, ggui.KeyArrowDown, ggui.KeyEnter)
 	p.Frame()
-	want := ggui.ThemePreset{Base: ggui.BaseStone, Accent: ggui.AccentBlue, Style: ggui.StyleRhea}.Light()
-	if ggui.UseTheme().Bg != want.Bg || ggui.UseTheme().Muted != want.Muted {
+	want := uitheme.Preset{Base: uitheme.BaseStone, Accent: uitheme.AccentBlue, Style: uitheme.StyleRhea}.Light()
+	if uitheme.Use().Bg != want.Bg || uitheme.Use().Muted != want.Muted {
 		t.Fatal("base palette not applied")
 	}
 	p.Tap("Theme style")
 	p.Type(ggui.Mods{}, ggui.KeyArrowUp, ggui.KeyEnter)
 	p.Frame()
-	if ggui.UseTheme().Chat.BubbleRadius != 12 {
+	if uitheme.Use().Chat.BubbleRadius != 12 {
 		t.Fatal("Nova geometry not applied")
 	}
 	p.Tap("Dark mode")
 	p.Frame()
-	want = ggui.ThemePreset{Base: ggui.BaseStone, Accent: ggui.AccentBlue, Style: ggui.StyleNova}.Dark()
-	if ggui.UseTheme().Bg != want.Bg || ggui.UseTheme().Primary != want.Primary {
+	want = uitheme.Preset{Base: uitheme.BaseStone, Accent: uitheme.AccentBlue, Style: uitheme.StyleNova}.Dark()
+	if uitheme.Use().Bg != want.Bg || uitheme.Use().Primary != want.Primary {
 		t.Fatal("preset was lost during dark mode switch")
 	}
 }

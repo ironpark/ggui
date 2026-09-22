@@ -244,7 +244,7 @@ func (f *flow) inspectFields() []inspect.Field {
 	align := []string{"start", "center", "end", "stretch"}
 	out := []inspect.Field{{Key: "Flex layout"}, {Key: "direction", Value: pick(f.horizontal, "row", "column")}, {Key: "justify", Value: justify[clamp(int(f.justify), 0, len(justify)-1)]}, {Key: "align", Value: align[clamp(int(f.align), 0, len(align)-1)]}}
 	if f.space > 0 {
-		return append(out, inspect.Field{Key: "gap token", Value: inspect.Num(f.space) + " × theme.space"})
+		return append(out, inspect.Field{Key: "gap token", Value: inspect.Num(f.space) + " × env.spacing"})
 	}
 	return append(out, inspect.Field{Key: "gap", Value: inspect.Num(f.gap) + " px", Number: true})
 }

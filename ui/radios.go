@@ -1,9 +1,12 @@
 package ui
 
-import "github.com/ironpark/ggui/internal/property"
+import (
+	"slices"
 
-import "github.com/ironpark/ggui"
-import "slices"
+	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/property"
+	uitheme "github.com/ironpark/ggui/ui/theme"
+)
 
 // RadiosWidget is a group of Radio options built from a list of values.
 // Build one with Radios.
@@ -146,7 +149,7 @@ func (g *RadiosWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	for _, r := range g.radios {
 		r.Disabled(g.IsInert())
 	}
-	t := env.Theme()
+	t := uitheme.From(env)
 	if g.column != nil {
 		return g.column.Gap(pick(g.gapSet, g.gap, t.Space)).Layout(c, env)
 	}

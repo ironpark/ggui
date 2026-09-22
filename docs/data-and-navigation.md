@@ -208,7 +208,7 @@ ui.Sidebar(page,
 	ui.SidebarItem("inbox", "Inbox"),
 	ui.SidebarItem("sent", "Sent"),
 	ui.SidebarItem("spam", "Spam").Disabled(true),
-).Header(ggui.Title("Acme")).BindCollapsed(narrow) // narrow is a Readable[bool]
+).Header(ui.Title("Acme")).BindCollapsed(narrow) // narrow is a Readable[bool]
 ```
 
 The column is one keyboard tab stop: Up and Down move the highlight over the

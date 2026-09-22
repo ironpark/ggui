@@ -1,11 +1,12 @@
-// Package heroicons embeds a curated Heroicons SVG set for GGUI controls.
-package heroicons
+// Package tabler embeds a curated Tabler SVG set for GGUI controls.
+package tabler
 
 import (
 	"embed"
 	"fmt"
-	"github.com/ironpark/ggui/icons"
 	"sync"
+
+	"github.com/ironpark/ggui/ui/icons"
 )
 
 //go:embed svg/*.svg
@@ -25,7 +26,7 @@ func Asset(name string) (*icons.SVG, error) {
 	}
 	a, err := icons.Load(files, "svg/"+name+".svg")
 	if err != nil {
-		return nil, fmt.Errorf("heroicons %q: %w", name, err)
+		return nil, fmt.Errorf("tabler %q: %w", name, err)
 	}
 	assets.Store(name, a)
 	return a, nil
@@ -43,7 +44,7 @@ func Icon(name string) *icons.Widget {
 
 type library struct{}
 
-// Set returns the immutable mapping from common roles to Heroicons icons.
+// Set returns the immutable mapping from common roles to Tabler icons.
 func Set() icons.Set { return library{} }
 func (library) Resolve(role icons.Role) *icons.SVG {
 	name, ok := roles[role]
@@ -59,20 +60,20 @@ func (library) Resolve(role icons.Role) *icons.SVG {
 
 var roles = map[icons.Role]string{
 	icons.Check:        "check",
-	icons.Close:        "x-mark",
+	icons.Close:        "x",
 	icons.ChevronDown:  "chevron-down",
 	icons.ChevronUp:    "chevron-up",
 	icons.ChevronLeft:  "chevron-left",
 	icons.ChevronRight: "chevron-right",
-	icons.Search:       "magnifying-glass",
-	icons.Alert:        "exclamation-circle",
-	icons.Info:         "information-circle",
+	icons.Search:       "search",
+	icons.Alert:        "alert-circle",
+	icons.Info:         "info-circle",
 	icons.Plus:         "plus",
 	icons.Minus:        "minus",
-	icons.Download:     "arrow-down-tray",
-	icons.File:         "document",
+	icons.Download:     "download",
+	icons.File:         "file",
 	icons.Sun:          "sun",
 	icons.Moon:         "moon",
-	icons.Grip:         "bars-2",
-	icons.Loader:       "arrow-path",
+	icons.Grip:         "grip-vertical",
+	icons.Loader:       "loader-2",
 }

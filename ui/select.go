@@ -5,8 +5,9 @@ import (
 	"slices"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/icons"
 	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/ui/icons"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // SelectWidget is a dropdown that picks one of a list of values into a
@@ -30,7 +31,7 @@ type SelectWidget[T comparable] struct {
 	pad       ggui.EdgeInsets
 	textSize  ggui.Size
 	highlight int // the option the keyboard is on while open, or -1
-	theme     ggui.Theme
+	theme     uitheme.Theme
 	env       ggui.Env
 }
 
@@ -189,7 +190,7 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if s.IsInert() {
 		s.popup.Hide()
 	}
-	t := env.Theme()
+	t := uitheme.From(env)
 	s.theme = t
 	s.env = env
 	s.pad = t.FieldPad
@@ -338,7 +339,7 @@ type selectItem[T comparable] struct {
 
 func (it *selectItem[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	it.Sync()
-	t := env.Theme()
+	t := uitheme.From(env)
 	it.pad = t.ItemPad
 	it.text.Color(colorOr(t.PopoverFg, t.Fg))
 	inner := it.pad.Shrink(c).Loosen()

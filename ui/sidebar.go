@@ -3,6 +3,7 @@ package ui
 import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // SidebarEntry is one line of a Sidebar: a destination, or a heading over
@@ -51,7 +52,7 @@ type SidebarWidget struct {
 	active           int
 	hover            int
 
-	theme                  ggui.Theme
+	theme                  uitheme.Theme
 	cur                    int // the current destination, found once a frame by paint
 	labelSize              []ggui.Size
 	rowH                   []float64
@@ -66,7 +67,7 @@ type SidebarWidget struct {
 //		ui.SidebarSection("Mail"),
 //		ui.SidebarItem("inbox", "Inbox"),
 //		ui.SidebarItem("sent", "Sent"),
-//	).Header(ggui.Title("Acme")).BindCollapsed(narrow)
+//	).Header(Title("Acme")).BindCollapsed(narrow)
 func Sidebar(selected ggui.Binding[string], entries ...SidebarEntry) *SidebarWidget {
 	s := &SidebarWidget{selected: selected, entries: entries, width: 240, active: -1, hover: -1}
 	s.Role = ggui.RoleTabs
@@ -158,14 +159,14 @@ func (s *SidebarWidget) current() int {
 func (s *SidebarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer s.props.Layout()()
 	s.Sync()
-	t := env.Theme()
+	t := uitheme.From(env)
 	t.Card, t.Fg = colorOr(t.Sidebar, t.Card), colorOr(t.SidebarFg, t.Fg)
 	t.Muted = colorOr(t.SidebarAccent, t.Muted)
 	t.Border, t.Ring = colorOr(t.SidebarBorder, t.Border), colorOr(t.SidebarRing, t.Ring)
 	// Children see the remapped palette, not only its text color, so a
 	// button or badge inside an item paints against the sidebar surface.
 	t.Text.Color = t.Fg
-	env = env.WithTheme(t).WithText(ggui.TextStyle{Color: t.Fg})
+	env = t.Apply(env).WithText(ggui.TextStyle{Color: t.Fg})
 	s.theme = t
 	s.hidden = s.collapsed.Get()
 	if s.hidden {

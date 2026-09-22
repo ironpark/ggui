@@ -9,6 +9,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 var controlNames = []string{"carousel-demo", "carousel-size", "carousel-spacing", "carousel-orientation", "carousel-api", "carousel-plugin", "carousel-multiple", "carousel-rtl", "carousel-loop", "input-otp-demo", "input-otp-pattern", "input-otp-separator", "input-otp-disabled", "input-otp-controlled", "input-otp-invalid", "input-otp-four-digits", "input-otp-alphanumeric", "input-otp-form", "input-otp-rtl"}
@@ -41,7 +42,7 @@ func buildControl(name string) controlDemo {
 		selected := ggui.State(0)
 		items := make([]ggui.Widget, 5)
 		for i := range items {
-			slide := ui.Card(ggui.Center(ggui.Title(fmt.Sprint(i + 1)).Size(30))).Pad(24)
+			slide := ui.Card(ggui.Center(ui.Title(fmt.Sprint(i + 1)).Size(30))).Pad(24)
 			it := ui.CarouselItem(ggui.Box(slide).Pad(4))
 			switch name {
 			case "carousel-size", "carousel-multiple":
@@ -75,7 +76,7 @@ func buildControl(name string) controlDemo {
 		d.Widget = c
 		if name == "carousel-api" {
 			label := selected.Map(func(i int) string { return fmt.Sprintf("Slide %d of 5", i+1) })
-			d.Widget = ggui.Column(c, ggui.Box(ggui.Center(ggui.Textf("%s", label).AsCaption())).Height(20)).Gap(16).Align(ggui.AlignStretch)
+			d.Widget = ggui.Column(c, ggui.Box(ggui.Center(ggui.Textf("%s", label).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption))).Height(20)).Gap(16).Align(ggui.AlignStretch)
 		}
 		if name == "carousel-plugin" {
 			d.Widget = ggui.Column(c, ggui.Box(ggui.Center(ggui.Row(ui.Button("Pause", c.Pause).Outline(), ui.Button("Play", c.Play).Outline()).Gap(8))).Height(36)).Gap(16).Align(ggui.AlignStretch)
@@ -114,7 +115,7 @@ func buildControl(name string) controlDemo {
 				}
 				return "You entered: " + s
 			})
-			body = ggui.Column(o, ggui.Textf("%s", message).AsCaption()).Gap(12)
+			body = ggui.Column(o, ggui.Textf("%s", message).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption)).Gap(12)
 		case "input-otp-pattern":
 			body = ui.Field("Digits Only", o)
 		case "input-otp-form":
@@ -129,10 +130,10 @@ func buildControl(name string) controlDemo {
 				status.Set("Code complete — ready for your verification handler.")
 			}
 			o.OnSubmit(func(string) { verify() })
-			body = ggui.Column(ggui.Title("Verify your login"), ggui.Text("Enter the verification code we sent to m@example.com."), ui.Field("Verification code", o).BindError(errorText), ggui.Row(ui.Button("Verify", verify), ui.Button("Resend code", func() { value.Set(""); status.Set("Demo code reset.") }).Outline()).Gap(12), ggui.Textf("%s", status).AsCaption()).Gap(16)
+			body = ggui.Column(ui.Title("Verify your login"), ggui.Text("Enter the verification code we sent to m@example.com."), ui.Field("Verification code", o).BindError(errorText), ggui.Row(ui.Button("Verify", verify), ui.Button("Resend code", func() { value.Set(""); status.Set("Demo code reset.") }).Outline()).Gap(12), ggui.Textf("%s", status).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption)).Gap(16)
 		}
 		d.Widget = ggui.Box(ggui.Center(body)).Height(288)
 	}
-	d.Widget = ui.Card(ggui.Column(ggui.Title(controlTitle(name)).Size(20), ggui.Caption("Native ggui · shadcn reference"), d.Widget).Gap(20).Align(ggui.AlignStretch)).Pad(24)
+	d.Widget = ui.Card(ggui.Column(ui.Title(controlTitle(name)).Size(20), ui.Caption("Native ggui · shadcn reference"), d.Widget).Gap(20).Align(ggui.AlignStretch)).Pad(24)
 	return d
 }

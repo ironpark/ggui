@@ -3,14 +3,13 @@
 package panel
 
 import (
-	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/internal/fn"
 	"math"
 	"slices"
 
 	"github.com/hajimehoshi/ebiten/v2"
-
+	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/inspect"
+	"github.com/ironpark/ggui/internal/fn"
 )
 
 type inspectVisibility struct {
@@ -72,7 +71,7 @@ func (in *View) panelSnapshot(dst *ggui.Canvas, fr *inspect.Frame, shown []int, 
 	s := inspectPanelSnapshot{rows: buf.rows[:0], crumbs: buf.crumbs[:0]}
 	s.state = inspectPanelState{
 		panel: in.panel, tree: in.tree, layout: in.layout, scale: dst.Scale(), split: in.split, scroll: in.scroll, detailScroll: in.detailScroll, layoutScroll: in.layoutScroll,
-		hoverRow: -1, hoverChip: -1, dark: luminance(ggui.Untrack(ggui.UseTheme).Bg) < .5,
+		hoverRow: -1, hoverChip: -1, dark: luminance(ggui.Untrack(ggui.UseEnv).Background()) < .5,
 		pinned: in.pinned, picking: in.picking, copied: in.copied, filterFocus: in.filterFocus, selectFilter: in.selectFilter, outlines: in.outlines,
 		filter: in.filter, dock: in.dock, tab: in.tab, selected: sel, total: len(fr.Nodes), shown: len(shown), matches: in.matches,
 	}

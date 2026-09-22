@@ -2,7 +2,6 @@ package ggui
 
 import (
 	"github.com/ironpark/ggui/internal/property"
-
 	"github.com/ironpark/ggui/internal/reactive"
 )
 
@@ -178,7 +177,7 @@ func (p *PopupWidget) Paint(dst *Canvas, r Rect) {
 	dst.Paint(p.anchor, r)
 	open := p.IsOpen()
 	now := Now()
-	progress := p.reveal.Toggle(open, now, p.env.Motion(p.env.Theme().MotionFast))
+	progress := p.reveal.Toggle(open, now, p.env.Motion(p.env.PopupDuration()))
 	if !open && progress <= 0 {
 		return
 	}

@@ -1,10 +1,12 @@
 package ui
 
 import (
-	"github.com/ironpark/ggui"
 	"math"
 	"testing"
 	"time"
+
+	"github.com/ironpark/ggui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 func carouselSlides(n int, basis float64) []ggui.Widget {
@@ -205,7 +207,7 @@ func TestCarouselDragCaptureAndAutoplayPause(t *testing.T) {
 
 func BenchmarkCarouselVisiblePaint10000(b *testing.B) {
 	c := Carousel(ggui.State(5000), carouselSlides(10000, 1)...).Loop(true)
-	c.Layout(ggui.Tight(ggui.Sz(416, 240)), ggui.Env{}.WithTheme(ggui.DefaultTheme()))
+	c.Layout(ggui.Tight(ggui.Sz(416, 240)), uitheme.Default().Apply(ggui.Env{}))
 	r := ggui.Rct(ggui.Point{}, ggui.Sz(416, 240))
 	c.Paint(nil, r)
 	b.ReportAllocs()

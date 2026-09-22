@@ -10,6 +10,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 type clientRender struct {
@@ -43,14 +44,14 @@ func (r *clientRender) render() error {
 		m := newModel()
 		m.Dark.Set(false)
 		p := ggui.ProbeBuilder(func() ggui.Widget { return ggui.Provide(ggui.ReducedMotionKey, true, build(m)) }, ggui.Sz(float64(width), 900))
-		p.Setup(func() { ggui.BindTheme(m.Dark, clientTheme(true), clientTheme(false)) })
+		p.Setup(func() { uitheme.Bind(m.Dark, clientTheme(true), clientTheme(false)) })
 		save := func(name string) error {
 			p.Frame()
 			now = now.Add(time.Second)
 			p.Frame()
 			img := ebiten.NewImage(width, 900)
 			defer img.Deallocate()
-			img.Fill(ggui.Untrack(ggui.UseTheme).Bg)
+			img.Fill(ggui.Untrack(uitheme.Use).Bg)
 			p.Draw(img)
 			f, err := os.Create(filepath.Join(r.directory, fmt.Sprintf("%d-%s.png", width, name)))
 			if err != nil {

@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // buttonVariant selects a button's look. One value replaces a set of flags
@@ -26,7 +27,7 @@ type buttonStyle struct {
 	elevated                   bool
 }
 
-func (v buttonVariant) resolve(t ggui.Theme) buttonStyle {
+func (v buttonVariant) resolve(t uitheme.Theme) buttonStyle {
 	switch v {
 	case variantOutline:
 		return buttonStyle{fill: t.Bg, hover: colorOr(t.Accent, t.Muted), border: t.Border, label: t.Fg, elevated: true}
@@ -58,7 +59,7 @@ type ButtonWidget struct {
 	opener      ggui.Actor
 	value       func() string // optional accessible value for composite triggers
 	motion      time.Duration
-	theme       ggui.Theme
+	theme       uitheme.Theme
 }
 
 // Button creates a primary button: Accent background, OnAccent label.
@@ -186,7 +187,7 @@ func (b *ButtonWidget) Pad(sides ...float64) *ButtonWidget {
 func (b *ButtonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer b.props.Layout()()
 	b.Sync()
-	t := env.Theme()
+	t := uitheme.From(env)
 	b.theme = t
 	b.motion = env.Motion(t.MotionFast)
 	if !b.padded {

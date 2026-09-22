@@ -30,7 +30,7 @@ func TestTextInputFilterNativeCommitsAndCaret(t *testing.T) {
 	if v.Get() != "183" || e.ed.caret != 2 {
 		t.Fatal("IME replace")
 	}
-	e.Layout(Loose(Sz(200, 40)), Env{}.WithTheme(DefaultTheme()))
+	e.Layout(Loose(Sz(200, 40)), Env{})
 	e.PaintCustom(nil, Rct(Point{}, Sz(200, 40)), func(_ *Canvas, _ Rect, s TextInputState) Rect {
 		if s.Text != "183" {
 			t.Fatal(s)

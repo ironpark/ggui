@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // Column describes one column of a Table: its heading, how wide it is and
@@ -63,7 +64,7 @@ type TableWidget[T any, K comparable] struct {
 	headBox *ggui.BoxWidget
 	scroll  *ggui.ScrollWidget
 	column  *ggui.ColumnWidget
-	theme   ggui.Theme
+	theme   uitheme.Theme
 	headH   float64
 }
 
@@ -172,7 +173,7 @@ func (t *TableWidget[T, K]) row(row ggui.EachItem[T]) ggui.Widget {
 // Layout implements Widget.
 func (t *TableWidget[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer t.props.Layout()()
-	th := env.Theme()
+	th := uitheme.From(env)
 	t.theme = th
 	t.head.Gap(0)
 	if t.height > 0 {
@@ -201,11 +202,11 @@ type tableRow[T any, K comparable] struct {
 	motion time.Duration
 	cells  *ggui.RowWidget
 	box    *ggui.BoxWidget
-	theme  ggui.Theme
+	theme  uitheme.Theme
 }
 
 func (r *tableRow[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	th := env.Theme()
+	th := uitheme.From(env)
 	r.theme = th
 	r.Sync()
 	r.SetName(r.table.label(r.item.Get()))

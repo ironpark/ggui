@@ -1,8 +1,10 @@
 package ui
 
-import "github.com/ironpark/ggui/internal/property"
-
-import "github.com/ironpark/ggui"
+import (
+	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/property"
+	uitheme "github.com/ironpark/ggui/ui/theme"
+)
 
 // AlertDialogWidget is a confirmation that has to be answered: the scrim
 // takes the clicks but does not close it, so the only ways out are the two
@@ -117,7 +119,7 @@ func (a *AlertDialogWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if a.dialog == nil {
 		a.build()
 	}
-	t := env.Theme()
+	t := uitheme.From(env)
 	a.text.Style(t.Text).Color(t.MutedFg)
 	a.actions.Gap(t.Space)
 	a.body.Gap(t.Space * 2)

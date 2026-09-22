@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"image/color"
 	"testing"
 )
 
@@ -141,29 +142,29 @@ func TestFillingWidgetsFallBackToContentWhenUnbounded(t *testing.T) {
 	}
 }
 
-func TestScrollBarFollowsThemeAndPreservesOverrides(t *testing.T) {
+func TestScrollBarFollowsEnvironmentAndPreservesOverrides(t *testing.T) {
 	s := Scroll(Box().Size(100, 300))
-	for _, theme := range []Theme{DefaultTheme(), DarkTheme()} {
-		s.Layout(Tight(Sz(100, 100)), Env{}.WithTheme(theme))
-		if s.bar != theme.MutedFg {
-			t.Fatal("default scrollbar did not follow theme")
+	for _, style := range []ScrollStyle{{Color: color.Black}, {Color: color.White}} {
+		s.Layout(Tight(Sz(100, 100)), Env{}.With(ScrollStyleKey, style))
+		if s.bar != style.Color {
+			t.Fatal("default scrollbar did not follow environment")
 		}
 	}
-	s.Layout(Tight(Sz(100, 100)), Env{}.WithTheme(DefaultTheme()))
+	s.Layout(Tight(Sz(100, 100)), Env{})
 	r, g, b, a := s.bar.RGBA()
 	// Premultiplied channels plus white behind alpha must not become white.
 	if r+65535-a == 65535 && g+65535-a == 65535 && b+65535-a == 65535 {
 		t.Fatal("scrollbar disappears on white")
 	}
 	s.Bar(red)
-	s.Layout(Tight(Sz(100, 100)), Env{}.WithTheme(DarkTheme()))
+	s.Layout(Tight(Sz(100, 100)), Env{}.With(ScrollStyleKey, ScrollStyle{Color: color.White}))
 	if s.bar != red {
-		t.Fatal("theme replaced explicit scrollbar color")
+		t.Fatal("environment replaced explicit scrollbar color")
 	}
 	s.Bar(nil)
-	s.Layout(Tight(Sz(100, 100)), Env{}.WithTheme(DefaultTheme()))
+	s.Layout(Tight(Sz(100, 100)), Env{})
 	if s.bar != nil {
-		t.Fatal("theme made a hidden scrollbar visible")
+		t.Fatal("environment made a hidden scrollbar visible")
 	}
 }
 
@@ -221,7 +222,7 @@ func TestScrollHiddenAndTinyThumb(t *testing.T) {
 	if s.HandlePointer(PointerEvent{Kind: PointerDown, Button: MouseButtonLeft, Pos: Pt(98, 5)}) {
 		t.Fatal("hidden scrollbar intercepted press")
 	}
-	s.Bar(DefaultTheme().MutedFg)
+	s.Bar((Env{}).ScrollStyle().Color)
 	paintFrame(&in, s, Sz(100, 8))
 	if s.thumbLength() > 8 {
 		t.Fatal("thumb extends beyond tiny viewport")

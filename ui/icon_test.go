@@ -4,9 +4,10 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/icons"
-	"github.com/ironpark/ggui/icons/lucide"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/ui/icons/lucide"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 type observedIcons struct{ seen map[icons.Role]int }
@@ -50,11 +51,11 @@ func TestIconButtonInheritsForeground(t *testing.T) {
 	b := ui.ButtonOf(content, nil)
 	env := ggui.Env{}
 	b.Layout(ggui.Loose(ggui.Sz(100, 50)), env)
-	if content.env.Text().Color != env.Theme().PrimaryFg {
+	if content.env.Text().Color != uitheme.From(env).PrimaryFg {
 		t.Fatal("icon button did not inherit primary foreground")
 	}
 	b.Disabled(true).Layout(ggui.Loose(ggui.Sz(100, 50)), env)
-	if content.env.Text().Color == env.Theme().PrimaryFg {
+	if content.env.Text().Color == uitheme.From(env).PrimaryFg {
 		t.Fatal("disabled icon did not inherit muted foreground")
 	}
 }

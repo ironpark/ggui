@@ -1,8 +1,10 @@
 package ui
 
-import "github.com/ironpark/ggui/internal/property"
-
-import "github.com/ironpark/ggui"
+import (
+	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/property"
+	uitheme "github.com/ironpark/ggui/ui/theme"
+)
 
 // ItemWidget is one row of a list: media on the left, a title and an
 // optional description in the middle, and an action on the right. Build one
@@ -72,7 +74,7 @@ func (i *ItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if i.box == nil {
 		i.build()
 	}
-	t := env.Theme()
+	t := uitheme.From(env)
 	i.title.Style(t.Text).Color(t.Fg)
 	if i.description != nil {
 		i.description.Style(t.Caption).Color(t.MutedFg)

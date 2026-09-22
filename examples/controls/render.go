@@ -9,6 +9,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 type controlsRender struct {
@@ -39,7 +40,7 @@ func (g *controlsRender) Draw(screen *ebiten.Image) {
 	if g.index/(2*n) == 1 {
 		width = 320
 	}
-	preset := ggui.ThemePreset{Base: ggui.BaseNeutral, Accent: ggui.AccentBlue}
+	preset := uitheme.Preset{Base: uitheme.BaseNeutral, Accent: uitheme.AccentBlue}
 	theme, mode := preset.Light(), "light"
 	if dark {
 		theme, mode = preset.Dark(), "dark"
@@ -50,11 +51,11 @@ func (g *controlsRender) Draw(screen *ebiten.Image) {
 	var demo controlDemo
 	p := ggui.ProbeBuilder(func() ggui.Widget {
 		demo = buildControl(name)
-		return ggui.Themed(theme, demo.Widget)
+		return uitheme.With(theme, demo.Widget)
 	}, ggui.Sz(float64(width), 520))
 	defer p.Close()
 	p.Frame()
-	env := ggui.Env{}.WithTheme(theme).WithText(theme.Text)
+	env := theme.Apply(ggui.Env{}).WithText(theme.Text)
 	size := demo.Widget.Layout(ggui.Loose(ggui.Sz(float64(width), 800)), env)
 	img := ebiten.NewImage(width, int(size.H))
 	defer img.Deallocate()

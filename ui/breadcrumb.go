@@ -1,8 +1,10 @@
 package ui
 
-import "github.com/ironpark/ggui/internal/property"
-
-import "github.com/ironpark/ggui"
+import (
+	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/property"
+	uitheme "github.com/ironpark/ggui/ui/theme"
+)
 
 // BreadcrumbEntry is one step of a trail; build it with Crumb.
 type BreadcrumbEntry struct {
@@ -125,7 +127,7 @@ func (b *BreadcrumbWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if b.row == nil {
 		b.build()
 	}
-	t := env.Theme()
+	t := uitheme.From(env)
 	for _, w := range b.muted {
 		w.Style(t.Text).Color(t.MutedFg)
 	}

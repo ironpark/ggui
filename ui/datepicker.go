@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // DatePickerWidget opens a Calendar in a focus-trapped popup.
@@ -122,7 +123,7 @@ func (d *DatePickerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		d.popup.Hide()
 	}
 	d.calendar.Disabled(d.button.IsInert())
-	t := env.Theme()
+	t := uitheme.From(env)
 	panelBox(d.panel, t)
 	text := d.placeholder
 	if v := d.value.Get(); !v.IsZero() {

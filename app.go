@@ -3,17 +3,16 @@
 package ggui
 
 import (
-	"github.com/ironpark/ggui/inspect"
-	"github.com/ironpark/ggui/internal/reactive"
 	"image/color"
 	"math"
 	"sync/atomic"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
-
 	"github.com/ironpark/ggui/a11y"
+	"github.com/ironpark/ggui/inspect"
 	"github.com/ironpark/ggui/internal/platform/drag"
+	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/runtime"
 )
 
@@ -23,7 +22,7 @@ type Config struct {
 	Width      int
 	Height     int
 	Resizable  bool
-	Background color.Color // nil follows the theme's Bg
+	Background color.Color // nil follows the root environment background
 	Inspector  string      // a chord that toggles the widget inspector, such as "f1"; empty for none. Import ggui/inspect/panel for the panel.
 
 	// Accessibility says when the app talks to the platform's
@@ -82,10 +81,14 @@ func New(cfg Config, build Builder) *App {
 }
 
 // Setup registers fn to run under the app's root owner before the first
-// build, so the derived values, Watch and BindTheme calls a main function
-// makes have an owner and are disposed by Close. Call it before Run.
+// build, so derived values and watchers have an owner and are disposed by
+// Close. Call it before Run.
 //
-//	app.Setup(func() { ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme()) })
+//	app.Setup(func() {
+//	    ggui.Watch(background, func(c color.Color) {
+//	        ggui.SetEnv(ggui.Untrack(ggui.UseEnv).With(ggui.BackgroundKey, c))
+//	    })
+//	})
 func (a *App) Setup(fn func()) *App {
 	a.setup = append(a.setup, fn)
 	return a
@@ -353,7 +356,7 @@ func (a *App) Draw(screen *ebiten.Image) {
 	frame.begin(clock())
 	bg := a.cfg.Background
 	if bg == nil {
-		bg = Untrack(theme.Get).Bg
+		bg = rootEnv().Background()
 	}
 	screen.Fill(bg)
 	if a.root == nil {
@@ -386,7 +389,7 @@ func (a *App) Draw(screen *ebiten.Image) {
 		return
 	}
 	if a.cfg.Background == nil {
-		screen.Fill(Untrack(theme.Get).Bg)
+		screen.Fill(rootEnv().Background())
 	}
 	a.canvas.Paint(a.root, Rect{Size: a.rootSize})
 	a.canvas.paintOverlays()

@@ -194,7 +194,7 @@ func TestSemanticsListCountsItems(t *testing.T) {
 }
 
 func TestSemanticsTextRoles(t *testing.T) {
-	tree := described(t, Column(Title("Heading"), Text("body"), Text("")), Sz(200, 200))
+	tree := described(t, Column(Text("Heading").Role(RoleHeading), Text("body"), Text("")), Sz(200, 200))
 	want := `heading "Heading"
 text "body"
 `

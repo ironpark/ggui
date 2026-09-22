@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // BubbleWidget is a chat surface. Message supplies avatar, header and footer;
@@ -23,7 +24,7 @@ type BubbleWidget struct {
 	reactionBox                *ggui.BoxWidget
 	reactionTop, reactionStart bool
 	bodySize, reactionSize     ggui.Size
-	theme                      ggui.Theme
+	theme                      uitheme.Theme
 	action                     func()
 }
 
@@ -133,7 +134,7 @@ func (b *BubbleWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	b.Sync()
 	inheritedEnd, _ := env.Get(messageEndKey)
 	b.alignedEnd = b.end || inheritedEnd
-	b.theme = env.Theme()
+	b.theme = uitheme.From(env)
 	_, fg, _ := b.colors()
 	if b.IsInert() {
 		fg = mix(fg, b.theme.Card, b.theme.DisabledMix)

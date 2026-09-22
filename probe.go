@@ -1,11 +1,11 @@
 package ggui
 
 import (
-	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/ironpark/ggui/inspect"
 	"io/fs"
 	"time"
 
+	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ironpark/ggui/inspect"
 	"github.com/ironpark/ggui/runtime"
 )
 
@@ -55,7 +55,7 @@ func (p *Probe) OnInspect(fn func(*inspect.Frame)) {
 	inspectorEnabled = true
 }
 
-// NewProbe creates a Probe that lays w out at size under the current theme.
+// NewProbe creates a Probe that lays w out at size under the current root environment.
 // The widget is held by a root owner, so effects it creates are disposed by
 // Close.
 func NewProbe(w Widget, size Size) *Probe {

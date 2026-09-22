@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // SliderWidget picks a number in a range by dragging a knob. Build one with
@@ -19,7 +20,7 @@ type SliderWidget struct {
 	onChange func(float64)
 	onCommit func(float64)
 
-	theme ggui.Theme
+	theme uitheme.Theme
 	rect  ggui.Rect
 }
 
@@ -118,7 +119,7 @@ func (s *SliderWidget) Act(a ggui.Action) bool {
 func (s *SliderWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer s.props.Layout()()
 	s.Sync()
-	s.theme = env.Theme()
+	s.theme = uitheme.From(env)
 	return c.Constrain(ggui.Sz(bounded(c.MaxW, defaultStripe), sliderKnob*2+4))
 }
 

@@ -35,7 +35,7 @@ shorthand when you do not need to register setup or shortcuts first.
 | `Title` | `"ggui"` | Window title. |
 | `Width`, `Height` | `800`, `600` when zero | Initial window dimensions. |
 | `Resizable` | `false` | Allow the user to resize the window. |
-| `Background` | `nil` | Follow the theme's `Bg`; set a color to override it. |
+| `Background` | `nil` | Follow `ggui.BackgroundKey` (the UI theme maps `Bg` to it); set a color to override it. |
 | `Inspector` | zero, disabled | Bind a chord such as `"f1"` to the [inspector](inspector.md). |
 | `Accessibility` | `AccessibilityAuto` | Choose when the macOS [accessibility bridge](accessibility.md) is active. |
 
@@ -53,12 +53,13 @@ app := ggui.New(ggui.Config{Title: "Settings", Resizable: true}, func() ggui.Wid
     return ui.ThemeSwitch(dark).Name("Dark mode")
 })
 app.Setup(func() {
-    ggui.BindTheme(dark, ggui.DarkTheme(), ggui.DefaultTheme())
+    theme.Bind(dark, theme.Dark(), theme.Default())
     ggui.OnCleanup(func() { /* release app-owned resources */ })
 })
 ```
 
-This snippet uses the `ggui` and `ui` imports from the counter example.
+This snippet uses `ggui`, `ui`, and `theme`
+(`github.com/ironpark/ggui/ui/theme`).
 `Setup` runs under the app's root owner before the first build. `Run` disposes
 owned work when it returns, including after an error. Call `app.Close()` on
 the UI thread to request shutdown. From a worker, use `app.Post(app.Close)`.

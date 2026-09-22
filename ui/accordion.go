@@ -5,8 +5,9 @@ import (
 	"slices"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/icons"
 	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/ui/icons"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // AccordionSection describes a keyed disclosure and its persistent content.
@@ -36,7 +37,7 @@ type AccordionWidget struct {
 	multiple bool
 	active   int
 	onChange func([]string)
-	theme    ggui.Theme
+	theme    uitheme.Theme
 	sizes    []ggui.Size
 	heights  []float64
 	env      ggui.Env
@@ -151,7 +152,7 @@ func (a *AccordionWidget) Adopt(prev any) {
 // Layout implements ggui.Widget.
 func (a *AccordionWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer a.props.Layout()()
-	a.env, a.theme = env, env.Theme()
+	a.env, a.theme = env, uitheme.From(env)
 	a.laidOpen = append(a.laidOpen[:0], a.open.Get()...)
 	a.sizes = slices.Grow(a.sizes[:0], len(a.items))[:len(a.items)]
 	clear(a.sizes)

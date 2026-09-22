@@ -15,7 +15,8 @@ Go 1.27 or newer.
 5. Add [headless interaction tests](testing.md).
 
 Examples are focused snippets unless they contain a `package` declaration.
-They use the `ggui` and `ui` packages; application callbacks, data, and colors
+They use the `ggui`, `ui`, and `theme` (`github.com/ironpark/ggui/ui/theme`)
+packages; application callbacks, data, and colors
 such as `save`, `todos`, and `accent` are supplied by your app. Run shell commands
 from the repository root unless a guide says otherwise.
 
@@ -55,8 +56,9 @@ from the repository root unless a guide says otherwise.
 
 Package-specific READMEs remain beside their code and assets:
 
-- [Icon sets, custom SVGs, precedence, and caching](../icons/README.md)
-- [Bundled Lucide icons](../icons/lucide/README.md), [Tabler icons](../icons/tabler/README.md), and [Heroicons](../icons/heroicons/README.md)
+- [Icon sets, custom SVGs, precedence, and caching](../ui/icons/README.md)
+- [Bundled Lucide icons](../ui/icons/lucide/README.md), [Tabler icons](../ui/icons/tabler/README.md), and [Heroicons](../ui/icons/heroicons/README.md)
 - [Optional Noto Color Emoji font](../fonts/notoemoji/README.md)
 - [Gallery chat assets and licenses](../examples/gallery/assets/chat/README.md)
+- [Theme package and migration](../ui/theme/README.md)
 - [Vendored theme palettes and sources](../internal/themedata/README.md)

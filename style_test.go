@@ -1,9 +1,10 @@
 package ggui
 
 import (
-	"github.com/ironpark/ggui/internal/reactive"
 	"image/color"
 	"testing"
+
+	"github.com/ironpark/ggui/internal/reactive"
 )
 
 var (
@@ -99,27 +100,27 @@ func TestEnvIsAValue(t *testing.T) {
 	}
 }
 
-func TestRootEnvStartsFromTheme(t *testing.T) {
-	old := Untrack(theme.Get)
-	defer SetTheme(old)
-	SetTheme(Theme{Text: TextStyle{Size: 33, Color: red}, Bg: blue})
+func TestRootEnvStartsFromConfiguredText(t *testing.T) {
+	old := Untrack(UseEnv)
+	defer SetEnv(old)
+	SetEnv(Env{}.WithText(TextStyle{Size: 33, Color: red}))
 	w := Text("x")
 	w.Layout(Loose(Sz(100, 100)), rootEnv())
 	if w.resolved.Size != 33 || w.resolved.Color != red {
-		t.Fatalf("resolved = %+v, want the theme's text style", w.resolved)
+		t.Fatalf("resolved = %+v, want the configured text style", w.resolved)
 	}
 }
 
-func TestSetThemeRebuildsReaders(t *testing.T) {
-	old := Untrack(theme.Get)
-	defer SetTheme(old)
+func TestSetEnvRebuildsReaders(t *testing.T) {
+	old := Untrack(UseEnv)
+	defer SetEnv(old)
 	builds := 0
-	dispose := reactive.Observe(func() { builds++; _ = UseTheme().Primary })
+	dispose := reactive.Observe(func() { builds++; _ = UseEnv().Background() })
 	defer dispose()
-	SetTheme(DarkTheme())
+	SetEnv(Env{}.With(BackgroundKey, color.Color(color.Black)))
 	reactive.Flush()
 	if builds != 2 {
-		t.Fatalf("builds = %d after SetTheme, want 2", builds)
+		t.Fatalf("builds = %d after SetEnv, want 2", builds)
 	}
 }
 

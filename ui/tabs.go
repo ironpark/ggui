@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 const (
@@ -26,7 +27,7 @@ type TabsWidget struct {
 	labelSize        []ggui.Size
 	hover            int // the label under the pointer, or -1
 
-	theme     ggui.Theme
+	theme     uitheme.Theme
 	motion    time.Duration
 	headerH   float64
 	stripW    float64   // the strip's natural width, inset included
@@ -89,9 +90,9 @@ func (t *TabsWidget) pick(i int) {
 func (t *TabsWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer t.props.Layout()()
 	t.Sync()
-	th := env.Theme()
+	th := uitheme.From(env)
 	t.theme = th
-	t.motion = env.Motion(env.Theme().MotionFast)
+	t.motion = env.Motion(uitheme.From(env).MotionFast)
 	t.pad = th.TabPad
 	t.labelSize, t.labelX = t.labelSize[:0], t.labelX[:0]
 	t.headerH, t.stripW = 0, 0

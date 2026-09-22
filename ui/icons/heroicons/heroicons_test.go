@@ -1,10 +1,11 @@
-package lucide
+package heroicons
 
 import (
-	"github.com/ironpark/ggui/icons"
 	"io/fs"
 	"strings"
 	"testing"
+
+	"github.com/ironpark/ggui/ui/icons"
 )
 
 func TestBundledSVGsAndRoles(t *testing.T) {

@@ -3,8 +3,10 @@
 package icons
 
 import (
-	"github.com/ironpark/ggui"
 	"image/color"
+
+	"github.com/ironpark/ggui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // Role identifies what an icon means, independently of its library's filename.
@@ -45,7 +47,7 @@ var SetKey = ggui.NewEnvKey[Set]("icons")
 // Resolve looks in the local Env, the theme, and finally fallback.
 func Resolve(env ggui.Env, fallback Set, role Role) *SVG {
 	local, _ := env.Get(SetKey)
-	themed, _ := env.Theme().Get(SetKey)
+	themed, _ := uitheme.From(env).Get(SetKey)
 	for _, set := range []Set{local, themed, fallback} {
 		if set != nil {
 			if asset := set.Resolve(role); asset != nil {
@@ -98,7 +100,7 @@ func (w *Widget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		col = w.env.Text().Color
 	}
 	if col == nil {
-		col = w.env.Theme().Fg
+		col = uitheme.From(w.env).Fg
 	}
 	side := min(w.size, r.Size.W, r.Size.H)
 	at := ggui.Rct(r.Origin.Add(ggui.Pt((r.Size.W-side)/2, (r.Size.H-side)/2)), ggui.Sz(side, side))

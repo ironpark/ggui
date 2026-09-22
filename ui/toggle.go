@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // toggle is the shared body of Checkbox, Radio and Switch: a glyph, an
@@ -16,7 +17,7 @@ type toggle struct {
 
 	labelSize ggui.Size
 	glyph     ggui.Size
-	theme     ggui.Theme
+	theme     uitheme.Theme
 	env       ggui.Env
 	motion    time.Duration // MotionFast, or zero under reduced motion
 }
@@ -25,7 +26,7 @@ type toggle struct {
 // checkbox and a radio are square control glyphs, a switch is a track.
 func (g *toggle) layout(c ggui.Constraints, env ggui.Env, glyph ggui.Size) ggui.Size {
 	g.Sync()
-	g.theme = env.Theme()
+	g.theme = uitheme.From(env)
 	g.env = env
 	g.motion = env.Motion(g.theme.MotionFast)
 	g.glyph = glyph

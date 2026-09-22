@@ -1,4 +1,4 @@
-package ggui
+package theme
 
 import (
 	"image/color"
@@ -8,8 +8,8 @@ import (
 func TestThemePresetsHaveCompleteSemanticPairs(t *testing.T) {
 	for _, base := range BaseColors() {
 		for _, accent := range AccentColors() {
-			for _, style := range ThemeStyles() {
-				p := ThemePreset{base, accent, style}
+			for _, style := range Styles() {
+				p := Preset{base, accent, style}
 				for _, theme := range []Theme{p.Light(), p.Dark()} {
 					colors := []color.Color{theme.Bg, theme.Fg, theme.Card, theme.CardFg, theme.Popover, theme.PopoverFg, theme.Primary, theme.PrimaryFg, theme.Secondary, theme.SecondaryFg, theme.Muted, theme.MutedFg, theme.Accent, theme.AccentFg, theme.Input, theme.InputBorder, theme.Border, theme.Ring, theme.Destructive, theme.Sidebar, theme.SidebarFg, theme.SidebarPrimary, theme.SidebarPrimaryFg, theme.SidebarAccent, theme.SidebarAccentFg, theme.SidebarBorder, theme.SidebarRing}
 					colors = append(colors, theme.Chart[:]...)
@@ -27,8 +27,8 @@ func TestThemePresetsHaveCompleteSemanticPairs(t *testing.T) {
 	}
 }
 func TestPresetAccentPreservesSurfacesAndCopies(t *testing.T) {
-	base := ThemePreset{Base: BaseStone}.Dark()
-	accented := ThemePreset{Base: BaseStone, Accent: AccentBlue}.Dark()
+	base := Preset{Base: BaseStone}.Dark()
+	accented := Preset{Base: BaseStone, Accent: AccentBlue}.Dark()
 	if base.Bg != accented.Bg || base.Card != accented.Card || base.Border != accented.Border {
 		t.Fatal("accent replaced base surfaces")
 	}
@@ -36,7 +36,7 @@ func TestPresetAccentPreservesSurfacesAndCopies(t *testing.T) {
 		t.Fatal("accent did not affect primary/chart")
 	}
 	accented.Chat.BubbleRadius = 999
-	if (ThemePreset{}).Dark().Chat.BubbleRadius == 999 {
+	if (Preset{}).Dark().Chat.BubbleRadius == 999 {
 		t.Fatal("mutable preset shared state")
 	}
 }
@@ -49,11 +49,11 @@ func TestPresetColorConversionAndGeometry(t *testing.T) {
 			t.Fatalf("%s = %v", tc.s, got)
 		}
 	}
-	nova, rhea := ThemePreset{Style: StyleNova}.Light(), ThemePreset{Style: StyleRhea}.Light()
+	nova, rhea := Preset{Style: StyleNova}.Light(), Preset{Style: StyleRhea}.Light()
 	if rhea.Chat.BubbleRadius <= nova.Chat.BubbleRadius || rhea.Chat.AttachmentRadius <= nova.Chat.AttachmentRadius {
 		t.Fatal("styles do not change chat geometry")
 	}
-	for _, p := range []ThemePreset{{Base: "invalid"}, {Accent: "invalid"}, {Style: "invalid"}} {
+	for _, p := range []Preset{{Base: "invalid"}, {Accent: "invalid"}, {Style: "invalid"}} {
 		func() {
 			defer func() {
 				if recover() == nil {

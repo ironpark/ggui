@@ -16,6 +16,7 @@ import (
 	"github.com/ironpark/ggui"
 	_ "github.com/ironpark/ggui/inspect/panel"
 	"github.com/ironpark/ggui/ui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // build is the root Builder. It reads nothing reactive: the theme comes
@@ -23,7 +24,7 @@ import (
 // or a derived value on the model.
 func build(m *model) ggui.Widget {
 	content := ggui.Column(
-		ggui.Row(ggui.Title("todo"), ggui.Spacer(), ui.Switch(m.Dark, "Dark")),
+		ggui.Row(ui.Title("todo"), ggui.Spacer(), ui.Switch(m.Dark, "Dark")),
 		composer(m),
 		ui.Progress(m.Progress).Height(4),
 		ggui.Expanded(ggui.Scroll(list(m))),
@@ -77,7 +78,9 @@ func title(td *Todo, editing *ggui.StateValue[bool]) ggui.Widget {
 			BindName(ggui.Sprintf("Edit: %s", td.Title)).
 			OnSubmit(func(string) { editing.Set(false) })
 	}).Else(func() ggui.Widget {
-		text := ggui.If(td.Done, func() ggui.Widget { return ggui.TextOf(td.Title).AsCaption() }).
+		text := ggui.If(td.Done, func() ggui.Widget {
+			return ggui.TextOf(td.Title).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption)
+		}).
 			Else(func() ggui.Widget { return ggui.TextOf(td.Title) })
 		return ggui.Tap(text, func() { editing.Set(true) })
 	})
@@ -87,7 +90,7 @@ func title(td *Todo, editing *ggui.StateValue[bool]) ggui.Widget {
 func footer(m *model) ggui.Widget {
 	clear := ui.Button("Clear done", m.askClearDone).Outline().BindDisabled(m.NoneDone)
 	return ggui.Row(
-		ggui.Textf("%d left", m.Left).AsCaption().NoWrap(),
+		ggui.Textf("%d left", m.Left).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption).NoWrap(),
 		ggui.Spacer(),
 		ui.Radios(m.Show).Options([]filter{all, active, done}), // labelled through filter.String
 		ui.Tooltip(clear, "Removes every finished item (⌘/Ctrl+K)"),
@@ -116,7 +119,7 @@ func run() error {
 		shortcuts(app, m)
 		// Setup runs under the app's root owner, so the theme binding is
 		// disposed with the app.
-		app.Setup(func() { ggui.BindTheme(m.Dark, ggui.DarkTheme(), ggui.DefaultTheme()) })
+		app.Setup(func() { uitheme.Bind(m.Dark, uitheme.Dark(), uitheme.Default()) })
 	})
 	defer dispose()
 	defer app.Close()

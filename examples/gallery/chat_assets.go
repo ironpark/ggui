@@ -9,6 +9,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/ironpark/ggui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 //go:embed assets/chat/*
@@ -41,13 +42,13 @@ func chatImage(name string) *ebiten.Image {
 
 // Reference scenes inherit the selected preset, whose fonts main.go installs.
 func chatSurface(content ggui.Widget, maxWidth ...float64) ggui.Widget {
-	t := ggui.UseTheme()
+	t := uitheme.Use()
 	t.Card = t.Bg // reaction rings cut out against the actual conversation surface
 	width := 384.0
 	if len(maxWidth) > 0 {
 		width = maxWidth[0]
 	}
-	scene := ggui.Row(ggui.Spacer(), ggui.Box(ggui.Themed(t, content)).Width(width), ggui.Spacer())
+	scene := ggui.Row(ggui.Spacer(), ggui.Box(uitheme.With(t, content)).Width(width), ggui.Spacer())
 	return ggui.Box(ggui.Padding(scene, 24, 20, 32, 20)).Fill(t.Bg).Radius(12)
 }
 

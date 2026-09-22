@@ -2,9 +2,11 @@ package ui
 
 import (
 	"fmt"
-	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/icons"
 	"image/color"
+
+	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/ui/icons"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // ChartTooltipContent is reusable tooltip content configured for a chart. It
@@ -48,7 +50,7 @@ func (w *chartContent) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 		categoryColors: c.categoryColors,
 		active:         c.active,
 		env:            env,
-		theme:          env.Theme(),
+		theme:          uitheme.From(env),
 	}
 	if w.legend {
 		return cs.Constrain(ggui.Sz(bounded(cs.MaxW, 240), w.context.legendHeight(bounded(cs.MaxW, 240))))

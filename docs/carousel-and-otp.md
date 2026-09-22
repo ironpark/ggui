@@ -22,9 +22,9 @@ inherit ggui theme tokens and require no browser, JavaScript or new dependency.
 ```go
 slide := ggui.State(0)
 carousel := ui.Carousel(slide,
-    ui.CarouselItem(ui.Card(ggui.Center(ggui.Title("1")))),
-    ui.CarouselItem(ui.Card(ggui.Center(ggui.Title("2")))),
-    ui.CarouselItem(ui.Card(ggui.Center(ggui.Title("3")))),
+    ui.CarouselItem(ui.Card(ggui.Center(ui.Title("1")))),
+    ui.CarouselItem(ui.Card(ggui.Center(ui.Title("2")))),
+    ui.CarouselItem(ui.Card(ggui.Center(ui.Title("3")))),
 ).Height(240).Loop(true)
 ```
 

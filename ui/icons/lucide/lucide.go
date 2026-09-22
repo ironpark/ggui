@@ -4,8 +4,9 @@ package lucide
 import (
 	"embed"
 	"fmt"
-	"github.com/ironpark/ggui/icons"
 	"sync"
+
+	"github.com/ironpark/ggui/ui/icons"
 )
 
 //go:embed svg/*.svg

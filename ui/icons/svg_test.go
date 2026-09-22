@@ -1,8 +1,10 @@
 package icons
 
 import (
-	"github.com/ironpark/ggui"
 	"testing"
+
+	"github.com/ironpark/ggui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 func TestSVGCurrentColorAndViewBox(t *testing.T) {
@@ -25,8 +27,8 @@ func TestSVGCurrentColorAndViewBox(t *testing.T) {
 }
 func TestSetResolutionPrecedenceAndFallback(t *testing.T) {
 	a, b, c := &SVG{}, &SVG{}, &SVG{}
-	theme := ggui.DefaultTheme().Set(SetKey, Set(Map{Check: b, Close: b}))
-	env := ggui.Env{}.WithTheme(theme).With(SetKey, Set(Map{Check: a}))
+	theme := uitheme.Default().Set(SetKey, Set(Map{Check: b, Close: b}))
+	env := theme.Apply(ggui.Env{}).With(SetKey, Set(Map{Check: a}))
 	fallback := Map{Check: c, Close: c, Search: c}
 	for role, want := range map[Role]*SVG{Check: a, Close: b, Search: c, Role("missing"): nil} {
 		if got := Resolve(env, fallback, role); got != want {

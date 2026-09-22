@@ -5,8 +5,9 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/icons"
 	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/ui/icons"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // CalendarWidget selects a single civil date. Navigation does not change value.
@@ -30,7 +31,7 @@ type CalendarWidget struct {
 	previous, next  *ButtonWidget
 	title           *ggui.TextWidget
 	header          ggui.Widget
-	theme           ggui.Theme
+	theme           uitheme.Theme
 	env             ggui.Env
 	headerSize      ggui.Size
 	cellH           float64
@@ -178,7 +179,7 @@ func (c *CalendarWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	defer c.props.Layout()()
 	c.Sync()
 	c.env = env
-	c.theme = env.Theme()
+	c.theme = uitheme.From(env)
 	c.syncDate()
 	c.lowest, c.highest = c.date(c.min), c.date(c.max)
 	month := c.month()

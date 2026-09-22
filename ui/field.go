@@ -3,6 +3,7 @@ package ui
 import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // FieldWidget is a labelled input: a caption above any control, help text
@@ -73,7 +74,7 @@ func (f *FieldWidget) BindError(r ggui.Readable[string]) *FieldWidget {
 // Layout implements Widget.
 func (f *FieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer f.props.Layout()()
-	t := env.Theme()
+	t := uitheme.From(env)
 	note, col := f.help, t.MutedFg
 	invalid := false
 	if e := f.err.Get(); e != "" {

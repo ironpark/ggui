@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 type previewInfo struct{ category, description string }
@@ -65,8 +66,8 @@ func preview(title string, body ggui.Widget) *componentPreview {
 	return &componentPreview{
 		title: title, info: info,
 		Widget: ui.Card(ggui.Column(
-			ggui.Wrap(ggui.Title(title).Size(18), ui.Badge(info.category)).Gap(8),
-			ggui.Caption(info.description),
+			ggui.Wrap(ui.Title(title).Size(18), ui.Badge(info.category)).Gap(8),
+			ui.Caption(info.description),
 			ui.Divider(),
 			body,
 		).Gap(16).Align(ggui.AlignStretch)),
@@ -143,10 +144,10 @@ func galleryPage(dark *ggui.StateValue[bool], search, category *ggui.StateValue[
 	})
 	field := ui.TextField(search).Name("Search components").Placeholder("Search components…").OnChange(func(string) { scroll.Set(0) })
 	header := ggui.Reactive(func() ggui.Widget {
-		theme := ggui.UseTheme()
+		theme := uitheme.Use()
 		return ggui.Box(ggui.Column(
-			ggui.Row(ggui.Title("Component gallery").Size(28), ggui.Spacer(), ui.ThemeSwitch(dark)).Gap(16),
-			ggui.Caption("Explore the building blocks. Try an interaction, adjust the theme, make it yours."),
+			ggui.Row(ui.Title("Component gallery").Size(28), ggui.Spacer(), ui.ThemeSwitch(dark)).Gap(16),
+			ui.Caption("Explore the building blocks. Try an interaction, adjust the theme, make it yours."),
 			ggui.Row(ggui.Expanded(field), ui.Button("Commands", commands).Outline()).Gap(12),
 			filters,
 		).Gap(14).Align(ggui.AlignStretch)).Pad(24, 28).Fill(theme.Card)
@@ -158,8 +159,8 @@ func galleryPage(dark *ggui.StateValue[bool], search, category *ggui.StateValue[
 		return &previewGrid{children: cards}
 	})
 	footer := ggui.Padding(ggui.Row(
-		ggui.Textf("%d of %d previews", shown.Map(func(cards []ggui.Widget) int { return len(cards) }), len(previews)).AsCaption(), ggui.Spacer(),
-		ggui.Caption("⌘K  Commands   ·   Tab  Navigate   ·   F1  Inspect"),
+		ggui.Textf("%d of %d previews", shown.Map(func(cards []ggui.Widget) int { return len(cards) }), len(previews)).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption), ggui.Spacer(),
+		ui.Caption("⌘K  Commands   ·   Tab  Navigate   ·   F1  Inspect"),
 	).Gap(12), 12, 28)
 	children := []ggui.Widget{header, ui.Divider(), ggui.Expanded(ggui.Scroll(ggui.Padding(content, 24, 28)).BindOffset(scroll)), ui.Divider(), footer}
 	children = append(children, extras...)

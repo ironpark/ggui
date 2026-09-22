@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // TooltipWidget shows a short text near its child after the cursor has
@@ -19,7 +20,7 @@ type TooltipWidget struct {
 	box    *ggui.BoxWidget
 	effect *ggui.TransitionWidget
 	env    ggui.Env
-	theme  ggui.Theme
+	theme  uitheme.Theme
 }
 
 // tooltipHover is the hover timer, retained on the Canvas by Rect so a
@@ -51,7 +52,7 @@ func (t *TooltipWidget) Delay(d time.Duration) *TooltipWidget {
 // Layout implements ggui.Widget.
 func (t *TooltipWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer t.props.Layout()()
-	t.theme = env.Theme()
+	t.theme = uitheme.From(env)
 	t.env = env
 	t.pad = ggui.Insets(t.theme.Space*.75, t.theme.Space*1.5)
 	t.tip.Color(t.theme.Bg)

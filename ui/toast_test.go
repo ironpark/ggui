@@ -1,9 +1,11 @@
 package ui
 
 import (
-	"github.com/ironpark/ggui"
 	"testing"
 	"time"
+
+	"github.com/ironpark/ggui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 func TestToastExitIsAnimatedAndInert(t *testing.T) {
@@ -13,7 +15,7 @@ func TestToastExitIsAnimatedAndInert(t *testing.T) {
 	p.Advance(0)
 	id := host.Push(Toast("Saved", "Your changes are stored.").Duration(0))
 	p.Advance(0)
-	p.Advance(ggui.DefaultTheme().MotionSlow)
+	p.Advance(uitheme.Default().MotionSlow)
 	host.Dismiss(id)
 	p.Advance(0)
 	if host.Len() != 0 || len(host.entries) != 1 {
@@ -22,12 +24,12 @@ func TestToastExitIsAnimatedAndInert(t *testing.T) {
 	if _, ok := p.Find("Dismiss Saved"); ok {
 		t.Fatal("exiting toast is still interactive")
 	}
-	p.Advance(ggui.DefaultTheme().MotionSlow / 2)
+	p.Advance(uitheme.Default().MotionSlow / 2)
 	v := host.entries[0].motion.Value(ggui.Now())
 	if v <= 0 || v >= 1 {
 		t.Fatalf("exit progress = %v, want an intermediate value", v)
 	}
-	p.Advance(ggui.DefaultTheme().MotionSlow)
+	p.Advance(uitheme.Default().MotionSlow)
 	if len(host.entries) != 0 {
 		t.Fatal("exit did not release the notice")
 	}

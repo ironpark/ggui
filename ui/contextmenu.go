@@ -2,6 +2,7 @@ package ui
 
 import (
 	"github.com/ironpark/ggui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // ContextMenuWidget wraps content with a secondary-click action menu.
@@ -12,7 +13,7 @@ type ContextMenuWidget struct {
 	menu    *MenuWidget
 	rect    ggui.Rect
 	at      *ggui.Point
-	theme   ggui.Theme
+	theme   uitheme.Theme
 }
 
 // ContextMenu opens entries at the right-click position. Tab focuses the
@@ -79,7 +80,7 @@ func (c *ContextMenuWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 	if c.IsInert() {
 		c.Popup().Hide()
 	}
-	c.theme = env.Theme()
+	c.theme = uitheme.From(env)
 	t := c.theme
 	c.menu.chrome(t)
 	return c.Popup().Layout(cs, env)

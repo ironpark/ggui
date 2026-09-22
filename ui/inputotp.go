@@ -10,6 +10,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // InputOTPPart describes a group of slots or a visual separator. Parts are
@@ -53,7 +54,7 @@ type InputOTPWidget struct {
 	slotSize, gap        float64
 	placeholder          []rune
 	onChange, onComplete func(string)
-	theme                ggui.Theme
+	theme                uitheme.Theme
 	env                  ggui.Env
 	cells                []otpCell
 	groups               []otpGroup
@@ -191,7 +192,7 @@ func (o *InputOTPWidget) Input() *ggui.TextInputWidget { return o.input }
 func (o *InputOTPWidget) Layout(c ggui.Constraints, e ggui.Env) ggui.Size {
 	defer o.props.Layout()()
 	o.Sync()
-	o.env, o.theme, o.reduced = e, e.Theme(), e.ReducedMotion()
+	o.env, o.theme, o.reduced = e, uitheme.From(e), e.ReducedMotion()
 	inherited, _ := e.Get(ggui.InputDisabled)
 	o.disabled = o.IsInert() || inherited
 	if o.invalidWhen != nil {

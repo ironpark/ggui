@@ -5,13 +5,14 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // SkeletonWidget reserves space while content loads. It pulses unless motion is reduced.
 type SkeletonWidget struct {
 	props           property.Owner
 	width, height   float64
-	theme           ggui.Theme
+	theme           uitheme.Theme
 	reduced, circle bool
 }
 
@@ -30,7 +31,7 @@ func (s *SkeletonWidget) Circle() *SkeletonWidget {
 // Layout implements ggui.Widget.
 func (s *SkeletonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer s.props.Layout()()
-	s.theme, s.reduced = env.Theme(), env.ReducedMotion()
+	s.theme, s.reduced = uitheme.From(env), env.ReducedMotion()
 	return c.Constrain(ggui.Sz(s.width, s.height))
 }
 

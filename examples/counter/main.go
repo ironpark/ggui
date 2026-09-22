@@ -14,6 +14,7 @@ import (
 	"github.com/ironpark/ggui"
 	_ "github.com/ironpark/ggui/inspect/panel"
 	"github.com/ironpark/ggui/ui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // model holds one signal per piece of state. Each field is its own reactive
@@ -53,11 +54,11 @@ func (m model) build() ggui.Widget {
 	).Space(1).Justify(ggui.JustifyCenter)
 	help := ggui.View(hints, func(lines []string) *ggui.ColumnWidget {
 		return ggui.List(lines, func(line string) ggui.Widget {
-			return ggui.Caption(line)
+			return ui.Caption(line)
 		}).Space(0.5)
 	})
 	content := ggui.Column(
-		ggui.Textf("count: %d", m.Count).AsTitle(),
+		ggui.Textf("count: %d", m.Count).StyleKey(uitheme.TitleKey, uitheme.Default().Title).Role(ggui.RoleHeading),
 		buttons,
 		help,
 	).Space(1.5).Align(ggui.AlignCenter)
@@ -87,7 +88,7 @@ func main() {
 
 	// Setup runs under the app's root owner, so the theme binding is
 	// disposed with the app.
-	app.Setup(func() { ggui.BindTheme(m.Dark, ggui.DarkTheme(), ggui.DefaultTheme()) })
+	app.Setup(func() { uitheme.Bind(m.Dark, uitheme.Dark(), uitheme.Default()) })
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}

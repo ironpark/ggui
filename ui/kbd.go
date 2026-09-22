@@ -1,6 +1,9 @@
 package ui
 
-import "github.com/ironpark/ggui"
+import (
+	"github.com/ironpark/ggui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
+)
 
 // KbdWidget displays a keyboard shortcut without registering an input handler.
 type KbdWidget struct {
@@ -16,7 +19,7 @@ func Kbd(label string) *KbdWidget {
 
 // Layout implements ggui.Widget.
 func (k *KbdWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	t := env.Theme()
+	t := uitheme.From(env)
 	k.text.Style(t.Caption).Color(t.MutedFg)
 	k.box.Pad(2, t.Space*.75).Fill(t.Muted).Border(t.BorderWidth, t.Border).Radius(t.Radius / 2)
 	return k.box.Layout(c, env)

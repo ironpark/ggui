@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
-
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // AttachmentState is the caller-owned upload lifecycle. Attachment does not
@@ -50,7 +50,7 @@ type AttachmentWidget struct {
 	size                                 AttachmentSize
 	vertical                             bool
 	width                                float64
-	theme                                ggui.Theme
+	theme                                uitheme.Theme
 	reduced                              bool
 	current                              AttachmentState
 	padX, padY, gap, radius, mediaSide   float64
@@ -149,7 +149,7 @@ func (a *AttachmentWidget) uploadState() AttachmentState {
 
 func (a *AttachmentWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer a.props.Layout()()
-	a.theme, a.reduced, a.current = env.Theme(), env.ReducedMotion(), a.uploadState()
+	a.theme, a.reduced, a.current = uitheme.From(env), env.ReducedMotion(), a.uploadState()
 	a.padX, a.padY, a.gap, a.mediaSide = 10, 8, 8, 40
 	a.radius = a.theme.ChatTokens().AttachmentRadius
 	fontSize := 14.0

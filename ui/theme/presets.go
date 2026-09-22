@@ -1,4 +1,4 @@
-package ggui
+package theme
 
 import (
 	"encoding/json"
@@ -9,10 +9,11 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/themedata"
 )
 
-// BaseColor selects the neutral surfaces and foregrounds of a ThemePreset.
+// BaseColor selects the neutral surfaces and foregrounds of a Preset.
 type BaseColor string
 
 const (
@@ -50,53 +51,53 @@ const (
 	AccentYellow  AccentColor = "yellow"
 )
 
-// ThemeStyle selects component geometry independently of the palette.
-type ThemeStyle string
+// Style selects component geometry independently of the palette.
+type Style string
 
 const (
-	StyleNova ThemeStyle = "nova"
-	StyleRhea ThemeStyle = "rhea"
+	StyleNova Style = "nova"
+	StyleRhea Style = "rhea"
 )
 
-// ThemePreset combines shadcn/ui's semantic palettes with ggui geometry tokens.
+// Preset combines shadcn/ui's semantic palettes with ggui geometry tokens.
 // Its zero value means Neutral/Nova with the base palette's own accent.
 // Values are ordinary Themes: customize the returned copy freely. Existing
-// DefaultTheme and DarkTheme remain unchanged. Unknown names panic.
-type ThemePreset struct {
+// Default and Dark remain unchanged. Unknown names panic.
+type Preset struct {
 	Base   BaseColor
 	Accent AccentColor
-	Style  ThemeStyle
+	Style  Style
 }
 
-func (p ThemePreset) Light() Theme { return p.theme(false) }
-func (p ThemePreset) Dark() Theme  { return p.theme(true) }
+func (p Preset) Light() Theme { return p.theme(false) }
+func (p Preset) Dark() Theme  { return p.theme(true) }
 func BaseColors() []BaseColor {
 	return []BaseColor{BaseNeutral, BaseStone, BaseZinc, BaseMauve, BaseOlive, BaseMist, BaseTaupe}
 }
 func AccentColors() []AccentColor {
 	return []AccentColor{AccentBase, AccentAmber, AccentBlue, AccentCyan, AccentEmerald, AccentFuchsia, AccentGreen, AccentIndigo, AccentLime, AccentOrange, AccentPink, AccentPurple, AccentRed, AccentRose, AccentSky, AccentTeal, AccentViolet, AccentYellow}
 }
-func ThemeStyles() []ThemeStyle { return []ThemeStyle{StyleNova, StyleRhea} }
+func Styles() []Style { return []Style{StyleNova, StyleRhea} }
 
 // ChatTokens controls the geometry of conversation and questionnaire widgets.
 // Values use logical pixels. Copy a theme's Chat field to customize these tokens.
 type ChatTokens struct {
 	BubbleRadius                                                    float64
-	BubblePadding                                                   EdgeInsets
+	BubblePadding                                                   ggui.EdgeInsets
 	AttachmentRadius, AttachmentXSRadius                            float64
 	QuestionRadius, QuestionGap, QuestionChoiceGap, QuestionTextGap float64
-	QuestionChoicePadding                                           EdgeInsets
+	QuestionChoicePadding                                           ggui.EdgeInsets
 	QuestionInputRadius                                             float64
 }
 
 func novaChat() ChatTokens {
-	return ChatTokens{12, Insets(11, 13), 12, 8, 8, 16, 10, 2, Insets(10, 12), 8}
+	return ChatTokens{12, ggui.Insets(11, 13), 12, 8, 8, 16, 10, 2, ggui.Insets(10, 12), 8}
 }
 func rheaChat() ChatTokens {
-	return ChatTokens{24, Insets(13, 13), 16, 12, 16, 20, 12, 4, Insets(12, 16), 16}
+	return ChatTokens{24, ggui.Insets(13, 13), 16, 12, 16, 20, 12, 4, ggui.Insets(12, 16), 16}
 }
 func defaultChat() ChatTokens {
-	return ChatTokens{24, Insets(13, 13), 16, 12, 10, 16, 10, 2, Insets(10, 12), 10}
+	return ChatTokens{24, ggui.Insets(13, 13), 16, 12, 10, 16, 10, 2, ggui.Insets(10, 12), 10}
 }
 
 // ChatTokens resolves an omitted Chat field for manually constructed Themes.
@@ -107,7 +108,7 @@ func (t Theme) ChatTokens() ChatTokens {
 	return t.Chat
 }
 
-func (p ThemePreset) theme(dark bool) Theme {
+func (p Preset) theme(dark bool) Theme {
 	base := p.Base
 	if base == "" {
 		base = BaseNeutral
@@ -118,10 +119,10 @@ func (p ThemePreset) theme(dark bool) Theme {
 	if !slices.Contains(AccentColors(), p.Accent) {
 		panic("ggui: unknown theme accent " + string(p.Accent))
 	}
-	t := DefaultTheme()
+	t := Default()
 	mode := 0
 	if dark {
-		t = DarkTheme()
+		t = Dark()
 		mode = 1
 	}
 	tokens := make(map[string]color.Color)
@@ -164,7 +165,7 @@ func (p ThemePreset) theme(dark bool) Theme {
 	case "", StyleNova:
 	case StyleRhea:
 		t.RadiusSm, t.Radius, t.RadiusLg = 8, 12, 16
-		t.ButtonPad, t.FieldPad = Insets(6, 12), Insets(6, 12)
+		t.ButtonPad, t.FieldPad = ggui.Insets(6, 12), ggui.Insets(6, 12)
 		t.Chat = rheaChat()
 	default:
 		panic("ggui: unknown theme style " + string(p.Style))

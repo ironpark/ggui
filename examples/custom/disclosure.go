@@ -1,6 +1,9 @@
 package main
 
-import "github.com/ironpark/ggui"
+import (
+	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/ui"
+)
 
 // disclosure shows its body only while open. The flag is an ordinary bool,
 // not a signal, so nothing rebuilds when it flips; instead Invalidate tells
@@ -16,7 +19,7 @@ type disclosure struct {
 
 func newDisclosure(title string, body ggui.Widget) *disclosure {
 	d := &disclosure{body: body}
-	d.header = ggui.Tap(ggui.Row(ggui.Text(title), ggui.Spacer(), ggui.Caption("tap to toggle")).Space(1), d.toggle)
+	d.header = ggui.Tap(ggui.Row(ggui.Text(title), ggui.Spacer(), ui.Caption("tap to toggle")).Space(1), d.toggle)
 	return d
 }
 

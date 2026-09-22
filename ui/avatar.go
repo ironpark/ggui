@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
-
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // AvatarWidget is a round portrait with a fallback: the person's initials on
@@ -22,7 +22,7 @@ type AvatarWidget struct {
 	img        *ebiten.Image
 	side       float64
 	square     bool
-	theme      ggui.Theme
+	theme      uitheme.Theme
 	textSize   ggui.Size
 }
 
@@ -84,7 +84,7 @@ func (a *AvatarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if a.nameReader != nil {
 		a.name = a.nameReader.Get()
 	}
-	a.theme = env.Theme()
+	a.theme = uitheme.From(env)
 	size := c.Constrain(ggui.Sz(a.side, a.side))
 	a.initials.Style(a.theme.Text).Size(max(size.H*0.4, 1)).Color(a.theme.MutedFg).Align(.5)
 	a.textSize = a.initials.Layout(ggui.Loose(size), env)

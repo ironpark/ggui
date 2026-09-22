@@ -1,8 +1,10 @@
 package ui
 
-import "github.com/ironpark/ggui/internal/property"
-
-import "github.com/ironpark/ggui"
+import (
+	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/property"
+	uitheme "github.com/ironpark/ggui/ui/theme"
+)
 
 // AlertWidget is an inline notice with a title, description and optional action.
 type AlertWidget struct {
@@ -31,7 +33,7 @@ func (a *AlertWidget) Action(w ggui.Widget) *AlertWidget { a.action = w; return 
 // Layout implements ggui.Widget.
 func (a *AlertWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer a.props.Layout()()
-	t := env.Theme()
+	t := uitheme.From(env)
 	fg, border := t.Fg, t.Border
 	if a.destructive {
 		fg, border = t.Destructive, mix(t.Border, t.Destructive, .3)
