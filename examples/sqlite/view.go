@@ -92,12 +92,14 @@ func buildClient(m *model) ggui.Widget {
 		}),
 		ui.Divider(), ggui.Padding(ggui.Row(
 			ggui.Text("●").Color(t.Primary), ggui.Expanded(ggui.TextOf(m.Status).AsCaption().NoWrap()),
-			ggui.If(m.Busy, func() ggui.Widget { return ui.Button("Cancel operation", m.stop).Ghost() }).Else(func() ggui.Widget { return ggui.Caption("Drop a database anywhere  ·  ⌘/Ctrl O to open") }),
+			ggui.If(m.Busy, func() ggui.Widget { return ui.Button("Cancel operation", m.stop).Ghost() }).
+				ElseIf(m.DropHover, func() ggui.Widget { return ggui.Text("Release to open the database").Color(t.Primary).AsCaption() }).
+				Else(func() ggui.Widget { return ggui.Caption("Drop a database anywhere  ·  ⌘/Ctrl O to open") }),
 		).Gap(8).Align(ggui.AlignCenter), 8, 16),
 	).Align(ggui.AlignStretch)
 	return ggui.Pointer(ggui.Column(ggui.Expanded(body), openDialog(m), historyDialog(m), cellEditor(m), rowEditor(m),
 		ui.AlertDialog(m.ConfirmDelete, "Delete selected row?", "This permanently removes the selected row. This action cannot be undone here.").Confirm("Delete", m.delete).Destructive(),
-	).Align(ggui.AlignStretch)).OnDrop(m.acceptDrop)
+	).Align(ggui.AlignStretch)).OnDrop(m.acceptDrop).OnDropHover(m.DropHover.Set)
 }
 
 func sidebarView(m *model) ggui.Widget {
@@ -159,13 +161,20 @@ func welcomeView(m *model) ggui.Widget {
 		ggui.Row(ui.Badge("LOCAL FIRST"), ui.Badge("SQLITE")).Gap(8).Justify(ggui.JustifyCenter),
 		ggui.Text("Your database. A clearer view.").AsTitle(),
 		ggui.Caption("Browse records, inspect your schema, and write SQL in one workspace."),
-		ggui.Box(ggui.Column(
-			lucide.Icon("download").Size(30).Color(t.Primary),
-			ggui.Title("Drop a SQLite database here"),
-			ggui.Caption("Open the original file directly from your computer."),
-			ui.Button("Choose database…", m.choose).BindDisabled(m.Busy),
-			ggui.Caption(".db, .sqlite, .sqlite3 or any valid SQLite file"),
-		).Gap(16).Align(ggui.AlignCenter)).Pad(32).Border(1, t.Border).Radius(8).Fill(t.Sidebar),
+		ggui.View(m.DropHover, func(over bool) ggui.Widget {
+			// The zone is the whole window; the box lights up to say so.
+			border, fill, title := t.Border, t.Sidebar, "Drop a SQLite database here"
+			if over {
+				border, fill, title = t.Primary, t.Accent, "Release to open it"
+			}
+			return ggui.Box(ggui.Column(
+				lucide.Icon("download").Size(30).Color(t.Primary),
+				ggui.Title(title),
+				ggui.Caption("Open the original file directly from your computer."),
+				ui.Button("Choose database…", m.choose).BindDisabled(m.Busy),
+				ggui.Caption(".db, .sqlite, .sqlite3 or any valid SQLite file"),
+			).Gap(16).Align(ggui.AlignCenter)).Pad(32).Border(1, border).Radius(8).Fill(fill)
+		}),
 		ui.Checkbox(m.ReadOnly, "Open read-only"),
 		ggui.Caption("Local files · No account needed · Changes save directly to your database"),
 	).Gap(22).Align(ggui.AlignCenter)).Width(650).Pad(24))

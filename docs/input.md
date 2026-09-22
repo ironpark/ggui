@@ -129,14 +129,25 @@ app.OnDrop(func(ev ggui.DropEvent) { openAll(ev.Paths()) })
 
 A custom handler implements `DropHandler` beside `PointerHandler`; the
 region registered with `HitPointer` then receives `HandleDrop`, and returns
-false to let the drop pass. There is no drag-over event: the platform
-reports the drop itself and nothing before it, so a zone cannot highlight
-while a file hovers over it.
+false to let the drop pass.
+
+A zone can highlight while files are dragged over it: `OnDropHover(fn)`
+fires with true when a drag enters the child and false when it leaves, is
+dropped or is abandoned, so `OnDropHover(hover.Set)` drives a signal the
+zone paints from. A custom handler implements `DragHandler`: `HandleDrag`
+receives `DragOver` each frame the cursor is over the region, returning
+false to be passed over, and `DragExit` once when the drag moves off it or
+ends. A `Pointer` with `OnDrop` claims the drag even without `OnDropHover`,
+so the zone that highlights is always the one the drop reaches. Ebitengine reports only the drop, so ggui follows the drag on the
+platform's own drag session where it can, which is macOS today; elsewhere a
+zone learns of a drag when it lands, and `OnDrop` still runs.
 
 In a test, `Probe.Drop(pos, fsys)` drops the root entries of any `fs.FS`, a
 `testing/fstest.MapFS` being the easiest, and `Probe.DropPaths(pos,
 paths...)` drops real files with their paths; see
-[examples/files](../examples/files) for both.
+[examples/files](../examples/files) for both. `Probe.DragOver(pos)` drags
+files over the window without dropping them, and `Probe.DragEnd()` abandons
+the drag; either drop ends it too.
 
 ## Native file dialogs
 

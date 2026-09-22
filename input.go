@@ -127,15 +127,17 @@ type Revealer interface {
 
 // frameInput is everything the runtime read from the platform this frame.
 type frameInput struct {
-	touch bool
-	pos   Point
-	down  []MouseButton
-	up    []MouseButton
-	wheel Point
-	keys  []KeyboardKey // just pressed, plus repeats of held keys
-	text  string
-	mods  Mods
-	drop  []DroppedFile // files dropped onto the window this frame
+	touch  bool
+	pos    Point
+	down   []MouseButton
+	up     []MouseButton
+	wheel  Point
+	keys   []KeyboardKey // just pressed, plus repeats of held keys
+	text   string
+	mods   Mods
+	drop   []DroppedFile // files dropped onto the window this frame
+	drag   bool          // files are being dragged over the window
+	dragAt Point         // where, when drag is set
 }
 
 // inputState routes frameInput to the regions painted last frame. A pressed
@@ -153,6 +155,7 @@ type inputState struct {
 	pressedBtn            MouseButton
 	focused               *hitRegion
 	cursor                CursorShape // what the hovered region asked for
+	dragTarget            *hitRegion  // the region files are being dragged over
 	touchStart, touchLast Point
 	touchScroll           *hitRegion
 	touchPanning          bool
@@ -243,6 +246,7 @@ func (in *inputState) dispatch(f frameInput) {
 	in.notifyObservers(f)
 	in.updateHover(f)
 	in.updateCursor(f)
+	in.updateDrag(f)
 	in.panTouch(&f)
 	in.dispatchPointer(f)
 	if len(f.drop) > 0 {
@@ -293,6 +297,24 @@ func (in *inputState) updateHover(f frameInput) {
 		}
 	}
 	in.hovered = keep(now)
+}
+
+// updateDrag moves the drag target to the topmost region taking DragOver,
+// sending the exit to the old one first. With no drag it only sends the
+// exit, which is how a drop or an abandoned drag ends the target's hover.
+func (in *inputState) updateDrag(f frameInput) {
+	var now *hitRegion
+	if f.drag {
+		over := DragEvent{Kind: DragOver, Pos: f.dragAt}
+		now = in.topmost(func(r *hitRegion) bool {
+			h, ok := r.pointer.(DragHandler)
+			return ok && r.rect.Contains(over.Pos) && h.HandleDrag(over)
+		})
+	}
+	if in.dragTarget != nil && !sameRegion(now, in.dragTarget) {
+		in.dragTarget.pointer.(DragHandler).HandleDrag(DragEvent{Kind: DragExit, Pos: f.dragAt})
+	}
+	in.dragTarget = keep(now)
 }
 
 // updateCursor picks the shape of the topmost region asking for one.
@@ -585,18 +607,20 @@ func sameRegion(a, b *hitRegion) bool {
 // PointerWidget makes its child react to the pointer. Build one with Pointer
 // or Tap. It takes no space of its own: the child's Rect is the hit region.
 type PointerWidget struct {
-	props    property.Owner
-	child    Widget
-	cursor   CursorShape
-	onDown   func(PointerEvent)
-	onUp     func(PointerEvent)
-	onTap    func()
-	onMove   func(PointerEvent)
-	onDrag   func(PointerEvent)
-	onEnter  func()
-	onExit   func()
-	onScroll func(Point)
-	onDrop   func(DropEvent)
+	props       property.Owner
+	child       Widget
+	cursor      CursorShape
+	onDown      func(PointerEvent)
+	onUp        func(PointerEvent)
+	onTap       func()
+	onMove      func(PointerEvent)
+	onDrag      func(PointerEvent)
+	onEnter     func()
+	onExit      func()
+	onScroll    func(Point)
+	onDrop      func(DropEvent)
+	onDropHover func(bool)
+	dropHovered bool
 }
 
 // Pointer wraps child in a hit region. Attach callbacks with the On methods;
@@ -648,6 +672,37 @@ func (p *PointerWidget) OnScroll(fn func(delta Point)) *PointerWidget { p.onScro
 // which makes the child a drop zone: a drop over it goes here rather than
 // to the handlers registered with Host.OnDrop.
 func (p *PointerWidget) OnDrop(fn func(DropEvent)) *PointerWidget { p.onDrop = fn; return p }
+
+// OnDropHover fires with true when files are dragged over the child and
+// false when they leave it or are dropped, so the zone can highlight while
+// a drop would land on it; hover.Set fits it. Only a platform that reports
+// the drag delivers it, which is macOS today; see DragHandler.
+func (p *PointerWidget) OnDropHover(fn func(bool)) *PointerWidget { p.onDropHover = fn; return p }
+
+// HandleDrag implements DragHandler. A drop zone claims the drag whether or
+// not it listens to it, so that the zone which lights up is the one the
+// drop will reach.
+func (p *PointerWidget) HandleDrag(ev DragEvent) bool {
+	if p.onDrop == nil {
+		return false
+	}
+	if p.onDropHover == nil {
+		return true
+	}
+	switch ev.Kind {
+	case DragOver:
+		if !p.dropHovered {
+			p.dropHovered = true
+			p.onDropHover(true)
+		}
+	case DragExit:
+		if p.dropHovered {
+			p.dropHovered = false
+			p.onDropHover(false)
+		}
+	}
+	return true
+}
 
 // HandleDrop implements DropHandler.
 func (p *PointerWidget) HandleDrop(ev DropEvent) bool {

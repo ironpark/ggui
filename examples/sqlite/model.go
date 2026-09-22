@@ -41,6 +41,7 @@ type model struct {
 	Draft                                              *ggui.StateValue[[]draftField]
 	History                                            *ggui.StateValue[[]string]
 	OpenDialog, FilterOpen, HistoryOpen                *ggui.StateValue[bool]
+	DropHover                                          *ggui.StateValue[bool] // files are being dragged over the window
 	OpenPath                                           *ggui.StateValue[string]
 }
 
@@ -71,6 +72,7 @@ func newModel() *model {
 		ConfirmDelete: ggui.State(false),
 		Busy:          ggui.State(false),
 		Connected:     ggui.State(false),
+		DropHover:     ggui.State(false),
 		ReadOnly:      ggui.State(false),
 		Locked:        ggui.State(false),
 		Dark:          ggui.State(true),

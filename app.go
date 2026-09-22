@@ -12,6 +12,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
 	"github.com/ironpark/ggui/a11y"
+	"github.com/ironpark/ggui/internal/platform/drag"
 	"github.com/ironpark/ggui/runtime"
 )
 
@@ -57,6 +58,7 @@ type App struct {
 	touch  touchInput
 	cursor CursorShape
 	ax     a11y.Bridge
+	drags  bool // the platform's drag observer is installed
 
 	inspect      bool
 	inspectChord Chord // parsed from cfg.Inspector; Key is zero for none
@@ -309,6 +311,17 @@ func (a *App) readInput() frameInput {
 	f.text = string(ebiten.AppendInputChars(nil))
 	if fsys := ebiten.DroppedFiles(); fsys != nil {
 		f.drop = droppedFiles(fsys)
+	}
+	if !a.drags {
+		// The window's view exists once frames run, so the first frame
+		// installs the observer; the hop to the main thread happens once.
+		ebiten.RunOnMainThread(func() { a.drags = drag.Install() })
+	}
+	// The drag is in the view's points, which are logical pixels already;
+	// the cursor above is in the device pixels Layout asked for, so only it
+	// is scaled.
+	if x, y, over := drag.Position(); over {
+		f.drag, f.dragAt = true, Pt(x, y)
 	}
 	f.mods = Mods{
 		Shift: ebiten.IsKeyPressed(KeyShift),

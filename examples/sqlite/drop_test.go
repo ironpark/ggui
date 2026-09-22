@@ -106,3 +106,21 @@ func TestQueryTableQuotesIdentifier(t *testing.T) {
 		t.Fatal("query table failed", m.Error.Get())
 	}
 }
+
+func TestDragOverHighlightsTheWindow(t *testing.T) {
+	m := newModel()
+	p := newProbe(t, m)
+	p.DragOver(ggui.Pt(500, 360))
+	if !m.DropHover.Get() {
+		t.Fatal("dragging over the window did not light the drop zone")
+	}
+	p.DragEnd()
+	if m.DropHover.Get() {
+		t.Fatal("abandoning the drag left the drop zone lit")
+	}
+	p.DragOver(ggui.Pt(500, 360))
+	p.DropPaths(ggui.Pt(500, 360), filepath.Join(t.TempDir(), "missing.db"))
+	if m.DropHover.Get() {
+		t.Fatal("a drop left the drop zone lit")
+	}
+}

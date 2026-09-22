@@ -27,7 +27,9 @@ Folders, multiple files, and drops without a local path display an actionable
 error. Invalid files preserve the current connection and results. While an
 operation or row editor is active, finish/cancel it before dropping another
 file. **Open read-only** applies to the next open, including drag and drop.
-The platform reports only the completed drop, so there is no hover highlight.
+While a file is dragged over the window the welcome box and the status bar
+say so, on the platforms that report the drag (macOS today); elsewhere the
+drop itself is the first the app hears of it.
 
 ## Workflow
 

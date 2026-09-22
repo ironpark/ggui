@@ -279,6 +279,15 @@ func (p *Probe) Type(mods Mods, keys ...KeyboardKey) {
 // without an IME would.
 func (p *Probe) Text(s string) { p.dispatch(frameInput{text: s}) }
 
+// DragOver drags files over the window at pos without dropping them, as
+// the desktop reports while a drag is in progress; the zone under pos hears
+// of it through OnDropHover. DragEnd, Drop or DropPaths ends it.
+func (p *Probe) DragOver(pos Point) { p.dispatch(frameInput{pos: pos, drag: true, dragAt: pos}) }
+
+// DragEnd abandons a drag started with DragOver, as letting go outside the
+// window does.
+func (p *Probe) DragEnd() { p.dispatch(frameInput{pos: p.pointer}) }
+
 // Drop drops the root entries of fsys onto the window at pos, as the desktop
 // would. A testing/fstest.MapFS is the easiest fsys to drop; the files it
 // carries have no Path and are read through DroppedFile.Open.

@@ -12,9 +12,11 @@ import (
 // the cursor that accepts drops, and otherwise to the handlers registered
 // with Host.OnDrop.
 //
-// There is no drag-over feedback: the platform layer ggui renders with
-// reports the drop itself and nothing before it, so a drop zone cannot
-// highlight while a file hovers over it.
+// While files are still being dragged, the zone under the cursor hears of
+// it through DragHandler, so that it can highlight. Ebitengine reports only
+// the drop, so ggui follows the drag on the platform's own drag session
+// where it can: macOS today. Elsewhere a zone learns of a drag when it
+// lands, and its drop handler still runs.
 
 // DroppedFile is one file or directory that was dropped onto the window.
 type DroppedFile struct {
@@ -63,6 +65,33 @@ func (ev DropEvent) Paths() []string {
 // to what is beneath, and then to the host's handlers.
 type DropHandler interface {
 	HandleDrop(DropEvent) bool
+}
+
+// DragKind is what a DragEvent reports: files over the zone, or gone.
+type DragKind uint8
+
+const (
+	// DragOver is sent every frame files are dragged over the zone.
+	DragOver DragKind = iota
+	// DragExit is sent once when they leave it, or are dropped or let go.
+	DragExit
+)
+
+// DragEvent is files being dragged over the window, before any drop.
+type DragEvent struct {
+	Kind DragKind
+	Pos  Point // in window coordinates
+}
+
+// DragHandler is a DropHandler that also follows the drag before the drop.
+// Each frame files are over the window, the topmost region under the cursor
+// whose handler returns true from HandleDrag for a DragOver is the drag's
+// target; it receives a DragExit when the cursor moves off it or the drag
+// ends. A handler that returns false for DragOver is passed over. A drop
+// zone should claim the drag whether or not it shows it, as PointerWidget
+// does, so that the zone which highlights is the one the drop reaches.
+type DragHandler interface {
+	HandleDrag(DragEvent) bool
 }
 
 // absPather is what a dropped entry implements where the platform knows

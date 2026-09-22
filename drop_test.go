@@ -132,3 +132,40 @@ func TestEmptyDropIsNotDispatched(t *testing.T) {
 		t.Fatal("a drop of nothing reached the host handler")
 	}
 }
+
+func TestDragHoverFollowsTheZoneUnderTheCursor(t *testing.T) {
+	var top, bottom []bool
+	build := func() Widget {
+		return Column(
+			Pointer(Box(Text("top")).Size(200, 100)).OnDrop(func(DropEvent) {}).OnDropHover(func(over bool) { top = append(top, over) }),
+			Pointer(Box(Text("bottom")).Size(200, 100)).OnDrop(func(DropEvent) {}).OnDropHover(func(over bool) { bottom = append(bottom, over) }),
+			Pointer(Box(Text("plain")).Size(200, 100)).OnDrop(func(DropEvent) {}),
+		)
+	}
+	p := ProbeBuilder(build, Sz(400, 400))
+	defer p.Close()
+
+	p.DragOver(Pt(50, 50))
+	p.DragOver(Pt(60, 60))
+	if len(top) != 1 || !top[0] {
+		t.Fatalf("top zone heard %v after two frames over it, want one enter", top)
+	}
+	p.DragOver(Pt(50, 150))
+	if len(top) != 2 || top[1] || len(bottom) != 1 || !bottom[0] {
+		t.Fatalf("moving to the bottom zone: top heard %v, bottom heard %v", top, bottom)
+	}
+	p.DragOver(Pt(50, 250))
+	if len(bottom) != 2 || bottom[1] {
+		t.Fatalf("moving over a zone without OnDropHover: bottom heard %v, want an exit", bottom)
+	}
+	p.DragOver(Pt(50, 50))
+	p.Drop(Pt(50, 50), fstest.MapFS{"a.txt": {Data: []byte("hi")}})
+	if len(top) != 4 || !top[2] || top[3] {
+		t.Fatalf("a drop should end the hover: top heard %v", top)
+	}
+	p.DragOver(Pt(50, 50))
+	p.DragEnd()
+	if len(top) != 6 || top[5] {
+		t.Fatalf("an abandoned drag should end the hover: top heard %v", top)
+	}
+}
