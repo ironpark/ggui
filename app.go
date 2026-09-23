@@ -81,6 +81,7 @@ func New(cfg Config, build Builder) *App {
 	a.wake = a.requestFrame
 	a.build = build
 	a.dialogs = a.nativeFilePicker()
+	a.clipboard = runtime.NativeClipboard()
 	if cfg.Inspector != "" {
 		// A chord rather than a KeyboardKey, whose zero value is KeyA and
 		// would have made "Inspector: ggui.KeyA" mean none.
@@ -311,6 +312,16 @@ func (a *App) SetDialogs(p runtime.FilePicker) *App {
 		p = a.nativeFilePicker()
 	}
 	a.dialogs = p
+	return a
+}
+
+// SetClipboard replaces the clipboard text fields cut, copy and paste
+// with. A nil c restores the platform's.
+func (a *App) SetClipboard(c runtime.Clipboard) *App {
+	if c == nil {
+		c = runtime.NativeClipboard()
+	}
+	a.clipboard = c
 	return a
 }
 

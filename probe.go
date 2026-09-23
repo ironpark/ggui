@@ -81,6 +81,7 @@ func ProbeBuilder(build Builder, size Size) *Probe {
 	p := &Probe{size: size}
 	p.build = build
 	p.dialogs = &runtime.StubFilePicker{}
+	p.clipboard = &runtime.MemoryClipboard{}
 	return p
 }
 

@@ -162,9 +162,7 @@ func TestWorkspaceSnapshotsAndSummary(t *testing.T) {
 // Native text fields receive IME commits; paste exercises that editor path
 // without touching the system clipboard.
 func paste(p *ggui.Probe, text string) {
-	clipboard := &ggui.MemoryClipboard{}
-	clipboard.Write(text)
-	ggui.SetClipboard(clipboard)
+	p.Clipboard().Write(text)
 	p.Type(ggui.Mods{Meta: true}, ggui.KeyV)
 }
 

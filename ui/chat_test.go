@@ -245,9 +245,7 @@ func TestQuestionnaireValidationSkipSubmissionAndReset(t *testing.T) {
 		t.Fatal("submitted unanswered last step")
 	}
 	p.Tap("Context")
-	clip := &ggui.MemoryClipboard{}
-	clip.Write("A useful answer")
-	ggui.SetClipboard(clip)
+	p.Clipboard().Write("A useful answer")
 	p.Type(ggui.Mods{Meta: true}, ggui.KeyV)
 	p.Tap("Submit")
 	if submits != 1 {
@@ -311,9 +309,7 @@ func TestQuestionnaireFreeformDefaultsAndExternalErrors(t *testing.T) {
 		t.Fatal("host error bypassed")
 	}
 	p.Tap("Custom")
-	clip := &ggui.MemoryClipboard{}
-	clip.Write("Custom answer")
-	ggui.SetClipboard(clip)
+	p.Clipboard().Write("Custom answer")
 	p.Type(ggui.Mods{Meta: true}, ggui.KeyV)
 	if a := ggui.Untrack(answers.Get)["one"]; len(a.Values) != 0 || a.Text != "Custom answer" {
 		t.Fatal("single freeform did not replace fixed choice", a)

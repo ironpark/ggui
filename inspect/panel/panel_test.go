@@ -396,11 +396,8 @@ func TestPanelArrowNavigationRevealsPinnedRows(t *testing.T) {
 }
 
 func TestPanelCopyAndClose(t *testing.T) {
-	old := ggui.CurrentClipboard()
-	defer ggui.SetClipboard(old)
-	mem := &ggui.MemoryClipboard{}
-	ggui.SetClipboard(mem)
 	h := newHarness(t, ggui.Box(ggui.Text("Example")).Pad(12), ggui.Sz(1200, 800))
+	mem := h.p.Clipboard()
 	in := View{dock: ggui.InspectorBottom}
 	in.selectEntry(h.fr, 0)
 	in.paint(h.dst, h.fr)
@@ -453,12 +450,9 @@ func TestPanelResetReleasesWidgetReferences(t *testing.T) {
 }
 
 func TestPanelCopyResolvesNewSelectionWithoutAnotherPaint(t *testing.T) {
-	old := ggui.CurrentClipboard()
-	defer ggui.SetClipboard(old)
-	mem := &ggui.MemoryClipboard{}
-	ggui.SetClipboard(mem)
 	one, two := ggui.Box(ggui.Text("one")).Pad(11), ggui.Box(ggui.Text("two")).Pad(22)
 	h := newHarness(t, ggui.Column(one, two), ggui.Sz(800, 600))
+	mem := h.p.Clipboard()
 	var in View
 	in.selectEntry(h.fr, 1)
 	in.paint(h.dst, h.fr)

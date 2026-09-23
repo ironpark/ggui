@@ -29,6 +29,9 @@ type Host interface {
 	// Dialogs opens the file dialogs: the platform's under an App, a
 	// runtime.StubFilePicker under a Probe.
 	Dialogs() runtime.FilePicker
+	// Clipboard holds the text cut, copy and paste move: the system's under
+	// an App, a runtime.MemoryClipboard of the probe's own under a Probe.
+	Clipboard() runtime.Clipboard
 	// Perform carries out an accessibility action on a node.
 	Perform(id NodeID, act Action)
 	// Announce queues text for assistive technology to speak.

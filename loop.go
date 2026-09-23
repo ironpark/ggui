@@ -71,6 +71,11 @@ func cycle() error {
 // runtime.StubFilePicker under a Probe, or what App.SetDialogs installed.
 func (l *frameLoop) Dialogs() runtime.FilePicker { return l.dialogs }
 
+// Clipboard is the host's clipboard: the system's under an App, a
+// runtime.MemoryClipboard of its own under a Probe, or what
+// App.SetClipboard installed.
+func (l *frameLoop) Clipboard() runtime.Clipboard { return l.clipboard }
+
 // frameLoop is the part of a frame loop App and Probe share: the root owner
 // the tree is built under, the posted work, and the record of the last
 // layout, which lets a still frame skip layout.
@@ -93,7 +98,8 @@ type frameLoop struct {
 
 	notices []Announcement // queued by Announce, drained by the bridge
 
-	dialogs runtime.FilePicker // the host's file dialogs; see Host.Dialogs
+	dialogs   runtime.FilePicker // the host's file dialogs; see Host.Dialogs
+	clipboard runtime.Clipboard  // the host's clipboard; see Host.Clipboard
 
 	// The last frame's finished accessibility tree. It is published at the
 	// end of a frame and read from anywhere, including a thread that is not

@@ -121,6 +121,7 @@ those guides as historical measurements; rerun them on your target hardware.
 | UI controls | [ui/](../ui/) |
 | Text editing and fonts | [editor.go](../editor.go), [font.go](../font.go), [internal/textinput/](../internal/textinput/) |
 | Input and shortcuts | [input.go](../input.go), [chord.go](../chord.go), [clipboard.go](../clipboard.go) |
+| Platform services | [runtime/](../runtime/) (file dialogs and the clipboard, reached through `Host`) |
 | Accessibility and semantics | [a11y.go](../a11y.go), [a11y_darwin.go](../a11y_darwin.go), [semantics.go](../semantics.go) |
 | Styling and animation | [style.go](../style.go), [anim.go](../anim.go), [transition.go](../transition.go) — see [Styling and themes](styling.md) |
 | Overlays and images | [popup.go](../popup.go), [image.go](../image.go) |

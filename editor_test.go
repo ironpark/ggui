@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/runtime"
 	"testing"
 	"time"
 )
@@ -195,10 +196,12 @@ func TestTextInputFollowsExternalWrites(t *testing.T) {
 }
 
 func TestTextInputSubmitAndClipboard(t *testing.T) {
-	prev := currentClipboard()
-	defer SetClipboard(prev)
-	clip := &MemoryClipboard{}
-	SetClipboard(clip)
+	// No Probe runs these frames, so stand in for the loop whose
+	// clipboard the editor reaches.
+	clip := &runtime.MemoryClipboard{}
+	loop := &frameLoop{clipboard: clip}
+	running.Store(loop)
+	defer running.CompareAndSwap(loop, nil)
 
 	value := State("copy me")
 	var submitted []string

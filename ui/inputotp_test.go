@@ -15,14 +15,12 @@ func otpCmd() ggui.Mods {
 	return ggui.Mods{Ctrl: true}
 }
 func TestInputOTPPasteSelectionUndo(t *testing.T) {
-	clip := &ggui.MemoryClipboard{}
-	ggui.SetClipboard(clip)
-	defer ggui.SetClipboard(&ggui.MemoryClipboard{})
 	value := ggui.State("")
 	completed, changed := 0, 0
 	o := InputOTP(value, 6).Groups(3, 3).OnChange(func(string) { changed++ }).OnComplete(func(string) { completed++ })
 	p := ggui.NewProbe(o, ggui.Sz(320, 80))
 	defer p.Close()
+	clip := p.Clipboard()
 	p.Click(ggui.Pt(15, 16))
 	clip.Write("12-34 56extra7")
 	p.Type(otpCmd(), ggui.KeyV)

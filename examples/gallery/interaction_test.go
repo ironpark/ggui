@@ -82,9 +82,7 @@ func TestGalleryRealInteractions(t *testing.T) {
 // The native editor takes text commits through its IME; test paste through
 // the same editing path without reading or writing the system clipboard.
 func pasteText(p *ggui.Probe, text string) {
-	clip := &ggui.MemoryClipboard{}
-	clip.Write(text)
-	ggui.SetClipboard(clip)
+	p.Clipboard().Write(text)
 	p.Type(ggui.Mods{Meta: true}, ggui.KeyV)
 }
 

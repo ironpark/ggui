@@ -1,7 +1,7 @@
 // Package runtime is the platform beneath a ggui app: the services an
 // application asks of the desktop it runs on rather than of its own
-// window. Today that is the native file dialog; what belongs here is
-// anything whose answer comes from the operating system.
+// window. Today that is the native file dialogs and the clipboard; what
+// belongs here is anything whose answer comes from the operating system.
 //
 // Every dialog is modal and blocks until the user picks or cancels. On
 // macOS the panel is a sheet attached to the app's window; on Windows it
@@ -12,7 +12,9 @@
 //
 // A dialog is reached through the Host: App.Dialogs is the platform's
 // picker, and Probe.Dialogs a StubFilePicker, so code written against Host
-// runs under a window and under a test alike. A dialog needs a running
+// runs under a window and under a test alike. The clipboard is too:
+// App.Clipboard is the system's, and each Probe has a MemoryClipboard of
+// its own, so a test never touches the user's clipboard. A dialog needs a running
 // App: it is asked for from a handler, a shortcut or posted work, not
 // before Run.
 package runtime
