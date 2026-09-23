@@ -156,8 +156,7 @@ func (p *Probe) Frame() Size {
 	if p.closed || p.root == nil {
 		return Size{}
 	}
-	c.Paint(p.root, Rect{Size: p.rootSize})
-	c.paintOverlays()
+	p.paintTree(c)
 	p.in.regions = c.hits
 	p.in.observers = c.inputObservers
 	p.in.applyFocusRequest(c)

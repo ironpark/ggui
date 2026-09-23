@@ -511,8 +511,7 @@ func (a *App) draw(screen *ggfx.Image, scale float64) {
 	if a.cfg.Background == nil {
 		screen.Fill(rootEnv().Background())
 	}
-	a.canvas.Paint(a.root, Rect{Size: a.rootSize})
-	a.canvas.paintOverlays()
+	a.paintTree(&a.canvas)
 	a.input.regions = a.canvas.hits
 	a.input.observers = a.canvas.inputObservers
 	a.input.applyFocusRequest(&a.canvas)

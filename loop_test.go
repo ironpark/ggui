@@ -2,10 +2,12 @@ package ggui
 
 import (
 	"errors"
+	"image/color"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
 )
 
@@ -240,5 +242,32 @@ func TestWorkPostedAfterCloseIsDropped(t *testing.T) {
 	post(func() { ran = true })
 	if ran {
 		t.Fatal("work posted to a closed app ran immediately")
+	}
+}
+
+// stamp paints its label twice in different colors, as a shimmer does.
+type stamp struct{ label *TextWidget }
+
+func (s *stamp) Layout(c Constraints, env Env) Size { return s.label.Layout(c, env) }
+func (s *stamp) Paint(dst *Canvas, r Rect) {
+	s.label.Color(color.White)
+	dst.Paint(s.label, r)
+	s.label.Color(color.Black)
+	dst.Paint(s.label, r)
+}
+
+func TestPaintTimeWritesScheduleNoLayout(t *testing.T) {
+	p := NewProbe(&stamp{label: Text("hi")}, Sz(100, 20))
+	defer p.Close()
+	p.Frame()
+	p.Frame()
+	// Count only property writes that schedule a layout: LayoutGen is
+	// global, and animations left by other tests move it too.
+	prev, scheduled := property.OnChange, 0
+	property.OnChange = func() { scheduled++; prev() }
+	defer func() { property.OnChange = prev }()
+	p.Frame()
+	if scheduled != 0 {
+		t.Fatalf("configuring a child while painting scheduled %d layouts", scheduled)
 	}
 }

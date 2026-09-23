@@ -280,6 +280,17 @@ func (r *frameLoop) needsLayout(logical Size) bool {
 	return true
 }
 
+// paintTree paints the laid-out tree and the overlays it queued. A widget
+// that configures a child it paints inline, such as a Text stamped in
+// several colors, changes only what it draws now: as during layout, the
+// write dirties the child's cached measurement but schedules no layout.
+// Scheduling one would lay the whole tree out again on every frame.
+func (r *frameLoop) paintTree(c *Canvas) {
+	defer property.EnterLayout()()
+	c.Paint(r.root, Rect{Size: r.rootSize})
+	c.paintOverlays()
+}
+
 // settle completes structural work, including mounts discovered by layout,
 // before running user effects. Both App and Probe use this exact ordering.
 func (r *frameLoop) settle(size Size) error {
