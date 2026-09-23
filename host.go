@@ -29,6 +29,9 @@ type Host interface {
 	// Dialogs opens the file dialogs: the platform's under an App, a
 	// runtime.StubFilePicker under a Probe.
 	Dialogs() runtime.FilePicker
+	// OnCloseRequest registers fn to decide whether the window closes when
+	// the user asks to close it; see App.OnCloseRequest.
+	OnCloseRequest(fn func() bool)
 	// Clipboard holds the text cut, copy and paste move: the system's under
 	// an App, a runtime.MemoryClipboard of the probe's own under a Probe.
 	Clipboard() runtime.Clipboard

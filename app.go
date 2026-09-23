@@ -229,6 +229,17 @@ func (a *App) HandleEvent(ev ggfx.Event) error {
 		a.pending.drop = append(a.pending.drop, droppedFiles(ev.Files)...)
 		a.requestFrame()
 	case ggfx.CloseEvent:
+		if len(a.closeRequests) > 0 {
+			// The handlers decide in a frame, where they may put up a
+			// question; the window stays until they agree or Close is called.
+			ev.KeepOpen()
+			a.post(func() {
+				if a.closeAllowed() {
+					a.Close()
+				}
+			})
+			break
+		}
 		// The window closes after this event. Dispose the tree and detach
 		// the native hooks first, while the window still exists.
 		a.Close()

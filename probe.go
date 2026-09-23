@@ -106,6 +106,17 @@ func (p *Probe) Close() {
 	}
 }
 
+// RequestClose asks to close as a window's close button does: the
+// OnCloseRequest handlers run now, and the probe closes if they all agree.
+// It reports whether it closed.
+func (p *Probe) RequestClose() bool {
+	if p.closed || !p.closeAllowed() {
+		return false
+	}
+	p.Close()
+	return true
+}
+
 // Resize changes the viewport; the next frame lays the tree out again.
 func (p *Probe) Resize(size Size) { p.size = size }
 

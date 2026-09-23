@@ -271,3 +271,34 @@ func TestPaintTimeWritesScheduleNoLayout(t *testing.T) {
 		t.Fatalf("configuring a child while painting scheduled %d layouts", scheduled)
 	}
 }
+
+func TestCloseRequestCanKeepTheWindowOpen(t *testing.T) {
+	asking := State(false)
+	p := NewProbe(Text("doc"), Sz(100, 20))
+	defer p.Close()
+	var order []string
+	p.OnCloseRequest(func() bool { order = append(order, "save"); asking.Set(true); return false })
+	p.OnCloseRequest(func() bool { order = append(order, "second"); return true })
+	p.Frame()
+	if p.RequestClose() {
+		t.Fatal("closed although a handler kept the window open")
+	}
+	if !Untrack(asking.Get) || len(order) != 1 {
+		t.Fatalf("handlers ran %v; the first false must stop the rest", order)
+	}
+	p.Frame() // still usable: the question is up
+	p.Close()
+	if p.RequestClose() {
+		t.Fatal("a closed probe closed again")
+	}
+}
+
+func TestCloseRequestWithAgreeingHandlersCloses(t *testing.T) {
+	p := NewProbe(Text("doc"), Sz(100, 20))
+	defer p.Close()
+	p.OnCloseRequest(func() bool { return true })
+	p.Frame()
+	if !p.RequestClose() {
+		t.Fatal("handlers agreed but the probe stayed open")
+	}
+}

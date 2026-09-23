@@ -71,6 +71,28 @@ func cycle() error {
 // runtime.StubFilePicker under a Probe, or what App.SetDialogs installed.
 func (l *frameLoop) Dialogs() runtime.FilePicker { return l.dialogs }
 
+// OnCloseRequest registers fn to decide whether the window closes when the
+// user asks to close it: its close button, or the platform's quit command.
+// fn runs on the UI thread at the start of the next frame. Return true to
+// let the window close, or false to keep it open, for instance to ask
+// "Discard unsaved changes?" and call Close once the user confirms; Close
+// does not ask again. The handlers run in order and the first false stops
+// the rest, so two of them never both put up a question. A browser tab
+// does not report the request, so there the window closes unasked.
+func (l *frameLoop) OnCloseRequest(fn func() bool) {
+	l.closeRequests = append(l.closeRequests, fn)
+}
+
+// closeAllowed runs the close handlers and reports whether they all agree.
+func (l *frameLoop) closeAllowed() bool {
+	for _, fn := range l.closeRequests {
+		if !fn() {
+			return false
+		}
+	}
+	return true
+}
+
 // Clipboard is the host's clipboard: the system's under an App, a
 // runtime.MemoryClipboard of its own under a Probe, or what
 // App.SetClipboard installed.
@@ -91,6 +113,8 @@ type frameLoop struct {
 	posted []func()
 	wake   func() // asks the host for a frame; nil under a Probe
 	frame  []func() // OnFrame handlers, run at the start of every frame
+
+	closeRequests []func() bool // OnCloseRequest handlers, in order
 
 	laidSize Size
 	laidGen  uint64
