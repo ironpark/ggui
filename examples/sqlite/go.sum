@@ -18,10 +18,10 @@ github.com/hajimehoshi/bitmapfont/v4 v4.2.0 h1:bpeN2ph7aHSuX7yoWFkLPo4ado9K+E+Dq
 github.com/hajimehoshi/bitmapfont/v4 v4.2.0/go.mod h1:AIeoQek1nxUmDczXNtFEYWTQ4ArINijutPD729q/NeE=
 github.com/hashicorp/golang-lru/v2 v2.0.7 h1:a+bsQ5rvGLjzHuww6tVxozPZFVghXaHOwFs4luLUK2k=
 github.com/hashicorp/golang-lru/v2 v2.0.7/go.mod h1:QeFd9opnmA6QUJc5vARoKUSoFhyfM2/ZepoAG6RGpeM=
-github.com/ironpark/ggfx v0.0.0-20260923070929-809d6bbc46b1 h1:vvhtt3+A7xTNn07QWPUpkdbcJVauHBGUf8sR8nPaII0=
-github.com/ironpark/ggfx v0.0.0-20260923070929-809d6bbc46b1/go.mod h1:lp/zmzxrCDxnZSl6aBO0Wt96v+Lg+G9hxqMA1BPpwJQ=
-github.com/ironpark/ggui v0.0.0-20260923134647-33389e064edd h1:m3CnNeH5gO7Xwctuw14X5+cPFxrFy8RyQ1fNRKEUJ6I=
-github.com/ironpark/ggui v0.0.0-20260923134647-33389e064edd/go.mod h1:ICgPT9BHZbI/skG/FkBkwA2lKEwrHbzgXturmdSL4OQ=
+github.com/ironpark/ggfx v0.0.0-20260923140109-38f61994442c h1:TAkwYL98825yDrPCh0XXleYHAAWGLwCOEDzh2a5lv68=
+github.com/ironpark/ggfx v0.0.0-20260923140109-38f61994442c/go.mod h1:lp/zmzxrCDxnZSl6aBO0Wt96v+Lg+G9hxqMA1BPpwJQ=
+github.com/ironpark/ggui v0.0.0-20260923140253-87ce44364883 h1:Nhr5SdC6Iqgg40wJN+MJB5nIM0OGShGAYeqijao1oYo=
+github.com/ironpark/ggui v0.0.0-20260923140253-87ce44364883/go.mod h1:wEowEQlyvZ7GOR/vE5auuagnsM58b4w29R115jgEi+o=
 github.com/mattn/go-isatty v0.0.24 h1:tGZZoVgT/KiqK1c8ocVLeDS8BSWMRd47J3Lbz7vsReI=
 github.com/mattn/go-isatty v0.0.24/go.mod h1:nMCL3Zebbrt45jsMDgnfIwz6ydEQApk5oEI3HqDio6A=
 github.com/ncruces/go-strftime v1.0.0 h1:HMFp8mLCTPp341M/ZnA4qaf7ZlsbTc+miZjCLOFAw7w=
