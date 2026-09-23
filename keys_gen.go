@@ -4,7 +4,7 @@ package ggui
 
 import "github.com/ironpark/ggfx"
 
-// The keys Ebitengine reports, by their US layout names. A key is a
+// The keys ggfx reports, by their US layout names. A key is a
 // physical place on the keyboard, not the character it produces.
 const (
 	KeyA              KeyboardKey = ggfx.KeyA

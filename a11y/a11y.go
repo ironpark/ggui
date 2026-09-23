@@ -17,7 +17,7 @@ import (
 // and does nothing but make objects and hand them notifications.
 //
 // Two rules shape everything here. The first is that queries arrive on the
-// operating system's main thread, synchronously, while Ebitengine runs
+// operating system's main thread, synchronously, while ggfx runs
 // frames on a goroutine of its own, so an answer must come from the last
 // published SemTree and never from work posted to the frame. The second is
 // that an assistive technology holds onto the objects it is given and

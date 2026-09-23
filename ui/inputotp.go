@@ -193,12 +193,12 @@ func (o *InputOTPWidget) Layout(c ggui.Constraints, e ggui.Env) ggui.Size {
 	defer o.props.Layout()()
 	o.Sync()
 	o.env, o.theme, o.reduced = e, uitheme.From(e), e.ReducedMotion()
-	inherited, _ := e.Get(ggui.InputDisabled)
+	inherited, _ := e.Get(ggui.InputDisabledKey)
 	o.disabled = o.IsInert() || inherited
 	if o.invalidWhen != nil {
 		o.invalid = o.invalidWhen.Get()
 	}
-	o.input.Layout(c, e.With(ggui.InputDisabled, o.disabled))
+	o.input.Layout(c, e.With(ggui.InputDisabledKey, o.disabled))
 	o.cells = o.cells[:0]
 	o.groups = o.groups[:0]
 	o.separators = o.separators[:0]

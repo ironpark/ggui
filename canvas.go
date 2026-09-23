@@ -440,7 +440,7 @@ func (c *Canvas) visiblePaintBounds(r Rect, extra float64) bool {
 // FillRect fills the logical Rect r with col.
 //
 // A rectangle is drawn without anti-aliasing, which its axis-aligned edges
-// have no use for. That matters more than it sounds: ebiten draws an
+// have no use for. That matters more than it sounds: ggfx draws an
 // anti-aliased shape by rendering it eight times into an offscreen stencil
 // buffer the size of the shape and compositing the result, which breaks the
 // batch both ways. A plain rectangle is instead one batched image, and most

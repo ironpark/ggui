@@ -13,7 +13,7 @@ import (
 // with Host.OnDrop.
 //
 // While files are still being dragged, the zone under the cursor hears of
-// it through DragHandler, so that it can highlight. Ebitengine reports only
+// it through DragHandler, so that it can highlight. ggfx reports only
 // the drop, so ggui follows the drag on the platform's own drag session
 // where it can: macOS today. Elsewhere a zone learns of a drag when it
 // lands, and its drop handler still runs.
@@ -95,7 +95,7 @@ type DragHandler interface {
 }
 
 // absPather is what a dropped entry implements where the platform knows
-// the file's real path; Ebitengine names it AbsPather.
+// the file's real path; ggfx names it AbsPather.
 type absPather interface {
 	AbsPath() string
 }

@@ -54,7 +54,7 @@ its content, including disabled-state color.
 
 Bundled assets are loaded and parsed on first use. Each shared SVG caches up to
 eight device-pixel sizes, capped at 1024 pixels; colors and rotations reuse these
-rasters. CPU parsing can happen before a window exists; drawing uses Ebitengine
+rasters. CPU parsing can happen before a window exists; drawing uses ggfx
 on the UI thread. Embedding includes every SVG in the directory in the binary,
 so this package bundles only a control-oriented subset, not the entire catalog.
 Unknown explicit names return an error from `lucide.Asset` and panic from

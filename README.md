@@ -6,7 +6,7 @@
 
 **No CGO. No WebView. Yes, GPU.**
 
-Powered by [Ebitengine](https://ebiten.org).
+Powered by [ggfx](https://github.com/ironpark/ggfx), a fork of [Ebitengine](https://ebiten.org).
 
 [Demos](#demos) · [Quick start](#quick-start) · [Examples](#examples) · [Guide](docs/README.md) · [Accessibility](#accessibility) · [Development](#development)
 
@@ -16,7 +16,7 @@ Powered by [Ebitengine](https://ebiten.org).
 
 ggui is a cross-platform GUI framework for Go. It brings together Flutter-inspired
 widget trees and layout, Svelte-style reactivity, and GPU rendering through
-Ebitengine. Build your interface in Go with composable widgets, reactive state,
+ggfx. Build your interface in Go with composable widgets, reactive state,
 and controls that bind directly to your data.
 
 > [!IMPORTANT]
@@ -58,8 +58,8 @@ go get github.com/ironpark/ggui
 ```
 
 **Requires Go 1.27+** for generic methods in the reactive API.
-ggui itself does not use CGO or a WebView. Ebitengine's platform dependencies
-still apply, including Xcode command line tools on macOS and X11/ALSA development
+ggui itself does not use CGO or a WebView. ggfx's platform dependencies,
+inherited from Ebitengine, still apply, including Xcode command line tools on macOS and X11/ALSA development
 headers on Linux; the no-CGO claim does not cover every platform dependency.
 
 ### Build a counter

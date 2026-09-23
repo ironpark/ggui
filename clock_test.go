@@ -27,8 +27,8 @@ func TestFrameClockCapsALongPause(t *testing.T) {
 	frame.reset()
 	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	frame.begin(t0)
-	// The window was hidden for five seconds: Ebiten called neither Update
-	// nor Draw, and the frame that comes back must not jump.
+	// The window was hidden for five seconds with no frame, and the frame
+	// that comes back must not jump.
 	if got := frame.begin(t0.Add(5 * time.Second)); got != t0.Add(maxFrameStep) {
 		t.Fatalf("after a pause the clock is at %v, want %v", got, t0.Add(maxFrameStep))
 	}

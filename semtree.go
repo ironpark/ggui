@@ -27,9 +27,9 @@ type (
 // A platform accessibility API is a synchronous pull from a thread that is
 // not the one ggui paints on: on every platform the assistive technology
 // asks the process for the tree and blocks until it answers, and it asks
-// from the main thread while Ebitengine runs frames on a goroutine of its
-// own. Reading the live frame from there would be a race twice over, since
-// App.Draw swaps and reuses its buffers every frame. So every frame ends by
+// from the main thread while ggfx runs frames on a goroutine of its own.
+// Reading the live frame from there would be a race twice over, since
+// painting swaps and reuses its buffers every frame. So every frame ends by
 // publishing a tree that is finished: never written again after publication,
 // and handed out through an atomic pointer. A reader may keep one as long
 // as it likes.

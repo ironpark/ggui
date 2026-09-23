@@ -8,7 +8,7 @@
 package geom
 
 // Number is any built-in numeric type. The geometry constructors take one so
-// that pixel counts from Ebitengine (int) and layout math (float64) can be
+// that pixel counts from ggfx (int) and layout math (float64) can be
 // mixed without a cast at every call site.
 type Number interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 |

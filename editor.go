@@ -489,7 +489,7 @@ func (t *TextInputWidget) BindName(r Readable[string]) *TextInputWidget {
 	return t
 }
 
-// IsDisabled reports the effective state, including InputDisabled inherited at
+// IsDisabled reports the effective state, including InputDisabledKey inherited at
 // the most recent Layout. It does not subscribe to the disabled binding.
 func (t *TextInputWidget) IsDisabled() bool { return t.IsInert() || t.inheritedDisabled }
 
@@ -724,7 +724,7 @@ func (t *TextInputWidget) linesHeight(n int) float64 {
 func (t *TextInputWidget) Layout(c Constraints, env Env) Size {
 	defer t.props.Layout()()
 	t.Sync()
-	t.inheritedDisabled, _ = env.Get(InputDisabled)
+	t.inheritedDisabled, _ = env.Get(InputDisabledKey)
 	t.resolved = env.Text().Merge(t.style).resolved()
 	t.resolved.Size *= env.TextScale()
 	t.cache, _ = env.Get(cacheOwner)
@@ -1002,8 +1002,8 @@ var newIME = func(t *TextInputWidget) ime {
 	return c
 }
 
-// composerIME drives textinput.Composer, but only inside a running game:
-// the package panics when used before Ebitengine has chosen its backend.
+// composerIME drives textinput.Composer, but only inside a running app:
+// the package panics when used before ggfx has chosen its backend.
 type composerIME struct {
 	textinput.Composer
 }

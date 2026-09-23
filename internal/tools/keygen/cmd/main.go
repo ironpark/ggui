@@ -1,5 +1,5 @@
 // Command keygen writes ggui's key constant file. Run it with go generate
-// after updating Ebitengine.
+// after updating ggfx.
 package main
 
 import (

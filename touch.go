@@ -33,7 +33,7 @@ func (t *touchInput) apply(f *frameInput, ids []ggfx.TouchID, position func(ggfx
 	if slices.Contains(ids, t.id) {
 		t.pos = position(t.id)
 	} else {
-		// Ebitengine no longer exposes the position of a released touch.
+		// ggfx no longer exposes the position of a released touch.
 		// Keep its last position instead of releasing at the mouse cursor.
 		f.up = []MouseButton{MouseButtonLeft}
 		t.active, t.waiting = false, len(ids) != 0

@@ -142,7 +142,7 @@ built on it. `ui.Tooltip` and `ui.HoverCard` paint through the same
 
 ## Images
 
-`Image(img)` draws an `*ebiten.Image` at its natural size, shrinking to
+`Image(img)` draws a `*ggfx.Image` at its natural size, shrinking to
 the room it gets with its aspect ratio kept; `.Size`, `.Width` or `.Height`
 fix it, and `.Fit(FitContain | FitCover | FitFill | FitNone)` says how it
 sits in a box of another shape. `DecodeImage(bytes)` and

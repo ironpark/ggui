@@ -31,6 +31,9 @@ Choose the smallest reactive boundary that expresses the change:
 | Run setup once and own local work | `Component` |
 | Replace a subtree when data changes | `View` or `Reactive` |
 | Switch branches or reset an identity | `If` or `Key` |
+| Animate a branch out before removing it | `Presence` |
+| Build rows once from a plain slice | `List`, or `Children` for another container |
+| Follow a list whose rows have no identity | `Each` (rows reused by position) |
 | Preserve rows through collection edits | `EachKeyed` |
 | Load asynchronously and render its status | `Resource` and `Await` |
 | Synchronize with an external system | An owned `Effect` or `Watch` with cleanup |

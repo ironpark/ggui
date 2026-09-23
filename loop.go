@@ -17,7 +17,7 @@ import (
 )
 
 // Threading: signals, effects, layout and paint all run on the UI thread,
-// the one Ebitengine calls Update and Draw on. A goroutine that has a
+// the one ggfx delivers the window's events on. A goroutine that has a
 // result hands it back with App.Post (Probe.Post in tests), and the posted
 // function runs on the UI thread before the next frame's input. The mutexes
 // inside StateValue and the effect set are cheap protection against a stray

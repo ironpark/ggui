@@ -270,7 +270,7 @@ func TestInputGroupPreservesEditorBindingAndAddon(t *testing.T) {
 
 func TestInheritedInputDisabledCannotBeClearedByDescendant(t *testing.T) {
 	editor := ggui.TextInput(ggui.State("value")).Name("Editor")
-	w := ggui.Provide(ggui.InputDisabled, true, ggui.Provide(ggui.InputDisabled, false, ui.InputGroup(editor).Disabled(false)))
+	w := ggui.Provide(ggui.InputDisabledKey, true, ggui.Provide(ggui.InputDisabledKey, false, ui.InputGroup(editor).Disabled(false)))
 	p := ggui.NewProbe(w, ggui.Sz(300, 50))
 	defer p.Close()
 	if !node(t, p.Semantics(), ggui.RoleTextField, "Editor").Disabled {

@@ -9,9 +9,9 @@ import (
 // read it directly: they read Now, the instant the current frame froze.
 var clock = time.Now
 
-// maxFrameStep caps how far one frame may move the frame clock. Ebiten
-// stops calling Update and Draw while the window is minimized or hidden,
-// so the frame that comes back sees the whole pause as its delta, and
+// maxFrameStep caps how far one frame may move the frame clock. A frame
+// comes only when something asks for one, and none while the window is
+// minimized, so the frame after a pause sees the whole pause as its delta, and
 // without a cap every animation running at the time would teleport to its
 // end. The cap turns a pause into a pause instead of a jump, and keeps a
 // stiff spring stable after a frame that took too long.
@@ -75,9 +75,7 @@ var frame frameClock
 
 // begin moves the clock forward by the time that has passed since the last
 // frame, at most maxFrameStep, and returns the instant this frame reads.
-// App calls it twice: once in Update, which Ebiten runs at a fixed TPS,
-// and once in Draw, which it runs at the display's rate, so motion eased
-// during Paint is as smooth as the screen allows.
+// App calls it once per frame, before input.
 func (f *frameClock) begin(raw time.Time) time.Time {
 	f.mu.Lock()
 	defer f.mu.Unlock()

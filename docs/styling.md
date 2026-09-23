@@ -430,7 +430,7 @@ skip rendering. Blur is a smooth feather distance on both sides of the edge;
 zero gives a sharp, antialiased shadow. This is a rounded-rectangle distance-field
 approximation, not a Gaussian blur of the content or image alpha.
 
-The renderer lazily shares one Ebitengine Kage shader. Each visible shadow layer
+The renderer lazily shares one WGSL shader. Each visible shadow layer
 uses one `DrawRectShader` call, with no intermediate textures, blur passes or CPU
 rasterization. Draw bounds are intersected with the target before rendering.
 Cost still grows with visible pixel area and overlapping layers.

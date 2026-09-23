@@ -1,7 +1,7 @@
-// Package keygen writes the file that re-exports Ebitengine's key constants
-// as ggui's own, so that a widget names a key without importing Ebitengine.
+// Package keygen writes the file that re-exports ggfx's key constants
+// as ggui's own, so that a widget names a key without importing ggfx.
 //
-// It asks Ebitengine for the names rather than reading its source: Key.String
+// It asks ggfx for the names rather than reading its source: Key.String
 // returns the canonical spelling of each key, so the constants deprecated in
 // favour of another spelling cannot come out of it, and a new key appears the
 // moment the dependency is updated and the file regenerated.
@@ -24,7 +24,7 @@ package ggui
 
 import "github.com/ironpark/ggfx"
 
-// The keys Ebitengine reports, by their US layout names. A key is a
+// The keys ggfx reports, by their US layout names. A key is a
 // physical place on the keyboard, not the character it produces.
 const (
 `)

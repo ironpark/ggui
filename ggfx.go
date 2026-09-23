@@ -2,12 +2,12 @@ package ggui
 
 import "github.com/ironpark/ggfx"
 
-// The types ggui hands a widget that come from Ebitengine, under ggui's own
+// The types ggui hands a widget that come from ggfx, under ggui's own
 // names, so that a widget package imports ggui alone. They are aliases, not
 // definitions: ggui.KeyEnter and ggfx.KeyEnter are the same value of the
 // same type, so code written either way keeps working and the two mix
-// freely. What they do not do is hide Ebitengine; ggui renders with it, and
-// Canvas.Image is still an *ggfx.Image.
+// freely. What they do not do is hide ggfx; ggui renders with it, and
+// Canvas.Image is still a *ggfx.Image.
 
 //go:generate go run ./internal/tools/keygen/cmd -o keys_gen.go
 

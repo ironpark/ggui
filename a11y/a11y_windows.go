@@ -18,7 +18,7 @@ import (
 // macOS half goes through the Objective-C runtime: the project builds
 // without a C toolchain and stays that way.
 //
-// Nothing in this file may call into Ebitengine except where it says it is
+// Nothing in this file may call into ggfx except where it says it is
 // on the main thread. UI Automation calls a provider on its own threads,
 // and the answers all come from the published frame, which is built to be
 // read from anywhere.

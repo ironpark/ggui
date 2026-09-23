@@ -137,7 +137,7 @@ ggui.Row(
 `InputGroup.Disabled` and `BindDisabled` disable the editor as well as its
 chrome. Leading and trailing addon controls remain independent. The editor's own
 settings are preserved: it is disabled if either it or its group is disabled.
-Custom containers can pass `ggui.InputDisabled` through `Env` or `Provide`;
+Custom containers can pass `ggui.InputDisabledKey` through `Env` or `Provide`;
 TextInput combines that inherited value with its own settings. A descendant
 `false` cannot clear an ancestor's `true`. Disabled editors remain in the
 accessibility tree and reject pointer, keyboard, and accessibility edits.

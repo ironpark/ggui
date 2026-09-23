@@ -97,8 +97,8 @@ and serves both main and its tests.
 
 Keys, cursor shapes and mouse buttons carry ggui's own names: `ggui.KeyTab`,
 `ggui.CursorShapePointer`, `ggui.MouseButtonRight`. They are aliases for
-Ebitengine's, so they are the same values of the same types and an
-`ebiten.Key` still works wherever one is wanted; what they buy is that a
+ggfx's, so they are the same values of the same types and a
+`ggfx.Key` still works wherever one is wanted; what they buy is that a
 widget, or an app, imports `ggui` alone.
 
 ## Drag and drop

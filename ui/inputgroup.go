@@ -102,7 +102,7 @@ func (g *InputGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 
 	g.Sync()
-	inherited, _ := env.Get(ggui.InputDisabled)
+	inherited, _ := env.Get(ggui.InputDisabledKey)
 	g.effectiveDisabled = g.IsInert() || inherited
 	t := uitheme.From(env)
 	g.theme = t
@@ -156,6 +156,6 @@ func (g *InputGroupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 type groupInput struct{ group *InputGroupWidget }
 
 func (w groupInput) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	return w.group.input.Layout(c, env.With(ggui.InputDisabled, w.group.IsInert()))
+	return w.group.input.Layout(c, env.With(ggui.InputDisabledKey, w.group.IsInert()))
 }
 func (w groupInput) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(w.group.input, r) }

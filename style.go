@@ -106,10 +106,10 @@ var textKey = new(byte)
 // or a subtree. Env.TextScale reads it, 1 by default.
 var TextScaleKey = NewEnvKey[float64]("text scale")
 
-// InputDisabled disables TextInput editing in a subtree without replacing the
+// InputDisabledKey disables TextInput editing in a subtree without replacing the
 // editor's own Disabled or BindDisabled setting. Containers combine inherited
 // and local values with OR; false must not enable an already-disabled ancestor.
-var InputDisabled = NewEnvKey[bool]("input disabled")
+var InputDisabledKey = NewEnvKey[bool]("input disabled")
 
 // ReducedMotionKey asks widgets not to animate: transitions land at once,
 // eased motions jump. Provide it above the tree; Env.Motion reads it.
@@ -151,11 +151,11 @@ func NewEnvKey[T any](name string) EnvKey[T] { return EnvKey[T]{id: new(byte), n
 // With returns e with v stored under k for the subtree below. Storing the
 // value already there, by ==, leaves e unchanged, and storing the value
 // stored last frame under the same parent yields the same revision, so
-// caches below a Provide rebuilt every frame hold. InputDisabled is cumulative:
+// caches below a Provide rebuilt every frame hold. InputDisabledKey is cumulative:
 // once true in an ancestor, a descendant cannot clear it.
 func (e Env) With[T any](k EnvKey[T], v T) Env {
-	if k.id == InputDisabled.id {
-		if disabled, _ := e.Get(InputDisabled); disabled {
+	if k.id == InputDisabledKey.id {
+		if disabled, _ := e.Get(InputDisabledKey); disabled {
 			return e
 		}
 	}

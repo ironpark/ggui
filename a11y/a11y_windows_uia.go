@@ -87,7 +87,7 @@ const (
 // RPC threads rather than marshalling them to an apartment. That is what
 // the bridge is already built for -- the published frame is behind an
 // atomic pointer and the element cache behind a mutex -- and it is why no
-// provider method below may touch Ebitengine, which is not thread-safe.
+// provider method below may touch ggfx, which is not thread-safe.
 const uiaProviderOptionsServerSide = 0x2
 
 // NavigateDirection, for IRawElementProviderFragment::Navigate.

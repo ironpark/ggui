@@ -8,16 +8,15 @@ import (
 	"testing"
 )
 
-// drawsItsOwnImages are the widgets that build an image themselves, scaling
-// and blending through GeoM and ColorScale. ggui re-exports the keys, cursors
-// and buttons a widget names, but not drawing, so these three still reach for
-// Ebitengine. They are where a drawing API of ggui's own would begin.
-var drawsItsOwnImages = []string{"attachment.go", "avatar.go", "toast.go"}
+// showsImages are the widgets that take an image to show. An image is a
+// *ggfx.Image, which ggui does not rename, but they draw it through the
+// Canvas like everything else.
+var showsImages = []string{"attachment.go", "avatar.go"}
 
-// TestOnlyImageWidgetsImportEbiten keeps the rest of the package on ggui's own
+// TestOnlyImageWidgetsImportGgfx keeps the rest of the package on ggui's own
 // surface: a widget author imports one package, and what renders is ggui's
 // business rather than every widget's.
-func TestOnlyImageWidgetsImportEbiten(t *testing.T) {
+func TestOnlyImageWidgetsImportGgfx(t *testing.T) {
 	fset := token.NewFileSet()
 	pkgs, err := parser.ParseDir(fset, ".", nil, parser.ImportsOnly)
 	if err != nil {
@@ -27,10 +26,10 @@ func TestOnlyImageWidgetsImportEbiten(t *testing.T) {
 		for path, file := range pkg.Files {
 			name := path[strings.LastIndex(path, "/")+1:]
 			for _, imp := range file.Imports {
-				if !strings.Contains(imp.Path.Value, "hajimehoshi/ebiten") {
+				if !strings.Contains(imp.Path.Value, "ironpark/ggfx") {
 					continue
 				}
-				if slices.Contains(drawsItsOwnImages, name) {
+				if slices.Contains(showsImages, name) {
 					continue
 				}
 				t.Errorf("%s imports %s; name it through ggui instead", fset.Position(imp.Pos()), imp.Path.Value)

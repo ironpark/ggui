@@ -60,7 +60,7 @@ func (ev KeyEvent) Is(c Chord) bool {
 
 // ParseChord reads a chord such as "cmd+s", "ctrl+shift+z", "alt+enter"
 // or "f1". Modifiers are cmd (the platform's command key), ctrl, alt (or
-// option), shift and meta; the key is any Ebitengine key name, ignoring
+// option), shift and meta; the key is any ggfx key name, ignoring
 // case, with esc, return, up, down, left, right, plus and minus accepted.
 func ParseChord(s string) (Chord, error) {
 	var c Chord
@@ -111,7 +111,7 @@ func MustChord(s string) Chord {
 
 var keyTable map[string]KeyboardKey
 
-// keyNames maps every key's lower-cased Ebitengine name and a few aliases
+// keyNames maps every key's lower-cased ggfx name and a few aliases
 // to the key, built on first use.
 func keyNames() map[string]KeyboardKey {
 	if keyTable != nil {

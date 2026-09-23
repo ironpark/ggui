@@ -10,7 +10,7 @@ import (
 )
 
 // Rounded rectangles are drawn from a signed distance field rather than
-// traced as vector paths. ebiten fills an anti-aliased path by rendering it
+// traced as vector paths. ggfx fills an anti-aliased path by rendering it
 // eight times into an offscreen stencil buffer and compositing the result,
 // and every hop between the screen and that buffer commits the whole command
 // buffer: one rounded rectangle costs two. A distance field needs no

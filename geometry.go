@@ -13,7 +13,7 @@ import (
 // They are those types under these names.
 type (
 	// Number is any built-in numeric type. The geometry constructors take
-	// one so that pixel counts from Ebitengine (int) and layout math
+	// one so that pixel counts from ggfx (int) and layout math
 	// (float64) can be mixed without a cast at every call site.
 	Number = geom.Number
 

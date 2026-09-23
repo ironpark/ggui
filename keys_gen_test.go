@@ -19,16 +19,16 @@ func TestKeyConstantsAreCurrent(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(got, want) {
-		t.Fatal("keys_gen.go does not match what Ebitengine reports; run go generate ./...")
+		t.Fatal("keys_gen.go does not match what ggfx reports; run go generate ./...")
 	}
 }
 
 func TestKeyAliasesAreTheSameValues(t *testing.T) {
 	if KeyArrowUp != ggfx.KeyArrowUp || KeyEnter != ggfx.KeyEnter || KeyMax != ggfx.KeyMax {
-		t.Fatal("a ggui key constant differs from the Ebitengine one it aliases")
+		t.Fatal("a ggui key constant differs from the ggfx one it aliases")
 	}
 	if CursorShapePointer != ggfx.CursorShapePointer || MouseButtonRight != ggfx.MouseButtonRight {
-		t.Fatal("a cursor or button constant differs from the Ebitengine one it aliases")
+		t.Fatal("a cursor or button constant differs from the ggfx one it aliases")
 	}
 	// Chord parses the same names the constants are generated from, so
 	// every name ParseChord accepts has a constant to go with it.

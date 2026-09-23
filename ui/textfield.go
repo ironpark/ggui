@@ -117,7 +117,7 @@ func (f *TextFieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	} else {
 		fieldBox(f.box, t, f.input.Focused(), f.IsInert())
 	}
-	size := f.box.Layout(c, env.With(ggui.InputDisabled, f.IsInert()))
+	size := f.box.Layout(c, env.With(ggui.InputDisabledKey, f.IsInert()))
 	if !f.plain {
 		fieldBox(f.box, t, f.input.Focused(), f.input.IsDisabled())
 	}
