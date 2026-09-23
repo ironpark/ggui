@@ -48,6 +48,16 @@ func (p *Probe) SetOverlay(o Overlay) { p.overlay = o }
 // probe lays out and routes input but draws nothing.
 func (p *Probe) RenderTo(img *ggfx.Image) { p.canvas.Image = img }
 
+// Draw runs one frame into img, as RenderTo followed by Frame would, and
+// goes back to drawing nothing. The caller clears img and sizes the probe in
+// logical pixels with Resize. Call it where GPU drawing is allowed: inside a
+// ggfx FrameEvent, as the examples' offscreen renders do.
+func (p *Probe) Draw(img *ggfx.Image) Size {
+	p.RenderTo(img)
+	defer p.RenderTo(nil)
+	return p.Frame()
+}
+
 // OnInspect registers fn to receive every frame's inspect.Frame, as
 // App.OnInspect does.
 func (p *Probe) OnInspect(fn func(*inspect.Frame)) {
