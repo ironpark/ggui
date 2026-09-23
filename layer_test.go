@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"image"
 	"testing"
 	"time"
 
@@ -19,8 +20,8 @@ func TestLayerSiblingsShareOneImage(t *testing.T) {
 	defer img.Deallocate()
 	c := &Canvas{Image: img}
 	var first, second *ggfx.Image
-	c.Layer(nil, func(l *Canvas) { first = l.Image })
-	c.Layer(nil, func(l *Canvas) { second = l.Image })
+	c.Layer(LayerOptions{}, func(l *Canvas) { first = l.Image })
+	c.Layer(LayerOptions{}, func(l *Canvas) { second = l.Image })
 	if first == nil || first != second {
 		t.Fatalf("siblings borrowed %p and %p; want one image", first, second)
 	}
@@ -35,9 +36,9 @@ func TestLayerNestedGetsItsOwnImage(t *testing.T) {
 	defer img.Deallocate()
 	c := &Canvas{Image: img}
 	var outer, inner *ggfx.Image
-	c.Layer(nil, func(l *Canvas) {
+	c.Layer(LayerOptions{}, func(l *Canvas) {
 		outer = l.Image
-		l.Layer(nil, func(l *Canvas) { inner = l.Image })
+		l.Layer(LayerOptions{}, func(l *Canvas) { inner = l.Image })
 	})
 	if outer == inner || layerCount(c) != 2 {
 		t.Fatalf("nested layers borrowed %p and %p with %d pooled; want two images", outer, inner, layerCount(c))
@@ -55,7 +56,7 @@ func TestLayerFrameEndKeepsOnlyWhatTheFrameUsed(t *testing.T) {
 	var open func(l *Canvas, n int)
 	open = func(l *Canvas, n int) {
 		if n > 0 {
-			l.Layer(nil, func(l *Canvas) { open(l, n-1) })
+			l.Layer(LayerOptions{}, func(l *Canvas) { open(l, n-1) })
 		}
 	}
 	for _, step := range []struct{ depth, want int }{{2, 2}, {1, 1}, {0, 0}, {1, 1}} {
@@ -77,9 +78,9 @@ func TestLayerFollowsTheWindowSize(t *testing.T) {
 	defer large.Deallocate()
 	c := &Canvas{Image: small}
 	var got *ggfx.Image
-	c.Layer(nil, func(l *Canvas) { got = l.Image })
+	c.Layer(LayerOptions{}, func(l *Canvas) { got = l.Image })
 	c.Image = large
-	c.Layer(nil, func(l *Canvas) { got = l.Image })
+	c.Layer(LayerOptions{}, func(l *Canvas) { got = l.Image })
 	if got.Bounds().Max != large.Bounds().Max || layerCount(c) != 1 {
 		t.Fatalf("after a resize the layer covers %v with %d pooled; want %v and 1", got.Bounds().Max, layerCount(c), large.Bounds().Max)
 	}
@@ -91,7 +92,7 @@ func TestLayerCanvasIsTheCallersButForTheImage(t *testing.T) {
 	defer img.Deallocate()
 	root := &Canvas{Image: img}
 	clipped := root.Clip(Rct(Pt(10, 10), Sz(20, 20))).Inert()
-	clipped.Layer(nil, func(l *Canvas) {
+	clipped.Layer(LayerOptions{}, func(l *Canvas) {
 		if !l.inert || !l.clipped || l.clip != clipped.clip || l.root() != root || l.frame != nil {
 			t.Fatalf("layer canvas lost the caller's state: inert %v clipped %v clip %v", l.inert, l.clipped, l.clip)
 		}
@@ -102,15 +103,55 @@ func TestLayerCanvasIsTheCallersButForTheImage(t *testing.T) {
 func TestLayerWithoutAnImagePaintsIntoTheCaller(t *testing.T) {
 	c := &Canvas{}
 	var got *Canvas
-	c.Layer(nil, func(l *Canvas) { got = l })
+	c.Layer(LayerOptions{}, func(l *Canvas) { got = l })
 	if got != c || layerCount(c) != 0 {
 		t.Fatalf("paint got %p, pooled %d; want the caller and nothing pooled", got, layerCount(c))
 	}
 	var nilCanvas *Canvas
 	called := false
-	nilCanvas.Layer(nil, func(l *Canvas) { called = l == nil })
+	nilCanvas.Layer(LayerOptions{}, func(l *Canvas) { called = l == nil })
 	if !called {
 		t.Fatal("a nil Canvas did not paint with itself")
+	}
+}
+
+func TestRoundRectMaskShaderCompiles(t *testing.T) {
+	if sharedRoundRectMask() == nil {
+		t.Fatal("missing shader")
+	}
+}
+
+func TestClipRoundRectPaintsIntoALayerCoveringOnlyTheRect(t *testing.T) {
+	img := ggfx.NewImage(100, 80)
+	defer img.Deallocate()
+	c := &Canvas{Image: img, scale: 2}
+	r := Rct(Pt(10, 5), Sz(20, 30))
+	var got *Canvas
+	c.ClipRoundRect(r, 10, func(l *Canvas) { got = l })
+	if got.Image == img || got.Image.Bounds() != image.Rect(20, 10, 60, 70) {
+		t.Fatalf("round clip painted into %v; want a layer over the rect's pixels", got.Image.Bounds())
+	}
+	if !got.clipped || got.clip != r || layerCount(c) != 1 || c.frame.layerDepth != 0 {
+		t.Fatalf("round clip canvas clip %v (%v) with %d pooled; want %v and one returned layer", got.clip, got.clipped, layerCount(c), r)
+	}
+	c.freeLayers()
+}
+
+func TestClipRoundRectWithoutARadiusOrImageIsClip(t *testing.T) {
+	img := ggfx.NewImage(100, 80)
+	defer img.Deallocate()
+	r := Rct(Pt(10, 5), Sz(20, 30))
+	for _, c := range []*Canvas{{Image: img}, {}} {
+		for _, radius := range []float64{0, 10} {
+			if c.Image != nil && radius > 0 {
+				continue
+			}
+			var got *Canvas
+			c.ClipRoundRect(r, radius, func(l *Canvas) { got = l })
+			if !got.clipped || got.clip != r || layerCount(c) != 0 {
+				t.Fatalf("radius %v, image %v: clip %v, %d pooled; want a plain clip to %v", radius, c.Image != nil, got.clip, layerCount(c), r)
+			}
+		}
 	}
 }
 

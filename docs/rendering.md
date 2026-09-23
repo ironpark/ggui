@@ -23,10 +23,16 @@ Widgets work in logical pixels; the screen is allocated at the monitor's
 device scale factor so a Retina display gets a sharp image. `dst.Scale()`
 returns the factor, and drawing goes through it: `dst.FillRect`,
 `dst.FillRoundRect`, `dst.StrokeRoundRect`, `dst.FillCircle` and
-`dst.StrokeLine` take logical geometry, `dst.Px(v)` converts a length,
-`dst.Geo(at)` is the transform for `DrawImageOptions`, and text rasterizes
-its face at the scaled size rather than scaling the pixels. A custom widget
-that draws with Ebitengine directly should do the same.
+`dst.StrokeLine` and `dst.DrawImage` take logical geometry, `dst.Px(v)`
+converts a length, `dst.Geo(at)` is the transform for drawing on `dst.Image`
+with ggfx directly, and text rasterizes its face at the scaled size rather
+than scaling the pixels. A custom widget that draws with ggfx directly should
+do the same.
+
+`dst.DrawImage(img, r, ggui.ImageOptions{})` stretches an image over a
+logical Rect. The options fade it, tint it (an icon's colour), turn it about
+its centre, or sample it pixelated instead of smoothed; the zero value draws
+it plainly.
 
 ## Custom widgets
 
@@ -121,20 +127,31 @@ its start time in slots.
 
 An opacity or a transform that applies to a subtree as a whole, rather than to
 each thing it draws, needs the subtree painted apart and composited.
-`dst.Layer(op, paint)` does that: `paint` gets a Canvas that draws into an
+`dst.Layer(o, paint)` does that: `paint` gets a Canvas that draws into an
 offscreen image the size of the window, and the image is then drawn onto `dst`
-with `op`. The layer Canvas is `dst` in every other respect, so hit regions,
-clipping, focus traps and inertness are unchanged. Transition's fade and scale
-and a toast's fade use it:
+faded and scaled as the `LayerOptions` say. The layer Canvas is `dst` in every
+other respect, so hit regions, clipping, focus traps and inertness are
+unchanged. Transition's fade and scale and a toast's fade use it:
 
 ```go
-op := &ggfx.DrawImageOptions{}
-op.ColorScale.ScaleAlpha(float32(opacity))
-dst.Layer(op, func(layer *ggui.Canvas) { layer.Paint(child, r) })
+dst.Layer(ggui.LayerOptions{Fade: 1 - opacity}, func(layer *ggui.Canvas) {
+	layer.Paint(child, r)
+})
+```
+
+`dst.ClipRoundRect(r, radius, paint)` is a clip with rounded, antialiased
+corners, built the same way over a layer that covers `r` alone. An avatar cuts
+its photo to a circle with it:
+
+```go
+dst.ClipRoundRect(r, r.Size.W/2, func(dst *ggui.Canvas) {
+	dst.DrawImage(photo, cover, ggui.ImageOptions{})
+})
 ```
 
 The images belong to the window, not to the widget. Layers painted one after
-another reuse one image and nested layers take one each; at the end of a frame
+another reuse one image and nested layers take one each, and a layer for a
+rounded clip clears and composites only the part it covers; at the end of a frame
 the window frees any it did not need, and closing the app frees the rest. A
 widget therefore keeps no texture of its own, and ten rows fading in together
 cost one window-sized image rather than ten.

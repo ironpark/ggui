@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"image"
+	"image/color"
 	_ "image/gif"  // registered for DecodeImage
 	_ "image/jpeg" // registered for DecodeImage
 	_ "image/png"  // registered for DecodeImage
+	"math"
 	"os"
 
 	"github.com/ironpark/ggfx"
@@ -26,20 +28,20 @@ const (
 
 // ImageWidget draws an ggfx.Image. Build one with Image.
 type ImageWidget struct {
-	props  property.Owner
-	img    *ggfx.Image
-	fit    ImageFit
-	width  float64
-	height float64
-	filter ggfx.Filter
-	alt    string
+	props     property.Owner
+	img       *ggfx.Image
+	fit       ImageFit
+	width     float64
+	height    float64
+	pixelated bool
+	alt       string
 }
 
 // Image draws img. With no Size it asks for the image's natural size in
 // logical pixels, and scales down, keeping its aspect ratio, when the
 // parent gives it less room.
 func Image(img *ggfx.Image) *ImageWidget {
-	return &ImageWidget{img: img, filter: ggfx.FilterLinear}
+	return &ImageWidget{img: img}
 }
 
 // Fit sets how the image is placed when the box has another shape; the
@@ -73,10 +75,11 @@ func (w *ImageWidget) Height(v float64) *ImageWidget {
 	return w
 }
 
-// Filter sets how pixels are sampled when scaled; the default is linear.
-func (w *ImageWidget) Filter(f ggfx.Filter) *ImageWidget {
-	defer property.Watch(&w.props, &w.filter)()
-	w.filter = f
+// Pixelated scales the image by its nearest pixel instead of smoothing it,
+// for pixel art.
+func (w *ImageWidget) Pixelated(v bool) *ImageWidget {
+	defer property.Watch(&w.props, &w.pixelated)()
+	w.pixelated = v
 	return w
 }
 
@@ -165,10 +168,62 @@ func (w *ImageWidget) Paint(dst *Canvas, r Rect) {
 	if at != r {
 		target = dst.Clip(r)
 	}
-	op := &ggfx.DrawImageOptions{Filter: w.filter}
-	op.GeoM.Scale(at.Size.W/n.W, at.Size.H/n.H)
-	op.GeoM.Concat(dst.Geo(at.Origin))
-	target.Image.DrawImage(w.img, op)
+	target.DrawImage(w.img, at, ImageOptions{Pixelated: w.pixelated})
+}
+
+// ImageOptions says how DrawImage draws an image. The zero value draws it
+// opaque, upright and smoothed.
+type ImageOptions struct {
+	// Fade is how far the image fades out: 0 draws it opaque, 1 not at all.
+	Fade float64
+	// Tint multiplies every pixel, which is how a white icon takes a
+	// colour; nil leaves them.
+	Tint color.Color
+	// Rotation turns the image clockwise about the centre of where it is
+	// drawn, in radians.
+	Rotation float64
+	// Pixelated scales by the nearest pixel instead of smoothing.
+	Pixelated bool
+}
+
+// DrawImage draws img stretched over the logical Rect r, as o says.
+func (c *Canvas) DrawImage(img *ggfx.Image, r Rect, o ImageOptions) {
+	if c == nil || c.Image == nil || img == nil || o.Fade >= 1 {
+		return
+	}
+	b := img.Bounds()
+	if b.Empty() {
+		return
+	}
+	// A turned image reaches as far as its corners do.
+	reach := 0.0
+	if o.Rotation != 0 {
+		reach = math.Hypot(r.Size.W, r.Size.H) / 2
+	}
+	if !c.visiblePaintBounds(r, reach) {
+		return
+	}
+	op := &ggfx.DrawImageOptions{Filter: ggfx.FilterLinear}
+	if o.Pixelated {
+		op.Filter = ggfx.FilterNearest
+	}
+	w, h := float64(b.Dx()), float64(b.Dy())
+	if o.Rotation != 0 {
+		op.GeoM.Translate(-w/2, -h/2)
+		op.GeoM.Scale(r.Size.W/w, r.Size.H/h)
+		op.GeoM.Rotate(o.Rotation)
+		op.GeoM.Concat(c.Geo(r.Origin.Add(Pt(r.Size.W/2, r.Size.H/2))))
+	} else {
+		op.GeoM.Scale(r.Size.W/w, r.Size.H/h)
+		op.GeoM.Concat(c.Geo(r.Origin))
+	}
+	if o.Tint != nil {
+		op.ColorScale.ScaleWithColor(o.Tint)
+	}
+	if o.Fade > 0 {
+		op.ColorScale.ScaleAlpha(float32(1 - o.Fade))
+	}
+	c.Image.DrawImage(img, op)
 }
 
 // DecodeImage decodes PNG, JPEG or GIF bytes into an ggfx.Image.

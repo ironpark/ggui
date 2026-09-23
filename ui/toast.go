@@ -4,7 +4,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
@@ -234,9 +233,7 @@ func (t *ToasterWidget) paintNotices(dst *ggui.Canvas) {
 		}
 		if progress < 1 {
 			// The panel and its shadow fade together.
-			op := &ggfx.DrawImageOptions{}
-			op.ColorScale.ScaleAlpha(float32(progress))
-			clip.Layer(op, paint)
+			clip.Layer(ggui.LayerOptions{Fade: 1 - progress}, paint)
 		} else {
 			paint(clip)
 		}

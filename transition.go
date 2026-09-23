@@ -3,8 +3,6 @@ package ggui
 import (
 	"time"
 
-	"github.com/ironpark/ggfx"
-
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
 )
@@ -160,18 +158,15 @@ func (t *TransitionWidget) Paint(dst *Canvas, r Rect) {
 	// Fade and scale apply to the child as a whole, so it paints into a
 	// layer that is composited: hit regions still register where the child
 	// painted itself.
-	op := &ggfx.DrawImageOptions{Filter: ggfx.FilterLinear}
+	var o LayerOptions
 	if scale {
-		s := t.from + (1-t.from)*e
-		cx, cy := dst.px(at.Origin.X+at.Size.W/2), dst.px(at.Origin.Y+at.Size.H/2)
-		op.GeoM.Translate(-cx, -cy)
-		op.GeoM.Scale(s, s)
-		op.GeoM.Translate(cx, cy)
+		o.Scale = t.from + (1-t.from)*e
+		o.About = Pt(at.Origin.X+at.Size.W/2, at.Origin.Y+at.Size.H/2)
 	}
 	if fade {
-		op.ColorScale.ScaleAlpha(float32(e))
+		o.Fade = 1 - e
 	}
-	target.Layer(op, func(layer *Canvas) { layer.Paint(t.child, at) })
+	target.Layer(o, func(layer *Canvas) { layer.Paint(t.child, at) })
 }
 
 var transitionSlot = NewSlot[transitionStart]("transition start")

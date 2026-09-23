@@ -1,10 +1,25 @@
 package ggui
 
-import "github.com/ironpark/ggfx"
+import (
+	"image"
+
+	"github.com/ironpark/ggfx"
+)
+
+// LayerOptions says how Layer draws the finished layer. The zero value draws
+// it as it was painted.
+type LayerOptions struct {
+	// Fade is how far the layer fades out: 0 draws it opaque, 1 not at all.
+	Fade float64
+	// Scale sizes the layer about the logical point About. 0 and 1 leave it
+	// at its size.
+	Scale float64
+	About Point
+}
 
 // Layer paints into an offscreen image the size of the window, then draws
-// that image onto c with op: the way to apply an opacity or a transform to a
-// subtree as a whole, which a Transition's fade and scale do. paint gets a
+// that image onto c as o says: the way to apply an opacity or a transform to
+// a subtree as a whole, which a Transition's fade and scale do. paint gets a
 // Canvas like c in every respect but the image it draws into, so hit regions,
 // clipping, focus traps and inertness are what they would be without the
 // layer. Layers nest.
@@ -15,7 +30,41 @@ import "github.com/ironpark/ggfx"
 // nothing is left for the garbage collector when it goes away.
 //
 // Without an image to draw into, Layer calls paint with c.
-func (c *Canvas) Layer(op *ggfx.DrawImageOptions, paint func(layer *Canvas)) {
+func (c *Canvas) Layer(o LayerOptions, paint func(layer *Canvas)) {
+	c.layer(nil, paint, func(img *ggfx.Image) {
+		op := &ggfx.DrawImageOptions{}
+		if o.Scale != 0 && o.Scale != 1 {
+			op.Filter = ggfx.FilterLinear
+			cx, cy := c.px(o.About.X), c.px(o.About.Y)
+			op.GeoM.Translate(-cx, -cy)
+			op.GeoM.Scale(o.Scale, o.Scale)
+			op.GeoM.Translate(cx, cy)
+		}
+		if o.Fade != 0 {
+			op.ColorScale.ScaleAlpha(float32(1 - o.Fade))
+		}
+		c.Image.DrawImage(img, op)
+	})
+}
+
+// ClipRoundRect is Clip with the corners of r rounded by radius, antialiased:
+// a photo cut to a circle, say. paint draws into a Layer covering r alone,
+// which is composited through the rounded shape. Hit regions are clipped to
+// r as a rectangle. A zero radius is Clip.
+func (c *Canvas) ClipRoundRect(r Rect, radius float64, paint func(dst *Canvas)) {
+	clip := c.Clip(r)
+	if radius <= 0 || clip == nil || clip.Image == nil || clip.Image.Bounds().Empty() {
+		paint(clip)
+		return
+	}
+	area := clip.Image.Bounds()
+	clip.layer(&area, paint, func(img *ggfx.Image) { clip.maskRoundRect(img, r, radius) })
+}
+
+// layer paints into the part of a borrowed layer image within area, the
+// whole window when nil, and hands that part to draw. Without an image it
+// paints into c.
+func (c *Canvas) layer(area *image.Rectangle, paint func(*Canvas), draw func(*ggfx.Image)) {
 	var window *ggfx.Image
 	if c != nil {
 		window = c.root().Image
@@ -27,14 +76,18 @@ func (c *Canvas) Layer(op *ggfx.DrawImageOptions, paint func(layer *Canvas)) {
 	f := c.fs()
 	img := f.borrowLayer(window)
 	defer func() { f.layerDepth-- }()
+	if area != nil {
+		img = img.SubImage(*area).(*ggfx.Image)
+	}
+	img.Clear()
 	layer := c.derive()
 	layer.Image = img
 	paint(layer)
-	c.Image.DrawImage(img, op)
+	draw(img)
 }
 
-// borrowLayer returns the cleared image for the next Layer depth, covering
-// the window image's coordinates.
+// borrowLayer returns the image for the next Layer depth, covering the
+// window image's coordinates. The caller clears what it paints into.
 func (f *frameState) borrowLayer(window *ggfx.Image) *ggfx.Image {
 	// Painting keeps the window's coordinates, so the layer covers them
 	// from the origin, which is the whole window when it starts there.
@@ -47,7 +100,6 @@ func (f *frameState) borrowLayer(window *ggfx.Image) *ggfx.Image {
 	}
 	if img := f.layers[i]; img != nil {
 		if img.Bounds().Max == size {
-			img.Clear()
 			return img
 		}
 		img.Deallocate()

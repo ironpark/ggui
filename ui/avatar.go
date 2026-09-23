@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"image/color"
-	"math"
 	"strings"
 
 	"github.com/ironpark/ggfx"
@@ -104,83 +102,22 @@ func (a *AvatarWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.Paint(a.initials, ggui.Rct(at, a.textSize))
 		return
 	}
-	side := int(math.Ceil(float64(dst.Px(min(r.Size.W, r.Size.H)))))
-	cut := roundedCut(a.img, side, float64(dst.Px(radius)))
-	if cut == nil {
+	side := min(r.Size.W, r.Size.H)
+	drawCover(dst, a.img, ggui.Rct(r.Origin, ggui.Sz(side, side)), radius, ggui.ImageOptions{})
+}
+
+// drawCover draws img scaled to cover the logical Rect r, keeping its aspect
+// ratio, and cut to r with its corners rounded by radius, which at half the
+// side of a square is a circle.
+func drawCover(dst *ggui.Canvas, img *ggfx.Image, r ggui.Rect, radius float64, o ggui.ImageOptions) {
+	b := img.Bounds()
+	if b.Empty() {
 		return
 	}
-	// The cut image is already in device pixels, so it is drawn one for
-	// one rather than through the canvas scale a second time.
-	op := &ggfx.DrawImageOptions{Filter: ggfx.FilterLinear}
-	s := dst.Scale()
-	op.GeoM.Scale(1/s, 1/s)
-	op.GeoM.Concat(dst.Geo(r.Origin))
-	dst.Image.DrawImage(cut, op)
-}
-
-// cutKey names one crop: the image it came from, the square of device
-// pixels it was scaled to, and the corner radius it was cut with.
-type cutKey struct {
-	src          *ggfx.Image
-	side, radius int
-}
-
-// Crops live in two generations: the ones asked for since the last sweep,
-// and the ones from the sweep before. A crop nobody has asked for in two
-// sweeps is freed, so a list longer than the cache loses its coldest crops
-// rather than all of them at once, and an avatar rebuilt every frame
-// allocates no texture at all. Both maps belong to the UI goroutine, as
-// painting does.
-var liveCuts, coldCuts = map[cutKey]*ggfx.Image{}, map[cutKey]*ggfx.Image{}
-
-// cutGeneration is how many crops are made before the cold generation is
-// freed; the warm ones are promoted back and survive.
-const cutGeneration = 64
-
-// roundedCut returns src scaled to cover a side-by-side square and cut to
-// the rounded rectangle of the given radius, which at half the side is a
-// circle. It is how an avatar gets a round photo at all: the canvas clips
-// to rectangles and nothing else, so the shape has to come from an alpha
-// mask multiplied into the image.
-func roundedCut(src *ggfx.Image, side int, radius float64) *ggfx.Image {
-	b := src.Bounds()
-	if side <= 0 || b.Dx() == 0 || b.Dy() == 0 {
-		return nil
-	}
-	key := cutKey{src, side, int(math.Round(radius))}
-	if cut, ok := liveCuts[key]; ok {
-		return cut
-	}
-	if cut, ok := coldCuts[key]; ok {
-		liveCuts[key] = cut
-		delete(coldCuts, key)
-		return cut
-	}
-	if len(liveCuts) >= cutGeneration {
-		sweepCuts()
-	}
-	cut := ggfx.NewImage(side, side)
-	k := max(float64(side)/float64(b.Dx()), float64(side)/float64(b.Dy()))
-	op := &ggfx.DrawImageOptions{Filter: ggfx.FilterLinear}
-	op.GeoM.Scale(k, k)
-	op.GeoM.Translate((float64(side)-float64(b.Dx())*k)/2, (float64(side)-float64(b.Dy())*k)/2)
-	cut.DrawImage(src, op)
-	mask := ggfx.NewImage(side, side)
-	(&ggui.Canvas{Image: mask}).FillRoundRect(ggui.Rect{Size: ggui.Sz(side, side)}, radius, color.White)
-	cut.DrawImage(mask, &ggfx.DrawImageOptions{Blend: ggfx.BlendDestinationIn})
-	mask.Deallocate()
-	liveCuts[key] = cut
-	return cut
-}
-
-// sweepCuts frees what has gone two generations unasked for and starts a
-// generation over.
-func sweepCuts() {
-	for k, img := range coldCuts {
-		img.Deallocate()
-		delete(coldCuts, k)
-	}
-	liveCuts, coldCuts = coldCuts, liveCuts
+	w, h := float64(b.Dx()), float64(b.Dy())
+	k := max(r.Size.W/w, r.Size.H/h)
+	at := ggui.Rct(r.Origin.Add(ggui.Pt((r.Size.W-w*k)/2, (r.Size.H-h*k)/2)), ggui.Sz(w*k, h*k))
+	dst.ClipRoundRect(r, radius, func(dst *ggui.Canvas) { dst.DrawImage(img, at, o) })
 }
 
 // BindName follows a non-nil accessible-name reader.

@@ -101,11 +101,6 @@ func (s *SVG) Draw(dst *ggui.Canvas, r ggui.Rect, col color.Color, rotation floa
 		}
 		s.cache = append(s.cache, raster{size, img})
 	}
-	op := &ggfx.DrawImageOptions{Filter: ggfx.FilterLinear}
-	op.GeoM.Translate(-float64(size)/2, -float64(size)/2)
-	op.GeoM.Scale(side/float64(size), side/float64(size))
-	op.GeoM.Rotate(rotation)
-	op.GeoM.Concat(dst.Geo(r.Origin.Add(ggui.Pt(r.Size.W/2, r.Size.H/2))))
-	op.ColorScale.ScaleWithColor(col)
-	dst.Image.DrawImage(img, op)
+	at := ggui.Rct(r.Origin.Add(ggui.Pt((r.Size.W-side)/2, (r.Size.H-side)/2)), ggui.Sz(side, side))
+	dst.DrawImage(img, at, ggui.ImageOptions{Tint: col, Rotation: rotation})
 }

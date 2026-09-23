@@ -153,3 +153,46 @@ func (c *Canvas) shadeSegment(a, b Point, w float64, col color.Color) {
 		half:   Sz(length/2, w*scale/2),
 	}, col)
 }
+
+// roundRectMaskSource draws source image 0 through the rounded rectangle
+// half_size around center, both relative to the image's own origin, which is
+// how ClipRoundRect composites its layer.
+const roundRectMaskSource = `
+struct Uniforms {
+	center: vec2f,
+	half_size: vec2f,
+	radius: f32,
+	feather: f32,
+}
+@group(1) @binding(0) var<uniform> u: Uniforms;
+fn fragment(v: Vertex) -> vec4f {
+	let q = abs(v.src_pos - src0_origin() - u.center) - u.half_size + vec2f(u.radius);
+	let distance = length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0) - u.radius;
+	return src0_at(v.src_pos) * (1.0 - smoothstep(-u.feather, u.feather, distance));
+}
+`
+
+var sharedRoundRectMask = sync.OnceValue(func() *ggfx.Shader {
+	shader, err := ggfx.NewShader([]byte(roundRectMaskSource))
+	if err != nil {
+		panic("ggui: compile round rect mask shader: " + err.Error())
+	}
+	return shader
+})
+
+// maskRoundRect draws img, a part of a layer, onto c where it lies within
+// the logical Rect r with corners rounded by radius.
+func (c *Canvas) maskRoundRect(img *ggfx.Image, r Rect, radius float64) {
+	b := img.Bounds()
+	scale := c.Scale()
+	half := Sz(r.Size.W*scale/2, r.Size.H*scale/2)
+	op := &ggfx.DrawRectShaderOptions{Uniforms: map[string]any{
+		"center":    []float32{float32(c.px(r.Origin.X+r.Size.W/2) - float64(b.Min.X)), float32(c.px(r.Origin.Y+r.Size.H/2) - float64(b.Min.Y))},
+		"half_size": []float32{float32(half.W), float32(half.H)},
+		"radius":    float32(min(radius*scale, half.W, half.H)),
+		"feather":   float32(feather),
+	}}
+	op.Images[0] = img
+	op.GeoM.Translate(float64(b.Min.X), float64(b.Min.Y))
+	c.Image.DrawRectShader(b.Dx(), b.Dy(), sharedRoundRectMask(), op)
+}

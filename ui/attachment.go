@@ -347,17 +347,11 @@ func (a *AttachmentWidget) paintMedia(dst *ggui.Canvas, r ggui.Rect, state Attac
 		if dst == nil || dst.Image == nil {
 			return
 		}
-		cut := roundedCut(a.image, int(math.Ceil(float64(dst.Px(r.Size.W)))), float64(dst.Px(radius)))
-		if cut == nil {
-			return
-		}
-		op := &ggfx.DrawImageOptions{Filter: ggfx.FilterLinear}
-		op.GeoM.Scale(1/dst.Scale(), 1/dst.Scale())
-		op.GeoM.Concat(dst.Geo(r.Origin))
+		var o ggui.ImageOptions
 		if state != AttachmentIdle && state != AttachmentDone {
-			op.ColorScale.ScaleAlpha(.6)
+			o.Fade = .4
 		}
-		dst.Image.DrawImage(cut, op)
+		drawCover(dst, a.image, ggui.Rct(r.Origin, ggui.Sz(r.Size.W, r.Size.W)), radius, o)
 	} else if a.media != nil {
 		dst.Paint(a.mediaView, r)
 	}
