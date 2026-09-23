@@ -9,6 +9,7 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/examples/internal/offscreen"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
@@ -81,7 +82,5 @@ func renderWorkspace(directory string) error {
 		return err
 	}
 	r := &workspaceRender{directory: directory}
-	return runRenderWindow("Workspace layout previews", 320, 240, func(*ggfx.Image) (bool, error) {
-		return true, r.render()
-	})
+	return offscreen.Run(func() (bool, error) { return true, r.render() })
 }

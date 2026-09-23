@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"image/png"
 	"os"
 	"path/filepath"
 	"slices"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/examples/internal/offscreen"
 	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
@@ -35,11 +35,10 @@ type galleryAudit struct {
 	dir   string
 	names []string
 	index int
-	err   error
 }
 
-// step audits one example in one theme, style and width, and previews it.
-func (g *galleryAudit) step(screen *ggfx.Image) (bool, error) {
+// step audits one example in one theme, style and width.
+func (g *galleryAudit) step() (bool, error) {
 	name := g.names[g.index%len(g.names)]
 	dark := g.index/len(g.names)%2 == 1
 	width := 640
@@ -92,18 +91,11 @@ func (g *galleryAudit) step(screen *ggfx.Image) (bool, error) {
 		now = now.Add(time.Second)
 	}
 	stem := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
+	// The first failure is kept; the audit goes on to the end of the step.
+	var err error
 	save := func(state string) {
-		file, err := os.Create(filepath.Join(g.dir, fmt.Sprintf("%s-%s-%s-%d-%s.png", stem, style, mode, width, state)))
-		if err != nil {
-			g.err = err
-			return
-		}
-		err = png.Encode(file, img)
-		closeErr := file.Close()
-		if err != nil {
-			g.err = err
-		} else if closeErr != nil {
-			g.err = closeErr
+		if e := offscreen.SavePNG(filepath.Join(g.dir, fmt.Sprintf("%s-%s-%s-%d-%s.png", stem, style, mode, width, state)), img); err == nil {
+			err = e
 		}
 	}
 	save("initial")
@@ -157,7 +149,9 @@ func (g *galleryAudit) step(screen *ggfx.Image) (bool, error) {
 		perform := func(label string, action ggui.Action) {
 			node, ok := app.Semantics().Find("", label)
 			if !ok {
-				g.err = fmt.Errorf("Data Table: missing %q", label)
+				if err == nil {
+					err = fmt.Errorf("Data Table: missing %q", label)
+				}
 				return
 			}
 			app.Perform(node.ID, action)
@@ -177,10 +171,9 @@ func (g *galleryAudit) step(screen *ggfx.Image) (bool, error) {
 		save("columns")
 	}
 
-	screen.DrawImage(img, nil)
 	g.index++
-	if g.err != nil {
-		return false, g.err
+	if err != nil {
+		return false, err
 	}
 	return g.index == len(g.names)*8, nil
 }
@@ -201,7 +194,7 @@ func renderGalleryAudit(dir, only string) error {
 	}
 
 	g := &galleryAudit{dir: dir, names: names}
-	return runRenderWindow("ggui existing component audit", 640, 900, g.step)
+	return offscreen.Run(g.step)
 }
 
 func auditControlStates() ggui.Widget {

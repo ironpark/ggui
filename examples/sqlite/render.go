@@ -105,7 +105,5 @@ func renderClient(directory string) error {
 		return err
 	}
 	r := &clientRender{directory: directory, path: path}
-	return runRenderWindow("SQLite layout previews", 320, 240, func(*ggfx.Image) (bool, error) {
-		return true, r.render()
-	})
+	return runRenderWindow(func() (bool, error) { return true, r.render() })
 }

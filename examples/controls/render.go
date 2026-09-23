@@ -2,24 +2,23 @@ package main
 
 import (
 	"fmt"
-	"image/png"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/examples/internal/offscreen"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 type controlsRender struct {
 	directory string
 	index     int
-	done      bool
 }
 
-// step renders one control's four states and previews the last on screen.
-func (g *controlsRender) step(screen *ggfx.Image) error {
+// step renders one control's four states.
+func (g *controlsRender) step() (done bool, err error) {
 	n := len(controlNames)
 	name := controlNames[g.index%n]
 	dark := g.index/n%2 == 1
@@ -76,29 +75,12 @@ func (g *controlsRender) step(screen *ggfx.Image) error {
 		img.Fill(theme.Bg)
 		demo.Widget.Paint(&ggui.Canvas{Image: img}, ggui.Rct(ggui.Point{}, size))
 		name := filepath.Join(g.directory, fmt.Sprintf("%s-%s-%d-%s.png", name, mode, width, state))
-		if err := savePNG(name, img); err != nil {
-			return err
+		if err := offscreen.SavePNG(name, img); err != nil {
+			return false, err
 		}
 	}
-	screen.Fill(theme.Bg)
-	screen.DrawImage(img, nil)
 	g.index++
-	g.done = g.index == n*4
-	return nil
-}
-
-// savePNG writes img to name, reporting either an encode or a close failure.
-func savePNG(name string, img *ggfx.Image) (err error) {
-	f, err := os.Create(name)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if closeErr := f.Close(); err == nil {
-			err = closeErr
-		}
-	}()
-	return png.Encode(f, img)
+	return g.index == n*4, nil
 }
 
 func renderControls(directory string) error {
@@ -106,10 +88,5 @@ func renderControls(directory string) error {
 		return err
 	}
 	g := &controlsRender{directory: directory}
-	return runRenderWindow("ggui controls render validation", 560, 520, func(screen *ggfx.Image) (bool, error) {
-		if err := g.step(screen); err != nil {
-			return false, err
-		}
-		return g.done, nil
-	})
+	return offscreen.Run(g.step)
 }

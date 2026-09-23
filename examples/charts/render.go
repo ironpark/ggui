@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/examples/internal/offscreen"
 	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
@@ -19,11 +19,10 @@ import (
 type renderGame struct {
 	directory string
 	index     int
-	done      bool
 }
 
-// step renders one example into g.directory and previews it on screen.
-func (g *renderGame) step(screen *ggfx.Image) error {
+// step renders one example into g.directory.
+func (g *renderGame) step() (done bool, err error) {
 	e := chartExamples[g.index%len(chartExamples)]
 	dark := g.index >= len(chartExamples)
 	preset := uitheme.Preset{Base: uitheme.BaseNeutral, Accent: uitheme.AccentBlue}
@@ -60,31 +59,12 @@ func (g *renderGame) step(screen *ggfx.Image) error {
 			content.Paint(dst, ggui.Rct(ggui.Pt(180., 180.), tipSize))
 		}
 		name := filepath.Join(g.directory, fmt.Sprintf("%s-%s-%04d.png", e.Name, mode, ms))
-		if err := savePNG(name, img); err != nil {
-			return err
+		if err := offscreen.SavePNG(name, img); err != nil {
+			return false, err
 		}
 	}
-	screen.Fill(theme.Bg)
-	screen.DrawImage(img, nil)
 	g.index++
-	if g.index == 2*len(chartExamples) {
-		g.done = true
-	}
-	return nil
-}
-
-// savePNG writes img to name, reporting either an encode or a close failure.
-func savePNG(name string, img *ggfx.Image) (err error) {
-	f, err := os.Create(name)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if closeErr := f.Close(); err == nil {
-			err = closeErr
-		}
-	}()
-	return png.Encode(f, img)
+	return g.index == 2*len(chartExamples), nil
 }
 
 func renderCharts(directory string) error {
@@ -92,10 +72,5 @@ func renderCharts(directory string) error {
 		return err
 	}
 	g := &renderGame{directory: directory}
-	return runRenderWindow("ggui chart render validation", 480, 420, func(screen *ggfx.Image) (bool, error) {
-		if err := g.step(screen); err != nil {
-			return false, err
-		}
-		return g.done, nil
-	})
+	return offscreen.Run(g.step)
 }

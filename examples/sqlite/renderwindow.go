@@ -2,22 +2,21 @@ package main
 
 import "github.com/ironpark/ggfx"
 
-// runRenderWindow calls step on every frame until step reports that it is done
-// or fails. A render harness needs a window because the graphics driver draws
-// and reads back pixels inside a frame, but the window stays hidden: nothing is
-// shown, and the frames still run.
-func runRenderWindow(title string, width, height int, step func(screen *ggfx.Image) (done bool, err error)) error {
+// runRenderWindow is examples/internal/offscreen.Run. This module resolves
+// ggui at its pinned version outside the workspace, which predates that
+// package, so it keeps a copy until the pin moves past it.
+func runRenderWindow(step func() (done bool, err error)) error {
 	var window *ggfx.Window
 	return ggfx.Run(ggfx.HandlerFunc(func(ev ggfx.Event) error {
-		switch ev := ev.(type) {
+		switch ev.(type) {
 		case ggfx.StartEvent:
-			w, err := ggfx.NewWindow(&ggfx.WindowOptions{Title: title, Width: width, Height: height, Hidden: true})
+			w, err := ggfx.NewWindow(&ggfx.WindowOptions{Title: "ggui render", Width: 64, Height: 64, Hidden: true})
 			if err != nil {
 				return err
 			}
 			window = w
 		case ggfx.FrameEvent:
-			done, err := step(ev.Screen)
+			done, err := step()
 			if err != nil {
 				return err
 			}
