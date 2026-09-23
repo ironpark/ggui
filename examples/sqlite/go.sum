@@ -20,8 +20,8 @@ github.com/hashicorp/golang-lru/v2 v2.0.7 h1:a+bsQ5rvGLjzHuww6tVxozPZFVghXaHOwFs
 github.com/hashicorp/golang-lru/v2 v2.0.7/go.mod h1:QeFd9opnmA6QUJc5vARoKUSoFhyfM2/ZepoAG6RGpeM=
 github.com/ironpark/ggfx v0.0.0-20260923170703-65f546a3c956 h1:5bYSEUCtDOClVhw8bQoU8wmyN/D3r96sE5Ij6E9evzY=
 github.com/ironpark/ggfx v0.0.0-20260923170703-65f546a3c956/go.mod h1:lp/zmzxrCDxnZSl6aBO0Wt96v+Lg+G9hxqMA1BPpwJQ=
-github.com/ironpark/ggui v0.0.0-20260923140253-87ce44364883 h1:Nhr5SdC6Iqgg40wJN+MJB5nIM0OGShGAYeqijao1oYo=
-github.com/ironpark/ggui v0.0.0-20260923140253-87ce44364883/go.mod h1:wEowEQlyvZ7GOR/vE5auuagnsM58b4w29R115jgEi+o=
+github.com/ironpark/ggui v0.0.0-20260923225619-7181fdbacdac h1:N6EX0Kr4DBAsSuCnD/P5mVenW5quN2JLAG7HY4pWCp0=
+github.com/ironpark/ggui v0.0.0-20260923225619-7181fdbacdac/go.mod h1:KXucoxmcOB2cQ0bv5/7x6x7bzkjhp9mHrrbSrqhXAKM=
 github.com/mattn/go-isatty v0.0.24 h1:tGZZoVgT/KiqK1c8ocVLeDS8BSWMRd47J3Lbz7vsReI=
 github.com/mattn/go-isatty v0.0.24/go.mod h1:nMCL3Zebbrt45jsMDgnfIwz6ydEQApk5oEI3HqDio6A=
 github.com/ncruces/go-strftime v1.0.0 h1:HMFp8mLCTPp341M/ZnA4qaf7ZlsbTc+miZjCLOFAw7w=
