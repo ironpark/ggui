@@ -42,7 +42,13 @@ type transitionStart struct{ at time.Time }
 // Transition wraps child in an enter animation: a fade over 200ms until
 // Fade, Slide or Scale say otherwise.
 func Transition(child Widget) *TransitionWidget {
-	return &TransitionWidget{child: child, duration: 200 * time.Millisecond, ease: EaseOut, id: reactive.AutoID()}
+	t := &TransitionWidget{child: child, duration: 200 * time.Millisecond, ease: EaseOut, id: reactive.AutoID()}
+	if reactive.CurrentOwner() != nil {
+		// A transition unmounted mid-animation never reaches the release in
+		// Paint, and its screen-sized buffer would otherwise wait for the GC.
+		OnCleanup(t.release)
+	}
+	return t
 }
 
 // PopIn is the entrance every floating panel shares: a fade with a slight
