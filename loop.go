@@ -84,6 +84,7 @@ type frameLoop struct {
 
 	postMu sync.Mutex
 	posted []func()
+	wake   func() // asks the host for a frame; nil under a Probe
 	frame  []func() // OnFrame handlers, run at the start of every frame
 
 	laidSize Size
@@ -211,10 +212,16 @@ func (r *frameLoop) close() {
 // post queues fn to run on the UI thread before the next frame's input.
 func (r *frameLoop) post(fn func()) {
 	r.postMu.Lock()
-	if !r.closed {
+	queued := !r.closed
+	if queued {
 		r.posted = append(r.posted, fn)
 	}
 	r.postMu.Unlock()
+	// An idle window draws no frames, so work posted from a worker or a
+	// browser callback would otherwise wait for the next input.
+	if queued && r.wake != nil {
+		r.wake()
+	}
 }
 
 // runFrame runs the OnFrame handlers, in registration order.

@@ -78,6 +78,7 @@ type App struct {
 // New creates an App that renders the tree returned by build.
 func New(cfg Config, build Builder) *App {
 	a := &App{cfg: cfg.withDefaults()}
+	a.wake = a.requestFrame
 	a.build = build
 	a.dialogs = a.nativeFilePicker()
 	if cfg.Inspector != "" {
@@ -105,10 +106,7 @@ func (a *App) Setup(fn func()) *App {
 // Post queues fn to run on the UI thread before the next frame's input.
 // It is the one way a goroutine may touch signals: do the work off the
 // thread, then Post the Set. Work posted by a callback runs next frame.
-func (a *App) Post(fn func()) {
-	a.post(fn)
-	a.requestFrame()
-}
+func (a *App) Post(fn func()) { a.post(fn) }
 
 // Close disposes the root owner, and with it every effect, memo and
 // component the app created, and ends Run at the next frame. Call it from
