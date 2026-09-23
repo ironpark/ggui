@@ -103,19 +103,7 @@ func (a *AvatarWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		return
 	}
 	side := min(r.Size.W, r.Size.H)
-	drawCover(dst, a.img, ggui.Rct(r.Origin, ggui.Sz(side, side)), radius, ggui.ImageOptions{})
-}
-
-// drawCover draws img scaled to cover the logical Rect r, keeping its aspect
-// ratio, and cut to r with its corners rounded by radius, which at half the
-// side of a square is a circle.
-func drawCover(dst *ggui.Canvas, img *ggfx.Image, r ggui.Rect, radius float64, o ggui.ImageOptions) {
-	b := img.Bounds()
-	if b.Empty() {
-		return
-	}
-	at := ggui.FitCover.Place(ggui.Sz(b.Dx(), b.Dy()), r)
-	dst.ClipRoundRect(r, radius, func(dst *ggui.Canvas) { dst.DrawImage(img, at, o) })
+	dst.DrawImage(a.img, ggui.Rct(r.Origin, ggui.Sz(side, side)), ggui.ImageOptions{Fit: ggui.FitCover, Radius: radius})
 }
 
 // BindName follows a non-nil accessible-name reader.

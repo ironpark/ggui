@@ -29,10 +29,19 @@ with ggfx directly, and text rasterizes its face at the scaled size rather
 than scaling the pixels. A custom widget that draws with ggfx directly should
 do the same.
 
-`dst.DrawImage(img, r, ggui.ImageOptions{})` stretches an image over a
-logical Rect. The options fade it, tint it (an icon's colour), turn it about
-its centre, or sample it pixelated instead of smoothed; the zero value draws
-it plainly.
+`dst.DrawImage(img, r, ggui.ImageOptions{})` draws an image in a logical
+Rect. The options place it (`Fit`, contain by default, clipped to the Rect),
+round the Rect's corners (`Radius`), fade it, tint it (an icon's colour),
+turn it about its centre, or sample it pixelated instead of smoothed. An
+avatar is a round photo:
+
+```go
+dst.DrawImage(photo, r, ggui.ImageOptions{Fit: ggui.FitCover, Radius: r.Size.W / 2})
+```
+
+A rounded image is one shader draw with no intermediate image. A shader gets
+no mipmaps, so it filters a shrunk image itself, averaging taps over each
+pixel's footprint.
 
 ## Custom widgets
 
@@ -140,14 +149,8 @@ dst.Layer(ggui.LayerOptions{Fade: 1 - opacity}, func(layer *ggui.Canvas) {
 ```
 
 `dst.ClipRoundRect(r, radius, paint)` is a clip with rounded, antialiased
-corners, built the same way over a layer that covers `r` alone. An avatar cuts
-its photo to a circle with it:
-
-```go
-dst.ClipRoundRect(r, r.Size.W/2, func(dst *ggui.Canvas) {
-	dst.DrawImage(photo, cover, ggui.ImageOptions{})
-})
-```
+corners for a whole subtree, built the same way over a layer that covers `r`
+alone. For a single image, `ImageOptions.Radius` is cheaper.
 
 The images belong to the window, not to the widget. Layers painted one after
 another reuse one image and nested layers take one each, and a layer for a

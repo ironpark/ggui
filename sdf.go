@@ -203,3 +203,110 @@ func (c *Canvas) maskRoundRect(img *ggfx.Image, r Rect, radius float64) {
 	op.GeoM.Translate(float64(b.Min.X), float64(b.Min.Y))
 	c.Image.DrawRectShader(b.Dx(), b.Dy(), sharedRoundRectMask(), op)
 }
+
+// roundRectImageSource draws source image 0 cut to a rounded rectangle in
+// one pass. custom.xy is the fragment's place relative to the rectangle's
+// centre, unturned. The image is filtered here rather than by a mipmap,
+// which a shader does not get: bilinear at one texel a pixel or more, and
+// shrunk further, the average of a grid of bilinear taps spread over the
+// pixel's footprint, up to eight each way.
+const roundRectImageSource = roundRectDistance + `
+struct Uniforms {
+	half_size: vec2f,
+	radius: f32,
+	feather: f32,
+	pixelated: i32,
+}
+@group(1) @binding(0) var<uniform> u: Uniforms;
+fn bilinear(p: vec2f) -> vec4f {
+	let q = clamp(p, src0_origin() + 0.5, src0_origin() + src0_size() - 0.5);
+	if (u.pixelated != 0) {
+		return src0_at(q);
+	}
+	let p0 = q - 0.5;
+	let p1 = q + 0.5;
+	let rate = fract(p1);
+	let top = mix(src0_at(p0), src0_at(vec2f(p1.x, p0.y)), rate.x);
+	let bottom = mix(src0_at(vec2f(p0.x, p1.y)), src0_at(p1), rate.x);
+	return mix(top, bottom, rate.y);
+}
+fn fragment(v: Vertex) -> vec4f {
+	let dx = dpdx(v.src_pos);
+	let dy = dpdy(v.src_pos);
+	let coverage = 1.0 - smoothstep(-u.feather, u.feather, round_rect_distance(v.custom.xy, u.half_size, u.radius));
+	if (coverage <= 0.0) {
+		return vec4f(0.0);
+	}
+	var n = vec2i(1, 1);
+	if (u.pixelated == 0) {
+		n = vec2i(clamp(ceil(vec2f(length(dx), length(dy))), vec2f(1.0), vec2f(8.0)));
+	}
+	var sum = vec4f(0.0);
+	for (var j = 0; j < n.y; j++) {
+		for (var i = 0; i < n.x; i++) {
+			let t = (vec2f(f32(i), f32(j)) + 0.5) / vec2f(n) - 0.5;
+			sum += bilinear(v.src_pos + t.x * dx + t.y * dy);
+		}
+	}
+	return sum / f32(n.x * n.y) * v.color * coverage;
+}
+`
+
+var sharedRoundRectImage = sync.OnceValue(func() *ggfx.Shader {
+	shader, err := ggfx.NewShader([]byte(roundRectImageSource))
+	if err != nil {
+		panic("ggui: compile round rect image shader: " + err.Error())
+	}
+	return shader
+})
+
+// shadeImage draws img placed at the logical Rect at, cut to r with its
+// corners rounded by o.Radius, in one draw: a quad over r and a pixel of
+// edge, whose source positions follow at.
+func (c *Canvas) shadeImage(img *ggfx.Image, r, at Rect, o ImageOptions) {
+	scale := c.Scale()
+	reach := 1 / scale
+	if o.Rotation != 0 {
+		reach += math.Hypot(r.Size.W, r.Size.H)/2 - min(r.Size.W, r.Size.H)/2
+	}
+	if at.Size.W <= 0 || at.Size.H <= 0 || !c.visiblePaintBounds(r, reach) {
+		return
+	}
+	b := img.Bounds()
+	kx, ky := float64(b.Dx())/at.Size.W, float64(b.Dy())/at.Size.H
+	centre := r.Center()
+	sin, cos := math.Sincos(o.Rotation)
+	red, green, blue, alpha := float32(1), float32(1), float32(1), float32(1)
+	if o.Tint != nil {
+		cr, cg, cb, ca := o.Tint.RGBA()
+		red, green, blue, alpha = float32(cr)/0xffff, float32(cg)/0xffff, float32(cb)/0xffff, float32(ca)/0xffff
+	}
+	if o.Fade != 0 {
+		k := float32(1 - o.Fade)
+		red, green, blue, alpha = red*k, green*k, blue*k, alpha*k
+	}
+	e := 1 / scale // one device pixel of edge to antialias into
+	var vs [4]ggfx.Vertex
+	for i, p := range [4]Point{
+		{X: r.Origin.X - e, Y: r.Origin.Y - e}, {X: r.Origin.X + r.Size.W + e, Y: r.Origin.Y - e},
+		{X: r.Origin.X - e, Y: r.Origin.Y + r.Size.H + e}, {X: r.Origin.X + r.Size.W + e, Y: r.Origin.Y + r.Size.H + e},
+	} {
+		d := Pt(p.X-centre.X, p.Y-centre.Y)
+		turned := centre.Add(Pt(d.X*cos-d.Y*sin, d.X*sin+d.Y*cos))
+		vs[i] = ggfx.Vertex{
+			DstX: float32(c.px(turned.X)), DstY: float32(c.px(turned.Y)),
+			SrcX: float32(float64(b.Min.X) + (p.X-at.Origin.X)*kx), SrcY: float32(float64(b.Min.Y) + (p.Y-at.Origin.Y)*ky),
+			ColorR: red, ColorG: green, ColorB: blue, ColorA: alpha,
+			Custom0: float32(d.X * scale), Custom1: float32(d.Y * scale),
+		}
+	}
+	half := Sz(r.Size.W*scale/2, r.Size.H*scale/2)
+	op := &ggfx.DrawTrianglesShaderOptions{Uniforms: map[string]any{
+		"half_size": []float32{float32(half.W), float32(half.H)},
+		"radius":    float32(min(o.Radius*scale, half.W, half.H)),
+		"feather":   float32(feather),
+		"pixelated": o.Pixelated,
+	}}
+	op.Images[0] = img
+	c.Image.DrawTrianglesShader(vs[:], []uint16{0, 1, 2, 1, 3, 2}, sharedRoundRectImage(), op)
+}

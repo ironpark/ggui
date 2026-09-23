@@ -47,10 +47,11 @@ func (c *Canvas) Layer(o LayerOptions, paint func(layer *Canvas)) {
 	})
 }
 
-// ClipRoundRect is Clip with the corners of r rounded by radius, antialiased:
-// a photo cut to a circle, say. paint draws into a Layer covering r alone,
-// which is composited through the rounded shape. Hit regions are clipped to
-// r as a rectangle. A zero radius is Clip.
+// ClipRoundRect is Clip with the corners of r rounded by radius, antialiased,
+// for a subtree: a card whose content runs to its rounded edge, say. paint
+// draws into a Layer covering r alone, which is composited through the
+// rounded shape. Hit regions are clipped to r as a rectangle. A zero radius
+// is Clip. A single image is cheaper drawn with ImageOptions.Radius.
 func (c *Canvas) ClipRoundRect(r Rect, radius float64, paint func(dst *Canvas)) {
 	clip := c.Clip(r)
 	if radius <= 0 || clip == nil || clip.Image == nil || clip.Image.Bounds().Empty() {

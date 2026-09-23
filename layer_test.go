@@ -176,3 +176,10 @@ func TestTransitionFadeHoldsALayerOnlyWhileAnimating(t *testing.T) {
 		}
 	})
 }
+
+// A shader that fails to compile panics on its first use, which for these
+// is the first rounded image or clip painted.
+func TestRoundedShadersCompile(t *testing.T) {
+	sharedRoundRectMask()
+	sharedRoundRectImage()
+}

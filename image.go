@@ -156,17 +156,17 @@ func (w *ImageWidget) Paint(dst *Canvas, r Rect) {
 	if w.alt != "" {
 		dst.Leaf(r, Node{Role: RoleImage, Name: w.alt})
 	}
-	at := w.fit.Place(w.natural(), r)
-	target := dst
-	if at != r {
-		target = dst.Clip(r)
-	}
-	target.DrawImage(w.img, at, ImageOptions{Pixelated: w.pixelated})
+	dst.DrawImage(w.img, r, ImageOptions{Fit: w.fit, Pixelated: w.pixelated})
 }
 
-// ImageOptions says how DrawImage draws an image. The zero value draws it
-// opaque, upright and smoothed.
+// ImageOptions says how DrawImage draws an image. The zero value fits it
+// inside the Rect, opaque, upright and smoothed.
 type ImageOptions struct {
+	// Fit places the image in the Rect; what falls outside is clipped.
+	Fit ImageFit
+	// Radius rounds the Rect's corners, antialiased, and the image is cut
+	// to them: at half the side of a square, a round photo.
+	Radius float64
 	// Fade is how far the image fades out: 0 draws it opaque, 1 not at all.
 	Fade float64
 	// Tint multiplies every pixel, which is how a white icon takes a
@@ -179,7 +179,7 @@ type ImageOptions struct {
 	Pixelated bool
 }
 
-// DrawImage draws img stretched over the logical Rect r, as o says.
+// DrawImage draws img in the logical Rect r, as o says.
 func (c *Canvas) DrawImage(img *ggfx.Image, r Rect, o ImageOptions) {
 	if c == nil || c.Image == nil || img == nil || o.Fade >= 1 {
 		return
@@ -188,6 +188,20 @@ func (c *Canvas) DrawImage(img *ggfx.Image, r Rect, o ImageOptions) {
 	if b.Empty() {
 		return
 	}
+	at := o.Fit.Place(Sz(b.Dx(), b.Dy()), r)
+	if o.Radius > 0 {
+		c.shadeImage(img, r, at, o)
+		return
+	}
+	if at != r {
+		c = c.Clip(r)
+	}
+	c.drawImage(img, at, o)
+}
+
+// drawImage draws img stretched over the logical Rect r.
+func (c *Canvas) drawImage(img *ggfx.Image, r Rect, o ImageOptions) {
+	b := img.Bounds()
 	// A turned image reaches as far as its corners do.
 	reach := 0.0
 	if o.Rotation != 0 {
