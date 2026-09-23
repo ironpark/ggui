@@ -69,16 +69,14 @@ type session struct {
 	length  int
 	nextID  uint64
 	post    func(func())
-	subs    map[int]func(Entry)
-	nextSub int
+	subs    subscribers
 	listen  js.Func
-	active  bool
 }
 
 func (h *session) init(read func() string, write func(string) string) {
 	h.history = js.Global().Get("history")
 	h.read, h.write = read, write
-	h.subs = map[int]func(Entry){}
+	h.index = -1 // so an untagged first entry lands at 0
 	h.adopt(h.history.Get("state"))
 }
 
@@ -98,9 +96,7 @@ func (h *session) adopt(state js.Value) {
 		}
 		return
 	}
-	if h.active {
-		h.index++
-	}
+	h.index++
 	h.length = h.index + 1
 	h.current = h.tag(url, "replaceState", state)
 }
@@ -146,18 +142,13 @@ func (h *session) Position() (index, length int) { return h.index, h.length }
 // Subscribe listens for popstate. Events are handed to the dispatcher the
 // router installs, so subscribers run on the UI thread.
 func (h *session) Subscribe(fn func(Entry)) (stop func()) {
-	id := h.nextSub
-	h.nextSub++
-	h.subs[id] = fn
-	if len(h.subs) == 1 {
+	id := h.subs.add(fn)
+	if len(h.subs.fns) == 1 {
 		h.listen = js.FuncOf(func(this js.Value, args []js.Value) any {
 			state := args[0].Get("state")
 			deliver := func() {
-				h.active = true
 				h.adopt(state)
-				for _, fn := range h.subs {
-					fn(h.current)
-				}
+				h.subs.notify(h.current)
 			}
 			if h.post != nil {
 				h.post(deliver)
@@ -169,8 +160,8 @@ func (h *session) Subscribe(fn func(Entry)) (stop func()) {
 		js.Global().Call("addEventListener", "popstate", h.listen)
 	}
 	return func() {
-		delete(h.subs, id)
-		if len(h.subs) == 0 {
+		delete(h.subs.fns, id)
+		if len(h.subs.fns) == 0 {
 			js.Global().Call("removeEventListener", "popstate", h.listen)
 			h.listen.Release()
 		}

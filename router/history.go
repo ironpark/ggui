@@ -28,13 +28,12 @@ type MemoryHistory struct {
 	entries []Entry
 	index   int
 	nextID  uint64
-	subs    map[int]func(Entry)
-	nextSub int
+	subs    subscribers
 }
 
 // Memory returns an in-memory history whose first entry is initialURL.
 func Memory(initialURL string) *MemoryHistory {
-	h := &MemoryHistory{subs: map[int]func(Entry){}}
+	h := &MemoryHistory{}
 	h.entries = []Entry{h.entry(initialURL)}
 	return h
 }
@@ -66,19 +65,36 @@ func (h *MemoryHistory) Go(delta int) {
 		return
 	}
 	h.index = next
-	e := h.entries[next]
-	for _, fn := range h.subs {
-		fn(e)
-	}
+	h.subs.notify(h.entries[next])
 }
 
 func (h *MemoryHistory) Position() (index, length int) { return h.index, len(h.entries) }
 
 func (h *MemoryHistory) Subscribe(fn func(Entry)) (stop func()) {
-	id := h.nextSub
-	h.nextSub++
-	h.subs[id] = fn
-	return func() { delete(h.subs, id) }
+	id := h.subs.add(fn)
+	return func() { delete(h.subs.fns, id) }
+}
+
+// subscribers holds a history's traversal listeners.
+type subscribers struct {
+	fns  map[int]func(Entry)
+	next int
+}
+
+func (s *subscribers) add(fn func(Entry)) (id int) {
+	if s.fns == nil {
+		s.fns = map[int]func(Entry){}
+	}
+	id = s.next
+	s.next++
+	s.fns[id] = fn
+	return id
+}
+
+func (s *subscribers) notify(e Entry) {
+	for _, fn := range s.fns {
+		fn(e)
+	}
 }
 
 // cleanBase validates a Browser base path and returns it without a trailing

@@ -5,6 +5,7 @@ package router
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/ironpark/ggui"
@@ -14,15 +15,14 @@ import (
 // ErrNotMounted is returned by navigation before the router's View mounts.
 var ErrNotMounted = errors.New("router: View is not mounted")
 
+const maxChain = 8
+
 // ErrRedirectLoop is returned when navigation keeps triggering navigation
 // without an intervening frame.
-var ErrRedirectLoop = errors.New("router: more than 8 chained navigations without a frame")
-
-const maxChain = 8
+var ErrRedirectLoop = fmt.Errorf("router: more than %d chained navigations without a frame", maxChain)
 
 // Router matches locations, reconciles the mounted branch and drives history.
 type Router struct {
-	routes    []*route
 	leaves    []*route
 	notFounds []*route
 	builtin   *route // the screen used when no NotFound applies
@@ -38,15 +38,8 @@ type Router struct {
 	pos  *ggui.StateValue[[2]int]
 	root *ggui.StateValue[*entry]
 
-	current    []*entry
-	committing bool
-	queued     *queuedNav
-	chain      int
-}
-
-type queuedNav struct {
-	url     string
-	replace bool
+	current []*entry
+	chain   int
 }
 
 // entry is one mounted level: an instance and, for a layout, the state its
@@ -67,7 +60,6 @@ func New(routes ...Route) *Router {
 		root: ggui.State[*entry](nil),
 	}
 	compile(r, routes)
-	r.builtin = &route{id: len(r.routes), kind: kindNotFound}
 	return r
 }
 
@@ -124,11 +116,7 @@ func (r *Router) match(u parsedURL) (parsedURL, *route, map[string]string, bool)
 		if leaf.kind != kindRedirect {
 			return u, leaf, params, redirected
 		}
-		next, err := parseURL(leaf.to) // validated by New
-		if err != nil {
-			panic(err)
-		}
-		u, redirected = next, true
+		u, redirected = leaf.to, true
 	}
 	if nf, params := r.matchNotFound(u.decoded); nf != nil {
 		return u, nf, params, redirected
@@ -154,24 +142,27 @@ func (r *Router) traverse(e Entry) {
 	}
 	loc.Entry = e.ID
 	r.commit(loc, leaf, params)
-	r.drain()
 }
 
 // Navigate pushes an application-absolute URL such as /projects/1?tab=a.
 // Unknown routes are valid and show a not-found screen.
-func (r *Router) Navigate(url string) error { return r.navigate(url, false) }
+func (r *Router) Navigate(url string) error {
+	reactive.CheckUIThread("router.Navigate")
+	return r.navigate(url, false)
+}
 
 // Replace is Navigate without a new history entry.
-func (r *Router) Replace(url string) error { return r.navigate(url, true) }
+func (r *Router) Replace(url string) error {
+	reactive.CheckUIThread("router.Replace")
+	return r.navigate(url, true)
+}
 
+// navigate commits at once. A call from a page's setup runs during the
+// frame's flush, after the commit that mounted the page, so it needs no
+// queue; chain stops a page that keeps navigating.
 func (r *Router) navigate(url string, replace bool) error {
-	reactive.CheckUIThread("router.Navigate")
 	if !r.mounted {
 		return ErrNotMounted
-	}
-	if r.committing {
-		r.queued = &queuedNav{url, replace}
-		return nil
 	}
 	u, err := parseURL(url)
 	if err != nil {
@@ -181,7 +172,8 @@ func (r *Router) navigate(url string, replace bool) error {
 	// or replaced in its place.
 	u, leaf, params, _ := r.match(u)
 	loc := u.location()
-	if loc.String() == ggui.Untrack(r.loc.Get).String() {
+	s := loc.String()
+	if s == ggui.Untrack(r.loc.Get).String() {
 		return nil
 	}
 	r.chain++
@@ -193,32 +185,20 @@ func (r *Router) navigate(url string, replace bool) error {
 	}
 	var e Entry
 	if replace {
-		e, err = r.history.Replace(loc.String())
+		e, err = r.history.Replace(s)
 	} else {
-		e, err = r.history.Push(loc.String())
+		e, err = r.history.Push(s)
 	}
 	if err != nil {
 		return err
 	}
 	loc.Entry = e.ID
 	r.commit(loc, leaf, params)
-	return r.drain()
-}
-
-// drain runs the navigation queued during the last commit, if any.
-func (r *Router) drain() error {
-	q := r.queued
-	r.queued = nil
-	if q == nil {
-		return nil
-	}
-	return r.navigate(q.url, q.replace)
+	return nil
 }
 
 // commit publishes the location and match together, then reconciles.
 func (r *Router) commit(loc Location, leaf *route, params map[string]string) {
-	r.committing = true
-	defer func() { r.committing = false }()
 	index, length := r.history.Position()
 	r.loc.Set(loc)
 	r.path.Set(loc.Path)
@@ -240,22 +220,15 @@ func (r *Router) reconcile(next []instance) {
 	if d == len(old) && d == len(next) {
 		return
 	}
+	fresh := make([]*entry, len(next))
+	copy(fresh, old[:d])
 	var first *entry
 	for i := len(next) - 1; i >= d; i-- {
 		e := &entry{inst: next[i]}
 		if next[i].route.kind == kindLayout {
 			e.child = ggui.State(first)
 		}
-		first = e
-	}
-	fresh := make([]*entry, 0, len(next))
-	fresh = append(fresh, old[:d]...)
-	for e := first; e != nil; {
-		fresh = append(fresh, e)
-		if e.child == nil {
-			break
-		}
-		e = ggui.Untrack(e.child.Get)
+		fresh[i], first = e, e
 	}
 	r.current = fresh
 	if d == 0 {
@@ -272,24 +245,25 @@ func (r *Router) build(e *entry) ggui.Widget {
 	}
 	c := &Context{r: r, inst: e.inst, owner: reactive.CurrentOwner()}
 	rt := e.inst.route
-	switch {
-	case rt.kind == kindLayout:
+	if rt.kind == kindLayout {
 		return rt.layout(c, ggui.Key(e.child, r.build))
-	case rt.page == nil:
-		return ggui.Text("Not found")
-	default:
-		return rt.page(c)
 	}
+	return rt.page(c)
 }
 
 // Back moves one entry back; it is a no-op at the first entry.
-func (r *Router) Back() { r.traversal(-1) }
+func (r *Router) Back() {
+	reactive.CheckUIThread("router.Back")
+	r.traversal(-1)
+}
 
 // Forward moves one entry forward; it is a no-op at the last entry.
-func (r *Router) Forward() { r.traversal(1) }
+func (r *Router) Forward() {
+	reactive.CheckUIThread("router.Forward")
+	r.traversal(1)
+}
 
 func (r *Router) traversal(delta int) {
-	reactive.CheckUIThread("router.Back")
 	if r.mounted {
 		r.history.Go(delta)
 	}
@@ -316,9 +290,10 @@ func (r *Router) Active(path string) ggui.Readable[bool] {
 		panic(err)
 	}
 	prefix := u.path()
+	below := prefix + "/"
 	return reader[bool](func() bool {
 		p := r.path.Get()
-		return prefix == "/" || p == prefix || strings.HasPrefix(p, prefix+"/")
+		return prefix == "/" || p == prefix || strings.HasPrefix(p, below)
 	})
 }
 

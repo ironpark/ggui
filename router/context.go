@@ -28,7 +28,7 @@ func (c *Context) Query(name string) string {
 	d := c.queries[name]
 	if d == nil {
 		reactive.WithOwner(c.owner, func() {
-			d = ggui.Derived(func() string { return c.r.loc.Get().Query(name) })
+			d = c.r.loc.Map(func(l Location) string { return l.Query(name) })
 		})
 		if c.queries == nil {
 			c.queries = map[string]*ggui.DerivedValue[string]{}

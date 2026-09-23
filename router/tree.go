@@ -2,6 +2,7 @@ package router
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/ironpark/ggui"
@@ -79,7 +80,7 @@ type route struct {
 	layout  LayoutFunc
 	page    PageFunc
 	target  *Target
-	to      string // redirect destination
+	to      parsedURL // redirect destination
 }
 
 type compiler struct {
@@ -87,7 +88,7 @@ type compiler struct {
 	seen      map[any]bool
 	leaves    map[string]*route // page and redirect signatures
 	notFounds map[string]*route // section signatures
-	all       []*route
+	count     int
 }
 
 func (c *compiler) fail(format string, args ...any) {
@@ -95,8 +96,8 @@ func (c *compiler) fail(format string, args ...any) {
 }
 
 func (c *compiler) add(r *route) *route {
-	r.id = len(c.all)
-	c.all = append(c.all, r)
+	r.id = c.count
+	c.count++
 	return r
 }
 
@@ -159,16 +160,21 @@ func (c *compiler) walk(nodes []Route, section []seg, layouts []*route) {
 			n.rt = c.leaf(&route{kind: kindPage, pattern: p, layouts: layouts, page: n.build, target: n})
 		case *redirectNode:
 			p := c.join(section, n.path, true)
-			c.leaf(&route{kind: kindRedirect, pattern: p, layouts: layouts, to: n.to})
+			to, err := parseURL(n.to)
+			if err != nil {
+				c.fail("redirect %s → %q: %v", patternString(p), n.to, err)
+			}
+			c.leaf(&route{kind: kindRedirect, pattern: p, layouts: layouts, to: to})
 		case *notFoundNode:
 			if n.build == nil {
 				c.fail("nil not-found page at %s", patternString(section))
 			}
 			sig := signature(section)
-			if prev := c.notFounds[sig]; prev != nil {
+			if c.notFounds[sig] != nil {
 				c.fail("two NotFound nodes for section %s", patternString(section))
 			}
 			c.notFounds[sig] = c.add(&route{kind: kindNotFound, pattern: section, layouts: layouts, page: n.build})
+			c.r.notFounds = append(c.r.notFounds, c.notFounds[sig])
 		default:
 			c.fail("unknown route node %T", n)
 		}
@@ -181,6 +187,7 @@ func (c *compiler) leaf(r *route) *route {
 		c.fail("ambiguous routes %s and %s", patternString(prev.pattern), patternString(r.pattern))
 	}
 	c.leaves[sig] = r
+	c.r.leaves = append(c.r.leaves, r)
 	return c.add(r)
 }
 
@@ -188,15 +195,8 @@ func (c *compiler) leaf(r *route) *route {
 func compile(r *Router, routes []Route) {
 	c := &compiler{r: r, seen: map[any]bool{}, leaves: map[string]*route{}, notFounds: map[string]*route{}}
 	c.walk(routes, nil, nil)
-	for _, rt := range c.all {
-		switch rt.kind {
-		case kindPage, kindRedirect:
-			r.leaves = append(r.leaves, rt)
-		case kindNotFound:
-			r.notFounds = append(r.notFounds, rt)
-		}
-	}
-	r.routes = c.all
+	// The screen used when no NotFound applies.
+	r.builtin = c.add(&route{kind: kindNotFound, page: func(*Context) ggui.Widget { return ggui.Text("Not found") }})
 	for _, rt := range r.leaves {
 		if rt.kind != kindRedirect {
 			continue
@@ -204,13 +204,9 @@ func compile(r *Router, routes []Route) {
 		visited := map[*route]bool{rt: true}
 		cur := rt
 		for cur.kind == kindRedirect {
-			u, err := parseURL(cur.to)
-			if err != nil {
-				c.fail("redirect %s → %q: %v", patternString(cur.pattern), cur.to, err)
-			}
-			next, _ := r.matchLeaf(u.decoded)
+			next, _ := r.matchLeaf(cur.to.decoded)
 			if next == nil {
-				c.fail("redirect %s → %q matches no page", patternString(cur.pattern), cur.to)
+				c.fail("redirect %s → %q matches no page", patternString(cur.pattern), cur.to.location())
 			}
 			if visited[next] {
 				c.fail("redirect loop through %s", patternString(rt.pattern))
@@ -223,24 +219,20 @@ func compile(r *Router, routes []Route) {
 
 // matchLeaf finds the most specific page or redirect for path.
 func (r *Router) matchLeaf(path []string) (*route, map[string]string) {
-	var best *route
-	var bestParams map[string]string
-	for _, rt := range r.leaves {
-		params, ok := matchSegs(rt.pattern, path, false)
-		if ok && (best == nil || moreSpecific(rt.pattern, best.pattern)) {
-			best, bestParams = rt, params
-		}
-	}
-	return best, bestParams
+	return bestMatch(r.leaves, path, false)
 }
 
 // matchNotFound finds the NotFound of the most specific section containing
 // path, or nil for the built-in screen.
 func (r *Router) matchNotFound(path []string) (*route, map[string]string) {
+	return bestMatch(r.notFounds, path, true)
+}
+
+func bestMatch(routes []*route, path []string, prefix bool) (*route, map[string]string) {
 	var best *route
 	var bestParams map[string]string
-	for _, rt := range r.notFounds {
-		params, ok := matchSegs(rt.pattern, path, true)
+	for _, rt := range routes {
+		params, ok := matchSegs(rt.pattern, path, prefix)
 		if ok && (best == nil || moreSpecific(rt.pattern, best.pattern)) {
 			best, bestParams = rt, params
 		}
@@ -259,7 +251,7 @@ type instance struct {
 func newInstance(rt *route, all map[string]string) instance {
 	var own map[string]string
 	var b strings.Builder
-	fmt.Fprintf(&b, "%d", rt.id)
+	b.WriteString(strconv.Itoa(rt.id))
 	for _, s := range rt.pattern {
 		if s.kind == segStatic {
 			continue
@@ -268,7 +260,8 @@ func newInstance(rt *route, all map[string]string) instance {
 			own = map[string]string{}
 		}
 		own[s.text] = all[s.text]
-		fmt.Fprintf(&b, "\x00%s", all[s.text])
+		b.WriteByte(0)
+		b.WriteString(all[s.text])
 	}
 	return instance{rt, own, b.String()}
 }

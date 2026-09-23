@@ -270,7 +270,8 @@ the history entry: Back from `/` after visiting `/home` does not return to
 
 Dynamic redirects, such as sending signed-out users to `/login`, are
 navigation guards and are deferred. Until then, a page may call `Replace`
-during setup; see [Queued navigation](#queued-navigation) for its cost.
+during setup; see [Navigation during setup](#navigation-during-setup) for
+its cost.
 
 ## Route context
 
@@ -367,16 +368,16 @@ boundaries keyed on a derived match would currently work only because
 effects flush in creation order; do not depend on that, and do not rebuild
 the whole route tree inside one `Reactive` callback.
 
-### Queued navigation
+### Navigation during setup
 
-`Navigate` or `Replace` called while a commit is running, for example from
-a page's setup or a synchronous effect, is queued and runs after the current
-commit; only the last queued navigation runs. A setup-time `Replace`
-therefore works as a redirect, at the cost of briefly mounting the
-redirecting page and running its resources. Prefer a `Redirect` node when
-the target is static. More than eight chained commits without an
-intervening frame are reported as a redirect loop and stop at the current
-screen.
+A commit only writes router state; pages are built and effects run in the
+frame's flush, after it. `Navigate` or `Replace` called from a page's setup
+or an effect therefore commits at once and needs no queue, and the outlet
+it rewrites is rebuilt in the same flush. A setup-time `Replace` works as a
+redirect, at the cost of briefly mounting the redirecting page and running
+its resources. Prefer a `Redirect` node when the target is static. More
+than eight chained commits without an intervening frame are reported as a
+redirect loop and stop at the current screen.
 
 ### Focus after navigation
 
@@ -596,7 +597,7 @@ so one tree value cannot be shared between routers.
    per-name `Query` tracking, `Active` and `Current`, static redirects, and
    hidden or doubly placed outlets.
 3. Resource cancellation, stale-result rejection, cleanup-once, rapid
-   repeated navigation, navigation queued during commit, redirect-loop
+   repeated navigation, navigation during setup, redirect-loop
    reporting, whole-router disposal and departed-control focus tests.
 4. `Hash` adapter with real-browser initial URL, reload, Back/Forward and
    event teardown checks, plus a small navigation example.
