@@ -3,11 +3,10 @@ package ggui
 import (
 	"time"
 
-	"github.com/ironpark/ggui/internal/reactive"
-
 	"github.com/ironpark/ggfx"
 
 	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/internal/reactive"
 )
 
 // TransitionWidget animates its child in when it first appears: it fades,

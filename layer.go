@@ -16,16 +16,20 @@ import "github.com/ironpark/ggfx"
 //
 // Without an image to draw into, Layer calls paint with c.
 func (c *Canvas) Layer(op *ggfx.DrawImageOptions, paint func(layer *Canvas)) {
-	if c == nil || c.Image == nil || c.root().Image == nil {
+	var window *ggfx.Image
+	if c != nil {
+		window = c.root().Image
+	}
+	if c == nil || c.Image == nil || window == nil {
 		paint(c)
 		return
 	}
 	f := c.fs()
-	img := f.borrowLayer(c.root().Image)
+	img := f.borrowLayer(window)
 	defer func() { f.layerDepth-- }()
-	layer := *c
-	layer.parent, layer.frame, layer.Image = c, nil, img
-	paint(&layer)
+	layer := c.derive()
+	layer.Image = img
+	paint(layer)
 	c.Image.DrawImage(img, op)
 }
 
@@ -41,38 +45,39 @@ func (f *frameState) borrowLayer(window *ggfx.Image) *ggfx.Image {
 	if i == len(f.layers) {
 		f.layers = append(f.layers, nil)
 	}
-	img := f.layers[i]
-	if img != nil && img.Bounds().Max == size {
-		img.Clear()
-		return img
-	}
-	if img != nil {
+	if img := f.layers[i]; img != nil {
+		if img.Bounds().Max == size {
+			img.Clear()
+			return img
+		}
 		img.Deallocate()
 	}
-	img = ggfx.NewImage(size.X, size.Y)
-	f.layers[i] = img
-	return img
+	f.layers[i] = ggfx.NewImage(size.X, size.Y)
+	return f.layers[i]
+}
+
+// trimLayers keeps the first keep layer images, frees the rest, and starts
+// counting the next frame's peak.
+func (f *frameState) trimLayers(keep int) {
+	for _, img := range f.layers[keep:] {
+		img.Deallocate()
+	}
+	clear(f.layers[keep:])
+	f.layers = f.layers[:keep]
+	f.layerPeak = 0
 }
 
 // trimLayers ends a frame for the layer images: it keeps as many as the frame
 // had open at once and frees the rest.
 func (c *Canvas) trimLayers() {
-	if c.frame == nil {
-		return
+	if f := c.frame; f != nil {
+		f.trimLayers(f.layerPeak)
 	}
-	f := c.frame
-	for i, img := range f.layers[f.layerPeak:] {
-		img.Deallocate()
-		f.layers[f.layerPeak+i] = nil
-	}
-	f.layers = f.layers[:f.layerPeak]
-	f.layerPeak = 0
 }
 
 // freeLayers frees every layer image, for an App or Probe that is closing.
 func (c *Canvas) freeLayers() {
-	if c.frame != nil {
-		c.frame.layerPeak = 0
+	if f := c.frame; f != nil {
+		f.trimLayers(0)
 	}
-	c.trimLayers()
 }

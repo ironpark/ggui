@@ -198,11 +198,18 @@ func (c *Canvas) Inert() *Canvas {
 	if c == nil {
 		return nil
 	}
-	// Only the root holds frameState, so the copy's parent link is all it
-	// takes to leave the frame's overlays, trace, retained slots and
-	// semantics where they are: there is nothing here to clear.
+	child := c.derive()
+	child.inert = true
+	return child
+}
+
+// derive returns a copy of c that paints through it. Only the root holds
+// frameState, so the copy's parent link is all it takes to leave the frame's
+// overlays, trace, retained slots and semantics where they are: there is
+// nothing here to clear.
+func (c *Canvas) derive() *Canvas {
 	child := *c
-	child.parent, child.inert, child.frame = c, true, nil
+	child.parent, child.frame = c, nil
 	return &child
 }
 

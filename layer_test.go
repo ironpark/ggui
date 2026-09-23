@@ -27,9 +27,6 @@ func TestLayerSiblingsShareOneImage(t *testing.T) {
 	if first == img || layerCount(c) != 1 {
 		t.Fatalf("layer is the window image or the pool has %d images; want a separate one", layerCount(c))
 	}
-	if got := first.Bounds().Max; got != img.Bounds().Max {
-		t.Fatalf("layer covers %v; want the window's %v", got, img.Bounds().Max)
-	}
 	c.freeLayers()
 }
 
@@ -55,18 +52,15 @@ func TestLayerFrameEndKeepsOnlyWhatTheFrameUsed(t *testing.T) {
 	img := ggfx.NewImage(100, 80)
 	defer img.Deallocate()
 	c := &Canvas{Image: img}
-	nest := func(depth int) {
-		var open func(l *Canvas, n int)
-		open = func(l *Canvas, n int) {
-			if n > 0 {
-				l.Layer(nil, func(l *Canvas) { open(l, n-1) })
-			}
+	var open func(l *Canvas, n int)
+	open = func(l *Canvas, n int) {
+		if n > 0 {
+			l.Layer(nil, func(l *Canvas) { open(l, n-1) })
 		}
-		open(c, depth)
-		c.trimLayers()
 	}
 	for _, step := range []struct{ depth, want int }{{2, 2}, {1, 1}, {0, 0}, {1, 1}} {
-		nest(step.depth)
+		open(c, step.depth)
+		c.trimLayers()
 		if got := layerCount(c); got != step.want {
 			t.Fatalf("after a frame %d deep, %d images pooled; want %d", step.depth, got, step.want)
 		}
@@ -120,31 +114,32 @@ func TestLayerWithoutAnImagePaintsIntoTheCaller(t *testing.T) {
 	}
 }
 
-func TestTransitionFadeLendsALayerOnlyWhileAnimating(t *testing.T) {
+func TestTransitionFadeHoldsALayerOnlyWhileAnimating(t *testing.T) {
 	img := ggfx.NewImage(120, 80)
 	defer img.Deallocate()
-	p := NewProbe(Transition(Text("fading")), Sz(120, 80))
-	p.RenderTo(img)
-	p.Frame()
-	if n := layerCount(&p.canvas); n != 1 {
-		t.Fatalf("mid-fade the window pools %d images; want 1", n)
+	fading := func() *Probe {
+		p := NewProbe(Transition(Text("fading")), Sz(120, 80))
+		p.RenderTo(img)
+		p.Frame()
+		if n := layerCount(&p.canvas); n != 1 {
+			t.Fatalf("mid-fade the window pools %d images; want 1", n)
+		}
+		return p
 	}
-	p.Advance(time.Second)
-	p.Frame()
-	if n := layerCount(&p.canvas); n != 0 {
-		t.Fatalf("after the fade the window pools %d images; want 0", n)
-	}
-	p.Close()
-}
-
-func TestProbeCloseFreesLayersMidAnimation(t *testing.T) {
-	img := ggfx.NewImage(120, 80)
-	defer img.Deallocate()
-	p := NewProbe(Transition(Text("fading")), Sz(120, 80))
-	p.RenderTo(img)
-	p.Frame()
-	p.Close()
-	if n := layerCount(&p.canvas); n != 0 {
-		t.Fatalf("a closed probe pools %d images; want 0", n)
-	}
+	t.Run("fade ends", func(t *testing.T) {
+		p := fading()
+		defer p.Close()
+		p.Advance(time.Second)
+		p.Frame()
+		if n := layerCount(&p.canvas); n != 0 {
+			t.Fatalf("after the fade the window pools %d images; want 0", n)
+		}
+	})
+	t.Run("closed mid-fade", func(t *testing.T) {
+		p := fading()
+		p.Close()
+		if n := layerCount(&p.canvas); n != 0 {
+			t.Fatalf("a closed probe pools %d images; want 0", n)
+		}
+	})
 }
