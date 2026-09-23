@@ -31,6 +31,11 @@ type frameClock struct {
 	// or a Motion reported that it is still moving.
 	read bool
 
+	// hidden counts the paints in progress of widgets wholly outside their
+	// clip. Time read there does not mark the frame: nothing it moves can
+	// show, and the frame that scrolls it into view resumes it.
+	hidden int
+
 	// wake is the earliest instant a widget asked to be painted again at,
 	// or zero. It is for looks that change at a known time, like a caret
 	// blink or a tooltip delay, which need no frame until then.
@@ -47,7 +52,20 @@ func (f *frameClock) timeRead() bool {
 // animate marks the frame as depending on time.
 func (f *frameClock) animate() {
 	f.mu.Lock()
-	f.read = true
+	f.read = f.read || f.hidden == 0
+	f.mu.Unlock()
+}
+
+// hide and unhide bracket the paint of a widget no one can see.
+func (f *frameClock) hide() {
+	f.mu.Lock()
+	f.hidden++
+	f.mu.Unlock()
+}
+
+func (f *frameClock) unhide() {
+	f.mu.Lock()
+	f.hidden--
 	f.mu.Unlock()
 }
 
@@ -114,7 +132,7 @@ func (f *frameClock) reset() {
 func (f *frameClock) instant() time.Time {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.read = true
+	f.read = f.read || f.hidden == 0
 	if f.now.IsZero() {
 		return clock()
 	}
@@ -126,7 +144,9 @@ func (f *frameClock) instant() time.Time {
 // advancing more than maxFrameStep at a time, so nothing jumps when the
 // window comes back from being hidden. Widgets that ease a value should
 // read Now rather than time.Now, which also lets tests step them with
-// Probe.Advance or SetClock.
+// Probe.Advance or SetClock. A read while painting a widget wholly outside
+// its clip, such as a card scrolled out of view, does not ask for another
+// frame.
 func Now() time.Time { return frame.instant() }
 
 // FrameTime is Now without the promise to paint again: reading it does not

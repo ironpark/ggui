@@ -161,7 +161,9 @@ func (t *ToasterWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 
 // Paint implements ggui.Widget. Adding a toast does not move keyboard focus.
 func (t *ToasterWidget) Paint(dst *ggui.Canvas, _ ggui.Rect) {
-	if t.closed {
+	// Only a notice needs the clock: an idle host must not keep the app
+	// painting. Push reads it, so the frame after one arrives comes.
+	if t.closed || len(t.entries) == 0 {
 		return
 	}
 	now := ggui.Now()

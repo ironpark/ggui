@@ -60,3 +60,30 @@ func TestProbeAdvanceStepsPastTheCap(t *testing.T) {
 		t.Fatalf("tween at %v after advancing 250ms, want 25: a probe steps by exactly what it asked for", got)
 	}
 }
+
+// clockReader reads Now while it paints, as a spinner does.
+type clockReader struct{}
+
+func (clockReader) Layout(c Constraints, _ Env) Size { return c.Constrain(Sz(20, 20)) }
+func (clockReader) Paint(*Canvas, Rect)              { Now() }
+
+func TestTimeReadOutsideTheClipDoesNotAnimate(t *testing.T) {
+	defer frame.reset()
+	offset := State(0.0)
+	p := NewProbe(Scroll(Column(Box().Size(100, 500), clockReader{})).BindOffset(offset), Sz(100, 100))
+	defer p.Close()
+	animating := func() bool {
+		frame.mu.Lock()
+		frame.read = false
+		frame.mu.Unlock()
+		p.Frame()
+		return frame.timeRead()
+	}
+	if animating() {
+		t.Fatal("a clock read below the viewport asked for another frame")
+	}
+	offset.Set(450)
+	if !animating() {
+		t.Fatal("the clock read scrolled into view did not ask for another frame")
+	}
+}

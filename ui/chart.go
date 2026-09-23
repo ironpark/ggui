@@ -614,11 +614,14 @@ func (c *ChartWidget) progress() float64 {
 	if c.reduced || c.duration <= 0 {
 		return 1
 	}
-	now := ggui.Now()
+	now := ggui.FrameTime()
 	if c.started.IsZero() {
 		c.started = now
 	}
 	t := clamp(float64(now.Sub(c.started)-c.delay)/float64(c.duration), 0, 1)
+	if t < 1 {
+		ggui.Now() // still entering, so ask for the next frame
+	}
 	if t == 0 || t == 1 {
 		return t
 	}
