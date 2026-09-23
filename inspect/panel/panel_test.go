@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ironpark/ggfx"
 
@@ -512,5 +513,19 @@ func TestPanelRunsAsTheProbesOverlay(t *testing.T) {
 	p.Move(in.filterRect.Origin.Add(ggui.Pt(10, 10)))
 	if p.Cursor() != ggui.CursorShapeText {
 		t.Fatalf("cursor over the filter field = %v, want the text cursor the panel asks for", p.Cursor())
+	}
+}
+
+func TestFrameRateCountsTheLastSecond(t *testing.T) {
+	var f frameRate
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for i := range 60 {
+		f.count(t0.Add(time.Duration(i) * time.Second / 60))
+	}
+	if got := f.count(t0.Add(time.Second)); got != 60 {
+		t.Fatalf("60 frames a second read %d; want 60", got)
+	}
+	if got := f.count(t0.Add(5 * time.Second)); got != 1 {
+		t.Fatalf("a frame after an idle pause read %d; want 1", got)
 	}
 }

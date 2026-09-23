@@ -4,8 +4,6 @@ package panel
 
 import (
 	"fmt"
-	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/internal/fn"
 	"image"
 	"image/color"
 	"math"
@@ -13,6 +11,10 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/fn"
 
 	"github.com/ironpark/ggfx"
 	"golang.org/x/image/font/gofont/gomono"
@@ -696,7 +698,7 @@ func (in *View) paintStatus(dst *ggui.Canvas, font *ggui.Font, pal inspectPalett
 			}
 		}
 	}
-	right := fmt.Sprintf("%.0f fps · %s×", ggfx.ActualFPS(), num(dst.Scale()))
+	right := fmt.Sprintf("%d fps · %s×", in.frames.count(time.Now()), num(dst.Scale()))
 	space := r.Size.W - 16
 	if r.Size.W > 600 {
 		drawLine(dst, font, right, r.Origin.X+r.Size.W-textWidth(dst, font, right)-10, r.Origin.Y+5, pal.dim)

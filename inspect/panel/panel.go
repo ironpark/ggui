@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/inspect"
@@ -120,6 +121,7 @@ type View struct {
 	tab                                inspectTab
 	closed                             bool
 	copied                             bool
+	frames                             frameRate
 
 	width, height, split                                   float64
 	drag                                                   inspectDrag
@@ -431,4 +433,21 @@ func (in *View) selection(dst *ggui.Canvas, fr *inspect.Frame) (int, []int) {
 		in.sel = next
 	}
 	return sel, shown
+}
+
+// frameRate counts the frames painted in the last second. Frames come only
+// when something asks for one, so an idle app reads near zero rather than
+// the display's refresh rate.
+type frameRate struct{ stamps []time.Time }
+
+// count records a frame at now and returns how many fell in the second
+// before it.
+func (f *frameRate) count(now time.Time) int {
+	f.stamps = append(f.stamps, now)
+	keep := 0
+	for keep < len(f.stamps) && now.Sub(f.stamps[keep]) >= time.Second {
+		keep++
+	}
+	f.stamps = append(f.stamps[:0], f.stamps[keep:]...)
+	return len(f.stamps)
 }
