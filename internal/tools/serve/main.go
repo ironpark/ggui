@@ -1,8 +1,8 @@
 // Command serve builds a Go package for js/wasm and serves it over HTTP for
 // development, in the shape of hajimehoshi/wasmserve with two differences:
 // the build is cached, so reloading the page serves the binary already built
-// instead of compiling again, and the page shows a loading screen while the
-// build runs and the binary downloads.
+// instead of compiling again, and the page shows a loading screen that
+// follows the build, the download and the compile.
 //
 // Usage:
 //
@@ -41,6 +41,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -68,6 +69,7 @@ var (
 // toolchain.
 type build struct {
 	done    chan struct{}
+	id      string // names this build in the ETag the binary is served with
 	path    string
 	gzPath  string // the gzipped copy, empty when compressing failed
 	err     error
@@ -90,7 +92,7 @@ func (b *builder) get() *build {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.cur == nil {
-		b.cur = &build{done: make(chan struct{})}
+		b.cur = &build{done: make(chan struct{}), id: strconv.FormatInt(time.Now().UnixNano(), 36)}
 		go b.run(b.cur)
 	}
 	return b.cur
@@ -317,10 +319,10 @@ func (s *server) serveWasm(w http.ResponseWriter, r *http.Request) {
 	// browser decodes it before instantiateStreaming sees the stream, so the
 	// page needs to know nothing about this; Vary keeps any cache in between
 	// from handing the encoded bytes to a client that cannot read them.
-	path := bd.path
+	path, etag := bd.path, bd.id
 	w.Header().Set("Vary", "Accept-Encoding")
 	if bd.gzPath != "" && acceptsGzip(r) {
-		path = bd.gzPath
+		path, etag = bd.gzPath, bd.id+"-gz"
 		w.Header().Set("Content-Encoding", "gzip")
 	}
 	f, err := os.Open(path)
@@ -338,7 +340,11 @@ func (s *server) serveWasm(w http.ResponseWriter, r *http.Request) {
 	// otherwise sniff the bytes.
 	w.Header().Set("Content-Type", "application/wasm")
 	// The binary is stable until it is built again, so a reload can come
-	// out of the browser's cache instead of over the wire.
+	// out of the browser's cache instead of over the wire, but only after
+	// asking: without a validator to check, a browser may guess the binary
+	// is still fresh and run the one from before a rebuild or a restart.
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("ETag", strconv.Quote(etag))
 	http.ServeContent(w, r, mainWasm, fi.ModTime(), f)
 }
 
@@ -361,12 +367,13 @@ func (s *server) serveStatus(w http.ResponseWriter, r *http.Request) {
 	// Size is the binary as the page will see it, decoded, which is what its
 	// progress bar counts; Compressed is only for reporting.
 	status := struct {
+		Target     string `json:"target"`
 		State      string `json:"state"`
 		Error      string `json:"error,omitempty"`
 		Size       int64  `json:"size,omitempty"`
 		Compressed int64  `json:"compressed,omitempty"`
 		Elapsed    string `json:"elapsed,omitempty"`
-	}{State: "building"}
+	}{Target: s.b.target, State: "building"}
 	if bd.ready() {
 		switch {
 		case bd.err != nil:
@@ -394,6 +401,9 @@ func serveWasmExec(w http.ResponseWriter, r *http.Request) {
 	for _, dir := range []string{"lib", "misc"} {
 		p := filepath.Join(root, dir, "wasm", "wasm_exec.js")
 		if _, err := os.Stat(p); err == nil {
+			// Revalidated, so a toolchain upgrade does not pair a new binary
+			// with the loader the browser kept from the old one.
+			w.Header().Set("Cache-Control", "no-cache")
 			http.ServeFile(w, r, p)
 			return
 		} else if !errors.Is(err, fs.ErrNotExist) {

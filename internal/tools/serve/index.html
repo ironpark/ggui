@@ -6,131 +6,242 @@
 <style>
   :root {
     color-scheme: light dark;
-    --bg: #fafafa; --fg: #18181b; --dim: #71717a; --line: #e4e4e7; --accent: #2563eb;
+    --bg: #fafafa; --card: #ffffff; --fg: #18181b; --dim: #71717a; --faint: #a1a1aa;
+    --line: #e4e4e7; --accent: #2563eb; --ok: #16a34a; --bad: #dc2626;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #09090b; --fg: #fafafa; --dim: #a1a1aa; --line: #27272a; --accent: #60a5fa; }
+    :root {
+      --bg: #09090b; --card: #18181b; --fg: #fafafa; --dim: #a1a1aa; --faint: #52525b;
+      --line: #27272a; --accent: #60a5fa; --ok: #4ade80; --bad: #f87171;
+    }
   }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
   body { font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", sans-serif; }
   canvas { display: block; }
+
   #loader {
-    position: fixed; inset: 0; display: grid; place-content: center; justify-items: center;
-    gap: 14px; background: var(--bg); transition: opacity .25s ease; z-index: 10;
+    position: fixed; inset: 0; z-index: 10; display: grid; place-items: center;
+    background: var(--bg); transition: opacity .25s ease;
   }
   #loader.done { opacity: 0; pointer-events: none; }
-  .spinner {
-    width: 26px; height: 26px; border-radius: 50%;
-    border: 2px solid var(--line); border-top-color: var(--accent);
-    animation: spin .7s linear infinite;
+  .card {
+    width: min(360px, calc(100vw - 48px)); padding: 22px 24px 20px; box-sizing: border-box;
+    border: 1px solid var(--line); border-radius: 12px; background: var(--card);
+    box-shadow: 0 1px 2px rgb(0 0 0 / .04), 0 8px 24px rgb(0 0 0 / .06);
   }
+  #loader.failed .card { width: min(900px, calc(100vw - 48px)); }
+  .head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 16px; }
+  .brand { font-weight: 600; letter-spacing: -.01em; }
+  #target { color: var(--dim); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #total { margin-left: auto; color: var(--faint); font-variant-numeric: tabular-nums; font-size: 12px; }
+
+  ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  li { display: grid; grid-template-columns: 16px 1fr auto; align-items: center; gap: 10px; color: var(--faint); }
+  li[data-state="active"], li[data-state="done"] { color: var(--fg); }
+  li[data-state="failed"] { color: var(--bad); }
+  .detail { color: var(--dim); font-variant-numeric: tabular-nums; font-size: 12px; }
+  .icon { width: 16px; height: 16px; box-sizing: border-box; border-radius: 50%; }
+  li[data-state="pending"] .icon { border: 1.5px solid var(--line); }
+  li[data-state="active"] .icon {
+    border: 1.5px solid var(--line); border-top-color: var(--accent); animation: spin .7s linear infinite;
+  }
+  li[data-state="done"] .icon, li[data-state="failed"] .icon { display: grid; place-items: center; }
+  li[data-state="done"] .icon::before { content: ""; width: 8px; height: 4px; margin-top: -2px;
+    border: solid var(--ok); border-width: 0 0 1.5px 1.5px; transform: rotate(-45deg); }
+  li[data-state="failed"] .icon::before { content: "×"; color: var(--bad); font-size: 16px; line-height: 1; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  #label { color: var(--dim); font-variant-numeric: tabular-nums; }
-  #track { width: 220px; height: 3px; border-radius: 2px; background: var(--line); overflow: hidden; }
+
+  #track { height: 3px; margin: 16px 0 0; border-radius: 2px; background: var(--line); overflow: hidden; }
   #bar { width: 0; height: 100%; background: var(--accent); transition: width .15s linear; }
-  #track.indeterminate #bar { width: 40%; animation: sweep 1.1s ease-in-out infinite; }
-  @keyframes sweep { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }
+  #track.indeterminate #bar { width: 35%; animation: sweep 1.1s ease-in-out infinite; }
+  @keyframes sweep { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
+  #loader.failed #track { display: none; }
+
+  #note { margin: 12px 0 0; color: var(--dim); font-size: 12px; }
+  #note:empty { display: none; }
   #error {
-    display: none; margin: 0; padding: 20px; max-width: min(90vw, 900px); max-height: 70vh;
-    overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--bg);
+    display: none; margin: 16px 0 0; padding: 14px 16px; max-height: 60vh; overflow: auto;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--bg);
     font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap;
   }
   #error:not(:empty) { display: block; }
+  #retry {
+    display: none; margin-top: 14px; padding: 6px 14px; border: 1px solid var(--line); border-radius: 6px;
+    background: var(--card); color: var(--fg); font: inherit; cursor: pointer;
+  }
+  #retry:hover { border-color: var(--dim); }
+  #loader.failed #retry { display: inline-block; }
 </style>
 <div id="loader">
-  <div class="spinner" id="spinner"></div>
-  <div id="track" class="indeterminate"><div id="bar"></div></div>
-  <div id="label">Building…</div>
-  <pre id="error"></pre>
+  <div class="card">
+    <div class="head">
+      <span class="brand">ggui</span>
+      <span id="target"></span>
+      <span id="total"></span>
+    </div>
+    <ol>
+      <li id="build"><span class="icon"></span><span>Build</span><span class="detail"></span></li>
+      <li id="download"><span class="icon"></span><span>Download</span><span class="detail"></span></li>
+      <li id="compile"><span class="icon"></span><span>Compile</span><span class="detail"></span></li>
+      <li id="start"><span class="icon"></span><span>Start</span><span class="detail"></span></li>
+    </ol>
+    <div id="track" class="indeterminate"><div id="bar"></div></div>
+    <p id="note"></p>
+    <pre id="error"></pre>
+    <button id="retry" type="button">Rebuild and reload</button>
+  </div>
 </div>
 <script src="wasm_exec.js"></script>
 <script>
-const loader = document.getElementById('loader');
-const label = document.getElementById('label');
-const track = document.getElementById('track');
-const bar = document.getElementById('bar');
-const spinner = document.getElementById('spinner');
+const $ = (id) => document.getElementById(id);
+const loader = $('loader'), track = $('track'), bar = $('bar'), note = $('note');
+const pageStart = performance.now();
 
-const fail = (text) => {
-  spinner.style.display = 'none';
-  track.style.display = 'none';
-  label.textContent = 'Build failed';
-  document.getElementById('error').textContent = text;
+const secs = (ms) => (ms / 1000).toFixed(1) + 's';
+const mb = (n) => (n / (1 << 20)).toFixed(1) + ' MB';
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Each step is a row that goes pending, active, then done or failed, and
+// says how long it took. current is the one an error is charged to.
+let current = null;
+const step = (id) => {
+  const li = $(id), detail = li.querySelector('.detail');
+  const started = performance.now();
+  li.dataset.state = 'active';
+  current = li;
+  const tick = setInterval(() => { detail.textContent = secs(performance.now() - started); }, 100);
+  return {
+    detail: (text) => { clearInterval(tick); detail.textContent = text; },
+    done: (text) => {
+      clearInterval(tick);
+      li.dataset.state = 'done';
+      detail.textContent = text || secs(performance.now() - started);
+    },
+    stop: () => clearInterval(tick),
+  };
+};
+for (const li of document.querySelectorAll('li')) li.dataset.state = 'pending';
+
+const progress = (fraction) => {
+  if (fraction == null) { track.classList.add('indeterminate'); bar.style.width = ''; return; }
+  track.classList.remove('indeterminate');
+  bar.style.width = Math.min(100, fraction * 100).toFixed(1) + '%';
 };
 
-const hide = () => {
-  loader.classList.add('done');
-  setTimeout(() => loader.remove(), 300);
+const fail = (text) => {
+  if (current) current.dataset.state = 'failed';
+  loader.classList.add('failed');
+  note.textContent = '';
+  $('error').textContent = text;
+};
+
+// Retrying drops the failed build on the server, which a page load does too;
+// asking for it outright also covers a build that succeeded but will not run.
+$('retry').onclick = async () => {
+  try { await fetch('_rebuild', { cache: 'no-store' }); } catch {}
+  location.reload();
 };
 
 // The loader goes once the app has painted, not the moment Go starts, so
 // there is no blank frame between the two.
-const hideWhenPainted = () => {
+const whenPainted = () => new Promise((resolve) => {
   const canvas = () => document.querySelector('canvas');
-  const paint = () => requestAnimationFrame(() => requestAnimationFrame(hide));
+  const paint = () => requestAnimationFrame(() => requestAnimationFrame(resolve));
   if (canvas()) { paint(); return; }
   const obs = new MutationObserver(() => {
     if (canvas()) { obs.disconnect(); paint(); }
   });
   obs.observe(document.body, { childList: true, subtree: true });
-  setTimeout(() => { obs.disconnect(); hide(); }, 8000);
-};
+  setTimeout(() => { obs.disconnect(); resolve(); }, 8000);
+});
 
-// Phase one: wait for the build the server started when this page was asked
-// for, reporting how long it is taking.
+// Build: wait for the one the server started when this page was asked for.
+// A server that is restarting is waited for rather than reported.
 const waitForBuild = async () => {
-  const started = Date.now();
-  for (;;) {
-    const status = await (await fetch('_status', { cache: 'no-store' })).json();
-    if (status.state === 'ready') return status;
-    if (status.state === 'error') throw new Error(status.error);
-    const secs = Math.round((Date.now() - started) / 1000);
-    label.textContent = secs < 1 ? 'Building…' : 'Building… ' + secs + 's';
-    await new Promise((r) => setTimeout(r, 250));
+  const s = step('build');
+  for (let first = true; ; first = false) {
+    let status;
+    try {
+      const resp = await fetch('_status', { cache: 'no-store' });
+      if (!resp.ok) throw new Error(resp.status + ' ' + resp.statusText);
+      status = await resp.json();
+      note.textContent = '';
+    } catch (e) {
+      note.textContent = 'Waiting for the server…';
+      await sleep(1000);
+      continue;
+    }
+    if (status.target) $('target').textContent = status.target;
+    if (status.state === 'error') { s.stop(); throw new Error(status.error); }
+    if (status.state === 'ready') {
+      // A build that finished before the page asked is reported as the
+      // server timed it; one the page waited for, as long as it waited.
+      s.done(first && status.elapsed ? 'built in ' + status.elapsed : undefined);
+      return status;
+    }
+    await sleep(250);
   }
 };
 
-// Phase two: download the binary, which the server has cached, so a reload
-// is usually a 304 and this bar fills at once.
-const download = async (expected) => {
-  const resp = await fetch(mainWasmURL, { cache: 'default' });
-  if (!resp.ok) throw new Error(await resp.text());
-  // The reader hands over decoded bytes, so count against the size the
-  // server reported rather than Content-Length, which is the gzipped one.
-  const total = expected || Number(resp.headers.get('Content-Length')) || 0;
-  if (!resp.body || !total) return resp;
-  track.classList.remove('indeterminate');
+// Download: read the whole binary, counting against the decoded size the
+// server reported, since Content-Length is the gzipped one. The bytes are
+// compiled once they are all here: handing a stream built in script to
+// instantiateStreaming is what stalled some browsers.
+const download = async (size) => {
+  const s = step('download');
+  const resp = await fetch('main.wasm');
+  if (!resp.ok) { s.stop(); throw new Error(await resp.text()); }
+  const total = size || Number(resp.headers.get('Content-Length')) || 0;
+  if (!resp.body || !resp.body.getReader) {
+    const bytes = new Uint8Array(await resp.arrayBuffer());
+    s.done(mb(bytes.byteLength));
+    return bytes;
+  }
+  const reader = resp.body.getReader();
+  const chunks = [];
   let loaded = 0;
-  const stream = new ReadableStream({
-    start(controller) {
-      const reader = resp.body.getReader();
-      const pump = () => reader.read().then(({ done, value }) => {
-        if (done) { controller.close(); return; }
-        loaded += value.byteLength;
-        const pct = Math.min(100, Math.round((loaded / total) * 100));
-        bar.style.width = pct + '%';
-        label.textContent = 'Loading… ' + pct + '%';
-        controller.enqueue(value);
-        pump();
-      }).catch((e) => controller.error(e));
-      pump();
-    },
-  });
-  return new Response(stream, { headers: { 'Content-Type': 'application/wasm' } });
+  progress(total ? 0 : null);
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    loaded += value.byteLength;
+    if (total) {
+      progress(loaded / total);
+      s.detail(mb(loaded) + ' / ' + mb(total));
+    }
+  }
+  const bytes = new Uint8Array(loaded);
+  let at = 0;
+  for (const c of chunks) { bytes.set(c, at); at += c.byteLength; }
+  s.done(mb(loaded));
+  return bytes;
 };
 
-const mainWasmURL = 'main.wasm';
+const compile = async (bytes, go) => {
+  const s = step('compile');
+  progress(null);
+  // Let the row paint before the compile takes the thread.
+  await sleep(0);
+  const { instance } = await WebAssembly.instantiate(bytes, go.importObject);
+  s.done();
+  return instance;
+};
 
 (async () => {
   try {
     const status = await waitForBuild();
-    const resp = await download(status.size);
-    label.textContent = 'Starting…';
-    track.classList.add('indeterminate');
+    const bytes = await download(status.size);
     const go = new Go();
-    const { instance } = await WebAssembly.instantiateStreaming(resp, go.importObject);
-    hideWhenPainted();
+    const instance = await compile(bytes, go);
+    const s = step('start');
     go.run(instance).catch((e) => fail(String(e && e.stack || e)));
+    await whenPainted();
+    s.done();
+    $('total').textContent = secs(performance.now() - pageStart);
+    loader.classList.add('done');
+    setTimeout(() => loader.remove(), 300);
   } catch (e) {
     fail(String(e && e.message || e));
   }
