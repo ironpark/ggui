@@ -2,7 +2,7 @@
 
 [Documentation](README.md) · [State and components](reactivity.md) · [Data and navigation](data-and-navigation.md)
 
-Status: in progress. Stages 1–4 of the [implementation plan](#implementation-plan) are implemented in `router/`, with `examples/router`; the Browser adapter, outlet placement checks and the Tab anchor are not. Names may change.
+Status: in progress. All five stages of the [implementation plan](#implementation-plan) are implemented in `router/`, with `examples/router`; outlet placement checks and the Tab anchor are not. Names may change.
 
 ## On this page
 
@@ -476,9 +476,47 @@ them still delegates to the browser. `Go` is a no-op at a memory boundary.
 Browser code stays behind js/wasm build constraints. Programmatic navigation
 publishes only after the backend mutation succeeds; browser traversal
 publishes from its event. Adapters preserve unrelated browser history state
-and tag their own entries to prevent duplicate commits. `Memory` and `Hash`
-ship first; `Browser` follows once base-path and host fallback behavior are
-tested.
+and tag their own entries to prevent duplicate commits. A reload keeps an
+entry's ID and position, because both live in the entry's state; forward
+entries are counted again only once they are visited.
+
+### Deploying with Browser history
+
+`Browser(basePath)` maps the application URL `/settings` to the browser
+path `basePath + "/settings"`; the application root is `basePath + "/"`.
+The base is `"/"` (or `""`) for an app at the site root and a path such as
+`"/app"` for one served from a subdirectory. A trailing slash is ignored;
+a query, a fragment or a relative path panics.
+
+```go
+r := router.New(routes...).History(router.Browser("/app"))
+```
+
+Because a reload, a bookmark or a typed address asks the host for the full
+path, a deployment needs two things that `Hash` does not:
+
+1. **A fallback.** The host answers every navigation below the base with
+   the entry page, while real files (`main.wasm`, `wasm_exec.js`, assets)
+   are still served as files. Unknown asset requests should stay 404s, or
+   a missing file comes back as HTML. For example, nginx:
+
+   ```nginx
+   location /app/ {
+       try_files $uri /app/index.html;
+   }
+   ```
+
+   Static hosts name this a single-page-app rewrite or a 404 fallback.
+2. **Base-relative assets.** The entry page is served at routes such as
+   `/app/projects/1/tasks`, where a relative `main.wasm` resolves to
+   `/app/projects/1/main.wasm`. Put `<base href="/app/">` in the page's
+   head, or use absolute asset URLs.
+
+A path outside the base, which only a misconfigured host delivers, is
+taken whole and usually shows a not-found screen. The development server
+does both for you: `go run ./internal/tools/serve -base /app ./examples/router`
+injects the `<base>` element and serves the page for any HTML request that
+names no file.
 
 Fragment changes update state only; anchor scrolling is not part of v1. New
 pages get fresh control identities, so page scroll positions are not

@@ -78,7 +78,7 @@ tasks:
       - '"{{.GO}}" work sync'
 
   bundle:
-    desc: Build a macOS app bundle (EXAMPLE=counter, todo, workspace, or gallery)
+    desc: Build a macOS app bundle (EXAMPLE=counter, todo, workspace, gallery, or router)
     vars:
       EXAMPLE: '{{default "counter" .EXAMPLE}}'
       # Empty by default: a bundle is a release build. launch sets it.
@@ -86,7 +86,7 @@ tasks:
     requires:
       vars:
         - name: EXAMPLE
-          enum: [counter, todo, workspace, gallery]
+          enum: [counter, todo, workspace, gallery, router]
     preconditions:
       - sh: 'test "$(uname -s)" = Darwin'
         msg: App bundles require macOS.
@@ -167,7 +167,7 @@ tasks:
     requires:
       vars:
         - name: EXAMPLE
-          enum: [counter, todo, workspace, gallery]
+          enum: [counter, todo, workspace, gallery, router]
     cmds:
       - '"{{.GO}}" run ./internal/tools/serve -http ":{{.PORT}}" -wasm-opt "{{.WASM_OPT}}" -tags "{{.TAGS}}" "./examples/{{.EXAMPLE}}"'
 

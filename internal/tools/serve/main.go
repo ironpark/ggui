@@ -24,6 +24,11 @@
 // build that is kept failed. Reloading is therefore the way to try again
 // after fixing the code, while the status the loading screen polls is only
 // read.
+//
+// The page is also served for any other URL that asks for HTML and names no
+// file in the target, so an app using the router's Browser history can be
+// reloaded on a route; -base mounts everything below a path, as a host
+// serving the app from a subdirectory would.
 package main
 
 import (
@@ -33,6 +38,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"html"
 	"io"
 	"io/fs"
 	"log"
@@ -62,6 +68,7 @@ var (
 	flagTags    = flag.String("tags", "", "build tags, passed to go build")
 	flagLDFlags = flag.String("ldflags", "-s -w", "linker flags; the default drops the symbol table and DWARF")
 	flagWasmOpt = flag.String("wasm-opt", "-O2", `binaryen wasm-opt flags to run after building, e.g. "-O2" or "-Oz"; empty to skip`)
+	flagBase    = flag.String("base", "/", "path the app is served below, such as /app/")
 )
 
 // build is one compilation of the target: in flight until done is closed,
@@ -278,11 +285,34 @@ func (bd *build) ready() bool {
 }
 
 type server struct {
-	b *builder
+	b     *builder
+	base  string // "/" or "/app/"
+	index string // the page, with a <base> naming base
+}
+
+func newServer(b *builder, base string) *server {
+	base = "/" + strings.Trim(base, "/") + "/"
+	if base == "//" {
+		base = "/"
+	}
+	// Relative asset URLs resolve against base, not against a route the
+	// page was loaded at, such as /app/projects/1.
+	const charset = `<meta charset="utf-8">`
+	tag := charset + "\n<base href=\"" + html.EscapeString(base) + "\">"
+	return &server{b: b, base: base, index: strings.Replace(indexHTML, charset, tag, 1)}
 }
 
 func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	switch path := strings.TrimPrefix(r.URL.Path, "/"); path {
+	if r.URL.Path+"/" == s.base {
+		http.Redirect(w, r, s.base, http.StatusMovedPermanently)
+		return
+	}
+	rest, ok := strings.CutPrefix(r.URL.Path, s.base)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	switch path := rest; path {
 	case "", "index.html":
 		s.serveIndex(w, r)
 	case mainWasm:
@@ -296,9 +326,22 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		// Anything else comes from the target's own directory, so a package
-		// can ship an asset it fetches at runtime.
-		http.ServeFile(w, r, filepath.Join(s.b.target, filepath.Clean("/"+path)))
+		// can ship an asset it fetches at runtime. A page request naming no
+		// file is a route the app shows itself.
+		file := filepath.Join(s.b.target, filepath.Clean("/"+path))
+		if _, err := os.Stat(file); errors.Is(err, fs.ErrNotExist) && wantsPage(r) {
+			s.serveIndex(w, r)
+			return
+		}
+		http.ServeFile(w, r, file)
 	}
+}
+
+// wantsPage reports whether r is a navigation, as opposed to a fetch for
+// an asset that happens to be missing.
+func wantsPage(r *http.Request) bool {
+	return (r.Method == http.MethodGet || r.Method == http.MethodHead) &&
+		strings.Contains(r.Header.Get("Accept"), "text/html")
 }
 
 func (s *server) serveIndex(w http.ResponseWriter, r *http.Request) {
@@ -306,7 +349,7 @@ func (s *server) serveIndex(w http.ResponseWriter, r *http.Request) {
 	s.b.get()           // start compiling while the page loads
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	fmt.Fprint(w, indexHTML)
+	fmt.Fprint(w, s.index)
 }
 
 func (s *server) serveWasm(w http.ResponseWriter, r *http.Request) {
@@ -433,13 +476,13 @@ func main() {
 	}
 	defer os.RemoveAll(dir)
 
-	s := &server{b: &builder{
+	s := newServer(&builder{
 		target:  target,
 		tags:    *flagTags,
 		ldflags: *flagLDFlags,
 		wasmOpt: *flagWasmOpt,
 		dir:     dir,
-	}}
+	}, *flagBase)
 	s.b.get() // compile now, so the first page load usually finds it done
 
 	srv := &http.Server{Addr: *flagHTTP, Handler: s}
@@ -447,7 +490,7 @@ func main() {
 	if strings.HasPrefix(addr, ":") {
 		addr = "localhost" + addr
 	}
-	log.Printf("serving %s at http://%s/", target, addr)
+	log.Printf("serving %s at http://%s%s", target, addr, s.base)
 
 	// Leave the temp directory behind on Ctrl-C, not on the next boot.
 	stop := make(chan os.Signal, 1)

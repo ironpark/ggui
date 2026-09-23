@@ -1,5 +1,10 @@
 package router
 
+import (
+	"fmt"
+	"strings"
+)
+
 // Entry is one history entry.
 type Entry struct {
 	URL string
@@ -74,4 +79,35 @@ func (h *MemoryHistory) Subscribe(fn func(Entry)) (stop func()) {
 	h.nextSub++
 	h.subs[id] = fn
 	return func() { delete(h.subs, id) }
+}
+
+// cleanBase validates a Browser base path and returns it without a trailing
+// slash, so the root is "".
+func cleanBase(basePath string) string {
+	if basePath == "" {
+		return ""
+	}
+	u, err := parseURL(basePath)
+	if err != nil || u.rawQuery != "" || u.fragment != "" || strings.ContainsAny(basePath, "?#") {
+		panic(fmt.Sprintf("router: base path %q must be a path such as /app", basePath))
+	}
+	if len(u.raw) == 0 {
+		return ""
+	}
+	return u.path()
+}
+
+// appURL strips base from a browser path. The base itself, with or without
+// its trailing slash, is the application root; a path outside base is kept
+// whole.
+func appURL(base, pathname string) string {
+	switch {
+	case base == "":
+		return pathname
+	case pathname == base:
+		return "/"
+	case strings.HasPrefix(pathname, base+"/"):
+		return pathname[len(base):]
+	}
+	return pathname
 }

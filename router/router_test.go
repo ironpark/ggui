@@ -353,3 +353,31 @@ func TestViewLifecycle(t *testing.T) {
 		t.Fatalf("Navigate after disposal = %v", err)
 	}
 }
+
+func TestBrowserBasePath(t *testing.T) {
+	for in, want := range map[string]string{"": "", "/": "", "/app": "/app", "/app/": "/app", "/a%20b/c": "/a%20b/c"} {
+		if got := cleanBase(in); got != want {
+			t.Errorf("cleanBase(%q) = %q; want %q", in, got, want)
+		}
+	}
+	for _, bad := range []string{"app", "/app?x", "/app#x", "//host", "/a//b"} {
+		mustPanic(t, "must be a path", func() { cleanBase(bad) })
+	}
+	cases := []struct{ base, pathname, want string }{
+		{"", "/settings", "/settings"},
+		{"/app", "/app", "/"},
+		{"/app", "/app/", "/"},
+		{"/app", "/app/projects/1", "/projects/1"},
+		{"/app", "/apple", "/apple"},
+		{"/app", "/", "/"},
+	}
+	for _, c := range cases {
+		if got := appURL(c.base, c.pathname); got != c.want {
+			t.Errorf("appURL(%q, %q) = %q; want %q", c.base, c.pathname, got, c.want)
+		}
+		// Writing what was read shows the same page.
+		if got := appURL(c.base, c.base+c.want); got != c.want {
+			t.Errorf("round trip of %q under %q gave %q", c.want, c.base, got)
+		}
+	}
+}
