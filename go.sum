@@ -20,6 +20,8 @@ github.com/ironpark/ggfx v0.0.0-20260922153954-b45ef5bbd3d1 h1:ZIGGzB1NqktbW3T9G
 github.com/ironpark/ggfx v0.0.0-20260922153954-b45ef5bbd3d1/go.mod h1:lp/zmzxrCDxnZSl6aBO0Wt96v+Lg+G9hxqMA1BPpwJQ=
 github.com/ironpark/ggfx v0.0.0-20260922160015-3da32b8e5d3f h1:DVIiJAidJxOhTKL7Ozj6Sdy3kdhiWf127pZbNCpM9Uc=
 github.com/ironpark/ggfx v0.0.0-20260922160015-3da32b8e5d3f/go.mod h1:lp/zmzxrCDxnZSl6aBO0Wt96v+Lg+G9hxqMA1BPpwJQ=
+github.com/ironpark/ggfx v0.0.0-20260923070929-809d6bbc46b1 h1:vvhtt3+A7xTNn07QWPUpkdbcJVauHBGUf8sR8nPaII0=
+github.com/ironpark/ggfx v0.0.0-20260923070929-809d6bbc46b1/go.mod h1:lp/zmzxrCDxnZSl6aBO0Wt96v+Lg+G9hxqMA1BPpwJQ=
 github.com/pierrec/lz4/v4 v4.1.29 h1:CDQY6qZOLI4DW0Nx6R1vRrifrCeQHnNXkMb0hZWXFjg=
 github.com/pierrec/lz4/v4 v4.1.29/go.mod h1:EoQMVJgeeEOMsCqCzqFm2O0cJvljX2nGZjcRIPL34O4=
 github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c h1:km8GpoQut05eY3GiYWEedbTT0qnSxrCjsVbb7yKY1KE=
