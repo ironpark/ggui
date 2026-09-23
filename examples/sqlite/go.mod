@@ -3,7 +3,7 @@ module github.com/ironpark/ggui/examples/sqlite
 go 1.27.0
 
 require (
-	github.com/ironpark/ggfx v0.0.0-20260923140109-38f61994442c
+	github.com/ironpark/ggfx v0.0.0-20260923170703-65f546a3c956
 	github.com/ironpark/ggui v0.0.0-20260923140253-87ce44364883
 	modernc.org/sqlite v1.59.0
 )

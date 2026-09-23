@@ -115,7 +115,7 @@ func (d *windowsAX) element(handle int64) uintptr { return newWinObj(d.bridge, h
 // then drops the cache's reference. Disconnecting first is what keeps a
 // client from holding a provider the bridge has finished with, which is a
 // documented way to leak a whole tree into a screen reader.
-func (windowsAX) release(elems []uintptr) {
+func (*windowsAX) release(elems []uintptr) {
 	for _, e := range elems {
 		winObjectBridges.Delete(e)
 		procUiaDisconnectProvider.Call(e)
