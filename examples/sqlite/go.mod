@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	github.com/ironpark/ggfx v0.0.0-20260923070929-809d6bbc46b1
-	github.com/ironpark/ggui v0.0.0-20260922084102-d037210ddcf6
+	github.com/ironpark/ggui v0.0.0-20260923084412-3d99e22d214c
 	modernc.org/sqlite v1.59.0
 )
 

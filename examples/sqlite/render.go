@@ -10,6 +10,7 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/examples/internal/offscreen"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
@@ -105,5 +106,5 @@ func renderClient(directory string) error {
 		return err
 	}
 	r := &clientRender{directory: directory, path: path}
-	return runRenderWindow(func() (bool, error) { return true, r.render() })
+	return offscreen.Run(func() (bool, error) { return true, r.render() })
 }
