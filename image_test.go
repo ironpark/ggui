@@ -41,7 +41,7 @@ func TestImagePlacement(t *testing.T) {
 		{FitNone, Rct(Pt(-50, 0), Sz(200, 100))},
 	}
 	for _, tc := range cases {
-		if got := Image(img).Fit(tc.fit).placement(box); got != tc.want {
+		if got := tc.fit.Place(Image(img).natural(), box); got != tc.want {
 			t.Errorf("fit %d: %+v, want %+v", tc.fit, got, tc.want)
 		}
 	}

@@ -129,14 +129,14 @@ func (w *ImageWidget) Layout(c Constraints, env Env) Size {
 	return c.Constrain(want)
 }
 
-// placement returns the Rect the image is drawn in for a box r.
-func (w *ImageWidget) placement(r Rect) Rect {
-	n := w.natural()
+// Place returns the Rect an image of the natural size n is drawn in to fit
+// the box r this way. An image with no size fills r.
+func (f ImageFit) Place(n Size, r Rect) Rect {
 	if n.W == 0 || n.H == 0 {
 		return r
 	}
 	var s Size
-	switch w.fit {
+	switch f {
 	case FitFill:
 		return r
 	case FitNone:
@@ -156,14 +156,7 @@ func (w *ImageWidget) Paint(dst *Canvas, r Rect) {
 	if w.alt != "" {
 		dst.Leaf(r, Node{Role: RoleImage, Name: w.alt})
 	}
-	if dst == nil || dst.Image == nil || w.img == nil {
-		return
-	}
-	n := w.natural()
-	if n.W == 0 || n.H == 0 {
-		return
-	}
-	at := w.placement(r)
+	at := w.fit.Place(w.natural(), r)
 	target := dst
 	if at != r {
 		target = dst.Clip(r)
@@ -212,7 +205,7 @@ func (c *Canvas) DrawImage(img *ggfx.Image, r Rect, o ImageOptions) {
 		op.GeoM.Translate(-w/2, -h/2)
 		op.GeoM.Scale(r.Size.W/w, r.Size.H/h)
 		op.GeoM.Rotate(o.Rotation)
-		op.GeoM.Concat(c.Geo(r.Origin.Add(Pt(r.Size.W/2, r.Size.H/2))))
+		op.GeoM.Concat(c.Geo(r.Center()))
 	} else {
 		op.GeoM.Scale(r.Size.W/w, r.Size.H/h)
 		op.GeoM.Concat(c.Geo(r.Origin))
@@ -220,7 +213,7 @@ func (c *Canvas) DrawImage(img *ggfx.Image, r Rect, o ImageOptions) {
 	if o.Tint != nil {
 		op.ColorScale.ScaleWithColor(o.Tint)
 	}
-	if o.Fade > 0 {
+	if o.Fade != 0 {
 		op.ColorScale.ScaleAlpha(float32(1 - o.Fade))
 	}
 	c.Image.DrawImage(img, op)

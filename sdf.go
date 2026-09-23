@@ -22,7 +22,7 @@ import (
 // pixels; at zero the field is filled to its outline instead. Axis is the
 // unit vector the shape's own width runs along, so a line is this shape
 // turned to lie along it and a border is the band around one.
-const roundRectSource = `
+const roundRectSource = roundRectDistance + `
 struct Uniforms {
 	center: vec2f,
 	axis: vec2f,
@@ -36,13 +36,21 @@ struct Uniforms {
 fn fragment(v: Vertex) -> vec4f {
 	let p = v.src_pos - u.center;
 	let local = vec2f(dot(p, u.axis), dot(p, vec2f(-u.axis.y, u.axis.x)));
-	let q = abs(local) - u.half_size + vec2f(u.radius);
-	var distance = length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0) - u.radius;
+	var distance = round_rect_distance(local, u.half_size, u.radius);
 	if (u.width > 0.0) {
 		distance = abs(distance) - u.width;
 	}
 	let coverage = 1.0 - smoothstep(-u.feather, u.feather, distance);
 	return u.tint * coverage;
+}
+`
+
+// roundRectDistance is the signed distance from p to the outline of a
+// rectangle centred on the origin, rounded by radius; both shapes use it.
+const roundRectDistance = `
+fn round_rect_distance(p: vec2f, half_size: vec2f, radius: f32) -> f32 {
+	let q = abs(p) - half_size + vec2f(radius);
+	return length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0) - radius;
 }
 `
 
@@ -157,7 +165,7 @@ func (c *Canvas) shadeSegment(a, b Point, w float64, col color.Color) {
 // roundRectMaskSource draws source image 0 through the rounded rectangle
 // half_size around center, both relative to the image's own origin, which is
 // how ClipRoundRect composites its layer.
-const roundRectMaskSource = `
+const roundRectMaskSource = roundRectDistance + `
 struct Uniforms {
 	center: vec2f,
 	half_size: vec2f,
@@ -166,8 +174,7 @@ struct Uniforms {
 }
 @group(1) @binding(0) var<uniform> u: Uniforms;
 fn fragment(v: Vertex) -> vec4f {
-	let q = abs(v.src_pos - src0_origin() - u.center) - u.half_size + vec2f(u.radius);
-	let distance = length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0) - u.radius;
+	let distance = round_rect_distance(v.src_pos - src0_origin() - u.center, u.half_size, u.radius);
 	return src0_at(v.src_pos) * (1.0 - smoothstep(-u.feather, u.feather, distance));
 }
 `
@@ -185,9 +192,9 @@ var sharedRoundRectMask = sync.OnceValue(func() *ggfx.Shader {
 func (c *Canvas) maskRoundRect(img *ggfx.Image, r Rect, radius float64) {
 	b := img.Bounds()
 	scale := c.Scale()
-	half := Sz(r.Size.W*scale/2, r.Size.H*scale/2)
+	half, centre := Sz(r.Size.W*scale/2, r.Size.H*scale/2), r.Center()
 	op := &ggfx.DrawRectShaderOptions{Uniforms: map[string]any{
-		"center":    []float32{float32(c.px(r.Origin.X+r.Size.W/2) - float64(b.Min.X)), float32(c.px(r.Origin.Y+r.Size.H/2) - float64(b.Min.Y))},
+		"center":    []float32{float32(c.px(centre.X) - float64(b.Min.X)), float32(c.px(centre.Y) - float64(b.Min.Y))},
 		"half_size": []float32{float32(half.W), float32(half.H)},
 		"radius":    float32(min(radius*scale, half.W, half.H)),
 		"feather":   float32(feather),

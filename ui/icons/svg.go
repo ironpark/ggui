@@ -101,6 +101,6 @@ func (s *SVG) Draw(dst *ggui.Canvas, r ggui.Rect, col color.Color, rotation floa
 		}
 		s.cache = append(s.cache, raster{size, img})
 	}
-	at := ggui.Rct(r.Origin.Add(ggui.Pt((r.Size.W-side)/2, (r.Size.H-side)/2)), ggui.Sz(side, side))
+	at := ggui.FitContain.Place(ggui.Sz(1, 1), r)
 	dst.DrawImage(img, at, ggui.ImageOptions{Tint: col, Rotation: rotation})
 }

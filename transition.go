@@ -161,7 +161,7 @@ func (t *TransitionWidget) Paint(dst *Canvas, r Rect) {
 	var o LayerOptions
 	if scale {
 		o.Scale = t.from + (1-t.from)*e
-		o.About = Pt(at.Origin.X+at.Size.W/2, at.Origin.Y+at.Size.H/2)
+		o.About = at.Center()
 	}
 	if fade {
 		o.Fade = 1 - e

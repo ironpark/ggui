@@ -31,7 +31,7 @@ type LayerOptions struct {
 //
 // Without an image to draw into, Layer calls paint with c.
 func (c *Canvas) Layer(o LayerOptions, paint func(layer *Canvas)) {
-	c.layer(nil, paint, func(img *ggfx.Image) {
+	c.layer(image.Rectangle{}, paint, func(img *ggfx.Image) {
 		op := &ggfx.DrawImageOptions{}
 		if o.Scale != 0 && o.Scale != 1 {
 			op.Filter = ggfx.FilterLinear
@@ -57,14 +57,13 @@ func (c *Canvas) ClipRoundRect(r Rect, radius float64, paint func(dst *Canvas)) 
 		paint(clip)
 		return
 	}
-	area := clip.Image.Bounds()
-	clip.layer(&area, paint, func(img *ggfx.Image) { clip.maskRoundRect(img, r, radius) })
+	clip.layer(clip.Image.Bounds(), paint, func(img *ggfx.Image) { clip.maskRoundRect(img, r, radius) })
 }
 
 // layer paints into the part of a borrowed layer image within area, the
-// whole window when nil, and hands that part to draw. Without an image it
+// whole window when empty, and hands that part to draw. Without an image it
 // paints into c.
-func (c *Canvas) layer(area *image.Rectangle, paint func(*Canvas), draw func(*ggfx.Image)) {
+func (c *Canvas) layer(area image.Rectangle, paint func(*Canvas), draw func(*ggfx.Image)) {
 	var window *ggfx.Image
 	if c != nil {
 		window = c.root().Image
@@ -76,8 +75,8 @@ func (c *Canvas) layer(area *image.Rectangle, paint func(*Canvas), draw func(*gg
 	f := c.fs()
 	img := f.borrowLayer(window)
 	defer func() { f.layerDepth-- }()
-	if area != nil {
-		img = img.SubImage(*area).(*ggfx.Image)
+	if !area.Empty() {
+		img = img.SubImage(area).(*ggfx.Image)
 	}
 	img.Clear()
 	layer := c.derive()

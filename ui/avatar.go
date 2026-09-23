@@ -114,9 +114,7 @@ func drawCover(dst *ggui.Canvas, img *ggfx.Image, r ggui.Rect, radius float64, o
 	if b.Empty() {
 		return
 	}
-	w, h := float64(b.Dx()), float64(b.Dy())
-	k := max(r.Size.W/w, r.Size.H/h)
-	at := ggui.Rct(r.Origin.Add(ggui.Pt((r.Size.W-w*k)/2, (r.Size.H-h*k)/2)), ggui.Sz(w*k, h*k))
+	at := ggui.FitCover.Place(ggui.Sz(b.Dx(), b.Dy()), r)
 	dst.ClipRoundRect(r, radius, func(dst *ggui.Canvas) { dst.DrawImage(img, at, o) })
 }
 

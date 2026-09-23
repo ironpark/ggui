@@ -344,14 +344,11 @@ func (a *AttachmentWidget) paintMedia(dst *ggui.Canvas, r ggui.Rect, state Attac
 		if a.imageAlt != "" {
 			dst.Leaf(r, ggui.Node{Role: ggui.RoleImage, Name: a.imageAlt})
 		}
-		if dst == nil || dst.Image == nil {
-			return
-		}
 		var o ggui.ImageOptions
 		if state != AttachmentIdle && state != AttachmentDone {
 			o.Fade = .4
 		}
-		drawCover(dst, a.image, ggui.Rct(r.Origin, ggui.Sz(r.Size.W, r.Size.W)), radius, o)
+		drawCover(dst, a.image, r, radius, o)
 	} else if a.media != nil {
 		dst.Paint(a.mediaView, r)
 	}

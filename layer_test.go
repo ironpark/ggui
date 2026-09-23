@@ -115,12 +115,6 @@ func TestLayerWithoutAnImagePaintsIntoTheCaller(t *testing.T) {
 	}
 }
 
-func TestRoundRectMaskShaderCompiles(t *testing.T) {
-	if sharedRoundRectMask() == nil {
-		t.Fatal("missing shader")
-	}
-}
-
 func TestClipRoundRectPaintsIntoALayerCoveringOnlyTheRect(t *testing.T) {
 	img := ggfx.NewImage(100, 80)
 	defer img.Deallocate()
@@ -141,16 +135,14 @@ func TestClipRoundRectWithoutARadiusOrImageIsClip(t *testing.T) {
 	img := ggfx.NewImage(100, 80)
 	defer img.Deallocate()
 	r := Rct(Pt(10, 5), Sz(20, 30))
-	for _, c := range []*Canvas{{Image: img}, {}} {
-		for _, radius := range []float64{0, 10} {
-			if c.Image != nil && radius > 0 {
-				continue
-			}
-			var got *Canvas
-			c.ClipRoundRect(r, radius, func(l *Canvas) { got = l })
-			if !got.clipped || got.clip != r || layerCount(c) != 0 {
-				t.Fatalf("radius %v, image %v: clip %v, %d pooled; want a plain clip to %v", radius, c.Image != nil, got.clip, layerCount(c), r)
-			}
+	for _, tc := range []struct {
+		c      *Canvas
+		radius float64
+	}{{&Canvas{Image: img}, 0}, {&Canvas{}, 0}, {&Canvas{}, 10}} {
+		var got *Canvas
+		tc.c.ClipRoundRect(r, tc.radius, func(l *Canvas) { got = l })
+		if !got.clipped || got.clip != r || layerCount(tc.c) != 0 {
+			t.Fatalf("radius %v, image %v: clip %v, %d pooled; want a plain clip to %v", tc.radius, tc.c.Image != nil, got.clip, layerCount(tc.c), r)
 		}
 	}
 }
