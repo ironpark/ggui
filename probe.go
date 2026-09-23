@@ -88,6 +88,7 @@ func (p *Probe) Post(fn func()) { p.post(fn) }
 // back the clock Advance replaced.
 func (p *Probe) Close() {
 	p.close()
+	p.canvas.freeLayers()
 	if p.restore != nil {
 		p.restore()
 		p.restore = nil
@@ -125,6 +126,7 @@ func (p *Probe) Frame() Size {
 		return Size{}
 	}
 	c := &p.canvas
+	defer c.trimLayers()
 	c.prev, c.hits = c.hits, nil
 	f := c.fs()
 	f.pointer, f.hasPointer, f.logical = p.pointer, p.hasPointer, p.size

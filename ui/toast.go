@@ -50,7 +50,6 @@ type ToasterWidget struct {
 	limit   int
 	closed  bool
 	env     ggui.Env
-	buffer  *ggfx.Image
 }
 type toastEntry struct {
 	id               ToastID
@@ -149,10 +148,6 @@ func (t *ToasterWidget) Len() int {
 func (t *ToasterWidget) Clear() {
 	clear(t.entries)
 	t.entries = nil
-	if t.buffer != nil {
-		t.buffer.Deallocate()
-		t.buffer = nil
-	}
 }
 
 // Close drops the queue and rejects future Push calls. It is safe to call twice.
@@ -226,32 +221,24 @@ func (t *ToasterWidget) paintNotices(dst *ggui.Canvas) {
 		if e.leaving {
 			clip = clip.Inert()
 		}
-		output := clip.Image
-		fading := progress < 1 && output != nil
-		if fading {
-			bounds := output.Bounds()
-			if t.buffer == nil || t.buffer.Bounds().Size() != bounds.Size() {
-				if t.buffer != nil {
-					t.buffer.Deallocate()
-				}
-				t.buffer = ggfx.NewImage(bounds.Dx(), bounds.Dy())
-			}
-			t.buffer.Clear()
-			clip.Image = t.buffer
+		paint := func(clip *ggui.Canvas) {
+			// Shadow stays outside the panel's own clipping rectangle.
+			clip.Shadow(rect, theme.RadiusLg, theme.PanelShadow)
+			clip = clip.Clip(rect)
+			clip.HitPointer(rect, toastHover{e})
+			// A notice is a live region: it appeared without the user asking,
+			// so it is announced where it stands rather than waited for.
+			clip.DescribeNode(rect, e, func(clip *ggui.Canvas) {
+				clip.Paint(e.panel, rect)
+			})
 		}
-		// Shadow stays outside the panel's own clipping rectangle.
-		clip.Shadow(rect, theme.RadiusLg, theme.PanelShadow)
-		clip = clip.Clip(rect)
-		clip.HitPointer(rect, toastHover{e})
-		// A notice is a live region: it appeared without the user asking,
-		// so it is announced where it stands rather than waited for.
-		clip.DescribeNode(rect, e, func(clip *ggui.Canvas) {
-			clip.Paint(e.panel, rect)
-		})
-		if fading {
-			options := &ggfx.DrawImageOptions{}
-			options.ColorScale.ScaleAlpha(float32(progress))
-			output.DrawImage(t.buffer, options)
+		if progress < 1 {
+			// The panel and its shadow fade together.
+			op := &ggfx.DrawImageOptions{}
+			op.ColorScale.ScaleAlpha(float32(progress))
+			clip.Layer(op, paint)
+		} else {
+			paint(clip)
 		}
 		if !e.leaving {
 			bottom -= size.H + theme.Space

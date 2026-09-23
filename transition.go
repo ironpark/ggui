@@ -1,8 +1,9 @@
 package ggui
 
 import (
-	"github.com/ironpark/ggui/internal/reactive"
 	"time"
+
+	"github.com/ironpark/ggui/internal/reactive"
 
 	"github.com/ironpark/ggfx"
 
@@ -32,8 +33,6 @@ type TransitionWidget struct {
 	progress float64
 	leaving  bool
 	reduced  bool // the Env asked for no animation
-
-	buf *ggfx.Image // offscreen, for fade and scale
 }
 
 // transitionStart is the start time, retained on the Canvas.
@@ -42,13 +41,7 @@ type transitionStart struct{ at time.Time }
 // Transition wraps child in an enter animation: a fade over 200ms until
 // Fade, Slide or Scale say otherwise.
 func Transition(child Widget) *TransitionWidget {
-	t := &TransitionWidget{child: child, duration: 200 * time.Millisecond, ease: EaseOut, id: reactive.AutoID()}
-	if reactive.CurrentOwner() != nil {
-		// A transition unmounted mid-animation never reaches the release in
-		// Paint, and its screen-sized buffer would otherwise wait for the GC.
-		OnCleanup(t.release)
-	}
-	return t
+	return &TransitionWidget{child: child, duration: 200 * time.Millisecond, ease: EaseOut, id: reactive.AutoID()}
 }
 
 // PopIn is the entrance every floating panel shares: a fade with a slight
@@ -148,10 +141,6 @@ func (t *TransitionWidget) Paint(dst *Canvas, r Rect) {
 		}
 	}
 	if p >= 1 && !t.leaving {
-		// The buffer is screen-sized, so a list of rows that came in
-		// together would otherwise hold one full-screen texture each for
-		// as long as the rows live.
-		t.release()
 		dst.Paint(t.child, r)
 		return
 	}
@@ -165,22 +154,13 @@ func (t *TransitionWidget) Paint(dst *Canvas, r Rect) {
 	if slide {
 		at.Origin = at.Origin.Add(Pt((1-e)*t.dx, (1-e)*t.dy))
 	}
-	if !(fade || scale) || dst == nil || dst.Image == nil {
+	if !(fade || scale) {
 		target.Paint(t.child, at)
 		return
 	}
-	// Fade and scale paint the child offscreen and composite it: hit
-	// regions still register where the child painted itself.
-	b := dst.root().Image.Bounds()
-	if t.buf == nil || t.buf.Bounds().Size() != b.Size() {
-		if t.buf != nil {
-			t.buf.Deallocate()
-		}
-		t.buf = ggfx.NewImage(b.Dx(), b.Dy())
-	}
-	t.buf.Clear()
-	off := &Canvas{parent: target, scale: dst.scale, inert: target.inert, Image: t.buf}
-	off.Paint(t.child, at)
+	// Fade and scale apply to the child as a whole, so it paints into a
+	// layer that is composited: hit regions still register where the child
+	// painted itself.
 	op := &ggfx.DrawImageOptions{Filter: ggfx.FilterLinear}
 	if scale {
 		s := t.from + (1-t.from)*e
@@ -192,19 +172,10 @@ func (t *TransitionWidget) Paint(dst *Canvas, r Rect) {
 	if fade {
 		op.ColorScale.ScaleAlpha(float32(e))
 	}
-	dst.Image.DrawImage(t.buf, op)
+	target.Layer(op, func(layer *Canvas) { layer.Paint(t.child, at) })
 }
 
 var transitionSlot = NewSlot[transitionStart]("transition start")
-
-// release frees the offscreen buffer; the next fade or scale allocates
-// another.
-func (t *TransitionWidget) release() {
-	if t.buf != nil {
-		t.buf.Deallocate()
-		t.buf = nil
-	}
-}
 
 // Presence keeps child on screen while it animates out. While show is
 // true the child is laid out and painted as usual, playing its enter

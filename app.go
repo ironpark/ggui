@@ -122,6 +122,7 @@ func (a *App) Close() {
 	}
 	a.ax.Close()
 	a.close()
+	a.canvas.freeLayers()
 	reactive.UnmarkUIThread()
 	// The loop notices at its next frame.
 	a.requestFrame()
@@ -482,6 +483,7 @@ func (a *App) draw(screen *ggfx.Image, scale float64) {
 	if a.root == nil {
 		return
 	}
+	defer a.canvas.trimLayers()
 	// Last frame's regions stay readable while this frame paints, for
 	// Adopter handoff, and input keeps routing to them until the paint is
 	// done; the buffer freed two frames ago takes the new ones.

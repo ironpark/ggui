@@ -76,6 +76,14 @@ type frameState struct {
 	semIndex  map[any]int // handler to index plus one, for Describe and SemanticRef
 	semParent int         // the node being painted into
 	semLast   int         // the node most recently recorded
+
+	// The images Layer lends, the size of the window. Layers nest, so the
+	// one at index n belongs to the Layer open at depth n. They outlive the
+	// frame, so the next fade reuses them rather than allocating; the frame
+	// end frees those deeper than the frame reached.
+	layers     []*ggfx.Image
+	layerDepth int // Layers open now
+	layerPeak  int // the most open at once this frame
 }
 
 // fs returns the frame state, creating it on the root's first use. A Canvas

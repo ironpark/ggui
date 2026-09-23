@@ -14,6 +14,7 @@ See [example conventions](README.md#start-here) before copying snippets.
 - [Frame lifecycle](#frame-lifecycle)
 - [Layout caching](#layout-caching)
 - [Retained paint state](#retained-paint-state)
+- [Layers](#layers)
 - [Overlays](#overlays)
 
 ## HiDPI
@@ -115,6 +116,28 @@ for the next frame and `dst.Retained(anchor, slot)` reads what was stored
 last frame, where the `Anchor` is the widget's ID or its Rect. `dst.Ease`
 is a `Motion` kept that way. `ui.Tooltip` keeps its hover timer and Transition
 its start time in slots.
+
+## Layers
+
+An opacity or a transform that applies to a subtree as a whole, rather than to
+each thing it draws, needs the subtree painted apart and composited.
+`dst.Layer(op, paint)` does that: `paint` gets a Canvas that draws into an
+offscreen image the size of the window, and the image is then drawn onto `dst`
+with `op`. The layer Canvas is `dst` in every other respect, so hit regions,
+clipping, focus traps and inertness are unchanged. Transition's fade and scale
+and a toast's fade use it:
+
+```go
+op := &ggfx.DrawImageOptions{}
+op.ColorScale.ScaleAlpha(float32(opacity))
+dst.Layer(op, func(layer *ggui.Canvas) { layer.Paint(child, r) })
+```
+
+The images belong to the window, not to the widget. Layers painted one after
+another reuse one image and nested layers take one each; at the end of a frame
+the window frees any it did not need, and closing the app frees the rest. A
+widget therefore keeps no texture of its own, and ten rows fading in together
+cost one window-sized image rather than ten.
 
 ## Overlays
 
