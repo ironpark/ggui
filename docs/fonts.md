@@ -44,6 +44,40 @@ Actual glyph coverage depends on the selected emoji font. Explicit text
 presentation (VS15) stays in the ordinary font; emoji presentation (VS16) uses
 the emoji font. Color glyphs retain their colors when text color changes.
 
+### Load fonts separately on the web
+
+`fonts/remote.Load(ctx, url)` downloads and parses a TTF or OTF without
+embedding it. Use it with `ggui.Resource` during app setup, then apply the
+result on the UI thread:
+
+```go
+font := ggui.Resource(func() string {
+    return "assets/emoji.ttf?v=1"
+}, remote.Load) // import github.com/ironpark/ggui/fonts/remote
+ggui.Effect(func() ggui.Cleanup {
+    state := font.Get()
+    if state.Status == ggui.Ready {
+        ggui.SetEmojiFont(state.Value)
+    }
+    // Handle state.Err when state.Status == ggui.Failed.
+    return nil
+})
+```
+
+Resource cancels the download when its owner is disposed. The app can render
+while the font loads; applying it invalidates text layout. Cross-origin font
+URLs require CORS. Serve fonts with cache headers and change their URL version
+when the contents change. Initial total transfer still includes the font, but
+the browser can cache it independently of the WASM binary.
+
+The gallery uses this path on the web and retains embedded Noto on native
+platforms. Its `assets/NotoColorEmoji.ttf` is a symlink to the shared font.
+The development server serves it directly. For static deployment, copy the
+symlink's contents as a regular file to the same asset URL (for example with
+`cp -L`), and include the OFL and Unicode license files from `fonts/notoemoji`.
+Keep the `fonts/notoemoji` import in native-only code to exclude its embedded
+data from web builds.
+
 ## Icons
 
 `ui.Icon(icons.Search)` uses a shared semantic placeholder backed by embedded

@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/fonts/notoemoji"
 	_ "github.com/ironpark/ggui/inspect/panel"
 	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
@@ -480,7 +479,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 	}
 
 	setup := func() {
-		notoemoji.Enable()
+		setupEmojiFont()
 		ggui.Effect(func() ggui.Cleanup {
 			preset := uitheme.Preset{Base: baseColor.Get(), Accent: accentColor.Get(), Style: themeStyle.Get()}
 			t := preset.Light()

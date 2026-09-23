@@ -34,7 +34,7 @@ func SetEmojiFont(f *Font) {
 }
 
 // SystemEmojiFont finds the platform color emoji font once, or returns nil.
-// Browsers have no filesystem font access; use an embedded font on the web.
+// Browsers have no filesystem font access; load a remote or embedded font there.
 func SystemEmojiFont() *Font { return systemEmoji() }
 
 var systemEmoji = sync.OnceValue(func() *Font {
