@@ -101,6 +101,9 @@ type Computation struct {
 	state      uint8
 	user       bool
 	persistent bool
+	// rt is the Runtime whose flushes run this Computation: its owner's, or
+	// Default for one created with no owner.
+	rt *Runtime
 	// loop is the frame loop this Computation belongs to, held only so that
 	// flushUsers can tell one loop's effects from another's. It is never
 	// dereferenced here, so the reactive core needs no frame loop type.
@@ -244,7 +247,7 @@ func (e *Computation) dispose() {
 	e.disposed = true
 	e.detach()
 	e.reset()
-	effects.remove(e)
+	e.rt.effects.remove(e)
 }
 
 // Readable is the read side of a reactive value. *StateValue and *DerivedValue both
@@ -462,9 +465,7 @@ func (s *StateValue[T]) store(v T) {
 
 	for _, e := range subs {
 		markDirty(e)
-	}
-	if len(subs) > 0 {
-		effects.dirtyGen++
+		e.rt.effects.dirtyGen++
 	}
 }
 
@@ -608,19 +609,19 @@ func Effect(fn func() Cleanup) Cleanup {
 		}
 	}, true)
 	e.state = stateDirty
-	effects.userPending = true
-	effects.dirtyGen++
+	e.rt.effects.userPending = true
+	e.rt.effects.dirtyGen++
 	return e.dispose
 }
 
 func newComputation(fn func(), user bool) *Computation {
-	e := &Computation{fn: fn, user: user, origin: effectOrigin()}
+	e := &Computation{fn: fn, user: user, origin: effectOrigin(), rt: Default}
 	if owner := CurrentOwner(); owner != nil {
 		e.attach(owner)
 		e.place(owner, "")
-		e.loop = owner.loop
+		e.loop, e.rt = owner.loop, owner.rt
 	}
-	effects.add(e)
+	e.rt.effects.add(e)
 	return e
 }
 
@@ -651,7 +652,20 @@ func Root(fn func()) (dispose func()) {
 // (identity) or has a name of its own under its owner (elem), for the
 // identities AutoID derives.
 func RootWith(identity any, elem string, fn func()) (dispose func()) {
-	r := &Computation{keyRoot: identity, origin: effectOrigin(), persistent: false}
+	return rootIn(nil, identity, elem, fn)
+}
+
+// Root is the package Root for a root whose computations rt flushes,
+// whatever the current owner's runtime: how a frame loop gives the tree it
+// builds a graph of its own.
+func (rt *Runtime) Root(fn func()) (dispose func()) {
+	return rootIn(rt, nil, "", func() { CurrentOwner().persistent = true; fn() })
+}
+
+// rootIn is RootWith with the root's runtime chosen: rt, or when nil the
+// owner's, or Default.
+func rootIn(rt *Runtime, identity any, elem string, fn func()) (dispose func()) {
+	r := &Computation{keyRoot: identity, origin: effectOrigin(), persistent: false, rt: Default}
 	deps.mu.Lock()
 	r.owner = deps.owner
 	prevListener, prevOwner := deps.listener, deps.owner
@@ -659,8 +673,11 @@ func RootWith(identity any, elem string, fn func()) (dispose func()) {
 	deps.mu.Unlock()
 	if r.owner != nil {
 		r.attach(r.owner)
-		r.loop = r.owner.loop
+		r.loop, r.rt = r.owner.loop, r.owner.rt
 		r.place(r.owner, elem)
+	}
+	if rt != nil {
+		r.rt = rt
 	}
 	ok := false
 	defer func() {
@@ -732,12 +749,13 @@ func Untrack[T any](fn func() T) T {
 // check on to the readers of the memo it computes.
 func markDirty(e *Computation) {
 	if e.user {
-		effects.userPending = true
+		e.rt.effects.userPending = true
 	}
 	if e.state == stateDirty {
 		return
 	}
 	e.state = stateDirty
+	e.rt.effects.dirtyGen++
 	if e.cell != nil {
 		e.cell.markSubsCheck()
 	}
@@ -748,12 +766,15 @@ func markDirty(e *Computation) {
 // linear and a cycle terminates.
 func markCheck(e *Computation) {
 	if e.user {
-		effects.userPending = true
+		e.rt.effects.userPending = true
 	}
 	if e.state != stateClean {
 		return
 	}
 	e.state = stateCheck
+	// A reader in another runtime learns of the change only through this
+	// mark, so its flush must not take itself for settled.
+	e.rt.effects.dirtyGen++
 	if e.cell != nil {
 		e.cell.markSubsCheck()
 	}
@@ -826,7 +847,37 @@ type effectSet struct {
 	lastPass []*Computation
 }
 
-var effects effectSet
+// Runtime is one reactive graph's scheduler: the computations it owns and
+// the bookkeeping that tells a flush whether any of them is stale. Signals
+// belong to no runtime; a write marks each reader in the reader's own.
+//
+// A computation belongs to its owner's runtime, and one created with no
+// owner to Default. A frame loop builds its tree under Runtime.Root, so
+// what the tree creates is flushed by that loop alone, and a loop that is
+// never closed leaves nothing behind in anyone else's frames. Every flush
+// of a runtime also flushes Default, which holds what was created outside
+// any tree, such as a widget built in a test before its Probe.
+//
+// Runtimes are not a license for goroutines: every runtime runs on the one
+// UI goroutine, and the running computation is tracked process-wide.
+type Runtime struct {
+	effects effectSet
+}
+
+// NewRuntime returns an empty Runtime.
+func NewRuntime() *Runtime { return &Runtime{} }
+
+// Default is the process's runtime: what has no owner belongs to it, and
+// the package-level Flush, FlushUsers, Settled, Unsettled and Count act on it.
+var Default = NewRuntime()
+
+// sets is the effect sets a flush of rt runs: rt's own and Default's.
+func (rt *Runtime) sets() []*effectSet {
+	if rt == Default {
+		return []*effectSet{&rt.effects}
+	}
+	return []*effectSet{&rt.effects, &Default.effects}
+}
 
 func (s *effectSet) add(e *Computation) {
 	s.mu.Lock()
@@ -872,69 +923,98 @@ func (s *effectSet) unsettled() (stuck []*Computation, total int) {
 	return s.lastPass, s.count
 }
 
+func (s *effectSet) len() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.count
+}
+
 // MaxFlushPasses bounds how far a change propagates through derived values in
 // one frame. Chains settle in a pass or two; the cap only stops a cycle.
 const MaxFlushPasses = 16
 
-// flush re-runs every dirty Computation, repeating until the tree is quiet so that a
-// DerivedValue feeding another Computation lands in the same frame. Called once per frame by
-// the runtime. It reports false when the effects were still dirty after
-// MaxFlushPasses, which only a cycle causes.
+// settled reports whether every write this set was told of has been
+// flushed.
 func (s *effectSet) settled() bool { return s.dirtyGen == s.settledGen }
 
-func (s *effectSet) flush() (settled bool) {
-	if s.settled() {
+// snapshot lists the registered computations, oldest first.
+func (s *effectSet) snapshot() []*Computation {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	list := make([]*Computation, 0, s.count)
+	for e := s.first; e != nil; e = e.nextEffect {
+		list = append(list, e)
+	}
+	return list
+}
+
+// flush re-runs every dirty Computation of sets, repeating until they are
+// all quiet so that a DerivedValue feeding another Computation lands in the
+// same frame. Called once per frame by the runtime. It reports false when
+// the effects were still dirty after MaxFlushPasses, which only a cycle
+// causes.
+func flush(sets []*effectSet) (settled bool) {
+	if allSettled(sets) {
 		return true
 	}
 	for range MaxFlushPasses {
-		s.mu.Lock()
-		list := make([]*Computation, 0, s.count)
-		for e := s.first; e != nil; e = e.nextEffect {
-			list = append(list, e)
-		}
-		s.mu.Unlock()
-
 		ran := false
-		s.lastPass = s.lastPass[:0]
-		for _, e := range list {
-			if !e.user && e.cell == nil && Refresh(e) {
-				ran = true
-				s.lastPass = append(s.lastPass, e)
+		for _, s := range sets {
+			s.lastPass = s.lastPass[:0]
+			for _, e := range s.snapshot() {
+				if !e.user && e.cell == nil && Refresh(e) {
+					ran = true
+					s.lastPass = append(s.lastPass, e)
+				}
 			}
 		}
 		if !ran {
 			// Read after the quiet pass: cleanup and nested flushes may
 			// have written signals while earlier passes were running.
-			s.settledGen = s.dirtyGen
+			for _, s := range sets {
+				s.settledGen = s.dirtyGen
+			}
 			return true
 		}
 	}
 	return false
 }
 
-// flushUsers executes one post-layout pass. Layout is settled again before
-// another pass, so effects never observe a partially mounted tree.
-func (s *effectSet) flushUsers(loop any) bool {
-	if !s.userPending {
-		return false
-	}
-	s.userPending = false
-	var pending []*Computation
-	for e := s.first; e != nil; e = e.nextEffect {
-		if e.user && e.state != stateClean {
-			if e.loop == nil || e.loop == loop {
-				pending = append(pending, e)
-			} else {
-				s.userPending = true
-			}
+func allSettled(sets []*effectSet) bool {
+	for _, s := range sets {
+		if !s.settled() {
+			return false
 		}
 	}
+	return true
+}
+
+// flushUsers executes one post-layout pass over sets. Layout is settled
+// again before another pass, so effects never observe a partially mounted
+// tree.
+func flushUsers(sets []*effectSet, loop any) bool {
 	ran := false
-	s.lastPass = s.lastPass[:0]
-	for _, e := range pending {
-		if Refresh(e) {
-			ran = true
-			s.lastPass = append(s.lastPass, e)
+	for _, s := range sets {
+		if !s.userPending {
+			continue
+		}
+		s.userPending = false
+		var pending []*Computation
+		for e := s.first; e != nil; e = e.nextEffect {
+			if e.user && e.state != stateClean {
+				if e.loop == nil || e.loop == loop {
+					pending = append(pending, e)
+				} else {
+					s.userPending = true
+				}
+			}
+		}
+		s.lastPass = s.lastPass[:0]
+		for _, e := range pending {
+			if Refresh(e) {
+				ran = true
+				s.lastPass = append(s.lastPass, e)
+			}
 		}
 	}
 	return ran
@@ -953,18 +1033,43 @@ func (s *StateValue[T]) LayoutVersion() uint64 {
 // Disposed reports whether this computation's owner has been torn down.
 func (e *Computation) Disposed() bool { return e.disposed }
 
-// Flush runs pending effects until quiet, reporting whether they settled.
-func Flush() bool { return effects.flush() }
+// Flush runs rt's pending effects, and Default's, until quiet, reporting
+// whether they settled.
+func (rt *Runtime) Flush() bool { return flush(rt.sets()) }
 
-// FlushUsers runs one post-layout pass of the user effects belonging to
-// loop, reporting whether any ran.
-func FlushUsers(loop any) bool { return effects.flushUsers(loop) }
+// FlushUsers runs one post-layout pass of the user effects of rt and
+// Default that belong to loop, reporting whether any ran.
+func (rt *Runtime) FlushUsers(loop any) bool { return flushUsers(rt.sets(), loop) }
 
-// Unsettled names the effects still dirty after the last pass, for ErrCycle.
-func Unsettled() (stuck []*Computation, total int) { return effects.unsettled() }
+// Unsettled names the effects the last pass of rt's flush ran, for
+// ErrCycle, with how many effects rt and Default hold in all.
+func (rt *Runtime) Unsettled() (stuck []*Computation, total int) {
+	for _, s := range rt.sets() {
+		pass, n := s.unsettled()
+		stuck, total = append(stuck, pass...), total+n
+	}
+	return stuck, total
+}
 
-// Settled reports whether every write has been flushed.
-func Settled() bool { return effects.settled() }
+// Settled reports whether every write reaching rt or Default has been
+// flushed.
+func (rt *Runtime) Settled() bool { return allSettled(rt.sets()) }
+
+// Count is how many effects rt holds, for a test asserting that a
+// construction or teardown left none behind.
+func (rt *Runtime) Count() int { return rt.effects.len() }
+
+// Flush is Default.Flush.
+func Flush() bool { return Default.Flush() }
+
+// FlushUsers is Default.FlushUsers.
+func FlushUsers(loop any) bool { return Default.FlushUsers(loop) }
+
+// Unsettled is Default.Unsettled.
+func Unsettled() (stuck []*Computation, total int) { return Default.Unsettled() }
+
+// Settled is Default.Settled.
+func Settled() bool { return Default.Settled() }
 
 // StateGen counts StateValue writes, so that a frame can tell whether one
 // happened while it was laying out.
@@ -996,10 +1101,5 @@ func (e *Computation) Children() []*Computation {
 	return out
 }
 
-// Count is how many effects are registered, for a test asserting that a
-// construction or teardown left none behind.
-func Count() int {
-	effects.mu.Lock()
-	defer effects.mu.Unlock()
-	return effects.count
-}
+// Count is Default.Count.
+func Count() int { return Default.Count() }
