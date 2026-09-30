@@ -1,6 +1,6 @@
 //go:build windows && !amd64 && !arm64
 
-package a11y
+package a11ybridge
 
 import "syscall"
 
@@ -10,7 +10,7 @@ import "syscall"
 // what it would fall back to anyway, and a slider that refuses to be set
 // can still be moved a step at a time through the range value pattern.
 //
-// See a11y_windows_thunk.go for what the thunk does where there is one.
+// See windows_thunk.go for what the thunk does where there is one.
 
 func winFromPointEntry() uintptr {
 	return syscall.NewCallback(func(_, _, _, ppRetVal uintptr) uintptr {

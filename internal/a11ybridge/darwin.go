@@ -1,6 +1,6 @@
 //go:build darwin && !ios
 
-package a11y
+package a11ybridge
 
 import (
 	"math"
@@ -16,6 +16,7 @@ import (
 
 	"github.com/ironpark/ggfx"
 
+	"github.com/ironpark/ggui/a11y"
 	"github.com/ironpark/ggui/internal/platform/cocoa"
 )
 
@@ -213,15 +214,15 @@ var axElementBridges sync.Map // objc.ID -> *Bridge; retired elements resolve to
 // element stands for. Every method starts with it, and every one of them
 // answers nothing when it fails: an element outliving its node is normal,
 // since an assistive technology keeps the ones it was given.
-func axSelf(self objc.ID) (*Bridge, *axFrame, SemNode, bool) {
+func axSelf(self objc.ID) (*Bridge, *axFrame, a11y.SemNode, bool) {
 	owner, _ := axElementBridges.Load(self)
 	b, _ := owner.(*Bridge)
 	if b == nil {
-		return nil, nil, SemNode{}, false
+		return nil, nil, a11y.SemNode{}, false
 	}
 	f := b.frame()
 	if f == nil {
-		return nil, nil, SemNode{}, false
+		return nil, nil, a11y.SemNode{}, false
 	}
 	n, ok := b.node(int64(self.GetIvar(axHandleIvar)))
 	return b, f, n, ok
@@ -447,7 +448,7 @@ func axHitTestAt(b *Bridge, p nsPoint) objc.ID {
 	}
 	local := axFromScreen(d.container, nsRect{origin: p})
 	h := objc.Send[nsRect](d.container, axSelBounds).size.height
-	i := axHitTest(f.tree, Pt(local.origin.x, h-local.origin.y))
+	i := axHitTest(f.tree, a11y.Pt(local.origin.x, h-local.origin.y))
 	if i < 0 {
 		return 0
 	}
@@ -557,7 +558,7 @@ func (d *darwinAX) post(b *Bridge, n axNote) {
 // without waiting to find out what came of it. The result says only that
 // the action was accepted, which is all a caller blocking the main thread
 // can safely be told; the next frame's tree says what actually happened.
-func axPerform(self objc.ID, a axAct, act Action) bool {
+func axPerform(self objc.ID, a axAct, act a11y.Action) bool {
 	b, _, n, ok := axSelf(self)
 	if !ok || !axAllows(n.Node, a) {
 		return false
@@ -568,27 +569,27 @@ func axPerform(self objc.ID, a axAct, act Action) bool {
 }
 
 func axElementPress(self objc.ID, _ objc.SEL) bool {
-	return axPerform(self, axPress, Action{})
+	return axPerform(self, axPress, a11y.Action{})
 }
 
 func axElementConfirm(self objc.ID, _ objc.SEL) bool {
-	return axPerform(self, axConfirm, Action{})
+	return axPerform(self, axConfirm, a11y.Action{})
 }
 
 func axElementIncrement(self objc.ID, _ objc.SEL) bool {
-	return axPerform(self, axIncrement, Action{})
+	return axPerform(self, axIncrement, a11y.Action{})
 }
 
 func axElementDecrement(self objc.ID, _ objc.SEL) bool {
-	return axPerform(self, axDecrement, Action{})
+	return axPerform(self, axDecrement, a11y.Action{})
 }
 
 func axElementShowMenu(self objc.ID, _ objc.SEL) bool {
-	return axPerform(self, axShowMenu, Action{})
+	return axPerform(self, axShowMenu, a11y.Action{})
 }
 
 func axElementPick(self objc.ID, _ objc.SEL) bool {
-	return axPerform(self, axPick, Action{})
+	return axPerform(self, axPick, a11y.Action{})
 }
 
 // axElementSetValue takes whatever the platform's text or numeric API
@@ -598,7 +599,7 @@ func axElementSetValue(self objc.ID, _ objc.SEL, v objc.ID) {
 	if _, _, _, ok := axSelf(self); !ok || v == 0 {
 		return
 	}
-	var act Action
+	var act a11y.Action
 	if v.Send(axSelIsKindOfClass, axClassNSString) != 0 {
 		act.Text = cstrings.NSStringToString(v)
 	} else {
@@ -617,12 +618,12 @@ func axElementSetFocused(self objc.ID, _ objc.SEL, on bool) {
 		return
 	}
 	b, _, n, ok := axSelf(self)
-	if ok && n.Offscreen && n.Actions.Has(ActionScrollIntoView) {
+	if ok && n.Offscreen && n.Actions.Has(a11y.ActionScrollIntoView) {
 		if b != nil {
-			b.perform(n.ID, Action{Kind: ActionScrollIntoView})
+			b.perform(n.ID, a11y.Action{Kind: a11y.ActionScrollIntoView})
 		}
 	}
-	axPerform(self, axSetFocus, Action{})
+	axPerform(self, axSetFocus, a11y.Action{})
 }
 
 // axElementSelectorAllowed is how AppKit asks which actions this element
@@ -711,10 +712,10 @@ func axTextSelector(sel objc.SEL) bool {
 
 // axText returns the node behind an element when it is a text field, which
 // is the only kind that answers any of this.
-func axText(self objc.ID) (*Bridge, SemNode, bool) {
+func axText(self objc.ID) (*Bridge, a11y.SemNode, bool) {
 	b, _, n, ok := axSelf(self)
 	if !ok || !axTextual(n.Node) {
-		return nil, SemNode{}, false
+		return nil, a11y.SemNode{}, false
 	}
 	return b, n, true
 }
@@ -724,7 +725,7 @@ func axElementCharacterCount(self objc.ID, _ objc.SEL) int {
 	if !ok {
 		return 0
 	}
-	return CharCount(n.Node)
+	return a11y.CharCount(n.Node)
 }
 
 func axElementSelectedText(self objc.ID, _ objc.SEL) objc.ID {
@@ -732,7 +733,7 @@ func axElementSelectedText(self objc.ID, _ objc.SEL) objc.ID {
 	if !ok {
 		return 0
 	}
-	return cocoa.String(Selected(n.Node))
+	return cocoa.String(a11y.Selected(n.Node))
 }
 
 func axElementSelectedRange(self objc.ID, _ objc.SEL) nsRange {
@@ -740,7 +741,7 @@ func axElementSelectedRange(self objc.ID, _ objc.SEL) nsRange {
 	if !ok {
 		return nsRange{location: axNotFound}
 	}
-	loc, length := Selection(n.Node)
+	loc, length := a11y.Selection(n.Node)
 	return nsRange{location: uint(loc), length: uint(length)}
 }
 
@@ -752,8 +753,8 @@ func axElementSetSelectedRange(self objc.ID, _ objc.SEL, r nsRange) {
 	if !ok || r.location >= axNotFound || !axAllows(n.Node, axSetSelection) {
 		return
 	}
-	start, end := ByteRange(n.Node, int(r.location), int(r.length))
-	b.perform(n.ID, Action{Kind: ActionSetSelection, SelStart: start, SelEnd: end})
+	start, end := a11y.ByteRange(n.Node, int(r.location), int(r.length))
+	b.perform(n.ID, a11y.Action{Kind: a11y.ActionSetSelection, SelStart: start, SelEnd: end})
 }
 
 func axElementStringForRange(self objc.ID, _ objc.SEL, r nsRange) objc.ID {
@@ -761,7 +762,7 @@ func axElementStringForRange(self objc.ID, _ objc.SEL, r nsRange) objc.ID {
 	if !ok || r.location >= axNotFound {
 		return 0
 	}
-	return cocoa.String(StringForRange(n.Node, int(r.location), int(r.length)))
+	return cocoa.String(a11y.StringForRange(n.Node, int(r.location), int(r.length)))
 }
 
 func axElementRangeForLine(self objc.ID, _ objc.SEL, line int) nsRange {
@@ -769,7 +770,7 @@ func axElementRangeForLine(self objc.ID, _ objc.SEL, line int) nsRange {
 	if !ok {
 		return nsRange{location: axNotFound}
 	}
-	loc, length, has := RangeForLine(n.Node, line)
+	loc, length, has := a11y.RangeForLine(n.Node, line)
 	if !has {
 		return nsRange{location: axNotFound}
 	}
@@ -781,7 +782,7 @@ func axElementLineForIndex(self objc.ID, _ objc.SEL, index int) int {
 	if !ok {
 		return 0
 	}
-	return LineForIndex(n.Node, index)
+	return a11y.LineForIndex(n.Node, index)
 }
 
 func axElementInsertionLine(self objc.ID, _ objc.SEL) int {
@@ -789,7 +790,7 @@ func axElementInsertionLine(self objc.ID, _ objc.SEL) int {
 	if !ok {
 		return 0
 	}
-	return InsertionLine(n.Node)
+	return a11y.InsertionLine(n.Node)
 }
 
 func axElementFrameForRange(self objc.ID, _ objc.SEL, r nsRange) nsRect {
@@ -801,7 +802,7 @@ func axElementFrameForRange(self objc.ID, _ objc.SEL, r nsRange) nsRect {
 	if !is || d.container == 0 {
 		return nsRect{}
 	}
-	box := RectForRange(n, int(r.location), int(r.length))
+	box := a11y.RectForRange(n, int(r.location), int(r.length))
 	h := objc.Send[nsRect](d.container, axSelBounds).size.height
 	return axToScreen(d.container, nsRect{
 		origin: nsPoint{x: box.Origin.X, y: h - (box.Origin.Y + box.Size.H)},
@@ -822,63 +823,63 @@ func axElementFrameForRange(self objc.ID, _ objc.SEL, r nsRange) nsRect {
 // has no switch role. A tab is a radio button with the tab subrole, which
 // is what a real NSTabView reports. A dialog is a window with the dialog
 // subrole, so that VoiceOver treats it as a thing to be dismissed.
-func axRole(r Role) (role, subrole string) {
+func axRole(r a11y.Role) (role, subrole string) {
 	switch r {
-	case RoleButton:
+	case a11y.RoleButton:
 		return "AXButton", ""
-	case RoleCheckbox:
+	case a11y.RoleCheckbox:
 		return "AXCheckBox", ""
-	case RoleRadio:
+	case a11y.RoleRadio:
 		return "AXRadioButton", ""
-	case RoleSwitch:
+	case a11y.RoleSwitch:
 		return "AXCheckBox", "AXSwitch"
-	case RoleSlider:
+	case a11y.RoleSlider:
 		return "AXSlider", ""
-	case RoleTextField:
+	case a11y.RoleTextField:
 		return "AXTextField", ""
-	case RoleSelect:
+	case a11y.RoleSelect:
 		return "AXPopUpButton", ""
-	case RoleOption:
+	case a11y.RoleOption:
 		return "AXMenuItem", ""
-	case RoleMenu:
+	case a11y.RoleMenu:
 		return "AXMenu", ""
-	case RoleMenuItem:
+	case a11y.RoleMenuItem:
 		return "AXMenuItem", ""
-	case RoleTab:
+	case a11y.RoleTab:
 		return "AXRadioButton", "AXTabButton"
-	case RoleTabs:
+	case a11y.RoleTabs:
 		return "AXTabGroup", ""
-	case RoleDisclosure:
+	case a11y.RoleDisclosure:
 		return "AXDisclosureTriangle", ""
-	case RoleDialog:
+	case a11y.RoleDialog:
 		return "AXWindow", "AXDialog"
-	case RoleRow, RoleListItem:
+	case a11y.RoleRow, a11y.RoleListItem:
 		return "AXRow", ""
-	case RoleAccordion:
+	case a11y.RoleAccordion:
 		return "AXGroup", "AXDisclosureTriangle"
-	case RoleCombobox:
+	case a11y.RoleCombobox:
 		return "AXComboBox", ""
-	case RoleSeparator:
+	case a11y.RoleSeparator:
 		return "AXSplitter", ""
-	case RoleText:
+	case a11y.RoleText:
 		return "AXStaticText", ""
-	case RoleHeading:
+	case a11y.RoleHeading:
 		return "AXHeading", ""
-	case RoleImage:
+	case a11y.RoleImage:
 		return "AXImage", ""
-	case RoleList:
+	case a11y.RoleList:
 		return "AXList", ""
-	case RoleProgress:
+	case a11y.RoleProgress:
 		return "AXProgressIndicator", ""
-	case RoleLink:
+	case a11y.RoleLink:
 		return "AXLink", ""
-	case RoleToolbar:
+	case a11y.RoleToolbar:
 		return "AXToolbar", ""
-	case RoleStatus:
+	case a11y.RoleStatus:
 		return "AXGroup", ""
-	case RoleWindow:
+	case a11y.RoleWindow:
 		return "AXWindow", ""
-	case RoleGroup:
+	case a11y.RoleGroup:
 		return "AXGroup", ""
 	}
 	return "AXUnknown", ""
@@ -893,7 +894,7 @@ func axRole(r Role) (role, subrole string) {
 // The bounds are the ones the node painted at rather than the ones it was
 // clipped to, so that a row scrolled out of a list still says where it
 // would be; an element that is offscreen says so separately.
-func axBounds(n SemNode, viewHeight float64) (x, y, w, h float64) {
+func axBounds(n a11y.SemNode, viewHeight float64) (x, y, w, h float64) {
 	r := n.Full
 	return r.Origin.X, viewHeight - (r.Origin.Y + r.Size.H), r.Size.W, r.Size.H
 }

@@ -1,6 +1,6 @@
 //go:build windows
 
-package a11y
+package a11ybridge
 
 import (
 	"sync"
@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"unsafe"
 
+	"github.com/ironpark/ggui/a11y"
 	"golang.org/x/sys/windows"
 )
 
@@ -134,17 +135,17 @@ func objOf(this uintptr) (*winObj, int, bool) {
 // bridge, the frame being answered from and the node the element stands
 // for. It answers false for an element whose node has left the tree, which
 // is normal, since an assistive technology keeps the ones it was given.
-func selfOf(this uintptr) (*winObj, *Bridge, SemNode, bool) {
+func selfOf(this uintptr) (*winObj, *Bridge, a11y.SemNode, bool) {
 	o, _, ok := objOf(this)
 	if !ok {
-		return nil, nil, SemNode{}, false
+		return nil, nil, a11y.SemNode{}, false
 	}
 	b := o.bridge()
 	if b == nil {
-		return o, nil, SemNode{}, false
+		return o, nil, a11y.SemNode{}, false
 	}
 	if o.handle == winRootHandle {
-		return o, b, SemNode{}, false
+		return o, b, a11y.SemNode{}, false
 	}
 	n, ok := b.node(o.handle)
 	return o, b, n, ok
@@ -358,7 +359,7 @@ func winRuntimeID(handle int64) uintptr {
 // receive one -- the operating system passes it in a floating-point
 // register and Go's callback entry saves only the integer registers. Those
 // two go through a short assembly thunk that copies the registers across;
-// see a11y_windows_thunk.go for what happens where there is no thunk.
+// see windows_thunk.go for what happens where there is no thunk.
 func buildVtables() {
 	qi := syscall.NewCallback(comQueryInterface)
 	ar := syscall.NewCallback(comAddRef)

@@ -1,11 +1,12 @@
-// Package a11y is ggui's accessibility layer: the vocabulary a widget
-// describes itself in, the frozen tree one frame publishes, and the bridges
-// that hand that tree to the platform's own accessibility API.
+// Package a11y is ggui's accessibility vocabulary: the terms a widget
+// describes itself in and the frozen tree one frame publishes. The bridges
+// that hand that tree to the platform's own accessibility API live in
+// internal/a11ybridge, so this package is plain Go on every platform.
 //
 // Most programs never import it. The ggui package re-exports every name
 // here -- Node, Role, Action and the rest are the same types under the same
 // names there -- and sets the whole thing going from Config.Accessibility.
-// Import it to read a field list, or to work on a bridge.
+// Import it to read a field list, or to build a tree by hand.
 //
 // Point, Rect and Size are re-exported from geom for the same reason, so
 // that a bridge writes them under one name throughout.
@@ -14,15 +15,6 @@
 // widget published, and a bridge cannot import the package that runs it.
 // Defining the vocabulary here, below both, is what keeps one definition of
 // Node rather than a copy that silently falls behind.
-//
-// # Platforms
-//
-// macOS goes through NSAccessibility and Windows through UI Automation,
-// both without cgo. Everywhere else the bridge is absent and costs nothing.
-// A new platform is a new file in this package. The seam it fills is the
-// axPlatform interface in a11y.go, which is unexported: the bridge and its
-// platform halves are one unit, so a platform is added here rather than
-// implemented from outside.
 package a11y
 
 import (

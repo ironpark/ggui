@@ -1,6 +1,6 @@
 //go:build darwin && !ios
 
-package a11y
+package a11ybridge
 
 import (
 	"runtime"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/ebitengine/purego/cstrings"
 	"github.com/ebitengine/purego/objc"
+	"github.com/ironpark/ggui/a11y"
 )
 
 func TestAXElementsResolveTheirOwningBridge(t *testing.T) {
@@ -22,7 +23,7 @@ func TestAXElementsResolveTheirOwningBridge(t *testing.T) {
 		b := &Bridge{plat: d}
 		d.bridge = b
 		bridges[i] = b
-		tree := axRoots(SemNode{Role: RoleTextField, Value: value})
+		tree := axRoots(a11y.SemNode{Role: a11y.RoleTextField, Value: value})
 		b.cur.Store(newAXFrame(tree))
 		elements[i] = objc.ID(b.element(axKeyOf(tree.At(0).ID)))
 		defer b.clear()
@@ -52,15 +53,15 @@ func TestAXEmptyEditorValue(t *testing.T) {
 
 	for _, tc := range []struct {
 		name    string
-		role    Role
+		role    a11y.Role
 		value   string
 		wantNil bool
 	}{
-		{"empty editor", RoleTextField, "", false},
-		{"populated editor", RoleTextField, "hello", false},
-		{"button without value", RoleButton, "", true},
+		{"empty editor", a11y.RoleTextField, "", false},
+		{"populated editor", a11y.RoleTextField, "hello", false},
+		{"button without value", a11y.RoleButton, "", true},
 	} {
-		tree := axRoots(SemNode{Role: tc.role, Value: tc.value, Actions: ActionSetValue})
+		tree := axRoots(a11y.SemNode{Role: tc.role, Value: tc.value, Actions: a11y.ActionSetValue})
 		b.cur.Store(newAXFrame(tree))
 		e := objc.ID(b.element(axKeyOf(tree.At(0).ID)))
 		value := e.Send(objc.RegisterName("accessibilityValue"))
@@ -78,8 +79,8 @@ func TestAXBoundsFlipTheYAxis(t *testing.T) {
 	// ggui measures down from the top of the window and Cocoa measures up
 	// from the bottom, and the bounds reported are the ones the node
 	// painted at, not the ones it was clipped to.
-	n := axNode(RoleButton, "b", nil, Rct(Pt(10, 20), Sz(30, 40)))
-	n.Rect, n.Offscreen = Rect{}, true
+	n := axNode(a11y.RoleButton, "b", nil, a11y.Rct(a11y.Pt(10, 20), a11y.Sz(30, 40)))
+	n.Rect, n.Offscreen = a11y.Rect{}, true
 	x, y, w, h := axBounds(n, 600)
 	if x != 10 || y != 600-60 || w != 30 || h != 40 {
 		t.Errorf("bounds = %g,%g %gx%g; want 10,540 30x40", x, y, w, h)
@@ -87,12 +88,12 @@ func TestAXBoundsFlipTheYAxis(t *testing.T) {
 }
 
 func TestAXRolesCoverEveryRole(t *testing.T) {
-	all := []Role{
-		RoleButton, RoleCheckbox, RoleRadio, RoleSwitch, RoleSlider, RoleTextField,
-		RoleSelect, RoleOption, RoleMenu, RoleMenuItem, RoleTab, RoleTabs,
-		RoleDisclosure, RoleDialog, RoleRow, RoleAccordion, RoleCombobox,
-		RoleSeparator, RoleText, RoleHeading, RoleImage, RoleList, RoleListItem,
-		RoleGroup, RoleProgress, RoleLink, RoleToolbar, RoleStatus, RoleWindow,
+	all := []a11y.Role{
+		a11y.RoleButton, a11y.RoleCheckbox, a11y.RoleRadio, a11y.RoleSwitch, a11y.RoleSlider, a11y.RoleTextField,
+		a11y.RoleSelect, a11y.RoleOption, a11y.RoleMenu, a11y.RoleMenuItem, a11y.RoleTab, a11y.RoleTabs,
+		a11y.RoleDisclosure, a11y.RoleDialog, a11y.RoleRow, a11y.RoleAccordion, a11y.RoleCombobox,
+		a11y.RoleSeparator, a11y.RoleText, a11y.RoleHeading, a11y.RoleImage, a11y.RoleList, a11y.RoleListItem,
+		a11y.RoleGroup, a11y.RoleProgress, a11y.RoleLink, a11y.RoleToolbar, a11y.RoleStatus, a11y.RoleWindow,
 	}
 	for _, r := range all {
 		role, _ := axRole(r)
@@ -100,16 +101,16 @@ func TestAXRolesCoverEveryRole(t *testing.T) {
 			t.Errorf("%s maps to no AppKit role", r)
 		}
 	}
-	if role, sub := axRole(RoleSwitch); role != "AXCheckBox" || sub != "AXSwitch" {
+	if role, sub := axRole(a11y.RoleSwitch); role != "AXCheckBox" || sub != "AXSwitch" {
 		t.Errorf("switch = %s/%s, want AXCheckBox/AXSwitch", role, sub)
 	}
-	if role, sub := axRole(RoleTab); role != "AXRadioButton" || sub != "AXTabButton" {
+	if role, sub := axRole(a11y.RoleTab); role != "AXRadioButton" || sub != "AXTabButton" {
 		t.Errorf("tab = %s/%s, want AXRadioButton/AXTabButton", role, sub)
 	}
-	if role, sub := axRole(RoleDialog); role != "AXWindow" || sub != "AXDialog" {
+	if role, sub := axRole(a11y.RoleDialog); role != "AXWindow" || sub != "AXDialog" {
 		t.Errorf("dialog = %s/%s, want AXWindow/AXDialog", role, sub)
 	}
-	if role, _ := axRole(Role("nonsense")); role != "AXUnknown" {
+	if role, _ := axRole(a11y.Role("nonsense")); role != "AXUnknown" {
 		t.Errorf("an unknown role mapped to %s", role)
 	}
 }

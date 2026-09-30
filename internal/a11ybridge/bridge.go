@@ -1,9 +1,20 @@
-package a11y
+// Package a11ybridge hands the tree a ggui frame publishes, in the a11y
+// package's vocabulary, to the platform's accessibility API: macOS through
+// NSAccessibility and Windows through UI Automation, both without cgo.
+// Everywhere else the bridge is absent and costs nothing.
+//
+// A new platform is a new file in this package. The seam it fills is the
+// axPlatform interface in bridge.go, which is unexported: the bridge and its
+// platform halves are one unit, so a platform is added here rather than
+// implemented from outside.
+package a11ybridge
 
 import (
-	"github.com/ironpark/ggfx"
 	"sync"
 	"sync/atomic"
+
+	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggui/a11y"
 )
 
 // A platform accessibility bridge is the far side of the tree semantics.go
@@ -25,24 +36,6 @@ import (
 // it did last frame, or focus and the reading position jump. Hence the
 // element cache below, which is keyed by identity and swept once a frame.
 
-// Mode says when an App talks to the platform's accessibility
-// API. The zero value waits for an assistive technology to attach and
-// builds nothing at all until one does, so a frame costs nothing in the
-// usual case where none is running.
-type Mode uint8
-
-const (
-	// Auto turns the bridge on while an assistive technology
-	// is attached, and off again when it detaches.
-	Auto Mode = iota
-	// Off never speaks to the platform, whatever is running.
-	Off
-	// Always keeps the bridge on, so that a tool which does
-	// not announce itself -- Accessibility Inspector is one -- still sees
-	// the tree. It costs a little work every frame.
-	Always
-)
-
 // axKey identifies a node from frame to frame, as NodeID does, but as
 // something a map will take: NodeID.ID is whatever a widget's Key setter
 // took and may be a slice, which would panic a lookup. A node with an identity
@@ -51,13 +44,13 @@ const (
 // handle on it there is.
 type axKey struct {
 	id   any
-	rect Rect
-	role Role
+	rect a11y.Rect
+	role a11y.Role
 }
 
 // axKeyOf reduces a NodeID to a cache key.
-func axKeyOf(id NodeID) axKey {
-	if k := Key(id.ID); k != nil {
+func axKeyOf(id a11y.NodeID) axKey {
+	if k := a11y.Key(id.ID); k != nil {
 		return axKey{id: k, role: id.Role}
 	}
 	return axKey{rect: id.Rect, role: id.Role}
@@ -68,7 +61,7 @@ func axKeyOf(id NodeID) axKey {
 // scan. Like the tree, it is finished when it is stored and never written
 // again, so the main thread may read it without a lock.
 type axFrame struct {
-	tree  *SemTree
+	tree  *a11y.SemTree
 	index map[axKey]int32
 }
 
@@ -76,7 +69,7 @@ type axFrame struct {
 // unidentified node keys on its bounds, and a container exactly filling its
 // one child shares them -- in which case the first, which is the outer one,
 // wins; the loser is simply not reachable as an element of its own.
-func newAXFrame(t *SemTree) *axFrame {
+func newAXFrame(t *a11y.SemTree) *axFrame {
 	f := &axFrame{tree: t, index: make(map[axKey]int32, t.Len())}
 	for i := range t.Len() {
 		k := axKeyOf(t.At(i).ID)
@@ -88,10 +81,10 @@ func newAXFrame(t *SemTree) *axFrame {
 }
 
 // at returns the node a key names, if the frame still holds one.
-func (f *axFrame) at(k axKey) (SemNode, bool) {
+func (f *axFrame) at(k axKey) (a11y.SemNode, bool) {
 	i, ok := f.index[k]
 	if !ok {
-		return SemNode{}, false
+		return a11y.SemNode{}, false
 	}
 	return f.tree.At(int(i)), true
 }
@@ -136,7 +129,7 @@ const axPollFrames = 60
 // it, and the critical sections are short and call nothing that could block.
 type Bridge struct {
 	plat axPlatform
-	mode Mode
+	mode a11y.Mode
 	on   bool
 	poll int
 
@@ -145,7 +138,7 @@ type Bridge struct {
 	// prev is last frame's, for the diff. Only the frame goroutine
 	// touches it, so it needs neither the lock nor the atomic.
 	prev *axFrame
-	act  func(NodeID, Action)
+	act  func(a11y.NodeID, a11y.Action)
 
 	mu    sync.Mutex
 	elems axElems
@@ -156,9 +149,9 @@ type Bridge struct {
 // none before Run. act is what an assistive technology's request to press or
 // focus something ends up calling; the bridge takes the function rather than
 // the App so that nothing here has to know what an App is.
-func (b *Bridge) Start(act func(NodeID, Action), mode Mode) {
+func (b *Bridge) Start(act func(a11y.NodeID, a11y.Action), mode a11y.Mode) {
 	b.mode = mode
-	if mode == Off {
+	if mode == a11y.Off {
 		return
 	}
 	b.plat = newAXPlatform()
@@ -191,7 +184,7 @@ func (b *Bridge) Close() {
 // notices is drained by the caller whether or not the bridge is listening,
 // so that an app nobody is reading does not accumulate a queue of things it
 // will never say.
-func (b *Bridge) Publish(t *SemTree, notices []Announcement) {
+func (b *Bridge) Publish(t *a11y.SemTree, notices []a11y.Announcement) {
 	if b.plat == nil || !b.enabled() {
 		b.prev = nil
 		return
@@ -224,7 +217,7 @@ func (b *Bridge) Publish(t *SemTree, notices []Announcement) {
 // drops the tree and every element with it, so that nothing is held once
 // the last assistive technology detaches.
 func (b *Bridge) enabled() bool {
-	if b.mode == Off {
+	if b.mode == a11y.Off {
 		return false
 	}
 	if b.poll > 0 {
@@ -237,8 +230,8 @@ func (b *Bridge) enabled() bool {
 	// that owns one.
 	b.poll = axPollFrames
 	was := b.on
-	b.on = b.plat.active() || b.mode == Always
-	axWantsDetail.Store(b.on)
+	b.on = b.plat.active() || b.mode == a11y.Always
+	a11y.SetWantsDetail(b.on)
 	if was && !b.on {
 		b.clear()
 	}
@@ -282,16 +275,16 @@ func (b *Bridge) element(k axKey) uintptr {
 // node returns the node an element handle stands for, as the tree last
 // published it. An element an assistive technology kept past the life of
 // its node resolves to nothing, which is the honest answer.
-func (b *Bridge) node(handle int64) (SemNode, bool) {
+func (b *Bridge) node(handle int64) (a11y.SemNode, bool) {
 	f := b.frame()
 	if f == nil {
-		return SemNode{}, false
+		return a11y.SemNode{}, false
 	}
 	b.mu.Lock()
 	k, ok := b.elems.keyOf(handle)
 	b.mu.Unlock()
 	if !ok {
-		return SemNode{}, false
+		return a11y.SemNode{}, false
 	}
 	return f.at(k)
 }
@@ -299,7 +292,7 @@ func (b *Bridge) node(handle int64) (SemNode, bool) {
 // perform hands an action to the app, which queues it onto the frame
 // goroutine and returns at once. Nothing here waits for it: see the note at
 // the top of actions.go for why waiting is the one thing that deadlocks.
-func (b *Bridge) perform(id NodeID, a Action) {
+func (b *Bridge) perform(id a11y.NodeID, a a11y.Action) {
 	if b.act != nil {
 		b.act(id, a)
 	}
@@ -403,18 +396,18 @@ func (e *axElems) sweep(live map[axKey]int32) []uintptr {
 // the mixed state AppKit expects from a check box with mixed children, and
 // a slider or a progress bar reports where it sits in its range. The second
 // result is false for a node whose value is text, or none.
-func axNumber(n Node) (float64, bool) {
-	if n.Checked != TriNone {
+func axNumber(n a11y.Node) (float64, bool) {
+	if n.Checked != a11y.TriNone {
 		switch n.Checked {
-		case TriOn:
+		case a11y.TriOn:
 			return 1, true
-		case TriMixed:
+		case a11y.TriMixed:
 			return 2, true
 		}
 		return 0, true
 	}
 	switch n.Role {
-	case RoleSlider, RoleProgress:
+	case a11y.RoleSlider, a11y.RoleProgress:
 		return n.Now, true
 	}
 	return 0, false
@@ -424,9 +417,9 @@ func axNumber(n Node) (float64, bool) {
 // AXMaxValue. A node that gave neither a minimum nor a maximum reports no
 // range at all, rather than a range of nothing to nothing, which VoiceOver
 // would read out.
-func axRange(n Node) (lo, hi float64, ok bool) {
+func axRange(n a11y.Node) (lo, hi float64, ok bool) {
 	switch n.Role {
-	case RoleSlider, RoleProgress:
+	case a11y.RoleSlider, a11y.RoleProgress:
 		if n.Min == 0 && n.Max == 0 {
 			return 0, 0, false
 		}
@@ -442,7 +435,7 @@ func axRange(n Node) (lo, hi float64, ok bool) {
 // from the pointer, and an assistive technology follows it into containers.
 //
 // An offscreen node is never hit: it is not where it says it is.
-func axHitTest(t *SemTree, p Point) int {
+func axHitTest(t *a11y.SemTree, p a11y.Point) int {
 	found := -1
 	var walk func(i int)
 	walk = func(i int) {
@@ -543,7 +536,7 @@ func axDiff(prev, next *axFrame) []axNote {
 // screen reader would repeat. The name is not among them: a node that is
 // renamed is read again the next time it is reached, and announcing every
 // label that a rebuild happened to rewrite would talk over the user.
-func axSpeaks(before, after Node) bool {
+func axSpeaks(before, after a11y.Node) bool {
 	if before.Value != after.Value || before.Checked != after.Checked || before.Now != after.Now {
 		return true
 	}
@@ -552,7 +545,7 @@ func axSpeaks(before, after Node) bool {
 
 // axExpanded folds Node.Expanded into a comparable tri-state: -1 for a node
 // that does not expand at all, 0 closed, 1 open.
-func axExpanded(n Node) int {
+func axExpanded(n a11y.Node) int {
 	if n.Expanded == nil {
 		return -1
 	}
@@ -565,7 +558,7 @@ func axExpanded(n Node) int {
 // axParentNote is the selection note for a node: it goes to whatever
 // contains it, since the notification says which of a container's children
 // is now the chosen one, and to the container itself for a root.
-func axParentNote(f *axFrame, n SemNode) axNote {
+func axParentNote(f *axFrame, n a11y.SemNode) axNote {
 	if n.Parent < 0 {
 		return axNote{kind: axSelectionChanged, root: true}
 	}
@@ -585,10 +578,10 @@ func axFocusKey(f *axFrame) axKey {
 
 // axSpeak turns the queue Announce filled into notes. Politeness survives
 // as loud, which the platform half maps onto whatever priority it has.
-func axSpeak(notices []Announcement) []axNote {
+func axSpeak(notices []a11y.Announcement) []axNote {
 	out := make([]axNote, 0, len(notices))
 	for _, a := range notices {
-		out = append(out, axNote{kind: axAnnouncement, root: true, text: a.Text, loud: a.Politeness == Assertive})
+		out = append(out, axNote{kind: axAnnouncement, root: true, text: a.Text, loud: a.Politeness == a11y.Assertive})
 	}
 	return out
 }
@@ -615,26 +608,26 @@ const (
 // it is what Return does to the focused element, which is what Space
 // already does to every ggui control. Show menu is an expansion, which is
 // what opening a combobox or a select is.
-func axActOf(a axAct) ActionSet {
+func axActOf(a axAct) a11y.ActionSet {
 	switch a {
 	case axPress, axConfirm:
-		return ActionPress
+		return a11y.ActionPress
 	case axIncrement:
-		return ActionIncrement
+		return a11y.ActionIncrement
 	case axDecrement:
-		return ActionDecrement
+		return a11y.ActionDecrement
 	case axShowMenu:
-		return ActionExpand
+		return a11y.ActionExpand
 	case axCollapse:
-		return ActionCollapse
+		return a11y.ActionCollapse
 	case axPick:
-		return ActionSelect
+		return a11y.ActionSelect
 	case axSetValue:
-		return ActionSetValue
+		return a11y.ActionSetValue
 	case axSetFocus:
-		return ActionFocus
+		return a11y.ActionFocus
 	case axSetSelection:
-		return ActionSetSelection
+		return a11y.ActionSetSelection
 	}
 	return 0
 }
@@ -642,164 +635,15 @@ func axActOf(a axAct) ActionSet {
 // axAllows reports whether a node offers an action, which is what decides
 // the list an assistive technology shows the user: only what Node.Actions
 // claims, and nothing at all on a disabled control except being looked at.
-func axAllows(n Node, a axAct) bool {
+func axAllows(n a11y.Node, a axAct) bool {
 	kind := axActOf(a)
 	if kind == 0 || !n.Actions.Has(kind) {
 		return false
 	}
-	return !n.Disabled || kind == ActionFocus
-}
-
-// A text field is the one node an assistive technology does not merely read
-// out: it walks it, character by character and line by line, and moves the
-// caret as it goes. macOS asks for that through a protocol of its own, in
-// UTF-16 offsets, and ggui stores UTF-8 bytes, so everything below converts
-// between the two. The answers come from the frozen snapshot -- Node.Value,
-// Node.SelStart and SelEnd, and the Runs a text widget froze into it -- and
-// never from the live widget, which belongs to another thread.
-
-// axDetail reports whether anything is reading the tree closely enough to
-// want a text node's full layout. Building it costs a measurement per
-// character on every frame, which is not a price to pay while nothing is
-// listening; a widget asks this before filling Node.Runs.
-func WantsDetail() bool { return axWantsDetail.Load() }
-
-// SetWantsDetail forces the answer WantsDetail gives. The bridge sets it
-// itself as assistive technologies come and go; a test that wants a widget
-// to freeze its text layout without one attached sets it by hand.
-func SetWantsDetail(on bool) { axWantsDetail.Store(on) }
-
-var axWantsDetail atomic.Bool
-
-// axUTF16Len is the length of s in UTF-16 code units, which is what every
-// offset crossing into AppKit is counted in.
-func axUTF16Len(s string) int {
-	n := 0
-	for _, r := range s {
-		n++
-		if r > 0xFFFF {
-			n++
-		}
-	}
-	return n
-}
-
-// axByteAt converts a UTF-16 offset into a byte offset in s, clamped to the
-// ends. An offset landing between the halves of a surrogate pair resolves
-// to the start of the rune, which is where a caret can actually go.
-func axByteAt(s string, u int) int {
-	if u <= 0 {
-		return 0
-	}
-	n := 0
-	for i, r := range s {
-		w := 1
-		if r > 0xFFFF {
-			w = 2
-		}
-		if n >= u || n+w > u {
-			return i
-		}
-		n += w
-	}
-	return len(s)
-}
-
-// axUTF16At converts a byte offset in s into a UTF-16 offset.
-func axUTF16At(s string, b int) int {
-	n := 0
-	for i, r := range s {
-		if i >= b {
-			return n
-		}
-		n++
-		if r > 0xFFFF {
-			n++
-		}
-	}
-	return n
-}
-
-// CharCount is the length of the field, in the units AppKit counts in.
-func CharCount(n Node) int { return axUTF16Len(n.Value) }
-
-// Selection is the selected range, as a UTF-16 location and length. An
-// empty selection is the caret, which is what it usually is.
-func Selection(n Node) (loc, length int) {
-	lo := axUTF16At(n.Value, n.SelStart)
-	return lo, axUTF16At(n.Value, n.SelEnd) - lo
-}
-
-// Selected is the selected text.
-func Selected(n Node) string {
-	loc, length := Selection(n)
-	return StringForRange(n, loc, length)
-}
-
-// ByteRange converts a UTF-16 location and length into the byte range an
-// Action carries, clamped to the text.
-func ByteRange(n Node, loc, length int) (start, end int) {
-	start = axByteAt(n.Value, loc)
-	end = axByteAt(n.Value, loc+max(length, 0))
-	return start, max(end, start)
-}
-
-// StringForRange is the text a UTF-16 range covers.
-func StringForRange(n Node, loc, length int) string {
-	start, end := ByteRange(n, loc, length)
-	return n.Value[start:end]
-}
-
-// LineForIndex is the line a UTF-16 offset falls on, counting from zero.
-// A field that never said how it was laid out is one line, which is the
-// honest answer for a field that is.
-func LineForIndex(n Node, u int) int {
-	b := axByteAt(n.Value, u)
-	for i, r := range n.Runs {
-		if b <= r.End {
-			return i
-		}
-	}
-	return max(len(n.Runs)-1, 0)
-}
-
-// RangeForLine is the UTF-16 range a line covers, and false for a line
-// number the field does not have.
-func RangeForLine(n Node, line int) (loc, length int, ok bool) {
-	if line < 0 || line >= len(n.Runs) {
-		if line == 0 {
-			return 0, axUTF16Len(n.Value), true
-		}
-		return 0, 0, false
-	}
-	r := n.Runs[line]
-	loc = axUTF16At(n.Value, r.Start)
-	return loc, axUTF16At(n.Value, r.End) - loc, true
-}
-
-// InsertionLine is the line the caret is on, which is what VoiceOver says
-// when the user moves between lines.
-func InsertionLine(n Node) int { return LineForIndex(n, axUTF16At(n.Value, n.SelEnd)) }
-
-// RectForRange is the area a UTF-16 range covers, in the same logical
-// coordinates as SemNode.Full. A range spanning several lines comes back as
-// the part of it on the first, since the caller wants somewhere to put a
-// cursor and a union of lines is not that. A range on a field that froze no
-// layout falls back to the whole field.
-func RectForRange(n SemNode, loc, length int) Rect {
-	start, end := ByteRange(n.Node, loc, length)
-	for _, r := range n.Runs {
-		if start > r.End {
-			continue
-		}
-		a := r.At(start)
-		b := r.At(min(end, r.End))
-		return Rct(Pt(r.Rect.Origin.X+a, r.Rect.Origin.Y), Sz(max(b-a, 1), r.Rect.Size.H))
-	}
-	return n.Full
+	return !n.Disabled || kind == a11y.ActionFocus
 }
 
 // axTextual reports whether a node answers the text protocol at all. A
 // button has no characters, and being asked for them would be answered with
 // the emptiness of a field rather than with nothing.
-func axTextual(n Node) bool { return n.Role == RoleTextField }
+func axTextual(n a11y.Node) bool { return n.Role == a11y.RoleTextField }

@@ -122,7 +122,7 @@ those guides as historical measurements; rerun them on your target hardware.
 | Text editing and fonts | [editor.go](../editor.go), [font.go](../font.go), [internal/textinput/](../internal/textinput/) |
 | Input and shortcuts | [input.go](../input.go), [chord.go](../chord.go), [clipboard.go](../clipboard.go) |
 | Platform services | [runtime/](../runtime/) (file dialogs and the clipboard, reached through `Host`) |
-| Accessibility and semantics | [a11y.go](../a11y.go), [a11y_darwin.go](../a11y_darwin.go), [semantics.go](../semantics.go) |
+| Accessibility and semantics | [a11y/](../a11y/) (the vocabulary), [internal/a11ybridge/](../internal/a11ybridge/) (the platform bridges), [semantics.go](../semantics.go) |
 | Styling and animation | [style.go](../style.go), [anim.go](../anim.go), [transition.go](../transition.go) — see [Styling and themes](styling.md) |
 | Overlays and images | [popup.go](../popup.go), [image.go](../image.go) |
 | Testing and diagnostics | [probe.go](../probe.go), [inspect/panel/](../inspect/panel) (the panel, build tag `ggui_inspector`), [inspector.go](../inspector.go) (its registration, and the frame built from the trace), [inspect/](../inspect) (the frame model the panel and `App.OnInspect` share), [overlay.go](../overlay.go) (the Overlay the panel draws as), [cache.go](../cache.go) |

@@ -1,6 +1,6 @@
 //go:build windows && (amd64 || arm64)
 
-package a11y
+package a11ybridge
 
 import "syscall"
 
@@ -18,8 +18,8 @@ import "syscall"
 // free -- nothing else was passed in them -- and the bits arrive intact.
 // The Go side reads them back with math.Float64frombits.
 //
-// The thunks are in a11y_windows_amd64.s and a11y_windows_arm64.s. Where
-// there is neither, a11y_windows_thunk_other.go stands in with methods
+// The thunks are in windows_amd64.s and windows_arm64.s. Where
+// there is neither, windows_thunk_other.go stands in with methods
 // that decline rather than guess.
 
 // The callbacks the thunks jump to. They are read from assembly, which is

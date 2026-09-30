@@ -1,11 +1,12 @@
 //go:build windows
 
-package a11y
+package a11ybridge
 
 import (
 	"sync/atomic"
 
 	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggui/a11y"
 )
 
 // The Windows half of the accessibility bridge speaks UI Automation, from
@@ -237,11 +238,11 @@ func winPostValue(b *Bridge, el uintptr, k axKey) {
 const uiaLiveRegionChangedEvent = 20024
 
 // winToggleOf is the ToggleState a checkable node reports.
-func winToggleOf(n Node) int32 {
+func winToggleOf(n a11y.Node) int32 {
 	switch n.Checked {
-	case TriOn:
+	case a11y.TriOn:
 		return uiaToggleOn
-	case TriMixed:
+	case a11y.TriMixed:
 		return uiaToggleIndeterminate
 	}
 	return uiaToggleOff
@@ -249,7 +250,7 @@ func winToggleOf(n Node) int32 {
 
 // winExpandStateOf is the ExpandCollapseState an expandable node reports,
 // and a leaf for one that is not.
-func winExpandStateOf(n Node) int32 {
+func winExpandStateOf(n a11y.Node) int32 {
 	switch {
 	case n.Expanded == nil:
 		return uiaLeafNode

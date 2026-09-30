@@ -61,8 +61,8 @@ tasks:
       - 'GOOS=windows GOARCH=amd64 "{{.GO}}" vet -unsafeptr=false -tags ggui_inspector .'
       - 'GOOS=windows GOARCH=arm64 "{{.GO}}" vet -unsafeptr=false -tags ggui_inspector .'
       - 'GOOS=windows GOARCH=arm64 "{{.GO}}" vet -unsafeptr=false ./...'
-      - 'GOOS=windows GOARCH=amd64 "{{.GO}}" test -c -o /dev/null ./a11y'
-      - 'GOOS=windows GOARCH=arm64 "{{.GO}}" test -c -o /dev/null ./a11y'
+      - 'GOOS=windows GOARCH=amd64 "{{.GO}}" test -c -o /dev/null ./internal/a11ybridge'
+      - 'GOOS=windows GOARCH=arm64 "{{.GO}}" test -c -o /dev/null ./internal/a11ybridge'
 
   fmt:
     desc: Format Go sources

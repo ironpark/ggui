@@ -1,11 +1,12 @@
 //go:build windows
 
-package a11y
+package a11ybridge
 
 import (
 	"math"
 	"unsafe"
 
+	"github.com/ironpark/ggui/a11y"
 	"golang.org/x/sys/windows"
 )
 
@@ -47,7 +48,7 @@ func winElementAt(b *Bridge, f *axFrame, i int) uintptr {
 }
 
 // winIndexOf finds where a node sits in the frame it came from.
-func winIndexOf(f *axFrame, n *SemNode) int {
+func winIndexOf(f *axFrame, n *a11y.SemNode) int {
 	if i, ok := f.index[axKeyOf(n.ID)]; ok {
 		return int(i)
 	}
@@ -56,7 +57,7 @@ func winIndexOf(f *axFrame, n *SemNode) int {
 
 // winChildren is the child list of a node, or the tree's roots for the
 // window's own element, which has no node.
-func winChildren(f *axFrame, n *SemNode) []int {
+func winChildren(f *axFrame, n *a11y.SemNode) []int {
 	if n == nil {
 		return f.tree.Roots()
 	}
@@ -65,7 +66,7 @@ func winChildren(f *axFrame, n *SemNode) []int {
 
 // winSiblings is the list a node appears in among its peers: its parent's
 // children, or the tree's roots when it has no parent.
-func winSiblings(f *axFrame, n *SemNode) []int {
+func winSiblings(f *axFrame, n *a11y.SemNode) []int {
 	if n.Parent < 0 || n.Parent >= f.tree.Len() {
 		return f.tree.Roots()
 	}
@@ -132,20 +133,20 @@ func winPatternIface(id int32) int {
 // winPattern reports whether a node supports the pattern interface k. It is
 // what both QueryInterface and GetPatternProvider answer on, so that the
 // two can never disagree about what an element can do.
-func winPattern(n Node, k int) bool {
+func winPattern(n a11y.Node, k int) bool {
 	switch k {
 	case ifInvoke:
 		return axAllows(n, axPress)
 	case ifValue:
 		switch n.Role {
-		case RoleTextField, RoleSelect, RoleCombobox:
+		case a11y.RoleTextField, a11y.RoleSelect, a11y.RoleCombobox:
 			return true
 		}
 		return false
 	case ifRangeValue:
-		return n.Role == RoleSlider || n.Role == RoleProgress
+		return n.Role == a11y.RoleSlider || n.Role == a11y.RoleProgress
 	case ifToggle:
-		return n.Checked != TriNone
+		return n.Checked != a11y.TriNone
 	case ifExpandCollapse:
 		return n.Expanded != nil
 	case ifSelectionItem:
@@ -214,7 +215,7 @@ func winGetPropertyValue(this, propertyID, pRetVal uintptr) uintptr {
 		}
 		return varR8(v, n.Now)
 	case uiaToggleToggleStateProperty:
-		if n.Checked == TriNone {
+		if n.Checked == a11y.TriNone {
 			return sOK
 		}
 		return varI4(v, winToggleOf(n.Node))
@@ -229,7 +230,7 @@ func winGetPropertyValue(this, propertyID, pRetVal uintptr) uintptr {
 		}
 		return varBool(v, n.Selected)
 	case uiaOrientationProperty:
-		if n.Role != RoleSlider && n.Role != RoleSeparator {
+		if n.Role != a11y.RoleSlider && n.Role != a11y.RoleSeparator {
 			return sOK
 		}
 		if n.Full.Size.W >= n.Full.Size.H {
@@ -299,7 +300,7 @@ func winNavigate(this, direction, ppRetVal uintptr) uintptr {
 	if !isRoot && !ok {
 		return winHandOut(0, 0, ppRetVal)
 	}
-	var self *SemNode
+	var self *a11y.SemNode
 	if !isRoot {
 		self = &n
 	}
@@ -420,7 +421,7 @@ func winGetEmbeddedFragmentRoots(_, ppRetVal uintptr) uintptr {
 // winSetFocus asks the app to move keyboard focus here. Like every action,
 // it queues and returns; the next frame is where the answer shows up.
 func winSetFocus(this uintptr) uintptr {
-	return winAct(this, axSetFocus, Action{Kind: ActionFocus})
+	return winAct(this, axSetFocus, a11y.Action{Kind: a11y.ActionFocus})
 }
 
 // winGetFragmentRoot is the window's element, for every element including
@@ -452,7 +453,7 @@ func winElementFromPoint(this, xBits, yBits, ppRetVal uintptr) uintptr {
 	if s == 0 {
 		return winHandOut(0, 0, ppRetVal)
 	}
-	p := Pt(
+	p := a11y.Pt(
 		(math.Float64frombits(uint64(xBits))-ox)/s,
 		(math.Float64frombits(uint64(yBits))-oy)/s,
 	)
@@ -484,7 +485,7 @@ func winGetFocus(this, ppRetVal uintptr) uintptr {
 // check the node still offers the action, then queue it. Nothing waits for
 // the result, because waiting is the one thing that deadlocks; see the note
 // at the top of actions.go.
-func winAct(this uintptr, want axAct, a Action) uintptr {
+func winAct(this uintptr, want axAct, a a11y.Action) uintptr {
 	_, b, n, ok := selfOf(this)
 	if !ok {
 		return uiaElementNotAvailable
@@ -497,7 +498,7 @@ func winAct(this uintptr, want axAct, a Action) uintptr {
 }
 
 func winInvoke(this uintptr) uintptr {
-	return winAct(this, axPress, Action{Kind: ActionPress})
+	return winAct(this, axPress, a11y.Action{Kind: a11y.ActionPress})
 }
 
 // winValueSetValue replaces a text field's contents outright. The string
@@ -508,7 +509,7 @@ func winValueSetValue(this, val uintptr) uintptr {
 	if val != 0 {
 		text = winFromBSTR(val)
 	}
-	return winAct(this, axSetValue, Action{Kind: ActionSetValue, Text: text})
+	return winAct(this, axSetValue, a11y.Action{Kind: a11y.ActionSetValue, Text: text})
 }
 
 func winValueGetValue(this, ppRetVal uintptr) uintptr {
@@ -527,28 +528,28 @@ func winValueGetValue(this, ppRetVal uintptr) uintptr {
 // winIsReadOnly answers IsReadOnly for both the value and the range value
 // patterns, which agree on what it means: the node takes no SetValue.
 func winIsReadOnly(this, pRetVal uintptr) uintptr {
-	return winBoolOut(this, pRetVal, func(n Node) bool { return !axAllows(n, axSetValue) })
+	return winBoolOut(this, pRetVal, func(n a11y.Node) bool { return !axAllows(n, axSetValue) })
 }
 
 // winRangeSetValue moves a slider to a number. Like the hit test, the
 // number arrives as raw bits from a thunk.
 func winRangeSetValue(this, valBits uintptr) uintptr {
-	return winAct(this, axSetValue, Action{
-		Kind: ActionSetValue,
+	return winAct(this, axSetValue, a11y.Action{
+		Kind: a11y.ActionSetValue,
 		Num:  math.Float64frombits(uint64(valBits)),
 	})
 }
 
 func winRangeGetValue(this, pRetVal uintptr) uintptr {
-	return winFloatOut(this, pRetVal, func(n Node) float64 { return n.Now })
+	return winFloatOut(this, pRetVal, func(n a11y.Node) float64 { return n.Now })
 }
 
 func winRangeMinimum(this, pRetVal uintptr) uintptr {
-	return winFloatOut(this, pRetVal, func(n Node) float64 { return n.Min })
+	return winFloatOut(this, pRetVal, func(n a11y.Node) float64 { return n.Min })
 }
 
 func winRangeMaximum(this, pRetVal uintptr) uintptr {
-	return winFloatOut(this, pRetVal, func(n Node) float64 { return n.Max })
+	return winFloatOut(this, pRetVal, func(n a11y.Node) float64 { return n.Max })
 }
 
 // winRangeSmallChange and winRangeLargeChange are what one press of an
@@ -556,11 +557,11 @@ func winRangeMaximum(this, pRetVal uintptr) uintptr {
 // a step, so these are the hundredth and the tenth of the range that a
 // slider without one conventionally moves in.
 func winRangeSmallChange(this, pRetVal uintptr) uintptr {
-	return winFloatOut(this, pRetVal, func(n Node) float64 { return (n.Max - n.Min) / 100 })
+	return winFloatOut(this, pRetVal, func(n a11y.Node) float64 { return (n.Max - n.Min) / 100 })
 }
 
 func winRangeLargeChange(this, pRetVal uintptr) uintptr {
-	return winFloatOut(this, pRetVal, func(n Node) float64 { return (n.Max - n.Min) / 10 })
+	return winFloatOut(this, pRetVal, func(n a11y.Node) float64 { return (n.Max - n.Min) / 10 })
 }
 
 // winToggleState is the toggle pattern's one method of its own: Toggle
@@ -571,11 +572,11 @@ func winToggleState(this, pRetVal uintptr) uintptr {
 }
 
 func winExpand(this uintptr) uintptr {
-	return winAct(this, axShowMenu, Action{Kind: ActionExpand})
+	return winAct(this, axShowMenu, a11y.Action{Kind: a11y.ActionExpand})
 }
 
 func winCollapse(this uintptr) uintptr {
-	return winAct(this, axCollapse, Action{Kind: ActionCollapse})
+	return winAct(this, axCollapse, a11y.Action{Kind: a11y.ActionCollapse})
 }
 
 func winExpandCollapseState(this, pRetVal uintptr) uintptr {
@@ -583,7 +584,7 @@ func winExpandCollapseState(this, pRetVal uintptr) uintptr {
 }
 
 func winSelect(this uintptr) uintptr {
-	return winAct(this, axPick, Action{Kind: ActionSelect})
+	return winAct(this, axPick, a11y.Action{Kind: a11y.ActionSelect})
 }
 
 // winAddToSelection and winRemoveFromSelection are refused: nothing ggui
@@ -594,7 +595,7 @@ func winAddToSelection(this uintptr) uintptr { return winSelect(this) }
 func winRemoveFromSelection(uintptr) uintptr { return uiaInvalidOperation }
 
 func winIsSelected(this, pRetVal uintptr) uintptr {
-	return winBoolOut(this, pRetVal, func(n Node) bool { return n.Selected })
+	return winBoolOut(this, pRetVal, func(n a11y.Node) bool { return n.Selected })
 }
 
 // winSelectionContainer is the nearest ancestor that holds the selection,
@@ -615,7 +616,7 @@ func winSelectionContainer(this, ppRetVal uintptr) uintptr {
 // not the two byte all-bits-set VARIANT_BOOL that goes inside a variant:
 // writing the smaller one leaves the caller's upper half as it found it,
 // and whatever was on its stack then reads as true.
-func winBoolOut(this, pRetVal uintptr, of func(Node) bool) uintptr {
+func winBoolOut(this, pRetVal uintptr, of func(a11y.Node) bool) uintptr {
 	if pRetVal == 0 {
 		return ePointer
 	}
@@ -631,7 +632,7 @@ func winBoolOut(this, pRetVal uintptr, of func(Node) bool) uintptr {
 }
 
 // winFloatOut answers a double out parameter from the node.
-func winFloatOut(this, pRetVal uintptr, of func(Node) float64) uintptr {
+func winFloatOut(this, pRetVal uintptr, of func(a11y.Node) float64) uintptr {
 	if pRetVal == 0 {
 		return ePointer
 	}
@@ -646,7 +647,7 @@ func winFloatOut(this, pRetVal uintptr, of func(Node) float64) uintptr {
 
 // winI32Out answers an enum out parameter from the node, with what to say
 // when there is no node to ask.
-func winI32Out(this, pRetVal uintptr, none int32, of func(Node) int32) uintptr {
+func winI32Out(this, pRetVal uintptr, none int32, of func(a11y.Node) int32) uintptr {
 	if pRetVal == 0 {
 		return ePointer
 	}

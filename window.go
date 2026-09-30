@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggui/a11y"
 	"github.com/ironpark/ggui/inspect"
+	"github.com/ironpark/ggui/internal/a11ybridge"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/textinput"
 	"github.com/ironpark/ggui/runtime"
@@ -137,7 +137,7 @@ type Window struct {
 	wakeTimer     *time.Timer
 	keys          [KeyMax + 1]bool       // keys held, for Mods
 	touches       map[ggfx.TouchID]Point // touches in progress, in logical pixels
-	ax            a11y.Bridge
+	ax            a11ybridge.Bridge
 	dragOver      bool
 	dragAt        Point
 	seenGen       uint64            // reactive.LayoutGen as this window's last frame left it

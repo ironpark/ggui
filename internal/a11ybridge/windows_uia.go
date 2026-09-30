@@ -1,6 +1,8 @@
 //go:build windows
 
-package a11y
+package a11ybridge
+
+import "github.com/ironpark/ggui/a11y"
 
 // The identifiers below are UI Automation's, copied from the mingw-w64
 // headers rather than remembered: uiautomationclient.h for the numeric
@@ -149,63 +151,63 @@ const (
 // reads a check box correctly; only its spoken type is overridden. A
 // heading is text with a level, which is how UIA expresses one. A tab is a
 // tab item inside a tab control, which is the pairing UIA expects.
-func axControlType(r Role) (ctl int32, localized string) {
+func axControlType(r a11y.Role) (ctl int32, localized string) {
 	switch r {
-	case RoleButton:
+	case a11y.RoleButton:
 		return uiaButtonControlType, ""
-	case RoleCheckbox:
+	case a11y.RoleCheckbox:
 		return uiaCheckBoxControlType, ""
-	case RoleRadio:
+	case a11y.RoleRadio:
 		return uiaRadioButtonControlType, ""
-	case RoleSwitch:
+	case a11y.RoleSwitch:
 		return uiaCheckBoxControlType, "switch"
-	case RoleSlider:
+	case a11y.RoleSlider:
 		return uiaSliderControlType, ""
-	case RoleTextField:
+	case a11y.RoleTextField:
 		return uiaEditControlType, ""
-	case RoleSelect, RoleCombobox:
+	case a11y.RoleSelect, a11y.RoleCombobox:
 		return uiaComboBoxControlType, ""
-	case RoleOption:
+	case a11y.RoleOption:
 		return uiaListItemControlType, ""
-	case RoleMenu:
+	case a11y.RoleMenu:
 		return uiaMenuControlType, ""
-	case RoleMenuItem:
+	case a11y.RoleMenuItem:
 		return uiaMenuItemControlType, ""
-	case RoleTab:
+	case a11y.RoleTab:
 		return uiaTabItemControlType, ""
-	case RoleTabs:
+	case a11y.RoleTabs:
 		return uiaTabControlType, ""
-	case RoleDisclosure:
+	case a11y.RoleDisclosure:
 		return uiaButtonControlType, "disclosure triangle"
-	case RoleAccordion:
+	case a11y.RoleAccordion:
 		return uiaGroupControlType, "accordion"
-	case RoleDialog:
+	case a11y.RoleDialog:
 		return uiaWindowControlType, "dialog"
-	case RoleRow:
+	case a11y.RoleRow:
 		return uiaDataItemControlType, ""
-	case RoleListItem:
+	case a11y.RoleListItem:
 		return uiaListItemControlType, ""
-	case RoleSeparator:
+	case a11y.RoleSeparator:
 		return uiaSeparatorControlType, ""
-	case RoleText:
+	case a11y.RoleText:
 		return uiaTextControlType, ""
-	case RoleHeading:
+	case a11y.RoleHeading:
 		return uiaTextControlType, "heading"
-	case RoleImage:
+	case a11y.RoleImage:
 		return uiaImageControlType, ""
-	case RoleList:
+	case a11y.RoleList:
 		return uiaListControlType, ""
-	case RoleProgress:
+	case a11y.RoleProgress:
 		return uiaProgressBarControlType, ""
-	case RoleLink:
+	case a11y.RoleLink:
 		return uiaHyperlinkControlType, ""
-	case RoleToolbar:
+	case a11y.RoleToolbar:
 		return uiaToolBarControlType, ""
-	case RoleStatus:
+	case a11y.RoleStatus:
 		return uiaGroupControlType, "status"
-	case RoleWindow:
+	case a11y.RoleWindow:
 		return uiaWindowControlType, ""
-	case RoleGroup:
+	case a11y.RoleGroup:
 		return uiaGroupControlType, ""
 	}
 	return uiaPaneControlType, ""

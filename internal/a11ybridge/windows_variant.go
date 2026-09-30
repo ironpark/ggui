@@ -1,6 +1,6 @@
 //go:build windows && !386
 
-package a11y
+package a11ybridge
 
 import "unsafe"
 

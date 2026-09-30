@@ -1,6 +1,6 @@
 //go:build (!darwin && !windows) || ios
 
-package a11y
+package a11ybridge
 
 // newAXPlatform returns nothing: there is no accessibility bridge on this
 // platform yet, so App.Semantics publishes a tree every frame and nobody

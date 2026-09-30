@@ -1,8 +1,10 @@
-package a11y
+package a11ybridge
 
 import (
-	"github.com/ironpark/ggfx"
 	"testing"
+
+	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggui/a11y"
 )
 
 // axFake is an axPlatform that makes numbers instead of objects, so that
@@ -41,8 +43,8 @@ func (f *axFake) notify(notes []axNote) { f.notes = append(f.notes, notes...); f
 
 // axRoots builds a tree of unnested nodes, which is all the element cache
 // and the gating care about.
-func axRoots(nodes ...SemNode) *SemTree {
-	out := make([]SemNode, 0, len(nodes))
+func axRoots(nodes ...a11y.SemNode) *a11y.SemTree {
+	out := make([]a11y.SemNode, 0, len(nodes))
 	for _, n := range nodes {
 		n.Parent = -1
 		if n.ID.Role == "" {
@@ -50,13 +52,13 @@ func axRoots(nodes ...SemNode) *SemTree {
 		}
 		out = append(out, n)
 	}
-	return Build(out, -1)
+	return a11y.Build(out, -1)
 }
 
-func axNode(role Role, name string, id any, r Rect) SemNode {
-	return SemNode{
+func axNode(role a11y.Role, name string, id any, r a11y.Rect) a11y.SemNode {
+	return a11y.SemNode{
 		Role: role, Name: name,
-		ID:   NodeID{ID: id, Rect: r, Role: role},
+		ID:   a11y.NodeID{ID: id, Rect: r, Role: role},
 		Rect: r,
 		Full: r,
 	}
@@ -65,33 +67,33 @@ func axNode(role Role, name string, id any, r Rect) SemNode {
 func TestAXKeyFollowsIdentityNotPosition(t *testing.T) {
 	// A control that was rebuilt somewhere else is the same element, or
 	// VoiceOver loses its place every time a list reflows.
-	before := axKeyOf(NodeID{ID: "save", Rect: Rct(Pt(0, 0), Sz(10, 10)), Role: RoleButton})
-	after := axKeyOf(NodeID{ID: "save", Rect: Rct(Pt(0, 40), Sz(10, 10)), Role: RoleButton})
+	before := axKeyOf(a11y.NodeID{ID: "save", Rect: a11y.Rct(a11y.Pt(0, 0), a11y.Sz(10, 10)), Role: a11y.RoleButton})
+	after := axKeyOf(a11y.NodeID{ID: "save", Rect: a11y.Rct(a11y.Pt(0, 40), a11y.Sz(10, 10)), Role: a11y.RoleButton})
 	if before != after {
 		t.Error("an identified node changed key by moving")
 	}
 	// Without an identity there is nothing to go on but where it painted.
-	anon := axKeyOf(NodeID{Rect: Rct(Pt(0, 0), Sz(10, 10)), Role: RoleButton})
-	moved := axKeyOf(NodeID{Rect: Rct(Pt(0, 40), Sz(10, 10)), Role: RoleButton})
+	anon := axKeyOf(a11y.NodeID{Rect: a11y.Rct(a11y.Pt(0, 0), a11y.Sz(10, 10)), Role: a11y.RoleButton})
+	moved := axKeyOf(a11y.NodeID{Rect: a11y.Rct(a11y.Pt(0, 40), a11y.Sz(10, 10)), Role: a11y.RoleButton})
 	if anon == moved {
 		t.Error("an unidentified node kept its key across a move")
 	}
 	// The role separates a container from the one child that fills it.
-	if axKeyOf(NodeID{Rect: Rct(Pt(0, 0), Sz(10, 10)), Role: RoleRow}) == anon {
+	if axKeyOf(a11y.NodeID{Rect: a11y.Rct(a11y.Pt(0, 0), a11y.Sz(10, 10)), Role: a11y.RoleRow}) == anon {
 		t.Error("two roles at the same bounds share a key")
 	}
 	// An identity that cannot be a map key must not panic the lookup.
-	k := axKeyOf(NodeID{ID: []int{1}, Rect: Rct(Pt(1, 2), Sz(3, 4)), Role: RoleText})
-	if k.id != nil || k.rect != Rct(Pt(1, 2), Sz(3, 4)) {
+	k := axKeyOf(a11y.NodeID{ID: []int{1}, Rect: a11y.Rct(a11y.Pt(1, 2), a11y.Sz(3, 4)), Role: a11y.RoleText})
+	if k.id != nil || k.rect != a11y.Rct(a11y.Pt(1, 2), a11y.Sz(3, 4)) {
 		t.Errorf("uncomparable identity = %v, want a fall back to the bounds", k)
 	}
 }
 
 func TestAXElementsAreStableAndSweptByLiveness(t *testing.T) {
 	f := newAXFake(true)
-	b := &Bridge{plat: f, mode: Always}
-	keep := axNode(RoleButton, "keep", "keep", Rct(Pt(0, 0), Sz(10, 10)))
-	goes := axNode(RoleButton, "goes", "goes", Rct(Pt(0, 20), Sz(10, 10)))
+	b := &Bridge{plat: f, mode: a11y.Always}
+	keep := axNode(a11y.RoleButton, "keep", "keep", a11y.Rct(a11y.Pt(0, 0), a11y.Sz(10, 10)))
+	goes := axNode(a11y.RoleButton, "goes", "goes", a11y.Rct(a11y.Pt(0, 20), a11y.Sz(10, 10)))
 	b.Publish(axRoots(keep, goes), nil)
 
 	e1 := b.element(axKeyOf(keep.ID))
@@ -106,7 +108,7 @@ func TestAXElementsAreStableAndSweptByLiveness(t *testing.T) {
 	// The node changed everything but its identity: no new object, and
 	// nothing released. Only liveness is diffed.
 	moved := keep
-	moved.Name, moved.Full, moved.ID.Rect = "renamed", Rct(Pt(5, 5), Sz(20, 20)), Rct(Pt(5, 5), Sz(20, 20))
+	moved.Name, moved.Full, moved.ID.Rect = "renamed", a11y.Rct(a11y.Pt(5, 5), a11y.Sz(20, 20)), a11y.Rct(a11y.Pt(5, 5), a11y.Sz(20, 20))
 	b.Publish(axRoots(moved), nil)
 	if len(f.freed) != 1 || f.freed[0] != e2 {
 		t.Errorf("freed = %v, want just the node that disappeared (%d)", f.freed, e2)
@@ -124,14 +126,14 @@ func TestAXStaleHandleResolvesToNothing(t *testing.T) {
 	// can outlive its node and even its slot. It must answer nothing
 	// rather than whatever moved in.
 	f := newAXFake(true)
-	b := &Bridge{plat: f, mode: Always}
-	gone := axNode(RoleButton, "gone", "gone", Rct(Pt(0, 0), Sz(10, 10)))
+	b := &Bridge{plat: f, mode: a11y.Always}
+	gone := axNode(a11y.RoleButton, "gone", "gone", a11y.Rct(a11y.Pt(0, 0), a11y.Sz(10, 10)))
 	b.Publish(axRoots(gone), nil)
 	e := b.element(axKeyOf(gone.ID))
 	stale := f.handles[e]
 
 	b.Publish(axRoots(), nil)
-	next := axNode(RoleButton, "next", "next", Rct(Pt(0, 0), Sz(10, 10)))
+	next := axNode(a11y.RoleButton, "next", "next", a11y.Rct(a11y.Pt(0, 0), a11y.Sz(10, 10)))
 	b.Publish(axRoots(next), nil)
 	if b.element(axKeyOf(next.ID)) == 0 {
 		t.Fatal("the new node got no element")
@@ -143,8 +145,8 @@ func TestAXStaleHandleResolvesToNothing(t *testing.T) {
 
 func TestAXGatingCostsNothingWhileNobodyIsListening(t *testing.T) {
 	f := newAXFake(false)
-	b := &Bridge{plat: f, mode: Auto}
-	n := axNode(RoleButton, "x", "x", Rct(Pt(0, 0), Sz(10, 10)))
+	b := &Bridge{plat: f, mode: a11y.Auto}
+	n := axNode(a11y.RoleButton, "x", "x", a11y.Rct(a11y.Pt(0, 0), a11y.Sz(10, 10)))
 	for range axPollFrames * 2 {
 		b.Publish(axRoots(n), nil)
 	}
@@ -175,12 +177,12 @@ func TestAXGatingCostsNothingWhileNobodyIsListening(t *testing.T) {
 }
 
 func TestAXOffNeverTouchesThePlatform(t *testing.T) {
-	b := &Bridge{mode: Off}
-	b.Start(nil, Off)
+	b := &Bridge{mode: a11y.Off}
+	b.Start(nil, a11y.Off)
 	if b.plat != nil {
 		t.Fatal("Off built a platform bridge")
 	}
-	b.Publish(axRoots(axNode(RoleButton, "x", "x", Rct(Pt(0, 0), Sz(10, 10)))), nil)
+	b.Publish(axRoots(axNode(a11y.RoleButton, "x", "x", a11y.Rct(a11y.Pt(0, 0), a11y.Sz(10, 10)))), nil)
 	if b.frame() != nil {
 		t.Error("Off published a tree")
 	}
@@ -189,30 +191,30 @@ func TestAXOffNeverTouchesThePlatform(t *testing.T) {
 func TestAXValuesFollowTheRole(t *testing.T) {
 	for _, c := range []struct {
 		name string
-		node Node
+		node a11y.Node
 		want float64
 		num  bool
 	}{
-		{"unticked", Node{Role: RoleCheckbox, Checked: TriOff}, 0, true},
-		{"ticked", Node{Role: RoleCheckbox, Checked: TriOn}, 1, true},
-		{"mixed", Node{Role: RoleCheckbox, Checked: TriMixed}, 2, true},
-		{"slider", Node{Role: RoleSlider, Now: 7}, 7, true},
-		{"progress", Node{Role: RoleProgress, Now: 0.5}, 0.5, true},
-		{"text", Node{Role: RoleTextField, Value: "hi"}, 0, false},
-		{"plain", Node{Role: RoleButton}, 0, false},
+		{"unticked", a11y.Node{Role: a11y.RoleCheckbox, Checked: a11y.TriOff}, 0, true},
+		{"ticked", a11y.Node{Role: a11y.RoleCheckbox, Checked: a11y.TriOn}, 1, true},
+		{"mixed", a11y.Node{Role: a11y.RoleCheckbox, Checked: a11y.TriMixed}, 2, true},
+		{"slider", a11y.Node{Role: a11y.RoleSlider, Now: 7}, 7, true},
+		{"progress", a11y.Node{Role: a11y.RoleProgress, Now: 0.5}, 0.5, true},
+		{"text", a11y.Node{Role: a11y.RoleTextField, Value: "hi"}, 0, false},
+		{"plain", a11y.Node{Role: a11y.RoleButton}, 0, false},
 	} {
 		got, num := axNumber(c.node)
 		if got != c.want || num != c.num {
 			t.Errorf("%s: axNumber = %g, %v; want %g, %v", c.name, got, num, c.want, c.num)
 		}
 	}
-	if _, _, ok := axRange(Node{Role: RoleButton, Min: 1, Max: 2}); ok {
+	if _, _, ok := axRange(a11y.Node{Role: a11y.RoleButton, Min: 1, Max: 2}); ok {
 		t.Error("a button reported a range")
 	}
-	if _, _, ok := axRange(Node{Role: RoleSlider}); ok {
+	if _, _, ok := axRange(a11y.Node{Role: a11y.RoleSlider}); ok {
 		t.Error("a slider that gave no range reported one anyway")
 	}
-	if lo, hi, ok := axRange(Node{Role: RoleSlider, Min: 1, Max: 9}); !ok || lo != 1 || hi != 9 {
+	if lo, hi, ok := axRange(a11y.Node{Role: a11y.RoleSlider, Min: 1, Max: 9}); !ok || lo != 1 || hi != 9 {
 		t.Errorf("slider range = %g..%g, %v; want 1..9", lo, hi, ok)
 	}
 }
@@ -221,44 +223,44 @@ func TestAXHitTestFindsTheDeepestNode(t *testing.T) {
 	// The array is in paint order, so a scan would answer with the last
 	// node painted; a hit test must answer with the innermost one.
 	tree := axHitTree()
-	if got := axHitTest(tree, Pt(30, 30)); got != 1 {
+	if got := axHitTest(tree, a11y.Pt(30, 30)); got != 1 {
 		t.Errorf("hit at 30,30 = %d, want the child (1)", got)
 	}
-	if got := axHitTest(tree, Pt(90, 90)); got != 0 {
+	if got := axHitTest(tree, a11y.Pt(90, 90)); got != 0 {
 		t.Errorf("hit at 90,90 = %d, want the group (0)", got)
 	}
-	if got := axHitTest(tree, Pt(500, 500)); got != -1 {
+	if got := axHitTest(tree, a11y.Pt(500, 500)); got != -1 {
 		t.Errorf("hit outside everything = %d, want -1", got)
 	}
-	if got := axHitTest(tree, Pt(30, 130)); got != -1 {
+	if got := axHitTest(tree, a11y.Pt(30, 130)); got != -1 {
 		t.Errorf("hit on the offscreen node = %d; it is not where it says it is", got)
 	}
 }
 
 // axHitTree is a group with a visible child and a clipped one.
-func axHitTree() *SemTree {
-	return Build([]SemNode{
-		{Role: RoleGroup, Full: Rct(Pt(0, 0), Sz(100, 100)), Parent: -1},
-		{Role: RoleButton, Full: Rct(Pt(10, 10), Sz(50, 50)), Parent: 0},
-		{Role: RoleButton, Offscreen: true, Full: Rct(Pt(10, 110), Sz(50, 50)), Parent: 0},
+func axHitTree() *a11y.SemTree {
+	return a11y.Build([]a11y.SemNode{
+		{Role: a11y.RoleGroup, Full: a11y.Rct(a11y.Pt(0, 0), a11y.Sz(100, 100)), Parent: -1},
+		{Role: a11y.RoleButton, Full: a11y.Rct(a11y.Pt(10, 10), a11y.Sz(50, 50)), Parent: 0},
+		{Role: a11y.RoleButton, Offscreen: true, Full: a11y.Rct(a11y.Pt(10, 110), a11y.Sz(50, 50)), Parent: 0},
 	}, -1)
 }
 
 // axParent builds a container holding the given children, which is what the
 // selection notification needs: it says which of a container's children is
 // now the chosen one, so it goes to the container.
-func axParent(parent SemNode, kids ...SemNode) *SemTree {
+func axParent(parent a11y.SemNode, kids ...a11y.SemNode) *a11y.SemTree {
 	return axParentFocus(-1, parent, kids...)
 }
 
 // axParentFocus is axParent with one of the nodes holding keyboard focus,
 // named by its index in the tree.
-func axParentFocus(focus int, parent SemNode, kids ...SemNode) *SemTree {
+func axParentFocus(focus int, parent a11y.SemNode, kids ...a11y.SemNode) *a11y.SemTree {
 	parent.Parent = -1
 	for i := range kids {
 		kids[i].Parent = 0
 	}
-	return Build(append([]SemNode{parent}, kids...), focus)
+	return a11y.Build(append([]a11y.SemNode{parent}, kids...), focus)
 }
 
 func axKinds(notes []axNote) []axNotice {
@@ -269,12 +271,12 @@ func axKinds(notes []axNote) []axNotice {
 	return out
 }
 
-func axFrameOf(t *SemTree) *axFrame { return newAXFrame(t) }
+func axFrameOf(t *a11y.SemTree) *axFrame { return newAXFrame(t) }
 
 func TestAXDiffSaysOnlyWhatChanged(t *testing.T) {
-	one := axNode(RoleCheckbox, "a", "a", Rct(Pt(0, 0), Sz(10, 10)))
-	one.Checked = TriOff
-	two := axNode(RoleCheckbox, "b", "b", Rct(Pt(0, 20), Sz(10, 10)))
+	one := axNode(a11y.RoleCheckbox, "a", "a", a11y.Rct(a11y.Pt(0, 0), a11y.Sz(10, 10)))
+	one.Checked = a11y.TriOff
+	two := axNode(a11y.RoleCheckbox, "b", "b", a11y.Rct(a11y.Pt(0, 20), a11y.Sz(10, 10)))
 	first := axFrameOf(axRoots(one, two))
 
 	if got := axKinds(axDiff(nil, first)); len(got) != 1 || got[0] != axLayoutChanged {
@@ -287,7 +289,7 @@ func TestAXDiffSaysOnlyWhatChanged(t *testing.T) {
 	}
 
 	ticked := one
-	ticked.Checked = TriOn
+	ticked.Checked = a11y.TriOn
 	notes := axDiff(first, axFrameOf(axRoots(ticked, two)))
 	if len(notes) != 1 || notes[0].kind != axValueChanged || notes[0].key != axKeyOf(one.ID) {
 		t.Errorf("ticking = %v, want one value change on the check box", notes)
@@ -306,9 +308,9 @@ func TestAXDiffSaysOnlyWhatChanged(t *testing.T) {
 }
 
 func TestAXDiffReportsFocusAndSelection(t *testing.T) {
-	list := axNode(RoleList, "", "list", Rct(Pt(0, 0), Sz(50, 50)))
-	a := axNode(RoleOption, "a", "a", Rct(Pt(0, 0), Sz(50, 20)))
-	b := axNode(RoleOption, "b", "b", Rct(Pt(0, 20), Sz(50, 20)))
+	list := axNode(a11y.RoleList, "", "list", a11y.Rct(a11y.Pt(0, 0), a11y.Sz(50, 50)))
+	a := axNode(a11y.RoleOption, "a", "a", a11y.Rct(a11y.Pt(0, 0), a11y.Sz(50, 20)))
+	b := axNode(a11y.RoleOption, "b", "b", a11y.Rct(a11y.Pt(0, 20), a11y.Sz(50, 20)))
 	a.Selected = true
 	before := axFrameOf(axParent(list, a, b))
 
@@ -338,8 +340,8 @@ func TestAXDiffReportsFocusAndSelection(t *testing.T) {
 
 func TestAXNotifiesOncePerFrameAndOnlyWhenThereIsNews(t *testing.T) {
 	f := newAXFake(true)
-	b := &Bridge{plat: f, mode: Always}
-	n := axNode(RoleSlider, "vol", "vol", Rct(Pt(0, 0), Sz(10, 10)))
+	b := &Bridge{plat: f, mode: a11y.Always}
+	n := axNode(a11y.RoleSlider, "vol", "vol", a11y.Rct(a11y.Pt(0, 0), a11y.Sz(10, 10)))
 	b.Publish(axRoots(n), nil)
 	if f.flushes != 1 {
 		t.Fatalf("flushes = %d, want the first tree to be announced once", f.flushes)
@@ -351,7 +353,7 @@ func TestAXNotifiesOncePerFrameAndOnlyWhenThereIsNews(t *testing.T) {
 		t.Errorf("flushes = %d after ten still frames, want 1", f.flushes)
 	}
 	n.Now = 5
-	b.Publish(axRoots(n), []Announcement{{Text: "muted", Politeness: Assertive}})
+	b.Publish(axRoots(n), []a11y.Announcement{{Text: "muted", Politeness: a11y.Assertive}})
 	if f.flushes != 2 {
 		t.Fatalf("flushes = %d, want one hop for the frame that changed", f.flushes)
 	}
@@ -362,15 +364,15 @@ func TestAXNotifiesOncePerFrameAndOnlyWhenThereIsNews(t *testing.T) {
 }
 
 func TestAXReusedSnapshotStillAnnouncesAndPolls(t *testing.T) {
-	oldDetail := axWantsDetail.Load()
-	defer axWantsDetail.Store(oldDetail)
+	oldDetail := a11y.WantsDetail()
+	defer a11y.SetWantsDetail(oldDetail)
 	f := newAXFake(true)
-	b := &Bridge{plat: f, mode: Auto}
-	tree := axRoots(axNode(RoleButton, "save", "save", Rect{}))
+	b := &Bridge{plat: f, mode: a11y.Auto}
+	tree := axRoots(axNode(a11y.RoleButton, "save", "save", a11y.Rect{}))
 	b.Publish(tree, nil)
 	first := b.frame()
 	elem := b.element(axKeyOf(tree.At(0).ID))
-	b.Publish(tree, []Announcement{{Text: "saved", Politeness: Polite}})
+	b.Publish(tree, []a11y.Announcement{{Text: "saved", Politeness: a11y.Polite}})
 	if b.frame() != first || f.flushes != 2 || f.notes[len(f.notes)-1].text != "saved" {
 		t.Fatal("reused tree rebuilt the index or lost an announcement")
 	}
@@ -387,7 +389,7 @@ func TestAXReusedSnapshotStillAnnouncesAndPolls(t *testing.T) {
 }
 
 func TestAXActionsAreOnlyWhatTheNodeClaims(t *testing.T) {
-	slider := Node{Role: RoleSlider, Actions: ActionIncrement | ActionDecrement | ActionFocus}
+	slider := a11y.Node{Role: a11y.RoleSlider, Actions: a11y.ActionIncrement | a11y.ActionDecrement | a11y.ActionFocus}
 	if axAllows(slider, axPress) {
 		t.Error("a slider offered a press it never claimed")
 	}
@@ -396,14 +398,14 @@ func TestAXActionsAreOnlyWhatTheNodeClaims(t *testing.T) {
 	}
 	// A disabled control is in the tree to be read out, not to be worked:
 	// everything but looking at it is refused.
-	off := Node{Role: RoleButton, Actions: ActionPress | ActionFocus, Disabled: true}
+	off := a11y.Node{Role: a11y.RoleButton, Actions: a11y.ActionPress | a11y.ActionFocus, Disabled: true}
 	if axAllows(off, axPress) || axAllows(off, axConfirm) {
 		t.Error("a disabled button could be pressed")
 	}
 	if !axAllows(off, axSetFocus) {
 		t.Error("a disabled button could not even be focused")
 	}
-	if axActOf(axConfirm) != ActionPress || axActOf(axShowMenu) != ActionExpand {
+	if axActOf(axConfirm) != a11y.ActionPress || axActOf(axShowMenu) != a11y.ActionExpand {
 		t.Error("the AppKit actions map onto the wrong ggui ones")
 	}
 }
@@ -413,60 +415,26 @@ func TestAXPressReachesTheApp(t *testing.T) {
 	// out of the published tree and asks the app to press it. What the app
 	// then does to the widget is the other half, and is tested where the
 	// widgets are; see TestAXPressRingsTheWidget in the ggui package.
-	var got []Action
-	var at []NodeID
-	b := &Bridge{plat: newAXFake(true), mode: Always,
-		act: func(id NodeID, a Action) { at, got = append(at, id), append(got, a) }}
-	button := axNode(RoleButton, "ring", "bell", Rct(Pt(0, 0), Sz(40, 20)))
-	button.Actions = ActionPress | ActionFocus
+	var got []a11y.Action
+	var at []a11y.NodeID
+	b := &Bridge{plat: newAXFake(true), mode: a11y.Always,
+		act: func(id a11y.NodeID, a a11y.Action) { at, got = append(at, id), append(got, a) }}
+	button := axNode(a11y.RoleButton, "ring", "bell", a11y.Rct(a11y.Pt(0, 0), a11y.Sz(40, 20)))
+	button.Actions = a11y.ActionPress | a11y.ActionFocus
 	b.Publish(axRoots(button), nil)
 
-	node, ok := b.frame().tree.Find(RoleButton, "ring")
+	node, ok := b.frame().tree.Find(a11y.RoleButton, "ring")
 	if !ok {
 		t.Fatal("the button is not in the published tree")
 	}
 	if !axAllows(node.Node, axPress) {
 		t.Fatal("the button does not offer a press")
 	}
-	b.perform(node.ID, Action{Kind: ActionPress})
-	if len(got) != 1 || got[0].Kind != ActionPress {
+	b.perform(node.ID, a11y.Action{Kind: a11y.ActionPress})
+	if len(got) != 1 || got[0].Kind != a11y.ActionPress {
 		t.Fatalf("actions = %v, want one press", got)
 	}
 	if len(at) != 1 || at[0].ID != "bell" {
 		t.Errorf("press aimed at %v, want the button", at)
-	}
-}
-
-func TestAXUTF16OffsetsCountSurrogatePairs(t *testing.T) {
-	// A platform text API counts in UTF-16 and ggui stores UTF-8, and the
-	// two disagree the moment anything outside the basic plane appears.
-	s := "aé😀b" // 1 + 2 + 4 + 1 bytes, 1 + 1 + 2 + 1 code units
-	if got := axUTF16Len(s); got != 5 {
-		t.Errorf("axUTF16Len = %d, want 5", got)
-	}
-	for _, c := range []struct{ u, b int }{{0, 0}, {1, 1}, {2, 3}, {4, 7}, {5, 8}, {9, 8}, {-1, 0}} {
-		if got := axByteAt(s, c.u); got != c.b {
-			t.Errorf("axByteAt(%d) = %d, want %d", c.u, got, c.b)
-		}
-	}
-	// Halfway into a surrogate pair is not a place a caret can be, so it
-	// resolves to the start of the rune.
-	if got := axByteAt(s, 3); got != 3 {
-		t.Errorf("axByteAt(3) = %d, want the start of the emoji (3)", got)
-	}
-	for _, c := range []struct{ b, u int }{{0, 0}, {1, 1}, {3, 2}, {7, 4}, {8, 5}} {
-		if got := axUTF16At(s, c.b); got != c.u {
-			t.Errorf("axUTF16At(%d) = %d, want %d", c.b, got, c.u)
-		}
-	}
-	n := Node{Value: s, SelStart: 1, SelEnd: 7}
-	if loc, length := Selection(n); loc != 1 || length != 3 {
-		t.Errorf("selection = %d+%d, want 1+3 in UTF-16", loc, length)
-	}
-	if got := Selected(n); got != "é😀" {
-		t.Errorf("selected text = %q, want %q", got, "é😀")
-	}
-	if a, b := ByteRange(n, 1, 3); a != 1 || b != 7 {
-		t.Errorf("byte range = %d..%d, want 1..7", a, b)
 	}
 }
