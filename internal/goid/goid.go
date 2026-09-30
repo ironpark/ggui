@@ -42,9 +42,9 @@ const scanLimit = 256
 
 // find returns the offset holding the id on this goroutine and on two more,
 // each checked against the id runtime.Stack reports, or -1.
-func find() uintptr {
+func find() int {
 	if !haveGetg {
-		return ^uintptr(0)
+		return -1
 	}
 	candidates := matches(nil)
 	for range 2 {
@@ -53,9 +53,9 @@ func find() uintptr {
 		candidates = <-done
 	}
 	if len(candidates) == 0 {
-		return ^uintptr(0)
+		return -1
 	}
-	return candidates[0]
+	return int(candidates[0])
 }
 
 // matches returns the offsets in within the running goroutine's record that
