@@ -50,6 +50,7 @@ type App struct {
 // New creates an App whose main window renders the tree returned by build.
 func New(cfg Config, build Builder) *App {
 	a := &App{rt: reactive.NewRuntime()}
+	worldOf(a.rt) // made here, before the engine's goroutine can ask for it
 	a.Window = newWindow(a, cfg, build)
 	a.windows = []*Window{a.Window}
 	return a
@@ -159,8 +160,10 @@ func (a *App) Run() error {
 		a.running = false
 		a.Close()
 		appRunning.Store(false)
+		runningApp.CompareAndSwap(a, nil)
 	}()
 	appRunning.Store(true)
+	runningApp.Store(a)
 	// Holding a key on macOS pops up the accent menu, as it does in every
 	// text field on the platform; text editing relies on it.
 	return ggfx.Run(ggfx.HandlerFunc(a.handleEvent), &ggfx.RunOptions{ApplePressAndHoldEnabled: true})
@@ -255,7 +258,7 @@ func (a *App) drain() error {
 		if !w.hasPosted() {
 			continue
 		}
-		running.Store(&w.frameLoop)
+		setRunning(&w.frameLoop)
 		w.runPosted()
 		if err := w.catchUp(); err != nil {
 			return err
@@ -299,7 +302,7 @@ func (a *App) follow(w *Window) error {
 		}
 		o.requestFrame()
 	}
-	running.Store(&w.frameLoop)
+	setRunning(&w.frameLoop)
 	return nil
 }
 
@@ -365,5 +368,10 @@ const (
 // appRunning reports whether Run has started, which is when platform
 // services such as the IME may be used.
 var appRunning atomic.Bool
+
+// runningApp is the App whose Run is under way, for work from a goroutine
+// of the process's own, such as the SystemDark poller, which no frame loop
+// runs on.
+var runningApp atomic.Pointer[App]
 
 var mouseButtons = []MouseButton{MouseButtonLeft, MouseButtonRight, MouseButtonMiddle}

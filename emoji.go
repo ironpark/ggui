@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"sync/atomic"
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggfx/text/v2"
@@ -14,13 +15,19 @@ import (
 	"github.com/ironpark/ggui/internal/textedit"
 )
 
-// The font state below belongs to the UI goroutine: every entry point that
-// writes it runs under checkUIThread, and fontGeneration is read from
-// CachedWidget.Layout to decide whether a measurement still holds. A font
-// loaded on another goroutine is handed over with App.Post.
-var emojiFont *Font
-var emojiFontSet bool
-var fontGeneration uint64
+// The font state below is written on the UI goroutine: every entry point
+// that writes it runs under CheckUIThread, and a font loaded on another
+// goroutine is handed over with App.Post. It is read during layout, which
+// probes under t.Parallel run on goroutines of their own, so it is atomic.
+// fontGeneration is read from CachedWidget.Layout to decide whether a
+// measurement still holds.
+var fontGeneration atomic.Uint64
+
+// emojiChoice is what SetEmojiFont chose, nil font included; a nil
+// *emojiChoice means it was never called and the system font is used.
+type emojiChoice struct{ font *Font }
+
+var emojiFont atomic.Pointer[emojiChoice]
 
 // SetEmojiFont selects a color emoji font for Text and TextInput. It does not
 // replace their Latin/CJK fonts. Use fonts/notoemoji for a portable embedded font,
@@ -29,9 +36,9 @@ var fontGeneration uint64
 // Like SetEnv, call on the UI thread or before creating the app.
 func SetEmojiFont(f *Font) {
 	reactive.CheckUIThread("SetEmojiFont")
-	emojiFont, emojiFontSet = f, true
-	fontGeneration++
-	reactive.RequestLayout()
+	emojiFont.Store(&emojiChoice{font: f})
+	fontGeneration.Add(1)
+	reactive.RequestLayoutEverywhere()
 }
 
 // SystemEmojiFont finds the platform color emoji font once, or returns nil.
@@ -69,11 +76,11 @@ type emojiFace struct {
 	text.Face
 	size     float64
 	emoji    text.Face
-	resolved bool
+	resolved sync.Once // a face is cached per Font and size, so shared
 }
 
 func withEmoji(face text.Face, size float64) text.Face {
-	if emojiFontSet && emojiFont == nil {
+	if c := emojiFont.Load(); c != nil && c.font == nil {
 		return face
 	}
 	return &emojiFace{Face: face, size: size}
@@ -82,24 +89,24 @@ func withEmoji(face text.Face, size float64) text.Face {
 // colorFace resolves the emoji font the first time a grapheme needs it, so
 // text without emoji never loads or parses the (large) system emoji font.
 func (ef *emojiFace) colorFace() text.Face {
-	if ef.resolved {
-		return ef.emoji
-	}
-	ef.resolved = true
-	f := emojiFont
-	if !emojiFontSet {
-		f = SystemEmojiFont()
-	}
-	if f == nil {
-		return nil
-	}
-	e := &text.GoTextFace{Source: f.src, Size: ef.size}
-	m, em := ef.Face.Metrics(), e.Metrics()
-	if h := em.HAscent + em.HDescent; h > 0 {
-		e.Size *= (m.HAscent + m.HDescent) / h
-	}
-	ef.emoji = e
-	return e
+	ef.resolved.Do(func() {
+		var f *Font
+		if c := emojiFont.Load(); c != nil {
+			f = c.font
+		} else {
+			f = SystemEmojiFont()
+		}
+		if f == nil {
+			return
+		}
+		e := &text.GoTextFace{Source: f.src, Size: ef.size}
+		m, em := ef.Face.Metrics(), e.Metrics()
+		if h := em.HAscent + em.HDescent; h > 0 {
+			e.Size *= (m.HAscent + m.HDescent) / h
+		}
+		ef.emoji = e
+	})
+	return ef.emoji
 }
 
 // Keep adjacent text in a single shaping run, so kerning and script ligatures

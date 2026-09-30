@@ -190,12 +190,12 @@ func newWindow(app *App, cfg Config, build Builder) *Window {
 // open builds the tree and creates the native window. It runs on the UI
 // thread while the engine runs, from inside an event.
 func (w *Window) open() error {
-	prev := running.Load()
+	prev := runningLoop()
 	w.start()
 	// Opening a window from another window's frame must leave that frame's
 	// loop current.
 	if prev != nil {
-		running.Store(prev)
+		setRunning(prev)
 	}
 	w.ax.Start(w.Perform, w.cfg.Accessibility)
 	nw, err := ggfx.NewWindow(w.cfg.options())
@@ -493,7 +493,7 @@ func (w *Window) runFrameEvent(ev ggfx.FrameEvent) error {
 	// with and no frame racing the write either.
 	reactive.MarkUIThread()
 	// Handlers dispatched below reach this window through UseHost.
-	running.Store(&w.frameLoop)
+	setRunning(&w.frameLoop)
 	restoreInput := textinput.WithWindow(ev.Window)
 	defer restoreInput()
 	w.runFrame()
@@ -541,7 +541,7 @@ func (w *Window) catchUp() error {
 	if w.closed || w.root == nil {
 		return nil
 	}
-	running.Store(&w.frameLoop)
+	setRunning(&w.frameLoop)
 	if err := w.settle(Untrack(w.viewport.Get)); err != nil {
 		return err
 	}

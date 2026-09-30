@@ -8,33 +8,44 @@ import (
 
 // A world is what the frame loops of one reactive runtime share beside the
 // graph itself: the animations their frames step, the clock those frames
-// read, and the groups their input holds busy. The App's windows share the
-// process world, as they share reactive.Default; each Probe has one of its
-// own, so its animations step in its frames alone and Advance moves its
-// clock without moving anyone else's.
+// read, and the groups their input holds busy. It is kept on the runtime,
+// so the App's windows share the App's world, each Probe has one of its
+// own, and what is made outside every tree lands in the world of its
+// goroutine's Base runtime. A probe's animations step in its frames alone
+// and Advance moves its clock without moving anyone else's.
 type world struct {
 	anims animator
 	frame frameClock
 	busy  map[any]bool // see inputState.markBusyGroups
+
+	rt      *reactive.Runtime
+	env     *StateValue[Env] // see UseEnv; nil until first read
+	envMemo envMemo
 }
 
-func newWorld() *world { return &world{busy: map[any]bool{}} }
-
-// processWorld is the App's world, and the one anything made outside every
-// frame loop's tree belongs to.
-var processWorld = newWorld()
-
-// loopWorld is l's world: a Probe's own, or the process world for a window.
-func loopWorld(l *frameLoop) *world {
-	if l == nil || l.world == nil {
-		return processWorld
+// worldOf returns rt's world, making it on first use. A runtime is used by
+// one goroutine at a time, so making it needs no lock.
+func worldOf(rt *reactive.Runtime) *world {
+	if w, ok := rt.Host.(*world); ok {
+		return w
 	}
-	return l.world
+	w := &world{busy: map[any]bool{}, rt: rt}
+	rt.Host = w
+	return w
 }
 
-// activeWorld is the world of the loop whose frame is running, or ran last:
-// what Now, WakeAt and a painting widget reach.
-func activeWorld() *world { return loopWorld(running.Load()) }
+// loopWorld is l's world: its runtime's.
+func loopWorld(l *frameLoop) *world {
+	if l == nil {
+		return worldOf(reactive.Base())
+	}
+	return worldOf(l.runtime())
+}
+
+// activeWorld is the world of the loop whose frame the running goroutine
+// runs, or ran last: what Now, WakeAt and a painting widget reach. Before
+// any frame on the goroutine, it is its Base runtime's.
+func activeWorld() *world { return loopWorld(runningLoop()) }
 
 // ownerWorld is the world of the tree being built now, for something that
 // keeps its world from creation on, as an animation does: the current

@@ -109,8 +109,8 @@ func TestTextInputSubmitAndClipboard(t *testing.T) {
 	// clipboard the editor reaches.
 	clip := &runtime.MemoryClipboard{}
 	loop := &frameLoop{clipboard: clip}
-	running.Store(loop)
-	defer running.CompareAndSwap(loop, nil)
+	setRunning(loop)
+	defer reactive.ClearRunningLoop(loop)
 
 	value := State("copy me")
 	var submitted []string

@@ -11,7 +11,7 @@ func CurrentClipboard() runtime.Clipboard { return currentClipboard() }
 var systemClipboard = runtime.NativeClipboard()
 
 func currentClipboard() runtime.Clipboard {
-	if l := running.Load(); l != nil && l.clipboard != nil {
+	if l := runningLoop(); l != nil && l.clipboard != nil {
 		return l.clipboard
 	}
 	return systemClipboard

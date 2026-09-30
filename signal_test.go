@@ -323,11 +323,12 @@ func TestSignalWritesAdvanceTheLayoutGeneration(t *testing.T) {
 		t.Fatal("an equal write must not request layout")
 	}
 	s.Set(2)
-	if reactive.LayoutGen() != before+1 {
+	written := reactive.LayoutGen()
+	if written == before {
 		t.Fatal("a write must request layout")
 	}
 	Invalidate(Env{})
-	if reactive.LayoutGen() != before+2 {
+	if reactive.LayoutGen() == written {
 		t.Fatal("Invalidate must request layout")
 	}
 }

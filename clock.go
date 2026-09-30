@@ -2,12 +2,22 @@ package ggui
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
-// clock is the raw time source; SetClock replaces it. Animations do not
-// read it directly: they read Now, the instant the current frame froze.
-var clock = time.Now
+// clockSource is the raw time source; SetClock replaces it. Animations do
+// not read it directly: they read Now, the instant the current frame froze.
+// It is atomic because probes on goroutines of their own all read it.
+var clockSource atomic.Pointer[func() time.Time]
+
+// clock reads the raw time source.
+func clock() time.Time {
+	if fn := clockSource.Load(); fn != nil {
+		return (*fn)()
+	}
+	return time.Now()
+}
 
 // maxFrameStep caps how far one frame may move the frame clock. A frame
 // comes only when something asks for one, and none while the window is
@@ -187,8 +197,7 @@ func blinkWake(start, now time.Time, period time.Duration) time.Time {
 //	restore := ggui.SetClock(func() time.Time { return now })
 //	defer restore()
 func SetClock(fn func() time.Time) (restore func()) {
-	prev := clock
-	clock = fn
-	processWorld.frame.reset()
-	return func() { clock = prev; processWorld.frame.reset() }
+	prev := clockSource.Swap(&fn)
+	activeWorld().frame.reset()
+	return func() { clockSource.Store(prev); activeWorld().frame.reset() }
 }

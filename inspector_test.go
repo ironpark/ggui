@@ -14,7 +14,7 @@ func inspectFrameOf(c *Canvas) *inspect.Frame { return inspectFrame(c, buildSemT
 // inspectorCanvas paints w with the trace on, as a frame with the
 // inspector open would.
 func inspectorCanvas(w Widget, size Size) *Canvas {
-	inspectorEnabled = true
+	inspectorEnabled.Store(true)
 	c := &Canvas{}
 	c.fs().logical = size
 	c.fs().tracing = true
@@ -23,7 +23,7 @@ func inspectorCanvas(w Widget, size Size) *Canvas {
 }
 
 func TestInspectorTracesPaintedWidgets(t *testing.T) {
-	inspectorEnabled = true
+	inspectorEnabled.Store(true)
 	c := Canvas{}
 	c.fs().tracing = true
 	w := Column(Box().Size(10, 10), Padding(Box().Size(10, 10), 5))
@@ -41,7 +41,7 @@ func TestInspectorTracesPaintedWidgets(t *testing.T) {
 
 func TestInspectFrameAnswersFromTheWidgets(t *testing.T) {
 	box := Box(Box().Size(80, 30)).Pad(7, 11, 13, 17).Border(2, red)
-	inspectorEnabled = true
+	inspectorEnabled.Store(true)
 	c := &Canvas{}
 	c.fs().tracing = true
 	c.Paint(box, Rct(Pt(20, 30), box.Layout(Loose(Sz(400, 400)), rootEnv())))

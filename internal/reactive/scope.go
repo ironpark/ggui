@@ -22,6 +22,8 @@ type scope struct {
 	measuring       func(src LayoutSource, version uint64)
 	derivedDepth    int
 	layoutDepth     int
+	layoutGen       uint64 // see RequestLayout
+	stateGen        uint64 // see StateGen
 	loop            any
 
 	// base is the runtime what this goroutine creates with no owner

@@ -10,17 +10,29 @@ import (
 	"github.com/ironpark/ggui/geom"
 )
 
-// layoutGen counts the changes that can move something on screen: every
-// StateValue write and every Invalidate. The runtime lays the tree out again
-// only when it has advanced, or the window changed size, and paints every
-// frame regardless. stateGen counts the writes alone, so that settle can
-// tell a write that happened during a layout and go round again. Both are
-// shared by every runtime and goroutine: a write elsewhere costs a frame at
-// most one extra pass.
-var layoutGen, stateGen atomic.Uint64
+// A goroutine's layout generation counts the changes on it that can move
+// something on screen: every StateValue write and every Invalidate. The
+// runtime lays a tree out again only when it has advanced, or the window
+// changed size, and paints every frame regardless. Its state generation
+// counts the writes alone, so that settle can tell a write that happened
+// during a layout and go round again.
+//
+// Both are kept per goroutine, in its scope: a runtime's signals are
+// written on the goroutine that runs its frames, and a write a probe on
+// another goroutine makes must neither lay this one out again nor make its
+// settle go round. A change that concerns every tree, such as a new default
+// font, goes to globalLayoutGen instead. Every generation is drawn from
+// genSeq, so no two are equal.
+var genSeq, globalLayoutGen atomic.Uint64
 
-// RequestLayout asks the runtime to lay the tree out again next frame.
-func RequestLayout() { layoutGen.Add(1) }
+// RequestLayout asks the runtime to lay out the trees whose frames run on
+// this goroutine again next frame. It belongs on the UI goroutine, as a
+// signal write does.
+func RequestLayout() { current().layoutGen = genSeq.Add(1) }
+
+// RequestLayoutEverywhere asks for every tree on every goroutine to be laid
+// out again, for a change that reaches them all, such as the default font.
+func RequestLayoutEverywhere() { globalLayoutGen.Store(genSeq.Add(1)) }
 
 // Measurement dependencies are separate from reactive subscriptions: even an
 // Untrack read affects layout, but never subscribes the enclosing computation.
@@ -413,9 +425,10 @@ func (s *StateValue[T]) store(v T) {
 		return
 	}
 	s.val = v
-	stateGen.Add(1)
+	sc := current()
+	sc.stateGen = genSeq.Add(1)
 	s.version++
-	layoutGen.Add(1)
+	sc.layoutGen = sc.stateGen
 	subs := make([]*Computation, 0, len(s.subs))
 	for e := range s.subs {
 		subs = append(subs, e)
@@ -834,6 +847,9 @@ func (rt *Runtime) Related() (out [3]*Runtime) {
 	return out
 }
 
+// Parent is the Base rt was made beside, or nil for a Base.
+func (rt *Runtime) Parent() *Runtime { return rt.base }
+
 // sets fills buf with the effect sets a flush of rt runs, and returns them;
 // see Related.
 func (rt *Runtime) sets(buf *[3]*effectSet) []*effectSet {
@@ -1050,10 +1066,12 @@ func Settled() bool { return Base().Settled() }
 
 // StateGen counts StateValue writes, so that a frame can tell whether one
 // happened while it was laying out.
-func StateGen() uint64 { return stateGen.Load() }
+func StateGen() uint64 { return current().stateGen }
 
-// LayoutGen counts the changes that can move something on screen.
-func LayoutGen() uint64 { return layoutGen.Load() }
+// LayoutGen changes whenever something that can move a tree laid out on
+// this goroutine changes: a RequestLayout here or a RequestLayoutEverywhere.
+// Both parts only grow, so their sum changes whenever either does.
+func LayoutGen() uint64 { return current().layoutGen + globalLayoutGen.Load() }
 
 // Origin is where this computation was created, in a ggui_debug build, for
 // the ErrCycle message the frame loop builds.

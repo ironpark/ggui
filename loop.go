@@ -108,7 +108,6 @@ type frameLoop struct {
 	// App's, which every window of it shares. Nil stands for the running
 	// goroutine's Base.
 	rt      *reactive.Runtime
-	world   *world // nil for the process world; see loopWorld
 	build   Builder
 	setup   []func()
 	root    Widget
@@ -178,12 +177,23 @@ func (r *frameLoop) semantics() *SemTree {
 	return a11y.Build(nil, -1)
 }
 
-// running is the loop whose frame is executing: what UIThread hands out. It
-// is written on the UI goroutine at the start of a frame and read there too,
-// and is a pointer swap only so that a test holding two probes cannot tear
-// it. One app runs per process; a Probe is a test's, and the last one to
-// start a frame is the one a component built in that frame belongs to.
-var running atomic.Pointer[frameLoop]
+// runningLoop is the loop whose frame the running goroutine executes, or
+// executed last: what UseHost falls back to and whose clock Now reads. It
+// is kept per goroutine, so that probes on goroutines of their own, as
+// t.Parallel runs them, each see their own. One app runs per process; a
+// Probe is a test's, and the last one to start a frame on a goroutine is
+// the one a component built there in that frame belongs to.
+func runningLoop() *frameLoop {
+	l, _ := reactive.RunningLoop().(*frameLoop)
+	return l
+}
+
+// setRunning makes l the running goroutine's loop and returns the one
+// before.
+func setRunning(l *frameLoop) (prev *frameLoop) {
+	prev, _ = reactive.SetRunningLoop(l).(*frameLoop)
+	return prev
+}
 
 // UIThread returns the current owner's dispatcher. Capture it during app or
 // component setup, then call it from a worker to deliver immutable results.
@@ -228,7 +238,7 @@ func (r *frameLoop) runtime() *reactive.Runtime {
 // start runs the setup functions and the builder under a fresh root owner.
 // Everything they create lives until close.
 func (r *frameLoop) start() {
-	running.Store(r)
+	setRunning(r)
 	r.dispose = r.runtime().Root(func() {
 		reactive.CurrentOwner().SetLoop(r)
 		r.owner = reactive.CurrentOwner()
@@ -252,7 +262,7 @@ func (r *frameLoop) close() {
 	r.closed = true
 	r.posted, r.notices = nil, nil
 	r.postMu.Unlock()
-	running.CompareAndSwap(r, nil)
+	reactive.ClearRunningLoop(r)
 	if r.dispose != nil {
 		r.dispose()
 	}
@@ -307,13 +317,14 @@ func (r *frameLoop) runPosted() {
 // tick is the shared per-frame step after input: animations advance, then
 // effects run until quiet. It returns ErrCycle when they never are.
 func (r *frameLoop) tick(now time.Time) error {
-	running.Store(r)
-	w := loopWorld(r)
-	w.anims.step(now)
-	if w != processWorld {
-		// Animations made outside every tree, such as one a test built
-		// before its probe, belong to the process world.
-		processWorld.anims.step(now)
+	setRunning(r)
+	// Animations made outside every tree, such as one a test built before
+	// its probe, belong to a Base runtime's world, which this loop's flushes
+	// cover too.
+	for _, rt := range r.runtime().Related() {
+		if rt != nil {
+			worldOf(rt).anims.step(now)
+		}
 	}
 	if rt := r.runtime(); !rt.Flush() {
 		return cycle(rt)
@@ -350,7 +361,7 @@ func (r *frameLoop) paintTree(c *Canvas) {
 // settle completes structural work, including mounts discovered by layout,
 // before running user effects. Both App and Probe use this exact ordering.
 func (r *frameLoop) settle(size Size) error {
-	running.Store(r)
+	setRunning(r)
 	rt := r.runtime()
 	for range reactive.MaxFlushPasses {
 		if r.closed {

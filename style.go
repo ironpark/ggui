@@ -195,24 +195,26 @@ type derivedKey struct {
 }
 
 // envMemo remembers the Envs derived this frame and last, so the same
-// derivation yields the same revision frame after frame. Canvas.nextFrame
-// rotates it.
-// envMemo holds the Envs derived this frame and last, so a container that
-// derives the same Env every frame reuses it. Written from derive and
-// rotated once a frame, both during layout on the UI goroutine.
-var envMemo struct {
+// derivation yields the same revision frame after frame and a container
+// that derives the same Env every frame reuses it. Each world keeps its
+// own, written from derive and rotated once a frame by Canvas.nextFrame,
+// both on the goroutine running that world's frames. A revision names one
+// Env across every world, so an Env derived in one is never mistaken for
+// another's.
+type envMemo struct {
 	cur, prev map[derivedKey]Env
 }
 
-func rotateEnvMemo() {
-	envMemo.prev, envMemo.cur = envMemo.cur, envMemo.prev
-	clear(envMemo.cur)
+func (m *envMemo) rotate() {
+	m.prev, m.cur = m.cur, m.prev
+	clear(m.cur)
 }
 
 // derive returns the Env derived from e with key and val last frame or
 // this one, else fn's. A val that cannot be hashed is never memoized.
 func (e Env) derive(key, val any, fn func() Env) (out Env) {
 	k := derivedKey{e.rev, key, val}
+	envMemo := &activeWorld().envMemo
 	memoized := true
 	func() {
 		defer func() {

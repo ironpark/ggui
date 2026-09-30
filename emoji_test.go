@@ -18,9 +18,9 @@ func useTestEmoji(t *testing.T) *Font {
 		t.Fatal(err)
 	}
 	f := MustFont(data)
-	old, set := emojiFont, emojiFontSet
+	old := emojiFont.Load()
 	SetEmojiFont(f)
-	t.Cleanup(func() { emojiFont, emojiFontSet = old, set; fontGeneration++; reactive.RequestLayout() })
+	t.Cleanup(func() { emojiFont.Store(old); fontGeneration.Add(1); reactive.RequestLayout() })
 	return f
 }
 func TestEmojiSequencesStayInOneColorGlyph(t *testing.T) {

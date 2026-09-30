@@ -84,9 +84,9 @@ func watchSystemDark() {
 		if dark == last {
 			continue
 		}
-		if l := running.Load(); l != nil {
+		if a := runningApp.Load(); a != nil {
 			last = dark
-			l.post(func() { systemDark.Set(dark) })
+			a.post(func() { systemDark.Set(dark) })
 		}
 	}
 }

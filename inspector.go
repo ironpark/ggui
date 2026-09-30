@@ -3,6 +3,7 @@ package ggui
 import (
 	"fmt"
 	"strconv"
+	"sync/atomic"
 
 	"github.com/ironpark/ggui/inspect"
 )
@@ -23,7 +24,7 @@ import (
 // inspectorEnabled is set once anything wants frames: a registered panel or
 // an OnInspect handler. Canvas.Paint tests it before walking to the frame
 // state, so an app with neither pays one branch per painted widget.
-var inspectorEnabled bool
+var inspectorEnabled atomic.Bool
 
 // InspectorPanel is what an inspector implementation provides: an Overlay
 // that shows the frames it is handed. ggui/inspect/panel is one; importing it
@@ -52,7 +53,9 @@ var newInspectorPanel func() InspectorPanel
 // calls it instead. nil unregisters.
 func RegisterInspector(fn func() InspectorPanel) {
 	newInspectorPanel = fn
-	inspectorEnabled = inspectorEnabled || fn != nil
+	if fn != nil {
+		inspectorEnabled.Store(true)
+	}
 }
 
 // inspectorPanel is the app's panel, made on first need from the
@@ -74,7 +77,7 @@ func (w *Window) inspectorPanel() InspectorPanel {
 // are built whether or not ggui/inspect/panel is imported.
 func (w *Window) OnInspect(fn func(*inspect.Frame)) {
 	w.sinks = append(w.sinks, fn)
-	inspectorEnabled = true
+	inspectorEnabled.Store(true)
 }
 
 // publishInspect ends a traced frame: the panel is handed the frame when it

@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/textedit"
@@ -25,6 +26,11 @@ type Font struct {
 	src        *text.GoTextFaceSource
 	fallbacks  []*Font
 	noFallback bool
+
+	// mu guards the cache, which probes on goroutines of their own fill
+	// at once from a font they share.
+	mu         sync.Mutex
+	used       bool // a face has been made, so something may have measured with f
 	generation uint64
 	faces      map[float64]text.Face // one face per size, reused across frames
 }
@@ -75,20 +81,37 @@ func LoadFontFile(path string) (*Font, error) {
 // preference. A Font with none set falls back to SystemFonts.
 func (f *Font) Fallback(fonts ...*Font) *Font {
 	reactive.CheckUIThread("Font.Fallback")
+	f.mu.Lock()
 	f.fallbacks = append(f.fallbacks, fonts...)
-	f.faces = nil
-	fontGeneration++
-	reactive.RequestLayout()
+	f.mu.Unlock()
+	f.changed()
 	return f
 }
 
 // NoFallback draws only f's own glyphs, with no system fonts behind it.
 func (f *Font) NoFallback() *Font {
 	reactive.CheckUIThread("Font.NoFallback")
-	f.noFallback, f.faces = true, nil
-	fontGeneration++
-	reactive.RequestLayout()
+	f.mu.Lock()
+	f.noFallback = true
+	f.mu.Unlock()
+	f.changed()
 	return f
+}
+
+// changed drops f's faces and, if anything has measured with f, every
+// measurement everywhere, which is what the font generation guards. A font
+// configured before its first use, as a loaded font nearly always is, has
+// nothing measured with it, and a probe setting one up on its own goroutine
+// must not lay out every other probe again.
+func (f *Font) changed() {
+	f.mu.Lock()
+	used := f.used
+	f.faces = nil
+	f.mu.Unlock()
+	if used {
+		fontGeneration.Add(1)
+		reactive.RequestLayoutEverywhere()
+	}
 }
 
 var (
@@ -181,32 +204,39 @@ func MustFont(data []byte) *Font {
 // DefaultTextSize is the size Text uses until Size is set.
 const DefaultTextSize = 14
 
-var defaultFont *Font
+// defaultFont is what SetDefaultFont set, or nil for the built-in one.
+var defaultFont atomic.Pointer[Font]
+
+// builtinFont is Go Regular, parsed on first use so a program that draws no
+// text never pays for it.
+var builtinFont = sync.OnceValue(func() *Font { return MustFont(goregular.TTF) })
 
 // SetDefaultFont replaces the font Text uses when none is set. The built-in
 // default is Go Regular, which covers Latin, Greek and Cyrillic; load a font
 // with the glyphs you need for anything else.
 func SetDefaultFont(f *Font) {
 	reactive.CheckUIThread("SetDefaultFont")
-	defaultFont = f
-	fontGeneration++
-	reactive.RequestLayout()
+	defaultFont.Store(f)
+	fontGeneration.Add(1)
+	reactive.RequestLayoutEverywhere()
 }
 
-// fallbackFont returns the font Text uses when none is set, parsing the
-// built-in one on first use so a program that draws no text never pays for it.
+// fallbackFont returns the font Text uses when none is set.
 func fallbackFont() *Font {
-	if defaultFont == nil {
-		defaultFont = MustFont(goregular.TTF)
+	if f := defaultFont.Load(); f != nil {
+		return f
 	}
-	return defaultFont
+	return builtinFont()
 }
 
 func (f *Font) face(size float64) text.Face {
-	if f.generation != fontGeneration {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if gen := fontGeneration.Load(); f.generation != gen {
 		f.faces = nil
-		f.generation = fontGeneration
+		f.generation = gen
 	}
+	f.used = true
 	if face, ok := f.faces[size]; ok {
 		return face
 	}

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"maps"
 	"strings"
+	"sync"
 )
 
 // Chord is a key with modifiers, as a shortcut names it: "cmd+s",
@@ -109,28 +110,23 @@ func MustChord(s string) Chord {
 	return c
 }
 
-var keyTable map[string]KeyboardKey
-
 // keyNames maps every key's lower-cased ggfx name and a few aliases
-// to the key, built on first use.
-func keyNames() map[string]KeyboardKey {
-	if keyTable != nil {
-		return keyTable
-	}
-	keyTable = map[string]KeyboardKey{}
+// to the key, built on first use, from whichever goroutine parses first.
+var keyNames = sync.OnceValue(func() map[string]KeyboardKey {
+	table := map[string]KeyboardKey{}
 	for k := KeyboardKey(0); k <= KeyMax; k++ {
 		if name := k.String(); name != "" {
-			keyTable[strings.ToLower(name)] = k
+			table[strings.ToLower(name)] = k
 		}
 	}
-	maps.Copy(keyTable, map[string]KeyboardKey{
+	maps.Copy(table, map[string]KeyboardKey{
 		"esc": KeyEscape, "return": KeyEnter, "up": KeyArrowUp,
 		"down": KeyArrowDown, "left": KeyArrowLeft, "right": KeyArrowRight,
 		"plus": KeyEqual, "minus": KeyMinus, "del": KeyDelete,
 		"pgup": KeyPageUp, "pgdn": KeyPageDown, "bksp": KeyBackspace,
 	})
-	return keyTable
-}
+	return table
+})
 
 // ShortcutHandle is a registered shortcut, for making it exclusive or
 // removing it.

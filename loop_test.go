@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
 )
 
@@ -261,14 +260,12 @@ func TestPaintTimeWritesScheduleNoLayout(t *testing.T) {
 	defer p.Close()
 	p.Frame()
 	p.Frame()
-	// Count only property writes that schedule a layout: LayoutGen is
-	// global, and animations left by other tests move it too.
-	prev, scheduled := property.OnChange, 0
-	property.OnChange = func() { scheduled++; prev() }
-	defer func() { property.OnChange = prev }()
+	// The layout generation is this goroutine's, so nothing another test
+	// does moves it.
+	before := reactive.LayoutGen()
 	p.Frame()
-	if scheduled != 0 {
-		t.Fatalf("configuring a child while painting scheduled %d layouts", scheduled)
+	if reactive.LayoutGen() != before {
+		t.Fatal("configuring a child while painting scheduled a layout")
 	}
 }
 

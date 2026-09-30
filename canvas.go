@@ -189,7 +189,7 @@ func (c *Canvas) nextFrame() {
 	clear(f.prevByID)
 	clear(f.prevByRect)
 	f.traceParent, f.traceRoots = 0, 0
-	rotateEnvMemo()
+	activeWorld().envMemo.rotate()
 }
 
 // Inert returns a Canvas that draws where c does but registers no hit
@@ -243,7 +243,7 @@ func (c *Canvas) Paint(w Widget, r Rect) {
 	// The trace exists only for the inspector, so an app with no panel and
 	// no OnInspect handler skips the frameState walk on every painted
 	// widget for one test of a package flag.
-	if inspectorEnabled {
+	if inspectorEnabled.Load() {
 		f := c.fs()
 		if f.tracing {
 			parent := f.traceParent

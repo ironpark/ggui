@@ -81,14 +81,36 @@ func (e Env) PopupDuration() time.Duration {
 	return 150 * time.Millisecond
 }
 
-var environment = State(Env{}).WithEqual(nil)
+// The application environment is kept per world: the App's windows share
+// one, each Probe has its own, and a goroutine's Base world holds what is
+// set there before any app or probe runs. A world's starts as a copy of the
+// Base world beside it when it is first read, which for an app or a probe
+// is its first frame, so SetEnv before Run, or before a probe's first
+// frame, reaches it. From then on the two are separate.
+
+// environment returns w's environment signal, copying its parent's the
+// first time.
+func (w *world) environment() *StateValue[Env] {
+	if w.env == nil {
+		var start Env
+		if parent := w.rt.Parent(); parent != nil {
+			start = Untrack(worldOf(parent).environment().Get)
+		}
+		w.env = State(start).WithEqual(nil)
+	}
+	return w.env
+}
 
 // UseEnv reads the application environment and subscribes the current builder
 // or effect to replacements. Layout receives this environment automatically.
-func UseEnv() Env { return environment.Get() }
+func UseEnv() Env { return activeWorld().environment().Get() }
 
-// SetEnv replaces the application environment and invalidates layout.
-// Call on the UI thread or before starting an application.
-func SetEnv(env Env) { environment.Set(env) }
+// SetEnv replaces the application environment and invalidates layout: the
+// environment of the App or Probe whose frames run on this goroutine, or
+// before any has, the one the next to start copies. Call on the UI thread
+// or before starting an application.
+func SetEnv(env Env) {
+	activeWorld().environment().Set(env)
+}
 
 func rootEnv() Env { return Untrack(UseEnv) }

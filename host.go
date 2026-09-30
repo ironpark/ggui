@@ -70,7 +70,7 @@ func UseHost() Host {
 	if l := loopOf(reactive.CurrentOwner()); l != nil {
 		return l.host
 	}
-	if l := running.Load(); l != nil {
+	if l := runningLoop(); l != nil {
 		return l.host
 	}
 	panic("ggui: UseHost outside a window or probe")

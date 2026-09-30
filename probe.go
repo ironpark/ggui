@@ -36,7 +36,8 @@ type Probe struct {
 	overlay Overlay
 	sinks   []func(*inspect.Frame)
 
-	now time.Time // the probe's clock once Advance has been called
+	world *world    // its runtime's; see worldOf
+	now   time.Time // the probe's clock once Advance has been called
 }
 
 // SetOverlay installs o over the probe's window, as App.SetOverlay does:
@@ -62,7 +63,7 @@ func (p *Probe) Draw(img *ggfx.Image) Size {
 // App.OnInspect does.
 func (p *Probe) OnInspect(fn func(*inspect.Frame)) {
 	p.sinks = append(p.sinks, fn)
-	inspectorEnabled = true
+	inspectorEnabled.Store(true)
 }
 
 // NewProbe creates a Probe that lays w out at size under the current root environment.
@@ -80,7 +81,8 @@ func NewProbe(w Widget, size Size) *Probe {
 func ProbeBuilder(build Builder, size Size) *Probe {
 	p := &Probe{size: size}
 	p.host = p
-	p.rt, p.world = reactive.NewRuntime(), newWorld()
+	p.rt = reactive.NewRuntime()
+	p.world = worldOf(p.rt)
 	p.build = build
 	p.dialogs = &runtime.StubFilePicker{}
 	p.clipboard = &runtime.MemoryClipboard{}

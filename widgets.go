@@ -279,7 +279,7 @@ func (t *TextWidget) Layout(c Constraints, env Env) Size {
 	t.resolved = base.Merge(t.style).resolved()
 	t.resolved.Size *= env.TextScale()
 	face := t.faceAt(1)
-	key := wrapKey{generation: fontGeneration, value: t.value, font: t.resolved.Font, size: t.resolved.Size, lineHeight: t.resolved.LineHeight, maxW: pick(t.wrap, c.MaxW, 0)}
+	key := wrapKey{generation: fontGeneration.Load(), value: t.value, font: t.resolved.Font, size: t.resolved.Size, lineHeight: t.resolved.LineHeight, maxW: pick(t.wrap, c.MaxW, 0)}
 	if key != t.wrapped {
 		t.wrapped = key
 		t.lines = wrapText(key.value, face, key.maxW)

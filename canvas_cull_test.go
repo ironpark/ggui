@@ -41,7 +41,7 @@ func TestEmptyClipRetainsTextSemanticsAndTrace(t *testing.T) {
 	img := ggfx.NewImage(100, 100)
 	defer img.Deallocate()
 	c := &Canvas{Image: img}
-	inspectorEnabled = true
+	inspectorEnabled.Store(true)
 	c.fs().tracing = true
 	txt := Text("offscreen text")
 	size := txt.Layout(Tight(Sz(100, 20)), rootEnv())
