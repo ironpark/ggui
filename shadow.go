@@ -23,12 +23,10 @@ type ShadowStyle struct {
 // so that shadows drawn one after another share a draw call. custom.xy is
 // the fragment's place relative to the silhouette's centre, custom.zw its
 // half size, src_pos the corner radius and the feather, and color the tint.
-const shadowSource = `
+const shadowSource = roundRectDistance + `
 fn fragment(v: Vertex) -> vec4f {
-	let radius = v.src_pos.x;
+	let distance = round_rect_distance(v.custom.xy, v.custom.zw, v.src_pos.x);
 	let feather = v.src_pos.y;
-	let q = abs(v.custom.xy) - v.custom.zw + vec2f(radius);
-	let distance = length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0) - radius;
 	let coverage = 1.0 - smoothstep(-feather, feather, distance);
 	return v.color * coverage;
 }
@@ -44,7 +42,8 @@ var sharedShadow = sync.OnceValue(func() *ggfx.Shader {
 
 type shadowGeometry struct {
 	bounds          image.Rectangle
-	center, half    [2]float32
+	centre          Point
+	half            Size
 	radius, feather float32
 }
 
@@ -77,8 +76,8 @@ func (c *Canvas) shadowGeometry(r Rect, radius float64, s ShadowStyle) (shadowGe
 	corner := max(min(max(radius, 0), r.Size.W/2, r.Size.H/2)+s.Spread, 0)
 	return shadowGeometry{
 		bounds:  bounds,
-		center:  [2]float32{float32(cx - float64(bounds.Min.X)), float32(cy - float64(bounds.Min.Y))},
-		half:    [2]float32{float32(hw), float32(hh)},
+		centre:  Pt(cx, cy),
+		half:    Sz(hw, hh),
 		radius:  float32(min(corner*scale, hw, hh)),
 		feather: float32(feather),
 	}, true
@@ -92,23 +91,14 @@ func (c *Canvas) Shadow(r Rect, radius float64, s ShadowStyle) {
 	if c == nil || c.Image == nil || s.Color == nil {
 		return
 	}
-	red, green, blue, alpha := s.Color.RGBA()
-	if alpha == 0 {
+	tint := premul(s.Color)
+	if tint[3] == 0 {
 		return
 	}
 	g, ok := c.shadowGeometry(r, radius, s)
 	if !ok {
 		return
 	}
-	var vs [4]ggfx.Vertex
-	for i, corner := range corners(g.bounds) {
-		vs[i] = ggfx.Vertex{
-			DstX: float32(corner.X), DstY: float32(corner.Y),
-			SrcX: g.radius, SrcY: g.feather,
-			ColorR: float32(red) / 65535, ColorG: float32(green) / 65535, ColorB: float32(blue) / 65535, ColorA: float32(alpha) / 65535,
-			Custom0: float32(corner.X-float64(g.bounds.Min.X)) - g.center[0], Custom1: float32(corner.Y-float64(g.bounds.Min.Y)) - g.center[1],
-			Custom2: g.half[0], Custom3: g.half[1],
-		}
-	}
+	vs := sdfQuad(g.bounds, g.centre, Pt(1, 0), g.half, g.radius, g.feather, tint)
 	c.Image.DrawTrianglesShader(vs[:], quadIndices[:], sharedShadow(), nil)
 }

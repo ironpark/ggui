@@ -29,7 +29,7 @@ func TestShadowGeometryScaleClipAndSpread(t *testing.T) {
 	}
 	clipped := c.Clip(Rct(Pt(25, 25), Sz(20, 20)))
 	g, ok = clipped.shadowGeometry(r, 8, s)
-	if !ok || g.bounds != image.Rect(50, 50, 90, 90) || g.center != [2]float32{36, 28} {
+	if !ok || g.bounds != image.Rect(50, 50, 90, 90) || g.centre != Pt(86, 78) {
 		t.Fatalf("clipped geometry: %+v", g)
 	}
 	for _, bad := range []ShadowStyle{{Spread: -30}, {Blur: math.NaN()}, {Offset: Pt(math.Inf(1), 0)}} {

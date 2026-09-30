@@ -13,12 +13,11 @@ import (
 // from sharing one. Every draw sets every member, so what a block held
 // before does not leak into the next.
 type uniformBlocks struct {
-	shader func() *ggfx.Shader
-	pool   sync.Pool
+	pool sync.Pool
 }
 
 func newUniformBlocks(shader func() *ggfx.Shader) *uniformBlocks {
-	b := &uniformBlocks{shader: shader}
+	b := &uniformBlocks{}
 	b.pool.New = func() any { return shader().NewUniforms() }
 	return b
 }

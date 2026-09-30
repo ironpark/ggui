@@ -89,8 +89,7 @@ type field struct {
 
 // shade draws f in col, over no more of the target than f can reach.
 func (c *Canvas) shade(f field, col color.Color) {
-	red, green, blue, alpha := col.RGBA()
-	if alpha == 0 {
+	if _, _, _, alpha := col.RGBA(); alpha == 0 {
 		return
 	}
 	for _, v := range [...]float64{f.centre.X, f.centre.Y, f.axis.X, f.axis.Y, f.half.W, f.half.H, f.radius, f.stroke} {
@@ -110,30 +109,40 @@ func (c *Canvas) shade(f field, col color.Color) {
 		return
 	}
 	// A corner never exceeds half the shape, which is a circle.
-	radius := float32(min(max(f.radius, 0), f.half.W, f.half.H))
-	width := float32(max(f.stroke, 0))
-	var vs [4]ggfx.Vertex
-	for i, corner := range corners(bounds) {
-		p := Pt(corner.X-f.centre.X, corner.Y-f.centre.Y)
-		vs[i] = ggfx.Vertex{
-			DstX: float32(corner.X), DstY: float32(corner.Y),
-			SrcX: radius, SrcY: width,
-			ColorR: float32(red) / 65535, ColorG: float32(green) / 65535, ColorB: float32(blue) / 65535, ColorA: float32(alpha) / 65535,
-			Custom0: float32(p.X*f.axis.X + p.Y*f.axis.Y), Custom1: float32(p.Y*f.axis.X - p.X*f.axis.Y),
-			Custom2: float32(f.half.W), Custom3: float32(f.half.H),
-		}
-	}
+	radius := min(max(f.radius, 0), f.half.W, f.half.H)
+	vs := sdfQuad(bounds, f.centre, f.axis, f.half, float32(radius), float32(max(f.stroke, 0)), premul(col))
 	c.Image.DrawTrianglesShader(vs[:], quadIndices[:], sharedRoundRect(), nil)
 }
 
-// quadIndices are the two triangles of the quad corners returns.
+// sdfQuad is the quad over bounds that draws a distance-field shape
+// centred at centre, turned to axis, with half size half, as
+// roundRectSource and shadowSource read it: the fragment's place in the
+// shape's own frame in custom.xy, the half size in custom.zw, the two
+// scalars in src_pos and the tint as the colour.
+func sdfQuad(bounds image.Rectangle, centre, axis Point, half Size, s0, s1 float32, tint [4]float32) [4]ggfx.Vertex {
+	x0, y0, x1, y1 := float64(bounds.Min.X), float64(bounds.Min.Y), float64(bounds.Max.X), float64(bounds.Max.Y)
+	var vs [4]ggfx.Vertex
+	for i, corner := range [4]Point{Pt(x0, y0), Pt(x1, y0), Pt(x0, y1), Pt(x1, y1)} {
+		p := Pt(corner.X-centre.X, corner.Y-centre.Y)
+		vs[i] = ggfx.Vertex{
+			DstX: float32(corner.X), DstY: float32(corner.Y),
+			SrcX: s0, SrcY: s1,
+			ColorR: tint[0], ColorG: tint[1], ColorB: tint[2], ColorA: tint[3],
+			Custom0: float32(p.X*axis.X + p.Y*axis.Y), Custom1: float32(p.Y*axis.X - p.X*axis.Y),
+			Custom2: float32(half.W), Custom3: float32(half.H),
+		}
+	}
+	return vs
+}
+
+// quadIndices are the two triangles of a quad whose corners run top left,
+// top right, bottom left, bottom right.
 var quadIndices = [...]uint16{0, 1, 2, 1, 3, 2}
 
-// corners returns the corners of r: top left, top right, bottom left,
-// bottom right.
-func corners(r image.Rectangle) [4]Point {
-	x0, y0, x1, y1 := float64(r.Min.X), float64(r.Min.Y), float64(r.Max.X), float64(r.Max.Y)
-	return [4]Point{Pt(x0, y0), Pt(x1, y0), Pt(x0, y1), Pt(x1, y1)}
+// premul is col as the premultiplied floats a shader takes.
+func premul(col color.Color) [4]float32 {
+	r, g, b, a := col.RGBA()
+	return [4]float32{float32(r) / 0xffff, float32(g) / 0xffff, float32(b) / 0xffff, float32(a) / 0xffff}
 }
 
 // shadeRoundRect draws the rounded rectangle shape in col. A zero halfStroke
@@ -293,8 +302,8 @@ func (c *Canvas) shadeImage(img *ggfx.Image, r, at Rect, o ImageOptions) {
 	sin, cos := math.Sincos(o.Rotation)
 	red, green, blue, alpha := float32(1), float32(1), float32(1), float32(1)
 	if o.Tint != nil {
-		cr, cg, cb, ca := o.Tint.RGBA()
-		red, green, blue, alpha = float32(cr)/0xffff, float32(cg)/0xffff, float32(cb)/0xffff, float32(ca)/0xffff
+		t := premul(o.Tint)
+		red, green, blue, alpha = t[0], t[1], t[2], t[3]
 	}
 	if o.Fade != 0 {
 		k := float32(1 - o.Fade)
@@ -324,5 +333,5 @@ func (c *Canvas) shadeImage(img *ggfx.Image, r, at Rect, o ImageOptions) {
 	u.SetBool("pixelated", o.Pixelated)
 	op := &ggfx.DrawTrianglesShaderOptions{UniformBlock: u}
 	op.Images[0] = img
-	c.Image.DrawTrianglesShader(vs[:], []uint16{0, 1, 2, 1, 3, 2}, sharedRoundRectImage(), op)
+	c.Image.DrawTrianglesShader(vs[:], quadIndices[:], sharedRoundRectImage(), op)
 }

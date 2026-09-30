@@ -115,14 +115,11 @@ func (c *Canvas) FillPathGradient(path *Path, bounds Rect, top, bottom color.Col
 		path.gradientKey = key
 		path.gradientRev = path.revision
 	}
-	rgba := func(col color.Color) []float32 {
-		r, g, b, a := col.RGBA()
-		return []float32{float32(r) / 65535, float32(g) / 65535, float32(b) / 65535, float32(a) / 65535}
-	}
+	topTint, bottomTint := premul(top), premul(bottom)
 	u := pathGradientUniforms.get()
 	defer pathGradientUniforms.put(u)
-	u.SetSlice("top", rgba(top))
-	u.SetSlice("bottom", rgba(bottom))
+	u.SetSlice("top", topTint[:])
+	u.SetSlice("bottom", bottomTint[:])
 	u.Set("height", float32(bounds.Size.H*scale))
 	u.Set("offset", float32(float64(coverage.Min.Y)-bounds.Origin.Y*scale))
 	op := &ggfx.DrawRectShaderOptions{UniformBlock: u}
