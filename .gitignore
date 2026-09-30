@@ -30,3 +30,7 @@ coverage.*
 
 # Local tool state (contains keys)
 /identity.json
+
+# Local Go workspace, for developing against a ggfx checkout beside this one
+go.work
+go.work.sum
