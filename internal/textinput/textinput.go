@@ -29,8 +29,7 @@
 // Web browsers scroll the page by themselves instead.
 //
 // When the user dismisses the virtual keyboard, e.g. with the Back gesture
-// on Android, text inputting ends: [Composer.OnEndByUser] is called, and a
-// focused [Field] loses its focus.
+// on Android, text inputting ends: [Composer.OnEndByUser] is called.
 //
 // # Android
 //
@@ -50,12 +49,9 @@
 package textinput
 
 import (
-	"fmt"
 	"image"
 	"slices"
 	"sync"
-	"unicode/utf16"
-	"unicode/utf8"
 )
 
 // noReplacement is the sentinel value for [textInputState.ReplacementStartInBytes]
@@ -143,151 +139,6 @@ type textInputState struct {
 // startTextInput returns nil and nil if the current environment doesn't support this package.
 func startTextInput(bounds image.Rectangle, textBeforeCaret, textAfterCaret string) (states <-chan textInputState, close func()) {
 	return theTextInput.backend().Start(bounds, textBeforeCaret, textAfterCaret)
-}
-
-func convertUTF16CountToByteCount(text string, c int) int {
-	if !utf8.ValidString(text) {
-		return -1
-	}
-	if c == 0 {
-		return 0
-	}
-	var utf16Len int
-	for idx, r := range text {
-		l16 := utf16.RuneLen(r)
-		if l16 < 0 {
-			panic(fmt.Sprintf("textinput: invalid rune: %c", r))
-		}
-		utf16Len += l16
-		if utf16Len >= c {
-			l8 := utf8.RuneLen(r)
-			if l8 < 0 {
-				panic(fmt.Sprintf("textinput: invalid rune: %c", r))
-			}
-			return idx + l8
-		}
-	}
-	return -1
-}
-
-func convertByteCountToUTF16Count(text string, c int) int {
-	if !utf8.ValidString(text) {
-		return -1
-	}
-	if c == 0 {
-		return 0
-	}
-	var utf16Len int
-	for idx, r := range text {
-		l16 := utf16.RuneLen(r)
-		if l16 < 0 {
-			panic(fmt.Sprintf("textinput: invalid rune length for rune %c", r))
-		}
-		utf16Len += l16
-		l8 := utf8.RuneLen(r)
-		if l8 < 0 {
-			panic(fmt.Sprintf("textinput: invalid rune length for rune %c", r))
-		}
-		if idx+l8 >= c {
-			return utf16Len
-		}
-	}
-	return -1
-}
-
-// computeReplacement returns the single contiguous edit turning baseline into
-// newText: the replacement text and the rune-aligned byte range
-// [startInBytes, endInBytes) it replaces in baseline. The range is what remains
-// after stripping the longest common prefix and suffix, so it is not
-// necessarily the minimal edit.
-//
-// A non-negative caretInBytes is taken as the end of the edited region in
-// newText and anchors the replacement, disambiguating an edit into repeated
-// surrounding text — e.g. committing "na" at "ba|na" — where the prefix/suffix
-// span alone would wrongly land at the end. Pass a negative value when the
-// caret does not mark the edit's end (a composition preedit) or is unknown.
-func computeReplacement(baseline, newText string, caretInBytes int) (replacement string, startInBytes, endInBytes int) {
-	// Common prefix, rune by rune.
-	var prefix int
-	for prefix < len(baseline) && prefix < len(newText) {
-		rb, size := utf8.DecodeRuneInString(baseline[prefix:])
-		rn, _ := utf8.DecodeRuneInString(newText[prefix:])
-		if rb != rn {
-			break
-		}
-		prefix += size
-	}
-
-	// Caret-anchored: the text after the caret is unchanged, so it must be a
-	// suffix of baseline. This holds only when the caret sits at the end of the
-	// edited region (a commit); otherwise fall through to the common-suffix
-	// scan below.
-	if 0 <= caretInBytes && caretInBytes <= len(newText) {
-		if end := len(baseline) - (len(newText) - caretInBytes); end >= 0 && newText[caretInBytes:] == baseline[end:] {
-			start := min(prefix, caretInBytes, end)
-			return newText[start:caretInBytes], start, end
-		}
-	}
-
-	// Common suffix, rune by rune, without crossing the prefix.
-	sufBaseline, sufNew := len(baseline), len(newText)
-	for sufBaseline > prefix && sufNew > prefix {
-		rb, size := utf8.DecodeLastRuneInString(baseline[:sufBaseline])
-		rn, _ := utf8.DecodeLastRuneInString(newText[:sufNew])
-		if rb != rn {
-			break
-		}
-		sufBaseline -= size
-		sufNew -= size
-	}
-
-	return newText[prefix:sufNew], prefix, sufBaseline
-}
-
-// findLineBounds returns the byte offsets bounding the line of text that
-// contains the selection [selStart, selEnd]. lineStart is the position right
-// after the previous line break (or 0 if none), and lineEnd is the position of
-// the next line break (or len(text) if none). The line break bytes themselves
-// are excluded from both ends.
-//
-// Line breaks that fall within [selStart, selEnd) are ignored, so a selection
-// crossing line breaks yields a single combined line.
-func findLineBounds(text string, selStart, selEnd int) (lineStart, lineEnd int) {
-	selStart = min(max(selStart, 0), len(text))
-	selEnd = min(max(selEnd, selStart), len(text))
-
-	for i := selStart; i > 0; {
-		r, size := utf8.DecodeLastRuneInString(text[:i])
-		if isLineBreak(r) {
-			lineStart = i
-			break
-		}
-		i -= size
-	}
-
-	lineEnd = len(text)
-	for i := selEnd; i < len(text); {
-		r, size := utf8.DecodeRuneInString(text[i:])
-		if isLineBreak(r) {
-			lineEnd = i
-			break
-		}
-		i += size
-	}
-	return
-}
-
-// isLineBreak reports whether r is a line-break codepoint.
-func isLineBreak(r rune) bool {
-	switch r {
-	case '\n', '\v', '\f', '\r':
-		return true
-	case '\u0085', // NEL
-		'\u2028', // LS
-		'\u2029': // PS
-		return true
-	}
-	return false
 }
 
 // textInputBackend produces the raw text-input state stream for sessions.
@@ -395,14 +246,6 @@ func (s *textInputEvents) start() (ch chan textInputState, endFunc func()) {
 	return s.ch, s.end
 }
 
-// isOpen reports whether text inputting is in progress, including by the
-// deprecated Field, which registers no session.
-func (s *textInputEvents) isOpen() bool {
-	s.m.Lock()
-	defer s.m.Unlock()
-	return s.ch != nil
-}
-
 func (s *textInputEvents) end() {
 	s.m.Lock()
 	defer s.m.Unlock()
@@ -415,6 +258,8 @@ func (s *textInputEvents) end() {
 // commit, which ends, and then report the user's ending, and the ending
 // belongs to the session that has not drained that commit yet. start clears a
 // record no session consumed.
+//
+//lint:ignore U1000 the mobile backends call it; this copy keeps the session and Composer logic that follows from it as upstream has it, tested on macOS
 func (s *textInputEvents) endByUser() {
 	s.m.Lock()
 	defer s.m.Unlock()

@@ -329,8 +329,7 @@ func (m *model) sortColumn(name string) {
 	m.apply()
 }
 
-func (m *model) apply()         { m.browsePage(0) }
-func (m *model) page(delta int) { m.browsePage(max(0, m.Offset.Get()+delta*m.PageSize.Get())) }
+func (m *model) apply() { m.browsePage(0) }
 func (m *model) execute() {
 	if m.db == nil || m.Busy.Get() {
 		return

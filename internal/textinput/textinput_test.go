@@ -22,74 +22,6 @@ import (
 	"github.com/ironpark/ggui/internal/textinput"
 )
 
-func TestConvertUTF16CountToByteCount(t *testing.T) {
-	testCases := []struct {
-		text string
-		c    int
-		want int
-	}{
-		{"", 0, 0},
-		{"a", 0, 0},
-		{"a", 1, 1},
-		{"a", 2, -1},
-		{"abc", 1, 1},
-		{"abc", 2, 2},
-		{"àbc", 1, 2},
-		{"àbc", 2, 3},
-		{"海老天", 1, 3},
-		{"海老天", 2, 6},
-		{"海老天", 3, 9},
-		{"寿司🍣食べたい", 1, 3},
-		{"寿司🍣食べたい", 2, 6},
-		{"寿司🍣食べたい", 4, 10},
-		{"寿司🍣食べたい", 5, 13},
-		{"寿司🍣食べたい", 100, -1},
-		{"\xff\xff\xff\xff", 0, -1},
-		{"\xff\xff\xff\xff", 1, -1},
-		{"\xff\xff\xff\xff", 2, -1},
-		{"\xff\xff\xff\xff", 100, -1},
-	}
-	for _, tc := range testCases {
-		if got := textinput.ConvertUTF16CountToByteCount(tc.text, tc.c); got != tc.want {
-			t.Errorf("ConvertUTF16CountToByteCount(%q, %d) = %v, want %v", tc.text, tc.c, got, tc.want)
-		}
-	}
-}
-
-func TestConvertByteCountToUTF16Count(t *testing.T) {
-	testCases := []struct {
-		text string
-		c    int
-		want int
-	}{
-		{"", 0, 0},
-		{"a", 0, 0},
-		{"a", 1, 1},
-		{"a", 2, -1},
-		{"abc", 1, 1},
-		{"abc", 2, 2},
-		{"àbc", 2, 1},
-		{"àbc", 3, 2},
-		{"海老天", 3, 1},
-		{"海老天", 6, 2},
-		{"海老天", 9, 3},
-		{"寿司🍣食べたい", 3, 1},
-		{"寿司🍣食べたい", 6, 2},
-		{"寿司🍣食べたい", 10, 4},
-		{"寿司🍣食べたい", 13, 5},
-		{"寿司🍣食べたい", 100, -1},
-		{"\xff\xff\xff\xff", 0, -1},
-		{"\xff\xff\xff\xff", 3, -1},
-		{"\xff\xff\xff\xff", 6, -1},
-		{"\xff\xff\xff\xff", 100, -1},
-	}
-	for _, tc := range testCases {
-		if got := textinput.ConvertByteCountToUTF16Count(tc.text, tc.c); got != tc.want {
-			t.Errorf("ConvertByteCountToUTF16Count(%q, %d) = %v, want %v", tc.text, tc.c, got, tc.want)
-		}
-	}
-}
-
 // TestClearQueueDropsDiscardedMarkedText verifies the macOS fix: a preedit
 // queued after a commit closed the channel would be replayed as a live
 // composition by the next session's start(). Clearing the queue first (as macOS
@@ -137,418 +69,15 @@ func TestClearQueueDropsDiscardedMarkedText(t *testing.T) {
 	}
 }
 
-func TestComputeReplacement(t *testing.T) {
-	// caret is the byte offset of the caret in newText; a negative caret
-	// exercises the plain caret-agnostic path, a non-negative one the
-	// caret-anchored path.
-	tests := []struct {
-		name      string
-		baseline  string
-		newText   string
-		caret     int
-		wantText  string
-		wantStart int
-		wantEnd   int
-	}{
-		{
-			name:      "insert into empty",
-			baseline:  "",
-			newText:   "a",
-			caret:     -1,
-			wantText:  "a",
-			wantStart: 0,
-			wantEnd:   0,
-		},
-		{
-			name:      "append",
-			baseline:  "a",
-			newText:   "ab",
-			caret:     -1,
-			wantText:  "b",
-			wantStart: 1,
-			wantEnd:   1,
-		},
-		{
-			name:      "no change",
-			baseline:  "abc",
-			newText:   "abc",
-			caret:     -1,
-			wantText:  "",
-			wantStart: 3,
-			wantEnd:   3,
-		},
-		{
-			name:      "prepend",
-			baseline:  "bc",
-			newText:   "abc",
-			caret:     -1,
-			wantText:  "a",
-			wantStart: 0,
-			wantEnd:   0,
-		},
-		{
-			name:      "middle insert",
-			baseline:  "helloworld",
-			newText:   "helloXworld",
-			caret:     -1,
-			wantText:  "X",
-			wantStart: 5,
-			wantEnd:   5,
-		},
-		{
-			name:      "middle replace",
-			baseline:  "hello",
-			newText:   "hEllo",
-			caret:     -1,
-			wantText:  "E",
-			wantStart: 1,
-			wantEnd:   2,
-		},
-
-		// Accent popup: the trailing base character is replaced.
-		{
-			name:      "accent replaces last ASCII",
-			baseline:  "a",
-			newText:   "à",
-			caret:     -1,
-			wantText:  "à",
-			wantStart: 0,
-			wantEnd:   1,
-		},
-		{
-			name:      "accent replaces last in word",
-			baseline:  "cafe",
-			newText:   "café",
-			caret:     -1,
-			wantText:  "é",
-			wantStart: 3,
-			wantEnd:   4,
-		},
-		{
-			name:      "accent adds combining mark",
-			baseline:  "e",
-			newText:   "e\u0301",
-			caret:     -1,
-			wantText:  "\u0301",
-			wantStart: 1,
-			wantEnd:   1,
-		},
-
-		// Two precomposed accents sharing a leading UTF-8 byte must not be
-		// split mid-rune (à and è both start with 0xC3).
-		{
-			name:      "precomposed to precomposed",
-			baseline:  "à",
-			newText:   "è",
-			caret:     -1,
-			wantText:  "è",
-			wantStart: 0,
-			wantEnd:   2,
-		},
-
-		// Multibyte alignment on the suffix side.
-		{
-			name:      "replace before multibyte suffix",
-			baseline:  "aé",
-			newText:   "bé",
-			caret:     -1,
-			wantText:  "b",
-			wantStart: 0,
-			wantEnd:   1,
-		},
-		{
-			name:      "replace multibyte middle",
-			baseline:  "海老天",
-			newText:   "海X天",
-			caret:     -1,
-			wantText:  "X",
-			wantStart: 3,
-			wantEnd:   6,
-		},
-		{
-			name:      "cjk preedit",
-			baseline:  "",
-			newText:   "日本",
-			caret:     -1,
-			wantText:  "日本",
-			wantStart: 0,
-			wantEnd:   0,
-		},
-
-		// Emoji (surrogate pair in UTF-16, 4 bytes in UTF-8).
-		{
-			name:      "replace emoji",
-			baseline:  "\U0001f363",
-			newText:   "\U0001f371",
-			caret:     -1,
-			wantText:  "\U0001f371",
-			wantStart: 0,
-			wantEnd:   4,
-		},
-
-		// Deletions yield empty text.
-		{
-			name:      "delete last",
-			baseline:  "ab",
-			newText:   "a",
-			caret:     -1,
-			wantText:  "",
-			wantStart: 1,
-			wantEnd:   2,
-		},
-		{
-			name:      "delete first",
-			baseline:  "ab",
-			newText:   "b",
-			caret:     -1,
-			wantText:  "",
-			wantStart: 0,
-			wantEnd:   1,
-		},
-		{
-			name:      "delete all",
-			baseline:  "abc",
-			newText:   "",
-			caret:     -1,
-			wantText:  "",
-			wantStart: 0,
-			wantEnd:   3,
-		},
-
-		// Caret-anchored cases.
-
-		// Inserting "na" at "ba|na" to build "banana". The caret after the
-		// committed text anchors the edit in the middle; the prefix/suffix span
-		// alone would append at the end.
-		{
-			name:      "anchored insert into repeated text at caret",
-			baseline:  "bana",
-			newText:   "banana",
-			caret:     len("bana"),
-			wantText:  "na",
-			wantStart: len("ba"),
-			wantEnd:   len("ba"),
-		},
-		// The same repeated text, but the caret is at the very end: this really
-		// is an append.
-		{
-			name:      "anchored append to repeated text at end",
-			baseline:  "bana",
-			newText:   "banana",
-			caret:     len("banana"),
-			wantText:  "na",
-			wantStart: len("bana"),
-			wantEnd:   len("bana"),
-		},
-		// An unambiguous middle insert: the anchored path agrees with the plain
-		// "middle insert" case above.
-		{
-			name:      "anchored middle insert",
-			baseline:  "helloworld",
-			newText:   "helloXworld",
-			caret:     6,
-			wantText:  "X",
-			wantStart: 5,
-			wantEnd:   5,
-		},
-		// Accent popup with the caret after the replaced character.
-		{
-			name:      "anchored accent replaces last ASCII",
-			baseline:  "a",
-			newText:   "à",
-			caret:     len("à"),
-			wantText:  "à",
-			wantStart: 0,
-			wantEnd:   1,
-		},
-		// A composition preedit ("abXY") whose leading text repeats the
-		// surrounding text, anchored at the preedit end. The prefix/suffix span
-		// alone would grab the wrong run ("XYab").
-		{
-			name:      "anchored preedit repeats surrounding text",
-			baseline:  "abab",
-			newText:   "ababXYab",
-			caret:     len("ababXY"),
-			wantText:  "abXY",
-			wantStart: 2,
-			wantEnd:   2,
-		},
-		// A caret that does not sit at the end of the edited region (the text
-		// after it is not a suffix of baseline) falls back to the prefix/suffix
-		// span.
-		{
-			name:      "anchored caret not at edit end falls back",
-			baseline:  "abc",
-			newText:   "aXYc",
-			caret:     2,
-			wantText:  "XY",
-			wantStart: 1,
-			wantEnd:   2,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gotText, gotStart, gotEnd := textinput.ComputeReplacement(tt.baseline, tt.newText, tt.caret)
-			if gotText != tt.wantText || gotStart != tt.wantStart || gotEnd != tt.wantEnd {
-				t.Errorf("ComputeReplacement(%q, %q, %d) = (%q, %d, %d), want (%q, %d, %d)",
-					tt.baseline, tt.newText, tt.caret, gotText, gotStart, gotEnd, tt.wantText, tt.wantStart, tt.wantEnd)
-			}
-			// The replaced range must be valid, and applying the edit must
-			// reproduce newText.
-			if gotStart < 0 || gotEnd < gotStart || gotEnd > len(tt.baseline) {
-				t.Fatalf("invalid range [%d, %d) for baseline len %d", gotStart, gotEnd, len(tt.baseline))
-			}
-			if got := tt.baseline[:gotStart] + gotText + tt.baseline[gotEnd:]; got != tt.newText {
-				t.Errorf("applying edit gave %q, want %q", got, tt.newText)
-			}
-		})
-	}
-}
-
-func TestFindLineBounds(t *testing.T) {
-	tests := []struct {
-		name          string
-		text          string
-		selStart      int
-		selEnd        int
-		wantLineStart int
-		wantLineEnd   int
-	}{
-		{
-			name:          "empty",
-			text:          "",
-			selStart:      0,
-			selEnd:        0,
-			wantLineStart: 0,
-			wantLineEnd:   0,
-		},
-		{
-			name:          "no line break",
-			text:          "Hello, World",
-			selStart:      5,
-			selEnd:        5,
-			wantLineStart: 0,
-			wantLineEnd:   12,
-		},
-		{
-			name:          "LF before and after",
-			text:          "abc\ndef\nghi",
-			selStart:      5, // cursor inside "def"
-			selEnd:        5,
-			wantLineStart: 4,
-			wantLineEnd:   7,
-		},
-		{
-			name:          "cursor right after LF",
-			text:          "abc\ndef",
-			selStart:      4,
-			selEnd:        4,
-			wantLineStart: 4,
-			wantLineEnd:   7,
-		},
-		{
-			name:          "cursor at LF position",
-			text:          "abc\ndef",
-			selStart:      3,
-			selEnd:        3,
-			wantLineStart: 0,
-			wantLineEnd:   3,
-		},
-		{
-			name:          "VT",
-			text:          "abc\vdef",
-			selStart:      5,
-			selEnd:        5,
-			wantLineStart: 4,
-			wantLineEnd:   7,
-		},
-		{
-			name:          "FF",
-			text:          "abc\fdef",
-			selStart:      5,
-			selEnd:        5,
-			wantLineStart: 4,
-			wantLineEnd:   7,
-		},
-		{
-			name:          "CR alone",
-			text:          "abc\rdef",
-			selStart:      5,
-			selEnd:        5,
-			wantLineStart: 4,
-			wantLineEnd:   7,
-		},
-		{
-			name:          "CRLF treated as one break",
-			text:          "abc\r\ndef",
-			selStart:      6, // cursor inside "def"
-			selEnd:        6,
-			wantLineStart: 5,
-			wantLineEnd:   8,
-		},
-		{
-			name:          "CRLF with cursor at end of break",
-			text:          "abc\r\ndef",
-			selStart:      5,
-			selEnd:        5,
-			wantLineStart: 5,
-			wantLineEnd:   8,
-		},
-		{
-			name:          "NEL (U+0085)",
-			text:          "abc\u0085def",
-			selStart:      7, // 3 + 2 + 2 = 7 (within "def")
-			selEnd:        7,
-			wantLineStart: 5, // "def" at bytes [5, 8)
-			wantLineEnd:   8,
-		},
-		{
-			name:          "LS (U+2028)",
-			text:          "abc\u2028def",
-			selStart:      7,
-			selEnd:        7,
-			wantLineStart: 6,
-			wantLineEnd:   9,
-		},
-		{
-			name:          "PS (U+2029)",
-			text:          "abc\u2029def",
-			selStart:      7,
-			selEnd:        7,
-			wantLineStart: 6,
-			wantLineEnd:   9,
-		},
-		{
-			name:          "selection crossing LF",
-			text:          "abc\ndef\nghi",
-			selStart:      2, // spans the first LF at byte 3
-			selEnd:        6,
-			wantLineStart: 0,
-			wantLineEnd:   7, // expands past the LF; next LF is at 7
-		},
-		{
-			name:          "selection crossing CRLF",
-			text:          "abc\r\ndef\r\nghi",
-			selStart:      2, // spans CRLF (3..5); 7 is inside "def"
-			selEnd:        7,
-			wantLineStart: 0,
-			wantLineEnd:   8, // next break is the CR at 8
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gotStart, gotEnd := textinput.FindLineBounds(tt.text, tt.selStart, tt.selEnd)
-			if gotStart != tt.wantLineStart || gotEnd != tt.wantLineEnd {
-				t.Errorf("FindLineBounds(%q, %d, %d) = (%d, %d), want (%d, %d)",
-					tt.text, tt.selStart, tt.selEnd, gotStart, gotEnd, tt.wantLineStart, tt.wantLineEnd)
-			}
-		})
-	}
-}
-
 // commitState returns a state representing a committed text.
 func commitState(text string) textinput.TextInputState {
 	return textinput.TextInputState{Text: text, CommitKind: textinput.CommitRegular}
+}
+
+// compositionState returns a state representing text being composed, with
+// the caret at its end.
+func compositionState(text string) textinput.TextInputState {
+	return textinput.TextInputState{Text: text, CompositionSelectionStartInBytes: len(text), CompositionSelectionEndInBytes: len(text)}
 }
 
 // TestQueuedCommitsReachSuccessiveSessions verifies that several commits
@@ -638,27 +167,27 @@ func TestSendReportsDelivery(t *testing.T) {
 // that the application can stop text inputting instead of restarting it,
 // which would show the virtual keyboard again.
 func TestUserEndingReachesSession(t *testing.T) {
-	d := textinput.NewDiffSender("", "")
+	d := textinput.NewSession()
 
 	// The user composes, then dismisses the virtual keyboard.
-	d.TrySend("か", 1, 1, true, textinput.CommitNone)
+	d.Send(compositionState("か"))
 	d.EndByUser()
 	if err := d.Update(); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
-	if !d.SessionClosed() {
+	if !d.Closed() {
 		t.Error("SessionClosed() = false, want true")
 	}
-	if !d.SessionClosedByUser() {
+	if !d.ClosedByUser() {
 		t.Error("SessionClosedByUser() = false, want true")
 	}
 
 	// The record must not leak into the next session.
-	d.StartNextSession("", "")
+	d.StartNext()
 	if err := d.Update(); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
-	if d.SessionClosedByUser() {
+	if d.ClosedByUser() {
 		t.Error("SessionClosedByUser() = true for the next session, want false")
 	}
 }
@@ -666,17 +195,17 @@ func TestUserEndingReachesSession(t *testing.T) {
 // A platform teardown that is not the user's, e.g. a focus loss, must not be
 // recorded as the user's ending.
 func TestPlatformTeardownIsNotUserEnding(t *testing.T) {
-	d := textinput.NewDiffSender("", "")
+	d := textinput.NewSession()
 
-	d.TrySend("か", 1, 1, true, textinput.CommitNone)
+	d.Send(compositionState("か"))
 	d.End()
 	if err := d.Update(); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
-	if !d.SessionClosed() {
+	if !d.Closed() {
 		t.Error("SessionClosed() = false, want true")
 	}
-	if d.SessionClosedByUser() {
+	if d.ClosedByUser() {
 		t.Error("SessionClosedByUser() = true, want false")
 	}
 }
@@ -686,9 +215,9 @@ func TestPlatformTeardownIsNotUserEnding(t *testing.T) {
 // application would restart text inputting and show the virtual keyboard
 // again.
 func TestUserEndingAfterCommitInSameTick(t *testing.T) {
-	d := textinput.NewDiffSender("", "")
+	d := textinput.NewSession()
 
-	d.TrySend("a", 1, 1, false, textinput.CommitRegular)
+	d.Send(commitState("a"))
 	d.EndByUser()
 	if err := d.Update(); err != nil {
 		t.Fatalf("Update: %v", err)
@@ -700,7 +229,7 @@ func TestUserEndingAfterCommitInSameTick(t *testing.T) {
 	if got, want := c.Text(), "a"; got != want {
 		t.Errorf("Text() = %q, want %q", got, want)
 	}
-	if !d.SessionClosedByUser() {
+	if !d.ClosedByUser() {
 		t.Error("SessionClosedByUser() = false, want true")
 	}
 }

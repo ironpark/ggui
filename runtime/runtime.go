@@ -20,7 +20,10 @@
 // before Run.
 package runtime
 
-import "errors"
+import (
+	"errors"
+	"strings"
+)
 
 // FileFilter is one entry of a dialog's file type menu: a name and the
 // extensions it admits, without dots. A filter with no extensions admits
@@ -28,6 +31,19 @@ import "errors"
 type FileFilter struct {
 	Name       string
 	Extensions []string
+}
+
+// globs is a filter's patterns joined by sep: "*.png *.jpg", or "*" for a
+// filter that admits everything.
+func globs(f FileFilter, sep string) string {
+	if len(f.Extensions) == 0 {
+		return "*"
+	}
+	patterns := make([]string, len(f.Extensions))
+	for i, ext := range f.Extensions {
+		patterns[i] = "*." + ext
+	}
+	return strings.Join(patterns, sep)
 }
 
 // FileDialog configures a file dialog. Every field is optional.

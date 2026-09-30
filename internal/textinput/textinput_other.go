@@ -11,5 +11,4 @@ type (
 	SessionOptions = textinput.SessionOptions
 	Composition    = textinput.Composition
 	Commit         = textinput.Commit
-	Field          = textinput.Field
 )

@@ -82,15 +82,15 @@ func Objects(arr objc.ID) iter.Seq[objc.ID] {
 type blockLiteral struct {
 	isa        uintptr
 	flags      int32
-	reserved   int32
+	_          int32 // reserved
 	invoke     uintptr
 	descriptor *blockDescriptor
 }
 
 // blockDescriptor is the part of struct Block_descriptor every block has.
 type blockDescriptor struct {
-	reserved uintptr
-	size     uintptr
+	_    uintptr // reserved
+	size uintptr
 }
 
 // blockIsGlobal marks a block that lives in static storage, so that copying

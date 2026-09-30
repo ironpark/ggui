@@ -373,5 +373,3 @@ var appRunning atomic.Bool
 // of the process's own, such as the SystemDark poller, which no frame loop
 // runs on.
 var runningApp atomic.Pointer[App]
-
-var mouseButtons = []MouseButton{MouseButtonLeft, MouseButtonRight, MouseButtonMiddle}

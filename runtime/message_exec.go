@@ -1,43 +1,8 @@
 package runtime
 
 // The message dialog of a desktop with no toolkit to ask: zenity or
-// kdialog, as for the file dialogs.
-
-import (
-	"bytes"
-	"errors"
-	"os/exec"
-	"strings"
-)
-
-// execMessage runs the first dialog program found and returns the button
-// pressed, or ErrUnsupported where neither program is on PATH.
-func execMessage(m Message) (int, error) {
-	if path, err := exec.LookPath("zenity"); err == nil {
-		return runMessage(path, zenityMessageArgs(m), m.buttons(), zenityAnswer)
-	}
-	if path, err := exec.LookPath("kdialog"); err == nil {
-		return runMessage(path, kdialogMessageArgs(m), m.buttons(), kdialogAnswer)
-	}
-	return 0, ErrUnsupported
-}
-
-// runMessage runs the program and turns its exit code and output into the
-// index of the button pressed.
-func runMessage(path string, args, buttons []string, answer func(code int, out string, buttons []string) (int, error)) (int, error) {
-	cmd := exec.Command(path, args...)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	code := 0
-	if err := cmd.Run(); err != nil {
-		var exit *exec.ExitError
-		if !errors.As(err, &exit) {
-			return 0, err
-		}
-		code = exit.ExitCode()
-	}
-	return answer(code, strings.TrimSpace(out.String()), buttons)
-}
+// kdialog, as for the file dialogs. The command lines are built here, and
+// run by message_other.go.
 
 // messageText is what the dialog body says: the headline, and the detail
 // below it.

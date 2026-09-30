@@ -1,64 +1,17 @@
+//go:build !windows
+
 package runtime
 
 // The file dialog of a desktop with no toolkit to ask: zenity on GTK,
 // kdialog on KDE, whichever is on PATH. Both print the chosen paths on
 // standard output and exit with one when the user cancels. The command
-// lines are built apart from the code that runs them, so they are tested
-// on every platform.
+// lines are built here, apart from the code in dialog_other.go that runs
+// them, so they are tested on macOS as well.
 
 import (
-	"bytes"
-	"errors"
-	"os/exec"
 	"path/filepath"
 	"strings"
 )
-
-// execDialog runs the first dialog program found and returns the paths
-// chosen, or ErrUnsupported where neither program is on PATH.
-func execDialog(k dialogKind, d FileDialog) ([]string, error) {
-	if path, err := exec.LookPath("zenity"); err == nil {
-		return runDialog(path, zenityArgs(k, d))
-	}
-	if path, err := exec.LookPath("kdialog"); err == nil {
-		return runDialog(path, kdialogArgs(k, d))
-	}
-	return nil, ErrUnsupported
-}
-
-// runDialog executes the program and splits its output into paths.
-func runDialog(path string, args []string) ([]string, error) {
-	cmd := exec.Command(path, args...)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	if err := cmd.Run(); err != nil {
-		var exit *exec.ExitError
-		if errors.As(err, &exit) && exit.ExitCode() == 1 {
-			return nil, ErrCanceled
-		}
-		return nil, err
-	}
-	var paths []string
-	for _, line := range strings.Split(strings.TrimRight(out.String(), "\n"), "\n") {
-		if line != "" {
-			paths = append(paths, line)
-		}
-	}
-	return all(paths, nil)
-}
-
-// globs is a filter's patterns joined by sep: "*.png *.jpg", or "*" for a
-// filter that admits everything.
-func globs(f FileFilter, sep string) string {
-	if len(f.Extensions) == 0 {
-		return "*"
-	}
-	patterns := make([]string, len(f.Extensions))
-	for i, ext := range f.Extensions {
-		patterns[i] = "*." + ext
-	}
-	return strings.Join(patterns, sep)
-}
 
 // zenityArgs is the command line for zenity --file-selection.
 func zenityArgs(k dialogKind, d FileDialog) []string {

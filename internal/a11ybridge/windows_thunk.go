@@ -25,8 +25,10 @@ import "syscall"
 // The callbacks the thunks jump to. They are read from assembly, which is
 // why they are plain package-level words rather than anything cleverer.
 var (
+	//lint:ignore U1000 read by windows_amd64.s and windows_arm64.s
 	winFromPointCB uintptr
-	winRangeSetCB  uintptr
+	//lint:ignore U1000 read by windows_amd64.s and windows_arm64.s
+	winRangeSetCB uintptr
 )
 
 // The addresses of the thunks themselves, defined as data in the assembly
@@ -39,7 +41,11 @@ var (
 
 // The thunks. Declared here so that the assembler's definitions have a Go
 // declaration to be checked against; nothing calls them from Go.
+//
+//lint:ignore U1000 defined in windows_amd64.s and windows_arm64.s
 func winFromPointThunk()
+
+//lint:ignore U1000 defined in windows_amd64.s and windows_arm64.s
 func winRangeSetThunk()
 
 // winFromPointEntry is what goes in the fragment root's method table.

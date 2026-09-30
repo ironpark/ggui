@@ -210,6 +210,11 @@ func init() {
 
 var axElementBridges sync.Map // objc.ID -> *Bridge; retired elements resolve to nothing
 
+// axTextual reports whether a node answers the text protocol at all. A
+// button has no characters, and being asked for them would be answered with
+// the emptiness of a field rather than with nothing.
+func axTextual(n a11y.Node) bool { return n.Role == a11y.RoleTextField }
+
 // axSelf returns the bridge, the frame being answered from and the node the
 // element stands for. Every method starts with it, and every one of them
 // answers nothing when it fails: an element outliving its node is normal,

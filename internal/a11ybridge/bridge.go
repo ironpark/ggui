@@ -642,8 +642,3 @@ func axAllows(n a11y.Node, a axAct) bool {
 	}
 	return !n.Disabled || kind == a11y.ActionFocus
 }
-
-// axTextual reports whether a node answers the text protocol at all. A
-// button has no characters, and being asked for them would be answered with
-// the emptiness of a field rather than with nothing.
-func axTextual(n a11y.Node) bool { return n.Role == a11y.RoleTextField }

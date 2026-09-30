@@ -16,22 +16,6 @@
 
 package textinput
 
-func ConvertUTF16CountToByteCount(text string, c int) int {
-	return convertUTF16CountToByteCount(text, c)
-}
-
-func ConvertByteCountToUTF16Count(text string, c int) int {
-	return convertByteCountToUTF16Count(text, c)
-}
-
-func FindLineBounds(text string, selStart, selEnd int) (int, int) {
-	return findLineBounds(text, selStart, selEnd)
-}
-
-func ComputeReplacement(baseline, newText string, caretInBytes int) (string, int, int) {
-	return computeReplacement(baseline, newText, caretInBytes)
-}
-
 type TextInputEvents = textInputEvents
 
 // TextInputState re-exports the internal state record so white-box tests can
@@ -93,197 +77,49 @@ func (s *TextInputEvents) StartSessionCompositing() bool {
 	return sess.IsCompositing()
 }
 
-// DiffSender drives the buffer differ for a session with the given surrounding
-// text, and collects the states it sends.
-type DiffSender struct {
+// Session is a session over events of its own, as a platform backend opens
+// one, for tests of how an ending reaches it.
+type Session struct {
 	events  textInputEvents
-	sender  diffSender
 	session *session
-	ch      <-chan textInputState
 }
 
-// NewDiffSender returns a differ for a session seeded with the surrounding text,
-// as a platform backend does on start.
-func NewDiffSender(textBeforeCaret, textAfterCaret string) *DiffSender {
-	d := &DiffSender{}
-	d.sender.events = &d.events
-	ch, end := d.events.start()
-	d.ch = ch
-	d.session = &session{
-		ch:              ch,
-		end:             end,
-		events:          &d.events,
-		textBeforeCaret: textBeforeCaret,
-		textAfterCaret:  textAfterCaret,
-	}
-	d.sender.reset(textBeforeCaret + textAfterCaret)
-	return d
+// NewSession opens a session.
+func NewSession() *Session {
+	s := &Session{}
+	s.StartNext()
+	return s
 }
 
-// TrySend hands the differ a snapshot of the platform buffer.
-func (d *DiffSender) TrySend(value string, selStartInUTF16, selEndInUTF16 int, caretAtPreeditEnd bool, kind CommitKind) {
-	d.sender.trySend(d.session, value, selStartInUTF16, selEndInUTF16, caretAtPreeditEnd, kind)
+// StartNext opens the next session, as the application does after the
+// previous one ended.
+func (s *Session) StartNext() {
+	ch, end := s.events.start()
+	s.session = &session{ch: ch, end: end, events: &s.events}
 }
 
-// StartNextSession starts a session seeded with the surrounding text the
-// application holds after applying the previous session's commit, as a platform
-// backend does when the application opens the next one. The states queued behind
-// that commit are taken over.
-func (d *DiffSender) StartNextSession(textBeforeCaret, textAfterCaret string) {
-	d.sender.reset(textBeforeCaret + textAfterCaret)
-	ch, end := d.events.start()
-	d.ch = ch
-	d.session = &session{
-		ch:              ch,
-		end:             end,
-		events:          &d.events,
-		textBeforeCaret: textBeforeCaret,
-		textAfterCaret:  textAfterCaret,
-	}
-}
-
-// Update drains the session's states, as a tick does.
-func (d *DiffSender) Update() error {
-	return d.session.Update()
-}
+// Send hands the session a state, as the platform does.
+func (s *Session) Send(state TextInputState) { s.events.send(state) }
 
 // EndByUser ends the events as the platform does for the user's dismissal.
-func (d *DiffSender) EndByUser() {
-	d.events.endByUser()
-}
+func (s *Session) EndByUser() { s.events.endByUser() }
 
 // End ends the events as the platform does for its own teardown.
-func (d *DiffSender) End() {
-	d.events.end()
-}
+func (s *Session) End() { s.events.end() }
 
-// SessionClosedByUser reports whether the session recorded the user's ending.
-func (d *DiffSender) SessionClosedByUser() bool {
-	return d.session.IsClosedByUser()
-}
+// Update drains the session's states, as a tick does.
+func (s *Session) Update() error { return s.session.Update() }
 
-// SessionClosed reports whether the session is closed.
-func (d *DiffSender) SessionClosed() bool {
-	return d.session.IsClosed()
-}
+// Closed reports whether the session is closed.
+func (s *Session) Closed() bool { return s.session.IsClosed() }
+
+// ClosedByUser reports whether the session recorded the user's ending.
+func (s *Session) ClosedByUser() bool { return s.session.IsClosedByUser() }
 
 // Commit returns the commit the session observed, or nil if it observed none.
-func (d *DiffSender) Commit() *Commit {
-	if !d.session.IsCommitted() {
+func (s *Session) Commit() *Commit {
+	if !s.session.IsCommitted() {
 		return nil
 	}
-	return d.session.Commit()
-}
-
-// Composition returns the preedit the session last observed.
-func (d *DiffSender) Composition() *Composition {
-	c := d.session.Composition()
-	return &c
-}
-
-// Drain returns the states sent to the session since the last call.
-func (d *DiffSender) Drain() []TextInputState {
-	var states []TextInputState
-	for {
-		select {
-		case state, ok := <-d.ch:
-			if !ok {
-				return states
-			}
-			states = append(states, state)
-		default:
-			return states
-		}
-	}
-}
-
-// PendingStateCount reports how many states are held for the next session.
-func (d *DiffSender) PendingStateCount() int {
-	return d.events.QueuedStateCount()
-}
-
-// PlatformStateHandler drives handlePlatformState with its own events and
-// sender, mirroring a platform backend whose channel is open.
-type PlatformStateHandler struct {
-	events        textInputEvents
-	sender        diffSender
-	legacyCleared bool
-	ch            <-chan textInputState
-}
-
-// NewPlatformStateHandler returns a handler whose diff baseline is value, as a
-// platform backend after seeding.
-func NewPlatformStateHandler(value string) *PlatformStateHandler {
-	h := &PlatformStateHandler{}
-	h.sender.events = &h.events
-	ch, _ := h.events.start()
-	h.ch = ch
-	h.sender.reset(value)
-	return h
-}
-
-// Handle reports a platform state with the caret pinned to the preedit's end,
-// and returns whether the platform buffer must be cleared.
-func (h *PlatformStateHandler) Handle(value string, selStartInUTF16, selEndInUTF16 int, kind CommitKind, fieldFocused bool) bool {
-	return handlePlatformState(&h.events, &h.sender, &h.legacyCleared, value, selStartInUTF16, selEndInUTF16, true, kind, fieldFocused)
-}
-
-// RegisterSession installs an active session with the given surrounding text.
-func (h *PlatformStateHandler) RegisterSession(textBeforeCaret, textAfterCaret string) {
-	h.events.setActiveSession(&session{
-		ch:              h.ch,
-		end:             h.events.end,
-		events:          &h.events,
-		textBeforeCaret: textBeforeCaret,
-		textAfterCaret:  textAfterCaret,
-	})
-}
-
-// Drain returns the states delivered since the last call.
-func (h *PlatformStateHandler) Drain() []TextInputState {
-	var states []TextInputState
-	for {
-		select {
-		case state, ok := <-h.ch:
-			if !ok {
-				return states
-			}
-			states = append(states, state)
-		default:
-			return states
-		}
-	}
-}
-
-// IsOpen reports whether the channel is open.
-func (h *PlatformStateHandler) IsOpen() bool {
-	return h.events.isOpen()
-}
-
-// LegacyCleared reports whether the legacy path cleared the buffer.
-func (h *PlatformStateHandler) LegacyCleared() bool {
-	return h.legacyCleared
-}
-
-// SeedGate re-exports the internal reseeding arbitration.
-type SeedGate = seedGate
-
-// Start re-exports seedGate.start.
-func (g *SeedGate) Start(value string) int {
-	return g.start(value)
-}
-
-// Abandon re-exports seedGate.abandon.
-func (g *SeedGate) Abandon() {
-	g.abandon()
-}
-
-// Admit re-exports seedGate.admit.
-func (g *SeedGate) Admit(generation int) (resetBaseline bool, ok bool) {
-	return g.admit(generation)
-}
-
-// PendingValue returns the pending seed.
-func (g *SeedGate) PendingValue() string {
-	return g.pendingValue
+	return s.session.Commit()
 }
