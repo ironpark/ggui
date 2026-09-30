@@ -118,6 +118,7 @@ func TestCycleSaysHowToNameTheEffects(t *testing.T) {
 }
 
 func TestProbeLayoutFollowsSetupAndEnvironmentChanges(t *testing.T) {
+	t.Parallel()
 	old := Untrack(UseEnv)
 	defer SetEnv(old)
 	dark := State(true)

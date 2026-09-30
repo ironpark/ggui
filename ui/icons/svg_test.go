@@ -8,6 +8,7 @@ import (
 )
 
 func TestSVGCurrentColorAndViewBox(t *testing.T) {
+	t.Parallel()
 	a, err := Parse([]byte(`<svg viewBox="10 20 20 10" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="20" width="20" height="10" fill="currentColor"/></svg>`))
 	if err != nil {
 		t.Fatal(err)
@@ -26,6 +27,7 @@ func TestSVGCurrentColorAndViewBox(t *testing.T) {
 	}
 }
 func TestSetResolutionPrecedenceAndFallback(t *testing.T) {
+	t.Parallel()
 	a, b, c := &SVG{}, &SVG{}, &SVG{}
 	theme := uitheme.Default().Set(SetKey, Set(Map{Check: b, Close: b}))
 	env := theme.Apply(ggui.Env{}).With(SetKey, Set(Map{Check: a}))

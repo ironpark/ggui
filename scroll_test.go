@@ -150,6 +150,7 @@ func TestFillingWidgetsFallBackToContentWhenUnbounded(t *testing.T) {
 }
 
 func TestScrollBarFollowsEnvironmentAndPreservesOverrides(t *testing.T) {
+	t.Parallel()
 	s := Scroll(Box().Size(100, 300))
 	for _, style := range []ScrollStyle{{Color: color.Black}, {Color: color.White}} {
 		s.Layout(Tight(Sz(100, 100)), Env{}.With(ScrollStyleKey, style))

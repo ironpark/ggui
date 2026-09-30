@@ -13,6 +13,7 @@ import (
 )
 
 func TestPanelOutlinesAreOptIn(t *testing.T) {
+	t.Parallel()
 	var in View
 	in.Apply(ggui.InspectorOptions{})
 	if in.outlines {
@@ -29,6 +30,7 @@ func TestPanelOutlinesAreOptIn(t *testing.T) {
 }
 
 func TestPanelVisibleCacheTracksFoldingAndFiltering(t *testing.T) {
+	t.Parallel()
 	tr := trace(entry("Column", 0, 0, 0, 100, 100), entry("Text", 1, 0, 0, 50, 20), entry("Box", 1, 0, 20, 50, 20))
 	var in View
 	first := in.visible(tr)
@@ -58,6 +60,7 @@ func TestPanelVisibleCacheTracksFoldingAndFiltering(t *testing.T) {
 }
 
 func TestPanelRowRange(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		scroll, height float64
 		first, end     int
@@ -83,6 +86,7 @@ func (d *described) Describe() ggui.Node {
 }
 
 func TestPanelSnapshotTracksLiveValues(t *testing.T) {
+	t.Parallel()
 	box := ggui.Box(ggui.Text("hello")).Pad(4)
 	h := newHarness(t, box, ggui.Sz(800, 600))
 	in := View{}
@@ -140,6 +144,7 @@ func TestPanelSnapshotTracksLiveValues(t *testing.T) {
 }
 
 func TestPanelSnapshotTracksLiveSemantics(t *testing.T) {
+	t.Parallel()
 	d := &described{}
 	h := newHarness(t, d, ggui.Sz(800, 600))
 	in := View{tab: inspectTabSemantics}
@@ -157,6 +162,7 @@ func TestPanelSnapshotTracksLiveSemantics(t *testing.T) {
 }
 
 func TestPanelWidePanelShowsLayoutColumn(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, ggui.Box(ggui.Text("hello")).Pad(4), ggui.Sz(1400, 900))
 	in := View{}
 	in.paint(h.dst, h.fr)
@@ -191,6 +197,7 @@ func TestPanelWidePanelShowsLayoutColumn(t *testing.T) {
 }
 
 func TestPanelPrunesStaleFolds(t *testing.T) {
+	t.Parallel()
 	tr := trace(entry("Column", 0, 0, 0, 100, 60), entry("Text", 1, 0, 0, 100, 10))
 	in := View{collapsed: map[inspectKey]bool{foldKey(keyOf(&tr.Nodes[0])): true}}
 	for i := range inspectFoldLimit + 1 {
@@ -203,6 +210,7 @@ func TestPanelPrunesStaleFolds(t *testing.T) {
 }
 
 func TestPanelResetDropsPanelCache(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, ggui.Box(ggui.Text("hello")), ggui.Sz(800, 600))
 	h.rendered(t, 800, 600)
 	in := New()

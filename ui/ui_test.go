@@ -48,6 +48,7 @@ func TestButtonTapsAndDisables(t *testing.T) {
 }
 
 func TestButtonSizesFromThemePadding(t *testing.T) {
+	t.Parallel()
 	got := ui.Button("go", nil).Layout(ggui.Loose(ggui.Sz(300, 300)), ggui.Env{})
 	text := ggui.Text("go").Layout(ggui.Loose(ggui.Sz(300, 300)), ggui.Env{})
 	th := uitheme.Default()
@@ -61,6 +62,7 @@ func TestButtonSizesFromThemePadding(t *testing.T) {
 }
 
 func TestCheckboxTogglesSignal(t *testing.T) {
+	t.Parallel()
 	on := ggui.State(false)
 	changed := []bool{}
 	c := ui.Checkbox(on, "label").OnChange(func(b bool) { changed = append(changed, b) })
@@ -378,6 +380,7 @@ func TestTabsSwitchByClickAndKeys(t *testing.T) {
 }
 
 func TestCollapsibleTogglesAndHidesContent(t *testing.T) {
+	t.Parallel()
 	open := ggui.State(false)
 	var body ggui.Rect
 	c := ui.Collapsible(open, "Details", probe(80, 40, &body))

@@ -3,6 +3,7 @@ package ggui
 import "testing"
 
 func TestEachProbeHasItsOwnClipboard(t *testing.T) {
+	t.Parallel()
 	useFakeIME(t)
 	a := NewProbe(TextInput(State("secret")), Sz(200, 20))
 	defer a.Close()

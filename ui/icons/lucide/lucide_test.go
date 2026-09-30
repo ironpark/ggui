@@ -9,6 +9,7 @@ import (
 )
 
 func TestBundledSVGsAndRoles(t *testing.T) {
+	t.Parallel()
 	names, err := fs.Glob(files, "svg/*.svg")
 	if err != nil {
 		t.Fatal(err)

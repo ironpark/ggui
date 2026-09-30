@@ -92,6 +92,7 @@ func TestChartKeyboardPointerSelection(t *testing.T) {
 	}
 }
 func TestChartMotionAndReducedMotion(t *testing.T) {
+	t.Parallel()
 	c := AreaChart(chartTestData(), chartTestConfig)
 	now := time.Unix(100, 0)
 	restore := ggui.SetClock(func() time.Time { return now })
@@ -220,6 +221,7 @@ func BenchmarkChartCachedPaint100K(b *testing.B) {
 }
 
 func TestChartTooltipFormatsTotalAndLegendWrap(t *testing.T) {
+	t.Parallel()
 	c := BarChart(chartTestData(), chartTestConfig).Tooltip(ChartTooltipOptions{ShowTotal: true, Label: "Total visits in the selected month", FormatValue: func(v float64, _ ChartSeries, _ ChartDatum) string { return fmt.Sprintf("%.0f visitors", v) }})
 	c.Layout(ggui.Loose(ggui.Sz(400, 240)), uitheme.Default().Apply(ggui.Env{}))
 	rows, size := c.tooltipRows(0)
@@ -317,6 +319,7 @@ func TestChartStackSamplingPreservesBaselineSpikes(t *testing.T) {
 	}
 }
 func TestChartReferenceAnimationTimings(t *testing.T) {
+	t.Parallel()
 	bar := BarChart(chartTestData(), chartTestConfig)
 	pie := PieChart(chartTestData(), chartTestConfig[:1])
 	if bar.duration != 400*time.Millisecond || pie.delay != 400*time.Millisecond {

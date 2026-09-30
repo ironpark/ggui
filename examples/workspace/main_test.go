@@ -34,6 +34,7 @@ func workspaceProbe(t *testing.T) (*model, *ggui.Probe) {
 }
 
 func TestWorkspaceTaskFlow(t *testing.T) {
+	t.Parallel()
 	m, p := workspaceProbe(t)
 	p.Tap("New task")
 	if !ggui.Untrack(m.Editing.Get) {
@@ -81,6 +82,7 @@ func TestWorkspaceTaskFlow(t *testing.T) {
 }
 
 func TestWorkspaceBindingsAndNavigation(t *testing.T) {
+	t.Parallel()
 	m, p := workspaceProbe(t)
 	p.Tap("Done")
 	if got := ggui.Untrack(m.Visible.Get); len(got) != 1 || got[0].Status != "Done" {
@@ -124,6 +126,7 @@ func TestWorkspaceBindingsAndNavigation(t *testing.T) {
 }
 
 func TestWorkspaceSnapshotsAndSummary(t *testing.T) {
+	t.Parallel()
 	m, _ := workspaceProbe(t)
 	before := ggui.Untrack(m.Tasks.Get)
 	m.Selected.Set(2)
@@ -169,6 +172,7 @@ func paste(p *ggui.Probe, text string) {
 // Check geometry as well as existence: a zero-width input can still have an
 // accessibility name, and should not pass a responsive-layout regression test.
 func TestWorkspaceResponsiveLayout(t *testing.T) {
+	t.Parallel()
 	m, p := workspaceProbe(t)
 	for _, width := range []float64{1040, 760, 480} {
 		p.Resize(ggui.Sz(width, 800))

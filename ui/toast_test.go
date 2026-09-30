@@ -9,6 +9,7 @@ import (
 )
 
 func TestToastExitIsAnimatedAndInert(t *testing.T) {
+	t.Parallel()
 	host := NewToaster()
 	p := ggui.NewProbe(host, ggui.Sz(500, 400))
 	defer p.Close()

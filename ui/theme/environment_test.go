@@ -17,6 +17,7 @@ func preserveEnv(t *testing.T) {
 }
 
 func TestBindUpdatesCachedLayoutAndTrackedReaders(t *testing.T) {
+	t.Parallel()
 	preserveEnv(t)
 	dark := ggui.State(true)
 	var seen theme.Theme
@@ -57,6 +58,7 @@ func TestBindUpdatesCachedLayoutAndTrackedReaders(t *testing.T) {
 }
 
 func TestLocalThemeMapsCoreStylesAndPreservesPreferences(t *testing.T) {
+	t.Parallel()
 	preserveEnv(t)
 	theme.Set(theme.Default())
 	local := theme.Dark()
@@ -90,6 +92,7 @@ func TestLocalThemeMapsCoreStylesAndPreservesPreferences(t *testing.T) {
 }
 
 func TestSetResetsTextAndPreservesOtherRootValues(t *testing.T) {
+	t.Parallel()
 	preserveEnv(t)
 	custom := ggui.NewEnvKey[int]("custom")
 	ggui.SetEnv(ggui.Untrack(ggui.UseEnv).With(custom, 42).With(ggui.TextScaleKey, 1.5))
@@ -108,6 +111,7 @@ func TestSetResetsTextAndPreservesOtherRootValues(t *testing.T) {
 }
 
 func TestLocalThemeKeepsCacheAcrossFrames(t *testing.T) {
+	t.Parallel()
 	layouts := 0
 	child := ggui.Cached(ggui.FromFuncs(func(c ggui.Constraints, _ ggui.Env) ggui.Size {
 		layouts++

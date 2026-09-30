@@ -229,6 +229,7 @@ func TestMenubarPopupHasBoundedWidth(t *testing.T) {
 	}
 }
 func TestCommandHoverAndStableHeight(t *testing.T) {
+	t.Parallel()
 	q := ggui.State("")
 	picked := ""
 	c := ui.Command(q, ui.CommandItem("One", func() { picked = "one" }), ui.CommandItem("Two", func() { picked = "two" })).Height(160).StableHeight().Borderless()

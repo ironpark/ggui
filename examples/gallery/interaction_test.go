@@ -305,6 +305,7 @@ func TestGallerySupplementedComponents(t *testing.T) {
 }
 
 func TestGalleryChatComponentFlows(t *testing.T) {
+	t.Parallel()
 	p := galleryProbe(ggui.Sz(1180, 900))
 	defer p.Close()
 	searchGallery(p, "Attachment")
@@ -366,6 +367,7 @@ func TestGalleryChatComponentFlows(t *testing.T) {
 }
 
 func TestGalleryEmojiEditingAndThemePresets(t *testing.T) {
+	t.Parallel()
 	p := galleryProbe(ggui.Sz(1180, 900))
 	defer p.Close()
 	searchGallery(p, "Emoji")

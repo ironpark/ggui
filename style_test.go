@@ -108,6 +108,7 @@ func TestEnvIsAValue(t *testing.T) {
 }
 
 func TestRootEnvStartsFromConfiguredText(t *testing.T) {
+	t.Parallel()
 	old := Untrack(UseEnv)
 	defer SetEnv(old)
 	SetEnv(Env{}.WithText(TextStyle{Size: 33, Color: red}))
@@ -119,6 +120,7 @@ func TestRootEnvStartsFromConfiguredText(t *testing.T) {
 }
 
 func TestSetEnvRebuildsReaders(t *testing.T) {
+	t.Parallel()
 	old := Untrack(UseEnv)
 	defer SetEnv(old)
 	builds := 0

@@ -49,6 +49,7 @@ func (w *iconColorProbe) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 }
 func (*iconColorProbe) Paint(*ggui.Canvas, ggui.Rect) {}
 func TestIconButtonInheritsForeground(t *testing.T) {
+	t.Parallel()
 	content := &iconColorProbe{}
 	b := ui.ButtonOf(content, nil)
 	env := ggui.Env{}

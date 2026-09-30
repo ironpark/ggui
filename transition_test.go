@@ -6,6 +6,7 @@ import (
 )
 
 func TestTransitionSlidesInOnceAndNotOnRebuild(t *testing.T) {
+	t.Parallel()
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	now := base
 	defer SetClock(func() time.Time { return now })()

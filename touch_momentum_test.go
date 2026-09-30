@@ -7,6 +7,7 @@ import (
 )
 
 func TestTouchFlingSpeedHoldAndInterruption(t *testing.T) {
+	t.Parallel()
 	run := func(speed float64, hold bool, interrupt bool) float64 {
 		var in inputState
 		now := time.Unix(100, 0)

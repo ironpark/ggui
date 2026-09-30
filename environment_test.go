@@ -31,6 +31,7 @@ func TestEnvironmentReplacementsPreserveParentsWithoutAccumulatingBindings(t *te
 }
 
 func TestCoreStylesWorkWithoutTheme(t *testing.T) {
+	t.Parallel()
 	env := Env{}.With(EditorStyleKey, EditorStyle{Muted: color.White, Selection: color.Black}).
 		With(ScrollStyleKey, ScrollStyle{Color: color.White, HoverColor: color.Black}).
 		With(PopupDurationKey, time.Duration(0)).With(SpacingKey, 0.0)

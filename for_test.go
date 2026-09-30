@@ -211,6 +211,7 @@ func TestForWithoutViewportLaysOutEverything(t *testing.T) {
 }
 
 func TestForRowsLeaveThroughTheirTransition(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	defer SetClock(func() time.Time { return now })()
 	items := State([]int{1, 2, 3})
