@@ -6,363 +6,15 @@ import (
 	"math"
 	"strings"
 	"time"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/ironpark/ggfx/text/v2"
 	"github.com/ironpark/ggui/a11y"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/internal/textedit"
 	"github.com/ironpark/ggui/internal/textinput"
 )
-
-// textEditor is the model behind TextInput: a string and a selection. The
-// caret sits at caret; anchor is where the selection started, so anchor ==
-// caret means no selection. Offsets are bytes on rune boundaries.
-type textEditor struct {
-	text   string
-	anchor int
-	caret  int
-
-	// Undo history: snapshots taken before each edit, and the ones undone.
-	// Insertions typed in quick succession share one snapshot.
-	undo, redo []editSnapshot
-	lastEdit   time.Time
-	lastInsert bool
-}
-
-// editSnapshot is the editor's state before an edit.
-type editSnapshot struct {
-	text          string
-	anchor, caret int
-}
-
-// maxUndo bounds the history.
-const maxUndo = 200
-
-// undoCoalesce is how close two typed insertions must be to undo as one.
-const undoCoalesce = 700 * time.Millisecond
-
-// record takes a snapshot before an edit that replaces the selection with
-// s. A plain insertion right after another joins the previous step, so a
-// word typed undoes at once, while deletions and pastes stand alone.
-func (e *textEditor) record(s string) {
-	now := clock()
-	insert := s != "" && !e.hasSelection() && utf8.RuneCountInString(s) == 1
-	if insert && e.lastInsert && now.Sub(e.lastEdit) < undoCoalesce && len(e.undo) > 0 {
-		e.lastEdit = now
-		return
-	}
-	e.undo = append(e.undo, editSnapshot{e.text, e.anchor, e.caret})
-	if len(e.undo) > maxUndo {
-		e.undo = e.undo[1:]
-	}
-	e.redo = e.redo[:0]
-	e.lastEdit, e.lastInsert = now, insert
-}
-
-// Undo restores the state before the last edit and reports whether there
-// was one.
-func (e *textEditor) Undo() bool {
-	if len(e.undo) == 0 {
-		return false
-	}
-	e.redo = append(e.redo, editSnapshot{e.text, e.anchor, e.caret})
-	e.restore(e.undo[len(e.undo)-1])
-	e.undo = e.undo[:len(e.undo)-1]
-	return true
-}
-
-// Redo reapplies the last undone edit and reports whether there was one.
-func (e *textEditor) Redo() bool {
-	if len(e.redo) == 0 {
-		return false
-	}
-	e.undo = append(e.undo, editSnapshot{e.text, e.anchor, e.caret})
-	e.restore(e.redo[len(e.redo)-1])
-	e.redo = e.redo[:len(e.redo)-1]
-	return true
-}
-
-func (e *textEditor) restore(s editSnapshot) {
-	e.text, e.anchor, e.caret = s.text, s.anchor, s.caret
-	e.lastInsert = false
-}
-
-func (e *textEditor) setText(s string) {
-	e.text = s
-	e.anchor, e.caret = e.snap(e.anchor), e.snap(e.caret)
-}
-
-// snap clamps i into the text and back to the start of the rune it is in.
-func (e *textEditor) snap(i int) int {
-	i = clamp(i, 0, len(e.text))
-	for i > 0 && i < len(e.text) && !utf8.RuneStart(e.text[i]) {
-		i--
-	}
-	return i
-}
-
-// selection returns the selected byte range, lo <= hi.
-func (e *textEditor) selection() (lo, hi int) {
-	return min(e.anchor, e.caret), max(e.anchor, e.caret)
-}
-
-func (e *textEditor) hasSelection() bool { return e.anchor != e.caret }
-
-func (e *textEditor) selected() string {
-	lo, hi := e.selection()
-	return e.text[lo:hi]
-}
-
-// replace puts s in place of the selection and leaves the caret after it.
-func (e *textEditor) replace(s string) {
-	e.record(s)
-	lo, hi := e.selection()
-	e.text = e.text[:lo] + s + e.text[hi:]
-	e.caret = lo + len(s)
-	e.anchor = e.caret
-}
-
-// moveTo puts the caret at pos, extending the selection or collapsing it.
-func (e *textEditor) moveTo(pos int, extend bool) {
-	e.caret = e.snap(pos)
-	if !extend {
-		e.anchor = e.caret
-	}
-}
-
-// moveBy moves the caret one rune or one word left (dir < 0) or right.
-// Without extend, a selection collapses to its edge in that direction first,
-// as every text field does.
-func (e *textEditor) moveBy(dir int, word, extend bool) {
-	if !extend && e.hasSelection() && !word {
-		lo, hi := e.selection()
-		e.moveTo(pick(dir < 0, lo, hi), false)
-		return
-	}
-	pos := e.caret
-	switch {
-	case dir < 0 && word:
-		pos = prevWord(e.text, pos)
-	case dir < 0:
-		pos = prevGrapheme(e.text, pos)
-	case word:
-		pos = nextWord(e.text, pos)
-	default:
-		pos = nextGrapheme(e.text, pos)
-	}
-	e.moveTo(pos, extend)
-}
-
-// backspace deletes the selection, or the grapheme or word before the caret.
-func (e *textEditor) backspace(word bool) {
-	if !e.hasSelection() {
-		e.anchor = pick(word, prevWord(e.text, e.caret), prevGrapheme(e.text, e.caret))
-	}
-	e.replace("")
-}
-
-// deleteForward deletes the selection, or the grapheme or word after the caret.
-func (e *textEditor) deleteForward(word bool) {
-	if !e.hasSelection() {
-		e.anchor = pick(word, nextWord(e.text, e.caret), nextGrapheme(e.text, e.caret))
-	}
-	e.replace("")
-}
-
-// Grapheme clusters, approximately: the caret and Backspace step over a
-// base rune together with what attaches to it. Without a segmentation
-// table this covers what shows up in practice: combining marks, variation
-// selectors, emoji modifiers and tags, zero-width-joiner sequences, CRLF,
-// and regional indicator pairs. Conjoining Hangul jamo are handled too,
-// though text from an IME arrives precomposed.
-
-// extends reports whether r attaches to the rune before it.
-func extends(r rune) bool {
-	switch {
-	case unicode.Is(unicode.M, r): // combining marks
-		return true
-	case r >= 0xFE00 && r <= 0xFE0F, r >= 0xE0100 && r <= 0xE01EF: // variation selectors
-		return true
-	case r >= 0x1F3FB && r <= 0x1F3FF: // emoji skin tones
-		return true
-	case r >= 0xE0020 && r <= 0xE007F: // emoji tags
-		return true
-	case r == 0x200D, r == 0x200C: // zero-width joiner and non-joiner
-		return true
-	case r >= 0x1160 && r <= 0x11FF: // Hangul jamo vowels and trailing consonants
-		return true
-	}
-	return false
-}
-
-func isRegionalIndicator(r rune) bool { return r >= 0x1F1E6 && r <= 0x1F1FF }
-
-// nextGrapheme returns the byte offset after the cluster starting at i.
-func nextGrapheme(s string, i int) int {
-	if i >= len(s) {
-		return len(s)
-	}
-	r, n := utf8.DecodeRuneInString(s[i:])
-	j := i + n
-	if r == '\r' && j < len(s) && s[j] == '\n' {
-		return j + 1
-	}
-	if isRegionalIndicator(r) {
-		if r2, n2 := utf8.DecodeRuneInString(s[j:]); isRegionalIndicator(r2) {
-			return j + n2
-		}
-		return j
-	}
-	for j < len(s) {
-		r2, n2 := utf8.DecodeRuneInString(s[j:])
-		if !extends(r2) {
-			break
-		}
-		j += n2
-		if r2 == 0x200D && j < len(s) {
-			// What follows a joiner belongs to the cluster.
-			_, n3 := utf8.DecodeRuneInString(s[j:])
-			j += n3
-		}
-	}
-	return j
-}
-
-// prevGrapheme returns the byte offset of the cluster ending at i.
-func prevGrapheme(s string, i int) int {
-	if i <= 0 {
-		return 0
-	}
-	if s[i-1] == '\n' {
-		if i >= 2 && s[i-2] == '\r' {
-			return i - 2
-		}
-		return i - 1
-	}
-	// Walk clusters from the start of the line; text fields are short.
-	start := i
-	for start > 0 && s[start-1] != '\n' {
-		start--
-	}
-	for j := start; j < i; {
-		k := nextGrapheme(s, j)
-		if k >= i {
-			return j
-		}
-		j = k
-	}
-	return prevRune(s, i)
-}
-
-func (e *textEditor) selectAll() { e.anchor, e.caret = 0, len(e.text) }
-
-// selectWord selects the word around pos, or the run of spaces it is in.
-func (e *textEditor) selectWord(pos int) {
-	pos = e.snap(pos)
-	if len(e.text) == 0 {
-		return
-	}
-	if pos == len(e.text) {
-		pos = prevRune(e.text, pos)
-	}
-	r, _ := utf8.DecodeRuneInString(e.text[pos:])
-	class := runeClass(r)
-	lo, hi := pos, pos
-	for lo > 0 {
-		p := prevRune(e.text, lo)
-		if q, _ := utf8.DecodeRuneInString(e.text[p:]); runeClass(q) != class {
-			break
-		}
-		lo = p
-	}
-	for hi < len(e.text) {
-		if q, _ := utf8.DecodeRuneInString(e.text[hi:]); runeClass(q) != class {
-			break
-		}
-		hi = nextRune(e.text, hi)
-	}
-	e.anchor, e.caret = lo, hi
-}
-
-func prevRune(s string, i int) int {
-	if i <= 0 {
-		return 0
-	}
-	_, n := utf8.DecodeLastRuneInString(s[:i])
-	return i - n
-}
-
-func nextRune(s string, i int) int {
-	if i >= len(s) {
-		return len(s)
-	}
-	_, n := utf8.DecodeRuneInString(s[i:])
-	return i + n
-}
-
-// runeClass groups runes for word movement: spaces, word characters and
-// punctuation each form their own runs.
-func runeClass(r rune) int {
-	switch {
-	case unicode.IsSpace(r):
-		return 0
-	case unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_':
-		return 1
-	}
-	return 2
-}
-
-// prevWord returns the start of the word before i: spaces are skipped, then
-// the run of same-class runes before them.
-func prevWord(s string, i int) int {
-	for i > 0 {
-		r, _ := utf8.DecodeLastRuneInString(s[:i])
-		if !unicode.IsSpace(r) {
-			break
-		}
-		i = prevRune(s, i)
-	}
-	if i == 0 {
-		return 0
-	}
-	r, _ := utf8.DecodeLastRuneInString(s[:i])
-	class := runeClass(r)
-	for i > 0 {
-		r, _ := utf8.DecodeLastRuneInString(s[:i])
-		if runeClass(r) != class {
-			break
-		}
-		i = prevRune(s, i)
-	}
-	return i
-}
-
-// nextWord returns the end of the word after i: the run of same-class runes
-// at i, then the spaces after it.
-func nextWord(s string, i int) int {
-	if i >= len(s) {
-		return len(s)
-	}
-	r, _ := utf8.DecodeRuneInString(s[i:])
-	class := runeClass(r)
-	for i < len(s) {
-		r, _ := utf8.DecodeRuneInString(s[i:])
-		if runeClass(r) != class {
-			break
-		}
-		i = nextRune(s, i)
-	}
-	for i < len(s) {
-		r, _ := utf8.DecodeRuneInString(s[i:])
-		if !unicode.IsSpace(r) {
-			break
-		}
-		i = nextRune(s, i)
-	}
-	return i
-}
 
 // TextInputWidget is a text editor bound to a StateValue[string]: typing writes
 // the signal, and writing the signal updates the text. Build one with
@@ -406,12 +58,12 @@ type TextInputWidget struct {
 	escapeUsed        bool
 	inheritedDisabled bool
 
-	ed textEditor
+	ed textedit.Editor
 
 	ime         ime
 	composition string
 	compCaret   int // caret inside composition, in bytes
-	imeStart    int // the byte range of ed.text the IME was told about
+	imeStart    int // the byte range of ed.Text the IME was told about
 	imeEnd      int
 	imeErr      error
 
@@ -437,18 +89,19 @@ func TextInput(value Binding[string]) *TextInputWidget {
 	t.Role = RoleTextField
 	t.AutoKey()
 	t.ime = newIME(t)
-	t.ed.setText(Untrack(value.Get))
-	t.ed.moveTo(len(t.ed.text), false)
+	t.ed.Now = func() time.Time { return clock() } // SetClock reaches typing coalesced into one undo
+	t.ed.SetText(Untrack(value.Get))
+	t.ed.MoveTo(len(t.ed.Text), false)
 	// Follow the binding rather than polling it in Layout: a write from
 	// outside reaches the editor even when the layout above it is cached.
 	// The effect's first run is the value it was just built with, and the
 	// editor's own commit writes what ed already holds, so both are no-ops.
 	reactive.Observe(func() {
 		v := value.Get()
-		if v == t.ed.text {
+		if v == t.ed.Text {
 			return
 		}
-		t.ed.setText(v)
+		t.ed.SetText(v)
 		t.cache.invalidate()
 	})
 	return t
@@ -512,11 +165,11 @@ func (t *TextInputWidget) Semantics() (Role, string) {
 // two: the first description of a handler in a frame is the one kept.
 func (t *TextInputWidget) Describe() Node {
 	role, name := t.Semantics()
-	lo, hi := t.ed.selection()
+	lo, hi := t.ed.Selection()
 	n := Node{
 		Role:     role,
 		Name:     name,
-		Value:    t.ed.text,
+		Value:    t.ed.Text,
 		Disabled: t.IsDisabled(),
 		Actions:  ActionFocus | ActionSetValue | ActionSetSelection,
 		SelStart: lo,
@@ -544,7 +197,7 @@ func (t *TextInputWidget) Describe() Node {
 // field that moved or scrolled this frame therefore reports character
 // positions one frame behind, which is a frame that has not been shown yet.
 func (t *TextInputWidget) runs() []TextRun {
-	spans := t.spans(t.ed.text)
+	spans := t.spans(t.ed.Text)
 	out := make([]TextRun, 0, len(spans))
 	h := t.height()
 	for i, sp := range spans {
@@ -554,10 +207,10 @@ func (t *TextInputWidget) runs() []TextRun {
 		} else {
 			x -= t.scroll
 		}
-		line := t.ed.text[sp.start:sp.end]
+		line := t.ed.Text[sp.start:sp.end]
 		r := TextRun{Start: sp.start, End: sp.end, Rect: Rct(Pt(x, y), Sz(t.advance(line), h))}
-		for b := sp.start; ; b = nextRune(t.ed.text, b) {
-			r.Stops = append(r.Stops, TextStop{Byte: b, X: t.advance(t.ed.text[sp.start:b])})
+		for b := sp.start; ; b = textedit.NextRune(t.ed.Text, b) {
+			r.Stops = append(r.Stops, TextStop{Byte: b, X: t.advance(t.ed.Text[sp.start:b])})
 			if b >= sp.end {
 				break
 			}
@@ -576,12 +229,12 @@ func (t *TextInputWidget) Act(a Action) bool {
 	}
 	switch a.Kind {
 	case ActionSetValue:
-		t.ed.setText(a.Text)
+		t.ed.SetText(a.Text)
 		t.commit()
 		return true
 	case ActionSetSelection:
-		t.ed.moveTo(a.SelStart, false)
-		t.ed.moveTo(a.SelEnd, true)
+		t.ed.MoveTo(a.SelStart, false)
+		t.ed.MoveTo(a.SelEnd, true)
 		return true
 	}
 	return false
@@ -640,7 +293,7 @@ func (t *TextInputWidget) OnCommit(fn func(string)) *TextInputWidget { t.onCommi
 
 func (t *TextInputWidget) committed() {
 	if t.onCommit != nil {
-		t.onCommit(t.ed.text)
+		t.onCommit(t.ed.Text)
 	}
 }
 
@@ -678,11 +331,11 @@ func (t *TextInputWidget) advance(s string) float64 { return lineWidth(t.display
 // rendered is the text with the composition inserted where the caret is,
 // and the caret's offset into it.
 func (t *TextInputWidget) rendered() (s string, caret int) {
-	lo, hi := t.ed.selection()
+	lo, hi := t.ed.Selection()
 	if t.composition == "" {
-		return t.ed.text, t.ed.caret
+		return t.ed.Text, t.ed.Caret
 	}
-	return t.ed.text[:lo] + t.composition + t.ed.text[hi:], lo + t.compCaret
+	return t.ed.Text[:lo] + t.composition + t.ed.Text[hi:], lo + t.compCaret
 }
 
 func (t *TextInputWidget) height() float64 {
@@ -738,7 +391,7 @@ func (t *TextInputWidget) Layout(c Constraints, env Env) Size {
 		return c.Constrain(Sz(w, t.height()))
 	}
 	t.width = max(c.MinW, w)
-	n := max(len(t.spans(t.ed.text)), t.minLines)
+	n := max(len(t.spans(t.ed.Text)), t.minLines)
 	return c.Constrain(Sz(t.width, t.linesHeight(n)))
 }
 
@@ -781,9 +434,9 @@ func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
 	}
 	clip := dst.Clip(r)
 
-	if t.Focused() && t.composition == "" && t.ed.hasSelection() {
-		lo, hi := t.ed.selection()
-		a, b := t.advance(t.ed.text[:lo]), t.advance(t.ed.text[:hi])
+	if t.Focused() && t.composition == "" && t.ed.HasSelection() {
+		lo, hi := t.ed.Selection()
+		a, b := t.advance(t.ed.Text[:lo]), t.advance(t.ed.Text[:hi])
 		clip.FillRect(Rct(Pt(x0+a, r.Origin.Y), Sz(b-a, h)), t.selection)
 	}
 
@@ -798,8 +451,8 @@ func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
 	}
 
 	if t.composition != "" {
-		lo, _ := t.ed.selection()
-		a := t.advance(t.ed.text[:lo])
+		lo, _ := t.ed.Selection()
+		a := t.advance(t.ed.Text[:lo])
 		b := a + t.advance(t.composition)
 		y := r.Origin.Y + h - 1
 		clip.FillRect(Rct(Pt(x0+a, y), Sz(b-a, 1)), t.resolved.Color)
@@ -857,8 +510,8 @@ func (t *TextInputWidget) paintLines(dst *Canvas, r Rect) {
 		}
 	}
 
-	if t.Focused() && t.composition == "" && t.ed.hasSelection() {
-		lo, hi := t.ed.selection()
+	if t.Focused() && t.composition == "" && t.ed.HasSelection() {
+		lo, hi := t.ed.Selection()
 		eachLine(lo, hi, func(i int, a, b float64) {
 			clip.FillRect(Rct(Pt(x0+a, lineY(i)), Sz(b-a, h)), t.selection)
 		})
@@ -882,7 +535,7 @@ func (t *TextInputWidget) paintLines(dst *Canvas, r Rect) {
 	}
 
 	if t.composition != "" {
-		lo, _ := t.ed.selection()
+		lo, _ := t.ed.Selection()
 		eachLine(lo, lo+len(t.composition), func(i int, a, b float64) {
 			clip.FillRect(Rct(Pt(x0+a, lineY(i)+h-1), Sz(b-a, 1)), t.resolved.Color)
 		})
@@ -898,7 +551,7 @@ func (t *TextInputWidget) paintLines(dst *Canvas, r Rect) {
 
 // indexAt returns the byte offset in the text nearest to a logical point.
 func (t *TextInputWidget) indexAt(p Point) int {
-	spans := t.spans(t.ed.text)
+	spans := t.spans(t.ed.Text)
 	li := 0
 	if t.multiline {
 		li = clamp(int((p.Y-t.rect.Origin.Y+t.scroll)/t.spacing()), 0, len(spans)-1)
@@ -915,8 +568,8 @@ func (t *TextInputWidget) indexAt(p Point) int {
 // rune boundaries would put the caret inside a joined emoji or modifier.
 func (t *TextInputWidget) indexInLine(sp lineSpan, x float64) int {
 	best, bestDist := sp.start, math.Inf(1)
-	for i := sp.start; ; i = nextGrapheme(t.ed.text, i) {
-		d := math.Abs(t.advance(t.ed.text[sp.start:i]) - x)
+	for i := sp.start; ; i = textedit.NextGrapheme(t.ed.Text, i) {
+		d := math.Abs(t.advance(t.ed.Text[sp.start:i]) - x)
 		if d < bestDist {
 			best, bestDist = i, d
 		}
@@ -930,24 +583,24 @@ func (t *TextInputWidget) indexInLine(sp lineSpan, x float64) int {
 // moveLine moves the caret to the nearest position on the line above
 // (dir < 0) or below, keeping its x.
 func (t *TextInputWidget) moveLine(dir int, extend bool) {
-	spans := t.spans(t.ed.text)
-	li := lineOf(spans, t.ed.caret)
-	x := t.advance(t.ed.text[spans[li].start:t.ed.caret])
+	spans := t.spans(t.ed.Text)
+	li := lineOf(spans, t.ed.Caret)
+	x := t.advance(t.ed.Text[spans[li].start:t.ed.Caret])
 	to := li + dir
 	switch {
 	case to < 0:
-		t.ed.moveTo(0, extend)
+		t.ed.MoveTo(0, extend)
 	case to >= len(spans):
-		t.ed.moveTo(len(t.ed.text), extend)
+		t.ed.MoveTo(len(t.ed.Text), extend)
 	default:
-		t.ed.moveTo(t.indexInLine(spans[to], x), extend)
+		t.ed.MoveTo(t.indexInLine(spans[to], x), extend)
 	}
 }
 
 // lineBounds returns the start and end of the line the caret is on.
 func (t *TextInputWidget) lineBounds() (int, int) {
-	spans := t.spans(t.ed.text)
-	sp := spans[lineOf(spans, t.ed.caret)]
+	spans := t.spans(t.ed.Text)
+	sp := spans[lineOf(spans, t.ed.Caret)]
 	return sp.start, sp.end
 }
 
@@ -957,19 +610,19 @@ func (t *TextInputWidget) commit() {
 	if t.filter != nil {
 		// Map both selection boundaries through the same normalization, so
 		// removed characters cannot leave the caret beyond the accepted text.
-		a, c := len(t.filter(t.ed.text[:t.ed.anchor])), len(t.filter(t.ed.text[:t.ed.caret]))
-		t.ed.setText(t.filter(t.ed.text))
-		t.ed.anchor, t.ed.caret = t.ed.snap(a), t.ed.snap(c)
+		a, c := len(t.filter(t.ed.Text[:t.ed.Anchor])), len(t.filter(t.ed.Text[:t.ed.Caret]))
+		t.ed.SetText(t.filter(t.ed.Text))
+		t.ed.Anchor, t.ed.Caret = t.ed.Snap(a), t.ed.Snap(c)
 	}
-	if t.ed.text == Untrack(t.value.Get) {
+	if t.ed.Text == Untrack(t.value.Get) {
 		return
 	}
-	t.value.Set(t.ed.text)
+	t.value.Set(t.ed.Text)
 	if t.multiline {
 		t.cache.invalidate()
 	}
 	if t.onChange != nil {
-		t.onChange(t.ed.text)
+		t.onChange(t.ed.Text)
 	}
 }
 
@@ -1018,12 +671,12 @@ func (c *composerIME) Update() (bool, error) {
 // IME callbacks, after examples/textinput in the Ebitengine repository.
 
 func (t *TextInputWidget) imeSession() *textinput.SessionOptions {
-	lo, hi := t.ed.selection()
-	t.imeStart, t.imeEnd = 0, len(t.ed.text)
+	lo, hi := t.ed.Selection()
+	t.imeStart, t.imeEnd = 0, len(t.ed.Text)
 	return &textinput.SessionOptions{
 		CaretBounds:     t.caretPx,
-		TextBeforeCaret: t.ed.text[:lo],
-		TextAfterCaret:  t.ed.text[hi:],
+		TextBeforeCaret: t.ed.Text[:lo],
+		TextAfterCaret:  t.ed.Text[hi:],
 	}
 }
 
@@ -1035,15 +688,15 @@ func (t *TextInputWidget) imeComposition(text string, caret int) {
 
 // imeCommit inserts committed text in place of the selection.
 func (t *TextInputWidget) imeCommit(text string) {
-	t.ed.replace(text)
+	t.ed.Replace(text)
 	t.commit()
 }
 
 // imeReplace applies a commit that rewrote the surrounding text the session
 // was given: before + text + after replace that whole range.
 func (t *TextInputWidget) imeReplace(before, text, after string) {
-	t.ed.text = t.ed.text[:t.imeStart] + before + text + after + t.ed.text[t.imeEnd:]
-	t.ed.moveTo(t.imeStart+len(before)+len(text), false)
+	t.ed.Text = t.ed.Text[:t.imeStart] + before + text + after + t.ed.Text[t.imeEnd:]
+	t.ed.MoveTo(t.imeStart+len(before)+len(text), false)
 	t.commit()
 }
 
@@ -1107,24 +760,24 @@ func (t *TextInputWidget) editKey(k KeyboardKey, m Mods) bool {
 	case KeyEnter, KeyNumpadEnter:
 		t.ime.Confirm()
 		if t.multiline && !m.Cmd() {
-			t.ed.replace("\n")
+			t.ed.Replace("\n")
 			return true
 		}
 		if t.onSubmit != nil {
-			t.onSubmit(t.ed.text)
+			t.onSubmit(t.ed.Text)
 		}
 		t.committed()
 	case KeyEscape:
 		t.ime.Cancel()
-		t.ed.moveTo(t.ed.caret, false)
+		t.ed.MoveTo(t.ed.Caret, false)
 		return true
 	case KeyBackspace:
 		t.ime.Confirm()
-		t.ed.backspace(wordWise(m))
+		t.ed.Backspace(wordWise(m))
 		return true
 	case KeyDelete:
 		t.ime.Confirm()
-		t.ed.deleteForward(wordWise(m))
+		t.ed.DeleteForward(wordWise(m))
 		return true
 	}
 	return false
@@ -1141,7 +794,7 @@ func (t *TextInputWidget) moveKey(k KeyboardKey, m Mods) bool {
 		}
 		t.ime.Confirm()
 		if m.Meta {
-			t.ed.moveTo(pick(k == KeyArrowUp, 0, len(t.ed.text)), m.Shift)
+			t.ed.MoveTo(pick(k == KeyArrowUp, 0, len(t.ed.Text)), m.Shift)
 		} else {
 			t.moveLine(pick(k == KeyArrowUp, -1, 1), m.Shift)
 		}
@@ -1150,18 +803,18 @@ func (t *TextInputWidget) moveKey(k KeyboardKey, m Mods) bool {
 		t.ime.Confirm()
 		dir := pick(k == KeyArrowLeft, -1, 1)
 		if m.Meta {
-			t.ed.moveTo(pick(dir < 0, 0, len(t.ed.text)), m.Shift)
+			t.ed.MoveTo(pick(dir < 0, 0, len(t.ed.Text)), m.Shift)
 		} else {
-			t.ed.moveBy(dir, wordWise(m), m.Shift)
+			t.ed.MoveBy(dir, wordWise(m), m.Shift)
 		}
 		return true
 	case KeyHome, KeyEnd:
 		t.ime.Confirm()
-		lo, hi := 0, len(t.ed.text)
+		lo, hi := 0, len(t.ed.Text)
 		if t.multiline && !m.Cmd() {
 			lo, hi = t.lineBounds()
 		}
-		t.ed.moveTo(pick(k == KeyHome, lo, hi), m.Shift)
+		t.ed.MoveTo(pick(k == KeyHome, lo, hi), m.Shift)
 		return true
 	}
 	return false
@@ -1175,21 +828,21 @@ func (t *TextInputWidget) clipboardKey(k KeyboardKey, m Mods) bool {
 	case KeyA:
 		if m.Cmd() {
 			t.ime.Confirm()
-			t.ed.selectAll()
+			t.ed.SelectAll()
 		}
 		return true
 	case KeyC:
-		if m.Cmd() && t.ed.hasSelection() && !t.password {
-			currentClipboard().Write(t.ed.selected())
+		if m.Cmd() && t.ed.HasSelection() && !t.password {
+			currentClipboard().Write(t.ed.Selected())
 		}
 		return true
 	case KeyX:
-		if m.Cmd() && t.ed.hasSelection() {
+		if m.Cmd() && t.ed.HasSelection() {
 			t.ime.Confirm()
 			if !t.password {
-				currentClipboard().Write(t.ed.selected())
+				currentClipboard().Write(t.ed.Selected())
 			}
-			t.ed.replace("")
+			t.ed.Replace("")
 		}
 		return true
 	case KeyV:
@@ -1200,7 +853,7 @@ func (t *TextInputWidget) clipboardKey(k KeyboardKey, m Mods) bool {
 			if !t.multiline {
 				s = strings.ReplaceAll(s, "\n", " ")
 			}
-			t.ed.replace(s)
+			t.ed.Replace(s)
 		}
 		return true
 	}
@@ -1254,17 +907,17 @@ func (t *TextInputWidget) HandlePointer(ev PointerEvent) bool {
 		idx := t.indexAt(ev.Pos)
 		switch t.clicks {
 		case 1:
-			t.ed.moveTo(idx, false)
+			t.ed.MoveTo(idx, false)
 		case 2:
-			t.ed.selectWord(idx)
+			t.ed.SelectWord(idx)
 		default:
-			t.ed.selectAll()
+			t.ed.SelectAll()
 		}
 		t.blink = Now()
 		return true
 	case PointerDrag:
 		if t.clicks == 1 {
-			t.ed.moveTo(t.indexAt(ev.Pos), true)
+			t.ed.MoveTo(t.indexAt(ev.Pos), true)
 			t.blink = Now()
 		}
 		return true
@@ -1290,8 +943,8 @@ func (t *TextInputWidget) Adopt(prev any) {
 	t.Interactive.Adopt(prev)
 	t.ed, t.scroll, t.width = p.ed, p.scroll, p.width
 	t.clicks, t.lastClick, t.lastPos = p.clicks, p.lastClick, p.lastPos
-	if p.ed.text != Untrack(t.value.Get) {
-		t.ed.setText(Untrack(t.value.Get))
+	if p.ed.Text != Untrack(t.value.Get) {
+		t.ed.SetText(Untrack(t.value.Get))
 	}
 	t.blink = Now()
 }

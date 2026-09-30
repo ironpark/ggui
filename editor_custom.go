@@ -22,7 +22,7 @@ func (t *TextInputWidget) Filter(fn func(string) string) *TextInputWidget {
 // EditingState returns the displayed text and selection, including IME preedit.
 func (t *TextInputWidget) EditingState() TextInputState {
 	s, caret := t.rendered()
-	a := t.ed.anchor
+	a := t.ed.Anchor
 	if t.composition != "" {
 		a = caret
 	}
@@ -35,8 +35,8 @@ func (t *TextInputWidget) Select(anchor, caret int) {
 		return
 	}
 	t.ime.Confirm()
-	t.ed.moveTo(anchor, false)
-	t.ed.moveTo(caret, true)
+	t.ed.MoveTo(anchor, false)
+	t.ed.MoveTo(caret, true)
 	t.blink = Now()
 }
 

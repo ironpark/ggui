@@ -17,17 +17,17 @@ func TestTextInputFilterNativeCommitsAndCaret(t *testing.T) {
 		}, s)
 	})
 	e.imeCommit("1a2-3")
-	if v.Get() != "123" || e.ed.caret != 3 {
-		t.Fatalf("filtered commit %q caret %d", v.Get(), e.ed.caret)
+	if v.Get() != "123" || e.ed.Caret != 3 {
+		t.Fatalf("filtered commit %q caret %d", v.Get(), e.ed.Caret)
 	}
 	e.Select(1, 2)
 	e.imeCommit("x9")
-	if v.Get() != "193" || e.ed.caret != 2 {
+	if v.Get() != "193" || e.ed.Caret != 2 {
 		t.Fatal("replacement")
 	}
 	e.imeStart, e.imeEnd = 0, 3
 	e.imeReplace("1", "z8", "3")
-	if v.Get() != "183" || e.ed.caret != 2 {
+	if v.Get() != "183" || e.ed.Caret != 2 {
 		t.Fatal("IME replace")
 	}
 	e.Layout(Loose(Sz(200, 40)), Env{})

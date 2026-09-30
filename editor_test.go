@@ -1,102 +1,11 @@
 package ggui
 
 import (
+	"testing"
+
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/runtime"
-	"testing"
-	"time"
 )
-
-func TestEditorMovesByRuneAndWord(t *testing.T) {
-	var e textEditor
-	e.setText("héllo wörld  foo")
-	e.moveTo(len(e.text), false)
-	e.moveBy(-1, true, false)
-	if e.text[e.caret:] != "foo" {
-		t.Fatalf("word left landed before %q, want \"foo\"", e.text[e.caret:])
-	}
-	e.moveBy(-1, true, false)
-	if e.text[e.caret:] != "wörld  foo" {
-		t.Fatalf("word left landed before %q, want \"wörld  foo\"", e.text[e.caret:])
-	}
-	e.moveBy(1, false, false)
-	e.moveBy(1, false, false)
-	if e.text[e.caret:] != "rld  foo" {
-		t.Fatalf("two runes right landed before %q; multibyte rune split?", e.text[e.caret:])
-	}
-	e.moveBy(1, true, false)
-	if e.text[e.caret:] != "foo" {
-		t.Fatalf("word right landed before %q, want \"foo\" (spaces skipped)", e.text[e.caret:])
-	}
-}
-
-func TestEditorSelectionCollapsesTowardMovement(t *testing.T) {
-	var e textEditor
-	e.setText("abcdef")
-	e.moveTo(1, false)
-	e.moveTo(4, true)
-	if lo, hi := e.selection(); lo != 1 || hi != 4 || e.selected() != "bcd" {
-		t.Fatalf("selection = [%d,%d) %q, want [1,4) \"bcd\"", lo, hi, e.selected())
-	}
-	e.moveBy(-1, false, false)
-	if e.caret != 1 || e.hasSelection() {
-		t.Fatalf("left collapsed to %d with selection %v, want 1 and none", e.caret, e.hasSelection())
-	}
-	e.moveTo(4, true)
-	e.moveBy(1, false, false)
-	if e.caret != 4 {
-		t.Fatalf("right collapsed to %d, want 4", e.caret)
-	}
-}
-
-func TestEditorBackspaceDeleteAndReplace(t *testing.T) {
-	var e textEditor
-	e.setText("한글 입력")
-	e.moveTo(len(e.text), false)
-	e.backspace(false)
-	if e.text != "한글 입" {
-		t.Fatalf("backspace removed a byte, not a rune: %q", e.text)
-	}
-	e.backspace(true)
-	if e.text != "한글 " {
-		t.Fatalf("word backspace = %q, want \"한글 \"", e.text)
-	}
-	e.moveTo(0, false)
-	e.deleteForward(false)
-	if e.text != "글 " {
-		t.Fatalf("delete = %q, want \"글 \"", e.text)
-	}
-	e.selectAll()
-	e.replace("x")
-	if e.text != "x" || e.caret != 1 || e.hasSelection() {
-		t.Fatalf("replace all = %q caret %d", e.text, e.caret)
-	}
-}
-
-func TestEditorSelectWord(t *testing.T) {
-	var e textEditor
-	e.setText("foo bar.baz")
-	e.selectWord(5)
-	if e.selected() != "bar" {
-		t.Fatalf("selectWord(5) = %q, want \"bar\"", e.selected())
-	}
-	e.selectWord(len(e.text))
-	if e.selected() != "baz" {
-		t.Fatalf("selectWord at end = %q, want \"baz\"", e.selected())
-	}
-	e.setText("")
-	e.selectWord(0)
-}
-
-func TestEditorSnapsOffsetsToRuneStarts(t *testing.T) {
-	var e textEditor
-	e.setText("aé")
-	e.caret, e.anchor = 2, 2 // inside é
-	e.setText("aéb")
-	if e.caret != 1 {
-		t.Fatalf("caret snapped to %d, want 1", e.caret)
-	}
-}
 
 // fakeIME stands in for the platform IME: a test sets its composition or
 // commit and the next tick delivers it.
@@ -171,8 +80,8 @@ func TestTextInputEditsWriteTheSignal(t *testing.T) {
 	changes := 0
 	w, in := focusedInput(t, value)
 	w.OnChange(func(string) { changes++ })
-	if w.ed.caret != len("hello") {
-		t.Fatalf("click past the end put the caret at %d, want %d", w.ed.caret, len("hello"))
+	if w.ed.Caret != len("hello") {
+		t.Fatalf("click past the end put the caret at %d, want %d", w.ed.Caret, len("hello"))
 	}
 	typeKeys(in, Mods{}, KeyBackspace, KeyBackspace)
 	if Untrack(value.Get) != "hel" || changes != 2 {
@@ -190,8 +99,8 @@ func TestTextInputFollowsExternalWrites(t *testing.T) {
 	w, in := focusedInput(t, value)
 	value.Set("")
 	paintFrame(in, w, Sz(200, 20))
-	if w.ed.text != "" || w.ed.caret != 0 {
-		t.Fatalf("editor text %q caret %d after the signal was cleared", w.ed.text, w.ed.caret)
+	if w.ed.Text != "" || w.ed.Caret != 0 {
+		t.Fatalf("editor text %q caret %d after the signal was cleared", w.ed.Text, w.ed.Caret)
 	}
 }
 
@@ -235,8 +144,8 @@ func TestTextInputDragSelectsAndDoubleClickSelectsWord(t *testing.T) {
 	in.dispatch(frameInput{pos: Pt(0, 10), down: []MouseButton{MouseButtonLeft}})
 	in.dispatch(frameInput{pos: Pt(199, 10)})
 	in.dispatch(frameInput{pos: Pt(199, 10), up: []MouseButton{MouseButtonLeft}})
-	if w.ed.selected() != "hello world" {
-		t.Fatalf("drag selected %q, want everything", w.ed.selected())
+	if w.ed.Selected() != "hello world" {
+		t.Fatalf("drag selected %q, want everything", w.ed.Selected())
 	}
 	click := func(p Point) {
 		in.dispatch(frameInput{pos: p, down: []MouseButton{MouseButtonLeft}})
@@ -245,8 +154,8 @@ func TestTextInputDragSelectsAndDoubleClickSelectsWord(t *testing.T) {
 	x := w.advance("hello wo")
 	click(Pt(x, 10))
 	click(Pt(x, 10))
-	if w.ed.selected() != "world" {
-		t.Fatalf("double-click selected %q, want \"world\"", w.ed.selected())
+	if w.ed.Selected() != "world" {
+		t.Fatalf("double-click selected %q, want \"world\"", w.ed.Selected())
 	}
 }
 
@@ -266,8 +175,8 @@ func TestTextInputComposesThenCommits(t *testing.T) {
 	}
 	f.compose, f.commit = "", "한"
 	in.dispatch(frameInput{})
-	if Untrack(value.Get) != "a한b" || w.composition != "" || w.ed.caret != 1+len("한") {
-		t.Fatalf("value = %q composition = %q caret %d after commit", Untrack(value.Get), w.composition, w.ed.caret)
+	if Untrack(value.Get) != "a한b" || w.composition != "" || w.ed.Caret != 1+len("한") {
+		t.Fatalf("value = %q composition = %q caret %d after commit", Untrack(value.Get), w.composition, w.ed.Caret)
 	}
 	// Moving the caret confirms whatever is being composed: the IME went
 	// idle with "ㄱ" still shown, and End commits it before moving.
@@ -343,20 +252,20 @@ func TestTextInputMultilineWrapsGrowsAndNavigates(t *testing.T) {
 	paintFrame(&in, w, Sz(200, grown.H))
 	in.dispatch(frameInput{pos: Pt(1, 5), down: []MouseButton{MouseButtonLeft}})
 	in.dispatch(frameInput{pos: Pt(1, 5), up: []MouseButton{MouseButtonLeft}})
-	if !w.Focused() || w.ed.caret != 0 {
-		t.Fatalf("click at the top left: focused %v caret %d", w.Focused(), w.ed.caret)
+	if !w.Focused() || w.ed.Caret != 0 {
+		t.Fatalf("click at the top left: focused %v caret %d", w.Focused(), w.ed.Caret)
 	}
 	typeKeys(&in, Mods{}, KeyEnd)
-	if w.ed.caret != spans[0].end {
-		t.Fatalf("End went to %d, want the end of the first line %d", w.ed.caret, spans[0].end)
+	if w.ed.Caret != spans[0].end {
+		t.Fatalf("End went to %d, want the end of the first line %d", w.ed.Caret, spans[0].end)
 	}
 	typeKeys(&in, Mods{}, KeyArrowDown)
-	if got := lineOf(spans, w.ed.caret); got != 1 {
+	if got := lineOf(spans, w.ed.Caret); got != 1 {
 		t.Fatalf("Down landed on line %d", got)
 	}
 	typeKeys(&in, Mods{}, KeyHome)
-	if w.ed.caret != spans[1].start {
-		t.Fatalf("Home on line 2 went to %d, want %d", w.ed.caret, spans[1].start)
+	if w.ed.Caret != spans[1].start {
+		t.Fatalf("Home on line 2 went to %d, want %d", w.ed.Caret, spans[1].start)
 	}
 	typeKeys(&in, Mods{}, KeyEnter)
 	if got := Untrack(w.value.Get); got[spans[1].start] != '\n' {
@@ -371,74 +280,8 @@ func TestTextInputMultilineWrapsGrowsAndNavigates(t *testing.T) {
 	// A click on the second line lands there.
 	paintFrame(&in, w, Sz(200, grown.H))
 	in.dispatch(frameInput{pos: Pt(5, w.spacing()+2), down: []MouseButton{MouseButtonLeft}})
-	if got := lineOf(w.spans(w.ed.text), w.ed.caret); got != 1 {
+	if got := lineOf(w.spans(w.ed.Text), w.ed.Caret); got != 1 {
 		t.Fatalf("click on the second line put the caret on line %d", got)
-	}
-}
-
-func TestCaretStepsByGrapheme(t *testing.T) {
-	var e textEditor
-	// e + combining acute, a family emoji joined with ZWJ, a flag pair, CRLF.
-	e.setText("é\U0001F468‍\U0001F469\U0001F1F0\U0001F1F7\r\nx")
-	e.moveTo(0, false)
-	steps := []int{}
-	for e.caret < len(e.text) {
-		e.moveBy(1, false, false)
-		steps = append(steps, e.caret)
-	}
-	if len(steps) != 5 {
-		t.Fatalf("%d steps over the text, want 5 clusters: %v", len(steps), steps)
-	}
-	e.moveTo(len(e.text), false)
-	e.backspace(false)
-	e.backspace(false)
-	if e.text != "é\U0001F468‍\U0001F469\U0001F1F0\U0001F1F7" {
-		t.Fatalf("after two backspaces: %q", e.text)
-	}
-	e.backspace(false)
-	if e.text != "é\U0001F468‍\U0001F469" {
-		t.Fatalf("backspace over the flag pair: %q", e.text)
-	}
-	e.moveTo(0, false)
-	e.moveBy(1, false, false)
-	if e.caret != len("é") {
-		t.Fatalf("caret %d after one step, want past the combining mark", e.caret)
-	}
-}
-
-func TestUndoRedo(t *testing.T) {
-	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	defer SetClock(func() time.Time { return now })()
-	var e textEditor
-	e.replace("a")
-	e.replace("b")
-	e.replace("c") // one word typed quickly: one step
-	now = now.Add(time.Second)
-	e.replace(" ")
-	now = now.Add(time.Second)
-	e.replace("d")
-	if e.text != "abc d" {
-		t.Fatalf("text %q", e.text)
-	}
-	e.Undo()
-	if e.text != "abc " {
-		t.Fatalf("after one undo %q, want the last letter gone", e.text)
-	}
-	e.Undo()
-	e.Undo()
-	if e.text != "" || e.caret != 0 {
-		t.Fatalf("after three undos %q caret %d, want empty", e.text, e.caret)
-	}
-	if e.Undo() {
-		t.Fatal("undo with nothing to undo reported true")
-	}
-	e.Redo()
-	if e.text != "abc" {
-		t.Fatalf("after redo %q, want abc", e.text)
-	}
-	e.replace("!")
-	if e.Redo() {
-		t.Fatal("an edit did not clear the redo stack")
 	}
 }
 

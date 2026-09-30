@@ -3,12 +3,14 @@ package ggui
 import (
 	"bytes"
 	"fmt"
-	"github.com/ironpark/ggui/internal/reactive"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
+
+	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/internal/textedit"
 
 	"github.com/ironpark/ggfx/text/v2"
 	"golang.org/x/image/font/gofont/goregular"
@@ -287,7 +289,7 @@ func breakRunes(word string, face text.Face, maxW float64) []string {
 	var pieces []string
 	start := 0
 	for i := 0; i < len(word); {
-		end := nextGrapheme(word, i)
+		end := textedit.NextGrapheme(word, i)
 		if i > start && lineWidth(word[start:end], face) > maxW {
 			pieces = append(pieces, word[start:i])
 			start = i
@@ -354,8 +356,8 @@ func wrapParagraph(p string, face text.Face, maxW float64) []lineSpan {
 		}
 		// A word wider than the line, alone on it: break between grapheme clusters.
 		for j := lineStart; j < wend; {
-			k := nextGrapheme(p, j)
-			if k < wend && lineWidth(p[lineStart:nextGrapheme(p, k)], face) > maxW {
+			k := textedit.NextGrapheme(p, j)
+			if k < wend && lineWidth(p[lineStart:textedit.NextGrapheme(p, k)], face) > maxW {
 				lines = append(lines, lineSpan{lineStart, k})
 				lineStart, j = k, k
 				continue

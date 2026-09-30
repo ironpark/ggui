@@ -1,10 +1,12 @@
 package ggui
 
 import (
-	"github.com/ironpark/ggui/internal/reactive"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/internal/textedit"
 
 	"github.com/ironpark/ggfx/text/v2"
 )
@@ -70,10 +72,10 @@ func TestEmojiPresentationAndTextShaping(t *testing.T) {
 				t.Fatalf("editor broke cluster: %+v", span)
 			}
 		}
-		e := textEditor{text: source, caret: len(source), anchor: len(source)}
-		e.backspace(false)
-		if e.text != strings.Repeat(s, 2) {
-			t.Fatalf("backspace broke %q: %q", s, e.text)
+		e := textedit.Editor{Text: source, Caret: len(source), Anchor: len(source)}
+		e.Backspace(false)
+		if e.Text != strings.Repeat(s, 2) {
+			t.Fatalf("backspace broke %q: %q", s, e.Text)
 		}
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/ironpark/ggfx/text/v2"
 	"github.com/ironpark/ggui/internal/emojidata"
 	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/internal/textedit"
 )
 
 // The font state below belongs to the UI goroutine: every entry point that
@@ -113,7 +114,7 @@ func textRuns(s string, face text.Face) iter.Seq2[string, text.Face] {
 		start := 0
 		var current text.Face
 		for i := 0; i < len(s); {
-			end := nextGrapheme(s, i)
+			end := textedit.NextGrapheme(s, i)
 			chosen := ef.Face
 			if emojidata.IsCluster(s[i:end]) {
 				if e := ef.colorFace(); e != nil {

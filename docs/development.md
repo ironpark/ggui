@@ -119,7 +119,7 @@ those guides as historical measurements; rerun them on your target hardware.
 | Reactivity and component ownership | [signal.go](../signal.go), [widget.go](../widget.go), [for.go](../for.go) |
 | Layout, geometry, and drawing | [widgets.go](../widgets.go), [geometry.go](../geometry.go), [canvas.go](../canvas.go), [internal/render/](../internal/render/) (the shaders behind the Canvas) |
 | UI controls | [ui/](../ui/) |
-| Text editing and fonts | [editor.go](../editor.go), [font.go](../font.go), [internal/textinput/](../internal/textinput/) |
+| Text editing and fonts | [editor.go](../editor.go), [font.go](../font.go), [internal/textedit/](../internal/textedit/) (the buffer, selection and undo), [internal/textinput/](../internal/textinput/) (the IME) |
 | Input and shortcuts | [input.go](../input.go), [chord.go](../chord.go), [clipboard.go](../clipboard.go) |
 | Platform services | [runtime/](../runtime/) (file dialogs and the clipboard, reached through `Host`) |
 | Accessibility and semantics | [a11y/](../a11y/) (the vocabulary), [internal/a11ybridge/](../internal/a11ybridge/) (the platform bridges), [semantics.go](../semantics.go) |

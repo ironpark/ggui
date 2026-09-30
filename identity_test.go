@@ -157,8 +157,8 @@ func TestCachedTextInputFollowsSignal(t *testing.T) {
 	v.Set("bbbbbbbb")
 	p.Frame()
 	p.Frame()
-	if in.ed.text != "bbbbbbbb" {
-		t.Fatalf("editor shows %q", in.ed.text)
+	if in.ed.Text != "bbbbbbbb" {
+		t.Fatalf("editor shows %q", in.ed.Text)
 	}
 }
 
@@ -182,7 +182,7 @@ func TestComponentGivesControlsStableIdentity(t *testing.T) {
 	rebuild.Set(1)
 	p.Frame()
 	p.Type(Mods{}, KeyArrowRight)
-	if first == input || first.HitID() != input.HitID() || input.ed.caret != 3 || !input.Focused() {
+	if first == input || first.HitID() != input.HitID() || input.ed.Caret != 3 || !input.Focused() {
 		t.Fatal("rebuild lost identity, caret or focus")
 	}
 }
