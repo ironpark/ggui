@@ -45,18 +45,21 @@ func (c Chord) String() string {
 // Is reports whether ev is a press of c: the same key with the same
 // modifiers, no more and no fewer.
 func (ev KeyEvent) Is(c Chord) bool {
-	if ev.Kind != KeyPress || ev.Key != c.Key {
-		return false
-	}
-	want := c.Mods
+	return ev.Kind == KeyPress && ev.Key == c.Key && ev.Mods == c.held()
+}
+
+// held is the modifiers a press of c holds on this platform, cmd turned
+// into Meta on macOS and Ctrl elsewhere.
+func (c Chord) held() Mods {
+	m := c.Mods
 	if c.Cmd {
 		if runtimeIsDarwin() {
-			want.Meta = true
+			m.Meta = true
 		} else {
-			want.Ctrl = true
+			m.Ctrl = true
 		}
 	}
-	return ev.Mods == want
+	return m
 }
 
 // ParseChord reads a chord such as "cmd+s", "ctrl+shift+z", "alt+enter"

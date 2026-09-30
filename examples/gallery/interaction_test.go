@@ -23,7 +23,7 @@ func galleryProbe(size ggui.Size) *ggui.Probe {
 func searchGallery(p *ggui.Probe, query string) {
 	p.Tap("All")
 	p.Tap("Search components")
-	p.Type(ggui.Mods{Meta: true}, ggui.KeyA)
+	p.Key("cmd+a")
 	pasteText(p, query)
 	p.Frame()
 }
@@ -59,7 +59,7 @@ func TestGalleryRealInteractions(t *testing.T) {
 		p.Click(h.Center())
 		p.Type(ggui.Mods{}, ggui.KeyArrowRight, ggui.KeyArrowDown)
 	}
-	p.Type(ggui.Mods{Meta: true}, ggui.KeyK)
+	p.Key("cmd+k")
 	if _, ok := p.Find("Search commands"); !ok {
 		t.Fatal("command palette missing")
 	}
@@ -84,7 +84,7 @@ func TestGalleryRealInteractions(t *testing.T) {
 // the same editing path without reading or writing the system clipboard.
 func pasteText(p *ggui.Probe, text string) {
 	p.Clipboard().Write(text)
-	p.Type(ggui.Mods{Meta: true}, ggui.KeyV)
+	p.Key("cmd+v")
 }
 
 func TestGallerySmallWindowPopups(t *testing.T) {
@@ -370,7 +370,7 @@ func TestGalleryEmojiEditingAndThemePresets(t *testing.T) {
 	defer p.Close()
 	searchGallery(p, "Emoji")
 	p.Tap("Emoji text")
-	p.Type(ggui.Mods{Meta: true}, ggui.KeyA)
+	p.Key("cmd+a")
 	pasteText(p, "Hello 👩🏽‍💻")
 	p.Type(ggui.Mods{}, ggui.KeyBackspace)
 	if _, ok := p.Semantics().Find(ggui.RoleText, "Hello "); !ok {

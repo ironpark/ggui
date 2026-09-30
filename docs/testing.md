@@ -41,7 +41,7 @@ func TestCheckbox(t *testing.T) {
 | `Host` | The surface `App` and `Probe` share (`Shortcut`, `OnKey`, `OnFrame`, `Post`, `Perform`, `Announce`, `Semantics`, `Close`), so the same setup function drives both. |
 | `Tap(label)`, `Find(label)`, `FindRole(role, label)` | Locating controls by semantics. |
 | `Click`, `Press`, `Move`, `Release`, `Scroll` | Pointer interaction. |
-| `Type`, `Text` | Key events and text entry. |
+| `Key("cmd+v")`, `Type`, `Text` | Shortcuts, written as `ParseChord` reads them so `cmd` is ⌘ on macOS and Ctrl elsewhere; other key events; text entry. |
 | `Advance(duration)` | Advancing this probe's clock for animation. |
 
 > [!IMPORTANT]

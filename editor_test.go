@@ -296,15 +296,11 @@ func TestUndoKeys(t *testing.T) {
 	if Untrack(v.Get) != "hel" {
 		t.Fatalf("value %q after two backspaces", Untrack(v.Get))
 	}
-	cmd := Mods{Meta: true}
-	if !runtimeIsDarwin() {
-		cmd = Mods{Ctrl: true}
-	}
-	p.Type(cmd, KeyZ)
+	p.Key("cmd+z")
 	if Untrack(v.Get) != "hell" {
 		t.Fatalf("value %q after undo, want hell", Untrack(v.Get))
 	}
-	p.Type(Mods{Shift: cmd.Shift || true, Meta: cmd.Meta, Ctrl: cmd.Ctrl}, KeyZ)
+	p.Key("cmd+shift+z")
 	if Untrack(v.Get) != "hel" {
 		t.Fatalf("value %q after redo, want hel", Untrack(v.Get))
 	}

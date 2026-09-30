@@ -317,6 +317,19 @@ func (p *Probe) Type(mods Mods, keys ...KeyboardKey) {
 	}
 }
 
+// Key presses each chord, written as ParseChord reads it, one frame each.
+// "cmd+v" is ⌘V on macOS and Ctrl+V elsewhere, so a test that presses a
+// shortcut with it passes on every platform. It panics on a malformed
+// chord.
+//
+//	p.Key("cmd+a", "cmd+c")
+func (p *Probe) Key(chords ...string) {
+	for _, s := range chords {
+		c := MustChord(s)
+		p.Type(c.held(), c.Key)
+	}
+}
+
 // Text delivers typed characters to the focused widget, as a platform
 // without an IME would.
 func (p *Probe) Text(s string) { p.dispatch(frameInput{text: s}) }

@@ -66,7 +66,7 @@ func TestTodo(t *testing.T) {
 	}
 
 	// Cmd+K asks before clearing; the dialog's Remove button confirms.
-	p.Type(ggui.Mods{Meta: true}, ggui.KeyK)
+	p.Key("cmd+k")
 	if !ggui.Untrack(m.Confirm.Get) {
 		t.Fatal("shortcut did not open the confirmation")
 	}

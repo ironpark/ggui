@@ -252,7 +252,7 @@ func TestQuestionnaireValidationSkipSubmissionAndReset(t *testing.T) {
 	}
 	p.Tap("Context")
 	p.Clipboard().Write("A useful answer")
-	p.Type(ggui.Mods{Meta: true}, ggui.KeyV)
+	p.Key("cmd+v")
 	p.Tap("Submit")
 	if submits != 1 {
 		t.Fatal("valid submission not delivered")
@@ -318,11 +318,11 @@ func TestQuestionnaireFreeformDefaultsAndExternalErrors(t *testing.T) {
 	}
 	p.Tap("Custom")
 	p.Clipboard().Write("Custom answer")
-	p.Type(ggui.Mods{Meta: true}, ggui.KeyV)
+	p.Key("cmd+v")
 	if a := ggui.Untrack(answers.Get)["one"]; len(a.Values) != 0 || a.Text != "Custom answer" {
 		t.Fatal("single freeform did not replace fixed choice", a)
 	}
-	p.Type(ggui.Mods{Meta: true}, ggui.KeyEnter)
+	p.Key("cmd+enter")
 	if submits != 1 {
 		t.Fatal("command enter not submitted")
 	}

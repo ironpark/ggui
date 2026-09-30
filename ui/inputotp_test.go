@@ -2,18 +2,11 @@ package ui
 
 import (
 	"regexp"
-	"runtime"
 	"testing"
 
 	"github.com/ironpark/ggui"
 )
 
-func otpCmd() ggui.Mods {
-	if runtime.GOOS == "darwin" {
-		return ggui.Mods{Meta: true}
-	}
-	return ggui.Mods{Ctrl: true}
-}
 func TestInputOTPPasteSelectionUndo(t *testing.T) {
 	t.Parallel()
 	value := ggui.State("")
@@ -24,17 +17,17 @@ func TestInputOTPPasteSelectionUndo(t *testing.T) {
 	clip := p.Clipboard()
 	p.Click(ggui.Pt(15, 16))
 	clip.Write("12-34 56extra7")
-	p.Type(otpCmd(), ggui.KeyV)
+	p.Key("cmd+v")
 	if value.Get() != "123456" || completed != 1 || changed != 1 {
 		t.Fatalf("paste %q completed %d changed %d", value.Get(), completed, changed)
 	}
 	p.Click(ggui.Pt(48, 16))
 	clip.Write("9")
-	p.Type(otpCmd(), ggui.KeyV)
+	p.Key("cmd+v")
 	if value.Get() != "193456" {
 		t.Fatalf("slot replacement %q", value.Get())
 	}
-	p.Type(otpCmd(), ggui.KeyZ)
+	p.Key("cmd+z")
 	if value.Get() != "123456" {
 		t.Fatal("undo", value.Get())
 	}
@@ -42,11 +35,11 @@ func TestInputOTPPasteSelectionUndo(t *testing.T) {
 	if value.Get() != "13456" {
 		t.Fatal("backspace", value.Get())
 	}
-	p.Type(otpCmd(), ggui.KeyA, ggui.KeyC)
+	p.Key("cmd+a", "cmd+c")
 	if clip.Read() != value.Get() {
 		t.Fatal("copy")
 	}
-	p.Type(otpCmd(), ggui.KeyX)
+	p.Key("cmd+x")
 	if value.Get() != "" {
 		t.Fatal("cut")
 	}

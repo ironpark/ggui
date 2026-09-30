@@ -92,7 +92,7 @@ func TestGallerySearchPasteAcrossRebuilds(t *testing.T) {
 	}
 	p.Tap("All")
 	p.Tap("Search components")
-	p.Type(ggui.Mods{Meta: true}, ggui.KeyA)
+	p.Key("cmd+a")
 	pasteText(p, "Text")
 	if ggui.Untrack(search.Get) != "Text" {
 		t.Fatalf("second search text lost: %q", ggui.Untrack(search.Get))

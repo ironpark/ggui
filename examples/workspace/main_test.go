@@ -52,7 +52,7 @@ func TestWorkspaceTaskFlow(t *testing.T) {
 
 	p.Tap("Edit selected")
 	p.Tap("Task title")
-	p.Type(ggui.Mods{Meta: true}, ggui.KeyA)
+	p.Key("cmd+a")
 	paste(p, "Ship version one")
 	p.Tap("Save task")
 	if got := ggui.Untrack(m.Tasks.Get)[4].Title; got != "Ship version one" {
@@ -106,7 +106,7 @@ func TestWorkspaceBindingsAndNavigation(t *testing.T) {
 	p.Tap("Insights")
 	p.Frame()
 	p.Tap("Tasks")
-	p.Type(ggui.Mods{Meta: true}, ggui.KeyN)
+	p.Key("cmd+n")
 	if !ggui.Untrack(m.Editing.Get) {
 		t.Fatal("new-task shortcut did not open the editor")
 	}
@@ -163,7 +163,7 @@ func TestWorkspaceSnapshotsAndSummary(t *testing.T) {
 // without touching the system clipboard.
 func paste(p *ggui.Probe, text string) {
 	p.Clipboard().Write(text)
-	p.Type(ggui.Mods{Meta: true}, ggui.KeyV)
+	p.Key("cmd+v")
 }
 
 // Check geometry as well as existence: a zero-width input can still have an
