@@ -9,14 +9,6 @@ import (
 	"github.com/ironpark/ggfx"
 )
 
-func TestShadowShaderCompiles(t *testing.T) {
-	if sharedShadow() == nil {
-		t.Fatal("missing shader")
-	}
-	if sharedShadow() != sharedShadow() {
-		t.Fatal("shader not shared")
-	}
-}
 func TestShadowGeometryScaleClipAndSpread(t *testing.T) {
 	img := ggfx.NewImage(200, 200)
 	defer img.Deallocate()
@@ -24,12 +16,12 @@ func TestShadowGeometryScaleClipAndSpread(t *testing.T) {
 	s := ShadowStyle{Offset: Pt(3, 4), Blur: 5, Spread: 2, Color: color.Black}
 	r := Rct(Pt(20, 20), Sz(40, 30))
 	g, ok := c.shadowGeometry(r, 8, s)
-	if !ok || g.bounds != image.Rect(32, 34, 140, 122) || g.radius != 20 || g.feather != 10 {
+	if !ok || g.Bounds != image.Rect(32, 34, 140, 122) || g.Radius != 20 || g.Feather != 10 {
 		t.Fatalf("scaled geometry: %+v", g)
 	}
 	clipped := c.Clip(Rct(Pt(25, 25), Sz(20, 20)))
 	g, ok = clipped.shadowGeometry(r, 8, s)
-	if !ok || g.bounds != image.Rect(50, 50, 90, 90) || g.centre != Pt(86, 78) {
+	if !ok || g.Bounds != image.Rect(50, 50, 90, 90) || g.Centre != Pt(86, 78) {
 		t.Fatalf("clipped geometry: %+v", g)
 	}
 	for _, bad := range []ShadowStyle{{Spread: -30}, {Blur: math.NaN()}, {Offset: Pt(math.Inf(1), 0)}} {

@@ -1,4 +1,4 @@
-package ggui
+package render
 
 import (
 	"sync"
@@ -24,3 +24,15 @@ func newUniformBlocks(shader func() *ggfx.Shader) *uniformBlocks {
 
 func (b *uniformBlocks) get() *ggfx.Uniforms  { return b.pool.Get().(*ggfx.Uniforms) }
 func (b *uniformBlocks) put(u *ggfx.Uniforms) { b.pool.Put(u) }
+
+// compile returns a shader built from source on first use. A source that
+// fails to compile panics then, naming what.
+func compile(what, source string) func() *ggfx.Shader {
+	return sync.OnceValue(func() *ggfx.Shader {
+		shader, err := ggfx.NewShader([]byte(source))
+		if err != nil {
+			panic("ggui: compile " + what + ": " + err.Error())
+		}
+		return shader
+	})
+}

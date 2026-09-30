@@ -3,10 +3,10 @@ package ggui
 import (
 	"image"
 	"image/color"
-	"sync"
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggfx/vector"
+	"github.com/ironpark/ggui/internal/render"
 )
 
 // Path is a reusable vector outline in logical pixels. Mutating a path invalidates
@@ -115,39 +115,6 @@ func (c *Canvas) FillPathGradient(path *Path, bounds Rect, top, bottom color.Col
 		path.gradientKey = key
 		path.gradientRev = path.revision
 	}
-	topTint, bottomTint := premul(top), premul(bottom)
-	u := pathGradientUniforms.get()
-	defer pathGradientUniforms.put(u)
-	u.SetSlice("top", topTint[:])
-	u.SetSlice("bottom", bottomTint[:])
-	u.Set("height", float32(bounds.Size.H*scale))
-	u.Set("offset", float32(float64(coverage.Min.Y)-bounds.Origin.Y*scale))
-	op := &ggfx.DrawRectShaderOptions{UniformBlock: u}
-	op.Images[0] = path.gradientMask
-	op.GeoM.Translate(float64(coverage.Min.X), float64(coverage.Min.Y))
-	c.Image.DrawRectShader(w, h, sharedPathGradient(), op)
+	render.VerticalGradient(c.Image, path.gradientMask, coverage.Min, render.Premul(top), render.Premul(bottom),
+		bounds.Size.H*scale, float64(coverage.Min.Y)-bounds.Origin.Y*scale)
 }
-
-const pathGradientSource = `
-struct Uniforms {
-	top: vec4f,
-	bottom: vec4f,
-	height: f32,
-	offset: f32,
-}
-@group(1) @binding(0) var<uniform> u: Uniforms;
-fn fragment(v: Vertex) -> vec4f {
-	let y = v.src_pos.y - src0_origin().y + u.offset;
-	return mix(u.top, u.bottom, clamp(y / u.height, 0.0, 1.0)) * src0_at(v.src_pos).a;
-}
-`
-
-var sharedPathGradient = sync.OnceValue(func() *ggfx.Shader {
-	shader, err := ggfx.NewShader([]byte(pathGradientSource))
-	if err != nil {
-		panic("ggui: compile path gradient: " + err.Error())
-	}
-	return shader
-})
-
-var pathGradientUniforms = newUniformBlocks(sharedPathGradient)

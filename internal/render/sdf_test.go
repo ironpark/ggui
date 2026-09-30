@@ -1,11 +1,11 @@
-package ggui
+package render
 
 import (
 	"image"
 	"testing"
 )
 
-// sdfBounds decides the quad a distance-field shape is drawn over. It has to
+// Bounds decides the quad a distance-field shape is drawn over. It has to
 // cover every pixel the shape can tint, including the edge it feathers over
 // and a border drawn outside the outline, and nothing the target cannot show.
 func TestSDFBoundsCoversTheShapeAndClipsToTheTarget(t *testing.T) {
@@ -26,7 +26,7 @@ func TestSDFBoundsCoversTheShapeAndClipsToTheTarget(t *testing.T) {
 		{"touching the edge covers nothing", -5, 30, 5, 5, 0, image.Rectangle{}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, ok := sdfBounds(target, tc.cx, tc.cy, tc.hw, tc.hh, tc.reach)
+			got, ok := Bounds(target, tc.cx, tc.cy, tc.hw, tc.hh, tc.reach)
 			if ok != tc.ok {
 				t.Fatalf("ok = %v, want %v", ok, tc.ok)
 			}
@@ -41,11 +41,11 @@ func TestSDFBoundsCoversTheShapeAndClipsToTheTarget(t *testing.T) {
 // The quad has to stay inside them, or the shape would spill past the clip.
 func TestSDFBoundsStaysInsideAClip(t *testing.T) {
 	clip := image.Rect(20, 10, 60, 40)
-	got, ok := sdfBounds(clip, 30, 20, 100, 100, 3)
+	got, ok := Bounds(clip, 30, 20, 100, 100, 3)
 	if !ok || got != clip {
 		t.Fatalf("bounds = %v (%v), want the clip %v", got, ok, clip)
 	}
-	if _, ok := sdfBounds(clip, 5, 20, 5, 5, 0); ok {
+	if _, ok := Bounds(clip, 5, 20, 5, 5, 0); ok {
 		t.Fatal("a shape left of the clip was given a quad")
 	}
 }

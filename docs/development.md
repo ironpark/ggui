@@ -117,7 +117,7 @@ those guides as historical measurements; rerun them on your target hardware.
 | --- | --- |
 | Application and frame loop | [app.go](../app.go), [loop.go](../loop.go) |
 | Reactivity and component ownership | [signal.go](../signal.go), [widget.go](../widget.go), [for.go](../for.go) |
-| Layout, geometry, and drawing | [widgets.go](../widgets.go), [geometry.go](../geometry.go), [canvas.go](../canvas.go) |
+| Layout, geometry, and drawing | [widgets.go](../widgets.go), [geometry.go](../geometry.go), [canvas.go](../canvas.go), [internal/render/](../internal/render/) (the shaders behind the Canvas) |
 | UI controls | [ui/](../ui/) |
 | Text editing and fonts | [editor.go](../editor.go), [font.go](../font.go), [internal/textinput/](../internal/textinput/) |
 | Input and shortcuts | [input.go](../input.go), [chord.go](../chord.go), [clipboard.go](../clipboard.go) |
