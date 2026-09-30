@@ -97,4 +97,3 @@ func (c *Canvas) Physical(r Rect) image.Rectangle { return c.physical(r) }
 
 // DefaultFont is the font Text uses when none is set.
 func DefaultFont() *Font { return fallbackFont() }
-

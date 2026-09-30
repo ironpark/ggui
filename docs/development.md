@@ -48,6 +48,25 @@ the `task run-*` and `task serve` loops set the tag. `task bundle` does not.
 See [Testing](testing.md) for `Probe`, and [Rendering](rendering.md#frame-lifecycle)
 for diagnosing effects that fail to settle.
 
+### Continuous integration
+
+`.github/workflows/ci.yml` runs on every push to `main` and every pull
+request:
+
+- **test**, on Linux, macOS and Windows: `go test` plain, with
+  `ggui_inspector` and with `ggui_debug`, and with `-race` everywhere but
+  Windows, whose runner has no C toolchain for it. `examples/sqlite` is
+  tested through a `go work init . ./examples/sqlite` workspace, so it
+  builds against the checkout rather than a published ggui.
+- **wasm**: builds everything for `js/wasm` and runs the packages that do
+  not start ggfx under node, `internal/goid` among them.
+- **lint**: `gofmt`, `go vet`, the Windows vet of `task vet:windows`, and
+  builds for linux/riscv64 and windows/arm64.
+
+A test that presses a shortcut should use `Probe.Key("cmd+k")` rather
+than a `Mods` literal: `cmd` is ⌘ on macOS and Ctrl elsewhere, and the
+Linux and Windows jobs press Ctrl.
+
 ## Run native examples
 
 ```sh

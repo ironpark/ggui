@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            examples/sqlite/go.sum
+      # examples/sqlite is a module of its own that requires a published
+      # ggui; the workspace makes it build against this checkout instead.
+      # The developer's own go.work, which also points at ../ggfx, is not
+      # committed.
+      - name: Workspace
+        run: go work init . ./examples/sqlite
+      - name: Test
+        run: go test ./... ./examples/sqlite/...
+      - name: Test with the inspector
+        run: go test -tags ggui_inspector .
+      - name: Test the debug build
+        run: go test -tags ggui_debug . ./internal/reactive
+      # The race detector needs cgo, which the Windows runner has no C
+      # toolchain configured for. Probe tests run under t.Parallel, and
+      # -race is what shows that no probe reaches another's state.
+      - name: Test with the race detector
+        if: runner.os != 'Windows'
+        run: go test -race ./...
+
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - name: Build
+        run: GOOS=js GOARCH=wasm go build ./...
+      # Only the packages that do not start ggfx run under node: ggfx wants
+      # a browser. internal/goid is the one that matters most, since wasm
+      # has no getg and must take the stack-parsing fallback.
+      - name: Test
+        run: >-
+          GOOS=js GOARCH=wasm go test
+          -exec="$(go env GOROOT)/lib/wasm/go_js_wasm_exec"
+          ./internal/goid ./internal/reactive ./internal/textedit
+          ./internal/emojidata ./a11y ./inspect ./runtime
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Workspace
+        run: go work init . ./examples/sqlite
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "gofmt would change:"; echo "$unformatted"; exit 1
+          fi
+      - name: vet
+        run: |
+          go vet ./... ./examples/sqlite/...
+          go vet -tags ggui_inspector .
+      # The Windows accessibility bridge is compiled by no other platform;
+      # see vet:windows in Taskfile.yml for why unsafeptr is off.
+      - name: vet (windows)
+        run: |
+          for arch in amd64 arm64; do
+            GOOS=windows GOARCH=$arch go vet -unsafeptr=false ./...
+            GOOS=windows GOARCH=$arch go vet -unsafeptr=false -tags ggui_inspector .
+          done
+      - name: Build for other architectures
+        run: |
+          GOOS=linux GOARCH=amd64 go build ./...
+          GOOS=linux GOARCH=riscv64 go build ./...
+          GOOS=windows GOARCH=arm64 go build ./...
