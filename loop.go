@@ -43,8 +43,8 @@ func (e *cycleError) Unwrap() error { return ErrCycle }
 
 // cycle describes the effects a flush just gave up on. It is built only on
 // that path, so a settled frame pays nothing for it.
-func cycle() error {
-	stuck, total := reactive.Unsettled()
+func cycle(rt *reactive.Runtime) error {
+	stuck, total := rt.Unsettled()
 	var b strings.Builder
 	b.WriteString(ErrCycle.Error())
 	fmt.Fprintf(&b, "\n  %d of %d effects never settled", len(stuck), total)
@@ -102,7 +102,11 @@ func (l *frameLoop) Clipboard() runtime.Clipboard { return l.clipboard }
 // the tree is built under, the posted work, and the record of the last
 // layout, which lets a still frame skip layout.
 type frameLoop struct {
-	host    Host // the Window or Probe this loop is, for UseHost
+	host Host // the Window or Probe this loop is, for UseHost
+	// rt is the reactive runtime the tree is built in and flushed by: a
+	// Probe's own, so that its effects run in its frames alone, or nil
+	// for Default, which every window of the App shares.
+	rt      *reactive.Runtime
 	build   Builder
 	setup   []func()
 	root    Widget
@@ -211,11 +215,19 @@ func loopOf(owner *reactive.Computation) *frameLoop {
 	return l
 }
 
+// runtime is the reactive runtime this loop flushes.
+func (r *frameLoop) runtime() *reactive.Runtime {
+	if r.rt == nil {
+		return reactive.Default
+	}
+	return r.rt
+}
+
 // start runs the setup functions and the builder under a fresh root owner.
 // Everything they create lives until close.
 func (r *frameLoop) start() {
 	running.Store(r)
-	r.dispose = Root(func() {
+	r.dispose = r.runtime().Root(func() {
 		reactive.CurrentOwner().SetLoop(r)
 		r.owner = reactive.CurrentOwner()
 		for _, fn := range r.setup {
@@ -295,8 +307,8 @@ func (r *frameLoop) runPosted() {
 func (r *frameLoop) tick(now time.Time) error {
 	running.Store(r)
 	anims.step(now)
-	if !reactive.Flush() {
-		return cycle()
+	if rt := r.runtime(); !rt.Flush() {
+		return cycle(rt)
 	}
 	return nil
 }
@@ -331,23 +343,24 @@ func (r *frameLoop) paintTree(c *Canvas) {
 // before running user effects. Both App and Probe use this exact ordering.
 func (r *frameLoop) settle(size Size) error {
 	running.Store(r)
+	rt := r.runtime()
 	for range reactive.MaxFlushPasses {
 		if r.closed {
 			return nil
 		}
-		if !reactive.Flush() {
-			return cycle()
+		if !rt.Flush() {
+			return cycle(rt)
 		}
 		before := reactive.StateGen()
 		if r.root != nil && r.needsLayout(size) {
 			reactive.WithOwner(r.owner, func() { defer property.EnterLayout()(); r.rootSize = r.root.Layout(Tight(size), rootEnv()) })
 		}
-		if !reactive.Settled() || reactive.StateGen() != before {
+		if !rt.Settled() || reactive.StateGen() != before {
 			continue
 		}
-		if !reactive.FlushUsers(r) {
+		if !rt.FlushUsers(r) {
 			return nil
 		}
 	}
-	return cycle()
+	return cycle(rt)
 }

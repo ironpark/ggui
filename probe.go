@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/inspect"
+	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/runtime"
 )
 
@@ -80,6 +81,7 @@ func NewProbe(w Widget, size Size) *Probe {
 func ProbeBuilder(build Builder, size Size) *Probe {
 	p := &Probe{size: size}
 	p.host = p
+	p.rt = reactive.NewRuntime()
 	p.build = build
 	p.dialogs = &runtime.StubFilePicker{}
 	p.clipboard = &runtime.MemoryClipboard{}
