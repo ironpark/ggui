@@ -3,6 +3,9 @@
 package runtime
 
 import (
+	goruntime "runtime"
+	"sync"
+
 	"github.com/ebitengine/purego/cstrings"
 	"github.com/ebitengine/purego/objc"
 
@@ -10,8 +13,12 @@ import (
 )
 
 // The macOS clipboard is the general NSPasteboard, which may be used from
-// any thread. Each call drains its own autorelease pool, since it runs on
-// whichever goroutine asked and none of them has one.
+// any thread but not from two at once: calls in parallel crash the process,
+// so they take turns. Each call drains its own autorelease pool, since it
+// runs on whichever goroutine asked and none of them has one. A pool
+// belongs to the thread that made it, so the goroutine stays on its thread
+// until the pool is drained; drained on another thread, it crashes the
+// process too.
 
 var (
 	selGeneralPasteboard = objc.RegisterName("generalPasteboard")
@@ -33,20 +40,35 @@ func nativeClipboard() Clipboard { return pasteboard{} }
 // pasteboard is the system clipboard through NSPasteboard.
 type pasteboard struct{}
 
-func (pasteboard) Read() string {
+// pasteboardMu makes the calls to NSPasteboard take turns.
+var pasteboardMu sync.Mutex
+
+// withPool runs fn alone, on one thread, inside an autorelease pool.
+func withPool(fn func()) {
+	pasteboardMu.Lock()
+	defer pasteboardMu.Unlock()
+	goruntime.LockOSThread()
+	defer goruntime.UnlockOSThread()
 	pool := classNSAutoreleasePool.Send(selNew)
 	defer pool.Send(selDrain)
-	s := classNSPasteboard.Send(selGeneralPasteboard).Send(selStringForType, cocoa.String(pasteboardTypeString))
-	if s == 0 {
-		return ""
-	}
-	return cstrings.NSStringToString(s)
+	fn()
+}
+
+func (pasteboard) Read() string {
+	var out string
+	withPool(func() {
+		s := classNSPasteboard.Send(selGeneralPasteboard).Send(selStringForType, cocoa.String(pasteboardTypeString))
+		if s != 0 {
+			out = cstrings.NSStringToString(s)
+		}
+	})
+	return out
 }
 
 func (pasteboard) Write(s string) {
-	pool := classNSAutoreleasePool.Send(selNew)
-	defer pool.Send(selDrain)
-	pb := classNSPasteboard.Send(selGeneralPasteboard)
-	pb.Send(selClearContents)
-	pb.Send(selSetStringForType, cocoa.String(s), cocoa.String(pasteboardTypeString))
+	withPool(func() {
+		pb := classNSPasteboard.Send(selGeneralPasteboard)
+		pb.Send(selClearContents)
+		pb.Send(selSetStringForType, cocoa.String(s), cocoa.String(pasteboardTypeString))
+	})
 }
