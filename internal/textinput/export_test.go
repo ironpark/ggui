@@ -22,21 +22,8 @@ type TextInputEvents = textInputEvents
 // build the events they send.
 type TextInputState = textInputState
 
-// CommitKind and its constants re-export the internal commit-kind enum.
-type CommitKind = commitKind
-
-const (
-	CommitNone               = commitNone
-	CommitRegular            = commitRegular
-	CommitWithPassthroughKey = commitWithPassthroughKey
-)
-
-// QueuedStateCount reports how many states are held for a session to take.
-func (s *TextInputEvents) QueuedStateCount() int {
-	s.m.Lock()
-	defer s.m.Unlock()
-	return len(s.queuedStates)
-}
+// CommitRegular re-exports the commit kind of an ordinary commit.
+const CommitRegular = commitRegular
 
 func (s *TextInputEvents) Start() {
 	s.start()

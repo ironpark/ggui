@@ -230,8 +230,10 @@ func SetDefaultFont(f *Font) {
 
 // fallbackFont returns the font Text uses when none is set.
 func fallbackFont() *Font {
-	if f := inherited(activeWorld(), func(w *world) *Font { return w.font }); f != nil {
-		return f
+	for w := range activeWorld().chain() {
+		if w.font != nil {
+			return w.font
+		}
 	}
 	return builtinFont()
 }

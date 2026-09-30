@@ -1,6 +1,10 @@
 package ggui
 
-import "github.com/ironpark/ggui/internal/reactive"
+import (
+	"iter"
+
+	"github.com/ironpark/ggui/internal/reactive"
+)
 
 // A world is what the frame loops of one reactive runtime share beside the
 // graph itself: the animations their frames step, the clock those frames
@@ -46,16 +50,13 @@ func worldOf(rt *reactive.Runtime) *world {
 	return w
 }
 
-// inherited returns the first setting get finds that is not zero, from w
-// up through its parents, or zero.
-func inherited[T comparable](w *world, get func(*world) T) T {
-	var zero T
-	for ; w != nil; w = w.parent {
-		if v := get(w); v != zero {
-			return v
+// chain yields w and then its parents, nearest first: where a setting w
+// has not made is looked up.
+func (w *world) chain() iter.Seq[*world] {
+	return func(yield func(*world) bool) {
+		for ; w != nil && yield(w); w = w.parent {
 		}
 	}
-	return zero
 }
 
 // activeWorld is the world of the loop whose frame the running goroutine

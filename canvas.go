@@ -571,10 +571,15 @@ func (c *Canvas) Clip(r Rect) *Canvas {
 		child.clip = c.clip.Intersect(r)
 	}
 	if c.Image != nil {
-		//lint:ignore SA1019 SubImage is not deprecated: staticcheck gives it the notice of DrawTrianglesShader32, the method after the generic one before it
-		child.Image = c.Image.SubImage(c.physical(child.clip)).(*ggfx.Image)
+		child.Image = subImage(c.Image, c.physical(child.clip))
 	}
 	return child
+}
+
+// subImage is the part of img inside r, sharing its pixels.
+func subImage(img *ggfx.Image, r image.Rectangle) *ggfx.Image {
+	//lint:ignore SA1019 SubImage is not deprecated: staticcheck gives it the notice of DrawTrianglesShader32, the method after the generic one before it
+	return img.SubImage(r).(*ggfx.Image)
 }
 
 // add records a hit region, trimmed to the clip, on the root Canvas. A

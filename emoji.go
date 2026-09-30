@@ -29,7 +29,7 @@ var fontGeneration atomic.Uint64
 // Text read it to decide whether a measurement still holds.
 func fontGen() uint64 {
 	g := fontGeneration.Load()
-	for w := activeWorld(); w != nil; w = w.parent {
+	for w := range activeWorld().chain() {
 		g += w.fontGen
 	}
 	return g
@@ -41,7 +41,12 @@ type emojiChoice struct{ font *Font }
 
 // activeEmoji is the active world's emoji choice.
 func activeEmoji() *emojiChoice {
-	return inherited(activeWorld(), func(w *world) *emojiChoice { return w.emoji })
+	for w := range activeWorld().chain() {
+		if w.emoji != nil {
+			return w.emoji
+		}
+	}
+	return nil
 }
 
 // SetEmojiFont selects a color emoji font for Text and TextInput. It does not

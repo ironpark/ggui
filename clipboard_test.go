@@ -11,9 +11,7 @@ func TestEachProbeHasItsOwnClipboard(t *testing.T) {
 	defer b.Close()
 	b.Frame()
 	a.Click(Pt(190, 10))
-	cmd := Mods{Meta: true, Ctrl: true}
-	a.Type(cmd, KeyA)
-	a.Type(cmd, KeyC)
+	a.Key("cmd+a", "cmd+c")
 	if got := a.Clipboard().Read(); got != "secret" {
 		t.Fatalf("copy put %q on the probe's clipboard", got)
 	}

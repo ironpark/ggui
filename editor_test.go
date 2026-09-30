@@ -123,7 +123,7 @@ func TestTextInputSubmitAndClipboard(t *testing.T) {
 	var submitted []string
 	w, in := focusedInput(t, value)
 	w.OnSubmit(func(s string) { submitted = append(submitted, s) })
-	cmd := Mods{Meta: true, Ctrl: true}
+	cmd := MustChord("cmd+a").held()
 	typeKeys(in, cmd, KeyA)
 	typeKeys(in, cmd, KeyC)
 	if clip.Read() != "copy me" {
@@ -286,7 +286,7 @@ func TestTextInputMultilineWrapsGrowsAndNavigates(t *testing.T) {
 	}
 	submitted := ""
 	w.OnSubmit(func(s string) { submitted = s })
-	typeKeys(&in, Mods{Meta: true, Ctrl: true}, KeyEnter)
+	typeKeys(&in, MustChord("cmd+enter").held(), KeyEnter)
 	if submitted == "" {
 		t.Fatal("Cmd+Enter did not submit")
 	}

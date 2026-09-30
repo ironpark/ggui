@@ -638,7 +638,7 @@ type ime interface {
 // newIME builds the IME driver for a new editor: the platform's, or the
 // one a test gave the world the editor is made in.
 func newIME(t *TextInputWidget) ime {
-	for w := ownerWorld(); w != nil; w = w.parent {
+	for w := range ownerWorld().chain() {
 		if w.ime != nil {
 			return w.ime(t)
 		}
