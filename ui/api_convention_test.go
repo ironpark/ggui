@@ -6,7 +6,7 @@ import (
 	"go/format"
 	"go/parser"
 	"go/token"
-	"io/fs"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -41,15 +41,9 @@ func receiverType(fn *ast.FuncDecl) string {
 func TestPublicKeySettersReturnTheirOwnControl(t *testing.T) {
 	t.Parallel()
 	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, ".", func(fi fs.FileInfo) bool {
-		return !strings.HasSuffix(fi.Name(), "_test.go")
-	}, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
 	types := map[string]*ast.StructType{}
 	keys := map[string]*ast.FuncDecl{}
-	for _, file := range pkgs["ui"].Files {
+	for _, file := range parseSources(t, fset, 0, false) {
 		for _, decl := range file.Decls {
 			switch d := decl.(type) {
 			case *ast.FuncDecl:
@@ -135,19 +129,8 @@ func TestPublicKeySettersReturnTheirOwnControl(t *testing.T) {
 func TestDisabledSettersComeInPairs(t *testing.T) {
 	t.Parallel()
 	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, ".", func(fi fs.FileInfo) bool {
-		return !strings.HasSuffix(fi.Name(), "_test.go")
-	}, 0)
-	if err != nil {
-		t.Fatalf("parse ui package: %v", err)
-	}
-	pkg, ok := pkgs["ui"]
-	if !ok {
-		t.Fatal("package ui not found")
-	}
-
 	setters := map[string]map[string]*ast.FuncDecl{}
-	for _, file := range pkg.Files {
+	for _, file := range parseSources(t, fset, 0, false) {
 		for _, decl := range file.Decls {
 			switch d := decl.(type) {
 			case *ast.FuncDecl:
@@ -189,13 +172,9 @@ func TestDisabledSettersComeInPairs(t *testing.T) {
 func TestBindingSettersHaveTypedFluentCounterparts(t *testing.T) {
 	t.Parallel()
 	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, ".", func(fi fs.FileInfo) bool { return !strings.HasSuffix(fi.Name(), "_test.go") }, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
 	methods := map[string]map[string]*ast.FuncDecl{}
 	print := func(n ast.Node) string { var b bytes.Buffer; format.Node(&b, fset, n); return b.String() }
-	for _, file := range pkgs["ui"].Files {
+	for _, file := range parseSources(t, fset, 0, false) {
 		for _, decl := range file.Decls {
 			f, ok := decl.(*ast.FuncDecl)
 			if !ok || f.Recv == nil {
@@ -239,4 +218,27 @@ func TestBindingSettersHaveTypedFluentCounterparts(t *testing.T) {
 	if checked == 0 {
 		t.Fatal("no bindings checked")
 	}
+}
+
+// parseSources parses the Go files in this directory, the tests among them
+// only when tests is set, keyed by name. It reads every file whatever its
+// build constraints, as a check of the source's shape wants.
+func parseSources(t *testing.T, fset *token.FileSet, mode parser.Mode, tests bool) map[string]*ast.File {
+	t.Helper()
+	names, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]*ast.File{}
+	for _, name := range names {
+		if !tests && strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, name, nil, mode)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files[name] = f
+	}
+	return files
 }

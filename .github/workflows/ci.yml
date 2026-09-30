@@ -96,6 +96,16 @@ jobs:
             GOOS=windows GOARCH=$arch go vet -unsafeptr=false ./...
             GOOS=windows GOARCH=$arch go vet -unsafeptr=false -tags ggui_inspector .
           done
+      # Each platform compiles code the others do not, so code unused on
+      # one platform alone is not dead: staticcheck runs once per platform.
+      - name: staticcheck
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@v0.8.1
+          for p in linux/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+            echo "::group::$p"
+            GOOS=${p%/*} GOARCH=${p#*/} staticcheck ./... ./examples/sqlite/...
+            echo "::endgroup::"
+          done
       - name: Build for other architectures
         run: |
           GOOS=linux GOARCH=amd64 go build ./...

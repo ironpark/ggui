@@ -16,7 +16,7 @@ func TestShadersCompile(t *testing.T) {
 			t.Fatal("missing shader")
 		}
 	}
-	if sharedShadow() != sharedShadow() {
+	if first, second := sharedShadow(), sharedShadow(); first != second {
 		t.Fatal("shader not shared")
 	}
 }

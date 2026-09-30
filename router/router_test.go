@@ -310,8 +310,7 @@ func TestTargetsAndQueryTracking(t *testing.T) {
 
 func TestSetupReplaceAndLoopReporting(t *testing.T) {
 	t.Parallel()
-	var r *Router
-	r = New(
+	r := New(
 		Page("/", text("home")),
 		Page("/old", func(c *Context) ggui.Widget {
 			if err := c.Replace("/"); err != nil {

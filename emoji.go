@@ -171,6 +171,6 @@ func drawText(dst *ggfx.Image, s string, face text.Face, options *text.DrawOptio
 		local.Concat(op.GeoM)
 		op.GeoM = local
 		text.Draw(dst, run, f, &op)
-		x += text.Advance(run, f)
+		x += text.AdvanceAt(run, len(run), f)
 	}
 }

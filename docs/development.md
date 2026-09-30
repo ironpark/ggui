@@ -22,6 +22,7 @@ On macOS, install it with `brew install go-task`.
 | `task build` | Build all packages. |
 | `task test` | Run `go test ./...`. |
 | `task vet` | Run `go vet ./...`. |
+| `task lint` | Run `staticcheck` once per platform, since code one platform does not compile looks unused on it. |
 | `task fmt` | Format Go sources. |
 | `task tidy` | Update module dependency metadata. |
 | `task bench COUNT=6` | Run package benchmarks repeatedly for comparison. |
@@ -60,8 +61,9 @@ request:
   builds against the checkout rather than a published ggui.
 - **wasm**: builds everything for `js/wasm` and runs the packages that do
   not start ggfx under node, `internal/goid` among them.
-- **lint**: `gofmt`, `go vet`, the Windows vet of `task vet:windows`, and
-  builds for linux/riscv64 and windows/arm64.
+- **lint**: `gofmt`, `go vet`, the Windows vet of `task vet:windows`,
+  `task lint`'s staticcheck for every platform, and builds for
+  linux/riscv64 and windows/arm64.
 
 A test that presses a shortcut should use `Probe.Key("cmd+k")` rather
 than a `Mods` literal: `cmd` is ⌘ on macOS and Ctrl elsewhere, and the

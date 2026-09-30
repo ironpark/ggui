@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -31,7 +32,8 @@ func reactivityPreview() ggui.Widget {
 			case <-timer.C:
 			}
 			if strings.EqualFold(q, "error") {
-				return nil, fmt.Errorf("Demo request failed; change the query or retry")
+				//lint:ignore ST1005 the demo shows the message to the user as it is
+				return nil, errors.New("Demo request failed; change the query or retry")
 			}
 			var matches []reactivePerson
 			for _, person := range []reactivePerson{{1, "Ada"}, {2, "Grace"}, {3, "Linus"}} {

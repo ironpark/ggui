@@ -571,6 +571,7 @@ func (c *Canvas) Clip(r Rect) *Canvas {
 		child.clip = c.clip.Intersect(r)
 	}
 	if c.Image != nil {
+		//lint:ignore SA1019 SubImage is not deprecated: staticcheck gives it the notice of DrawTrianglesShader32, the method after the generic one before it
 		child.Image = c.Image.SubImage(c.physical(child.clip)).(*ggfx.Image)
 	}
 	return child

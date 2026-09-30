@@ -267,7 +267,7 @@ func (f *Font) face(size float64) text.Face {
 func lineWidth(s string, face text.Face) float64 {
 	width := 0.0
 	for run, f := range textRuns(s, face) {
-		width += text.Advance(run, f)
+		width += text.AdvanceAt(run, len(run), f)
 	}
 	return width
 }

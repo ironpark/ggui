@@ -68,7 +68,7 @@ func edgeFade(dst *ggui.Canvas, r ggui.Rect, dx, dy float64, col color.Color, st
 	const width = 12
 	for i := 0; i < width; i++ {
 		alpha := strength * (1 - float64(i)/width)
-		strip := ggui.Rct(r.Origin, ggui.Sz(r.Size.W, 1.0))
+		var strip ggui.Rect
 		switch {
 		case dx > 0:
 			strip = ggui.Rct(r.Origin.Add(ggui.Pt(float64(i), 0.0)), ggui.Sz(1.0, r.Size.H))

@@ -89,7 +89,7 @@ func TestEditorSelectWord(t *testing.T) {
 func TestCaretStepsByGrapheme(t *testing.T) {
 	var e Editor
 	// e + combining acute, a family emoji joined with ZWJ, a flag pair, CRLF.
-	e.SetText("é\U0001F468‍\U0001F469\U0001F1F0\U0001F1F7\r\nx")
+	e.SetText("é\U0001F468\u200d\U0001F469\U0001F1F0\U0001F1F7\r\nx")
 	e.MoveTo(0, false)
 	steps := []int{}
 	for e.Caret < len(e.Text) {
@@ -102,11 +102,11 @@ func TestCaretStepsByGrapheme(t *testing.T) {
 	e.MoveTo(len(e.Text), false)
 	e.Backspace(false)
 	e.Backspace(false)
-	if e.Text != "é\U0001F468‍\U0001F469\U0001F1F0\U0001F1F7" {
+	if e.Text != "é\U0001F468\u200d\U0001F469\U0001F1F0\U0001F1F7" {
 		t.Fatalf("after two backspaces: %q", e.Text)
 	}
 	e.Backspace(false)
-	if e.Text != "é\U0001F468‍\U0001F469" {
+	if e.Text != "é\U0001F468\u200d\U0001F469" {
 		t.Fatalf("backspace over the flag pair: %q", e.Text)
 	}
 	e.MoveTo(0, false)

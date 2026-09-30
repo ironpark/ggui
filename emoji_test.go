@@ -47,7 +47,7 @@ func TestEmojiPresentationAndTextShaping(t *testing.T) {
 	face := fallbackFont().face(20)
 	ef := face.(*emojiFace)
 	for _, s := range []string{"AV 123 # * © ♥︎", "plain text"} {
-		if got, want := lineWidth(s, face), text.Advance(s, ef.Face); got != want {
+		if got, want := lineWidth(s, face), text.AdvanceAt(s, len(s), ef.Face); got != want {
 			t.Fatalf("ordinary text width changed: %q %v != %v", s, got, want)
 		}
 	}

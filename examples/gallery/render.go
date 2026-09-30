@@ -150,7 +150,7 @@ func (g *galleryAudit) step() (bool, error) {
 			node, ok := app.Semantics().Find("", label)
 			if !ok {
 				if err == nil {
-					err = fmt.Errorf("Data Table: missing %q", label)
+					err = fmt.Errorf("data table: missing %q", label)
 				}
 				return
 			}

@@ -77,6 +77,7 @@ func (c *Canvas) layer(area image.Rectangle, paint func(*Canvas), draw func(*ggf
 	img := f.borrowLayer(window)
 	defer func() { f.layerDepth-- }()
 	if !area.Empty() {
+		//lint:ignore SA1019 SubImage is not deprecated: staticcheck gives it the notice of DrawTrianglesShader32, the method after the generic one before it
 		img = img.SubImage(area).(*ggfx.Image)
 	}
 	img.Clear()
