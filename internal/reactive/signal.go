@@ -13,16 +13,11 @@ import (
 // layoutGen counts the changes that can move something on screen: every
 // StateValue write and every Invalidate. The runtime lays the tree out again
 // only when it has advanced, or the window changed size, and paints every
-// frame regardless.
-//
-// It is atomic and stateGen is not, which is the difference between the two:
-// RequestLayout is reachable from anything that changes a size, and a stray
-// call from another goroutine should cost one extra layout rather than tear
-// the counter. stateGen is written only by store and read only by settle,
-// both on the UI goroutine under CheckUIThread, and marks a state write that
-// happened during a layout so settle knows to go round again.
-var layoutGen atomic.Uint64
-var stateGen uint64
+// frame regardless. stateGen counts the writes alone, so that settle can
+// tell a write that happened during a layout and go round again. Both are
+// shared by every runtime and goroutine: a write elsewhere costs a frame at
+// most one extra pass.
+var layoutGen, stateGen atomic.Uint64
 
 // RequestLayout asks the runtime to lay the tree out again next frame.
 func RequestLayout() { layoutGen.Add(1) }
@@ -31,47 +26,10 @@ func RequestLayout() { layoutGen.Add(1) }
 // Untrack read affects layout, but never subscribes the enclosing computation.
 type LayoutSource interface{ LayoutVersion() uint64 }
 
-// measuring is the recorder a running Layout installs so that a signal
-// read during measurement is remembered as an input of that layout. It is
-// a func rather than the cache itself, so that the reactive core does not
-// name the layout cache.
-var measuring func(src LayoutSource, version uint64)
-
-// Measure runs fn with record installed as the layout recorder, restoring
-// whatever was installed before, so that nested layouts each see their own.
-func Measure(record func(src LayoutSource, version uint64), fn func()) {
-	previous := measuring
-	measuring = record
-	defer func() { measuring = previous }()
-	fn()
-}
-
-// Recording reports whether a layout recorder is installed.
-func Recording() bool { return measuring != nil }
-
-// Record reports a read of src at version to the running layout, if any.
-func Record(src LayoutSource, version uint64) {
-	if measuring != nil {
-		measuring(src, version)
-	}
-}
-
-// tracker holds the running computation. listener is the Computation that reads
-// subscribe to (nil inside Untrack); owner is the Computation that newly created
-// effects belong to, so that they are disposed when it re-runs or is
-// disposed. This mirrors Svelte's automatic dependency tracking and Solid's
-// ownership tree: nothing is declared, reads and creations are observed.
-type tracker struct {
-	mu       sync.Mutex
-	listener *Computation
-	owner    *Computation
-}
-
-// deps, effects and derivedDepth are the reactive system's one running
-// state: there is a single UI goroutine, and every entry point that reaches
-// them -- Get, Set, Derived, Effect -- runs under CheckUIThread. deps takes
-// a mutex anyway because a read may cross into a Derived's own computation.
-var deps tracker
+// The running computation, the owner new computations join and the layout
+// recorder a read reports to are the running goroutine's; see scope. This
+// mirrors Svelte's automatic dependency tracking and Solid's ownership
+// tree: nothing is declared, reads and creations are observed.
 
 // source is anything an effect can subscribe to.
 type source interface {
@@ -102,7 +60,7 @@ type Computation struct {
 	user       bool
 	persistent bool
 	// rt is the Runtime whose flushes run this Computation: its owner's, or
-	// Default for one created with no owner.
+	// the creating goroutine's Base for one created with no owner.
 	rt *Runtime
 	// loop is the frame loop this Computation belongs to, held only so that
 	// flushUsers can tell one loop's effects from another's. It is never
@@ -397,9 +355,8 @@ func (s *StateValue[T]) WithEqual(eq func(a, b T) bool) *StateValue[T] {
 // Get returns the current value and subscribes the running Effect, if any.
 func (s *StateValue[T]) Get() T {
 	CheckUIThread("StateValue.Get")
-	deps.mu.Lock()
-	e := deps.listener
-	deps.mu.Unlock()
+	sc := current()
+	e := sc.listener
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -409,7 +366,9 @@ func (s *StateValue[T]) Get() T {
 			e.sources = append(e.sources, s)
 		}
 	}
-	Record(s, s.version)
+	if sc.measuring != nil {
+		sc.measuring(s, s.version)
+	}
 	return s.val
 }
 
@@ -440,7 +399,7 @@ func (s *StateValue[T]) unsubscribe(e *Computation) {
 // value changes nothing and notifies no one.
 func (s *StateValue[T]) Set(v T) {
 	CheckUIThread("StateValue.Set")
-	if derivedDepth > 0 {
+	if current().derivedDepth > 0 {
 		panic("ggui: state write inside Derived")
 	}
 	s.store(v)
@@ -454,7 +413,7 @@ func (s *StateValue[T]) store(v T) {
 		return
 	}
 	s.val = v
-	stateGen++
+	stateGen.Add(1)
 	s.version++
 	layoutGen.Add(1)
 	subs := make([]*Computation, 0, len(s.subs))
@@ -522,10 +481,6 @@ type DerivedValue[T any] struct {
 	dispose func()
 }
 
-// derivedDepth is how deep the running computation is inside Derived, which
-// is what makes a state write in there a panic rather than a silent cycle.
-var derivedDepth int
-
 // Derived creates a lazy, read-only value. fn runs on the first Get and the
 // first Get after its dependencies change. State writes inside fn panic.
 // Computations created under an owner are disposed with it; otherwise call
@@ -533,7 +488,14 @@ var derivedDepth int
 func Derived[T any](fn func() T) *DerivedValue[T] {
 	m := &DerivedValue[T]{sig: State(*new(T))}
 	e := newComputation(func() {
-		value := func() T { derivedDepth++; defer func() { derivedDepth-- }(); return fn() }()
+		// How deep the goroutine is inside Derived is what makes a state
+		// write in there a panic rather than a silent cycle.
+		value := func() T {
+			sc := current()
+			sc.derivedDepth++
+			defer func() { sc.derivedDepth-- }()
+			return fn()
+		}()
 		m.sig.store(value)
 	}, false)
 	m.eff, m.dispose = e, e.dispose
@@ -615,11 +577,13 @@ func Effect(fn func() Cleanup) Cleanup {
 }
 
 func newComputation(fn func(), user bool) *Computation {
-	e := &Computation{fn: fn, user: user, origin: effectOrigin(), rt: Default}
+	e := &Computation{fn: fn, user: user, origin: effectOrigin()}
 	if owner := CurrentOwner(); owner != nil {
 		e.attach(owner)
 		e.place(owner, "")
 		e.loop, e.rt = owner.loop, owner.rt
+	} else {
+		e.rt = Base()
 	}
 	e.rt.effects.add(e)
 	return e
@@ -663,27 +627,25 @@ func (rt *Runtime) Root(fn func()) (dispose func()) {
 }
 
 // rootIn is RootWith with the root's runtime chosen: rt, or when nil the
-// owner's, or Default.
+// owner's, or the goroutine's Base.
 func rootIn(rt *Runtime, identity any, elem string, fn func()) (dispose func()) {
-	r := &Computation{keyRoot: identity, origin: effectOrigin(), persistent: false, rt: Default}
-	deps.mu.Lock()
-	r.owner = deps.owner
-	prevListener, prevOwner := deps.listener, deps.owner
-	deps.listener, deps.owner = nil, r
-	deps.mu.Unlock()
+	r := &Computation{keyRoot: identity, origin: effectOrigin(), persistent: false}
+	sc, prevListener, prevOwner := enter(nil, r)
+	r.owner = prevOwner
 	if r.owner != nil {
 		r.attach(r.owner)
 		r.loop, r.rt = r.owner.loop, r.owner.rt
 		r.place(r.owner, elem)
 	}
-	if rt != nil {
+	switch {
+	case rt != nil:
 		r.rt = rt
+	case r.rt == nil:
+		r.rt = Base()
 	}
 	ok := false
 	defer func() {
-		deps.mu.Lock()
-		deps.listener, deps.owner = prevListener, prevOwner
-		deps.mu.Unlock()
+		sc.listener, sc.owner = prevListener, prevOwner
 		if !ok {
 			r.dispose()
 		}
@@ -695,31 +657,19 @@ func rootIn(rt *Runtime, identity any, elem string, fn func()) (dispose func()) 
 
 // WithOwner runs fn with owner as the current owner and no listener.
 func WithOwner(owner *Computation, fn func()) {
-	deps.mu.Lock()
-	prevListener, prevOwner := deps.listener, deps.owner
-	deps.listener, deps.owner = nil, owner
-	deps.mu.Unlock()
-	defer func() {
-		deps.mu.Lock()
-		deps.listener, deps.owner = prevListener, prevOwner
-		deps.mu.Unlock()
-	}()
+	sc, prevListener, prevOwner := enter(nil, owner)
+	defer func() { sc.listener, sc.owner = prevListener, prevOwner }()
 	fn()
 }
 
-func CurrentOwner() *Computation {
-	deps.mu.Lock()
-	defer deps.mu.Unlock()
-	return deps.owner
-}
+// CurrentOwner returns the running goroutine's owner, or nil.
+func CurrentOwner() *Computation { return current().owner }
 
 // OnCleanup registers fn to run before the enclosing Effect re-runs and when
 // it is disposed. Call it from inside an Effect, a Builder or a Component
 // setup, for timers, subscriptions and anything else that must be undone.
 func OnCleanup(fn func()) {
-	deps.mu.Lock()
-	o := deps.owner
-	deps.mu.Unlock()
+	o := CurrentOwner()
 	if o == nil {
 		panic("ggui: OnCleanup requires an owner")
 	}
@@ -733,15 +683,13 @@ func OnCleanup(fn func()) {
 // Untrack runs fn without subscribing the running Effect to the signals fn
 // reads. Effects created inside still belong to the running Effect.
 func Untrack[T any](fn func() T) T {
-	deps.mu.Lock()
-	prev := deps.listener
-	deps.listener = nil
-	deps.mu.Unlock()
-	defer func() {
-		deps.mu.Lock()
-		deps.listener = prev
-		deps.mu.Unlock()
-	}()
+	sc := current()
+	if sc.listener == nil {
+		return fn()
+	}
+	prev := sc.listener
+	sc.listener = nil
+	defer func() { sc.listener = prev }()
 	return fn()
 }
 
@@ -809,15 +757,8 @@ func runEffect(e *Computation) {
 	e.reset()
 	e.seq = 0
 
-	deps.mu.Lock()
-	prevListener, prevOwner := deps.listener, deps.owner
-	deps.listener, deps.owner = e, e
-	deps.mu.Unlock()
-	defer func() {
-		deps.mu.Lock()
-		deps.listener, deps.owner = prevListener, prevOwner
-		deps.mu.Unlock()
-	}()
+	sc, prevListener, prevOwner := enter(e, e)
+	defer func() { sc.listener, sc.owner = prevListener, prevOwner }()
 
 	e.state, e.running = stateClean, true
 	completed := false
@@ -852,31 +793,57 @@ type effectSet struct {
 // belong to no runtime; a write marks each reader in the reader's own.
 //
 // A computation belongs to its owner's runtime, and one created with no
-// owner to Default. A frame loop builds its tree under Runtime.Root, so
-// what the tree creates is flushed by that loop alone, and a loop that is
-// never closed leaves nothing behind in anyone else's frames. Every flush
-// of a runtime also flushes Default, which holds what was created outside
-// any tree, such as a widget built in a test before its Probe.
+// owner to its goroutine's Base. A frame loop builds its tree under
+// Runtime.Root, so what the tree creates is flushed by that loop alone, and
+// a loop that is never closed leaves nothing behind in anyone else's frames.
 //
-// Runtimes are not a license for goroutines: every runtime runs on the one
-// UI goroutine, and the running computation is tracked process-wide.
+// A runtime runs on one goroutine at a time. Two runtimes may run on two
+// goroutines at once, as probes under t.Parallel do, as long as nothing one
+// of them flushes is written from the other: a signal written by one
+// goroutine and read by another's computations is a race, runtimes or not.
 type Runtime struct {
 	effects effectSet
+
+	// base is the Base of the goroutine that made this runtime, which holds
+	// what was built there before the runtime's tree: a widget a test built
+	// before its probe. Nil for a Base itself.
+	base *Runtime
+
+	// Host is whatever the package driving this runtime keeps beside it.
+	// The root package keeps its animations and frame clock here.
+	Host any
 }
 
-// NewRuntime returns an empty Runtime.
-func NewRuntime() *Runtime { return &Runtime{} }
+// NewRuntime returns an empty Runtime that flushes the running goroutine's
+// Base along with its own computations.
+func NewRuntime() *Runtime { return &Runtime{base: Base()} }
 
-// Default is the process's runtime: what has no owner belongs to it, and
-// the package-level Flush, FlushUsers, Settled, Unsettled and Count act on it.
-var Default = NewRuntime()
-
-// sets is the effect sets a flush of rt runs: rt's own and Default's.
-func (rt *Runtime) sets() []*effectSet {
-	if rt == Default {
-		return []*effectSet{&rt.effects}
+// Related returns the runtimes a flush of rt covers: rt itself, the Base it
+// was made beside, and the running goroutine's Base, which holds what a
+// handler running in rt's frame built with no owner. The array is padded
+// with nil, so that a frame asking allocates nothing.
+func (rt *Runtime) Related() (out [3]*Runtime) {
+	out[0] = rt
+	n := 1
+	for _, x := range [...]*Runtime{rt.base, Base()} {
+		if x != nil && x != out[0] && x != out[1] {
+			out[n] = x
+			n++
+		}
 	}
-	return []*effectSet{&rt.effects, &Default.effects}
+	return out
+}
+
+// sets fills buf with the effect sets a flush of rt runs, and returns them;
+// see Related.
+func (rt *Runtime) sets(buf *[3]*effectSet) []*effectSet {
+	out := buf[:0]
+	for _, x := range rt.Related() {
+		if x != nil {
+			out = append(out, &x.effects)
+		}
+	}
+	return out
 }
 
 func (s *effectSet) add(e *Computation) {
@@ -1033,47 +1000,57 @@ func (s *StateValue[T]) LayoutVersion() uint64 {
 // Disposed reports whether this computation's owner has been torn down.
 func (e *Computation) Disposed() bool { return e.disposed }
 
-// Flush runs rt's pending effects, and Default's, until quiet, reporting
-// whether they settled.
-func (rt *Runtime) Flush() bool { return flush(rt.sets()) }
+// Flush runs the pending effects of rt and the runtimes it covers until
+// quiet, reporting whether they settled.
+func (rt *Runtime) Flush() bool {
+	var buf [3]*effectSet
+	return flush(rt.sets(&buf))
+}
 
-// FlushUsers runs one post-layout pass of the user effects of rt and
-// Default that belong to loop, reporting whether any ran.
-func (rt *Runtime) FlushUsers(loop any) bool { return flushUsers(rt.sets(), loop) }
+// FlushUsers runs one post-layout pass of the user effects of rt and the
+// runtimes it covers that belong to loop, reporting whether any ran.
+func (rt *Runtime) FlushUsers(loop any) bool {
+	var buf [3]*effectSet
+	return flushUsers(rt.sets(&buf), loop)
+}
 
 // Unsettled names the effects the last pass of rt's flush ran, for
-// ErrCycle, with how many effects rt and Default hold in all.
+// ErrCycle, with how many effects the runtimes it covers hold in all.
 func (rt *Runtime) Unsettled() (stuck []*Computation, total int) {
-	for _, s := range rt.sets() {
+	var buf [3]*effectSet
+	for _, s := range rt.sets(&buf) {
 		pass, n := s.unsettled()
 		stuck, total = append(stuck, pass...), total+n
 	}
 	return stuck, total
 }
 
-// Settled reports whether every write reaching rt or Default has been
-// flushed.
-func (rt *Runtime) Settled() bool { return allSettled(rt.sets()) }
+// Settled reports whether every write reaching rt or a runtime it covers
+// has been flushed.
+func (rt *Runtime) Settled() bool {
+	var buf [3]*effectSet
+	return allSettled(rt.sets(&buf))
+}
 
 // Count is how many effects rt holds, for a test asserting that a
 // construction or teardown left none behind.
 func (rt *Runtime) Count() int { return rt.effects.len() }
 
-// Flush is Default.Flush.
-func Flush() bool { return Default.Flush() }
+// Flush is Base().Flush, for the running goroutine.
+func Flush() bool { return Base().Flush() }
 
-// FlushUsers is Default.FlushUsers.
-func FlushUsers(loop any) bool { return Default.FlushUsers(loop) }
+// FlushUsers is Base().FlushUsers, for the running goroutine.
+func FlushUsers(loop any) bool { return Base().FlushUsers(loop) }
 
-// Unsettled is Default.Unsettled.
-func Unsettled() (stuck []*Computation, total int) { return Default.Unsettled() }
+// Unsettled is Base().Unsettled, for the running goroutine.
+func Unsettled() (stuck []*Computation, total int) { return Base().Unsettled() }
 
-// Settled is Default.Settled.
-func Settled() bool { return Default.Settled() }
+// Settled is Base().Settled, for the running goroutine.
+func Settled() bool { return Base().Settled() }
 
 // StateGen counts StateValue writes, so that a frame can tell whether one
 // happened while it was laying out.
-func StateGen() uint64 { return stateGen }
+func StateGen() uint64 { return stateGen.Load() }
 
 // LayoutGen counts the changes that can move something on screen.
 func LayoutGen() uint64 { return layoutGen.Load() }
@@ -1101,5 +1078,5 @@ func (e *Computation) Children() []*Computation {
 	return out
 }
 
-// Count is Default.Count.
-func Count() int { return Default.Count() }
+// Count is Base().Count, for the running goroutine.
+func Count() int { return Base().Count() }

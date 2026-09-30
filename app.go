@@ -25,6 +25,11 @@ import (
 type App struct {
 	*Window // the main window, the one New opened
 
+	// rt is the reactive runtime every window of the app builds in, made
+	// beside the Base of the goroutine that called New, so that state and
+	// widgets main built before Run are flushed by the app's frames.
+	rt *reactive.Runtime
+
 	mu         sync.Mutex // guards windows, which Quit reads from any goroutine
 	windows    []*Window  // open or waiting for Run, in the order they were made
 	running    bool       // the engine is running, so native windows may be made
@@ -44,7 +49,7 @@ type App struct {
 
 // New creates an App whose main window renders the tree returned by build.
 func New(cfg Config, build Builder) *App {
-	a := &App{}
+	a := &App{rt: reactive.NewRuntime()}
 	a.Window = newWindow(a, cfg, build)
 	a.windows = []*Window{a.Window}
 	return a

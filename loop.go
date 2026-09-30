@@ -104,8 +104,9 @@ func (l *frameLoop) Clipboard() runtime.Clipboard { return l.clipboard }
 type frameLoop struct {
 	host Host // the Window or Probe this loop is, for UseHost
 	// rt is the reactive runtime the tree is built in and flushed by: a
-	// Probe's own, so that its effects run in its frames alone, or nil
-	// for Default, which every window of the App shares.
+	// Probe's own, so that its effects run in its frames alone, or the
+	// App's, which every window of it shares. Nil stands for the running
+	// goroutine's Base.
 	rt      *reactive.Runtime
 	world   *world // nil for the process world; see loopWorld
 	build   Builder
@@ -219,7 +220,7 @@ func loopOf(owner *reactive.Computation) *frameLoop {
 // runtime is the reactive runtime this loop flushes.
 func (r *frameLoop) runtime() *reactive.Runtime {
 	if r.rt == nil {
-		return reactive.Default
+		return reactive.Base()
 	}
 	return r.rt
 }

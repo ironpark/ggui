@@ -12,7 +12,20 @@ import (
 // change schedules measurement. Neither operation creates a subscription.
 var OnRead func(*Owner)
 var OnChange func()
+
+// EnterHook and InLayout are installed by the runtime too, which keeps how
+// deep a goroutine is inside layout per goroutine. Without them the depth
+// is one counter, for this package's own tests.
+var EnterHook func() func()
+var InLayout func() bool
 var layoutDepth int
+
+func inLayout() bool {
+	if InLayout != nil {
+		return InLayout()
+	}
+	return layoutDepth > 0
+}
 
 // Owner is the revision of a widget's explicit configuration.
 type Owner struct {
@@ -29,7 +42,7 @@ func (o *Owner) Read() {
 }
 func (o *Owner) Changed() {
 	o.version++
-	if o.mounted && layoutDepth == 0 && OnChange != nil {
+	if o.mounted && !inLayout() && OnChange != nil {
 		OnChange()
 	}
 }
@@ -42,7 +55,13 @@ func (o *Owner) Layout() func() {
 	o.Read()
 	return func() { o.Read(); done() }
 }
-func EnterLayout() func() { layoutDepth++; return func() { layoutDepth-- } }
+func EnterLayout() func() {
+	if EnterHook != nil {
+		return EnterHook()
+	}
+	layoutDepth++
+	return func() { layoutDepth-- }
+}
 
 // Equal compares configuration values, not reader identity. Colors compare by
 // their rendered channels; equal NaNs must not turn a still frame into a loop.

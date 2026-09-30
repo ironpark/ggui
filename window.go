@@ -159,6 +159,9 @@ type Window struct {
 func newWindow(app *App, cfg Config, build Builder) *Window {
 	w := &Window{app: app, cfg: cfg.withDefaults()}
 	w.host = w
+	if app != nil {
+		w.rt = app.rt
+	}
 	w.wake = func() {
 		w.requestFrame()
 		// The window may draw no frame, hidden or covered as it may be;
