@@ -115,11 +115,17 @@ func (c *Canvas) FillPathGradient(path *Path, bounds Rect, top, bottom color.Col
 		path.gradientKey = key
 		path.gradientRev = path.revision
 	}
-	rgba := func(col color.Color) [4]float32 {
+	rgba := func(col color.Color) []float32 {
 		r, g, b, a := col.RGBA()
-		return [4]float32{float32(r) / 65535, float32(g) / 65535, float32(b) / 65535, float32(a) / 65535}
+		return []float32{float32(r) / 65535, float32(g) / 65535, float32(b) / 65535, float32(a) / 65535}
 	}
-	op := &ggfx.DrawRectShaderOptions{Uniforms: map[string]any{"top": rgba(top), "bottom": rgba(bottom), "height": float32(bounds.Size.H * scale), "offset": float32(float64(coverage.Min.Y) - bounds.Origin.Y*scale)}}
+	u := pathGradientUniforms.get()
+	defer pathGradientUniforms.put(u)
+	u.SetSlice("top", rgba(top))
+	u.SetSlice("bottom", rgba(bottom))
+	u.Set("height", float32(bounds.Size.H*scale))
+	u.Set("offset", float32(float64(coverage.Min.Y)-bounds.Origin.Y*scale))
+	op := &ggfx.DrawRectShaderOptions{UniformBlock: u}
 	op.Images[0] = path.gradientMask
 	op.GeoM.Translate(float64(coverage.Min.X), float64(coverage.Min.Y))
 	c.Image.DrawRectShader(w, h, sharedPathGradient(), op)
@@ -146,3 +152,5 @@ var sharedPathGradient = sync.OnceValue(func() *ggfx.Shader {
 	}
 	return shader
 })
+
+var pathGradientUniforms = newUniformBlocks(sharedPathGradient)

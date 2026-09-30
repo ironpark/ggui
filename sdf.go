@@ -62,6 +62,8 @@ var sharedRoundRect = sync.OnceValue(func() *ggfx.Shader {
 	return shader
 })
 
+var roundRectUniforms = newUniformBlocks(sharedRoundRect)
+
 // sdfBounds returns the pixels of target a distance-field shape covers: the
 // silhouette centred at cx, cy with half size hw, hh, grown by reach for the
 // edge it feathers over and for a border drawn outside the outline. Anything
@@ -112,16 +114,17 @@ func (c *Canvas) shade(f field, col color.Color) {
 	if !ok {
 		return
 	}
-	op := &ggfx.DrawRectShaderOptions{Uniforms: map[string]any{
-		"center":    []float32{float32(f.centre.X - float64(bounds.Min.X)), float32(f.centre.Y - float64(bounds.Min.Y))},
-		"axis":      []float32{float32(f.axis.X), float32(f.axis.Y)},
-		"half_size": []float32{float32(f.half.W), float32(f.half.H)},
-		// A corner never exceeds half the shape, which is a circle.
-		"radius":  float32(min(max(f.radius, 0), f.half.W, f.half.H)),
-		"width":   float32(max(f.stroke, 0)),
-		"feather": float32(feather),
-		"tint":    []float32{float32(red) / 65535, float32(green) / 65535, float32(blue) / 65535, float32(alpha) / 65535},
-	}}
+	u := roundRectUniforms.get()
+	defer roundRectUniforms.put(u)
+	u.SetSlice("center", []float32{float32(f.centre.X - float64(bounds.Min.X)), float32(f.centre.Y - float64(bounds.Min.Y))})
+	u.SetSlice("axis", []float32{float32(f.axis.X), float32(f.axis.Y)})
+	u.SetSlice("half_size", []float32{float32(f.half.W), float32(f.half.H)})
+	// A corner never exceeds half the shape, which is a circle.
+	u.Set("radius", float32(min(max(f.radius, 0), f.half.W, f.half.H)))
+	u.Set("width", float32(max(f.stroke, 0)))
+	u.Set("feather", float32(feather))
+	u.SetSlice("tint", []float32{float32(red) / 65535, float32(green) / 65535, float32(blue) / 65535, float32(alpha) / 65535})
+	op := &ggfx.DrawRectShaderOptions{UniformBlock: u}
 	op.GeoM.Translate(float64(bounds.Min.X), float64(bounds.Min.Y))
 	c.Image.DrawRectShader(bounds.Dx(), bounds.Dy(), sharedRoundRect(), op)
 }
@@ -187,18 +190,21 @@ var sharedRoundRectMask = sync.OnceValue(func() *ggfx.Shader {
 	return shader
 })
 
+var roundRectMaskUniforms = newUniformBlocks(sharedRoundRectMask)
+
 // maskRoundRect draws img, a part of a layer, onto c where it lies within
 // the logical Rect r with corners rounded by radius.
 func (c *Canvas) maskRoundRect(img *ggfx.Image, r Rect, radius float64) {
 	b := img.Bounds()
 	scale := c.Scale()
 	half, centre := Sz(r.Size.W*scale/2, r.Size.H*scale/2), r.Center()
-	op := &ggfx.DrawRectShaderOptions{Uniforms: map[string]any{
-		"center":    []float32{float32(c.px(centre.X) - float64(b.Min.X)), float32(c.px(centre.Y) - float64(b.Min.Y))},
-		"half_size": []float32{float32(half.W), float32(half.H)},
-		"radius":    float32(min(radius*scale, half.W, half.H)),
-		"feather":   float32(feather),
-	}}
+	u := roundRectMaskUniforms.get()
+	defer roundRectMaskUniforms.put(u)
+	u.SetSlice("center", []float32{float32(c.px(centre.X) - float64(b.Min.X)), float32(c.px(centre.Y) - float64(b.Min.Y))})
+	u.SetSlice("half_size", []float32{float32(half.W), float32(half.H)})
+	u.Set("radius", float32(min(radius*scale, half.W, half.H)))
+	u.Set("feather", float32(feather))
+	op := &ggfx.DrawRectShaderOptions{UniformBlock: u}
 	op.Images[0] = img
 	op.GeoM.Translate(float64(b.Min.X), float64(b.Min.Y))
 	c.Image.DrawRectShader(b.Dx(), b.Dy(), sharedRoundRectMask(), op)
@@ -260,6 +266,8 @@ var sharedRoundRectImage = sync.OnceValue(func() *ggfx.Shader {
 	return shader
 })
 
+var roundRectImageUniforms = newUniformBlocks(sharedRoundRectImage)
+
 // shadeImage draws img placed at the logical Rect at, cut to r with its
 // corners rounded by o.Radius, in one draw: a quad over r and a pixel of
 // edge, whose source positions follow at.
@@ -301,12 +309,13 @@ func (c *Canvas) shadeImage(img *ggfx.Image, r, at Rect, o ImageOptions) {
 		}
 	}
 	half := Sz(r.Size.W*scale/2, r.Size.H*scale/2)
-	op := &ggfx.DrawTrianglesShaderOptions{Uniforms: map[string]any{
-		"half_size": []float32{float32(half.W), float32(half.H)},
-		"radius":    float32(min(o.Radius*scale, half.W, half.H)),
-		"feather":   float32(feather),
-		"pixelated": o.Pixelated,
-	}}
+	u := roundRectImageUniforms.get()
+	defer roundRectImageUniforms.put(u)
+	u.SetSlice("half_size", []float32{float32(half.W), float32(half.H)})
+	u.Set("radius", float32(min(o.Radius*scale, half.W, half.H)))
+	u.Set("feather", float32(feather))
+	u.SetBool("pixelated", o.Pixelated)
+	op := &ggfx.DrawTrianglesShaderOptions{UniformBlock: u}
 	op.Images[0] = img
 	c.Image.DrawTrianglesShader(vs[:], []uint16{0, 1, 2, 1, 3, 2}, sharedRoundRectImage(), op)
 }

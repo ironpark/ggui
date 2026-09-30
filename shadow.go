@@ -44,6 +44,8 @@ var sharedShadow = sync.OnceValue(func() *ggfx.Shader {
 	return shader
 })
 
+var shadowUniforms = newUniformBlocks(sharedShadow)
+
 type shadowGeometry struct {
 	bounds          image.Rectangle
 	center, half    [2]float32
@@ -102,10 +104,14 @@ func (c *Canvas) Shadow(r Rect, radius float64, s ShadowStyle) {
 	if !ok {
 		return
 	}
-	op := &ggfx.DrawRectShaderOptions{Uniforms: map[string]any{
-		"center": g.center[:], "half_size": g.half[:], "radius": g.radius, "feather": g.feather,
-		"tint": []float32{float32(red) / 65535, float32(green) / 65535, float32(blue) / 65535, float32(alpha) / 65535},
-	}}
+	u := shadowUniforms.get()
+	defer shadowUniforms.put(u)
+	u.SetSlice("center", g.center[:])
+	u.SetSlice("half_size", g.half[:])
+	u.Set("radius", g.radius)
+	u.Set("feather", g.feather)
+	u.SetSlice("tint", []float32{float32(red) / 65535, float32(green) / 65535, float32(blue) / 65535, float32(alpha) / 65535})
+	op := &ggfx.DrawRectShaderOptions{UniformBlock: u}
 	op.GeoM.Translate(float64(g.bounds.Min.X), float64(g.bounds.Min.Y))
 	c.Image.DrawRectShader(g.bounds.Dx(), g.bounds.Dy(), sharedShadow(), op)
 }
