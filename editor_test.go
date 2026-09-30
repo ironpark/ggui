@@ -49,11 +49,15 @@ func (f *fakeIME) Cancel() {
 	f.t.imeComposition("", 0)
 }
 
+// useFakeIME gives the editors the test goroutine makes, and the ones its
+// probes build, a fake IME. A subtest runs on a goroutine of its own and
+// calls it again.
 func useFakeIME(t *testing.T) {
 	t.Helper()
-	prev := newIME
-	newIME = func(w *TextInputWidget) ime { return &fakeIME{t: w} }
-	t.Cleanup(func() { newIME = prev })
+	w := activeWorld()
+	prev := w.ime
+	w.ime = func(w *TextInputWidget) ime { return &fakeIME{t: w} }
+	t.Cleanup(func() { w.ime = prev })
 }
 
 // typeKeys dispatches key presses to the focused region.
@@ -76,6 +80,7 @@ func focusedInput(t *testing.T, value *StateValue[string]) (*TextInputWidget, *i
 }
 
 func TestTextInputEditsWriteTheSignal(t *testing.T) {
+	t.Parallel()
 	value := State("hello")
 	changes := 0
 	w, in := focusedInput(t, value)
@@ -95,6 +100,7 @@ func TestTextInputEditsWriteTheSignal(t *testing.T) {
 }
 
 func TestTextInputFollowsExternalWrites(t *testing.T) {
+	t.Parallel()
 	value := State("abc")
 	w, in := focusedInput(t, value)
 	value.Set("")
@@ -105,6 +111,7 @@ func TestTextInputFollowsExternalWrites(t *testing.T) {
 }
 
 func TestTextInputSubmitAndClipboard(t *testing.T) {
+	t.Parallel()
 	// No Probe runs these frames, so stand in for the loop whose
 	// clipboard the editor reaches.
 	clip := &runtime.MemoryClipboard{}
@@ -138,6 +145,7 @@ func TestTextInputSubmitAndClipboard(t *testing.T) {
 }
 
 func TestTextInputDragSelectsAndDoubleClickSelectsWord(t *testing.T) {
+	t.Parallel()
 	value := State("hello world")
 	w, in := focusedInput(t, value)
 	// Drag from the left edge to the far right selects everything.
@@ -160,6 +168,7 @@ func TestTextInputDragSelectsAndDoubleClickSelectsWord(t *testing.T) {
 }
 
 func TestTextInputComposesThenCommits(t *testing.T) {
+	t.Parallel()
 	value := State("ab")
 	w, in := focusedInput(t, value)
 	typeKeys(in, Mods{}, KeyArrowLeft)
@@ -190,6 +199,7 @@ func TestTextInputComposesThenCommits(t *testing.T) {
 }
 
 func TestTextInputSurvivesRebuildWithCaret(t *testing.T) {
+	t.Parallel()
 	useFakeIME(t)
 	value := State("abc")
 	build := func() Widget { return TextInput(value) }
@@ -207,6 +217,7 @@ func TestTextInputSurvivesRebuildWithCaret(t *testing.T) {
 }
 
 func TestTextInputPasswordHidesText(t *testing.T) {
+	t.Parallel()
 	useFakeIME(t)
 	w := TextInput(State("abc")).Password()
 	w.Layout(Loose(Sz(200, 20)), Env{})
@@ -219,6 +230,7 @@ func TestTextInputPasswordHidesText(t *testing.T) {
 }
 
 func TestTextInputFillsBoundedWidth(t *testing.T) {
+	t.Parallel()
 	useFakeIME(t)
 	w := TextInput(State(""))
 	if got := w.Layout(Loose(Sz(300, 100)), Env{}); got.W != 300 {
@@ -230,6 +242,7 @@ func TestTextInputFillsBoundedWidth(t *testing.T) {
 }
 
 func TestTextInputMultilineWrapsGrowsAndNavigates(t *testing.T) {
+	t.Parallel()
 	useFakeIME(t)
 	w := TextInput(State("")).Multiline()
 	one := w.Layout(Loose(Sz(200, Unbounded)), Env{})
@@ -307,9 +320,8 @@ func TestUndoKeys(t *testing.T) {
 }
 
 func TestTextInputKeyHookLeavesCompositionWithIME(t *testing.T) {
-	old := newIME
-	newIME = func(w *TextInputWidget) ime { return &fakeIME{t: w} }
-	defer func() { newIME = old }()
+	t.Parallel()
+	useFakeIME(t)
 	calls := 0
 	w := TextInput(State("")).OnKey(func(ev KeyEvent) bool { calls++; return ev.Key == KeyArrowDown })
 	w.HandleKey(KeyEvent{Kind: KeyPress, Key: KeyArrowDown})

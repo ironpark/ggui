@@ -15,29 +15,52 @@ import (
 	"github.com/ironpark/ggui/internal/textedit"
 )
 
-// The font state below is written on the UI goroutine: every entry point
-// that writes it runs under CheckUIThread, and a font loaded on another
-// goroutine is handed over with App.Post. It is read during layout, which
-// probes under t.Parallel run on goroutines of their own, so it is atomic.
-// fontGeneration is read from CachedWidget.Layout to decide whether a
-// measurement still holds.
+// fontGeneration counts the changes to a Font itself, Fallback and
+// NoFallback, which reach every world that measures with it. A Font is
+// shared by probes on goroutines of their own, so it is atomic. What a
+// world chose with SetDefaultFont and SetEmojiFont is counted in the world;
+// see fontGen.
 var fontGeneration atomic.Uint64
+
+// fontGen changes whenever a measurement made in the active world with the
+// fonts it resolves may no longer hold: a Font changed, or the active world
+// or one it inherits from chose another default or emoji font. Every part
+// only grows, so their sum changes whenever one does. CachedWidget and
+// Text read it to decide whether a measurement still holds.
+func fontGen() uint64 {
+	g := fontGeneration.Load()
+	for w := activeWorld(); w != nil; w = w.parent {
+		g += w.fontGen
+	}
+	return g
+}
 
 // emojiChoice is what SetEmojiFont chose, nil font included; a nil
 // *emojiChoice means it was never called and the system font is used.
 type emojiChoice struct{ font *Font }
 
-var emojiFont atomic.Pointer[emojiChoice]
+// activeEmoji is the active world's emoji choice.
+func activeEmoji() *emojiChoice {
+	return inherited(activeWorld(), func(w *world) *emojiChoice { return w.emoji })
+}
 
 // SetEmojiFont selects a color emoji font for Text and TextInput. It does not
 // replace their Latin/CJK fonts. Use fonts/notoemoji for a portable embedded font,
 // or LoadFont for another CBDT, sbix, COLRv0 or OpenType SVG font. Nil disables
 // emoji substitution; SetEmojiFont(SystemEmojiFont()) restores system rendering.
-// Like SetEnv, call on the UI thread or before creating the app.
+// Like SetEnv, call on the UI thread or before creating the app: it sets the
+// emoji font of the App or Probe whose frames run on this goroutine, or,
+// before any has, the one every App and Probe made on it uses until given
+// its own.
 func SetEmojiFont(f *Font) {
 	reactive.CheckUIThread("SetEmojiFont")
-	emojiFont.Store(&emojiChoice{font: f})
-	fontGeneration.Add(1)
+	setEmoji(activeWorld(), &emojiChoice{font: f})
+}
+
+// setEmoji makes c w's emoji choice, nil to inherit its parent's.
+func setEmoji(w *world, c *emojiChoice) {
+	w.emoji = c
+	w.fontGen++
 }
 
 // SystemEmojiFont finds the platform color emoji font once, or returns nil.
@@ -74,15 +97,16 @@ var systemEmoji = sync.OnceValue(func() *Font {
 type emojiFace struct {
 	text.Face
 	size     float64
+	choice   *emojiChoice // the emoji font to resolve; nil for the system's
 	emoji    text.Face
-	resolved sync.Once // a face is cached per Font and size, so shared
+	resolved sync.Once // a face is cached per Font, size and choice, so shared
 }
 
-func withEmoji(face text.Face, size float64) text.Face {
-	if c := emojiFont.Load(); c != nil && c.font == nil {
+func withEmoji(face text.Face, size float64, choice *emojiChoice) text.Face {
+	if choice != nil && choice.font == nil {
 		return face
 	}
-	return &emojiFace{Face: face, size: size}
+	return &emojiFace{Face: face, size: size, choice: choice}
 }
 
 // colorFace resolves the emoji font the first time a grapheme needs it, so
@@ -90,8 +114,8 @@ func withEmoji(face text.Face, size float64) text.Face {
 func (ef *emojiFace) colorFace() text.Face {
 	ef.resolved.Do(func() {
 		var f *Font
-		if c := emojiFont.Load(); c != nil {
-			f = c.font
+		if ef.choice != nil {
+			f = ef.choice.font
 		} else {
 			f = SystemEmojiFont()
 		}

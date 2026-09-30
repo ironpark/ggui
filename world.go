@@ -9,14 +9,26 @@ import "github.com/ironpark/ggui/internal/reactive"
 // own, and what is made outside every tree lands in the world of its
 // goroutine's Base runtime. A probe's animations step in its frames alone
 // and Advance moves its clock without moving anyone else's.
+//
+// A world also holds the settings SetClock, SetDefaultFont and
+// SetEmojiFont make, and a test's IME. One it has not set is its parent's:
+// the world of the Base its runtime was made beside. Set on the goroutine
+// before any App or Probe runs, a setting reaches every one made there;
+// set during their frames, it is theirs alone.
 type world struct {
+	parent *world // nil for a Base's own
+
 	anims animator
 	frame frameClock
 	busy  map[any]bool // see inputState.markBusyGroups
 
-	rt      *reactive.Runtime
 	env     *StateValue[Env] // see UseEnv; nil until first read
 	envMemo envMemo
+
+	font    *Font                      // see SetDefaultFont; nil inherits
+	emoji   *emojiChoice               // see SetEmojiFont; nil inherits
+	fontGen uint64                     // counts this world's font and emoji settings
+	ime     func(*TextInputWidget) ime // a test's IME; nil inherits
 }
 
 // worldOf returns rt's world, making it on first use. A runtime is used by
@@ -25,9 +37,25 @@ func worldOf(rt *reactive.Runtime) *world {
 	if w, ok := rt.Host.(*world); ok {
 		return w
 	}
-	w := &world{busy: map[any]bool{}, rt: rt}
+	w := &world{busy: map[any]bool{}}
+	if p := rt.Parent(); p != nil {
+		w.parent = worldOf(p)
+		w.frame.parent = &w.parent.frame
+	}
 	rt.Host = w
 	return w
+}
+
+// inherited returns the first setting get finds that is not zero, from w
+// up through its parents, or zero.
+func inherited[T comparable](w *world, get func(*world) T) T {
+	var zero T
+	for ; w != nil; w = w.parent {
+		if v := get(w); v != zero {
+			return v
+		}
+	}
+	return zero
 }
 
 // activeWorld is the world of the loop whose frame the running goroutine

@@ -47,15 +47,17 @@ func TestCheckbox(t *testing.T) {
 > [!IMPORTANT]
 > Each probe has its own reactive runtime, animations, clock and
 > environment, so probe tests may call `t.Parallel`: one probe's frames never
-> run another's effects, and `Advance` moves only its own time. `SetEnv`, or a
-> theme set with `ui/theme`, changes the probe whose frames the test runs,
-> or before its first frame what the test's next probe starts from; either
-> way it stays on the test's goroutine. Keep each parallel test to its own
-> signals, and call `Close`, usually with `defer`.
+> run another's effects, and `Advance` moves only its own time. `SetEnv`, a
+> theme set with `ui/theme`, `SetClock`, `SetDefaultFont` and `SetEmojiFont`
+> change the probe whose frames the test runs, or before its first frame
+> what every probe the test makes starts from; either way they stay on the
+> test's goroutine. A subtest runs on a goroutine of its own, so a setting
+> its probes need is made in the subtest. Keep each parallel test to its
+> own signals, and call `Close`, usually with `defer`.
 >
-> A few settings remain the process's, and tests that change them must not
-> be parallel: `SetClock`, `SetDefaultFont`, `SetEmojiFont` and
-> `RegisterInspector`.
+> Two settings remain the process's, and tests that change them must not be
+> parallel: `RegisterInspector`, and `a11y.SetWantsDetail`, which says
+> whether an assistive technology is reading.
 
 ## State, layout, and semantic actions
 

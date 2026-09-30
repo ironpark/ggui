@@ -93,8 +93,8 @@ func (e Env) PopupDuration() time.Duration {
 func (w *world) environment() *StateValue[Env] {
 	if w.env == nil {
 		var start Env
-		if parent := w.rt.Parent(); parent != nil {
-			start = Untrack(worldOf(parent).environment().Get)
+		if w.parent != nil {
+			start = Untrack(w.parent.environment().Get)
 		}
 		w.env = State(start).WithEqual(nil)
 	}

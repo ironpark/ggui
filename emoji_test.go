@@ -17,12 +17,14 @@ func useTestEmoji(t *testing.T) *Font {
 		t.Fatal(err)
 	}
 	f := MustFont(data)
-	old := emojiFont.Load()
+	w := activeWorld()
+	old := w.emoji
 	SetEmojiFont(f)
-	t.Cleanup(func() { emojiFont.Store(old); fontGeneration.Add(1) })
+	t.Cleanup(func() { setEmoji(w, old) })
 	return f
 }
 func TestEmojiSequencesStayInOneColorGlyph(t *testing.T) {
+	t.Parallel()
 	useTestEmoji(t)
 	face := fallbackFont().face(20)
 	for _, s := range []string{"👍", "👍🏽", "🇰🇷", "👩🏽‍💻", "👨‍👩‍👧‍👦", "1️⃣", "🏳️‍🌈", "❤️", "🫩"} {
@@ -43,6 +45,7 @@ func TestEmojiSequencesStayInOneColorGlyph(t *testing.T) {
 	}
 }
 func TestEmojiPresentationAndTextShaping(t *testing.T) {
+	t.Parallel()
 	useTestEmoji(t)
 	face := fallbackFont().face(20)
 	ef := face.(*emojiFace)
@@ -79,6 +82,7 @@ func TestEmojiPresentationAndTextShaping(t *testing.T) {
 	}
 }
 func TestEmojiSwitchInvalidatesCachedMeasurement(t *testing.T) {
+	t.Parallel()
 	useTestEmoji(t)
 	w := Text("👩🏽‍💻")
 	c := Cached(w)
@@ -94,10 +98,13 @@ func TestEmojiSwitchInvalidatesCachedMeasurement(t *testing.T) {
 }
 
 func TestEmojiPointerCaretAndBackspace(t *testing.T) {
-	useTestEmoji(t)
-	useFakeIME(t)
+	t.Parallel()
 	for _, s := range []string{"👍🏽", "🇰🇷", "👩🏽‍💻", "👨‍👩‍👧‍👦", "1️⃣", "🏳️‍🌈", "❤️"} {
 		t.Run(s, func(t *testing.T) {
+			// A subtest runs on a goroutine of its own, whose settings are
+			// its own.
+			useTestEmoji(t)
+			useFakeIME(t)
 			value := State(s)
 			w := TextInput(value)
 			w.Layout(Tight(Sz(300, 30)), rootEnv())

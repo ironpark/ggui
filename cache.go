@@ -48,7 +48,7 @@ func (c *CachedWidget) invalidate() {
 // Layout implements Widget.
 func (c *CachedWidget) Layout(cs Constraints, env Env) Size {
 	c.outer, _ = env.Get(cacheOwner)
-	if c.valid && !c.dirty && cs == c.cons && env.rev == c.rev && c.fontGen == fontGeneration.Load() && c.inputsEqual() {
+	if c.valid && !c.dirty && cs == c.cons && env.rev == c.rev && c.fontGen == fontGen() && c.inputsEqual() {
 		if record := reactive.Recorder(); record != nil {
 			for src, version := range c.sources {
 				record(src, version)
@@ -58,7 +58,7 @@ func (c *CachedWidget) Layout(cs Constraints, env Env) Size {
 	}
 	clear(c.sources)
 	reactive.Measure(c.record, func() { c.size = c.child.Layout(cs, env.With(cacheOwner, c)) })
-	c.fontGen = fontGeneration.Load()
+	c.fontGen = fontGen()
 	c.cons, c.rev, c.valid, c.dirty = cs, env.rev, true, false
 	return c.size
 }

@@ -86,8 +86,9 @@ Controls obtain colors and spacing from the inherited theme. Hover and press
 state stay in the widget; animated details retain their motion across rebuilds.
 Use `ggui.Now()` in `Paint` for animation timing. It is sampled once per frame
 and advances by at most 100ms, so a hidden window resumes without a large jump.
-`ggui.SetClock` replaces the source in tests; `Probe.Advance(d)` advances one
-probe's clock, and its headless frame, by exactly `d`.
+`ggui.SetClock` replaces the source in tests, for the probes the test's
+goroutine makes; `Probe.Advance(d)` advances one probe's clock, and its
+headless frame, by exactly `d`.
 
 ## Text input and validation
 

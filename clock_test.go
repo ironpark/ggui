@@ -6,9 +6,8 @@ import (
 )
 
 func TestNowIsFrozenForTheFrame(t *testing.T) {
+	t.Parallel()
 	f := &activeWorld().frame
-	defer f.reset()
-	f.reset()
 	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	raw := t0
 	defer SetClock(func() time.Time { return raw })()

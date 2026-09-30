@@ -334,9 +334,9 @@ func (r *frameLoop) tick(now time.Time) error {
 
 // layoutGen changes whenever something that can move a tree laid out on
 // this goroutine changes: a StateValue write or Invalidate here, or a font
-// change, which reaches every tree on every goroutine. Both parts only
-// grow, so their sum changes whenever either does.
-func layoutGen() uint64 { return reactive.LayoutGen() + fontGeneration.Load() }
+// the active world measures with; see fontGen. Both parts only grow, so
+// their sum changes whenever either does.
+func layoutGen() uint64 { return reactive.LayoutGen() + fontGen() }
 
 // needsLayout reports whether the tree must be laid out again for a
 // viewport of the given logical size, and records that it will be: when

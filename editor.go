@@ -635,8 +635,19 @@ type ime interface {
 	Cancel()
 }
 
-// newIME builds the IME driver for a new editor. Tests replace it.
-var newIME = func(t *TextInputWidget) ime {
+// newIME builds the IME driver for a new editor: the platform's, or the
+// one a test gave the world the editor is made in.
+func newIME(t *TextInputWidget) ime {
+	for w := ownerWorld(); w != nil; w = w.parent {
+		if w.ime != nil {
+			return w.ime(t)
+		}
+	}
+	return newPlatformIME(t)
+}
+
+// newPlatformIME builds the platform's IME driver for an editor.
+func newPlatformIME(t *TextInputWidget) ime {
 	c := &composerIME{}
 	c.OnNewSession = t.imeSession
 	c.OnComposition = func(comp *textinput.Composition) {

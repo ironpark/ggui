@@ -8,7 +8,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/textedit"
@@ -32,7 +31,14 @@ type Font struct {
 	mu         sync.Mutex
 	used       bool // a face has been made, so something may have measured with f
 	generation uint64
-	faces      map[float64]text.Face // one face per size, reused across frames
+	faces      map[faceKey]text.Face // reused across frames
+}
+
+// faceKey is what a face depends on beside the Font: its size, and the
+// emoji font the world measuring with it chose.
+type faceKey struct {
+	size  float64
+	emoji *emojiChoice
 }
 
 // LoadFont parses TTF or OTF bytes.
@@ -203,9 +209,6 @@ func MustFont(data []byte) *Font {
 // DefaultTextSize is the size Text uses until Size is set.
 const DefaultTextSize = 14
 
-// defaultFont is what SetDefaultFont set, or nil for the built-in one.
-var defaultFont atomic.Pointer[Font]
-
 // builtinFont is Go Regular, parsed on first use so a program that draws no
 // text never pays for it.
 var builtinFont = sync.OnceValue(func() *Font { return MustFont(goregular.TTF) })
@@ -213,21 +216,31 @@ var builtinFont = sync.OnceValue(func() *Font { return MustFont(goregular.TTF) }
 // SetDefaultFont replaces the font Text uses when none is set. The built-in
 // default is Go Regular, which covers Latin, Greek and Cyrillic; load a font
 // with the glyphs you need for anything else.
+//
+// Like SetEnv, it sets the font of the App or Probe whose frames run on
+// this goroutine, or, before any has, the one every App and Probe made on
+// it uses until given its own. Nil goes back to that inherited font, or
+// to Go Regular.
 func SetDefaultFont(f *Font) {
 	reactive.CheckUIThread("SetDefaultFont")
-	defaultFont.Store(f)
-	fontGeneration.Add(1)
+	w := activeWorld()
+	w.font = f
+	w.fontGen++
 }
 
 // fallbackFont returns the font Text uses when none is set.
 func fallbackFont() *Font {
-	if f := defaultFont.Load(); f != nil {
+	if f := inherited(activeWorld(), func(w *world) *Font { return w.font }); f != nil {
 		return f
 	}
 	return builtinFont()
 }
 
 func (f *Font) face(size float64) text.Face {
+	key := faceKey{size: size}
+	if !f.noFallback {
+		key.emoji = activeEmoji()
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if gen := fontGeneration.Load(); f.generation != gen {
@@ -235,7 +248,7 @@ func (f *Font) face(size float64) text.Face {
 		f.generation = gen
 	}
 	f.used = true
-	if face, ok := f.faces[size]; ok {
+	if face, ok := f.faces[key]; ok {
 		return face
 	}
 	var face text.Face = &text.GoTextFace{Source: f.src, Size: size}
@@ -255,12 +268,12 @@ func (f *Font) face(size float64) text.Face {
 		}
 	}
 	if !f.noFallback {
-		face = withEmoji(face, size)
+		face = withEmoji(face, size, key.emoji)
 	}
 	if f.faces == nil {
-		f.faces = make(map[float64]text.Face)
+		f.faces = make(map[faceKey]text.Face)
 	}
-	f.faces[size] = face
+	f.faces[key] = face
 	return face
 }
 

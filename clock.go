@@ -2,22 +2,8 @@ package ggui
 
 import (
 	"sync"
-	"sync/atomic"
 	"time"
 )
-
-// clockSource is the raw time source; SetClock replaces it. Animations do
-// not read it directly: they read Now, the instant the current frame froze.
-// It is atomic because probes on goroutines of their own all read it.
-var clockSource atomic.Pointer[func() time.Time]
-
-// clock reads the raw time source.
-func clock() time.Time {
-	if fn := clockSource.Load(); fn != nil {
-		return (*fn)()
-	}
-	return time.Now()
-}
 
 // maxFrameStep caps how far one frame may move the frame clock. A frame
 // comes only when something asks for one, and none while the window is
@@ -51,18 +37,31 @@ type frameClock struct {
 	// blink or a tooltip delay, which need no frame until then.
 	wake time.Time
 
-	// pinned is the raw time this clock advances from, or zero for the
-	// package clock; see raw. Probe.Advance sets it.
+	// pinned is the raw time this clock advances from, or zero; see raw.
+	// Probe.Advance sets it.
 	pinned time.Time
+
+	// source is the raw time source SetClock installed, or nil to take the
+	// parent's: the clock of the world this clock's world inherits from.
+	source func() time.Time
+	parent *frameClock
 }
 
 // raw is the time the frame clock advances from: the time a Probe's
-// Advance pinned, else the package clock.
+// Advance pinned, else the source SetClock installed here or on a parent,
+// else time.Now. Animations do not read it directly: they read Now, the
+// instant the current frame froze. A parent is read without its lock, as
+// it belongs to the same goroutine.
 func (f *frameClock) raw() time.Time {
 	if !f.pinned.IsZero() {
 		return f.pinned
 	}
-	return clock()
+	for c := f; c != nil; c = c.parent {
+		if c.source != nil {
+			return c.source()
+		}
+	}
+	return time.Now()
 }
 
 // timeRead reports whether the frame depends on time.
@@ -140,12 +139,14 @@ func (f *frameClock) set(raw time.Time) time.Time {
 	return raw
 }
 
-// reset forgets the frame clock, so the next frame starts afresh from
-// whatever source SetClock left behind.
-func (f *frameClock) reset() {
+// setSource installs the raw time source, nil to take the parent's, and
+// returns the one before. The clock starts afresh from it.
+func (f *frameClock) setSource(fn func() time.Time) (prev func() time.Time) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	prev, f.source = f.source, fn
 	f.now, f.real = time.Time{}, time.Time{}
+	return prev
 }
 
 // instant returns the current frame's time, or the raw clock while no
@@ -201,12 +202,16 @@ func blinkWake(start, now time.Time, period time.Duration) time.Time {
 // and returns a function that restores the previous one. The frame clock
 // starts again from the new source, so the next frame reads whatever it
 // returns. A Probe that Advance has moved keeps the clock Advance gave it.
-// It is for tests:
+//
+// Like SetEnv, it sets the clock of the App or Probe whose frames run on
+// this goroutine, or, before any has, the clock every App and Probe made
+// on the goroutine reads until it is given its own, so tests that set
+// their own clocks may run in parallel. It is for tests:
 //
 //	restore := ggui.SetClock(func() time.Time { return now })
 //	defer restore()
 func SetClock(fn func() time.Time) (restore func()) {
-	prev := clockSource.Swap(&fn)
-	activeWorld().frame.reset()
-	return func() { clockSource.Store(prev); activeWorld().frame.reset() }
+	f := &activeWorld().frame
+	prev := f.setSource(fn)
+	return func() { f.setSource(prev) }
 }

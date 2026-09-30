@@ -163,6 +163,11 @@ What is created outside every tree, such as a widget built before its probe
 or state made in `main`, stays in its goroutine's base runtime, which the
 app or probe made on that goroutine flushes as well.
 
+The settings `SetEnv`, `SetClock`, `SetDefaultFont` and `SetEmojiFont`
+make belong to the same place: an app's or a probe's own when made during
+its frames, and before any frame the goroutine's base, which every app and
+probe made on that goroutine inherits until it is given its own.
+
 What is running -- the computation reads subscribe, the owner new effects
 join, the loop whose frame runs -- is kept per goroutine. Probes on
 goroutines of their own, as `t.Parallel` runs them, therefore run at the
