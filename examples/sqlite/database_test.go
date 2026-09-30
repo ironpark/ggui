@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -23,7 +24,13 @@ func loadTable(ctx context.Context, db *sql.DB, o object) (tableData, error) {
 
 func fixture(t *testing.T) (*sql.DB, string) {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "sample #?.db")
+	// A name the URI must escape: '#' and '?' end its path, '%' starts an
+	// escape. Windows allows no '?' in a file name.
+	name := "sample #?%.db"
+	if runtime.GOOS == "windows" {
+		name = "sample #%.db"
+	}
+	path := filepath.Join(t.TempDir(), name)
 	db, err := sql.Open("sqlite", fileURI(path, ""))
 	if err != nil {
 		t.Fatal(err)
