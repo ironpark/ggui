@@ -19,20 +19,18 @@ type ShadowStyle struct {
 	Color        color.Color
 }
 
+// shadowSource takes every value on the vertices, as roundRectSource does,
+// so that shadows drawn one after another share a draw call. custom.xy is
+// the fragment's place relative to the silhouette's centre, custom.zw its
+// half size, src_pos the corner radius and the feather, and color the tint.
 const shadowSource = `
-struct Uniforms {
-	center: vec2f,
-	half_size: vec2f,
-	radius: f32,
-	feather: f32,
-	tint: vec4f,
-}
-@group(1) @binding(0) var<uniform> u: Uniforms;
 fn fragment(v: Vertex) -> vec4f {
-	let q = abs(v.src_pos - u.center) - u.half_size + vec2f(u.radius);
-	let distance = length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0) - u.radius;
-	let coverage = 1.0 - smoothstep(-u.feather, u.feather, distance);
-	return u.tint * coverage;
+	let radius = v.src_pos.x;
+	let feather = v.src_pos.y;
+	let q = abs(v.custom.xy) - v.custom.zw + vec2f(radius);
+	let distance = length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0) - radius;
+	let coverage = 1.0 - smoothstep(-feather, feather, distance);
+	return v.color * coverage;
 }
 `
 
@@ -43,8 +41,6 @@ var sharedShadow = sync.OnceValue(func() *ggfx.Shader {
 	}
 	return shader
 })
-
-var shadowUniforms = newUniformBlocks(sharedShadow)
 
 type shadowGeometry struct {
 	bounds          image.Rectangle
@@ -89,7 +85,7 @@ func (c *Canvas) shadowGeometry(r Rect, radius float64, s ShadowStyle) (shadowGe
 }
 
 // Shadow draws a soft rounded-rectangle silhouette behind a surface. Paint the
-// surface afterward. It uses one shared Kage shader, one DrawRectShader call,
+// surface afterward. It uses one shared shader, one DrawTrianglesShader call,
 // and no intermediate images or CPU rasterization. This distance-field feather
 // approximates UI shadows; it is not an image blur. Parent clipping is respected.
 func (c *Canvas) Shadow(r Rect, radius float64, s ShadowStyle) {
@@ -104,14 +100,15 @@ func (c *Canvas) Shadow(r Rect, radius float64, s ShadowStyle) {
 	if !ok {
 		return
 	}
-	u := shadowUniforms.get()
-	defer shadowUniforms.put(u)
-	u.SetSlice("center", g.center[:])
-	u.SetSlice("half_size", g.half[:])
-	u.Set("radius", g.radius)
-	u.Set("feather", g.feather)
-	u.SetSlice("tint", []float32{float32(red) / 65535, float32(green) / 65535, float32(blue) / 65535, float32(alpha) / 65535})
-	op := &ggfx.DrawRectShaderOptions{UniformBlock: u}
-	op.GeoM.Translate(float64(g.bounds.Min.X), float64(g.bounds.Min.Y))
-	c.Image.DrawRectShader(g.bounds.Dx(), g.bounds.Dy(), sharedShadow(), op)
+	var vs [4]ggfx.Vertex
+	for i, corner := range corners(g.bounds) {
+		vs[i] = ggfx.Vertex{
+			DstX: float32(corner.X), DstY: float32(corner.Y),
+			SrcX: g.radius, SrcY: g.feather,
+			ColorR: float32(red) / 65535, ColorG: float32(green) / 65535, ColorB: float32(blue) / 65535, ColorA: float32(alpha) / 65535,
+			Custom0: float32(corner.X-float64(g.bounds.Min.X)) - g.center[0], Custom1: float32(corner.Y-float64(g.bounds.Min.Y)) - g.center[1],
+			Custom2: g.half[0], Custom3: g.half[1],
+		}
+	}
+	c.Image.DrawTrianglesShader(vs[:], quadIndices[:], sharedShadow(), nil)
 }

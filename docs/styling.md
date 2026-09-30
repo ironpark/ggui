@@ -431,8 +431,8 @@ zero gives a sharp, antialiased shadow. This is a rounded-rectangle distance-fie
 approximation, not a Gaussian blur of the content or image alpha.
 
 The renderer lazily shares one WGSL shader. Each visible shadow layer
-uses one `DrawRectShader` call, with no intermediate textures, blur passes or CPU
-rasterization. Draw bounds are intersected with the target before rendering.
+is one quad, with no intermediate textures, blur passes or CPU
+rasterization, and shadows drawn one after another share a draw call. Draw bounds are intersected with the target before rendering.
 Cost still grows with visible pixel area and overlapping layers.
 
 Shadows do not reserve layout space or create hit regions. Add padding/gaps when

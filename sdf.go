@@ -19,29 +19,26 @@ import (
 // edge.
 //
 // The same shape serves a fill and a border. Width is half the border, in
-// pixels; at zero the field is filled to its outline instead. Axis is the
-// unit vector the shape's own width runs along, so a line is this shape
-// turned to lie along it and a border is the band around one.
+// pixels; at zero the field is filled to its outline instead. A line is
+// this shape turned to lie along it, and a border is the band around one.
+//
+// Everything that differs from one shape to the next rides on the
+// vertices, not in uniforms: ggfx merges consecutive draws only when their
+// uniforms are equal, so shapes carried this way share one draw call.
+// custom.xy is the fragment's place in the shape's own frame, centred and
+// unturned, which is linear in the vertices and so interpolates exactly;
+// custom.zw is the half size, src_pos is the radius and the width, and
+// color is the tint.
 const roundRectSource = roundRectDistance + `
-struct Uniforms {
-	center: vec2f,
-	axis: vec2f,
-	half_size: vec2f,
-	radius: f32,
-	width: f32,
-	feather: f32,
-	tint: vec4f,
-}
-@group(1) @binding(0) var<uniform> u: Uniforms;
+const feather = 0.5; // the Go constant feather
+
 fn fragment(v: Vertex) -> vec4f {
-	let p = v.src_pos - u.center;
-	let local = vec2f(dot(p, u.axis), dot(p, vec2f(-u.axis.y, u.axis.x)));
-	var distance = round_rect_distance(local, u.half_size, u.radius);
-	if (u.width > 0.0) {
-		distance = abs(distance) - u.width;
+	var distance = round_rect_distance(v.custom.xy, v.custom.zw, v.src_pos.x);
+	if (v.src_pos.y > 0.0) {
+		distance = abs(distance) - v.src_pos.y;
 	}
-	let coverage = 1.0 - smoothstep(-u.feather, u.feather, distance);
-	return u.tint * coverage;
+	let coverage = 1.0 - smoothstep(-feather, feather, distance);
+	return v.color * coverage;
 }
 `
 
@@ -61,8 +58,6 @@ var sharedRoundRect = sync.OnceValue(func() *ggfx.Shader {
 	}
 	return shader
 })
-
-var roundRectUniforms = newUniformBlocks(sharedRoundRect)
 
 // sdfBounds returns the pixels of target a distance-field shape covers: the
 // silhouette centred at cx, cy with half size hw, hh, grown by reach for the
@@ -114,19 +109,31 @@ func (c *Canvas) shade(f field, col color.Color) {
 	if !ok {
 		return
 	}
-	u := roundRectUniforms.get()
-	defer roundRectUniforms.put(u)
-	u.SetSlice("center", []float32{float32(f.centre.X - float64(bounds.Min.X)), float32(f.centre.Y - float64(bounds.Min.Y))})
-	u.SetSlice("axis", []float32{float32(f.axis.X), float32(f.axis.Y)})
-	u.SetSlice("half_size", []float32{float32(f.half.W), float32(f.half.H)})
 	// A corner never exceeds half the shape, which is a circle.
-	u.Set("radius", float32(min(max(f.radius, 0), f.half.W, f.half.H)))
-	u.Set("width", float32(max(f.stroke, 0)))
-	u.Set("feather", float32(feather))
-	u.SetSlice("tint", []float32{float32(red) / 65535, float32(green) / 65535, float32(blue) / 65535, float32(alpha) / 65535})
-	op := &ggfx.DrawRectShaderOptions{UniformBlock: u}
-	op.GeoM.Translate(float64(bounds.Min.X), float64(bounds.Min.Y))
-	c.Image.DrawRectShader(bounds.Dx(), bounds.Dy(), sharedRoundRect(), op)
+	radius := float32(min(max(f.radius, 0), f.half.W, f.half.H))
+	width := float32(max(f.stroke, 0))
+	var vs [4]ggfx.Vertex
+	for i, corner := range corners(bounds) {
+		p := Pt(corner.X-f.centre.X, corner.Y-f.centre.Y)
+		vs[i] = ggfx.Vertex{
+			DstX: float32(corner.X), DstY: float32(corner.Y),
+			SrcX: radius, SrcY: width,
+			ColorR: float32(red) / 65535, ColorG: float32(green) / 65535, ColorB: float32(blue) / 65535, ColorA: float32(alpha) / 65535,
+			Custom0: float32(p.X*f.axis.X + p.Y*f.axis.Y), Custom1: float32(p.Y*f.axis.X - p.X*f.axis.Y),
+			Custom2: float32(f.half.W), Custom3: float32(f.half.H),
+		}
+	}
+	c.Image.DrawTrianglesShader(vs[:], quadIndices[:], sharedRoundRect(), nil)
+}
+
+// quadIndices are the two triangles of the quad corners returns.
+var quadIndices = [...]uint16{0, 1, 2, 1, 3, 2}
+
+// corners returns the corners of r: top left, top right, bottom left,
+// bottom right.
+func corners(r image.Rectangle) [4]Point {
+	x0, y0, x1, y1 := float64(r.Min.X), float64(r.Min.Y), float64(r.Max.X), float64(r.Max.Y)
+	return [4]Point{Pt(x0, y0), Pt(x1, y0), Pt(x0, y1), Pt(x1, y1)}
 }
 
 // shadeRoundRect draws the rounded rectangle shape in col. A zero halfStroke
