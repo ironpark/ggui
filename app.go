@@ -157,13 +157,13 @@ func (a *App) Run() error {
 	appRunning.Store(true)
 	// Holding a key on macOS pops up the accent menu, as it does in every
 	// text field on the platform; text editing relies on it.
-	return ggfx.Run(a, &ggfx.RunOptions{ApplePressAndHoldEnabled: true})
+	return ggfx.Run(ggfx.HandlerFunc(a.handleEvent), &ggfx.RunOptions{ApplePressAndHoldEnabled: true})
 }
 
-// HandleEvent implements ggfx.Handler. It opens the windows made before
+// handleEvent is the App's ggfx.Handler. It opens the windows made before
 // Run when the engine starts and hands every other event to the window it
 // is for.
-func (a *App) HandleEvent(ev ggfx.Event) error {
+func (a *App) handleEvent(ev ggfx.Event) error {
 	if a.quit.Load() {
 		a.Close()
 		return ggfx.Termination

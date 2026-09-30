@@ -43,7 +43,7 @@ func Use() Theme { return From(ggui.UseEnv()) }
 // Set replaces the application theme while preserving other environment
 // values, and matches the windows' title bars to it.
 func Set(t Theme) {
-	ggui.SetEnv(t.Apply(ggui.Untrack(ggui.UseEnv).WithTextStyle(t.Text)))
+	ggui.SetEnv(t.Apply(ggui.Untrack(ggui.UseEnv).WithTextReplaced(t.Text)))
 	if t.Bg != nil {
 		ggui.SetAppearance(appearanceOf(t.Bg))
 	}

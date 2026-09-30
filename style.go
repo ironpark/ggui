@@ -84,12 +84,12 @@ func (e Env) Text() TextStyle { return e.text }
 
 // WithText returns e with s merged onto the inherited text style.
 func (e Env) WithText(s TextStyle) Env {
-	return e.WithTextStyle(e.text.Merge(s))
+	return e.WithTextReplaced(e.text.Merge(s))
 }
 
-// WithTextStyle replaces the inherited text style, including zero fields.
+// WithTextReplaced replaces the inherited text style, including zero fields.
 // Use WithText to merge a partial style instead.
-func (e Env) WithTextStyle(s TextStyle) Env {
+func (e Env) WithTextReplaced(s TextStyle) Env {
 	if sameAny(s, e.text) {
 		return e
 	}
