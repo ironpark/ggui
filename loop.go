@@ -188,12 +188,8 @@ func runningLoop() *frameLoop {
 	return l
 }
 
-// setRunning makes l the running goroutine's loop and returns the one
-// before.
-func setRunning(l *frameLoop) (prev *frameLoop) {
-	prev, _ = reactive.SetRunningLoop(l).(*frameLoop)
-	return prev
-}
+// setRunning makes l the running goroutine's loop.
+func setRunning(l *frameLoop) { reactive.SetRunningLoop(l) }
 
 // UIThread returns the current owner's dispatcher. Capture it during app or
 // component setup, then call it from a worker to deliver immutable results.
@@ -227,13 +223,17 @@ func loopOf(owner *reactive.Computation) *frameLoop {
 	return l
 }
 
-// runtime is the reactive runtime this loop flushes.
+// runtime is the reactive runtime this loop flushes: the goroutine's Base
+// for a loop made with none, or no loop at all.
 func (r *frameLoop) runtime() *reactive.Runtime {
-	if r.rt == nil {
+	if r == nil || r.rt == nil {
 		return reactive.Base()
 	}
 	return r.rt
 }
+
+// world is the world of the loop's runtime.
+func (r *frameLoop) world() *world { return worldOf(r.runtime()) }
 
 // start runs the setup functions and the builder under a fresh root owner.
 // Everything they create lives until close.
@@ -332,6 +332,12 @@ func (r *frameLoop) tick(now time.Time) error {
 	return nil
 }
 
+// layoutGen changes whenever something that can move a tree laid out on
+// this goroutine changes: a StateValue write or Invalidate here, or a font
+// change, which reaches every tree on every goroutine. Both parts only
+// grow, so their sum changes whenever either does.
+func layoutGen() uint64 { return reactive.LayoutGen() + fontGeneration.Load() }
+
 // needsLayout reports whether the tree must be laid out again for a
 // viewport of the given logical size, and records that it will be: when
 // the viewport changed size, or a StateValue was written or Invalidate called
@@ -339,7 +345,7 @@ func (r *frameLoop) tick(now time.Time) error {
 // write rebuilds it. Hover and press live outside signals and only change
 // how a widget paints, so a still frame costs no layout.
 func (r *frameLoop) needsLayout(logical Size) bool {
-	gen := reactive.LayoutGen()
+	gen := layoutGen()
 	if logical == r.laidSize && gen == r.laidGen {
 		return false
 	}

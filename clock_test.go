@@ -75,7 +75,7 @@ func TestTimeReadOutsideTheClipDoesNotAnimate(t *testing.T) {
 	p := NewProbe(Scroll(Column(Box().Size(100, 500), clockReader{})).BindOffset(offset), Sz(100, 100))
 	defer p.Close()
 	animating := func() bool {
-		f := &p.world.frame
+		f := &p.world().frame
 		f.mu.Lock()
 		f.read = false
 		f.mu.Unlock()

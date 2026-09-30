@@ -51,9 +51,18 @@ type frameClock struct {
 	// blink or a tooltip delay, which need no frame until then.
 	wake time.Time
 
-	// source is the raw time this clock advances from, or nil for the
-	// package clock; see raw. Probe.Advance installs one.
-	source func() time.Time
+	// pinned is the raw time this clock advances from, or zero for the
+	// package clock; see raw. Probe.Advance sets it.
+	pinned time.Time
+}
+
+// raw is the time the frame clock advances from: the time a Probe's
+// Advance pinned, else the package clock.
+func (f *frameClock) raw() time.Time {
+	if !f.pinned.IsZero() {
+		return f.pinned
+	}
+	return clock()
 }
 
 // timeRead reports whether the frame depends on time.

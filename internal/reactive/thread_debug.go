@@ -3,11 +3,10 @@
 package reactive
 
 import (
-	"bytes"
 	"fmt"
-	"runtime"
-	"strconv"
 	"sync/atomic"
+
+	"github.com/ironpark/ggui/internal/goid"
 )
 
 // Signals, effects, layout and paint all belong to the UI goroutine, and a
@@ -22,24 +21,9 @@ import (
 
 var uiGoroutine atomic.Int64
 
-// goID returns the running goroutine's id, from the header runtime.Stack
-// writes: "goroutine 17 [running]:". It is only ever used to compare one
-// goroutine with another, and only in this build.
-func goID() int64 {
-	var buf [40]byte
-	b := buf[:runtime.Stack(buf[:], false)]
-	b = bytes.TrimPrefix(b, []byte("goroutine "))
-	if i := bytes.IndexByte(b, ' '); i >= 0 {
-		if n, err := strconv.ParseInt(string(b[:i]), 10, 64); err == nil {
-			return n
-		}
-	}
-	return 0
-}
-
 // MarkUIThread records the goroutine frames run on. Called at the top of
 // every frame, so it follows a runtime that moves them.
-func MarkUIThread() { uiGoroutine.Store(goID()) }
+func MarkUIThread() { uiGoroutine.Store(goid.ID()) }
 
 // UnmarkUIThread disarms the check when the app closes, so a process that
 // outlives its window, or a test that opens a second app, starts clean.
@@ -51,10 +35,10 @@ func UnmarkUIThread() { uiGoroutine.Store(0) }
 // on the goroutine that will run them.
 func CheckUIThread(op string) {
 	ui := uiGoroutine.Load()
-	if ui == 0 || ui == goID() {
+	if ui == 0 || ui == goid.ID() {
 		return
 	}
 	panic(fmt.Sprintf("ggui: %s from goroutine %d; frames run on %d. "+
 		"Do the work off the UI goroutine and hand the result back with App.Post.",
-		op, goID(), ui))
+		op, goid.ID(), ui))
 }

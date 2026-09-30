@@ -49,9 +49,9 @@ func (c *CachedWidget) invalidate() {
 func (c *CachedWidget) Layout(cs Constraints, env Env) Size {
 	c.outer, _ = env.Get(cacheOwner)
 	if c.valid && !c.dirty && cs == c.cons && env.rev == c.rev && c.fontGen == fontGeneration.Load() && c.inputsEqual() {
-		if reactive.Recording() {
+		if record := reactive.Recorder(); record != nil {
 			for src, version := range c.sources {
-				reactive.Record(src, version)
+				record(src, version)
 			}
 		}
 		return c.size

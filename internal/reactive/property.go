@@ -1,19 +1,5 @@
 package reactive
 
-import "github.com/ironpark/ggui/internal/property"
-
-// Explicit widget properties are layout sources, just like signal versions.
-// Keeping this separate from signals avoids owning effects for configuration.
-type propertySource struct{ owner *property.Owner }
-
-func (s propertySource) LayoutVersion() uint64 { return s.owner.Version() }
-func init() {
-	property.OnRead = func(owner *property.Owner) {
-		Record(propertySource{owner}, owner.Version())
-	}
-	property.OnChange = RequestLayout
-}
-
 type constant[T any] struct{ value T }
 
 func (c constant[T]) Get() T      { return c.value }

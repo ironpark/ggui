@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/textedit"
 
 	"github.com/ironpark/ggfx/text/v2"
@@ -20,7 +19,7 @@ func useTestEmoji(t *testing.T) *Font {
 	f := MustFont(data)
 	old := emojiFont.Load()
 	SetEmojiFont(f)
-	t.Cleanup(func() { emojiFont.Store(old); fontGeneration.Add(1); reactive.RequestLayout() })
+	t.Cleanup(func() { emojiFont.Store(old); fontGeneration.Add(1) })
 	return f
 }
 func TestEmojiSequencesStayInOneColorGlyph(t *testing.T) {

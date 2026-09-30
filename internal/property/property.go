@@ -6,44 +6,31 @@ import (
 	"image/color"
 	"math"
 	"reflect"
+
+	"github.com/ironpark/ggui/internal/reactive"
 )
 
-// Hooks are installed by the runtime. A read records a layout dependency; a
-// change schedules measurement. Neither operation creates a subscription.
-var OnRead func(*Owner)
-var OnChange func()
-
-// EnterHook and InLayout are installed by the runtime too, which keeps how
-// deep a goroutine is inside layout per goroutine. Without them the depth
-// is one counter, for this package's own tests.
-var EnterHook func() func()
-var InLayout func() bool
-var layoutDepth int
-
-func inLayout() bool {
-	if InLayout != nil {
-		return InLayout()
-	}
-	return layoutDepth > 0
-}
-
-// Owner is the revision of a widget's explicit configuration.
+// Owner is the revision of a widget's explicit configuration. It is a
+// layout source, just like a signal's version: a read records a layout
+// dependency and a change schedules measurement, and neither creates a
+// subscription, which keeps configuration free of owning effects.
 type Owner struct {
 	version uint64
 	mounted bool
 }
 
 func (o *Owner) Version() uint64 { return o.version }
+
+// LayoutVersion implements reactive.LayoutSource.
+func (o *Owner) LayoutVersion() uint64 { return o.version }
 func (o *Owner) Read() {
 	o.mounted = true
-	if OnRead != nil {
-		OnRead(o)
-	}
+	reactive.Record(o, o.version)
 }
 func (o *Owner) Changed() {
 	o.version++
-	if o.mounted && !inLayout() && OnChange != nil {
-		OnChange()
+	if o.mounted && !reactive.InLayout() {
+		reactive.RequestLayout()
 	}
 }
 
@@ -55,13 +42,7 @@ func (o *Owner) Layout() func() {
 	o.Read()
 	return func() { o.Read(); done() }
 }
-func EnterLayout() func() {
-	if EnterHook != nil {
-		return EnterHook()
-	}
-	layoutDepth++
-	return func() { layoutDepth-- }
-}
+func EnterLayout() func() { return reactive.EnterLayout() }
 
 // Equal compares configuration values, not reader identity. Colors compare by
 // their rendered channels; equal NaNs must not turn a still frame into a loop.

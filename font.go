@@ -110,7 +110,6 @@ func (f *Font) changed() {
 	f.mu.Unlock()
 	if used {
 		fontGeneration.Add(1)
-		reactive.RequestLayoutEverywhere()
 	}
 }
 
@@ -218,7 +217,6 @@ func SetDefaultFont(f *Font) {
 	reactive.CheckUIThread("SetDefaultFont")
 	defaultFont.Store(f)
 	fontGeneration.Add(1)
-	reactive.RequestLayoutEverywhere()
 }
 
 // fallbackFont returns the font Text uses when none is set.

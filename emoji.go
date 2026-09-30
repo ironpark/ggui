@@ -38,7 +38,6 @@ func SetEmojiFont(f *Font) {
 	reactive.CheckUIThread("SetEmojiFont")
 	emojiFont.Store(&emojiChoice{font: f})
 	fontGeneration.Add(1)
-	reactive.RequestLayoutEverywhere()
 }
 
 // SystemEmojiFont finds the platform color emoji font once, or returns nil.

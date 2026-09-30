@@ -35,9 +35,6 @@ type Probe struct {
 
 	overlay Overlay
 	sinks   []func(*inspect.Frame)
-
-	world *world    // its runtime's; see worldOf
-	now   time.Time // the probe's clock once Advance has been called
 }
 
 // SetOverlay installs o over the probe's window, as App.SetOverlay does:
@@ -82,7 +79,7 @@ func ProbeBuilder(build Builder, size Size) *Probe {
 	p := &Probe{size: size}
 	p.host = p
 	p.rt = reactive.NewRuntime()
-	p.world = worldOf(p.rt)
+	worldOf(p.rt) // made here, on the goroutine that made the probe
 	p.build = build
 	p.dialogs = &runtime.StubFilePicker{}
 	p.clipboard = &runtime.MemoryClipboard{}
@@ -140,7 +137,8 @@ func (p *Probe) Frame() Size {
 	}
 	p.runFrame()
 	p.runPosted()
-	if err := p.tick(p.world.frame.set(p.world.frame.raw())); err != nil {
+	clk := &p.world().frame
+	if err := p.tick(clk.set(clk.raw())); err != nil {
 		panic(err)
 	}
 	if p.root == nil {
@@ -192,11 +190,8 @@ func (p *Probe) Frame() Size {
 //
 //	p.Advance(150 * time.Millisecond) // a 300ms tween is now halfway
 func (p *Probe) Advance(d time.Duration) {
-	if p.now.IsZero() {
-		p.now = p.world.frame.raw()
-		p.world.frame.source = func() time.Time { return p.now }
-	}
-	p.now = p.now.Add(d)
+	f := &p.world().frame
+	f.pinned = f.raw().Add(d)
 	p.Frame()
 }
 

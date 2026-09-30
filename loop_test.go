@@ -46,7 +46,7 @@ func TestAdvanceStepsAnimations(t *testing.T) {
 	if got := Untrack(tw.Get); got != 25 {
 		t.Fatalf("value after 250ms = %v, want 25", got)
 	}
-	if Now() != p.now {
+	if Now() != p.world().frame.pinned {
 		t.Fatal("Now does not read the probe's clock")
 	}
 }

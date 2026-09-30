@@ -25,11 +25,6 @@ import (
 type App struct {
 	*Window // the main window, the one New opened
 
-	// rt is the reactive runtime every window of the app builds in, made
-	// beside the Base of the goroutine that called New, so that state and
-	// widgets main built before Run are flushed by the app's frames.
-	rt *reactive.Runtime
-
 	mu         sync.Mutex // guards windows, which Quit reads from any goroutine
 	windows    []*Window  // open or waiting for Run, in the order they were made
 	running    bool       // the engine is running, so native windows may be made
@@ -49,9 +44,13 @@ type App struct {
 
 // New creates an App whose main window renders the tree returned by build.
 func New(cfg Config, build Builder) *App {
-	a := &App{rt: reactive.NewRuntime()}
-	worldOf(a.rt) // made here, before the engine's goroutine can ask for it
-	a.Window = newWindow(a, cfg, build)
+	// Every window of the app builds in one reactive runtime, made beside
+	// the Base of the goroutine that called New, so that state and widgets
+	// main built before Run are flushed by the app's frames.
+	rt := reactive.NewRuntime()
+	worldOf(rt) // made here, before the engine's goroutine can ask for it
+	a := &App{}
+	a.Window = newWindow(a, rt, cfg, build)
 	a.windows = []*Window{a.Window}
 	return a
 }
@@ -95,7 +94,7 @@ func (a *App) SetClipboard(c runtime.Clipboard) *App {
 //
 //	ggui.UseWindow().App().OpenWindow(ggui.Config{Title: "Preferences"}, prefs)
 func (a *App) OpenWindow(cfg Config, build Builder) (*Window, error) {
-	w := newWindow(a, cfg, build)
+	w := newWindow(a, a.rt, cfg, build)
 	if !NativeMenu() {
 		a.addMenuShortcuts(w)
 	}
@@ -293,8 +292,9 @@ func (a *App) windowFor(nw *ggfx.Window) *Window {
 // its effects run even while the platform sends it no frames, as it does
 // for a window that is covered or minimized, and paints at its next frame.
 func (a *App) follow(w *Window) error {
+	gen := layoutGen()
 	for _, o := range a.Windows() {
-		if o == w || o.seenGen == reactive.LayoutGen() {
+		if o == w || o.seenGen == gen {
 			continue
 		}
 		if err := o.catchUp(); err != nil {

@@ -140,7 +140,7 @@ type Window struct {
 	ax            a11ybridge.Bridge
 	dragOver      bool
 	dragAt        Point
-	seenGen       uint64            // reactive.LayoutGen as this window's last frame left it
+	seenGen       uint64            // layoutGen as this window's last frame left it
 	menuShortcuts []*ShortcutHandle // the app menus' chords, where the menu bar does not run them
 	settling      time.Time         // until when a change to the native window is followed; see native
 
@@ -156,12 +156,10 @@ type Window struct {
 }
 
 // newWindow makes a window for app that is not open yet.
-func newWindow(app *App, cfg Config, build Builder) *Window {
+func newWindow(app *App, rt *reactive.Runtime, cfg Config, build Builder) *Window {
 	w := &Window{app: app, cfg: cfg.withDefaults()}
 	w.host = w
-	if app != nil {
-		w.rt = app.rt
-	}
+	w.rt = rt
 	w.wake = func() {
 		w.requestFrame()
 		// The window may draw no frame, hidden or covered as it may be;
@@ -510,7 +508,7 @@ func (w *Window) runFrameEvent(ev ggfx.FrameEvent) error {
 	if w.closed {
 		return nil
 	}
-	wd := loopWorld(&w.frameLoop)
+	wd := w.world()
 	if err := w.tick(wd.frame.begin(wd.frame.raw())); err != nil {
 		return err
 	}
@@ -521,7 +519,7 @@ func (w *Window) runFrameEvent(ev ggfx.FrameEvent) error {
 	if w.closed {
 		return nil
 	}
-	w.seenGen = reactive.LayoutGen()
+	w.seenGen = layoutGen()
 	if w.wantsFrame(f) {
 		ev.Window.RequestFrame()
 	} else if wake := wd.frame.takeWake(); !wake.IsZero() {
@@ -545,7 +543,7 @@ func (w *Window) catchUp() error {
 	if err := w.settle(Untrack(w.viewport.Get)); err != nil {
 		return err
 	}
-	w.seenGen = reactive.LayoutGen()
+	w.seenGen = layoutGen()
 	return nil
 }
 
@@ -555,7 +553,7 @@ func (w *Window) catchUp() error {
 // every frame, a touch is down, files are being dragged over, or the
 // native window was just changed.
 func (w *Window) wantsFrame(f frameInput) bool {
-	wd := loopWorld(&w.frameLoop)
+	wd := w.world()
 	if wd.anims.active() || wd.frame.timeRead() || len(w.frame) > 0 || w.hasPosted() {
 		return true
 	}

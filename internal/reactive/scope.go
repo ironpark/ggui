@@ -5,7 +5,6 @@ import (
 	"sync/atomic"
 
 	"github.com/ironpark/ggui/internal/goid"
-	"github.com/ironpark/ggui/internal/property"
 )
 
 // A scope is what one goroutine is running: the computation its reads
@@ -18,6 +17,7 @@ import (
 // a goroutine of their own, so each goroutine gets its own scope, keyed by
 // goid.ID. A scope is touched by its own goroutine alone and needs no lock.
 type scope struct {
+	id              int64 // the goroutine's; never changes
 	listener, owner *Computation
 	measuring       func(src LayoutSource, version uint64)
 	derivedDepth    int
@@ -29,13 +29,6 @@ type scope struct {
 	// base is the runtime what this goroutine creates with no owner
 	// belongs to; see Base.
 	base *Runtime
-
-	hit *scopeHit
-}
-
-type scopeHit struct {
-	id int64
-	s  *scope
 }
 
 // scopes holds a scope for every goroutine that has entered one. They are
@@ -45,25 +38,24 @@ var scopes sync.Map // int64 -> *scope
 
 // lastScope is the scope looked up last, which in an app, where one
 // goroutine runs every frame, is the scope of nearly every lookup.
-var lastScope atomic.Pointer[scopeHit]
+var lastScope atomic.Pointer[scope]
 
 // current returns the running goroutine's scope, making it on first use. A
 // goroutine that only reads makes one too, so that its next lookup is the
 // cached one rather than a miss in scopes.
 func current() *scope {
 	id := goid.ID()
-	if h := lastScope.Load(); h != nil && h.id == id {
-		return h.s
+	if s := lastScope.Load(); s != nil && s.id == id {
+		return s
 	}
 	if v, ok := scopes.Load(id); ok {
 		s := v.(*scope)
-		lastScope.Store(s.hit)
+		lastScope.Store(s)
 		return s
 	}
-	s := &scope{}
-	s.hit = &scopeHit{id: id, s: s}
+	s := &scope{id: id}
 	scopes.Store(id, s)
-	lastScope.Store(s.hit)
+	lastScope.Store(s)
 	return s
 }
 
@@ -71,8 +63,9 @@ func current() *scope {
 // created on it with no owner belongs to, such as the bindings of a widget a
 // test builds before its probe. A runtime made on the goroutine flushes it
 // along with its own; see Runtime.Related.
-func Base() *Runtime {
-	s := current()
+func Base() *Runtime { return current().baseRuntime() }
+
+func (s *scope) baseRuntime() *Runtime {
 	if s.base == nil {
 		s.base = &Runtime{}
 	}
@@ -101,6 +94,10 @@ func Measure(record func(src LayoutSource, version uint64), fn func()) {
 // Recording reports whether a layout recorder is installed.
 func Recording() bool { return current().measuring != nil }
 
+// Recorder returns the installed layout recorder, or nil, for a caller
+// reporting many reads at once.
+func Recorder() func(src LayoutSource, version uint64) { return current().measuring }
+
 // Record reports a read of src at version to the running layout, if any.
 func Record(src LayoutSource, version uint64) {
 	if s := current(); s.measuring != nil {
@@ -109,14 +106,10 @@ func Record(src LayoutSource, version uint64) {
 }
 
 // SetRunningLoop records loop as the frame loop the running goroutine runs
-// a frame of, and returns the one recorded before. It stays recorded after
-// the frame, so that a test reading Now between frames reads its probe's
-// clock, until ClearRunningLoop or another loop replaces it.
-func SetRunningLoop(loop any) (prev any) {
-	s := current()
-	prev, s.loop = s.loop, loop
-	return prev
-}
+// a frame of. It stays recorded after the frame, so that a test reading Now
+// between frames reads its probe's clock, until ClearRunningLoop or another
+// loop replaces it.
+func SetRunningLoop(loop any) { current().loop = loop }
 
 // RunningLoop returns the frame loop the running goroutine last ran a frame
 // of, or nil.
@@ -130,17 +123,18 @@ func ClearRunningLoop(loop any) {
 	}
 }
 
-// leaveLayout undoes EnterHook. It is a function of its own rather than a
+// EnterLayout marks the running goroutine as inside layout until the
+// returned function is called. Layout depth is per goroutine: a property
+// written while one goroutine lays out must not keep another's writes from
+// scheduling a frame.
+func EnterLayout() func() {
+	current().layoutDepth++
+	return leaveLayout
+}
+
+// leaveLayout undoes EnterLayout. It is a function of its own rather than a
 // closure over the scope, so that entering layout allocates nothing.
 func leaveLayout() { current().layoutDepth-- }
 
-// Layout depth is per goroutine as well: a property written while one
-// goroutine lays out must not keep another's writes from scheduling a
-// frame.
-func init() {
-	property.EnterHook = func() func() {
-		current().layoutDepth++
-		return leaveLayout
-	}
-	property.InLayout = func() bool { return current().layoutDepth > 0 }
-}
+// InLayout reports whether the running goroutine is inside layout.
+func InLayout() bool { return current().layoutDepth > 0 }
