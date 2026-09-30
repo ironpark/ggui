@@ -2,10 +2,10 @@ package ggui
 
 import "github.com/ironpark/ggui/runtime"
 
-func (a *App) nativeFilePicker() runtime.FilePicker {
-	return runtime.NativeFilePickerForWindow(func() uintptr {
-		if w := a.window.Load(); w != nil {
-			return w.NativeHandle()
+func (w *Window) nativeDialogs() runtime.Dialogs {
+	return runtime.NativeDialogsForWindow(func() uintptr {
+		if nw := w.window.Load(); nw != nil {
+			return nw.NativeHandle()
 		}
 		return 0
 	})

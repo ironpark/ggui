@@ -15,11 +15,11 @@ type Clipboard interface {
 	Write(s string)
 }
 
-// NativeClipboard returns the system clipboard. It talks to the OS through
-// the platform's command-line tool (pbcopy/pbpaste, wl-clipboard or xclip,
-// PowerShell) and keeps an in-process copy where none is available, as in
-// a browser.
-func NativeClipboard() Clipboard { return &execClipboard{} }
+// NativeClipboard returns the system clipboard. On macOS and Windows it is
+// the platform's clipboard API; elsewhere it talks to the OS through
+// wl-clipboard, xclip or xsel and keeps an in-process copy where none is
+// available, as in a browser.
+func NativeClipboard() Clipboard { return nativeClipboard() }
 
 // MemoryClipboard is a Clipboard that lives in the process only, for tests
 // and platforms with no system clipboard.

@@ -218,6 +218,7 @@ type MenuItemWidget struct {
 	props property.Owner
 	ggui.Interactive
 	text         *ggui.TextWidget
+	label        string
 	onTap        func()
 	menu         *MenuWidget
 	active       bool
@@ -234,7 +235,7 @@ type MenuItemWidget struct {
 
 // MenuItem creates an entry that runs onTap and closes the menu.
 func MenuItem(label string, onTap func()) *MenuItemWidget {
-	it := &MenuItemWidget{text: ggui.Text(label).NoWrap(), onTap: onTap}
+	it := &MenuItemWidget{text: ggui.Text(label).NoWrap(), label: label, onTap: onTap}
 	it.Role = ggui.RoleMenuItem
 	it.SetName(label)
 	it.AutoKey()
@@ -259,6 +260,27 @@ func (it *MenuItemWidget) Disabled(v bool) *MenuItemWidget { it.SetInert(v); ret
 func (it *MenuItemWidget) BindDisabled(r ggui.Readable[bool]) *MenuItemWidget {
 	it.BindInert(r)
 	return it
+}
+
+// Checked puts a check mark before the label, or takes it away.
+func (it *MenuItemWidget) Checked(v bool) *MenuItemWidget {
+	it.text.Content(checkedLabel(it.label, v))
+	return it
+}
+
+// BindChecked puts a check mark before the label while r is true.
+func (it *MenuItemWidget) BindChecked(r ggui.Readable[bool]) *MenuItemWidget {
+	label := it.label
+	it.text.BindContent(ggui.Map(r, func(on bool) string { return checkedLabel(label, on) }))
+	return it
+}
+
+// checkedLabel is label with a check mark before it while checked.
+func checkedLabel(label string, checked bool) string {
+	if checked {
+		return "✓ " + label
+	}
+	return label
 }
 
 // MenuDivider is a line between groups of items.

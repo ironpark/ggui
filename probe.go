@@ -79,6 +79,7 @@ func NewProbe(w Widget, size Size) *Probe {
 //	p := ggui.ProbeBuilder(func() ggui.Widget { return ggui.Textf("%d", n) }, ggui.Sz(100, 20))
 func ProbeBuilder(build Builder, size Size) *Probe {
 	p := &Probe{size: size}
+	p.host = p
 	p.build = build
 	p.dialogs = &runtime.StubFilePicker{}
 	p.clipboard = &runtime.MemoryClipboard{}

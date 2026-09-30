@@ -153,7 +153,8 @@ the drag; either drop ends it too.
 
 `Host.Dialogs` opens the platform's own file chooser, the one with the
 user's favourites and recent places, rather than a browser drawn by ggui.
-It returns a `runtime.FilePicker`, whose `OpenFile`, `OpenFiles`,
+It returns a `runtime.Dialogs`, which also shows
+[message dialogs](windows-and-platform.md#message-dialogs), and whose `OpenFile`, `OpenFiles`,
 `PickFolder` and `SaveFile` each take a `runtime.FileDialog` of title,
 starting directory, proposed file name and type `Filters`, and return the
 chosen path or `runtime.ErrCanceled`.
@@ -174,13 +175,16 @@ dialog; both run on the window's thread, so the window stops repainting
 while one is up, which is how a modal dialog behaves there;
 elsewhere the panel is the `zenity` or `kdialog` program found on `PATH`,
 and where neither is, or in a browser, every call is `ErrUnsupported`. A
-dialog needs a running `App`: ask for one from a handler, a shortcut or
-posted work, not before `Run`.
+dialog needs an open window: ask for one from a handler, a shortcut or
+posted work. Asked before `Run`, or from `Setup`, which runs before the
+window exists, it returns `runtime.ErrNotRunning`. Call it through
+[`ggui.Async`](windows-and-platform.md#slow-calls-from-a-handler) to keep the
+handler from waiting on it.
 
 A `Probe` answers every dialog with a `runtime.StubFilePicker`, which
-returns fixed `Paths` and records what was asked, so a test sets the paths
-and taps the button. `App.SetDialogs` installs any other `FilePicker`,
-for an app that draws its own.
+returns fixed `Paths` and `Button` and records what was asked, so a test sets
+the answers and taps the button. `App.SetDialogs` installs any other
+`runtime.Dialogs`, for an app that draws its own.
 
 ## Focus scopes
 

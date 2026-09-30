@@ -7,22 +7,22 @@ import (
 )
 
 func TestAppUsesNativeModifierSnapshot(t *testing.T) {
-	a := &App{}
-	a.HandleEvent(ggfx.KeyEvent{Key: ggfx.KeyA, Pressed: true, Modifiers: ggfx.KeyModifiers{Meta: true}})
+	a := &Window{}
+	a.handle(ggfx.KeyEvent{Key: ggfx.KeyA, Pressed: true, Modifiers: ggfx.KeyModifiers{Meta: true}})
 	if !a.takeInput().mods.Meta {
 		t.Fatal("native modifier snapshot was lost without a separate modifier key event")
 	}
 }
 
 func TestAppKeepsModifierOnQueuedKeyPress(t *testing.T) {
-	a := &App{}
+	a := &Window{}
 	for _, e := range []ggfx.KeyEvent{
 		{Key: ggfx.KeyMetaLeft, Pressed: true},
 		{Key: ggfx.KeyO, Pressed: true},
 		{Key: ggfx.KeyO},
 		{Key: ggfx.KeyMetaLeft},
 	} {
-		if err := a.HandleEvent(e); err != nil {
+		if err := a.handle(e); err != nil {
 			t.Fatal(err)
 		}
 	}

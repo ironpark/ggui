@@ -1,6 +1,8 @@
 package theme
 
 import (
+	"image/color"
+
 	"github.com/ironpark/ggui"
 )
 
@@ -38,8 +40,24 @@ func (t Theme) Apply(env ggui.Env) ggui.Env {
 // Use reads the application theme and subscribes the current builder or effect.
 func Use() Theme { return From(ggui.UseEnv()) }
 
-// Set replaces the application theme while preserving other environment values.
-func Set(t Theme) { ggui.SetEnv(t.Apply(ggui.Untrack(ggui.UseEnv).WithTextStyle(t.Text))) }
+// Set replaces the application theme while preserving other environment
+// values, and matches the windows' title bars to it.
+func Set(t Theme) {
+	ggui.SetEnv(t.Apply(ggui.Untrack(ggui.UseEnv).WithTextStyle(t.Text)))
+	if t.Bg != nil {
+		ggui.SetAppearance(appearanceOf(t.Bg))
+	}
+}
+
+// appearanceOf is the platform appearance that suits a theme whose
+// background is bg: dark when bg is closer to black than to white.
+func appearanceOf(bg color.Color) ggui.Appearance {
+	r, g, b, _ := bg.RGBA()
+	if r+g+b < 3*0x8000 {
+		return ggui.AppearanceDark
+	}
+	return ggui.AppearanceLight
+}
 
 // Bind applies on while sw is true and off otherwise through a Watch.
 // Its first application runs when effects flush; the returned function stops it.

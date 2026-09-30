@@ -60,6 +60,8 @@ var sheetDone = sync.OnceValue(func() *cocoa.Block {
 
 // showDialog runs the panel on the main thread and waits for it.
 func showDialog(k dialogKind, d FileDialog, owner uintptr) (paths []string, err error) {
+	// The engine runs nothing on the main thread before it has a window.
+	err = ErrNotRunning
 	ggfx.RunOnMainThread(func() { paths, err = runPanel(k, d, owner) })
 	return paths, err
 }

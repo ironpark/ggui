@@ -108,7 +108,7 @@ func withPanel(t *testing.T) *fakePanel {
 
 func TestInspectorDrivesTheRegisteredPanel(t *testing.T) {
 	panel := withPanel(t)
-	a := &App{}
+	a := &Window{}
 	a.SetInspector(InspectorOptions{Dock: InspectorRight})
 	if panel.opts.Dock != InspectorRight {
 		t.Fatal("options set before the panel opened were lost")
@@ -141,7 +141,7 @@ func TestInspectorWithoutARegisteredPanelStaysOff(t *testing.T) {
 	old := newInspectorPanel
 	t.Cleanup(func() { newInspectorPanel = old })
 	newInspectorPanel = nil
-	a := &App{}
+	a := &Window{}
 	a.Inspector(true)
 	a.SetInspector(InspectorOptions{})
 	if a.inspect || a.overlay != nil || a.panel != nil {
@@ -153,7 +153,7 @@ func TestInspectorWithoutARegisteredPanelStaysOff(t *testing.T) {
 // tracing turns on for it alone, and the frame answers through its Source.
 func TestOnInspectReceivesFramesWithThePanelClosed(t *testing.T) {
 	withPanel(t)
-	a := &App{}
+	a := &Window{}
 	var frames int
 	var names []string
 	a.OnInspect(func(fr *inspect.Frame) {

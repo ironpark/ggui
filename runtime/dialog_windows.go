@@ -100,6 +100,8 @@ type browseInfo struct {
 
 // showDialog runs the dialog on the main thread and waits for it.
 func showDialog(k dialogKind, d FileDialog, owner uintptr) (paths []string, err error) {
+	// The engine runs nothing on the main thread before it has a window.
+	err = ErrNotRunning
 	ggfx.RunOnMainThread(func() {
 		// Owned by the app's window, the dialog is modal to it and centred
 		// on it; without one it stands on its own.

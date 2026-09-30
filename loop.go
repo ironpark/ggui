@@ -67,9 +67,9 @@ func cycle() error {
 	return &cycleError{msg: b.String()}
 }
 
-// Dialogs is the host's file dialogs: the platform's under an App, a
+// Dialogs is the host's file and message dialogs: the platform's under an App, a
 // runtime.StubFilePicker under a Probe, or what App.SetDialogs installed.
-func (l *frameLoop) Dialogs() runtime.FilePicker { return l.dialogs }
+func (l *frameLoop) Dialogs() runtime.Dialogs { return l.dialogs }
 
 // OnCloseRequest registers fn to decide whether the window closes when the
 // user asks to close it: its close button, or the platform's quit command.
@@ -102,6 +102,7 @@ func (l *frameLoop) Clipboard() runtime.Clipboard { return l.clipboard }
 // the tree is built under, the posted work, and the record of the last
 // layout, which lets a still frame skip layout.
 type frameLoop struct {
+	host    Host // the Window or Probe this loop is, for UseHost
 	build   Builder
 	setup   []func()
 	root    Widget
@@ -111,7 +112,7 @@ type frameLoop struct {
 
 	postMu sync.Mutex
 	posted []func()
-	wake   func() // asks the host for a frame; nil under a Probe
+	wake   func()   // asks the host for a frame; nil under a Probe
 	frame  []func() // OnFrame handlers, run at the start of every frame
 
 	closeRequests []func() bool // OnCloseRequest handlers, in order
@@ -122,8 +123,8 @@ type frameLoop struct {
 
 	notices []Announcement // queued by Announce, drained by the bridge
 
-	dialogs   runtime.FilePicker // the host's file dialogs; see Host.Dialogs
-	clipboard runtime.Clipboard  // the host's clipboard; see Host.Clipboard
+	dialogs   runtime.Dialogs   // the host's dialogs; see Host.Dialogs
+	clipboard runtime.Clipboard // the host's clipboard; see Host.Clipboard
 
 	// The last frame's finished accessibility tree. It is published at the
 	// end of a frame and read from anywhere, including a thread that is not
@@ -195,14 +196,19 @@ func UIThread() func(func()) {
 // An effect holds its loop as an opaque token, so this is the one place
 // that turns it back into the concrete loop.
 func loopPost(owner *reactive.Computation) func(func()) {
+	if l := loopOf(owner); l != nil {
+		return l.post
+	}
+	return nil
+}
+
+// loopOf is the frame loop owner belongs to, or nil when it has none.
+func loopOf(owner *reactive.Computation) *frameLoop {
 	if owner == nil {
 		return nil
 	}
 	l, _ := owner.Loop().(*frameLoop)
-	if l == nil {
-		return nil
-	}
-	return l.post
+	return l
 }
 
 // start runs the setup functions and the builder under a fresh root owner.

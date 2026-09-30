@@ -53,8 +53,8 @@ type Actor interface {
 //
 // It may be called from any goroutine. Nothing reads the queue yet; the
 // platform bridge will.
-func (a *App) Announce(text string, politeness Politeness) {
-	a.announce(Announcement{Text: text, Politeness: politeness})
+func (w *Window) Announce(text string, politeness Politeness) {
+	w.announce(Announcement{Text: text, Politeness: politeness})
 }
 
 // Announce queues text as App.Announce does, for tests.
@@ -66,8 +66,8 @@ func (p *Probe) Announce(text string, politeness Politeness) {
 // immediately: the work is queued onto the UI goroutine and happens before
 // the next frame's input, and the frame after that publishes what came of
 // it. See the note at the top of this file for why it must not wait.
-func (a *App) Perform(id NodeID, act Action) {
-	a.Post(func() { perform(&a.canvas, &a.input, id, act) })
+func (w *Window) Perform(id NodeID, act Action) {
+	w.Post(func() { perform(&w.canvas, &w.input, id, act) })
 }
 
 // Perform queues act as App.Perform does and then runs a frame, so that a

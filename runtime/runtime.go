@@ -1,7 +1,8 @@
 // Package runtime is the platform beneath a ggui app: the services an
 // application asks of the desktop it runs on rather than of its own
-// window. Today that is the native file dialogs and the clipboard; what
-// belongs here is anything whose answer comes from the operating system.
+// window: the native file and message dialogs, the clipboard, OpenURL and
+// ClaimInstance; what belongs here is anything whose answer comes from the
+// operating system.
 //
 // Every dialog is modal and blocks until the user picks or cancels. On
 // macOS the panel is a sheet attached to the app's window; on Windows it
@@ -45,6 +46,11 @@ type FileDialog struct {
 // ErrCanceled is returned when the user closes a dialog without choosing.
 var ErrCanceled = errors.New("runtime: canceled")
 
+// ErrNotRunning is returned by a dialog asked for while no App window is
+// open to run it: before Run, or from Setup, which runs before the window
+// it sets up exists.
+var ErrNotRunning = errors.New("runtime: no running app to show the dialog")
+
 // ErrUnsupported is returned where the platform offers no dialog.
 var ErrUnsupported = errors.New("runtime: not supported on this platform")
 
@@ -66,15 +72,19 @@ type FilePicker interface {
 // window; NativeFilePickerForWindow attaches them to one.
 func NativeFilePicker() FilePicker { return NativeFilePickerForWindow(nil) }
 
-// StubFilePicker is a FilePicker that answers every dialog with fixed
-// paths, for tests. OpenFile, PickFolder and SaveFile return the first of
-// Paths; OpenFiles returns them all. With no Paths every call is a cancel,
-// and Err, when set, is returned instead of anything.
+// StubFilePicker is the Dialogs a test uses: it answers every dialog with
+// fixed values. OpenFile, PickFolder and SaveFile return the first of
+// Paths; OpenFiles returns them all. With no Paths every file dialog is a
+// cancel. Message answers with Button. Err, when set, is returned instead
+// of anything.
 type StubFilePicker struct {
-	Paths []string
-	Err   error
-	// Asked records every dialog opened, in order.
+	Paths  []string
+	Button int
+	Err    error
+	// Asked records every file dialog opened, in order.
 	Asked []FileDialog
+	// Messages records every message shown, in order.
+	Messages []Message
 }
 
 // answer records the dialog and returns a copy of Paths, or Err.

@@ -57,11 +57,11 @@ func RegisterInspector(fn func() InspectorPanel) {
 
 // inspectorPanel is the app's panel, made on first need from the
 // registered constructor; nil when none is registered.
-func (a *App) inspectorPanel() InspectorPanel {
-	if a.panel == nil && newInspectorPanel != nil {
-		a.panel = newInspectorPanel()
+func (w *Window) inspectorPanel() InspectorPanel {
+	if w.panel == nil && newInspectorPanel != nil {
+		w.panel = newInspectorPanel()
 	}
-	return a.panel
+	return w.panel
 }
 
 // OnInspect registers fn to receive every painted frame's inspect.Frame:
@@ -72,19 +72,19 @@ func (a *App) inspectorPanel() InspectorPanel {
 // a viewer that keeps it copies it, and one that leaves the process calls
 // DescribeAll first. Unlike App.Inspector it needs no panel: the frames
 // are built whether or not ggui/inspect/panel is imported.
-func (a *App) OnInspect(fn func(*inspect.Frame)) {
-	a.sinks = append(a.sinks, fn)
+func (w *Window) OnInspect(fn func(*inspect.Frame)) {
+	w.sinks = append(w.sinks, fn)
 	inspectorEnabled = true
 }
 
 // publishInspect ends a traced frame: the panel is handed the frame when it
 // is on, and every OnInspect handler receives it.
-func (a *App) publishInspect(c *Canvas, sem *SemTree) {
+func (w *Window) publishInspect(c *Canvas, sem *SemTree) {
 	fr := inspectFrame(c, sem)
-	if a.inspect {
-		a.panel.Frame(fr)
+	if w.inspect {
+		w.panel.Frame(fr)
 	}
-	for _, fn := range a.sinks {
+	for _, fn := range w.sinks {
 		fn(fr)
 	}
 }

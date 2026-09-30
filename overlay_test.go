@@ -20,7 +20,7 @@ func (r *recorder) Cursor(p Point) (CursorShape, bool) {
 }
 
 func TestOverlayTakesInputBeforeWidgetsExceptDuringADrag(t *testing.T) {
-	a := &App{}
+	a := &Window{}
 	taps := 0
 	w := Tap(Box().Size(400, 400), func() { taps++ })
 	paintFrame(&a.input, w, Sz(800, 600))

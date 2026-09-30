@@ -152,3 +152,66 @@ func (h *ShortcutHandle) Remove() { h.removed = true }
 
 // Chord returns what the shortcut listens for.
 func (h *ShortcutHandle) Chord() Chord { return h.chord }
+
+// Label writes the chord the way the platform shows it to a user, in a
+// menu or a tooltip: "⇧⌘S" on macOS, "Ctrl+Shift+S" elsewhere.
+func (c Chord) Label() string {
+	ctrl, alt, shift, meta := c.Mods.Ctrl, c.Mods.Alt, c.Mods.Shift, c.Mods.Meta
+	mac := runtimeIsDarwin()
+	if c.Cmd {
+		if mac {
+			meta = true
+		} else {
+			ctrl = true
+		}
+	}
+	key := keyLabel(c.Key, mac)
+	if mac {
+		var b strings.Builder
+		for _, m := range []struct {
+			on  bool
+			sym string
+		}{{ctrl, "⌃"}, {alt, "⌥"}, {shift, "⇧"}, {meta, "⌘"}} {
+			if m.on {
+				b.WriteString(m.sym)
+			}
+		}
+		return b.String() + key
+	}
+	var parts []string
+	for _, m := range []struct {
+		on   bool
+		name string
+	}{{ctrl, "Ctrl"}, {alt, "Alt"}, {shift, "Shift"}, {meta, "Win"}} {
+		if m.on {
+			parts = append(parts, m.name)
+		}
+	}
+	return strings.Join(append(parts, key), "+")
+}
+
+// keyLabel is how a key is written in a chord's label.
+func keyLabel(k KeyboardKey, mac bool) string {
+	switch {
+	case k >= KeyA && k <= KeyZ:
+		return string(rune('A' + (k - KeyA)))
+	case k >= KeyDigit0 && k <= KeyDigit9:
+		return string(rune('0' + (k - KeyDigit0)))
+	}
+	symbols := map[KeyboardKey][2]string{
+		KeyEnter: {"Enter", "↩"}, KeyEscape: {"Esc", "⎋"}, KeyTab: {"Tab", "⇥"},
+		KeyBackspace: {"Backspace", "⌫"}, KeyDelete: {"Del", "⌦"}, KeySpace: {"Space", "Space"},
+		KeyArrowUp: {"Up", "↑"}, KeyArrowDown: {"Down", "↓"}, KeyArrowLeft: {"Left", "←"}, KeyArrowRight: {"Right", "→"},
+		KeyPageUp: {"PgUp", "⇞"}, KeyPageDown: {"PgDn", "⇟"}, KeyHome: {"Home", "↖"}, KeyEnd: {"End", "↘"},
+		KeyComma: {",", ","}, KeyPeriod: {".", "."}, KeySlash: {"/", "/"}, KeySemicolon: {";", ";"},
+		KeyQuote: {"'", "'"}, KeyBracketLeft: {"[", "["}, KeyBracketRight: {"]", "]"}, KeyBackslash: {"\\", "\\"},
+		KeyMinus: {"-", "-"}, KeyEqual: {"=", "="}, KeyBackquote: {"`", "`"},
+	}
+	if s, ok := symbols[k]; ok {
+		if mac {
+			return s[1]
+		}
+		return s[0]
+	}
+	return k.String()
+}

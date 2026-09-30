@@ -24,13 +24,17 @@ from the repository root unless a guide says otherwise.
 > APIs are under active development. Native accessibility currently supports
 > **macOS and Windows**; the Linux bridge is not implemented. Native file
 > dialogs run on macOS, Windows, and desktops with `zenity` or `kdialog`
-> on `PATH`; elsewhere they report `runtime.ErrUnsupported`.
+> on `PATH`; elsewhere they report `runtime.ErrUnsupported`. App menus in the
+> menu bar and tray icons are **macOS** only; elsewhere menus are drawn with
+> `ui.AppMenubar` and a tray does nothing.
 
 ## Find a topic
 
 | I want to… | Read |
 | --- | --- |
 | Configure a window and app lifecycle | [Getting started](getting-started.md) |
+| Open several windows, move and resize them, or follow their state | [Windows and the desktop](windows-and-platform.md) |
+| Add app menus, a tray icon, message boxes, or keep one instance running | [Windows and the desktop](windows-and-platform.md) |
 | Understand signals, derived values, ownership, and cleanup | [State and components](reactivity.md) |
 | Update the UI from background work | [Threads](reactivity.md#threads) · [Resources](reactivity.md#resources-and-await-blocks) |
 | Render changing or large collections | [Keyed lists](reactivity.md#keyed-lists) · [Tables](data-and-navigation.md#tables) |

@@ -46,7 +46,7 @@ func overlayInput(f frameInput) OverlayInput {
 // SetOverlay installs o over the window, or removes the overlay when o is
 // nil. There is one at a time: turning the inspector on installs it here
 // and turning it off removes it.
-func (a *App) SetOverlay(o Overlay) { a.overlay = o }
+func (w *Window) SetOverlay(o Overlay) { w.overlay = o }
 
 // dispatchOver offers f to the overlay before the widgets, unless a widget
 // holds a press, so that a drag that began in the app finishes there.
