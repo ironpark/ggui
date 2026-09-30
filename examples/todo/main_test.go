@@ -2,6 +2,7 @@ package main
 
 import (
 	"testing"
+	"time"
 
 	"github.com/ironpark/ggui"
 )
@@ -33,6 +34,7 @@ func TestTodo(t *testing.T) {
 		t.Fatal("draft was not cleared after adding")
 	}
 
+	p.Advance(time.Second) // the new rows animate in
 	p.Tap("Done: Buy milk")
 	if !ggui.Untrack(m.Todos.Get)[0].Done.Get() {
 		t.Fatal("checkbox did not mark the first item done")

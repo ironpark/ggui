@@ -34,6 +34,7 @@ func TestAccordionSelectionAndKeyboard(t *testing.T) {
 	if !slices.Equal(ggui.Untrack(open.Get), []string{"a"}) {
 		t.Fatal("Home failed", ggui.Untrack(open.Get))
 	}
+	p.Advance(time.Second) // content takes focus once it has opened
 	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyEnter)
 	if calls != 1 {
 		t.Fatal("open content is not keyboard reachable")
@@ -298,7 +299,7 @@ func TestAdvancedBindingsInvalidateCachedLayout(t *testing.T) {
 	open.Set([]string{"a"})
 	fraction.Set(.75)
 	p.Frame()
-	p.Frame()
+	p.Advance(time.Second) // the section opens
 	find(t, p, ggui.RoleButton, "Content")
 	r := find(t, p, ggui.RoleSeparator, "Resize panels").Rect
 	if math.Abs(r.Origin.X-150) > 1e-9 {

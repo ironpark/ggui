@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"database/sql"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -25,7 +24,7 @@ func loadTable(ctx context.Context, db *sql.DB, o object) (tableData, error) {
 func fixture(t *testing.T) (*sql.DB, string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "sample #?.db")
-	db, err := sql.Open("sqlite", (&url.URL{Scheme: "file", Path: path}).String())
+	db, err := sql.Open("sqlite", fileURI(path, ""))
 	if err != nil {
 		t.Fatal(err)
 	}

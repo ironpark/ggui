@@ -1,0 +1,3 @@
+# Check out with LF everywhere, so tests comparing generated source to the
+# file (keys_gen.go) match on Windows too.
+* text=auto eol=lf

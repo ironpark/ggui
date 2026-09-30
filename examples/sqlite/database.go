@@ -58,6 +58,16 @@ func (t tableData) column(name string) (column, bool) {
 	return t.Columns[i], true
 }
 
+// fileURI is the SQLite URI of the file at the absolute path: slashed and
+// escaped, with a Windows drive letter after a slash, file:///C:/...
+func fileURI(path, query string) string {
+	p := filepath.ToSlash(path)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	return (&url.URL{Scheme: "file", Path: p, RawQuery: query}).String()
+}
+
 // openMode opens the database and reads its catalog, which is what proves
 // the file is one.
 func openMode(path string, readOnly bool) (*sql.DB, []object, error) {
@@ -69,8 +79,7 @@ func openMode(path string, readOnly bool) (*sql.DB, []object, error) {
 	if readOnly {
 		mode = "ro"
 	}
-	u := url.URL{Scheme: "file", Path: path, RawQuery: "mode=" + mode + "&_pragma=foreign_keys(1)&_pragma=busy_timeout(1000)"}
-	db, err := sql.Open("sqlite", u.String())
+	db, err := sql.Open("sqlite", fileURI(path, "mode="+mode+"&_pragma=foreign_keys(1)&_pragma=busy_timeout(1000)"))
 	if err != nil {
 		return nil, nil, err
 	}
