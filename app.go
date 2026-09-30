@@ -18,7 +18,8 @@ import (
 // App is the process's GUI: the event loop and the windows it drives. New
 // makes one with its main window, which App embeds, so that app.Shortcut
 // and app.Post reach that window; OpenWindow adds more. Every window runs
-// on the one UI thread and shares the one reactive graph.
+// on the one UI thread and in the process's reactive runtime, which a
+// Probe does not share.
 //
 // Run ends when the last window closes, or when Close or Quit is called.
 type App struct {

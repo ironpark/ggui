@@ -14,6 +14,7 @@ See [example conventions](README.md#start-here) before copying snippets.
 - [Derived values](#derived-values)
 - [Ownership and cleanup](#ownership-and-cleanup)
 - [Threads](#threads)
+- [Runtimes](#runtimes)
 - [Readers, bindings, and lenses](#readers-bindings-and-lenses)
 - [Builders and components](#builders-and-components)
 - [Conditional and key blocks](#conditional-and-key-blocks)
@@ -145,6 +146,25 @@ creates no effect or derived value and requires no owner. `Textf` copies its
 argument list. `Content(text)` and `BindContent(reader)` replace any previous
 literal, reader or formatted source. `Sprintf` explicitly creates a derived
 string and follows the normal derived ownership rules.
+
+## Runtimes
+
+Every computation belongs to a runtime: its owner's, or the process runtime
+when it has none. The App's windows share the process runtime, so a signal
+written in one window updates every window that reads it. Each `Probe`
+builds its tree in a runtime of its own, beside its own animations and clock:
+its frames run its own effects and never another probe's, a probe a test
+forgets to close leaves nothing running in the next test, and
+`Probe.Advance` moves that probe's time alone.
+
+Signals belong to no runtime. One signal can feed an App and several probes
+at once, and a derived value built in one runtime can be read from another.
+What is created outside every tree, such as a widget built before its probe
+or state made in `main`, stays in the process runtime, which every frame
+flushes as well.
+
+Runtimes do not make the UI goroutine plural. Every runtime runs on the one
+UI goroutine, so probes still run one after another, never in parallel.
 
 ## Readers, bindings, and lenses
 

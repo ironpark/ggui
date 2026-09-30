@@ -42,11 +42,14 @@ func TestCheckbox(t *testing.T) {
 | `Tap(label)`, `Find(label)`, `FindRole(role, label)` | Locating controls by semantics. |
 | `Click`, `Press`, `Move`, `Release`, `Scroll` | Pointer interaction. |
 | `Type`, `Text` | Key events and text entry. |
-| `Advance(duration)` | Advancing the test clock for animation. |
+| `Advance(duration)` | Advancing this probe's clock for animation. |
 
 > [!IMPORTANT]
-> Probes share the reactive runtime, theme, and clock. Run probe tests serially
-> (do not call `t.Parallel`) and always call `Close`, usually with `defer`.
+> Each probe has its own reactive runtime, animations and clock, so one
+> probe's frames never run another's effects and `Advance` moves only its own
+> time. Probes still share the UI goroutine, the theme (`SetEnv`) and the
+> package clock (`SetClock`): run probe tests serially (do not call
+> `t.Parallel`) and call `Close`, usually with `defer`.
 
 ## State, layout, and semantic actions
 

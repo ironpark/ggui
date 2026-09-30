@@ -116,9 +116,9 @@ const (
 // bindings and layout, runs user effects, then paints and collects the
 // next frame's regions. Its root setup runs once, when it opens.
 //
-// Every window of an App shares the one UI thread and the one reactive
-// graph, so a signal written in one window updates every window that
-// reads it. New opens the first window; App.OpenWindow opens more.
+// Every window of an App shares the one UI thread and the process's
+// reactive runtime, so a signal written in one window updates every window
+// that reads it. New opens the first window; App.OpenWindow opens more.
 type Window struct {
 	frameErr error
 	frameLoop
