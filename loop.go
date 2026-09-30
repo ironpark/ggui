@@ -107,6 +107,7 @@ type frameLoop struct {
 	// Probe's own, so that its effects run in its frames alone, or nil
 	// for Default, which every window of the App shares.
 	rt      *reactive.Runtime
+	world   *world // nil for the process world; see loopWorld
 	build   Builder
 	setup   []func()
 	root    Widget
@@ -306,7 +307,13 @@ func (r *frameLoop) runPosted() {
 // effects run until quiet. It returns ErrCycle when they never are.
 func (r *frameLoop) tick(now time.Time) error {
 	running.Store(r)
-	anims.step(now)
+	w := loopWorld(r)
+	w.anims.step(now)
+	if w != processWorld {
+		// Animations made outside every tree, such as one a test built
+		// before its probe, belong to the process world.
+		processWorld.anims.step(now)
+	}
 	if rt := r.runtime(); !rt.Flush() {
 		return cycle(rt)
 	}

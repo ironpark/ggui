@@ -507,7 +507,8 @@ func (w *Window) runFrameEvent(ev ggfx.FrameEvent) error {
 	if w.closed {
 		return nil
 	}
-	if err := w.tick(frame.begin(clock())); err != nil {
+	wd := loopWorld(&w.frameLoop)
+	if err := w.tick(wd.frame.begin(wd.frame.raw())); err != nil {
 		return err
 	}
 	w.draw(ev.Screen, ev.Scale)
@@ -520,7 +521,7 @@ func (w *Window) runFrameEvent(ev ggfx.FrameEvent) error {
 	w.seenGen = reactive.LayoutGen()
 	if w.wantsFrame(f) {
 		ev.Window.RequestFrame()
-	} else if wake := frame.takeWake(); !wake.IsZero() {
+	} else if wake := wd.frame.takeWake(); !wake.IsZero() {
 		// A caret or a delayed tooltip changes at a known time; sleep
 		// until then rather than painting every frame.
 		if w.wakeTimer != nil {
@@ -551,7 +552,8 @@ func (w *Window) catchUp() error {
 // every frame, a touch is down, files are being dragged over, or the
 // native window was just changed.
 func (w *Window) wantsFrame(f frameInput) bool {
-	if anims.active() || frame.timeRead() || len(w.frame) > 0 || w.hasPosted() {
+	wd := loopWorld(&w.frameLoop)
+	if wd.anims.active() || wd.frame.timeRead() || len(w.frame) > 0 || w.hasPosted() {
 		return true
 	}
 	if time.Now().Before(w.settling) {

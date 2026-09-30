@@ -271,8 +271,9 @@ func (c *Canvas) Paint(w Widget, r Rect) {
 	// an animation inside it must not keep the app painting. A zero-size
 	// host, such as a toaster that paints through overlays, is never hidden.
 	if c.clipped && !r.Empty() && r.Intersect(c.clip).Empty() {
-		frame.hide()
-		defer frame.unhide()
+		f := &activeWorld().frame
+		f.hide()
+		defer f.unhide()
 	}
 	w.Paint(c, r)
 }

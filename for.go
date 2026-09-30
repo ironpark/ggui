@@ -366,6 +366,7 @@ func (f *EachWidget[T, K]) evict() {
 		return
 	}
 	var out []K
+	busy := activeWorld().busy
 	for k, e := range f.entries {
 		if e.seen != f.frame && !busy[e] {
 			out = append(out, k)

@@ -7,50 +7,50 @@ import (
 )
 
 func TestTweenMovesOverItsDuration(t *testing.T) {
-	anims.list = nil
+	activeWorld().anims.list = nil
 	tw := Tween(0.0, time.Second).Easing(EaseLinear)
 	tw.Set(100)
 	t0 := time.Unix(0, 0)
-	anims.step(t0)
-	anims.step(t0.Add(250 * time.Millisecond))
+	activeWorld().anims.step(t0)
+	activeWorld().anims.step(t0.Add(250 * time.Millisecond))
 	if got := Untrack(tw.Get); got != 25 {
 		t.Fatalf("value at 250ms = %v, want 25", got)
 	}
-	anims.step(t0.Add(2 * time.Second))
-	if got := Untrack(tw.Get); got != 100 || len(anims.list) != 0 {
-		t.Fatalf("value at the end = %v with %d animations still registered", got, len(anims.list))
+	activeWorld().anims.step(t0.Add(2 * time.Second))
+	if got := Untrack(tw.Get); got != 100 || len(activeWorld().anims.list) != 0 {
+		t.Fatalf("value at the end = %v with %d animations still registered", got, len(activeWorld().anims.list))
 	}
 }
 
 func TestTweenRetargetsFromCurrentValue(t *testing.T) {
-	anims.list = nil
+	activeWorld().anims.list = nil
 	tw := Tween(0.0, time.Second).Easing(EaseLinear)
 	tw.Set(100)
 	t0 := time.Unix(0, 0)
-	anims.step(t0)
-	anims.step(t0.Add(500 * time.Millisecond))
+	activeWorld().anims.step(t0)
+	activeWorld().anims.step(t0.Add(500 * time.Millisecond))
 	tw.Set(0)
-	anims.step(t0.Add(500 * time.Millisecond))
-	anims.step(t0.Add(1000 * time.Millisecond))
+	activeWorld().anims.step(t0.Add(500 * time.Millisecond))
+	activeWorld().anims.step(t0.Add(1000 * time.Millisecond))
 	if got := Untrack(tw.Get); got != 25 {
 		t.Fatalf("value = %v, want 25 (halfway back from 50)", got)
 	}
 	tw.Jump(7)
-	anims.step(t0.Add(5 * time.Second))
+	activeWorld().anims.step(t0.Add(5 * time.Second))
 	if Untrack(tw.Get) != 7 {
 		t.Fatalf("Jump did not stick: %v", Untrack(tw.Get))
 	}
 }
 
 func TestTweenDrivesEffects(t *testing.T) {
-	anims.list = nil
+	activeWorld().anims.list = nil
 	tw := Tween(0, 100*time.Millisecond)
 	runs := 0
 	reactive.Observe(func() { tw.Get(); runs++ })
 	tw.Set(10)
 	t0 := time.Unix(0, 0)
-	anims.step(t0)
-	anims.step(t0.Add(50 * time.Millisecond))
+	activeWorld().anims.step(t0)
+	activeWorld().anims.step(t0.Add(50 * time.Millisecond))
 	reactive.Flush()
 	if runs != 2 {
 		t.Fatalf("effect ran %d times, want 2 after the value moved", runs)
@@ -58,20 +58,20 @@ func TestTweenDrivesEffects(t *testing.T) {
 }
 
 func TestSpringSettlesAtTarget(t *testing.T) {
-	anims.list = nil
+	activeWorld().anims.list = nil
 	sp := Spring(0.0)
 	sp.Set(1)
 	now := time.Unix(0, 0)
 	overshot := false
-	for i := 0; i < 600 && len(anims.list) > 0; i++ {
+	for i := 0; i < 600 && len(activeWorld().anims.list) > 0; i++ {
 		now = now.Add(time.Second / 60)
-		anims.step(now)
+		activeWorld().anims.step(now)
 		if Untrack(sp.Get) > 1 {
 			overshot = true
 		}
 	}
-	if len(anims.list) != 0 || Untrack(sp.Get) != 1 {
-		t.Fatalf("spring did not settle: value %v, %d running", Untrack(sp.Get), len(anims.list))
+	if len(activeWorld().anims.list) != 0 || Untrack(sp.Get) != 1 {
+		t.Fatalf("spring did not settle: value %v, %d running", Untrack(sp.Get), len(activeWorld().anims.list))
 	}
 	if !overshot {
 		t.Fatal("default spring should overshoot a little")
@@ -128,7 +128,7 @@ func TestAnimationCleanupOnlyStopsOwnedValues(t *testing.T) {
 	p.Advance(100 * time.Millisecond)
 	tv, sv := Untrack(tw.Get), Untrack(sp.Get)
 	p.Close()
-	for _, a := range anims.list {
+	for _, a := range activeWorld().anims.list {
 		if a == tw || a == sp {
 			t.Fatal("closed probe retains its animation")
 		}
@@ -138,7 +138,7 @@ func TestAnimationCleanupOnlyStopsOwnedValues(t *testing.T) {
 	sp.Set(200)
 	tw.Jump(300)
 	sp.Jump(300)
-	anims.step(outside.start.Add(500 * time.Millisecond))
+	activeWorld().anims.step(outside.start.Add(500 * time.Millisecond))
 	if Untrack(tw.Get) != tv || Untrack(sp.Get) != sv {
 		t.Fatal("a disposed owner's animation changed value")
 	}
@@ -159,9 +159,9 @@ func TestAnimationCreatedDuringStepIsNotDropped(t *testing.T) {
 	defer first.Jump(0)
 	t0 := time.Unix(100, 0)
 	first.Set(10)
-	anims.step(t0)
-	anims.step(t0.Add(100 * time.Millisecond))
-	anims.step(t0.Add(200 * time.Millisecond))
+	activeWorld().anims.step(t0)
+	activeWorld().anims.step(t0.Add(100 * time.Millisecond))
+	activeWorld().anims.step(t0.Add(200 * time.Millisecond))
 	if Untrack(second.Get) <= 0 {
 		t.Fatal("animation registered by an easing callback was lost")
 	}
@@ -170,7 +170,7 @@ func TestAnimationCreatedDuringStepIsNotDropped(t *testing.T) {
 // TweenOf and SpringOf start at the source's value and retarget as it
 // changes, through a Watch that their owner disposes.
 func TestTweenOfAndSpringOfFollowTheirSource(t *testing.T) {
-	anims.list = nil
+	activeWorld().anims.list = nil
 	src := State(10.0)
 	var tw *Tweened[float64]
 	var sp *Sprung[float64]
@@ -186,8 +186,8 @@ func TestTweenOfAndSpringOfFollowTheirSource(t *testing.T) {
 	reactive.Flush()
 	reactive.FlushUsers(nil)
 	t0 := time.Unix(0, 0)
-	anims.step(t0)
-	anims.step(t0.Add(500 * time.Millisecond))
+	activeWorld().anims.step(t0)
+	activeWorld().anims.step(t0.Add(500 * time.Millisecond))
 	if got := Untrack(tw.Get); got != 60 {
 		t.Fatalf("tween halfway = %v, want 60", got)
 	}
@@ -217,12 +217,12 @@ func TestAnimationCanLoseOwnerDuringStep(t *testing.T) {
 	defer dispose()
 	tw.Set(100)
 	t0 := time.Unix(100, 0)
-	anims.step(t0)
-	anims.step(t0.Add(500 * time.Millisecond))
+	activeWorld().anims.step(t0)
+	activeWorld().anims.step(t0.Add(500 * time.Millisecond))
 	if Untrack(tw.Get) != 0 || tw.running {
 		t.Fatal("step updated an animation after its owner was disposed")
 	}
-	for _, s := range anims.list {
+	for _, s := range activeWorld().anims.list {
 		if s == tw {
 			t.Fatal("step restored the disposed animation's registration")
 		}

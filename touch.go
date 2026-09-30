@@ -45,7 +45,7 @@ func (t *touchInput) apply(f *frameInput, ids []ggfx.TouchID, position func(ggfx
 // Hit testing stays at the gesture origin; a captured scroller continues
 // receiving movement even when the finger leaves its viewport.
 func (in *inputState) panTouch(f *frameInput) {
-	now := clock()
+	now := activeWorld().frame.raw()
 	if len(f.down) != 0 || f.wheel != (Point{}) || len(f.keys) != 0 {
 		in.touchMotion.stop()
 	}

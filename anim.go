@@ -59,8 +59,6 @@ type animator struct {
 	list []stepper
 }
 
-var anims animator
-
 func (a *animator) add(s stepper) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -106,6 +104,7 @@ func (a *animator) step(now time.Time) {
 // Tweened is a value that eases from where it is to its target over a fixed
 // duration. Build one with Tween.
 type Tweened[T Number] struct {
+	w        *world // whose frames step it, from creation
 	sig      *StateValue[T]
 	duration time.Duration
 	ease     Easing
@@ -119,11 +118,11 @@ type Tweened[T Number] struct {
 // Tween creates a Tweened at v that takes d to reach each new target, with
 // EaseOut. T is inferred from v, so write Tween(0.0, d) for a float64.
 func Tween[T Number](v T, d time.Duration) *Tweened[T] {
-	t := &Tweened[T]{sig: State(v), duration: d, ease: EaseOut, from: v, to: v}
+	t := &Tweened[T]{w: ownerWorld(), sig: State(v), duration: d, ease: EaseOut, from: v, to: v}
 	if reactive.CurrentOwner() != nil {
 		OnCleanup(func() {
 			t.disposed, t.running = true, false
-			anims.remove(t)
+			t.w.anims.remove(t)
 		})
 	}
 	return t
@@ -165,12 +164,12 @@ func (t *Tweened[T]) Set(target T) {
 	if t.duration <= 0 || t.from == t.to {
 		t.sig.Set(target)
 		t.running = false
-		anims.remove(t)
+		t.w.anims.remove(t)
 		return
 	}
 	t.start = time.Time{} // taken from the first step
 	t.running = true
-	anims.add(t)
+	t.w.anims.add(t)
 }
 
 // Jump moves to v at once, with no animation.
@@ -179,7 +178,7 @@ func (t *Tweened[T]) Jump(v T) {
 		return
 	}
 	t.from, t.to, t.running = v, v, false
-	anims.remove(t)
+	t.w.anims.remove(t)
 	t.sig.Set(v)
 }
 
@@ -210,6 +209,7 @@ func (t *Tweened[T]) step(now time.Time) bool {
 // it overshoots a little, keeps its momentum when the target changes, and
 // settles. Build one with Spring.
 type Sprung[T Number] struct {
+	w         *world // whose frames step it, from creation
 	sig       *StateValue[T]
 	stiffness float64
 	damping   float64
@@ -224,11 +224,11 @@ type Sprung[T Number] struct {
 // Spring creates a Sprung at v. Stiffness and Damping tune the motion; the
 // defaults settle in a few hundred milliseconds with a slight overshoot.
 func Spring[T Number](v T) *Sprung[T] {
-	s := &Sprung[T]{sig: State(v), stiffness: 170, damping: 18, precision: 0.01, pos: float64(v), to: float64(v)}
+	s := &Sprung[T]{w: ownerWorld(), sig: State(v), stiffness: 170, damping: 18, precision: 0.01, pos: float64(v), to: float64(v)}
 	if reactive.CurrentOwner() != nil {
 		OnCleanup(func() {
 			s.disposed, s.running = true, false
-			anims.remove(s)
+			s.w.anims.remove(s)
 		})
 	}
 	return s
@@ -266,7 +266,7 @@ func (s *Sprung[T]) Set(target T) {
 	if !s.running {
 		s.last = time.Time{}
 		s.running = true
-		anims.add(s)
+		s.w.anims.add(s)
 	}
 }
 
@@ -276,7 +276,7 @@ func (s *Sprung[T]) Jump(v T) {
 		return
 	}
 	s.pos, s.vel, s.to, s.running = float64(v), 0, float64(v), false
-	anims.remove(s)
+	s.w.anims.remove(s)
 	s.sig.Set(v)
 }
 
@@ -361,6 +361,6 @@ func (m *Motion) Value(now time.Time) float64 {
 		m.from = m.to
 		return m.to
 	}
-	frame.animate()
+	activeWorld().frame.animate()
 	return m.from + (m.to-m.from)*EaseOut(clamp(p, 0, 1))
 }

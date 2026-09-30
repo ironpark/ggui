@@ -89,7 +89,7 @@ func TextInput(value Binding[string]) *TextInputWidget {
 	t.Role = RoleTextField
 	t.AutoKey()
 	t.ime = newIME(t)
-	t.ed.Now = func() time.Time { return clock() } // SetClock reaches typing coalesced into one undo
+	t.ed.Now = func() time.Time { return activeWorld().frame.raw() } // Probe.Advance reaches typing coalesced into one undo
 	t.ed.SetText(Untrack(value.Get))
 	t.ed.MoveTo(len(t.ed.Text), false)
 	// Follow the binding rather than polling it in Layout: a write from
@@ -897,7 +897,7 @@ func (t *TextInputWidget) HandlePointer(ev PointerEvent) bool {
 			return false
 		}
 		t.ime.Confirm()
-		now := clock()
+		now := activeWorld().frame.raw()
 		if now.Sub(t.lastClick) < 400*time.Millisecond && near(ev.Pos, t.lastPos) {
 			t.clicks++
 		} else {

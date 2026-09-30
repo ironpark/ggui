@@ -36,8 +36,7 @@ type Probe struct {
 	overlay Overlay
 	sinks   []func(*inspect.Frame)
 
-	now     time.Time // the probe's clock once Advance has been called
-	restore func()
+	now time.Time // the probe's clock once Advance has been called
 }
 
 // SetOverlay installs o over the probe's window, as App.SetOverlay does:
@@ -81,7 +80,7 @@ func NewProbe(w Widget, size Size) *Probe {
 func ProbeBuilder(build Builder, size Size) *Probe {
 	p := &Probe{size: size}
 	p.host = p
-	p.rt = reactive.NewRuntime()
+	p.rt, p.world = reactive.NewRuntime(), newWorld()
 	p.build = build
 	p.dialogs = &runtime.StubFilePicker{}
 	p.clipboard = &runtime.MemoryClipboard{}
@@ -98,15 +97,10 @@ func (p *Probe) Setup(fn func()) *Probe {
 // Post queues fn to run before the next frame's input, as App.Post does.
 func (p *Probe) Post(fn func()) { p.post(fn) }
 
-// Close disposes the root owner and everything built under it, and puts
-// back the clock Advance replaced.
+// Close disposes the root owner and everything built under it.
 func (p *Probe) Close() {
 	p.close()
 	p.canvas.freeLayers()
-	if p.restore != nil {
-		p.restore()
-		p.restore = nil
-	}
 }
 
 // RequestClose asks to close as a window's close button does: the
@@ -144,7 +138,7 @@ func (p *Probe) Frame() Size {
 	}
 	p.runFrame()
 	p.runPosted()
-	if err := p.tick(frame.set(p.clock())); err != nil {
+	if err := p.tick(p.world.frame.set(p.world.frame.raw())); err != nil {
 		panic(err)
 	}
 	if p.root == nil {
@@ -188,26 +182,17 @@ func (p *Probe) Frame() Size {
 	return p.rootSize
 }
 
-// clock is the raw time a probe's frame reads: the time Advance set, else
-// the package clock. Frames set the frame clock to it exactly, so a probe
-// steps by what the test asked for.
-func (p *Probe) clock() time.Time {
-	if p.now.IsZero() {
-		return clock()
-	}
-	return p.now
-}
-
 // Advance moves the probe's clock forward by d and runs a frame, so
-// animations step by exactly d. The first call fixes the clock at the
-// current time and installs it with SetClock, so widgets that read Now
-// see the same time; Close restores the previous clock.
+// animations step by exactly d. The first call fixes the probe's clock at
+// the current time; from then on its frames, and Now and every other
+// reading of the time in them, see the time Advance set. Other probes and
+// the App keep their own clocks.
 //
 //	p.Advance(150 * time.Millisecond) // a 300ms tween is now halfway
 func (p *Probe) Advance(d time.Duration) {
 	if p.now.IsZero() {
-		p.now = clock()
-		p.restore = SetClock(func() time.Time { return p.now })
+		p.now = p.world.frame.raw()
+		p.world.frame.source = func() time.Time { return p.now }
 	}
 	p.now = p.now.Add(d)
 	p.Frame()

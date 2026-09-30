@@ -242,11 +242,6 @@ func keep(r *hitRegion) *hitRegion {
 	return &c
 }
 
-// busy holds the groups (EachKeyed entries) whose regions have focus or a
-// pointer capture after the last dispatch, so EachKeyed.Retain leaves them be.
-// It is process-wide, as one window drives input.
-var busy = map[any]bool{}
-
 // dispatch turns one frame's raw input into handler calls, in the order the
 // frame needs them: what is under the pointer is settled before a press can
 // use it, presses before releases, and the keyboard last, because moving
@@ -270,6 +265,7 @@ func (in *inputState) dispatch(f frameInput) {
 // markBusyGroups records the groups holding focus or a pointer capture after
 // this dispatch, so EachKeyed.Retain leaves them be.
 func (in *inputState) markBusyGroups() {
+	busy := activeWorld().busy
 	clear(busy)
 	for _, r := range []*hitRegion{in.focused, in.pressed, in.touchMotion.target} {
 		if r != nil && r.group != nil {

@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"testing"
+	"time"
 
 	"github.com/ironpark/ggui/internal/reactive"
 )
@@ -68,5 +69,49 @@ func TestAWidgetBuiltBeforeItsProbeStillFollowsItsSignals(t *testing.T) {
 	p.Frame()
 	if in.ed.Text != "changed" {
 		t.Fatalf("editor shows %q, want the signal's new value", in.ed.Text)
+	}
+}
+
+// Advance moves one probe's clock: another probe, and code outside every
+// probe, keep reading their own.
+func TestAdvanceMovesOnlyItsOwnProbesClock(t *testing.T) {
+	var inA time.Time
+	a := NewProbe(FromFuncs(func(c Constraints, _ Env) Size { return c.Constrain(Sz(1, 1)) }, func(*Canvas, Rect) { inA = Now() }), Sz(10, 10))
+	defer a.Close()
+	b := NewProbe(Box(), Sz(10, 10))
+	defer b.Close()
+	a.Frame()
+	start := inA
+	a.Advance(time.Hour)
+	if got := inA.Sub(start); got < time.Hour {
+		t.Fatalf("a painted %v after advancing an hour, want at least an hour on", got)
+	}
+	b.Frame()
+	if got := Now(); got.Sub(start) >= time.Hour {
+		t.Fatalf("after b's frame Now is %v on from a's start: a's Advance leaked out", got.Sub(start))
+	}
+}
+
+// An animation keeps the world it was made in: another probe's frames do
+// not step it.
+func TestAnAnimationStepsOnlyInItsOwnProbe(t *testing.T) {
+	var tw *Tweened[float64]
+	a := ProbeBuilder(func() Widget { return Box() }, Sz(10, 10)).Setup(func() {
+		tw = Tween(0.0, time.Second).Easing(EaseLinear)
+	})
+	defer a.Close()
+	b := NewProbe(Box(), Sz(10, 10))
+	defer b.Close()
+	a.Frame()
+	tw.Set(100)
+	a.Advance(0)
+	b.Advance(0)
+	b.Advance(time.Second)
+	if got := Untrack(tw.Get); got != 0 {
+		t.Fatalf("another probe's frames moved the tween to %v", got)
+	}
+	a.Advance(500 * time.Millisecond)
+	if got := Untrack(tw.Get); got != 50 {
+		t.Fatalf("its own probe moved it to %v, want 50", got)
 	}
 }

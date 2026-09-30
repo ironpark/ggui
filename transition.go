@@ -134,7 +134,7 @@ func (t *TransitionWidget) Paint(dst *Canvas, r Rect) {
 			p = clamp(float64(now.Sub(start))/float64(t.duration), 0, 1)
 		}
 		if p < 1 {
-			frame.animate()
+			activeWorld().frame.animate()
 		}
 	}
 	if p >= 1 && !t.leaving {
