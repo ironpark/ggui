@@ -9,6 +9,7 @@ import (
 // TestCharts drives the catalog headlessly: Tap finds controls by their
 // accessible label, and the signals record what they did.
 func TestCharts(t *testing.T) {
+	t.Parallel()
 	m := newModel("chart-area-default", false)
 	p := ggui.ProbeBuilder(m.build, ggui.Sz(740, 600))
 	defer p.Close()

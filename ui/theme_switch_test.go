@@ -9,6 +9,7 @@ import (
 )
 
 func TestThemeSwitchPointerKeyboardAndDisabled(t *testing.T) {
+	t.Parallel()
 	dark, disabled := ggui.State(false), ggui.State(false)
 	var changes []bool
 	s := ui.ThemeSwitch(dark).Name("Appearance").BindDisabled(disabled).
@@ -33,6 +34,7 @@ func TestThemeSwitchPointerKeyboardAndDisabled(t *testing.T) {
 }
 
 func TestThemeSwitchRebuildAndReducedMotion(t *testing.T) {
+	t.Parallel()
 	for _, reduced := range []bool{false, true} {
 		t.Run(map[bool]string{false: "animated", true: "reduced"}[reduced], func(t *testing.T) {
 			dark := ggui.State(false)

@@ -7,6 +7,7 @@ import (
 )
 
 func TestTextInputFilterNativeCommitsAndCaret(t *testing.T) {
+	t.Parallel()
 	v := State("")
 	e := TextInput(v).Filter(func(s string) string {
 		return strings.Map(func(r rune) rune {

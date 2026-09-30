@@ -3,6 +3,7 @@ package ggui
 import "testing"
 
 func TestConstraintsConstrain(t *testing.T) {
+	t.Parallel()
 	c := Constraints{MinW: 10, MinH: 10, MaxW: 100, MaxH: 100}
 	got := c.Constrain(Size{W: 5, H: 200})
 	if got != (Size{W: 10, H: 100}) {
@@ -11,6 +12,7 @@ func TestConstraintsConstrain(t *testing.T) {
 }
 
 func TestBoxAddsPaddingAroundChild(t *testing.T) {
+	t.Parallel()
 	b := Box(Box().Size(20, 10)).Pad(5)
 	got := b.Layout(Loose(Sz(200, 200)), Env{})
 	if got != (Size{W: 30, H: 20}) {
@@ -19,10 +21,12 @@ func TestBoxAddsPaddingAroundChild(t *testing.T) {
 }
 
 func TestBoxRejectsSeveralChildren(t *testing.T) {
+	t.Parallel()
 	mustPanic(t, "Box(a, b)", func() { Box(Text("a"), Text("b")) })
 }
 
 func TestColumnSumsHeightsAndGaps(t *testing.T) {
+	t.Parallel()
 	col := Column(
 		Box().Size(10, 10),
 		Box().Size(30, 20),
@@ -34,6 +38,7 @@ func TestColumnSumsHeightsAndGaps(t *testing.T) {
 }
 
 func TestCenterFillsAvailableSpace(t *testing.T) {
+	t.Parallel()
 	c := Center(Box().Size(10, 10))
 	got := c.Layout(Loose(Sz(100, 50)), Env{})
 	if got != (Size{W: 100, H: 50}) {
@@ -42,6 +47,7 @@ func TestCenterFillsAvailableSpace(t *testing.T) {
 }
 
 func TestSzAndPtAcceptAnyNumericType(t *testing.T) {
+	t.Parallel()
 	if got := Sz(3, 4); got != (Size{W: 3, H: 4}) {
 		t.Fatalf("Sz() = %+v, want {3 4}", got)
 	}
@@ -51,6 +57,7 @@ func TestSzAndPtAcceptAnyNumericType(t *testing.T) {
 }
 
 func TestChildrenBuildsOnePerItem(t *testing.T) {
+	t.Parallel()
 	got := Children([]float64{10, 20}, func(h float64) Widget {
 		return Box().Size(5, h)
 	})
@@ -63,6 +70,7 @@ func TestChildrenBuildsOnePerItem(t *testing.T) {
 }
 
 func TestListLaysOutItemsLikeColumn(t *testing.T) {
+	t.Parallel()
 	l := List([]float64{10, 20}, func(h float64) Widget { return Box().Size(30, h) }).Gap(4)
 	got := l.Layout(Loose(Sz(200, 200)), Env{})
 	if got != (Size{W: 30, H: 34}) {
@@ -90,6 +98,7 @@ func mustPanic(t *testing.T, what string, fn func()) {
 }
 
 func TestInsetsShorthand(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		in   []float64
 		want EdgeInsets
@@ -108,6 +117,7 @@ func TestInsetsShorthand(t *testing.T) {
 }
 
 func TestRowSumsWidthsAndGaps(t *testing.T) {
+	t.Parallel()
 	var second Rect
 	row := Row(
 		Box().Size(10, 10),
@@ -124,6 +134,7 @@ func TestRowSumsWidthsAndGaps(t *testing.T) {
 }
 
 func TestPaddingInsetsChild(t *testing.T) {
+	t.Parallel()
 	var child Rect
 	p := Padding(probe(20, 10, &child), 1, 2, 3, 4)
 	got := p.Layout(Loose(Sz(200, 200)), Env{})
@@ -137,6 +148,7 @@ func TestPaddingInsetsChild(t *testing.T) {
 }
 
 func TestPaddingShrinksChildConstraints(t *testing.T) {
+	t.Parallel()
 	p := Padding(Box().Size(500, 500), 10)
 	got := p.Layout(Loose(Sz(100, 100)), Env{})
 	if got != (Size{W: 100, H: 100}) {
@@ -145,6 +157,7 @@ func TestPaddingShrinksChildConstraints(t *testing.T) {
 }
 
 func TestStackHugsLargestChildAndLayersAtOrigin(t *testing.T) {
+	t.Parallel()
 	var a, b Rect
 	st := Stack(probe(10, 30, &a), probe(20, 5, &b))
 	got := st.Layout(Loose(Sz(200, 200)), Env{})
@@ -158,6 +171,7 @@ func TestStackHugsLargestChildAndLayersAtOrigin(t *testing.T) {
 }
 
 func TestStackExpandFillsSpace(t *testing.T) {
+	t.Parallel()
 	st := Stack(Box().Size(10, 10)).Expand()
 	if got := st.Layout(Loose(Sz(200, 100)), Env{}); got != (Size{W: 200, H: 100}) {
 		t.Fatalf("Layout() = %+v, want {200 100}", got)
@@ -165,6 +179,7 @@ func TestStackExpandFillsSpace(t *testing.T) {
 }
 
 func TestAlignPlacesChildByFraction(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		w    *AlignWidget
@@ -190,6 +205,7 @@ func TestAlignPlacesChildByFraction(t *testing.T) {
 }
 
 func TestStateInfersTypeFromLiteral(t *testing.T) {
+	t.Parallel()
 	var _ *StateValue[int] = State(0)
 	var _ *StateValue[string] = State("??")
 	var _ *StateValue[float64] = State[float64](0)
@@ -197,6 +213,7 @@ func TestStateInfersTypeFromLiteral(t *testing.T) {
 }
 
 func TestExpandedTakesLeftoverMainAxis(t *testing.T) {
+	t.Parallel()
 	var a, b, c Rect
 	row := Row(
 		probe(10, 10, &a),
@@ -218,6 +235,7 @@ func TestExpandedTakesLeftoverMainAxis(t *testing.T) {
 }
 
 func TestSpacerPushesNeighboursApart(t *testing.T) {
+	t.Parallel()
 	var last Rect
 	row := Row(Box().Size(10, 10), Spacer(), probe(10, 10, &last))
 	row.Paint(nil, Rct(Pt(0, 0), row.Layout(Loose(Sz(100, 10)), Env{})))
@@ -227,6 +245,7 @@ func TestSpacerPushesNeighboursApart(t *testing.T) {
 }
 
 func TestJustifyDistributesSlack(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		j    Justify
@@ -256,6 +275,7 @@ func TestJustifyDistributesSlack(t *testing.T) {
 }
 
 func TestCrossAlignPlacesAndStretches(t *testing.T) {
+	t.Parallel()
 	var got Rect
 	row := Row(Box().Size(10, 40), probe(10, 10, &got)).Align(AlignCenter)
 	row.Paint(nil, Rct(Pt(0, 0), row.Layout(Loose(Sz(100, 100)), Env{})))
@@ -272,12 +292,14 @@ func TestCrossAlignPlacesAndStretches(t *testing.T) {
 }
 
 func TestFlexIsTransparentOutsideAFlow(t *testing.T) {
+	t.Parallel()
 	if got := Expanded(Box().Size(7, 7)).Layout(Loose(Sz(100, 100)), Env{}); got != (Size{W: 7, H: 7}) {
 		t.Fatalf("Layout() = %+v, want the child's {7 7}", got)
 	}
 }
 
 func TestFixedBoxGivesChildTightConstraints(t *testing.T) {
+	t.Parallel()
 	var got Constraints
 	child := FromFuncs(
 		func(c Constraints, _ Env) Size { got = c; return c.Constrain(Sz(1, 1)) },
@@ -293,6 +315,7 @@ func TestFixedBoxGivesChildTightConstraints(t *testing.T) {
 }
 
 func TestContentCentersInsideFixedBox(t *testing.T) {
+	t.Parallel()
 	var text, row Rect
 	b := Box(
 		Column(
@@ -313,6 +336,7 @@ func TestContentCentersInsideFixedBox(t *testing.T) {
 }
 
 func TestWrapBreaksLinesAtWidth(t *testing.T) {
+	t.Parallel()
 	w := Wrap(
 		Box().Size(40, 10), Box().Size(40, 20), Box().Size(40, 10),
 		Box().Size(40, 10),
@@ -337,6 +361,7 @@ func TestWrapBreaksLinesAtWidth(t *testing.T) {
 }
 
 func TestGridSharesWidthAndSizesRows(t *testing.T) {
+	t.Parallel()
 	var cell Rect
 	g := Grid(3,
 		Box().Size(10, 10), Box().Size(10, 30), Box().Size(10, 10),
@@ -357,6 +382,7 @@ func TestGridSharesWidthAndSizesRows(t *testing.T) {
 }
 
 func TestAppLaysOutOnlyWhenSomethingChanged(t *testing.T) {
+	t.Parallel()
 	a := New(Config{}, func() Widget { return Box() })
 	a.root = a.build()
 	size := Sz(100, 100)

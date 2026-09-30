@@ -6,6 +6,7 @@ import (
 )
 
 func TestPaymentTableFiltersAndRestores(t *testing.T) {
+	t.Parallel()
 	p := ggui.ProbeBuilder(newPaymentTable, ggui.Sz(640, 600))
 	defer p.Close()
 	set := func(value string) {

@@ -24,6 +24,7 @@ func ids(rows []person) []int {
 	return result
 }
 func TestDataTablePipeline(t *testing.T) {
+	t.Parallel()
 	rows := people()
 	m := dataModel(rows)
 	m.SetPageSize(2)
@@ -75,6 +76,7 @@ func TestDataTablePipeline(t *testing.T) {
 	}
 }
 func TestDataTableStableSortAndMemoization(t *testing.T) {
+	t.Parallel()
 	rows := ggui.State([]person{{1, "B", 2}, {2, "A", 2}, {3, "C", 1}})
 	calls := 0
 	m := ui.NewTableModel(rows, func(p person) int { return p.ID }, ui.TextCol("Name", func(p person) string { return p.Name }).Sortable(func(a, b person) int { calls++; return cmp.Compare(a.Age, b.Age) }))
@@ -97,6 +99,7 @@ func TestDataTableStableSortAndMemoization(t *testing.T) {
 	}
 }
 func TestDataTableControls(t *testing.T) {
+	t.Parallel()
 	m := dataModel(people())
 	m.SetPageSize(2)
 	p := ggui.NewProbe(ggui.Column(ui.DataTable(m)).Align(ggui.AlignStretch), ggui.Sz(640, 600))
@@ -143,6 +146,7 @@ func TestDataTableControls(t *testing.T) {
 }
 
 func TestDataTableReusesCellsAndKeyboardMenu(t *testing.T) {
+	t.Parallel()
 	builds := 0
 	rows := people()
 	col := ui.Col("Name", func(p ggui.Readable[person]) ggui.Widget {
@@ -174,6 +178,7 @@ func TestDataTableReusesCellsAndKeyboardMenu(t *testing.T) {
 }
 
 func TestDataTableNarrowLayout(t *testing.T) {
+	t.Parallel()
 	m := dataModel(people())
 	m.SetPageSize(2)
 	p := ggui.NewProbe(ggui.Column(ui.DataTable(m)).Align(ggui.AlignStretch), ggui.Sz(280, 600))
@@ -195,6 +200,7 @@ func TestDataTableNarrowLayout(t *testing.T) {
 }
 
 func TestDataTableEmptyMessageStaysInsideNarrowViewport(t *testing.T) {
+	t.Parallel()
 	m := dataModel(people())
 	m.SetQuery("absent")
 	p := ggui.NewProbe(ggui.Column(ui.DataTable(m)).Align(ggui.AlignStretch), ggui.Sz(280, 600))
@@ -209,6 +215,7 @@ func TestDataTableEmptyMessageStaysInsideNarrowViewport(t *testing.T) {
 }
 
 func TestDataTableWideColumnsRemainReachable(t *testing.T) {
+	t.Parallel()
 	cols := make([]ui.Column[person], 6)
 	for i := range cols {
 		cols[i] = ui.TextCol("Column "+strconv.Itoa(i), func(p person) string { return p.Name }).W(180).Sortable(func(a, b person) int { return cmp.Compare(a.Name, b.Name) })

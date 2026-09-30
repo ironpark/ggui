@@ -17,6 +17,7 @@ type adoptionCounter struct {
 func (a *adoptionCounter) Adopt(prev any) { a.calls++; a.from = prev }
 
 func TestAdoptPreservesHandlerKindsAndPaintOrder(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"pointer", "key", "both"} {
 		t.Run(kind, func(t *testing.T) {
 			first, last, next := &adoptionCounter{}, &adoptionCounter{}, &adoptionCounter{}
@@ -41,6 +42,7 @@ func TestAdoptPreservesHandlerKindsAndPaintOrder(t *testing.T) {
 }
 
 func TestAdoptTakesTheLastRegionWithTheSameID(t *testing.T) {
+	t.Parallel()
 	first, last, next := &adoptionCounter{}, &adoptionCounter{}, &adoptionCounter{}
 	id := new(byte)
 	c := Canvas{prev: []hitRegion{
@@ -55,6 +57,7 @@ func TestAdoptTakesTheLastRegionWithTheSameID(t *testing.T) {
 }
 
 func TestAdoptSkipsIDsTheLanguageCannotCompare(t *testing.T) {
+	t.Parallel()
 	// Interactive.SetKey takes any value, so an ID may be a slice. Matching it
 	// is impossible, but it must not bring the frame down either.
 	old, next := &adoptionCounter{}, &adoptionCounter{}
@@ -68,6 +71,7 @@ func TestAdoptSkipsIDsTheLanguageCannotCompare(t *testing.T) {
 }
 
 func TestAdoptIndexIsRebuiltEachFrame(t *testing.T) {
+	t.Parallel()
 	first, second := &adoptionCounter{}, &adoptionCounter{}
 	r := Rct(Pt(0, 0), Sz(20, 20))
 	c := Canvas{prev: []hitRegion{{rect: r, pointer: first}}}
@@ -86,6 +90,7 @@ func TestAdoptIndexIsRebuiltEachFrame(t *testing.T) {
 }
 
 func TestCanvasScaleConvertsToImagePixels(t *testing.T) {
+	t.Parallel()
 	c := &Canvas{scale: 2}
 	if got := c.Px(7.5); got != 15 {
 		t.Fatalf("Px(7.5) = %v at scale 2, want 15", got)
@@ -105,6 +110,7 @@ func TestCanvasScaleConvertsToImagePixels(t *testing.T) {
 }
 
 func TestClipKeepsScale(t *testing.T) {
+	t.Parallel()
 	c := &Canvas{scale: 2}
 	if got := c.Clip(Rct(Pt(0, 0), Sz(10, 10))).Scale(); got != 2 {
 		t.Fatalf("clipped canvas scale = %v, want 2", got)
@@ -112,6 +118,7 @@ func TestClipKeepsScale(t *testing.T) {
 }
 
 func TestTextRasterizesAtScaledSize(t *testing.T) {
+	t.Parallel()
 	w := Text("x").Font(MustFont(goregular.TTF).NoFallback()).Size(14)
 	face, ok := w.faceAt(2).(*text.GoTextFace)
 	if !ok || face.Size != 28 {
@@ -123,6 +130,7 @@ func TestTextRasterizesAtScaledSize(t *testing.T) {
 }
 
 func TestFillRectAndTextTolerateNilTargets(t *testing.T) {
+	t.Parallel()
 	(*Canvas)(nil).FillRect(Rect{}, nil)
 	(&Canvas{}).FillRect(Rct(Pt(0, 0), Sz(1, 1)), nil)
 	w := Text("x")

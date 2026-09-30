@@ -8,6 +8,7 @@ import (
 )
 
 func TestVisiblePaintBounds(t *testing.T) {
+	t.Parallel()
 	img := ggfx.NewImage(100, 100)
 	defer img.Deallocate()
 	c := (&Canvas{Image: img, scale: 2}).Clip(Rct(Pt(10, 10), Sz(20, 20)))

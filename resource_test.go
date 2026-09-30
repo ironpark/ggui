@@ -44,6 +44,7 @@ func waitResourcePost(t *testing.T, p *Probe) {
 }
 
 func TestResourceCancellationLateResultsReloadAndErrors(t *testing.T) {
+	t.Parallel()
 	input := State(1)
 	requests := make(chan resourceRequest, 10)
 	var r *ResourceValue[int]
@@ -103,6 +104,7 @@ func TestResourceCancellationLateResultsReloadAndErrors(t *testing.T) {
 }
 
 func TestResourceInputChangedBeforePostedCompletion(t *testing.T) {
+	t.Parallel()
 	input := State(1)
 	requests := make(chan resourceRequest, 2)
 	var r *ResourceValue[int]
@@ -135,6 +137,7 @@ func TestResourceInputChangedBeforePostedCompletion(t *testing.T) {
 }
 
 func TestAwaitRequestIdentityAndReactiveValue(t *testing.T) {
+	t.Parallel()
 	source := State(AsyncState[int]{RequestID: 1, Status: Ready, Value: 1})
 	builds, cleanups := 0, 0
 	var value Readable[int]
@@ -161,6 +164,7 @@ func TestAwaitRequestIdentityAndReactiveValue(t *testing.T) {
 }
 
 func TestResourceEqualityAndSharedAwait(t *testing.T) {
+	t.Parallel()
 	input := State(1)
 	requests := make(chan resourceRequest, 3)
 	show := State(true)
@@ -192,6 +196,7 @@ func TestResourceEqualityAndSharedAwait(t *testing.T) {
 }
 
 func TestResourceDisposedComponentIgnoresCompletionWhileAppLives(t *testing.T) {
+	t.Parallel()
 	shown := State(true)
 	requests := make(chan resourceRequest, 1)
 	var resource *ResourceValue[int]

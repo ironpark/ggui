@@ -286,6 +286,7 @@ func TestTextInputMultilineWrapsGrowsAndNavigates(t *testing.T) {
 }
 
 func TestUndoKeys(t *testing.T) {
+	t.Parallel()
 	v := State("hello")
 	in := TextInput(v)
 	p := NewProbe(in, Sz(200, 30))

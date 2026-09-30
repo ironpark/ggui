@@ -79,6 +79,8 @@ func TestAXTextFieldSaysWhereItsCharactersAre(t *testing.T) {
 	}
 }
 
+// Not parallel: whether anything is reading is the process's, and the tests
+// that turn it on with axDetailed run one at a time beside this one.
 func TestAXTextDetailIsOnlyFrozenWhenSomethingIsReading(t *testing.T) {
 	p := NewProbe(TextInput(State("hello")), Sz(300, 40))
 	defer p.Close()
@@ -113,6 +115,7 @@ func TestAXPasswordKeepsItsShapeToItself(t *testing.T) {
 }
 
 func TestAXSetSelectionMovesTheCaret(t *testing.T) {
+	t.Parallel()
 	w := TextInput(State("hello world"))
 	p := NewProbe(w, Sz(300, 40))
 	defer p.Close()
@@ -173,6 +176,7 @@ func TestAXMultilineFieldReportsItsLines(t *testing.T) {
 // hears it. The bridge's half, where the element finds the node and asks,
 // is TestAXPressReachesTheApp in the a11y package.
 func TestAXPressRingsTheWidget(t *testing.T) {
+	t.Parallel()
 	w := &axBell{}
 	w.Role = RoleButton
 	w.SetName("ring")

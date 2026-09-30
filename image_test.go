@@ -7,6 +7,7 @@ import (
 )
 
 func TestImageLayoutKeepsAspect(t *testing.T) {
+	t.Parallel()
 	img := ggfx.NewImage(200, 100)
 	cases := []struct {
 		name string
@@ -29,6 +30,7 @@ func TestImageLayoutKeepsAspect(t *testing.T) {
 }
 
 func TestImagePlacement(t *testing.T) {
+	t.Parallel()
 	img := ggfx.NewImage(200, 100)
 	box := Rct(Pt(0, 0), Sz(100, 100))
 	cases := []struct {

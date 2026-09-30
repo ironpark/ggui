@@ -12,6 +12,7 @@ import (
 )
 
 func TestAttachmentIndependentActionsAndStates(t *testing.T) {
+	t.Parallel()
 	state := ggui.State(ui.AttachmentIdle)
 	opened, removed := 0, 0
 	file := ui.Attachment("report.pdf", "PDF · 2.4 MB").Media(ggui.Text("PDF")).BindState(state).
@@ -46,6 +47,7 @@ func TestAttachmentIndependentActionsAndStates(t *testing.T) {
 	}
 }
 func TestAttachmentSizesLongNamesAndGroup(t *testing.T) {
+	t.Parallel()
 	name := strings.Repeat("긴파일명", 30) + ".pdf"
 	heights := []float64{}
 	for _, size := range []ui.AttachmentSize{ui.AttachmentDefault, ui.AttachmentSmall, ui.AttachmentExtraSmall} {
@@ -89,6 +91,7 @@ func TestAttachmentSizesLongNamesAndGroup(t *testing.T) {
 	}
 }
 func TestBubbleMessageAndMarkerComposition(t *testing.T) {
+	t.Parallel()
 	pressed, reactions := 0, 0
 	b := ui.Bubble(ggui.Text("Choose this reply")).End().Outline().Action("Reply", func() { pressed++ }).Reactions(ui.Button("Like", func() { reactions++ }).Ghost()).ReactionsTop()
 	msg := ui.Message(b).Avatar(ui.Avatar("Ada").Size(32)).Header(ggui.Text("Ada")).Footer(ui.Button("Retry", func() {}).Ghost()).End()
@@ -118,6 +121,7 @@ func transcript(n int) []ui.MessageEntry {
 	return out
 }
 func TestMessageScrollerOpeningFollowingAndReaderIntent(t *testing.T) {
+	t.Parallel()
 	rows := ggui.State(transcript(6))
 	s := ui.MessageScroller(rows).Height(200).Gap(10).AutoScroll(true).Animation(0)
 	p := ggui.NewProbe(s, ggui.Sz(300, 200))
@@ -161,6 +165,7 @@ func TestMessageScrollerOpeningFollowingAndReaderIntent(t *testing.T) {
 	}
 }
 func TestMessageScrollerHistoryAnchorsAndRestore(t *testing.T) {
+	t.Parallel()
 	rows := ggui.State(transcript(6))
 	s := ui.MessageScroller(rows).Height(200).Gap(10).Opening(ui.ScrollStart).Animation(0)
 	p := ggui.NewProbe(s, ggui.Sz(300, 200))
@@ -212,6 +217,7 @@ func slicesContains(xs []string, s string) bool {
 }
 
 func TestQuestionnaireValidationSkipSubmissionAndReset(t *testing.T) {
+	t.Parallel()
 	answers := ggui.State(ui.QuestionAnswers{})
 	submits := 0
 	q := ui.Questionnaire(answers,
@@ -261,6 +267,7 @@ func TestQuestionnaireValidationSkipSubmissionAndReset(t *testing.T) {
 	}
 }
 func TestQuestionnaireKeyboardMultipleControlledAndDisabled(t *testing.T) {
+	t.Parallel()
 	answers := ggui.State(ui.QuestionAnswers{})
 	active := ggui.State("multi")
 	items := []ui.Question{{Name: "single", Title: "Single", Required: true, Choices: []ui.QuestionOption{{Value: "a", Label: "A"}}}, {Name: "multi", Title: "Multiple", Required: true, Multiple: true, Choices: []ui.QuestionOption{{Value: "b", Label: "B"}, {Value: "off", Label: "Off", Disabled: true}, {Value: "c", Label: "C"}}}, {Name: "disabled", Title: "Hidden", Disabled: true}}
@@ -297,6 +304,7 @@ func TestQuestionnaireKeyboardMultipleControlledAndDisabled(t *testing.T) {
 }
 
 func TestQuestionnaireFreeformDefaultsAndExternalErrors(t *testing.T) {
+	t.Parallel()
 	answers := ggui.State(ui.QuestionAnswers{"one": {Values: []string{"a"}}})
 	submits := 0
 	q := ui.Questionnaire(answers, ui.Question{Name: "one", Title: "Answer", Required: true, Choices: []ui.QuestionOption{{Value: "a", Label: "Fixed"}}, InputLabel: "Custom"}).OnSubmit(func(ui.QuestionAnswers) { submits++ })
@@ -326,6 +334,7 @@ func TestQuestionnaireFreeformDefaultsAndExternalErrors(t *testing.T) {
 }
 
 func TestMessageScrollerNoImplicitFollowAndReducedMotion(t *testing.T) {
+	t.Parallel()
 	rows := ggui.State(transcript(6))
 	s := ui.MessageScroller(rows).Gap(10)
 	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, s), ggui.Sz(300, 200))
@@ -353,6 +362,7 @@ func TestMessageScrollerNoImplicitFollowAndReducedMotion(t *testing.T) {
 }
 
 func TestMessageScrollerRestoreReplacesQueuedJump(t *testing.T) {
+	t.Parallel()
 	rows := ggui.State(transcript(8))
 	s := ui.MessageScroller(rows).Gap(10).Animation(0)
 	p := ggui.NewProbe(s, ggui.Sz(300, 200))
@@ -371,6 +381,7 @@ func TestMessageScrollerRestoreReplacesQueuedJump(t *testing.T) {
 }
 
 func TestAttachmentGroupTouchPixelsAndMomentum(t *testing.T) {
+	t.Parallel()
 	group := ui.AttachmentGroup(
 		ui.Attachment("One", "PDF").Width(180),
 		ui.Attachment("Two", "PDF").Width(180),

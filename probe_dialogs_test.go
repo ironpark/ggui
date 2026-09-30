@@ -10,6 +10,7 @@ import (
 // A Probe answers dialogs with a stub that cancels until its Paths are set,
 // and records what was asked, so code written against Host runs headless.
 func TestProbeDialogsAreAStub(t *testing.T) {
+	t.Parallel()
 	p := NewProbe(Text("x"), Sz(10, 10))
 	defer p.Close()
 	var h Host = p

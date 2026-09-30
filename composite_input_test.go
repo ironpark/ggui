@@ -27,6 +27,7 @@ func (w *focusRequester) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 }
 func TestCompositeFocusRequestAndInputObserver(t *testing.T) {
+	t.Parallel()
 	actions, observed := 0, 0
 	b := ui.Button("Child", func() { actions++ })
 	w := &focusRequester{child: b, target: b, request: true, observed: &observed}
@@ -54,6 +55,7 @@ func TestCompositeFocusRequestAndInputObserver(t *testing.T) {
 	}
 }
 func TestInputObserversRespectModalScope(t *testing.T) {
+	t.Parallel()
 	observed := 0
 	open := ggui.State(true)
 	background := &focusRequester{child: ui.Button("Background", func() {}), observed: &observed}

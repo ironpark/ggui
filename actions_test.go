@@ -3,6 +3,7 @@ package ggui
 import "testing"
 
 func TestAnnounceQueuesWithoutAConsumer(t *testing.T) {
+	t.Parallel()
 	a := New(Config{}, func() Widget { return Box() })
 	a.Announce("Saved", Polite)
 	a.Announce("", Assertive) // nothing to say, nothing queued
@@ -18,6 +19,7 @@ func TestAnnounceQueuesWithoutAConsumer(t *testing.T) {
 }
 
 func TestPerformDoesNotWaitForTheUIGoroutine(t *testing.T) {
+	t.Parallel()
 	// An action is queued and returns at once: the platform thread that
 	// asked is blocked, and so may the UI goroutine be, so nothing may
 	// wait on anything. Without a frame, nothing has run.
@@ -37,6 +39,7 @@ func TestPerformDoesNotWaitForTheUIGoroutine(t *testing.T) {
 }
 
 func TestPerformFocusesAndScrollsIntoView(t *testing.T) {
+	t.Parallel()
 	w := &twice{}
 	w.Role = RoleTextField
 	w.SetName("Name")

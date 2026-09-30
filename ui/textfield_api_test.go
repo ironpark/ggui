@@ -12,6 +12,7 @@ import (
 // This keeps the two from drifting: every chainable method on the editor
 // must have a namesake on the field with the same parameters.
 func TestTextFieldForwardsEditorSetters(t *testing.T) {
+	t.Parallel()
 	editor := reflect.TypeFor[*ggui.TextInputWidget]()
 	field := reflect.TypeFor[*ui.TextFieldWidget]()
 	for i := range editor.NumMethod() {
@@ -38,6 +39,7 @@ func TestTextFieldForwardsEditorSetters(t *testing.T) {
 
 // The field's Key reaches the editor, whose regions carry the identity.
 func TestTextFieldKeyReachesEditor(t *testing.T) {
+	t.Parallel()
 	f := ui.TextField(ggui.State("")).Key("k")
 	if f.Input().HitID() != "k" {
 		t.Fatalf("editor id = %v", f.Input().HitID())

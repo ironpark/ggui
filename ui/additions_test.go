@@ -8,6 +8,7 @@ import (
 )
 
 func TestPaginationNavigation(t *testing.T) {
+	t.Parallel()
 	page, pages := ggui.State(1), ggui.State(12)
 	changes := 0
 	nav := ui.Pagination(page, pages).OnChange(func(int) { changes++ })
@@ -93,6 +94,7 @@ func TestPaginationNavigation(t *testing.T) {
 }
 
 func TestNoticeActionsAndKeyboard(t *testing.T) {
+	t.Parallel()
 	retries, creates := 0, 0
 	p := ggui.ProbeBuilder(func() ggui.Widget {
 		return ggui.Column(

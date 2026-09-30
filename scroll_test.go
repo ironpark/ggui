@@ -15,6 +15,7 @@ func tall(taps *int, painted *[3]Rect) Widget {
 }
 
 func TestScrollGivesChildUnboundedHeightAndFillsViewport(t *testing.T) {
+	t.Parallel()
 	var painted [3]Rect
 	s := Scroll(tall(nil, &painted))
 	got := s.Layout(Loose(Sz(100, 120)), Env{})
@@ -27,6 +28,7 @@ func TestScrollGivesChildUnboundedHeightAndFillsViewport(t *testing.T) {
 }
 
 func TestScrollWheelMovesAndClamps(t *testing.T) {
+	t.Parallel()
 	var painted [3]Rect
 	s := Scroll(tall(nil, &painted)).Speed(10)
 	size := s.Layout(Loose(Sz(100, 120)), Env{})
@@ -57,6 +59,7 @@ func TestScrollWheelMovesAndClamps(t *testing.T) {
 }
 
 func TestScrollClipsHitRegions(t *testing.T) {
+	t.Parallel()
 	taps := 0
 	var painted [3]Rect
 	s := Scroll(tall(&taps, &painted)).Speed(10)
@@ -90,6 +93,7 @@ func TestScrollClipsHitRegions(t *testing.T) {
 }
 
 func TestScrollOffsetBinding(t *testing.T) {
+	t.Parallel()
 	var painted [3]Rect
 	pos := State(0.0)
 	s := Scroll(tall(nil, &painted)).BindOffset(pos)
@@ -105,6 +109,7 @@ func TestScrollOffsetBinding(t *testing.T) {
 }
 
 func TestScrollDoesNotConsumeWheelWithNothingToScroll(t *testing.T) {
+	t.Parallel()
 	var got Point
 	s := Pointer(Scroll(Box().Size(10, 10))).OnScroll(func(d Point) { got = d })
 	var in inputState
@@ -116,6 +121,7 @@ func TestScrollDoesNotConsumeWheelWithNothingToScroll(t *testing.T) {
 }
 
 func TestClipNestsAndTrimsRegions(t *testing.T) {
+	t.Parallel()
 	var c Canvas
 	inner := c.Clip(Rct(Pt(0, 0), Sz(50, 50))).Clip(Rct(Pt(25, 25), Sz(100, 100)))
 	inner.HitPointer(Rct(Pt(0, 0), Sz(200, 200)), Pointer(Box()))
@@ -126,6 +132,7 @@ func TestClipNestsAndTrimsRegions(t *testing.T) {
 }
 
 func TestFillingWidgetsFallBackToContentWhenUnbounded(t *testing.T) {
+	t.Parallel()
 	unb := Constraints{MaxW: 100, MaxH: Unbounded}
 	cases := map[string]Widget{
 		"align":   Align(Box().Size(10, 10)),
@@ -169,6 +176,7 @@ func TestScrollBarFollowsEnvironmentAndPreservesOverrides(t *testing.T) {
 }
 
 func TestScrollThumbDrag(t *testing.T) {
+	t.Parallel()
 	for _, horizontal := range []bool{false, true} {
 		offset := State(0.0)
 		taps := 0
@@ -216,6 +224,7 @@ func TestScrollThumbDrag(t *testing.T) {
 }
 
 func TestScrollHiddenAndTinyThumb(t *testing.T) {
+	t.Parallel()
 	s := Scroll(Box().Size(100, 500)).Bar(nil)
 	var in inputState
 	paintFrame(&in, s, Sz(100, 100))
@@ -230,6 +239,7 @@ func TestScrollHiddenAndTinyThumb(t *testing.T) {
 }
 
 func TestScrollThumbHoverAndDragFeedback(t *testing.T) {
+	t.Parallel()
 	s := Scroll(Box().Size(100, 500))
 	var in inputState
 	paintFrame(&in, s, Sz(100, 100))

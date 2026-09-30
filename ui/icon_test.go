@@ -17,6 +17,7 @@ func (s *observedIcons) Resolve(role icons.Role) *icons.SVG {
 	return lucide.Set().Resolve(role)
 }
 func TestControlsResolveInheritedIcons(t *testing.T) {
+	t.Parallel()
 	set := &observedIcons{seen: map[icons.Role]int{}}
 	tree := ggui.Provide(icons.SetKey, icons.Set(set), ggui.Column(
 		ui.Checkbox(ggui.State(true), "Check"),
@@ -34,6 +35,7 @@ func TestControlsResolveInheritedIcons(t *testing.T) {
 	}
 }
 func TestIconDecorativeAndAccessible(t *testing.T) {
+	t.Parallel()
 	p := ggui.NewProbe(ggui.Row(ui.Icon(icons.Check), ui.Icon(icons.Download).Alt("Download icon")), ggui.Sz(100, 30))
 	defer p.Close()
 	node(t, p.Semantics(), ggui.RoleImage, "Download icon")

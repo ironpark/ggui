@@ -8,6 +8,7 @@ import (
 )
 
 func TestBindDisabledFollowsSignalWithoutRebuild(t *testing.T) {
+	t.Parallel()
 	busy := ggui.State(false)
 	taps := 0
 	b := ui.Button("x", func() { taps++ }).BindDisabled(busy)
@@ -23,6 +24,7 @@ func TestBindDisabledFollowsSignalWithoutRebuild(t *testing.T) {
 // A bound name follows its signal on the next frame, and a Field's label
 // does not replace it.
 func TestBindNameFollowsSignalWithoutRebuild(t *testing.T) {
+	t.Parallel()
 	name := ggui.State("Remove Buy milk")
 	b := ui.Button("×", nil).BindName(name)
 	f := ui.Field("Label", ui.TextField(ggui.State("")).BindName(name))
@@ -44,6 +46,7 @@ func TestBindNameFollowsSignalWithoutRebuild(t *testing.T) {
 }
 
 func TestSliderCommitsOnRelease(t *testing.T) {
+	t.Parallel()
 	v := ggui.State(0.0)
 	changes, commits := 0, 0
 	s := ui.Slider(v, 0, 100).OnChange(func(float64) { changes++ }).OnCommit(func(float64) { commits++ })
@@ -58,6 +61,7 @@ func TestSliderCommitsOnRelease(t *testing.T) {
 }
 
 func TestControlBindsToLens(t *testing.T) {
+	t.Parallel()
 	type prefs struct{ Dark bool }
 	pv := ggui.State(prefs{})
 	dark := pv.Lens(func(p prefs) bool { return p.Dark }, func(p prefs, v bool) prefs { p.Dark = v; return p })

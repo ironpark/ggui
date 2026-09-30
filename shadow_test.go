@@ -10,6 +10,7 @@ import (
 )
 
 func TestShadowGeometryScaleClipAndSpread(t *testing.T) {
+	t.Parallel()
 	img := ggfx.NewImage(200, 200)
 	defer img.Deallocate()
 	c := &Canvas{Image: img, scale: 2}
@@ -31,6 +32,7 @@ func TestShadowGeometryScaleClipAndSpread(t *testing.T) {
 	}
 }
 func TestShadowDoesNotChangeLayoutOrHits(t *testing.T) {
+	t.Parallel()
 	b := Box().Size(50, 30).Shadow(ShadowStyle{Blur: 20, Spread: 5, Color: color.Black})
 	if got := b.Layout(Loose(Sz(100, 100)), Env{}); got != Sz(50, 30) {
 		t.Fatal(got)

@@ -17,6 +17,7 @@ var showsImages = []string{"attachment.go", "avatar.go"}
 // surface: a widget author imports one package, and what renders is ggui's
 // business rather than every widget's.
 func TestOnlyImageWidgetsImportGgfx(t *testing.T) {
+	t.Parallel()
 	fset := token.NewFileSet()
 	pkgs, err := parser.ParseDir(fset, ".", nil, parser.ImportsOnly)
 	if err != nil {

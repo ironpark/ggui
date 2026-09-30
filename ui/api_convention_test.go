@@ -39,6 +39,7 @@ func receiverType(fn *ast.FuncDecl) string {
 // Controls built on Interactive, including indirect embeddings, must expose
 // their own fluent Key rather than only the implementation-level SetKey.
 func TestPublicKeySettersReturnTheirOwnControl(t *testing.T) {
+	t.Parallel()
 	fset := token.NewFileSet()
 	pkgs, err := parser.ParseDir(fset, ".", func(fi fs.FileInfo) bool {
 		return !strings.HasSuffix(fi.Name(), "_test.go")
@@ -132,6 +133,7 @@ func TestPublicKeySettersReturnTheirOwnControl(t *testing.T) {
 // Description values such as CommandEntry and AccordionSection have value
 // receivers and intentionally keep their static Disabled option.
 func TestDisabledSettersComeInPairs(t *testing.T) {
+	t.Parallel()
 	fset := token.NewFileSet()
 	pkgs, err := parser.ParseDir(fset, ".", func(fi fs.FileInfo) bool {
 		return !strings.HasSuffix(fi.Name(), "_test.go")
@@ -185,6 +187,7 @@ func TestDisabledSettersComeInPairs(t *testing.T) {
 // Reactive property methods are discoverable by one prefix and keep chaining
 // on the concrete widget. The literal counterpart uses the same value type.
 func TestBindingSettersHaveTypedFluentCounterparts(t *testing.T) {
+	t.Parallel()
 	fset := token.NewFileSet()
 	pkgs, err := parser.ParseDir(fset, ".", func(fi fs.FileInfo) bool { return !strings.HasSuffix(fi.Name(), "_test.go") }, 0)
 	if err != nil {

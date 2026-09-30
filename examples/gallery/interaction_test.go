@@ -28,6 +28,7 @@ func searchGallery(p *ggui.Probe, query string) {
 	p.Frame()
 }
 func TestGalleryRealInteractions(t *testing.T) {
+	t.Parallel()
 	p := galleryProbe(ggui.Sz(1180, 820))
 	defer p.Close()
 	for _, size := range []ggui.Size{ggui.Sz(1600, 1000), ggui.Sz(640, 700), ggui.Sz(480, 640), ggui.Sz(360, 480), ggui.Sz(480, 320), ggui.Sz(1180, 820)} {
@@ -87,6 +88,7 @@ func pasteText(p *ggui.Probe, text string) {
 }
 
 func TestGallerySmallWindowPopups(t *testing.T) {
+	t.Parallel()
 	for _, size := range []ggui.Size{ggui.Sz(360, 480), ggui.Sz(480, 320), ggui.Sz(640, 480)} {
 		t.Run(fmt.Sprintf("%gx%g", size.W, size.H), func(t *testing.T) {
 			p := galleryProbe(size)
@@ -127,6 +129,7 @@ func revealGallery(p *ggui.Probe, label string) {
 }
 
 func TestGalleryControlFlows(t *testing.T) {
+	t.Parallel()
 	p := galleryProbe(ggui.Sz(1180, 820))
 	defer p.Close()
 	searchGallery(p, "Buttons")
@@ -194,6 +197,7 @@ func TestGalleryControlFlows(t *testing.T) {
 // navigation, grouping and composition components in the real tree, where
 // they share a window with everything else.
 func TestGalleryNavigationAndOverlays(t *testing.T) {
+	t.Parallel()
 	p := galleryProbe(ggui.Sz(1180, 820))
 	defer p.Close()
 
@@ -236,6 +240,7 @@ func TestGalleryNavigationAndOverlays(t *testing.T) {
 }
 
 func TestGallerySupplementedComponents(t *testing.T) {
+	t.Parallel()
 	p := galleryProbe(ggui.Sz(1180, 820))
 	defer p.Close()
 
@@ -398,6 +403,7 @@ func TestGalleryEmojiEditingAndThemePresets(t *testing.T) {
 }
 
 func TestGalleryIconOverrideSurvivesThemeChange(t *testing.T) {
+	t.Parallel()
 	p := galleryProbe(ggui.Sz(1180, 900))
 	defer p.Close()
 	searchGallery(p, "Icons")

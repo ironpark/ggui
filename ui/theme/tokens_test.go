@@ -8,6 +8,7 @@ import (
 )
 
 func TestThemeTokens(t *testing.T) {
+	t.Parallel()
 	k := ggui.NewEnvKey[color.Color]("danger")
 	base := Default()
 	red := base.Set(k, color.Color(color.RGBA{0xd3, 0x2f, 0x2f, 0xff}))

@@ -6,6 +6,7 @@ import (
 )
 
 func TestThemePresetsHaveCompleteSemanticPairs(t *testing.T) {
+	t.Parallel()
 	for _, base := range BaseColors() {
 		for _, accent := range AccentColors() {
 			for _, style := range Styles() {
@@ -27,6 +28,7 @@ func TestThemePresetsHaveCompleteSemanticPairs(t *testing.T) {
 	}
 }
 func TestPresetAccentPreservesSurfacesAndCopies(t *testing.T) {
+	t.Parallel()
 	base := Preset{Base: BaseStone}.Dark()
 	accented := Preset{Base: BaseStone, Accent: AccentBlue}.Dark()
 	if base.Bg != accented.Bg || base.Card != accented.Card || base.Border != accented.Border {
@@ -41,6 +43,7 @@ func TestPresetAccentPreservesSurfacesAndCopies(t *testing.T) {
 	}
 }
 func TestPresetColorConversionAndGeometry(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		s string
 		c color.NRGBA

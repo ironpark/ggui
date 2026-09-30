@@ -9,6 +9,7 @@ import (
 )
 
 func TestSignalGetSet(t *testing.T) {
+	t.Parallel()
 	s := State(1)
 	if got := s.Get(); got != 1 {
 		t.Fatalf("Get() = %d, want 1", got)
@@ -20,6 +21,7 @@ func TestSignalGetSet(t *testing.T) {
 }
 
 func TestEffectRerunsOnChange(t *testing.T) {
+	t.Parallel()
 	s := State("a")
 	var seen []string
 	dispose := reactive.Observe(func() { seen = append(seen, s.Get()) })
@@ -61,6 +63,7 @@ func TestIdleEffectFlushDoesNotAllocate(t *testing.T) {
 }
 
 func TestEffectFlushIncludesCleanupWrites(t *testing.T) {
+	t.Parallel()
 	trigger, result := State(0), State(0)
 	var seen []int
 	dispose := Root(func() {
@@ -89,6 +92,7 @@ func TestEffectFlushIncludesCleanupWrites(t *testing.T) {
 }
 
 func TestEffectFlushIncludesWritesAfterNestedFlush(t *testing.T) {
+	t.Parallel()
 	trigger, before, after := State(0), State(0), State(0)
 	var seenBefore, seenAfter []int
 	dispose := Root(func() {
@@ -117,6 +121,7 @@ func TestEffectFlushIncludesWritesAfterNestedFlush(t *testing.T) {
 }
 
 func TestEffectCycleIsNotRecordedAsSettled(t *testing.T) {
+	t.Parallel()
 	reactive.Flush()
 	reactive.FlushUsers(nil)
 	n := State(0)
@@ -134,6 +139,7 @@ func TestEffectCycleIsNotRecordedAsSettled(t *testing.T) {
 }
 
 func TestEffectDisposeStopsUpdates(t *testing.T) {
+	t.Parallel()
 	s := State(0)
 	runs := 0
 	dispose := reactive.Observe(func() { s.Get(); runs++ })
@@ -148,6 +154,7 @@ func TestEffectDisposeStopsUpdates(t *testing.T) {
 }
 
 func TestUntrackedReadDoesNotSubscribe(t *testing.T) {
+	t.Parallel()
 	s := State(0)
 	s.Get() // outside any effect
 	s.Set(1)
@@ -156,6 +163,7 @@ func TestUntrackedReadDoesNotSubscribe(t *testing.T) {
 }
 
 func TestSetSkipsEqualValue(t *testing.T) {
+	t.Parallel()
 	s := State(1)
 	runs := 0
 	dispose := reactive.Observe(func() { s.Get(); runs++ })
@@ -176,6 +184,7 @@ func TestSetSkipsEqualValue(t *testing.T) {
 }
 
 func TestSetNotifiesForUncomparableValue(t *testing.T) {
+	t.Parallel()
 	s := State([]int{1})
 	runs := 0
 	dispose := reactive.Observe(func() { s.Get(); runs++ })
@@ -190,6 +199,7 @@ func TestSetNotifiesForUncomparableValue(t *testing.T) {
 }
 
 func TestWithEqualOverridesComparison(t *testing.T) {
+	t.Parallel()
 	s := State([]int{1}).WithEqual(slices.Equal)
 	runs := 0
 	dispose := reactive.Observe(func() { s.Get(); runs++ })
@@ -204,6 +214,7 @@ func TestWithEqualOverridesComparison(t *testing.T) {
 }
 
 func TestSignalMapDerivesValue(t *testing.T) {
+	t.Parallel()
 	n := State(2)
 	label := n.Map(func(v int) string { return strconv.Itoa(v * 10) })
 	defer label.Dispose()
@@ -220,6 +231,7 @@ func TestSignalMapDerivesValue(t *testing.T) {
 }
 
 func TestMemoChainSettlesInOneFlush(t *testing.T) {
+	t.Parallel()
 	n := State(1)
 	doubled := n.Map(func(v int) int { return v * 2 })
 	defer doubled.Dispose()
@@ -239,6 +251,7 @@ func TestMemoChainSettlesInOneFlush(t *testing.T) {
 }
 
 func TestMemoRecomputesOnlyWhenSourceChanges(t *testing.T) {
+	t.Parallel()
 	n := State(1)
 	runs := 0
 	m := n.Map(func(v int) int { runs++; return v % 2 })
@@ -260,6 +273,7 @@ func TestMemoRecomputesOnlyWhenSourceChanges(t *testing.T) {
 }
 
 func TestMemoDisposeStopsRecomputation(t *testing.T) {
+	t.Parallel()
 	n := State(1)
 	m := n.Map(func(v int) int { return v + 1 })
 	m.Get()
@@ -274,6 +288,7 @@ func TestMemoDisposeStopsRecomputation(t *testing.T) {
 }
 
 func TestToggleAndAdd(t *testing.T) {
+	t.Parallel()
 	on := State(false)
 	n := State(1.5)
 	Toggle(on)
@@ -284,6 +299,7 @@ func TestToggleAndAdd(t *testing.T) {
 }
 
 func TestCombineDerivesFromTwoSources(t *testing.T) {
+	t.Parallel()
 	a := State(2)
 	b := State("x")
 	joined := Combine(a, b, func(n int, s string) string { return strings.Repeat(s, n) })
@@ -301,6 +317,7 @@ func TestCombineDerivesFromTwoSources(t *testing.T) {
 }
 
 func TestWatchRunsOnChange(t *testing.T) {
+	t.Parallel()
 	s := State(0)
 	var seen []int
 	dispose := Root(func() { Watch(s, func(v int) { seen = append(seen, v) }) })
@@ -316,6 +333,7 @@ func TestWatchRunsOnChange(t *testing.T) {
 }
 
 func TestSignalWritesAdvanceTheLayoutGeneration(t *testing.T) {
+	t.Parallel()
 	s := State(1)
 	before := reactive.LayoutGen()
 	s.Set(1)
@@ -334,6 +352,7 @@ func TestSignalWritesAdvanceTheLayoutGeneration(t *testing.T) {
 }
 
 func TestAppendAndRemoveOnSliceSignals(t *testing.T) {
+	t.Parallel()
 	s := State([]int{1, 2, 3})
 	runs := 0
 	dispose := reactive.Observe(func() { s.Get(); runs++ })
@@ -363,6 +382,7 @@ func TestAppendAndRemoveOnSliceSignals(t *testing.T) {
 // registered before the memo it reads, which is what an effect that outlives
 // a rebuilt memo ends up looking like.
 func TestReaderSeesNoPartialUpdate(t *testing.T) {
+	t.Parallel()
 	s := State(0)
 	var b *DerivedValue[int]
 	var seen [][2]int
@@ -391,6 +411,7 @@ func TestReaderSeesNoPartialUpdate(t *testing.T) {
 // far memo is not itself marked by the write, only checked through the one
 // above it.
 func TestReaderSeesNoPartialUpdateThroughChain(t *testing.T) {
+	t.Parallel()
 	s := State(0)
 	var far *DerivedValue[int]
 	var seen [][2]int
@@ -420,6 +441,7 @@ func TestReaderSeesNoPartialUpdateThroughChain(t *testing.T) {
 // A memo read from outside any effect, between writes, reports the value its
 // inputs imply now rather than the one the last flush left behind.
 func TestMemoReadOutsideEffectIsCurrent(t *testing.T) {
+	t.Parallel()
 	s := State(2)
 	m := Derived(func() int { return s.Get() * 3 })
 	defer m.Dispose()

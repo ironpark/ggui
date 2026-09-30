@@ -12,6 +12,7 @@ import (
 // signal. User effects were already kept to their own loop; the widget
 // bindings a tree makes with Observe were not.
 func TestProbesDoNotRunEachOthersEffects(t *testing.T) {
+	t.Parallel()
 	n := State(0)
 	var inA, inB int
 	a := ProbeBuilder(func() Widget { return Box() }, Sz(10, 10)).Setup(func() {
@@ -40,6 +41,7 @@ func TestProbesDoNotRunEachOthersEffects(t *testing.T) {
 // A probe a test forgets to close keeps its effects to itself: the next
 // probe's frames never run them.
 func TestALeakedProbeStaysOutOfTheNextOnesFrames(t *testing.T) {
+	t.Parallel()
 	n := State(0)
 	leaked := 0
 	ProbeBuilder(func() Widget { return Box() }, Sz(10, 10)).Setup(func() {
@@ -60,6 +62,7 @@ func TestALeakedProbeStaysOutOfTheNextOnesFrames(t *testing.T) {
 // signals: what has no owner belongs to the process's runtime, which every
 // probe's frame flushes too.
 func TestAWidgetBuiltBeforeItsProbeStillFollowsItsSignals(t *testing.T) {
+	t.Parallel()
 	v := State("a")
 	in := TextInput(v)
 	p := NewProbe(in, Sz(200, 30))
@@ -75,6 +78,7 @@ func TestAWidgetBuiltBeforeItsProbeStillFollowsItsSignals(t *testing.T) {
 // Advance moves one probe's clock: another probe, and code outside every
 // probe, keep reading their own.
 func TestAdvanceMovesOnlyItsOwnProbesClock(t *testing.T) {
+	t.Parallel()
 	var inA time.Time
 	a := NewProbe(FromFuncs(func(c Constraints, _ Env) Size { return c.Constrain(Sz(1, 1)) }, func(*Canvas, Rect) { inA = Now() }), Sz(10, 10))
 	defer a.Close()
@@ -95,6 +99,7 @@ func TestAdvanceMovesOnlyItsOwnProbesClock(t *testing.T) {
 // An animation keeps the world it was made in: another probe's frames do
 // not step it.
 func TestAnAnimationStepsOnlyInItsOwnProbe(t *testing.T) {
+	t.Parallel()
 	var tw *Tweened[float64]
 	a := ProbeBuilder(func() Widget { return Box() }, Sz(10, 10)).Setup(func() {
 		tw = Tween(0.0, time.Second).Easing(EaseLinear)

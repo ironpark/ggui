@@ -10,6 +10,7 @@ import (
 )
 
 func TestKeyConstantsAreCurrent(t *testing.T) {
+	t.Parallel()
 	want, err := keygen.Generate()
 	if err != nil {
 		t.Fatal(err)
@@ -24,6 +25,7 @@ func TestKeyConstantsAreCurrent(t *testing.T) {
 }
 
 func TestKeyAliasesAreTheSameValues(t *testing.T) {
+	t.Parallel()
 	if KeyArrowUp != ggfx.KeyArrowUp || KeyEnter != ggfx.KeyEnter || KeyMax != ggfx.KeyMax {
 		t.Fatal("a ggui key constant differs from the ggfx one it aliases")
 	}

@@ -7,6 +7,7 @@ import (
 )
 
 func TestTouchTapAndCapturedDrag(t *testing.T) {
+	t.Parallel()
 	var touch touchInput
 	var in inputState
 	var taps, ups, drags int
@@ -34,6 +35,7 @@ func TestTouchTapAndCapturedDrag(t *testing.T) {
 }
 
 func TestTouchKeepsPrimaryAndWaitsForRemainingFingers(t *testing.T) {
+	t.Parallel()
 	var touch touchInput
 	position := func(id ggfx.TouchID) Point { return Pt(float64(id), 10) }
 	step := func(ids ...ggfx.TouchID) frameInput {
@@ -58,6 +60,7 @@ func TestTouchKeepsPrimaryAndWaitsForRemainingFingers(t *testing.T) {
 }
 
 func TestTouchPanScrollsAndCancelsTap(t *testing.T) {
+	t.Parallel()
 	var in inputState
 	var touch touchInput
 	taps, ups := 0, 0
@@ -98,6 +101,7 @@ func TestTouchPanScrollsAndCancelsTap(t *testing.T) {
 }
 
 func TestHorizontalTouchDragDoesNotScrollVerticalList(t *testing.T) {
+	t.Parallel()
 	var in inputState
 	drags := 0
 	s := Scroll(Pointer(Box().Size(100, 400)).OnDrag(func(PointerEvent) { drags++ }))
@@ -118,6 +122,7 @@ func (w *touchDragControl) Paint(dst *Canvas, r Rect) {
 }
 
 func TestTouchCapturedControlDoesNotPanParent(t *testing.T) {
+	t.Parallel()
 	var in inputState
 	drags, ups := 0, 0
 	control := &touchDragControl{Pointer(Box().Size(100, 400)).

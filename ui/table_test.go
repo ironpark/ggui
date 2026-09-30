@@ -28,6 +28,7 @@ func table(rows ggui.Readable[[]person]) (*ui.TableWidget[person, int], *ggui.St
 }
 
 func TestTableRowsSelectOnClick(t *testing.T) {
+	t.Parallel()
 	rows := people()
 	tbl, chosen := table(rows)
 	p := ggui.NewProbe(tbl, ggui.Sz(300, 200))
@@ -52,6 +53,7 @@ func TestTableRowsSelectOnClick(t *testing.T) {
 }
 
 func TestTableHeightScrollsBody(t *testing.T) {
+	t.Parallel()
 	var many []person
 	for i := range 100 {
 		many = append(many, person{ID: i + 1, Name: "p" + strconv.Itoa(i+1), Age: i})
@@ -79,6 +81,7 @@ func TestTableHeightScrollsBody(t *testing.T) {
 }
 
 func TestTableAlignsCellsAndHonorsRowHeight(t *testing.T) {
+	t.Parallel()
 	for _, align := range []float64{0, .5, 1} {
 		var cellRect ggui.Rect
 		cell := ggui.FromFuncs(func(c ggui.Constraints, _ ggui.Env) ggui.Size {
@@ -101,6 +104,7 @@ func TestTableAlignsCellsAndHonorsRowHeight(t *testing.T) {
 }
 
 func TestTableRowNameFollowsEdits(t *testing.T) {
+	t.Parallel()
 	rows := people()
 	tbl, chosen := table(rows)
 	p := ggui.NewProbe(tbl, ggui.Sz(300, 200))

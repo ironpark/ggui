@@ -50,6 +50,7 @@ func selectionPropertyFixture(kind string, value ggui.Binding[string], changed f
 	}
 }
 func TestSelectionPropertySnapshotsAndBindingReplacement(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"select", "combobox", "radios", "toggle"} {
 		t.Run(kind, func(t *testing.T) {
 			value := ggui.State("missing")
@@ -99,6 +100,7 @@ func TestSelectionPropertySnapshotsAndBindingReplacement(t *testing.T) {
 }
 
 func TestRadiosKeepDuplicateOccurrenceIdentityAndFocus(t *testing.T) {
+	t.Parallel()
 	value := ggui.State("a")
 	w := Radios(value).Options([]string{"a", "a", "b"})
 	p := ggui.NewProbe(ggui.Cached(ggui.Column(w)), ggui.Sz(400, 200))
@@ -123,6 +125,7 @@ func TestRadiosKeepDuplicateOccurrenceIdentityAndFocus(t *testing.T) {
 }
 
 func TestToggleOptionsRejectStaleSegmentsAndKeepFocus(t *testing.T) {
+	t.Parallel()
 	value := ggui.State("a")
 	w := ToggleGroup(value).Options([]string{"a", "b"})
 	p := ggui.NewProbe(ggui.Column(w), ggui.Sz(400, 200))
@@ -150,6 +153,7 @@ func TestToggleOptionsRejectStaleSegmentsAndKeepFocus(t *testing.T) {
 }
 
 func TestCompositeNamesUseSameTargetsAndDetach(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"text", "otp", "combo", "group"} {
 		t.Run(kind, func(t *testing.T) {
 			source := ggui.State("first")
@@ -198,6 +202,7 @@ func TestCompositeNamesUseSameTargetsAndDetach(t *testing.T) {
 }
 
 func TestUIBindingsRejectNilAndTypedNil(t *testing.T) {
+	t.Parallel()
 	var options *ggui.StateValue[[]string]
 	var text *ggui.StateValue[string]
 	var invalid *ggui.StateValue[bool]
@@ -221,6 +226,7 @@ func TestUIBindingsRejectNilAndTypedNil(t *testing.T) {
 }
 
 func TestRepeatedRuntimeConfigurationPreservesChildren(t *testing.T) {
+	t.Parallel()
 	table := Table(ggui.State([]int{1, 2}), func(v int) int { return v },
 		Col("Value", func(v ggui.Readable[int]) ggui.Widget { return ggui.Textf("%d", v) }))
 	p := ggui.NewProbe(ggui.Cached(table), ggui.Sz(300, 400))

@@ -7,6 +7,7 @@ import (
 )
 
 func TestEnvironmentReplacementsPreserveParentsWithoutAccumulatingBindings(t *testing.T) {
+	t.Parallel()
 	key := NewEnvKey[int]("value")
 	other := NewEnvKey[string]("other")
 	parent := Env{}.With(key, 1).With(other, "kept")
@@ -44,6 +45,7 @@ func TestCoreStylesWorkWithoutTheme(t *testing.T) {
 }
 
 func TestTextStyleKeyFallbackAndExplicitOverrides(t *testing.T) {
+	t.Parallel()
 	key := NewEnvKey[TextStyle]("label")
 	text := Text("hello").StyleKey(key, TextStyle{Size: 21, Color: color.White}).Color(color.Black)
 	text.Layout(Loose(Sz(300, 100)), Env{})

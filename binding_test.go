@@ -12,6 +12,7 @@ type form struct {
 }
 
 func TestLensReadsAndWritesThrough(t *testing.T) {
+	t.Parallel()
 	f := State(form{Name: "a", Age: 1})
 	name := f.Lens(func(v form) string { return v.Name }, func(v form, s string) form { v.Name = s; return v })
 	var b Binding[string] = name
@@ -30,6 +31,7 @@ func TestLensReadsAndWritesThrough(t *testing.T) {
 }
 
 func TestTweenIsABinding(t *testing.T) {
+	t.Parallel()
 	var b Binding[float64] = Tween(0.0, time.Millisecond)
 	b.Set(1)
 	if Untrack(b.Get) != 0 {
@@ -38,6 +40,7 @@ func TestTweenIsABinding(t *testing.T) {
 }
 
 func TestForRetainEvictsOffscreenRows(t *testing.T) {
+	t.Parallel()
 	var items []int
 	for i := range 100 {
 		items = append(items, i)
@@ -71,6 +74,7 @@ func (w *independentWritable[T]) Set(v T)             { w.value = v; w.writes++ 
 func (w *independentWritable[T]) Update(fn func(T) T) { w.updates++; w.Set(fn(w.value)) }
 
 func TestWritableHelpersOnSignalsLensesAndCustomValues(t *testing.T) {
+	t.Parallel()
 	state := State(form{Name: "kept", Age: 1})
 	age := state.Lens(func(f form) int { return f.Age }, func(f form, v int) form { f.Age = v; return f })
 	custom := &independentWritable[int]{value: 1}
@@ -96,6 +100,7 @@ func TestWritableHelpersOnSignalsLensesAndCustomValues(t *testing.T) {
 }
 
 func TestWritableSlicesCopyAndSkipNoopRemoval(t *testing.T) {
+	t.Parallel()
 	type model struct {
 		Items []int
 		Other int
@@ -138,6 +143,7 @@ func TestWritableSlicesCopyAndSkipNoopRemoval(t *testing.T) {
 }
 
 func TestAnimatedBindingsAreNotWritable(t *testing.T) {
+	t.Parallel()
 	for _, b := range []Binding[float64]{Tween(0.0, time.Second), Spring(0.0)} {
 		if _, ok := b.(Writable[float64]); ok {
 			t.Fatal("animated binding must not support immediate updates")
@@ -148,6 +154,7 @@ func TestAnimatedBindingsAreNotWritable(t *testing.T) {
 // Field is Lens with one closure instead of two: it reads and writes through
 // a pointer into a copy of the whole.
 func TestFieldLensReadsAndWritesThrough(t *testing.T) {
+	t.Parallel()
 	type form struct {
 		Name string
 		Age  int

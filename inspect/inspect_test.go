@@ -28,6 +28,7 @@ func (s *fakeSource) Semantic(int) int      { return s.semantic }
 func (s *fakeSource) Box(i int) (Box, bool) { b, ok := s.boxes[i]; return b, ok }
 
 func TestFrameRemembersWhatItAskedFor(t *testing.T) {
+	t.Parallel()
 	src := &fakeSource{}
 	f := &Frame{Nodes: []Node{node("Button", 0, 0, 0, 10, 10)}, Source: src}
 	f.Describe(0)
@@ -45,6 +46,7 @@ func TestFrameRemembersWhatItAskedFor(t *testing.T) {
 }
 
 func TestTreeHelpers(t *testing.T) {
+	t.Parallel()
 	nodes := []Node{node("Column", 0, 0, 0, 100, 100), node("Box", 1, 10, 10, 80, 80), node("Text", 2, 20, 20, 30, 10), node("Other", 1, 0, 90, 100, 10)}
 	nodes[2].Clipped, nodes[2].Clip = true, geom.Rct(geom.Pt(20, 20), geom.Sz(5, 5))
 	if got := Deepest(nodes, geom.Pt(21, 21)); got != 2 {
@@ -62,6 +64,7 @@ func TestTreeHelpers(t *testing.T) {
 }
 
 func TestDetailsPanes(t *testing.T) {
+	t.Parallel()
 	src := &fakeSource{boxes: map[int]Box{1: {Padding: Insets{Top: 4, Right: 4, Bottom: 4, Left: 4}, Border: 1, Content: geom.Sz(72, 72), Valid: true}}, semantic: 0}
 	sem := a11y.Build([]a11y.SemNode{{Node: a11y.Node{Role: a11y.RoleButton, Name: "Save", Checked: a11y.TriOn}, Rect: geom.Rct(geom.Pt(0, 0), geom.Sz(100, 100)), Parent: -1}}, -1)
 	f := &Frame{Nodes: []Node{node("Button", 0, 0, 0, 100, 100), node("Box", 1, 0, 0, 100, 100)}, Sem: sem, Source: src}

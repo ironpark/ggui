@@ -17,6 +17,7 @@ func carouselSlides(n int, basis float64) []ggui.Widget {
 	return w
 }
 func TestCarouselNavigationAndClipping(t *testing.T) {
+	t.Parallel()
 	value := ggui.State(0)
 	changes := 0
 	c := Carousel(value, carouselSlides(5, 1)...).OnChange(func(int) { changes++ })
@@ -49,6 +50,7 @@ func TestCarouselNavigationAndClipping(t *testing.T) {
 	}
 }
 func TestCarouselSizingAndLoop(t *testing.T) {
+	t.Parallel()
 	for _, basis := range []float64{1, .5, 1. / 3} {
 		c := Carousel(ggui.State(0), carouselSlides(5, basis)...).Align(0)
 		p := ggui.NewProbe(c, ggui.Sz(416, 240))
@@ -75,6 +77,7 @@ func TestCarouselSizingAndLoop(t *testing.T) {
 	}
 }
 func TestCarouselMotionReducedAndAutoplay(t *testing.T) {
+	t.Parallel()
 	c := Carousel(ggui.State(0), carouselSlides(3, 1)...).Autoplay(time.Second).StopOnInteraction(false)
 	p := ggui.NewProbe(c, ggui.Sz(416, 240))
 	defer p.Close()
@@ -113,6 +116,7 @@ func TestCarouselMotionReducedAndAutoplay(t *testing.T) {
 	}
 }
 func TestCarouselVerticalRTLDisabledEmpty(t *testing.T) {
+	t.Parallel()
 	for _, vertical := range []bool{false, true} {
 		c := Carousel(ggui.State(0), carouselSlides(3, 1)...).RTL(true)
 		if vertical {
@@ -150,6 +154,7 @@ func TestCarouselVerticalRTLDisabledEmpty(t *testing.T) {
 	}
 }
 func TestCarouselVisibleSlidesOnly(t *testing.T) {
+	t.Parallel()
 	paints := make([]int, 1000)
 	items := make([]ggui.Widget, len(paints))
 	for i := range items {
@@ -174,6 +179,7 @@ func (w *carouselPaintCounter) Layout(c ggui.Constraints, _ ggui.Env) ggui.Size 
 func (w *carouselPaintCounter) Paint(*ggui.Canvas, ggui.Rect) { *w.count++ }
 
 func TestCarouselDragCaptureAndAutoplayPause(t *testing.T) {
+	t.Parallel()
 	c := Carousel(ggui.State(0), carouselSlides(5, 1)...).Autoplay(time.Second)
 	p := ggui.NewProbe(c, ggui.Sz(416, 240))
 	defer p.Close()
@@ -218,6 +224,7 @@ func BenchmarkCarouselVisiblePaint10000(b *testing.B) {
 }
 
 func TestCarouselAutoplayPausesForFocusedSlideChild(t *testing.T) {
+	t.Parallel()
 	child := Button("Inside", func() {})
 	c := Carousel(ggui.State(0), child, ggui.Text("Second")).Autoplay(time.Second).StopOnInteraction(false)
 	p := ggui.NewProbe(c, ggui.Sz(416, 240))
@@ -235,6 +242,7 @@ func TestCarouselAutoplayPausesForFocusedSlideChild(t *testing.T) {
 	}
 }
 func TestCarouselSpringMatchesReferenceSteps(t *testing.T) {
+	t.Parallel()
 	c := Carousel(ggui.State(0), carouselSlides(2, 1)...)
 	p := ggui.NewProbe(c, ggui.Sz(416, 240))
 	defer p.Close()

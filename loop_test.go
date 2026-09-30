@@ -11,6 +11,7 @@ import (
 )
 
 func TestCloseDisposesEverythingBuilt(t *testing.T) {
+	t.Parallel()
 	n := State(0)
 	runs := 0
 	p := ProbeBuilder(func() Widget {
@@ -34,6 +35,7 @@ func TestCloseDisposesEverythingBuilt(t *testing.T) {
 }
 
 func TestAdvanceStepsAnimations(t *testing.T) {
+	t.Parallel()
 	tw := Tween(0.0, time.Second).Easing(EaseLinear)
 	p := NewProbe(Box(), Sz(10, 10))
 	defer p.Close()
@@ -50,6 +52,7 @@ func TestAdvanceStepsAnimations(t *testing.T) {
 }
 
 func TestPostRunsBeforeTheFrame(t *testing.T) {
+	t.Parallel()
 	n := State(0)
 	var seen []int
 	p := ProbeBuilder(func() Widget { return Reactive(func() Widget { seen = append(seen, n.Get()); return Box() }) }, Sz(10, 10))
@@ -63,6 +66,7 @@ func TestPostRunsBeforeTheFrame(t *testing.T) {
 }
 
 func TestCycleIsReported(t *testing.T) {
+	t.Parallel()
 	n := State(0)
 	p := ProbeBuilder(func() Widget { return Box() }, Sz(10, 10)).Setup(func() {
 		reactive.Observe(func() { n.Set(n.Get() + 1) })
@@ -87,6 +91,7 @@ func TestCycleIsReported(t *testing.T) {
 // Without the debug build there are no creation sites to print, and the
 // error says where to get them.
 func TestCycleSaysHowToNameTheEffects(t *testing.T) {
+	t.Parallel()
 	n := State(0)
 	p := ProbeBuilder(func() Widget { return Box() }, Sz(10, 10)).Setup(func() {
 		reactive.Observe(func() { n.Set(n.Get() + 1) })
@@ -137,6 +142,7 @@ func TestProbeLayoutFollowsSetupAndEnvironmentChanges(t *testing.T) {
 }
 
 func TestPostDefersRepostedWorkToNextFrame(t *testing.T) {
+	t.Parallel()
 	p := NewProbe(Box(), Sz(10, 10))
 	defer p.Close()
 	var seen []int
@@ -161,6 +167,7 @@ func TestPostDefersRepostedWorkToNextFrame(t *testing.T) {
 }
 
 func TestPostedCloseSkipsRemainingWork(t *testing.T) {
+	t.Parallel()
 	p := NewProbe(Box(), Sz(10, 10))
 	defer p.Close()
 	p.Post(p.Close)
@@ -169,6 +176,7 @@ func TestPostedCloseSkipsRemainingWork(t *testing.T) {
 }
 
 func TestCloseRejectsLatePostedWork(t *testing.T) {
+	t.Parallel()
 	p := NewProbe(Box(), Sz(10, 10))
 	defer p.Close()
 	p.Frame()
@@ -193,6 +201,7 @@ func TestCloseRejectsLatePostedWork(t *testing.T) {
 // and the result reaches its state on the UI goroutine, with no App handed
 // down from main.
 func TestUIThreadCarriesAResultBackIntoAComponent(t *testing.T) {
+	t.Parallel()
 	done := make(chan struct{})
 	var text *StateValue[string]
 	p := ProbeBuilder(func() Widget {
@@ -221,6 +230,7 @@ func TestUIThreadCarriesAResultBackIntoAComponent(t *testing.T) {
 }
 
 func TestUIThreadOutsideAFrameIsRefused(t *testing.T) {
+	t.Parallel()
 	p := ProbeBuilder(func() Widget { return Box() }, Sz(10, 10))
 	p.Frame()
 	p.Close()
@@ -233,6 +243,7 @@ func TestUIThreadOutsideAFrameIsRefused(t *testing.T) {
 }
 
 func TestWorkPostedAfterCloseIsDropped(t *testing.T) {
+	t.Parallel()
 	var post func(func())
 	p := ProbeBuilder(func() Widget { post = UIThread(); return Box() }, Sz(10, 10))
 	p.Frame()
@@ -256,6 +267,7 @@ func (s *stamp) Paint(dst *Canvas, r Rect) {
 }
 
 func TestPaintTimeWritesScheduleNoLayout(t *testing.T) {
+	t.Parallel()
 	p := NewProbe(&stamp{label: Text("hi")}, Sz(100, 20))
 	defer p.Close()
 	p.Frame()
@@ -270,6 +282,7 @@ func TestPaintTimeWritesScheduleNoLayout(t *testing.T) {
 }
 
 func TestCloseRequestCanKeepTheWindowOpen(t *testing.T) {
+	t.Parallel()
 	asking := State(false)
 	p := NewProbe(Text("doc"), Sz(100, 20))
 	defer p.Close()
@@ -291,6 +304,7 @@ func TestCloseRequestCanKeepTheWindowOpen(t *testing.T) {
 }
 
 func TestCloseRequestWithAgreeingHandlersCloses(t *testing.T) {
+	t.Parallel()
 	p := NewProbe(Text("doc"), Sz(100, 20))
 	defer p.Close()
 	p.OnCloseRequest(func() bool { return true })

@@ -7,6 +7,7 @@ import (
 )
 
 func TestKeyedIdentityAcrossParentsAndRemount(t *testing.T) {
+	t.Parallel()
 	left, right := ggui.State(false), ggui.State(false)
 	rebuild, parent := ggui.State(0), ggui.State(0)
 	show := ggui.State(true)

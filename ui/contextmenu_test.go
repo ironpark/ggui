@@ -8,6 +8,7 @@ import (
 )
 
 func TestContextMenuPointerKeyboardAndAccessibility(t *testing.T) {
+	t.Parallel()
 	clicks, picked := 0, ""
 	menu := ui.ContextMenu(ui.Button("Content", func() { clicks++ }),
 		ui.MenuItem("Unavailable", func() { t.Fatal("disabled action") }).Disabled(true),
@@ -69,6 +70,7 @@ func TestContextMenuPointerKeyboardAndAccessibility(t *testing.T) {
 }
 
 func TestContextMenuNoEnabledActions(t *testing.T) {
+	t.Parallel()
 	for _, entries := range [][]ggui.Widget{nil, {ui.MenuItem("Disabled", func() { t.Fatal("disabled action ran") }).Disabled(true)}} {
 		menu := ui.ContextMenu(ggui.Text("Target"), entries...).Name("Actions")
 		p := ggui.NewProbe(menu, ggui.Sz(300, 200))
@@ -83,6 +85,7 @@ func TestContextMenuNoEnabledActions(t *testing.T) {
 }
 
 func TestContextMenuEdgePlacementAndRebuild(t *testing.T) {
+	t.Parallel()
 	var menu *ui.ContextMenuWidget
 	version := ggui.State(0)
 	p := ggui.ProbeBuilder(func() ggui.Widget {

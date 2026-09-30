@@ -9,6 +9,7 @@ import (
 // TestTodo drives the app headlessly. Tap finds controls by their
 // accessible names, which the rows derive from their titles.
 func TestTodo(t *testing.T) {
+	t.Parallel()
 	// The model's derived values need an owner, as in main: a Root that
 	// the probe disposes with itself.
 	var m *model

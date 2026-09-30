@@ -7,6 +7,7 @@ import (
 )
 
 func TestAppUsesNativeModifierSnapshot(t *testing.T) {
+	t.Parallel()
 	a := &Window{}
 	a.handle(ggfx.KeyEvent{Key: ggfx.KeyA, Pressed: true, Modifiers: ggfx.KeyModifiers{Meta: true}})
 	if !a.takeInput().mods.Meta {
@@ -15,6 +16,7 @@ func TestAppUsesNativeModifierSnapshot(t *testing.T) {
 }
 
 func TestAppKeepsModifierOnQueuedKeyPress(t *testing.T) {
+	t.Parallel()
 	a := &Window{}
 	for _, e := range []ggfx.KeyEvent{
 		{Key: ggfx.KeyMetaLeft, Pressed: true},

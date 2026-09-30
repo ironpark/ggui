@@ -16,6 +16,7 @@ func layerCount(c *Canvas) int {
 }
 
 func TestLayerSiblingsShareOneImage(t *testing.T) {
+	t.Parallel()
 	img := ggfx.NewImage(100, 80)
 	defer img.Deallocate()
 	c := &Canvas{Image: img}
@@ -32,6 +33,7 @@ func TestLayerSiblingsShareOneImage(t *testing.T) {
 }
 
 func TestLayerNestedGetsItsOwnImage(t *testing.T) {
+	t.Parallel()
 	img := ggfx.NewImage(100, 80)
 	defer img.Deallocate()
 	c := &Canvas{Image: img}
@@ -50,6 +52,7 @@ func TestLayerNestedGetsItsOwnImage(t *testing.T) {
 }
 
 func TestLayerFrameEndKeepsOnlyWhatTheFrameUsed(t *testing.T) {
+	t.Parallel()
 	img := ggfx.NewImage(100, 80)
 	defer img.Deallocate()
 	c := &Canvas{Image: img}
@@ -73,6 +76,7 @@ func TestLayerFrameEndKeepsOnlyWhatTheFrameUsed(t *testing.T) {
 }
 
 func TestLayerFollowsTheWindowSize(t *testing.T) {
+	t.Parallel()
 	small, large := ggfx.NewImage(40, 30), ggfx.NewImage(90, 60)
 	defer small.Deallocate()
 	defer large.Deallocate()
@@ -88,6 +92,7 @@ func TestLayerFollowsTheWindowSize(t *testing.T) {
 }
 
 func TestLayerCanvasIsTheCallersButForTheImage(t *testing.T) {
+	t.Parallel()
 	img := ggfx.NewImage(100, 80)
 	defer img.Deallocate()
 	root := &Canvas{Image: img}
@@ -101,6 +106,7 @@ func TestLayerCanvasIsTheCallersButForTheImage(t *testing.T) {
 }
 
 func TestLayerWithoutAnImagePaintsIntoTheCaller(t *testing.T) {
+	t.Parallel()
 	c := &Canvas{}
 	var got *Canvas
 	c.Layer(LayerOptions{}, func(l *Canvas) { got = l })
@@ -116,6 +122,7 @@ func TestLayerWithoutAnImagePaintsIntoTheCaller(t *testing.T) {
 }
 
 func TestClipRoundRectPaintsIntoALayerCoveringOnlyTheRect(t *testing.T) {
+	t.Parallel()
 	img := ggfx.NewImage(100, 80)
 	defer img.Deallocate()
 	c := &Canvas{Image: img, scale: 2}
@@ -132,6 +139,7 @@ func TestClipRoundRectPaintsIntoALayerCoveringOnlyTheRect(t *testing.T) {
 }
 
 func TestClipRoundRectWithoutARadiusOrImageIsClip(t *testing.T) {
+	t.Parallel()
 	img := ggfx.NewImage(100, 80)
 	defer img.Deallocate()
 	r := Rct(Pt(10, 5), Sz(20, 30))
@@ -148,6 +156,7 @@ func TestClipRoundRectWithoutARadiusOrImageIsClip(t *testing.T) {
 }
 
 func TestTransitionFadeHoldsALayerOnlyWhileAnimating(t *testing.T) {
+	t.Parallel()
 	img := ggfx.NewImage(120, 80)
 	defer img.Deallocate()
 	fading := func() *Probe {

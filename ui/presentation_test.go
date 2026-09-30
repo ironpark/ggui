@@ -8,6 +8,7 @@ import (
 )
 
 func TestDisclosureHeightMotionAndLeavingInput(t *testing.T) {
+	t.Parallel()
 	for _, accordion := range []bool{false, true} {
 		t.Run(pick(accordion, "accordion", "collapsible"), func(t *testing.T) {
 			on := ggui.State(false)
@@ -57,6 +58,7 @@ func TestDisclosureHeightMotionAndLeavingInput(t *testing.T) {
 }
 
 func TestDisclosureReducedMotionImmediate(t *testing.T) {
+	t.Parallel()
 	keys := ggui.State([]string{})
 	a := Accordion(keys, AccordionItem("a", "Reveal", ggui.Box().Height(100)))
 	var measured ggui.Size
@@ -77,6 +79,7 @@ func TestDisclosureReducedMotionImmediate(t *testing.T) {
 }
 
 func TestDialogMotionReversalAndExit(t *testing.T) {
+	t.Parallel()
 	open := ggui.State(false)
 	d := Dialog(open, Button("Inside", nil)).Title("Motion")
 	p := ggui.NewProbe(d, ggui.Sz(500, 400))
@@ -113,6 +116,7 @@ func TestDialogMotionReversalAndExit(t *testing.T) {
 }
 
 func TestDisabledSliderAndTabsIgnoreDirectInput(t *testing.T) {
+	t.Parallel()
 	value := ggui.State(.5)
 	slider := Slider(value, 0, 1).Disabled(true)
 	selected := ggui.State(0)
@@ -129,6 +133,7 @@ func TestDisabledSliderAndTabsIgnoreDirectInput(t *testing.T) {
 }
 
 func TestHoverCardBridgeAndNarrowViewport(t *testing.T) {
+	t.Parallel()
 	h := HoverCard(Button("Preview", nil), Button("Preview action", nil)).Width(400)
 	p := ggui.NewProbe(ggui.Column(h), ggui.Sz(180, 300))
 	defer p.Close()
@@ -163,6 +168,7 @@ func TestHoverCardBridgeAndNarrowViewport(t *testing.T) {
 }
 
 func TestFieldErrorPropagatesToInputChrome(t *testing.T) {
+	t.Parallel()
 	err := ggui.State("")
 	input := TextField(ggui.State(""))
 	group := InputGroup(ggui.TextInput(ggui.State("")))
@@ -185,6 +191,7 @@ func TestFieldErrorPropagatesToInputChrome(t *testing.T) {
 }
 
 func TestDisclosureStopsLayoutAfterSettling(t *testing.T) {
+	t.Parallel()
 	open := ggui.State([]string{})
 	layouts := 0
 	body := ggui.FromFuncs(func(c ggui.Constraints, _ ggui.Env) ggui.Size { layouts++; return c.Constrain(ggui.Sz(100, 100)) }, func(*ggui.Canvas, ggui.Rect) {})
@@ -212,6 +219,7 @@ func TestDisclosureStopsLayoutAfterSettling(t *testing.T) {
 }
 
 func TestTableRowSelectionMotion(t *testing.T) {
+	t.Parallel()
 	for _, reduced := range []bool{false, true} {
 		selected := ggui.State(0)
 		tbl := Table(ggui.State([]int{1}), func(v int) int { return v }, TextCol("ID", func(int) string { return "one" })).BindSelected(selected)
@@ -253,6 +261,7 @@ func TestTableRowSelectionMotion(t *testing.T) {
 }
 
 func TestTooltipKeyboardFocusAndNarrowViewport(t *testing.T) {
+	t.Parallel()
 	input := ggui.TextInput(ggui.State("")).Name("Editor")
 	tip := Tooltip(input, "A longer explanation that must fit within a narrow window.")
 	p := ggui.NewProbe(tip, ggui.Sz(100, 200))

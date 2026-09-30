@@ -10,6 +10,7 @@ import (
 )
 
 func TestLeavingAPageCancelsItsResource(t *testing.T) {
+	t.Parallel()
 	started := make(chan context.Context, 4)
 	release := make(chan struct{})
 	r := New(
@@ -50,6 +51,7 @@ func TestLeavingAPageCancelsItsResource(t *testing.T) {
 }
 
 func TestRapidNavigationBuildsOnlyTheLastPage(t *testing.T) {
+	t.Parallel()
 	built := map[string]int{}
 	page := func(name string) PageFunc {
 		return func(*Context) ggui.Widget { built[name]++; return ggui.Text(name) }
@@ -70,6 +72,7 @@ func TestRapidNavigationBuildsOnlyTheLastPage(t *testing.T) {
 }
 
 func TestDisposingViewCleansUpOnce(t *testing.T) {
+	t.Parallel()
 	cleanups := map[string]int{}
 	track := func(name string) func() {
 		return func() { cleanups[name]++ }
@@ -100,6 +103,7 @@ func TestDisposingViewCleansUpOnce(t *testing.T) {
 }
 
 func TestDepartedFocusClearsAndLayoutFocusSurvives(t *testing.T) {
+	t.Parallel()
 	r := New(Layout("", func(c *Context, page ggui.Widget) ggui.Widget {
 		return ggui.Column(ui.Button("chrome", func() {}), page)
 	}, Page("/", func(*Context) ggui.Widget { return ui.Button("home", func() {}) }),

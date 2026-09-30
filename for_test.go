@@ -17,6 +17,7 @@ type todo struct {
 }
 
 func TestForReusesChildrenByKey(t *testing.T) {
+	t.Parallel()
 	items := State([]todo{{1, "a"}, {2, "b"}})
 	setups := 0
 	var f Widget
@@ -50,6 +51,7 @@ func TestForReusesChildrenByKey(t *testing.T) {
 }
 
 func TestForUpdatesItemSignalInPlace(t *testing.T) {
+	t.Parallel()
 	items := State([]todo{{1, "a"}})
 	builds := 0
 	var f Widget
@@ -71,6 +73,7 @@ func TestForUpdatesItemSignalInPlace(t *testing.T) {
 }
 
 func TestForDisposesRemovedAndAllOnParentRebuild(t *testing.T) {
+	t.Parallel()
 	items := State([]todo{{1, "a"}, {2, "b"}})
 	parentDep := State(0)
 	cleanups := 0
@@ -97,6 +100,7 @@ func TestForDisposesRemovedAndAllOnParentRebuild(t *testing.T) {
 }
 
 func TestForDoesNotRebuildOnParentSignals(t *testing.T) {
+	t.Parallel()
 	items := State([]todo{{1, "a"}})
 	setups := 0
 	var f Widget
@@ -117,6 +121,7 @@ func TestForDoesNotRebuildOnParentSignals(t *testing.T) {
 }
 
 func TestForRejectsDuplicateKeys(t *testing.T) {
+	t.Parallel()
 	defer func() {
 		if recover() == nil {
 			t.Fatal("duplicate keys did not panic")
@@ -126,6 +131,7 @@ func TestForRejectsDuplicateKeys(t *testing.T) {
 }
 
 func TestRootOutlivesOwnerRerunsUntilDisposed(t *testing.T) {
+	t.Parallel()
 	dep, inner := State(0), State(0)
 	innerRuns := 0
 	var disposeRoot func()
@@ -148,6 +154,7 @@ func TestRootOutlivesOwnerRerunsUntilDisposed(t *testing.T) {
 }
 
 func TestForWithItemExtentBuildsOnlyTheViewport(t *testing.T) {
+	t.Parallel()
 	var list []todo
 	for i := range 1000 {
 		list = append(list, todo{i, "x"})
@@ -190,6 +197,7 @@ func TestForWithItemExtentBuildsOnlyTheViewport(t *testing.T) {
 }
 
 func TestForWithoutViewportLaysOutEverything(t *testing.T) {
+	t.Parallel()
 	items := State([]todo{{1, "a"}, {2, "b"}, {3, "c"}})
 	var f *EachWidget[todo, int]
 	dispose := reactive.Observe(func() {
@@ -250,6 +258,7 @@ func TestForRowsLeaveThroughTheirTransition(t *testing.T) {
 }
 
 func TestForPaintGroupsFollowRows(t *testing.T) {
+	t.Parallel()
 	for _, animate := range []bool{false, true} {
 		name := "immediate"
 		if animate {
@@ -320,6 +329,7 @@ func TestForPaintGroupsFollowRows(t *testing.T) {
 }
 
 func TestForEvictionReleasesOwnerChildren(t *testing.T) {
+	t.Parallel()
 	ids := make([]int, 1000)
 	for i := range ids {
 		ids[i] = i

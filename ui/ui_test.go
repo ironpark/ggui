@@ -20,6 +20,7 @@ func find(t *testing.T, p *ggui.Probe, role ggui.Role, label string) ggui.Found 
 }
 
 func TestButtonTapsAndDisables(t *testing.T) {
+	t.Parallel()
 	taps := 0
 	b := ui.Button("go", func() { taps++ })
 	p := ggui.NewProbe(b, ggui.Sz(100, 40))
@@ -80,6 +81,7 @@ func TestCheckboxTogglesSignal(t *testing.T) {
 }
 
 func TestRadioSelectsValue(t *testing.T) {
+	t.Parallel()
 	choice := ggui.State("a")
 	col := ggui.Column(ui.Radio(choice, "a", "A"), ui.Radio(choice, "b", "B")).Gap(4)
 	p := ggui.NewProbe(col, ggui.Sz(100, 60))
@@ -91,6 +93,7 @@ func TestRadioSelectsValue(t *testing.T) {
 }
 
 func TestSwitchToggles(t *testing.T) {
+	t.Parallel()
 	on := ggui.State(false)
 	s := ui.Switch(on, "")
 	p := ggui.NewProbe(s, ggui.Sz(100, 30))
@@ -111,6 +114,7 @@ func onTrack(s ggui.Found, f float64) ggui.Point {
 }
 
 func TestSliderDragsBeyondItsRect(t *testing.T) {
+	t.Parallel()
 	v := ggui.State(0.0)
 	s := ui.Slider(v, 0, 100).Step(10)
 	p := ggui.NewProbe(s, ggui.Sz(100+2*8, 20))
@@ -137,6 +141,7 @@ func TestSliderDragsBeyondItsRect(t *testing.T) {
 }
 
 func TestTextFieldFocusesFromItsPadding(t *testing.T) {
+	t.Parallel()
 	value := ggui.State("")
 	f := ui.TextField(value).Placeholder("name")
 	p := ggui.NewProbe(f, ggui.Sz(200, 40))
@@ -159,6 +164,7 @@ func TestTextFieldFocusesFromItsPadding(t *testing.T) {
 }
 
 func TestDividerFillsItsAxis(t *testing.T) {
+	t.Parallel()
 	if got := ui.Divider().Layout(ggui.Loose(ggui.Sz(120, 50)), ggui.Env{}); got != ggui.Sz(120, 1) {
 		t.Fatalf("horizontal = %v", got)
 	}
@@ -168,6 +174,7 @@ func TestDividerFillsItsAxis(t *testing.T) {
 }
 
 func TestControlsPaintOnNilCanvas(t *testing.T) {
+	t.Parallel()
 	widgets := []ggui.Widget{
 		ui.Button("b", nil), ui.Button("b", nil).Outline(), ui.ButtonOf(ggui.Box().Size(4, 4), nil),
 		ui.Checkbox(ggui.State(true), "c"), ui.Radio(ggui.State(1), 1, "r"), ui.Switch(ggui.State(true), "s"),
@@ -180,6 +187,7 @@ func TestControlsPaintOnNilCanvas(t *testing.T) {
 }
 
 func TestSwitchKeepsSlidingAcrossRebuild(t *testing.T) {
+	t.Parallel()
 	on := ggui.State(false)
 	// The switch sits in a subtree that rebuilds when it is flipped, as a
 	// theme toggle does.
@@ -204,6 +212,7 @@ func TestSwitchKeepsSlidingAcrossRebuild(t *testing.T) {
 }
 
 func TestSliderDragSurvivesRebuild(t *testing.T) {
+	t.Parallel()
 	v := ggui.State(0.0)
 	tree := ggui.Reactive(func() ggui.Widget {
 		v.Get() // every change rebuilds the slider
@@ -221,6 +230,7 @@ func TestSliderDragSurvivesRebuild(t *testing.T) {
 }
 
 func TestControlsWorkFromTheKeyboard(t *testing.T) {
+	t.Parallel()
 	taps := 0
 	on := ggui.State(false)
 	v := ggui.State(50.0)
@@ -246,6 +256,7 @@ func TestControlsWorkFromTheKeyboard(t *testing.T) {
 }
 
 func TestSliderKeepsDraggingWhenItMoves(t *testing.T) {
+	t.Parallel()
 	// The value it writes changes a widget above it, so every drag frame
 	// moves the slider itself; capture must follow the widget, not its Rect.
 	v := ggui.State(0.0)
@@ -266,6 +277,7 @@ func TestSliderKeepsDraggingWhenItMoves(t *testing.T) {
 }
 
 func TestSelectOpensPicksAndClosesWithPointerAndKeys(t *testing.T) {
+	t.Parallel()
 	v := ggui.State("b")
 	changes := 0
 	sel := ui.Select(v).Options([]string{"a", "b", "c"}).Name("letter").OnChange(func(string) { changes++ })
@@ -307,6 +319,7 @@ func TestSelectOpensPicksAndClosesWithPointerAndKeys(t *testing.T) {
 }
 
 func TestMenuRunsItemsAndClosesOnEscape(t *testing.T) {
+	t.Parallel()
 	ran := ""
 	m := ui.Menu("File", ui.MenuItem("New", func() { ran = "new" }), ui.MenuDivider(), ui.MenuItem("Quit", func() { ran = "quit" }))
 	p := ggui.NewProbe(ggui.Column(m), ggui.Sz(300, 300))
@@ -335,6 +348,7 @@ func TestMenuRunsItemsAndClosesOnEscape(t *testing.T) {
 }
 
 func TestTabsSwitchByClickAndKeys(t *testing.T) {
+	t.Parallel()
 	sel := ggui.State(0)
 	var a, b ggui.Rect
 	tabs := ui.Tabs(sel, ui.Tab("One", probe(80, 30, &a)), ui.Tab("Two", probe(80, 30, &b)))
@@ -391,6 +405,7 @@ func TestCollapsibleTogglesAndHidesContent(t *testing.T) {
 }
 
 func TestCardBadgeProgressLayout(t *testing.T) {
+	t.Parallel()
 	v := ggui.State(0.5)
 	tree := ggui.Column(ui.Card(ggui.Text("x")), ui.Badge("new").Accent(), ui.Progress(v))
 	p := ggui.NewProbe(tree, ggui.Sz(200, 200))
@@ -412,6 +427,7 @@ func probe(w, h float64, got *ggui.Rect) ggui.Widget {
 }
 
 func TestSwitchKnobEasesOnTheClock(t *testing.T) {
+	t.Parallel()
 	on := ggui.State(false)
 	// Rebuilt on every flip: the knob's motion must live in the Canvas,
 	// not the widget.
@@ -430,6 +446,7 @@ func TestSwitchKnobEasesOnTheClock(t *testing.T) {
 }
 
 func TestMenuKeysSkipDisabledItems(t *testing.T) {
+	t.Parallel()
 	ran := ""
 	m := ui.Menu("File",
 		ui.MenuItem("New", func() { ran = "new" }).Disabled(true),
@@ -450,6 +467,7 @@ func TestMenuKeysSkipDisabledItems(t *testing.T) {
 }
 
 func TestDisabledTextFieldTakesNoInput(t *testing.T) {
+	t.Parallel()
 	v := ggui.State("")
 	f := ui.TextField(v).Disabled(true)
 	p := ggui.NewProbe(f, ggui.Sz(200, 40))
@@ -466,6 +484,7 @@ func TestDisabledTextFieldTakesNoInput(t *testing.T) {
 }
 
 func TestSliderReportsChanges(t *testing.T) {
+	t.Parallel()
 	v := ggui.State(0.0)
 	var got []float64
 	s := ui.Slider(v, 0, 100).Step(10).Name("volume").OnChange(func(x float64) { got = append(got, x) })
@@ -479,6 +498,7 @@ func TestSliderReportsChanges(t *testing.T) {
 }
 
 func TestRadiosSelectAndReport(t *testing.T) {
+	t.Parallel()
 	sel := ggui.State("a")
 	var got string
 	g := ui.Radios(sel).Options([]string{"a", "b", "c"}).Vertical().OnChange(func(s string) { got = s })
@@ -494,6 +514,7 @@ func TestRadiosSelectAndReport(t *testing.T) {
 }
 
 func TestDialogKeyboardFlow(t *testing.T) {
+	t.Parallel()
 	open := ggui.State(false)
 	deleted := false
 	tree := ggui.Column(
@@ -539,6 +560,7 @@ func TestDialogKeyboardFlow(t *testing.T) {
 }
 
 func TestFieldNamesAndReportsErrors(t *testing.T) {
+	t.Parallel()
 	email := ggui.State("")
 	errText := ggui.State("")
 	f := ui.Field("Email", ui.TextField(email)).Help("Work address").BindError(errText)

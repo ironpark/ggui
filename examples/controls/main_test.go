@@ -9,6 +9,7 @@ import (
 // TestControls drives the catalog headlessly: the theme switch flips its
 // signal and changing the selection swaps the demo without a restart.
 func TestControls(t *testing.T) {
+	t.Parallel()
 	m := newModel("carousel-demo", false)
 	p := ggui.ProbeBuilder(m.build, ggui.Sz(680, 700))
 	defer p.Close()

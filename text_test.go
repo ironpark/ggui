@@ -6,6 +6,7 @@ import (
 )
 
 func TestTextHeightFollowsLines(t *testing.T) {
+	t.Parallel()
 	one := Text("a").Layout(Loose(Sz(1000, 1000)), Env{})
 	two := Text("a\nb").Layout(Loose(Sz(1000, 1000)), Env{})
 	if one.H <= 0 || two.H <= one.H {
@@ -17,6 +18,7 @@ func TestTextHeightFollowsLines(t *testing.T) {
 }
 
 func TestTextWrapsAtSpaces(t *testing.T) {
+	t.Parallel()
 	w := Text("aaa bbb ccc")
 	wide := w.Layout(Loose(Sz(1000, 1000)), Env{})
 	if len(w.lines) != 1 {
@@ -32,6 +34,7 @@ func TestTextWrapsAtSpaces(t *testing.T) {
 }
 
 func TestTextBreaksLongWordsBetweenRunes(t *testing.T) {
+	t.Parallel()
 	w := Text(strings.Repeat("x", 40))
 	full := w.Layout(Loose(Sz(1000, 1000)), Env{})
 	w.Layout(Loose(Sz(full.W/4, 1000)), Env{})
@@ -46,6 +49,7 @@ func TestTextBreaksLongWordsBetweenRunes(t *testing.T) {
 }
 
 func TestTextNoWrapKeepsOneLine(t *testing.T) {
+	t.Parallel()
 	w := Text("aaa bbb ccc").NoWrap()
 	w.Layout(Loose(Sz(5, 1000)), Env{})
 	if len(w.lines) != 1 {
@@ -54,6 +58,7 @@ func TestTextNoWrapKeepsOneLine(t *testing.T) {
 }
 
 func TestTextSizeScalesLayout(t *testing.T) {
+	t.Parallel()
 	small := Text("hello").Size(10).Layout(Loose(Sz(1000, 1000)), Env{})
 	big := Text("hello").Size(20).Layout(Loose(Sz(1000, 1000)), Env{})
 	if big.W <= small.W || big.H <= small.H {
@@ -62,6 +67,7 @@ func TestTextSizeScalesLayout(t *testing.T) {
 }
 
 func TestTextHeightFollowsInheritedLineHeight(t *testing.T) {
+	t.Parallel()
 	w := Text("first\nsecond\nthird")
 	c := Loose(Sz(1000, 1000))
 	env := Env{}.WithText(TextStyle{Size: 20, LineHeight: 1})
@@ -73,6 +79,7 @@ func TestTextHeightFollowsInheritedLineHeight(t *testing.T) {
 }
 
 func TestLoadFontRejectsGarbage(t *testing.T) {
+	t.Parallel()
 	if _, err := LoadFont([]byte("not a font")); err == nil {
 		t.Fatal("LoadFont(garbage) = nil error")
 	}

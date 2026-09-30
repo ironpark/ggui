@@ -6,6 +6,7 @@ import (
 )
 
 func TestConfigOptionsMapWindowFields(t *testing.T) {
+	t.Parallel()
 	at := Pt(10, 20)
 	o := Config{Title: "t", Width: 300, Height: 200, MinWidth: 100, MaxHeight: 400, Position: &at,
 		Frameless: true, AlwaysOnTop: true, Transparent: true, Hidden: true, Maximized: true, Unfocused: true}.options()
@@ -18,6 +19,7 @@ func TestConfigOptionsMapWindowFields(t *testing.T) {
 }
 
 func TestWindowControlBeforeOpenChangesConfig(t *testing.T) {
+	t.Parallel()
 	a := New(Config{Title: "a"}, func() Widget { return Box() })
 	defer a.Close()
 	a.SetTitle("b")
@@ -30,6 +32,7 @@ func TestWindowControlBeforeOpenChangesConfig(t *testing.T) {
 }
 
 func TestOpenWindowBeforeRunWaits(t *testing.T) {
+	t.Parallel()
 	a := New(Config{}, func() Widget { return Box() })
 	w, err := a.OpenWindow(Config{Title: "second"}, func() Widget { return Box() })
 	if err != nil {
@@ -49,6 +52,7 @@ func TestOpenWindowBeforeRunWaits(t *testing.T) {
 }
 
 func TestUseHostFindsTheProbe(t *testing.T) {
+	t.Parallel()
 	var built, clicked Host
 	p := ProbeBuilder(func() Widget {
 		built = UseHost()
@@ -72,6 +76,7 @@ func useWindowIn(p *Probe) (w *Window) {
 }
 
 func TestAsyncDeliversOnTheUIThread(t *testing.T) {
+	t.Parallel()
 	result := State("")
 	p := NewProbe(TextOf(result), Sz(100, 20))
 	defer p.Close()

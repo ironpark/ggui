@@ -7,6 +7,7 @@ import (
 )
 
 func TestTweenMovesOverItsDuration(t *testing.T) {
+	t.Parallel()
 	activeWorld().anims.list = nil
 	tw := Tween(0.0, time.Second).Easing(EaseLinear)
 	tw.Set(100)
@@ -23,6 +24,7 @@ func TestTweenMovesOverItsDuration(t *testing.T) {
 }
 
 func TestTweenRetargetsFromCurrentValue(t *testing.T) {
+	t.Parallel()
 	activeWorld().anims.list = nil
 	tw := Tween(0.0, time.Second).Easing(EaseLinear)
 	tw.Set(100)
@@ -43,6 +45,7 @@ func TestTweenRetargetsFromCurrentValue(t *testing.T) {
 }
 
 func TestTweenDrivesEffects(t *testing.T) {
+	t.Parallel()
 	activeWorld().anims.list = nil
 	tw := Tween(0, 100*time.Millisecond)
 	runs := 0
@@ -58,6 +61,7 @@ func TestTweenDrivesEffects(t *testing.T) {
 }
 
 func TestSpringSettlesAtTarget(t *testing.T) {
+	t.Parallel()
 	activeWorld().anims.list = nil
 	sp := Spring(0.0)
 	sp.Set(1)
@@ -79,6 +83,7 @@ func TestSpringSettlesAtTarget(t *testing.T) {
 }
 
 func TestEasingEndpoints(t *testing.T) {
+	t.Parallel()
 	for _, e := range []Easing{EaseLinear, EaseIn, EaseOut, EaseInOut} {
 		if e(0) != 0 || e(1) != 1 {
 			t.Fatalf("easing does not map 0->0 and 1->1: %v %v", e(0), e(1))
@@ -90,6 +95,7 @@ func TestEasingEndpoints(t *testing.T) {
 }
 
 func TestMotionRetargetsMidway(t *testing.T) {
+	t.Parallel()
 	var m Motion
 	t0 := time.Unix(0, 0)
 	m.MoveTo(0, t0, 100*time.Millisecond) // first target: no animation
@@ -111,6 +117,7 @@ func TestMotionRetargetsMidway(t *testing.T) {
 }
 
 func TestAnimationCleanupOnlyStopsOwnedValues(t *testing.T) {
+	t.Parallel()
 	outside := Tween(0.0, time.Second).Easing(EaseLinear)
 	defer outside.Jump(0)
 	var tw *Tweened[float64]
@@ -148,6 +155,7 @@ func TestAnimationCleanupOnlyStopsOwnedValues(t *testing.T) {
 }
 
 func TestAnimationCreatedDuringStepIsNotDropped(t *testing.T) {
+	t.Parallel()
 	second := Tween(0.0, time.Second).Easing(EaseLinear)
 	defer second.Jump(0)
 	first := Tween(0.0, time.Second).Easing(func(p float64) float64 {
@@ -170,6 +178,7 @@ func TestAnimationCreatedDuringStepIsNotDropped(t *testing.T) {
 // TweenOf and SpringOf start at the source's value and retarget as it
 // changes, through a Watch that their owner disposes.
 func TestTweenOfAndSpringOfFollowTheirSource(t *testing.T) {
+	t.Parallel()
 	activeWorld().anims.list = nil
 	src := State(10.0)
 	var tw *Tweened[float64]
@@ -204,6 +213,7 @@ func TestTweenOfAndSpringOfFollowTheirSource(t *testing.T) {
 }
 
 func TestAnimationCanLoseOwnerDuringStep(t *testing.T) {
+	t.Parallel()
 	var tw *Tweened[float64]
 	var dispose func()
 	dispose = Root(func() {
@@ -230,6 +240,7 @@ func TestAnimationCanLoseOwnerDuringStep(t *testing.T) {
 }
 
 func TestMotionReducedWhileMoving(t *testing.T) {
+	t.Parallel()
 	now := time.Unix(100, 0)
 	var m Motion
 	m.MoveTo(0, now, time.Second)

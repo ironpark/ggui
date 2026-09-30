@@ -3,6 +3,7 @@ package ggui
 import "testing"
 
 func TestMenuActionSkipsDisabled(t *testing.T) {
+	t.Parallel()
 	a := New(Config{}, func() Widget { return Box() })
 	defer a.Close()
 	enabled := State(false)
@@ -30,6 +31,7 @@ func TestMenuActionSkipsDisabled(t *testing.T) {
 }
 
 func TestSetMenuReplacesShortcuts(t *testing.T) {
+	t.Parallel()
 	a := New(Config{}, func() Widget { return Box() })
 	defer a.Close()
 	a.SetMenu(Menu("File", MenuAction("Save", "cmd+s", func() {}), MenuAction("Open", "", func() {})))
@@ -49,6 +51,7 @@ func TestSetMenuReplacesShortcuts(t *testing.T) {
 }
 
 func TestKeyEquivalent(t *testing.T) {
+	t.Parallel()
 	for k, want := range map[KeyboardKey]string{
 		KeyS: "s", KeyDigit1: "1", KeyF5: "", KeyEnter: "\r", KeyArrowUp: "", KeyComma: ",",
 	} {
@@ -59,6 +62,7 @@ func TestKeyEquivalent(t *testing.T) {
 }
 
 func TestChordLabel(t *testing.T) {
+	t.Parallel()
 	c := MustChord("cmd+shift+s")
 	want := "Ctrl+Shift+S"
 	if runtimeIsDarwin() {
@@ -70,6 +74,7 @@ func TestChordLabel(t *testing.T) {
 }
 
 func TestTrayNumbersItsActionsApart(t *testing.T) {
+	t.Parallel()
 	a := New(Config{}, func() Widget { return Box() })
 	defer a.Close()
 	a.SetMenu(Menu("File", MenuAction("Save", "cmd+s", func() {})))

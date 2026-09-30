@@ -5,6 +5,7 @@ import (
 )
 
 func TestTextfFollowsSignals(t *testing.T) {
+	t.Parallel()
 	n := State(1)
 	w := Textf("n=%d %s", n, "x")
 	p := NewProbe(w, Sz(200, 30))
@@ -20,6 +21,7 @@ func TestTextfFollowsSignals(t *testing.T) {
 }
 
 func TestViewAndWhen(t *testing.T) {
+	t.Parallel()
 	s := State("a")
 	on := State(true)
 	then, other := Text("then"), Text("other")
@@ -51,6 +53,7 @@ func TestViewAndWhen(t *testing.T) {
 // subscribed even though it was chained on after construction; without an
 // Else, nothing is shown when no condition holds.
 func TestIfPicksTheFirstTrueBranch(t *testing.T) {
+	t.Parallel()
 	a, b := State(false), State(true)
 	ta, tb, tc := Text("A"), Text("B"), Text("C")
 	w := If(a, func() Widget {
@@ -94,6 +97,7 @@ func TestIfPicksTheFirstTrueBranch(t *testing.T) {
 // An If showing nothing is left out of its flow: no gap beside it in a
 // Column, Row or Wrap, and justification counts the children that are there.
 func TestIfShowingNothingTakesNoGap(t *testing.T) {
+	t.Parallel()
 	off := State(false)
 	col := Column(Box().Size(10, 10), If(off, func() Widget {
 		return Box().Size(10, 10)
@@ -130,6 +134,7 @@ func TestIfShowingNothingTakesNoGap(t *testing.T) {
 // Branches are constructed once and kept, so the one shown keeps its state
 // across being hidden; the choice rebuilds the If alone, not its parent.
 func TestIfKeepsBranchesAndRebuildsAlone(t *testing.T) {
+	t.Parallel()
 	on := State(true)
 	then := TextOf(State("kept"))
 	parentBuilds := 0
@@ -159,6 +164,7 @@ func TestIfKeepsBranchesAndRebuildsAlone(t *testing.T) {
 // An If the parent rebuilt away stops reacting: its effect is owned by the
 // builder run that made it.
 func TestIfIsDisposedWithItsParent(t *testing.T) {
+	t.Parallel()
 	on := State(true)
 	gen := State(0)
 	var first *IfWidget
@@ -187,6 +193,7 @@ func TestIfIsDisposedWithItsParent(t *testing.T) {
 }
 
 func TestSpacingAndNamedTextStyles(t *testing.T) {
+	t.Parallel()
 	env := Env{}.With(SpacingKey, 12.0)
 	key := NewEnvKey[TextStyle]("heading")
 	env = env.With(key, TextStyle{Size: 24})

@@ -29,6 +29,7 @@ func mustPanic(t *testing.T, want string, fn func()) {
 }
 
 func TestValidation(t *testing.T) {
+	t.Parallel()
 	mustPanic(t, "ambiguous routes /a/:x and /a/:y", func() {
 		New(Page("/a/:x", text("")), Layout("", passLayout, Page("/a/:y", text(""))))
 	})
@@ -55,6 +56,7 @@ func TestValidation(t *testing.T) {
 }
 
 func TestMatchingPrecedence(t *testing.T) {
+	t.Parallel()
 	r := New(
 		Page("/users/new", text("new")),
 		Page("/users/:id", text("user")),
@@ -96,6 +98,7 @@ func TestMatchingPrecedence(t *testing.T) {
 }
 
 func TestTargetURL(t *testing.T) {
+	t.Parallel()
 	user := Page("/users/:id", text(""))
 	doc := Page("/docs/*rest", text(""))
 	loose := Page("/loose", text(""))
@@ -182,6 +185,7 @@ func (x *harness) want(counts map[string]int) {
 }
 
 func TestLayoutsSurviveAndParametersRemount(t *testing.T) {
+	t.Parallel()
 	x := mount(t, nil)
 	x.want(map[string]int{"app:": 1, "home:": 1})
 
@@ -204,6 +208,7 @@ func TestLayoutsSurviveAndParametersRemount(t *testing.T) {
 }
 
 func TestNotFoundScopeAndRedirect(t *testing.T) {
+	t.Parallel()
 	x := mount(t, nil)
 	x.go_("/admin/nope")
 	x.want(map[string]int{"admin:": 1, "admin-missing:": 1})
@@ -228,6 +233,7 @@ func TestNotFoundScopeAndRedirect(t *testing.T) {
 }
 
 func TestHistoryTraversalAndReaders(t *testing.T) {
+	t.Parallel()
 	h := Memory("/admin/users")
 	x := mount(t, h)
 	users := x.r.Active("/admin/users")
@@ -265,6 +271,7 @@ func TestHistoryTraversalAndReaders(t *testing.T) {
 }
 
 func TestTargetsAndQueryTracking(t *testing.T) {
+	t.Parallel()
 	var runs, filterRuns int
 	var filter string
 	list := Page("/tasks", func(c *Context) ggui.Widget {
@@ -302,6 +309,7 @@ func TestTargetsAndQueryTracking(t *testing.T) {
 }
 
 func TestSetupReplaceAndLoopReporting(t *testing.T) {
+	t.Parallel()
 	var r *Router
 	r = New(
 		Page("/", text("home")),
@@ -341,6 +349,7 @@ func TestSetupReplaceAndLoopReporting(t *testing.T) {
 }
 
 func TestViewLifecycle(t *testing.T) {
+	t.Parallel()
 	r := New(Page("/", text("home")))
 	if err := r.Navigate("/"); err != ErrNotMounted {
 		t.Fatalf("unmounted Navigate = %v", err)
@@ -355,6 +364,7 @@ func TestViewLifecycle(t *testing.T) {
 }
 
 func TestBrowserBasePath(t *testing.T) {
+	t.Parallel()
 	for in, want := range map[string]string{"": "", "/": "", "/app": "/app", "/app/": "/app", "/a%20b/c": "/a%20b/c"} {
 		if got := cleanBase(in); got != want {
 			t.Errorf("cleanBase(%q) = %q; want %q", in, got, want)

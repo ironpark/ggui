@@ -61,6 +61,7 @@ func TestInspectFrameAnswersFromTheWidgets(t *testing.T) {
 }
 
 func TestInspectFrameFindsTheSemanticNode(t *testing.T) {
+	t.Parallel()
 	w := &twice{}
 	w.Role = RoleButton
 	w.SetName("Save document")
@@ -138,6 +139,7 @@ func TestInspectorDrivesTheRegisteredPanel(t *testing.T) {
 }
 
 func TestInspectorWithoutARegisteredPanelStaysOff(t *testing.T) {
+	t.Parallel()
 	old := newInspectorPanel
 	t.Cleanup(func() { newInspectorPanel = old })
 	newInspectorPanel = nil
@@ -182,6 +184,7 @@ func TestOnInspectReceivesFramesWithThePanelClosed(t *testing.T) {
 }
 
 func TestProbePublishesFramesAndPaintsTheOverlay(t *testing.T) {
+	t.Parallel()
 	p := NewProbe(Box(Text("hello")), Sz(300, 200))
 	defer p.Close()
 	var names []string

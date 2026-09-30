@@ -6,6 +6,7 @@ import (
 )
 
 func TestWrapSpansCoverTheTextWithinWidth(t *testing.T) {
+	t.Parallel()
 	face := fallbackFont().face(14)
 	for _, s := range []string{
 		"", "one", "the quick brown fox jumps over the lazy dog",
@@ -45,6 +46,7 @@ func TestWrapSpansCoverTheTextWithinWidth(t *testing.T) {
 }
 
 func TestLineOf(t *testing.T) {
+	t.Parallel()
 	spans := []lineSpan{{0, 3}, {4, 7}, {8, 8}}
 	for pos, want := range map[int]int{0: 0, 3: 0, 4: 1, 7: 1, 8: 2, 20: 2} {
 		if got := lineOf(spans, pos); got != want {

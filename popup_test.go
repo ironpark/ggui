@@ -3,6 +3,7 @@ package ggui
 import "testing"
 
 func TestPopupPaintsContentAboveAndClosesOnOutsidePress(t *testing.T) {
+	t.Parallel()
 	var contentRect Rect
 	taps := 0
 	content := Box(probe(80, 40, &contentRect)).Fill(nil)
@@ -36,6 +37,7 @@ func TestPopupPaintsContentAboveAndClosesOnOutsidePress(t *testing.T) {
 }
 
 func TestPopupFlipsAboveWhenNoRoomBelow(t *testing.T) {
+	t.Parallel()
 	var contentRect Rect
 	p := Popup(Box().Size(60, 20), probe(80, 100, &contentRect))
 	tree := Column(Box().Size(10, 250), p)

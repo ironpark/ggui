@@ -13,6 +13,7 @@ func (r formattedReader) Get() int     { return r.source.Get() }
 func (formattedReader) String() string { return "custom reader" }
 
 func TestSprintfCustomReadablePassesThroughWithoutGetAny(t *testing.T) {
+	t.Parallel()
 	state := ggui.State(1)
 	r := formattedReader{state}
 	text := ggui.Sprintf("%v", r)
@@ -27,6 +28,7 @@ func TestSprintfCustomReadablePassesThroughWithoutGetAny(t *testing.T) {
 }
 
 func TestTextfAdaptsCustomReadableAndTracksLens(t *testing.T) {
+	t.Parallel()
 	state := ggui.State(1)
 	form := ggui.State(struct{ Name string }{"Ada"})
 	reader := formattedReader{state}

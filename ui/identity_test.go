@@ -8,6 +8,7 @@ import (
 )
 
 func TestFluentButtonKeyKeepsFocusAfterMovingRebuild(t *testing.T) {
+	t.Parallel()
 	offset := ggui.State(0.0)
 	clicks := 0
 	var button *ui.ButtonWidget
@@ -31,6 +32,7 @@ func TestFluentButtonKeyKeepsFocusAfterMovingRebuild(t *testing.T) {
 }
 
 func TestFluentSelectKeyKeepsOpenPopupAfterMovingRebuild(t *testing.T) {
+	t.Parallel()
 	offset := ggui.State(0.0)
 	value := ggui.State("Alpha")
 	var control *ui.SelectWidget[string]
@@ -54,6 +56,7 @@ func TestFluentSelectKeyKeepsOpenPopupAfterMovingRebuild(t *testing.T) {
 }
 
 func TestComboboxKeyKeepsPopupAndSearchFocusAfterMovingRebuild(t *testing.T) {
+	t.Parallel()
 	offset := ggui.State(0.0)
 	value := ggui.State("Alpha")
 	var control *ui.ComboboxWidget[string]
@@ -90,6 +93,7 @@ func (w *layoutCounter) Layout(c ggui.Constraints, _ ggui.Env) ggui.Size {
 func (*layoutCounter) Paint(*ggui.Canvas, ggui.Rect) {}
 
 func TestControlConfigurationDoesNotCauseIdleLayouts(t *testing.T) {
+	t.Parallel()
 	leaf := &layoutCounter{}
 	p := ggui.ProbeBuilder(func() ggui.Widget {
 		return ggui.Column(ui.Button("Action", nil), ui.Select(ggui.State("a")).Options([]string{"a", "b"}), leaf)

@@ -39,6 +39,7 @@ func node(t *testing.T, tree *ggui.SemTree, role ggui.Role, name string) ggui.Se
 // cannot: Interactive.Hit registers nothing for an Inert control, so a
 // disabled button used to vanish from everything that could see it.
 func TestSemanticsDisabledButtonIsPresent(t *testing.T) {
+	t.Parallel()
 	tree := semantics(t, ui.Button("Save", nil).Disabled(true), ggui.Sz(200, 60))
 	n := node(t, tree, ggui.RoleButton, "Save")
 	if !n.Disabled {
@@ -53,6 +54,7 @@ button "Save" disabled
 // and the editor inside it both describe the same field, and one field is
 // one element.
 func TestSemanticsTextFieldIsOneNode(t *testing.T) {
+	t.Parallel()
 	value := ggui.State("Ada")
 	tree := semantics(t, ui.TextField(value).Name("Name"), ggui.Sz(200, 60))
 	n := 0
@@ -68,6 +70,7 @@ func TestSemanticsTextFieldIsOneNode(t *testing.T) {
 }
 
 func TestSemanticsFieldNamesItsInput(t *testing.T) {
+	t.Parallel()
 	tree := semantics(t, ui.Field("Email", ui.TextField(ggui.State(""))), ggui.Sz(200, 100))
 	wantTree(t, tree, `
 text "Email"
@@ -76,6 +79,7 @@ textfield "Email"
 }
 
 func TestSemanticsTabsHoldTheirTabs(t *testing.T) {
+	t.Parallel()
 	sel := ggui.State(1)
 	tabs := ui.Tabs(sel, ui.Tab("One", ggui.Text("first")), ui.Tab("Two", ggui.Text("second")))
 	wantTree(t, semantics(t, tabs, ggui.Sz(300, 200)), `
@@ -87,6 +91,7 @@ tabs
 }
 
 func TestSemanticsDialogPanelIsTheNode(t *testing.T) {
+	t.Parallel()
 	// The scrim takes the clicks but is not an element; the panel is.
 	tree := semantics(t, ui.Dialog(ggui.State(true), ggui.Text("body")).Title("Confirm"), ggui.Sz(300, 300))
 	wantTree(t, tree, `
@@ -97,6 +102,7 @@ dialog "Confirm"
 }
 
 func TestSemanticsSelectOwnsItsOptions(t *testing.T) {
+	t.Parallel()
 	value := ggui.State(2)
 	sel := ui.Select(value).Options([]int{1, 2, 3}).Name("Count")
 	p := ggui.NewProbe(ggui.Column(sel), ggui.Sz(200, 200))
@@ -117,6 +123,7 @@ select "Count" value="2" expanded
 }
 
 func TestSemanticsMenuOwnsItsItems(t *testing.T) {
+	t.Parallel()
 	m := ui.Menu("File", ui.MenuItem("Open", nil), ui.MenuItem("Quit", nil).Disabled(true))
 	p := ggui.NewProbe(m, ggui.Sz(200, 200))
 	defer p.Close()
@@ -130,6 +137,7 @@ menu "File" expanded
 }
 
 func TestSemanticsComboboxOwnsItsSearch(t *testing.T) {
+	t.Parallel()
 	c := ui.Combobox(ggui.State(1)).Options([]int{1, 2})
 	p := ggui.NewProbe(c, ggui.Sz(400, 400))
 	defer p.Close()
@@ -149,6 +157,7 @@ func TestSemanticsComboboxOwnsItsSearch(t *testing.T) {
 }
 
 func TestSemanticsDisclosuresReportOpen(t *testing.T) {
+	t.Parallel()
 	open := ggui.State([]string{"a"})
 	acc := ui.Accordion(open,
 		ui.AccordionItem("a", "A", ggui.Text("ac")),
@@ -172,6 +181,7 @@ accordion "Accordion"
 }
 
 func TestSemanticsSliderReportsItsRange(t *testing.T) {
+	t.Parallel()
 	tree := semantics(t, ui.Slider(ggui.State(4.0), 0, 10).Name("Volume"), ggui.Sz(200, 40))
 	n := node(t, tree, ggui.RoleSlider, "Volume")
 	if n.Min != 0 || n.Max != 10 || n.Now != 4 {
@@ -183,6 +193,7 @@ func TestSemanticsSliderReportsItsRange(t *testing.T) {
 }
 
 func TestSemanticsTogglesReportChecked(t *testing.T) {
+	t.Parallel()
 	on, off := ggui.State(true), ggui.State(false)
 	chosen := ggui.State("b")
 	w := ggui.Column(
@@ -200,6 +211,7 @@ radio "B" checked selected
 }
 
 func TestSemanticsRadiosAreOneGroup(t *testing.T) {
+	t.Parallel()
 	tree := semantics(t, ui.Radios(ggui.State(1)).Options([]int{1, 2}), ggui.Sz(200, 100))
 	wantTree(t, tree, `
 group 0 of 1..2
@@ -209,6 +221,7 @@ group 0 of 1..2
 }
 
 func TestSemanticsTableRowsHoldTheirCells(t *testing.T) {
+	t.Parallel()
 	rows := ggui.State([]string{"Ada", "Alan"})
 	table := ui.Table(rows, func(s string) string { return s },
 		ui.TextCol("Name", func(s string) string { return s })).BindSelected(ggui.State("Alan"))
@@ -225,6 +238,7 @@ list 0 of 1..2
 }
 
 func TestSemanticsCardGroupsAndProgressReports(t *testing.T) {
+	t.Parallel()
 	wantTree(t, semantics(t, ui.Card(ggui.Text("inside")), ggui.Sz(200, 100)), `
 group
   text "inside"
@@ -236,6 +250,7 @@ group
 }
 
 func TestSemanticsToastIsALiveRegion(t *testing.T) {
+	t.Parallel()
 	toaster := ui.NewToaster()
 	p := ggui.NewProbe(toaster, ggui.Sz(400, 300))
 	defer p.Close()
@@ -249,6 +264,7 @@ func TestSemanticsToastIsALiveRegion(t *testing.T) {
 }
 
 func TestSemanticsScrolledRowsStayWithTheirBounds(t *testing.T) {
+	t.Parallel()
 	rows := make([]string, 200)
 	for i := range rows {
 		rows[i] = "row " + strconv.Itoa(i)

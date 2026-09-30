@@ -35,6 +35,7 @@ func TestTransitionSlidesInOnceAndNotOnRebuild(t *testing.T) {
 }
 
 func TestPresenceKeepsChildInertWhileLeaving(t *testing.T) {
+	t.Parallel()
 	show := State(true)
 	taps := 0
 	var got Rect

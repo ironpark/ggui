@@ -15,6 +15,7 @@ func otpCmd() ggui.Mods {
 	return ggui.Mods{Ctrl: true}
 }
 func TestInputOTPPasteSelectionUndo(t *testing.T) {
+	t.Parallel()
 	value := ggui.State("")
 	completed, changed := 0, 0
 	o := InputOTP(value, 6).Groups(3, 3).OnChange(func(string) { changed++ }).OnComplete(func(string) { completed++ })
@@ -51,6 +52,7 @@ func TestInputOTPPasteSelectionUndo(t *testing.T) {
 	}
 }
 func TestInputOTPAccessibilityAndExternalValue(t *testing.T) {
+	t.Parallel()
 	value := ggui.State("")
 	o := InputOTP(value, 4).Alphanumeric().Name("Code")
 	p := ggui.NewProbe(o, ggui.Sz(300, 80))
@@ -74,6 +76,7 @@ func TestInputOTPAccessibilityAndExternalValue(t *testing.T) {
 	}
 }
 func TestInputOTPCompositionSizesRTL(t *testing.T) {
+	t.Parallel()
 	for _, rtl := range []bool{false, true} {
 		for _, width := range []float64{0, 20, 320} {
 			o := InputOTP(ggui.State("한글12"), 4, InputOTPGroup(InputOTPSlot(0), InputOTPSlot(1)), InputOTPSeparator(), InputOTPGroup(InputOTPSlot(2), InputOTPSlot(3))).Accept(func(r rune) bool { return true }).RTL(rtl)
@@ -98,6 +101,7 @@ func TestInputOTPCompositionSizesRTL(t *testing.T) {
 	}
 }
 func TestInputOTPInvalidAndDisabledBindings(t *testing.T) {
+	t.Parallel()
 	locked, bad := ggui.State(false), ggui.State(false)
 	o := InputOTP(ggui.State("123456"), 6).BindDisabled(locked).BindInvalid(bad)
 	p := ggui.NewProbe(o, ggui.Sz(300, 40))
@@ -117,6 +121,7 @@ func TestInputOTPInvalidAndDisabledBindings(t *testing.T) {
 }
 
 func TestInputOTPCompleteAfterExternalReset(t *testing.T) {
+	t.Parallel()
 	value := ggui.State("")
 	calls := 0
 	o := InputOTP(value, 4).OnComplete(func(string) { calls++ })

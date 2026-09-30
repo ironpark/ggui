@@ -6,6 +6,7 @@ import (
 )
 
 func TestPathScaleCacheInvalidation(t *testing.T) {
+	t.Parallel()
 	var p Path
 	p.MoveTo(2, 3)
 	p.LineTo(12, 3)

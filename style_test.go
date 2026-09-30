@@ -13,6 +13,7 @@ var (
 )
 
 func TestTextStyleMergeLetsSetFieldsWin(t *testing.T) {
+	t.Parallel()
 	base := TextStyle{Size: 14, Color: red, LineHeight: 1.2}
 	got := base.Merge(TextStyle{Color: blue})
 	if got.Size != 14 || got.Color != blue || got.LineHeight != 1.2 {
@@ -24,6 +25,7 @@ func TestTextStyleMergeLetsSetFieldsWin(t *testing.T) {
 }
 
 func TestTextResolvesEnvThenOwnThenDefaults(t *testing.T) {
+	t.Parallel()
 	env := Env{}.WithText(TextStyle{Size: 20, Color: red})
 	w := Text("x").Color(blue)
 	w.Layout(Loose(Sz(100, 100)), env)
@@ -41,6 +43,7 @@ func TestTextResolvesEnvThenOwnThenDefaults(t *testing.T) {
 }
 
 func TestStyledSetsInheritedStyleForSubtree(t *testing.T) {
+	t.Parallel()
 	inner, outer := Text("in"), Text("out")
 	Column(Styled(Column(inner)).Color(red).Size(10), outer).Layout(Loose(Sz(100, 100)), Env{})
 	if inner.resolved.Color != red || inner.resolved.Size != 10 {
@@ -52,6 +55,7 @@ func TestStyledSetsInheritedStyleForSubtree(t *testing.T) {
 }
 
 func TestStyledNestsAndOwnSettersWin(t *testing.T) {
+	t.Parallel()
 	w := Text("x").Size(30)
 	Styled(Styled(w).Color(blue)).Color(red).Size(10).Layout(Loose(Sz(100, 100)), Env{})
 	if w.resolved.Color != blue || w.resolved.Size != 30 {
@@ -60,6 +64,7 @@ func TestStyledNestsAndOwnSettersWin(t *testing.T) {
 }
 
 func TestInheritedSizeChangesLayout(t *testing.T) {
+	t.Parallel()
 	small := Text("hello").Layout(Loose(Sz(1000, 1000)), Env{}.WithText(TextStyle{Size: 10}))
 	big := Text("hello").Layout(Loose(Sz(1000, 1000)), Env{}.WithText(TextStyle{Size: 20}))
 	if big.W <= small.W || big.H <= small.H {
@@ -68,6 +73,7 @@ func TestInheritedSizeChangesLayout(t *testing.T) {
 }
 
 func TestProvideAndGetTravelDownTheTree(t *testing.T) {
+	t.Parallel()
 	disabled := NewEnvKey[bool]("disabled")
 	other := NewEnvKey[bool]("other")
 	var seen, seenOther, ok, okOther bool
@@ -89,6 +95,7 @@ func TestProvideAndGetTravelDownTheTree(t *testing.T) {
 }
 
 func TestEnvIsAValue(t *testing.T) {
+	t.Parallel()
 	k := NewEnvKey[int]("n")
 	base := Env{}.With(k, 1)
 	child := base.With(k, 2)
@@ -125,6 +132,7 @@ func TestSetEnvRebuildsReaders(t *testing.T) {
 }
 
 func TestBoxDecorationsTolerateNilCanvas(t *testing.T) {
+	t.Parallel()
 	b := Box().Size(10, 10).Fill(red).Radius(4).Border(1, blue)
 	b.Paint(nil, Rct(Pt(0, 0), b.Layout(Loose(Sz(10, 10)), Env{})))
 	b.Paint(&Canvas{}, Rct(Pt(0, 0), Sz(10, 10)))

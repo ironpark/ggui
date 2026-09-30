@@ -10,6 +10,7 @@ func closeTo(a, b float64) bool { return math.Abs(a-b) < 1e-6 }
 // Under AlignBaseline a large title and a small caption share a baseline,
 // and the Row is as tall as the tallest ascent plus the tallest descent.
 func TestRowAlignBaseline(t *testing.T) {
+	t.Parallel()
 	title, caption := Text("Title").Size(28), Text("caption").Size(12)
 	row := Row(title, caption).Align(AlignBaseline)
 	size := row.Layout(Loose(Sz(400, 400)), Env{})
@@ -35,6 +36,7 @@ func TestRowAlignBaseline(t *testing.T) {
 // A child with no baseline of its own rests on the shared baseline by its
 // bottom edge.
 func TestRowAlignBaselineWithoutBaseline(t *testing.T) {
+	t.Parallel()
 	title, box := Text("Title").Size(28), Box().Size(10, 10)
 	row := Row(title, box).Align(AlignBaseline)
 	row.Layout(Loose(Sz(400, 400)), Env{})
@@ -47,6 +49,7 @@ func TestRowAlignBaselineWithoutBaseline(t *testing.T) {
 // Containers pass their first child's baseline up, moved by where the
 // child went.
 func TestBaselinePropagates(t *testing.T) {
+	t.Parallel()
 	col := Column(Box().Size(10, 5), Padding(Text("x"), 3)).Gap(2)
 	col.Layout(Loose(Sz(100, 100)), Env{})
 	cb, ok := col.Baseline()

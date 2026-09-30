@@ -9,6 +9,7 @@ import (
 // A direct write to Inert, bypassing SetInert, still asks for a layout
 // once Sync sees it.
 func TestInteractiveDirectInertWriteRequestsLayout(t *testing.T) {
+	t.Parallel()
 	var s Interactive
 	s.Sync()
 	before := reactive.LayoutGen()
@@ -25,6 +26,7 @@ func TestInteractiveDirectInertWriteRequestsLayout(t *testing.T) {
 }
 
 func TestConfigInspectorChord(t *testing.T) {
+	t.Parallel()
 	a := New(Config{Inspector: "f1"}, func() Widget { return Box() })
 	if a.inspectChord.Key != KeyF1 {
 		t.Fatalf("chord key = %v", a.inspectChord.Key)

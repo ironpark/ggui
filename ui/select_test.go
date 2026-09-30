@@ -9,6 +9,7 @@ import (
 )
 
 func TestSelectPopupStaysWithinTriggerWidth(t *testing.T) {
+	t.Parallel()
 	value := ggui.State("Alpha")
 	selectBox := ui.Select(value).Options([]string{"Alpha", "Beta"}).Name("Choose option")
 	p := ggui.NewProbe(ggui.Box(selectBox).Width(180), ggui.Sz(900, 400))
@@ -28,6 +29,7 @@ func TestSelectPopupStaysWithinTriggerWidth(t *testing.T) {
 }
 
 func TestSelectOverflowScrollsWithoutCollapsingOptions(t *testing.T) {
+	t.Parallel()
 	options := []string{"amber", "blue", "cyan", "green", "lime", "orange", "pink", "purple", "red", "rose", "teal", "yellow"}
 	for _, above := range []bool{false, true} {
 		value := ggui.State("lime")
@@ -66,6 +68,7 @@ func TestSelectOverflowScrollsWithoutCollapsingOptions(t *testing.T) {
 }
 
 func TestSelectKeyboardRevealsOverflowOption(t *testing.T) {
+	t.Parallel()
 	options := []string{"one", "two", "three", "four", "five", "six", "seven", "eight"}
 	value := ggui.State("one")
 	selectBox := ui.Select(value).Options(options).Name("Number")
@@ -86,6 +89,7 @@ func TestSelectKeyboardRevealsOverflowOption(t *testing.T) {
 }
 
 func TestSelectionControlsOwnOptionSnapshots(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"select", "combobox", "toggle group"} {
 		t.Run(kind, func(t *testing.T) {
 			options := []string{"Alpha", "Beta"}

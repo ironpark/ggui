@@ -24,6 +24,7 @@ func newProbe(t *testing.T) (*model, *ggui.Probe) {
 // The dialogs are answered by the Probe's stub, so the test never opens a
 // window; setting its Paths is all an app's own tests need do.
 func TestDialogsFillTheList(t *testing.T) {
+	t.Parallel()
 	m, p := newProbe(t)
 	stub := p.Dialogs().(*runtime.StubFilePicker)
 	stub.Paths = []string{"/pictures/a.png", "/pictures/b.png"}
@@ -57,6 +58,7 @@ func TestDialogsFillTheList(t *testing.T) {
 }
 
 func TestDropOntoTheCard(t *testing.T) {
+	t.Parallel()
 	m, p := newProbe(t)
 	// The card fills the window above the buttons, so its middle is well
 	// inside the zone; a plain text has no label a Find could locate.

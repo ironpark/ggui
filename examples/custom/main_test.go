@@ -11,6 +11,7 @@ import (
 // keyboard, opens the disclosure and checks the list only mounts what it
 // shows.
 func TestCustom(t *testing.T) {
+	t.Parallel()
 	m := newModel()
 	p := ggui.ProbeBuilder(m.build, ggui.Sz(560, 640))
 	defer p.Close()

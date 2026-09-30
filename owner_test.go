@@ -7,6 +7,7 @@ import (
 )
 
 func TestInnerEffectDisposedWhenOuterReruns(t *testing.T) {
+	t.Parallel()
 	outerDep, innerDep := State(0), State(0)
 	innerRuns := 0
 	dispose := reactive.Observe(func() {
@@ -32,6 +33,7 @@ func TestInnerEffectDisposedWhenOuterReruns(t *testing.T) {
 }
 
 func TestDerivedInsideBuilderDoesNotAccumulate(t *testing.T) {
+	t.Parallel()
 	rebuild, n := State(0), State(1)
 	computes := 0
 	dispose := reactive.Observe(func() {
@@ -52,6 +54,7 @@ func TestDerivedInsideBuilderDoesNotAccumulate(t *testing.T) {
 }
 
 func TestOnCleanupRunsBeforeRerunAndOnDispose(t *testing.T) {
+	t.Parallel()
 	dep := State(0)
 	var log []string
 	dispose := reactive.Observe(func() {
@@ -76,6 +79,7 @@ func TestOnCleanupRunsBeforeRerunAndOnDispose(t *testing.T) {
 }
 
 func TestOnCleanupOutsideEffectPanics(t *testing.T) {
+	t.Parallel()
 	defer func() {
 		if recover() == nil {
 			t.Fatal("OnCleanup outside an Effect did not panic")
@@ -85,6 +89,7 @@ func TestOnCleanupOutsideEffectPanics(t *testing.T) {
 }
 
 func TestUntrackAndPeekDoNotSubscribe(t *testing.T) {
+	t.Parallel()
 	a, b := State(0), State(0)
 	runs := 0
 	dispose := reactive.Observe(func() {
@@ -107,6 +112,7 @@ func TestUntrackAndPeekDoNotSubscribe(t *testing.T) {
 }
 
 func TestFlushSkipsEffectsDisposedEarlierInThePass(t *testing.T) {
+	t.Parallel()
 	dep := State(0)
 	staleRuns := 0
 	dispose := reactive.Observe(func() {
@@ -128,6 +134,7 @@ func TestFlushSkipsEffectsDisposedEarlierInThePass(t *testing.T) {
 }
 
 func TestReactiveRebuildsWithoutParent(t *testing.T) {
+	t.Parallel()
 	leaf := State("a")
 	parentBuilds, leafBuilds := 0, 0
 	var root Widget
@@ -147,6 +154,7 @@ func TestReactiveRebuildsWithoutParent(t *testing.T) {
 }
 
 func TestComponentRunsSetupOnceAndKeepsState(t *testing.T) {
+	t.Parallel()
 	setups, builds := 0, 0
 	var local *StateValue[int]
 	var c *ComponentWidget
@@ -170,6 +178,7 @@ func TestComponentRunsSetupOnceAndKeepsState(t *testing.T) {
 }
 
 func TestComponentSetupDoesNotSubscribeParent(t *testing.T) {
+	t.Parallel()
 	dep := State(0)
 	parentBuilds := 0
 	var c *ComponentWidget
@@ -190,6 +199,7 @@ func TestComponentSetupDoesNotSubscribeParent(t *testing.T) {
 }
 
 func TestComponentDisposedWithParent(t *testing.T) {
+	t.Parallel()
 	parentDep, leaf := State(0), State(0)
 	setups, builds := 0, 0
 	var c *ComponentWidget
@@ -214,6 +224,7 @@ func TestComponentDisposedWithParent(t *testing.T) {
 }
 
 func TestChildCleanupCanDisposeSibling(t *testing.T) {
+	t.Parallel()
 	var stopSibling func()
 	var cleaned []int
 	dispose := Root(func() {
@@ -229,6 +240,7 @@ func TestChildCleanupCanDisposeSibling(t *testing.T) {
 }
 
 func TestEffectRemovalPreservesExecutionOrder(t *testing.T) {
+	t.Parallel()
 	n := State(0)
 	var seen []int
 	var stops []func()
@@ -262,6 +274,7 @@ func (p mountProps) Equal(o mountProps) bool {
 }
 
 func TestEqualDerivedPropsDoNotRebuild(t *testing.T) {
+	t.Parallel()
 	tick := State(0)
 	builds := 0
 	p := ProbeBuilder(func() Widget {
@@ -282,6 +295,7 @@ func TestEqualDerivedPropsDoNotRebuild(t *testing.T) {
 // A type without an Equal method and without comparable fields notifies on
 // every write, as it always has: there is nothing to compare it with.
 func TestSignalWithoutEqualityNotifiesEveryWrite(t *testing.T) {
+	t.Parallel()
 	s := State([]int{1})
 	runs := 0
 	defer reactive.Observe(func() { s.Get(); runs++ })()

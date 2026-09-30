@@ -82,6 +82,7 @@ func semanticFieldChanges(v reflect.Value, visit func()) {
 }
 
 func TestNodeEqualityCoversEveryField(t *testing.T) {
+	t.Parallel()
 	var n Node
 	semanticFieldChanges(reflect.ValueOf(&n).Elem(), func() {
 		// Use a populated baseline too, so changes inside a slice cannot
@@ -117,6 +118,7 @@ func TestNodeEqualityCoversEveryField(t *testing.T) {
 }
 
 func TestNodeEqualityMatchesDeepEqual(t *testing.T) {
+	t.Parallel()
 	rng := rand.New(rand.NewPCG(1, 2))
 	for range 1000 {
 		a := Node{Role: RoleTextField, Name: "a", Value: "xy", Expanded: Expandable(rng.IntN(2) == 0),
@@ -133,6 +135,7 @@ func TestNodeEqualityMatchesDeepEqual(t *testing.T) {
 }
 
 func TestSemTreeInvalidatesGeometryIdentityHierarchyAndFocus(t *testing.T) {
+	t.Parallel()
 	w := &twice{}
 	w.Role = RoleTextField
 	c := &Canvas{}
@@ -172,6 +175,7 @@ func TestSemTreeInvalidatesGeometryIdentityHierarchyAndFocus(t *testing.T) {
 }
 
 func TestSemTreeOldSnapshotCanBeReadDuringBufferReuse(t *testing.T) {
+	t.Parallel()
 	c := &Canvas{}
 	n := Node{Role: RoleTextField, Expanded: Expandable(false), Runs: []TextRun{{Stops: []TextStop{{}}}}}
 	c.Leaf(Rect{}, n)

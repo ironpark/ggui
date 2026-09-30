@@ -5,6 +5,7 @@ import (
 )
 
 func TestComponentSetupIsStable(t *testing.T) {
+	t.Parallel()
 	dep := State(0)
 	setups := 0
 	var local *StateValue[int]
@@ -27,6 +28,7 @@ func TestComponentSetupIsStable(t *testing.T) {
 }
 
 func TestKeyDisposesAndRecreates(t *testing.T) {
+	t.Parallel()
 	key := State(1)
 	setups, cleanups := 0, 0
 	p := ProbeBuilder(func() Widget {
@@ -54,6 +56,7 @@ func TestKeyDisposesAndRecreates(t *testing.T) {
 }
 
 func TestComponentPropsAreReadable(t *testing.T) {
+	t.Parallel()
 	n := State(1)
 	var seen []int
 	p := ProbeBuilder(func() Widget {
@@ -71,6 +74,7 @@ func TestComponentPropsAreReadable(t *testing.T) {
 }
 
 func TestScrollAdoptsOffsetAcrossRebuild(t *testing.T) {
+	t.Parallel()
 	dep := State(0)
 	p := ProbeBuilder(func() Widget {
 		dep.Get()
@@ -105,6 +109,7 @@ func (k *keyedBox) Adopt(prev any) {
 }
 
 func TestAdoptionFollowsIDNotRect(t *testing.T) {
+	t.Parallel()
 	a := &keyedBox{id: "a", count: 5}
 	a2, b := &keyedBox{id: "a"}, &keyedBox{id: "b"}
 	gen := State(0)
@@ -127,6 +132,7 @@ func TestAdoptionFollowsIDNotRect(t *testing.T) {
 }
 
 func TestCachedSeesProvideChange(t *testing.T) {
+	t.Parallel()
 	k := NewEnvKey[float64]("w")
 	layouts := 0
 	leaf := FromFuncs(func(c Constraints, env Env) Size {
@@ -150,6 +156,7 @@ func TestCachedSeesProvideChange(t *testing.T) {
 }
 
 func TestCachedTextInputFollowsSignal(t *testing.T) {
+	t.Parallel()
 	v := State("a")
 	in := TextInput(v)
 	p := NewProbe(Cached(in), Sz(200, 30))
@@ -163,6 +170,7 @@ func TestCachedTextInputFollowsSignal(t *testing.T) {
 }
 
 func TestComponentGivesControlsStableIdentity(t *testing.T) {
+	t.Parallel()
 	value := State("hello")
 	rebuild := State(0)
 	var input *TextInputWidget
@@ -188,6 +196,7 @@ func TestComponentGivesControlsStableIdentity(t *testing.T) {
 }
 
 func TestTabReachesAControlOutsideTheScrollWindow(t *testing.T) {
+	t.Parallel()
 	items := Column(Focus(Box().Size(50, 50)), Focus(Box().Size(50, 50)), Focus(Box().Size(50, 50)))
 	sc := Scroll(items)
 	p := NewProbe(sc, Sz(50, 40))
@@ -199,6 +208,7 @@ func TestTabReachesAControlOutsideTheScrollWindow(t *testing.T) {
 }
 
 func TestRetainKeepsTheFocusedRow(t *testing.T) {
+	t.Parallel()
 	items := State([]int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9})
 	built := map[int]int{}
 	list := EachKeyed(items, func(i int) int { return i }, func(rowItem EachItem[int]) Widget {

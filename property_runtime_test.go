@@ -26,6 +26,7 @@ func measuredPropertyProbe(w Widget) (*Probe, *Size, *int) {
 }
 
 func TestPropertyDimensionsReplaceSourcesUnderNestedCaches(t *testing.T) {
+	t.Parallel()
 	a, b := State(80.0), State(80.0)
 	height := State(20.0)
 	box := Box().BindWidth(a).BindHeight(height)
@@ -64,6 +65,7 @@ func TestPropertyDimensionsReplaceSourcesUnderNestedCaches(t *testing.T) {
 }
 
 func TestPropertyLiteralGeometryUpdatesMountedCaches(t *testing.T) {
+	t.Parallel()
 	box := Box(Text("x")).Pad(1)
 	p, size, layouts := measuredPropertyProbe(box)
 	defer p.Close()
@@ -88,6 +90,7 @@ func TestPropertyLiteralGeometryUpdatesMountedCaches(t *testing.T) {
 }
 
 func TestPropertyParentConfigurationConverges(t *testing.T) {
+	t.Parallel()
 	text := Text("unchanged")
 	box := Box(text)
 	layouts := 0
@@ -110,6 +113,7 @@ func TestPropertyParentConfigurationConverges(t *testing.T) {
 }
 
 func TestTextPropertiesPullWithoutEffectsAndDetach(t *testing.T) {
+	t.Parallel()
 	start := reactive.Count()
 	source := State("a")
 	args := []any{source, Const(3)}
@@ -158,6 +162,7 @@ func TestTextPropertiesPullWithoutEffectsAndDetach(t *testing.T) {
 }
 
 func TestPropertyBindingsRejectNilReaders(t *testing.T) {
+	t.Parallel()
 	var width *StateValue[float64]
 	var text *StateValue[string]
 	var flag *StateValue[bool]
@@ -185,6 +190,7 @@ func TestPropertyBindingsRejectNilReaders(t *testing.T) {
 }
 
 func TestBoundDimensionsFollowAnimationWithoutRebuilding(t *testing.T) {
+	t.Parallel()
 	tween := Tween(10.0, 100*time.Millisecond)
 	box := Box().Height(10).BindWidth(tween)
 	q, size, _ := measuredPropertyProbe(box)
@@ -199,6 +205,7 @@ func TestBoundDimensionsFollowAnimationWithoutRebuilding(t *testing.T) {
 }
 
 func TestScrollOffsetDetachesAndClampsLocalPosition(t *testing.T) {
+	t.Parallel()
 	source := State(10.0)
 	scroll := Scroll(Box().Size(20, 600)).BindOffset(source)
 	p := NewProbe(scroll, Sz(100, 100))

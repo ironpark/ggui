@@ -9,6 +9,7 @@ import (
 )
 
 func TestDropGoesToTheZoneUnderTheCursor(t *testing.T) {
+	t.Parallel()
 	var zone, host []string
 	build := func() Widget {
 		target := Pointer(Box(Text("drop here")).Size(200, 100)).OnDrop(func(ev DropEvent) {
@@ -48,6 +49,7 @@ func TestDropGoesToTheZoneUnderTheCursor(t *testing.T) {
 }
 
 func TestDroppedFileOpensWithoutAPath(t *testing.T) {
+	t.Parallel()
 	var got string
 	p := ProbeBuilder(func() Widget {
 		return Pointer(Box(Text("zone")).Size(100, 100)).OnDrop(func(ev DropEvent) {
@@ -71,6 +73,7 @@ func TestDroppedFileOpensWithoutAPath(t *testing.T) {
 }
 
 func TestDropPathsCarriesRealFiles(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	file := filepath.Join(dir, "real.txt")
 	if err := os.WriteFile(file, []byte("on disk"), 0o644); err != nil {
@@ -109,6 +112,7 @@ func TestDropPathsCarriesRealFiles(t *testing.T) {
 }
 
 func TestZoneWithoutOnDropLetsTheDropFallThrough(t *testing.T) {
+	t.Parallel()
 	var outer, host int
 	p := ProbeBuilder(func() Widget {
 		inner := Pointer(Box(Text("tap only")).Size(50, 50)).OnTap(func() {})
@@ -123,6 +127,7 @@ func TestZoneWithoutOnDropLetsTheDropFallThrough(t *testing.T) {
 }
 
 func TestEmptyDropIsNotDispatched(t *testing.T) {
+	t.Parallel()
 	var host int
 	p := ProbeBuilder(func() Widget { return Text("x") }, Sz(100, 100))
 	defer p.Close()
@@ -134,6 +139,7 @@ func TestEmptyDropIsNotDispatched(t *testing.T) {
 }
 
 func TestDragHoverFollowsTheZoneUnderTheCursor(t *testing.T) {
+	t.Parallel()
 	var top, bottom []bool
 	build := func() Widget {
 		return Column(

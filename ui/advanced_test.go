@@ -12,6 +12,7 @@ import (
 )
 
 func TestAccordionSelectionAndKeyboard(t *testing.T) {
+	t.Parallel()
 	open := ggui.State([]string{})
 	calls := 0
 	a := ui.Accordion(open,
@@ -57,6 +58,7 @@ func TestAccordionSelectionAndKeyboard(t *testing.T) {
 }
 
 func TestCommandFiltersAndSkipsDisabled(t *testing.T) {
+	t.Parallel()
 	query := ggui.State("")
 	picked := ""
 	cmd := ui.Command(query,
@@ -101,6 +103,7 @@ func TestCommandFiltersAndSkipsDisabled(t *testing.T) {
 }
 
 func TestComboboxSelectionAndEscape(t *testing.T) {
+	t.Parallel()
 	value := ggui.State("Apple")
 	changes := 0
 	c := ui.Combobox(value).Options([]string{"Apple", "Banana", "Cherry"}).Name("Fruit").OnChange(func(string) { changes++ })
@@ -133,6 +136,7 @@ func TestComboboxSelectionAndEscape(t *testing.T) {
 }
 
 func TestResizableCaptureLimitsAndKeyboard(t *testing.T) {
+	t.Parallel()
 	fraction := ggui.State(.5)
 	r := ui.Resizable(fraction, ggui.Box(), ggui.Box()).WithHandle().MinSizes(40, 60)
 	p := ggui.NewProbe(r, ggui.Sz(208, 100))
@@ -173,6 +177,7 @@ func TestResizableCaptureLimitsAndKeyboard(t *testing.T) {
 }
 
 func TestResizableVertical(t *testing.T) {
+	t.Parallel()
 	fraction := ggui.State(.5)
 	p := ggui.NewProbe(ui.Resizable(fraction, ggui.Box(), ggui.Box()).Vertical().WithHandle(), ggui.Sz(100, 208))
 	defer p.Close()
@@ -188,6 +193,7 @@ func TestResizableVertical(t *testing.T) {
 }
 
 func TestToasterLifecycleAndNonmodalActions(t *testing.T) {
+	t.Parallel()
 	toaster := ui.NewToaster().Limit(2)
 	clicks := 0
 	p := ggui.ProbeBuilder(func() ggui.Widget { return ggui.Column(ui.Button("Background", func() { clicks++ }), toaster) }, ggui.Sz(500, 500))
@@ -230,6 +236,7 @@ func TestToasterLifecycleAndNonmodalActions(t *testing.T) {
 }
 
 func TestToasterPausesWhileInteracting(t *testing.T) {
+	t.Parallel()
 	toaster := ui.NewToaster()
 	p := ggui.NewProbe(ggui.Column(toaster), ggui.Sz(500, 400))
 	defer p.Close()
@@ -248,6 +255,7 @@ func TestToasterPausesWhileInteracting(t *testing.T) {
 }
 
 func TestCommandScrollsKeyboardHighlight(t *testing.T) {
+	t.Parallel()
 	query := ggui.State("")
 	picked := -1
 	entries := make([]ui.CommandEntry, 20)
@@ -276,6 +284,7 @@ func TestCommandScrollsKeyboardHighlight(t *testing.T) {
 }
 
 func TestAdvancedBindingsInvalidateCachedLayout(t *testing.T) {
+	t.Parallel()
 	open := ggui.State([]string{})
 	fraction := ggui.State(.5)
 	p := ggui.ProbeBuilder(func() ggui.Widget {
@@ -298,6 +307,7 @@ func TestAdvancedBindingsInvalidateCachedLayout(t *testing.T) {
 }
 
 func TestResizableCapturesTouchDrag(t *testing.T) {
+	t.Parallel()
 	r := ui.Resizable(ggui.State(.5), ggui.Box(), ggui.Box()).Vertical()
 	var capturer ggui.TouchDragCapturer = r
 	if !capturer.CaptureTouchDrag() {

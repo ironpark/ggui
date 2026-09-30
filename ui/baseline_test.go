@@ -11,6 +11,7 @@ import (
 // A padded button beside a label lines its text up with the label's under
 // AlignBaseline, since the button reports its label's baseline.
 func TestButtonBaselineAlignsWithText(t *testing.T) {
+	t.Parallel()
 	label := ggui.Text("Go")
 	button := ui.Button("Run", nil).Pad(8, 16)
 	p := ggui.NewProbe(ggui.Row(label, button).Gap(8).Align(ggui.AlignBaseline), ggui.Sz(300, 100))

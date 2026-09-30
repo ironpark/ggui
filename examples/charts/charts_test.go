@@ -7,6 +7,7 @@ import (
 )
 
 func TestAllReferenceExamples(t *testing.T) {
+	t.Parallel()
 	if len(chartExamples) != 70 {
 		t.Fatalf("catalog: %d", len(chartExamples))
 	}

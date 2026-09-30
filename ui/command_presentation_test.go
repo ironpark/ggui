@@ -7,6 +7,7 @@ import (
 )
 
 func TestGroupedCommandFilteringAndNavigation(t *testing.T) {
+	t.Parallel()
 	query := ggui.State("")
 	picked := ""
 	command := ui.Command(query,

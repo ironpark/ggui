@@ -57,6 +57,7 @@ func TestTouchFlingSpeedHoldAndInterruption(t *testing.T) {
 }
 
 func TestTouchMomentumFrameRateAndBounds(t *testing.T) {
+	t.Parallel()
 	run := func(step time.Duration, height float64) (float64, bool) {
 		var in inputState
 		s := Scroll(Box().Size(100, height))
@@ -81,6 +82,7 @@ func TestTouchMomentumFrameRateAndBounds(t *testing.T) {
 }
 
 func TestTouchMomentumStopsOnPauseOrMissingTarget(t *testing.T) {
+	t.Parallel()
 	for _, missing := range []bool{false, true} {
 		var in inputState
 		s := Scroll(Box().Size(100, 1000))
@@ -101,6 +103,7 @@ func TestTouchMomentumStopsOnPauseOrMissingTarget(t *testing.T) {
 }
 
 func TestTouchVelocityReversesWithoutOldMomentum(t *testing.T) {
+	t.Parallel()
 	now := time.Unix(100, 0)
 	m := touchMotion{last: now, pos: Pt(0, 0), velocity: Pt(0, -1000)}
 	m.sample(now.Add(16*time.Millisecond), Pt(0, 10))

@@ -17,6 +17,7 @@ func chartTestData() []ChartDatum {
 var chartTestConfig = ChartConfig{{Key: "a", Label: "Desktop"}, {Key: "b", Label: "Mobile"}}
 
 func TestChartStackDomainAndSnapshot(t *testing.T) {
+	t.Parallel()
 	data := chartTestData()
 	c := BarChart(data, chartTestConfig).Stack(ChartStacked)
 	data[0].Values["a"] = 900
@@ -38,6 +39,7 @@ func TestChartStackDomainAndSnapshot(t *testing.T) {
 	}
 }
 func TestChartEmptyMissingInvalidAndNarrow(t *testing.T) {
+	t.Parallel()
 	for kind := ChartArea; kind <= ChartRadial; kind++ {
 		for _, data := range [][]ChartDatum{nil, {{Label: "only", Values: map[string]float64{"a": 0}}}, {{Values: map[string]float64{"a": math.NaN()}}, {Values: map[string]float64{"b": math.Inf(1)}}}} {
 			c := ChartContainer(kind, data, chartTestConfig)
@@ -59,6 +61,7 @@ func TestChartEmptyMissingInvalidAndNarrow(t *testing.T) {
 	}
 }
 func TestChartKeyboardPointerSelection(t *testing.T) {
+	t.Parallel()
 	selected := -1
 	c := BarChart(chartTestData(), chartTestConfig).Animation(0).OnSelect(func(i int, _ ChartDatum) { selected = i })
 	p := ggui.NewProbe(c, ggui.Sz(400, 240))
@@ -114,6 +117,7 @@ func TestChartMotionAndReducedMotion(t *testing.T) {
 	}
 }
 func TestChartDownsamplePreservesSpikesAndGaps(t *testing.T) {
+	t.Parallel()
 	points := make([]ggui.Point, 10000)
 	valid := make([]bool, len(points))
 	for i := range points {
@@ -143,6 +147,7 @@ func TestChartDownsamplePreservesSpikesAndGaps(t *testing.T) {
 	}
 }
 func TestChartGeometryAndCurveCaches(t *testing.T) {
+	t.Parallel()
 	c := AreaChart(chartTestData(), chartTestConfig)
 	p := ggui.NewProbe(c, ggui.Sz(400, 240))
 	defer p.Close()
@@ -167,6 +172,7 @@ func TestChartGeometryAndCurveCaches(t *testing.T) {
 	}
 }
 func TestChartPolarHitTesting(t *testing.T) {
+	t.Parallel()
 	c := PieChart([]ChartDatum{{Values: map[string]float64{"a": 1}}, {Values: map[string]float64{"a": 1}}}, chartTestConfig[:1]).InnerRadius(.5).Animation(0)
 	p := ggui.NewProbe(c, ggui.Sz(300, 300))
 	defer p.Close()
@@ -231,6 +237,7 @@ func TestChartTooltipFormatsTotalAndLegendWrap(t *testing.T) {
 	}
 }
 func TestChartMotionThroughProbe(t *testing.T) {
+	t.Parallel()
 	c := LineChart(chartTestData(), chartTestConfig)
 	p := ggui.NewProbe(c, ggui.Sz(400, 240))
 	defer p.Close()
@@ -252,6 +259,7 @@ func TestChartMotionThroughProbe(t *testing.T) {
 	}
 }
 func TestChartTooltipAndLegendEmpty(t *testing.T) {
+	t.Parallel()
 	c := PieChart(nil, nil)
 	p := ggui.NewProbe(ggui.Column(ChartLegend(c), ChartTooltip(c, 99)), ggui.Sz(300, 200))
 	defer p.Close()
@@ -272,6 +280,7 @@ func BenchmarkChartPrepare100K(b *testing.B) {
 }
 
 func TestChartAssistiveActions(t *testing.T) {
+	t.Parallel()
 	c := LineChart(chartTestData(), chartTestConfig)
 	if !c.Act(ggui.Action{Kind: ggui.ActionIncrement}) || c.active != 0 {
 		t.Fatal("increment")
@@ -288,6 +297,7 @@ func TestChartAssistiveActions(t *testing.T) {
 }
 
 func TestChartStackSamplingPreservesBaselineSpikes(t *testing.T) {
+	t.Parallel()
 	data := make([]ChartDatum, 10000)
 	for i := range data {
 		data[i] = ChartDatum{Values: map[string]float64{"a": 1, "b": 9}}

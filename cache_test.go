@@ -13,6 +13,7 @@ func (c *counting) Layout(Constraints, Env) Size { c.layouts++; return Sz(10, 10
 func (c *counting) Paint(*Canvas, Rect)          {}
 
 func TestCachedSkipsLayoutUntilSomethingInsideChanges(t *testing.T) {
+	t.Parallel()
 	leaf := &counting{}
 	dep := State(0)
 	var inner Widget
@@ -45,6 +46,7 @@ func TestCachedSkipsLayoutUntilSomethingInsideChanges(t *testing.T) {
 }
 
 func TestCachedNestsAndFollowsScrollAndFor(t *testing.T) {
+	t.Parallel()
 	leaf := &counting{}
 	items := State([]todo{{1, "a"}})
 	var list Widget
@@ -97,6 +99,7 @@ func (c *countingLeaf) Paint(dst *Canvas, r Rect) {}
 // must not re-measure its siblings, even though the runtime lays out from the
 // root whenever anything was written.
 func TestRebuildBoundaryConfinesLayout(t *testing.T) {
+	t.Parallel()
 	a, b := State(0), State(0)
 	leafA, leafB := &countingLeaf{}, &countingLeaf{}
 	p := ProbeBuilder(func() Widget {

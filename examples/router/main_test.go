@@ -8,6 +8,7 @@ import (
 
 // TestRouter taps through the sidebar and history buttons headlessly.
 func TestRouter(t *testing.T) {
+	t.Parallel()
 	r := routes()
 	p := ggui.NewProbe(r.View(), ggui.Sz(820, 520))
 	defer p.Close()

@@ -18,6 +18,7 @@ func act(t *testing.T, p *ggui.Probe, role ggui.Role, name string, a ggui.Action
 }
 
 func TestActPressesThroughTheKeyPath(t *testing.T) {
+	t.Parallel()
 	taps := 0
 	p := ggui.NewProbe(ui.Button("Save", func() { taps++ }), ggui.Sz(200, 60))
 	defer p.Close()
@@ -28,6 +29,7 @@ func TestActPressesThroughTheKeyPath(t *testing.T) {
 }
 
 func TestActLeavesDisabledControlsAlone(t *testing.T) {
+	t.Parallel()
 	taps := 0
 	p := ggui.NewProbe(ui.Button("Save", func() { taps++ }).Disabled(true), ggui.Sz(200, 60))
 	defer p.Close()
@@ -38,6 +40,7 @@ func TestActLeavesDisabledControlsAlone(t *testing.T) {
 }
 
 func TestActStepsASlider(t *testing.T) {
+	t.Parallel()
 	value := ggui.State(5.0)
 	committed := 0.0
 	p := ggui.NewProbe(ui.Slider(value, 0, 10).Step(1).Name("Vol").OnCommit(func(v float64) { committed = v }), ggui.Sz(200, 40))
@@ -58,6 +61,7 @@ func TestActStepsASlider(t *testing.T) {
 }
 
 func TestActExpandsAndCollapses(t *testing.T) {
+	t.Parallel()
 	open := ggui.State(false)
 	p := ggui.NewProbe(ui.Collapsible(open, "More", ggui.Text("body")), ggui.Sz(200, 200))
 	defer p.Close()
@@ -78,6 +82,7 @@ func TestActExpandsAndCollapses(t *testing.T) {
 }
 
 func TestActOpensAndChoosesInASelect(t *testing.T) {
+	t.Parallel()
 	value := ggui.State(1)
 	p := ggui.NewProbe(ggui.Column(ui.Select(value).Options([]int{1, 2, 3}).Name("Count")), ggui.Sz(200, 300))
 	defer p.Close()
@@ -92,6 +97,7 @@ func TestActOpensAndChoosesInASelect(t *testing.T) {
 }
 
 func TestActSelectsATabAndARow(t *testing.T) {
+	t.Parallel()
 	sel := ggui.State(0)
 	tabs := ui.Tabs(sel, ui.Tab("One", ggui.Text("first")), ui.Tab("Two", ggui.Text("second")))
 	p := ggui.NewProbe(tabs, ggui.Sz(300, 200))
@@ -113,6 +119,7 @@ func TestActSelectsATabAndARow(t *testing.T) {
 }
 
 func TestActSetsATextFieldOutright(t *testing.T) {
+	t.Parallel()
 	value := ggui.State("Ada")
 	p := ggui.NewProbe(ui.TextField(value).Name("Name"), ggui.Sz(200, 60))
 	defer p.Close()
@@ -123,6 +130,7 @@ func TestActSetsATextFieldOutright(t *testing.T) {
 }
 
 func TestActRunsAMenuItem(t *testing.T) {
+	t.Parallel()
 	ran := 0
 	m := ui.Menu("File", ui.MenuItem("Open", func() { ran++ }))
 	p := ggui.NewProbe(ggui.Column(m), ggui.Sz(200, 300))

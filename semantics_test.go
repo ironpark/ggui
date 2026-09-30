@@ -14,6 +14,7 @@ func described(t *testing.T, w Widget, size Size) *SemTree {
 }
 
 func TestSemanticsNestingComesFromTheBuilder(t *testing.T) {
+	t.Parallel()
 	// Column registers nothing, so paint depth would fold the leaf under
 	// the group beside it; the explicit scope is what says otherwise.
 	inner := FromFuncs(
@@ -37,6 +38,7 @@ button "three"
 }
 
 func TestSemanticsKeepsClippedNodesWithTheirBounds(t *testing.T) {
+	t.Parallel()
 	// A node scrolled out of view is present, flagged, and still says where
 	// it is, so an assistive technology can ask to be taken there.
 	tall := FromFuncs(
@@ -74,6 +76,7 @@ func (t *twice) HandlePointer(PointerEvent) bool { return true }
 func (t *twice) HandleKey(KeyEvent)              {}
 
 func TestSemanticsDescribesOneHandlerOnce(t *testing.T) {
+	t.Parallel()
 	w := &twice{}
 	w.Role = RoleTextField
 	w.SetName("Name")
@@ -91,6 +94,7 @@ func TestSemanticsDescribesOneHandlerOnce(t *testing.T) {
 }
 
 func TestSemanticsSnapshotIsFrozen(t *testing.T) {
+	t.Parallel()
 	label := State("a")
 	p := ProbeBuilder(func() Widget { return TextOf(label) }, Sz(100, 100))
 	defer p.Close()
@@ -110,6 +114,7 @@ func TestSemanticsSnapshotIsFrozen(t *testing.T) {
 }
 
 func TestSemanticsMirrorsFocus(t *testing.T) {
+	t.Parallel()
 	one, two := Focus(Box().Size(40, 20)), Focus(Box().Size(40, 20))
 	p := NewProbe(Column(one, two), Sz(100, 100))
 	defer p.Close()
@@ -135,6 +140,7 @@ type uncomparableFocus []int
 func (uncomparableFocus) HandleKey(KeyEvent) {}
 
 func TestFocusedNodePrefersHandlerAndFallsBackAfterRebuild(t *testing.T) {
+	t.Parallel()
 	c := Canvas{}
 	r := Rct(Pt(0, 0), Sz(100, 20))
 	first, exact, rebuilt := &twice{}, &twice{}, &twice{}
@@ -172,6 +178,7 @@ func TestFocusedNodePrefersHandlerAndFallsBackAfterRebuild(t *testing.T) {
 }
 
 func TestSemanticsListCountsItems(t *testing.T) {
+	t.Parallel()
 	items := State([]string{"a", "b", "c"})
 	tree := described(t, Each(items, func(rowItem EachItem[string]) Widget { s := rowItem.Value; return TextOf(s) }), Sz(100, 200))
 	list, ok := tree.Find(RoleList, "")
@@ -194,6 +201,7 @@ func TestSemanticsListCountsItems(t *testing.T) {
 }
 
 func TestSemanticsTextRoles(t *testing.T) {
+	t.Parallel()
 	tree := described(t, Column(Text("Heading").Role(RoleHeading), Text("body"), Text("")), Sz(200, 200))
 	want := `heading "Heading"
 text "body"
@@ -204,6 +212,7 @@ text "body"
 }
 
 func TestSemanticsStagingReusePreservesOldTree(t *testing.T) {
+	t.Parallel()
 	rows := State([]string{"one", "two", "three"})
 	p := ProbeBuilder(func() Widget {
 		return Each(rows, func(rowItem EachItem[string]) Widget { s := rowItem.Value; return TextOf(s) })

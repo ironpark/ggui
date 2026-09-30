@@ -6,6 +6,7 @@ import (
 )
 
 func TestCatalog(t *testing.T) {
+	t.Parallel()
 	for _, name := range controlNames {
 		for _, width := range []float64{200, 320, 640} {
 			t.Run(name, func(t *testing.T) {

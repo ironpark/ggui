@@ -25,6 +25,7 @@ func TestNowIsFrozenForTheFrame(t *testing.T) {
 }
 
 func TestFrameClockCapsALongPause(t *testing.T) {
+	t.Parallel()
 	var f frameClock
 	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	f.begin(t0)
@@ -39,6 +40,7 @@ func TestFrameClockCapsALongPause(t *testing.T) {
 }
 
 func TestFrameClockNeverGoesBackwards(t *testing.T) {
+	t.Parallel()
 	var f frameClock
 	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	f.begin(t0.Add(time.Second))
@@ -48,6 +50,7 @@ func TestFrameClockNeverGoesBackwards(t *testing.T) {
 }
 
 func TestProbeAdvanceStepsPastTheCap(t *testing.T) {
+	t.Parallel()
 	tw := Tween(0.0, time.Second).Easing(EaseLinear)
 	p := NewProbe(Reactive(func() Widget { return Box().Size(tw.Get(), 1) }), Sz(200, 20))
 	defer p.Close()
@@ -67,6 +70,7 @@ func (clockReader) Layout(c Constraints, _ Env) Size { return c.Constrain(Sz(20,
 func (clockReader) Paint(*Canvas, Rect)              { Now() }
 
 func TestTimeReadOutsideTheClipDoesNotAnimate(t *testing.T) {
+	t.Parallel()
 	offset := State(0.0)
 	p := NewProbe(Scroll(Column(Box().Size(100, 500), clockReader{})).BindOffset(offset), Sz(100, 100))
 	defer p.Close()

@@ -9,6 +9,7 @@ import (
 )
 
 func TestAspectRatioDerivesTheMissingSide(t *testing.T) {
+	t.Parallel()
 	a := ui.AspectRatio(2, ggui.Box())
 	if got := a.Layout(ggui.Loose(ggui.Sz(200, 500)), ggui.Env{}); got != ggui.Sz(200, 100) {
 		t.Fatalf("width leads: %+v", got)
@@ -30,6 +31,7 @@ func TestAspectRatioDerivesTheMissingSide(t *testing.T) {
 }
 
 func TestItemGroupsItsTextAndKeepsTheActionLive(t *testing.T) {
+	t.Parallel()
 	runs := 0
 	item := ui.Item("Backups", "Last run 2 hours ago").
 		Media(ui.Avatar("Ada Lovelace").Size(24)).
@@ -52,6 +54,7 @@ func TestItemGroupsItsTextAndKeepsTheActionLive(t *testing.T) {
 }
 
 func TestBreadcrumbLinksEveryStepButTheCurrentOne(t *testing.T) {
+	t.Parallel()
 	home := 0
 	b := ui.Breadcrumb(
 		ui.Crumb("Home", func() { home++ }),
@@ -72,6 +75,7 @@ func TestBreadcrumbLinksEveryStepButTheCurrentOne(t *testing.T) {
 }
 
 func TestBreadcrumbElidesTheMiddleAtMax(t *testing.T) {
+	t.Parallel()
 	var crumbs []ui.BreadcrumbEntry
 	for _, label := range []string{"A", "B", "C", "D", "E"} {
 		crumbs = append(crumbs, ui.Crumb(label, func() {}))
@@ -96,6 +100,7 @@ func TestBreadcrumbElidesTheMiddleAtMax(t *testing.T) {
 }
 
 func TestAvatarFallsBackToInitials(t *testing.T) {
+	t.Parallel()
 	p := ggui.NewProbe(ui.Avatar("Ada Lovelace"), ggui.Sz(60, 60))
 	defer p.Close()
 	tree := p.Semantics()
@@ -118,6 +123,7 @@ func TestAvatarFallsBackToInitials(t *testing.T) {
 }
 
 func TestInputGroupFocusesTheEditorFromItsPadding(t *testing.T) {
+	t.Parallel()
 	value := ggui.State("ab")
 	visits := 0
 	group := ui.InputGroup(ggui.TextInput(value).Name("Site")).
@@ -142,6 +148,7 @@ func TestInputGroupFocusesTheEditorFromItsPadding(t *testing.T) {
 }
 
 func TestHoverCardWaitsForTheCursorToRest(t *testing.T) {
+	t.Parallel()
 	card := ui.HoverCard(ggui.Box(ggui.Text("@ada")).Size(80, 24), ggui.Text("Ada Lovelace"))
 	p := ggui.NewProbe(ggui.Column(card, ggui.Spacer()), ggui.Sz(400, 300))
 	defer p.Close()
@@ -168,6 +175,7 @@ func TestHoverCardWaitsForTheCursorToRest(t *testing.T) {
 }
 
 func TestTooltipAppearsAfterHover(t *testing.T) {
+	t.Parallel()
 	tip := ui.Tooltip(ggui.Box().Size(50, 50), "hint").Delay(0)
 	p := ggui.NewProbe(ggui.Column(tip, ggui.Spacer()), ggui.Sz(100, 100))
 	defer p.Close()
@@ -189,6 +197,7 @@ func TestTooltipAppearsAfterHover(t *testing.T) {
 }
 
 func TestButtonGroupJoinsChildrenWithoutTakingTheirInput(t *testing.T) {
+	t.Parallel()
 	copies, pastes := 0, 0
 	g := ui.ButtonGroup(
 		ui.Button("Copy", func() { copies++ }).Ghost(),
@@ -214,6 +223,7 @@ func TestButtonGroupJoinsChildrenWithoutTakingTheirInput(t *testing.T) {
 }
 
 func TestToggleGroupPicksWithThePointerAndTheArrows(t *testing.T) {
+	t.Parallel()
 	value := ggui.State("left")
 	changes := 0
 	g := ui.ToggleGroup(value).Options([]string{"left", "center", "right"}).OnChange(func(string) { changes++ })
@@ -258,6 +268,7 @@ func TestToggleGroupPicksWithThePointerAndTheArrows(t *testing.T) {
 }
 
 func TestSheetSlidesInFromItsEdgeAndClosesOnTheScrim(t *testing.T) {
+	t.Parallel()
 	open := ggui.State(false)
 	sheet := ui.Sheet(open, ui.Button("Save", func() {})).Title("Filters").Size(200)
 	p := ggui.NewProbe(ggui.Column(ui.Button("Open", func() { open.Set(true) }), sheet), ggui.Sz(400, 300))
@@ -283,6 +294,7 @@ func TestSheetSlidesInFromItsEdgeAndClosesOnTheScrim(t *testing.T) {
 }
 
 func TestDrawerRisesFromTheBottom(t *testing.T) {
+	t.Parallel()
 	open := ggui.State(true)
 	p := ggui.NewProbe(ui.Drawer(open, ui.Button("Share", func() {})).Size(120), ggui.Sz(400, 300))
 	defer p.Close()
@@ -294,6 +306,7 @@ func TestDrawerRisesFromTheBottom(t *testing.T) {
 }
 
 func TestSidebarNavigatesWithThePointerAndTheArrows(t *testing.T) {
+	t.Parallel()
 	page := ggui.State("inbox")
 	narrow := ggui.State(false)
 	bar := ui.Sidebar(page,
@@ -330,6 +343,7 @@ func TestSidebarNavigatesWithThePointerAndTheArrows(t *testing.T) {
 }
 
 func TestAlertDialogHasToBeAnswered(t *testing.T) {
+	t.Parallel()
 	open := ggui.State(true)
 	deleted, cancelled := 0, 0
 	d := ui.AlertDialog(open, "Delete the file?", "This cannot be undone.").

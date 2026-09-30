@@ -6,6 +6,7 @@ import (
 )
 
 func TestEachKeysByValue(t *testing.T) {
+	t.Parallel()
 	tags := State([]string{"a", "b"})
 	builds := 0
 	list := Each(tags, func(rowItem EachItem[string]) Widget { r := rowItem.Value; builds++; return TextOf(r) })
@@ -20,6 +21,7 @@ func TestEachKeysByValue(t *testing.T) {
 }
 
 func TestTextScaleAndReducedMotionThroughTheEnv(t *testing.T) {
+	t.Parallel()
 	plain := Text("hello").Layout(Loose(Sz(500, 100)), Env{})
 	scaled := Provide(TextScaleKey, 2.0, Text("hello")).Layout(Loose(Sz(500, 100)), Env{})
 	if scaled.H < plain.H*1.8 {

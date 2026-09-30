@@ -16,6 +16,7 @@ type namedControl interface {
 }
 
 func TestFieldNamePriority(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		make func() namedControl
@@ -71,6 +72,7 @@ func TestFieldNamePriority(t *testing.T) {
 }
 
 func TestNamingDoesNotChangeOptionFormatting(t *testing.T) {
+	t.Parallel()
 	selected := ggui.State(2)
 	s := ui.Select(selected).Options([]int{1, 2}).Format(func(n int) string { return "Option " + strconv.Itoa(n) }).Name("Choice")
 	p := ggui.NewProbe(ui.Field("Outer", s), ggui.Sz(300, 300))
@@ -121,6 +123,7 @@ func checkDisabled[W interface {
 }
 
 func TestDisabledSettingsAcrossControls(t *testing.T) {
+	t.Parallel()
 	t.Run("input OTP", func(t *testing.T) {
 		checkDisabled(t, ui.InputOTP(ggui.State(""), 6).Name("Code"), ggui.RoleTextField, "Code")
 	})
@@ -216,6 +219,7 @@ func checkPopupDisabled[W interface {
 }
 
 func TestReactiveDisabledClosesPopups(t *testing.T) {
+	t.Parallel()
 	t.Run("select", func(t *testing.T) { checkPopupDisabled(t, ui.Select(ggui.State(1)).Options([]int{1, 2})) })
 	t.Run("combobox", func(t *testing.T) { checkPopupDisabled(t, ui.Combobox(ggui.State(1)).Options([]int{1, 2})) })
 	t.Run("datepicker", func(t *testing.T) { checkPopupDisabled(t, ui.DatePicker(ggui.State(time.Time{}))) })
@@ -226,6 +230,7 @@ func TestReactiveDisabledClosesPopups(t *testing.T) {
 }
 
 func TestInputGroupPreservesEditorBindingAndAddon(t *testing.T) {
+	t.Parallel()
 	value := ggui.State("abc")
 	childDisabled, groupDisabled := ggui.State(false), ggui.State(false)
 	editor := ggui.TextInput(value).Name("Editor").BindDisabled(childDisabled)
@@ -269,6 +274,7 @@ func TestInputGroupPreservesEditorBindingAndAddon(t *testing.T) {
 }
 
 func TestInheritedInputDisabledCannotBeClearedByDescendant(t *testing.T) {
+	t.Parallel()
 	editor := ggui.TextInput(ggui.State("value")).Name("Editor")
 	w := ggui.Provide(ggui.InputDisabledKey, true, ggui.Provide(ggui.InputDisabledKey, false, ui.InputGroup(editor).Disabled(false)))
 	p := ggui.NewProbe(w, ggui.Sz(300, 50))
@@ -282,6 +288,7 @@ func TestInheritedInputDisabledCannotBeClearedByDescendant(t *testing.T) {
 }
 
 func TestPaginationDisabledDoesNotSubscribeBuilder(t *testing.T) {
+	t.Parallel()
 	pages := ggui.State(3)
 	builds := 0
 	p := ggui.ProbeBuilder(func() ggui.Widget {
@@ -299,6 +306,7 @@ func TestPaginationDisabledDoesNotSubscribeBuilder(t *testing.T) {
 }
 
 func TestDisabledMenuClosesSharedMenubarPopup(t *testing.T) {
+	t.Parallel()
 	busy := ggui.State(false)
 	menu := ui.Menu("File", ui.MenuItem("Open", nil)).BindDisabled(busy)
 	bar := ui.Menubar(menu)
@@ -316,6 +324,7 @@ func TestDisabledMenuClosesSharedMenubarPopup(t *testing.T) {
 }
 
 func TestTextFieldPreservesEditorDisabledBinding(t *testing.T) {
+	t.Parallel()
 	busy := ggui.State(true)
 	field := ui.TextField(ggui.State("text")).Name("Field")
 	field.Input().BindDisabled(busy)
@@ -346,6 +355,7 @@ func TestTextFieldPreservesEditorDisabledBinding(t *testing.T) {
 }
 
 func TestInputGroupNamesFollowEditor(t *testing.T) {
+	t.Parallel()
 	editor := ggui.TextInput(ggui.State("")).Placeholder("Hint")
 	group := ui.InputGroup(editor)
 	p := ggui.NewProbe(group, ggui.Sz(300, 50))

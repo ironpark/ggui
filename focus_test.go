@@ -5,6 +5,7 @@ import (
 )
 
 func TestParseChord(t *testing.T) {
+	t.Parallel()
 	cases := map[string]Chord{
 		"cmd+s":        {Key: KeyS, Cmd: true},
 		"Ctrl+Shift+Z": {Key: KeyZ, Mods: Mods{Ctrl: true, Shift: true}},
@@ -30,6 +31,7 @@ func TestParseChord(t *testing.T) {
 }
 
 func TestKeyEventIs(t *testing.T) {
+	t.Parallel()
 	ev := KeyEvent{Kind: KeyPress, Key: KeyS, Mods: Mods{Ctrl: true}}
 	if !ev.Is(MustChord("ctrl+s")) || ev.Is(MustChord("ctrl+shift+s")) || ev.Is(MustChord("s")) {
 		t.Fatal("ctrl+s matched wrongly")
@@ -54,6 +56,7 @@ func (e *spaceEater) ConsumesKey(ev KeyEvent) bool { return ev.Key == KeySpace }
 func (e *spaceEater) Paint(dst *Canvas, r Rect)    { dst.HitKey(r, e) }
 
 func TestShortcutsRunAroundTheFocusedWidget(t *testing.T) {
+	t.Parallel()
 	e := &spaceEater{FocusWidget: *Focus(Box().Size(20, 20))}
 	p := NewProbe(e, Sz(50, 50))
 	defer p.Close()
@@ -82,6 +85,7 @@ func TestShortcutsRunAroundTheFocusedWidget(t *testing.T) {
 }
 
 func TestPopupTrapsTabAndRestoresFocus(t *testing.T) {
+	t.Parallel()
 	focused := ""
 	track := func(name string, size float64) *FocusWidget {
 		return Focus(Box().Size(size, size)).OnFocus(func(on bool) {
@@ -122,6 +126,7 @@ func TestPopupTrapsTabAndRestoresFocus(t *testing.T) {
 }
 
 func TestTabScrollsTheTargetIntoView(t *testing.T) {
+	t.Parallel()
 	items := Column(Focus(Box().Size(50, 50)), Focus(Box().Size(50, 50)), Focus(Box().Size(50, 50)))
 	sc := Scroll(items)
 	p := NewProbe(sc, Sz(50, 70))

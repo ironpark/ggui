@@ -25,6 +25,7 @@ func paintFrame(in *inputState, w Widget, size Size) {
 }
 
 func TestTapFiresOnDownAndUpInside(t *testing.T) {
+	t.Parallel()
 	taps := 0
 	w := Column(Box().Size(50, 50), Tap(Box().Size(50, 50), func() { taps++ }))
 	var in inputState
@@ -49,6 +50,7 @@ func TestTapFiresOnDownAndUpInside(t *testing.T) {
 }
 
 func TestTapSurvivesRebuildBetweenDownAndUp(t *testing.T) {
+	t.Parallel()
 	taps := 0
 	build := func() Widget { return Tap(Box().Size(50, 50), func() { taps++ }) }
 	var in inputState
@@ -62,6 +64,7 @@ func TestTapSurvivesRebuildBetweenDownAndUp(t *testing.T) {
 }
 
 func TestTopmostRegionWins(t *testing.T) {
+	t.Parallel()
 	var outer, inner int
 	w := Tap(Padding(Tap(Box().Size(20, 20), func() { inner++ }), 10), func() { outer++ })
 	var in inputState
@@ -78,6 +81,7 @@ func TestTopmostRegionWins(t *testing.T) {
 }
 
 func TestHoverEnterAndExit(t *testing.T) {
+	t.Parallel()
 	var log []bool
 	w := Pointer(Box().Size(50, 50)).OnHover(func(b bool) { log = append(log, b) })
 	var in inputState
@@ -91,6 +95,7 @@ func TestHoverEnterAndExit(t *testing.T) {
 }
 
 func TestUnhandledEventsFallThrough(t *testing.T) {
+	t.Parallel()
 	var scrolled Point
 	tapped := false
 	w := Pointer(Tap(Box().Size(50, 50), func() { tapped = true })).OnScroll(func(d Point) { scrolled = d })
@@ -106,6 +111,7 @@ func TestUnhandledEventsFallThrough(t *testing.T) {
 }
 
 func TestFocusRoutesKeys(t *testing.T) {
+	t.Parallel()
 	var keys []KeyboardKey
 	var typed string
 	var focus []bool
@@ -139,6 +145,7 @@ func TestFocusRoutesKeys(t *testing.T) {
 }
 
 func TestFocusLostWhenRegionDisappears(t *testing.T) {
+	t.Parallel()
 	blurred := false
 	w := Focus(Box().Size(50, 50)).OnFocus(func(b bool) { blurred = !b })
 	var in inputState
@@ -152,6 +159,7 @@ func TestFocusLostWhenRegionDisappears(t *testing.T) {
 }
 
 func TestPressedRegionCapturesDragAndRelease(t *testing.T) {
+	t.Parallel()
 	var drags, ups int
 	var last Point
 	w := Pointer(Box().Size(50, 50)).
@@ -170,6 +178,7 @@ func TestPressedRegionCapturesDragAndRelease(t *testing.T) {
 }
 
 func TestPointerAroundFocusSharesOneRegion(t *testing.T) {
+	t.Parallel()
 	taps := 0
 	focused := false
 	w := Tap(Focus(Box().Size(50, 50)).OnFocus(func(b bool) { focused = b }), func() { taps++ })
@@ -186,6 +195,7 @@ func TestPointerAroundFocusSharesOneRegion(t *testing.T) {
 }
 
 func TestCursorFollowsTopmostRegion(t *testing.T) {
+	t.Parallel()
 	w := Stack(
 		Pointer(Box().Size(100, 100)).Cursor(CursorShapeCrosshair),
 		Pointer(Box().Size(50, 50)).Cursor(CursorShapeText),
@@ -207,6 +217,7 @@ func TestCursorFollowsTopmostRegion(t *testing.T) {
 }
 
 func TestPressedRegionSurvivesBufferReuse(t *testing.T) {
+	t.Parallel()
 	var drags int
 	w := Row(
 		Pointer(Box().Size(50, 50)).OnDrag(func(PointerEvent) { drags++ }),
@@ -225,6 +236,7 @@ func TestPressedRegionSurvivesBufferReuse(t *testing.T) {
 }
 
 func TestAdopterTakesOverAtTheSameRect(t *testing.T) {
+	t.Parallel()
 	build := func() *adopting { return &adopting{} }
 	var in inputState
 	first := build()
@@ -258,6 +270,7 @@ func (a *adopting) Adopt(prev any) {
 }
 
 func TestModsCmdIsPlatformSpecific(t *testing.T) {
+	t.Parallel()
 	m := Mods{Meta: true}
 	if m.Cmd() != (runtime.GOOS == "darwin") {
 		t.Fatalf("Meta counts as Cmd = %v on %s", m.Cmd(), runtime.GOOS)
@@ -284,6 +297,7 @@ func (k *keyed) HandleKey(ev KeyEvent) {
 }
 
 func TestTabMovesFocusInPaintOrder(t *testing.T) {
+	t.Parallel()
 	var log []string
 	w := Row(&keyed{&log, "a"}, Box().Size(50, 50), &keyed{&log, "b"}, &keyed{&log, "c"})
 	var in inputState
@@ -310,6 +324,7 @@ func TestTabMovesFocusInPaintOrder(t *testing.T) {
 }
 
 func TestOnKeyRunsBeforeTheFocusedWidgetAndCanConsume(t *testing.T) {
+	t.Parallel()
 	var log []string
 	w := &keyed{&log, "a"}
 	p := NewProbe(w, Sz(50, 50))

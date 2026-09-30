@@ -8,6 +8,7 @@ import (
 )
 
 func TestKoreanFallsBackToASystemFont(t *testing.T) {
+	t.Parallel()
 	if len(SystemFonts()) == 0 {
 		t.Skip("no system CJK font on this machine")
 	}

@@ -11,6 +11,7 @@ import (
 )
 
 func TestDerivedIsLazyPureAndUntrackIsFresh(t *testing.T) {
+	t.Parallel()
 	n := State(1)
 	calls := 0
 	m := Derived(func() int { calls++; return n.Get() * 2 })
@@ -52,6 +53,7 @@ func assertPanics(t *testing.T, fn func()) {
 }
 
 func TestPublicEffectMountOrderCleanupAndDispose(t *testing.T) {
+	t.Parallel()
 	n, shown := State(0), State(true)
 	var log []string
 	p := ProbeBuilder(func() Widget {
@@ -85,6 +87,7 @@ func TestPublicEffectMountOrderCleanupAndDispose(t *testing.T) {
 }
 
 func TestEffectWriteSettlesBeforePaint(t *testing.T) {
+	t.Parallel()
 	n := State(0)
 	painted := -1
 	p := ProbeBuilder(func() Widget {
@@ -106,6 +109,7 @@ func TestEffectWriteSettlesBeforePaint(t *testing.T) {
 }
 
 func TestEffectDisposedBeforeFirstRunAndUntrackedCleanup(t *testing.T) {
+	t.Parallel()
 	trigger, other := State(0), State(0)
 	runs := 0
 	p := ProbeBuilder(func() Widget {
@@ -127,6 +131,7 @@ func TestEffectDisposedBeforeFirstRunAndUntrackedCleanup(t *testing.T) {
 }
 
 func TestIfFactoryLifetimeAndConfiguration(t *testing.T) {
+	t.Parallel()
 	shown := State(false)
 	created, cleaned := 0, 0
 	var local *StateValue[int]
@@ -160,6 +165,7 @@ func TestIfFactoryLifetimeAndConfiguration(t *testing.T) {
 }
 
 func TestEachPositionKeyIndexAndEmptyLifetime(t *testing.T) {
+	t.Parallel()
 	type item struct {
 		ID    int
 		Label string
@@ -204,6 +210,7 @@ func TestEachPositionKeyIndexAndEmptyLifetime(t *testing.T) {
 }
 
 func TestDerivedEqualityAndMeasurementTracking(t *testing.T) {
+	t.Parallel()
 	n := State(1)
 	runs := 0
 	p := ProbeBuilder(func() Widget {
@@ -220,6 +227,7 @@ func TestDerivedEqualityAndMeasurementTracking(t *testing.T) {
 }
 
 func TestPublicEffectCycleReportsItsOrigin(t *testing.T) {
+	t.Parallel()
 	n := State(0)
 	p := ProbeBuilder(func() Widget {
 		Effect(func() Cleanup { n.Set(n.Get() + 1); return nil })
@@ -239,6 +247,7 @@ func TestPublicEffectCycleReportsItsOrigin(t *testing.T) {
 }
 
 func TestEffectCanCloseAppBeforePaint(t *testing.T) {
+	t.Parallel()
 	var p *Probe
 	painted := false
 	cleaned := 0
@@ -256,6 +265,7 @@ func TestEffectCanCloseAppBeforePaint(t *testing.T) {
 }
 
 func TestEachEmptyBranchLaidOutAfterExitTransition(t *testing.T) {
+	t.Parallel()
 	items := State([]int{1})
 	cleaned := 0
 	p := ProbeBuilder(func() Widget {

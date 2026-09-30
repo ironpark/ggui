@@ -27,6 +27,7 @@ func makeOptionControl(kind string, value ggui.Binding[string], changed func(str
 }
 
 func TestOptionsUpdateOpenControlWithoutWritingSelection(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"select", "combobox"} {
 		t.Run(kind, func(t *testing.T) {
 			value := ggui.State("Alpha")
@@ -65,6 +66,7 @@ func TestOptionsUpdateOpenControlWithoutWritingSelection(t *testing.T) {
 }
 
 func TestBindOptionsLastSettingWinsInsideCaches(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"select", "combobox"} {
 		t.Run(kind, func(t *testing.T) {
 			w := makeOptionControl(kind, ggui.State("Alpha"), nil)
@@ -101,6 +103,7 @@ func TestBindOptionsLastSettingWinsInsideCaches(t *testing.T) {
 }
 
 func TestOptionsAndFormatComposeInEitherOrder(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"select", "combobox"} {
 		for _, formatFirst := range []bool{false, true} {
 			t.Run(kind+map[bool]string{true: "/format-first", false: "/options-first"}[formatFirst], func(t *testing.T) {
@@ -124,6 +127,7 @@ func TestOptionsAndFormatComposeInEitherOrder(t *testing.T) {
 }
 
 func TestSelectOptionsResizeCachedTrigger(t *testing.T) {
+	t.Parallel()
 	w := ui.Select(ggui.State("a")).Options([]string{"a"}).Name("Choice")
 	p := ggui.NewProbe(ggui.Component(func() ggui.Widget { return ggui.Column(w) }), ggui.Sz(600, 300))
 	defer p.Close()
@@ -144,6 +148,7 @@ func TestSelectOptionsResizeCachedTrigger(t *testing.T) {
 }
 
 func TestSelectOptionsResetKeyboardHighlightToValue(t *testing.T) {
+	t.Parallel()
 	value := ggui.State("Beta")
 	w := ui.Select(value).Options([]string{"Alpha", "Beta"}).Name("Choice")
 	p := ggui.NewProbe(ggui.Column(w), ggui.Sz(400, 350))
@@ -164,6 +169,7 @@ func TestSelectOptionsResetKeyboardHighlightToValue(t *testing.T) {
 }
 
 func TestComboboxOptionsKeepSearchQueryAndFocus(t *testing.T) {
+	t.Parallel()
 	value := ggui.State("Alpha")
 	w := ui.Combobox(value).Options([]string{"Alpha", "Beta"}).Name("Choice")
 	p := ggui.NewProbe(ggui.Component(func() ggui.Widget { return ggui.Column(w) }), ggui.Sz(450, 400))
@@ -189,6 +195,7 @@ func TestComboboxOptionsKeepSearchQueryAndFocus(t *testing.T) {
 }
 
 func TestRepeatedOptionConfigurationSettles(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"select", "combobox"} {
 		for _, bound := range []bool{false, true} {
 			t.Run(kind+map[bool]string{true: "/bound", false: "/static"}[bound], func(t *testing.T) {
@@ -227,6 +234,7 @@ type optionReader struct{ read func() []string }
 func (r optionReader) Get() []string { return r.read() }
 
 func TestBindOptionsSupportsCustomNonComparableReaders(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"select", "combobox"} {
 		t.Run(kind, func(t *testing.T) {
 			source := ggui.State([]string{"Alpha"})
@@ -246,6 +254,7 @@ func TestBindOptionsSupportsCustomNonComparableReaders(t *testing.T) {
 }
 
 func TestOptionsReplacementCancelsPressOnRemovedRow(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"select", "combobox"} {
 		t.Run(kind, func(t *testing.T) {
 			value := ggui.State("Alpha")

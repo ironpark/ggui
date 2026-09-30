@@ -9,6 +9,7 @@ import (
 // TestCounter drives the app headlessly: Tap finds buttons by their
 // label, Type sends keys through the same shortcut table as the window.
 func TestCounter(t *testing.T) {
+	t.Parallel()
 	m := newModel()
 	p := ggui.ProbeBuilder(m.build, ggui.Sz(480, 320))
 	defer p.Close()

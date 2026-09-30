@@ -36,6 +36,7 @@ func TestToastExitIsAnimatedAndInert(t *testing.T) {
 }
 
 func TestToastReducedMotionAndQueueReplacement(t *testing.T) {
+	t.Parallel()
 	host := NewToaster().Limit(2)
 	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, host), ggui.Sz(500, 400))
 	defer p.Close()
@@ -56,6 +57,7 @@ func TestToastReducedMotionAndQueueReplacement(t *testing.T) {
 }
 
 func TestToastLiveRegionKeepsIdentityWhileMoving(t *testing.T) {
+	t.Parallel()
 	host := NewToaster()
 	p := ggui.NewProbe(host, ggui.Sz(500, 400))
 	defer p.Close()

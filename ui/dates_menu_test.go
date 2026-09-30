@@ -11,6 +11,7 @@ import (
 
 func date(y int, m time.Month, d int) time.Time { return time.Date(y, m, d, 0, 0, 0, 0, time.UTC) }
 func TestCalendarNavigationAndConstraints(t *testing.T) {
+	t.Parallel()
 	value := ggui.State(date(2024, 1, 31))
 	changes := 0
 	c := ui.Calendar(value).Location(time.UTC).WeekStartsOn(time.Monday).OnChange(func(time.Time) { changes++ })
@@ -51,6 +52,7 @@ func TestCalendarNavigationAndConstraints(t *testing.T) {
 	}
 }
 func TestDatePickerSelectionAndCancel(t *testing.T) {
+	t.Parallel()
 	v := ggui.State(date(2024, 2, 1))
 	n := 0
 	d := ui.DatePicker(v).Name("Due date").OnChange(func(time.Time) { n++ })
@@ -83,6 +85,7 @@ func TestDatePickerSelectionAndCancel(t *testing.T) {
 	}
 }
 func TestMenubarSwitchAndKeyboard(t *testing.T) {
+	t.Parallel()
 	picked := ""
 	after := 0
 	b := ui.Menubar(ui.Menu("File", ui.MenuItem("Unavailable", nil).Disabled(true), ui.MenuItem("New", func() { picked = "new" })), ui.Menu("Edit", ui.MenuItem("Copy", func() { picked = "copy" })))
@@ -115,6 +118,7 @@ func TestMenubarSwitchAndKeyboard(t *testing.T) {
 }
 
 func TestCalendarCivilDatesAndWeekStart(t *testing.T) {
+	t.Parallel()
 	loc, err := time.LoadLocation("America/New_York")
 	if err != nil {
 		t.Fatal(err)
@@ -148,6 +152,7 @@ func TestCalendarCivilDatesAndWeekStart(t *testing.T) {
 }
 
 func TestMenubarDisabledAndRebuild(t *testing.T) {
+	t.Parallel()
 	version := ggui.State(0)
 	calls := 0
 	var b *ui.MenubarWidget
@@ -168,6 +173,7 @@ func TestMenubarDisabledAndRebuild(t *testing.T) {
 }
 
 func TestMenubarKeyboardIgnoresStationaryPointer(t *testing.T) {
+	t.Parallel()
 	chosen := ""
 	b := ui.Menubar(ui.Menu("File", ui.MenuItem("New", func() { chosen = "new" })), ui.Menu("Edit", ui.MenuItem("Copy", func() { chosen = "copy" })))
 	p := ggui.NewProbe(b, ggui.Sz(300, 200))
@@ -179,6 +185,7 @@ func TestMenubarKeyboardIgnoresStationaryPointer(t *testing.T) {
 }
 
 func TestButtonStylesPreserveActivationAndDisabledState(t *testing.T) {
+	t.Parallel()
 	for _, style := range []struct {
 		name  string
 		apply func(*ui.ButtonWidget) *ui.ButtonWidget
@@ -210,6 +217,7 @@ func TestButtonStylesPreserveActivationAndDisabledState(t *testing.T) {
 }
 
 func TestMenubarPopupHasBoundedWidth(t *testing.T) {
+	t.Parallel()
 	b := ui.Menubar(ui.Menu("File", ui.MenuItem("New", nil).Shortcut("⌘N")))
 	p := ggui.NewProbe(ggui.Padding(b, 40), ggui.Sz(900, 400))
 	defer p.Close()

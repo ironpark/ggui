@@ -8,6 +8,7 @@ import (
 )
 
 func TestGalleryFiltersAndGlobalActions(t *testing.T) {
+	t.Parallel()
 	dark, search, category, scroll := ggui.State(false), ggui.State(""), ggui.State("All"), ggui.State(0.0)
 	commands := 0
 	p := ggui.ProbeBuilder(func() ggui.Widget {
@@ -55,6 +56,7 @@ func TestGalleryFiltersAndGlobalActions(t *testing.T) {
 }
 
 func TestPreviewGridReflows(t *testing.T) {
+	t.Parallel()
 	grid := &previewGrid{children: []ggui.Widget{
 		preview("Buttons", ui.Button("First", nil)),
 		preview("Text", ui.Button("Second", nil)),
@@ -77,6 +79,7 @@ func TestPreviewGridReflows(t *testing.T) {
 }
 
 func TestGallerySearchPasteAcrossRebuilds(t *testing.T) {
+	t.Parallel()
 	dark, search, category, scroll := ggui.State(false), ggui.State(""), ggui.State("All"), ggui.State(0.0)
 	p := ggui.ProbeBuilder(func() ggui.Widget {
 		return galleryPage(dark, search, category, scroll, func() {}, []ggui.Widget{preview("Buttons", ui.Button("Sample", nil))})

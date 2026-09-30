@@ -20,6 +20,7 @@ func (r *recorder) Cursor(p Point) (CursorShape, bool) {
 }
 
 func TestOverlayTakesInputBeforeWidgetsExceptDuringADrag(t *testing.T) {
+	t.Parallel()
 	a := &Window{}
 	taps := 0
 	w := Tap(Box().Size(400, 400), func() { taps++ })
@@ -49,6 +50,7 @@ func TestOverlayTakesInputBeforeWidgetsExceptDuringADrag(t *testing.T) {
 }
 
 func TestCanvasTextForOverlays(t *testing.T) {
+	t.Parallel()
 	c := &Canvas{}
 	c.scale = 2
 	if w := c.TextWidth("hello", nil, 12); w <= 0 || w != c.TextWidth("hello", DefaultFont(), 12) {

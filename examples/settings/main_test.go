@@ -11,6 +11,7 @@ import (
 // TestSettings edits through the lenses, saves through a worker and waits
 // for the posted result to land on the probe's frame.
 func TestSettings(t *testing.T) {
+	t.Parallel()
 	var stored Profile
 	fail := false
 	m := newModel(func(p Profile) error {
