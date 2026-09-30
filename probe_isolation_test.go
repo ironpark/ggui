@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"image/color"
 	"testing"
 	"time"
 
@@ -118,5 +119,30 @@ func TestAnAnimationStepsOnlyInItsOwnProbe(t *testing.T) {
 	a.Advance(500 * time.Millisecond)
 	if got := Untrack(tw.Get); got != 50 {
 		t.Fatalf("its own probe moved it to %v, want 50", got)
+	}
+}
+
+// SetEnv before a probe's first frame sets what that probe starts from, on
+// the test's own goroutine alone, so parallel tests may each set their own.
+func TestSetEnvBeforeAProbeStaysOnItsGoroutine(t *testing.T) {
+	t.Parallel()
+	for _, c := range []color.RGBA{{R: 1, A: 255}, {G: 2, A: 255}, {B: 3, A: 255}} {
+		t.Run("", func(t *testing.T) {
+			t.Parallel()
+			SetEnv(Env{}.With(BackgroundKey, color.Color(c)))
+			var seen color.Color
+			p := NewProbe(FromFuncs(func(cs Constraints, env Env) Size {
+				seen = env.Background()
+				return cs.Constrain(Sz(1, 1))
+			}, func(*Canvas, Rect) {}), Sz(10, 10))
+			defer p.Close()
+			for range 20 {
+				p.Frame()
+				if seen != color.Color(c) {
+					t.Fatalf("laid out under %v, want %v", seen, c)
+				}
+				p.Resize(Sz(10+float64(c.R+c.G+c.B), 10))
+			}
+		})
 	}
 }
