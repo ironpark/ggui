@@ -149,22 +149,26 @@ string and follows the normal derived ownership rules.
 
 ## Runtimes
 
-Every computation belongs to a runtime: its owner's, or the process runtime
-when it has none. The App's windows share the process runtime, so a signal
-written in one window updates every window that reads it. Each `Probe`
-builds its tree in a runtime of its own, beside its own animations and clock:
-its frames run its own effects and never another probe's, a probe a test
-forgets to close leaves nothing running in the next test, and
-`Probe.Advance` moves that probe's time alone.
+Every computation belongs to a runtime: its owner's, or, when it has none,
+the base runtime of the goroutine that created it. The App's windows share
+one runtime, so a signal written in one window updates every window that
+reads it. Each `Probe` builds its tree in a runtime of its own, beside its
+own animations, clock and environment: its frames run its own effects and
+never another probe's, a probe a test forgets to close leaves nothing
+running in the next test, and `Probe.Advance` moves that probe's time alone.
 
 Signals belong to no runtime. One signal can feed an App and several probes
 at once, and a derived value built in one runtime can be read from another.
 What is created outside every tree, such as a widget built before its probe
-or state made in `main`, stays in the process runtime, which every frame
-flushes as well.
+or state made in `main`, stays in its goroutine's base runtime, which the
+app or probe made on that goroutine flushes as well.
 
-Runtimes do not make the UI goroutine plural. Every runtime runs on the one
-UI goroutine, so probes still run one after another, never in parallel.
+What is running -- the computation reads subscribe, the owner new effects
+join, the loop whose frame runs -- is kept per goroutine. Probes on
+goroutines of their own, as `t.Parallel` runs them, therefore run at the
+same time without seeing each other, as long as each keeps to its own
+signals: a signal written on one goroutine and read by another's
+computations is a data race, as it would be for any Go value.
 
 ## Readers, bindings, and lenses
 

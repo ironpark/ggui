@@ -45,11 +45,16 @@ func TestCheckbox(t *testing.T) {
 | `Advance(duration)` | Advancing this probe's clock for animation. |
 
 > [!IMPORTANT]
-> Each probe has its own reactive runtime, animations and clock, so one
-> probe's frames never run another's effects and `Advance` moves only its own
-> time. Probes still share the UI goroutine, the theme (`SetEnv`) and the
-> package clock (`SetClock`): run probe tests serially (do not call
-> `t.Parallel`) and call `Close`, usually with `defer`.
+> Each probe has its own reactive runtime, animations, clock and
+> environment, so probe tests may call `t.Parallel`: one probe's frames never
+> run another's effects, `Advance` moves only its own time, and `SetEnv` or a
+> theme set once a probe has run changes that probe alone. Keep each parallel
+> test to its own signals, and call `Close`, usually with `defer`.
+>
+> A few settings remain the process's. Tests that change them must not be
+> parallel: `SetClock`, `SetDefaultFont`, `SetEmojiFont`, `RegisterInspector`,
+> and `SetEnv` or a theme set before any probe has run on the test's
+> goroutine, which is what that goroutine's next probe starts from.
 
 ## State, layout, and semantic actions
 
