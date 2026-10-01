@@ -147,7 +147,8 @@ steppers. Typing is committed on Enter or blur: the text is parsed, rounded to
 the decimals shown and clamped to the range; text that is not a number
 reverts. ArrowUp and ArrowDown step (Shift for ten steps), and a stepper is
 disabled at its end of the range. Screen readers see one spin button with its
-range, and can increment, decrement or set it.
+range, and can increment, decrement or set it. The spin button is the editor
+itself, so its caret and characters read as in any text field.
 
 ```go
 ui.Field("Quantity", ui.NumberInput(qty).Range(0, 99))

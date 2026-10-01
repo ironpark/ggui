@@ -193,7 +193,6 @@ func (c *Canvas) nextFrame() {
 	clear(f.prevByID)
 	clear(f.prevByRect)
 	f.traceParent, f.traceRoots = 0, 0
-	activeWorld().envMemo.rotate()
 }
 
 // Inert returns a Canvas that draws where c does but registers no hit

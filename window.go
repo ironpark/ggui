@@ -138,7 +138,8 @@ type Window struct {
 	keys          [KeyMax + 1]bool       // keys held, for Mods
 	touches       map[ggfx.TouchID]Point // touches in progress, in logical pixels
 	ax            a11ybridge.Bridge
-	semWanted     atomic.Bool // a caller of Semantics or Perform reads the tree
+	semWanted     atomic.Bool  // a caller of Semantics reads the tree
+	performs      atomic.Int32 // Perform calls not yet carried out, which need a tree
 	dragOver      bool
 	dragAt        Point
 	seenGen       uint64            // layoutGen as this window's last frame left it
@@ -422,9 +423,10 @@ func (w *Window) Shortcut(chord string, fn func()) *ShortcutHandle {
 // to the UI goroutine.
 //
 // A window builds the tree only while something reads it: an assistive
-// technology, the inspector, or a caller of Semantics or Perform. The first
-// call turns it on for good and asks for a frame; until that frame, the
-// tree returned is the last one built, which is empty before any was.
+// technology, the inspector, a caller of Semantics, or a Perform waiting to
+// be carried out. The first call to Semantics turns it on for good and asks
+// for a frame; until that frame, the tree returned is the last one built,
+// which is empty before any was.
 func (w *Window) Semantics() *SemTree {
 	w.wantSemantics()
 	return w.semantics()
@@ -642,7 +644,7 @@ func (w *Window) draw(screen *ggfx.Image, scale float64) {
 		// The buffer freed two frames ago takes the new regions.
 		hits:    w.spare[:0],
 		tracing: tracing,
-		semOff:  !w.semWanted.Load() && !tracing && !w.ax.Listening(),
+		semOff:  !w.semWanted.Load() && w.performs.Load() == 0 && !tracing && !w.ax.Listening(),
 		settled: func() {
 			// The settle may have changed the theme the background is.
 			if w.cfg.Background == nil && !w.cfg.Transparent {

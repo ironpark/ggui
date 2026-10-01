@@ -74,13 +74,33 @@ An interactive widget can implement `Describer` and `Actor`; register it with
 use `Canvas.Leaf`, and `Canvas.Node` groups semantic children. Keep semantic
 names descriptive and avoid exposing decorative content as extra controls.
 
+A control built around a `TextInput` keeps the editor as the element rather
+than describing itself and forwarding the editor's input. The editor then
+brings its caret, selection and character positions to the screen reader.
+`OnDescribe` amends the editor's node, and `OnAction` takes the actions the
+control adds, as `ui.NumberInput` makes its editor a spin button that steps:
+
+```go
+input := ggui.TextInput(text).
+	OnDescribe(func(n *ggui.Node) { n.Role = ggui.RoleSpinButton; n.Actions |= ggui.ActionIncrement }).
+	OnAction(func(a ggui.Action) bool {
+		if a.Kind != ggui.ActionIncrement {
+			return false // the editor's own, such as moving the caret
+		}
+		increment()
+		return true
+	})
+```
+
 `app.Semantics()` returns the last published `SemTree`. A snapshot may be read
 from any goroutine and retained across frames, but its shared slices must not
 be modified. A window builds the tree only while something reads it: an
-assistive technology, the inspector, or a caller of `Semantics` or `Perform`.
-The first call turns it on and asks for a frame, so the tree it returns may be
-the last one built, empty before any was. `app.Perform(node.ID, action)` queues a supported action on the UI
-thread; observe the result in a subsequent snapshot. See
+assistive technology, the inspector, a caller of `Semantics`, or a `Perform`
+waiting to be carried out. The first call to `Semantics` turns it on and asks
+for a frame, so the tree it returns may be the last one built, empty before
+any was. A `Perform` keeps the tree on only until it has run.
+`app.Perform(node.ID, action)` queues a supported action on the UI thread;
+observe the result in a subsequent snapshot. See
 [semantic action tests](testing.md#state-layout-and-semantic-actions) for a
 headless example.
 

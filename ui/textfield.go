@@ -88,6 +88,20 @@ func (f *TextFieldWidget) OnChange(fn func(string)) *TextFieldWidget { f.input.O
 // OnCommit fires with the value when the field loses focus or submits.
 func (f *TextFieldWidget) OnCommit(fn func(string)) *TextFieldWidget { f.input.OnCommit(fn); return f }
 
+// OnDescribe amends the node the field describes; see
+// ggui.TextInputWidget.OnDescribe.
+func (f *TextFieldWidget) OnDescribe(fn func(*ggui.Node)) *TextFieldWidget {
+	f.input.OnDescribe(fn)
+	return f
+}
+
+// OnAction gives fn the first say on an assistive technology's action; see
+// ggui.TextInputWidget.OnAction.
+func (f *TextFieldWidget) OnAction(fn func(ggui.Action) bool) *TextFieldWidget {
+	f.input.OnAction(fn)
+	return f
+}
+
 // Key gives the editor an identity, so a rebuilt field that also moved
 // keeps its caret and focus. The editor registers the field's regions, so
 // its identity is the one that counts, not Interactive's.

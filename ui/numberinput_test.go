@@ -132,6 +132,15 @@ func TestNumberInputSemanticsAndActions(t *testing.T) {
 	if n := node(t, p.Semantics(), ggui.RoleSpinButton, "Qty"); n.Value != "3.10" {
 		t.Fatalf("value text %q", n.Value)
 	}
+	// The spin button is the editor, so a screen reader moves its caret
+	// and reads where it is as in any field.
+	if !n.Actions.Has(ggui.ActionSetSelection) {
+		t.Fatalf("the spin button cannot move its caret: actions %b", n.Actions)
+	}
+	act(t, p, ggui.RoleSpinButton, "Qty", ggui.Action{Kind: ggui.ActionSetSelection, SelStart: 1, SelEnd: 3})
+	if n := node(t, p.Semantics(), ggui.RoleSpinButton, "Qty"); n.SelStart != 1 || n.SelEnd != 3 {
+		t.Fatalf("selection %d-%d after setting it to 1-3", n.SelStart, n.SelEnd)
+	}
 }
 
 func TestNumberInputDisabled(t *testing.T) {

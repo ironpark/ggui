@@ -66,17 +66,22 @@ func (p *Probe) Announce(text string, politeness Politeness) {
 // immediately: the work is queued onto the UI goroutine and happens before
 // the next frame's input, and the frame after that publishes what came of
 // it. See the note at the top of this file for why it must not wait.
+//
+// The action is found in the accessibility tree, which a window builds only
+// while something reads it. A pending Perform is such a reader: while one
+// waits, every frame builds the tree, and once it is carried out the window
+// goes back to building it only when asked.
 func (w *Window) Perform(id NodeID, act Action) {
-	w.wantSemantics()
-	retried := false
+	w.performs.Add(1)
 	var run func()
 	run = func() {
-		if w.canvas.fs().semOff && !retried {
-			// The last frame built no tree; the next one will.
-			retried = true
+		if w.canvas.fs().semOff {
+			// The last frame built no tree. The one about to run does,
+			// since this Perform is pending, so try again after it.
 			w.Post(run)
 			return
 		}
+		w.performs.Add(-1)
 		perform(&w.canvas, &w.input, id, act)
 	}
 	w.Post(run)

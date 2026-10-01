@@ -16,7 +16,8 @@ import (
 // typed into a text editor and committed on Enter or when the field loses
 // focus, and stepped by the buttons, ArrowUp and ArrowDown (with Shift, ten
 // steps at a time) or an assistive technology. A screen reader sees one
-// spin button with its range. Build one with NumberInput.
+// spin button with its range, which is the editor: its caret and characters
+// read as any field's do. Build one with NumberInput.
 type NumberInputWidget struct {
 	props property.Owner
 	ggui.Interactive
@@ -42,10 +43,9 @@ type NumberInputWidget struct {
 //	ui.Field("Quantity", ui.NumberInput(qty).Range(0, 99))
 func NumberInput(value ggui.Binding[float64]) *NumberInputWidget {
 	n := &NumberInputWidget{value: value, step: 1, digits: -1, lo: math.Inf(-1), hi: math.Inf(1)}
-	n.Role = ggui.RoleSpinButton
-	n.AutoKey()
 	n.text = ggui.State(n.format(ggui.Untrack(value.Get)))
-	n.input = ggui.TextInput(n.text).MinWidth(64).Filter(numberChars).OnKey(n.key).OnCommit(func(string) { n.commit() })
+	n.input = ggui.TextInput(n.text).MinWidth(64).Filter(numberChars).OnKey(n.key).OnCommit(func(string) { n.commit() }).
+		OnDescribe(n.describe).OnAction(n.act)
 	n.dec = &numberStepper{n: n, dir: -1}
 	n.inc = &numberStepper{n: n, dir: 1}
 	n.dec.Role, n.inc.Role = ggui.RoleButton, ggui.RoleButton
@@ -91,17 +91,23 @@ func (n *NumberInputWidget) Precision(digits int) *NumberInputWidget {
 }
 
 // Name names the field for Probe.Find and the inspector.
-func (n *NumberInputWidget) Name(s string) *NumberInputWidget { n.SetName(s); return n }
+func (n *NumberInputWidget) Name(s string) *NumberInputWidget { n.input.Name(s); return n }
+
+// SetName names the field, as a Field's label does.
+func (n *NumberInputWidget) SetName(s string) { n.input.Name(s) }
+
+// HasName reports whether the field has a name of its own.
+func (n *NumberInputWidget) HasName() bool { return n.input.HasName() }
 
 // BindName binds the field's name to r; see ggui.Interactive.BindName.
 func (n *NumberInputWidget) BindName(r ggui.Readable[string]) *NumberInputWidget {
-	n.Interactive.BindName(r)
+	n.input.BindName(r)
 	return n
 }
 
 // Key gives the field an identity, so a rebuilt one that also moved keeps
 // its caret and focus.
-func (n *NumberInputWidget) Key(k any) *NumberInputWidget { n.Interactive.SetKey(k); return n }
+func (n *NumberInputWidget) Key(k any) *NumberInputWidget { n.input.Key(k); return n }
 
 // Disabled greys the field out and ignores input while v is true.
 func (n *NumberInputWidget) Disabled(v bool) *NumberInputWidget { n.SetInert(v); return n }
@@ -246,29 +252,21 @@ func (n *NumberInputWidget) key(ev ggui.KeyEvent) bool {
 	return true
 }
 
-// Describe implements ggui.Describer: one spin button carrying the range,
-// the value and the text shown for it. Min and Max are 0 without a Range.
-func (n *NumberInputWidget) Describe() ggui.Node {
-	node := ggui.Node{
-		Role:     ggui.RoleSpinButton,
-		Name:     n.SemanticName(),
-		Value:    ggui.Untrack(n.text.Get),
-		Now:      ggui.Untrack(n.value.Get),
-		Disabled: n.disabled || n.IsInert(),
-		Actions:  ggui.ActionIncrement | ggui.ActionDecrement | ggui.ActionSetValue | ggui.ActionFocus,
-	}
+// describe makes the editor's node a spin button carrying the range and
+// the value; the text shown for it, the caret and the characters are the
+// editor's. Min and Max are 0 without a Range.
+func (n *NumberInputWidget) describe(node *ggui.Node) {
+	node.Role = ggui.RoleSpinButton
+	node.Now = ggui.Untrack(n.value.Get)
+	node.Actions |= ggui.ActionIncrement | ggui.ActionDecrement
 	if !math.IsInf(n.lo, 0) || !math.IsInf(n.hi, 0) {
 		node.Min, node.Max = n.lo, n.hi
 	}
-	return node
 }
 
-// Act implements ggui.Actor: increment, decrement and set the value, from
-// a number or from text. Focus is left to the runtime.
-func (n *NumberInputWidget) Act(a ggui.Action) bool {
-	if n.disabled || n.IsInert() {
-		return false
-	}
+// act increments, decrements and sets the value, from a number or from
+// text; moving the caret is the editor's.
+func (n *NumberInputWidget) act(a ggui.Action) bool {
 	switch a.Kind {
 	case ggui.ActionIncrement:
 		n.stepBy(1)
@@ -289,42 +287,6 @@ func (n *NumberInputWidget) Act(a ggui.Action) bool {
 	return true
 }
 
-// The field is the handler for the editor's input, so that the region,
-// the focus and the node are the spin button's; these forward to the editor.
-
-// HandleKey implements ggui.KeyHandler.
-func (n *NumberInputWidget) HandleKey(ev ggui.KeyEvent) {
-	n.Keyboard(ev, nil)
-	n.input.HandleKey(ev)
-}
-
-// HandlePointer implements ggui.PointerHandler.
-func (n *NumberInputWidget) HandlePointer(ev ggui.PointerEvent) bool {
-	n.Pointer(ev, nil)
-	return n.input.HandlePointer(ev)
-}
-
-// HandleTick implements ggui.TickHandler: it runs the editor's IME.
-func (n *NumberInputWidget) HandleTick() bool { return n.input.HandleTick() }
-
-// ConsumesKey implements ggui.KeyConsumer.
-func (n *NumberInputWidget) ConsumesKey(ev ggui.KeyEvent) bool { return n.input.ConsumesKey(ev) }
-
-// ClaimsChord implements ggui.ChordClaimer.
-func (n *NumberInputWidget) ClaimsChord(ev ggui.KeyEvent) bool { return n.input.ClaimsChord(ev) }
-
-// CaptureTouchDrag implements ggui.TouchDragCapturer: a drag selects text.
-func (n *NumberInputWidget) CaptureTouchDrag() bool { return !n.disabled && !n.IsInert() }
-
-// Adopt implements ggui.Adopter: focus, caret and selection carry across a
-// rebuild.
-func (n *NumberInputWidget) Adopt(prev any) {
-	n.Interactive.Adopt(prev)
-	if p, ok := prev.(*NumberInputWidget); ok {
-		n.input.Adopt(p.input)
-	}
-}
-
 // Layout implements ggui.Widget.
 func (n *NumberInputWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer n.props.Layout()()
@@ -335,7 +297,7 @@ func (n *NumberInputWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	n.disabled = n.IsInert() || inherited
 	n.invalid, _ = env.Get(fieldInvalid)
 	if n.row == nil {
-		n.row = ggui.Row(ggui.Expanded(numberEditor{n}), n.dec, n.inc)
+		n.row = ggui.Row(ggui.Expanded(n.input), n.dec, n.inc)
 		n.box = ggui.Box(n.row)
 	}
 	n.row.Gap(t.Space / 2)
@@ -352,10 +314,12 @@ func (n *NumberInputWidget) Baseline() (float64, bool) { return n.box.Baseline()
 // Paint implements ggui.Widget.
 func (n *NumberInputWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	n.Sync()
+	// The whole box, padding included, focuses and clicks into the editor,
+	// which is the element: it describes itself as the spin button.
 	if n.disabled {
-		dst.Describe(r, n)
+		dst.Describe(r, n.input)
 	} else {
-		n.Hit(dst, r, n, ggui.CursorShapeText)
+		n.Hit(dst, r, n.input, ggui.CursorShapeText)
 	}
 	if n.input.Focused() && !n.disabled {
 		fieldHalo(dst, r, n.theme.Radius, fieldRing(n.theme, n.invalid))
@@ -364,18 +328,6 @@ func (n *NumberInputWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		n.box.Border(n.theme.BorderWidth, n.theme.Destructive)
 	}
 	dst.Paint(n.box, r)
-}
-
-// numberEditor paints the editor without its own regions or node: the
-// field registered them for it, with itself as the handler.
-type numberEditor struct{ n *NumberInputWidget }
-
-func (e numberEditor) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	return e.n.input.Layout(c, env)
-}
-func (e numberEditor) Baseline() (float64, bool) { return e.n.input.Baseline() }
-func (e numberEditor) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	dst.Inert().Paint(e.n.input, r)
 }
 
 // numberStepper is the − or + button beside the editor. It takes the

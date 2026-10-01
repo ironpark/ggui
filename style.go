@@ -204,36 +204,57 @@ type derivedKey struct {
 	val  any
 }
 
-// envMemo remembers the Envs derived this frame and last, so the same
-// derivation yields the same revision frame after frame and a container
-// that derives the same Env every frame reuses it. Each world keeps its
-// own, written from derive and rotated by Canvas.nextFrame, both on the
-// goroutine running that world's frames. A revision names one Env across
-// every world, so an Env derived in one is never mistaken for another's.
+// envMemo remembers derived Envs, so the same derivation yields the same
+// revision every time it is made and a Cached below it holds. Each world
+// keeps its own, written from derive on the goroutine running that world's
+// frames. A revision names one Env across every world, so an Env derived in
+// one is never mistaken for another's.
 //
-// Only a frame that derived anything rotates: a frame that only paints from
-// the layout it already has would otherwise age every entry out, and the
-// next layout would mint new revisions and miss every cache below them.
+// Entries age by how many new ones arrive, not by frames: a subtree a
+// Cached skipped derives nothing for as long as it is skipped, and when it
+// is next laid out it must find its Envs again, or it mints new revisions
+// and every cache inside it misses. So an entry lives in two generations.
+// One that is used moves into the current one; the current one becomes the
+// old one once it is as large as the old one, and whatever the old one
+// still held then is dropped. A tree that stops deriving new Envs keeps all
+// of its own, and the memo stays within about twice what is in use.
 type envMemo struct {
 	cur, prev map[derivedKey]Env
-	used      bool
 }
 
-func (m *envMemo) rotate() {
-	if !m.used {
-		return
+// envMemoMin is the size below which the memo never ages anything out.
+const envMemoMin = 256
+
+func (m *envMemo) get(k derivedKey) (Env, bool) {
+	if out, ok := m.cur[k]; ok {
+		return out, true
 	}
-	m.used = false
-	m.prev, m.cur = m.cur, m.prev
-	clear(m.cur)
+	out, ok := m.prev[k]
+	if ok {
+		m.put(k, out)
+	}
+	return out, ok
 }
 
-// derive returns the Env derived from e with key and val last frame or
-// this one, else fn's. A val that cannot be hashed is never memoized.
+func (m *envMemo) put(k derivedKey, e Env) {
+	if m.cur == nil {
+		m.cur = map[derivedKey]Env{}
+	}
+	if len(m.cur) >= max(envMemoMin, len(m.prev)) {
+		m.prev, m.cur = m.cur, m.prev
+		if m.cur == nil {
+			m.cur = map[derivedKey]Env{}
+		}
+		clear(m.cur)
+	}
+	m.cur[k] = e
+}
+
+// derive returns the Env derived from e with key and val before, else
+// fn's. A val that cannot be hashed is never memoized.
 func (e Env) derive(key, val any, fn func() Env) (out Env) {
 	k := derivedKey{e.rev, key, val}
 	envMemo := &activeWorld().envMemo
-	envMemo.used = true
 	memoized := true
 	func() {
 		defer func() {
@@ -242,16 +263,10 @@ func (e Env) derive(key, val any, fn func() Env) (out Env) {
 			}
 		}()
 		var ok bool
-		if out, ok = envMemo.cur[k]; ok {
-			return
-		}
-		if out, ok = envMemo.prev[k]; !ok {
+		if out, ok = envMemo.get(k); !ok {
 			out = fn()
+			envMemo.put(k, out)
 		}
-		if envMemo.cur == nil {
-			envMemo.cur = map[derivedKey]Env{}
-		}
-		envMemo.cur[k] = out
 	}()
 	if !memoized {
 		return fn()

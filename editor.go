@@ -54,6 +54,8 @@ type TextInputWidget struct {
 	onCommit          func(string)
 	onChange          func(string)
 	onKey             func(KeyEvent) bool
+	onDescribe        func(*Node)
+	onAction          func(Action) bool
 	filter            func(string) string
 	escapeUsed        bool
 	inheritedDisabled bool
@@ -194,6 +196,9 @@ func (t *TextInputWidget) Describe() Node {
 	if a11y.WantsDetail() && !t.password {
 		n.Runs = t.runs()
 	}
+	if t.onDescribe != nil {
+		t.onDescribe(&n)
+	}
 	return n
 }
 
@@ -235,6 +240,9 @@ func (t *TextInputWidget) runs() []TextRun {
 func (t *TextInputWidget) Act(a Action) bool {
 	if t.IsDisabled() {
 		return false
+	}
+	if t.onAction != nil && t.onAction(a) {
+		return true
 	}
 	switch a.Kind {
 	case ActionSetValue:
@@ -339,6 +347,20 @@ func (t *TextInputWidget) OnChange(fn func(string)) *TextInputWidget { t.onChang
 // editor. This lets searchable lists use Up, Down and Enter without replacing
 // the editor's platform input driver.
 func (t *TextInputWidget) OnKey(fn func(KeyEvent) bool) *TextInputWidget { t.onKey = fn; return t }
+
+// OnDescribe lets a control built around the editor say what it is: fn
+// amends the node the editor describes, which already carries its text,
+// caret and character positions. A number field makes it a spin button with
+// a range and the actions that step it; OnAction then carries those out.
+// The editor stays the element, so its focus, input and text interface are
+// the control's without anything forwarding them.
+func (t *TextInputWidget) OnDescribe(fn func(*Node)) *TextInputWidget { t.onDescribe = fn; return t }
+
+// OnAction gives fn the first say on an action an assistive technology aims
+// at the editor: one it returns true for is done, and any other the editor
+// carries out as it would without it. It is not called while the editor is
+// disabled.
+func (t *TextInputWidget) OnAction(fn func(Action) bool) *TextInputWidget { t.onAction = fn; return t }
 
 // Focused reports whether the editor has keyboard focus.
 func (t *TextInputWidget) Focused() bool { return t.Interactive.Focused }

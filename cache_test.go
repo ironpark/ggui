@@ -127,3 +127,45 @@ func TestRebuildBoundaryConfinesLayout(t *testing.T) {
 		t.Fatalf("a still frame measured again: A+%d B+%d", leafA.n-wasA, leafB.n-wasB)
 	}
 }
+
+func TestACachedSkippedWhileOthersChangeKeepsTheCachesInside(t *testing.T) {
+	t.Parallel()
+	leaf := &counting{}
+	depA, depB := State(0), State(0)
+	a := Cached(Column(Reactive(func() Widget { depA.Get(); return Box().Size(10, 10) }), Cached(Column(leaf))))
+	b := Cached(Column(Reactive(func() Widget { depB.Get(); return Box().Size(10, 10) })))
+	p := NewProbe(Column(a, b), Sz(100, 100))
+	defer p.Close()
+	p.Frame()
+	before := leaf.layouts
+	// Frames that lay out only b leave a skipped: nothing inside it derives
+	// its Envs, which must still be there when a is next laid out.
+	for i := 1; i <= 5; i++ {
+		depB.Set(i)
+		p.Frame()
+	}
+	depA.Set(1)
+	p.Frame()
+	if leaf.layouts != before {
+		t.Fatalf("a Cached inside a laid out again %d times after a sibling of it changed", leaf.layouts-before)
+	}
+}
+
+func TestEnvMemoStaysBoundedAsDerivationsChurn(t *testing.T) {
+	var m envMemo
+	for i := range 100_000 {
+		m.put(derivedKey{from: uint64(i), key: "k", val: i}, Env{})
+	}
+	if n := len(m.cur) + len(m.prev); n > 2*envMemoMin {
+		t.Fatalf("the memo holds %d entries after churn, want at most %d", n, 2*envMemoMin)
+	}
+	k := derivedKey{from: 1, key: "kept"}
+	m.put(k, Env{rev: 42})
+	for i := range envMemoMin * 4 {
+		m.get(k) // in use: it survives however many others come and go
+		m.put(derivedKey{from: uint64(i), key: "other"}, Env{})
+	}
+	if e, ok := m.get(k); !ok || e.rev != 42 {
+		t.Fatal("an entry in use aged out")
+	}
+}
