@@ -37,3 +37,16 @@ func TestBundledSVGsAndRoles(t *testing.T) {
 		t.Fatal("unknown asset should return an error")
 	}
 }
+
+func TestIconBuildsBundledNamesAndPanicsOnUnknownOnes(t *testing.T) {
+	t.Parallel()
+	if Icon("check") == nil {
+		t.Fatal("Icon(\"check\") returned no widget")
+	}
+	defer func() {
+		if recover() == nil {
+			t.Error("Icon of an unknown name did not panic")
+		}
+	}()
+	Icon("no-such-icon")
+}

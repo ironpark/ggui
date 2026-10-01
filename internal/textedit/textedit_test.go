@@ -160,3 +160,77 @@ func TestEditorSnapsOffsetsToRuneStarts(t *testing.T) {
 		t.Fatalf("caret snapped to %d, want 1", e.Caret)
 	}
 }
+
+func TestUndoKeepsOnlyTheLatestSteps(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	e := Editor{Now: func() time.Time { return now }}
+	for range maxUndo + 5 {
+		now = now.Add(time.Second) // each insertion a step of its own
+		e.Replace("x")
+	}
+	undone := 0
+	for e.Undo() {
+		undone++
+	}
+	if undone != maxUndo {
+		t.Fatalf("undid %d steps, want the history capped at %d", undone, maxUndo)
+	}
+	if want := 5; len(e.Text) != want {
+		t.Fatalf("after undoing all %d kept steps the text is %q, want the %d oldest insertions left", maxUndo, e.Text, want)
+	}
+}
+
+func TestPasteAndDeletionUndoAlone(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	e := Editor{Now: func() time.Time { return now }}
+	e.Replace("a")
+	e.Replace("bc") // a paste, even right after typing
+	e.Replace("d")
+	e.Backspace(false)
+	e.Undo()
+	if e.Text != "abcd" {
+		t.Fatalf("undoing the backspace gave %q, want \"abcd\"", e.Text)
+	}
+	e.Undo()
+	if e.Text != "abc" {
+		t.Fatalf("undoing the typing after a paste gave %q, want \"abc\"", e.Text)
+	}
+	e.Undo()
+	if e.Text != "a" {
+		t.Fatalf("undoing the paste gave %q, want \"a\"", e.Text)
+	}
+}
+
+func TestWordMoveWithSelectionMovesFromCaret(t *testing.T) {
+	t.Parallel()
+	var e Editor
+	e.SetText("one two three")
+	e.MoveTo(4, false)
+	e.MoveTo(6, true) // "tw" selected, caret after it
+	e.MoveBy(1, true, false)
+	if e.Caret != len("one two ") || e.HasSelection() {
+		t.Fatalf("word right from a selection put the caret at %d (selection %v), want %d past the word the caret is in",
+			e.Caret, e.HasSelection(), len("one two "))
+	}
+	e.MoveBy(-1, true, true)
+	if lo, hi := e.Selection(); lo != 4 || hi != 8 {
+		t.Fatalf("word left extending selected [%d,%d), want [4,8)", lo, hi)
+	}
+}
+
+func TestBackspaceAndDeleteAtTextEdgesKeepText(t *testing.T) {
+	t.Parallel()
+	var e Editor
+	e.SetText("ab")
+	e.MoveTo(0, false)
+	e.Backspace(false)
+	e.Backspace(true)
+	e.MoveTo(2, false)
+	e.DeleteForward(false)
+	e.DeleteForward(true)
+	if e.Text != "ab" || e.Caret != 2 {
+		t.Fatalf("deleting past the edges gave %q caret %d, want \"ab\" caret 2", e.Text, e.Caret)
+	}
+}

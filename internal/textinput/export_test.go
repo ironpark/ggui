@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build darwin && !ios
+//go:build (darwin && !ios) || windows
 
 package textinput
 
@@ -24,6 +24,13 @@ type TextInputState = textInputState
 
 // CommitRegular re-exports the commit kind of an ordinary commit.
 const CommitRegular = commitRegular
+
+// CommitWithPassthroughKey re-exports the commit kind of a commit whose key
+// also reaches the application.
+const CommitWithPassthroughKey = commitWithPassthroughKey
+
+// NoReplacement re-exports the replacement offset meaning "at the caret".
+const NoReplacement = noReplacement
 
 func (s *TextInputEvents) Start() {
 	s.start()
@@ -67,13 +74,18 @@ func (s *TextInputEvents) StartSessionCompositing() bool {
 // Session is a session over events of its own, as a platform backend opens
 // one, for tests of how an ending reaches it.
 type Session struct {
-	events  textInputEvents
-	session *session
+	input         *textInput
+	before, after string
+	session       *session
 }
 
 // NewSession opens a session.
-func NewSession() *Session {
-	s := &Session{}
+func NewSession() *Session { return NewSessionAround("", "") }
+
+// NewSessionAround opens a session whose caret has before and after around
+// it, as SessionOptions give them.
+func NewSessionAround(before, after string) *Session {
+	s := &Session{input: newTextInput(nil), before: before, after: after}
 	s.StartNext()
 	return s
 }
@@ -81,18 +93,42 @@ func NewSession() *Session {
 // StartNext opens the next session, as the application does after the
 // previous one ended.
 func (s *Session) StartNext() {
-	ch, end := s.events.start()
-	s.session = &session{ch: ch, end: end, events: &s.events}
+	ch, end := s.input.events.start()
+	s.session = &session{input: s.input, ch: ch, end: end, events: &s.input.events,
+		textBeforeCaret: s.before, textAfterCaret: s.after}
+}
+
+// Attach hands c the open session, as Composer.Update does when it starts
+// one; a Composer cannot reach a platform backend in tests.
+func (s *Session) Attach(c *Composer) { c.s = s.session }
+
+// HasSession reports whether c holds a session.
+func HasSession(c *Composer) bool { return c.s != nil }
+
+// Cancel cancels the session, as a caller-driven edit does.
+func (s *Session) Cancel() { s.session.Cancel() }
+
+// Compositing reports whether the session says the IME owns input.
+func (s *Session) Compositing() bool { return s.session.IsCompositing() }
+
+// Composition returns the session's preedit.
+func (s *Session) Composition() Composition { return s.session.Composition() }
+
+// Queued returns how many states wait for the next session.
+func (s *Session) Queued() int {
+	s.input.events.m.Lock()
+	defer s.input.events.m.Unlock()
+	return len(s.input.events.queuedStates)
 }
 
 // Send hands the session a state, as the platform does.
-func (s *Session) Send(state TextInputState) { s.events.send(state) }
+func (s *Session) Send(state TextInputState) { s.input.events.send(state) }
 
 // EndByUser ends the events as the platform does for the user's dismissal.
-func (s *Session) EndByUser() { s.events.endByUser() }
+func (s *Session) EndByUser() { s.input.events.endByUser() }
 
 // End ends the events as the platform does for its own teardown.
-func (s *Session) End() { s.events.end() }
+func (s *Session) End() { s.input.events.end() }
 
 // Update drains the session's states, as a tick does.
 func (s *Session) Update() error { return s.session.Update() }

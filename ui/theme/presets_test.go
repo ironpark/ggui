@@ -67,3 +67,15 @@ func TestPresetColorConversionAndGeometry(t *testing.T) {
 		}()
 	}
 }
+
+func TestChatTokensFillsAnOmittedChatBlock(t *testing.T) {
+	t.Parallel()
+	manual := Theme{}
+	if got := manual.ChatTokens(); got != Default().Chat || got == (ChatTokens{}) {
+		t.Errorf("a Theme without Chat resolved to %+v, want Default's tokens %+v", got, Default().Chat)
+	}
+	rhea := Preset{Style: StyleRhea}.Light()
+	if got := rhea.ChatTokens(); got != rhea.Chat {
+		t.Errorf("a Theme with Chat resolved to %+v, want its own %+v", got, rhea.Chat)
+	}
+}
