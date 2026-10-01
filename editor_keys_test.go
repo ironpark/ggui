@@ -296,15 +296,30 @@ func TestTextInputTripleClickSelectsAll(t *testing.T) {
 	}
 }
 
-func TestTextInputWordKeysWithCtrlOffMacOS(t *testing.T) {
+// Ctrl jumps words on every platform: off macOS it is also Cmd, but no
+// Cmd shortcut uses an arrow or a delete.
+func TestTextInputWordKeysWithCtrl(t *testing.T) {
 	t.Parallel()
-	if runtimeIsDarwin() {
-		t.Skip("macOS jumps words with Option; Ctrl is not the command key there")
-	}
-	t.Skip("BUG: wordWise (editor.go) is Alt || (!m.Cmd() && m.Ctrl), and Cmd() is Ctrl off macOS, so Ctrl+Left and Ctrl+Backspace move and delete one character on Windows and Linux although TextInput documents \"Alt or Ctrl to jump words\"")
-	w, p, _ := editorProbe(t, "hello world")
+	w, p, value := editorProbe(t, "hello big world")
 	p.Type(Mods{Ctrl: true}, KeyArrowLeft)
-	if w.ed.Caret != len("hello ") {
+	if w.ed.Caret != len("hello big ") {
 		t.Fatalf("Ctrl+Left put the caret at %d, want the start of the last word", w.ed.Caret)
+	}
+	p.Type(Mods{Ctrl: true}, KeyBackspace)
+	if got := Untrack(value.Get); got != "hello world" {
+		t.Fatalf("Ctrl+Backspace left %q, want the word before the caret gone", got)
+	}
+}
+
+func TestPasswordSelectionIsReportedInBullets(t *testing.T) {
+	t.Parallel()
+	w, _, _ := editorProbe(t, "héllo", func(w *TextInputWidget) { w.Password() })
+	w.Act(Action{Kind: ActionSetSelection, SelStart: len(bullet), SelEnd: 3 * len(bullet)})
+	if lo, hi := w.ed.Selection(); w.ed.Text[lo:hi] != "él" {
+		t.Fatalf("selecting bullets 1 to 3 selected %q, want \"él\"", w.ed.Text[lo:hi])
+	}
+	n := w.Describe()
+	if n.Value != "•••••" || n.SelStart != len(bullet) || n.SelEnd != 3*len(bullet) {
+		t.Fatalf("described as %q selecting %d-%d, want five bullets selecting %d-%d", n.Value, n.SelStart, n.SelEnd, len(bullet), 3*len(bullet))
 	}
 }

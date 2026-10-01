@@ -112,7 +112,6 @@ func TestTextFieldMinWidthStyleAndBaselineShapeTheBox(t *testing.T) {
 }
 
 func TestTextFieldPasswordHidesValueFromSemantics(t *testing.T) {
-	t.Skip("BUG: TextInputWidget.Describe (editor.go:171) publishes a Password field's plain text as the node Value")
 	t.Parallel()
 	p := ggui.NewProbe(ui.TextField(ggui.State("hunter2")).Name("Password").Password(), ggui.Sz(300, 60))
 	defer p.Close()

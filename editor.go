@@ -160,7 +160,9 @@ func (t *TextInputWidget) Semantics() (Role, string) {
 }
 
 // Describe implements Describer: the field, its contents and whether it
-// takes input. ui.TextField describes the padded box it draws around this
+// takes input. A password's contents are the bullets drawn for it, which
+// tell a screen reader its length and where the caret is, but not what it
+// says. ui.TextField describes the padded box it draws around this
 // editor with the same handler, which is why the two are one node and not
 // two: the first description of a handler in a frame is the one kept.
 func (t *TextInputWidget) Describe() Node {
@@ -169,11 +171,11 @@ func (t *TextInputWidget) Describe() Node {
 	n := Node{
 		Role:     role,
 		Name:     name,
-		Value:    t.ed.Text,
+		Value:    t.display(t.ed.Text),
 		Disabled: t.IsDisabled(),
 		Actions:  ActionFocus | ActionSetValue | ActionSetSelection,
-		SelStart: lo,
-		SelEnd:   hi,
+		SelStart: t.toDisplay(lo),
+		SelEnd:   t.toDisplay(hi),
 	}
 	// A screen reader reads a field character by character and line by
 	// line, and needs to know where each of them went. Working that out
@@ -233,8 +235,8 @@ func (t *TextInputWidget) Act(a Action) bool {
 		t.commit()
 		return true
 	case ActionSetSelection:
-		t.ed.MoveTo(a.SelStart, false)
-		t.ed.MoveTo(a.SelEnd, true)
+		t.ed.MoveTo(t.fromDisplay(a.SelStart), false)
+		t.ed.MoveTo(t.fromDisplay(a.SelEnd), true)
 		return true
 	}
 	return false
@@ -314,7 +316,32 @@ func (t *TextInputWidget) display(s string) string {
 	if !t.password {
 		return s
 	}
-	return strings.Repeat("•", utf8.RuneCountInString(s))
+	return strings.Repeat(bullet, utf8.RuneCountInString(s))
+}
+
+// bullet is what a password field draws for each character.
+const bullet = "•"
+
+// toDisplay maps the byte offset b in the text to the same place in what
+// display returns for it.
+func (t *TextInputWidget) toDisplay(b int) int {
+	if !t.password {
+		return b
+	}
+	return len(bullet) * utf8.RuneCountInString(t.ed.Text[:b])
+}
+
+// fromDisplay maps the byte offset b in the displayed text back to the
+// text, the inverse of toDisplay.
+func (t *TextInputWidget) fromDisplay(b int) int {
+	if !t.password {
+		return b
+	}
+	i := 0
+	for n := b / len(bullet); n > 0 && i < len(t.ed.Text); n-- {
+		i = textedit.NextRune(t.ed.Text, i)
+	}
+	return i
 }
 
 func (t *TextInputWidget) face(scale float64) text.Face {
@@ -750,8 +777,10 @@ func (t *TextInputWidget) HandleKey(ev KeyEvent) {
 }
 
 // wordWise reports whether m asks for the word-wise form of a motion or a
-// delete: Alt anywhere, or Ctrl where it is not standing in for Cmd.
-func wordWise(m Mods) bool { return m.Alt || (!m.Cmd() && m.Ctrl) }
+// delete: Alt (Option) anywhere, or Ctrl without Meta. Ctrl stands in for
+// Cmd off macOS, but no Cmd shortcut uses an arrow or a delete, which is
+// why Ctrl+Left jumps a word on Windows and Linux.
+func wordWise(m Mods) bool { return m.Alt || (m.Ctrl && !m.Meta) }
 
 // key applies one key press. It is split by what the key does, and each
 // group reports whether anything it changed has to reach the binding: a key
