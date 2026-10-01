@@ -169,3 +169,17 @@ func mix(a, b color.Color, amount float64) color.Color {
 	blend := func(x, y uint32) uint8 { return uint8((float64(x)*(1-amount) + float64(y)*amount) / 257) }
 	return color.RGBA{blend(ar, br), blend(ag, bg), blend(ab, bb), blend(aa, ba)}
 }
+
+// shortcutLabel shows a key hint: a chord ParseChord reads, such as
+// "cmd+shift+z", the way the platform writes it ("⇧⌘Z" on macOS, "Ctrl+Shift+Z"
+// elsewhere), and anything else, such as "⌘N", as it is.
+func shortcutLabel(s string) string {
+	if c, err := ggui.ParseChord(s); err == nil {
+		return c.Label()
+	}
+	return s
+}
+
+// chorded is a control that runs on a chord, so a Tooltip around it can
+// show the chord.
+type chorded interface{ ShortcutChord() (ggui.Chord, bool) }

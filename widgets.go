@@ -270,14 +270,11 @@ func (t *TextWidget) Layout(c Constraints, env Env) Size {
 		t.value = t.content.Get()
 	}
 	t.cache, _ = env.Get(cacheOwner)
-	base := env.Text()
 	style, ok := env.Get(t.styleKey)
 	if !ok {
 		style = t.styleFallback
 	}
-	base = base.Merge(style)
-	t.resolved = base.Merge(t.style).resolved()
-	t.resolved.Size *= env.TextScale()
+	t.resolved = env.ResolveText(style.Merge(t.style))
 	face := t.faceAt(1)
 	key := wrapKey{generation: fontGen(), value: t.value, font: t.resolved.Font, size: t.resolved.Size, lineHeight: t.resolved.LineHeight, maxW: pick(t.wrap, c.MaxW, 0)}
 	if key != t.wrapped {
@@ -440,6 +437,7 @@ type BoxWidget struct {
 	padding     EdgeInsets
 	width       float64 // 0 means "as small as the child allows"
 	height      float64
+	maxW, maxH  float64 // 0 means no limit
 	child       Widget
 
 	childSize Size
@@ -535,19 +533,44 @@ func (b *BoxWidget) BindHeight(r Readable[float64]) *BoxWidget {
 	return b
 }
 
+// MaxWidth caps the width, padding included, so a form or a paragraph
+// stops growing in a wide window; zero removes the cap. A parent that
+// demands more, such as a stretching Column, still wins: put the box in an
+// Align or Center to keep it narrow there. A fixed Width above the cap is
+// cut to it.
+func (b *BoxWidget) MaxWidth(w float64) *BoxWidget {
+	defer property.Watch(&b.props, &b.maxW)()
+	b.maxW = w
+	return b
+}
+
+// MaxHeight caps the height the way MaxWidth caps the width.
+func (b *BoxWidget) MaxHeight(h float64) *BoxWidget {
+	defer property.Watch(&b.props, &b.maxH)()
+	b.maxH = h
+	return b
+}
+
 // Layout implements Widget.
 func (b *BoxWidget) Layout(c Constraints, env Env) Size {
 	defer b.props.Layout()()
 	b.width, b.height = b.widthProp.Get(), b.heightProp.Get()
+	width, height := capped(b.width, b.maxW), capped(b.height, b.maxH)
+	inner := b.padding.Shrink(c).Loosen()
+	if b.maxW > 0 {
+		inner.MaxW = min(inner.MaxW, max(b.maxW-b.padding.horizontal(), 0))
+	}
+	if b.maxH > 0 {
+		inner.MaxH = min(inner.MaxH, max(b.maxH-b.padding.vertical(), 0))
+	}
 	// A fixed dimension is passed down tight, so a child that centers or
 	// justifies does so within the box rather than the space around it.
-	inner := b.padding.Shrink(c).Loosen()
-	if b.width > 0 {
-		w := max(clamp(b.width, c.MinW, c.MaxW)-b.padding.horizontal(), 0)
+	if width > 0 {
+		w := max(clamp(width, c.MinW, c.MaxW)-b.padding.horizontal(), 0)
 		inner.MinW, inner.MaxW = w, w
 	}
-	if b.height > 0 {
-		h := max(clamp(b.height, c.MinH, c.MaxH)-b.padding.vertical(), 0)
+	if height > 0 {
+		h := max(clamp(height, c.MinH, c.MaxH)-b.padding.vertical(), 0)
 		inner.MinH, inner.MaxH = h, h
 	}
 	b.childSize = Size{}
@@ -555,13 +578,21 @@ func (b *BoxWidget) Layout(c Constraints, env Env) Size {
 		b.childSize = b.child.Layout(inner, env)
 	}
 	want := b.padding.Inflate(b.childSize)
-	if b.width > 0 {
-		want.W = b.width
+	if width > 0 {
+		want.W = width
 	}
-	if b.height > 0 {
-		want.H = b.height
+	if height > 0 {
+		want.H = height
 	}
 	return c.Constrain(want)
+}
+
+// capped is a fixed size v held to limit; zero means unset for both.
+func capped(v, limit float64) float64 {
+	if v > 0 && limit > 0 {
+		return min(v, limit)
+	}
+	return v
 }
 
 // Baseline implements Baseliner: the child's, below the top padding.
@@ -1105,6 +1136,7 @@ type ScrollWidget struct {
 	barSet     bool
 	bound      Binding[float64]
 	offset     float64
+	follow     bool
 	id         any
 
 	childSize             Size
@@ -1131,6 +1163,8 @@ func (s *ScrollWidget) Adopt(prev any) {
 	if p, ok := prev.(*ScrollWidget); ok {
 		s.dragging, s.dragStart, s.dragOffset = p.dragging, p.dragStart, p.dragOffset
 		s.thumbHovered = p.thumbHovered
+		// Whether the old one was at its end, for FollowEnd.
+		s.childSize, s.viewport = p.childSize, p.viewport
 		if s.bound != nil {
 			return
 		}
@@ -1178,6 +1212,16 @@ func (s *ScrollWidget) BindOffset(sig Binding[float64]) *ScrollWidget {
 		s.bound = sig
 		s.props.Changed()
 	}
+	return s
+}
+
+// FollowEnd keeps the window at the end as the content grows, the way a
+// log or a terminal follows new lines, for as long as it is there: scrolling
+// back stops following and scrolling to the end again resumes it. A new
+// scroll starts at the end.
+func (s *ScrollWidget) FollowEnd() *ScrollWidget {
+	defer property.Watch(&s.props, &s.follow)()
+	s.follow = true
 	return s
 }
 
@@ -1231,13 +1275,19 @@ func (s *ScrollWidget) Layout(c Constraints, env Env) Size {
 		inner.H = Unbounded
 	}
 	s.cache, _ = env.Get(cacheOwner)
+	// Judged against the last layout, before the content can grow.
+	follow := s.follow && s.atEnd()
 	s.laidAt = s.position()
 	vp := Viewport{Offset: s.laidAt, Extent: s.extent(c.Max()), Horizontal: s.horizontal}
 	s.childSize = s.child.Layout(Loose(inner), env.With(viewportKey, vp))
 	s.viewport = c.Constrain(Sz(bounded(c.MaxW, s.childSize.W), bounded(c.MaxH, s.childSize.H)))
-	s.scrollTo(s.position())
+	s.scrollTo(pick(follow, s.maxOffset(), s.position()))
 	return s.viewport
 }
+
+// atEnd reports whether the window shows the end of the content, within
+// half a pixel.
+func (s *ScrollWidget) atEnd() bool { return s.position() >= s.maxOffset()-0.5 }
 
 // Paint implements Widget.
 func (s *ScrollWidget) Paint(dst *Canvas, r Rect) {

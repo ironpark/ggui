@@ -32,6 +32,11 @@ type ComponentWidget struct {
 	// runtime lays out from the root whenever anything was written.
 	cw    CachedWidget
 	mount func() // runs setup at the first Layout; nil once mounted
+
+	// For the inspector: how many times Reactive built the subtree, and in
+	// a ggui_debug build where the Reactive or View was made.
+	builds int
+	origin string
 }
 
 // Component runs setup once when mounted. Reads in setup are untracked;
@@ -60,8 +65,9 @@ func Component(setup func() Widget) *ComponentWidget {
 // change, this subtree rebuilds and the parent does not. Use it to keep a
 // parent's Builder static so the components it holds survive.
 func Reactive[W Widget](build func() W) *ComponentWidget {
-	c := &ComponentWidget{}
+	c := &ComponentWidget{origin: reactive.Origin()}
 	reactive.Observe(func() {
+		c.builds++
 		c.child = build()
 		c.cw.child = c.child
 		c.cw.invalidate()
@@ -76,6 +82,19 @@ func Reactive[W Widget](build func() W) *ComponentWidget {
 //	ggui.View(rows, func(r []Row) *ggui.ColumnWidget { return ggui.List(r, rowWidget) })
 func View[T any, W Widget](r Readable[T], build func(T) W) Widget {
 	return Reactive(func() Widget { return build(r.Get()) })
+}
+
+// ViewOf builds a widget from the part of r that sel picks and rebuilds it
+// only when that part changes, not on every change to the rest of r:
+//
+//	ggui.ViewOf(doc, func(d Doc) Selection { return d.Selection }, inspector)
+//
+// The part is compared the way a StateValue compares its value: with its
+// Equal method or ==, so pick a comparable part, or a Map with WithEqual
+// for one holding slices or maps. It is View over Map, with the Map made
+// once, outside the rebuilds.
+func ViewOf[T, K any, W Widget](r Readable[T], sel func(T) K, build func(K) W) Widget {
+	return View(Map(r, sel), build)
 }
 
 // IfWidget mounts only the selected branch and disposes it on exit.

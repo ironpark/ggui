@@ -70,7 +70,7 @@ Widget mutation belongs on the UI goroutine; workers use `App.Post`.
 | Equal-width columns | `Grid` |
 | Overlap children | `Stack` |
 | Position one child | `Align`, `Center` |
-| Decorate or inset content | `Box`, `Padding` |
+| Decorate, inset or cap content | `Box`, `Padding`, `Box.MaxWidth` |
 | Show overflowing content | `Scroll` |
 
 Build children from a plain slice with `List` or `Children`:
@@ -88,6 +88,11 @@ ggui.Row(ggui.Children(rows, func(r Row) ggui.Widget {
 Padding uses CSS order: `Padding(w, 8)` sets every side, `Padding(w, 4, 12)`
 sets vertical/horizontal padding, and `Box(w).Pad(1, 2, 3, 4)` sets
 top/right/bottom/left.
+
+`Box(w).MaxWidth(640)` stops a form or a paragraph from growing past 640
+pixels, padding included, in a wide window; `MaxHeight` caps the height. A
+parent that stretches its children still wins, so center the box to keep it
+narrow there: `ggui.Center(ggui.Box(form).MaxWidth(640))`.
 
 `Stack` layers children at the top-left and takes its largest child's size
 unless `.Expand()` is set. `Align` fills available space and positions its child

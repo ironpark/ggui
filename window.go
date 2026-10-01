@@ -221,6 +221,8 @@ func (w *Window) Setup(fn func()) *Window {
 // Post queues fn to run on the UI thread before the window's next frame's
 // input. It is the one way a goroutine may touch signals: do the work off
 // the thread, then Post the Set. Work posted by a callback runs next frame.
+// Work posted before the window opens, such as before App.Run, waits and
+// runs once, after Setup and the first build.
 func (w *Window) Post(fn func()) { w.post(fn) }
 
 // Close closes the window and disposes its root owner, and with it every
@@ -651,6 +653,7 @@ func (w *Window) draw(screen *ggfx.Image, scale float64) {
 	w.paintTree(&w.canvas)
 	w.input.regions = w.canvas.hits
 	w.input.observers = w.canvas.inputObservers
+	w.input.painted = w.canvas.shortcuts
 	w.input.applyFocusRequest(&w.canvas)
 	w.publishSemantics(&w.canvas, w.input.focused)
 	w.ax.Publish(w.semantics(), w.takeAnnouncements())

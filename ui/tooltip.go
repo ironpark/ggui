@@ -14,8 +14,13 @@ type TooltipWidget struct {
 	props property.Owner
 	child ggui.Widget
 	tip   *ggui.TextWidget
+	keys  *ggui.TextWidget // the shortcut hint, if any
+	hint  string           // what Shortcut set, before the child's chord
 	delay time.Duration
 	pad   ggui.EdgeInsets
+	// focusOpens reports whether keyboard focus opens the tip; nil means
+	// focus anywhere within the child. Tabs narrows it to the shown tab.
+	focusOpens func(dst *ggui.Canvas, r ggui.Rect) bool
 
 	box    *ggui.BoxWidget
 	effect *ggui.TransitionWidget
@@ -42,6 +47,15 @@ func Tooltip(child ggui.Widget, text string) *TooltipWidget {
 	return t
 }
 
+// Shortcut shows a key hint after the text, written the way
+// MenuItemWidget.Shortcut writes it: "Undo ⌘Z". Around a Button with a
+// Shortcut, the tip shows the button's chord without this.
+func (t *TooltipWidget) Shortcut(s string) *TooltipWidget {
+	defer property.Watch(&t.props, &t.hint)()
+	t.hint = s
+	return t
+}
+
 // Delay sets how long the cursor must rest before the tip appears.
 func (t *TooltipWidget) Delay(d time.Duration) *TooltipWidget {
 	defer property.Watch(&t.props, &t.delay)()
@@ -56,8 +70,29 @@ func (t *TooltipWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t.env = env
 	t.pad = ggui.Insets(t.theme.Space*.75, t.theme.Space*1.5)
 	t.tip.Color(t.theme.Bg)
+	t.showKeys()
 	t.box.Padding(t.pad).Fill(t.theme.Fg).Radius(t.theme.Radius * .75)
 	return t.child.Layout(c, env)
+}
+
+// showKeys puts the shortcut hint, Shortcut's or else the child's chord,
+// after the text, building the row the first time there is one.
+func (t *TooltipWidget) showKeys() {
+	label := shortcutLabel(t.hint)
+	if c, ok := t.child.(chorded); ok && label == "" {
+		if chord, ok := c.ShortcutChord(); ok {
+			label = chord.Label()
+		}
+	}
+	if label == "" && t.keys == nil {
+		return
+	}
+	if t.keys == nil {
+		t.keys = ggui.Text(label).Size(12).NoWrap()
+		t.box = ggui.Box(ggui.Row(t.tip, t.keys).Gap(t.theme.Space).Align(ggui.AlignBaseline))
+		t.effect = ggui.PopIn(t.box)
+	}
+	t.keys.Content(label).Color(fade(t.theme.Bg, .65))
 }
 
 // Baseline implements ggui.Baseliner: the child's.
@@ -76,6 +111,9 @@ func (t *TooltipWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	at := ggui.Anchor{Rect: r}
 	state, _ := dst.Retained(at, tooltipSlot)
 	focused := dst.FocusWithin(r)
+	if t.focusOpens != nil {
+		focused = t.focusOpens(dst, r)
+	}
 	hovered := ok && r.Contains(p)
 	if hovered && state.since.IsZero() {
 		state.since = now

@@ -174,6 +174,7 @@ type inputState struct {
 
 	shortcuts []func(KeyEvent) bool // App.OnKey handlers, tried before the focused widget
 	chords    []*ShortcutHandle     // App.Shortcut handlers
+	painted   []paintedShortcut     // Canvas.Shortcut handlers, from the last paint
 	drops     []func(DropEvent)     // Host.OnDrop handlers, for drops no region took
 
 	// A focus trap: while regions of a scope exist, Tab cycles within them
@@ -204,6 +205,14 @@ func (in *inputState) runChords(k KeyboardKey, mods Mods, before bool) bool {
 		ran = true
 	}
 	in.chords = slices.DeleteFunc(in.chords, func(h *ShortcutHandle) bool { return h.removed })
+	scope := in.activeScope()
+	for _, p := range in.painted {
+		if p.chord.Modified() != before || !ev.Is(p.chord) || (scope != nil && p.scope != scope) {
+			continue
+		}
+		p.fn()
+		ran = true
+	}
 	return ran
 }
 
@@ -378,7 +387,7 @@ func (in *inputState) consumeBindings(keys []KeyboardKey, mods Mods) []KeyboardK
 	if len(in.shortcuts) > 0 {
 		keys = in.withoutShortcuts(keys, mods)
 	}
-	if len(in.chords) > 0 {
+	if len(in.chords) > 0 || len(in.painted) > 0 {
 		keys = slices.DeleteFunc(slices.Clone(keys), func(k KeyboardKey) bool { return in.runChords(k, mods, true) })
 	}
 	return keys

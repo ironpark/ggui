@@ -242,9 +242,13 @@ func MenuItem(label string, onTap func()) *MenuItemWidget {
 	return it
 }
 
-// Shortcut displays a right-aligned key hint; it does not register a shortcut.
+// Shortcut displays a right-aligned key hint; it does not register a
+// shortcut. A chord such as "cmd+shift+z" shows as the platform writes it,
+// "⇧⌘Z" on macOS and "Ctrl+Shift+Z" elsewhere; other text, such as "⌘N",
+// shows as it is.
 func (it *MenuItemWidget) Shortcut(s string) *MenuItemWidget {
 	defer property.Watch(&it.props, &it.shortcut)()
+	s = shortcutLabel(s)
 	if it.shortcut == nil {
 		it.shortcut = Caption(s).NoWrap()
 	} else {

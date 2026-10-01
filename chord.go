@@ -65,7 +65,9 @@ func (c Chord) held() Mods {
 // ParseChord reads a chord such as "cmd+s", "ctrl+shift+z", "alt+enter"
 // or "f1". Modifiers are cmd (the platform's command key), ctrl, alt (or
 // option), shift and meta; the key is any ggfx key name, ignoring
-// case, with esc, return, up, down, left, right, plus and minus accepted.
+// case, with esc, return, up, down, left, right, plus and minus accepted,
+// and a digit or punctuation key also by the character it types on a US
+// layout: "cmd+1" is "cmd+digit1", "cmd+," is "cmd+comma".
 func ParseChord(s string) (Chord, error) {
 	var c Chord
 	s = strings.TrimSpace(s)
@@ -128,7 +130,13 @@ var keyNames = sync.OnceValue(func() map[string]KeyboardKey {
 		"down": KeyArrowDown, "left": KeyArrowLeft, "right": KeyArrowRight,
 		"plus": KeyEqual, "minus": KeyMinus, "del": KeyDelete,
 		"pgup": KeyPageUp, "pgdn": KeyPageDown, "bksp": KeyBackspace,
+		"-": KeyMinus, "=": KeyEqual, ",": KeyComma, ".": KeyPeriod,
+		"/": KeySlash, ";": KeySemicolon, "'": KeyQuote, "[": KeyBracketLeft,
+		"]": KeyBracketRight, "\\": KeyBackslash, "`": KeyBackquote,
 	})
+	for k := KeyDigit0; k <= KeyDigit9; k++ {
+		table[string(rune('0'+(k-KeyDigit0)))] = k
+	}
 	return table
 })
 

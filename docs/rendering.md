@@ -58,6 +58,13 @@ text baseline sits, valid after `Layout`. `Row.Align(AlignBaseline)` reads it.
 and the wrappers report their first child's, moved by where the child is
 painted. A widget that does not implement it is aligned by its bottom edge.
 
+A short label, such as a tick or a value drawn on a custom canvas, does not
+need a child `Text`: keep `env.ResolveText(style)` from `Layout`, the style a
+`Text` would draw in with the theme's font, size and color and the user's
+text scale, and draw it in `Paint` with `dst.DrawText(s, st.Font, st.Size,
+at, st.Color)`; `dst.TextWidth` measures it. Text that wraps, can be selected
+or must be read by a screen reader is a `Text` painted as a child.
+
 Paint children through `dst.Paint(child, r)` so the inspector can see them.
 The [custom example](../examples/custom) builds a dial on `Interactive`, a
 disclosure that calls `Invalidate`, and a virtualized list. For small

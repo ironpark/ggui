@@ -69,7 +69,10 @@ func (in *inputState) cursorOver(o Overlay, p Point) CursorShape {
 
 // DrawText draws s as one unwrapped line with its top-left corner at the
 // logical point at, in font at size logical pixels; a nil font is the
-// default. It is for an Overlay: a widget draws text through Text.
+// default. A custom widget's Paint draws a label with it in the style its
+// Layout kept from Env.ResolveText, so the label follows the theme; text
+// that wraps, selects or is read by a screen reader is a Text painted with
+// Canvas.Paint.
 func (c *Canvas) DrawText(s string, font *Font, size float64, at Point, col color.Color) {
 	if c == nil || c.Image == nil {
 		return

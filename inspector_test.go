@@ -205,3 +205,27 @@ func TestProbePublishesFramesAndPaintsTheOverlay(t *testing.T) {
 		t.Fatal("the overlay's cursor was not reported")
 	}
 }
+
+// A View that rebuilt says how often, in its badge, its Computed pane and
+// the filter.
+func TestInspectorCountsRebuilds(t *testing.T) {
+	n := State(0)
+	view := View(n, func(v int) *BoxWidget { return Box().Size(10, 10) })
+	p := NewProbe(view, Sz(50, 50))
+	defer p.Close()
+	p.Frame()
+	for i := range 3 {
+		n.Set(i + 1)
+		p.Frame()
+	}
+	fr := inspectFrameOf(inspectorCanvas(view, Sz(50, 50)))
+	if got := fr.Badge(0); got != "rebuilt 3" {
+		t.Fatalf("badge %q, want %q", got, "rebuilt 3")
+	}
+	if !fr.Matches(0, "rebuilt") {
+		t.Error("the filter does not find the rebuilt view")
+	}
+	if !slices.ContainsFunc(fr.Details(inspect.Computed, 0), func(f inspect.Field) bool { return f.Key == "rebuilt" && f.Value == "3 times" }) {
+		t.Errorf("Computed pane %+v, want 3 rebuilds", fr.Details(inspect.Computed, 0))
+	}
+}

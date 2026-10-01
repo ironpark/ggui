@@ -24,7 +24,7 @@ See [example conventions](README.md#start-here) before copying snippets.
 
 | Control | Behavior |
 | --- | --- |
-| `ui.Tabs(selected, ui.Tab("One", page), ...)` | Displays the selected index, with an animated segmented selection and Left/Right navigation; `.Line()` uses an underline. Only the active page is laid out. |
+| `ui.Tabs(selected, ui.Tab("One", page), ...)` | Displays the selected index, with an animated segmented selection and Left/Right navigation; `.Line()` uses an underline. Only the active page is laid out. `Tab(...).Header(widget)` draws an icon, count or badge in place of the label's text, which still names the tab; `Tab(...).Tooltip(text)` explains it. |
 | `ui.Collapsible(open, "Title", content)` | Animates an expandable section with `Presence`. |
 | `ui.Card(child)` | Adds a surface, border, radius, padding and subtle shadow. |
 | `ui.Badge("new")` | Displays a small label; `.Accent()` emphasizes it. |
@@ -293,8 +293,11 @@ footer. Without `StableHeight`, the results shrink to their content. Empty
 results display a centered message. Pointer movement updates the same selection
 used by Enter; a stationary pointer no longer resets keyboard menu navigation.
 
-`MenuItem(...).Shortcut("⌘N")` and `CommandItem(...).Shortcut("⌘N")` display
-right-aligned hints only. Register the actual shortcut with `App.Shortcut`.
+`MenuItem(...).Shortcut("cmd+n")` and `CommandItem(...).Shortcut("cmd+n")`
+display right-aligned hints only, written the platform's way ("⌘N" on macOS,
+"Ctrl+N" elsewhere); text that is not a chord, such as "⌘N", shows as it is.
+Register the actual shortcut with `App.Shortcut`, or use `App.SetMenu`, whose
+items register and label their chords together.
 
 For a compact command palette, use `ui.CommandDialog(open, command)`. It supplies
 an accessible "Commands" name without a visible heading, removes the surrounding

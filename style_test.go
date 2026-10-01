@@ -139,3 +139,21 @@ func TestBoxDecorationsTolerateNilCanvas(t *testing.T) {
 	b.Paint(nil, Rct(Pt(0, 0), b.Layout(Loose(Sz(10, 10)), Env{})))
 	b.Paint(&Canvas{}, Rct(Pt(0, 0), Sz(10, 10)))
 }
+
+// ResolveText is the style a Text draws in, so a label drawn with DrawText
+// matches a Text beside it.
+func TestResolveTextMatchesText(t *testing.T) {
+	t.Parallel()
+	red := color.RGBA{R: 255, A: 255}
+	env := Env{}.WithText(TextStyle{Size: 20, Color: red}).With(TextScaleKey, 1.5)
+	got := env.ResolveText(TextStyle{LineHeight: 2})
+	want := TextStyle{Font: DefaultFont(), Size: 30, Color: red, LineHeight: 2}
+	if got != want {
+		t.Fatalf("ResolveText = %+v, want %+v", got, want)
+	}
+	txt := Text("x").LineHeight(2)
+	txt.Layout(Loose(Sz(100, 100)), env)
+	if txt.resolved != got {
+		t.Fatalf("Text resolved %+v, ResolveText %+v", txt.resolved, got)
+	}
+}

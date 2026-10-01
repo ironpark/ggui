@@ -11,6 +11,10 @@ import (
 // Debug reports whether this build records effect origins.
 const Debug = true
 
+// Origin returns where the code outside ggui that called in sits, in a
+// ggui_debug build; "" otherwise.
+func Origin() string { return effectOrigin() }
+
 // effectOrigin returns the file and line outside this package that created
 // the Computation being registered, so that a cycle can name the effects it is
 // made of. Only this build records it; see ErrCycle.

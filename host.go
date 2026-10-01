@@ -18,7 +18,8 @@ import (
 //
 // Setup is left out on purpose: it returns the concrete type for chaining.
 type Host interface {
-	// Post queues fn to run on the UI thread before the next frame's input.
+	// Post queues fn to run on the UI thread before the next frame's input;
+	// before the window opens, it waits for Setup and the first build.
 	Post(fn func())
 	// OnFrame registers fn to run once per frame, before input is dispatched.
 	OnFrame(fn func())

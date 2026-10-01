@@ -145,6 +145,12 @@ func TestParseChordReadsEveryAlias(t *testing.T) {
 		"a":         {Key: KeyA},
 		"shift+a":   {Key: KeyA, Mods: Mods{Shift: true}},
 		" cmd+a\t":  {Key: KeyA, Cmd: true},
+		"cmd+1":     {Key: KeyDigit1, Cmd: true},
+		"0":         {Key: KeyDigit0},
+		"cmd+,":     {Key: KeyComma, Cmd: true},
+		"ctrl+-":    {Key: KeyMinus, Mods: Mods{Ctrl: true}},
+		"ctrl+=":    {Key: KeyEqual, Mods: Mods{Ctrl: true}},
+		"alt+\\":    {Key: KeyBackslash, Mods: Mods{Alt: true}},
 	}
 	for in, want := range cases {
 		if got, err := ParseChord(in); err != nil || got != want {
@@ -157,6 +163,21 @@ func TestParseChordReadsEveryAlias(t *testing.T) {
 		}
 	}
 	mustPanic(t, "MustChord of a chord with no key", func() { MustChord("cmd+shift") })
+}
+
+// A digit or punctuation key's label is also its name, so a chord written
+// the way a menu shows it parses back to the same key.
+func TestParseChordReadsKeyLabels(t *testing.T) {
+	t.Parallel()
+	for k := KeyboardKey(0); k <= KeyMax; k++ {
+		label := keyLabel(k, false)
+		if utf8.RuneCountInString(label) != 1 || label == "+" {
+			continue
+		}
+		if got, err := ParseChord("cmd+" + label); err != nil || got.Key != k {
+			t.Errorf("ParseChord(%q) = %v, %v; want %v, whose label it is", "cmd+"+label, got.Key, err, k)
+		}
+	}
 }
 
 func TestParseChordIgnoresSpaceAroundThePlusKey(t *testing.T) {

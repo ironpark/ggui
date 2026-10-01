@@ -22,10 +22,11 @@ type TabsWidget struct {
 	tabs     []TabPage
 	onChange func(int)
 
-	ggui.Interactive // hovered is unused; hover holds the label instead
-	labels           []*ggui.TextWidget
-	labelSize        []ggui.Size
-	hover            int // the label under the pointer, or -1
+	ggui.Interactive                   // hovered is unused; hover holds the label instead
+	boxes            []*ggui.BoxWidget // each label, padded
+	heads            []ggui.Widget     // each box, in its Tooltip if it has one
+	labelSize        []ggui.Size       // padding included
+	hover            int               // the label under the pointer, or -1
 
 	theme     uitheme.Theme
 	motion    time.Duration
@@ -41,10 +42,25 @@ type TabsWidget struct {
 type TabPage struct {
 	Label   string
 	Content ggui.Widget
+
+	header  ggui.Widget
+	tooltip string
 }
 
 // Tab pairs a label with the page it shows.
 func Tab(label string, content ggui.Widget) TabPage { return TabPage{Label: label, Content: content} }
+
+// Header draws w in the strip in place of the label's text, for a tab with
+// an icon, a count or a badge:
+//
+//	ui.Tab("Build", build).Header(ggui.Row(ggui.Text("Build"), ui.Badge("3")).Gap(6))
+//
+// The label still names the tab to screen readers and Probe. Text in w
+// takes the strip's colors unless it sets its own.
+func (p TabPage) Header(w ggui.Widget) TabPage { p.header = w; return p }
+
+// Tooltip shows s when the pointer rests on the tab, as Tooltip does.
+func (p TabPage) Tooltip(s string) TabPage { p.tooltip = s; return p }
 
 // Tabs creates a tab strip bound to selected, the index of the page shown.
 // Click or Space picks the label under the pointer; Left and Right move
@@ -53,8 +69,21 @@ func Tabs(selected ggui.Binding[int], tabs ...TabPage) *TabsWidget {
 	t := &TabsWidget{selected: selected, tabs: tabs, hover: -1}
 	t.Role = ggui.RoleTabs
 	t.AutoKey()
-	for _, tab := range tabs {
-		t.labels = append(t.labels, ggui.Text(tab.Label).NoWrap())
+	for i, tab := range tabs {
+		var head ggui.Widget = ggui.Text(tab.Label).NoWrap()
+		if tab.header != nil {
+			head = tab.header
+		}
+		box := ggui.Box(head)
+		t.boxes = append(t.boxes, box)
+		if tab.tooltip != "" {
+			// The strip takes focus as a whole: focus shows the shown tab's tip.
+			tip := Tooltip(box, tab.tooltip)
+			tip.focusOpens = func(dst *ggui.Canvas, r ggui.Rect) bool { return i == t.index() && dst.FocusWithin(r) }
+			t.heads = append(t.heads, tip)
+		} else {
+			t.heads = append(t.heads, box)
+		}
 	}
 	return t
 }
@@ -97,13 +126,14 @@ func (t *TabsWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t.labelSize, t.labelX = t.labelSize[:0], t.labelX[:0]
 	t.headerH, t.stripW = 0, 0
 	cur := t.index()
-	for i, l := range t.labels {
-		l.Color(pick(i == cur && !t.IsInert(), th.Fg, th.MutedFg))
-		s := l.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env)
+	for i, head := range t.heads {
+		t.boxes[i].Padding(t.pad)
+		fg := pick(i == cur && !t.IsInert(), th.Fg, th.MutedFg)
+		s := head.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env.WithText(ggui.TextStyle{Color: fg}))
 		t.labelSize = append(t.labelSize, s)
 		t.labelX = append(t.labelX, t.stripW)
-		t.stripW += s.W + t.pad.Left + t.pad.Right
-		t.headerH = max(t.headerH, s.H+t.pad.Top+t.pad.Bottom)
+		t.stripW += s.W
+		t.headerH = max(t.headerH, s.H)
 	}
 	t.stripW += 2 * tabInset
 	t.headerH += 2*tabInset + tabGap
@@ -138,7 +168,7 @@ func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		if cur >= 0 {
 			target := x + t.labelX[cur]
 			sx := dst.Ease(ggui.Anchor{Rect: header}, underlineSlot, target, t.motion)
-			sw := dst.Ease(ggui.Anchor{Rect: header}, widthSlot, t.labelSize[cur].W+t.pad.Left+t.pad.Right, t.motion)
+			sw := dst.Ease(ggui.Anchor{Rect: header}, widthSlot, t.labelSize[cur].W, t.motion)
 			active := ggui.Rct(ggui.Pt(sx, r.Origin.Y+tabInset), ggui.Sz(sw, header.Size.H-2*tabInset))
 			dst.Shadow(active, max(th.Radius-2, 0), th.CardShadow)
 			dst.FillRoundRect(active, max(th.Radius-2, 0), th.Card)
@@ -146,7 +176,7 @@ func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 
 	for i, s := range t.labelSize {
-		lr := ggui.Rct(ggui.Pt(x, r.Origin.Y+tabInset), ggui.Sz(s.W+t.pad.Left+t.pad.Right, header.Size.H-2*tabInset))
+		lr := ggui.Rct(ggui.Pt(x, r.Origin.Y+tabInset), ggui.Sz(s.W, header.Size.H-2*tabInset))
 		t.labelRect = append(t.labelRect, lr)
 		dst.Describe(lr, tabLabel{t, i})
 		if !t.IsInert() {
@@ -156,7 +186,7 @@ func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		if i == hover && i != cur {
 			dst.FillRoundRect(lr, th.Radius, th.Muted)
 		}
-		dst.Paint(t.labels[i], ggui.Rct(ggui.Pt(x+t.pad.Left, r.Origin.Y+tabInset+t.pad.Top), s))
+		dst.Paint(t.heads[i], ggui.Rct(lr.Origin, s))
 		x += lr.Size.W
 	}
 	lineY := r.Origin.Y + header.Size.H - 1

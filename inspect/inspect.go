@@ -140,11 +140,12 @@ func (f *Frame) Badge(i int) string {
 	return n.Role
 }
 
-// Matches reports whether node i's name, label or role contains filter,
-// which must already be lower-cased.
+// Matches reports whether node i's name, badge, label or role contains
+// filter, which must already be lower-cased: "rebuilt" finds the views
+// that rebuilt.
 func (f *Frame) Matches(i int, filter string) bool {
 	n := f.Describe(i)
-	return strings.Contains(strings.ToLower(n.Name+" "+n.Label+" "+n.Role), filter)
+	return strings.Contains(strings.ToLower(n.Name+" "+n.Kind+" "+n.Label+" "+n.Role), filter)
 }
 
 // Deepest is the innermost node under p that is not clipped away there,

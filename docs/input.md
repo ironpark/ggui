@@ -45,6 +45,11 @@ scrolling; `.Speed(px)` and `.Bar(color)` tune it. Widgets that fill their space
 fall back to their content size on an unbounded axis, so `Center`, `Expanded`
 and `.Justify` inside a `Scroll` do not blow up.
 
+`.FollowEnd()` keeps the window at the end as the content grows, as a build
+log or a terminal does: scrolling back stops following and scrolling to the
+end again resumes it, with no sentinel offset to manage. `ui.MessageScroller`
+is the chat-transcript version, with anchors and a jump-to-latest button.
+
 ## Touch input
 
 Touch uses the same pointer handlers as mouse input. The first finger becomes
@@ -77,6 +82,21 @@ a focus ring, and a `Scroll` around the new target scrolls it into view.
 Buttons press on Space or Enter, toggles flip, sliders step with the
 arrows.
 
+To focus a widget from code, attach a `FocusRef` to it and call `Focus`
+from a handler, an effect or posted work:
+
+```go
+var nameRef ggui.FocusRef
+form := ggui.Column(nameRef.Attach(ui.TextField(name)), save)
+// after a failed validation:
+nameRef.Focus()
+```
+
+The first focusable widget inside the attached one takes focus when it is
+next painted, with the focus ring and a scroll into view as Tab gives it.
+`Focused()` reports whether focus was inside at the last paint. A custom
+widget that decides in `Paint` calls `dst.RequestFocus(handler)` instead.
+
 ## Shortcuts
 
 Shortcuts are chords: `app.Shortcut("cmd+s", save)` runs before the
@@ -88,7 +108,25 @@ button presses the button and a text field keeps every key but Escape;
 what it consumes through `KeyConsumer`; `Interactive` claims Space and
 Enter and the controls with more keys claim those. `ParseChord` reads the
 names, `KeyEvent.Is(chord)` matches one in a handler, and `App.OnKey` stays
-for what a chord cannot say.
+for what a chord cannot say. A digit or punctuation key may be written as the
+character it types on a US layout: `"cmd+1"` is `"cmd+digit1"`, `"cmd+,"` is
+`"cmd+comma"`.
+
+`Chord.Label()` writes a chord the way the platform shows it: `"⇧⌘Z"` on
+macOS, in Apple's ⌃⌥⇧⌘ order, and `"Ctrl+Shift+Z"` elsewhere. The handle
+`Shortcut` returns keeps its chord, so a label never drifts from what is
+registered: `handle.Chord().Label()`.
+
+A shortcut that belongs to a control lives with it:
+`ui.Button("Undo", undo).Shortcut("cmd+z")` presses the button on ⌘Z
+(Ctrl+Z elsewhere) while the button is on screen and enabled, and
+`ui.Tooltip(button, "Undo")` around it shows "Undo ⌘Z" with nothing else to
+keep in step. A custom widget does the same with `dst.Shortcut(chord, fn)`
+from `Paint`: the shortcut lasts as long as the widget is painted, and a
+dialog's focus trap silences the ones behind it. `Tooltip(...).Shortcut(s)`
+and `MenuItem(...).Shortcut(s)` show a hint without registering anything; a
+chord such as `"cmd+shift+z"` is written the platform's way, other text as
+it is.
 
 `Shortcut`, `OnKey`, `OnDrop`, `OnFrame`, `Post`, `Perform`, `Announce`,
 `Semantics` and `Close` are the same on `App` and `Probe`, and the `Host` interface

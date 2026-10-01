@@ -25,7 +25,8 @@ func CommandItem(label string, run func()) CommandEntry { return CommandEntry{la
 // Group labels a contiguous group of entries. Empty groups disappear when filtering.
 func (e CommandEntry) Group(name string) CommandEntry { e.group = name; return e }
 
-// Shortcut displays a key hint without registering a global shortcut.
+// Shortcut displays a key hint without registering a global shortcut; a
+// chord shows as MenuItemWidget.Shortcut shows it.
 func (e CommandEntry) Shortcut(s string) CommandEntry { e.shortcut = s; return e }
 
 // Keywords adds search terms that are not displayed.

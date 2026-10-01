@@ -79,7 +79,9 @@ with `app.Post(func() { result.Set(value) })`, or use a
 [`Resource`](reactivity.md#resources-and-await-blocks) for cancellation and
 lifetime handling, or [`ggui.Async`](windows-and-platform.md#slow-calls-from-a-handler)
 for a one-off call. `Post` queues work for the next frame, runs it even while
-the window is hidden or covered, and drops queued work after shutdown.
+the window is hidden or covered, and drops queued work after shutdown. Work
+posted before `app.Run` is kept, and runs once after `Setup` and the first
+build, so a goroutine started in `main` may Post from its first line.
 
 `app.OnFrame(fn)` registers per-frame work before input and effect processing.
 Prefer owned effects or resources when the work belongs to a component, and

@@ -228,6 +228,12 @@ func (b *BoxWidget) InspectFields() []inspect.Field {
 	if b.height > 0 {
 		out = append(out, inspect.Field{Key: "fixed height", Value: inspect.Num(b.height) + " px", Number: true})
 	}
+	if b.maxW > 0 {
+		out = append(out, inspect.Field{Key: "max width", Value: inspect.Num(b.maxW) + " px", Number: true})
+	}
+	if b.maxH > 0 {
+		out = append(out, inspect.Field{Key: "max height", Value: inspect.Num(b.maxH) + " px", Number: true})
+	}
 	return out
 }
 
@@ -274,7 +280,7 @@ func (f *FlexWidget) InspectFields() []inspect.Field {
 
 // inspectKind is the layout badge a tree row shows after a widget's name.
 func inspectKind(w Widget) string {
-	switch w.(type) {
+	switch w := w.(type) {
 	case *RowWidget, *ColumnWidget:
 		return "flex"
 	case *WrapWidget:
@@ -283,6 +289,24 @@ func inspectKind(w Widget) string {
 		return "grid"
 	case *ScrollWidget:
 		return "scroll"
+	case *ComponentWidget:
+		if w.builds > 1 {
+			return "rebuilt " + strconv.Itoa(w.builds-1)
+		}
 	}
 	return ""
+}
+
+// InspectFields implements inspect.Fielder: how often a Reactive or View
+// rebuilt, the way to spot one that rebuilds far more than what it shows
+// changes.
+func (c *ComponentWidget) InspectFields() []inspect.Field {
+	if c.builds == 0 {
+		return nil
+	}
+	out := []inspect.Field{{Key: "Rebuilds"}, {Key: "rebuilt", Value: strconv.Itoa(c.builds-1) + " times", Number: true}}
+	if c.origin != "" {
+		out = append(out, inspect.Field{Key: "made at", Value: c.origin})
+	}
+	return out
 }

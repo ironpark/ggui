@@ -230,7 +230,21 @@ Snapshot expressions such as `Text(fmt.Sprint(count.Get()))` do not subscribe se
 and reactive control bindings do. `View(source, build)` and `Reactive(build)`
 are explicit subtree replacement boundaries: their callbacks rerun and
 replace locally created state/work. Keep state outside these callbacks if
-it must survive their updates. Svelte's snippet `{@render}` has no special
+it must survive their updates.
+
+`View(state, build)` rebuilds on every change to `state`, whichever field
+changed. `ViewOf(state, pick, build)` rebuilds only when the part `pick`
+returns changes, so selecting an item need not rebuild a form that shows
+only the settings:
+
+```go
+ggui.ViewOf(app, func(s AppState) Settings { return s.Settings }, settingsForm)
+```
+
+A state's value is compared with its `Equal` method or `==`. A struct that
+holds a slice or a map has neither, so every `Set` notifies, even one that
+changed nothing: give the type an `Equal` method, use `WithEqual`, or pick
+comparable parts with `ViewOf` or `Map`. Svelte's snippet `{@render}` has no special
 runtime counterpart; use ordinary Go functions to compose reusable widgets.
 
 ## Conditional and key blocks

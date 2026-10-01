@@ -259,3 +259,47 @@ func TestScrollThumbHoverAndDragFeedback(t *testing.T) {
 		t.Fatal("feedback remains after release outside")
 	}
 }
+
+// FollowEnd keeps a growing log at its end until the user scrolls back,
+// and follows again once they scroll to the end, across rebuilds and with
+// a bound offset alike.
+func TestScrollFollowEnd(t *testing.T) {
+	t.Parallel()
+	for _, bound := range []bool{false, true} {
+		lines, rebuild := State(10), State(0)
+		pos := State(0.0)
+		p := ProbeBuilder(func() Widget {
+			rebuild.Get()
+			s := Scroll(Reactive(func() Widget { return Box().Size(50, float64(lines.Get()*20)) })).FollowEnd()
+			if bound {
+				s.BindOffset(pos)
+			}
+			return s
+		}, Sz(50, 100))
+		offset := func() float64 { return Untrack(p.root.(*ScrollWidget).position) }
+		step := func(what string, want float64) {
+			t.Helper()
+			p.Frame()
+			if got := offset(); got != want {
+				t.Fatalf("bound=%v, %s: offset %v, want %v", bound, what, got, want)
+			}
+		}
+		step("opened", 100)
+		lines.Set(15)
+		step("grew at the end", 200)
+		p.Scroll(Pt(10, 10), Pt(0, 2)) // back 40
+		step("scrolled back", 160)
+		lines.Set(20)
+		step("grew while scrolled back", 160)
+		rebuild.Set(1)
+		step("rebuilt while scrolled back", 160)
+		p.Scroll(Pt(10, 10), Pt(0, -100))
+		step("scrolled to the end", 300)
+		lines.Set(25)
+		step("grew after returning", 400)
+		rebuild.Set(2)
+		lines.Set(30)
+		step("rebuilt and grew at the end", 500)
+		p.Close()
+	}
+}

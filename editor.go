@@ -405,8 +405,7 @@ func (t *TextInputWidget) Layout(c Constraints, env Env) Size {
 	defer t.props.Layout()()
 	t.Sync()
 	t.inheritedDisabled, _ = env.Get(InputDisabledKey)
-	t.resolved = env.Text().Merge(t.style).resolved()
-	t.resolved.Size *= env.TextScale()
+	t.resolved = env.ResolveText(t.style)
 	t.cache, _ = env.Get(cacheOwner)
 	style := env.EditorStyle()
 	if t.IsDisabled() {

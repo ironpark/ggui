@@ -23,7 +23,9 @@ import (
 type Canvas struct {
 	Image          *ggfx.Image
 	focusRequest   KeyHandler
+	focusClaim     *FocusRef // a Focus waiting for the next key region painted
 	inputObservers []inputObserver
+	shortcuts      []paintedShortcut
 
 	scale   float64
 	hits    []hitRegion
@@ -180,6 +182,7 @@ func (c *Canvas) Ease(at Anchor, s Slot[*Motion], target float64, d time.Duratio
 // clears the current slots, ready for a paint.
 func (c *Canvas) nextFrame() {
 	c.inputObservers = c.inputObservers[:0]
+	c.shortcuts = c.shortcuts[:0]
 	f := c.fs()
 	f.prevKeeps, f.keeps = f.keeps, f.prevKeeps
 	clear(f.keeps)
@@ -601,6 +604,9 @@ func (c *Canvas) add(h hitRegion) {
 		root = root.parent
 	}
 	root.adopt(&h)
+	if h.key != nil && root.focusClaim != nil {
+		root.focusRequest, root.focusClaim = h.key, nil
+	}
 	if n := len(root.hits); n > 0 && root.hits[n-1].merge(h) {
 		return
 	}
@@ -805,6 +811,27 @@ func (c *Canvas) RequestFocus(h KeyHandler) {
 	if c != nil && !c.inert {
 		c.root().focusRequest = h
 	}
+}
+
+// paintedShortcut is a chord a widget listens for while it is painted.
+type paintedShortcut struct {
+	chord Chord
+	fn    func()
+	scope *focusScope
+}
+
+// Shortcut runs fn on chord for as long as the caller is painted: a
+// widget registers it from Paint every frame, as it does its hit regions,
+// so the shortcut goes when the widget does, when it is inert, and while a
+// focus trap it is not inside, such as a dialog over it, is open. It runs
+// where Window.Shortcut's would: a chord with a modifier before the
+// focused widget, a bare key only if the focused widget left it.
+func (c *Canvas) Shortcut(chord Chord, fn func()) {
+	if c == nil || c.inert || fn == nil {
+		return
+	}
+	root := c.root()
+	root.shortcuts = append(root.shortcuts, paintedShortcut{chord, fn, c.scope})
 }
 
 type inputObserver struct {

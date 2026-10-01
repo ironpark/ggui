@@ -53,7 +53,13 @@ The details panes show read-only runtime values:
 - **Accessibility:** the selected widget's role, name, value, state, actions,
   and semantic ancestry. The copy button copies the selection's properties.
 
-Click the search field to filter by type, accessible name, or role. With the
+A `Reactive`, `View` or `ViewOf` that has rebuilt shows a "rebuilt N" badge,
+and its Computed pane gives the count and, in a `ggui_debug` build, where it
+was made. Filter by "rebuilt" to list them: one whose count runs far ahead of
+what it shows changing reads more state than it needs, which `ViewOf` or `Map`
+narrows.
+
+Click the search field to filter by type, accessible name, badge, or role. With the
 panel focused, Up/Down and Home/End navigate visible rows; Left/Right fold,
 expand, or navigate ancestors and children. Each pane scrolls independently.
 While the panel has keyboard focus it consumes every key press, including

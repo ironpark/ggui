@@ -1,6 +1,11 @@
 package ggui
 
-import "github.com/ironpark/ggui/internal/reactive"
+import (
+	"log"
+	"sync"
+
+	"github.com/ironpark/ggui/internal/reactive"
+)
 
 // The reactive core lives in internal/reactive: signals, effects, memos and
 // the ownership tree, which need nothing from widgets or painting. It is
@@ -73,13 +78,53 @@ func Remove[T any](s Writable[[]T], drop func(T) bool) { reactive.Remove(s, drop
 func Const[T any](v T) Readable[T] { return reactive.Const(v) }
 
 // Bind adapts a getter and setter pair into a Binding, for controls that
-// edit state owned by a model method rather than a signal.
-func Bind[T any](get func() T, set func(T)) Binding[T] { return &funcBinding[T]{get, set} }
-
-type funcBinding[T any] struct {
-	get func() T
-	set func(T)
+// edit state owned by a model method rather than a signal. The getter
+// should read a signal, through the model's StateValue, Lens or Field:
+// one that reads plain storage, or a copy captured when the control was
+// built, leaves the control showing a stale value, and a ggui_debug build
+// says so the first time it runs. State.Field and State.Lens bind part of
+// a struct directly.
+func Bind[T any](get func() T, set func(T)) Binding[T] {
+	return &funcBinding[T]{get: get, set: set, origin: reactive.Origin()}
 }
 
-func (b *funcBinding[T]) Get() T  { return b.get() }
+type funcBinding[T any] struct {
+	get     func() T
+	set     func(T)
+	origin  string // where Bind was called, in a ggui_debug build
+	checked bool
+}
+
+func (b *funcBinding[T]) Get() T {
+	if !reactive.Debug || b.checked {
+		return b.get()
+	}
+	b.checked = true
+	return countReads(b.origin, b.get)
+}
+
 func (b *funcBinding[T]) Set(v T) { b.set(v) }
+
+// untrackedBinds holds the Bind call sites already reported, so each is
+// reported once however many controls it builds.
+var untrackedBinds sync.Map
+
+// countReads runs get, telling a layout recording in progress about what it
+// reads as usual, and reports a getter that read no signal.
+func countReads[T any](origin string, get func() T) T {
+	var v T
+	reads := 0
+	outer := reactive.Recorder()
+	reactive.Measure(func(src reactive.LayoutSource, version uint64) {
+		reads++
+		if outer != nil {
+			outer(src, version)
+		}
+	}, func() { v = get() })
+	if reads == 0 {
+		if _, seen := untrackedBinds.LoadOrStore(origin, true); !seen {
+			log.Printf("ggui: the Bind getter at %s read no signal, so its control will not see changes made elsewhere; read a StateValue, or bind with State.Field or State.Lens", origin)
+		}
+	}
+	return v
+}

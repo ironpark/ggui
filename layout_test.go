@@ -20,6 +20,33 @@ func TestBoxAddsPaddingAroundChild(t *testing.T) {
 	}
 }
 
+func TestBoxMaxWidthCapsTheBoxAndItsChild(t *testing.T) {
+	t.Parallel()
+	wide := func() Widget { return Row(Spacer()) } // as wide as allowed
+	for _, tc := range []struct {
+		name string
+		box  *BoxWidget
+		c    Constraints
+		want Size
+	}{
+		{"loose", Box(wide()).MaxWidth(100).Pad(10), Loose(Sz(500, 50)), Sz(100, 20)},
+		{"narrower parent", Box(wide()).MaxWidth(100), Loose(Sz(60, 50)), Sz(60, 0)},
+		{"fixed width above the cap", Box().Width(300).MaxWidth(100), Loose(Sz(500, 50)), Sz(100, 0)},
+		{"fixed width below the cap", Box().Width(80).MaxWidth(100), Loose(Sz(500, 50)), Sz(80, 0)},
+		{"tight parent wins", Box(wide()).MaxWidth(100), Tight(Sz(500, 50)), Sz(500, 50)},
+		{"max height", Box().Height(300).MaxHeight(40), Loose(Sz(500, 500)), Sz(0, 40)},
+	} {
+		if got := tc.box.Layout(tc.c, Env{}); got != tc.want {
+			t.Errorf("%s: Layout() = %+v, want %+v", tc.name, got, tc.want)
+		}
+	}
+	inner := Box(wide()).MaxWidth(100).Pad(10)
+	Center(inner).Layout(Tight(Sz(500, 50)), Env{})
+	if inner.childSize.W != 80 {
+		t.Errorf("centered: child is %v wide, want 80 inside the padding", inner.childSize.W)
+	}
+}
+
 func TestBoxRejectsSeveralChildren(t *testing.T) {
 	t.Parallel()
 	mustPanic(t, "Box(a, b)", func() { Box(Text("a"), Text("b")) })

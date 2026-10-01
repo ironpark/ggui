@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"slices"
 	"testing"
 )
 
@@ -205,5 +206,41 @@ func TestSpacingAndNamedTextStyles(t *testing.T) {
 	title.Layout(Loose(Sz(100, 100)), env)
 	if title.resolved.Size != 24 {
 		t.Fatalf("title size = %v", title.resolved.Size)
+	}
+}
+
+// ViewOf rebuilds when the part it picks changes and not when the rest of
+// the state does, even under a parent that rebuilds it.
+func TestViewOfRebuildsOnlyForItsPart(t *testing.T) {
+	t.Parallel()
+	type doc struct {
+		Title    string
+		Selected int
+		Rows     []string // makes doc incomparable: every Set notifies
+	}
+	d := State(doc{Title: "a"})
+	parent := State(0)
+	var built []string
+	p := ProbeBuilder(func() Widget {
+		return Reactive(func() Widget {
+			parent.Get()
+			return ViewOf(d, func(d doc) string { return d.Title }, func(title string) *TextWidget {
+				built = append(built, title)
+				return Text(title)
+			})
+		})
+	}, Sz(200, 30))
+	defer p.Close()
+	p.Frame()
+	d.Update(func(v doc) doc { v.Selected = 3; v.Rows = []string{"x"}; return v })
+	p.Frame()
+	d.Update(func(v doc) doc { v.Title = "b"; return v })
+	p.Frame()
+	parent.Set(1)
+	p.Frame()
+	d.Update(func(v doc) doc { v.Selected = 4; return v })
+	p.Frame()
+	if want := []string{"a", "b", "b"}; !slices.Equal(built, want) {
+		t.Fatalf("built %q, want %q: once, once for the title, once for the parent", built, want)
 	}
 }

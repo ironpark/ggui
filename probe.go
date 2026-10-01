@@ -168,6 +168,7 @@ func (p *Probe) Frame() Size {
 	p.paintTree(c)
 	p.in.regions = c.hits
 	p.in.observers = c.inputObservers
+	p.in.painted = c.shortcuts
 	p.in.applyFocusRequest(c)
 	p.publishSemantics(c, p.in.focused)
 	if f.tracing {

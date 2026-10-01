@@ -82,6 +82,16 @@ type envNode struct {
 // style onto.
 func (e Env) Text() TextStyle { return e.text }
 
+// ResolveText returns the style a Text with style s draws in under e: s
+// merged onto the inherited style, unset fields filled with the defaults
+// and the size multiplied by TextScale. A custom widget keeps it from
+// Layout to draw a label with Canvas.DrawText in Paint.
+func (e Env) ResolveText(s TextStyle) TextStyle {
+	r := e.text.Merge(s).resolved()
+	r.Size *= e.TextScale()
+	return r
+}
+
 // WithText returns e with s merged onto the inherited text style.
 func (e Env) WithText(s TextStyle) Env {
 	return e.WithTextReplaced(e.text.Merge(s))

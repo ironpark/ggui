@@ -60,6 +60,8 @@ type ButtonWidget struct {
 	value       func() string // optional accessible value for composite triggers
 	motion      time.Duration
 	theme       uitheme.Theme
+	chord       ggui.Chord
+	chorded     bool
 }
 
 // Button creates a primary button: Accent background, OnAccent label.
@@ -90,6 +92,18 @@ func (b *ButtonWidget) BindName(r ggui.Readable[string]) *ButtonWidget {
 	b.Interactive.BindName(r)
 	return b
 }
+
+// Shortcut presses the button on chord, such as "cmd+z", while the button
+// is on screen and enabled; see ggui.ParseChord for the names, and
+// ggui.Canvas.Shortcut for when it runs. A Tooltip around the button shows
+// the chord. It panics on a chord ParseChord rejects.
+func (b *ButtonWidget) Shortcut(chord string) *ButtonWidget {
+	b.chord, b.chorded = ggui.MustChord(chord), true
+	return b
+}
+
+// ShortcutChord returns the chord Shortcut set, if any.
+func (b *ButtonWidget) ShortcutChord() (ggui.Chord, bool) { return b.chord, b.chorded }
 
 // Expands makes the button report whether what it opens is showing, for a
 // menu button or a combobox trigger; a plain button does not expand at all,
@@ -233,6 +247,9 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.Shadow(r, t.Radius, t.CardShadow)
 	}
 	b.Hit(dst, r, b, ggui.CursorShapePointer)
+	if b.chorded && !b.IsInert() && b.onTap != nil {
+		dst.Shortcut(b.chord, b.onTap)
+	}
 	dst.Paint(b.box, r)
 	ring := t.Ring
 	if b.variant == variantDestructive {

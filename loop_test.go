@@ -3,6 +3,7 @@ package ggui
 import (
 	"errors"
 	"image/color"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -62,6 +63,25 @@ func TestPostRunsBeforeTheFrame(t *testing.T) {
 	p.Frame()
 	if len(seen) != 2 || seen[1] != 1 {
 		t.Fatalf("builder saw %v, want [0 1]", seen)
+	}
+}
+
+// Work posted before the first frame, as from main before App.Run, waits
+// for Setup and the first build rather than being dropped.
+func TestPostBeforeStartRunsAfterSetupAndBuild(t *testing.T) {
+	t.Parallel()
+	var order []string
+	n := State(0)
+	p := ProbeBuilder(func() Widget {
+		order = append(order, "build")
+		return Reactive(func() Widget { n.Get(); return Box() })
+	}, Sz(10, 10)).Setup(func() { order = append(order, "setup") })
+	defer p.Close()
+	p.Post(func() { order = append(order, "post"); n.Set(1) })
+	p.Frame()
+	p.Frame()
+	if want := []string{"setup", "build", "post"}; !slices.Equal(order, want) {
+		t.Fatalf("ran %v, want %v, each once", order, want)
 	}
 }
 
