@@ -77,7 +77,7 @@ func (c *Canvas) layer(area image.Rectangle, paint func(*Canvas), draw func(*ggf
 	img := f.borrowLayer(window)
 	defer func() { f.layerDepth-- }()
 	if !area.Empty() {
-		img = subImage(img, area)
+		img = img.SubImage(area).(*ggfx.Image)
 	}
 	img.Clear()
 	layer := c.derive()
