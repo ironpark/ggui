@@ -142,7 +142,6 @@ type Window struct {
 	dragAt        Point
 	seenGen       uint64            // layoutGen as this window's last frame left it
 	menuShortcuts []*ShortcutHandle // the app menus' chords, where the menu bar does not run them
-	settling      time.Time         // until when a change to the native window is followed; see native
 
 	inspect      bool
 	inspectChord Chord          // parsed from cfg.Inspector; Key is zero for none
@@ -304,6 +303,9 @@ func (w *Window) handle(ev ggfx.Event) error {
 		w.requestFrame()
 	case ggfx.MouseButtonEvent:
 		w.pos = Pt(ev.X, ev.Y)
+		// A modifier pressed while another window had the focus reached
+		// no KeyEvent here; the click still sees it.
+		w.pending.mods = w.pending.mods.or(modsFrom(ev.Modifiers))
 		if ev.Pressed {
 			w.pending.down = append(w.pending.down, ev.Button)
 		} else {
@@ -311,7 +313,8 @@ func (w *Window) handle(ev ggfx.Event) error {
 		}
 		w.requestFrame()
 	case ggfx.ScrollEvent:
-		w.pending.wheel = w.pending.wheel.Add(Pt(ev.X*wheelUnit, ev.Y*wheelUnit))
+		w.pending.mods = w.pending.mods.or(modsFrom(ev.Modifiers))
+		w.pending.wheel = w.pending.wheel.Add(Pt(ev.X, ev.Y))
 		w.requestFrame()
 	case ggfx.TouchEvent:
 		if w.touches == nil {
@@ -354,11 +357,9 @@ func (w *Window) handle(ev ggfx.Event) error {
 			// Releases are not reported while another window has the focus.
 			w.keys = [KeyMax + 1]bool{}
 		}
-		w.post(func() { w.focused.Set(ev.Focused); w.refreshState() })
-	case ggfx.ResizeEvent:
-		// A resize comes with a frame at the new size, whose screen the
-		// viewport follows; the state may have changed with it.
-		w.post(w.refreshState)
+		w.post(func() { w.focused.Set(ev.Focused) })
+	case ggfx.WindowStateEvent:
+		w.post(func() { w.state.Set(windowState(ev.State)) })
 	}
 	return nil
 }
@@ -552,15 +553,10 @@ func (w *Window) catchUp() error {
 // wantsFrame reports whether the next frame must run without waiting for
 // input: an animation or a momentum scroll is moving, a widget read the
 // clock while painting (a Motion, a caret blink), work is posted or runs
-// every frame, a touch is down, files are being dragged over, or the
-// native window was just changed.
+// every frame, a touch is down or files are being dragged over.
 func (w *Window) wantsFrame(f frameInput) bool {
 	wd := w.world()
 	if wd.anims.active() || wd.frame.timeRead() || len(w.frame) > 0 || w.hasPosted() {
-		return true
-	}
-	if time.Now().Before(w.settling) {
-		w.refreshState()
 		return true
 	}
 	return f.drag || w.touch.active || w.touch.waiting || w.input.touchMotion.target != nil

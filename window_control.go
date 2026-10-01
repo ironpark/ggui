@@ -2,7 +2,6 @@ package ggui
 
 import (
 	"image"
-	"time"
 
 	"github.com/ironpark/ggfx"
 )
@@ -160,43 +159,26 @@ func (w *Window) Viewport() Readable[Size] { return w.viewport }
 // State follows whether the window is minimized, maximized or fullscreen.
 func (w *Window) State() Readable[WindowState] { return w.state }
 
-// settleTime is how long a window keeps painting after a call that
-// changes its state: longer than the platform's animation of it.
-const settleTime = time.Second
-
-// native calls fn with the native window, when there is one, then
-// follows the change fn may have made to the window's size or state.
+// native calls fn with the native window, when there is one. What fn
+// changes comes back as events: a ResizeEvent for the size and a
+// WindowStateEvent for the state, once the platform has animated it.
 func (w *Window) native(fn func(*ggfx.Window)) {
 	if nw := w.window.Load(); nw != nil {
 		fn(nw)
-		w.refreshState()
-		// A platform animates a change of state such as minimizing, and
-		// reports none that leaves the size alone, so the window keeps
-		// painting for a while and reads its state as it goes. A change of
-		// size arrives as a ResizeEvent.
-		w.settling = time.Now().Add(settleTime)
-		nw.RequestFrame()
 	}
 }
 
-// refreshState reads the window's state back from the platform. The
-// engine reports no event for it, so it is read after a resize, a change
-// of focus and every call that may have changed it.
-func (w *Window) refreshState() {
-	nw := w.window.Load()
-	if nw == nil || w.closed {
-		return
+// windowState converts the engine's window state.
+func windowState(s ggfx.WindowState) WindowState {
+	switch s {
+	case ggfx.WindowStateMinimized:
+		return WindowMinimized
+	case ggfx.WindowStateMaximized:
+		return WindowMaximized
+	case ggfx.WindowStateFullscreen:
+		return WindowFullscreen
 	}
-	s := WindowNormal
-	switch {
-	case nw.IsFullscreen():
-		s = WindowFullscreen
-	case nw.IsMinimized():
-		s = WindowMinimized
-	case nw.IsMaximized():
-		s = WindowMaximized
-	}
-	w.state.Set(s)
+	return WindowNormal
 }
 
 // Screen describes a display.

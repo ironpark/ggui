@@ -12,40 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package textinput provides a text-inputting controller.
-// This package is experimental and the API might be changed in the future.
-//
-// This package is supported on Windows, macOS, Linux, iOS, Android, other
-// UNIX-like systems with X11, and Web browsers so far.
-// It also works in a virtualization guest regardless of the operating system,
-// with the host serving text inputting (see exp/vmhost).
-//
-// # Virtual keyboards
-//
-// On iOS and Android, a virtual keyboard appears during text inputting.
-// While the keyboard would cover the caret reported by
-// [SessionOptions.CaretBounds], the rendering is shifted so that the caret
-// stays visible, and the shift is undone when the keyboard disappears.
-// Web browsers scroll the page by themselves instead.
-//
-// When the user dismisses the virtual keyboard, e.g. with the Back gesture
-// on Android, text inputting ends: [Composer.OnEndByUser] is called.
-//
-// # Android
-//
-// The soft-input mode (android:windowSoftInputMode) is left to the app,
-// since EbitenView can be embedded in any activity. Every mode works: the
-// keyboard's occlusion is measured from the actual geometry, not assumed
-// from the mode. adjustNothing is the most predictable, as the caret is
-// kept visible by the shift described above without the window being
-// resized or panned.
-//
-// EbitenView contains a hidden text-editing view that takes the focus
-// during text inputting. When embedding EbitenView in a custom view
-// hierarchy, no ancestor view must prevent its descendants from taking
-// the focus.
-//go:build (darwin && !ios) || windows
+//go:build !js
 
+// Package textinput composes text from the input-method events ggfx reports
+// for each window: CompositionEvent for the marked text and TextEvent for
+// what is committed. It is a fork of ggfx's exp/textinput, whose Composer
+// and sessions it keeps, without the polling platform backends. The browser
+// build uses exp/textinput itself.
 package textinput
 
 import (

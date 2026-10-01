@@ -1,7 +1,7 @@
-//go:build (!darwin || ios) && !windows
+//go:build js
 
-// Package textinput adapts ggfx's event-based desktop IME. Other platforms
-// retain exp/textinput's platform backend.
+// Package textinput adapts ggfx's event-based desktop IME. The browser
+// keeps exp/textinput's backend, which composes in a hidden text area.
 package textinput
 
 import "github.com/ironpark/ggfx/exp/textinput"

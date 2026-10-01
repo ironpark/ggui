@@ -33,14 +33,14 @@ func FuzzParse(f *testing.F) {
 			}
 			return
 		}
-		b := a.icon.ViewBox
-		for _, v := range []float64{b.X, b.Y, b.W, b.H} {
+		x, y, w, h := a.doc.ViewBox()
+		for _, v := range []float64{x, y, w, h} {
 			if math.IsNaN(v) || math.IsInf(v, 0) {
-				t.Fatalf("accepted a viewBox with a non-finite value: %+v", b)
+				t.Fatalf("accepted a viewBox with a non-finite value: %v %v %v %v", x, y, w, h)
 			}
 		}
-		if b.W <= 0 || b.H <= 0 {
-			t.Fatalf("accepted a viewBox without area: %+v", b)
+		if w <= 0 || h <= 0 {
+			t.Fatalf("accepted a viewBox without area: %v %v %v %v", x, y, w, h)
 		}
 		img := a.rasterize(8)
 		for i := 0; i < len(img.Pix); i += 4 {

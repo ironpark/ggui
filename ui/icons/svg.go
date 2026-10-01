@@ -10,9 +10,8 @@ import (
 	"sync"
 
 	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggfx/svg"
 	"github.com/ironpark/ggui"
-	"github.com/srwiley/oksvg"
-	"github.com/srwiley/rasterx"
 )
 
 // SVG is a parsed monochrome SVG. Its alpha coverage is tinted at draw time,
@@ -21,7 +20,7 @@ import (
 // A shared SVG retains at most eight device-resolution rasterizations.
 type SVG struct {
 	mu    sync.Mutex
-	icon  *oksvg.SvgIcon
+	doc   *svg.Document
 	cache []raster
 }
 type raster struct {
@@ -32,15 +31,15 @@ type raster struct {
 // Parse compiles SVG paths once without creating GPU resources.
 func Parse(data []byte) (*SVG, error) {
 	source := strings.ReplaceAll(string(data), "currentColor", "#ffffff")
-	icon, err := oksvg.ReadIconStream(strings.NewReader(source), oksvg.StrictErrorMode)
+	doc, err := svg.Parse(strings.NewReader(source))
 	if err != nil {
 		return nil, fmt.Errorf("icons: parse SVG: %w", err)
 	}
-	b := icon.ViewBox
-	if b.W <= 0 || b.H <= 0 || math.IsNaN(b.W+b.H+b.X+b.Y) || math.IsInf(b.W+b.H+b.X+b.Y, 0) {
+	x, y, w, h := doc.ViewBox()
+	if w <= 0 || h <= 0 || math.IsNaN(w+h+x+y) || math.IsInf(w+h+x+y, 0) {
 		return nil, fmt.Errorf("icons: SVG needs a finite positive viewBox")
 	}
-	return &SVG{icon: icon}, nil
+	return &SVG{doc: doc}, nil
 }
 
 // Load reads an SVG from an embedded or other filesystem.
@@ -54,12 +53,13 @@ func Load(files fs.FS, path string) (*SVG, error) {
 
 func (s *SVG) rasterize(size int) *image.RGBA {
 	img := image.NewRGBA(image.Rect(0, 0, size, size))
-	scanner := rasterx.NewScannerGV(size, size, img, img.Bounds())
-	painter := rasterx.NewDasher(size, size, scanner)
-	b := s.icon.ViewBox
-	scale := float64(size) / max(b.W, b.H)
-	s.icon.Transform = rasterx.Matrix2D{A: scale, D: scale, E: (float64(size)-b.W*scale)/2 - b.X*scale, F: (float64(size)-b.H*scale)/2 - b.Y*scale}
-	s.icon.Draw(painter, 1)
+	x, y, w, h := s.doc.ViewBox()
+	scale := float64(size) / max(w, h)
+	var g ggfx.GeoM
+	g.Translate(-x, -y)
+	g.Scale(scale, scale)
+	g.Translate((float64(size)-w*scale)/2, (float64(size)-h*scale)/2)
+	s.doc.Draw(img, g)
 	// Store a white coverage mask so recoloring never requires rasterization.
 	for i := 0; i < len(img.Pix); i += 4 {
 		a := img.Pix[i+3]

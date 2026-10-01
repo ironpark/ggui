@@ -322,6 +322,8 @@ func eventWindow(ev ggfx.Event) *ggfx.Window {
 		return ev.Window
 	case ggfx.FocusEvent:
 		return ev.Window
+	case ggfx.WindowStateEvent:
+		return ev.Window
 	case ggfx.CloseEvent:
 		return ev.Window
 	case ggfx.KeyEvent:

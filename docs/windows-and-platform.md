@@ -74,7 +74,8 @@ status := ggui.Combine(w.Focused(), w.Viewport(), func(focused bool, size ggui.S
 ```
 
 `Focused` follows the keyboard focus, `Viewport` the content size, and `State`
-whether the window is normal, minimized, maximized or fullscreen.
+whether the window is normal, minimized, maximized or fullscreen, whether the
+app, the user or the OS changed it.
 
 ## Reaching the host from a widget
 
@@ -245,7 +246,7 @@ only the same user can reach.
 | App menus in the menu bar | Yes | Drawn with `ui.AppMenubar` | Drawn with `ui.AppMenubar` | Drawn with `ui.AppMenubar` |
 | Tray icon | Yes | No | No | No |
 | Message dialogs | Alert sheet | Message box | `zenity` / `kdialog` | `alert` / `confirm` |
-| Clipboard | Pasteboard API | Clipboard API | `wl-clipboard`, `xclip`, `xsel` | In-process |
+| Clipboard | Pasteboard API | Clipboard API | X11 `CLIPBOARD` selection | In-process |
 | `SystemDark` | Yes | Yes | Yes | Yes |
 | `SingleInstance` | Yes | Yes | Yes | Every tab is one |
 | `runtime.OpenURL` | `open` | Default handler | `xdg-open` | New tab |

@@ -109,7 +109,7 @@ func TestEventWindowIsTheWindowEachEventNames(t *testing.T) {
 	nw := new(ggfx.Window)
 	for _, ev := range []ggfx.Event{
 		ggfx.FrameEvent{Window: nw}, ggfx.ResizeEvent{Window: nw}, ggfx.FocusEvent{Window: nw},
-		ggfx.CloseEvent{Window: nw}, ggfx.KeyEvent{Window: nw}, ggfx.TextEvent{Window: nw},
+		ggfx.WindowStateEvent{Window: nw}, ggfx.CloseEvent{Window: nw}, ggfx.KeyEvent{Window: nw}, ggfx.TextEvent{Window: nw},
 		ggfx.CompositionEvent{Window: nw}, ggfx.MouseMoveEvent{Window: nw}, ggfx.MouseButtonEvent{Window: nw},
 		ggfx.ScrollEvent{Window: nw}, ggfx.TouchEvent{Window: nw}, ggfx.DragEvent{Window: nw}, ggfx.DropEvent{Window: nw},
 	} {
@@ -126,5 +126,28 @@ func TestEventWindowIsTheWindowEachEventNames(t *testing.T) {
 	defer a.Close()
 	if a.windowFor(nw) != nil {
 		t.Fatal("a native window the app never made was matched to one of its windows")
+	}
+}
+
+func TestWindowStateFollowsTheStateEvents(t *testing.T) {
+	t.Parallel()
+	a := New(Config{}, func() Widget { return Box() })
+	defer a.Close()
+	for _, c := range []struct {
+		from ggfx.WindowState
+		want WindowState
+	}{
+		{ggfx.WindowStateMaximized, WindowMaximized},
+		{ggfx.WindowStateMinimized, WindowMinimized},
+		{ggfx.WindowStateFullscreen, WindowFullscreen},
+		{ggfx.WindowStateNormal, WindowNormal},
+	} {
+		if err := a.handle(ggfx.WindowStateEvent{State: c.from}); err != nil {
+			t.Fatal(err)
+		}
+		a.runPosted()
+		if got := Untrack(a.State().Get); got != c.want {
+			t.Errorf("after a WindowStateEvent of %d, state %v; want %v", c.from, got, c.want)
+		}
 	}
 }

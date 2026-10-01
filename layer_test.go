@@ -185,3 +185,22 @@ func TestTransitionFadeHoldsALayerOnlyWhileAnimating(t *testing.T) {
 		}
 	})
 }
+
+func TestLayerUnderAClipCoversTheClipAlone(t *testing.T) {
+	t.Parallel()
+	img := ggfx.NewImage(100, 80)
+	defer img.Deallocate()
+	c := &Canvas{Image: img}
+	clip := c.Clip(Rct(Pt(20, 10), Sz(40, 30)))
+	var faded, scaled image.Rectangle
+	clip.Layer(LayerOptions{Fade: 0.5}, func(l *Canvas) { faded = l.Image.Bounds() })
+	clip.Layer(LayerOptions{Scale: 0.9}, func(l *Canvas) { scaled = l.Image.Bounds() })
+	if faded != image.Rect(20, 10, 60, 40) {
+		t.Errorf("faded layer under the clip covers %v; want the clip", faded)
+	}
+	// A scaled layer can draw what was painted outside the clip into it.
+	if scaled != img.Bounds() {
+		t.Errorf("scaled layer under the clip covers %v; want the window", scaled)
+	}
+	c.freeLayers()
+}

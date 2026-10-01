@@ -134,8 +134,9 @@ func quad(bounds image.Rectangle, centre, axis geom.Point, half geom.Size, s0, s
 }
 
 // quadIndices are the two triangles of a quad whose corners run top left,
-// top right, bottom left, bottom right.
-var quadIndices = [...]uint16{0, 1, 2, 1, 3, 2}
+// top right, bottom left, bottom right, as uint32, which a draw takes
+// without converting.
+var quadIndices = [...]uint32{0, 1, 2, 1, 3, 2}
 
 // Premul is col as the premultiplied floats a shader takes.
 func Premul(col color.Color) [4]float32 {

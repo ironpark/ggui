@@ -31,9 +31,19 @@ type LayerOptions struct {
 //
 // Without an image to draw into, Layer calls paint with c.
 func (c *Canvas) Layer(o LayerOptions, paint func(layer *Canvas)) {
-	c.layer(image.Rectangle{}, paint, func(img *ggfx.Image) {
+	scaled := o.Scale != 0 && o.Scale != 1
+	// Unscaled, nothing painted outside the clip can show, so the layer
+	// is cleared and composited over the clip alone.
+	var area image.Rectangle
+	if !scaled && c != nil && c.Image != nil {
+		area = c.Image.Bounds()
+	}
+	c.layer(area, paint, func(img *ggfx.Image) {
 		op := &ggfx.DrawImageOptions{}
-		if o.Scale != 0 && o.Scale != 1 {
+		// A source is drawn from its corner, a destination's coordinates
+		// are the window's.
+		op.GeoM.Translate(float64(img.Bounds().Min.X), float64(img.Bounds().Min.Y))
+		if scaled {
 			op.Filter = ggfx.FilterLinear
 			cx, cy := c.px(o.About.X), c.px(o.About.Y)
 			op.GeoM.Translate(-cx, -cy)

@@ -209,10 +209,10 @@ func (t *TextInputWidget) runs() []TextRun {
 		} else {
 			x -= t.scroll
 		}
-		line := t.ed.Text[sp.start:sp.end]
-		r := TextRun{Start: sp.start, End: sp.end, Rect: Rct(Pt(x, y), Sz(t.advance(line), h))}
+		width := t.prefixWidths(sp)
+		r := TextRun{Start: sp.start, End: sp.end, Rect: Rct(Pt(x, y), Sz(width(sp.end), h))}
 		for b := sp.start; ; b = textedit.NextRune(t.ed.Text, b) {
-			r.Stops = append(r.Stops, TextStop{Byte: b, X: t.advance(t.ed.Text[sp.start:b])})
+			r.Stops = append(r.Stops, TextStop{Byte: b, X: width(b)})
 			if b >= sp.end {
 				break
 			}
@@ -354,6 +354,15 @@ func (t *TextInputWidget) face(scale float64) text.Face {
 
 // advance is the logical width of s as drawn.
 func (t *TextInputWidget) advance(s string) float64 { return lineWidth(t.display(s), t.face(1)) }
+
+// prefixWidths measures the line sp once and returns the width of its text
+// up to a byte offset b of the text within it, where advance would
+// measure each prefix.
+func (t *TextInputWidget) prefixWidths(sp lineSpan) func(b int) float64 {
+	width := prefixWidths(t.display(t.ed.Text[sp.start:sp.end]), t.face(1))
+	from := t.toDisplay(sp.start)
+	return func(b int) float64 { return width(t.toDisplay(b) - from) }
+}
 
 // rendered is the text with the composition inserted where the caret is,
 // and the caret's offset into it.
@@ -593,9 +602,10 @@ func (t *TextInputWidget) indexAt(p Point) int {
 // partial emoji sequences can give the same width as the whole glyph, so
 // rune boundaries would put the caret inside a joined emoji or modifier.
 func (t *TextInputWidget) indexInLine(sp lineSpan, x float64) int {
+	width := t.prefixWidths(sp)
 	best, bestDist := sp.start, math.Inf(1)
 	for i := sp.start; ; i = textedit.NextGrapheme(t.ed.Text, i) {
-		d := math.Abs(t.advance(t.ed.Text[sp.start:i]) - x)
+		d := math.Abs(width(i) - x)
 		if d < bestDist {
 			best, bestDist = i, d
 		}

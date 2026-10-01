@@ -6,8 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"sort"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/textedit"
@@ -285,6 +288,52 @@ func lineWidth(s string, face text.Face) float64 {
 		width += text.AdvanceAt(run, len(run), f)
 	}
 	return width
+}
+
+// prefixWidths shapes s once and returns the width of s[:b] for any byte
+// offset b on a rune boundary, which measuring each prefix would shape
+// once per offset. An offset inside a glyph cluster, a ligature say, gets
+// the share of the cluster's width that the runes before it have.
+func prefixWidths(s string, face text.Face) func(b int) float64 {
+	type cluster struct {
+		start, end int
+		x, w       float64 // the width before the cluster, and its own
+	}
+	var cs []cluster
+	var glyphs []text.LazyGlyph
+	off := 0
+	for run, f := range textRuns(s, face) {
+		glyphs = text.AppendLazyGlyphs(glyphs[:0], run, f, nil)
+		for _, g := range glyphs {
+			cs = append(cs, cluster{start: off + g.StartIndexInBytes, end: off + g.EndIndexInBytes, w: g.AdvanceX})
+		}
+		off += len(run)
+	}
+	// Glyphs come in visual order and a cluster may have several; put
+	// them in the order of the text, one entry a cluster.
+	slices.SortStableFunc(cs, func(a, b cluster) int { return a.start - b.start })
+	merged := cs[:0]
+	x := 0.0
+	for _, c := range cs {
+		if n := len(merged); n > 0 && merged[n-1].start == c.start {
+			merged[n-1].w += c.w
+		} else {
+			c.x = x
+			merged = append(merged, c)
+		}
+		x += c.w
+	}
+	return func(b int) float64 {
+		i := sort.Search(len(merged), func(i int) bool { return merged[i].end > b })
+		if i == len(merged) {
+			return x
+		}
+		c := merged[i]
+		if b <= c.start {
+			return c.x
+		}
+		return c.x + c.w*float64(utf8.RuneCountInString(s[c.start:b]))/float64(utf8.RuneCountInString(s[c.start:c.end]))
+	}
 }
 
 // wrapText breaks s into lines no wider than maxW. Hard line breaks are kept;

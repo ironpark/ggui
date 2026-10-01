@@ -1,4 +1,4 @@
-//go:build (darwin && !ios) || windows
+//go:build !js
 
 package textinput_test
 

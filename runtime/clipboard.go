@@ -12,9 +12,9 @@ type Clipboard interface {
 }
 
 // NativeClipboard returns the system clipboard. On macOS and Windows it is
-// the platform's clipboard API; elsewhere it talks to the OS through
-// wl-clipboard, xclip or xsel and keeps an in-process copy where none is
-// available, as in a browser.
+// the platform's clipboard API and on Linux and the BSDs the X11 CLIPBOARD
+// selection, which XWayland shares with Wayland. In a browser it is an
+// in-process copy.
 func NativeClipboard() Clipboard { return nativeClipboard() }
 
 // MemoryClipboard is a Clipboard that lives in the process only, for tests

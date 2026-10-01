@@ -36,3 +36,19 @@ func TestAppKeepsModifierOnQueuedKeyPress(t *testing.T) {
 		t.Fatal("released modifier remains held")
 	}
 }
+
+func TestPointerEventsCarryTheirModifiers(t *testing.T) {
+	t.Parallel()
+	for _, e := range []ggfx.Event{
+		ggfx.MouseButtonEvent{Button: ggfx.MouseButtonLeft, Pressed: true, Modifiers: ggfx.KeyModifiers{Shift: true}},
+		ggfx.ScrollEvent{Y: -1, Modifiers: ggfx.KeyModifiers{Shift: true}},
+	} {
+		a := &Window{}
+		if err := a.handle(e); err != nil {
+			t.Fatal(err)
+		}
+		if !a.takeInput().mods.Shift {
+			t.Errorf("%T: a modifier held as it arrived, with no KeyEvent for it, was lost", e)
+		}
+	}
+}
