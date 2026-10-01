@@ -86,11 +86,9 @@ func TestStepsClampAtTextEdges(t *testing.T) {
 	}
 }
 
-// BUG: runeClass puts combining marks, variation selectors and joiners with
-// punctuation, so word movement and double-click stop between a letter and
-// its mark. Devanagari, Thai and decomposed Latin all break this way.
+// Word movement and double-click take a letter with its marks: Devanagari,
+// Thai and decomposed Latin put them after it.
 func TestWordMovementKeepsMarksWithTheirBase(t *testing.T) {
-	t.Skip("BUG: nextWord/prevWord/SelectWord split a letter from its combining mark (runeClass treats marks as punctuation)")
 	t.Parallel()
 	s := "café x"
 	if got, want := nextWord(s, 0), len("café "); got != want {
@@ -108,11 +106,9 @@ func TestWordMovementKeepsMarksWithTheirBase(t *testing.T) {
 	}
 }
 
-// BUG: NextGrapheme lets a line feed take the marks after it, and a joiner
-// take the line feed after it, while PrevGrapheme always breaks at a line
-// feed; so arrows and Backspace disagree on where clusters are.
+// A line feed is a cluster of its own both ways, so arrows and Backspace
+// agree on where clusters are.
 func TestLineFeedEndsCluster(t *testing.T) {
-	t.Skip("BUG: NextGrapheme joins a line feed to a cluster (LF + mark, ZWJ + LF); PrevGrapheme does not")
 	t.Parallel()
 	for _, c := range []struct {
 		s    string

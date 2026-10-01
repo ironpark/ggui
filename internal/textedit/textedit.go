@@ -215,6 +215,9 @@ func NextGrapheme(s string, i int) int {
 	if r == '\r' && j < len(s) && s[j] == '\n' {
 		return j + 1
 	}
+	if r == '\r' || r == '\n' {
+		return j // a line break is a cluster of its own
+	}
 	if isRegionalIndicator(r) {
 		if r2, n2 := utf8.DecodeRuneInString(s[j:]); isRegionalIndicator(r2) {
 			return j + n2
@@ -227,8 +230,9 @@ func NextGrapheme(s string, i int) int {
 			break
 		}
 		j += n2
-		if r2 == 0x200D && j < len(s) {
-			// What follows a joiner belongs to the cluster.
+		if r2 == 0x200D && j < len(s) && s[j] != '\r' && s[j] != '\n' {
+			// What follows a joiner belongs to the cluster, unless it
+			// breaks the line.
 			_, n3 := utf8.DecodeRuneInString(s[j:])
 			j += n3
 		}
@@ -270,26 +274,12 @@ func (e *Editor) SelectWord(pos int) {
 	if len(e.Text) == 0 {
 		return
 	}
-	if pos == len(e.Text) {
-		pos = prevRune(e.Text, pos)
-	}
+	// The cluster holding pos, or at the end the last one; its first rune
+	// gives the class.
+	pos = PrevGrapheme(e.Text, NextRune(e.Text, pos))
 	r, _ := utf8.DecodeRuneInString(e.Text[pos:])
 	class := runeClass(r)
-	lo, hi := pos, pos
-	for lo > 0 {
-		p := prevRune(e.Text, lo)
-		if q, _ := utf8.DecodeRuneInString(e.Text[p:]); runeClass(q) != class {
-			break
-		}
-		lo = p
-	}
-	for hi < len(e.Text) {
-		if q, _ := utf8.DecodeRuneInString(e.Text[hi:]); runeClass(q) != class {
-			break
-		}
-		hi = NextRune(e.Text, hi)
-	}
-	e.Anchor, e.Caret = lo, hi
+	e.Anchor, e.Caret = runStart(e.Text, pos, class), runEnd(e.Text, pos, class)
 }
 
 func prevRune(s string, i int) int {
@@ -309,12 +299,17 @@ func NextRune(s string, i int) int {
 	return i + n
 }
 
+// spaceClass is the runeClass of spaces.
+const spaceClass = 0
+
 // runeClass groups runes for word movement: spaces, word characters and
-// punctuation each form their own runs.
+// punctuation each form their own runs. A rune that extends a cluster, a
+// combining mark or a joiner, has no class of its own: it goes with the
+// rune it is attached to; see runStart and runEnd.
 func runeClass(r rune) int {
 	switch {
 	case unicode.IsSpace(r):
-		return 0
+		return spaceClass
 	case unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_':
 		return 1
 	}
@@ -324,24 +319,46 @@ func runeClass(r rune) int {
 // prevWord returns the start of the word before i: spaces are skipped, then
 // the run of same-class runes before them.
 func prevWord(s string, i int) int {
-	for i > 0 {
-		r, _ := utf8.DecodeLastRuneInString(s[:i])
-		if !unicode.IsSpace(r) {
-			break
-		}
-		i = prevRune(s, i)
-	}
+	i = runStart(s, i, spaceClass)
 	if i == 0 {
 		return 0
 	}
-	r, _ := utf8.DecodeLastRuneInString(s[:i])
-	class := runeClass(r)
+	r, _ := utf8.DecodeRuneInString(s[PrevGrapheme(s, i):])
+	return runStart(s, i, runeClass(r))
+}
+
+// runStart returns the start of the run of class that ends at i, cluster
+// by cluster, each taking the class of its first rune. The clusters are
+// found forward from the start of each line, as NextGrapheme finds them, so
+// the edges agree with the arrows'.
+func runStart(s string, i, class int) int {
 	for i > 0 {
-		r, _ := utf8.DecodeLastRuneInString(s[:i])
-		if runeClass(r) != class {
+		line := i - 1
+		for line > 0 && s[line-1] != '\n' {
+			line--
+		}
+		var starts []int
+		for j := line; j < i; j = NextGrapheme(s, j) {
+			starts = append(starts, j)
+		}
+		for k := len(starts) - 1; k >= 0; k-- {
+			if r, _ := utf8.DecodeRuneInString(s[starts[k]:]); runeClass(r) != class {
+				return i
+			}
+			i = starts[k]
+		}
+	}
+	return i
+}
+
+// runEnd returns the end of the run of class that starts at i, cluster by
+// cluster, each taking the class of its first rune.
+func runEnd(s string, i, class int) int {
+	for i < len(s) {
+		if r, _ := utf8.DecodeRuneInString(s[i:]); runeClass(r) != class {
 			break
 		}
-		i = prevRune(s, i)
+		i = NextGrapheme(s, i)
 	}
 	return i
 }
@@ -353,20 +370,5 @@ func nextWord(s string, i int) int {
 		return len(s)
 	}
 	r, _ := utf8.DecodeRuneInString(s[i:])
-	class := runeClass(r)
-	for i < len(s) {
-		r, _ := utf8.DecodeRuneInString(s[i:])
-		if runeClass(r) != class {
-			break
-		}
-		i = NextRune(s, i)
-	}
-	for i < len(s) {
-		r, _ := utf8.DecodeRuneInString(s[i:])
-		if !unicode.IsSpace(r) {
-			break
-		}
-		i = NextRune(s, i)
-	}
-	return i
+	return runEnd(s, runEnd(s, i, runeClass(r)), spaceClass)
 }

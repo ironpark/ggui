@@ -32,23 +32,8 @@ func boundaries(s string) []int {
 	return b
 }
 
-// lineFeedJoins reports whether s holds a line feed NextGrapheme joins to a
-// cluster, which PrevGrapheme does not (see TestLineFeedEndsCluster): a line
-// feed followed by an extending rune, or a joiner followed by CR or LF.
-func lineFeedJoins(s string) bool {
-	prev := rune(-1)
-	for _, r := range s {
-		if prev == '\n' && extends(r) || prev == 0x200D && (r == '\n' || r == '\r') {
-			return true
-		}
-		prev = r
-	}
-	return false
-}
-
 // hasExtender reports whether s holds a rune that attaches to the one before
-// it. Word movement splits such clusters (see
-// TestWordMovementKeepsMarksWithTheirBase).
+// it.
 func hasExtender(s string) bool { return strings.ContainsFunc(s, extends) }
 
 // FuzzGraphemeBoundaries checks the segmentation helpers on any string:
@@ -94,7 +79,7 @@ func FuzzGraphemeBoundaries(f *testing.F) {
 		}
 
 		forward := boundaries(s)
-		if !lineFeedJoins(s) {
+		{
 			backward := []int{len(s)}
 			for i := len(s); i > 0; {
 				i = PrevGrapheme(s, i)
@@ -107,14 +92,14 @@ func FuzzGraphemeBoundaries(f *testing.F) {
 		}
 
 		// A cluster starts with an extending rune only at the start, or after
-		// a flag or CRLF, which take nothing after them.
+		// a flag or a line break, which take nothing after them.
 		for _, b := range forward {
 			if b == 0 || b == len(s) {
 				continue
 			}
 			r, _ := utf8.DecodeRuneInString(s[b:])
 			q, _ := utf8.DecodeLastRuneInString(s[:b])
-			if extends(r) && !isRegionalIndicator(q) && !strings.HasSuffix(s[:b], "\r\n") {
+			if extends(r) && !isRegionalIndicator(q) && q != '\n' && q != '\r' {
 				t.Fatalf("cluster at %d of %q starts with %U after %U, which it should extend", b, s, r, q)
 			}
 		}
@@ -153,6 +138,12 @@ func FuzzEditorOperations(f *testing.F) {
 	f.Add("한글 입력", []byte{0, 17, 0, 18, 15, 100, 0, 19, 2, 12, 14, 13, 10, 0, 5})
 	f.Add("abc", []byte{10, 0, 4, 1, 12, 13, 13, 16, 7, 6, 3})
 	f.Add("क्ष שלום", []byte{8, 1, 7, 0, 4, 12})
+	// Double-click at the end of a word ending in a mark, and a word move
+	// over a space that carries one: both once stopped inside the cluster.
+	f.Add("00\u032d", []byte("\xa42"))
+	f.Add("00 \u0301", []byte("y0\"!+0*"))
+	// A word move back over a flag after a joiner that opens a line.
+	f.Add("0", []byte("\"1\"\"\"Z)"))
 	f.Fuzz(func(t *testing.T, initial string, ops []byte) {
 		initial = strings.ToValidUTF8(initial, "?")
 		now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -178,8 +169,8 @@ func FuzzEditorOperations(f *testing.F) {
 			lo, hi := e.Selection()
 			extend := arg&1 != 0
 
-			// motion is set for a move that must keep an aligned caret aligned;
-			// word for one that splits clusters holding an extender (known bug).
+			// motion is set for a move that must keep an aligned caret aligned,
+			// word for a word-wise one.
 			motion, word := false, false
 			// want is the text an edit must leave, and wantCaret its caret.
 			want, wantCaret := old.text, -1
@@ -193,7 +184,7 @@ func FuzzEditorOperations(f *testing.F) {
 				word = op%17 == 2
 				if !e.HasSelection() {
 					lo = fn.Pick(word, prevWord(old.text, old.caret), PrevGrapheme(old.text, old.caret))
-					if aligned && !word && !onBoundary(lo) && !lineFeedJoins(old.text) {
+					if aligned && !word && !onBoundary(lo) {
 						t.Fatalf("backspace in %q at %d would stop inside a cluster, at %d", old.text, old.caret, lo)
 					}
 				}
@@ -258,8 +249,7 @@ func FuzzEditorOperations(f *testing.F) {
 			if motion && e.Text != old.text {
 				t.Fatalf("move op %d changed the text from %q to %q", op%17, old.text, e.Text)
 			}
-			if motion && aligned && !(onBoundary(e.Anchor) && onBoundary(e.Caret)) &&
-				!lineFeedJoins(old.text) && !(word && hasExtender(old.text)) {
+			if motion && aligned && !(onBoundary(e.Anchor) && onBoundary(e.Caret)) {
 				t.Fatalf("move op %d from %+v left anchor %d caret %d inside a cluster; boundaries %v",
 					op%17, old, e.Anchor, e.Caret, oldBounds)
 			}
