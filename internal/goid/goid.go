@@ -10,6 +10,14 @@
 // architecture without the few lines of assembly that find the record or a
 // runtime whose layout no longer matches, ID parses runtime.Stack instead:
 // slower, and never wrong.
+//
+// WebAssembly is the exception. It has no such assembly, and parsing a
+// stack on every signal read cost a browser app tens of milliseconds a
+// frame. Its goroutines share one thread and switch only where one blocks,
+// so there ID reports one id for every goroutine: the core keeps one state
+// for the process, which is right while the UI goroutine never blocks in
+// the middle of a frame and other goroutines leave signals alone, as Async
+// already asks of them.
 package goid
 
 import (
@@ -25,12 +33,23 @@ func ID() int64 {
 	if offset >= 0 {
 		return *(*int64)(unsafe.Add(getg(), offset))
 	}
+	if shared {
+		return 1
+	}
 	return slowID()
 }
 
-// Fast reports whether ID reads the runtime's record rather than parsing a
-// stack trace.
-func Fast() bool { return offset >= 0 }
+// Fast reports whether ID is cheap: it reads the runtime's record, or is
+// shared, rather than parsing a stack trace.
+func Fast() bool { return offset >= 0 || shared }
+
+// shared reports that every goroutine gets the same id; see the package
+// doc.
+const shared = runtime.GOARCH == "wasm"
+
+// Shared reports whether every goroutine gets the same id, for a test that
+// tells goroutines apart.
+func Shared() bool { return shared }
 
 // offset is where the id sits in the runtime's record of a goroutine, or -1
 // when ID has to parse the stack.

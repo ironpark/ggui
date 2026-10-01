@@ -259,6 +259,7 @@ func TestFlushReportsACycle(t *testing.T) {
 }
 
 func TestRuntimeParentAndRelated(t *testing.T) {
+	skipSharedGoroutines(t)
 	t.Parallel()
 	rt := NewRuntime()
 	if rt.Parent() != Base() || Base().Parent() != nil {

@@ -207,15 +207,23 @@ type derivedKey struct {
 // envMemo remembers the Envs derived this frame and last, so the same
 // derivation yields the same revision frame after frame and a container
 // that derives the same Env every frame reuses it. Each world keeps its
-// own, written from derive and rotated once a frame by Canvas.nextFrame,
-// both on the goroutine running that world's frames. A revision names one
-// Env across every world, so an Env derived in one is never mistaken for
-// another's.
+// own, written from derive and rotated by Canvas.nextFrame, both on the
+// goroutine running that world's frames. A revision names one Env across
+// every world, so an Env derived in one is never mistaken for another's.
+//
+// Only a frame that derived anything rotates: a frame that only paints from
+// the layout it already has would otherwise age every entry out, and the
+// next layout would mint new revisions and miss every cache below them.
 type envMemo struct {
 	cur, prev map[derivedKey]Env
+	used      bool
 }
 
 func (m *envMemo) rotate() {
+	if !m.used {
+		return
+	}
+	m.used = false
 	m.prev, m.cur = m.cur, m.prev
 	clear(m.cur)
 }
@@ -225,6 +233,7 @@ func (m *envMemo) rotate() {
 func (e Env) derive(key, val any, fn func() Env) (out Env) {
 	k := derivedKey{e.rev, key, val}
 	envMemo := &activeWorld().envMemo
+	envMemo.used = true
 	memoized := true
 	func() {
 		defer func() {
@@ -236,11 +245,9 @@ func (e Env) derive(key, val any, fn func() Env) (out Env) {
 		if out, ok = envMemo.cur[k]; ok {
 			return
 		}
-		if out, ok = envMemo.prev[k]; ok {
-			return
+		if out, ok = envMemo.prev[k]; !ok {
+			out = fn()
 		}
-		ok = false
-		out = fn()
 		if envMemo.cur == nil {
 			envMemo.cur = map[derivedKey]Env{}
 		}

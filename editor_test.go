@@ -165,6 +165,41 @@ func TestTextInputDragSelectsAndDoubleClickSelectsWord(t *testing.T) {
 	if w.ed.Selected() != "world" {
 		t.Fatalf("double-click selected %q, want \"world\"", w.ed.Selected())
 	}
+	click(Pt(x, 10))
+	if w.ed.Selected() != "hello world" {
+		t.Fatalf("triple-click selected %q, want the line", w.ed.Selected())
+	}
+}
+
+func TestTextInputTripleClickSelectsTheLineNotTheText(t *testing.T) {
+	t.Parallel()
+	useFakeIME(t)
+	w := TextInput(State("first\nsecond line\nthird")).Multiline()
+	var in inputState
+	paintFrame(&in, w, Sz(300, 100))
+	p := Pt(w.advance("sec"), w.spacing()+5)
+	for range 3 {
+		in.dispatch(frameInput{pos: p, down: []MouseButton{MouseButtonLeft}})
+		in.dispatch(frameInput{pos: p, up: []MouseButton{MouseButtonLeft}})
+	}
+	if w.ed.Selected() != "second line" {
+		t.Fatalf("triple-click selected %q, want the second line", w.ed.Selected())
+	}
+}
+
+func TestTextInputWrapsOnceForAnUnchangedText(t *testing.T) {
+	t.Parallel()
+	useFakeIME(t)
+	w := TextInput(State("one two three four five six seven")).Multiline()
+	w.Layout(Loose(Sz(80, Unbounded)), Env{})
+	a, b := w.spans(w.ed.Text), w.spans(w.ed.Text)
+	if len(a) < 2 || &a[0] != &b[0] {
+		t.Fatal("the same text at the same width was wrapped again")
+	}
+	w.Layout(Loose(Sz(400, Unbounded)), Env{})
+	if c := w.spans(w.ed.Text); len(c) != 1 {
+		t.Fatalf("after widening, %d lines; want the cache to follow the width", len(c))
+	}
 }
 
 func TestTextInputComposesThenCommits(t *testing.T) {

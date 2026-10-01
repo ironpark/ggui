@@ -94,6 +94,15 @@ func (c *Canvas) TextWidth(s string, font *Font, size float64) float64 {
 	return c.dp(lineWidth(s, font.face(c.px(size))))
 }
 
+// FitText returns s as it fits in width at size, cut with "…" when it is
+// too wide: what Text's Ellipsis draws, for a widget drawing its own.
+func (c *Canvas) FitText(s string, font *Font, size, width float64) string {
+	if font == nil {
+		font = fallbackFont()
+	}
+	return ellipsize(s, font.face(c.px(size)), c.px(width), false)
+}
+
 // Physical is r in the pixels of Image, for an Overlay that keeps an image
 // of its own the size of what it draws.
 func (c *Canvas) Physical(r Rect) image.Rectangle { return c.physical(r) }

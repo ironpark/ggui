@@ -354,44 +354,21 @@ func (a *AttachmentWidget) paintMedia(dst *ggui.Canvas, r ggui.Rect, state Attac
 	}
 }
 
-// attachmentText clips and ellipsizes visually while keeping the complete name
-// in the semantics tree. Measurements use the same font and scale as drawing.
+// attachmentText ends a name too long for its line with an ellipsis while
+// keeping the complete name in the semantics tree.
 type attachmentText struct {
-	text     *ggui.TextWidget
-	value    string
-	fitted   bool // truncation computed for value at fitWidth
-	fitWidth float64
+	text  *ggui.TextWidget
+	value string
 }
 
 func (t *attachmentText) set(value string, size float64, col color.Color) {
 	t.value = strings.ReplaceAll(value, "\n", " ")
 	if t.text == nil {
-		t.text = ggui.Text(t.value).NoWrap()
+		t.text = ggui.Text(t.value).NoWrap().Ellipsis()
 	}
 	t.text.Content(t.value).Size(size).LineHeight(1.25).Color(col)
-	t.fitted = false
 }
 func (t *attachmentText) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	if t.fitted && t.fitWidth == c.MaxW {
-		return t.text.Layout(c, env)
-	}
-	t.fitted, t.fitWidth = true, c.MaxW
-	t.text.Content(t.value)
-	natural := t.text.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env)
-	if natural.W > c.MaxW {
-		runes := []rune(t.value)
-		lo, hi := 0, len(runes)
-		for lo < hi {
-			mid := (lo + hi + 1) / 2
-			t.text.Content(string(runes[:mid]) + "…")
-			if t.text.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env).W <= c.MaxW {
-				lo = mid
-			} else {
-				hi = mid - 1
-			}
-		}
-		t.text.Content(string(runes[:lo]) + "…")
-	}
 	return t.text.Layout(c, env)
 }
 func (t *attachmentText) Paint(dst *ggui.Canvas, r ggui.Rect) {

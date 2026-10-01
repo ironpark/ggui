@@ -101,3 +101,43 @@ func TestTrayNumbersItsActionsApart(t *testing.T) {
 		t.Fatalf("removed tray left %d actions, %d trays", len(a.actions), len(a.trays))
 	}
 }
+
+func TestEditCommandsGoToTheFocusedFieldFirst(t *testing.T) {
+	t.Parallel()
+	useFakeIME(t)
+	value := State("hello")
+	field := TextInput(value)
+	a := New(Config{}, func() Widget { return field })
+	defer a.Close()
+	undos := 0
+	a.SetMenu(EditMenu(EditActions{Undo: func() { undos++ }}))
+	undo := a.menu.ids[0]
+	a.runAction(undo)
+	if undos != 1 {
+		t.Fatalf("with no field focused, Undo ran the app's action %d times, want once", undos)
+	}
+	paintFrame(&a.input, field, Sz(200, 20))
+	a.input.dispatch(frameInput{pos: Pt(190, 10), down: []MouseButton{MouseButtonLeft}})
+	a.input.dispatch(frameInput{pos: Pt(190, 10), up: []MouseButton{MouseButtonLeft}})
+	typeKeys(&a.input, Mods{}, KeyBackspace)
+	if Untrack(value.Get) != "hell" {
+		t.Fatalf("value = %q after Backspace", Untrack(value.Get))
+	}
+	a.runAction(undo)
+	if undos != 1 || Untrack(value.Get) != "hello" {
+		t.Fatalf("Undo with the field focused: app ran %d times, value %q; want the field undone", undos, Untrack(value.Get))
+	}
+	// A shortcut on the same chord waits for the field too.
+	shortcut := 0
+	a.Shortcut("cmd+z", func() { shortcut++ })
+	typeKeys(&a.input, MustChord("cmd+z").held(), KeyZ)
+	if shortcut != 0 {
+		t.Fatal("a shortcut took ⌘Z from the focused field")
+	}
+	saves := 0
+	a.Shortcut("cmd+s", func() { saves++ })
+	typeKeys(&a.input, MustChord("cmd+s").held(), KeyS)
+	if saves != 1 {
+		t.Fatal("the field kept a chord it does not edit with")
+	}
+}

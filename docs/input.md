@@ -187,6 +187,37 @@ paths...)` drops real files with their paths; see
 files over the window without dropping them, and `Probe.DragEnd()` abandons
 the drag; either drop ends it too.
 
+### Dragging inside the app
+
+`ggui.DragSource(child, value)` lets the user pick child up and carry a
+value of any type; `ggui.DropZone(child, fn)` takes values of its type
+parameter and calls `fn` with a `Dropped[T]`: the value, where it landed in
+the zone and the zone's size. The child of a source keeps its clicks. A
+press becomes a drag once it moves a few pixels, a faded copy of the child,
+or of `Preview(w)`, follows the pointer, and Escape cancels it. `Accept`
+narrows what a zone takes and `OnHover` highlights it while a drag is over
+it.
+
+A list reorders with a source and a zone per row and `ggui.Move`. The rows
+carry their keys, which stay right while the list moves under them:
+
+```go
+ggui.EachKeyed(items, func(it Item) int { return it.ID }, func(row ggui.EachItem[Item]) ggui.Widget {
+	id := ggui.Untrack(row.Value.Get).ID
+	return ggui.DropZone(ggui.DragSource(itemRow(row.Value), id), func(d ggui.Dropped[int]) {
+		list := ggui.Untrack(items.Get)
+		from := slices.IndexFunc(list, func(it Item) bool { return it.ID == d.Value })
+		to := ggui.Untrack(row.Index.Get)
+		if !d.Before() {
+			to++
+		}
+		items.Set(ggui.Move(list, from, to))
+	})
+})
+```
+
+In a test, `Probe.Press`, `Move` and `Release` drive a drag.
+
 ## Native file dialogs
 
 `Host.Dialogs` opens the platform's own file chooser, the one with the

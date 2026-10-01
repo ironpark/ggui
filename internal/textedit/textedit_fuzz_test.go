@@ -174,14 +174,14 @@ func FuzzEditorOperations(f *testing.F) {
 			motion, word := false, false
 			// want is the text an edit must leave, and wantCaret its caret.
 			want, wantCaret := old.text, -1
-			switch op % 17 {
+			switch op % 18 {
 			case 0: // type or paste
 				s := palette[int(arg)%len(palette)]
 				e.Replace(s)
 				edits++
 				want, wantCaret = old.text[:lo]+s+old.text[hi:], lo+len(s)
 			case 1, 2: // backspace, by cluster or word
-				word = op%17 == 2
+				word = op%18 == 2
 				if !e.HasSelection() {
 					lo = fn.Pick(word, prevWord(old.text, old.caret), PrevGrapheme(old.text, old.caret))
 					if aligned && !word && !onBoundary(lo) {
@@ -192,7 +192,7 @@ func FuzzEditorOperations(f *testing.F) {
 				edits++
 				want, wantCaret = old.text[:lo]+old.text[hi:], lo
 			case 3, 4: // delete forward, by cluster or word
-				word = op%17 == 4
+				word = op%18 == 4
 				if !e.HasSelection() {
 					hi = fn.Pick(word, nextWord(old.text, old.caret), NextGrapheme(old.text, old.caret))
 				}
@@ -200,10 +200,10 @@ func FuzzEditorOperations(f *testing.F) {
 				edits++
 				want, wantCaret = old.text[:lo]+old.text[hi:], lo
 			case 5, 6: // arrows
-				e.MoveBy(fn.Pick(op%17 == 5, -1, 1), false, extend)
+				e.MoveBy(fn.Pick(op%18 == 5, -1, 1), false, extend)
 				motion = true
 			case 7, 8: // word arrows
-				e.MoveBy(fn.Pick(op%17 == 7, -1, 1), true, extend)
+				e.MoveBy(fn.Pick(op%18 == 7, -1, 1), true, extend)
 				motion, word = true, true
 			case 9: // home and end
 				e.MoveTo(fn.Pick(arg&2 != 0, len(e.Text), 0), extend)
@@ -231,27 +231,32 @@ func FuzzEditorOperations(f *testing.F) {
 				now = now.Add(time.Duration(arg) * 10 * time.Millisecond)
 			case 16: // click anywhere
 				e.MoveTo(int(arg)*len(e.Text)/255, extend)
+			case 17: // a write from outside, as through the bound signal
+				e.SetText(e.Text[:e.Snap(int(arg)*len(e.Text)/255)] + palette[int(arg)%len(palette)])
+				if e.pending == nil {
+					initial = e.Text // nothing to undo: it is where undo stops
+				}
 			}
 
 			if !utf8.ValidString(e.Text) {
-				t.Fatalf("op %d left invalid UTF-8 %q", op%17, e.Text)
+				t.Fatalf("op %d left invalid UTF-8 %q", op%18, e.Text)
 			}
 			for name, i := range map[string]int{"anchor": e.Anchor, "caret": e.Caret} {
 				if i < 0 || i > len(e.Text) || e.Snap(i) != i {
-					t.Fatalf("op %d left the %s at %d in %q, off a rune start or out of [0,%d]", op%17, name, i, e.Text, len(e.Text))
+					t.Fatalf("op %d left the %s at %d in %q, off a rune start or out of [0,%d]", op%18, name, i, e.Text, len(e.Text))
 				}
 			}
 			_ = e.Selected()
 			if wantCaret >= 0 && (e.Text != want || e.Caret != wantCaret || e.HasSelection()) {
 				t.Fatalf("op %d on %+v gave %q caret %d anchor %d, want %q caret %d and no selection",
-					op%17, old, e.Text, e.Caret, e.Anchor, want, wantCaret)
+					op%18, old, e.Text, e.Caret, e.Anchor, want, wantCaret)
 			}
 			if motion && e.Text != old.text {
-				t.Fatalf("move op %d changed the text from %q to %q", op%17, old.text, e.Text)
+				t.Fatalf("move op %d changed the text from %q to %q", op%18, old.text, e.Text)
 			}
 			if motion && aligned && !(onBoundary(e.Anchor) && onBoundary(e.Caret)) {
 				t.Fatalf("move op %d from %+v left anchor %d caret %d inside a cluster; boundaries %v",
-					op%17, old, e.Anchor, e.Caret, oldBounds)
+					op%18, old, e.Anchor, e.Caret, oldBounds)
 			}
 		}
 

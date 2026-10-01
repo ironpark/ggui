@@ -323,6 +323,21 @@ func TestTabMovesFocusInPaintOrder(t *testing.T) {
 	}
 }
 
+func TestTabTellsApartRegionsSharingARect(t *testing.T) {
+	t.Parallel()
+	var log []string
+	w := Stack(&keyed{&log, "a"}, &keyed{&log, "b"})
+	var in inputState
+	paintFrame(&in, w, Sz(50, 50))
+	for range 3 {
+		in.dispatch(frameInput{keys: []KeyboardKey{KeyTab}})
+	}
+	want := []string{"a+tab", "-a", "b+tab", "-b", "a+tab"}
+	if fmt.Sprint(log) != fmt.Sprint(want) {
+		t.Fatalf("focus log = %v\nwant %v", log, want)
+	}
+}
+
 func TestOnKeyRunsBeforeTheFocusedWidgetAndCanConsume(t *testing.T) {
 	t.Parallel()
 	var log []string
@@ -339,5 +354,35 @@ func TestOnKeyRunsBeforeTheFocusedWidgetAndCanConsume(t *testing.T) {
 	p.Type(Mods{}, KeyF1)
 	if len(log) != 0 {
 		t.Fatalf("widget got %v for a consumed key, want nothing", log)
+	}
+}
+
+// roving is a keyed region that is a Tab stop only when stop says so.
+type roving struct {
+	keyed
+	stop bool
+}
+
+func (r *roving) Paint(dst *Canvas, rc Rect) { dst.HitKey(rc, r) }
+func (r *roving) TabStop() bool              { return r.stop }
+
+func TestTabSkipsWhatIsNotATabStop(t *testing.T) {
+	t.Parallel()
+	var log []string
+	w := Row(&keyed{&log, "a"}, &roving{keyed{&log, "b"}, false}, &roving{keyed{&log, "c"}, true})
+	var in inputState
+	paintFrame(&in, w, Sz(200, 50))
+	for range 3 {
+		in.dispatch(frameInput{keys: []KeyboardKey{KeyTab}})
+	}
+	want := []string{"a+tab", "-a", "c+tab", "-c", "a+tab"}
+	if fmt.Sprint(log) != fmt.Sprint(want) {
+		t.Fatalf("focus log = %v\nwant %v", log, want)
+	}
+	log = nil
+	clickAt(&in, Pt(75, 25))
+	in.dispatch(frameInput{keys: []KeyboardKey{KeyTab}})
+	if fmt.Sprint(log) != fmt.Sprint([]string{"-a", "b", "-b", "c+tab"}) {
+		t.Fatalf("a click must still reach a region off the Tab order, and Tab leave it: %v", log)
 	}
 }

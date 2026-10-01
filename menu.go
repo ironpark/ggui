@@ -49,6 +49,28 @@ func MenuAction(label, chord string, run func()) MenuItem {
 	return MenuItem{Label: label, Chord: chord, Run: run}
 }
 
+// EditActions is what an app's Edit menu does when no focused field takes
+// the command. A nil action does nothing then.
+type EditActions struct {
+	Undo, Redo, Cut, Copy, Paste, SelectAll func()
+}
+
+// EditMenu returns the usual Edit menu: Undo, Redo, Cut, Copy, Paste and
+// Select All on their usual chords. Each goes to the focused text field
+// while one has the focus, as the key would, and to app's action
+// otherwise, so one Undo serves the field being edited and the document.
+func EditMenu(app EditActions) MenuItem {
+	return Menu("Edit",
+		MenuAction("Undo", "cmd+z", app.Undo),
+		MenuAction("Redo", "cmd+shift+z", app.Redo),
+		MenuSeparator(),
+		MenuAction("Cut", "cmd+x", app.Cut),
+		MenuAction("Copy", "cmd+c", app.Copy),
+		MenuAction("Paste", "cmd+v", app.Paste),
+		MenuAction("Select All", "cmd+a", app.SelectAll),
+	)
+}
+
 // MenuSeparator returns a line between groups of entries.
 func MenuSeparator() MenuItem { return MenuItem{Separator: true} }
 
@@ -182,9 +204,21 @@ func (a *App) activeWindow() *Window {
 }
 
 // runAction runs the action with the id, unless it is disabled or gone.
+// When the focused widget claims the action's chord, as a text field does
+// ⌘Z, the chord goes to the widget instead, the way the key would have:
+// Edit ▸ Undo undoes the field being edited.
 func (a *App) runAction(id int) {
 	m, ok := a.actions[id]
-	if !ok || m.Run == nil || (m.Enabled != nil && !Untrack(m.Enabled.Get)) {
+	if !ok {
+		return
+	}
+	if m.Chord != "" {
+		c := MustChord(m.Chord)
+		if w := a.activeWindow(); w != nil && w.input.sendClaimed(KeyEvent{Kind: KeyPress, Key: c.Key, Mods: c.held()}) {
+			return
+		}
+	}
+	if m.Run == nil || (m.Enabled != nil && !Untrack(m.Enabled.Get)) {
 		return
 	}
 	m.Run()

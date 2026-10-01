@@ -11,6 +11,7 @@ See [example conventions](README.md#start-here) before copying snippets.
 
 - [Containers and feedback](#containers-and-feedback)
 - [Tables](#tables)
+- [Trees](#trees)
 - [Data tables](#data-tables)
 - [Select and menu](#select-and-menu)
 - [Menubar](#menubar)
@@ -42,18 +43,56 @@ Choose unique keys, then configure columns and selection:
 | `ui.Col(title, func(ggui.Readable[T]) ggui.Widget)` | Custom cell content. |
 | `.W(px)` / `.Grow(weight)` | Fixed width or a share of remaining width. |
 | `.Right()` / `.Center()` | Align the heading and text cells. |
-| `.BindSelected(binding)` | Read and write the selected row key on click, Space, or Enter. |
+| `.Resizable()` | Let the user drag the heading's right edge to change the column's width. |
+| `.BindSelected(binding)` | Read and write the selected row key on click, the arrows, Space, or Enter. |
+| `.BindSelection(binding)` | Edit a set of selected keys as a file list does: ⌘-click (Ctrl-click) toggles, Shift-click and Shift+arrows select a run, Space toggles, ⌘A selects all. |
 | `.OnSelect(fn)` | Receive the activated item. |
 | `.Height(h)` | Scroll the body beneath a fixed heading and virtualize rows. |
 | `.RowHeight(h)` | Set the fixed row height (default: 40 logical pixels). |
 | `.RowName(fn)` | Set each row's accessible name; otherwise the key is used. |
 
 Without `Height`, the table grows to fit all rows.
+
+A selectable table is one Tab stop: the row last used, or the selected one.
+The arrows, Home, End, Page Up and Page Down move between rows, scrolling a
+`Height` table to the row, and with `BindSelected` the selection follows.
+Screen readers read it as a table of rows and cells under column headings.
+
 ```go
 ui.Table(people, func(p Person) int { return p.ID },
 	ui.TextCol("Name", func(p Person) string { return p.Name }),
 	ui.TextCol("Age", func(p Person) string { return strconv.Itoa(p.Age) }).W(60).Right(),
 ).BindSelected(chosen).Height(240)
+```
+
+## Trees
+
+`ui.Tree(roots, key, children, label)` shows a hierarchy as indented, keyed
+rows with a disclosure chevron on each item that has children. Keys must be
+unique across the whole tree; rows keep their state across expand and collapse.
+
+| API | Purpose |
+| --- | --- |
+| `.BindExpanded(binding)` / `.Expanded(set)` | The keys of open items; the tree keeps its own set otherwise. |
+| `.BindSelected(binding)` / `.Selected(key)` | The selected key, set by click, Space, Enter and arrow moves. |
+| `.OnSelect(fn)` | Receive the item activated by click, Space or Enter. |
+| `.RowName(fn)` | Set each row's accessible name; otherwise the key is used. |
+| `.Name(s)` | Name the tree for assistive technology. |
+| `.RowHeight(h)` / `.Indent(px)` | Row height (default 32) and per-level inset (default 16). |
+| `.Height(h)` | Scroll the rows and virtualize them. |
+
+The tree is one Tab stop (the last focused row, else the selected one, else
+the first). Up/Down move between visible rows, Home/End jump to the ends,
+Right opens an item or moves to its first child, and Left closes it or moves
+to its parent. Rows report `RoleTreeItem` with `Level` and `Expanded`.
+
+```go
+ui.Tree(roots, func(f File) string { return f.Path },
+	func(f File) []File { return f.Children },
+	func(f ggui.Readable[File]) ggui.Widget {
+		return ggui.TextOf(ggui.Map(f, func(f File) string { return f.Name }))
+	},
+).RowName(func(f File) string { return f.Name }).BindSelected(chosen).Height(320)
 ```
 
 ## Data tables

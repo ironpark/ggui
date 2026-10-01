@@ -99,9 +99,10 @@ func TestKeyRejectsUncomparableHandlers(t *testing.T) {
 func TestControlSeparatesInputRolesFromContent(t *testing.T) {
 	t.Parallel()
 	controls := []Role{RoleButton, RoleCheckbox, RoleRadio, RoleSwitch, RoleSlider, RoleTextField,
-		RoleSelect, RoleOption, RoleMenu, RoleMenuItem, RoleTab, RoleDisclosure, RoleCombobox, RoleLink}
+		RoleSelect, RoleOption, RoleMenu, RoleMenuItem, RoleTab, RoleDisclosure, RoleCombobox, RoleLink, RoleSpinButton}
 	content := []Role{RoleTabs, RoleDialog, RoleRow, RoleAccordion, RoleSeparator, RoleText, RoleHeading,
-		RoleImage, RoleList, RoleListItem, RoleGroup, RoleProgress, RoleToolbar, RoleStatus, RoleWindow, ""}
+		RoleImage, RoleList, RoleListItem, RoleGroup, RoleProgress, RoleToolbar, RoleStatus, RoleWindow,
+		RoleTreeItem, RoleTable, RoleTree, RoleCell, RoleHeader, ""}
 	for _, r := range controls {
 		if !Control(r) {
 			t.Errorf("Control(%q) = false, want true: the user acts on it", r)

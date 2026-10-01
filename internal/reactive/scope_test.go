@@ -1,6 +1,10 @@
 package reactive
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/ironpark/ggui/internal/goid"
+)
 
 // A layout recorder sees every read, tracked or not, and a nested Measure
 // sees only its own and then hands the outer recorder back.
@@ -77,6 +81,7 @@ func TestLayoutDepthNests(t *testing.T) {
 // Layout and state generations are the running goroutine's: a write or a
 // layout request made on another goroutine moves neither.
 func TestGenerationsBelongToTheirGoroutine(t *testing.T) {
+	skipSharedGoroutines(t)
 	t.Parallel()
 	state, layout := StateGen(), LayoutGen()
 	RequestLayout()
@@ -97,6 +102,7 @@ func TestGenerationsBelongToTheirGoroutine(t *testing.T) {
 }
 
 func TestRunningLoopIsRememberedUntilCleared(t *testing.T) {
+	skipSharedGoroutines(t)
 	t.Parallel()
 	a, b := new(int), new(int)
 	if RunningLoop() != nil {
@@ -115,5 +121,14 @@ func TestRunningLoopIsRememberedUntilCleared(t *testing.T) {
 	ClearRunningLoop(a)
 	if RunningLoop() != nil {
 		t.Fatal("ClearRunningLoop kept the loop")
+	}
+}
+
+// skipSharedGoroutines skips a test that tells goroutines apart where they
+// all share one scope, as in WebAssembly.
+func skipSharedGoroutines(t *testing.T) {
+	t.Helper()
+	if goid.Shared() {
+		t.Skip("every goroutine shares one scope here")
 	}
 }

@@ -65,6 +65,8 @@ const (
 	RoleAccordion  Role = "accordion"
 	RoleCombobox   Role = "combobox"
 	RoleSeparator  Role = "separator"
+	RoleSpinButton Role = "spinbutton" // a number field with steppers
+	RoleTreeItem   Role = "treeitem"   // a row of a tree; Level is its depth
 
 	// Content and structure: these describe what is on screen rather than
 	// what takes input, so they live in the semantics tree alone and never
@@ -80,6 +82,10 @@ const (
 	RoleToolbar  Role = "toolbar"
 	RoleStatus   Role = "status"
 	RoleWindow   Role = "window"
+	RoleTable    Role = "table"        // rows of cells under column headings
+	RoleTree     Role = "tree"         // tree items nested by Level
+	RoleCell     Role = "cell"         // one cell of a table row
+	RoleHeader   Role = "columnheader" // one column heading of a table
 )
 
 // Tristate is a checkbox's state: on, off, or the mixed state a parent
@@ -155,6 +161,7 @@ type Node struct {
 	Now         float64  // where the value sits in it, or an item's place in a list
 	Actions     ActionSet
 	Offscreen   bool // clipped out of view, but present with its true bounds
+	Level       int  // a tree item's depth, from 1; 0 where there is none
 
 	// A text field carries where its caret and selection are, in bytes
 	// into Value, and -- while something is reading the tree closely
@@ -220,7 +227,7 @@ func Control(r Role) bool {
 	switch r {
 	case RoleButton, RoleCheckbox, RoleRadio, RoleSwitch, RoleSlider, RoleTextField,
 		RoleSelect, RoleOption, RoleMenu, RoleMenuItem, RoleTab, RoleDisclosure,
-		RoleCombobox, RoleLink:
+		RoleCombobox, RoleLink, RoleSpinButton:
 		return true
 	}
 	return false

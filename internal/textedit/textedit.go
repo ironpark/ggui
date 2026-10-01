@@ -4,6 +4,7 @@
 package textedit
 
 import (
+	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -23,17 +24,62 @@ type Editor struct {
 	// nil is time.Now.
 	Now func() time.Time
 
-	// Undo history: snapshots taken before each edit, and the ones undone.
-	// Insertions typed in quick succession share one snapshot.
-	undo, redo []snapshot
+	// Undo history. pending is the state before the latest step, whole.
+	// Every older state is kept as the difference from the state after it,
+	// and every undone one as the difference from the state before it, so
+	// a long text costs one copy rather than one a step. Insertions typed
+	// in quick succession share one step.
+	pending    *snapshot
+	undo, redo []delta
 	lastEdit   time.Time
 	lastInsert bool
 }
 
-// snapshot is the editor's state before an edit.
+// snapshot is the editor's state at one point of the history.
 type snapshot struct {
 	text          string
 	anchor, caret int
+}
+
+// delta turns one text into a snapshot: it replaces the cut bytes at at
+// with text and sets the selection.
+type delta struct {
+	at, cut       int
+	text          string
+	anchor, caret int
+}
+
+// diff returns the delta from the text from to the state to, holding only
+// the bytes that differ.
+func diff(from string, to snapshot) delta {
+	p := 0
+	for p < len(from) && p < len(to.text) && from[p] == to.text[p] {
+		p++
+	}
+	s := 0
+	for s < len(from)-p && s < len(to.text)-p && from[len(from)-1-s] == to.text[len(to.text)-1-s] {
+		s++
+	}
+	return delta{at: p, cut: len(from) - p - s, text: strings.Clone(to.text[p : len(to.text)-s]), anchor: to.anchor, caret: to.caret}
+}
+
+func (d delta) apply(from string) snapshot {
+	return snapshot{from[:d.at] + d.text + from[d.at+d.cut:], d.anchor, d.caret}
+}
+
+func (e *Editor) state() snapshot { return snapshot{e.Text, e.Anchor, e.Caret} }
+
+// push makes the current state the latest one undo returns to, keeping the
+// one before it as a delta.
+func (e *Editor) push() {
+	if e.pending != nil {
+		e.undo = append(e.undo, diff(e.Text, *e.pending))
+		if len(e.undo) >= maxUndo {
+			e.undo = e.undo[1:]
+		}
+	}
+	s := e.state()
+	e.pending = &s
 }
 
 func (e *Editor) now() time.Time {
@@ -55,14 +101,11 @@ const undoCoalesce = 700 * time.Millisecond
 func (e *Editor) record(s string) {
 	now := e.now()
 	insert := s != "" && !e.HasSelection() && utf8.RuneCountInString(s) == 1
-	if insert && e.lastInsert && now.Sub(e.lastEdit) < undoCoalesce && len(e.undo) > 0 {
+	if insert && e.lastInsert && now.Sub(e.lastEdit) < undoCoalesce && e.pending != nil {
 		e.lastEdit = now
 		return
 	}
-	e.undo = append(e.undo, snapshot{e.Text, e.Anchor, e.Caret})
-	if len(e.undo) > maxUndo {
-		e.undo = e.undo[1:]
-	}
+	e.push()
 	e.redo = e.redo[:0]
 	e.lastEdit, e.lastInsert = now, insert
 }
@@ -70,23 +113,31 @@ func (e *Editor) record(s string) {
 // Undo restores the state before the last edit and reports whether there
 // was one.
 func (e *Editor) Undo() bool {
-	if len(e.undo) == 0 {
+	if e.pending == nil {
 		return false
 	}
-	e.redo = append(e.redo, snapshot{e.Text, e.Anchor, e.Caret})
-	e.restore(e.undo[len(e.undo)-1])
-	e.undo = e.undo[:len(e.undo)-1]
+	to := *e.pending
+	e.redo = append(e.redo, diff(to.text, e.state()))
+	e.pending = nil
+	if n := len(e.undo); n > 0 {
+		s := e.undo[n-1].apply(to.text)
+		e.pending = &s
+		e.undo = e.undo[:n-1]
+	}
+	e.restore(to)
 	return true
 }
 
 // Redo reapplies the last undone edit and reports whether there was one.
 func (e *Editor) Redo() bool {
-	if len(e.redo) == 0 {
+	n := len(e.redo)
+	if n == 0 {
 		return false
 	}
-	e.undo = append(e.undo, snapshot{e.Text, e.Anchor, e.Caret})
-	e.restore(e.redo[len(e.redo)-1])
-	e.redo = e.redo[:len(e.redo)-1]
+	to := e.redo[n-1].apply(e.Text)
+	e.redo = e.redo[:n-1]
+	e.push()
+	e.restore(to)
 	return true
 }
 
@@ -95,7 +146,12 @@ func (e *Editor) restore(s snapshot) {
 	e.lastInsert = false
 }
 
+// SetText replaces the text from outside the editor. What was undone can
+// no longer be redone onto it; undo still returns to the states before.
 func (e *Editor) SetText(s string) {
+	if s != e.Text {
+		e.redo = e.redo[:0]
+	}
 	e.Text = s
 	e.Anchor, e.Caret = e.Snap(e.Anchor), e.Snap(e.Caret)
 }
@@ -264,6 +320,18 @@ func PrevGrapheme(s string, i int) int {
 		j = k
 	}
 	return prevRune(s, i)
+}
+
+// SelectLine selects the line around i, from the hard line break before
+// it to the one after, which stays unselected: what a triple-click selects.
+func (e *Editor) SelectLine(i int) {
+	i = e.Snap(i)
+	start := strings.LastIndexByte(e.Text[:i], '\n') + 1
+	end := len(e.Text)
+	if n := strings.IndexByte(e.Text[i:], '\n'); n >= 0 {
+		end = i + n
+	}
+	e.Anchor, e.Caret = start, end
 }
 
 func (e *Editor) SelectAll() { e.Anchor, e.Caret = 0, len(e.Text) }

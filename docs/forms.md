@@ -140,6 +140,28 @@ field := ui.Field("Name", ui.TextField(name)).
 A nonempty error replaces the help text. The field label names the control
 for `Probe.Find` unless the control already has an explicit name.
 
+### Numbers
+
+`ui.NumberInput(value)` edits a `Binding[float64]` as text with − and +
+steppers. Typing is committed on Enter or blur: the text is parsed, rounded to
+the decimals shown and clamped to the range; text that is not a number
+reverts. ArrowUp and ArrowDown step (Shift for ten steps), and a stepper is
+disabled at its end of the range. Screen readers see one spin button with its
+range, and can increment, decrement or set it.
+
+```go
+ui.Field("Quantity", ui.NumberInput(qty).Range(0, 99))
+ui.NumberInput(opacity).Range(0, 1).Step(0.05) // shows two decimals
+```
+
+| Option | Behavior |
+| --- | --- |
+| `.Range(lo, hi)` | Clamp the value; unbounded by default. |
+| `.Step(s)` | The step, 1 by default; also sets the decimals shown. |
+| `.Precision(n)` | Show and round to `n` decimals instead. |
+| `.OnChange(fn)` | Handle a committed or stepped change. |
+| `.Name`, `.Disabled`, `.Key` | As on other controls, with `Bind` forms. |
+
 For segmented verification codes, see [Input OTP](carousel-and-otp.md#input-otp).
 For font fallbacks, IME-related text coverage, and emoji, see
 [Fonts, emoji, and icons](fonts.md).

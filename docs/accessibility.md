@@ -76,7 +76,10 @@ names descriptive and avoid exposing decorative content as extra controls.
 
 `app.Semantics()` returns the last published `SemTree`. A snapshot may be read
 from any goroutine and retained across frames, but its shared slices must not
-be modified. `app.Perform(node.ID, action)` queues a supported action on the UI
+be modified. A window builds the tree only while something reads it: an
+assistive technology, the inspector, or a caller of `Semantics` or `Perform`.
+The first call turns it on and asks for a frame, so the tree it returns may be
+the last one built, empty before any was. `app.Perform(node.ID, action)` queues a supported action on the UI
 thread; observe the result in a subsequent snapshot. See
 [semantic action tests](testing.md#state-layout-and-semantic-actions) for a
 headless example.

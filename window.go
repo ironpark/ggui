@@ -138,6 +138,7 @@ type Window struct {
 	keys          [KeyMax + 1]bool       // keys held, for Mods
 	touches       map[ggfx.TouchID]Point // touches in progress, in logical pixels
 	ax            a11ybridge.Bridge
+	semWanted     atomic.Bool // a caller of Semantics or Perform reads the tree
 	dragOver      bool
 	dragAt        Point
 	seenGen       uint64            // layoutGen as this window's last frame left it
@@ -419,7 +420,22 @@ func (w *Window) Shortcut(chord string, fn func()) *ShortcutHandle {
 // than changing this one. Unchanged descriptions reuse the snapshot. A platform
 // accessibility bridge answers queries from it, since the live frame belongs
 // to the UI goroutine.
-func (w *Window) Semantics() *SemTree { return w.semantics() }
+//
+// A window builds the tree only while something reads it: an assistive
+// technology, the inspector, or a caller of Semantics or Perform. The first
+// call turns it on for good and asks for a frame; until that frame, the
+// tree returned is the last one built, which is empty before any was.
+func (w *Window) Semantics() *SemTree {
+	w.wantSemantics()
+	return w.semantics()
+}
+
+// wantSemantics makes every frame from the next on build the tree.
+func (w *Window) wantSemantics() {
+	if !w.semWanted.Swap(true) && w.wake != nil {
+		w.wake()
+	}
+}
 
 // OnDrop registers fn to receive files dropped onto the window that no
 // drop zone under the cursor took; see PointerWidget.OnDrop for zones.
@@ -614,50 +630,35 @@ func (w *Window) draw(screen *ggfx.Image, scale float64) {
 		return
 	}
 	defer w.canvas.trimLayers()
-	// Last frame's regions stay readable while this frame paints, for
-	// Adopter handoff, and input keeps routing to them until the paint is
-	// done; the buffer freed two frames ago takes the new ones.
 	w.canvas.Image = screen
-	w.canvas.prev, w.canvas.hits = w.canvas.hits, w.spare[:0]
 	b := screen.Bounds()
 	logical := Sz(w.canvas.dp(float64(b.Dx())), w.canvas.dp(float64(b.Dy())))
-	f := w.canvas.fs()
-	clear(f.trace)
-	clear(f.traceWidgets)
-	f.tracing = w.inspect || len(w.sinks) > 0
-	f.trace, f.traceWidgets = f.trace[:0], f.traceWidgets[:0]
-	f.logical = logical
 	if Untrack(w.viewport.Get) != logical {
 		w.viewport.Set(logical)
 	}
-	f.focusBounds = Rect{}
-	if w.input.focused != nil {
-		f.focusBounds = w.input.focused.rect
-	}
-	w.canvas.nextFrame()
-	w.canvas.resetSemantics()
-	if err := w.settle(logical); err != nil {
+	tracing := w.inspect || len(w.sinks) > 0
+	_, err := w.paint(paintPass{
+		canvas: &w.canvas, in: &w.input, overlay: w.overlay, size: logical,
+		// The buffer freed two frames ago takes the new regions.
+		hits:    w.spare[:0],
+		tracing: tracing,
+		semOff:  !w.semWanted.Load() && !tracing && !w.ax.Listening(),
+		settled: func() {
+			// The settle may have changed the theme the background is.
+			if w.cfg.Background == nil && !w.cfg.Transparent {
+				screen.Fill(rootEnv().Background())
+			}
+		},
+		painted: func() {
+			w.ax.Publish(w.semantics(), w.takeAnnouncements())
+			if tracing {
+				w.publishInspect(&w.canvas, w.semantics())
+			}
+		},
+	})
+	if err != nil {
 		w.frameErr = err
 		return
-	}
-	if w.closed || w.root == nil {
-		return
-	}
-	if w.cfg.Background == nil && !w.cfg.Transparent {
-		screen.Fill(rootEnv().Background())
-	}
-	w.paintTree(&w.canvas)
-	w.input.regions = w.canvas.hits
-	w.input.observers = w.canvas.inputObservers
-	w.input.painted = w.canvas.shortcuts
-	w.input.applyFocusRequest(&w.canvas)
-	w.publishSemantics(&w.canvas, w.input.focused)
-	w.ax.Publish(w.semantics(), w.takeAnnouncements())
-	if f.tracing {
-		w.publishInspect(&w.canvas, w.semantics())
-	}
-	if w.overlay != nil {
-		w.overlay.Paint(&w.canvas)
 	}
 	w.spare = w.canvas.prev
 }

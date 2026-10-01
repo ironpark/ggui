@@ -2,6 +2,7 @@ package ui_test
 
 import (
 	"cmp"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -209,4 +210,160 @@ func FuzzTableModelPagesAreTheSortedFilter(f *testing.F) {
 			t.Fatalf("after the source shrank the page is %d of %d", p, m.PageCount())
 		}
 	})
+}
+
+func focusedName(t *testing.T, p *ggui.Probe) string {
+	t.Helper()
+	n, ok := p.Semantics().Focused()
+	if !ok {
+		return ""
+	}
+	return n.Name
+}
+
+func TestTableArrowsMoveFocusAndTheSelection(t *testing.T) {
+	t.Parallel()
+	tbl, chosen := table(people())
+	p := ggui.NewProbe(tbl, ggui.Sz(300, 200))
+	defer p.Close()
+	p.Tap("Ada")
+	p.Type(ggui.Mods{}, ggui.KeyArrowDown)
+	if got := focusedName(t, p); got != "Grace" || ggui.Untrack(chosen.Get) != 2 {
+		t.Fatalf("after Down: focus on %q, selected %d; want Grace, 2", got, ggui.Untrack(chosen.Get))
+	}
+	p.Type(ggui.Mods{}, ggui.KeyEnd)
+	p.Type(ggui.Mods{}, ggui.KeyArrowDown) // stays on the last row
+	if got := focusedName(t, p); got != "Linus" || ggui.Untrack(chosen.Get) != 3 {
+		t.Fatalf("after End: focus on %q, selected %d; want Linus, 3", got, ggui.Untrack(chosen.Get))
+	}
+	p.Type(ggui.Mods{}, ggui.KeyHome)
+	if got := focusedName(t, p); got != "Ada" {
+		t.Fatalf("after Home: focus on %q, want Ada", got)
+	}
+}
+
+func TestTableIsOneTabStop(t *testing.T) {
+	t.Parallel()
+	tbl, chosen := table(people())
+	chosen.Set(2)
+	p := ggui.NewProbe(ggui.Column(ui.Button("before", func() {}), tbl, ui.Button("after", func() {})), ggui.Sz(300, 300))
+	defer p.Close()
+	var stops []string
+	for range 3 {
+		p.Type(ggui.Mods{}, ggui.KeyTab)
+		stops = append(stops, focusedName(t, p))
+	}
+	if want := []string{"before", "Grace", "after"}; !slices.Equal(stops, want) {
+		t.Fatalf("Tab stopped at %q, want %q: the selected row is the table's one stop", stops, want)
+	}
+}
+
+func TestTableArrowsScrollAVirtualBody(t *testing.T) {
+	t.Parallel()
+	var many []person
+	for i := range 200 {
+		many = append(many, person{ID: i + 1, Name: "p" + strconv.Itoa(i+1)})
+	}
+	tbl, chosen := table(ggui.State(many))
+	tbl.Height(200)
+	p := ggui.NewProbe(tbl, ggui.Sz(300, 200))
+	defer p.Close()
+	p.Tap("p1")
+	p.Type(ggui.Mods{}, ggui.KeyEnd)
+	if got := focusedName(t, p); got != "p200" || ggui.Untrack(chosen.Get) != 200 {
+		t.Fatalf("after End: focus on %q, selected %d; want the last row, scrolled to", got, ggui.Untrack(chosen.Get))
+	}
+	p.Type(ggui.Mods{}, ggui.KeyPageUp)
+	if got := ggui.Untrack(chosen.Get); got >= 200 || got < 190 {
+		t.Fatalf("PageUp selected %d, want a page above the last row", got)
+	}
+	if focusedName(t, p) != "p"+strconv.Itoa(ggui.Untrack(chosen.Get)) {
+		t.Fatal("the focus did not follow PageUp")
+	}
+}
+
+func TestTableBindSelectionPicksLikeAFileList(t *testing.T) {
+	t.Parallel()
+	sel := ggui.State(map[int]bool{})
+	activated := 0
+	tbl := ui.Table(people(), func(p person) int { return p.ID },
+		ui.TextCol("Name", func(p person) string { return p.Name }),
+	).RowName(func(p person) string { return p.Name }).BindSelection(sel).OnSelect(func(person) { activated++ })
+	p := ggui.NewProbe(tbl, ggui.Sz(300, 200))
+	defer p.Close()
+	keys := func() []int {
+		var out []int
+		for k := range ggui.Untrack(sel.Get) {
+			out = append(out, k)
+		}
+		slices.Sort(out)
+		return out
+	}
+	at := func(name string) ggui.Point {
+		f, ok := p.Find(name)
+		if !ok {
+			t.Fatalf("no row %q", name)
+		}
+		return f.Center()
+	}
+	p.Tap("Ada")
+	p.ClickWith(at("Linus"), ggui.Mods{Shift: true})
+	if got := keys(); !slices.Equal(got, []int{1, 2, 3}) {
+		t.Fatalf("Shift-click selected %v, want the run 1..3", got)
+	}
+	toggle := ggui.Mods{Ctrl: true}
+	if runtime.GOOS == "darwin" {
+		toggle = ggui.Mods{Meta: true}
+	}
+	p.ClickWith(at("Grace"), toggle)
+	if got := keys(); !slices.Equal(got, []int{1, 3}) {
+		t.Fatalf("⌘-click left %v, want Grace taken out", got)
+	}
+	p.Type(ggui.Mods{}, ggui.KeySpace)
+	if got := keys(); !slices.Equal(got, []int{1, 2, 3}) {
+		t.Fatalf("Space left %v, want Grace back", got)
+	}
+	p.Tap("Ada")
+	p.Type(ggui.Mods{Shift: true}, ggui.KeyArrowDown)
+	if got := keys(); !slices.Equal(got, []int{1, 2}) {
+		t.Fatalf("Shift+Down selected %v, want 1 and 2", got)
+	}
+	p.Type(toggle, ggui.KeyA)
+	if got := keys(); !slices.Equal(got, []int{1, 2, 3}) {
+		t.Fatalf("⌘A selected %v, want every row", got)
+	}
+	if activated == 0 {
+		t.Fatal("a click no longer reaches OnSelect")
+	}
+}
+
+func TestTableResizableColumnFollowsADragOnItsHeading(t *testing.T) {
+	t.Parallel()
+	tbl := ui.Table(people(), func(p person) int { return p.ID },
+		ui.TextCol("Name", func(p person) string { return p.Name }).W(100).Resizable(),
+		ui.TextCol("Age", func(p person) string { return strconv.Itoa(p.Age) }),
+	)
+	p := ggui.NewProbe(tbl, ggui.Sz(400, 200))
+	defer p.Close()
+	widths := func() (head, cell float64) {
+		tree := p.Semantics()
+		for _, n := range tree.Nodes(ggui.RoleHeader) {
+			head = n.Full.Size.W
+			break
+		}
+		for _, n := range tree.Nodes(ggui.RoleCell) {
+			cell = n.Full.Size.W
+			break
+		}
+		return head, cell
+	}
+	if h, c := widths(); h != 100 || c != 100 {
+		t.Fatalf("before the drag: heading %v, cell %v; want 100", h, c)
+	}
+	p.Press(ggui.Pt(98, 20))
+	p.Move(ggui.Pt(148, 20))
+	p.Release(ggui.Pt(148, 20))
+	if h, c := widths(); h != 150 || c != 150 {
+		t.Fatalf("after dragging 50 right: heading %v, cell %v; want 150", h, c)
+	}
 }

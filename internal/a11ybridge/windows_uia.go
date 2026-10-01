@@ -35,7 +35,14 @@ const (
 	uiaTabItemControlType     = 50019
 	uiaTextControlType        = 50020
 	uiaToolBarControlType     = 50021
+	uiaSpinnerControlType     = 50016
+	uiaTreeControlType        = 50023
+	uiaTreeItemControlType    = 50024
+	uiaCustomControlType      = 50025
 	uiaGroupControlType       = 50026
+	uiaDataGridControlType    = 50028
+	uiaHeaderItemControlType  = 50035
+	uiaTableControlType       = 50036
 	uiaDataItemControlType    = 50029
 	uiaWindowControlType      = 50032
 	uiaPaneControlType        = 50033
@@ -209,6 +216,18 @@ func axControlType(r a11y.Role) (ctl int32, localized string) {
 		return uiaWindowControlType, ""
 	case a11y.RoleGroup:
 		return uiaGroupControlType, ""
+	case a11y.RoleSpinButton:
+		return uiaSpinnerControlType, ""
+	case a11y.RoleTreeItem:
+		return uiaTreeItemControlType, ""
+	case a11y.RoleTable:
+		return uiaTableControlType, ""
+	case a11y.RoleTree:
+		return uiaTreeControlType, ""
+	case a11y.RoleCell:
+		return uiaCustomControlType, "cell"
+	case a11y.RoleHeader:
+		return uiaHeaderItemControlType, ""
 	}
 	return uiaPaneControlType, ""
 }

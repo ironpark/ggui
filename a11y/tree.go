@@ -185,6 +185,9 @@ func (n *SemNode) Flags() string {
 	if n.Offscreen {
 		b.WriteString(" offscreen")
 	}
+	if n.Level != 0 {
+		fmt.Fprintf(&b, " level %d", n.Level)
+	}
 	if n.Max != 0 || n.Now != 0 {
 		fmt.Fprintf(&b, " %g of %g..%g", n.Now, n.Min, n.Max)
 	}

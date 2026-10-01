@@ -146,39 +146,23 @@ func (p *Probe) Frame() Size {
 	}
 	c := &p.canvas
 	defer c.trimLayers()
-	c.prev, c.hits = c.hits, nil
 	f := c.fs()
-	f.pointer, f.hasPointer, f.logical = p.pointer, p.hasPointer, p.size
-	clear(f.trace)
-	clear(f.traceWidgets)
-	f.tracing = len(p.sinks) > 0
-	f.trace, f.traceWidgets = f.trace[:0], f.traceWidgets[:0]
-	f.focusBounds = Rect{}
-	if p.in.focused != nil {
-		f.focusBounds = p.in.focused.rect
-	}
-	c.nextFrame()
-	c.resetSemantics()
-	if err := p.settle(p.size); err != nil {
+	f.pointer, f.hasPointer = p.pointer, p.hasPointer
+	ok, err := p.paint(paintPass{canvas: c, in: &p.in, overlay: p.overlay, size: p.size, tracing: len(p.sinks) > 0,
+		painted: func() {
+			if len(p.sinks) == 0 {
+				return
+			}
+			fr := inspectFrame(c, p.semantics())
+			for _, fn := range p.sinks {
+				fn(fr)
+			}
+		}})
+	if err != nil {
 		panic(err)
 	}
-	if p.closed || p.root == nil {
+	if !ok {
 		return Size{}
-	}
-	p.paintTree(c)
-	p.in.regions = c.hits
-	p.in.observers = c.inputObservers
-	p.in.painted = c.shortcuts
-	p.in.applyFocusRequest(c)
-	p.publishSemantics(c, p.in.focused)
-	if f.tracing {
-		fr := inspectFrame(c, p.semantics())
-		for _, fn := range p.sinks {
-			fn(fr)
-		}
-	}
-	if p.overlay != nil {
-		p.overlay.Paint(c)
 	}
 	return p.rootSize
 }
@@ -300,6 +284,12 @@ func (p *Probe) Release(pos Point) {
 // Click presses and releases the left button at pos.
 func (p *Probe) Click(pos Point) {
 	p.ClickButton(pos, MouseButtonLeft)
+}
+
+// ClickWith clicks at pos with mods held, as a Shift-click or ⌘-click.
+func (p *Probe) ClickWith(pos Point, mods Mods) {
+	p.dispatch(frameInput{pos: pos, down: []MouseButton{MouseButtonLeft}, mods: mods})
+	p.dispatch(frameInput{pos: pos, up: []MouseButton{MouseButtonLeft}, mods: mods})
 }
 
 // ClickButton presses and releases the specified mouse button at pos.

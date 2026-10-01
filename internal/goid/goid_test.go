@@ -6,6 +6,9 @@ import (
 )
 
 func TestIDMatchesTheStack(t *testing.T) {
+	if shared {
+		t.Skip("every goroutine shares one id here")
+	}
 	if !Fast() {
 		t.Log("fast path unavailable; ID parses the stack")
 	}

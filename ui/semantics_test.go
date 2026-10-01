@@ -226,13 +226,14 @@ func TestSemanticsTableRowsHoldTheirCells(t *testing.T) {
 	table := ui.Table(rows, func(s string) string { return s },
 		ui.TextCol("Name", func(s string) string { return s })).BindSelected(ggui.State("Alan"))
 	wantTree(t, semantics(t, table, ggui.Sz(300, 200)), `
-text "Name"
-list 0 of 1..2
-  listitem 1 of 1..2
-    row "Ada"
+table
+  columnheader
+    text "Name"
+  row "Ada" 1 of 1..2
+    cell
       text "Ada"
-  listitem 2 of 1..2
-    row "Alan" selected
+  row "Alan" selected 2 of 1..2
+    cell
       text "Alan"
 `)
 }

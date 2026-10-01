@@ -78,6 +78,7 @@ type frameState struct {
 	semIndex  map[any]int // handler to index plus one, for Describe and SemanticRef
 	semParent int         // the node being painted into
 	semLast   int         // the node most recently recorded
+	semOff    bool        // nothing reads this frame's tree, so none is built
 
 	// The images Layer lends, the size of the window. Layers nest, so the
 	// one at index n belongs to the Layer open at depth n. They outlive the
@@ -707,7 +708,8 @@ type hitRegion struct {
 	scope   *focusScope // the focus trap the region was painted in, if any
 	role    Role        // from a Semantic handler
 	label   string
-	group   any // set by inGroup: the EachKeyed entry that painted it
+	group   any        // set by inGroup: the EachKeyed entry that painted it
+	drag    dragSource // a DragSource beneath its child; see dragdrop.go
 }
 
 // inGroup paints through fn with every region it registers marked as
@@ -751,6 +753,7 @@ func (c *Canvas) FocusTrap(owner any, onEscape func(), fn func(dst *Canvas)) {
 // merge folds o into r when they share a Rect and o only adds what r lacks.
 func (r *hitRegion) merge(o hitRegion) bool {
 	if r.rect != o.rect || (o.id != nil && r.id != nil && o.id != r.id) ||
+		o.drag != nil || r.drag != nil ||
 		(o.pointer != nil && r.pointer != nil) ||
 		(o.key != nil && r.key != nil) ||
 		(o.cursor != 0 && r.cursor != 0) {

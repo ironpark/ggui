@@ -153,6 +153,26 @@ fix it, and `.Fit(FitContain | FitCover | FitFill | FitNone)` says how it
 sits in a box of another shape. `DecodeImage(bytes)` and
 `LoadImageFile(path)` read PNG, JPEG and GIF.
 
+Those decode on the calling goroutine, which for a large photo or a list of
+thumbnails is a visible stall. `AsyncImage(src)` reads and decodes `src` on a
+goroutine instead, shows `.Placeholder(widget)` until it is ready (and
+`.Fallback(widget)` if it fails), then lays out and paints as `Image` does,
+with the same `.Fit`, `.Size`, `.Width`, `.Height`, `.Pixelated` and `.Alt`.
+`.BindSrc(r)` follows a signal; a new src cancels the old load through its
+`context`. `.Loader(fn)` replaces the file read, `.MaxSize(px)` downscales
+before upload, and `.Status()` / `.Err()` report the state.
+
+```go
+ggui.AsyncImage(photo.Path).MaxSize(256).Size(96, 96).Fit(ggui.FitCover).
+	Placeholder(ui.Skeleton(96, 96))
+```
+
+Decoded images live in one process-wide cache keyed by src and max size, so
+the same src shown twice decodes once. Images no widget shows are kept in
+least-recently-used order within a byte budget, `SetImageCacheLimit(bytes)`
+(256 MiB by default), and deallocated when evicted; an image on screen is
+never evicted.
+
 ## Text
 
 `Text` wraps at spaces to the width it is given, and between runes when a

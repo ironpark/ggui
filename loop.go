@@ -364,6 +364,74 @@ func (r *frameLoop) paintTree(c *Canvas) {
 	c.paintOverlays()
 }
 
+// paintPass is what one paint of a frame takes from the host running it,
+// which a Window and a Probe each hold.
+type paintPass struct {
+	canvas  *Canvas
+	in      *inputState
+	overlay Overlay
+	size    Size        // the logical viewport
+	hits    []hitRegion // a spare buffer for the regions the paint registers
+	tracing bool        // the inspector or a sink reads the paint's trace
+	semOff  bool        // nothing reads the accessibility tree
+	// settled runs after the settle, before the paint; it may be nil.
+	settled func()
+	// painted runs once the tree is painted and the accessibility tree
+	// published, before the overlay paints over it, for what the host
+	// does with the frame. It may be nil.
+	painted func()
+}
+
+// paint is the paint half of a frame, the same for a Window and a Probe:
+// settle effects and layout at the viewport size, paint the tree and its
+// overlays, hand the regions to input, publish the accessibility tree,
+// then paint the overlay. It reports false, painting nothing, when the loop
+// closed or had no root by the time it settled.
+func (r *frameLoop) paint(p paintPass) (bool, error) {
+	c := p.canvas
+	// Last frame's regions stay readable while this frame paints, for
+	// Adopter handoff, and input keeps routing to them until the paint is
+	// done.
+	c.prev, c.hits = c.hits, p.hits
+	f := c.fs()
+	f.logical = p.size
+	clear(f.trace)
+	clear(f.traceWidgets)
+	f.tracing = p.tracing
+	f.trace, f.traceWidgets = f.trace[:0], f.traceWidgets[:0]
+	f.focusBounds = Rect{}
+	if p.in.focused != nil {
+		f.focusBounds = p.in.focused.rect
+	}
+	c.nextFrame()
+	c.resetSemantics()
+	f.semOff = p.semOff
+	if err := r.settle(p.size); err != nil {
+		return false, err
+	}
+	if r.closed || r.root == nil {
+		return false, nil
+	}
+	if p.settled != nil {
+		p.settled()
+	}
+	r.paintTree(c)
+	p.in.regions = c.hits
+	p.in.observers = c.inputObservers
+	p.in.painted = c.shortcuts
+	p.in.applyFocusRequest(c)
+	if !p.semOff {
+		r.publishSemantics(c, p.in.focused)
+	}
+	if p.painted != nil {
+		p.painted()
+	}
+	if p.overlay != nil {
+		p.overlay.Paint(c)
+	}
+	return true, nil
+}
+
 // settle completes structural work, including mounts discovered by layout,
 // before running user effects. Both App and Probe use this exact ordering.
 func (r *frameLoop) settle(size Size) error {

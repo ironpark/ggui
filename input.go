@@ -30,6 +30,9 @@ type PointerEvent struct {
 	Scroll         Point // wheel delta, for PointerScroll
 	ScrollPixels   bool  // Scroll is in logical pixels (touch panning), not wheel units
 	ScrollMomentum bool  // inertial scrolling; return false when no further movement is possible
+	// Mods are the modifiers held, for a press, release, tap or wheel: a
+	// Shift-click that extends a selection, a ⌘-click that toggles one.
+	Mods Mods
 }
 
 // PointerHandler receives pointer events whose position fell inside the
@@ -120,6 +123,50 @@ type KeyConsumer interface {
 	ConsumesKey(ev KeyEvent) bool
 }
 
+// TabStopper is a KeyHandler that may stay out of the Tab order while
+// remaining focusable by a click, an arrow key or Canvas.RequestFocus: the
+// rows of a table, list or tree, of which one is the stop Tab lands on and
+// the arrows reach the rest.
+type TabStopper interface {
+	TabStop() bool
+}
+
+// ChordClaimer is a KeyHandler that keeps some modified chords from the
+// shortcuts and menu actions that would otherwise run before it: a text
+// editor keeps ⌘Z, ⌘C and the rest while it has the focus, so the app's
+// Undo shortcut or Edit menu undoes the app only when no field is being
+// edited, and undoes the field when one is.
+type ChordClaimer interface {
+	ClaimsChord(ev KeyEvent) bool
+}
+
+// claimedBy returns the focused handler when it claims ev, else nil.
+func (in *inputState) claimedBy(ev KeyEvent) KeyHandler {
+	if in.focused == nil {
+		return nil
+	}
+	cur := in.findKeyRegion(in.focused)
+	if cur == nil {
+		return nil
+	}
+	if c, ok := cur.key.(ChordClaimer); ok && c.ClaimsChord(ev) {
+		return cur.key
+	}
+	return nil
+}
+
+// sendClaimed delivers ev to the focused handler if it claims it, and
+// reports whether it did: how a menu action's chord reaches a focused
+// field rather than the action.
+func (in *inputState) sendClaimed(ev KeyEvent) bool {
+	h := in.claimedBy(ev)
+	if h == nil {
+		return false
+	}
+	h.HandleKey(ev)
+	return true
+}
+
 // consumes reports whether h claims ev through KeyConsumer.
 func consumes(h KeyHandler, ev KeyEvent) bool {
 	if c, ok := h.(KeyConsumer); ok {
@@ -167,6 +214,7 @@ type inputState struct {
 	focused               *hitRegion
 	cursor                CursorShape // what the hovered region asked for
 	dragTarget            *hitRegion  // the region files are being dragged over
+	drag                  *appDrag    // a drag inside the app; see dragdrop.go
 	touchStart, touchLast Point
 	touchScroll           *hitRegion
 	touchPanning          bool
@@ -264,8 +312,12 @@ func (in *inputState) dispatch(f frameInput) {
 	in.updateDrag(f)
 	in.panTouch(&f)
 	in.dispatchPointer(f)
+	in.updateAppDrag(f)
 	if len(f.drop) > 0 {
 		in.dispatchDrop(f)
+	}
+	if i := slices.Index(f.keys, KeyEscape); i >= 0 && in.cancelAppDrag() {
+		f.keys = slices.Delete(slices.Clone(f.keys), i, i+1)
 	}
 	f.keys = in.consumeBindings(f.keys, f.mods)
 	in.dispatchKeys(f)
@@ -304,7 +356,7 @@ func (in *inputState) notifyObservers(f frameInput) {
 func (in *inputState) updateHover(f frameInput) {
 	move := PointerEvent{Kind: PointerMove, Pos: f.pos}
 	now := in.send(move)
-	if !sameRegion(now, in.hovered) {
+	if !in.continues(now, in.hovered) {
 		if in.hovered != nil {
 			in.hovered.pointer.HandlePointer(PointerEvent{Kind: PointerExit, Pos: f.pos})
 		}
@@ -327,7 +379,7 @@ func (in *inputState) updateDrag(f frameInput) {
 			return ok && r.rect.Contains(over.Pos) && h.HandleDrag(over)
 		})
 	}
-	if in.dragTarget != nil && !sameRegion(now, in.dragTarget) {
+	if in.dragTarget != nil && !in.continues(now, in.dragTarget) {
 		in.dragTarget.pointer.(DragHandler).HandleDrag(DragEvent{Kind: DragExit, Pos: f.dragAt})
 	}
 	in.dragTarget = keep(now)
@@ -346,7 +398,10 @@ func (in *inputState) updateCursor(f frameInput) {
 // cursor goes, and gets a tap only if the release landed back inside it.
 func (in *inputState) dispatchPointer(f frameInput) {
 	for _, b := range f.down {
-		ev := PointerEvent{Kind: PointerDown, Pos: f.pos, Button: b}
+		ev := PointerEvent{Kind: PointerDown, Pos: f.pos, Button: b, Mods: f.mods}
+		if b == MouseButtonLeft {
+			in.pressDrag(f.pos)
+		}
 		in.pressed, in.pressedBtn = keep(in.send(ev)), b
 		in.setFocus(in.findKey(f.pos))
 	}
@@ -356,7 +411,7 @@ func (in *inputState) dispatchPointer(f frameInput) {
 		}
 	}
 	for _, b := range f.up {
-		ev := PointerEvent{Kind: PointerUp, Pos: f.pos, Button: b}
+		ev := PointerEvent{Kind: PointerUp, Pos: f.pos, Button: b, Mods: f.mods}
 		p := in.pressed
 		if p == nil || b != in.pressedBtn {
 			in.send(ev)
@@ -365,13 +420,13 @@ func (in *inputState) dispatchPointer(f frameInput) {
 		if cur := in.findPointer(p); cur != nil {
 			cur.pointer.HandlePointer(ev)
 			if cur.rect.Contains(f.pos) {
-				cur.pointer.HandlePointer(PointerEvent{Kind: PointerTap, Pos: f.pos, Button: b})
+				cur.pointer.HandlePointer(PointerEvent{Kind: PointerTap, Pos: f.pos, Button: b, Mods: f.mods})
 			}
 		}
 		in.pressed = nil
 	}
 	if f.wheel != (Point{}) {
-		in.send(PointerEvent{Kind: PointerScroll, Pos: f.pos, Scroll: f.wheel})
+		in.send(PointerEvent{Kind: PointerScroll, Pos: f.pos, Scroll: f.wheel, Mods: f.mods})
 	}
 }
 
@@ -388,7 +443,9 @@ func (in *inputState) consumeBindings(keys []KeyboardKey, mods Mods) []KeyboardK
 		keys = in.withoutShortcuts(keys, mods)
 	}
 	if len(in.chords) > 0 || len(in.painted) > 0 {
-		keys = slices.DeleteFunc(slices.Clone(keys), func(k KeyboardKey) bool { return in.runChords(k, mods, true) })
+		keys = slices.DeleteFunc(slices.Clone(keys), func(k KeyboardKey) bool {
+			return in.claimedBy(KeyEvent{Kind: KeyPress, Key: k, Mods: mods}) == nil && in.runChords(k, mods, true)
+		})
 	}
 	return keys
 }
@@ -548,12 +605,12 @@ func (in *inputState) setFocus(r *hitRegion) { in.focus(r, false) }
 // reported with Key set to KeyTab, so a control can show a focus ring only
 // then, as browsers do with :focus-visible.
 func (in *inputState) focus(r *hitRegion, keyboard bool) {
-	if sameRegion(r, in.focused) {
+	if r == nil && in.focused == nil {
 		return
 	}
-	if r != nil && in.focused != nil && sameAny(r.key, in.focused.key) {
-		// The same widget in another region, such as a dropdown's list
-		// under its field: focus stays, without a blur.
+	if r != nil && in.focused != nil && (sameAny(r.key, in.focused.key) || in.continues(r, in.focused)) {
+		// The same widget, perhaps in another region, such as a dropdown's
+		// list under its field: focus stays, without a blur.
 		in.focused = keep(r)
 		return
 	}
@@ -588,15 +645,21 @@ func (in *inputState) moveFocus(dir int) {
 	var keyed []*hitRegion
 	cur := -1
 	scope := in.activeScope()
+	// The focused region may have moved since it was recorded, as after a
+	// Reveal, so find it the way a frame does, handler before Rect.
+	var focused *hitRegion
+	if in.focused != nil {
+		focused = in.findKeyRegion(in.focused)
+	}
 	for i := range in.regions {
 		r := &in.regions[i]
 		if r.key == nil || (scope != nil && (r.scope == nil || r.scope.owner != scope.owner)) {
 			continue
 		}
-		// The focused region may have moved since it was recorded, as
-		// after a Reveal, so match the handler before the Rect.
-		if in.focused != nil && (sameAny(r.key, in.focused.key) || (in.focused.id != nil && r.id == in.focused.id) || r.rect == in.focused.rect) {
+		if r == focused {
 			cur = len(keyed)
+		} else if t, ok := r.key.(TabStopper); ok && !t.TabStop() {
+			continue
 		}
 		keyed = append(keyed, r)
 	}
@@ -613,11 +676,21 @@ func (in *inputState) moveFocus(dir int) {
 	in.focus(keyed[next], true)
 }
 
-func sameRegion(a, b *hitRegion) bool {
-	if a == nil || b == nil {
-		return a == b
+// continues reports whether now, a region painted this frame, is the one
+// prev was recorded from, matched as findPointer and findKeyRegion match: by
+// handler, then id, and by Rect only for a rebuilt widget. Two regions
+// sharing a Rect, as in a Stack, stay two.
+func (in *inputState) continues(now, prev *hitRegion) bool {
+	if now == nil || prev == nil {
+		return now == prev
 	}
-	return a.rect == b.rect
+	if (prev.pointer != nil && sameAny(now.pointer, prev.pointer)) || (prev.key != nil && sameAny(now.key, prev.key)) {
+		return true
+	}
+	if prev.pointer != nil && in.findPointer(prev) == now {
+		return true
+	}
+	return prev.key != nil && in.findKeyRegion(prev) == now
 }
 
 // PointerWidget makes its child react to the pointer. Build one with Pointer

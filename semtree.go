@@ -80,7 +80,7 @@ func sameNode(a, b *Node) bool {
 	if a.Role != b.Role || a.Name != b.Name || a.Description != b.Description ||
 		a.Value != b.Value || a.Checked != b.Checked || a.Selected != b.Selected ||
 		a.Disabled != b.Disabled || a.Min != b.Min || a.Max != b.Max || a.Now != b.Now ||
-		a.Actions != b.Actions || a.Offscreen != b.Offscreen ||
+		a.Actions != b.Actions || a.Offscreen != b.Offscreen || a.Level != b.Level ||
 		a.SelStart != b.SelStart || a.SelEnd != b.SelEnd {
 		return false
 	}

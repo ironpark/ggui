@@ -212,6 +212,14 @@ func (b *Bridge) Publish(t *a11y.SemTree, notices []a11y.Announcement) {
 	}
 }
 
+// Listening reports whether the next Publish will use its tree: an
+// assistive technology is attached, or the bridge asks the platform again
+// this frame whether one has. A frame may skip building the tree when it
+// is false.
+func (b *Bridge) Listening() bool {
+	return b.plat != nil && b.mode != a11y.Off && (b.on || b.poll == 0)
+}
+
 // enabled reports whether the bridge should do the frame's work, asking the
 // platform every axPollFrames frames rather than every frame. Turning off
 // drops the tree and every element with it, so that nothing is held once

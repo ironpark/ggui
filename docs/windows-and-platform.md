@@ -143,6 +143,18 @@ one tree serves every platform:
 ggui.Column(ui.AppMenubar(app.Menu()), ggui.Expanded(content))
 ```
 
+`ggui.EditMenu` is the usual Edit menu: Undo, Redo, Cut, Copy, Paste and
+Select All. A focused text field takes its own editing chords ahead of any
+shortcut or menu action on them, so with a field focused Edit ▸ Undo, or ⌘Z,
+undoes the typing, and with none it runs the app's action:
+
+```go
+app.SetMenu(fileMenu, ggui.EditMenu(ggui.EditActions{Undo: m.undo, Redo: m.redo}))
+```
+
+A widget of your own keeps chords the same way by implementing
+`ggui.ChordClaimer`.
+
 An action runs on the UI thread, where `UseWindow` is the window that last had
 the focus. `ggui.NativeMenu()` reports whether the menu bar shows the menus.
 `Chord.Label` writes a chord the way the platform shows it: `⇧⌘S` on macOS,
@@ -246,7 +258,8 @@ only the same user can reach.
 | App menus in the menu bar | Yes | Drawn with `ui.AppMenubar` | Drawn with `ui.AppMenubar` | Drawn with `ui.AppMenubar` |
 | Tray icon | Yes | No | No | No |
 | Message dialogs | Alert sheet | Message box | `zenity` / `kdialog` | `alert` / `confirm` |
-| Clipboard | Pasteboard API | Clipboard API | X11 `CLIPBOARD` selection | In-process |
+| Clipboard | Pasteboard API | Clipboard API | X11 `CLIPBOARD` selection | Paste events and `navigator.clipboard` |
 | `SystemDark` | Yes | Yes | Yes | Yes |
 | `SingleInstance` | Yes | Yes | Yes | Every tab is one |
 | `runtime.OpenURL` | `open` | Default handler | `xdg-open` | New tab |
+| `runtime.Reveal` | Selected in Finder | Selected in Explorer | FileManager1 over D-Bus, else the folder | No |

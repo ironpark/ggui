@@ -375,6 +375,27 @@ func wrapLine(line string, face text.Face, maxW float64) []string {
 	return lines
 }
 
+// ellipsize cuts s at a grapheme boundary and ends it with "…", so that it
+// fits in maxW. When cut is false, s that already fits comes back whole.
+// Spaces before the cut go, and the ellipsis is all that is left when not
+// even one grapheme fits beside it.
+func ellipsize(s string, face text.Face, maxW float64, cut bool) string {
+	width := prefixWidths(s, face)
+	if !cut && width(len(s)) <= maxW {
+		return s
+	}
+	room := maxW - lineWidth("…", face)
+	keep := 0
+	for i := 0; i < len(s); {
+		end := textedit.NextGrapheme(s, i)
+		if width(end) > room {
+			break
+		}
+		keep, i = end, end
+	}
+	return strings.TrimRight(s[:keep], " \t") + "…"
+}
+
 // breakRunes splits word into pieces no wider than maxW, never emptier than
 // one grapheme so progress is guaranteed.
 func breakRunes(word string, face text.Face, maxW float64) []string {

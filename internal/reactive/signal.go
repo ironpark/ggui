@@ -1,6 +1,8 @@
 package reactive
 
 import (
+	"cmp"
+	"container/heap"
 	"reflect"
 	"slices"
 	"strconv"
@@ -90,6 +92,12 @@ type Computation struct {
 	prevEffect, nextEffect *Computation
 	registered             bool
 	sources                []source
+
+	// order is the computation's place in its runtime's creation order,
+	// which is the order a flush runs them in: an owner before what it
+	// made. queued is set while it waits in that runtime's queue.
+	order  uint64
+	queued bool
 
 	// Where this Computation was created, in the ggui_debug build only: what
 	// lets ErrCycle name the effects a cycle is made of. Empty otherwise.
@@ -578,6 +586,7 @@ func Effect(fn func() Cleanup) Cleanup {
 	e.state = stateDirty
 	e.rt.effects.userPending = true
 	e.rt.effects.dirtyGen++
+	e.rt.effects.enqueue(e)
 	return e.dispose
 }
 
@@ -715,6 +724,7 @@ func markDirty(e *Computation) {
 		return
 	}
 	e.state = stateDirty
+	e.rt.effects.enqueue(e)
 	if e.cell != nil {
 		e.cell.markSubsCheck()
 	}
@@ -734,6 +744,7 @@ func markCheck(e *Computation) {
 	// A reader in another runtime learns of the change only through this
 	// mark, so its flush must not take itself for settled.
 	e.rt.effects.dirtyGen++
+	e.rt.effects.enqueue(e)
 	if e.cell != nil {
 		e.cell.markSubsCheck()
 	}
@@ -777,6 +788,7 @@ func runEffect(e *Computation) {
 		e.running = false
 		if !completed {
 			e.state = stateDirty
+			e.rt.effects.enqueue(e)
 		}
 	}()
 	e.fn()
@@ -787,6 +799,14 @@ type effectSet struct {
 	mu          sync.Mutex
 	first, last *Computation
 	count       int
+	nextOrder   uint64
+
+	// The computations marked since they last ran, in no order: what a
+	// flush runs, so that a frame that changed one row of ten thousand
+	// looks at that row and not the ten thousand. Bindings and user
+	// effects wait apart, as they run in different phases. Confined to
+	// the UI thread, like the states they mirror.
+	queue, userQueue []*Computation
 
 	// Like Computation.state, these are confined to the UI thread. A signal
 	// write advances dirtyGen; only a quiet flush records settledGen.
@@ -851,6 +871,8 @@ func (rt *Runtime) Parent() *Runtime { return rt.base }
 func (s *effectSet) add(e *Computation) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.nextOrder++
+	e.order = s.nextOrder
 	e.prevEffect, e.registered = s.last, true
 	if s.last != nil {
 		s.last.nextEffect = e
@@ -906,15 +928,67 @@ const MaxFlushPasses = 16
 // flushed.
 func (s *effectSet) settled() bool { return s.dirtyGen == s.settledGen }
 
-// snapshot lists the registered computations, oldest first.
-func (s *effectSet) snapshot() []*Computation {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	list := make([]*Computation, 0, s.count)
-	for e := s.first; e != nil; e = e.nextEffect {
-		list = append(list, e)
+// enqueue puts a computation that just stopped being clean in line for
+// the flush that runs its kind. A memo is not queued: it runs when read.
+func (s *effectSet) enqueue(e *Computation) {
+	if e.queued || e.cell != nil || e.disposed {
+		return
 	}
-	return list
+	e.queued = true
+	if e.user {
+		s.userQueue = append(s.userQueue, e)
+	} else {
+		s.queue = append(s.queue, e)
+	}
+}
+
+// orderHeap is a min-heap of computations by creation order.
+type orderHeap []*Computation
+
+func (h orderHeap) Len() int           { return len(h) }
+func (h orderHeap) Less(i, j int) bool { return h[i].order < h[j].order }
+func (h orderHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h *orderHeap) Push(x any)        { *h = append(*h, x.(*Computation)) }
+func (h *orderHeap) Pop() any {
+	old := *h
+	e := old[len(old)-1]
+	old[len(old)-1] = nil
+	*h = old[:len(old)-1]
+	return e
+}
+
+// runPass runs the queued bindings oldest first, as a scan of every
+// computation in creation order would, and reports whether any ran. One
+// marked while the pass runs joins it if it comes later in that order, and
+// waits for the next pass if it comes earlier, as the scan would leave it.
+//
+// The pass is a heap of its own, not a buffer of the set, since a binding
+// may flush in the middle of one.
+func (s *effectSet) runPass() (ran bool) {
+	pass := orderHeap(slices.Clone(s.queue))
+	clear(s.queue)
+	s.queue = s.queue[:0]
+	heap.Init(&pass)
+	var later []*Computation
+	for pass.Len() > 0 {
+		e := heap.Pop(&pass).(*Computation)
+		e.queued = false
+		if Refresh(e) {
+			ran = true
+			s.lastPass = append(s.lastPass, e)
+		}
+		for _, n := range s.queue {
+			if n.order > e.order {
+				heap.Push(&pass, n)
+			} else {
+				later = append(later, n)
+			}
+		}
+		clear(s.queue)
+		s.queue = s.queue[:0]
+	}
+	s.queue = append(s.queue, later...)
+	return ran
 }
 
 // Flush re-runs every dirty Computation of rt and the runtimes it covers,
@@ -939,11 +1013,8 @@ func (rt *Runtime) Flush() (settled bool) {
 				// last flush has nothing to run.
 				continue
 			}
-			for _, e := range s.snapshot() {
-				if !e.user && e.cell == nil && Refresh(e) {
-					ran = true
-					s.lastPass = append(s.lastPass, e)
-				}
+			if s.runPass() {
+				ran = true
 			}
 		}
 		if !ran {
@@ -984,15 +1055,22 @@ func (rt *Runtime) FlushUsers(loop any) bool {
 		s := &x.effects
 		s.userPending = false
 		var pending []*Computation
-		for _, e := range s.snapshot() {
-			if e.user && e.state != stateClean {
-				if e.loop == nil || e.loop == loop {
-					pending = append(pending, e)
-				} else {
-					s.userPending = true
-				}
+		kept := s.userQueue[:0]
+		for _, e := range s.userQueue {
+			switch {
+			case e.disposed || e.state == stateClean:
+				e.queued = false
+			case e.loop == nil || e.loop == loop:
+				e.queued = false
+				pending = append(pending, e)
+			default:
+				kept = append(kept, e)
+				s.userPending = true
 			}
 		}
+		clear(s.userQueue[len(kept):])
+		s.userQueue = kept
+		slices.SortFunc(pending, func(a, b *Computation) int { return cmp.Compare(a.order, b.order) })
 		s.lastPass = s.lastPass[:0]
 		for _, e := range pending {
 			if Refresh(e) {

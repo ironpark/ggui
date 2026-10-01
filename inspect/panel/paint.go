@@ -62,23 +62,10 @@ func fitText(dst *ggui.Canvas, font *ggui.Font, s string, width float64) string 
 	if width <= 0 {
 		return ""
 	}
-	if textWidth(dst, font, s) <= width {
-		return s
-	}
-	r := []rune(s)
-	lo, hi := 0, len(r)
-	for lo < hi {
-		m := (lo + hi + 1) / 2
-		if textWidth(dst, font, string(r[:m])+"…") <= width {
-			lo = m
-		} else {
-			hi = m - 1
-		}
-	}
-	if lo == 0 && textWidth(dst, font, "…") > width {
+	if s = dst.FitText(s, font, inspectFontSize, width); s == "…" && textWidth(dst, font, s) > width {
 		return ""
 	}
-	return string(r[:lo]) + "…"
+	return s
 }
 func fittedLine(dst *ggui.Canvas, font *ggui.Font, s string, x, y, width float64, col color.Color) {
 	drawLine(dst, font, fitText(dst, font, s, width), x, y, col)

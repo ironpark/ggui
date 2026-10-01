@@ -12,3 +12,6 @@ func OpenURL(url string) error {
 	}
 	return nil
 }
+
+// Reveal is unsupported in a browser, which has no file manager to show.
+func Reveal(path string) error { return ErrUnsupported }

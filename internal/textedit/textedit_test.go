@@ -1,6 +1,7 @@
 package textedit
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -68,6 +69,20 @@ func TestEditorBackspaceDeleteAndReplace(t *testing.T) {
 	e.Replace("x")
 	if e.Text != "x" || e.Caret != 1 || e.HasSelection() {
 		t.Fatalf("replace all = %q caret %d", e.Text, e.Caret)
+	}
+}
+
+func TestEditorSelectLine(t *testing.T) {
+	var e Editor
+	e.SetText("one\ntwo three\n\nfour")
+	for _, c := range []struct {
+		at   int
+		want string
+	}{{1, "one"}, {3, "one"}, {6, "two three"}, {14, ""}, {len(e.Text), "four"}} {
+		e.SelectLine(c.at)
+		if got := e.Selected(); got != c.want {
+			t.Errorf("SelectLine(%d) selected %q, want %q", c.at, got, c.want)
+		}
 	}
 }
 
@@ -232,5 +247,30 @@ func TestBackspaceAndDeleteAtTextEdgesKeepText(t *testing.T) {
 	e.DeleteForward(true)
 	if e.Text != "ab" || e.Caret != 2 {
 		t.Fatalf("deleting past the edges gave %q caret %d, want \"ab\" caret 2", e.Text, e.Caret)
+	}
+}
+
+func TestUndoKeepsOnlyWhatEachStepChanged(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	e := Editor{Now: func() time.Time { return now }}
+	e.SetText(strings.Repeat("x", 1<<20))
+	for range 100 {
+		e.Replace("y")
+		now = now.Add(time.Second)
+	}
+	held := 0
+	for _, d := range e.undo {
+		held += len(d.text)
+	}
+	if held > 100 {
+		t.Fatalf("the undo history holds %d bytes of text for 100 one-byte steps", held)
+	}
+	for range 100 {
+		if !e.Undo() {
+			t.Fatal("ran out of undo")
+		}
+	}
+	if e.Text != strings.Repeat("x", 1<<20) {
+		t.Fatal("undoing every step did not restore the text")
 	}
 }

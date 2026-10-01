@@ -67,3 +67,11 @@ func TestAllAndFirstTurnNothingIntoACancel(t *testing.T) {
 		t.Fatalf("first(err) = %v", err)
 	}
 }
+
+func TestRevealRejectsWhatItCannotShow(t *testing.T) {
+	for _, p := range []string{"", "-rf"} {
+		if err := Reveal(p); err == nil {
+			t.Errorf("Reveal(%q) = nil, want an error", p)
+		}
+	}
+}

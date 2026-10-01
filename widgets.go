@@ -76,6 +76,8 @@ type TextWidget struct {
 	formatted     bool
 	style         TextStyle
 	wrap          bool
+	ellipsis      bool
+	maxLines      int
 	align         float64
 	role          Role
 	styleKey      EnvKey[TextStyle]
@@ -101,6 +103,8 @@ type wrapKey struct {
 	size       float64
 	lineHeight float64
 	maxW       float64
+	maxLines   int
+	ellipsis   bool
 }
 
 // Text draws s in the inherited style, wrapping at spaces when it is wider
@@ -231,6 +235,24 @@ func (t *TextWidget) NoWrap() *TextWidget {
 	return t
 }
 
+// Ellipsis ends a line too wide for the widget with "…" instead of letting it
+// run past the edge: with NoWrap, every line wider than the width it gets.
+// A screen reader still reads the whole text.
+func (t *TextWidget) Ellipsis() *TextWidget {
+	defer property.Watch(&t.props, &t.ellipsis)()
+	t.ellipsis = true
+	return t
+}
+
+// MaxLines shows at most n lines, ending the last with "…" when the text
+// goes on past it; 0 shows them all. MaxLines(1) with wrapping on is one
+// line cut to the width. A screen reader still reads the whole text.
+func (t *TextWidget) MaxLines(n int) *TextWidget {
+	defer property.Watch(&t.props, &t.maxLines)()
+	t.maxLines = max(n, 0)
+	return t
+}
+
 // Align places each line within the widget's width by fraction: 0 is left,
 // 0.5 centered, 1 right.
 func (t *TextWidget) Align(x float64) *TextWidget {
@@ -276,10 +298,21 @@ func (t *TextWidget) Layout(c Constraints, env Env) Size {
 	}
 	t.resolved = env.ResolveText(style.Merge(t.style))
 	face := t.faceAt(1)
-	key := wrapKey{generation: fontGen(), value: t.value, font: t.resolved.Font, size: t.resolved.Size, lineHeight: t.resolved.LineHeight, maxW: pick(t.wrap, c.MaxW, 0)}
+	fits := t.wrap || t.ellipsis || t.maxLines > 0
+	key := wrapKey{generation: fontGen(), value: t.value, font: t.resolved.Font, size: t.resolved.Size, lineHeight: t.resolved.LineHeight,
+		maxW: pick(fits, c.MaxW, 0), maxLines: t.maxLines, ellipsis: t.ellipsis}
 	if key != t.wrapped {
 		t.wrapped = key
-		t.lines = wrapText(key.value, face, key.maxW)
+		t.lines = wrapText(key.value, face, pick(t.wrap, key.maxW, 0))
+		if n := key.maxLines; n > 0 && len(t.lines) > n {
+			t.lines = t.lines[:n]
+			t.lines[n-1] = ellipsize(t.lines[n-1], face, key.maxW, true)
+		}
+		if key.ellipsis {
+			for i, line := range t.lines {
+				t.lines[i] = ellipsize(line, face, key.maxW, false)
+			}
+		}
 		t.widths = t.widths[:0]
 		var w float64
 		for _, line := range t.lines {

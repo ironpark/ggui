@@ -151,3 +151,37 @@ func TestWindowStateFollowsTheStateEvents(t *testing.T) {
 		}
 	}
 }
+
+func TestAWindowBuildsTheTreeOnlyOnceSomethingReadsIt(t *testing.T) {
+	t.Parallel()
+	a := New(Config{}, func() Widget { return Box() })
+	defer a.Close()
+	if a.semWanted.Load() {
+		t.Fatal("a window nobody asked builds its accessibility tree")
+	}
+	c := &Canvas{}
+	c.fs().semOff = true
+	c.Leaf(Rct(Pt(0, 0), Sz(10, 10)), Node{Role: RoleText, Name: "x"})
+	if len(c.fs().sem) != 0 {
+		t.Fatal("a frame with the tree off recorded a node")
+	}
+	a.canvas.fs().semOff = true
+	a.Perform(NodeID{Role: RoleButton}, Action{Kind: ActionPress})
+	if !a.semWanted.Load() {
+		t.Fatal("Perform did not turn the tree on")
+	}
+	a.runPosted()
+	if !a.hasPosted() {
+		t.Fatal("Perform ran against a frame that built no tree instead of waiting for one")
+	}
+	a.runPosted()
+	if a.hasPosted() {
+		t.Fatal("Perform kept waiting after its one retry")
+	}
+	b := New(Config{}, func() Widget { return Box() })
+	defer b.Close()
+	b.Semantics()
+	if !b.semWanted.Load() {
+		t.Fatal("Semantics did not turn the tree on")
+	}
+}

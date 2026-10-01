@@ -28,7 +28,7 @@ import (
 // underlined in place. Keys: arrows (with Shift to select, Alt or Ctrl to
 // jump words, ⌘ on macOS to reach the ends), Home and End, Backspace and
 // Delete, ⌘/Ctrl+A, C, X and V, Enter for OnSubmit. Double-click selects a
-// word, triple-click everything, dragging selects a range. A Multiline
+// word, triple-click the line up to its break, dragging selects a range. A Multiline
 // editor adds Up and Down, Home and End within the line, Enter for a line
 // break and ⌘/Ctrl+Enter for OnSubmit.
 // caretBlink is how long the caret shows and hides for.
@@ -73,6 +73,13 @@ type TextInputWidget struct {
 	clicks    int
 	lastClick time.Time
 	lastPos   Point
+
+	// spans caches the wrap of the text it was last asked for, which
+	// layout, paint, the caret's blink and hit testing all ask for again.
+	wrapped struct {
+		key   spanKey
+		spans []lineSpan
+	}
 
 	cache     *CachedWidget
 	resolved  TextStyle
@@ -248,6 +255,31 @@ func (t *TextInputWidget) ConsumesKey(ev KeyEvent) bool {
 	return ev.Kind == KeyPress && (ev.Key != KeyEscape || t.escapeUsed)
 }
 
+// ClaimsChord implements ChordClaimer: the editing chords stay with the
+// editor while it has the focus, ahead of any shortcut or menu action on
+// the same chord. Those are the clipboard, undo and select-all chords, and
+// the modified arrows, Home, End and deletes; ⌘/Ctrl+Enter too when the
+// editor submits with it.
+func (t *TextInputWidget) ClaimsChord(ev KeyEvent) bool {
+	m := ev.Mods
+	if ev.Kind != KeyPress || t.IsDisabled() || !(m.Ctrl || m.Alt || m.Meta) {
+		return false
+	}
+	switch ev.Key {
+	case KeyA, KeyC, KeyX, KeyV, KeyZ:
+		return m.Cmd()
+	case KeyY:
+		return m.Cmd() && !runtimeIsDarwin()
+	case KeyArrowLeft, KeyArrowRight, KeyHome, KeyEnd, KeyBackspace, KeyDelete:
+		return true
+	case KeyArrowUp, KeyArrowDown:
+		return t.multiline
+	case KeyEnter, KeyNumpadEnter:
+		return t.multiline && t.onSubmit != nil && m.Cmd()
+	}
+	return false
+}
+
 // Password masks every rune with a bullet.
 func (t *TextInputWidget) Password() *TextInputWidget { t.password = true; return t }
 
@@ -396,12 +428,30 @@ func (t *TextInputWidget) spacing() float64 {
 	return st.Size * st.LineHeight
 }
 
-// spans wraps s at the editor's width, or leaves it one line.
+// spanKey is what a wrap depends on.
+type spanKey struct {
+	text       string
+	generation uint64
+	font       *Font
+	size       float64
+	width      float64
+}
+
+// spans wraps s at the editor's width, or leaves it one line. The result
+// is shared: callers must not change it.
 func (t *TextInputWidget) spans(s string) []lineSpan {
 	if !t.multiline {
 		return []lineSpan{{0, len(s)}}
 	}
-	return wrapSpans(s, t.face(1), t.width)
+	st := t.resolved
+	if st.Font == nil {
+		st = t.style.resolved()
+	}
+	key := spanKey{s, fontGen(), st.Font, st.Size, t.width}
+	if t.wrapped.spans == nil || t.wrapped.key != key {
+		t.wrapped.key, t.wrapped.spans = key, wrapSpans(s, t.face(1), t.width)
+	}
+	return t.wrapped.spans
 }
 
 // linesHeight is the height of n wrapped lines.
@@ -960,7 +1010,7 @@ func (t *TextInputWidget) HandlePointer(ev PointerEvent) bool {
 		case 2:
 			t.ed.SelectWord(idx)
 		default:
-			t.ed.SelectAll()
+			t.ed.SelectLine(idx)
 		}
 		t.blink = Now()
 		return true

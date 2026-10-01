@@ -192,6 +192,9 @@ func (c *Canvas) addSem(r Rect, n Node, h any) SemRef {
 		return SemRef{}
 	}
 	root := c.fs()
+	if root.semOff {
+		return SemRef{}
+	}
 	key := a11y.Key(h)
 	if key != nil {
 		if i := root.semIndex[key]; i != 0 {

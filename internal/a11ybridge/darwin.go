@@ -886,6 +886,16 @@ func axRole(r a11y.Role) (role, subrole string) {
 		return "AXWindow", ""
 	case a11y.RoleGroup:
 		return "AXGroup", ""
+	case a11y.RoleSpinButton:
+		return "AXIncrementor", ""
+	case a11y.RoleTreeItem:
+		return "AXRow", "AXOutlineRow"
+	case a11y.RoleTable:
+		return "AXTable", ""
+	case a11y.RoleTree:
+		return "AXOutline", ""
+	case a11y.RoleCell, a11y.RoleHeader:
+		return "AXCell", ""
 	}
 	return "AXUnknown", ""
 }

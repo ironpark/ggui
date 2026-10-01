@@ -67,7 +67,19 @@ func (p *Probe) Announce(text string, politeness Politeness) {
 // the next frame's input, and the frame after that publishes what came of
 // it. See the note at the top of this file for why it must not wait.
 func (w *Window) Perform(id NodeID, act Action) {
-	w.Post(func() { perform(&w.canvas, &w.input, id, act) })
+	w.wantSemantics()
+	retried := false
+	var run func()
+	run = func() {
+		if w.canvas.fs().semOff && !retried {
+			// The last frame built no tree; the next one will.
+			retried = true
+			w.Post(run)
+			return
+		}
+		perform(&w.canvas, &w.input, id, act)
+	}
+	w.Post(run)
 }
 
 // Perform queues act as App.Perform does and then runs a frame, so that a

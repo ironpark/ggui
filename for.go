@@ -33,6 +33,7 @@ type EachWidget[T any, K comparable] struct {
 	stale        bool // items changed since children was last filled
 	cache        *CachedWidget
 	extent       float64 // fixed main-axis size per item; 0 lays every child out
+	unlisted     bool    // the rows describe their own place; see Unlisted
 
 	// Transition wraps every row; removed rows then leave through it.
 	transition func(Widget) *TransitionWidget
@@ -219,6 +220,15 @@ func (f *EachWidget[T, K]) Horizontal() *EachWidget[T, K] {
 	return f
 }
 
+// Unlisted leaves out the list and list-item nodes Each describes its rows
+// with, for a container whose rows describe themselves and their place, as
+// a table's or a tree's do.
+func (f *EachWidget[T, K]) Unlisted() *EachWidget[T, K] {
+	defer property.Watch(&f.props, &f.unlisted)()
+	f.unlisted = true
+	return f
+}
+
 // ItemExtent fixes every child's height (width, with Horizontal) to v. The
 // list's size then follows from the count alone, and inside a Scroll only
 // the children in view are built, laid out and painted: a list of tens of
@@ -391,7 +401,7 @@ func (f *EachWidget[T, K]) Paint(dst *Canvas, r Rect) {
 		return
 	}
 	n := len(f.items)
-	dst.Node(r, Node{Role: RoleList, Min: 1, Max: float64(n)}, func(dst *Canvas) {
+	list := func(dst *Canvas) {
 		if f.extent <= 0 {
 			for i, child := range f.children {
 				rc := Rct(r.Origin.Add(f.offsets[i]), f.sizes[i])
@@ -404,11 +414,20 @@ func (f *EachWidget[T, K]) Paint(dst *Canvas, r Rect) {
 			rc := Rct(r.Origin.Add(f.offsets[j]), f.sizes[j])
 			dst.inGroup(e, func() { f.paintRow(dst, w, rc, f.first+j, n) })
 		}
-	})
+	}
+	if f.unlisted {
+		list(dst)
+		return
+	}
+	dst.Node(r, Node{Role: RoleList, Min: 1, Max: float64(n)}, list)
 }
 
 // paintRow paints one row inside a list item that knows its place.
 func (f *EachWidget[T, K]) paintRow(dst *Canvas, w Widget, rc Rect, i, n int) {
+	if f.unlisted {
+		dst.Paint(w, rc)
+		return
+	}
 	item := Node{Role: RoleListItem, Min: 1, Now: float64(i + 1), Max: float64(n)}
 	dst.Node(rc, item, func(dst *Canvas) { dst.Paint(w, rc) })
 }

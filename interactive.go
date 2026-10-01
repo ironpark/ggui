@@ -37,6 +37,8 @@ const (
 	RoleAccordion  = a11y.RoleAccordion
 	RoleCombobox   = a11y.RoleCombobox
 	RoleSeparator  = a11y.RoleSeparator
+	RoleSpinButton = a11y.RoleSpinButton
+	RoleTreeItem   = a11y.RoleTreeItem
 )
 
 // Content and structure: these describe what is on screen rather than what
@@ -54,6 +56,10 @@ const (
 	RoleToolbar  = a11y.RoleToolbar
 	RoleStatus   = a11y.RoleStatus
 	RoleWindow   = a11y.RoleWindow
+	RoleTable    = a11y.RoleTable
+	RoleTree     = a11y.RoleTree
+	RoleCell     = a11y.RoleCell
+	RoleHeader   = a11y.RoleHeader
 )
 
 // Control is a widget that takes both pointer and keyboard input.

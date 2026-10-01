@@ -235,3 +235,29 @@ func TestRetainKeepsTheFocusedRow(t *testing.T) {
 		t.Fatalf("rows 1 and 2 built %d and %d times: one unfocused row should have been evicted with Retain(1)", built[1], built[2])
 	}
 }
+
+func TestFramesThatOnlyPaintKeepTheDerivedEnv(t *testing.T) {
+	t.Parallel()
+	k := NewEnvKey[float64]("w")
+	gen := State(0)
+	layouts := 0
+	cached := Cached(FromFuncs(func(c Constraints, env Env) Size {
+		layouts++
+		return c.Constrain(Sz(10, 10))
+	}, func(*Canvas, Rect) {}))
+	provided := Provide(k, 1, cached)
+	root := FromFuncs(func(c Constraints, env Env) Size {
+		gen.Get()
+		return provided.Layout(c, env)
+	}, func(dst *Canvas, r Rect) { provided.Paint(dst, r) })
+	p := NewProbe(root, Sz(100, 100))
+	defer p.Close()
+	p.Frame()
+	p.Frame()
+	p.Frame()
+	gen.Set(1)
+	p.Frame()
+	if layouts != 1 {
+		t.Fatalf("the cached leaf laid out %d times, want once: frames that only painted aged out the Env its cache is keyed by", layouts)
+	}
+}
