@@ -161,7 +161,6 @@ func TestParseChordReadsEveryAlias(t *testing.T) {
 
 func TestParseChordIgnoresSpaceAroundThePlusKey(t *testing.T) {
 	t.Parallel()
-	t.Skip("BUG: ParseChord checks the untrimmed input for the \"++\" suffix (chord.go:76), so \"ctrl++ \" is an unknown key while \"ctrl+s \" parses")
 	want := Chord{Key: KeyEqual, Mods: Mods{Ctrl: true}}
 	if got, err := ParseChord("ctrl++ "); err != nil || got != want {
 		t.Fatalf("ParseChord(%q) = %+v, %v; want %+v, as ParseChord(\"ctrl++\")", "ctrl++ ", got, err, want)

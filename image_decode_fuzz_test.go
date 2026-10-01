@@ -59,7 +59,10 @@ func FuzzDecodeImage(f *testing.F) {
 		}
 		want, _, stdErr := image.Decode(bytes.NewReader(data))
 		if stdErr == nil && want.Bounds().Empty() {
-			t.Skip("BUG: DecodeImage panics on an image with no pixels; see TestDecodeImageRejectsAnEmptyImage")
+			if _, err := DecodeImage(data); err == nil {
+				t.Fatal("DecodeImage accepted an image with no pixels")
+			}
+			return
 		}
 		img, err := DecodeImage(data)
 		if (err == nil) != (stdErr == nil) {
@@ -87,7 +90,6 @@ var emptyGIF = []byte("GIF89a\x00\x00\x00\x00\x80\x00\x00\x00\x00\x00\xff\xff\xf
 
 func TestDecodeImageRejectsAnEmptyImage(t *testing.T) {
 	t.Parallel()
-	t.Skip("BUG: DecodeImage passes a 0x0 image.Decode result to ggfx.NewImageFromImage (image.go:242), which panics \"width at NewImage must be positive\" instead of returning an error")
 	if _, err := DecodeImage(emptyGIF); err == nil {
 		t.Fatal("DecodeImage of a 0x0 GIF succeeded, want an error: there is nothing to draw")
 	}

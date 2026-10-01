@@ -65,7 +65,7 @@ var wrapSeeds = []string{
 	"", " ", "\n", "a\nb\n", "one", "the quick brown fox jumps over the lazy dog",
 	"  leading and   inner   spaces  ", "tabs\tbetween\twords", "line one\nline two\n\nafter blank",
 	"averyveryveryverylongwordwithoutanyspacesinit then short", "한글 텍스트도 잘 감싸야 합니다",
-	"日本語のテキストは空白なしで折り返す", "ééé café", "👩🏽‍💻👨‍👩‍👧‍👦🇰🇷 flags",
+	"日本語のテキストは空白なしで折り返す", "ééé café", "👩🏽\u200d💻👨\u200d👩\u200d👧\u200d👦🇰🇷 flags",
 	"\xff\xfe bad bytes \xc3", "nbsp joined em space", "a \u0301b", "\r\n windows",
 }
 
@@ -166,7 +166,7 @@ func FuzzTextRunsCoverTheTextByGrapheme(f *testing.F) {
 		f.Add(s)
 	}
 	f.Add("a👍b👍🏽c1\ufe0f\u20e3❤\ufe0f")
-	f.Add("🏳\ufe0f‍🌈x🫩")
+	f.Add("🏳\ufe0f\u200d🌈x🫩")
 	data, err := os.ReadFile("fonts/notoemoji/NotoColorEmoji.ttf")
 	if err != nil {
 		f.Fatal(err)

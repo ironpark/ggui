@@ -45,11 +45,9 @@ func TestClampKeepsValuesWithinBounds(t *testing.T) {
 	}
 }
 
-// The package comment promises lo for contradicting bounds whatever v is,
-// but a v at or above lo passes the lo test and is then clamped to hi.
+// The package comment promises lo for contradicting bounds whatever v is.
 func TestClampContradictingBoundsReturnsLo(t *testing.T) {
 	t.Parallel()
-	t.Skip("BUG: Clamp(10, 5, 3) returns hi (3), not lo (5) as its doc promises; internal/fn/fn.go:32")
 	for _, v := range []int{-1, 3, 4, 5, 10} {
 		if got := Clamp(v, 5, 3); got != 5 {
 			t.Errorf("Clamp(%d, 5, 3) = %d, want lo (5) for contradicting bounds", v, got)

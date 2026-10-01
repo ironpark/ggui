@@ -68,7 +68,8 @@ func (c Chord) held() Mods {
 // case, with esc, return, up, down, left, right, plus and minus accepted.
 func ParseChord(s string) (Chord, error) {
 	var c Chord
-	parts := strings.Split(strings.ToLower(strings.TrimSpace(s)), "+")
+	s = strings.TrimSpace(s)
+	parts := strings.Split(strings.ToLower(s), "+")
 	if s == "" {
 		return c, errors.New("ggui: empty chord")
 	}
@@ -92,12 +93,12 @@ func ParseChord(s string) (Chord, error) {
 		default:
 			k, ok := keyNames()[p]
 			if !ok || !last {
-				return c, errors.New("ggui: unknown key " + strings.TrimSpace(s))
+				return c, errors.New("ggui: unknown key " + s)
 			}
 			c.Key = k
 		}
 		if last && c.Key == 0 && p != "a" {
-			return c, errors.New("ggui: chord " + strings.TrimSpace(s) + " names no key")
+			return c, errors.New("ggui: chord " + s + " names no key")
 		}
 	}
 	return c, nil

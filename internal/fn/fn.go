@@ -26,11 +26,11 @@ func Pick[T any](cond bool, a, b T) T {
 // caller that computed an empty range gets the low end rather than a value
 // that depends on which comparison ran first.
 func Clamp[T cmp.Ordered](v, lo, hi T) T {
-	if v < lo {
-		return lo
-	}
 	if v > hi {
-		return hi
+		v = hi
+	}
+	if v < lo {
+		v = lo
 	}
 	return v
 }

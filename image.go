@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -238,6 +239,9 @@ func DecodeImage(data []byte) (*ggfx.Image, error) {
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("ggui: decode image: %w", err)
+	}
+	if img.Bounds().Empty() {
+		return nil, errors.New("ggui: decode image: the image has no pixels")
 	}
 	return ggfx.NewImageFromImage(img), nil
 }
