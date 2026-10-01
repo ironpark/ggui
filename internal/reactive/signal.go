@@ -87,11 +87,10 @@ type Computation struct {
 	prevSibling, nextSibling *Computation
 	cleanups                 []func()
 
-	// Registration and sibling links preserve creation order while allowing
-	// a disposed computation to leave both lists in constant time.
-	prevEffect, nextEffect *Computation
-	registered             bool
-	sources                []source
+	// registered is whether the runtime counts the computation; sources
+	// are the signals it read when it last ran.
+	registered bool
+	sources    []source
 
 	// order is the computation's place in its runtime's creation order,
 	// which is the order a flush runs them in: an owner before what it
@@ -516,7 +515,7 @@ func Derived[T any](fn func() T) *DerivedValue[T] {
 	}, false)
 	m.eff, m.dispose = e, e.dispose
 	m.sig.memo, e.cell = e, m.sig
-	e.state = stateDirty
+	e.mark(stateDirty)
 	return m
 }
 
@@ -583,10 +582,9 @@ func Effect(fn func() Cleanup) Cleanup {
 			OnCleanup(cleanup)
 		}
 	}, true)
-	e.state = stateDirty
 	e.rt.effects.userPending = true
 	e.rt.effects.dirtyGen++
-	e.rt.effects.enqueue(e)
+	e.mark(stateDirty)
 	return e.dispose
 }
 
@@ -723,11 +721,18 @@ func markDirty(e *Computation) {
 	if e.state == stateDirty {
 		return
 	}
-	e.state = stateDirty
-	e.rt.effects.enqueue(e)
+	e.mark(stateDirty)
 	if e.cell != nil {
 		e.cell.markSubsCheck()
 	}
+}
+
+// mark moves e out of the clean state and queues it for the next flush:
+// every such move goes through here, so a flush that runs only the queue
+// misses none.
+func (e *Computation) mark(state uint8) {
+	e.state = state
+	e.rt.effects.enqueue(e)
 }
 
 // markCheck records that an input of this Computation may have changed. It stops
@@ -740,11 +745,10 @@ func markCheck(e *Computation) {
 	if e.state != stateClean {
 		return
 	}
-	e.state = stateCheck
 	// A reader in another runtime learns of the change only through this
 	// mark, so its flush must not take itself for settled.
 	e.rt.effects.dirtyGen++
-	e.rt.effects.enqueue(e)
+	e.mark(stateCheck)
 	if e.cell != nil {
 		e.cell.markSubsCheck()
 	}
@@ -787,8 +791,7 @@ func runEffect(e *Computation) {
 	defer func() {
 		e.running = false
 		if !completed {
-			e.state = stateDirty
-			e.rt.effects.enqueue(e)
+			e.mark(stateDirty)
 		}
 	}()
 	e.fn()
@@ -796,10 +799,9 @@ func runEffect(e *Computation) {
 }
 
 type effectSet struct {
-	mu          sync.Mutex
-	first, last *Computation
-	count       int
-	nextOrder   uint64
+	mu        sync.Mutex
+	count     int
+	nextOrder uint64
 
 	// The computations marked since they last ran, in no order: what a
 	// flush runs, so that a frame that changed one row of ten thousand
@@ -873,13 +875,7 @@ func (s *effectSet) add(e *Computation) {
 	defer s.mu.Unlock()
 	s.nextOrder++
 	e.order = s.nextOrder
-	e.prevEffect, e.registered = s.last, true
-	if s.last != nil {
-		s.last.nextEffect = e
-	} else {
-		s.first = e
-	}
-	s.last = e
+	e.registered = true
 	s.count++
 }
 
@@ -889,17 +885,7 @@ func (s *effectSet) remove(e *Computation) {
 	if !e.registered {
 		return
 	}
-	if e.prevEffect != nil {
-		e.prevEffect.nextEffect = e.nextEffect
-	} else {
-		s.first = e.nextEffect
-	}
-	if e.nextEffect != nil {
-		e.nextEffect.prevEffect = e.prevEffect
-	} else {
-		s.last = e.prevEffect
-	}
-	e.prevEffect, e.nextEffect, e.registered = nil, nil, false
+	e.registered = false
 	s.count--
 }
 

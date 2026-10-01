@@ -4,5 +4,6 @@ package runtime
 
 import "os/exec"
 
-// explorerSelect is only reached on Windows.
-func explorerSelect(path string) *exec.Cmd { return exec.Command("explorer", "/select,"+path) }
+// explorerSelect is only reached on Windows; it is here so that Reveal's
+// switch builds everywhere.
+func explorerSelect(string) *exec.Cmd { panic("unreachable") }

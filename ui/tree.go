@@ -35,15 +35,7 @@ type TreeWidget[T any, K comparable] struct {
 	offset  *ggui.StateValue[float64]
 	content ggui.Widget
 	viewH   float64
-
-	// Roving focus: the row Tab lands on, the row that last had focus and a
-	// row the keyboard asked to focus once it paints.
-	stop       K
-	hasStop    bool
-	active     K
-	hasActive  bool
-	focusKey   K
-	focusAsked bool
+	nav     rovingRows[treeEntry[T, K], K]
 }
 
 // treeEntry is one visible row of the flattened tree.
@@ -51,8 +43,7 @@ type treeEntry[T any, K comparable] struct {
 	item        T
 	key         K
 	depth       int
-	parent      K
-	hasParent   bool
+	parent      int // the parent's index in the flattened tree, or -1
 	hasChildren bool
 	open        bool
 }
@@ -86,21 +77,20 @@ func Tree[T any, K comparable](roots ggui.Readable[[]T], key func(T) K, children
 // children of every open item under it.
 func (t *TreeWidget[T, K]) flatten(roots []T, open map[K]bool) []treeEntry[T, K] {
 	var out []treeEntry[T, K]
-	var walk func(items []T, depth int, parent K, hasParent bool)
-	walk = func(items []T, depth int, parent K, hasParent bool) {
+	var walk func(items []T, depth, parent int)
+	walk = func(items []T, depth, parent int) {
 		for _, item := range items {
 			kids := t.children(item)
 			k := t.key(item)
-			e := treeEntry[T, K]{item: item, key: k, depth: depth, parent: parent, hasParent: hasParent, hasChildren: len(kids) > 0}
+			e := treeEntry[T, K]{item: item, key: k, depth: depth, parent: parent, hasChildren: len(kids) > 0}
 			e.open = e.hasChildren && open[k]
 			out = append(out, e)
 			if e.open {
-				walk(kids, depth+1, k, true)
+				walk(kids, depth+1, len(out)-1)
 			}
 		}
 	}
-	var none K
-	walk(roots, 0, none, false)
+	walk(roots, 0, -1)
 	return out
 }
 
@@ -185,7 +175,7 @@ func (t *TreeWidget[T, K]) Height(h float64) *TreeWidget[T, K] {
 func (t *TreeWidget[T, K]) row(row ggui.EachItem[treeEntry[T, K]], label func(ggui.Readable[T]) ggui.Widget) ggui.Widget {
 	item := ggui.Map(row.Value, func(e treeEntry[T, K]) T { return e.item })
 	e := row.Value.Get()
-	r := &treeRow[T, K]{tree: t, entry: row.Value, key: e.key, label: ggui.Align(label(item)).At(0, .5)}
+	r := &treeRow[T, K]{tree: t, entry: row.Value, index: row.Index, key: e.key, label: ggui.Align(label(item)).At(0, .5)}
 	r.toggle.row = r
 	r.box = ggui.Box(r.label)
 	r.Role = ggui.RoleTreeItem
@@ -208,32 +198,7 @@ func (t *TreeWidget[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 
 // Paint implements Widget.
 func (t *TreeWidget[T, K]) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	t.findStop(ggui.Untrack(t.flat.Get))
 	dst.Node(r, ggui.Node{Role: ggui.RoleTree, Name: t.name}, func(dst *ggui.Canvas) { dst.Paint(t.content, r) })
-}
-
-// findStop picks the one row Tab lands on: the row that last had focus,
-// else the selected one, else the first.
-func (t *TreeWidget[T, K]) findStop(list []treeEntry[T, K]) {
-	t.hasStop = len(list) > 0
-	if !t.hasStop {
-		return
-	}
-	var sel K
-	hasSel := t.selected != nil
-	if hasSel {
-		sel = ggui.Untrack(t.selected.Get)
-	}
-	t.stop = list[0].key
-	for _, e := range list {
-		if t.hasActive && e.key == t.active {
-			t.stop = e.key
-			return
-		}
-		if hasSel && e.key == sel {
-			t.stop, hasSel = e.key, false
-		}
-	}
 }
 
 // setOpen opens or closes the item keyed k.
@@ -243,16 +208,7 @@ func (t *TreeWidget[T, K]) setOpen(k K, open bool) {
 	if cur[k] == open {
 		return
 	}
-	next := maps.Clone(cur)
-	if next == nil {
-		next = map[K]bool{}
-	}
-	if open {
-		next[k] = true
-	} else {
-		delete(next, k)
-	}
-	b.Set(next)
+	b.Set(withKey(cur, k, open))
 }
 
 // moveTo focuses row i, selects it when selection is bound and scrolls it
@@ -262,18 +218,12 @@ func (t *TreeWidget[T, K]) moveTo(list []treeEntry[T, K], i int) {
 		return
 	}
 	k := list[i].key
-	t.focusKey, t.focusAsked = k, true
+	t.nav.ask(k)
 	if t.selected != nil {
 		t.selected.Set(k)
 	}
-	if t.height > 0 && t.viewH > 0 {
-		top, at := float64(i)*t.rowH, ggui.Untrack(t.offset.Get)
-		switch {
-		case top < at:
-			t.offset.Set(top)
-		case top+t.rowH > at+t.viewH:
-			t.offset.Set(top + t.rowH - t.viewH)
-		}
+	if t.height > 0 {
+		revealRow(t.offset, i, t.rowH, t.viewH)
 	}
 	t.props.Changed()
 }
@@ -292,6 +242,7 @@ type treeRow[T any, K comparable] struct {
 	ggui.Interactive
 	tree   *TreeWidget[T, K]
 	entry  ggui.Readable[treeEntry[T, K]]
+	index  ggui.Readable[int]
 	key    K
 	label  ggui.Widget
 	box    *ggui.BoxWidget
@@ -312,9 +263,12 @@ func (g *treeToggle[T, K]) HandlePointer(ev ggui.PointerEvent) bool {
 	return ev.Kind != ggui.PointerScroll
 }
 
-func (r *treeRow[T, K]) inset(e treeEntry[T, K]) float64 {
-	return 8 + float64(e.depth)*r.tree.indent + 20
+// chevronX is where the row's chevron starts, and inset where its label
+// does.
+func (r *treeRow[T, K]) chevronX(e treeEntry[T, K]) float64 {
+	return 8 + float64(e.depth)*r.tree.indent
 }
+func (r *treeRow[T, K]) inset(e treeEntry[T, K]) float64 { return r.chevronX(e) + 20 }
 
 func (r *treeRow[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	r.env, r.theme = env, uitheme.From(env)
@@ -361,7 +315,7 @@ func (r *treeRow[T, K]) paint(dst *ggui.Canvas, rc ggui.Rect) {
 		dst.FillRoundRect(rc, th.Radius, fade(th.Muted, amount))
 	}
 	if e.hasChildren {
-		x := rc.Origin.X + 8 + float64(e.depth)*t.indent
+		x := rc.Origin.X + r.chevronX(e)
 		turn := dst.Ease(r.Anchor(rc), treeChevronSlot, pick(e.open, 1.0, 0.0), r.motion)
 		paintIcon(dst, r.env, icons.ChevronRight, ggui.Rct(ggui.Pt(x, rc.Origin.Y+(rc.Size.H-16)/2), ggui.Sz(16, 16)), th.MutedFg, turn*math.Pi/2)
 		if !r.IsInert() {
@@ -370,8 +324,7 @@ func (r *treeRow[T, K]) paint(dst *ggui.Canvas, rc ggui.Rect) {
 	}
 	dst.Clip(rc).Paint(r.box, rc)
 	r.FocusRing(dst, rc, th.Radius, th.Ring)
-	if t.focusAsked && t.focusKey == r.key {
-		t.focusAsked = false
+	if t.nav.claim(r.key) {
 		dst.RequestFocus(r)
 	}
 }
@@ -390,7 +343,14 @@ func (r *treeRow[T, K]) activate() {
 
 // TabStop implements ggui.TabStopper: only one row of the tree is in the
 // Tab order.
-func (r *treeRow[T, K]) TabStop() bool { return r.tree.hasStop && r.tree.stop == r.key }
+func (r *treeRow[T, K]) TabStop() bool {
+	t := r.tree
+	var sel rowCursor[K]
+	if t.selected != nil {
+		sel = at(ggui.Untrack(t.selected.Get))
+	}
+	return t.nav.isStop(r.key, ggui.Untrack(t.flat.Get), func(e treeEntry[T, K]) K { return e.key }, sel)
+}
 
 // Act implements ggui.Actor: expanding, collapsing and selecting the row.
 func (r *treeRow[T, K]) Act(a ggui.Action) bool {
@@ -434,21 +394,14 @@ func (r *treeRow[T, K]) HandleKey(ev ggui.KeyEvent) {
 	}
 	t := r.tree
 	if ev.Kind == ggui.KeyFocus {
-		t.active, t.hasActive = r.key, true
+		t.nav.active = at(r.key)
 	}
 	r.Keyboard(ev, r.activate)
 	if !r.ConsumesKey(ev) || ggui.Activates(ev) {
 		return
 	}
-	list := ggui.Untrack(t.flat.Get)
-	i := -1
-	for j, e := range list {
-		if e.key == r.key {
-			i = j
-			break
-		}
-	}
-	if i < 0 {
+	list, i := ggui.Untrack(t.flat.Get), ggui.Untrack(r.index.Get)
+	if i < 0 || i >= len(list) {
 		return
 	}
 	e := list[i]
@@ -470,13 +423,8 @@ func (r *treeRow[T, K]) HandleKey(ev ggui.KeyEvent) {
 	case ggui.KeyArrowLeft:
 		if e.open {
 			r.setOpen(false)
-		} else if e.hasParent {
-			for j := i - 1; j >= 0; j-- {
-				if list[j].key == e.parent {
-					t.moveTo(list, j)
-					break
-				}
-			}
+		} else {
+			t.moveTo(list, e.parent)
 		}
 	}
 }

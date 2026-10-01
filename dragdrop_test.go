@@ -131,3 +131,21 @@ func TestAListReordersByDraggingItsRows(t *testing.T) {
 		t.Fatalf("after dragging a above b: %q, want abc", got)
 	}
 }
+
+func TestDragPreviewIsLaidOutOnlyWhileDragging(t *testing.T) {
+	t.Parallel()
+	preview := &counting{}
+	source := DragSource(Box().Size(100, 40), 7).Preview(preview)
+	p := NewProbe(Column(source, Box().Size(100, 40)), Sz(100, 80))
+	defer p.Close()
+	p.Frame()
+	if preview.layouts != 0 {
+		t.Fatalf("the preview was laid out %d times before a drag", preview.layouts)
+	}
+	p.Press(Pt(50, 20))
+	p.Move(Pt(50, 60))
+	if !source.Dragging() || preview.layouts == 0 {
+		t.Fatalf("mid-drag: dragging %v, preview laid out %d times", source.Dragging(), preview.layouts)
+	}
+	p.Release(Pt(50, 60))
+}

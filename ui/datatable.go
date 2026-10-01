@@ -219,13 +219,7 @@ func (m *TableModel[T, K]) SetColumnVisible(id string, visible bool) {
 	if !found || (!visible && m.ColumnVisible(id) && count <= 1) {
 		return
 	}
-	hidden := maps.Clone(m.hidden.Get())
-	if visible {
-		delete(hidden, id)
-	} else {
-		hidden[id] = true
-	}
-	m.hidden.Set(hidden)
+	m.hidden.Set(withKey(m.hidden.Get(), id, !visible))
 }
 
 // IsSelected reports selection by row key.
@@ -233,13 +227,7 @@ func (m *TableModel[T, K]) IsSelected(key K) bool { return m.selected.Get()[key]
 
 // Select updates one key without disturbing other pages.
 func (m *TableModel[T, K]) Select(key K, selected bool) {
-	next := maps.Clone(m.selected.Get())
-	if selected {
-		next[key] = true
-	} else {
-		delete(next, key)
-	}
-	m.selected.Set(next)
+	m.selected.Set(withKey(m.selected.Get(), key, selected))
 }
 
 // SelectPage selects or clears only rows on the current filtered page.

@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"maps"
 	"slices"
 	"time"
 
@@ -87,13 +86,13 @@ type TableWidget[T any, K comparable] struct {
 	height         float64
 	label          func(T) string
 
-	// The keyboard: the row the arrows move from, the one Tab lands on,
-	// the one Shift extends a selection from, and the one to focus when it
-	// next paints, which may be a row scrolled into view this frame.
-	active, tab, anchor, focus rowCursor[K]
-	offset                     *ggui.StateValue[float64]
-	bodyH                      float64
-	widths                     []*ggui.StateValue[float64] // a Resizable column's width
+	// The keyboard: the rows' Tab stop and focus, and the row Shift
+	// extends a selection from.
+	nav    rovingRows[T, K]
+	anchor rowCursor[K]
+	offset *ggui.StateValue[float64]
+	bodyH  float64
+	widths []*ggui.StateValue[float64] // a Resizable column's width
 
 	body    *ggui.EachWidget[T, K]
 	head    *ggui.RowWidget
@@ -137,14 +136,6 @@ func Table[T any, K comparable](rows ggui.Readable[[]T], key func(T) K, cols ...
 	t.column = ggui.Column(t.headBox, t.body).Align(ggui.AlignStretch)
 	return t
 }
-
-// rowCursor is a row's key, or none.
-type rowCursor[K comparable] struct {
-	key K
-	ok  bool
-}
-
-func at[K comparable](k K) rowCursor[K] { return rowCursor[K]{k, true} }
 
 // BindSelected binds the key of the highlighted row: a click on a row sets
 // it, and rows take focus so Space or Enter select too.
@@ -245,30 +236,24 @@ func (t *TableWidget[T, K]) selectable() bool {
 	return t.selected != nil || t.onSelect != nil || t.selection != nil
 }
 
-// tabStop is the row Tab lands on: the active row, else the selected one,
-// else the first.
-func (t *TableWidget[T, K]) tabStop(rows []T) rowCursor[K] {
-	var first, chosen rowCursor[K]
-	var sel rowCursor[K]
-	if t.selected != nil {
-		sel = at(ggui.Untrack(t.selected.Get))
+// target is the row a navigation key takes the keyboard to from row i of
+// n, unclamped, and whether key is one.
+func (t *TableWidget[T, K]) target(key ggui.KeyboardKey, i, n int) (int, bool) {
+	switch key {
+	case ggui.KeyArrowUp:
+		return i - 1, true
+	case ggui.KeyArrowDown:
+		return i + 1, true
+	case ggui.KeyHome:
+		return 0, true
+	case ggui.KeyEnd:
+		return n - 1, true
+	case ggui.KeyPageUp:
+		return i - t.page(), true
+	case ggui.KeyPageDown:
+		return i + t.page(), true
 	}
-	for i, item := range rows {
-		k := t.key(item)
-		switch {
-		case t.active.ok && k == t.active.key:
-			return t.active
-		case i == 0:
-			first = at(k)
-		}
-		if sel.ok && k == sel.key {
-			chosen = sel
-		}
-	}
-	if chosen.ok {
-		return chosen
-	}
-	return first
+	return 0, false
 }
 
 // move takes the keyboard to row i, clamped to the rows: it becomes the
@@ -280,16 +265,18 @@ func (t *TableWidget[T, K]) move(i int, extend bool) {
 	if len(rows) == 0 {
 		return
 	}
-	i = min(max(i, 0), len(rows)-1)
+	i = clamp(i, 0, len(rows)-1)
 	k := t.key(rows[i])
-	t.active, t.focus = at(k), at(k)
+	t.nav.ask(k)
 	switch {
 	case t.selection != nil:
 		t.selectAt(rows, i, extend, false)
 	case t.selected != nil:
 		t.selected.Set(k)
 	}
-	t.reveal(i)
+	if t.height > 0 {
+		revealRow(t.offset, i, t.rowH, t.bodyH)
+	}
 }
 
 // selectAt changes the bound selection for row i: to that row alone, to
@@ -308,36 +295,14 @@ func (t *TableWidget[T, K]) selectAt(rows []T, i int, extend, toggle bool) {
 			next[t.key(rows[j])] = true
 		}
 	case toggle:
-		maps.Copy(next, ggui.Untrack(t.selection.Get))
-		if next[k] {
-			delete(next, k)
-		} else {
-			next[k] = true
-		}
+		cur := ggui.Untrack(t.selection.Get)
+		next = withKey(cur, k, !cur[k])
 		t.anchor = at(k)
 	default:
 		next[k] = true
 		t.anchor = at(k)
 	}
 	t.selection.Set(next)
-}
-
-// reveal scrolls the body of a table with a Height so that row i is in
-// view: the row may not be laid out yet, so the focus cannot do it.
-func (t *TableWidget[T, K]) reveal(i int) {
-	if t.height <= 0 || t.bodyH <= 0 {
-		return
-	}
-	top, off := float64(i)*t.rowH, ggui.Untrack(t.offset.Get)
-	switch {
-	case top < off:
-		off = top
-	case top+t.rowH > off+t.bodyH:
-		off = top + t.rowH - t.bodyH
-	default:
-		return
-	}
-	t.offset.Set(off)
 }
 
 // page is how many rows a Page key moves.
@@ -390,7 +355,6 @@ func (t *TableWidget[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	sz := t.column.Layout(c, env)
 	t.headH = t.headBox.Layout(ggui.Loose(sz), env).H
 	t.bodyH = sz.H - t.headH
-	t.tab = t.tabStop(t.rows.Get())
 	return sz
 }
 
@@ -451,9 +415,8 @@ func (r *tableRow[T, K]) paint(dst *ggui.Canvas, rc ggui.Rect) {
 	th := r.theme
 	if r.table.selectable() {
 		r.Hit(dst, rc, r, ggui.CursorShapePointer)
-		if t := r.table; t.focus.ok && t.focus.key == r.key {
+		if r.table.nav.claim(r.key) {
 			dst.RequestFocus(r)
-			t.focus = rowCursor[K]{}
 		}
 	} else if !r.IsInert() {
 		dst.HitPointer(rc, r)
@@ -481,7 +444,7 @@ func (r *tableRow[T, K]) pick() {
 	if r.IsInert() || !r.table.selectable() {
 		return
 	}
-	r.table.active = at(r.key)
+	r.table.nav.active = at(r.key)
 	if r.table.selected != nil {
 		r.table.selected.Set(r.key)
 	}
@@ -516,29 +479,15 @@ func (r *tableRow[T, K]) HandleKey(ev ggui.KeyEvent) {
 		return
 	}
 	if ev.Kind == ggui.KeyFocus {
-		t.active = at(r.key)
+		t.nav.active = at(r.key)
 	}
 	if ev.Kind == ggui.KeyPress {
 		i, n := ggui.Untrack(r.index.Get), len(ggui.Untrack(t.rows.Get))
+		if to, ok := t.target(ev.Key, i, n); ok {
+			t.move(to, ev.Mods.Shift)
+			return
+		}
 		switch ev.Key {
-		case ggui.KeyArrowUp:
-			t.move(i-1, ev.Mods.Shift)
-			return
-		case ggui.KeyArrowDown:
-			t.move(i+1, ev.Mods.Shift)
-			return
-		case ggui.KeyHome:
-			t.move(0, ev.Mods.Shift)
-			return
-		case ggui.KeyEnd:
-			t.move(n-1, ev.Mods.Shift)
-			return
-		case ggui.KeyPageUp:
-			t.move(i-t.page(), ev.Mods.Shift)
-			return
-		case ggui.KeyPageDown:
-			t.move(i+t.page(), ev.Mods.Shift)
-			return
 		case ggui.KeyA:
 			if t.selection != nil && ev.Mods.Cmd() {
 				all := make(map[K]bool, n)
@@ -576,7 +525,14 @@ func (r *tableRow[T, K]) ClaimsChord(ev ggui.KeyEvent) bool {
 
 // TabStop implements ggui.TabStopper: Tab lands on one row, and the arrows
 // reach the others.
-func (r *tableRow[T, K]) TabStop() bool { return !r.table.tab.ok || r.table.tab.key == r.key }
+func (r *tableRow[T, K]) TabStop() bool {
+	t := r.table
+	var sel rowCursor[K]
+	if t.selected != nil {
+		sel = at(ggui.Untrack(t.selected.Get))
+	}
+	return t.nav.isStop(r.key, ggui.Untrack(t.rows.Get), t.key, sel)
+}
 
 // HandlePointer implements PointerHandler.
 func (r *tableRow[T, K]) HandlePointer(ev ggui.PointerEvent) bool {

@@ -65,8 +65,8 @@ func (in *inputState) updateAppDrag(f frameInput) {
 	}
 	released := slices.Contains(f.up, MouseButtonLeft)
 	if d.source == nil {
-		dx, dy := f.pos.X-d.from.X, f.pos.Y-d.from.Y
-		if released || dx*dx+dy*dy < dragThreshold*dragThreshold {
+		dx := f.pos.Sub(d.from)
+		if released || dx.X*dx.X+dx.Y*dx.Y < dragThreshold*dragThreshold {
 			if released {
 				in.drag = nil
 			}
@@ -74,30 +74,22 @@ func (in *inputState) updateAppDrag(f frameInput) {
 		}
 		src := d.candidate.drag
 		d.source, d.value = src, src.dragValue()
-		// The widget under the press lets go of it, without a tap.
-		if p := in.pressed; p != nil {
-			if cur := in.findPointer(p); cur != nil {
-				cur.pointer.HandlePointer(PointerEvent{Kind: PointerUp, Pos: f.pos, Button: in.pressedBtn, Mods: f.mods})
-			}
-			in.pressed = nil
-		}
+		in.releasePress(f.pos, f.mods)
 	}
-	grab := Pt(d.from.X-d.candidate.full.Origin.X, d.from.Y-d.candidate.full.Origin.Y)
-	d.source.dragMoved(f.pos, grab)
+	d.source.dragMoved(f.pos, d.from.Sub(d.candidate.full.Origin))
 	now := in.topmost(func(r *hitRegion) bool {
 		t, ok := r.pointer.(dropTarget)
 		return ok && r.rect.Contains(f.pos) && t.acceptsDrag(d.value)
 	})
-	if d.target != nil && !in.continues(now, d.target) {
-		d.target.pointer.(dropTarget).dragOver(false)
-		d.target = nil
+	if !in.continues(now, d.target) {
+		if d.target != nil {
+			d.target.pointer.(dropTarget).dragOver(false)
+		}
+		if now != nil {
+			now.pointer.(dropTarget).dragOver(true)
+		}
 	}
-	if now != nil && d.target == nil {
-		now.pointer.(dropTarget).dragOver(true)
-	}
-	if now != nil {
-		d.target = keep(now)
-	}
+	d.target = keep(now)
 	if !released {
 		return
 	}
@@ -105,7 +97,7 @@ func (in *inputState) updateAppDrag(f frameInput) {
 	if now != nil {
 		t := now.pointer.(dropTarget)
 		t.dragOver(false)
-		t.dropped(d.value, Pt(f.pos.X-now.full.Origin.X, f.pos.Y-now.full.Origin.Y))
+		t.dropped(d.value, f.pos.Sub(now.full.Origin))
 		dropped = true
 	}
 	in.drag = nil
@@ -181,7 +173,8 @@ func (d *DragSourceWidget[T]) Dragging() bool { return d.dragging }
 func (d *DragSourceWidget[T]) Layout(c Constraints, env Env) Size {
 	defer d.props.Layout()()
 	d.size = d.child.Layout(c, env)
-	if d.preview != nil {
+	// The preview is only painted mid-drag, so only then is it laid out.
+	if d.preview != nil && d.dragging {
 		d.preview.Layout(Tight(d.size), env)
 	}
 	return d.size
@@ -209,6 +202,7 @@ func (d *DragSourceWidget[T]) dragValue() any { return d.value }
 func (d *DragSourceWidget[T]) dragMoved(at, grab Point) {
 	if !d.dragging {
 		d.dragging = true
+		d.props.Changed() // lay out the preview
 		if d.onStart != nil {
 			d.onStart()
 		}

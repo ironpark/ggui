@@ -24,7 +24,6 @@ type NumberInputWidget struct {
 	text     *ggui.StateValue[string]
 	input    *ggui.TextInputWidget
 	lo, hi   float64
-	ranged   bool
 	step     float64
 	digits   int // decimals shown; -1 follows the step
 	onChange func(float64)
@@ -66,7 +65,7 @@ func NumberInput(value ggui.Binding[float64]) *NumberInputWidget {
 func (n *NumberInputWidget) Range(lo, hi float64) *NumberInputWidget {
 	defer property.Watch(&n.props, &n.hi)()
 	defer property.Watch(&n.props, &n.lo)()
-	n.lo, n.hi, n.ranged = min(lo, hi), max(lo, hi), true
+	n.lo, n.hi = min(lo, hi), max(lo, hi)
 	return n
 }
 
@@ -194,7 +193,7 @@ func (n *NumberInputWidget) commit() {
 		n.set(v)
 		return
 	}
-	n.text.Set(n.format(ggui.Untrack(n.value.Get)))
+	n.reformat()
 }
 
 // current is the value a step starts from: what is typed, while it reads
@@ -258,7 +257,7 @@ func (n *NumberInputWidget) Describe() ggui.Node {
 		Disabled: n.disabled || n.IsInert(),
 		Actions:  ggui.ActionIncrement | ggui.ActionDecrement | ggui.ActionSetValue | ggui.ActionFocus,
 	}
-	if n.ranged {
+	if !math.IsInf(n.lo, 0) || !math.IsInf(n.hi, 0) {
 		node.Min, node.Max = n.lo, n.hi
 	}
 	return node

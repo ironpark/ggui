@@ -1,7 +1,6 @@
 package ggui
 
 import (
-	"bytes"
 	"container/list"
 	"context"
 	"errors"
@@ -10,6 +9,7 @@ import (
 	"os"
 	"runtime"
 	"sync"
+	"weak"
 
 	"github.com/ironpark/ggfx"
 	"golang.org/x/image/draw"
@@ -33,11 +33,7 @@ func LoadImage(ctx context.Context, src string) (image.Image, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	img, _, err := image.Decode(bytes.NewReader(data))
-	if err != nil {
-		return nil, fmt.Errorf("ggui: decode image: %w", err)
-	}
-	return img, nil
+	return decodeImage(data)
 }
 
 // AsyncImageWidget shows an image that is loaded and decoded off the UI
@@ -178,7 +174,15 @@ func (a *AsyncImageWidget) sync() {
 		if l := runningLoop(); post == nil && l != nil {
 			post = l.post
 		}
-		notify := func() { a.props.Changed() }
+		// The cache keeps notify until the load ends; holding the widget
+		// weakly lets a widget dropped meanwhile be collected, and its
+		// cleanup cancel the load.
+		wa := weak.Make(a)
+		notify := func() {
+			if a := wa.Value(); a != nil {
+				a.props.Changed()
+			}
+		}
 		h.acquire(a.cache, key, a.loader, post, notify)
 	}
 	a.status, a.inner.img, a.err = h.state()

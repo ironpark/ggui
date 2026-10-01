@@ -676,6 +676,18 @@ func (in *inputState) moveFocus(dir int) {
 	in.focus(keyed[next], true)
 }
 
+// releasePress takes the press away from the widget under it when a drag
+// or a pan takes over: it gets a PointerUp without a tap.
+func (in *inputState) releasePress(pos Point, mods Mods) {
+	if in.pressed == nil {
+		return
+	}
+	if cur := in.findPointer(in.pressed); cur != nil {
+		cur.pointer.HandlePointer(PointerEvent{Kind: PointerUp, Pos: pos, Button: in.pressedBtn, Mods: mods})
+	}
+	in.pressed = nil
+}
+
 // continues reports whether now, a region painted this frame, is the one
 // prev was recorded from, matched as findPointer and findKeyRegion match: by
 // handler, then id, and by Rect only for a rebuilt widget. Two regions

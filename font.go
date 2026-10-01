@@ -380,10 +380,10 @@ func wrapLine(line string, face text.Face, maxW float64) []string {
 // Spaces before the cut go, and the ellipsis is all that is left when not
 // even one grapheme fits beside it.
 func ellipsize(s string, face text.Face, maxW float64, cut bool) string {
-	width := prefixWidths(s, face)
-	if !cut && width(len(s)) <= maxW {
+	if !cut && lineWidth(s, face) <= maxW {
 		return s
 	}
+	width := prefixWidths(s, face)
 	room := maxW - lineWidth("…", face)
 	keep := 0
 	for i := 0; i < len(s); {

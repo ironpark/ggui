@@ -17,6 +17,7 @@ import (
 	"cmp"
 	"fmt"
 	"image/color"
+	"maps"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/fn"
@@ -93,6 +94,19 @@ func setChanged[T comparable](s ggui.Binding[T], v T, fn func(T)) {
 	if fn != nil {
 		fn(v)
 	}
+}
+
+// withKey returns a copy of the set m with k in it when on and out of it
+// otherwise, leaving m as it was for whoever else holds it.
+func withKey[K comparable](m map[K]bool, k K, on bool) map[K]bool {
+	next := make(map[K]bool, len(m)+1)
+	maps.Copy(next, m)
+	if on {
+		next[k] = true
+	} else {
+		delete(next, k)
+	}
+	return next
 }
 
 // stepIndex moves cur by dir through n items, wrapping around and skipping

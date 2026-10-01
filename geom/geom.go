@@ -27,6 +27,9 @@ func Pt[T Number](x, y T) Point { return Point{X: float64(x), Y: float64(y)} }
 // Add returns the component-wise sum of p and q.
 func (p Point) Add(q Point) Point { return Point{p.X + q.X, p.Y + q.Y} }
 
+// Sub returns p moved back by q: where p lies relative to q.
+func (p Point) Sub(q Point) Point { return Point{p.X - q.X, p.Y - q.Y} }
+
 // Size is a width/height pair in logical pixels.
 type Size struct {
 	W, H float64

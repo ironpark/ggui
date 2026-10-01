@@ -236,6 +236,16 @@ func (c *Canvas) drawImage(img *ggfx.Image, r Rect, o ImageOptions) {
 
 // DecodeImage decodes PNG, JPEG or GIF bytes into an ggfx.Image.
 func DecodeImage(data []byte) (*ggfx.Image, error) {
+	img, err := decodeImage(data)
+	if err != nil {
+		return nil, err
+	}
+	return ggfx.NewImageFromImage(img), nil
+}
+
+// decodeImage decodes PNG, JPEG or GIF bytes, refusing an image with no
+// pixels.
+func decodeImage(data []byte) (image.Image, error) {
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("ggui: decode image: %w", err)
@@ -243,7 +253,7 @@ func DecodeImage(data []byte) (*ggfx.Image, error) {
 	if img.Bounds().Empty() {
 		return nil, errors.New("ggui: decode image: the image has no pixels")
 	}
-	return ggfx.NewImageFromImage(img), nil
+	return img, nil
 }
 
 // LoadImageFile decodes the PNG, JPEG or GIF file at path.

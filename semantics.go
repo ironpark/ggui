@@ -133,13 +133,26 @@ func (c *Canvas) Node(r Rect, n Node, fn func(dst *Canvas)) {
 // Describing the same handler twice in a frame keeps the first node, so a
 // control painted as a box around an editor, as ui.TextField is, is one
 // element and not two.
-func (c *Canvas) Describe(r Rect, h any) { c.addSem(r, nodeOf(h), h) }
+func (c *Canvas) Describe(r Rect, h any) {
+	if c.describing() {
+		c.addSem(r, nodeOf(h), h)
+	}
+}
 
 // DescribeNode is Describe for a handler that contains other elements: the
 // children fn describes hang under it. A table row is one.
 func (c *Canvas) DescribeNode(r Rect, h any, fn func(dst *Canvas)) {
-	c.scoped(c.addSem(r, nodeOf(h), h), fn)
+	var ref SemRef
+	if c.describing() {
+		ref = c.addSem(r, nodeOf(h), h)
+	}
+	c.scoped(ref, fn)
 }
+
+// describing reports whether this frame records nodes from c: it does not
+// when nobody asked for the tree or c is inert, and then a handler is not
+// asked to describe itself either.
+func (c *Canvas) describing() bool { return c != nil && !c.inert && !c.fs().semOff }
 
 // scoped paints fn with ref as the parent of everything it describes.
 func (c *Canvas) scoped(ref SemRef, fn func(dst *Canvas)) {
@@ -188,13 +201,10 @@ func nodeOf(h any) Node {
 // holding the bounds it would have had: an assistive technology scrolls to
 // what it cannot see.
 func (c *Canvas) addSem(r Rect, n Node, h any) SemRef {
-	if c == nil || c.inert {
+	if !c.describing() {
 		return SemRef{}
 	}
 	root := c.fs()
-	if root.semOff {
-		return SemRef{}
-	}
 	key := a11y.Key(h)
 	if key != nil {
 		if i := root.semIndex[key]; i != 0 {

@@ -71,9 +71,9 @@ func (in *inputState) panTouch(f *frameInput) {
 		}
 	}
 	in.touchMotion.sample(now, f.pos)
-	delta := Pt(f.pos.X-in.touchLast.X, f.pos.Y-in.touchLast.Y)
+	delta := f.pos.Sub(in.touchLast)
 	if !in.touchPanning {
-		delta = Pt(f.pos.X-in.touchStart.X, f.pos.Y-in.touchStart.Y)
+		delta = f.pos.Sub(in.touchStart)
 		if delta.X*delta.X+delta.Y*delta.Y < 64 {
 			return
 		}
@@ -95,12 +95,7 @@ func (in *inputState) panTouch(f *frameInput) {
 	} else if delta != (Point{}) {
 		if target := in.send(ev); target != nil {
 			in.touchScroll, in.touchPanning = keep(target), true
-			if in.pressed != nil {
-				if cur := in.findPointer(in.pressed); cur != nil {
-					cur.pointer.HandlePointer(PointerEvent{Kind: PointerUp, Pos: f.pos, Button: in.pressedBtn})
-				}
-				in.pressed = nil
-			}
+			in.releasePress(f.pos, f.mods)
 		}
 	}
 	in.touchLast = f.pos
