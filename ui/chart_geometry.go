@@ -240,7 +240,10 @@ func (c *ChartWidget) hitIndex(p ggui.Point) int {
 		if sweep == 0 {
 			return -1
 		}
-		offset := math.Mod((angle-c.startAngle)*math.Copysign(1, sweep)+720, 360)
+		offset := math.Mod((angle-c.startAngle)*math.Copysign(1, sweep), 360)
+		if offset < 0 {
+			offset += 360
+		}
 		if offset > math.Abs(sweep) {
 			return -1
 		}

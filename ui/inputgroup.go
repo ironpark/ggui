@@ -16,6 +16,7 @@ import (
 // behavior, because the group registers its region before painting them.
 type InputGroupWidget struct {
 	nameChild bool
+	keyChild  bool // the editor's identity is the group's; see Layout
 	ggui.Interactive
 	input             ggui.Widget
 	leading, trailing ggui.Widget
@@ -98,6 +99,15 @@ func (g *InputGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if g.nameChild {
 		if n, ok := g.input.(Named); ok {
 			n.SetName(g.SemanticName())
+		}
+	}
+	// The editor takes the group's input, so it is the editor's identity
+	// that keeps focus across a rebuild: one without its own takes the
+	// group's.
+	if in, ok := g.input.(keyed); ok {
+		if id := g.HitID(); id != nil && (g.keyChild || in.HitID() == nil) {
+			in.SetKey(childKey{id, nil})
+			g.keyChild = true
 		}
 	}
 

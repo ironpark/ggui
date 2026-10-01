@@ -34,6 +34,7 @@ func Radios[T comparable](selected ggui.Binding[T]) *RadiosWidget[T] {
 	g := &RadiosWidget[T]{selected: selected, label: sprint[T]}
 	g.Role = ggui.RoleGroup
 	g.row = ggui.Row()
+	g.AutoKey()
 	return g
 }
 
@@ -70,7 +71,6 @@ func (g *RadiosWidget[T]) setOptions(options []T) bool {
 			remaining[v] = old[1:]
 		} else {
 			r = Radio(g.selected, v, g.label(v))
-			r.Key(r)
 		}
 		r.OnChange(g.onChange)
 		next = append(next, r)
@@ -89,6 +89,12 @@ func (g *RadiosWidget[T]) setOptions(options []T) bool {
 		g.column = ggui.Column(g.children()...)
 	}
 	return true
+}
+
+// radioPart is the part an option plays in Radios; see childKey.
+type radioPart[T comparable] struct {
+	value T
+	nth   int
 }
 
 // Format sets how each option is shown.
@@ -146,8 +152,13 @@ func (g *RadiosWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer g.props.Layout()()
 	g.setOptions(g.optionProp.Get())
 	g.Sync()
+	// Each option is keyed by the group and its value, and by how many
+	// options before it share that value.
+	owner, seen := ownerOf(&g.Interactive, g), map[T]int{}
 	for _, r := range g.radios {
 		r.Disabled(g.IsInert())
+		r.Key(childKey{owner, radioPart[T]{r.value, seen[r.value]}})
+		seen[r.value]++
 	}
 	t := uitheme.From(env)
 	if g.column != nil {

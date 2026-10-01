@@ -93,8 +93,17 @@ func (p *PaginationWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	return p.row.Layout(c, env)
 }
 
-// Paint implements ggui.Widget.
-func (p *PaginationWidget) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(p.row, r) }
+// Paint implements ggui.Widget. The buttons are one group, named by Name
+// or else "Pagination", so a screen reader reads them as one navigation.
+func (p *PaginationWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	name := p.SemanticName()
+	if name == "" {
+		name = "Pagination"
+	}
+	dst.Node(r, ggui.Node{Role: ggui.RoleGroup, Name: name}, func(dst *ggui.Canvas) {
+		dst.Paint(p.row, r)
+	})
+}
 
 // BindDisabled follows r for all navigation buttons without rebuilding.
 func (p *PaginationWidget) BindDisabled(r ggui.Readable[bool]) *PaginationWidget {

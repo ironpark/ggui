@@ -5,6 +5,30 @@ import "github.com/ironpark/ggui"
 // Key setters return the concrete control so identities can be assigned inside
 // widget expressions. Custom controls use Interactive.SetKey to set identity.
 
+// keyed is a control whose identity can be read and given.
+type keyed interface {
+	HitID() any
+	SetKey(any)
+}
+
+// childKey identifies a control a composite builds for itself, such as an
+// option of Radios, by the composite's identity and the part it plays, so
+// a rebuilt composite's parts keep their focus when the composite keeps its
+// own.
+type childKey struct {
+	owner, part any
+}
+
+// ownerOf is the identity a composite's parts are keyed under: its own, or
+// while it has none, the composite itself, which still tells its parts
+// apart from another composite's.
+func ownerOf(i *ggui.Interactive, self any) any {
+	if id := i.HitID(); id != nil {
+		return id
+	}
+	return self
+}
+
 // Key assigns this control an input identity. Configure it before mount.
 func (w *AccordionWidget) Key(k any) *AccordionWidget { w.Interactive.SetKey(k); return w }
 

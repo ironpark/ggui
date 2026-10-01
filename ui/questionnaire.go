@@ -416,10 +416,6 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 		c.Role = pick(item.Multiple, ggui.RoleCheckbox, ggui.RoleRadio)
 		c.SetName(choice.Label)
 		c.SetInert(choice.Disabled)
-		c.SetKey(struct {
-			Q           *QuestionnaireWidget
-			Item, Value string
-		}{q, item.Name, choice.Value})
 		if !choice.Disabled {
 			if q.shortcuts == QuestionLetters && shortcut < 26 {
 				c.shortcut = string(rune('A' + shortcut))
@@ -515,7 +511,14 @@ func (q *QuestionnaireWidget) shortcut(ev ggui.KeyEvent) bool {
 }
 func (q *QuestionnaireWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer q.props.Layout()()
-	return q.view.Layout(c, env)
+	size := q.view.Layout(c, env)
+	// The choices are built before a Key given after Questionnaire, so
+	// they take the questionnaire's identity here; see childKey.
+	owner := ownerOf(&q.Interactive, q)
+	for _, c := range q.choices {
+		c.SetKey(childKey{owner, [2]string{c.item.Name, c.option.Value}})
+	}
+	return size
 }
 func (q *QuestionnaireWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.DescribeNode(r, q, func(dst *ggui.Canvas) { dst.Paint(q.view, r) })

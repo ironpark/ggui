@@ -90,7 +90,7 @@ var keyedControls = []struct {
 	}},
 	{name: "Pagination", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
 		return keyed(ui.Pagination(ggui.State(1), ggui.State(5)), k, n)
-	}, unfocused: "it describes no node of its own", unnamed: true},
+	}, unfocused: "its group node takes no focus"},
 	{name: "Questionnaire", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
 		q := ui.Question{Name: "q", Title: "Pick", Choices: []ui.QuestionOption{{Value: "a", Label: "A"}}}
 		return keyed(ui.Questionnaire(ggui.State(ui.QuestionAnswers{}), q), k, n)
@@ -254,7 +254,6 @@ func TestCalendarKeyKeepsKeyboardAfterMovingRebuild(t *testing.T) {
 }
 
 func TestRadiosKeepFocusedOptionAcrossRebuild(t *testing.T) {
-	t.Skip("BUG: Radios keys each option by its own pointer (radios.go:72), so every rebuild drops the focused option from focus")
 	t.Parallel()
 	selected := ggui.State("a")
 	tick := ggui.State(0)
@@ -274,7 +273,6 @@ func TestRadiosKeepFocusedOptionAcrossRebuild(t *testing.T) {
 }
 
 func TestQuestionnaireKeyKeepsChoiceFocusAcrossRebuild(t *testing.T) {
-	t.Skip("BUG: questionnaire.go:419 keys choices by the *QuestionnaireWidget pointer, not its Key, so a rebuilt keyed questionnaire drops choice focus")
 	t.Parallel()
 	answers := ggui.State(ui.QuestionAnswers{})
 	tick := ggui.State(0)
@@ -295,7 +293,6 @@ func TestQuestionnaireKeyKeepsChoiceFocusAcrossRebuild(t *testing.T) {
 }
 
 func TestInputGroupKeyKeepsEditorFocusAfterMovingRebuild(t *testing.T) {
-	t.Skip("BUG: InputGroup.Hit registers the editor as handler (inputgroup.go:137-141), so the group's Key never identifies a region and a moved group loses focus")
 	t.Parallel()
 	text := ggui.State("")
 	p, offset := moveAndRebuild(t, func() ggui.Widget {
@@ -311,7 +308,6 @@ func TestInputGroupKeyKeepsEditorFocusAfterMovingRebuild(t *testing.T) {
 }
 
 func TestPaginationNameReachesSemantics(t *testing.T) {
-	t.Skip("BUG: Pagination paints only its row (pagination.go:97), so Name and BindName never reach the semantic tree")
 	t.Parallel()
 	p := ggui.NewProbe(ui.Pagination(ggui.State(1), ggui.State(3)).Name("Results pages"), ggui.Sz(480, 80))
 	defer p.Close()

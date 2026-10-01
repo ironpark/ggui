@@ -287,10 +287,6 @@ func FuzzChartPolarHitMatchesPaint(f *testing.F) {
 		if len(raw) == 0 || len(raw) > 48 {
 			t.Skip()
 		}
-		if math.Abs(float64(start)) > 360 {
-			// Covered by TestChartPieHitTestAcceptsAnyStartAngle.
-			t.Skip("BUG: hitIndex assumes the start angle lies within ±540 degrees")
-		}
 		data := make([]ChartDatum, len(raw))
 		for i, b := range raw {
 			v := float64(b)
@@ -330,7 +326,6 @@ func FuzzChartPolarHitMatchesPaint(f *testing.F) {
 }
 
 func TestChartPieHitTestAcceptsAnyStartAngle(t *testing.T) {
-	t.Skip("BUG: chart_geometry.go:243 adds 720 before math.Mod, which stays negative for start angles beyond ±540, so every point hits the first sector")
 	t.Parallel()
 	data := []ChartDatum{{Values: map[string]float64{"a": 1}}, {Values: map[string]float64{"a": 1}}}
 	c := PieChart(data, chartTestConfig[:1]).Angles(900, 1260)
