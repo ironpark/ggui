@@ -3,8 +3,8 @@ module github.com/ironpark/ggui/examples/sqlite
 go 1.27.0
 
 require (
-	github.com/ironpark/ggfx v0.0.0-20261001022904-86e443928a9e
-	github.com/ironpark/ggui v0.0.0-20260930135854-d2dc1ab2fe2a
+	github.com/ironpark/ggfx v0.0.0-20261001055153-6909aef12aef
+	github.com/ironpark/ggui v0.0.0-20261001095826-7e9df6021596
 	modernc.org/sqlite v1.59.0
 )
 
@@ -18,10 +18,8 @@ require (
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c // indirect
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
 	golang.org/x/image v0.46.0 // indirect
-	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
