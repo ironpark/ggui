@@ -1139,6 +1139,12 @@ type ScrollWidget struct {
 	follow     bool
 	id         any
 
+	// FollowEnd's state. A scroll laid out for the first time cannot know
+	// yet whether it replaces one that was at its end, as Adopt says only
+	// at paint, so it leaves the decision to Paint.
+	laidOut, decideAtPaint bool
+	adoptedAtEnd           *bool // whether the scroll it adopted was at its end
+
 	childSize             Size
 	viewport              Size
 	laidAt                float64 // the offset the child was last laid out for
@@ -1163,8 +1169,8 @@ func (s *ScrollWidget) Adopt(prev any) {
 	if p, ok := prev.(*ScrollWidget); ok {
 		s.dragging, s.dragStart, s.dragOffset = p.dragging, p.dragStart, p.dragOffset
 		s.thumbHovered = p.thumbHovered
-		// Whether the old one was at its end, for FollowEnd.
-		s.childSize, s.viewport = p.childSize, p.viewport
+		atEnd := p.laidOut && p.atEnd()
+		s.adoptedAtEnd = &atEnd
 		if s.bound != nil {
 			return
 		}
@@ -1276,13 +1282,30 @@ func (s *ScrollWidget) Layout(c Constraints, env Env) Size {
 	}
 	s.cache, _ = env.Get(cacheOwner)
 	// Judged against the last layout, before the content can grow.
-	follow := s.follow && s.atEnd()
+	follow := s.follow && s.laidOut && s.atEnd()
+	if s.follow && !s.laidOut {
+		s.decideAtPaint = true
+	}
 	s.laidAt = s.position()
 	vp := Viewport{Offset: s.laidAt, Extent: s.extent(c.Max()), Horizontal: s.horizontal}
 	s.childSize = s.child.Layout(Loose(inner), env.With(viewportKey, vp))
 	s.viewport = c.Constrain(Sz(bounded(c.MaxW, s.childSize.W), bounded(c.MaxH, s.childSize.H)))
+	s.laidOut = true
 	s.scrollTo(pick(follow, s.maxOffset(), s.position()))
 	return s.viewport
+}
+
+// followFirst settles FollowEnd for a scroll's first layout, once Adopt
+// has had its chance: a new scroll starts at the end, and one that
+// replaces another follows if that one was at its end.
+func (s *ScrollWidget) followFirst() {
+	if !s.decideAtPaint {
+		return
+	}
+	s.decideAtPaint = false
+	if s.adoptedAtEnd == nil || *s.adoptedAtEnd {
+		s.scrollTo(s.maxOffset())
+	}
 }
 
 // atEnd reports whether the window shows the end of the content, within
@@ -1297,7 +1320,8 @@ func (s *ScrollWidget) Paint(dst *Canvas, r Rect) {
 		s.cache.invalidate()
 	}
 	s.rect = r
-	dst.HitPointer(r, s)
+	dst.HitPointer(r, s) // adopts the scroll this one replaces
+	s.followFirst()
 	origin := r.Origin
 	if s.horizontal {
 		origin.X -= s.position()

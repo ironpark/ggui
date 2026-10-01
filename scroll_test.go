@@ -303,3 +303,45 @@ func TestScrollFollowEnd(t *testing.T) {
 		p.Close()
 	}
 }
+
+// A scroll rebuilt with its content, as a View showing a growing log
+// rebuilds it every line, keeps following or not as the old one did: the
+// new one is laid out before it adopts the old one's state.
+func TestScrollFollowEndAcrossContentRebuilds(t *testing.T) {
+	t.Parallel()
+	for _, bound := range []bool{false, true} {
+		lines := State(10)
+		pos := State(0.0)
+		var current *ScrollWidget
+		p := ProbeBuilder(func() Widget {
+			return Column(Text("header"), View(lines, func(n int) Widget {
+				current = Scroll(Box().Size(50, float64(n*20))).FollowEnd()
+				if bound {
+					current.BindOffset(pos)
+				}
+				return Box(current).Height(100)
+			}))
+		}, Sz(50, 200))
+		offset := func() float64 { return Untrack(current.position) }
+		step := func(what string, want float64) {
+			t.Helper()
+			p.Frame()
+			p.Frame()
+			if got := offset(); got != want {
+				t.Fatalf("bound=%v, %s: offset %v, want %v", bound, what, got, want)
+			}
+		}
+		step("opened", 100)
+		lines.Set(15)
+		step("grew at the end", 200)
+		p.Scroll(Pt(10, 50), Pt(0, 2))
+		step("scrolled back", 160)
+		lines.Set(20)
+		step("grew while scrolled back", 160)
+		p.Scroll(Pt(10, 50), Pt(0, -100))
+		step("scrolled to the end", 300)
+		lines.Set(25)
+		step("grew after returning", 400)
+		p.Close()
+	}
+}
