@@ -64,4 +64,5 @@ var roles = map[icons.Role]string{
 	icons.Search: "search", icons.Alert: "circle-alert", icons.Info: "info", icons.Plus: "plus",
 	icons.Minus: "minus", icons.Download: "download", icons.File: "file", icons.Sun: "sun",
 	icons.Moon: "moon", icons.Grip: "grip-vertical", icons.Loader: "loader-circle",
+	icons.Undo: "undo-2", icons.Redo: "redo-2",
 }

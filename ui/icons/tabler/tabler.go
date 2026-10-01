@@ -76,4 +76,6 @@ var roles = map[icons.Role]string{
 	icons.Moon:         "moon",
 	icons.Grip:         "grip-vertical",
 	icons.Loader:       "loader-2",
+	icons.Undo:         "arrow-back-up",
+	icons.Redo:         "arrow-forward-up",
 }

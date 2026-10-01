@@ -30,6 +30,8 @@ const (
 	Moon         Role = "moon"
 	Grip         Role = "grip"
 	Loader       Role = "loader"
+	Undo         Role = "undo"
+	Redo         Role = "redo"
 )
 
 // Set resolves semantic roles to reusable SVG assets. Return nil for an unknown
