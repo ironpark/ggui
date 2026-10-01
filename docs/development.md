@@ -23,6 +23,7 @@ On macOS, install it with `brew install go-task`.
 | `task test` | Run `go test ./...`. |
 | `task vet` | Run `go vet ./...`. |
 | `task lint` | Run `staticcheck` once per platform, since code one platform does not compile looks unused on it. |
+| `task fuzz FUZZTIME=1m` | Run every fuzz target for `FUZZTIME` each, 10s by default. |
 | `task fmt` | Format Go sources. |
 | `task tidy` | Update module dependency metadata. |
 | `task bench COUNT=6` | Run package benchmarks repeatedly for comparison. |
@@ -64,6 +65,9 @@ request:
 - **lint**: `gofmt`, `go vet`, the Windows vet of `task vet:windows`,
   `task lint`'s staticcheck for every platform, and builds for
   linux/riscv64 and windows/arm64.
+- **fuzz**: every fuzz target for 5s. `go test` already runs their seed
+  inputs; this goes a little past them. A failing input lands in the
+  package's `testdata/fuzz`: commit it with the fix, and it stays a test.
 
 A test that presses a shortcut should use `Probe.Key("cmd+k")` rather
 than a `Mods` literal: `cmd` is ⌘ on macOS and Ctrl elsewhere, and the

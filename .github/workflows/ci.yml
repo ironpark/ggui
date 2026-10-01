@@ -69,6 +69,18 @@ jobs:
           ./internal/goid ./internal/reactive ./internal/textedit
           ./internal/emojidata ./a11y ./inspect ./runtime
 
+  # Each fuzz target's seeds already run in test; this explores a little
+  # beyond them on every push.
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Fuzz
+        run: FUZZTIME=5s internal/tools/fuzz.sh
+
   lint:
     runs-on: ubuntu-latest
     steps:

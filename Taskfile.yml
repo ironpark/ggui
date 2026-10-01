@@ -73,6 +73,11 @@ tasks:
       - for: [darwin/arm64, linux/amd64, windows/amd64, windows/arm64]
         cmd: 'GOOS={{splitList "/" .ITEM | first}} GOARCH={{splitList "/" .ITEM | last}} staticcheck ./... ./examples/sqlite/...'
 
+  fuzz:
+    desc: Run every fuzz target for FUZZTIME each (default 10s)
+    cmds:
+      - internal/tools/fuzz.sh
+
   fmt:
     desc: Format Go sources
     cmds:
