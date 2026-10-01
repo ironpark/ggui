@@ -216,13 +216,13 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 	t := s.theme
 	open := s.popup.IsOpen()
-	s.box.Border(t.BorderWidth, pick(open || s.Focused, t.Ring, colorOr(t.InputBorder, t.Border)))
+	s.box.Border(t.BorderWidth, pick(open || s.Focused, t.Ring, t.InputBorder))
 	s.Hit(dst, r, s, ggui.CursorShapePointer)
 	dst.Paint(s.box, r)
 	dst.Clip(r).Paint(s.text, ggui.Rct(ggui.Pt(r.Origin.X+s.pad.Left, r.Origin.Y+(r.Size.H-s.textSize.H)/2), s.textSize))
 	// Chevron, pointing down, or up while open.
 	center := ggui.Pt(r.Origin.X+r.Size.W-t.Space-t.ControlSize*0.3, r.Origin.Y+r.Size.H/2)
-	chevron(dst, s.env, center, pick(open, -2.0, 2.0), pick(s.IsInert(), t.MutedFg, t.Fg))
+	chevron(dst, s.env, t, center, pick(open, -2.0, 2.0), pick(s.IsInert(), t.MutedFg, t.Fg))
 	s.FocusRing(dst, r, t.Radius, t.Ring)
 }
 
@@ -341,7 +341,7 @@ func (it *selectItem[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	it.Sync()
 	t := uitheme.From(env)
 	it.pad = t.ItemPad
-	it.text.Color(colorOr(t.PopoverFg, t.Fg))
+	it.text.Color(t.PopoverFg) // Paint swaps in AccentFg under the highlight
 	inner := it.pad.Shrink(c).Loosen()
 	inner.MaxW = max(0, inner.MaxW-t.ControlSize-t.ControlGap)
 	it.textSize = it.text.Layout(inner, env)
@@ -366,14 +366,16 @@ func (it *selectItem[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Describe(r, it)
 	dst.HitPointer(r, it)
 	dst.HitCursor(r, ggui.CursorShapePointer)
-	if it.Hovered || it.active {
-		dst.FillRoundRect(r, t.RadiusSm, colorOr(t.Accent, t.Muted))
+	lit := it.Hovered || it.active
+	if lit {
+		dst.FillRoundRect(r, t.RadiusSm, t.Accent)
 	}
+	it.text.Color(pick(lit, t.AccentFg, t.PopoverFg))
 	at := ggui.Pt(r.Origin.X+it.pad.Left+t.ControlSize+t.ControlGap, r.Origin.Y+(r.Size.H-it.textSize.H)/2)
 	dst.Clip(r).Paint(it.text, ggui.Rct(at, it.textSize))
 	if it.index == it.owner.index() {
-		x, y := r.Origin.X+it.pad.Left, r.Origin.Y+r.Size.H/2
-		paintIcon(dst, it.owner.env, icons.Check, ggui.Rct(ggui.Pt(x, y-8), ggui.Sz(16, 16)), t.Primary, 0)
+		center := ggui.Pt(r.Origin.X+it.pad.Left+t.ControlSize/2, r.Origin.Y+r.Size.H/2)
+		paintIconAt(dst, it.owner.env, icons.Check, center, t.IconSize, t.Primary, 0)
 	}
 }
 

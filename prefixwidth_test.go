@@ -10,7 +10,7 @@ import (
 func TestPrefixWidthsMatchMeasuringEachPrefix(t *testing.T) {
 	t.Parallel()
 	useTestEmoji(t)
-	face := fallbackFont().face(20)
+	face := fallbackFont().face(20, 0)
 	for _, s := range []string{"", "Hello, world", "a b  c", "안녕하세요 세계", "été", "ok 👍🏽 then 👨‍👩‍👧‍👦!", "1️⃣2"} {
 		width := prefixWidths(s, face)
 		for b := 0; ; b = textedit.NextGrapheme(s, b) {

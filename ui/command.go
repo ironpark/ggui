@@ -232,7 +232,7 @@ func (c *CommandWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 		parts = append(parts, Divider(), ggui.Padding(Caption("↑↓ Navigate   ↵ Select"), 8, 12))
 	}
 	c.body = ggui.Column(parts...).Gap(0).Align(ggui.AlignStretch)
-	c.panel = ggui.Box(c.body).Fill(t.Popover).Border(t.BorderWidth, t.Border).Radius(t.Radius)
+	c.panel = ggui.Box(ggui.Styled(c.body).Color(t.PopoverFg)).Fill(t.Popover).Border(t.BorderWidth, t.Border).Radius(t.Radius)
 	if c.borderless {
 		c.panel.Border(0, nil)
 	}

@@ -159,14 +159,16 @@ func (s *SidebarWidget) current() int {
 func (s *SidebarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer s.props.Layout()()
 	s.Sync()
+	// Children see the sidebar palette in place of the page's, so a button
+	// or badge inside an item paints against the sidebar surface, and the
+	// tokens that follow these follow them here too.
 	t := uitheme.From(env)
-	t.Card, t.Fg = colorOr(t.Sidebar, t.Card), colorOr(t.SidebarFg, t.Fg)
-	t.Muted = colorOr(t.SidebarAccent, t.Muted)
-	t.Border, t.Ring = colorOr(t.SidebarBorder, t.Border), colorOr(t.SidebarRing, t.Ring)
-	// Children see the remapped palette, not only its text color, so a
-	// button or badge inside an item paints against the sidebar surface.
-	t.Text.Color = t.Fg
-	env = t.Apply(env).WithText(ggui.TextStyle{Color: t.Fg})
+	t.Card, t.Fg = t.Sidebar, t.SidebarFg
+	t.Primary, t.PrimaryFg = t.SidebarPrimary, t.SidebarPrimaryFg
+	t.Accent, t.AccentFg = t.SidebarAccent, t.SidebarAccentFg
+	t.Border, t.Ring = t.SidebarBorder, t.SidebarRing
+	t = t.Resolve()
+	env = t.Apply(env)
 	s.theme = t
 	s.hidden = s.collapsed.Get()
 	if s.hidden {
@@ -188,9 +190,9 @@ func (s *SidebarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		case e.section:
 			l.Style(t.Caption).Color(t.MutedFg)
 		case e.disabled || s.IsInert():
-			l.Style(t.Text).Color(mix(t.MutedFg, t.Card, t.DisabledMix))
+			l.Style(t.Text).Color(t.Disabled(t.MutedFg))
 		default:
-			l.Style(t.Text).Color(pick(i == cur, colorOr(t.SidebarAccentFg, t.Fg), t.MutedFg))
+			l.Style(t.Text).Color(pick(i == cur, t.AccentFg, t.MutedFg))
 		}
 		size := l.Layout(ggui.Loose(inner.Max()), env)
 		s.labelSize = append(s.labelSize, size)
@@ -249,9 +251,9 @@ func (s *SidebarWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		}
 		switch {
 		case i == cur:
-			dst.FillRoundRect(row, t.RadiusSm, t.Muted)
+			dst.FillRoundRect(row, t.RadiusSm, t.Accent)
 		case i == hover:
-			dst.FillRoundRect(row, t.RadiusSm, mix(t.Card, t.Fg, t.HoverMix))
+			dst.FillRoundRect(row, t.RadiusSm, t.Hovered(t.Card))
 		}
 		dst.Paint(s.labels[i], label)
 		if i == s.active {

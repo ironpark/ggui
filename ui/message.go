@@ -49,11 +49,11 @@ func (m *MessageWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	m.bodySize = m.content.Layout(loose, env.With(messageEndKey, m.end))
 	m.headerSize, m.footerSize = ggui.Size{}, ggui.Size{}
 	if m.headerView != nil {
-		m.headerView.Size(12).Color(uitheme.From(env).MutedFg)
+		m.headerView.Style(uitheme.From(env).Caption)
 		m.headerSize = m.headerView.Layout(loose, env)
 	}
 	if m.footerView != nil {
-		m.footerView.Size(12).Color(uitheme.From(env).MutedFg)
+		m.footerView.Style(uitheme.From(env).Caption)
 		m.footerSize = m.footerView.Layout(loose, env)
 	}
 	h := m.bodySize.H

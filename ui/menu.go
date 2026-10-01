@@ -310,7 +310,7 @@ func (it *MenuItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	it.theme = t
 	it.popup, _ = ggui.PopupOf(env)
 	it.pad = t.ItemPad
-	it.text.Color(pick(it.IsInert(), t.MutedFg, colorOr(t.PopoverFg, t.Fg)))
+	it.text.Color(pick(it.IsInert(), t.Disabled(t.PopoverFg), t.PopoverFg)) // Paint swaps in AccentFg under the highlight
 	inner := it.pad.Shrink(c).Loosen()
 	gap := 0.0
 	if it.shortcut != nil {
@@ -331,9 +331,11 @@ func (it *MenuItemWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if !it.IsInert() {
 		dst.HitPointer(r, it)
 		dst.HitCursor(r, ggui.CursorShapePointer)
-		if it.active || (it.onHover == nil && it.Hovered) {
-			dst.FillRoundRect(r, t.RadiusSm, colorOr(t.Accent, t.Muted))
+		lit := it.active || (it.onHover == nil && it.Hovered)
+		if lit {
+			dst.FillRoundRect(r, t.RadiusSm, t.Accent)
 		}
+		it.text.Color(pick(lit, t.AccentFg, t.PopoverFg))
 	}
 	if it.shortcut != nil {
 		dst.Paint(it.shortcut, ggui.Rct(ggui.Pt(r.Origin.X+r.Size.W-it.pad.Right-it.shortcutSize.W, r.Origin.Y+(r.Size.H-it.shortcutSize.H)/2), it.shortcutSize))

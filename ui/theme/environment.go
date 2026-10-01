@@ -8,10 +8,15 @@ import (
 
 var key = ggui.NewEnvKey[Theme]("ui theme")
 
-// TitleKey and CaptionKey hold named text styles for layout-time resolution.
+// TitleKey, HeadingKey, LabelKey, CaptionKey and MonoKey hold the theme's
+// named text styles for layout-time resolution, as TextWidget.StyleKey
+// takes them.
 var (
 	TitleKey   = ggui.NewEnvKey[ggui.TextStyle]("ui title")
+	HeadingKey = ggui.NewEnvKey[ggui.TextStyle]("ui heading")
+	LabelKey   = ggui.NewEnvKey[ggui.TextStyle]("ui label")
 	CaptionKey = ggui.NewEnvKey[ggui.TextStyle]("ui caption")
+	MonoKey    = ggui.NewEnvKey[ggui.TextStyle]("ui mono")
 )
 
 // Importing theme installs the default UI environment. Applications can replace
@@ -26,11 +31,14 @@ func From(env ggui.Env) Theme {
 	return Default()
 }
 
-// Apply supplies this theme and the corresponding core styles to env.
-// Unrelated environment values, including accessibility preferences, survive.
+// Apply supplies this theme, resolved, and the corresponding core styles to
+// env. Unrelated environment values, including accessibility preferences,
+// survive.
 func (t Theme) Apply(env ggui.Env) ggui.Env {
+	t = t.Resolve()
 	return env.With(key, t).WithText(t.Text).
-		With(TitleKey, t.Title).With(CaptionKey, t.Caption).
+		With(TitleKey, t.Title).With(HeadingKey, t.Heading).With(LabelKey, t.Label).
+		With(CaptionKey, t.Caption).With(MonoKey, t.Mono).
 		With(ggui.BackgroundKey, t.Bg).With(ggui.SpacingKey, t.Space).
 		With(ggui.EditorStyleKey, ggui.EditorStyle{Muted: t.MutedFg, Selection: t.Selection}).
 		With(ggui.ScrollStyleKey, ggui.ScrollStyle{Color: t.MutedFg, HoverColor: t.Fg, Duration: t.MotionFast}).
@@ -43,17 +51,15 @@ func Use() Theme { return From(ggui.UseEnv()) }
 // Set replaces the application theme while preserving other environment
 // values, and matches the windows' title bars to it.
 func Set(t Theme) {
+	t = t.Resolve()
 	ggui.SetEnv(t.Apply(ggui.Untrack(ggui.UseEnv).WithTextReplaced(t.Text)))
-	if t.Bg != nil {
-		ggui.SetAppearance(appearanceOf(t.Bg))
-	}
+	ggui.SetAppearance(appearanceOf(t.Bg))
 }
 
 // appearanceOf is the platform appearance that suits a theme whose
 // background is bg: dark when bg is closer to black than to white.
 func appearanceOf(bg color.Color) ggui.Appearance {
-	r, g, b, _ := bg.RGBA()
-	if r+g+b < 3*0x8000 {
+	if isDark(bg) {
 		return ggui.AppearanceDark
 	}
 	return ggui.AppearanceLight
@@ -74,4 +80,17 @@ func Bind(sw ggui.Readable[bool], on, off Theme) func() {
 // With applies a theme to a subtree at layout time.
 func With(t Theme, child ggui.Widget) *ggui.EnvWidget {
 	return ggui.WithEnv(t.Apply, child)
+}
+
+// Override changes some tokens of the theme the subtree inherits, as a CSS
+// variable set on an element does. Tokens that follow the ones fn changes
+// follow them here too:
+//
+//	theme.Override(func(t *theme.Theme) { t.Primary = brand }, form)
+func Override(fn func(*Theme), child ggui.Widget) *ggui.EnvWidget {
+	return ggui.WithEnv(func(env ggui.Env) ggui.Env {
+		t := From(env)
+		fn(&t)
+		return t.Apply(env)
+	}, child)
 }

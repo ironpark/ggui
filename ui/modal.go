@@ -28,7 +28,7 @@ type modal struct {
 }
 
 // setTitle puts a heading above the content and names the panel with it.
-func (m *modal) setTitle(s string) { m.title, m.name = Title(s).Size(18), s }
+func (m *modal) setTitle(s string) { m.title, m.name = Heading(s), s }
 
 // Close closes the panel.
 func (m *modal) Close() {
@@ -57,7 +57,7 @@ func (m *modal) build(env ggui.Env) *ggui.BoxWidget {
 	if m.title != nil {
 		body = ggui.Column(m.title, m.content).Gap(t.Space * 2).Align(ggui.AlignStretch)
 	}
-	m.panel = ggui.Box(body).Padding(t.CardPad).Fill(t.Popover).Shadow(t.OverlayShadow)
+	m.panel = ggui.Box(ggui.Styled(body).Color(t.PopoverFg)).Padding(t.CardPad).Fill(t.Popover).Shadow(t.OverlayShadow)
 	if m.compact {
 		m.panel.Pad(0)
 	}

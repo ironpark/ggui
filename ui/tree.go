@@ -266,9 +266,11 @@ func (g *treeToggle[T, K]) HandlePointer(ev ggui.PointerEvent) bool {
 // chevronX is where the row's chevron starts, and inset where its label
 // does.
 func (r *treeRow[T, K]) chevronX(e treeEntry[T, K]) float64 {
-	return 8 + float64(e.depth)*r.tree.indent
+	return r.theme.Space + float64(e.depth)*r.tree.indent
 }
-func (r *treeRow[T, K]) inset(e treeEntry[T, K]) float64 { return r.chevronX(e) + 20 }
+func (r *treeRow[T, K]) inset(e treeEntry[T, K]) float64 {
+	return r.chevronX(e) + r.theme.IconSize + r.theme.Space/2
+}
 
 func (r *treeRow[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	r.env, r.theme = env, uitheme.From(env)
@@ -317,9 +319,9 @@ func (r *treeRow[T, K]) paint(dst *ggui.Canvas, rc ggui.Rect) {
 	if e.hasChildren {
 		x := rc.Origin.X + r.chevronX(e)
 		turn := dst.Ease(r.Anchor(rc), treeChevronSlot, pick(e.open, 1.0, 0.0), r.motion)
-		paintIcon(dst, r.env, icons.ChevronRight, ggui.Rct(ggui.Pt(x, rc.Origin.Y+(rc.Size.H-16)/2), ggui.Sz(16, 16)), th.MutedFg, turn*math.Pi/2)
+		paintIconAt(dst, r.env, icons.ChevronRight, ggui.Pt(x+th.IconSize/2, rc.Center().Y), th.IconSize, th.MutedFg, turn*math.Pi/2)
 		if !r.IsInert() {
-			dst.HitPointer(ggui.Rct(ggui.Pt(x-4, rc.Origin.Y), ggui.Sz(24, rc.Size.H)), &r.toggle)
+			dst.HitPointer(ggui.Rct(ggui.Pt(x-th.Space/2, rc.Origin.Y), ggui.Sz(th.IconSize+th.Space, rc.Size.H)), &r.toggle)
 		}
 	}
 	dst.Clip(rc).Paint(r.box, rc)

@@ -114,7 +114,7 @@ func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// the body it reveals.
 	v := c.progress
 	cx, cy := r.Origin.X+c.pad.Left+t.ControlSize*0.4, r.Origin.Y+c.headerH/2
-	paintIcon(dst, c.env, icons.ChevronRight, ggui.Rct(ggui.Pt(cx-8, cy-8), ggui.Sz(16, 16)), t.MutedFg, v*math.Pi/2)
+	paintIconAt(dst, c.env, icons.ChevronRight, ggui.Pt(cx, cy), t.IconSize, t.MutedFg, v*math.Pi/2)
 	dst.Paint(c.title, ggui.Rct(ggui.Pt(r.Origin.X+c.pad.Left+t.ControlSize+t.ControlGap, r.Origin.Y+c.pad.Top), c.titleSize))
 	c.FocusRing(dst, header, t.Radius, t.Ring)
 	paintDisclosure(dst, c.env, c.content, ggui.Pt(r.Origin.X, r.Origin.Y+c.headerH), r.Size.W, c.bodySize, c.progress, open)

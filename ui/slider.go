@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"image/color"
 	"math"
 
 	"github.com/ironpark/ggui"
@@ -120,7 +119,7 @@ func (s *SliderWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer s.props.Layout()()
 	s.Sync()
 	s.theme = uitheme.From(env)
-	return c.Constrain(ggui.Sz(bounded(c.MaxW, defaultStripe), sliderKnob*2+4))
+	return c.Constrain(ggui.Sz(bounded(c.MaxW, defaultStripe), s.theme.ControlSize+4))
 }
 
 // fraction returns where value sits in the range, 0 to 1.
@@ -133,11 +132,12 @@ func (s *SliderWidget) fraction() float64 {
 
 // setFromX moves the value to where logical x falls on the track.
 func (s *SliderWidget) setFromX(x float64) {
-	track := s.rect.Size.W - 2*sliderKnob
+	knob := s.theme.ControlSize / 2
+	track := s.rect.Size.W - 2*knob
 	if track <= 0 {
 		return
 	}
-	f := clamp((x-s.rect.Origin.X-sliderKnob)/track, 0, 1)
+	f := clamp((x-s.rect.Origin.X-knob)/track, 0, 1)
 	v := s.min + f*(s.max-s.min)
 	if s.step > 0 {
 		v = s.min + math.Round((v-s.min)/s.step)*s.step
@@ -151,18 +151,18 @@ func (s *SliderWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	s.rect = r
 	s.Hit(dst, r, s, ggui.CursorShapePointer)
 	cy := r.Origin.Y + r.Size.H/2
-	knob := min(float64(sliderKnob), r.Size.W/2, r.Size.H/2)
+	knob := min(t.ControlSize/2, r.Size.W/2, r.Size.H/2)
 	x0, x1 := r.Origin.X+knob, r.Origin.X+r.Size.W-knob
 	kx := x0 + (x1-x0)*s.fraction()
-	dst.FillRoundRect(ggui.Rct(ggui.Pt(x0, cy-2), ggui.Sz(x1-x0, 4)), 2, t.Border)
-	accent := pick(s.IsInert(), fade(t.Primary, .5), t.Primary)
+	dst.FillRoundRect(ggui.Rct(ggui.Pt(x0, cy-2), ggui.Sz(x1-x0, 4)), 2, t.Muted)
+	accent := pick(s.IsInert(), t.Disabled(t.Primary), t.Primary)
 	dst.FillRoundRect(ggui.Rct(ggui.Pt(x0, cy-2), ggui.Sz(kx-x0, 4)), 2, accent)
 	radius := knob
 	if !s.IsInert() && (s.Hovered || s.Pressed || (s.Focused && s.FocusVisible)) {
-		dst.StrokeRoundRect(ggui.Rct(ggui.Pt(kx-radius-2, cy-radius-2), ggui.Sz(2*radius+4, 2*radius+4)), radius+2, 4, fade(t.Ring, .3))
+		dst.StrokeRoundRect(ggui.Rct(ggui.Pt(kx-radius-2, cy-radius-2), ggui.Sz(2*radius+4, 2*radius+4)), radius+2, 4, t.Halo(t.Ring))
 	}
 	dst.FillCircle(ggui.Pt(kx, cy), radius, accent)
-	dst.FillCircle(ggui.Pt(kx, cy), max(radius-1, 0), pick(s.IsInert(), fade(color.White, .5), color.Color(color.White)))
+	dst.FillCircle(ggui.Pt(kx, cy), max(radius-t.BorderWidth, 0), pick(s.IsInert(), t.Disabled(t.Bg), t.Bg))
 	if s.Focused && s.FocusVisible {
 		dst.StrokeRoundRect(ggui.Rct(ggui.Pt(kx-radius-2, cy-radius-2), ggui.Sz(2*radius+4, 2*radius+4)), radius+2, 2, t.Primary)
 	}

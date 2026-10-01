@@ -19,7 +19,8 @@ type TextStyle struct {
 	Font       *Font
 	Size       float64 // pixels
 	Color      color.Color
-	LineHeight float64 // multiple of Size between baselines
+	LineHeight float64    // multiple of Size between baselines
+	Weight     FontWeight // drawn with the Font's face nearest this weight
 }
 
 // Merge returns s with every set field of o laid over it.
@@ -35,6 +36,9 @@ func (s TextStyle) Merge(o TextStyle) TextStyle {
 	}
 	if o.LineHeight != 0 {
 		s.LineHeight = o.LineHeight
+	}
+	if o.Weight != 0 {
+		s.Weight = o.Weight
 	}
 	return s
 }

@@ -50,8 +50,9 @@ func TestButtonTapsAndDisables(t *testing.T) {
 func TestButtonSizesFromThemePadding(t *testing.T) {
 	t.Parallel()
 	got := ui.Button("go", nil).Layout(ggui.Loose(ggui.Sz(300, 300)), ggui.Env{})
-	text := ggui.Text("go").Layout(ggui.Loose(ggui.Sz(300, 300)), ggui.Env{})
 	th := uitheme.Default()
+	// The label is drawn in the theme's Label style, a medium weight.
+	text := ggui.Text("go").Style(th.Label).Layout(ggui.Loose(ggui.Sz(300, 300)), ggui.Env{})
 	if got.W != text.W+th.ButtonPad.Left+th.ButtonPad.Right || got.H != text.H+th.ButtonPad.Top+th.ButtonPad.Bottom {
 		t.Fatalf("button %v around text %v, want theme padding", got, text)
 	}
@@ -410,7 +411,7 @@ func TestCollapsibleTogglesAndHidesContent(t *testing.T) {
 func TestCardBadgeProgressLayout(t *testing.T) {
 	t.Parallel()
 	v := ggui.State(0.5)
-	tree := ggui.Column(ui.Card(ggui.Text("x")), ui.Badge("new").Accent(), ui.Progress(v))
+	tree := ggui.Column(ui.Card(ggui.Text("x")), ui.Badge("new").Primary(), ui.Progress(v))
 	p := ggui.NewProbe(tree, ggui.Sz(200, 200))
 	defer p.Close()
 	if s := p.Frame(); s.W != 200 {

@@ -22,18 +22,19 @@ func panelBox(b *ggui.BoxWidget, t uitheme.Theme) *ggui.BoxWidget {
 func fieldBox(b *ggui.BoxWidget, t uitheme.Theme, focused, inert bool) *ggui.BoxWidget {
 	return b.Padding(t.FieldPad).Radius(t.Radius).
 		Fill(pick(inert, t.Card, t.Input)).
-		Border(t.BorderWidth, pick(focused, t.Ring, colorOr(t.InputBorder, t.Border)))
+		Border(t.BorderWidth, pick(focused, t.Ring, t.InputBorder))
 }
 
 // chevron resolves the directional role shared by selects and accordions.
 // dy points the tip down when positive and up when negative.
-func chevron(dst *ggui.Canvas, env ggui.Env, center ggui.Point, dy float64, col color.Color) {
-	paintIcon(dst, env, pick(dy < 0, icons.ChevronUp, icons.ChevronDown), ggui.Rct(center.Add(ggui.Pt(-8, -8)), ggui.Sz(16, 16)), col, 0)
+func chevron(dst *ggui.Canvas, env ggui.Env, t uitheme.Theme, center ggui.Point, dy float64, col color.Color) {
+	paintIconAt(dst, env, pick(dy < 0, icons.ChevronUp, icons.ChevronDown), center, t.IconSize, col, 0)
 }
 
-// fieldHalo draws the focus ring just outside a text field.
-func fieldHalo(dst *ggui.Canvas, r ggui.Rect, radius float64, ring color.Color) {
-	dst.StrokeRoundRect(ggui.Rct(r.Origin.Add(ggui.Pt(-2, -2)), ggui.Sz(r.Size.W+4, r.Size.H+4)), radius+2, 3, fade(ring, .5))
+// fieldHalo draws the focus ring just outside a text field, at the theme's
+// halo opacity.
+func fieldHalo(dst *ggui.Canvas, t uitheme.Theme, r ggui.Rect, radius float64, ring color.Color) {
+	dst.StrokeRoundRect(ggui.Rct(r.Origin.Add(ggui.Pt(-2, -2)), ggui.Sz(r.Size.W+4, r.Size.H+4)), radius+2, 3, t.Halo(ring))
 }
 
 // fieldRing is the focus ring for a field: the theme's, or the destructive
@@ -47,13 +48,17 @@ func fieldRing(t uitheme.Theme, invalid bool) color.Color {
 
 // destructiveRing is the focus ring of anything that warns: destructive
 // buttons and invalid fields.
-func destructiveRing(t uitheme.Theme) color.Color { return fade(t.Destructive, .4) }
+func destructiveRing(t uitheme.Theme) color.Color { return fade(t.Destructive, t.RingAlpha*.8) }
 
 // isDark reports whether c is closer to black than to white.
 func isDark(c color.Color) bool {
 	r, g, b, _ := c.RGBA()
 	return r+g+b < 3*32768
 }
+
+// iconButtonSide is the side of a square button holding one icon, as
+// ButtonIcon pads it.
+func iconButtonSide(t uitheme.Theme) float64 { return t.IconSize + 2*t.ButtonPad.Top }
 
 // paintDisclosure paints content folding open below y: the body is clipped
 // to progress of its height, inert while closing, and asks for another

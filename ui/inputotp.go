@@ -293,20 +293,18 @@ func (o *InputOTPWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 }
 func (o *InputOTPWidget) paintSlots(d *ggui.Canvas, r ggui.Rect, state ggui.TextInputState) ggui.Rect {
 	t := o.theme
-	fg, border, fill := t.Fg, colorOr(t.InputBorder, t.Border), t.Input
+	fg, border, fill := t.Fg, t.InputBorder, t.Input
 	if o.invalid {
 		border = t.Destructive
 	}
 	if o.disabled {
-		fg = fade(fg, .5)
-		border = fade(border, .5)
-		fill = fade(fill, .5)
+		fg, border, fill = t.Disabled(fg), t.Disabled(border), t.Disabled(fill)
 	}
 	translate := func(at ggui.Rect) ggui.Rect { at.Origin = at.Origin.Add(r.Origin); return at }
 	for _, group := range o.groups {
 		at := translate(group.rect)
 		d.FillRoundRect(at, t.Radius, fill)
-		d.StrokeRoundRect(at, t.Radius, 1, border)
+		d.StrokeRoundRect(at, t.Radius, t.BorderWidth, border)
 	}
 	for _, sep := range o.separators {
 		at := translate(sep)
@@ -355,7 +353,7 @@ func (o *InputOTPWidget) paintSlots(d *ggui.Canvas, r ggui.Rect, state ggui.Text
 			if o.invalid {
 				ring = t.Destructive
 			}
-			otpSlotBorder(d, ggui.Rct(at.Origin.Add(ggui.Pt(-1, -1)), ggui.Sz(at.Size.W+2, at.Size.H+2)), t.Radius+1, 3, fade(ring, .5), left, right)
+			otpSlotBorder(d, ggui.Rct(at.Origin.Add(ggui.Pt(-1, -1)), ggui.Sz(at.Size.W+2, at.Size.H+2)), t.Radius+1, 3, t.Halo(ring), left, right)
 			otpSlotBorder(d, at, t.Radius, 1, ring, left, right)
 		}
 		if i == active {
@@ -365,7 +363,7 @@ func (o *InputOTPWidget) paintSlots(d *ggui.Canvas, r ggui.Rect, state ggui.Text
 		if i >= len(runes) {
 			col = t.MutedFg
 			if o.disabled {
-				col = fade(col, .5)
+				col = t.Disabled(col)
 			}
 		}
 		o.labels[i].Color(col)

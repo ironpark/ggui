@@ -1,9 +1,8 @@
 package ui
 
 import (
-	"image/color"
-
 	"github.com/ironpark/ggui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // SwitchWidget is a sliding on/off toggle. Build one with Switch.
@@ -50,7 +49,9 @@ func (s *SwitchWidget) Describe() ggui.Node {
 
 // Layout implements Widget.
 func (s *SwitchWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	return s.layout(c, env, ggui.Sz(switchWidth, switchHeight))
+	// The track is a control glyph tall, plus the thumb's inset.
+	h := uitheme.From(env).ControlSize + 4
+	return s.layout(c, env, ggui.Sz(h*1.8, h))
 }
 
 // Paint implements Widget.
@@ -59,11 +60,13 @@ func (s *SwitchWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	box := s.paint(dst, r, s)
 	on := ggui.Untrack(s.on.Get)
 	k := dst.Ease(s.Anchor(box), knobSlot, pick(on, 1.0, 0.0), s.motion)
-	track := mix(colorOr(t.InputBorder, t.Border), t.Primary, k)
-	thumb := mix(color.White, t.PrimaryFg, k)
+	// As shadcn's: the page's background on a light page, and on a dark one
+	// the foreground, or PrimaryFg once on.
+	dark := isDark(t.Bg)
+	track := mix(t.InputBorder, t.Primary, k)
+	thumb := mix(pick(dark, t.Fg, t.Bg), pick(dark, t.PrimaryFg, t.Bg), k)
 	if s.IsInert() {
-		track = fade(track, .5)
-		thumb = fade(thumb, .5)
+		track, thumb = t.Disabled(track), t.Disabled(thumb)
 	}
 	dst.FillRoundRect(box, box.Size.H/2, track)
 	radius := box.Size.H/2 - 2

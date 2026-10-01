@@ -48,7 +48,7 @@ func TestPresetColorConversionAndGeometry(t *testing.T) {
 		s string
 		c color.NRGBA
 	}{{"oklch(0 0 0)", color.NRGBA{0, 0, 0, 255}}, {"oklch(1 0 0)", color.NRGBA{255, 255, 255, 255}}, {"oklch(1 0 0 / 10%)", color.NRGBA{255, 255, 255, 26}}} {
-		if got := parseOKLCH(tc.s); got != tc.c {
+		if got, err := ParseColor(tc.s); err != nil || got != tc.c {
 			t.Fatalf("%s = %v", tc.s, got)
 		}
 	}

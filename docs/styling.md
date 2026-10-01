@@ -27,7 +27,7 @@ that were built long before it.
 - [Inherited styles](#inherited-styles)
 - [Theme tokens](#theme-tokens)
 - [Deriving a theme](#deriving-a-theme)
-- [Porting a shadcn/ui palette](#porting-a-shadcnui-palette)
+- [Porting a shadcn/ui theme](#porting-a-shadcnui-theme)
 - [Tokens of your own](#tokens-of-your-own)
 - [Switching themes](#switching-themes)
 - [Styling a custom widget](#styling-a-custom-widget)
@@ -35,12 +35,13 @@ that were built long before it.
 - [Theme presets](#theme-presets)
 - [GPU shadows](#gpu-shadows)
 - [Component appearance](#component-appearance)
+- [Component variants](#component-variants)
 - [Applying styles and a theme switch](#applying-styles-and-a-theme-switch)
 - [Where it lives](#where-it-lives)
 
 ## Local styles
 
-`TextStyle` is a plain value with four fields:
+`TextStyle` is a plain value with five fields:
 
 ```go
 type TextStyle struct {
@@ -48,6 +49,7 @@ type TextStyle struct {
 	Size       float64     // pixels
 	Color      color.Color
 	LineHeight float64     // multiple of Size between baselines
+	Weight     FontWeight  // drawn with the Font's face nearest it
 }
 ```
 
@@ -60,16 +62,18 @@ ggui.Text("Heading").Style(t.Title)              // the theme's heading
 ggui.Text("Heading").Style(t.Title).Color(brand) // the same, in one other color
 ```
 
-`ui.Title(s)` and `ui.Caption(s)` are shorthands for the same merge against the
-theme's named styles, resolved from the `Env` at layout, so a heading needs no
-`theme.Use`. Note that the named styles are *deltas*: `theme.Default().Title` is
-`{Size: 24}` and nothing else, so a title inherits its font, color and line
-height from `Theme.Text`. Change `Theme.Text.Color` and the headings follow.
+`ui.Title(s)`, `ui.Heading(s)`, `ui.Caption(s)` and `ui.Mono(s)` are
+shorthands for the same merge against the theme's named styles, resolved from
+the `Env` at layout, so a heading needs no `theme.Use`. Note that the named
+styles are *deltas*: `theme.Default().Title` is `{Size: 24, Weight:
+WeightSemibold}` and nothing else, so a title inherits its font, color and
+line height from `Theme.Text`. Change `Theme.Text.Font` and the headings
+follow. See [Fonts](fonts.md#font-weights) for how a weight picks a face.
 
 The full order a `Text` resolves in, every layout:
 
 1. the inherited style from the `Env` (`env.Text()`)
-2. merged with `Theme.Title` or `Theme.Caption`, for `Title` and `Caption`
+2. merged with the theme's named style, for `Title`, `Heading`, `Caption` and `Mono`
 3. merged with the widget's own setters
 4. anything still unset filled from the built-in defaults — Go Regular,
    `DefaultTextSize` (14), black, line height 1.2. This step rarely does
@@ -125,32 +129,37 @@ may supply different colors and geometry.
 ### Colors
 
 The palette follows shadcn/ui's semantic tokens, so each one answers to a CSS
-variable and a palette written for shadcn ports across a line at a time. Every
-surface comes with the foreground drawn on it; use the pair together and text
-stays legible under any theme.
+variable and a theme written for shadcn ports across as it is; see
+[Porting a shadcn/ui theme](#porting-a-shadcnui-theme). Every surface comes
+with the foreground drawn on it; use the pair together and text stays legible
+under any theme.
+
+Tokens marked *follows* take their value from another token unless set; see
+[Deriving a theme](#deriving-a-theme).
 
 | Token | CSS variable | For | Light | Dark |
 | --- | --- | --- | --- | --- |
 | `Bg` / `Fg` | `--background` / `--foreground` | the window and the text on it | white / zinc-900 | zinc-950 / zinc-50 |
-| `Card` / `CardFg` | `--card` / `--card-foreground` | raised inline surfaces and their text | white / zinc-900 | zinc-900 / zinc-50 |
-| `Popover` / `PopoverFg` | `--popover` / `--popover-foreground` | floating surfaces and their text | white / zinc-900 | zinc-900 / zinc-50 |
+| `Card` / `CardFg` | `--card` / `--card-foreground` | raised inline surfaces and their text | follow `Bg` / `Fg` | zinc-900 / follows `Fg` |
+| `Popover` / `PopoverFg` | `--popover` / `--popover-foreground` | floating surfaces: menus, dialogs, toasts | follow `Card` / `CardFg` | same |
 | `Primary` / `PrimaryFg` | `--primary` / `--primary-foreground` | the main action | zinc-900 / zinc-50 | zinc-200 / zinc-900 |
-| `PrimaryHover` | — | `Primary` under the pointer | zinc-700 | zinc-300 |
-| `Secondary` / `SecondaryFg` | `--secondary` / `--secondary-foreground` | a supporting action | zinc-100 / zinc-900 | zinc-800 / zinc-50 |
-| `Muted` / `MutedFg` | `--muted` / `--muted-foreground` | the quiet surface behind a hover; the grey of secondary text | zinc-100 / zinc-500 | zinc-800 / zinc-400 |
+| `PrimaryHover` | — | `Primary` under the pointer | follows `Primary`, at 90% over `Bg` | same |
+| `Secondary` / `SecondaryFg` | `--secondary` / `--secondary-foreground` | a supporting action | zinc-100 / follows `Fg` | zinc-800 / follows `Fg` |
+| `Muted` / `MutedFg` | `--muted` / `--muted-foreground` | the quiet surface of tracks and strips; the grey of secondary text | zinc-100 / zinc-500 | zinc-800 / zinc-400 |
 | `Destructive` / `DestructiveFg` | `--destructive` / `--destructive-foreground` | an irreversible action | `#d32f2f` / zinc-50 | same |
 | `Border` | `--border` | outlines of inputs, dividers, hairlines | zinc-200 | `#323236` |
-| `Input` | — | the painted input surface | white | `#202023` |
-| `InputBorder` | `--input` | input outlines | zinc-200 | `#323236` |
-| `Accent` / `AccentFg` | `--accent` / `--accent-foreground` | highlighted surfaces and their text | zinc-100 / zinc-900 | zinc-800 / zinc-50 |
+| `Input` | — | the painted input surface | follows `Bg` | follows `InputBorder`, at 30% over `Bg` |
+| `InputBorder` | `--input` | input outlines | follows `Border` | same |
+| `Accent` / `AccentFg` | `--accent` / `--accent-foreground` | the highlighted row or button under the pointer, and its text | follow `Muted` / `Fg` | same |
 | `Ring` | `--ring` | the focus halo, deliberately not `Primary` | zinc-400 | zinc-500 |
-| `Selection` | — | selected text | zinc-300 | zinc-700 |
+| `Selection` | — | selected text | follows `Primary`, at 25% over `Bg` | same |
 | `Scrim` | — | dims the window behind a modal | 38% black | same |
 
 The sidebar uses separate `Sidebar`/`SidebarFg`, `SidebarPrimary`/
 `SidebarPrimaryFg`, `SidebarAccent`/`SidebarAccentFg`, `SidebarBorder`, and
-`SidebarRing` tokens. The default sidebar reuses the matching page colors,
-with a near-white light surface and zinc-900 dark surface.
+`SidebarRing` tokens. `Sidebar` is near-white in light and zinc-900 in dark;
+the rest follow the matching page tokens. Inside a `Sidebar`, its children
+see these in place of the page's.
 
 `Chart` contains five optional series colors. Default themes leave them unset,
 so charts fall back to `Primary`; choose a `theme.Preset` or set `Chart` for a
@@ -172,13 +181,14 @@ Three shadows, in the order a surface rises off the page. They are
 
 | Token | For | Default |
 | --- | --- | --- |
-| `Radius` | boxes that ask for one | 8 |
-| `RadiusSm` | rows and pills inside a rounded container | 6 |
-| `RadiusLg` | cards, dialogs, toasts | 12 |
+| `Radius` | buttons, inputs and boxes that ask for one | 8 |
+| `RadiusSm` | rows and pills inside a rounded container | follows `Radius` × 0.75 |
+| `RadiusLg` | cards, dialogs, toasts | follows `Radius` × 1.5 |
 | `Space` | the unit every gap and padding is a multiple of | 8 |
 | `BorderWidth` | the line `Box.Border` and the controls draw | 1 |
-| `ControlSize` | a checkbox or radio glyph | 16 |
+| `ControlSize` | a checkbox or radio glyph; a switch track is 4px taller, a slider knob this wide | 16 |
 | `ControlGap` | between a glyph and its label | 8 |
+| `IconSize` | chevrons, checks and other icons inside a control | 16 |
 | `MenuWidth` | a dropdown panel, which does not stretch | 224 |
 
 ### Padding
@@ -200,67 +210,103 @@ Each is an `EdgeInsets`, built with the CSS shorthand `Insets` takes.
 | --- | --- | --- |
 | `MotionFast` | knobs, tab indicators, collapsing content | 150ms |
 | `MotionSlow` | entrances and exits | 240ms |
-| `HoverMix` | how far a color moves under the pointer | 0.06 |
-| `PressMix` | how far it moves while pressed | 0.08 |
-| `DisabledMix` | how far it fades when disabled | 0.55 |
+| `HoverMix` | how far a color moves toward `Fg` under the pointer | 0.06 |
+| `PressMix` | how far it moves toward `Fg` while pressed | 0.08 |
+| `DisabledMix` | how much opacity a disabled control loses | 0.5 |
+| `RingAlpha` | the opacity of a field's focus halo and of a warning ring | 0.5 |
 
-The mixes are fractions toward another color, so a control of your own can
-match the built-in ones rather than inventing its own greys.
+Every control draws its states with these, through `t.Hovered(c)`,
+`t.Pressed(c)`, `t.Disabled(c)` and `t.Halo(ring)`, so a control of your own
+can match the built-in ones rather than inventing its own greys.
 
 ### Text
 
-`Text` is the base every piece of text inherits; `Title` and `Caption` are
-merged onto it for headings and small secondary text. See
-[Local styles](#local-styles) for how the merge resolves.
+`Text` is the base every piece of text inherits; the others are merged onto
+it. See [Local styles](#local-styles) for how the merge resolves.
+
+| Token | For | Default |
+| --- | --- | --- |
+| `Text` | everything; its `Color` follows `Fg` | 14px, line height 1.4 |
+| `Title` | page headings, `ui.Title` | 24px semibold |
+| `Heading` | dialog, sheet and card titles, `ui.Heading` | 18px semibold |
+| `Label` | the labels of buttons, tabs, badges and accordion headers | medium weight |
+| `Caption` | small secondary text, `ui.Caption`; its `Color` follows `MutedFg` | 12px |
+| `Mono` | code, `ui.Mono` | Go Mono |
 
 ## Deriving a theme
 
-**Start from `theme.Default()`, `theme.Dark()`, or a `theme.Preset`.** A `Theme` has no "inherit" state the way `TextStyle` does: a field
-you leave out is a zero, and a zero `ControlSize` paints a checkbox with no
-box at all.
+Start from `theme.Default()`, `theme.Dark()`, or a `theme.Preset`, and set
+only what your brand changes:
 
 ```go
 func brandTheme() theme.Theme {
 	t := theme.Default()
 	t.Primary = color.RGBA{0x2f, 0x6f, 0xed, 0xff}
-	t.PrimaryHover = color.RGBA{0x25, 0x5a, 0xc4, 0xff}
 	t.PrimaryFg = color.White
 	t.Ring = t.Primary
-	t.Radius, t.RadiusSm, t.RadiusLg = 4, 3, 6
+	t.Radius = 4
 	t.Text.Font = inter
 	return t
 }
 ```
 
+Some tokens **follow** others, as the tables mark: `PrimaryHover` and
+`Selection` follow `Primary`, the foregrounds follow `Fg`, `RadiusSm` and
+`RadiusLg` follow `Radius`, and so on. A token follows its source until you
+set it, so above the hover color, the text selection and the smaller and
+larger radii all move with the brand without being named. Setting a follower
+pins it: `t.PrimaryHover = darker` keeps `darker` whatever `Primary` becomes.
+A preset sets its whole palette and its radii, so on a preset only the tokens
+shadcn has no variable for, such as `PrimaryHover`, `Selection` and `Input`,
+follow.
+
+`Apply`, `Set` and `With` resolve the followers as they apply a theme, and
+`theme.From` and `theme.Use` return resolved themes. Call `t.Resolve()`
+yourself only to read a follower of a theme you changed before applying it.
+
+A `Theme` literal works too: colors it leaves unset with nothing to follow
+are `Default`'s, as are a zero `ControlSize`, `IconSize`, `MenuWidth`, `Chat`
+or `Mono` font. Other zero sizes, such as `BorderWidth`, mean zero.
+
 Changing `Text.Font` alone reaches every piece of text in the app, headings
 and captions included, because those are deltas merged onto it.
 
-## Porting a shadcn/ui palette
+## Porting a shadcn/ui theme
 
-The color table above is the mapping. A shadcn `:root` block goes across
-variable by variable:
-
-```css
---background: #ffffff;   --foreground: #09090b;
---primary:    #18181b;   --primary-foreground: #fafafa;
---border:     #e4e4e7;   --ring: #a1a1aa;
-```
+`theme.FromCSS` reads the CSS that shadcn/ui's theme editor, tweakcn and
+similar generators export, as it is:
 
 ```go
-// hex is four lines of your own; ggui takes any color.Color.
-func hex(s string) color.RGBA { ... }
+//go:embed theme.css
+var themeCSS string
 
-t := theme.Default()
-t.Bg, t.Fg = hex("#ffffff"), hex("#09090b")
-t.Primary, t.PrimaryFg = hex("#18181b"), hex("#fafafa")
-t.Border, t.Ring = hex("#e4e4e7"), hex("#a1a1aa")
+light, dark, err := theme.FromCSS(themeCSS)
+if err != nil {
+	log.Fatal(err)
+}
+app.Setup(func() { theme.Bind(isDark, dark, light) })
 ```
 
-Two differences to expect. shadcn derives hover states in CSS; ggui names
-`PrimaryHover` as a token, so set it rather than expecting it to follow
-`Primary`. And `--radius` is one variable that CSS derives the others from,
-where ggui keeps `Radius`, `RadiusSm` and `RadiusLg` separately — set all
-three if you change the scale.
+It lays the `:root` block over `Default` and the `.dark` block over `Dark`.
+As in a browser, `.dark` inherits whatever it leaves out from `:root`. Blocks
+may sit inside `@layer`, other rules such as `@theme inline` are skipped, and
+a value may be `var()` of another variable. Each color variable sets the
+token the color table names, with `--input` setting `InputBorder`. `--radius`
+sets the radii the way shadcn derives its own: `Radius` 2px less for the
+`rounded-md` controls, `RadiusSm` 4px less and `RadiusLg` 4px more.
+Variables ggui has no token for, such as fonts, are ignored.
+
+`t.ApplyCSS(decls)` lays one block's declarations over a theme you already
+have, and `theme.ParseColor(s)` reads a single value. Both accept hex,
+`rgb()`, `hsl()` and `oklch()` in either syntax, and shadcn v3's bare HSL
+channels such as `222.2 84% 4.9%`.
+
+```go
+t, err := theme.Default().ApplyCSS(`--primary: oklch(0.546 0.245 262.881); --radius: 0.5rem;`)
+```
+
+shadcn derives hover states in CSS, and ggui has tokens for them that follow
+`Primary` the same way, so a ported theme needs nothing more.
 
 ## Tokens of your own
 
@@ -289,6 +335,7 @@ subtree, like a form's disabled state.
 | `theme.Set(t)` | Replace the global theme, invalidate inherited layout, and notify tracked readers. |
 | `theme.Bind(sig, on, off)` | follows a `Readable[bool]`, swapping between two themes |
 | `theme.With(t, child)` | gives one subtree a theme without touching the app's |
+| `theme.Override(fn, child)` | changes some tokens of the inherited theme for a subtree, as a CSS variable set on an element does |
 | `theme.From(env)` | the theme at layout time, for a widget |
 
 The usual dark-mode switch is three lines:
@@ -330,8 +377,19 @@ Two things worth matching when you draw:
 
 - Use the token pairs. A surface and its foreground go together, so the
   control stays legible when someone swaps the palette.
-- Use `HoverMix`, `PressMix` and `DisabledMix` for state rather than picking
-  greys, so your control ages with the theme.
+- Draw states with `t.Hovered(c)`, `t.Pressed(c)`, `t.Disabled(c)` and
+  `t.Halo(ring)` rather than picking greys, so your control ages with the
+  theme. `theme.Mix(a, b, amount)` and `theme.Fade(c, alpha)` are the color
+  arithmetic underneath.
+
+`theme.Override` is the quick way to restyle part of a page:
+
+```go
+theme.Override(func(t *theme.Theme) {
+	t.Primary = danger // PrimaryHover and Selection follow
+	t.Radius = 0
+}, dangerZone)
+```
 
 ## Accessibility preferences
 
@@ -449,16 +507,19 @@ and ggui's existing APIs.
 
 | Element | Appearance and configuration |
 | --- | --- |
-| Buttons | Primary by default; `Outline()` draws a border around the background. `Secondary()` adds a subdued fill, `Ghost()` removes the resting surface, and `Destructive()` uses the theme's `Destructive` color. Variants preserve pointer, keyboard and accessibility behavior. |
+| Buttons | Primary by default; `Outline()` draws a border around the background. `Secondary()` adds a subdued fill, `Ghost()` removes the resting surface, `Destructive()` fills it with `Destructive` under a `DestructiveFg` label, and `Link()` underlines a `Primary` label under the pointer. Outline and ghost buttons turn `Accent` with an `AccentFg` label under the pointer. `Size(ui.ButtonSmall)`, `ui.ButtonLarge` and `ui.ButtonIcon` scale `ButtonPad`; `Radius(r)` and `Pad(...)` override the theme for one button. Labels use the `Label` text style. |
 | Focus | Controls use a separate, softer focus color. Text fields add an outer halo while editing. |
 | Tabs | A muted rounded strip with an animated raised selection; `.Line()` opts into the underline treatment. Reduced-motion settings still apply. |
 | Cards and floating panels | Cards receive a subtle shadow; menus, select lists, comboboxes and date pickers use a stronger shared panel shadow. Dialogs use a larger radius and deeper elevation. |
 | Labels and notices | Field labels use the body size; help text remains smaller. Alerts use body-size descriptions and tighter title spacing. |
-| Badges and calendar | Badges use small rounded corners. Calendar month navigation uses ghost buttons, with a centered month heading and contrasting selected-date text. |
+| Badges and calendar | Badges are pills on the `Secondary` surface; `Primary()`, `Outline()` and `Destructive()` change the look and `Radius(r)` the corners. Calendar month navigation uses ghost buttons, with a centered month heading and contrasting selected-date text. |
+| Menus, selects and dialogs | A highlighted item turns `Accent` with an `AccentFg` label. Floating surfaces draw their text in `PopoverFg`; dialog and sheet titles use the `Heading` style. |
 
 These choices follow a brand by changing the theme rather than the widgets.
-The controls read ordinary `Theme` fields. Start with a default or preset
-and override just the fields you need.
+The controls read ordinary `Theme` fields, and a test checks that every one
+of them is read by some control. Start with a default or preset and override
+just the fields you need. `Card(...)` also takes `Fill`, `Border`, `Radius`,
+`Pad` and `Shadow` for one card.
 
 ```go
 t := theme.Default()
@@ -468,6 +529,45 @@ t.PanelShadow = ggui.ShadowStyle{Offset: ggui.Pt(0, 4), Blur: 12, Color: color.N
 t.CardShadow = ggui.ShadowStyle{}
 theme.Set(t)
 ```
+
+## Component variants
+
+A button or badge variant is a `ui.Variant`: a named look worked out from the
+theme at layout. The built-in ones are package variables, such as
+`ui.ButtonOutline`, `ui.ButtonSmall` and `ui.BadgeDestructive`. A variant can
+be changed for everything drawn with it under a theme, the way editing the
+`cva` call in a copied shadcn component does:
+
+```go
+t := theme.Default()
+t = ui.ButtonPrimary.Restyle(t, func(t theme.Theme) ui.ButtonStyle {
+	s := ui.ButtonPrimary.Base(t) // the built-in look, to change
+	s.Shadow = false
+	return s
+})
+theme.Set(t)
+```
+
+`Base` is the variant's own look under a theme, whatever `Restyle` did; a
+restyle that starts from it changes the original rather than replacing it.
+The restyle travels with the theme, so `theme.With` and `theme.Bind` carry it
+too.
+
+`ui.NewVariant` makes a variant of your own, used with `.Variant(v)`:
+
+```go
+var ButtonBrand = ui.NewVariant("brand", func(t theme.Theme) ui.ButtonStyle {
+	return ui.ButtonStyle{Fill: brand, Hover: t.Hovered(brand), Label: color.White, Shadow: true}
+})
+
+ui.Button("Upgrade", upgrade).Variant(ButtonBrand)
+```
+
+| Type | Built-in variants | Fields |
+| --- | --- | --- |
+| `ui.ButtonVariant` | `ButtonPrimary`, `ButtonOutline`, `ButtonSecondary`, `ButtonGhost`, `ButtonDestructive`, `ButtonLink` | `Fill`, `Hover`, `Label`, `HoverLabel`, `Border`, `Ring`, `Shadow`, `Underline` |
+| `ui.ButtonSizeVariant` | `ButtonDefault`, `ButtonSmall`, `ButtonLarge`, `ButtonIcon` | `Pad`, `Square` |
+| `ui.BadgeVariant` | `BadgeSecondary`, `BadgePrimary`, `BadgeOutline`, `BadgeDestructive` | `Fill`, `Label`, `Border` |
 
 ## Applying styles and a theme switch
 
@@ -494,9 +594,11 @@ control supports `.Name("Appearance")`, `.OnChange(fn)`, `.Disabled(v)`, and
 | --- | --- |
 | `TextStyle`, `Env`, typed environment values | [style.go](../style.go) |
 | Root environment, editor/scrollbar styles, spacing and background | [environment.go](../environment.go) |
-| Theme tokens, defaults, presets and application | [ui/theme/](../ui/theme/) |
+| Theme tokens, followers, defaults, presets and application | [ui/theme/](../ui/theme/) |
+| Reading shadcn/ui CSS | [ui/theme/css.go](../ui/theme/css.go) |
+| `Variant`, `Restyle` | [ui/variant.go](../ui/variant.go) |
 | `Text`, `Styled`, `Provide`, `WithEnv` | [widgets.go](../widgets.go) |
-| `ui.Title`, `ui.Caption` | [ui/text.go](../ui/text.go) |
+| `ui.Title`, `ui.Heading`, `ui.Caption`, `ui.Mono` | [ui/text.go](../ui/text.go) |
 | Shadows | [shadow.go](../shadow.go) |
 | Motion and transitions | [anim.go](../anim.go), [transition.go](../transition.go) |
 | The controls that consume the tokens | [ui/](../ui/) |

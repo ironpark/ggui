@@ -159,19 +159,21 @@ func (a *AccordionWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	a.heights = slices.Grow(a.heights[:0], len(a.items))[:len(a.items)]
 	now, motion := ggui.FrameTime(), env.Motion(a.theme.MotionFast)
 	var width, height float64
+	t := a.theme
+	chevron := t.IconSize + t.Space // the room the chevron takes beside a header
 	for i, item := range a.items {
 		h := a.headers[i]
-		h.text.Color(pick(item.disabled, a.theme.MutedFg, a.theme.Fg))
-		h.size = h.text.Layout(ggui.Loose(ggui.Sz(max(c.MaxW-24, 0), ggui.Unbounded)), env)
-		a.heights[i] = h.size.H + 32
-		width = max(width, h.size.W+24)
+		h.text.Style(t.Label).Color(pick(item.disabled, t.Disabled(t.Fg), t.Fg))
+		h.size = h.text.Layout(ggui.Loose(ggui.Sz(max(c.MaxW-chevron, 0), ggui.Unbounded)), env)
+		a.heights[i] = h.size.H + 4*t.Space
+		width = max(width, h.size.W+chevron)
 		height += a.heights[i]
 		h.open = a.isOpen(i)
 		h.progress = h.reveal.Toggle(h.open, now, motion)
 		if h.open || h.progress > 0 {
 			a.sizes[i] = item.content.Layout(ggui.Loose(ggui.Sz(c.MaxW, ggui.Unbounded)), env)
 			width = max(width, a.sizes[i].W)
-			height += (a.sizes[i].H + 16) * h.progress
+			height += (a.sizes[i].H + 2*t.Space) * h.progress
 		}
 	}
 	return c.Constrain(ggui.Sz(width, height))
@@ -201,18 +203,19 @@ func (a *AccordionWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 			dst.HitCursor(rect, ggui.CursorShapePointer)
 		}
 		if h.Hovered && !item.disabled {
-			dst.StrokeLine(ggui.Pt(rect.Origin.X, y+16+h.size.H-1), ggui.Pt(rect.Origin.X+h.size.W, y+16+h.size.H-1), 1, t.Fg)
+			under := y + 2*t.Space + h.size.H - 1
+			dst.StrokeLine(ggui.Pt(rect.Origin.X, under), ggui.Pt(rect.Origin.X+h.size.W, under), 1, t.Fg)
 		}
-		paintIcon(dst, a.env, icons.ChevronDown, ggui.Rct(ggui.Pt(rect.Origin.X+rect.Size.W-16, y+(a.heights[i]-16)/2), ggui.Sz(16, 16)), t.MutedFg, h.progress*math.Pi)
-		dst.Paint(h.text, ggui.Rct(ggui.Pt(rect.Origin.X, y+16), h.size))
+		paintIconAt(dst, a.env, icons.ChevronDown, ggui.Pt(rect.Origin.X+rect.Size.W-t.IconSize/2, y+a.heights[i]/2), t.IconSize, t.MutedFg, h.progress*math.Pi)
+		dst.Paint(h.text, ggui.Rct(ggui.Pt(rect.Origin.X, y+2*t.Space), h.size))
 		if i == a.active {
 			a.FocusRing(dst, rect, t.Radius, t.Ring)
 		}
 		y += a.heights[i]
 		paintDisclosure(dst, a.env, item.content, ggui.Pt(r.Origin.X, y), r.Size.W, a.sizes[i], h.progress, h.open)
-		y += (a.sizes[i].H + 16) * h.progress
+		y += (a.sizes[i].H + 2*t.Space) * h.progress
 		if i < len(a.items)-1 {
-			dst.StrokeLine(ggui.Pt(r.Origin.X, y), ggui.Pt(r.Origin.X+r.Size.W, y), 1, t.Border)
+			dst.StrokeLine(ggui.Pt(r.Origin.X, y), ggui.Pt(r.Origin.X+r.Size.W, y), t.BorderWidth, t.Border)
 		}
 	}
 }

@@ -20,6 +20,33 @@ on a `Font` chooses a chain of your own and `NoFallback()` turns it off.
 `LoadFontFile` also reads the first face of a `.ttc`; `LoadFontCollection`
 returns them all.
 
+### Font weights
+
+`TextStyle.Weight` asks for a CSS weight, from `ggui.WeightThin` (100) to
+`ggui.WeightBlack` (900), and like the other fields it inherits when zero:
+`Text(s).Weight(ggui.WeightBold)`, `Styled(child).Weight(...)`. The theme's
+`Title` and `Heading` are semibold and its `Label`, used by buttons, tabs and
+badges, is medium.
+
+A `Font` draws a weight with the face nearest it. Register the faces of a
+family with `WithWeight`; a variable font with a weight axis needs none,
+since it draws every weight on the axis:
+
+```go
+inter := ggui.MustFont(interRegular).
+	WithWeight(ggui.WeightMedium, ggui.MustFont(interMedium)).
+	WithWeight(ggui.WeightSemibold, ggui.MustFont(interSemibold))
+t := theme.Default()
+t.Text.Font = inter
+```
+
+Between two faces equally near, the heavier wins above regular and the
+lighter below it, as CSS matches weights, so semibold falls to bold when a
+family has no semibold. The built-in font is Go Regular with Go Medium and Go
+Bold, and `ggui.DefaultMonoFont()` is Go Mono; each is parsed the first time
+it draws. The fallback fonts take the weight too where they have a weight
+axis.
+
 ### Add color emoji
 
 `Text` and `TextInput` render color emoji as part of ordinary strings. Emoji

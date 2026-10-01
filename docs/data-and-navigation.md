@@ -28,7 +28,7 @@ See [example conventions](README.md#start-here) before copying snippets.
 | `ui.Tabs(selected, ui.Tab("One", page), ...)` | Displays the selected index, with an animated segmented selection and Left/Right navigation; `.Line()` uses an underline. Only the active page is laid out. `Tab(...).Header(widget)` draws an icon, count or badge in place of the label's text, which still names the tab; `Tab(...).Tooltip(text)` explains it. |
 | `ui.Collapsible(open, "Title", content)` | Animates an expandable section with `Presence`. |
 | `ui.Card(child)` | Adds a surface, border, radius, padding and subtle shadow. |
-| `ui.Badge("new")` | Displays a small label; `.Accent()` emphasizes it. |
+| `ui.Badge("new")` | Displays a small label; `.Primary()`, `.Outline()` and `.Destructive()` change its look. |
 | `ui.Progress(value)` | Eases toward a fraction from a `Readable[float64]`. |
 | `ui.Dialog(open, content)` | Shows a modal while the binding is true; see [focus scopes](input.md#focus-scopes). |
 

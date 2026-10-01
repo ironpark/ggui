@@ -25,9 +25,6 @@ import (
 )
 
 const (
-	sliderKnob    = 8
-	switchWidth   = 36
-	switchHeight  = 20
 	defaultStripe = 160 // a slider's width when nothing bounds it
 )
 
@@ -45,22 +42,11 @@ func bounded(v, fallback float64) float64 { return fn.Bounded(v, fallback) }
 
 func clamp[T cmp.Ordered](v, lo, hi T) T { return fn.Clamp(v, lo, hi) }
 
-// channels returns c with its color scaled by f and its alpha by fa.
-func channels(c color.Color, f, fa float64) color.Color {
-	if c == nil {
-		return nil
-	}
-	if f == 1 && fa == 1 {
-		return c
-	}
-	r, g, b, a := c.RGBA()
-	scale := func(v uint32, by float64) uint8 { return uint8(clamp(float64(v>>8)*by, 0, 255)) }
-	return color.RGBA{scale(r, f), scale(g, f), scale(b, f), scale(a, fa)}
-}
+// fade and mix are theme.Fade and theme.Mix, short for the many controls
+// that draw with them.
+func fade(c color.Color, f float64) color.Color { return uitheme.Fade(c, f) }
 
-// fade dims a color toward nothing. Every channel goes, alpha included,
-// because a premultiplied color stays premultiplied only if they all do.
-func fade(c color.Color, f float64) color.Color { return channels(c, f, f) }
+func mix(a, b color.Color, amount float64) color.Color { return uitheme.Mix(a, b, amount) }
 
 // edgeFade paints a 12px gradient from col at one edge of r to transparent.
 // (dx, dy) points inward from the opaque edge: (1, 0) fades from the left,
@@ -169,19 +155,6 @@ func hoverPick(ev ggui.PointerEvent, i int, hover *int, pick func()) bool {
 		return false
 	}
 	return true
-}
-
-func mix(a, b color.Color, amount float64) color.Color {
-	if a == nil {
-		return b
-	}
-	if b == nil {
-		return a
-	}
-	ar, ag, ab, aa := a.RGBA()
-	br, bg, bb, ba := b.RGBA()
-	blend := func(x, y uint32) uint8 { return uint8((float64(x)*(1-amount) + float64(y)*amount) / 257) }
-	return color.RGBA{blend(ar, br), blend(ag, bg), blend(ab, bb), blend(aa, ba)}
 }
 
 // shortcutLabel shows a key hint: a chord ParseChord reads, such as

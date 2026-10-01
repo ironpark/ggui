@@ -137,10 +137,10 @@ func (b *BubbleWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	b.theme = uitheme.From(env)
 	_, fg, _ := b.colors()
 	if b.IsInert() {
-		fg = mix(fg, b.theme.Card, b.theme.DisabledMix)
+		fg = b.theme.Disabled(fg)
 	}
-	b.content.Size(14).LineHeight(1.625).Color(fg)
-	tokens := b.theme.ChatTokens()
+	b.content.Size(b.theme.Text.Size).LineHeight(1.625).Color(fg)
+	tokens := b.theme.Chat
 	b.box.Padding(tokens.BubblePadding).Radius(tokens.BubbleRadius)
 	maxW := c.MaxW * .8
 	if b.variant == "ghost" {
@@ -165,23 +165,20 @@ func (b *BubbleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		if fill == nil {
 			fill = b.theme.Muted
 		} else {
-			fill = mix(fill, b.theme.Fg, .05)
+			fill = b.theme.Hovered(fill)
 		}
 	}
 	if b.IsInert() {
-		if fill != nil {
-			fill = mix(fill, b.theme.Card, b.theme.DisabledMix)
-		}
-		fg = mix(fg, b.theme.Card, b.theme.DisabledMix)
+		fill, fg = b.theme.Disabled(fill), b.theme.Disabled(fg)
 	}
 	b.content.Color(fg)
-	b.box.Fill(fill).Border(pick(border != nil, 1.0, 0.0), border)
+	b.box.Fill(fill).Border(pick(border != nil, b.theme.BorderWidth, 0.0), border)
 	if b.action != nil {
 		b.Hit(dst, body, b, ggui.CursorShapePointer)
 	}
 	dst.Paint(b.box, body)
 	if b.action != nil {
-		b.FocusRing(dst, body, b.theme.ChatTokens().BubbleRadius, b.theme.Ring)
+		b.FocusRing(dst, body, b.theme.Chat.BubbleRadius, b.theme.Ring)
 	}
 	if b.reactionBox != nil {
 		x := body.Origin.X + body.Size.W - b.reactionSize.W - 12

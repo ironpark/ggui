@@ -7,7 +7,7 @@ import (
 
 func TestWrapSpansCoverTheTextWithinWidth(t *testing.T) {
 	t.Parallel()
-	face := fallbackFont().face(14)
+	face := fallbackFont().face(14, 0)
 	for _, s := range []string{
 		"", "one", "the quick brown fox jumps over the lazy dog",
 		"line one\nline two\n\nafter blank", "  leading and   inner   spaces",

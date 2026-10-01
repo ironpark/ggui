@@ -45,8 +45,12 @@ ggui.Column(
 
 ## Buttons and shared options
 
-`ui.Button(label, onTap)` creates a primary button. Use `.Outline()` for a
-secondary action or `ui.ButtonOf(child, onTap)` for custom content.
+`ui.Button(label, onTap)` creates a primary button. Use `.Outline()`,
+`.Secondary()`, `.Ghost()`, `.Destructive()` or `.Link()` for the other
+shadcn/ui variants, `.Size(ui.ButtonSmall)`, `ui.ButtonLarge` or
+`ui.ButtonIcon` for the sizes, and `ui.ButtonOf(child, onTap)` for custom
+content. [Component variants](styling.md#component-variants) covers variants
+of your own and restyling the built-in ones.
 `ui.Radio(plan, value, label)` creates one radio option; `ui.Radios` builds a group.
 
 Common options on interactive controls include:

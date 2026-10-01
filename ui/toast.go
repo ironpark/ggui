@@ -279,17 +279,18 @@ func (p *toastPanel) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		accent = t.Destructive
 		mark = icons.Alert
 	}
-	p.title.Style(t.Text).Color(t.Fg)
+	p.title.Style(t.Text.Merge(t.Label)).Color(t.PopoverFg)
 	p.description.Style(t.Caption).Color(t.MutedFg)
 	parts := []ggui.Widget{p.title, p.description}
 	if p.entry.action != nil {
 		parts = append(parts, ggui.Row(p.entry.action))
 	}
-	text := ggui.Column(parts...).Gap(4).Align(ggui.AlignStretch)
+	text := ggui.Column(parts...).Gap(t.Space / 2).Align(ggui.AlignStretch)
+	badge := t.IconSize * 1.5
 	p.body = ggui.Box(ggui.Row(
-		ggui.Box(ggui.Center(Icon(mark).Color(t.PrimaryFg).Size(14))).Size(24, 24).Fill(accent).Radius(12),
+		ggui.Box(ggui.Center(Icon(mark).Color(t.PrimaryFg).Size(t.IconSize*.875))).Size(badge, badge).Fill(accent).Radius(badge/2),
 		ggui.Expanded(text), p.entry.dismiss,
-	).Gap(12).Align(ggui.AlignStart)).Pad(t.Space*2).Fill(t.Popover).Border(t.BorderWidth, t.Border).Radius(t.RadiusLg)
+	).Gap(t.Space*1.5).Align(ggui.AlignStart)).Pad(t.Space*2).Fill(t.Popover).Border(t.BorderWidth, t.Border).Radius(t.RadiusLg)
 	return p.body.Layout(c, env)
 }
 

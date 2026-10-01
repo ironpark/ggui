@@ -26,7 +26,7 @@ func useTestEmoji(t *testing.T) *Font {
 func TestEmojiSequencesStayInOneColorGlyph(t *testing.T) {
 	t.Parallel()
 	useTestEmoji(t)
-	face := fallbackFont().face(20)
+	face := fallbackFont().face(20, 0)
 	for _, s := range []string{"👍", "👍🏽", "🇰🇷", "👩🏽‍💻", "👨‍👩‍👧‍👦", "1️⃣", "🏳️‍🌈", "❤️", "🫩"} {
 		t.Run(s, func(t *testing.T) {
 			for run, f := range textRuns(s, face) {
@@ -47,7 +47,7 @@ func TestEmojiSequencesStayInOneColorGlyph(t *testing.T) {
 func TestEmojiPresentationAndTextShaping(t *testing.T) {
 	t.Parallel()
 	useTestEmoji(t)
-	face := fallbackFont().face(20)
+	face := fallbackFont().face(20, 0)
 	ef := face.(*emojiFace)
 	for _, s := range []string{"AV 123 # * © ♥︎", "plain text"} {
 		if got, want := lineWidth(s, face), text.AdvanceAt(s, len(s), ef.Face); got != want {

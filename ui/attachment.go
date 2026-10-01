@@ -151,13 +151,13 @@ func (a *AttachmentWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer a.props.Layout()()
 	a.theme, a.reduced, a.current = uitheme.From(env), env.ReducedMotion(), a.uploadState()
 	a.padX, a.padY, a.gap, a.mediaSide = 10, 8, 8, 40
-	a.radius = a.theme.ChatTokens().AttachmentRadius
+	a.radius = a.theme.Chat.AttachmentRadius
 	fontSize := 14.0
 	switch a.size {
 	case AttachmentSmall:
 		a.padX, a.padY, a.gap, a.mediaSide, fontSize = 8, 6, 10, 32, 12
 	case AttachmentExtraSmall:
-		a.padX, a.padY, a.gap, a.radius, a.mediaSide, fontSize = 6, 4, 6, a.theme.ChatTokens().AttachmentXSRadius, 28, 12
+		a.padX, a.padY, a.gap, a.radius, a.mediaSide, fontSize = 6, 4, 6, a.theme.Chat.AttachmentXSRadius, 28, 12
 	}
 	hasMedia := a.media != nil || a.image != nil
 	if hasMedia {

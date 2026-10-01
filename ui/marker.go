@@ -35,12 +35,12 @@ func (m *MarkerWidget) Border() *MarkerWidget {
 func (m *MarkerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer m.props.Layout()()
 	m.theme = uitheme.From(env)
-	m.view.Color(m.theme.MutedFg).Size(14)
+	m.view.Color(m.theme.MutedFg).Size(m.theme.Text.Size)
 	width := c.MaxW
 	m.iconSize = ggui.Size{}
 	if m.icon != nil {
-		m.iconSize = m.icon.Layout(ggui.Loose(ggui.Sz(16, 16)), env.WithText(ggui.TextStyle{Color: m.theme.MutedFg}))
-		width = max(0, width-24)
+		m.iconSize = m.icon.Layout(ggui.Loose(ggui.Sz(m.theme.IconSize, m.theme.IconSize)), env.WithText(ggui.TextStyle{Color: m.theme.MutedFg}))
+		width = max(0, width-m.theme.IconSize-m.theme.Space)
 	}
 	if m.variant == "separator" {
 		width = max(0, width-48)

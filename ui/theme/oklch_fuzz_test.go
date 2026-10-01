@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"image/color"
 	"math"
-	"runtime"
 	"testing"
 )
 
@@ -125,26 +124,26 @@ func FuzzParseOKLCH(f *testing.F) {
 	})
 }
 
-// FuzzParseOKLCHInput feeds arbitrary text. The parser only reads the
-// bundled theme data and reports malformed input by panicking with the
-// scan error; anything else, such as an index out of range, is a bug.
-func FuzzParseOKLCHInput(f *testing.F) {
-	for _, s := range []string{"oklch(0.5 0.1 120)", "oklch(1 0 0 / 10%)", "oklch(", "", "1 2", "oklch(1 0 0 / )", "a/b/c", "oklch(1 0 0 / 1 / 2)"} {
+// FuzzParseColor feeds arbitrary text: ParseColor reports malformed input
+// as an error and never panics.
+func FuzzParseColor(f *testing.F) {
+	for _, s := range []string{"oklch(0.5 0.1 120)", "oklch(1 0 0 / 10%)", "oklch(", "", "1 2", "oklch(1 0 0 / )", "a/b/c",
+		"oklch(1 0 0 / 1 / 2)", "#fff", "#12345", "rgb(1, 2, 3, .5)", "hsl(210 40% 98%)", "222.2 84% 4.9%", "var(--x)"} {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, s string) {
-		defer func() {
-			v := recover()
-			if v == nil {
-				return
-			}
-			if _, isRuntime := v.(runtime.Error); isRuntime {
-				t.Fatalf("parseOKLCH(%q) crashed: %v", s, v)
-			}
-			if _, isErr := v.(error); !isErr {
-				t.Fatalf("parseOKLCH(%q) panicked with %T %v, want a scan error", s, v, v)
-			}
-		}()
-		parseOKLCH(s)
+		c, err := ParseColor(s)
+		if (err == nil) == (c == nil) {
+			t.Fatalf("ParseColor(%q) = %v, %v: want a color or an error", s, c, err)
+		}
 	})
+}
+
+// parseOKLCH is ParseColor for values known to parse.
+func parseOKLCH(s string) color.Color {
+	c, err := ParseColor(s)
+	if err != nil {
+		panic(err)
+	}
+	return c
 }

@@ -38,9 +38,16 @@ The core consumes only the settings it needs:
 | `MutedFg`, `Fg`, `MotionFast` | `ggui.ScrollStyleKey` |
 | `MotionFast` | `ggui.PopupDurationKey` |
 
-`TitleKey` and `CaptionKey` belong to `ui/theme`. `ui.Title` and `ui.Caption`
-select these keys through the generic `TextWidget.StyleKey` API; a heading's
-accessibility role is set separately with `Role(ggui.RoleHeading)`.
+`TitleKey`, `HeadingKey`, `LabelKey`, `CaptionKey` and `MonoKey` belong to
+`ui/theme`. `ui.Title`, `ui.Heading`, `ui.Caption` and `ui.Mono` select these
+keys through the generic `TextWidget.StyleKey` API; a heading's accessibility
+role is set separately with `Role(ggui.RoleHeading)`.
+
+`Apply`, `Set` and `With` resolve the theme first: tokens that follow others,
+such as `PrimaryHover` following `Primary`, take their source's value unless
+set, and `theme.Override(fn, child)` changes tokens for a subtree with the
+followers following there too. `theme.FromCSS` reads a shadcn/ui stylesheet.
+See [styling](../../docs/styling.md#deriving-a-theme).
 A local theme preserves inherited text fields omitted by its `Text` style.
 A global `Set` replaces the complete root text style so a previous theme's
 font does not leak into the next theme. Accessibility preferences such as

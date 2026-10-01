@@ -41,7 +41,7 @@ var tooltipSlot = ggui.NewSlot[tooltipHover]("tooltip hover")
 // a second, or while keyboard focus is within child. It registers no hit
 // region, so the child gets every event, and paints through Canvas.Overlay.
 func Tooltip(child ggui.Widget, text string) *TooltipWidget {
-	t := &TooltipWidget{child: child, tip: ggui.Text(text).Size(12), delay: 500 * time.Millisecond}
+	t := &TooltipWidget{child: child, tip: ggui.Text(text), delay: 500 * time.Millisecond}
 	t.box = ggui.Box(t.tip)
 	t.effect = ggui.PopIn(t.box)
 	return t
@@ -69,7 +69,7 @@ func (t *TooltipWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t.theme = uitheme.From(env)
 	t.env = env
 	t.pad = ggui.Insets(t.theme.Space*.75, t.theme.Space*1.5)
-	t.tip.Color(t.theme.Bg)
+	t.tip.Style(t.theme.Caption).Color(t.theme.Bg)
 	t.showKeys()
 	t.box.Padding(t.pad).Fill(t.theme.Fg).Radius(t.theme.Radius * .75)
 	return t.child.Layout(c, env)
@@ -88,11 +88,11 @@ func (t *TooltipWidget) showKeys() {
 		return
 	}
 	if t.keys == nil {
-		t.keys = ggui.Text(label).Size(12).NoWrap()
+		t.keys = ggui.Text(label).NoWrap()
 		t.box = ggui.Box(ggui.Row(t.tip, t.keys).Gap(t.theme.Space).Align(ggui.AlignBaseline))
 		t.effect = ggui.PopIn(t.box)
 	}
-	t.keys.Content(label).Color(fade(t.theme.Bg, .65))
+	t.keys.Content(label).Style(t.theme.Caption).Color(fade(t.theme.Bg, .65))
 }
 
 // Baseline implements ggui.Baseliner: the child's.

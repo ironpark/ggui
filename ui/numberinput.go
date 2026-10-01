@@ -322,7 +322,7 @@ func (n *NumberInputWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		n.Hit(dst, r, n.input, ggui.CursorShapeText)
 	}
 	if n.input.Focused() && !n.disabled {
-		fieldHalo(dst, r, n.theme.Radius, fieldRing(n.theme, n.invalid))
+		fieldHalo(dst, n.theme, r, n.theme.Radius, fieldRing(n.theme, n.invalid))
 	}
 	if n.invalid {
 		n.box.Border(n.theme.BorderWidth, n.theme.Destructive)
@@ -343,7 +343,8 @@ type numberStepper struct {
 
 func (s *numberStepper) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	s.env = env
-	return c.Constrain(ggui.Sz(20, 20))
+	side := uitheme.From(env).IconSize * 1.25
+	return c.Constrain(ggui.Sz(side, side))
 }
 
 func (s *numberStepper) HandlePointer(ev ggui.PointerEvent) bool {
@@ -361,12 +362,12 @@ func (s *numberStepper) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.HitPointer(r, s)
 		dst.HitCursor(r, ggui.CursorShapePointer)
 		if s.Hovered {
-			dst.FillRoundRect(r, t.Radius/2, colorOr(t.Accent, t.Muted))
+			dst.FillRoundRect(r, t.Radius/2, t.Accent)
 		}
 	} else {
 		s.Hovered, s.Pressed = false, false
 	}
 	role := pick(s.dir < 0, icons.Minus, icons.Plus)
-	col := pick(enabled, t.Fg, fade(t.MutedFg, .5))
-	paintIcon(dst, s.env, role, ggui.Rct(r.Center().Add(ggui.Pt(-7, -7)), ggui.Sz(14, 14)), col, 0)
+	col := pick(enabled, pick(s.Hovered, t.AccentFg, t.Fg), t.Disabled(t.MutedFg))
+	paintIconAt(dst, s.env, role, r.Center(), t.IconSize*.875, col, 0)
 }

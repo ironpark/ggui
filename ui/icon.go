@@ -17,3 +17,8 @@ func Icon(role icons.Role) *icons.Widget {
 func paintIcon(dst *ggui.Canvas, env ggui.Env, role icons.Role, rect ggui.Rect, col color.Color, rotation float64) {
 	icons.Resolve(env, lucide.Set(), role).Draw(dst, rect, col, rotation)
 }
+
+// paintIconAt paints a size-square icon centered on center.
+func paintIconAt(dst *ggui.Canvas, env ggui.Env, role icons.Role, center ggui.Point, size float64, col color.Color, rotation float64) {
+	paintIcon(dst, env, role, ggui.Rct(center.Add(ggui.Pt(-size/2, -size/2)), ggui.Sz(size, size)), col, rotation)
+}

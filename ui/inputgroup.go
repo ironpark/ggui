@@ -154,7 +154,7 @@ func (g *InputGroupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.Describe(r, g)
 	}
 	if g.hasFocus() && !g.effectiveDisabled {
-		fieldHalo(dst, r, t.Radius, fieldRing(t, g.invalid))
+		fieldHalo(dst, t, r, t.Radius, fieldRing(t, g.invalid))
 	}
 	if g.invalid {
 		g.box.Border(t.BorderWidth, t.Destructive)

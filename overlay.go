@@ -83,7 +83,7 @@ func (c *Canvas) DrawText(s string, font *Font, size float64, at Point, col colo
 	op := &text.DrawOptions{}
 	op.ColorScale.ScaleWithColor(col)
 	op.GeoM.Translate(c.px(at.X), c.px(at.Y))
-	drawText(c.Image, s, font.face(c.px(size)), op)
+	drawText(c.Image, s, font.face(c.px(size), 0), op)
 }
 
 // TextWidth measures s as DrawText would draw it, in logical pixels.
@@ -91,7 +91,7 @@ func (c *Canvas) TextWidth(s string, font *Font, size float64) float64 {
 	if font == nil {
 		font = fallbackFont()
 	}
-	return c.dp(lineWidth(s, font.face(c.px(size))))
+	return c.dp(lineWidth(s, font.face(c.px(size), 0)))
 }
 
 // FitText returns s as it fits in width at size, cut with "…" when it is
@@ -100,7 +100,7 @@ func (c *Canvas) FitText(s string, font *Font, size, width float64) string {
 	if font == nil {
 		font = fallbackFont()
 	}
-	return ellipsize(s, font.face(c.px(size)), c.px(width), false)
+	return ellipsize(s, font.face(c.px(size), 0), c.px(width), false)
 }
 
 // Physical is r in the pixels of Image, for an Overlay that keeps an image

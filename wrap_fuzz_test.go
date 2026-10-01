@@ -17,7 +17,7 @@ import (
 // wrapFace is Go Regular at 14px with no fallbacks, so wrapping measures
 // the same on every machine.
 var wrapFace = sync.OnceValue(func() text.Face {
-	return &text.GoTextFace{Source: MustFont(goregular.TTF).src, Size: 14}
+	return &text.GoTextFace{Source: MustFont(goregular.TTF).source(), Size: 14}
 })
 
 // graphemes counts the grapheme clusters in s.

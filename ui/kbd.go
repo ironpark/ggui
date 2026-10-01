@@ -20,7 +20,7 @@ func Kbd(label string) *KbdWidget {
 // Layout implements ggui.Widget.
 func (k *KbdWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := uitheme.From(env)
-	k.text.Style(t.Caption).Color(t.MutedFg)
+	k.text.Style(t.Caption.Merge(t.Label)).Color(t.MutedFg)
 	k.box.Pad(2, t.Space*.75).Fill(t.Muted).Border(t.BorderWidth, t.Border).Radius(t.Radius / 2)
 	return k.box.Layout(c, env)
 }

@@ -64,11 +64,15 @@ func (c *CalendarWidget) Name(s string) *CalendarWidget { c.SetName(s); return c
 // Location sets the timezone used to interpret dates. Nil means time.Local.
 func (c *CalendarWidget) Location(l *time.Location) *CalendarWidget {
 	defer property.Watch(&c.props, &c.active)()
-	defer property.Watch(&c.props, &c.location)()
 	if l == nil {
 		l = time.Local
 	}
-	c.location = l
+	// A Location is compared by identity: a deep comparison reads the
+	// insides of time.Local, which another goroutine may be loading.
+	if l != c.location {
+		c.location = l
+		c.props.Changed()
+	}
 	c.active = time.Time{}
 	return c
 }

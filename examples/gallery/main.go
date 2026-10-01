@@ -196,7 +196,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 				}).Destructive()).Gap(8),
 				ggui.Wrap(
 					ui.Badge("Draft"),
-					ui.Badge("Published").Accent(),
+					ui.Badge("Published").Primary(),
 					ui.Tooltip(ui.Button("Hover for help", nil).Outline(), "Tooltips add context to an action."),
 				).Gap(8),
 			).Gap(16)),
@@ -331,7 +331,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 
 			preview("Tabs", ui.Tabs(tab,
 				ui.Tab("Overview", ggui.Column(
-					ggui.Row(ggui.Text("Status"), ui.Badge("stable"), ui.Badge("new").Accent()).Space(1),
+					ggui.Row(ggui.Text("Status"), ui.Badge("stable"), ui.Badge("new").Primary()).Space(1),
 					ui.Progress(progress), // reads the signal every frame: no Reactive needed
 					ggui.Row(
 						ui.Button("+10%", func() { progress.Set(min(ggui.Untrack(progress.Get)+0.1, 1)) }).Outline(),

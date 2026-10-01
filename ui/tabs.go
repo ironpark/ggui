@@ -10,7 +10,6 @@ import (
 
 const (
 	tabInset = 3.0 // strip padding all round the label row
-	tabGap   = 8.0 // between the strip and the page below it
 )
 
 // TabsWidget shows one of several pages, picked by a row of labels above.
@@ -129,14 +128,14 @@ func (t *TabsWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	for i, head := range t.heads {
 		t.boxes[i].Padding(t.pad)
 		fg := pick(i == cur && !t.IsInert(), th.Fg, th.MutedFg)
-		s := head.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env.WithText(ggui.TextStyle{Color: fg}))
+		s := head.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env.WithText(th.Label.Merge(ggui.TextStyle{Color: fg})))
 		t.labelSize = append(t.labelSize, s)
 		t.labelX = append(t.labelX, t.stripW)
 		t.stripW += s.W
 		t.headerH = max(t.headerH, s.H)
 	}
 	t.stripW += 2 * tabInset
-	t.headerH += 2*tabInset + tabGap
+	t.headerH += 2*tabInset + th.Space // the gap above the page
 	t.bodySize = ggui.Size{}
 	if cur >= 0 {
 		body := ggui.Constraints{MinW: c.MinW, MaxW: c.MaxW, MinH: max(c.MinH-t.headerH, 0), MaxH: max(c.MaxH-t.headerH, 0)}
@@ -155,7 +154,7 @@ func (t *TabsWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst = dst.Clip(r)
 	th := t.theme
-	header := ggui.Rct(r.Origin, ggui.Sz(r.Size.W, t.headerH-tabGap))
+	header := ggui.Rct(r.Origin, ggui.Sz(r.Size.W, t.headerH-th.Space))
 	if !t.IsInert() {
 		dst.HitKey(header, t)
 	}

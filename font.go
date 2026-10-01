@@ -16,6 +16,9 @@ import (
 	"github.com/ironpark/ggui/internal/textedit"
 
 	"github.com/ironpark/ggfx/text/v2"
+	"golang.org/x/image/font/gofont/gobold"
+	"golang.org/x/image/font/gofont/gomedium"
+	"golang.org/x/image/font/gofont/gomono"
 	"golang.org/x/image/font/gofont/goregular"
 )
 
@@ -26,6 +29,10 @@ import (
 // font installed.
 type Font struct {
 	src        *text.GoTextFaceSource
+	load       func() *text.GoTextFaceSource // parses src on first use, for the built-in fonts
+	loadOnce   sync.Once
+	weight     FontWeight // what src draws, from its metadata
+	weights    []*Font    // the faces WithWeight added
 	fallbacks  []*Font
 	noFallback bool
 
@@ -37,12 +44,29 @@ type Font struct {
 	faces      map[faceKey]text.Face // reused across frames
 }
 
-// faceKey is what a face depends on beside the Font: its size, and the
-// emoji font the world measuring with it chose.
+// faceKey is what a face depends on beside the Font: its size and weight,
+// and the emoji font the world measuring with it chose.
 type faceKey struct {
-	size  float64
-	emoji *emojiChoice
+	size   float64
+	weight FontWeight
+	emoji  *emojiChoice
 }
+
+// FontWeight is a CSS font weight, from 100 (thin) to 900 (black). Zero
+// asks for nothing, so a TextStyle without one inherits it.
+type FontWeight int
+
+const (
+	WeightThin       FontWeight = 100
+	WeightExtraLight FontWeight = 200
+	WeightLight      FontWeight = 300
+	WeightRegular    FontWeight = 400
+	WeightMedium     FontWeight = 500
+	WeightSemibold   FontWeight = 600
+	WeightBold       FontWeight = 700
+	WeightExtraBold  FontWeight = 800
+	WeightBlack      FontWeight = 900
+)
 
 // LoadFont parses TTF or OTF bytes.
 func LoadFont(data []byte) (*Font, error) {
@@ -50,8 +74,98 @@ func LoadFont(data []byte) (*Font, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ggui: load font: %w", err)
 	}
-	return &Font{src: src}, nil
+	return newFont(src), nil
 }
+
+func newFont(src *text.GoTextFaceSource) *Font {
+	return &Font{src: src, weight: FontWeight(src.Metadata().Weight)}
+}
+
+// lazyFont is a font of weight w parsed from data the first time it draws.
+func lazyFont(data []byte, w FontWeight) *Font {
+	return &Font{weight: w, load: func() *text.GoTextFaceSource {
+		src, err := text.NewGoTextFaceSource(bytes.NewReader(data))
+		if err != nil {
+			panic(err)
+		}
+		return src
+	}}
+}
+
+// source returns the parsed face source, parsing it now for a lazy font.
+func (f *Font) source() *text.GoTextFaceSource {
+	if f.load != nil {
+		f.loadOnce.Do(func() { f.src = f.load() })
+	}
+	return f.src
+}
+
+// WithWeight adds face as f's face for weight w: text whose style asks for
+// a weight is drawn with the face nearest it, f itself among them. A
+// variable font with a weight axis needs none, since it draws every weight
+// on the axis.
+//
+//	inter := ggui.MustFont(interRegular).
+//		WithWeight(ggui.WeightMedium, ggui.MustFont(interMedium)).
+//		WithWeight(ggui.WeightBold, ggui.MustFont(interBold))
+func (f *Font) WithWeight(w FontWeight, face *Font) *Font {
+	reactive.CheckUIThread("Font.WithWeight")
+	if face == nil || face == f {
+		return f
+	}
+	face.weight = w
+	f.mu.Lock()
+	f.weights = append(f.weights, face)
+	f.mu.Unlock()
+	f.changed()
+	return f
+}
+
+// forWeight returns the face of f nearest w, and whether it has a weight
+// axis to draw w exactly. Between two equally near, the heavier wins above
+// regular and the lighter below it, as CSS matches weights.
+func (f *Font) forWeight(w FontWeight) (*Font, bool) {
+	if w == 0 {
+		return f, false
+	}
+	if lo, hi, ok := f.weightAxis(); ok && float32(w) >= lo && float32(w) <= hi {
+		return f, true
+	}
+	best := f
+	for _, c := range f.weights {
+		d, bd := abs(int(c.weight-w)), abs(int(best.weight-w))
+		if d < bd || d == bd && (c.weight > best.weight) == (w > WeightRegular) {
+			best = c
+		}
+	}
+	_, _, axis := best.weightAxis()
+	return best, axis
+}
+
+var wghtTag = text.MustParseTag("wght")
+
+// weightAxis reports the range of f's weight axis, if it is a variable font.
+func (f *Font) weightAxis() (lo, hi float32, ok bool) {
+	for _, a := range f.source().AppendVariationAxes(nil) {
+		if a.Tag == wghtTag {
+			return a.Min, a.Max, true
+		}
+	}
+	return 0, 0, false
+}
+
+// goFace is a face of f's own glyphs at size, set to weight w along a
+// weight axis when axis is true.
+func (f *Font) goFace(size float64, w FontWeight, axis bool) *text.GoTextFace {
+	g := &text.GoTextFace{Source: f.source(), Size: size}
+	if axis {
+		lo, hi, _ := f.weightAxis()
+		g.SetVariation(wghtTag, min(max(float32(w), lo), hi))
+	}
+	return g
+}
+
+func abs(n int) int { return max(n, -n) }
 
 // LoadFontCollection parses a TTC or OTC collection into one Font per face.
 func LoadFontCollection(data []byte) ([]*Font, error) {
@@ -61,7 +175,7 @@ func LoadFontCollection(data []byte) ([]*Font, error) {
 	}
 	fonts := make([]*Font, len(srcs))
 	for i, src := range srcs {
-		fonts[i] = &Font{src: src}
+		fonts[i] = newFont(src)
 	}
 	return fonts, nil
 }
@@ -212,9 +326,22 @@ func MustFont(data []byte) *Font {
 // DefaultTextSize is the size Text uses until Size is set.
 const DefaultTextSize = 14
 
-// builtinFont is Go Regular, parsed on first use so a program that draws no
-// text never pays for it.
-var builtinFont = sync.OnceValue(func() *Font { return MustFont(goregular.TTF) })
+// builtinFont is Go Regular, with Go Medium and Go Bold as its heavier
+// weights, each parsed on first use so a program that draws no text, or no
+// bold text, never pays for it.
+var builtinFont = sync.OnceValue(func() *Font {
+	f := lazyFont(goregular.TTF, WeightRegular)
+	f.weights = []*Font{lazyFont(gomedium.TTF, WeightMedium), lazyFont(gobold.TTF, WeightBold)}
+	return f
+})
+
+// builtinMono is Go Mono. Its bold is left out to keep binaries small;
+// code and key caps are drawn at a regular weight.
+var builtinMono = sync.OnceValue(func() *Font { return lazyFont(gomono.TTF, WeightRegular) })
+
+// DefaultMonoFont returns the built-in monospaced font, Go Mono, for code
+// and keyboard keys. It is parsed the first time it draws.
+func DefaultMonoFont() *Font { return builtinMono() }
 
 // SetDefaultFont replaces the font Text uses when none is set. The built-in
 // default is Go Regular, which covers Latin, Greek and Cyrillic; load a font
@@ -241,8 +368,8 @@ func fallbackFont() *Font {
 	return builtinFont()
 }
 
-func (f *Font) face(size float64) text.Face {
-	key := faceKey{size: size}
+func (f *Font) face(size float64, weight FontWeight) text.Face {
+	key := faceKey{size: size, weight: weight}
 	if !f.noFallback {
 		key.emoji = activeEmoji()
 	}
@@ -256,7 +383,8 @@ func (f *Font) face(size float64) text.Face {
 	if face, ok := f.faces[key]; ok {
 		return face
 	}
-	var face text.Face = &text.GoTextFace{Source: f.src, Size: size}
+	own, axis := f.forWeight(weight)
+	var face text.Face = own.goFace(size, weight, axis)
 	fallbacks := f.fallbacks
 	if fallbacks == nil && !f.noFallback {
 		fallbacks = SystemFonts()
@@ -265,7 +393,8 @@ func (f *Font) face(size float64) text.Face {
 		faces := []text.Face{face}
 		for _, fb := range fallbacks {
 			if fb != f {
-				faces = append(faces, &text.GoTextFace{Source: fb.src, Size: size})
+				fbFace, fbAxis := fb.forWeight(weight)
+				faces = append(faces, fbFace.goFace(size, weight, fbAxis))
 			}
 		}
 		if m, err := text.NewMultiFace(faces...); err == nil {

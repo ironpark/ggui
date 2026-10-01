@@ -6,7 +6,6 @@ import (
 	"image/color"
 	"math"
 	"slices"
-	"strings"
 	"sync"
 
 	"github.com/ironpark/ggui"
@@ -100,7 +99,8 @@ func defaultChat() ChatTokens {
 	return ChatTokens{24, ggui.Insets(13, 13), 16, 12, 10, 16, 10, 2, ggui.Insets(10, 12), 10}
 }
 
-// ChatTokens resolves an omitted Chat field for manually constructed Themes.
+// ChatTokens returns Chat, or Default's for a Theme not yet resolved
+// without one; Resolve fills an omitted Chat in the same way.
 func (t Theme) ChatTokens() ChatTokens {
 	if t.Chat == (ChatTokens{}) {
 		return defaultChat()
@@ -119,11 +119,11 @@ func (p Preset) theme(dark bool) Theme {
 	if !slices.Contains(AccentColors(), p.Accent) {
 		panic("ggui: unknown theme accent " + string(p.Accent))
 	}
-	t := Default()
-	mode := 0
+	// The bases are unresolved, so every token the palette sets below is
+	// set, not followed, even where it equals what it would follow.
+	t, mode := lightBase(), 0
 	if dark {
-		t = Dark()
-		mode = 1
+		t, mode = darkBase(), 1
 	}
 	tokens := make(map[string]color.Color)
 	for k, v := range themePalettes()[string(base)][mode] {
@@ -134,6 +134,7 @@ func (p Preset) theme(dark bool) Theme {
 			tokens[k] = v
 		}
 	}
+	// PrimaryHover, Selection, Input and the text colors follow these.
 	t.Bg, t.Fg = tokens["background"], tokens["foreground"]
 	t.Card, t.CardFg = tokens["card"], tokens["card-foreground"]
 	t.Popover, t.PopoverFg = tokens["popover"], tokens["popover-foreground"]
@@ -144,13 +145,6 @@ func (p Preset) theme(dark bool) Theme {
 	t.Border, t.InputBorder, t.Ring = tokens["border"], tokens["input"], tokens["ring"]
 	t.Destructive = tokens["destructive"]
 	t.DestructiveFg = color.White
-	// ggui's Input is a painted surface; CSS --input is a border token. Keep both.
-	t.Input = t.Bg
-	if dark {
-		t.Input = compositeColor(tokens["input"], t.Bg, .3)
-	}
-	t.PrimaryHover = compositeColor(t.Primary, t.Bg, .9)
-	t.Selection = compositeColor(t.Primary, t.Bg, .25)
 	t.Sidebar, t.SidebarFg = tokens["sidebar"], tokens["sidebar-foreground"]
 	t.SidebarPrimary, t.SidebarPrimaryFg = tokens["sidebar-primary"], tokens["sidebar-primary-foreground"]
 	t.SidebarAccent, t.SidebarAccentFg = tokens["sidebar-accent"], tokens["sidebar-accent-foreground"]
@@ -158,7 +152,6 @@ func (p Preset) theme(dark bool) Theme {
 	for i := range t.Chart {
 		t.Chart[i] = tokens[fmt.Sprintf("chart-%d", i+1)]
 	}
-	t.Text.Color, t.Caption.Color = t.Fg, t.MutedFg
 	t.RadiusSm, t.Radius, t.RadiusLg = 6, 8, 10
 	t.Chat = novaChat()
 	switch p.Style {
@@ -170,7 +163,7 @@ func (p Preset) theme(dark bool) Theme {
 	default:
 		panic("ggui: unknown theme style " + string(p.Style))
 	}
-	return t
+	return t.Resolve()
 }
 
 // compositeColor resolves a translucent token against its actual background.
@@ -196,7 +189,11 @@ var themePalettes = sync.OnceValue(func() map[string][2]map[string]color.Color {
 			pair[i] = make(map[string]color.Color)
 			for k, v := range src {
 				if k != "radius" {
-					pair[i][k] = parseOKLCH(v)
+					c, err := ParseColor(v)
+					if err != nil {
+						panic(err)
+					}
+					pair[i][k] = c
 				}
 			}
 		}
@@ -204,38 +201,3 @@ var themePalettes = sync.OnceValue(func() map[string][2]map[string]color.Color {
 	}
 	return out
 })
-
-// shadcn tokens are OKLCH in CSS. Convert to sRGB at the rendering boundary;
-// out-of-gamut channels are clipped, and alpha is retained for borders/rings.
-func parseOKLCH(s string) color.Color {
-	s = strings.TrimSuffix(strings.TrimPrefix(s, "oklch("), ")")
-	var l, c, h, a float64
-	a = 1
-	parts := strings.Split(s, "/")
-	if _, err := fmt.Sscanf(parts[0], "%f %f %f", &l, &c, &h); err != nil {
-		panic(err)
-	}
-	if len(parts) == 2 {
-		alpha := strings.TrimSpace(parts[1])
-		percent := strings.HasSuffix(alpha, "%")
-		if _, err := fmt.Sscanf(strings.TrimSuffix(alpha, "%"), "%f", &a); err != nil {
-			panic(err)
-		}
-		if percent {
-			a /= 100
-		}
-	}
-	angle := h * math.Pi / 180
-	x, y := c*math.Cos(angle), c*math.Sin(angle)
-	ll, mm, ss := l+.3963377774*x+.2158037573*y, l-.1055613458*x-.0638541728*y, l-.0894841775*x-1.291485548*y
-	ll, mm, ss = ll*ll*ll, mm*mm*mm, ss*ss*ss
-	ch := func(v float64) uint8 {
-		if v <= .0031308 {
-			v *= 12.92
-		} else {
-			v = 1.055*math.Pow(v, 1/2.4) - .055
-		}
-		return uint8(math.Round(max(0, min(1, v)) * 255))
-	}
-	return color.NRGBA{ch(4.0767416621*ll - 3.3077115913*mm + .2309699292*ss), ch(-1.2684380046*ll + 2.6097574011*mm - .3413193965*ss), ch(-.0041960863*ll - .7034186147*mm + 1.707614701*ss), uint8(math.Round(max(0, min(1, a)) * 255))}
-}

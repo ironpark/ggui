@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"image/color"
 	"time"
 
 	"github.com/ironpark/ggui"
@@ -8,16 +9,43 @@ import (
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
-// Card is a Surface panel with a border, rounded corners and padding, for
-// grouping content. It is a Box, so its setters stay available.
-func Card(child ggui.Widget) *CardWidget { return &CardWidget{box: ggui.Box(child)} }
+// Card is a panel on the theme's Card surface, with a border, rounded
+// corners and padding, for grouping content. Fill, Border, Radius, Pad and
+// Shadow override the theme for one card.
+func Card(child ggui.Widget) *CardWidget {
+	return &CardWidget{box: ggui.Box(child), radius: -1, borderWidth: -1}
+}
 
 // CardWidget is a themed panel. Build one with Card.
 type CardWidget struct {
-	props     property.Owner
-	box       *ggui.BoxWidget
-	pad       bool
-	shadowSet bool
+	props       property.Owner
+	box         *ggui.BoxWidget
+	pad         bool
+	shadowSet   bool
+	fill        color.Color // nil is the theme's Card
+	border      color.Color // nil is the theme's Border
+	borderWidth float64     // negative is the theme's BorderWidth
+	radius      float64     // negative is the theme's RadiusLg
+}
+
+// Fill paints the card in c instead of the theme's Card surface; nil goes
+// back to it.
+func (c *CardWidget) Fill(col color.Color) *CardWidget {
+	c.fill = col
+	return c
+}
+
+// Border draws the card's outline w wide in col instead of the theme's; a
+// zero w draws none.
+func (c *CardWidget) Border(w float64, col color.Color) *CardWidget {
+	c.borderWidth, c.border = max(w, 0), col
+	return c
+}
+
+// Radius rounds the card's corners by r instead of the theme's RadiusLg.
+func (c *CardWidget) Radius(r float64) *CardWidget {
+	c.radius = max(r, 0)
+	return c
 }
 
 // Shadow sets outer shadow layers without changing the card's layout.
@@ -46,8 +74,10 @@ func (c *CardWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	if !c.pad {
 		c.box.Padding(t.CardPad)
 	}
-	c.box.Fill(t.Card).Border(t.BorderWidth, t.Border).Radius(t.RadiusLg)
-	return c.box.Layout(cs, env.WithText(ggui.TextStyle{Color: colorOr(t.CardFg, t.Fg)}))
+	c.box.Fill(colorOr(c.fill, t.Card)).
+		Border(pick(c.borderWidth >= 0, c.borderWidth, t.BorderWidth), colorOr(c.border, t.Border)).
+		Radius(pick(c.radius >= 0, c.radius, t.RadiusLg))
+	return c.box.Layout(cs, env.WithText(ggui.TextStyle{Color: t.CardFg}))
 }
 
 // Paint implements Widget. A card groups what is inside it, which a
@@ -56,23 +86,70 @@ func (c *CardWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Node(r, ggui.Node{Role: ggui.RoleGroup}, func(dst *ggui.Canvas) { dst.Paint(c.box, r) })
 }
 
-// BadgeWidget is a small pill of text. Build one with Badge.
-type BadgeWidget struct {
-	props  property.Owner
-	text   *ggui.TextWidget
-	accent bool
-	pad    ggui.EdgeInsets
-	size   ggui.Size
-	theme  uitheme.Theme
+// BadgeStyle is the look of a badge variant under a theme.
+type BadgeStyle struct {
+	Fill, Label, Border color.Color // nil Fill or Border draws none
 }
 
-// Badge creates a muted pill labelled s; Accent colors it.
-func Badge(s string) *BadgeWidget { return &BadgeWidget{text: ggui.Text(s).NoWrap()} }
+// BadgeVariant is a look for Badge.Variant.
+type BadgeVariant = Variant[BadgeStyle]
 
-// Accent fills the badge with the accent color.
-func (b *BadgeWidget) Accent() *BadgeWidget {
-	defer property.Watch(&b.props, &b.accent)()
-	b.accent = true
+// The badge variants of shadcn/ui. Restyle one to change every badge drawn
+// with it under a theme, or make more with NewVariant.
+var (
+	BadgePrimary = NewVariant("primary", func(t uitheme.Theme) BadgeStyle {
+		return BadgeStyle{Fill: t.Primary, Label: t.PrimaryFg}
+	})
+	BadgeSecondary = NewVariant("secondary", func(t uitheme.Theme) BadgeStyle {
+		return BadgeStyle{Fill: t.Secondary, Label: t.SecondaryFg}
+	})
+	BadgeOutline = NewVariant("outline", func(t uitheme.Theme) BadgeStyle {
+		return BadgeStyle{Label: t.Fg, Border: t.Border}
+	})
+	BadgeDestructive = NewVariant("destructive", func(t uitheme.Theme) BadgeStyle {
+		return BadgeStyle{Fill: t.Destructive, Label: t.DestructiveFg}
+	})
+)
+
+// BadgeWidget is a small pill with a short label. Build one with Badge.
+type BadgeWidget struct {
+	props   property.Owner
+	text    *ggui.TextWidget
+	variant *BadgeVariant
+	radius  float64 // set by Radius; negative is a pill
+	style   BadgeStyle
+	pad     ggui.EdgeInsets
+	size    ggui.Size
+	theme   uitheme.Theme
+}
+
+// Badge creates a pill labelled s on the Secondary surface; Variant, or
+// Primary, Outline and Destructive, change its look.
+func Badge(s string) *BadgeWidget {
+	return &BadgeWidget{text: ggui.Text(s).NoWrap(), variant: BadgeSecondary, radius: -1}
+}
+
+// Variant draws the badge in v, one of the Badge variables or a variant of
+// your own; see NewVariant.
+func (b *BadgeWidget) Variant(v *BadgeVariant) *BadgeWidget {
+	defer property.Watch(&b.props, &b.variant)()
+	b.variant = v
+	return b
+}
+
+// Primary fills the badge with the Primary color.
+func (b *BadgeWidget) Primary() *BadgeWidget { return b.Variant(BadgePrimary) }
+
+// Outline draws the badge as a border with no fill.
+func (b *BadgeWidget) Outline() *BadgeWidget { return b.Variant(BadgeOutline) }
+
+// Destructive fills the badge with the Destructive color.
+func (b *BadgeWidget) Destructive() *BadgeWidget { return b.Variant(BadgeDestructive) }
+
+// Radius gives the badge corners of radius r instead of a pill's.
+func (b *BadgeWidget) Radius(r float64) *BadgeWidget {
+	defer property.Watch(&b.props, &b.radius)()
+	b.radius = max(r, 0)
 	return b
 }
 
@@ -81,16 +158,22 @@ func (b *BadgeWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer b.props.Layout()()
 	t := uitheme.From(env)
 	b.theme = t
+	b.style = b.variant.Style(t)
 	b.pad = ggui.Insets(2, t.Space*0.75)
-	b.text.Style(t.Caption).Color(pick(b.accent, t.PrimaryFg, t.Fg))
+	b.text.Style(t.Caption.Merge(t.Label)).Color(b.style.Label)
 	b.size = b.text.Layout(b.pad.Shrink(c).Loosen(), env)
 	return c.Constrain(b.pad.Inflate(b.size))
 }
 
 // Paint implements Widget.
 func (b *BadgeWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	t := b.theme
-	dst.FillRoundRect(r, r.Size.H/2, pick(b.accent, t.Primary, t.Muted))
+	radius := pick(b.radius >= 0, b.radius, r.Size.H/2)
+	if b.style.Fill != nil {
+		dst.FillRoundRect(r, radius, b.style.Fill)
+	}
+	if b.style.Border != nil {
+		dst.StrokeRoundRect(r, radius, b.theme.BorderWidth, b.style.Border)
+	}
 	dst.Paint(b.text, ggui.Rct(ggui.Pt(r.Origin.X+b.pad.Left, r.Origin.Y+(r.Size.H-b.size.H)/2), b.size))
 }
 

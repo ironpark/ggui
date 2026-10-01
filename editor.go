@@ -403,7 +403,7 @@ func (t *TextInputWidget) face(scale float64) text.Face {
 	if st.Font == nil {
 		st = t.style.resolved()
 	}
-	return st.Font.face(st.Size * scale)
+	return st.Font.face(st.Size*scale, st.Weight)
 }
 
 // advance is the logical width of s as drawn.
@@ -455,6 +455,7 @@ type spanKey struct {
 	text       string
 	generation uint64
 	font       *Font
+	weight     FontWeight
 	size       float64
 	width      float64
 }
@@ -469,7 +470,7 @@ func (t *TextInputWidget) spans(s string) []lineSpan {
 	if st.Font == nil {
 		st = t.style.resolved()
 	}
-	key := spanKey{s, fontGen(), st.Font, st.Size, t.width}
+	key := spanKey{s, fontGen(), st.Font, st.Weight, st.Size, t.width}
 	if t.wrapped.spans == nil || t.wrapped.key != key {
 		t.wrapped.key, t.wrapped.spans = key, wrapSpans(s, t.face(1), t.width)
 	}

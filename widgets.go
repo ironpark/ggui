@@ -100,6 +100,7 @@ type wrapKey struct {
 	generation uint64
 	value      string
 	font       *Font
+	weight     FontWeight
 	size       float64
 	lineHeight float64
 	maxW       float64
@@ -174,9 +175,13 @@ func (t *TextWidget) Style(ts TextStyle) *TextWidget {
 	return t
 }
 
-// Color sets the text color.
+// Color sets the text color; nil inherits. Changing one color for another
+// is paint-only, so a control can recolor its label as the pointer moves
+// over it without laying it out again.
 func (t *TextWidget) Color(c color.Color) *TextWidget {
-	defer property.Watch(&t.props, &t.style)()
+	if (c == nil) != (t.style.Color == nil) {
+		defer property.Watch(&t.props, &t.style)()
+	}
 	t.style.Color = c
 	return t
 }
@@ -185,6 +190,14 @@ func (t *TextWidget) Color(c color.Color) *TextWidget {
 func (t *TextWidget) Font(f *Font) *TextWidget {
 	defer property.Watch(&t.props, &t.style)()
 	t.style.Font = f
+	return t
+}
+
+// Weight sets the font weight, drawn with the Font's face nearest it; zero
+// inherits.
+func (t *TextWidget) Weight(w FontWeight) *TextWidget {
+	defer property.Watch(&t.props, &t.style)()
+	t.style.Weight = w
 	return t
 }
 
@@ -274,7 +287,7 @@ func (t *TextWidget) current() TextStyle {
 // HiDPI Canvas glyphs are rasterized at full resolution instead of scaled up.
 func (t *TextWidget) faceAt(scale float64) text.Face {
 	st := t.current()
-	return st.Font.face(st.Size * scale)
+	return st.Font.face(st.Size*scale, st.Weight)
 }
 
 // spacing is the distance between baselines.
@@ -299,7 +312,7 @@ func (t *TextWidget) Layout(c Constraints, env Env) Size {
 	t.resolved = env.ResolveText(style.Merge(t.style))
 	face := t.faceAt(1)
 	fits := t.wrap || t.ellipsis || t.maxLines > 0
-	key := wrapKey{generation: fontGen(), value: t.value, font: t.resolved.Font, size: t.resolved.Size, lineHeight: t.resolved.LineHeight,
+	key := wrapKey{generation: fontGen(), value: t.value, font: t.resolved.Font, weight: t.resolved.Weight, size: t.resolved.Size, lineHeight: t.resolved.LineHeight,
 		maxW: pick(fits, c.MaxW, 0), maxLines: t.maxLines, ellipsis: t.ellipsis}
 	if key != t.wrapped {
 		t.wrapped = key
@@ -356,7 +369,7 @@ func (t *TextWidget) paintLines(dst *Canvas, r Rect, place func(op *text.DrawOpt
 	}
 	face := t.faceAt(dst.Scale())
 	op := &text.DrawOptions{}
-	op.ColorScale.ScaleWithColor(t.current().Color)
+	op.ColorScale.ScaleWithColor(pick(t.style.Color != nil, t.style.Color, t.current().Color))
 	for i, line := range t.lines {
 		x := r.Origin.X + (r.Size.W-t.widths[i])*t.align
 		y := r.Origin.Y + float64(i)*t.spacing()
@@ -399,6 +412,13 @@ func (s *StyledWidget) Color(c color.Color) *StyledWidget {
 func (s *StyledWidget) Font(f *Font) *StyledWidget {
 	defer property.Watch(&s.props, &s.style)()
 	s.style.Font = f
+	return s
+}
+
+// Weight sets the inherited font weight.
+func (s *StyledWidget) Weight(w FontWeight) *StyledWidget {
+	defer property.Watch(&s.props, &s.style)()
+	s.style.Weight = w
 	return s
 }
 

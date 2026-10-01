@@ -401,9 +401,9 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 	}
 	item := q.items[i]
 	current, total := q.Progress()
-	heading := []ggui.Widget{ggui.Text(item.Title).StyleKey(uitheme.TitleKey, uitheme.Default().Title).Role(ggui.RoleHeading).Size(16).LineHeight(1.5)}
+	heading := []ggui.Widget{Heading(item.Title).LineHeight(1.5)}
 	if item.Description != "" {
-		heading = append(heading, ggui.Text(item.Description).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption).Size(14).LineHeight(1.5))
+		heading = append(heading, Caption(item.Description).LineHeight(1.5))
 	}
 	body := []ggui.Widget{ggui.Column(
 		&questionProgress{Caption(fmt.Sprintf("Question %d of %d", current, total)), current, total},
@@ -449,7 +449,7 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 	}
 	body = append(body, ggui.Column(rows...).Gap(8).Align(ggui.AlignStretch))
 	if message := q.errors[item.Name]; message != "" {
-		body = append(body, &questionError{ggui.Text(message).Size(14)})
+		body = append(body, &questionError{ggui.Text(message)})
 	}
 	actions := []ggui.Widget{}
 	if current > 1 {
@@ -614,16 +614,18 @@ func (c *questionChoice) selected() bool {
 func (c *questionChoice) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	c.theme = uitheme.From(env)
 	c.env = env
-	text := []ggui.Widget{ggui.Text(c.option.Label).Font(uitheme.From(env).Title.Font).Size(14).LineHeight(1.5).Color(pick(c.IsInert(), c.theme.MutedFg, c.theme.Fg))}
+	t := c.theme
+	text := []ggui.Widget{ggui.Text(c.option.Label).Style(t.Label).LineHeight(1.5).Color(pick(c.IsInert(), t.MutedFg, t.Fg))}
 	if c.option.Description != "" {
-		text = append(text, ggui.Text(c.option.Description).Size(14).LineHeight(1.5).Color(c.theme.MutedFg))
+		text = append(text, ggui.Text(c.option.Description).LineHeight(1.5).Color(t.MutedFg))
 	}
-	parts := []ggui.Widget{ggui.Box().Width(16).Height(16), ggui.Expanded(ggui.Column(text...).Gap(c.theme.ChatTokens().QuestionTextGap))}
+	parts := []ggui.Widget{ggui.Box().Width(t.ControlSize).Height(t.ControlSize), ggui.Expanded(ggui.Column(text...).Gap(t.Chat.QuestionTextGap))}
 	if c.shortcut != "" {
-		parts = append(parts, ggui.Box(ggui.Center(ggui.Text(c.shortcut).Size(10).Color(c.theme.MutedFg))).
-			Width(20).Height(20).Radius(8).Fill(c.theme.Bg).Border(1, c.theme.Border))
+		key := t.ControlSize + 4
+		parts = append(parts, ggui.Box(ggui.Center(ggui.Text(c.shortcut).Style(t.Caption).Size(t.Caption.Size*.85).Color(t.MutedFg))).
+			Width(key).Height(key).Radius(t.RadiusSm).Fill(t.Bg).Border(t.BorderWidth, t.Border))
 	}
-	tokens := c.theme.ChatTokens()
+	tokens := c.theme.Chat
 	c.body = ggui.Box(ggui.Row(parts...).Gap(tokens.QuestionChoiceGap).Align(ggui.AlignStart)).Padding(tokens.QuestionChoicePadding)
 	s := c.body.Layout(cs, env)
 	s.H = max(44, s.H)
@@ -642,19 +644,19 @@ func (c *questionChoice) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if c.q.errors[c.item.Name] != "" {
 		border = t.Destructive
 	}
-	tokens := t.ChatTokens()
+	tokens := t.Chat
 	dst.FillRoundRect(r, tokens.QuestionRadius, fill)
-	dst.StrokeRoundRect(r, tokens.QuestionRadius, 1, border)
+	dst.StrokeRoundRect(r, tokens.QuestionRadius, t.BorderWidth, border)
 	c.Hit(dst, r, c, ggui.CursorShapePointer)
 	dst.Paint(c.body, r)
-	glyph := ggui.Rct(r.Origin.Add(ggui.Pt(tokens.QuestionChoicePadding.Left, tokens.QuestionChoicePadding.Top+2)), ggui.Sz(16, 16))
-	radius := pick(c.item.Multiple, 4.0, 8.0)
+	glyph := ggui.Rct(r.Origin.Add(ggui.Pt(tokens.QuestionChoicePadding.Left, tokens.QuestionChoicePadding.Top+2)), squareGlyph(t))
+	radius := pick(c.item.Multiple, t.Radius*.5, t.ControlSize/2)
 	dst.FillRoundRect(glyph, radius, pick(selected, t.Primary, t.Input))
-	dst.StrokeRoundRect(glyph, radius, 1, pick(selected, t.Primary, t.Border))
+	dst.StrokeRoundRect(glyph, radius, t.BorderWidth, pick(selected, t.Primary, t.InputBorder))
 	if selected && c.item.Multiple {
 		paintIcon(dst, c.env, icons.Check, glyph, t.PrimaryFg, 0)
 	} else if selected {
-		dst.FillCircle(glyph.Origin.Add(ggui.Pt(8, 8)), 4, t.PrimaryFg)
+		dst.FillCircle(glyph.Center(), t.ControlSize/4, t.PrimaryFg)
 	}
 	c.FocusRing(dst, r, tokens.QuestionRadius, t.Ring)
 }
@@ -751,7 +753,7 @@ type questionInput struct{ *TextFieldWidget }
 func (f *questionInput) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := uitheme.From(env)
 	t.FieldPad = ggui.Insets(5, 10)
-	t.Radius = t.ChatTokens().QuestionInputRadius
+	t.Radius = t.Chat.QuestionInputRadius
 	t.Input = mix(t.Bg, t.Input, .3)
 	c.MinH = min(c.MaxH, max(c.MinH, 32))
 	return f.TextFieldWidget.Layout(c, t.Apply(env))
@@ -762,7 +764,7 @@ func (f *questionInput) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 type questionStack struct{ *ggui.ColumnWidget }
 
 func (s *questionStack) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	s.Gap(uitheme.From(env).ChatTokens().QuestionGap)
+	s.Gap(uitheme.From(env).Chat.QuestionGap)
 	return s.ColumnWidget.Layout(c, env)
 }
 

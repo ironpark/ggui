@@ -127,7 +127,7 @@ func (ef *emojiFace) colorFace() text.Face {
 		if f == nil {
 			return
 		}
-		e := &text.GoTextFace{Source: f.src, Size: ef.size}
+		e := &text.GoTextFace{Source: f.source(), Size: ef.size}
 		m, em := ef.Face.Metrics(), e.Metrics()
 		if h := em.HAscent + em.HDescent; h > 0 {
 			e.Size *= (m.HAscent + m.HDescent) / h

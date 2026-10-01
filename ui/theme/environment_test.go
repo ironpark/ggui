@@ -128,3 +128,36 @@ func TestLocalThemeKeepsCacheAcrossFrames(t *testing.T) {
 		t.Fatalf("local theme invalidated stable cached child %d times", layouts)
 	}
 }
+
+func TestOverrideChangesTokensForASubtreeAndKeepsItsLayoutCached(t *testing.T) {
+	t.Parallel()
+	preserveEnv(t)
+	brand := color.NRGBA{0x25, 0x63, 0xeb, 0xff}
+	var inside, outside theme.Theme
+	layouts := 0
+	child := ggui.FromFuncs(func(c ggui.Constraints, env ggui.Env) ggui.Size {
+		layouts++
+		inside = theme.From(env)
+		return c.Constrain(ggui.Sz(10, 10))
+	}, func(*ggui.Canvas, ggui.Rect) {})
+	probe := ggui.FromFuncs(func(c ggui.Constraints, env ggui.Env) ggui.Size {
+		outside = theme.From(env)
+		return ggui.Size{}
+	}, func(*ggui.Canvas, ggui.Rect) {})
+	tree := ggui.Column(probe, theme.Override(func(t *theme.Theme) { t.Primary = brand }, ggui.Cached(child)))
+	p := ggui.NewProbe(tree, ggui.Sz(20, 20))
+	defer p.Close()
+	p.Frame()
+	if inside.Primary != color.Color(brand) || outside.Primary == color.Color(brand) {
+		t.Fatalf("Primary inside %v, outside %v: want the override only inside", inside.Primary, outside.Primary)
+	}
+	if inside.PrimaryHover == outside.PrimaryHover {
+		t.Fatalf("PrimaryHover %v did not follow the overridden Primary", inside.PrimaryHover)
+	}
+	before := layouts
+	p.Frame()
+	p.Frame()
+	if layouts != before {
+		t.Fatalf("an unchanged override laid its cached subtree out %d more times", layouts-before)
+	}
+}

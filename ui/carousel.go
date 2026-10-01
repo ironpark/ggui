@@ -288,7 +288,7 @@ func (c *CarouselWidget) Layout(con ggui.Constraints, e ggui.Env) ggui.Size {
 	size := con.Constrain(ggui.Sz(bounded(con.MaxW, 416), c.height))
 	gutter := 0.
 	if c.controls {
-		gutter = 48
+		gutter = iconButtonSide(c.theme) + 2*c.theme.Space
 	}
 	if c.vertical {
 		gutter = min(gutter, size.H/2)
@@ -353,8 +353,9 @@ func (c *CarouselWidget) Layout(con ggui.Constraints, e ggui.Env) ggui.Size {
 		c.ready = true
 		c.dragging = false
 	}
-	c.prev.Layout(ggui.Tight(ggui.Sz(28, 28)), e)
-	c.next.Layout(ggui.Tight(ggui.Sz(28, 28)), e)
+	side := iconButtonSide(c.theme)
+	c.prev.Layout(ggui.Tight(ggui.Sz(side, side)), e)
+	c.next.Layout(ggui.Tight(ggui.Sz(side, side)), e)
 	return size
 }
 func (c *CarouselWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
@@ -433,11 +434,12 @@ func (c *CarouselWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 			clip.Node(at, ggui.Node{Role: ggui.RoleGroup, Name: fmt.Sprintf("Slide %d of %d", i+1, len(c.items))}, func(dst *ggui.Canvas) { dst.Paint(c.items[i], at) })
 		}
 		c.FocusRing(d, v, c.theme.Radius, c.theme.Ring)
-		if c.controls && ((!c.vertical && r.Size.W >= 56) || (c.vertical && r.Size.H >= 56)) {
-			a, b := ggui.Rct(ggui.Pt(r.Origin.X, r.Center().Y-14), ggui.Sz(28, 28)), ggui.Rct(ggui.Pt(r.Origin.X+r.Size.W-28, r.Center().Y-14), ggui.Sz(28, 28))
+		side := iconButtonSide(c.theme)
+		if c.controls && ((!c.vertical && r.Size.W >= 2*side) || (c.vertical && r.Size.H >= 2*side)) {
+			a, b := ggui.Rct(ggui.Pt(r.Origin.X, r.Center().Y-side/2), ggui.Sz(side, side)), ggui.Rct(ggui.Pt(r.Origin.X+r.Size.W-side, r.Center().Y-side/2), ggui.Sz(side, side))
 			if c.vertical {
-				a.Origin = ggui.Pt(r.Center().X-14, r.Origin.Y)
-				b.Origin = ggui.Pt(r.Center().X-14, r.Origin.Y+r.Size.H-28)
+				a.Origin = ggui.Pt(r.Center().X-side/2, r.Origin.Y)
+				b.Origin = ggui.Pt(r.Center().X-side/2, r.Origin.Y+r.Size.H-side)
 			} else if c.rtl {
 				a, b = b, a
 			}
@@ -599,7 +601,8 @@ func carouselNavigation(c *CarouselWidget, prev bool) *CarouselNavigationWidget 
 }
 func (b *CarouselNavigationWidget) Layout(c ggui.Constraints, e ggui.Env) ggui.Size {
 	b.env = e
-	return c.Constrain(ggui.Sz(28, 28))
+	side := iconButtonSide(uitheme.From(e))
+	return c.Constrain(ggui.Sz(side, side))
 }
 func (b *CarouselNavigationWidget) enabled() bool {
 	if b.previous {
@@ -623,14 +626,13 @@ func (b *CarouselNavigationWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 	t := uitheme.From(b.env)
 	fill, col, border := t.Bg, t.Fg, t.Border
 	if b.Hovered && !b.IsInert() {
-		fill = colorOr(t.Accent, t.Muted)
+		fill, col = t.Accent, t.AccentFg
 	}
 	if b.IsInert() {
-		col = fade(col, .5)
-		border = fade(border, .5)
+		col, border = t.Disabled(col), t.Disabled(border)
 	}
 	d.FillRoundRect(r, min(r.Size.W, r.Size.H)/2, fill)
-	d.StrokeRoundRect(r, min(r.Size.W, r.Size.H)/2, 1, border)
+	d.StrokeRoundRect(r, min(r.Size.W, r.Size.H)/2, t.BorderWidth, border)
 	role := icons.ChevronRight
 	if b.previous {
 		role = icons.ChevronLeft
@@ -641,8 +643,8 @@ func (b *CarouselNavigationWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 	} else if b.carousel.rtl {
 		angle = math.Pi
 	}
-	paintIcon(d, b.env, role, ggui.Rct(r.Center().Add(ggui.Pt(-8, -8)), ggui.Sz(16, 16)), col, angle)
-	b.FocusRing(d, r, 14, t.Ring)
+	paintIconAt(d, b.env, role, r.Center(), t.IconSize, col, angle)
+	b.FocusRing(d, r, min(r.Size.W, r.Size.H)/2, t.Ring)
 }
 func (b *CarouselNavigationWidget) HandlePointer(e ggui.PointerEvent) bool {
 	return b.Pointer(e, b.activate)

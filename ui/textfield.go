@@ -150,7 +150,7 @@ func (f *TextFieldWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		f.Hit(dst, r, f.input, ggui.CursorShapeText)
 	}
 	if !f.plain && f.input.Focused() && !f.input.IsDisabled() {
-		fieldHalo(dst, r, f.theme.Radius, fieldRing(f.theme, f.invalid))
+		fieldHalo(dst, f.theme, r, f.theme.Radius, fieldRing(f.theme, f.invalid))
 	}
 	if f.invalid && !f.plain {
 		f.box.Border(f.theme.BorderWidth, f.theme.Destructive)
