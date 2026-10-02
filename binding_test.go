@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"github.com/ironpark/ggui/internal/reactive"
+	"slices"
 	"testing"
 	"time"
 )
@@ -189,5 +190,17 @@ func TestFieldLensReadsAndWritesThrough(t *testing.T) {
 	reactive.FlushUsers(nil)
 	if Untrack(name.Get) != "c" || seen != "c" {
 		t.Fatalf("peek %q, watcher %q after the whole was replaced", Untrack(name.Get), seen)
+	}
+}
+
+// Controlled shows the value it was built with and hands a change to set,
+// which may refuse it.
+func TestControlledAsksSetForAChange(t *testing.T) {
+	t.Parallel()
+	var asked []int
+	b := Controlled(1, func(v int) { asked = append(asked, v) })
+	b.Set(2)
+	if b.Get() != 1 || !slices.Equal(asked, []int{2}) {
+		t.Fatalf("Get = %d, asked %v; want 1 and [2]", b.Get(), asked)
 	}
 }

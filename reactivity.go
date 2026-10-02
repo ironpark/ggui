@@ -105,6 +105,29 @@ func (b *funcBinding[T]) Get() T {
 
 func (b *funcBinding[T]) Set(v T) { b.set(v) }
 
+// Controlled binds a control to value, a copy taken when the view was
+// built, and asks set for a change instead of making it. It is for a
+// control whose change the model may refuse, such as a mode switch that a
+// form with an invalid entry blocks: a change set takes rebuilds the view
+// with the new value, and one it refuses leaves the control showing value.
+// Unlike Bind, it reads no signal on purpose, so the view around it must
+// rebuild when the model changes.
+//
+//	ggui.View(mode, func(m int) ggui.Widget {
+//		return ui.ToggleGroup(ggui.Controlled(m, model.SwitchMode)).Options(modes)
+//	})
+func Controlled[T any](value T, set func(T)) Binding[T] {
+	return controlled[T]{value, set}
+}
+
+type controlled[T any] struct {
+	value T
+	set   func(T)
+}
+
+func (c controlled[T]) Get() T  { return c.value }
+func (c controlled[T]) Set(v T) { c.set(v) }
+
 // untrackedBinds holds the Bind call sites already reported, so each is
 // reported once however many controls it builds.
 var untrackedBinds sync.Map

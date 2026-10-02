@@ -188,6 +188,10 @@ uses it. Nil, including a typed nil reader, is rejected; `X(value)` detaches it.
 `Const(value)` adapts a literal only where a reader is required, for example
 `ui.Progress(ggui.Const(0.5))`. `Bind(get, set)` adapts a getter and setter
 pair, typically model methods, where a control needs a `Binding[T]`.
+`Controlled(value, set)` binds a control to a value taken when its view was
+built and hands a change to `set`, which may refuse it; the view around it
+rebuilds when the model changes, so a `ggui_debug` build does not warn that it
+reads no signal, as it does for `Bind`.
 
 Layout bindings such as `BindDisabled`, `BindName` and `BindOptions` track
 signal reads made inside a custom reader's `Get`, including under layout caches.

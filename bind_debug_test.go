@@ -28,6 +28,7 @@ func TestBindReportsAGetterThatReadsNoSignal(t *testing.T) {
 		b.Get()
 	}
 	live.Get()
+	Controlled(3, func(int) {}).Get() // reads no signal on purpose
 	if n := strings.Count(out.String(), "read no signal"); n != 1 {
 		t.Fatalf("logged %d reports, want 1 for the one call site:\n%s", n, out.String())
 	}
