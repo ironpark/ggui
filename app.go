@@ -48,7 +48,7 @@ func New(cfg Config, build Builder) *App {
 	// the Base of the goroutine that called New, so that state and widgets
 	// main built before Run are flushed by the app's frames.
 	rt := reactive.NewRuntime()
-	worldOf(rt) // made here, before the engine's goroutine can ask for it
+	worldOf(rt).nativeFonts = true // made here, before the engine's goroutine can ask for it
 	a := &App{}
 	a.Window = newWindow(a, rt, cfg, build)
 	a.windows = []*Window{a.Window}

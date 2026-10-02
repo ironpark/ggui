@@ -29,10 +29,12 @@ type world struct {
 	env     *StateValue[Env] // see UseEnv; nil until first read
 	envMemo envMemo
 
-	font    *Font                      // see SetDefaultFont; nil inherits
-	emoji   *emojiChoice               // see SetEmojiFont; nil inherits
-	fontGen uint64                     // counts this world's font and emoji settings
-	ime     func(*TextInputWidget) ime // a test's IME; nil inherits
+	font        *Font                      // see SetDefaultFont; nil inherits
+	mono        *Font                      // see SetDefaultMonoFont; nil inherits
+	nativeFonts bool                       // an App's: defaults to the platform's fonts
+	emoji       *emojiChoice               // see SetEmojiFont; nil inherits
+	fontGen     uint64                     // counts this world's font and emoji settings
+	ime         func(*TextInputWidget) ime // a test's IME; nil inherits
 }
 
 // worldOf returns rt's world, making it on first use. A runtime is used by

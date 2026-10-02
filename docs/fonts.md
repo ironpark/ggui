@@ -11,11 +11,18 @@ See [example conventions](README.md#start-here) before copying snippets.
 
 ### Choose text fonts
 
-The built-in font covers Latin, Greek and Cyrillic. Glyphs a font lacks are
-drawn from its fallbacks: `SystemFonts()`, the CJK and wide-coverage fonts
-found at well-known paths on macOS, Windows and Linux (plus any files in
-the `GGUI_FONTS` environment variable), so Korean, Japanese and Chinese
-render out of the box on a machine that has such a font. `Fallback(fonts...)`
+An App draws in the platform's interface font, with every weight it has:
+SF Pro on macOS, Segoe UI on Windows, and on Linux what fontconfig's
+`fc-match` gives for `sans-serif`. A browser has no system fonts, and a
+`Probe` keeps to one font so tests measure the same everywhere; both draw in
+the built-in Go Regular, as does an App on a machine without an interface
+font. `SetDefaultFont` replaces the default.
+
+Glyphs a font lacks are drawn from its fallbacks: `SystemFonts()`, the CJK
+and wide-coverage fonts found at well-known paths on macOS, Windows and Linux
+(plus any files in the `GGUI_FONTS` environment variable), so Korean,
+Japanese and Chinese render out of the box on a machine that has such a font.
+A fallback that is a `.ttc` brings every weight in it. `Fallback(fonts...)`
 on a `Font` chooses a chain of your own and `NoFallback()` turns it off.
 `LoadFontFile` also reads the first face of a `.ttc`; `LoadFontCollection`
 returns them all.
@@ -42,10 +49,23 @@ t.Text.Font = inter
 
 Between two faces equally near, the heavier wins above regular and the
 lighter below it, as CSS matches weights, so semibold falls to bold when a
-family has no semibold. The built-in font is Go Regular with Go Medium and Go
-Bold, and `ggui.DefaultMonoFont()` is Go Mono; each is parsed the first time
-it draws. The fallback fonts take the weight too where they have a weight
-axis.
+family has no semibold. The fallback fonts take the weight too.
+
+`ggui.DefaultMonoFont()`, which the theme's `Mono` style uses, draws in the
+platform's monospaced font: SF Mono on macOS, Cascadia Mono or Consolas on
+Windows, fontconfig's `monospace` on Linux. `SetDefaultMonoFont` replaces
+it; where there is none it draws in the text font.
+
+The built-in Go Regular has no other weights, so in a browser or a `Probe`
+text asking for one is drawn regular. For bold text there, or for the same
+look on every platform, import `fonts/gofont`, which adds about 650 KB to
+the binary:
+
+```go
+import "github.com/ironpark/ggui/fonts/gofont"
+
+gofont.Enable() // Go Regular, Medium and Bold, and Go Mono; before building the app
+```
 
 ### Add color emoji
 

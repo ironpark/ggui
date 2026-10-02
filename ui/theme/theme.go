@@ -127,7 +127,7 @@ func (t Theme) Get[T any](k ggui.EnvKey[T]) (T, bool) {
 	return zero, false
 }
 
-// Default is a neutral light theme inspired by shadcn/ui, in Go Regular.
+// Default is a neutral light theme inspired by shadcn/ui, in the default font.
 // The palette is shadcn's zinc scale, so its CSS variables map across a token
 // at a time.
 func Default() Theme { return lightBase().Resolve() }

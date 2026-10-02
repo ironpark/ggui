@@ -63,6 +63,7 @@ Package-specific READMEs remain beside their code and assets:
 - [Icon sets, custom SVGs, precedence, and caching](../ui/icons/README.md)
 - [Bundled Lucide icons](../ui/icons/lucide/README.md), [Tabler icons](../ui/icons/tabler/README.md), and [Heroicons](../ui/icons/heroicons/README.md)
 - [Optional Noto Color Emoji font](../fonts/notoemoji/README.md)
+- [Optional Go fonts, with bold, for every platform](../fonts/gofont/README.md)
 - [Gallery chat assets and licenses](../examples/gallery/assets/chat/README.md)
 - [Theme package and migration](../ui/theme/README.md)
 - [Vendored theme palettes and sources](../internal/themedata/README.md)

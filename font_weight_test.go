@@ -6,20 +6,26 @@ import (
 
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/gomedium"
+	"golang.org/x/image/font/gofont/gomono"
 	"golang.org/x/image/font/gofont/goregular"
 )
 
 func TestTextWeightDrawsTheHeavierFace(t *testing.T) {
 	t.Parallel()
+	family := MustFont(goregular.TTF).WithWeight(WeightBold, MustFont(gobold.TTF))
 	loose := Loose(Sz(1000, 1000))
-	regular := Text("Weighty words").Layout(loose, Env{})
-	bold := Text("Weighty words").Weight(WeightBold).Layout(loose, Env{})
+	regular := Text("Weighty words").Font(family).Layout(loose, Env{})
+	bold := Text("Weighty words").Font(family).Weight(WeightBold).Layout(loose, Env{})
 	if bold.W <= regular.W {
-		t.Fatalf("bold is %v wide, regular %v: want the built-in bold face, which is wider", bold.W, regular.W)
+		t.Fatalf("bold is %v wide, regular %v: want the bold face, which is wider", bold.W, regular.W)
 	}
-	inherited := Styled(Text("Weighty words")).Weight(WeightBold)
+	inherited := Styled(Text("Weighty words")).Font(family).Weight(WeightBold)
 	if got := inherited.Layout(loose, Env{}); got.W != bold.W {
 		t.Fatalf("inherited bold is %v wide, want %v", got.W, bold.W)
+	}
+	// The built-in font has no bold, so it draws regular.
+	if plain, heavy := Text("Weighty words").Layout(loose, Env{}), Text("Weighty words").Weight(WeightBold).Layout(loose, Env{}); plain != heavy {
+		t.Fatalf("the built-in font drew bold %v against regular %v, want the same face", heavy, plain)
 	}
 }
 
@@ -61,5 +67,34 @@ func TestTextRecolorIsPaintOnly(t *testing.T) {
 	w.Color(nil)
 	if w.props.Version() == v {
 		t.Fatal("going back to the inherited color did not lay the text out again")
+	}
+}
+
+func TestDefaultMonoFontFollowsItsSetting(t *testing.T) {
+	t.Parallel()
+	mono := MustFont(gomono.TTF)
+	p := NewProbe(Text("x"), Sz(10, 10)).Setup(func() { SetDefaultMonoFont(mono) })
+	defer p.Close()
+	p.Frame()
+	var monoWidth, textWidth float64
+	p.Post(func() {
+		monoWidth = lineWidth("iiii", DefaultMonoFont().face(14, 0))
+		textWidth = lineWidth("iiii", fallbackFont().face(14, 0))
+	})
+	p.Frame()
+	if want := lineWidth("iiii", mono.face(14, 0)); monoWidth != want || textWidth == want {
+		t.Fatalf("DefaultMonoFont drew %v wide and the text font %v, want Go Mono's %v for the first only", monoWidth, textWidth, want)
+	}
+}
+
+func TestAProbeDrawsInTheBuiltInFont(t *testing.T) {
+	t.Parallel()
+	p := NewProbe(Text("x"), Sz(10, 10))
+	defer p.Close()
+	var got *Font
+	p.Post(func() { got = fallbackFont() })
+	p.Frame()
+	if got != builtinFont() {
+		t.Fatal("a Probe drew in a font other than the built-in one, so tests would vary by machine")
 	}
 }

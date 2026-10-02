@@ -15,16 +15,16 @@ import (
 //go:embed assets/chat/*
 var chatAssets embed.FS
 
-var chatFonts = sync.OnceValue(func() [2]*ggui.Font {
-	var fonts [2]*ggui.Font
-	for i, name := range []string{"Geist-Regular.ttf", "Geist-Medium.ttf"} {
+// chatFont is Geist, with its medium face drawing every heavier weight.
+var chatFont = sync.OnceValue(func() *ggui.Font {
+	load := func(name string) *ggui.Font {
 		data, err := chatAssets.ReadFile("assets/chat/" + name)
 		if err != nil {
 			panic(err)
 		}
-		fonts[i] = ggui.MustFont(data)
+		return ggui.MustFont(data)
 	}
-	return fonts
+	return load("Geist-Regular.ttf").WithWeight(ggui.WeightMedium, load("Geist-Medium.ttf"))
 })
 
 func chatImage(name string) *ggfx.Image {

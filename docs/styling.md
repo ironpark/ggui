@@ -75,7 +75,7 @@ The full order a `Text` resolves in, every layout:
 1. the inherited style from the `Env` (`env.Text()`)
 2. merged with the theme's named style, for `Title`, `Heading`, `Caption` and `Mono`
 3. merged with the widget's own setters
-4. anything still unset filled from the built-in defaults — Go Regular,
+4. anything still unset filled from the built-in defaults — the default font,
    `DefaultTextSize` (14), black, line height 1.2. This step rarely does
    anything, because step 1 has already supplied `Theme.Text`; it is the
    floor under an `Env` built by hand, as a test does.
@@ -231,7 +231,7 @@ it. See [Local styles](#local-styles) for how the merge resolves.
 | `Heading` | dialog, sheet and card titles, `ui.Heading` | 18px semibold |
 | `Label` | the labels of buttons, tabs, badges and accordion headers | medium weight |
 | `Caption` | small secondary text, `ui.Caption`; its `Color` follows `MutedFg` | 12px |
-| `Mono` | code, `ui.Mono` | Go Mono |
+| `Mono` | code, `ui.Mono` | the platform's monospaced font, `ggui.DefaultMonoFont()` |
 
 ## Deriving a theme
 

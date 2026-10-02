@@ -179,5 +179,6 @@ never evicted.
 word is wider than the line, so scripts without spaces wrap too. `.Size(px)`,
 `.Color(c)`, `.Font(f)`, `.LineHeight(mult)`, `.Style(ts)`, `.Align(0.5)` and
 `.NoWrap()` adjust it; what is not set is inherited (see [Styling and themes](styling.md)). The
-built-in font is Go Regular; `LoadFont(ttf)` or `LoadFontFile(path)` load your
-own, and `SetDefaultFont` makes one the default.
+default font is the platform's (see [Fonts](fonts.md#choose-text-fonts));
+`LoadFont(ttf)` or `LoadFontFile(path)` load your own, and `SetDefaultFont`
+makes one the default.

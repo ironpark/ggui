@@ -16,9 +16,6 @@ import (
 	"github.com/ironpark/ggui/internal/textedit"
 
 	"github.com/ironpark/ggfx/text/v2"
-	"golang.org/x/image/font/gofont/gobold"
-	"golang.org/x/image/font/gofont/gomedium"
-	"golang.org/x/image/font/gofont/gomono"
 	"golang.org/x/image/font/gofont/goregular"
 )
 
@@ -31,8 +28,9 @@ type Font struct {
 	src        *text.GoTextFaceSource
 	load       func() *text.GoTextFaceSource // parses src on first use, for the built-in fonts
 	loadOnce   sync.Once
-	weight     FontWeight // what src draws, from its metadata
-	weights    []*Font    // the faces WithWeight added
+	weight     FontWeight   // what src draws, from its metadata
+	weights    []*Font      // the faces WithWeight added
+	alias      func() *Font // draws in the font this returns, as DefaultMonoFont does
 	fallbacks  []*Font
 	noFallback bool
 
@@ -255,7 +253,9 @@ func SystemFonts() []*Font {
 				continue
 			}
 			seen[path] = true
-			if f, err := LoadFontFile(path); err == nil {
+			// Every weight of the file, so text asking for one draws it
+			// in these scripts too.
+			if f := loadFamily([]fontFile{{path: path}}); f != nil {
 				f.noFallback = true
 				systemFonts = append(systemFonts, f)
 			}
@@ -326,31 +326,32 @@ func MustFont(data []byte) *Font {
 // DefaultTextSize is the size Text uses until Size is set.
 const DefaultTextSize = 14
 
-// builtinFont is Go Regular, with Go Medium and Go Bold as its heavier
-// weights, each parsed on first use so a program that draws no text, or no
-// bold text, never pays for it.
-var builtinFont = sync.OnceValue(func() *Font {
-	f := lazyFont(goregular.TTF, WeightRegular)
-	f.weights = []*Font{lazyFont(gomedium.TTF, WeightMedium), lazyFont(gobold.TTF, WeightBold)}
-	return f
-})
+// builtinFont is Go Regular, parsed on first use so a program that draws
+// no text never pays for it. It is the floor under every default: the font
+// of a Probe, and of an App where no system font is found.
+var builtinFont = sync.OnceValue(func() *Font { return lazyFont(goregular.TTF, WeightRegular) })
 
-// builtinMono is Go Mono. Its bold is left out to keep binaries small;
-// code and key caps are drawn at a regular weight.
-var builtinMono = sync.OnceValue(func() *Font { return lazyFont(gomono.TTF, WeightRegular) })
+// defaultMono stands for the default monospaced font, which is chosen
+// where it draws: see DefaultMonoFont.
+var defaultMono = &Font{alias: monoFont}
 
-// DefaultMonoFont returns the built-in monospaced font, Go Mono, for code
-// and keyboard keys. It is parsed the first time it draws.
-func DefaultMonoFont() *Font { return builtinMono() }
+// DefaultMonoFont returns a Font that draws in the default monospaced font
+// of whatever App or Probe it draws in: the one SetDefaultMonoFont set, or
+// in an App the platform's own, such as SF Mono on macOS, or else the
+// default text font. The theme's Mono style uses it.
+func DefaultMonoFont() *Font { return defaultMono }
 
-// SetDefaultFont replaces the font Text uses when none is set. The built-in
-// default is Go Regular, which covers Latin, Greek and Cyrillic; load a font
-// with the glyphs you need for anything else.
+// SetDefaultFont replaces the font Text uses when none is set. An App
+// draws in the platform's interface font, SF Pro on macOS, Segoe UI on
+// Windows and fontconfig's sans-serif elsewhere, and a Probe, a browser, or
+// an App on a machine without one, in Go Regular, which covers Latin, Greek
+// and Cyrillic. fonts/gofont adds Go Medium and Go Bold for the same look
+// everywhere.
 //
 // Like SetEnv, it sets the font of the App or Probe whose frames run on
 // this goroutine, or, before any has, the one every App and Probe made on
 // it uses until given its own. Nil goes back to that inherited font, or
-// to Go Regular.
+// to the default above.
 func SetDefaultFont(f *Font) {
 	reactive.CheckUIThread("SetDefaultFont")
 	w := activeWorld()
@@ -358,17 +359,54 @@ func SetDefaultFont(f *Font) {
 	w.fontGen++
 }
 
+// SetDefaultMonoFont replaces the font DefaultMonoFont draws in, in the
+// same scope SetDefaultFont sets the text font in. Nil goes back to the
+// default.
+func SetDefaultMonoFont(f *Font) {
+	reactive.CheckUIThread("SetDefaultMonoFont")
+	w := activeWorld()
+	w.mono = f
+	w.fontGen++
+}
+
 // fallbackFont returns the font Text uses when none is set.
 func fallbackFont() *Font {
+	native := false
 	for w := range activeWorld().chain() {
 		if w.font != nil {
 			return w.font
+		}
+		native = native || w.nativeFonts
+	}
+	if native {
+		if f, _ := systemUIFonts(); f != nil {
+			return f
 		}
 	}
 	return builtinFont()
 }
 
+// monoFont returns the font DefaultMonoFont draws in.
+func monoFont() *Font {
+	native := false
+	for w := range activeWorld().chain() {
+		if w.mono != nil {
+			return w.mono
+		}
+		native = native || w.nativeFonts
+	}
+	if native {
+		if _, f := systemUIFonts(); f != nil {
+			return f
+		}
+	}
+	return fallbackFont()
+}
+
 func (f *Font) face(size float64, weight FontWeight) text.Face {
+	if f.alias != nil {
+		return f.alias().face(size, weight)
+	}
 	key := faceKey{size: size, weight: weight}
 	if !f.noFallback {
 		key.emoji = activeEmoji()

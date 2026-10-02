@@ -486,8 +486,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 			if dark.Get() {
 				t = preset.Dark()
 			}
-			fonts := chatFonts()
-			t.Text.Font, t.Title.Font = fonts[0], fonts[1]
+			t.Text.Font = chatFont()
 			uitheme.Set(t)
 			return nil
 		})
