@@ -28,6 +28,7 @@ jobs:
           cache-dependency-path: |
             go.sum
             examples/sqlite/go.sum
+            fonts/notoemoji/go.sum
       # examples/sqlite and fonts/notoemoji are modules of their own that
       # require a published ggui; the workspace makes them build against
       # this checkout instead.
