@@ -120,3 +120,24 @@ func TestTextFieldPasswordHidesValueFromSemantics(t *testing.T) {
 		t.Fatalf("the password field exposes its secret as %q", node.Value)
 	}
 }
+
+// Under a Probe, which has no platform IME, typed text reaches a focused
+// text field at its caret, as it would on a platform without one.
+func TestProbeTextTypesIntoAFocusedTextField(t *testing.T) {
+	t.Parallel()
+	v := ggui.State("")
+	p := ggui.NewProbe(ui.TextField(v), ggui.Sz(200, 40))
+	defer p.Close()
+	size := p.Frame()
+	p.Text("ab")
+	if got := ggui.Untrack(v.Get); got != "" {
+		t.Fatalf("an unfocused field took %q", got)
+	}
+	p.Click(ggui.Pt(size.W/2, size.H/2))
+	p.Text("ab")
+	p.Type(ggui.Mods{}, ggui.KeyArrowLeft)
+	p.Text("c")
+	if got := ggui.Untrack(v.Get); got != "acb" {
+		t.Fatalf("value %q, want acb: the c at the caret", got)
+	}
+}

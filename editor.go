@@ -847,7 +847,12 @@ func (t *TextInputWidget) HandleKey(ev KeyEvent) {
 		t.Interactive.Focused = false
 		t.committed()
 	case KeyText:
-		// Text arrives through the IME, on every platform.
+		// Text arrives through the IME, on every platform. Outside a running
+		// app, as under a Probe, there is no platform IME, so typed text
+		// arrives here instead, as it would without one.
+		if _, platform := t.ime.(*composerIME); platform && !appRunning.Load() {
+			t.imeCommit(ev.Text)
+		}
 	case KeyPress:
 		t.escapeUsed = ev.Key == KeyEscape && t.composition != ""
 		if t.composition == "" && t.onKey != nil && t.onKey(ev) {
