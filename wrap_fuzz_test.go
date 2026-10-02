@@ -167,7 +167,7 @@ func FuzzTextRunsCoverTheTextByGrapheme(f *testing.F) {
 	}
 	f.Add("a👍b👍🏽c1\ufe0f\u20e3❤\ufe0f")
 	f.Add("🏳\ufe0f\u200d🌈x🫩")
-	data, err := os.ReadFile("fonts/notoemoji/NotoColorEmoji.ttf")
+	data, err := os.ReadFile("testdata/emoji-subset.ttf")
 	if err != nil {
 		f.Fatal(err)
 	}

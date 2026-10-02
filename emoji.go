@@ -50,7 +50,7 @@ func activeEmoji() *emojiChoice {
 }
 
 // SetEmojiFont selects a color emoji font for Text and TextInput. It does not
-// replace their Latin/CJK fonts. Use fonts/notoemoji for a portable embedded font,
+// replace their Latin/CJK fonts. Use the fonts/notoemoji module for a portable embedded font,
 // or LoadFont for another CBDT, sbix, COLRv0 or OpenType SVG font. Nil disables
 // emoji substitution; SetEmojiFont(SystemEmojiFont()) restores system rendering.
 // Like SetEnv, call on the UI thread or before creating the app: it sets the

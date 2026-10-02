@@ -12,7 +12,7 @@ import (
 
 func useTestEmoji(t *testing.T) *Font {
 	t.Helper()
-	data, err := os.ReadFile("fonts/notoemoji/NotoColorEmoji.ttf")
+	data, err := os.ReadFile("testdata/emoji-subset.ttf")
 	if err != nil {
 		t.Fatal(err)
 	}

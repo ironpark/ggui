@@ -28,14 +28,15 @@ jobs:
           cache-dependency-path: |
             go.sum
             examples/sqlite/go.sum
-      # examples/sqlite is a module of its own that requires a published
-      # ggui; the workspace makes it build against this checkout instead.
+      # examples/sqlite and fonts/notoemoji are modules of their own that
+      # require a published ggui; the workspace makes them build against
+      # this checkout instead.
       # The developer's own go.work, which also points at ../ggfx, is not
       # committed.
       - name: Workspace
-        run: go work init . ./examples/sqlite
+        run: go work init . ./examples/sqlite ./fonts/notoemoji
       - name: Test
-        run: go test ./... ./examples/sqlite/...
+        run: go test ./... ./examples/sqlite/... ./fonts/notoemoji/...
       - name: Test with the inspector
         run: go test -tags ggui_inspector .
       - name: Test the debug build
@@ -89,7 +90,7 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Workspace
-        run: go work init . ./examples/sqlite
+        run: go work init . ./examples/sqlite ./fonts/notoemoji
       - name: gofmt
         run: |
           unformatted=$(gofmt -l .)
@@ -98,7 +99,7 @@ jobs:
           fi
       - name: vet
         run: |
-          go vet ./... ./examples/sqlite/...
+          go vet ./... ./examples/sqlite/... ./fonts/notoemoji/...
           go vet -tags ggui_inspector .
       # The Windows accessibility bridge is compiled by no other platform;
       # see vet:windows in Taskfile.yml for why unsafeptr is off.
@@ -115,7 +116,7 @@ jobs:
           go install honnef.co/go/tools/cmd/staticcheck@v0.8.1
           for p in linux/amd64 darwin/arm64 windows/amd64 windows/arm64; do
             echo "::group::$p"
-            GOOS=${p%/*} GOARCH=${p#*/} staticcheck ./... ./examples/sqlite/...
+            GOOS=${p%/*} GOARCH=${p#*/} staticcheck ./... ./examples/sqlite/... ./fonts/notoemoji/...
             echo "::endgroup::"
           done
       - name: Build for other architectures

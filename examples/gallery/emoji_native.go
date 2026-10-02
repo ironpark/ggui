@@ -2,6 +2,5 @@
 
 package main
 
-import "github.com/ironpark/ggui/fonts/notoemoji"
-
-func setupEmojiFont() { notoemoji.Enable() }
+// setupEmojiFont leaves the platform's own color emoji font in place.
+func setupEmojiFont() {}

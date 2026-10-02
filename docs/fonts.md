@@ -72,18 +72,25 @@ gofont.Enable() // Go Regular, Medium and Bold, and Go Mono; before building the
 `Text` and `TextInput` render color emoji as part of ordinary strings. Emoji
 presentation selectors, skin tones, regional-indicator flags, keycaps and ZWJ
 sequences stay together when shaping, wrapping, moving the caret or deleting.
-Native apps use `SystemEmojiFont()` when available. For a predictable offline
-font, including WebAssembly:
+Native apps draw them in the platform's color emoji font,
+`SystemEmojiFont()`: Apple Color Emoji, Segoe UI Emoji, or a Noto or Twemoji
+font installed on Linux. Nothing is embedded for that.
+
+A browser has no system fonts, so on the web, on a Linux machine without an
+emoji font, or for the same emoji everywhere, choose a font. The
+`fonts/notoemoji` module embeds Noto Color Emoji; it is a module of its own,
+so its 10.7 MB are downloaded only by applications that require it:
 
 ```go
+// go get github.com/ironpark/ggui/fonts/notoemoji
 import "github.com/ironpark/ggui/fonts/notoemoji"
 
 notoemoji.Enable() // before building the app
 label := ggui.Text("Hello 👋🏽 · 🇰🇷 · 👩🏽‍💻 · 1️⃣")
 ```
 
-The optional Noto package embeds approximately 10.7 MB of font data; apps that
-do not import it do not embed it. `SetEmojiFont(font)` selects a caller-owned
+To keep the font out of a WebAssembly binary, serve it and load it as
+[below](#load-fonts-separately-on-the-web). `SetEmojiFont(font)` selects a caller-owned
 CBDT/CBLC, sbix, COLRv0 or OpenType SVG font without replacing the text font.
 `SetEmojiFont(nil)` disables substitution; `SetEmojiFont(SystemEmojiFont())`
 restores the platform font. `Font.NoFallback()` opts that font out as well.
@@ -117,13 +124,12 @@ URLs require CORS. Serve fonts with cache headers and change their URL version
 when the contents change. Initial total transfer still includes the font, but
 the browser can cache it independently of the WASM binary.
 
-The gallery uses this path on the web and retains embedded Noto on native
-platforms. Its `assets/NotoColorEmoji.ttf` is a symlink to the shared font.
-The development server serves it directly. For static deployment, copy the
-symlink's contents as a regular file to the same asset URL (for example with
-`cp -L`), and include the OFL and Unicode license files from `fonts/notoemoji`.
-Keep the `fonts/notoemoji` import in native-only code to exclude its embedded
-data from web builds.
+The gallery uses this path on the web and the system emoji font on native
+platforms. Its `assets/NotoColorEmoji.ttf` is a symlink to the font in
+`fonts/notoemoji`. The development server serves it directly. For static
+deployment, copy the symlink's contents as a regular file to the same asset
+URL (for example with `cp -L`), and include the OFL and Unicode license files
+from `fonts/notoemoji`.
 
 ## Icons
 

@@ -16,4 +16,4 @@ Avatars are distributed with the MIT-licensed shadcn/ui project
 Geist Regular and Medium are from https://github.com/vercel/geist-font;
 their SIL Open Font License is included in OFL.txt.
 
-Reactions now use ordinary Text with the optional fonts/notoemoji package.
+Reactions use ordinary Text, drawn in the system emoji font on native platforms and in Noto Color Emoji, loaded from assets/, on the web.
