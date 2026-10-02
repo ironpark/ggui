@@ -6,6 +6,9 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"sync"
+
+	"github.com/ironpark/ggui"
 )
 
 // cssColors maps shadcn/ui's CSS variables to the tokens they set.
@@ -54,9 +57,8 @@ var cssColors = map[string]func(*Theme) *color.Color{
 //
 // As in a browser, .dark inherits what it does not set from :root, so a
 // stylesheet without one gives a dark theme in the light colors. Blocks may
-// be nested in at-rules such as @layer; other selectors and variables ggui
-// has no token for, such as fonts, are ignored. See ApplyCSS for the
-// values it reads.
+// be nested in at-rules such as @layer; other selectors are ignored. See
+// ApplyCSS for the values it reads.
 func FromCSS(css string) (light, dark Theme, err error) {
 	var root, darkVars []string
 	collectBlocks(stripComments(css), func(selector, body string) {
@@ -87,7 +89,11 @@ func FromCSS(css string) (light, dark Theme, err error) {
 // may be var() of another variable in decls. --radius sets the radii as
 // shadcn derives its own from it: Radius 2px less, for the rounded-md
 // controls, RadiusSm 4px less and RadiusLg 4px more. A later declaration
-// wins, and variables with no token are ignored.
+// wins.
+//
+// A color variable with no token of its own, such as the --warning shadcn
+// suggests adding, is kept under CSSColor of its name; other variables,
+// such as fonts, are ignored.
 func (t Theme) ApplyCSS(decls string) (Theme, error) {
 	vars := map[string]string{}
 	var order []string
@@ -125,9 +131,34 @@ func (t Theme) ApplyCSS(decls string) (Theme, error) {
 			}
 			t.Radius, t.RadiusSm, t.RadiusLg = max(r-2, 0), max(r-4, 0), r+4
 			t.auto.radiusSm, t.auto.radiusLg = 0, 0
+			continue
+		}
+		if c, err := ParseColor(value); err == nil {
+			t = t.Set(CSSColor(name), c)
 		}
 	}
 	return t.Resolve(), nil
+}
+
+var cssColorKeys sync.Map // name -> ggui.EnvKey[color.Color]
+
+// CSSColor is the token ApplyCSS and FromCSS keep a color variable with no
+// field of its own under, by its name without the dashes. Colors shadcn/ui
+// leaves to the app, such as success and warning, are read this way:
+//
+//	light, dark, _ := theme.FromCSS(`
+//		:root { --warning: oklch(0.84 0.16 84); }
+//		.dark { --warning: oklch(0.41 0.11 46); }`)
+//	warning, ok := theme.Use().Get(theme.CSSColor("warning"))
+//
+// An app setting the color in Go uses the same key with Theme.Set, so the
+// two stay interchangeable.
+func CSSColor(name string) ggui.EnvKey[color.Color] {
+	if k, ok := cssColorKeys.Load(name); ok {
+		return k.(ggui.EnvKey[color.Color])
+	}
+	k, _ := cssColorKeys.LoadOrStore(name, ggui.NewEnvKey[color.Color]("--"+name))
+	return k.(ggui.EnvKey[color.Color])
 }
 
 // resolveVar returns the value of the variable name, following var().

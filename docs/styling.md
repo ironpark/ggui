@@ -294,7 +294,15 @@ a value may be `var()` of another variable. Each color variable sets the
 token the color table names, with `--input` setting `InputBorder`. `--radius`
 sets the radii the way shadcn derives its own: `Radius` 2px less for the
 `rounded-md` controls, `RadiusSm` 4px less and `RadiusLg` 4px more.
-Variables ggui has no token for, such as fonts, are ignored.
+A color variable with no token of its own, such as the `--warning` or
+`--success` shadcn leaves to the app, is kept as a token of your own (below)
+under `theme.CSSColor(name)`:
+
+```go
+warning, ok := theme.Use().Get(theme.CSSColor("warning"))
+```
+
+Other variables, such as fonts, are ignored.
 
 `t.ApplyCSS(decls)` lays one block's declarations over a theme you already
 have, and `theme.ParseColor(s)` reads a single value. Both accept hex,

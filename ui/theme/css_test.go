@@ -97,3 +97,27 @@ func TestFromCSS(t *testing.T) {
 		t.Error("an undefined var() parsed")
 	}
 }
+
+// A color variable shadcn leaves to the app, such as --warning, is kept
+// under CSSColor, the .dark one in the dark theme; others are ignored.
+func TestFromCSSKeepsCustomColors(t *testing.T) {
+	t.Parallel()
+	light, dark, err := FromCSS(`
+		:root { --warning: #f59e0b; --font-sans: Inter, sans-serif; }
+		.dark { --warning: oklch(0.41 0.11 46); }`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c, ok := light.Get(CSSColor("warning")); !ok || !near(c, color.NRGBA{0xf5, 0x9e, 0x0b, 255}) {
+		t.Fatalf("light --warning = %v, %v", c, ok)
+	}
+	if c, ok := dark.Get(CSSColor("warning")); !ok || near(c, color.NRGBA{0xf5, 0x9e, 0x0b, 255}) {
+		t.Fatalf("dark --warning = %v, %v; want the .dark value", c, ok)
+	}
+	if _, ok := light.Get(CSSColor("font-sans")); ok {
+		t.Fatal("--font-sans was kept as a color")
+	}
+	if CSSColor("warning") != CSSColor("warning") {
+		t.Fatal("CSSColor gave two keys for one name")
+	}
+}
