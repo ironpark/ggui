@@ -12,6 +12,7 @@ See [example conventions](README.md#start-here) before copying snippets.
 - [Containers and feedback](#containers-and-feedback)
 - [Tables](#tables)
 - [Trees](#trees)
+- [List boxes](#list-boxes)
 - [Data tables](#data-tables)
 - [Select and menu](#select-and-menu)
 - [Menubar](#menubar)
@@ -93,6 +94,34 @@ ui.Tree(roots, func(f File) string { return f.Path },
 		return ggui.TextOf(ggui.Map(f, func(f File) string { return f.Name }))
 	},
 ).RowName(func(f File) string { return f.Name }).BindSelected(chosen).Height(320)
+```
+
+## List boxes
+
+`ui.ListBox(items, key, row)` is a flat list of keyed rows of which one is
+selected, such as a file list beside its preview. Each row's content is
+yours; the list paints the selection and hover fill under it.
+
+| API | Purpose |
+| --- | --- |
+| `.BindSelected(binding)` / `.Selected(key)` | The selected key, set by click, Space, Enter and arrow moves. |
+| `.OnSelect(fn)` | Receive the item activated by click, Space or Enter. |
+| `.RowName(fn)` | Set each row's accessible name; otherwise the key is used. |
+| `.Name(s)` | Name the list for assistive technology. |
+| `.Gap(v)` / `.Else(build)` | Space between rows (default 2), and what shows while there are none. |
+
+The list is one Tab stop, as a tree is. Up/Down move the selection and the
+focus with it, and Home/End jump to the ends. Rows report `RoleOption` with
+`Selected`. Put the list in a `Scroll` to bound it: a selection changed from
+elsewhere, such as a canvas showing the same items, scrolls its row into view
+without taking the focus.
+
+```go
+ggui.Scroll(ui.ListBox(files, func(f File) string { return f.Path },
+	func(f ggui.Readable[File]) ggui.Widget {
+		return ggui.TextOf(ggui.Map(f, func(f File) string { return f.Name }))
+	},
+).RowName(func(f File) string { return f.Name }).BindSelected(chosen))
 ```
 
 ## Data tables
