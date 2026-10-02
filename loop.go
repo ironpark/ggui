@@ -419,7 +419,9 @@ func (r *frameLoop) paint(p paintPass) (bool, error) {
 	p.in.regions = c.hits
 	p.in.observers = c.inputObservers
 	p.in.painted = c.shortcuts
+	p.in.refreshFocused()
 	p.in.applyFocusRequest(c)
+	p.in.applyRevealRequests(c)
 	if !p.semOff {
 		r.publishSemantics(c, p.in.focused)
 	}

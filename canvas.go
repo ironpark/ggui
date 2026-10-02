@@ -24,6 +24,7 @@ type Canvas struct {
 	Image          *ggfx.Image
 	focusRequest   KeyHandler
 	focusClaim     *FocusRef // a Focus waiting for the next key region painted
+	revealRequests []Rect
 	inputObservers []inputObserver
 	shortcuts      []paintedShortcut
 
@@ -812,6 +813,18 @@ func (c *Canvas) HitCursor(r Rect, shape CursorShape) {
 func (c *Canvas) RequestFocus(h KeyHandler) {
 	if c != nil && !c.inert {
 		c.root().focusRequest = h
+	}
+}
+
+// RequestReveal asks every Scroll around r to move the least it must to show
+// it, as moving focus there with the keyboard would, without moving focus:
+// a list whose arrow keys a parent handles keeps its selection in view.
+// It takes effect once, after this paint; ask again only when the target
+// changes, or the user can no longer scroll away from it.
+func (c *Canvas) RequestReveal(r Rect) {
+	if c != nil && !c.inert {
+		root := c.root()
+		root.revealRequests = append(root.revealRequests, r)
 	}
 }
 

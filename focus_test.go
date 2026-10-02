@@ -136,3 +136,43 @@ func TestTabScrollsTheTargetIntoView(t *testing.T) {
 		t.Fatalf("offset = %v after tabbing to the second item, want 30 so it is fully shown", sc.offset)
 	}
 }
+
+// RequestReveal scrolls its Rect into view, once, and leaves focus alone.
+func TestRequestRevealScrollsWithoutFocusing(t *testing.T) {
+	t.Parallel()
+	reveal := -1
+	rows := make([]Widget, 10)
+	for i := range rows {
+		rows[i] = &revealer{i: i, want: &reveal}
+	}
+	sc := Scroll(Column(rows...))
+	p := NewProbe(sc, Sz(50, 70))
+	defer p.Close()
+	p.Frame()
+	reveal = 5
+	p.Frame()
+	if sc.offset != 50*6-70 {
+		t.Fatalf("offset = %v after revealing row 5, want %v", sc.offset, 50*6-70)
+	}
+	if p.in.focused != nil {
+		t.Fatal("RequestReveal moved focus")
+	}
+	reveal = -1
+	p.Scroll(Pt(10, 10), Pt(0, -40))
+	p.Frame()
+	if sc.offset == 50*6-70 {
+		t.Fatal("the reveal held the scroll after it was asked once")
+	}
+}
+
+type revealer struct {
+	i    int
+	want *int
+}
+
+func (w *revealer) Layout(Constraints, Env) Size { return Sz(50, 50) }
+func (w *revealer) Paint(dst *Canvas, r Rect) {
+	if *w.want == w.i {
+		dst.RequestReveal(r)
+	}
+}

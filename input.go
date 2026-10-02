@@ -599,6 +599,21 @@ func (in *inputState) findKeyRegion(p *hitRegion) *hitRegion {
 	return in.topmost(func(r *hitRegion) bool { return r.key != nil && r.id == nil && r.rect == p.rect })
 }
 
+// refreshFocused moves the focused region to where its widget painted this
+// frame, so the next paint's FocusWithin sees it there: a region focused
+// while scrolled out of view was kept with no area. Only the same handler
+// counts; one rebuilt in its place is left for dispatchKeys to tell it has
+// focus.
+func (in *inputState) refreshFocused() {
+	if in.focused == nil {
+		return
+	}
+	key := in.focused.key
+	if r := in.topmost(func(r *hitRegion) bool { return r.key != nil && sameAny(r.key, key) }); r != nil {
+		in.focused = keep(r)
+	}
+}
+
 func (in *inputState) setFocus(r *hitRegion) { in.focus(r, false) }
 
 // focus moves keyboard focus to r. A move made with the keyboard is
@@ -933,6 +948,14 @@ func (f *FocusWidget) Baseline() (float64, bool) { return baselineOf(f.child) }
 func (f *FocusWidget) Paint(dst *Canvas, r Rect) {
 	dst.HitKey(r, f)
 	dst.Paint(f.child, r)
+}
+
+// applyRevealRequests runs the Canvas.RequestReveal calls this paint made.
+func (in *inputState) applyRevealRequests(c *Canvas) {
+	for _, r := range c.revealRequests {
+		in.reveal(r)
+	}
+	c.revealRequests = c.revealRequests[:0]
 }
 
 func (in *inputState) applyFocusRequest(c *Canvas) {
