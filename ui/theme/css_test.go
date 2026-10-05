@@ -117,7 +117,7 @@ func TestFromCSSKeepsCustomColors(t *testing.T) {
 	if _, ok := light.Get(CSSColor("font-sans")); ok {
 		t.Fatal("--font-sans was kept as a color")
 	}
-	if CSSColor("warning") != CSSColor("warning") {
+	if first, again := CSSColor("warning"), CSSColor("warning"); first != again {
 		t.Fatal("CSSColor gave two keys for one name")
 	}
 }
