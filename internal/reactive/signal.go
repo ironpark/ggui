@@ -708,10 +708,7 @@ func Untrack[T any](fn func() T) T {
 	if sc.listener == nil && !sc.building {
 		return fn()
 	}
-	prev, building := sc.listener, sc.building
-	sc.listener, sc.building = nil, false
-	defer func() { sc.listener, sc.building = prev, building }()
-	return fn()
+	return untracked(sc, false, fn)
 }
 
 // Build runs fn, which builds widgets, untracked. A signal read directly in
@@ -719,11 +716,13 @@ func Untrack[T any](fn func() T) T {
 // never what was meant; a ggui_debug build reports each place that does,
 // once. A read inside Untrack is a snapshot asked for, and a computation fn
 // creates, such as a Derived or an Observe, tracks its own reads as usual.
-func Build[T any](fn func() T) T {
-	sc := current()
-	prev, building := sc.listener, sc.building
-	sc.listener, sc.building = nil, true
-	defer func() { sc.listener, sc.building = prev, building }()
+func Build[T any](fn func() T) T { return untracked(current(), true, fn) }
+
+// untracked runs fn with no listener, building or not.
+func untracked[T any](sc *scope, building bool, fn func() T) T {
+	prev, wasBuilding := sc.listener, sc.building
+	sc.listener, sc.building = nil, building
+	defer func() { sc.listener, sc.building = prev, wasBuilding }()
 	return fn()
 }
 

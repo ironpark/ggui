@@ -25,7 +25,9 @@ func ResolveColor(c color.Color, env Env) color.Color {
 	return c
 }
 
-func isEnvColor(c color.Color) bool {
+// IsEnvColor reports whether c is an EnvColor, which a widget can only
+// paint once layout has resolved it.
+func IsEnvColor(c color.Color) bool {
 	_, ok := c.(EnvColor)
 	return ok
 }
@@ -40,7 +42,7 @@ func (s *shownColor) set(c color.Color, changed func()) {
 	if c == s.given {
 		return
 	}
-	if isEnvColor(c) || isEnvColor(s.given) {
+	if IsEnvColor(c) || IsEnvColor(s.given) {
 		changed()
 	}
 	s.given, s.shown = c, c

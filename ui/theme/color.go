@@ -6,16 +6,11 @@ import (
 	"github.com/ironpark/ggui"
 )
 
-func isEnvColor(c color.Color) bool {
-	_, ok := c.(ggui.EnvColor)
-	return ok
-}
-
 // Mix returns a moved amount of the way toward b, the way the state mixes
 // tint: Mix(fill, t.Fg, t.HoverMix) is fill under the pointer. A nil color
 // gives the other one.
 func Mix(a, b color.Color, amount float64) color.Color {
-	if isEnvColor(a) || isEnvColor(b) {
+	if ggui.IsEnvColor(a) || ggui.IsEnvColor(b) {
 		return mixed{a, b, amount}
 	}
 	if a == nil {

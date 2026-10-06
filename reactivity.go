@@ -1,9 +1,6 @@
 package ggui
 
 import (
-	"log"
-	"sync"
-
 	"github.com/ironpark/ggui/internal/reactive"
 )
 
@@ -128,10 +125,6 @@ type controlled[T any] struct {
 func (c controlled[T]) Get() T  { return c.value }
 func (c controlled[T]) Set(v T) { c.set(v) }
 
-// untrackedBinds holds the Bind call sites already reported, so each is
-// reported once however many controls it builds.
-var untrackedBinds sync.Map
-
 // countReads runs get, telling a layout recording in progress about what it
 // reads as usual, and reports a getter that read no signal.
 func countReads[T any](origin string, get func() T) T {
@@ -145,9 +138,7 @@ func countReads[T any](origin string, get func() T) T {
 		}
 	}, func() { v = get() })
 	if reads == 0 {
-		if _, seen := untrackedBinds.LoadOrStore(origin, true); !seen {
-			log.Printf("ggui: the Bind getter at %s read no signal, so its control will not see changes made elsewhere; read a StateValue, or bind with State.Field or State.Lens", origin)
-		}
+		reactive.ReportOnce("bind "+origin, "ggui: the Bind getter at %s read no signal, so its control will not see changes made elsewhere; read a StateValue, or bind with State.Field or State.Lens", origin)
 	}
 	return v
 }

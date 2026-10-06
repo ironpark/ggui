@@ -3,11 +3,9 @@
 package reactive
 
 import (
-	"log"
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 )
 
 // Debug reports whether this build records effect origins.
@@ -20,18 +18,19 @@ func Origin() string { return effectOrigin() }
 // effectOrigin returns the file and line outside this package that created
 // the Computation being registered, so that a cycle can name the effects it is
 // made of. Only this build records it; see ErrCycle.
-func effectOrigin() string {
+func effectOrigin() string { return callerOutside(3, isGgui) }
+
+// callerOutside returns the file and line of the nearest caller, skip
+// frames up, whose function own does not claim; code in a test file is
+// always the caller's own. With every frame claimed it names the last one,
+// which still says where to look.
+func callerOutside(skip int, own func(fn string) bool) string {
 	var pcs [32]uintptr
-	n := runtime.Callers(2, pcs[:])
+	n := runtime.Callers(skip, pcs[:])
 	frames := runtime.CallersFrames(pcs[:n])
 	for {
 		f, more := frames.Next()
-		if f.Function != "" && (strings.HasSuffix(f.File, "_test.go") || !isGgui(f.Function)) {
-			return f.File + ":" + strconv.Itoa(f.Line)
-		}
-		if !more {
-			// Everything on the stack is ggui's own: report the last available
-			// frame rather than nothing, which still says where to look.
+		if (f.Function != "" && (strings.HasSuffix(f.File, "_test.go") || !own(f.Function))) || !more {
 			return f.File + ":" + strconv.Itoa(f.Line)
 		}
 	}
@@ -50,34 +49,17 @@ func isGgui(fn string) bool {
 	return strings.HasPrefix(rest, ".") || strings.HasPrefix(rest, "/internal/")
 }
 
-// snapshots holds the places already reported by reportSnapshot.
-var snapshots sync.Map
-
 // reportSnapshot reports, once per place, a signal read while widgets are
-// built; see Build.
+// built; see Build. A read a function such as theme.Use makes for its
+// caller is reported where that function was called.
 func reportSnapshot() {
-	origin := userOrigin()
-	if _, seen := snapshots.LoadOrStore(origin, true); !seen {
-		log.Printf("ggui: %s reads a signal while building widgets, which takes a snapshot that never updates; "+
-			"bind the value instead (TextOf, a BindX setter, View or If), or read it in ggui.Untrack if a snapshot is meant", origin)
-	}
+	origin := callerOutside(3, inModule)
+	ReportOnce(origin, "ggui: %s reads a signal while building widgets, which takes a snapshot that never updates; "+
+		"bind the value instead (TextOf, a BindX setter, View or If), or read it in ggui.Untrack if a snapshot is meant", origin)
 }
 
-// userOrigin returns the file and line of the nearest caller outside the
-// ggui module, or in its tests and examples: a read made by a function such
-// as theme.Use is reported where that function was called.
-func userOrigin() string {
-	var pcs [32]uintptr
-	n := runtime.Callers(3, pcs[:])
-	frames := runtime.CallersFrames(pcs[:n])
-	for {
-		f, more := frames.Next()
-		if !strings.Contains(f.Function, "github.com/ironpark/ggui") ||
-			strings.HasSuffix(f.File, "_test.go") || strings.Contains(f.Function, "github.com/ironpark/ggui/examples/") {
-			return f.File + ":" + strconv.Itoa(f.Line)
-		}
-		if !more {
-			return f.File + ":" + strconv.Itoa(f.Line)
-		}
-	}
+// inModule reports whether fn is ggui's own, ui and theme included, as
+// opposed to its examples.
+func inModule(fn string) bool {
+	return strings.Contains(fn, "github.com/ironpark/ggui") && !strings.Contains(fn, "github.com/ironpark/ggui/examples/")
 }

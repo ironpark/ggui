@@ -3,22 +3,44 @@
 package ggui
 
 import (
-	"log"
 	"sync"
 	"weak"
 
 	"github.com/ironpark/ggui/internal/goid"
+	"github.com/ironpark/ggui/internal/reactive"
 )
 
 // A ggui_debug build checks every live Store after each frame's input.
 // watched holds each weakly, so a store no longer used is let go.
 var (
-	watchedMu     sync.Mutex
-	watched       []func(report func(store, sel string)) (live bool)
-	staleReported sync.Map
+	watchedMu sync.Mutex
+	watched   []func(report func(store, sel string)) (live bool)
 )
 
+// storeChecks is where a Store was made and a check for each live Select.
+type storeChecks struct {
+	origin string
+	checks []selectCheck
+}
+
+type selectCheck struct {
+	origin string
+	// stale reports whether the Select's model changed unpublished, and
+	// live whether it is still in use.
+	stale func() (stale, live bool)
+}
+
+func watchSelect[M, T any](s *Store[M], d *DerivedValue[T], fn func(M) T) {
+	s.checks = append(s.checks, selectCheck{reactive.Origin(), func() (bool, bool) {
+		if reactive.Disposed(d) {
+			return false, false
+		}
+		return !reactive.Same(d, Untrack(d.Get), fn(s.model)), true
+	}})
+}
+
 func watchStore[M any](s *Store[M]) {
+	s.origin = reactive.Origin()
 	p, g := weak.Make(s), goid.ID()
 	watchedMu.Lock()
 	defer watchedMu.Unlock()
@@ -51,18 +73,23 @@ func checkStores() {
 }
 
 func reportStale(store, sel string) {
-	if _, seen := staleReported.LoadOrStore(sel, true); !seen {
-		log.Printf("ggui: the model of the Store made at %s changed without being published, so the Select at %s shows a stale value; "+
-			"change the model in Store.Update or Store.Action, or call Store.Changed after changing it", store, sel)
-	}
+	reactive.ReportOnce("store "+sel, "ggui: the model of the Store made at %s changed without being published, so the Select at %s shows a stale value; "+
+		"change the model in Store.Update or Store.Action, or call Store.Changed after changing it", store, sel)
 }
 
 // checkStale reports every Select whose model changed with nothing
-// published, once per place.
+// published, and forgets those disposed.
 func (s *Store[M]) checkStale(report func(store, sel string)) {
-	for _, check := range s.checks {
-		if origin, stale := check(); stale {
-			report(s.origin, origin)
+	live := s.checks[:0]
+	for _, c := range s.checks {
+		stale, ok := c.stale()
+		if stale {
+			report(s.origin, c.origin)
+		}
+		if ok {
+			live = append(live, c)
 		}
 	}
+	clear(s.checks[len(live):])
+	s.checks = live
 }

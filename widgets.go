@@ -179,7 +179,7 @@ func (t *TextWidget) Style(ts TextStyle) *TextWidget {
 // is paint-only, so a control can recolor its label as the pointer moves
 // over it without laying it out again.
 func (t *TextWidget) Color(c color.Color) *TextWidget {
-	if (c == nil) != (t.style.Color == nil) || isEnvColor(c) || isEnvColor(t.style.Color) {
+	if (c == nil) != (t.style.Color == nil) || IsEnvColor(c) || IsEnvColor(t.style.Color) {
 		defer property.Watch(&t.props, &t.style)()
 	}
 	t.style.Color = c
@@ -369,7 +369,7 @@ func (t *TextWidget) paintLines(dst *Canvas, r Rect, place func(op *text.DrawOpt
 	}
 	face := t.faceAt(dst.Scale())
 	op := &text.DrawOptions{}
-	op.ColorScale.ScaleWithColor(pick(t.style.Color != nil && !isEnvColor(t.style.Color), t.style.Color, t.current().Color))
+	op.ColorScale.ScaleWithColor(pick(t.style.Color != nil && !IsEnvColor(t.style.Color), t.style.Color, t.current().Color))
 	for i, line := range t.lines {
 		x := r.Origin.X + (r.Size.W-t.widths[i])*t.align
 		y := r.Origin.Y + float64(i)*t.spacing()
@@ -521,13 +521,9 @@ func (b *BoxWidget) Fill(c color.Color) *BoxWidget {
 // Shadow replaces the outer shadow layers. Calling it without arguments clears
 // them. Shadows paint in argument order and do not reserve layout space.
 func (b *BoxWidget) Shadow(styles ...ShadowStyle) *BoxWidget {
-	if !slices.Equal(b.shadows, styles) {
-		for _, s := range append(b.shadows, styles...) {
-			if isEnvColor(s.Color) {
-				b.props.Changed()
-				break
-			}
-		}
+	themed := func(s ShadowStyle) bool { return IsEnvColor(s.Color) }
+	if !slices.Equal(b.shadows, styles) && (slices.ContainsFunc(b.shadows, themed) || slices.ContainsFunc(styles, themed)) {
+		b.props.Changed()
 	}
 	b.shadows = append(b.shadows[:0], styles...)
 	b.shownShadows = append(b.shownShadows[:0], styles...)

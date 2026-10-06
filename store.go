@@ -1,7 +1,5 @@
 package ggui
 
-import "github.com/ironpark/ggui/internal/reactive"
-
 // Store makes a model the UI was not written for, such as a plain struct an
 // app keeps its documents and undo history in, something the UI follows.
 // The model stays plain Go: what the UI shows of it is selected with Select,
@@ -22,13 +20,13 @@ type Store[M any] struct {
 	model   M
 	version *StateValue[uint64]
 	depth   int // how many Updates are running, so nested ones publish once
-	origin  string
-	checks  []func() (origin string, stale bool)
+	//lint:ignore U1000 only a ggui_debug build checks a store
+	storeChecks
 }
 
 // NewStore wraps model.
 func NewStore[M any](model M) *Store[M] {
-	s := &Store[M]{model: model, version: State[uint64](0), origin: reactive.Origin()}
+	s := &Store[M]{model: model, version: State[uint64](0)}
 	watchStore(s)
 	return s
 }
@@ -70,15 +68,7 @@ func Select[M, T any](s *Store[M], fn func(M) T) *DerivedValue[T] {
 		s.version.Get()
 		return fn(s.model)
 	})
-	if reactive.Debug {
-		origin := reactive.Origin()
-		s.checks = append(s.checks, func() (string, bool) {
-			if reactive.Disposed(d) {
-				return origin, false
-			}
-			return origin, !reactive.Same(d, Untrack(d.Get), fn(s.model))
-		})
-	}
+	watchSelect(s, d, fn)
 	return d
 }
 

@@ -19,7 +19,8 @@ import (
 // Drawn without an Env, as a custom widget's raw Canvas calls do, it is the
 // color the application's theme has.
 type Color struct {
-	name string
+	name  string
+	field int // index in colorFields plus one; zero for a variable of the app's own
 	// fade is how much opacity Alpha has taken away, so that the zero
 	// value is the color as the theme has it.
 	fade float32
@@ -54,7 +55,7 @@ var (
 //	warning := theme.Var("warning")
 //
 // A name the theme has no color for paints nothing.
-func Var(name string) Color { return Color{name: name} }
+func Var(name string) Color { return Color{name: name, field: colorField[name]} }
 
 // otherColors are the Theme fields no CSS variable sets.
 var otherColors = map[string]func(*Theme) *color.Color{
@@ -64,6 +65,20 @@ var otherColors = map[string]func(*Theme) *color.Color{
 	"scrim":         func(t *Theme) *color.Color { return &t.Scrim },
 }
 
+// colorFields are the accessors of cssColors and otherColors, and
+// colorField a name's index there plus one, so that a token finds its field
+// without a map lookup each time it is resolved.
+var colorFields, colorField = func() ([]func(*Theme) *color.Color, map[string]int) {
+	fields, index := []func(*Theme) *color.Color{}, map[string]int{}
+	for _, m := range []map[string]func(*Theme) *color.Color{cssColors, otherColors} {
+		for name, f := range m {
+			fields = append(fields, f)
+			index[name] = len(fields)
+		}
+	}
+	return fields, index
+}()
+
 // Alpha is the color at alpha times its opacity, from 0 to 1.
 func (c Color) Alpha(alpha float64) Color {
 	c.fade = 1 - (1-c.fade)*float32(min(max(alpha, 0), 1))
@@ -72,12 +87,9 @@ func (c Color) Alpha(alpha float64) Color {
 
 // In returns the color t has.
 func (c Color) In(t Theme) color.Color {
-	field := cssColors[c.name]
-	if field == nil {
-		field = otherColors[c.name]
-	}
 	var v color.Color
-	if field != nil {
+	if c.field != 0 {
+		field := colorFields[c.field-1]
 		if v = *field(&t); v == nil {
 			// A field that follows another is nil until Resolve fills it.
 			t = t.Resolve()
