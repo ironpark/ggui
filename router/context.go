@@ -41,6 +41,16 @@ func (c *Context) Query(name string) string {
 // Location reads the current location; it is a tracked read.
 func (c *Context) Location() Location { return c.r.loc.Get() }
 
+// QueryValue is Query as a value to bind, for a page that shows it: a page
+// factory runs once, so what it reads with Query is never read again.
+func (c *Context) QueryValue(name string) ggui.Readable[string] {
+	ggui.Untrack(func() string { return c.Query(name) }) // makes the derived value
+	return c.queries[name]
+}
+
+// LocationValue is Location as a value to bind; see QueryValue.
+func (c *Context) LocationValue() ggui.Readable[Location] { return c.r.loc }
+
 // Navigate is Router.Navigate.
 func (c *Context) Navigate(url string) error { return c.r.Navigate(url) }
 

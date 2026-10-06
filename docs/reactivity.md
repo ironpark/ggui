@@ -230,11 +230,19 @@ func Counter() ggui.Widget {
 }
 ```
 
-Snapshot expressions such as `Text(fmt.Sprint(count.Get()))` do not subscribe setup. `TextOf`, `Textf`
-and reactive control bindings do. `View(source, build)` and `Reactive(build)`
-are explicit subtree replacement boundaries: their callbacks rerun and
-replace locally created state/work. Keep state outside these callbacks if
-it must survive their updates.
+Every builder runs untracked: app and `Component` setup, and the callbacks of
+`View`, `If`, `Key` and `Each`. A snapshot expression such as
+`Text(fmt.Sprint(count.Get()))` in one shows the value once and never again.
+`TextOf`, `Textf` and reactive control bindings follow the value instead. A
+`ggui_debug` build reports every place a builder reads a signal, once; read it
+in `Untrack` when a snapshot is what you mean. A keyed row reads what it keeps
+for life, such as its ID, from `EachItem.Item`.
+
+`View(source, build)` and `Reactive(build)` are explicit subtree replacement
+boundaries: their callbacks rerun and replace locally created state/work. Keep
+state outside these callbacks if it must survive their updates. `View` follows
+only `source`; `Reactive` follows whatever its callback reads, which makes it
+the one builder that is not untracked.
 
 `View(state, build)` rebuilds on every change to `state`, whichever field
 changed. `ViewOf(state, pick, build)` rebuilds only when the part `pick`
@@ -267,8 +275,8 @@ ggui.Key(documentID, func(id string) ggui.Widget {
 
 `If` creates only the active branch; `.ElseIf` and `.Else` add branches.
 Leaving a branch disposes its state, effects and resources. Returning creates
-a fresh instance. Reads in branch factories are untracked; use bindings or
-`View` inside them. `Key` recreates its subtree when its comparable key changes.
+a fresh instance. Branch factories are builders, untracked like the rest; use
+bindings or `View` inside them. `Key` recreates its subtree when its comparable key changes.
 Configure fluent blocks before mount; later configuration panics.
 
 The keyboard key type is `KeyboardKey`; constants such as `KeyEnter` and the

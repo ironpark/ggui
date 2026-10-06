@@ -371,6 +371,9 @@ func (s *StateValue[T]) Get() T {
 	CheckUIThread("StateValue.Get")
 	sc := current()
 	e := sc.listener
+	if Debug && e == nil && sc.building {
+		reportSnapshot()
+	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -702,12 +705,25 @@ func OnCleanup(fn func()) {
 // reads. Effects created inside still belong to the running Effect.
 func Untrack[T any](fn func() T) T {
 	sc := current()
-	if sc.listener == nil {
+	if sc.listener == nil && !sc.building {
 		return fn()
 	}
-	prev := sc.listener
-	sc.listener = nil
-	defer func() { sc.listener = prev }()
+	prev, building := sc.listener, sc.building
+	sc.listener, sc.building = nil, false
+	defer func() { sc.listener, sc.building = prev, building }()
+	return fn()
+}
+
+// Build runs fn, which builds widgets, untracked. A signal read directly in
+// it is a snapshot the widgets it builds never see change, which is almost
+// never what was meant; a ggui_debug build reports each place that does,
+// once. A read inside Untrack is a snapshot asked for, and a computation fn
+// creates, such as a Derived or an Observe, tracks its own reads as usual.
+func Build[T any](fn func() T) T {
+	sc := current()
+	prev, building := sc.listener, sc.building
+	sc.listener, sc.building = nil, true
+	defer func() { sc.listener, sc.building = prev, building }()
 	return fn()
 }
 
@@ -784,7 +800,9 @@ func runEffect(e *Computation) {
 	e.seq = 0
 
 	sc, prevListener, prevOwner := enter(e, e)
-	defer func() { sc.listener, sc.owner = prevListener, prevOwner }()
+	building := sc.building
+	sc.building = false
+	defer func() { sc.listener, sc.owner, sc.building = prevListener, prevOwner, building }()
 
 	e.state, e.running = stateClean, true
 	completed := false

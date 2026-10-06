@@ -18,7 +18,10 @@ type Widget interface {
 }
 
 // Builder constructs a widget tree. App and Component setup run once;
-// Reactive and View explicitly rerun a builder when its dependencies change.
+// View, If, Key and Each rerun a builder when the value they follow changes.
+// A builder runs untracked: a signal it reads itself is a snapshot, and a
+// ggui_debug build reports each place that reads one. Reactive alone reruns
+// on whatever its builder reads.
 type Builder func() Widget
 
 // ComponentWidget is a subtree with its own rebuild boundary. Build one with
@@ -53,7 +56,7 @@ func Component(setup func() Widget) *ComponentWidget {
 		}
 		reactive.WithOwner(owner, func() {
 			reactive.RootWith(c, "", func() {
-				c.child = setup()
+				c.child = reactive.Build(setup)
 				c.cw.child = c.child
 			})
 		})
@@ -76,12 +79,17 @@ func Reactive[W Widget](build func() W) *ComponentWidget {
 }
 
 // View builds a widget from a reactive value and rebuilds it when the value
-// changes, with the widget type inferred from the constructor:
+// changes, with the widget type inferred from the constructor. Only r is
+// followed: build runs untracked like every other builder, so what it reads
+// itself is a snapshot, and a value that changes is bound instead.
 //
 //	ggui.View(label, ggui.Text)
 //	ggui.View(rows, func(r []Row) *ggui.ColumnWidget { return ggui.List(r, rowWidget) })
 func View[T any, W Widget](r Readable[T], build func(T) W) Widget {
-	return Reactive(func() Widget { return build(r.Get()) })
+	return Reactive(func() Widget {
+		v := r.Get()
+		return reactive.Build(func() Widget { return build(v) })
+	})
 }
 
 // ViewOf builds a widget from the part of r that sel picks and rebuilds it
@@ -189,7 +197,10 @@ func Key[K comparable](key Readable[K], build func(K) Widget) *ComponentWidget {
 			reactive.WithOwner(owner, func() {
 				// A unique root gives remounted controls fresh identities.
 				identity := new(int)
-				dispose = reactive.RootWith(identity, "", func() { c.child = build(value); c.cw.child = c.child })
+				dispose = reactive.RootWith(identity, "", func() {
+					c.child = reactive.Build(func() Widget { return build(value) })
+					c.cw.child = c.child
+				})
 			})
 			c.cw.invalidate()
 		})

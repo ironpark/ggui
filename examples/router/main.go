@@ -124,7 +124,7 @@ func settingsPage(c *router.Context) ggui.Widget {
 func notFoundPage(c *router.Context) ggui.Widget {
 	return ggui.Column(
 		ui.Title("Not found"),
-		ggui.Text("No page at "+c.Location().Path+"."),
+		ggui.TextOf(ggui.Map(c.LocationValue(), func(l router.Location) string { return "No page at " + l.Path + "." })),
 		ui.Button("Go home", func() { _ = c.Navigate("/") }),
 	).Space(1)
 }

@@ -287,3 +287,25 @@ func TestEachEmptyBranchLaidOutAfterExitTransition(t *testing.T) {
 		t.Fatal("empty branch not painted")
 	}
 }
+
+// View rebuilds when its value changes, and not when a signal its builder
+// happened to read does.
+func TestViewFollowsOnlyItsValue(t *testing.T) {
+	value, other := State(0), State(0)
+	builds := 0
+	p := ProbeBuilder(func() Widget {
+		return View(value, func(int) Widget { builds++; other.Get(); return Box() })
+	}, Size{W: 100, H: 100})
+	defer p.Close()
+	p.Frame()
+	other.Set(1)
+	p.Frame()
+	if builds != 1 {
+		t.Fatalf("built %d times after another signal changed, want 1", builds)
+	}
+	value.Set(1)
+	p.Frame()
+	if builds != 2 {
+		t.Fatalf("built %d times after the value changed, want 2", builds)
+	}
+}

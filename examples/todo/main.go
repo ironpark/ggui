@@ -52,7 +52,7 @@ func composer(m *model) ggui.Widget {
 func list(m *model) ggui.Widget {
 	return ggui.EachKeyed(m.Visible,
 		func(td *Todo) int { return td.ID },
-		func(item ggui.EachItem[*Todo]) ggui.Widget { return row(m, item.Value.Get()) },
+		func(item ggui.EachItem[*Todo]) ggui.Widget { return row(m, item.Item) },
 	).Space(0.5).
 		Transition(func(w ggui.Widget) *ggui.TransitionWidget { return ggui.Transition(w).Fade().Slide(-16, 0) }).
 		Else(func() ggui.Widget { return ui.Empty("Nothing here", "Add an item above, or pick another filter.") })

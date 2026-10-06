@@ -72,6 +72,10 @@ func (e *forEntry[T]) transition() *TransitionWidget {
 type EachItem[T any] struct {
 	Value Readable[T]
 	Index Readable[int]
+	// Item is the item the row was built for, read once: what a row keeps
+	// for life, such as the ID EachKeyed matched it by, is read from it.
+	// Value follows the item as it changes.
+	Item T
 }
 
 // EachKeyed reuses rows by a unique key and preserves their local state while
@@ -144,7 +148,9 @@ func each[T any, K comparable](items Readable[[]T], key func(int, T) K, build fu
 				f.emptyDispose, f.empty = nil, nil
 			}
 			if len(list) == 0 && f.emptyBuild != nil && f.emptyDispose == nil {
-				reactive.WithOwner(f.owner, func() { f.emptyDispose = reactive.RootWith(new(int), "", func() { f.empty = f.emptyBuild() }) })
+				reactive.WithOwner(f.owner, func() {
+					f.emptyDispose = reactive.RootWith(new(int), "", func() { f.empty = reactive.Build(f.emptyBuild) })
+				})
 			}
 			f.items, f.keys, f.stale = list, keys, true
 			f.cache.invalidate()
@@ -256,7 +262,7 @@ func (f *EachWidget[T, K]) entry(i int) *forEntry[T] {
 		e = &forEntry[T]{item: State(f.items[i]), position: State(i)}
 		reactive.WithOwner(f.owner, func() {
 			e.dispose = reactive.RootWith(e, fmt.Sprint(k), func() {
-				e.widget = f.build(EachItem[T]{Value: e.item, Index: e.position})
+				e.widget = reactive.Build(func() Widget { return f.build(EachItem[T]{Value: e.item, Index: e.position, Item: f.items[i]}) })
 				if f.transition != nil {
 					t := f.transition(e.widget)
 					t.id = forRowKey[K]{k} // the row keeps its animation when it moves

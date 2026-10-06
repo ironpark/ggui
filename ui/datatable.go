@@ -196,7 +196,7 @@ func (m *TableModel[T, K]) PageSize() int { return m.pageSize.Get() }
 // SetPageSize clamps size to at least one and resets to page one.
 func (m *TableModel[T, K]) SetPageSize(size int) {
 	size = max(1, size)
-	if size != m.pageSize.Get() {
+	if size != ggui.Untrack(m.pageSize.Get) {
 		m.pageSize.Set(size)
 		m.page.Set(1)
 	}
@@ -292,7 +292,7 @@ func DataTable[T any, K comparable](m *TableModel[T, K]) ggui.Widget {
 		page := ggui.Derived(m.pageSelection)
 		table := ggui.Reactive(func() ggui.Widget {
 			cols := []Column[T]{Col("", func(row ggui.Readable[T]) ggui.Widget {
-				key := m.key(row.Get())
+				key := m.key(ggui.Untrack(row.Get))
 				return Checkbox(ggui.Bind(func() bool { return m.IsSelected(key) }, func(v bool) { m.Select(key, v) }), "").Name(fmt.Sprintf("Select row %v", key))
 			}).W(40)}
 			cols[0].Header = Checkbox(ggui.Bind(func() bool { return page.Get().all }, m.SelectPage), "").Name("Select page").

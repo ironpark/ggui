@@ -174,7 +174,7 @@ func (t *TreeWidget[T, K]) Height(h float64) *TreeWidget[T, K] {
 
 func (t *TreeWidget[T, K]) row(row ggui.EachItem[treeEntry[T, K]], label func(ggui.Readable[T]) ggui.Widget) ggui.Widget {
 	item := ggui.Map(row.Value, func(e treeEntry[T, K]) T { return e.item })
-	e := row.Value.Get()
+	e := ggui.Untrack(row.Value.Get)
 	r := &treeRow[T, K]{tree: t, entry: row.Value, index: row.Index, key: e.key, label: ggui.Align(label(item)).At(0, .5)}
 	r.toggle.row = r
 	r.box = ggui.Box(r.label)

@@ -335,9 +335,10 @@ func (t *TableWidget[T, K]) row(row ggui.EachItem[T]) ggui.Widget {
 	for i, c := range t.cols {
 		cells[i] = t.cell(i, c.Cell(item), ggui.RoleCell)
 	}
-	r := &tableRow[T, K]{table: t, item: item, index: row.Index, key: t.key(item.Get()), cells: ggui.Row(cells...)}
+	first := ggui.Untrack(item.Get)
+	r := &tableRow[T, K]{table: t, item: item, index: row.Index, key: t.key(first), cells: ggui.Row(cells...)}
 	r.Role = ggui.RoleRow
-	r.SetName(t.label(item.Get()))
+	r.SetName(t.label(first))
 	r.AutoKey()
 	return r
 }

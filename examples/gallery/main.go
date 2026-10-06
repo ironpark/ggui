@@ -451,7 +451,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 					ui.TextCol("Role", func(p Person) string { return p.Role }).Grow(2),
 					ui.TextCol("Age", func(p Person) string { return strconv.Itoa(p.Age) }).W(48).Right(),
 					ui.Col("", func(r ggui.Readable[Person]) ggui.Widget {
-						id := r.Get().ID
+						id := ggui.Untrack(r.Get).ID
 						return ui.Button("×", func() { ggui.Remove(people, func(p Person) bool { return p.ID == id }) }).Outline().Pad(0, 8)
 					}).W(48),
 				).BindSelected(chosen).RowName(func(p Person) string { return p.Name }).Height(160),

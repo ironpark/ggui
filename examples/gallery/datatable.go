@@ -27,7 +27,7 @@ func newPaymentTable() ggui.Widget {
 		ui.TextCol("Email", func(p payment) string { return p.Email }).Sortable(func(a, b payment) int { return cmp.Compare(a.Email, b.Email) }),
 		ui.TextCol("Amount", func(p payment) string { return fmt.Sprintf("$%.2f", float64(p.Amount)/100) }).W(100).Right().Sortable(func(a, b payment) int { return cmp.Compare(a.Amount, b.Amount) }),
 		ui.Col("", func(row ggui.Readable[payment]) ggui.Widget {
-			return ui.Menu("…", ui.MenuItem("Remove payment", func() { id := row.Get().ID; ggui.Remove(rows, func(p payment) bool { return p.ID == id }) })).Name("Actions for " + row.Get().Email)
+			return ui.Menu("…", ui.MenuItem("Remove payment", func() { id := row.Get().ID; ggui.Remove(rows, func(p payment) bool { return p.ID == id }) })).BindName(ggui.Map(row, func(p payment) string { return "Actions for " + p.Email }))
 		}).Identified("actions").W(56),
 	)
 	model.SetPageSize(5)

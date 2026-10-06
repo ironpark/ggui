@@ -21,6 +21,7 @@ type scope struct {
 	listener, owner *Computation
 	measuring       func(src LayoutSource, version uint64)
 	derivedDepth    int
+	building        bool // inside Build: see SnapshotRead
 	layoutDepth     int
 	layoutGen       uint64 // see RequestLayout
 	stateGen        uint64 // see StateGen

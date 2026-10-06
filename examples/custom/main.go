@@ -79,7 +79,7 @@ func (m *model) build() ggui.Widget {
 			// offscreen rows keep that state before being rebuilt.
 			ggui.EachKeyed(m.Items, func(it item) int { return it.ID }, func(row ggui.EachItem[item]) ggui.Widget {
 				picked := ggui.State(false)
-				return ui.Checkbox(picked, row.Value.Get().Name)
+				return ui.Checkbox(picked, row.Item.Name)
 			}).ItemExtent(rowHeight).Retain(24),
 		).BindOffset(m.Scroll)),
 	).Space(1.5).Align(ggui.AlignStretch)).Pad(24)

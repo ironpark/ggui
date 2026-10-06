@@ -294,7 +294,8 @@ child introduces.
 `Query` and `Location` change while the instance stays mounted. They are
 tracked reads: inside `Effect`, `Derived`, `Reactive` or a `Resource` input,
 updates subscribe automatically. In one-time page or layout setup they are
-snapshots, exactly like `State.Get`. Each `Query(name)` tracks only that
+snapshots, exactly like `State.Get`; bind `QueryValue(name)` or
+`LocationValue()` to show them instead. Each `Query(name)` tracks only that
 name: it is backed by a per-name derived string owned by the route
 instance, and a derived value notifies only when its result changes, so an
 unrelated query update reruns nothing.

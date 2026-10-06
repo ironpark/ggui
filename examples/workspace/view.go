@@ -100,7 +100,7 @@ func taskList(m *model) ggui.Widget {
 
 	compactList := ggui.EachKeyed(m.Visible, func(item task) int { return item.ID },
 		func(row ggui.EachItem[task]) ggui.Widget {
-			id := row.Value.Get().ID
+			id := row.Item.ID
 			label := ggui.Map(row.Value, func(item task) string { return item.Title })
 			detail := ggui.Map(row.Value, func(item task) string { return item.Assignee + " · " + item.Status })
 			return ui.ButtonOf(ggui.Column(

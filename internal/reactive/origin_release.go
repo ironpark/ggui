@@ -13,3 +13,5 @@ func effectOrigin() string { return "" }
 // Origin returns where the code outside ggui that called in sits, in a
 // ggui_debug build; "" otherwise.
 func Origin() string { return "" }
+
+func reportSnapshot() {}
