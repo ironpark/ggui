@@ -334,6 +334,9 @@ func (t *TextInputWidget) OnSubmit(fn func(string)) *TextInputWidget { t.onSubmi
 func (t *TextInputWidget) OnCommit(fn func(string)) *TextInputWidget { t.onCommit = fn; return t }
 
 func (t *TextInputWidget) committed() {
+	if c, ok := t.value.(Committer); ok {
+		c.Commit()
+	}
 	if t.onCommit != nil {
 		t.onCommit(t.ed.Text)
 	}
@@ -857,6 +860,12 @@ func (t *TextInputWidget) HandleKey(ev KeyEvent) {
 		t.escapeUsed = ev.Key == KeyEscape && t.composition != ""
 		if t.composition == "" && t.onKey != nil && t.onKey(ev) {
 			t.escapeUsed = ev.Key == KeyEscape
+			return
+		}
+		// Escape drops an edit a Committer holds back, and only then stays
+		// with the editor, so a dialog around a clean field still closes.
+		if c, ok := t.value.(Committer); ok && ev.Key == KeyEscape && t.composition == "" && c.Revert() {
+			t.escapeUsed = true
 			return
 		}
 		t.key(ev.Key, ev.Mods)

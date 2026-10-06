@@ -149,7 +149,7 @@ func each[T any, K comparable](items Readable[[]T], key func(int, T) K, build fu
 			}
 			if len(list) == 0 && f.emptyBuild != nil && f.emptyDispose == nil {
 				reactive.WithOwner(f.owner, func() {
-					f.emptyDispose = reactive.RootWith(new(int), "", func() { f.empty = reactive.Build(f.emptyBuild) })
+					f.emptyDispose = reactive.RootWith(new(int), "", func() { f.empty = remembering(f.emptyBuild) })
 				})
 			}
 			f.items, f.keys, f.stale = list, keys, true
@@ -262,7 +262,7 @@ func (f *EachWidget[T, K]) entry(i int) *forEntry[T] {
 		e = &forEntry[T]{item: State(f.items[i]), position: State(i)}
 		reactive.WithOwner(f.owner, func() {
 			e.dispose = reactive.RootWith(e, fmt.Sprint(k), func() {
-				e.widget = reactive.Build(func() Widget { return f.build(EachItem[T]{Value: e.item, Index: e.position, Item: f.items[i]}) })
+				e.widget = remembering(func() Widget { return f.build(EachItem[T]{Value: e.item, Index: e.position, Item: f.items[i]}) })
 				if f.transition != nil {
 					t := f.transition(e.widget)
 					t.id = forRowKey[K]{k} // the row keeps its animation when it moves

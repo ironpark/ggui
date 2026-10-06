@@ -246,7 +246,7 @@ func (r *frameLoop) start() {
 			fn()
 		}
 		// Root setup runs once. Reactive blocks own subsequent updates.
-		r.root = reactive.Build(r.build)
+		r.root = remembering(r.build)
 	})
 	r.setup = nil
 }

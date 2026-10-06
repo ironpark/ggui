@@ -56,7 +56,7 @@ func Component(setup func() Widget) *ComponentWidget {
 		}
 		reactive.WithOwner(owner, func() {
 			reactive.RootWith(c, "", func() {
-				c.child = reactive.Build(setup)
+				c.child = remembering(setup)
 				c.cw.child = c.child
 			})
 		})
@@ -69,9 +69,10 @@ func Component(setup func() Widget) *ComponentWidget {
 // parent's Builder static so the components it holds survive.
 func Reactive[W Widget](build func() W) *ComponentWidget {
 	c := &ComponentWidget{origin: reactive.Origin()}
+	b := newBoundary()
 	reactive.Observe(func() {
 		c.builds++
-		c.child = build()
+		c.child = b.build(func() Widget { return build() })
 		c.cw.child = c.child
 		c.cw.invalidate()
 	})
@@ -198,7 +199,7 @@ func Key[K comparable](key Readable[K], build func(K) Widget) *ComponentWidget {
 				// A unique root gives remounted controls fresh identities.
 				identity := new(int)
 				dispose = reactive.RootWith(identity, "", func() {
-					c.child = reactive.Build(func() Widget { return build(value) })
+					c.child = remembering(func() Widget { return build(value) })
 					c.cw.child = c.child
 				})
 			})

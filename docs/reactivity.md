@@ -18,6 +18,7 @@ See [example conventions](README.md#start-here) before copying snippets.
 - [Runtimes](#runtimes)
 - [Readers, bindings, and lenses](#readers-bindings-and-lenses)
 - [Builders and components](#builders-and-components)
+- [State that outlives a rebuild](#state-that-outlives-a-rebuild)
 - [Conditional and key blocks](#conditional-and-key-blocks)
 - [Keyed lists](#keyed-lists)
 - [Resources and await blocks](#resources-and-await-blocks)
@@ -33,6 +34,7 @@ Choose the smallest reactive boundary that expresses the change:
 | Show a plain Go model the UI was not written for | `Store` and `Select` |
 | Run setup once and own local work | `Component` |
 | Replace a subtree when data changes | `View` or `Reactive` |
+| Keep state through those replacements | `Remember` |
 | Switch branches or reset an identity | `If` or `Key` |
 | Animate a branch out before removing it | `Presence` |
 | Build rows once from a plain slice | `List`, or `Children` for another container |
@@ -290,6 +292,38 @@ holds a slice or a map has neither, so every `Set` notifies, even one that
 changed nothing: give the type an `Equal` method, use `WithEqual`, or pick
 comparable parts with `ViewOf` or `Map`. Svelte's snippet `{@render}` has no special
 runtime counterpart; use ordinary Go functions to compose reusable widgets.
+
+## State that outlives a rebuild
+
+What a `View` builds goes when it rebuilds. State that should stay, a field's
+draft while the page around it is rebuilt say, is asked for with
+`Remember(key, init)`: the first build that asks makes it with `init`, and
+every later build asking for the same key gets the same value back.
+
+```go
+ggui.View(fields, func(fs []FieldSpec) ggui.Widget {
+    rows := []ggui.Widget{}
+    for _, f := range fs {
+        draft := ggui.Remember(f.ID, func() *ggui.DraftValue[string] {
+            return ggui.Draft(f.Value, f.Commit)
+        })
+        rows = append(rows, ui.Field(f.Label, ui.TextField(draft)).BindError(draft.Error()))
+    }
+    return ggui.Column(rows...)
+})
+```
+
+A value lasts as long as builds keep asking for it. One that a View's build
+stops asking for is let go when that build ends, and so is one asked for by a
+View its parent rebuilt without; asking again later makes a fresh one. Keys
+belong to the nearest `Component`, `If` or `Key` branch, or `Each` row,
+together with the value's type, and everything remembered there goes when
+it does. `init` runs untracked under an owner of its own, so a `Derived` or
+`Effect` it makes lasts exactly as long as the value. Outside every builder,
+`Remember` returns `init()`.
+
+Focus, the caret and a `Scroll`'s offset need none of this: a rebuilt
+control with the same `Key` takes them over from the one it replaced.
 
 ## Conditional and key blocks
 

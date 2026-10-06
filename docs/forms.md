@@ -144,6 +144,30 @@ field := ui.Field("Name", ui.TextField(name)).
 A nonempty error replaces the help text. The field label names the control
 for `Probe.Find` unless the control already has an explicit name.
 
+### Committing an edit
+
+A field that should change the model only once the user is done with it,
+and refuse what the model will not take, binds a `ggui.Draft`. The field
+shows the model's value until edited, then the edit; leaving the field or
+pressing Enter hands the edit to the commit function, and a commit that
+returns an error keeps the edit and shows the error, for the user to repair.
+Escape drops the edit and goes back to the model's value, and while there is
+nothing to drop it passes on, so a dialog around the field still closes.
+
+```go
+name := ggui.Draft(ggui.Select(store, func(p *Project) string { return p.Name }),
+	func(v string) error { return project.Rename(v) })
+ui.Field("Name", ui.TextField(name)).BindError(name.Error())
+```
+
+`Commit` and `Revert` do the same from code, as a Save button committing
+every field first does; `Fail(msg)` shows an error found elsewhere, and
+`Dirty()` follows whether an edit is waiting. A Draft made in a `View`'s
+build is lost with that build; make it with `ggui.Remember` to keep it, its
+edit and error included, while the page rebuilds around it. Any `Binding`
+with `Commit() bool` and `Revert() bool` gets the same treatment from a text
+input; that is the `ggui.Committer` interface.
+
 ### Numbers
 
 `ui.NumberInput(value)` edits a `Binding[float64]` as text with − and +

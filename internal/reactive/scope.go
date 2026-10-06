@@ -22,6 +22,7 @@ type scope struct {
 	measuring       func(src LayoutSource, version uint64)
 	derivedDepth    int
 	building        bool // inside Build: see SnapshotRead
+	memory          any  // what Remember keeps values in; see ggui's memory.go
 	layoutDepth     int
 	layoutGen       uint64 // see RequestLayout
 	stateGen        uint64 // see StateGen
@@ -139,3 +140,14 @@ func leaveLayout() { current().layoutDepth-- }
 
 // InLayout reports whether the running goroutine is inside layout.
 func InLayout() bool { return current().layoutDepth > 0 }
+
+// SwapMemory makes m what the running goroutine's builders remember values
+// in and returns what it replaces. The reactive package only keeps it.
+func SwapMemory(m any) (prev any) {
+	s := current()
+	prev, s.memory = s.memory, m
+	return prev
+}
+
+// Memory returns what SwapMemory installed last.
+func Memory() any { return current().memory }
