@@ -1154,3 +1154,16 @@ func (e *Computation) Children() []*Computation {
 
 // Count is Base().Count, for the running goroutine.
 func Count() int { return Base().Count() }
+
+// Same reports whether m's equality takes a and b for one value, falling
+// back on reflect.DeepEqual where m has none; for a debug check comparing a
+// result with the one m holds.
+func Same[T any](m *DerivedValue[T], a, b T) bool {
+	if eq := m.sig.eq; eq != nil {
+		return eq(a, b)
+	}
+	return reflect.DeepEqual(a, b)
+}
+
+// Disposed reports whether m has been disposed, and keeps its last value.
+func Disposed[T any](m *DerivedValue[T]) bool { return m.eff.disposed }

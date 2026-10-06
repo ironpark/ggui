@@ -12,6 +12,7 @@ See [example conventions](README.md#start-here) before copying snippets.
 - [Concepts](#concepts)
 - [Signals](#signals)
 - [Derived values](#derived-values)
+- [Plain models](#plain-models)
 - [Ownership and cleanup](#ownership-and-cleanup)
 - [Threads](#threads)
 - [Runtimes](#runtimes)
@@ -29,6 +30,7 @@ Choose the smallest reactive boundary that expresses the change:
 | --- | --- |
 | Store an editable value | `State` |
 | Compute a value from other signals | `Derived`, `Map`, or `Combine` |
+| Show a plain Go model the UI was not written for | `Store` and `Select` |
 | Run setup once and own local work | `Component` |
 | Replace a subtree when data changes | `View` or `Reactive` |
 | Switch branches or reset an identity | `If` or `Key` |
@@ -99,6 +101,36 @@ its `Get` method for changes to notify consumers.
 A derived value belongs to its creation owner; disposing that owner stops it.
 Unowned derivations must be explicitly disposed. A disposed value retains its
 last computed result (the zero value if it was never read).
+
+## Plain models
+
+An app whose model is ordinary Go, a document with an undo history say,
+need not turn every field into a signal. `NewStore(model)` wraps it, and
+`Select` picks what the UI shows: a `Derived` computed again whenever the
+store publishes a change, and passed on only when its part differs.
+
+```go
+store := ggui.NewStore(&Editor{})
+title := ggui.Select(store, func(e *Editor) string { return e.Title })
+tags := ggui.Select(store, func(e *Editor) []string { return slices.Clone(e.Tags) }).
+    WithEqual(slices.Equal)
+name := ggui.SelectBind(store,
+    func(e *Editor) string { return e.Name },
+    func(e *Editor, v string) { e.Name = v })
+
+ggui.TextOf(title)
+ui.TextField(name)
+ui.Button("Save", store.Action((*Editor).Save))
+```
+
+`Update(fn)` changes the model and publishes once, however many Updates `fn`
+runs itself; `Action(fn)` is the same as an event handler. A change made
+around the store, such as a worker's result posted back, is published with
+`Changed()`. Forgetting to publish is the one way a Select goes stale, and a
+`ggui_debug` build checks for it after every frame's input: a Select whose
+model changed with nothing published is reported with where it was made.
+Select copies of slices and maps rather than the model's own, so the next
+change is something to compare against.
 
 ## Ownership and cleanup
 

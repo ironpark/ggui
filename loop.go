@@ -318,6 +318,7 @@ func (r *frameLoop) runPosted() {
 // effects run until quiet. It returns ErrCycle when they never are.
 func (r *frameLoop) tick(now time.Time) error {
 	setRunning(r)
+	checkStores()
 	// Animations made outside every tree, such as one a test built before
 	// its probe, belong to a Base runtime's world, which this loop's flushes
 	// cover too.
