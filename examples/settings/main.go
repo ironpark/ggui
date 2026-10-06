@@ -118,13 +118,12 @@ func (m *model) build(post func(func())) ggui.Widget {
 			ggui.TextOf(m.Status).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption).NoWrap(),
 		).Space(1),
 		// Styled sets the base style for everything below it: these lines
-		// are small and muted without a setter on each Text. The color is
-		// read once here; an app with a theme switch would put this in a
-		// Reactive island or use Caption, which resolves at layout.
+		// are small and muted without a setter on each Text. MutedFg is a
+		// token, resolved at layout, so it follows a theme switch.
 		ggui.Styled(ggui.Column(
 			ggui.Textf("Draft: %s <%s>, notify=%t, volume=%.2f", name, email, notify, volume),
 			ggui.Textf("Saved: %s <%s>", savedName, savedEmail),
-		).Space(0.5)).Size(12).Color(uitheme.Use().MutedFg),
+		).Space(0.5)).Size(12).Color(uitheme.MutedFg),
 	).Space(1.5).Align(ggui.AlignStretch)
 	return ggui.Center(ggui.Box(ui.Card(form).Pad(24)).Width(440))
 }

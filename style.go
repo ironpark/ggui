@@ -93,6 +93,7 @@ func (e Env) Text() TextStyle { return e.text }
 func (e Env) ResolveText(s TextStyle) TextStyle {
 	r := e.text.Merge(s).resolved()
 	r.Size *= e.TextScale()
+	r.Color = ResolveColor(r.Color, e)
 	return r
 }
 

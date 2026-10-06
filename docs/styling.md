@@ -14,7 +14,7 @@ Choose the scope of a change before setting a style:
 | --- | --- | --- | --- |
 | Local style | one widget's own font, size, color | `Text(s).Size(18).Color(c)` | that widget |
 | Inherited style | what a subtree starts from | `Styled(child)`, `theme.With(t, child)`, `Provide(key, v, child)` | every widget below, at layout |
-| Theme | the app's tokens: colors, spacing, named text styles | `theme.Set(t)`, `theme.Bind(sig, on, off)` | the tree at layout, and tracked computations using `theme.Use()` |
+| Theme | the app's tokens: colors, spacing, named text styles | `theme.Set(t)`, `theme.Bind(sig, on, off)` | the tree at layout: controls, and colors given as tokens such as `theme.Primary` |
 
 A widget's own setters win over what it inherited, and what it inherited wins
 over the built-in defaults. Nothing is resolved at construction: the chain is
@@ -136,6 +136,28 @@ under any theme.
 
 Tokens marked *follows* take their value from another token unless set; see
 [Deriving a theme](#deriving-a-theme).
+
+### Coloring what you build
+
+Give a widget a theme color by name, not by value. `theme.Primary`,
+`theme.MutedFg` and the rest, one for every color field of `Theme`, are
+`theme.Color` tokens: a widget resolves one against the `Env` it is laid out
+in, so it follows a theme switch, or a subtree's own `theme.With`, without
+anything being rebuilt.
+
+```go
+ggui.Box(ggui.Text("Z").Color(theme.PrimaryFg)).Fill(theme.Primary)
+ggui.Text("Off").Color(theme.MutedFg.Alpha(.55))
+ggui.Box().Fill(theme.Var("warning"))   // a variable of your own; see below
+```
+
+`Alpha` fades a token, and `theme.Fade` and `theme.Mix` keep a token a token
+until it is drawn. Reading the theme's values with `theme.Use()` in a builder
+takes a snapshot instead, which a theme switch leaves behind, and a
+`ggui_debug` build reports it; `theme.Use()` is for a `Reactive` that builds
+something other than colors from the theme. A custom widget that takes a
+color resolves it with `ggui.ResolveColor(c, env)` in `Layout`; drawn without
+an `Env`, a token is the color the application's theme has.
 
 | Token | CSS variable | For | Light | Dark |
 | --- | --- | --- | --- | --- |
@@ -299,7 +321,8 @@ A color variable with no token of its own, such as the `--warning` or
 under `theme.CSSColor(name)`:
 
 ```go
-warning, ok := theme.Use().Get(theme.CSSColor("warning"))
+ggui.Text("Low disk space").Color(theme.Var("warning"))
+warning, ok := theme.From(env).Get(theme.CSSColor("warning")) // in a widget's Layout
 ```
 
 Other variables, such as fonts, are ignored.
@@ -339,7 +362,7 @@ subtree, like a form's disabled state.
 
 | Call | Does |
 | --- | --- |
-| `theme.Use()` | Read the global theme; inside a tracked computation such as `Reactive`, subscribe it to changes. |
+| `theme.Use()` | Read the global theme's values; inside a tracked computation such as `Reactive`, subscribe it to changes. To color a widget, use a token such as `theme.Primary` instead. |
 | `theme.Set(t)` | Replace the global theme, invalidate inherited layout, and notify tracked readers. |
 | `theme.Bind(sig, on, off)` | follows a `Readable[bool]`, swapping between two themes |
 | `theme.With(t, child)` | gives one subtree a theme without touching the app's |
@@ -375,7 +398,8 @@ func (w *MyWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 `theme.Use` reads the theme from the reactive root environment; it does not create an effect.
 Use `theme.From(env)` in a widget so local `theme.With` overrides are respected.
 Use `theme.Use()` inside `Reactive` when constructing a subtree from the global
-theme. Reads in app root setup or `Component` setup do not make setup rerun.
+theme's values; for colors, a token does it with no rebuild. Reads in app root
+setup or `Component` setup do not make setup rerun.
 
 Keep what `Paint` needs on the struct, since `Paint` gets no `Env`. That is
 the pattern every control in the `ui` package follows, and it is why a theme
@@ -585,8 +609,8 @@ and inheritance is resolved at layout time, so a theme swap reaches widgets
 built long before it.
 
 ```go
-ggui.Text("Heading").Style(t.Title).Color(brand)   // local
-ggui.Styled(page).Color(t.MutedFg).Size(12)        // inherited
+ggui.Text("Heading").Style(t.Title).Color(brand)        // local
+ggui.Styled(page).Color(theme.MutedFg).Size(12)         // inherited
 app.Setup(func() { theme.Bind(dark, theme.Dark(), theme.Default()) })
 ```
 
@@ -604,6 +628,7 @@ control supports `.Name("Appearance")`, `.OnChange(fn)`, `.Disabled(v)`, and
 | Root environment, editor/scrollbar styles, spacing and background | [environment.go](../environment.go) |
 | Theme tokens, followers, defaults, presets and application | [ui/theme/](../ui/theme/) |
 | Reading shadcn/ui CSS | [ui/theme/css.go](../ui/theme/css.go) |
+| Color tokens, `EnvColor` | [ui/theme/tokens.go](../ui/theme/tokens.go), [envcolor.go](../envcolor.go) |
 | `Variant`, `Restyle` | [ui/variant.go](../ui/variant.go) |
 | `Text`, `Styled`, `Provide`, `WithEnv` | [widgets.go](../widgets.go) |
 | `ui.Title`, `ui.Heading`, `ui.Caption`, `ui.Mono` | [ui/text.go](../ui/text.go) |

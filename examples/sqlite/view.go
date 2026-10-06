@@ -37,14 +37,13 @@ func clientTheme(dark bool) uitheme.Theme {
 }
 
 func build(m *model) ggui.Widget {
-	return ggui.Reactive(func() ggui.Widget { return buildClient(m) })
+	return buildClient(m)
 }
 
 func buildClient(m *model) ggui.Widget {
-	t := uitheme.Use()
 	unavailable := ggui.Combine(m.Busy, m.Connected, func(b, c bool) bool { return b || !c })
 	header := ggui.Padding(ggui.Row(
-		ggui.Box(ggui.Text("S").Color(t.PrimaryFg)).Fill(t.Primary).Radius(4).Pad(4, 8),
+		ggui.Box(ggui.Text("S").Color(uitheme.PrimaryFg)).Fill(uitheme.Primary).Radius(4).Pad(4, 8),
 		ggui.Text("SQLite Studio"),
 		ggui.Expanded(ggui.If(m.Connected, func() ggui.Widget {
 			return ggui.Row(ui.Caption("/"), ggui.TextOf(m.Path.Map(filepath.Base)).NoWrap()).Gap(10)
@@ -67,7 +66,7 @@ func buildClient(m *model) ggui.Widget {
 			m.browse()
 		}
 	})
-	workspace := ggui.Row(sidebarView(m), ggui.Box().Width(1).Fill(t.Border),
+	workspace := ggui.Row(sidebarView(m), ggui.Box().Width(1).Fill(uitheme.Border),
 		ggui.Expanded(ggui.Column(
 			ggui.Expanded(ggui.Padding(tabs, 0, 0, 8, 0)),
 		).Align(ggui.AlignStretch)),
@@ -81,10 +80,10 @@ func buildClient(m *model) ggui.Widget {
 			return ggui.Padding(ggui.Row(ggui.Expanded(ui.Alert("Operation failed", message).Destructive()), ui.Button("Dismiss", func() { m.Error.Set("") }).Ghost()).Gap(8), 8, 16)
 		}),
 		ui.Divider(), ggui.Padding(ggui.Row(
-			ggui.Text("●").Color(t.Primary), ggui.Expanded(ggui.TextOf(m.Status).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption).NoWrap()),
+			ggui.Text("●").Color(uitheme.Primary), ggui.Expanded(ggui.TextOf(m.Status).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption).NoWrap()),
 			ggui.If(m.Busy, func() ggui.Widget { return ui.Button("Cancel operation", m.stop).Ghost() }).
 				ElseIf(m.DropHover, func() ggui.Widget {
-					return ggui.Text("Release to open the database").Color(t.Primary).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption)
+					return ggui.Text("Release to open the database").Color(uitheme.Primary).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption)
 				}).
 				Else(func() ggui.Widget { return ui.Caption("Drop a database anywhere  ·  ⌘/Ctrl O to open") }),
 		).Gap(8).Align(ggui.AlignCenter), 8, 16),
@@ -95,7 +94,6 @@ func buildClient(m *model) ggui.Widget {
 }
 
 func sidebarView(m *model) ggui.Widget {
-	t := uitheme.Use()
 	list := ggui.View(ggui.Combine(m.Objects, m.Search, func(objects []object, search string) []object {
 		out := []object{}
 		for _, o := range objects {
@@ -120,13 +118,13 @@ func sidebarView(m *model) ggui.Widget {
 					continue
 				}
 				name := o.Name
-				label := ggui.Row(ggui.Text(mark).Color(t.MutedFg), ggui.Expanded(ggui.Text(name).NoWrap())).Gap(10)
+				label := ggui.Row(ggui.Text(mark).Color(uitheme.MutedFg), ggui.Expanded(ggui.Text(name).NoWrap())).Gap(10)
 				// Only the rows whose selection changes rebuild.
 				selected := m.Table.Map(func(s string) bool { return s == name })
 				group = append(group, ggui.View(selected, func(selected bool) ggui.Widget {
 					b := ui.ButtonOf(label, func() { m.selectTable(name) }).Name(name).BindDisabled(m.Busy).Pad(6, 8)
 					if selected {
-						return ggui.Box(ggui.Row(ggui.Box().Width(2).Fill(t.Primary), ggui.Expanded(b.Secondary())).Align(ggui.AlignStretch))
+						return ggui.Box(ggui.Row(ggui.Box().Width(2).Fill(uitheme.Primary), ggui.Expanded(b.Secondary())).Align(ggui.AlignStretch))
 					}
 					return b.Ghost()
 				}))
@@ -144,23 +142,22 @@ func sidebarView(m *model) ggui.Widget {
 		ggui.Expanded(ggui.Scroll(list)), ui.Divider(),
 		ui.Checkbox(m.ReadOnly, "Open read-only"), ui.Caption("Applies to the next database."),
 		ui.Caption(".db · .sqlite · .sqlite3"),
-	).Gap(12).Align(ggui.AlignStretch)).Width(240).Pad(12, 12).Fill(t.Sidebar)
+	).Gap(12).Align(ggui.AlignStretch)).Width(240).Pad(12, 12).Fill(uitheme.Sidebar)
 }
 
 func welcomeView(m *model) ggui.Widget {
-	t := uitheme.Use()
 	return ggui.Center(ggui.Padding(ggui.Box(ggui.Column(
 		ggui.Column(
 			ui.Title("Open database"),
 			ui.Caption("Choose a SQLite file to get started."),
 		).Gap(8).Align(ggui.AlignStart),
 		ggui.View(m.DropHover, func(over bool) ggui.Widget {
-			border, fill, title := t.Border, t.Sidebar, "Drop your database here"
+			border, fill, title := uitheme.Border, uitheme.Sidebar, "Drop your database here"
 			if over {
-				border, fill, title = t.Primary, t.Accent, "Release to open"
+				border, fill, title = uitheme.Primary, uitheme.Accent, "Release to open"
 			}
 			return ggui.Box(ggui.Row(ggui.Column(
-				lucide.Icon("file").Size(28).Color(t.MutedFg),
+				lucide.Icon("file").Size(28).Color(uitheme.MutedFg),
 				ggui.Text(title),
 				ui.Caption(".db · .sqlite · .sqlite3"),
 				ui.Button("Open database", m.choose).BindDisabled(m.Busy),
@@ -290,17 +287,17 @@ func resultGrid(source ggui.Readable[result], m *model) ggui.Widget {
 			heading := ggui.TextOf(ggui.Derived(func() string { return name + sort.Get().Mark(name) })).NoWrap()
 			label := ggui.Row(heading, ui.Caption(strings.ToLower(meta.Type))).Gap(8).Align(ggui.AlignCenter)
 			if meta.PK > 0 {
-				label = ggui.Row(ggui.Text("◆").Color(uitheme.Use().Primary), label).Gap(6)
+				label = ggui.Row(ggui.Text("◆").Color(uitheme.Primary), label).Gap(6)
 			}
 			cols[i].Header = ui.ButtonOf(label, func() { m.sortColumn(name) }).Name("Sort by "+name).Ghost().Pad(0, 0).BindDisabled(m.Busy)
 		}
 		cols = append([]ui.Column[record]{ui.Col("", func(row ggui.Readable[record]) ggui.Widget {
-			id := row.Get().ID
+			id := ggui.Untrack(row.Get).ID
 			return ui.Checkbox(ggui.Bind(func() bool { return m.Selections.Get()[id] }, func(on bool) { m.selectRow(id, on) }), "").Name(fmt.Sprintf("Select row %d", id)).BindDisabled(m.Busy)
 		}).W(32)}, cols...)
 		cols[0].Header = ui.Checkbox(ggui.Bind(m.pageSelected, m.selectPage), "").Name("Select page").BindDisabled(ggui.Derived(func() bool { return m.Busy.Get() || len(m.Data.Get().Rows) == 0 })).BindIndeterminate(ggui.Derived(func() bool { n := len(m.Selections.Get()); return n > 0 && n < len(m.Data.Get().Rows) }))
 		table := ui.Table(ggui.State(r.Rows), func(row record) int { return row.ID }, cols...).BindSelectedRows(m.Selections).OnSelect(func(row record) { m.selectRow(row.ID, !m.Selections.Get()[row.ID]) }).RowHeight(34)
-		border := uitheme.Use().Border
+		border := uitheme.Border
 		grid := ggui.FromFuncs(table.Layout, func(dst *ggui.Canvas, rc ggui.Rect) {
 			dst.Paint(table, rc)
 			x := rc.Origin.X + 32

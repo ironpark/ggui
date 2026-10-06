@@ -45,7 +45,9 @@ func (t Theme) Apply(env ggui.Env) ggui.Env {
 		With(ggui.PopupDurationKey, t.MotionFast)
 }
 
-// Use reads the application theme and subscribes the current builder or effect.
+// Use reads the application theme and subscribes the current Reactive or
+// effect. A builder colors what it builds with tokens such as Primary
+// instead: read here, the theme is a snapshot a theme switch leaves behind.
 func Use() Theme { return From(ggui.UseEnv()) }
 
 // Set replaces the application theme while preserving other environment

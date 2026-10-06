@@ -104,6 +104,7 @@ func (w *Widget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if col == nil {
 		col = uitheme.From(w.env).Fg
 	}
+	col = ggui.ResolveColor(col, w.env)
 	side := min(w.size, r.Size.W, r.Size.H)
 	at := ggui.Rct(r.Origin.Add(ggui.Pt((r.Size.W-side)/2, (r.Size.H-side)/2)), ggui.Sz(side, side))
 	asset.Draw(dst, at, col, w.rotation)

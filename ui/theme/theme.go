@@ -9,8 +9,10 @@ import (
 	"github.com/ironpark/ggui"
 )
 
-// Theme is the app's design tokens. Read it at build time with Use;
-// Text starts from Theme.Text through the root Env.
+// Theme is the app's design tokens. A widget reads it from its Env with
+// From; a builder colors what it builds with Color tokens such as Primary,
+// which widgets resolve the same way. Text starts from Theme.Text through
+// the root Env.
 //
 // Some tokens follow others: PrimaryHover and Selection follow Primary,
 // CardFg and the other foregrounds follow Fg, RadiusSm and RadiusLg follow

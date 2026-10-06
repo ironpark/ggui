@@ -221,7 +221,7 @@ func inspectFrame(c *Canvas, sem *SemTree) *inspect.Frame {
 
 // InspectFields implements inspect.Fielder.
 func (b *BoxWidget) InspectFields() []inspect.Field {
-	out := []inspect.Field{{Key: "Box style"}, {Key: "background", Value: inspect.Color(b.fill)}, {Key: "border", Value: inspect.Num(b.borderWidth) + " px " + inspect.Color(b.borderColor)}, {Key: "radius", Value: inspect.Num(b.radius) + " px", Number: true}, {Key: "padding", Value: fmt.Sprintf("%s %s %s %s", inspect.Num(b.padding.Top), inspect.Num(b.padding.Right), inspect.Num(b.padding.Bottom), inspect.Num(b.padding.Left)), Number: true}}
+	out := []inspect.Field{{Key: "Box style"}, {Key: "background", Value: inspect.Color(b.fill.shown)}, {Key: "border", Value: inspect.Num(b.borderWidth) + " px " + inspect.Color(b.borderColor.shown)}, {Key: "radius", Value: inspect.Num(b.radius) + " px", Number: true}, {Key: "padding", Value: fmt.Sprintf("%s %s %s %s", inspect.Num(b.padding.Top), inspect.Num(b.padding.Right), inspect.Num(b.padding.Bottom), inspect.Num(b.padding.Left)), Number: true}}
 	if b.width > 0 {
 		out = append(out, inspect.Field{Key: "fixed width", Value: inspect.Num(b.width) + " px", Number: true})
 	}

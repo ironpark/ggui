@@ -179,7 +179,7 @@ func (t *TextWidget) Style(ts TextStyle) *TextWidget {
 // is paint-only, so a control can recolor its label as the pointer moves
 // over it without laying it out again.
 func (t *TextWidget) Color(c color.Color) *TextWidget {
-	if (c == nil) != (t.style.Color == nil) {
+	if (c == nil) != (t.style.Color == nil) || isEnvColor(c) || isEnvColor(t.style.Color) {
 		defer property.Watch(&t.props, &t.style)()
 	}
 	t.style.Color = c
@@ -369,7 +369,7 @@ func (t *TextWidget) paintLines(dst *Canvas, r Rect, place func(op *text.DrawOpt
 	}
 	face := t.faceAt(dst.Scale())
 	op := &text.DrawOptions{}
-	op.ColorScale.ScaleWithColor(pick(t.style.Color != nil, t.style.Color, t.current().Color))
+	op.ColorScale.ScaleWithColor(pick(t.style.Color != nil && !isEnvColor(t.style.Color), t.style.Color, t.current().Color))
 	for i, line := range t.lines {
 		x := r.Origin.X + (r.Size.W-t.widths[i])*t.align
 		y := r.Origin.Y + float64(i)*t.spacing()
@@ -483,15 +483,17 @@ type BoxWidget struct {
 	heightProp  property.Value[float64]
 	props       property.Owner
 	shadows     []ShadowStyle
-	fill        color.Color
+	fill        shownColor
 	radius      float64
 	borderWidth float64
-	borderColor color.Color
-	padding     EdgeInsets
-	width       float64 // 0 means "as small as the child allows"
-	height      float64
-	maxW, maxH  float64 // 0 means no limit
-	child       Widget
+	borderColor shownColor
+
+	shownShadows []ShadowStyle // shadows with their colors resolved
+	padding      EdgeInsets
+	width        float64 // 0 means "as small as the child allows"
+	height       float64
+	maxW, maxH   float64 // 0 means no limit
+	child        Widget
 
 	childSize Size
 }
@@ -512,14 +514,23 @@ func Box(child ...Widget) *BoxWidget {
 
 // Fill sets the background color. Nil paints nothing.
 func (b *BoxWidget) Fill(c color.Color) *BoxWidget {
-	b.fill = c
+	b.fill.set(c, b.props.Changed)
 	return b
 }
 
 // Shadow replaces the outer shadow layers. Calling it without arguments clears
 // them. Shadows paint in argument order and do not reserve layout space.
 func (b *BoxWidget) Shadow(styles ...ShadowStyle) *BoxWidget {
+	if !slices.Equal(b.shadows, styles) {
+		for _, s := range append(b.shadows, styles...) {
+			if isEnvColor(s.Color) {
+				b.props.Changed()
+				break
+			}
+		}
+	}
 	b.shadows = append(b.shadows[:0], styles...)
+	b.shownShadows = append(b.shownShadows[:0], styles...)
 	return b
 }
 
@@ -531,7 +542,8 @@ func (b *BoxWidget) Radius(r float64) *BoxWidget {
 
 // Border draws a line of width w in color c just inside the edge.
 func (b *BoxWidget) Border(w float64, c color.Color) *BoxWidget {
-	b.borderWidth, b.borderColor = w, c
+	b.borderWidth = w
+	b.borderColor.set(c, b.props.Changed)
 	return b
 }
 
@@ -607,6 +619,11 @@ func (b *BoxWidget) MaxHeight(h float64) *BoxWidget {
 // Layout implements Widget.
 func (b *BoxWidget) Layout(c Constraints, env Env) Size {
 	defer b.props.Layout()()
+	b.fill.layout(env)
+	b.borderColor.layout(env)
+	for i, s := range b.shadows {
+		b.shownShadows[i].Color = ResolveColor(s.Color, env)
+	}
 	b.width, b.height = b.widthProp.Get(), b.heightProp.Get()
 	width, height := capped(b.width, b.maxW), capped(b.height, b.maxH)
 	inner := b.padding.Shrink(c).Loosen()
@@ -653,12 +670,12 @@ func (b *BoxWidget) Baseline() (float64, bool) { return baselineAt(b.child, b.pa
 
 // Paint implements Widget.
 func (b *BoxWidget) Paint(dst *Canvas, r Rect) {
-	for _, s := range b.shadows {
+	for _, s := range b.shownShadows {
 		dst.Shadow(r, b.radius, s)
 	}
-	dst.FillRoundRect(r, b.radius, b.fill)
+	dst.FillRoundRect(r, b.radius, b.fill.shown)
 	if b.borderWidth > 0 {
-		dst.StrokeRoundRect(r, b.radius, b.borderWidth, b.borderColor)
+		dst.StrokeRoundRect(r, b.radius, b.borderWidth, b.borderColor.shown)
 	}
 	if b.child != nil {
 		dst.Paint(b.child, Rct(r.Origin.Add(Pt(b.padding.Left, b.padding.Top)), b.childSize))
@@ -1398,7 +1415,8 @@ func (s *ScrollWidget) thumbLength() float64 {
 func (s *ScrollWidget) paintBar(dst *Canvas, r Rect) {
 	s.thumbHit = Rect{}
 	track, content := s.extent(r.Size), s.extent(s.childSize)
-	if s.bar == nil || content <= track || track <= 0 {
+	bar := ResolveColor(s.bar, s.barEnv)
+	if bar == nil || content <= track || track <= 0 {
 		s.dragging, s.thumbHovered = false, false
 		return
 	}
@@ -1407,11 +1425,11 @@ func (s *ScrollWidget) paintBar(dst *Canvas, r Rect) {
 	active := s.thumbHovered || s.dragging
 	amount := dst.Ease(Anchor{Rect: r, ID: scrollThumb{s}.HitID()}, scrollThumbHoverSlot, pick(active, 1.0, 0.0), s.barEnv.Motion(style.Duration))
 	thickness := 3 + 1.5*amount
-	fill := s.bar
+	fill := bar
 	if amount > 0 {
 		// Keep the thumb close to its resting gray, including while dragging.
 		tint := amount * pick(s.dragging, .28, .18)
-		r, g, b, a := s.bar.RGBA()
+		r, g, b, a := bar.RGBA()
 		fr, fg, fb, fa := style.HoverColor.RGBA()
 		blend := func(from, to uint32) uint16 {
 			return uint16(float64(from) + (float64(to)-float64(from))*tint)

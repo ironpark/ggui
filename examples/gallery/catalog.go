@@ -144,15 +144,12 @@ func galleryPage(dark *ggui.StateValue[bool], search, category *ggui.StateValue[
 		return ggui.Wrap(buttons...).Gap(8)
 	})
 	field := ui.TextField(search).Name("Search components").Placeholder("Search components…").OnChange(func(string) { scroll.Set(0) })
-	header := ggui.Reactive(func() ggui.Widget {
-		theme := uitheme.Use()
-		return ggui.Box(ggui.Column(
-			ggui.Row(ui.Title("Component gallery").Size(28), ggui.Spacer(), ui.ThemeSwitch(dark)).Gap(16),
-			ui.Caption("Explore the building blocks. Try an interaction, adjust the theme, make it yours."),
-			ggui.Row(ggui.Expanded(field), ui.Button("Commands", commands).Outline()).Gap(12),
-			filters,
-		).Gap(14).Align(ggui.AlignStretch)).Pad(24, 28).Fill(theme.Card)
-	})
+	header := ggui.Box(ggui.Column(
+		ggui.Row(ui.Title("Component gallery").Size(28), ggui.Spacer(), ui.ThemeSwitch(dark)).Gap(16),
+		ui.Caption("Explore the building blocks. Try an interaction, adjust the theme, make it yours."),
+		ggui.Row(ggui.Expanded(field), ui.Button("Commands", commands).Outline()).Gap(12),
+		filters,
+	).Gap(14).Align(ggui.AlignStretch)).Pad(24, 28).Fill(uitheme.Card)
 	content := ggui.View(shown, func(cards []ggui.Widget) ggui.Widget {
 		if len(cards) == 0 {
 			return ui.Empty("No matching components", "Try a different search or explore another category.").Action(ui.Button("Clear filters", reset))

@@ -1,11 +1,23 @@
 package theme
 
-import "image/color"
+import (
+	"image/color"
+
+	"github.com/ironpark/ggui"
+)
+
+func isEnvColor(c color.Color) bool {
+	_, ok := c.(ggui.EnvColor)
+	return ok
+}
 
 // Mix returns a moved amount of the way toward b, the way the state mixes
 // tint: Mix(fill, t.Fg, t.HoverMix) is fill under the pointer. A nil color
 // gives the other one.
 func Mix(a, b color.Color, amount float64) color.Color {
+	if isEnvColor(a) || isEnvColor(b) {
+		return mixed{a, b, amount}
+	}
 	if a == nil {
 		return b
 	}
@@ -23,6 +35,12 @@ func Mix(a, b color.Color, amount float64) color.Color {
 func Fade(c color.Color, alpha float64) color.Color {
 	if c == nil || alpha == 1 {
 		return c
+	}
+	switch e := c.(type) {
+	case Color:
+		return e.Alpha(alpha)
+	case ggui.EnvColor:
+		return faded{e, alpha}
 	}
 	r, g, b, a := c.RGBA()
 	// Every channel scales, alpha included, because a premultiplied color
