@@ -27,16 +27,16 @@ func TestTodo(t *testing.T) {
 	p.Tap("Add")
 	m.Draft.Set("Walk the dog")
 	p.Tap("Add")
-	if got := len(ggui.Untrack(m.Todos.Get)); got != 2 {
+	if got := len(ggui.Peek(m.Todos)); got != 2 {
 		t.Fatalf("todos after two adds = %d, want 2", got)
 	}
-	if ggui.Untrack(m.Draft.Get) != "" {
+	if ggui.Peek(m.Draft) != "" {
 		t.Fatal("draft was not cleared after adding")
 	}
 
 	p.Advance(time.Second) // the new rows animate in
 	p.Tap("Done: Buy milk")
-	if !ggui.Untrack(m.Todos.Get)[0].Done.Get() {
+	if !ggui.Peek(m.Todos)[0].Done.Get() {
 		t.Fatal("checkbox did not mark the first item done")
 	}
 	p.Tap("Active")
@@ -55,7 +55,7 @@ func TestTodo(t *testing.T) {
 		t.Fatal("tapping the title did not open the editor")
 	}
 	p.Tap("Edit: Buy milk") // focus the field
-	ggui.Untrack(m.Todos.Get)[0].Title.Set("Buy oat milk")
+	ggui.Peek(m.Todos)[0].Title.Set("Buy oat milk")
 	if _, ok := p.Find("Edit: Buy oat milk"); !ok {
 		t.Fatal("the editor's name did not follow the title")
 	}
@@ -69,15 +69,15 @@ func TestTodo(t *testing.T) {
 
 	// Cmd+K asks before clearing; the dialog's Remove button confirms.
 	p.Key("cmd+k")
-	if !ggui.Untrack(m.Confirm.Get) {
+	if !ggui.Peek(m.Confirm) {
 		t.Fatal("shortcut did not open the confirmation")
 	}
 	p.Tap("Remove")
-	if got := len(ggui.Untrack(m.Todos.Get)); got != 1 || ggui.Untrack(m.Confirm.Get) {
-		t.Fatalf("after clearing: %d todos, confirm=%v", got, ggui.Untrack(m.Confirm.Get))
+	if got := len(ggui.Peek(m.Todos)); got != 1 || ggui.Peek(m.Confirm) {
+		t.Fatalf("after clearing: %d todos, confirm=%v", got, ggui.Peek(m.Confirm))
 	}
 	p.Tap("Remove Walk the dog")
-	if got := len(ggui.Untrack(m.Todos.Get)); got != 0 {
+	if got := len(ggui.Peek(m.Todos)); got != 0 {
 		t.Fatalf("todos after removing the last row = %d, want 0", got)
 	}
 }

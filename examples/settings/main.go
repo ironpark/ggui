@@ -62,8 +62,8 @@ func emailError(p Profile) string {
 // outcome back. Signals are only touched on the UI goroutine: before the
 // worker starts and inside the posted function.
 func (m *model) save(post func(func())) {
-	draft := ggui.Untrack(m.Draft.Get)
-	if emailError(draft) != "" || ggui.Untrack(m.Saving.Get) {
+	draft := ggui.Peek(m.Draft)
+	if emailError(draft) != "" || ggui.Peek(m.Saving) {
 		return
 	}
 	m.Saving.Set(true)
@@ -82,7 +82,7 @@ func (m *model) save(post func(func())) {
 	}()
 }
 
-func (m *model) reset() { m.Draft.Set(ggui.Untrack(m.Saved.Get)) }
+func (m *model) reset() { m.Draft.Set(ggui.Peek(m.Saved)) }
 
 // build is the root Builder; post is how Save reaches the UI goroutine
 // again (App.Post or Probe.Post, both part of ggui.Host).
@@ -98,7 +98,7 @@ func (m *model) build(post func(func())) ggui.Widget {
 	cannotSave := ggui.Derived(func() bool {
 		return !dirty.Get() || validation.Get() != "" || m.Saving.Get()
 	})
-	cannotReset := dirty.Map(func(changed bool) bool { return !changed })
+	cannotReset := ggui.Not(dirty)
 	savedName := m.Saved.Field(func(p *Profile) *string { return &p.Name })
 	savedEmail := m.Saved.Field(func(p *Profile) *string { return &p.Email })
 
@@ -115,7 +115,7 @@ func (m *model) build(post func(func())) ggui.Widget {
 			ui.Button("Save", func() { m.save(post) }).BindDisabled(cannotSave),
 			ui.Button("Reset", m.reset).Outline().BindDisabled(cannotReset),
 			ggui.Spacer(),
-			ggui.TextOf(m.Status).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption).NoWrap(),
+			ui.CaptionOf(m.Status).NoWrap(),
 		).Space(1),
 		// Styled sets the base style for everything below it: these lines
 		// are small and muted without a setter on each Text. MutedFg is a
@@ -124,7 +124,7 @@ func (m *model) build(post func(func())) ggui.Widget {
 			ggui.Textf("Draft: %s <%s>, notify=%t, volume=%.2f", name, email, notify, volume),
 			ggui.Textf("Saved: %s <%s>", savedName, savedEmail),
 		).Space(0.5)).Size(12).Color(uitheme.MutedFg),
-	).Space(1.5).Align(ggui.AlignStretch)
+	).Space(1.5).Stretch()
 	return ggui.Center(ggui.Box(ui.Card(form).Pad(24)).Width(440))
 }
 

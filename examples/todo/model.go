@@ -21,7 +21,7 @@ type Todo struct {
 	Done  *ggui.StateValue[bool]
 }
 
-func isDone(t *Todo) bool { return ggui.Untrack(t.Done.Get) }
+func isDone(t *Todo) bool { return ggui.Peek(t.Done) }
 
 // filter chooses which rows the list shows.
 type filter int
@@ -104,10 +104,10 @@ func newModel() *model {
 	return m
 }
 
-// Actions. Each reads with Untrack: they run from handlers, not effects.
+// Actions. Each reads with Peek: they read state to act on it, not to show it.
 
 func (m *model) add() {
-	title := strings.TrimSpace(ggui.Untrack(m.Draft.Get))
+	title := strings.TrimSpace(ggui.Peek(m.Draft))
 	if title == "" || titleError(title) != "" {
 		return
 	}
@@ -124,7 +124,7 @@ func (m *model) clearDone() { ggui.Remove(m.Todos, isDone) }
 
 // askClearDone opens the confirmation when there is something to clear.
 func (m *model) askClearDone() {
-	if slices.ContainsFunc(ggui.Untrack(m.Todos.Get), isDone) {
+	if slices.ContainsFunc(ggui.Peek(m.Todos), isDone) {
 		m.Confirm.Set(true)
 	}
 }

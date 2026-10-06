@@ -64,7 +64,9 @@ ggui.Text("Heading").Style(t.Title).Color(brand) // the same, in one other color
 
 `ui.Title(s)`, `ui.Heading(s)`, `ui.Caption(s)` and `ui.Mono(s)` are
 shorthands for the same merge against the theme's named styles, resolved from
-the `Env` at layout, so a heading needs no `theme.Use`. Note that the named
+the `Env` at layout, so a heading needs no `theme.Use`. Each has the forms
+`ggui.Text` has: `ui.CaptionOf(reader)` follows a value and
+`ui.Captionf("%d left", count)` formats one, as `TextOf` and `Textf` do. Note that the named
 styles are *deltas*: `theme.Default().Title` is `{Size: 24, Weight:
 WeightSemibold}` and nothing else, so a title inherits its font, color and
 line height from `Theme.Text`. Change `Theme.Text.Font` and the headings
@@ -462,7 +464,8 @@ preset := theme.Preset{
 app.Setup(func() { theme.Bind(dark, preset.Dark(), preset.Light()) })
 
 // Returned Themes are independent values; customize after selecting a preset.
-t := preset.Light()
+// For(dark) picks Dark or Light.
+t := preset.For(dark)
 t.Chat.BubbleRadius = 20
 t.Chat.BubblePadding = ggui.Insets(10, 14)
 theme.Set(t)

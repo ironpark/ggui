@@ -37,7 +37,7 @@ func TestWorkspaceTaskFlow(t *testing.T) {
 	t.Parallel()
 	m, p := workspaceProbe(t)
 	p.Tap("New task")
-	if !ggui.Untrack(m.Editing.Get) {
+	if !ggui.Peek(m.Editing) {
 		t.Fatal("new task did not open the editor")
 	}
 	if m.save() {
@@ -46,8 +46,8 @@ func TestWorkspaceTaskFlow(t *testing.T) {
 	p.Tap("Task title")
 	paste(p, "Ship the release")
 	p.Tap("Save task")
-	tasks := ggui.Untrack(m.Tasks.Get)
-	if len(tasks) != 5 || tasks[4].Title != "Ship the release" || ggui.Untrack(m.Editing.Get) {
+	tasks := ggui.Peek(m.Tasks)
+	if len(tasks) != 5 || tasks[4].Title != "Ship the release" || ggui.Peek(m.Editing) {
 		t.Fatalf("new task was not saved: %+v", tasks)
 	}
 
@@ -56,27 +56,27 @@ func TestWorkspaceTaskFlow(t *testing.T) {
 	p.Key("cmd+a")
 	paste(p, "Ship version one")
 	p.Tap("Save task")
-	if got := ggui.Untrack(m.Tasks.Get)[4].Title; got != "Ship version one" {
+	if got := ggui.Peek(m.Tasks)[4].Title; got != "Ship version one" {
 		t.Fatalf("edited title = %q", got)
 	}
 
 	p.Tap("Search tasks")
 	paste(p, "version")
-	if got := len(ggui.Untrack(m.Visible.Get)); got != 1 {
+	if got := len(ggui.Peek(m.Visible)); got != 1 {
 		t.Fatalf("search matched %d tasks", got)
 	}
 	p.Tap("Delete selected")
 	p.Tap("Cancel")
-	if len(ggui.Untrack(m.Tasks.Get)) != 5 {
+	if len(ggui.Peek(m.Tasks)) != 5 {
 		t.Fatal("cancel deleted the task")
 	}
 	p.Tap("Delete selected")
 	p.Tap("Delete task")
-	if len(ggui.Untrack(m.Tasks.Get)) != 4 || ggui.Untrack(m.Selected.Get) != 0 {
+	if len(ggui.Peek(m.Tasks)) != 4 || ggui.Peek(m.Selected) != 0 {
 		t.Fatal("confirmed deletion did not clear the task and selection")
 	}
 	p.Tap("Clear filters")
-	if got := len(ggui.Untrack(m.Visible.Get)); got != 4 {
+	if got := len(ggui.Peek(m.Visible)); got != 4 {
 		t.Fatalf("clear filters left %d visible tasks", got)
 	}
 }
@@ -85,12 +85,12 @@ func TestWorkspaceBindingsAndNavigation(t *testing.T) {
 	t.Parallel()
 	m, p := workspaceProbe(t)
 	p.Tap("Done")
-	if got := ggui.Untrack(m.Visible.Get); len(got) != 1 || got[0].Status != "Done" {
+	if got := ggui.Peek(m.Visible); len(got) != 1 || got[0].Status != "Done" {
 		t.Fatalf("status filter = %+v", got)
 	}
 	p.Tap("Settings")
 	p.Tap("Include extended team")
-	if got := len(ggui.Untrack(m.Team.Get)); got != 5 {
+	if got := len(ggui.Peek(m.Team)); got != 5 {
 		t.Fatalf("extended team has %d people", got)
 	}
 	p.Tap("Available people")
@@ -100,7 +100,7 @@ func TestWorkspaceBindingsAndNavigation(t *testing.T) {
 	p.Type(ggui.Mods{}, ggui.KeyEnd, ggui.KeyEnter)
 	p.Frame()
 	p.Tap("Dark mode")
-	if !ggui.Untrack(m.Dark.Get) {
+	if !ggui.Peek(m.Dark) {
 		t.Fatal("theme switch did not update state")
 	}
 	m.CardWidth.Set(280)
@@ -109,11 +109,11 @@ func TestWorkspaceBindingsAndNavigation(t *testing.T) {
 	p.Frame()
 	p.Tap("Tasks")
 	p.Key("cmd+n")
-	if !ggui.Untrack(m.Editing.Get) {
+	if !ggui.Peek(m.Editing) {
 		t.Fatal("new-task shortcut did not open the editor")
 	}
 	p.Type(ggui.Mods{}, ggui.KeyEscape)
-	if ggui.Untrack(m.Editing.Get) {
+	if ggui.Peek(m.Editing) {
 		t.Fatal("Escape did not dismiss the editor")
 	}
 	for _, size := range []ggui.Size{ggui.Sz(760, 700), ggui.Sz(1040, 800)} {
@@ -128,7 +128,7 @@ func TestWorkspaceBindingsAndNavigation(t *testing.T) {
 func TestWorkspaceSnapshotsAndSummary(t *testing.T) {
 	t.Parallel()
 	m, _ := workspaceProbe(t)
-	before := ggui.Untrack(m.Tasks.Get)
+	before := ggui.Peek(m.Tasks)
 	m.Selected.Set(2)
 	m.edit()
 	m.Draft.Update(func(item task) task {
@@ -141,13 +141,13 @@ func TestWorkspaceSnapshotsAndSummary(t *testing.T) {
 	if before[1].Status != "In progress" {
 		t.Fatal("save mutated the previous state slice")
 	}
-	if got := ggui.Untrack(m.Summary.Get); got.Done != 2 || got.Active != 0 {
+	if got := ggui.Peek(m.Summary); got.Done != 2 || got.Active != 0 {
 		t.Fatalf("summary after edit = %+v", got)
 	}
 	m.askDelete()
 	m.Selected.Set(1) // the pending confirmation must still target task 2
 	m.delete()
-	for _, item := range ggui.Untrack(m.Tasks.Get) {
+	for _, item := range ggui.Peek(m.Tasks) {
 		if item.ID == 2 {
 			t.Fatal("delete followed a later selection")
 		}
@@ -192,12 +192,12 @@ func TestWorkspaceResponsiveLayout(t *testing.T) {
 		}
 	}
 	p.Tap("Sketch the workspace")
-	if ggui.Untrack(m.Selected.Get) != 1 {
+	if ggui.Peek(m.Selected) != 1 {
 		t.Fatal("compact task card did not select its task")
 	}
 	p.Resize(ggui.Sz(1040, 800))
 	p.Frame()
-	if ggui.Untrack(m.Selected.Get) != 1 {
+	if ggui.Peek(m.Selected) != 1 {
 		t.Fatal("switching back to the table lost selection")
 	}
 }

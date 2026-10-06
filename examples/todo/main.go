@@ -79,7 +79,7 @@ func title(td *Todo, editing *ggui.StateValue[bool]) ggui.Widget {
 			OnSubmit(func(string) { editing.Set(false) })
 	}).Else(func() ggui.Widget {
 		text := ggui.If(td.Done, func() ggui.Widget {
-			return ggui.TextOf(td.Title).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption)
+			return ui.CaptionOf(td.Title)
 		}).
 			Else(func() ggui.Widget { return ggui.TextOf(td.Title) })
 		return ggui.Tap(text, func() { editing.Set(true) })
@@ -90,7 +90,7 @@ func title(td *Todo, editing *ggui.StateValue[bool]) ggui.Widget {
 func footer(m *model) ggui.Widget {
 	clear := ui.Button("Clear done", m.askClearDone).Outline().BindDisabled(m.NoneDone)
 	return ggui.Row(
-		ggui.Textf("%d left", m.Left).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption).NoWrap(),
+		ui.Captionf("%d left", m.Left).NoWrap(),
 		ggui.Spacer(),
 		ui.Radios(m.Show).Options([]filter{all, active, done}), // labelled through filter.String
 		ui.Tooltip(clear, "Removes every finished item (⌘/Ctrl+K)"),

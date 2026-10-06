@@ -16,7 +16,6 @@ import (
 	"github.com/ironpark/ggui"
 	_ "github.com/ironpark/ggui/inspect/panel"
 	"github.com/ironpark/ggui/ui"
-	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 type item struct {
@@ -64,11 +63,11 @@ func (m *model) build() ggui.Widget {
 				ggui.Textf("Level: %.0f%%", m.Level.Map(func(v float64) float64 { return v * 100 })),
 				ui.Caption("Drag the dial, or focus it and use the arrows."),
 				ui.Progress(m.Level),
-			).Space(1).Align(ggui.AlignStretch),
+			).Space(1).Stretch(),
 		).Space(2).Align(ggui.AlignCenter),
 		ui.Card(m.Detail),
 		ggui.Row(
-			ggui.Textf("%d rows", m.Items.Map(func(it []item) int { return len(it) })).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
+			ui.Captionf("%d rows", m.Items.Map(func(it []item) int { return len(it) })),
 			ggui.Spacer(),
 			ui.Button("Top", func() { m.jump(0) }).Outline(),
 			ui.Button("Middle", func() { m.jump(rowCount / 2) }).Outline(),
@@ -82,7 +81,7 @@ func (m *model) build() ggui.Widget {
 				return ui.Checkbox(picked, row.Item.Name)
 			}).ItemExtent(rowHeight).Retain(24),
 		).BindOffset(m.Scroll)),
-	).Space(1.5).Align(ggui.AlignStretch)).Pad(24)
+	).Space(1.5).Stretch()).Pad(24)
 }
 
 func main() {

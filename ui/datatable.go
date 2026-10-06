@@ -321,10 +321,10 @@ func DataTable[T any, K comparable](m *TableModel[T, K]) ggui.Widget {
 			}
 			return &dataTableFrame{minWidth: max(560, minWidth), box: box, scroll: ggui.Scroll(box).Horizontal(), isEmpty: isEmpty, message: ggui.Center(Caption("No results."))}
 		})
-		summary := ggui.TextOf(ggui.Derived(func() string {
+		summary := CaptionOf(ggui.Derived(func() string {
 			rows := m.filtered.Get()
 			return fmt.Sprintf("%d of %d row(s) selected.", m.countSelected(rows), len(rows))
-		})).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption)
+		}))
 		pageLabel := ggui.TextOf(ggui.Derived(func() string { return fmt.Sprintf("Page %d of %d", m.Page(), m.PageCount()) })).NoWrap()
 		previous := Button("Previous", func() { m.SetPage(m.Page() - 1) }).Outline().BindDisabled(ggui.Derived(func() bool { return m.Page() <= 1 }))
 		next := Button("Next", func() { m.SetPage(m.Page() + 1) }).Outline().BindDisabled(ggui.Derived(func() bool { return m.Page() >= m.PageCount() }))

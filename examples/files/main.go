@@ -17,7 +17,6 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/runtime"
 	"github.com/ironpark/ggui/ui"
-	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // model is the list of files the app has been handed and a line about the
@@ -110,9 +109,9 @@ func (m *model) build() ggui.Widget {
 		}).Space(0.25)
 	})
 	zone := ggui.Pointer(ui.Card(ggui.Column(
-		ggui.Text("Drop files here").StyleKey(uitheme.TitleKey, uitheme.Default().Title).Role(ggui.RoleHeading),
+		ui.Title("Drop files here"),
 		list,
-	).Space(1).Align(ggui.AlignStretch)).Pad(24)).OnDrop(m.accept)
+	).Space(1).Stretch()).Pad(24)).OnDrop(m.accept)
 	buttons := ggui.Wrap(
 		ui.Button("Open…", m.open),
 		ui.Button("Open several…", m.openMany),
@@ -123,8 +122,8 @@ func (m *model) build() ggui.Widget {
 	return ggui.Box(ggui.Column(
 		ggui.Expanded(zone),
 		buttons,
-		ggui.TextOf(m.Status).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
-	).Space(1).Align(ggui.AlignStretch)).Pad(24)
+		ui.CaptionOf(m.Status),
+	).Space(1).Stretch()).Pad(24)
 }
 
 func main() {

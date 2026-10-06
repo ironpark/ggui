@@ -179,11 +179,7 @@ func (c *CarouselWidget) Autoplay(interval time.Duration) *CarouselWidget {
 	return c
 }
 func (c *CarouselWidget) StopOnInteraction(v bool) *CarouselWidget {
-	defer property.
-		Watch(
-			&c.props, &c.stopOnInteraction,
-		)()
-
+	defer property.Watch(&c.props, &c.stopOnInteraction)()
 	c.stopOnInteraction = v
 	return c
 }

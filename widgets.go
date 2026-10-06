@@ -919,13 +919,11 @@ func pick[T any](cond bool, a, b T) T { return fn.Pick(cond, a, b) }
 
 // ColumnWidget stacks its children vertically. Build one with Column.
 type ColumnWidget struct {
-	props property.
-
-		// Column stacks children top to bottom.
-		Owner
+	props property.Owner
 	flow
 }
 
+// Column stacks children top to bottom.
 func Column(children ...Widget) *ColumnWidget {
 	return &ColumnWidget{flow: flow{children: children}}
 }
@@ -958,6 +956,10 @@ func (col *ColumnWidget) Align(a CrossAlign) *ColumnWidget {
 	return col
 }
 
+// Stretch makes every child as wide as the column: Align(AlignStretch),
+// the arrangement of a form or a page.
+func (col *ColumnWidget) Stretch() *ColumnWidget { return col.Align(AlignStretch) }
+
 // Layout implements Widget.
 func (col *ColumnWidget) Layout(c Constraints, env Env) Size {
 	defer col.props.Layout()()
@@ -969,14 +971,12 @@ func (col *ColumnWidget) Paint(dst *Canvas, r Rect) { col.paint(dst, r) }
 
 // RowWidget lines its children up horizontally. Build one with Row.
 type RowWidget struct {
-	props property.
-
-		// Row lines children up left to right, centered on the row's height; a
-		// Column starts its children at the left.
-		Owner
+	props property.Owner
 	flow
 }
 
+// Row lines children up left to right, centered on the row's height; a
+// Column starts its children at the left.
 func Row(children ...Widget) *RowWidget {
 	return &RowWidget{flow: flow{horizontal: true, align: AlignCenter, children: children}}
 }
@@ -1008,6 +1008,9 @@ func (row *RowWidget) Align(a CrossAlign) *RowWidget {
 	row.align = a
 	return row
 }
+
+// Stretch makes every child as tall as the row: Align(AlignStretch).
+func (row *RowWidget) Stretch() *RowWidget { return row.Align(AlignStretch) }
 
 // Layout implements Widget.
 func (row *RowWidget) Layout(c Constraints, env Env) Size {

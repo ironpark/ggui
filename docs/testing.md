@@ -28,7 +28,7 @@ func TestCheckbox(t *testing.T) {
 	defer p.Close()
 
 	p.Tap("Enable alerts")
-	if !ggui.Untrack(on.Get) {
+	if !ggui.Peek(on) {
 		t.Fatal("expected alerts to be enabled after tapping the checkbox")
 	}
 }

@@ -71,7 +71,7 @@ func preview(title string, body ggui.Widget) *componentPreview {
 			ui.Caption(info.description),
 			ui.Divider(),
 			body,
-		).Gap(16).Align(ggui.AlignStretch)),
+		).Gap(16).Stretch()),
 	}
 }
 
@@ -80,22 +80,11 @@ func (p *componentPreview) matches(category, query string) bool {
 		strings.Contains(strings.ToLower(p.title+" "+p.info.category+" "+p.info.description), strings.ToLower(strings.TrimSpace(query)))
 }
 
-// The grid chooses its column count at layout time, so resizing the window
-// does not rebuild controls or discard their state.
-type previewGrid struct {
-	children []ggui.Widget
-	grid     *ggui.GridWidget
+// previewGrid chooses its column count at layout time, so resizing the
+// window does not rebuild controls or discard their state.
+func previewGrid(cards []ggui.Widget) ggui.Widget {
+	return ggui.Responsive(1000, ggui.Grid(2, cards...).Gap(20), ggui.Grid(1, cards...).Gap(20))
 }
-
-func (g *previewGrid) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	cols := 1
-	if c.MaxW >= 1000 {
-		cols = 2
-	}
-	g.grid = ggui.Grid(cols, g.children...).Gap(20)
-	return g.grid.Layout(c, env)
-}
-func (g *previewGrid) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(g.grid, r) }
 
 // galleryPage builds the chrome once. The filter row follows category, the
 // preview grid follows category and search, and the header's surface color
@@ -149,18 +138,18 @@ func galleryPage(dark *ggui.StateValue[bool], search, category *ggui.StateValue[
 		ui.Caption("Explore the building blocks. Try an interaction, adjust the theme, make it yours."),
 		ggui.Row(ggui.Expanded(field), ui.Button("Commands", commands).Outline()).Gap(12),
 		filters,
-	).Gap(14).Align(ggui.AlignStretch)).Pad(24, 28).Fill(uitheme.Card)
+	).Gap(14).Stretch()).Pad(24, 28).Fill(uitheme.Card)
 	content := ggui.View(shown, func(cards []ggui.Widget) ggui.Widget {
 		if len(cards) == 0 {
 			return ui.Empty("No matching components", "Try a different search or explore another category.").Action(ui.Button("Clear filters", reset))
 		}
-		return &previewGrid{children: cards}
+		return previewGrid(cards)
 	})
 	footer := ggui.Padding(ggui.Row(
-		ggui.Textf("%d of %d previews", shown.Map(func(cards []ggui.Widget) int { return len(cards) }), len(previews)).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption), ggui.Spacer(),
+		ui.Captionf("%d of %d previews", shown.Map(func(cards []ggui.Widget) int { return len(cards) }), len(previews)), ggui.Spacer(),
 		ui.Caption("⌘K  Commands   ·   Tab  Navigate   ·   F1  Inspect"),
 	).Gap(12), 12, 28)
 	children := []ggui.Widget{header, ui.Divider(), ggui.Expanded(ggui.Scroll(ggui.Padding(content, 24, 28)).BindOffset(scroll)), ui.Divider(), footer}
 	children = append(children, extras...)
-	return ggui.Column(children...).Align(ggui.AlignStretch)
+	return ggui.Column(children...).Stretch()
 }

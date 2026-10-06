@@ -219,6 +219,9 @@ func (f *EachWidget[T, K]) Align(a CrossAlign) *EachWidget[T, K] {
 	return f
 }
 
+// Stretch makes every row as wide as the list: Align(AlignStretch).
+func (f *EachWidget[T, K]) Stretch() *EachWidget[T, K] { return f.Align(AlignStretch) }
+
 // Horizontal lays the children out like a Row instead of a Column.
 func (f *EachWidget[T, K]) Horizontal() *EachWidget[T, K] {
 	f.checkConfig()

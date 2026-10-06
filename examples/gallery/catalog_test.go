@@ -22,7 +22,7 @@ func TestGalleryFiltersAndGlobalActions(t *testing.T) {
 	p.Frame()
 	p.Tap("Layout")
 	p.Frame()
-	if ggui.Untrack(category.Get) != "Layout" {
+	if ggui.Peek(category) != "Layout" {
 		t.Fatal("category not selected")
 	}
 	if _, ok := p.Find("Input sample"); ok {
@@ -42,7 +42,7 @@ func TestGalleryFiltersAndGlobalActions(t *testing.T) {
 	p.Frame()
 	p.Tap("Clear filters")
 	p.Frame()
-	if ggui.Untrack(search.Get) != "" || ggui.Untrack(category.Get) != "All" {
+	if ggui.Peek(search) != "" || ggui.Peek(category) != "All" {
 		t.Fatal("filters not cleared")
 	}
 	search.Set("  PRIMARY  ")
@@ -57,10 +57,10 @@ func TestGalleryFiltersAndGlobalActions(t *testing.T) {
 
 func TestPreviewGridReflows(t *testing.T) {
 	t.Parallel()
-	grid := &previewGrid{children: []ggui.Widget{
+	grid := previewGrid([]ggui.Widget{
 		preview("Buttons", ui.Button("First", nil)),
 		preview("Text", ui.Button("Second", nil)),
-	}}
+	})
 	p := ggui.NewProbe(ggui.Scroll(grid), ggui.Sz(1120, 820))
 	defer p.Close()
 	p.Frame()
@@ -87,14 +87,14 @@ func TestGallerySearchPasteAcrossRebuilds(t *testing.T) {
 	defer p.Close()
 	p.Tap("Search components")
 	pasteText(p, "Accordion")
-	if ggui.Untrack(search.Get) != "Accordion" {
-		t.Fatalf("search text lost: %q", ggui.Untrack(search.Get))
+	if ggui.Peek(search) != "Accordion" {
+		t.Fatalf("search text lost: %q", ggui.Peek(search))
 	}
 	p.Tap("All")
 	p.Tap("Search components")
 	p.Key("cmd+a")
 	pasteText(p, "Text")
-	if ggui.Untrack(search.Get) != "Text" {
-		t.Fatalf("second search text lost: %q", ggui.Untrack(search.Get))
+	if ggui.Peek(search) != "Text" {
+		t.Fatalf("second search text lost: %q", ggui.Peek(search))
 	}
 }

@@ -59,6 +59,11 @@ func OnCleanup(fn func()) { reactive.OnCleanup(fn) }
 // Untrack runs fn without subscribing the running Effect to what it reads.
 func Untrack[T any](fn func() T) T { return reactive.Untrack(fn) }
 
+// Peek returns r's current value without subscribing anything to it, as
+// Untrack(r.Get) does: for an action reading state it does not show, or a
+// builder taking a snapshot on purpose.
+func Peek[T any](r Readable[T]) T { return reactive.Untrack(r.Get) }
+
 // Toggle inverts a boolean signal.
 func Toggle(s Writable[bool]) { reactive.Toggle(s) }
 
@@ -141,4 +146,23 @@ func countReads[T any](origin string, get func() T) T {
 		reactive.ReportOnce("bind "+origin, "ggui: the Bind getter at %s read no signal, so its control will not see changes made elsewhere; read a StateValue, or bind with State.Field or State.Lens", origin)
 	}
 	return v
+}
+
+// Not is true while r is false, as a control's BindDisabled wants a "can"
+// turned around.
+func Not(r Readable[bool]) *DerivedValue[bool] {
+	return Map(r, func(v bool) bool { return !v })
+}
+
+// Or is true while any one of rs is, as a control disabled while busy or
+// while nothing is selected is.
+func Or(rs ...Readable[bool]) *DerivedValue[bool] {
+	return Derived(func() bool {
+		for _, r := range rs {
+			if r.Get() {
+				return true
+			}
+		}
+		return false
+	})
 }

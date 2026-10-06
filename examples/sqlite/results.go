@@ -121,7 +121,7 @@ func queryResultTable(source ggui.Readable[result]) ggui.Widget {
 			if r.Limited {
 				notice = "Showing the first 500 rows. Refine your SQL to retrieve a different result window."
 			}
-			return ggui.Column(ui.Caption(notice), ui.DataTable(table)).Gap(12).Align(ggui.AlignStretch)
+			return ggui.Column(ui.Caption(notice), ui.DataTable(table)).Gap(12).Stretch()
 		})
 	})
 }

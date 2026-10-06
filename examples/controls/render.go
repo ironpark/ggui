@@ -27,9 +27,10 @@ func (g *controlsRender) step() (done bool, err error) {
 		width = 320
 	}
 	preset := uitheme.Preset{Base: uitheme.BaseNeutral, Accent: uitheme.AccentBlue}
-	theme, mode := preset.Light(), "light"
+	theme := preset.For(dark)
+	mode := "light"
 	if dark {
-		theme, mode = preset.Dark(), "dark"
+		mode = "dark"
 	}
 	now := time.Unix(100, 0)
 	restore := ggui.SetClock(func() time.Time { return now })

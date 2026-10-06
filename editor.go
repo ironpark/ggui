@@ -16,6 +16,9 @@ import (
 	"github.com/ironpark/ggui/internal/textinput"
 )
 
+// caretBlink is how long the caret shows and hides for.
+const caretBlink = 530 * time.Millisecond
+
 // TextInputWidget is a text editor bound to a StateValue[string]: typing writes
 // the signal, and writing the signal updates the text. Build one with
 // TextInput. It is one line that scrolls sideways until Multiline makes it
@@ -31,16 +34,12 @@ import (
 // word, triple-click the line up to its break, dragging selects a range. A Multiline
 // editor adds Up and Down, Home and End within the line, Enter for a line
 // break and ⌘/Ctrl+Enter for OnSubmit.
-// caretBlink is how long the caret shows and hides for.
-const caretBlink = 530 * time.Millisecond
-
 type TextInputWidget struct {
-	props property.
-		// Interactive carries the identity, name and disabled state every
-		// control shares. The editor drives focus itself rather than through
-		// Keyboard: a caret and an IME session are not a press.
-		Owner
+	props property.Owner
 
+	// Interactive carries the identity, name and disabled state every
+	// control shares. The editor drives focus itself rather than through
+	// Keyboard: a caret and an IME session are not a press.
 	Interactive
 
 	value             Binding[string]

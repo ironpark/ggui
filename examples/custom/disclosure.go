@@ -31,9 +31,9 @@ func (d *disclosure) toggle() {
 func (d *disclosure) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	d.env = env
 	if d.open {
-		d.column = ggui.Column(d.header, d.body).Space(1).Align(ggui.AlignStretch)
+		d.column = ggui.Column(d.header, d.body).Space(1).Stretch()
 	} else {
-		d.column = ggui.Column(d.header).Align(ggui.AlignStretch)
+		d.column = ggui.Column(d.header).Stretch()
 	}
 	return d.column.Layout(c, env)
 }

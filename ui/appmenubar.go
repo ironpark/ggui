@@ -38,7 +38,7 @@ func menuEntries(items []ggui.MenuItem) []ggui.Widget {
 				it.Shortcut(ggui.MustChord(m.Chord).Label())
 			}
 			if m.Enabled != nil {
-				it.BindDisabled(ggui.Map(m.Enabled, func(on bool) bool { return !on }))
+				it.BindDisabled(ggui.Not(m.Enabled))
 			}
 			if m.Checked != nil {
 				it.BindChecked(m.Checked)

@@ -374,7 +374,7 @@ func chartCard(e chartExample) ggui.Widget {
 			}
 		}
 	}
-	column := ggui.Column(widgets...).Gap(12).Align(ggui.AlignStretch)
+	column := ggui.Column(widgets...).Gap(12).Stretch()
 	return decorateChart(ui.Card(column).Pad(24))
 }
 func nextData(e chartExample) []ui.ChartDatum {

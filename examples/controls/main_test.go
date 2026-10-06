@@ -15,7 +15,7 @@ func TestControls(t *testing.T) {
 	defer p.Close()
 
 	p.Tap("Dark theme")
-	if !ggui.Untrack(m.Dark.Get) {
+	if !ggui.Peek(m.Dark) {
 		t.Fatal("dark theme switch did not flip the signal")
 	}
 	if _, ok := p.Find("Slides"); !ok {

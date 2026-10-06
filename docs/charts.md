@@ -49,7 +49,7 @@ panel := ui.Card(ggui.Column(
     ui.Title("Visitors"),
     ui.Caption("January – March"),
     chart,
-).Gap(12).Align(ggui.AlignStretch))
+).Gap(12).Stretch())
 ```
 
 `ChartConfig` is ordered: the order determines series, stacking and legend order.

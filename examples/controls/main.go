@@ -42,7 +42,7 @@ func (m model) build() ggui.Widget {
 		// the switch above stay as they are.
 		ggui.Key(m.Selected, func(name string) ggui.Widget { return buildControl(name).Widget }),
 		ui.Caption("Drag slides or use arrow keys · Paste a code or edit individual slots"),
-	).Gap(20).Align(ggui.AlignStretch)).Pad(24)
+	).Gap(20).Stretch()).Pad(24)
 }
 
 func main() {

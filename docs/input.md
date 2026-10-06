@@ -203,11 +203,11 @@ carry their keys, which stay right while the list moves under them:
 
 ```go
 ggui.EachKeyed(items, func(it Item) int { return it.ID }, func(row ggui.EachItem[Item]) ggui.Widget {
-	id := ggui.Untrack(row.Value.Get).ID
+	id := row.Item.ID
 	return ggui.DropZone(ggui.DragSource(itemRow(row.Value), id), func(d ggui.Dropped[int]) {
-		list := ggui.Untrack(items.Get)
+		list := ggui.Peek(items)
 		from := slices.IndexFunc(list, func(it Item) bool { return it.ID == d.Value })
-		to := ggui.Untrack(row.Index.Get)
+		to := ggui.Peek(row.Index)
 		if !d.Before() {
 			to++
 		}

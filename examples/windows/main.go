@@ -31,7 +31,7 @@ func (m *model) main() ggui.Widget {
 	w := ggui.UseWindow()
 	ggui.Watch(m.Count, func(n int) { w.SetTitle(fmt.Sprintf("ggui · windows (%d)", n)) })
 	return ggui.Column(ui.AppMenubar(w.App().Menu()), ggui.Expanded(ggui.Center(ui.Card(ggui.Column(
-		ggui.Textf("count: %d", m.Count).StyleKey(uitheme.TitleKey, uitheme.Default().Title),
+		ui.Titlef("count: %d", m.Count),
 		ggui.Row(
 			ui.Button("+1", func() { ggui.Add(m.Count, 1) }),
 			ui.Button("Open inspector", func() { m.open(w.App()) }),
@@ -44,7 +44,7 @@ func (m *model) main() ggui.Widget {
 // open adds an inspector window beside the main one.
 func (m *model) open(app *ggui.App) *ggui.Window {
 	ggui.Add(m.Opened, 1)
-	n := ggui.Untrack(m.Opened.Get)
+	n := ggui.Peek(m.Opened)
 	at := app.Position().Add(ggui.Pt(float64(40*n), float64(40*n)))
 	w, err := app.OpenWindow(ggui.Config{
 		Title:       fmt.Sprintf("Inspector %d", n),
@@ -80,7 +80,7 @@ func describe(w *ggui.Window) ggui.Widget {
 	status := ggui.Combine(w.Focused(), w.Viewport(), func(focused bool, size ggui.Size) string {
 		return fmt.Sprintf("focused: %t · %.0f×%.0f", focused, size.W, size.H)
 	})
-	return ui.Caption("").BindContent(status)
+	return ui.CaptionOf(status)
 }
 
 func main() {
@@ -108,7 +108,7 @@ func main() {
 			ggui.MenuAction("Show Main Window", "", func() { app.Show(); app.Focus() }),
 			ggui.MenuAction("Keep Main Window on Top", "", func() {
 				ggui.Toggle(onTop)
-				app.SetAlwaysOnTop(ggui.Untrack(onTop.Get))
+				app.SetAlwaysOnTop(ggui.Peek(onTop))
 			}).BindChecked(onTop),
 		),
 	)

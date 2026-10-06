@@ -3,37 +3,30 @@ package main
 import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
-	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 func build(m *model) ggui.Widget {
 	toasts := ui.NewToaster().Limit(1)
 	ggui.OnCleanup(toasts.Close)
 
-	content := ggui.Column(
+	page := ggui.Column(
 		header(m),
 		metrics(m),
-		ggui.Column(
-			ggui.Row(
-				ui.Caption("RELEASE PROGRESS"),
-				ggui.Spacer(),
-				ggui.Textf("%d of %d complete",
-					m.Summary.Map(func(s summary) int { return s.Done }),
-					m.Summary.Map(func(s summary) int { return s.Total }),
-				).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
-			),
-			ui.Progress(m.Progress).Height(5),
-		).Gap(8).Align(ggui.AlignStretch),
+		progress(m),
 		ui.Tabs(m.Tab,
 			ui.Tab("Tasks", taskList(m)),
 			ui.Tab("Insights", insights(m)),
 			ui.Tab("Settings", settings(m)),
 		).Line(),
 		ui.Caption("⌘/Ctrl+N  New task · F1  Inspector · Changes last until the window closes."),
-	).Gap(16).Align(ggui.AlignStretch)
+	).Gap(16).Stretch()
+	// The page keeps a readable width at the top of a wide window, and
+	// scrolls in a short one.
+	centered := ggui.Align(ggui.Box(page).Width(1120)).Top()
+	scrolled := ggui.Scroll(ggui.Padding(centered, 24))
 
 	return ggui.Column(
-		ggui.Expanded(ggui.Scroll(ggui.Padding(ggui.Align(ggui.Box(content).Width(1120)).Top(), 24))),
+		ggui.Expanded(scrolled),
 		taskEditor(m, func() {
 			if m.save() {
 				toasts.Push(ui.Toast("Task saved", "The list and insights are up to date."))
@@ -45,7 +38,7 @@ func build(m *model) ggui.Widget {
 				toasts.Push(ui.Toast("Task deleted", "The remaining tasks are unchanged."))
 			}).Destructive(),
 		toasts,
-	).Align(ggui.AlignStretch)
+	).Stretch()
 }
 
 func header(m *model) ggui.Widget {
@@ -58,18 +51,27 @@ func header(m *model) ggui.Widget {
 		ui.ThemeSwitch(m.Dark),
 		ui.Tooltip(ui.Button("New task", m.create), "Create a task (⌘/Ctrl+N)"),
 	).Gap(12).Align(ggui.AlignCenter)
-	return &adaptive{
-		breakpoint: 680,
-		wide:       ggui.Row(ggui.Expanded(title), actions).Gap(24).Align(ggui.AlignCenter),
-		narrow:     ggui.Column(title, actions).Gap(16).Align(ggui.AlignStretch),
-	}
+	return ggui.Responsive(680,
+		ggui.Row(ggui.Expanded(title), actions).Gap(24).Align(ggui.AlignCenter),
+		ggui.Column(title, actions).Gap(16).Stretch(),
+	)
+}
+
+// progress is how much of the release is done.
+func progress(m *model) ggui.Widget {
+	done := m.Summary.Map(func(s summary) int { return s.Done })
+	total := m.Summary.Map(func(s summary) int { return s.Total })
+	return ggui.Column(
+		ggui.Row(ui.Caption("RELEASE PROGRESS"), ggui.Spacer(), ui.Captionf("%d of %d complete", done, total)),
+		ui.Progress(m.Progress).Height(5),
+	).Gap(8).Stretch()
 }
 
 func metrics(m *model) ggui.Widget {
 	card := func(label string, value ggui.Readable[int]) ggui.Widget {
 		return ggui.Box(ui.Card(ggui.Column(
 			ui.Caption(label),
-			ggui.Textf("%d", value).StyleKey(uitheme.TitleKey, uitheme.Default().Title).Role(ggui.RoleHeading).Size(30),
+			ui.Titlef("%d", value).Size(30),
 		).Gap(6)).Pad(16)).BindWidth(m.CardWidth)
 	}
 	cards := []ggui.Widget{
@@ -77,11 +79,10 @@ func metrics(m *model) ggui.Widget {
 		card("In progress", m.Summary.Map(func(s summary) int { return s.Active })),
 		card("Completed", m.Summary.Map(func(s summary) int { return s.Done })),
 	}
-	return &adaptive{
-		breakpoint: 980,
-		wide:       ggui.Wrap(cards...).Gap(12),
-		narrow:     ggui.Grid(3, cards...).Gap(8),
-	}
+	return ggui.Responsive(980,
+		ggui.Wrap(cards...).Gap(12),
+		ggui.Grid(3, cards...).Gap(8),
+	)
 }
 
 func taskList(m *model) ggui.Widget {
@@ -105,35 +106,33 @@ func taskList(m *model) ggui.Widget {
 			detail := ggui.Map(row.Value, func(item task) string { return item.Assignee + " · " + item.Status })
 			return ui.ButtonOf(ggui.Column(
 				ggui.TextOf(label),
-				ggui.TextOf(detail).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
-			).Gap(4).Align(ggui.AlignStretch), func() { m.Selected.Set(id) }).
+				ui.CaptionOf(detail),
+			).Gap(4).Stretch(), func() { m.Selected.Set(id) }).
 				BindName(label).Outline().Pad(12)
 		},
 	).Gap(8)
-	rows := &adaptive{breakpoint: 620, wide: table, narrow: compactList}
+	rows := ggui.Responsive(620, table, compactList)
 	search := ui.TextField(m.Query).Name("Search tasks").Placeholder("Search titles or people…")
 	filters := ui.ToggleGroup(m.Filter).
 		Options([]string{"All", "Planned", "In progress", "Done"}).Name("Task filter")
-	toolbar := &adaptive{
-		breakpoint: 760,
-		wide:       ggui.Row(ggui.Expanded(search), filters).Gap(16).Align(ggui.AlignCenter),
-		narrow:     ggui.Column(search, ggui.Align(filters).Left()).Gap(12).Align(ggui.AlignStretch),
-	}
-	selection := ggui.TextOf(selectedTitle).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption)
+	toolbar := ggui.Responsive(760,
+		ggui.Row(ggui.Expanded(search), filters).Gap(16).Align(ggui.AlignCenter),
+		ggui.Column(search, ggui.Align(filters).Left()).Gap(12).Stretch(),
+	)
+	selection := ui.CaptionOf(selectedTitle)
 	actions := ggui.Wrap(
 		ui.Button("Edit selected", m.edit).Outline().BindDisabled(noSelection),
 		ui.Button("Delete selected", m.askDelete).Outline().BindDisabled(noSelection),
 	).Gap(8)
-	selectionBar := &adaptive{
-		breakpoint: 760,
-		wide:       ggui.Row(ggui.Expanded(selection), actions).Gap(16).Align(ggui.AlignCenter),
-		narrow:     ggui.Column(selection, actions).Gap(12).Align(ggui.AlignStretch),
-	}
+	selectionBar := ggui.Responsive(760,
+		ggui.Row(ggui.Expanded(selection), actions).Gap(16).Align(ggui.AlignCenter),
+		ggui.Column(selection, actions).Gap(12).Stretch(),
+	)
 	return ui.Card(ggui.Column(
 		ggui.Row(
 			ui.Title("Tasks").Size(20),
 			ggui.Spacer(),
-			ggui.Textf("%d results", m.Visible.Map(func(tasks []task) int { return len(tasks) })).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
+			ui.Captionf("%d results", m.Visible.Map(func(tasks []task) int { return len(tasks) })),
 		).Align(ggui.AlignCenter),
 		toolbar,
 		selectionBar,
@@ -147,7 +146,7 @@ func taskList(m *model) ggui.Widget {
 					m.Filter.Set("All")
 				}).Outline())
 		}),
-	).Gap(16).Align(ggui.AlignStretch)).Pad(20)
+	).Gap(16).Stretch()).Pad(20)
 }
 
 func taskEditor(m *model, save func()) ggui.Widget {
@@ -167,7 +166,7 @@ func taskEditor(m *model, save func()) ggui.Widget {
 			ui.Button("Cancel edit", func() { m.Editing.Set(false) }).Outline(),
 			ui.Button("Save task", save).BindDisabled(invalid),
 		).Gap(8).Justify(ggui.JustifyEnd),
-	).Gap(16).Align(ggui.AlignStretch)).Title("Task details").Width(440)
+	).Gap(16).Stretch()).Title("Task details").Width(440)
 }
 
 func insights(m *model) ggui.Widget {
@@ -188,9 +187,9 @@ func insights(m *model) ggui.Widget {
 			ui.Title("Work by status").Size(20),
 			ui.Caption("All tasks in this workspace, independent of the current filter."),
 			chart,
-		).Gap(12).Align(ggui.AlignStretch)),
+		).Gap(12).Stretch()),
 		ui.Card(ui.Collapsible(ggui.State(true), "Recent activity", activity)),
-	).Gap(16).Align(ggui.AlignStretch)
+	).Gap(16).Stretch()
 }
 
 func settings(m *model) ggui.Widget {
@@ -202,7 +201,7 @@ func settings(m *model) ggui.Widget {
 			Help("This list and the task editor share a live options source. Existing assignments are preserved."),
 		ui.Field("Metric card width", ui.Slider(m.CardWidth, 200, 360).Step(10).Name("Metric card width")).
 			Help("Adjust the desktop cards. Narrow windows use three compact, equal columns."),
-		ggui.Textf("Card width: %.0f px", m.CardWidth).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
+		ui.Captionf("Card width: %.0f px", m.CardWidth),
 		ui.Alert("Try the inspector", "Press F1 to explore layout, hit regions, and the widget tree."),
-	).Gap(16).Align(ggui.AlignStretch))
+	).Gap(16).Stretch())
 }

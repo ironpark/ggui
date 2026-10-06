@@ -15,10 +15,7 @@ import (
 
 func clientTheme(dark bool) uitheme.Theme {
 	preset := uitheme.Preset{Base: uitheme.BaseNeutral, Accent: uitheme.AccentEmerald}
-	t := preset.Light()
-	if dark {
-		t = preset.Dark()
-	}
+	t := preset.For(dark)
 	t.Radius, t.RadiusSm, t.RadiusLg = 5, 3, 8
 	t.Text.Size = 13
 	t.Caption.Size = 12
@@ -66,31 +63,53 @@ func buildClient(m *model) ggui.Widget {
 			m.browse()
 		}
 	})
-	workspace := ggui.Row(sidebarView(m), ggui.Box().Width(1).Fill(uitheme.Border),
+	workspace := ggui.Row(sidebarView(m), ui.Divider().Vertical(),
 		ggui.Expanded(ggui.Column(
 			ggui.Expanded(ggui.Padding(tabs, 0, 0, 8, 0)),
-		).Align(ggui.AlignStretch)),
-	).Align(ggui.AlignStretch)
+		).Stretch()),
+	).Stretch()
 	content := ggui.If(m.Connected, func() ggui.Widget { return workspace }).Else(func() ggui.Widget { return welcomeView(m) })
-	body := ggui.Column(header, ui.Divider(), ggui.Expanded(content),
-		ggui.View(m.Error, func(message string) ggui.Widget {
-			if message == "" {
-				return ggui.Column()
-			}
-			return ggui.Padding(ggui.Row(ggui.Expanded(ui.Alert("Operation failed", message).Destructive()), ui.Button("Dismiss", func() { m.Error.Set("") }).Ghost()).Gap(8), 8, 16)
-		}),
-		ui.Divider(), ggui.Padding(ggui.Row(
-			ggui.Text("●").Color(uitheme.Primary), ggui.Expanded(ggui.TextOf(m.Status).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption).NoWrap()),
-			ggui.If(m.Busy, func() ggui.Widget { return ui.Button("Cancel operation", m.stop).Ghost() }).
-				ElseIf(m.DropHover, func() ggui.Widget {
-					return ggui.Text("Release to open the database").Color(uitheme.Primary).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption)
-				}).
-				Else(func() ggui.Widget { return ui.Caption("Drop a database anywhere  ·  ⌘/Ctrl O to open") }),
-		).Gap(8).Align(ggui.AlignCenter), 8, 16),
-	).Align(ggui.AlignStretch)
-	return ggui.Pointer(ggui.Column(ggui.Expanded(body), historyDialog(m), cellEditor(m), rowEditor(m),
-		ui.AlertDialog(m.ConfirmDelete, "Delete selected row?", "This permanently removes the selected row. This action cannot be undone here.").Confirm("Delete", m.delete).Destructive(),
-	).Align(ggui.AlignStretch)).OnDrop(m.acceptDrop).OnDropHover(m.DropHover.Set)
+	body := ggui.Column(
+		header,
+		ui.Divider(),
+		ggui.Expanded(content),
+		errorBanner(m),
+		ui.Divider(),
+		ggui.Padding(statusBar(m), 8, 16),
+	).Stretch()
+	confirmDelete := ui.AlertDialog(m.ConfirmDelete, "Delete selected row?",
+		"This permanently removes the selected row. This action cannot be undone here.").
+		Confirm("Delete", m.delete).Destructive()
+	window := ggui.Column(ggui.Expanded(body), historyDialog(m), cellEditor(m), rowEditor(m), confirmDelete).Stretch()
+	return ggui.Pointer(window).OnDrop(m.acceptDrop).OnDropHover(m.DropHover.Set)
+}
+
+// errorBanner shows the last operation's error until it is dismissed.
+func errorBanner(m *model) ggui.Widget {
+	return ggui.View(m.Error, func(message string) ggui.Widget {
+		if message == "" {
+			return ggui.Column()
+		}
+		alert := ui.Alert("Operation failed", message).Destructive()
+		dismiss := ui.Button("Dismiss", func() { m.Error.Set("") }).Ghost()
+		return ggui.Padding(ggui.Row(ggui.Expanded(alert), dismiss).Gap(8), 8, 16)
+	})
+}
+
+// statusBar reports what the client is doing, and offers to cancel it.
+func statusBar(m *model) ggui.Widget {
+	action := ggui.If(m.Busy, func() ggui.Widget {
+		return ui.Button("Cancel operation", m.stop).Ghost()
+	}).ElseIf(m.DropHover, func() ggui.Widget {
+		return ui.Caption("Release to open the database").Color(uitheme.Primary)
+	}).Else(func() ggui.Widget {
+		return ui.Caption("Drop a database anywhere  ·  ⌘/Ctrl O to open")
+	})
+	return ggui.Row(
+		ggui.Text("●").Color(uitheme.Primary),
+		ggui.Expanded(ui.CaptionOf(m.Status).NoWrap()),
+		action,
+	).Gap(8).Align(ggui.AlignCenter)
 }
 
 func sidebarView(m *model) ggui.Widget {
@@ -124,7 +143,7 @@ func sidebarView(m *model) ggui.Widget {
 				group = append(group, ggui.View(selected, func(selected bool) ggui.Widget {
 					b := ui.ButtonOf(label, func() { m.selectTable(name) }).Name(name).BindDisabled(m.Busy).Pad(6, 8)
 					if selected {
-						return ggui.Box(ggui.Row(ggui.Box().Width(2).Fill(uitheme.Primary), ggui.Expanded(b.Secondary())).Align(ggui.AlignStretch))
+						return ggui.Box(ggui.Row(ggui.Box().Width(2).Fill(uitheme.Primary), ggui.Expanded(b.Secondary())).Stretch())
 					}
 					return b.Ghost()
 				}))
@@ -134,7 +153,7 @@ func sidebarView(m *model) ggui.Widget {
 				rows = append(rows, group...)
 			}
 		}
-		return ggui.Column(rows...).Gap(2).Align(ggui.AlignStretch)
+		return ggui.Column(rows...).Gap(2).Stretch()
 	})
 	return ggui.Box(ggui.Column(
 		ggui.Row(ggui.Text("Table Editor"), ggui.Spacer(), ui.Badge("main")).Gap(8),
@@ -142,7 +161,7 @@ func sidebarView(m *model) ggui.Widget {
 		ggui.Expanded(ggui.Scroll(list)), ui.Divider(),
 		ui.Checkbox(m.ReadOnly, "Open read-only"), ui.Caption("Applies to the next database."),
 		ui.Caption(".db · .sqlite · .sqlite3"),
-	).Gap(12).Align(ggui.AlignStretch)).Width(240).Pad(12, 12).Fill(uitheme.Sidebar)
+	).Gap(12).Stretch()).Width(240).Pad(12, 12).Fill(uitheme.Sidebar)
 }
 
 func welcomeView(m *model) ggui.Widget {
@@ -164,91 +183,175 @@ func welcomeView(m *model) ggui.Widget {
 			).Gap(16).Align(ggui.AlignCenter)).Justify(ggui.JustifyCenter)).Pad(52, 32).Border(1, border).Radius(8).Fill(fill)
 		}),
 		ui.Checkbox(m.ReadOnly, "Open read-only").BindDisabled(m.Busy),
-	).Gap(24).Align(ggui.AlignStretch)).Width(520), 24))
+	).Gap(24).Stretch()).Width(520), 24))
 }
 
 func dataView(m *model, unavailable ggui.Readable[bool]) ggui.Widget {
-	insertDisabled := ggui.Combine(m.Insertable, m.Busy, func(a, b bool) bool { return !a || b })
-	editDisabled := ggui.Combine(ggui.Combine(m.Selected, m.Editable, func(row int, editable bool) bool { return row == 0 || !editable }), m.Busy, func(a, b bool) bool { return a || b })
-	filters := ggui.If(m.FilterOpen, func() ggui.Widget {
-		return ggui.Column(
-			ggui.Row(ui.Caption("Sort by"), ggui.Expanded(ui.Select(m.Sort).BindOptions(m.Data.Map(func(r result) []string { return append([]string{""}, r.Columns...) })).Name("Sort column").Format(func(name string) string {
-				if name == "" {
-					return "Default order"
-				}
-				return name
-			}).BindDisabled(unavailable)), ui.Checkbox(m.Desc, "Descending"), ui.Button("Sort", m.apply).Outline().BindDisabled(unavailable)).Gap(10),
-		).Gap(8).Align(ggui.AlignStretch)
-	})
-	grid := ggui.If(m.Loaded.Map(func(s string) bool { return s != "" }), func() ggui.Widget { return resultGrid(m.Data, m) }).Else(func() ggui.Widget {
+	loaded := m.Loaded.Map(func(s string) bool { return s != "" })
+	grid := ggui.If(loaded, func() ggui.Widget { return resultGrid(m.Data, m) }).Else(func() ggui.Widget {
 		return ggui.Center(ui.Empty("No table selected", "Choose a table, or use SQL to create your first one."))
 	})
 	return ggui.Column(
-		ggui.Padding(ggui.Row(
-			ggui.Expanded(ui.TextField(m.Filter).Name("Filter rows").Placeholder("Filter rows…").OnSubmit(func(string) { m.apply() }).BindDisabled(unavailable)),
-			ui.Button("Apply", m.apply).Ghost().BindDisabled(unavailable),
-			ui.Button("Sort", func() { m.FilterOpen.Set(!m.FilterOpen.Get()) }).Outline().BindDisabled(unavailable),
-			ui.Button("↻", m.browse).Name("Refresh").Outline().BindDisabled(unavailable),
-			ui.Menu("More", ui.MenuItem("Clear filters", func() { m.Filter.Set(""); m.Sort.Set(""); m.Desc.Set(false); m.apply() }), ui.MenuItem("Export CSV", func() { m.export(false) }), ui.MenuItem("Query table", m.queryTable)).BindDisabled(unavailable),
-			ui.Button("Add row", m.add).BindDisabled(insertDisabled),
-		).Gap(8).Align(ggui.AlignCenter), 8, 10), filters,
-		ggui.If(ggui.Derived(func() bool { return m.selectionCount() > 0 }), func() ggui.Widget {
-			return ggui.Row(
-				ggui.TextOf(ggui.Derived(func() string { return fmt.Sprintf("%d rows selected", m.selectionCount()) })).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
-				ui.Button("View / edit cell", m.edit).Outline().BindDisabled(ggui.Derived(func() bool { return m.Busy.Get() || m.selectionCount() != 1 })), ui.Button("Delete row", m.askDelete).Destructive().BindDisabled(editDisabled), ggui.Spacer(), ui.Button("Deselect", m.clearSelection).Ghost(),
-			).Gap(8)
-		}),
-		ggui.Expanded(grid), ui.Divider(),
-		ggui.Padding(ggui.Wrap(
-			ggui.TextOf(ggui.Derived(func() string {
-				if len(m.Data.Get().Rows) == 0 {
-					return "0 rows"
-				}
-				return fmt.Sprintf("%d–%d of %d rows", m.Offset.Get()+1, m.Offset.Get()+len(m.Data.Get().Rows), m.Total.Get())
-			})).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
-			ggui.Row(ui.Caption("Rows per page"), ggui.Box(ui.Select(ggui.Bind(m.PageSize.Get, m.setPageSize)).Options([]int{25, 50, 100, 250, 500}).Name("Rows per page").BindDisabled(unavailable)).Width(76)).Gap(8).Align(ggui.AlignCenter),
-			ui.Pagination(ggui.Bind(m.currentPage, m.setPage), ggui.Derived(m.pageCount)).BindDisabled(unavailable),
-		).Gap(12).Align(ggui.AlignCenter), 6, 10),
-	).Gap(0).Align(ggui.AlignStretch)
+		ggui.Padding(dataToolbar(m, unavailable), 8, 10),
+		ggui.If(m.FilterOpen, func() ggui.Widget { return sortBar(m, unavailable) }),
+		selectionBar(m),
+		ggui.Expanded(grid),
+		ui.Divider(),
+		ggui.Padding(pager(m, unavailable), 6, 10),
+	).Gap(0).Stretch()
+}
+
+// dataToolbar filters, sorts, refreshes and adds to the table shown.
+func dataToolbar(m *model, unavailable ggui.Readable[bool]) ggui.Widget {
+	filter := ui.TextField(m.Filter).Name("Filter rows").Placeholder("Filter rows…").
+		OnSubmit(func(string) { m.apply() }).BindDisabled(unavailable)
+	clearFilters := func() {
+		m.Filter.Set("")
+		m.Sort.Set("")
+		m.Desc.Set(false)
+		m.apply()
+	}
+	more := ui.Menu("More",
+		ui.MenuItem("Clear filters", clearFilters),
+		ui.MenuItem("Export CSV", func() { m.export(false) }),
+		ui.MenuItem("Query table", m.queryTable),
+	).BindDisabled(unavailable)
+	return ggui.Row(
+		ggui.Expanded(filter),
+		ui.Button("Apply", m.apply).Ghost().BindDisabled(unavailable),
+		ui.Button("Sort", func() { ggui.Toggle(m.FilterOpen) }).Outline().BindDisabled(unavailable),
+		ui.Button("↻", m.browse).Name("Refresh").Outline().BindDisabled(unavailable),
+		more,
+		ui.Button("Add row", m.add).BindDisabled(ggui.Or(ggui.Not(m.Insertable), m.Busy)),
+	).Gap(8).Align(ggui.AlignCenter)
+}
+
+// sortBar picks the column the rows are sorted by.
+func sortBar(m *model, unavailable ggui.Readable[bool]) ggui.Widget {
+	columns := m.Data.Map(func(r result) []string { return append([]string{""}, r.Columns...) })
+	column := ui.Select(m.Sort).BindOptions(columns).Name("Sort column").Format(func(name string) string {
+		if name == "" {
+			return "Default order"
+		}
+		return name
+	}).BindDisabled(unavailable)
+	return ggui.Row(
+		ui.Caption("Sort by"),
+		ggui.Expanded(column),
+		ui.Checkbox(m.Desc, "Descending"),
+		ui.Button("Sort", m.apply).Outline().BindDisabled(unavailable),
+	).Gap(10)
+}
+
+// selectionBar acts on the selected rows, while there are any.
+func selectionBar(m *model) ggui.Widget {
+	count := ggui.Derived(m.selectionCount)
+	notOne := count.Map(func(n int) bool { return n != 1 })
+	cannotEdit := ggui.Combine(m.Selected, m.Editable, func(row int, editable bool) bool { return row == 0 || !editable })
+	return ggui.If(count.Map(func(n int) bool { return n > 0 }), func() ggui.Widget {
+		return ggui.Row(
+			ui.Captionf("%d rows selected", count),
+			ui.Button("View / edit cell", m.edit).Outline().BindDisabled(ggui.Or(m.Busy, notOne)),
+			ui.Button("Delete row", m.askDelete).Destructive().BindDisabled(ggui.Or(cannotEdit, m.Busy)),
+			ggui.Spacer(),
+			ui.Button("Deselect", m.clearSelection).Ghost(),
+		).Gap(8)
+	})
+}
+
+// pager says which rows are shown and moves between pages.
+func pager(m *model, unavailable ggui.Readable[bool]) ggui.Widget {
+	shown := ggui.Derived(func() string {
+		n := len(m.Data.Get().Rows)
+		if n == 0 {
+			return "0 rows"
+		}
+		return fmt.Sprintf("%d–%d of %d rows", m.Offset.Get()+1, m.Offset.Get()+n, m.Total.Get())
+	})
+	pageSize := ui.Select(ggui.Bind(m.PageSize.Get, m.setPageSize)).
+		Options([]int{25, 50, 100, 250, 500}).Name("Rows per page").BindDisabled(unavailable)
+	return ggui.Wrap(
+		ui.CaptionOf(shown),
+		ggui.Row(ui.Caption("Rows per page"), ggui.Box(pageSize).Width(76)).Gap(8).Align(ggui.AlignCenter),
+		ui.Pagination(ggui.Bind(m.currentPage, m.setPage), ggui.Derived(m.pageCount)).BindDisabled(unavailable),
+	).Gap(12).Align(ggui.AlignCenter)
 }
 
 func schemaView(m *model) ggui.Widget {
-	return ggui.Column(ggui.Padding(ggui.Row(ui.Title("Table structure"), ggui.Spacer(), ggui.TextOf(m.Data.Map(func(r result) string { return fmt.Sprintf("%d columns", len(r.Columns)) })).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption)), 10, 0),
-		ggui.Row(ggui.Box(ui.Caption("COLUMN")).Width(180), ggui.Box(ui.Caption("TYPE")).Width(110), ui.Caption("CONSTRAINTS / DEFAULT")).Gap(12), ui.Divider(),
-		ggui.View(m.Data, func(result) ggui.Widget {
-			rows := []ggui.Widget{}
-			for _, c := range m.current.Columns {
-				flags := []string{}
-				if c.PK > 0 {
-					flags = append(flags, "PRIMARY KEY")
-				}
-				if c.NotNull {
-					flags = append(flags, "NOT NULL")
-				}
-				if c.Hidden != 0 {
-					flags = append(flags, "GENERATED / HIDDEN")
-				}
-				if c.Default.Valid {
-					flags = append(flags, "DEFAULT "+c.Default.String)
-				}
-				if len(flags) == 0 {
-					flags = append(flags, "Nullable")
-				}
-				rows = append(rows, ggui.Row(ggui.Box(ggui.Text(c.Name)).Width(180), ggui.Box(ui.Caption(c.Type)).Width(110), ggui.Expanded(ui.Caption(strings.Join(flags, " · ")))).Gap(12), ui.Divider())
-			}
-			return ggui.Column(rows...).Gap(12).Align(ggui.AlignStretch)
-		}), ui.Caption("CREATE STATEMENT"), ui.Card(ggui.TextOf(m.Schema)).Pad(18),
-	).Gap(16).Align(ggui.AlignStretch)
+	count := m.Data.Map(func(r result) string { return fmt.Sprintf("%d columns", len(r.Columns)) })
+	headings := ggui.Row(
+		ggui.Box(ui.Caption("COLUMN")).Width(180),
+		ggui.Box(ui.Caption("TYPE")).Width(110),
+		ui.Caption("CONSTRAINTS / DEFAULT"),
+	).Gap(12)
+	columns := ggui.View(m.Data, func(result) ggui.Widget {
+		rows := []ggui.Widget{}
+		for _, c := range m.current.Columns {
+			rows = append(rows, columnRow(c), ui.Divider())
+		}
+		return ggui.Column(rows...).Gap(12).Stretch()
+	})
+	return ggui.Column(
+		ggui.Padding(ggui.Row(ui.Title("Table structure"), ggui.Spacer(), ui.CaptionOf(count)), 10, 0),
+		headings,
+		ui.Divider(),
+		columns,
+		ui.Caption("CREATE STATEMENT"),
+		ui.Card(ggui.TextOf(m.Schema)).Pad(18),
+	).Gap(16).Stretch()
+}
+
+// columnRow is one column of the table's structure.
+func columnRow(c column) ggui.Widget {
+	flags := []string{}
+	if c.PK > 0 {
+		flags = append(flags, "PRIMARY KEY")
+	}
+	if c.NotNull {
+		flags = append(flags, "NOT NULL")
+	}
+	if c.Hidden != 0 {
+		flags = append(flags, "GENERATED / HIDDEN")
+	}
+	if c.Default.Valid {
+		flags = append(flags, "DEFAULT "+c.Default.String)
+	}
+	if len(flags) == 0 {
+		flags = append(flags, "Nullable")
+	}
+	return ggui.Row(
+		ggui.Box(ggui.Text(c.Name)).Width(180),
+		ggui.Box(ui.Caption(c.Type)).Width(110),
+		ggui.Expanded(ui.Caption(strings.Join(flags, " · "))),
+	).Gap(12)
 }
 
 func sqlView(m *model, unavailable ggui.Readable[bool]) ggui.Widget {
+	header := ggui.Row(
+		ui.Caption("SQL EDITOR"),
+		ggui.Spacer(),
+		ui.Button("Recent queries", func() { m.HistoryOpen.Set(true) }).Ghost(),
+		ui.Caption("⌘/Ctrl + Enter"),
+	).Gap(10)
+	run := ggui.Row(
+		ui.Button("Run SQL", m.execute).BindDisabled(unavailable),
+		ui.Button("Cancel query", m.stop).Ghost().BindDisabled(ggui.Not(m.Busy)),
+		ggui.Spacer(),
+		ui.Caption("One statement · Auto-commit on success"),
+	).Gap(8)
+	results := ggui.Row(
+		ggui.Text("Results"),
+		ggui.Expanded(ui.CaptionOf(m.QueryStatus)),
+		ui.Button("Export loaded results", func() { m.export(true) }).Outline().BindDisabled(unavailable),
+	).Gap(12)
 	return ggui.Column(
-		ggui.Row(ui.Caption("SQL EDITOR"), ggui.Spacer(), ui.Button("Recent queries", func() { m.HistoryOpen.Set(true) }).Ghost(), ui.Caption("⌘/Ctrl + Enter")).Gap(10),
+		header,
 		ui.TextField(m.SQL).Name("SQL").Multiline().Lines(7).BindDisabled(m.Busy),
-		ggui.Row(ui.Button("Run SQL", m.execute).BindDisabled(unavailable), ui.Button("Cancel query", m.stop).Ghost().BindDisabled(m.Busy.Map(func(b bool) bool { return !b })), ggui.Spacer(), ui.Caption("One statement · Auto-commit on success")).Gap(8),
-		ui.Divider(), ggui.Row(ggui.Text("Results"), ggui.Expanded(ggui.TextOf(m.QueryStatus).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption)), ui.Button("Export loaded results", func() { m.export(true) }).Outline().BindDisabled(unavailable)).Gap(12),
+		run,
+		ui.Divider(),
+		results,
 		ggui.Expanded(ggui.Scroll(queryResultTable(m.QueryData))),
-	).Gap(12).Align(ggui.AlignStretch)
+	).Gap(12).Stretch()
 }
 
 func historyDialog(m *model) ggui.Widget {
@@ -261,7 +364,7 @@ func historyDialog(m *model) ggui.Widget {
 			label := truncate(strings.Join(strings.Fields(text), " "), 90)
 			rows = append(rows, ui.Button(label, func() { m.SQL.Set(text); m.HistoryOpen.Set(false); m.Tab.Set(2) }).Ghost().BindDisabled(m.Busy))
 		}
-		return ggui.Column(rows...).Gap(8).Align(ggui.AlignStretch)
+		return ggui.Column(rows...).Gap(8).Stretch()
 	}))).Height(360)).Title("Recent queries").Width(700)
 }
 
@@ -291,12 +394,20 @@ func resultGrid(source ggui.Readable[result], m *model) ggui.Widget {
 			}
 			cols[i].Header = ui.ButtonOf(label, func() { m.sortColumn(name) }).Name("Sort by "+name).Ghost().Pad(0, 0).BindDisabled(m.Busy)
 		}
-		cols = append([]ui.Column[record]{ui.Col("", func(row ggui.Readable[record]) ggui.Widget {
-			id := ggui.Untrack(row.Get).ID
-			return ui.Checkbox(ggui.Bind(func() bool { return m.Selections.Get()[id] }, func(on bool) { m.selectRow(id, on) }), "").Name(fmt.Sprintf("Select row %d", id)).BindDisabled(m.Busy)
-		}).W(32)}, cols...)
-		cols[0].Header = ui.Checkbox(ggui.Bind(m.pageSelected, m.selectPage), "").Name("Select page").BindDisabled(ggui.Derived(func() bool { return m.Busy.Get() || len(m.Data.Get().Rows) == 0 })).BindIndeterminate(ggui.Derived(func() bool { n := len(m.Selections.Get()); return n > 0 && n < len(m.Data.Get().Rows) }))
-		table := ui.Table(ggui.State(r.Rows), func(row record) int { return row.ID }, cols...).BindSelectedRows(m.Selections).OnSelect(func(row record) { m.selectRow(row.ID, !m.Selections.Get()[row.ID]) }).RowHeight(34)
+		selectRow := ui.Col("", func(row ggui.Readable[record]) ggui.Widget {
+			id := ggui.Peek(row).ID
+			on := ggui.Bind(func() bool { return m.Selections.Get()[id] }, func(on bool) { m.selectRow(id, on) })
+			return ui.Checkbox(on, "").Name(fmt.Sprintf("Select row %d", id)).BindDisabled(m.Busy)
+		}).W(32)
+		cannotSelect := ggui.Derived(func() bool { return m.Busy.Get() || len(m.Data.Get().Rows) == 0 })
+		some := ggui.Derived(func() bool { n := len(m.Selections.Get()); return n > 0 && n < len(m.Data.Get().Rows) })
+		selectRow.Header = ui.Checkbox(ggui.Bind(m.pageSelected, m.selectPage), "").Name("Select page").
+			BindDisabled(cannotSelect).BindIndeterminate(some)
+		cols = append([]ui.Column[record]{selectRow}, cols...)
+		table := ui.Table(ggui.State(r.Rows), func(row record) int { return row.ID }, cols...).
+			BindSelectedRows(m.Selections).
+			OnSelect(func(row record) { m.selectRow(row.ID, !m.Selections.Get()[row.ID]) }).
+			RowHeight(34)
 		border := uitheme.Border
 		grid := ggui.FromFuncs(table.Layout, func(dst *ggui.Canvas, rc ggui.Rect) {
 			dst.Paint(table, rc)
@@ -357,34 +468,67 @@ func truncate(s string, n int) string {
 }
 
 func cellEditor(m *model) ggui.Widget {
+	columns := m.Data.Map(func(result) []string {
+		out := []string{}
+		for _, c := range m.current.Columns {
+			if c.Hidden != 1 {
+				out = append(out, c.Name)
+			}
+		}
+		return out
+	})
+	column := ui.Select(m.Cell).BindOptions(columns).OnChange(func(string) { m.loadCell() }).BindDisabled(m.Busy)
+	kind := ui.Select(m.Kind).Options([]string{"TEXT", "INTEGER", "REAL", "BLOB", "NULL"}).BindDisabled(m.Busy)
+	isNull := m.Kind.Map(func(kind string) bool { return kind == "NULL" })
+	value := ui.TextField(m.Value).Multiline().Lines(5).BindDisabled(ggui.Or(isNull, m.Busy))
+	readOnly := ggui.Combine(m.Cell, m.Editable, func(name string, editable bool) bool {
+		if !editable {
+			return true
+		}
+		c, ok := m.current.column(name)
+		return !ok || c.Hidden != 0
+	})
+	actions := ggui.Row(
+		ui.Button("Cancel", func() { m.Editing.Set(false) }).Outline().BindDisabled(m.Busy),
+		ui.Button("Save cell", m.save).BindDisabled(ggui.Or(readOnly, m.Busy)),
+	).Gap(8).Justify(ggui.JustifyEnd)
 	return ui.Dialog(m.Editing, ggui.Column(
-		ui.Field("Column", ui.Select(m.Cell).BindOptions(m.Data.Map(func(result) []string {
-			out := []string{}
-			for _, c := range m.current.Columns {
-				if c.Hidden != 1 {
-					out = append(out, c.Name)
-				}
-			}
-			return out
-		})).OnChange(func(string) { m.loadCell() }).BindDisabled(m.Busy)),
-		ui.Field("Storage type", ui.Select(m.Kind).Options([]string{"TEXT", "INTEGER", "REAL", "BLOB", "NULL"}).BindDisabled(m.Busy)),
-		ui.Field("Value", ui.TextField(m.Value).Multiline().Lines(5).BindDisabled(ggui.Combine(m.Kind, m.Busy, func(kind string, b bool) bool { return kind == "NULL" || b }))).Help("BLOB values use hexadecimal. NULL is different from empty text."),
-		ggui.TextOf(m.Error).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption), ggui.Row(ui.Button("Cancel", func() { m.Editing.Set(false) }).Outline().BindDisabled(m.Busy), ui.Button("Save cell", m.save).BindDisabled(ggui.Combine(ggui.Combine(m.Cell, m.Editable, func(name string, editable bool) bool {
-			if !editable {
-				return true
-			}
-			c, ok := m.current.column(name)
-			return !ok || c.Hidden != 0
-		}), m.Busy, func(a, b bool) bool { return a || b }))).Gap(8).Justify(ggui.JustifyEnd),
-	).Gap(14).Align(ggui.AlignStretch)).Title("Cell details").Width(600)
+		ui.Field("Column", column),
+		ui.Field("Storage type", kind),
+		ui.Field("Value", value).Help("BLOB values use hexadecimal. NULL is different from empty text."),
+		ui.CaptionOf(m.Error),
+		actions,
+	).Gap(14).Stretch()).Title("Cell details").Width(600)
 }
+
 func rowEditor(m *model) ggui.Widget {
 	fields := ggui.View(m.Draft, func(fields []draftField) ggui.Widget {
 		rows := []ggui.Widget{}
 		for _, field := range fields {
-			rows = append(rows, ggui.Column(ggui.Row(ggui.Text(field.Name), ui.Caption(field.Detail)).Gap(12), ggui.Row(ggui.Box(ui.Select(field.Kind).Options([]string{"DEFAULT", "TEXT", "INTEGER", "REAL", "BLOB", "NULL"}).BindDisabled(m.Busy)).Width(140), ggui.Expanded(ui.TextField(field.Value).BindDisabled(ggui.Combine(field.Kind, m.Busy, func(kind string, b bool) bool { return b || kind == "DEFAULT" || kind == "NULL" })))).Gap(10)).Gap(6))
+			rows = append(rows, draftFieldRow(m, field))
 		}
-		return ggui.Column(rows...).Gap(16).Align(ggui.AlignStretch)
+		return ggui.Column(rows...).Gap(16).Stretch()
 	})
-	return ui.Dialog(m.Adding, ggui.Column(ui.Caption("DEFAULT omits the column so SQLite supplies its default or generated ID."), ggui.Box(ggui.Scroll(fields)).Height(360), ggui.TextOf(m.Error).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption), ggui.Row(ui.Button("Cancel insert", func() { m.Adding.Set(false) }).Outline().BindDisabled(m.Busy), ui.Button("Insert row", m.insert).BindDisabled(m.Busy)).Gap(8).Justify(ggui.JustifyEnd)).Gap(14).Align(ggui.AlignStretch)).Title("Add row").Width(720)
+	actions := ggui.Row(
+		ui.Button("Cancel insert", func() { m.Adding.Set(false) }).Outline().BindDisabled(m.Busy),
+		ui.Button("Insert row", m.insert).BindDisabled(m.Busy),
+	).Gap(8).Justify(ggui.JustifyEnd)
+	return ui.Dialog(m.Adding, ggui.Column(
+		ui.Caption("DEFAULT omits the column so SQLite supplies its default or generated ID."),
+		ggui.Box(ggui.Scroll(fields)).Height(360),
+		ui.CaptionOf(m.Error),
+		actions,
+	).Gap(14).Stretch()).Title("Add row").Width(720)
+}
+
+// draftFieldRow edits one column of the row being added.
+func draftFieldRow(m *model, field draftField) ggui.Widget {
+	kind := ui.Select(field.Kind).Options([]string{"DEFAULT", "TEXT", "INTEGER", "REAL", "BLOB", "NULL"}).BindDisabled(m.Busy)
+	noValue := ggui.Combine(field.Kind, m.Busy, func(kind string, busy bool) bool {
+		return busy || kind == "DEFAULT" || kind == "NULL"
+	})
+	return ggui.Column(
+		ggui.Row(ggui.Text(field.Name), ui.Caption(field.Detail)).Gap(12),
+		ggui.Row(ggui.Box(kind).Width(140), ggui.Expanded(ui.TextField(field.Value).BindDisabled(noValue))).Gap(10),
+	).Gap(6)
 }

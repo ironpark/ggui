@@ -115,7 +115,7 @@ func newChatPreviews() func() []ggui.Widget {
 								attachmentAction.Set("Source attachment removed.")
 							}))
 					}),
-				).Gap(12).Align(ggui.AlignStretch)),
+				).Gap(12).Stretch()),
 				ui.Select(upload).Options(states).Name("Upload state"),
 				ui.Attachment("design-system.zip", "Choose an upload state above").Media(ggui.Text("ZIP").Size(11)).BindState(upload).
 					Actions(ui.AttachmentAction("Retry upload", ggui.Text("↻"), func() { upload.Set(ui.AttachmentUploading) })),
@@ -128,7 +128,7 @@ func newChatPreviews() func() []ggui.Widget {
 					}
 					return ui.AttachmentGroup(cards...).Name("Attached files")
 				}),
-				ggui.TextOf(attachmentAction).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
+				ui.CaptionOf(attachmentAction),
 				ui.Button("Restore attachments", func() {
 					showUpload.Set(true)
 					showSource.Set(true)
@@ -139,7 +139,7 @@ func newChatPreviews() func() []ggui.Widget {
 					ui.Attachment("Small", "CSV · 18 KB").Size(ui.AttachmentSmall),
 					ui.Attachment("Extra small", "").Size(ui.AttachmentExtraSmall),
 				).Gap(8)),
-			).Gap(12).Align(ggui.AlignStretch)),
+			).Gap(12).Stretch()),
 			preview("Bubble", ggui.Column(
 				chatSurface(ggui.Column(
 					ui.Bubble(ggui.Text("Hey there! what's up?")).End(),
@@ -149,7 +149,7 @@ func newChatPreviews() func() []ggui.Widget {
 					),
 					ui.Bubble(ggui.Text("Sure. Hit me with your best demo.")).End(),
 					ui.Bubble(ggui.Text("Yes. You are reading a demo that is demoing itself. Very meta. Very on-brand.")).Muted().Reactions(ggui.Row(ggui.Text("👍").Size(20), ggui.Text("🔥").Size(20), ggui.Text("👀").Size(20), ggui.Text("+2")).Gap(4)),
-				).Gap(32).Align(ggui.AlignStretch)),
+				).Gap(32).Stretch()),
 				ui.Collapsible(variants, "More bubble variants", ggui.Column(
 					ui.Bubble(ggui.Text("Secondary conversation surface.")).Secondary(),
 					ui.Bubble(ggui.Text("A subtle primary tint.")).Tinted(),
@@ -157,9 +157,9 @@ func newChatPreviews() func() []ggui.Widget {
 					ui.Bubble(ggui.Text("Upload failed. Please retry.")).Destructive(),
 					ui.Bubble(ggui.Text("Ghost content uses the full width.")).Ghost(),
 					ui.Bubble(ui.Collapsible(expanded, "Show more", ggui.Text("Long content keeps its state."))).Secondary().Reactions(ui.ButtonOf(ggui.Textf("Like · %d", reaction), func() { ggui.Add(reaction, 1) }).Name("Like bubble").Ghost().Pad(2, 6)),
-					ggui.Padding(ggui.TextOf(bubbleAction).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption), 16, 0, 0, 0),
-				).Gap(16).Align(ggui.AlignStretch)),
-			).Gap(16).Align(ggui.AlignStretch)),
+					ggui.Padding(ui.CaptionOf(bubbleAction), 16, 0, 0, 0),
+				).Gap(16).Stretch()),
+			).Gap(16).Stretch()),
 			preview("Message", chatSurface(ggui.Column(
 				ui.Message(ui.Bubble(ggui.Text("Deploying to prod real quick."))).End().Avatar(ui.Avatar("You").Image(you).Size(32)),
 				ui.Message(ui.Bubble(ggui.Text("It's 4:55 PM. On a Friday.")).Muted()).Avatar(ui.Avatar("Oliver").Image(oliver).Size(32)),
@@ -169,13 +169,13 @@ func newChatPreviews() func() []ggui.Widget {
 					ui.Bubble(ggui.Text("Alright, let me take a look.")).Muted().Reactions(ggui.Text("👍").Size(20)),
 				)).Avatar(ui.Avatar("Oliver").Image(oliver).Size(32)),
 				ui.Marker(ggui.Text("Oliver is typing…")),
-			).Gap(24).Align(ggui.AlignStretch))),
+			).Gap(24).Stretch())),
 			preview("Marker", chatSurface(ggui.Column(
 				ui.Marker(ggui.Text("Switched to a new branch")).Icon(&chatIcon{kind: "branch"}),
 				ui.Marker(ggui.Text("Thinking…")).Icon(ui.Spinner().Size(16)),
 				ui.Marker(ggui.Text("Conversation compacted")).Separator(),
 				ui.Marker(ggui.Text("Explored 4 files")).Icon(ui.Icon(icons.Search)),
-			).Gap(32).Align(ggui.AlignStretch))),
+			).Gap(32).Stretch())),
 			preview("Message Scroller", ggui.Column(
 				chatSurface(ggui.Box(scroller).Border(1, t.Border).Radius(t.Radius)),
 				ggui.Wrap(
@@ -187,7 +187,7 @@ func newChatPreviews() func() []ggui.Widget {
 							ui.MessageEntry{ID: id + "-reply", Content: ui.Message(ui.Bubble(ggui.Text("Starting the review…")).Secondary())})
 					}),
 					ui.Button("Stream reply", func() {
-						if len(ggui.Untrack(rows.Get)) == 0 {
+						if len(ggui.Peek(rows)) == 0 {
 							return
 						}
 						sequence++
@@ -214,16 +214,16 @@ func newChatPreviews() func() []ggui.Widget {
 						scroller.Restore(saved)
 						scrollNote.Set("Restored the saved reading position.")
 					}).Outline(),
-				).Gap(8), ggui.TextOf(scrollNote).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
-			).Gap(12).Align(ggui.AlignStretch)),
+				).Gap(8), ui.CaptionOf(scrollNote),
+			).Gap(12).Stretch()),
 			preview("Questionnaire", ggui.Column(
 				chatSurface(questionnaire, 448),
-				ggui.TextOf(submission).StyleKey(uitheme.CaptionKey, uitheme.Default().Caption),
+				ui.CaptionOf(submission),
 				ui.Button("Reset questionnaire", func() {
 					questionnaire.Reset()
 					submission.Set("Your answers stay local to this preview.")
 				}).Outline(),
-			).Gap(16).Align(ggui.AlignStretch)),
+			).Gap(16).Stretch()),
 		}
 	}
 }

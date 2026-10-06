@@ -47,7 +47,9 @@ Choose the smallest reactive boundary that expresses the change:
 
 `State(v)` creates a `*StateValue[T]`. `Get()` tracks a read inside a
 reactive computation; `Set(v)` and `Update(func(T) T)` publish changes.
-`Untrack(value.Get)` reads the current value without subscribing.
+`ggui.Peek(value)` reads the current value of any reader without
+subscribing, as an action reading state it does not show does; it is
+`Untrack(value.Get)`.
 
 ```go
 count := ggui.State(0)
@@ -79,11 +81,16 @@ total := ggui.Combine(price, qty, func(p float64, n int) float64 {
 A `*DerivedValue[T]` computes on its first read and the next read after an
 input changes. Unread values do not run during a frame flush. Dependencies
 are recollected on each computation; `Get()` settles upstream values before
-returning. `Untrack(total.Get)` also returns the latest value.
+returning. `ggui.Peek(total)` also returns the latest value.
 
 Derived calculations must be pure: state writes and recursive derived cycles
 panic. `WithEqual` controls downstream notification, including slice results.
-`Map`, `StateValue.Map`, and `DerivedValue.Map` are convenience derivations.
+`Map`, `StateValue.Map`, and `DerivedValue.Map` are convenience derivations,
+and `Not` and `Or` combine flags without a closure:
+
+```go
+ui.Button("Delete", del).BindDisabled(ggui.Or(m.Busy, ggui.Not(m.HasSelection)))
+```
 
 `Textf` and `Sprintf` unwrap arguments with `GetAny() any`: built-in state,
 derived values, lenses, tweens and springs all provide it. A custom
@@ -269,7 +276,7 @@ Every builder runs untracked: app and `Component` setup, and the callbacks of
 `Text(fmt.Sprint(count.Get()))` in one shows the value once and never again.
 `TextOf`, `Textf` and reactive control bindings follow the value instead. A
 `ggui_debug` build reports every place a builder reads a signal, once; read it
-in `Untrack` when a snapshot is what you mean. A keyed row reads what it keeps
+with `ggui.Peek` when a snapshot is what you mean. A keyed row reads what it keeps
 for life, such as its ID, from `EachItem.Item`.
 
 `View(source, build)` and `Reactive(build)` are explicit subtree replacement

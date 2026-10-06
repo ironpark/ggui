@@ -19,7 +19,7 @@ type dial struct {
 }
 
 func newDial(value *ggui.StateValue[float64], name string) *dial {
-	d := &dial{value: value, needle: ggui.Spring(ggui.Untrack(value.Get))}
+	d := &dial{value: value, needle: ggui.Spring(ggui.Peek(value))}
 	d.Role = ggui.RoleSlider
 	d.SetName(name)
 	d.AutoKey()
@@ -95,9 +95,9 @@ func (d *dial) HandleKey(ev ggui.KeyEvent) {
 	}
 	switch ev.Key {
 	case ggui.KeyArrowLeft, ggui.KeyArrowDown:
-		d.write(ggui.Untrack(d.value.Get) - 0.05)
+		d.write(ggui.Peek(d.value) - 0.05)
 	case ggui.KeyArrowRight, ggui.KeyArrowUp:
-		d.write(ggui.Untrack(d.value.Get) + 0.05)
+		d.write(ggui.Peek(d.value) + 0.05)
 	}
 }
 
@@ -118,7 +118,7 @@ func (d *dial) Describe() ggui.Node {
 		Name:     d.SemanticName(),
 		Min:      0,
 		Max:      1,
-		Now:      ggui.Untrack(d.value.Get),
+		Now:      ggui.Peek(d.value),
 		Disabled: d.IsInert(),
 		Actions:  ggui.ActionFocus,
 	}

@@ -68,8 +68,8 @@ type Preset struct {
 	Style  Style
 }
 
-func (p Preset) Light() Theme { return p.theme(false) }
-func (p Preset) Dark() Theme  { return p.theme(true) }
+func (p Preset) Light() Theme { return p.For(false) }
+func (p Preset) Dark() Theme  { return p.For(true) }
 func BaseColors() []BaseColor {
 	return []BaseColor{BaseNeutral, BaseStone, BaseZinc, BaseMauve, BaseOlive, BaseMist, BaseTaupe}
 }
@@ -108,7 +108,8 @@ func (t Theme) ChatTokens() ChatTokens {
 	return t.Chat
 }
 
-func (p Preset) theme(dark bool) Theme {
+// For is Dark when dark is true and Light otherwise.
+func (p Preset) For(dark bool) Theme {
 	base := p.Base
 	if base == "" {
 		base = BaseNeutral

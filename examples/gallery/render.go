@@ -53,10 +53,9 @@ func (g *galleryAudit) step() (bool, error) {
 		style = uitheme.StyleRhea
 	}
 	preset := uitheme.Preset{Base: uitheme.BaseNeutral, Accent: uitheme.AccentBlue, Style: style}
-	theme := preset.Light()
+	theme := preset.For(dark)
 	mode := "light"
 	if dark {
-		theme = preset.Dark()
 		mode = "dark"
 	}
 	uitheme.Set(theme)
@@ -218,5 +217,5 @@ func auditControlStates() ggui.Widget {
 		ui.Field("Email", ui.TextField(text)).BindError(ggui.State("Enter a valid email address.")),
 		ui.Slider(ggui.State(.5), 0, 1).Disabled(true),
 		ui.Progress(ggui.State(.6)),
-	).Gap(20).Align(ggui.AlignStretch))
+	).Gap(20).Stretch())
 }

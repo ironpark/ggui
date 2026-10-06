@@ -110,7 +110,8 @@ by fraction (`.At(0.25, 1)`) or edge (`.Bottom().Right()`). `Center` places it a
 Any of those makes the widget fill its main axis. `.Align(...)` places
 children across the axis (`AlignStart`, `AlignCenter`, `AlignEnd`,
 `AlignStretch`, `AlignBaseline`); a Row centers by default, a Column starts
-at the left. `AlignBaseline` lines a Row's children up on their first text
+at the left. `.Stretch()` is short for `.Align(ggui.AlignStretch)`, the usual
+arrangement of a form or a page. `AlignBaseline` lines a Row's children up on their first text
 baseline, so a caption beside a title shares its baseline rather than its
 centre; a child with no text rests on that baseline by its bottom edge. A
 Column, `Wrap` or `Each` treats it as `AlignStart`.
@@ -121,7 +122,21 @@ ggui.Row(ui.Title("Inbox"), ui.Caption("12 unread")).Gap(8).Align(ggui.AlignBase
 
 ```go
 ggui.Row(ggui.Text("Title"), ggui.Spacer(), ggui.Text("3 items")) // centered on its height
-ggui.Column(ggui.Text("a"), ggui.Text("b")).Align(ggui.AlignStretch)
+ggui.Column(ggui.Text("a"), ggui.Text("b")).Stretch() // Align(ggui.AlignStretch)
+```
+
+### Changing arrangement by width
+
+`Responsive(breakpoint, wide, narrow)` lays out `wide` while it has at least
+`breakpoint` of width and `narrow` below it. Both may hold the same widgets,
+so a field keeps its text and focus as the window crosses the breakpoint:
+
+```go
+search, filters := ui.TextField(query), ui.ToggleGroup(filter).Options(kinds)
+ggui.Responsive(760,
+    ggui.Row(ggui.Expanded(search), filters).Gap(16),
+    ggui.Column(search, filters).Gap(12).Stretch(),
+)
 ```
 
 ## Wrap and grid

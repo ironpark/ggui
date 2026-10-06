@@ -114,7 +114,7 @@ func (m *model) create() {
 }
 
 func (m *model) edit() {
-	if item, ok := m.find(ggui.Untrack(m.Selected.Get)); ok {
+	if item, ok := m.find(ggui.Peek(m.Selected)); ok {
 		m.Draft.Set(item)
 		m.Editing.Set(true)
 	}
@@ -122,7 +122,7 @@ func (m *model) edit() {
 
 // find is the task with the given ID, read outside any tracking scope.
 func (m *model) find(id int) (task, bool) {
-	return findTask(ggui.Untrack(m.Tasks.Get), id)
+	return findTask(ggui.Peek(m.Tasks), id)
 }
 
 func findTask(tasks []task, id int) (task, bool) {
@@ -134,17 +134,17 @@ func findTask(tasks []task, id int) (task, bool) {
 }
 
 func (m *model) save() bool {
-	if ggui.Untrack(m.Validation.Get) != "" {
+	if ggui.Peek(m.Validation) != "" {
 		return false
 	}
-	item := ggui.Untrack(m.Draft.Get)
+	item := ggui.Peek(m.Draft)
 	item.Title = strings.TrimSpace(item.Title)
 	if item.ID == 0 {
 		item.ID = m.nextID
 		m.nextID++
 		ggui.Append(m.Tasks, item)
 	} else {
-		tasks := slices.Clone(ggui.Untrack(m.Tasks.Get))
+		tasks := slices.Clone(ggui.Peek(m.Tasks))
 		index := slices.IndexFunc(tasks, func(existing task) bool { return existing.ID == item.ID })
 		if index < 0 {
 			return false
@@ -159,7 +159,7 @@ func (m *model) save() bool {
 }
 
 func (m *model) askDelete() {
-	id := ggui.Untrack(m.Selected.Get)
+	id := ggui.Peek(m.Selected)
 	if _, ok := m.find(id); ok {
 		m.pendingID = id // confirmation applies to this task, even if selection changes
 		m.Confirm.Set(true)
@@ -168,7 +168,7 @@ func (m *model) askDelete() {
 
 func (m *model) delete() {
 	ggui.Remove(m.Tasks, func(item task) bool { return item.ID == m.pendingID })
-	if ggui.Untrack(m.Selected.Get) == m.pendingID {
+	if ggui.Peek(m.Selected) == m.pendingID {
 		m.Selected.Set(0)
 	}
 	m.record(fmt.Sprintf("Deleted task #%d", m.pendingID))

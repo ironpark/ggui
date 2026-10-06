@@ -26,10 +26,9 @@ func (g *renderGame) step() (done bool, err error) {
 	e := chartExamples[g.index%len(chartExamples)]
 	dark := g.index >= len(chartExamples)
 	preset := uitheme.Preset{Base: uitheme.BaseNeutral, Accent: uitheme.AccentBlue}
-	theme := preset.Light()
+	theme := preset.For(dark)
 	mode := "light"
 	if dark {
-		theme = preset.Dark()
 		mode = "dark"
 	}
 	now := time.Unix(100, 0)

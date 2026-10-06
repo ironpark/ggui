@@ -23,18 +23,18 @@ func TestCustom(t *testing.T) {
 	c := dial.Center()
 	p.Press(ggui.Pt(c.X, c.Y-40)) // straight up: 12 o'clock is half way
 	p.Release(ggui.Pt(c.X, c.Y-40))
-	if got := ggui.Untrack(m.Level.Get); got < 0.45 || got > 0.55 {
+	if got := ggui.Peek(m.Level); got < 0.45 || got > 0.55 {
 		t.Fatalf("level after pressing at 12 o'clock = %.2f, want about 0.5", got)
 	}
 	p.Press(c)
 	p.Move(ggui.Pt(c.X+40, c.Y)) // drag to 3 o'clock
 	p.Release(ggui.Pt(c.X+40, c.Y))
-	if got := ggui.Untrack(m.Level.Get); got < 0.78 || got > 0.88 {
+	if got := ggui.Peek(m.Level); got < 0.78 || got > 0.88 {
 		t.Fatalf("level after dragging to 3 o'clock = %.2f, want about 0.83", got)
 	}
 	// The dial holds focus from the click; the arrows step it.
 	p.Type(ggui.Mods{}, ggui.KeyArrowRight, ggui.KeyArrowRight, ggui.KeyArrowRight, ggui.KeyArrowRight)
-	if got := ggui.Untrack(m.Level.Get); got != 1 {
+	if got := ggui.Peek(m.Level); got != 1 {
 		t.Fatalf("level after four right arrows = %.2f, want clamped at 1", got)
 	}
 	p.Advance(time.Second) // let the spring settle; Paint reads its value

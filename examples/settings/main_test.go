@@ -27,21 +27,21 @@ func TestSettings(t *testing.T) {
 	p.Frame()
 
 	p.Tap("Email me about activity")
-	draft := ggui.Untrack(m.Draft.Get)
+	draft := ggui.Peek(m.Draft)
 	if draft.Notify {
 		t.Fatal("switch did not write through the lens")
 	}
-	if ggui.Untrack(m.Saved.Get).Notify != true {
+	if ggui.Peek(m.Saved).Notify != true {
 		t.Fatal("saved copy changed before saving")
 	}
 	p.Tap("Save")
-	waitFor(t, p, func() bool { return !ggui.Untrack(m.Saving.Get) })
-	if stored != draft || ggui.Untrack(m.Saved.Get) != draft {
-		t.Fatalf("persisted %+v, saved %+v, want %+v", stored, ggui.Untrack(m.Saved.Get), draft)
+	waitFor(t, p, func() bool { return !ggui.Peek(m.Saving) })
+	if stored != draft || ggui.Peek(m.Saved) != draft {
+		t.Fatalf("persisted %+v, saved %+v, want %+v", stored, ggui.Peek(m.Saved), draft)
 	}
 
 	m.Draft.Set(Profile{Name: "Ada", Email: "not-an-address"})
-	before := ggui.Untrack(m.Saved.Get)
+	before := ggui.Peek(m.Saved)
 	// Save is disabled while the address is invalid: a disabled button
 	// takes no input, so it has no region for Tap to find.
 	if _, ok := p.Find("Save"); ok {
@@ -49,20 +49,20 @@ func TestSettings(t *testing.T) {
 	}
 	m.save(p.Post) // the shortcut path checks the same validation
 	p.Frame()
-	if ggui.Untrack(m.Saving.Get) || ggui.Untrack(m.Saved.Get) != before {
+	if ggui.Peek(m.Saving) || ggui.Peek(m.Saved) != before {
 		t.Fatal("an invalid draft was saved")
 	}
 	p.Tap("Reset")
-	if ggui.Untrack(m.Draft.Get) != before {
+	if ggui.Peek(m.Draft) != before {
 		t.Fatal("reset did not restore the saved copy")
 	}
 
 	fail = true
 	m.Draft.Set(Profile{Name: "Grace", Email: "grace@example.com"})
 	p.Tap("Save")
-	waitFor(t, p, func() bool { return !ggui.Untrack(m.Saving.Get) })
-	if ggui.Untrack(m.Status.Get) != "Could not save: offline" {
-		t.Fatalf("status = %q after a failed save", ggui.Untrack(m.Status.Get))
+	waitFor(t, p, func() bool { return !ggui.Peek(m.Saving) })
+	if ggui.Peek(m.Status) != "Could not save: offline" {
+		t.Fatalf("status = %q after a failed save", ggui.Peek(m.Status))
 	}
 }
 

@@ -62,7 +62,7 @@ func (m model) build() ggui.Widget {
 			return chartCard(findChart(key.name))
 		}),
 		ui.Caption("Arrow keys explore values · Enter selects · Replay restarts motion"),
-	).Gap(20).Align(ggui.AlignStretch)).Pad(24)
+	).Gap(20).Stretch()).Pad(24)
 }
 
 func main() {

@@ -33,8 +33,8 @@ func newModel() model {
 	}
 }
 
-func (m model) add()  { ggui.Add(m.Count, ggui.Untrack(m.Step.Get)) }
-func (m model) sub()  { ggui.Add(m.Count, -ggui.Untrack(m.Step.Get)) }
+func (m model) add()  { ggui.Add(m.Count, ggui.Peek(m.Step)) }
+func (m model) sub()  { ggui.Add(m.Count, -ggui.Peek(m.Step)) }
 func (m model) up()   { ggui.Add(m.Step, 1) }
 func (m model) down() { m.Step.Update(func(s int) int { return max(s-1, 1) }) }
 
@@ -58,7 +58,7 @@ func (m model) build() ggui.Widget {
 		}).Space(0.5)
 	})
 	content := ggui.Column(
-		ggui.Textf("count: %d", m.Count).StyleKey(uitheme.TitleKey, uitheme.Default().Title).Role(ggui.RoleHeading),
+		ui.Titlef("count: %d", m.Count),
 		buttons,
 		help,
 	).Space(1.5).Align(ggui.AlignCenter)

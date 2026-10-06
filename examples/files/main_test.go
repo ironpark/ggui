@@ -30,7 +30,7 @@ func TestDialogsFillTheList(t *testing.T) {
 	stub.Paths = []string{"/pictures/a.png", "/pictures/b.png"}
 
 	p.Tap("Open…")
-	if got := ggui.Untrack(m.Files.Get); !slices.Equal(got, []string{"/pictures/a.png"}) {
+	if got := ggui.Peek(m.Files); !slices.Equal(got, []string{"/pictures/a.png"}) {
 		t.Fatalf("after Open: %q", got)
 	}
 	if asked := stub.Asked[0]; asked.Title != "Open a file" || len(asked.Filters) != 2 {
@@ -38,21 +38,21 @@ func TestDialogsFillTheList(t *testing.T) {
 	}
 
 	p.Tap("Open several…")
-	if got := ggui.Untrack(m.Files.Get); len(got) != 3 {
+	if got := ggui.Peek(m.Files); len(got) != 3 {
 		t.Fatalf("after OpenMultiple: %q", got)
 	}
 
 	stub.Paths = nil
 	p.Tap("Save…")
-	if got := ggui.Untrack(m.Status.Get); got != "Canceled." {
+	if got := ggui.Peek(m.Status); got != "Canceled." {
 		t.Fatalf("status after cancel = %q", got)
 	}
-	if got := ggui.Untrack(m.Files.Get); len(got) != 3 {
+	if got := ggui.Peek(m.Files); len(got) != 3 {
 		t.Fatalf("a cancel changed the list: %q", got)
 	}
 
 	p.Tap("Clear")
-	if got := ggui.Untrack(m.Files.Get); len(got) != 0 {
+	if got := ggui.Peek(m.Files); len(got) != 0 {
 		t.Fatalf("after Clear: %q", got)
 	}
 }
@@ -66,18 +66,18 @@ func TestDropOntoTheCard(t *testing.T) {
 		"notes.txt": {Data: []byte("hi")},
 		"photos":    {Mode: fs.ModeDir},
 	})
-	got := ggui.Untrack(m.Files.Get)
+	got := ggui.Peek(m.Files)
 	if len(got) != 2 || got[0] != "notes.txt" || !strings.HasPrefix(got[1], "photos") || !strings.HasSuffix(got[1], string(filepath.Separator)) {
 		t.Fatalf("after drop: %q", got)
 	}
-	if status := ggui.Untrack(m.Status.Get); status != "Dropped 2 item(s)." {
+	if status := ggui.Peek(m.Status); status != "Dropped 2 item(s)." {
 		t.Fatalf("status = %q", status)
 	}
 
 	// A drop outside the card reaches no zone, and main registers no
 	// App.OnDrop, so nothing changes.
 	p.Drop(ggui.Pt(1, 1), fstest.MapFS{"stray": {}})
-	if got := ggui.Untrack(m.Files.Get); len(got) != 2 {
+	if got := ggui.Peek(m.Files); len(got) != 2 {
 		t.Fatalf("a drop outside the card was taken: %q", got)
 	}
 }

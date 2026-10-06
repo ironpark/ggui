@@ -38,8 +38,8 @@ func routes() *router.Router {
 // appLayout is the persistent chrome: history buttons, the sidebar and the
 // outlet. It is built once; only the outlet's content switches.
 func appLayout(r *router.Router, page ggui.Widget) ggui.Widget {
-	back := ui.Button("‹ Back", r.Back).Ghost().BindDisabled(not(r.CanBack()))
-	forward := ui.Button("Forward ›", r.Forward).Ghost().BindDisabled(not(r.CanForward()))
+	back := ui.Button("‹ Back", r.Back).Ghost().BindDisabled(ggui.Not(r.CanBack()))
+	forward := ui.Button("Forward ›", r.Forward).Ghost().BindDisabled(ggui.Not(r.CanForward()))
 	path := ggui.Derived(func() string { return r.Location().String() })
 	toolbar := ggui.Row(back, forward, ggui.TextOf(path)).Space(1).Align(ggui.AlignCenter)
 
@@ -69,10 +69,6 @@ func navLink(r *router.Router, label, url string, active ggui.Readable[bool]) gg
 	}
 	return ggui.If(active, func() ggui.Widget { return ui.Button(label, go_).Secondary() }).
 		Else(func() ggui.Widget { return ui.Button(label, go_).Ghost() })
-}
-
-func not(b ggui.Readable[bool]) ggui.Readable[bool] {
-	return ggui.Map(b, func(v bool) bool { return !v })
 }
 
 func homePage(c *router.Context) ggui.Widget {
