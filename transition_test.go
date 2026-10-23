@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"math"
 	"testing"
 	"time"
 )
@@ -72,5 +73,25 @@ func TestPresenceKeepsChildInertWhileLeaving(t *testing.T) {
 	p.Frame()
 	if got == (Rect{}) || got.Origin.Y != 40 {
 		t.Fatalf("re-entering child at %+v, want at the start of its slide", got)
+	}
+}
+
+// Presence drives its Transition with linear progress, so the Transition's
+// own easing is the only curve applied.
+func TestPresenceAppliesTheEasingOnce(t *testing.T) {
+	t.Parallel()
+	show := State(true)
+	var got Rect
+	tree := Column(Presence(show, Transition(probe(50, 20, &got)).Slide(0, 40).Easing(EaseIn).Duration(100*time.Millisecond)))
+	p := NewProbe(tree, Sz(100, 100))
+	defer p.Close()
+	p.Frame()
+	show.Set(false)
+	p.Advance(0)
+	p.Advance(0)
+	p.Advance(50 * time.Millisecond)
+	// Leaving, half way back: progress 0.5, offset (1 - EaseIn(0.5)) * 40.
+	if want := (1 - EaseIn(0.5)) * 40; math.Abs(got.Origin.Y-want) > 1e-6 {
+		t.Fatalf("half way out at y=%v, want %v", got.Origin.Y, want)
 	}
 }

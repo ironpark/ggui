@@ -23,7 +23,6 @@ type SwitcherWidget[K comparable] struct {
 	from     float64 // starting scale, 0 for none
 	duration time.Duration
 	ease     Easing
-	mounted  bool
 
 	props   property.Owner // changed while moving, to lay out again
 	entries []*switchEntry // oldest first; the last is the current key's
@@ -36,13 +35,15 @@ type SwitcherWidget[K comparable] struct {
 type switchEntry struct {
 	t       *TransitionWidget
 	dispose Cleanup
-	since   time.Time // when it started its current move
-	from    float64   // its progress then
+	since   time.Time     // when it started its current move
+	from    float64       // its progress then
+	d       time.Duration // how long a full move takes, as of its switch
 	leaving bool
 }
 
 // progress returns how far in e is at now, from zero to one.
-func (e *switchEntry) progress(now time.Time, d time.Duration) float64 {
+func (e *switchEntry) progress(now time.Time) float64 {
+	d := e.d
 	if d <= 0 {
 		return pick(e.leaving, 0.0, 1.0)
 	}
@@ -57,13 +58,13 @@ func (e *switchEntry) progress(now time.Time, d time.Duration) float64 {
 // to a new one when the value changes: the old subtree stays, inert, until
 // it has faded out. The first subtree appears without animating. Like Key,
 // build is untracked and owns what it creates; each subtree is disposed
-// once it has left.
+// once it has left. Its options may change after mount; they apply from
+// the next switch.
 //
 //	ggui.Switcher(tab, func(t Tab) ggui.Widget { return page(t) }).Slide(0, 8)
 func Switcher[K comparable](key Readable[K], build func(K) Widget) *SwitcherWidget[K] {
 	s := &SwitcherWidget[K]{key: key, build: build, duration: 200 * time.Millisecond, ease: EaseOut}
 	s.comp = Component(func() Widget {
-		s.mounted = true
 		owner := reactive.CurrentOwner()
 		OnCleanup(func() {
 			for _, e := range s.entries {
@@ -87,20 +88,13 @@ func Switcher[K comparable](key Readable[K], build func(K) Widget) *SwitcherWidg
 	return s
 }
 
-func (s *SwitcherWidget[K]) checkConfig() {
-	if s.mounted {
-		panic("ggui: Switcher configured after mount")
-	}
-}
-
 // Fade fades the subtrees in and out; it is the default until Slide or
 // Scale is set, and combines with them.
-func (s *SwitcherWidget[K]) Fade() *SwitcherWidget[K] { s.checkConfig(); s.fade = true; return s }
+func (s *SwitcherWidget[K]) Fade() *SwitcherWidget[K] { s.fade = true; return s }
 
 // Slide moves an entering subtree in from dx, dy away, and a leaving one out
 // the same way.
 func (s *SwitcherWidget[K]) Slide(dx, dy float64) *SwitcherWidget[K] {
-	s.checkConfig()
 	s.dx, s.dy = dx, dy
 	return s
 }
@@ -108,21 +102,18 @@ func (s *SwitcherWidget[K]) Slide(dx, dy float64) *SwitcherWidget[K] {
 // Scale grows an entering subtree from the given factor, and shrinks a
 // leaving one to it.
 func (s *SwitcherWidget[K]) Scale(from float64) *SwitcherWidget[K] {
-	s.checkConfig()
 	s.from = from
 	return s
 }
 
 // Duration sets how long a switch takes, 200ms by default.
 func (s *SwitcherWidget[K]) Duration(d time.Duration) *SwitcherWidget[K] {
-	s.checkConfig()
 	s.duration = d
 	return s
 }
 
 // Easing sets the curve, EaseOut by default.
 func (s *SwitcherWidget[K]) Easing(e Easing) *SwitcherWidget[K] {
-	s.checkConfig()
 	s.ease = e
 	return s
 }
@@ -132,10 +123,10 @@ func (s *SwitcherWidget[K]) change(v K, owner *reactive.Computation, first bool)
 	now := FrameTime()
 	for _, e := range s.entries {
 		if !e.leaving {
-			e.from, e.since, e.leaving = e.progress(now, s.duration), now, true
+			e.from, e.since, e.leaving = e.progress(now), now, true
 		}
 	}
-	e := &switchEntry{since: now, from: pick(first, 1.0, 0.0)}
+	e := &switchEntry{since: now, from: pick(first, 1.0, 0.0), d: s.duration}
 	var child Widget
 	reactive.WithOwner(owner, func() {
 		// A unique root gives remounted controls fresh identities.
@@ -174,7 +165,7 @@ func (b *switcherBody[K]) Layout(c Constraints, env Env) Size {
 	s.reduced = env.ReducedMotion()
 	now := FrameTime()
 	s.entries = slices.DeleteFunc(s.entries, func(e *switchEntry) bool {
-		if e.leaving && (s.reduced || e.progress(now, s.duration) <= 0) {
+		if e.leaving && (s.reduced || e.progress(now) <= 0) {
 			e.dispose()
 			return true
 		}
@@ -183,7 +174,7 @@ func (b *switcherBody[K]) Layout(c Constraints, env Env) Size {
 	s.sizes = s.sizes[:0]
 	var total Size
 	for _, e := range s.entries {
-		e.t.drive(pick(s.reduced, 1.0, e.progress(now, s.duration)), e.leaving)
+		e.t.drive(pick(s.reduced, 1.0, e.progress(now)), e.leaving)
 		size := e.t.Layout(c.Loosen(), env)
 		s.sizes = append(s.sizes, size)
 		total.W, total.H = max(total.W, size.W), max(total.H, size.H)

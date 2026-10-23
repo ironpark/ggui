@@ -184,3 +184,14 @@ func TestTweenAndSpringOfWithFollowASource(t *testing.T) {
 		t.Fatalf("followers ended at %v and %v", Untrack(tw.Get), Untrack(sp.Get))
 	}
 }
+
+// A missing lerp or Vector fails where it is given, not frames later in
+// the animation step.
+func TestTweenWithAndSpringWithRejectMissingFuncs(t *testing.T) {
+	t.Parallel()
+	mustPanic(t, "TweenWith(nil lerp)", func() { TweenWith(Pt(0, 0), time.Second, nil) })
+	mustPanic(t, "SpringWith(zero Vector)", func() { SpringWith(Pt(0, 0), Vector[Point]{}) })
+	if r := Reverse(nil); r(0.25) != 0.25 {
+		t.Fatalf("Reverse(nil)(0.25) = %v, want linear", r(0.25))
+	}
+}

@@ -150,3 +150,46 @@ func TestTimelineStopsWithItsOwner(t *testing.T) {
 		t.Fatal("a disposed timeline moved")
 	}
 }
+
+// A done callback that plays a repeating timeline again starts a fresh run
+// from the next step instead of looping over the time before it.
+func TestTimelineReplayedFromOnDoneStartsFresh(t *testing.T) {
+	t.Parallel()
+	activeWorld().anims.list = nil
+	tl := Timeline(100 * time.Millisecond).Repeat(-1)
+	replayed := false
+	tl.OnDone(func() {
+		if !replayed {
+			replayed = true
+			tl.Reverse()
+		}
+	})
+	tl.Play()
+	t0 := time.Unix(0, 0)
+	stepAt(t0, 0, 150*time.Millisecond)
+	if !replayed || !tl.Running() {
+		t.Fatalf("replayed %v running %v", replayed, tl.Running())
+	}
+	stepAt(t0, 160*time.Millisecond, 185*time.Millisecond)
+	if got := Untrack(tl.Get); math.Abs(got-0.75) > 1e-9 {
+		t.Fatalf("25ms into the reversed run the progress is %v, want 0.75", got)
+	}
+	tl.Stop()
+}
+
+// A duration cut to zero mid-run lands the timeline on its end; an endless
+// repeat must not spin forever on cycles that take no time.
+func TestTimelineDurationCutToZeroMidRunLands(t *testing.T) {
+	t.Parallel()
+	activeWorld().anims.list = nil
+	done := 0
+	tl := Timeline(100 * time.Millisecond).Repeat(-1).OnDone(func() { done++ })
+	tl.Play()
+	t0 := time.Unix(0, 0)
+	stepAt(t0, 0, 10*time.Millisecond)
+	tl.Duration(0)
+	stepAt(t0, 20*time.Millisecond)
+	if Untrack(tl.Get) != 1 || tl.Running() || done != 1 {
+		t.Fatalf("after Duration(0): progress %v running %v done %d", Untrack(tl.Get), tl.Running(), done)
+	}
+}

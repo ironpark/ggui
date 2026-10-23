@@ -70,11 +70,28 @@ func TestSwitcherUnderReducedMotionSwitchesAtOnce(t *testing.T) {
 	}
 }
 
-func TestSwitcherRejectsConfigAfterMount(t *testing.T) {
+// Options are value setters: changed after mount, they apply from the
+// next switch, and a switch under way keeps the duration it started with.
+func TestSwitcherOptionsApplyFromTheNextSwitch(t *testing.T) {
 	t.Parallel()
-	sw := Switcher(State(0), func(int) Widget { return Box() })
-	p := NewProbe(sw, Sz(10, 10))
+	key := State(0)
+	var rects [3]Rect
+	sw := Switcher(key, func(k int) Widget { return probe(50, 20, &rects[k]) }).
+		Slide(0, 10).Easing(EaseLinear).Duration(100 * time.Millisecond)
+	p := NewProbe(Column(sw), Sz(100, 100))
 	defer p.Close()
 	p.Frame()
-	mustPanic(t, "Duration after mount", func() { sw.Duration(time.Second) })
+	sw.Duration(200*time.Millisecond).Slide(0, 20)
+	key.Set(1)
+	p.Advance(0)
+	p.Advance(0)
+	p.Advance(100 * time.Millisecond)
+	if rects[1].Origin.Y != 10 {
+		t.Fatalf("half way through a 200ms slide of 20 the new subtree is at y=%v, want 10", rects[1].Origin.Y)
+	}
+	sw.Duration(time.Second)
+	p.Advance(50 * time.Millisecond)
+	if rects[1].Origin.Y != 5 {
+		t.Fatalf("a duration changed mid-switch moved it to y=%v, want 5", rects[1].Origin.Y)
+	}
 }

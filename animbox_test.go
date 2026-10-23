@@ -62,3 +62,32 @@ func TestAnimatedBoxUnderReducedMotionJumps(t *testing.T) {
 		t.Fatalf("reduced motion width %v, want 200 at once", got.Size.W)
 	}
 }
+
+// Zero sizes to the child, so no number between leads to it: a box growing
+// from zero starts at the child's size, and one shrinking to zero lands.
+func TestAnimatedBoxEasesFromTheChildSize(t *testing.T) {
+	t.Parallel()
+	width := State(0.0)
+	var got Rect
+	box := AnimatedBox(probe(60, 10, &got)).BindWidth(width).Easing(EaseLinear).Duration(100 * time.Millisecond)
+	p := NewProbe(Column(box), Sz(300, 100))
+	defer p.Close()
+	p.Frame()
+	if got.Size.W != 60 {
+		t.Fatalf("sized to the child: %v, want 60", got.Size.W)
+	}
+	width.Set(160)
+	p.Advance(0)
+	p.Advance(0)
+	p.Advance(50 * time.Millisecond)
+	if got.Size.W != 110 {
+		t.Fatalf("half way from the child's 60 to 160: %v, want 110", got.Size.W)
+	}
+	p.Advance(time.Second)
+	p.Frame()
+	width.Set(0)
+	p.Frame()
+	if got.Size.W != 60 {
+		t.Fatalf("back to the child's size: %v, want 60 at once", got.Size.W)
+	}
+}

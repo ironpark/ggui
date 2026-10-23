@@ -193,7 +193,9 @@ func Presence(show Readable[bool], child Widget) Widget {
 			return struct {
 			}{}
 		})
-		p := Tween(initial, t.duration).Easing(t.ease)
+		// The tween is linear: the Transition applies its easing to the
+		// progress it is driven with, and a curve here would apply twice.
+		p := Tween(initial, t.duration).Easing(EaseLinear)
 		// Read the duration at the toggle rather than at setup, so a
 		// Duration set from Layout — a theme token, say — is not frozen to
 		// whatever it was on the first frame. Tweened.Set reads it here too,

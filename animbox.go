@@ -30,6 +30,7 @@ type AnimatedBoxWidget struct {
 	widthTo, heightTo       follower[float64]
 	radiusTo, borderWidthTo follower[float64]
 	paddingTo               follower[EdgeInsets]
+	size                    Size // as the last layout left it
 }
 
 // AnimatedBox wraps at most one child, as Box does, and animates its looks
@@ -99,7 +100,8 @@ func (a *AnimatedBoxWidget) BindRadius(r Readable[float64]) *AnimatedBoxWidget {
 // Size fixes both dimensions. Zero leaves that dimension to the child.
 func (a *AnimatedBoxWidget) Size(w, h float64) *AnimatedBoxWidget { return a.Width(w).Height(h) }
 
-// Width fixes the width. Zero leaves it to the child.
+// Width fixes the width. Zero leaves it to the child: a change to zero
+// lands at once, and one from zero eases from the size the child gave.
 func (a *AnimatedBoxWidget) Width(w float64) *AnimatedBoxWidget { return animSet(a, &a.width, w) }
 
 // BindWidth follows a non-nil width reader.
@@ -107,7 +109,7 @@ func (a *AnimatedBoxWidget) BindWidth(r Readable[float64]) *AnimatedBoxWidget {
 	return animBind(a, &a.width, r, "BindWidth")
 }
 
-// Height fixes the height. Zero leaves it to the child.
+// Height fixes the height. Zero leaves it to the child, as in Width.
 func (a *AnimatedBoxWidget) Height(h float64) *AnimatedBoxWidget { return animSet(a, &a.height, h) }
 
 // BindHeight follows a non-nil height reader.
@@ -139,10 +141,11 @@ func (a *AnimatedBoxWidget) Layout(c Constraints, env Env) Size {
 	b.Border(a.borderWidthTo.follow(a.borderWidth.Get(), d, a.ease, LerpFloat),
 		a.borderTo.follow(ResolveColor(a.border.Get(), env), d, a.ease, LerpColor))
 	b.Radius(a.radiusTo.follow(a.radius.Get(), d, a.ease, LerpFloat))
-	b.Width(a.widthTo.follow(a.width.Get(), d, a.ease, LerpFloat))
-	b.Height(a.heightTo.follow(a.height.Get(), d, a.ease, LerpFloat))
+	b.Width(followSize(&a.widthTo, a.width.Get(), a.size.W, d, a.ease))
+	b.Height(followSize(&a.heightTo, a.height.Get(), a.size.H, d, a.ease))
 	b.Padding(a.paddingTo.follow(a.padding.Get(), d, a.ease, LerpInsets))
-	return b.Layout(c, env)
+	a.size = b.Layout(c, env)
+	return a.size
 }
 
 // Paint implements Widget.
@@ -174,4 +177,16 @@ func (f *follower[T]) follow(target T, d time.Duration, e Easing, lerp func(a, b
 		f.tw.Duration(d).Easing(e).Set(target)
 	}
 	return f.tw.Get()
+}
+
+// followSize eases a width or height, where zero is no number on the way
+// but "as the child sizes it": a move to zero lands at once, and a move
+// away from it starts at shown, the size the box last had.
+func followSize(f *follower[float64], target, shown float64, d time.Duration, e Easing) float64 {
+	if target <= 0 {
+		d = 0
+	} else if f.tw == nil && shown > 0 && d > 0 {
+		reactive.WithOwner(nil, func() { f.tw = TweenWith(shown, d, LerpFloat) })
+	}
+	return f.follow(target, d, e, LerpFloat)
 }

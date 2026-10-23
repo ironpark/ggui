@@ -130,6 +130,14 @@ func (tl *TimelineValue) step(now time.Time) bool {
 	if !tl.running {
 		return false
 	}
+	if tl.duration <= 0 {
+		// Duration was cut to zero mid-run: no cycle would ever advance the
+		// clock, so land on the end as run does, rather than loop for ever.
+		tl.running = false
+		tl.sig.Set(pick(tl.dir > 0, 1.0, 0.0))
+		tl.finish()
+		return false
+	}
 	if tl.start.IsZero() {
 		tl.start = now
 	}
@@ -153,9 +161,12 @@ func (tl *TimelineValue) step(now time.Time) bool {
 		if tl.left > 0 {
 			tl.left--
 		}
+		tl.sig.Set(end) // what a done callback reads
 		tl.finish()
-		if !tl.running {
-			return false // a done callback stopped it
+		if !tl.running || tl.start.IsZero() {
+			// A done callback stopped it, or played it again from where it
+			// stands: that new run takes its start from the next step.
+			return tl.running
 		}
 		if tl.alternate {
 			tl.from, tl.dir = end, -tl.dir

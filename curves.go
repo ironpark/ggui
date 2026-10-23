@@ -79,8 +79,14 @@ func Interval(begin, end float64, e Easing) Easing {
 
 // Reverse returns e flipped end for end: t maps to 1 - e(1-t), so an easing
 // in becomes the matching easing out. Use it for the way back, so a panel
-// that slid in with EaseOutBack leaves with the same curve mirrored.
-func Reverse(e Easing) Easing { return func(t float64) float64 { return 1 - e(1-t) } }
+// that slid in with EaseOutBack leaves with the same curve mirrored. A nil
+// e is linear, as in Interval.
+func Reverse(e Easing) Easing {
+	if e == nil {
+		return EaseLinear
+	}
+	return func(t float64) float64 { return 1 - e(1-t) }
+}
 
 // EaseInOutCubic is EaseInOut, by its full name.
 func EaseInOutCubic(t float64) float64 { return EaseInOut(t) }

@@ -106,8 +106,9 @@ ggui.Presence(open, ggui.Transition(panel).Slide(0, -8).Fade())
 `Switcher(key, build)` is `Key` that cross-fades: when the key changes the new
 subtree enters while the old one plays the same animation backwards, inert,
 and is disposed once gone. The first subtree appears at once. Configure it with
-`.Fade()`, `.Slide(dx, dy)`, `.Scale(from)`, `.Duration(d)` and `.Easing(e)`
-before mount; subtrees are stacked at the top-left corner.
+`.Fade()`, `.Slide(dx, dy)`, `.Scale(from)`, `.Duration(d)` and `.Easing(e)`;
+a change after mount applies from the next switch. Subtrees are stacked at the
+top-left corner.
 
 ```go
 ggui.Switcher(tab, page).Slide(0, 8).Duration(180 * time.Millisecond)
@@ -116,7 +117,9 @@ ggui.Switcher(tab, page).Slide(0, 8).Duration(180 * time.Millisecond)
 `AnimatedBox(child)` is a Box whose `Fill`, `Border`, `Radius`, `Width`,
 `Height` and `Padding` ease to each new value, set or bound (`BindFill`,
 `BindBorderColor`, `BindRadius`, `BindWidth`, `BindHeight`, `BindPadding`),
-over `.Duration(d)` with `.Easing(e)`. Theme colors resolve before they blend,
+over `.Duration(d)` with `.Easing(e)`. A zero width or height sizes to the
+child, as in Box: a change to zero lands at once, and one from zero eases from
+the size the child gave. Theme colors resolve before they blend,
 so a theme switch fades too. Keep one box and change its values: a box built
 anew starts where it is told.
 

@@ -129,6 +129,9 @@ func Tween[T Number](v T, d time.Duration) *Tweened[T] { return TweenWith(v, d, 
 //
 //	at := ggui.TweenWith(ggui.Pt(0, 0), 200*time.Millisecond, ggui.LerpPoint)
 func TweenWith[T any](v T, d time.Duration, lerp func(a, b T, t float64) T) *Tweened[T] {
+	if lerp == nil {
+		panic("ggui: TweenWith requires a non-nil lerp")
+	}
 	t := &Tweened[T]{w: ownerWorld(), sig: State(v), duration: d, ease: EaseOut, lerp: lerp, from: v, to: v}
 	if reactive.CurrentOwner() != nil {
 		OnCleanup(func() {
@@ -263,6 +266,9 @@ func Spring[T Number](v T) *Sprung[T] {
 //
 //	at := ggui.SpringWith(ggui.Pt(0, 0), ggui.PointVector)
 func SpringWith[T any](v T, vec Vector[T]) *Sprung[T] {
+	if vec.Split == nil || vec.Join == nil {
+		panic("ggui: SpringWith requires a Vector with Split and Join")
+	}
 	c := vec.Split(v)
 	s := &Sprung[T]{w: ownerWorld(), sig: State(v), vec: vec, stiffness: 170, damping: 18, precision: 0.01, goal: v, pos: c, to: c}
 	if reactive.CurrentOwner() != nil {
