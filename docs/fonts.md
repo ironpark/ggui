@@ -27,6 +27,27 @@ on a `Font` chooses a chain of your own and `NoFallback()` turns it off.
 `LoadFontFile` also reads the first face of a `.ttc`; `LoadFontCollection`
 returns them all.
 
+### Right-to-left text
+
+Text is reordered by the Unicode Bidirectional Algorithm, so Arabic or Hebrew
+mixed into a line reads correctly, and each right-to-left run is shaped right
+to left by ggfx with its script (and the language in `LanguageKey`, when one is
+provided) so Arabic letters join. `Directionality(DirRTL, child)` makes a
+subtree read right to left: paragraphs order their runs from the right, `Text`
+and `RichText` start at the right edge unless `Align` says otherwise, a `Row`
+puts its first child rightmost and a `Column` puts `AlignStart` children on the
+right. `Env.Direction()` reads it in a custom widget. `Align`'s `Left` and
+`Right` stay absolute.
+
+```go
+ggui.Provide(ggui.LanguageKey, "ar",
+	ggui.Directionality(ggui.DirRTL, ggui.Text("مرحبا بالعالم")))
+```
+
+Levels are resolved line by line after wrapping, not across a whole
+paragraph, and a right-to-left run is shaped apart from the runs of other
+fonts in its fallback chain.
+
 ### Font weights
 
 `TextStyle.Weight` asks for a CSS weight, from `ggui.WeightThin` (100) to

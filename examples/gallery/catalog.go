@@ -18,6 +18,7 @@ var previewDetails = map[string]previewInfo{
 	"Reactive blocks":          {"Data", "Cancellable search, await branches, keyed row identity and component cleanup."},
 	"Theme presets":            {"Layout", "shadcn semantic tokens: seven base palettes, seventeen accents, Nova and Rhea geometry."},
 	"Icons":                    {"Inputs", "Embedded Lucide SVGs, semantic placeholders and scoped icon-set overrides."},
+	"Rich text":                {"Inputs", "Styled spans in one paragraph, tappable links, selection and copy, and right-to-left text."},
 	"Emoji":                    {"Inputs", "Color emoji in ordinary text and editors, with skin tones, flags, keycaps and joined sequences."},
 	"Attachment":               {"Data", "File and image attachments, upload states, sizes, independent actions and snapping groups."},
 	"Bubble":                   {"Layout", "Seven conversation surfaces, sender alignment, reactions and expandable content."},
