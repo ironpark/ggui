@@ -197,3 +197,34 @@ word is wider than the line, so scripts without spaces wrap too. `.Size(px)`,
 default font is the platform's (see [Fonts](fonts.md#choose-text-fonts));
 `LoadFont(ttf)` or `LoadFontFile(path)` load your own, and `SetDefaultFont`
 makes one the default.
+
+### Rich text
+
+`RichText` lays out spans as one paragraph: they wrap together across span
+boundaries and share each line's baseline. A `Span` inherits the paragraph's
+style, and its setters (`Color`, `Weight`, `Size`, `Font`, `Style`,
+`Underline`) override it. `OnTap` makes a span a link: it takes clicks and
+Enter once Tab reaches it, shows the pointer cursor, and a screen reader reads
+it as a link under the paragraph. `MaxLines`, `Ellipsis`, `NoWrap` and `Align`
+work as on `Text`; `Spans` and `BindSpans` replace the spans after mount.
+
+```go
+ggui.RichText(
+	ggui.Span("Read the "),
+	ggui.Span("guide").Color(accent).Underline().OnTap(openGuide),
+	ggui.Span(" before you start.").Weight(ggui.WeightBold),
+).MaxLines(2)
+```
+
+### Selectable text
+
+`.Selectable()` on a `Text` or a `RichText` lets the reader select and copy:
+drag to select, double-click for a word, triple-click for the line,
+Shift-click to extend. Once a click has focused it, ⌘A/Ctrl+A selects all and
+⌘C/Ctrl+C copies through the app's clipboard. The selection is drawn in the
+`EditorStyle` Selection color while the text has focus; it is not a Tab stop.
+`RichTextWidget.Selection` and `SelectedText` read it back.
+
+```go
+ggui.Text(orderID).Selectable()
+```

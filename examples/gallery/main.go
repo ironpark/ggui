@@ -466,6 +466,18 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 		entries = append(entries, chatPreviews()...)
 		entries = append(entries, reactivityPreview())
 		entries = append(entries, preview("Carousel", ui.Carousel(carouselIndex, ui.Card(ggui.Center(ui.Title("1"))), ui.Card(ggui.Center(ui.Title("2"))), ui.Card(ggui.Center(ui.Title("3")))).Height(180)))
+		entries = append(entries, preview("Rich text", ggui.Column(
+			ggui.RichText(
+				ggui.Span("Spans wrap as one paragraph, in "),
+				ggui.Span("bold").Weight(ggui.WeightBold),
+				ggui.Span(", "),
+				ggui.Span("larger").Size(20),
+				ggui.Span(" or "),
+				ggui.Span("linked").Color(t.Primary).Underline().OnTap(func() { toasts.Push(ui.Toast("Link", "The span was tapped.")) }),
+				ggui.Span(" text. Drag across it to select, then copy."),
+			).Selectable(),
+			ggui.Directionality(ggui.DirRTL, ggui.Text("مرحبا بالعالم · שלום עולם · ggui").Selectable()),
+		).Space(1).Stretch()))
 		entries = append(entries, preview("Input OTP", ui.Field("Verification code", ui.InputOTP(otpValue, 6).Groups(3, 3)).Help("Paste a code or edit individual slots.")))
 		entries = append(entries, preview("Charts", ggui.Column(
 			chartPreview(),

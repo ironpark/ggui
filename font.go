@@ -587,6 +587,12 @@ type lineSpan struct{ start, end int }
 // wrapSpans is wrapText for an editor: the same breaks, as offsets into s
 // rather than copies, so a caret position maps to a line and back.
 func wrapSpans(s string, face text.Face, maxW float64) []lineSpan {
+	return wrapSpansBy(s, func(a, b int) float64 { return lineWidth(s[a:b], face) }, maxW)
+}
+
+// wrapSpansBy is wrapSpans with width measuring s[a:b] however the caller
+// draws it, so text in several styles wraps as one paragraph.
+func wrapSpansBy(s string, width func(a, b int) float64, maxW float64) []lineSpan {
 	var out []lineSpan
 	start := 0
 	for {
@@ -594,7 +600,8 @@ func wrapSpans(s string, face text.Face, maxW float64) []lineSpan {
 		if i := strings.IndexByte(s[start:], '\n'); i >= 0 {
 			stop = start + i
 		}
-		for _, sp := range wrapParagraph(s[start:stop], face, maxW) {
+		off := start
+		for _, sp := range wrapParagraphBy(s[start:stop], func(a, b int) float64 { return width(off+a, off+b) }, maxW) {
 			out = append(out, lineSpan{start + sp.start, start + sp.end})
 		}
 		if stop == len(s) {
@@ -607,7 +614,12 @@ func wrapSpans(s string, face text.Face, maxW float64) []lineSpan {
 // wrapParagraph wraps text without hard breaks: greedily by words, and
 // between grapheme clusters when a word alone is wider than maxW.
 func wrapParagraph(p string, face text.Face, maxW float64) []lineSpan {
-	if maxW <= 0 || lineWidth(p, face) <= maxW {
+	return wrapParagraphBy(p, func(a, b int) float64 { return lineWidth(p[a:b], face) }, maxW)
+}
+
+// wrapParagraphBy is wrapParagraph with width measuring p[a:b].
+func wrapParagraphBy(p string, width func(a, b int) float64, maxW float64) []lineSpan {
+	if maxW <= 0 || width(0, len(p)) <= maxW {
 		return []lineSpan{{0, len(p)}}
 	}
 	var lines []lineSpan
@@ -625,19 +637,19 @@ func wrapParagraph(p string, face text.Face, maxW float64) []lineSpan {
 			i++
 		}
 		wend := i
-		if lineEnd > lineStart && lineWidth(p[lineStart:wend], face) > maxW {
+		if lineEnd > lineStart && width(lineStart, wend) > maxW {
 			// Does not fit after what is on the line: break before it.
 			lines = append(lines, lineSpan{lineStart, lineEnd})
 			lineStart, lineEnd = wstart, wstart
 		}
-		if lineWidth(p[lineStart:wend], face) <= maxW {
+		if width(lineStart, wend) <= maxW {
 			lineEnd = wend
 			continue
 		}
 		// A word wider than the line, alone on it: break between grapheme clusters.
 		for j := lineStart; j < wend; {
 			k := textedit.NextGrapheme(p, j)
-			if k < wend && lineWidth(p[lineStart:textedit.NextGrapheme(p, k)], face) > maxW {
+			if k < wend && width(lineStart, textedit.NextGrapheme(p, k)) > maxW {
 				lines = append(lines, lineSpan{lineStart, k})
 				lineStart, j = k, k
 				continue

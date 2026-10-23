@@ -79,6 +79,7 @@ type TextWidget struct {
 	ellipsis      bool
 	maxLines      int
 	align         float64
+	alignSet      bool
 	role          Role
 	styleKey      EnvKey[TextStyle]
 	styleFallback TextStyle
@@ -93,6 +94,8 @@ type TextWidget struct {
 	natural  Size
 	ascent   float64 // the first baseline, below the top
 	wrapped  wrapKey
+	bidi     textBidi        // the lines in visual order, when the direction or the text needs it
+	rich     *RichTextWidget // what a Selectable Text lays out and paints as
 }
 
 // wrapKey is the input wrapText was last run with.
@@ -267,10 +270,12 @@ func (t *TextWidget) MaxLines(n int) *TextWidget {
 }
 
 // Align places each line within the widget's width by fraction: 0 is left,
-// 0.5 centered, 1 right.
+// 0.5 centered, 1 right. Unset, lines start at the reading direction's
+// start: the left, or the right under DirRTL.
 func (t *TextWidget) Align(x float64) *TextWidget {
 	defer property.Watch(&t.props, &t.align)()
-	t.align = x
+	defer property.Watch(&t.props, &t.alignSet)()
+	t.align, t.alignSet = x, true
 	return t
 }
 
@@ -337,12 +342,21 @@ func (t *TextWidget) Layout(c Constraints, env Env) Size {
 		t.natural = Sz(w, float64(len(t.lines)-1)*t.spacing()+m.HAscent+m.HDescent)
 		t.ascent = m.HAscent
 	}
+	t.layoutBidi(env)
+	if t.rich != nil {
+		return t.layoutRich(c, env, style.Merge(t.style))
+	}
 	return c.Constrain(t.natural)
 }
 
 // Baseline implements Baseliner: the first line's baseline is its ascent
 // below the top, where paintLines puts the line.
-func (t *TextWidget) Baseline() (float64, bool) { return t.ascent, t.resolved.Font != nil }
+func (t *TextWidget) Baseline() (float64, bool) {
+	if t.rich != nil {
+		return t.rich.Baseline()
+	}
+	return t.ascent, t.resolved.Font != nil
+}
 
 // Paint implements Widget.
 func (t *TextWidget) Paint(dst *Canvas, r Rect) {
@@ -351,6 +365,10 @@ func (t *TextWidget) Paint(dst *Canvas, r Rect) {
 	// which input scans backwards on every pointer event. Text a control
 	// already painted as its own label is that control's name, not an
 	// element of its own, so it stays quiet there.
+	if t.rich != nil {
+		t.rich.Paint(dst, r)
+		return
+	}
 	t.paintLines(dst, r, func(op *text.DrawOptions, x, y float64) {
 		op.GeoM.Translate(dst.px(x), dst.px(y))
 	})
@@ -369,10 +387,15 @@ func (t *TextWidget) paintLines(dst *Canvas, r Rect, place func(op *text.DrawOpt
 	}
 	face := t.faceAt(dst.Scale())
 	op := &text.DrawOptions{}
-	op.ColorScale.ScaleWithColor(pick(t.style.Color != nil && !IsEnvColor(t.style.Color), t.style.Color, t.current().Color))
+	col := pick(t.style.Color != nil && !IsEnvColor(t.style.Color), t.style.Color, t.current().Color)
+	op.ColorScale.ScaleWithColor(col)
+	align := pick(t.alignSet, t.align, startAlign(t.bidi.dir))
 	for i, line := range t.lines {
-		x := r.Origin.X + (r.Size.W-t.widths[i])*t.align
+		x := r.Origin.X + (r.Size.W-t.widths[i])*align
 		y := r.Origin.Y + float64(i)*t.spacing()
+		if t.paintBidi(dst, i, r, align, y, col, place) {
+			continue
+		}
 		op.GeoM.Reset()
 		place(op, x, y)
 		drawText(dst.Image, line, face, op)
@@ -888,6 +911,7 @@ func (f *flow) layout(c Constraints, env Env) Size {
 		}
 		pos += f.main(s) + between
 	}
+	f.mirror(result, env)
 	return result
 }
 
