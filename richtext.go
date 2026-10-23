@@ -243,7 +243,9 @@ func (t *RichTextWidget) Layout(c Constraints, env Env) Size {
 	p := &t.para
 	var sb strings.Builder
 	p.runs = p.runs[:0]
-	keys := t.runKeys[:0]
+	// A fresh slice: reusing t.runKeys' array would overwrite the keys it
+	// is compared with below.
+	keys := make([]runKey, 0, len(t.cur))
 	for i, sp := range t.cur {
 		if sp.text == "" {
 			continue
@@ -257,12 +259,14 @@ func (t *RichTextWidget) Layout(c Constraints, env Env) Size {
 	p.base = base
 	p.dir, p.lang = env.Direction(), env.Language()
 	t.selection = env.EditorStyle().Selection
-	key := richKey{generation: fontGen(), text: sb.String(), maxW: c.MaxW, wrap: t.wrap, ellipsis: t.ellipsis, maxLines: t.maxLines,
+	// As Text's: the width only matters when something wraps or cuts to it.
+	fits := t.wrap || t.ellipsis || t.maxLines > 0
+	key := richKey{generation: fontGen(), text: sb.String(), maxW: pick(fits, c.MaxW, 0), wrap: t.wrap, ellipsis: t.ellipsis, maxLines: t.maxLines,
 		dir: p.dir, lang: p.lang, base: runKey{font: base.Font, size: base.Size, lineHeight: base.LineHeight, weight: base.Weight}}
 	if key != t.laid || !slices.Equal(keys, t.runKeys) || p.lines == nil {
 		t.laid = key
 		p.text = key.text
-		p.layout(c.MaxW, t.wrap, t.maxLines, t.ellipsis)
+		p.layout(key.maxW, t.wrap, t.maxLines, t.ellipsis)
 	}
 	t.runKeys = keys
 	if t.ed.Text != p.text {
@@ -314,10 +318,12 @@ func (t *RichTextWidget) Paint(dst *Canvas, r Rect) {
 	}
 	switch {
 	case t.selectable:
-		dst.DescribeNode(r, t, described)
+		// The paragraph's regions go first, so that a link's, registered
+		// after them, are on top and take the clicks and the cursor.
 		dst.HitPointer(r, t)
 		dst.HitKey(r, t)
 		dst.HitCursor(r, CursorShapeText)
+		dst.DescribeNode(r, t, described)
 	case p.text != "" && !dst.named(r):
 		dst.Node(r, Node{Role: pick(t.role != "", t.role, RoleText), Name: p.text}, described)
 	default:
