@@ -34,6 +34,7 @@ that were built long before it.
 - [Accessibility preferences](#accessibility-preferences)
 - [Theme presets](#theme-presets)
 - [GPU shadows](#gpu-shadows)
+- [Gradients](#gradients)
 - [Component appearance](#component-appearance)
 - [Component variants](#component-variants)
 - [Applying styles and a theme switch](#applying-styles-and-a-theme-switch)
@@ -532,6 +533,27 @@ Shadows do not reserve layout space or create hit regions. Add padding/gaps when
 needed; parent clipping and window bounds still clip them. The gallery's Shadows
 preview compares subtle, floating and colored treatments. Toast uses this same
 renderer, including its existing fade animation.
+
+## Gradients
+
+`Box.Gradient(g)` fills a box with a `Gradient`, over its `Fill` and under its
+border, with the box's rounded corners. A gradient is placed relative to the
+Rect it fills, so one value fits a box of any size:
+
+```go
+ggui.Box(content).Radius(12).Gradient(ggui.LinearGradient(math.Pi/4, ggui.Stops(from, to)...))
+ggui.Box().Size(64, 64).Gradient(ggui.RadialGradient(ggui.Stops(glow, transparent)...).Center(0.5, 0.3))
+ggui.Box().Size(48, 48).Radius(24).Gradient(ggui.SweepGradient(ggui.Stops(red, green, blue, red)...))
+```
+
+`LinearGradient(angle, stops...)` runs at `angle` radians clockwise from
+pointing right, far enough that its ends reach the corners, as CSS's does.
+`RadialGradient` reaches half the shorter side until `Radius` says otherwise;
+`SweepGradient` turns a full circle from `StartAngle`. `Stops(colors...)`
+spaces colors evenly; give `GradientStop{Offset, Color}` values to place them.
+Up to 16 stops are drawn, colors blend premultiplied, and stops may be theme
+tokens, resolved at layout. For custom drawing use `dst.FillGradientRect`,
+`dst.FillGradientRoundRect` and `dst.FillGradientPath`.
 
 ## Component appearance
 

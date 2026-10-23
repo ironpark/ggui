@@ -149,7 +149,7 @@ func press(e *semNode) bool {
 		return true
 	}
 	if p, ok := e.handler.(PointerHandler); ok {
-		at := Pt(e.full.Origin.X+e.full.Size.W/2, e.full.Origin.Y+e.full.Size.H/2)
+		at := e.space.local(Pt(e.full.Origin.X+e.full.Size.W/2, e.full.Origin.Y+e.full.Size.H/2))
 		p.HandlePointer(PointerEvent{Kind: PointerTap, Pos: at, Button: MouseButtonLeft})
 		return true
 	}

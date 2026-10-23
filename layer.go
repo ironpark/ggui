@@ -15,6 +15,10 @@ type LayerOptions struct {
 	// at its size.
 	Scale float64
 	About Point
+	// Transform moves the layer after Scale, in the Canvas's logical
+	// coordinates; the zero value leaves it in place. Hit regions stay
+	// where they were painted: Canvas.Transform moves them too.
+	Transform Affine
 }
 
 // Layer paints into an offscreen image the size of the window, then draws
@@ -32,10 +36,11 @@ type LayerOptions struct {
 // Without an image to draw into, Layer calls paint with c.
 func (c *Canvas) Layer(o LayerOptions, paint func(layer *Canvas)) {
 	scaled := o.Scale != 0 && o.Scale != 1
+	moved := !o.Transform.IsIdentity()
 	// Unscaled, nothing painted outside the clip can show, so the layer
 	// is cleared and composited over the clip alone.
 	var area image.Rectangle
-	if !scaled && c != nil && c.Image != nil {
+	if !scaled && !moved && c != nil && c.Image != nil {
 		area = c.Image.Bounds()
 	}
 	c.layer(area, paint, func(img *ggfx.Image) {
@@ -49,6 +54,10 @@ func (c *Canvas) Layer(o LayerOptions, paint func(layer *Canvas)) {
 			op.GeoM.Translate(-cx, -cy)
 			op.GeoM.Scale(o.Scale, o.Scale)
 			op.GeoM.Translate(cx, cy)
+		}
+		if moved {
+			op.Filter = ggfx.FilterLinear
+			op.GeoM.Concat(o.Transform.geoM(c.Scale()))
 		}
 		if o.Fade != 0 {
 			op.ColorScale.ScaleAlpha(float32(1 - o.Fade))

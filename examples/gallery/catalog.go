@@ -31,6 +31,7 @@ var previewDetails = map[string]previewInfo{
 	"Field":                    {"Inputs", "Labels, helper text and inline validation."},
 	"Choices":                  {"Inputs", "Checkboxes, radio groups, select menus and dropdown actions."},
 	"Shadows":                  {"Layout", "GPU-rendered soft shadows with configurable blur, spread and offset."},
+	"Effects":                  {"Layout", "Transforms that keep input aligned, gradients, shape clips, opacity and blurs."},
 	"Menubar":                  {"Navigation", "Coordinated File, Edit and View menus with arrow-key navigation."},
 	"Calendar":                 {"Inputs", "Single-date selection with day, week and month keyboard navigation."},
 	"Date picker":              {"Inputs", "A calendar popup for choosing an appointment date."},

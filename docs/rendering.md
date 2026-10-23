@@ -15,6 +15,7 @@ See [example conventions](README.md#start-here) before copying snippets.
 - [Layout caching](#layout-caching)
 - [Retained paint state](#retained-paint-state)
 - [Layers](#layers)
+- [Effects](#effects)
 - [Overlays](#overlays)
 
 ## HiDPI
@@ -165,6 +166,46 @@ rounded clip clears and composites only the part it covers; at the end of a fram
 the window frees any it did not need, and closing the app frees the rest. A
 widget therefore keeps no texture of its own, and ten rows fading in together
 cost one window-sized image rather than ten.
+
+## Effects
+
+Widgets that paint a subtree differently, all built on layers. None changes
+layout.
+
+```go
+ggui.Transform(card).Rotate(math.Pi / 12).Scale(1.1).Translate(0, -4)
+ggui.Transform(card).BindScale(ggui.Tween(1.0, 150*time.Millisecond)).Origin(0, 0)
+ggui.Opacity(panel, 0.6).BindOpacity(fade)
+ggui.ClipOval(avatar)
+ggui.ClipPath(photo, func(r ggui.Rect) *ggui.Path { return star(r) })
+ggui.Blur(content, 0).BindSigma(blur)
+ggui.BackdropBlur(ggui.Box(menu).Fill(glass).Radius(12), 16).Radius(12)
+```
+
+`Transform` scales, then turns, then moves its child about `Origin`, a
+fraction of its size and its centre by default; `Matrix` adds any `Affine`.
+Input goes through the same transform: a pointer is matched through the
+inverse, a handler gets `PointerEvent.Pos` (and a scroll's delta, turned and
+scaled) in the coordinates it painted in, drag-and-drop offsets are measured
+the same way, and semantics report the window Rect holding the turned shape.
+An `Overlay` scheduled inside paints through the same transform, so a popup
+or tooltip opens beside its moved anchor. For custom
+painting, `dst.Transform(m, paint)` does the same for an `Affine` m, and
+`LayerOptions.Transform` moves a layer's pixels without its hit regions. The
+layer is the window's size, so what lies outside the window before the
+transform moves it is not drawn.
+
+`Opacity` composites its child as a whole, so overlapping parts do not show
+through each other. `ClipOval` and `ClipPath`, and `dst.ClipOval(r, paint)`
+and `dst.ClipPath(path, paint)`, cut a subtree to a shape with antialiased
+edges; input outside the shape does not reach the child. `Path.Contains` and
+`Path.Bounds` answer the same questions for a path of your own.
+
+`Blur` and `dst.Blur(r, sigma, paint)` blur a subtree by a Gaussian of sigma
+logical pixels. `BackdropBlur` and `dst.BackdropBlur(r, radius, sigma)` blur
+what is already painted under r before the child paints, reading the image
+the Canvas draws into: inside a layer, only what that layer holds. Both blur
+in two separable passes, on a copy made smaller first when sigma is large.
 
 ## Overlays
 

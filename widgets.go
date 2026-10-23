@@ -507,6 +507,7 @@ type BoxWidget struct {
 	props       property.Owner
 	shadows     []ShadowStyle
 	fill        shownColor
+	gradient    [2]Gradient // as given and as painted; see BoxWidget.Gradient
 	radius      float64
 	borderWidth float64
 	borderColor shownColor
@@ -640,6 +641,7 @@ func (b *BoxWidget) Layout(c Constraints, env Env) Size {
 	defer b.props.Layout()()
 	b.fill.layout(env)
 	b.borderColor.layout(env)
+	b.gradient[1] = b.gradient[0].resolve(env)
 	for i, s := range b.shadows {
 		b.shownShadows[i].Color = ResolveColor(s.Color, env)
 	}
@@ -693,6 +695,7 @@ func (b *BoxWidget) Paint(dst *Canvas, r Rect) {
 		dst.Shadow(r, b.radius, s)
 	}
 	dst.FillRoundRect(r, b.radius, b.fill.shown)
+	dst.FillGradientRoundRect(r, b.radius, b.gradient[1])
 	if b.borderWidth > 0 {
 		dst.StrokeRoundRect(r, b.radius, b.borderWidth, b.borderColor.shown)
 	}

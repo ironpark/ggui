@@ -3,10 +3,10 @@ package ggui
 import (
 	"image"
 	"image/color"
+	"math"
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggfx/vector"
-	"github.com/ironpark/ggui/internal/render"
 )
 
 // Path is a reusable vector outline in logical pixels. Mutating a path invalidates
@@ -23,6 +23,12 @@ type Path struct {
 	// from, so a new mutator only has to bump this one field to invalidate them
 	// all rather than remember a flag per cache.
 	revision uint64
+
+	// outline is the path as its points, for Contains and Bounds, and
+	// flat that outline in straight lines as of flatRev.
+	outline []pathOp
+	flat    [][]Point
+	flatRev uint64
 }
 
 // gradientKey is everything besides path geometry that the coverage mask depends on.
@@ -34,24 +40,24 @@ type gradientKey struct {
 
 func (p *Path) MoveTo(x, y float64) {
 	p.path.MoveTo(float32(x), float32(y))
-	p.revision++
+	p.record(pathMove, Pt(x, y))
 }
 func (p *Path) LineTo(x, y float64) {
 	p.path.LineTo(float32(x), float32(y))
-	p.revision++
+	p.record(pathLine, Pt(x, y))
 }
 
 // QuadTo appends a quadratic Bezier segment.
 func (p *Path) QuadTo(x1, y1, x2, y2 float64) {
 	p.path.QuadTo(float32(x1), float32(y1), float32(x2), float32(y2))
-	p.revision++
+	p.record(pathQuad, Pt(x1, y1), Pt(x2, y2))
 }
 func (p *Path) CubicTo(x1, y1, x2, y2, x3, y3 float64) {
 	p.path.CubicTo(float32(x1), float32(y1), float32(x2), float32(y2), float32(x3), float32(y3))
-	p.revision++
+	p.record(pathCubic, Pt(x1, y1), Pt(x2, y2), Pt(x3, y3))
 }
-func (p *Path) Close() { p.path.Close(); p.revision++ }
-func (p *Path) Reset() { p.path.Reset(); p.revision++ }
+func (p *Path) Close() { p.path.Close(); p.record(pathClose) }
+func (p *Path) Reset() { p.path.Reset(); p.outline = p.outline[:0]; p.revision++ }
 func (p *Path) device(scale float64) *vector.Path {
 	if scale == 1 {
 		return &p.path
@@ -83,38 +89,45 @@ func (c *Canvas) StrokePath(path *Path, width float64, col color.Color) {
 	vector.StrokePath(c.Image, path.device(c.Scale()), &vector.StrokeOptions{Width: c.Px(width), LineJoin: vector.LineJoinRound}, pathOptions(col))
 }
 
-// FillPathGradient fills a path with a vertical premultiplied color gradient.
-// A reusable GPU coverage mask avoids translucent fan-triangulation artifacts.
-// The mask is rebuilt only when geometry, bounds or device scale changes.
+// FillPathGradient fills a path with a vertical premultiplied color gradient
+// from top to bottom of bounds: FillGradientPath with a LinearGradient at
+// π/2. A reusable GPU coverage mask avoids translucent fan-triangulation
+// artifacts. The mask is rebuilt only when geometry, bounds or device scale
+// changes.
 func (c *Canvas) FillPathGradient(path *Path, bounds Rect, top, bottom color.Color) {
-	if c == nil || c.Image == nil || path == nil || top == nil || bottom == nil || bounds.Empty() {
+	if top == nil || bottom == nil {
 		return
 	}
+	c.FillGradientPath(path, bounds, LinearGradient(math.Pi/2, Stops(top, bottom)...))
+}
+
+// coverage returns the path's coverage mask within bounds on c and where
+// its first pixel goes, building it if the path, bounds or scale changed.
+func (p *Path) coverage(c *Canvas, bounds Rect) (*ggfx.Image, image.Point, bool) {
 	scale := c.Scale()
-	device := path.device(scale)
+	device := p.device(scale)
 	coverage := device.Bounds().Intersect(c.physical(bounds))
 	w, h := coverage.Dx(), coverage.Dy()
 	if w <= 0 || h <= 0 {
-		return
+		return nil, image.Point{}, false
 	}
 	key := gradientKey{bounds: bounds, coverage: coverage, scale: scale}
-	if path.gradientRev != path.revision || path.gradientKey != key || path.gradientMask == nil {
-		if path.gradientMask == nil || path.gradientMask.Bounds().Dx() != w || path.gradientMask.Bounds().Dy() != h {
-			if path.gradientMask != nil {
-				path.gradientMask.Deallocate()
+	if p.gradientRev != p.revision || p.gradientKey != key || p.gradientMask == nil {
+		if p.gradientMask == nil || p.gradientMask.Bounds().Dx() != w || p.gradientMask.Bounds().Dy() != h {
+			if p.gradientMask != nil {
+				p.gradientMask.Deallocate()
 			}
-			path.gradientMask = ggfx.NewImage(w, h)
+			p.gradientMask = ggfx.NewImage(w, h)
 		} else {
-			path.gradientMask.Clear()
+			p.gradientMask.Clear()
 		}
 		var local vector.Path
 		op := &vector.AddPathOptions{}
 		op.GeoM.Translate(-float64(coverage.Min.X), -float64(coverage.Min.Y))
-		local.AddPath(path.device(scale), op)
-		vector.FillPath(path.gradientMask, &local, nil, pathOptions(color.White))
-		path.gradientKey = key
-		path.gradientRev = path.revision
+		local.AddPath(device, op)
+		vector.FillPath(p.gradientMask, &local, nil, pathOptions(color.White))
+		p.gradientKey = key
+		p.gradientRev = p.revision
 	}
-	render.VerticalGradient(c.Image, path.gradientMask, coverage.Min, render.Premul(top), render.Premul(bottom),
-		bounds.Size.H*scale, float64(coverage.Min.Y)-bounds.Origin.Y*scale)
+	return p.gradientMask, coverage.Min, true
 }

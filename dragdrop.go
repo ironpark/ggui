@@ -47,7 +47,7 @@ type appDrag struct {
 
 // pressDrag notes the drag source under a press, if there is one.
 func (in *inputState) pressDrag(at Point) {
-	r := in.topmost(func(r *hitRegion) bool { return r.drag != nil && r.rect.Contains(at) })
+	r := in.topmost(func(r *hitRegion) bool { return r.drag != nil && r.contains(at) })
 	in.drag = nil
 	if r != nil {
 		in.drag = &appDrag{candidate: keep(r), from: at}
@@ -76,10 +76,10 @@ func (in *inputState) updateAppDrag(f frameInput) {
 		d.source, d.value = src, src.dragValue()
 		in.releasePress(f.pos, f.mods)
 	}
-	d.source.dragMoved(f.pos, d.from.Sub(d.candidate.full.Origin))
+	d.source.dragMoved(d.candidate.at(f.pos), d.candidate.offset(d.from))
 	now := in.topmost(func(r *hitRegion) bool {
 		t, ok := r.pointer.(dropTarget)
-		return ok && r.rect.Contains(f.pos) && t.acceptsDrag(d.value)
+		return ok && r.contains(f.pos) && t.acceptsDrag(d.value)
 	})
 	if !in.continues(now, d.target) {
 		if d.target != nil {
@@ -97,7 +97,7 @@ func (in *inputState) updateAppDrag(f frameInput) {
 	if now != nil {
 		t := now.pointer.(dropTarget)
 		t.dragOver(false)
-		t.dropped(d.value, f.pos.Sub(now.full.Origin))
+		t.dropped(d.value, now.offset(f.pos))
 		dropped = true
 	}
 	in.drag = nil
