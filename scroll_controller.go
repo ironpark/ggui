@@ -97,7 +97,7 @@ func (c *ScrollController) JumpToKey(k any) {
 
 func (c *ScrollController) request(v float64, animate bool) {
 	c.keyed, c.key = false, nil
-	if c.scroll == nil || !c.scroll.laidOut {
+	if c.scroll == nil || !c.scroll.phys.painted {
 		c.pending = &scrollRequest{offset: v, animate: animate}
 		reactive.RequestLayout()
 		return

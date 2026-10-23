@@ -54,6 +54,9 @@ type scrollPhysics struct {
 	anim       Motion
 	animTo     float64
 	animating  bool
+
+	applied *scrollRequest // what attach applied in this layout, until paint
+	painted bool           // painted, so adopted what it replaces: requests apply at once
 }
 
 func (p *scrollPhysics) adopt(q *scrollPhysics) {
@@ -175,6 +178,17 @@ func (p *scrollPhysics) attach(s *ScrollWidget) {
 	if r := c.pending; r != nil {
 		c.pending = nil
 		s.animateTo(r.offset, r.animate)
+		// A rebuilt scroll adopts the one it replaces only at paint, which
+		// would overwrite what this did; Adopt applies it again.
+		p.applied = r
+	}
+}
+
+// reapply redoes, after Adopt, a request attach applied before it.
+func (p *scrollPhysics) reapply(s *ScrollWidget) {
+	if r := p.applied; r != nil {
+		p.applied = nil
+		s.animateTo(r.offset, r.animate)
 	}
 }
 
@@ -182,6 +196,7 @@ func (p *scrollPhysics) attach(s *ScrollWidget) {
 // a scroll once its input pauses.
 func (p *scrollPhysics) paint(s *ScrollWidget) {
 	now := FrameTime()
+	p.applied, p.painted = nil, true // Adopt, if any, has run
 	if p.animating {
 		s.cache.invalidate() // the next frame lays out the child for the next step
 	}

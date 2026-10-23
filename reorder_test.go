@@ -163,3 +163,39 @@ func TestReorderableScrollsItsScrollNearTheEdge(t *testing.T) {
 		t.Fatalf("the row dropped after scrolling stayed first: %v", got)
 	}
 }
+
+func TestReorderableKeysIgnoreFocusBehindAScrolledOutRow(t *testing.T) {
+	t.Parallel()
+	focusable := State("")
+	items := State([]string{"a", "b", "c", "d", "e", "f", "g", "h"})
+	offset := State(60.0)
+	// The field sits above the Scroll where row b, scrolled out of the
+	// window, would be drawn.
+	p := NewProbe(Column(
+		Box(TextInput(focusable)).Size(100, 30),
+		Box(Scroll(reorderFixture(items, map[string]Rect{}, true)).BindOffset(offset)).Size(100, 60),
+	), Sz(100, 200))
+	defer p.Close()
+	p.Frame()
+	p.Click(Pt(50, 15))
+	p.Frame()
+	p.Key("alt+down")
+	if got := Peek(items); !slices.Equal(got, []string{"a", "b", "c", "d", "e", "f", "g", "h"}) {
+		t.Fatalf("Alt+Down with focus outside the list moved a hidden row: %v", got)
+	}
+}
+
+func TestReorderableRowsAnswerScrollToKey(t *testing.T) {
+	t.Parallel()
+	items := State([]string{"a", "b", "c", "d", "e", "f", "g", "h"})
+	var sc ScrollController
+	p := NewProbe(Scroll(reorderFixture(items, map[string]Rect{}, false)).Controller(&sc), Sz(100, 60))
+	defer p.Close()
+	p.Frame()
+	sc.JumpToKey("f")
+	p.Frame()
+	p.Frame()
+	if sc.Offset() != 150 {
+		t.Fatalf("JumpToKey(f) reached %v, want 150", sc.Offset())
+	}
+}

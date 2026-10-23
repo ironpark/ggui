@@ -167,6 +167,7 @@ func (l *ReorderableWidget[T, K]) Paint(dst *Canvas, r Rect) {
 		dst.Paint(f.empty, r)
 		return
 	}
+	f.placeKey(r) // a ScrollController's ScrollToKey reaches these rows too
 	n := len(f.children)
 	now := FrameTime()
 	dur := l.env.Motion(reorderDuration)
@@ -235,7 +236,9 @@ func (l *ReorderableWidget[T, K]) Paint(dst *Canvas, r Rect) {
 			dy := m.Value(now)
 			st.painted[k] = f.offsets[i].Y + dy
 			rc := Rct(r.Origin.Add(f.offsets[i]).Add(Pt(0, dy)), f.sizes[i])
-			if keyed && rc.Contains(focus) {
+			// Only where the row shows: one scrolled out of a Scroll's
+			// window lies under whatever is drawn there instead.
+			if keyed && rc.Contains(focus) && (!dst.clipped || dst.clip.Contains(focus)) {
 				keyed = false
 				row := child.(*reorderRow[T, K])
 				dst.Shortcut(reorderUp, func() { row.moveBy(-1) })

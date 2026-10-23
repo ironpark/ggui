@@ -297,3 +297,51 @@ func TestScrollPagingTurnsAPageInTheGesturesDirection(t *testing.T) {
 		t.Fatalf("back by a quarter page settled at %v, want the previous page, 0", s.position())
 	}
 }
+
+func TestScrollControllerRequestSurvivesARebuiltScroll(t *testing.T) {
+	t.Parallel()
+	got := make([]Rect, 20)
+	var sc ScrollController
+	tick := State(0)
+	p := NewProbe(Reactive(func() Widget {
+		_ = tick.Get()
+		return Scroll(rows(20, 50, got)).Controller(&sc)
+	}), Sz(100, 100))
+	defer p.Close()
+	p.Frame()
+	sc.JumpTo(500)
+	p.Frame()
+	// The rebuilt scroll is laid out before it adopts the one it replaces;
+	// a request made in between must not be overwritten by the adoption.
+	tick.Set(1)
+	p.Flush()
+	sc.JumpTo(100)
+	p.Frame()
+	p.Frame()
+	if sc.Offset() != 100 || got[2].Origin.Y != 0 {
+		t.Fatalf("JumpTo across a rebuild: offset %v, row 2 at %v; want 100", sc.Offset(), got[2])
+	}
+}
+
+func TestRevealTakesOverFromAnEasedScroll(t *testing.T) {
+	t.Parallel()
+	reveal := -1
+	children := make([]Widget, 20)
+	for i := range children {
+		children[i] = &revealer{i: i, want: &reveal}
+	}
+	var sc ScrollController
+	p := NewProbe(Scroll(Column(children...)).Controller(&sc), Sz(50, 100))
+	defer p.Close()
+	p.Frame()
+	sc.ScrollTo(900)
+	p.Advance(50 * time.Millisecond)
+	reveal = 0
+	p.Frame()
+	reveal = -1
+	p.Advance(time.Second)
+	p.Frame()
+	if sc.Animating() || sc.Offset() != 0 {
+		t.Fatalf("after revealing row 0 mid-scroll: offset %v animating %v; want the reveal to win", sc.Offset(), sc.Animating())
+	}
+}

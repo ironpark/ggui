@@ -62,8 +62,10 @@ never snaps.
 A `ScrollController` scrolls from code. The zero value is ready; attach it
 and call it from a handler. `ScrollTo` and `ScrollBy` ease (and jump under
 reduced motion), `JumpTo` does not, and `ScrollToKey` brings the
-`EachKeyed` row with that key to the top, even one a virtualized list has
-not built yet. Requests made before the first layout wait for it. To keep
+`EachKeyed` or `Reorderable` row with that key to the top, even one a
+virtualized list has not built yet. Requests made before the first layout
+wait for it, and the wheel, a touch pan or a focus reveal takes over from
+an eased scroll. To keep
 a known `Rect` in view instead, use `Canvas.RequestReveal`.
 
 ```go

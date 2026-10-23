@@ -1241,6 +1241,7 @@ func (s *ScrollWidget) Adopt(prev any) {
 		s.dragging, s.dragStart, s.dragOffset = p.dragging, p.dragStart, p.dragOffset
 		s.thumbHovered = p.thumbHovered
 		s.phys.adopt(&p.phys)
+		defer s.phys.reapply(s) // once the offset is adopted too
 		atEnd := p.laidOut && p.atEnd()
 		s.adoptedAtEnd = &atEnd
 		if s.bound != nil {
@@ -1502,8 +1503,10 @@ func (s *ScrollWidget) Reveal(target Rect) {
 	}
 	switch {
 	case lo < 0:
+		s.phys.animating = false // the reveal wins over an eased scroll
 		s.scrollTo(s.position() + lo)
 	case hi > extent:
+		s.phys.animating = false
 		s.scrollTo(s.position() + hi - extent)
 	}
 }
