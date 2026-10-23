@@ -338,6 +338,13 @@ func (c *Canvas) Overlay(fn func(dst *Canvas), owner ...SemRef) {
 	if len(owner) > 0 {
 		under = owner[0]
 	}
+	// An overlay is placed in the coordinates of the widget scheduling it,
+	// so under a Transform it paints through the same transform: a popup
+	// opens beside its moved anchor, not where the anchor was laid out.
+	if m := c.space.affine(); !m.IsIdentity() {
+		inner := fn
+		fn = func(dst *Canvas) { dst.Transform(m, inner) }
+	}
 	f := c.fs()
 	f.overlays = append(f.overlays, overlay{fn: fn, owner: under})
 }
@@ -715,8 +722,9 @@ type hitRegion struct {
 	group   any        // set by inGroup: the EachKeyed entry that painted it
 	drag    dragSource // a DragSource beneath its child; see dragdrop.go
 
-	space *paintSpace // the space it was painted in, nil for the window's
-	local Rect        // rect in that space, clipped there; see contains
+	space  *paintSpace // the space it was painted in, nil for the window's
+	local  Rect        // rect in that space, clipped there; see contains
+	origin Point       // full's corner in that space, before placeRegion moved it
 }
 
 // inGroup paints through fn with every region it registers marked as

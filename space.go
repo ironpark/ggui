@@ -45,6 +45,16 @@ func (s *paintSpace) reach(p Point) (Point, bool) {
 	return q, true
 }
 
+// affine returns the transform from s's coordinates to the window's,
+// leaving out the clips and shapes on the way.
+func (s *paintSpace) affine() Affine {
+	var m Affine
+	for ; s != nil; s = s.parent {
+		m = m.Then(s.toParent)
+	}
+	return m
+}
+
 // window returns the window Rect that holds r in s, cut to the clips
 // between; full skips the cuts.
 func (s *paintSpace) window(r Rect, full bool) Rect {
@@ -84,7 +94,7 @@ func (c *Canvas) enter(m, inverse Affine, inside func(Point) bool) *Canvas {
 // Rect that holds it and local keeps it as it was painted. It reports false
 // for a region left with no area and no key handler.
 func (s *paintSpace) placeRegion(h *hitRegion) bool {
-	h.space, h.local = s, h.rect
+	h.space, h.local, h.origin = s, h.rect, h.full.Origin
 	h.full = s.window(h.full, true)
 	h.rect = s.window(h.rect, false)
 	if h.local.Empty() || h.rect.Empty() {
@@ -112,8 +122,27 @@ func (r *hitRegion) contains(p Point) bool {
 // is where its handler expects an event.
 func (r *hitRegion) at(p Point) Point { return r.space.local(p) }
 
+// offset returns the window point p from the corner of the Rect r was
+// registered for, in the coordinates it was painted in: where on a drag
+// source the pointer took hold, or where in a drop zone it let go.
+func (r *hitRegion) offset(p Point) Point {
+	if r.space == nil {
+		return p.Sub(r.full.Origin)
+	}
+	return r.at(p).Sub(r.origin)
+}
+
 // pointerAt is ev as r's handler sees it.
 func (r *hitRegion) pointerAt(ev PointerEvent) PointerEvent {
+	if r.space == nil {
+		return ev
+	}
+	if ev.Scroll != (Point{}) {
+		// A delta is a direction, so it turns and scales but does not move:
+		// a scroll view turned on its side scrolls along its own axis, and
+		// a pan under a zoom follows the finger.
+		ev.Scroll = r.at(ev.Scroll).Sub(r.at(Point{}))
+	}
 	ev.Pos = r.at(ev.Pos)
 	return ev
 }

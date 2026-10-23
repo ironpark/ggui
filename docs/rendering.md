@@ -185,8 +185,11 @@ ggui.BackdropBlur(ggui.Box(menu).Fill(glass).Radius(12), 16).Radius(12)
 `Transform` scales, then turns, then moves its child about `Origin`, a
 fraction of its size and its centre by default; `Matrix` adds any `Affine`.
 Input goes through the same transform: a pointer is matched through the
-inverse, a handler gets `PointerEvent.Pos` in the coordinates it painted in,
-and semantics report the window Rect holding the turned shape. For custom
+inverse, a handler gets `PointerEvent.Pos` (and a scroll's delta, turned and
+scaled) in the coordinates it painted in, drag-and-drop offsets are measured
+the same way, and semantics report the window Rect holding the turned shape.
+An `Overlay` scheduled inside paints through the same transform, so a popup
+or tooltip opens beside its moved anchor. For custom
 painting, `dst.Transform(m, paint)` does the same for an `Affine` m, and
 `LayerOptions.Transform` moves a layer's pixels without its hit regions. The
 layer is the window's size, so what lies outside the window before the

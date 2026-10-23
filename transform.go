@@ -30,16 +30,52 @@ func (c *Canvas) Transform(m Affine, paint func(dst *Canvas)) {
 	inverse, ok := m.Invert()
 	if !ok {
 		// Nothing to see and nowhere to point, but the subtree still
-		// paints, so what it retains survives a scale passing zero.
-		c.layer(image.Rectangle{}, func(layer *Canvas) { paint(layer.Inert()) }, func(*ggfx.Image) {})
+		// paints, so what it retains survives a scale passing zero. The
+		// space it paints in takes no point, and an overlay scheduled in
+		// it goes through m too, and so shows nothing either.
+		c.layer(image.Rectangle{}, func(layer *Canvas) {
+			paint(layer.Inert().enter(m, Affine{}, func(Point) bool { return false }))
+		}, func(*ggfx.Image) {})
 		return
 	}
-	c.layer(image.Rectangle{}, func(layer *Canvas) { paint(layer.enter(m, inverse, nil)) }, func(img *ggfx.Image) {
+	area, visible := c.transformArea(inverse)
+	if !visible {
+		// Nothing of the layer would land on c, but the subtree still
+		// registers its input and semantics, which the clip then trims.
+		hidden := c.derive()
+		hidden.Image = nil
+		paint(hidden.enter(m, inverse, nil))
+		return
+	}
+	c.layer(area, func(layer *Canvas) { paint(layer.enter(m, inverse, nil)) }, func(img *ggfx.Image) {
 		op := &ggfx.DrawImageOptions{Filter: ggfx.FilterLinear}
 		op.GeoM.Translate(float64(img.Bounds().Min.X), float64(img.Bounds().Min.Y))
 		op.GeoM.Concat(m.geoM(c.Scale()))
 		c.Image.DrawImage(img, op)
 	})
+}
+
+// transformArea returns the part of a layer that m, the inverse of which is
+// given, takes onto what c can show, with a pixel to spare for filtering,
+// and false when none of it shows. Only that part is cleared, painted and
+// composited.
+func (c *Canvas) transformArea(inverse Affine) (image.Rectangle, bool) {
+	dest := Rct(Point{}, c.Size())
+	if c.clipped {
+		dest = c.clip
+	}
+	if c.Image != nil {
+		b := c.Image.Bounds()
+		dest = dest.Intersect(Rct(Pt(c.dp(float64(b.Min.X)), c.dp(float64(b.Min.Y))), Sz(c.dp(float64(b.Dx())), c.dp(float64(b.Dy())))))
+	}
+	if dest.Empty() {
+		return image.Rectangle{}, false
+	}
+	area := c.physical(grow(inverse.Bounds(dest), c.dp(2)))
+	if window := c.root().Image; window != nil {
+		area = area.Intersect(window.Bounds())
+	}
+	return area, !area.Empty()
 }
 
 // TransformWidget paints its child scaled, turned and moved, about an origin

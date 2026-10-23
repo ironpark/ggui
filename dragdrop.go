@@ -76,7 +76,7 @@ func (in *inputState) updateAppDrag(f frameInput) {
 		d.source, d.value = src, src.dragValue()
 		in.releasePress(f.pos, f.mods)
 	}
-	d.source.dragMoved(f.pos, d.from.Sub(d.candidate.full.Origin))
+	d.source.dragMoved(d.candidate.at(f.pos), d.candidate.offset(d.from))
 	now := in.topmost(func(r *hitRegion) bool {
 		t, ok := r.pointer.(dropTarget)
 		return ok && r.contains(f.pos) && t.acceptsDrag(d.value)
@@ -97,7 +97,7 @@ func (in *inputState) updateAppDrag(f frameInput) {
 	if now != nil {
 		t := now.pointer.(dropTarget)
 		t.dragOver(false)
-		t.dropped(d.value, f.pos.Sub(now.full.Origin))
+		t.dropped(d.value, now.offset(f.pos))
 		dropped = true
 	}
 	in.drag = nil

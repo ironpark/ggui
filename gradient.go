@@ -6,6 +6,7 @@ import (
 	"math"
 	"slices"
 
+	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/render"
 )
 
@@ -189,6 +190,9 @@ func (c *Canvas) FillGradientPath(path *Path, bounds Rect, g Gradient) {
 // the same rounded corners. A zero Gradient removes it. EnvColor stops are
 // resolved at layout, as Fill's color is.
 func (b *BoxWidget) Gradient(g Gradient) *BoxWidget {
+	if property.Equal(g, b.gradient[0]) {
+		return b
+	}
 	if g.themed() || b.gradient[0].themed() {
 		b.props.Changed()
 	}
