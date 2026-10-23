@@ -50,6 +50,42 @@ log or a terminal does: scrolling back stops following and scrolling to the
 end again resumes it, with no sentinel offset to manage. `ui.MessageScroller`
 is the chat-transcript version, with anchors and a jump-to-latest button.
 
+`.Overscroll(ggui.OverscrollBounce)` lets a pull past either end follow
+the input with growing resistance and spring back when it stops, as iOS
+does; `OverscrollStretch` stretches the content from that end instead.
+`.Snap(v)` settles the offset on a multiple of `v` (or the end) once
+scrolling stops, and `.Paging()` on whole viewports, turning the page when
+a gesture moved more than a sixth of one. ggfx reports no gesture phases,
+so both settle after a short pause in the input. The default clamps and
+never snaps.
+
+A `ScrollController` scrolls from code. The zero value is ready; attach it
+and call it from a handler. `ScrollTo` and `ScrollBy` ease (and jump under
+reduced motion), `JumpTo` does not, and `ScrollToKey` brings the
+`EachKeyed` row with that key to the top, even one a virtualized list has
+not built yet. Requests made before the first layout wait for it. To keep
+a known `Rect` in view instead, use `Canvas.RequestReveal`.
+
+```go
+var sc ggui.ScrollController
+list := ggui.Scroll(ggui.EachKeyed(todos, Todo.Key, row).ItemExtent(40)).Controller(&sc)
+top := ui.Button("Top", func() { sc.ScrollTo(0) })
+sc.ScrollToKey(added.ID)
+```
+
+`Sticky(header, body)` is a section whose header stays pinned to the top
+of the enclosing Scroll while its body is in view and is pushed out by the
+next section's; `Pinned()` says whether it is floating. A list does the
+same for some of its own rows with `EachKeyed(...).StickyHeaders(isHeader)`,
+with or without `ItemExtent`:
+
+```go
+ggui.Scroll(ggui.Column(
+	ggui.Sticky(ui.Title("Today"), ggui.List(today, row)),
+	ggui.Sticky(ui.Title("Earlier"), ggui.List(earlier, row)),
+).Stretch())
+```
+
 ## Touch input
 
 Touch uses the same pointer handlers as mouse input. The first finger becomes
@@ -197,6 +233,28 @@ press becomes a drag once it moves a few pixels, a faded copy of the child,
 or of `Preview(w)`, follows the pointer, and Escape cancels it. `Accept`
 narrows what a zone takes and `OnHover` highlights it while a drag is over
 it.
+
+### Reordering a list
+
+`Reorderable(items, key, build)` is `EachKeyed` over a `Binding[[]T]` whose
+rows the user rearranges: a dragged row lifts under the pointer, the others
+ease aside to open the gap it will drop into, an enclosing Scroll scrolls
+while the row is held near its edge, and Escape puts it back. Alt+Up and
+Alt+Down move the row holding focus, and each row offers increment and
+decrement actions to assistive technology. A move writes `items` through
+`Move` and then calls `OnReorder(from, to)` with the same indexes.
+`Handles()` limits dragging to a `ReorderHandle` inside the row, which is
+also a focusable button for the keyboard:
+
+```go
+ggui.Reorderable(tasks, func(t Task) int { return t.ID }, func(it ggui.EachItem[Task]) ggui.Widget {
+	return ggui.Row(ggui.ReorderHandle(ui.Icon(icons.Grip)).Name("Move "+it.Item.Title),
+		ggui.Text(it.Item.Title)).Gap(8)
+}).Handles().Gap(4).OnReorder(func(from, to int) { app.Announce("Moved", ggui.Polite) })
+```
+
+Rows lay out vertically and are all laid out; `ItemExtent` virtualization
+is not available for a reorderable list.
 
 A list reorders with a source and a zone per row and `ggui.Move`. The rows
 carry their keys, which stay right while the list moves under them:

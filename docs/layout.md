@@ -71,7 +71,7 @@ Widget mutation belongs on the UI goroutine; workers use `App.Post`.
 | Overlap children | `Stack` |
 | Position one child | `Align`, `Center` |
 | Decorate, inset or cap content | `Box`, `Padding`, `Box.MaxWidth` |
-| Show overflowing content | `Scroll` |
+| Show overflowing content | `Scroll`, `Sticky` section headers |
 
 Build children from a plain slice with `List` or `Children`:
 

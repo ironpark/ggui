@@ -1224,6 +1224,8 @@ type ScrollWidget struct {
 	thumbHovered          bool
 	dragging              bool
 	dragStart, dragOffset float64
+
+	phys scrollPhysics // overscroll, snapping and animated scrolls; see scroll_physics.go
 }
 
 // Key gives the scroll an identity, so a rebuilt one that also moved keeps
@@ -1238,6 +1240,7 @@ func (s *ScrollWidget) Adopt(prev any) {
 	if p, ok := prev.(*ScrollWidget); ok {
 		s.dragging, s.dragStart, s.dragOffset = p.dragging, p.dragStart, p.dragOffset
 		s.thumbHovered = p.thumbHovered
+		s.phys.adopt(&p.phys)
 		atEnd := p.laidOut && p.atEnd()
 		s.adoptedAtEnd = &atEnd
 		if s.bound != nil {
@@ -1355,12 +1358,14 @@ func (s *ScrollWidget) Layout(c Constraints, env Env) Size {
 	if s.follow && !s.laidOut {
 		s.decideAtPaint = true
 	}
+	s.phys.step(s)
 	s.laidAt = s.position()
 	vp := Viewport{Offset: s.laidAt, Extent: s.extent(c.Max()), Horizontal: s.horizontal}
-	s.childSize = s.child.Layout(Loose(inner), env.With(viewportKey, vp))
+	s.childSize = s.child.Layout(Loose(inner), env.With(viewportKey, vp).With(scrollPortKey, s))
 	s.viewport = c.Constrain(Sz(bounded(c.MaxW, s.childSize.W), bounded(c.MaxH, s.childSize.H)))
 	s.laidOut = true
 	s.scrollTo(pick(follow, s.maxOffset(), s.position()))
+	s.phys.attach(s)
 	return s.viewport
 }
 
@@ -1391,14 +1396,9 @@ func (s *ScrollWidget) Paint(dst *Canvas, r Rect) {
 	s.rect = r
 	dst.HitPointer(r, s) // adopts the scroll this one replaces
 	s.followFirst()
-	origin := r.Origin
-	if s.horizontal {
-		origin.X -= s.position()
-	} else {
-		origin.Y -= s.position()
-	}
+	s.phys.paint(s)
 	dst.Node(r, Node{Role: RoleGroup, Actions: ActionScrollIntoView}, func(dst *Canvas) {
-		dst.Clip(r).Paint(s.child, Rct(origin, s.childSize))
+		s.paintContent(dst.Clip(r), r)
 	})
 	s.paintBar(dst, r)
 }
@@ -1524,6 +1524,7 @@ func (s *ScrollWidget) HandlePointer(ev PointerEvent) bool {
 			return false
 		}
 		travel := s.extent(s.rect.Size) - s.thumbLength()
+		s.phys.input(s)
 		if travel > 0 {
 			s.scrollTo(s.dragOffset + (axis-s.dragStart)*s.maxOffset()/travel)
 		}
@@ -1551,9 +1552,7 @@ func (s *ScrollWidget) HandlePointer(ev PointerEvent) bool {
 	if ev.ScrollPixels {
 		speed = 1
 	}
-	before := s.position()
-	s.scrollTo(before - delta*speed)
-	return !ev.ScrollMomentum || s.position() != before
+	return s.wheel(delta*speed, ev.ScrollMomentum)
 }
 
 // WrapWidget lines its children up like a Row and starts a new line when

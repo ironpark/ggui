@@ -48,6 +48,8 @@ type EachWidget[T any, K comparable] struct {
 	// widgets; sizes and offsets are indexed the same way.
 	first, last int
 	visible     []Widget
+
+	pin eachPin[T] // sticky headers and ScrollToKey; see each_sticky.go
 }
 
 type forEntry[T any] struct {
@@ -282,6 +284,7 @@ func (f *EachWidget[T, K]) entry(i int) *forEntry[T] {
 func (f *EachWidget[T, K]) Layout(c Constraints, env Env) Size {
 	defer f.props.Layout()()
 	f.cache, _ = env.Get(cacheOwner)
+	f.pin.port = scrollPortOf(env)
 	f.mount.Layout(c, env)
 	if len(f.items) == 0 && len(f.leaving) == 0 && f.empty != nil {
 		return f.empty.Layout(c, env)
@@ -331,6 +334,7 @@ func (f *EachWidget[T, K]) Layout(c Constraints, env Env) Size {
 		f.sizes[j] = w.Layout(f.constraints(f.extent, f.extent, crossMin, crossMax), env)
 		crossUsed = max(crossUsed, f.cross(f.sizes[j]))
 	}
+	f.layoutPinned(pitch, gap, crossMin, crossMax, env)
 	result := c.Constrain(f.size(total, f.stretched(crossMax, crossUsed)))
 	f.evict()
 	for j, s := range f.sizes {
@@ -410,9 +414,19 @@ func (f *EachWidget[T, K]) Paint(dst *Canvas, r Rect) {
 		return
 	}
 	n := len(f.items)
+	f.placeKey(r)
+	pinned, pinIndex, pinRect := f.pinned(r)
 	list := func(dst *Canvas) {
+		defer func() {
+			if pinned != nil {
+				dst.inGroup(pinned, func() { f.paintRow(dst, pinned.widget, pinRect, pinIndex, n) })
+			}
+		}()
 		if f.extent <= 0 {
 			for i, child := range f.children {
+				if f.childEntries[i] == pinned {
+					continue
+				}
 				rc := Rct(r.Origin.Add(f.offsets[i]), f.sizes[i])
 				dst.inGroup(f.childEntries[i], func() { f.paintRow(dst, child, rc, i, n) })
 			}
@@ -420,6 +434,9 @@ func (f *EachWidget[T, K]) Paint(dst *Canvas, r Rect) {
 		}
 		for j, w := range f.visible {
 			e := f.entries[f.keys[f.first+j]]
+			if e == pinned {
+				continue
+			}
 			rc := Rct(r.Origin.Add(f.offsets[j]), f.sizes[j])
 			dst.inGroup(e, func() { f.paintRow(dst, w, rc, f.first+j, n) })
 		}
