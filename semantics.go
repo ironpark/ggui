@@ -84,6 +84,8 @@ type semNode struct {
 	group   any // the EachKeyed entry that painted it, as for a hit region
 	id      any // from an Identified handler, else nil
 	handler any // the widget that described itself, for focus and dedup
+
+	space *paintSpace // where it painted, for a tap given in its coordinates
 }
 
 // SemRef refers to a node recorded earlier in this frame, so that work
@@ -212,13 +214,16 @@ func (c *Canvas) addSem(r Rect, n Node, h any) SemRef {
 		}
 	}
 	e := semNode{node: n, parent: root.semParent, rect: r, full: r, handler: h, id: idOf(h)}
-	e.scope, e.group = c.scope, c.group
+	e.scope, e.group, e.space = c.scope, c.group, c.space
 	if c.clipped {
 		e.rect = r.Intersect(c.clip)
-		if e.rect.Empty() {
-			e.node.Offscreen = true
-			e.rect = Rect{Origin: e.full.Origin}
-		}
+	}
+	if c.space != nil {
+		e.rect, e.full = c.space.window(e.rect, false), c.toWindow(e.full)
+	}
+	if (c.clipped || c.space != nil) && e.rect.Empty() {
+		e.node.Offscreen = true
+		e.rect = Rect{Origin: e.full.Origin}
 	}
 	root.sem = append(root.sem, e)
 	ref := SemRef{n: len(root.sem)}
@@ -247,7 +252,7 @@ func (c *Canvas) named(r Rect) bool {
 		return false
 	}
 	last := &root.sem[root.semLast-1]
-	return last.parent == root.semParent && a11y.Control(last.node.Role) && covers(last.full, r)
+	return last.parent == root.semParent && a11y.Control(last.node.Role) && covers(last.full, c.toWindow(r))
 }
 
 // covers reports whether outer wholly contains inner.

@@ -25,7 +25,7 @@ const (
 // PointerEvent is a mouse or touch event delivered to a hit region.
 type PointerEvent struct {
 	Kind           PointerKind
-	Pos            Point // in window coordinates
+	Pos            Point // where the handler painted: window coordinates, unless under a Transform
 	Button         MouseButton
 	Scroll         Point // wheel delta, for PointerScroll
 	ScrollPixels   bool  // Scroll is in logical pixels (touch panning), not wheel units
@@ -358,10 +358,10 @@ func (in *inputState) updateHover(f frameInput) {
 	now := in.send(move)
 	if !in.continues(now, in.hovered) {
 		if in.hovered != nil {
-			in.hovered.pointer.HandlePointer(PointerEvent{Kind: PointerExit, Pos: f.pos})
+			in.hovered.pointer.HandlePointer(in.hovered.pointerAt(PointerEvent{Kind: PointerExit, Pos: f.pos}))
 		}
 		if now != nil {
-			now.pointer.HandlePointer(PointerEvent{Kind: PointerEnter, Pos: f.pos})
+			now.pointer.HandlePointer(now.pointerAt(PointerEvent{Kind: PointerEnter, Pos: f.pos}))
 		}
 	}
 	in.hovered = keep(now)
@@ -376,11 +376,11 @@ func (in *inputState) updateDrag(f frameInput) {
 		over := DragEvent{Kind: DragOver, Pos: f.dragAt}
 		now = in.topmost(func(r *hitRegion) bool {
 			h, ok := r.pointer.(DragHandler)
-			return ok && r.rect.Contains(over.Pos) && h.HandleDrag(over)
+			return ok && r.contains(over.Pos) && h.HandleDrag(DragEvent{Kind: over.Kind, Pos: r.at(over.Pos)})
 		})
 	}
 	if in.dragTarget != nil && !in.continues(now, in.dragTarget) {
-		in.dragTarget.pointer.(DragHandler).HandleDrag(DragEvent{Kind: DragExit, Pos: f.dragAt})
+		in.dragTarget.pointer.(DragHandler).HandleDrag(DragEvent{Kind: DragExit, Pos: in.dragTarget.at(f.dragAt)})
 	}
 	in.dragTarget = keep(now)
 }
@@ -388,7 +388,7 @@ func (in *inputState) updateDrag(f frameInput) {
 // updateCursor picks the shape of the topmost region asking for one.
 func (in *inputState) updateCursor(f frameInput) {
 	in.cursor = CursorShapeDefault
-	if r := in.topmost(func(r *hitRegion) bool { return r.cursor != 0 && r.rect.Contains(f.pos) }); r != nil {
+	if r := in.topmost(func(r *hitRegion) bool { return r.cursor != 0 && r.contains(f.pos) }); r != nil {
 		in.cursor = r.cursor
 	}
 }
@@ -407,7 +407,7 @@ func (in *inputState) dispatchPointer(f frameInput) {
 	}
 	if in.pressed != nil && len(f.down) == 0 && len(f.up) == 0 {
 		if cur := in.findPointer(in.pressed); cur != nil {
-			cur.pointer.HandlePointer(PointerEvent{Kind: PointerDrag, Pos: f.pos, Button: in.pressedBtn})
+			cur.pointer.HandlePointer(cur.pointerAt(PointerEvent{Kind: PointerDrag, Pos: f.pos, Button: in.pressedBtn}))
 		}
 	}
 	for _, b := range f.up {
@@ -418,9 +418,9 @@ func (in *inputState) dispatchPointer(f frameInput) {
 			continue
 		}
 		if cur := in.findPointer(p); cur != nil {
-			cur.pointer.HandlePointer(ev)
-			if cur.rect.Contains(f.pos) {
-				cur.pointer.HandlePointer(PointerEvent{Kind: PointerTap, Pos: f.pos, Button: b, Mods: f.mods})
+			cur.pointer.HandlePointer(cur.pointerAt(ev))
+			if cur.contains(f.pos) {
+				cur.pointer.HandlePointer(cur.pointerAt(PointerEvent{Kind: PointerTap, Pos: f.pos, Button: b, Mods: f.mods}))
 			}
 		}
 		in.pressed = nil
@@ -566,13 +566,13 @@ func (in *inputState) topmost(match func(*hitRegion) bool) *hitRegion {
 // and returns that region, or nil.
 func (in *inputState) send(ev PointerEvent) *hitRegion {
 	return in.topmost(func(r *hitRegion) bool {
-		return r.pointer != nil && r.rect.Contains(ev.Pos) && r.pointer.HandlePointer(ev)
+		return r.pointer != nil && r.contains(ev.Pos) && r.pointer.HandlePointer(r.pointerAt(ev))
 	})
 }
 
 // findKey returns the topmost region with a KeyHandler under p.
 func (in *inputState) findKey(p Point) *hitRegion {
-	return in.topmost(func(r *hitRegion) bool { return r.key != nil && r.rect.Contains(p) })
+	return in.topmost(func(r *hitRegion) bool { return r.key != nil && r.contains(p) })
 }
 
 // findPointer returns the region that continues p this frame: the one
@@ -698,7 +698,7 @@ func (in *inputState) releasePress(pos Point, mods Mods) {
 		return
 	}
 	if cur := in.findPointer(in.pressed); cur != nil {
-		cur.pointer.HandlePointer(PointerEvent{Kind: PointerUp, Pos: pos, Button: in.pressedBtn, Mods: mods})
+		cur.pointer.HandlePointer(cur.pointerAt(PointerEvent{Kind: PointerUp, Pos: pos, Button: in.pressedBtn, Mods: mods}))
 	}
 	in.pressed = nil
 }

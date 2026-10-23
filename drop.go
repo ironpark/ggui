@@ -43,7 +43,7 @@ func (f DroppedFile) Open() (fs.File, error) {
 
 // DropEvent is a drop of files onto the window.
 type DropEvent struct {
-	Pos   Point // in window coordinates
+	Pos   Point // where the handler painted: window coordinates, unless under a Transform
 	Files []DroppedFile
 }
 
@@ -80,7 +80,7 @@ const (
 // DragEvent is files being dragged over the window, before any drop.
 type DragEvent struct {
 	Kind DragKind
-	Pos  Point // in window coordinates
+	Pos  Point // where the handler painted: window coordinates, unless under a Transform
 }
 
 // DragHandler is a DropHandler that also follows the drag before the drop.
@@ -145,7 +145,7 @@ func (in *inputState) dispatchDrop(f frameInput) {
 	ev := DropEvent{Pos: f.pos, Files: f.drop}
 	taken := in.topmost(func(r *hitRegion) bool {
 		h, ok := r.pointer.(DropHandler)
-		return ok && r.rect.Contains(ev.Pos) && h.HandleDrop(ev)
+		return ok && r.contains(ev.Pos) && h.HandleDrop(DropEvent{Pos: r.at(ev.Pos), Files: ev.Files})
 	})
 	if taken != nil {
 		return

@@ -240,6 +240,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 				ui.Card(ggui.Text("Floating")).Shadow(ggui.ShadowStyle{Offset: ggui.Pt(0, 6), Blur: 12, Color: color.NRGBA{A: 55}}),
 				ui.Card(ggui.Text("Colored")).Shadow(ggui.ShadowStyle{Offset: ggui.Pt(0, 4), Blur: 16, Spread: 2, Color: color.NRGBA{R: 70, G: 100, B: 230, A: 85}}),
 			).Gap(24), 20)),
+			preview("Effects", effectsDemo()),
 			preview("Menubar", menubar),
 			preview("Calendar", calendar),
 			preview("Date picker", datePicker),

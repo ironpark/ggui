@@ -37,6 +37,7 @@ type Canvas struct {
 	inert   bool        // registers no hit regions: a widget on its way out
 	scope   *focusScope // the focus trap regions are registered under, if any
 	group   any         // what regions painted now belong to, for EachKeyed's eviction
+	space   *paintSpace // inside a Transform or a shape clip; see space.go
 
 	// frame is the state there is one of per frame rather than one per
 	// Canvas: it is reached through root, and only the root holds it. A
@@ -311,14 +312,14 @@ func (c *Canvas) Pointer() (Point, bool) {
 		return Point{}, false
 	}
 	f := c.fs()
-	return f.pointer, f.hasPointer
+	return c.space.local(f.pointer), f.hasPointer
 }
 
 // FocusWithin reports whether the focused input region overlaps r. Containers
 // use it to pause motion while a descendant (including a custom control) has
 // the keyboard. Like Pointer, it reads the state at the start of the paint.
 func (c *Canvas) FocusWithin(r Rect) bool {
-	return c != nil && !c.fs().focusBounds.Intersect(r).Empty()
+	return c != nil && !c.fs().focusBounds.Intersect(c.toWindow(r)).Empty()
 }
 
 // Overlay schedules fn to paint after the whole tree has, on the root
@@ -570,7 +571,7 @@ func (c *Canvas) Clip(r Rect) *Canvas {
 	if c == nil {
 		return nil
 	}
-	child := &Canvas{parent: c, clip: r, clipped: true, scale: c.scale, inert: c.inert, scope: c.scope, group: c.group}
+	child := &Canvas{parent: c, clip: r, clipped: true, scale: c.scale, inert: c.inert, scope: c.scope, group: c.group, space: c.space}
 	if c.clipped {
 		child.clip = c.clip.Intersect(r)
 	}
@@ -599,6 +600,9 @@ func (c *Canvas) add(h hitRegion) {
 			// so Tab can reach it and Reveal can scroll it into view.
 			h.rect = Rect{Origin: h.full.Origin}
 		}
+	}
+	if c.space != nil && !c.space.placeRegion(&h) {
+		return
 	}
 	root := c
 	for root.parent != nil {
@@ -710,6 +714,9 @@ type hitRegion struct {
 	label   string
 	group   any        // set by inGroup: the EachKeyed entry that painted it
 	drag    dragSource // a DragSource beneath its child; see dragdrop.go
+
+	space *paintSpace // the space it was painted in, nil for the window's
+	local Rect        // rect in that space, clipped there; see contains
 }
 
 // inGroup paints through fn with every region it registers marked as
@@ -752,7 +759,7 @@ func (c *Canvas) FocusTrap(owner any, onEscape func(), fn func(dst *Canvas)) {
 
 // merge folds o into r when they share a Rect and o only adds what r lacks.
 func (r *hitRegion) merge(o hitRegion) bool {
-	if r.rect != o.rect || (o.id != nil && r.id != nil && o.id != r.id) ||
+	if r.rect != o.rect || r.space != o.space || (o.id != nil && r.id != nil && o.id != r.id) ||
 		o.drag != nil || r.drag != nil ||
 		(o.pointer != nil && r.pointer != nil) ||
 		(o.key != nil && r.key != nil) ||
@@ -824,7 +831,7 @@ func (c *Canvas) RequestFocus(h KeyHandler) {
 func (c *Canvas) RequestReveal(r Rect) {
 	if c != nil && !c.inert {
 		root := c.root()
-		root.revealRequests = append(root.revealRequests, r)
+		root.revealRequests = append(root.revealRequests, c.toWindow(r))
 	}
 }
 
@@ -864,6 +871,9 @@ func (c *Canvas) ObserveInput(r Rect, notify func()) {
 	}
 	if c.clipped {
 		r = r.Intersect(c.clip)
+	}
+	if c.space != nil {
+		r = c.space.window(r, false)
 	}
 	if !r.Empty() {
 		c.root().inputObservers = append(c.root().inputObservers, inputObserver{r, c.scope, notify})
