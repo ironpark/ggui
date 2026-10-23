@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
 	"math"
 	"slices"
@@ -102,12 +103,15 @@ func (a *animator) step(now time.Time) {
 }
 
 // Tweened is a value that eases from where it is to its target over a fixed
-// duration. Build one with Tween.
-type Tweened[T Number] struct {
+// duration. Build one with Tween, or TweenWith for a value that is not a
+// number.
+type Tweened[T any] struct {
 	w        *world // whose frames step it, from creation
 	sig      *StateValue[T]
 	duration time.Duration
+	delay    time.Duration
 	ease     Easing
+	lerp     func(a, b T, t float64) T
 
 	from, to T
 	start    time.Time
@@ -117,8 +121,15 @@ type Tweened[T Number] struct {
 
 // Tween creates a Tweened at v that takes d to reach each new target, with
 // EaseOut. T is inferred from v, so write Tween(0.0, d) for a float64.
-func Tween[T Number](v T, d time.Duration) *Tweened[T] {
-	t := &Tweened[T]{w: ownerWorld(), sig: State(v), duration: d, ease: EaseOut, from: v, to: v}
+func Tween[T Number](v T, d time.Duration) *Tweened[T] { return TweenWith(v, d, lerpNumber[T]) }
+
+// TweenWith creates a Tweened at v for any type, moved between targets by
+// lerp: LerpColor, LerpPoint, LerpSize, LerpRect, LerpInsets, or a func of
+// your own that returns a at zero and b at one.
+//
+//	at := ggui.TweenWith(ggui.Pt(0, 0), 200*time.Millisecond, ggui.LerpPoint)
+func TweenWith[T any](v T, d time.Duration, lerp func(a, b T, t float64) T) *Tweened[T] {
+	t := &Tweened[T]{w: ownerWorld(), sig: State(v), duration: d, ease: EaseOut, lerp: lerp, from: v, to: v}
 	if reactive.CurrentOwner() != nil {
 		OnCleanup(func() {
 			t.disposed, t.running = true, false
@@ -145,6 +156,10 @@ func (t *Tweened[T]) Easing(e Easing) *Tweened[T] { t.ease = e; return t }
 // Duration sets how long each move takes.
 func (t *Tweened[T]) Duration(d time.Duration) *Tweened[T] { t.duration = d; return t }
 
+// Delay holds each move at its start for d before it begins: give the items
+// of a list growing delays to stagger them.
+func (t *Tweened[T]) Delay(d time.Duration) *Tweened[T] { t.delay = d; return t }
+
 // Get returns the current value and subscribes the running Effect, so a
 // Builder that reads it rebuilds as the value moves.
 func (t *Tweened[T]) Get() T { return t.sig.Get() }
@@ -161,7 +176,7 @@ func (t *Tweened[T]) Set(target T) {
 		return
 	}
 	t.from, t.to = Untrack(t.sig.Get), target
-	if t.duration <= 0 || t.from == t.to {
+	if t.duration <= 0 && t.delay <= 0 || property.Equal(t.from, t.to) {
 		t.sig.Set(target)
 		t.running = false
 		t.w.anims.remove(t)
@@ -189,9 +204,15 @@ func (t *Tweened[T]) step(now time.Time) bool {
 		return false
 	}
 	if t.start.IsZero() {
-		t.start = now
+		t.start = now.Add(t.delay)
 	}
-	p := float64(now.Sub(t.start)) / float64(t.duration)
+	if now.Before(t.start) {
+		return true // still waiting out the delay
+	}
+	p := 1.0
+	if t.duration > 0 {
+		p = float64(now.Sub(t.start)) / float64(t.duration)
+	}
 	if p >= 1 {
 		t.sig.Set(t.to)
 		t.running = false
@@ -201,21 +222,27 @@ func (t *Tweened[T]) step(now time.Time) bool {
 	if !t.running {
 		return false
 	}
-	t.sig.Set(T(float64(t.from) + (float64(t.to)-float64(t.from))*f))
+	t.sig.Set(t.lerp(t.from, t.to, f))
 	return true
 }
 
+// lerpNumber is the straight line from a to b that Tween moves numbers on.
+func lerpNumber[T Number](a, b T, t float64) T { return T(float64(a) + (float64(b)-float64(a))*t) }
+
 // Sprung is a value that moves toward its target like a mass on a spring:
 // it overshoots a little, keeps its momentum when the target changes, and
-// settles. Build one with Spring.
-type Sprung[T Number] struct {
+// settles. Build one with Spring, or SpringWith for a value that is not a
+// number.
+type Sprung[T any] struct {
 	w         *world // whose frames step it, from creation
 	sig       *StateValue[T]
+	vec       Vector[T]
 	stiffness float64
 	damping   float64
 	precision float64
 
-	pos, vel, to float64
+	goal         T // the target as given, which the spring lands on exactly
+	pos, vel, to [4]float64
 	last         time.Time
 	running      bool
 	disposed     bool
@@ -224,7 +251,20 @@ type Sprung[T Number] struct {
 // Spring creates a Sprung at v. Stiffness and Damping tune the motion; the
 // defaults settle in a few hundred milliseconds with a slight overshoot.
 func Spring[T Number](v T) *Sprung[T] {
-	s := &Sprung[T]{w: ownerWorld(), sig: State(v), stiffness: 170, damping: 18, precision: 0.01, pos: float64(v), to: float64(v)}
+	return SpringWith(v, Vector[T]{
+		Split: func(v T) [4]float64 { return [4]float64{float64(v)} },
+		Join:  func(c [4]float64) T { return T(c[0]) },
+	})
+}
+
+// SpringWith creates a Sprung at v for any type vec splits into numbers:
+// ColorVector, PointVector, SizeVector, RectVector, InsetsVector, or one of
+// your own. Each number springs on its own, with the same stiffness.
+//
+//	at := ggui.SpringWith(ggui.Pt(0, 0), ggui.PointVector)
+func SpringWith[T any](v T, vec Vector[T]) *Sprung[T] {
+	c := vec.Split(v)
+	s := &Sprung[T]{w: ownerWorld(), sig: State(v), vec: vec, stiffness: 170, damping: 18, precision: 0.01, goal: v, pos: c, to: c}
 	if reactive.CurrentOwner() != nil {
 		OnCleanup(func() {
 			s.disposed, s.running = true, false
@@ -255,14 +295,14 @@ func (s *Sprung[T]) Get() T { return s.sig.Get() }
 func (s *Sprung[T]) GetAny() any { return s.Get() }
 
 // Target returns where the value is heading.
-func (s *Sprung[T]) Target() T { return T(s.to) }
+func (s *Sprung[T]) Target() T { return s.goal }
 
 // Set retargets the spring; motion already under way carries over.
 func (s *Sprung[T]) Set(target T) {
 	if s.disposed {
 		return
 	}
-	s.to = float64(target)
+	s.goal, s.to = target, s.vec.Split(target)
 	if !s.running {
 		s.last = time.Time{}
 		s.running = true
@@ -275,7 +315,8 @@ func (s *Sprung[T]) Jump(v T) {
 	if s.disposed {
 		return
 	}
-	s.pos, s.vel, s.to, s.running = float64(v), 0, float64(v), false
+	c := s.vec.Split(v)
+	s.goal, s.pos, s.vel, s.to, s.running = v, c, [4]float64{}, c, false
 	s.w.anims.remove(s)
 	s.sig.Set(v)
 }
@@ -296,16 +337,22 @@ func (s *Sprung[T]) step(now time.Time) bool {
 	const h = 1.0 / 240
 	for ; dt > 0; dt -= h {
 		d := min(dt, h)
-		acc := -s.stiffness*(s.pos-s.to) - s.damping*s.vel
-		s.vel += acc * d
-		s.pos += s.vel * d
+		for i := range s.pos {
+			acc := -s.stiffness*(s.pos[i]-s.to[i]) - s.damping*s.vel[i]
+			s.vel[i] += acc * d
+			s.pos[i] += s.vel[i] * d
+		}
 	}
-	if math.Abs(s.pos-s.to) < s.precision && math.Abs(s.vel) < s.precision {
-		s.pos, s.vel, s.running = s.to, 0, false
-		s.sig.Set(T(s.to))
+	settled := true
+	for i := range s.pos {
+		settled = settled && math.Abs(s.pos[i]-s.to[i]) < s.precision && math.Abs(s.vel[i]) < s.precision
+	}
+	if settled {
+		s.pos, s.vel, s.running = s.to, [4]float64{}, false
+		s.sig.Set(s.goal)
 		return false
 	}
-	s.sig.Set(T(s.pos))
+	s.sig.Set(s.vec.Join(s.pos))
 	return true
 }
 
