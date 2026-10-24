@@ -94,6 +94,28 @@ func (c *Canvas) TextWidth(s string, font *Font, size float64) float64 {
 	return c.dp(lineWidth(s, font.face(c.px(size), 0)))
 }
 
+// DrawTextStyle is DrawText in a whole TextStyle: its Font, Size and Color,
+// and its Weight, drawn with the font's face nearest it or along the weight
+// axis of a variable font. A label kept from Env.ResolveText keeps its
+// weight this way; zero fields fall back as a Text's would.
+func (c *Canvas) DrawTextStyle(s string, st TextStyle, at Point) {
+	if c == nil || c.Image == nil {
+		return
+	}
+	st = st.resolved()
+	op := &text.DrawOptions{}
+	op.ColorScale.ScaleWithColor(st.Color)
+	op.GeoM.Translate(c.px(at.X), c.px(at.Y))
+	drawText(c.Image, s, st.Font.face(c.px(st.Size), st.Weight), op)
+}
+
+// TextStyleWidth measures s as DrawTextStyle would draw it, in logical
+// pixels.
+func (c *Canvas) TextStyleWidth(s string, st TextStyle) float64 {
+	st = st.resolved()
+	return c.dp(lineWidth(s, st.Font.face(c.px(st.Size), st.Weight)))
+}
+
 // FitText returns s as it fits in width at size, cut with "…" when it is
 // too wide: what Text's Ellipsis draws, for a widget drawing its own.
 func (c *Canvas) FitText(s string, font *Font, size, width float64) string {

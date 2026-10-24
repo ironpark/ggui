@@ -98,3 +98,24 @@ func TestAProbeDrawsInTheBuiltInFont(t *testing.T) {
 		t.Fatal("a Probe drew in a font other than the built-in one, so tests would vary by machine")
 	}
 }
+
+func TestDrawTextStyleKeepsTheWeight(t *testing.T) {
+	t.Parallel()
+	family := MustFont(goregular.TTF).WithWeight(WeightBold, MustFont(gobold.TTF))
+	c := &Canvas{}
+	c.scale = 2
+	regular := c.TextStyleWidth("Weighty words", TextStyle{Font: family, Size: 14})
+	bold := c.TextStyleWidth("Weighty words", TextStyle{Font: family, Size: 14, Weight: WeightBold})
+	if bold <= regular {
+		t.Fatalf("bold measured %v, regular %v: want the bold face, which is wider", bold, regular)
+	}
+	if got := c.TextWidth("Weighty words", family, 14); got != regular {
+		t.Fatalf("TextWidth %v, TextStyleWidth %v: want the same regular face", got, regular)
+	}
+	// Mono faces keep one advance across weights, which a grid relies on.
+	mono := MustFont(gomono.TTF)
+	if a, b := c.TextStyleWidth("M", TextStyle{Font: mono, Size: 13}), c.TextStyleWidth("M", TextStyle{Font: mono, Size: 13, Weight: WeightBold}); a != b {
+		t.Fatalf("a mono face without bold measured %v and %v", a, b)
+	}
+	c.DrawTextStyle("no image, no panic", TextStyle{}, Pt(0, 0))
+}

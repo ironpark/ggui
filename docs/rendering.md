@@ -61,9 +61,10 @@ painted. A widget that does not implement it is aligned by its bottom edge.
 
 A short label, such as a tick or a value drawn on a custom canvas, does not
 need a child `Text`: keep `env.ResolveText(style)` from `Layout`, the style a
-`Text` would draw in with the theme's font, size and color and the user's
-text scale, and draw it in `Paint` with `dst.DrawText(s, st.Font, st.Size,
-at, st.Color)`; `dst.TextWidth` measures it. Text that wraps, can be selected
+`Text` would draw in with the theme's font, size, color and weight and the
+user's text scale, and draw it in `Paint` with `dst.DrawTextStyle(s, st,
+at)`; `dst.TextStyleWidth` measures it. `dst.DrawText(s, font, size, at,
+col)` is the same without a weight. Text that wraps, can be selected
 or must be read by a screen reader is a `Text` painted as a child.
 
 Paint children through `dst.Paint(child, r)` so the inspector can see them.
