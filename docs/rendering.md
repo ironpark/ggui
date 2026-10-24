@@ -67,6 +67,12 @@ at)`; `dst.TextStyleWidth` measures it. `dst.DrawText(s, font, size, at,
 col)` is the same without a weight. Text that wraps, can be selected
 or must be read by a screen reader is a `Text` painted as a child.
 
+Monospaced text on a grid, a terminal's cells or a hex dump's columns, is
+drawn with `dst.DrawTextCells(s, st, at, cellW)`: each grapheme starts a cell
+of its own, on a whole device pixel, so a cell rounded to whole pixels while
+the font's advance is not keeps every column in place along the row. The run
+is still shaped and drawn in one call.
+
 Paint children through `dst.Paint(child, r)` so the inspector can see them.
 The [custom example](../examples/custom) builds a dial on `Interactive`, a
 disclosure that calls `Invalidate`, and a virtualized list. For small
