@@ -81,6 +81,57 @@ func fontconfig(family string) []fontFile {
 	return out
 }
 
+// SystemItalicFonts returns the italic faces of the platform's interface
+// fonts, with every weight it has of them, loaded once: SF Pro Italic and
+// SF Mono Italic on macOS, Segoe UI Italic and Cascadia Mono Italic or
+// Consolas Italic on Windows, and what fontconfig matches for sans-serif
+// and monospace in italic elsewhere. Either is nil where the platform has
+// no italic of that font, and fontconfig's match for an italic it does not
+// have, an upright face, is not taken for one. Like any Font they fall back
+// to SystemFonts. Text has no italic style of its own; a widget that draws
+// italics, such as a terminal, chooses these for them.
+func SystemItalicFonts() (sans, mono *Font) { return systemItalicFonts() }
+
+var systemItalicFonts = sync.OnceValues(func() (sans, mono *Font) {
+	sansFiles, monoFiles := systemItalicFiles()
+	italic := func(f *Font) *Font {
+		if f == nil || f.source().Metadata().Style != text.StyleItalic {
+			return nil
+		}
+		return f
+	}
+	return italic(loadFamily(sansFiles)), italic(loadFamily(monoFiles))
+})
+
+// systemItalicFiles lists the faces of the italics of the platform's
+// interface fonts, the regular weight first.
+func systemItalicFiles() (sans, mono []fontFile) {
+	switch runtime.GOOS {
+	case "darwin":
+		return []fontFile{{path: "/System/Library/Fonts/SFNSItalic.ttf"}}, []fontFile{{path: "/System/Library/Fonts/SFNSMonoItalic.ttf"}}
+	case "windows":
+		dir := filepath.Join(os.Getenv("WINDIR"), "Fonts")
+		existing := func(names ...string) []fontFile {
+			var out []fontFile
+			for _, name := range names {
+				if p := filepath.Join(dir, name); fileExists(p) {
+					out = append(out, fontFile{path: p})
+				}
+			}
+			return out
+		}
+		sans = existing("segoeuii.ttf", "seguisbi.ttf", "segoeuiz.ttf")
+		mono = existing("CascadiaMonoItalic.ttf")
+		if len(mono) == 0 {
+			mono = existing("consolai.ttf", "consolaz.ttf")
+		}
+		return sans, mono
+	case "js", "wasip1", "ios", "android":
+		return nil, nil
+	}
+	return fontconfig("sans-serif:italic"), fontconfig("monospace:italic")
+}
+
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
@@ -110,7 +161,8 @@ func loadFamily(files []fontFile) *Font {
 }
 
 // loadFaces loads a font file: its one face, or for a collection the face
-// at file.index followed by the collection's other upright faces.
+// at file.index followed by the collection's other faces of its style,
+// upright for an upright face and italic for an italic one.
 func loadFaces(file fontFile) ([]*Font, error) {
 	data, err := os.ReadFile(file.path)
 	if err != nil {
@@ -132,8 +184,9 @@ func loadFaces(file fontFile) ([]*Font, error) {
 	}
 	first := faces[min(file.index, len(faces)-1)]
 	out := []*Font{first}
+	style := first.source().Metadata().Style
 	for _, f := range faces {
-		if f != first && f.source().Metadata().Style != text.StyleItalic {
+		if f != first && f.source().Metadata().Style == style {
 			out = append(out, f)
 		}
 	}

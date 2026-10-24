@@ -240,8 +240,10 @@ var (
 )
 
 // SystemFonts returns the fonts found on this machine that cover scripts
-// the built-in font does not, mainly CJK, loaded once from well-known
-// paths per platform. It is what every Font falls back to; call it to
+// the built-in font does not, mainly CJK, and then symbols interface fonts
+// lack, such as the arrows, dingbats and technical symbols command-line
+// programs print (❯ ⏵ ⏺ ⎿), loaded once from well-known paths per
+// platform. It is what every Font falls back to; call it to
 // see what was found, and Fallback to choose differently. The GGUI_FONTS
 // environment variable lists extra files, separated like PATH, tried
 // first.
@@ -278,10 +280,13 @@ func systemFontPaths() []string {
 			"/System/Library/Fonts/Supplemental/AppleGothic.ttf",   // Korean
 			"/System/Library/Fonts/Supplemental/Arial Unicode.ttf", // wide coverage
 			"/System/Library/Fonts/Supplemental/NotoSansGothic-Regular.ttf",
+			"/System/Library/Fonts/Menlo.ttc",                    // dingbats such as ❯ ✳ ✻
+			"/System/Library/Fonts/Apple Symbols.ttf",            // technical symbols such as ⎿
+			"/System/Library/Fonts/Supplemental/STIXTwoMath.otf", // media symbols such as ⏵ ⏺
 		)
 	case "windows":
 		dir := filepath.Join(os.Getenv("WINDIR"), "Fonts")
-		for _, name := range []string{"malgun.ttf", "meiryo.ttc", "YuGothM.ttc", "msyh.ttc", "msjh.ttc", "simsun.ttc", "segoeui.ttf"} {
+		for _, name := range []string{"malgun.ttf", "meiryo.ttc", "YuGothM.ttc", "msyh.ttc", "msjh.ttc", "simsun.ttc", "segoeui.ttf", "seguisym.ttf", "cambria.ttc"} {
 			paths = append(paths, filepath.Join(dir, name))
 		}
 	default:
@@ -289,6 +294,7 @@ func systemFontPaths() []string {
 			for _, pattern := range []string{
 				"**/NotoSansCJK*-Regular.ttc", "**/NotoSansCJK*-Regular.otf", "**/NotoSansKR-Regular.*", "**/NotoSansJP-Regular.*", "**/NotoSansSC-Regular.*",
 				"**/NanumGothic.ttf", "**/DroidSansFallback*.ttf", "**/wqy-microhei.ttc", "**/wqy-zenhei.ttc",
+				"**/NotoSansSymbols-Regular.*", "**/NotoSansSymbols2-Regular.*", "**/NotoSansMath-Regular.*", "**/DejaVuSans.ttf",
 			} {
 				paths = append(paths, findFonts(dir, pattern)...)
 			}

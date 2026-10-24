@@ -19,9 +19,12 @@ the built-in Go Regular, as does an App on a machine without an interface
 font. `SetDefaultFont` replaces the default.
 
 Glyphs a font lacks are drawn from its fallbacks: `SystemFonts()`, the CJK
-and wide-coverage fonts found at well-known paths on macOS, Windows and Linux
-(plus any files in the `GGUI_FONTS` environment variable), so Korean,
-Japanese and Chinese render out of the box on a machine that has such a font.
+and wide-coverage fonts found at well-known paths on macOS, Windows and Linux,
+then fonts for the symbols interface fonts lack, such as the arrows, dingbats
+and technical symbols command-line programs print (`❯ ⏵ ⏺ ⎿`), plus any files
+in the `GGUI_FONTS` environment variable, tried first. So Korean, Japanese and
+Chinese, and those symbols, render out of the box on a machine that has such a
+font.
 A fallback that is a `.ttc` brings every weight in it. `Fallback(fonts...)`
 on a `Font` chooses a chain of your own and `NoFallback()` turns it off.
 `LoadFontFile` also reads the first face of a `.ttc`; `LoadFontCollection`
@@ -76,6 +79,13 @@ family has no semibold. The fallback fonts take the weight too.
 platform's monospaced font: SF Mono on macOS, Cascadia Mono or Consolas on
 Windows, fontconfig's `monospace` on Linux. `SetDefaultMonoFont` replaces
 it; where there is none it draws in the text font.
+
+Text has no italic style of its own. A widget that draws italics, such as a
+terminal, can choose `SystemItalicFonts()`: the italics of the interface and
+monospaced fonts with their weights, SF Pro Italic and SF Mono Italic on
+macOS, Segoe UI Italic and Cascadia Mono Italic or Consolas Italic on
+Windows, fontconfig's italic `sans-serif` and `monospace` on Linux, or nil
+where there is none.
 
 The built-in Go Regular has no other weights, so in a browser or a `Probe`
 text asking for one is drawn regular. For bold text there, or for the same
