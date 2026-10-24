@@ -146,28 +146,38 @@ func textRuns(s string, face text.Face) iter.Seq2[string, text.Face] {
 			yield(s, face)
 			return
 		}
-		start := 0
-		var current text.Face
-		for i := 0; i < len(s); {
-			end := textedit.NextGrapheme(s, i)
-			chosen := ef.Face
-			if emojidata.IsCluster(s[i:end]) {
+		pick := func(g string) text.Face {
+			if emojidata.IsCluster(g) {
 				if e := ef.colorFace(); e != nil {
-					chosen = e
+					return e
 				}
 			}
-			if current != nil && chosen != current {
-				if !yield(s[start:i], current) {
-					return
-				}
-				start = i
+			return ef.Face
+		}
+		graphemeRuns(s, pick, func(start, end int, f text.Face) bool { return yield(s[start:end], f) })
+	}
+}
+
+// graphemeRuns yields the maximal runs of s, as byte ranges, whose
+// graphemes pick maps to one value, with that value; it stops when yield
+// returns false.
+func graphemeRuns[K comparable](s string, pick func(g string) K, yield func(start, end int, k K) bool) {
+	start := 0
+	var cur K
+	for i := 0; i < len(s); {
+		end := textedit.NextGrapheme(s, i)
+		k := pick(s[i:end])
+		if i > 0 && k != cur {
+			if !yield(start, i, cur) {
+				return
 			}
-			current = chosen
-			i = end
+			start = i
 		}
-		if current != nil {
-			yield(s[start:], current)
-		}
+		cur = k
+		i = end
+	}
+	if len(s) > 0 {
+		yield(start, len(s), cur)
 	}
 }
 

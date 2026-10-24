@@ -4,7 +4,6 @@ import (
 	"image/color"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/ironpark/ggfx/text/v2"
 	"github.com/ironpark/ggui/internal/property"
@@ -78,12 +77,10 @@ type RichTextWidget struct {
 	links     []*spanLink
 
 	// The selection, for a Selectable paragraph.
-	ed        textedit.Editor
-	focused   bool
-	clicks    int
-	lastClick time.Time
-	lastPos   Point
-	rect      Rect
+	ed      textedit.Editor
+	focused bool
+	clicks  clickSelector
+	rect    Rect
 }
 
 // richKey is what the paragraph was last laid out for, beside its runs.
@@ -298,13 +295,8 @@ func (t *RichTextWidget) Baseline() (float64, bool) {
 	return t.para.lines[0].baseline, true
 }
 
-// runStyle returns the resolved style of run i, or the base style for -1.
-func (t *RichTextWidget) runStyle(i int) TextStyle {
-	if i < 0 {
-		return t.para.base
-	}
-	return t.para.runs[i].style
-}
+// roleOr returns role, or fallback when it is unset.
+func roleOr(role, fallback Role) Role { return pick(role != "", role, fallback) }
 
 // Paint implements Widget.
 func (t *RichTextWidget) Paint(dst *Canvas, r Rect) {
@@ -325,7 +317,7 @@ func (t *RichTextWidget) Paint(dst *Canvas, r Rect) {
 		dst.HitCursor(r, CursorShapeText)
 		dst.DescribeNode(r, t, described)
 	case p.text != "" && !dst.named(r):
-		dst.Node(r, Node{Role: pick(t.role != "", t.role, RoleText), Name: p.text}, described)
+		dst.Node(r, Node{Role: roleOr(t.role, RoleText), Name: p.text}, described)
 	default:
 		described(dst)
 	}
@@ -342,8 +334,8 @@ func (t *RichTextWidget) Paint(dst *Canvas, r Rect) {
 	for i := range p.lines {
 		ln := &p.lines[i]
 		x := r.Origin.X + p.lineX(i, r.Size.W, align)
-		col := func(style int) color.Color { return t.runStyle(ln.styles[style].run).Color }
-		drawPieces(dst.Image, ln.s, ln.pieces, ln.styles, p.lang, scale, dst.px(ln.baseline), col, func(op *text.DrawOptions) {
+		col := func(style int) color.Color { return p.style(ln.styles[style].run).Color }
+		drawPieces(dst.Image, ln.s, ln.pieces, ln.styles, scale, dst.px(ln.baseline), col, func(op *text.DrawOptions) {
 			op.GeoM.Translate(dst.px(x), dst.px(r.Origin.Y))
 		})
 		for _, pc := range ln.pieces {
@@ -351,7 +343,7 @@ func (t *RichTextWidget) Paint(dst *Canvas, r Rect) {
 			if st.run < 0 || !t.cur[p.runs[st.run].span].underline {
 				continue
 			}
-			rs := t.runStyle(st.run)
+			rs := p.style(st.run)
 			thick := max(1/scale, rs.Size/14)
 			y := r.Origin.Y + ln.baseline + max(1, rs.Size*0.08)
 			dst.FillRect(Rct(Pt(x+pc.x, y), Sz(pc.w, thick)), rs.Color)
@@ -413,7 +405,7 @@ func (l *spanLink) paint(dst *Canvas, r Rect, align float64) {
 		dst.HitCursor(b, CursorShapePointer)
 	}
 	if l.Focused && l.FocusVisible && dst != nil && dst.Image != nil {
-		col := l.w.runStyle(-1).Color
+		col := l.w.para.base.Color
 		for _, run := range p.runs {
 			if run.span == l.span {
 				col = run.style.Color

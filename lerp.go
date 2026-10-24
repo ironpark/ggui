@@ -29,25 +29,16 @@ func LerpColor(a, b color.Color, t float64) color.Color {
 func LerpFloat(a, b, t float64) float64 { return a + (b-a)*t }
 
 // LerpPoint moves along the straight line from a to b.
-func LerpPoint(a, b Point, t float64) Point {
-	return Pt(LerpFloat(a.X, b.X, t), LerpFloat(a.Y, b.Y, t))
-}
+func LerpPoint(a, b Point, t float64) Point { return PointVector.Lerp(a, b, t) }
 
 // LerpSize grows or shrinks a toward b.
-func LerpSize(a, b Size, t float64) Size { return Sz(LerpFloat(a.W, b.W, t), LerpFloat(a.H, b.H, t)) }
+func LerpSize(a, b Size, t float64) Size { return SizeVector.Lerp(a, b, t) }
 
 // LerpRect moves and resizes a toward b.
-func LerpRect(a, b Rect, t float64) Rect {
-	return Rct(LerpPoint(a.Origin, b.Origin, t), LerpSize(a.Size, b.Size, t))
-}
+func LerpRect(a, b Rect, t float64) Rect { return RectVector.Lerp(a, b, t) }
 
 // LerpInsets moves each side of a toward b's.
-func LerpInsets(a, b EdgeInsets, t float64) EdgeInsets {
-	return EdgeInsets{
-		Top: LerpFloat(a.Top, b.Top, t), Right: LerpFloat(a.Right, b.Right, t),
-		Bottom: LerpFloat(a.Bottom, b.Bottom, t), Left: LerpFloat(a.Left, b.Left, t),
-	}
-}
+func LerpInsets(a, b EdgeInsets, t float64) EdgeInsets { return InsetsVector.Lerp(a, b, t) }
 
 func lerp4(a, b [4]float64, t float64) (c [4]float64) {
 	for i := range c {

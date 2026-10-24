@@ -124,6 +124,9 @@ func (tl *TimelineValue) finish() {
 	}
 }
 
+// end is the progress the current run is heading for.
+func (tl *TimelineValue) end() float64 { return pick(tl.dir > 0, 1.0, 0.0) }
+
 func (tl *TimelineValue) active() bool { return tl.running }
 
 func (tl *TimelineValue) step(now time.Time) bool {
@@ -134,7 +137,7 @@ func (tl *TimelineValue) step(now time.Time) bool {
 		// Duration was cut to zero mid-run: no cycle would ever advance the
 		// clock, so land on the end as run does, rather than loop for ever.
 		tl.running = false
-		tl.sig.Set(pick(tl.dir > 0, 1.0, 0.0))
+		tl.sig.Set(tl.end())
 		tl.finish()
 		return false
 	}
@@ -143,7 +146,7 @@ func (tl *TimelineValue) step(now time.Time) bool {
 	}
 	d := float64(tl.duration)
 	for {
-		end := pick(tl.dir > 0, 1.0, 0.0)
+		end := tl.end()
 		left := (end - tl.from) * tl.dir // the part of the run still ahead
 		elapsed := float64(now.Sub(tl.start)) / d
 		if elapsed < left {
@@ -179,7 +182,7 @@ func (tl *TimelineValue) step(now time.Time) bool {
 // Interval returns the timeline's progress through the stretch from begin
 // to end, eased by e: zero before it, one after. See the package Interval.
 func (tl *TimelineValue) Interval(begin, end float64, e Easing) Readable[float64] {
-	return curved{tl, Interval(begin, end, e)}
+	return mapped[float64, float64]{tl, Interval(begin, end, e)}
 }
 
 // Stagger returns the progress of item i of n, eased by e, when each item
@@ -200,26 +203,20 @@ func (tl *TimelineValue) Stagger(i, n int, span float64, e Easing) Readable[floa
 	return tl.Interval(begin, begin+span, e)
 }
 
-// curved is a progress read through an easing.
-type curved struct {
-	src  Readable[float64]
-	ease Easing
+// mapped reads src through fn on every Get. Interval and Interpolate
+// return one rather than a Map, which is a memo: that needs an owner and
+// runs eagerly, and these are built anywhere and read once per frame.
+type mapped[T, U any] struct {
+	src Readable[T]
+	fn  func(T) U
 }
 
-func (c curved) Get() float64 { return c.ease(c.src.Get()) }
+func (m mapped[T, U]) Get() U { return m.fn(m.src.Get()) }
 
 // Interpolate returns the value lerp gives between from and to at progress
 // p: a Readable to bind a widget's property to, so it moves as p does.
 //
 //	box.BindWidth(ggui.Interpolate(tl, 40.0, 240.0, ggui.LerpFloat))
 func Interpolate[T any](p Readable[float64], from, to T, lerp func(a, b T, t float64) T) Readable[T] {
-	return interpolated[T]{p, from, to, lerp}
+	return mapped[float64, T]{p, func(t float64) T { return lerp(from, to, t) }}
 }
-
-type interpolated[T any] struct {
-	p        Readable[float64]
-	from, to T
-	lerp     func(a, b T, t float64) T
-}
-
-func (v interpolated[T]) Get() T { return v.lerp(v.from, v.to, v.p.Get()) }

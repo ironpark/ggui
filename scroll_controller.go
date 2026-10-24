@@ -74,7 +74,7 @@ func (c *ScrollController) ScrollBy(d float64) {
 	if r := c.pending; r != nil {
 		base = r.offset
 	} else if c.scroll != nil && c.scroll.phys.animating {
-		base = c.scroll.phys.animTo
+		base = c.scroll.phys.anim.to
 	}
 	c.request(base+d, true)
 }
@@ -110,10 +110,10 @@ func (c *ScrollController) request(v float64, animate bool) {
 // whether the waiting key is one of its rows and, if so, where that row
 // starts in window coordinates along the axis.
 func (s *ScrollWidget) placeKey(match func(k any) (float64, bool)) {
-	c := s.phys.ctrl
-	if c == nil || !c.keyed || c.scroll != s {
+	if !s.keyPending() {
 		return
 	}
+	c := s.phys.ctrl
 	at, ok := match(c.key)
 	if !ok {
 		return
@@ -123,4 +123,11 @@ func (s *ScrollWidget) placeKey(match func(k any) (float64, bool)) {
 	// at is where the row is drawn now; the content moved by the visible
 	// offset to put it there.
 	s.animateTo(s.visualOffset()+at-start, c.animate)
+}
+
+// keyPending reports whether a ScrollToKey on s waits for a list to place
+// its key, which a list checks before it builds the match.
+func (s *ScrollWidget) keyPending() bool {
+	c := s.phys.ctrl
+	return c != nil && c.keyed && c.scroll == s
 }

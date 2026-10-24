@@ -68,12 +68,10 @@ type TextInputWidget struct {
 	imeEnd      int
 	imeErr      error
 
-	scroll    float64 // how far the text is shifted left, or up when multiline, to show the caret
-	width     float64 // the wrap width from the last Layout, when multiline
-	blink     time.Time
-	clicks    int
-	lastClick time.Time
-	lastPos   Point
+	scroll float64 // how far the text is shifted left, or up when multiline, to show the caret
+	width  float64 // the wrap width from the last Layout, when multiline
+	blink  time.Time
+	clicks clickSelector
 
 	// spans caches the wrap of the text it was last asked for, which
 	// layout, paint, the caret's blink and hit testing all ask for again.
@@ -1032,27 +1030,11 @@ func (t *TextInputWidget) HandlePointer(ev PointerEvent) bool {
 			return false
 		}
 		t.ime.Confirm()
-		now := activeWorld().frame.raw()
-		if now.Sub(t.lastClick) < 400*time.Millisecond && near(ev.Pos, t.lastPos) {
-			t.clicks++
-		} else {
-			t.clicks = 1
-		}
-		t.lastClick, t.lastPos = now, ev.Pos
-		idx := t.indexAt(ev.Pos)
-		switch t.clicks {
-		case 1:
-			t.ed.MoveTo(idx, false)
-		case 2:
-			t.ed.SelectWord(idx)
-		default:
-			t.ed.SelectLine(idx)
-		}
+		t.clicks.press(&t.ed, ev.Pos, t.indexAt, false)
 		t.blink = Now()
 		return true
 	case PointerDrag:
-		if t.clicks == 1 {
-			t.ed.MoveTo(t.indexAt(ev.Pos), true)
+		if t.clicks.drag(&t.ed, ev.Pos, t.indexAt) {
 			t.blink = Now()
 		}
 		return true
@@ -1067,6 +1049,50 @@ func near(a, b Point) bool {
 	return dx*dx+dy*dy < 16
 }
 
+// clickSelector turns a pointer's clicks on text into a selection: one
+// places the caret, a quick second near the first selects a word, a
+// third the line, and a drag after one click extends the selection.
+type clickSelector struct {
+	clicks    int
+	lastClick time.Time
+	lastPos   Point
+}
+
+// press counts a left press at pos and selects in ed for it, at reports
+// the text offset for a point. extend, as Shift does, extends the
+// selection to pos instead and starts the count over.
+func (c *clickSelector) press(ed *textedit.Editor, pos Point, at func(Point) int, extend bool) {
+	now := activeWorld().frame.raw()
+	if now.Sub(c.lastClick) < 400*time.Millisecond && near(pos, c.lastPos) {
+		c.clicks++
+	} else {
+		c.clicks = 1
+	}
+	c.lastClick, c.lastPos = now, pos
+	idx := at(pos)
+	switch {
+	case extend:
+		c.clicks = 1
+		ed.MoveTo(idx, true)
+	case c.clicks == 1:
+		ed.MoveTo(idx, false)
+	case c.clicks == 2:
+		ed.SelectWord(idx)
+	default:
+		ed.SelectLine(idx)
+	}
+}
+
+// drag extends ed's selection to pos after a single click, and reports
+// whether it did.
+func (c *clickSelector) drag(ed *textedit.Editor, pos Point, at func(Point) int) bool {
+	if c.clicks != 1 {
+		return false
+	}
+	ed.MoveTo(at(pos), true)
+	return true
+}
+
 // Adopt implements Adopter: a rebuilt editor at the same Rect carries on
 // with the previous one's focus, caret and selection.
 func (t *TextInputWidget) Adopt(prev any) {
@@ -1077,7 +1103,7 @@ func (t *TextInputWidget) Adopt(prev any) {
 	p.ime.Confirm()
 	t.Interactive.Adopt(prev)
 	t.ed, t.scroll, t.width = p.ed, p.scroll, p.width
-	t.clicks, t.lastClick, t.lastPos = p.clicks, p.lastClick, p.lastPos
+	t.clicks = p.clicks
 	if p.ed.Text != Untrack(t.value.Get) {
 		t.ed.SetText(Untrack(t.value.Get))
 	}

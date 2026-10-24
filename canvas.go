@@ -39,6 +39,12 @@ type Canvas struct {
 	group   any         // what regions painted now belong to, for EachKeyed's eviction
 	space   *paintSpace // inside a Transform or a shape clip; see space.go
 
+	// window is set on a Canvas that draws into the window's own image,
+	// its screen or its backbuffer, and onScreen when that is the screen,
+	// which ggfx draws to but never reads. derive and Clip keep them; a
+	// layer's Canvas draws into an image of its own and clears them.
+	window, onScreen bool
+
 	// frame is the state there is one of per frame rather than one per
 	// Canvas: it is reached through root, and only the root holds it. A
 	// Clip or an Inert child leaves this nil, which is what makes "root
@@ -89,6 +95,11 @@ type frameState struct {
 	layers     []*ggfx.Image
 	layerDepth int // Layers open now
 	layerPeak  int // the most open at once this frame
+
+	// backdrop records that a BackdropBlur read the window's own image
+	// this frame, or wanted to: the window keeps a backbuffer for it, as
+	// its screen cannot be read.
+	backdrop bool
 }
 
 // fs returns the frame state, creating it on the root's first use. A Canvas
@@ -217,6 +228,18 @@ func (c *Canvas) derive() *Canvas {
 	child.parent, child.frame = c, nil
 	return &child
 }
+
+// into returns a Canvas like c that draws into img, an image of its own
+// such as a layer's.
+func (c *Canvas) into(img *ggfx.Image) *Canvas {
+	child := c.derive()
+	child.Image, child.window, child.onScreen = img, false, false
+	return child
+}
+
+// readable reports whether what c has drawn can be read back, which a
+// window's screen cannot be.
+func (c *Canvas) readable() bool { return c.Image != nil && !c.onScreen }
 
 // frameTrace is every widget painted this frame, in paint order; the
 // inspector reads it. frameSem is the same for the accessibility tree.
@@ -578,7 +601,7 @@ func (c *Canvas) Clip(r Rect) *Canvas {
 	if c == nil {
 		return nil
 	}
-	child := &Canvas{parent: c, clip: r, clipped: true, scale: c.scale, inert: c.inert, scope: c.scope, group: c.group, space: c.space}
+	child := &Canvas{parent: c, clip: r, clipped: true, scale: c.scale, inert: c.inert, scope: c.scope, group: c.group, space: c.space, window: c.window, onScreen: c.onScreen}
 	if c.clipped {
 		child.clip = c.clip.Intersect(r)
 	}

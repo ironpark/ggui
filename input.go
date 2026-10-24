@@ -358,10 +358,10 @@ func (in *inputState) updateHover(f frameInput) {
 	now := in.send(move)
 	if !in.continues(now, in.hovered) {
 		if in.hovered != nil {
-			in.hovered.pointer.HandlePointer(in.hovered.pointerAt(PointerEvent{Kind: PointerExit, Pos: f.pos}))
+			in.hovered.handle(PointerEvent{Kind: PointerExit, Pos: f.pos})
 		}
 		if now != nil {
-			now.pointer.HandlePointer(now.pointerAt(PointerEvent{Kind: PointerEnter, Pos: f.pos}))
+			now.handle(PointerEvent{Kind: PointerEnter, Pos: f.pos})
 		}
 	}
 	in.hovered = keep(now)
@@ -407,7 +407,7 @@ func (in *inputState) dispatchPointer(f frameInput) {
 	}
 	if in.pressed != nil && len(f.down) == 0 && len(f.up) == 0 {
 		if cur := in.findPointer(in.pressed); cur != nil {
-			cur.pointer.HandlePointer(cur.pointerAt(PointerEvent{Kind: PointerDrag, Pos: f.pos, Button: in.pressedBtn}))
+			cur.handle(PointerEvent{Kind: PointerDrag, Pos: f.pos, Button: in.pressedBtn})
 		}
 	}
 	for _, b := range f.up {
@@ -418,9 +418,9 @@ func (in *inputState) dispatchPointer(f frameInput) {
 			continue
 		}
 		if cur := in.findPointer(p); cur != nil {
-			cur.pointer.HandlePointer(cur.pointerAt(ev))
+			cur.handle(ev)
 			if cur.contains(f.pos) {
-				cur.pointer.HandlePointer(cur.pointerAt(PointerEvent{Kind: PointerTap, Pos: f.pos, Button: b, Mods: f.mods}))
+				cur.handle(PointerEvent{Kind: PointerTap, Pos: f.pos, Button: b, Mods: f.mods})
 			}
 		}
 		in.pressed = nil
@@ -562,11 +562,17 @@ func (in *inputState) topmost(match func(*hitRegion) bool) *hitRegion {
 	return nil
 }
 
+// handle delivers the window-space ev to r's PointerHandler in the
+// coordinates r was painted in and reports whether it consumed it.
+func (r *hitRegion) handle(ev PointerEvent) bool {
+	return r.pointer.HandlePointer(r.pointerAt(ev))
+}
+
 // send offers ev to regions under it from the top down until one consumes it
 // and returns that region, or nil.
 func (in *inputState) send(ev PointerEvent) *hitRegion {
 	return in.topmost(func(r *hitRegion) bool {
-		return r.pointer != nil && r.contains(ev.Pos) && r.pointer.HandlePointer(r.pointerAt(ev))
+		return r.pointer != nil && r.contains(ev.Pos) && r.handle(ev)
 	})
 }
 
@@ -698,7 +704,7 @@ func (in *inputState) releasePress(pos Point, mods Mods) {
 		return
 	}
 	if cur := in.findPointer(in.pressed); cur != nil {
-		cur.pointer.HandlePointer(cur.pointerAt(PointerEvent{Kind: PointerUp, Pos: pos, Button: in.pressedBtn, Mods: mods}))
+		cur.handle(PointerEvent{Kind: PointerUp, Pos: pos, Button: in.pressedBtn, Mods: mods})
 	}
 	in.pressed = nil
 }

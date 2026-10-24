@@ -72,15 +72,7 @@ func Switcher[K comparable](key Readable[K], build func(K) Widget) *SwitcherWidg
 			}
 			s.entries = nil
 		})
-		var previous K
-		var initialized bool
-		reactive.Observe(func() {
-			v := key.Get()
-			if initialized && v == previous {
-				return
-			}
-			first := !initialized
-			previous, initialized = v, true
+		observeKey(key, func(v K, first bool) {
 			reactive.Untrack(func() struct{} { s.change(v, owner, first); return struct{}{} })
 		})
 		return &switcherBody[K]{s}
@@ -127,14 +119,8 @@ func (s *SwitcherWidget[K]) change(v K, owner *reactive.Computation, first bool)
 		}
 	}
 	e := &switchEntry{since: now, from: pick(first, 1.0, 0.0), d: s.duration}
-	var child Widget
-	reactive.WithOwner(owner, func() {
-		// A unique root gives remounted controls fresh identities.
-		identity := new(int)
-		e.dispose = reactive.RootWith(identity, "", func() {
-			child = remembering(func() Widget { return s.build(v) })
-		})
-	})
+	child, dispose := mountKeyed(owner, func() Widget { return s.build(v) })
+	e.dispose = dispose
 	if child == nil {
 		child = Box()
 	}

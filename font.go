@@ -421,19 +421,12 @@ func (f *Font) face(size float64, weight FontWeight) text.Face {
 	if face, ok := f.faces[key]; ok {
 		return face
 	}
-	own, axis := f.forWeight(weight)
-	var face text.Face = own.goFace(size, weight, axis)
-	fallbacks := f.fallbacks
-	if fallbacks == nil && !f.noFallback {
-		fallbacks = SystemFonts()
-	}
-	if len(fallbacks) > 0 {
+	fonts, multi := f.chainLocked(weight)
+	var face text.Face = fonts[0].font.goFace(size, weight, fonts[0].axis)
+	if multi {
 		faces := []text.Face{face}
-		for _, fb := range fallbacks {
-			if fb != f {
-				fbFace, fbAxis := fb.forWeight(weight)
-				faces = append(faces, fbFace.goFace(size, weight, fbAxis))
-			}
+		for _, cf := range fonts[1:] {
+			faces = append(faces, cf.font.goFace(size, weight, cf.axis))
 		}
 		if m, err := text.NewMultiFace(faces...); err == nil {
 			face = m
@@ -447,6 +440,32 @@ func (f *Font) face(size float64, weight FontWeight) text.Face {
 	}
 	f.faces[key] = face
 	return face
+}
+
+// chainFont is one font of a fallback chain, as forWeight picks it.
+type chainFont struct {
+	font *Font
+	axis bool // it draws the weight on its weight axis
+}
+
+// chainLocked returns the fonts f draws weight w with, in order: its own
+// for w, then each fallback's for w. multi reports whether f has
+// fallbacks at all, its own or the system's, which makes the face a
+// fallback chain even when the only one is f itself. f.mu must be held.
+func (f *Font) chainLocked(w FontWeight) (fonts []chainFont, multi bool) {
+	own, axis := f.forWeight(w)
+	fonts = []chainFont{{own, axis}}
+	fallbacks := f.fallbacks
+	if fallbacks == nil && !f.noFallback {
+		fallbacks = SystemFonts()
+	}
+	for _, fb := range fallbacks {
+		if fb != f {
+			fbFont, fbAxis := fb.forWeight(w)
+			fonts = append(fonts, chainFont{fbFont, fbAxis})
+		}
+	}
+	return fonts, len(fallbacks) > 0
 }
 
 func lineWidth(s string, face text.Face) float64 {
@@ -542,6 +561,9 @@ func wrapLine(line string, face text.Face, maxW float64) []string {
 	return lines
 }
 
+// ellipsisText ends a line cut short.
+const ellipsisText = "…"
+
 // ellipsize cuts s at a grapheme boundary and ends it with "…", so that it
 // fits in maxW. When cut is false, s that already fits comes back whole.
 // Spaces before the cut go, and the ellipsis is all that is left when not
@@ -550,17 +572,22 @@ func ellipsize(s string, face text.Face, maxW float64, cut bool) string {
 	if !cut && lineWidth(s, face) <= maxW {
 		return s
 	}
-	width := prefixWidths(s, face)
-	room := maxW - lineWidth("…", face)
-	keep := 0
-	for i := 0; i < len(s); {
+	keep := ellipsizeBy(s, 0, len(s), prefixWidths(s, face), maxW-lineWidth(ellipsisText, face))
+	return strings.TrimRight(s[:keep], " \t") + ellipsisText
+}
+
+// ellipsizeBy returns where s[a:b] ends so that it fits in room, at a
+// grapheme boundary of s, width(x) measuring s[a:x].
+func ellipsizeBy(s string, a, b int, width func(int) float64, room float64) int {
+	keep := a
+	for i := a; i < b; {
 		end := textedit.NextGrapheme(s, i)
-		if width(end) > room {
+		if end > b || width(end) > room {
 			break
 		}
 		keep, i = end, end
 	}
-	return strings.TrimRight(s[:keep], " \t") + "…"
+	return keep
 }
 
 // breakRunes splits word into pieces no wider than maxW, never emptier than
@@ -611,13 +638,9 @@ func wrapSpansBy(s string, width func(a, b int) float64, maxW float64) []lineSpa
 	}
 }
 
-// wrapParagraph wraps text without hard breaks: greedily by words, and
-// between grapheme clusters when a word alone is wider than maxW.
-func wrapParagraph(p string, face text.Face, maxW float64) []lineSpan {
-	return wrapParagraphBy(p, func(a, b int) float64 { return lineWidth(p[a:b], face) }, maxW)
-}
-
-// wrapParagraphBy is wrapParagraph with width measuring p[a:b].
+// wrapParagraphBy wraps text without hard breaks, width measuring p[a:b]:
+// greedily by words, and between grapheme clusters when a word alone is
+// wider than maxW.
 func wrapParagraphBy(p string, width func(a, b int) float64, maxW float64) []lineSpan {
 	if maxW <= 0 || width(0, len(p)) <= maxW {
 		return []lineSpan{{0, len(p)}}

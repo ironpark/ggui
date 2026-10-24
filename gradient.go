@@ -60,7 +60,9 @@ type Gradient struct {
 // bottom. The line is as long as it takes for the first and last stops to
 // fall on the Rect's far corners, as CSS's does.
 func LinearGradient(angle float64, stops ...GradientStop) Gradient {
-	return newGradient(gradientLinear, stops).withAngle(angle)
+	g := newGradient(gradientLinear, stops)
+	g.angle = angle
+	return g
 }
 
 // RadialGradient blends outwards in a circle from the Rect's centre, the
@@ -84,8 +86,6 @@ func newGradient(kind gradientKind, stops []GradientStop) Gradient {
 	slices.SortStableFunc(s, func(a, b GradientStop) int { return cmp.Compare(a.Offset, b.Offset) })
 	return Gradient{kind: kind, stops: s, cx: 0.5, cy: 0.5, radius: 0.5}
 }
-
-func (g Gradient) withAngle(a float64) Gradient { g.angle = a; return g }
 
 // Center places a radial or sweep gradient's centre at fractions of the
 // Rect: (0, 0) is its top-left corner, (0.5, 0.5) its middle, the default.
@@ -132,25 +132,24 @@ func (g Gradient) resolve(env Env) Gradient {
 func (g Gradient) device(c *Canvas, r Rect) render.Gradient {
 	out := render.Gradient{Kind: int(g.kind)}
 	for _, s := range g.stops {
-		if s.Color == nil {
-			continue
+		if s.Color != nil {
+			out.Stops = append(out.Stops, render.Stop{Offset: s.Offset, Color: render.Premul(s.Color)})
 		}
-		out.Colors = append(out.Colors, render.Premul(s.Color))
-		out.Stops = append(out.Stops, s.Offset)
 	}
-	centre := Pt(r.Origin.X+r.Size.W*g.cx, r.Origin.Y+r.Size.H*g.cy)
-	switch g.kind {
-	case gradientLinear:
+	if g.kind == gradientLinear {
 		sin, cos := math.Sincos(g.angle)
 		half := math.Abs(r.Size.W/2*cos) + math.Abs(r.Size.H/2*sin)
 		mid := r.Center()
 		out.Start = Pt(c.px(mid.X-cos*half), c.px(mid.Y-sin*half))
 		out.End = Pt(c.px(mid.X+cos*half), c.px(mid.Y+sin*half))
-	case gradientRadial:
+		return out
+	}
+	out.Start = Pt(c.px(r.Origin.X+r.Size.W*g.cx), c.px(r.Origin.Y+r.Size.H*g.cy))
+	if g.kind == gradientRadial {
 		radius := c.px(g.radius * min(r.Size.W, r.Size.H))
-		out.Start, out.End = Pt(c.px(centre.X), c.px(centre.Y)), Pt(radius, radius)
-	case gradientSweep:
-		out.Start, out.End = Pt(c.px(centre.X), c.px(centre.Y)), Pt(g.angle, 0)
+		out.End = Pt(radius, radius)
+	} else {
+		out.End = Pt(g.angle, 0)
 	}
 	return out
 }
@@ -190,12 +189,12 @@ func (c *Canvas) FillGradientPath(path *Path, bounds Rect, g Gradient) {
 // the same rounded corners. A zero Gradient removes it. EnvColor stops are
 // resolved at layout, as Fill's color is.
 func (b *BoxWidget) Gradient(g Gradient) *BoxWidget {
-	if property.Equal(g, b.gradient[0]) {
+	if property.Equal(g, b.gradient) {
 		return b
 	}
-	if g.themed() || b.gradient[0].themed() {
+	if g.themed() || b.gradient.themed() {
 		b.props.Changed()
 	}
-	b.gradient = [2]Gradient{g, g}
+	b.gradient, b.shownGradient = g, g
 	return b
 }

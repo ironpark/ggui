@@ -129,3 +129,22 @@ func (p *Value[T]) Bind(r Reader[T], name string) bool {
 	p.reader = r
 	return true
 }
+
+// Set gives p the literal v and, if that changed it, o: a widget's setter.
+func Set[T any](o *Owner, p *Value[T], v T) bool {
+	changed := p.Set(v)
+	if changed {
+		o.Changed()
+	}
+	return changed
+}
+
+// Bind has p follow r and, if that is a new reader, changes o: a widget's
+// Bind setter. name is the setter's, for the panic on a nil reader.
+func Bind[T any](o *Owner, p *Value[T], r Reader[T], name string) bool {
+	changed := p.Bind(r, name)
+	if changed {
+		o.Changed()
+	}
+	return changed
+}

@@ -58,9 +58,7 @@ func (c *Canvas) clipShape(bounds Rect, inside func(Point) bool, drawMask func(*
 	}
 	shaped.layer(shaped.Image.Bounds(), paint, func(img *ggfx.Image) {
 		shaped.scratch(img.Bounds(), func(mask *ggfx.Image) {
-			m := shaped.derive()
-			m.Image = mask
-			drawMask(m)
+			drawMask(shaped.into(mask))
 			// The mask keeps the layer where it is opaque.
 			op := &ggfx.DrawImageOptions{Blend: ggfx.BlendSourceIn}
 			op.GeoM.Translate(float64(img.Bounds().Min.X), float64(img.Bounds().Min.Y))
@@ -72,13 +70,15 @@ func (c *Canvas) clipShape(bounds Rect, inside func(Point) bool, drawMask func(*
 	})
 }
 
-// scratch lends fn a cleared layer image covering area, for an effect that
-// needs one more image than the layer it works on.
+// scratch lends fn the part of a cleared layer image within area, the whole
+// window when empty: a Layer's, or one more for an effect that needs it.
 func (c *Canvas) scratch(area image.Rectangle, fn func(img *ggfx.Image)) {
 	f := c.fs()
 	img := f.borrowLayer(c.root().Image)
 	defer func() { f.layerDepth-- }()
-	img = img.SubImage(area).(*ggfx.Image)
+	if !area.Empty() {
+		img = img.SubImage(area).(*ggfx.Image)
+	}
 	img.Clear()
 	fn(img)
 }

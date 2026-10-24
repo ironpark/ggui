@@ -176,8 +176,6 @@ func blockChild(w Widget) Widget {
 func Key[K comparable](key Readable[K], build func(K) Widget) *ComponentWidget {
 	return Component(func() Widget {
 		c := &ComponentWidget{}
-		var previous K
-		var initialized bool
 		var dispose Cleanup
 		owner := reactive.CurrentOwner()
 		OnCleanup(func() {
@@ -185,28 +183,47 @@ func Key[K comparable](key Readable[K], build func(K) Widget) *ComponentWidget {
 				dispose()
 			}
 		})
-		reactive.Observe(func() {
-			value := key.Get()
-			if initialized && value == previous {
-				return
-			}
+		observeKey(key, func(value K, _ bool) {
 			if dispose != nil {
 				dispose()
 				dispose = nil
 			}
-			previous, initialized = value, true
-			reactive.WithOwner(owner, func() {
-				// A unique root gives remounted controls fresh identities.
-				identity := new(int)
-				dispose = reactive.RootWith(identity, "", func() {
-					c.child = remembering(func() Widget { return build(value) })
-					c.cw.child = c.child
-				})
-			})
+			c.child, dispose = mountKeyed(owner, func() Widget { return build(value) })
+			c.cw.child = c.child
 			c.cw.invalidate()
 		})
 		return c
 	})
+}
+
+// observeKey calls changed with key's value now and again whenever it
+// changes to a different one; first is set on the initial call. It shares
+// Key's and Switcher's dedupe, which a re-run reading the same key skips.
+func observeKey[K comparable](key Readable[K], changed func(v K, first bool)) {
+	var previous K
+	var initialized bool
+	reactive.Observe(func() {
+		v := key.Get()
+		if initialized && v == previous {
+			return
+		}
+		first := !initialized
+		previous, initialized = v, true
+		changed(v, first)
+	})
+}
+
+// mountKeyed builds a keyed subtree under owner in a root of its own, and
+// returns it with the function that disposes it.
+func mountKeyed(owner *reactive.Computation, build func() Widget) (child Widget, dispose Cleanup) {
+	reactive.WithOwner(owner, func() {
+		// A unique root gives remounted controls fresh identities.
+		identity := new(int)
+		dispose = reactive.RootWith(identity, "", func() {
+			child = remembering(build)
+		})
+	})
+	return child, dispose
 }
 
 // vacant is reported by a widget that currently shows nothing, so the flow

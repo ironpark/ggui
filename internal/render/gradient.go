@@ -100,21 +100,26 @@ var (
 // Gradient is a gradient in a destination's pixels. Start and End are its
 // line for a Linear one; Start is the centre and End the radii for a Radial
 // one, and Start the centre and End.X the angle it starts at for a Sweep.
-// Colors are premultiplied, one per stop, and Stops are ascending offsets.
+// Stops are in ascending Offset.
 type Gradient struct {
 	Kind       int
 	Start, End geom.Point
-	Colors     [][4]float32
-	Stops      []float64
+	Stops      []Stop
+}
+
+// Stop is a premultiplied colour at Offset along a Gradient.
+type Stop struct {
+	Offset float64
+	Color  [4]float32
 }
 
 // set fills u with g, keeping at most MaxStops stops.
 func (g *Gradient) set(u *ggfx.Uniforms) {
-	n := min(len(g.Colors), len(g.Stops), MaxStops)
+	n := min(len(g.Stops), MaxStops)
 	var colors, stops [MaxStops * 4]float32
-	for i := range n {
-		copy(colors[i*4:], g.Colors[i][:])
-		stops[i*4] = float32(g.Stops[i])
+	for i, s := range g.Stops[:n] {
+		copy(colors[i*4:], s.Color[:])
+		stops[i*4] = float32(s.Offset)
 	}
 	u.SetSlice("colors", colors[:])
 	u.SetSlice("stops", stops[:])
@@ -132,7 +137,7 @@ func (g *Gradient) valid() bool {
 			return false
 		}
 	}
-	return min(len(g.Colors), len(g.Stops)) > 0
+	return len(g.Stops) > 0
 }
 
 // FillGradientRoundRect fills the rectangle centred at centre with half size

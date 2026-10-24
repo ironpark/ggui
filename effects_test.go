@@ -184,19 +184,6 @@ func TestTransformNestsAndPaintsThroughALayer(t *testing.T) {
 	}
 }
 
-func TestLayerTransformLeavesHitRegions(t *testing.T) {
-	t.Parallel()
-	img := ggfx.NewImage(50, 50)
-	defer img.Deallocate()
-	c := &Canvas{Image: img}
-	tg := &target{}
-	c.Layer(LayerOptions{Transform: Affine{}.Translate(20, 0)}, func(l *Canvas) { tg.Paint(l, Rct(Pt(0, 0), Sz(10, 10))) })
-	if len(c.hits) != 1 || c.hits[0].rect != Rct(Pt(0, 0), Sz(10, 10)) || c.hits[0].space != nil {
-		t.Fatalf("hits %+v; a Layer's transform must not move them", c.hits)
-	}
-	c.freeLayers()
-}
-
 func TestOpacityFadesWithoutChangingLayoutOrInput(t *testing.T) {
 	t.Parallel()
 	tg := &target{size: Sz(30, 30)}
@@ -217,6 +204,9 @@ func TestOpacityFadesWithoutChangingLayoutOrInput(t *testing.T) {
 	}
 	w.Opacity(0)
 	p.Draw(img)
+	if layerCount(&p.canvas) != 0 {
+		t.Fatalf("an invisible child kept %d layers", layerCount(&p.canvas))
+	}
 	p.Click(Pt(10, 10))
 	if len(tg.taps()) != 1 {
 		t.Fatal("an invisible child stopped taking input")
@@ -353,7 +343,7 @@ func TestBoxGradientResolvesThemeColors(t *testing.T) {
 	box := Box().Size(40, 20).Gradient(LinearGradient(0, Stops(testColor{}, color.White)...)).Radius(4)
 	env := Env{}.With(testColorKey, color.Color(color.RGBA{G: 200, A: 255}))
 	box.Layout(Loose(Sz(100, 100)), env)
-	if got := box.gradient[1].stops[0].Color; got != (color.RGBA{G: 200, A: 255}) {
+	if got := box.shownGradient.stops[0].Color; got != (color.RGBA{G: 200, A: 255}) {
 		t.Fatalf("painted stop %v; want the Env's color", got)
 	}
 	img := ggfx.NewImage(50, 50)
@@ -369,7 +359,7 @@ func TestBoxGradientResolvesThemeColors(t *testing.T) {
 	c.FillGradientPath(&path, Rct(Pt(0, 0), Sz(20, 20)), RadialGradient(Stops(color.White, color.Black)...))
 	c.FillPathGradient(&path, Rct(Pt(0, 0), Sz(20, 20)), color.White, color.Black)
 	var none *Canvas
-	none.FillGradientRoundRect(Rct(Pt(0, 0), Sz(1, 1)), 1, box.gradient[1])
+	none.FillGradientRoundRect(Rct(Pt(0, 0), Sz(1, 1)), 1, box.shownGradient)
 }
 
 func TestBlurPaintsTheSubtreeOnceAndReturnsItsImages(t *testing.T) {
@@ -389,8 +379,10 @@ func TestBlurPaintsTheSubtreeOnceAndReturnsItsImages(t *testing.T) {
 			t.Fatalf("sigma %v: painted %d times, %d layers open", sigma, painted, c.fs().layerDepth)
 		}
 	}
-	if layerCount(c) == 0 {
-		t.Fatal("a blur borrowed no layer")
+	// The passes take turns with the image blurred, so a blur borrows
+	// two at most: the layer or backdrop, and one scratch.
+	if n := layerCount(c); n != 2 {
+		t.Fatalf("blurs borrowed %d layers; want 2", n)
 	}
 	c.freeLayers()
 }
@@ -415,5 +407,59 @@ func TestBlurWidgetsPassLayoutAndInputThrough(t *testing.T) {
 	}
 	if tg.rect.Size != Sz(30, 30) {
 		t.Fatalf("blurred child laid out at %v", tg.rect)
+	}
+}
+
+func TestBackdropBlurNeverReadsTheScreen(t *testing.T) {
+	t.Parallel()
+	img := ggfx.NewImage(80, 80)
+	defer img.Deallocate()
+	c := &Canvas{Image: img, window: true, onScreen: true}
+	f := c.fs()
+	// Reading a ggfx screen panics; on it the blur must not touch it, only
+	// ask for a backbuffer.
+	c.BackdropBlur(Rct(Pt(10, 10), Sz(20, 20)), 4, 3)
+	if !f.backdrop || layerCount(c) != 0 {
+		t.Fatalf("backdrop wanted %v, %d layers borrowed", f.backdrop, layerCount(c))
+	}
+	// Inside a layer the image read is the layer's, which is allowed.
+	f.backdrop = false
+	c.Layer(LayerOptions{}, func(dst *Canvas) {
+		dst.BackdropBlur(Rct(Pt(10, 10), Sz(20, 20)), 4, 3)
+	})
+	if f.backdrop {
+		t.Fatal("a blur inside a layer asked for a backbuffer")
+	}
+	// On the backbuffer it reads the window's image and keeps asking.
+	c.onScreen = false
+	c.Clip(Rct(Pt(0, 0), Sz(40, 40))).BackdropBlur(Rct(Pt(10, 10), Sz(20, 20)), 4, 3)
+	if !f.backdrop {
+		t.Fatal("a blur on the backbuffer let it go")
+	}
+	c.freeLayers()
+}
+
+func TestWindowKeepsABackbufferWhileBackdropsPaint(t *testing.T) {
+	t.Parallel()
+	screen := ggfx.NewImage(40, 30)
+	defer screen.Deallocate()
+	w := &Window{}
+	if w.paintTarget(screen) != screen {
+		t.Fatal("a window with no backdrop painted off screen")
+	}
+	// A frame on the screen that wanted a blur turns the backbuffer on.
+	w.canvas.fs().backdrop = true
+	w.presentBackdrop(screen, screen)
+	back := w.paintTarget(screen)
+	if back == screen || back.Bounds() != screen.Bounds() {
+		t.Fatalf("backbuffer %v for screen %v", back.Bounds(), screen.Bounds())
+	}
+	// Frames without one count it down and free it.
+	w.canvas.fs().backdrop = false
+	for range backdropFrames {
+		w.presentBackdrop(screen, w.paintTarget(screen))
+	}
+	if w.backbuf != nil || w.paintTarget(screen) != screen {
+		t.Fatal("the backbuffer outlived its backdrops")
 	}
 }

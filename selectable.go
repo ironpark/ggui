@@ -1,10 +1,6 @@
 package ggui
 
-import (
-	"time"
-
-	"github.com/ironpark/ggui/internal/property"
-)
+import "github.com/ironpark/ggui/internal/property"
 
 // Selectable lets the reader select the paragraph's text and copy it: a
 // drag selects from where it began, a double click a word, a triple click
@@ -39,7 +35,9 @@ func (t *RichTextWidget) SelectedText() string { return t.ed.Selected() }
 // the Text's own merged onto the one it inherits.
 func (t *TextWidget) layoutRich(c Constraints, env Env, style TextStyle) Size {
 	r := t.rich
-	r.spans.Set([]TextSpan{Span(t.value)})
+	if len(r.cur) != 1 || r.cur[0].text != t.value {
+		r.spans.Set([]TextSpan{Span(t.value)})
+	}
 	r.style = style
 	r.wrap, r.ellipsis, r.maxLines = t.wrap, t.ellipsis, t.maxLines
 	r.align, r.alignSet, r.role = t.align, t.alignSet, t.role
@@ -51,7 +49,7 @@ func (t *TextWidget) layoutRich(c Constraints, env Env, style TextStyle) Size {
 func (t *RichTextWidget) Describe() Node {
 	lo, hi := t.ed.Selection()
 	return Node{
-		Role:     pick(t.role != "", t.role, RoleText),
+		Role:     roleOr(t.role, RoleText),
 		Name:     t.para.text,
 		Actions:  ActionFocus | ActionSetSelection,
 		SelStart: lo,
@@ -135,30 +133,10 @@ func (t *RichTextWidget) HandlePointer(ev PointerEvent) bool {
 		if ev.Button != MouseButtonLeft {
 			return false
 		}
-		now := activeWorld().frame.raw()
-		if now.Sub(t.lastClick) < 400*time.Millisecond && near(ev.Pos, t.lastPos) {
-			t.clicks++
-		} else {
-			t.clicks = 1
-		}
-		t.lastClick, t.lastPos = now, ev.Pos
-		idx := t.offsetAt(ev.Pos)
-		switch {
-		case ev.Mods.Shift:
-			t.clicks = 1
-			t.ed.MoveTo(idx, true)
-		case t.clicks == 1:
-			t.ed.MoveTo(idx, false)
-		case t.clicks == 2:
-			t.ed.SelectWord(idx)
-		default:
-			t.ed.SelectLine(idx)
-		}
+		t.clicks.press(&t.ed, ev.Pos, t.offsetAt, ev.Mods.Shift)
 		return true
 	case PointerDrag:
-		if t.clicks == 1 {
-			t.ed.MoveTo(t.offsetAt(ev.Pos), true)
-		}
+		t.clicks.drag(&t.ed, ev.Pos, t.offsetAt)
 		return true
 	case PointerUp, PointerTap, PointerMove, PointerEnter, PointerExit:
 		return true
@@ -183,7 +161,7 @@ func (t *RichTextWidget) Adopt(prev any) {
 		return
 	}
 	t.focused = p.focused
-	t.clicks, t.lastClick, t.lastPos = p.clicks, p.lastClick, p.lastPos
+	t.clicks = p.clicks
 	if p.ed.Text == t.ed.Text {
 		t.ed.Anchor, t.ed.Caret = p.ed.Anchor, p.ed.Caret
 	}

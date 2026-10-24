@@ -151,6 +151,12 @@ type Window struct {
 	sinks        []func(*inspect.Frame)
 	overlay      Overlay // drawn over every frame; the inspector while it is on
 
+	// backbuf is what the window paints into while a BackdropBlur needs to
+	// read the frame, copied to the screen at the end; backdropTTL counts
+	// down the frames it is kept after the last blur.
+	backbuf     *ggfx.Image
+	backdropTTL int
+
 	focused  *StateValue[bool]
 	viewport *StateValue[Size]
 	state    *StateValue[WindowState]
@@ -255,6 +261,7 @@ func (w *Window) release() {
 	w.ax.Close()
 	w.close()
 	w.canvas.freeLayers()
+	w.freeBackbuf()
 }
 
 // Closed reports whether the window has closed. It may be called from any
@@ -554,6 +561,51 @@ func (w *Window) runFrameEvent(ev ggfx.FrameEvent) error {
 	return nil
 }
 
+// paintTarget returns the image this frame paints into: screen, or the
+// backbuffer while a BackdropBlur has wanted one recently.
+func (w *Window) paintTarget(screen *ggfx.Image) *ggfx.Image {
+	if w.backdropTTL == 0 {
+		return screen
+	}
+	size := screen.Bounds().Size()
+	if w.backbuf == nil || w.backbuf.Bounds().Size() != size {
+		w.freeBackbuf()
+		w.backbuf = ggfx.NewImage(size.X, size.Y)
+	}
+	return w.backbuf
+}
+
+// backdropFrames is how many frames the backbuffer outlives the last
+// BackdropBlur, so one that blinks in and out does not reallocate it.
+const backdropFrames = 120
+
+// presentBackdrop copies a backbuffer frame to the screen and decides
+// whether the next frame needs one.
+func (w *Window) presentBackdrop(screen, target *ggfx.Image) {
+	if target != screen {
+		screen.DrawImage(target, &ggfx.DrawImageOptions{Blend: ggfx.BlendCopy})
+	}
+	if w.canvas.fs().backdrop {
+		w.backdropTTL = backdropFrames
+		if target == screen {
+			// This frame skipped its blurs; draw the next one with them.
+			w.requestFrame()
+		}
+	} else if w.backdropTTL > 0 {
+		if w.backdropTTL--; w.backdropTTL == 0 {
+			w.freeBackbuf()
+		}
+	}
+}
+
+// freeBackbuf frees the backbuffer, if there is one.
+func (w *Window) freeBackbuf() {
+	if w.backbuf != nil {
+		w.backbuf.Deallocate()
+		w.backbuf = nil
+	}
+}
+
 // catchUp settles the window's effects and layout at its current size
 // without painting, for a change another window made.
 func (w *Window) catchUp() error {
@@ -627,12 +679,16 @@ func (w *Window) draw(screen *ggfx.Image, scale float64) {
 	if scale > 0 {
 		w.canvas.scale = scale
 	}
-	screen.Fill(w.background())
+	target := w.paintTarget(screen)
+	target.Fill(w.background())
 	if w.root == nil {
 		return
 	}
 	defer w.canvas.trimLayers()
-	w.canvas.Image = screen
+	w.canvas.Image = target
+	w.canvas.window, w.canvas.onScreen = true, target == screen
+	w.canvas.fs().backdrop = false
+	defer w.presentBackdrop(screen, target)
 	b := screen.Bounds()
 	logical := Sz(w.canvas.dp(float64(b.Dx())), w.canvas.dp(float64(b.Dy())))
 	if Untrack(w.viewport.Get) != logical {
@@ -648,7 +704,7 @@ func (w *Window) draw(screen *ggfx.Image, scale float64) {
 		settled: func() {
 			// The settle may have changed the theme the background is.
 			if w.cfg.Background == nil && !w.cfg.Transparent {
-				screen.Fill(rootEnv().Background())
+				target.Fill(rootEnv().Background())
 			}
 		},
 		painted: func() {

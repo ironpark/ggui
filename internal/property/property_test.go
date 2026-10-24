@@ -324,3 +324,16 @@ func FuzzEqualFloat(f *testing.F) {
 		}
 	})
 }
+
+func TestSetAndBindChangeTheOwnerOnlyOnAChange(t *testing.T) {
+	t.Parallel()
+	var o Owner
+	var v Value[int]
+	if !Set(&o, &v, 1) || Set(&o, &v, 1) || o.Version() != 1 {
+		t.Fatalf("version %d after setting 1 twice, want 1", o.Version())
+	}
+	s := reactive.State(2)
+	if !Bind(&o, &v, s, "Width") || Bind(&o, &v, s, "Width") || o.Version() != 2 {
+		t.Fatalf("version %d after binding one reader twice, want 2", o.Version())
+	}
+}

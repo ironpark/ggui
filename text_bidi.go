@@ -10,11 +10,12 @@ import (
 // reordering: every line in a right-to-left paragraph, and a line holding
 // right-to-left text in a left-to-right one. Other lines draw as they are.
 type textBidi struct {
-	dir   TextDirection
-	lang  string
-	key   wrapKey
-	laid  bool
-	lines [][]piece // nil for a line drawn as it is
+	dir    TextDirection
+	lang   string
+	key    wrapKey
+	laid   bool
+	lines  [][]piece     // nil for a line drawn as it is
+	styles [][]lineStyle // each reordered line's styles
 }
 
 // layoutBidi orders the lines Layout just wrapped for the Env's direction.
@@ -25,13 +26,14 @@ func (t *TextWidget) layoutBidi(env Env) {
 		return
 	}
 	b.laid, b.dir, b.lang, b.key = true, dir, lang, t.wrapped
-	b.lines = b.lines[:0]
+	b.lines, b.styles = b.lines[:0], b.styles[:0]
 	for _, line := range t.lines {
 		if !needsBidi(line, dir) {
-			b.lines = append(b.lines, nil)
+			b.lines, b.styles = append(b.lines, nil), append(b.styles, nil)
 			continue
 		}
-		b.lines = append(b.lines, layoutLine(line, t.lineStyles(line), dir, lang))
+		styles := t.lineStyles(line)
+		b.lines, b.styles = append(b.lines, layoutLine(line, styles, dir, lang)), append(b.styles, styles)
 	}
 }
 
@@ -51,7 +53,7 @@ func (t *TextWidget) paintBidi(dst *Canvas, i int, r Rect, align, y float64, col
 	ps, line := t.bidi.lines[i], t.lines[i]
 	x := r.Origin.X + (r.Size.W-piecesWidth(ps))*align
 	baseline := t.faceAt(dst.Scale()).Metrics().HAscent
-	drawPieces(dst.Image, line, ps, t.lineStyles(line), t.bidi.lang, dst.Scale(), baseline,
+	drawPieces(dst.Image, line, ps, t.bidi.styles[i], dst.Scale(), baseline,
 		func(int) color.Color { return col },
 		func(op *text.DrawOptions) { place(op, x, y) })
 	return true

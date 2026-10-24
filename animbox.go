@@ -43,17 +43,13 @@ func AnimatedBox(child ...Widget) *AnimatedBoxWidget {
 
 // animSet assigns a literal and lays out again if it changed.
 func animSet[T any](a *AnimatedBoxWidget, p *property.Value[T], v T) *AnimatedBoxWidget {
-	if p.Set(v) {
-		a.props.Changed()
-	}
+	property.Set(&a.props, p, v)
 	return a
 }
 
 // animBind follows a reader and lays out again if it is a new one.
 func animBind[T any](a *AnimatedBoxWidget, p *property.Value[T], r Readable[T], name string) *AnimatedBoxWidget {
-	if p.Bind(r, name) {
-		a.props.Changed()
-	}
+	property.Bind(&a.props, p, r, name)
 	return a
 }
 

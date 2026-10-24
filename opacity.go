@@ -23,17 +23,13 @@ func Opacity(child Widget, opacity float64) *OpacityWidget {
 
 // Opacity sets the opacity, clamped to [0, 1].
 func (o *OpacityWidget) Opacity(v float64) *OpacityWidget {
-	if o.opacity.Set(v) {
-		o.props.Changed()
-	}
+	property.Set(&o.props, &o.opacity, v)
 	return o
 }
 
 // BindOpacity follows a non-nil opacity reader, a Tween say.
 func (o *OpacityWidget) BindOpacity(r Readable[float64]) *OpacityWidget {
-	if o.opacity.Bind(r, "BindOpacity") {
-		o.props.Changed()
-	}
+	property.Bind(&o.props, &o.opacity, r, "BindOpacity")
 	return o
 }
 
@@ -48,10 +44,15 @@ func (o *OpacityWidget) Layout(c Constraints, env Env) Size {
 }
 
 // Paint implements Widget. A fully opaque child paints directly, with no
-// layer.
+// layer, and an invisible one with no image, so that it still registers its
+// input and semantics.
 func (o *OpacityWidget) Paint(dst *Canvas, r Rect) {
-	if o.shown >= 1 {
+	switch {
+	case o.shown >= 1 || dst == nil:
 		dst.Paint(o.child, r)
+		return
+	case o.shown <= 0:
+		dst.into(nil).Paint(o.child, r)
 		return
 	}
 	dst.Layer(LayerOptions{Fade: 1 - o.shown}, func(layer *Canvas) { layer.Paint(o.child, r) })

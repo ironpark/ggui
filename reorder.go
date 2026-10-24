@@ -205,13 +205,16 @@ func (l *ReorderableWidget[T, K]) Paint(dst *Canvas, r Rect) {
 		}
 		st.settle = nil
 	}
+	// Rows move only around a drag and while they settle after a move; a
+	// list at rest skips their motions and leaves painted empty for drawn.
+	moving := d >= 0 || len(st.shift) > 0
 	clear(st.painted)
 	// The row holding focus takes the move keys: the one its middle is in,
 	// as rows easing past each other overlap.
 	focus, keyed := Point{}, false
 	if dst != nil && !l.disabled {
 		if fb := dst.fs().focusBounds; !fb.Empty() {
-			focus, keyed = fb.Center(), true
+			focus, keyed = dst.space.local(fb.Center()), true
 		}
 	}
 	dst.Node(r, Node{Role: RoleList, Min: 1, Max: float64(n)}, func(dst *Canvas) {
@@ -220,21 +223,10 @@ func (l *ReorderableWidget[T, K]) Paint(dst *Canvas, r Rect) {
 			if i == d {
 				continue
 			}
-			target := 0.0
-			switch {
-			case d >= 0 && i < d && i >= slot:
-				target = span
-			case d >= 0 && i > d && i-1 < slot:
-				target = -span
+			dy := 0.0
+			if moving {
+				dy = l.shiftRow(k, i, d, slot, span, now, dur)
 			}
-			m := st.shift[k]
-			if m == nil {
-				m = new(Motion)
-				st.shift[k] = m
-			}
-			m.MoveTo(target, now, dur)
-			dy := m.Value(now)
-			st.painted[k] = f.offsets[i].Y + dy
 			rc := Rct(r.Origin.Add(f.offsets[i]).Add(Pt(0, dy)), f.sizes[i])
 			// Only where the row shows: one scrolled out of a Scroll's
 			// window lies under whatever is drawn there instead.
@@ -270,6 +262,47 @@ func (l *ReorderableWidget[T, K]) Paint(dst *Canvas, r Rect) {
 		o.Inert().Paint(row, lifted)
 	})
 	l.autoScroll(now)
+}
+
+// shiftRow eases row i, keyed k, out of the way of the row lifted from d
+// toward slot and returns how far it is moved. A row back in its place
+// with no drag under way drops its motion.
+func (l *ReorderableWidget[T, K]) shiftRow(k K, i, d, slot int, span float64, now time.Time, dur time.Duration) float64 {
+	st := l.st
+	target := 0.0
+	switch {
+	case d >= 0 && i < d && i >= slot:
+		target = span
+	case d >= 0 && i > d && i-1 < slot:
+		target = -span
+	}
+	m := st.shift[k]
+	if m == nil {
+		m = new(Motion)
+		m.MoveTo(0, now, 0) // from its place, which a row at rest is in
+		st.shift[k] = m
+	}
+	m.MoveTo(target, now, dur)
+	dy := m.Value(now)
+	st.painted[k] = l.list.offsets[i].Y + dy
+	if d < 0 && dy == 0 && m.to == 0 {
+		delete(st.shift, k)
+	}
+	return dy
+}
+
+// drawn returns where each row was drawn at the last paint, list-local:
+// painted, or the rows' own places when they were at rest.
+func (l *ReorderableWidget[T, K]) drawn() map[K]float64 {
+	if len(l.st.painted) > 0 {
+		return maps.Clone(l.st.painted)
+	}
+	f := l.list
+	at := make(map[K]float64, len(f.children))
+	for i, k := range f.keys[:len(f.children)] {
+		at[k] = f.offsets[i].Y
+	}
+	return at
 }
 
 // paintRow paints one row as a list item that knows its place and offers
@@ -328,7 +361,7 @@ func (l *ReorderableWidget[T, K]) move(k K, delta int) bool {
 // commit writes the move and has every row ease from where it was drawn.
 func (l *ReorderableWidget[T, K]) commit(from, to int) {
 	st := l.st
-	st.settle = maps.Clone(st.painted)
+	st.settle = l.drawn()
 	if from == to || from+1 == to {
 		return
 	}
@@ -365,22 +398,23 @@ func (w *reorderRow[T, K]) Baseline() (float64, bool) { return baselineOf(w.chil
 
 func (w *reorderRow[T, K]) Paint(dst *Canvas, r Rect) {
 	w.rect = r
-	if w.enabled() {
-		if !w.list.handles {
-			dst.add(dst.region(r, nil, hitRegion{drag: w}))
-		}
+	if w.enabled() && !w.list.handles {
+		dst.add(dst.region(r, nil, hitRegion{drag: w}))
 	}
 	dst.Paint(w.child, r)
 }
 
 // Act implements Actor: an assistive technology moves the row down with
 // increment and up with decrement.
-func (w *reorderRow[T, K]) Act(a Action) bool {
+func (w *reorderRow[T, K]) Act(a Action) bool { return reorderAct(w, a) }
+
+// reorderAct moves t down for increment and up for decrement.
+func reorderAct(t reorderTarget, a Action) bool {
 	switch a.Kind {
 	case ActionIncrement:
-		return w.moveBy(1)
+		return t.moveBy(1)
 	case ActionDecrement:
-		return w.moveBy(-1)
+		return t.moveBy(-1)
 	}
 	return false
 }
@@ -410,7 +444,7 @@ func (w *reorderRow[T, K]) dragEnded(dropped bool) {
 	st.dragging = false
 	from := l.index(st.key)
 	if !dropped || from < 0 {
-		st.settle = maps.Clone(st.painted)
+		st.settle = l.drawn()
 		return
 	}
 	l.commit(from, st.to)
@@ -488,11 +522,7 @@ func (h *ReorderHandleWidget) ConsumesKey(KeyEvent) bool { return false }
 
 // Describe implements Describer.
 func (h *ReorderHandleWidget) Describe() Node {
-	name := h.SemanticName()
-	if name == "" {
-		name = "Reorder"
-	}
-	n := Node{Role: RoleButton, Name: name, Disabled: h.IsInert() || h.row == nil || !h.row.enabled()}
+	n := Node{Role: RoleButton, Name: h.name(), Disabled: h.IsInert() || h.row == nil || !h.row.enabled()}
 	if !n.Disabled {
 		n.Actions = ActionFocus | ActionIncrement | ActionDecrement
 		n.Description = "Alt+Up or Alt+Down moves the row"
@@ -505,21 +535,18 @@ func (h *ReorderHandleWidget) Act(a Action) bool {
 	if h.row == nil || h.IsInert() {
 		return false
 	}
-	switch a.Kind {
-	case ActionIncrement:
-		return h.row.moveBy(1)
-	case ActionDecrement:
-		return h.row.moveBy(-1)
-	}
-	return false
+	return reorderAct(h.row, a)
 }
 
 // Semantics implements Semantic.
-func (h *ReorderHandleWidget) Semantics() (Role, string) {
+func (h *ReorderHandleWidget) Semantics() (Role, string) { return RoleButton, h.name() }
+
+// name is the accessible name, "Reorder" unless Name says otherwise.
+func (h *ReorderHandleWidget) name() string {
 	if name := h.SemanticName(); name != "" {
-		return RoleButton, name
+		return name
 	}
-	return RoleButton, "Reorder"
+	return "Reorder"
 }
 
 // reorderHandleSource drags the handle's row, holding it where the

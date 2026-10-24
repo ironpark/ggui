@@ -49,11 +49,11 @@ func TestLayoutLineOrdersRunsByDirection(t *testing.T) {
 	}
 	// Inside a right-to-left piece the text runs leftwards.
 	p := &rtl[0]
-	if a, b := p.offsetX(s, oneStyle(s), "", p.start), p.offsetX(s, oneStyle(s), "", p.end); a <= b {
+	if a, b := p.offsetX(s, oneStyle(s), p.start), p.offsetX(s, oneStyle(s), p.end); a <= b {
 		t.Fatalf("Hebrew starts at x %v and ends at %v, want it to run leftwards", a, b)
 	}
 	// The Hebrew's first letter is at its right edge, under the RTL caret.
-	if got := caretAt(s, rtl, oneStyle(s), "", piecesWidth(rtl)+5); got != 3 {
+	if got := caretAt(s, rtl, oneStyle(s), piecesWidth(rtl)+5); got != 3 {
 		t.Fatalf("past the right edge the caret is at %d, want the end of abc (3)", got)
 	}
 }
@@ -176,7 +176,7 @@ func TestRightToLeftFallbackRunsAreReversed(t *testing.T) {
 	if len(segs) != 3 || segs[0].face != 1 || segs[1].face != 0 || segs[2].face != 1 {
 		t.Fatalf("segs %+v, want the fallback, the space in the font, the fallback", segs)
 	}
-	first := ps[0].offsetX(s, []lineStyle{{start: 0, end: len(s), font: f, size: 14}}, "he", 0)
+	first := ps[0].offsetX(s, []lineStyle{{start: 0, end: len(s), font: f, size: 14}}, 0)
 	if math.Abs(first-ps[0].w) > 1e-6 {
 		t.Fatalf("the first word starts at %v, want the right edge %v", first, ps[0].w)
 	}

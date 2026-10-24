@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"iter"
 	"math"
 
 	"github.com/ironpark/ggfx"
@@ -89,14 +90,28 @@ func (m Affine) Bounds(r Rect) Rect {
 	if m.IsIdentity() {
 		return r
 	}
+	return pointBounds(func(yield func(Point) bool) {
+		for _, p := range [4]Point{
+			r.Origin, {X: r.Origin.X + r.Size.W, Y: r.Origin.Y},
+			{X: r.Origin.X, Y: r.Origin.Y + r.Size.H}, {X: r.Origin.X + r.Size.W, Y: r.Origin.Y + r.Size.H},
+		} {
+			if !yield(m.Apply(p)) {
+				return
+			}
+		}
+	})
+}
+
+// pointBounds returns the smallest Rect holding every point of pts, or the
+// zero Rect when there are none.
+func pointBounds(pts iter.Seq[Point]) Rect {
 	x0, y0 := math.Inf(1), math.Inf(1)
 	x1, y1 := math.Inf(-1), math.Inf(-1)
-	for _, p := range [4]Point{
-		r.Origin, {X: r.Origin.X + r.Size.W, Y: r.Origin.Y},
-		{X: r.Origin.X, Y: r.Origin.Y + r.Size.H}, {X: r.Origin.X + r.Size.W, Y: r.Origin.Y + r.Size.H},
-	} {
-		q := m.Apply(p)
+	for q := range pts {
 		x0, y0, x1, y1 = min(x0, q.X), min(y0, q.Y), max(x1, q.X), max(y1, q.Y)
+	}
+	if x0 > x1 {
+		return Rect{}
 	}
 	return Rct(Pt(x0, y0), Sz(x1-x0, y1-y0))
 }

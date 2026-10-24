@@ -1,11 +1,9 @@
 package ggui
 
 import (
-	"image"
 	"math"
 	"time"
 
-	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
 )
@@ -43,7 +41,15 @@ type scrollPhysics struct {
 	paging bool    // snap to the viewport's extent
 	ctrl   *ScrollController
 
-	// State, carried across a rebuild by adopt.
+	scrollMotionState // carried across a rebuild by adopt
+
+	applied *scrollRequest // what attach applied in this layout, until paint
+	painted bool           // painted, so adopted what it replaces: requests apply at once
+}
+
+// scrollMotionState is what a scroll is doing on its own, which a rebuilt
+// one carries on with.
+type scrollMotionState struct {
 	over       float64 // how far the content is pulled past an end: offset minus where it shows
 	overMotion Motion
 	relaxing   bool // over is springing back
@@ -52,18 +58,10 @@ type scrollPhysics struct {
 	dir        float64 // the sign of the last movement
 	settle     bool    // waiting for input to pause
 	anim       Motion
-	animTo     float64
 	animating  bool
-
-	applied *scrollRequest // what attach applied in this layout, until paint
-	painted bool           // painted, so adopted what it replaces: requests apply at once
 }
 
-func (p *scrollPhysics) adopt(q *scrollPhysics) {
-	p.over, p.overMotion, p.relaxing = q.over, q.overMotion, q.relaxing
-	p.lastInput, p.from, p.dir, p.settle = q.lastInput, q.from, q.dir, q.settle
-	p.anim, p.animTo, p.animating = q.anim, q.animTo, q.animating
-}
+func (p *scrollPhysics) adopt(q *scrollPhysics) { p.scrollMotionState = q.scrollMotionState }
 
 // Overscroll sets what happens at either end: OverscrollClamp, the
 // default, stops there; OverscrollBounce and OverscrollStretch follow the
@@ -162,7 +160,7 @@ func (p *scrollPhysics) step(s *ScrollWidget) {
 		return
 	}
 	v := p.anim.Value(FrameTime())
-	if v == p.animTo {
+	if v == p.anim.to {
 		p.animating = false
 	}
 	s.scrollTo(v)
@@ -267,7 +265,7 @@ func (s *ScrollWidget) animateTo(v float64, animate bool) {
 	p.anim = Motion{}
 	p.anim.MoveTo(s.position(), now, 0)
 	p.anim.MoveTo(v, now, d)
-	p.animTo, p.animating = v, true
+	p.animating = true
 	s.cache.invalidate()
 }
 
@@ -290,10 +288,7 @@ func (s *ScrollWidget) jumpTo(v float64) {
 // by any overscroll.
 func (s *ScrollWidget) paintContent(dst *Canvas, r Rect) {
 	p := &s.phys
-	off := s.position()
-	if p.mode != OverscrollStretch {
-		off -= p.over
-	}
+	off := s.visualOffset()
 	origin := r.Origin
 	if s.horizontal {
 		origin.X -= off
@@ -314,15 +309,7 @@ func (s *ScrollWidget) paintContent(dst *Canvas, r Rect) {
 		about = about.Add(pick(s.horizontal, Pt(r.Size.W, 0), Pt(0, r.Size.H)))
 	}
 	sx, sy := pick(s.horizontal, k, 1.0), pick(s.horizontal, 1.0, k)
-	dst.layer(image.Rectangle{}, func(layer *Canvas) { layer.Paint(s.child, content) }, func(img *ggfx.Image) {
-		op := &ggfx.DrawImageOptions{Filter: ggfx.FilterLinear}
-		op.GeoM.Translate(float64(img.Bounds().Min.X), float64(img.Bounds().Min.Y))
-		ax, ay := dst.px(about.X), dst.px(about.Y)
-		op.GeoM.Translate(-ax, -ay)
-		op.GeoM.Scale(sx, sy)
-		op.GeoM.Translate(ax, ay)
-		dst.Image.DrawImage(img, op)
-	})
+	dst.Transform(Affine{}.Scale(sx, sy).About(about), func(dst *Canvas) { dst.Paint(s.child, content) })
 }
 
 // visualOffset is the offset the content is drawn at, past either end

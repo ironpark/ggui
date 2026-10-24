@@ -1,6 +1,9 @@
 package ggui
 
-import "math"
+import (
+	"math"
+	"slices"
+)
 
 // eachPin is what an EachWidget keeps for sticky headers and for answering
 // a ScrollController's ScrollToKey.
@@ -44,12 +47,18 @@ func (f *EachWidget[T, K]) headerBefore(i int) int {
 // starts, along the list's axis, given where the list is painted; ok is
 // false when the list's own start is in view.
 func (f *EachWidget[T, K]) windowStart(r Rect) (float64, bool) {
-	p := f.pin.port
-	if p == nil || p.horizontal != f.horizontal {
-		return 0, false
-	}
-	edge := pick(f.horizontal, p.rect.Origin.X-r.Origin.X, p.rect.Origin.Y-r.Origin.Y)
-	return edge, edge > 0
+	edge, ok := portEdge(f.pin.port, f.horizontal, r)
+	return edge, ok && edge > 0
+}
+
+// mainAt and crossAt return where row i of those laid out starts, along
+// and across the list's axis, from the list's corner.
+func (f *EachWidget[T, K]) mainAt(i int) float64 {
+	return pick(f.horizontal, f.offsets[i].X, f.offsets[i].Y)
+}
+
+func (f *EachWidget[T, K]) crossAt(i int) float64 {
+	return pick(f.horizontal, f.offsets[i].Y, f.offsets[i].X)
 }
 
 // layoutPinned lays out, on the virtual path, the header of the section at
@@ -105,13 +114,13 @@ func (f *EachWidget[T, K]) pinned(r Rect) (*forEntry[T], int, Rect) {
 				break
 			}
 		}
-		pos := max(min(edge, end-f.extent), start)
+		pos := pinPos(edge, start, end, f.extent)
 		if pos == start {
 			return nil, 0, Rect{}
 		}
 		cross := 0.0
 		if h >= f.first && h < f.last {
-			cross = f.cross(Size{W: f.offsets[h-f.first].X, H: f.offsets[h-f.first].Y})
+			cross = f.crossAt(h - f.first)
 		}
 		return f.entries[f.keys[h]], h, Rct(at(pos, cross), f.pin.size)
 	}
@@ -119,8 +128,7 @@ func (f *EachWidget[T, K]) pinned(r Rect) (*forEntry[T], int, Rect) {
 	// the end of its section, which is where the next header's row begins.
 	head := -1
 	for i, e := range f.childEntries {
-		main := f.main(Size{W: f.offsets[i].X, H: f.offsets[i].Y})
-		if main > edge {
+		if f.mainAt(i) > edge {
 			break
 		}
 		if f.entries[f.keys[clamp(Untrack(e.position.Get), 0, len(f.keys)-1)]] == e && f.pin.header(Untrack(e.item.Get)) {
@@ -130,7 +138,7 @@ func (f *EachWidget[T, K]) pinned(r Rect) (*forEntry[T], int, Rect) {
 	if head < 0 {
 		return nil, 0, Rect{}
 	}
-	start := f.main(Size{W: f.offsets[head].X, H: f.offsets[head].Y})
+	start := f.mainAt(head)
 	lead := f.main(f.sizes[head])
 	end := start + lead
 	for i := head + 1; i < len(f.childEntries); i++ {
@@ -138,14 +146,14 @@ func (f *EachWidget[T, K]) pinned(r Rect) (*forEntry[T], int, Rect) {
 		if f.pin.header(Untrack(e.item.Get)) {
 			break
 		}
-		end = f.main(Size{W: f.offsets[i].X, H: f.offsets[i].Y}) + f.main(f.sizes[i])
+		end = f.mainAt(i) + f.main(f.sizes[i])
 	}
-	pos := max(min(edge, end-lead), start)
+	pos := pinPos(edge, start, end, lead)
 	if pos == start {
 		return nil, 0, Rect{}
 	}
 	e := f.childEntries[head]
-	cross := f.cross(Size{W: f.offsets[head].X, H: f.offsets[head].Y})
+	cross := f.crossAt(head)
 	return e, Untrack(e.position.Get), Rct(at(pos, cross), f.sizes[head])
 }
 
@@ -153,7 +161,7 @@ func (f *EachWidget[T, K]) pinned(r Rect) (*forEntry[T], int, Rect) {
 // of this list's rows.
 func (f *EachWidget[T, K]) placeKey(r Rect) {
 	p := f.pin.port
-	if p == nil || p.horizontal != f.horizontal {
+	if p == nil || p.horizontal != f.horizontal || !p.keyPending() {
 		return
 	}
 	p.placeKey(func(k any) (float64, bool) {
@@ -163,22 +171,17 @@ func (f *EachWidget[T, K]) placeKey(r Rect) {
 		}
 		start := pick(f.horizontal, r.Origin.X, r.Origin.Y)
 		if f.extent > 0 {
-			for i, have := range f.keys {
-				if have == key {
-					return start + float64(i)*f.pin.pitch, true
-				}
-			}
-			return 0, false
+			i := slices.Index(f.keys, key)
+			return start + float64(i)*f.pin.pitch, i >= 0
 		}
 		e := f.entries[key]
 		if e == nil {
 			return 0, false
 		}
-		for i, c := range f.childEntries {
-			if c == e {
-				return start + f.main(Size{W: f.offsets[i].X, H: f.offsets[i].Y}), true
-			}
+		i := slices.Index(f.childEntries, e)
+		if i < 0 {
+			return 0, false
 		}
-		return 0, false
+		return start + f.mainAt(i), true
 	})
 }

@@ -76,20 +76,35 @@ func (s *StickyWidget) Paint(dst *Canvas, r Rect) {
 	lead := s.main(s.headerSize)
 	body := Rct(r.Origin.Add(pick(s.horizontal, Pt(lead, 0), Pt(0, lead))), s.bodySize)
 	dst.Paint(s.body, body)
-	at := pinAt(s.port, s.horizontal, r, lead, 0)
+	at := pinAt(s.port, s.horizontal, r, lead)
 	s.pinned = at != 0
 	header := Rct(r.Origin.Add(pick(s.horizontal, Pt(at, 0), Pt(0, at))), s.headerSize)
 	dst.Paint(s.header, header)
 }
 
-// pinAt returns how far past its own place, start, a header of length lead
-// moves to stay at the start of port's window, staying inside the section
-// r so the section's end pushes it out.
-func pinAt(port *ScrollWidget, horizontal bool, r Rect, lead, start float64) float64 {
-	if port == nil || port.horizontal != horizontal {
+// pinAt returns how far past its own place a header of length lead moves
+// to stay at the start of port's window, staying inside the section r so
+// the section's end pushes it out.
+func pinAt(port *ScrollWidget, horizontal bool, r Rect, lead float64) float64 {
+	edge, ok := portEdge(port, horizontal, r)
+	if !ok {
 		return 0
 	}
-	edge := pick(horizontal, port.rect.Origin.X-r.Origin.X, port.rect.Origin.Y-r.Origin.Y)
-	end := pick(horizontal, r.Size.W, r.Size.H) - lead
-	return max(min(edge, end)-start, 0)
+	return pinPos(edge, 0, pick(horizontal, r.Size.W, r.Size.H), lead)
+}
+
+// portEdge returns how far past the start of r, along the axis, port's
+// window starts, and false when there is no port scrolling along it.
+func portEdge(port *ScrollWidget, horizontal bool, r Rect) (float64, bool) {
+	if port == nil || port.horizontal != horizontal {
+		return 0, false
+	}
+	return pick(horizontal, port.rect.Origin.X-r.Origin.X, port.rect.Origin.Y-r.Origin.Y), true
+}
+
+// pinPos returns where a header of length lead, in a section from start to
+// end, sits when the window starts at edge: at the edge, but no earlier
+// than its own place and no later than lets the section's end push it out.
+func pinPos(edge, start, end, lead float64) float64 {
+	return max(min(edge, end-lead), start)
 }

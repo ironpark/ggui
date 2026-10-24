@@ -96,6 +96,13 @@ type TextWidget struct {
 	wrapped  wrapKey
 	bidi     textBidi        // the lines in visual order, when the direction or the text needs it
 	rich     *RichTextWidget // what a Selectable Text lays out and paints as
+	richAt   richAt          // what a Selectable Text was laid out for, to lay its lines out when rotated
+}
+
+// richAt is the width and Env a Selectable Text last laid out in.
+type richAt struct {
+	maxW float64
+	env  Env
 }
 
 // wrapKey is the input wrapText was last run with.
@@ -315,10 +322,23 @@ func (t *TextWidget) Layout(c Constraints, env Env) Size {
 		style = t.styleFallback
 	}
 	t.resolved = env.ResolveText(style.Merge(t.style))
+	if t.rich != nil {
+		// A Selectable Text lays out and paints as its RichText. Only
+		// PaintRotated draws the lines, so they wait for it.
+		t.richAt = richAt{c.MaxW, env}
+		return t.layoutRich(c, env, style.Merge(t.style))
+	}
+	t.layoutLines(c.MaxW, env)
+	return c.Constrain(t.natural)
+}
+
+// layoutLines wraps, cuts and orders the lines for a width of maxW, when
+// any of what they depend on changed since the last time.
+func (t *TextWidget) layoutLines(maxW float64, env Env) {
 	face := t.faceAt(1)
 	fits := t.wrap || t.ellipsis || t.maxLines > 0
 	key := wrapKey{generation: fontGen(), value: t.value, font: t.resolved.Font, weight: t.resolved.Weight, size: t.resolved.Size, lineHeight: t.resolved.LineHeight,
-		maxW: pick(fits, c.MaxW, 0), maxLines: t.maxLines, ellipsis: t.ellipsis}
+		maxW: pick(fits, maxW, 0), maxLines: t.maxLines, ellipsis: t.ellipsis}
 	if key != t.wrapped {
 		t.wrapped = key
 		t.lines = wrapText(key.value, face, pick(t.wrap, key.maxW, 0))
@@ -343,10 +363,6 @@ func (t *TextWidget) Layout(c Constraints, env Env) Size {
 		t.ascent = m.HAscent
 	}
 	t.layoutBidi(env)
-	if t.rich != nil {
-		return t.layoutRich(c, env, style.Merge(t.style))
-	}
-	return c.Constrain(t.natural)
 }
 
 // Baseline implements Baseliner: the first line's baseline is its ascent
@@ -380,10 +396,13 @@ func (t *TextWidget) Paint(dst *Canvas, r Rect) {
 // PaintRotated translates, rotates and translates back.
 func (t *TextWidget) paintLines(dst *Canvas, r Rect, place func(op *text.DrawOptions, x, y float64)) {
 	if t.value != "" && !dst.named(r) {
-		dst.Leaf(r, Node{Role: pick(t.role != "", t.role, RoleText), Name: t.value})
+		dst.Leaf(r, Node{Role: roleOr(t.role, RoleText), Name: t.value})
 	}
 	if dst == nil || dst.Image == nil || dst.Image.Bounds().Empty() {
 		return
+	}
+	if t.rich != nil {
+		t.layoutLines(t.richAt.maxW, t.richAt.env)
 	}
 	face := t.faceAt(dst.Scale())
 	op := &text.DrawOptions{}
@@ -507,17 +526,18 @@ type BoxWidget struct {
 	props       property.Owner
 	shadows     []ShadowStyle
 	fill        shownColor
-	gradient    [2]Gradient // as given and as painted; see BoxWidget.Gradient
+	gradient    Gradient // as given; see BoxWidget.Gradient
 	radius      float64
 	borderWidth float64
 	borderColor shownColor
 
-	shownShadows []ShadowStyle // shadows with their colors resolved
-	padding      EdgeInsets
-	width        float64 // 0 means "as small as the child allows"
-	height       float64
-	maxW, maxH   float64 // 0 means no limit
-	child        Widget
+	shownShadows  []ShadowStyle // shadows with their colors resolved
+	shownGradient Gradient      // gradient with its colors resolved
+	padding       EdgeInsets
+	width         float64 // 0 means "as small as the child allows"
+	height        float64
+	maxW, maxH    float64 // 0 means no limit
+	child         Widget
 
 	childSize Size
 }
@@ -641,7 +661,7 @@ func (b *BoxWidget) Layout(c Constraints, env Env) Size {
 	defer b.props.Layout()()
 	b.fill.layout(env)
 	b.borderColor.layout(env)
-	b.gradient[1] = b.gradient[0].resolve(env)
+	b.shownGradient = b.gradient.resolve(env)
 	for i, s := range b.shadows {
 		b.shownShadows[i].Color = ResolveColor(s.Color, env)
 	}
@@ -695,7 +715,7 @@ func (b *BoxWidget) Paint(dst *Canvas, r Rect) {
 		dst.Shadow(r, b.radius, s)
 	}
 	dst.FillRoundRect(r, b.radius, b.fill.shown)
-	dst.FillGradientRoundRect(r, b.radius, b.gradient[1])
+	dst.FillGradientRoundRect(r, b.radius, b.shownGradient)
 	if b.borderWidth > 0 {
 		dst.StrokeRoundRect(r, b.radius, b.borderWidth, b.borderColor.shown)
 	}
@@ -1455,13 +1475,7 @@ func (s *ScrollWidget) paintBar(dst *Canvas, r Rect) {
 	fill := bar
 	if amount > 0 {
 		// Keep the thumb close to its resting gray, including while dragging.
-		tint := amount * pick(s.dragging, .28, .18)
-		r, g, b, a := bar.RGBA()
-		fr, fg, fb, fa := style.HoverColor.RGBA()
-		blend := func(from, to uint32) uint16 {
-			return uint16(float64(from) + (float64(to)-float64(from))*tint)
-		}
-		fill = color.RGBA64{R: blend(r, fr), G: blend(g, fg), B: blend(b, fb), A: blend(a, fa)}
+		fill = LerpColor(bar, style.HoverColor, amount*pick(s.dragging, .28, .18))
 	}
 	thumb := s.thumbLength()
 	at := (track - thumb) * s.position() / s.maxOffset()

@@ -42,9 +42,7 @@ func (c *Canvas) Transform(m Affine, paint func(dst *Canvas)) {
 	if !visible {
 		// Nothing of the layer would land on c, but the subtree still
 		// registers its input and semantics, which the clip then trims.
-		hidden := c.derive()
-		hidden.Image = nil
-		paint(hidden.enter(m, inverse, nil))
+		paint(c.into(nil).enter(m, inverse, nil))
 		return
 	}
 	c.layer(area, func(layer *Canvas) { paint(layer.enter(m, inverse, nil)) }, func(img *ggfx.Image) {
@@ -107,33 +105,25 @@ func Transform(child Widget) *TransformWidget {
 
 // Rotate turns the child by rad radians, clockwise.
 func (t *TransformWidget) Rotate(rad float64) *TransformWidget {
-	if t.rotate.Set(rad) {
-		t.props.Changed()
-	}
+	property.Set(&t.props, &t.rotate, rad)
 	return t
 }
 
 // BindRotate follows a non-nil angle reader, an animation say.
 func (t *TransformWidget) BindRotate(r Readable[float64]) *TransformWidget {
-	if t.rotate.Bind(r, "BindRotate") {
-		t.props.Changed()
-	}
+	property.Bind(&t.props, &t.rotate, r, "BindRotate")
 	return t
 }
 
 // Scale sizes the child by s; 1 leaves it as it is.
 func (t *TransformWidget) Scale(s float64) *TransformWidget {
-	if t.scale.Set(s) {
-		t.props.Changed()
-	}
+	property.Set(&t.props, &t.scale, s)
 	return t
 }
 
 // BindScale follows a non-nil scale reader.
 func (t *TransformWidget) BindScale(r Readable[float64]) *TransformWidget {
-	if t.scale.Bind(r, "BindScale") {
-		t.props.Changed()
-	}
+	property.Bind(&t.props, &t.scale, r, "BindScale")
 	return t
 }
 
@@ -142,17 +132,13 @@ func (t *TransformWidget) Translate(dx, dy float64) *TransformWidget { return t.
 
 // Offset moves the child by p.
 func (t *TransformWidget) Offset(p Point) *TransformWidget {
-	if t.offset.Set(p) {
-		t.props.Changed()
-	}
+	property.Set(&t.props, &t.offset, p)
 	return t
 }
 
 // BindOffset follows a non-nil offset reader.
 func (t *TransformWidget) BindOffset(r Readable[Point]) *TransformWidget {
-	if t.offset.Bind(r, "BindOffset") {
-		t.props.Changed()
-	}
+	property.Bind(&t.props, &t.offset, r, "BindOffset")
 	return t
 }
 

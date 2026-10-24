@@ -2,7 +2,6 @@ package ggui
 
 import (
 	"github.com/ironpark/ggfx/text/v2"
-	"github.com/ironpark/ggui/internal/textedit"
 )
 
 // paragraph is text in several styles laid out as one: it wraps across
@@ -39,14 +38,17 @@ type paraLine struct {
 	baseline   float64 // below the paragraph's top
 }
 
-const ellipsisText = "…"
+// style returns run i's resolved style, or the base style for -1.
+func (p *paragraph) style(i int) TextStyle {
+	if i < 0 {
+		return p.base
+	}
+	return p.runs[i].style
+}
 
 // face returns run i's face at scale 1, or the base style's for -1.
 func (p *paragraph) face(i int) text.Face {
-	st := p.base
-	if i >= 0 {
-		st = p.runs[i].style
-	}
+	st := p.style(i)
 	return st.Font.face(st.Size, st.Weight)
 }
 
@@ -154,17 +156,11 @@ func (p *paragraph) layout(maxW float64, wrap bool, maxLines int, ellipsis bool)
 func (p *paragraph) leading(ln *paraLine) float64 {
 	spacing := 0.0
 	for _, st := range ln.styles {
-		r := p.base
-		if st.run >= 0 {
-			r = p.runs[st.run].style
-		}
+		r := p.style(st.run)
 		spacing = max(spacing, r.Size*r.LineHeight)
 	}
 	if len(ln.styles) == 0 {
-		r := p.base
-		if i := p.runAt(ln.start); i >= 0 {
-			r = p.runs[i].style
-		}
+		r := p.style(p.runAt(ln.start))
 		spacing = r.Size * r.LineHeight
 	}
 	return spacing - ln.ascent - ln.descent
@@ -176,15 +172,7 @@ func (p *paragraph) leading(ln *paraLine) float64 {
 func (p *paragraph) cut(a, b int, maxW float64) (int, int) {
 	ell := p.runAt(max(b-1, a))
 	room := maxW - lineWidth(ellipsisText, p.face(ell))
-	width := p.prefix(a, b)
-	keep := a
-	for i := a; i < b; {
-		end := textedit.NextGrapheme(p.text, i)
-		if end > b || width(end) > room {
-			break
-		}
-		keep, i = end, end
-	}
+	keep := ellipsizeBy(p.text, a, b, p.prefix(a, b), room)
 	for keep > a && (p.text[keep-1] == ' ' || p.text[keep-1] == '\t') {
 		keep--
 	}
@@ -204,10 +192,7 @@ func (p *paragraph) buildLine(ln *paraLine, cut bool, ell int) {
 		ln.styles = append(ln.styles, lineStyle{start: lo - ln.start, end: hi - ln.start, font: st.Font, size: st.Size, weight: st.Weight, run: i})
 	}
 	if cut {
-		st := p.base
-		if ell >= 0 {
-			st = p.runs[ell].style
-		}
+		st := p.style(ell)
 		n := len(ln.s)
 		ln.s += ellipsisText
 		ln.styles = append(ln.styles, lineStyle{start: n, end: len(ln.s), font: st.Font, size: st.Size, weight: st.Weight, run: ell})
@@ -249,7 +234,7 @@ func (p *paragraph) offsetAt(at Point, w, align float64) int {
 	}
 	i := p.lineAt(at.Y)
 	ln := &p.lines[i]
-	b := caretAt(ln.s, ln.pieces, ln.styles, p.lang, at.X-p.lineX(i, w, align))
+	b := caretAt(ln.s, ln.pieces, ln.styles, at.X-p.lineX(i, w, align))
 	return ln.start + min(b, ln.end-ln.start)
 }
 
@@ -264,7 +249,7 @@ func (p *paragraph) rects(lo, hi int, w, align float64, yield func(Rect)) {
 		}
 		x := p.lineX(i, w, align)
 		top := ln.baseline - ln.ascent
-		spanX(ln.s, ln.pieces, ln.styles, p.lang, a-ln.start, b-ln.start, func(x0, x1 float64) {
+		spanX(ln.s, ln.pieces, ln.styles, a-ln.start, b-ln.start, func(x0, x1 float64) {
 			yield(Rct(Pt(x+x0, top), Sz(x1-x0, ln.ascent+ln.descent)))
 		})
 	}

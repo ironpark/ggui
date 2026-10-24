@@ -15,10 +15,6 @@ type LayerOptions struct {
 	// at its size.
 	Scale float64
 	About Point
-	// Transform moves the layer after Scale, in the Canvas's logical
-	// coordinates; the zero value leaves it in place. Hit regions stay
-	// where they were painted: Canvas.Transform moves them too.
-	Transform Affine
 }
 
 // Layer paints into an offscreen image the size of the window, then draws
@@ -36,11 +32,10 @@ type LayerOptions struct {
 // Without an image to draw into, Layer calls paint with c.
 func (c *Canvas) Layer(o LayerOptions, paint func(layer *Canvas)) {
 	scaled := o.Scale != 0 && o.Scale != 1
-	moved := !o.Transform.IsIdentity()
 	// Unscaled, nothing painted outside the clip can show, so the layer
 	// is cleared and composited over the clip alone.
 	var area image.Rectangle
-	if !scaled && !moved && c != nil && c.Image != nil {
+	if !scaled && c != nil && c.Image != nil {
 		area = c.Image.Bounds()
 	}
 	c.layer(area, paint, func(img *ggfx.Image) {
@@ -54,10 +49,6 @@ func (c *Canvas) Layer(o LayerOptions, paint func(layer *Canvas)) {
 			op.GeoM.Translate(-cx, -cy)
 			op.GeoM.Scale(o.Scale, o.Scale)
 			op.GeoM.Translate(cx, cy)
-		}
-		if moved {
-			op.Filter = ggfx.FilterLinear
-			op.GeoM.Concat(o.Transform.geoM(c.Scale()))
 		}
 		if o.Fade != 0 {
 			op.ColorScale.ScaleAlpha(float32(1 - o.Fade))
@@ -84,25 +75,14 @@ func (c *Canvas) ClipRoundRect(r Rect, radius float64, paint func(dst *Canvas)) 
 // whole window when empty, and hands that part to draw. Without an image it
 // paints into c.
 func (c *Canvas) layer(area image.Rectangle, paint func(*Canvas), draw func(*ggfx.Image)) {
-	var window *ggfx.Image
-	if c != nil {
-		window = c.root().Image
-	}
-	if c == nil || c.Image == nil || window == nil {
+	if c == nil || c.Image == nil || c.root().Image == nil {
 		paint(c)
 		return
 	}
-	f := c.fs()
-	img := f.borrowLayer(window)
-	defer func() { f.layerDepth-- }()
-	if !area.Empty() {
-		img = img.SubImage(area).(*ggfx.Image)
-	}
-	img.Clear()
-	layer := c.derive()
-	layer.Image = img
-	paint(layer)
-	draw(img)
+	c.scratch(area, func(img *ggfx.Image) {
+		paint(c.into(img))
+		draw(img)
+	})
 }
 
 // borrowLayer returns the image for the next Layer depth, covering the

@@ -22,7 +22,7 @@ func TestLerpColorBlendsPremultiplied(t *testing.T) {
 	if g.Y < 63 || g.Y > 64 {
 		t.Fatalf("a quarter from black to white = %v", g.Y)
 	}
-	over := color.NRGBAModel.Convert(LerpColor(black, white, 1.5).(color.Color))
+	over := color.NRGBAModel.Convert(LerpColor(black, white, 1.5))
 	if _, _, _, a := over.RGBA(); a != 0xffff {
 		t.Fatal("overshoot must clamp to a valid color")
 	}

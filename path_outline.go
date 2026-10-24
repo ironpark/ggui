@@ -1,7 +1,5 @@
 package ggui
 
-import "math"
-
 // pathOp is one step of a Path as it was given, kept beside the vector path
 // so that a Path can answer where it is: ggfx's own path does not say.
 type pathOp struct {
@@ -61,25 +59,23 @@ func (p *Path) polygons() [][]Point {
 			begin()
 			at = op.pts[0]
 			cur = append(cur, at)
-		case pathQuad:
+		case pathQuad, pathCubic:
 			begin()
-			p0 := at
-			for i := 1; i <= curveSteps; i++ {
-				t := float64(i) / curveSteps
-				u := 1 - t
-				cur = append(cur, Pt(u*u*p0.X+2*u*t*op.pts[0].X+t*t*op.pts[1].X, u*u*p0.Y+2*u*t*op.pts[0].Y+t*t*op.pts[1].Y))
+			p0, c1, c2, end := at, op.pts[0], op.pts[1], op.pts[2]
+			if op.kind == pathQuad {
+				// A quadratic is the cubic whose handles are two thirds
+				// of the way from its ends to its control point.
+				end = op.pts[1]
+				c1 = Pt(p0.X+2*(c1.X-p0.X)/3, p0.Y+2*(c1.Y-p0.Y)/3)
+				c2 = Pt(end.X+2*(op.pts[0].X-end.X)/3, end.Y+2*(op.pts[0].Y-end.Y)/3)
 			}
-			at = op.pts[1]
-		case pathCubic:
-			begin()
-			p0 := at
 			for i := 1; i <= curveSteps; i++ {
 				t := float64(i) / curveSteps
 				u := 1 - t
 				a, b, c, d := u*u*u, 3*u*u*t, 3*u*t*t, t*t*t
-				cur = append(cur, Pt(a*p0.X+b*op.pts[0].X+c*op.pts[1].X+d*op.pts[2].X, a*p0.Y+b*op.pts[0].Y+c*op.pts[1].Y+d*op.pts[2].Y))
+				cur = append(cur, Pt(a*p0.X+b*c1.X+c*c2.X+d*end.X, a*p0.Y+b*c1.Y+c*c2.Y+d*end.Y))
 			}
-			at = op.pts[2]
+			at = end
 		case pathClose:
 			flush()
 			at = start
@@ -129,17 +125,15 @@ func (p *Path) Bounds() Rect {
 	if p == nil {
 		return Rect{}
 	}
-	x0, y0 := math.Inf(1), math.Inf(1)
-	x1, y1 := math.Inf(-1), math.Inf(-1)
-	for _, poly := range p.polygons() {
-		for _, q := range poly {
-			x0, y0, x1, y1 = min(x0, q.X), min(y0, q.Y), max(x1, q.X), max(y1, q.Y)
+	return pointBounds(func(yield func(Point) bool) {
+		for _, poly := range p.polygons() {
+			for _, q := range poly {
+				if !yield(q) {
+					return
+				}
+			}
 		}
-	}
-	if x0 > x1 {
-		return Rect{}
-	}
-	return Rct(Pt(x0, y0), Sz(x1-x0, y1-y0))
+	})
 }
 
 // ovalPath is the ellipse inscribed in r, as four cubic arcs.
