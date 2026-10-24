@@ -16,7 +16,8 @@ SF Pro on macOS, Segoe UI on Windows, and on Linux what fontconfig's
 `fc-match` gives for `sans-serif`. A browser has no system fonts, and a
 `Probe` keeps to one font so tests measure the same everywhere; both draw in
 the built-in Go Regular, as does an App on a machine without an interface
-font. `SetDefaultFont` replaces the default.
+font. `SetDefaultFont` replaces the default. An App starts loading these and the
+fallbacks below as it is made, so they load while its window opens.
 
 Glyphs a font lacks are drawn from its fallbacks: `SystemFonts()`, the CJK
 and wide-coverage fonts found at well-known paths on macOS, Windows and Linux,

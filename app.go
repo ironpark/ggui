@@ -49,6 +49,13 @@ func New(cfg Config, build Builder) *App {
 	// main built before Run are flushed by the app's frames.
 	rt := reactive.NewRuntime()
 	worldOf(rt).nativeFonts = true // made here, before the engine's goroutine can ask for it
+	// The interface and fallback fonts take a fifth of a second to read and
+	// parse. Begun now, they load while the window opens rather than in its
+	// first frame, which waits only for what is left.
+	go func() {
+		systemUIFonts()
+		SystemFonts()
+	}()
 	a := &App{}
 	a.Window = newWindow(a, rt, cfg, build)
 	a.windows = []*Window{a.Window}
