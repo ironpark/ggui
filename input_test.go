@@ -323,6 +323,49 @@ func TestTabMovesFocusInPaintOrder(t *testing.T) {
 	}
 }
 
+// claimer is a keyed region that claims Tab and Ctrl chords, as a terminal
+// does.
+type claimer struct{ keyed }
+
+func (k *claimer) Paint(dst *Canvas, r Rect) { dst.HitKey(r, k) }
+func (k *claimer) ClaimsChord(ev KeyEvent) bool {
+	return ev.Key == KeyTab || ev.Mods.Ctrl
+}
+
+func TestClaimedChordsSkipRuntimeBindings(t *testing.T) {
+	t.Parallel()
+	var log []string
+	w := Row(&claimer{keyed{&log, "term"}}, &keyed{&log, "b"})
+	var in inputState
+	paintFrame(&in, w, Sz(100, 50))
+	hooked := 0
+	in.shortcuts = append(in.shortcuts, func(ev KeyEvent) bool { hooked++; return true })
+	clickAt(&in, Pt(25, 25))
+	log = nil
+	in.dispatch(frameInput{keys: []KeyboardKey{KeyTab}})
+	in.dispatch(frameInput{keys: []KeyboardKey{KeyTab}, mods: Mods{Shift: true}})
+	in.dispatch(frameInput{keys: []KeyboardKey{KeyC}, mods: Mods{Ctrl: true}})
+	if want := []string{"term:Tab", "term:Tab", "term:C"}; fmt.Sprint(log) != fmt.Sprint(want) {
+		t.Fatalf("log = %v, want the claimed chords delivered and focus kept: %v", log, want)
+	}
+	if hooked != 0 {
+		t.Fatalf("an OnKey hook saw %d claimed chords", hooked)
+	}
+	// An unclaimed key still goes to the hook first.
+	in.dispatch(frameInput{keys: []KeyboardKey{KeyA}})
+	if hooked != 1 {
+		t.Fatalf("hook ran %d times for an unclaimed key, want 1", hooked)
+	}
+	// Focus elsewhere: Tab moves focus as usual, including onto the claimer.
+	clickAt(&in, Pt(75, 25))
+	log = nil
+	in.shortcuts = nil
+	in.dispatch(frameInput{keys: []KeyboardKey{KeyTab}})
+	if want := []string{"-b", "term+tab"}; fmt.Sprint(log) != fmt.Sprint(want) {
+		t.Fatalf("log = %v, want %v", log, want)
+	}
+}
+
 func TestTabTellsApartRegionsSharingARect(t *testing.T) {
 	t.Parallel()
 	var log []string

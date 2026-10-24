@@ -131,11 +131,14 @@ type TabStopper interface {
 	TabStop() bool
 }
 
-// ChordClaimer is a KeyHandler that keeps some modified chords from the
-// shortcuts and menu actions that would otherwise run before it: a text
-// editor keeps ⌘Z, ⌘C and the rest while it has the focus, so the app's
-// Undo shortcut or Edit menu undoes the app only when no field is being
-// edited, and undoes the field when one is.
+// ChordClaimer is a KeyHandler that keeps chords from the runtime's own
+// bindings while it has the focus. A chord it claims skips everything that
+// would otherwise take it before the handler sees it -- Tab's focus
+// traversal, App.OnKey hooks, shortcuts and menu actions -- and arrives as a
+// KeyPress. A text editor keeps ⌘Z, ⌘C and the rest, so the app's Undo
+// shortcut or Edit menu undoes the app only when no field is being edited;
+// a terminal keeps Tab for the shell's completion and Ctrl+C for the
+// program, so focus leaves it by the pointer or from code.
 type ChordClaimer interface {
 	ClaimsChord(ev KeyEvent) bool
 }
@@ -266,10 +269,10 @@ func (in *inputState) runChords(k KeyboardKey, mods Mods, before bool) bool {
 
 // withoutShortcuts returns keys less those a shortcut consumed, copying
 // only once one has.
-func (in *inputState) withoutShortcuts(keys []KeyboardKey, mods Mods) []KeyboardKey {
+func (in *inputState) withoutShortcuts(keys []KeyboardKey, mods Mods, claimed func(KeyboardKey) bool) []KeyboardKey {
 	out, copied := keys, false
 	for i, k := range keys {
-		switch taken := in.shortcut(k, mods); {
+		switch taken := !claimed(k) && in.shortcut(k, mods); {
 		case taken && !copied:
 			out, copied = slices.Clone(keys[:i]), true
 		case !taken && copied:
@@ -435,16 +438,19 @@ func (in *inputState) dispatchPointer(f frameInput) {
 // focused widget sees them -- and returns what is left for the widget. The
 // frame's slice belongs to the caller of dispatch, so a removal clones it.
 func (in *inputState) consumeBindings(keys []KeyboardKey, mods Mods) []KeyboardKey {
-	if i := slices.Index(keys, KeyTab); i >= 0 {
+	// A chord the focused handler claims is its own: none of the bindings
+	// below sees it.
+	claimed := func(k KeyboardKey) bool { return in.claimedBy(KeyEvent{Kind: KeyPress, Key: k, Mods: mods}) != nil }
+	if i := slices.Index(keys, KeyTab); i >= 0 && !claimed(KeyTab) {
 		keys = slices.Delete(slices.Clone(keys), i, i+1)
 		in.moveFocus(pick(mods.Shift, -1, 1))
 	}
 	if len(in.shortcuts) > 0 {
-		keys = in.withoutShortcuts(keys, mods)
+		keys = in.withoutShortcuts(keys, mods, claimed)
 	}
 	if len(in.chords) > 0 || len(in.painted) > 0 {
 		keys = slices.DeleteFunc(slices.Clone(keys), func(k KeyboardKey) bool {
-			return in.claimedBy(KeyEvent{Kind: KeyPress, Key: k, Mods: mods}) == nil && in.runChords(k, mods, true)
+			return !claimed(k) && in.runChords(k, mods, true)
 		})
 	}
 	return keys

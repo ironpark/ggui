@@ -144,7 +144,12 @@ the shortcut only when the widget did not consume it, so Space on a focused
 button presses the button and a text field keeps every key but Escape;
 `.Exclusive()` on the handle makes a bare key run first too. A widget says
 what it consumes through `KeyConsumer`; `Interactive` claims Space and
-Enter and the controls with more keys claim those. `ParseChord` reads the
+Enter and the controls with more keys claim those. A focused widget that
+must have a chord before any of that, Tab included, implements
+`ChordClaimer`: a chord it claims skips Tab's focus traversal, `App.OnKey`,
+shortcuts and menu actions and arrives as a key press. A text field claims
+its editing chords so ⌘Z undoes the typing; a terminal claims Tab and the
+Ctrl chords for the program it runs. `ParseChord` reads the
 names, `KeyEvent.Is(chord)` matches one in a handler, and `App.OnKey` stays
 for what a chord cannot say. A digit or punctuation key may be written as the
 character it types on a US layout: `"cmd+1"` is `"cmd+digit1"`, `"cmd+,"` is
