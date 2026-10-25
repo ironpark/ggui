@@ -91,3 +91,30 @@ func TestAnimatedBoxEasesFromTheChildSize(t *testing.T) {
 		t.Fatalf("back to the child's size: %v, want 60 at once", got.Size.W)
 	}
 }
+
+// A collapsible box's zero is zero: it eases closed and open again.
+func TestAnimatedBoxCollapsibleEasesToZero(t *testing.T) {
+	t.Parallel()
+	width := State(100.0)
+	var got Rect
+	box := AnimatedBox(probe(60, 10, &got)).BindWidth(width).Collapsible().Easing(EaseLinear).Duration(100 * time.Millisecond)
+	var shown Rect
+	p := NewProbe(Column(Row(box, probe(10, 10, &shown))), Sz(300, 100))
+	defer p.Close()
+	p.Frame()
+	if shown.Origin.X != 100 {
+		t.Fatalf("at 100 wide the next child is at %v", shown.Origin.X)
+	}
+	width.Set(0)
+	p.Advance(0)
+	p.Advance(0)
+	p.Advance(50 * time.Millisecond)
+	if shown.Origin.X != 50 {
+		t.Fatalf("half way to zero the next child is at %v, want 50", shown.Origin.X)
+	}
+	p.Advance(time.Second)
+	p.Frame()
+	if shown.Origin.X > 1e-6 {
+		t.Fatalf("closed, the next child is at %v, want 0", shown.Origin.X)
+	}
+}

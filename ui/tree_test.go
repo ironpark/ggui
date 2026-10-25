@@ -236,3 +236,32 @@ func TestTreeKeyboardReachesRowsScrolledOutOfView(t *testing.T) {
 		t.Fatalf("Home focused %q, want the first row", got)
 	}
 }
+
+// With the closed items bound instead, every item starts open, and the
+// chevron writes the item it closes; OnToggle hears of both ways.
+func TestTreeBindCollapsedStartsOpen(t *testing.T) {
+	t.Parallel()
+	closed := ggui.State(map[string]bool{"Pear": true})
+	type toggle struct {
+		name string
+		open bool
+	}
+	var toggled []toggle
+	tree := folderTree().BindCollapsed(closed).OnToggle(func(f folder, open bool) { toggled = append(toggled, toggle{f.Name, open}) })
+	p := ggui.NewProbe(tree, ggui.Sz(300, 400))
+	defer p.Close()
+	if got := treeItems(p); !slices.Equal(got, []string{"Fruits", "Apple", "Pear", "Vegetables", "Leek", "Bread"}) {
+		t.Fatalf("tree shows %q", got)
+	}
+	clickChevron(t, p, "Vegetables")
+	if got := ggui.Peek(closed); !got["Vegetables"] || !got["Pear"] {
+		t.Fatalf("closed %v", got)
+	}
+	clickChevron(t, p, "Pear")
+	if got := treeItems(p); !slices.Contains(got, "Conference") || slices.Contains(got, "Leek") {
+		t.Fatalf("after opening Pear: %q", got)
+	}
+	if !slices.Equal(toggled, []toggle{{"Vegetables", false}, {"Pear", true}}) {
+		t.Fatalf("toggled %v", toggled)
+	}
+}

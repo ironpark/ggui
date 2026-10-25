@@ -20,6 +20,8 @@ type TreeWidget[T any, K comparable] struct {
 	key           func(T) K
 	children      func(T) []T
 	expanded      *ggui.StateValue[ggui.Binding[map[K]bool]]
+	collapsed     bool // expanded holds the closed items, and the rest are open
+	onToggle      func(T, bool)
 	selected      ggui.Binding[K]
 	localSelected *ggui.StateValue[K]
 	onSelect      func(T)
@@ -83,7 +85,7 @@ func (t *TreeWidget[T, K]) flatten(roots []T, open map[K]bool) []treeEntry[T, K]
 			kids := t.children(item)
 			k := t.key(item)
 			e := treeEntry[T, K]{item: item, key: k, depth: depth, parent: parent, hasChildren: len(kids) > 0}
-			e.open = e.hasChildren && open[k]
+			e.open = e.hasChildren && open[k] != t.collapsed
 			out = append(out, e)
 			if e.open {
 				walk(kids, depth+1, len(out)-1)
@@ -99,9 +101,37 @@ func (t *TreeWidget[T, K]) flatten(roots []T, open map[K]bool) []treeEntry[T, K]
 // starting fully collapsed.
 func (t *TreeWidget[T, K]) BindExpanded(b ggui.Binding[map[K]bool]) *TreeWidget[T, K] {
 	property.Require(b, "BindExpanded")
-	if !property.Same(ggui.Untrack(t.expanded.Get), b) {
+	t.bindOpen(b, false)
+	return t
+}
+
+// BindCollapsed binds the set of closed items' keys instead: every item
+// with children not in it is open, so a tree that grows shows its new
+// items open, as a list of changes does.
+func (t *TreeWidget[T, K]) BindCollapsed(b ggui.Binding[map[K]bool]) *TreeWidget[T, K] {
+	property.Require(b, "BindCollapsed")
+	t.bindOpen(b, true)
+	return t
+}
+
+// Collapsed detaches a closed-set binding and closes the keys in closed,
+// opening every other item, which the tree then keeps as its own state.
+func (t *TreeWidget[T, K]) Collapsed(closed map[K]bool) *TreeWidget[T, K] {
+	return t.BindCollapsed(ggui.State(maps.Clone(closed)))
+}
+
+func (t *TreeWidget[T, K]) bindOpen(b ggui.Binding[map[K]bool], collapsed bool) {
+	if t.collapsed != collapsed || !property.Same(ggui.Untrack(t.expanded.Get), b) {
+		t.collapsed = collapsed
 		t.expanded.Set(b)
 	}
+}
+
+// OnToggle runs when the user opens or closes an item, with the item and
+// whether it is open now: a tree that reads its children lazily loads
+// them here.
+func (t *TreeWidget[T, K]) OnToggle(fn func(item T, open bool)) *TreeWidget[T, K] {
+	t.onToggle = fn
 	return t
 }
 
@@ -201,14 +231,18 @@ func (t *TreeWidget[T, K]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Node(r, ggui.Node{Role: ggui.RoleTree, Name: t.name}, func(dst *ggui.Canvas) { dst.Paint(t.content, r) })
 }
 
-// setOpen opens or closes the item keyed k.
-func (t *TreeWidget[T, K]) setOpen(k K, open bool) {
+// setOpen opens or closes item, keyed k.
+func (t *TreeWidget[T, K]) setOpen(item T, k K, open bool) {
 	b := ggui.Untrack(t.expanded.Get)
 	cur := ggui.Untrack(b.Get)
-	if cur[k] == open {
+	stored := open != t.collapsed
+	if cur[k] == stored {
 		return
 	}
-	b.Set(withKey(cur, k, open))
+	b.Set(withKey(cur, k, stored))
+	if t.onToggle != nil {
+		t.onToggle(item, open)
+	}
 }
 
 // moveTo focuses row i, selects it when selection is bound and scrolls it
@@ -332,8 +366,8 @@ func (r *treeRow[T, K]) paint(dst *ggui.Canvas, rc ggui.Rect) {
 }
 
 func (r *treeRow[T, K]) setOpen(open bool) {
-	if !r.IsInert() && ggui.Untrack(r.entry.Get).hasChildren {
-		r.tree.setOpen(r.key, open)
+	if e := ggui.Untrack(r.entry.Get); !r.IsInert() && e.hasChildren {
+		r.tree.setOpen(e.item, r.key, open)
 	}
 }
 
