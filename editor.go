@@ -936,7 +936,13 @@ func (t *TextInputWidget) moveKey(k KeyboardKey, m Mods) bool {
 		t.ime.Confirm()
 		dir := pick(k == KeyArrowLeft, -1, 1)
 		if m.Meta {
-			t.ed.MoveTo(pick(dir < 0, 0, len(t.ed.Text)), m.Shift)
+			// The macOS form of Home and End: the ends of the line the caret
+			// is on, which in a single-line field are the ends of the text.
+			lo, hi := 0, len(t.ed.Text)
+			if t.multiline {
+				lo, hi = t.lineBounds()
+			}
+			t.ed.MoveTo(pick(dir < 0, lo, hi), m.Shift)
 		} else {
 			t.ed.MoveBy(dir, wordWise(m), m.Shift)
 		}

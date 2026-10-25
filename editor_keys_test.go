@@ -323,3 +323,22 @@ func TestPasswordSelectionIsReportedInBullets(t *testing.T) {
 		t.Fatalf("described as %q selecting %d-%d, want five bullets selecting %d-%d", n.Value, n.SelStart, n.SelEnd, len(bullet), 3*len(bullet))
 	}
 }
+
+// Meta+Left and Right move to the ends of the caret's line in a multiline
+// field, as Cmd+Left and Right do on macOS, not to the ends of the text.
+func TestTextInputMetaArrowsKeepToTheLine(t *testing.T) {
+	t.Parallel()
+	w, p, value := editorProbe(t, "one\ntwo\nthree", func(w *TextInputWidget) { w.Multiline() })
+	w.Select(len("one\ntw"), len("one\ntw"))
+	p.Type(Mods{Meta: true}, KeyArrowLeft)
+	if lo, hi := w.ed.Anchor, w.ed.Caret; lo != len("one\n") || hi != lo {
+		t.Fatalf("Meta+Left put the caret at %d..%d, want the start of the second line, %d", lo, hi, len("one\n"))
+	}
+	p.Type(Mods{Meta: true, Shift: true}, KeyArrowRight)
+	if sel, _ := selection(w); sel != "two" {
+		t.Fatalf("Shift+Meta+Right selected %q, want the line", sel)
+	}
+	if got := Untrack(value.Get); got != "one\ntwo\nthree" {
+		t.Fatalf("moving edited the text: %q", got)
+	}
+}
