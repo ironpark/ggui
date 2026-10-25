@@ -78,7 +78,7 @@ func Tabs(selected ggui.Binding[int], tabs ...TabPage) *TabsWidget {
 		if tab.tooltip != "" {
 			// The strip takes focus as a whole: focus shows the shown tab's tip.
 			tip := Tooltip(box, tab.tooltip)
-			tip.focusOpens = func(dst *ggui.Canvas, r ggui.Rect) bool { return i == t.index() && dst.FocusWithin(r) }
+			tip.focusOpens = func(dst *ggui.Canvas, r ggui.Rect) bool { return i == t.index() && dst.FocusVisibleWithin(r) }
 			t.heads = append(t.heads, tip)
 		} else {
 			t.heads = append(t.heads, box)

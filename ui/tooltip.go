@@ -31,14 +31,17 @@ type TooltipWidget struct {
 // tooltipHover is the hover timer, retained on the Canvas by Rect so a
 // tooltip rebuilt every frame still opens.
 type tooltipHover struct {
-	since  time.Time
-	reveal ggui.Motion
+	since     time.Time
+	dismissed bool // pressed since the pointer came over it
+	reveal    ggui.Motion
 }
 
 var tooltipSlot = ggui.NewSlot[tooltipHover]("tooltip hover")
 
 // Tooltip shows text below child once the cursor has rested on it for half
-// a second, or while keyboard focus is within child. It registers no hit
+// a second, or while keyboard focus is within child. A press closes it, and
+// it stays closed until the cursor leaves and comes back; focus a click
+// gives the child does not open it, as focus moved with the keyboard does. It registers no hit
 // region, so the child gets every event, and paints through Canvas.Overlay.
 func Tooltip(child ggui.Widget, text string) *TooltipWidget {
 	t := &TooltipWidget{child: child, tip: ggui.Text(text), delay: 500 * time.Millisecond}
@@ -110,7 +113,7 @@ func (t *TooltipWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	now := ggui.FrameTime()
 	at := ggui.Anchor{Rect: r}
 	state, _ := dst.Retained(at, tooltipSlot)
-	focused := dst.FocusWithin(r)
+	focused := dst.FocusVisibleWithin(r)
 	if t.focusOpens != nil {
 		focused = t.focusOpens(dst, r)
 	}
@@ -119,9 +122,12 @@ func (t *TooltipWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		state.since = now
 	}
 	if !hovered {
-		state.since = time.Time{}
+		state.since, state.dismissed = time.Time{}, false
 	}
-	open := focused || (hovered && now.Sub(state.since) >= t.delay)
+	if hovered && dst.PointerPressed() {
+		state.dismissed = true
+	}
+	open := focused || (hovered && !state.dismissed && now.Sub(state.since) >= t.delay)
 	if hovered && !open {
 		ggui.WakeAt(state.since.Add(t.delay))
 	}

@@ -404,6 +404,8 @@ func (r *frameLoop) paint(p paintPass) (bool, error) {
 	if p.in.focused != nil {
 		f.focusBounds = p.in.focused.rect
 	}
+	f.focusVisible = p.in.focused != nil && p.in.focusVisible
+	f.pressed = p.in.pressed != nil
 	c.nextFrame()
 	c.resetSemantics()
 	f.semOff = p.semOff

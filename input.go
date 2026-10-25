@@ -215,6 +215,7 @@ type inputState struct {
 	pressed               *hitRegion
 	pressedBtn            MouseButton
 	focused               *hitRegion
+	focusVisible          bool        // focused moved there with the keyboard
 	cursor                CursorShape // what the hovered region asked for
 	dragTarget            *hitRegion  // the region files are being dragged over
 	drag                  *appDrag    // a drag inside the app; see dragdrop.go
@@ -643,8 +644,10 @@ func (in *inputState) focus(r *hitRegion, keyboard bool) {
 	}
 	if r != nil && in.focused != nil && (sameAny(r.key, in.focused.key) || in.continues(r, in.focused)) {
 		// The same widget, perhaps in another region, such as a dropdown's
-		// list under its field: focus stays, without a blur.
+		// list under its field: focus stays, without a blur, and becomes
+		// visible if the keyboard moved it there.
 		in.focused = keep(r)
+		in.focusVisible = in.focusVisible || keyboard
 		return
 	}
 	if in.focused != nil && in.focused.key != nil {
@@ -659,6 +662,7 @@ func (in *inputState) focus(r *hitRegion, keyboard bool) {
 		r.key.HandleKey(ev)
 	}
 	in.focused = keep(r)
+	in.focusVisible = keyboard
 }
 
 // reveal asks every Revealer painted to scroll target into view; each

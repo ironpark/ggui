@@ -61,6 +61,8 @@ type frameState struct {
 	pointer      Point
 	hasPointer   bool
 	focusBounds  Rect // focused input region at the start of this paint
+	focusVisible bool // focus came there by keyboard
+	pressed      bool // a pointer button is held
 	overlays     []overlay
 	trace        []inspect.Node // every Paint call, when the inspector is on
 	traceWidgets []Widget       // the widget behind each trace node
@@ -344,6 +346,17 @@ func (c *Canvas) Pointer() (Point, bool) {
 func (c *Canvas) FocusWithin(r Rect) bool {
 	return c != nil && !c.fs().focusBounds.Intersect(c.toWindow(r)).Empty()
 }
+
+// FocusVisibleWithin is FocusWithin for focus moved there with the
+// keyboard, as the focus ring shows: what a tooltip opens on, since a click
+// that focuses a button is no request for its tip.
+func (c *Canvas) FocusVisibleWithin(r Rect) bool {
+	return c.FocusWithin(r) && c.fs().focusVisible
+}
+
+// PointerPressed reports whether a pointer button is held down, as of the
+// start of the paint: a tooltip closes on a press.
+func (c *Canvas) PointerPressed() bool { return c != nil && c.fs().pressed }
 
 // Overlay schedules fn to paint after the whole tree has, on the root
 // Canvas, unclipped and above everything: tooltips, popups and menus go

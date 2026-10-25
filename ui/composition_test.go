@@ -196,6 +196,41 @@ func TestTooltipAppearsAfterHover(t *testing.T) {
 	}
 }
 
+// A click is no request for a button's tip: the focus it gives does not
+// open it, and the press closes one already up until the pointer leaves.
+func TestTooltipStaysClosedAfterAClick(t *testing.T) {
+	t.Parallel()
+	taps := 0
+	tip := ui.Tooltip(ui.Button("Toggle", func() { taps++ }), "hint").Delay(0)
+	p := ggui.NewProbe(ggui.Column(tip, ggui.Spacer()), ggui.Sz(200, 200))
+	defer p.Close()
+	shown := func() bool {
+		_, ok := p.Semantics().Find(ggui.RoleText, "hint")
+		return ok
+	}
+	at := ggui.Pt(10, 10)
+	p.Move(at)
+	if !shown() {
+		t.Fatal("tooltip not up with the pointer on the button")
+	}
+	p.Click(at)
+	p.Advance(time.Second)
+	if taps != 1 || shown() {
+		t.Fatalf("after a click: %d taps, tip shown %v; want the tip closed", taps, shown())
+	}
+	p.Move(ggui.Pt(150, 150))
+	p.Move(at)
+	if !shown() {
+		t.Fatal("tooltip not back once the pointer left and returned")
+	}
+	p.Move(ggui.Pt(150, 150))
+	p.Type(ggui.Mods{}, ggui.KeyTab) // the clicked button keeps focus; Tab moves it, by keyboard
+	p.Type(ggui.Mods{Shift: true}, ggui.KeyTab)
+	if !shown() {
+		t.Fatal("keyboard focus no longer opens the tooltip")
+	}
+}
+
 func TestButtonGroupJoinsChildrenWithoutTakingTheirInput(t *testing.T) {
 	t.Parallel()
 	copies, pastes := 0, 0
