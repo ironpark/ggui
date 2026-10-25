@@ -58,6 +58,9 @@ type CommandWidget struct {
 	height             float64
 	stable, borderless bool
 	hints              bool
+	hintNav, hintSel   string
+	emptyText          string
+	dismiss            func() // closes the dialog it is in, set by CommandDialog
 	insetSearch        bool
 	theme              uitheme.Theme
 	env                ggui.Env
@@ -68,7 +71,8 @@ type CommandWidget struct {
 // wrap through enabled matches; Enter runs the highlighted action. IME
 // composition and normal editing keys stay with TextInput.
 func Command(query ggui.Binding[string], entries ...CommandEntry) *CommandWidget {
-	c := &CommandWidget{query: query, highlight: -1, height: 200, offset: ggui.State(0.0)}
+	c := &CommandWidget{query: query, highlight: -1, height: 200, offset: ggui.State(0.0),
+		hintNav: "Navigate", hintSel: "Select", emptyText: "No results"}
 	c.field = TextField(query).Placeholder("Search commands…").Name("Search commands").OnKey(c.key)
 	if c.field.input.HitID() == nil {
 		c.field.input.Key(c)
@@ -100,9 +104,20 @@ func (c *CommandWidget) setEntries(entries []CommandEntry) {
 	}
 }
 
+// Entries replaces the actions, keeping the search field, its query and
+// its focus: a palette built once lists the actions of the moment each
+// time it opens.
+func (c *CommandWidget) Entries(entries ...CommandEntry) *CommandWidget {
+	c.setEntries(entries)
+	c.props.Changed()
+	return c
+}
+
 // CommandDialog creates a compact, accessible command palette. The command
-// owns its spacing; no visible dialog title is added.
+// owns its spacing; no visible dialog title is added. Choosing an action
+// closes the dialog before the action runs.
 func CommandDialog(open ggui.Binding[bool], command *CommandWidget) *DialogWidget {
+	command.dismiss = func() { open.Set(false) }
 	return Dialog(open, command.Borderless().InsetSearch()).Compact().Name("Commands").Width(440)
 }
 
@@ -116,6 +131,26 @@ func (c *CommandWidget) Name(s string) *CommandWidget { c.field.Name(s); return 
 func (c *CommandWidget) InsetSearch() *CommandWidget {
 	defer property.Watch(&c.props, &c.insetSearch)()
 	c.insetSearch = true
+	return c
+}
+
+// HintLabels words the footer Hints shows, as "Navigate" and "Select" in
+// the application's language.
+func (c *CommandWidget) HintLabels(navigate, choose string) *CommandWidget {
+	defer property.Watch(&c.props, &c.hintNav)()
+	defer property.Watch(&c.props, &c.hintSel)()
+	c.hintNav, c.hintSel = navigate, choose
+	return c
+}
+
+// Empty sets what the list says when nothing matches; "No results" by
+// default.
+func (c *CommandWidget) Empty(s string) *CommandWidget {
+	defer property.Watch(&c.props, &c.emptyText)()
+	c.emptyText = s
+	if c.results.empty != nil {
+		c.results.empty.Content(s)
+	}
 	return c
 }
 
@@ -175,6 +210,9 @@ func (c *CommandWidget) choose(index int) {
 	if popup, ok := ggui.PopupOf(c.env); ok {
 		popup.Hide()
 	}
+	if c.dismiss != nil {
+		c.dismiss()
+	}
 	if fn := c.entries[index].run; fn != nil {
 		fn()
 	}
@@ -229,7 +267,7 @@ func (c *CommandWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 		parts = []ggui.Widget{search, results}
 	}
 	if c.hints {
-		parts = append(parts, Divider(), ggui.Padding(Caption("↑↓ Navigate   ↵ Select"), 8, 12))
+		parts = append(parts, Divider(), ggui.Padding(Caption("↑↓ "+c.hintNav+"   ↵ "+c.hintSel), 8, 12))
 	}
 	c.body = ggui.Column(parts...).Gap(0).Align(ggui.AlignStretch)
 	c.panel = ggui.Box(ggui.Styled(c.body).Color(t.PopoverFg)).Fill(t.Popover).Border(t.BorderWidth, t.Border).Radius(t.Radius)
@@ -265,7 +303,7 @@ func (r *commandResults) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	r.rows = r.rows[:0]
 	if len(c.matched) == 0 {
 		if r.empty == nil {
-			r.empty = Caption("No results")
+			r.empty = Caption(c.emptyText)
 		}
 		r.emptySize = r.empty.Layout(cs.Loosen(), env)
 		height := max(64, r.emptySize.H+24)

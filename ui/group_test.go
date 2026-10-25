@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/ui/icons"
 )
 
 func TestButtonGroupVerticalStacksAndNamesTheToolbar(t *testing.T) {
@@ -68,5 +69,34 @@ func TestToggleGroupVerticalMovesWithEveryArrow(t *testing.T) {
 	p.Type(ggui.Mods{}, ggui.KeySpace) // re-picking the chosen segment is no change
 	if len(changes) != 6 {
 		t.Fatalf("OnChange ran %d times, want once per change (6)", len(changes))
+	}
+}
+
+func TestToggleGroupIcons(t *testing.T) {
+	t.Parallel()
+	value := ggui.State("grid")
+	opts := []string{"grid", "list"}
+	glyph := func(string) *icons.Widget { return ui.Icon(icons.Search) }
+	labelled := ui.ToggleGroup(value).Options(opts).Icon(glyph)
+	bare := ui.ToggleGroup(value).Options(opts)
+	only := ui.ToggleGroup(value).Options(opts).Icon(glyph).IconOnly()
+	p := ggui.NewProbe(ggui.Column(labelled, bare, only), ggui.Sz(400, 300))
+	defer p.Close()
+	p.Frame()
+	var widths []float64
+	for _, f := range p.FindAll(ggui.RoleRadio) {
+		if f.Label == "list" {
+			widths = append(widths, f.Rect.Size.W)
+		}
+	}
+	if len(widths) != 3 {
+		t.Fatalf("segments named list: %v", widths)
+	}
+	if !(widths[0] > widths[1] && widths[2] < widths[1]) {
+		t.Fatalf("widths with icon %v, label alone %v, icon alone %v", widths[0], widths[1], widths[2])
+	}
+	p.Tap("list")
+	if ggui.Peek(value) != "list" {
+		t.Fatalf("value %q", ggui.Peek(value))
 	}
 }

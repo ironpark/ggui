@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"testing"
+	"unsafe"
 
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/runtime"
@@ -406,5 +407,36 @@ func TestReplaceIsOneUndoStep(t *testing.T) {
 	w.HandleKey(KeyEvent{Kind: KeyPress, Key: KeyZ, Mods: Mods{Meta: runtimeIsDarwin(), Ctrl: !runtimeIsDarwin()}})
 	if got := Peek(v); got != "ab" {
 		t.Fatalf("after undo value = %q, want ab", got)
+	}
+}
+
+func TestTheComposedTextIsBuiltOncePerChange(t *testing.T) {
+	t.Parallel()
+	value := State("ab")
+	w, in := focusedInput(t, value)
+	typeKeys(in, Mods{}, KeyArrowLeft)
+	f := w.ime.(*fakeIME)
+	f.compose = "ㅎ"
+	w.HandleTick()
+	a, _ := w.rendered()
+	b := w.EditingState().Text
+	if a != "aㅎb" || unsafe.StringData(a) != unsafe.StringData(b) {
+		t.Fatalf("rendered %q, then %q built again", a, b)
+	}
+	f.compose = "하"
+	w.HandleTick()
+	if c, _ := w.rendered(); c != "a하b" {
+		t.Fatalf("after the composition changed, rendered %q", c)
+	}
+}
+
+func TestNoWrapLayoutCountsLinesWithoutTheirTable(t *testing.T) {
+	useFakeIME(t)
+	w := TextInput(State("1\n2\n3\n4\n5\n6")).NoWrap()
+	one := TextInput(State("one")).NoWrap()
+	h3 := w.Layout(Loose(Sz(200, Unbounded)), Env{}).H
+	h1 := one.Layout(Loose(Sz(200, Unbounded)), Env{}).H
+	if h3 <= h1 || w.wrapped.spans != nil {
+		t.Fatalf("six lines %v tall against one's %v; line table made: %v", h3, h1, w.wrapped.spans != nil)
 	}
 }

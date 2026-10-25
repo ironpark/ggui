@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
@@ -120,12 +121,17 @@ type ToggleGroupWidget[T comparable] struct {
 	options          []T
 	labels           []*ggui.TextWidget
 	names            []string
+	icon             func(T) *icons.Widget // nil without icons
+	icons            []*icons.Widget       // by option, nil where the option has none
+	iconOnly         bool
+	tips             []*TooltipWidget // by option, for IconOnly
 	onChange         func(T)
 	vertical         bool
 	hover            int
 
 	theme uitheme.Theme
-	sizes []ggui.Size
+	sizes []ggui.Size    // each segment's content
+	parts []segmentParts // and what is in it
 	rects []ggui.Rect
 	pad   ggui.EdgeInsets
 	cur   int // the chosen segment, found once a frame by paint
@@ -180,8 +186,56 @@ func (g *ToggleGroupWidget[T]) setOptions(options []T) bool {
 		g.names[i] = g.label(v)
 		g.labels[i] = ggui.Text(g.names[i]).NoWrap()
 	}
+	g.makeIcons()
 	return true
 }
+
+// makeIcons makes the segments' icons, and for IconOnly the tooltips
+// naming them.
+func (g *ToggleGroupWidget[T]) makeIcons() {
+	g.icons, g.tips = nil, nil
+	if g.icon == nil {
+		return
+	}
+	g.icons = make([]*icons.Widget, len(g.options))
+	for i, v := range g.options {
+		g.icons[i] = g.icon(v)
+	}
+	if g.iconOnly {
+		g.tips = make([]*TooltipWidget, len(g.options))
+		for i := range g.options {
+			g.tips[i] = Tooltip(ggui.Box(), g.names[i])
+		}
+	}
+}
+
+// Icon puts an icon before each option's label, tinted as the label is;
+// fn may return nil for an option without one.
+//
+//	ui.ToggleGroup(view).Options([]string{"grid", "list"}).
+//		Icon(func(v string) *icons.Widget { return icons.Icon(glyphs[v]) })
+func (g *ToggleGroupWidget[T]) Icon(fn func(T) *icons.Widget) *ToggleGroupWidget[T] {
+	g.icon = fn
+	g.makeIcons()
+	g.props.Changed()
+	return g
+}
+
+// IconOnly shows the icons without the labels, which name the segments
+// for a screen reader and in a tooltip each.
+func (g *ToggleGroupWidget[T]) IconOnly() *ToggleGroupWidget[T] {
+	g.iconOnly = true
+	g.makeIcons()
+	g.props.Changed()
+	return g
+}
+
+// segmentParts are the sizes of a segment's icon and label, zero for one
+// it does not show.
+type segmentParts struct{ icon, label ggui.Size }
+
+// iconGap is the space between a segment's icon and its label.
+const iconGap = 6
 
 // Format sets how each option is shown and named.
 func (g *ToggleGroupWidget[T]) Format(fn func(T) string) *ToggleGroupWidget[T] {
@@ -190,6 +244,7 @@ func (g *ToggleGroupWidget[T]) Format(fn func(T) string) *ToggleGroupWidget[T] {
 		g.names[i] = fn(o)
 		g.labels[i].Content(g.names[i])
 	}
+	g.makeIcons()
 	return g
 }
 
@@ -238,9 +293,23 @@ func (g *ToggleGroupWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Siz
 	g.sizes = g.sizes[:0]
 	cur := g.index()
 	var main, cross float64
+	g.parts = g.parts[:0]
 	for i, l := range g.labels {
-		l.Color(pick(g.IsInert(), t.MutedFg, pick(i == cur, t.Fg, t.MutedFg)))
-		s := l.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env)
+		fg := pick(g.IsInert(), t.MutedFg, pick(i == cur, t.Fg, t.MutedFg))
+		l.Color(fg)
+		var p segmentParts
+		if !g.iconOnly || g.iconAt(i) == nil {
+			p.label = l.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env)
+		}
+		s := p.label
+		if ic := g.iconAt(i); ic != nil {
+			p.icon = ic.Color(fg).Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env)
+			if s.W > 0 {
+				s.W += iconGap
+			}
+			s = ggui.Sz(s.W+p.icon.W, max(s.H, p.icon.H))
+		}
+		g.parts = append(g.parts, p)
 		g.sizes = append(g.sizes, s)
 		if g.vertical {
 			main, cross = main+s.H+g.pad.Top+g.pad.Bottom, max(cross, s.W+g.pad.Left+g.pad.Right)
@@ -248,8 +317,20 @@ func (g *ToggleGroupWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Siz
 			main, cross = main+s.W+g.pad.Left+g.pad.Right, max(cross, s.H+g.pad.Top+g.pad.Bottom)
 		}
 	}
+	for i, tip := range g.tips {
+		s := g.sizes[i]
+		tip.Layout(ggui.Tight(ggui.Sz(s.W+g.pad.Left+g.pad.Right, s.H+g.pad.Top+g.pad.Bottom)), env)
+	}
 	main, cross = main+2*tabInset, cross+2*tabInset
 	return c.Constrain(pick(g.vertical, ggui.Sz(cross, main), ggui.Sz(main, cross)))
+}
+
+// iconAt is option i's icon, or nil.
+func (g *ToggleGroupWidget[T]) iconAt(i int) *icons.Widget {
+	if i < len(g.icons) {
+		return g.icons[i]
+	}
+	return nil
 }
 
 // Paint implements ggui.Widget. The group is one node holding a segment
@@ -290,8 +371,21 @@ func (g *ToggleGroupWidget[T]) paint(dst *ggui.Canvas, r ggui.Rect) {
 		case i == hover:
 			dst.FillRoundRect(seg, radius, mix(t.Muted, t.Fg, t.HoverMix))
 		}
-		label := ggui.Rct(ggui.Pt(seg.Origin.X+(seg.Size.W-s.W)/2, seg.Origin.Y+(seg.Size.H-s.H)/2), s)
-		dst.Paint(g.labels[i], label)
+		// The icon and the label, centred together and each on the line.
+		p, x := g.parts[i], seg.Origin.X+(seg.Size.W-s.W)/2
+		middle := func(sz ggui.Size) ggui.Rect {
+			return ggui.Rct(ggui.Pt(x, seg.Origin.Y+(seg.Size.H-sz.H)/2), sz)
+		}
+		if ic := g.iconAt(i); ic != nil {
+			dst.Paint(ic, middle(p.icon))
+			x += p.icon.W + iconGap
+		}
+		if p.label.W > 0 {
+			dst.Paint(g.labels[i], middle(p.label))
+		}
+		if i < len(g.tips) {
+			dst.Paint(g.tips[i], seg)
+		}
 		at = at.Add(pick(g.vertical, ggui.Pt(0, main), ggui.Pt(main, 0)))
 	}
 	if cur >= 0 {

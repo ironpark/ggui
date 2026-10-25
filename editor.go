@@ -80,6 +80,15 @@ type TextInputWidget struct {
 		key   spanKey
 		spans []lineSpan
 	}
+	// composed caches the text with the composition in it, which every
+	// paint, tick and EditingState asks for while the IME composes: built
+	// again only when the text, the selection or the composition change,
+	// not copied each time.
+	composed struct {
+		text, composition string
+		lo, hi            int
+		out               string
+	}
 
 	cache     *CachedWidget
 	resolved  TextStyle
@@ -457,7 +466,12 @@ func (t *TextInputWidget) rendered() (s string, caret int) {
 	if t.composition == "" {
 		return t.ed.Text, t.ed.Caret
 	}
-	return t.ed.Text[:lo] + t.composition + t.ed.Text[hi:], lo + t.compCaret
+	c := &t.composed
+	if c.out == "" || c.text != t.ed.Text || c.composition != t.composition || c.lo != lo || c.hi != hi {
+		c.text, c.composition, c.lo, c.hi = t.ed.Text, t.composition, lo, hi
+		c.out = t.ed.Text[:lo] + t.composition + t.ed.Text[hi:]
+	}
+	return c.out, lo + t.compCaret
 }
 
 func (t *TextInputWidget) height() float64 {
@@ -539,7 +553,15 @@ func (t *TextInputWidget) Layout(c Constraints, env Env) Size {
 		return c.Constrain(Sz(w, t.height()))
 	}
 	t.width = max(c.MinW, w)
-	n := max(len(t.spans(t.ed.Text)), t.minLines)
+	var n int
+	if t.noWrap {
+		// Lines break only at newlines, so counting them gives the height
+		// without the line table, which paint makes if it draws.
+		n = strings.Count(t.ed.Text, "\n") + 1
+	} else {
+		n = len(t.spans(t.ed.Text))
+	}
+	n = max(n, t.minLines)
 	return c.Constrain(Sz(t.width, t.linesHeight(n)))
 }
 
