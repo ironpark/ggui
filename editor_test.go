@@ -379,3 +379,32 @@ func TestTextInputKeyHookLeavesCompositionWithIME(t *testing.T) {
 		t.Fatal("ordinary Escape was not released")
 	}
 }
+
+func TestNoWrapBreaksOnlyAtLineBreaks(t *testing.T) {
+	useFakeIME(t)
+	w := TextInput(State("a long first line that would wrap\nsecond")).NoWrap()
+	if got := w.spans(w.ed.Text); len(got) != 2 || got[1] != (lineSpan{34, 40}) {
+		t.Fatalf("spans = %v, want the two lines as written", got)
+	}
+	var in inputState
+	paintFrame(&in, w, Sz(60, 60))
+	w.ed.MoveTo(36, false)
+	w.HandleKey(KeyEvent{Kind: KeyPress, Key: KeyArrowUp})
+	if w.ed.Caret > 33 {
+		t.Fatalf("Up left the caret at %d, not on the first line", w.ed.Caret)
+	}
+}
+
+func TestReplaceIsOneUndoStep(t *testing.T) {
+	v := State("ab")
+	w, _ := focusedInput(t, v)
+	w.Select(1, 1)
+	w.Replace("\n    ")
+	if got := Peek(v); got != "a\n    b" {
+		t.Fatalf("value = %q", got)
+	}
+	w.HandleKey(KeyEvent{Kind: KeyPress, Key: KeyZ, Mods: Mods{Meta: runtimeIsDarwin(), Ctrl: !runtimeIsDarwin()}})
+	if got := Peek(v); got != "ab" {
+		t.Fatalf("after undo value = %q, want ab", got)
+	}
+}

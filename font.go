@@ -690,13 +690,22 @@ func wrapParagraphBy(p string, width func(a, b int) float64, maxW float64) []lin
 	return append(lines, lineSpan{lineStart, lineEnd})
 }
 
+// breakSpans splits s at its line breaks only.
+func breakSpans(s string) []lineSpan {
+	spans := make([]lineSpan, 0, strings.Count(s, "\n")+1)
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			spans = append(spans, lineSpan{start, i})
+			start = i + 1
+		}
+	}
+	return append(spans, lineSpan{start, len(s)})
+}
+
 // lineOf returns the index of the span that holds byte offset pos: the
 // last one starting at or before it.
 func lineOf(spans []lineSpan, pos int) int {
-	for i := len(spans) - 1; i > 0; i-- {
-		if spans[i].start <= pos {
-			return i
-		}
-	}
-	return 0
+	i := sort.Search(len(spans), func(i int) bool { return spans[i].start > pos })
+	return max(i-1, 0)
 }

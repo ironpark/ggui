@@ -69,6 +69,9 @@ func (f *TextFieldWidget) MinWidth(w float64) *TextFieldWidget { f.input.MinWidt
 // the line and ⌘/Ctrl+Enter submits.
 func (f *TextFieldWidget) Multiline() *TextFieldWidget { f.input.Multiline(); return f }
 
+// NoWrap makes the field Multiline with lines that do not wrap.
+func (f *TextFieldWidget) NoWrap() *TextFieldWidget { f.input.NoWrap(); return f }
+
 // Lines sets the fewest lines a Multiline field is tall.
 func (f *TextFieldWidget) Lines(n int) *TextFieldWidget { f.input.Lines(n); return f }
 

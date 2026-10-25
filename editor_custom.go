@@ -8,6 +8,9 @@ type TextInputState struct {
 	Text               string
 	Anchor, Caret      int
 	Focused, Composing bool
+	// CompStart and CompEnd are where the composition is in Text, while
+	// Composing.
+	CompStart, CompEnd int
 }
 
 // Filter normalizes edits before publishing them to the binding. It must be a
@@ -26,7 +29,12 @@ func (t *TextInputWidget) EditingState() TextInputState {
 	if t.composition != "" {
 		a = caret
 	}
-	return TextInputState{s, a, caret, t.Focused(), t.composition != ""}
+	st := TextInputState{Text: s, Anchor: a, Caret: caret, Focused: t.Focused(), Composing: t.composition != ""}
+	if st.Composing {
+		st.CompStart = caret - t.compCaret
+		st.CompEnd = st.CompStart + len(t.composition)
+	}
+	return st
 }
 
 // Select sets the selection at UTF-8 byte offsets, clamped to rune boundaries.

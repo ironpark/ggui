@@ -47,6 +47,7 @@ type TextInputWidget struct {
 	style             TextStyle
 	password          bool
 	multiline         bool
+	noWrap            bool
 	minLines          int
 	minWidth          float64
 	onSubmit          func(string)
@@ -323,6 +324,28 @@ func (t *TextInputWidget) Multiline() *TextInputWidget {
 	return t
 }
 
+// NoWrap makes the editor Multiline with each line as long as it runs,
+// broken only where the text breaks it, as a code editor's are. Nothing is
+// measured to find the lines, so a long text stays cheap to edit.
+func (t *TextInputWidget) NoWrap() *TextInputWidget {
+	defer property.Watch(&t.props, &t.noWrap)()
+	t.noWrap = true
+	return t.Multiline()
+}
+
+// Replace puts s in place of the selection, as typing or a paste does: it
+// is one step of the undo history and reaches the binding and OnChange.
+// It lets a caller build commands of its own, such as an Enter that
+// indents the new line.
+func (t *TextInputWidget) Replace(s string) {
+	if t.IsDisabled() {
+		return
+	}
+	t.ime.Confirm()
+	t.ed.Replace(s)
+	t.commit()
+}
+
 // Lines sets the fewest lines a Multiline editor is tall, and makes the
 // editor Multiline.
 func (t *TextInputWidget) Lines(n int) *TextInputWidget {
@@ -480,8 +503,16 @@ func (t *TextInputWidget) spans(s string) []lineSpan {
 		st = t.style.resolved()
 	}
 	key := spanKey{s, fontGen(), st.Font, st.Weight, st.Size, t.width}
+	if t.noWrap {
+		key = spanKey{text: s}
+	}
 	if t.wrapped.spans == nil || t.wrapped.key != key {
-		t.wrapped.key, t.wrapped.spans = key, wrapSpans(s, t.face(1), t.width)
+		t.wrapped.key = key
+		if t.noWrap {
+			t.wrapped.spans = breakSpans(s)
+		} else {
+			t.wrapped.spans = wrapSpans(s, t.face(1), t.width)
+		}
 	}
 	return t.wrapped.spans
 }
