@@ -71,6 +71,10 @@ func HandleEvent(event ggfx.Event) bool {
 		t := inputFor(e.Window)
 		st := textInputState{Text: e.Text, CommitKind: commitRegular,
 			ReplacementStartInBytes: noReplacement, ReplacementEndInBytes: noReplacement}
+		if e.Passthrough {
+			// The IME passed the key on: it still reaches the editor.
+			st.CommitKind = commitWithPassthroughKey
+		}
 		if e.HasReplacement {
 			st.ReplacementStartInBytes, st.ReplacementEndInBytes = e.ReplacementStart, e.ReplacementEnd
 			st.ReplacementRelativeToCaret = true

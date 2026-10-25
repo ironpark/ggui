@@ -289,3 +289,18 @@ func (c *Composer) dispatchEndByUser() {
 		c.OnEndByUser()
 	}
 }
+
+// Rebase points c's session at new text around the caret, as after the
+// caller replaced its buffer outside a commit: the IME's next edit applies
+// to it, and the platform reads it back. Unlike ending the session, the
+// platform's text input stays on, so a key typed before the next tick
+// still reaches the IME. It is a no-op without a session.
+func Rebase(c *Composer, before, after string) {
+	if c.s == nil || c.s.IsClosed() {
+		return
+	}
+	c.s.textBeforeCaret, c.s.textAfterCaret = before, after
+	if c.s.input != nil {
+		c.s.input.impl.setContext(before, after)
+	}
+}

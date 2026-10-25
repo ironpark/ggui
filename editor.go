@@ -107,8 +107,17 @@ func TextInput(value Binding[string]) *TextInputWidget {
 		if v == t.ed.Text {
 			return
 		}
+		if t.composition != "" {
+			t.ime.Cancel() // the write replaces what was being composed
+		}
 		t.ed.SetText(v)
 		t.cache.invalidate()
+		// The IME's next edit applies to the new text, and an IME that
+		// rewrites what it committed, as the Korean one does each
+		// syllable, reads it back.
+		lo, hi := t.ed.Selection()
+		t.imeStart, t.imeEnd = 0, len(t.ed.Text)
+		t.ime.Rebase(t.ed.Text[:lo], t.ed.Text[hi:])
 	})
 	return t
 }
@@ -742,6 +751,9 @@ type ime interface {
 	Update() (handled bool, err error)
 	Confirm()
 	Cancel()
+	// Rebase points a session at new text around the caret, written
+	// outside the IME.
+	Rebase(before, after string)
 }
 
 // newIME builds the IME driver for a new editor: the platform's, or the
@@ -780,6 +792,8 @@ func newPlatformIME(t *TextInputWidget) ime {
 type composerIME struct {
 	textinput.Composer
 }
+
+func (c *composerIME) Rebase(before, after string) { textinput.Rebase(&c.Composer, before, after) }
 
 func (c *composerIME) Update() (bool, error) {
 	if !appRunning.Load() {

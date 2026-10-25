@@ -43,6 +43,8 @@ func (f *fakeIME) Confirm() {
 	f.t.imeComposition("", 0)
 }
 
+func (f *fakeIME) Rebase(string, string) {}
+
 func (f *fakeIME) Cancel() {
 	f.cancelled++
 	f.compose = ""

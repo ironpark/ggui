@@ -6,6 +6,9 @@ package textinput
 
 import "github.com/ironpark/ggfx/exp/textinput"
 
+// Rebase is a no-op in the browser, whose text area holds the text itself.
+func Rebase(*Composer, string, string) {}
+
 type (
 	Composer       = textinput.Composer
 	SessionOptions = textinput.SessionOptions
