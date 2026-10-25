@@ -5,7 +5,7 @@ go 1.27.0
 require (
 	github.com/ebitengine/purego v0.11.0
 	github.com/go-text/typesetting v0.3.5
-	github.com/ironpark/ggfx v0.0.0-20261005073843-6475c0167651
+	github.com/ironpark/ggfx v0.0.0-20261025073821-baa791aebac7
 	golang.org/x/image v0.46.0
 	golang.org/x/sys v0.48.0
 	golang.org/x/text v0.42.0
