@@ -18,7 +18,7 @@ import (
 // lives in the widget: keep one box and change its values, rather than
 // building a new box with the new values, which starts where it is told.
 type AnimatedBoxWidget struct {
-	props    property.Owner
+	props       property.Owner
 	box         *BoxWidget // painted with the values of the moment
 	duration    time.Duration
 	ease        Easing

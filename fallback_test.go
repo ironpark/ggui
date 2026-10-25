@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/ironpark/ggfx/text/v2"
@@ -9,8 +10,8 @@ import (
 
 func TestKoreanFallsBackToASystemFont(t *testing.T) {
 	t.Parallel()
-	if len(SystemFonts()) == 0 {
-		t.Skip("no system CJK font on this machine")
+	if !systemFontDrawsKorean() {
+		t.Skip("no system font draws Korean on this machine")
 	}
 	face := fallbackFont().face(14, 0)
 	if ef, ok := face.(*emojiFace); ok {
@@ -26,4 +27,18 @@ func TestKoreanFallsBackToASystemFont(t *testing.T) {
 	if bare.face(14, 0).(*text.GoTextFace) == nil || lineWidth("한글", bare.face(14, 0)) >= lineWidth("한글", face) {
 		t.Fatal("NoFallback still draws Korean, or the fallback did not change the measurement")
 	}
+}
+
+// systemFontDrawsKorean reports whether a system font has glyphs for
+// Korean. A machine can have system fonts and none of them for Korean, as
+// a Linux one with DejaVu Sans alone does, where the fallback draws the
+// same .notdef boxes as the built-in font.
+func systemFontDrawsKorean() bool {
+	for _, f := range SystemFonts() {
+		glyphs := text.AppendGlyphs(nil, "한글", f.face(14, 0), nil)
+		if len(glyphs) > 0 && !slices.ContainsFunc(glyphs, func(g text.Glyph) bool { return g.GID == 0 }) {
+			return true
+		}
+	}
+	return false
 }

@@ -36,6 +36,11 @@ jobs:
       # committed.
       - name: Workspace
         run: go work init . ./examples/sqlite ./fonts/notoemoji
+      # The Ubuntu image has DejaVu Sans but no font for Korean, which the
+      # system font fallback is tested with.
+      - name: Install a Korean font
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y fonts-nanum
       - name: Test
         run: go test ./... ./examples/sqlite/... ./fonts/notoemoji/...
       - name: Test with the inspector
