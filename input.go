@@ -361,7 +361,13 @@ func (in *inputState) updateHover(f frameInput) {
 	now := in.send(move)
 	if !in.continues(now, in.hovered) {
 		if in.hovered != nil {
-			in.hovered.handle(PointerEvent{Kind: PointerExit, Pos: f.pos})
+			// The exit goes to the handler holding the region now: one
+			// rebuilt since it was entered has taken over its hover.
+			left := in.hovered
+			if cur := in.findPointer(left); cur != nil {
+				left = cur
+			}
+			left.handle(PointerEvent{Kind: PointerExit, Pos: f.pos})
 		}
 		if now != nil {
 			now.handle(PointerEvent{Kind: PointerEnter, Pos: f.pos})

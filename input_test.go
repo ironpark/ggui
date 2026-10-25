@@ -429,3 +429,55 @@ func TestTabSkipsWhatIsNotATabStop(t *testing.T) {
 		t.Fatalf("a click must still reach a region off the Tab order, and Tab leave it: %v", log)
 	}
 }
+
+// hoverBox is a 50x50 control that tracks its hover and carries it across a
+// rebuild, as Interactive does.
+type hoverBox struct {
+	id      string
+	hovered bool
+}
+
+func (h *hoverBox) Layout(c Constraints, _ Env) Size { return c.Constrain(Sz(50, 50)) }
+func (h *hoverBox) Paint(dst *Canvas, r Rect)        { dst.HitPointer(r, h) }
+func (h *hoverBox) HitID() any                       { return h.id }
+func (h *hoverBox) HandlePointer(ev PointerEvent) bool {
+	switch ev.Kind {
+	case PointerEnter, PointerMove:
+		h.hovered = true
+	case PointerExit:
+		h.hovered = false
+	}
+	return true
+}
+func (h *hoverBox) Adopt(prev any) {
+	if p, ok := prev.(*hoverBox); ok {
+		h.hovered = p.hovered
+	}
+}
+
+// A control rebuilt while hovered, as a tap that changes what is shown
+// rebuilds it, takes the exit when the pointer leaves: the exit goes to the
+// one holding the region, not to the one that was entered.
+func TestHoverExitReachesARebuiltControl(t *testing.T) {
+	t.Parallel()
+	gen := State(0)
+	var a *hoverBox
+	p := ProbeBuilder(func() Widget {
+		return Reactive(func() Widget {
+			_ = gen.Get()
+			a = &hoverBox{id: "a"}
+			return Column(a, &hoverBox{id: "b"})
+		})
+	}, Sz(50, 100))
+	defer p.Close()
+	p.Move(Pt(25, 25))
+	gen.Set(1) // rebuilt under the pointer
+	p.Frame()
+	if !a.hovered {
+		t.Fatal("the rebuilt control did not take over the hover")
+	}
+	p.Move(Pt(25, 75))
+	if a.hovered {
+		t.Fatal("the rebuilt control is still hovered after the pointer left it")
+	}
+}
