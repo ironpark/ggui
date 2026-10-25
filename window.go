@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggip"
+	"github.com/ironpark/ggip/ggfxinput"
 	"github.com/ironpark/ggui/inspect"
 	"github.com/ironpark/ggui/internal/a11ybridge"
 	"github.com/ironpark/ggui/internal/reactive"
@@ -135,7 +137,7 @@ type Window struct {
 	pending       frameInput                  // input gathered from events since the last frame
 	pos           Point                       // the last known pointer position, in logical pixels
 	wakeTimer     *time.Timer
-	keys          [KeyMax + 1]bool       // keys held, for Mods
+	keyboard      ggip.Keyboard          // keys held, for Mods
 	touches       map[ggfx.TouchID]Point // touches in progress, in logical pixels
 	ax            a11ybridge.Bridge
 	semWanted     atomic.Bool  // a caller of Semantics reads the tree
@@ -282,19 +284,21 @@ func (w *Window) handle(ev ggfx.Event) error {
 	case ggfx.FrameEvent:
 		return w.runFrameEvent(ev)
 	case ggfx.KeyEvent:
-		if int(ev.Key) < len(w.keys) {
-			w.keys[ev.Key] = ev.Pressed
+		key, ok := ggfxinput.Key(ev.Key)
+		if !ok {
+			break
 		}
+		w.keyboard.Set(key, ev.Pressed)
 		if ev.Pressed {
 			// The modifiers of this press, from the held keys and from the
 			// event itself, which sees a modifier the OS never reported as a
 			// key. Presses within one frame share the union, so a chord is
 			// not lost when its modifier was released before the frame ran.
-			m := w.mods().or(modsFrom(ev.Modifiers))
-			w.pending.mods = w.pending.mods.or(m)
-			w.pending.keys = append(w.pending.keys, ev.Key)
+			m := w.keyboard.Mods().Or(ggfxinput.Mods(ev.Modifiers))
+			w.pending.mods = w.pending.mods.Or(m)
+			w.pending.keys = append(w.pending.keys, key)
 			if w.cfg.Inspector != "" && !ev.Repeat &&
-				(KeyEvent{Kind: KeyPress, Key: ev.Key, Mods: m}).Is(w.inspectChord) {
+				(KeyEvent{Kind: KeyPress, Key: key, Mods: m}).Is(w.inspectChord) {
 				w.Inspector(!w.inspect)
 			}
 		}
@@ -314,15 +318,15 @@ func (w *Window) handle(ev ggfx.Event) error {
 		w.pos = Pt(ev.X, ev.Y)
 		// A modifier pressed while another window had the focus reached
 		// no KeyEvent here; the click still sees it.
-		w.pending.mods = w.pending.mods.or(modsFrom(ev.Modifiers))
+		w.pending.mods = w.pending.mods.Or(ggfxinput.Mods(ev.Modifiers))
 		if ev.Pressed {
-			w.pending.down = append(w.pending.down, ev.Button)
+			w.pending.down = append(w.pending.down, ggfxinput.MouseButton(ev.Button))
 		} else {
-			w.pending.up = append(w.pending.up, ev.Button)
+			w.pending.up = append(w.pending.up, ggfxinput.MouseButton(ev.Button))
 		}
 		w.requestFrame()
 	case ggfx.ScrollEvent:
-		w.pending.mods = w.pending.mods.or(modsFrom(ev.Modifiers))
+		w.pending.mods = w.pending.mods.Or(ggfxinput.Mods(ev.Modifiers))
 		w.pending.wheel = w.pending.wheel.Add(Pt(ev.X, ev.Y))
 		w.requestFrame()
 	case ggfx.TouchEvent:
@@ -364,7 +368,7 @@ func (w *Window) handle(ev ggfx.Event) error {
 	case ggfx.FocusEvent:
 		if !ev.Focused {
 			// Releases are not reported while another window has the focus.
-			w.keys = [KeyMax + 1]bool{}
+			w.keyboard.Reset()
 		}
 		w.post(func() { w.focused.Set(ev.Focused) })
 	case ggfx.WindowStateEvent:
@@ -378,16 +382,6 @@ func (w *Window) handle(ev ggfx.Event) error {
 func (w *Window) requestFrame() {
 	if nw := w.window.Load(); nw != nil {
 		nw.RequestFrame()
-	}
-}
-
-// mods reports the modifier keys currently held.
-func (w *Window) mods() Mods {
-	return Mods{
-		Shift: w.keys[KeyShift] || w.keys[KeyShiftLeft] || w.keys[KeyShiftRight],
-		Ctrl:  w.keys[KeyControl] || w.keys[KeyControlLeft] || w.keys[KeyControlRight],
-		Alt:   w.keys[KeyAlt] || w.keys[KeyAltLeft] || w.keys[KeyAltRight],
-		Meta:  w.keys[KeyMeta] || w.keys[KeyMetaLeft] || w.keys[KeyMetaRight],
 	}
 }
 
@@ -650,7 +644,7 @@ func (w *Window) takeInput() frameInput {
 	f.pos = w.pos
 	// The union gathered from the frame's key presses, or the held keys
 	// alone when there were none.
-	f.mods = f.mods.or(w.mods())
+	f.mods = f.mods.Or(w.keyboard.Mods())
 	ids := make([]ggfx.TouchID, 0, len(w.touches))
 	for id := range w.touches {
 		ids = append(ids, id)

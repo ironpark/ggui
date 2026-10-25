@@ -1,10 +1,10 @@
 package ggui
 
 import (
-	"github.com/ironpark/ggfx"
 	"runtime"
 	"slices"
 
+	"github.com/ironpark/ggip"
 	"github.com/ironpark/ggui/internal/property"
 )
 
@@ -53,29 +53,9 @@ type TouchDragCapturer interface {
 	CaptureTouchDrag() bool
 }
 
-// Mods are the modifier keys held during a KeyEvent.
-type Mods struct {
-	Shift, Ctrl, Alt, Meta bool
-}
-
-// or is the union of two modifier sets.
-func (m Mods) or(o Mods) Mods {
-	return Mods{Shift: m.Shift || o.Shift, Ctrl: m.Ctrl || o.Ctrl, Alt: m.Alt || o.Alt, Meta: m.Meta || o.Meta}
-}
-
-// modsFrom converts the modifiers ggfx reports with a key event.
-func modsFrom(k ggfx.KeyModifiers) Mods {
-	return Mods{Shift: k.Shift, Ctrl: k.Control, Alt: k.Alt, Meta: k.Meta}
-}
-
-// Cmd reports the platform's command modifier: Meta (⌘) on macOS, Ctrl
-// elsewhere. Shortcuts such as select-all and paste check it.
-func (m Mods) Cmd() bool {
-	if runtimeIsDarwin() {
-		return m.Meta
-	}
-	return m.Ctrl
-}
+// Mods are the modifier keys held during a KeyEvent. Cmd reports the
+// platform's command modifier: Meta (⌘) on macOS, Ctrl elsewhere.
+type Mods = ggip.Mods
 
 func runtimeIsDarwin() bool { return runtime.GOOS == "darwin" }
 

@@ -1,7 +1,7 @@
-// Package keygen writes the file that re-exports ggfx's key constants
-// as ggui's own, so that a widget names a key without importing ggfx.
+// Package keygen writes the file that re-exports ggip's key constants
+// as ggui's own, so that a widget names a key without importing ggip.
 //
-// It asks ggfx for the names rather than reading its source: Key.String
+// It asks ggip for the names rather than reading its source: Key.String
 // returns the canonical spelling of each key, so the constants deprecated in
 // favour of another spelling cannot come out of it, and a new key appears the
 // moment the dependency is updated and the file regenerated.
@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"go/format"
 
-	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggip"
 )
 
 // Generate returns the source of the key constant file, gofmt'd.
@@ -22,15 +22,15 @@ func Generate() ([]byte, error) {
 
 package ggui
 
-import "github.com/ironpark/ggfx"
+import "github.com/ironpark/ggip"
 
-// The keys ggfx reports, by their US layout names. A key is a
+// The keys ggip defines, by their US layout names. A key is a
 // physical place on the keyboard, not the character it produces.
 const (
 `)
-	for k := ggfx.Key(0); k <= ggfx.KeyMax; k++ {
+	for k := ggip.Key(0); k <= ggip.KeyMax; k++ {
 		if name := k.String(); name != "" {
-			fmt.Fprintf(&b, "\tKey%s KeyboardKey = ggfx.Key%s\n", name, name)
+			fmt.Fprintf(&b, "\tKey%s KeyboardKey = ggip.Key%s\n", name, name)
 		}
 	}
 	b.WriteString(")\n")

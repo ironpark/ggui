@@ -32,7 +32,7 @@ func TestAppKeepsModifierOnQueuedKeyPress(t *testing.T) {
 	if !f.mods.Meta {
 		t.Fatal("Cmd+O lost its modifier when Cmd was released before the frame")
 	}
-	if a.mods().Meta {
+	if a.keyboard.Mods().Meta {
 		t.Fatal("released modifier remains held")
 	}
 }
