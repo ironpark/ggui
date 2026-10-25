@@ -456,6 +456,7 @@ type reorderCatcher struct{ token reorderToken }
 func (c reorderCatcher) HandlePointer(PointerEvent) bool { return false }
 func (c reorderCatcher) acceptsDrag(v any) bool          { return v == c.token }
 func (c reorderCatcher) dragOver(bool)                   {}
+func (c reorderCatcher) dragMoved(any, Point)            {}
 func (c reorderCatcher) dropped(any, Point)              {}
 
 // ReorderHandleWidget is the grip a row of a Reorderable is dragged by.

@@ -239,7 +239,9 @@ the zone and the zone's size. The child of a source keeps its clicks. A
 press becomes a drag once it moves a few pixels, a faded copy of the child,
 or of `Preview(w)`, follows the pointer, and Escape cancels it. `Accept`
 narrows what a zone takes and `OnHover` highlights it while a drag is over
-it.
+it. `OnOver` follows the drag across the zone with a `Dropped[T]` for where
+it would land, to show where in the zone the value would go: a gap opening
+between tabs moved from one bar to another, say.
 
 ### Reordering a list
 

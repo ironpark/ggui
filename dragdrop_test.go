@@ -149,3 +149,28 @@ func TestDragPreviewIsLaidOutOnlyWhileDragging(t *testing.T) {
 	}
 	p.Release(Pt(50, 60))
 }
+
+// A zone hears where a drag it accepts is as the drag moves over it, so it
+// can show where the value would land.
+func TestDropZoneFollowsADragOverIt(t *testing.T) {
+	t.Parallel()
+	var at []Point
+	source := DragSource(Box().Size(100, 40), "tab")
+	zone := DropZone(Box().Size(100, 40), func(Dropped[string]) {}).OnOver(func(d Dropped[string]) {
+		if d.Value != "tab" || d.Size != Sz(100, 40) {
+			t.Fatalf("over with %+v", d)
+		}
+		at = append(at, d.Pos)
+	})
+	p := NewProbe(Column(source, zone), Sz(100, 80))
+	defer p.Close()
+	p.Frame()
+	p.Press(Pt(50, 20))
+	p.Move(Pt(50, 30)) // a drag, still over the source
+	p.Move(Pt(20, 50))
+	p.Move(Pt(80, 60))
+	p.Release(Pt(80, 60))
+	if !slices.Equal(at, []Point{Pt(20, 10), Pt(80, 20)}) {
+		t.Fatalf("followed the drag at %v, want each move over the zone in its own coordinates", at)
+	}
+}

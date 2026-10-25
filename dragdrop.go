@@ -32,6 +32,7 @@ type dragSource interface {
 type dropTarget interface {
 	acceptsDrag(v any) bool
 	dragOver(over bool)
+	dragMoved(v any, at Point) // the drag is over the target, at a point of its own
 	dropped(v any, at Point)
 }
 
@@ -90,6 +91,9 @@ func (in *inputState) updateAppDrag(f frameInput) {
 		}
 	}
 	d.target = keep(now)
+	if now != nil && !released {
+		now.pointer.(dropTarget).dragMoved(d.value, now.offset(f.pos))
+	}
 	if !released {
 		return
 	}
@@ -245,6 +249,7 @@ type DropZoneWidget[T any] struct {
 	onDrop  func(Dropped[T])
 	accept  func(T) bool
 	onHover func(over bool)
+	onOver  func(Dropped[T])
 	over    bool
 	size    Size
 }
@@ -261,6 +266,11 @@ func (z *DropZoneWidget[T]) Accept(fn func(T) bool) *DropZoneWidget[T] { z.accep
 // OnHover runs when a drag the zone accepts comes over it and when it
 // leaves, to highlight where the drop would go.
 func (z *DropZoneWidget[T]) OnHover(fn func(over bool)) *DropZoneWidget[T] { z.onHover = fn; return z }
+
+// OnOver runs as a drag the zone accepts moves over it, with where it would
+// land: to show where in the zone the value would go, as a gap opening
+// between tabs or rows. OnHover with false says the drag has left.
+func (z *DropZoneWidget[T]) OnOver(fn func(Dropped[T])) *DropZoneWidget[T] { z.onOver = fn; return z }
 
 // Over reports whether a drag the zone accepts is over it.
 func (z *DropZoneWidget[T]) Over() bool { return z.over }
@@ -294,6 +304,12 @@ func (z *DropZoneWidget[T]) dragOver(over bool) {
 	z.over = over
 	if z.onHover != nil {
 		z.onHover(over)
+	}
+}
+
+func (z *DropZoneWidget[T]) dragMoved(v any, at Point) {
+	if z.onOver != nil {
+		z.onOver(Dropped[T]{Value: v.(T), Pos: at, Size: z.size})
 	}
 }
 
