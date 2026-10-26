@@ -16,6 +16,7 @@ type DialogWidget struct {
 	props      property.Owner
 	modal
 	width  float64
+	top    float64 // the panel's distance from the window's top; 0 centres it
 	effect *ggui.TransitionWidget
 	reveal ggui.Motion
 }
@@ -72,6 +73,16 @@ func (d *DialogWidget) Width(w float64) *DialogWidget {
 	return d
 }
 
+// Top holds the panel's top y pixels below the window's, rather than
+// centring it, so a panel whose height follows its content, such as a
+// command palette's, stays put as it grows and shrinks. It keeps the
+// margin of a centred panel at least; 0 centres it again.
+func (d *DialogWidget) Top(y float64) *DialogWidget {
+	defer property.Watch(&d.props, &d.top)()
+	d.top = max(y, 0)
+	return d
+}
+
 // OnClose fires when the dialog closes, however it closed.
 func (d *DialogWidget) OnClose(fn func()) *DialogWidget { d.onClose = fn; return d }
 
@@ -111,14 +122,21 @@ func (d *DialogWidget) paintPanel(dst *ggui.Canvas, progress float64, open bool)
 		screen = ggui.Sz(d.width+t.Space*4, ggui.Unbounded)
 	}
 	margin := t.Space * 2
+	top := max(d.top, margin)
 	w := min(d.width, max(screen.W-2*margin, 0))
 	maxH := screen.H - 2*margin
+	if d.top > 0 {
+		maxH = screen.H - top - margin
+	}
 	if screen.H == ggui.Unbounded {
 		maxH = ggui.Unbounded
 	}
 	size := d.effect.Layout(ggui.Constraints{MinW: w, MaxW: w, MaxH: max(maxH, 0)}, d.env)
 	at := ggui.Pt((screen.W-size.W)/2, margin)
-	if screen.H != ggui.Unbounded {
+	switch {
+	case d.top > 0 && screen.H != ggui.Unbounded:
+		at.Y = min(top, max(screen.H-margin-size.H, margin))
+	case screen.H != ggui.Unbounded:
 		at.Y = (screen.H - size.H) / 2
 	}
 	if !open {

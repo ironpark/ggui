@@ -301,3 +301,36 @@ func TestTooltipOverAFocusedWidgetStaysClosed(t *testing.T) {
 		t.Fatal("hover no longer opens it")
 	}
 }
+
+func TestDialogTopHoldsItsPanelAsItGrows(t *testing.T) {
+	t.Parallel()
+	open := ggui.State(true)
+	tall := ggui.State(false)
+	body := ggui.Reactive(func() ggui.Widget {
+		return ggui.Box(Button("Inside", nil)).Height(pick(tall.Get(), 200.0, 60.0))
+	})
+	d := Dialog(open, body).Compact().Top(80)
+	p := ggui.NewProbe(d, ggui.Sz(500, 400))
+	defer p.Close()
+	p.Frame()
+	p.Advance(time.Second)
+	if y := d.Rect().Origin.Y; y != 80 {
+		t.Fatalf("short panel at %v", y)
+	}
+	tall.Set(true)
+	p.Frame()
+	if y := d.Rect().Origin.Y; y != 80 {
+		t.Fatalf("tall panel at %v", y)
+	}
+	// A panel taller than the room below its top rises to fit.
+	d.Top(300)
+	p.Frame()
+	if r := d.Rect(); r.Origin.Y+r.Size.H > 400 {
+		t.Fatalf("panel %v leaves the window", r)
+	}
+	d.Top(0)
+	p.Frame()
+	if r := d.Rect(); r.Origin.Y != (400-r.Size.H)/2 {
+		t.Fatalf("Top(0) left the panel at %v", r)
+	}
+}
