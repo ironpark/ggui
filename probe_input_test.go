@@ -99,7 +99,7 @@ func TestCanvasPointerAndFocusWithinReadTheFrameStart(t *testing.T) {
 		func(dst *Canvas, _ Rect) {
 			at, known = dst.Pointer()
 			focusedIn = dst.FocusWithin(field)
-			elsewhere = dst.FocusWithin(Rct(Pt(60, 60), Sz(10, 10)))
+			elsewhere = dst.FocusWithin(Rct(Pt(60, 60), Sz(10, 10))) || dst.FocusWithin(Rct(Pt(5, 5), Sz(10, 10)))
 		},
 	)
 	p := NewProbe(Column(Focus(Box().Size(40, 20)), recorder), Sz(100, 100))
@@ -115,7 +115,7 @@ func TestCanvasPointerAndFocusWithinReadTheFrameStart(t *testing.T) {
 	p.Click(Pt(10, 10))
 	p.Frame()
 	if !focusedIn || elsewhere {
-		t.Fatalf("with the field focused: within it %v, within an empty rect %v", focusedIn, elsewhere)
+		t.Fatalf("with the field focused: within it %v, within an empty rect or one floating over the field %v", focusedIn, elsewhere)
 	}
 	var nilCanvas *Canvas
 	if _, ok := nilCanvas.Pointer(); ok || nilCanvas.FocusWithin(field) {

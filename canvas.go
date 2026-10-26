@@ -342,9 +342,17 @@ func (c *Canvas) Pointer() (Point, bool) {
 
 // FocusWithin reports whether the focused input region overlaps r. Containers
 // use it to pause motion while a descendant (including a custom control) has
-// the keyboard. Like Pointer, it reads the state at the start of the paint.
+// the keyboard. A region that takes in all of r and more is not within it:
+// that is a widget r floats over, such as an editor under an overlay, which
+// no descendant of r can be. Like Pointer, it reads the state at the start of
+// the paint.
 func (c *Canvas) FocusWithin(r Rect) bool {
-	return c != nil && !c.fs().focusBounds.Intersect(c.toWindow(r)).Empty()
+	if c == nil {
+		return false
+	}
+	focus, w := c.fs().focusBounds, c.toWindow(r)
+	in := focus.Intersect(w)
+	return !in.Empty() && (in != w || focus == w)
 }
 
 // FocusVisibleWithin is FocusWithin for focus moved there with the

@@ -278,3 +278,26 @@ func TestTooltipKeyboardFocusAndNarrowViewport(t *testing.T) {
 		t.Fatalf("tooltip overflows: %v", size)
 	}
 }
+
+// A tooltip floating over a focused editor, as an overlay does, is not
+// focused by it: it opens on hover alone.
+func TestTooltipOverAFocusedWidgetStaysClosed(t *testing.T) {
+	t.Parallel()
+	input := ggui.TextInput(ggui.State("")).Name("Editor")
+	badge := Tooltip(ggui.Box(ggui.Text("badge")).Size(40, 20), "Over the editor")
+	p := ggui.NewProbe(ggui.Stack(ggui.Box(input).Size(200, 100), ggui.Padding(badge, 10)), ggui.Sz(200, 100))
+	defer p.Close()
+	p.Advance(0)
+	p.Type(ggui.Mods{}, ggui.KeyTab)
+	p.Frame()
+	p.Advance(time.Second)
+	if _, ok := p.Semantics().Find(ggui.RoleText, "Over the editor"); ok {
+		t.Fatal("the editor's focus opened a tooltip floating over it")
+	}
+	p.Move(ggui.Pt(30, 20))
+	p.Frame()
+	p.Advance(time.Second)
+	if _, ok := p.Semantics().Find(ggui.RoleText, "Over the editor"); !ok {
+		t.Fatal("hover no longer opens it")
+	}
+}
