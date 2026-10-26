@@ -60,9 +60,11 @@ type frameState struct {
 	logical      Size // the window in logical pixels, for Size
 	pointer      Point
 	hasPointer   bool
-	focusBounds  Rect // focused input region at the start of this paint
-	focusVisible bool // focus came there by keyboard
-	pressed      bool // a pointer button is held
+	focusBounds  Rect       // focused input region at the start of this paint
+	focusKey     KeyHandler // its handler
+	focusPainted bool       // the focused handler registered since PaintFocus began
+	focusVisible bool       // focus came there by keyboard
+	pressed      bool       // a pointer button is held
 	overlays     []overlay
 	trace        []inspect.Node // every Paint call, when the inspector is on
 	traceWidgets []Widget       // the widget behind each trace node
@@ -342,17 +344,39 @@ func (c *Canvas) Pointer() (Point, bool) {
 
 // FocusWithin reports whether the focused input region overlaps r. Containers
 // use it to pause motion while a descendant (including a custom control) has
-// the keyboard. A region that takes in all of r and more is not within it:
-// that is a widget r floats over, such as an editor under an overlay, which
-// no descendant of r can be. Like Pointer, it reads the state at the start of
-// the paint.
+// the keyboard. Like Pointer, it reads the state at the start of the paint.
+// Overlap is all it knows: a widget floating over a focused one finds focus
+// within it too. PaintFocus tells the focused widget by who painted it.
 func (c *Canvas) FocusWithin(r Rect) bool {
+	return c != nil && !c.fs().focusBounds.Intersect(c.toWindow(r)).Empty()
+}
+
+// HasFocus reports whether h is the focused key handler, as of the start of
+// the paint.
+func (c *Canvas) HasFocus(h KeyHandler) bool {
+	return c != nil && h != nil && c.fs().focusKey != nil && sameAny(c.fs().focusKey, h)
+}
+
+// FocusVisible reports whether focus, wherever it is, came there by the
+// keyboard, as the focus ring shows.
+func (c *Canvas) FocusVisible() bool { return c != nil && c.fs().focusVisible }
+
+// PaintFocus paints w into r, as Paint does, and reports whether the focused
+// key handler is one w registered. A wrapper that reacts to its child's
+// focus, as a Tooltip does, asks this rather than FocusWithin, which a
+// focused widget under the wrapper, or around it, satisfies as well.
+func (c *Canvas) PaintFocus(w Widget, r Rect) bool {
 	if c == nil {
+		c.Paint(w, r)
 		return false
 	}
-	focus, w := c.fs().focusBounds, c.toWindow(r)
-	in := focus.Intersect(w)
-	return !in.Empty() && (in != w || focus == w)
+	f := c.fs()
+	outer := f.focusPainted
+	f.focusPainted = false
+	c.Paint(w, r)
+	held := f.focusPainted
+	f.focusPainted = outer || held
+	return held
 }
 
 // FocusVisibleWithin is FocusWithin for focus moved there with the
@@ -660,6 +684,11 @@ func (c *Canvas) add(h hitRegion) {
 		root = root.parent
 	}
 	root.adopt(&h)
+	if h.key != nil {
+		if f := root.fs(); f.focusKey != nil && sameAny(h.key, f.focusKey) {
+			f.focusPainted = true
+		}
+	}
 	if h.key != nil && root.focusClaim != nil {
 		root.focusRequest, root.focusClaim = h.key, nil
 	}

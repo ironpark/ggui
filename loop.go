@@ -400,9 +400,9 @@ func (r *frameLoop) paint(p paintPass) (bool, error) {
 	clear(f.traceWidgets)
 	f.tracing = p.tracing
 	f.trace, f.traceWidgets = f.trace[:0], f.traceWidgets[:0]
-	f.focusBounds = Rect{}
+	f.focusBounds, f.focusKey, f.focusPainted = Rect{}, nil, false
 	if p.in.focused != nil {
-		f.focusBounds = p.in.focused.rect
+		f.focusBounds, f.focusKey = p.in.focused.rect, p.in.focused.key
 	}
 	f.focusVisible = p.in.focused != nil && p.in.focusVisible
 	f.pressed = p.in.pressed != nil

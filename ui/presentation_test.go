@@ -285,7 +285,7 @@ func TestTooltipOverAFocusedWidgetStaysClosed(t *testing.T) {
 	t.Parallel()
 	input := ggui.TextInput(ggui.State("")).Name("Editor")
 	badge := Tooltip(ggui.Box(ggui.Text("badge")).Size(40, 20), "Over the editor")
-	p := ggui.NewProbe(ggui.Stack(ggui.Box(input).Size(200, 100), ggui.Padding(badge, 10)), ggui.Sz(200, 100))
+	p := ggui.NewProbe(ggui.Stack(ggui.Box(input).Size(200, 100), ggui.Padding(badge, 13.7, 10.3)), ggui.Sz(200, 100))
 	defer p.Close()
 	p.Advance(0)
 	p.Type(ggui.Mods{}, ggui.KeyTab)
@@ -294,7 +294,7 @@ func TestTooltipOverAFocusedWidgetStaysClosed(t *testing.T) {
 	if _, ok := p.Semantics().Find(ggui.RoleText, "Over the editor"); ok {
 		t.Fatal("the editor's focus opened a tooltip floating over it")
 	}
-	p.Move(ggui.Pt(30, 20))
+	p.Move(ggui.Pt(30, 22))
 	p.Frame()
 	p.Advance(time.Second)
 	if _, ok := p.Semantics().Find(ggui.RoleText, "Over the editor"); !ok {

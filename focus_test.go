@@ -176,3 +176,30 @@ func (w *revealer) Paint(dst *Canvas, r Rect) {
 		dst.RequestReveal(r)
 	}
 }
+
+// PaintFocus tells the widget that painted the focused handler from one
+// that only overlaps it: a badge floating over a focused editor, a parent
+// around it.
+func TestPaintFocusKnowsWhoPaintedTheFocus(t *testing.T) {
+	t.Parallel()
+	var inEditor, inBadge, inColumn bool
+	tracked := func(w Widget, held *bool) Widget {
+		return FromFuncs(
+			func(c Constraints, env Env) Size { return w.Layout(c, env) },
+			func(dst *Canvas, r Rect) { *held = dst.PaintFocus(w, r) },
+		)
+	}
+	editor := Focus(Box().Size(200, 100))
+	badge := Box().Size(40, 20)
+	p := NewProbe(tracked(Stack(tracked(editor, &inEditor), Padding(tracked(badge, &inBadge), 10.5, 3.3)), &inColumn), Sz(200, 100))
+	defer p.Close()
+	p.Frame()
+	if inEditor || inBadge || inColumn {
+		t.Fatalf("before any focus: editor %v, badge %v, around both %v", inEditor, inBadge, inColumn)
+	}
+	p.Click(Pt(150, 80))
+	p.Frame()
+	if !inEditor || inBadge || !inColumn {
+		t.Fatalf("with the editor focused: editor %v, badge over it %v, around both %v; want true, false, true", inEditor, inBadge, inColumn)
+	}
+}

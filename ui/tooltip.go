@@ -19,7 +19,8 @@ type TooltipWidget struct {
 	delay time.Duration
 	pad   ggui.EdgeInsets
 	// focusOpens reports whether keyboard focus opens the tip; nil means
-	// focus anywhere within the child. Tabs narrows it to the shown tab.
+	// focus on a widget the child painted. Tabs, whose strip takes focus
+	// as a whole, opens the shown tab's.
 	focusOpens func(dst *ggui.Canvas, r ggui.Rect) bool
 
 	box    *ggui.BoxWidget
@@ -108,15 +109,14 @@ func (t *TooltipWidget) Baseline() (float64, bool) {
 
 // Paint implements ggui.Widget.
 func (t *TooltipWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	dst.Paint(t.child, r)
+	focused := dst.PaintFocus(t.child, r) && dst.FocusVisible()
+	if t.focusOpens != nil {
+		focused = t.focusOpens(dst, r)
+	}
 	p, ok := dst.Pointer()
 	now := ggui.FrameTime()
 	at := ggui.Anchor{Rect: r}
 	state, _ := dst.Retained(at, tooltipSlot)
-	focused := dst.FocusVisibleWithin(r)
-	if t.focusOpens != nil {
-		focused = t.focusOpens(dst, r)
-	}
 	hovered := ok && r.Contains(p)
 	if hovered && state.since.IsZero() {
 		state.since = now
