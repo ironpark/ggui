@@ -338,7 +338,7 @@ func (in *inputState) notifyObservers(f frameInput) {
 // updateHover moves hover to the topmost region that claims PointerMove,
 // sending the exit before the enter so the two never overlap.
 func (in *inputState) updateHover(f frameInput) {
-	move := PointerEvent{Kind: PointerMove, Pos: f.pos}
+	move := PointerEvent{Kind: PointerMove, Pos: f.pos, Mods: f.mods}
 	now := in.send(move)
 	if !in.continues(now, in.hovered) {
 		if in.hovered != nil {

@@ -271,6 +271,9 @@ func (p *Probe) Tap(label string) {
 // cursor shape and, after Press, dragging.
 func (p *Probe) Move(pos Point) { p.dispatch(frameInput{pos: pos}) }
 
+// MoveWith is Move with mods held, as ⌘ over a link.
+func (p *Probe) MoveWith(pos Point, mods Mods) { p.dispatch(frameInput{pos: pos, mods: mods}) }
+
 // Press pushes the left button down at pos.
 func (p *Probe) Press(pos Point) {
 	p.dispatch(frameInput{pos: pos, down: []MouseButton{MouseButtonLeft}})

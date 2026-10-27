@@ -481,3 +481,31 @@ func TestHoverExitReachesARebuiltControl(t *testing.T) {
 		t.Fatal("the rebuilt control is still hovered after the pointer left it")
 	}
 }
+
+// modsBox records the keys held as the pointer moves over it.
+type modsBox struct{ mods Mods }
+
+func (b *modsBox) Layout(c Constraints, _ Env) Size { return c.Constrain(Sz(50, 50)) }
+func (b *modsBox) Paint(dst *Canvas, r Rect)        { dst.HitPointer(r, b) }
+func (b *modsBox) HandlePointer(ev PointerEvent) bool {
+	if ev.Kind == PointerMove {
+		b.mods = ev.Mods
+	}
+	return true
+}
+
+// A move says which keys are held, as ⌘ over a link that follows on click.
+func TestPointerMoveCarriesTheHeldKeys(t *testing.T) {
+	t.Parallel()
+	b := &modsBox{}
+	p := NewProbe(b, Sz(50, 50))
+	defer p.Close()
+	p.MoveWith(Pt(10, 10), Mods{Meta: true})
+	if !b.mods.Meta {
+		t.Fatal("the move did not say ⌘ was held")
+	}
+	p.Move(Pt(12, 10))
+	if b.mods.Meta {
+		t.Fatal("⌘ still held after it was let go")
+	}
+}
