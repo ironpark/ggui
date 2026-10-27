@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"unicode/utf8"
 
 	"github.com/ironpark/ggui/internal/reactive"
@@ -25,9 +26,15 @@ import (
 // text renders with the built-in Latin font on a machine that has a CJK
 // font installed.
 type Font struct {
-	src        *text.GoTextFaceSource
-	load       func() *text.GoTextFaceSource // parses src on first use, for the built-in fonts
-	loadOnce   sync.Once
+	src      *text.GoTextFaceSource
+	load     func() *text.GoTextFaceSource // parses src on first use, for the built-in fonts and those of files
+	loadOnce sync.Once
+	// light, for a font read from a file, is its metrics, metadata,
+	// variation axes and coverage, read without its glyphs: what a
+	// fallback chain asks of a font before text needs one of its glyphs.
+	// Until then its glyphs stay unread; see chainFace.
+	light      *text.GoTextFaceSource
+	loaded     atomic.Bool  // source has parsed src
 	weight     FontWeight   // what src draws, from its metadata
 	weights    []*Font      // the faces WithWeight added
 	alias      func() *Font // draws in the font this returns, as DefaultMonoFont does
@@ -93,9 +100,21 @@ func lazyFont(data []byte, w FontWeight) *Font {
 // source returns the parsed face source, parsing it now for a lazy font.
 func (f *Font) source() *text.GoTextFaceSource {
 	if f.load != nil {
-		f.loadOnce.Do(func() { f.src = f.load() })
+		f.loadOnce.Do(func() {
+			f.src = f.load()
+			f.loaded.Store(true)
+		})
 	}
 	return f.src
+}
+
+// meta is what f's metadata, variation axes and metrics are read from:
+// its light source, for a font of a file, which does not parse its glyphs.
+func (f *Font) meta() *text.GoTextFaceSource {
+	if f.light != nil {
+		return f.light
+	}
+	return f.source()
 }
 
 // WithWeight adds face as f's face for weight w: text whose style asks for
@@ -144,7 +163,7 @@ var wghtTag = text.MustParseTag("wght")
 
 // weightAxis reports the range of f's weight axis, if it is a variable font.
 func (f *Font) weightAxis() (lo, hi float32, ok bool) {
-	for _, a := range f.source().AppendVariationAxes(nil) {
+	for _, a := range f.meta().AppendVariationAxes(nil) {
 		if a.Tag == wghtTag {
 			return a.Min, a.Max, true
 		}
@@ -163,6 +182,22 @@ func (f *Font) goFace(size float64, w FontWeight, axis bool) *text.GoTextFace {
 	return g
 }
 
+// chainFace is goFace as a fallback chain holds it: a font of a file
+// stands in as a LazyFace, answering from its light source, until text
+// needs one of its glyphs, so a chain of fonts for many scripts reads
+// only those of the scripts drawn.
+func (f *Font) chainFace(size float64, w FontWeight, axis bool) text.Face {
+	if f.light == nil || f.loaded.Load() {
+		return f.goFace(size, w, axis)
+	}
+	light := &text.GoTextFace{Source: f.light, Size: size}
+	if axis {
+		lo, hi, _ := f.weightAxis()
+		light.SetVariation(wghtTag, min(max(float32(w), lo), hi))
+	}
+	return text.NewLazyFace(light, func() text.Face { return f.goFace(size, w, axis) })
+}
+
 func abs(n int) int { return max(n, -n) }
 
 // LoadFontCollection parses a TTC or OTC collection into one Font per face.
@@ -178,24 +213,16 @@ func LoadFontCollection(data []byte) ([]*Font, error) {
 	return fonts, nil
 }
 
-// LoadFontFile parses the font file at path: a TTF or OTF, or the first
-// face of a TTC or OTC collection.
+// LoadFontFile loads the font file at path: a TTF or OTF, or the first
+// face of a TTC or OTC collection. The file is read as the font draws,
+// not into memory, and stays open: a font's glyphs are parsed once text
+// needs them, and a color emoji font's bitmaps read as they are drawn.
 func LoadFontFile(path string) (*Font, error) {
-	data, err := os.ReadFile(path)
+	r, size, err := openFontFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("ggui: load font: %w", err)
 	}
-	if strings.HasPrefix(string(data[:min(4, len(data))]), "ttcf") {
-		fonts, err := LoadFontCollection(data)
-		if err != nil {
-			return nil, err
-		}
-		if len(fonts) == 0 {
-			return nil, fmt.Errorf("ggui: load font: %s holds no faces", path)
-		}
-		return fonts[0], nil
-	}
-	return LoadFont(data)
+	return fileFont(r, size, 0)
 }
 
 // Fallback appends fonts to draw the glyphs f lacks, in order of
@@ -273,16 +300,18 @@ func systemFontPaths() []string {
 	switch runtime.GOOS {
 	case "darwin":
 		paths = append(paths,
-			"/System/Library/Fonts/AppleSDGothicNeo.ttc",           // Korean
-			"/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",               // Japanese
-			"/System/Library/Fonts/Hiragino Sans GB.ttc",           // Simplified Chinese
-			"/System/Library/Fonts/PingFang.ttc",                   // Chinese
-			"/System/Library/Fonts/Supplemental/AppleGothic.ttf",   // Korean
-			"/System/Library/Fonts/Supplemental/Arial Unicode.ttf", // wide coverage
+			"/System/Library/Fonts/AppleSDGothicNeo.ttc",         // Korean
+			"/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",             // Japanese
+			"/System/Library/Fonts/Hiragino Sans GB.ttc",         // Simplified Chinese
+			"/System/Library/Fonts/PingFang.ttc",                 // Chinese
+			"/System/Library/Fonts/Supplemental/AppleGothic.ttf", // Korean
 			"/System/Library/Fonts/Supplemental/NotoSansGothic-Regular.ttf",
 			"/System/Library/Fonts/Menlo.ttc",                    // dingbats such as ❯ ✳ ✻
 			"/System/Library/Fonts/Apple Symbols.ttf",            // technical symbols such as ⎿
 			"/System/Library/Fonts/Supplemental/STIXTwoMath.otf", // media symbols such as ⏵ ⏺
+			// Wide coverage, and large: last, so a glyph the fonts
+			// above have does not read it.
+			"/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
 		)
 	case "windows":
 		dir := filepath.Join(os.Getenv("WINDIR"), "Fonts")
@@ -428,11 +457,11 @@ func (f *Font) face(size float64, weight FontWeight) text.Face {
 		return face
 	}
 	fonts, multi := f.chainLocked(weight)
-	var face text.Face = fonts[0].font.goFace(size, weight, fonts[0].axis)
+	var face text.Face = fonts[0].font.chainFace(size, weight, fonts[0].axis)
 	if multi {
 		faces := []text.Face{face}
 		for _, cf := range fonts[1:] {
-			faces = append(faces, cf.font.goFace(size, weight, cf.axis))
+			faces = append(faces, cf.font.chainFace(size, weight, cf.axis))
 		}
 		if m, err := text.NewMultiFace(faces...); err == nil {
 			face = m

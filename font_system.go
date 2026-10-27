@@ -13,12 +13,6 @@ import (
 	"github.com/ironpark/ggfx/text/v2"
 )
 
-// fontFile is one face to load: a file, and its face within a collection.
-type fontFile struct {
-	path  string
-	index int
-}
-
 // systemUIFonts loads the platform's interface fonts once, with every
 // weight it has of them, or returns nil for one it does not find: SF Pro
 // and SF Mono on macOS, Segoe UI and Cascadia Mono or Consolas on Windows,
@@ -95,7 +89,7 @@ func SystemItalicFonts() (sans, mono *Font) { return systemItalicFonts() }
 var systemItalicFonts = sync.OnceValues(func() (sans, mono *Font) {
 	sansFiles, monoFiles := systemItalicFiles()
 	italic := func(f *Font) *Font {
-		if f == nil || f.source().Metadata().Style != text.StyleItalic {
+		if f == nil || f.meta().Metadata().Style != text.StyleItalic {
 			return nil
 		}
 		return f
@@ -162,31 +156,31 @@ func loadFamily(files []fontFile) *Font {
 
 // loadFaces loads a font file: its one face, or for a collection the face
 // at file.index followed by the collection's other faces of its style,
-// upright for an upright face and italic for an italic one.
+// upright for an upright face and italic for an italic one. Each is read
+// as it draws; see fileFont.
 func loadFaces(file fontFile) ([]*Font, error) {
-	data, err := os.ReadFile(file.path)
+	r, size, err := openFontFile(file.path)
 	if err != nil {
 		return nil, err
 	}
-	if !strings.HasPrefix(string(data[:min(4, len(data))]), "ttcf") {
-		f, err := LoadFont(data)
-		if err != nil {
-			return nil, err
+	n, err := faceCount(r)
+	if err != nil {
+		return nil, err
+	}
+	var faces []*Font
+	for i := range n {
+		if f, err := fileFont(r, size, i); err == nil {
+			faces = append(faces, f)
 		}
-		return []*Font{f}, nil
-	}
-	faces, err := LoadFontCollection(data)
-	if err != nil {
-		return nil, err
 	}
 	if len(faces) == 0 {
 		return nil, os.ErrNotExist
 	}
 	first := faces[min(file.index, len(faces)-1)]
 	out := []*Font{first}
-	style := first.source().Metadata().Style
+	style := first.meta().Metadata().Style
 	for _, f := range faces {
-		if f != first && f.source().Metadata().Style == style {
+		if f != first && f.meta().Metadata().Style == style {
 			out = append(out, f)
 		}
 	}
