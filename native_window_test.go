@@ -84,3 +84,26 @@ func TestLostModifierReleaseIsForgotten(t *testing.T) {
 		t.Error("a held Shift was let go")
 	}
 }
+
+// The fingers lifting reaches the widgets though it moves nothing, and is
+// not lost to the momentum that follows within the frame.
+func TestScrollPhaseReachesTheFrame(t *testing.T) {
+	t.Parallel()
+	a := &Window{}
+	for _, e := range []ggfx.ScrollEvent{
+		{X: -1, Phase: ggfx.ScrollPhaseChanged},
+		{Phase: ggfx.ScrollPhaseEnded},
+		{X: -0.5, Phase: ggfx.ScrollPhaseMomentum},
+	} {
+		if err := a.handle(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if f := a.takeInput(); f.phase != ScrollPhaseEnded || f.wheel.X != -1.5 {
+		t.Fatalf("phase %v wheel %v", f.phase, f.wheel)
+	}
+	a.handle(ggfx.ScrollEvent{Phase: ggfx.ScrollPhaseEnded})
+	if f := a.takeInput(); f.phase != ScrollPhaseEnded || f.wheel != (Point{}) {
+		t.Fatalf("a lift alone: phase %v wheel %v", f.phase, f.wheel)
+	}
+}

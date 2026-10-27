@@ -52,3 +52,29 @@ const (
 	MouseButtonMiddle = ggip.MouseButtonMiddle
 	MouseButtonRight  = ggip.MouseButtonRight
 )
+
+// ScrollPhase is where a trackpad's scroll is in the gesture making it.
+type ScrollPhase = ggfx.ScrollPhase
+
+const (
+	ScrollPhaseNone          = ggfx.ScrollPhaseNone          // a wheel, or no gesture reported
+	ScrollPhaseBegan         = ggfx.ScrollPhaseBegan         // the fingers start to move
+	ScrollPhaseChanged       = ggfx.ScrollPhaseChanged       // the fingers move on
+	ScrollPhaseEnded         = ggfx.ScrollPhaseEnded         // the fingers lift
+	ScrollPhaseMomentum      = ggfx.ScrollPhaseMomentum      // momentum after they lift
+	ScrollPhaseMomentumEnded = ggfx.ScrollPhaseMomentumEnded // the momentum stops
+)
+
+// laterPhase is the phase a frame's scrolls report, of what it had and
+// the next: the fingers lifting stays reported over all after it in the
+// frame, momentum too, so a gesture is not seen still on; the momentum
+// stopping, over more momentum.
+func laterPhase(had, next ScrollPhase) ScrollPhase {
+	switch {
+	case had == ScrollPhaseEnded:
+		return had
+	case had == ScrollPhaseMomentumEnded && (next == ScrollPhaseMomentum || next == ScrollPhaseNone):
+		return had
+	}
+	return next
+}

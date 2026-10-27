@@ -30,6 +30,10 @@ type PointerEvent struct {
 	Scroll         Point // wheel delta, for PointerScroll
 	ScrollPixels   bool  // Scroll is in logical pixels (touch panning), not wheel units
 	ScrollMomentum bool  // inertial scrolling; return false when no further movement is possible
+	// ScrollPhase is where a trackpad's scroll is in its gesture, on a
+	// platform that says: ScrollPhaseEnded is the fingers lifting, and may
+	// come with no Scroll at all. A wheel's is ScrollPhaseNone.
+	ScrollPhase ScrollPhase
 	// Mods are the modifiers held, for a press, release, tap or wheel: a
 	// Shift-click that extends a selection, a ⌘-click that toggles one.
 	Mods Mods
@@ -173,6 +177,7 @@ type frameInput struct {
 	down   []MouseButton
 	up     []MouseButton
 	wheel  Point
+	phase  ScrollPhase   // of the frame's scrolls, the lift outranking the rest
 	keys   []KeyboardKey // just pressed, plus repeats of held keys
 	text   string
 	mods   Mods
@@ -415,8 +420,9 @@ func (in *inputState) dispatchPointer(f frameInput) {
 		}
 		in.pressed = nil
 	}
-	if f.wheel != (Point{}) {
-		in.send(PointerEvent{Kind: PointerScroll, Pos: f.pos, Scroll: f.wheel, Mods: f.mods})
+	if f.wheel != (Point{}) || f.phase == ScrollPhaseEnded || f.phase == ScrollPhaseMomentumEnded {
+		in.send(PointerEvent{Kind: PointerScroll, Pos: f.pos, Scroll: f.wheel, Mods: f.mods,
+			ScrollMomentum: f.phase == ScrollPhaseMomentum || f.phase == ScrollPhaseMomentumEnded, ScrollPhase: f.phase})
 	}
 }
 

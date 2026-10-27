@@ -331,6 +331,7 @@ func (w *Window) handle(ev ggfx.Event) error {
 		w.syncMods(ggfxinput.Mods(ev.Modifiers))
 		w.pending.mods = w.pending.mods.Or(ggfxinput.Mods(ev.Modifiers))
 		w.pending.wheel = w.pending.wheel.Add(Pt(ev.X, ev.Y))
+		w.pending.phase = laterPhase(w.pending.phase, ev.Phase)
 		w.requestFrame()
 	case ggfx.TouchEvent:
 		if w.touches == nil {
