@@ -29,6 +29,7 @@ type TreeWidget[T any, K comparable] struct {
 	name          string
 	rowH          float64
 	indent        float64
+	noChevrons    bool
 	height        float64
 
 	flat    *ggui.DerivedValue[[]treeEntry[T, K]]
@@ -193,6 +194,16 @@ func (t *TreeWidget[T, K]) Indent(px float64) *TreeWidget[T, K] {
 	return t
 }
 
+// Chevrons shows or hides the chevron that turns as a row opens, and the
+// room it takes; shown by default. A tree without them says a row opens
+// in its label, as a folder's icon does, and a row still opens on a press
+// that selects it only if OnSelect opens it.
+func (t *TreeWidget[T, K]) Chevrons(show bool) *TreeWidget[T, K] {
+	defer property.Watch(&t.props, &t.noChevrons)()
+	t.noChevrons = !show
+	return t
+}
+
 // Height bounds the tree and scrolls its rows. Without it the tree is as
 // tall as its visible rows.
 func (t *TreeWidget[T, K]) Height(h float64) *TreeWidget[T, K] {
@@ -303,6 +314,9 @@ func (r *treeRow[T, K]) chevronX(e treeEntry[T, K]) float64 {
 	return r.theme.Space + float64(e.depth)*r.tree.indent
 }
 func (r *treeRow[T, K]) inset(e treeEntry[T, K]) float64 {
+	if r.tree.noChevrons {
+		return r.chevronX(e)
+	}
 	return r.chevronX(e) + r.theme.IconSize + r.theme.Space/2
 }
 
@@ -350,7 +364,7 @@ func (r *treeRow[T, K]) paint(dst *ggui.Canvas, rc ggui.Rect) {
 	if amount := dst.Ease(r.Anchor(rc), treeRowFillSlot, target, r.motion); amount > 0 {
 		dst.FillRoundRect(rc, th.Radius, fade(th.Muted, amount))
 	}
-	if e.hasChildren {
+	if e.hasChildren && !r.tree.noChevrons {
 		x := rc.Origin.X + r.chevronX(e)
 		turn := dst.Ease(r.Anchor(rc), treeChevronSlot, pick(e.open, 1.0, 0.0), r.motion)
 		paintIconAt(dst, r.env, icons.ChevronRight, ggui.Pt(x+th.IconSize/2, rc.Center().Y), th.IconSize, th.MutedFg, turn*math.Pi/2)

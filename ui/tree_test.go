@@ -82,6 +82,22 @@ func TestTreeChevronClickExpandsAndCollapses(t *testing.T) {
 	}
 }
 
+// Without chevrons a press where one was is a press on the row: it picks
+// the row and leaves it to OnSelect whether it opens.
+func TestTreeWithoutChevronsOpensOnlyAsTheRowSays(t *testing.T) {
+	t.Parallel()
+	var picked []string
+	p := ggui.NewProbe(folderTree().Chevrons(false).OnSelect(func(f folder) { picked = append(picked, f.Name) }), ggui.Sz(300, 400))
+	defer p.Close()
+	clickChevron(t, p, "Fruits")
+	if got := treeItems(p); !slices.Equal(got, []string{"Fruits", "Vegetables", "Bread"}) {
+		t.Fatalf("a press where the chevron was opened the row: %q", got)
+	}
+	if !slices.Equal(picked, []string{"Fruits"}) {
+		t.Fatalf("the press picked %q, want Fruits", picked)
+	}
+}
+
 func TestTreeKeysNavigateExpandAndSelect(t *testing.T) {
 	t.Parallel()
 	chosen := ggui.State("")
