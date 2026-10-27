@@ -292,7 +292,7 @@ func (in *inputState) dispatch(f frameInput) {
 	in.updateTrap()
 	in.notifyObservers(f)
 	in.updateHover(f)
-	in.updateCursor(f)
+	in.updateCursor(f.pos)
 	in.updateDrag(f)
 	in.panTouch(&f)
 	in.dispatchPointer(f)
@@ -375,10 +375,10 @@ func (in *inputState) updateDrag(f frameInput) {
 	in.dragTarget = keep(now)
 }
 
-// updateCursor picks the shape of the topmost region asking for one.
-func (in *inputState) updateCursor(f frameInput) {
+// updateCursor picks the shape of the topmost region at pos asking for one.
+func (in *inputState) updateCursor(pos Point) {
 	in.cursor = CursorShapeDefault
-	if r := in.topmost(func(r *hitRegion) bool { return r.cursor != 0 && r.contains(f.pos) }); r != nil {
+	if r := in.topmost(func(r *hitRegion) bool { return r.cursor != 0 && r.contains(pos) }); r != nil {
 		in.cursor = r.cursor
 	}
 }

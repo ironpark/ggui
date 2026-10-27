@@ -509,3 +509,29 @@ func TestPointerMoveCarriesTheHeldKeys(t *testing.T) {
 		t.Fatal("⌘ still held after it was let go")
 	}
 }
+
+// A region that changes its cursor over the input of a frame shows the new
+// one once that frame is painted, not at the next event: a key held over a
+// link is not followed by a move to show the hand.
+func TestCursorFollowsTheFramePainted(t *testing.T) {
+	held := State(false)
+	w := Reactive(func() Widget {
+		shape := CursorShapeText
+		if held.Get() {
+			shape = CursorShapePointer
+		}
+		return Pointer(Box().Size(100, 100)).Cursor(shape).OnMove(func(ev PointerEvent) { held.Set(ev.Mods.Shift) })
+	})
+	p := NewProbe(w, Sz(100, 100))
+	defer p.Close()
+	p.Move(Pt(50, 50))
+	p.Frame()
+	if p.Cursor() != CursorShapeText {
+		t.Fatalf("cursor %v, want text", p.Cursor())
+	}
+	p.MoveWith(Pt(50, 50), Mods{Shift: true})
+	p.Frame()
+	if p.Cursor() != CursorShapePointer {
+		t.Fatalf("cursor %v after the frame, want the hand", p.Cursor())
+	}
+}

@@ -522,11 +522,6 @@ func (w *Window) runFrameEvent(ev ggfx.FrameEvent) error {
 	cf := w.canvas.fs()
 	cf.pointer, cf.hasPointer = f.pos, true
 	w.dispatchInput(f)
-	cursor := w.input.cursorOver(w.overlay, f.pos)
-	if cursor != w.cursor {
-		w.cursor = cursor
-		ev.Window.SetCursorShape(w.cursor)
-	}
 	if w.closed {
 		return nil
 	}
@@ -537,6 +532,12 @@ func (w *Window) runFrameEvent(ev ggfx.FrameEvent) error {
 	w.draw(ev.Screen, ev.Scale)
 	if w.frameErr != nil {
 		return w.frameErr
+	}
+	// The regions just painted decide the cursor, so one a widget changed
+	// over this frame's input shows now rather than at the next event.
+	if cursor := w.input.cursorOver(w.overlay, f.pos); cursor != w.cursor {
+		w.cursor = cursor
+		ev.Window.SetCursorShape(w.cursor)
 	}
 	if w.closed {
 		return nil

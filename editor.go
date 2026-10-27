@@ -14,6 +14,7 @@ import (
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/textedit"
 	"github.com/ironpark/ggui/internal/textinput"
+	"github.com/ironpark/ggui/runtime"
 )
 
 // caretBlink is how long the caret shows and hides for.
@@ -54,6 +55,7 @@ type TextInputWidget struct {
 	onCommit          func(string)
 	onChange          func(string)
 	onKey             func(KeyEvent) bool
+	onPasteImage      func(png []byte) bool
 	onDescribe        func(*Node)
 	onAction          func(Action) bool
 	filter            func(string) string
@@ -120,7 +122,14 @@ func TextInput(value Binding[string]) *TextInputWidget {
 		if t.composition != "" {
 			t.ime.Cancel() // the write replaces what was being composed
 		}
+		// A caret at the end stays there, after a path appended or a
+		// message recalled into the field. Text loaded into an empty field
+		// not being typed in, as a file opened, is read from its start.
+		atEnd := !t.ed.HasSelection() && t.ed.Caret == len(t.ed.Text) && (t.ed.Text != "" || t.Focused())
 		t.ed.SetText(v)
+		if atEnd {
+			t.ed.MoveTo(len(v), false)
+		}
 		t.cache.invalidate()
 		// The IME's next edit applies to the new text, and an IME that
 		// rewrites what it committed, as the Korean one does each
@@ -388,6 +397,15 @@ func (t *TextInputWidget) OnChange(fn func(string)) *TextInputWidget { t.onChang
 // editor. This lets searchable lists use Up, Down and Enter without replacing
 // the editor's platform input driver.
 func (t *TextInputWidget) OnKey(fn func(KeyEvent) bool) *TextInputWidget { t.onKey = fn; return t }
+
+// OnPasteImage takes a paste of a clipboard that holds an image and no
+// text, as a screenshot leaves it: fn gets the image as PNG and reports
+// whether it took it. The editor holds text alone, so without it such a
+// paste pastes nothing.
+func (t *TextInputWidget) OnPasteImage(fn func(png []byte) bool) *TextInputWidget {
+	t.onPasteImage = fn
+	return t
+}
 
 // OnDescribe lets a control built around the editor say what it is: fn
 // amends the node the editor describes, which already carries its text,
@@ -1054,7 +1072,13 @@ func (t *TextInputWidget) clipboardKey(k KeyboardKey, m Mods) bool {
 	case KeyV:
 		if m.Cmd() {
 			t.ime.Confirm()
-			s := strings.ReplaceAll(currentClipboard().Read(), "\r\n", "\n")
+			clip := currentClipboard().Read()
+			if clip == "" && t.onPasteImage != nil {
+				if png, ok := runtime.ReadImage(currentClipboard()); ok && t.onPasteImage(png) {
+					return false
+				}
+			}
+			s := strings.ReplaceAll(clip, "\r\n", "\n")
 			s = strings.ReplaceAll(s, "\r", "\n")
 			if !t.multiline {
 				s = strings.ReplaceAll(s, "\n", " ")

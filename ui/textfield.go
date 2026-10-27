@@ -81,6 +81,12 @@ func (f *TextFieldWidget) OnKey(fn func(ggui.KeyEvent) bool) *TextFieldWidget {
 	return f
 }
 
+// OnPasteImage takes a paste of an image; see TextInputWidget.OnPasteImage.
+func (f *TextFieldWidget) OnPasteImage(fn func(png []byte) bool) *TextFieldWidget {
+	f.input.OnPasteImage(fn)
+	return f
+}
+
 // OnSubmit fires with the value when Enter is pressed, or ⌘/Ctrl+Enter
 // when Multiline.
 func (f *TextFieldWidget) OnSubmit(fn func(string)) *TextFieldWidget { f.input.OnSubmit(fn); return f }

@@ -423,6 +423,11 @@ func (r *frameLoop) paint(p paintPass) (bool, error) {
 	p.in.observers = c.inputObservers
 	p.in.painted = c.shortcuts
 	p.in.refreshFocused()
+	// A widget that changed its cursor over what the pointer just did, as
+	// a link underlined when a key is held, shows it this frame.
+	if f.hasPointer {
+		p.in.updateCursor(f.pointer)
+	}
 	p.in.applyFocusRequest(c)
 	p.in.applyRevealRequests(c)
 	if !p.semOff {

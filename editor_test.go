@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"slices"
 	"testing"
 	"unsafe"
 
@@ -17,6 +18,9 @@ type fakeIME struct {
 	confirmed int
 	cancelled int
 	handled   bool
+	// passthrough commits with the key that ended the composition passed on
+	// to the editor, as Korean IMEs do with Enter.
+	passthrough bool
 }
 
 func (f *fakeIME) Update() (bool, error) {
@@ -25,7 +29,7 @@ func (f *fakeIME) Update() (bool, error) {
 		f.t.imeCommit(f.commit)
 		f.commit = ""
 		f.t.imeComposition("", 0)
-		return true, nil
+		return !f.passthrough, nil
 	}
 	if f.compose != "" {
 		f.t.imeComposition(f.compose, len(f.compose))
@@ -438,5 +442,80 @@ func TestNoWrapLayoutCountsLinesWithoutTheirTable(t *testing.T) {
 	h1 := one.Layout(Loose(Sz(200, Unbounded)), Env{}).H
 	if h3 <= h1 || w.wrapped.spans != nil {
 		t.Fatalf("six lines %v tall against one's %v; line table made: %v", h3, h1, w.wrapped.spans != nil)
+	}
+}
+
+// Enter over a syllable being composed reaches OnKey after the syllable is
+// in the text when the IME passes the key on, as a Korean one does, so a
+// field that sends on Enter sends the whole word; an IME that keeps the key
+// to confirm its conversion, as a Japanese one does, sends nothing.
+func TestEnterThatEndsACompositionSeesItsCommit(t *testing.T) {
+	t.Parallel()
+	for _, passthrough := range []bool{true, false} {
+		value := State("안녕")
+		w, in := focusedInput(t, value)
+		var sent []string
+		w.OnKey(func(ev KeyEvent) bool {
+			if ev.Key == KeyEnter {
+				sent = append(sent, Untrack(value.Get))
+				return true
+			}
+			return false
+		})
+		f := w.ime.(*fakeIME)
+		f.compose = "하"
+		in.dispatch(frameInput{})
+		f.compose, f.commit, f.passthrough = "", "하", passthrough
+		typeKeys(in, Mods{}, KeyEnter)
+		want := []string{"안녕하"}
+		if !passthrough {
+			want = nil
+		}
+		if !slices.Equal(sent, want) || Untrack(value.Get) != "안녕하" {
+			t.Errorf("passthrough %v: sent %q, value %q; want %q", passthrough, sent, Untrack(value.Get), want)
+		}
+	}
+}
+
+// A write from outside leaves a caret that was at the end at the new end,
+// so text appended or swapped in is typed after; one inside the text stays.
+func TestOutsideWritesKeepACaretAtTheEnd(t *testing.T) {
+	t.Parallel()
+	value := State("")
+	w, _ := focusedInput(t, value)
+	value.Set("see /tmp/a.png")
+	reactive.Flush()
+	if w.ed.Caret != len("see /tmp/a.png") {
+		t.Fatalf("caret %d after a write into an empty field, want the end", w.ed.Caret)
+	}
+	w.ed.MoveTo(3, false)
+	value.Set("see /tmp/a.png and b")
+	reactive.Flush()
+	if w.ed.Caret != 3 {
+		t.Fatalf("caret %d, want it left inside the text", w.ed.Caret)
+	}
+}
+
+// A paste of a clipboard holding an image and no text goes to
+// OnPasteImage; one with text pastes the text.
+func TestPasteOfAnImageGoesToItsHook(t *testing.T) {
+	useFakeIME(t)
+	value := State("")
+	var got []byte
+	p := NewProbe(TextInput(value).OnPasteImage(func(png []byte) bool { got = png; return true }), Sz(200, 20))
+	defer p.Close()
+	var clip *runtime.MemoryClipboard
+	p.OnFrame(func() { clip, _ = CurrentClipboard().(*runtime.MemoryClipboard) })
+	p.Click(Pt(10, 10))
+	paste := Mods{Meta: runtimeIsDarwin(), Ctrl: !runtimeIsDarwin()}
+	clip.WriteImage([]byte("png"))
+	p.Type(paste, KeyV)
+	if string(got) != "png" || Untrack(value.Get) != "" {
+		t.Fatalf("hook got %q, value %q", got, Untrack(value.Get))
+	}
+	clip.Write("text")
+	p.Type(paste, KeyV)
+	if Untrack(value.Get) != "text" {
+		t.Fatalf("value %q after pasting text", Untrack(value.Get))
 	}
 }
