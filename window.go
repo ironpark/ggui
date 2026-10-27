@@ -288,6 +288,7 @@ func (w *Window) handle(ev ggfx.Event) error {
 		if !ok {
 			break
 		}
+		w.syncMods(ggfxinput.Mods(ev.Modifiers))
 		w.keyboard.Set(key, ev.Pressed)
 		if ev.Pressed {
 			// The modifiers of this press, from the held keys and from the
@@ -318,6 +319,7 @@ func (w *Window) handle(ev ggfx.Event) error {
 		w.pos = Pt(ev.X, ev.Y)
 		// A modifier pressed while another window had the focus reached
 		// no KeyEvent here; the click still sees it.
+		w.syncMods(ggfxinput.Mods(ev.Modifiers))
 		w.pending.mods = w.pending.mods.Or(ggfxinput.Mods(ev.Modifiers))
 		if ev.Pressed {
 			w.pending.down = append(w.pending.down, ggfxinput.MouseButton(ev.Button))
@@ -326,6 +328,7 @@ func (w *Window) handle(ev ggfx.Event) error {
 		}
 		w.requestFrame()
 	case ggfx.ScrollEvent:
+		w.syncMods(ggfxinput.Mods(ev.Modifiers))
 		w.pending.mods = w.pending.mods.Or(ggfxinput.Mods(ev.Modifiers))
 		w.pending.wheel = w.pending.wheel.Add(Pt(ev.X, ev.Y))
 		w.requestFrame()
@@ -375,6 +378,32 @@ func (w *Window) handle(ev ggfx.Event) error {
 		w.post(func() { w.state.Set(windowState(ev.State)) })
 	}
 	return nil
+}
+
+// modKeys are the keys of each modifier, in the order syncMods reads
+// them: Shift, Ctrl, Alt and Meta.
+var modKeys = [4][3]ggip.Key{
+	{ggip.KeyShift, ggip.KeyShiftLeft, ggip.KeyShiftRight},
+	{ggip.KeyControl, ggip.KeyControlLeft, ggip.KeyControlRight},
+	{ggip.KeyAlt, ggip.KeyAltLeft, ggip.KeyAltRight},
+	{ggip.KeyMeta, ggip.KeyMetaLeft, ggip.KeyMetaRight},
+}
+
+// syncMods forgets the modifier keys an event says are not held, before
+// the event's own key is recorded. A modifier's release can go unreported
+// with the focus kept, taken by a system shortcut such as ⌘⇧4 or an input
+// source switch, and the key would read as held until pressed again; the
+// modifiers an event carries are the window system's own word on what is
+// held.
+func (w *Window) syncMods(m Mods) {
+	held := [4]bool{m.Shift, m.Ctrl, m.Alt, m.Meta}
+	for i, keys := range modKeys {
+		if !held[i] {
+			for _, k := range keys {
+				w.keyboard.Set(k, false)
+			}
+		}
+	}
 }
 
 // requestFrame asks the window for a frame. It is safe from any goroutine

@@ -52,3 +52,35 @@ func TestPointerEventsCarryTheirModifiers(t *testing.T) {
 		}
 	}
 }
+
+// A modifier whose release the window system never reported, taken by a
+// system shortcut or an input source switch, is let go by the next event
+// that says it is not held.
+func TestLostModifierReleaseIsForgotten(t *testing.T) {
+	t.Parallel()
+	for _, later := range []ggfx.Event{
+		ggfx.KeyEvent{Key: ggfx.KeyA, Pressed: true},
+		ggfx.MouseButtonEvent{Button: ggfx.MouseButtonLeft, Pressed: true},
+		ggfx.ScrollEvent{Y: -1},
+	} {
+		a := &Window{}
+		if err := a.handle(ggfx.KeyEvent{Key: ggfx.KeyShiftLeft, Pressed: true, Modifiers: ggfx.KeyModifiers{Shift: true}}); err != nil {
+			t.Fatal(err)
+		}
+		a.takeInput()
+		if err := a.handle(later); err != nil {
+			t.Fatal(err)
+		}
+		if a.takeInput().mods.Shift || a.keyboard.Mods().Shift {
+			t.Errorf("after %T Shift is still held", later)
+		}
+	}
+	// One the event says is held stays held.
+	a := &Window{}
+	a.handle(ggfx.KeyEvent{Key: ggfx.KeyShiftLeft, Pressed: true, Modifiers: ggfx.KeyModifiers{Shift: true}})
+	a.handle(ggfx.KeyEvent{Key: ggfx.KeyA, Pressed: true, Modifiers: ggfx.KeyModifiers{Shift: true}})
+	a.takeInput()
+	if !a.keyboard.Mods().Shift {
+		t.Error("a held Shift was let go")
+	}
+}
