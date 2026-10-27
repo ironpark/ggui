@@ -16,6 +16,7 @@ type TooltipWidget struct {
 	tip   *ggui.TextWidget
 	keys  *ggui.TextWidget // the shortcut hint, if any
 	hint  string           // what Shortcut set, before the child's chord
+	text  func() string    // the text, asked as the tip opens; nil keeps tip's
 	delay time.Duration
 	pad   ggui.EdgeInsets
 	// focusOpens reports whether keyboard focus opens the tip; nil means
@@ -48,6 +49,14 @@ func Tooltip(child ggui.Widget, text string) *TooltipWidget {
 	t := &TooltipWidget{child: child, tip: ggui.Text(text), delay: 500 * time.Millisecond}
 	t.box = ggui.Box(t.tip)
 	t.effect = ggui.PopIn(t.box)
+	return t
+}
+
+// TooltipText is Tooltip with text asked for while the tip is shown, for
+// text that goes stale, such as how long until something happens.
+func TooltipText(child ggui.Widget, text func() string) *TooltipWidget {
+	t := Tooltip(child, "")
+	t.text = text
 	return t
 }
 
@@ -135,6 +144,9 @@ func (t *TooltipWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Retain(at, tooltipSlot, state)
 	if !open && progress <= 0 {
 		return
+	}
+	if t.text != nil {
+		t.tip.Content(t.text())
 	}
 	t.effect.Progress(progress, !open) // text-only content never accepts input
 	dst.Overlay(func(dst *ggui.Canvas) { t.paintTip(dst, r) })

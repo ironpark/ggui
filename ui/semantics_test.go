@@ -248,6 +248,10 @@ group
 	if n := node(t, tree, ggui.RoleProgress, ""); n.Max != 1 {
 		t.Errorf("progress = %g of %g, want a 0..1 range", n.Now, n.Max)
 	}
+	ring := semantics(t, ggui.Center(ui.ProgressRing(ggui.State(0.25)).Size(12)), ggui.Sz(200, 40))
+	if n := node(t, ring, ggui.RoleProgress, ""); n.Max != 1 || n.Rect.Size != ggui.Sz(12, 12) {
+		t.Errorf("ring = %g of %g in %v, want a 0..1 range in 12×12", n.Now, n.Max, n.Rect)
+	}
 }
 
 func TestSemanticsToastIsALiveRegion(t *testing.T) {

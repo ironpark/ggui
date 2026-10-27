@@ -410,3 +410,21 @@ func TestAlertDialogHasToBeAnswered(t *testing.T) {
 		t.Fatalf("escape: open=%v cancelled=%d", ggui.Untrack(open.Get), cancelled)
 	}
 }
+
+// A tip whose text is asked for shows it as it is when the tip is up.
+func TestTooltipTextIsAskedWhileShown(t *testing.T) {
+	t.Parallel()
+	text := "first"
+	tip := ui.TooltipText(ggui.Box().Size(50, 50), func() string { return text }).Delay(0)
+	p := ggui.NewProbe(ggui.Column(tip, ggui.Spacer()), ggui.Sz(100, 100))
+	defer p.Close()
+	p.Move(ggui.Pt(10, 10))
+	if _, ok := p.Semantics().Find(ggui.RoleText, "first"); !ok {
+		t.Fatalf("no first text:\n%s", p.Semantics().String())
+	}
+	text = "later"
+	p.Frame()
+	if _, ok := p.Semantics().Find(ggui.RoleText, "later"); !ok {
+		t.Fatalf("the tip kept its old text:\n%s", p.Semantics().String())
+	}
+}

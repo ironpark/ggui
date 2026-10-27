@@ -56,6 +56,26 @@ func (p *Path) CubicTo(x1, y1, x2, y2, x3, y3 float64) {
 	p.path.CubicTo(float32(x1), float32(y1), float32(x2), float32(y2), float32(x3), float32(y3))
 	p.record(pathCubic, Pt(x1, y1), Pt(x2, y2), Pt(x3, y3))
 }
+
+// Arc starts a subpath on the circle about (cx, cy) of radius r, from angle
+// start to end in radians, measured from +x and turning clockwise on
+// screen as the angle grows. A sweep of 2π or more is the whole circle.
+func (p *Path) Arc(cx, cy, r, start, end float64) {
+	sweep := max(min(end-start, 2*math.Pi), -2*math.Pi)
+	at := func(a float64) (float64, float64) { return cx + r*math.Cos(a), cy + r*math.Sin(a) }
+	p.MoveTo(at(start))
+	// A cubic per quarter turn or less stays within 0.03% of the circle.
+	n := max(1, int(math.Ceil(math.Abs(sweep)/(math.Pi/2)-1e-9)))
+	step := sweep / float64(n)
+	k := 4.0 / 3 * math.Tan(step/4) * r
+	for i := range n {
+		a0, a1 := start+step*float64(i), start+step*float64(i+1)
+		x0, y0 := at(a0)
+		x1, y1 := at(a1)
+		p.CubicTo(x0-k*math.Sin(a0), y0+k*math.Cos(a0), x1+k*math.Sin(a1), y1-k*math.Cos(a1), x1, y1)
+	}
+}
+
 func (p *Path) Close() { p.path.Close(); p.record(pathClose) }
 func (p *Path) Reset() { p.path.Reset(); p.outline = p.outline[:0]; p.revision++ }
 func (p *Path) device(scale float64) *vector.Path {

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"image/color"
+	"math"
 	"time"
 
 	"github.com/ironpark/ggui"
@@ -218,4 +219,84 @@ func (p *ProgressWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if w := r.Size.W * v; w > 0 {
 		dst.FillRoundRect(ggui.Rct(r.Origin, ggui.Sz(w, r.Size.H)), r.Size.H/2, t.Primary)
 	}
+}
+
+// ProgressRingWidget is a ring filled clockwise from the top to a fraction:
+// Progress where a bar does not fit. Build one with ProgressRing.
+type ProgressRingWidget struct {
+	props        property.Owner
+	value        ggui.Readable[float64]
+	size, stroke float64
+	fill, track  color.Color
+	theme        uitheme.Theme
+	motion       time.Duration
+
+	arc   ggui.Path // the filled part, kept while the ring and value hold
+	arcAt ggui.Rect
+	arcV  float64
+}
+
+// ProgressRing creates a ring that shows value, a fraction from 0 to 1,
+// read every frame, and eases toward it as it changes.
+func ProgressRing(value ggui.Readable[float64]) *ProgressRingWidget {
+	return &ProgressRingWidget{value: value, size: 16, stroke: 2}
+}
+
+// Size sets the ring's diameter.
+func (p *ProgressRingWidget) Size(d float64) *ProgressRingWidget {
+	defer property.Watch(&p.props, &p.size)()
+	p.size = d
+	return p
+}
+
+// Stroke sets the ring's thickness.
+func (p *ProgressRingWidget) Stroke(w float64) *ProgressRingWidget {
+	defer property.Watch(&p.props, &p.stroke)()
+	p.stroke = w
+	return p
+}
+
+// Color sets the filled part's colour; nil is the theme's primary.
+func (p *ProgressRingWidget) Color(c color.Color) *ProgressRingWidget {
+	defer property.Watch(&p.props, &p.fill)()
+	p.fill = c
+	return p
+}
+
+// Track sets the colour of the ring under the filled part; nil is the
+// theme's border.
+func (p *ProgressRingWidget) Track(c color.Color) *ProgressRingWidget {
+	defer property.Watch(&p.props, &p.track)()
+	p.track = c
+	return p
+}
+
+// Layout implements Widget.
+func (p *ProgressRingWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer p.props.Layout()()
+	p.theme = uitheme.From(env)
+	p.motion = env.Motion(p.theme.MotionFast)
+	return c.Constrain(ggui.Sz(p.size, p.size))
+}
+
+// Paint implements Widget.
+func (p *ProgressRingWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	v := dst.Ease(ggui.Anchor{Rect: r}, progressSlot, clamp(p.value.Get(), 0, 1), p.motion)
+	dst.Leaf(r, ggui.Node{Role: ggui.RoleProgress, Min: 0, Max: 1, Now: v})
+	d := min(r.Size.W, r.Size.H) - p.stroke
+	if d <= 0 {
+		return
+	}
+	center := ggui.Pt(r.Origin.X+r.Size.W/2, r.Origin.Y+r.Size.H/2)
+	ring := ggui.Rct(ggui.Pt(center.X-d/2, center.Y-d/2), ggui.Sz(d, d))
+	dst.StrokeRoundRect(ring, d/2, p.stroke, pick[color.Color](p.track != nil, p.track, p.theme.Border))
+	if v <= 0 {
+		return
+	}
+	if r != p.arcAt || v != p.arcV {
+		p.arcAt, p.arcV = r, v
+		p.arc.Reset()
+		p.arc.Arc(center.X, center.Y, d/2, -math.Pi/2, -math.Pi/2+2*math.Pi*v)
+	}
+	dst.StrokePath(&p.arc, p.stroke, pick[color.Color](p.fill != nil, p.fill, p.theme.Primary))
 }
