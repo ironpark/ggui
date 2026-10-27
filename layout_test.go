@@ -261,6 +261,40 @@ func TestExpandedTakesLeftoverMainAxis(t *testing.T) {
 	}
 }
 
+// A shrinking Scroll in a Flexible is as wide as its content while that
+// fits, so what follows it follows its content, and at most its share.
+func TestShrinkingScrollInAFlexible(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ content, after float64 }{
+		{100, 100},
+		{900, 390},
+	} {
+		var a, b Rect
+		row := Row(Flexible(Scroll(probe(tc.content, 20, &a)).Horizontal().Shrink()), probe(10, 10, &b))
+		row.Paint(nil, Rct(Pt(0, 0), row.Layout(Tight(Sz(400, 20)), Env{})))
+		if b.Origin.X != tc.after {
+			t.Errorf("content %v: the next child at %v, want %v", tc.content, b.Origin.X, tc.after)
+		}
+	}
+}
+
+// A Flexible child takes what it needs, up to its share: what follows it
+// follows it, until it fills its share and the rest is pushed to the end.
+func TestFlexibleTakesUpToItsShare(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ need, want, after float64 }{
+		{30, 30, 30},  // fits: the next child follows at once
+		{500, 90, 90}, // too wide: it takes the row but the next child's room
+	} {
+		var a, b Rect
+		row := Row(Flexible(probe(tc.need, 10, &a)), probe(10, 10, &b))
+		row.Paint(nil, Rct(Pt(0, 0), row.Layout(Tight(Sz(100, 10)), Env{})))
+		if a.Size.W != tc.want || b.Origin.X != tc.after {
+			t.Errorf("need %v: flexible %v, next at %v; want %v, %v", tc.need, a.Size.W, b.Origin.X, tc.want, tc.after)
+		}
+	}
+}
+
 func TestSpacerPushesNeighboursApart(t *testing.T) {
 	t.Parallel()
 	var last Rect

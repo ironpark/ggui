@@ -866,7 +866,7 @@ func (f *flow) layout(c Constraints, env Env) Size {
 	for i, child := range f.children {
 		if fw, ok := child.(*FlexWidget); ok && fw.flex > 0 && flexible {
 			extent := free * fw.flex / totalFlex
-			f.sizes[i] = child.Layout(f.constraints(extent, extent, crossMin, crossMax), env)
+			f.sizes[i] = child.Layout(f.constraints(pick(fw.loose, 0, extent), extent, crossMin, crossMax), env)
 		}
 	}
 
@@ -1074,6 +1074,7 @@ func (row *RowWidget) Paint(dst *Canvas, r Rect) { row.paint(dst, r) }
 type FlexWidget struct {
 	flex  float64
 	child Widget
+	loose bool // the share is the most it takes, not what it must
 }
 
 // Flex gives child weight shares of the space its Row or Column has left
@@ -1082,6 +1083,11 @@ func Flex(child Widget, weight float64) *FlexWidget { return &FlexWidget{flex: w
 
 // Expanded is Flex with weight 1.
 func Expanded(child Widget) *FlexWidget { return Flex(child, 1) }
+
+// Flexible is Flex with weight 1 that takes up to its share, and no more
+// than it needs: a Scroll of tabs as wide as its tabs until they fill the
+// row, so what follows them follows them until it is pushed to the end.
+func Flexible(child Widget) *FlexWidget { return &FlexWidget{flex: 1, child: child, loose: true} }
 
 // Spacer is an empty Expanded: it pushes its neighbours apart.
 func Spacer() *FlexWidget { return Expanded(Box()) }
@@ -1247,6 +1253,7 @@ type ScrollWidget struct {
 	props      property.Owner
 	child      Widget
 	horizontal bool
+	shrink     bool // along its axis, as long as its content and no longer
 	speed      float64
 	bar        color.Color
 	barSet     bool
@@ -1311,6 +1318,11 @@ func Scroll(child Widget) *ScrollWidget {
 
 // Horizontal scrolls along the x axis instead of the y axis.
 func (s *ScrollWidget) Horizontal() *ScrollWidget { s.horizontal = true; return s }
+
+// Shrink makes the scroll, along its axis, only as long as its content
+// while that fits, where it would otherwise take all it is offered: a row
+// of tabs in a Flexible, with what follows them right after the last.
+func (s *ScrollWidget) Shrink() *ScrollWidget { s.shrink = true; return s }
 
 // Speed sets how many pixels one wheel unit moves. A unit is one mouse
 // notch on the desktop; on the web, where browsers report pixels, it is
@@ -1411,6 +1423,14 @@ func (s *ScrollWidget) Layout(c Constraints, env Env) Size {
 	vp := Viewport{Offset: s.laidAt, Extent: s.extent(c.Max()), Horizontal: s.horizontal}
 	s.childSize = s.child.Layout(Loose(inner), env.With(viewportKey, vp).With(scrollPortKey, s))
 	s.viewport = c.Constrain(Sz(bounded(c.MaxW, s.childSize.W), bounded(c.MaxH, s.childSize.H)))
+	if s.shrink {
+		// Constrain keeps it within c, so a tight c still decides.
+		if s.horizontal {
+			s.viewport.W = c.Constrain(Sz(s.childSize.W, 0)).W
+		} else {
+			s.viewport.H = c.Constrain(Sz(0, s.childSize.H)).H
+		}
+	}
 	s.laidOut = true
 	s.scrollTo(pick(follow, s.maxOffset(), s.position()))
 	s.phys.attach(s)
