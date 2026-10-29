@@ -61,6 +61,13 @@ func (m *MenuWidget) ConsumesKey(ev ggui.KeyEvent) bool {
 }
 
 func (m *MenuWidget) init(entries []ggui.Widget) {
+	m.panel = ggui.Box(m.column(entries))
+	m.popup = ggui.Popup(m.button, m.panel).Keys(m).Owner(m.button)
+	m.button.Expands(m.popup.IsOpen).Opens(m)
+}
+
+// column makes m's items of entries and lays them out as its panel does.
+func (m *MenuWidget) column(entries []ggui.Widget) ggui.Widget {
 	for _, e := range entries {
 		if it, ok := e.(*MenuItemWidget); ok {
 			it.menu = m
@@ -69,9 +76,7 @@ func (m *MenuWidget) init(entries []ggui.Widget) {
 			m.items = append(m.items, it)
 		}
 	}
-	m.panel = ggui.Box(ggui.Column(entries...).Align(ggui.AlignStretch))
-	m.popup = ggui.Popup(m.button, m.panel).Keys(m).Owner(m.button)
-	m.button.Expands(m.popup.IsOpen).Opens(m)
+	return ggui.Column(entries...).Align(ggui.AlignStretch)
 }
 
 // Width sets the popup panel width, constrained to the available space.

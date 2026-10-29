@@ -107,3 +107,51 @@ func TestContextMenuEdgePlacementAndRebuild(t *testing.T) {
 		t.Fatal("rebuilt menu did not close")
 	}
 }
+
+// A ContextMenuFunc makes its entries as it opens, not as it is rebuilt,
+// and works as a ContextMenu does once open.
+func TestContextMenuFuncMakesEntriesAsItOpens(t *testing.T) {
+	t.Parallel()
+	made, picked := 0, ""
+	version := ggui.State(0)
+	var menu *ui.ContextMenuWidget
+	p := ggui.ProbeBuilder(func() ggui.Widget {
+		_ = version.Get()
+		menu = ui.ContextMenuFunc(ggui.Box().Size(300, 200), func() []ggui.Widget {
+			made++
+			return []ggui.Widget{
+				ui.MenuItem("Copy", func() { picked = "copy" }), ui.MenuDivider(),
+				ui.MenuItem("Delete", func() { picked = "delete" }),
+			}
+		}).Name("Actions")
+		menu.Key("context")
+		return menu
+	}, ggui.Sz(300, 200))
+	defer p.Close()
+	for v := 1; v <= 3; v++ {
+		version.Set(v)
+		p.Frame()
+	}
+	if made != 0 {
+		t.Fatalf("entries made %d times before the menu opened", made)
+	}
+	p.ClickButton(ggui.Pt(20, 20), ggui.MouseButtonRight)
+	if !menu.Popup().IsOpen() || made != 1 {
+		t.Fatalf("open %v, entries made %d times", menu.Popup().IsOpen(), made)
+	}
+	p.Type(ggui.Mods{}, ggui.KeyEnd, ggui.KeyEnter)
+	if picked != "delete" || menu.Popup().IsOpen() {
+		t.Fatal("keyboard in a made menu", picked)
+	}
+	act(t, p, ggui.RoleMenu, "Actions", ggui.Action{Kind: ggui.ActionExpand})
+	// Rebuilt while open, the menu makes its entries again and shows them.
+	version.Set(4)
+	p.Frame()
+	if !menu.Popup().IsOpen() {
+		t.Fatal("rebuilt menu closed")
+	}
+	act(t, p, ggui.RoleMenuItem, "Copy", ggui.Action{Kind: ggui.ActionPress})
+	if picked != "copy" {
+		t.Fatal("item of a menu rebuilt open", picked)
+	}
+}

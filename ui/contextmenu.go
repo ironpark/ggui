@@ -14,17 +14,63 @@ type ContextMenuWidget struct {
 	rect    ggui.Rect
 	at      *ggui.Point
 	theme   uitheme.Theme
+
+	// entries makes a ContextMenuFunc's entries into lazy as the menu opens.
+	entries func() []ggui.Widget
+	lazy    *lazyEntries
 }
 
 // ContextMenu opens entries at the right-click position. Tab focuses the
 // wrapper; Shift+F10, Enter or Space opens it from the keyboard. Entries are
 // MenuItem and MenuDivider, with the same arrow navigation as Menu.
 func ContextMenu(content ggui.Widget, entries ...ggui.Widget) *ContextMenuWidget {
-	c := &ContextMenuWidget{content: content, menu: Menu("", entries...)}
+	return newContextMenu(content, Menu("", entries...))
+}
+
+// ContextMenuFunc is ContextMenu with entries made by entries as the menu
+// opens rather than as it is built: for content rebuilt far more often than
+// its menu opens, such as a row in a list that follows live state, whose
+// entries would otherwise be made with every rebuild.
+func ContextMenuFunc(content ggui.Widget, entries func() []ggui.Widget) *ContextMenuWidget {
+	m := Menu("")
+	lazy := &lazyEntries{}
+	m.panel = ggui.Box(lazy)
+	c := newContextMenu(content, m)
+	c.entries, c.lazy = entries, lazy
+	return c
+}
+
+func newContextMenu(content ggui.Widget, m *MenuWidget) *ContextMenuWidget {
+	c := &ContextMenuWidget{content: content, menu: m}
 	c.Role = ggui.RoleMenu
 	c.AutoKey()
 	c.menu.popup = ggui.Popup(content, c.menu.panel).Gap(0).Keys(c).Owner(c)
 	return c
+}
+
+// build makes a ContextMenuFunc's entries, once: when it opens, or when it
+// is laid out open, as one rebuilt while its menu is open is.
+func (c *ContextMenuWidget) build() {
+	if c.entries == nil || c.lazy.col != nil {
+		return
+	}
+	c.lazy.col = c.menu.column(c.entries())
+}
+
+// lazyEntries is a ContextMenuFunc's panel content, nothing until built.
+type lazyEntries struct{ col ggui.Widget }
+
+func (e *lazyEntries) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
+	if e.col == nil {
+		return cs.Constrain(ggui.Size{})
+	}
+	return e.col.Layout(cs, env)
+}
+
+func (e *lazyEntries) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	if e.col != nil {
+		dst.Paint(e.col, r)
+	}
 }
 
 // Name sets the accessible name of the context-menu target.
@@ -47,6 +93,7 @@ func (c *ContextMenuWidget) open(at ggui.Point) {
 		return
 	}
 	c.at = &at
+	c.build()
 	c.menu.reopen()
 	c.menu.popup.ShowAt(at)
 }
@@ -79,6 +126,9 @@ func (c *ContextMenuWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 	c.Sync()
 	if c.IsInert() {
 		c.Popup().Hide()
+	}
+	if c.Popup().IsOpen() {
+		c.build()
 	}
 	c.theme = uitheme.From(env)
 	t := c.theme
