@@ -383,7 +383,7 @@ func (c *imageCache) upload(e *imageEntry) {
 	src := e.decoded
 	e.decoded = nil
 	c.mu.Unlock()
-	img := ggfx.NewImageFromImage(src)
+	img := newTexture(src)
 	b := img.Bounds()
 	c.mu.Lock()
 	if e.dead {

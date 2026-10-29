@@ -240,7 +240,21 @@ func DecodeImage(data []byte) (*ggfx.Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ggfx.NewImageFromImage(img), nil
+	return newTexture(img), nil
+}
+
+// largeImage is the side past which an image is a texture of its own: the
+// atlas would round it up to a page of powers of two, 2048×2048 and 16 MB
+// for a 1254-pixel square, and it packs badly with the small images the
+// atlas batches.
+const largeImage = 512
+
+// newTexture uploads img, a texture of exactly its size when it is large.
+func newTexture(img image.Image) *ggfx.Image {
+	if b := img.Bounds(); b.Dx() > largeImage || b.Dy() > largeImage {
+		return ggfx.NewImageFromImageWithOptions(img, &ggfx.NewImageFromImageOptions{Unmanaged: true})
+	}
+	return ggfx.NewImageFromImage(img)
 }
 
 // decodeImage decodes PNG, JPEG or GIF bytes, refusing an image with no
