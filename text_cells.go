@@ -26,17 +26,25 @@ func (c *Canvas) DrawTextCells(s string, st TextStyle, at Point, cellW float64) 
 		return
 	}
 	st = st.resolved()
+	// A terminal draws a run per row and colour every frame, each a string
+	// of its own: the run's graphemes, glyphs, shifts and images are kept
+	// in buffers it reuses.
+	buf := theCellsBufPool.Get()
+	defer func() {
+		clear(buf.glyphs)
+		clear(buf.entries)
+		theCellsBufPool.Put(buf)
+	}()
+	buf.bounds = textedit.AppendBounds(buf.bounds[:0], s)
 	face := st.Font.face(c.px(st.Size), st.Weight)
 	if ef, ok := face.(*emojiFace); ok {
 		if emojidata.MayHold(s) {
 			// An emoji is drawn from a font of its own, with its own
 			// metrics: one grapheme at a time keeps it in its cell.
 			x := at.X
-			for i := 0; i < len(s); {
-				j := textedit.NextGrapheme(s, i)
-				c.DrawTextStyle(s[i:j], st, Pt(x, at.Y))
+			for k := 0; k+1 < len(buf.bounds); k++ {
+				c.DrawTextStyle(s[buf.bounds[k]:buf.bounds[k+1]], st, Pt(x, at.Y))
 				x += cellW
-				i = j
 			}
 			return
 		}
@@ -50,16 +58,8 @@ func (c *Canvas) DrawTextCells(s string, st TextStyle, at Point, cellW float64) 
 	colored.ColorScale.ScaleAlpha(op.ColorScale.A())
 	x0, y0, cell := c.px(at.X), c.px(at.Y), c.px(cellW)
 
-	// A terminal draws a run per row and colour every frame: the run's
-	// glyphs, shifts and images are kept in buffers it reuses.
-	buf := theCellsBufPool.Get()
-	defer func() {
-		clear(buf.glyphs)
-		clear(buf.entries)
-		theCellsBufPool.Put(buf)
-	}()
 	buf.glyphs = text.AppendLazyGlyphs(buf.glyphs[:0], s, face, nil)
-	buf.shifts = cellShifts(buf.shifts, s, buf.glyphs, x0, cell)
+	buf.shifts = cellShifts(buf.shifts, buf.bounds, buf.glyphs, x0, cell)
 	// Realize every image before drawing any, as text.Draw does, so the
 	// atlas is written in one batch.
 	buf.entries = buf.entries[:0]
@@ -92,6 +92,7 @@ type cellEntry struct {
 
 // cellsBuf holds what DrawTextCells works out for a run between runs.
 type cellsBuf struct {
+	bounds  []int
 	glyphs  []text.LazyGlyph
 	shifts  []float64
 	entries []cellEntry
@@ -101,18 +102,18 @@ var theCellsBufPool = pool.Pool[*cellsBuf]{
 	New: func() *cellsBuf { return &cellsBuf{} },
 }
 
-// cellShifts is how far each glyph moves from where s shaped it, in device
-// pixels, to start its grapheme's cell: the kth grapheme's first glyph goes
-// to the whole pixel nearest x0+k·cell, and the rest of a grapheme, its
-// marks or the parts of a ligature, move with it. It is kept in dst's
-// storage when that has room.
-func cellShifts(dst []float64, s string, glyphs []text.LazyGlyph, x0, cell float64) []float64 {
+// cellShifts is how far each glyph moves from where its run shaped it, in
+// device pixels, to start its grapheme's cell: the kth grapheme, from
+// bounds[k] to bounds[k+1] of the run as textedit.Bounds gives them, has
+// its first glyph at the whole pixel nearest x0+k·cell, and the rest of a
+// grapheme, its marks or the parts of a ligature, move with it. It is kept
+// in dst's storage when that has room.
+func cellShifts(dst []float64, bounds []int, glyphs []text.LazyGlyph, x0, cell float64) []float64 {
 	shifts := slices.Grow(dst[:0], len(glyphs))[:len(glyphs)]
-	k, next, shift := -1, 0, 0.0
+	k, shift := -1, 0.0
 	for i, g := range glyphs {
-		if g.StartIndexInBytes >= next {
-			for g.StartIndexInBytes >= next && next < len(s) {
-				next = textedit.NextGrapheme(s, next)
+		if g.StartIndexInBytes >= bounds[k+1] {
+			for k+1 < len(bounds)-1 && g.StartIndexInBytes >= bounds[k+1] {
 				k++
 			}
 			shift = math.Round(x0+float64(k)*cell) - x0 - g.OriginX

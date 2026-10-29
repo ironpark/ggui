@@ -1,6 +1,9 @@
 package textedit
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 // clusters splits s by stepping NextGrapheme from the start.
 func clusters(s string) []string {
@@ -131,5 +134,24 @@ func TestLineFeedEndsCluster(t *testing.T) {
 			t.Errorf("NextGrapheme(%q, %d) = %d, want %d where PrevGrapheme(%q, %d) = %d",
 				c.s, c.i, got, c.want, c.s, len(c.s), PrevGrapheme(c.s, len(c.s)))
 		}
+	}
+}
+
+// AppendBounds finds what Bounds does, and into a slice it is given, so a
+// caller stepping through a new string each time allocates nothing.
+func TestAppendBoundsFindsBoundsWithoutAllocating(t *testing.T) {
+	texts := []string{"áb", "한글", "한", "👩‍💻 ok", "🇰🇷x", "a\r\nb\nc", "\xffz", "❯ go test"}
+	for _, s := range texts {
+		if got, want := AppendBounds(nil, s), Bounds(s); !slices.Equal(got, want) {
+			t.Errorf("AppendBounds(%q) = %v, want %v", s, got, want)
+		}
+	}
+	dst := make([]int, 0, 64)
+	row := []byte("❯ go build ./... && echo ok")
+	if allocs := testing.AllocsPerRun(100, func() {
+		row[len(row)-1] ^= 1 // a new string each run, as a terminal's rows are
+		dst = AppendBounds(dst[:0], string(row))
+	}); allocs > 1 { // the string conversion
+		t.Errorf("AppendBounds allocates %v times, want at most the string's", allocs)
 	}
 }

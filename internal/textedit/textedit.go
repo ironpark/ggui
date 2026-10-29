@@ -274,7 +274,16 @@ func clusterBounds(s string) []int {
 	}
 	// One more than the runes is the most bounds there can be, so the
 	// slice is allocated once.
-	bounds := make([]int, 0, utf8.RuneCountInString(s)+1)
+	bounds := appendBoundsLocked(make([]int, 0, utf8.RuneCountInString(s)+1), s)
+	c.entries[c.next] = clusterEntry{s: s, bounds: bounds}
+	c.next = (c.next + 1) % len(c.entries)
+	return bounds
+}
+
+// appendBoundsLocked appends the bounds of s to bounds, segmenting with the
+// cache's buffers, whose lock the caller holds.
+func appendBoundsLocked(bounds []int, s string) []int {
+	c := &clusterCache
 	for start := 0; start < len(s); {
 		end := len(s)
 		if i := strings.IndexByte(s[start:], '\n'); i >= 0 {
@@ -300,10 +309,7 @@ func clusterBounds(s string) []int {
 		}
 		start = end
 	}
-	bounds = append(bounds, len(s))
-	c.entries[c.next] = clusterEntry{s: s, bounds: bounds}
-	c.next = (c.next + 1) % len(c.entries)
-	return bounds
+	return append(bounds, len(s))
 }
 
 // joinEmojiSequences mends the cluster starts of runes, as rune indices,
@@ -347,6 +353,16 @@ func joinEmojiSequences(runes []rune, starts []int) []int {
 // slice is shared: do not change it.
 func Bounds(s string) []int {
 	return clusterBounds(s)
+}
+
+// AppendBounds appends what Bounds returns to dst, without keeping it: for
+// a caller that steps through each string once and reuses dst, as a
+// terminal drawing new rows every frame does.
+func AppendBounds(dst []int, s string) []int {
+	c := &clusterCache
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return appendBoundsLocked(dst, s)
 }
 
 // NextGrapheme returns the byte offset after the cluster starting at i.

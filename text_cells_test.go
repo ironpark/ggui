@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggui/internal/text"
+	"github.com/ironpark/ggui/internal/textedit"
 	"golang.org/x/image/font/gofont/gomono"
 )
 
@@ -18,7 +19,7 @@ func TestDrawTextCellsKeepsEveryGraphemeOnItsCell(t *testing.T) {
 	const x0 = 20.25
 	s := "é" + "abcdefghijklmnopqrstuvwxyz0123456789"
 	glyphs := text.AppendLazyGlyphs(nil, s, face, nil)
-	shifts := cellShifts(nil, s, glyphs, x0, cell)
+	shifts := cellShifts(nil, textedit.Bounds(s), glyphs, x0, cell)
 	k, last := -1, -1
 	for i, g := range glyphs {
 		at := x0 + g.OriginX + shifts[i]
@@ -43,4 +44,28 @@ func TestDrawTextCellsKeepsEveryGraphemeOnItsCell(t *testing.T) {
 		t.Fatalf("placed %d graphemes after é, want 36", k)
 	}
 	(&Canvas{}).DrawTextCells("no image, no panic", TextStyle{}, Pt(0, 0), 8)
+}
+
+// Shifts found from a run's bounds are those stepping through it grapheme
+// by grapheme finds, whatever its clusters are.
+func TestCellShiftsFollowTheRunsGraphemes(t *testing.T) {
+	face := MustFont(gomono.TTF).NoFallback().face(13*2, 0)
+	const x0, cell = 20.25, 17.0
+	for _, s := range []string{"é" + "abc", "한글 ok", "á̂b", "👩‍💻x", "ffi fl", "\xffz", "❯ go test"} {
+		glyphs := text.AppendLazyGlyphs(nil, s, face, nil)
+		got := cellShifts(nil, textedit.Bounds(s), glyphs, x0, cell)
+		k, next, shift := -1, 0, 0.0
+		for i, g := range glyphs {
+			if g.StartIndexInBytes >= next {
+				for g.StartIndexInBytes >= next && next < len(s) {
+					next = textedit.NextGrapheme(s, next)
+					k++
+				}
+				shift = math.Round(x0+float64(k)*cell) - x0 - g.OriginX
+			}
+			if got[i] != shift {
+				t.Errorf("%q glyph %d: shift %v, want %v", s, i, got[i], shift)
+			}
+		}
+	}
 }
