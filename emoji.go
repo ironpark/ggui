@@ -165,8 +165,9 @@ func textRuns(s string, face text.Face) iter.Seq2[string, text.Face] {
 func graphemeRuns[K comparable](s string, pick func(g string) K, yield func(start, end int, k K) bool) {
 	start := 0
 	var cur K
-	for i := 0; i < len(s); {
-		end := textedit.NextGrapheme(s, i)
+	bounds := textedit.Bounds(s)
+	for j := 0; j+1 < len(bounds); j++ {
+		i, end := bounds[j], bounds[j+1]
 		k := pick(s[i:end])
 		if i > 0 && k != cur {
 			if !yield(start, i, cur) {
@@ -175,7 +176,6 @@ func graphemeRuns[K comparable](s string, pick func(g string) K, yield func(star
 			start = i
 		}
 		cur = k
-		i = end
 	}
 	if len(s) > 0 {
 		yield(start, len(s), cur)

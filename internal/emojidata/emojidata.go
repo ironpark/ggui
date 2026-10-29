@@ -9,14 +9,23 @@ import (
 	"unicode/utf8"
 )
 
-// MayHold is a cheap byte scan: every emoji-presentation code point,
-// U+FE0F and U+20E3 encode with a lead byte of 0xE2 or above, so a string
-// without one holds no emoji and needs no cluster walk.
+// MayHold reports whether s may hold a grapheme IsCluster takes for an
+// emoji, cheaply, so that text without one needs no cluster walk: such a
+// grapheme holds U+FE0F or U+20E3, or starts with a code point that presents
+// as emoji by default, all of which encode with a lead byte of 0xE2 or
+// above. Korean, Chinese or Japanese text, whose letters encode so too, is
+// told apart by the code points themselves.
 func MayHold(s string) bool {
-	for i := 0; i < len(s); i++ {
-		if s[i] >= 0xE2 {
+	for i := 0; i < len(s); {
+		if s[i] < 0xE2 {
+			i++
+			continue
+		}
+		r, n := utf8.DecodeRuneInString(s[i:])
+		if r == '\ufe0f' || r == '\u20e3' || inRanges(r, presentation[:]) {
 			return true
 		}
+		i += n
 	}
 	return false
 }

@@ -252,7 +252,7 @@ var clusterCache struct {
 	seg     segmenter.Segmenter
 	runes   []rune
 	offsets []int
-	entries [8]clusterEntry
+	entries [32]clusterEntry
 	next    int
 }
 
@@ -338,6 +338,13 @@ func joinEmojiSequences(runes []rune, starts []int) []int {
 		}
 	}
 	return out
+}
+
+// Bounds returns the byte offsets where the clusters of s start, and len(s)
+// last: what stepping through s with NextGrapheme finds, found at once. The
+// slice is shared: do not change it.
+func Bounds(s string) []int {
+	return clusterBounds(s)
 }
 
 // NextGrapheme returns the byte offset after the cluster starting at i.

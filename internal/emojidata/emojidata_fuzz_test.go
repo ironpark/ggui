@@ -32,10 +32,10 @@ func isClusterRef(s string) bool {
 }
 
 // mayHoldRef is the reference for MayHold on valid UTF-8: whether any rune
-// is at or above U+2000, the first code point encoded with lead byte 0xE2.
+// is U+FE0F, U+20E3 or one that presents as emoji by default.
 func mayHoldRef(s string) bool {
 	for _, r := range s {
-		if r >= 0x2000 {
+		if r == '\ufe0f' || r == '\u20e3' || inRangesLinear(r, presentation[:]) {
 			return true
 		}
 	}
