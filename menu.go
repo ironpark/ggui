@@ -208,13 +208,17 @@ func (a *App) activeWindow() *Window {
 // ⌘Z, the chord goes to the widget instead, the way the key would have:
 // Edit ▸ Undo undoes the field being edited.
 func (a *App) runAction(id int) {
+	a.runActionIn(a.activeWindow(), id)
+}
+
+func (a *App) runActionIn(w *Window, id int) {
 	m, ok := a.actions[id]
 	if !ok {
 		return
 	}
 	if m.Chord != "" {
 		c := MustChord(m.Chord)
-		if w := a.activeWindow(); w != nil && w.input.sendClaimed(KeyEvent{Kind: KeyPress, Key: c.Key, Mods: c.held()}) {
+		if w != nil && w.input.sendClaimed(KeyEvent{Kind: KeyPress, Key: c.Key, Mods: c.held()}) {
 			return
 		}
 	}

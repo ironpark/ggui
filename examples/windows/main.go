@@ -31,7 +31,14 @@ func (m *model) main() ggui.Widget {
 	w := ggui.UseWindow()
 	ggui.Watch(m.Count, func(n int) { w.SetTitle(fmt.Sprintf("ggui · windows (%d)", n)) })
 	return ggui.Column(ui.AppMenubar(w.App().Menu()), ggui.Expanded(ggui.Center(ui.Card(ggui.Column(
-		ui.Titlef("count: %d", m.Count),
+		ui.NativeContextMenu(ui.Titlef("count: %d", m.Count),
+			ggui.MenuAction("Add One", "", func() { ggui.Add(m.Count, 1) }),
+			ggui.MenuAction("Reset", "", func() { m.Count.Set(0) }).BindEnabled(
+				ggui.Map(m.Count, func(n int) bool { return n != 0 })),
+			ggui.MenuSeparator(),
+			ggui.Menu("Windows", ggui.MenuAction("New Inspector", "", func() { m.open(w.App()) })),
+		),
+		ui.Caption("Right-click the count for native actions"),
 		ggui.Row(
 			ui.Button("+1", func() { ggui.Add(m.Count, 1) }),
 			ui.Button("Open inspector", func() { m.open(w.App()) }),

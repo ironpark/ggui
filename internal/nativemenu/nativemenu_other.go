@@ -25,3 +25,9 @@ func SetTray(int, Tray) {}
 
 // RemoveTray does nothing where there is no status area.
 func RemoveTray(int) {}
+
+// ContextSupported reports whether native popup menus are available.
+func ContextSupported() bool { return false }
+
+// Popup does nothing on unsupported platforms.
+func Popup(uintptr, float64, float64, []Item) int { return 0 }

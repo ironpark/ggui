@@ -16,8 +16,9 @@ type ContextMenuWidget struct {
 	theme   uitheme.Theme
 
 	// entries makes a ContextMenuFunc's entries into lazy as the menu opens.
-	entries func() []ggui.Widget
-	lazy    *lazyEntries
+	nativeEntries func() []ggui.MenuItem
+	entries       func() []ggui.Widget
+	lazy          *lazyEntries
 }
 
 // ContextMenu opens entries at the right-click position. Tab focuses the
@@ -37,6 +38,20 @@ func ContextMenuFunc(content ggui.Widget, entries func() []ggui.Widget) *Context
 	m.panel = ggui.Box(lazy)
 	c := newContextMenu(content, m)
 	c.entries, c.lazy = entries, lazy
+	return c
+}
+
+// NativeContextMenu uses the platform's context menu with the same model as
+// App.SetMenu and App.AddTray. Where unavailable (including probes), it uses
+// the regular widget menu. Keyboard and accessibility invocation work as usual.
+func NativeContextMenu(content ggui.Widget, entries ...ggui.MenuItem) *ContextMenuWidget {
+	return NativeContextMenuFunc(content, func() []ggui.MenuItem { return entries })
+}
+
+// NativeContextMenuFunc builds its entries each time the menu opens.
+func NativeContextMenuFunc(content ggui.Widget, entries func() []ggui.MenuItem) *ContextMenuWidget {
+	c := ContextMenuFunc(content, func() []ggui.Widget { return menuEntries(entries()) })
+	c.nativeEntries = entries
 	return c
 }
 
@@ -91,6 +106,15 @@ func (c *ContextMenuWidget) Popup() *ggui.PopupWidget { return c.menu.popup }
 func (c *ContextMenuWidget) open(at ggui.Point) {
 	if c.IsInert() {
 		return
+	}
+	if c.nativeEntries != nil {
+		entries := c.nativeEntries()
+		if w := ggui.UseWindow(); w != nil && w.ShowContextMenu(at, entries...) {
+			return
+		}
+		// Rebuild the fallback from this invocation's snapshot.
+		c.menu.items = nil
+		c.lazy.col = c.menu.column(menuEntries(entries))
 	}
 	c.at = &at
 	c.build()

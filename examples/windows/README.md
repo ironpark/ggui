@@ -8,7 +8,8 @@ and size through `Window.Focused` and `Window.Viewport`.
 
 The app menus (Counter, View) go in the menu bar on macOS and are drawn by
 `ui.AppMenubar` elsewhere; their chords work in every window. On macOS a tray
-icon shows the count and a menu of its own.
+icon shows the count and a menu of its own. Right-click the count for a native
+context menu on macOS, with a widget menu fallback on other platforms.
 
 ```sh
 go run ./examples/windows

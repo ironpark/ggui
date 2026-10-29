@@ -85,9 +85,10 @@ const (
 type nsSize struct{ W, H float64 }
 
 var (
-	mu       sync.Mutex
-	onSelect func(id int)
-	items    = map[int]objc.ID{} // the action items made, by id
+	mu              sync.Mutex
+	onSelect        func(id int)
+	popupSelections = map[int]func(int){}
+	items           = map[int]objc.ID{} // the action items made, by id
 
 	// Main-thread state.
 	target  objc.ID
@@ -111,6 +112,9 @@ var targetClass = sync.OnceValue(func() objc.Class {
 			id := objc.Send[int](sender, selTag)
 			mu.Lock()
 			fn := onSelect
+			if popup := popupSelections[id]; popup != nil {
+				fn = popup
+			}
 			mu.Unlock()
 			if fn != nil {
 				fn(id)
@@ -350,4 +354,44 @@ func RemoveTray(key int) {
 		s.item.Send(selRelease)
 		delete(trays, key)
 	})
+}
+
+// ContextSupported reports whether native popup menus are available.
+func ContextSupported() bool { return true }
+
+// Popup tracks a menu synchronously and returns its selected action, or zero
+// on dismissal. Selection is returned to the caller rather than dispatched
+// through Handle, so it runs in the originating window before IDs are released.
+func Popup(owner uintptr, x, y float64, entries []Item) (selected int) {
+	ggwd.RunOnMainThread(func() {
+		if owner == 0 || len(entries) == 0 {
+			return
+		}
+		view := objc.ID(owner).Send(objc.RegisterName("contentView"))
+		if view == 0 {
+			return
+		}
+		var ids []int
+		m := menu("", entries, &ids)
+		defer m.Send(selRelease)
+		defer forget(ids)
+		mu.Lock()
+		for _, id := range ids {
+			popupSelections[id] = func(id int) { selected = id }
+		}
+		mu.Unlock()
+		defer func() {
+			mu.Lock()
+			defer mu.Unlock()
+			for _, id := range ids {
+				delete(popupSelections, id)
+			}
+		}()
+		if !objc.Send[bool](view, objc.RegisterName("isFlipped")) {
+			bounds := objc.Send[struct{ X, Y, W, H float64 }](view, objc.RegisterName("bounds"))
+			y = bounds.H - y
+		}
+		m.Send(objc.RegisterName("popUpMenuPositioningItem:atLocation:inView:"), objc.ID(0), struct{ X, Y float64 }{x, y}, view)
+	})
+	return selected
 }

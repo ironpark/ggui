@@ -14,6 +14,7 @@ system appearance and a single running instance.
 - [Reaching the host from a widget](#reaching-the-host-from-a-widget)
 - [Slow calls from a handler](#slow-calls-from-a-handler)
 - [App menus](#app-menus)
+- [Context menus](#context-menus)
 - [Tray icons](#tray-icons)
 - [Message dialogs](#message-dialogs)
 - [Light and dark](#light-and-dark)
@@ -160,6 +161,33 @@ the focus. `ggui.NativeMenu()` reports whether the menu bar shows the menus.
 `Chord.Label` writes a chord the way the platform shows it: `⇧⌘S` on macOS,
 `Ctrl+Shift+S` elsewhere.
 
+## Context menus
+
+`ui.NativeContextMenu` wraps content with a native context menu on macOS.
+It accepts the same `ggui.MenuItem` model as the menu bar and tray, including
+submenus, separators, enabled state, and check marks:
+
+```go
+ui.NativeContextMenu(ggui.Text("Right-click me"),
+    ggui.MenuAction("Open", "", open),
+    ggui.MenuAction("Save", "", save).BindEnabled(dirty),
+    ggui.MenuSeparator(),
+    ggui.Menu("More", ggui.MenuAction("Duplicate", "", duplicate)),
+)
+```
+
+`ui.NativeContextMenuFunc(content,
+func() []ggui.MenuItem { ... })` builds entries at invocation time. Secondary
+click, Shift+F10, Enter, Space, and accessibility actions can open the menu.
+Windows, Linux, browsers, and probes use the regular widget context menu;
+its submenus are displayed inline, as with `ui.AppMenubar`.
+
+For custom controls, `window.ShowContextMenu(position, items...)` opens the
+native menu directly. Positions are logical content coordinates from the
+window's top-left corner. Call it on the UI thread; it waits for dismissal,
+runs the selected action, and releases the temporary entries. It returns
+false when unavailable; `ggui.NativeContextMenu()` reports platform support.
+
 ## Tray icons
 
 `app.AddTray` puts an icon in the system tray, with a menu of the same items or
@@ -256,6 +284,7 @@ only the same user can reach.
 | --- | --- | --- | --- | --- |
 | Several windows, window control | Yes | Yes | Yes | One window |
 | App menus in the menu bar | Yes | Drawn with `ui.AppMenubar` | Drawn with `ui.AppMenubar` | Drawn with `ui.AppMenubar` |
+| Native context menus | Yes | Widget fallback | Widget fallback | Widget fallback |
 | Tray icon | Yes | No | No | No |
 | Message dialogs | Alert sheet | Message box | `zenity` / `kdialog` | `alert` / `confirm` |
 | Clipboard | Pasteboard API | Clipboard API | X11 `CLIPBOARD` selection | Paste events and `navigator.clipboard` |

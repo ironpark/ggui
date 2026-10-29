@@ -155,3 +155,44 @@ func TestContextMenuFuncMakesEntriesAsItOpens(t *testing.T) {
 		t.Fatal("item of a menu rebuilt open", picked)
 	}
 }
+
+func TestNativeContextMenuFallback(t *testing.T) {
+	t.Parallel()
+	builds, runs := 0, 0
+	enabled := ggui.State(false)
+	menu := ui.NativeContextMenuFunc(ggui.Text("Target"), func() []ggui.MenuItem {
+		builds++
+		version := builds
+		return []ggui.MenuItem{
+			ggui.MenuAction("Unavailable", "", func() { t.Fatal("disabled action ran") }).BindEnabled(enabled),
+			ggui.MenuSeparator(),
+			ggui.MenuAction("Run", "", func() { runs += version }),
+		}
+	}).Name("Native actions")
+	p := ggui.NewProbe(menu, ggui.Sz(320, 300))
+	defer p.Close()
+	if builds != 0 {
+		t.Fatal("entries built before invocation")
+	}
+	act(t, p, ggui.RoleMenu, "Native actions", ggui.Action{Kind: ggui.ActionExpand})
+	if !menu.Popup().IsOpen() || builds != 1 {
+		t.Fatalf("fallback open=%v builds=%d", menu.Popup().IsOpen(), builds)
+	}
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
+	if runs != 1 || menu.Popup().IsOpen() {
+		t.Fatal("fallback selection failed")
+	}
+	p.Type(ggui.Mods{Shift: true}, ggui.KeyF10)
+	if builds != 2 || !menu.Popup().IsOpen() {
+		t.Fatal("entries were not rebuilt on invocation")
+	}
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
+	if runs != 3 {
+		t.Fatalf("stale menu action: runs=%d", runs)
+	}
+	menu.Disabled(true)
+	actResult := menu.Act(ggui.Action{Kind: ggui.ActionExpand})
+	if actResult || builds != 2 {
+		t.Fatal("disabled native menu invoked")
+	}
+}
