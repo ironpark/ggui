@@ -18,8 +18,8 @@ import (
 	"image"
 	"image/draw"
 
-	"github.com/go-text/typesetting/font"
-	"github.com/go-text/typesetting/font/opentype"
+	"github.com/ironpark/ggui/internal/typesetting/font"
+	"github.com/ironpark/ggui/internal/typesetting/font/opentype"
 	"golang.org/x/image/math/fixed"
 	gvector "golang.org/x/image/vector"
 

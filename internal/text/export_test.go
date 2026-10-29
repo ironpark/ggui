@@ -15,7 +15,7 @@
 package text
 
 import (
-	"github.com/go-text/typesetting/bidi"
+	"github.com/ironpark/ggui/internal/typesetting/bidi"
 	"golang.org/x/image/math/fixed"
 )
 

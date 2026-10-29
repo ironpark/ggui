@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	gofont "github.com/go-text/typesetting/font"
+	gofont "github.com/ironpark/ggui/internal/typesetting/font"
 
 	"github.com/ironpark/ggui/internal/text"
 )

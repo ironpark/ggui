@@ -6,8 +6,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/go-text/typesetting/font"
-	"github.com/go-text/typesetting/fontscan"
+	"github.com/ironpark/ggui/internal/typesetting/font"
+	"github.com/ironpark/ggui/internal/typesetting/fontscan"
 
 	"github.com/ironpark/ggui/internal/text"
 )

@@ -26,9 +26,9 @@ import (
 
 	"golang.org/x/image/tiff"
 
-	"github.com/go-text/typesetting/font"
-	"github.com/go-text/typesetting/font/opentype"
-	"github.com/go-text/typesetting/font/opentype/tables"
+	"github.com/ironpark/ggui/internal/typesetting/font"
+	"github.com/ironpark/ggui/internal/typesetting/font/opentype"
+	"github.com/ironpark/ggui/internal/typesetting/font/opentype/tables"
 )
 
 // A font read through NewGoTextFaceSourceAt stays where it is, in a file

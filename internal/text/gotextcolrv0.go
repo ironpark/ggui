@@ -19,8 +19,8 @@ import (
 	"image/color"
 	"image/draw"
 
-	"github.com/go-text/typesetting/font/opentype"
-	"github.com/go-text/typesetting/font/opentype/tables"
+	"github.com/ironpark/ggui/internal/typesetting/font/opentype"
+	"github.com/ironpark/ggui/internal/typesetting/font/opentype/tables"
 	"golang.org/x/image/math/fixed"
 
 	"github.com/ironpark/ggfx"

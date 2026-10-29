@@ -6,8 +6,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/go-text/typesetting/bidi"
 	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggui/internal/typesetting/bidi"
 	"golang.org/x/image/font/gofont/goregular"
 )
 

@@ -7,10 +7,10 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/go-text/typesetting/bidi"
-	gofont "github.com/go-text/typesetting/font"
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/internal/text"
+	"github.com/ironpark/ggui/internal/typesetting/bidi"
+	gofont "github.com/ironpark/ggui/internal/typesetting/font"
 	"golang.org/x/text/language"
 
 	"github.com/ironpark/ggui/internal/emojidata"

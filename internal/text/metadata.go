@@ -15,7 +15,7 @@
 package text
 
 import (
-	"github.com/go-text/typesetting/font"
+	"github.com/ironpark/ggui/internal/typesetting/font"
 )
 
 // Metadata represents a font face's metadata.

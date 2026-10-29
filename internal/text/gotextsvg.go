@@ -18,7 +18,7 @@ import (
 	"bytes"
 	"image"
 
-	"github.com/go-text/typesetting/font"
+	"github.com/ironpark/ggui/internal/typesetting/font"
 	"github.com/srwiley/rasterx"
 	"golang.org/x/image/math/fixed"
 

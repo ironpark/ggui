@@ -4,7 +4,7 @@ import (
 	"sync"
 	"unicode/utf8"
 
-	"github.com/go-text/typesetting/segmenter"
+	"github.com/ironpark/ggui/internal/typesetting/segmenter"
 
 	"github.com/ironpark/ggui/internal/textedit"
 )

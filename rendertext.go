@@ -6,12 +6,12 @@ import (
 	"math"
 	"slices"
 
-	"github.com/go-text/render"
-	"github.com/go-text/typesetting/di"
-	"github.com/go-text/typesetting/font"
-	"github.com/go-text/typesetting/font/opentype"
-	"github.com/go-text/typesetting/language"
-	"github.com/go-text/typesetting/shaping"
+	"github.com/ironpark/ggui/internal/typesetting/di"
+	"github.com/ironpark/ggui/internal/typesetting/font"
+	"github.com/ironpark/ggui/internal/typesetting/font/opentype"
+	"github.com/ironpark/ggui/internal/typesetting/language"
+	"github.com/ironpark/ggui/internal/typesetting/render"
+	"github.com/ironpark/ggui/internal/typesetting/shaping"
 	"golang.org/x/image/math/fixed"
 
 	"github.com/ironpark/ggui/internal/emojidata"

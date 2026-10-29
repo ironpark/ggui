@@ -28,8 +28,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/go-text/typesetting/bidi"
 	"github.com/hajimehoshi/bitmapfont/v4"
+	"github.com/ironpark/ggui/internal/typesetting/bidi"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/image/font/opentype"

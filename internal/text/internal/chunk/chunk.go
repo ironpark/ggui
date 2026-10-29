@@ -33,7 +33,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/go-text/typesetting/bidi"
+	"github.com/ironpark/ggui/internal/typesetting/bidi"
 
 	"github.com/ironpark/ggui/internal/text/internal/textutil"
 )
