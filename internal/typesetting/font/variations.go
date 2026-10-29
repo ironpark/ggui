@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sync/atomic"
 
 	"github.com/ironpark/ggui/internal/typesetting/font/opentype/tables"
 )
@@ -48,37 +49,31 @@ func (mv mvar) getVar(tag Tag, coords []VarCoord) float32 {
 // ---------------------------------- gvar ----------------------------------
 
 type gvar struct {
-	sharedTuples         [][]VarCoord       // with size tupleCount x axisCount
-	variations           [][]tupleVariation // with length glyphCount
-	sharedTupleActiveIdx []int              // with length tupleCount
+	sharedTuples         [][]VarCoord // with size tupleCount x axisCount
+	sharedTupleActiveIdx []int        // with length tupleCount
+
+	// ggui: a glyph's variations are decoded the first time it is drawn,
+	// not all of them as the font loads, which costs a font such as SF Pro
+	// tens of megabytes for glyphs that are never drawn.
+	table      tables.Gvar
+	glyf       tables.Glyf                        // with length glyphCount
+	variations []atomic.Pointer[[]tupleVariation] // with length glyphCount, nil until decoded
 }
 
 func newGvar(table tables.Gvar, glyf tables.Glyf) (gvar, error) {
-	if len(table.GlyphVariationDatas) != len(glyf) {
+	if table.GlyphCount() != len(glyf) {
 		return gvar{}, fmt.Errorf("invalid 'gvar' table: mismatch in glyphs count")
 	}
 
 	out := gvar{
 		sharedTuples:         make([][]VarCoord, len(table.SharedTuples.SharedTuples)),
-		variations:           make([][]tupleVariation, len(table.GlyphVariationDatas)),
 		sharedTupleActiveIdx: make([]int, len(table.SharedTuples.SharedTuples)),
+		table:                table,
+		glyf:                 glyf,
+		variations:           make([]atomic.Pointer[[]tupleVariation], table.GlyphCount()),
 	}
 	for i, ts := range table.SharedTuples.SharedTuples {
 		out.sharedTuples[i] = ts.Values
-	}
-	for i, vs := range table.GlyphVariationDatas {
-		tvs := make([]tupleVariation, len(vs.TupleVariationHeaders))
-		for j, header := range vs.TupleVariationHeaders {
-			tvs[j].TupleVariationHeader = header
-		}
-
-		pointsNumberCountAll := pointNumbersCount(glyf[i]) + phantomCount
-		err := parseGlyphVariationSerializedData(vs.SerializedData,
-			vs.HasSharedPointNumbers(), pointsNumberCountAll, false, tvs)
-		if err != nil {
-			return out, err
-		}
-		out.variations[i] = tvs
 	}
 
 	// For shared tuples that only have one axis active, share the index of
@@ -99,6 +94,36 @@ func newGvar(table tables.Gvar, glyf tables.Glyf) (gvar, error) {
 	}
 
 	return out, nil
+}
+
+// glyphVariations returns the variations of glyph, decoding them on first
+// use. Concurrent callers may both decode a glyph; they get equal results
+// and one is kept. Invalid data decodes to no variations.
+func (gvar gvar) glyphVariations(glyph gID) []tupleVariation {
+	if p := gvar.variations[glyph].Load(); p != nil {
+		return *p
+	}
+	tvs, err := gvar.decode(glyph)
+	if err != nil {
+		tvs = nil
+	}
+	gvar.variations[glyph].CompareAndSwap(nil, &tvs)
+	return *gvar.variations[glyph].Load()
+}
+
+func (gvar gvar) decode(glyph gID) ([]tupleVariation, error) {
+	vs, err := gvar.table.GlyphVariationData(int(glyph))
+	if err != nil {
+		return nil, err
+	}
+	tvs := make([]tupleVariation, len(vs.TupleVariationHeaders))
+	for j, header := range vs.TupleVariationHeaders {
+		tvs[j].TupleVariationHeader = header
+	}
+	pointsNumberCountAll := pointNumbersCount(gvar.glyf[glyph]) + phantomCount
+	err = parseGlyphVariationSerializedData(vs.SerializedData,
+		vs.HasSharedPointNumbers(), pointsNumberCountAll, false, tvs)
+	return tvs, err
 }
 
 type tupleVariation struct {
@@ -347,7 +372,7 @@ func (gvar gvar) applyDeltasToPoints(glyph gID, coords []VarCoord, points []cont
 	// flag is used to indicate referenced point
 	deltas := make([]contourPoint, len(points))
 
-	varData := gvar.variations[glyph]
+	varData := gvar.glyphVariations(glyph)
 	for _, tuple := range varData {
 		scalar := tuple.calculateScalar(coords, gvar.sharedTuples, gvar.sharedTupleActiveIdx)
 		if scalar == 0 {

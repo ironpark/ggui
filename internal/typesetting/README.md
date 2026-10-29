@@ -11,3 +11,15 @@ Import paths are rewritten from `github.com/go-text/typesetting/...` and
 The tests, testdata, and `testutils` directory of the originals are not
 included, nor is anything that only they use.
 
+## Local modifications
+
+- Glyph variations are decoded as each glyph is first drawn, not all at once
+  when a font loads. `tables.Gvar` keeps the table and the offsets of each
+  glyph's data, checked as it is parsed, and `Gvar.GlyphVariationData`
+  parses one glyph's; `font`'s `gvar` decodes a glyph's tuples and deltas
+  on first use and keeps them in a per-glyph `atomic.Pointer`, so a `*Font`
+  stays safe for concurrent use. Upstream decodes every glyph up front,
+  which kept about 37 MB live for SF Pro (`SFNS.ttf`) of which ggui draws a
+  few hundred glyphs; it now keeps about 9 MB. A glyph whose data is
+  malformed now has no variations, where upstream dropped the variations
+  of it and every glyph after it.

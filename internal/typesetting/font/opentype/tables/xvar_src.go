@@ -219,7 +219,25 @@ type Gvar struct {
 	flags                         uint16                                                                                         // Bit-field that gives the format of the offset array that follows. If bit 0 is clear, the offsets are uint16; if bit 0 is set, the offsets are uint32.
 	glyphVariationDataArrayOffset Offset32                                                                                       // Offset from the start of this table to the array of GlyphVariationData tables.
 	glyphVariationDataOffsets     []uint32                                                                                       `isOpaque:"" subsliceStart:"AtCurrent"` // [glyphCount + 1]Offset16 or Offset32 Offsets from the start of the GlyphVariationData array to each GlyphVariationData table.
-	GlyphVariationDatas           []GlyphVariationData                                                                           `isOpaque:""`
+	// ggui: the table itself, from which each glyph's data is parsed as
+	// GlyphVariationData asks for it, not all of them as the font loads.
+	glyphVariationDatas []byte `isOpaque:""`
+}
+
+// GlyphCount is the number of glyphs the table has variations for.
+func (gv *Gvar) GlyphCount() int { return int(gv.glyphCount) }
+
+// GlyphVariationData parses the variation data of glyph i, which
+// ParseGvar has checked is in the table; a glyph without variations has
+// the zero value.
+func (gv *Gvar) GlyphVariationData(i int) (GlyphVariationData, error) {
+	startArray := uint32(gv.glyphVariationDataArrayOffset)
+	start, end := int(startArray+gv.glyphVariationDataOffsets[i]), int(startArray+gv.glyphVariationDataOffsets[i+1])
+	if start == end {
+		return GlyphVariationData{}, nil
+	}
+	out, _, err := ParseGlyphVariationData(gv.glyphVariationDatas[start:end], int(gv.axisCount))
+	return out, err
 }
 
 func (gv *Gvar) parseGlyphVariationDataOffsets(src []byte) error {
@@ -229,9 +247,8 @@ func (gv *Gvar) parseGlyphVariationDataOffsets(src []byte) error {
 }
 
 func (gv *Gvar) parseGlyphVariationDatas(src []byte) error {
-	gv.GlyphVariationDatas = make([]GlyphVariationData, gv.glyphCount)
 	startArray := uint32(gv.glyphVariationDataArrayOffset)
-	for i := range gv.GlyphVariationDatas {
+	for i := range int(gv.glyphCount) {
 		start, end := int(startArray+gv.glyphVariationDataOffsets[i]), int(startArray+gv.glyphVariationDataOffsets[i+1])
 		if start == end {
 			continue
@@ -244,13 +261,8 @@ func (gv *Gvar) parseGlyphVariationDatas(src []byte) error {
 		if L := len(src); L < end {
 			return fmt.Errorf("EOF: expected length: %d, got %d", end, L)
 		}
-
-		var err error
-		gv.GlyphVariationDatas[i], _, err = ParseGlyphVariationData(src[start:end], int(gv.axisCount))
-		if err != nil {
-			return err
-		}
 	}
+	gv.glyphVariationDatas = src
 	return nil
 }
 
