@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"math"
 	"reflect"
+	"sync"
 
 	"github.com/ironpark/ggui/internal/reactive"
 )
@@ -58,6 +59,12 @@ func EnterLayout() func() { return reactive.EnterLayout() }
 // Equal compares configuration values, not reader identity. Colors compare by
 // their rendered channels; equal NaNs must not turn a still frame into a loop.
 func Equal[T any](a, b T) bool {
+	if t := reflect.TypeFor[T](); t.Kind() != reflect.Float64 && t.Kind() != reflect.Float32 && plain(t) {
+		// == is DeepEqual for these, and the values, boxed only to be
+		// compared, stay on the stack. A float alone is below, where a NaN
+		// is the same as another.
+		return any(a) == any(b)
+	}
 	if ca, ok := any(a).(color.Color); ok {
 		if cb, ok := any(b).(color.Color); ok {
 			ar, ag, ab, aa := ca.RGBA()
@@ -77,6 +84,44 @@ func Equal[T any](a, b T) bool {
 		return true
 	}
 	return reflect.DeepEqual(a, b)
+}
+
+// plainTypes caches plain by type: Equal runs for every property a layout
+// sets, and Same's Comparable allocates as it walks a struct's fields.
+var plainTypes sync.Map // reflect.Type → bool
+
+var colorType = reflect.TypeFor[color.Color]()
+
+// plain reports whether t's values are made of booleans, numbers and
+// strings alone, in arrays and structs: values == compares as DeepEqual
+// does, never panicking and never following a reference. A color is not,
+// being compared by what it draws.
+func plain(t reflect.Type) bool {
+	if v, ok := plainTypes.Load(t); ok {
+		return v.(bool)
+	}
+	var is bool
+	switch t.Kind() {
+	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128, reflect.String:
+		is = true
+	case reflect.Array:
+		is = plain(t.Elem())
+	case reflect.Struct:
+		is = true
+		for i := range t.NumField() {
+			if !plain(t.Field(i).Type) {
+				is = false
+				break
+			}
+		}
+	}
+	if t.Implements(colorType) {
+		is = false
+	}
+	plainTypes.Store(t, is)
+	return is
 }
 
 // Watch checks a value setter's final result, including compound assignments.

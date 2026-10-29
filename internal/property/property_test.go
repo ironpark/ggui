@@ -337,3 +337,27 @@ func TestSetAndBindChangeTheOwnerOnlyOnAChange(t *testing.T) {
 		t.Fatalf("version %d after binding one reader twice, want 2", o.Version())
 	}
 }
+
+// A struct of numbers, as insets or a size, is compared with == and no
+// allocation; one holding a reference is still compared deeply.
+func TestEqualComparesPlainValuesWithoutAllocating(t *testing.T) {
+	type insets struct{ Top, Right, Bottom, Left float64 }
+	a, b := insets{1, 2, 3, 4}, insets{1, 2, 3, 4}
+	if !Equal(a, b) || Equal(a, insets{1, 2, 3, 5}) {
+		t.Fatal("plain struct compared wrongly")
+	}
+	if allocs := testing.AllocsPerRun(100, func() { _ = Equal(a, b) }); allocs != 0 {
+		t.Errorf("Equal of a plain struct allocates %v times, want 0", allocs)
+	}
+	type labelled struct {
+		N    int
+		Name *string
+	}
+	x, y := "x", "x"
+	if !Equal(labelled{1, &x}, labelled{1, &y}) {
+		t.Error("a struct holding a pointer is no longer compared deeply")
+	}
+	if Equal(insets{Top: math.NaN()}, insets{Top: math.NaN()}) {
+		t.Error("a NaN inside a struct reads as unchanged")
+	}
+}
