@@ -1,7 +1,9 @@
 package ggui
 
 import (
+	"sync"
 	"unicode/utf8"
+	"unsafe"
 
 	"github.com/go-text/typesetting/segmenter"
 )
@@ -14,7 +16,40 @@ import (
 // ideographs, and not before closing punctuation or after opening
 // punctuation. Korean breaks at spaces only, as CSS's word-break: keep-all
 // has it: UAX #14 would break between any two syllables.
+//
+// The breaks of the strings last asked about are kept, since text wraps
+// again at each width it is laid out at, and finding them takes as long as
+// the rest of wrapping. The slice returned is shared: do not change it.
 func lineBreaks(p string) []int {
+	c := &lineBreakCache
+	c.Lock()
+	defer c.Unlock()
+	for _, e := range c.entries {
+		if len(e.s) == len(p) && unsafe.StringData(e.s) == unsafe.StringData(p) {
+			return e.breaks
+		}
+	}
+	breaks := findLineBreaks(p)
+	c.entries[c.next] = lineBreakEntry{s: p, breaks: breaks}
+	c.next = (c.next + 1) % len(c.entries)
+	return breaks
+}
+
+// lineBreakCache holds the breaks of the strings lineBreaks found last. An
+// entry keeps its string alive, so a string at the same address and length
+// is the same string.
+var lineBreakCache struct {
+	sync.Mutex
+	entries [16]lineBreakEntry
+	next    int
+}
+
+type lineBreakEntry struct {
+	s      string
+	breaks []int
+}
+
+func findLineBreaks(p string) []int {
 	// Decode by hand rather than with InitWithString, so that a byte of
 	// invalid UTF-8 is one rune and every rune has its offset.
 	runes := make([]rune, 0, len(p))

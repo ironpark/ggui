@@ -1,7 +1,9 @@
 package ggui
 
 import (
+	"math"
 	"slices"
+	"strings"
 	"testing"
 	"unicode/utf8"
 )
@@ -80,4 +82,31 @@ func TestWrapBreaksWhereUAX14Allows(t *testing.T) {
 			t.Errorf("%s: %q at %v wraps to %q, want %q", c.name, c.s, c.maxW, got, c.want)
 		}
 	}
+}
+
+// BenchmarkWrapParagraph wraps a paragraph to a new width each time, as a
+// window being resized does.
+func BenchmarkWrapParagraph(b *testing.B) {
+	face := wrapFace()
+	s := benchParagraph()
+	w := 200.0
+	for b.Loop() {
+		w = 200 + math.Mod(w*1.618, 300)
+		wrapSpans(s, face, w)
+	}
+}
+
+// benchParagraph is about 2,000 bytes of words that do not repeat.
+func benchParagraph() string {
+	var b strings.Builder
+	x := uint32(1)
+	for b.Len() < 2000 {
+		n := 2 + x%8
+		for range n {
+			x = x*1664525 + 1013904223
+			b.WriteByte(byte('a' + x>>24%26))
+		}
+		b.WriteByte(' ')
+	}
+	return b.String()
 }
