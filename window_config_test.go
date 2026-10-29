@@ -4,7 +4,7 @@ import (
 	"image"
 	"testing"
 
-	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggwd"
 	"github.com/ironpark/ggui/runtime"
 )
 
@@ -86,17 +86,17 @@ func TestAppQuitEndsRunAtTheNextEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Events for no window, and a wake before the app runs, do nothing.
-	if err := a.handleEvent(ggfx.FrameEvent{}); err != nil {
+	if err := a.handleEvent(ggwd.FrameEvent{}); err != nil {
 		t.Fatalf("an event for no window gave %v", err)
 	}
-	if err := a.handleEvent(ggfx.WakeEvent{}); err != nil {
+	if err := a.handleEvent(ggwd.WakeEvent{}); err != nil {
 		t.Fatalf("a wake before Run gave %v", err)
 	}
 	if a.Closed() {
 		t.Fatal("an ignored event closed the app")
 	}
 	a.Quit()
-	if err := a.handleEvent(ggfx.WakeEvent{}); err != ggfx.Termination {
+	if err := a.handleEvent(ggwd.WakeEvent{}); err != ggwd.Termination {
 		t.Fatalf("the event after Quit gave %v, want Termination", err)
 	}
 	if !a.Closed() || !extra.Closed() || len(a.Windows()) != 0 {
@@ -106,18 +106,18 @@ func TestAppQuitEndsRunAtTheNextEvent(t *testing.T) {
 
 func TestEventWindowIsTheWindowEachEventNames(t *testing.T) {
 	t.Parallel()
-	nw := new(ggfx.Window)
-	for _, ev := range []ggfx.Event{
-		ggfx.FrameEvent{Window: nw}, ggfx.ResizeEvent{Window: nw}, ggfx.FocusEvent{Window: nw},
-		ggfx.WindowStateEvent{Window: nw}, ggfx.CloseEvent{Window: nw}, ggfx.KeyEvent{Window: nw}, ggfx.TextEvent{Window: nw},
-		ggfx.CompositionEvent{Window: nw}, ggfx.MouseMoveEvent{Window: nw}, ggfx.MouseButtonEvent{Window: nw},
-		ggfx.ScrollEvent{Window: nw}, ggfx.TouchEvent{Window: nw}, ggfx.DragEvent{Window: nw}, ggfx.DropEvent{Window: nw},
+	nw := new(ggwd.Window)
+	for _, ev := range []ggwd.Event{
+		ggwd.FrameEvent{Window: nw}, ggwd.ResizeEvent{Window: nw}, ggwd.FocusEvent{Window: nw},
+		ggwd.WindowStateEvent{Window: nw}, ggwd.CloseEvent{Window: nw}, ggwd.KeyEvent{Window: nw}, ggwd.TextEvent{Window: nw},
+		ggwd.CompositionEvent{Window: nw}, ggwd.MouseMoveEvent{Window: nw}, ggwd.MouseButtonEvent{Window: nw},
+		ggwd.ScrollEvent{Window: nw}, ggwd.TouchEvent{Window: nw}, ggwd.DragEvent{Window: nw}, ggwd.DropEvent{Window: nw},
 	} {
 		if got := eventWindow(ev); got != nw {
 			t.Errorf("eventWindow(%T) = %p, want the event's window", ev, got)
 		}
 	}
-	for _, ev := range []ggfx.Event{ggfx.StartEvent{}, ggfx.WakeEvent{}} {
+	for _, ev := range []ggwd.Event{ggwd.StartEvent{}, ggwd.WakeEvent{}} {
 		if got := eventWindow(ev); got != nil {
 			t.Errorf("eventWindow(%T) = %p, want none", ev, got)
 		}
@@ -134,15 +134,15 @@ func TestWindowStateFollowsTheStateEvents(t *testing.T) {
 	a := New(Config{}, func() Widget { return Box() })
 	defer a.Close()
 	for _, c := range []struct {
-		from ggfx.WindowState
+		from ggwd.WindowState
 		want WindowState
 	}{
-		{ggfx.WindowStateMaximized, WindowMaximized},
-		{ggfx.WindowStateMinimized, WindowMinimized},
-		{ggfx.WindowStateFullscreen, WindowFullscreen},
-		{ggfx.WindowStateNormal, WindowNormal},
+		{ggwd.WindowStateMaximized, WindowMaximized},
+		{ggwd.WindowStateMinimized, WindowMinimized},
+		{ggwd.WindowStateFullscreen, WindowFullscreen},
+		{ggwd.WindowStateNormal, WindowNormal},
 	} {
-		if err := a.handle(ggfx.WindowStateEvent{State: c.from}); err != nil {
+		if err := a.handle(ggwd.WindowStateEvent{State: c.from}); err != nil {
 			t.Fatal(err)
 		}
 		a.runPosted()

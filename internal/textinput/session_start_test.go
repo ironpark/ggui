@@ -5,7 +5,7 @@ package textinput
 import (
 	"testing"
 
-	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggwd"
 )
 
 // useTextInput makes t the current text input for the test, as WithWindow
@@ -63,7 +63,7 @@ func TestComposerWithoutWindowStartsNoSession(t *testing.T) {
 }
 
 func TestCloseWindowCancelsItsSession(t *testing.T) {
-	w := new(ggfx.Window)
+	w := new(ggwd.Window)
 	input := inputFor(w)
 	owner := openSession(input)
 	input.events.send(textInputState{Text: "a", CommitKind: commitRegular})

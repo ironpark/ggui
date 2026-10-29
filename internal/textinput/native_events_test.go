@@ -5,13 +5,13 @@ package textinput
 import (
 	"testing"
 
-	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggwd"
 )
 
 func TestTextBeforeFocusSeedsTheSameFrameSession(t *testing.T) {
-	w := new(ggfx.Window)
+	w := new(ggwd.Window)
 	defer delete(windowInputs, w)
-	if HandleEvent(ggfx.TextEvent{Window: w, Text: "t"}) {
+	if HandleEvent(ggwd.TextEvent{Window: w, Text: "t"}) {
 		t.Fatal("text was consumed before an editable target existed")
 	}
 	input := inputFor(w)
@@ -27,7 +27,7 @@ func TestTextBeforeFocusSeedsTheSameFrameSession(t *testing.T) {
 	}
 }
 
-func testWindowInput(t *testing.T, w *ggfx.Window) *textInput {
+func testWindowInput(t *testing.T, w *ggwd.Window) *textInput {
 	t.Helper()
 	input := inputFor(w)
 	input.impl.enabled = true
@@ -36,13 +36,13 @@ func testWindowInput(t *testing.T, w *ggfx.Window) *textInput {
 }
 
 func TestNativeCommitCarriesNextKoreanComposition(t *testing.T) {
-	w := new(ggfx.Window)
+	w := new(ggwd.Window)
 	input := testWindowInput(t, w)
 	ch, _ := input.events.start()
-	HandleEvent(ggfx.CompositionEvent{Window: w, Text: "한", Start: 3, End: 3})
-	HandleEvent(ggfx.CompositionEvent{Window: w, Done: true})
-	HandleEvent(ggfx.TextEvent{Window: w, Text: "한"})
-	HandleEvent(ggfx.CompositionEvent{Window: w, Text: "ㄱ", Start: 3, End: 3})
+	HandleEvent(ggwd.CompositionEvent{Window: w, Text: "한", Start: 3, End: 3})
+	HandleEvent(ggwd.CompositionEvent{Window: w, Done: true})
+	HandleEvent(ggwd.TextEvent{Window: w, Text: "한"})
+	HandleEvent(ggwd.CompositionEvent{Window: w, Text: "ㄱ", Start: 3, End: 3})
 	var states []textInputState
 	for s := range ch {
 		states = append(states, s)
@@ -62,12 +62,12 @@ func TestNativeCommitCarriesNextKoreanComposition(t *testing.T) {
 }
 
 func TestNativeEventsStayWithOwningWindow(t *testing.T) {
-	a, b := new(ggfx.Window), new(ggfx.Window)
+	a, b := new(ggwd.Window), new(ggwd.Window)
 	ia, ib := testWindowInput(t, a), testWindowInput(t, b)
 	ca, _ := ia.events.start()
 	cb, _ := ib.events.start()
-	HandleEvent(ggfx.TextEvent{Window: b, Text: "乙"})
-	HandleEvent(ggfx.TextEvent{Window: a, Text: "甲"})
+	HandleEvent(ggwd.TextEvent{Window: b, Text: "乙"})
+	HandleEvent(ggwd.TextEvent{Window: a, Text: "甲"})
 	if got := <-ca; got.Text != "甲" {
 		t.Fatalf("first window: %+v", got)
 	}
@@ -77,10 +77,10 @@ func TestNativeEventsStayWithOwningWindow(t *testing.T) {
 }
 
 func TestNativeReplacementIsRelativeToReceivingCaret(t *testing.T) {
-	w := new(ggfx.Window)
+	w := new(ggwd.Window)
 	input := testWindowInput(t, w)
 	ch, _ := input.events.start()
-	HandleEvent(ggfx.TextEvent{Window: w, Text: "é", HasReplacement: true, ReplacementStart: -1, ReplacementEnd: 0})
+	HandleEvent(ggwd.TextEvent{Window: w, Text: "é", HasReplacement: true, ReplacementStart: -1, ReplacementEnd: 0})
 	s := <-ch
 	if !s.ReplacementRelativeToCaret || s.ReplacementStartInBytes != -1 || s.ReplacementEndInBytes != 0 {
 		t.Fatalf("replacement: %+v", s)
@@ -88,10 +88,10 @@ func TestNativeReplacementIsRelativeToReceivingCaret(t *testing.T) {
 }
 
 func TestNativeTargetWithoutEditorDoesNotConsumeText(t *testing.T) {
-	w := new(ggfx.Window)
+	w := new(ggwd.Window)
 	input := inputFor(w)
 	defer delete(windowInputs, w)
-	if HandleEvent(ggfx.TextEvent{Window: w, Text: "x"}) {
+	if HandleEvent(ggwd.TextEvent{Window: w, Text: "x"}) {
 		t.Fatal("unfocused target consumed text")
 	}
 	restore := WithWindow(w)

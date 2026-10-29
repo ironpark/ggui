@@ -13,7 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggwd"
 	"github.com/ironpark/ggui/a11y"
 )
 
@@ -95,7 +95,7 @@ func (f *axFrame) at(k axKey) (a11y.SemNode, bool) {
 type axPlatform interface {
 	// setWindow attaches the platform tree to w's native window, and close
 	// detaches it before the window goes away.
-	setWindow(b *Bridge, w *ggfx.Window)
+	setWindow(b *Bridge, w *ggwd.Window)
 	close()
 	// active reports whether an assistive technology is attached. It is
 	// asked once a second rather than once a frame, since it is the one
@@ -162,7 +162,7 @@ func (b *Bridge) Start(act func(a11y.NodeID, a11y.Action), mode a11y.Mode) {
 
 // SetWindow binds this bridge to its owning window. Call after Start and before
 // publishing its first tree.
-func (b *Bridge) SetWindow(w *ggfx.Window) {
+func (b *Bridge) SetWindow(w *ggwd.Window) {
 	if b.plat != nil {
 		b.plat.setWindow(b, w)
 	}

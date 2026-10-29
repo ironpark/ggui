@@ -3,18 +3,18 @@ package ggui
 import (
 	"slices"
 
-	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggwd"
 )
 
 // touchInput maps a primary finger to the single pointer used by widgets.
 // Once it lifts, wait for all fingers to lift before starting another press.
 type touchInput struct {
-	id              ggfx.TouchID
+	id              ggwd.TouchID
 	active, waiting bool
 	pos             Point
 }
 
-func (t *touchInput) apply(f *frameInput, ids []ggfx.TouchID, position func(ggfx.TouchID) Point) {
+func (t *touchInput) apply(f *frameInput, ids []ggwd.TouchID, position func(ggwd.TouchID) Point) {
 	if !t.active && !t.waiting && len(ids) == 0 {
 		return
 	}

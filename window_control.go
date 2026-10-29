@@ -3,7 +3,7 @@ package ggui
 import (
 	"image"
 
-	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggwd"
 )
 
 // The methods here change the native window. Called before the window
@@ -34,7 +34,7 @@ func (w *Window) Size() Size {
 // SetSize resizes the window's content to size, in logical pixels.
 func (w *Window) SetSize(size Size) {
 	w.cfg.Width, w.cfg.Height = int(size.W), int(size.H)
-	w.native(func(nw *ggfx.Window) { nw.SetSize(w.cfg.Width, w.cfg.Height) })
+	w.native(func(nw *ggwd.Window) { nw.SetSize(w.cfg.Width, w.cfg.Height) })
 }
 
 // Position returns where the window is on the screen, in logical pixels.
@@ -68,7 +68,7 @@ func (w *Window) SetSizeLimits(minSize, maxSize Size) {
 		}
 		return v
 	}
-	w.native(func(nw *ggfx.Window) {
+	w.native(func(nw *ggwd.Window) {
 		nw.SetSizeLimits(limit(w.cfg.MinWidth), limit(w.cfg.MinHeight), limit(w.cfg.MaxWidth), limit(w.cfg.MaxHeight))
 	})
 }
@@ -84,7 +84,7 @@ func (w *Window) SetResizable(resizable bool) {
 // SetFrameless shows or hides the window's title bar and border.
 func (w *Window) SetFrameless(frameless bool) {
 	w.cfg.Frameless = frameless
-	w.native(func(nw *ggfx.Window) { nw.SetDecorated(!frameless) })
+	w.native(func(nw *ggwd.Window) { nw.SetDecorated(!frameless) })
 }
 
 // SetAlwaysOnTop sets whether the window stays above ordinary windows.
@@ -104,35 +104,35 @@ func (w *Window) SetIcon(icon []image.Image) {
 }
 
 // Minimize minimizes the window.
-func (w *Window) Minimize() { w.native((*ggfx.Window).Minimize) }
+func (w *Window) Minimize() { w.native((*ggwd.Window).Minimize) }
 
 // Maximize maximizes the window.
 func (w *Window) Maximize() {
 	w.cfg.Maximized = true
-	w.native((*ggfx.Window).Maximize)
+	w.native((*ggwd.Window).Maximize)
 }
 
 // Restore brings the window back from being minimized or maximized.
 func (w *Window) Restore() {
 	w.cfg.Maximized = false
-	w.native((*ggfx.Window).Restore)
+	w.native((*ggwd.Window).Restore)
 }
 
 // SetFullscreen puts the window into fullscreen or takes it out.
 func (w *Window) SetFullscreen(on bool) {
-	w.native(func(nw *ggfx.Window) { nw.SetFullscreen(on) })
+	w.native(func(nw *ggwd.Window) { nw.SetFullscreen(on) })
 }
 
 // Show shows a hidden window.
 func (w *Window) Show() {
 	w.cfg.Hidden = false
-	w.native((*ggfx.Window).Show)
+	w.native((*ggwd.Window).Show)
 }
 
 // Hide hides the window without closing it.
 func (w *Window) Hide() {
 	w.cfg.Hidden = true
-	w.native((*ggfx.Window).Hide)
+	w.native((*ggwd.Window).Hide)
 }
 
 // Visible reports whether the window is shown.
@@ -144,11 +144,11 @@ func (w *Window) Visible() bool {
 }
 
 // Focus brings the window to the front and gives it the keyboard focus.
-func (w *Window) Focus() { w.native((*ggfx.Window).Focus) }
+func (w *Window) Focus() { w.native((*ggwd.Window).Focus) }
 
 // RequestAttention asks for the user's attention, such as by bouncing the
 // dock icon or flashing the taskbar button, without taking the focus.
-func (w *Window) RequestAttention() { w.native((*ggfx.Window).RequestAttention) }
+func (w *Window) RequestAttention() { w.native((*ggwd.Window).RequestAttention) }
 
 // Focused follows whether the window has the keyboard focus.
 func (w *Window) Focused() Readable[bool] { return w.focused }
@@ -162,20 +162,20 @@ func (w *Window) State() Readable[WindowState] { return w.state }
 // native calls fn with the native window, when there is one. What fn
 // changes comes back as events: a ResizeEvent for the size and a
 // WindowStateEvent for the state, once the platform has animated it.
-func (w *Window) native(fn func(*ggfx.Window)) {
+func (w *Window) native(fn func(*ggwd.Window)) {
 	if nw := w.window.Load(); nw != nil {
 		fn(nw)
 	}
 }
 
 // windowState converts the engine's window state.
-func windowState(s ggfx.WindowState) WindowState {
+func windowState(s ggwd.WindowState) WindowState {
 	switch s {
-	case ggfx.WindowStateMinimized:
+	case ggwd.WindowStateMinimized:
 		return WindowMinimized
-	case ggfx.WindowStateMaximized:
+	case ggwd.WindowStateMaximized:
 		return WindowMaximized
-	case ggfx.WindowStateFullscreen:
+	case ggwd.WindowStateFullscreen:
 		return WindowFullscreen
 	}
 	return WindowNormal
@@ -190,7 +190,7 @@ type Screen struct {
 	Scale float64
 }
 
-func screenOf(m *ggfx.MonitorType) Screen {
+func screenOf(m *ggwd.MonitorType) Screen {
 	width, height := m.Size()
 	return Screen{Name: m.Name(), Size: Sz(float64(width), float64(height)), Scale: m.DeviceScaleFactor()}
 }
@@ -213,7 +213,7 @@ func Screens() []Screen {
 		return nil
 	}
 	var out []Screen
-	for _, m := range ggfx.AppendMonitors(nil) {
+	for _, m := range ggwd.AppendMonitors(nil) {
 		out = append(out, screenOf(m))
 	}
 	return out

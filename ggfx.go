@@ -1,7 +1,7 @@
 package ggui
 
 import (
-	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggwd"
 	"github.com/ironpark/ggip"
 )
 
@@ -26,21 +26,21 @@ const KeyMax = ggip.KeyMax
 
 // CursorShape is what the pointer looks like over a region; a widget picks
 // one when it registers the region with Hit or HitCursor.
-type CursorShape = ggfx.CursorShapeType
+type CursorShape = ggwd.CursorShapeType
 
 // The cursor shapes a platform offers. CursorShapeDefault is the arrow, and
 // the zero value, which means a region does not ask for a shape at all.
 const (
-	CursorShapeDefault    = ggfx.CursorShapeDefault
-	CursorShapeText       = ggfx.CursorShapeText
-	CursorShapeCrosshair  = ggfx.CursorShapeCrosshair
-	CursorShapePointer    = ggfx.CursorShapePointer
-	CursorShapeEWResize   = ggfx.CursorShapeEWResize
-	CursorShapeNSResize   = ggfx.CursorShapeNSResize
-	CursorShapeNESWResize = ggfx.CursorShapeNESWResize
-	CursorShapeNWSEResize = ggfx.CursorShapeNWSEResize
-	CursorShapeMove       = ggfx.CursorShapeMove
-	CursorShapeNotAllowed = ggfx.CursorShapeNotAllowed
+	CursorShapeDefault    = ggwd.CursorShapeDefault
+	CursorShapeText       = ggwd.CursorShapeText
+	CursorShapeCrosshair  = ggwd.CursorShapeCrosshair
+	CursorShapePointer    = ggwd.CursorShapePointer
+	CursorShapeEWResize   = ggwd.CursorShapeEWResize
+	CursorShapeNSResize   = ggwd.CursorShapeNSResize
+	CursorShapeNESWResize = ggwd.CursorShapeNESWResize
+	CursorShapeNWSEResize = ggwd.CursorShapeNWSEResize
+	CursorShapeMove       = ggwd.CursorShapeMove
+	CursorShapeNotAllowed = ggwd.CursorShapeNotAllowed
 )
 
 // MouseButton is which button a PointerEvent came from.
@@ -54,15 +54,15 @@ const (
 )
 
 // ScrollPhase is where a trackpad's scroll is in the gesture making it.
-type ScrollPhase = ggfx.ScrollPhase
+type ScrollPhase = ggwd.ScrollPhase
 
 const (
-	ScrollPhaseNone          = ggfx.ScrollPhaseNone          // a wheel, or no gesture reported
-	ScrollPhaseBegan         = ggfx.ScrollPhaseBegan         // the fingers start to move
-	ScrollPhaseChanged       = ggfx.ScrollPhaseChanged       // the fingers move on
-	ScrollPhaseEnded         = ggfx.ScrollPhaseEnded         // the fingers lift
-	ScrollPhaseMomentum      = ggfx.ScrollPhaseMomentum      // momentum after they lift
-	ScrollPhaseMomentumEnded = ggfx.ScrollPhaseMomentumEnded // the momentum stops
+	ScrollPhaseNone          = ggwd.ScrollPhaseNone          // a wheel, or no gesture reported
+	ScrollPhaseBegan         = ggwd.ScrollPhaseBegan         // the fingers start to move
+	ScrollPhaseChanged       = ggwd.ScrollPhaseChanged       // the fingers move on
+	ScrollPhaseEnded         = ggwd.ScrollPhaseEnded         // the fingers lift
+	ScrollPhaseMomentum      = ggwd.ScrollPhaseMomentum      // momentum after they lift
+	ScrollPhaseMomentumEnded = ggwd.ScrollPhaseMomentumEnded // the momentum stops
 )
 
 // laterPhase is the phase a frame's scrolls report, of what it had and

@@ -8,21 +8,21 @@ package textinput
 import (
 	"image"
 
-	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggwd"
 )
 
 // All accesses are from ggfx's event-handler goroutine. Each window keeps its
 // own session queue; WithWindow selects the context while that window runs a
 // frame. Sessions retain their owner even when another window handles events.
-var windowInputs = map[*ggfx.Window]*textInput{}
+var windowInputs = map[*ggwd.Window]*textInput{}
 
-func newTextInput(w *ggfx.Window) *textInput {
+func newTextInput(w *ggwd.Window) *textInput {
 	t := &textInput{}
 	t.impl.events, t.impl.window = &t.events, w
 	return t
 }
 
-func inputFor(w *ggfx.Window) *textInput {
+func inputFor(w *ggwd.Window) *textInput {
 	t := windowInputs[w]
 	if t == nil {
 		t = newTextInput(w)
@@ -31,7 +31,7 @@ func inputFor(w *ggfx.Window) *textInput {
 	return t
 }
 
-func WithWindow(w *ggfx.Window) func() {
+func WithWindow(w *ggwd.Window) func() {
 	old := theTextInput
 	theTextInput = inputFor(w)
 	return func() {
@@ -44,7 +44,7 @@ func WithWindow(w *ggfx.Window) func() {
 	}
 }
 
-func CloseWindow(w *ggfx.Window) {
+func CloseWindow(w *ggwd.Window) {
 	if t := windowInputs[w]; t != nil {
 		t.cancelSessionIfNeeded()
 		t.abandonTarget()
@@ -54,9 +54,9 @@ func CloseWindow(w *ggfx.Window) {
 
 // HandleEvent feeds the owning window's session without polling the platform.
 // A true result means a TextEvent was consumed by its editable target.
-func HandleEvent(event ggfx.Event) bool {
+func HandleEvent(event ggwd.Event) bool {
 	switch e := event.(type) {
-	case ggfx.CompositionEvent:
+	case ggwd.CompositionEvent:
 		t := windowInputs[e.Window]
 		if t == nil || !t.impl.enabled {
 			return false
@@ -65,7 +65,7 @@ func HandleEvent(event ggfx.Event) bool {
 			CompositionSelectionStartInBytes: e.Start, CompositionSelectionEndInBytes: e.End,
 			ReplacementStartInBytes: noReplacement, ReplacementEndInBytes: noReplacement})
 		return true
-	case ggfx.TextEvent:
+	case ggwd.TextEvent:
 		// The window's entry is made here if need be: the first character
 		// can arrive in the frame that focuses the field it is for.
 		t := inputFor(e.Window)
@@ -88,7 +88,7 @@ func HandleEvent(event ggfx.Event) bool {
 
 type textInputImpl struct {
 	events  *textInputEvents
-	window  *ggfx.Window
+	window  *ggwd.Window
 	enabled bool
 	rect    image.Rectangle // the caret last handed to the window
 	before  string          // the context last handed to the window

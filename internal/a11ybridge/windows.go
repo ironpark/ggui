@@ -5,7 +5,7 @@ package a11ybridge
 import (
 	"sync/atomic"
 
-	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggwd"
 	"github.com/ironpark/ggui/a11y"
 )
 
@@ -28,13 +28,13 @@ func init() { buildVtables() }
 
 type windowsAX struct {
 	bridge     *Bridge
-	window     *ggfx.Window
+	window     *ggwd.Window
 	root, hwnd atomic.Uintptr
 }
 
 func newAXPlatform() axPlatform { return &windowsAX{} }
 
-func (d *windowsAX) setWindow(b *Bridge, w *ggfx.Window) {
+func (d *windowsAX) setWindow(b *Bridge, w *ggwd.Window) {
 	d.bridge, d.window = b, w
 	h := w.NativeHandle()
 	if h == 0 {
@@ -74,7 +74,7 @@ func (d *windowsAX) close() {
 	h := d.hwnd.Swap(0)
 	root := d.root.Swap(0)
 	if h != 0 {
-		ggfx.RunOnMainThread(func() { procUiaReturnRawElementProvider.Call(h, 0, 0, 0) })
+		ggwd.RunOnMainThread(func() { procUiaReturnRawElementProvider.Call(h, 0, 0, 0) })
 	}
 	if root != 0 {
 		winObjectBridges.Delete(root)
@@ -136,7 +136,7 @@ func (d *windowsAX) notify(notes []axNote) {
 	if b == nil || winHandle(b) == 0 {
 		return
 	}
-	ggfx.RunOnMainThread(func() {
+	ggwd.RunOnMainThread(func() {
 		for _, n := range notes {
 			winPost(b, n)
 		}

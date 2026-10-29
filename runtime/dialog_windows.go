@@ -7,7 +7,7 @@ import (
 	"strings"
 	"unsafe"
 
-	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggwd"
 	"golang.org/x/sys/windows"
 )
 
@@ -102,7 +102,7 @@ type browseInfo struct {
 func showDialog(k dialogKind, d FileDialog, owner uintptr) (paths []string, err error) {
 	// The engine runs nothing on the main thread before it has a window.
 	err = ErrNotRunning
-	ggfx.RunOnMainThread(func() {
+	ggwd.RunOnMainThread(func() {
 		// Owned by the app's window, the dialog is modal to it and centred
 		// on it; without one it stands on its own.
 		if k == kindFolder {

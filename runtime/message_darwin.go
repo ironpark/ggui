@@ -4,8 +4,7 @@ package runtime
 
 import (
 	"github.com/ebitengine/purego/objc"
-	"github.com/ironpark/ggfx"
-
+	"github.com/ironpark/ggwd"
 	"github.com/ironpark/ggui/internal/platform/cocoa"
 )
 
@@ -34,7 +33,7 @@ const (
 // showMessage runs the alert on the main thread and waits for it.
 func showMessage(m Message, owner uintptr) (i int, err error) {
 	err = ErrNotRunning
-	ggfx.RunOnMainThread(func() { i, err = runAlert(m, objc.ID(owner)) })
+	ggwd.RunOnMainThread(func() { i, err = runAlert(m, objc.ID(owner)) })
 	return i, err
 }
 

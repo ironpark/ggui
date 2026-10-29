@@ -5,7 +5,7 @@ package runtime
 import (
 	"unsafe"
 
-	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggwd"
 )
 
 // A message is user32's MessageBoxW, whose buttons are fixed sets; see
@@ -45,7 +45,7 @@ func showMessage(m Message, owner uintptr) (i int, err error) {
 	body, caption := utf16z(text), utf16z(m.Title)
 	var r uintptr
 	ran := false
-	ggfx.RunOnMainThread(func() {
+	ggwd.RunOnMainThread(func() {
 		ran = true
 		r, _, _ = procMessageBoxW.Call(owner, uintptr(unsafe.Pointer(&body[0])), uintptr(unsafe.Pointer(&caption[0])), style)
 	})

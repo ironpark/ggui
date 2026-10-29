@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggwd"
 	"github.com/ironpark/ggip"
 	"github.com/ironpark/ggip/ggfxinput"
 	"github.com/ironpark/ggui/inspect"
@@ -78,8 +79,8 @@ func (c Config) withDefaults() Config {
 }
 
 // options is the ggfx form of c.
-func (c Config) options() *ggfx.WindowOptions {
-	o := &ggfx.WindowOptions{
+func (c Config) options() *ggwd.WindowOptions {
+	o := &ggwd.WindowOptions{
 		Title:       c.Title,
 		Width:       c.Width,
 		Height:      c.Height,
@@ -133,12 +134,12 @@ type Window struct {
 	touch  touchInput
 	cursor CursorShape
 
-	window        atomic.Pointer[ggfx.Window] // the native window, once open; read by Post from any goroutine
+	window        atomic.Pointer[ggwd.Window] // the native window, once open; read by Post from any goroutine
 	pending       frameInput                  // input gathered from events since the last frame
 	pos           Point                       // the last known pointer position, in logical pixels
 	wakeTimer     *time.Timer
 	keyboard      ggip.Keyboard          // keys held, for Mods
-	touches       map[ggfx.TouchID]Point // touches in progress, in logical pixels
+	touches       map[ggwd.TouchID]Point // touches in progress, in logical pixels
 	ax            a11ybridge.Bridge
 	semWanted     atomic.Bool  // a caller of Semantics reads the tree
 	performs      atomic.Int32 // Perform calls not yet carried out, which need a tree
@@ -205,7 +206,7 @@ func (w *Window) open() error {
 		setRunning(prev)
 	}
 	w.ax.Start(w.Perform, w.cfg.Accessibility)
-	nw, err := ggfx.NewWindow(w.cfg.options())
+	nw, err := ggwd.NewWindow(w.cfg.options())
 	if err != nil {
 		w.release()
 		return err
@@ -279,11 +280,11 @@ func (w *Window) App() *App { return w.app }
 
 // handle routes one of the window's events. Input is gathered until the
 // next frame, which it requests; a FrameEvent runs the frame.
-func (w *Window) handle(ev ggfx.Event) error {
+func (w *Window) handle(ev ggwd.Event) error {
 	switch ev := ev.(type) {
-	case ggfx.FrameEvent:
+	case ggwd.FrameEvent:
 		return w.runFrameEvent(ev)
-	case ggfx.KeyEvent:
+	case ggwd.KeyEvent:
 		key, ok := ggfxinput.Key(ev.Key)
 		if !ok {
 			break
@@ -304,18 +305,18 @@ func (w *Window) handle(ev ggfx.Event) error {
 			}
 		}
 		w.requestFrame()
-	case ggfx.CompositionEvent:
+	case ggwd.CompositionEvent:
 		textinput.HandleEvent(ev)
 		w.requestFrame()
-	case ggfx.TextEvent:
+	case ggwd.TextEvent:
 		if !textinput.HandleEvent(ev) {
 			w.pending.text += ev.Text
 		}
 		w.requestFrame()
-	case ggfx.MouseMoveEvent:
+	case ggwd.MouseMoveEvent:
 		w.pos = Pt(ev.X, ev.Y)
 		w.requestFrame()
-	case ggfx.MouseButtonEvent:
+	case ggwd.MouseButtonEvent:
 		w.pos = Pt(ev.X, ev.Y)
 		// A modifier pressed while another window had the focus reached
 		// no KeyEvent here; the click still sees it.
@@ -327,34 +328,34 @@ func (w *Window) handle(ev ggfx.Event) error {
 			w.pending.up = append(w.pending.up, ggfxinput.MouseButton(ev.Button))
 		}
 		w.requestFrame()
-	case ggfx.ScrollEvent:
+	case ggwd.ScrollEvent:
 		w.syncMods(ggfxinput.Mods(ev.Modifiers))
 		w.pending.mods = w.pending.mods.Or(ggfxinput.Mods(ev.Modifiers))
 		w.pending.wheel = w.pending.wheel.Add(Pt(ev.X, ev.Y))
 		w.pending.phase = laterPhase(w.pending.phase, ev.Phase)
 		w.requestFrame()
-	case ggfx.TouchEvent:
+	case ggwd.TouchEvent:
 		if w.touches == nil {
-			w.touches = map[ggfx.TouchID]Point{}
+			w.touches = map[ggwd.TouchID]Point{}
 		}
-		if ev.Phase == ggfx.TouchPhaseEnded {
+		if ev.Phase == ggwd.TouchPhaseEnded {
 			delete(w.touches, ev.ID)
 		} else {
 			w.touches[ev.ID] = Pt(ev.X, ev.Y)
 		}
 		w.requestFrame()
-	case ggfx.DragEvent:
+	case ggwd.DragEvent:
 		switch ev.Phase {
-		case ggfx.DragEntered, ggfx.DragMoved:
+		case ggwd.DragEntered, ggwd.DragMoved:
 			w.dragOver, w.dragAt = true, Pt(ev.X, ev.Y)
-		case ggfx.DragExited, ggfx.DragEnded:
+		case ggwd.DragExited, ggwd.DragEnded:
 			w.dragOver = false
 		}
 		w.requestFrame()
-	case ggfx.DropEvent:
+	case ggwd.DropEvent:
 		w.pending.drop = append(w.pending.drop, droppedFiles(ev.Files)...)
 		w.requestFrame()
-	case ggfx.CloseEvent:
+	case ggwd.CloseEvent:
 		if len(w.closeRequests) > 0 {
 			// The handlers decide in a frame, where they may put up a
 			// question; the window stays until they agree or Close is called.
@@ -369,13 +370,13 @@ func (w *Window) handle(ev ggfx.Event) error {
 		// The window closes after this event. Dispose the tree and detach
 		// the native hooks first, while the window still exists.
 		w.release()
-	case ggfx.FocusEvent:
+	case ggwd.FocusEvent:
 		if !ev.Focused {
 			// Releases are not reported while another window has the focus.
 			w.keyboard.Reset()
 		}
 		w.post(func() { w.focused.Set(ev.Focused) })
-	case ggfx.WindowStateEvent:
+	case ggwd.WindowStateEvent:
 		w.post(func() { w.state.Set(windowState(ev.State)) })
 	}
 	return nil
@@ -530,7 +531,7 @@ func (w *Window) SetInspector(o InspectorOptions) {
 // runFrameEvent runs one frame: the OnFrame handlers and posted work, then
 // the input gathered since the last frame, then the reactive settle, layout
 // and paint. It asks for the next frame while something is still moving.
-func (w *Window) runFrameEvent(ev ggfx.FrameEvent) error {
+func (w *Window) runFrameEvent(ev ggwd.FrameEvent) error {
 	if w.frameErr != nil {
 		return w.frameErr
 	}
@@ -676,12 +677,12 @@ func (w *Window) takeInput() frameInput {
 	// The union gathered from the frame's key presses, or the held keys
 	// alone when there were none.
 	f.mods = f.mods.Or(w.keyboard.Mods())
-	ids := make([]ggfx.TouchID, 0, len(w.touches))
+	ids := make([]ggwd.TouchID, 0, len(w.touches))
 	for id := range w.touches {
 		ids = append(ids, id)
 	}
 	slices.Sort(ids)
-	w.touch.apply(&f, ids, func(id ggfx.TouchID) Point { return w.touches[id] })
+	w.touch.apply(&f, ids, func(id ggwd.TouchID) Point { return w.touches[id] })
 	f.drag, f.dragAt = w.dragOver, w.dragAt
 	return f
 }

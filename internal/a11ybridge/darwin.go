@@ -14,7 +14,7 @@ import (
 	"github.com/ebitengine/purego/cstrings"
 	"github.com/ebitengine/purego/objc"
 
-	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggwd"
 
 	"github.com/ironpark/ggui/a11y"
 	"github.com/ironpark/ggui/internal/platform/cocoa"
@@ -78,7 +78,7 @@ func nsNumber(v float64) objc.ID {
 type darwinAX struct {
 	container objc.ID
 	bridge    *Bridge
-	window    *ggfx.Window
+	window    *ggwd.Window
 }
 
 // newAXPlatform returns the macOS bridge. Nothing is created here: the
@@ -90,14 +90,14 @@ func newAXPlatform() axPlatform { return &darwinAX{} }
 // would put a main-thread round trip in the middle of every paint.
 func (d *darwinAX) active() bool {
 	var on bool
-	ggfx.RunOnMainThread(func() {
+	ggwd.RunOnMainThread(func() {
 		on = axIDNSWorkspace.Send(axSelSharedWorkspace).Send(axSelVoiceOverEnabled) != 0
 	})
 	return on
 }
 
 // setWindow uses the container owned by ggfx; ggui never inserts a view.
-func (d *darwinAX) setWindow(b *Bridge, w *ggfx.Window) {
+func (d *darwinAX) setWindow(b *Bridge, w *ggwd.Window) {
 	d.bridge, d.window = b, w
 	d.container = objc.ID(w.AccessibilityView())
 	w.SetAccessibilityHandlers(func() uintptr {
@@ -518,7 +518,7 @@ func axPriority(loud bool) int32 {
 // is the only thread they may be posted from. Elements are resolved here
 // rather than in the diff, because making one is also main-thread work.
 func (d *darwinAX) notify(notes []axNote) {
-	ggfx.RunOnMainThread(func() {
+	ggwd.RunOnMainThread(func() {
 		b := d.bridge
 		if b == nil || d.container == 0 {
 			return

@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggwd"
 )
 
 // Appearance is the light or dark look of what the platform draws for the
@@ -40,14 +40,14 @@ func SetAppearance(a Appearance) {
 // applyAppearance hands the appearance to the engine, which needs a
 // running app to change a window.
 func applyAppearance() {
-	mode := ggfx.ColorModeUnknown
+	mode := ggwd.ColorModeUnknown
 	switch Appearance(appearance.Load()) {
 	case AppearanceLight:
-		mode = ggfx.ColorModeLight
+		mode = ggwd.ColorModeLight
 	case AppearanceDark:
-		mode = ggfx.ColorModeDark
+		mode = ggwd.ColorModeDark
 	}
-	ggfx.SetPreferredColorMode(mode)
+	ggwd.SetPreferredColorMode(mode)
 }
 
 var (
@@ -80,7 +80,7 @@ func watchSystemDark() {
 		if !appRunning.Load() {
 			continue
 		}
-		dark := ggfx.SystemColorMode() == ggfx.ColorModeDark
+		dark := ggwd.SystemColorMode() == ggwd.ColorModeDark
 		if dark == last {
 			continue
 		}

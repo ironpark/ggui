@@ -7,8 +7,7 @@ import (
 
 	"github.com/ebitengine/purego/cstrings"
 	"github.com/ebitengine/purego/objc"
-	"github.com/ironpark/ggfx"
-
+	"github.com/ironpark/ggwd"
 	"github.com/ironpark/ggui/internal/platform/cocoa"
 )
 
@@ -62,7 +61,7 @@ var sheetDone = sync.OnceValue(func() *cocoa.Block {
 func showDialog(k dialogKind, d FileDialog, owner uintptr) (paths []string, err error) {
 	// The engine runs nothing on the main thread before it has a window.
 	err = ErrNotRunning
-	ggfx.RunOnMainThread(func() { paths, err = runPanel(k, d, owner) })
+	ggwd.RunOnMainThread(func() { paths, err = runPanel(k, d, owner) })
 	return paths, err
 }
 

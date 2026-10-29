@@ -7,8 +7,7 @@ import (
 	"unsafe"
 
 	"github.com/ebitengine/purego/objc"
-	"github.com/ironpark/ggfx"
-
+	"github.com/ironpark/ggwd"
 	"github.com/ironpark/ggui/internal/platform/cocoa"
 )
 
@@ -143,7 +142,7 @@ func Handle(selected func(id int)) {
 // item whose Items are its entries. It needs a running app: before the
 // engine has a window it does nothing.
 func Set(menus []Item) {
-	ggfx.RunOnMainThread(func() { install(menus) })
+	ggwd.RunOnMainThread(func() { install(menus) })
 }
 
 // install swaps the menus in. It runs on the main thread.
@@ -257,7 +256,7 @@ func state(checked bool) int {
 
 // SetEnabled enables or disables the action item with the id.
 func SetEnabled(id int, on bool) {
-	ggfx.RunOnMainThread(func() {
+	ggwd.RunOnMainThread(func() {
 		if it := item(id); it != 0 {
 			it.Send(selSetEnabled, on)
 		}
@@ -267,7 +266,7 @@ func SetEnabled(id int, on bool) {
 // SetChecked puts a check mark by the action item with the id, or takes it
 // away.
 func SetChecked(id int, on bool) {
-	ggfx.RunOnMainThread(func() {
+	ggwd.RunOnMainThread(func() {
 		if it := item(id); it != 0 {
 			it.Send(selSetState, state(on))
 		}
@@ -283,7 +282,7 @@ func item(id int) objc.ID {
 // SetTray shows t in the status area as the icon named key, making it or
 // replacing what it showed. It needs a running app, as Set does.
 func SetTray(key int, t Tray) {
-	ggfx.RunOnMainThread(func() { installTray(key, t) })
+	ggwd.RunOnMainThread(func() { installTray(key, t) })
 }
 
 // installTray makes or updates a status item. It runs on the main thread.
@@ -341,7 +340,7 @@ func trayImage(png []byte, template bool) objc.ID {
 
 // RemoveTray takes the icon named key out of the status area.
 func RemoveTray(key int) {
-	ggfx.RunOnMainThread(func() {
+	ggwd.RunOnMainThread(func() {
 		s := trays[key]
 		if s == nil {
 			return

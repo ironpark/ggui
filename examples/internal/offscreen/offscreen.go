@@ -7,28 +7,29 @@ import (
 	"os"
 
 	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggwd"
 )
 
 // Run calls step on every frame until step reports that it is done or fails.
 // The graphics driver draws and reads back pixels only inside a frame, so Run
 // opens a window for the frames, but keeps it hidden: nothing is shown.
 func Run(step func() (done bool, err error)) error {
-	var window *ggfx.Window
-	return ggfx.Run(ggfx.HandlerFunc(func(ev ggfx.Event) error {
+	var window *ggwd.Window
+	return ggwd.Run(ggwd.HandlerFunc(func(ev ggwd.Event) error {
 		switch ev.(type) {
-		case ggfx.StartEvent:
-			w, err := ggfx.NewWindow(&ggfx.WindowOptions{Title: "ggui render", Width: 64, Height: 64, Hidden: true})
+		case ggwd.StartEvent:
+			w, err := ggwd.NewWindow(&ggwd.WindowOptions{Title: "ggui render", Width: 64, Height: 64, Hidden: true})
 			if err != nil {
 				return err
 			}
 			window = w
-		case ggfx.FrameEvent:
+		case ggwd.FrameEvent:
 			done, err := step()
 			if err != nil {
 				return err
 			}
 			if done {
-				return ggfx.Termination
+				return ggwd.Termination
 			}
 			window.RequestFrame()
 		}

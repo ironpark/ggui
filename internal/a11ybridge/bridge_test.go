@@ -3,7 +3,7 @@ package a11ybridge
 import (
 	"testing"
 
-	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggwd"
 	"github.com/ironpark/ggui/a11y"
 )
 
@@ -27,7 +27,7 @@ func newAXFake(on bool) *axFake {
 
 func (f *axFake) active() bool { f.asked++; return f.on }
 
-func (f *axFake) setWindow(*Bridge, *ggfx.Window) {}
+func (f *axFake) setWindow(*Bridge, *ggwd.Window) {}
 func (f *axFake) close()                          {}
 
 func (f *axFake) element(handle int64) uintptr {

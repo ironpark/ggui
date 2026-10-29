@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggwd"
 	"github.com/ironpark/ggui/a11y"
 	"github.com/ironpark/ggui/internal/nativemenu"
 	"github.com/ironpark/ggui/internal/reactive"
@@ -172,21 +172,21 @@ func (a *App) Run() error {
 	runningApp.Store(a)
 	// Holding a key on macOS pops up the accent menu, as it does in every
 	// text field on the platform; text editing relies on it.
-	return ggfx.Run(ggfx.HandlerFunc(a.handleEvent), &ggfx.RunOptions{ApplePressAndHoldEnabled: true})
+	return ggwd.Run(ggwd.HandlerFunc(a.handleEvent), &ggwd.RunOptions{ApplePressAndHoldEnabled: true})
 }
 
 // handleEvent is the App's ggfx.Handler. It opens the windows made before
 // Run when the engine starts and hands every other event to the window it
 // is for.
-func (a *App) handleEvent(ev ggfx.Event) error {
+func (a *App) handleEvent(ev ggwd.Event) error {
 	if a.quit.Load() {
 		a.Close()
-		return ggfx.Termination
+		return ggwd.Termination
 	}
-	if _, ok := ev.(ggfx.WakeEvent); ok {
+	if _, ok := ev.(ggwd.WakeEvent); ok {
 		return a.drain()
 	}
-	if _, ok := ev.(ggfx.StartEvent); ok {
+	if _, ok := ev.(ggwd.StartEvent); ok {
 		a.running = true
 		if Appearance(appearance.Load()) != AppearanceSystem {
 			applyAppearance()
@@ -211,13 +211,13 @@ func (a *App) handleEvent(ev ggfx.Event) error {
 	if w == nil {
 		return nil
 	}
-	if f, ok := ev.(ggfx.FocusEvent); ok && f.Focused {
+	if f, ok := ev.(ggwd.FocusEvent); ok && f.Focused {
 		a.focus.Store(w)
 	}
 	if err := w.handle(ev); err != nil {
 		return err
 	}
-	if _, ok := ev.(ggfx.FrameEvent); ok {
+	if _, ok := ev.(ggwd.FrameEvent); ok {
 		if err := a.follow(w); err != nil {
 			return err
 		}
@@ -225,7 +225,7 @@ func (a *App) handleEvent(ev ggfx.Event) error {
 	a.forgetClosed()
 	if a.quit.Load() {
 		a.Close()
-		return ggfx.Termination
+		return ggwd.Termination
 	}
 	return nil
 }
@@ -242,10 +242,10 @@ func (a *App) wakeUp() {
 		return
 	}
 	if a.draining.Load() {
-		time.AfterFunc(wakeDelay, ggfx.Wake)
+		time.AfterFunc(wakeDelay, ggwd.Wake)
 		return
 	}
-	ggfx.Wake()
+	ggwd.Wake()
 }
 
 // drain runs every window's posted work, settles what it changed and asks
@@ -274,13 +274,13 @@ func (a *App) drain() error {
 	a.forgetClosed()
 	if a.quit.Load() {
 		a.Close()
-		return ggfx.Termination
+		return ggwd.Termination
 	}
 	return nil
 }
 
 // windowFor is the open window whose native window is nw.
-func (a *App) windowFor(nw *ggfx.Window) *Window {
+func (a *App) windowFor(nw *ggwd.Window) *Window {
 	if nw == nil {
 		return nil
 	}
@@ -321,35 +321,35 @@ func (a *App) forgetClosed() {
 }
 
 // eventWindow is the window ev is for, or nil for an event that has none.
-func eventWindow(ev ggfx.Event) *ggfx.Window {
+func eventWindow(ev ggwd.Event) *ggwd.Window {
 	switch ev := ev.(type) {
-	case ggfx.FrameEvent:
+	case ggwd.FrameEvent:
 		return ev.Window
-	case ggfx.ResizeEvent:
+	case ggwd.ResizeEvent:
 		return ev.Window
-	case ggfx.FocusEvent:
+	case ggwd.FocusEvent:
 		return ev.Window
-	case ggfx.WindowStateEvent:
+	case ggwd.WindowStateEvent:
 		return ev.Window
-	case ggfx.CloseEvent:
+	case ggwd.CloseEvent:
 		return ev.Window
-	case ggfx.KeyEvent:
+	case ggwd.KeyEvent:
 		return ev.Window
-	case ggfx.TextEvent:
+	case ggwd.TextEvent:
 		return ev.Window
-	case ggfx.CompositionEvent:
+	case ggwd.CompositionEvent:
 		return ev.Window
-	case ggfx.MouseMoveEvent:
+	case ggwd.MouseMoveEvent:
 		return ev.Window
-	case ggfx.MouseButtonEvent:
+	case ggwd.MouseButtonEvent:
 		return ev.Window
-	case ggfx.ScrollEvent:
+	case ggwd.ScrollEvent:
 		return ev.Window
-	case ggfx.TouchEvent:
+	case ggwd.TouchEvent:
 		return ev.Window
-	case ggfx.DragEvent:
+	case ggwd.DragEvent:
 		return ev.Window
-	case ggfx.DropEvent:
+	case ggwd.DropEvent:
 		return ev.Window
 	}
 	return nil

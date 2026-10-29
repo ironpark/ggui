@@ -2,7 +2,9 @@
 
 package runtime
 
-import "github.com/ironpark/ggfx"
+import (
+	"github.com/ironpark/ggwd"
+)
 
 func nativeClipboard() Clipboard { return &x11Clipboard{} }
 
@@ -14,7 +16,7 @@ type x11Clipboard struct {
 }
 
 func (c *x11Clipboard) Read() string {
-	s, err := ggfx.ClipboardText()
+	s, err := ggwd.ClipboardText()
 	if err != nil {
 		return c.mem.Read()
 	}
@@ -22,7 +24,7 @@ func (c *x11Clipboard) Read() string {
 }
 
 func (c *x11Clipboard) Write(s string) {
-	if ggfx.SetClipboardText(s) != nil {
+	if ggwd.SetClipboardText(s) != nil {
 		c.mem.Write(s)
 	}
 }

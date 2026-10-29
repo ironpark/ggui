@@ -3,11 +3,11 @@
 package textinput
 
 import (
-	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggwd"
 	"image"
 )
 
-func WithWindow(*ggfx.Window) func() { return func() {} }
-func CloseWindow(*ggfx.Window)       {}
-func HandleEvent(ggfx.Event) bool    { return false }
+func WithWindow(*ggwd.Window) func() { return func() {} }
+func CloseWindow(*ggwd.Window)       {}
+func HandleEvent(ggwd.Event) bool    { return false }
 func UpdateCaret(image.Rectangle)    {}

@@ -3,13 +3,13 @@ package ggui
 import (
 	"testing"
 
-	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggwd"
 )
 
 func TestAppUsesNativeModifierSnapshot(t *testing.T) {
 	t.Parallel()
 	a := &Window{}
-	a.handle(ggfx.KeyEvent{Key: ggfx.KeyA, Pressed: true, Modifiers: ggfx.KeyModifiers{Meta: true}})
+	a.handle(ggwd.KeyEvent{Key: ggwd.KeyA, Pressed: true, Modifiers: ggwd.KeyModifiers{Meta: true}})
 	if !a.takeInput().mods.Meta {
 		t.Fatal("native modifier snapshot was lost without a separate modifier key event")
 	}
@@ -18,11 +18,11 @@ func TestAppUsesNativeModifierSnapshot(t *testing.T) {
 func TestAppKeepsModifierOnQueuedKeyPress(t *testing.T) {
 	t.Parallel()
 	a := &Window{}
-	for _, e := range []ggfx.KeyEvent{
-		{Key: ggfx.KeyMetaLeft, Pressed: true},
-		{Key: ggfx.KeyO, Pressed: true},
-		{Key: ggfx.KeyO},
-		{Key: ggfx.KeyMetaLeft},
+	for _, e := range []ggwd.KeyEvent{
+		{Key: ggwd.KeyMetaLeft, Pressed: true},
+		{Key: ggwd.KeyO, Pressed: true},
+		{Key: ggwd.KeyO},
+		{Key: ggwd.KeyMetaLeft},
 	} {
 		if err := a.handle(e); err != nil {
 			t.Fatal(err)
@@ -39,9 +39,9 @@ func TestAppKeepsModifierOnQueuedKeyPress(t *testing.T) {
 
 func TestPointerEventsCarryTheirModifiers(t *testing.T) {
 	t.Parallel()
-	for _, e := range []ggfx.Event{
-		ggfx.MouseButtonEvent{Button: ggfx.MouseButtonLeft, Pressed: true, Modifiers: ggfx.KeyModifiers{Shift: true}},
-		ggfx.ScrollEvent{Y: -1, Modifiers: ggfx.KeyModifiers{Shift: true}},
+	for _, e := range []ggwd.Event{
+		ggwd.MouseButtonEvent{Button: ggwd.MouseButtonLeft, Pressed: true, Modifiers: ggwd.KeyModifiers{Shift: true}},
+		ggwd.ScrollEvent{Y: -1, Modifiers: ggwd.KeyModifiers{Shift: true}},
 	} {
 		a := &Window{}
 		if err := a.handle(e); err != nil {
@@ -58,13 +58,13 @@ func TestPointerEventsCarryTheirModifiers(t *testing.T) {
 // that says it is not held.
 func TestLostModifierReleaseIsForgotten(t *testing.T) {
 	t.Parallel()
-	for _, later := range []ggfx.Event{
-		ggfx.KeyEvent{Key: ggfx.KeyA, Pressed: true},
-		ggfx.MouseButtonEvent{Button: ggfx.MouseButtonLeft, Pressed: true},
-		ggfx.ScrollEvent{Y: -1},
+	for _, later := range []ggwd.Event{
+		ggwd.KeyEvent{Key: ggwd.KeyA, Pressed: true},
+		ggwd.MouseButtonEvent{Button: ggwd.MouseButtonLeft, Pressed: true},
+		ggwd.ScrollEvent{Y: -1},
 	} {
 		a := &Window{}
-		if err := a.handle(ggfx.KeyEvent{Key: ggfx.KeyShiftLeft, Pressed: true, Modifiers: ggfx.KeyModifiers{Shift: true}}); err != nil {
+		if err := a.handle(ggwd.KeyEvent{Key: ggwd.KeyShiftLeft, Pressed: true, Modifiers: ggwd.KeyModifiers{Shift: true}}); err != nil {
 			t.Fatal(err)
 		}
 		a.takeInput()
@@ -77,8 +77,8 @@ func TestLostModifierReleaseIsForgotten(t *testing.T) {
 	}
 	// One the event says is held stays held.
 	a := &Window{}
-	a.handle(ggfx.KeyEvent{Key: ggfx.KeyShiftLeft, Pressed: true, Modifiers: ggfx.KeyModifiers{Shift: true}})
-	a.handle(ggfx.KeyEvent{Key: ggfx.KeyA, Pressed: true, Modifiers: ggfx.KeyModifiers{Shift: true}})
+	a.handle(ggwd.KeyEvent{Key: ggwd.KeyShiftLeft, Pressed: true, Modifiers: ggwd.KeyModifiers{Shift: true}})
+	a.handle(ggwd.KeyEvent{Key: ggwd.KeyA, Pressed: true, Modifiers: ggwd.KeyModifiers{Shift: true}})
 	a.takeInput()
 	if !a.keyboard.Mods().Shift {
 		t.Error("a held Shift was let go")
@@ -90,10 +90,10 @@ func TestLostModifierReleaseIsForgotten(t *testing.T) {
 func TestScrollPhaseReachesTheFrame(t *testing.T) {
 	t.Parallel()
 	a := &Window{}
-	for _, e := range []ggfx.ScrollEvent{
-		{X: -1, Phase: ggfx.ScrollPhaseChanged},
-		{Phase: ggfx.ScrollPhaseEnded},
-		{X: -0.5, Phase: ggfx.ScrollPhaseMomentum},
+	for _, e := range []ggwd.ScrollEvent{
+		{X: -1, Phase: ggwd.ScrollPhaseChanged},
+		{Phase: ggwd.ScrollPhaseEnded},
+		{X: -0.5, Phase: ggwd.ScrollPhaseMomentum},
 	} {
 		if err := a.handle(e); err != nil {
 			t.Fatal(err)
@@ -102,7 +102,7 @@ func TestScrollPhaseReachesTheFrame(t *testing.T) {
 	if f := a.takeInput(); f.phase != ScrollPhaseEnded || f.wheel.X != -1.5 {
 		t.Fatalf("phase %v wheel %v", f.phase, f.wheel)
 	}
-	a.handle(ggfx.ScrollEvent{Phase: ggfx.ScrollPhaseEnded})
+	a.handle(ggwd.ScrollEvent{Phase: ggwd.ScrollPhaseEnded})
 	if f := a.takeInput(); f.phase != ScrollPhaseEnded || f.wheel != (Point{}) {
 		t.Fatalf("a lift alone: phase %v wheel %v", f.phase, f.wheel)
 	}
