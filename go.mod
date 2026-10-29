@@ -7,7 +7,7 @@ require (
 	github.com/go-text/render v0.2.1
 	github.com/go-text/typesetting v0.3.5
 	github.com/hajimehoshi/bitmapfont/v4 v4.2.0
-	github.com/ironpark/ggfx v0.0.0-20261029062301-a25739f2e7f6
+	github.com/ironpark/ggfx v0.0.0-20261029065937-dadaab3b47ff
 	github.com/ironpark/ggwd v0.0.0-20261029062320-cb062001b1bb
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
 	golang.org/x/image v0.46.0
