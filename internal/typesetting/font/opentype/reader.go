@@ -47,6 +47,16 @@ type Resource interface {
 	Seek(int64, int) (int64, error)
 }
 
+// Slicer is a Resource that can lend its bytes rather than copy them, as
+// one over a file mapped into memory can.
+//
+// ggui: a table read with no buffer to reuse is lent, so a font's tables
+// are not copied onto the heap. A lent table must not be written to.
+type Slicer interface {
+	// Slice returns the n bytes at off, and false when it cannot lend them.
+	Slice(off, n int64) ([]byte, bool)
+}
+
 // tableSection represents a table within the font file.
 type tableSection struct {
 	offset  uint32 // Offset into the file this table starts.
@@ -142,6 +152,11 @@ func (pr *Loader) findTableBuffer(s tableSection, dst []byte) ([]byte, error) {
 			return nil, err
 		}
 	} else {
+		if sl, ok := pr.file.(Slicer); ok && dst == nil {
+			if b, ok := sl.Slice(int64(s.offset), int64(s.length)); ok {
+				return b, nil
+			}
+		}
 		if cap(dst) < int(s.length) {
 			dst = make([]byte, s.length)
 		}

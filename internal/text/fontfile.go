@@ -99,7 +99,7 @@ func NewGoTextFaceSourceAt(r io.ReaderAt, size int64, opts SourceOptions) (*GoTe
 			}
 		}
 	}
-	res := io.NewSectionReader(patched, 0, size)
+	res := fontResource{io.NewSectionReader(patched, 0, size), patched}
 	var ld *opentype.Loader
 	if dir.collection {
 		lds, err := opentype.NewLoaders(res)
@@ -208,6 +208,31 @@ func (p *patchedReaderAt) ReadAt(b []byte, off int64) (int, error) {
 	}
 	return n, err
 }
+
+// slice lends the n bytes at off of a reader that can lend them, as a font
+// file mapped into memory can, when no patch changes them.
+func (p *patchedReaderAt) slice(off, n int64) ([]byte, bool) {
+	sl, ok := p.r.(opentype.Slicer)
+	if !ok {
+		return nil, false
+	}
+	for _, pt := range p.patches {
+		if pt.at < off+n && off < pt.at+int64(len(pt.data)) {
+			return nil, false
+		}
+	}
+	return sl.Slice(off, n)
+}
+
+// fontResource is what a font's loader reads: the file, patched, lending
+// its tables where it can rather than copying them onto the heap.
+type fontResource struct {
+	*io.SectionReader
+	patched *patchedReaderAt
+}
+
+// Slice implements opentype.Slicer.
+func (r fontResource) Slice(off, n int64) ([]byte, bool) { return r.patched.slice(off, n) }
 
 // lazySbix is an 'sbix' table read a glyph at a time. It answers what the
 // parser's own table would: the strikes' sizes, and a glyph's extents and

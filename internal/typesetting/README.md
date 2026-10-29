@@ -23,3 +23,8 @@ included, nor is anything that only they use.
   few hundred glyphs; it now keeps about 9 MB. A glyph whose data is
   malformed now has no variations, where upstream dropped the variations
   of it and every glyph after it.
+- A table read with no buffer to reuse is lent rather than copied when the
+  font's source can lend its bytes: `opentype.Slicer`, which ggui's mapped
+  font files implement. A font's tables then stay in the file's pages,
+  which macOS does not count as the program's memory, and not on the heap:
+  SF Pro kept 9.3 MB on the heap, and keeps 1.9 MB.

@@ -25,26 +25,66 @@ type fontFile struct {
 // open while the program runs, since their fonts read them as they draw.
 var openFontFiles = struct {
 	sync.Mutex
-	files map[string]*os.File
-}{files: map[string]*os.File{}}
+	files map[string]openFile
+}{files: map[string]openFile{}}
+
+// openFile is a font file open for reading at offsets, and its size.
+type openFile struct {
+	r    io.ReaderAt
+	size int64
+}
 
 // openFontFile opens the font file at path for reading at offsets, once.
+// Where it can, it maps the file into memory: its pages are then the
+// file's, read as they are touched and dropped under pressure, and the
+// tables lent from them never count as the program's memory, as copies on
+// the heap would.
 func openFontFile(path string) (io.ReaderAt, int64, error) {
 	openFontFiles.Lock()
 	defer openFontFiles.Unlock()
-	f, ok := openFontFiles.files[path]
-	if !ok {
-		var err error
-		if f, err = os.Open(path); err != nil {
-			return nil, 0, err
-		}
-		openFontFiles.files[path] = f
+	if o, ok := openFontFiles.files[path]; ok {
+		return o.r, o.size, nil
 	}
-	st, err := f.Stat()
+	f, err := os.Open(path)
 	if err != nil {
 		return nil, 0, err
 	}
-	return f, st.Size(), nil
+	st, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, 0, err
+	}
+	o := openFile{r: f, size: st.Size()}
+	if m, ok := mapFontFile(f, o.size); ok {
+		f.Close() // the mapping outlives it
+		o.r = m
+	}
+	openFontFiles.files[path] = o
+	return o.r, o.size, nil
+}
+
+// mappedFont is a font file mapped into memory, for the program's life.
+type mappedFont []byte
+
+// ReadAt implements io.ReaderAt.
+func (m mappedFont) ReadAt(b []byte, off int64) (int, error) {
+	if off < 0 || off >= int64(len(m)) {
+		return 0, io.EOF
+	}
+	n := copy(b, m[off:])
+	if n < len(b) {
+		return n, io.EOF
+	}
+	return n, nil
+}
+
+// Slice lends the n bytes at off, capped so that appending to them cannot
+// reach the bytes after.
+func (m mappedFont) Slice(off, n int64) ([]byte, bool) {
+	if off < 0 || n < 0 || off+n > int64(len(m)) {
+		return nil, false
+	}
+	return m[off : off+n : off+n], true
 }
 
 // faceCount is how many faces the font file r holds: a collection's, or
