@@ -336,6 +336,11 @@ type GoTextFaceSource struct {
 
 	outputCache *cache[goTextOutputCacheKey, *goTextOutputCacheValue]
 
+	// chunkedGlyphsCache holds the glyphs of text made of more than one
+	// bidi chunk, joined in visual order, so that drawing such text again
+	// does not join them again.
+	chunkedGlyphsCache *cache[goTextOutputCacheKey, []goTextGlyph]
+
 	glyphImageCache glyphImageCaches
 	hasGlyphCache   runeToBoolMap
 
@@ -423,6 +428,7 @@ func newGoTextFaceSource(face *font.Face, loader *opentype.Loader) *GoTextFaceSo
 	s.metadata = metadataFromFace(face)
 	s.variationAxes = variationAxesFromLoader(loader)
 	s.outputCache = newCache[goTextOutputCacheKey, *goTextOutputCacheValue](512)
+	s.chunkedGlyphsCache = newCache[goTextOutputCacheKey, []goTextGlyph](512)
 	s.chunkPlanCache = newCache[chunkPlanKey, []chunk.Chunk](512)
 	// 4 is an arbitrary number, which should not cause troubles.
 	s.shaper.SetFontCacheSize(4)
@@ -708,7 +714,13 @@ func (g *GoTextFaceSource) glyphs(text string, face *GoTextFace) []goTextGlyph {
 		chunkText := text[ch.Start:ch.End]
 		return g.outputCacheValue(chunkText, face).ensureGlyphs(g, chunkText, face)
 	}
+	return g.chunkedGlyphsCache.getOrCreate(face.outputCacheKey(text), func() ([]goTextGlyph, bool) {
+		return g.joinChunkGlyphs(text, face, chunks), true
+	})
+}
 
+// joinChunkGlyphs returns the glyphs of the chunks of text in visual order.
+func (g *GoTextFaceSource) joinChunkGlyphs(text string, face *GoTextFace, chunks []chunk.Chunk) []goTextGlyph {
 	// Stack arrays rather than reusable struct fields: this path
 	// runs without shapeMu, so a shared buffer would race.
 	var levelsArr [16]bidi.Level

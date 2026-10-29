@@ -86,8 +86,8 @@ func (f *FallbackFace) advanceAt(text string, indexInBytes int) float64 {
 }
 
 // appendLazyGlyphsForLine implements Face.
-func (f *FallbackFace) appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, indexOffset int, originX, originY float64, keepGlyph func(originX, originY float64) bool) []LazyGlyph {
-	return f.faceFor(line).appendLazyGlyphsForLine(glyphs, line, indexOffset, originX, originY, keepGlyph)
+func (f *FallbackFace) appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, indexOffset int, originX, originY float64, cull glyphCull) []LazyGlyph {
+	return f.faceFor(line).appendLazyGlyphsForLine(glyphs, line, indexOffset, originX, originY, cull)
 }
 
 // appendVectorPathForLine implements Face.

@@ -270,7 +270,7 @@ func (g *GoTextFace) hasGlyph(r rune) bool {
 }
 
 // appendLazyGlyphsForLine implements Face.
-func (g *GoTextFace) appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, indexOffset int, originX, originY float64, keepGlyph func(originX, originY float64) bool) []LazyGlyph {
+func (g *GoTextFace) appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, indexOffset int, originX, originY float64, cull glyphCull) []LazyGlyph {
 	origin := fixed.Point26_6{
 		X: float64ToFixed26_6(originX),
 		Y: float64ToFixed26_6(originY),
@@ -281,10 +281,6 @@ func (g *GoTextFace) appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, in
 
 	glyphs = slices.Grow(glyphs, len(gs))
 
-	// imager is allocated lazily on the first glyph that produces an image.
-	// If none do (e.g. a line of control characters), no allocation happens.
-	var imager *goTextLineImager
-
 	for i := range gs {
 		glyph := &gs[i]
 		o := origin.Add(fixed.Point26_6{
@@ -292,7 +288,7 @@ func (g *GoTextFace) appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, in
 			Y: -glyph.shapingGlyph.YOffset,
 		})
 
-		if keepGlyph == nil || keepGlyph(fixed26_6ToFloat64(o.X), fixed26_6ToFloat64(o.Y)) {
+		if cull.keep(fixed26_6ToFloat64(o.X), fixed26_6ToFloat64(o.Y)) {
 			// The image position is integer so that the nearest filter can be used.
 			bounds, args, hasImage := goTextGlyphImageInfo(g, glyph, o, granularity)
 
@@ -316,15 +312,8 @@ func (g *GoTextFace) appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, in
 				AdvanceY:          advanceY,
 			}
 			if hasImage {
-				if imager == nil {
-					imager = &goTextLineImager{
-						face: g,
-						args: make([]goTextGlyphImageArgs, 0, len(gs)-i),
-					}
-				}
-				imager.args = append(imager.args, args)
-				lg.imager = imager
-				lg.imageIndex = len(imager.args) - 1
+				lg.imager = g
+				lg.imageArgs = args
 			}
 			// Append a glyph even if it has no image (control characters etc.).
 			// This is necessary to return index information for control characters.
@@ -347,28 +336,9 @@ func (g *GoTextFace) appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, in
 	return glyphs
 }
 
-// goTextLineImager owns a per-call slice of per-glyph args for a single
-// invocation of [GoTextFace.appendLazyGlyphsForLine]. It satisfies
-// [glyphImager].
-type goTextLineImager struct {
-	face *GoTextFace
-	args []goTextGlyphImageArgs
-}
-
-// goTextGlyphImageArgs is the per-glyph data needed by
-// [goTextLineImager.glyphImage]. It points into the cached glyph slice
-// owned by the source's shape-output cache, so the bitmap and scaled
-// segments are not duplicated per occurrence.
-type goTextGlyphImageArgs struct {
-	glyph          *goTextGlyph
-	subpixelOffset fixed.Point26_6
-}
-
 // glyphImage implements glyphImager.
-func (im *goTextLineImager) glyphImage(index int) *ggfx.Image {
-	args := &im.args[index]
+func (face *GoTextFace) glyphImage(args glyphImageArgs) *ggfx.Image {
 	glyph := args.glyph
-	face := im.face
 	rd := glyph.render
 	// A bitmap glyph is pixel-aligned and its subpixel offset is always
 	// zero (see goTextGlyphImageInfo), so one key form covers both the
@@ -400,8 +370,7 @@ func (im *goTextLineImager) glyphImage(index int) *ggfx.Image {
 }
 
 // glyphPixels implements glyphImager: glyphImage's image, on the CPU.
-func (im *goTextLineImager) glyphPixels(index int) image.Image {
-	args := &im.args[index]
+func (g *GoTextFace) glyphPixels(args glyphImageArgs) image.Image {
 	rd := args.glyph.render
 	if bm := rd.bitmap(); bm != nil {
 		return bm
@@ -421,8 +390,8 @@ func (im *goTextLineImager) glyphPixels(index int) image.Image {
 }
 
 // glyphColored implements glyphImager.
-func (im *goTextLineImager) glyphColored(index int) bool {
-	return im.args[index].glyph.render.colored()
+func (g *GoTextFace) glyphColored(args glyphImageArgs) bool {
+	return args.glyph.render.colored()
 }
 
 // goTextGlyphImageInfo returns the image bounds in layout space and the
@@ -434,7 +403,7 @@ func (im *goTextLineImager) glyphColored(index int) bool {
 // granularity is taken as a parameter rather than derived from face
 // because the caller is expected to compute it once per layout pass
 // (see granularityFactor) and share it across every glyph.
-func goTextGlyphImageInfo(face *GoTextFace, glyph *goTextGlyph, origin fixed.Point26_6, granularity fixed.Int26_6) (bounds image.Rectangle, args goTextGlyphImageArgs, hasImage bool) {
+func goTextGlyphImageInfo(face *GoTextFace, glyph *goTextGlyph, origin fixed.Point26_6, granularity fixed.Int26_6) (bounds image.Rectangle, args glyphImageArgs, hasImage bool) {
 	if glyph.render == nil {
 		return
 	}
@@ -455,7 +424,7 @@ func goTextGlyphImageInfo(face *GoTextFace, glyph *goTextGlyph, origin fixed.Poi
 			imgX := (origin.X + glyph.shapingGlyph.XBearing).Round()
 			imgY := (origin.Y - glyph.shapingGlyph.YBearing).Round()
 			bounds = image.Rect(imgX, imgY, imgX+rw, imgY+rh)
-			args = goTextGlyphImageArgs{glyph: glyph}
+			args = glyphImageArgs{glyph: glyph}
 			hasImage = true
 			return
 		}
@@ -487,7 +456,7 @@ func goTextGlyphImageInfo(face *GoTextFace, glyph *goTextGlyph, origin fixed.Poi
 	}
 	bounds = image.Rect(imgX, imgY, imgX+rw+1, imgY+rh+1)
 
-	args = goTextGlyphImageArgs{
+	args = glyphImageArgs{
 		glyph:          glyph,
 		subpixelOffset: subpixelOffset,
 	}

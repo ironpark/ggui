@@ -74,8 +74,8 @@ func (l *LazyFace) advanceAt(text string, indexInBytes int) float64 {
 func (l *LazyFace) hasGlyph(r rune) bool { return l.light.hasGlyph(r) }
 
 // appendLazyGlyphsForLine implements Face.
-func (l *LazyFace) appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, indexOffset int, originX, originY float64, keepGlyph func(originX, originY float64) bool) []LazyGlyph {
-	return l.get().appendLazyGlyphsForLine(glyphs, line, indexOffset, originX, originY, keepGlyph)
+func (l *LazyFace) appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, indexOffset int, originX, originY float64, cull glyphCull) []LazyGlyph {
+	return l.get().appendLazyGlyphsForLine(glyphs, line, indexOffset, originX, originY, cull)
 }
 
 // appendVectorPathForLine implements Face.

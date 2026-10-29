@@ -44,10 +44,9 @@ type Face interface {
 	hasGlyph(r rune) bool
 
 	// appendLazyGlyphsForLine appends a LazyGlyph for each glyph in line
-	// to glyphs and returns the extended slice. If keepGlyph is non-nil,
-	// glyphs for which it returns false are skipped (the origin still
-	// advances).
-	appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, indexOffset int, originX, originY float64, keepGlyph func(originX, originY float64) bool) []LazyGlyph
+	// to glyphs and returns the extended slice. Glyphs cull does not keep
+	// are skipped (the origin still advances).
+	appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, indexOffset int, originX, originY float64, cull glyphCull) []LazyGlyph
 	appendVectorPathForLine(path *vector.Path, line string, originX, originY float64)
 
 	direction() Direction
@@ -273,18 +272,14 @@ type LazyGlyph struct {
 	// advance returned by [AdvanceAt].
 	AdvanceY float64
 
-	// imager dispatches glyph image realization. nil when the glyph has no
-	// image (e.g. control characters).
-	//
-	// imager is a per-line, per-face object that owns a tightly-packed
-	// slice of per-glyph data. imageIndex selects the entry within that
-	// slice. Storing a pointer here keeps LazyGlyph small and avoids
-	// carrying redundant references to data that already lives in the
-	// face's own caches.
+	// imager dispatches glyph image realization: the face that laid the
+	// glyph out. nil when the glyph has no image (e.g. control
+	// characters).
 	imager glyphImager
 
-	// imageIndex is this glyph's index within imager's args slice.
-	imageIndex int
+	// imageArgs is what imager needs to realize this glyph's image. It
+	// is held inline so that laying out a line allocates nothing for it.
+	imageArgs glyphImageArgs
 }
 
 // Image returns the rasterized glyph bitmap.
@@ -302,7 +297,7 @@ func (g LazyGlyph) Image() *ggfx.Image {
 	if g.imager == nil {
 		return nil
 	}
-	return g.imager.glyphImage(g.imageIndex)
+	return g.imager.glyphImage(g.imageArgs)
 }
 
 // Pixels returns the image [LazyGlyph.Image] returns, rasterized on the CPU
@@ -313,7 +308,7 @@ func (g LazyGlyph) Pixels() image.Image {
 	if g.imager == nil {
 		return nil
 	}
-	return g.imager.glyphPixels(g.imageIndex)
+	return g.imager.glyphPixels(g.imageArgs)
 }
 
 // Colored reports whether the image returned by [LazyGlyph.Image] is colored
@@ -322,17 +317,29 @@ func (g LazyGlyph) Colored() bool {
 	if g.imager == nil {
 		return false
 	}
-	return g.imager.glyphColored(g.imageIndex)
+	return g.imager.glyphColored(g.imageArgs)
 }
 
-// glyphImager produces the rasterized image for a glyph identified by its
-// index within a face-specific args slice, and reports whether the glyph is
-// colored without rasterizing it. Implementations are allocated once per
-// face per call to appendLazyGlyphsForLine.
+// glyphImager produces the rasterized image for a glyph described by its
+// args, and reports whether the glyph is colored without rasterizing it. The
+// faces implement it.
 type glyphImager interface {
-	glyphImage(index int) *ggfx.Image
-	glyphPixels(index int) image.Image
-	glyphColored(index int) bool
+	glyphImage(args glyphImageArgs) *ggfx.Image
+	glyphPixels(args glyphImageArgs) image.Image
+	glyphColored(args glyphImageArgs) bool
+}
+
+// glyphImageArgs is the per-glyph data a [glyphImager] needs.
+type glyphImageArgs struct {
+	// glyph is a GoTextFace glyph. It points into the cached glyph slice
+	// owned by the source's shape-output cache, so the bitmap and scaled
+	// segments are not duplicated per occurrence.
+	glyph *goTextGlyph
+
+	// rune is a GoXFace glyph.
+	rune rune
+
+	subpixelOffset fixed.Point26_6
 }
 
 // AdvanceAt returns the visual distance from the line's origin to the caret
@@ -455,7 +462,7 @@ func CacheGlyphs(text string, face Face) {
 	var buf []LazyGlyph
 	// Create all the possible variations (#2528).
 	for range c {
-		buf = appendLazyGlyphs(buf, text, face, x, y, nil, nil)
+		buf = appendLazyGlyphs(buf, text, face, x, y, nil, glyphCull{})
 		// Realize each glyph to populate the underlying image cache.
 		for _, g := range buf {
 			g.Image()

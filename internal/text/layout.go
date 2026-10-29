@@ -155,7 +155,7 @@ func Draw(dst *ggfx.Image, text string, face Face, options *DrawOptions) {
 		*glyphs = slices.Delete(*glyphs, 0, len(*glyphs))
 		theDrawGlyphsPool.Put(glyphs)
 	}()
-	*glyphs = appendLazyGlyphs((*glyphs)[:0], text, face, 0, 0, &layoutOp, keepGlyphFilter(face, geoM, dstBounds))
+	*glyphs = appendLazyGlyphs((*glyphs)[:0], text, face, 0, 0, &layoutOp, newGlyphCull(face, geoM, dstBounds))
 
 	entries := theDrawGlyphEntriesPool.Get()
 	defer func() {
@@ -205,21 +205,40 @@ func Draw(dst *ggfx.Image, text string, face Face, options *DrawOptions) {
 	}
 }
 
-// keepGlyphFilter returns a per-glyph predicate suitable for
-// appendLazyGlyphs's keepGlyph parameter. It returns false for glyphs
-// whose text-space origin, after the geoM transform, is far enough outside
-// dst that no plausible glyph image can reach into dst from there. Glyphs
-// near the edge are kept and re-checked by the precise per-glyph cull in
-// Draw.
+// glyphCull drops the glyphs whose text-space origin, after a geoM
+// transform, is far enough outside dst that no plausible glyph image can
+// reach into dst from there. Glyphs near the edge are kept and re-checked by
+// the precise per-glyph cull in Draw. The zero glyphCull keeps every glyph.
 //
-// The cull applies only when geoM has no shear or rotation. Otherwise nil
-// is returned and no glyph-level cull happens.
-func keepGlyphFilter(face Face, geoM ggfx.GeoM, dstBounds image.Rectangle) func(originX, originY float64) bool {
+// It is a value rather than a func so that passing it through the Face
+// methods allocates nothing.
+type glyphCull struct {
+	on                     bool
+	a, d, tx, ty           float64
+	minX, maxX, minY, maxY float64
+}
+
+// keep reports whether the glyph at the text-space origin is kept.
+func (c glyphCull) keep(originX, originY float64) bool {
+	if !c.on {
+		return true
+	}
+	dx := c.a*originX + c.tx
+	dy := c.d*originY + c.ty
+	return dx >= c.minX && dx <= c.maxX && dy >= c.minY && dy <= c.maxY
+}
+
+// newGlyphCull returns the glyphCull of drawing face's glyphs with geoM
+// into dstBounds.
+//
+// The cull applies only when geoM has no shear or rotation. Otherwise the
+// zero glyphCull is returned and no glyph-level cull happens.
+func newGlyphCull(face Face, geoM ggfx.GeoM, dstBounds image.Rectangle) glyphCull {
 	// Nonzero off-diagonal elements mean a rotation or a skew, where a
 	// glyph's extent depends on both axes. The origin projection below and
 	// its per-axis margins hold only for a diagonal geoM.
 	if geoM.Element(0, 1) != 0 || geoM.Element(1, 0) != 0 {
-		return nil
+		return glyphCull{}
 	}
 	// advanceMarginFactor is the cull slack on each side of dst along
 	// the advance (text-progression) axis, as a multiple of the line
@@ -249,14 +268,16 @@ func keepGlyphFilter(face Face, geoM ggfx.GeoM, dstBounds image.Rectangle) func(
 	// cover the glyph extents after the transform.
 	marginX *= math.Abs(a)
 	marginY *= math.Abs(d)
-	dstMinX := float64(dstBounds.Min.X) - marginX
-	dstMaxX := float64(dstBounds.Max.X) + marginX
-	dstMinY := float64(dstBounds.Min.Y) - marginY
-	dstMaxY := float64(dstBounds.Max.Y) + marginY
-	return func(originX, originY float64) bool {
-		dx := a*originX + tx
-		dy := d*originY + ty
-		return dx >= dstMinX && dx <= dstMaxX && dy >= dstMinY && dy <= dstMaxY
+	return glyphCull{
+		on:   true,
+		a:    a,
+		d:    d,
+		tx:   tx,
+		ty:   ty,
+		minX: float64(dstBounds.Min.X) - marginX,
+		maxX: float64(dstBounds.Max.X) + marginX,
+		minY: float64(dstBounds.Min.Y) - marginY,
+		maxY: float64(dstBounds.Max.Y) + marginY,
 	}
 }
 
@@ -308,7 +329,7 @@ func AppendGlyphs(glyphs []Glyph, text string, face Face, options *LayoutOptions
 	}()
 	forEachLine(text, face, options, func(line string, indexOffset int, originX, originY float64) {
 		before := len(lazyBuf)
-		lazyBuf = face.appendLazyGlyphsForLine(lazyBuf, line, indexOffset, originX, originY, nil)
+		lazyBuf = face.appendLazyGlyphsForLine(lazyBuf, line, indexOffset, originX, originY, glyphCull{})
 		for i := before; i < len(lazyBuf); i++ {
 			lg := lazyBuf[i]
 			glyphs = append(glyphs, Glyph{
@@ -342,7 +363,7 @@ func AppendGlyphs(glyphs []Glyph, text string, face Face, options *LayoutOptions
 //
 // AppendLazyGlyphs is concurrent-safe.
 func AppendLazyGlyphs(glyphs []LazyGlyph, text string, face Face, options *LayoutOptions) []LazyGlyph {
-	return appendLazyGlyphs(glyphs, text, face, 0, 0, options, nil)
+	return appendLazyGlyphs(glyphs, text, face, 0, 0, options, glyphCull{})
 }
 
 // AppendVectorPath appends a vector path for glyphs to the given path.
@@ -360,12 +381,12 @@ func AppendVectorPath(path *vector.Path, text string, face Face, options *Layout
 // appendLazyGlyphs assumes the text is rendered with the position (x, y).
 // (x, y) might affect the subpixel rendering results.
 //
-// keepGlyph, when non-nil, is forwarded to each face's
-// appendLazyGlyphsForLine so glyphs whose text-space origin fails the
-// predicate are skipped without their image bounds being computed.
-func appendLazyGlyphs(glyphs []LazyGlyph, text string, face Face, x, y float64, options *LayoutOptions, keepGlyph func(originX, originY float64) bool) []LazyGlyph {
+// cull is forwarded to each face's appendLazyGlyphsForLine so glyphs whose
+// text-space origin it does not keep are skipped without their image
+// bounds being computed.
+func appendLazyGlyphs(glyphs []LazyGlyph, text string, face Face, x, y float64, options *LayoutOptions, cull glyphCull) []LazyGlyph {
 	forEachLine(text, face, options, func(line string, indexOffset int, originX, originY float64) {
-		glyphs = face.appendLazyGlyphsForLine(glyphs, line, indexOffset, originX+x, originY+y, keepGlyph)
+		glyphs = face.appendLazyGlyphsForLine(glyphs, line, indexOffset, originX+x, originY+y, cull)
 	})
 	return glyphs
 }

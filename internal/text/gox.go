@@ -183,7 +183,7 @@ func (g *GoXFace) hasGlyph(r rune) bool {
 }
 
 // appendLazyGlyphsForLine implements Face.
-func (g *GoXFace) appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, indexOffset int, originX, originY float64, keepGlyph func(originX, originY float64) bool) []LazyGlyph {
+func (g *GoXFace) appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, indexOffset int, originX, originY float64, cull glyphCull) []LazyGlyph {
 	g.copyCheck()
 
 	origin := fixed.Point26_6{
@@ -198,16 +198,13 @@ func (g *GoXFace) appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, index
 
 	glyphs = slices.Grow(glyphs, len(line))
 
-	// imager is allocated lazily on the first glyph that produces an image.
-	var imager *goXLineImager
-
 	for i, r := range line {
 		if i > 0 {
 			origin.X = ox + originXs[advanceIndex]
 			advanceIndex++
 		}
 
-		if keepGlyph != nil && !keepGlyph(fixed26_6ToFloat64(origin.X), fixed26_6ToFloat64(origin.Y)) {
+		if !cull.keep(fixed26_6ToFloat64(origin.X), fixed26_6ToFloat64(origin.Y)) {
 			continue
 		}
 
@@ -242,12 +239,8 @@ func (g *GoXFace) appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, index
 			AdvanceY:          0,
 		}
 		if hasImage {
-			if imager == nil {
-				imager = &goXLineImager{face: g}
-			}
-			imager.args = append(imager.args, args)
-			lg.imager = imager
-			lg.imageIndex = len(imager.args) - 1
+			lg.imager = g
+			lg.imageArgs = args
 		}
 		// Append a glyph even if it has no image (control characters etc.).
 		// This is necessary to return index information for control characters.
@@ -257,41 +250,23 @@ func (g *GoXFace) appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, index
 	return glyphs
 }
 
-// goXLineImager owns a per-call slice of per-glyph args for a single
-// invocation of [GoXFace.appendLazyGlyphsForLine]. It satisfies
-// [glyphImager].
-type goXLineImager struct {
-	face *GoXFace
-	args []goXGlyphImageArgs
-}
-
-// goXGlyphImageArgs is the per-glyph data needed by
-// [goXLineImager.glyphImage]. Unlike GoTextFace there is no pre-existing
-// per-glyph cache to point into, so the args are inlined.
-type goXGlyphImageArgs struct {
-	rune           rune
-	subpixelOffset fixed.Point26_6
-	bounds         fixed.Rectangle26_6
-}
-
 // glyphImage implements glyphImager.
-func (im *goXLineImager) glyphImage(index int) *ggfx.Image {
-	args := &im.args[index]
-	face := im.face
+func (face *GoXFace) glyphImage(args glyphImageArgs) *ggfx.Image {
 	key := goXFaceGlyphImageCacheKey{
 		rune:    args.rune,
 		xoffset: args.subpixelOffset.X,
 	}
 	return face.glyphImageCache.getOrCreate(key, func() (*ggfx.Image, bool) {
-		img := face.glyphImageImpl(args.rune, args.subpixelOffset, args.bounds)
+		b, _, _ := face.f.GlyphBounds(args.rune)
+		img := face.glyphImageImpl(args.rune, args.subpixelOffset, b)
 		return img, img != nil
 	})
 }
 
 // glyphPixels implements glyphImager.
-func (im *goXLineImager) glyphPixels(index int) image.Image {
-	args := &im.args[index]
-	if img := im.face.glyphRGBA(args.rune, args.subpixelOffset, args.bounds, newRGBA); img != nil {
+func (g *GoXFace) glyphPixels(args glyphImageArgs) image.Image {
+	b, _, _ := g.f.GlyphBounds(args.rune)
+	if img := g.glyphRGBA(args.rune, args.subpixelOffset, b, newRGBA); img != nil {
 		return img
 	}
 	return nil
@@ -299,7 +274,7 @@ func (im *goXLineImager) glyphPixels(index int) image.Image {
 
 // glyphColored implements glyphImager. A GoXFace glyph is always a
 // grayscale mask.
-func (im *goXLineImager) glyphColored(index int) bool {
+func (g *GoXFace) glyphColored(args glyphImageArgs) bool {
 	return false
 }
 
@@ -311,7 +286,7 @@ func (im *goXLineImager) glyphColored(index int) bool {
 // granularity is taken as a parameter rather than derived from face
 // because the caller is expected to compute it once per layout pass
 // (see granularityFactor) and share it across every glyph.
-func goXGlyphImageInfo(face *GoXFace, r rune, origin fixed.Point26_6, granularity fixed.Int26_6) (bounds image.Rectangle, args goXGlyphImageArgs, hasImage bool) {
+func goXGlyphImageInfo(face *GoXFace, r rune, origin fixed.Point26_6, granularity fixed.Int26_6) (bounds image.Rectangle, args glyphImageArgs, hasImage bool) {
 	// Assume that GoXFace's direction is always horizontal.
 	origin.X = adjustGranularity(origin.X, granularity)
 	origin.Y &^= ((1 << 6) - 1)
@@ -332,10 +307,9 @@ func goXGlyphImageInfo(face *GoXFace, r rune, origin fixed.Point26_6, granularit
 	}
 	bounds = image.Rect(imgX, imgY, imgX+rw+1, imgY+rh+1)
 
-	args = goXGlyphImageArgs{
+	args = glyphImageArgs{
 		rune:           r,
 		subpixelOffset: subpixelOffset,
-		bounds:         b,
 	}
 	hasImage = true
 	return

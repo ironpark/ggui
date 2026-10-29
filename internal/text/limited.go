@@ -88,10 +88,10 @@ func (l *LimitedFace) hasGlyph(r rune) bool {
 }
 
 // appendLazyGlyphsForLine implements Face.
-func (l *LimitedFace) appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, indexOffset int, originX, originY float64, keepGlyph func(originX, originY float64) bool) []LazyGlyph {
+func (l *LimitedFace) appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, indexOffset int, originX, originY float64, cull glyphCull) []LazyGlyph {
 	filtered := l.unicodeRanges.Filter(line)
 	if filtered == line {
-		return l.face.appendLazyGlyphsForLine(glyphs, filtered, indexOffset, originX, originY, keepGlyph)
+		return l.face.appendLazyGlyphsForLine(glyphs, filtered, indexOffset, originX, originY, cull)
 	}
 
 	// The appended glyphs' indices are indices in filtered, not in line, so
@@ -106,7 +106,7 @@ func (l *LimitedFace) appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, i
 	mapping = limitedFilterMapping((*mappingP)[:0], line, filtered)
 
 	before := len(glyphs)
-	glyphs = l.face.appendLazyGlyphsForLine(glyphs, filtered, indexOffset, originX, originY, keepGlyph)
+	glyphs = l.face.appendLazyGlyphsForLine(glyphs, filtered, indexOffset, originX, originY, cull)
 	// The indices of glyphs are always in the range [0, len(filtered)], where
 	// mapping has len(filtered)+1 entries.
 	for i := before; i < len(glyphs); i++ {
