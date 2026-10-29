@@ -28,3 +28,6 @@ included, nor is anything that only they use.
   font files implement. A font's tables then stay in the file's pages,
   which macOS does not count as the program's memory, and not on the heap:
   SF Pro kept 9.3 MB on the heap, and keeps 1.9 MB.
+- A face's glyph extents are cached in pages of 256 glyphs, each made when
+  one of its glyphs is first measured, rather than a slot for every glyph
+  of the font as the face is made.
