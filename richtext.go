@@ -73,6 +73,7 @@ type RichTextWidget struct {
 	para      paragraph
 	laid      richKey
 	runKeys   []runKey
+	keyBuf    []runKey // the other of runKeys' two arrays, which layouts take in turn
 	selection color.Color
 	links     []*spanLink
 
@@ -234,40 +235,54 @@ func (t *RichTextWidget) Layout(c Constraints, env Env) Size {
 	// The links outlive a layout that changed no span, so that one keeps
 	// its focus and hover; a new tap func is picked up either way.
 	spans := t.spans.Get()
-	if !slices.EqualFunc(spans, t.cur, sameSpan) {
+	same := slices.EqualFunc(spans, t.cur, sameSpan)
+	if !same {
 		t.links = nil
 	}
-	t.cur = slices.Clone(spans)
+	// A paragraph is laid out far more often than its spans change, so
+	// what it keeps is kept in arrays it reuses. The spans are copied in
+	// either way, for their tap funcs.
+	t.cur = append(t.cur[:0], spans...)
 	base := env.ResolveText(t.style)
 	p := &t.para
-	var sb strings.Builder
 	p.runs = p.runs[:0]
-	// A fresh slice: reusing t.runKeys' array would overwrite the keys it
-	// is compared with below.
-	keys := make([]runKey, 0, len(t.cur))
+	// The keys go in the array runKeys is not in, which they are compared
+	// with below.
+	keys := t.keyBuf[:0]
+	end := 0
 	for i, sp := range t.cur {
 		if sp.text == "" {
 			continue
 		}
 		st := env.ResolveText(t.style.Merge(sp.style))
-		start := sb.Len()
-		sb.WriteString(sp.text)
-		p.runs = append(p.runs, paraRun{start: start, end: sb.Len(), style: st, span: i})
-		keys = append(keys, runKey{start, sb.Len(), st.Font, st.Size, st.LineHeight, st.Weight})
+		start := end
+		end += len(sp.text)
+		p.runs = append(p.runs, paraRun{start: start, end: end, style: st, span: i})
+		keys = append(keys, runKey{start, end, st.Font, st.Size, st.LineHeight, st.Weight})
+	}
+	// The same spans hold the same text.
+	text := p.text
+	if !same || len(text) != end {
+		var sb strings.Builder
+		sb.Grow(end)
+		for _, sp := range t.cur {
+			sb.WriteString(sp.text)
+		}
+		text = sb.String()
 	}
 	p.base = base
 	p.dir, p.lang = env.Direction(), env.Language()
 	t.selection = env.EditorStyle().Selection
 	// As Text's: the width only matters when something wraps or cuts to it.
 	fits := t.wrap || t.ellipsis || t.maxLines > 0
-	key := richKey{generation: fontGen(), text: sb.String(), maxW: pick(fits, c.MaxW, 0), wrap: t.wrap, ellipsis: t.ellipsis, maxLines: t.maxLines,
+	key := richKey{generation: fontGen(), text: text, maxW: pick(fits, c.MaxW, 0), wrap: t.wrap, ellipsis: t.ellipsis, maxLines: t.maxLines,
 		dir: p.dir, lang: p.lang, base: runKey{font: base.Font, size: base.Size, lineHeight: base.LineHeight, weight: base.Weight}}
 	if key != t.laid || !slices.Equal(keys, t.runKeys) || p.lines == nil {
 		t.laid = key
 		p.text = key.text
 		p.layout(key.maxW, t.wrap, t.maxLines, t.ellipsis)
 	}
-	t.runKeys = keys
+	t.runKeys, t.keyBuf = keys, t.runKeys
 	if t.ed.Text != p.text {
 		t.ed.SetText(p.text)
 	}

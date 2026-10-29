@@ -168,3 +168,17 @@ func TestRichTextLinkTapsWithPointerCursorAndA11y(t *testing.T) {
 		t.Fatalf("%d taps after ActionPress, want 2", taps)
 	}
 }
+
+// A paragraph laid out again with the same spans, as one in a long chat is
+// whenever anything above it is, keeps what it made: its spans, its text
+// and its run keys are not made again.
+func TestRichTextRelayoutKeepsWhatItMade(t *testing.T) {
+	spans := []TextSpan{Span("The agent ran "), Span("go test ./...").Weight(WeightBold), Span(" and every package passed.")}
+	rt := RichText(spans...)
+	env := rootEnv()
+	cs := Loose(Sz(400, 1e6))
+	rt.Layout(cs, env)
+	if allocs := testing.AllocsPerRun(100, func() { rt.Layout(cs, env) }); allocs != 0 {
+		t.Errorf("laying out unchanged spans allocates %v times, want 0", allocs)
+	}
+}
