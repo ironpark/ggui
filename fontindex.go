@@ -41,9 +41,36 @@ func systemFamilyFiles(family string) []fontFile {
 	return familyFiles(systemIndex(), font.NormalizeFamily(family))
 }
 
-// familyFiles returns the upright faces of the normalized family among
-// fps, one per file, the one nearest regular weight first.
-func familyFiles(fps []fontscan.Footprint, family string) []fontFile {
+// systemFamily returns family among the system's fonts as one Font, nil
+// when the system has no such family; see indexedFamily.
+func systemFamily(family string) *Font {
+	return indexedFamily(systemIndex(), font.NormalizeFamily(family))
+}
+
+// indexedFamily returns the upright faces of the normalized family among
+// fps as one Font: the face nearest regular weight, with the faces of other
+// weights as its weights; nil when fps has no such face. No font file is
+// read until a face is asked about, as the index knows each face's weight.
+func indexedFamily(fps []fontscan.Footprint, family string) *Font {
+	var base *Font
+	for _, fp := range familyFaces(fps, family) {
+		w := FontWeight(fp.Aspect.Weight)
+		if base != nil && (base.weight == w || slices.ContainsFunc(base.weights, func(f *Font) bool { return f.weight == w })) {
+			continue
+		}
+		f := indexedFont(fontFile{path: fp.Location.File, index: int(fp.Location.Index)}, w)
+		if base == nil {
+			base = f
+		} else {
+			base.weights = append(base.weights, f)
+		}
+	}
+	return base
+}
+
+// familyFaces returns the upright faces of the normalized family among
+// fps, the one nearest regular weight first.
+func familyFaces(fps []fontscan.Footprint, family string) []fontscan.Footprint {
 	var faces []fontscan.Footprint
 	for _, fp := range fps {
 		if fp.Family == family && fp.Aspect.Style == font.StyleNormal {
@@ -53,8 +80,14 @@ func familyFiles(fps []fontscan.Footprint, family string) []fontFile {
 	slices.SortStableFunc(faces, func(a, b fontscan.Footprint) int {
 		return weightDistance(a.Aspect.Weight) - weightDistance(b.Aspect.Weight)
 	})
+	return faces
+}
+
+// familyFiles returns the upright faces of the normalized family among
+// fps, one per file, the one nearest regular weight first.
+func familyFiles(fps []fontscan.Footprint, family string) []fontFile {
 	var files []fontFile
-	for _, fp := range faces {
+	for _, fp := range familyFaces(fps, family) {
 		// A collection is read whole, its other weights with it.
 		if !slices.ContainsFunc(files, func(f fontFile) bool { return f.path == fp.Location.File }) {
 			files = append(files, fontFile{path: fp.Location.File, index: int(fp.Location.Index)})
@@ -110,7 +143,7 @@ func systemFallback(r rune) *Font {
 		family := fps[best].Family
 		var ok bool
 		if f, ok = s.families[family]; !ok {
-			if f = loadFamily(familyFiles(fps, family)); f != nil {
+			if f = indexedFamily(fps, family); f != nil {
 				f.noFallback = true
 			}
 			s.families[family] = f

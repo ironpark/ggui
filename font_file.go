@@ -60,6 +60,34 @@ func faceCount(r io.ReaderAt) (int, error) {
 	return int(binary.BigEndian.Uint32(head[8:])), nil
 }
 
+// indexedFont is face file.index of the font file at file.path, of weight
+// w as the system's index has it: its light source read when f is first
+// asked about, and the rest when it first draws. A family's faces are
+// many, and most are never chosen.
+func indexedFont(file fontFile, w FontWeight) *Font {
+	f := &Font{weight: w}
+	f.lightLoad = func() *text.GoTextFaceSource {
+		if r, size, err := openFontFile(file.path); err == nil {
+			if light, err := text.NewGoTextFaceSourceAt(r, size, text.SourceOptions{Index: file.index, MetricsOnly: true}); err == nil {
+				return light
+			}
+		}
+		// The file is gone or changed since it was indexed. The built-in
+		// font stands in rather than leave f with no source.
+		return builtinFont().source()
+	}
+	f.load = func() *text.GoTextFaceSource {
+		light := f.lightSource()
+		if r, size, err := openFontFile(file.path); err == nil {
+			if src, err := text.NewGoTextFaceSourceAt(r, size, text.SourceOptions{Index: file.index}); err == nil {
+				return src
+			}
+		}
+		return light // draws as little as the light source, as a font that failed to load
+	}
+	return f
+}
+
 // fileFont is face index of the font file r holds, of size bytes: its
 // light source read now, and the rest when it first draws.
 func fileFont(r io.ReaderAt, size int64, index int) (*Font, error) {

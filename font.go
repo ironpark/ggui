@@ -34,6 +34,8 @@ type Font struct {
 	// fallback chain asks of a font before text needs one of its glyphs.
 	// Until then its glyphs stay unread; see chainFace.
 	light      *text.GoTextFaceSource
+	lightLoad  func() *text.GoTextFaceSource // reads light on first use, for a font of the system's index
+	lightOnce  sync.Once
 	loaded     atomic.Bool  // source has parsed src
 	weight     FontWeight   // what src draws, from its metadata
 	weights    []*Font      // the faces WithWeight added
@@ -111,10 +113,19 @@ func (f *Font) source() *text.GoTextFaceSource {
 // meta is what f's metadata, variation axes and metrics are read from:
 // its light source, for a font of a file, which does not parse its glyphs.
 func (f *Font) meta() *text.GoTextFaceSource {
-	if f.light != nil {
-		return f.light
+	if l := f.lightSource(); l != nil {
+		return l
 	}
 	return f.source()
+}
+
+// lightSource returns f's light source, reading it now for a font of the
+// system's index; nil for a font with none.
+func (f *Font) lightSource() *text.GoTextFaceSource {
+	if f.lightLoad != nil {
+		f.lightOnce.Do(func() { f.light = f.lightLoad() })
+	}
+	return f.light
 }
 
 // WithWeight adds face as f's face for weight w: text whose style asks for
@@ -201,10 +212,10 @@ func (f *Font) chainFaceWith(size float64, w FontWeight, axis bool, set func(*te
 		}
 		return g
 	}
-	if f.light == nil || f.loaded.Load() {
+	if f.light == nil && f.lightLoad == nil || f.loaded.Load() {
 		return face()
 	}
-	light := &text.GoTextFace{Source: f.light, Size: size}
+	light := &text.GoTextFace{Source: f.lightSource(), Size: size}
 	if axis {
 		lo, hi, _ := f.weightAxis()
 		light.SetVariation(wghtTag, min(max(float32(w), lo), hi))
@@ -313,7 +324,10 @@ func SystemFonts() []*Font {
 			}
 		}
 		for _, family := range systemFallbackFamilies() {
-			load(systemFamilyFiles(family))
+			if f := systemFamily(family); f != nil {
+				f.noFallback = true
+				systemFonts = append(systemFonts, f)
+			}
 		}
 	})
 	return systemFonts
