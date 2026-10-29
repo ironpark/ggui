@@ -6,6 +6,8 @@ import (
 	"unsafe"
 
 	"github.com/go-text/typesetting/segmenter"
+
+	"github.com/ironpark/ggui/internal/textedit"
 )
 
 // lineBreaks returns where p may be broken across lines, by the rules of
@@ -68,6 +70,12 @@ func findLineBreaks(p string) []int {
 		l := it.Line()
 		end := l.Offset + len(l.Text)
 		if end < len(runes) && isHangul(runes[end-1]) && isHangul(runes[end]) {
+			continue
+		}
+		// UAX #14 and #29 class some runes apart: an emoji modifier after a
+		// combining mark is a break opportunity, though the two make one
+		// grapheme cluster. A line never breaks a cluster.
+		if b := offsets[end]; b < len(p) && textedit.NextGrapheme(p, textedit.PrevGrapheme(p, b)) != b {
 			continue
 		}
 		breaks = append(breaks, offsets[end])
