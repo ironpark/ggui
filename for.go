@@ -35,7 +35,8 @@ type EachWidget[T any, K comparable] struct {
 	extent       float64 // fixed main-axis size per item; 0 lays every child out
 	estimate     float64 // a row's size until it is laid out, virtualizing rows of any size; see EstimatedExtent
 	est          eachEstimate[K]
-	unlisted     bool // the rows describe their own place; see Unlisted
+	lead         float64 // virtual paths: where the list starts in its Scroll's content, as last painted
+	unlisted     bool    // the rows describe their own place; see Unlisted
 
 	// Transition wraps every row; removed rows then leave through it.
 	transition func(Widget) *TransitionWidget
@@ -286,7 +287,7 @@ func (f *EachWidget[T, K]) entry(i int) *forEntry[T] {
 func (f *EachWidget[T, K]) Layout(c Constraints, env Env) Size {
 	defer f.props.Layout().EndLayout()
 	f.cache, _ = env.Get(cacheOwner)
-	f.pin.port = scrollPortOf(env)
+	f.pin.port = scrollPortAlong(env, f.horizontal)
 	f.mount.Layout(c, env)
 	if len(f.items) == 0 && len(f.leaving) == 0 && f.empty != nil {
 		return f.empty.Layout(c, env)
@@ -319,9 +320,10 @@ func (f *EachWidget[T, K]) Layout(c Constraints, env Env) Size {
 	pitch := f.extent + gap
 	total := max(float64(n)*pitch-gap, 0)
 	f.first, f.last = 0, n
-	if vp, ok := ScrollViewport(env); ok && vp.Horizontal == f.horizontal && n > 0 {
-		f.first = clamp(int(math.Floor(vp.Offset/pitch)), 0, n)
-		f.last = clamp(int(math.Ceil((vp.Offset+vp.Extent)/pitch)), f.first, n)
+	if vp, ok := viewportAlong(env, f.horizontal); ok && n > 0 {
+		at := vp.Offset - f.lead
+		f.first = clamp(int(math.Floor(at/pitch)), 0, n)
+		f.last = clamp(int(math.Ceil((at+vp.Extent)/pitch)), f.first, n)
 	}
 	shown := f.last - f.first
 	f.frame++
@@ -419,8 +421,8 @@ func (f *EachWidget[T, K]) Paint(dst *Canvas, r Rect) {
 		return
 	}
 	n := len(f.items)
-	if f.estimated() {
-		f.paintEstimated(r)
+	if f.virtual() {
+		f.paintLead(r)
 	}
 	f.placeKey(r)
 	pinned, pinIndex, pinRect := f.pinned(r)

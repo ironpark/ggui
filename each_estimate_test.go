@@ -170,3 +170,49 @@ func sortedIDs(m map[int]Rect) []int {
 	slices.Sort(ids)
 	return ids
 }
+
+func TestEstimatedRowsAreWindowedThroughAScrollAcross(t *testing.T) {
+	t.Parallel()
+	items := State(todos(0, 1000))
+	painted, builds := map[int]Rect{}, 0
+	f := estimatedRows(t, items, painted, &builds)
+	// A diff's long lines scroll sideways inside its scroll down.
+	s := Scroll(Scroll(f).Horizontal())
+	frame(s, painted)
+	if builds == 0 || builds > 20 {
+		t.Fatalf("built %d of 1000 rows inside a scroll across, want only those near the window", builds)
+	}
+}
+
+func TestFixedRowsUnderAHeaderFillTheWindow(t *testing.T) {
+	t.Parallel()
+	items := State(todos(0, 1000))
+	painted := map[int]Rect{}
+	var f *EachWidget[todo, int]
+	dispose := reactive.Observe(func() {
+		f = EachKeyed(items, func(t todo) int { return t.ID }, func(row EachItem[todo]) Widget {
+			id := row.Item.ID
+			return FromFuncs(
+				func(c Constraints, _ Env) Size { return c.Constrain(Sz(50, 20)) },
+				func(_ *Canvas, r Rect) { painted[id] = r },
+			)
+		}).ItemExtent(20)
+	})
+	defer dispose()
+	var head Rect
+	offset := State(5000.0)
+	s := Scroll(Column(probe(100, 410, &head), f)).BindOffset(offset)
+	frame(s, painted)
+	frame(s, painted)
+	// The list starts 410 into the content, so the window, 5000 in, shows
+	// it from 4590: rows 229 to 234, the first from 10 above the window's
+	// top, the last to 10 below its foot.
+	for id := 229; id <= 234; id++ {
+		if _, ok := painted[id]; !ok {
+			t.Fatalf("row %d, in the window, not painted; painted %v", id, sortedIDs(painted))
+		}
+	}
+	if r := painted[229]; r.Origin.Y != -10 {
+		t.Fatalf("row 229 painted at %v, want 10 above the window's top", r.Origin.Y)
+	}
+}

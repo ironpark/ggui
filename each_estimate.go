@@ -14,7 +14,6 @@ import (
 type eachEstimate[K comparable] struct {
 	measured map[K]float64 // main-axis size, by key
 	starts   []float64     // where each row starts, and the end of the last plus a gap
-	lead     float64       // where the list starts in its Scroll's content, as last painted
 
 	anchored bool
 	anchor   K       // the row at the window's start
@@ -106,14 +105,14 @@ func (f *EachWidget[T, K]) layoutEstimated(c Constraints, env Env) Size {
 	gap := f.gapFor(env)
 	est.place(f.keys, f.estimate, gap)
 
-	vp, ok := ScrollViewport(env)
-	port := scrollPortOf(env)
-	windowed := ok && vp.Horizontal == f.horizontal && n > 0
+	vp, ok := viewportAlong(env, f.horizontal)
+	port := scrollPortAlong(env, f.horizontal)
+	windowed := ok && n > 0
 	// The window, in the list's own coordinates, where it will be once the
 	// Scroll keeps the rows in view in place; and as far again either side,
 	// so that a wheel's step finds its rows laid out, as does a window a
 	// frame off where the list starts in it.
-	lo := vp.Offset - est.lead + est.moved(f.keys)
+	lo := vp.Offset - f.lead + est.moved(f.keys)
 	reach := vp.Extent / 2
 	f.first, f.last = 0, n
 	if windowed {
@@ -152,7 +151,7 @@ func (f *EachWidget[T, K]) layoutEstimated(c Constraints, env Env) Size {
 
 	d := est.moved(f.keys)
 	est.anchored = false
-	if !windowed || port == nil || port.horizontal != f.horizontal {
+	if !windowed || port == nil {
 		return result
 	}
 	if d != 0 {
@@ -160,24 +159,24 @@ func (f *EachWidget[T, K]) layoutEstimated(c Constraints, env Env) Size {
 	}
 	// The window's start once the Scroll has moved, inside the list: the
 	// row there is the one the next layout keeps in place.
-	if start := vp.Offset - est.lead + d; start >= 0 && start < total {
+	if start := vp.Offset - f.lead + d; start >= 0 && start < total {
 		a := est.rowAt(start)
 		est.anchored, est.anchor, est.anchorAt = true, f.keys[a], est.starts[a]
 	}
 	return result
 }
 
-// paintEstimated notes where the list starts in its Scroll's content,
-// which the next layout's window is reckoned from, and lays out again when
-// that moved.
-func (f *EachWidget[T, K]) paintEstimated(r Rect) {
+// paintLead notes, on a virtual path, where the list starts in its
+// Scroll's content, which the next layout's window is reckoned from, and
+// lays out again when that moved: under a header, or padded.
+func (f *EachWidget[T, K]) paintLead(r Rect) {
 	p := f.pin.port
-	if p == nil || p.horizontal != f.horizontal {
+	if p == nil {
 		return
 	}
 	lead := pick(f.horizontal, r.Origin.X-p.rect.Origin.X, r.Origin.Y-p.rect.Origin.Y) + p.visualOffset()
-	if lead != f.est.lead {
-		f.est.lead = lead
+	if lead != f.lead {
+		f.lead = lead
 		f.cache.invalidate()
 		reactive.RequestLayout()
 	}

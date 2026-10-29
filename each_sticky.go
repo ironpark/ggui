@@ -62,17 +62,15 @@ func (f *EachWidget[T, K]) crossAt(i int) float64 {
 }
 
 // layoutPinned lays out, on the virtual path, the header of the section at
-// the window's start when it is not among the rows in view. Virtualization
-// takes the list to start where the Scroll's content does, and so does
-// this.
+// the window's start when it is not among the rows in view.
 func (f *EachWidget[T, K]) layoutPinned(pitch, gap, crossMin, crossMax float64, env Env) {
 	f.pin.row, f.pin.pitch, f.pin.gap = -1, pitch, gap
-	vp, ok := ScrollViewport(env)
+	vp, ok := viewportAlong(env, f.horizontal)
 	n := len(f.items)
-	if f.pin.header == nil || !ok || vp.Horizontal != f.horizontal || n == 0 || pitch <= 0 {
+	if f.pin.header == nil || !ok || n == 0 || pitch <= 0 {
 		return
 	}
-	h := f.headerBefore(clamp(int(math.Floor(vp.Offset/pitch)), 0, n-1))
+	h := f.headerBefore(clamp(int(math.Floor((vp.Offset-f.lead)/pitch)), 0, n-1))
 	if h < 0 {
 		return
 	}

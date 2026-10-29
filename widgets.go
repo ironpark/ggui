@@ -1253,10 +1253,23 @@ type Viewport struct {
 	Horizontal     bool
 }
 
-var viewportKey = NewEnvKey[Viewport]("viewport")
+var (
+	viewportKey = NewEnvKey[Viewport]("viewport")
+	// The window of the nearest Scroll along each axis: a list inside a
+	// Scroll that scrolls the other way, as a diff's long lines do, is
+	// still windowed by the one along its own.
+	viewportXKey = NewEnvKey[Viewport]("viewport x")
+	viewportYKey = NewEnvKey[Viewport]("viewport y")
+)
 
 // ScrollViewport returns the window of the nearest enclosing Scroll, if any.
 func ScrollViewport(env Env) (Viewport, bool) { return env.Get(viewportKey) }
+
+// viewportAlong returns the window of the nearest enclosing Scroll that
+// scrolls along the x axis, for horizontal, or the y axis.
+func viewportAlong(env Env, horizontal bool) (Viewport, bool) {
+	return env.Get(pick(horizontal, viewportXKey, viewportYKey))
+}
 
 // ScrollWidget shows a window onto a child that may be taller (or, with
 // Horizontal, wider) than the space it has, and moves that window with the
@@ -1434,7 +1447,9 @@ func (s *ScrollWidget) Layout(c Constraints, env Env) Size {
 	s.phys.step(s)
 	s.laidAt = s.position()
 	vp := Viewport{Offset: s.laidAt, Extent: s.extent(c.Max()), Horizontal: s.horizontal}
-	s.childSize = s.child.Layout(Loose(inner), env.With(viewportKey, vp).With(scrollPortKey, s))
+	env = env.With(viewportKey, vp).With(scrollPortKey, s).
+		With(pick(s.horizontal, viewportXKey, viewportYKey), vp).With(pick(s.horizontal, scrollPortXKey, scrollPortYKey), s)
+	s.childSize = s.child.Layout(Loose(inner), env)
 	s.viewport = c.Constrain(Sz(bounded(c.MaxW, s.childSize.W), bounded(c.MaxH, s.childSize.H)))
 	if s.shrink {
 		// Constrain keeps it within c, so a tight c still decides.

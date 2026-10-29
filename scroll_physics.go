@@ -323,7 +323,18 @@ func (s *ScrollWidget) visualOffset() float64 {
 
 // scrollPortKey carries the nearest Scroll to its subtree, so a sticky
 // header can find the window's edge and a list can answer ScrollToKey.
-var scrollPortKey = NewEnvKey[*ScrollWidget]("scroll port")
+var (
+	scrollPortKey  = NewEnvKey[*ScrollWidget]("scroll port")
+	scrollPortXKey = NewEnvKey[*ScrollWidget]("scroll port x")
+	scrollPortYKey = NewEnvKey[*ScrollWidget]("scroll port y")
+)
+
+// scrollPortAlong returns the nearest enclosing Scroll along the x axis,
+// for horizontal, or the y axis.
+func scrollPortAlong(env Env, horizontal bool) *ScrollWidget {
+	s, _ := env.Get(pick(horizontal, scrollPortXKey, scrollPortYKey))
+	return s
+}
 
 // scrollPortOf returns the nearest enclosing Scroll in env, if any.
 func scrollPortOf(env Env) *ScrollWidget {
