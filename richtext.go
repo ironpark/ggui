@@ -333,6 +333,12 @@ func (t *RichTextWidget) Paint(dst *Canvas, r Rect) {
 	scale := dst.Scale()
 	for i := range p.lines {
 		ln := &p.lines[i]
+		// A line wholly outside the clip is not shaped and drawn to be
+		// clipped, with a line's height to spare for what reaches past it.
+		top, h := ln.baseline-ln.ascent, ln.ascent+ln.descent
+		if !dst.visiblePaintBounds(Rct(Pt(r.Origin.X, r.Origin.Y+top), Sz(r.Size.W, h)), h) {
+			continue
+		}
 		x := r.Origin.X + p.lineX(i, r.Size.W, align)
 		col := func(style int) color.Color { return p.style(ln.styles[style].run).Color }
 		drawPieces(dst.Image, ln.s, ln.pieces, ln.styles, scale, dst.px(ln.baseline), col, func(op *text.DrawOptions) {

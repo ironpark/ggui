@@ -18,7 +18,7 @@ func (t *TextWidget) PaintRotated(dst *Canvas, r Rect, radians float64) {
 		return
 	}
 	center := r.Center()
-	t.paintLines(dst, r, func(op *text.DrawOptions, x, y float64) {
+	t.paintLines(dst, r, false, func(op *text.DrawOptions, x, y float64) {
 		op.GeoM.Translate(dst.px(x-center.X), dst.px(y-center.Y))
 		op.GeoM.Rotate(radians)
 		op.GeoM.Translate(dst.px(center.X), dst.px(center.Y))

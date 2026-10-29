@@ -1,7 +1,9 @@
 package ggui
 
 import (
+	"fmt"
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/ironpark/ggfx"
@@ -65,5 +67,26 @@ func BenchmarkOffscreenPaintBounds(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		c.visiblePaintBounds(r, 0)
+	}
+}
+
+// TestTextSkipsLinesOutsideTheClip paints a long Text into a canvas that
+// shows one line of it: the lines outside are not shaped and drawn, so it
+// allocates a fraction of what painting all of them does.
+func TestTextSkipsLinesOutsideTheClip(t *testing.T) {
+	img := ggfx.NewImage(400, 400)
+	defer img.Deallocate()
+	var s strings.Builder
+	for i := range 200 {
+		fmt.Fprintf(&s, "line %d of a long text\n", i)
+	}
+	txt := Text(s.String()).NoWrap()
+	size := txt.Layout(Loose(Sz(400, 1e6)), rootEnv())
+	full := &Canvas{Image: img}
+	shown := full.Clip(Rct(Pt(0, 0), Sz(400, 20)))
+	all := testing.AllocsPerRun(5, func() { full.Paint(txt, Rct(Point{}, size)) })
+	one := testing.AllocsPerRun(5, func() { shown.Paint(txt, Rct(Point{}, size)) })
+	if one*10 > all {
+		t.Errorf("painting one line of 200 allocates %v, all of them %v", one, all)
 	}
 }

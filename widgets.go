@@ -94,9 +94,10 @@ type TextWidget struct {
 	natural  Size
 	ascent   float64 // the first baseline, below the top
 	wrapped  wrapKey
-	bidi     textBidi        // the lines in visual order, when the direction or the text needs it
-	rich     *RichTextWidget // what a Selectable Text lays out and paints as
-	richAt   richAt          // what a Selectable Text was laid out for, to lay its lines out when rotated
+	bidi     textBidi         // the lines in visual order, when the direction or the text needs it
+	rich     *RichTextWidget  // what a Selectable Text lays out and paints as
+	richAt   richAt           // what a Selectable Text was laid out for, to lay its lines out when rotated
+	drawOp   text.DrawOptions // reused by paintLines, which would allocate one a paint
 }
 
 // richAt is the width and Env a Selectable Text last laid out in.
@@ -385,7 +386,7 @@ func (t *TextWidget) Paint(dst *Canvas, r Rect) {
 		t.rich.Paint(dst, r)
 		return
 	}
-	t.paintLines(dst, r, func(op *text.DrawOptions, x, y float64) {
+	t.paintLines(dst, r, true, func(op *text.DrawOptions, x, y float64) {
 		op.GeoM.Translate(dst.px(x), dst.px(y))
 	})
 }
@@ -394,7 +395,11 @@ func (t *TextWidget) Paint(dst *Canvas, r Rect) {
 // shared style and line-advance math. place positions one line: it receives the
 // freshly reset GeoM and the line's logical origin, so Paint translates and
 // PaintRotated translates, rotates and translates back.
-func (t *TextWidget) paintLines(dst *Canvas, r Rect, place func(op *text.DrawOptions, x, y float64)) {
+// paintLines draws the lines with place moving each to where it is drawn.
+// upright says place only translates them, so that a line wholly outside
+// the clip is skipped rather than shaped and drawn to be clipped: a long
+// Text in a Scroll draws only what shows.
+func (t *TextWidget) paintLines(dst *Canvas, r Rect, upright bool, place func(op *text.DrawOptions, x, y float64)) {
 	if t.value != "" && !dst.named(r) {
 		dst.Leaf(r, Node{Role: roleOr(t.role, RoleText), Name: t.value})
 	}
@@ -405,13 +410,19 @@ func (t *TextWidget) paintLines(dst *Canvas, r Rect, place func(op *text.DrawOpt
 		t.layoutLines(t.richAt.maxW, t.richAt.env)
 	}
 	face := t.faceAt(dst.Scale())
-	op := &text.DrawOptions{}
+	op := &t.drawOp
+	*op = text.DrawOptions{}
 	col := pick(t.style.Color != nil && !IsEnvColor(t.style.Color), t.style.Color, t.current().Color)
 	op.ColorScale.ScaleWithColor(col)
 	align := pick(t.alignSet, t.align, startAlign(t.bidi.dir))
 	for i, line := range t.lines {
 		x := r.Origin.X + (r.Size.W-t.widths[i])*align
 		y := r.Origin.Y + float64(i)*t.spacing()
+		// A line's glyphs can reach past its box, by an accent, a tall
+		// emoji or a long tail, by up to a line more.
+		if upright && !dst.visiblePaintBounds(Rct(Pt(r.Origin.X, y), Sz(r.Size.W, t.spacing())), t.spacing()) {
+			continue
+		}
 		if t.paintBidi(dst, i, r, align, y, col, place) {
 			continue
 		}
