@@ -187,15 +187,32 @@ func (f *Font) goFace(size float64, w FontWeight, axis bool) *text.GoTextFace {
 // needs one of its glyphs, so a chain of fonts for many scripts reads
 // only those of the scripts drawn.
 func (f *Font) chainFace(size float64, w FontWeight, axis bool) text.Face {
+	return f.chainFaceWith(size, w, axis, nil)
+}
+
+// chainFaceWith is chainFace with set, when not nil, applied to each
+// GoTextFace made, the light one and the loaded one alike: to shape right
+// to left, say.
+func (f *Font) chainFaceWith(size float64, w FontWeight, axis bool, set func(*text.GoTextFace)) text.Face {
+	face := func() text.Face {
+		g := f.goFace(size, w, axis)
+		if set != nil {
+			set(g)
+		}
+		return g
+	}
 	if f.light == nil || f.loaded.Load() {
-		return f.goFace(size, w, axis)
+		return face()
 	}
 	light := &text.GoTextFace{Source: f.light, Size: size}
 	if axis {
 		lo, hi, _ := f.weightAxis()
 		light.SetVariation(wghtTag, min(max(float32(w), lo), hi))
 	}
-	return text.NewLazyFace(light, func() text.Face { return f.goFace(size, w, axis) })
+	if set != nil {
+		set(light)
+	}
+	return text.NewLazyFace(light, face)
 }
 
 func abs(n int) int { return max(n, -n) }

@@ -211,7 +211,9 @@ func rtlSegs(s string, off int, chain *rtlChain) ([]rtlSeg, float64) {
 }
 
 // rtlChain is a Font's faces at one size, weight and language, set right
-// to left, with what each covers.
+// to left, with what each covers: their light sources, which hold the cmap
+// and not the glyphs, so a font is loaded only once a glyph only it has is
+// drawn, as in Font.face's chain.
 type rtlChain struct {
 	srcs  []*text.GoTextFaceSource
 	faces []text.Face
@@ -266,17 +268,20 @@ func (c *rtlChain) addLocked(fb *Font) int {
 		return i
 	}
 	font, axis := fb.forWeight(c.weight)
-	g := font.goFace(c.size, c.weight, axis)
-	g.Direction = text.DirectionRightToLeft
-	g.Language = c.tag
 	last := len(c.faces) - 1
-	c.srcs = slices.Insert(c.srcs, last, font.source())
-	c.faces = slices.Insert(c.faces, last, text.Face(g))
+	c.srcs = slices.Insert(c.srcs, last, font.meta())
+	c.faces = slices.Insert(c.faces, last, font.chainFaceWith(c.size, c.weight, axis, c.rtl))
 	if c.found == nil {
 		c.found = map[*Font]int{}
 	}
 	c.found[fb] = last
 	return last
+}
+
+// rtl sets g to shape right to left in c's language.
+func (c *rtlChain) rtl(g *text.GoTextFace) {
+	g.Direction = text.DirectionRightToLeft
+	g.Language = c.tag
 }
 
 func (c *rtlChain) face(i int) text.Face {
@@ -351,11 +356,8 @@ func newRTLChain(f *Font, size float64, w FontWeight, tag language.Tag) *rtlChai
 	c.system = f.systemFallback()
 	f.mu.Unlock()
 	for _, cf := range fonts {
-		g := cf.font.goFace(size, w, cf.axis)
-		g.Direction = text.DirectionRightToLeft
-		g.Language = tag
-		c.srcs = append(c.srcs, cf.font.source())
-		c.faces = append(c.faces, g)
+		c.srcs = append(c.srcs, cf.font.meta())
+		c.faces = append(c.faces, cf.font.chainFaceWith(size, w, cf.axis, c.rtl))
 	}
 	if !noFallback {
 		c.emoji, _ = f.face(size, w).(*emojiFace)
