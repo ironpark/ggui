@@ -1,0 +1,1428 @@
+// Copyright 2023 The Ebitengine Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package text_test
+
+import (
+	"bufio"
+	"bytes"
+	"image"
+	"image/color"
+	"math"
+	"math/rand/v2"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/go-text/typesetting/bidi"
+	"github.com/hajimehoshi/bitmapfont/v4"
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/gofont/goregular"
+	"golang.org/x/image/font/opentype"
+	"golang.org/x/image/math/fixed"
+
+	"github.com/ironpark/ggfx"
+	t "github.com/ironpark/ggui/internal/gfxtest"
+	"github.com/ironpark/ggui/internal/text"
+	"github.com/ironpark/ggui/internal/text/internal/testfonts"
+	"github.com/ironpark/ggui/internal/text/internal/textutil"
+)
+
+func TestMain(m *testing.M) {
+	t.MainInFrame(m)
+}
+
+func TestGlyphIndex(t *testing.T) {
+	const sampleText = `The quick brown fox jumps
+over the lazy dog.`
+
+	f := text.NewGoXFace(bitmapfont.Face)
+	got := sampleText
+	for _, g := range text.AppendGlyphs(nil, sampleText, f, nil) {
+		got = got[:g.StartIndexInBytes] + strings.Repeat(" ", g.EndIndexInBytes-g.StartIndexInBytes) + got[g.EndIndexInBytes:]
+	}
+	want := regexp.MustCompile(`\S`).ReplaceAllString(sampleText, " ")
+	if got != want {
+		t.Errorf("got: %q, want: %q", got, want)
+	}
+}
+
+func TestGlyphIndexWithLineBreaks(t *testing.T) {
+	// A line break is not always a single byte: it can be "\r\n" or a multi-byte character.
+	for _, lineBreak := range []string{"\n", "\v", "\f", "\r", "\r\n", "\u0085", "\u2028", "\u2029"} {
+		sampleText := "abc" + lineBreak + "defg" + lineBreak + "hijklmno"
+
+		f := text.NewGoXFace(bitmapfont.Face)
+		got := sampleText
+		for _, g := range text.AppendGlyphs(nil, sampleText, f, nil) {
+			if g.StartIndexInBytes < 0 || g.EndIndexInBytes > len(got) || g.StartIndexInBytes >= g.EndIndexInBytes {
+				t.Errorf("lineBreak: %q, invalid indices: [%d, %d)", lineBreak, g.StartIndexInBytes, g.EndIndexInBytes)
+				continue
+			}
+			got = got[:g.StartIndexInBytes] + strings.Repeat(" ", g.EndIndexInBytes-g.StartIndexInBytes) + got[g.EndIndexInBytes:]
+		}
+
+		// All the runes other than the line breaks should be covered by the glyphs.
+		for i, r := range got {
+			if r == ' ' || textutil.IsLineBreak(r) {
+				continue
+			}
+			t.Errorf("lineBreak: %q, unexpected rune %q at %d: %q", lineBreak, r, i, got)
+		}
+	}
+}
+
+func TestTextColor(t *testing.T) {
+	clr := color.RGBA{R: 0x80, G: 0x80, B: 0x80, A: 0x80}
+	img := ggfx.NewImage(30, 30)
+	op := &text.DrawOptions{}
+	op.GeoM.Translate(0, 0)
+	op.ColorScale.ScaleWithColor(clr)
+	text.Draw(img, "Hello", text.NewGoXFace(bitmapfont.Face), op)
+
+	w, h := img.Bounds().Dx(), img.Bounds().Dy()
+	allTransparent := true
+	for j := range h {
+		for i := range w {
+			got := img.At(i, j)
+			want1 := color.RGBA{R: 0x80, G: 0x80, B: 0x80, A: 0x80}
+			var want2 color.RGBA
+			if got != want1 && got != want2 {
+				t.Errorf("img At(%d, %d): got %v; want %v or %v", i, j, got, want1, want2)
+			}
+			if got == want1 {
+				allTransparent = false
+			}
+		}
+	}
+	if allTransparent {
+		t.Fail()
+	}
+}
+
+const testGoXFaceSize = 6
+
+type testGoXFace struct{}
+
+func (f *testGoXFace) Glyph(dot fixed.Point26_6, r rune) (dr image.Rectangle, mask image.Image, maskp image.Point, advance fixed.Int26_6, ok bool) {
+	dr = image.Rect(0, 0, testGoXFaceSize, testGoXFaceSize)
+	a := image.NewAlpha(dr)
+	switch r {
+	case 'a':
+		for j := dr.Min.Y; j < dr.Max.Y; j++ {
+			for i := dr.Min.X; i < dr.Max.X; i++ {
+				a.SetAlpha(i, j, color.Alpha{A: 0x80})
+			}
+		}
+	case 'b':
+		for j := dr.Min.Y; j < dr.Max.Y; j++ {
+			for i := dr.Min.X; i < dr.Max.X; i++ {
+				a.SetAlpha(i, j, color.Alpha{A: 0xff})
+			}
+		}
+	}
+	mask = a
+	advance = fixed.I(testGoXFaceSize)
+	ok = true
+	return
+}
+
+func (f *testGoXFace) GlyphBounds(r rune) (bounds fixed.Rectangle26_6, advance fixed.Int26_6, ok bool) {
+	bounds = fixed.R(0, 0, testGoXFaceSize, testGoXFaceSize)
+	advance = fixed.I(testGoXFaceSize)
+	ok = true
+	return
+}
+
+func (f *testGoXFace) GlyphAdvance(r rune) (advance fixed.Int26_6, ok bool) {
+	return fixed.I(testGoXFaceSize), true
+}
+
+func (f *testGoXFace) Kern(r0, r1 rune) fixed.Int26_6 {
+	if r1 == 'b' {
+		return fixed.I(-testGoXFaceSize)
+	}
+	return 0
+}
+
+func (f *testGoXFace) Close() error {
+	return nil
+}
+
+func (f *testGoXFace) Metrics() font.Metrics {
+	return font.Metrics{
+		Height:     fixed.I(testGoXFaceSize),
+		Ascent:     0,
+		Descent:    fixed.I(testGoXFaceSize),
+		XHeight:    0,
+		CapHeight:  fixed.I(testGoXFaceSize),
+		CaretSlope: image.Pt(0, 1),
+	}
+}
+
+// Issue #1378
+func TestNegativeKern(t *testing.T) {
+	f := text.NewGoXFace(&testGoXFace{})
+	dst := ggfx.NewImage(testGoXFaceSize*2, testGoXFaceSize)
+
+	// With testGoXFace, 'b' is rendered at the previous position as 0xff.
+	// 'a' is rendered at the current position as 0x80.
+	op := &text.DrawOptions{}
+	op.GeoM.Translate(0, 0)
+	text.Draw(dst, "ab", f, op)
+	for j := range testGoXFaceSize {
+		for i := range testGoXFaceSize {
+			got := dst.At(i, j)
+			want := color.RGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}
+			if got != want {
+				t.Errorf("At(%d, %d): got: %v, want: %v", i, j, got, want)
+			}
+		}
+	}
+
+	// The glyph 'a' should be treated correctly.
+	op = &text.DrawOptions{}
+	op.GeoM.Translate(testGoXFaceSize, 0)
+	text.Draw(dst, "a", f, op)
+	for j := range testGoXFaceSize {
+		for i := testGoXFaceSize; i < testGoXFaceSize*2; i++ {
+			got := dst.At(i, j)
+			want := color.RGBA{R: 0x80, G: 0x80, B: 0x80, A: 0x80}
+			if got != want {
+				t.Errorf("At(%d, %d): got: %v, want: %v", i, j, got, want)
+			}
+		}
+	}
+}
+
+type unhashableGoXFace func()
+
+const unhashableGoXFaceSize = 10
+
+func (u *unhashableGoXFace) Glyph(dot fixed.Point26_6, r rune) (dr image.Rectangle, mask image.Image, maskp image.Point, advance fixed.Int26_6, ok bool) {
+	dr = image.Rect(0, 0, unhashableGoXFaceSize, unhashableGoXFaceSize)
+	a := image.NewAlpha(dr)
+	for j := dr.Min.Y; j < dr.Max.Y; j++ {
+		for i := dr.Min.X; i < dr.Max.X; i++ {
+			a.SetAlpha(i, j, color.Alpha{A: 0xff})
+		}
+	}
+	mask = a
+	advance = fixed.I(unhashableGoXFaceSize)
+	ok = true
+	return
+}
+
+func (u *unhashableGoXFace) GlyphBounds(r rune) (bounds fixed.Rectangle26_6, advance fixed.Int26_6, ok bool) {
+	bounds = fixed.R(0, 0, unhashableGoXFaceSize, unhashableGoXFaceSize)
+	advance = fixed.I(unhashableGoXFaceSize)
+	ok = true
+	return
+}
+
+func (u *unhashableGoXFace) GlyphAdvance(r rune) (advance fixed.Int26_6, ok bool) {
+	return fixed.I(unhashableGoXFaceSize), true
+}
+
+func (u *unhashableGoXFace) Kern(r0, r1 rune) fixed.Int26_6 {
+	return 0
+}
+
+func (u *unhashableGoXFace) Close() error {
+	return nil
+}
+
+func (u *unhashableGoXFace) Metrics() font.Metrics {
+	return font.Metrics{
+		Height:     fixed.I(unhashableGoXFaceSize),
+		Ascent:     0,
+		Descent:    fixed.I(unhashableGoXFaceSize),
+		XHeight:    0,
+		CapHeight:  fixed.I(unhashableGoXFaceSize),
+		CaretSlope: image.Pt(0, 1),
+	}
+}
+
+// Issue #2669
+func TestUnhashableFace(t *testing.T) {
+	var face unhashableGoXFace
+	f := text.NewGoXFace(&face)
+	dst := ggfx.NewImage(unhashableGoXFaceSize*2, unhashableGoXFaceSize*2)
+	text.Draw(dst, "a", f, nil)
+
+	for j := range unhashableGoXFaceSize * 2 {
+		for i := range unhashableGoXFaceSize * 2 {
+			got := dst.At(i, j)
+			var want color.RGBA
+			if i < unhashableGoXFaceSize && j < unhashableGoXFaceSize {
+				want = color.RGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}
+			}
+			if got != want {
+				t.Errorf("At(%d, %d): got: %v, want: %v", i, j, got, want)
+			}
+		}
+	}
+}
+
+func TestConvertToFixed26_6(t *testing.T) {
+	testCases := []struct {
+		In  float64
+		Out fixed.Int26_6
+	}{
+		{
+			In:  0,
+			Out: 0,
+		},
+		{
+			In:  0.25,
+			Out: fixed.I(1) / 4,
+		},
+		{
+			In:  0.5,
+			Out: fixed.I(1) / 2,
+		},
+		{
+			In:  1.25,
+			Out: fixed.I(1) * 5 / 4,
+		},
+		{
+			In:  1,
+			Out: fixed.I(1),
+		},
+		{
+			In:  -0.25,
+			Out: fixed.I(-1) / 4,
+		},
+		{
+			In:  -0.5,
+			Out: fixed.I(-1) / 2,
+		},
+		{
+			In:  -1,
+			Out: fixed.I(-1),
+		},
+		{
+			In:  -1.25,
+			Out: fixed.I(-1) * 5 / 4,
+		},
+	}
+
+	for _, tc := range testCases {
+		got := text.Float32ToFixed26_6(float32(tc.In))
+		want := tc.Out
+		if got != want {
+			t.Errorf("Float32ToFixed26_6(%v): got: %v, want: %v", tc.In, got, want)
+		}
+
+		got = text.Float64ToFixed26_6(tc.In)
+		want = tc.Out
+		if got != want {
+			t.Errorf("Float32ToFixed26_6(%v): got: %v, want: %v", tc.In, got, want)
+		}
+	}
+}
+
+func TestConvertToFloat(t *testing.T) {
+	testCases := []struct {
+		In  fixed.Int26_6
+		Out float64
+	}{
+		{
+			In:  0,
+			Out: 0,
+		},
+		{
+			In:  fixed.I(1) / 4,
+			Out: 0.25,
+		},
+		{
+			In:  fixed.I(1) / 2,
+			Out: 0.5,
+		},
+		{
+			In:  fixed.I(1) * 5 / 4,
+			Out: 1.25,
+		},
+		{
+			In:  fixed.I(1),
+			Out: 1,
+		},
+		{
+			In:  fixed.I(-1) / 4,
+			Out: -0.25,
+		},
+		{
+			In:  fixed.I(-1) / 2,
+			Out: -0.5,
+		},
+		{
+			In:  fixed.I(-1),
+			Out: -1,
+		},
+		{
+			In:  fixed.I(-1) * 5 / 4,
+			Out: -1.25,
+		},
+	}
+
+	for _, tc := range testCases {
+		got := text.Fixed26_6ToFloat32(tc.In)
+		want := float32(tc.Out)
+		if got != want {
+			t.Errorf("Fixed26_6ToFloat32(%v): got: %v, want: %v", tc.In, got, want)
+		}
+
+		got64 := text.Fixed26_6ToFloat64(tc.In)
+		want64 := tc.Out
+		if got64 != want64 {
+			t.Errorf("Fixed26_6ToFloat64(%v): got: %v, want: %v", tc.In, got64, want64)
+		}
+	}
+}
+
+// Issue #2954
+func TestDrawOptionsNotModified(t *testing.T) {
+	img := ggfx.NewImage(30, 30)
+
+	op := &text.DrawOptions{}
+	text.Draw(img, "Hello", text.NewGoXFace(bitmapfont.Face), op)
+
+	if got, want := op.GeoM, (ggfx.GeoM{}); got != want {
+		t.Errorf("got: %v, want: %v", got, want)
+	}
+	if got, want := op.ColorScale, (ggfx.ColorScale{}); got != want {
+		t.Errorf("got: %v, want: %v", got, want)
+	}
+}
+
+func TestGoXFaceMetrics(t *testing.T) {
+	const size = 100
+
+	fontFiles := []string{
+		// MPLUS1p-Regular.ttf is an old version of M+ 1p font, and this doesn't have metadata.
+		"MPLUS1p-Regular.ttf",
+		"Roboto-Regular.ttf",
+	}
+
+	for _, fontFile := range fontFiles {
+		t.Run(fontFile, func(t *testing.T) {
+			fontdata, err := os.ReadFile(filepath.Join("testdata", fontFile))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			sfntFont, err := opentype.Parse(fontdata)
+			if err != nil {
+				t.Fatal(err)
+			}
+			opentypeFace, err := opentype.NewFace(sfntFont, &opentype.FaceOptions{
+				Size: size,
+				DPI:  72,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			goXFace := text.NewGoXFace(opentypeFace)
+			goXMetrics := goXFace.Metrics()
+			if goXMetrics.XHeight <= 0 {
+				t.Errorf("GoXFace's XHeight must be positive but not: %f", goXMetrics.XHeight)
+			}
+			if goXMetrics.CapHeight <= 0 {
+				t.Errorf("GoXFace's CapHeight must be positive but not: %f", goXMetrics.CapHeight)
+			}
+
+			goTextFaceSource, err := text.NewGoTextFaceSource(bytes.NewBuffer(fontdata))
+			if err != nil {
+				t.Fatal(err)
+			}
+			goTextFace := &text.GoTextFace{
+				Source: goTextFaceSource,
+				Size:   size,
+			}
+			goTextMetrics := goTextFace.Metrics()
+			if goTextMetrics.XHeight <= 0 {
+				t.Errorf("GoTextFace's XHeight must be positive but not: %f", goTextMetrics.XHeight)
+			}
+			if goTextMetrics.CapHeight <= 0 {
+				t.Errorf("GoTextFace's CapHeight must be positive but not: %f", goTextMetrics.CapHeight)
+			}
+
+			if math.Abs(goXMetrics.XHeight-goTextMetrics.XHeight) >= 0.1 {
+				t.Errorf("XHeight values don't match: %f (GoXFace) vs %f (GoTextFace)", goXMetrics.XHeight, goTextMetrics.XHeight)
+			}
+			if math.Abs(goXMetrics.CapHeight-goTextMetrics.CapHeight) >= 0.1 {
+				t.Errorf("CapHeight values don't match: %f (GoXFace) vs %f (GoTextFace)", goXMetrics.CapHeight, goTextMetrics.CapHeight)
+			}
+
+			// Check that a MultiFace should have the same metrics.
+			multiFace, err := text.NewMultiFace(goTextFace)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := multiFace.Metrics(); got != goTextMetrics {
+				t.Errorf("got: %v, want: %v", got, goTextMetrics)
+			}
+		})
+	}
+}
+
+func TestCollection(t *testing.T) {
+	fontFilePaths := []string{
+		// If a font file doesn't exist, the test is skipped.
+		"/System/Library/Fonts/Helvetica.ttc",
+	}
+	for _, path := range fontFilePaths {
+		t.Run(path, func(t *testing.T) {
+			bs, err := os.ReadFile(path)
+			if err != nil {
+				t.Skipf("skipping: failed to read %s", path)
+			}
+			fs, err := text.NewGoTextFaceSourcesFromCollection(bytes.NewBuffer(bs))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, f := range fs {
+				dst := ggfx.NewImage(16, 16)
+				text.Draw(dst, "a", &text.GoTextFace{
+					Source: f,
+					Size:   16,
+				}, nil)
+			}
+		})
+	}
+}
+
+func TestRuneToBoolMap(t *testing.T) {
+	var rtb text.RuneToBoolMap
+	m := map[rune]bool{}
+	for range 0x100000 {
+		r := rune(rand.IntN(0x10000))
+		gotVal, gotOK := rtb.Get(r)
+		wantVal, wantOK := m[r]
+		if gotVal != wantVal || gotOK != wantOK {
+			t.Fatalf("rune: %c, got: %v, %v; want: %v, %v", r, gotVal, gotOK, wantVal, wantOK)
+		}
+		v := rand.IntN(2)
+		m[r] = v != 0
+		rtb.Set(r, v != 0)
+		if gotVal, gotOK := rtb.Get(r); gotVal != (v != 0) || !gotOK {
+			t.Fatalf("rune: %c, got: %v, %v; want: %v, %v", r, gotVal, gotOK, v != 0, true)
+		}
+	}
+}
+
+func TestRuneToBoolMapConcurrent(t *testing.T) {
+	var rtb text.RuneToBoolMap
+	const goroutines = 16
+	const perGoroutine = 64
+	var wg sync.WaitGroup
+	for g := range goroutines {
+		wg.Go(func() {
+			for i := range perGoroutine {
+				// The rune ranges of the goroutines overlap.
+				r := rune(g*perGoroutine/2 + i)
+				v := r%2 == 0
+				rtb.Set(r, v)
+				if gotVal, gotOK := rtb.Get(r); !gotOK || gotVal != v {
+					t.Errorf("rune %d: got: %v, %v; want: %v, true", r, gotVal, gotOK, v)
+				}
+			}
+		})
+	}
+	wg.Wait()
+}
+
+// Issue #3284
+func TestAppendGlyphsWithInvalidSequence(t *testing.T) {
+	goxFace := text.NewGoXFace(bitmapfont.Face)
+
+	f, err := os.Open(filepath.Join("testdata", "Roboto-Regular.ttf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = f.Close()
+	}()
+	fs, err := text.NewGoTextFaceSource(bufio.NewReader(f))
+	if err != nil {
+		t.Fatal(err)
+	}
+	goTextFace := &text.GoTextFace{
+		Source: fs,
+		Size:   32,
+	}
+
+	for _, tc := range []struct {
+		name string
+		face text.Face
+	}{
+		{
+			name: "GoXFace",
+			face: goxFace,
+		},
+		{
+			name: "GoTextFace",
+			face: goTextFace,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var glyphs []text.Glyph
+			glyphs = text.AppendGlyphs(glyphs, "a\x80b", tc.face, nil)
+			if len(glyphs) != 3 {
+				t.Fatalf("got: %d, want: 3", len(glyphs))
+			}
+			if got, want := glyphs[0].StartIndexInBytes, 0; got != want {
+				t.Errorf("got: %d, want: %d", got, want)
+			}
+			if got, want := glyphs[0].EndIndexInBytes, 1; got != want {
+				t.Errorf("got: %d, want: %d", got, want)
+			}
+			if got, want := glyphs[1].StartIndexInBytes, 1; got != want {
+				t.Errorf("got: %d, want: %d", got, want)
+			}
+			if got, want := glyphs[1].EndIndexInBytes, 2; got != want {
+				t.Errorf("got: %d, want: %d", got, want)
+			}
+			if got, want := glyphs[2].StartIndexInBytes, 2; got != want {
+				t.Errorf("got: %d, want: %d", got, want)
+			}
+			if got, want := glyphs[2].EndIndexInBytes, 3; got != want {
+				t.Errorf("got: %d, want: %d", got, want)
+			}
+		})
+	}
+}
+
+func TestBitmapFont(t *testing.T) {
+	source, err := text.NewGoTextFaceSource(bytes.NewReader(testfonts.TerminusTTF_ttf))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The font has bitmap strikes at these ppem values.
+	bitmapSizes := []float64{12, 14, 16, 18, 20, 22, 24, 28, 32}
+
+	for _, size := range bitmapSizes {
+		face := &text.GoTextFace{
+			Source: source,
+			Size:   size,
+		}
+
+		const str = "Hg"
+
+		imgW := int(size) * len(str) * 2
+		imgH := int(size) * 3
+		dst := ggfx.NewImage(imgW, imgH)
+		defer dst.Deallocate()
+
+		op := &text.DrawOptions{}
+		op.GeoM.Translate(0, size)
+		op.ColorScale.ScaleWithColor(color.White)
+		text.Draw(dst, str, face, op)
+
+		// Verify that some non-transparent pixels exist.
+		var hasPixel bool
+		for j := range imgH {
+			for i := range imgW {
+				if _, _, _, a := dst.At(i, j).RGBA(); a > 0 {
+					hasPixel = true
+				}
+			}
+		}
+		if !hasPixel {
+			t.Errorf("size %v: no pixels were rendered", size)
+			continue
+		}
+
+		// Bitmap glyphs should have no anti-aliasing:
+		// every pixel should be either fully opaque or fully transparent.
+		for j := range imgH {
+			for i := range imgW {
+				if _, _, _, a := dst.At(i, j).RGBA(); a != 0 && a != 0xffff {
+					t.Errorf("size %v: pixel at (%d, %d) has alpha %d; want 0 or 0xffff (bitmap glyph should not be anti-aliased)", size, i, j, a)
+				}
+			}
+		}
+	}
+}
+
+func TestBitmapFontBaseline(t *testing.T) {
+	source, err := text.NewGoTextFaceSource(bytes.NewReader(testfonts.TerminusTTF_ttf))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const size = 16
+	face := &text.GoTextFace{
+		Source: source,
+		Size:   size,
+	}
+
+	// Render each character individually and check that the bottommost
+	// row of pixels is at the same Y position (consistent baseline).
+	chars := []rune{'T', 'h', 'e', 'q', 'u', 'i', 'c', 'k'}
+	var bottoms []int
+	for _, ch := range chars {
+		imgW := size * 2
+		imgH := size * 3
+		dst := ggfx.NewImage(imgW, imgH)
+		defer dst.Deallocate()
+
+		op := &text.DrawOptions{}
+		op.GeoM.Translate(0, size)
+		op.ColorScale.ScaleWithColor(color.White)
+		text.Draw(dst, string(ch), face, op)
+
+		bottom := -1
+		for j := range imgH {
+			for i := range imgW {
+				if _, _, _, a := dst.At(i, j).RGBA(); a > 0 && j > bottom {
+					bottom = j
+				}
+			}
+		}
+		bottoms = append(bottoms, bottom)
+	}
+
+	// Characters without descenders (T, h, e, u, i, c, k) should share the same bottom Y.
+	// 'q' has a descender so skip index 3.
+	baselineChars := []int{0, 1, 2, 4, 5, 6, 7}
+	ref := bottoms[baselineChars[0]]
+	for _, idx := range baselineChars[1:] {
+		if bottoms[idx] != ref {
+			t.Errorf("baseline mismatch: %c bottom=%d, %c bottom=%d",
+				chars[baselineChars[0]], ref, chars[idx], bottoms[idx])
+		}
+	}
+}
+
+func TestGlyphAdvance(t *testing.T) {
+	const eps = 1.0 / (1 << 6)
+
+	goxFace := text.NewGoXFace(bitmapfont.Face)
+
+	source, err := text.NewGoTextFaceSource(bytes.NewReader(testfonts.MPlus1pRegular_ttf))
+	if err != nil {
+		t.Fatal(err)
+	}
+	gtLTR := &text.GoTextFace{
+		Source:    source,
+		Size:      24,
+		Direction: text.DirectionLeftToRight,
+	}
+	gtVertical := &text.GoTextFace{
+		Source:    source,
+		Size:      24,
+		Direction: text.DirectionTopToBottomAndRightToLeft,
+	}
+
+	cases := []struct {
+		name     string
+		face     text.Face
+		text     string
+		vertical bool
+	}{
+		{
+			name: "GoXFace/Hello",
+			face: goxFace,
+			text: "Hello",
+		},
+		{
+			name: "GoXFace/single",
+			face: goxFace,
+			text: "A",
+		},
+		{
+			name: "GoTextFace/horizontal",
+			face: gtLTR,
+			text: "Hello",
+		},
+		{
+			name:     "GoTextFace/vertical",
+			face:     gtVertical,
+			text:     "あいうえお",
+			vertical: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			glyphs := text.AppendGlyphs(nil, tc.text, tc.face, nil)
+			if len(glyphs) == 0 {
+				t.Fatalf("no glyphs produced for %q", tc.text)
+			}
+
+			// Per-glyph contiguity: origin + advance equals the next origin.
+			for i := 0; i < len(glyphs)-1; i++ {
+				gotX := glyphs[i].OriginX + glyphs[i].AdvanceX
+				gotY := glyphs[i].OriginY + glyphs[i].AdvanceY
+				wantX := glyphs[i+1].OriginX
+				wantY := glyphs[i+1].OriginY
+				if math.Abs(gotX-wantX) > eps {
+					t.Errorf("glyph %d: OriginX+AdvanceX = %v, next OriginX = %v", i, gotX, wantX)
+				}
+				if math.Abs(gotY-wantY) > eps {
+					t.Errorf("glyph %d: OriginY+AdvanceY = %v, next OriginY = %v", i, gotY, wantY)
+				}
+			}
+
+			// AdvanceX/AdvanceY are populated only for the corresponding direction.
+			for i, g := range glyphs {
+				if tc.vertical {
+					if g.AdvanceX != 0 {
+						t.Errorf("glyph %d: AdvanceX = %v, want 0 for vertical layout", i, g.AdvanceX)
+					}
+				} else {
+					if g.AdvanceY != 0 {
+						t.Errorf("glyph %d: AdvanceY = %v, want 0 for horizontal layout", i, g.AdvanceY)
+					}
+				}
+			}
+
+			// Sum across the line equals text.AdvanceAt(_, len(text), _).
+			last := glyphs[len(glyphs)-1]
+			advance := text.AdvanceAt(tc.text, len(tc.text), tc.face)
+			if tc.vertical {
+				// For vertical layouts, GoTextFace.advance returns a negative value
+				// matching the AdvanceY sign convention.
+				gotEnd := last.OriginY + last.AdvanceY - glyphs[0].OriginY
+				if math.Abs(gotEnd-advance) > eps {
+					t.Errorf("vertical: last OriginY+AdvanceY - first OriginY = %v, want %v", gotEnd, advance)
+				}
+			} else {
+				gotEnd := last.OriginX + last.AdvanceX - glyphs[0].OriginX
+				if math.Abs(gotEnd-advance) > eps {
+					t.Errorf("horizontal: last OriginX+AdvanceX - first OriginX = %v, want %v", gotEnd, advance)
+				}
+			}
+		})
+	}
+}
+
+func TestAdvanceAt(t *testing.T) {
+	const eps = 1.0 / (1 << 6)
+
+	goxFace := text.NewGoXFace(bitmapfont.Face)
+
+	source, err := text.NewGoTextFaceSource(bytes.NewReader(testfonts.MPlus1pRegular_ttf))
+	if err != nil {
+		t.Fatal(err)
+	}
+	gtLTR := &text.GoTextFace{
+		Source:    source,
+		Size:      24,
+		Direction: text.DirectionLeftToRight,
+	}
+	gtVertical := &text.GoTextFace{
+		Source:    source,
+		Size:      24,
+		Direction: text.DirectionTopToBottomAndRightToLeft,
+	}
+
+	cases := []struct {
+		name string
+		face text.Face
+		text string
+	}{
+		{
+			name: "GoXFace/ASCII",
+			face: goxFace,
+			text: "Hello, world",
+		},
+		{
+			name: "GoXFace/MultiByte",
+			face: goxFace,
+			text: "Hello, 世界",
+		},
+		{
+			name: "GoTextFace/LTR",
+			face: gtLTR,
+			text: "Hello, world",
+		},
+		{
+			name: "GoTextFace/LTR/MultiByte",
+			face: gtLTR,
+			text: "Hello, 世界",
+		},
+		{
+			name: "GoTextFace/Vertical",
+			face: gtVertical,
+			text: "あいうえお",
+		},
+		{
+			name: "GoTextFace/LTR/MultiSentence",
+			face: gtLTR,
+			text: "Hello. World. Goodbye!",
+		},
+		{
+			name: "GoTextFace/LTR/MultiSentenceLowercaseSuppress",
+			face: gtLTR,
+			text: "Yes etc. and so on.",
+		},
+		{
+			name: "GoTextFace/LTR/CJKMultiSentence",
+			face: gtLTR,
+			text: "今日は雨だ。明日も雨だ。",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := text.AdvanceAt(tc.text, 0, tc.face); got != 0 {
+				t.Errorf("AdvanceAt(_, 0, _) = %v, want 0", got)
+			}
+
+			// AdvanceAt is monotonic non-decreasing along the byte sequence.
+			// The vertical sign convention is normalized to magnitude by
+			// GoTextFace.advanceAt.
+			var prev float64
+			for i := range tc.text {
+				got := text.AdvanceAt(tc.text, i, tc.face)
+				if got < prev-eps {
+					t.Errorf("AdvanceAt(_, %d, _) = %v, expected >= previous %v", i, got, prev)
+				}
+				prev = got
+			}
+
+			// Snap-to-prev: AdvanceAt within a multi-byte rune equals the
+			// advance at the rune's start.
+			for i, r := range tc.text {
+				runeLen := len(string(r))
+				if runeLen < 2 {
+					continue
+				}
+				atStart := text.AdvanceAt(tc.text, i, tc.face)
+				for off := 1; off < runeLen; off++ {
+					got := text.AdvanceAt(tc.text, i+off, tc.face)
+					if math.Abs(got-atStart) > eps {
+						t.Errorf("AdvanceAt(_, %d, _) = %v, want snap-to-prev %v", i+off, got, atStart)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestAdvanceAtBidi(t *testing.T) {
+	const eps = 1.0 / (1 << 6)
+
+	source, err := text.NewGoTextFaceSource(bytes.NewReader(testfonts.MPlus1pRegular_ttf))
+	if err != nil {
+		t.Fatal(err)
+	}
+	face := &text.GoTextFace{
+		Source:    source,
+		Size:      24,
+		Direction: text.DirectionLeftToRight,
+	}
+
+	// Mixed bidi text: LTR + RTL + LTR with base = LTR. Hebrew runes
+	// are 2 bytes each in UTF-8, so logical byte offsets are:
+	//   a=0 b=1 c=2  א=3 ב=5 ג=7  x=9 y=10 z=11  end=12
+	s := "abc" + "אבג" + "xyz"
+
+	at := func(i int) float64 { return text.AdvanceAt(s, i, face) }
+
+	if got := at(0); got != 0 {
+		t.Errorf("AdvanceAt(0) = %v, want 0", got)
+	}
+
+	// End-of-text is the total visual line width.
+	fullAt := at(len(s))
+
+	// Leading LTR run "abc" grows monotonically.
+	a0, a1, a2 := at(0), at(1), at(2)
+	if !(a0 < a1 && a1 < a2) {
+		t.Errorf("LTR prefix not monotonic: %v %v %v", a0, a1, a2)
+	}
+
+	// Inside the RTL run, the leading-edge X decreases as the logical
+	// position advances, because RTL glyphs are visually reversed within
+	// their run.
+	aAlef, aBet, aGimel := at(3), at(5), at(7)
+	if !(aAlef > aBet && aBet > aGimel) {
+		t.Errorf("RTL run not visually reversed: aAlef=%v aBet=%v aGimel=%v", aAlef, aBet, aGimel)
+	}
+
+	// At the LTR→RTL→LTR seam on the right side of the RTL run, the
+	// leading edge of א (RTL, leading = right side) coincides with the
+	// leading edge of x (LTR, leading = left side).
+	aX := at(9)
+	if math.Abs(aAlef-aX) > eps {
+		t.Errorf("RTL→LTR seam mismatch: leading(א)=%v leading(x)=%v", aAlef, aX)
+	}
+
+	// Trailing LTR run "xyz" grows monotonically again.
+	aY, aZ := at(10), at(11)
+	if !(aX < aY && aY < aZ && aZ < fullAt) {
+		t.Errorf("LTR suffix not monotonic: %v %v %v %v", aX, aY, aZ, fullAt)
+	}
+
+	// Snap-to-prev: bytes interior to a Hebrew rune (2 bytes each) take
+	// the leading-edge X of the rune's start byte.
+	for _, start := range []int{3, 5, 7} {
+		if got := at(start + 1); math.Abs(got-at(start)) > eps {
+			t.Errorf("AdvanceAt(%d) = %v, want snap-to-prev %v", start+1, got, at(start))
+		}
+	}
+
+	// Special case: when the text ends with an RTL run under an LTR
+	// base, AdvanceAt(text, len) returns the total visual line width
+	// rather than snap-to-prev'ing onto an interior position, so it
+	// preserves parity with Advance. The interior position that
+	// snap-to-prev would otherwise pick is the leading edge of ג (the
+	// visually-leftmost glyph in the RTL run, which is the last logical
+	// byte's cluster-start in logical order); the special case must
+	// jump past that to the visual line end.
+	s2 := "abc" + "אבג"
+	at2 := func(i int) float64 { return text.AdvanceAt(s2, i, face) }
+	full2 := at2(len(s2))
+	// Leading edge of ג sits inside the line (right side of the visually
+	// leftmost RTL glyph); the end-of-text X must lie strictly past it.
+	if leadGimel := at2(7); !(full2 > leadGimel+eps) {
+		t.Errorf("AdvanceAt(len) = %v, want strictly > leading(ג) = %v", full2, leadGimel)
+	}
+
+	// Base-RTL paragraph with multiple separately-shaped LTR runs.
+	// Under proper L2, the two adjacent level-2 runs "Hello " and
+	// "こんにちは" are reversed among themselves: the Japanese word is
+	// laid out visually to the right of the English word, not to its
+	// left as a single global slice reversal would do. Comparing the
+	// caret X inside each catches that distinction.
+	rtlBase := &text.GoTextFace{
+		Source:    source,
+		Size:      24,
+		Direction: text.DirectionRightToLeft,
+	}
+	const rtlText = "Hello こんにちは (שלום) world!"
+	leadE := text.AdvanceAt(rtlText, 1, rtlBase)              // inside "Hello"
+	leadJa := text.AdvanceAt(rtlText, len("Hello "), rtlBase) // start of "こんにちは"
+	if !(leadE+eps < leadJa) {
+		t.Errorf("RTL-base mixed bidi: leading inside Hello = %v, want < leading at こ = %v", leadE, leadJa)
+	}
+
+	// L1: trailing whitespace in a line that ends with an RTL run under
+	// LTR base should land at the visual right end, not interleaved with
+	// the RTL run. Without L1 the trailing spaces would inherit the RTL
+	// level and L2 would place them inside the Hebrew word.
+	const tailText = "Hello עברית   "
+	tailStart := len("Hello עברית")
+	leadSpace := text.AdvanceAt(tailText, tailStart, face) // first trailing space
+	leadEnd := text.AdvanceAt(tailText, len(tailText), face)
+	// Pick a position inside the Hebrew run. "עברית" runes are 2 bytes
+	// each; byte len("Hello ")+2 is the start of the second Hebrew letter.
+	leadInsideHebrew := text.AdvanceAt(tailText, len("Hello ")+2, face)
+	if !(leadInsideHebrew+eps < leadSpace) {
+		t.Errorf("L1 trailing whitespace: leading inside Hebrew = %v, want < leading at first trailing space = %v",
+			leadInsideHebrew, leadSpace)
+	}
+	if !(leadSpace+eps < leadEnd) {
+		t.Errorf("L1 trailing whitespace: leading at first trailing space = %v, want < leading at end = %v",
+			leadSpace, leadEnd)
+	}
+}
+
+// TestAdvanceAtRTLLineUnderChunker covers a pure-RTL line on an LTR
+// face: the chunker emits the RTL run whole, and the in-chunk layout
+// must still place logically-earlier RTL bytes visually to the right
+// of logically-later ones.
+func TestAdvanceAtRTLLineUnderChunker(t *testing.T) {
+	const eps = 1.0 / (1 << 6)
+
+	source, err := text.NewGoTextFaceSource(bytes.NewReader(testfonts.MPlus1pRegular_ttf))
+	if err != nil {
+		t.Fatal(err)
+	}
+	face := &text.GoTextFace{
+		Source:    source,
+		Size:      24,
+		Direction: text.DirectionLeftToRight,
+	}
+
+	// Two Hebrew sentences under LTR-paragraph treatment. The body
+	// of the line resolves to level 1 (RTL) and the chunker emits it
+	// as a single chunk; the trailing period takes paragraph
+	// direction L by N2 and becomes a separate level-0 chunk.
+	//
+	// Bytes (Hebrew letters are 2 bytes each):
+	//   א=0 ב=2 .=4 ' '=5 ג=6 ד=8 .=10
+	const s = "אב. גד."
+
+	// Sample two RTL bytes inside the single L1 chunk (AdvanceAt(0)
+	// is hardcoded to 0, so it can't witness the right-edge
+	// convention of an RTL byte).
+	leadBet := text.AdvanceAt(s, 2, face)   // leading edge of ב
+	leadDaled := text.AdvanceAt(s, 8, face) // leading edge of ד
+
+	// ב is logically before ד within the RTL run, so visually ב
+	// sits to the right of ד. Under the leading-edge convention for
+	// RTL, the leading edge of ב must therefore lie strictly to the
+	// right of the leading edge of ד.
+	if !(leadBet > leadDaled+eps) {
+		t.Errorf("RTL layout: leading(ב)=%v should be > leading(ד)=%v", leadBet, leadDaled)
+	}
+}
+
+func TestAdvanceAtMultiFace(t *testing.T) {
+	const eps = 1.0 / (1 << 6)
+
+	source, err := text.NewGoTextFaceSource(bytes.NewReader(testfonts.MPlus1pRegular_ttf))
+	if err != nil {
+		t.Fatal(err)
+	}
+	gt := &text.GoTextFace{Source: source, Size: 24}
+	gx := text.NewGoXFace(bitmapfont.Face)
+	m, err := text.NewMultiFace(gx, gt)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	str := "Hello, 世界"
+
+	var prev float64
+	for i := range str {
+		got := text.AdvanceAt(str, i, m)
+		if got < prev-eps {
+			t.Errorf("MultiFace: AdvanceAt(_, %d, _) = %v < previous %v", i, got, prev)
+		}
+		prev = got
+	}
+}
+
+// Issue #3458
+func TestAdvanceAtLineBreak(t *testing.T) {
+	const eps = 1.0 / (1 << 6)
+
+	source, err := text.NewGoTextFaceSource(bytes.NewReader(testfonts.MPlus1pRegular_ttf))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	goTextFace := &text.GoTextFace{
+		Source:    source,
+		Size:      24,
+		Direction: text.DirectionLeftToRight,
+	}
+	limitedFace := text.NewLimitedFace(goTextFace)
+	limitedFace.AddUnicodeRange('a', 'd')
+	multiFace, err := text.NewMultiFace(limitedFace, goTextFace)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name string
+		face text.Face
+	}{
+		{
+			name: "GoXFace",
+			face: text.NewGoXFace(bitmapfont.Face),
+		},
+		{
+			name: "GoTextFace",
+			face: goTextFace,
+		},
+		{
+			name: "LimitedFace",
+			face: limitedFace,
+		},
+		{
+			name: "MultiFace",
+			face: multiFace,
+		},
+	}
+
+	// AdvanceAt operates on the first line only. For each tail, the result
+	// at every byte position from len("a") to len("a"+tail) must equal the
+	// advance at the end of the first line.
+	tails := []string{
+		"\n", "\r", "\v", "\f", "\u0085", "\u2028", "\u2029", "\r\n",
+		"\nb", "\nbcd", "\r\nbcd",
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			baseline := text.AdvanceAt("a", 1, tc.face)
+			if baseline == 0 {
+				t.Fatalf("AdvanceAt(%q, 1, _) = 0, want non-zero", "a")
+			}
+			for _, tail := range tails {
+				str := "a" + tail
+				for i := 1; i <= len(str); i++ {
+					got := text.AdvanceAt(str, i, tc.face)
+					if math.Abs(got-baseline) > eps {
+						t.Errorf("AdvanceAt(%q, %d, _) = %v, want %v", str, i, got, baseline)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestAdvanceAtPanic(t *testing.T) {
+	source, err := text.NewGoTextFaceSource(bytes.NewReader(testfonts.MPlus1pRegular_ttf))
+	if err != nil {
+		t.Fatal(err)
+	}
+	face := &text.GoTextFace{Source: source, Size: 24}
+	str := "Hi"
+
+	for _, indexInBytes := range []int{-1, len(str) + 1} {
+		func() {
+			defer func() {
+				if recover() == nil {
+					t.Errorf("AdvanceAt(_, %d, _) did not panic", indexInBytes)
+				}
+			}()
+			_ = text.AdvanceAt(str, indexInBytes, face)
+		}()
+	}
+}
+
+func TestL2VisualOrder(t *testing.T) {
+	cases := []struct {
+		name   string
+		levels []bidi.Level
+		want   []int
+	}{
+		{
+			name:   "empty",
+			levels: nil,
+			want:   []int{},
+		},
+		{
+			name:   "single",
+			levels: []bidi.Level{1},
+			want:   []int{0},
+		},
+		{
+			name:   "pure LTR",
+			levels: []bidi.Level{0, 0, 0},
+			want:   []int{0, 1, 2},
+		},
+		{
+			name:   "pure RTL",
+			levels: []bidi.Level{1, 1, 1},
+			want:   []int{2, 1, 0},
+		},
+		{
+			name:   "LTR base with one RTL run",
+			levels: []bidi.Level{0, 1, 0},
+			want:   []int{0, 1, 2},
+		},
+		{
+			name:   "LTR base with two adjacent RTL runs",
+			levels: []bidi.Level{0, 1, 1, 0},
+			want:   []int{0, 2, 1, 3},
+		},
+		{
+			name:   "RTL base with one nested LTR",
+			levels: []bidi.Level{1, 2, 1},
+			want:   []int{2, 1, 0},
+		},
+		{
+			name:   "RTL base mixed (Hello+JP / Hebrew / world / !)",
+			levels: []bidi.Level{2, 2, 1, 2, 1},
+			want:   []int{4, 3, 2, 0, 1},
+		},
+		{
+			name:   "three-level nesting",
+			levels: []bidi.Level{0, 1, 2, 1, 0},
+			want:   []int{0, 3, 2, 1, 4},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := text.L2VisualOrder(tc.levels)
+			if len(got) != len(tc.want) {
+				t.Fatalf("L2VisualOrder(%v) length = %d, want %d", tc.levels, len(got), len(tc.want))
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Errorf("L2VisualOrder(%v) = %v, want %v", tc.levels, got, tc.want)
+					break
+				}
+			}
+		})
+	}
+}
+
+// Issue #3529
+func TestDrawWithScaledGeoM(t *testing.T) {
+	const (
+		width  = 64
+		height = 64
+		// steps is the number of positions sampled in one sweep.
+		steps = 24
+	)
+
+	face := text.NewGoXFace(bitmapfont.Face)
+	m := face.Metrics()
+	const str = "AAAA\nBBBB\nCCCC\nDDDD"
+	layoutOp := text.LayoutOptions{
+		LineSpacing: m.HAscent + m.HDescent,
+	}
+
+	// AppendGlyphs never culls glyphs, so drawing its result by hand is the
+	// reference rendering. The glyphs do not depend on the geometry matrix.
+	glyphs := text.AppendGlyphs(nil, str, face, &layoutOp)
+
+	// The text's extent in the text space.
+	var extentX, extentY float64
+	for _, g := range glyphs {
+		if g.Image == nil {
+			continue
+		}
+		b := g.Image.Bounds()
+		extentX = max(extentX, g.X+float64(b.Dx()))
+		extentY = max(extentY, g.Y+float64(b.Dy()))
+	}
+
+	got := ggfx.NewImage(width, height)
+	defer got.Deallocate()
+	want := ggfx.NewImage(width, height)
+	defer want.Deallocate()
+
+	gotPix := make([]byte, 4*width*height)
+	wantPix := make([]byte, 4*width*height)
+
+	sameAsReference := func(geoM ggfx.GeoM) bool {
+		got.Clear()
+		op := &text.DrawOptions{}
+		op.GeoM = geoM
+		op.LayoutOptions = layoutOp
+		text.Draw(got, str, face, op)
+
+		want.Clear()
+		for _, g := range glyphs {
+			if g.Image == nil {
+				continue
+			}
+			op := &ggfx.DrawImageOptions{}
+			op.GeoM.Translate(g.X, g.Y)
+			op.GeoM.Concat(geoM)
+			want.DrawImage(g.Image, op)
+		}
+
+		got.ReadPixels(gotPix)
+		want.ReadPixels(wantPix)
+		return bytes.Equal(gotPix, wantPix)
+	}
+
+	// Slide the text along each axis at various scales, from completely
+	// before the destination to completely after it, so that glyphs straddle
+	// every edge. The axis that is not swept is centered to keep the text
+	// visible there.
+	for _, scale := range []float64{-4, -2, -1, -0.5, 0.5, 1, 1.5, 2, 3, 4} {
+		spanX := extentX * math.Abs(scale)
+		spanY := extentY * math.Abs(scale)
+		centerX := (width - extentX*scale) / 2
+		centerY := (height - extentY*scale) / 2
+		for i := range steps {
+			r := float64(i) / (steps - 1)
+
+			tx := -spanX + (width+2*spanX)*r
+			var geoM ggfx.GeoM
+			geoM.Scale(scale, scale)
+			geoM.Translate(tx, centerY)
+			if !sameAsReference(geoM) {
+				t.Errorf("scale: %v, tx: %v, ty: %v: Draw rendered a different result from AppendGlyphs", scale, tx, centerY)
+			}
+
+			ty := -spanY + (height+2*spanY)*r
+			geoM = ggfx.GeoM{}
+			geoM.Scale(scale, scale)
+			geoM.Translate(centerX, ty)
+			if !sameAsReference(geoM) {
+				t.Errorf("scale: %v, tx: %v, ty: %v: Draw rendered a different result from AppendGlyphs", scale, centerX, ty)
+			}
+		}
+	}
+}
+
+func TestGoTextFaceSourceConcurrentDrawWithDifferentSizes(t *testing.T) {
+	f, err := os.Open(filepath.Join("testdata", "Roboto-Regular.ttf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = f.Close()
+	}()
+	fs, err := text.NewGoTextFaceSource(bufio.NewReader(f))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const goroutineCount = 8
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := range goroutineCount {
+		wg.Go(func() {
+			dst := ggfx.NewImage(64, 64)
+			face := &text.GoTextFace{
+				Source: fs,
+				Size:   float64(10 + i),
+			}
+			<-start
+			var op text.DrawOptions
+			text.Draw(dst, "Hello, World!", face, &op)
+		})
+	}
+	close(start)
+	wg.Wait()
+}
+
+func TestGoXFaceConcurrentDrawAndMeasure(t *testing.T) {
+	sfntFont, err := opentype.Parse(goregular.TTF)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opentypeFace, err := opentype.NewFace(sfntFont, &opentype.FaceOptions{
+		Size: 24,
+		DPI:  72,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := text.NewGoXFace(opentypeFace)
+
+	const (
+		goroutineCount = 8
+		loopCount      = 10
+	)
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := range goroutineCount {
+		wg.Go(func() {
+			dst := ggfx.NewImage(256, 64)
+			str := string(rune('A'+i)) + "xyz"
+			<-start
+			for range loopCount {
+				if i%2 == 0 {
+					var op text.DrawOptions
+					text.Draw(dst, str, f, &op)
+				} else {
+					_, _ = text.Measure(str, f, 0)
+				}
+			}
+		})
+	}
+	close(start)
+	wg.Wait()
+}

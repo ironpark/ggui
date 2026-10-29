@@ -3,7 +3,7 @@ package ggui
 import (
 	"math"
 
-	"github.com/ironpark/ggfx/text/v2"
+	"github.com/ironpark/ggui/internal/text"
 )
 
 // PaintRotated paints already-laid-out text clockwise around the center of r.

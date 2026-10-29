@@ -1,0 +1,459 @@
+// Copyright 2023 The Ebitengine Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Package text shapes, lays out and draws text on a ggfx Image. It began as ggfx's text/v2, a fork
+// of Ebitengine's, and moved into ggui once ggfx kept to rendering.
+//
+// For the example using a TrueType font, see examples in the examples directory.
+package text
+
+import (
+	"fmt"
+	"image"
+
+	"golang.org/x/image/math/fixed"
+
+	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggfx/vector"
+	"github.com/ironpark/ggui/internal/text/internal/textutil"
+)
+
+// Face is an interface representing a font face.
+// The implementations are only faces defined in this package, like GoTextFace and GoXFace.
+type Face interface {
+	// Metrics returns the metrics for this Face.
+	Metrics() Metrics
+
+	// advanceAt returns the visual distance from the line's origin to the caret
+	// at indexInBytes. Only the first line of text is considered: content from
+	// the first line break onward is ignored, and an indexInBytes on or past the
+	// first line break is treated as the end of the first line.
+	advanceAt(text string, indexInBytes int) float64
+
+	hasGlyph(r rune) bool
+
+	// appendLazyGlyphsForLine appends a LazyGlyph for each glyph in line
+	// to glyphs and returns the extended slice. If keepGlyph is non-nil,
+	// glyphs for which it returns false are skipped (the origin still
+	// advances).
+	appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, indexOffset int, originX, originY float64, keepGlyph func(originX, originY float64) bool) []LazyGlyph
+	appendVectorPathForLine(path *vector.Path, line string, originX, originY float64)
+
+	direction() Direction
+
+	// private is an unexported function preventing being implemented by other packages.
+	private()
+}
+
+// Metrics holds the metrics for a Face.
+// A visual depiction is at https://developer.apple.com/library/mac/documentation/TextFonts/Conceptual/CocoaTextArchitecture/Art/glyph_metrics_2x.png
+type Metrics struct {
+	// HLineGap is the recommended amount of vertical space between two lines of text in pixels.
+	HLineGap float64
+
+	// HAscent is the distance in pixels from the top of a line to its baseline for horizontal lines.
+	HAscent float64
+
+	// HDescent is the distance in pixels from the bottom of a line to its baseline for horizontal lines.
+	// The value is typically positive, even though a descender goes below the baseline.
+	HDescent float64
+
+	// VLineGap is the recommended amount of horizontal space between two lines of text in pixels.
+	// If the face is GoXFace or the font doesn't support a vertical direction, VLineGap is 0.
+	VLineGap float64
+
+	// VAscent is the distance in pixels from the top of a line to its baseline for vertical lines.
+	// If the face is GoXFace or the font doesn't support a vertical direction, VAscent is 0.
+	VAscent float64
+
+	// VDescent is the distance in pixels from the bottom of a line to its baseline for vertical lines.
+	// The value is typically positive, even though a descender goes below the baseline.
+	// If the face is GoXFace or the font doesn't support a vertical direction, VDescent is 0.
+	VDescent float64
+
+	// XHeight is the distance in pixels from the baseline to the top of the lower case letters.
+	XHeight float64
+
+	// CapHeight is the distance in pixels from the baseline to the top of the capital letters.
+	CapHeight float64
+}
+
+func fixed26_6ToFloat32(x fixed.Int26_6) float32 {
+	return float32(x) / (1 << 6)
+}
+
+func fixed26_6ToFloat64(x fixed.Int26_6) float64 {
+	return float64(x) / (1 << 6)
+}
+
+func float32ToFixed26_6(x float32) fixed.Int26_6 {
+	return fixed.Int26_6(x * (1 << 6))
+}
+
+func float64ToFixed26_6(x float64) fixed.Int26_6 {
+	return fixed.Int26_6(x * (1 << 6))
+}
+
+func glyphVariationCount(face Face) int {
+	var s float64
+	if m := face.Metrics(); face.direction().isHorizontal() {
+		s = m.HAscent + m.HDescent
+	} else {
+		s = m.VAscent + m.VDescent
+	}
+	// The threshold is decided based on the rendering result of the examples (e.g. examples/text, examples/ui).
+	if s < 20 {
+		return 8
+	}
+	if s < 40 {
+		return 4
+	}
+	if s < 80 {
+		return 2
+	}
+	return 1
+}
+
+func granularityFactor(face Face) fixed.Int26_6 {
+	return (1 << 6) / fixed.Int26_6(glyphVariationCount(face))
+}
+
+func adjustGranularity(x, factor fixed.Int26_6) fixed.Int26_6 {
+	return x / factor * factor
+}
+
+// Glyph represents one glyph to render.
+type Glyph struct {
+	// StartIndexInBytes is the start index in bytes for the given string at AppendGlyphs.
+	StartIndexInBytes int
+
+	// EndIndexInBytes is the end index in bytes for the given string at AppendGlyphs.
+	EndIndexInBytes int
+
+	// GID is an ID for a glyph of TrueType or OpenType font. GID is valid when the face is GoTextFace.
+	GID uint32
+
+	// Image is a rasterized glyph image.
+	// Image is a grayscale image i.e. RGBA values are the same,
+	// except for color glyphs like emojis, whose image is colored.
+	//
+	// Image should be used as a render source and must not be modified.
+	//
+	// Image can be nil.
+	Image *ggfx.Image
+
+	// Colored reports whether Image is colored like a color emoji, rather
+	// than grayscale.
+	Colored bool
+
+	// X is the X position to render this glyph.
+	// The position is determined in a sequence of characters given at AppendGlyphs.
+	// The position's origin is the first character's origin position.
+	//
+	// X is always an integer value; the type is float64 for historical
+	// reasons. See also [LazyGlyph.ImageBounds], which exposes the same
+	// position as part of an [image.Rectangle].
+	X float64
+
+	// Y is the Y position to render this glyph.
+	// The position is determined in a sequence of characters given at AppendGlyphs.
+	// The position's origin is the first character's origin position.
+	//
+	// Y is always an integer value; the type is float64 for historical
+	// reasons. See also [LazyGlyph.ImageBounds], which exposes the same
+	// position as part of an [image.Rectangle].
+	Y float64
+
+	// OriginX is the X position of the origin of this glyph.
+	OriginX float64
+
+	// OriginY is the Y position of the origin of this glyph.
+	OriginY float64
+
+	// OriginOffsetX is the adjustment value to the X position of the origin of this glyph.
+	// OriginOffsetX is usually 0, but can be non-zero for some special glyphs or glyphs in the vertical text layout.
+	OriginOffsetX float64
+
+	// OriginOffsetY is the adjustment value to the Y position of the origin of this glyph.
+	// OriginOffsetY is usually 0, but can be non-zero for some special glyphs or glyphs in the vertical text layout.
+	OriginOffsetY float64
+
+	// AdvanceX is the X advance applied after rendering this glyph.
+	// Non-zero only for horizontal text layouts.
+	//
+	// AdvanceX is the distance from this glyph's origin to the origin of the next glyph in the line,
+	// and can therefore depend on the following glyph.
+	// For the last glyph of a line, [Glyph.OriginX] + AdvanceX minus the first OriginX of that line
+	// equals the line's advance returned by [AdvanceAt].
+	AdvanceX float64
+
+	// AdvanceY is the Y advance applied after rendering this glyph.
+	// Non-zero only for vertical text layouts.
+	//
+	// AdvanceY is the distance from this glyph's origin to the origin of the next glyph in the line,
+	// and can therefore depend on the following glyph.
+	// For the last glyph of a line, [Glyph.OriginY] + AdvanceY minus the first OriginY of that line
+	// equals the line's advance returned by [AdvanceAt].
+	AdvanceY float64
+}
+
+// LazyGlyph is like [Glyph] but its rasterized image is realized on demand.
+//
+// LazyGlyph carries every piece of layout information you need to position,
+// hit-test, or cull a glyph without rasterizing it. [LazyGlyph.Image]
+// returns the rasterized bitmap (possibly from cache) on first access.
+//
+// LazyGlyph is useful when only glyph layout is needed (such as hit testing
+// or cursor positioning), or when a custom draw loop culls glyphs that fall
+// outside a viewport.
+type LazyGlyph struct {
+	// StartIndexInBytes is the start index in bytes for the given string at AppendLazyGlyphs.
+	StartIndexInBytes int
+
+	// EndIndexInBytes is the end index in bytes for the given string at AppendLazyGlyphs.
+	EndIndexInBytes int
+
+	// GID is an ID for a glyph of TrueType or OpenType font. GID is valid when the face is GoTextFace.
+	GID uint32
+
+	// ImageBounds is the rectangle the rasterized glyph image occupies in
+	// the layout coordinate space (with origin at the first character's
+	// origin position). ImageBounds.Min is the position at which the image
+	// should be drawn, and the rectangle's Dx and Dy give the bitmap's
+	// width and height.
+	//
+	// ImageBounds is computed from font metadata without rasterizing the
+	// glyph. ImageBounds is the zero [image.Rectangle] for glyphs that
+	// produce no image (control characters or zero-area glyphs); use
+	// ImageBounds.Empty to detect that case.
+	ImageBounds image.Rectangle
+
+	// OriginX is the X position of the origin of this glyph.
+	OriginX float64
+
+	// OriginY is the Y position of the origin of this glyph.
+	OriginY float64
+
+	// OriginOffsetX is the adjustment value to the X position of the origin of this glyph.
+	// OriginOffsetX is usually 0, but can be non-zero for some special glyphs or glyphs in the vertical text layout.
+	OriginOffsetX float64
+
+	// OriginOffsetY is the adjustment value to the Y position of the origin of this glyph.
+	// OriginOffsetY is usually 0, but can be non-zero for some special glyphs or glyphs in the vertical text layout.
+	OriginOffsetY float64
+
+	// AdvanceX is the X advance applied after rendering this glyph.
+	// Non-zero only for horizontal text layouts.
+	//
+	// AdvanceX is the distance from this glyph's origin to the origin of
+	// the next glyph in the line, and can therefore depend on the
+	// following glyph. For the last glyph of a line, [LazyGlyph.OriginX] +
+	// AdvanceX minus the first OriginX of that line equals the line's
+	// advance returned by [AdvanceAt].
+	AdvanceX float64
+
+	// AdvanceY is the Y advance applied after rendering this glyph.
+	// Non-zero only for vertical text layouts.
+	//
+	// AdvanceY is the distance from this glyph's origin to the origin of
+	// the next glyph in the line, and can therefore depend on the
+	// following glyph. For the last glyph of a line, [LazyGlyph.OriginY] +
+	// AdvanceY minus the first OriginY of that line equals the line's
+	// advance returned by [AdvanceAt].
+	AdvanceY float64
+
+	// imager dispatches glyph image realization. nil when the glyph has no
+	// image (e.g. control characters).
+	//
+	// imager is a per-line, per-face object that owns a tightly-packed
+	// slice of per-glyph data. imageIndex selects the entry within that
+	// slice. Storing a pointer here keeps LazyGlyph small and avoids
+	// carrying redundant references to data that already lives in the
+	// face's own caches.
+	imager glyphImager
+
+	// imageIndex is this glyph's index within imager's args slice.
+	imageIndex int
+}
+
+// Image returns the rasterized glyph bitmap.
+//
+// Image realizes the bitmap on first call and is backed by the same glyph
+// image cache as [Glyph.Image]. Subsequent calls return the cached image at
+// the cost of one cache lookup.
+//
+// Image returns nil for control characters and zero-area glyphs.
+//
+// The returned image is a grayscale image i.e. RGBA values are the same,
+// except for color glyphs like emojis, whose image is colored.
+// The returned image should be used as a render source and must not be modified.
+func (g LazyGlyph) Image() *ggfx.Image {
+	if g.imager == nil {
+		return nil
+	}
+	return g.imager.glyphImage(g.imageIndex)
+}
+
+// Colored reports whether the image returned by [LazyGlyph.Image] is colored
+// like a color emoji, rather than grayscale.
+func (g LazyGlyph) Colored() bool {
+	if g.imager == nil {
+		return false
+	}
+	return g.imager.glyphColored(g.imageIndex)
+}
+
+// glyphImager produces the rasterized image for a glyph identified by its
+// index within a face-specific args slice, and reports whether the glyph is
+// colored without rasterizing it. Implementations are allocated once per
+// face per call to appendLazyGlyphsForLine.
+type glyphImager interface {
+	glyphImage(index int) *ggfx.Image
+	glyphColored(index int) bool
+}
+
+// AdvanceAt returns the visual distance from the line's origin to the caret
+// at indexInBytes, computed from the in-context shape of text. It is intended
+// for caret and selection positioning within a line.
+//
+// AdvanceAt operates on the first line of text only: any content from the
+// first line break onward is ignored, and an indexInBytes that falls on or
+// past the first line break is treated as the end of the first line.
+//
+// AdvanceAt(text, 0, face) is 0.
+// AdvanceAt(text, len(text), face) is the total visual line width, the same
+// value as the deprecated [Advance].
+//
+// If indexInBytes falls strictly inside a glyph cluster (e.g., between bytes
+// of a ligature, a multi-byte rune, or a combining mark and its base), the
+// returned value is snapped to the cluster's leading-edge position in logical
+// order.
+//
+// For bidirectional text, AdvanceAt uses a leading-edge convention: the
+// returned value is the leading edge of the cluster that starts at
+// indexInBytes — the left side of the cluster for left-to-right runs, the
+// right side for right-to-left runs. A logical position on a bidi level
+// boundary has two visually valid caret positions, and this single-value API
+// returns one of them; affinity-aware positioning is not exposed.
+//
+// AdvanceAt panics if indexInBytes is negative or greater than len(text).
+//
+// AdvanceAt is concurrent-safe.
+func AdvanceAt(text string, indexInBytes int, face Face) float64 {
+	if indexInBytes < 0 || indexInBytes > len(text) {
+		panic(fmt.Sprintf("text: indexInBytes %d is out of range [0, %d] at AdvanceAt", indexInBytes, len(text)))
+	}
+	return face.advanceAt(text, indexInBytes)
+}
+
+// Direction represents a direction of text rendering.
+// Direction indicates both the primary direction, in which a text in one line is rendered,
+// and the secondary direction, in which multiple lines are rendered.
+type Direction int
+
+const (
+	// DirectionLeftToRight indicates that the primary direction is from left to right,
+	// and the secondary direction is from top to bottom.
+	DirectionLeftToRight Direction = iota
+
+	// DirectionRightToLeft indicates that the primary direction is from right to left,
+	// and the secondary direction is from top to bottom.
+	DirectionRightToLeft
+
+	// DirectionTopToBottomAndLeftToRight indicates that the primary direction is from top to bottom,
+	// and the secondary direction is from left to right.
+	// This is used e.g. for Mongolian.
+	DirectionTopToBottomAndLeftToRight
+
+	// DirectionTopToBottomAndRightToLeft indicates that the primary direction is from top to bottom,
+	// and the secondary direction is from right to left.
+	// This is used e.g. for Japanese.
+	DirectionTopToBottomAndRightToLeft
+)
+
+func (d Direction) isHorizontal() bool {
+	switch d {
+	case DirectionLeftToRight, DirectionRightToLeft:
+		return true
+	}
+	return false
+}
+
+// Measure measures the boundary size of the text.
+// With a horizontal direction face, the width is the longest line's advance, and the height is the total of line heights.
+// With a vertical direction face, the width and the height are calculated in an opposite manner.
+//
+// Measure is concurrent-safe.
+func Measure(text string, face Face, lineSpacingInPixels float64) (width, height float64) {
+	if text == "" {
+		return 0, 0
+	}
+
+	var primary float64
+	var lineCount int
+	for line := range textutil.Lines(text) {
+		l := textutil.TrimTailingLineBreak(line)
+		primary = max(primary, face.advanceAt(l, len(l)))
+		lineCount++
+	}
+
+	m := face.Metrics()
+
+	if face.direction().isHorizontal() {
+		secondary := float64(lineCount-1)*lineSpacingInPixels + m.HAscent + m.HDescent
+		return primary, secondary
+	}
+	secondary := float64(lineCount-1)*lineSpacingInPixels + m.VAscent + m.VDescent
+	return secondary, primary
+}
+
+// CacheGlyphs pre-caches the glyphs for the given text and the given font face into the cache.
+//
+// Glyphs used for rendering are cached in the least-recently-used way.
+// Then old glyphs might be evicted from the cache.
+// As the cache capacity has limitations, it is not guaranteed that all the glyphs for runes given at CacheGlyphs are cached.
+// The cache is shared with Draw and AppendGlyphs.
+//
+// One rune can have multiple variations of glyphs due to sub-pixels in X or Y direction.
+// CacheGlyphs creates all such variations for one rune, while Draw and AppendGlyphs create only necessary glyphs.
+//
+// Draw and AppendGlyphs automatically create and cache necessary glyphs, so usually you don't have to call CacheGlyphs explicitly.
+// If you really care about the performance, CacheGlyphs might be useful.
+//
+// CacheGlyphs is pretty heavy since it creates all the possible variations of glyphs.
+// Call CacheGlyphs only when you really need it.
+//
+// CacheGlyphs is concurrent-safe.
+func CacheGlyphs(text string, face Face) {
+	var x, y float64
+
+	c := glyphVariationCount(face)
+
+	var buf []LazyGlyph
+	// Create all the possible variations (#2528).
+	for range c {
+		buf = appendLazyGlyphs(buf, text, face, x, y, nil, nil)
+		// Realize each glyph to populate the underlying image cache.
+		for _, g := range buf {
+			g.Image()
+		}
+		buf = buf[:0]
+
+		if face.direction().isHorizontal() {
+			x += 1.0 / float64(c)
+		} else {
+			y += 1.0 / float64(c)
+		}
+	}
+}

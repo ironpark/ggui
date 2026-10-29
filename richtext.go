@@ -5,8 +5,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ironpark/ggfx/text/v2"
 	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/internal/text"
 	"github.com/ironpark/ggui/internal/textedit"
 )
 

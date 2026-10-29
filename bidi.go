@@ -10,7 +10,7 @@ import (
 	"github.com/go-text/typesetting/bidi"
 	gofont "github.com/go-text/typesetting/font"
 	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggfx/text/v2"
+	"github.com/ironpark/ggui/internal/text"
 	"golang.org/x/text/language"
 
 	"github.com/ironpark/ggui/internal/emojidata"

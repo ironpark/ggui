@@ -9,7 +9,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/ironpark/ggfx/text/v2"
+	"github.com/ironpark/ggui/internal/text"
 	"github.com/ironpark/ggui/internal/textedit"
 	"golang.org/x/image/font/gofont/goregular"
 )

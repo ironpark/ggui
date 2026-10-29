@@ -16,7 +16,7 @@ import (
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/textedit"
 
-	"github.com/ironpark/ggfx/text/v2"
+	"github.com/ironpark/ggui/internal/text"
 	"golang.org/x/image/font/gofont/goregular"
 )
 

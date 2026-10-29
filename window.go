@@ -11,6 +11,7 @@ import (
 	"github.com/ironpark/ggui/inspect"
 	"github.com/ironpark/ggui/internal/a11ybridge"
 	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/internal/text"
 	"github.com/ironpark/ggui/internal/textinput"
 	"github.com/ironpark/ggui/runtime"
 	"github.com/ironpark/ggwd"
@@ -506,6 +507,8 @@ func (w *Window) runFrameEvent(ev ggwd.FrameEvent) error {
 	if w.closed {
 		return nil
 	}
+	// The glyph and shaping caches expire after so many frames unused.
+	text.AdvanceTick()
 	// Frames run here, whichever goroutine the engine calls this on. A Probe
 	// does not arm the check: it runs on its test's goroutine, and several
 	// live in one process, so there is no single UI goroutine to compare

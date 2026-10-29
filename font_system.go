@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ironpark/ggfx/text/v2"
+	"github.com/ironpark/ggui/internal/text"
 )
 
 // systemUIFonts loads the platform's interface fonts once, with every

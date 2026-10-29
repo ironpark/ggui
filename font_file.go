@@ -6,7 +6,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/ironpark/ggfx/text/v2"
+	"github.com/ironpark/ggui/internal/text"
 )
 
 // Fonts of files are read where they are rather than into memory: the

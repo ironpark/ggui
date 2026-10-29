@@ -8,7 +8,7 @@ import (
 
 	gofont "github.com/go-text/typesetting/font"
 
-	"github.com/ironpark/ggfx/text/v2"
+	"github.com/ironpark/ggui/internal/text"
 )
 
 // The platforms CI runs on have interface fonts to find: SF on macOS, which

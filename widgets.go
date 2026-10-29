@@ -6,10 +6,10 @@ import (
 	"math"
 	"slices"
 
-	"github.com/ironpark/ggfx/text/v2"
 	"github.com/ironpark/ggui/internal/fn"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/internal/text"
 )
 
 // Built-in widgets follow one shape: a constructor takes what the widget

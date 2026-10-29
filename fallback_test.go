@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/ironpark/ggfx/text/v2"
+	"github.com/ironpark/ggui/internal/text"
 	"golang.org/x/image/font/gofont/goregular"
 )
 

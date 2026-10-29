@@ -3,7 +3,7 @@ package ggui
 import (
 	"image/color"
 
-	"github.com/ironpark/ggfx/text/v2"
+	"github.com/ironpark/ggui/internal/text"
 )
 
 // textBidi is a Text's lines in visual order, for the lines that need

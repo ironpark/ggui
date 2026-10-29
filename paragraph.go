@@ -1,7 +1,7 @@
 package ggui
 
 import (
-	"github.com/ironpark/ggfx/text/v2"
+	"github.com/ironpark/ggui/internal/text"
 )
 
 // paragraph is text in several styles laid out as one: it wraps across

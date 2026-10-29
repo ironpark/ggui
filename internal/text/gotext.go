@@ -1,0 +1,510 @@
+// Copyright 2023 The Ebitengine Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package text
+
+import (
+	"encoding/binary"
+	"fmt"
+	"image"
+	"math"
+	"slices"
+
+	"github.com/go-text/typesetting/di"
+	"github.com/go-text/typesetting/font"
+	glanguage "github.com/go-text/typesetting/language"
+	"github.com/go-text/typesetting/shaping"
+	"golang.org/x/image/math/fixed"
+	"golang.org/x/text/language"
+
+	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggfx/vector"
+)
+
+var _ Face = (*GoTextFace)(nil)
+
+// GoTextFace is a Face implementation for go-text's font.Face (github.com/go-text/typesetting).
+// With a GoTextFace, shaping.HarfbuzzShaper is always used as a shaper internally.
+// GoTextFace includes the source and various options.
+//
+// Unlike GoXFace, one GoTextFace instance doesn't have its own glyph image cache.
+// Instead, a GoTextFaceSource has a glyph image cache.
+// You can casually create multiple GoTextFace instances from the same GoTextFaceSource.
+//
+// Mutating a GoTextFace, including assigning to its fields, while the same face
+// is used for drawing in another goroutine is not allowed.
+// Mutate a face before drawing with it, or use another face.
+type GoTextFace struct {
+	// Source is the font face source.
+	Source *GoTextFaceSource
+
+	// Direction is the rendering direction.
+	// The default (zero) value is left-to-right horizontal.
+	Direction Direction
+
+	// Size is the font size in pixels.
+	//
+	// This package creates glyph images for each size. Thus, gradual change of font size is not efficient.
+	// If you want to change the font size gradually, draw the text on an offscreen with a larger size and scale it down.
+	Size float64
+
+	// Language is a hint for a language (BCP 47).
+	Language language.Tag
+
+	variations []font.Variation
+	features   []shaping.FontFeature
+
+	variationsString string
+	featuresString   string
+}
+
+// SetVariation sets a variation value.
+// For font variations, see https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_fonts/Variable_fonts_guide for more details.
+func (g *GoTextFace) SetVariation(tag Tag, value float32) {
+	idx := len(g.variations)
+	for i, v := range g.variations {
+		if uint32(v.Tag) < uint32(tag) {
+			continue
+		}
+		if uint32(v.Tag) > uint32(tag) {
+			idx = i
+			break
+		}
+		if v.Value == value {
+			return
+		}
+		g.variations[i].Value = value
+		g.variationsString = encodeVariations(g.variations)
+		return
+	}
+
+	// Keep the alphabetical order in order to make the cache key deterministic.
+	g.variations = append(g.variations, font.Variation{})
+	copy(g.variations[idx+1:], g.variations[idx:])
+	g.variations[idx] = font.Variation{
+		Tag:   font.Tag(tag),
+		Value: value,
+	}
+	g.variationsString = encodeVariations(g.variations)
+}
+
+// RemoveVariation removes a variation value.
+func (g *GoTextFace) RemoveVariation(tag Tag) {
+	for i, v := range g.variations {
+		if uint32(v.Tag) < uint32(tag) {
+			continue
+		}
+		if uint32(v.Tag) > uint32(tag) {
+			return
+		}
+
+		copy(g.variations[i:], g.variations[i+1:])
+		g.variations = g.variations[:len(g.variations)-1]
+		g.variationsString = encodeVariations(g.variations)
+		return
+	}
+}
+
+// SetFeature sets a feature value.
+// For font features, see https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_fonts/OpenType_fonts_guide for more details.
+func (g *GoTextFace) SetFeature(tag Tag, value uint32) {
+	idx := len(g.features)
+	for i, f := range g.features {
+		if uint32(f.Tag) < uint32(tag) {
+			continue
+		}
+		if uint32(f.Tag) > uint32(tag) {
+			idx = i
+			break
+		}
+		if f.Value == value {
+			return
+		}
+		g.features[i].Value = value
+		g.featuresString = encodeFeatures(g.features)
+		return
+	}
+
+	// Keep the alphabetical order in order to make the cache key deterministic.
+	g.features = append(g.features, shaping.FontFeature{})
+	copy(g.features[idx+1:], g.features[idx:])
+	g.features[idx] = shaping.FontFeature{
+		Tag:   font.Tag(tag),
+		Value: value,
+	}
+	g.featuresString = encodeFeatures(g.features)
+}
+
+// RemoveFeature removes a feature value.
+func (g *GoTextFace) RemoveFeature(tag Tag) {
+	for i, v := range g.features {
+		if uint32(v.Tag) < uint32(tag) {
+			continue
+		}
+		if uint32(v.Tag) > uint32(tag) {
+			return
+		}
+
+		copy(g.features[i:], g.features[i+1:])
+		g.features = g.features[:len(g.features)-1]
+		g.featuresString = encodeFeatures(g.features)
+		return
+	}
+}
+
+// Tag is a tag for font variations and features.
+// Tag is a 4-byte value like 'cmap'.
+type Tag uint32
+
+// String returns the Tag's string representation.
+func (t Tag) String() string {
+	return string([]byte{byte(t >> 24), byte(t >> 16), byte(t >> 8), byte(t)})
+}
+
+// ParseTag converts a string to Tag.
+func ParseTag(str string) (Tag, error) {
+	if len(str) != 4 {
+		return 0, fmt.Errorf("text: a string's length must be 4 but was %d at ParseTag", len(str))
+	}
+	return Tag((uint32(str[0]) << 24) | (uint32(str[1]) << 16) | (uint32(str[2]) << 8) | uint32(str[3])), nil
+}
+
+// MustParseTag converts a string to Tag.
+// If parsing fails, MustParseTag panics.
+func MustParseTag(str string) Tag {
+	t, err := ParseTag(str)
+	if err != nil {
+		panic(err)
+	}
+	return t
+}
+
+// Metrics implements Face.
+func (g *GoTextFace) Metrics() Metrics {
+	return g.Source.metrics(g.Size)
+}
+
+// encodeVariations returns a binary string encoding of variations
+// suitable for use as a cache key. It is the canonical form referenced
+// by glyphDataCacheKey and glyphRenderDataCacheKey.
+func encodeVariations(variations []font.Variation) string {
+	if len(variations) == 0 {
+		return ""
+	}
+	buf := make([]byte, 0, 8*len(variations))
+	for _, t := range variations {
+		buf = binary.LittleEndian.AppendUint32(buf, uint32(t.Tag))
+		buf = binary.LittleEndian.AppendUint32(buf, math.Float32bits(t.Value))
+	}
+	return string(buf)
+}
+
+// encodeFeatures returns a binary string encoding of features
+// suitable for use as a cache key.
+func encodeFeatures(features []shaping.FontFeature) string {
+	if len(features) == 0 {
+		return ""
+	}
+	buf := make([]byte, 0, 8*len(features))
+	for _, t := range features {
+		buf = binary.LittleEndian.AppendUint32(buf, uint32(t.Tag))
+		buf = binary.LittleEndian.AppendUint32(buf, t.Value)
+	}
+	return string(buf)
+}
+
+func (g *GoTextFace) outputCacheKey(text string) goTextOutputCacheKey {
+	return goTextOutputCacheKey{
+		text:       text,
+		direction:  g.Direction,
+		size:       g.Size,
+		language:   g.Language,
+		variations: g.variationsString,
+		features:   g.featuresString,
+	}
+}
+
+func (g *GoTextFace) diDirection() di.Direction {
+	switch g.Direction {
+	case DirectionLeftToRight:
+		return di.DirectionLTR
+	case DirectionRightToLeft:
+		return di.DirectionRTL
+	default:
+		return di.DirectionTTB
+	}
+}
+
+func (g *GoTextFace) gScript() glanguage.Script {
+	ls, _ := g.Language.Script()
+	s, err := glanguage.ParseScript(ls.String())
+	if err != nil {
+		panic(err)
+	}
+	return s
+}
+
+// advanceAt implements Face.
+func (g *GoTextFace) advanceAt(text string, indexInBytes int) float64 {
+	a := g.Source.advanceAt(text, g, indexInBytes)
+	if g.direction().isHorizontal() {
+		return fixed26_6ToFloat64(a)
+	}
+	return -fixed26_6ToFloat64(a)
+}
+
+// hasGlyph implements Face.
+func (g *GoTextFace) hasGlyph(r rune) bool {
+	return g.Source.hasGlyph(r)
+}
+
+// appendLazyGlyphsForLine implements Face.
+func (g *GoTextFace) appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, indexOffset int, originX, originY float64, keepGlyph func(originX, originY float64) bool) []LazyGlyph {
+	origin := fixed.Point26_6{
+		X: float64ToFixed26_6(originX),
+		Y: float64ToFixed26_6(originY),
+	}
+	horizontal := g.direction().isHorizontal()
+	granularity := granularityFactor(g)
+	gs := g.Source.glyphs(line, g)
+
+	glyphs = slices.Grow(glyphs, len(gs))
+
+	// imager is allocated lazily on the first glyph that produces an image.
+	// If none do (e.g. a line of control characters), no allocation happens.
+	var imager *goTextLineImager
+
+	for i := range gs {
+		glyph := &gs[i]
+		o := origin.Add(fixed.Point26_6{
+			X: glyph.shapingGlyph.XOffset,
+			Y: -glyph.shapingGlyph.YOffset,
+		})
+
+		if keepGlyph == nil || keepGlyph(fixed26_6ToFloat64(o.X), fixed26_6ToFloat64(o.Y)) {
+			// The image position is integer so that the nearest filter can be used.
+			bounds, args, hasImage := goTextGlyphImageInfo(g, glyph, o, granularity)
+
+			var advanceX, advanceY float64
+			if horizontal {
+				advanceX = fixed26_6ToFloat64(glyph.shapingGlyph.Advance)
+			} else {
+				advanceY = -fixed26_6ToFloat64(glyph.shapingGlyph.Advance)
+			}
+
+			lg := LazyGlyph{
+				StartIndexInBytes: indexOffset + glyph.startIndex,
+				EndIndexInBytes:   indexOffset + glyph.endIndex,
+				GID:               uint32(glyph.shapingGlyph.GlyphID),
+				ImageBounds:       bounds,
+				OriginX:           fixed26_6ToFloat64(origin.X),
+				OriginY:           fixed26_6ToFloat64(origin.Y),
+				OriginOffsetX:     fixed26_6ToFloat64(glyph.shapingGlyph.XOffset),
+				OriginOffsetY:     fixed26_6ToFloat64(-glyph.shapingGlyph.YOffset),
+				AdvanceX:          advanceX,
+				AdvanceY:          advanceY,
+			}
+			if hasImage {
+				if imager == nil {
+					imager = &goTextLineImager{
+						face: g,
+						args: make([]goTextGlyphImageArgs, 0, len(gs)-i),
+					}
+				}
+				imager.args = append(imager.args, args)
+				lg.imager = imager
+				lg.imageIndex = len(imager.args) - 1
+			}
+			// Append a glyph even if it has no image (control characters etc.).
+			// This is necessary to return index information for control characters.
+			glyphs = append(glyphs, lg)
+		}
+
+		if horizontal {
+			origin = origin.Add(fixed.Point26_6{
+				X: glyph.shapingGlyph.Advance,
+				Y: 0,
+			})
+		} else {
+			origin = origin.Add(fixed.Point26_6{
+				X: 0,
+				Y: -glyph.shapingGlyph.Advance,
+			})
+		}
+	}
+
+	return glyphs
+}
+
+// goTextLineImager owns a per-call slice of per-glyph args for a single
+// invocation of [GoTextFace.appendLazyGlyphsForLine]. It satisfies
+// [glyphImager].
+type goTextLineImager struct {
+	face *GoTextFace
+	args []goTextGlyphImageArgs
+}
+
+// goTextGlyphImageArgs is the per-glyph data needed by
+// [goTextLineImager.glyphImage]. It points into the cached glyph slice
+// owned by the source's shape-output cache, so the bitmap and scaled
+// segments are not duplicated per occurrence.
+type goTextGlyphImageArgs struct {
+	glyph          *goTextGlyph
+	subpixelOffset fixed.Point26_6
+}
+
+// glyphImage implements glyphImager.
+func (im *goTextLineImager) glyphImage(index int) *ggfx.Image {
+	args := &im.args[index]
+	glyph := args.glyph
+	face := im.face
+	rd := glyph.render
+	// A bitmap glyph is pixel-aligned and its subpixel offset is always
+	// zero (see goTextGlyphImageInfo), so one key form covers both the
+	// bitmap and the outline conventions.
+	key := goTextGlyphImageCacheKey{
+		gid:        glyph.shapingGlyph.GlyphID,
+		xoffset:    args.subpixelOffset.X,
+		yoffset:    args.subpixelOffset.Y,
+		variations: face.variationsString,
+	}
+	subpixelOffset := args.subpixelOffset
+	return face.Source.getOrCreateGlyphImage(face, key, func() (*ggfx.Image, bool) {
+		if bm := rd.bitmap(); bm != nil {
+			return ggfx.NewImageFromImage(bm), true
+		}
+		if svg := rd.svg(); svg != nil {
+			if img := svgToImage(svg, fixed26_6ToFloat64(rd.size), subpixelOffset, rd.bounds); img != nil {
+				return img, true
+			}
+		}
+		if img := colrV0LayersToImage(rd.colrV0Layers(), subpixelOffset, rd.bounds); img != nil {
+			return img, true
+		}
+		// The outline is the last resort, e.g. for an SVG glyph whose
+		// document cannot be rasterized.
+		img := segmentsToImage(rd.segments(), subpixelOffset, rd.bounds)
+		return img, img != nil
+	})
+}
+
+// glyphColored implements glyphImager.
+func (im *goTextLineImager) glyphColored(index int) bool {
+	return im.args[index].glyph.render.colored()
+}
+
+// goTextGlyphImageInfo returns the image bounds in layout space and the
+// per-glyph args needed to realize the image. The bounds are computed
+// without rasterizing. hasImage is false for glyphs that do not produce
+// an image (control characters or glyphs whose extents are empty); in
+// that case bounds is empty and args is the zero value.
+//
+// granularity is taken as a parameter rather than derived from face
+// because the caller is expected to compute it once per layout pass
+// (see granularityFactor) and share it across every glyph.
+func goTextGlyphImageInfo(face *GoTextFace, glyph *goTextGlyph, origin fixed.Point26_6, granularity fixed.Int26_6) (bounds image.Rectangle, args goTextGlyphImageArgs, hasImage bool) {
+	if glyph.render == nil {
+		return
+	}
+	if glyph.render.useBitmap {
+		// Bitmap glyph: dimensions come from rd.bounds (sourced from
+		// GlyphExtents via the sbix or CBDT/EBDT subtable, set during
+		// buildRenderData) so layout doesn't have to wait for the
+		// bitmap to be decoded.
+		b := glyph.render.bounds
+		rw := (b.Max.X - b.Min.X).Ceil()
+		rh := (b.Max.Y - b.Min.Y).Ceil()
+		if rw > 0 && rh > 0 {
+			// Bitmap glyphs are pixel-aligned; no subpixel offset is needed.
+			origin.X &^= ((1 << 6) - 1)
+			origin.Y &^= ((1 << 6) - 1)
+
+			// Position using the shaping glyph's bearing values.
+			imgX := (origin.X + glyph.shapingGlyph.XBearing).Round()
+			imgY := (origin.Y - glyph.shapingGlyph.YBearing).Round()
+			bounds = image.Rect(imgX, imgY, imgX+rw, imgY+rh)
+			args = goTextGlyphImageArgs{glyph: glyph}
+			hasImage = true
+			return
+		}
+	}
+
+	if face.direction().isHorizontal() {
+		origin.X = adjustGranularity(origin.X, granularity)
+		origin.Y &^= ((1 << 6) - 1)
+	} else {
+		origin.X &^= ((1 << 6) - 1)
+		origin.Y = adjustGranularity(origin.Y, granularity)
+	}
+
+	b := glyph.render.bounds
+	subpixelOffset := fixed.Point26_6{
+		X: (origin.X + b.Min.X) & ((1 << 6) - 1),
+		Y: (origin.Y + b.Min.Y) & ((1 << 6) - 1),
+	}
+
+	imgX := (origin.X + b.Min.X).Floor()
+	imgY := (origin.Y + b.Min.Y).Floor()
+
+	// The dimensions follow the formula in segmentsToImage: the +1 covers the
+	// edge case where the outline reaches the bounds.
+	rw := (b.Max.X - b.Min.X).Ceil()
+	rh := (b.Max.Y - b.Min.Y).Ceil()
+	if rw == 0 || rh == 0 {
+		return
+	}
+	bounds = image.Rect(imgX, imgY, imgX+rw+1, imgY+rh+1)
+
+	args = goTextGlyphImageArgs{
+		glyph:          glyph,
+		subpixelOffset: subpixelOffset,
+	}
+	hasImage = true
+	return
+}
+
+// appendVectorPathForLine implements Face.
+func (g *GoTextFace) appendVectorPathForLine(path *vector.Path, line string, originX, originY float64) {
+	origin := fixed.Point26_6{
+		X: float64ToFixed26_6(originX),
+		Y: float64ToFixed26_6(originY),
+	}
+	horizontal := g.direction().isHorizontal()
+	gs := g.Source.glyphs(line, g)
+	for _, glyph := range gs {
+		if glyph.render != nil {
+			appendVectorPathFromSegments(path, glyph.render.segments(), fixed26_6ToFloat32(origin.X), fixed26_6ToFloat32(origin.Y))
+		}
+		if horizontal {
+			origin = origin.Add(fixed.Point26_6{
+				X: glyph.shapingGlyph.Advance,
+				Y: 0,
+			})
+		} else {
+			origin = origin.Add(fixed.Point26_6{
+				X: 0,
+				Y: -glyph.shapingGlyph.Advance,
+			})
+		}
+	}
+}
+
+// direction implements Face.
+func (g *GoTextFace) direction() Direction {
+	return g.Direction
+}
+
+// private implements Face.
+func (g *GoTextFace) private() {
+}
