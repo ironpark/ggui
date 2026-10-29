@@ -216,9 +216,20 @@ type rtlChain struct {
 	srcs  []*text.GoTextFaceSource
 	faces []text.Face
 	emoji *emojiFace // the emoji fallback, if the font has one
+
+	// system makes pick look among all the system's fonts for a rune no
+	// face has, as the font's own chain does, adding the face it finds
+	// before the last. size, weight and tag are what such a face is made
+	// with, and found the fonts added, by their place in faces.
+	system bool
+	size   float64
+	weight FontWeight
+	tag    language.Tag
+	found  map[*Font]int
 }
 
-// nominalMu guards NominalGlyph, which bypasses the source's own lock.
+// nominalMu guards NominalGlyph, which bypasses the source's own lock, and
+// the faces an rtlChain adds as it picks.
 var nominalMu sync.Mutex
 
 // pick returns the index of the face that draws grapheme g: the emoji
@@ -240,13 +251,40 @@ func (c *rtlChain) pick(g string) int {
 			}
 		}
 	}
+	if c.system {
+		if fb := systemFallback(r); fb != nil {
+			return c.addLocked(fb)
+		}
+	}
 	return len(c.faces) - 1
+}
+
+// addLocked returns the place of fb's face, adding it before the last if
+// it is not in c yet. nominalMu must be held.
+func (c *rtlChain) addLocked(fb *Font) int {
+	if i, ok := c.found[fb]; ok {
+		return i
+	}
+	font, axis := fb.forWeight(c.weight)
+	g := font.goFace(c.size, c.weight, axis)
+	g.Direction = text.DirectionRightToLeft
+	g.Language = c.tag
+	last := len(c.faces) - 1
+	c.srcs = slices.Insert(c.srcs, last, font.source())
+	c.faces = slices.Insert(c.faces, last, text.Face(g))
+	if c.found == nil {
+		c.found = map[*Font]int{}
+	}
+	c.found[fb] = last
+	return last
 }
 
 func (c *rtlChain) face(i int) text.Face {
 	if i < 0 {
 		return c.emoji.colorFace()
 	}
+	nominalMu.Lock()
+	defer nominalMu.Unlock()
 	return c.faces[i]
 }
 
@@ -306,10 +344,11 @@ func rtlFaces(f *Font, size float64, w FontWeight, lang shapeLang) *rtlChain {
 // newRTLChain builds f's chain at size and weight, shaping in tag: the
 // same faces Font.face puts in its fallback chain, in its order.
 func newRTLChain(f *Font, size float64, w FontWeight, tag language.Tag) *rtlChain {
-	c := &rtlChain{}
+	c := &rtlChain{size: size, weight: w, tag: tag}
 	f.mu.Lock()
 	fonts, _ := f.chainLocked(w)
 	noFallback := f.noFallback
+	c.system = f.systemFallback()
 	f.mu.Unlock()
 	for _, cf := range fonts {
 		g := cf.font.goFace(size, w, cf.axis)

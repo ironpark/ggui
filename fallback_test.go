@@ -42,3 +42,35 @@ func systemFontDrawsKorean() bool {
 	}
 	return false
 }
+
+// TestGlyphsNoListedFontHasComeFromAnyFontThatDoes draws a rune none of
+// SystemFonts has, which the default font finds in whichever system font
+// has it.
+func TestGlyphsNoListedFontHasComeFromAnyFontThatDoes(t *testing.T) {
+	t.Parallel()
+	drawn := func(s string, face text.Face) bool {
+		glyphs := text.AppendGlyphs(nil, s, face, nil)
+		return len(glyphs) > 0 && !slices.ContainsFunc(glyphs, func(g text.Glyph) bool { return g.GID == 0 })
+	}
+	var s string
+	for _, r := range []rune{'𓀀', 'ᚠ', 'Ꭰ', 'ⴰ', 'ሀ', 'ก', 'ა', 'अ'} {
+		if systemFallback(r) == nil || slices.ContainsFunc(SystemFonts(), func(f *Font) bool { return drawn(string(r), f.face(14, 0)) }) {
+			continue
+		}
+		s = string(r)
+		break
+	}
+	if s == "" {
+		t.Skip("no system font has a rune that the listed ones lack")
+	}
+	face := fallbackFont().face(14, 0)
+	if ef, ok := face.(*emojiFace); ok {
+		face = ef.Face
+	}
+	if !drawn(s, face) {
+		t.Fatalf("%q draws .notdef, though %s has it", s, systemFallback([]rune(s)[0]).meta().Metadata().Family)
+	}
+	if !drawn("a"+s+"b", face) || lineWidth("a"+s+"b", face) <= lineWidth("ab", face) {
+		t.Fatalf("%q between Latin letters is not drawn", s)
+	}
+}

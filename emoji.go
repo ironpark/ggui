@@ -82,9 +82,10 @@ var systemEmoji = sync.OnceValue(func() *Font {
 	case "js", "ios", "android":
 		return nil
 	default:
-		for _, dir := range []string{"/usr/share/fonts", "/usr/local/share/fonts", filepath.Join(os.Getenv("HOME"), ".local/share/fonts")} {
-			paths = append(paths, findFonts(dir, "**/NotoColorEmoji.ttf")...)
-			paths = append(paths, findFonts(dir, "**/Twemoji*.ttf")...)
+		for _, family := range []string{"Noto Color Emoji", "Twemoji", "Twemoji Mozilla"} {
+			for _, file := range systemFamilyFiles(family) {
+				paths = append(paths, file.path)
+			}
 		}
 	}
 	for _, path := range paths {

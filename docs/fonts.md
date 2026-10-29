@@ -20,12 +20,17 @@ font. `SetDefaultFont` replaces the default. An App starts loading these and the
 fallbacks below as it is made, so they load while its window opens.
 
 Glyphs a font lacks are drawn from its fallbacks: `SystemFonts()`, the CJK
-and wide-coverage fonts found at well-known paths on macOS, Windows and Linux,
-then fonts for the symbols interface fonts lack, such as the arrows, dingbats
-and technical symbols command-line programs print (`❯ ⏵ ⏺ ⎿`), plus any files
-in the `GGUI_FONTS` environment variable, tried first. So Korean, Japanese and
-Chinese, and those symbols, render out of the box on a machine that has such a
-font.
+and wide-coverage fonts of macOS, Windows and Linux, then fonts for the symbols
+interface fonts lack, such as the arrows, dingbats and technical symbols
+command-line programs print (`❯ ⏵ ⏺ ⎿`), plus any files in the `GGUI_FONTS`
+environment variable, tried first. A glyph none of those has is drawn from
+whichever installed font has it, preferring an upright font made for its
+script over one covering all of Unicode, so Thai, Ethiopic or Egyptian
+hieroglyphs render too wherever a font for them is installed. Fonts are found
+by family in the index of installed fonts that go-text's `fontscan` keeps,
+built on first use and cached on disk, rather than at fixed paths. So Korean,
+Japanese and Chinese, and those symbols, render out of the box on a machine
+that has such a font.
 A fallback that is a `.ttc` brings every weight in it. `Fallback(fonts...)`
 on a `Font` chooses a chain of your own and `NoFallback()` turns it off.
 `LoadFontFile` also reads the first face of a `.ttc`; `LoadFontCollection`

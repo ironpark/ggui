@@ -269,84 +269,73 @@ var (
 // SystemFonts returns the fonts found on this machine that cover scripts
 // the built-in font does not, mainly CJK, and then symbols interface fonts
 // lack, such as the arrows, dingbats and technical symbols command-line
-// programs print (❯ ⏵ ⏺ ⎿), loaded once from well-known paths per
-// platform. It is what every Font falls back to; call it to
-// see what was found, and Fallback to choose differently. The GGUI_FONTS
-// environment variable lists extra files, separated like PATH, tried
-// first.
+// programs print (❯ ⏵ ⏺ ⎿), found once by family in the index of the
+// system's fonts that go-text's fontscan keeps. It is what every Font
+// falls back to first; a glyph none of them has is then looked for in
+// every font the system has (see systemFallback). Call it to see what was
+// found, and Fallback to choose differently. The GGUI_FONTS environment
+// variable lists extra files, separated like PATH, tried first.
 func SystemFonts() []*Font {
 	systemOnce.Do(func() {
 		seen := map[string]bool{}
-		for _, path := range systemFontPaths() {
-			if seen[path] {
-				continue
+		load := func(files []fontFile) {
+			if len(files) == 0 || seen[files[0].path] {
+				return
 			}
-			seen[path] = true
-			// Every weight of the file, so text asking for one draws it
+			seen[files[0].path] = true
+			// Every weight of the family, so text asking for one draws it
 			// in these scripts too.
-			if f := loadFamily([]fontFile{{path: path}}); f != nil {
+			if f := loadFamily(files); f != nil {
 				f.noFallback = true
 				systemFonts = append(systemFonts, f)
 			}
+		}
+		for _, path := range filepath.SplitList(os.Getenv("GGUI_FONTS")) {
+			if path != "" {
+				load([]fontFile{{path: path}})
+			}
+		}
+		for _, family := range systemFallbackFamilies() {
+			load(systemFamilyFiles(family))
 		}
 	})
 	return systemFonts
 }
 
-// systemFontPaths lists candidate files, most specific first: one per
-// script where the platform has them, then pan-Unicode fonts.
-func systemFontPaths() []string {
-	paths := filepath.SplitList(os.Getenv("GGUI_FONTS"))
+// systemFallbackFamilies lists the families SystemFonts looks for, most
+// specific first: one per script where the platform has them, then
+// symbols, then pan-Unicode fonts.
+func systemFallbackFamilies() []string {
 	switch runtime.GOOS {
 	case "darwin":
-		paths = append(paths,
-			"/System/Library/Fonts/AppleSDGothicNeo.ttc",         // Korean
-			"/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",             // Japanese
-			"/System/Library/Fonts/Hiragino Sans GB.ttc",         // Simplified Chinese
-			"/System/Library/Fonts/PingFang.ttc",                 // Chinese
-			"/System/Library/Fonts/Supplemental/AppleGothic.ttf", // Korean
-			"/System/Library/Fonts/Supplemental/NotoSansGothic-Regular.ttf",
-			"/System/Library/Fonts/Menlo.ttc",                    // dingbats such as ❯ ✳ ✻
-			"/System/Library/Fonts/Apple Symbols.ttf",            // technical symbols such as ⎿
-			"/System/Library/Fonts/Supplemental/STIXTwoMath.otf", // media symbols such as ⏵ ⏺
-			// Wide coverage, and large: last, so a glyph the fonts
-			// above have does not read it.
-			"/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
-		)
+		return []string{
+			"Apple SD Gothic Neo", // Korean
+			"Hiragino Sans",       // Japanese
+			"Hiragino Sans GB",    // Simplified Chinese
+			"PingFang SC",         // Chinese
+			"AppleGothic",         // Korean
+			"Noto Sans Gothic",
+			"Menlo",         // dingbats such as ❯ ✳ ✻
+			"Apple Symbols", // technical symbols such as ⎿
+			"STIX Two Math", // media symbols such as ⏵ ⏺
+			// Wide coverage, and large: last, so a glyph the fonts above
+			// have does not read it.
+			"Arial Unicode MS",
+		}
 	case "windows":
-		dir := filepath.Join(os.Getenv("WINDIR"), "Fonts")
-		for _, name := range []string{"malgun.ttf", "meiryo.ttc", "YuGothM.ttc", "msyh.ttc", "msjh.ttc", "simsun.ttc", "segoeui.ttf", "seguisym.ttf", "cambria.ttc"} {
-			paths = append(paths, filepath.Join(dir, name))
+		return []string{
+			"Malgun Gothic", "Meiryo", "Yu Gothic", "Microsoft YaHei", "Microsoft JhengHei", "SimSun",
+			"Segoe UI", "Segoe UI Symbol", "Cambria Math",
 		}
-	default:
-		for _, dir := range []string{"/usr/share/fonts", "/usr/local/share/fonts", filepath.Join(os.Getenv("HOME"), ".local/share/fonts"), filepath.Join(os.Getenv("HOME"), ".fonts")} {
-			for _, pattern := range []string{
-				"**/NotoSansCJK*-Regular.ttc", "**/NotoSansCJK*-Regular.otf", "**/NotoSansKR-Regular.*", "**/NotoSansJP-Regular.*", "**/NotoSansSC-Regular.*",
-				"**/NanumGothic.ttf", "**/DroidSansFallback*.ttf", "**/wqy-microhei.ttc", "**/wqy-zenhei.ttc",
-				"**/NotoSansSymbols-Regular.*", "**/NotoSansSymbols2-Regular.*", "**/NotoSansMath-Regular.*", "**/DejaVuSans.ttf",
-			} {
-				paths = append(paths, findFonts(dir, pattern)...)
-			}
-		}
-	}
-	return paths
-}
-
-// findFonts walks dir for files matching the base of pattern, which may
-// start with "**/" to search every subdirectory.
-func findFonts(dir, pattern string) []string {
-	base := strings.TrimPrefix(pattern, "**/")
-	var out []string
-	filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return nil
-		}
-		if ok, _ := filepath.Match(base, d.Name()); ok {
-			out = append(out, path)
-		}
+	case "js":
 		return nil
-	})
-	return out
+	}
+	return []string{
+		"Noto Sans CJK KR", "Noto Sans CJK JP", "Noto Sans CJK SC", "Noto Sans CJK TC",
+		"Noto Sans KR", "Noto Sans JP", "Noto Sans SC",
+		"NanumGothic", "Droid Sans Fallback", "WenQuanYi Micro Hei", "WenQuanYi Zen Hei",
+		"Noto Sans Symbols", "Noto Sans Symbols 2", "Noto Sans Math", "DejaVu Sans",
+	}
 }
 
 // MustFont is LoadFont for embedded data that is known to be valid.
@@ -463,6 +452,9 @@ func (f *Font) face(size float64, weight FontWeight) text.Face {
 		for _, cf := range fonts[1:] {
 			faces = append(faces, cf.font.chainFace(size, weight, cf.axis))
 		}
+		if f.systemFallback() {
+			faces = append(faces, systemFallbackFace(size, weight, face))
+		}
 		if m, err := text.NewMultiFace(faces...); err == nil {
 			face = m
 		}
@@ -483,6 +475,12 @@ type chainFont struct {
 	axis bool // it draws the weight on its weight axis
 }
 
+// systemFallback reports whether f falls back to the system's fonts: to
+// SystemFonts, and then to any font that has a glyph they lack.
+func (f *Font) systemFallback() bool {
+	return f.fallbacks == nil && !f.noFallback && runtime.GOOS != "js"
+}
+
 // chainLocked returns the fonts f draws weight w with, in order: its own
 // for w, then each fallback's for w. multi reports whether f has
 // fallbacks at all, its own or the system's, which makes the face a
@@ -500,7 +498,7 @@ func (f *Font) chainLocked(w FontWeight) (fonts []chainFont, multi bool) {
 			fonts = append(fonts, chainFont{fbFont, fbAxis})
 		}
 	}
-	return fonts, len(fallbacks) > 0
+	return fonts, len(fallbacks) > 0 || f.systemFallback()
 }
 
 func lineWidth(s string, face text.Face) float64 {
