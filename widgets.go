@@ -98,6 +98,7 @@ type TextWidget struct {
 	rich     *RichTextWidget  // what a Selectable Text lays out and paints as
 	richAt   richAt           // what a Selectable Text was laid out for, to lay its lines out when rotated
 	drawOp   text.DrawOptions // reused by paintLines, which would allocate one a paint
+	pieceOp  text.DrawOptions // reused by drawPieces for the same
 }
 
 // richAt is the width and Env a Selectable Text last laid out in.
@@ -311,7 +312,7 @@ func (t *TextWidget) spacing() float64 {
 
 // Layout implements Widget.
 func (t *TextWidget) Layout(c Constraints, env Env) Size {
-	defer t.props.Layout()()
+	defer t.props.Layout().EndLayout()
 	if t.formatted {
 		t.value = formatValues(t.format, t.formatArgs)
 	} else {
@@ -491,7 +492,7 @@ func (s *StyledWidget) LineHeight(mult float64) *StyledWidget {
 
 // Layout implements Widget.
 func (s *StyledWidget) Layout(c Constraints, env Env) Size {
-	defer s.props.Layout()()
+	defer s.props.Layout().EndLayout()
 	return s.child.Layout(c, env.WithText(s.style))
 }
 
@@ -669,7 +670,7 @@ func (b *BoxWidget) MaxHeight(h float64) *BoxWidget {
 
 // Layout implements Widget.
 func (b *BoxWidget) Layout(c Constraints, env Env) Size {
-	defer b.props.Layout()()
+	defer b.props.Layout().EndLayout()
 	b.fill.layout(env)
 	b.borderColor.layout(env)
 	b.shownGradient = b.gradient.resolve(env)
@@ -1020,7 +1021,7 @@ func (col *ColumnWidget) Stretch() *ColumnWidget { return col.Align(AlignStretch
 
 // Layout implements Widget.
 func (col *ColumnWidget) Layout(c Constraints, env Env) Size {
-	defer col.props.Layout()()
+	defer col.props.Layout().EndLayout()
 	return col.layout(c, env)
 }
 
@@ -1072,7 +1073,7 @@ func (row *RowWidget) Stretch() *RowWidget { return row.Align(AlignStretch) }
 
 // Layout implements Widget.
 func (row *RowWidget) Layout(c Constraints, env Env) Size {
-	defer row.props.Layout()()
+	defer row.props.Layout().EndLayout()
 	return row.layout(c, env)
 }
 
@@ -1139,7 +1140,7 @@ func (st *StackWidget) Expand() *StackWidget {
 
 // Layout implements Widget.
 func (st *StackWidget) Layout(c Constraints, env Env) Size {
-	defer st.props.Layout()()
+	defer st.props.Layout().EndLayout()
 	st.sizes = st.sizes[:0]
 	var total Size
 	for _, child := range st.children {
@@ -1218,7 +1219,7 @@ func (a *AlignWidget) Bottom() *AlignWidget {
 
 // Layout implements Widget.
 func (a *AlignWidget) Layout(c Constraints, env Env) Size {
-	defer a.props.Layout()()
+	defer a.props.Layout().EndLayout()
 	a.childSize = a.child.Layout(c.Loosen(), env)
 	a.size = c.Constrain(Sz(bounded(c.MaxW, a.childSize.W), bounded(c.MaxH, a.childSize.H)))
 	return a.size
@@ -1412,7 +1413,7 @@ func (s *ScrollWidget) scrollTo(v float64) {
 
 // Layout implements Widget.
 func (s *ScrollWidget) Layout(c Constraints, env Env) Size {
-	defer s.props.Layout()()
+	defer s.props.Layout().EndLayout()
 	s.barEnv = env
 	if !s.barSet {
 		s.bar = env.ScrollStyle().Color
@@ -1679,7 +1680,7 @@ func (w *WrapWidget) Align(a CrossAlign) *WrapWidget {
 
 // Layout implements Widget.
 func (w *WrapWidget) Layout(c Constraints, env Env) Size {
-	defer w.props.Layout()()
+	defer w.props.Layout().EndLayout()
 	if w.space > 0 {
 		w.gap = w.space * env.Spacing()
 		w.runGap = w.gap
@@ -1784,7 +1785,7 @@ func (g *GridWidget) Space(n float64) *GridWidget {
 
 // Layout implements Widget.
 func (g *GridWidget) Layout(c Constraints, env Env) Size {
-	defer g.props.Layout()()
+	defer g.props.Layout().EndLayout()
 	if g.space > 0 {
 		g.gap = g.space * env.Spacing()
 		g.rowGap = g.gap

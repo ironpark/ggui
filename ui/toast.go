@@ -154,7 +154,7 @@ func (t *ToasterWidget) Close() { t.closed = true; t.Clear() }
 
 // Layout implements ggui.Widget; put the host anywhere in the root tree.
 func (t *ToasterWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer t.props.Layout()()
+	defer t.props.Layout().EndLayout()
 	t.env = env
 	return c.Constrain(ggui.Size{})
 }

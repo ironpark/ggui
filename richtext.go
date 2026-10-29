@@ -81,6 +81,8 @@ type RichTextWidget struct {
 	focused bool
 	clicks  clickSelector
 	rect    Rect
+
+	pieceOp text.DrawOptions // reused by drawPieces, which would allocate one a piece
 }
 
 // richKey is what the paragraph was last laid out for, beside its runs.
@@ -228,7 +230,7 @@ func (t *RichTextWidget) alignment() float64 {
 
 // Layout implements Widget.
 func (t *RichTextWidget) Layout(c Constraints, env Env) Size {
-	defer t.props.Layout()()
+	defer t.props.Layout().EndLayout()
 	// The links outlive a layout that changed no span, so that one keeps
 	// its focus and hover; a new tap func is picked up either way.
 	spans := t.spans.Get()
@@ -341,7 +343,7 @@ func (t *RichTextWidget) Paint(dst *Canvas, r Rect) {
 		}
 		x := r.Origin.X + p.lineX(i, r.Size.W, align)
 		col := func(style int) color.Color { return p.style(ln.styles[style].run).Color }
-		drawPieces(dst.Image, ln.s, ln.pieces, ln.styles, scale, dst.px(ln.baseline), col, func(op *text.DrawOptions) {
+		drawPieces(dst.Image, &t.pieceOp, ln.s, ln.pieces, ln.styles, scale, dst.px(ln.baseline), col, func(op *text.DrawOptions) {
 			op.GeoM.Translate(dst.px(x), dst.px(r.Origin.Y))
 		})
 		for _, pc := range ln.pieces {

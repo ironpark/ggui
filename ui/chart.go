@@ -408,7 +408,7 @@ func (c *ChartWidget) AnimationDelay(d time.Duration) *ChartWidget {
 // Replay restarts the entrance without rebuilding or copying the data.
 func (c *ChartWidget) Replay() { c.started = time.Time{} }
 func (c *ChartWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
-	defer c.props.Layout()()
+	defer c.props.Layout().EndLayout()
 	c.env = env
 	c.theme = uitheme.From(env)
 	c.reduced = env.ReducedMotion()

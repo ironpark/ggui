@@ -117,7 +117,7 @@ func (d *DatePickerWidget) Act(a ggui.Action) bool {
 
 // Layout implements ggui.Widget.
 func (d *DatePickerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer d.props.Layout()()
+	defer d.props.Layout().EndLayout()
 	d.button.Sync()
 	if d.button.IsInert() {
 		d.popup.Hide()

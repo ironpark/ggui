@@ -138,6 +138,10 @@ func EnterLayout() func() {
 // closure over the scope, so that entering layout allocates nothing.
 func leaveLayout() { current().layoutDepth-- }
 
+// LeaveLayout undoes EnterLayout, for a caller that does not keep the
+// function EnterLayout returns.
+func LeaveLayout() { leaveLayout() }
+
 // InLayout reports whether the running goroutine is inside layout.
 func InLayout() bool { return current().layoutDepth > 0 }
 

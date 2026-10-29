@@ -166,7 +166,7 @@ func PopupOf(env Env) (*PopupWidget, bool) { return env.Get(popupKey) }
 
 // Layout implements Widget.
 func (p *PopupWidget) Layout(c Constraints, env Env) Size {
-	defer p.props.Layout()()
+	defer p.props.Layout().EndLayout()
 	p.env = env.With(popupKey, p)
 	return p.anchor.Layout(c, env)
 }

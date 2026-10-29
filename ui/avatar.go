@@ -78,7 +78,7 @@ func (a *AvatarWidget) Name(s string) *AvatarWidget {
 
 // Layout implements ggui.Widget.
 func (a *AvatarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer a.props.Layout()()
+	defer a.props.Layout().EndLayout()
 	if a.nameReader != nil {
 		a.name = a.nameReader.Get()
 	}

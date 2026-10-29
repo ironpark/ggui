@@ -190,7 +190,7 @@ func (o *InputOTPWidget) Accept(fn func(rune) bool) *InputOTPWidget { o.accept =
 // Input exposes the native editor for selection, submission and advanced use.
 func (o *InputOTPWidget) Input() *ggui.TextInputWidget { return o.input }
 func (o *InputOTPWidget) Layout(c ggui.Constraints, e ggui.Env) ggui.Size {
-	defer o.props.Layout()()
+	defer o.props.Layout().EndLayout()
 	o.Sync()
 	o.env, o.theme, o.reduced = e, uitheme.From(e), e.ReducedMotion()
 	inherited, _ := e.Get(ggui.InputDisabledKey)

@@ -510,7 +510,7 @@ func (q *QuestionnaireWidget) shortcut(ev ggui.KeyEvent) bool {
 	return false
 }
 func (q *QuestionnaireWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer q.props.Layout()()
+	defer q.props.Layout().EndLayout()
 	size := q.view.Layout(c, env)
 	// The choices are built before a Key given after Questionnaire, so
 	// they take the questionnaire's identity here; see childKey.

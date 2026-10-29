@@ -147,7 +147,7 @@ func (c *ComboboxWidget[T]) Popup() *ggui.PopupWidget { return c.popup }
 
 // Layout implements ggui.Widget.
 func (c *ComboboxWidget[T]) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
-	defer c.props.Layout()()
+	defer c.props.Layout().EndLayout()
 	c.env = env
 	c.setOptions(c.optionProp.Get())
 	c.button.Sync()

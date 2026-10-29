@@ -3,7 +3,6 @@ package ggui
 import (
 	"sync"
 	"unicode/utf8"
-	"unsafe"
 
 	"github.com/go-text/typesetting/segmenter"
 
@@ -26,29 +25,35 @@ func lineBreaks(p string) []int {
 	c := &lineBreakCache
 	c.Lock()
 	defer c.Unlock()
-	for _, e := range c.entries {
-		if len(e.s) == len(p) && unsafe.StringData(e.s) == unsafe.StringData(p) {
-			return e.breaks
-		}
+	if breaks, ok := c.cur[p]; ok {
+		return breaks
 	}
-	breaks := findLineBreaks(p)
-	c.entries[c.next] = lineBreakEntry{s: p, breaks: breaks}
-	c.next = (c.next + 1) % len(c.entries)
+	breaks, ok := c.prev[p]
+	if !ok {
+		breaks = findLineBreaks(p)
+	}
+	if len(c.cur) >= lineBreakCacheSize {
+		// Forget what was not asked about since the last turnover.
+		c.prev, c.cur = c.cur, make(map[string][]int, lineBreakCacheSize)
+	}
+	if c.cur == nil {
+		c.cur = make(map[string][]int, lineBreakCacheSize)
+	}
+	c.cur[p] = breaks
 	return breaks
 }
 
-// lineBreakCache holds the breaks of the strings lineBreaks found last. An
-// entry keeps its string alive, so a string at the same address and length
-// is the same string.
+// lineBreakCacheSize is how many paragraphs' breaks lineBreakCache holds at
+// least: every paragraph of a window of text, which a resize wraps again
+// all at once.
+const lineBreakCacheSize = 1024
+
+// lineBreakCache holds the breaks of the strings lineBreaks found last, in
+// two generations: a lookup that finds its string in prev moves it to cur,
+// and when cur is full, it becomes prev and the old prev is dropped.
 var lineBreakCache struct {
 	sync.Mutex
-	entries [16]lineBreakEntry
-	next    int
-}
-
-type lineBreakEntry struct {
-	s      string
-	breaks []int
+	cur, prev map[string][]int
 }
 
 func findLineBreaks(p string) []int {

@@ -166,7 +166,7 @@ func (t *TransformWidget) Baseline() (float64, bool) { return baselineOf(t.child
 
 // Layout implements Widget.
 func (t *TransformWidget) Layout(c Constraints, env Env) Size {
-	defer t.props.Layout()()
+	defer t.props.Layout().EndLayout()
 	s := t.scale.Get()
 	off := t.offset.Get()
 	t.shown = Affine{}.Scale(s, s).Rotate(t.rotate.Get()).Then(t.matrix).Translate(off.X, off.Y)

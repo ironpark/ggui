@@ -282,7 +282,7 @@ func (f *EachWidget[T, K]) entry(i int) *forEntry[T] {
 
 // Layout implements Widget.
 func (f *EachWidget[T, K]) Layout(c Constraints, env Env) Size {
-	defer f.props.Layout()()
+	defer f.props.Layout().EndLayout()
 	f.cache, _ = env.Get(cacheOwner)
 	f.pin.port = scrollPortOf(env)
 	f.mount.Layout(c, env)

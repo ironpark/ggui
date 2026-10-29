@@ -184,7 +184,7 @@ func (s *SelectWidget[T]) Popup() *ggui.PopupWidget { return s.popup }
 
 // Layout implements Widget.
 func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer s.props.Layout()()
+	defer s.props.Layout().EndLayout()
 	s.setOptions(s.optionProp.Get())
 	s.Sync()
 	if s.IsInert() {

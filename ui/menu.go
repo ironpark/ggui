@@ -115,7 +115,7 @@ func (m *MenuWidget) Act(a ggui.Action) bool {
 
 // Layout implements Widget.
 func (m *MenuWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer m.props.Layout()()
+	defer m.props.Layout().EndLayout()
 	m.button.Sync()
 	if m.button.IsInert() {
 		m.popup.Hide()
@@ -304,7 +304,7 @@ func (it *MenuItemWidget) run() {
 
 // Layout implements Widget.
 func (it *MenuItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer it.props.Layout()()
+	defer it.props.Layout().EndLayout()
 	it.Sync()
 	t := uitheme.From(env)
 	it.theme = t

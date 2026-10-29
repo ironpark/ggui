@@ -255,7 +255,7 @@ func (b *ButtonWidget) Pad(sides ...float64) *ButtonWidget {
 
 // Layout implements Widget.
 func (b *ButtonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer b.props.Layout()()
+	defer b.props.Layout().EndLayout()
 	b.Sync()
 	t := uitheme.From(env)
 	b.theme = t

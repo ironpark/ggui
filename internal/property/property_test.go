@@ -73,16 +73,16 @@ func TestOwnerLayoutRecordsInitialAndFinalRevision(t *testing.T) {
 	var o Owner
 	var inside bool
 	reads := measure(func() {
-		done := o.Layout()
+		o.Layout()
 		inside = reactive.InLayout()
 		o.Changed()
-		done()
+		o.EndLayout()
 	})
 	if !inside {
 		t.Fatal("Layout did not mark the goroutine as laying out")
 	}
 	if reactive.InLayout() {
-		t.Fatal("the goroutine is still laying out after Layout's done")
+		t.Fatal("the goroutine is still laying out after EndLayout")
 	}
 	if len(reads) != 2 || reads[0].version != 0 || reads[1].version != 1 {
 		t.Fatalf("Layout reported %v, want reads at version 0 then 1", reads)

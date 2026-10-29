@@ -248,7 +248,7 @@ func (c *CommandWidget) key(ev ggui.KeyEvent) bool {
 
 // Layout implements ggui.Widget.
 func (c *CommandWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
-	defer c.props.Layout()()
+	defer c.props.Layout().EndLayout()
 	c.env = env
 	c.filter()
 	t := uitheme.From(env)

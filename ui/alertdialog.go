@@ -115,7 +115,7 @@ func (a *AlertDialogWidget) build() {
 
 // Layout implements ggui.Widget: the dialog takes no room in the tree.
 func (a *AlertDialogWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer a.props.Layout()()
+	defer a.props.Layout().EndLayout()
 	if a.dialog == nil {
 		a.build()
 	}

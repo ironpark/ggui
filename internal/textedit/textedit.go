@@ -272,7 +272,9 @@ func clusterBounds(s string) []int {
 			return e.bounds
 		}
 	}
-	bounds := []int{}
+	// One more than the runes is the most bounds there can be, so the
+	// slice is allocated once.
+	bounds := make([]int, 0, utf8.RuneCountInString(s)+1)
 	for start := 0; start < len(s); {
 		end := len(s)
 		if i := strings.IndexByte(s[start:], '\n'); i >= 0 {

@@ -190,7 +190,7 @@ func (a *AsyncImageWidget) sync() {
 
 // Layout implements Widget.
 func (a *AsyncImageWidget) Layout(c Constraints, env Env) Size {
-	defer a.props.Layout()()
+	defer a.props.Layout().EndLayout()
 	a.inner.props.Read()
 	a.sync()
 	if a.status == Ready {

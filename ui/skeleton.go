@@ -30,7 +30,7 @@ func (s *SkeletonWidget) Circle() *SkeletonWidget {
 
 // Layout implements ggui.Widget.
 func (s *SkeletonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer s.props.Layout()()
+	defer s.props.Layout().EndLayout()
 	s.theme, s.reduced = uitheme.From(env), env.ReducedMotion()
 	return c.Constrain(ggui.Sz(s.width, s.height))
 }

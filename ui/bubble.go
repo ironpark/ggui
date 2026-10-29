@@ -130,7 +130,7 @@ func (b *BubbleWidget) colors() (fill, fg, border color.Color) {
 	return t.Primary, t.PrimaryFg, nil
 }
 func (b *BubbleWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer b.props.Layout()()
+	defer b.props.Layout().EndLayout()
 	b.Sync()
 	inheritedEnd, _ := env.Get(messageEndKey)
 	b.alignedEnd = b.end || inheritedEnd

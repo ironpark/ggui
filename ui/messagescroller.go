@@ -210,7 +210,7 @@ func (s *MessageScrollerWidget) target(i int, align ScrollAlignment) float64 {
 	return start - s.margin
 }
 func (s *MessageScrollerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer s.props.Layout()()
+	defer s.props.Layout().EndLayout()
 	saved := s.Save()
 	oldRows := s.rows
 	s.theme, s.reduced = uitheme.From(env), env.ReducedMotion()

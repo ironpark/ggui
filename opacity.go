@@ -38,7 +38,7 @@ func (o *OpacityWidget) Baseline() (float64, bool) { return baselineOf(o.child) 
 
 // Layout implements Widget.
 func (o *OpacityWidget) Layout(c Constraints, env Env) Size {
-	defer o.props.Layout()()
+	defer o.props.Layout().EndLayout()
 	o.shown = clamp(o.opacity.Get(), 0, 1)
 	return o.child.Layout(c, env)
 }

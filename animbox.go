@@ -141,7 +141,7 @@ func (a *AnimatedBoxWidget) BindPadding(r Readable[EdgeInsets]) *AnimatedBoxWidg
 
 // Layout implements Widget.
 func (a *AnimatedBoxWidget) Layout(c Constraints, env Env) Size {
-	defer a.props.Layout()()
+	defer a.props.Layout().EndLayout()
 	d := env.Motion(a.duration)
 	b := a.box
 	b.Fill(a.fillTo.follow(ResolveColor(a.fill.Get(), env), d, a.ease, LerpColor))

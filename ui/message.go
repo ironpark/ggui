@@ -37,7 +37,7 @@ func MessageGroup(messages ...ggui.Widget) *ggui.ColumnWidget {
 	return ggui.Column(messages...).Gap(8).Align(ggui.AlignStretch)
 }
 func (m *MessageWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer m.props.Layout()()
+	defer m.props.Layout().EndLayout()
 	width := bounded(c.MaxW, 400)
 	m.avatarSize = ggui.Size{}
 	if m.avatar != nil {

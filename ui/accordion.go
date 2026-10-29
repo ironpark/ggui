@@ -151,7 +151,7 @@ func (a *AccordionWidget) Adopt(prev any) {
 
 // Layout implements ggui.Widget.
 func (a *AccordionWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer a.props.Layout()()
+	defer a.props.Layout().EndLayout()
 	a.env, a.theme = env, uitheme.From(env)
 	a.laidOpen = append(a.laidOpen[:0], a.open.Get()...)
 	a.sizes = slices.Grow(a.sizes[:0], len(a.items))[:len(a.items)]

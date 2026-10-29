@@ -104,7 +104,7 @@ func (w *ImageWidget) natural() Size {
 
 // Layout implements Widget.
 func (w *ImageWidget) Layout(c Constraints, env Env) Size {
-	defer w.props.Layout()()
+	defer w.props.Layout().EndLayout()
 	n := w.natural()
 	want := n
 	ratio := 1.0

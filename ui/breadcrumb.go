@@ -120,7 +120,7 @@ func (b *BreadcrumbWidget) build() {
 
 // Layout implements ggui.Widget.
 func (b *BreadcrumbWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer b.props.Layout()()
+	defer b.props.Layout().EndLayout()
 	if b.nameReader != nil {
 		b.name = b.nameReader.Get()
 	}

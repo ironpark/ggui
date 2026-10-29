@@ -556,7 +556,7 @@ func (t *TextInputWidget) linesHeight(n int) float64 {
 
 // Layout implements Widget.
 func (t *TextInputWidget) Layout(c Constraints, env Env) Size {
-	defer t.props.Layout()()
+	defer t.props.Layout().EndLayout()
 	t.Sync()
 	t.inheritedDisabled, _ = env.Get(InputDisabledKey)
 	t.resolved = env.ResolveText(t.style)

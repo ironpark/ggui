@@ -52,7 +52,7 @@ func (g *ButtonGroupWidget) Name(s string) *ButtonGroupWidget {
 
 // Layout implements ggui.Widget.
 func (g *ButtonGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer g.props.Layout()()
+	defer g.props.Layout().EndLayout()
 	if g.nameReader != nil {
 		g.name = g.nameReader.Get()
 	}
@@ -285,7 +285,7 @@ func (g *ToggleGroupWidget[T]) pick(i int) {
 
 // Layout implements ggui.Widget.
 func (g *ToggleGroupWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer g.props.Layout()()
+	defer g.props.Layout().EndLayout()
 	g.setOptions(g.optionProp.Get())
 	g.Sync()
 	t := uitheme.From(env)

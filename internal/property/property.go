@@ -34,13 +34,24 @@ func (o *Owner) Changed() {
 	}
 }
 
-// Layout records the final revision as well as the initial one: a custom parent
-// may configure a child several times before measuring it. Such writes dirty
-// cached measurements through their revision without scheduling another frame.
-func (o *Owner) Layout() func() {
-	done := EnterLayout()
+// Layout enters layout and records the initial revision; defer EndLayout on
+// its result to record the final one too: a custom parent may configure a
+// child several times before measuring it. Such writes dirty cached
+// measurements through their revision without scheduling another frame.
+//
+//	defer w.props.Layout().EndLayout()
+//
+// It returns o rather than a closure so that it allocates nothing.
+func (o *Owner) Layout() *Owner {
+	reactive.EnterLayout()
 	o.Read()
-	return func() { o.Read(); done() }
+	return o
+}
+
+// EndLayout records the final revision and leaves the layout Layout entered.
+func (o *Owner) EndLayout() {
+	o.Read()
+	reactive.LeaveLayout()
 }
 func EnterLayout() func() { return reactive.EnterLayout() }
 

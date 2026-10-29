@@ -97,7 +97,7 @@ func (l *ListBoxWidget[T, K]) Else(build func() ggui.Widget) *ListBoxWidget[T, K
 
 // Layout implements Widget.
 func (l *ListBoxWidget[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer l.props.Layout()()
+	defer l.props.Layout().EndLayout()
 	return l.body.Layout(c, env)
 }
 

@@ -73,7 +73,7 @@ func (f *FieldWidget) BindError(r ggui.Readable[string]) *FieldWidget {
 
 // Layout implements Widget.
 func (f *FieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer f.props.Layout()()
+	defer f.props.Layout().EndLayout()
 	t := uitheme.From(env)
 	note, col := f.help, t.MutedFg
 	invalid := false

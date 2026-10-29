@@ -88,7 +88,7 @@ func (d *DialogWidget) OnClose(fn func()) *DialogWidget { d.onClose = fn; return
 
 // Layout implements Widget: the dialog takes no room in the tree.
 func (d *DialogWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer d.props.Layout()()
+	defer d.props.Layout().EndLayout()
 	if d.nameReader != nil {
 		d.name = d.nameReader.Get()
 	}

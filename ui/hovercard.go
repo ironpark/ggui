@@ -82,7 +82,7 @@ func (h *HoverCardWidget) Name(s string) *HoverCardWidget {
 // pass over the whole content every frame to answer a question nobody is
 // asking yet. Paint measures it once it is about to show.
 func (h *HoverCardWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer h.props.Layout()()
+	defer h.props.Layout().EndLayout()
 	if h.nameReader != nil {
 		h.name = h.nameReader.Get()
 	}

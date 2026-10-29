@@ -289,7 +289,7 @@ func (n *NumberInputWidget) act(a ggui.Action) bool {
 
 // Layout implements ggui.Widget.
 func (n *NumberInputWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer n.props.Layout()()
+	defer n.props.Layout().EndLayout()
 	n.Sync()
 	t := uitheme.From(env)
 	n.theme = t

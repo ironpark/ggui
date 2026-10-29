@@ -886,7 +886,7 @@ func (p *PointerWidget) HandlePointer(ev PointerEvent) bool {
 
 // Layout implements Widget.
 func (p *PointerWidget) Layout(c Constraints, env Env) Size {
-	defer p.props.Layout()()
+	defer p.props.Layout().EndLayout()
 	return p.child.Layout(c, env)
 }
 

@@ -147,7 +147,7 @@ type switcherBody[K comparable] struct{ s *SwitcherWidget[K] }
 // ones included, all anchored at the top-left corner as in a Stack.
 func (b *switcherBody[K]) Layout(c Constraints, env Env) Size {
 	s := b.s
-	defer s.props.Layout()()
+	defer s.props.Layout().EndLayout()
 	s.reduced = env.ReducedMotion()
 	now := FrameTime()
 	s.entries = slices.DeleteFunc(s.entries, func(e *switchEntry) bool {

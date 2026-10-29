@@ -90,7 +90,7 @@ func (r *ResizableWidget) axis(p ggui.Point) float64 {
 
 // Layout implements ggui.Widget.
 func (r *ResizableWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer r.props.Layout()()
+	defer r.props.Layout().EndLayout()
 	r.Sync()
 	r.env, r.theme = env, uitheme.From(env)
 	size := c.Constrain(ggui.Sz(bounded(c.MaxW, 320), bounded(c.MaxH, 200)))

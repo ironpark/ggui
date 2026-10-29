@@ -68,7 +68,7 @@ func (b *MenubarWidget) toggle(i int) {
 
 // Layout implements ggui.Widget.
 func (b *MenubarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer b.props.Layout()()
+	defer b.props.Layout().EndLayout()
 	for _, m := range b.menus {
 		m.button.Sync()
 	}

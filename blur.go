@@ -147,7 +147,7 @@ func (b *BlurWidget) Baseline() (float64, bool) { return baselineOf(b.child) }
 
 // Layout implements Widget.
 func (b *BlurWidget) Layout(c Constraints, env Env) Size {
-	defer b.props.Layout()()
+	defer b.props.Layout().EndLayout()
 	b.shown = b.sigma.Get()
 	return b.child.Layout(c, env)
 }
@@ -207,7 +207,7 @@ func (b *BackdropBlurWidget) Baseline() (float64, bool) {
 
 // Layout implements Widget.
 func (b *BackdropBlurWidget) Layout(c Constraints, env Env) Size {
-	defer b.props.Layout()()
+	defer b.props.Layout().EndLayout()
 	b.shown = b.sigma.Get()
 	if b.child == nil {
 		return c.Constrain(Sz(bounded(c.MaxW, 0), bounded(c.MaxH, 0)))

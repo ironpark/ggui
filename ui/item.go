@@ -70,7 +70,7 @@ func (i *ItemWidget) build() {
 
 // Layout implements ggui.Widget.
 func (i *ItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer i.props.Layout()()
+	defer i.props.Layout().EndLayout()
 	if i.box == nil {
 		i.build()
 	}

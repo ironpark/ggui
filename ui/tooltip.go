@@ -78,7 +78,7 @@ func (t *TooltipWidget) Delay(d time.Duration) *TooltipWidget {
 
 // Layout implements ggui.Widget.
 func (t *TooltipWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer t.props.Layout()()
+	defer t.props.Layout().EndLayout()
 	t.theme = uitheme.From(env)
 	t.env = env
 	t.pad = ggui.Insets(t.theme.Space*.75, t.theme.Space*1.5)

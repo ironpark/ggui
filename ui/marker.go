@@ -33,7 +33,7 @@ func (m *MarkerWidget) Border() *MarkerWidget {
 	return m
 }
 func (m *MarkerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer m.props.Layout()()
+	defer m.props.Layout().EndLayout()
 	m.theme = uitheme.From(env)
 	m.view.Color(m.theme.MutedFg).Size(m.theme.Text.Size)
 	width := c.MaxW

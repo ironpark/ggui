@@ -149,7 +149,7 @@ func (l *ReorderableWidget[T, K]) HandlePointer(PointerEvent) bool { return fals
 
 // Layout implements Widget.
 func (l *ReorderableWidget[T, K]) Layout(c Constraints, env Env) Size {
-	defer l.props.Layout()()
+	defer l.props.Layout().EndLayout()
 	l.env, l.port = env, scrollPortOf(env)
 	return l.list.Layout(c, env)
 }

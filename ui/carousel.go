@@ -35,7 +35,7 @@ func (w *CarouselItemWidget) BasisWhen(fn func(ggui.Size) float64) *CarouselItem
 	return w
 }
 func (w *CarouselItemWidget) Layout(c ggui.Constraints, e ggui.Env) ggui.Size {
-	defer w.props.Layout()()
+	defer w.props.Layout().EndLayout()
 	return w.child.Layout(c, e)
 }
 func (w *CarouselItemWidget) Paint(d *ggui.Canvas, r ggui.Rect) { d.Paint(w.child, r) }
@@ -278,7 +278,7 @@ func (c *CarouselWidget) position() float64 {
 	return c.target + (c.from-c.target)*remaining
 }
 func (c *CarouselWidget) Layout(con ggui.Constraints, e ggui.Env) ggui.Size {
-	defer c.props.Layout()()
+	defer c.props.Layout().EndLayout()
 	c.Sync()
 	c.env, c.theme, c.reduced = e, uitheme.From(e), e.ReducedMotion()
 	size := con.Constrain(ggui.Sz(bounded(con.MaxW, 416), c.height))

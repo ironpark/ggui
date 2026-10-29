@@ -53,7 +53,7 @@ func (t *TextWidget) paintBidi(dst *Canvas, i int, r Rect, align, y float64, col
 	ps, line := t.bidi.lines[i], t.lines[i]
 	x := r.Origin.X + (r.Size.W-piecesWidth(ps))*align
 	baseline := t.faceAt(dst.Scale()).Metrics().HAscent
-	drawPieces(dst.Image, line, ps, t.bidi.styles[i], dst.Scale(), baseline,
+	drawPieces(dst.Image, &t.pieceOp, line, ps, t.bidi.styles[i], dst.Scale(), baseline,
 		func(int) color.Color { return col },
 		func(op *text.DrawOptions) { place(op, x, y) })
 	return true

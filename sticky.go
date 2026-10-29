@@ -40,7 +40,7 @@ func (s *StickyWidget) main(z Size) float64 { return pick(s.horizontal, z.W, z.H
 
 // Layout implements Widget.
 func (s *StickyWidget) Layout(c Constraints, env Env) Size {
-	defer s.props.Layout()()
+	defer s.props.Layout().EndLayout()
 	s.port = scrollPortOf(env)
 	s.horizontal = false
 	if vp, ok := ScrollViewport(env); ok {

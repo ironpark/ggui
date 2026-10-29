@@ -30,7 +30,7 @@ func (s *SpinnerWidget) Size(px float64) *SpinnerWidget {
 
 // Layout implements ggui.Widget.
 func (s *SpinnerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer s.props.Layout()()
+	defer s.props.Layout().EndLayout()
 	s.env = env
 	s.theme, s.reduced = uitheme.From(env), env.ReducedMotion()
 	return c.Constrain(ggui.Sz(s.size, s.size))

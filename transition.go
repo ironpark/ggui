@@ -109,7 +109,7 @@ func (t *TransitionWidget) Baseline() (float64, bool) { return baselineOf(t.chil
 
 // Layout implements Widget.
 func (t *TransitionWidget) Layout(c Constraints, env Env) Size {
-	defer t.props.Layout()()
+	defer t.props.Layout().EndLayout()
 	t.reduced = env.ReducedMotion()
 	return t.child.Layout(c, env)
 }

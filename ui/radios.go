@@ -149,7 +149,7 @@ func (g *RadiosWidget[T]) OnChange(fn func(T)) *RadiosWidget[T] {
 
 // Layout implements Widget.
 func (g *RadiosWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer g.props.Layout()()
+	defer g.props.Layout().EndLayout()
 	g.setOptions(g.optionProp.Get())
 	g.Sync()
 	// Each option is keyed by the group and its value, and by how many

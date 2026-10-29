@@ -372,10 +372,35 @@ type shapeLang struct {
 	key string
 }
 
-// newShapeLang is shapingLanguage's tag for lang and sample.
+// newShapeLang is shapingLanguage's tag for lang and sample. Each tag is
+// made once: a line is laid out again at every width.
 func newShapeLang(lang, sample string) shapeLang {
+	// The script counts even with a lang, which may not parse.
+	k := shapeLangKey{lang: lang, script: rtlScriptOf(sample)}
+	shapeLangs.Lock()
+	defer shapeLangs.Unlock()
+	if l, ok := shapeLangs.m[k]; ok {
+		return l
+	}
 	tag := shapingLanguage(lang, sample)
-	return shapeLang{tag, tag.String()}
+	l := shapeLang{tag, tag.String()}
+	if shapeLangs.m == nil {
+		shapeLangs.m = map[shapeLangKey]shapeLang{}
+	}
+	shapeLangs.m[k] = l
+	return l
+}
+
+// shapeLangKey is what decides newShapeLang's result: lang, and the index
+// in rtlScripts of the sample's script, -1 for none.
+type shapeLangKey struct {
+	lang   string
+	script int
+}
+
+var shapeLangs struct {
+	sync.Mutex
+	m map[shapeLangKey]shapeLang
 }
 
 // shapingLanguage is lang as a tag, or, when lang is unset, the
@@ -387,14 +412,23 @@ func shapingLanguage(lang, sample string) language.Tag {
 			return t
 		}
 	}
-	for _, r := range sample {
-		for _, sc := range rtlScripts {
+	if i := rtlScriptOf(sample); i >= 0 {
+		return language.Make("und-" + rtlScripts[i].code)
+	}
+	return language.Und
+}
+
+// rtlScriptOf returns the index in rtlScripts of the script of the first
+// right-to-left letter of s, or -1.
+func rtlScriptOf(s string) int {
+	for _, r := range s {
+		for i, sc := range rtlScripts {
 			if unicode.Is(sc.table, r) {
-				return language.Make("und-" + sc.code)
+				return i
 			}
 		}
 	}
-	return language.Und
+	return -1
 }
 
 var rtlScripts = []struct {
@@ -489,15 +523,16 @@ func spanX(s string, ps []piece, styles []lineStyle, lo, hi int, yield func(x0, 
 // drawPieces draws a laid-out line. scale is the Canvas's, baseline the
 // line's baseline below where place puts the line's origin, in image
 // pixels, and col the color of a style; place moves a freshly translated
-// GeoM to the line.
-func drawPieces(dst *ggfx.Image, s string, ps []piece, styles []lineStyle, scale, baseline float64, col func(style int) color.Color, place func(op *text.DrawOptions)) {
+// GeoM to the line. op is scratch space the caller keeps, so that drawing
+// allocates no options.
+func drawPieces(dst *ggfx.Image, op *text.DrawOptions, s string, ps []piece, styles []lineStyle, scale, baseline float64, col func(style int) color.Color, place func(op *text.DrawOptions)) {
 	if dst == nil || dst.Bounds().Empty() {
 		return
 	}
 	for i := range ps {
 		p := &ps[i]
 		st := styles[p.style]
-		op := &text.DrawOptions{}
+		*op = text.DrawOptions{}
 		op.ColorScale.ScaleWithColor(col(p.style))
 		if !p.rtl {
 			face := st.font.face(st.size*scale, st.weight)

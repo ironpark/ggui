@@ -175,7 +175,7 @@ func (d *DragSourceWidget[T]) Dragging() bool { return d.dragging }
 
 // Layout implements Widget.
 func (d *DragSourceWidget[T]) Layout(c Constraints, env Env) Size {
-	defer d.props.Layout()()
+	defer d.props.Layout().EndLayout()
 	d.size = d.child.Layout(c, env)
 	// The preview is only painted mid-drag, so only then is it laid out.
 	if d.preview != nil && d.dragging {
@@ -277,7 +277,7 @@ func (z *DropZoneWidget[T]) Over() bool { return z.over }
 
 // Layout implements Widget.
 func (z *DropZoneWidget[T]) Layout(c Constraints, env Env) Size {
-	defer z.props.Layout()()
+	defer z.props.Layout().EndLayout()
 	z.size = z.child.Layout(c, env)
 	return z.size
 }

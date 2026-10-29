@@ -345,7 +345,7 @@ func (t *TableWidget[T, K]) row(row ggui.EachItem[T]) ggui.Widget {
 
 // Layout implements Widget.
 func (t *TableWidget[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer t.props.Layout()()
+	defer t.props.Layout().EndLayout()
 	th := uitheme.From(env)
 	t.theme = th
 	t.head.Gap(0)

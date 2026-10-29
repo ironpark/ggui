@@ -118,7 +118,7 @@ func (t *TabsWidget) pick(i int) {
 
 // Layout implements Widget.
 func (t *TabsWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer t.props.Layout()()
+	defer t.props.Layout().EndLayout()
 	t.Sync()
 	th := uitheme.From(env)
 	t.theme = th

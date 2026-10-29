@@ -129,7 +129,7 @@ func (s *SheetWidget) horizontal() bool { return s.side == sheetLeft || s.side =
 // Layout implements ggui.Widget: the sheet takes no room in the tree. The
 // panel gets no border or radius: it is flush with the edge it came from.
 func (s *SheetWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer s.props.Layout()()
+	defer s.props.Layout().EndLayout()
 	if s.nameReader != nil {
 		s.name = s.nameReader.Get()
 	}

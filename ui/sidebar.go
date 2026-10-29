@@ -157,7 +157,7 @@ func (s *SidebarWidget) current() int {
 
 // Layout implements ggui.Widget.
 func (s *SidebarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer s.props.Layout()()
+	defer s.props.Layout().EndLayout()
 	s.Sync()
 	// Children see the sidebar palette in place of the page's, so a button
 	// or badge inside an item paints against the sidebar surface, and the

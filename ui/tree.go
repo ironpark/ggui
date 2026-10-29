@@ -227,7 +227,7 @@ func (t *TreeWidget[T, K]) row(row ggui.EachItem[treeEntry[T, K]], label func(gg
 
 // Layout implements Widget.
 func (t *TreeWidget[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer t.props.Layout()()
+	defer t.props.Layout().EndLayout()
 	if t.height > 0 {
 		h := min(t.height, c.MaxH)
 		c.MinH, c.MaxH = h, h

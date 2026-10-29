@@ -116,7 +116,7 @@ func (s *SliderWidget) Act(a ggui.Action) bool {
 
 // Layout implements Widget.
 func (s *SliderWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	defer s.props.Layout()()
+	defer s.props.Layout().EndLayout()
 	s.Sync()
 	s.theme = uitheme.From(env)
 	return c.Constrain(ggui.Sz(bounded(c.MaxW, defaultStripe), s.theme.ControlSize+4))
