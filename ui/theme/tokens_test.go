@@ -81,3 +81,12 @@ func TestTokensFollowAThemeSwitchWithoutARebuild(t *testing.T) {
 		t.Errorf("built %d times, want 1", builds)
 	}
 }
+
+// A token is resolved for every fill and stroke a frame paints, so reading
+// one must not copy the theme to the heap.
+func TestColorInDoesNotAllocate(t *testing.T) {
+	th := uitheme.Default().Resolve()
+	if allocs := testing.AllocsPerRun(100, func() { _ = uitheme.MutedFg.In(th) }); allocs != 0 {
+		t.Errorf("Color.In allocates %v times, want 0", allocs)
+	}
+}

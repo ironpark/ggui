@@ -3,6 +3,7 @@ package theme
 import (
 	"image/color"
 	"strconv"
+	"unsafe"
 
 	"github.com/ironpark/ggui"
 )
@@ -79,6 +80,23 @@ var colorFields, colorField = func() ([]func(*Theme) *color.Color, map[string]in
 	return fields, index
 }()
 
+// colorOffsets are where in a Theme each of colorFields is, so that In reads
+// its copy of the theme in place: handing that copy's address to an
+// accessor would move it, a whole Theme, to the heap on every call.
+var colorOffsets = func() []uintptr {
+	var t Theme
+	offsets := make([]uintptr, len(colorFields))
+	for i, f := range colorFields {
+		offsets[i] = uintptr(unsafe.Pointer(f(&t))) - uintptr(unsafe.Pointer(&t))
+	}
+	return offsets
+}()
+
+// colorAt is t's field for the token field c.field names.
+func (t *Theme) colorAt(field int) color.Color {
+	return *(*color.Color)(unsafe.Add(unsafe.Pointer(t), colorOffsets[field-1]))
+}
+
 // Alpha is the color at alpha times its opacity, from 0 to 1.
 func (c Color) Alpha(alpha float64) Color {
 	c.fade = 1 - (1-c.fade)*float32(min(max(alpha, 0), 1))
@@ -89,11 +107,10 @@ func (c Color) Alpha(alpha float64) Color {
 func (c Color) In(t Theme) color.Color {
 	var v color.Color
 	if c.field != 0 {
-		field := colorFields[c.field-1]
-		if v = *field(&t); v == nil {
+		if v = t.colorAt(c.field); v == nil {
 			// A field that follows another is nil until Resolve fills it.
 			t = t.Resolve()
-			v = *field(&t)
+			v = t.colorAt(c.field)
 		}
 	} else {
 		v, _ = t.Get(CSSColor(c.name))
