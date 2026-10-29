@@ -4,10 +4,15 @@
 package textedit
 
 import (
+	"sort"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
+	"unsafe"
+
+	"github.com/go-text/typesetting/segmenter"
 
 	"github.com/ironpark/ggui/internal/fn"
 )
@@ -233,67 +238,115 @@ func (e *Editor) DeleteForward(word bool) {
 	e.Replace("")
 }
 
-// Grapheme clusters, approximately: the caret and Backspace step over a
-// base rune together with what attaches to it. Without a segmentation
-// table this covers what shows up in practice: combining marks, variation
-// selectors, emoji modifiers and tags, zero-width-joiner sequences, CRLF,
-// and regional indicator pairs. Conjoining Hangul jamo are handled too,
-// though text from an IME arrives precomposed.
+// Grapheme clusters are the extended grapheme clusters of UAX #29, which
+// go-text's segmenter finds: the caret and Backspace step over a base rune
+// together with what attaches to it, a Hangul syllable written in jamo, an
+// emoji ZWJ sequence or a flag. A cluster never spans a line break but CR LF,
+// so each line is segmented apart.
 
-// extends reports whether r attaches to the rune before it.
-func extends(r rune) bool {
-	switch {
-	case unicode.Is(unicode.M, r): // combining marks
-		return true
-	case r >= 0xFE00 && r <= 0xFE0F, r >= 0xE0100 && r <= 0xE01EF: // variation selectors
-		return true
-	case r >= 0x1F3FB && r <= 0x1F3FF: // emoji skin tones
-		return true
-	case r >= 0xE0020 && r <= 0xE007F: // emoji tags
-		return true
-	case r == 0x200D, r == 0x200C: // zero-width joiner and non-joiner
-		return true
-	case r >= 0x1160 && r <= 0x11FF: // Hangul jamo vowels and trailing consonants
-		return true
-	}
-	return false
+// clusterCache holds the cluster boundaries of the strings last stepped
+// through. An entry keeps its string alive, so a string at the same address
+// and length is the same string.
+var clusterCache struct {
+	mu      sync.Mutex
+	seg     segmenter.Segmenter
+	runes   []rune
+	offsets []int
+	entries [8]clusterEntry
+	next    int
 }
 
-func isRegionalIndicator(r rune) bool { return r >= 0x1F1E6 && r <= 0x1F1FF }
+type clusterEntry struct {
+	s      string
+	bounds []int
+}
+
+// clusterBounds returns the byte offsets where the clusters of s start, and
+// len(s), in order.
+func clusterBounds(s string) []int {
+	c := &clusterCache
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, e := range c.entries {
+		if len(e.s) == len(s) && unsafe.StringData(e.s) == unsafe.StringData(s) {
+			return e.bounds
+		}
+	}
+	bounds := []int{}
+	for start := 0; start < len(s); {
+		end := len(s)
+		if i := strings.IndexByte(s[start:], '\n'); i >= 0 {
+			end = start + i + 1
+		}
+		// Decode by hand rather than with InitWithString, so that a byte of
+		// invalid UTF-8 is one rune and every rune has its offset.
+		c.runes, c.offsets = c.runes[:0], c.offsets[:0]
+		for i := start; i < end; {
+			r, n := utf8.DecodeRuneInString(s[i:end])
+			c.runes = append(c.runes, r)
+			c.offsets = append(c.offsets, i)
+			i += n
+		}
+		c.seg.Init(c.runes)
+		first := len(bounds)
+		for it := c.seg.GraphemeIterator(); it.Next(); {
+			bounds = append(bounds, it.Grapheme().Offset)
+		}
+		bounds = append(bounds[:first], joinEmojiSequences(c.runes, bounds[first:])...)
+		for k := first; k < len(bounds); k++ {
+			bounds[k] = c.offsets[bounds[k]]
+		}
+		start = end
+	}
+	bounds = append(bounds, len(s))
+	c.entries[c.next] = clusterEntry{s: s, bounds: bounds}
+	c.next = (c.next + 1) % len(c.entries)
+	return bounds
+}
+
+// joinEmojiSequences mends the cluster starts of runes, as rune indices,
+// that go-text's segmenter (v0.3.5) puts inside an emoji ZWJ sequence: after
+// a sequence ends with a pictograph, it does not start a new one at the
+// pictograph that follows, so the next "👩🏽‍💻" splits after its joiner
+// (UAX #29 GB11). A segmenter started afresh at the cluster before the
+// joiner finds the whole sequence.
+func joinEmojiSequences(runes []rune, starts []int) []int {
+	out := starts[:0]
+	for k := 0; k < len(starts); k++ {
+		b := starts[k]
+		if len(out) == 0 || b == 0 || runes[b-1] != 0x200D {
+			out = append(out, b)
+			continue
+		}
+		var seg segmenter.Segmenter
+		from := out[len(out)-1]
+		seg.Init(runes[from:])
+		it := seg.GraphemeIterator()
+		it.Next()
+		end := from + len(it.Grapheme().Text)
+		if end <= b {
+			out = append(out, b)
+			continue
+		}
+		// Drop the starts inside the sequence, and start a cluster after it
+		// unless one already does.
+		for k+1 < len(starts) && starts[k+1] < end {
+			k++
+		}
+		if end < len(runes) && (k+1 == len(starts) || starts[k+1] != end) {
+			out = append(out, end)
+		}
+	}
+	return out
+}
 
 // NextGrapheme returns the byte offset after the cluster starting at i.
 func NextGrapheme(s string, i int) int {
 	if i >= len(s) {
 		return len(s)
 	}
-	r, n := utf8.DecodeRuneInString(s[i:])
-	j := i + n
-	if r == '\r' && j < len(s) && s[j] == '\n' {
-		return j + 1
-	}
-	if r == '\r' || r == '\n' {
-		return j // a line break is a cluster of its own
-	}
-	if isRegionalIndicator(r) {
-		if r2, n2 := utf8.DecodeRuneInString(s[j:]); isRegionalIndicator(r2) {
-			return j + n2
-		}
-		return j
-	}
-	for j < len(s) {
-		r2, n2 := utf8.DecodeRuneInString(s[j:])
-		if !extends(r2) {
-			break
-		}
-		j += n2
-		if r2 == 0x200D && j < len(s) && s[j] != '\r' && s[j] != '\n' {
-			// What follows a joiner belongs to the cluster, unless it
-			// breaks the line.
-			_, n3 := utf8.DecodeRuneInString(s[j:])
-			j += n3
-		}
-	}
-	return j
+	bounds := clusterBounds(s)
+	return bounds[sort.SearchInts(bounds, max(i, 0)+1)]
 }
 
 // PrevGrapheme returns the byte offset of the cluster ending at i.
@@ -301,25 +354,8 @@ func PrevGrapheme(s string, i int) int {
 	if i <= 0 {
 		return 0
 	}
-	if s[i-1] == '\n' {
-		if i >= 2 && s[i-2] == '\r' {
-			return i - 2
-		}
-		return i - 1
-	}
-	// Walk clusters from the start of the line; text fields are short.
-	start := i
-	for start > 0 && s[start-1] != '\n' {
-		start--
-	}
-	for j := start; j < i; {
-		k := NextGrapheme(s, j)
-		if k >= i {
-			return j
-		}
-		j = k
-	}
-	return prevRune(s, i)
+	bounds := clusterBounds(s)
+	return bounds[sort.SearchInts(bounds, min(i, len(s)))-1]
 }
 
 // SelectLine selects the line around i, from the hard line break before

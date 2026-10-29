@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/ironpark/ggui/internal/fn"
@@ -32,14 +33,62 @@ func boundaries(s string) []int {
 	return b
 }
 
-// hasExtender reports whether s holds a rune that attaches to the one before
-// it.
-func hasExtender(s string) bool { return strings.ContainsFunc(s, extends) }
+// extends reports whether r attaches to the rune before it, unless that rune
+// is a control: nonspacing and enclosing marks, variation selectors, emoji
+// modifiers and tags, and the joiners. Spacing marks mostly attach too, but
+// not all of them, so they are left out.
+func extends(r rune) bool {
+	switch {
+	case unicode.In(r, unicode.Mn, unicode.Me):
+		return true
+	case r >= 0xFE00 && r <= 0xFE0F, r >= 0xE0100 && r <= 0xE01EF:
+		return true
+	case r >= 0x1F3FB && r <= 0x1F3FF:
+		return true
+	case r >= 0xE0020 && r <= 0xE007F:
+		return true
+	case r == 0x200D, r == 0x200C:
+		return true
+	}
+	return false
+}
+
+// joinsNext reports whether r can take the rune after it into its cluster
+// although that rune extends nothing: a regional indicator, CR, and the
+// Prepend characters of Arabic and Syriac, the ones the palette holds.
+func joinsNext(r rune) bool {
+	switch {
+	case r >= 0x1F1E6 && r <= 0x1F1FF, r == '\r':
+		return true
+	case r >= 0x0600 && r <= 0x0605, r == 0x06DD, r == 0x070F, r == 0x0890, r == 0x0891, r == 0x08E2:
+		return true
+	}
+	return false
+}
+
+// isControl reports whether a cluster always ends after r (UAX #29 GB4):
+// the controls, the line and paragraph separators, the format characters
+// that neither extend nor prepend, and the unassigned default ignorables.
+func isControl(r rune) bool {
+	unassigned := !unicode.In(r, unicode.L, unicode.M, unicode.N, unicode.P, unicode.S, unicode.Z,
+		unicode.Cc, unicode.Cf, unicode.Co, unicode.Cs)
+	ignorable := r >= 0xE0000 && r <= 0xE0FFF || r >= 0xFFF0 && r <= 0xFFF8 || r >= 0x2060 && r <= 0x206F
+	return unicode.Is(unicode.Cc, r) || r == 0x2028 || r == 0x2029 ||
+		unicode.Is(unicode.Cf, r) && !extends(r) && !joinsNext(r) ||
+		unassigned && ignorable && !extends(r)
+}
+
+// simple reports whether every rune of s is a cluster of its own: it holds
+// nothing past the Latin letters and no CR LF. Further on, Prepend characters
+// and the Hangul and Indic rules join runes that extend nothing.
+func simple(s string) bool {
+	return !strings.ContainsFunc(s, func(r rune) bool { return r >= 0x0300 }) && !strings.Contains(s, "\r\n")
+}
 
 // FuzzGraphemeBoundaries checks the segmentation helpers on any string:
 // each step makes progress within bounds and lands on a rune start, walking
-// forward and backward finds the same clusters, and text without
-// multi-rune clusters splits exactly at its runes.
+// forward and backward finds the same clusters, an extending rune joins what
+// it follows, and simple text splits exactly at its runes.
 func FuzzGraphemeBoundaries(f *testing.F) {
 	for _, s := range palette {
 		f.Add(s)
@@ -92,20 +141,20 @@ func FuzzGraphemeBoundaries(f *testing.F) {
 		}
 
 		// A cluster starts with an extending rune only at the start, or after
-		// a flag or a line break, which take nothing after them.
+		// a control, which takes nothing after it.
 		for _, b := range forward {
 			if b == 0 || b == len(s) {
 				continue
 			}
 			r, _ := utf8.DecodeRuneInString(s[b:])
 			q, _ := utf8.DecodeLastRuneInString(s[:b])
-			if extends(r) && !isRegionalIndicator(q) && q != '\n' && q != '\r' {
+			if extends(r) && !isControl(q) {
 				t.Fatalf("cluster at %d of %q starts with %U after %U, which it should extend", b, s, r, q)
 			}
 		}
 
-		// Reference: without extenders, flags or CR every rune is a cluster.
-		if valid && !hasExtender(s) && !strings.ContainsFunc(s, isRegionalIndicator) && !strings.Contains(s, "\r") {
+		// Reference: in simple text every rune is a cluster.
+		if valid && simple(s) {
 			runes := []int{}
 			for i := range s {
 				runes = append(runes, i)

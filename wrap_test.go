@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"slices"
 	"testing"
 	"unicode/utf8"
 )
@@ -51,6 +52,32 @@ func TestLineOf(t *testing.T) {
 	for pos, want := range map[int]int{0: 0, 3: 0, 4: 1, 7: 1, 8: 2, 20: 2} {
 		if got := lineOf(spans, pos); got != want {
 			t.Errorf("lineOf(%d) = %d, want %d", pos, got, want)
+		}
+	}
+}
+
+// TestWrapBreaksWhereUAX14Allows wraps with every rune ten wide, so the
+// breaks are the line-breaking rules' and not a font's.
+func TestWrapBreaksWhereUAX14Allows(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name string
+		s    string
+		maxW float64
+		want []string
+	}{
+		{"after a hyphen", "well-known", 60, []string{"well-", "known"}},
+		{"after a slash", "and/or", 50, []string{"and/", "or"}},
+		{"between ideographs, not before a full stop", "日本語の文章。次の文", 40, []string{"日本語の", "文章。次", "の文"}},
+		{"between Hangul words at spaces", "한글 텍스트", 40, []string{"한글", "텍스트"}},
+	} {
+		width := func(a, b int) float64 { return 10 * float64(utf8.RuneCountInString(c.s[a:b])) }
+		var got []string
+		for _, sp := range wrapParagraphBy(c.s, width, c.maxW) {
+			got = append(got, c.s[sp.start:sp.end])
+		}
+		if !slices.Equal(got, c.want) {
+			t.Errorf("%s: %q at %v wraps to %q, want %q", c.name, c.s, c.maxW, got, c.want)
 		}
 	}
 }

@@ -557,9 +557,9 @@ func prefixWidths(s string, face text.Face) func(b int) float64 {
 	}
 }
 
-// wrapText breaks s into lines no wider than maxW. Hard line breaks are kept;
-// soft breaks fall on spaces, or between grapheme clusters when a single word is wider
-// than the line, which is what scripts written without spaces need.
+// wrapText breaks s into lines no wider than maxW. Hard line breaks are
+// kept; soft breaks fall where UAX #14 allows, or between grapheme clusters
+// when a single word is wider than the line.
 func wrapText(s string, face text.Face, maxW float64) []string {
 	var out []string
 	for para := range strings.SplitSeq(s, "\n") {
@@ -568,30 +568,13 @@ func wrapText(s string, face text.Face, maxW float64) []string {
 	return out
 }
 
+// wrapLine wraps a line without hard breaks as wrapParagraphBy does, the
+// spaces a break falls on left out.
 func wrapLine(line string, face text.Face, maxW float64) []string {
-	if maxW <= 0 || lineWidth(line, face) <= maxW {
-		return []string{line}
-	}
-	var lines []string
-	cur := ""
-	for word := range strings.FieldsSeq(line) {
-		cand := word
-		if cur != "" {
-			cand = cur + " " + word
-		}
-		if lineWidth(cand, face) <= maxW {
-			cur = cand
-			continue
-		}
-		if cur != "" {
-			lines = append(lines, cur)
-		}
-		pieces := breakRunes(word, face, maxW)
-		lines = append(lines, pieces[:len(pieces)-1]...)
-		cur = pieces[len(pieces)-1]
-	}
-	if cur != "" || len(lines) == 0 {
-		lines = append(lines, cur)
+	spans := wrapParagraphBy(line, func(a, b int) float64 { return lineWidth(line[a:b], face) }, maxW)
+	lines := make([]string, len(spans))
+	for i, sp := range spans {
+		lines[i] = line[sp.start:sp.end]
 	}
 	return lines
 }
@@ -623,22 +606,6 @@ func ellipsizeBy(s string, a, b int, width func(int) float64, room float64) int 
 		keep, i = end, end
 	}
 	return keep
-}
-
-// breakRunes splits word into pieces no wider than maxW, never emptier than
-// one grapheme so progress is guaranteed.
-func breakRunes(word string, face text.Face, maxW float64) []string {
-	var pieces []string
-	start := 0
-	for i := 0; i < len(word); {
-		end := textedit.NextGrapheme(word, i)
-		if i > start && lineWidth(word[start:end], face) > maxW {
-			pieces = append(pieces, word[start:i])
-			start = i
-		}
-		i = end
-	}
-	return append(pieces, word[start:])
 }
 
 // lineSpan is one drawn line of a wrapped string as byte offsets: the text
@@ -674,31 +641,30 @@ func wrapSpansBy(s string, width func(a, b int) float64, maxW float64) []lineSpa
 }
 
 // wrapParagraphBy wraps text without hard breaks, width measuring p[a:b]:
-// greedily by words, and between grapheme clusters when a word alone is
-// wider than maxW.
+// greedily at the break opportunities of UAX #14, and between grapheme
+// clusters when a word alone is wider than maxW. The spaces before a soft
+// break end no line: they lie between it and the next.
 func wrapParagraphBy(p string, width func(a, b int) float64, maxW float64) []lineSpan {
 	if maxW <= 0 || width(0, len(p)) <= maxW {
 		return []lineSpan{{0, len(p)}}
 	}
 	var lines []lineSpan
 	lineStart, lineEnd := 0, 0 // the line being filled: its first byte and the end of its last word
-	i := 0
-	for i < len(p) {
-		for i < len(p) && (p[i] == ' ' || p[i] == '\t') {
-			i++
+	wstart := 0
+	for _, brk := range lineBreaks(p) {
+		wend := brk
+		for wend > wstart && (p[wend-1] == ' ' || p[wend-1] == '\t') {
+			wend--
 		}
-		if i == len(p) {
-			break
+		start := wstart
+		wstart = brk
+		if wend == start {
+			continue // spaces alone, before the first word
 		}
-		wstart := i
-		for i < len(p) && p[i] != ' ' && p[i] != '\t' {
-			i++
-		}
-		wend := i
 		if lineEnd > lineStart && width(lineStart, wend) > maxW {
 			// Does not fit after what is on the line: break before it.
 			lines = append(lines, lineSpan{lineStart, lineEnd})
-			lineStart, lineEnd = wstart, wstart
+			lineStart, lineEnd = start, start
 		}
 		if width(lineStart, wend) <= maxW {
 			lineEnd = wend

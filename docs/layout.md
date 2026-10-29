@@ -190,8 +190,11 @@ never evicted.
 
 ## Text
 
-`Text` wraps at spaces to the width it is given, and between runes when a
-word is wider than the line, so scripts without spaces wrap too. `.Size(px)`,
+`Text` wraps to the width it is given where the Unicode line-breaking rules
+(UAX #14) allow: after spaces, hyphens and slashes, and between Chinese and
+Japanese characters, never before closing punctuation such as `。`. Korean
+breaks at spaces only, as CSS's `word-break: keep-all` does. A word wider than
+the line breaks between grapheme clusters. Spaces are kept as written. `.Size(px)`,
 `.Color(c)`, `.Font(f)`, `.LineHeight(mult)`, `.Style(ts)`, `.Align(0.5)` and
 `.NoWrap()` adjust it; what is not set is inherited (see [Styling and themes](styling.md)). The
 default font is the platform's (see [Fonts](fonts.md#choose-text-fonts));

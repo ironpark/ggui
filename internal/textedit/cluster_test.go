@@ -33,6 +33,15 @@ func TestClustersKeepAttachedRunesWithTheirBase(t *testing.T) {
 		{"lone line feed", "a\nb", []string{"a", "\n", "b"}},
 		{"CR then LF", "\r\r\n", []string{"\r", "\r\n"}},
 		{"mark at the start", "\u0301a", []string{"\u0301", "a"}},
+		// What the segmenter gets right that runes alone do not tell.
+		{"Devanagari conjunct", "क्षa", []string{"क्ष", "a"}},
+		{"leading and vowel jamo", "\u1100\u1161\u1100", []string{"\u1100\u1161", "\u1100"}},
+		{"prepended concatenation mark", "\u0600١٢x", []string{"\u0600١", "٢", "x"}},
+		{"spacing mark", "कि", []string{"कि"}},
+		{"mark after a tab", "\t\u0301", []string{"\t", "\u0301"}},
+		{"ZWJ sequences in a row", "👩🏽\u200d💻👩🏽\u200d💻👨\u200d👩\u200d👧\u200d👦x",
+			[]string{"👩🏽\u200d💻", "👩🏽\u200d💻", "👨\u200d👩\u200d👧\u200d👦", "x"}},
+		{"joiner after a letter", "a\u200d💻", []string{"a\u200d", "💻"}},
 	} {
 		got := clusters(c.s)
 		if len(got) != len(c.want) {

@@ -116,8 +116,9 @@ Every chainable setter on `ggui.TextInput` has a namesake on `ui.TextField`;
 a test in the `ui` package keeps them in step.
 
 Editors support IME composition, with preedit text underlined in place.
-Caret movement and Backspace respect grapheme clusters, including combined
-letters and multi-code-point emoji. Caret and selection state survive rebuilds.
+Caret movement and Backspace respect grapheme clusters as Unicode defines them
+(UAX #29), including combined letters, Indic conjuncts, Hangul written in jamo
+and multi-code-point emoji. Caret and selection state survive rebuilds.
 Use `.Input().Focused()` on a `ui.TextField` to inspect focus.
 
 | Interaction | Result |
