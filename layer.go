@@ -103,7 +103,10 @@ func (f *frameState) borrowLayer(window *ggfx.Image) *ggfx.Image {
 		}
 		img.Deallocate()
 	}
-	f.layers[i] = ggfx.NewImage(size.X, size.Y)
+	// Unmanaged, the layer is a texture of its own size: on the atlas it
+	// would take a page rounded up to powers of two, 4096×2048 for a
+	// 3252×1534 window, 32 MB rather than 20.
+	f.layers[i] = ggfx.NewImageWithOptions(image.Rect(0, 0, size.X, size.Y), &ggfx.NewImageOptions{Unmanaged: true})
 	return f.layers[i]
 }
 

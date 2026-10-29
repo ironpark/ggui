@@ -567,7 +567,8 @@ func (w *Window) paintTarget(screen *ggfx.Image) *ggfx.Image {
 	size := screen.Bounds().Size()
 	if w.backbuf == nil || w.backbuf.Bounds().Size() != size {
 		w.freeBackbuf()
-		w.backbuf = ggfx.NewImage(size.X, size.Y)
+		// Unmanaged for the reason a layer is: see borrowLayer.
+		w.backbuf = ggfx.NewImageWithOptions(image.Rect(0, 0, size.X, size.Y), &ggfx.NewImageOptions{Unmanaged: true})
 	}
 	return w.backbuf
 }
