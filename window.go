@@ -8,12 +8,12 @@ import (
 	"time"
 
 	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggwd"
 	"github.com/ironpark/ggui/inspect"
 	"github.com/ironpark/ggui/internal/a11ybridge"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/textinput"
 	"github.com/ironpark/ggui/runtime"
+	"github.com/ironpark/ggwd"
 )
 
 // Config describes a window: the one New opens, or one App.OpenWindow

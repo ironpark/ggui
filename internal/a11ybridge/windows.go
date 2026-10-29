@@ -5,9 +5,9 @@ package a11ybridge
 import (
 	"sync/atomic"
 
+	"github.com/ironpark/ggui/a11y"
 	"github.com/ironpark/ggwd"
 	"github.com/ironpark/ggwd/native"
-	"github.com/ironpark/ggui/a11y"
 )
 
 // The Windows half of the accessibility bridge speaks UI Automation, from

@@ -8,11 +8,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ironpark/ggwd"
 	"github.com/ironpark/ggui/a11y"
 	"github.com/ironpark/ggui/internal/nativemenu"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/runtime"
+	"github.com/ironpark/ggwd"
 )
 
 // App is the process's GUI: the event loop and the windows it drives. New

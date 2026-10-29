@@ -4,8 +4,8 @@ import (
 	"image"
 	"testing"
 
-	"github.com/ironpark/ggwd"
 	"github.com/ironpark/ggui/runtime"
+	"github.com/ironpark/ggwd"
 )
 
 func TestWindowSettersBeforeOpenShapeTheConfig(t *testing.T) {

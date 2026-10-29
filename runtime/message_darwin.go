@@ -4,8 +4,8 @@ package runtime
 
 import (
 	"github.com/ebitengine/purego/objc"
-	"github.com/ironpark/ggwd"
 	"github.com/ironpark/ggui/internal/platform/cocoa"
+	"github.com/ironpark/ggwd"
 )
 
 // A message is an NSAlert, shown as a sheet on the app's window as the

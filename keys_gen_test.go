@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ironpark/ggwd"
 	"github.com/ironpark/ggui/internal/tools/keygen"
+	"github.com/ironpark/ggwd"
 )
 
 func TestKeyConstantsAreCurrent(t *testing.T) {

@@ -7,8 +7,8 @@ import (
 
 	"github.com/ebitengine/purego/cstrings"
 	"github.com/ebitengine/purego/objc"
-	"github.com/ironpark/ggwd"
 	"github.com/ironpark/ggui/internal/platform/cocoa"
+	"github.com/ironpark/ggwd"
 )
 
 // The macOS dialogs are NSOpenPanel and NSSavePanel. A panel is shown as a

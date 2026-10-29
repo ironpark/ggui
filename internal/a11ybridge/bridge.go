@@ -13,8 +13,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/ironpark/ggwd"
 	"github.com/ironpark/ggui/a11y"
+	"github.com/ironpark/ggwd"
 )
 
 // A platform accessibility bridge is the far side of the tree semantics.go

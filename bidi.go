@@ -218,6 +218,9 @@ type rtlChain struct {
 	emoji *emojiFace // the emoji fallback, if the font has one
 }
 
+// nominalMu guards NominalGlyph, which bypasses the source's own lock.
+var nominalMu sync.Mutex
+
 // pick returns the index of the face that draws grapheme g: the emoji
 // font's for an emoji, else the first face that has its first rune, else
 // the last, as a fallback face picks.
@@ -226,6 +229,10 @@ func (c *rtlChain) pick(g string) int {
 		return -1
 	}
 	r, _ := utf8.DecodeRuneInString(g)
+	// A face's cmap caches its lookups unguarded, and sources are shared
+	// across goroutines.
+	nominalMu.Lock()
+	defer nominalMu.Unlock()
 	for i, src := range c.srcs {
 		if f, ok := src.UnsafeInternal().(*gofont.Face); ok {
 			if _, has := f.NominalGlyph(r); has {

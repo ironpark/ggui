@@ -3,8 +3,8 @@ package a11ybridge
 import (
 	"testing"
 
-	"github.com/ironpark/ggwd"
 	"github.com/ironpark/ggui/a11y"
+	"github.com/ironpark/ggwd"
 )
 
 // axFake is an axPlatform that makes numbers instead of objects, so that
