@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggwd"
-	"github.com/ironpark/ggip"
 	"github.com/ironpark/ggui/internal/tools/keygen"
 )
 
@@ -21,16 +20,16 @@ func TestKeyConstantsAreCurrent(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(got, want) {
-		t.Fatal("keys_gen.go does not match the keys ggip defines; run go generate ./...")
+		t.Fatal("keys_gen.go does not match the keys ggwd defines; run go generate ./...")
 	}
 }
 
 func TestKeyAliasesAreTheSameValues(t *testing.T) {
 	t.Parallel()
-	if KeyArrowUp != ggip.KeyArrowUp || KeyEnter != ggip.KeyEnter || KeyMax != ggip.KeyMax {
-		t.Fatal("a ggui key constant differs from the ggip one it aliases")
+	if KeyArrowUp != ggwd.KeyArrowUp || KeyEnter != ggwd.KeyEnter || KeyMax != ggwd.KeyMax {
+		t.Fatal("a ggui key constant differs from the ggwd one it aliases")
 	}
-	if CursorShapePointer != ggwd.CursorShapePointer || MouseButtonRight != ggip.MouseButtonRight {
+	if CursorShapePointer != ggwd.CursorShapePointer || MouseButtonRight != ggwd.MouseButtonRight {
 		t.Fatal("a cursor or button constant differs from the ggfx one it aliases")
 	}
 	// Chord parses the same names the constants are generated from, so

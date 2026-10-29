@@ -9,7 +9,7 @@ import (
 func TestAppUsesNativeModifierSnapshot(t *testing.T) {
 	t.Parallel()
 	a := &Window{}
-	a.handle(ggwd.KeyEvent{Key: ggwd.KeyA, Pressed: true, Modifiers: ggwd.KeyModifiers{Meta: true}})
+	a.handle(ggwd.KeyEvent{Key: ggwd.KeyA, Pressed: true, Modifiers: ggwd.Mods{Meta: true}})
 	if !a.takeInput().mods.Meta {
 		t.Fatal("native modifier snapshot was lost without a separate modifier key event")
 	}
@@ -40,8 +40,8 @@ func TestAppKeepsModifierOnQueuedKeyPress(t *testing.T) {
 func TestPointerEventsCarryTheirModifiers(t *testing.T) {
 	t.Parallel()
 	for _, e := range []ggwd.Event{
-		ggwd.MouseButtonEvent{Button: ggwd.MouseButtonLeft, Pressed: true, Modifiers: ggwd.KeyModifiers{Shift: true}},
-		ggwd.ScrollEvent{Y: -1, Modifiers: ggwd.KeyModifiers{Shift: true}},
+		ggwd.MouseButtonEvent{Button: ggwd.MouseButtonLeft, Pressed: true, Modifiers: ggwd.Mods{Shift: true}},
+		ggwd.ScrollEvent{Y: -1, Modifiers: ggwd.Mods{Shift: true}},
 	} {
 		a := &Window{}
 		if err := a.handle(e); err != nil {
@@ -64,7 +64,7 @@ func TestLostModifierReleaseIsForgotten(t *testing.T) {
 		ggwd.ScrollEvent{Y: -1},
 	} {
 		a := &Window{}
-		if err := a.handle(ggwd.KeyEvent{Key: ggwd.KeyShiftLeft, Pressed: true, Modifiers: ggwd.KeyModifiers{Shift: true}}); err != nil {
+		if err := a.handle(ggwd.KeyEvent{Key: ggwd.KeyShiftLeft, Pressed: true, Modifiers: ggwd.Mods{Shift: true}}); err != nil {
 			t.Fatal(err)
 		}
 		a.takeInput()
@@ -77,8 +77,8 @@ func TestLostModifierReleaseIsForgotten(t *testing.T) {
 	}
 	// One the event says is held stays held.
 	a := &Window{}
-	a.handle(ggwd.KeyEvent{Key: ggwd.KeyShiftLeft, Pressed: true, Modifiers: ggwd.KeyModifiers{Shift: true}})
-	a.handle(ggwd.KeyEvent{Key: ggwd.KeyA, Pressed: true, Modifiers: ggwd.KeyModifiers{Shift: true}})
+	a.handle(ggwd.KeyEvent{Key: ggwd.KeyShiftLeft, Pressed: true, Modifiers: ggwd.Mods{Shift: true}})
+	a.handle(ggwd.KeyEvent{Key: ggwd.KeyA, Pressed: true, Modifiers: ggwd.Mods{Shift: true}})
 	a.takeInput()
 	if !a.keyboard.Mods().Shift {
 		t.Error("a held Shift was let go")

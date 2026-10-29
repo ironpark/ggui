@@ -175,7 +175,7 @@ func (a *App) Run() error {
 	return ggwd.Run(ggwd.HandlerFunc(a.handleEvent), &ggwd.RunOptions{ApplePressAndHoldEnabled: true})
 }
 
-// handleEvent is the App's ggfx.Handler. It opens the windows made before
+// handleEvent is the App's ggwd.Handler. It opens the windows made before
 // Run when the engine starts and hands every other event to the window it
 // is for.
 func (a *App) handleEvent(ev ggwd.Event) error {

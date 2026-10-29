@@ -15,6 +15,7 @@ import (
 	"github.com/ebitengine/purego/objc"
 
 	"github.com/ironpark/ggwd"
+	"github.com/ironpark/ggwd/native"
 
 	"github.com/ironpark/ggui/a11y"
 	"github.com/ironpark/ggui/internal/platform/cocoa"
@@ -99,8 +100,8 @@ func (d *darwinAX) active() bool {
 // setWindow uses the container owned by ggfx; ggui never inserts a view.
 func (d *darwinAX) setWindow(b *Bridge, w *ggwd.Window) {
 	d.bridge, d.window = b, w
-	d.container = objc.ID(w.AccessibilityView())
-	w.SetAccessibilityHandlers(func() uintptr {
+	d.container = objc.ID(native.AccessibilityView(w))
+	native.SetAccessibilityHandlers(w, func() uintptr {
 		f := b.frame()
 		if f == nil {
 			return uintptr(cocoa.Array(nil))
@@ -111,7 +112,7 @@ func (d *darwinAX) setWindow(b *Bridge, w *ggwd.Window) {
 
 func (d *darwinAX) close() {
 	if d.window != nil {
-		d.window.SetAccessibilityHandlers(nil, nil)
+		native.SetAccessibilityHandlers(d.window, nil, nil)
 	}
 	d.container, d.window = 0, nil
 }

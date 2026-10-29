@@ -9,8 +9,6 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggwd"
-	"github.com/ironpark/ggip"
-	"github.com/ironpark/ggip/ggfxinput"
 	"github.com/ironpark/ggui/inspect"
 	"github.com/ironpark/ggui/internal/a11ybridge"
 	"github.com/ironpark/ggui/internal/reactive"
@@ -138,7 +136,7 @@ type Window struct {
 	pending       frameInput                  // input gathered from events since the last frame
 	pos           Point                       // the last known pointer position, in logical pixels
 	wakeTimer     *time.Timer
-	keyboard      ggip.Keyboard          // keys held, for Mods
+	keyboard      ggwd.Keyboard          // keys held, for Mods
 	touches       map[ggwd.TouchID]Point // touches in progress, in logical pixels
 	ax            a11ybridge.Bridge
 	semWanted     atomic.Bool  // a caller of Semantics reads the tree
@@ -285,18 +283,15 @@ func (w *Window) handle(ev ggwd.Event) error {
 	case ggwd.FrameEvent:
 		return w.runFrameEvent(ev)
 	case ggwd.KeyEvent:
-		key, ok := ggfxinput.Key(ev.Key)
-		if !ok {
-			break
-		}
-		w.syncMods(ggfxinput.Mods(ev.Modifiers))
+		key := ev.Key
+		w.syncMods(ev.Modifiers)
 		w.keyboard.Set(key, ev.Pressed)
 		if ev.Pressed {
 			// The modifiers of this press, from the held keys and from the
 			// event itself, which sees a modifier the OS never reported as a
 			// key. Presses within one frame share the union, so a chord is
 			// not lost when its modifier was released before the frame ran.
-			m := w.keyboard.Mods().Or(ggfxinput.Mods(ev.Modifiers))
+			m := w.keyboard.Mods().Or(ev.Modifiers)
 			w.pending.mods = w.pending.mods.Or(m)
 			w.pending.keys = append(w.pending.keys, key)
 			if w.cfg.Inspector != "" && !ev.Repeat &&
@@ -320,17 +315,17 @@ func (w *Window) handle(ev ggwd.Event) error {
 		w.pos = Pt(ev.X, ev.Y)
 		// A modifier pressed while another window had the focus reached
 		// no KeyEvent here; the click still sees it.
-		w.syncMods(ggfxinput.Mods(ev.Modifiers))
-		w.pending.mods = w.pending.mods.Or(ggfxinput.Mods(ev.Modifiers))
+		w.syncMods(ev.Modifiers)
+		w.pending.mods = w.pending.mods.Or(ev.Modifiers)
 		if ev.Pressed {
-			w.pending.down = append(w.pending.down, ggfxinput.MouseButton(ev.Button))
+			w.pending.down = append(w.pending.down, ev.Button)
 		} else {
-			w.pending.up = append(w.pending.up, ggfxinput.MouseButton(ev.Button))
+			w.pending.up = append(w.pending.up, ev.Button)
 		}
 		w.requestFrame()
 	case ggwd.ScrollEvent:
-		w.syncMods(ggfxinput.Mods(ev.Modifiers))
-		w.pending.mods = w.pending.mods.Or(ggfxinput.Mods(ev.Modifiers))
+		w.syncMods(ev.Modifiers)
+		w.pending.mods = w.pending.mods.Or(ev.Modifiers)
 		w.pending.wheel = w.pending.wheel.Add(Pt(ev.X, ev.Y))
 		w.pending.phase = laterPhase(w.pending.phase, ev.Phase)
 		w.requestFrame()
@@ -384,11 +379,11 @@ func (w *Window) handle(ev ggwd.Event) error {
 
 // modKeys are the keys of each modifier, in the order syncMods reads
 // them: Shift, Ctrl, Alt and Meta.
-var modKeys = [4][3]ggip.Key{
-	{ggip.KeyShift, ggip.KeyShiftLeft, ggip.KeyShiftRight},
-	{ggip.KeyControl, ggip.KeyControlLeft, ggip.KeyControlRight},
-	{ggip.KeyAlt, ggip.KeyAltLeft, ggip.KeyAltRight},
-	{ggip.KeyMeta, ggip.KeyMetaLeft, ggip.KeyMetaRight},
+var modKeys = [4][3]ggwd.Key{
+	{ggwd.KeyShift, ggwd.KeyShiftLeft, ggwd.KeyShiftRight},
+	{ggwd.KeyControl, ggwd.KeyControlLeft, ggwd.KeyControlRight},
+	{ggwd.KeyAlt, ggwd.KeyAltLeft, ggwd.KeyAltRight},
+	{ggwd.KeyMeta, ggwd.KeyMetaLeft, ggwd.KeyMetaRight},
 }
 
 // syncMods forgets the modifier keys an event says are not held, before

@@ -190,7 +190,7 @@ type Screen struct {
 	Scale float64
 }
 
-func screenOf(m *ggwd.MonitorType) Screen {
+func screenOf(m *ggwd.Monitor) Screen {
 	width, height := m.Size()
 	return Screen{Name: m.Name(), Size: Sz(float64(width), float64(height)), Scale: m.DeviceScaleFactor()}
 }

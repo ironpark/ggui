@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 
 	"github.com/ironpark/ggwd"
+	"github.com/ironpark/ggwd/native"
 	"github.com/ironpark/ggui/a11y"
 )
 
@@ -36,7 +37,7 @@ func newAXPlatform() axPlatform { return &windowsAX{} }
 
 func (d *windowsAX) setWindow(b *Bridge, w *ggwd.Window) {
 	d.bridge, d.window = b, w
-	h := w.NativeHandle()
+	h := native.Handle(w)
 	if h == 0 {
 		return
 	}
@@ -46,7 +47,7 @@ func (d *windowsAX) setWindow(b *Bridge, w *ggwd.Window) {
 	}
 	d.root.Store(root)
 	d.hwnd.Store(h)
-	w.SetGetObjectHandler(func(wparam, lparam uintptr) (uintptr, bool) {
+	native.SetGetObjectHandler(w, func(wparam, lparam uintptr) (uintptr, bool) {
 		if int32(uint32(lparam)) != uiaRootObjectID {
 			return 0, false
 		}
@@ -69,7 +70,7 @@ func (d *windowsAX) active() bool {
 
 func (d *windowsAX) close() {
 	if d.window != nil {
-		d.window.SetGetObjectHandler(nil)
+		native.SetGetObjectHandler(d.window, nil)
 	}
 	h := d.hwnd.Swap(0)
 	root := d.root.Swap(0)

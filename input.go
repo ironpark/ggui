@@ -4,8 +4,8 @@ import (
 	"runtime"
 	"slices"
 
-	"github.com/ironpark/ggip"
 	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggwd"
 )
 
 // PointerKind says what a PointerEvent reports.
@@ -59,7 +59,7 @@ type TouchDragCapturer interface {
 
 // Mods are the modifier keys held during a KeyEvent. Cmd reports the
 // platform's command modifier: Meta (⌘) on macOS, Ctrl elsewhere.
-type Mods = ggip.Mods
+type Mods = ggwd.Mods
 
 func runtimeIsDarwin() bool { return runtime.GOOS == "darwin" }
 
