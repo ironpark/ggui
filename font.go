@@ -335,9 +335,9 @@ func systemFallbackFamilies() []string {
 			"Menlo",         // dingbats such as ❯ ✳ ✻
 			"Apple Symbols", // technical symbols such as ⎿
 			"STIX Two Math", // media symbols such as ⏵ ⏺
-			// Wide coverage, and large: last, so a glyph the fonts above
-			// have does not read it.
-			"Arial Unicode MS",
+			// No pan-Unicode font: Arial Unicode MS takes 46 MB once
+			// loaded, and a glyph none of these has comes from a font made
+			// for its script (see systemFallback).
 		}
 	case "windows":
 		return []string{

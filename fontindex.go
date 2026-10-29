@@ -80,9 +80,11 @@ var systemFallbacks = fallbackChoices{families: map[string]*Font{}, runes: map[r
 
 // systemFallback returns a system font that has r, for text whose fonts
 // lack it, or nil if none has. Of the fonts that have r it prefers an
-// upright one, then the one covering the fewest runes, so that a font made
-// for r's script wins over a font covering all of Unicode thinly. Placeholder
-// fonts and emoji fonts, which have their own place, are never chosen.
+// upright one, then one that reads as interface text (see fallbackRank),
+// then the one covering the fewest runes, so that a font made for r's
+// script wins over a font covering all of Unicode, which is also large to
+// load. Placeholder fonts, emoji fonts, which have their own place, and
+// fonts private to the platform are never chosen.
 func systemFallback(r rune) *Font {
 	s := &systemFallbacks
 	s.Lock()
@@ -94,7 +96,9 @@ func systemFallback(r rune) *Font {
 	best := -1
 	for i := range fps {
 		fp := &fps[i]
-		if !fp.Runes.Contains(r) || fp.Family == "lastresort" || strings.Contains(fp.Family, "emoji") {
+		// A family starting with a dot is private to macOS: its own
+		// interface faces, helpers such as .Keyboard, and script faces.
+		if !fp.Runes.Contains(r) || fp.Family == "lastresort" || strings.Contains(fp.Family, "emoji") || strings.HasPrefix(fp.Family, ".") {
 			continue
 		}
 		if best < 0 || s.better(fps, i, best) {
@@ -123,7 +127,11 @@ func (s *fallbackChoices) better(fps []fontscan.Footprint, i, j int) bool {
 	if ua, ub := a.Aspect.Style == font.StyleNormal, b.Aspect.Style == font.StyleNormal; ua != ub {
 		return ua
 	}
-	if la, lb := s.runeLen(fps, i), s.runeLen(fps, j); la != lb {
+	la, lb := s.runeLen(fps, i), s.runeLen(fps, j)
+	if ra, rb := fallbackRank(a.Family, la), fallbackRank(b.Family, lb); ra != rb {
+		return ra > rb
+	}
+	if la != lb {
 		return la < lb
 	}
 	if a.Family != b.Family {
@@ -140,6 +148,64 @@ func (s *fallbackChoices) runeLen(fps []fontscan.Footprint, i int) int {
 	}
 	return n
 }
+
+// panUnicodeRunes is the coverage past which a font is taken to cover all
+// of Unicode thinly, as Arial Unicode MS does with 38,000 runes in 22 MB:
+// a font for one script, even CJK, holds fewer.
+const panUnicodeRunes = 30000
+
+// fallbackRank ranks a font of the normalized family covering runes runes
+// as a fallback for interface text, higher first: the platform's own text
+// family, then one made for interface text, then any other, then one whose
+// name says it is serif, calligraphic, a symbol font or a variant such as a
+// narrow or rounded cut, and one covering all of Unicode last. It goes by
+// the name, since the index holds no font's classification.
+func fallbackRank(family string, runes int) int {
+	if runes > panUnicodeRunes {
+		return -2
+	}
+	if slices.Contains(platformTextFamilies, family) {
+		return 2
+	}
+	for _, word := range []string{
+		"serif", "mincho", "myungjo", "batang", "song", "ming", "kai", "thuluth", "corsiva", "script",
+		"symbol", "math", "size", "variants", "dingbat", "webdings", "wingdings", "braille", "brush",
+		"hand", "chalk", "marker", "diwan", "farisi", "mishafi", "nastaliq", "chancery", "fraktur",
+		"comic", "rounded", "narrow", "condensed", "compressed", "black", "mono",
+	} {
+		if strings.Contains(family, word) && !strings.Contains(family, "sans") {
+			return -1
+		}
+	}
+	for _, word := range []string{
+		"sans", "gothic", "sangam", "kohinoor", "geeza", "arial", "helvetica", "verdana", "tahoma",
+		"segoe", "dejavu", "liberation", "roboto", "hiragino", "pingfang", "thonburi", "ui",
+	} {
+		if strings.Contains(family, word) {
+			return 1
+		}
+	}
+	return 0
+}
+
+// platformTextFamilies are the normalized families each platform sets text
+// in, which cover the scripts written with Latin letters, Greek and
+// Cyrillic, and many symbols.
+var platformTextFamilies = func() []string {
+	var names []string
+	switch runtime.GOOS {
+	case "darwin":
+		names = []string{"Helvetica Neue", "Helvetica", "Arial"}
+	case "windows":
+		names = []string{"Segoe UI", "Arial"}
+	default:
+		names = []string{"Noto Sans", "DejaVu Sans", "Liberation Sans"}
+	}
+	for i, n := range names {
+		names[i] = font.NormalizeFamily(n)
+	}
+	return names
+}()
 
 // systemFallbackFace returns a FallbackFace that draws, at size and
 // weight, what the faces before it lack with systemFallback's fonts, and
