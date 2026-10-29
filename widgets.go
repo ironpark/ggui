@@ -1283,6 +1283,7 @@ type ScrollWidget struct {
 	childSize             Size
 	viewport              Size
 	laidAt                float64 // the offset the child was last laid out for
+	anchorShift           float64 // how far the child asked, as it laid out, to move to keep what is in view
 	cache                 *CachedWidget
 	rect                  Rect // where the window was last painted
 	thumbHit              Rect
@@ -1444,10 +1445,21 @@ func (s *ScrollWidget) Layout(c Constraints, env Env) Size {
 		}
 	}
 	s.laidOut = true
-	s.scrollTo(pick(follow, s.maxOffset(), s.position()))
+	shift := s.anchorShift
+	s.anchorShift = 0
+	if shift != 0 && s.phys.animating {
+		s.phys.anim.from += shift
+		s.phys.anim.to += shift
+	}
+	s.scrollTo(pick(follow, s.maxOffset(), s.position()+shift))
 	s.phys.attach(s)
 	return s.viewport
 }
+
+// keepInView moves the window by d once the child is laid out: a list
+// whose rows above the window changed size asks for it, so what is in view
+// stays where it is.
+func (s *ScrollWidget) keepInView(d float64) { s.anchorShift += d }
 
 // followFirst settles FollowEnd for a scroll's first layout, once Adopt
 // has had its chance: a new scroll starts at the end, and one that

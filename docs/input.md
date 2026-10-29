@@ -79,7 +79,8 @@ sc.ScrollToKey(added.ID)
 of the enclosing Scroll while its body is in view and is pushed out by the
 next section's; `Pinned()` says whether it is floating. A list does the
 same for some of its own rows with `EachKeyed(...).StickyHeaders(isHeader)`,
-with or without `ItemExtent`:
+with or without `ItemExtent`, though not with `EstimatedExtent`, where headers
+keep to their rows:
 
 ```go
 ggui.Scroll(ggui.Column(

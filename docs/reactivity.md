@@ -377,7 +377,11 @@ branches have their own lifetime. These blocks are layout widgets (vertical
 by default), not fragments spliced into their parent's children.
 
 `Gap`, `Space`, `Align`, and `Horizontal` configure layout. `ItemExtent` inside
-`Scroll` virtualizes fixed-size rows; `Retain(n)` bounds offscreen instances.
+`Scroll` virtualizes fixed-size rows. `EstimatedExtent(v)` virtualizes rows of
+any size: a row counts as `v` long until it is first laid out and as its own
+size after, and as the sizes of rows above the window come to be known, or rows
+come in above it, the `Scroll` moves by as much, so what is in view stays in
+place. `Retain(n)` bounds offscreen instances.
 Evicted rows lose local state and are recreated when visible; focused or
 captured rows are retained. `Transition` preserves exiting rows until their
 animation completes; virtualization removes rows immediately.

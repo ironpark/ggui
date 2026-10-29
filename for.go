@@ -33,7 +33,9 @@ type EachWidget[T any, K comparable] struct {
 	stale        bool // items changed since children was last filled
 	cache        *CachedWidget
 	extent       float64 // fixed main-axis size per item; 0 lays every child out
-	unlisted     bool    // the rows describe their own place; see Unlisted
+	estimate     float64 // a row's size until it is laid out, virtualizing rows of any size; see EstimatedExtent
+	est          eachEstimate[K]
+	unlisted     bool // the rows describe their own place; see Unlisted
 
 	// Transition wraps every row; removed rows then leave through it.
 	transition func(Widget) *TransitionWidget
@@ -175,7 +177,7 @@ func (f *EachWidget[T, K]) Else(build func() Widget) *EachWidget[T, K] {
 // while it plays its Transition backwards.
 func (f *EachWidget[T, K]) remove(k K, e *forEntry[T]) {
 	delete(f.entries, k)
-	if f.transition == nil || f.extent > 0 || f.reduced || e.transition() == nil {
+	if f.transition == nil || f.virtual() || f.reduced || e.transition() == nil {
 		e.dispose()
 		return
 	}
@@ -291,6 +293,9 @@ func (f *EachWidget[T, K]) Layout(c Constraints, env Env) Size {
 	}
 	f.reduced = env.ReducedMotion()
 	n := len(f.items)
+	if f.estimated() {
+		return f.layoutEstimated(c, env)
+	}
 	if f.extent <= 0 {
 		if f.stale || len(f.leaving) > 0 {
 			clear(f.childEntries)
@@ -414,6 +419,9 @@ func (f *EachWidget[T, K]) Paint(dst *Canvas, r Rect) {
 		return
 	}
 	n := len(f.items)
+	if f.estimated() {
+		f.paintEstimated(r)
+	}
 	f.placeKey(r)
 	pinned, pinIndex, pinRect := f.pinned(r)
 	list := func(dst *Canvas) {
@@ -422,7 +430,7 @@ func (f *EachWidget[T, K]) Paint(dst *Canvas, r Rect) {
 				dst.inGroup(pinned, func() { f.paintRow(dst, pinned.widget, pinRect, pinIndex, n) })
 			}
 		}()
-		if f.extent <= 0 {
+		if !f.virtual() {
 			for i, child := range f.children {
 				if f.childEntries[i] == pinned {
 					continue

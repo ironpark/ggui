@@ -89,7 +89,7 @@ func (f *EachWidget[T, K]) layoutPinned(pitch, gap, crossMin, crossMax float64, 
 // pinned returns the header row to draw pinned at the window's start, its
 // index and where it goes, or nil when no header has to move.
 func (f *EachWidget[T, K]) pinned(r Rect) (*forEntry[T], int, Rect) {
-	if f.pin.header == nil || len(f.items) == 0 {
+	if f.pin.header == nil || len(f.items) == 0 || f.estimated() {
 		return nil, 0, Rect{}
 	}
 	edge, ok := f.windowStart(r)
@@ -173,6 +173,13 @@ func (f *EachWidget[T, K]) placeKey(r Rect) {
 		if f.extent > 0 {
 			i := slices.Index(f.keys, key)
 			return start + float64(i)*f.pin.pitch, i >= 0
+		}
+		if f.estimated() {
+			i := slices.Index(f.keys, key)
+			if i < 0 || i >= len(f.est.starts) {
+				return 0, false
+			}
+			return start + f.est.starts[i], true
 		}
 		e := f.entries[key]
 		if e == nil {
