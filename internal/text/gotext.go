@@ -399,6 +399,27 @@ func (im *goTextLineImager) glyphImage(index int) *ggfx.Image {
 	})
 }
 
+// glyphPixels implements glyphImager: glyphImage's image, on the CPU.
+func (im *goTextLineImager) glyphPixels(index int) image.Image {
+	args := &im.args[index]
+	rd := args.glyph.render
+	if bm := rd.bitmap(); bm != nil {
+		return bm
+	}
+	if svg := rd.svg(); svg != nil {
+		if img := svgToRGBA(svg, fixed26_6ToFloat64(rd.size), args.subpixelOffset, rd.bounds, newRGBA); img != nil {
+			return img
+		}
+	}
+	if img := colrV0LayersToRGBA(rd.colrV0Layers(), args.subpixelOffset, rd.bounds, newRGBA); img != nil {
+		return img
+	}
+	if img := segmentsToRGBA(rd.segments(), args.subpixelOffset, rd.bounds, newRGBA); img != nil {
+		return img
+	}
+	return nil
+}
+
 // glyphColored implements glyphImager.
 func (im *goTextLineImager) glyphColored(index int) bool {
 	return im.args[index].glyph.render.colored()

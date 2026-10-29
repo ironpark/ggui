@@ -80,6 +80,12 @@ func (g *GoTextFaceSource) appendCOLRV0Layers(dst []colrV0Layer, layers tables.P
 // segmentsToImage, and the returned image has the same dimensions as
 // segmentsToImage would produce.
 func colrV0LayersToImage(layers []colrV0Layer, subpixelOffset fixed.Point26_6, glyphBounds fixed.Rectangle26_6) *ggfx.Image {
+	return uploadPooledRGBA(colrV0LayersToRGBA(layers, subpixelOffset, glyphBounds, newPooledRGBA))
+}
+
+// colrV0LayersToRGBA is colrV0LayersToImage on the CPU, into an image alloc
+// makes.
+func colrV0LayersToRGBA(layers []colrV0Layer, subpixelOffset fixed.Point26_6, glyphBounds fixed.Rectangle26_6, alloc func(w, h int) *image.RGBA) *image.RGBA {
 	if len(layers) == 0 {
 		return nil
 	}
@@ -93,8 +99,7 @@ func colrV0LayersToImage(layers []colrV0Layer, subpixelOffset fixed.Point26_6, g
 	w++
 	h++
 
-	dst := newPooledRGBA(w, h)
-	defer releasePooledRGBA(dst)
+	dst := alloc(w, h)
 	src := &image.Uniform{}
 	for _, l := range layers {
 		rast := newGlyphRasterizer(w, h, l.segments, subpixelOffset, glyphBounds)
@@ -102,5 +107,5 @@ func colrV0LayersToImage(layers []colrV0Layer, subpixelOffset fixed.Point26_6, g
 		src.C = l.color
 		rast.Draw(dst, dst.Bounds(), src, image.Point{})
 	}
-	return ggfx.NewImageFromImage(dst)
+	return dst
 }

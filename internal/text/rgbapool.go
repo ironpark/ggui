@@ -17,6 +17,7 @@ package text
 import (
 	"image"
 
+	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/internal/pool"
 )
 
@@ -40,6 +41,22 @@ func newPooledRGBA(w, h int) *image.RGBA {
 	rgba.Stride = 4 * w
 	rgba.Rect = image.Rect(0, 0, w, h)
 	return rgba
+}
+
+// newRGBA returns a new *image.RGBA of its own, for a glyph image that stays
+// on the CPU.
+func newRGBA(w, h int) *image.RGBA {
+	return image.NewRGBA(image.Rect(0, 0, w, h))
+}
+
+// uploadPooledRGBA returns an image of img, made by newPooledRGBA, and
+// returns img to the pool; nil for nil.
+func uploadPooledRGBA(img *image.RGBA) *ggfx.Image {
+	if img == nil {
+		return nil
+	}
+	defer releasePooledRGBA(img)
+	return ggfx.NewImageFromImage(img)
 }
 
 // releasePooledRGBA returns an image obtained from newPooledRGBA to the pool.

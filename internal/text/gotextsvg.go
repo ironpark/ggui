@@ -16,6 +16,7 @@ package text
 
 import (
 	"bytes"
+	"image"
 
 	"github.com/go-text/typesetting/font"
 	"github.com/srwiley/rasterx"
@@ -45,6 +46,11 @@ type svgGlyphData struct {
 // glyphs is reduced to a single glyph's description beforehand (see
 // [GoTextFaceSource.svgGlyphData]).
 func svgToImage(svg *svgGlyphData, sizeInPixels float64, subpixelOffset fixed.Point26_6, glyphBounds fixed.Rectangle26_6) *ggfx.Image {
+	return uploadPooledRGBA(svgToRGBA(svg, sizeInPixels, subpixelOffset, glyphBounds, newPooledRGBA))
+}
+
+// svgToRGBA is svgToImage on the CPU, into an image alloc makes.
+func svgToRGBA(svg *svgGlyphData, sizeInPixels float64, subpixelOffset fixed.Point26_6, glyphBounds fixed.Rectangle26_6, alloc func(w, h int) *image.RGBA) *image.RGBA {
 	if svg.viewBox.Width <= 0 || svg.viewBox.Height <= 0 {
 		return nil
 	}
@@ -83,10 +89,9 @@ func svgToImage(svg *svgGlyphData, sizeInPixels float64, subpixelOffset fixed.Po
 		F: biasY - float64(svg.viewBox.MinY)*sy,
 	}
 
-	dst := newPooledRGBA(w, h)
-	defer releasePooledRGBA(dst)
+	dst := alloc(w, h)
 	scanner := rasterx.NewScannerGV(w, h, dst, dst.Bounds())
 	dasher := rasterx.NewDasher(w, h, scanner)
 	icon.Draw(dasher, 1)
-	return ggfx.NewImageFromImage(dst)
+	return dst
 }

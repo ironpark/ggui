@@ -96,6 +96,11 @@ func newGlyphRasterizer(w, h int, segs []opentype.Segment, subpixelOffset fixed.
 }
 
 func segmentsToImage(segs []opentype.Segment, subpixelOffset fixed.Point26_6, glyphBounds fixed.Rectangle26_6) *ggfx.Image {
+	return uploadPooledRGBA(segmentsToRGBA(segs, subpixelOffset, glyphBounds, newPooledRGBA))
+}
+
+// segmentsToRGBA is segmentsToImage on the CPU, into an image alloc makes.
+func segmentsToRGBA(segs []opentype.Segment, subpixelOffset fixed.Point26_6, glyphBounds fixed.Rectangle26_6, alloc func(w, h int) *image.RGBA) *image.RGBA {
 	if len(segs) == 0 {
 		return nil
 	}
@@ -113,10 +118,9 @@ func segmentsToImage(segs []opentype.Segment, subpixelOffset fixed.Point26_6, gl
 	rast := newGlyphRasterizer(w, h, segs, subpixelOffset, glyphBounds)
 	rast.DrawOp = draw.Src
 
-	dst := newPooledRGBA(w, h)
-	defer releasePooledRGBA(dst)
+	dst := alloc(w, h)
 	rast.Draw(dst, dst.Bounds(), image.Opaque, image.Point{})
-	return ggfx.NewImageFromImage(dst)
+	return dst
 }
 
 func appendVectorPathFromSegments(path *vector.Path, segs []opentype.Segment, x, y float32) {

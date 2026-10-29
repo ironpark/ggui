@@ -305,6 +305,17 @@ func (g LazyGlyph) Image() *ggfx.Image {
 	return g.imager.glyphImage(g.imageIndex)
 }
 
+// Pixels returns the image [LazyGlyph.Image] returns, rasterized on the CPU
+// each time and never uploaded, for drawing text without a GPU; nil for a
+// glyph without one. A glyph that is not [LazyGlyph.Colored] is a white
+// mask to tint.
+func (g LazyGlyph) Pixels() image.Image {
+	if g.imager == nil {
+		return nil
+	}
+	return g.imager.glyphPixels(g.imageIndex)
+}
+
 // Colored reports whether the image returned by [LazyGlyph.Image] is colored
 // like a color emoji, rather than grayscale.
 func (g LazyGlyph) Colored() bool {
@@ -320,6 +331,7 @@ func (g LazyGlyph) Colored() bool {
 // face per call to appendLazyGlyphsForLine.
 type glyphImager interface {
 	glyphImage(index int) *ggfx.Image
+	glyphPixels(index int) image.Image
 	glyphColored(index int) bool
 }
 

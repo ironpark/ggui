@@ -73,6 +73,18 @@ of its own, on a whole device pixel, so a cell rounded to whole pixels while
 the font's advance is not keeps every column in place along the row. The run
 is still shaped and drawn in one call.
 
+Text can also be drawn with no GPU, window or App, for an icon, a
+thumbnail, a file or a test: `ggui.RenderText(s, st, maxWidth)` returns an
+`*image.RGBA` just large enough for it, wrapped to `maxWidth` as `Text` wraps
+when that is positive, in `st`'s font and its fallbacks with emoji in color.
+It shapes with go-text and draws with go-text/render, and is safe to call
+from any goroutine.
+
+```go
+img := ggui.RenderText("Hello, 세계 👋", ggui.TextStyle{Size: 32}, 0)
+png.Encode(w, img)
+```
+
 Paint children through `dst.Paint(child, r)` so the inspector can see them.
 The [custom example](../examples/custom) builds a dial on `Interactive`, a
 disclosure that calls `Invalidate`, and a virtualized list. For small

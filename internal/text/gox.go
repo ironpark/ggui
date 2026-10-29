@@ -288,6 +288,15 @@ func (im *goXLineImager) glyphImage(index int) *ggfx.Image {
 	})
 }
 
+// glyphPixels implements glyphImager.
+func (im *goXLineImager) glyphPixels(index int) image.Image {
+	args := &im.args[index]
+	if img := im.face.glyphRGBA(args.rune, args.subpixelOffset, args.bounds, newRGBA); img != nil {
+		return img
+	}
+	return nil
+}
+
 // glyphColored implements glyphImager. A GoXFace glyph is always a
 // grayscale mask.
 func (im *goXLineImager) glyphColored(index int) bool {
@@ -333,6 +342,11 @@ func goXGlyphImageInfo(face *GoXFace, r rune, origin fixed.Point26_6, granularit
 }
 
 func (g *GoXFace) glyphImageImpl(r rune, subpixelOffset fixed.Point26_6, glyphBounds fixed.Rectangle26_6) *ggfx.Image {
+	return uploadPooledRGBA(g.glyphRGBA(r, subpixelOffset, glyphBounds, newPooledRGBA))
+}
+
+// glyphRGBA is glyphImageImpl on the CPU, into an image alloc makes.
+func (g *GoXFace) glyphRGBA(r rune, subpixelOffset fixed.Point26_6, glyphBounds fixed.Rectangle26_6, alloc func(w, h int) *image.RGBA) *image.RGBA {
 	w, h := (glyphBounds.Max.X - glyphBounds.Min.X).Ceil(), (glyphBounds.Max.Y - glyphBounds.Min.Y).Ceil()
 	if w == 0 || h == 0 {
 		return nil
@@ -343,15 +357,12 @@ func (g *GoXFace) glyphImageImpl(r rune, subpixelOffset fixed.Point26_6, glyphBo
 	w++
 	h++
 
-	rgba := newPooledRGBA(w, h)
-	defer releasePooledRGBA(rgba)
-
+	rgba := alloc(w, h)
 	g.f.drawString(rgba, image.White, fixed.Point26_6{
 		X: -glyphBounds.Min.X + subpixelOffset.X,
 		Y: -glyphBounds.Min.Y + subpixelOffset.Y,
 	}, string(r))
-
-	return ggfx.NewImageFromImage(rgba)
+	return rgba
 }
 
 // direction implements Face.
