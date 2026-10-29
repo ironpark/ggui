@@ -199,3 +199,13 @@ func TestParseSVGColorEmptyComponent(t *testing.T) {
 		}
 	}
 }
+
+func TestReadIconStreamMalformedElementErrorMode(t *testing.T) {
+	const svg = `<svg xmlns="http://www.w3.org/2000/svg"><path d="M nope"/></svg>`
+	if _, err := oksvg.ReadIconStream(strings.NewReader(svg), oksvg.StrictErrorMode); err == nil {
+		t.Fatal("strict mode discarded the path parsing error")
+	}
+	if _, err := oksvg.ReadIconStream(strings.NewReader(svg), oksvg.IgnoreErrorMode); err != nil {
+		t.Fatalf("ignore mode returned an error: %v", err)
+	}
+}

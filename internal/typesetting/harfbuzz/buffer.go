@@ -695,12 +695,6 @@ func (b *Buffer) reverseRange(start, end int) {
 // Reverse reverses buffer contents, that is the order of the `Info` and `Pos` slices.
 func (b *Buffer) Reverse() { b.reverseRange(0, len(b.Info)) }
 
-func (b *Buffer) reverseClusters() {
-	b.reverseGroups(func(gi1, gi2 *GlyphInfo) bool {
-		return gi1.Cluster == gi2.Cluster
-	}, false)
-}
-
 // mergeClusters = false
 func (b *Buffer) reverseGroups(groupFunc func(*GlyphInfo, *GlyphInfo) bool, mergeClusters bool) {
 	if len(b.Info) == 0 {

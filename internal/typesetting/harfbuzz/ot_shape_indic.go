@@ -23,7 +23,7 @@ const (
 	posBaseC
 	posAfterMain
 
-	posAboveC
+	_ // posAboveC (reserved position)
 
 	posBeforeSub
 	posBelowC

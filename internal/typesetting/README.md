@@ -13,6 +13,10 @@ included, nor is anything that only they use.
 
 ## Local modifications
 
+- Unused private cluster-mapping and set helpers from the upstream test
+  surface are removed. Reserved Indic position values keep their original
+  numeric slots.
+
 - Glyph variations are decoded as each glyph is first drawn, not all at once
   when a font loads. `tables.Gvar` keeps the table and the offsets of each
   glyph's data, checked as it is parsed, and `Gvar.GlyphVariationData`

@@ -31,7 +31,7 @@ func init() {
 // MainInFrame runs m inside one frame of the renderer, with no window: that is what makes
 // (*Image).At and the rest of the graphics API available to a test. OpenGL needs a context to
 // draw in, which the test gets of its own where it can (macOS); elsewhere a test runs with the
-// driver that needs none.
+// driver that needs none, or a surfaceless EGL context on Linux.
 func MainInFrame(m *testing.M) {
 	code, err := runInFrame(m)
 	if err != nil {
@@ -44,7 +44,13 @@ func runInFrame(m *testing.M) (int, error) {
 	if err := host.Init(nil); err != nil {
 		return 0, err
 	}
-	defer host.Terminate()
+	var closeContext func()
+	defer func() {
+		host.Terminate()
+		if closeContext != nil {
+			closeContext()
+		}
+	}()
 
 	if err := newCanvasSurface(); err != nil {
 		return 0, err
@@ -53,6 +59,9 @@ func runInFrame(m *testing.M) (int, error) {
 		c, err := newGLContext()
 		if err != nil {
 			return 0, fmt.Errorf("testing: OpenGL needs a context: %w", err)
+		}
+		if closer, ok := any(c).(interface{ Close() }); ok {
+			closeContext = closer.Close
 		}
 		host.SetGLContext(c)
 	}

@@ -119,7 +119,7 @@ func TestMetricsOnlySourceAgrees(t *testing.T) {
 		if a, b := len(full.AppendVariationAxes(nil)), len(light.AppendVariationAxes(nil)); a != b {
 			t.Errorf("%d variation axes, want %d", b, a)
 		}
-		for _, r := range []rune("aZ한글漢字かな❯⏺😀\u0000") {
+		for _, r := range "aZ한글漢字かな❯⏺😀\u0000" {
 			fg := text.HasGlyph(&text.GoTextFace{Source: full, Size: 12}, r)
 			lg := text.HasGlyph(&text.GoTextFace{Source: light, Size: 12}, r)
 			if fg != lg {

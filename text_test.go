@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 )
@@ -74,7 +75,8 @@ func TestTextHeightFollowsInheritedLineHeight(t *testing.T) {
 	env := Env{}.WithText(TextStyle{Size: 20, LineHeight: 1})
 	before := w.Layout(c, env)
 	after := w.Layout(c, env.WithText(TextStyle{LineHeight: 2}))
-	if after.W != before.W || after.H-before.H != 40 {
+	// Font metrics can leave a rounding residual when the heights are subtracted.
+	if after.W != before.W || math.Abs(after.H-before.H-40) > 1e-9 {
 		t.Fatalf("line spacing: before=%v after=%v; want unchanged width and 40 more height", before, after)
 	}
 }

@@ -11,6 +11,9 @@ included.
 
 ## Local modifications
 
+- Strict error mode returns malformed-element parsing errors instead of
+  clearing them before the caller can see them.
+
 - Gradient rendering under a drawing transform: `SvgPath.DrawTransformed`
   now builds gradient color functions with
   `Gradient.GetColorFunctionUS(opacity, objMatrix)`, passing the composed

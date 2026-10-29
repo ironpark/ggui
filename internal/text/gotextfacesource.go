@@ -568,7 +568,7 @@ func (g *GoTextFaceSource) UnsafeInternal() any {
 	return g.f
 }
 
-// advances returns a slice of length len(text)+1 where element i is the
+// buildAdvances returns a slice of length len(text)+1 where element i is the
 // visual X of the caret at logical byte i, using the leading-edge
 // convention: the value is the leading edge of the cluster that starts
 // at byte i (left edge in an LTR run, right edge in an RTL run). A byte
@@ -583,14 +583,6 @@ func (g *GoTextFaceSource) UnsafeInternal() any {
 //
 // The leading-edge convention picks one of the two visually valid carets
 // at a bidi level boundary; affinity-aware positioning is not exposed.
-func (g *GoTextFaceSource) advances(text string, face *GoTextFace) []fixed.Int26_6 {
-	g.copyCheck()
-	return g.outputCacheValue(text, face).ensureAdvances(text)
-}
-
-// buildAdvances derives the leading-edge X for each byte position in
-// text from already-shaped outputs. See [GoTextFaceSource.advances] for
-// the meaning of the returned slice.
 func buildAdvances(outputs []shaping.Output, text string) []fixed.Int26_6 {
 	// Rune index → byte index, plus a final entry at len(text).
 	runeToByte := make([]int, 0, len(text)+1)
@@ -615,7 +607,7 @@ func buildAdvances(outputs []shaping.Output, text string) []fixed.Int26_6 {
 		var cum fixed.Int26_6 // sum of advances of earlier glyphs in this run
 		for gi := range out.Glyphs {
 			gl := &out.Glyphs[gi]
-			startByte := runeToByte[gl.ClusterIndex]
+			startByte := runeToByte[gl.TextIndex()]
 			var leading fixed.Int26_6
 			if rtl {
 				leading = runLeftX + cum + gl.Advance

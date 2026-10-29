@@ -149,17 +149,6 @@ func (rs *intSet) add(r uint32) {
 	*b |= (1 << (r & 0x1f)) // r & 0x1f is the bit in the uint32
 }
 
-// delete removes the rune from the rune set.
-func (rs intSet) delete(r uint32) {
-	leaf := rs.findPage(uint16(r >> 8))
-	if leaf == nil {
-		return
-	}
-	b := &leaf[(r&0xff)>>5]  // (r&0xff)>>5 is the index in the page
-	*b &= ^(1 << (r & 0x1f)) // r & 0x1f is the bit in the uint32
-	// we don't bother removing the leaf if it's empty
-}
-
 // has returns `true` if `r` is in the set.
 func (rs intSet) has(r uint32) bool {
 	leaf := rs.findPage(uint16(r >> 8))
@@ -260,21 +249,6 @@ func (s *intSet) addRange(start, end uint32) {
 		leaf := s.findOrCreatePage(pageEnd)
 		leaf.addRange(0, endByte)
 	}
-}
-
-// ints is an helper method returning a copy of the runes in the set.
-func (rs intSet) ints() (out []uint32) {
-	for _, page := range rs {
-		pageLow := uint32(page.ref) << 8
-		for j, set := range page.set {
-			for k := uint32(0); k < 32; k++ {
-				if set&uint32(1<<k) != 0 {
-					out = append(out, pageLow|uint32(j)<<5|k)
-				}
-			}
-		}
-	}
-	return out
 }
 
 // typed API
