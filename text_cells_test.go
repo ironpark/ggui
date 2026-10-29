@@ -18,7 +18,7 @@ func TestDrawTextCellsKeepsEveryGraphemeOnItsCell(t *testing.T) {
 	const x0 = 20.25
 	s := "é" + "abcdefghijklmnopqrstuvwxyz0123456789"
 	glyphs := text.AppendLazyGlyphs(nil, s, face, nil)
-	shifts := cellShifts(s, glyphs, x0, cell)
+	shifts := cellShifts(nil, s, glyphs, x0, cell)
 	k, last := -1, -1
 	for i, g := range glyphs {
 		at := x0 + g.OriginX + shifts[i]
