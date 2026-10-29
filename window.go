@@ -283,9 +283,8 @@ func (w *Window) handle(ev ggwd.Event) error {
 	case ggwd.FrameEvent:
 		return w.runFrameEvent(ev)
 	case ggwd.KeyEvent:
-		key := ev.Key
-		w.syncMods(ev.Modifiers)
-		w.keyboard.Set(key, ev.Pressed)
+		w.keyboard.SyncMods(ev.Modifiers)
+		w.keyboard.Set(ev.Key, ev.Pressed)
 		if ev.Pressed {
 			// The modifiers of this press, from the held keys and from the
 			// event itself, which sees a modifier the OS never reported as a
@@ -293,9 +292,9 @@ func (w *Window) handle(ev ggwd.Event) error {
 			// not lost when its modifier was released before the frame ran.
 			m := w.keyboard.Mods().Or(ev.Modifiers)
 			w.pending.mods = w.pending.mods.Or(m)
-			w.pending.keys = append(w.pending.keys, key)
+			w.pending.keys = append(w.pending.keys, ev.Key)
 			if w.cfg.Inspector != "" && !ev.Repeat &&
-				(KeyEvent{Kind: KeyPress, Key: key, Mods: m}).Is(w.inspectChord) {
+				(KeyEvent{Kind: KeyPress, Key: ev.Key, Mods: m}).Is(w.inspectChord) {
 				w.Inspector(!w.inspect)
 			}
 		}
@@ -315,7 +314,7 @@ func (w *Window) handle(ev ggwd.Event) error {
 		w.pos = Pt(ev.X, ev.Y)
 		// A modifier pressed while another window had the focus reached
 		// no KeyEvent here; the click still sees it.
-		w.syncMods(ev.Modifiers)
+		w.keyboard.SyncMods(ev.Modifiers)
 		w.pending.mods = w.pending.mods.Or(ev.Modifiers)
 		if ev.Pressed {
 			w.pending.down = append(w.pending.down, ev.Button)
@@ -324,7 +323,7 @@ func (w *Window) handle(ev ggwd.Event) error {
 		}
 		w.requestFrame()
 	case ggwd.ScrollEvent:
-		w.syncMods(ev.Modifiers)
+		w.keyboard.SyncMods(ev.Modifiers)
 		w.pending.mods = w.pending.mods.Or(ev.Modifiers)
 		w.pending.wheel = w.pending.wheel.Add(Pt(ev.X, ev.Y))
 		w.pending.phase = laterPhase(w.pending.phase, ev.Phase)
@@ -375,32 +374,6 @@ func (w *Window) handle(ev ggwd.Event) error {
 		w.post(func() { w.state.Set(windowState(ev.State)) })
 	}
 	return nil
-}
-
-// modKeys are the keys of each modifier, in the order syncMods reads
-// them: Shift, Ctrl, Alt and Meta.
-var modKeys = [4][3]ggwd.Key{
-	{ggwd.KeyShift, ggwd.KeyShiftLeft, ggwd.KeyShiftRight},
-	{ggwd.KeyControl, ggwd.KeyControlLeft, ggwd.KeyControlRight},
-	{ggwd.KeyAlt, ggwd.KeyAltLeft, ggwd.KeyAltRight},
-	{ggwd.KeyMeta, ggwd.KeyMetaLeft, ggwd.KeyMetaRight},
-}
-
-// syncMods forgets the modifier keys an event says are not held, before
-// the event's own key is recorded. A modifier's release can go unreported
-// with the focus kept, taken by a system shortcut such as ⌘⇧4 or an input
-// source switch, and the key would read as held until pressed again; the
-// modifiers an event carries are the window system's own word on what is
-// held.
-func (w *Window) syncMods(m Mods) {
-	held := [4]bool{m.Shift, m.Ctrl, m.Alt, m.Meta}
-	for i, keys := range modKeys {
-		if !held[i] {
-			for _, k := range keys {
-				w.keyboard.Set(k, false)
-			}
-		}
-	}
 }
 
 // requestFrame asks the window for a frame. It is safe from any goroutine
