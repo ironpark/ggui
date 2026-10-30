@@ -35,7 +35,7 @@ The accessibility layer is the `a11y` package: the vocabulary a widget
 describes itself in, the tree one frame publishes, and the platform bridges.
 The `ggui` package re-exports every name from it, so `ggui.Node` and
 `a11y.Node` are the same type and normal code never imports `a11y` directly.
-Geometry sits below both, in `geom`, for the same reason.
+Geometry sits below both, in `pkg/layout`, for the same reason.
 
 The split is what lets a bridge read everything a widget published without a
 copy of `Node` that falls behind the original. A new platform is a new file

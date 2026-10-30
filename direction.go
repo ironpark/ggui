@@ -1,22 +1,16 @@
 package ggui
 
+import "github.com/ironpark/ggui/pkg/layout"
+
 // TextDirection is the direction a subtree reads in: left to right, as
 // English does, or right to left, as Arabic and Hebrew do. The zero value
 // is DirLTR.
-type TextDirection uint8
+type TextDirection = layout.Direction
 
 const (
-	DirLTR TextDirection = iota // left to right
-	DirRTL                      // right to left
+	DirLTR = layout.LTR
+	DirRTL = layout.RTL
 )
-
-// String returns "ltr" or "rtl".
-func (d TextDirection) String() string {
-	if d == DirRTL {
-		return "rtl"
-	}
-	return "ltr"
-}
 
 // DirectionKey holds the direction of the subtree below it; Directionality
 // provides it and Env.Direction reads it, DirLTR by default.
@@ -48,17 +42,6 @@ func (e Env) Language() string {
 //	ggui.Directionality(ggui.DirRTL, ggui.Text("שלום עולם"))
 func Directionality(dir TextDirection, child Widget) *EnvWidget {
 	return Provide(DirectionKey, dir, child)
-}
-
-// mirror flips the flow's children for a right-to-left Env: a Row's main
-// axis, a Column's cross axis, within the size the flow took.
-func (f *flow) mirror(result Size, env Env) {
-	if env.Direction() != DirRTL {
-		return
-	}
-	for i, s := range f.sizes {
-		f.offsets[i].X = result.W - f.offsets[i].X - s.W
-	}
 }
 
 // startAlign is where a line of text starts by default: the left edge, or

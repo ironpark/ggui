@@ -105,12 +105,12 @@ func TestIfShowingNothingTakesNoGap(t *testing.T) {
 	}), Box().Size(10, 10)).Gap(4)
 	p := NewProbe(Align(col).At(0, 0), Sz(100, 100))
 	p.Frame()
-	if h := col.sizes[0].H + col.sizes[1].H + col.sizes[2].H; h != 20 || col.offsets[2].Y != 14 {
-		t.Fatalf("third child at y=%v with %v of content, want 14 after one box and one gap", col.offsets[2].Y, h)
+	if h := col.rects[0].Size.H + col.rects[1].Size.H + col.rects[2].Size.H; h != 20 || col.rects[2].Origin.Y != 14 {
+		t.Fatalf("third child at y=%v with %v of content, want 14 after one box and one gap", col.rects[2].Origin.Y, h)
 	}
 	off.Set(true)
 	p.Frame()
-	if got := col.offsets[2].Y; got != 28 {
+	if got := col.rects[2].Origin.Y; got != 28 {
 		t.Fatalf("third child at y=%v once shown, want 28 after two boxes and two gaps", got)
 	}
 
@@ -120,7 +120,7 @@ func TestIfShowingNothingTakesNoGap(t *testing.T) {
 		return Box().Size(10, 10)
 	}), Box().Size(10, 10)).Justify(SpaceBetween)
 	row.Layout(Tight(Sz(100, 10)), rootEnv())
-	if got := row.offsets[2].X; got != 90 {
+	if got := row.rects[2].Origin.X; got != 90 {
 		t.Fatalf("space-between placed the last box at x=%v, want 90 with the absent child ignored", got)
 	}
 

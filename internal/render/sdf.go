@@ -10,7 +10,7 @@ import (
 	"math"
 
 	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggui/geom"
+	"github.com/ironpark/ggui/pkg/layout"
 )
 
 // Rounded rectangles are drawn from a signed distance field rather than
@@ -80,8 +80,8 @@ const Feather = .5
 // Radius rounds the corners, and a Stroke of half that width is drawn as
 // the band around the outline instead of filling it.
 type Field struct {
-	Centre, Axis   geom.Point
-	Half           geom.Size
+	Centre, Axis   layout.Point
+	Half           layout.Size
 	Radius, Stroke float64
 }
 
@@ -117,11 +117,11 @@ func Shade(dst *ggfx.Image, f Field, col color.Color) {
 // shadowSource read it: the fragment's place in the shape's own frame in
 // custom.xy, the half size in custom.zw, the two scalars in src_pos and
 // the tint as the colour.
-func quad(bounds image.Rectangle, centre, axis geom.Point, half geom.Size, s0, s1 float32, tint [4]float32) [4]ggfx.Vertex {
+func quad(bounds image.Rectangle, centre, axis layout.Point, half layout.Size, s0, s1 float32, tint [4]float32) [4]ggfx.Vertex {
 	x0, y0, x1, y1 := float64(bounds.Min.X), float64(bounds.Min.Y), float64(bounds.Max.X), float64(bounds.Max.Y)
 	var vs [4]ggfx.Vertex
-	for i, corner := range [4]geom.Point{geom.Pt(x0, y0), geom.Pt(x1, y0), geom.Pt(x0, y1), geom.Pt(x1, y1)} {
-		p := geom.Pt(corner.X-centre.X, corner.Y-centre.Y)
+	for i, corner := range [4]layout.Point{layout.Pt(x0, y0), layout.Pt(x1, y0), layout.Pt(x0, y1), layout.Pt(x1, y1)} {
+		p := layout.Pt(corner.X-centre.X, corner.Y-centre.Y)
 		vs[i] = ggfx.Vertex{
 			DstX: float32(corner.X), DstY: float32(corner.Y),
 			SrcX: s0, SrcY: s1,
@@ -169,7 +169,7 @@ var (
 // MaskRoundRect draws img onto dst where it lies within the rounded
 // rectangle centred at centre with half size half and corners rounded by
 // radius, all in dst's pixels. img is drawn at its own bounds.
-func MaskRoundRect(dst, img *ggfx.Image, centre geom.Point, half geom.Size, radius float64) {
+func MaskRoundRect(dst, img *ggfx.Image, centre layout.Point, half layout.Size, radius float64) {
 	b := img.Bounds()
 	u := roundRectMaskUniforms.get()
 	defer roundRectMaskUniforms.put(u)
@@ -240,7 +240,7 @@ var (
 // with half size half and corners rounded by radius, in dst's pixels. Each
 // vertex carries its place in img as its source, its tint as its colour and
 // its offset from the rectangle's centre, unturned, in Custom0 and Custom1.
-func RoundRectImage(dst, img *ggfx.Image, vs [4]ggfx.Vertex, half geom.Size, radius float64, pixelated bool) {
+func RoundRectImage(dst, img *ggfx.Image, vs [4]ggfx.Vertex, half layout.Size, radius float64, pixelated bool) {
 	u := roundRectImageUniforms.get()
 	defer roundRectImageUniforms.put(u)
 	u.SetSlice("half_size", []float32{float32(half.W), float32(half.H)})

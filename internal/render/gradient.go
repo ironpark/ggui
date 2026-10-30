@@ -5,7 +5,7 @@ import (
 	"math"
 
 	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggui/geom"
+	"github.com/ironpark/ggui/pkg/layout"
 )
 
 // MaxStops is how many colour stops a gradient carries to the shader.
@@ -103,7 +103,7 @@ var (
 // Stops are in ascending Offset.
 type Gradient struct {
 	Kind       int
-	Start, End geom.Point
+	Start, End layout.Point
 	Stops      []Stop
 }
 
@@ -143,7 +143,7 @@ func (g *Gradient) valid() bool {
 // FillGradientRoundRect fills the rectangle centred at centre with half size
 // half, its corners rounded by radius, with g; a zero radius is a plain
 // rectangle, drawn without antialiasing as FillRect draws one.
-func FillGradientRoundRect(dst *ggfx.Image, g *Gradient, centre geom.Point, half geom.Size, radius float64) {
+func FillGradientRoundRect(dst *ggfx.Image, g *Gradient, centre layout.Point, half layout.Size, radius float64) {
 	if !g.valid() || half.W <= 0 || half.H <= 0 {
 		return
 	}

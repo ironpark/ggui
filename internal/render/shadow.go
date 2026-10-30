@@ -4,7 +4,7 @@ import (
 	"image"
 
 	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggui/geom"
+	"github.com/ironpark/ggui/pkg/layout"
 )
 
 // shadowSource takes every value on the vertices, as roundRectSource does,
@@ -28,13 +28,13 @@ var sharedShadow = compile("shadow shader", shadowSource)
 // either side of.
 type Shadow struct {
 	Bounds          image.Rectangle
-	Centre          geom.Point
-	Half            geom.Size
+	Centre          layout.Point
+	Half            layout.Size
 	Radius, Feather float32
 }
 
 // DrawShadow draws s onto dst in tint, a premultiplied colour.
 func DrawShadow(dst *ggfx.Image, s Shadow, tint [4]float32) {
-	vs := quad(s.Bounds, s.Centre, geom.Pt(1, 0), s.Half, s.Radius, s.Feather, tint)
+	vs := quad(s.Bounds, s.Centre, layout.Pt(1, 0), s.Half, s.Radius, s.Feather, tint)
 	dst.DrawTrianglesShader(vs[:], quadIndices[:], sharedShadow(), nil)
 }

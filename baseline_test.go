@@ -20,14 +20,14 @@ func TestRowAlignBaseline(t *testing.T) {
 	if !ok1 || !ok2 || tb <= cb {
 		t.Fatalf("baselines: title %v %v, caption %v %v", tb, ok1, cb, ok2)
 	}
-	if !closeTo(row.offsets[0].Y+tb, row.offsets[1].Y+cb) {
-		t.Fatalf("baselines differ: %v vs %v", row.offsets[0].Y+tb, row.offsets[1].Y+cb)
+	if !closeTo(row.rects[0].Origin.Y+tb, row.rects[1].Origin.Y+cb) {
+		t.Fatalf("baselines differ: %v vs %v", row.rects[0].Origin.Y+tb, row.rects[1].Origin.Y+cb)
 	}
 	rb, ok := row.Baseline()
 	if !ok || !closeTo(rb, tb) {
 		t.Fatalf("row baseline = %v %v, want %v", rb, ok, tb)
 	}
-	below := max(row.sizes[0].H-tb, row.sizes[1].H-cb)
+	below := max(row.rects[0].Size.H-tb, row.rects[1].Size.H-cb)
 	if !closeTo(size.H, tb+below) {
 		t.Fatalf("row height = %v, want %v", size.H, tb+below)
 	}
@@ -41,8 +41,8 @@ func TestRowAlignBaselineWithoutBaseline(t *testing.T) {
 	row := Row(title, box).Align(AlignBaseline)
 	row.Layout(Loose(Sz(400, 400)), Env{})
 	tb, _ := title.Baseline()
-	if !closeTo(row.offsets[1].Y+10, row.offsets[0].Y+tb) {
-		t.Fatalf("box bottom %v, baseline %v", row.offsets[1].Y+10, row.offsets[0].Y+tb)
+	if !closeTo(row.rects[1].Origin.Y+10, row.rects[0].Origin.Y+tb) {
+		t.Fatalf("box bottom %v, baseline %v", row.rects[1].Origin.Y+10, row.rects[0].Origin.Y+tb)
 	}
 }
 

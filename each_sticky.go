@@ -54,11 +54,11 @@ func (f *EachWidget[T, K]) windowStart(r Rect) (float64, bool) {
 // mainAt and crossAt return where row i of those laid out starts, along
 // and across the list's axis, from the list's corner.
 func (f *EachWidget[T, K]) mainAt(i int) float64 {
-	return pick(f.horizontal, f.offsets[i].X, f.offsets[i].Y)
+	return pick(f.horizontal, f.rects[i].Origin.X, f.rects[i].Origin.Y)
 }
 
 func (f *EachWidget[T, K]) crossAt(i int) float64 {
-	return pick(f.horizontal, f.offsets[i].Y, f.offsets[i].X)
+	return pick(f.horizontal, f.rects[i].Origin.Y, f.rects[i].Origin.X)
 }
 
 // layoutPinned lays out, on the virtual path, the header of the section at
@@ -76,7 +76,7 @@ func (f *EachWidget[T, K]) layoutPinned(pitch, gap, crossMin, crossMax float64, 
 	}
 	f.pin.row = h
 	if h >= f.first && h < f.last {
-		f.pin.size = f.sizes[h-f.first]
+		f.pin.size = f.rects[h-f.first].Size
 		return
 	}
 	e := f.entry(h)
@@ -137,14 +137,14 @@ func (f *EachWidget[T, K]) pinned(r Rect) (*forEntry[T], int, Rect) {
 		return nil, 0, Rect{}
 	}
 	start := f.mainAt(head)
-	lead := f.main(f.sizes[head])
+	lead := f.main(f.rects[head].Size)
 	end := start + lead
 	for i := head + 1; i < len(f.childEntries); i++ {
 		e := f.childEntries[i]
 		if f.pin.header(Untrack(e.item.Get)) {
 			break
 		}
-		end = f.mainAt(i) + f.main(f.sizes[i])
+		end = f.mainAt(i) + f.main(f.rects[i].Size)
 	}
 	pos := pinPos(edge, start, end, lead)
 	if pos == start {
@@ -152,7 +152,7 @@ func (f *EachWidget[T, K]) pinned(r Rect) (*forEntry[T], int, Rect) {
 	}
 	e := f.childEntries[head]
 	cross := f.crossAt(head)
-	return e, Untrack(e.position.Get), Rct(at(pos, cross), f.sizes[head])
+	return e, Untrack(e.position.Get), Rct(at(pos, cross), f.rects[head].Size)
 }
 
 // placeKey answers the enclosing Scroll's ScrollToKey when the key is one

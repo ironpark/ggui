@@ -182,12 +182,12 @@ func (l *ReorderableWidget[T, K]) Paint(dst *Canvas, r Rect) {
 	var lifted Rect
 	slot, span := 0, 0.0
 	if d >= 0 {
-		size := f.sizes[d]
+		size := f.rects[d].Size
 		y := clamp(st.at.Y-st.grab.Y, r.Origin.Y, max(r.Origin.Y, r.Origin.Y+r.Size.H-size.H))
-		lifted = Rct(Pt(r.Origin.X+f.offsets[d].X, y), size)
+		lifted = Rct(Pt(r.Origin.X+f.rects[d].Origin.X, y), size)
 		middle := y - r.Origin.Y + size.H/2
 		for j := range n {
-			if j != d && f.offsets[j].Y+f.sizes[j].H/2 < middle {
+			if j != d && f.rects[j].Origin.Y+f.rects[j].Size.H/2 < middle {
 				slot++
 			}
 		}
@@ -199,7 +199,7 @@ func (l *ReorderableWidget[T, K]) Paint(dst *Canvas, r Rect) {
 		for i, k := range f.keys[:n] {
 			if was, ok := st.settle[k]; ok {
 				m := new(Motion)
-				m.MoveTo(was-f.offsets[i].Y, now, 0)
+				m.MoveTo(was-f.rects[i].Origin.Y, now, 0)
 				st.shift[k] = m
 			}
 		}
@@ -227,7 +227,7 @@ func (l *ReorderableWidget[T, K]) Paint(dst *Canvas, r Rect) {
 			if moving {
 				dy = l.shiftRow(k, i, d, slot, span, now, dur)
 			}
-			rc := Rct(r.Origin.Add(f.offsets[i]).Add(Pt(0, dy)), f.sizes[i])
+			rc := Rct(r.Origin.Add(f.rects[i].Origin).Add(Pt(0, dy)), f.rects[i].Size)
 			// Only where the row shows: one scrolled out of a Scroll's
 			// window lies under whatever is drawn there instead.
 			if keyed && rc.Contains(focus) && (!dst.clipped || dst.clip.Contains(focus)) {
@@ -237,7 +237,7 @@ func (l *ReorderableWidget[T, K]) Paint(dst *Canvas, r Rect) {
 				dst.Shortcut(reorderDown, func() { row.moveBy(1) })
 			}
 			if st.reveal != nil && *st.reveal == k {
-				dst.RequestReveal(Rct(r.Origin.Add(f.offsets[i]), f.sizes[i]))
+				dst.RequestReveal(Rct(r.Origin.Add(f.rects[i].Origin), f.rects[i].Size))
 				st.reveal = nil
 			}
 			dst.inGroup(f.childEntries[i], func() { l.paintRow(dst, child, rc, i, n) })
@@ -284,7 +284,7 @@ func (l *ReorderableWidget[T, K]) shiftRow(k K, i, d, slot int, span float64, no
 	}
 	m.MoveTo(target, now, dur)
 	dy := m.Value(now)
-	st.painted[k] = l.list.offsets[i].Y + dy
+	st.painted[k] = l.list.rects[i].Origin.Y + dy
 	if d < 0 && dy == 0 && m.to == 0 {
 		delete(st.shift, k)
 	}
@@ -300,7 +300,7 @@ func (l *ReorderableWidget[T, K]) drawn() map[K]float64 {
 	f := l.list
 	at := make(map[K]float64, len(f.children))
 	for i, k := range f.keys[:len(f.children)] {
-		at[k] = f.offsets[i].Y
+		at[k] = f.rects[i].Origin.Y
 	}
 	return at
 }

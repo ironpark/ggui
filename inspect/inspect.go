@@ -22,13 +22,13 @@ import (
 	"strings"
 
 	"github.com/ironpark/ggui/a11y"
-	"github.com/ironpark/ggui/geom"
+	"github.com/ironpark/ggui/pkg/layout"
 )
 
 type (
-	Point = geom.Point
-	Size  = geom.Size
-	Rect  = geom.Rect
+	Point = layout.Point
+	Size  = layout.Size
+	Rect  = layout.Rect
 )
 
 // Node is one widget as painted: its Rect and where it sits in the tree.

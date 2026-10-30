@@ -9,7 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/ironpark/ggui/geom"
+	"github.com/ironpark/ggui/pkg/layout"
 )
 
 // A goroutine's layout generation counts the changes on it that can move
@@ -468,7 +468,7 @@ func (s *StateValue[T]) Map[U any](fn func(T) U) *DerivedValue[U] {
 func Toggle(s Writable[bool]) { s.Update(func(b bool) bool { return !b }) }
 
 // Add adds d to a writable number.
-func Add[N geom.Number](s Writable[N], d N) { s.Update(func(n N) N { return n + d }) }
+func Add[N layout.Number](s Writable[N], d N) { s.Update(func(n N) N { return n + d }) }
 
 // Append adds items to a writable slice, in a new slice so the
 // change is noticed.

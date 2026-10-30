@@ -3,13 +3,13 @@ package ggui
 import (
 	"fmt"
 	"image/color"
-	"math"
 	"slices"
 
 	"github.com/ironpark/ggui/internal/fn"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/text"
+	"github.com/ironpark/ggui/pkg/layout"
 )
 
 // Built-in widgets follow one shape: a constructor takes what the widget
@@ -23,10 +23,9 @@ import (
 // a reader and X replaces it with a literal. Configure structure, identity and
 // construction modes before the first Layout.
 
-// EdgeInsets is padding on the four sides of a box.
-type EdgeInsets struct {
-	Top, Right, Bottom, Left float64
-}
+// EdgeInsets is padding on the four sides of a box: Top, Right, Bottom and
+// Left. Shrink removes it from constraints and Inflate adds it to a size.
+type EdgeInsets = layout.Insets
 
 // Insets builds EdgeInsets with CSS shorthand: one value for every side, two
 // for vertical then horizontal, four for top, right, bottom, left.
@@ -44,24 +43,6 @@ func Insets(sides ...float64) EdgeInsets {
 		panic("ggui: Insets takes 1, 2 or 4 values")
 	}
 }
-
-// Shrink returns constraints with the insets removed from the maximums.
-func (e EdgeInsets) Shrink(c Constraints) Constraints {
-	return Constraints{
-		MinW: max(c.MinW-e.horizontal(), 0),
-		MinH: max(c.MinH-e.vertical(), 0),
-		MaxW: max(c.MaxW-e.horizontal(), 0),
-		MaxH: max(c.MaxH-e.vertical(), 0),
-	}
-}
-
-// Inflate returns s grown by the insets.
-func (e EdgeInsets) Inflate(s Size) Size {
-	return Size{W: s.W + e.horizontal(), H: s.H + e.vertical()}
-}
-
-func (e EdgeInsets) horizontal() float64 { return e.Left + e.Right }
-func (e EdgeInsets) vertical() float64   { return e.Top + e.Bottom }
 
 // TextWidget draws text, wrapping it to the width it is given. Build one
 // with Text. Its style is resolved at layout: the Env's inherited TextStyle,
@@ -551,7 +532,7 @@ type BoxWidget struct {
 	maxW, maxH    float64 // 0 means no limit
 	child         Widget
 
-	childSize Size
+	childRect Rect // inside the padding, from the last Layout
 }
 
 // Box wraps at most one child. With no child it is an empty rectangle, sized
@@ -678,44 +659,16 @@ func (b *BoxWidget) Layout(c Constraints, env Env) Size {
 		b.shownShadows[i].Color = ResolveColor(s.Color, env)
 	}
 	b.width, b.height = b.widthProp.Get(), b.heightProp.Get()
-	width, height := capped(b.width, b.maxW), capped(b.height, b.maxH)
-	inner := b.padding.Shrink(c).Loosen()
-	if b.maxW > 0 {
-		inner.MaxW = min(inner.MaxW, max(b.maxW-b.padding.horizontal(), 0))
-	}
-	if b.maxH > 0 {
-		inner.MaxH = min(inner.MaxH, max(b.maxH-b.padding.vertical(), 0))
-	}
-	// A fixed dimension is passed down tight, so a child that centers or
-	// justifies does so within the box rather than the space around it.
-	if width > 0 {
-		w := max(clamp(width, c.MinW, c.MaxW)-b.padding.horizontal(), 0)
-		inner.MinW, inner.MaxW = w, w
-	}
-	if height > 0 {
-		h := max(clamp(height, c.MinH, c.MaxH)-b.padding.vertical(), 0)
-		inner.MinH, inner.MaxH = h, h
-	}
-	b.childSize = Size{}
+	var measure layout.MeasureFunc
 	if b.child != nil {
-		b.childSize = b.child.Layout(inner, env)
+		measure = func(_ int, c Constraints) layout.Measurement { return measureWidget(b.child, c, env) }
 	}
-	want := b.padding.Inflate(b.childSize)
-	if width > 0 {
-		want.W = width
-	}
-	if height > 0 {
-		want.H = height
-	}
-	return c.Constrain(want)
-}
-
-// capped is a fixed size v held to limit; zero means unset for both.
-func capped(v, limit float64) float64 {
-	if v > 0 && limit > 0 {
-		return min(v, limit)
-	}
-	return v
+	result := layout.Box(c, layout.BoxStyle{
+		Padding: b.padding, Width: b.width, Height: b.height,
+		MaxWidth: b.maxW, MaxHeight: b.maxH,
+	}, measure)
+	b.childRect = result.Child
+	return result.Size
 }
 
 // Baseline implements Baseliner: the child's, below the top padding.
@@ -732,7 +685,7 @@ func (b *BoxWidget) Paint(dst *Canvas, r Rect) {
 		dst.StrokeRoundRect(r, b.radius, b.borderWidth, b.borderColor.shown)
 	}
 	if b.child != nil {
-		dst.Paint(b.child, Rct(r.Origin.Add(Pt(b.padding.Left, b.padding.Top)), b.childSize))
+		dst.Paint(b.child, Rct(r.Origin.Add(b.childRect.Origin), b.childRect.Size))
 	}
 }
 
@@ -741,29 +694,27 @@ func (b *BoxWidget) Paint(dst *Canvas, r Rect) {
 // a Box with no fill, so the rest of Box's setters stay available.
 func Padding(child Widget, sides ...float64) *BoxWidget { return Box(child).Pad(sides...) }
 
-// Justify distributes a Row's or Column's children along its main axis. Any
-// value but JustifyStart makes the widget fill the main axis so there is
-// space to distribute.
-type Justify int
+// Justify distributes children along a flow's main axis.
+type Justify = layout.Justify
 
 const (
-	JustifyStart  Justify = iota // packed at the start (the default)
-	JustifyCenter                // packed in the middle
-	JustifyEnd                   // packed at the end
-	SpaceBetween                 // free space split between children
-	SpaceAround                  // free space split around each child
-	SpaceEvenly                  // free space split evenly, edges included
+	JustifyStart  = layout.JustifyStart
+	JustifyCenter = layout.JustifyCenter
+	JustifyEnd    = layout.JustifyEnd
+	SpaceBetween  = layout.SpaceBetween
+	SpaceAround   = layout.SpaceAround
+	SpaceEvenly   = layout.SpaceEvenly
 )
 
-// CrossAlign places a Row's or Column's children across its main axis.
-type CrossAlign int
+// CrossAlign places children across a flow's main axis.
+type CrossAlign = layout.CrossAlign
 
 const (
-	AlignStart    CrossAlign = iota // top of a Row, left of a Column (a Column's default)
-	AlignCenter                     // centered across (a Row's default)
-	AlignEnd                        // bottom of a Row, right of a Column
-	AlignStretch                    // stretched to the widget's cross size, which fills the space given
-	AlignBaseline                   // a Row lines its children's first text baselines up; Column, Wrap and Each treat it as AlignStart
+	AlignStart    = layout.AlignStart
+	AlignCenter   = layout.AlignCenter
+	AlignEnd      = layout.AlignEnd
+	AlignStretch  = layout.AlignStretch
+	AlignBaseline = layout.AlignBaseline
 )
 
 // flow lays children out along one axis. Column and Row are the two
@@ -777,56 +728,52 @@ type flow struct {
 	align      CrossAlign
 	children   []Widget
 
-	sizes   []Size
-	offsets []Point
-	bases   []float64 // per-child baselines under AlignBaseline; a child without one sits on its bottom edge
+	rects  []Rect // borrowed from engine, or EachWidget.virtualRects on its virtual paths
+	engine layout.Scratch
+	items  []layout.Item
 }
-
-// byBaseline reports whether children are lined up on their baselines,
-// which only a Row does.
-func (f *flow) byBaseline() bool { return f.horizontal && f.align == AlignBaseline }
 
 // Baseline implements Baseliner: the first child's that has one, moved by
 // where it went. Under AlignBaseline every child was placed on the shared
-// baseline, so that is what the first one reports.
+// baseline, so that is what the first one reports. The engine's
+// Result.Baseline is not used: layout only supplies child baselines under
+// AlignBaseline, so it would be missing for every other alignment.
 func (f *flow) Baseline() (float64, bool) {
-	for i, off := range f.offsets { // empty before the first layout
+	for i, rect := range f.rects { // empty before the first layout
 		child := f.children[i]
 		if isAbsent(child) {
 			continue
 		}
-		if b, ok := baselineAt(child, off.Y); ok {
+		if b, ok := baselineAt(child, rect.Origin.Y); ok {
 			return b, true
 		}
 	}
 	return 0, false
 }
 
-func (f *flow) main(s Size) float64  { return pick(f.horizontal, s.W, s.H) }
-func (f *flow) cross(s Size) float64 { return pick(f.horizontal, s.H, s.W) }
+// axis is the flow's main axis in the layout package's terms; main, cross,
+// size and constraints read sizes and build bounds along it.
+func (f *flow) axis() layout.Axis { return pick(f.horizontal, layout.Horizontal, layout.Vertical) }
 
-func (f *flow) size(main, cross float64) Size {
-	if f.horizontal {
-		return Size{W: main, H: cross}
-	}
-	return Size{W: cross, H: main}
-}
+func (f *flow) main(s Size) float64  { return f.axis().Main(s) }
+func (f *flow) cross(s Size) float64 { return f.axis().Cross(s) }
+
+func (f *flow) size(main, cross float64) Size { return f.axis().Size(main, cross) }
 
 func (f *flow) constraints(mainMin, mainMax, crossMin, crossMax float64) Constraints {
-	if f.horizontal {
-		return Constraints{MinW: mainMin, MaxW: mainMax, MinH: crossMin, MaxH: crossMax}
-	}
-	return Constraints{MinH: mainMin, MaxH: mainMax, MinW: crossMin, MaxW: crossMax}
+	return f.axis().Constraints(mainMin, mainMax, crossMin, crossMax)
 }
 
 // stretched returns the cross-axis size to give a child (v = 0) or the
 // flow itself (v = the widest child): with AlignStretch it fills the
 // available cross space when that is bounded.
-func (f *flow) stretched(crossMax, v float64) float64 {
-	if f.align == AlignStretch {
-		return bounded(crossMax, v)
-	}
-	return v
+func (f *flow) stretched(crossMax, v float64) float64 { return f.align.Stretched(crossMax, v) }
+
+// placeRow puts virtual row j at main along the axis, aligned across a
+// list that came out as big as result.
+func (f *flow) placeRow(j int, main float64, result Size) {
+	s := f.rects[j].Size
+	f.rects[j].Origin = f.axis().Point(main, (f.cross(result)-f.cross(s))*f.align.Fraction())
 }
 
 // gapFor returns the gap to use: Space times the environment unit, else Gap.
@@ -838,133 +785,46 @@ func (f *flow) gapFor(env Env) float64 {
 }
 
 func (f *flow) layout(c Constraints, env Env) Size {
-	gap := f.gapFor(env)
-	n := len(f.children)
-	f.sizes = resize(f.sizes, n)
-	f.offsets = resize(f.offsets, n)
-	f.bases = resize(f.bases, n)
-
-	mainMax, crossMax := f.main(c.Max()), f.cross(c.Max())
-	crossMin := f.stretched(crossMax, 0)
-
-	// Gaps go between the children that are there; a child showing nothing
-	// (see vacant) is only known to be absent once laid out, so the rigid
-	// pass reserves a gap for every child and settles the count after.
-	gaps := gap * float64(max(n-1, 0))
-
-	// Rigid children first, each offered what is left; then flex children
-	// split the remainder by weight.
-	used := gaps
-	var totalFlex float64
-	flexible := !math.IsInf(mainMax, 1) // no leftover to share on an unbounded axis
-	present := n
+	f.items = resize(f.items, len(f.children))
 	for i, child := range f.children {
-		if fw, ok := child.(*FlexWidget); ok && fw.flex > 0 && flexible {
-			totalFlex += fw.flex
-			continue
-		}
-		f.sizes[i] = child.Layout(f.constraints(0, max(mainMax-used, 0), crossMin, crossMax), env)
-		used += f.main(f.sizes[i])
-		if isAbsent(child) {
-			present--
+		if fw, ok := child.(*FlexWidget); ok {
+			f.items[i] = layout.Item{Weight: fw.flex, Loose: fw.loose}
 		}
 	}
-	if present < n {
-		used -= gaps
-		gaps = gap * float64(max(present-1, 0))
-		used += gaps
-	}
-	free := max(mainMax-used, 0)
-	for i, child := range f.children {
-		if fw, ok := child.(*FlexWidget); ok && fw.flex > 0 && flexible {
-			extent := free * fw.flex / totalFlex
-			f.sizes[i] = child.Layout(f.constraints(pick(fw.loose, 0, extent), extent, crossMin, crossMax), env)
+	byBaseline := f.horizontal && f.align == AlignBaseline
+	result := f.engine.Flow(c, layout.FlowStyle{
+		Axis: f.axis(), Gap: f.gapFor(env), Justify: f.justify, Align: f.align,
+		Direction: env.Direction(),
+	}, f.items, func(i int, c Constraints) layout.Measurement {
+		m := measureWidget(f.children[i], c, env)
+		if byBaseline {
+			m.Baseline, m.HasBaseline = baselineOf(f.children[i])
 		}
-	}
-
-	content := gaps
-	var crossUsed float64
-	for _, s := range f.sizes {
-		content += f.main(s)
-		crossUsed = max(crossUsed, f.cross(s))
-	}
-	// Under AlignBaseline the Row is as tall as the tallest part above
-	// any baseline plus the tallest part below one. A child with no
-	// baseline rests on the shared one by its bottom edge.
-	var above, below float64
-	if f.byBaseline() {
-		for i, s := range f.sizes {
-			b, ok := baselineOf(f.children[i])
-			if !ok {
-				b = s.H
-			}
-			f.bases[i] = b
-			if !isAbsent(f.children[i]) {
-				above, below = max(above, b), max(below, s.H-b)
-			}
-		}
-		crossUsed = above + below
-	}
-	mainTotal := content
-	if totalFlex > 0 || f.justify != JustifyStart {
-		mainTotal = bounded(mainMax, content)
-	}
-	result := c.Constrain(f.size(mainTotal, f.stretched(crossMax, crossUsed)))
-
-	lead, between := 0.0, gap
-	if slack := max(f.main(result)-content, 0); present > 0 {
-		switch f.justify {
-		case JustifyCenter:
-			lead = slack / 2
-		case JustifyEnd:
-			lead = slack
-		case SpaceBetween:
-			if present > 1 {
-				between += slack / float64(present-1)
-			}
-		case SpaceAround:
-			lead = slack / float64(present) / 2
-			between += slack / float64(present)
-		case SpaceEvenly:
-			lead = slack / float64(present+1)
-			between += slack / float64(present+1)
-		}
-	}
-	pos := lead
-	for i, s := range f.sizes {
-		crossOff := (f.cross(result) - f.cross(s)) * f.crossFraction()
-		if f.byBaseline() {
-			crossOff = above - f.bases[i]
-		}
-		if f.horizontal {
-			f.offsets[i] = Pt(pos, crossOff)
-		} else {
-			f.offsets[i] = Pt(crossOff, pos)
-		}
-		if isAbsent(f.children[i]) {
-			continue // sits at pos with no size, and no gap after it
-		}
-		pos += f.main(s) + between
-	}
-	f.mirror(result, env)
-	return result
+		return m
+	})
+	f.rects = result.Children
+	return result.Size
 }
 
-func (f *flow) crossFraction() float64 {
-	switch f.align {
-	case AlignCenter:
-		return 0.5
-	case AlignEnd:
-		return 1
-	}
-	return 0
+// measureWidget is the boundary between widget state and geometry calculation.
+func measureWidget(w Widget, c Constraints, env Env) layout.Measurement {
+	size := w.Layout(c, env)
+	return layout.Measurement{Size: size, Absent: isAbsent(w)}
 }
 
-func (f *flow) paint(dst *Canvas, r Rect) {
-	for i, child := range f.children {
-		dst.Paint(child, Rct(r.Origin.Add(f.offsets[i]), f.sizes[i]))
+// measureChildren measures children[i] for a multi-child layout.
+func measureChildren(children []Widget, env Env) layout.MeasureFunc {
+	return func(i int, c Constraints) layout.Measurement { return measureWidget(children[i], c, env) }
+}
+
+// paintRects paints each child at its rectangle, moved to r's origin.
+func paintRects(dst *Canvas, r Rect, children []Widget, rects []Rect) {
+	for i, child := range children {
+		dst.Paint(child, Rct(r.Origin.Add(rects[i].Origin), rects[i].Size))
 	}
 }
+
+func (f *flow) paint(dst *Canvas, r Rect) { paintRects(dst, r, f.children, f.rects) }
 
 // resize returns s with length n and every element zeroed, reusing s's array.
 func resize[T any](s []T, n int) []T {
@@ -1116,11 +976,13 @@ func (f *FlexWidget) Paint(dst *Canvas, r Rect) { dst.Paint(f.child, r) }
 // StackWidget layers its children on top of each other, first at the bottom.
 // Build one with Stack.
 type StackWidget struct {
+	engine layout.Scratch
+
 	props    property.Owner
 	expand   bool
 	children []Widget
 
-	sizes []Size
+	rects []Rect // borrowed from engine
 }
 
 // Stack layers children in order, all anchored at the top-left corner. It is
@@ -1141,26 +1003,13 @@ func (st *StackWidget) Expand() *StackWidget {
 // Layout implements Widget.
 func (st *StackWidget) Layout(c Constraints, env Env) Size {
 	defer st.props.Layout().EndLayout()
-	st.sizes = st.sizes[:0]
-	var total Size
-	for _, child := range st.children {
-		s := child.Layout(c.Loosen(), env)
-		st.sizes = append(st.sizes, s)
-		total.W = max(total.W, s.W)
-		total.H = max(total.H, s.H)
-	}
-	if st.expand {
-		total = Sz(bounded(c.MaxW, total.W), bounded(c.MaxH, total.H))
-	}
-	return c.Constrain(total)
+	result := st.engine.Stack(c, st.expand, len(st.children), measureChildren(st.children, env))
+	st.rects = result.Children
+	return result.Size
 }
 
 // Paint implements Widget.
-func (st *StackWidget) Paint(dst *Canvas, r Rect) {
-	for i, child := range st.children {
-		dst.Paint(child, Rct(r.Origin, st.sizes[i]))
-	}
-}
+func (st *StackWidget) Paint(dst *Canvas, r Rect) { paintRects(dst, r, st.children, st.rects) }
 
 // AlignWidget fills the space it is given and places one child within it.
 // Build one with Align or Center.
@@ -1169,8 +1018,7 @@ type AlignWidget struct {
 	x, y  float64
 	child Widget
 
-	childSize Size
-	size      Size // what Layout returned, for Baseline
+	childRect Rect // where child sits, from the last Layout
 }
 
 // Align fills the available space and places child in it, centered until At
@@ -1220,22 +1068,21 @@ func (a *AlignWidget) Bottom() *AlignWidget {
 // Layout implements Widget.
 func (a *AlignWidget) Layout(c Constraints, env Env) Size {
 	defer a.props.Layout().EndLayout()
-	a.childSize = a.child.Layout(c.Loosen(), env)
-	a.size = c.Constrain(Sz(bounded(c.MaxW, a.childSize.W), bounded(c.MaxH, a.childSize.H)))
-	return a.size
+	result := layout.Align(c, a.x, a.y, func(_ int, c Constraints) layout.Measurement {
+		return measureWidget(a.child, c, env)
+	})
+	a.childRect = result.Child
+	return result.Size
 }
 
 // Baseline implements Baseliner: the child's, moved by where it sits.
 func (a *AlignWidget) Baseline() (float64, bool) {
-	return baselineAt(a.child, (a.size.H-a.childSize.H)*a.y)
+	return baselineAt(a.child, a.childRect.Origin.Y)
 }
 
 // Paint implements Widget.
 func (a *AlignWidget) Paint(dst *Canvas, r Rect) {
-	dst.Paint(a.child, Rct(
-		r.Origin.Add(Pt((r.Size.W-a.childSize.W)*a.x, (r.Size.H-a.childSize.H)*a.y)),
-		a.childSize,
-	))
+	dst.Paint(a.child, Rct(r.Origin.Add(a.childRect.Origin), a.childRect.Size))
 }
 
 // List builds one child per item and stacks them like a Column, which is
@@ -1661,6 +1508,8 @@ func (s *ScrollWidget) HandlePointer(ev PointerEvent) bool {
 // WrapWidget lines its children up like a Row and starts a new line when
 // the next child would not fit. Build one with Wrap.
 type WrapWidget struct {
+	engine layout.Scratch
+
 	props    property.Owner
 	children []Widget
 	gap      float64 // between children on a line
@@ -1668,8 +1517,7 @@ type WrapWidget struct {
 	space    float64 // both, in environment spacing units, when set
 	align    CrossAlign
 
-	sizes   []Size
-	offsets []Point
+	rects []Rect // borrowed from engine
 }
 
 // Wrap flows children left to right, wrapping onto new lines at the width
@@ -1712,62 +1560,19 @@ func (w *WrapWidget) Layout(c Constraints, env Env) Size {
 		w.gap = w.space * env.Spacing()
 		w.runGap = w.gap
 	}
-	n := len(w.children)
-	w.sizes = resize(w.sizes, n)
-	w.offsets = resize(w.offsets, n)
-	for i, child := range w.children {
-		w.sizes[i] = child.Layout(Loose(Sz(c.MaxW, c.MaxH)), env)
-	}
-	var x, y, lineH, width float64
-	start := 0
-	place := func(end int) {
-		for i := start; i < end; i++ {
-			w.offsets[i].Y = y + (lineH-w.sizes[i].H)*w.crossFraction()
-		}
-	}
-	for i, s := range w.sizes {
-		if isAbsent(w.children[i]) {
-			w.offsets[i].X = x
-			continue
-		}
-		if i > start && x+s.W > c.MaxW {
-			place(i)
-			width = max(width, x-w.gap)
-			y += lineH + w.runGap
-			x, lineH, start = 0, 0, i
-		}
-		w.offsets[i].X = x
-		x += s.W + w.gap
-		lineH = max(lineH, s.H)
-	}
-	place(n)
-	if n > 0 {
-		width = max(width, x-w.gap)
-		y += lineH
-	}
-	return c.Constrain(Sz(width, y))
-}
-
-func (w *WrapWidget) crossFraction() float64 {
-	switch w.align {
-	case AlignCenter:
-		return 0.5
-	case AlignEnd:
-		return 1
-	}
-	return 0
+	result := w.engine.Wrap(c, layout.WrapStyle{Gap: w.gap, RunGap: w.runGap, Align: w.align}, len(w.children), measureChildren(w.children, env))
+	w.rects = result.Children
+	return result.Size
 }
 
 // Paint implements Widget.
-func (w *WrapWidget) Paint(dst *Canvas, r Rect) {
-	for i, child := range w.children {
-		dst.Paint(child, Rct(r.Origin.Add(w.offsets[i]), w.sizes[i]))
-	}
-}
+func (w *WrapWidget) Paint(dst *Canvas, r Rect) { paintRects(dst, r, w.children, w.rects) }
 
 // GridWidget lays its children out in equal-width columns. Build one with
 // Grid.
 type GridWidget struct {
+	engine layout.Scratch
+
 	props    property.Owner
 	cols     int
 	children []Widget
@@ -1775,9 +1580,8 @@ type GridWidget struct {
 	rowGap   float64
 	space    float64 // both, in environment spacing units, when set
 
-	sizes   []Size
-	offsets []Point
-	cellW   float64
+	rects []Rect // borrowed from engine
+	cellW float64
 }
 
 // Grid places children in rows of cols cells, left to right then top to
@@ -1817,43 +1621,10 @@ func (g *GridWidget) Layout(c Constraints, env Env) Size {
 		g.gap = g.space * env.Spacing()
 		g.rowGap = g.gap
 	}
-	n := len(g.children)
-	g.sizes = resize(g.sizes, n)
-	g.offsets = resize(g.offsets, n)
-	cols := g.cols
-	if math.IsInf(c.MaxW, 1) {
-		// No width to share: every column is as wide as the widest child.
-		g.cellW = 0
-		for i, child := range g.children {
-			g.sizes[i] = child.Layout(Loose(Sz(Unbounded, Unbounded)), env)
-			g.cellW = max(g.cellW, g.sizes[i].W)
-		}
-	} else {
-		g.cellW = max((c.MaxW-g.gap*float64(cols-1))/float64(cols), 0)
-	}
-	cell := Constraints{MinW: g.cellW, MaxW: g.cellW, MaxH: Unbounded}
-	var y float64
-	for row := 0; row*cols < n; row++ {
-		var rowH float64
-		for col := 0; col < cols && row*cols+col < n; col++ {
-			i := row*cols + col
-			g.sizes[i] = g.children[i].Layout(cell, env)
-			g.offsets[i] = Pt(float64(col)*(g.cellW+g.gap), y)
-			rowH = max(rowH, g.sizes[i].H)
-		}
-		y += rowH
-		if (row+1)*cols < n {
-			y += g.rowGap
-		}
-	}
-	usedCols := min(cols, n)
-	width := float64(usedCols)*g.cellW + g.gap*float64(max(usedCols-1, 0))
-	return c.Constrain(Sz(width, y))
+	result := g.engine.Grid(c, layout.GridStyle{Columns: g.cols, Gap: g.gap, RowGap: g.rowGap}, len(g.children), measureChildren(g.children, env))
+	g.rects, g.cellW = result.Children, result.CellWidth
+	return result.Size
 }
 
 // Paint implements Widget.
-func (g *GridWidget) Paint(dst *Canvas, r Rect) {
-	for i, child := range g.children {
-		dst.Paint(child, Rct(r.Origin.Add(g.offsets[i]), g.sizes[i]))
-	}
-}
+func (g *GridWidget) Paint(dst *Canvas, r Rect) { paintRects(dst, r, g.children, g.rects) }

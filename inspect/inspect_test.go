@@ -5,11 +5,11 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggui/a11y"
-	"github.com/ironpark/ggui/geom"
+	"github.com/ironpark/ggui/pkg/layout"
 )
 
 func node(name string, depth int, x, y, w, h float64) Node {
-	return Node{Name: name, Depth: depth, Rect: geom.Rct(geom.Pt(x, y), geom.Sz(w, h))}
+	return Node{Name: name, Depth: depth, Rect: layout.Rct(layout.Pt(x, y), layout.Sz(w, h))}
 }
 
 // fakeSource answers as an app would, counting the calls so a test can
@@ -48,11 +48,11 @@ func TestFrameRemembersWhatItAskedFor(t *testing.T) {
 func TestTreeHelpers(t *testing.T) {
 	t.Parallel()
 	nodes := []Node{node("Column", 0, 0, 0, 100, 100), node("Box", 1, 10, 10, 80, 80), node("Text", 2, 20, 20, 30, 10), node("Other", 1, 0, 90, 100, 10)}
-	nodes[2].Clipped, nodes[2].Clip = true, geom.Rct(geom.Pt(20, 20), geom.Sz(5, 5))
-	if got := Deepest(nodes, geom.Pt(21, 21)); got != 2 {
+	nodes[2].Clipped, nodes[2].Clip = true, layout.Rct(layout.Pt(20, 20), layout.Sz(5, 5))
+	if got := Deepest(nodes, layout.Pt(21, 21)); got != 2 {
 		t.Fatalf("deepest = %d, want the Text", got)
 	}
-	if got := Deepest(nodes, geom.Pt(40, 25)); got != 1 {
+	if got := Deepest(nodes, layout.Pt(40, 25)); got != 1 {
 		t.Fatalf("deepest = %d, want the Box: the Text is clipped away there", got)
 	}
 	if !HasChildren(nodes, 0) || HasChildren(nodes, 2) || HasChildren(nodes, 3) {
@@ -65,17 +65,17 @@ func TestTreeHelpers(t *testing.T) {
 
 func TestDetailsPanes(t *testing.T) {
 	t.Parallel()
-	src := &fakeSource{boxes: map[int]Box{1: {Padding: Insets{Top: 4, Right: 4, Bottom: 4, Left: 4}, Border: 1, Content: geom.Sz(72, 72), Valid: true}}, semantic: 0}
-	sem := a11y.Build([]a11y.SemNode{{Node: a11y.Node{Role: a11y.RoleButton, Name: "Save", Checked: a11y.TriOn}, Rect: geom.Rct(geom.Pt(0, 0), geom.Sz(100, 100)), Parent: -1}}, -1)
+	src := &fakeSource{boxes: map[int]Box{1: {Padding: Insets{Top: 4, Right: 4, Bottom: 4, Left: 4}, Border: 1, Content: layout.Sz(72, 72), Valid: true}}, semantic: 0}
+	sem := a11y.Build([]a11y.SemNode{{Node: a11y.Node{Role: a11y.RoleButton, Name: "Save", Checked: a11y.TriOn}, Rect: layout.Rct(layout.Pt(0, 0), layout.Sz(100, 100)), Parent: -1}}, -1)
 	f := &Frame{Nodes: []Node{node("Button", 0, 0, 0, 100, 100), node("Box", 1, 0, 0, 100, 100)}, Sem: sem, Source: src}
 	f.Nodes[0].ID = "save"
 
 	has := func(fields []Field, key, value string) bool {
 		return slices.ContainsFunc(fields, func(fl Field) bool { return fl.Key == key && fl.Value == value })
 	}
-	layout := f.Details(Layout, 0)
-	if !has(layout, "children", "1") || !has(layout, "parent", "root") || !has(layout, "identity", "save") {
-		t.Fatalf("layout = %+v", layout)
+	layoutFields := f.Details(Layout, 0)
+	if !has(layoutFields, "children", "1") || !has(layoutFields, "parent", "root") || !has(layoutFields, "identity", "save") {
+		t.Fatalf("layout = %+v", layoutFields)
 	}
 	computed := f.Details(Computed, 0)
 	if !has(computed, "type", "Button") || !has(computed, "label", "label") || !has(computed, "x", "1") {
@@ -89,10 +89,10 @@ func TestDetailsPanes(t *testing.T) {
 	if box := f.BoxOf(0); !box.Valid || box.Border != 1 {
 		t.Fatalf("box of the control = %+v, want its child Box's", box)
 	}
-	if got := f.SemanticAt(geom.Pt(5, 5)); got != 0 {
+	if got := f.SemanticAt(layout.Pt(5, 5)); got != 0 {
 		t.Fatalf("SemanticAt = %d", got)
 	}
-	if f.Details(Layout, 7) != nil || (&Frame{}).SemanticAt(geom.Pt(0, 0)) != -1 {
+	if f.Details(Layout, 7) != nil || (&Frame{}).SemanticAt(layout.Pt(0, 0)) != -1 {
 		t.Fatal("out-of-range and empty frames should answer nothing")
 	}
 	if Num(1.23456) != "1.23" || Color(nil) != "none" {

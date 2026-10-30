@@ -4,6 +4,9 @@
 
 Choose a layout, size its children, and display text, images, and overlays. Dimensions are logical pixels unless stated otherwise.
 
+For use in another toolkit without ggui widgets or rendering, see the public
+[`layout` package](../pkg/layout/README.md).
+
 Examples use `ggui` and `ui` imports and application-defined placeholders.
 See [example conventions](README.md#start-here) before copying snippets.
 

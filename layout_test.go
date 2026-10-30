@@ -42,8 +42,8 @@ func TestBoxMaxWidthCapsTheBoxAndItsChild(t *testing.T) {
 	}
 	inner := Box(wide()).MaxWidth(100).Pad(10)
 	Center(inner).Layout(Tight(Sz(500, 50)), Env{})
-	if inner.childSize.W != 80 {
-		t.Errorf("centered: child is %v wide, want 80 inside the padding", inner.childSize.W)
+	if inner.childRect.Size.W != 80 {
+		t.Errorf("centered: child is %v wide, want 80 inside the padding", inner.childRect.Size.W)
 	}
 }
 
@@ -131,7 +131,7 @@ func TestInsetsShorthand(t *testing.T) {
 		want EdgeInsets
 	}{
 		{nil, EdgeInsets{}},
-		{[]float64{8}, EdgeInsets{8, 8, 8, 8}},
+		{[]float64{8}, EdgeInsets{Top: 8, Right: 8, Bottom: 8, Left: 8}},
 		{[]float64{4, 12}, EdgeInsets{Top: 4, Right: 12, Bottom: 4, Left: 12}},
 		{[]float64{1, 2, 3, 4}, EdgeInsets{Top: 1, Right: 2, Bottom: 3, Left: 4}},
 	}
@@ -408,13 +408,13 @@ func TestWrapBreaksLinesAtWidth(t *testing.T) {
 	if got != (Size{W: 85, H: 35}) {
 		t.Fatalf("Layout() = %+v, want {85 35}", got)
 	}
-	if w.offsets[2] != Pt(0, 25) || w.offsets[3] != Pt(45, 25) {
-		t.Fatalf("second line at %v %v, want (0,25) (45,25)", w.offsets[2], w.offsets[3])
+	if w.rects[2].Origin != Pt(0, 25) || w.rects[3].Origin != Pt(45, 25) {
+		t.Fatalf("second line at %v %v, want (0,25) (45,25)", w.rects[2].Origin, w.rects[3].Origin)
 	}
 	w.Align(AlignCenter)
 	w.Layout(Loose(Sz(100, 200)), Env{})
-	if w.offsets[0].Y != 5 {
-		t.Fatalf("centered first child at y=%v in a 20-tall line, want 5", w.offsets[0].Y)
+	if w.rects[0].Origin.Y != 5 {
+		t.Fatalf("centered first child at y=%v in a 20-tall line, want 5", w.rects[0].Origin.Y)
 	}
 	if got := Wrap(Box().Size(40, 10), Box().Size(40, 10)).Layout(Loose(Sz(Unbounded, 10)), Env{}); got.W != 80 {
 		t.Fatalf("unbounded width gave %v, want one line of 80", got)
@@ -459,5 +459,45 @@ func TestAppLaysOutOnlyWhenSomethingChanged(t *testing.T) {
 	State(0).Set(1)
 	if !a.needsLayout(Sz(200, 100)) {
 		t.Fatal("a signal write must lay out")
+	}
+}
+
+// Borrowed rectangles must survive sibling layouts and cached children must
+// still paint correctly when parent scratch buffers are reused on later frames.
+func TestNestedLayoutRectsSurviveCacheHitsAndResize(t *testing.T) {
+	t.Parallel()
+	var painted [6]Rect
+	layouts := 0
+	a := FromFuncs(func(c Constraints, _ Env) Size { layouts++; return c.Constrain(Sz(20, 10)) }, func(_ *Canvas, r Rect) { painted[0] = r })
+	tree := Stack(
+		Column(
+			Cached(Row(a, probe(20, 20, &painted[1])).Gap(5).Align(AlignStart)),
+			Cached(Grid(2, probe(7, 8, &painted[2]), probe(9, 12, &painted[3])).Gap(4)),
+		).Gap(7),
+		Wrap(probe(30, 5, &painted[4]), probe(30, 10, &painted[5])).Gap(3),
+	)
+	origin := Pt(7, 11)
+	for _, width := range []float64{100, 100, 40, 40, 100} {
+		size := tree.Layout(Loose(Sz(width, 100)), Env{})
+		tree.Paint(nil, Rct(origin, size))
+		cell := (width - 4) / 2
+		want := [6]Rect{
+			Rct(Pt(0, 0), Sz(20, 10)), Rct(Pt(25, 0), Sz(20, 20)),
+			Rct(Pt(0, 27), Sz(cell, 8)), Rct(Pt(cell+4, 27), Sz(cell, 12)),
+			Rct(Pt(0, 0), Sz(30, 5)), Rct(Pt(33, 0), Sz(30, 10)),
+		}
+		if width == 40 {
+			want[1].Size.W = 15
+			want[5].Origin = Pt(0, 8)
+		}
+		for i, rect := range want {
+			rect.Origin = rect.Origin.Add(origin)
+			if painted[i] != rect {
+				t.Fatalf("width %v, child %d painted at %+v, want %+v", width, i, painted[i], rect)
+			}
+		}
+	}
+	if layouts != 3 {
+		t.Fatalf("first child measured %d times, want 3 across cache hits and resizing", layouts)
 	}
 }

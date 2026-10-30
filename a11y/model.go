@@ -8,7 +8,7 @@
 // names there -- and sets the whole thing going from Config.Accessibility.
 // Import it to read a field list, or to build a tree by hand.
 //
-// Point, Rect and Size are re-exported from geom for the same reason, so
+// Point, Rect and Size are re-exported from pkg/layout for the same reason, so
 // that a bridge writes them under one name throughout.
 //
 // It is a package of its own because the bridges must read everything a
@@ -20,25 +20,25 @@ package a11y
 import (
 	"reflect"
 
-	"github.com/ironpark/ggui/geom"
+	"github.com/ironpark/ggui/pkg/layout"
 )
 
 // The geometry a node is measured in.
 type (
-	Point = geom.Point
-	Rect  = geom.Rect
-	Size  = geom.Size
+	Point = layout.Point
+	Rect  = layout.Rect
+	Size  = layout.Size
 )
 
 // Pt returns the Point at (x, y). A generic function cannot be aliased, so
 // the three geometry constructors are one-line forwards rather than names.
-func Pt[T geom.Number](x, y T) Point { return geom.Pt(x, y) }
+func Pt[T layout.Number](x, y T) Point { return layout.Pt(x, y) }
 
 // Sz returns the Size w by h.
-func Sz[T geom.Number](w, h T) Size { return geom.Sz(w, h) }
+func Sz[T layout.Number](w, h T) Size { return layout.Sz(w, h) }
 
 // Rct returns the Rect at origin with size.
-func Rct(origin Point, size Size) Rect { return geom.Rct(origin, size) }
+func Rct(origin Point, size Size) Rect { return layout.Rct(origin, size) }
 
 // Role says what kind of element a node or region is. The ui package fills
 // it in; Probe.Find, the inspector and the semantics tree read it. The

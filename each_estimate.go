@@ -123,7 +123,7 @@ func (f *EachWidget[T, K]) layoutEstimated(c Constraints, env Env) Size {
 	crossMin := f.stretched(crossMax, 0)
 	var crossUsed float64
 	f.frame++
-	f.visible, f.sizes = f.visible[:0], f.sizes[:0]
+	f.visible, f.virtualRects = f.visible[:0], f.virtualRects[:0]
 	at := est.starts[f.first]
 	i := f.first
 	for ; i < n && (!windowed || at < lo+vp.Extent+reach); i++ {
@@ -132,21 +132,19 @@ func (f *EachWidget[T, K]) layoutEstimated(c Constraints, env Env) Size {
 		s := e.widget.Layout(f.constraints(0, Unbounded, crossMin, crossMax), env)
 		est.measured[f.keys[i]] = f.main(s)
 		f.visible = append(f.visible, e.widget)
-		f.sizes = append(f.sizes, s)
+		f.virtualRects = append(f.virtualRects, Rect{Size: s})
 		crossUsed = max(crossUsed, f.cross(s))
 		at += f.main(s) + gap
 	}
+	f.rects = f.virtualRects
 	f.last = i
 	est.place(f.keys, f.estimate, gap)
 
 	total := max(est.starts[n]-gap, 0)
 	result := c.Constrain(f.size(total, f.stretched(crossMax, crossUsed)))
 	f.evict()
-	f.offsets = resize(f.offsets, len(f.sizes))
-	for j, s := range f.sizes {
-		main := est.starts[f.first+j]
-		off := (f.cross(result) - f.cross(s)) * f.crossFraction()
-		f.offsets[j] = pick(f.horizontal, Pt(main, off), Pt(off, main))
+	for j := range f.rects {
+		f.placeRow(j, est.starts[f.first+j], result)
 	}
 
 	d := est.moved(f.keys)

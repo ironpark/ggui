@@ -195,9 +195,9 @@ func (s inspectSource) Box(i int) (inspect.Box, bool) {
 // inspectBox is a Box's box model as painted at size: its padding and
 // border around the child, or around the space left when it has none.
 func (b *BoxWidget) inspectBox(size Size) inspect.Box {
-	content := b.childSize
+	content := b.childRect.Size
 	if b.child == nil {
-		content = Sz(max(size.W-b.padding.horizontal(), 0), max(size.H-b.padding.vertical(), 0))
+		content = Sz(max(size.W-b.padding.Horizontal(), 0), max(size.H-b.padding.Vertical(), 0))
 	}
 	p := b.padding
 	return inspect.Box{Padding: inspect.Insets{Top: p.Top, Right: p.Right, Bottom: p.Bottom, Left: p.Left}, Border: b.borderWidth, Content: content, Valid: true}

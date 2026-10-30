@@ -48,9 +48,11 @@ type EachWidget[T any, K comparable] struct {
 	childEntries []*forEntry[T]
 
 	// The virtual path: the range of items laid out this frame and their
-	// widgets; sizes and offsets are indexed the same way.
-	first, last int
-	visible     []Widget
+	// widgets; rects are indexed the same way. Those rects live in
+	// virtualRects, owned here, never in the flow engine's borrowed buffer.
+	first, last  int
+	visible      []Widget
+	virtualRects []Rect
 
 	pin eachPin[T] // sticky headers and ScrollToKey; see each_sticky.go
 }
@@ -328,8 +330,8 @@ func (f *EachWidget[T, K]) Layout(c Constraints, env Env) Size {
 	shown := f.last - f.first
 	f.frame++
 	f.visible = resize(f.visible, shown)
-	f.sizes = resize(f.sizes, shown)
-	f.offsets = resize(f.offsets, shown)
+	f.virtualRects = resize(f.virtualRects, shown)
+	f.rects = f.virtualRects
 	crossMax := f.cross(c.Max())
 	crossMin := f.stretched(crossMax, 0)
 	var crossUsed float64
@@ -338,20 +340,14 @@ func (f *EachWidget[T, K]) Layout(c Constraints, env Env) Size {
 		e.seen = f.frame
 		w := e.widget
 		f.visible[j] = w
-		f.sizes[j] = w.Layout(f.constraints(f.extent, f.extent, crossMin, crossMax), env)
-		crossUsed = max(crossUsed, f.cross(f.sizes[j]))
+		f.rects[j].Size = w.Layout(f.constraints(f.extent, f.extent, crossMin, crossMax), env)
+		crossUsed = max(crossUsed, f.cross(f.rects[j].Size))
 	}
 	f.layoutPinned(pitch, gap, crossMin, crossMax, env)
 	result := c.Constrain(f.size(total, f.stretched(crossMax, crossUsed)))
 	f.evict()
-	for j, s := range f.sizes {
-		main := float64(f.first+j) * pitch
-		off := (f.cross(result) - f.cross(s)) * f.crossFraction()
-		if f.horizontal {
-			f.offsets[j] = Pt(main, off)
-		} else {
-			f.offsets[j] = Pt(off, main)
-		}
+	for j := range f.rects {
+		f.placeRow(j, float64(f.first+j)*pitch, result)
 	}
 	return result
 }
@@ -437,7 +433,7 @@ func (f *EachWidget[T, K]) Paint(dst *Canvas, r Rect) {
 				if f.childEntries[i] == pinned {
 					continue
 				}
-				rc := Rct(r.Origin.Add(f.offsets[i]), f.sizes[i])
+				rc := Rct(r.Origin.Add(f.rects[i].Origin), f.rects[i].Size)
 				dst.inGroup(f.childEntries[i], func() { f.paintRow(dst, child, rc, i, n) })
 			}
 			return
@@ -447,7 +443,7 @@ func (f *EachWidget[T, K]) Paint(dst *Canvas, r Rect) {
 			if e == pinned {
 				continue
 			}
-			rc := Rct(r.Origin.Add(f.offsets[j]), f.sizes[j])
+			rc := Rct(r.Origin.Add(f.rects[j].Origin), f.rects[j].Size)
 			dst.inGroup(e, func() { f.paintRow(dst, w, rc, f.first+j, n) })
 		}
 	}

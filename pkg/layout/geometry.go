@@ -1,15 +1,6 @@
-// Package geom is the geometry ggui measures in: a point, a size and a
-// rectangle, in logical pixels.
-//
-// Most programs never import it. The ggui package re-exports every name
-// here, so Point, Size and Rect are the same types under the same names
-// there. It is a package of its own because the accessibility bridges
-// measure in it too, and they sit below the package that runs them.
-package geom
+package layout
 
-// Number is any built-in numeric type. The geometry constructors take one so
-// that pixel counts from ggfx (int) and layout math (float64) can be
-// mixed without a cast at every call site.
+// Number is any built-in numeric type accepted by geometry constructors.
 type Number interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 |
 		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 |
@@ -38,8 +29,7 @@ type Size struct {
 // Sz returns the Size w by h, whatever numeric type they are.
 func Sz[T Number](w, h T) Size { return Size{W: float64(w), H: float64(h)} }
 
-// Rect is an axis-aligned rectangle anchored at Origin. Paint receives one:
-// the origin its parent chose and the size its own Layout returned.
+// Rect is an axis-aligned rectangle anchored at Origin.
 type Rect struct {
 	Origin Point
 	Size   Size

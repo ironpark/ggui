@@ -86,18 +86,18 @@ func TestDirectionalityMirrorsRowsAndColumns(t *testing.T) {
 	}
 	row := Row(Box().Size(10, 10), Box().Size(20, 10))
 	size := row.Layout(Loose(Sz(100, 100)), rtl)
-	if row.offsets[0].X != size.W-10 || row.offsets[1].X != 0 {
-		t.Fatalf("RTL row offsets %v in %v, want the first child rightmost", row.offsets, size)
+	if row.rects[0].Origin.X != size.W-10 || row.rects[1].Origin.X != 0 {
+		t.Fatalf("RTL row offsets %v in %v, want the first child rightmost", row.rects, size)
 	}
 	col := Column(Box().Size(10, 10), Box().Size(30, 10))
 	col.Layout(Loose(Sz(100, 100)), rtl)
-	if col.offsets[0].X != 20 || col.offsets[1].X != 0 {
-		t.Fatalf("RTL column offsets %v, want AlignStart on the right", col.offsets)
+	if col.rects[0].Origin.X != 20 || col.rects[1].Origin.X != 0 {
+		t.Fatalf("RTL column offsets %v, want AlignStart on the right", col.rects)
 	}
 	ltr := Row(Box().Size(10, 10), Box().Size(20, 10))
 	ltr.Layout(Loose(Sz(100, 100)), Env{})
-	if ltr.offsets[0].X != 0 {
-		t.Fatalf("LTR row moved: %v", ltr.offsets)
+	if ltr.rects[0].Origin.X != 0 {
+		t.Fatalf("LTR row moved: %v", ltr.rects)
 	}
 }
 
