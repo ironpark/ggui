@@ -33,6 +33,8 @@ type App struct {
 	menu       *menuSet               // the menu bar's
 	trays      []*Tray
 	nextTray   int
+	quitAsked  []func()         // OnQuitRequest's
+	reopened   []func()         // OnReopen's
 	actions    map[int]MenuItem // every menu action installed, by id
 	nextAction int
 
@@ -205,6 +207,14 @@ func (a *App) handleEvent(ev ggwd.Event) error {
 		for _, t := range a.trays {
 			t.install()
 		}
+		return nil
+	}
+	switch ev.(type) {
+	case ggwd.QuitEvent:
+		a.postAll(a.quitAsked)
+		return nil
+	case ggwd.ReopenEvent:
+		a.postAll(a.reopened)
 		return nil
 	}
 	w := a.windowFor(eventWindow(ev))

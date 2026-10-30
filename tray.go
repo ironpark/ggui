@@ -55,7 +55,15 @@ func TraySupported() bool { return nativemenu.TraySupported() }
 //			ggui.MenuAction("Quit", "", app.Quit),
 //		},
 //	})
-//	app.OnCloseRequest(func() bool { app.Hide(); return false })
+//	quitting := false
+//	app.OnQuitRequest(func() { quitting = true })
+//	app.OnCloseRequest(func() bool {
+//		if quitting {
+//			return true
+//		}
+//		app.Hide()
+//		return false
+//	})
 func (a *App) AddTray(cfg TrayConfig) *Tray {
 	a.nextTray++
 	t := &Tray{app: a, key: a.nextTray, cfg: cfg}
