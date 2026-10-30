@@ -535,3 +535,26 @@ func TestCursorFollowsTheFramePainted(t *testing.T) {
 		t.Fatalf("cursor %v after the frame, want the hand", p.Cursor())
 	}
 }
+
+func TestARebuiltRegionIsToldItIsHovered(t *testing.T) {
+	t.Parallel()
+	var was, now []bool
+	var in inputState
+	paintFrame(&in, Pointer(Box().Size(50, 50)).OnHover(func(b bool) { was = append(was, b) }), Sz(50, 50))
+	in.dispatch(frameInput{pos: Pt(10, 10)})
+	// Rebuilt under the pointer, as a list redrawn for a change elsewhere
+	// is: the new region holds a hover state of its own.
+	paintFrame(&in, Pointer(Box().Size(50, 50)).OnHover(func(b bool) { now = append(now, b) }), Sz(50, 50))
+	in.dispatch(frameInput{pos: Pt(10, 10)})
+	in.dispatch(frameInput{pos: Pt(12, 12)})
+	if len(now) != 1 || !now[0] {
+		t.Fatalf("the rebuilt region heard %v of its hover, want [true]", now)
+	}
+	if len(was) != 1 || !was[0] {
+		t.Fatalf("the region it replaced heard %v, want only its enter", was)
+	}
+	in.dispatch(frameInput{pos: Pt(80, 80)})
+	if len(now) != 2 || now[1] {
+		t.Fatalf("the rebuilt region heard %v as the pointer left, want [true false]", now)
+	}
+}

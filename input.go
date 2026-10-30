@@ -358,6 +358,12 @@ func (in *inputState) updateHover(f frameInput) {
 		if now != nil {
 			now.handle(PointerEvent{Kind: PointerEnter, Pos: f.pos})
 		}
+	} else if now != nil && now.pointer != nil && !sameAny(now.pointer, in.hovered.pointer) {
+		// Rebuilt under the pointer, the region is a new handler, with a
+		// hover state of its own that never heard the enter: a row of a
+		// list redrawn for a change elsewhere would show itself left. The
+		// one it replaced is gone, and hears no exit.
+		now.handle(PointerEvent{Kind: PointerEnter, Pos: f.pos})
 	}
 	in.hovered = keep(now)
 }
