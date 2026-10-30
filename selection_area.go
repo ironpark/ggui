@@ -3,6 +3,8 @@ package ggui
 import (
 	"slices"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // SelectionAreaWidget lets a drag select across the Selectable texts inside
@@ -189,4 +191,82 @@ func (a *SelectionAreaWidget) textAt(at Point) (*RichTextWidget, int) {
 		return a.texts[0], 0
 	}
 	return nil, 0
+}
+
+// Find selects the match of needle n places on, from 0, among the area's
+// texts painted from the window's y top down, in paint order, and reports
+// where it is painted, in window coordinates: a page's find, for a page
+// whose rows are laid out only near the window. Case is ignored. ok is
+// false, and the selection is left as it was, when there are no more than
+// n matches.
+func (a *SelectionAreaWidget) Find(needle string, top float64, n int) (at Rect, ok bool) {
+	if needle == "" || n < 0 {
+		return Rect{}, false
+	}
+	for _, t := range a.texts {
+		if t.rect.Origin.Y+t.rect.Size.H <= top {
+			continue
+		}
+		text := t.ed.Text
+		for i := 0; ; {
+			lo, hi := IndexFold(text, needle, i)
+			if lo < 0 {
+				break
+			}
+			if n > 0 {
+				n--
+				i = hi
+				continue
+			}
+			a.clear(t)
+			t.ed.MoveTo(lo, false)
+			t.ed.MoveTo(hi, true)
+			a.anchor, a.anchorAt, a.focus, a.focusAt = t, lo, t, hi
+			first := true
+			t.para.rects(lo, hi, t.rect.Size.W, t.alignment(), func(b Rect) {
+				b.Origin = t.rect.Origin.Add(b.Origin)
+				if first {
+					at, first = b, false
+				} else {
+					at = at.Union(b)
+				}
+			})
+			return at, true
+		}
+	}
+	return Rect{}, false
+}
+
+// IndexFold returns where needle is first found in s at or after byte from,
+// ignoring case, as the byte range [lo, hi) of s; lo is -1 when it is not
+// found. The range is s's own, which may differ in length from needle.
+func IndexFold(s, needle string, from int) (lo, hi int) {
+	if needle == "" {
+		return -1, -1
+	}
+	for i := max(from, 0); i < len(s); {
+		if j, ok := prefixFold(s[i:], needle); ok {
+			return i, i + j
+		}
+		_, w := utf8.DecodeRuneInString(s[i:])
+		i += w
+	}
+	return -1, -1
+}
+
+// prefixFold reports whether s begins with prefix, ignoring case, and how
+// many bytes of s that takes.
+func prefixFold(s, prefix string) (int, bool) {
+	i := 0
+	for _, p := range prefix {
+		if i >= len(s) {
+			return 0, false
+		}
+		r, w := utf8.DecodeRuneInString(s[i:])
+		if r != p && unicode.ToLower(r) != unicode.ToLower(p) {
+			return 0, false
+		}
+		i += w
+	}
+	return i, true
 }

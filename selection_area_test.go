@@ -57,3 +57,46 @@ func TestADragWithinOneTextOfAnAreaSelectsAsItsOwn(t *testing.T) {
 		t.Fatalf("copy put %q on the clipboard", got)
 	}
 }
+
+func TestFindSelectsTheMatchesOfAnAreaInTurn(t *testing.T) {
+	t.Parallel()
+	a, b := Text("Error: the path").Selectable(), Text("another error, and an ERROR").Selectable()
+	area := SelectionArea(Column(a, b).Gap(10))
+	p := NewProbe(area, Sz(400, 100))
+	defer p.Close()
+	p.Frame()
+	for n, want := range []string{"Error", "error", "ERROR"} {
+		at, ok := area.Find("error", 0, n)
+		if !ok || area.SelectedText() != want {
+			t.Fatalf("match %d: found %v, selected %q; want %q", n, ok, area.SelectedText(), want)
+		}
+		if at.Size.W <= 0 || (n == 0) != (at.Origin.Y < b.rich.rect.Origin.Y) {
+			t.Fatalf("match %d painted at %v", n, at)
+		}
+	}
+	if _, ok := area.Find("error", 0, 3); ok || area.SelectedText() != "ERROR" {
+		t.Fatalf("a fourth match was found, or the third let go: %q", area.SelectedText())
+	}
+	// From below the first text, its match does not count.
+	if _, ok := area.Find("error", b.rich.rect.Origin.Y, 0); !ok || area.SelectedText() != "error" {
+		t.Fatalf("from the second text, the first match is %q", area.SelectedText())
+	}
+}
+
+func TestIndexFoldIgnoresCase(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		s, needle string
+		from      int
+		lo, hi    int
+	}{
+		{"Hello World", "world", 0, 6, 11},
+		{"ÄBC äbc", "äbc", 1, 5, 9},
+		{"abc", "x", 0, -1, -1},
+		{"abc", "", 0, -1, -1},
+	} {
+		if lo, hi := IndexFold(c.s, c.needle, c.from); lo != c.lo || hi != c.hi {
+			t.Errorf("IndexFold(%q, %q, %d) = %d, %d; want %d, %d", c.s, c.needle, c.from, lo, hi, c.lo, c.hi)
+		}
+	}
+}
