@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -31,6 +32,12 @@ type frameClock struct {
 	// clip. Time read there does not mark the frame: nothing it moves can
 	// show, and the frame that scrolls it into view resumes it.
 	hidden int
+
+	// marks counts the times something painted where it can be seen read
+	// the time or asked to be painted again at one. Canvas.Paint compares
+	// it across a widget's paint to learn that the widget moves with time,
+	// and where: the place a frame that only time drives redraws.
+	marks atomic.Uint64
 
 	// wake is the earliest instant a widget asked to be painted again at,
 	// or zero. It is for looks that change at a known time, like a caret
@@ -74,7 +81,10 @@ func (f *frameClock) timeRead() bool {
 // animate marks the frame as depending on time.
 func (f *frameClock) animate() {
 	f.mu.Lock()
-	f.read = f.read || f.hidden == 0
+	if f.hidden == 0 {
+		f.read = true
+		f.marks.Add(1)
+	}
 	f.mu.Unlock()
 }
 
@@ -154,7 +164,10 @@ func (f *frameClock) setSource(fn func() time.Time) (prev func() time.Time) {
 func (f *frameClock) instant() time.Time {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.read = f.read || f.hidden == 0
+	if f.hidden == 0 {
+		f.read = true
+		f.marks.Add(1)
+	}
 	if f.now.IsZero() {
 		return f.raw()
 	}
@@ -187,6 +200,9 @@ func WakeAt(t time.Time) {
 	f.mu.Lock()
 	if f.wake.IsZero() || t.Before(f.wake) {
 		f.wake = t
+	}
+	if f.hidden == 0 {
+		f.marks.Add(1)
 	}
 	f.mu.Unlock()
 }

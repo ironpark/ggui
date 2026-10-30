@@ -104,6 +104,17 @@ type frameState struct {
 	// this frame, or wanted to: the window keeps a backbuffer for it, as
 	// its screen cannot be read.
 	backdrop bool
+
+	// What a frame that only time asks for repaints; see damage.go. scopes
+	// are the widgets being painted, motion the regions of those that read
+	// the time, and motionLost that one did where it cannot be placed.
+	// partial is set while such a frame paints within damage.
+	scopes     []paintScope
+	motion     []Rect
+	motionLost bool
+	partial    bool
+	damage     Rect
+	overlaid   bool // an overlay was painted this frame
 }
 
 // fs returns the frame state, creating it on the root's first use. A Canvas
@@ -299,15 +310,21 @@ func (c *Canvas) Paint(w Widget, r Rect) {
 			defer func() { f.depth--; f.traceParent = parent }()
 		}
 	}
+	fs := c.fs()
+	if fs.skips(c, r) {
+		return
+	}
+	clock := &activeWorld().frame
 	// A widget wholly outside the clip still paints, for its semantics, but
 	// an animation inside it must not keep the app painting. A zero-size
 	// host, such as a toaster that paints through overlays, is never hidden.
 	if c.clipped && !r.Empty() && r.Intersect(c.clip).Empty() {
-		f := &activeWorld().frame
-		f.hide()
-		defer f.unhide()
+		clock.hide()
+		defer clock.unhide()
 	}
+	fs.openScope(c, r, clock.marks.Load())
 	w.Paint(c, r)
+	fs.closeScope(clock.marks.Load())
 }
 
 var widgetNames sync.Map // reflect.Type -> string; names never change
@@ -435,6 +452,7 @@ func (c *Canvas) Size() Size {
 // queue themselves, and clears the queue.
 func (c *Canvas) paintOverlays() {
 	f := c.fs()
+	f.overlaid = f.overlaid || len(f.overlays) > 0
 	for i := 0; i < len(f.overlays); i++ {
 		o := f.overlays[i]
 		c.scoped(o.owner, o.fn)
@@ -503,7 +521,12 @@ func (c *Canvas) Geo(at Point) ggfx.GeoM {
 // semantics and traces. Keep one physical pixel for antialiasing and round to
 // float32 like the vector API. Unusual geometry takes the original draw path.
 func (c *Canvas) visiblePaintBounds(r Rect, extra float64) bool {
-	if c == nil || c.Image == nil {
+	if c == nil {
+		return false
+	}
+	// Seen or not, it is where the widget painting draws.
+	c.fs().drew(r, extra)
+	if c.Image == nil {
 		return false
 	}
 	bounds := c.Image.Bounds()

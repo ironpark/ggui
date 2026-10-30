@@ -19,6 +19,10 @@ type FrameStats struct {
 	// drag or touch going on. The rest came from outside: an event, an
 	// Invalidate, a new frame the window or the platform asked for.
 	ForAnimation, ForTime, ForCallback, ForPosted, ForInput int64
+
+	// Partial counts the frames painted in part, where only what moves
+	// with time changed; see damage.go.
+	Partial int64
 }
 
 const (
@@ -33,6 +37,7 @@ const (
 var (
 	framesRun, frameNanos atomic.Int64
 	framesFor             [frameReasons]atomic.Int64
+	partialFrames         atomic.Int64
 )
 
 func countFrame(d time.Duration) {
@@ -48,5 +53,6 @@ func ReadFrameStats() FrameStats {
 		ForAnimation: framesFor[frameForAnimation].Load(), ForTime: framesFor[frameForTime].Load(),
 		ForCallback: framesFor[frameForCallback].Load(), ForPosted: framesFor[frameForPosted].Load(),
 		ForInput: framesFor[frameForInput].Load(),
+		Partial:  partialFrames.Load(),
 	}
 }

@@ -159,6 +159,19 @@ type Window struct {
 	backbuf     *ggfx.Image
 	backdropTTL int
 
+	// A frame only time asks for is painted in part, into the backbuffer
+	// (see damage.go): motion is the regions it paints, motionOK whether
+	// the last frame allows it, motionGen and motionSize the state and the
+	// size it was painted at, and motionTTL the frames the backbuffer is
+	// kept after the last motion. dirty is set by all else that asks for a
+	// frame, which then paints whole.
+	motion     []Rect
+	motionOK   bool
+	motionGen  uint64
+	motionSize image.Point
+	motionTTL  int
+	dirty      atomic.Bool
+
 	focused  *StateValue[bool]
 	viewport *StateValue[Size]
 	state    *StateValue[WindowState]
@@ -380,6 +393,13 @@ func (w *Window) handle(ev ggwd.Event) error {
 // requestFrame asks the window for a frame. It is safe from any goroutine
 // and before the window exists, when the first frame comes on its own.
 func (w *Window) requestFrame() {
+	w.dirty.Store(true)
+	w.wakeFrame()
+}
+
+// wakeFrame asks for a frame for the time a widget asked to be painted
+// again at, which nothing else changes: it may be painted in part.
+func (w *Window) wakeFrame() {
 	if nw := w.window.Load(); nw != nil {
 		nw.RequestFrame()
 	}
@@ -525,7 +545,11 @@ func (w *Window) runFrameEvent(ev ggwd.FrameEvent) error {
 	f := w.takeInput()
 	cf := w.canvas.fs()
 	cf.pointer, cf.hasPointer = f.pos, true
+	before := delivered.Load()
 	w.dispatchInput(f)
+	if delivered.Load() != before {
+		w.dirty.Store(true)
+	}
 	if w.closed {
 		return nil
 	}
@@ -555,7 +579,7 @@ func (w *Window) runFrameEvent(ev ggwd.FrameEvent) error {
 		if w.wakeTimer != nil {
 			w.wakeTimer.Stop()
 		}
-		w.wakeTimer = time.AfterFunc(max(wake.Sub(FrameTime()), 0), w.requestFrame)
+		w.wakeTimer = time.AfterFunc(max(wake.Sub(FrameTime()), 0), w.wakeFrame)
 	}
 	return nil
 }
@@ -563,7 +587,7 @@ func (w *Window) runFrameEvent(ev ggwd.FrameEvent) error {
 // paintTarget returns the image this frame paints into: screen, or the
 // backbuffer while a BackdropBlur has wanted one recently.
 func (w *Window) paintTarget(screen *ggfx.Image) *ggfx.Image {
-	if w.backdropTTL == 0 {
+	if w.backdropTTL == 0 && w.motionTTL == 0 {
 		return screen
 	}
 	size := screen.Bounds().Size()
@@ -592,9 +616,11 @@ func (w *Window) presentBackdrop(screen, target *ggfx.Image) {
 			w.requestFrame()
 		}
 	} else if w.backdropTTL > 0 {
-		if w.backdropTTL--; w.backdropTTL == 0 {
-			w.freeBackbuf()
-		}
+		w.backdropTTL--
+	}
+	// Kept for neither a blur nor a motion, it goes, after this copy.
+	if w.backdropTTL == 0 && w.motionTTL == 0 {
+		w.freeBackbuf()
 	}
 }
 
@@ -629,14 +655,20 @@ func (w *Window) wantsFrame(f frameInput) bool {
 	switch {
 	case wd.anims.active():
 		framesFor[frameForAnimation].Add(1)
+		w.dirty.Store(true)
 	case wd.frame.timeRead():
+		// Only what read the time changes: the frame may be painted in
+		// part. What else changes by then marks it dirty itself.
 		framesFor[frameForTime].Add(1)
 	case len(w.frame) > 0:
 		framesFor[frameForCallback].Add(1)
+		w.dirty.Store(true)
 	case w.hasPosted():
 		framesFor[frameForPosted].Add(1)
+		w.dirty.Store(true)
 	case f.drag || w.touch.active || w.touch.waiting || w.input.touchMotion.target != nil:
 		framesFor[frameForInput].Add(1)
+		w.dirty.Store(true)
 	default:
 		return false
 	}
@@ -687,10 +719,15 @@ func (w *Window) background() color.Color {
 // pixels per logical pixel, so that a HiDPI monitor gets a sharp image while
 // widgets keep working in logical pixels.
 func (w *Window) draw(screen *ggfx.Image, scale float64) {
+	dirty := w.dirty.Swap(false)
 	if scale > 0 {
+		dirty = dirty || scale != w.canvas.scale
 		w.canvas.scale = scale
 	}
 	target := w.paintTarget(screen)
+	if !dirty && w.drawPartial(screen, target) {
+		return
+	}
 	target.Fill(w.background())
 	if w.root == nil {
 		return
@@ -730,4 +767,5 @@ func (w *Window) draw(screen *ggfx.Image, scale float64) {
 		return
 	}
 	w.spare = w.canvas.prev
+	w.noteMotion(screen, target)
 }

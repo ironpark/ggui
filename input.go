@@ -3,6 +3,7 @@ package ggui
 import (
 	"runtime"
 	"slices"
+	"sync/atomic"
 
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggwd"
@@ -474,6 +475,7 @@ func (in *inputState) dispatchKeys(f frameInput) {
 		// An Adopter already took the old one's state over during paint;
 		// anything else is told it has focus now.
 		if _, ok := cur.key.(Adopter); !ok {
+			delivered.Add(1)
 			cur.key.HandleKey(KeyEvent{Kind: KeyFocus})
 		}
 	}
@@ -570,8 +572,14 @@ func (in *inputState) topmost(match func(*hitRegion) bool) *hitRegion {
 // handle delivers the window-space ev to r's PointerHandler in the
 // coordinates r was painted in and reports whether it consumed it.
 func (r *hitRegion) handle(ev PointerEvent) bool {
+	delivered.Add(1)
 	return r.pointer.HandlePointer(r.pointerAt(ev))
 }
+
+// delivered counts the events handed to widgets, which may change how
+// they look with no signal written: a frame in which it moves is painted
+// whole.
+var delivered atomic.Uint64
 
 // send offers ev to regions under it from the top down until one consumes it
 // and returns that region, or nil.
@@ -643,6 +651,7 @@ func (in *inputState) focus(r *hitRegion, keyboard bool) {
 		return
 	}
 	if in.focused != nil && in.focused.key != nil {
+		delivered.Add(1)
 		in.focused.key.HandleKey(KeyEvent{Kind: KeyBlur})
 	}
 	if r != nil && r.key != nil {
