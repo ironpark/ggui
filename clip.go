@@ -74,7 +74,7 @@ func (c *Canvas) clipShape(bounds Rect, inside func(Point) bool, drawMask func(*
 // window when empty: a Layer's, or one more for an effect that needs it.
 func (c *Canvas) scratch(area image.Rectangle, fn func(img *ggfx.Image)) {
 	f := c.fs()
-	img := f.borrowLayer(c.root().Image)
+	img := f.borrowLayer(c.root().Image, area)
 	defer func() { f.layerDepth-- }()
 	if !area.Empty() {
 		img = img.SubImage(area).(*ggfx.Image)

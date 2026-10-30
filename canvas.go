@@ -92,11 +92,10 @@ type frameState struct {
 	semLast   int         // the node most recently recorded
 	semOff    bool        // nothing reads this frame's tree, so none is built
 
-	// The images Layer lends, the size of the window. Layers nest, so the
-	// one at index n belongs to the Layer open at depth n. They outlive the
-	// frame, so the next fade reuses them rather than allocating; the frame
-	// end frees those deeper than the frame reached.
-	layers     []*ggfx.Image
+	// The images Layer lends, by depth: as large as the areas the layers
+	// at that depth took this frame, kept for the next frame's, and freed
+	// at the end of one that took them no more.
+	layers     [][]layerImage
 	layerDepth int // Layers open now
 	layerPeak  int // the most open at once this frame
 

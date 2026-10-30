@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"image"
+	"slices"
 
 	"github.com/ironpark/ggfx"
 )
@@ -85,39 +86,103 @@ func (c *Canvas) layer(area image.Rectangle, paint func(*Canvas), draw func(*ggf
 	})
 }
 
-// borrowLayer returns the image for the next Layer depth, covering the
-// window image's coordinates. The caller clears what it paints into.
-func (f *frameState) borrowLayer(window *ggfx.Image) *ggfx.Image {
-	// Painting keeps the window's coordinates, so the layer covers them
-	// from the origin, which is the whole window when it starts there.
-	size := window.Bounds().Max
+// borrowLayer returns an image for the next Layer depth that covers area
+// of the window's coordinates, the whole window when area is empty. The
+// caller clears what it paints into.
+//
+// An image is only as large as an area asks for, on a grid of
+// layerGrid pixels so that one moving a little keeps it, rather than the
+// window's size: a fade along a tab bar 60 pixels tall took a layer of the
+// whole window, 80 MB on a 6K display. Each depth keeps the images its
+// areas took this frame, so layers taken in turn at the same depth over
+// different areas, as each pane's tab bar does, do not take and give back
+// an image each every frame.
+func (f *frameState) borrowLayer(window *ggfx.Image, area image.Rectangle) *ggfx.Image {
+	whole := window.Bounds()
+	if area.Empty() {
+		area = whole
+	}
 	i := f.layerDepth
 	f.layerDepth++
 	f.layerPeak = max(f.layerPeak, f.layerDepth)
-	if i == len(f.layers) {
+	for len(f.layers) <= i {
 		f.layers = append(f.layers, nil)
 	}
-	if img := f.layers[i]; img != nil {
-		if img.Bounds().Max == size {
-			return img
+	pool := f.layers[i]
+	// The smallest that holds the area.
+	best := -1
+	for j, l := range pool {
+		if area.In(l.img.Bounds()) && (best < 0 || pixels(l.img.Bounds()) < pixels(pool[best].img.Bounds())) {
+			best = j
 		}
-		img.Deallocate()
 	}
+	if best >= 0 {
+		pool[best].used = true
+		return pool[best].img
+	}
+	b := image.Rect(area.Min.X&^(layerGrid-1), area.Min.Y&^(layerGrid-1),
+		(area.Max.X+layerGrid-1)&^(layerGrid-1), (area.Max.Y+layerGrid-1)&^(layerGrid-1)).Intersect(whole)
+	if b.Empty() {
+		b = area
+	}
+	// What the new image holds, it replaces.
+	pool = slices.DeleteFunc(pool, func(l layerImage) bool {
+		if l.img.Bounds().In(b) {
+			l.img.Deallocate()
+			return true
+		}
+		return false
+	})
 	// Unmanaged, the layer is a texture of its own size: on the atlas it
 	// would take a page rounded up to powers of two, 4096×2048 for a
 	// 3252×1534 window, 32 MB rather than 20.
-	f.layers[i] = ggfx.NewImageWithOptions(image.Rect(0, 0, size.X, size.Y), &ggfx.NewImageOptions{Unmanaged: true})
-	return f.layers[i]
+	img := ggfx.NewImageWithOptions(b, &ggfx.NewImageOptions{Unmanaged: true})
+	f.layers[i] = append(pool, layerImage{img: img, used: true})
+	return img
 }
 
-// trimLayers keeps the first keep layer images, frees the rest, and starts
-// counting the next frame's peak.
-func (f *frameState) trimLayers(keep int) {
-	for _, img := range f.layers[keep:] {
-		img.Deallocate()
+// layerGrid is the grid in pixels a layer image's bounds are rounded out
+// to.
+const layerGrid = 64
+
+// layerImage is an image a layer depth keeps, and whether a layer took it
+// this frame.
+type layerImage struct {
+	img  *ggfx.Image
+	used bool
+}
+
+func pixels(r image.Rectangle) int { return r.Dx() * r.Dy() }
+
+// trimLayers ends a frame for the layer images: it frees those no layer
+// took this frame, and the depths past the deepest the frame opened.
+func (f *frameState) trimLayers() {
+	for i, pool := range f.layers {
+		f.layers[i] = slices.DeleteFunc(pool, func(l layerImage) bool {
+			if i >= f.layerPeak || !l.used {
+				l.img.Deallocate()
+				return true
+			}
+			return false
+		})
+		for j := range f.layers[i] {
+			f.layers[i][j].used = false
+		}
 	}
-	clear(f.layers[keep:])
-	f.layers = f.layers[:keep]
+	for len(f.layers) > 0 && len(f.layers[len(f.layers)-1]) == 0 {
+		f.layers = f.layers[:len(f.layers)-1]
+	}
+	f.layerPeak = 0
+}
+
+// freeLayersAll frees every layer image.
+func (f *frameState) freeLayersAll() {
+	for _, pool := range f.layers {
+		for _, l := range pool {
+			l.img.Deallocate()
+		}
+	}
+	f.layers = f.layers[:0]
 	f.layerPeak = 0
 }
 
@@ -125,13 +190,13 @@ func (f *frameState) trimLayers(keep int) {
 // had open at once and frees the rest.
 func (c *Canvas) trimLayers() {
 	if f := c.frame; f != nil {
-		f.trimLayers(f.layerPeak)
+		f.trimLayers()
 	}
 }
 
 // freeLayers frees every layer image, for an App or Probe that is closing.
 func (c *Canvas) freeLayers() {
 	if f := c.frame; f != nil {
-		f.trimLayers(0)
+		f.freeLayersAll()
 	}
 }

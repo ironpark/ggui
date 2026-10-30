@@ -12,7 +12,11 @@ func layerCount(c *Canvas) int {
 	if c.frame == nil {
 		return 0
 	}
-	return len(c.frame.layers)
+	n := 0
+	for _, pool := range c.frame.layers {
+		n += len(pool)
+	}
+	return n
 }
 
 func TestLayerSiblingsShareOneImage(t *testing.T) {
@@ -201,6 +205,33 @@ func TestLayerUnderAClipCoversTheClipAlone(t *testing.T) {
 	// A scaled layer can draw what was painted outside the clip into it.
 	if scaled != img.Bounds() {
 		t.Errorf("scaled layer under the clip covers %v; want the window", scaled)
+	}
+	c.freeLayers()
+}
+
+func TestALayerOverAStripTakesAnImageTheSizeOfTheStrip(t *testing.T) {
+	t.Parallel()
+	img := ggfx.NewImage(1000, 800)
+	defer img.Deallocate()
+	c := &Canvas{Image: img}
+	bar := func(y float64) *ggfx.Image {
+		var got *ggfx.Image
+		c.Clip(Rct(Pt(0, y), Sz(1000, 30))).Layer(LayerOptions{}, func(l *Canvas) { got = l.Image })
+		return got
+	}
+	for range 2 {
+		top, bottom := bar(0), bar(500)
+		if b := top.Bounds(); b.Dy() > 64 || b.Dx() > 1000 {
+			t.Fatalf("a layer over a 30-pixel strip covers %v", b)
+		}
+		if layerCount(c) != 2 || top.Bounds().Overlaps(bottom.Bounds()) {
+			t.Fatalf("two strips at one depth: %v and %v with %d pooled; want one image each", top.Bounds(), bottom.Bounds(), layerCount(c))
+		}
+		// The next frame takes the same images again.
+		c.trimLayers()
+		if layerCount(c) != 2 {
+			t.Fatalf("the frame's end kept %d of the strips' images; want both", layerCount(c))
+		}
 	}
 	c.freeLayers()
 }
