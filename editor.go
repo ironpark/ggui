@@ -92,13 +92,13 @@ type TextInputWidget struct {
 		out               string
 	}
 
-	cache     *CachedWidget
-	resolved  TextStyle
-	muted     color.Color
-	selection color.Color
-	rect      Rect            // where it was last painted, in logical pixels
-	scale     float64         // the Canvas scale at that paint
-	caretPx   image.Rectangle // the caret in screen pixels, for the IME
+	cache       *CachedWidget
+	resolved    TextStyle
+	muted       color.Color
+	selection   color.Color
+	rect        Rect            // where it was last painted, in logical pixels
+	scale       float64         // the Canvas scale at that paint
+	caretBounds image.Rectangle // the caret in logical pixels, for the IME
 }
 
 // TextInput creates an editor bound to value.
@@ -613,9 +613,9 @@ func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
 		t.scroll = caretX
 	}
 	x0 := r.Origin.X - t.scroll
-	t.caretPx = image.Rect(
-		int(dst.px(x0+caretX)), int(dst.px(r.Origin.Y)),
-		int(dst.px(x0+caretX))+1, int(dst.px(r.Origin.Y+h)),
+	t.caretBounds = image.Rect(
+		int(x0+caretX), int(r.Origin.Y),
+		int(x0+caretX)+1, int(r.Origin.Y+h),
 	)
 	if dst == nil || dst.Image == nil {
 		return
@@ -672,9 +672,9 @@ func (t *TextInputWidget) paintLines(dst *Canvas, r Rect) {
 		t.scroll = caretY
 	}
 	x0, y0 := r.Origin.X, r.Origin.Y-t.scroll
-	t.caretPx = image.Rect(
-		int(dst.px(x0+caretX)), int(dst.px(y0+caretY)),
-		int(dst.px(x0+caretX))+1, int(dst.px(y0+caretY+h)),
+	t.caretBounds = image.Rect(
+		int(x0+caretX), int(y0+caretY),
+		int(x0+caretX)+1, int(y0+caretY+h),
 	)
 	if dst == nil || dst.Image == nil {
 		return
@@ -879,7 +879,7 @@ func (t *TextInputWidget) imeSession() *textinput.SessionOptions {
 	lo, hi := t.ed.Selection()
 	t.imeStart, t.imeEnd = 0, len(t.ed.Text)
 	return &textinput.SessionOptions{
-		CaretBounds:     t.caretPx,
+		CaretBounds:     t.caretBounds,
 		TextBeforeCaret: t.ed.Text[:lo],
 		TextAfterCaret:  t.ed.Text[hi:],
 	}
@@ -910,7 +910,7 @@ func (t *TextInputWidget) HandleTick() bool {
 	if !t.Focused() || t.IsDisabled() {
 		return false
 	}
-	textinput.UpdateCaret(t.caretPx)
+	textinput.UpdateCaret(t.caretBounds)
 	handled, err := t.ime.Update()
 	if err != nil {
 		t.imeErr = err

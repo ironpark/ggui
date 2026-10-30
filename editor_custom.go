@@ -55,5 +55,5 @@ func (t *TextInputWidget) Select(anchor, caret int) {
 func (t *TextInputWidget) PaintCustom(dst *Canvas, r Rect, paint func(*Canvas, Rect, TextInputState) Rect) {
 	t.rect, t.scale = r, dst.Scale()
 	caret := paint(dst, r, t.EditingState())
-	t.caretPx = image.Rect(int(dst.px(caret.Origin.X)), int(dst.px(caret.Origin.Y)), int(dst.px(caret.Origin.X+caret.Size.W)), int(dst.px(caret.Origin.Y+caret.Size.H)))
+	t.caretBounds = image.Rect(int(caret.Origin.X), int(caret.Origin.Y), int(caret.Origin.X+caret.Size.W), int(caret.Origin.Y+caret.Size.H))
 }

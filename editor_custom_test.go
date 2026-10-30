@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"image"
 	"strings"
 	"testing"
 	"unicode"
@@ -38,7 +39,31 @@ func TestTextInputFilterNativeCommitsAndCaret(t *testing.T) {
 		}
 		return Rct(Pt(32, 8), Sz(1, 16))
 	})
-	if e.caretPx.Min.X != 32 {
+	if e.caretBounds.Min.X != 32 {
 		t.Fatal("custom IME caret")
+	}
+}
+
+// Native window APIs consume logical coordinates even on HiDPI displays.
+func TestTextInputIMECaretUsesLogicalCoordinates(t *testing.T) {
+	t.Parallel()
+	for _, scale := range []float64{1, 1.5, 2} {
+		for _, multiline := range []bool{false, true} {
+			e := TextInput(State(""))
+			e.multiline = multiline
+			e.Layout(Loose(Sz(200, 80)), Env{})
+			c := &Canvas{scale: scale}
+			e.Paint(c, Rct(Pt(32, 8), Sz(200, 80)))
+			want := image.Rect(32, 8, 33, int(8+e.height()))
+			if got := e.imeSession().CaretBounds; got != want {
+				t.Fatalf("scale %g multiline %v: got %v, want %v", scale, multiline, got, want)
+			}
+			e.PaintCustom(c, Rct(Point{}, Sz(200, 80)), func(*Canvas, Rect, TextInputState) Rect {
+				return Rct(Pt(32, 8), Sz(1, 16))
+			})
+			if got := e.imeSession().CaretBounds; got != image.Rect(32, 8, 33, 24) {
+				t.Fatalf("scale %g custom: got %v", scale, got)
+			}
+		}
 	}
 }
