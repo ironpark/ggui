@@ -18,7 +18,7 @@ type ResizableWidget struct {
 	laidFraction                        float64
 	fraction                            ggui.Binding[float64]
 	first, second                       ggui.Widget
-	withHandle                          bool
+	withHandle, hairline                bool
 	vertical                            bool
 	minFirst, minSecond                 float64
 	onChange                            func(float64)
@@ -49,6 +49,16 @@ func (r *ResizableWidget) Vertical() *ResizableWidget { r.vertical = true; retur
 func (r *ResizableWidget) WithHandle() *ResizableWidget {
 	defer property.Watch(&r.props, &r.withHandle)()
 	r.withHandle = true
+	return r
+}
+
+// Hairline lays the divider out as its line alone, so that the panes
+// meet at it and the line of a split nested in one of them runs up to
+// it. The divider is still grabbed across 8 logical pixels, over the
+// panes' edges.
+func (r *ResizableWidget) Hairline() *ResizableWidget {
+	defer property.Watch(&r.props, &r.hairline)()
+	r.hairline = true
 	return r
 }
 
@@ -98,7 +108,7 @@ func (r *ResizableWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if r.vertical {
 		main = size.H
 	}
-	handle := min(8.0, main)
+	handle := min(pick(r.hairline, 1.0, 8.0), main)
 	r.available = max(0, main-handle)
 	r.lo, r.hi = 0, 1
 	if r.available > 0 {
@@ -121,6 +131,11 @@ func (r *ResizableWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		r.firstRect = ggui.Rct(ggui.Pt(0, 0), ggui.Sz(first, size.H))
 		r.handle = ggui.Rct(ggui.Pt(first, 0.0), ggui.Sz(handle, size.H))
 		r.secondRect = ggui.Rct(ggui.Pt(first+handle, 0.0), ggui.Sz(second, size.H))
+	}
+	if r.hairline {
+		// Grabbed across as much as the full divider takes, centred on
+		// the line, within the split.
+		r.handle = grabArea(r.handle, r.vertical, size)
 	}
 	r.first.Layout(ggui.Tight(r.firstRect.Size), env)
 	r.second.Layout(ggui.Tight(r.secondRect.Size), env)
@@ -150,6 +165,17 @@ func (r *ResizableWidget) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 	line := ggui.Rct(ggui.Pt(center.X-.5, handle.Origin.Y), ggui.Sz(1, handle.Size.H))
 	if r.vertical {
 		line = ggui.Rct(ggui.Pt(handle.Origin.X, center.Y-.5), ggui.Sz(handle.Size.W, 1))
+	}
+	if r.hairline {
+		// The line is the gap between the panes, wherever the grab area
+		// was clamped to.
+		gap := r.firstRect.Size.W
+		line = ggui.Rct(ggui.Pt(rect.Origin.X+gap, rect.Origin.Y), ggui.Sz(1, rect.Size.H))
+		if r.vertical {
+			gap = r.firstRect.Size.H
+			line = ggui.Rct(ggui.Pt(rect.Origin.X, rect.Origin.Y+gap), ggui.Sz(rect.Size.W, 1))
+		}
+		center = line.Origin.Add(ggui.Pt(line.Size.W/2, line.Size.H/2))
 	}
 	dst.FillRect(line, col)
 	focus := handle
@@ -247,3 +273,15 @@ func (r *ResizableWidget) name() string {
 
 // Semantics implements ggui.Semantic, including the built-in fallback name.
 func (r *ResizableWidget) Semantics() (ggui.Role, string) { return r.Role, r.name() }
+
+// grabArea widens a hairline divider to the full divider's 8 logical
+// pixels across, centred on it and kept within size.
+func grabArea(line ggui.Rect, vertical bool, size ggui.Size) ggui.Rect {
+	const grab = 8.0
+	if vertical {
+		y := clamp(line.Origin.Y+line.Size.H/2-grab/2, 0, max(0, size.H-grab))
+		return ggui.Rct(ggui.Pt(0, y), ggui.Sz(size.W, min(grab, size.H)))
+	}
+	x := clamp(line.Origin.X+line.Size.W/2-grab/2, 0, max(0, size.W-grab))
+	return ggui.Rct(ggui.Pt(x, 0), ggui.Sz(min(grab, size.W), size.H))
+}

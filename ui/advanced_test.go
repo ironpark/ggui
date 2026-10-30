@@ -319,3 +319,34 @@ func TestResizableCapturesTouchDrag(t *testing.T) {
 		t.Fatal("disabled resize handle captures touch dragging")
 	}
 }
+
+func TestResizableHairlineLetsThePanesMeet(t *testing.T) {
+	t.Parallel()
+	fraction := ggui.State(.5)
+	var second ggui.Size
+	p := ggui.NewProbe(ui.Resizable(fraction, ggui.Box(), sizeOf(&second)).Hairline(), ggui.Sz(201, 100))
+	defer p.Close()
+	p.Frame()
+	if second.W != 100 {
+		t.Fatal("hairline divider takes more than its line", second)
+	}
+	// Grabbed a few pixels into the second pane.
+	p.Press(ggui.Pt(104, 50))
+	p.Move(ggui.Pt(124, 50))
+	p.Release(ggui.Pt(124, 50))
+	if math.Abs(ggui.Untrack(fraction.Get)-.6) > 1e-9 {
+		t.Fatal("hairline divider not grabbed beside its line", ggui.Untrack(fraction.Get))
+	}
+}
+
+// sizeOf lays out at the size it is given, noting it.
+type sizeOfWidget struct{ to *ggui.Size }
+
+func sizeOf(to *ggui.Size) ggui.Widget { return &sizeOfWidget{to} }
+
+func (s *sizeOfWidget) Layout(c ggui.Constraints, _ ggui.Env) ggui.Size {
+	*s.to = c.Constrain(ggui.Size{})
+	return *s.to
+}
+
+func (s *sizeOfWidget) Paint(*ggui.Canvas, ggui.Rect) {}
