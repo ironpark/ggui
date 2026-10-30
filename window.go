@@ -626,10 +626,21 @@ func (w *Window) catchUp() error {
 // every frame, a touch is down or files are being dragged over.
 func (w *Window) wantsFrame(f frameInput) bool {
 	wd := w.world()
-	if wd.anims.active() || wd.frame.timeRead() || len(w.frame) > 0 || w.hasPosted() {
-		return true
+	switch {
+	case wd.anims.active():
+		framesFor[frameForAnimation].Add(1)
+	case wd.frame.timeRead():
+		framesFor[frameForTime].Add(1)
+	case len(w.frame) > 0:
+		framesFor[frameForCallback].Add(1)
+	case w.hasPosted():
+		framesFor[frameForPosted].Add(1)
+	case f.drag || w.touch.active || w.touch.waiting || w.input.touchMotion.target != nil:
+		framesFor[frameForInput].Add(1)
+	default:
+		return false
 	}
-	return f.drag || w.touch.active || w.touch.waiting || w.input.touchMotion.target != nil
+	return true
 }
 
 // dispatchInput lets an existing app drag finish before the overlay can
