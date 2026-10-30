@@ -1153,6 +1153,8 @@ type ScrollWidget struct {
 	dragStart, dragOffset float64
 
 	phys scrollPhysics // overscroll, snapping and animated scrolls; see scroll_physics.go
+
+	fade float64 // how far in the content fades out at an end with more past it
 }
 
 // Key gives the scroll an identity, so a rebuilt one that also moved keeps
@@ -1191,6 +1193,12 @@ func Scroll(child Widget) *ScrollWidget {
 
 // Horizontal scrolls along the x axis instead of the y axis.
 func (s *ScrollWidget) Horizontal() *ScrollWidget { s.horizontal = true; return s }
+
+// FadeEdges fades the content out over width logical pixels at an end
+// with more of it past that end, and as the end comes near, the fade
+// narrows to nothing: a hint that the content goes on, without a line or
+// a surface. It paints the content through a layer.
+func (s *ScrollWidget) FadeEdges(width float64) *ScrollWidget { s.fade = max(width, 0); return s }
 
 // Shrink makes the scroll, along its axis, only as long as its content
 // while that fits, where it would otherwise take all it is offered: a row
@@ -1352,7 +1360,14 @@ func (s *ScrollWidget) Paint(dst *Canvas, r Rect) {
 	s.followFirst()
 	s.phys.paint(s)
 	dst.Node(r, Node{Role: RoleGroup, Actions: ActionScrollIntoView}, func(dst *Canvas) {
-		s.paintContent(dst.Clip(r), r)
+		clip := dst.Clip(r)
+		if s.fade <= 0 {
+			s.paintContent(clip, r)
+			return
+		}
+		pos := s.position()
+		lead, trail := min(s.fade, max(pos, 0)), min(s.fade, max(s.maxOffset()-pos, 0))
+		clip.FadeEdges(r, s.horizontal, lead, trail, func(dst *Canvas) { s.paintContent(dst, r) })
 	})
 	s.paintBar(dst, r)
 }
