@@ -4,6 +4,7 @@ import (
 	"image"
 	"image/color"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -172,6 +173,8 @@ type Window struct {
 	motionTTL  int
 	motionWhy  string // why the next frame may not be painted in part, or "ok"
 	dirty      atomic.Bool
+	repaintMu  sync.Mutex
+	repaints   []Rect // asked for by RepaintRect since the last frame
 
 	focused  *StateValue[bool]
 	viewport *StateValue[Size]
@@ -725,12 +728,17 @@ func (w *Window) draw(screen *ggfx.Image, scale float64) {
 		dirty = dirty || scale != w.canvas.scale
 		w.canvas.scale = scale
 	}
+	asked := w.takeRepaints()
+	if len(asked) > 0 {
+		// Painted in part, a region asked for needs the last frame kept.
+		w.motionTTL = motionFrames
+	}
 	target := w.paintTarget(screen)
-	if dirty {
-		if w.motionWhy != "" {
+	if wanted := len(w.motion) > 0 || len(asked) > 0; dirty {
+		if wanted {
 			refusePartial("dirty")
 		}
-	} else if w.drawPartial(screen, target) {
+	} else if wanted && w.drawPartial(screen, target, asked) {
 		return
 	}
 	target.Fill(w.background())

@@ -162,8 +162,6 @@ func (w *Window) noteMotion(screen, target *ggfx.Image) {
 	// the last whole one: none may have been painted, nor anything that
 	// reads every frame or traces it.
 	switch {
-	case len(w.motion) == 0:
-		w.motionWhy = ""
 	case f.motionLost:
 		w.motionWhy = "unplaced"
 	case f.overlaid:
@@ -181,10 +179,11 @@ func (w *Window) noteMotion(screen, target *ggfx.Image) {
 	w.motionSize = target.Bounds().Size()
 }
 
-// drawPartial paints a frame that only time asked for within the last
-// frame's motion regions, onto the last frame in target, and reports
-// false, painting nothing, when the frame must be painted whole.
-func (w *Window) drawPartial(screen, target *ggfx.Image) bool {
+// drawPartial paints a frame that only time and RepaintRect asked for
+// within the last frame's motion regions and asked, onto the last frame in
+// target, and reports false, painting nothing, when the frame must be
+// painted whole.
+func (w *Window) drawPartial(screen, target *ggfx.Image, asked []Rect) bool {
 	if !w.motionOK {
 		refusePartial(w.motionWhy)
 		return false
@@ -212,6 +211,10 @@ func (w *Window) drawPartial(screen, target *ggfx.Image) bool {
 	c.Image = target
 	c.window, c.onScreen = true, false
 	f := c.fs()
+	damage := w.motion
+	if len(asked) > 0 {
+		damage = motionRegions(append(slices.Clone(w.motion), asked...), Rct(Point{}, logical))
+	}
 	f.startMotion()
 	f.backdrop = false
 	// Nothing painted registers anything, but what slips past the inert
@@ -221,7 +224,7 @@ func (w *Window) drawPartial(screen, target *ggfx.Image) bool {
 	f.partial = true
 	func() {
 		defer property.EnterLayout()()
-		for _, d := range w.motion {
+		for _, d := range damage {
 			f.damage = d
 			at := c.Clip(d)
 			at.inert = true
@@ -285,4 +288,48 @@ func ReadMotionReport() MotionReport {
 		r.Refusals[k] = v
 	}
 	return r
+}
+
+// RepaintRect asks for r, in the window's logical coordinates, to be
+// painted again in the next frame, for a widget whose look changed with
+// no signal written, as a terminal's does as output comes: if nothing else
+// changed by then, the frame paints r alone, and what lies beside it is
+// left as it was. Safe to call from any goroutine.
+func (w *Window) RepaintRect(r Rect) {
+	if r.Empty() {
+		return
+	}
+	w.repaintMu.Lock()
+	if len(w.repaints) >= mostRepaints {
+		// Past so many, the one region around them all.
+		for _, o := range w.repaints {
+			r = cover(r, o)
+		}
+		w.repaints = w.repaints[:0]
+	}
+	w.repaints = append(w.repaints, r)
+	w.repaintMu.Unlock()
+	w.wakeFrame()
+}
+
+// mostRepaints is how many asked regions a frame keeps apart.
+const mostRepaints = 32
+
+// takeRepaints returns the regions asked for since the last frame.
+func (w *Window) takeRepaints() []Rect {
+	w.repaintMu.Lock()
+	defer w.repaintMu.Unlock()
+	out := slices.Clone(w.repaints)
+	w.repaints = w.repaints[:0]
+	return out
+}
+
+// WindowRect returns where r, in the coordinates dst paints in, lies in
+// the window, for a widget to hand to RepaintRect later, and false where
+// that cannot be told: under a Transform or a shape clip.
+func (c *Canvas) WindowRect(r Rect) (Rect, bool) {
+	if c == nil || c.space != nil {
+		return Rect{}, false
+	}
+	return r, true
 }

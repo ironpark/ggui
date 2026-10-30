@@ -92,3 +92,40 @@ func TestAPartialFrameSkipsWhatItsRegionMisses(t *testing.T) {
 		t.Fatal("a whole frame skipped a widget")
 	}
 }
+
+func TestRepaintRectQueuesRegionsForTheNextFrame(t *testing.T) {
+	w := &Window{}
+	w.RepaintRect(Rect{})
+	w.RepaintRect(Rct(Pt(10, 10), Sz(20, 20)))
+	w.RepaintRect(Rct(Pt(300, 10), Sz(20, 20)))
+	if got := w.takeRepaints(); len(got) != 2 {
+		t.Fatalf("asked %v; want the two regions, not the empty one", got)
+	}
+	if got := w.takeRepaints(); len(got) != 0 {
+		t.Fatalf("asked %v after they were taken", got)
+	}
+	for i := range mostRepaints + 1 {
+		w.RepaintRect(Rct(Pt(float64(i)*10, 0), Sz(5, 5)))
+	}
+	got := w.takeRepaints()
+	if len(got) > mostRepaints {
+		t.Fatalf("%d regions kept apart; want at most %d", len(got), mostRepaints)
+	}
+	all := got[0]
+	for _, r := range got[1:] {
+		all = cover(all, r)
+	}
+	if all.Origin.X != 0 || all.Origin.X+all.Size.W != float64(mostRepaints)*10+5 {
+		t.Fatalf("regions %v lost some of what was asked", got)
+	}
+}
+
+func TestWindowRectIsKnownOutsideATransformOnly(t *testing.T) {
+	r := Rct(Pt(5, 5), Sz(10, 10))
+	if got, ok := (&Canvas{}).WindowRect(r); !ok || got != r {
+		t.Fatalf("got %v, %v; want %v", got, ok, r)
+	}
+	if _, ok := (&Canvas{space: &paintSpace{}}).WindowRect(r); ok {
+		t.Fatal("a rect under a transform was placed in the window")
+	}
+}
