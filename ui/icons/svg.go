@@ -68,6 +68,15 @@ func (s *SVG) rasterize(size int) *image.RGBA {
 	return img
 }
 
+// Image is the icon drawn size pixels square, in white over clear: a mask
+// whose alpha is the icon, as a template image wants, such as a tray's.
+func (s *SVG) Image(size int) *image.RGBA {
+	if s == nil || size < 1 {
+		return nil
+	}
+	return s.rasterize(size)
+}
+
 // Draw paints the icon centered in r, preserving its aspect ratio. Rotation is
 // clockwise in radians. Call on the UI thread, as with other Canvas methods.
 func (s *SVG) Draw(dst *ggui.Canvas, r ggui.Rect, col color.Color, rotation float64) {

@@ -38,3 +38,24 @@ func TestSetResolutionPrecedenceAndFallback(t *testing.T) {
 		}
 	}
 }
+
+func TestSVGImageIsAWhiteMask(t *testing.T) {
+	t.Parallel()
+	a, err := Parse([]byte(`<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="6" stroke="currentColor" fill="none" stroke-width="2"/></svg>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	img := a.Image(36)
+	if img.Bounds().Dx() != 36 || img.Bounds().Dy() != 36 {
+		t.Fatalf("image is %v, want 36 square", img.Bounds())
+	}
+	if got := img.RGBAAt(18, 9); got.A == 0 || got.R != got.A || got.G != got.A || got.B != got.A {
+		t.Fatalf("on the ring %v, want white of its coverage", got)
+	}
+	if img.RGBAAt(18, 18).A != 0 || img.RGBAAt(1, 1).A != 0 {
+		t.Fatal("inside or outside the ring is not clear")
+	}
+	if (*SVG)(nil).Image(36) != nil || a.Image(0) != nil {
+		t.Fatal("an image from no icon, or of no size")
+	}
+}
