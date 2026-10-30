@@ -170,6 +170,7 @@ type Window struct {
 	motionGen  uint64
 	motionSize image.Point
 	motionTTL  int
+	motionWhy  string // why the next frame may not be painted in part, or "ok"
 	dirty      atomic.Bool
 
 	focused  *StateValue[bool]
@@ -725,7 +726,11 @@ func (w *Window) draw(screen *ggfx.Image, scale float64) {
 		w.canvas.scale = scale
 	}
 	target := w.paintTarget(screen)
-	if !dirty && w.drawPartial(screen, target) {
+	if dirty {
+		if w.motionWhy != "" {
+			refusePartial("dirty")
+		}
+	} else if w.drawPartial(screen, target) {
 		return
 	}
 	target.Fill(w.background())

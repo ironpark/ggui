@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"slices"
+	"sync"
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/internal/property"
@@ -54,15 +55,17 @@ func (f *frameState) openScope(c *Canvas, r Rect, marks uint64) {
 // closeScope ends the widget's scope: a widget that read the time itself
 // leaves its bounds as a motion region, and its bounds and marks go to its
 // parent's.
-func (f *frameState) closeScope(marks uint64) {
+func (f *frameState) closeScope(w Widget, marks uint64) {
 	s := f.scopes[len(f.scopes)-1]
 	f.scopes = f.scopes[:len(f.scopes)-1]
 	total := marks - s.start
 	if total-s.kids > 0 {
 		if s.placed && !s.bounds.Empty() {
 			f.motion = append(f.motion, s.bounds)
+			f.movers = append(f.movers, widgetName(w))
 		} else {
 			f.motionLost = true
+			f.movers = append(f.movers, widgetName(w)+" (unplaced)")
 		}
 	}
 	if n := len(f.scopes); n > 0 {
@@ -141,7 +144,7 @@ const motionFrames = 120
 
 // startMotion clears what the last frame noted of its motion.
 func (f *frameState) startMotion() {
-	f.scopes, f.motion = f.scopes[:0], f.motion[:0]
+	f.scopes, f.motion, f.movers = f.scopes[:0], f.motion[:0], f.movers[:0]
 	f.motionLost, f.overlaid = false, false
 }
 
@@ -158,8 +161,22 @@ func (w *Window) noteMotion(screen, target *ggfx.Image) {
 	// Painted in part, the frame keeps the input, semantics and overlays of
 	// the last whole one: none may have been painted, nor anything that
 	// reads every frame or traces it.
-	w.motionOK = len(w.motion) > 0 && !f.motionLost && !f.overlaid && target != screen &&
-		w.overlay == nil && !w.inspect && len(w.sinks) == 0 && len(w.frame) == 0
+	switch {
+	case len(w.motion) == 0:
+		w.motionWhy = ""
+	case f.motionLost:
+		w.motionWhy = "unplaced"
+	case f.overlaid:
+		w.motionWhy = "overlay"
+	case target == screen:
+		w.motionWhy = "no backbuffer"
+	case w.overlay != nil || w.inspect || len(w.sinks) > 0 || len(w.frame) > 0:
+		w.motionWhy = "inspected"
+	default:
+		w.motionWhy = "ok"
+	}
+	w.motionOK = w.motionWhy == "ok"
+	noteMovers(f.movers)
 	w.motionGen = reactive.StateGen()
 	w.motionSize = target.Bounds().Size()
 }
@@ -168,13 +185,18 @@ func (w *Window) noteMotion(screen, target *ggfx.Image) {
 // frame's motion regions, onto the last frame in target, and reports
 // false, painting nothing, when the frame must be painted whole.
 func (w *Window) drawPartial(screen, target *ggfx.Image) bool {
-	if !w.motionOK || target == screen || target.Bounds().Size() != w.motionSize ||
-		w.closed || w.root == nil {
+	if !w.motionOK {
+		refusePartial(w.motionWhy)
+		return false
+	}
+	if target == screen || target.Bounds().Size() != w.motionSize || w.closed || w.root == nil {
+		refusePartial("resized")
 		return false
 	}
 	changed := func() bool { return reactive.StateGen() != w.motionGen || layoutGen() != w.seenGen }
 	logical := Sz(w.canvas.dp(float64(screen.Bounds().Dx())), w.canvas.dp(float64(screen.Bounds().Dy())))
 	if changed() || Untrack(w.viewport.Get) != logical {
+		refusePartial("state changed")
 		return false
 	}
 	setRunning(&w.frameLoop)
@@ -183,6 +205,7 @@ func (w *Window) drawPartial(screen, target *ggfx.Image) bool {
 		return true
 	}
 	if changed() || w.closed || w.root == nil {
+		refusePartial("state changed")
 		return false
 	}
 	c := &w.canvas
@@ -215,4 +238,51 @@ func (w *Window) drawPartial(screen, target *ggfx.Image) bool {
 	w.noteMotion(screen, target)
 	w.presentBackdrop(screen, target)
 	return true
+}
+
+// What moved and why frames were painted whole, for MotionReport.
+var (
+	motionMu        sync.Mutex
+	lastMovers      []string
+	partialRefusals = map[string]int64{}
+)
+
+func noteMovers(movers []string) {
+	motionMu.Lock()
+	lastMovers = append(lastMovers[:0], movers...)
+	motionMu.Unlock()
+}
+
+// refusePartial counts a frame only time asked for that was painted whole,
+// by why: "" when nothing had moved is not counted.
+func refusePartial(why string) {
+	if why == "" {
+		return
+	}
+	motionMu.Lock()
+	partialRefusals[why]++
+	motionMu.Unlock()
+}
+
+// MotionReport is what moved in the last frame a window painted, by
+// widget type, and how many frames since the program started could have
+// been painted in part but were painted whole, by why: "dirty" when
+// something else asked for them, "state changed", "overlay",
+// "unplaced" when what moved was under a transform, "inspected",
+// "resized", "no backbuffer".
+type MotionReport struct {
+	Movers   []string
+	Refusals map[string]int64
+}
+
+// ReadMotionReport reports what moves and what keeps frames whole. It is
+// safe to call from any goroutine.
+func ReadMotionReport() MotionReport {
+	motionMu.Lock()
+	defer motionMu.Unlock()
+	r := MotionReport{Movers: slices.Clone(lastMovers), Refusals: make(map[string]int64, len(partialRefusals))}
+	for k, v := range partialRefusals {
+		r.Refusals[k] = v
+	}
+	return r
 }

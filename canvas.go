@@ -112,6 +112,7 @@ type frameState struct {
 	scopes     []paintScope
 	motion     []Rect
 	motionLost bool
+	movers     []string // the widgets behind motion, by type
 	partial    bool
 	damage     Rect
 	overlaid   bool // an overlay was painted this frame
@@ -324,7 +325,7 @@ func (c *Canvas) Paint(w Widget, r Rect) {
 	}
 	fs.openScope(c, r, clock.marks.Load())
 	w.Paint(c, r)
-	fs.closeScope(clock.marks.Load())
+	fs.closeScope(w, clock.marks.Load())
 }
 
 var widgetNames sync.Map // reflect.Type -> string; names never change
