@@ -79,7 +79,7 @@ func (t *RichTextWidget) ConsumesKey(ev KeyEvent) bool {
 	}
 	switch ev.Key {
 	case KeyEscape:
-		return t.ed.HasSelection()
+		return t.ed.HasSelection() || t.area != nil && t.area.spans
 	case KeyArrowLeft, KeyArrowRight, KeyHome, KeyEnd:
 		return ev.Mods.Shift
 	}
@@ -103,14 +103,21 @@ func (t *RichTextWidget) HandleKey(ev KeyEvent) {
 		m := ev.Mods
 		switch ev.Key {
 		case KeyA:
-			if m.Cmd() {
+			if m.Cmd() && t.area != nil {
+				t.area.selectAll()
+			} else if m.Cmd() {
 				t.ed.SelectAll()
 			}
 		case KeyC:
-			if m.Cmd() && t.ed.HasSelection() {
+			if m.Cmd() && t.area != nil && t.area.spans {
+				currentClipboard().Write(t.area.SelectedText())
+			} else if m.Cmd() && t.ed.HasSelection() {
 				currentClipboard().Write(t.ed.Selected())
 			}
 		case KeyEscape:
+			if t.area != nil {
+				t.area.clear(nil)
+			}
 			t.ed.MoveTo(t.ed.Caret, false)
 		case KeyArrowLeft, KeyArrowRight:
 			if m.Shift {
@@ -128,6 +135,9 @@ func (t *RichTextWidget) HandleKey(ev KeyEvent) {
 // start, a drag extends it, and repeated clicks select a word, then the
 // line.
 func (t *RichTextWidget) HandlePointer(ev PointerEvent) bool {
+	if t.area != nil {
+		return t.area.pointer(t, ev)
+	}
 	switch ev.Kind {
 	case PointerDown:
 		if ev.Button != MouseButtonLeft {

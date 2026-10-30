@@ -80,6 +80,7 @@ type RichTextWidget struct {
 	// The selection, for a Selectable paragraph.
 	ed      textedit.Editor
 	focused bool
+	area    *SelectionAreaWidget // the SelectionArea it is in, if any
 	clicks  clickSelector
 	rect    Rect
 
@@ -232,6 +233,10 @@ func (t *RichTextWidget) alignment() float64 {
 // Layout implements Widget.
 func (t *RichTextWidget) Layout(c Constraints, env Env) Size {
 	defer t.props.Layout().EndLayout()
+	t.area = nil
+	if t.selectable {
+		t.area, _ = env.Get(selectionAreaKey)
+	}
 	// The links outlive a layout that changed no span, so that one keeps
 	// its focus and hover; a new tap func is picked up either way.
 	spans := t.spans.Get()
@@ -331,6 +336,9 @@ func (t *RichTextWidget) Paint(dst *Canvas, r Rect) {
 		// after them, are on top and take the clicks and the cursor.
 		dst.HitPointer(r, t)
 		dst.HitKey(r, t)
+		if t.area != nil {
+			t.area.painted(t)
+		}
 		dst.HitCursor(r, CursorShapeText)
 		dst.DescribeNode(r, t, described)
 	case p.text != "" && !dst.named(r):
@@ -341,7 +349,9 @@ func (t *RichTextWidget) Paint(dst *Canvas, r Rect) {
 	if dst == nil || dst.Image == nil || dst.Image.Bounds().Empty() {
 		return
 	}
-	if t.selectable && t.focused && t.ed.HasSelection() {
+	// In a SelectionArea the selection shows wherever the focus is: one
+	// selection runs through many texts, and only one has the focus.
+	if t.selectable && (t.focused || t.area != nil) && t.ed.HasSelection() {
 		lo, hi := t.ed.Selection()
 		p.rects(lo, hi, r.Size.W, align, func(b Rect) {
 			dst.FillRect(Rct(r.Origin.Add(b.Origin), b.Size), t.selection)
