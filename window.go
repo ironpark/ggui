@@ -507,6 +507,8 @@ func (w *Window) runFrameEvent(ev ggwd.FrameEvent) error {
 	if w.closed {
 		return nil
 	}
+	start := time.Now()
+	defer func() { countFrame(time.Since(start)) }()
 	// The glyph and shaping caches expire after so many frames unused.
 	text.AdvanceTick()
 	// Frames run here, whichever goroutine the engine calls this on. A Probe
