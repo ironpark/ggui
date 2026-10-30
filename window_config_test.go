@@ -108,16 +108,17 @@ func TestEventWindowIsTheWindowEachEventNames(t *testing.T) {
 	t.Parallel()
 	nw := new(ggwd.Window)
 	for _, ev := range []ggwd.Event{
-		ggwd.FrameEvent{Window: nw}, ggwd.ResizeEvent{Window: nw}, ggwd.FocusEvent{Window: nw},
-		ggwd.WindowStateEvent{Window: nw}, ggwd.CloseEvent{Window: nw}, ggwd.KeyEvent{Window: nw}, ggwd.TextEvent{Window: nw},
-		ggwd.CompositionEvent{Window: nw}, ggwd.MouseMoveEvent{Window: nw}, ggwd.MouseButtonEvent{Window: nw},
+		ggwd.FrameEvent{Window: nw}, ggwd.ResizeEvent{Window: nw}, ggwd.MoveEvent{Window: nw}, ggwd.FocusEvent{Window: nw},
+		ggwd.WindowStateEvent{Window: nw}, ggwd.CloseEvent{Window: nw}, ggwd.ClosedEvent{Window: nw}, ggwd.KeyEvent{Window: nw},
+		ggwd.TextEvent{Window: nw}, ggwd.CompositionEvent{Window: nw}, ggwd.MouseMoveEvent{Window: nw},
+		ggwd.MouseEnterEvent{Window: nw}, ggwd.MouseButtonEvent{Window: nw},
 		ggwd.ScrollEvent{Window: nw}, ggwd.TouchEvent{Window: nw}, ggwd.DragEvent{Window: nw}, ggwd.DropEvent{Window: nw},
 	} {
 		if got := eventWindow(ev); got != nw {
 			t.Errorf("eventWindow(%T) = %p, want the event's window", ev, got)
 		}
 	}
-	for _, ev := range []ggwd.Event{ggwd.StartEvent{}, ggwd.WakeEvent{}} {
+	for _, ev := range []ggwd.Event{ggwd.StartEvent{}, ggwd.WakeEvent{}, ggwd.SystemColorModeEvent{}, ggwd.MonitorEvent{}} {
 		if got := eventWindow(ev); got != nil {
 			t.Errorf("eventWindow(%T) = %p, want none", ev, got)
 		}

@@ -75,8 +75,8 @@ func HandleEvent(event ggwd.Event) bool {
 			// The IME passed the key on: it still reaches the editor.
 			st.CommitKind = commitWithPassthroughKey
 		}
-		if e.HasReplacement {
-			st.ReplacementStartInBytes, st.ReplacementEndInBytes = e.ReplacementStart, e.ReplacementEnd
+		if r := e.Replacement; r != nil {
+			st.ReplacementStartInBytes, st.ReplacementEndInBytes = r.Start, r.End
 			st.ReplacementRelativeToCaret = true
 		}
 		t.events.send(st)

@@ -80,7 +80,7 @@ func TestNativeReplacementIsRelativeToReceivingCaret(t *testing.T) {
 	w := new(ggwd.Window)
 	input := testWindowInput(t, w)
 	ch, _ := input.events.start()
-	HandleEvent(ggwd.TextEvent{Window: w, Text: "é", HasReplacement: true, ReplacementStart: -1, ReplacementEnd: 0})
+	HandleEvent(ggwd.TextEvent{Window: w, Text: "é", Replacement: &ggwd.TextRange{Start: -1, End: 0}})
 	s := <-ch
 	if !s.ReplacementRelativeToCaret || s.ReplacementStartInBytes != -1 || s.ReplacementEndInBytes != 0 {
 		t.Fatalf("replacement: %+v", s)

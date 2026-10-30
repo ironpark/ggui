@@ -81,8 +81,8 @@ func (c Config) withDefaults() Config {
 func (c Config) options() *ggwd.WindowOptions {
 	o := &ggwd.WindowOptions{
 		Title:       c.Title,
-		Width:       c.Width,
-		Height:      c.Height,
+		Width:       float64(c.Width),
+		Height:      float64(c.Height),
 		Resizable:   c.Resizable,
 		Undecorated: c.Frameless,
 		Floating:    c.AlwaysOnTop,
@@ -90,13 +90,13 @@ func (c Config) options() *ggwd.WindowOptions {
 		Hidden:      c.Hidden,
 		Maximized:   c.Maximized,
 		Unfocused:   c.Unfocused,
-		MinWidth:    c.MinWidth,
-		MinHeight:   c.MinHeight,
-		MaxWidth:    c.MaxWidth,
-		MaxHeight:   c.MaxHeight,
+		MinWidth:    float64(c.MinWidth),
+		MinHeight:   float64(c.MinHeight),
+		MaxWidth:    float64(c.MaxWidth),
+		MaxHeight:   float64(c.MaxHeight),
 	}
 	if c.Position != nil {
-		o.Position = &image.Point{X: int(c.Position.X), Y: int(c.Position.Y)}
+		o.Position = &ggwd.Point{X: c.Position.X, Y: c.Position.Y}
 	}
 	return o
 }

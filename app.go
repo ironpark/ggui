@@ -172,7 +172,7 @@ func (a *App) Run() error {
 	runningApp.Store(a)
 	// Holding a key on macOS pops up the accent menu, as it does in every
 	// text field on the platform; text editing relies on it.
-	return ggwd.Run(ggwd.HandlerFunc(a.handleEvent), &ggwd.RunOptions{ApplePressAndHoldEnabled: true})
+	return ggwd.Run(ggwd.HandlerFunc(a.handleEvent), &ggwd.RunOptions{MacOS: ggwd.MacOSOptions{PressAndHold: true}})
 }
 
 // handleEvent is the App's ggwd.Handler. It opens the windows made before
@@ -327,11 +327,15 @@ func eventWindow(ev ggwd.Event) *ggwd.Window {
 		return ev.Window
 	case ggwd.ResizeEvent:
 		return ev.Window
+	case ggwd.MoveEvent:
+		return ev.Window
 	case ggwd.FocusEvent:
 		return ev.Window
 	case ggwd.WindowStateEvent:
 		return ev.Window
 	case ggwd.CloseEvent:
+		return ev.Window
+	case ggwd.ClosedEvent:
 		return ev.Window
 	case ggwd.KeyEvent:
 		return ev.Window
@@ -340,6 +344,8 @@ func eventWindow(ev ggwd.Event) *ggwd.Window {
 	case ggwd.CompositionEvent:
 		return ev.Window
 	case ggwd.MouseMoveEvent:
+		return ev.Window
+	case ggwd.MouseEnterEvent:
 		return ev.Window
 	case ggwd.MouseButtonEvent:
 		return ev.Window

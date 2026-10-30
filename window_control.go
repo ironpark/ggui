@@ -25,8 +25,7 @@ func (w *Window) SetTitle(title string) {
 // Size returns the size of the window's content, in logical pixels.
 func (w *Window) Size() Size {
 	if nw := w.window.Load(); nw != nil {
-		width, height := nw.Size()
-		return Sz(float64(width), float64(height))
+		return Sz(nw.Size())
 	}
 	return Sz(float64(w.cfg.Width), float64(w.cfg.Height))
 }
@@ -34,14 +33,13 @@ func (w *Window) Size() Size {
 // SetSize resizes the window's content to size, in logical pixels.
 func (w *Window) SetSize(size Size) {
 	w.cfg.Width, w.cfg.Height = int(size.W), int(size.H)
-	w.native(func(nw *ggwd.Window) { nw.SetSize(w.cfg.Width, w.cfg.Height) })
+	w.native(func(nw *ggwd.Window) { nw.SetSize(float64(w.cfg.Width), float64(w.cfg.Height)) })
 }
 
 // Position returns where the window is on the screen, in logical pixels.
 func (w *Window) Position() Point {
 	if nw := w.window.Load(); nw != nil {
-		x, y := nw.Position()
-		return Pt(float64(x), float64(y))
+		return Pt(nw.Position())
 	}
 	if w.cfg.Position != nil {
 		return *w.cfg.Position
@@ -53,7 +51,7 @@ func (w *Window) Position() Point {
 func (w *Window) SetPosition(p Point) {
 	w.cfg.Position = &p
 	if nw := w.window.Load(); nw != nil {
-		nw.SetPosition(int(p.X), int(p.Y))
+		nw.SetPosition(p.X, p.Y)
 	}
 }
 
@@ -62,14 +60,8 @@ func (w *Window) SetPosition(p Point) {
 func (w *Window) SetSizeLimits(minSize, maxSize Size) {
 	w.cfg.MinWidth, w.cfg.MinHeight = int(minSize.W), int(minSize.H)
 	w.cfg.MaxWidth, w.cfg.MaxHeight = int(maxSize.W), int(maxSize.H)
-	limit := func(v int) int {
-		if v <= 0 {
-			return -1
-		}
-		return v
-	}
 	w.native(func(nw *ggwd.Window) {
-		nw.SetSizeLimits(limit(w.cfg.MinWidth), limit(w.cfg.MinHeight), limit(w.cfg.MaxWidth), limit(w.cfg.MaxHeight))
+		nw.SetSizeLimits(float64(w.cfg.MinWidth), float64(w.cfg.MinHeight), float64(w.cfg.MaxWidth), float64(w.cfg.MaxHeight))
 	})
 }
 
