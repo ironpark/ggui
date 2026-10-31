@@ -160,17 +160,15 @@ type Window struct {
 	backbuf     *ggfx.Image
 	backdropTTL int
 
-	// A frame only time asks for is painted in part, into the backbuffer
-	// (see damage.go): motion is the regions it paints, motionOK whether
-	// the last frame allows it, motionGen and motionSize the state and the
-	// size it was painted at, and motionTTL the frames the backbuffer is
-	// kept after the last motion. dirty is set by all else that asks for a
-	// frame, which then paints whole.
+	// A frame only time asks for is painted in part, over the last frame
+	// where it is kept (see damage.go): motion is the regions it paints,
+	// motionOK whether the last frame allows it, and motionGen and
+	// motionSize the state and the size it was painted at. dirty is set by
+	// all else that asks for a frame, which then paints whole.
 	motion     []Rect
 	motionOK   bool
 	motionGen  uint64
 	motionSize image.Point
-	motionTTL  int
 	motionWhy  string // why the next frame may not be painted in part, or "ok"
 	dirty      atomic.Bool
 	repaintMu  sync.Mutex
@@ -600,7 +598,7 @@ func (w *Window) runFrameEvent(ev ggwd.FrameEvent) error {
 // paintTarget returns the image this frame paints into: screen, or the
 // backbuffer while a BackdropBlur has wanted one recently.
 func (w *Window) paintTarget(screen *ggfx.Image) *ggfx.Image {
-	if w.backdropTTL == 0 && w.motionTTL == 0 {
+	if w.backdropTTL == 0 {
 		return screen
 	}
 	size := screen.Bounds().Size()
@@ -631,8 +629,8 @@ func (w *Window) presentBackdrop(screen, target *ggfx.Image) {
 	} else if w.backdropTTL > 0 {
 		w.backdropTTL--
 	}
-	// Kept for neither a blur nor a motion, it goes, after this copy.
-	if w.backdropTTL == 0 && w.motionTTL == 0 {
+	// Kept for no blur, it goes, after this copy.
+	if w.backdropTTL == 0 {
 		w.freeBackbuf()
 	}
 }
@@ -737,10 +735,6 @@ func (w *Window) draw(screen *ggfx.Image, scale float64) {
 		w.canvas.scale = scale
 	}
 	asked := w.takeRepaints()
-	if len(asked) > 0 {
-		// Painted in part, a region asked for needs the last frame kept.
-		w.motionTTL = motionFrames
-	}
 	target := w.paintTarget(screen)
 	if wanted := len(w.motion) > 0 || len(asked) > 0; dirty {
 		if wanted {

@@ -12,10 +12,15 @@ import (
 // A frame that only time asks for, because a widget read the clock, eased
 // a value, or asked to be painted again at an instant, changes only where
 // those widgets paint: a caret blinking, a dot breathing, a hover fading.
-// The window keeps the last frame in its backbuffer and paints such a
-// frame there alone, within those regions, rather than the whole window
-// again for a few pixels. Anything else that asks for a frame, input, a
-// signal written, posted work, a layout, a resize, paints it whole.
+// Where the last frame is kept, such a frame is painted over it within
+// those regions alone, rather than the whole window again for a few
+// pixels. Anything else that asks for a frame, input, a signal written,
+// a layout, a resize, paints it whole.
+//
+// The last frame is kept only where it is kept anyway: in the backbuffer a
+// BackdropBlur needs. A backbuffer the window's size is not kept for this
+// alone: on a 6K display it is 80 MB, held for as long as a dot breathes,
+// to save a frame that, painted whole, takes a few milliseconds.
 //
 // Canvas.Paint keeps, for each widget, the bounds of what it and its
 // subtree drew. A widget that read the time while painting, in its own
@@ -138,10 +143,6 @@ func cover(a, b Rect) Rect {
 // overlaps reports whether a and b share any area.
 func overlaps(a, b Rect) bool { return !a.Intersect(b).Empty() }
 
-// motionFrames is how many frames the backbuffer is kept after the last
-// one that had a motion region.
-const motionFrames = 120
-
 // startMotion clears what the last frame noted of its motion.
 func (f *frameState) startMotion() {
 	f.scopes, f.motion, f.movers = f.scopes[:0], f.motion[:0], f.movers[:0]
@@ -152,11 +153,6 @@ func (f *frameState) startMotion() {
 // may be painted in part, and where.
 func (w *Window) noteMotion(screen, target *ggfx.Image) {
 	f := w.canvas.fs()
-	if len(f.motion) > 0 {
-		w.motionTTL = motionFrames
-	} else if w.motionTTL > 0 {
-		w.motionTTL--
-	}
 	w.motion = motionRegions(f.motion, Rct(Point{}, f.logical))
 	// Painted in part, the frame keeps the input, semantics and overlays of
 	// the last whole one: none may have been painted, nor anything that
