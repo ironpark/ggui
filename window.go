@@ -157,8 +157,9 @@ type Window struct {
 	// backbuf is what the window paints into while a BackdropBlur needs to
 	// read the frame, copied to the screen at the end; backdropTTL counts
 	// down the frames it is kept after the last blur.
-	backbuf     *ggfx.Image
-	backdropTTL int
+	backbuf      *ggfx.Image
+	backdropTTL  int
+	backbufFresh bool // made for this frame, and holding no frame yet
 
 	// A frame only time asks for is painted in part, over the last frame
 	// where it is kept (see damage.go): motion is the regions it paints,
@@ -169,7 +170,8 @@ type Window struct {
 	motionOK   bool
 	motionGen  uint64
 	motionSize image.Point
-	motionWhy  string // why the next frame may not be painted in part, or "ok"
+	motionWhy  string        // why the next frame may not be painted in part, or "ok"
+	history    []frameDamage // what the last frames changed, the newest last
 	dirty      atomic.Bool
 	repaintMu  sync.Mutex
 	repaints   []Rect // asked for by RepaintRect since the last frame
@@ -568,7 +570,7 @@ func (w *Window) runFrameEvent(ev ggwd.FrameEvent) error {
 	if err := w.tick(wd.frame.begin(wd.frame.raw())); err != nil {
 		return err
 	}
-	w.draw(ev.Screen, ev.Scale)
+	w.draw(ev.Screen, ev.Scale, ev.BufferAge, ev.SetDamage)
 	if w.frameErr != nil {
 		return w.frameErr
 	}
@@ -606,6 +608,7 @@ func (w *Window) paintTarget(screen *ggfx.Image) *ggfx.Image {
 		w.freeBackbuf()
 		// Unmanaged for the reason a layer is: see borrowLayer.
 		w.backbuf = ggfx.NewImageWithOptions(image.Rect(0, 0, size.X, size.Y), &ggfx.NewImageOptions{Unmanaged: true})
+		w.backbufFresh = true
 	}
 	return w.backbuf
 }
@@ -728,7 +731,7 @@ func (w *Window) background() color.Color {
 // draw paints the tree to screen, which is in physical pixels at scale
 // pixels per logical pixel, so that a HiDPI monitor gets a sharp image while
 // widgets keep working in logical pixels.
-func (w *Window) draw(screen *ggfx.Image, scale float64) {
+func (w *Window) draw(screen *ggfx.Image, scale float64, age int, setDamage func([]image.Rectangle)) {
 	dirty := w.dirty.Swap(false)
 	if scale > 0 {
 		dirty = dirty || scale != w.canvas.scale
@@ -736,13 +739,21 @@ func (w *Window) draw(screen *ggfx.Image, scale float64) {
 	}
 	asked := w.takeRepaints()
 	target := w.paintTarget(screen)
+	if target != screen {
+		// The backbuffer holds the frame painted into it last, unless it
+		// was made for this one.
+		age = pick(w.backbufFresh, 0, 1)
+		w.backbufFresh = false
+	}
 	if wanted := len(w.motion) > 0 || len(asked) > 0; dirty {
 		if wanted {
 			refusePartial("dirty")
 		}
-	} else if wanted && w.drawPartial(screen, target, asked) {
+	} else if wanted && w.drawPartial(screen, target, age, asked, setDamage) {
 		return
 	}
+	// Painted whole, the frame changed everywhere.
+	w.remember(frameDamage{whole: true})
 	target.Fill(w.background())
 	if w.root == nil {
 		return

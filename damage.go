@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"image"
 	"slices"
 	"sync"
 
@@ -162,8 +163,6 @@ func (w *Window) noteMotion(screen, target *ggfx.Image) {
 		w.motionWhy = "unplaced"
 	case f.overlaid:
 		w.motionWhy = "overlay"
-	case target == screen:
-		w.motionWhy = "no backbuffer"
 	case w.overlay != nil || w.inspect || len(w.sinks) > 0 || len(w.frame) > 0:
 		w.motionWhy = "inspected"
 	default:
@@ -175,16 +174,16 @@ func (w *Window) noteMotion(screen, target *ggfx.Image) {
 	w.motionSize = target.Bounds().Size()
 }
 
-// drawPartial paints a frame that only time and RepaintRect asked for
-// within the last frame's motion regions and asked, onto the last frame in
-// target, and reports false, painting nothing, when the frame must be
-// painted whole.
-func (w *Window) drawPartial(screen, target *ggfx.Image, asked []Rect) bool {
+// drawPartial paints a frame that only time and RepaintRect asked for over
+// what target holds, a frame age frames old, within what changed since and
+// changes now, and reports false, painting nothing, when the frame must be
+// painted whole. It gives setDamage, when there is one, what changed now.
+func (w *Window) drawPartial(screen, target *ggfx.Image, age int, asked []Rect, setDamage func([]image.Rectangle)) bool {
 	if !w.motionOK {
 		refusePartial(w.motionWhy)
 		return false
 	}
-	if target == screen || target.Bounds().Size() != w.motionSize || w.closed || w.root == nil {
+	if target.Bounds().Size() != w.motionSize || w.closed || w.root == nil {
 		refusePartial("resized")
 		return false
 	}
@@ -192,6 +191,13 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, asked []Rect) bool {
 	logical := Sz(w.canvas.dp(float64(screen.Bounds().Dx())), w.canvas.dp(float64(screen.Bounds().Dy())))
 	if changed() || Untrack(w.viewport.Get) != logical {
 		refusePartial("state changed")
+		return false
+	}
+	window := Rct(Point{}, logical)
+	now := motionRegions(append(slices.Clone(w.motion), asked...), window)
+	damage, ok := repaintFor(w.history, age, now, window)
+	if !ok {
+		refusePartial(pick(age == 0, "buffer not kept", "too much changed"))
 		return false
 	}
 	setRunning(&w.frameLoop)
@@ -205,12 +211,8 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, asked []Rect) bool {
 	}
 	c := &w.canvas
 	c.Image = target
-	c.window, c.onScreen = true, false
+	c.window, c.onScreen = true, target == screen
 	f := c.fs()
-	damage := w.motion
-	if len(asked) > 0 {
-		damage = motionRegions(append(slices.Clone(w.motion), asked...), Rct(Point{}, logical))
-	}
 	f.startMotion()
 	f.backdrop = false
 	// Nothing painted registers anything, but what slips past the inert
@@ -236,9 +238,69 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, asked []Rect) bool {
 	// uses those of the regions it paints, and freeing the rest would make
 	// the next whole frame allocate them again.
 	partialFrames.Add(1)
+	w.remember(frameDamage{rects: now})
+	if setDamage != nil {
+		px := make([]image.Rectangle, len(now))
+		for i, r := range now {
+			px[i] = c.physical(r)
+		}
+		setDamage(px)
+	}
 	w.noteMotion(screen, target)
 	w.presentBackdrop(screen, target)
 	return true
+}
+
+// frameDamage is what a frame changed: the regions it painted in part, or
+// all of it.
+type frameDamage struct {
+	whole bool
+	rects []Rect
+}
+
+// mostBufferAge is how many frames back the window remembers what changed:
+// as many buffers as a swap chain has, and one to spare.
+const mostBufferAge = 4
+
+// remember notes what the frame painted changed.
+func (w *Window) remember(d frameDamage) {
+	if len(w.history) == mostBufferAge {
+		w.history = append(w.history[:0], w.history[1:]...)
+	}
+	w.history = append(w.history, d)
+}
+
+// mostPartial is the share of the window past which a frame is painted
+// whole: there, painting in part saves little, and paints more than once
+// where regions are painted one by one.
+const mostPartial = 0.6
+
+// repaintFor is what must be painted over a buffer that holds the frame
+// age frames before this one for it to show this one: what changed in the
+// frames since, from history, the newest last, and what changes now. It
+// reports false when that is all of it: a buffer of an unknown age, or one
+// older than what history remembers, or a frame since painted whole, or
+// most of window.
+func repaintFor(history []frameDamage, age int, now []Rect, window Rect) ([]Rect, bool) {
+	if age <= 0 || age-1 > len(history) {
+		return nil, false
+	}
+	out := slices.Clone(now)
+	for _, d := range history[len(history)-(age-1):] {
+		if d.whole {
+			return nil, false
+		}
+		out = append(out, d.rects...)
+	}
+	out = motionRegions(out, window)
+	area := 0.0
+	for _, r := range out {
+		area += r.Size.W * r.Size.H
+	}
+	if area > mostPartial*window.Size.W*window.Size.H {
+		return nil, false
+	}
+	return out, true
 }
 
 // What moved and why frames were painted whole, for MotionReport.
