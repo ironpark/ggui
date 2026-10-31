@@ -444,22 +444,26 @@ func TestWindowKeepsABackbufferWhileBackdropsPaint(t *testing.T) {
 	screen := ggfx.NewImage(40, 30)
 	defer screen.Deallocate()
 	w := &Window{}
-	if w.paintTarget(screen) != screen {
+	target := func() *ggfx.Image { img, _ := w.paintTarget(screen, 0); return img }
+	if target() != screen {
 		t.Fatal("a window with no backdrop painted off screen")
 	}
 	// A frame on the screen that wanted a blur turns the backbuffer on.
 	w.canvas.fs().backdrop = true
 	w.presentBackdrop(screen, screen)
-	back := w.paintTarget(screen)
-	if back == screen || back.Bounds() != screen.Bounds() {
-		t.Fatalf("backbuffer %v for screen %v", back.Bounds(), screen.Bounds())
+	back, age := w.paintTarget(screen, 0)
+	if back == screen || back.Bounds() != screen.Bounds() || age != 0 {
+		t.Fatalf("backbuffer %v, %d frames old, for screen %v; want a new one", back.Bounds(), age, screen.Bounds())
+	}
+	if _, age := w.paintTarget(screen, 0); age != 1 {
+		t.Fatalf("the backbuffer kept is %d frames old; want 1", age)
 	}
 	// Frames without one count it down and free it.
 	w.canvas.fs().backdrop = false
 	for range backdropFrames {
-		w.presentBackdrop(screen, w.paintTarget(screen))
+		w.presentBackdrop(screen, target())
 	}
-	if w.backbuf != nil || w.paintTarget(screen) != screen {
+	if w.backbuf != nil || target() != screen {
 		t.Fatal("the backbuffer outlived its backdrops")
 	}
 }

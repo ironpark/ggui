@@ -157,17 +157,15 @@ type Window struct {
 	// backbuf is what the window paints into while a BackdropBlur needs to
 	// read the frame, copied to the screen at the end; backdropTTL counts
 	// down the frames it is kept after the last blur.
-	backbuf      *ggfx.Image
-	backdropTTL  int
-	backbufFresh bool // made for this frame, and holding no frame yet
+	backbuf     *ggfx.Image
+	backdropTTL int
 
 	// A frame only time asks for is painted in part, over the last frame
 	// where it is kept (see damage.go): motion is the regions it paints,
-	// motionOK whether the last frame allows it, and motionGen and
+	// motionWhy whether the last frame allows it, and motionGen and
 	// motionSize the state and the size it was painted at. dirty is set by
 	// all else that asks for a frame, which then paints whole.
 	motion     []Rect
-	motionOK   bool
 	motionGen  uint64
 	motionSize image.Point
 	motionWhy  string        // why the next frame may not be painted in part, or "ok"
@@ -597,20 +595,22 @@ func (w *Window) runFrameEvent(ev ggwd.FrameEvent) error {
 	return nil
 }
 
-// paintTarget returns the image this frame paints into: screen, or the
-// backbuffer while a BackdropBlur has wanted one recently.
-func (w *Window) paintTarget(screen *ggfx.Image) *ggfx.Image {
+// paintTarget returns the image this frame paints into, and how many
+// frames ago it held a frame: screen, as old as its driver says, or the
+// backbuffer while a BackdropBlur has wanted one recently, a frame old
+// unless it was made for this one.
+func (w *Window) paintTarget(screen *ggfx.Image, age int) (*ggfx.Image, int) {
 	if w.backdropTTL == 0 {
-		return screen
+		return screen, age
 	}
 	size := screen.Bounds().Size()
 	if w.backbuf == nil || w.backbuf.Bounds().Size() != size {
 		w.freeBackbuf()
 		// Unmanaged for the reason a layer is: see borrowLayer.
 		w.backbuf = ggfx.NewImageWithOptions(image.Rect(0, 0, size.X, size.Y), &ggfx.NewImageOptions{Unmanaged: true})
-		w.backbufFresh = true
+		return w.backbuf, 0
 	}
-	return w.backbuf
+	return w.backbuf, 1
 }
 
 // backdropFrames is how many frames the backbuffer outlives the last
@@ -738,13 +738,7 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, age int, setDamage func
 		w.canvas.scale = scale
 	}
 	asked := w.takeRepaints()
-	target := w.paintTarget(screen)
-	if target != screen {
-		// The backbuffer holds the frame painted into it last, unless it
-		// was made for this one.
-		age = pick(w.backbufFresh, 0, 1)
-		w.backbufFresh = false
-	}
+	target, age := w.paintTarget(screen, age)
 	if wanted := len(w.motion) > 0 || len(asked) > 0; dirty {
 		if wanted {
 			refusePartial("dirty")
@@ -793,5 +787,5 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, age int, setDamage func
 		return
 	}
 	w.spare = w.canvas.prev
-	w.noteMotion(screen, target)
+	w.noteMotion(target)
 }
