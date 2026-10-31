@@ -187,7 +187,10 @@ func newWindow(app *App, rt *reactive.Runtime, cfg Config, build Builder) *Windo
 	w.host = w
 	w.rt = rt
 	w.wake = func() {
-		w.requestFrame()
+		// Posted work is painted by what it changes: a signal or the
+		// layout keeps the next frame from being painted in part, and a
+		// change outside them asks Repaint. Waking alone marks nothing.
+		w.wakeFrame()
 		// The window may draw no frame, hidden or covered as it may be;
 		// the app runs the work anyway.
 		if app != nil {
@@ -400,6 +403,12 @@ func (w *Window) requestFrame() {
 	w.dirty.Store(true)
 	w.wakeFrame()
 }
+
+// Repaint asks for the whole window to be painted in the next frame, for
+// a change that no signal and no layout records, such as fields that work
+// posted with Post wrote: posted work alone repaints only what its signals
+// and layout changes reach. Safe to call from any goroutine.
+func (w *Window) Repaint() { w.requestFrame() }
 
 // wakeFrame asks for a frame for the time a widget asked to be painted
 // again at, which nothing else changes: it may be painted in part.
@@ -669,7 +678,6 @@ func (w *Window) wantsFrame(f frameInput) bool {
 		w.dirty.Store(true)
 	case w.hasPosted():
 		framesFor[frameForPosted].Add(1)
-		w.dirty.Store(true)
 	case f.drag || w.touch.active || w.touch.waiting || w.input.touchMotion.target != nil:
 		framesFor[frameForInput].Add(1)
 		w.dirty.Store(true)

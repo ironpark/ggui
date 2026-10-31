@@ -236,7 +236,9 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, asked []Rect) bool {
 	f.partial = false
 	c.inputObservers, c.shortcuts, c.revealRequests = c.inputObservers[:observers], c.shortcuts[:shortcuts], c.revealRequests[:reveals]
 	c.focusRequest, c.focusClaim = nil, nil
-	c.trimLayers()
+	// The layers are trimmed by whole frames alone: one painted in part
+	// uses those of the regions it paints, and freeing the rest would make
+	// the next whole frame allocate them again.
 	partialFrames.Add(1)
 	w.noteMotion(screen, target)
 	w.presentBackdrop(screen, target)

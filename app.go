@@ -275,11 +275,19 @@ func (a *App) drain() error {
 			continue
 		}
 		setRunning(&w.frameLoop)
+		state, layout := reactive.StateGen(), layoutGen()
 		w.runPosted()
 		if err := w.catchUp(); err != nil {
 			return err
 		}
-		w.requestFrame()
+		// catchUp settles the layout, so the frame cannot tell it changed:
+		// work that changed it is painted whole. Work that changed nothing
+		// leaves the frame free to be painted in part.
+		if reactive.StateGen() != state || layoutGen() != layout {
+			w.requestFrame()
+		} else {
+			w.wakeFrame()
+		}
 	}
 	a.forgetClosed()
 	if a.quit.Load() {
