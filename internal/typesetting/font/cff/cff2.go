@@ -16,9 +16,9 @@ type CFF2 struct {
 	// Charstrings contains the actual glyph definition.
 	// It has a length of numGlyphs and is indexed by glyph ID.
 	// See `LoadGlyph` for a way to intepret the glyph data.
-	Charstrings [][]byte
+	Charstrings ps.Index
 
-	globalSubrs [][]byte
+	globalSubrs ps.Index
 
 	// array of length 1 if fdSelect is nil
 	// otherwise, it can be safely indexed by `fdSelect` output
@@ -28,7 +28,7 @@ type CFF2 struct {
 }
 
 type privateFonts struct {
-	localSubrs     [][]byte
+	localSubrs     ps.Index
 	defaultVSIndex int32
 }
 
@@ -51,7 +51,7 @@ func ParseCFF2(src []byte) (*CFF2, error) {
 		tp  topDict2
 		psi ps.Machine
 	)
-	if err := psi.Run(topDictSrc, nil, nil, &tp); err != nil {
+	if err := psi.Run(topDictSrc, ps.Index{}, ps.Index{}, &tp); err != nil {
 		return nil, fmt.Errorf("reading top dict: %s", err)
 	}
 
@@ -76,11 +76,11 @@ func ParseCFF2(src []byte) (*CFF2, error) {
 		return nil, err
 	}
 
-	out.fonts = make([]privateFonts, len(fdIndex))
+	out.fonts = make([]privateFonts, fdIndex.Len())
 	// private dict reference
-	for i, font := range fdIndex {
+	for i := range out.fonts {
 		var fd fontDict2
-		err = psi.Run(font, nil, nil, &fd)
+		err = psi.Run(fdIndex.At(i), ps.Index{}, ps.Index{}, &fd)
 		if err != nil {
 			return nil, fmt.Errorf("reading font dict: %s", err)
 		}
@@ -90,7 +90,7 @@ func ParseCFF2(src []byte) (*CFF2, error) {
 		}
 		// parse private dict
 		var pd privateDict2
-		err = psi.Run(src[fd.privateDictOffset:end], nil, nil, &pd)
+		err = psi.Run(src[fd.privateDictOffset:end], ps.Index{}, ps.Index{}, &pd)
 		if err != nil {
 			return nil, fmt.Errorf("reading private dict: %s", err)
 		}
@@ -111,20 +111,20 @@ func ParseCFF2(src []byte) (*CFF2, error) {
 		}
 	}
 
-	if len(fdIndex) > 1 {
+	if fdIndex.Len() > 1 {
 		// parse the fdSelect
 		if L := len(src); L < int(tp.fdSelect) {
 			return nil, fmt.Errorf("reading fdSelect: EOF: expected length: %d, got %d", tp.fdSelect, L)
 		}
-		out.fdSelect, _, err = parseFdSelect(src[tp.fdSelect:], len(out.Charstrings))
+		out.fdSelect, _, err = parseFdSelect(src[tp.fdSelect:], out.Charstrings.Len())
 		if err != nil {
 			return nil, err
 		}
 
 		// sanitize fdSelect outputs
 		indexExtent := out.fdSelect.extent()
-		if len(fdIndex) < indexExtent {
-			return nil, fmt.Errorf("invalid number of font dicts: %d (for %d)", len(fdIndex), indexExtent)
+		if fdIndex.Len() < indexExtent {
+			return nil, fmt.Errorf("invalid number of font dicts: %d (for %d)", fdIndex.Len(), indexExtent)
 		}
 	}
 
@@ -148,12 +148,12 @@ func ParseCFF2(src []byte) (*CFF2, error) {
 	return &out, nil
 }
 
-func parseIndex2(src []byte, offset int) ([][]byte, error) {
+func parseIndex2(src []byte, offset int) (ps.Index, error) {
 	if offset < 0 {
-		return nil, fmt.Errorf("reading INDEX: invalid offset %d", offset)
+		return ps.Index{}, fmt.Errorf("reading INDEX: invalid offset %d", offset)
 	}
 	if L := len(src); L < offset+5 {
-		return nil, fmt.Errorf("reading INDEX: EOF: expected length: %d, got %d", offset+5, L)
+		return ps.Index{}, fmt.Errorf("reading INDEX: EOF: expected length: %d, got %d", offset+5, L)
 	}
 	var is indexStart
 	is.mustParse(src[offset:])

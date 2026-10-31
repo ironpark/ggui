@@ -152,7 +152,7 @@ type Font struct {
 	post post         // optional
 	svg  svg          // optional
 
-	glyf   tables.Glyf
+	glyf   *glyfTable
 	hmtx   tables.Hmtx
 	vmtx   tables.Vmtx
 	bitmap bitmap
@@ -256,8 +256,8 @@ func NewFont(ld *ot.Loader) (*Font, error) {
 	raw, _ = ld.RawTable(ot.MustNewTag("glyf"))
 	locaRaw, _ := ld.RawTable(ot.MustNewTag("loca"))
 	loca, err := tables.ParseLoca(locaRaw, out.nGlyphs, out.head.IndexToLocFormat == 1)
-	if err == nil { // ParseGlyf panics if len(loca) == 0
-		out.glyf, _ = tables.ParseGlyf(raw, loca)
+	if err == nil {
+		out.glyf = newGlyfTable(raw, loca)
 	}
 
 	out.bitmap = selectBitmapTable(ld)
@@ -521,7 +521,7 @@ func loadCff(ld *ot.Loader, numGlyphs int) (*cff.CFF, error) {
 		return nil, err
 	}
 
-	if N := len(cff.Charstrings); N != numGlyphs {
+	if N := cff.Charstrings.Len(); N != numGlyphs {
 		return nil, fmt.Errorf("invalid number of glyphs in CFF table (%d != %d)", N, numGlyphs)
 	}
 	return cff, nil
@@ -538,7 +538,7 @@ func loadCff2(ld *ot.Loader, numGlyphs, axisCount int) (*cff.CFF2, error) {
 		return nil, err
 	}
 
-	if N := len(cff2.Charstrings); N != numGlyphs {
+	if N := cff2.Charstrings.Len(); N != numGlyphs {
 		return nil, fmt.Errorf("invalid number of glyphs in CFF table (%d != %d)", N, numGlyphs)
 	}
 

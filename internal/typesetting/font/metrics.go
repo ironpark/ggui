@@ -315,14 +315,14 @@ func (f *Face) getVOriginWithVar(gid gID) float32 {
 }
 
 func (f *Face) getExtentsFromGlyf(glyph gID) (GlyphExtents, bool) {
-	if int(glyph) >= len(f.glyf) {
+	if int(glyph) >= f.glyf.Len() {
 		return GlyphExtents{}, false
 	}
 	if f.isVar() { // we have to compute the outline points and apply variations
 		extents, _ := f.getGlyfPoints(glyph, true)
 		return extents, true
 	}
-	return getGlyphExtents(f.glyf[glyph], f.hmtx, glyph), true
+	return getGlyphExtents(f.glyf.Glyph(glyph), f.hmtx, glyph), true
 }
 
 func (f *Font) getExtentsFromBitmap(glyph gID, xPpem, yPpem uint16) (GlyphExtents, bool) {

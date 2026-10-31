@@ -14,7 +14,7 @@ import (
 // LoadGlyph parses the glyph charstring to compute segments and path bounds.
 // It returns an error if the glyph is invalid or if decoding the charstring fails.
 func (f *CFF) LoadGlyph(glyph tables.GlyphID) ([]ot.Segment, ps.PathBounds, error) {
-	if int(glyph) >= len(f.Charstrings) {
+	if int(glyph) >= f.Charstrings.Len() {
 		return nil, ps.PathBounds{}, errGlyph
 	}
 
@@ -32,7 +32,7 @@ func (f *CFF) LoadGlyph(glyph tables.GlyphID) ([]ot.Segment, ps.PathBounds, erro
 	}
 
 	subrs := f.localSubrs[index]
-	err = psi.Run(f.Charstrings[glyph], subrs, f.globalSubrs, &loader)
+	err = psi.Run(f.Charstrings.At(int(glyph)), subrs, f.globalSubrs, &loader)
 	return loader.cs.Segments, loader.cs.Bounds, err
 }
 
@@ -145,7 +145,7 @@ func (met *type2CharstringHandler) Apply(state *ps.Machine, op ps.Operator) erro
 // [coords] must either have the same length as the variations axis, or be empty,
 // and be normalized
 func (f *CFF2) LoadGlyph(glyph tables.GlyphID, coords []tables.Coord) ([]ot.Segment, ps.PathBounds, error) {
-	if int(glyph) >= len(f.Charstrings) {
+	if int(glyph) >= f.Charstrings.Len() {
 		return nil, ps.PathBounds{}, errGlyph
 	}
 
@@ -168,7 +168,7 @@ func (f *CFF2) LoadGlyph(glyph tables.GlyphID, coords []tables.Coord) ([]ot.Segm
 	loader.vars = f.VarStore
 	loader.setVSIndex(int(font.defaultVSIndex))
 
-	err = psi.Run(f.Charstrings[glyph], font.localSubrs, f.globalSubrs, &loader)
+	err = psi.Run(f.Charstrings.At(int(glyph)), font.localSubrs, f.globalSubrs, &loader)
 
 	return loader.cs.Segments, loader.cs.Bounds, err
 }

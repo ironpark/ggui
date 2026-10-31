@@ -89,8 +89,8 @@ func (a *ArgStack) PopN(numPop int32) error {
 // Machine is a PostScript interpreter.
 // A same interpreter may be re-used using muliples `Run` calls.
 type Machine struct {
-	localSubrs  [][]byte
-	globalSubrs [][]byte
+	localSubrs  Index
+	globalSubrs Index
 
 	instructions []byte
 
@@ -120,7 +120,7 @@ const escapeByte = 12
 
 // Run runs the instructions in the PostScript context asked by `handler`.
 // `localSubrs` and `globalSubrs` contains the subroutines that may be called in the instructions.
-func (p *Machine) Run(instructions []byte, localSubrs, globalSubrs [][]byte, handler OperatorHandler) error {
+func (p *Machine) Run(instructions []byte, localSubrs, globalSubrs Index, handler OperatorHandler) error {
 	p.ctx = handler.Context()
 	p.instructions = instructions
 	p.localSubrs = localSubrs
@@ -314,11 +314,11 @@ func (p *Machine) CallSubroutine(index int32, isLocal bool) error {
 
 	// no bias in type1 fonts
 	if p.ctx == Type2Charstring {
-		index += subrBias(len(subrs))
+		index += subrBias(subrs.Len())
 	}
 
-	if index < 0 || int(index) >= len(subrs) {
-		return fmt.Errorf("invalid subroutine index %d (for length %d)", index, len(subrs))
+	if index < 0 || int(index) >= subrs.Len() {
+		return fmt.Errorf("invalid subroutine index %d (for length %d)", index, subrs.Len())
 	}
 	if p.callStack.top == psCallStackSize {
 		return errors.New("maximum call stack size reached")
@@ -328,7 +328,7 @@ func (p *Machine) CallSubroutine(index int32, isLocal bool) error {
 	p.callStack.top++
 
 	// activate the subroutine
-	p.instructions = subrs[index]
+	p.instructions = subrs.At(int(index))
 	return nil
 }
 

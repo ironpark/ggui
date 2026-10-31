@@ -61,7 +61,7 @@ const maxCompositeNesting = 20 // protect against malicious fonts
 func (f *Face) getPointsForGlyphRec(gid tables.GlyphID, currentDepth int, currentGlyphs glyphSet, allPoints *[]contourPoint /* OUT */) {
 	// adapted from harfbuzz/src/OT/glyf/Glyph.hh
 
-	if currentDepth > maxCompositeNesting || int(gid) >= len(f.glyf) {
+	if currentDepth > maxCompositeNesting || int(gid) >= f.glyf.Len() {
 		// The glyph is missing or too deeply nested; still contribute the
 		// phantom points so the invariant documented above holds and callers
 		// never see a slice shorter than phantomCount.
@@ -69,7 +69,7 @@ func (f *Face) getPointsForGlyphRec(gid tables.GlyphID, currentDepth int, curren
 		return
 	}
 
-	g := f.glyf[gid]
+	g := f.glyf.Glyph(gid)
 
 	var points []contourPoint
 	if data, ok := g.Data.(tables.SimpleGlyph); ok {
@@ -210,7 +210,7 @@ func extentsFromPoints(allPoints []contourPoint) (ext GlyphExtents) {
 // walk through the contour points of the given glyph to compute its extends and its phantom points
 // As an optimization, if `computeExtents` is false, the extents computation is skipped (a zero value is returned).
 func (f *Face) getGlyfPoints(gid tables.GlyphID, computeExtents bool) (ext GlyphExtents, ph [phantomCount]contourPoint) {
-	if int(gid) >= len(f.glyf) {
+	if int(gid) >= f.glyf.Len() {
 		return
 	}
 	allPoints := f.getPointsForGlyph(gid)

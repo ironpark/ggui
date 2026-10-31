@@ -56,12 +56,12 @@ type gvar struct {
 	// not all of them as the font loads, which costs a font such as SF Pro
 	// tens of megabytes for glyphs that are never drawn.
 	table      tables.Gvar
-	glyf       tables.Glyf                        // with length glyphCount
+	glyf       *glyfTable                         // with length glyphCount
 	variations []atomic.Pointer[[]tupleVariation] // with length glyphCount, nil until decoded
 }
 
-func newGvar(table tables.Gvar, glyf tables.Glyf) (gvar, error) {
-	if table.GlyphCount() != len(glyf) {
+func newGvar(table tables.Gvar, glyf *glyfTable) (gvar, error) {
+	if table.GlyphCount() != glyf.Len() {
 		return gvar{}, fmt.Errorf("invalid 'gvar' table: mismatch in glyphs count")
 	}
 
@@ -120,7 +120,7 @@ func (gvar gvar) decode(glyph gID) ([]tupleVariation, error) {
 	for j, header := range vs.TupleVariationHeaders {
 		tvs[j].TupleVariationHeader = header
 	}
-	pointsNumberCountAll := pointNumbersCount(gvar.glyf[glyph]) + phantomCount
+	pointsNumberCountAll := pointNumbersCount(gvar.glyf.Glyph(glyph)) + phantomCount
 	err = parseGlyphVariationSerializedData(vs.SerializedData,
 		vs.HasSharedPointNumbers(), pointsNumberCountAll, false, tvs)
 	return tvs, err

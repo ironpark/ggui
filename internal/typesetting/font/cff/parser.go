@@ -26,14 +26,14 @@ type CFF struct {
 	// Charstrings contains the actual glyph definition.
 	// It has a length of numGlyphs and is indexed by glyph ID.
 	// See `LoadGlyph` for a way to intepret the glyph data.
-	Charstrings [][]byte
+	Charstrings ps.Index
 
 	fontName    []byte // name from the Name INDEX
-	globalSubrs [][]byte
+	globalSubrs ps.Index
 
 	// array of length 1 for non CIDFonts
 	// For CIDFonts, it can be safely indexed by `fdSelect` output
-	localSubrs [][][]byte
+	localSubrs []ps.Index
 }
 
 // Parse parses a .cff font file.
@@ -75,7 +75,7 @@ func (f *CFF) GlyphName(glyph opentype.GID) string {
 // to mean unset
 const unsetSID = uint16(0xFFFF)
 
-type userStrings [][]byte
+type userStrings ps.Index
 
 // return either the predefined string or the user defined one
 func (u userStrings) getString(sid uint16) (string, error) {
@@ -86,10 +86,10 @@ func (u userStrings) getString(sid uint16) (string, error) {
 		return stdStrings[sid], nil
 	}
 	sid -= 391
-	if int(sid) >= len(u) {
+	if int(sid) >= ps.Index(u).Len() {
 		return "", fmt.Errorf("invalid glyph index %d", sid)
 	}
-	return string(u[sid]), nil
+	return string(ps.Index(u).At(int(sid))), nil
 }
 
 // Compact Font Format (CFF) fonts are written in PostScript, a stack-based
@@ -149,9 +149,9 @@ func (p *cffParser) parse() ([]CFF, error) {
 	}
 	// 5176.CFF.pdf section 8 "Top DICT INDEX" says that the count here
 	// should match the count of the Name INDEX
-	if len(topDicts) != len(fontNames) {
+	if len(topDicts) != fontNames.Len() {
 		return nil, fmt.Errorf("top DICT length doest not match Names (%d, %d)", len(topDicts),
-			len(fontNames))
+			fontNames.Len())
 	}
 
 	// parse the String INDEX.
@@ -164,7 +164,7 @@ func (p *cffParser) parse() ([]CFF, error) {
 
 	// use the strings to fetch the PSInfo
 	for i, topDict := range topDicts {
-		out[i].fontName = fontNames[i]
+		out[i].fontName = fontNames.At(i)
 		out[i].userStrings = strs
 
 		// skip PSInfo, and cidFontName
@@ -193,7 +193,7 @@ func (p *cffParser) parse() ([]CFF, error) {
 		if err != nil {
 			return nil, err
 		}
-		numGlyphs := uint16(len(out[i].Charstrings))
+		numGlyphs := uint16(out[i].Charstrings.Len())
 
 		out[i].charset, err = p.parseCharset(topDict.charsetOffset, numGlyphs)
 		if err != nil {
@@ -204,12 +204,12 @@ func (p *cffParser) parse() ([]CFF, error) {
 
 		if !topDict.isCIDFont {
 			// Parse the Private DICT, whose location was found in the Top DICT.
-			var localSubrs [][]byte
+			var localSubrs ps.Index
 			localSubrs, err = p.parsePrivateDICT(topDict.privateDictOffset, topDict.privateDictLength)
 			if err != nil {
 				return nil, err
 			}
-			out[i].localSubrs = [][][]byte{localSubrs}
+			out[i].localSubrs = []ps.Index{localSubrs}
 		} else {
 			// Parse the Font Dict Select data, whose location was found in the Top
 			// DICT.
@@ -231,7 +231,7 @@ func (p *cffParser) parse() ([]CFF, error) {
 				return nil, fmt.Errorf("invalid number of font dicts: %d (for %d)",
 					len(topDicts), indexExtent)
 			}
-			multiSubrs := make([][][]byte, len(topDicts))
+			multiSubrs := make([]ps.Index, len(topDicts))
 			for i, topDict := range topDicts {
 				multiSubrs[i], err = p.parsePrivateDICT(topDict.privateDictOffset, topDict.privateDictLength)
 				if err != nil {
@@ -252,9 +252,10 @@ func (p *cffParser) parseTopDicts() ([]topDict, error) {
 		return nil, err
 	}
 
-	out := make([]topDict, len(instructions)) // guarded by uint16 max size
+	out := make([]topDict, instructions.Len()) // guarded by uint16 max size
 	var psi ps.Machine
-	for i, buf := range instructions {
+	for i := range out {
+		buf := instructions.At(i)
 		topDict := &out[i]
 
 		// set default value before parsing
@@ -267,7 +268,7 @@ func (p *cffParser) parseTopDicts() ([]topDict, error) {
 		topDict.weight = unsetSID
 		topDict.cidFontName = unsetSID
 
-		if err = psi.Run(buf, nil, nil, topDict); err != nil {
+		if err = psi.Run(buf, ps.Index{}, ps.Index{}, topDict); err != nil {
 			return nil, err
 		}
 	}
@@ -276,9 +277,9 @@ func (p *cffParser) parseTopDicts() ([]topDict, error) {
 
 // src does NOT includes header, but starts at the array offset
 // also returns the length read from 'src'
-func parseIndexContent(src []byte, header indexStart) ([][]byte, int, error) {
+func parseIndexContent(src []byte, header indexStart) (ps.Index, int, error) {
 	if header.count == 0 {
-		return nil, 0, nil
+		return ps.Index{}, 0, nil
 	}
 	oSize := int(header.offSize)
 	// offSize must be 1..4 (CFF spec, 5176 §5). The CFF2 INDEX header parser
@@ -287,7 +288,7 @@ func parseIndexContent(src []byte, header indexStart) ([][]byte, int, error) {
 	// array size below and let the length check pass while
 	// make([][]byte, count) still allocates gigabytes.
 	if oSize < 1 || oSize > 4 {
-		return nil, 0, fmt.Errorf("reading INDEX: invalid offSize %d", oSize)
+		return ps.Index{}, 0, fmt.Errorf("reading INDEX: invalid offSize %d", oSize)
 	}
 	// The offset array holds count+1 offsets of oSize bytes each. Compute in
 	// uint64 so that a 32-bit count near 0xFFFFFFFF cannot wrap, on 64- or
@@ -295,14 +296,15 @@ func parseIndexContent(src []byte, header indexStart) ([][]byte, int, error) {
 	// int (it is <= len(src)) and bounds count, so the make below is safe.
 	size := (uint64(header.count) + 1) * uint64(oSize)
 	if uint64(len(src)) < size {
-		return nil, 0, fmt.Errorf("reading INDEX offsets: EOF: expected length: %d, got %d", size, len(src))
+		return ps.Index{}, 0, fmt.Errorf("reading INDEX offsets: EOF: expected length: %d, got %d", size, len(src))
 	}
 	offsetArraySize := int(size)
-	out := make([][]byte, header.count)
 	data := src[offsetArraySize:]
 
+	// The offsets are checked here, once, and decoded again as an object is
+	// read: see ps.Index.
 	prev := 0
-	for i := range out {
+	for i := range int(header.count) {
 		// In the same paragraph, "Therefore the first element of the offset
 		// array is always 1" before correcting for the off-by-1.
 		loc := int(bigEndian(src[(i+1)*oSize : (i+2)*oSize]))
@@ -312,30 +314,28 @@ func parseIndexContent(src []byte, header indexStart) ([][]byte, int, error) {
 		// precedes the object data... This ensures that every object has a
 		// corresponding offset which is always nonzero".
 		if loc == 0 {
-			return nil, 0, errors.New("invalid INDEX locations (0)")
+			return ps.Index{}, 0, errors.New("invalid INDEX locations (0)")
 		}
 		loc--
 
 		if loc < prev { // Check that locations are increasing
-			return nil, 0, errors.New("invalid INDEX locations (not increasing)")
+			return ps.Index{}, 0, errors.New("invalid INDEX locations (not increasing)")
 		}
 
 		// Check that locations are in bounds, that is offsetsLength + loc <= len(src)
 		if int(loc) > len(data) {
-			return nil, 0, errors.New("invalid INDEX locations (out of bounds)")
+			return ps.Index{}, 0, errors.New("invalid INDEX locations (out of bounds)")
 		}
-
-		out[i] = data[prev:loc]
 		prev = loc
 	}
-	return out, offsetArraySize + prev, nil
+	return ps.NewIndex(src, data, oSize, int(header.count)), offsetArraySize + prev, nil
 }
 
 // parse the general form of an index
-func (p *cffParser) parseIndex() ([][]byte, error) {
+func (p *cffParser) parseIndex() (ps.Index, error) {
 	count, offSize, err := p.parseIndexHeader()
 	if err != nil {
-		return nil, err
+		return ps.Index{}, err
 	}
 
 	out, read, err := parseIndexContent(p.src[p.offset:], indexStart{count: uint32(count), offSize: offSize})
@@ -345,7 +345,7 @@ func (p *cffParser) parseIndex() ([][]byte, error) {
 }
 
 // parse the Name INDEX
-func (p *cffParser) parseNames() ([][]byte, error) {
+func (p *cffParser) parseNames() (ps.Index, error) {
 	return p.parseIndex()
 }
 
@@ -429,36 +429,36 @@ func (p *cffParser) parseFDSelect(offset int32, numGlyphs uint16) (fdSelect, err
 }
 
 // Parse Private DICT and the Local Subrs [Subroutines] INDEX
-func (p *cffParser) parsePrivateDICT(offset, length int32) ([][]byte, error) {
+func (p *cffParser) parsePrivateDICT(offset, length int32) (ps.Index, error) {
 	if length == 0 {
-		return nil, nil
+		return ps.Index{}, nil
 	}
 	if err := p.seek(offset); err != nil {
-		return nil, err
+		return ps.Index{}, err
 	}
 	buf, err := p.read(int(length))
 	if err != nil {
-		return nil, err
+		return ps.Index{}, err
 	}
 	var (
 		psi  ps.Machine
 		priv privateDict
 	)
-	if err = psi.Run(buf, nil, nil, &priv); err != nil {
-		return nil, err
+	if err = psi.Run(buf, ps.Index{}, ps.Index{}, &priv); err != nil {
+		return ps.Index{}, err
 	}
 
 	if priv.subrsOffset == 0 {
-		return nil, nil
+		return ps.Index{}, nil
 	}
 
 	// "The local subrs offset is relative to the beginning of the Private DICT data"
 	if err = p.seek(offset + priv.subrsOffset); err != nil {
-		return nil, errors.New("invalid local subroutines offset")
+		return ps.Index{}, errors.New("invalid local subroutines offset")
 	}
 	subrs, err := p.parseIndex()
 	if err != nil {
-		return nil, err
+		return ps.Index{}, err
 	}
 	return subrs, nil
 }
