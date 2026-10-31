@@ -295,6 +295,7 @@ type treeRow[T any, K comparable] struct {
 	env    ggui.Env
 	theme  uitheme.Theme
 	motion time.Duration
+	clip   ggui.Canvas // the Canvas its content paints through, made anew each frame
 }
 
 // treeToggle is the chevron's click target.
@@ -372,7 +373,7 @@ func (r *treeRow[T, K]) paint(dst *ggui.Canvas, rc ggui.Rect) {
 			dst.HitPointer(ggui.Rct(ggui.Pt(x-th.Space/2, rc.Origin.Y), ggui.Sz(th.IconSize+th.Space, rc.Size.H)), &r.toggle)
 		}
 	}
-	dst.Clip(rc).Paint(r.box, rc)
+	dst.ClipReusing(&r.clip, rc).Paint(r.box, rc)
 	r.FocusRing(dst, rc, th.Radius, th.Ring)
 	if t.nav.claim(r.key) {
 		dst.RequestFocus(r)

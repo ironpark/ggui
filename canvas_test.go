@@ -138,3 +138,19 @@ func TestFillRectAndTextTolerateNilTargets(t *testing.T) {
 	w.Paint(nil, Rct(Pt(0, 0), Sz(10, 10)))
 	w.Paint(&Canvas{}, Rct(Pt(0, 0), Sz(10, 10)))
 }
+
+// A Canvas clipped into again is the Clip it would be made anew, with
+// nothing kept of what was painted through it before.
+func TestClipReusingIsAClipMadeAgain(t *testing.T) {
+	t.Parallel()
+	c := &Canvas{scale: 2, clip: Rct(Pt(0, 0), Sz(50, 50)), clipped: true}
+	var reuse Canvas
+	reuse.hits = []hitRegion{{}}
+	reuse.inert = true
+	r := Rct(Pt(10, 10), Sz(100, 100))
+	got := c.ClipReusing(&reuse, r)
+	want := c.Clip(r)
+	if got != &reuse || got.clip != want.clip || got.parent != c || got.Scale() != 2 || got.inert || len(got.hits) != 0 {
+		t.Fatalf("reused clip %+v; want %+v made anew", *got, *want)
+	}
+}

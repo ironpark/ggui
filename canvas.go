@@ -669,7 +669,24 @@ func (c *Canvas) Clip(r Rect) *Canvas {
 	if c == nil {
 		return nil
 	}
-	child := &Canvas{parent: c, clip: r, clipped: true, scale: c.scale, inert: c.inert, scope: c.scope, group: c.group, space: c.space, window: c.window, onScreen: c.onScreen}
+	return c.clipInto(new(Canvas), r)
+}
+
+// ClipReusing is Clip made in reuse, a Canvas the caller keeps from frame
+// to frame, for a widget that clips each time it paints: a row of a long
+// list clipping its content would otherwise make a Canvas a row a frame.
+// What was painted through reuse before is let go, so nothing a widget
+// painted may keep reuse past its frame.
+func (c *Canvas) ClipReusing(reuse *Canvas, r Rect) *Canvas {
+	if c == nil {
+		return nil
+	}
+	return c.clipInto(reuse, r)
+}
+
+// clipInto makes child the Clip of c to r.
+func (c *Canvas) clipInto(child *Canvas, r Rect) *Canvas {
+	*child = Canvas{parent: c, clip: r, clipped: true, scale: c.scale, inert: c.inert, scope: c.scope, group: c.group, space: c.space, window: c.window, onScreen: c.onScreen}
 	if c.clipped {
 		child.clip = c.clip.Intersect(r)
 	}

@@ -125,7 +125,12 @@ func (t *TooltipWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	p, ok := dst.Pointer()
 	now := ggui.FrameTime()
 	at := ggui.Anchor{Rect: r}
-	state, _ := dst.Retained(at, tooltipSlot)
+	state, kept := dst.Retained(at, tooltipSlot)
+	if !kept {
+		// An idle tooltip keeps nothing: it comes back closed, so that
+		// opening still eases in.
+		state.reveal.MoveTo(0, now, 0)
+	}
 	hovered := ok && r.Contains(p)
 	if hovered && state.since.IsZero() {
 		state.since = now
@@ -141,7 +146,11 @@ func (t *TooltipWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		ggui.WakeAt(state.since.Add(t.delay))
 	}
 	progress := state.reveal.Toggle(open, now, t.env.Motion(t.theme.MotionFast))
-	dst.Retain(at, tooltipSlot, state)
+	// Kept only while it has something to keep: every tooltip on screen
+	// would otherwise store its idle state each frame.
+	if hovered || open || progress > 0 || state.dismissed {
+		dst.Retain(at, tooltipSlot, state)
+	}
 	if !open && progress <= 0 {
 		return
 	}
