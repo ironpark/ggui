@@ -427,8 +427,11 @@ func newGoTextFaceSource(face *font.Face, loader *opentype.Loader) *GoTextFaceSo
 	s.addr = s
 	s.metadata = metadataFromFace(face)
 	s.variationAxes = variationAxesFromLoader(loader)
-	s.outputCache = newCache[goTextOutputCacheKey, *goTextOutputCacheValue](512)
-	s.chunkedGlyphsCache = newCache[goTextOutputCacheKey, []goTextGlyph](512)
+	// A UI shows a few hundred strings at most in a frame, and keeps them
+	// shaped while they show; past these, those unused for 60 ticks go. A
+	// shaped string holds its glyphs, a long one many.
+	s.outputCache = newCache[goTextOutputCacheKey, *goTextOutputCacheValue](256)
+	s.chunkedGlyphsCache = newCache[goTextOutputCacheKey, []goTextGlyph](256)
 	s.chunkPlanCache = newCache[chunkPlanKey, []chunk.Chunk](512)
 	// 4 is an arbitrary number, which should not cause troubles.
 	s.shaper.SetFontCacheSize(4)

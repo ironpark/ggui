@@ -77,7 +77,7 @@ var envRev atomic.Uint64
 func nextRev() uint64 { return envRev.Add(1) }
 
 type envNode struct {
-	key  any
+	key  *byte // the EnvKey's id: a pointer, which an interface holds without allocating
 	val  any
 	next *envNode
 }
@@ -108,10 +108,17 @@ func (e Env) WithTextReplaced(s TextStyle) Env {
 	if sameAny(s, e.text) {
 		return e
 	}
-	return e.derive(textKey, s, func() Env {
-		e.text, e.rev = s, nextRev()
-		return e
-	})
+	val := any(s)
+	out, ok, hashable := e.memo(textKey, val)
+	if ok {
+		return out
+	}
+	out = e
+	out.text, out.rev = s, nextRev()
+	if hashable {
+		e.remember(textKey, val, out)
+	}
+	return out
 }
 
 var textKey = new(byte)
@@ -178,20 +185,27 @@ func (e Env) With[T any](k EnvKey[T], v T) Env {
 	if exists && sameAny(cur, v) {
 		return e
 	}
-	return e.derive(k, v, func() Env {
-		if exists {
-			e.vals = withEnvValue(e.vals, k, v)
-		} else {
-			e.vals = &envNode{key: k, val: v, next: e.vals}
-		}
-		e.rev = nextRev()
-		return e
-	})
+	val := any(v)
+	out, ok, hashable := e.memo(k.id, val)
+	if ok {
+		return out
+	}
+	out = e
+	if exists {
+		out.vals = withEnvValue(e.vals, k.id, val)
+	} else {
+		out.vals = &envNode{key: k.id, val: val, next: e.vals}
+	}
+	out.rev = nextRev()
+	if hashable {
+		e.remember(k.id, val, out)
+	}
+	return out
 }
 
 // Replace the nearest binding persistently instead of retaining every old
 // value. Root environment updates remain bounded while ancestor Envs stay intact.
-func withEnvValue(node *envNode, key, value any) *envNode {
+func withEnvValue(node *envNode, key *byte, value any) *envNode {
 	if node == nil {
 		return &envNode{key: key, val: value}
 	}
@@ -255,34 +269,28 @@ func (m *envMemo) put(k derivedKey, e Env) {
 	m.cur[k] = e
 }
 
-// derive returns the Env derived from e with key and val before, else
-// fn's. A val that cannot be hashed is never memoized.
-func (e Env) derive(key, val any, fn func() Env) (out Env) {
-	k := derivedKey{e.rev, key, val}
-	envMemo := &activeWorld().envMemo
-	memoized := true
-	func() {
-		defer func() {
-			if recover() != nil {
-				memoized = false
-			}
-		}()
-		var ok bool
-		if out, ok = envMemo.get(k); !ok {
-			out = fn()
-			envMemo.put(k, out)
+// memo returns the Env derived from e with key and val before, if one
+// was. A val a map cannot hash is never memoized: hashable reports it.
+func (e Env) memo(key, val any) (out Env, ok, hashable bool) {
+	defer func() {
+		if recover() != nil {
+			hashable = false
 		}
 	}()
-	if !memoized {
-		return fn()
-	}
-	return out
+	out, ok = activeWorld().envMemo.get(derivedKey{e.rev, key, val})
+	return out, ok, true
+}
+
+// remember keeps out as the Env derived from e with key and val, for the
+// same derivation to yield the same revision.
+func (e Env) remember(key, val any, out Env) {
+	activeWorld().envMemo.put(derivedKey{e.rev, key, val}, out)
 }
 
 // Get returns the nearest value stored under k, if any ancestor set one.
 func (e Env) Get[T any](k EnvKey[T]) (T, bool) {
 	for n := e.vals; n != nil; n = n.next {
-		if n.key == any(k) {
+		if n.key == k.id {
 			return n.val.(T), true
 		}
 	}

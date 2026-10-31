@@ -20,6 +20,8 @@ github.com/ironpark/ggfx v0.0.0-20261031160336-78d9b61aa87e h1:xOLqeBH/s0s79iUSL
 github.com/ironpark/ggfx v0.0.0-20261031160336-78d9b61aa87e/go.mod h1:g4KK8bnQr3VQ65W26/Sa+WL9HlSshg/PZUMfWRMK42c=
 github.com/ironpark/ggfx v0.0.0-20261031160642-791bf4b5a06a h1:GDyvsq5l8IR5jTT9vepKC7jZO8wIrljyfrZeG78Ceqo=
 github.com/ironpark/ggfx v0.0.0-20261031160642-791bf4b5a06a/go.mod h1:g4KK8bnQr3VQ65W26/Sa+WL9HlSshg/PZUMfWRMK42c=
+github.com/ironpark/ggfx v0.0.0-20261031170437-2d0d8e7381ca h1:TLKm+fGOHsN7o6YQ76F9FHP7yk85tnn5hu60m1RlOcc=
+github.com/ironpark/ggfx v0.0.0-20261031170437-2d0d8e7381ca/go.mod h1:g4KK8bnQr3VQ65W26/Sa+WL9HlSshg/PZUMfWRMK42c=
 github.com/ironpark/ggwd v0.0.0-20261030035645-cd939c201b94 h1:q2mt33ioOPqrUOLbl+Xqu/Q35U5JEAIW7caI3099TXY=
 github.com/ironpark/ggwd v0.0.0-20261030035645-cd939c201b94/go.mod h1:ZBZM+Vgb/3nkFixAztB/X3VqhUu/l4/tvARmLHjcZ7k=
 github.com/ironpark/ggwd v0.0.0-20261030074107-f958a890e2b9 h1:NlXDvFiTdlYr1Fl3pMQNaVBvgjgP7Ghu1ETuKm2vpWU=
@@ -32,6 +34,8 @@ github.com/ironpark/ggwd v0.0.0-20261031160357-f1d6d1faa58d h1:ycRAXG5/bPdT4vduK
 github.com/ironpark/ggwd v0.0.0-20261031160357-f1d6d1faa58d/go.mod h1:X/xTa9U6kBjViKZ1npeXWUnt5xGFAAKHrHNnTV5eQCg=
 github.com/ironpark/ggwd v0.0.0-20261031160706-bc5b5d24107a h1:6oQ1UotUqkBrlqvv8iKxcmLP7gulwQeR2/WSRd2WiyY=
 github.com/ironpark/ggwd v0.0.0-20261031160706-bc5b5d24107a/go.mod h1:CjOYTo2VwIL9W6a1k+jX+89MkjqXnsmWNWvPxpEVwgE=
+github.com/ironpark/ggwd v0.0.0-20261031170520-65df921002d2 h1:nmxj3TXyOv9d395vzT4amTQJ3knhybLx+Uu/AsN/xbE=
+github.com/ironpark/ggwd v0.0.0-20261031170520-65df921002d2/go.mod h1:U4G78bhALXLxCSDvvWL4CMlJ6pMTFwQZfFLxp5J4tN0=
 github.com/pierrec/lz4/v4 v4.1.29 h1:CDQY6qZOLI4DW0Nx6R1vRrifrCeQHnNXkMb0hZWXFjg=
 github.com/pierrec/lz4/v4 v4.1.29/go.mod h1:EoQMVJgeeEOMsCqCzqFm2O0cJvljX2nGZjcRIPL34O4=
 github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c h1:km8GpoQut05eY3GiYWEedbTT0qnSxrCjsVbb7yKY1KE=
