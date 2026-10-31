@@ -106,6 +106,13 @@ func ParseMorxChainSubtable(src []byte, valuesCount int) (MorxChainSubtable, int
 	item.SubFeatureFlags = binary.BigEndian.Uint32(src[8:])
 	n += 12
 
+	// The subtable is read within its length, header included: a ligature
+	// list, whose length is not given, would otherwise run on through
+	// every subtable after it, to the end of the table. Not generated.
+	body := src[12:]
+	if l := int(item.length); l >= 12 && l <= len(src) {
+		body = src[12:l]
+	}
 	{
 		var (
 			read int
@@ -113,15 +120,15 @@ func ParseMorxChainSubtable(src []byte, valuesCount int) (MorxChainSubtable, int
 		)
 		switch item.version {
 		case MorxSubtableVersionContextual:
-			item.Data, read, err = ParseMorxSubtableContextual(src[12:], valuesCount)
+			item.Data, read, err = ParseMorxSubtableContextual(body, valuesCount)
 		case MorxSubtableVersionInsertion:
-			item.Data, read, err = ParseMorxSubtableInsertion(src[12:], valuesCount)
+			item.Data, read, err = ParseMorxSubtableInsertion(body, valuesCount)
 		case MorxSubtableVersionLigature:
-			item.Data, read, err = ParseMorxSubtableLigature(src[12:], valuesCount)
+			item.Data, read, err = ParseMorxSubtableLigature(body, valuesCount)
 		case MorxSubtableVersionNonContextual:
-			item.Data, read, err = ParseMorxSubtableNonContextual(src[12:], valuesCount)
+			item.Data, read, err = ParseMorxSubtableNonContextual(body, valuesCount)
 		case MorxSubtableVersionRearrangement:
-			item.Data, read, err = ParseMorxSubtableRearrangement(src[12:], valuesCount)
+			item.Data, read, err = ParseMorxSubtableRearrangement(body, valuesCount)
 		default:
 			err = fmt.Errorf("unsupported MorxSubtableVersion %d", item.version)
 		}
