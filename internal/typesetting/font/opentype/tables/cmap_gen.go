@@ -401,10 +401,8 @@ func ParseCmapSubtable12(src []byte) (CmapSubtable12, int, error) {
 			return item, 0, fmt.Errorf("reading CmapSubtable12: "+"EOF: expected length: %d, got %d", 16+arrayLengthGroups*12, L)
 		}
 
-		item.Groups = make([]SequentialMapGroup, arrayLengthGroups) // allocation guarded by the previous check
-		for i := range item.Groups {
-			item.Groups[i].mustParse(src[16+i*12:])
-		}
+		end := 16 + arrayLengthGroups*12
+		item.Groups = SequentialMapGroups(src[16:end:end])
 		n += arrayLengthGroups * 12
 	}
 	return item, n, nil
@@ -430,10 +428,8 @@ func ParseCmapSubtable13(src []byte) (CmapSubtable13, int, error) {
 			return item, 0, fmt.Errorf("reading CmapSubtable13: "+"EOF: expected length: %d, got %d", 16+arrayLengthGroups*12, L)
 		}
 
-		item.Groups = make([]SequentialMapGroup, arrayLengthGroups) // allocation guarded by the previous check
-		for i := range item.Groups {
-			item.Groups[i].mustParse(src[16+i*12:])
-		}
+		end := 16 + arrayLengthGroups*12
+		item.Groups = SequentialMapGroups(src[16:end:end])
 		n += arrayLengthGroups * 12
 	}
 	return item, n, nil

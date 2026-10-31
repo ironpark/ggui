@@ -393,13 +393,14 @@ func (fd *Font) IsMonospace() bool {
 		return false
 	}
 
-	if len(fd.hmtx.Metrics) == 1 {
+	if fd.hmtx.Len() == 1 {
 		return true
 	}
 
 	// directly read the advances in the 'hmtx' table
 	var firstAdvance int
-	for gid, metric := range fd.hmtx.Metrics {
+	for gid := range fd.hmtx.Len() {
+		metric := fd.hmtx.Metric(gid)
 		if gid == 0 { // ignore the 'unset' glyph, which may be different
 			continue
 		}

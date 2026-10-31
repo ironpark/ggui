@@ -401,9 +401,9 @@ func (s cmap6or10) Lookup(r rune) (GID, bool) {
 
 // ---------------------------------- Format 12 ----------------------------------
 
-type cmap12 []tables.SequentialMapGroup
+type cmap12 tables.SequentialMapGroups
 
-func newCmap12(cm tables.CmapSubtable12) cmap12 { return cm.Groups }
+func newCmap12(cm tables.CmapSubtable12) cmap12 { return cmap12(cm.Groups) }
 
 type cmap12Iter struct {
 	data cmap12
@@ -411,10 +411,10 @@ type cmap12Iter struct {
 	pos2 int // offset from start
 }
 
-func (it *cmap12Iter) Next() bool { return it.pos1 < len(it.data) }
+func (it *cmap12Iter) Next() bool { return it.pos1 < tables.SequentialMapGroups(it.data).Len() }
 
 func (it *cmap12Iter) Char() (r rune, gy GID) {
-	entry := it.data[it.pos1]
+	entry := tables.SequentialMapGroups(it.data).At(it.pos1)
 	r = rune(it.pos2 + int(entry.StartCharCode))
 	gy = GID(it.pos2 + int(entry.StartGlyphID))
 	if uint32(it.pos2) == entry.EndCharCode-entry.StartCharCode {
@@ -433,9 +433,10 @@ func (s cmap12) Iter() CmapIter { return &cmap12Iter{data: s} }
 func (s cmap12) Lookup(r rune) (GID, bool) {
 	c := uint32(r)
 	// binary search
-	for i, j := 0, len(s); i < j; {
+	groups := tables.SequentialMapGroups(s)
+	for i, j := 0, groups.Len(); i < j; {
 		h := i + (j-i)/2
-		entry := s[h]
+		entry := groups.At(h)
 		if c < entry.StartCharCode {
 			j = h
 		} else if entry.EndCharCode < c {
@@ -449,9 +450,9 @@ func (s cmap12) Lookup(r rune) (GID, bool) {
 
 // ---------------------------------- Format 13 ----------------------------------
 
-type cmap13 []tables.SequentialMapGroup
+type cmap13 tables.SequentialMapGroups
 
-func newCmap13(cm tables.CmapSubtable13) cmap13 { return cm.Groups }
+func newCmap13(cm tables.CmapSubtable13) cmap13 { return cmap13(cm.Groups) }
 
 type cmap13Iter struct {
 	data cmap13
@@ -460,11 +461,11 @@ type cmap13Iter struct {
 }
 
 func (it *cmap13Iter) Next() bool {
-	return it.pos1 < len(it.data)
+	return it.pos1 < tables.SequentialMapGroups(it.data).Len()
 }
 
 func (it *cmap13Iter) Char() (r rune, gy GID) {
-	entry := it.data[it.pos1]
+	entry := tables.SequentialMapGroups(it.data).At(it.pos1)
 	r = rune(it.pos2 + int(entry.StartCharCode))
 	gy = GID(entry.StartGlyphID)
 	if uint32(it.pos2) == entry.EndCharCode-entry.StartCharCode {
@@ -483,9 +484,10 @@ func (s cmap13) Iter() CmapIter { return &cmap13Iter{data: s} }
 func (s cmap13) Lookup(r rune) (GID, bool) {
 	c := uint32(r)
 	// binary search
-	for i, j := 0, len(s); i < j; {
+	groups := tables.SequentialMapGroups(s)
+	for i, j := 0, groups.Len(); i < j; {
 		h := i + (j-i)/2
-		entry := s[h]
+		entry := groups.At(h)
 		if c < entry.StartCharCode {
 			j = h
 		} else if entry.EndCharCode < c {
@@ -872,11 +874,13 @@ func (cm *cmap6or10) RuneRanges(dst [][2]rune) [][2]rune {
 }
 
 func (cm cmap12) RuneRanges(dst [][2]rune) [][2]rune {
-	if cap(dst) < len(cm) {
-		dst = make([][2]rune, 0, len(cm))
+	groups := tables.SequentialMapGroups(cm)
+	if cap(dst) < groups.Len() {
+		dst = make([][2]rune, 0, groups.Len())
 	}
 	dst = dst[:0]
-	for _, e := range cm {
+	for i := range groups.Len() {
+		e := groups.At(i)
 		start, end := rune(e.StartCharCode), rune(e.EndCharCode)
 		if L := len(dst); L != 0 && dst[L-1][1] == start {
 			// grow the previous range

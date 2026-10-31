@@ -2,6 +2,8 @@
 
 package tables
 
+import "encoding/binary"
+
 // Cmap is the Character to Glyph Index Mapping table
 // See https://learn.microsoft.com/en-us/typography/opentype/spec/cmap
 type Cmap struct {
@@ -80,7 +82,21 @@ type CmapSubtable12 struct {
 	reserved uint16               //	Reserved; set to 0
 	length   uint32               //	Byte length of this subtable (including the header)
 	language uint32               //	For requirements on use of the language field, see “Use of the language field in 'cmap' subtables” in this document.
-	Groups   []SequentialMapGroup `arrayCount:"FirstUint32"` // Array of SequentialMapGroup records.
+	Groups   SequentialMapGroups `arrayCount:"FirstUint32"` // Array of SequentialMapGroup records.
+}
+
+// SequentialMapGroups are SequentialMapGroup records as they lie in the
+// font's data, 12 bytes each, read in place: a font covering much of
+// Unicode has thousands, which a lookup searches a few of.
+type SequentialMapGroups []byte
+
+// Len is the number of groups.
+func (g SequentialMapGroups) Len() int { return len(g) / 12 }
+
+// At is the i-th group.
+func (g SequentialMapGroups) At(i int) SequentialMapGroup {
+	b := g[i*12 : i*12+12]
+	return SequentialMapGroup{binary.BigEndian.Uint32(b), binary.BigEndian.Uint32(b[4:]), binary.BigEndian.Uint32(b[8:])}
 }
 
 type SequentialMapGroup struct {
@@ -94,7 +110,7 @@ type CmapSubtable13 struct {
 	reserved uint16               //	Reserved; set to 0
 	length   uint32               //	Byte length of this subtable (including the header)
 	language uint32               //	For requirements on use of the language field, see “Use of the language field in 'cmap' subtables” in this document.
-	Groups   []SequentialMapGroup `arrayCount:"FirstUint32"` // Array of SequentialMapGroup records.
+	Groups   SequentialMapGroups `arrayCount:"FirstUint32"` // Array of SequentialMapGroup records.
 }
 
 type CmapSubtable14 struct {

@@ -19,30 +19,18 @@ func (item *LongHorMetric) mustParse(src []byte) {
 
 func ParseHmtx(src []byte, metricsCount int, leftSideBearingsCount int) (Hmtx, int, error) {
 	var item Hmtx
-	n := 0
-	{
-
-		if L := len(src); L < metricsCount*4 {
-			return item, 0, fmt.Errorf("reading Hmtx: "+"EOF: expected length: %d, got %d", metricsCount*4, L)
-		}
-
-		item.Metrics = make([]LongHorMetric, metricsCount) // allocation guarded by the previous check
-		for i := range item.Metrics {
-			item.Metrics[i].mustParse(src[i*4:])
-		}
-		n += metricsCount * 4
+	if metricsCount < 0 || leftSideBearingsCount < 0 {
+		return item, 0, fmt.Errorf("reading Hmtx: invalid counts %d, %d", metricsCount, leftSideBearingsCount)
 	}
-	{
-
-		if L := len(src); L < n+leftSideBearingsCount*2 {
-			return item, 0, fmt.Errorf("reading Hmtx: "+"EOF: expected length: %d, got %d", n+leftSideBearingsCount*2, L)
-		}
-
-		item.LeftSideBearings = make([]int16, leftSideBearingsCount) // allocation guarded by the previous check
-		for i := range item.LeftSideBearings {
-			item.LeftSideBearings[i] = int16(binary.BigEndian.Uint16(src[n+i*2:]))
-		}
-		n += leftSideBearingsCount * 2
+	n := metricsCount * 4
+	if L := len(src); L < n {
+		return item, 0, fmt.Errorf("reading Hmtx: "+"EOF: expected length: %d, got %d", n, L)
 	}
+	item.metrics = src[:n:n]
+	if L := len(src); L < n+leftSideBearingsCount*2 {
+		return item, 0, fmt.Errorf("reading Hmtx: "+"EOF: expected length: %d, got %d", n+leftSideBearingsCount*2, L)
+	}
+	item.bearings = src[n : n+leftSideBearingsCount*2 : n+leftSideBearingsCount*2]
+	n += leftSideBearingsCount * 2
 	return item, n, nil
 }
