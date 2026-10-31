@@ -16,6 +16,10 @@ github.com/ironpark/ggfx v0.0.0-20261031152521-82f94b2daa2c h1:/q27411McZPxwLATp
 github.com/ironpark/ggfx v0.0.0-20261031152521-82f94b2daa2c/go.mod h1:g4KK8bnQr3VQ65W26/Sa+WL9HlSshg/PZUMfWRMK42c=
 github.com/ironpark/ggfx v0.0.0-20261031155000-fb6d4bbad850 h1:8HBFJWGg6k7g8LBLrND5I1HiR7gDTtRGtBVkXedbC8A=
 github.com/ironpark/ggfx v0.0.0-20261031155000-fb6d4bbad850/go.mod h1:g4KK8bnQr3VQ65W26/Sa+WL9HlSshg/PZUMfWRMK42c=
+github.com/ironpark/ggfx v0.0.0-20261031160336-78d9b61aa87e h1:xOLqeBH/s0s79iUSL9D4cd/zG1hK5xp2j4kviu6G3wI=
+github.com/ironpark/ggfx v0.0.0-20261031160336-78d9b61aa87e/go.mod h1:g4KK8bnQr3VQ65W26/Sa+WL9HlSshg/PZUMfWRMK42c=
+github.com/ironpark/ggfx v0.0.0-20261031160642-791bf4b5a06a h1:GDyvsq5l8IR5jTT9vepKC7jZO8wIrljyfrZeG78Ceqo=
+github.com/ironpark/ggfx v0.0.0-20261031160642-791bf4b5a06a/go.mod h1:g4KK8bnQr3VQ65W26/Sa+WL9HlSshg/PZUMfWRMK42c=
 github.com/ironpark/ggwd v0.0.0-20261030035645-cd939c201b94 h1:q2mt33ioOPqrUOLbl+Xqu/Q35U5JEAIW7caI3099TXY=
 github.com/ironpark/ggwd v0.0.0-20261030035645-cd939c201b94/go.mod h1:ZBZM+Vgb/3nkFixAztB/X3VqhUu/l4/tvARmLHjcZ7k=
 github.com/ironpark/ggwd v0.0.0-20261030074107-f958a890e2b9 h1:NlXDvFiTdlYr1Fl3pMQNaVBvgjgP7Ghu1ETuKm2vpWU=
@@ -24,6 +28,10 @@ github.com/ironpark/ggwd v0.0.0-20261031152612-4c6432c8e167 h1:bU3gNhEpUxk570ucA
 github.com/ironpark/ggwd v0.0.0-20261031152612-4c6432c8e167/go.mod h1:rj4TIWNaD02C1dZuSM0mPwzowKzYy+mGutguQ6EG4wg=
 github.com/ironpark/ggwd v0.0.0-20261031155025-1a462f1558eb h1:4UJpwn1n1yZwZlLgN47iVNQZGa+PQyt006N7lq4Eki4=
 github.com/ironpark/ggwd v0.0.0-20261031155025-1a462f1558eb/go.mod h1:EvrFP3jQccRJkcWsNrfAP9rcLPevsZc5eq4DUtDc6O0=
+github.com/ironpark/ggwd v0.0.0-20261031160357-f1d6d1faa58d h1:ycRAXG5/bPdT4vduKGTHme3bYiSoqkFc0QRdqGwjnlQ=
+github.com/ironpark/ggwd v0.0.0-20261031160357-f1d6d1faa58d/go.mod h1:X/xTa9U6kBjViKZ1npeXWUnt5xGFAAKHrHNnTV5eQCg=
+github.com/ironpark/ggwd v0.0.0-20261031160706-bc5b5d24107a h1:6oQ1UotUqkBrlqvv8iKxcmLP7gulwQeR2/WSRd2WiyY=
+github.com/ironpark/ggwd v0.0.0-20261031160706-bc5b5d24107a/go.mod h1:CjOYTo2VwIL9W6a1k+jX+89MkjqXnsmWNWvPxpEVwgE=
 github.com/pierrec/lz4/v4 v4.1.29 h1:CDQY6qZOLI4DW0Nx6R1vRrifrCeQHnNXkMb0hZWXFjg=
 github.com/pierrec/lz4/v4 v4.1.29/go.mod h1:EoQMVJgeeEOMsCqCzqFm2O0cJvljX2nGZjcRIPL34O4=
 github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c h1:km8GpoQut05eY3GiYWEedbTT0qnSxrCjsVbb7yKY1KE=

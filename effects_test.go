@@ -444,19 +444,19 @@ func TestWindowKeepsABackbufferWhileBackdropsPaint(t *testing.T) {
 	screen := ggfx.NewImage(40, 30)
 	defer screen.Deallocate()
 	w := &Window{}
-	target := func() *ggfx.Image { img, _ := w.paintTarget(screen, 0); return img }
+	target := func() *ggfx.Image { img, _ := w.paintTarget(screen, false); return img }
 	if target() != screen {
 		t.Fatal("a window with no backdrop painted off screen")
 	}
 	// A frame on the screen that wanted a blur turns the backbuffer on.
 	w.canvas.fs().backdrop = true
 	w.presentBackdrop(screen, screen)
-	back, age := w.paintTarget(screen, 0)
-	if back == screen || back.Bounds() != screen.Bounds() || age != 0 {
-		t.Fatalf("backbuffer %v, %d frames old, for screen %v; want a new one", back.Bounds(), age, screen.Bounds())
+	back, kept := w.paintTarget(screen, false)
+	if back == screen || back.Bounds() != screen.Bounds() || kept {
+		t.Fatalf("backbuffer %v, kept %v, for screen %v; want a new one", back.Bounds(), kept, screen.Bounds())
 	}
-	if _, age := w.paintTarget(screen, 0); age != 1 {
-		t.Fatalf("the backbuffer kept is %d frames old; want 1", age)
+	if _, kept := w.paintTarget(screen, false); !kept {
+		t.Fatal("the backbuffer did not keep the last frame")
 	}
 	// Frames without one count it down and free it.
 	w.canvas.fs().backdrop = false

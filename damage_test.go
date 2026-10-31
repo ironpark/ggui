@@ -181,43 +181,16 @@ func TestDrainedWorkAsksForTheWholeOnlyWhenItChangedSomething(t *testing.T) {
 	}
 }
 
-func TestABufferIsPaintedOverWithWhatChangedSinceIt(t *testing.T) {
+func TestAKeptFrameIsPaintedOverWithWhatChangesNow(t *testing.T) {
 	window := Rct(Point{}, Sz(1000, 1000))
-	a, b, now := Rct(Pt(10, 10), Sz(10, 10)), Rct(Pt(500, 500), Sz(10, 10)), Rct(Pt(800, 100), Sz(10, 10))
-	history := []frameDamage{{whole: true}, {rects: []Rect{a}}, {rects: []Rect{b}}}
-	covers := func(out []Rect, r Rect) bool {
-		return slices.ContainsFunc(out, func(o Rect) bool { return o.Intersect(r) == r })
+	now := []Rect{Rct(Pt(800, 100), Sz(10, 10))}
+	if out, why := repaintFor(true, now, window); why != "" || !slices.Equal(out, now) {
+		t.Fatalf("kept: %v, %q; want the change now alone", out, why)
 	}
-	// The last frame's buffer needs only what changes now.
-	if out, why := repaintFor(history, 1, []Rect{now}, window); why != "" || len(out) != 1 || !covers(out, now) {
-		t.Fatalf("age 1: %v, %q; want the change now alone", out, why)
+	if _, why := repaintFor(false, now, window); why != "not kept" {
+		t.Fatalf("not kept: %q; want it painted whole", why)
 	}
-	// One two frames old also misses what the last frame changed.
-	if out, why := repaintFor(history, 2, []Rect{now}, window); why != "" || !covers(out, now) || !covers(out, b) || covers(out, a) {
-		t.Fatalf("age 2: %v, %q; want now and the last frame's change", out, why)
-	}
-	if out, why := repaintFor(history, 3, []Rect{now}, window); why != "" || !covers(out, a) || !covers(out, b) {
-		t.Fatalf("age 3: %v, %q; want the last two frames' changes too", out, why)
-	}
-	// Older than a frame painted whole, or than what is remembered, or of
-	// an unknown age: whole.
-	for _, age := range []int{0, 4, 5} {
-		if out, why := repaintFor(history, age, []Rect{now}, window); why == "" {
-			t.Fatalf("age %d painted in part: %v", age, out)
-		}
-	}
-	// Most of the window changed: whole.
-	if _, why := repaintFor(nil, 1, []Rect{Rct(Point{}, Sz(900, 900))}, window); why != "too much changed" {
-		t.Fatal("a change over most of the window was painted in part")
-	}
-}
-
-func TestTheWindowRemembersAsManyFramesAsABufferMayBeOld(t *testing.T) {
-	w := &Window{}
-	for i := range mostBufferAge + 3 {
-		w.remember(frameDamage{rects: []Rect{Rct(Pt(float64(i), 0), Sz(1, 1))}})
-	}
-	if len(w.history) != mostBufferAge || w.history[len(w.history)-1].rects[0].Origin.X != mostBufferAge+2 {
-		t.Fatalf("history %v; want the newest %d", w.history, mostBufferAge)
+	if _, why := repaintFor(true, []Rect{Rct(Point{}, Sz(900, 900))}, window); why != "too much changed" {
+		t.Fatalf("most of the window: %q; want it painted whole", why)
 	}
 }

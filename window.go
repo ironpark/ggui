@@ -168,8 +168,7 @@ type Window struct {
 	motion     []Rect
 	motionGen  uint64
 	motionSize image.Point
-	motionWhy  string        // why the next frame may not be painted in part, or "ok"
-	history    []frameDamage // what the last frames changed, the newest last
+	motionWhy  string // why the next frame may not be painted in part, or "ok"
 	dirty      atomic.Bool
 	repaintMu  sync.Mutex
 	repaints   []Rect // asked for by RepaintRect since the last frame
@@ -568,7 +567,7 @@ func (w *Window) runFrameEvent(ev ggwd.FrameEvent) error {
 	if err := w.tick(wd.frame.begin(wd.frame.raw())); err != nil {
 		return err
 	}
-	w.draw(ev.Screen, ev.Scale, ev.BufferAge, ev.SetDamage)
+	w.draw(ev.Screen, ev.Scale, ev.Kept, ev.SetDamage)
 	if w.frameErr != nil {
 		return w.frameErr
 	}
@@ -595,22 +594,22 @@ func (w *Window) runFrameEvent(ev ggwd.FrameEvent) error {
 	return nil
 }
 
-// paintTarget returns the image this frame paints into, and how many
-// frames ago it held a frame: screen, as old as its driver says, or the
-// backbuffer while a BackdropBlur has wanted one recently, a frame old
-// unless it was made for this one.
-func (w *Window) paintTarget(screen *ggfx.Image, age int) (*ggfx.Image, int) {
+// paintTarget returns the image this frame paints into, and whether it
+// holds the last frame: screen, as its driver keeps it, or the backbuffer
+// while a BackdropBlur has wanted one recently, unless it was made for
+// this frame.
+func (w *Window) paintTarget(screen *ggfx.Image, kept bool) (*ggfx.Image, bool) {
 	if w.backdropTTL == 0 {
-		return screen, age
+		return screen, kept
 	}
 	size := screen.Bounds().Size()
 	if w.backbuf == nil || w.backbuf.Bounds().Size() != size {
 		w.freeBackbuf()
 		// Unmanaged for the reason a layer is: see borrowLayer.
 		w.backbuf = ggfx.NewImageWithOptions(image.Rect(0, 0, size.X, size.Y), &ggfx.NewImageOptions{Unmanaged: true})
-		return w.backbuf, 0
+		return w.backbuf, false
 	}
-	return w.backbuf, 1
+	return w.backbuf, true
 }
 
 // backdropFrames is how many frames the backbuffer outlives the last
@@ -731,23 +730,21 @@ func (w *Window) background() color.Color {
 // draw paints the tree to screen, which is in physical pixels at scale
 // pixels per logical pixel, so that a HiDPI monitor gets a sharp image while
 // widgets keep working in logical pixels.
-func (w *Window) draw(screen *ggfx.Image, scale float64, age int, setDamage func([]image.Rectangle)) {
+func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage func([]image.Rectangle)) {
 	dirty := w.dirty.Swap(false)
 	if scale > 0 {
 		dirty = dirty || scale != w.canvas.scale
 		w.canvas.scale = scale
 	}
 	asked := w.takeRepaints()
-	target, age := w.paintTarget(screen, age)
+	target, kept := w.paintTarget(screen, kept)
 	if wanted := len(w.motion) > 0 || len(asked) > 0; dirty {
 		if wanted {
 			refusePartial("dirty")
 		}
-	} else if wanted && w.drawPartial(screen, target, age, asked, setDamage) {
+	} else if wanted && w.drawPartial(screen, target, kept, asked, setDamage) {
 		return
 	}
-	// Painted whole, the frame changed everywhere.
-	w.remember(frameDamage{whole: true})
 	target.Fill(w.background())
 	if w.root == nil {
 		return
