@@ -78,10 +78,10 @@ type CmapSubtable10 struct {
 }
 
 type CmapSubtable12 struct {
-	format   uint16               `unionTag:"12"` //	Subtable format; set to 12.
-	reserved uint16               //	Reserved; set to 0
-	length   uint32               //	Byte length of this subtable (including the header)
-	language uint32               //	For requirements on use of the language field, see “Use of the language field in 'cmap' subtables” in this document.
+	format   uint16              `unionTag:"12"` //	Subtable format; set to 12.
+	reserved uint16              //	Reserved; set to 0
+	length   uint32              //	Byte length of this subtable (including the header)
+	language uint32              //	For requirements on use of the language field, see “Use of the language field in 'cmap' subtables” in this document.
 	Groups   SequentialMapGroups `arrayCount:"FirstUint32"` // Array of SequentialMapGroup records.
 }
 
@@ -106,10 +106,10 @@ type SequentialMapGroup struct {
 }
 
 type CmapSubtable13 struct {
-	format   uint16               `unionTag:"13"` //	Subtable format; set to 13.
-	reserved uint16               //	Reserved; set to 0
-	length   uint32               //	Byte length of this subtable (including the header)
-	language uint32               //	For requirements on use of the language field, see “Use of the language field in 'cmap' subtables” in this document.
+	format   uint16              `unionTag:"13"` //	Subtable format; set to 13.
+	reserved uint16              //	Reserved; set to 0
+	length   uint32              //	Byte length of this subtable (including the header)
+	language uint32              //	For requirements on use of the language field, see “Use of the language field in 'cmap' subtables” in this document.
 	Groups   SequentialMapGroups `arrayCount:"FirstUint32"` // Array of SequentialMapGroup records.
 }
 
