@@ -21,6 +21,16 @@ import (
 
 const infTick = math.MaxInt64
 
+// maxAge is how many ticks, frames, an entry may go unused before a cache
+// lets it go however few entries it has, and sweepEvery how often, in
+// ticks, a cache that adds an entry looks for those. A window draws a few
+// frames a second at rest, tens while working, so an entry goes after
+// minutes of use without it, or about an hour at rest.
+const (
+	maxAge     = 3600
+	sweepEvery = 600
+)
+
 type cacheValue[Value any] struct {
 	value Value
 
@@ -36,6 +46,9 @@ type cache[Key comparable, Value any] struct {
 
 	// atime is the last time when the cache was accessed.
 	atime int64
+
+	// swept is when entries were last looked over for age (see maxAge).
+	swept int64
 
 	m sync.Mutex
 }
@@ -71,6 +84,18 @@ func (c *cache[Key, Value]) getOrCreate(key Key, create func() (Value, bool)) Va
 		e.atime = n
 	}
 	c.values[key] = e
+
+	// Below the soft limit, entries go only once unused for maxAge: a UI
+	// shows the same strings for hours, and those it showed once, a
+	// conversation scrolled past, a file closed, are kept for nothing.
+	if n-c.swept >= sweepEvery {
+		c.swept = n
+		for key, e := range c.values {
+			if e.atime < n-maxAge {
+				delete(c.values, key)
+			}
+		}
+	}
 
 	// Clean up old entries.
 	if c.atime < n {
