@@ -25,15 +25,23 @@ type ContextMenuWidget struct {
 // wrapper; Shift+F10, Enter or Space opens it from the keyboard. Entries are
 // MenuItem and MenuDivider, with the same arrow navigation as Menu.
 func ContextMenu(content ggui.Widget, entries ...ggui.Widget) *ContextMenuWidget {
-	return newContextMenu(content, Menu("", entries...))
+	m := panelMenu()
+	m.panel = ggui.Box(m.column(entries))
+	return newContextMenu(content, m)
 }
+
+// panelMenu is a menu for a context menu: its items and the keys that move
+// through them, shown in the context menu's popup, with no button of its
+// own to open it nor popup under one. A list keeps a context menu for each
+// of its rows, and those were tens of megabytes.
+func panelMenu() *MenuWidget { return &MenuWidget{current: -1} }
 
 // ContextMenuFunc is ContextMenu with entries made by entries as the menu
 // opens rather than as it is built: for content rebuilt far more often than
 // its menu opens, such as a row in a list that follows live state, whose
 // entries would otherwise be made with every rebuild.
 func ContextMenuFunc(content ggui.Widget, entries func() []ggui.Widget) *ContextMenuWidget {
-	m := Menu("")
+	m := panelMenu()
 	lazy := &lazyEntries{}
 	m.panel = ggui.Box(lazy)
 	c := newContextMenu(content, m)
