@@ -716,13 +716,6 @@ func ParseVariationSelector(src []byte, parentSrc []byte) (VariationSelector, in
 	return item, n, nil
 }
 
-func (item *SequentialMapGroup) mustParse(src []byte) {
-	_ = src[11] // early bound checking
-	item.StartCharCode = binary.BigEndian.Uint32(src[0:])
-	item.EndCharCode = binary.BigEndian.Uint32(src[4:])
-	item.StartGlyphID = binary.BigEndian.Uint32(src[8:])
-}
-
 func (item *UnicodeRange) mustParse(src []byte) {
 	_ = src[3] // early bound checking
 	item.StartUnicodeValue[0] = src[0]
