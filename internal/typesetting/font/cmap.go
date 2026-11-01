@@ -246,9 +246,10 @@ func (s cmap0) Lookup(r rune) (GID, bool) {
 
 // if indexes is nil, delta is used
 type cmapEntry16 struct {
-	// we prefere not to keep a link to a buffer (via an offset)
-	// and eagerly resolve it
-	indexes    []tables.GlyphID // length end - start + 1
+	// indexes are the segment's glyph indexes, big endian, 2 bytes each,
+	// where they lie in the font's data, which is mapped from its file:
+	// a font covering much of the BMP holds tens of thousands.
+	indexes    []byte // length 2 * (end - start + 1)
 	end, start uint16
 	delta      uint16 // arithmetic modulo 0xFFFF
 }
@@ -268,16 +269,12 @@ func newCmap4(cm tables.CmapSubtable4) (cmap4, error) {
 
 		// some fonts use 0xFFFF for idRangeOff for the last segment
 		if entry.start != 0xFFFF && idRangeOffset != 0 {
-			// we resolve the indexes
-			entry.indexes = make([]tables.GlyphID, entry.end-entry.start+1)
+			count := int(entry.end-entry.start) + 1
 			indexStart := idRangeOffset/2 + i - segCount
-			if len(cm.GlyphIDArray) < 2*(indexStart+len(entry.indexes)) {
+			if indexStart < 0 || len(cm.GlyphIDArray) < 2*(indexStart+count) {
 				return nil, errors.New("invalid cmap subtable format 4 glyphs array length")
 			}
-			for j := range entry.indexes {
-				index := indexStart + j
-				entry.indexes[j] = tables.GlyphID(binary.BigEndian.Uint16(cm.GlyphIDArray[2*index:]))
-			}
+			entry.indexes = cm.GlyphIDArray[2*indexStart : 2*(indexStart+count) : 2*(indexStart+count)]
 		}
 		out[i] = entry
 	}
@@ -308,11 +305,11 @@ func (it *cmap4Iter) Char() (r rune, gy GID) {
 		}
 	} else { // pos2 is the array index
 		r = rune(it.pos2) + rune(entry.start)
-		gy = GID(entry.indexes[it.pos2])
+		gy = GID(binary.BigEndian.Uint16(entry.indexes[2*it.pos2:]))
 		if gy != 0 {
-			gy += GID(entry.delta)
+			gy = GID(uint16(gy) + entry.delta)
 		}
-		if it.pos2 == len(entry.indexes)-1 {
+		if it.pos2 == len(entry.indexes)/2-1 {
 			// we have read the last glyph in this part
 			it.pos2 = 0
 			it.pos1++
@@ -342,7 +339,7 @@ func (s cmap4) Lookup(r rune) (GID, bool) {
 		} else if entry.indexes == nil {
 			return GID(c + entry.delta), true
 		} else {
-			glyph := entry.indexes[c-entry.start]
+			glyph := binary.BigEndian.Uint16(entry.indexes[2*int(c-entry.start):])
 			if glyph == 0 {
 				return 0, false
 			}

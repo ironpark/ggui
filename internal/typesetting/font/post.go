@@ -4,6 +4,7 @@ package font
 
 import (
 	"errors"
+	"sync"
 
 	"github.com/ironpark/ggui/internal/typesetting/font/opentype/tables"
 )
@@ -283,6 +284,46 @@ type post struct {
 	names postGlyphNames
 
 	isFixedPitch bool
+}
+
+// loadPost reads a 'post' table's metrics, and leaves its glyph names, a
+// string for each glyph of a font of tens of thousands, read when first
+// asked for: nothing that lays out or draws text asks.
+func loadPost(raw []byte) post {
+	// The metrics come before the names, which this short a table fails
+	// to hold: what was read before then is all that is wanted.
+	pst, _, _ := tables.ParsePost(raw[:min(len(raw), 32)])
+	out := post{
+		underlinePosition:  float32(pst.UnderlinePosition),
+		underlineThickness: float32(pst.UnderlineThickness),
+		isFixedPitch:       pst.IsFixedPitch != 0,
+	}
+	if len(raw) >= 32 {
+		out.names = &lazyPostNames{raw: raw}
+	}
+	return out
+}
+
+// lazyPostNames are a 'post' table's glyph names, read at the first ask.
+type lazyPostNames struct {
+	once  sync.Once
+	raw   []byte
+	names postGlyphNames
+}
+
+func (l *lazyPostNames) glyphName(x GID) string {
+	l.once.Do(func() {
+		if pst, _, err := tables.ParsePost(l.raw); err == nil {
+			if p, err := newPost(pst); err == nil {
+				l.names = p.names
+			}
+		}
+		l.raw = nil
+	})
+	if l.names == nil {
+		return ""
+	}
+	return l.names.glyphName(x)
 }
 
 func newPost(pst tables.Post) (post, error) {
