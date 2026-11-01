@@ -10,6 +10,8 @@ github.com/ironpark/ggfx v0.0.0-20261101160727-7dcf81c7658e h1:+umsTkSz8rISYWo05
 github.com/ironpark/ggfx v0.0.0-20261101160727-7dcf81c7658e/go.mod h1:g4KK8bnQr3VQ65W26/Sa+WL9HlSshg/PZUMfWRMK42c=
 github.com/ironpark/ggfx v0.0.0-20261101170750-0cc635c813d2 h1:km+u8eYKSTclS+KKHj0eUTnX6364W59jTPk8LZkLiVs=
 github.com/ironpark/ggfx v0.0.0-20261101170750-0cc635c813d2/go.mod h1:g4KK8bnQr3VQ65W26/Sa+WL9HlSshg/PZUMfWRMK42c=
+github.com/ironpark/ggfx v0.0.0-20261101183619-120cf0da55ef h1:Tlre5kGlTRNwRir7BOvu2ZZ6QYPYiA8QW52KCesn6Rs=
+github.com/ironpark/ggfx v0.0.0-20261101183619-120cf0da55ef/go.mod h1:g4KK8bnQr3VQ65W26/Sa+WL9HlSshg/PZUMfWRMK42c=
 github.com/ironpark/ggwd v0.0.0-20261031170520-65df921002d2 h1:nmxj3TXyOv9d395vzT4amTQJ3knhybLx+Uu/AsN/xbE=
 github.com/ironpark/ggwd v0.0.0-20261031170520-65df921002d2/go.mod h1:U4G78bhALXLxCSDvvWL4CMlJ6pMTFwQZfFLxp5J4tN0=
 github.com/pierrec/lz4/v4 v4.1.29 h1:CDQY6qZOLI4DW0Nx6R1vRrifrCeQHnNXkMb0hZWXFjg=
