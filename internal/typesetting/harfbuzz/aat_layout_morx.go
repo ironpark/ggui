@@ -368,7 +368,7 @@ func (dc *driverContextLigature) transition(buffer *Buffer, driver stateTableDri
 			}
 			offset := int32(uoffset)
 			componentIdx := int32(buffer.cur(0).Glyph) + offset
-			if int(componentIdx) >= len(dc.table.Components) {
+			if componentIdx < 0 || int(componentIdx) >= len(dc.table.Components) {
 				break
 			}
 			componentData := dc.table.Components[componentIdx]
