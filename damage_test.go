@@ -258,3 +258,31 @@ func TestDeliveredPointerEventsNoteTheirRegions(t *testing.T) {
 type takesPointer struct{}
 
 func (takesPointer) HandlePointer(PointerEvent) bool { return true }
+
+// A move is noted only where it was claimed, and only when the pointer
+// moved since the last frame's: each frame hands one to the regions
+// under a pointer at rest.
+func TestAMoveIsNotedOnlyWhenThePointerMovedAndItWasClaimed(t *testing.T) {
+	var in inputState
+	r := &hitRegion{rect: Rct(Pt(0, 0), Sz(10, 10)), pointer: takesPointer{}}
+	in.moved = true
+	in.deliver(r, PointerEvent{Kind: PointerMove})
+	if got, _ := in.takeTouched(); len(got) != 1 {
+		t.Fatalf("a claimed move after the pointer moved noted %v", got)
+	}
+	in.moved = false
+	in.deliver(r, PointerEvent{Kind: PointerMove})
+	if got, _ := in.takeTouched(); len(got) != 0 {
+		t.Fatalf("a move of a pointer at rest noted %v", got)
+	}
+	in.moved = true
+	in.deliver(&hitRegion{rect: r.rect, pointer: passesPointer{}}, PointerEvent{Kind: PointerMove})
+	if got, _ := in.takeTouched(); len(got) != 0 {
+		t.Fatalf("a move passed on noted %v", got)
+	}
+}
+
+// passesPointer claims no pointer event.
+type passesPointer struct{}
+
+func (passesPointer) HandlePointer(PointerEvent) bool { return false }

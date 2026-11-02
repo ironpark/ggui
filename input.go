@@ -197,6 +197,10 @@ type inputState struct {
 	// a Transform or a shape clip, where it cannot be placed.
 	touched         []Rect
 	touchedUnplaced bool
+	// lastMove is where the last frame's move was, and moved whether this
+	// frame's is elsewhere; movedOnce, that there was one.
+	lastMove         Point
+	moved, movedOnce bool
 
 	regions   []hitRegion
 	observers []inputObserver
@@ -351,6 +355,8 @@ func (in *inputState) notifyObservers(f frameInput) {
 // sending the exit before the enter so the two never overlap.
 func (in *inputState) updateHover(f frameInput) {
 	move := PointerEvent{Kind: PointerMove, Pos: f.pos, Mods: f.mods}
+	in.moved = !in.movedOnce || f.pos != in.lastMove
+	in.lastMove, in.movedOnce = f.pos, true
 	now := in.send(move)
 	if !in.continues(now, in.hovered) {
 		if in.hovered != nil {
@@ -584,13 +590,21 @@ func (r *hitRegion) handle(ev PointerEvent) bool {
 // deliver hands ev to r as handle does, noting where: a widget a pointer
 // event reached may look otherwise with no signal written, as a button
 // pressed or hovered does, and the frame paints its region again.
+//
+// A move is handed to the regions under the pointer every frame, moved or
+// not, and passes through those that do not claim it: only one claimed
+// after the pointer moved can have changed.
 func (in *inputState) deliver(r *hitRegion, ev PointerEvent) bool {
+	took := r.handle(ev)
+	if ev.Kind == PointerMove && (!took || !in.moved) {
+		return took
+	}
 	if r.space != nil {
 		in.touchedUnplaced = true
 	} else {
 		in.touched = append(in.touched, r.rect)
 	}
-	return r.handle(ev)
+	return took
 }
 
 // delivered counts the events handed to widgets, which may change how
