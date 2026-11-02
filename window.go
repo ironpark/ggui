@@ -652,6 +652,10 @@ func (w *Window) catchUp() error {
 		return nil
 	}
 	setRunning(&w.frameLoop)
+	// A layout shapes text as a frame does, and the shaping caches expire
+	// by ticks: a window covered for hours, its rows laid out again as
+	// their text changes, would otherwise keep every string it shaped.
+	text.AdvanceTick()
 	if err := w.settle(Untrack(w.viewport.Get)); err != nil {
 		return err
 	}
