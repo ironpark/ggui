@@ -4,6 +4,7 @@ import (
 	"github.com/ironpark/ggui/a11y"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/runtime"
+	"reflect"
 
 	"errors"
 	"fmt"
@@ -310,7 +311,11 @@ func (r *frameLoop) runPosted() {
 		if r.closed {
 			return
 		}
+		before := reactive.StateGen()
 		fn()
+		if reactive.StateGen() != before {
+			noteDirtier(dirtySignal, reflect.ValueOf(fn).Pointer())
+		}
 	}
 }
 
@@ -406,6 +411,7 @@ func (r *frameLoop) paint(p paintPass) (bool, error) {
 	}
 	f.focusVisible = p.in.focused != nil && p.in.focusVisible
 	f.pressed = p.in.pressed != nil
+	f.resetCanvases()
 	f.startMotion()
 	c.nextFrame()
 	c.resetSemantics()

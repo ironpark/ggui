@@ -3,6 +3,7 @@ package ggui
 import (
 	"image/color"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/ironpark/ggfx"
@@ -138,17 +139,17 @@ func TestWindowRectIsKnownOutsideATransformOnly(t *testing.T) {
 func TestPostedWorkLeavesTheFrameFreeToBePaintedInPart(t *testing.T) {
 	w := newWindow(nil, nil, Config{}, func() Widget { return Box() })
 	w.Post(func() {})
-	if w.dirty.Load() {
+	if w.dirty.Load() != 0 {
 		t.Fatal("posting work asked for the whole window")
 	}
 	if !w.hasPosted() || !w.wantsFrame(frameInput{}) {
 		t.Fatal("posted work does not get a frame")
 	}
-	if w.dirty.Load() {
+	if w.dirty.Load() != 0 {
 		t.Fatal("the frame for posted work was taken as dirty")
 	}
 	w.Repaint()
-	if !w.dirty.Load() {
+	if w.dirty.Load() == 0 {
 		t.Fatal("Repaint did not ask for the whole window")
 	}
 }
@@ -170,13 +171,13 @@ func TestDrainedWorkAsksForTheWholeOnlyWhenItChangedSomething(t *testing.T) {
 		{"a signal", func() { changed.Set(changed.Get() + 1) }, true},
 		{"the layout", reactive.RequestLayout, true},
 	} {
-		a.dirty.Store(false)
+		a.dirty.Store(0)
 		a.Post(tc.work)
 		if err := a.drain(); err != nil {
 			t.Fatal(err)
 		}
-		if a.dirty.Load() != tc.whole {
-			t.Errorf("work that changed %s: whole window asked %v, want %v", tc.name, a.dirty.Load(), tc.whole)
+		if (a.dirty.Load() != 0) != tc.whole {
+			t.Errorf("work that changed %s: whole window asked %v, want %v", tc.name, a.dirty.Load() != 0, tc.whole)
 		}
 	}
 }
@@ -193,4 +194,26 @@ func TestAKeptFrameIsPaintedOverWithWhatChangesNow(t *testing.T) {
 	if _, why := repaintFor(true, []Rect{Rct(Point{}, Sz(900, 900))}, window); why != "too much changed" {
 		t.Fatalf("most of the window: %q; want it painted whole", why)
 	}
+}
+
+func TestTheReportNamesThePostedWorkThatMadeTheWholeWindowDirty(t *testing.T) {
+	a := New(Config{}, func() Widget { return Box() })
+	defer a.Close()
+	a.running = true
+	changed := State(0)
+	a.Post(writeForTheReport(changed))
+	if err := a.drain(); err != nil {
+		t.Fatal(err)
+	}
+	for name := range ReadMotionReport().Dirtiers {
+		if strings.Contains(name, "dirty(signal)") && strings.Contains(name, "writeForTheReport") {
+			return
+		}
+	}
+	t.Fatalf("no dirtier names the work: %v", ReadMotionReport().Dirtiers)
+}
+
+// writeForTheReport is work that writes s.
+func writeForTheReport(s *StateValue[int]) func() {
+	return func() { s.Set(s.Get() + 1) }
 }

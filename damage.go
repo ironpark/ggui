@@ -2,7 +2,9 @@ package ggui
 
 import (
 	"image"
+	"runtime"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/ironpark/ggfx"
@@ -211,6 +213,8 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect
 	c.Image = target
 	c.window, c.onScreen = true, target == screen
 	f := c.fs()
+	f.resetCanvases()
+	defer f.resetCanvases()
 	f.startMotion()
 	f.backdrop = false
 	// Nothing painted registers anything, but what slips past the inert
@@ -294,6 +298,114 @@ func refusePartial(why string) {
 	motionMu.Unlock()
 }
 
+// dirtyReason records what marked the window dirty, keeping partial
+// redraw from taking the frame.
+type dirtyReason uint32
+
+const (
+	dirtyRepaint dirtyReason = 1 << iota
+	dirtySignal
+	dirtyLayout
+	dirtyEvent
+	dirtyAnim
+	dirtyCallback
+	dirtyInput
+	dirtyScale
+	dirtyOther
+)
+
+var dirtyReasons = []struct {
+	flag dirtyReason
+	name string
+}{
+	{dirtyRepaint, "dirty(repaint)"},
+	{dirtySignal, "dirty(signal)"},
+	{dirtyLayout, "dirty(layout)"},
+	{dirtyEvent, "dirty(event)"},
+	{dirtyAnim, "dirty(anim)"},
+	{dirtyCallback, "dirty(callback)"},
+	{dirtyInput, "dirty(input)"},
+	{dirtyScale, "dirty(scale)"},
+	{dirtyOther, "dirty(other)"},
+}
+
+// dirtiers counts, by code address, what marked frames dirty: posted work
+// that wrote a signal, and the callers of Repaint. Most are a handful of
+// sites, so the map stays small; past mostDirtiers it takes no new ones.
+var dirtiers = map[dirtier]int64{}
+
+type dirtier struct {
+	why dirtyReason
+	pc  uintptr
+}
+
+const mostDirtiers = 256
+
+// noteDirtier counts pc, a function's entry or a call site, as having
+// marked a frame dirty for why.
+func noteDirtier(why dirtyReason, pc uintptr) {
+	k := dirtier{why, pc}
+	motionMu.Lock()
+	if _, ok := dirtiers[k]; ok || len(dirtiers) < mostDirtiers {
+		dirtiers[k]++
+	}
+	motionMu.Unlock()
+}
+
+// noteCaller counts the caller of the function calling it.
+func noteCaller(why dirtyReason) {
+	var pc [1]uintptr
+	if runtime.Callers(3, pc[:]) == 1 {
+		noteDirtier(why, pc[0])
+	}
+}
+
+// callerOutside returns the first call site outside this package, past
+// the function calling it: what in an app or a widget package started an
+// animation, say.
+func callerOutside() uintptr {
+	var pcs [12]uintptr
+	n := runtime.Callers(3, pcs[:])
+	frames := runtime.CallersFrames(pcs[:n])
+	for {
+		f, more := frames.Next()
+		if !strings.HasPrefix(f.Function, "github.com/ironpark/ggui.") {
+			return f.PC
+		}
+		if !more {
+			return f.PC
+		}
+	}
+}
+
+// dirtierName names a dirtier as "why: function".
+func dirtierName(d dirtier) string {
+	why := "dirty"
+	for _, r := range dirtyReasons {
+		if r.flag == d.why {
+			why = r.name
+		}
+	}
+	name := "?"
+	if f := runtime.FuncForPC(d.pc); f != nil {
+		name = f.Name()
+	}
+	return why + " " + name
+}
+
+func refusePartialDirty(bits dirtyReason) {
+	if bits == 0 {
+		return
+	}
+	motionMu.Lock()
+	defer motionMu.Unlock()
+	for _, d := range dirtyReasons {
+		if bits&d.flag != 0 {
+			partialRefusals[d.name]++
+		}
+	}
+}
+
 // MotionReport is what moved in the last frame a window painted, by
 // widget type, and how many frames since the program started could have
 // been painted in part but were painted whole, by why: "dirty" when
@@ -301,9 +413,15 @@ func refusePartial(why string) {
 // "unplaced" when what moved was under a transform, "inspected",
 // "resized", "not kept" when the last frame was not, "too much
 // changed".
+//
+// Dirtiers counts, by name, the posted work that wrote a signal
+// ("dirty(signal) pkg.func") and the callers of Repaint
+// ("dirty(repaint) pkg.func"), whether or not the frame could have been
+// painted in part.
 type MotionReport struct {
 	Movers   []string
 	Refusals map[string]int64
+	Dirtiers map[string]int64
 }
 
 // ReadMotionReport reports what moves and what keeps frames whole. It is
@@ -314,6 +432,10 @@ func ReadMotionReport() MotionReport {
 	r := MotionReport{Movers: slices.Clone(lastMovers), Refusals: make(map[string]int64, len(partialRefusals))}
 	for k, v := range partialRefusals {
 		r.Refusals[k] = v
+	}
+	r.Dirtiers = make(map[string]int64, len(dirtiers))
+	for k, v := range dirtiers {
+		r.Dirtiers[dirtierName(k)] += v
 	}
 	return r
 }

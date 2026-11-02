@@ -283,8 +283,17 @@ func (a *App) drain() error {
 		// catchUp settles the layout, so the frame cannot tell it changed:
 		// work that changed it is painted whole. Work that changed nothing
 		// leaves the frame free to be painted in part.
-		if reactive.StateGen() != state || layoutGen() != layout {
-			w.requestFrame()
+		stateChanged := reactive.StateGen() != state
+		layoutChanged := layoutGen() != layout
+		if stateChanged || layoutChanged {
+			var reason dirtyReason
+			if stateChanged {
+				reason |= dirtySignal
+			}
+			if layoutChanged {
+				reason |= dirtyLayout
+			}
+			w.markDirty(reason)
 		} else {
 			w.wakeFrame()
 		}

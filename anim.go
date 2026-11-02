@@ -58,15 +58,30 @@ type stepper interface {
 type animator struct {
 	mu   sync.Mutex
 	list []stepper
+	// origins are where list's animations were started, for MotionReport.
+	origins  []uintptr
+	stepping []stepper // step's copy of list
 }
 
 func (a *animator) add(s stepper) {
+	pc := callerOutside()
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if slices.Contains(a.list, s) {
 		return
 	}
 	a.list = append(a.list, s)
+	a.origins = append(a.origins, pc)
+}
+
+// noteDirtiers counts where the running animations were started as having
+// marked a frame dirty.
+func (a *animator) noteDirtiers() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, pc := range a.origins {
+		noteDirtier(dirtyAnim, pc)
+	}
 }
 
 // remove drops a stopped animation immediately, even if no more frames run.
@@ -75,6 +90,7 @@ func (a *animator) remove(s stepper) {
 	defer a.mu.Unlock()
 	if i := slices.Index(a.list, s); i >= 0 {
 		a.list = slices.Delete(a.list, i, i+1)
+		a.origins = slices.Delete(a.origins, i, i+1)
 	}
 }
 
@@ -88,7 +104,10 @@ func (a *animator) active() bool {
 // step advances every running animation and drops the ones that finished.
 func (a *animator) step(now time.Time) {
 	a.mu.Lock()
-	list := append([]stepper(nil), a.list...)
+	// The copy steps outside the lock, in a buffer kept from step to step
+	// (taken, so that a step within a step makes its own).
+	list := append(a.stepping[:0], a.list...)
+	a.stepping = nil
 	a.mu.Unlock()
 
 	for _, s := range list {
@@ -98,7 +117,17 @@ func (a *animator) step(now time.Time) {
 	// animations during step. Preserve new registrations, and avoid a
 	// quadratic series of removals when many animations finish together.
 	a.mu.Lock()
-	a.list = slices.DeleteFunc(a.list, func(s stepper) bool { return !s.active() })
+	n := 0
+	for i, s := range a.list {
+		if s.active() {
+			a.list[n], a.origins[n] = s, a.origins[i]
+			n++
+		}
+	}
+	clear(a.list[n:])
+	a.list, a.origins = a.list[:n], a.origins[:n]
+	clear(list)
+	a.stepping = list[:0]
 	a.mu.Unlock()
 }
 

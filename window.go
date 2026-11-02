@@ -169,7 +169,7 @@ type Window struct {
 	motionGen  uint64
 	motionSize image.Point
 	motionWhy  string // why the next frame may not be painted in part, or "ok"
-	dirty      atomic.Bool
+	dirty      atomic.Uint32
 	repaintMu  sync.Mutex
 	repaints   []Rect // asked for by RepaintRect since the last frame
 
@@ -316,18 +316,18 @@ func (w *Window) handle(ev ggwd.Event) error {
 				w.Inspector(!w.inspect)
 			}
 		}
-		w.requestFrame()
+		w.markDirty(dirtyEvent)
 	case ggwd.CompositionEvent:
 		textinput.HandleEvent(ev)
-		w.requestFrame()
+		w.markDirty(dirtyEvent)
 	case ggwd.TextEvent:
 		if !textinput.HandleEvent(ev) {
 			w.pending.text += ev.Text
 		}
-		w.requestFrame()
+		w.markDirty(dirtyEvent)
 	case ggwd.MouseMoveEvent:
 		w.pos = Pt(ev.X, ev.Y)
-		w.requestFrame()
+		w.markDirty(dirtyEvent)
 	case ggwd.MouseButtonEvent:
 		w.pos = Pt(ev.X, ev.Y)
 		// A modifier pressed while another window had the focus reached
@@ -339,13 +339,13 @@ func (w *Window) handle(ev ggwd.Event) error {
 		} else {
 			w.pending.up = append(w.pending.up, ev.Button)
 		}
-		w.requestFrame()
+		w.markDirty(dirtyEvent)
 	case ggwd.ScrollEvent:
 		w.keyboard.SyncMods(ev.Modifiers)
 		w.pending.mods = w.pending.mods.Or(ev.Modifiers)
 		w.pending.wheel = w.pending.wheel.Add(Pt(ev.X, ev.Y))
 		w.pending.phase = laterPhase(w.pending.phase, ev.Phase)
-		w.requestFrame()
+		w.markDirty(dirtyEvent)
 	case ggwd.TouchEvent:
 		if w.touches == nil {
 			w.touches = map[ggwd.TouchID]Point{}
@@ -355,7 +355,7 @@ func (w *Window) handle(ev ggwd.Event) error {
 		} else {
 			w.touches[ev.ID] = Pt(ev.X, ev.Y)
 		}
-		w.requestFrame()
+		w.markDirty(dirtyEvent)
 	case ggwd.DragEvent:
 		switch ev.Phase {
 		case ggwd.DragEntered, ggwd.DragMoved:
@@ -363,10 +363,10 @@ func (w *Window) handle(ev ggwd.Event) error {
 		case ggwd.DragExited, ggwd.DragEnded:
 			w.dragOver = false
 		}
-		w.requestFrame()
+		w.markDirty(dirtyEvent)
 	case ggwd.DropEvent:
 		w.pending.drop = append(w.pending.drop, droppedFiles(ev.Files)...)
-		w.requestFrame()
+		w.markDirty(dirtyEvent)
 	case ggwd.CloseEvent:
 		if len(w.closeRequests) > 0 {
 			// The handlers decide in a frame, where they may put up a
@@ -394,18 +394,27 @@ func (w *Window) handle(ev ggwd.Event) error {
 	return nil
 }
 
+// markDirty notes that something asked for the window to be painted whole,
+// by why (see damage.go).
+func (w *Window) markDirty(reason dirtyReason) {
+	w.dirty.Or(uint32(reason))
+	w.wakeFrame()
+}
+
 // requestFrame asks the window for a frame. It is safe from any goroutine
 // and before the window exists, when the first frame comes on its own.
 func (w *Window) requestFrame() {
-	w.dirty.Store(true)
-	w.wakeFrame()
+	w.markDirty(dirtyOther)
 }
 
 // Repaint asks for the whole window to be painted in the next frame, for
 // a change that no signal and no layout records, such as fields that work
 // posted with Post wrote: posted work alone repaints only what its signals
 // and layout changes reach. Safe to call from any goroutine.
-func (w *Window) Repaint() { w.requestFrame() }
+func (w *Window) Repaint() {
+	noteCaller(dirtyRepaint)
+	w.markDirty(dirtyRepaint)
+}
 
 // wakeFrame asks for a frame for the time a widget asked to be painted
 // again at, which nothing else changes: it may be painted in part.
@@ -558,7 +567,7 @@ func (w *Window) runFrameEvent(ev ggwd.FrameEvent) error {
 	before := delivered.Load()
 	w.dispatchInput(f)
 	if delivered.Load() != before {
-		w.dirty.Store(true)
+		w.dirty.Or(uint32(dirtyInput))
 	}
 	if w.closed {
 		return nil
@@ -672,19 +681,20 @@ func (w *Window) wantsFrame(f frameInput) bool {
 	switch {
 	case wd.anims.active():
 		framesFor[frameForAnimation].Add(1)
-		w.dirty.Store(true)
+		w.dirty.Or(uint32(dirtyAnim))
+		wd.anims.noteDirtiers()
 	case wd.frame.timeRead():
 		// Only what read the time changes: the frame may be painted in
 		// part. What else changes by then marks it dirty itself.
 		framesFor[frameForTime].Add(1)
 	case len(w.frame) > 0:
 		framesFor[frameForCallback].Add(1)
-		w.dirty.Store(true)
+		w.dirty.Or(uint32(dirtyCallback))
 	case w.hasPosted():
 		framesFor[frameForPosted].Add(1)
 	case f.drag || w.touch.active || w.touch.waiting || w.input.touchMotion.target != nil:
 		framesFor[frameForInput].Add(1)
-		w.dirty.Store(true)
+		w.dirty.Or(uint32(dirtyInput))
 	default:
 		return false
 	}
@@ -735,20 +745,24 @@ func (w *Window) background() color.Color {
 // pixels per logical pixel, so that a HiDPI monitor gets a sharp image while
 // widgets keep working in logical pixels.
 func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage func([]image.Rectangle)) {
-	dirty := w.dirty.Swap(false)
+	dirtyBits := dirtyReason(w.dirty.Swap(0))
 	if scale > 0 {
-		dirty = dirty || scale != w.canvas.scale
-		w.canvas.scale = scale
+		if scale != w.canvas.scale {
+			dirtyBits |= dirtyScale
+			w.canvas.scale = scale
+		}
 	}
 	asked := w.takeRepaints()
 	target, kept := w.paintTarget(screen, kept)
-	if wanted := len(w.motion) > 0 || len(asked) > 0; dirty {
+	if wanted := len(w.motion) > 0 || len(asked) > 0; dirtyBits != 0 {
 		if wanted {
-			refusePartial("dirty")
+			refusePartialDirty(dirtyBits)
 		}
 	} else if wanted && w.drawPartial(screen, target, kept, asked, setDamage) {
 		return
 	}
+	w.canvas.fs().resetCanvases()
+	defer w.canvas.fs().resetCanvases()
 	target.Fill(w.background())
 	if w.root == nil {
 		return

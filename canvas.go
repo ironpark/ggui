@@ -115,6 +115,21 @@ type frameState struct {
 	partial    bool
 	damage     Rect
 	overlaid   bool // an overlay was painted this frame
+
+	// canvases are the Canvases Clip hands out, made once and handed out
+	// again from the next paint on: canvasIdx are those taken this one.
+	canvases  []*Canvas
+	canvasIdx int
+}
+
+// resetCanvases takes back the Canvases Clip handed out, at the start and
+// the end of a paint: nothing a widget painted keeps one past its frame,
+// as with ClipReusing. Zeroed, they hold no image or parent until taken.
+func (f *frameState) resetCanvases() {
+	for i := 0; i < f.canvasIdx; i++ {
+		*f.canvases[i] = Canvas{}
+	}
+	f.canvasIdx = 0
 }
 
 // fs returns the frame state, creating it on the root's first use. A Canvas
@@ -665,11 +680,22 @@ func (c *Canvas) physical(r Rect) image.Rectangle {
 
 // Clip returns a Canvas that draws only inside r and registers hit regions
 // only where they overlap r. Coordinates are unchanged, and clips nest.
+// The Canvas is the frame's: it is handed out again in a later frame, so
+// a widget keeps none past its Paint or the overlays the frame paints.
 func (c *Canvas) Clip(r Rect) *Canvas {
 	if c == nil {
 		return nil
 	}
-	return c.clipInto(new(Canvas), r)
+	f := c.fs()
+	var child *Canvas
+	if f.canvasIdx < len(f.canvases) {
+		child = f.canvases[f.canvasIdx]
+	} else {
+		child = new(Canvas)
+		f.canvases = append(f.canvases, child)
+	}
+	f.canvasIdx++
+	return c.clipInto(child, r)
 }
 
 // ClipReusing is Clip made in reuse, a Canvas the caller keeps from frame
