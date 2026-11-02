@@ -462,6 +462,29 @@ func (w *Window) RepaintRect(r Rect) {
 	w.wakeFrame()
 }
 
+// addRepaints asks for rs, grown by damageReach for what a widget draws
+// around its region, to be painted again in the frame being run.
+func (w *Window) addRepaints(rs []Rect) {
+	if len(rs) == 0 {
+		return
+	}
+	w.repaintMu.Lock()
+	defer w.repaintMu.Unlock()
+	for _, r := range rs {
+		if r.Empty() {
+			continue
+		}
+		r = grow(r, damageReach)
+		if len(w.repaints) >= mostRepaints {
+			for _, o := range w.repaints {
+				r = cover(r, o)
+			}
+			w.repaints = w.repaints[:0]
+		}
+		w.repaints = append(w.repaints, r)
+	}
+}
+
 // mostRepaints is how many asked regions a frame keeps apart.
 const mostRepaints = 32
 

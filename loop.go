@@ -412,6 +412,7 @@ func (r *frameLoop) paint(p paintPass) (bool, error) {
 	f.focusVisible = p.in.focused != nil && p.in.focusVisible
 	f.pressed = p.in.pressed != nil
 	f.resetCanvases()
+	f.pointerRead = false
 	f.startMotion()
 	c.nextFrame()
 	c.resetSemantics()

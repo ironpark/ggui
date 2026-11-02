@@ -192,6 +192,12 @@ type frameInput struct {
 // survived, or by Rect when a rebuild replaced it, so a widget that moves
 // while dragged keeps the drag and a tap completes across a rebuild.
 type inputState struct {
+	// touched are the regions, in the window's coordinates, pointer events
+	// were handed to since takeTouched; touchedUnplaced, that one was under
+	// a Transform or a shape clip, where it cannot be placed.
+	touched         []Rect
+	touchedUnplaced bool
+
 	regions   []hitRegion
 	observers []inputObserver
 
@@ -354,17 +360,17 @@ func (in *inputState) updateHover(f frameInput) {
 			if cur := in.findPointer(left); cur != nil {
 				left = cur
 			}
-			left.handle(PointerEvent{Kind: PointerExit, Pos: f.pos})
+			in.deliver(left, PointerEvent{Kind: PointerExit, Pos: f.pos})
 		}
 		if now != nil {
-			now.handle(PointerEvent{Kind: PointerEnter, Pos: f.pos})
+			in.deliver(now, PointerEvent{Kind: PointerEnter, Pos: f.pos})
 		}
 	} else if now != nil && now.pointer != nil && !sameAny(now.pointer, in.hovered.pointer) {
 		// Rebuilt under the pointer, the region is a new handler, with a
 		// hover state of its own that never heard the enter: a row of a
 		// list redrawn for a change elsewhere would show itself left. The
 		// one it replaced is gone, and hears no exit.
-		now.handle(PointerEvent{Kind: PointerEnter, Pos: f.pos})
+		in.deliver(now, PointerEvent{Kind: PointerEnter, Pos: f.pos})
 	}
 	in.hovered = keep(now)
 }
@@ -409,7 +415,7 @@ func (in *inputState) dispatchPointer(f frameInput) {
 	}
 	if in.pressed != nil && len(f.down) == 0 && len(f.up) == 0 {
 		if cur := in.findPointer(in.pressed); cur != nil {
-			cur.handle(PointerEvent{Kind: PointerDrag, Pos: f.pos, Button: in.pressedBtn})
+			in.deliver(cur, PointerEvent{Kind: PointerDrag, Pos: f.pos, Button: in.pressedBtn})
 		}
 	}
 	for _, b := range f.up {
@@ -420,9 +426,9 @@ func (in *inputState) dispatchPointer(f frameInput) {
 			continue
 		}
 		if cur := in.findPointer(p); cur != nil {
-			cur.handle(ev)
+			in.deliver(cur, ev)
 			if cur.contains(f.pos) {
-				cur.handle(PointerEvent{Kind: PointerTap, Pos: f.pos, Button: b, Mods: f.mods})
+				in.deliver(cur, PointerEvent{Kind: PointerTap, Pos: f.pos, Button: b, Mods: f.mods})
 			}
 		}
 		in.pressed = nil
@@ -572,8 +578,19 @@ func (in *inputState) topmost(match func(*hitRegion) bool) *hitRegion {
 // handle delivers the window-space ev to r's PointerHandler in the
 // coordinates r was painted in and reports whether it consumed it.
 func (r *hitRegion) handle(ev PointerEvent) bool {
-	delivered.Add(1)
 	return r.pointer.HandlePointer(r.pointerAt(ev))
+}
+
+// deliver hands ev to r as handle does, noting where: a widget a pointer
+// event reached may look otherwise with no signal written, as a button
+// pressed or hovered does, and the frame paints its region again.
+func (in *inputState) deliver(r *hitRegion, ev PointerEvent) bool {
+	if r.space != nil {
+		in.touchedUnplaced = true
+	} else {
+		in.touched = append(in.touched, r.rect)
+	}
+	return r.handle(ev)
 }
 
 // delivered counts the events handed to widgets, which may change how
@@ -585,7 +602,7 @@ var delivered atomic.Uint64
 // and returns that region, or nil.
 func (in *inputState) send(ev PointerEvent) *hitRegion {
 	return in.topmost(func(r *hitRegion) bool {
-		return r.pointer != nil && r.contains(ev.Pos) && r.handle(ev)
+		return r.pointer != nil && r.contains(ev.Pos) && in.deliver(r, ev)
 	})
 }
 
@@ -721,7 +738,7 @@ func (in *inputState) releasePress(pos Point, mods Mods) {
 		return
 	}
 	if cur := in.findPointer(in.pressed); cur != nil {
-		cur.handle(PointerEvent{Kind: PointerUp, Pos: pos, Button: in.pressedBtn, Mods: mods})
+		in.deliver(cur, PointerEvent{Kind: PointerUp, Pos: pos, Button: in.pressedBtn, Mods: mods})
 	}
 	in.pressed = nil
 }
@@ -997,4 +1014,12 @@ func (in *inputState) applyFocusRequest(c *Canvas) {
 			return
 		}
 	}
+}
+
+// takeTouched returns the regions pointer events reached since the last
+// call, and false when one cannot be placed in the window.
+func (in *inputState) takeTouched() ([]Rect, bool) {
+	t, ok := in.touched, !in.touchedUnplaced
+	in.touched, in.touchedUnplaced = in.touched[:0], false
+	return t, ok
 }

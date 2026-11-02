@@ -57,9 +57,14 @@ type Canvas struct {
 // Clip chain reaches the same one through root, so a field added here is
 // shared by construction and needs no clearing when a child Canvas is made.
 type frameState struct {
-	logical      Size // the window in logical pixels, for Size
-	pointer      Point
-	hasPointer   bool
+	logical    Size // the window in logical pixels, for Size
+	pointer    Point
+	hasPointer bool
+	// pointerRead records that a widget read the pointer in the last
+	// whole paint, or in a part painted since: a mouse move then repaints
+	// the whole window, as what such a widget draws follows the pointer
+	// with no event reaching it.
+	pointerRead  bool
 	focusBounds  Rect       // focused input region at the start of this paint
 	focusKey     KeyHandler // its handler
 	focusPainted bool       // the focused handler registered since PaintFocus began
@@ -371,6 +376,7 @@ func (c *Canvas) Pointer() (Point, bool) {
 		return Point{}, false
 	}
 	f := c.fs()
+	f.pointerRead = true
 	return c.space.local(f.pointer), f.hasPointer
 }
 

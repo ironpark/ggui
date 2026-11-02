@@ -327,7 +327,13 @@ func (w *Window) handle(ev ggwd.Event) error {
 		w.markDirty(dirtyEvent)
 	case ggwd.MouseMoveEvent:
 		w.pos = Pt(ev.X, ev.Y)
-		w.markDirty(dirtyEvent)
+		if w.canvas.fs().pointerRead {
+			w.markDirty(dirtyEvent)
+		} else {
+			// What the move reaches is painted again, as hovering it
+			// enters or leaves a region; see deliver.
+			w.wakeFrame()
+		}
 	case ggwd.MouseButtonEvent:
 		w.pos = Pt(ev.X, ev.Y)
 		// A modifier pressed while another window had the focus reached
@@ -566,8 +572,16 @@ func (w *Window) runFrameEvent(ev ggwd.FrameEvent) error {
 	cf.pointer, cf.hasPointer = f.pos, true
 	before := delivered.Load()
 	w.dispatchInput(f)
-	if delivered.Load() != before {
+	touched, placed := w.input.takeTouched()
+	switch {
+	case delivered.Load() != before:
 		w.dirty.Or(uint32(dirtyInput))
+	case !placed:
+		w.dirty.Or(uint32(dirtyEvent))
+	default:
+		// What a pointer event reached is painted again, and what lies
+		// beside it left as it was, unless a signal was written too.
+		w.addRepaints(touched)
 	}
 	if w.closed {
 		return nil

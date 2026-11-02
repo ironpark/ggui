@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"github.com/ironpark/ggwd"
 	"image/color"
 	"slices"
 	"strings"
@@ -217,3 +218,43 @@ func TestTheReportNamesThePostedWorkThatMadeTheWholeWindowDirty(t *testing.T) {
 func writeForTheReport(s *StateValue[int]) func() {
 	return func() { s.Set(s.Get() + 1) }
 }
+
+// A mouse move asks for the whole window only when the last paint read
+// where the pointer is; otherwise what the move reaches is painted again.
+func TestAMouseMoveRepaintsTheWholeOnlyWhenPaintReadThePointer(t *testing.T) {
+	w := newWindow(nil, nil, Config{}, func() Widget { return Box() })
+	if err := w.handle(ggwd.MouseMoveEvent{X: 5, Y: 5}); err != nil {
+		t.Fatal(err)
+	}
+	if w.dirty.Load() != 0 {
+		t.Fatal("a mouse move nothing read asked for the whole window")
+	}
+	w.canvas.Pointer()
+	if err := w.handle(ggwd.MouseMoveEvent{X: 6, Y: 6}); err != nil {
+		t.Fatal(err)
+	}
+	if w.dirty.Load() == 0 {
+		t.Fatal("a mouse move did not ask for the whole window a paint read the pointer in")
+	}
+}
+
+// The regions pointer events reach are what the frame paints again.
+func TestDeliveredPointerEventsNoteTheirRegions(t *testing.T) {
+	var in inputState
+	r := &hitRegion{rect: Rct(Pt(10, 20), Sz(30, 40)), pointer: takesPointer{}}
+	in.deliver(r, PointerEvent{Kind: PointerEnter})
+	got, placed := in.takeTouched()
+	if !placed || len(got) != 1 || got[0] != r.rect {
+		t.Fatalf("touched %v, %v", got, placed)
+	}
+	r.space = &paintSpace{}
+	in.deliver(r, PointerEvent{Kind: PointerExit})
+	if _, placed := in.takeTouched(); placed {
+		t.Fatal("a region under a transform was taken as placed")
+	}
+}
+
+// takesPointer consumes every pointer event.
+type takesPointer struct{}
+
+func (takesPointer) HandlePointer(PointerEvent) bool { return true }
