@@ -133,8 +133,11 @@ type ToggleGroupWidget[T comparable] struct {
 	sizes []ggui.Size    // each segment's content
 	parts []segmentParts // and what is in it
 	rects []ggui.Rect
-	pad   ggui.EdgeInsets
-	cur   int // the chosen segment, found once a frame by paint
+	// segs are the segments' handlers, made once for each version of the
+	// options: a segment painted as a value would be boxed twice a frame.
+	segs []*toggleSegment[T]
+	pad  ggui.EdgeInsets
+	cur  int // the chosen segment, found once a frame by paint
 }
 
 // ToggleGroup creates one segment per option, bound to value and labelled
@@ -359,9 +362,10 @@ func (g *ToggleGroupWidget[T]) paint(dst *ggui.Canvas, r ggui.Rect) {
 		main := pick(g.vertical, s.H+g.pad.Top+g.pad.Bottom, s.W+g.pad.Left+g.pad.Right)
 		seg := ggui.Rct(at, pick(g.vertical, ggui.Sz(cross, main), ggui.Sz(main, cross)))
 		g.rects = append(g.rects, seg)
-		dst.Describe(seg, toggleSegment[T]{g: g, i: i, version: g.optionsVersion})
+		h := g.segment(i)
+		dst.Describe(seg, h)
 		if !g.IsInert() {
-			dst.HitPointer(seg, toggleSegment[T]{g: g, i: i, version: g.optionsVersion})
+			dst.HitPointer(seg, h)
 			dst.HitCursor(seg, ggui.CursorShapePointer)
 		}
 		switch {
@@ -426,6 +430,17 @@ func (g *ToggleGroupWidget[T]) Adopt(prev any) {
 	if p, ok := prev.(*ToggleGroupWidget[T]); ok {
 		g.hover = p.hover
 	}
+}
+
+// segment returns segment i's handler for the options' current version.
+func (g *ToggleGroupWidget[T]) segment(i int) *toggleSegment[T] {
+	if len(g.segs) > 0 && g.segs[0].version != g.optionsVersion {
+		g.segs = g.segs[:0]
+	}
+	for len(g.segs) <= i {
+		g.segs = append(g.segs, &toggleSegment[T]{g: g, i: len(g.segs), version: g.optionsVersion})
+	}
+	return g.segs[i]
 }
 
 // toggleSegment is one option's pointer handler and node.

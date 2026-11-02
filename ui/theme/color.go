@@ -2,6 +2,7 @@ package theme
 
 import (
 	"image/color"
+	"sync"
 
 	"github.com/ironpark/ggui"
 )
@@ -38,11 +39,38 @@ func Fade(c color.Color, alpha float64) color.Color {
 		return faded{e, alpha}
 	}
 	r, g, b, a := c.RGBA()
+	k := fadeKey{r, g, b, a, alpha}
+	fadesMu.Lock()
+	defer fadesMu.Unlock()
+	if f, ok := fades[k]; ok {
+		return f
+	}
 	// Every channel scales, alpha included, because a premultiplied color
 	// stays premultiplied only if they all do.
 	scale := func(v uint32) uint8 { return uint8(min(max(float64(v>>8)*alpha, 0), 255)) }
-	return color.RGBA{scale(r), scale(g), scale(b), scale(a)}
+	var f color.Color = color.RGBA{scale(r), scale(g), scale(b), scale(a)}
+	if len(fades) >= mostFades {
+		clear(fades)
+	}
+	fades[k] = f
+	return f
 }
+
+// fades keeps the colors Fade made, boxed: a widget fades the same colors
+// every frame it paints, and each a fresh color.Color is an allocation.
+var (
+	fadesMu sync.Mutex
+	fades   = map[fadeKey]color.Color{}
+)
+
+// fadeKey is a color Fade faded, and by how much.
+type fadeKey struct {
+	r, g, b, a uint32
+	alpha      float64
+}
+
+// mostFades is how many faded colors Fade keeps.
+const mostFades = 256
 
 // Disabled is c as a disabled control draws it, faded by DisabledMix.
 func (t Theme) Disabled(c color.Color) color.Color { return Fade(c, 1-t.DisabledMix) }

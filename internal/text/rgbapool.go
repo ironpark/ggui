@@ -60,8 +60,18 @@ func uploadPooledRGBA(img *image.RGBA) *ggfx.Image {
 }
 
 // releasePooledRGBA returns an image obtained from newPooledRGBA to the pool.
+//
+// A buffer past mostPooledRGBA is let go instead: the pool would keep the
+// largest glyph it ever drew, a big emoji, for every small one after.
 func releasePooledRGBA(rgba *image.RGBA) {
-	clear(rgba.Pix)
+	if cap(rgba.Pix) > mostPooledRGBA {
+		return
+	}
+	clear(rgba.Pix[:cap(rgba.Pix)])
 	rgba.Pix = rgba.Pix[:0]
 	theRGBAPool.Put(rgba)
 }
+
+// mostPooledRGBA is the largest buffer, in bytes, the pool keeps: a glyph
+// 128 pixels square.
+const mostPooledRGBA = 64 << 10

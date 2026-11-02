@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"github.com/ironpark/ggui/internal/property"
 	"image/color"
 	"sync/atomic"
 	"time"
@@ -22,6 +23,22 @@ type TextStyle struct {
 	LineHeight float64    // multiple of Size between baselines
 	Weight     FontWeight // drawn with the Font's face nearest this weight
 }
+
+// Equal reports whether s and o draw the same: the same Font, size, line
+// height and weight, and colors that draw alike.
+func (s TextStyle) Equal(o TextStyle) bool {
+	if s.Font != o.Font || s.Size != o.Size || s.LineHeight != o.LineHeight || s.Weight != o.Weight {
+		return false
+	}
+	if s.Color == nil || o.Color == nil {
+		return s.Color == nil && o.Color == nil
+	}
+	ar, ag, ab, aa := s.Color.RGBA()
+	br, bg, bb, ba := o.Color.RGBA()
+	return ar == br && ag == bg && ab == bb && aa == ba
+}
+
+func init() { property.RegisterEqual(TextStyle.Equal) }
 
 // Merge returns s with every set field of o laid over it.
 func (s TextStyle) Merge(o TextStyle) TextStyle {

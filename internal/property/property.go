@@ -59,11 +59,17 @@ func EnterLayout() func() { return reactive.EnterLayout() }
 // Equal compares configuration values, not reader identity. Colors compare by
 // their rendered channels; equal NaNs must not turn a still frame into a loop.
 func Equal[T any](a, b T) bool {
-	if t := reflect.TypeFor[T](); t.Kind() != reflect.Float64 && t.Kind() != reflect.Float32 && plain(t) {
+	t := reflect.TypeFor[T]()
+	if t.Kind() != reflect.Float64 && t.Kind() != reflect.Float32 && plain(t) {
 		// == is DeepEqual for these, and the values, boxed only to be
 		// compared, stay on the stack. A float alone is below, where a NaN
 		// is the same as another.
 		return any(a) == any(b)
+	}
+	// A type that registered what equal is, as a style holding a color
+	// does, compares with no boxing or reflection.
+	if eq, ok := equals.Load(t); ok {
+		return eq.(func(a, b T) bool)(a, b)
 	}
 	if ca, ok := any(a).(color.Color); ok {
 		if cb, ok := any(b).(color.Color); ok {
@@ -84,6 +90,17 @@ func Equal[T any](a, b T) bool {
 		return true
 	}
 	return reflect.DeepEqual(a, b)
+}
+
+// equals are the comparisons RegisterEqual registered, by type.
+var equals sync.Map // reflect.Type → func(a, b T) bool
+
+// RegisterEqual makes Equal compare values of T with eq, for a type a
+// property holds that is not plain but can say cheaply what equal is: a
+// struct holding a color.Color, which Equal would otherwise box and
+// compare by reflection on every layout.
+func RegisterEqual[T any](eq func(a, b T) bool) {
+	equals.Store(reflect.TypeFor[T](), eq)
 }
 
 // plainTypes caches plain by type: Equal runs for every property a layout
