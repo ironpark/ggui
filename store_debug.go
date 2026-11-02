@@ -15,6 +15,8 @@ import (
 var (
 	watchedMu sync.Mutex
 	watched   []func(report func(store, sel string)) (live bool)
+	// checkMu has checkStores check one at a time.
+	checkMu sync.Mutex
 )
 
 // storeChecks is where a Store was made and a check for each live Select.
@@ -57,6 +59,10 @@ func watchStore[M any](s *Store[M]) {
 // checkStores reports a Select whose model changed with nothing published,
 // once per place it was made.
 func checkStores() {
+	// Frames on goroutines of their own check at once; one at a time, or
+	// one would cut watched down below the length another read.
+	checkMu.Lock()
+	defer checkMu.Unlock()
 	watchedMu.Lock()
 	list := watched
 	watchedMu.Unlock()
