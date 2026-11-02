@@ -86,7 +86,9 @@ func TestTextSkipsLinesOutsideTheClip(t *testing.T) {
 	shown := full.Clip(Rct(Pt(0, 0), Sz(400, 20)))
 	all := testing.AllocsPerRun(5, func() { full.Paint(txt, Rct(Point{}, size)) })
 	one := testing.AllocsPerRun(5, func() { shown.Paint(txt, Rct(Point{}, size)) })
-	if one*10 > all {
+	// One line allocates about a twelfth of what all do, but about a tenth
+	// under the race detector; painting all of them would allocate as much.
+	if one*5 > all {
 		t.Errorf("painting one line of 200 allocates %v, all of them %v", one, all)
 	}
 }
