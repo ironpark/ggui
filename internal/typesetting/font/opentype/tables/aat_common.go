@@ -16,8 +16,62 @@ type AATStateTable struct {
 	ClassTable ClassTable      `offsetSize:"Offset16"` // Byte offset from the beginning of the state table to the class subtable.
 	stateArray Offset16        // Byte offset from the beginning of the state table to the state array.
 	entryTable Offset16        // Byte offset from the beginning of the state table to the entry subtable.
-	States     [][]uint8       `isOpaque:""`
+	States     AATStates       `isOpaque:""` // a byte a cell
 	Entries    []AATStateEntry `isOpaque:""` // entry data are empty
+}
+
+// AATStates is a state array as it lies in the font's data: a row of a
+// cell for each class, for each state, a cell the index of an entry, of 2
+// bytes in an extended state table and of 1 in an old one. It is read in
+// place rather than copied out row by row: a font's 'morx' table holds
+// hundreds of thousands of cells, of which a glyph reads a few.
+type AATStates struct {
+	data    []byte // whole rows only
+	nClass  int
+	nStates int
+	wide    bool // 2 bytes a cell
+}
+
+// newAATStates reads the rows of nClass cells in data, a partial row at its
+// end left out.
+func newAATStates(data []byte, nClass int, wide bool) AATStates {
+	row := nClass
+	if wide {
+		row *= 2
+	}
+	n := len(data) / row
+	return AATStates{data: data[:n*row], nClass: nClass, nStates: n, wide: wide}
+}
+
+// Len is the number of states.
+func (s AATStates) Len() int { return s.nStates }
+
+// NClass is the number of classes, the cells of a state.
+func (s AATStates) NClass() int { return s.nClass }
+
+// At is the index of the entry for the given state and class, both in
+// range.
+func (s AATStates) At(state, class int) uint16 {
+	i := state*s.nClass + class
+	if s.wide {
+		return binary.BigEndian.Uint16(s.data[2*i:])
+	}
+	return uint16(s.data[i])
+}
+
+// maxIndex is the largest entry index of any cell, 0 for none.
+func (s AATStates) maxIndex() uint16 {
+	var maxi uint16
+	if s.wide {
+		for i := 0; i+1 < len(s.data); i += 2 {
+			maxi = max(maxi, binary.BigEndian.Uint16(s.data[i:]))
+		}
+		return maxi
+	}
+	for _, b := range s.data {
+		maxi = max(maxi, uint16(b))
+	}
+	return maxi
 }
 
 func (state *AATStateTable) parseStates(src []byte) error {
@@ -34,27 +88,14 @@ func (state *AATStateTable) parseStates(src []byte) error {
 	if nC < 4 {
 		return fmt.Errorf("invalid number of classes in AAT state table: %d", nC)
 	}
-	state.States = make([][]uint8, len(states)/nC)
-	for i := range state.States {
-		state.States[i] = states[i*nC : (i+1)*nC]
-	}
+	state.States = newAATStates(states, nC, false)
 
 	return nil
 }
 
 func (state *AATStateTable) parseEntries(src []byte) (int, error) {
-	// find max index
-	var maxi uint8
-	for _, l := range state.States {
-		for _, stateIndex := range l {
-			if stateIndex > maxi {
-				maxi = stateIndex
-			}
-		}
-	}
-
 	src = src[state.entryTable:] // checked in parseStates
-	count := int(maxi) + 1
+	count := int(state.States.maxIndex()) + 1
 	var err error
 	state.Entries, err = parseAATStateEntries(src, count, 0)
 	if err != nil {
@@ -100,7 +141,7 @@ type AATStateTableExt struct {
 	Class      AATLookup       `offsetSize:"Offset32"` // Byte offset from the beginning of the state table to the class subtable.
 	stateArray Offset32        // Byte offset from the beginning of the state table to the state array.
 	entryTable Offset32        // Byte offset from the beginning of the state table to the entry subtable.
-	States     [][]uint16      `isOpaque:""` // each sub array has length stateSize
+	States     AATStates       `isOpaque:""` // 2 bytes a cell
 	Entries    []AATStateEntry `isOpaque:""` // length is the maximum state + 1
 }
 
@@ -113,36 +154,19 @@ func (state *AATStateTableExt) parseStates(src []byte, _, _ int) error {
 	}
 
 	statesArray := src[state.stateArray:state.entryTable]
-	states, err := ParseUint16s(statesArray, len(statesArray)/2)
-	if err != nil {
-		return err
-	}
 
 	nC := int(state.StateSize)
 	// Ensure pre-defined classes fit.
 	if nC < 4 {
 		return fmt.Errorf("invalid number of classes in AAT state table: %d", nC)
 	}
-	state.States = make([][]uint16, len(states)/nC)
-	for i := range state.States {
-		state.States[i] = states[i*nC : (i+1)*nC]
-	}
+	state.States = newAATStates(statesArray, nC, true)
 	return nil
 }
 
 func (state *AATStateTableExt) parseEntries(src []byte, _, entryDataSize int) (int, error) {
-	// find max index
-	var maxi uint16
-	for _, l := range state.States {
-		for _, stateIndex := range l {
-			if stateIndex > maxi {
-				maxi = stateIndex
-			}
-		}
-	}
-
 	src = src[state.entryTable:] // checked in parseStates
-	count := int(maxi) + 1
+	count := int(state.States.maxIndex()) + 1
 	var err error
 	state.Entries, err = parseAATStateEntries(src, count, entryDataSize)
 

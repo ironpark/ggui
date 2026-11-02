@@ -117,10 +117,31 @@ type MorxSubtableLigature struct {
 	ligActionOffset  Offset32  // Byte offset from stateHeader to the start of the ligature action table.
 	componentOffset  Offset32  // Byte offset from stateHeader to the start of the component table.
 	ligatureOffset   Offset32  // Byte offset from stateHeader to the start of the actual ligature lists.
-	LigActions       []uint32  `isOpaque:""`
-	Components       []uint16  `isOpaque:""`
-	Ligatures        []GlyphID `isOpaque:""`
+	LigActions       BEUint32s `isOpaque:""`
+	Components       BEUint16s `isOpaque:""`
+	Ligatures        BEUint16s `isOpaque:""` // glyph IDs
 }
+
+// BEUint16s are big-endian 16-bit values as they lie in a font's data, read
+// in place: a ligature subtable lists tens of thousands of components and
+// ligatures, of which a ligature reads a few.
+type BEUint16s []byte
+
+// Len is the number of values.
+func (b BEUint16s) Len() int { return len(b) / 2 }
+
+// At is the i-th value, for i below Len.
+func (b BEUint16s) At(i int) uint16 { return binary.BigEndian.Uint16(b[2*i:]) }
+
+// BEUint32s are big-endian 32-bit values as they lie in a font's data, read
+// in place.
+type BEUint32s []byte
+
+// Len is the number of values.
+func (b BEUint32s) Len() int { return len(b) / 4 }
+
+// At is the i-th value, for i below Len.
+func (b BEUint32s) At(i int) uint32 { return binary.BigEndian.Uint32(b[4*i:]) }
 
 // MorxLigatureSubtable flags
 const (
@@ -169,16 +190,17 @@ func (lig *MorxSubtableLigature) parseLigActions(src []byte, _ int) error {
 	}
 
 	// fetch the action table, up to the last entry
-	src = src[lig.ligActionOffset:]
-	for len(src) >= 4 { // stop gracefully if the last action was not found
-		action := binary.BigEndian.Uint32(src)
-		lig.LigActions = append(lig.LigActions, action)
-		src = src[4:]
+	actions := src[lig.ligActionOffset:]
+	n := 0
+	for 4*(n+1) <= len(actions) { // stop gracefully if the last action was not found
+		action := binary.BigEndian.Uint32(actions[4*n:])
+		n++
 		// dont break before maxIndex
-		if len(lig.LigActions) > maxIndex && action&MLActionLast != 0 {
+		if n > maxIndex && action&MLActionLast != 0 {
 			break
 		}
 	}
+	lig.LigActions = BEUint32s(actions[:4*n])
 	return nil
 }
 
@@ -187,15 +209,11 @@ func (lig *MorxSubtableLigature) parseComponents(src []byte, _ int) error {
 	if lig.componentOffset > lig.ligatureOffset {
 		return errors.New("unsupported non sorted offsets")
 	}
-	if L := len(src); L < int(lig.componentOffset) {
-		return fmt.Errorf("EOF: expected length: %d, got %d", lig.componentOffset, L)
+	componentCount := int(lig.ligatureOffset-lig.componentOffset) / 2
+	if L, E := len(src), int(lig.componentOffset)+2*componentCount; L < E {
+		return fmt.Errorf("EOF: expected length: %d, got %d", E, L)
 	}
-	src = src[lig.componentOffset:]
-	componentCount := (lig.ligatureOffset - lig.componentOffset) / 2
-	lig.Components = make([]uint16, componentCount)
-	for i := range lig.Components {
-		lig.Components[i] = binary.BigEndian.Uint16(src[2*i:])
-	}
+	lig.Components = BEUint16s(src[lig.componentOffset : int(lig.componentOffset)+2*componentCount])
 	return nil
 }
 
@@ -204,11 +222,7 @@ func (lig *MorxSubtableLigature) parseLigatures(src []byte, _ int) error {
 		return fmt.Errorf("EOF: expected length: %d, got %d", lig.ligatureOffset, L)
 	}
 	src = src[lig.ligatureOffset:]
-	ligatureCount := len(src) / 2
-	lig.Ligatures = make([]GlyphID, ligatureCount)
-	for i := range lig.Ligatures {
-		lig.Ligatures[i] = GlyphID(binary.BigEndian.Uint16(src[2*i:]))
-	}
+	lig.Ligatures = BEUint16s(src[:len(src)/2*2])
 	return nil
 }
 

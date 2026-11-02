@@ -187,20 +187,12 @@ func newKern1(k tables.KernData1) Kern1 {
 	for i, b := range k.ClassTable.Values {
 		class.Values[i] = uint16(b)
 	}
-	states := make([][]uint16, len(k.States))
-	for i, row := range k.States {
-		v := make([]uint16, len(row))
-		for j, b := range row {
-			v[j] = uint16(b)
-		}
-		states[i] = v
-	}
 	return Kern1{
 		Values: k.Values,
 		Machine: AATStateTable{
 			nClass:  uint32(k.StateSize),
 			Class:   class,
-			states:  states,
+			states:  k.States,
 			entries: k.Entries,
 		},
 	}
@@ -283,7 +275,7 @@ func (kd Kern6) KernPair(left, right GID) int16 {
 type AATStateTable struct {
 	nClass  uint32
 	Class   tables.AATLookup
-	states  [][]uint16             // each sub array has length stateSize
+	states  tables.AATStates       // in place, nClass cells a state
 	entries []tables.AATStateEntry // length is the maximum state + 1
 }
 
@@ -314,9 +306,9 @@ func (st *AATStateTable) GetEntry(state, class uint16) tables.AATStateEntry {
 	if uint32(class) >= st.nClass {
 		class = 1 // class out of bounds
 	}
-	if int(state) >= len(st.states) {
+	if int(state) >= st.states.Len() {
 		return tables.AATStateEntry{}
 	}
-	entry := st.states[state][class] // access check when parsing
-	return st.entries[entry]         // access check when parsing
+	entry := st.states.At(int(state), int(class)) // access check when parsing
+	return st.entries[entry]                      // access check when parsing
 }

@@ -38,6 +38,9 @@ func (m mappedFile) Slice(off, n int64) ([]byte, bool) {
 	return m.b[off : off+n : off+n], true
 }
 
+// Permanent implements opentype.PermanentSlicer: the file is never unmapped.
+func (mappedFile) Permanent() bool { return true }
+
 // mapLoaders maps the font file at path, never unmapped, and reads its
 // faces' table directories.
 func mapLoaders(t testing.TB, path string) []*ot.Loader {
@@ -135,7 +138,16 @@ func checkStates(t *testing.T, name string, st *AATStateTable, r refStates, data
 // ligatureLists are a ligature subtable's actions, components and
 // ligatures, as its accessors give them.
 func ligatureLists(s MorxLigatureSubtable) (actions []uint32, components []uint16, ligatures []GID) {
-	return s.LigatureAction, s.Components, s.Ligatures
+	for i := 0; i < s.LigatureAction.Len(); i++ {
+		actions = append(actions, s.LigatureAction.At(i))
+	}
+	for i := 0; i < s.Components.Len(); i++ {
+		components = append(components, s.Components.At(i))
+	}
+	for i := 0; i < s.Ligatures.Len(); i++ {
+		ligatures = append(ligatures, GID(s.Ligatures.At(i)))
+	}
+	return actions, components, ligatures
 }
 
 // TestMorxMatchesItsBytes checks the 'morx' tables of system fonts, as the
@@ -315,4 +327,52 @@ func TestKern1MatchesItsBytes(t *testing.T) {
 		t.Skip("no font with a 'kern' state table")
 	}
 	t.Logf("%d kern state cells", checked)
+}
+
+// TestMorxSharedByACollectionsFaces checks that the faces of a collection
+// mapped into memory share their common 'morx' table, and that faces of
+// bytes on the heap, which may move or go, read their own.
+func TestMorxSharedByACollectionsFaces(t *testing.T) {
+	const path = "/System/Library/Fonts/AppleSDGothicNeo.ttc"
+	lds := mapLoaders(t, path)
+	if len(lds) < 2 {
+		t.Skip("not a collection")
+	}
+	first := func(m Morx) *MorxChain {
+		if len(m) == 0 {
+			t.Fatal("no morx table")
+		}
+		return &m[0]
+	}
+	a, err := NewFont(lds[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := NewFont(lds[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first(a.Morx) != first(b.Morx) {
+		t.Error("the mapped faces read their common table each")
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	heap, err := ot.NewLoaders(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := NewFont(heap[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := NewFont(heap[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first(c.Morx) == first(d.Morx) || first(c.Morx) == first(a.Morx) {
+		t.Error("faces of bytes on the heap share a table")
+	}
 }

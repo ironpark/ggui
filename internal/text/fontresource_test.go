@@ -1,8 +1,13 @@
 package text
 
 import (
+	"bytes"
+	"io"
+	"os"
 	"strings"
 	"testing"
+
+	"github.com/ironpark/ggui/internal/typesetting/font"
 )
 
 // lendingBytes is a reader that lends its bytes, as a mapped file does.
@@ -26,5 +31,39 @@ func TestPatchedReaderLendsOnlyWhatNoPatchChanges(t *testing.T) {
 	}
 	if _, ok := (&patchedReaderAt{r: strings.NewReader("0123")}).slice(0, 2); ok {
 		t.Error("a reader that cannot lend lent bytes")
+	}
+}
+
+// permanentBytes lends its bytes, and has them stay, as a file mapped for
+// the program's life does.
+type permanentBytes struct{ lendingBytes }
+
+func (permanentBytes) Permanent() bool { return true }
+
+// The faces of a collection a permanent reader holds share their common
+// 'morx' table; those of a reader that only lends read their own.
+func TestCollectionFacesShareMorxOnlyOfPermanentBytes(t *testing.T) {
+	data, err := os.ReadFile("/System/Library/Fonts/AppleSDGothicNeo.ttc")
+	if err != nil {
+		t.Skip(err)
+	}
+	morx := func(r io.ReaderAt, index int) *font.MorxChain {
+		t.Helper()
+		src, err := NewGoTextFaceSourceAt(r, int64(len(data)), SourceOptions{Index: index})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(src.f.Morx) == 0 {
+			t.Fatal("no morx table")
+		}
+		return &src.f.Morx[0]
+	}
+	perm := permanentBytes{lendingBytes(data)}
+	if morx(perm, 0) != morx(perm, 1) {
+		t.Error("faces of permanent bytes read their common table each")
+	}
+	lent := lendingBytes(bytes.Clone(data))
+	if morx(lent, 0) == morx(lent, 1) {
+		t.Error("faces of bytes that may go share a table")
 	}
 }

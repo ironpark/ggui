@@ -57,6 +57,18 @@ type Slicer interface {
 	Slice(off, n int64) ([]byte, bool)
 }
 
+// PermanentSlicer is a Slicer whose lent bytes stay where they lie, as they
+// are, for the program's life, as those of a file mapped into memory and
+// never unmapped do.
+//
+// ggui: what is read from such bytes may be shared by every font that lends
+// the same ones, as the faces of a collection do their common tables.
+type PermanentSlicer interface {
+	Slicer
+	// Permanent reports whether the bytes Slice lends are permanent.
+	Permanent() bool
+}
+
 // tableSection represents a table within the font file.
 type tableSection struct {
 	offset  uint32 // Offset into the file this table starts.
@@ -200,6 +212,22 @@ func (pr *Loader) RawTableTo(tag Tag, dst []byte) ([]byte, error) {
 	}
 
 	return pr.findTableBuffer(s, dst)
+}
+
+// PermanentTable is RawTable, and whether the bytes it returns are lent by
+// a [PermanentSlicer], to stay where they lie, as they are.
+func (pr *Loader) PermanentTable(tag Tag) ([]byte, bool, error) {
+	s, found := pr.tables[tag]
+	if !found {
+		return nil, false, fmt.Errorf("missing table %s", tag)
+	}
+	if sl, ok := pr.file.(PermanentSlicer); ok && sl.Permanent() && !(s.length != 0 && s.length < s.zLength) {
+		if b, ok := sl.Slice(int64(s.offset), int64(s.length)); ok {
+			return b, true, nil
+		}
+	}
+	b, err := pr.findTableBuffer(s, nil)
+	return b, false, err
 }
 
 func parseOneFont(file Resource, offset uint32, relativeOffset bool) (parser *Loader, err error) {

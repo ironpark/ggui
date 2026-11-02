@@ -37,7 +37,7 @@ func TestMorxLigaturesEndWithTheirSubtable(t *testing.T) {
 	for _, c := range morx.Chains {
 		for _, s := range c.Subtables {
 			if lig, ok := s.Data.(tables.MorxSubtableLigature); ok {
-				total += len(lig.Ligatures)
+				total += lig.Ligatures.Len()
 			}
 		}
 	}

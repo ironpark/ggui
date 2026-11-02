@@ -335,8 +335,9 @@ func (dc *driverContextLigature) transition(buffer *Buffer, driver stateTableDri
 		}
 		cursor := dc.matchLength
 
-		actionIdx := entry.AsMorxLigature()
-		actionData := dc.table.LigatureAction[actionIdx:]
+		// The actions run from the entry's on, read in place.
+		actions := dc.table.LigatureAction
+		actionIdx := int(entry.AsMorxLigature()) // access check when parsing
 
 		ligatureIdx := 0
 		var action uint32
@@ -357,10 +358,10 @@ func (dc *driverContextLigature) transition(buffer *Buffer, driver stateTableDri
 			cursor--
 			buffer.moveTo(dc.matchPositions[cursor%len(dc.matchPositions)])
 
-			if len(actionData) == 0 {
+			if actionIdx >= actions.Len() {
 				break
 			}
-			action = actionData[0]
+			action = actions.At(actionIdx)
 
 			uoffset := action & tables.MLActionOffset
 			if uoffset&0x20000000 != 0 {
@@ -368,10 +369,10 @@ func (dc *driverContextLigature) transition(buffer *Buffer, driver stateTableDri
 			}
 			offset := int32(uoffset)
 			componentIdx := int32(buffer.cur(0).Glyph) + offset
-			if componentIdx < 0 || int(componentIdx) >= len(dc.table.Components) {
+			if componentIdx < 0 || int(componentIdx) >= dc.table.Components.Len() {
 				break
 			}
-			componentData := dc.table.Components[componentIdx]
+			componentData := dc.table.Components.At(int(componentIdx))
 			ligatureIdx += int(componentData)
 
 			if debugMode {
@@ -379,10 +380,10 @@ func (dc *driverContextLigature) transition(buffer *Buffer, driver stateTableDri
 			}
 
 			if action&(tables.MLActionStore|tables.MLActionLast) != 0 {
-				if ligatureIdx >= len(dc.table.Ligatures) {
+				if ligatureIdx >= dc.table.Ligatures.Len() {
 					break
 				}
-				lig := dc.table.Ligatures[ligatureIdx]
+				lig := font.GID(dc.table.Ligatures.At(ligatureIdx))
 
 				if debugMode {
 					fmt.Printf("\tLigature - Produced ligature %d\n", lig)
@@ -407,7 +408,7 @@ func (dc *driverContextLigature) transition(buffer *Buffer, driver stateTableDri
 				buffer.mergeOutClusters(dc.matchPositions[cursor%len(dc.matchPositions)], len(buffer.outInfo))
 			}
 
-			actionData = actionData[1:]
+			actionIdx++
 		}
 		buffer.moveTo(end)
 	}

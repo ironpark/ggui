@@ -36,6 +36,9 @@ func (m mappedFile) Slice(off, n int64) ([]byte, bool) {
 	return m.b[off : off+n : off+n], true
 }
 
+// Permanent implements opentype.PermanentSlicer: the file is never unmapped.
+func (mappedFile) Permanent() bool { return true }
+
 // mapFaces maps the font file at path, never unmapped, and parses its faces.
 func mapFaces(t testing.TB, path string) []*font.Face {
 	t.Helper()

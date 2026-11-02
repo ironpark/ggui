@@ -346,9 +346,7 @@ func NewFont(ld *ot.Loader) (*Font, error) {
 
 	out.GDEF, _ = loadGDEF(ld, len(out.fvar), gsubRaw, gposRaw)
 
-	raw, _ = ld.RawTable(ot.MustNewTag("morx"))
-	morx, _, _ := tables.ParseMorx(raw, out.nGlyphs)
-	out.Morx = newMorx(morx)
+	out.Morx = loadMorx(ld, out.nGlyphs)
 
 	raw, _ = ld.RawTable(ot.MustNewTag("kerx"))
 	kerx, _, _ := tables.ParseKerx(raw, out.nGlyphs)

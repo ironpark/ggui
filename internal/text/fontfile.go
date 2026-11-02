@@ -234,6 +234,13 @@ type fontResource struct {
 // Slice implements opentype.Slicer.
 func (r fontResource) Slice(off, n int64) ([]byte, bool) { return r.patched.slice(off, n) }
 
+// Permanent implements opentype.PermanentSlicer, as the file does: the
+// bytes it lends, which no patch changes, are the file's.
+func (r fontResource) Permanent() bool {
+	sl, ok := r.patched.r.(opentype.PermanentSlicer)
+	return ok && sl.Permanent()
+}
+
 // lazySbix is an 'sbix' table read a glyph at a time. It answers what the
 // parser's own table would: the strikes' sizes, and a glyph's extents and
 // bitmap at a strike, chosen as the parser chooses one.

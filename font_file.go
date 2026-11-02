@@ -87,6 +87,11 @@ func (m mappedFont) Slice(off, n int64) ([]byte, bool) {
 	return m[off : off+n : off+n], true
 }
 
+// Permanent implements opentype.PermanentSlicer: the mapping is never
+// undone, so what faces read from its bytes, as a collection's common
+// 'morx' table, they may share.
+func (mappedFont) Permanent() bool { return true }
+
 // faceCount is how many faces the font file r holds: a collection's, or
 // one.
 func faceCount(r io.ReaderAt) (int, error) {
