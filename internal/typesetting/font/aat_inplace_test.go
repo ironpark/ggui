@@ -329,14 +329,34 @@ func TestKern1MatchesItsBytes(t *testing.T) {
 	t.Logf("%d kern state cells", checked)
 }
 
+// sharedMorxCollections are collections whose first two faces share one
+// 'morx' table, tried in order. macOS 26 sets
+// Apple SD Gothic Neo with 'GSUB' and no 'morx' table.
+var sharedMorxCollections = []string{
+	"/System/Library/Fonts/AppleSDGothicNeo.ttc",
+	"/System/Library/Fonts/Apple Color Emoji.ttc",
+}
+
 // TestMorxSharedByACollectionsFaces checks that the faces of a collection
 // mapped into memory share their common 'morx' table, and that faces of
 // bytes on the heap, which may move or go, read their own.
 func TestMorxSharedByACollectionsFaces(t *testing.T) {
-	const path = "/System/Library/Fonts/AppleSDGothicNeo.ttc"
-	lds := mapLoaders(t, path)
-	if len(lds) < 2 {
-		t.Skip("not a collection")
+	var (
+		path string
+		lds  []*ot.Loader
+	)
+	morx := ot.MustNewTag("morx")
+	for _, p := range sharedMorxCollections {
+		if _, err := os.Stat(p); err != nil {
+			continue
+		}
+		if l := mapLoaders(t, p); len(l) >= 2 && l[0].HasTable(morx) && l[1].HasTable(morx) {
+			path, lds = p, l
+			break
+		}
+	}
+	if lds == nil {
+		t.Skip("no collection whose first two faces have a 'morx' table")
 	}
 	first := func(m Morx) *MorxChain {
 		if len(m) == 0 {

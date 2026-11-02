@@ -43,10 +43,7 @@ func (permanentBytes) Permanent() bool { return true }
 // The faces of a collection a permanent reader holds share their common
 // 'morx' table; those of a reader that only lends read their own.
 func TestCollectionFacesShareMorxOnlyOfPermanentBytes(t *testing.T) {
-	data, err := os.ReadFile("/System/Library/Fonts/AppleSDGothicNeo.ttc")
-	if err != nil {
-		t.Skip(err)
-	}
+	var data []byte
 	morx := func(r io.ReaderAt, index int) *font.MorxChain {
 		t.Helper()
 		src, err := NewGoTextFaceSourceAt(r, int64(len(data)), SourceOptions{Index: index})
@@ -54,9 +51,28 @@ func TestCollectionFacesShareMorxOnlyOfPermanentBytes(t *testing.T) {
 			t.Fatal(err)
 		}
 		if len(src.f.Morx) == 0 {
-			t.Fatal("no morx table")
+			return nil
 		}
 		return &src.f.Morx[0]
+	}
+	// Collections whose first two faces share one 'morx' table, tried in
+	// order. macOS 26 sets Apple SD Gothic Neo with 'GSUB' and no 'morx'.
+	for _, path := range []string{
+		"/System/Library/Fonts/AppleSDGothicNeo.ttc",
+		"/System/Library/Fonts/Apple Color Emoji.ttc",
+	} {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		data = b
+		if r := (permanentBytes{lendingBytes(b)}); morx(r, 0) != nil && morx(r, 1) != nil {
+			break
+		}
+		data = nil
+	}
+	if data == nil {
+		t.Skip("no collection whose first two faces have a 'morx' table")
 	}
 	perm := permanentBytes{lendingBytes(data)}
 	if morx(perm, 0) != morx(perm, 1) {

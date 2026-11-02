@@ -5,6 +5,7 @@ package shaping
 import (
 	"bufio"
 	"bytes"
+	"crypto/sha256"
 	"flag"
 	"fmt"
 	"os"
@@ -137,8 +138,12 @@ const goldenPath = "testdata/aat_golden.txt"
 // checks the glyphs, clusters, advances and offsets against those recorded
 // before the 'morx' tables were read in place. go test -update records
 // them anew.
+//
+// The golden file begins with each font file's hash, and only the lines of
+// the fonts the system has as they were recorded are checked: macOS 26, for
+// one, sets Apple SD Gothic Neo with 'GSUB' and no 'morx' table.
 func TestAATShapingGolden(t *testing.T) {
-	got := shapeAATCorpus(t)
+	got := fontHashes(t) + shapeAATCorpus(t)
 	if *update {
 		if err := os.MkdirAll(filepath.Dir(goldenPath), 0o755); err != nil {
 			t.Fatal(err)
@@ -156,6 +161,23 @@ func TestAATShapingGolden(t *testing.T) {
 		return
 	}
 	gl, wl := strings.Split(got, "\n"), strings.Split(string(want), "\n")
+	recorded := map[string]bool{}
+	for _, l := range wl {
+		if strings.HasPrefix(l, "# ") {
+			recorded[l] = true
+		}
+	}
+	var changed []string
+	for _, l := range gl {
+		if strings.HasPrefix(l, "# ") && !recorded[l] {
+			name, _, _ := strings.Cut(strings.TrimPrefix(l, "# "), "\t")
+			changed = append(changed, name+" ")
+		}
+	}
+	if len(changed) > 0 {
+		t.Logf("not checking the fonts other than recorded: %q", changed)
+		gl, wl = keepLines(gl, changed), keepLines(wl, changed)
+	}
 	bad := 0
 	for i := 0; i < max(len(gl), len(wl)); i++ {
 		var g, w string
@@ -172,6 +194,46 @@ func TestAATShapingGolden(t *testing.T) {
 			}
 		}
 	}
+}
+
+// fontHashes are the hashes of the corpus's font files, a line each.
+func fontHashes(t *testing.T) string {
+	var b strings.Builder
+	seen := map[string]bool{}
+	for _, c := range aatCorpus {
+		if seen[c.path] {
+			continue
+		}
+		seen[c.path] = true
+		data, err := os.ReadFile(c.path)
+		if err != nil {
+			t.Skip(err)
+		}
+		fmt.Fprintf(&b, "# %s\t%x\n", filepath.Base(c.path), sha256.Sum256(data))
+	}
+	return b.String()
+}
+
+// keepLines are lines but those of the fonts named by a prefix of changed,
+// and the fonts' hashes.
+func keepLines(lines, changed []string) []string {
+	var out []string
+	for _, l := range lines {
+		if strings.HasPrefix(l, "# ") {
+			continue
+		}
+		keep := true
+		for _, p := range changed {
+			if strings.HasPrefix(l, p) {
+				keep = false
+				break
+			}
+		}
+		if keep {
+			out = append(out, l)
+		}
+	}
+	return out
 }
 
 // glyphString is o's glyphs: ID, cluster, advance and offsets each.
