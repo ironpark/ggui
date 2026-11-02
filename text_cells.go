@@ -51,43 +51,30 @@ func (c *Canvas) DrawTextCells(s string, st TextStyle, at Point, cellW float64) 
 		face = ef.Face
 	}
 
-	var op ggfx.DrawImageOptions
-	op.ColorScale.ScaleWithColor(st.Color)
-	colored := op
-	colored.ColorScale.Reset()
-	colored.ColorScale.ScaleAlpha(op.ColorScale.A())
+	var tint, colored ggfx.ColorScale
+	tint.ScaleWithColor(st.Color)
+	colored.ScaleAlpha(tint.A())
 	x0, y0, cell := c.px(at.X), c.px(at.Y), c.px(cellW)
 
 	buf.glyphs = text.AppendLazyGlyphs(buf.glyphs[:0], s, face, nil)
 	buf.shifts = cellShifts(buf.shifts, buf.bounds, buf.glyphs, x0, cell)
 	// Realize every image before drawing any, as text.Draw does, so the
-	// atlas is written in one batch.
+	// atlas is written in one batch, then draw those on one atlas page as
+	// one.
 	buf.entries = buf.entries[:0]
 	for i, g := range buf.glyphs {
 		if g.ImageBounds.Empty() {
 			continue
 		}
 		if img := g.Image(); img != nil {
-			buf.entries = append(buf.entries, cellEntry{img, float64(g.ImageBounds.Min.X) + buf.shifts[i], float64(g.ImageBounds.Min.Y), g.Colored()})
+			e := ggfx.ImageDraw{Image: img, X: x0 + (float64(g.ImageBounds.Min.X) + buf.shifts[i]), Y: y0 + float64(g.ImageBounds.Min.Y), ColorScale: tint}
+			if g.Colored() {
+				e.ColorScale = colored
+			}
+			buf.entries = append(buf.entries, e)
 		}
 	}
-	for _, e := range buf.entries {
-		o := &op
-		if e.colored {
-			o = &colored
-		}
-		o.GeoM.Reset()
-		o.GeoM.Translate(x0+e.x, y0+e.y)
-		c.Image.DrawImage(e.img, o)
-	}
-}
-
-// cellEntry is a realized glyph image of a DrawTextCells run and where it
-// goes, relative to the run's start.
-type cellEntry struct {
-	img     *ggfx.Image
-	x, y    float64
-	colored bool
+	c.Image.DrawImages(buf.entries, nil)
 }
 
 // cellsBuf holds what DrawTextCells works out for a run between runs.
@@ -95,7 +82,7 @@ type cellsBuf struct {
 	bounds  []int
 	glyphs  []text.LazyGlyph
 	shifts  []float64
-	entries []cellEntry
+	entries []ggfx.ImageDraw
 }
 
 var theCellsBufPool = pool.Pool[*cellsBuf]{

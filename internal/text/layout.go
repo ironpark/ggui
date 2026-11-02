@@ -79,20 +79,12 @@ var theDrawGlyphsPool = pool.Pool[*[]LazyGlyph]{
 	},
 }
 
-// drawGlyphEntry is a realized glyph image plus its destination-space
-// translation, used by [Draw] to defer DrawImage calls until after all glyph
-// images have been rasterized. colored is true for a color glyph image,
-// which must not be tinted by the text color.
-type drawGlyphEntry struct {
-	img     *ggfx.Image
-	x       float64
-	y       float64
-	colored bool
-}
-
-var theDrawGlyphEntriesPool = pool.Pool[*[]drawGlyphEntry]{
-	New: func() *[]drawGlyphEntry {
-		s := make([]drawGlyphEntry, 0, 64)
+// theDrawGlyphEntriesPool holds the realized glyph images [Draw] collects,
+// each with its destination-space translation and color scale, so that it
+// draws them in one DrawImages once all are rasterized.
+var theDrawGlyphEntriesPool = pool.Pool[*[]ggfx.ImageDraw]{
+	New: func() *[]ggfx.ImageDraw {
+		s := make([]ggfx.ImageDraw, 0, 64)
 		return &s
 	},
 }
@@ -163,6 +155,11 @@ func Draw(dst *ggfx.Image, text string, face Face, options *DrawOptions) {
 		theDrawGlyphEntriesPool.Put(entries)
 	}()
 
+	// A color glyph must not be tinted by the text color, so only the
+	// alpha of the color scale is applied to it (see DrawOptions).
+	var colored ggfx.ColorScale
+	colored.ScaleAlpha(drawOp.ColorScale.A())
+
 	// Realize images, then draw, in two passes: interleaving DrawImage
 	// with glyph realization flushes the pending atlas write-pixels batch
 	// on each glyph and fragments draw calls (#3455).
@@ -179,30 +176,15 @@ func Draw(dst *ggfx.Image, text string, face Face, options *DrawOptions) {
 		if img == nil {
 			continue
 		}
-		*entries = append(*entries, drawGlyphEntry{
-			img:     img,
-			x:       float64(g.ImageBounds.Min.X),
-			y:       float64(g.ImageBounds.Min.Y),
-			colored: g.Colored(),
-		})
-	}
-
-	// A color glyph must not be tinted by the text color, so only the
-	// alpha of the color scale is applied to it (see DrawOptions).
-	coloredOp := drawOp
-	coloredOp.ColorScale.Reset()
-	coloredOp.ColorScale.ScaleAlpha(drawOp.ColorScale.A())
-
-	for _, e := range *entries {
-		op := &drawOp
-		if e.colored {
-			op = &coloredOp
+		e := ggfx.ImageDraw{Image: img, X: float64(g.ImageBounds.Min.X), Y: float64(g.ImageBounds.Min.Y), ColorScale: drawOp.ColorScale}
+		if g.Colored() {
+			e.ColorScale = colored
 		}
-		op.GeoM.Reset()
-		op.GeoM.Translate(e.x, e.y)
-		op.GeoM.Concat(geoM)
-		dst.DrawImage(e.img, op)
+		*entries = append(*entries, e)
 	}
+
+	// The glyphs on one atlas page are drawn as one.
+	dst.DrawImages(*entries, &drawOp)
 }
 
 // glyphCull drops the glyphs whose text-space origin, after a geoM
