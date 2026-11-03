@@ -547,6 +547,26 @@ func (c *Canvas) visiblePaintBounds(r Rect, extra float64) bool {
 	}
 	// Seen or not, it is where the widget painting draws.
 	c.fs().drew(r, extra)
+	return c.overlaps(r, extra)
+}
+
+// Shows reports whether any of r, in the canvas's coordinates, lands where
+// this frame paints. A frame painted in part paints only around what
+// changed: a widget whose drawing costs more than the draws themselves,
+// copying a screen out of a terminal say, need not do that work for a
+// frame that keeps what it showed. It must still collect input and
+// semantics, as all widgets do.
+//
+// Only r itself counts, not the pixel drawing at its edge may smear past
+// it, and r's edge on the edge of what is painted does not.
+func (c *Canvas) Shows(r Rect) bool {
+	if c == nil || c.Image == nil {
+		return false
+	}
+	return c.physical(r).Overlaps(c.Image.Bounds())
+}
+
+func (c *Canvas) overlaps(r Rect, extra float64) bool {
 	if c.Image == nil {
 		return false
 	}
