@@ -103,7 +103,10 @@ func (l *frameLoop) Clipboard() runtime.Clipboard { return l.clipboard }
 // the tree is built under, the posted work, and the record of the last
 // layout, which lets a still frame skip layout.
 type frameLoop struct {
-	host Host // the Window or Probe this loop is, for UseHost
+	// contained are the window regions changes made in reactive.Contained
+	// since the last frame show in; see damage.go.
+	contained []Rect
+	host      Host // the Window or Probe this loop is, for UseHost
 	// rt is the reactive runtime the tree is built in and flushed by: a
 	// Probe's own, so that its effects run in its frames alone, or the
 	// App's, which every window of it shares. Nil stands for the running

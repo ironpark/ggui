@@ -165,13 +165,16 @@ type Window struct {
 	// motionWhy whether the last frame allows it, and motionGen and
 	// motionSize the state and the size it was painted at. dirty is set by
 	// all else that asks for a frame, which then paints whole.
-	motion     []Rect
-	motionGen  uint64
-	motionSize image.Point
-	motionWhy  string // why the next frame may not be painted in part, or "ok"
-	dirty      atomic.Uint32
-	repaintMu  sync.Mutex
-	repaints   []Rect // asked for by RepaintRect since the last frame
+	motion    []Rect
+	motionGen uint64
+	// freeSeen and fontSeen are reactive.FreeGen and fontGen as the last
+	// frame left them: a frame a scroll contains has neither move.
+	freeSeen, fontSeen uint64
+	motionSize         image.Point
+	motionWhy          string // why the next frame may not be painted in part, or "ok"
+	dirty              atomic.Uint32
+	repaintMu          sync.Mutex
+	repaints           []Rect // asked for by RepaintRect since the last frame
 
 	focused  *StateValue[bool]
 	viewport *StateValue[Size]
@@ -770,32 +773,48 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 		}
 	}
 	asked := w.takeRepaints()
-	if kept && dirtyBits == 0 && len(asked) == 0 && len(w.motion) == 0 {
+	if kept && dirtyBits == 0 && len(asked) == 0 && len(w.motion) == 0 && len(w.frameLoop.contained) == 0 &&
+		reactive.StateGen() == w.motionGen && layoutGen() == w.seenGen {
 		// Nothing changed: work was posted that wrote nothing, say. The
 		// screen keeps the last frame, and untouched, nothing is presented.
 		framesSkipped.Add(1)
 		return
 	}
 	target, kept := w.paintTarget(screen, kept)
+	contained := w.takeContained()
+	// within is where a frame whose changes a scroll contains paints, in
+	// pixels; empty, the frame paints all of it.
+	var within image.Rectangle
 	if wanted := len(w.motion) > 0 || len(asked) > 0; dirtyBits != 0 {
-		if wanted {
+		if wanted || len(contained) > 0 {
 			refusePartialDirty(dirtyBits)
 		}
+	} else if len(contained) > 0 {
+		within = w.containedDamage(target, kept, contained, asked)
 	} else if wanted && w.drawPartial(screen, target, kept, asked, setDamage) {
 		return
 	}
 	w.canvas.fs().resetCanvases()
 	defer w.canvas.fs().resetCanvases()
-	if setDamage != nil {
-		// All of it changes: the screen need not start from a copy of the last frame.
-		setDamage([]image.Rectangle{screen.Bounds()})
+	dst := target
+	if !within.Empty() {
+		dst = target.SubImage(within).(*ggfx.Image)
+		containedFrames.Add(1)
 	}
-	target.Fill(w.background())
+	if setDamage != nil {
+		if within.Empty() {
+			// All of it changes: the screen need not start from a copy of the last frame.
+			setDamage([]image.Rectangle{screen.Bounds()})
+		} else {
+			setDamage([]image.Rectangle{within})
+		}
+	}
+	dst.Fill(w.background())
 	if w.root == nil {
 		return
 	}
 	defer w.canvas.trimLayers()
-	w.canvas.Image = target
+	w.canvas.Image = dst
 	w.canvas.window, w.canvas.onScreen = true, target == screen
 	w.canvas.fs().backdrop = false
 	defer w.presentBackdrop(screen, target)
@@ -812,9 +831,19 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 		tracing: tracing,
 		semOff:  !w.semWanted.Load() && w.performs.Load() == 0 && !tracing && !w.ax.Listening(),
 		settled: func() {
+			if dst != target && (reactive.FreeGen() != w.freeSeen || fontGen() != w.fontSeen) {
+				// The layout changed more than the scroll: paint all of it.
+				refusePartial("state changed")
+				dst = target
+				w.canvas.Image = target
+				target.Fill(w.background())
+				if setDamage != nil {
+					setDamage([]image.Rectangle{screen.Bounds()})
+				}
+			}
 			// The settle may have changed the theme the background is.
 			if w.cfg.Background == nil && !w.cfg.Transparent {
-				target.Fill(rootEnv().Background())
+				dst.Fill(rootEnv().Background())
 			}
 		},
 		painted: func() {

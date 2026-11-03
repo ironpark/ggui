@@ -22,8 +22,10 @@ type FrameStats struct {
 
 	// Partial counts the frames painted in part, where only what moves
 	// with time changed; see damage.go. Skipped counts those that painted
-	// nothing, as nothing had changed, and presented nothing.
-	Partial, Skipped int64
+	// nothing, as nothing had changed, and presented nothing. Contained
+	// counts those painted within the viewports of scrolls that moved, as
+	// nothing else changed.
+	Partial, Skipped, Contained int64
 }
 
 const (
@@ -40,6 +42,7 @@ var (
 	framesFor             [frameReasons]atomic.Int64
 	partialFrames         atomic.Int64
 	framesSkipped         atomic.Int64
+	containedFrames       atomic.Int64
 )
 
 func countFrame(d time.Duration) {
@@ -55,6 +58,6 @@ func ReadFrameStats() FrameStats {
 		ForAnimation: framesFor[frameForAnimation].Load(), ForTime: framesFor[frameForTime].Load(),
 		ForCallback: framesFor[frameForCallback].Load(), ForPosted: framesFor[frameForPosted].Load(),
 		ForInput: framesFor[frameForInput].Load(),
-		Partial:  partialFrames.Load(), Skipped: framesSkipped.Load(),
+		Partial:  partialFrames.Load(), Skipped: framesSkipped.Load(), Contained: containedFrames.Load(),
 	}
 }

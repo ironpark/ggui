@@ -29,7 +29,28 @@ var genSeq atomic.Uint64
 // RequestLayout asks the runtime to lay out the trees whose frames run on
 // this goroutine again next frame. It belongs on the UI goroutine, as a
 // signal write does.
-func RequestLayout() { current().layoutGen = genSeq.Add(1) }
+func RequestLayout() {
+	sc := current()
+	sc.layoutGen = genSeq.Add(1)
+	if sc.contained == 0 {
+		sc.freeGen = sc.layoutGen
+	}
+}
+
+// Contained runs fn, whose writes and layout requests change only what a
+// region of the window shows, as a scroll moving its content does: FreeGen
+// does not count them, so a frame can paint that region alone. What
+// reacts to them later, outside fn, counts as ever.
+func Contained(fn func()) {
+	sc := current()
+	sc.contained++
+	defer func() { sc.contained-- }()
+	fn()
+}
+
+// FreeGen changes with every StateValue write and layout request made
+// outside Contained, on this goroutine.
+func FreeGen() uint64 { return current().freeGen }
 
 // Measurement dependencies are separate from reactive subscriptions: even an
 // Untrack read affects layout, but never subscribes the enclosing computation.
@@ -435,6 +456,9 @@ func (s *StateValue[T]) store(sc *scope, v T) {
 	sc.stateGen = genSeq.Add(1)
 	s.version++
 	sc.layoutGen = sc.stateGen
+	if sc.contained == 0 {
+		sc.freeGen = sc.stateGen
+	}
 	subs := make([]*Computation, 0, len(s.subs))
 	for e := range s.subs {
 		subs = append(subs, e)

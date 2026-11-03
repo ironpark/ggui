@@ -27,6 +27,8 @@ type scope struct {
 	layoutGen       uint64 // see RequestLayout
 	stateGen        uint64 // see StateGen
 	loop            any
+	contained       int    // depth of Contained
+	freeGen         uint64 // see FreeGen
 
 	// base is the runtime what this goroutine creates with no owner
 	// belongs to; see Base.

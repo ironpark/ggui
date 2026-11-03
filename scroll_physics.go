@@ -107,7 +107,25 @@ func (p *scrollPhysics) input(s *ScrollWidget) {
 
 // wheel moves the content by d along the axis, as the wheel, a trackpad or
 // a touch pan asks, and reports whether the event was used.
+//
+// A scroll placed in the window, as its last paint found it, moves in
+// reactive.Contained: what the move changes shows in its viewport alone,
+// for the frame to paint that alone.
 func (s *ScrollWidget) wheel(d float64, momentum bool) bool {
+	if !s.placed {
+		return s.wheelBy(d, momentum)
+	}
+	var used bool
+	before, over := s.position(), s.phys.over
+	reactive.Contained(func() { used = s.wheelBy(d, momentum) })
+	if s.position() != before || s.phys.over != over {
+		s.containedMove = true
+		noteContained(s.win)
+	}
+	return used
+}
+
+func (s *ScrollWidget) wheelBy(d float64, momentum bool) bool {
 	p := &s.phys
 	p.input(s)
 	before, over := s.position(), p.over

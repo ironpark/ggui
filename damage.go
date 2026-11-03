@@ -169,6 +169,75 @@ func (w *Window) noteMotion(target *ggfx.Image) {
 	noteMovers(f.movers)
 	w.motionGen = reactive.StateGen()
 	w.motionSize = target.Bounds().Size()
+	w.freeSeen, w.fontSeen = reactive.FreeGen(), fontGen()
+}
+
+// A scroll that moves its content changes what its viewport shows and
+// nothing else: its writes and layout requests are made in
+// reactive.Contained, and it notes its viewport with noteContained. A
+// frame for which nothing else changed, no write or layout outside a
+// Contained, is laid out and painted as a whole frame is, every widget
+// registering its regions, semantics and shortcuts, but into the part of
+// the screen the viewports cover alone: a widget elsewhere draws into an
+// image it misses, which draws nothing, and what the screen kept of the
+// last frame shows there.
+
+// mostContained is the share of the window past which a frame a scroll
+// contains is painted whole: one pass either way, so higher than
+// mostPartial.
+const mostContained = 0.85
+
+// noteContained records r, in window coordinates, as all that a change
+// just made shows in, for the frame running on this goroutine.
+func noteContained(r Rect) {
+	if l, ok := reactive.RunningLoop().(*frameLoop); ok {
+		l.contained = append(l.contained, r)
+	}
+}
+
+// takeContained returns the regions noted since the last frame.
+func (w *Window) takeContained() []Rect {
+	rs := w.frameLoop.contained
+	w.frameLoop.contained = w.frameLoop.contained[:0]
+	return rs
+}
+
+// containedDamage is the part of the screen, in pixels, a frame the
+// regions contain paints, or empty, saying why, when it must be painted
+// whole.
+func (w *Window) containedDamage(target *ggfx.Image, kept bool, contained, asked []Rect) image.Rectangle {
+	switch {
+	case !kept:
+		refusePartial("not kept")
+		return image.Rectangle{}
+	case w.motionWhy != "ok":
+		refusePartial(w.motionWhy)
+		return image.Rectangle{}
+	case target.Bounds().Size() != w.motionSize || w.closed || w.root == nil:
+		refusePartial("resized")
+		return image.Rectangle{}
+	case reactive.FreeGen() != w.freeSeen || fontGen() != w.fontSeen:
+		refusePartial("state changed")
+		return image.Rectangle{}
+	}
+	logical := Sz(w.canvas.dp(float64(target.Bounds().Dx())), w.canvas.dp(float64(target.Bounds().Dy())))
+	window := Rct(Point{}, logical)
+	all := contained[0]
+	for _, r := range contained[1:] {
+		all = cover(all, r)
+	}
+	for _, r := range w.motion {
+		all = cover(all, r)
+	}
+	for _, r := range asked {
+		all = cover(all, r)
+	}
+	all = all.Intersect(window)
+	if all.Empty() || all.Size.W*all.Size.H > mostContained*window.Size.W*window.Size.H {
+		refusePartial("too much changed")
+		return image.Rectangle{}
+	}
+	return w.canvas.physical(all).Intersect(target.Bounds())
 }
 
 // drawPartial paints a frame that only time and RepaintRect asked for over

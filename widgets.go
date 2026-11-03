@@ -1152,17 +1152,23 @@ func viewportAlong(env Env, horizontal bool) (Viewport, bool) {
 // Horizontal, wider) than the space it has, and moves that window with the
 // wheel or by dragging the scrollbar thumb. Build one with Scroll.
 type ScrollWidget struct {
-	props      property.Owner
-	child      Widget
-	horizontal bool
-	shrink     bool // along its axis, as long as its content and no longer
-	speed      float64
-	bar        color.Color
-	barSet     bool
-	bound      Binding[float64]
-	offset     float64
-	follow     bool
-	id         any
+	// win is where the last paint put the viewport in the window, placed
+	// whether it could tell, and containedMove that the wheel moved the
+	// content since the last layout; see wheel.
+	win           Rect
+	placed        bool
+	containedMove bool
+	props         property.Owner
+	child         Widget
+	horizontal    bool
+	shrink        bool // along its axis, as long as its content and no longer
+	speed         float64
+	bar           color.Color
+	barSet        bool
+	bound         Binding[float64]
+	offset        float64
+	follow        bool
+	id            any
 
 	// FollowEnd's state. A scroll laid out for the first time cannot know
 	// yet whether it replaces one that was at its end, as Adopt says only
@@ -1310,8 +1316,20 @@ func (s *ScrollWidget) scrollTo(v float64) {
 	}
 }
 
-// Layout implements Widget.
+// Layout implements Widget. After a move of the wheel's, all it changes
+// laying the content out again for the new window, mounting what scrolls
+// into it, is contained in the viewport too.
 func (s *ScrollWidget) Layout(c Constraints, env Env) Size {
+	if s.containedMove {
+		s.containedMove = false
+		var size Size
+		reactive.Contained(func() { size = s.layout(c, env) })
+		return size
+	}
+	return s.layout(c, env)
+}
+
+func (s *ScrollWidget) layout(c Constraints, env Env) Size {
 	defer s.props.Layout().EndLayout()
 	s.barEnv = env
 	if !s.barSet {
@@ -1386,6 +1404,7 @@ func (s *ScrollWidget) Paint(dst *Canvas, r Rect) {
 		s.cache.invalidate()
 	}
 	s.rect = r
+	s.win, s.placed = dst.WindowRect(r)
 	dst.HitPointer(r, s) // adopts the scroll this one replaces
 	s.followFirst()
 	s.phys.paint(s)
