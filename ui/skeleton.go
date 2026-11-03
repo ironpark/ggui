@@ -2,6 +2,7 @@ package ui
 
 import (
 	"math"
+	"time"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
@@ -43,7 +44,7 @@ func (s *SkeletonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	factor := 1.0
 	if !s.reduced {
-		factor = .75 + .25*math.Cos(float64(ggui.Now().UnixMilli()%2000)*2*math.Pi/2000)
+		factor = .75 + .25*math.Cos(float64(ggui.Paced(time.Second/20).UnixMilli()%2000)*2*math.Pi/2000)
 	}
 	dst.FillRoundRect(r, radius, fade(s.theme.Muted, factor))
 }

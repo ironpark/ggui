@@ -2,6 +2,7 @@ package ui
 
 import (
 	"math"
+	"time"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
@@ -37,6 +38,10 @@ func (s *SpinnerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 }
 
 // Paint implements ggui.Widget.
+// spinnerStep is how often a spinner turns: 30 times a second, smooth for
+// a turn a second, a quarter of the frames the display would ask for.
+const spinnerStep = time.Second / 30
+
 func (s *SpinnerWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	diameter := min(r.Size.W, r.Size.H)
 	if diameter <= 0 {
@@ -44,7 +49,7 @@ func (s *SpinnerWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	phase := 0.0
 	if !s.reduced {
-		phase = float64(ggui.Now().UnixMilli()%1000) * 2 * math.Pi / 1000
+		phase = float64(ggui.Paced(spinnerStep).UnixMilli()%1000) * 2 * math.Pi / 1000
 	}
 	paintIcon(dst, s.env, icons.Loader, r, s.theme.Primary, phase)
 }

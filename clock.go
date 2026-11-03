@@ -189,6 +189,20 @@ func Now() time.Time { return activeWorld().frame.instant() }
 // asks for frames itself while it moves, or together with WakeAt.
 func FrameTime() time.Time { return activeWorld().frame.peek() }
 
+// Paced is Now for a look that loops on with no end, a spinner or a pulse:
+// it asks for the next frame at the next multiple of every, rather than at
+// every refresh of the display. A loop needs no more than 20 or 30 steps a
+// second, and each step paints a frame, which the display would otherwise
+// ask for 120 times a second while one shows.
+func Paced(every time.Duration) time.Time {
+	now := FrameTime()
+	if every <= 0 {
+		return Now()
+	}
+	WakeAt(now.Truncate(every).Add(every))
+	return now
+}
+
 // WakeAt asks for a frame at t, for a look that changes at a known time
 // such as a caret blink or a tooltip delay. Nothing is painted before then
 // unless something else asks. The earliest request in a frame wins.
