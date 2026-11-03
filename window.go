@@ -784,6 +784,7 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 	}
 	target, kept := w.paintTarget(screen, kept)
 	contained := w.takeContained()
+	defer w.frameLoop.endFrameFree(len(contained) > 0, false)
 	// within is where a frame whose changes a scroll contains paints, in
 	// pixels; empty, the frame paints all of it.
 	var within image.Rectangle
@@ -836,6 +837,7 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 			if dst != target && (reactive.FreeGen() != w.freeSeen || fontGen() != w.fontSeen) {
 				// The layout changed more than the scroll: paint all of it.
 				refusePartial("state changed")
+				w.frameLoop.endFrameFree(true, true)
 				dst = target
 				w.canvas.Image = target
 				target.Fill(w.background())

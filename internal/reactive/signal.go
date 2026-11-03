@@ -34,6 +34,9 @@ func RequestLayout() {
 	sc.layoutGen = genSeq.Add(1)
 	if sc.contained == 0 {
 		sc.freeGen = sc.layoutGen
+		if sc.onFree != nil {
+			sc.onFree()
+		}
 	}
 }
 
@@ -51,6 +54,11 @@ func Contained(fn func()) {
 // FreeGen changes with every StateValue write and layout request made
 // outside Contained, on this goroutine.
 func FreeGen() uint64 { return current().freeGen }
+
+// WatchFree has fn called, nil for nothing, at every write and layout
+// request that moves FreeGen on this goroutine, on the writer's stack: what
+// keeps a frame from painting a region alone can then be told.
+func WatchFree(fn func()) { current().onFree = fn }
 
 // Measurement dependencies are separate from reactive subscriptions: even an
 // Untrack read affects layout, but never subscribes the enclosing computation.
@@ -458,6 +466,9 @@ func (s *StateValue[T]) store(sc *scope, v T) {
 	sc.layoutGen = sc.stateGen
 	if sc.contained == 0 {
 		sc.freeGen = sc.stateGen
+		if sc.onFree != nil {
+			sc.onFree()
+		}
 	}
 	subs := make([]*Computation, 0, len(s.subs))
 	for e := range s.subs {

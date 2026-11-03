@@ -29,6 +29,7 @@ type scope struct {
 	loop            any
 	contained       int    // depth of Contained
 	freeGen         uint64 // see FreeGen
+	onFree          func() // see WatchFree
 
 	// base is the runtime what this goroutine creates with no owner
 	// belongs to; see Base.

@@ -106,7 +106,11 @@ type frameLoop struct {
 	// contained are the window regions changes made in reactive.Contained
 	// since the last frame show in; see damage.go.
 	contained []Rect
-	host      Host // the Window or Probe this loop is, for UseHost
+	// freeWriters are who wrote outside Contained while watchingFree,
+	// since the last frame; see watchFree.
+	freeWriters  []uintptr
+	watchingFree bool
+	host         Host // the Window or Probe this loop is, for UseHost
 	// rt is the reactive runtime the tree is built in and flushed by: a
 	// Probe's own, so that its effects run in its frames alone, or the
 	// App's, which every window of it shares. Nil stands for the running

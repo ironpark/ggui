@@ -192,6 +192,63 @@ const mostContained = 0.85
 func noteContained(r Rect) {
 	if l, ok := reactive.RunningLoop().(*frameLoop); ok {
 		l.contained = append(l.contained, r)
+		l.watchFree()
+	}
+}
+
+// mostFreeWriters is how many writes outside a scroll a frame keeps the
+// writers of.
+const mostFreeWriters = 16
+
+// watchFree has the loop note who writes outside Contained until a frame
+// with nothing contained, to name what keeps a scroll's frame whole.
+func (l *frameLoop) watchFree() {
+	if l.watchingFree {
+		return
+	}
+	l.watchingFree = true
+	reactive.WatchFree(func() {
+		if len(l.freeWriters) < mostFreeWriters {
+			l.freeWriters = append(l.freeWriters, freeWriter())
+		}
+	})
+}
+
+// endFrameFree ends a frame's watch for writes outside a scroll: they are
+// counted when refused says the frame was painted whole for them, and the
+// watch stops after a frame with nothing contained.
+func (l *frameLoop) endFrameFree(contained, refused bool) {
+	if refused {
+		for _, pc := range l.freeWriters {
+			noteDirtier(dirtyFree, pc)
+		}
+	}
+	l.freeWriters = l.freeWriters[:0]
+	if !contained && l.watchingFree {
+		l.watchingFree = false
+		reactive.WatchFree(nil)
+	}
+}
+
+// freeWriter returns the call site that wrote, past the reactive package
+// and ggui's state types.
+func freeWriter() uintptr {
+	var pcs [16]uintptr
+	n := runtime.Callers(3, pcs[:])
+	frames := runtime.CallersFrames(pcs[:n])
+	var last uintptr
+	for {
+		f, more := frames.Next()
+		last = f.PC
+		switch {
+		case strings.HasPrefix(f.Function, "github.com/ironpark/ggui/internal/reactive."),
+			strings.HasPrefix(f.Function, "github.com/ironpark/ggui.") && (strings.Contains(f.Function, "StateValue[") || strings.Contains(f.Function, "Binding[")):
+		default:
+			return f.PC
+		}
+		if !more {
+			return last
+		}
 	}
 }
 
@@ -218,6 +275,7 @@ func (w *Window) containedDamage(target *ggfx.Image, kept bool, contained, asked
 		return image.Rectangle{}
 	case reactive.FreeGen() != w.freeSeen || fontGen() != w.fontSeen:
 		refusePartial("state changed")
+		w.frameLoop.endFrameFree(true, true)
 		return image.Rectangle{}
 	}
 	logical := Sz(w.canvas.dp(float64(target.Bounds().Dx())), w.canvas.dp(float64(target.Bounds().Dy())))
@@ -381,6 +439,9 @@ const (
 	dirtyInput
 	dirtyScale
 	dirtyOther
+	// dirtyFree is never a dirty bit: it names, for a frame a scroll
+	// contained that was painted whole for it, a write made outside.
+	dirtyFree
 )
 
 var dirtyReasons = []struct {
@@ -396,6 +457,7 @@ var dirtyReasons = []struct {
 	{dirtyInput, "dirty(input)"},
 	{dirtyScale, "dirty(scale)"},
 	{dirtyOther, "dirty(other)"},
+	{dirtyFree, "state changed"},
 }
 
 // dirtiers counts, by code address, what marked frames dirty: posted work

@@ -72,6 +72,11 @@ func TestAScrollsMoveWithAnotherChangePaintsWhole(t *testing.T) {
 	if len(damage) != 1 || damage[0] != screen.Bounds() {
 		t.Fatalf("damage %v, want all of the screen", damage)
 	}
+	// The write is named as what kept the frame whole.
+	const writer = "state changed github.com/ironpark/ggui.TestAScrollsMoveWithAnotherChangePaintsWhole"
+	if ReadMotionReport().Dirtiers[writer] == 0 {
+		t.Fatalf("the write outside the scroll was not named: %v", ReadMotionReport().Dirtiers)
+	}
 }
 
 // A widget beside a scroll is told that a frame painted within the
