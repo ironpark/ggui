@@ -55,6 +55,7 @@ type TextInputWidget struct {
 	onCommit          func(string)
 	onChange          func(string)
 	onKey             func(KeyEvent) bool
+	claims            func(KeyEvent) bool
 	onPasteImage      func(png []byte) bool
 	onDescribe        func(*Node)
 	onAction          func(Action) bool
@@ -292,10 +293,16 @@ func (t *TextInputWidget) ConsumesKey(ev KeyEvent) bool {
 // editor while it has the focus, ahead of any shortcut or menu action on
 // the same chord. Those are the clipboard, undo and select-all chords, and
 // the modified arrows, Home, End and deletes; ⌘/Ctrl+Enter too when the
-// editor submits with it.
+// editor submits with it; and any key ClaimKeys claims.
 func (t *TextInputWidget) ClaimsChord(ev KeyEvent) bool {
 	m := ev.Mods
-	if ev.Kind != KeyPress || t.IsDisabled() || !(m.Ctrl || m.Alt || m.Meta) {
+	if ev.Kind != KeyPress || t.IsDisabled() {
+		return false
+	}
+	if t.claims != nil && t.composition == "" && t.claims(ev) {
+		return true
+	}
+	if !(m.Ctrl || m.Alt || m.Meta) {
 		return false
 	}
 	switch ev.Key {
@@ -397,6 +404,16 @@ func (t *TextInputWidget) OnChange(fn func(string)) *TextInputWidget { t.onChang
 // editor. This lets searchable lists use Up, Down and Enter without replacing
 // the editor's platform input driver.
 func (t *TextInputWidget) OnKey(fn func(KeyEvent) bool) *TextInputWidget { t.onKey = fn; return t }
+
+// ClaimKeys keeps the keys fn reports with the editor while it has the
+// focus, ahead of what the runtime does with them first: Tab moving the
+// focus, a shortcut or a menu action on the same chord. They reach OnKey,
+// then the editor. fn is asked at each press, so it can claim a key only
+// while it means something, as Tab while a completion list shows.
+func (t *TextInputWidget) ClaimKeys(fn func(KeyEvent) bool) *TextInputWidget {
+	t.claims = fn
+	return t
+}
 
 // OnPasteImage takes a paste of a clipboard that holds an image and no
 // text, as a screenshot leaves it: fn gets the image as PNG and reports

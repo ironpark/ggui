@@ -519,3 +519,31 @@ func TestPasteOfAnImageGoesToItsHook(t *testing.T) {
 		t.Fatalf("value %q after pasting text", Untrack(value.Get))
 	}
 }
+
+// A key a text input claims is its own while it claims it: Tab reaches
+// its OnKey rather than moving the focus, and moves it again once the
+// input lets it go.
+func TestTextInputClaimsTheKeysItIsAsked(t *testing.T) {
+	t.Parallel()
+	claim := true
+	seen := 0
+	a := TextInput(State("")).Name("a").
+		ClaimKeys(func(ev KeyEvent) bool { return claim && ev.Key == KeyTab }).
+		OnKey(func(ev KeyEvent) bool { seen++; return ev.Key == KeyTab })
+	b := TextInput(State("")).Name("b")
+	p := NewProbe(Column(a, b), Sz(200, 100))
+	defer p.Close()
+	p.Frame()
+	field, _ := p.Semantics().Find(RoleTextField, "a")
+	p.Click(field.Rect.Center())
+	focused := func() string { n, _ := p.Semantics().Focused(); return n.Name }
+	p.Type(Mods{}, KeyTab)
+	if seen != 1 || focused() != "a" {
+		t.Fatalf("a claimed Tab: OnKey saw %d keys, %q focused", seen, focused())
+	}
+	claim = false
+	p.Type(Mods{}, KeyTab)
+	if seen != 1 || focused() != "b" {
+		t.Fatalf("a let Tab go: OnKey saw %d keys, %q focused", seen, focused())
+	}
+}
