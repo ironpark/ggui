@@ -286,3 +286,26 @@ func TestAMoveIsNotedOnlyWhenThePointerMovedAndItWasClaimed(t *testing.T) {
 type passesPointer struct{}
 
 func (passesPointer) HandlePointer(PointerEvent) bool { return false }
+
+// A frame for which nothing changed, as for posted work that wrote
+// nothing, paints nothing over the kept screen, and a Repaint paints it.
+func TestAFrameNothingChangedForPaintsNothing(t *testing.T) {
+	w := newWindow(nil, nil, Config{}, func() Widget { return Box() })
+	screen := ggfx.NewImage(16, 16)
+	w.draw(screen, 1, false, nil)
+	skipped := func() int64 { return ReadFrameStats().Skipped }
+	before := skipped()
+	w.draw(screen, 1, true, nil)
+	if skipped() != before+1 {
+		t.Fatal("a frame nothing changed for was painted")
+	}
+	w.Repaint()
+	w.draw(screen, 1, true, nil)
+	if skipped() != before+1 {
+		t.Fatal("a frame after Repaint painted nothing")
+	}
+	w.draw(screen, 1, false, nil)
+	if skipped() != before+1 {
+		t.Fatal("a frame on a screen not kept painted nothing")
+	}
+}

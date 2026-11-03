@@ -21,8 +21,9 @@ type FrameStats struct {
 	ForAnimation, ForTime, ForCallback, ForPosted, ForInput int64
 
 	// Partial counts the frames painted in part, where only what moves
-	// with time changed; see damage.go.
-	Partial int64
+	// with time changed; see damage.go. Skipped counts those that painted
+	// nothing, as nothing had changed, and presented nothing.
+	Partial, Skipped int64
 }
 
 const (
@@ -38,6 +39,7 @@ var (
 	framesRun, frameNanos atomic.Int64
 	framesFor             [frameReasons]atomic.Int64
 	partialFrames         atomic.Int64
+	framesSkipped         atomic.Int64
 )
 
 func countFrame(d time.Duration) {
@@ -53,6 +55,6 @@ func ReadFrameStats() FrameStats {
 		ForAnimation: framesFor[frameForAnimation].Load(), ForTime: framesFor[frameForTime].Load(),
 		ForCallback: framesFor[frameForCallback].Load(), ForPosted: framesFor[frameForPosted].Load(),
 		ForInput: framesFor[frameForInput].Load(),
-		Partial:  partialFrames.Load(),
+		Partial:  partialFrames.Load(), Skipped: framesSkipped.Load(),
 	}
 }

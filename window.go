@@ -767,6 +767,12 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 		}
 	}
 	asked := w.takeRepaints()
+	if kept && dirtyBits == 0 && len(asked) == 0 && len(w.motion) == 0 {
+		// Nothing changed: work was posted that wrote nothing, say. The
+		// screen keeps the last frame, and untouched, nothing is presented.
+		framesSkipped.Add(1)
+		return
+	}
 	target, kept := w.paintTarget(screen, kept)
 	if wanted := len(w.motion) > 0 || len(asked) > 0; dirtyBits != 0 {
 		if wanted {
