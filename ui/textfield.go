@@ -81,6 +81,14 @@ func (f *TextFieldWidget) OnKey(fn func(ggui.KeyEvent) bool) *TextFieldWidget {
 	return f
 }
 
+// ClaimKeys keeps the keys fn reports with the field while it has the
+// focus, ahead of Tab moving the focus and shortcuts; see
+// ggui.TextInputWidget.ClaimKeys.
+func (f *TextFieldWidget) ClaimKeys(fn func(ggui.KeyEvent) bool) *TextFieldWidget {
+	f.input.ClaimKeys(fn)
+	return f
+}
+
 // OnPasteImage takes a paste of an image; see TextInputWidget.OnPasteImage.
 func (f *TextFieldWidget) OnPasteImage(fn func(png []byte) bool) *TextFieldWidget {
 	f.input.OnPasteImage(fn)
