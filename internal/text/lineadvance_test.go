@@ -47,3 +47,19 @@ func BenchmarkMultiFaceLine(b *testing.B) {
 		glyphs = m.appendLazyGlyphsForLine(glyphs[:0], line, 0, 0, 0, glyphCull{})
 	}
 }
+
+// BenchmarkMultiFaceText lays a paragraph of two faces out as a draw does.
+func BenchmarkMultiFaceText(b *testing.B) {
+	latin, _ := NewGoTextFaceSource(bytes.NewReader(goregular.TTF))
+	cjk, _ := NewGoTextFaceSource(bytes.NewReader(testfonts.MPlus1pRegular_ttf))
+	m, err := NewMultiFace(&GoTextFace{Source: latin, Size: 13}, &GoTextFace{Source: cjk, Size: 13})
+	if err != nil {
+		b.Fatal(err)
+	}
+	text := "The cache keeps 日本語 sources once,\nその後 in the cache that read them 日本.\nand a third line of plain words"
+	var glyphs []LazyGlyph
+	b.ReportAllocs()
+	for b.Loop() {
+		glyphs = AppendLazyGlyphs(glyphs[:0], text, m, nil)
+	}
+}

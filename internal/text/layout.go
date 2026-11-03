@@ -410,20 +410,31 @@ func forEachLine(text string, face Face, options *LayoutOptions, f func(text str
 		options = &LayoutOptions{}
 	}
 
-	// Calculate the advances for each line.
+	d := face.direction()
+	m := face.Metrics()
+	h, v := calcAligns(d, options.PrimaryAlign, options.SecondaryAlign)
+
+	// The lines' advances place them only when they are aligned at their
+	// center or end, along the direction of the text; text aligned at its
+	// start, as nearly all is, is laid out without measuring each line
+	// first, which would look its shaping up twice.
+	needAdvances := h != horizontalAlignLeft
+	if !d.isHorizontal() {
+		needAdvances = v != verticalAlignTop
+	}
 	var advances []float64
 	var longestAdvance float64
 	var lineCount int
 	for line := range textutil.Lines(text) {
 		lineCount++
+		if !needAdvances {
+			continue
+		}
 		l := textutil.TrimTailingLineBreak(line)
 		a := face.advanceAt(l, len(l))
 		advances = append(advances, a)
 		longestAdvance = max(longestAdvance, a)
 	}
-
-	d := face.direction()
-	m := face.Metrics()
 
 	var boundaryWidth, boundaryHeight float64
 	if d.isHorizontal() {
@@ -438,7 +449,6 @@ func forEachLine(text string, face Face, options *LayoutOptions, f func(text str
 	var offsetX, offsetY float64
 
 	// Adjust the offset based on the secondary alignments.
-	h, v := calcAligns(d, options.PrimaryAlign, options.SecondaryAlign)
 	switch d {
 	case DirectionLeftToRight, DirectionRightToLeft:
 		offsetY += m.HAscent
