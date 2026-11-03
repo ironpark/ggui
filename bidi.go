@@ -533,7 +533,11 @@ func drawPieces(dst *ggfx.Image, op *text.DrawOptions, s string, ps []piece, sty
 		p := &ps[i]
 		st := styles[p.style]
 		*op = text.DrawOptions{}
-		op.ColorScale.ScaleWithColor(col(p.style))
+		c := col(p.style)
+		if c == nil {
+			c = color.Black // as a style resolves no color
+		}
+		op.ColorScale.ScaleWithColor(c)
 		if !p.rtl {
 			face := st.font.face(st.size*scale, st.weight)
 			op.GeoM.Translate(p.x*scale, baseline-face.Metrics().HAscent)
