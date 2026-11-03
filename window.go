@@ -318,6 +318,8 @@ func (w *Window) handle(ev ggwd.Event) error {
 				(KeyEvent{Kind: KeyPress, Key: ev.Key, Mods: m}).Is(w.inspectChord) {
 				w.Inspector(!w.inspect)
 			}
+		} else {
+			w.pending.released = append(w.pending.released, ev.Key)
 		}
 		w.markDirty(dirtyEvent)
 	case ggwd.CompositionEvent:

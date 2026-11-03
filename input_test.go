@@ -558,3 +558,31 @@ func TestARebuiltRegionIsToldItIsHovered(t *testing.T) {
 		t.Fatalf("the rebuilt region heard %v as the pointer left, want [true false]", now)
 	}
 }
+
+// releasing is a keyed region that is told of releases too.
+type releasing struct{ keyed }
+
+func (k *releasing) Paint(dst *Canvas, r Rect) { dst.HitKey(r, k) }
+func (k *releasing) HandleKeyRelease(ev KeyEvent) {
+	*k.log = append(*k.log, k.id+":-"+ev.Key.String())
+}
+
+func TestReleasesReachTheFocusedHandlerThatAsks(t *testing.T) {
+	t.Parallel()
+	var log []string
+	w := Row(&releasing{keyed{&log, "a"}}, &keyed{&log, "b"})
+	var in inputState
+	paintFrame(&in, w, Sz(100, 50))
+	clickAt(&in, Pt(25, 25))
+	log = nil
+	in.dispatch(frameInput{keys: []KeyboardKey{KeyA}, released: []KeyboardKey{KeyA}})
+	if want := []string{"a:A", "a:-A"}; fmt.Sprint(log) != fmt.Sprint(want) {
+		t.Fatalf("log = %v, want %v: the release after the press", log, want)
+	}
+	clickAt(&in, Pt(75, 25))
+	log = nil
+	in.dispatch(frameInput{keys: []KeyboardKey{KeyB}, released: []KeyboardKey{KeyB}})
+	if want := []string{"b:B"}; fmt.Sprint(log) != fmt.Sprint(want) {
+		t.Fatalf("log = %v, want %v: a handler that does not ask hears no releases", log, want)
+	}
+}

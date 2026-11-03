@@ -68,10 +68,11 @@ func runtimeIsDarwin() bool { return runtime.GOOS == "darwin" }
 type KeyKind int
 
 const (
-	KeyPress KeyKind = iota // Key was just pressed
-	KeyText                 // Text was typed
-	KeyFocus                // the region gained keyboard focus
-	KeyBlur                 // the region lost keyboard focus
+	KeyPress   KeyKind = iota // Key was just pressed
+	KeyText                   // Text was typed
+	KeyFocus                  // the region gained keyboard focus
+	KeyBlur                   // the region lost keyboard focus
+	KeyRelease                // Key was let go of, for a KeyReleaseHandler alone
 )
 
 // KeyEvent is a keyboard event delivered to the focused region.
@@ -88,6 +89,15 @@ type KeyEvent struct {
 // short delay it delivers KeyPress again every few frames.
 type KeyHandler interface {
 	HandleKey(ev KeyEvent)
+}
+
+// KeyReleaseHandler is a KeyHandler that is also told, while it has focus,
+// of each key let go of, as a KeyRelease: a terminal reports releases to a
+// program that asks for them. Only the focused handler is told, and only of
+// keys released while it has focus; a held key repeats as KeyPress.
+type KeyReleaseHandler interface {
+	KeyHandler
+	HandleKeyRelease(ev KeyEvent)
 }
 
 // TickHandler is a KeyHandler that also needs to run once per frame while it
@@ -173,18 +183,20 @@ type Revealer interface {
 
 // frameInput is everything the runtime read from the platform this frame.
 type frameInput struct {
-	touch  bool
-	pos    Point
-	down   []MouseButton
-	up     []MouseButton
-	wheel  Point
-	phase  ScrollPhase   // of the frame's scrolls, the lift outranking the rest
-	keys   []KeyboardKey // just pressed, plus repeats of held keys
-	text   string
-	mods   Mods
-	drop   []DroppedFile // files dropped onto the window this frame
-	drag   bool          // files are being dragged over the window
-	dragAt Point         // where, when drag is set
+	touch bool
+	pos   Point
+	down  []MouseButton
+	up    []MouseButton
+	wheel Point
+	phase ScrollPhase   // of the frame's scrolls, the lift outranking the rest
+	keys  []KeyboardKey // just pressed, plus repeats of held keys
+	// released are the keys let go of, for a KeyReleaseHandler.
+	released []KeyboardKey
+	text     string
+	mods     Mods
+	drop     []DroppedFile // files dropped onto the window this frame
+	drag     bool          // files are being dragged over the window
+	dragAt   Point         // where, when drag is set
 }
 
 // inputState routes frameInput to the regions painted last frame. A pressed
@@ -493,6 +505,7 @@ func (in *inputState) dispatchKeys(f frameInput) {
 	}
 	in.focused = keep(cur)
 	if th, ok := cur.key.(TickHandler); ok && th.HandleTick() {
+		releaseKeys(cur.key, f)
 		return
 	}
 	for _, k := range f.keys {
@@ -501,7 +514,19 @@ func (in *inputState) dispatchKeys(f frameInput) {
 	if f.text != "" {
 		cur.key.HandleKey(KeyEvent{Kind: KeyText, Text: f.text})
 	}
+	releaseKeys(cur.key, f)
 	in.afterFocused(f, cur.key)
+}
+
+// releaseKeys tells h of the keys let go of this frame, after the frame's
+// presses, when it asks to be told. They go to it even when its tick took
+// the presses, so a key it saw pressed is not left held.
+func releaseKeys(h KeyHandler, f frameInput) {
+	if rh, ok := h.(KeyReleaseHandler); ok {
+		for _, k := range f.released {
+			rh.HandleKeyRelease(KeyEvent{Kind: KeyRelease, Key: k, Mods: f.mods})
+		}
+	}
 }
 
 // afterFocused runs what comes after the focused widget saw the keys: the

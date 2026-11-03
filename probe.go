@@ -328,6 +328,19 @@ func (p *Probe) Key(chords ...string) {
 // without an IME would.
 func (p *Probe) Text(s string) { p.dispatch(frameInput{text: s}) }
 
+// TypeText presses key with mods held and delivers the text it typed, in
+// one frame, as a platform without an IME does a key that types.
+func (p *Probe) TypeText(mods Mods, key KeyboardKey, text string) {
+	p.dispatch(frameInput{keys: []KeyboardKey{key}, text: text, mods: mods})
+}
+
+// KeyRelease lets go of each key, one frame each, with mods held.
+func (p *Probe) KeyRelease(mods Mods, keys ...KeyboardKey) {
+	for _, k := range keys {
+		p.dispatch(frameInput{released: []KeyboardKey{k}, mods: mods})
+	}
+}
+
 // DragOver drags files over the window at pos without dropping them, as
 // the desktop reports while a drag is in progress; the zone under pos hears
 // of it through OnDropHover. DragEnd, Drop or DropPaths ends it.
