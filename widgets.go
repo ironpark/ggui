@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"slices"
 
+	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/internal/fn"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
@@ -71,15 +72,20 @@ type TextWidget struct {
 	// fit in changes.
 	resolved TextStyle
 	lines    []string
-	widths   []float64
-	natural  Size
-	ascent   float64 // the first baseline, below the top
-	wrapped  wrapKey
-	bidi     textBidi         // the lines in visual order, when the direction or the text needs it
-	rich     *RichTextWidget  // what a Selectable Text lays out and paints as
-	richAt   richAt           // what a Selectable Text was laid out for, to lay its lines out when rotated
-	drawOp   text.DrawOptions // reused by paintLines, which would allocate one a paint
-	pieceOp  text.DrawOptions // reused by drawPieces for the same
+	// glyphs are each line's glyphs laid out in glyphFace, the face they
+	// were last drawn in, kept until the lines are wrapped again: a frame
+	// that draws them as they were, as a scroll's does, lays none out.
+	glyphs    [][]text.LazyGlyph
+	glyphFace text.Face
+	widths    []float64
+	natural   Size
+	ascent    float64 // the first baseline, below the top
+	wrapped   wrapKey
+	bidi      textBidi         // the lines in visual order, when the direction or the text needs it
+	rich      *RichTextWidget  // what a Selectable Text lays out and paints as
+	richAt    richAt           // what a Selectable Text was laid out for, to lay its lines out when rotated
+	drawOp    text.DrawOptions // reused by paintLines, which would allocate one a paint
+	pieceOp   text.DrawOptions // reused by drawPieces for the same
 }
 
 // richAt is the width and Env a Selectable Text last laid out in.
@@ -324,6 +330,7 @@ func (t *TextWidget) layoutLines(maxW float64, env Env) {
 		maxW: pick(fits, maxW, 0), maxLines: t.maxLines, ellipsis: t.ellipsis}
 	if key != t.wrapped {
 		t.wrapped = key
+		t.glyphFace = nil // the lines' glyphs are of the lines before
 		t.lines = wrapText(key.value, face, pick(t.wrap, key.maxW, 0))
 		if n := key.maxLines; n > 0 && len(t.lines) > n {
 			t.lines = t.lines[:n]
@@ -410,8 +417,31 @@ func (t *TextWidget) paintLines(dst *Canvas, r Rect, upright bool, place func(op
 		}
 		op.GeoM.Reset()
 		place(op, x, y)
-		drawText(dst.Image, line, face, op)
+		t.drawLine(dst.Image, i, line, face, op)
 	}
+}
+
+// drawLine draws line i, from the glyphs it keeps when it can.
+func (t *TextWidget) drawLine(dst *ggfx.Image, i int, line string, face text.Face, op *text.DrawOptions) {
+	plain := plainFace(face, line)
+	if plain == nil {
+		drawText(dst, line, face, op)
+		return
+	}
+	if t.glyphFace != plain || len(t.glyphs) != len(t.lines) {
+		for j := range t.glyphs {
+			t.glyphs[j] = t.glyphs[j][:0]
+		}
+		t.glyphs = slices.Grow(t.glyphs[:0], len(t.lines))[:len(t.lines)]
+		for j := range t.glyphs {
+			t.glyphs[j] = t.glyphs[j][:0]
+		}
+		t.glyphFace = plain
+	}
+	if len(t.glyphs[i]) == 0 && line != "" {
+		t.glyphs[i] = text.AppendLazyGlyphs(t.glyphs[i][:0], line, plain, nil)
+	}
+	text.DrawLazyGlyphs(dst, t.glyphs[i], op)
 }
 
 // StyledWidget sets the text style its subtree inherits. Build one with

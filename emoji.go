@@ -182,6 +182,19 @@ func graphemeRuns[K comparable](s string, pick func(g string) K, yield func(star
 	}
 }
 
+// plainFace is the face s is drawn in as one run, as drawText draws it, or
+// nil when s holds an emoji, drawn in runs of faces of their own.
+func plainFace(face text.Face, s string) text.Face {
+	ef, ok := face.(*emojiFace)
+	if !ok {
+		return face
+	}
+	if emojidata.MayHold(s) {
+		return nil
+	}
+	return ef.Face
+}
+
 func drawText(dst *ggfx.Image, s string, face text.Face, options *text.DrawOptions) {
 	if dst == nil || dst.Bounds().Empty() {
 		return

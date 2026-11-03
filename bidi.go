@@ -48,6 +48,13 @@ type piece struct {
 	lang       shapeLang // what a right-to-left piece is shaped in
 
 	pos func(b int) float64 // x of offset b within the piece; built on first use
+
+	// glyphs are the piece's glyphs laid out in glyphFace, the face it was
+	// last drawn in: kept until the line is laid out again, so that a
+	// frame that draws the line as it was, as a scroll's does, lays none
+	// of it out again.
+	glyphs    []text.LazyGlyph
+	glyphFace text.Face
 }
 
 // rtlSeg is a run of a right-to-left piece drawn by one face of its chain:
@@ -542,7 +549,17 @@ func drawPieces(dst *ggfx.Image, op *text.DrawOptions, s string, ps []piece, sty
 			face := st.font.face(st.size*scale, st.weight)
 			op.GeoM.Translate(p.x*scale, baseline-face.Metrics().HAscent)
 			place(op)
-			drawText(dst, s[p.start:p.end], face, op)
+			t := s[p.start:p.end]
+			plain := plainFace(face, t)
+			if plain == nil {
+				drawText(dst, t, face, op)
+				continue
+			}
+			if p.glyphFace != plain {
+				p.glyphs = text.AppendLazyGlyphs(p.glyphs[:0], t, plain, nil)
+				p.glyphFace = plain
+			}
+			text.DrawLazyGlyphs(dst, p.glyphs, op)
 			continue
 		}
 		chain := rtlFaces(st.font, st.size*scale, st.weight, p.lang)

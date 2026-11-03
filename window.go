@@ -351,7 +351,10 @@ func (w *Window) handle(ev ggwd.Event) error {
 		w.pending.mods = w.pending.mods.Or(ev.Modifiers)
 		w.pending.wheel = w.pending.wheel.Add(Pt(ev.X, ev.Y))
 		w.pending.phase = laterPhase(w.pending.phase, ev.Phase)
-		w.markDirty(dirtyEvent)
+		// The wheel is a pointer event: what it reaches is painted again
+		// (see deliver), and what it scrolls through a signal or a layout
+		// marks the frame whole by itself.
+		w.wakeFrame()
 	case ggwd.TouchEvent:
 		if w.touches == nil {
 			w.touches = map[ggwd.TouchID]Point{}
@@ -783,6 +786,10 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 	}
 	w.canvas.fs().resetCanvases()
 	defer w.canvas.fs().resetCanvases()
+	if setDamage != nil {
+		// All of it changes: the screen need not start from a copy of the last frame.
+		setDamage([]image.Rectangle{screen.Bounds()})
+	}
 	target.Fill(w.background())
 	if w.root == nil {
 		return

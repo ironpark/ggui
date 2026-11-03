@@ -148,6 +148,26 @@ func Draw(dst *ggfx.Image, text string, face Face, options *DrawOptions) {
 		theDrawGlyphsPool.Put(glyphs)
 	}()
 	*glyphs = appendLazyGlyphs((*glyphs)[:0], text, face, 0, 0, &layoutOp, newGlyphCull(face, geoM, dstBounds))
+	drawLazyGlyphs(dst, *glyphs, &drawOp)
+}
+
+// DrawLazyGlyphs draws glyphs, as AppendLazyGlyphs laid them out with no
+// LayoutOptions, as Draw would draw their text with options: a widget that
+// keeps a text's glyphs from frame to frame draws them without laying the
+// text out again.
+func DrawLazyGlyphs(dst *ggfx.Image, glyphs []LazyGlyph, options *DrawOptions) {
+	var drawOp ggfx.DrawImageOptions
+	if options != nil {
+		drawOp = options.DrawImageOptions
+	}
+	drawLazyGlyphs(dst, glyphs, &drawOp)
+}
+
+// drawLazyGlyphs draws the glyphs that reach dst, with drawOp.
+func drawLazyGlyphs(dst *ggfx.Image, glyphs []LazyGlyph, drawOpIn *ggfx.DrawImageOptions) {
+	drawOp := *drawOpIn
+	geoM := drawOp.GeoM
+	dstBounds := dst.Bounds()
 
 	entries := theDrawGlyphEntriesPool.Get()
 	defer func() {
@@ -163,7 +183,7 @@ func Draw(dst *ggfx.Image, text string, face Face, options *DrawOptions) {
 	// Realize images, then draw, in two passes: interleaving DrawImage
 	// with glyph realization flushes the pending atlas write-pixels batch
 	// on each glyph and fragments draw calls (#3455).
-	for _, g := range *glyphs {
+	for _, g := range glyphs {
 		if g.ImageBounds.Empty() {
 			continue
 		}
