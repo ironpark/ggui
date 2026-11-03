@@ -271,6 +271,14 @@ func (g *GoTextFace) hasGlyph(r rune) bool {
 
 // appendLazyGlyphsForLine implements Face.
 func (g *GoTextFace) appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, indexOffset int, originX, originY float64, cull glyphCull) []LazyGlyph {
+	glyphs, _ = g.appendLazyGlyphsForLineAdvance(glyphs, line, indexOffset, originX, originY, cull)
+	return glyphs
+}
+
+// appendLazyGlyphsForLineAdvance implements lineAdvancer: the line's
+// advance is its glyphs' advances, which the glyphs just looked up have.
+func (g *GoTextFace) appendLazyGlyphsForLineAdvance(glyphs []LazyGlyph, line string, indexOffset int, originX, originY float64, cull glyphCull) ([]LazyGlyph, float64) {
+	var advance fixed.Int26_6
 	origin := fixed.Point26_6{
 		X: float64ToFixed26_6(originX),
 		Y: float64ToFixed26_6(originY),
@@ -331,9 +339,10 @@ func (g *GoTextFace) appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, in
 				Y: -glyph.shapingGlyph.Advance,
 			})
 		}
+		advance += glyph.shapingGlyph.Advance
 	}
 
-	return glyphs
+	return glyphs, fixed26_6ToFloat64(advance)
 }
 
 // glyphImage implements glyphImager.

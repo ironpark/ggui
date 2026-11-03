@@ -131,8 +131,9 @@ func (m *MultiFace) appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, ind
 		}
 		f := m.faces[c.faceIndex]
 		t := line[c.textStartIndex:c.textEndIndex]
-		glyphs = f.appendLazyGlyphsForLine(glyphs, t, indexOffset, originX, originY, cull)
-		if a := f.advanceAt(t, len(t)); f.direction().isHorizontal() {
+		var a float64
+		glyphs, a = appendLineAdvance(f, glyphs, t, indexOffset, originX, originY, cull)
+		if f.direction().isHorizontal() {
 			originX += a
 		} else {
 			originY += a
@@ -140,6 +141,23 @@ func (m *MultiFace) appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, ind
 		indexOffset += len(t)
 	}
 	return glyphs
+}
+
+// lineAdvancer is a Face that appends a line's glyphs and says the line's
+// advance at once, from the shaping it looked up for the glyphs, rather
+// than looking it up again: a MultiFace places each face's run after the
+// last, for every line it draws.
+type lineAdvancer interface {
+	appendLazyGlyphsForLineAdvance(glyphs []LazyGlyph, line string, indexOffset int, originX, originY float64, cull glyphCull) ([]LazyGlyph, float64)
+}
+
+// appendLineAdvance appends f's glyphs for line and returns its advance.
+func appendLineAdvance(f Face, glyphs []LazyGlyph, line string, indexOffset int, originX, originY float64, cull glyphCull) ([]LazyGlyph, float64) {
+	if la, ok := f.(lineAdvancer); ok {
+		return la.appendLazyGlyphsForLineAdvance(glyphs, line, indexOffset, originX, originY, cull)
+	}
+	glyphs = f.appendLazyGlyphsForLine(glyphs, line, indexOffset, originX, originY, cull)
+	return glyphs, f.advanceAt(line, len(line))
 }
 
 // appendVectorPathForLine implements Face.

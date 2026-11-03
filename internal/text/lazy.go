@@ -78,6 +78,12 @@ func (l *LazyFace) appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, inde
 	return l.get().appendLazyGlyphsForLine(glyphs, line, indexOffset, originX, originY, cull)
 }
 
+// appendLazyGlyphsForLineAdvance implements lineAdvancer when the face it
+// stands for does.
+func (l *LazyFace) appendLazyGlyphsForLineAdvance(glyphs []LazyGlyph, line string, indexOffset int, originX, originY float64, cull glyphCull) ([]LazyGlyph, float64) {
+	return appendLineAdvance(l.get(), glyphs, line, indexOffset, originX, originY, cull)
+}
+
 // appendVectorPathForLine implements Face.
 func (l *LazyFace) appendVectorPathForLine(path *vector.Path, line string, originX, originY float64) {
 	l.get().appendVectorPathForLine(path, line, originX, originY)
