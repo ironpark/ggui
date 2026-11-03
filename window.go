@@ -802,7 +802,6 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 	dst := target
 	if !within.Empty() {
 		dst = target.SubImage(within).(*ggfx.Image)
-		containedFrames.Add(1)
 	}
 	if setDamage != nil {
 		if within.Empty() {
@@ -851,6 +850,10 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 			}
 		},
 		painted: func() {
+			// Counted once the settle had its chance to paint it whole.
+			if dst != target {
+				containedFrames.Add(1)
+			}
 			w.ax.Publish(w.semantics(), w.takeAnnouncements())
 			if tracing {
 				w.publishInspect(&w.canvas, w.semantics())

@@ -1318,10 +1318,10 @@ func (s *ScrollWidget) scrollTo(v float64) {
 
 // Layout implements Widget. After a move of the wheel's, all it changes
 // laying the content out again for the new window, mounting what scrolls
-// into it, is contained in the viewport too.
+// into it and keeping what is in view in place as it is measured, is
+// contained in the viewport too, in every pass of the frame until Paint.
 func (s *ScrollWidget) Layout(c Constraints, env Env) Size {
 	if s.containedMove {
-		s.containedMove = false
 		var size Size
 		reactive.Contained(func() { size = s.layout(c, env) })
 		return size
@@ -1352,7 +1352,9 @@ func (s *ScrollWidget) layout(c Constraints, env Env) Size {
 	vp := Viewport{Offset: s.laidAt, Extent: s.extent(c.Max()), Horizontal: s.horizontal}
 	env = env.With(viewportKey, vp).With(scrollPortKey, s).
 		With(pick(s.horizontal, viewportXKey, viewportYKey), vp).With(pick(s.horizontal, scrollPortXKey, scrollPortYKey), s)
-	s.childSize = s.child.Layout(Loose(inner), env)
+	// What the content builds as it is laid out, rows mounting as they
+	// scroll in, reacts within the viewport too; see Layout.
+	reactive.InRegion(&s.containedMove, func() { s.childSize = s.child.Layout(Loose(inner), env) })
 	s.viewport = c.Constrain(Sz(bounded(c.MaxW, s.childSize.W), bounded(c.MaxH, s.childSize.H)))
 	if s.shrink {
 		// Constrain keeps it within c, so a tight c still decides.
@@ -1405,6 +1407,7 @@ func (s *ScrollWidget) Paint(dst *Canvas, r Rect) {
 	}
 	s.rect = r
 	s.win, s.placed = dst.WindowRect(r)
+	s.containedMove = false
 	dst.HitPointer(r, s) // adopts the scroll this one replaces
 	s.followFirst()
 	s.phys.paint(s)

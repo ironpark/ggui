@@ -55,6 +55,19 @@ func Contained(fn func()) {
 // outside Contained, on this goroutine.
 func FreeGen() uint64 { return current().freeGen }
 
+// InRegion runs fn with the computations it makes, and those they own,
+// in the region flag stands for: while *flag is true, what they do when they
+// run again is Contained, as what the region's layout does is. A scroll
+// lays its content out in one, so the rows that mount as it moves and react
+// as they are measured change only its viewport.
+func InRegion(flag *bool, fn func()) {
+	sc := current()
+	prev := sc.region
+	sc.region = flag
+	defer func() { sc.region = prev }()
+	fn()
+}
+
 // WatchFree has fn called, nil for nothing, at every write and layout
 // request that moves FreeGen on this goroutine, on the writer's stack: what
 // keeps a frame from painting a region alone can then be told.
@@ -110,6 +123,10 @@ type Computation struct {
 	// cell is the memo's value this Computation computes, if it is a memo's:
 	// what carries staleness on to the memo's own readers.
 	cell downstream
+
+	// region, when not nil, is the flag of the region the computation was
+	// made in or its owner was; see InRegion.
+	region *bool
 
 	owner                    *Computation
 	firstChild, lastChild    *Computation
@@ -633,11 +650,14 @@ func newComputation(fn func(), user bool) *Computation {
 	if user && sc.owner == nil {
 		panic("ggui: Effect requires an owner; use Component or Root")
 	}
-	e := &Computation{fn: fn, user: user, origin: effectOrigin()}
+	e := &Computation{fn: fn, user: user, origin: effectOrigin(), region: sc.region}
 	if owner := sc.owner; owner != nil {
 		e.attach(owner)
 		e.place(owner, "")
 		e.loop, e.rt = owner.loop, owner.rt
+		if e.region == nil {
+			e.region = owner.region
+		}
 	} else {
 		e.rt = sc.baseRuntime()
 	}
@@ -688,10 +708,14 @@ func rootIn(rt *Runtime, identity any, elem string, persistent bool, fn func()) 
 	r := &Computation{keyRoot: identity, origin: effectOrigin(), persistent: persistent}
 	sc, prevListener, prevOwner := enter(nil, r)
 	r.owner = prevOwner
+	r.region = sc.region
 	if r.owner != nil {
 		r.attach(r.owner)
 		r.loop, r.rt = r.owner.loop, r.owner.rt
 		r.place(r.owner, elem)
+		if r.region == nil {
+			r.region = r.owner.region
+		}
 	}
 	switch {
 	case rt != nil:
@@ -840,6 +864,10 @@ func runEffect(e *Computation) {
 
 	e.state, e.running = stateClean, true
 	completed := false
+	if e.region != nil && *e.region {
+		sc.contained++
+		defer func() { sc.contained-- }()
+	}
 	defer func() {
 		e.running = false
 		if !completed {

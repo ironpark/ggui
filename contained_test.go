@@ -99,3 +99,80 @@ func TestAWidgetBesideAScrollsMoveIsNotShown(t *testing.T) {
 		t.Fatalf("the scroll's frame showed the widget beside it: %v", shown)
 	}
 }
+
+// A wheel's move up a long list mounts rows taller than it guessed, which
+// learn their height a pass later, and the frame lays the list out again to keep
+// what is in view in place: all of that is contained in the viewport.
+func TestAScrollMountingRowsItGuessedWrongStaysContained(t *testing.T) {
+	items := State(make([]int, 200))
+	for i := range items.Get() {
+		items.Get()[i] = i
+	}
+	w := newWindow(nil, nil, Config{}, func() Widget {
+		list := EachKeyed(items, func(i int) int { return i }, func(row EachItem[int]) Widget {
+			// A row learns its height as it is laid out, as a chat's turn
+			// does: the frame lays the list out again.
+			return View(row.Value, func(i int) Widget {
+				h := State(20.0)
+				want := float64(30 + i%3*20)
+				return View(h, func(got float64) Widget {
+					return FromFuncs(func(Constraints, Env) Size {
+						if got != want {
+							h.Set(want)
+						}
+						return Sz(100, got)
+					}, func(*Canvas, Rect) {})
+				})
+			})
+		}).EstimatedExtent(20)
+		return Row(Box(Scroll(list).FollowEnd()).Size(100, 100), Box().Size(100, 100))
+	})
+	w.start()
+	setRunning(&w.frameLoop)
+	screen := ggfx.NewImage(200, 100)
+	for range 3 {
+		w.draw(screen, 1, false, nil)
+	}
+	for k := range 60 {
+		setRunning(&w.frameLoop)
+		w.dispatchInput(frameInput{pos: Pt(50, 50), wheel: Pt(0, 3)})
+		before := ReadFrameStats().Contained
+		w.draw(screen, 1, true, func([]image.Rectangle) {})
+		if ReadFrameStats().Contained != before+1 {
+			t.Fatalf("move %d was painted whole: %v %v", k, ReadMotionReport().Refusals, ReadMotionReport().Dirtiers)
+		}
+	}
+}
+
+// A widget beside a scroll that reads its offset, as a button to the end
+// does, is painted when what it shows changes: that frame is whole.
+func TestAReaderOfAScrollsOffsetBesideItIsPainted(t *testing.T) {
+	offset := State(0.0)
+	builds := 0
+	w := newWindow(nil, nil, Config{}, func() Widget {
+		rows := make([]Widget, 40)
+		for i := range rows {
+			rows[i] = Box().Size(100, 20)
+		}
+		far := Map(offset, func(o float64) bool { return o > 100 })
+		side := View(far, func(bool) Widget { builds++; return Box().Size(100, 100) })
+		return Row(Box(Scroll(Column(rows...)).BindOffset(offset)).Size(100, 100), side)
+	})
+	w.start()
+	setRunning(&w.frameLoop)
+	screen := ggfx.NewImage(200, 100)
+	w.draw(screen, 1, false, nil)
+	for k := 0; offset.Get() <= 100; k++ {
+		if k > 20 {
+			t.Fatal("the scroll did not move")
+		}
+		setRunning(&w.frameLoop)
+		w.dispatchInput(frameInput{pos: Pt(50, 50), wheel: Pt(0, -1)})
+		before, built := ReadFrameStats().Contained, builds
+		w.draw(screen, 1, true, func([]image.Rectangle) {})
+		contained := ReadFrameStats().Contained != before
+		if crossed := builds != built; crossed == contained {
+			t.Fatalf("move %d to %v: the reader beside was rebuilt %v, the frame contained %v", k, offset.Get(), crossed, contained)
+		}
+	}
+}
