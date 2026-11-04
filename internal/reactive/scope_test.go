@@ -3,7 +3,7 @@ package reactive
 import (
 	"testing"
 
-	"github.com/ironpark/ggui/internal/goid"
+	"github.com/ironpark/ggui/internal/reactive/goid"
 )
 
 // A layout recorder sees every read, tracked or not, and a nested Measure

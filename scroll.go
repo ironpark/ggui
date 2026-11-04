@@ -5,9 +5,9 @@ import (
 	"math"
 	"time"
 
-	"github.com/ironpark/ggui/internal/kinetics"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/pkg/kinetics"
 )
 
 // Viewport is what a Scroll tells the subtree it lays out: how far along

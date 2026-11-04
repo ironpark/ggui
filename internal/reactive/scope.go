@@ -4,7 +4,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/ironpark/ggui/internal/goid"
+	"github.com/ironpark/ggui/internal/reactive/goid"
 )
 
 // A scope is what one goroutine is running: the computation its reads

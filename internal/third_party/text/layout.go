@@ -21,8 +21,8 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggfx/vector"
-	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/internal/third_party/text/internal/textutil"
+	"github.com/ironpark/ggui/pkg/gem"
 )
 
 // Align is the alignment that determines how to put a text.

@@ -141,8 +141,8 @@ func TestTransformNestsAndPaintsThroughALayer(t *testing.T) {
 	img := ggfx.NewImage(100, 100)
 	defer img.Deallocate()
 	p.Draw(img)
-	if p.canvas.frame.layerDepth != 0 || layerCount(&p.canvas) != 2 {
-		t.Fatalf("depth %d with %d layers; want two nested layers, all returned", p.canvas.frame.layerDepth, layerCount(&p.canvas))
+	if p.canvas.frame.layers.Depth() != 0 || layerCount(&p.canvas) != 2 {
+		t.Fatalf("depth %d with %d layers; want two nested layers, all returned", p.canvas.frame.layers.Depth(), layerCount(&p.canvas))
 	}
 	p.Click(Pt(25, 5))
 	taps := tg.taps()
@@ -197,7 +197,7 @@ func TestClipOvalKeepsInputInsideTheOval(t *testing.T) {
 	if len(tg.taps()) != 2 {
 		t.Fatalf("taps %v; want the centre and the right edge", tg.taps())
 	}
-	if p.canvas.frame.layerDepth != 0 {
+	if p.canvas.frame.layers.Depth() != 0 {
 		t.Fatal("a layer was not returned")
 	}
 }
@@ -342,8 +342,8 @@ func TestBlurPaintsTheSubtreeOnceAndReturnsItsImages(t *testing.T) {
 		})
 		c.BackdropBlur(Rct(Pt(10, 10), Sz(20, 20)), 4, sigma)
 		c.BackdropBlur(Rct(Pt(10, 10), Sz(20, 20)), 0, sigma)
-		if painted != 1 || c.fs().layerDepth != 0 {
-			t.Fatalf("sigma %v: painted %d times, %d layers open", sigma, painted, c.fs().layerDepth)
+		if painted != 1 || c.fs().layers.Depth() != 0 {
+			t.Fatalf("sigma %v: painted %d times, %d layers open", sigma, painted, c.fs().layers.Depth())
 		}
 	}
 	// The passes take turns with the image blurred, so a blur borrows

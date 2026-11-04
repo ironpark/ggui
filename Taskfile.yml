@@ -5,7 +5,7 @@ vars:
   # The packages bench:save and bench:compare measure by default. Those
   # among them below the UI are also listed in boundary_test.go, which
   # keeps them from importing it.
-  ENGINES: ./internal/reactive ./internal/fontsys ./internal/textlayout ./internal/paragraph ./internal/kinetics ./internal/virtual ./internal/region ./pkg/geom
+  ENGINES: ./internal/reactive ./internal/fontsys ./internal/textlayout ./internal/paragraph ./internal/imgcache ./internal/render ./pkg/kinetics ./pkg/virtual ./pkg/geom ./pkg/layout
 
 tasks:
   default:
@@ -115,8 +115,8 @@ tasks:
       - 'GOOS=windows GOARCH=amd64 "{{.GO}}" vet -unsafeptr=false -tags ggui_inspector .'
       - 'GOOS=windows GOARCH=arm64 "{{.GO}}" vet -unsafeptr=false -tags ggui_inspector .'
       - 'GOOS=windows GOARCH=arm64 "{{.GO}}" vet -unsafeptr=false ./...'
-      - 'GOOS=windows GOARCH=amd64 "{{.GO}}" test -c -o /dev/null ./internal/a11ybridge'
-      - 'GOOS=windows GOARCH=arm64 "{{.GO}}" test -c -o /dev/null ./internal/a11ybridge'
+      - 'GOOS=windows GOARCH=amd64 "{{.GO}}" test -c -o /dev/null ./internal/platform/a11ybridge'
+      - 'GOOS=windows GOARCH=arm64 "{{.GO}}" test -c -o /dev/null ./internal/platform/a11ybridge'
 
   lint:
     desc: Run staticcheck for every platform the tree has code for

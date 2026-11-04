@@ -4,8 +4,8 @@ import (
 	"image/color"
 	"slices"
 
-	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/pkg/layout"
 )
 

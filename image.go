@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"image"
@@ -11,10 +12,13 @@ import (
 	_ "image/png"  // registered for DecodeImage
 	"math"
 	"os"
+	"runtime"
+	"weak"
 
 	"github.com/ironpark/ggfx"
-
+	"github.com/ironpark/ggui/internal/imgcache"
 	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/internal/reactive"
 )
 
 // ImageFit says how an image is placed in a box of another shape.
@@ -277,4 +281,254 @@ func LoadImageFile(path string) (*ggfx.Image, error) {
 		return nil, fmt.Errorf("ggui: load image: %w", err)
 	}
 	return DecodeImage(data)
+}
+
+// ImageLoader produces the image for src. It runs on a goroutine of its
+// own, never the UI thread, and should give up when ctx is cancelled: the
+// widget asking for it moved on to another src, or went away.
+type ImageLoader func(ctx context.Context, src string) (image.Image, error)
+
+// LoadImage is the default ImageLoader: it reads the PNG, JPEG or GIF file
+// at the path src.
+func LoadImage(ctx context.Context, src string) (image.Image, error) {
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return nil, fmt.Errorf("ggui: load image: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return decodeImage(data)
+}
+
+// AsyncImageWidget shows an image that is loaded and decoded off the UI
+// thread. Build one with AsyncImage.
+type AsyncImageWidget struct {
+	props       property.Owner
+	src         property.Value[string]
+	loader      ImageLoader
+	maxSize     int
+	placeholder Widget
+	fallback    Widget
+	inner       *ImageWidget
+	cache       *imageCache
+	h           *imgcache.Handle[*ggfx.Image]
+	status      AsyncStatus
+	err         error
+}
+
+// AsyncImage shows the image at src, which the Loader turns into pixels --
+// by default src is a file path. The file is read and decoded on a
+// goroutine, the Placeholder shows until it is ready, and the decoded
+// image is kept in a process-wide cache bounded in bytes (see
+// SetImageCacheLimit), so the same src shown twice, or again later, is
+// decoded once. The cache is keyed by src and MaxSize, not by loader: give
+// each loader srcs of its own.
+//
+// Once loaded it lays out and paints as Image does, with the same Fit,
+// Size, Width, Height, Pixelated and Alt.
+//
+//	ggui.AsyncImage(photo.Path).MaxSize(512).Size(96, 96).Fit(ggui.FitCover).
+//		Placeholder(ui.Skeleton(96, 96))
+func AsyncImage(src string) *AsyncImageWidget {
+	a := &AsyncImageWidget{loader: LoadImage, inner: Image(nil), cache: defaultImageCache}
+	a.src.Set(src)
+	a.h = &imgcache.Handle[*ggfx.Image]{}
+	// A widget dropped by a rebuild lets go of its image, so the cache may
+	// evict it: through its owner when it was built under one, else when
+	// it is collected.
+	h := a.h
+	if reactive.CurrentOwner() != nil {
+		OnCleanup(h.Release)
+	}
+	runtime.AddCleanup(a, func(h *imgcache.Handle[*ggfx.Image]) { h.Release() }, h)
+	return a
+}
+
+// Src changes the image shown; the load of the previous one is cancelled
+// if nothing else is showing it.
+func (a *AsyncImageWidget) Src(src string) *AsyncImageWidget {
+	if a.src.Set(src) {
+		a.props.Changed()
+	}
+	return a
+}
+
+// BindSrc follows r for Src without a rebuild.
+func (a *AsyncImageWidget) BindSrc(r Readable[string]) *AsyncImageWidget {
+	if a.src.Bind(r, "BindSrc") {
+		a.props.Changed()
+	}
+	return a
+}
+
+// Loader replaces how a src becomes an image: from an archive, the
+// network, a thumbnailer. nil restores LoadImage.
+func (a *AsyncImageWidget) Loader(fn ImageLoader) *AsyncImageWidget {
+	if fn == nil {
+		fn = LoadImage
+	}
+	a.loader = fn
+	return a
+}
+
+// MaxSize downscales an image whose larger side exceeds px pixels to that
+// size before it is uploaded, keeping its aspect ratio: a thumbnail of a
+// photo costs a thumbnail's memory. 0, the default, keeps the full size.
+func (a *AsyncImageWidget) MaxSize(px int) *AsyncImageWidget {
+	defer property.Watch(&a.props, &a.maxSize)()
+	a.maxSize = max(px, 0)
+	return a
+}
+
+// Placeholder shows w until the image is ready, and when it fails without
+// a Fallback. With a fixed Size the placeholder is given that size.
+func (a *AsyncImageWidget) Placeholder(w Widget) *AsyncImageWidget {
+	defer property.Watch(&a.props, &a.placeholder)()
+	a.placeholder = w
+	return a
+}
+
+// Fallback shows w in place of an image that failed to load.
+func (a *AsyncImageWidget) Fallback(w Widget) *AsyncImageWidget {
+	defer property.Watch(&a.props, &a.fallback)()
+	a.fallback = w
+	return a
+}
+
+// Fit sets how the image is placed when the box has another shape.
+func (a *AsyncImageWidget) Fit(f ImageFit) *AsyncImageWidget { a.inner.Fit(f); return a }
+
+// Size fixes both dimensions; see ImageWidget.Size.
+func (a *AsyncImageWidget) Size(width, height float64) *AsyncImageWidget {
+	a.inner.Size(width, height)
+	return a
+}
+
+// Width fixes the width; the height follows the aspect ratio.
+func (a *AsyncImageWidget) Width(v float64) *AsyncImageWidget { a.inner.Width(v); return a }
+
+// Height fixes the height; the width follows the aspect ratio.
+func (a *AsyncImageWidget) Height(v float64) *AsyncImageWidget { a.inner.Height(v); return a }
+
+// Pixelated scales the image by its nearest pixel instead of smoothing it.
+func (a *AsyncImageWidget) Pixelated(v bool) *AsyncImageWidget { a.inner.Pixelated(v); return a }
+
+// Alt describes the image for a screen reader; see ImageWidget.Alt.
+func (a *AsyncImageWidget) Alt(s string) *AsyncImageWidget { a.inner.Alt(s); return a }
+
+// Status reports whether the image is still loading, shown, or failed, as
+// of the last layout.
+func (a *AsyncImageWidget) Status() AsyncStatus { return a.status }
+
+// Err is why the image failed to load, when Status is Failed.
+func (a *AsyncImageWidget) Err() error { return a.err }
+
+// sync makes the handle hold the entry for the current src and reads its
+// state. It runs on the UI thread, in Layout.
+func (a *AsyncImageWidget) sync() {
+	key := imgcache.Key{Src: a.src.Get(), Max: a.maxSize}
+	h := a.h
+	if key.Src == "" {
+		h.Release()
+		a.status, a.err, a.inner.img = Failed, errNoSrc, nil
+		return
+	}
+	if !h.Holds(a.cache, key) {
+		post := loopPost(reactive.CurrentOwner())
+		if l := runningLoop(); post == nil && l != nil {
+			post = l.post
+		}
+		// The cache keeps notify until the load ends; holding the widget
+		// weakly lets a widget dropped meanwhile be collected, and its
+		// cleanup cancel the load.
+		wa := weak.Make(a)
+		notify := func() {
+			if a := wa.Value(); a != nil {
+				a.props.Changed()
+			}
+		}
+		h.Acquire(a.cache, key, imgcache.Loader(a.loader), imgcache.Waiter{Post: post, Notify: notify})
+	}
+	var st imgcache.Status
+	st, a.inner.img, a.err = h.State()
+	a.status = asyncStatus(st)
+}
+
+// Layout implements Widget.
+func (a *AsyncImageWidget) Layout(c Constraints, env Env) Size {
+	defer a.props.Layout().EndLayout()
+	a.inner.props.Read()
+	a.sync()
+	if a.status == Ready {
+		return a.inner.Layout(c, env)
+	}
+	w, h := a.inner.width, a.inner.height
+	if p := a.shown(); p != nil {
+		if w > 0 && h > 0 {
+			c = Tight(c.Constrain(Sz(w, h)))
+		}
+		return p.Layout(c, env)
+	}
+	return c.Constrain(Sz(w, h))
+}
+
+// shown is the widget painted in place of the image, or nil.
+func (a *AsyncImageWidget) shown() Widget {
+	if a.status == Failed && a.fallback != nil {
+		return a.fallback
+	}
+	return a.placeholder
+}
+
+// Paint implements Widget.
+func (a *AsyncImageWidget) Paint(dst *Canvas, r Rect) {
+	if a.status == Ready {
+		a.inner.Paint(dst, r)
+		return
+	}
+	if a.inner.alt != "" {
+		dst.Leaf(r, Node{Role: RoleImage, Name: a.inner.alt})
+	}
+	if p := a.shown(); p != nil {
+		dst.Paint(p, r)
+	}
+}
+
+// SetImageCacheLimit bounds the memory the AsyncImage cache keeps for
+// images nothing shows, in bytes of decoded RGBA pixels; the least
+// recently shown go first, and are deallocated. Images on screen are never
+// evicted, whatever they cost. The default is 256 MiB; 0 keeps nothing that
+// is not shown. Call it on the UI thread.
+func SetImageCacheLimit(bytes int64) { defaultImageCache.SetLimit(bytes) }
+
+var defaultImageCache = newImageCache(256 << 20)
+
+// errNoSrc is the error of an AsyncImage given no src.
+var errNoSrc = errors.New("ggui: AsyncImage has no src")
+
+// imageCache is the AsyncImage cache, of textures on the GPU.
+type imageCache = imgcache.Cache[*ggfx.Image]
+
+func newImageCache(limit int64) *imageCache {
+	return imgcache.New(limit, uploadImage, (*ggfx.Image).Deallocate)
+}
+
+// uploadImage makes a texture of a decoded image, and says what it costs
+// in bytes of RGBA pixels.
+func uploadImage(src image.Image) (*ggfx.Image, int64) {
+	img := newTexture(src)
+	b := img.Bounds()
+	return img, int64(b.Dx()) * int64(b.Dy()) * 4
+}
+
+// asyncStatus is the AsyncStatus of a cache entry's.
+func asyncStatus(s imgcache.Status) AsyncStatus {
+	switch s {
+	case imgcache.Ready:
+		return Ready
+	case imgcache.Failed:
+		return Failed
+	}
+	return Pending
 }

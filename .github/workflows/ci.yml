@@ -68,14 +68,14 @@ jobs:
       - name: Build
         run: GOOS=js GOARCH=wasm go build ./...
       # Only the packages that do not start ggfx run under node: ggfx wants
-      # a browser. internal/goid is the one that matters most, since wasm
+      # a browser. internal/reactive/goid is the one that matters most, since wasm
       # has no getg and must take the stack-parsing fallback.
       - name: Test
         run: >-
           GOOS=js GOARCH=wasm go test
           -exec="$(go env GOROOT)/lib/wasm/go_js_wasm_exec"
-          ./internal/goid ./internal/reactive ./internal/textedit
-          ./internal/emojidata ./a11y ./inspect ./runtime
+          ./internal/reactive/goid ./internal/reactive ./internal/textedit
+          ./a11y ./inspect ./runtime
 
   # Each fuzz target's seeds already run in test; this explores a little
   # beyond them on every push.

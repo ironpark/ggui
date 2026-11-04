@@ -16,8 +16,9 @@ func TestEnginePackagesStayBelowTheUI(t *testing.T) {
 		t.Skip("lists the module's packages")
 	}
 	t.Parallel()
-	// Also the default of the Taskfile's bench tasks, ENGINES, with reactive.
-	engines := []string{"internal/fontsys", "internal/textlayout", "internal/paragraph", "internal/kinetics", "internal/virtual", "internal/region", "pkg/geom", "pkg/gem"}
+	// The Taskfile's bench default, ENGINES, is these with reactive, less
+	// gem, which has nothing to measure.
+	engines := []string{"internal/fontsys", "internal/textlayout", "internal/paragraph", "internal/imgcache", "internal/render", "pkg/kinetics", "pkg/virtual", "pkg/geom", "pkg/gem", "pkg/layout"}
 	forbidden := []string{"github.com/ironpark/ggui", "github.com/ironpark/ggui/internal/reactive", "github.com/ironpark/ggui/internal/property"}
 	for _, pkg := range engines {
 		out, err := exec.Command("go", "list", "-deps", "./"+pkg).Output()
