@@ -1,10 +1,7 @@
 package fontsys
 
 import (
-	"sync"
-
 	"github.com/ironpark/ggui/internal/text"
-	gofont "github.com/ironpark/ggui/internal/typesetting/font"
 )
 
 // Picker finds, rune by rune, the font that draws it, in the order Face's
@@ -31,6 +28,7 @@ func (f *Font) Picker(w Weight) *Picker {
 	fonts, _ := f.chainLocked(w)
 	p := &Picker{fonts: fonts, system: f.systemFallback(), weight: w}
 	f.mu.Unlock()
+	p.metas = make([]*text.GoTextFaceSource, 0, len(fonts))
 	for _, cf := range fonts {
 		p.metas = append(p.metas, cf.Font.Meta())
 	}
@@ -81,19 +79,6 @@ func (p *Picker) Pick(r rune) (int, bool) {
 	return len(p.fonts) - 1, true
 }
 
-// cmapMu guards NominalGlyph, which caches its lookups in the font without
-// a lock of its own; a font is shared by every face, chain and goroutine
-// that draws with it.
-var cmapMu sync.Mutex
-
-// HasGlyph reports whether src's cmap maps r to a glyph.
-func HasGlyph(src *text.GoTextFaceSource, r rune) bool {
-	f, ok := src.UnsafeInternal().(*gofont.Face)
-	if !ok {
-		return false
-	}
-	cmapMu.Lock()
-	defer cmapMu.Unlock()
-	_, has := f.NominalGlyph(r)
-	return has
-}
+// HasGlyph reports whether src's cmap maps r to a glyph, from any
+// goroutine without a lock.
+func HasGlyph(src *text.GoTextFaceSource, r rune) bool { return src.HasRune(r) }

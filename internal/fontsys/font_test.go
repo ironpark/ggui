@@ -1,6 +1,7 @@
 package fontsys
 
 import (
+	"os"
 	"testing"
 
 	"golang.org/x/image/font/gofont/gobold"
@@ -8,12 +9,24 @@ import (
 	"golang.org/x/image/font/gofont/goregular"
 )
 
-func mustLoad(t *testing.T, data []byte) *Font {
+func mustLoad(t testing.TB, data []byte) *Font {
 	t.Helper()
 	f, err := Load(data)
 	if err != nil {
 		t.Fatal(err)
 	}
+	return f
+}
+
+// emojiChain is Go Regular with the emoji test subset as its fallback.
+func emojiChain(t testing.TB) *Font {
+	t.Helper()
+	data, err := os.ReadFile("../../testdata/emoji-subset.ttf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := mustLoad(t, goregular.TTF)
+	f.AddFallbacks(mustLoad(t, data))
 	return f
 }
 

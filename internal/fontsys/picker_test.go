@@ -1,7 +1,6 @@
 package fontsys
 
 import (
-	"os"
 	"sync"
 	"testing"
 
@@ -10,13 +9,7 @@ import (
 
 func TestPickerLooksInTheChainThenTheSystem(t *testing.T) {
 	t.Parallel()
-	data, err := os.ReadFile("../../testdata/emoji-subset.ttf")
-	if err != nil {
-		t.Fatal(err)
-	}
-	emoji := mustLoad(t, data)
-	f := mustLoad(t, goregular.TTF)
-	f.AddFallbacks(emoji)
+	f := emojiChain(t)
 	p := f.Picker(400)
 	if p.Len() != 2 {
 		t.Fatalf("chain of %d fonts, want the font and its fallback", p.Len())
