@@ -100,6 +100,18 @@ type SemRef struct{ n int } // index in sem, plus one
 // Valid reports whether the reference points at a node.
 func (r SemRef) Valid() bool { return r.n != 0 }
 
+// semState is the frame's accessibility tree, kept apart from the hit
+// regions: input scans those on every pointer event, and most of what a
+// screen reader reads takes no input at all. semParent and semLast are
+// indices into sem plus one, so a zero value means none.
+type semState struct {
+	sem       []semNode
+	semIndex  map[any]int // handler to index plus one, for Describe and SemanticRef
+	semParent int         // the node being painted into
+	semLast   int         // the node most recently recorded
+	semOff    bool        // nothing reads this frame's tree, so none is built
+}
+
 // resetSemantics starts a new frame's tree. App.Draw and Probe.Frame call
 // it before painting. buildSemTree copies nodes into a separate immutable
 // snapshot, so this private staging buffer can be reused. Clear old entries

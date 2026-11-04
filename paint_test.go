@@ -153,8 +153,8 @@ func TestLayerCanvasIsTheCallersButForTheImage(t *testing.T) {
 	root := &Canvas{Image: img}
 	clipped := root.Clip(Rct(Pt(10, 10), Sz(20, 20))).Inert()
 	clipped.Layer(LayerOptions{}, func(l *Canvas) {
-		if !l.inert || !l.clipped || l.clip != clipped.clip || l.root() != root || l.frame != nil {
-			t.Fatalf("layer canvas lost the caller's state: inert %v clipped %v clip %v", l.inert, l.clipped, l.clip)
+		if !l.inert || !l.clipped || l.clip != clipped.clip || l.root() != root || l.frame != root.fs() {
+			t.Fatalf("layer canvas lost the caller's state: inert %v clipped %v clip %v, its frame state shared %v", l.inert, l.clipped, l.clip, l.frame == root.fs())
 		}
 	})
 	root.freeLayers()

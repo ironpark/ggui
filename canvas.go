@@ -2,17 +2,11 @@ package ggui
 
 import (
 	"image"
-	"image/color"
 	"math"
 	"reflect"
-	"strconv"
-	"strings"
-	"sync"
 	"time"
 
 	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggfx/vector"
-	"github.com/ironpark/ggui/inspect"
 	"github.com/ironpark/ggui/internal/render"
 )
 
@@ -47,9 +41,10 @@ type Canvas struct {
 	window, onScreen bool
 
 	// frame is the state there is one of per frame rather than one per
-	// Canvas: it is reached through root, and only the root holds it. A
-	// Clip or an Inert child leaves this nil, which is what makes "root
-	// only" a property of the type rather than a rule to remember.
+	// Canvas. The root makes it on first use and every Canvas derived from
+	// the root points to the same one, so a field added there is shared by
+	// construction, and reaching it, which every Paint does, takes no walk
+	// up the chain.
 	frame *frameState
 }
 
@@ -58,7 +53,35 @@ type Canvas struct {
 // Clip chain reaches the same one through root, so a field added here is
 // shared by construction and needs no clearing when a child Canvas is made.
 type frameState struct {
-	logical    Size // the window in logical pixels, for Size
+	logical  Size // the window in logical pixels, for Size
+	overlays []overlay
+	// clock is the frame clock of the world painting, for the length of a
+	// paint, so that Paint finds it without asking which goroutine runs.
+	// Outside a paint it is nil, and Paint asks.
+	clock *frameClock
+
+	// The images Layer lends, by depth: as large as the areas the layers
+	// at that depth took this frame, kept for the next frame's, and freed
+	// at the end of one that took them no more.
+	layers render.LayerPool[*ggfx.Image]
+
+	// backdrop records that a BackdropBlur read the window's own image
+	// this frame, or wanted to: the window keeps a backbuffer for it, as
+	// its screen cannot be read.
+	backdrop bool
+
+	inputView   // where the pointer and focus were as the paint began
+	retained    // what Retain kept, this frame and last
+	adoptIndex  // where last frame's regions are, for adopt
+	canvasPool  // the Canvases Clip hands out
+	traceState  // every widget painted, for the inspector; see inspector.go
+	semState    // the accessibility tree; see semantics.go
+	motionState // what a frame painted in part repaints; see damage.go
+}
+
+// inputView is where input stood as the paint began, which the Canvas's
+// focus and pointer queries answer from: the paint cannot see input move.
+type inputView struct {
 	pointer    Point
 	hasPointer bool
 	// pointerRead records that a widget read the pointer in the last
@@ -71,57 +94,52 @@ type frameState struct {
 	focusPainted bool       // the focused handler registered since PaintFocus began
 	focusVisible bool       // focus came there by keyboard
 	pressed      bool       // a pointer button is held
-	overlays     []overlay
-	trace        []inspect.Node // every Paint call, when the inspector is on
-	traceWidgets []Widget       // the widget behind each trace node
-	tracing      bool
-	depth        int
-	traceParent  int // index plus one of the widget currently painting
-	traceRoots   int
-	keeps        map[retainKey]any // Retain this frame
-	prevKeeps    map[retainKey]any // Retain last frame, read by Retained
+}
 
-	// Where last frame's regions are, for adopt. Built on the frame's
-	// first handoff and not at all in a frame with none, which is most
-	// of them: only a handful of widgets adopt.
+// take records where in stands, for a paint about to begin.
+func (v *inputView) take(in *inputState) {
+	v.focusBounds, v.focusKey, v.focusPainted = Rect{}, nil, false
+	if in.focused != nil {
+		v.focusBounds, v.focusKey = in.focused.rect, in.focused.key
+	}
+	v.focusVisible = in.focused != nil && in.focusVisible
+	v.pressed = in.pressed != nil
+	v.pointerRead = false
+}
+
+// retained is what Retain stored this frame, and last frame's, which
+// Retained reads.
+type retained struct {
+	keeps     map[retainKey]any
+	prevKeeps map[retainKey]any
+}
+
+// next makes this frame's values last frame's.
+func (r *retained) next() {
+	r.prevKeeps, r.keeps = r.keeps, r.prevKeeps
+	clear(r.keeps)
+}
+
+// adoptIndex is where last frame's regions are, for adopt. It is built on
+// a frame's first handoff and not at all in a frame with none, which is
+// most of them: only a handful of widgets adopt.
+type adoptIndex struct {
 	prevByID    map[any]int  // id to its place in prev, the last one painted
 	prevByRect  map[Rect]int // the same for a region with no id
 	prevIndexed bool
+}
 
-	// The frame's accessibility tree, kept apart from hits: input scans
-	// hits on every pointer event, and most of what a screen reader reads
-	// takes no input at all. semParent and semLast are indices into sem
-	// plus one, so a zero value means none.
-	sem       []semNode
-	semIndex  map[any]int // handler to index plus one, for Describe and SemanticRef
-	semParent int         // the node being painted into
-	semLast   int         // the node most recently recorded
-	semOff    bool        // nothing reads this frame's tree, so none is built
+// reset forgets the index, which a new prev makes stale. The maps keep
+// their storage for the next frame that needs them.
+func (x *adoptIndex) reset() {
+	x.prevIndexed = false
+	clear(x.prevByID)
+	clear(x.prevByRect)
+}
 
-	// The images Layer lends, by depth: as large as the areas the layers
-	// at that depth took this frame, kept for the next frame's, and freed
-	// at the end of one that took them no more.
-	layers render.LayerPool[*ggfx.Image]
-
-	// backdrop records that a BackdropBlur read the window's own image
-	// this frame, or wanted to: the window keeps a backbuffer for it, as
-	// its screen cannot be read.
-	backdrop bool
-
-	// What a frame that only time asks for repaints; see damage.go. scopes
-	// are the widgets being painted, motion the regions of those that read
-	// the time, and motionLost that one did where it cannot be placed.
-	// partial is set while such a frame paints within damage.
-	scopes     []paintScope
-	motion     []Rect
-	motionLost bool
-	movers     []string // the widgets behind motion, by type
-	partial    bool
-	damage     Rect
-	overlaid   bool // an overlay was painted this frame
-
-	// canvases are the Canvases Clip hands out, made once and handed out
-	// again from the next paint on: canvasIdx are those taken this one.
+// canvasPool holds the Canvases Clip hands out, made once and handed out
+// again from the next paint on: canvasIdx are those taken this one.
+type canvasPool struct {
 	canvases  []*Canvas
 	canvasIdx int
 }
@@ -129,7 +147,7 @@ type frameState struct {
 // resetCanvases takes back the Canvases Clip handed out, at the start and
 // the end of a paint: nothing a widget painted keeps one past its frame,
 // as with ClipReusing. Zeroed, they hold no image or parent until taken.
-func (f *frameState) resetCanvases() {
+func (f *canvasPool) resetCanvases() {
 	for i := 0; i < f.canvasIdx; i++ {
 		*f.canvases[i] = Canvas{}
 	}
@@ -138,13 +156,18 @@ func (f *frameState) resetCanvases() {
 
 // fs returns the frame state, creating it on the root's first use. A Canvas
 // with no parent is a root even before a frame has started, which is what a
-// Probe and the zero Canvas in App rely on.
+// Probe and the zero Canvas in App rely on. One made by hand with a parent
+// finds its root's the first time and keeps it.
 func (c *Canvas) fs() *frameState {
+	if c.frame != nil {
+		return c.frame
+	}
 	r := c.root()
 	if r.frame == nil {
 		r.frame = &frameState{}
 	}
-	return r.frame
+	c.frame = r.frame
+	return c.frame
 }
 
 // overlay is one deferred paint and the semantics node it belongs under.
@@ -232,14 +255,9 @@ func (c *Canvas) nextFrame() {
 	c.inputObservers = c.inputObservers[:0]
 	c.shortcuts = c.shortcuts[:0]
 	f := c.fs()
-	f.prevKeeps, f.keeps = f.keeps, f.prevKeeps
-	clear(f.keeps)
+	f.retained.next()
 	// prev is a different slice now, so what adopt knew about it is stale.
-	// The maps keep their storage for the next frame that needs them.
-	f.prevIndexed = false
-	clear(f.prevByID)
-	clear(f.prevByRect)
-	f.traceParent, f.traceRoots = 0, 0
+	f.adoptIndex.reset()
 }
 
 // Inert returns a Canvas that draws where c does but registers no hit
@@ -253,13 +271,12 @@ func (c *Canvas) Inert() *Canvas {
 	return child
 }
 
-// derive returns a copy of c that paints through it. Only the root holds
-// frameState, so the copy's parent link is all it takes to leave the frame's
-// overlays, trace, retained slots and semantics where they are: there is
-// nothing here to clear.
+// derive returns a copy of c that paints through it. The copy shares the
+// root's frameState, so the frame's overlays, trace, retained slots and
+// semantics stay where they are: there is nothing here to clear.
 func (c *Canvas) derive() *Canvas {
 	child := *c
-	child.parent, child.frame = c, nil
+	child.parent, child.frame = c, c.fs()
 	return &child
 }
 
@@ -274,17 +291,6 @@ func (c *Canvas) into(img *ggfx.Image) *Canvas {
 // readable reports whether what c has drawn can be read back, which a
 // window's screen cannot be.
 func (c *Canvas) readable() bool { return c.Image != nil && !c.onScreen }
-
-// frameTrace is every widget painted this frame, in paint order; the
-// inspector reads it. frameSem is the same for the accessibility tree.
-// inspectComparable keeps a widget id only when it can be compared, so an
-// inspect.Node stays usable as a map key however a widget was identified.
-func inspectComparable(v any) any {
-	if v != nil && reflect.ValueOf(v).Comparable() {
-		return v
-	}
-	return nil
-}
 
 // root returns the Canvas a Clip chain started from.
 func (c *Canvas) root() *Canvas {
@@ -306,34 +312,18 @@ func (c *Canvas) Paint(w Widget, r Rect) {
 	// no OnInspect handler skips the frameState walk on every painted
 	// widget for one test of a package flag.
 	if inspectorEnabled.Load() {
-		f := c.fs()
-		if f.tracing {
-			parent := f.traceParent
-			path := "/" + strconv.Itoa(f.traceRoots)
-			if parent > 0 {
-				p := &f.trace[parent-1]
-				path = p.Path + "/" + strconv.Itoa(p.Children)
-				p.Children++
-			} else {
-				f.traceRoots++
-			}
-			n := inspect.Node{
-				Rect: r, Depth: f.depth, Name: widgetName(w), Kind: inspectKind(w),
-				ID: inspectComparable(idOf(w)), Instance: inspectComparable(w),
-				Path: path, Clip: c.clip, Clipped: c.clipped,
-			}
-			f.trace = append(f.trace, n)
-			f.traceWidgets = append(f.traceWidgets, w)
-			f.traceParent = len(f.trace)
-			f.depth++
-			defer func() { f.depth--; f.traceParent = parent }()
+		if f := c.fs(); f.tracing {
+			defer f.traceLeave(f.traceEnter(c, w, r))
 		}
 	}
 	fs := c.fs()
 	if fs.skips(c, r) {
 		return
 	}
-	clock := &activeWorld().frame
+	clock := fs.clock
+	if clock == nil {
+		clock = &activeWorld().frame
+	}
 	// A widget wholly outside the clip still paints, for its semantics, but
 	// an animation inside it must not keep the app painting. A zero-size
 	// host, such as a toaster that paints through overlays, is never hidden.
@@ -344,27 +334,6 @@ func (c *Canvas) Paint(w Widget, r Rect) {
 	fs.openScope(c, r, clock.marks.Load())
 	w.Paint(c, r)
 	fs.closeScope(w, clock.marks.Load())
-}
-
-var widgetNames sync.Map // reflect.Type -> string; names never change
-
-// widgetName is a widget's type for the inspector: Box for *ggui.BoxWidget.
-func widgetName(w Widget) string {
-	t := reflect.TypeOf(w)
-	if name, ok := widgetNames.Load(t); ok {
-		return name.(string)
-	}
-	original := t
-	for t.Kind() == reflect.Pointer {
-		t = t.Elem()
-	}
-	name := t.Name()
-	if i := strings.Index(name, "["); i >= 0 {
-		name = name[:i]
-	}
-	name = strings.TrimSuffix(name, "Widget")
-	widgetNames.Store(original, name)
-	return name
 }
 
 // Pointer returns where the mouse cursor was when this frame began, in
@@ -537,164 +506,6 @@ func (c *Canvas) Geo(at Point) ggfx.GeoM {
 	return g
 }
 
-// visiblePaintBounds tests drawing only; callers must still collect input,
-// semantics and traces. Keep one physical pixel for antialiasing and round to
-// float32 like the vector API. Unusual geometry takes the original draw path.
-func (c *Canvas) visiblePaintBounds(r Rect, extra float64) bool {
-	if c == nil {
-		return false
-	}
-	// Seen or not, it is where the widget painting draws.
-	c.fs().drew(r, extra)
-	return c.overlaps(r, extra)
-}
-
-// Shows reports whether any of r, in the canvas's coordinates, lands where
-// this frame paints. A frame painted in part paints only around what
-// changed: a widget whose drawing costs more than the draws themselves,
-// copying a screen out of a terminal say, need not do that work for a
-// frame that keeps what it showed. It must still collect input and
-// semantics, as all widgets do.
-//
-// Only r itself counts, not the pixel drawing at its edge may smear past
-// it, and r's edge on the edge of what is painted does not.
-func (c *Canvas) Shows(r Rect) bool {
-	if c == nil || c.Image == nil {
-		return false
-	}
-	return c.physical(r).Overlaps(c.Image.Bounds())
-}
-
-func (c *Canvas) overlaps(r Rect, extra float64) bool {
-	if c.Image == nil {
-		return false
-	}
-	bounds := c.Image.Bounds()
-	if bounds.Empty() {
-		return false
-	}
-	x, y, w, h := c.Px(r.Origin.X), c.Px(r.Origin.Y), c.Px(r.Size.W), c.Px(r.Size.H)
-	pad := c.px(extra) + 1
-	// Avoid culling huge coordinates where float32 intermediate rounding
-	// can exceed the one-pixel guard.
-	for _, v := range [...]float64{float64(x), float64(y), float64(w), float64(h), pad} {
-		if math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > 1<<20 {
-			return true
-		}
-	}
-	if w < 0 || h < 0 || pad < 1 {
-		return true
-	}
-	return float64(x+w)+pad > float64(bounds.Min.X) && float64(y+h)+pad > float64(bounds.Min.Y) &&
-		float64(x)-pad < float64(bounds.Max.X) && float64(y)-pad < float64(bounds.Max.Y)
-}
-
-// FillRect fills the logical Rect r with col.
-//
-// A rectangle is drawn without anti-aliasing, which its axis-aligned edges
-// have no use for. That matters more than it sounds: ggfx draws an
-// anti-aliased shape by rendering it eight times into an offscreen stencil
-// buffer the size of the shape and compositing the result, which breaks the
-// batch both ways. A plain rectangle is instead one batched image, and most
-// of the large fills in a frame are rectangles: table rows, sidebars, text
-// selection, a modal's scrim.
-func (c *Canvas) FillRect(r Rect, col color.Color) {
-	if c == nil || c.Image == nil || col == nil {
-		return
-	}
-	if !c.visiblePaintBounds(r, 0) {
-		return
-	}
-	w, h := c.Px(r.Size.W), c.Px(r.Size.H)
-	// Without anti-aliasing a shape thinner than a pixel covers no pixel
-	// centre and disappears. A hairline divider asked for is drawn.
-	if r.Size.W > 0 {
-		w = max(w, 1)
-	}
-	if r.Size.H > 0 {
-		h = max(h, 1)
-	}
-	vector.FillRect(c.Image, c.Px(r.Origin.X), c.Px(r.Origin.Y), w, h, col, false)
-}
-
-// FillCircle fills a circle of logical radius around center with col.
-func (c *Canvas) FillCircle(center Point, radius float64, col color.Color) {
-	if c == nil || c.Image == nil || col == nil || radius <= 0 {
-		return
-	}
-	r := Rct(center.Add(Pt(-radius, -radius)), Sz(2*radius, 2*radius))
-	if !c.visiblePaintBounds(r, 0) {
-		return
-	}
-	// A circle is a rounded rectangle whose corner is its own half size.
-	c.shadeRoundRect(r, radius, 0, col)
-}
-
-// StrokeLine draws a line of logical width w from a to b in col. The ends
-// are cut square, so a line drawn in pieces joins up.
-func (c *Canvas) StrokeLine(a, b Point, w float64, col color.Color) {
-	if c == nil || c.Image == nil || col == nil || w <= 0 || c.Image.Bounds().Empty() {
-		return
-	}
-	if !c.visiblePaintBounds(Rct(Pt(min(a.X, b.X), min(a.Y, b.Y)), Sz(math.Abs(b.X-a.X), math.Abs(b.Y-a.Y))), w/2) {
-		return
-	}
-	// A line along an axis is a rectangle, and a rectangle draws as one
-	// batched image rather than a shaded quad of its own. Rules, table
-	// borders and the straight runs of a dashed outline are all this.
-	switch {
-	case a.Y == b.Y:
-		c.FillRect(Rct(Pt(min(a.X, b.X), a.Y-w/2), Sz(math.Abs(b.X-a.X), w)), col)
-	case a.X == b.X:
-		c.FillRect(Rct(Pt(a.X-w/2, min(a.Y, b.Y)), Sz(w, math.Abs(b.Y-a.Y))), col)
-	default:
-		c.shadeSegment(a, b, w, col)
-	}
-}
-
-func pathOptions(col color.Color) *vector.DrawPathOptions {
-	op := &vector.DrawPathOptions{AntiAlias: true}
-	op.ColorScale.ScaleWithColor(col)
-	return op
-}
-
-// FillRoundRect fills the logical Rect r with col, with corners rounded by
-// radius. A zero radius is FillRect.
-func (c *Canvas) FillRoundRect(r Rect, radius float64, col color.Color) {
-	if c == nil || c.Image == nil || col == nil {
-		return
-	}
-	if !c.visiblePaintBounds(r, 0) {
-		return
-	}
-	if radius <= 0 {
-		c.FillRect(r, col)
-		return
-	}
-	c.shadeRoundRect(r, radius, 0, col)
-}
-
-// StrokeRoundRect draws a line of logical width w in col just inside r,
-// with corners rounded by radius.
-func (c *Canvas) StrokeRoundRect(r Rect, radius, w float64, col color.Color) {
-	if c == nil || c.Image == nil || col == nil || w <= 0 || c.Image.Bounds().Empty() {
-		return
-	}
-	if w <= r.Size.W && w <= r.Size.H && !c.visiblePaintBounds(r, w) {
-		return
-	}
-	// A border as thick as the box it outlines leaves no hole to draw
-	// around, so it is that box filled.
-	if w >= r.Size.W || w >= r.Size.H {
-		c.FillRoundRect(r, radius, col)
-		return
-	}
-	// The border straddles a rectangle inset by half its width, which is
-	// what keeps it just inside r.
-	inset := Rct(r.Origin.Add(Pt(w/2, w/2)), Sz(r.Size.W-w, r.Size.H-w))
-	c.shadeRoundRect(inset, max(radius-w/2, 0), w/2, col)
-}
-
 // physical returns the Image pixels r covers, rounded outwards.
 func (c *Canvas) physical(r Rect) image.Rectangle {
 	return image.Rect(
@@ -737,7 +548,7 @@ func (c *Canvas) ClipReusing(reuse *Canvas, r Rect) *Canvas {
 
 // clipInto makes child the Clip of c to r.
 func (c *Canvas) clipInto(child *Canvas, r Rect) *Canvas {
-	*child = Canvas{parent: c, clip: r, clipped: true, scale: c.scale, inert: c.inert, scope: c.scope, group: c.group, space: c.space, window: c.window, onScreen: c.onScreen}
+	*child = Canvas{parent: c, frame: c.fs(), clip: r, clipped: true, scale: c.scale, inert: c.inert, scope: c.scope, group: c.group, space: c.space, window: c.window, onScreen: c.onScreen}
 	if c.clipped {
 		child.clip = c.clip.Intersect(r)
 	}
@@ -1005,94 +816,4 @@ func (c *Canvas) ObserveInput(r Rect, notify func()) {
 	if !r.Empty() {
 		c.root().inputObservers = append(c.root().inputObservers, inputObserver{r, c.scope, notify})
 	}
-}
-
-// The shapes below are drawn by the render package from signed distance
-// fields; these methods turn logical coordinates into the Image's pixels.
-
-// shadeRoundRect draws the rounded rectangle shape in col. A zero halfStroke
-// fills it; otherwise shape is the centreline of a border of twice that
-// width. Both are logical, as radius is.
-func (c *Canvas) shadeRoundRect(shape Rect, radius, halfStroke float64, col color.Color) {
-	scale := c.Scale()
-	if math.IsNaN(scale) || math.IsInf(scale, 0) {
-		return
-	}
-	render.Shade(c.Image, render.Field{
-		Centre: Pt(c.px(shape.Origin.X+shape.Size.W/2), c.px(shape.Origin.Y+shape.Size.H/2)),
-		Axis:   Pt(1, 0),
-		Half:   Sz(shape.Size.W*scale/2, shape.Size.H*scale/2),
-		Radius: radius * scale,
-		Stroke: halfStroke * scale,
-	}, col)
-}
-
-// shadeSegment draws the line from a to b, w wide, in col. The ends are cut
-// square, as the vector renderer's default cap is.
-func (c *Canvas) shadeSegment(a, b Point, w float64, col color.Color) {
-	scale := c.Scale()
-	if math.IsNaN(scale) || math.IsInf(scale, 0) {
-		return
-	}
-	dx, dy := c.px(b.X-a.X), c.px(b.Y-a.Y)
-	length := math.Hypot(dx, dy)
-	if length == 0 || math.IsNaN(length) || math.IsInf(length, 0) {
-		return
-	}
-	render.Shade(c.Image, render.Field{
-		Centre: Pt(c.px((a.X+b.X)/2), c.px((a.Y+b.Y)/2)),
-		Axis:   Pt(dx/length, dy/length),
-		Half:   Sz(length/2, w*scale/2),
-	}, col)
-}
-
-// maskRoundRect draws img, a part of a layer, onto c where it lies within
-// the logical Rect r with corners rounded by radius.
-func (c *Canvas) maskRoundRect(img *ggfx.Image, r Rect, radius float64) {
-	scale := c.Scale()
-	centre := r.Center()
-	render.MaskRoundRect(c.Image, img, Pt(c.px(centre.X), c.px(centre.Y)), Sz(r.Size.W*scale/2, r.Size.H*scale/2), radius*scale)
-}
-
-// shadeImage draws img placed at the logical Rect at, cut to r with its
-// corners rounded by o.Radius, in one draw: a quad over r and a pixel of
-// edge, whose source positions follow at.
-func (c *Canvas) shadeImage(img *ggfx.Image, r, at Rect, o ImageOptions) {
-	scale := c.Scale()
-	reach := 1 / scale
-	if o.Rotation != 0 {
-		reach += math.Hypot(r.Size.W, r.Size.H)/2 - min(r.Size.W, r.Size.H)/2
-	}
-	if at.Size.W <= 0 || at.Size.H <= 0 || !c.visiblePaintBounds(r, reach) {
-		return
-	}
-	b := img.Bounds()
-	kx, ky := float64(b.Dx())/at.Size.W, float64(b.Dy())/at.Size.H
-	centre := r.Center()
-	sin, cos := math.Sincos(o.Rotation)
-	red, green, blue, alpha := float32(1), float32(1), float32(1), float32(1)
-	if o.Tint != nil {
-		t := render.Premul(o.Tint)
-		red, green, blue, alpha = t[0], t[1], t[2], t[3]
-	}
-	if o.Fade != 0 {
-		k := float32(1 - o.Fade)
-		red, green, blue, alpha = red*k, green*k, blue*k, alpha*k
-	}
-	e := 1 / scale // one device pixel of edge to antialias into
-	var vs [4]ggfx.Vertex
-	for i, p := range [4]Point{
-		{X: r.Origin.X - e, Y: r.Origin.Y - e}, {X: r.Origin.X + r.Size.W + e, Y: r.Origin.Y - e},
-		{X: r.Origin.X - e, Y: r.Origin.Y + r.Size.H + e}, {X: r.Origin.X + r.Size.W + e, Y: r.Origin.Y + r.Size.H + e},
-	} {
-		d := Pt(p.X-centre.X, p.Y-centre.Y)
-		turned := centre.Add(Pt(d.X*cos-d.Y*sin, d.X*sin+d.Y*cos))
-		vs[i] = ggfx.Vertex{
-			DstX: float32(c.px(turned.X)), DstY: float32(c.px(turned.Y)),
-			SrcX: float32(float64(b.Min.X) + (p.X-at.Origin.X)*kx), SrcY: float32(float64(b.Min.Y) + (p.Y-at.Origin.Y)*ky),
-			ColorR: red, ColorG: green, ColorB: blue, ColorA: alpha,
-			Custom0: float32(d.X * scale), Custom1: float32(d.Y * scale),
-		}
-	}
-	render.RoundRectImage(c.Image, img, vs, Sz(r.Size.W*scale/2, r.Size.H*scale/2), o.Radius*scale, o.Pixelated)
 }

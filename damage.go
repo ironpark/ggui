@@ -102,8 +102,22 @@ func motionRegions(motion []Rect, window Rect) []Rect {
 	return region.Merge(motion, window, motionSlack, mostMotionRegions)
 }
 
+// motionState is what a frame that only time asks for repaints. scopes
+// are the widgets being painted, motion the regions of those that read the
+// time, and motionLost that one did where it cannot be placed. partial is
+// set while such a frame paints within damage.
+type motionState struct {
+	scopes     []paintScope
+	motion     []Rect
+	motionLost bool
+	movers     []string // the widgets behind motion, by type
+	partial    bool
+	damage     Rect
+	overlaid   bool // an overlay was painted this frame
+}
+
 // startMotion clears what the last frame noted of its motion.
-func (f *frameState) startMotion() {
+func (f *motionState) startMotion() {
 	f.scopes, f.motion, f.movers = f.scopes[:0], f.motion[:0], f.movers[:0]
 	f.motionLost, f.overlaid = false, false
 }
@@ -287,6 +301,8 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect
 	f := c.fs()
 	f.resetCanvases()
 	defer f.resetCanvases()
+	f.clock = &w.world().frame
+	defer func() { f.clock = nil }()
 	f.startMotion()
 	f.backdrop = false
 	// Nothing painted registers anything, but what slips past the inert

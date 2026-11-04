@@ -345,3 +345,57 @@ type twoClips struct{}
 
 func (twoClips) Layout(cs Constraints, _ Env) Size { return cs.Max() }
 func (twoClips) Paint(dst *Canvas, r Rect)         { dst.Clip(r).Clip(r) }
+
+// paintLeaf paints nothing: what Canvas.Paint costs a widget of its own.
+type paintLeaf struct{}
+
+func (paintLeaf) Layout(c Constraints, _ Env) Size { return c.Max() }
+func (paintLeaf) Paint(*Canvas, Rect)              {}
+
+// Every widget a frame paints goes through Canvas.Paint, under as many
+// clips as scrolls and boxes around it: its cost is paid thousands of
+// times a frame.
+func BenchmarkCanvasPaint(b *testing.B) {
+	for _, depth := range []int{0, 8} {
+		b.Run(fmt.Sprint("clips", depth), func(b *testing.B) {
+			c := &Canvas{}
+			c.fs().clock = &activeWorld().frame // as a frame's paint has it
+			for range depth {
+				c = c.Clip(Rct(Point{}, Sz(1000, 1000)))
+			}
+			r := Rct(Pt(1, 1), Sz(10, 10))
+			b.ReportAllocs()
+			for b.Loop() {
+				c.Paint(paintLeaf{}, r)
+			}
+		})
+	}
+}
+
+// A paint finds its world's clock on the frame state, and leaves none
+// there: a Canvas painted outside a frame asks the running goroutine, as
+// it would have before any frame.
+func TestPaintHoldsTheClockOnlyWhilePainting(t *testing.T) {
+	t.Parallel()
+	var during *frameClock
+	p := NewProbe(paintFunc(func(dst *Canvas, r Rect) { during = dst.fs().clock }), Sz(20, 20))
+	defer p.Close()
+	p.Frame()
+	if during != &p.world().frame {
+		t.Fatal("the paint did not hold its world's clock")
+	}
+	if p.canvas.fs().clock != nil {
+		t.Fatal("the clock outlived the paint")
+	}
+	// A Clip shares its root's frame state rather than walking to it.
+	clip := p.canvas.Clip(Rct(Point{}, Sz(5, 5)))
+	if clip.frame != p.canvas.fs() {
+		t.Fatal("a Clip has a frame state of its own")
+	}
+}
+
+// paintFunc is a widget that paints with fn.
+type paintFunc func(dst *Canvas, r Rect)
+
+func (paintFunc) Layout(c Constraints, _ Env) Size { return c.Max() }
+func (f paintFunc) Paint(dst *Canvas, r Rect)      { f(dst, r) }
