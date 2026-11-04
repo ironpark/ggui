@@ -172,9 +172,13 @@ type Window struct {
 	freeSeen, fontSeen uint64
 	motionSize         image.Point
 	motionWhy          string // why the next frame may not be painted in part, or "ok"
-	dirty              atomic.Uint32
-	repaintMu          sync.Mutex
-	repaints           []Rect // asked for by RepaintRect since the last frame
+	// motionLost says the last frame moved with time where no region
+	// says, as a dialog that takes no room does: the next is painted
+	// whole, never skipped.
+	motionLost bool
+	dirty      atomic.Uint32
+	repaintMu  sync.Mutex
+	repaints   []Rect // asked for by RepaintRect since the last frame
 
 	focused  *StateValue[bool]
 	viewport *StateValue[Size]
@@ -775,7 +779,7 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 		}
 	}
 	asked := w.takeRepaints()
-	if kept && dirtyBits == 0 && len(asked) == 0 && len(w.motion) == 0 && len(w.frameLoop.contained) == 0 &&
+	if kept && dirtyBits == 0 && len(asked) == 0 && len(w.motion) == 0 && !w.motionLost && len(w.frameLoop.contained) == 0 &&
 		reactive.StateGen() == w.motionGen && layoutGen() == w.seenGen {
 		// Nothing changed: work was posted that wrote nothing, say. The
 		// screen keeps the last frame, and untouched, nothing is presented.

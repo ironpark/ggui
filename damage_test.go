@@ -309,3 +309,26 @@ func TestAFrameNothingChangedForPaintsNothing(t *testing.T) {
 		t.Fatal("a frame on a screen not kept painted nothing")
 	}
 }
+
+// A frame after one whose motion could not be placed, as a dialog's,
+// which takes no room and paints its panel over the window, is painted
+// whole, not skipped as one nothing changed for: the dialog would stand
+// half faded until the next input.
+func TestAFrameAfterMotionNotPlacedIsPainted(t *testing.T) {
+	dialog := FromFuncs(func(c Constraints, _ Env) Size { return Size{} }, func(dst *Canvas, r Rect) { Now() })
+	w := newWindow(nil, nil, Config{}, func() Widget { return Stack(Box().Size(10, 10), dialog) })
+	w.start()
+	setRunning(&w.frameLoop)
+	screen := ggfx.NewImage(16, 16)
+	w.draw(screen, 1, false, nil)
+	w.seenGen = layoutGen() // as the frame's handler does after drawing
+	if !w.motionLost || len(w.motion) != 0 {
+		t.Fatalf("motion %v, lost %v: want motion no region says", w.motion, w.motionLost)
+	}
+	skipped := func() int64 { return ReadFrameStats().Skipped }
+	before := skipped()
+	w.draw(screen, 1, true, nil)
+	if skipped() != before {
+		t.Fatal("the frame after motion that could not be placed was skipped")
+	}
+}

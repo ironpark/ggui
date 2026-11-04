@@ -153,6 +153,7 @@ func (f *frameState) startMotion() {
 func (w *Window) noteMotion(target *ggfx.Image) {
 	f := w.canvas.fs()
 	w.motion = motionRegions(f.motion, Rct(Point{}, f.logical))
+	w.motionLost = f.motionLost
 	// Painted in part, the frame keeps the input, semantics and overlays of
 	// the last whole one: none may have been painted, nor anything that
 	// reads every frame or traces it.
