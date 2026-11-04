@@ -7,6 +7,7 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggfx/vector"
+	"github.com/ironpark/ggui/pkg/geom"
 )
 
 // Path is a reusable vector outline in logical pixels. Mutating a path invalidates
@@ -24,11 +25,8 @@ type Path struct {
 	// all rather than remember a flag per cache.
 	revision uint64
 
-	// outline is the path as its points, for Contains and Bounds, and
-	// flat that outline in straight lines as of flatRev.
-	outline []pathOp
-	flat    [][]Point
-	flatRev uint64
+	// outline is the path as its points, for Contains and Bounds.
+	outline geom.Outline
 }
 
 // gradientKey is everything besides path geometry that the coverage mask depends on.
@@ -40,21 +38,25 @@ type gradientKey struct {
 
 func (p *Path) MoveTo(x, y float64) {
 	p.path.MoveTo(float32(x), float32(y))
-	p.record(pathMove, Pt(x, y))
+	p.outline.MoveTo(Pt(x, y))
+	p.revision++
 }
 func (p *Path) LineTo(x, y float64) {
 	p.path.LineTo(float32(x), float32(y))
-	p.record(pathLine, Pt(x, y))
+	p.outline.LineTo(Pt(x, y))
+	p.revision++
 }
 
 // QuadTo appends a quadratic Bezier segment.
 func (p *Path) QuadTo(x1, y1, x2, y2 float64) {
 	p.path.QuadTo(float32(x1), float32(y1), float32(x2), float32(y2))
-	p.record(pathQuad, Pt(x1, y1), Pt(x2, y2))
+	p.outline.QuadTo(Pt(x1, y1), Pt(x2, y2))
+	p.revision++
 }
 func (p *Path) CubicTo(x1, y1, x2, y2, x3, y3 float64) {
 	p.path.CubicTo(float32(x1), float32(y1), float32(x2), float32(y2), float32(x3), float32(y3))
-	p.record(pathCubic, Pt(x1, y1), Pt(x2, y2), Pt(x3, y3))
+	p.outline.CubicTo(Pt(x1, y1), Pt(x2, y2), Pt(x3, y3))
+	p.revision++
 }
 
 // Arc starts a subpath on the circle about (cx, cy) of radius r, from angle
@@ -76,8 +78,42 @@ func (p *Path) Arc(cx, cy, r, start, end float64) {
 	}
 }
 
-func (p *Path) Close() { p.path.Close(); p.record(pathClose) }
-func (p *Path) Reset() { p.path.Reset(); p.outline = p.outline[:0]; p.revision++ }
+func (p *Path) Close() { p.path.Close(); p.outline.Close(); p.revision++ }
+func (p *Path) Reset() { p.path.Reset(); p.outline.Reset(); p.revision++ }
+
+// Contains reports whether pt is inside the path as FillPath fills it: by
+// the nonzero rule, with every subpath closed. Curves are followed to within
+// a sixteenth of their length.
+func (p *Path) Contains(pt Point) bool {
+	if p == nil {
+		return false
+	}
+	return p.outline.Contains(pt)
+}
+
+// Bounds returns the smallest Rect holding the path's outline, or the zero
+// Rect for an empty path.
+func (p *Path) Bounds() Rect {
+	if p == nil {
+		return Rect{}
+	}
+	return p.outline.Bounds()
+}
+
+// ovalPath is the ellipse inscribed in r, as four cubic arcs.
+func ovalPath(r Rect) *Path {
+	const k = 0.5522847498307936 // 4/3·(√2−1), a quarter circle's handle
+	cx, cy := r.Origin.X+r.Size.W/2, r.Origin.Y+r.Size.H/2
+	rx, ry := r.Size.W/2, r.Size.H/2
+	p := &Path{}
+	p.MoveTo(cx+rx, cy)
+	p.CubicTo(cx+rx, cy+k*ry, cx+k*rx, cy+ry, cx, cy+ry)
+	p.CubicTo(cx-k*rx, cy+ry, cx-rx, cy+k*ry, cx-rx, cy)
+	p.CubicTo(cx-rx, cy-k*ry, cx-k*rx, cy-ry, cx, cy-ry)
+	p.CubicTo(cx+k*rx, cy-ry, cx+rx, cy-k*ry, cx+rx, cy)
+	p.Close()
+	return p
+}
 func (p *Path) device(scale float64) *vector.Path {
 	if scale == 1 {
 		return &p.path

@@ -5,6 +5,7 @@ import (
 	"image/color"
 
 	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggui/pkg/geom"
 )
 
 // ClipPath is Clip to the inside of path, antialiased, for a subtree: paint
@@ -16,8 +17,8 @@ func (c *Canvas) ClipPath(path *Path, paint func(dst *Canvas)) {
 	if path == nil {
 		return
 	}
-	polys := path.polygons()
-	c.clipShape(path.Bounds(), func(p Point) bool { return polygonsContain(polys, p) }, func(mask *Canvas) {
+	polys := path.outline.Polygons()
+	c.clipShape(path.Bounds(), func(p Point) bool { return geom.PolygonsContain(polys, p) }, func(mask *Canvas) {
 		mask.FillPath(path, color.White)
 	}, paint)
 }
