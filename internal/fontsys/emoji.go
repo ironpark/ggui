@@ -9,8 +9,8 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/internal/emojidata"
-	"github.com/ironpark/ggui/internal/text"
 	"github.com/ironpark/ggui/internal/textedit"
+	"github.com/ironpark/ggui/internal/third_party/text"
 )
 
 // EmojiChoice is an emoji font chosen for text, nil Font included, which

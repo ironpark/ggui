@@ -14,7 +14,7 @@ import (
 	"sync/atomic"
 
 	"github.com/ironpark/ggui/internal/fn"
-	"github.com/ironpark/ggui/internal/text"
+	"github.com/ironpark/ggui/internal/third_party/text"
 	"golang.org/x/image/font/gofont/goregular"
 )
 

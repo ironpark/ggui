@@ -13,9 +13,9 @@ import (
 	"github.com/ironpark/ggui/internal/pool"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
-	"github.com/ironpark/ggui/internal/text"
 	"github.com/ironpark/ggui/internal/textedit"
 	"github.com/ironpark/ggui/internal/textlayout"
+	"github.com/ironpark/ggui/internal/third_party/text"
 )
 
 // engine is st as the text engine sets text in it: its font, size, weight

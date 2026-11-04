@@ -12,8 +12,8 @@ import (
 	"github.com/ironpark/ggui/inspect"
 	"github.com/ironpark/ggui/internal/a11ybridge"
 	"github.com/ironpark/ggui/internal/reactive"
-	"github.com/ironpark/ggui/internal/text"
 	"github.com/ironpark/ggui/internal/textinput"
+	"github.com/ironpark/ggui/internal/third_party/text"
 	"github.com/ironpark/ggui/runtime"
 	"github.com/ironpark/ggwd"
 )

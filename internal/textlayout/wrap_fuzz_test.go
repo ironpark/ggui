@@ -10,8 +10,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/ironpark/ggui/internal/fontsys"
-	"github.com/ironpark/ggui/internal/text"
 	"github.com/ironpark/ggui/internal/textedit"
+	"github.com/ironpark/ggui/internal/third_party/text"
 )
 
 // wrapFace is Go Regular at 14px with no fallbacks, so wrapping measures

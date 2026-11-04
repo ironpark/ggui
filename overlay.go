@@ -5,8 +5,8 @@ import (
 	"image/color"
 
 	"github.com/ironpark/ggui/internal/fontsys"
-	"github.com/ironpark/ggui/internal/text"
 	"github.com/ironpark/ggui/internal/textlayout"
+	"github.com/ironpark/ggui/internal/third_party/text"
 )
 
 // An overlay is drawn over the whole window after the widget tree, and is

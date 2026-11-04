@@ -6,7 +6,7 @@ import (
 
 	"github.com/ironpark/ggui/internal/fontsys"
 	"github.com/ironpark/ggui/internal/reactive"
-	"github.com/ironpark/ggui/internal/text"
+	"github.com/ironpark/ggui/internal/third_party/text"
 )
 
 // Font is a loaded TrueType or OpenType face, usable at any size. Glyphs

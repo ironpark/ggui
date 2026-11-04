@@ -12,7 +12,7 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
-	"github.com/ironpark/ggui/internal/typesetting/segmenter"
+	"github.com/ironpark/ggui/internal/third_party/typesetting/segmenter"
 
 	"github.com/ironpark/ggui/internal/fn"
 )
