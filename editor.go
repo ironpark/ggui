@@ -12,10 +12,10 @@ import (
 	"github.com/ironpark/ggui/internal/fontsys"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
-	"github.com/ironpark/ggui/internal/text"
 	"github.com/ironpark/ggui/internal/textedit"
 	"github.com/ironpark/ggui/internal/textinput"
 	"github.com/ironpark/ggui/internal/textlayout"
+	"github.com/ironpark/ggui/internal/third_party/text"
 	"github.com/ironpark/ggui/runtime"
 )
 

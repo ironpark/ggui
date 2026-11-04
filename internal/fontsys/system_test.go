@@ -6,9 +6,9 @@ import (
 	"slices"
 	"testing"
 
-	gofont "github.com/ironpark/ggui/internal/typesetting/font"
+	gofont "github.com/ironpark/ggui/internal/third_party/typesetting/font"
 
-	"github.com/ironpark/ggui/internal/text"
+	"github.com/ironpark/ggui/internal/third_party/text"
 )
 
 // The platforms CI runs on have interface fonts to find: SF on macOS, which

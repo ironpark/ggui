@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggui/internal/fontsys"
-	"github.com/ironpark/ggui/internal/typesetting/bidi"
+	"github.com/ironpark/ggui/internal/third_party/typesetting/bidi"
 	"golang.org/x/image/font/gofont/goregular"
 )
 

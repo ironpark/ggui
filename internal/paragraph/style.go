@@ -12,7 +12,7 @@ package paragraph
 
 import (
 	"github.com/ironpark/ggui/internal/fontsys"
-	"github.com/ironpark/ggui/internal/text"
+	"github.com/ironpark/ggui/internal/third_party/text"
 )
 
 // Style is what text is set in: a font at a size and weight, LineHeight

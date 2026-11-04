@@ -10,16 +10,16 @@ import (
 	"github.com/ironpark/ggui/internal/fontsys"
 	"github.com/ironpark/ggui/internal/textedit"
 	"github.com/ironpark/ggui/internal/textlayout"
-	"github.com/ironpark/ggui/internal/typesetting/di"
-	"github.com/ironpark/ggui/internal/typesetting/font"
-	"github.com/ironpark/ggui/internal/typesetting/font/opentype"
-	"github.com/ironpark/ggui/internal/typesetting/language"
-	"github.com/ironpark/ggui/internal/typesetting/render"
-	"github.com/ironpark/ggui/internal/typesetting/shaping"
+	"github.com/ironpark/ggui/internal/third_party/typesetting/di"
+	"github.com/ironpark/ggui/internal/third_party/typesetting/font"
+	"github.com/ironpark/ggui/internal/third_party/typesetting/font/opentype"
+	"github.com/ironpark/ggui/internal/third_party/typesetting/language"
+	"github.com/ironpark/ggui/internal/third_party/typesetting/render"
+	"github.com/ironpark/ggui/internal/third_party/typesetting/shaping"
 	"golang.org/x/image/math/fixed"
 
 	"github.com/ironpark/ggui/internal/emojidata"
-	"github.com/ironpark/ggui/internal/text"
+	"github.com/ironpark/ggui/internal/third_party/text"
 )
 
 // Render draws s in st and col on the CPU, with no GPU, window or App,

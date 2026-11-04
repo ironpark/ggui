@@ -12,8 +12,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/ironpark/ggui/internal/fontsys"
-	"github.com/ironpark/ggui/internal/text"
 	"github.com/ironpark/ggui/internal/textedit"
+	"github.com/ironpark/ggui/internal/third_party/text"
 )
 
 // Width is how wide s draws in face.

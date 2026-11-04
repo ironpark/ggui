@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/ironpark/ggui/internal/property"
-	"github.com/ironpark/ggui/internal/text"
 	"github.com/ironpark/ggui/internal/textedit"
+	"github.com/ironpark/ggui/internal/third_party/text"
 )
 
 // TextSpan is one stretch of a RichText in a style of its own. It is a

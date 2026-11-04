@@ -1,7 +1,7 @@
 package fontsys
 
 import (
-	"github.com/ironpark/ggui/internal/text"
+	"github.com/ironpark/ggui/internal/third_party/text"
 )
 
 // Picker finds, rune by rune, the font that draws it, in the order Face's

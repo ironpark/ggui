@@ -10,9 +10,9 @@ import (
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/internal/fn"
 	"github.com/ironpark/ggui/internal/fontsys"
-	"github.com/ironpark/ggui/internal/text"
 	"github.com/ironpark/ggui/internal/textlayout"
-	"github.com/ironpark/ggui/internal/typesetting/bidi"
+	"github.com/ironpark/ggui/internal/third_party/text"
+	"github.com/ironpark/ggui/internal/third_party/typesetting/bidi"
 	"golang.org/x/text/language"
 
 	"github.com/ironpark/ggui/internal/emojidata"

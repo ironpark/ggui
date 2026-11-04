@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ironpark/ggui/internal/text"
+	"github.com/ironpark/ggui/internal/third_party/text"
 )
 
 // SystemUI loads the platform's interface fonts, with every weight it has

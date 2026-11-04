@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggui/internal/text"
+	"github.com/ironpark/ggui/internal/third_party/text"
 	"golang.org/x/image/font/gofont/goregular"
 )
 

@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggui/internal/fontsys"
-	"github.com/ironpark/ggui/internal/text"
 	"github.com/ironpark/ggui/internal/textedit"
 	"github.com/ironpark/ggui/internal/textlayout"
+	"github.com/ironpark/ggui/internal/third_party/text"
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/gomono"
 	"golang.org/x/image/font/gofont/goregular"

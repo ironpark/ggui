@@ -6,10 +6,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ironpark/ggui/internal/typesetting/font"
-	"github.com/ironpark/ggui/internal/typesetting/fontscan"
+	"github.com/ironpark/ggui/internal/third_party/typesetting/font"
+	"github.com/ironpark/ggui/internal/third_party/typesetting/fontscan"
 
-	"github.com/ironpark/ggui/internal/text"
+	"github.com/ironpark/ggui/internal/third_party/text"
 )
 
 // systemIndex is the index of the system's fonts that go-text's fontscan
