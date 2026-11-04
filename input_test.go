@@ -682,7 +682,7 @@ func TestTouchPanScrollsAndCancelsTap(t *testing.T) {
 		t.Fatalf("captured offset = %v, want 90", s.position())
 	}
 	step(false, Point{})
-	if taps != 1 || ups != 2 || in.pressed != nil || in.touchPanning {
+	if taps != 1 || ups != 2 || in.pressed != nil || in.touchPan.Panning {
 		t.Fatalf("pan did not cancel press: taps=%d ups=%d", taps, ups)
 	}
 }
@@ -695,7 +695,7 @@ func TestHorizontalTouchDragDoesNotScrollVerticalList(t *testing.T) {
 	paintFrame(&in, s, Sz(100, 100))
 	in.dispatch(frameInput{touch: true, pos: Pt(10, 50), down: []MouseButton{MouseButtonLeft}})
 	in.dispatch(frameInput{touch: true, pos: Pt(40, 51)})
-	if s.position() != 0 || drags != 1 || in.touchPanning {
+	if s.position() != 0 || drags != 1 || in.touchPan.Panning {
 		t.Fatalf("horizontal drag stolen: offset=%v drags=%d", s.position(), drags)
 	}
 }
@@ -724,7 +724,7 @@ func TestTouchCapturedControlDoesNotPanParent(t *testing.T) {
 	if drags != 2 || ups != 1 || in.pressed != nil {
 		t.Fatalf("lost captured drag: drags=%d ups=%d pressed=%v", drags, ups, in.pressed)
 	}
-	if s.position() != 0 || in.touchPanning || in.touchMotion.target != nil {
+	if s.position() != 0 || in.touchPan.Panning || in.touchMotion.target != nil {
 		t.Fatalf("captured control started scrolling: offset=%v", s.position())
 	}
 }
@@ -1171,5 +1171,89 @@ func BenchmarkFocusedNode(b *testing.B) {
 				}
 			}
 		})
+	}
+}
+
+// benchRow is a list row that takes the pointer and the keys.
+type benchRow struct{}
+
+func (*benchRow) HandlePointer(ev PointerEvent) bool { return true }
+func (*benchRow) HandleKey(KeyEvent)                 {}
+
+// benchInput is an inputState over n rows, the first focused and pressed,
+// and observers watching the list, as a long list in an app at rest is.
+func benchInput(n, observers int) (*inputState, Point) {
+	rows := make([]benchRow, n)
+	in := &inputState{}
+	for i := range rows {
+		r := Rct(Pt(0, float64(i)*20), Sz(100, 20))
+		in.regions = append(in.regions, hitRegion{rect: r, full: r, pointer: &rows[i], key: &rows[i]})
+	}
+	for range observers {
+		in.observers = append(in.observers, inputObserver{rect: Rct(Point{}, Sz(100, float64(n)*20)), notify: func() {}})
+	}
+	pos := Pt(50, 10) // over the first row, so the scans run the whole list
+	in.dispatch(frameInput{pos: pos, down: []MouseButton{MouseButtonLeft}})
+	return in, pos
+}
+
+// The input of a frame in which nothing happens: the pointer still over a
+// long list, a row focused and pressed. Every frame of a large app pays it.
+func BenchmarkDispatchStill(b *testing.B) {
+	for _, n := range []int{100, 2000} {
+		b.Run(fmt.Sprint(n), func(b *testing.B) {
+			in, pos := benchInput(n, 0)
+			b.ReportAllocs()
+			for b.Loop() {
+				in.dispatch(frameInput{pos: pos})
+				in.takeTouched() // as the frame does
+			}
+		})
+	}
+}
+
+// A key typed into the focused row of a list some regions observe.
+func BenchmarkDispatchKey(b *testing.B) {
+	in, pos := benchInput(2000, 8)
+	keys := []KeyboardKey{KeyA}
+	b.ReportAllocs()
+	for b.Loop() {
+		in.dispatch(frameInput{pos: pos, keys: keys})
+		in.takeTouched()
+	}
+}
+
+// What a paint hands input: the focused region found where it painted.
+func BenchmarkRefreshFocused(b *testing.B) {
+	in, _ := benchInput(2000, 0)
+	b.ReportAllocs()
+	for b.Loop() {
+		in.refreshFocused()
+	}
+}
+
+// A slot keeps the copy before the last valid, as a hover's exit reads
+// the region it leaves after the next is kept, and lets go of handlers
+// once it keeps nothing.
+func TestRegionSlotKeepsThePreviousCopy(t *testing.T) {
+	t.Parallel()
+	var s regionSlot
+	a, b := &benchRow{}, &benchRow{}
+	regions := []hitRegion{{pointer: a, rect: Rct(Point{}, Sz(1, 1))}, {pointer: b}}
+	first := s.keep(&regions[0])
+	regions[0] = hitRegion{} // the regions buffer is reused by the next paint
+	second := s.keep(&regions[1])
+	if first == second || first.pointer != a || second.pointer != b {
+		t.Fatal("keeping the second overwrote the first")
+	}
+	if s.keep(nil) != nil {
+		t.Fatal("kept a region from nil")
+	}
+	if second.pointer != b {
+		t.Fatal("keeping nothing cleared the copy just replaced")
+	}
+	s.keep(nil)
+	if s.buf[0].pointer != nil || s.buf[1].pointer != nil {
+		t.Fatal("a slot keeping nothing holds a handler")
 	}
 }

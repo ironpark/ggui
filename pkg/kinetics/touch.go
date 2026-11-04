@@ -77,3 +77,42 @@ func Fling(v layout.Point, dt float64) (travel, next layout.Point, done bool) {
 	distance := (1 - decay) / FlingFriction
 	return layout.Pt(v.X*distance, v.Y*distance), layout.Pt(v.X*decay, v.Y*decay), done
 }
+
+// PanSlop is how far, in logical pixels, a finger moves from where it went
+// down before it pans rather than presses.
+const PanSlop = 8.0
+
+// Pan tells a finger panning from one pressing. Until the finger has moved
+// PanSlop from Start it is a press; past it, its first movement is locked
+// to the dominant axis, so a horizontal control in a vertical list can
+// still be dragged without moving the list. Once something takes the pan,
+// Panning is set and the finger is followed one to one, on both axes.
+type Pan struct {
+	Start   layout.Point // where the finger went down
+	Panning bool         // something took the pan
+	last    layout.Point
+}
+
+// Down starts a pan for a finger gone down at p.
+func (p *Pan) Down(at layout.Point) { *p = Pan{Start: at, last: at} }
+
+// Move returns how far to scroll for the finger now at pos, and false
+// while it is still a press: since the last move once Panning, and before,
+// from Start along the dominant axis.
+func (p *Pan) Move(pos layout.Point) (delta layout.Point, ok bool) {
+	if p.Panning {
+		delta = pos.Sub(p.last)
+	} else {
+		delta = pos.Sub(p.Start)
+		if delta.X*delta.X+delta.Y*delta.Y < PanSlop*PanSlop {
+			return layout.Point{}, false
+		}
+		if delta.X*delta.X > delta.Y*delta.Y {
+			delta.Y = 0
+		} else {
+			delta.X = 0
+		}
+	}
+	p.last = pos
+	return delta, true
+}

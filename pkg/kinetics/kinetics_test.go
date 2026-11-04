@@ -297,3 +297,39 @@ func BenchmarkSpringStep(b *testing.B) {
 		s.Step(1.0 / 60)
 	}
 }
+
+func TestPanWaitsForTheSlopThenLocksItsFirstMove(t *testing.T) {
+	var p Pan
+	p.Down(layout.Pt(100, 100))
+	if _, ok := p.Move(layout.Pt(105, 104)); ok {
+		t.Fatal("a move inside the slop pans")
+	}
+	d, ok := p.Move(layout.Pt(103, 112))
+	if !ok || d != layout.Pt(0, 12) {
+		t.Fatalf("past the slop: %v %v, want the vertical part alone", d, ok)
+	}
+	// Not taken: the next move is measured from Start again.
+	if d, _ := p.Move(layout.Pt(120, 110)); d != layout.Pt(20, 0) {
+		t.Fatalf("untaken pan moved %v, want from Start along x", d)
+	}
+	p.Panning = true
+	if d, ok := p.Move(layout.Pt(123, 104)); !ok || d != layout.Pt(3, -6) {
+		t.Fatalf("taken pan moved %v %v, want the finger's move on both axes", d, ok)
+	}
+	p.Down(layout.Pt(0, 0))
+	if p.Panning {
+		t.Fatal("Down keeps the last pan")
+	}
+}
+
+func BenchmarkPanMove(b *testing.B) {
+	var p Pan
+	p.Down(layout.Point{})
+	p.Panning = true
+	b.ReportAllocs()
+	x := 0.0
+	for b.Loop() {
+		x++
+		p.Move(layout.Pt(x, x/2))
+	}
+}

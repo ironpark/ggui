@@ -873,24 +873,6 @@ func sameAny(a, b any) (same bool) {
 	return a == b
 }
 
-type hitRegion struct {
-	rect    Rect
-	full    Rect // rect before clipping, for scrolling it into view
-	id      any  // from an Identified handler, else nil
-	pointer PointerHandler
-	key     KeyHandler
-	cursor  CursorShape
-	scope   *focusScope // the focus trap the region was painted in, if any
-	role    Role        // from a Semantic handler
-	label   string
-	group   any        // set by inGroup: the EachKeyed entry that painted it
-	drag    dragSource // a DragSource beneath its child; see dragdrop.go
-
-	space  *paintSpace // the space it was painted in, nil for the window's
-	local  Rect        // rect in that space, clipped there; see contains
-	origin Point       // full's corner in that space, before placeRegion moved it
-}
-
 // inGroup paints through fn with every region it registers marked as
 // belonging to g, so input can report whether g holds focus or a capture.
 func (c *Canvas) inGroup(g any, fn func()) {
@@ -927,33 +909,6 @@ func (c *Canvas) FocusTrap(owner any, onEscape func(), fn func(dst *Canvas)) {
 	c.scope = &focusScope{owner: owner, escape: onEscape}
 	defer func() { c.scope = prev }()
 	fn(c)
-}
-
-// merge folds o into r when they share a Rect and o only adds what r lacks.
-func (r *hitRegion) merge(o hitRegion) bool {
-	if r.rect != o.rect || r.space != o.space || (o.id != nil && r.id != nil && o.id != r.id) ||
-		o.drag != nil || r.drag != nil ||
-		(o.pointer != nil && r.pointer != nil) ||
-		(o.key != nil && r.key != nil) ||
-		(o.cursor != 0 && r.cursor != 0) {
-		return false
-	}
-	if o.pointer != nil {
-		r.pointer = o.pointer
-	}
-	if o.key != nil {
-		r.key = o.key
-	}
-	if o.cursor != 0 {
-		r.cursor = o.cursor
-	}
-	if o.id != nil {
-		r.id = o.id
-	}
-	if o.role != "" {
-		r.role, r.label = o.role, o.label
-	}
-	return true
 }
 
 // HitPointer registers r as a region that receives pointer events. Regions
