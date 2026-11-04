@@ -655,7 +655,8 @@ control supports `.Name("Appearance")`, `.OnChange(fn)`, `.Disabled(v)`, and
 | Reading shadcn/ui CSS | [ui/theme/css.go](../ui/theme/css.go) |
 | Color tokens, `EnvColor` | [ui/theme/tokens.go](../ui/theme/tokens.go), [environment.go](../environment.go) |
 | `Variant`, `Restyle` | [ui/variant.go](../ui/variant.go) |
-| `Text`, `Styled`, `Provide`, `WithEnv` | [widgets.go](../widgets.go) |
+| `Text`, `Styled` | [text.go](../text.go) |
+| `Provide`, `WithEnv` | [widgets.go](../widgets.go) |
 | `ui.Title`, `ui.Heading`, `ui.Caption`, `ui.Mono` | [ui/text.go](../ui/text.go) |
 | Shadows | [effects.go](../effects.go) |
 | Motion and transitions | [anim.go](../anim.go), [transition.go](../transition.go) |

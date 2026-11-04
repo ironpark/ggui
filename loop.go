@@ -1,20 +1,19 @@
 package ggui
 
 import (
-	"github.com/ironpark/ggui/a11y"
-	"github.com/ironpark/ggui/internal/reactive"
-	"github.com/ironpark/ggui/runtime"
-	"reflect"
-
 	"errors"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/ironpark/ggui/a11y"
 	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/runtime"
 )
 
 // Threading: signals, effects, layout and paint all run on the UI thread,
@@ -481,4 +480,61 @@ func (r *frameLoop) settle(size Size) error {
 		}
 	}
 	return cycle(rt)
+}
+
+// FrameStats counts the frames the app's windows have run since the
+// program started, and the time they took: input, layout, paint and the
+// draw handed to the GPU, not the GPU's own. Read twice, they give the
+// frame rate, which for an app at rest should be near nothing.
+type FrameStats struct {
+	Frames int64
+	Busy   time.Duration
+
+	// Of the frames, those a frame before asked for, by why: an animation
+	// running, a widget that read the frame's time to move with it, a
+	// callback waiting for the next frame, work posted to the window, or a
+	// drag or touch going on. The rest came from outside: an event, an
+	// Invalidate, a new frame the window or the platform asked for.
+	ForAnimation, ForTime, ForCallback, ForPosted, ForInput int64
+
+	// Partial counts the frames painted in part, where only what moves
+	// with time changed; see damage.go. Skipped counts those that painted
+	// nothing, as nothing had changed, and presented nothing. Contained
+	// counts those painted within the viewports of scrolls that moved, as
+	// nothing else changed.
+	Partial, Skipped, Contained int64
+}
+
+const (
+	frameForAnimation = iota
+	frameForTime
+	frameForCallback
+	frameForPosted
+	frameForInput
+	frameReasons
+)
+
+var (
+	framesRun, frameNanos atomic.Int64
+	framesFor             [frameReasons]atomic.Int64
+	partialFrames         atomic.Int64
+	framesSkipped         atomic.Int64
+	containedFrames       atomic.Int64
+)
+
+func countFrame(d time.Duration) {
+	framesRun.Add(1)
+	frameNanos.Add(int64(d))
+}
+
+// ReadFrameStats reports the frames run so far. It is safe to call from
+// any goroutine.
+func ReadFrameStats() FrameStats {
+	return FrameStats{
+		Frames: framesRun.Load(), Busy: time.Duration(frameNanos.Load()),
+		ForAnimation: framesFor[frameForAnimation].Load(), ForTime: framesFor[frameForTime].Load(),
+		ForCallback: framesFor[frameForCallback].Load(), ForPosted: framesFor[frameForPosted].Load(),
+		ForInput: framesFor[frameForInput].Load(),
+		Partial:  partialFrames.Load(), Skipped: framesSkipped.Load(), Contained: containedFrames.Load(),
+	}
 }

@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 	"math"
@@ -10,8 +11,11 @@ import (
 	"github.com/ironpark/ggui/internal/fontsys"
 	"github.com/ironpark/ggui/internal/paragraph"
 	"github.com/ironpark/ggui/internal/pool"
+	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/text"
 	"github.com/ironpark/ggui/internal/textedit"
+	"github.com/ironpark/ggui/internal/textlayout"
 )
 
 // engine is st as the text engine sets text in it: its font, size, weight
@@ -205,3 +209,471 @@ func cellShifts(dst []float64, bounds []int, glyphs []text.LazyGlyph, x0, cell f
 	}
 	return shifts
 }
+
+// TextWidget draws text, wrapping it to the width it is given. Build one
+// with Text. Its style is resolved at layout: the Env's inherited TextStyle,
+// then the widget's own setters on top, then built-in defaults for whatever
+// is still unset.
+type TextWidget struct {
+	props         property.Owner
+	value         string
+	content       property.Value[string]
+	format        string
+	formatArgs    []any
+	formatted     bool
+	style         TextStyle
+	wrap          bool
+	ellipsis      bool
+	maxLines      int
+	align         float64
+	alignSet      bool
+	role          Role
+	styleKey      EnvKey[TextStyle]
+	styleFallback TextStyle
+	cache         *CachedWidget
+
+	// Layout caches the wrapped lines, their widths and the size they add up
+	// to, and re-measures only when the text, the face or the width it must
+	// fit in changes.
+	resolved TextStyle
+	lines    []string
+	// glyphs are each line's glyphs laid out in glyphFace, the face they
+	// were last drawn in, kept until the lines are wrapped again: a frame
+	// that draws them as they were, as a scroll's does, lays none out.
+	glyphs    [][]text.LazyGlyph
+	glyphFace text.Face
+	widths    []float64
+	natural   Size
+	ascent    float64 // the first baseline, below the top
+	wrapped   wrapKey
+	bidi      textBidi         // the lines in visual order, when the direction or the text needs it
+	rich      *RichTextWidget  // what a Selectable Text lays out and paints as
+	richAt    richAt           // what a Selectable Text was laid out for, to lay its lines out when rotated
+	drawOp    text.DrawOptions // reused by paintLines, which would allocate one a paint
+	pieceOp   text.DrawOptions // reused by paragraph.Draw for the same
+}
+
+// richAt is the width and Env a Selectable Text last laid out in.
+type richAt struct {
+	maxW float64
+	env  Env
+}
+
+// wrapKey is the input textlayout.Wrap was last run with.
+type wrapKey struct {
+	generation uint64
+	value      string
+	font       *Font
+	weight     FontWeight
+	size       float64
+	lineHeight float64
+	maxW       float64
+	maxLines   int
+	ellipsis   bool
+}
+
+// Text draws s in the inherited style, wrapping at spaces when it is wider
+// than the space it gets.
+func Text(s string) *TextWidget {
+	return (&TextWidget{wrap: true}).Content(s)
+}
+
+// StyleKey selects an inherited text style, merged below explicit setters.
+// An optional fallback is used when the environment has no value for key.
+func (t *TextWidget) StyleKey(key EnvKey[TextStyle], fallback ...TextStyle) *TextWidget {
+	defer property.Watch(&t.props, &t.styleKey)()
+	defer property.Watch(&t.props, &t.styleFallback)()
+	t.styleKey = key
+	t.styleFallback = TextStyle{}
+	if len(fallback) > 0 {
+		t.styleFallback = fallback[0]
+	}
+	return t
+}
+
+// Role sets the accessibility role; the default is RoleText.
+func (t *TextWidget) Role(role Role) *TextWidget {
+	defer property.Watch(&t.props, &t.role)()
+	t.role = role
+	return t
+}
+
+// TextOf borrows r and follows it during layout without owning a subscription.
+func TextOf(r Readable[string]) *TextWidget { return Text("").BindContent(r) }
+
+// Textf formats during layout, reading GetAny arguments like Sprintf. It copies
+// args and creates no computation; construction needs no owner.
+func Textf(format string, args ...any) *TextWidget {
+	t := Text("")
+	t.format = format
+	t.formatArgs = append([]any(nil), args...)
+	t.formatted = true
+	return t
+}
+
+// Sprintf formats like fmt.Sprintf, reading arguments that implement
+// GetAny() any on each computation. StateValue, DerivedValue, Lens, Tweened
+// and Sprung implement that method. Other arguments pass through unchanged;
+// Readable's Get() alone is not enough. Adapt a custom Readable with
+// Derived(reader.Get), or format its Get() inside a Derived callback.
+func Sprintf(format string, args ...any) *DerivedValue[string] {
+	args = append([]any(nil), args...)
+	return Derived(func() string { return formatValues(format, args) })
+}
+func formatValues(format string, args []any) string {
+	vals := make([]any, len(args))
+	for i, a := range args {
+		if r, ok := a.(reactive.AnyReader); ok {
+			vals[i] = r.GetAny()
+		} else {
+			vals[i] = a
+		}
+	}
+	return fmt.Sprintf(format, vals...)
+}
+
+// Style merges ts onto the widget's own style.
+func (t *TextWidget) Style(ts TextStyle) *TextWidget {
+	defer property.Watch(&t.props, &t.style)()
+	t.style = t.style.Merge(ts)
+	return t
+}
+
+// Color sets the text color; nil inherits. Changing one color for another
+// is paint-only, so a control can recolor its label as the pointer moves
+// over it without laying it out again.
+func (t *TextWidget) Color(c color.Color) *TextWidget {
+	if (c == nil) != (t.style.Color == nil) || IsEnvColor(c) || IsEnvColor(t.style.Color) {
+		defer property.Watch(&t.props, &t.style)()
+	}
+	t.style.Color = c
+	return t
+}
+
+// Font sets the face; nil inherits.
+func (t *TextWidget) Font(f *Font) *TextWidget {
+	defer property.Watch(&t.props, &t.style)()
+	t.style.Font = f
+	return t
+}
+
+// Weight sets the font weight, drawn with the Font's face nearest it; zero
+// inherits.
+func (t *TextWidget) Weight(w FontWeight) *TextWidget {
+	defer property.Watch(&t.props, &t.style)()
+	t.style.Weight = w
+	return t
+}
+
+// Size sets the font size in pixels.
+func (t *TextWidget) Size(px float64) *TextWidget {
+	defer property.Watch(&t.props, &t.style)()
+	t.style.Size = px
+	return t
+}
+
+// LineHeight sets the distance between baselines as a multiple of Size.
+func (t *TextWidget) LineHeight(mult float64) *TextWidget {
+	defer property.Watch(&t.props, &t.style)()
+	t.style.LineHeight = mult
+	return t
+}
+
+// Content replaces any literal, reader or formatted source and refreshes
+// measurement when needed. Call it on the UI goroutine.
+func (t *TextWidget) Content(s string) *TextWidget {
+	changed := t.content.Set(s) || t.formatted || t.value != s
+	t.formatted = false
+	t.format = ""
+	t.formatArgs = nil
+	t.value = s
+	if changed {
+		t.props.Changed()
+	}
+	return t
+}
+
+// BindContent follows r during layout without owning a subscription.
+func (t *TextWidget) BindContent(r Readable[string]) *TextWidget {
+	changed := t.content.Bind(r, "BindContent") || t.formatted
+	t.formatted = false
+	t.format = ""
+	t.formatArgs = nil
+	if changed {
+		t.props.Changed()
+	}
+	return t
+}
+
+// NoWrap keeps the text on one line per hard line break, however wide.
+func (t *TextWidget) NoWrap() *TextWidget {
+	defer property.Watch(&t.props, &t.wrap)()
+	t.wrap = false
+	return t
+}
+
+// Ellipsis ends a line too wide for the widget with "…" instead of letting it
+// run past the edge: with NoWrap, every line wider than the width it gets.
+// A screen reader still reads the whole text.
+func (t *TextWidget) Ellipsis() *TextWidget {
+	defer property.Watch(&t.props, &t.ellipsis)()
+	t.ellipsis = true
+	return t
+}
+
+// MaxLines shows at most n lines, ending the last with "…" when the text
+// goes on past it; 0 shows them all. MaxLines(1) with wrapping on is one
+// line cut to the width. A screen reader still reads the whole text.
+func (t *TextWidget) MaxLines(n int) *TextWidget {
+	defer property.Watch(&t.props, &t.maxLines)()
+	t.maxLines = max(n, 0)
+	return t
+}
+
+// Align places each line within the widget's width by fraction: 0 is left,
+// 0.5 centered, 1 right. Unset, lines start at the reading direction's
+// start: the left, or the right under DirRTL.
+func (t *TextWidget) Align(x float64) *TextWidget {
+	defer property.Watch(&t.props, &t.align)()
+	defer property.Watch(&t.props, &t.alignSet)()
+	t.align, t.alignSet = x, true
+	return t
+}
+
+// current is the resolved style from the last Layout, or the widget's own
+// style over the defaults before any Layout has run.
+func (t *TextWidget) current() TextStyle {
+	if t.resolved.Font == nil {
+		return t.style.resolved()
+	}
+	return t.resolved
+}
+
+// faceAt returns the face at the resolved size times scale, so that on a
+// HiDPI Canvas glyphs are rasterized at full resolution instead of scaled up.
+func (t *TextWidget) faceAt(scale float64) text.Face {
+	st := t.current()
+	return st.Font.face(st.Size*scale, st.Weight)
+}
+
+// spacing is the distance between baselines.
+func (t *TextWidget) spacing() float64 {
+	st := t.current()
+	return st.Size * st.LineHeight
+}
+
+// Layout implements Widget.
+func (t *TextWidget) Layout(c Constraints, env Env) Size {
+	defer t.props.Layout().EndLayout()
+	if t.formatted {
+		t.value = formatValues(t.format, t.formatArgs)
+	} else {
+		t.value = t.content.Get()
+	}
+	t.cache, _ = env.Get(cacheOwner)
+	style, ok := env.Get(t.styleKey)
+	if !ok {
+		style = t.styleFallback
+	}
+	t.resolved = env.ResolveText(style.Merge(t.style))
+	if t.rich != nil {
+		// A Selectable Text lays out and paints as its RichText. Only
+		// PaintRotated draws the lines, so they wait for it.
+		t.richAt = richAt{c.MaxW, env}
+		return t.layoutRich(c, env, style.Merge(t.style))
+	}
+	t.layoutLines(c.MaxW, env)
+	return c.Constrain(t.natural)
+}
+
+// layoutLines wraps, cuts and orders the lines for a width of maxW, when
+// any of what they depend on changed since the last time.
+func (t *TextWidget) layoutLines(maxW float64, env Env) {
+	face := t.faceAt(1)
+	fits := t.wrap || t.ellipsis || t.maxLines > 0
+	key := wrapKey{generation: fontGen(), value: t.value, font: t.resolved.Font, weight: t.resolved.Weight, size: t.resolved.Size, lineHeight: t.resolved.LineHeight,
+		maxW: pick(fits, maxW, 0), maxLines: t.maxLines, ellipsis: t.ellipsis}
+	if key != t.wrapped {
+		t.wrapped = key
+		t.glyphFace = nil // the lines' glyphs are of the lines before
+		t.lines = textlayout.Wrap(key.value, face, pick(t.wrap, key.maxW, 0))
+		if n := key.maxLines; n > 0 && len(t.lines) > n {
+			t.lines = t.lines[:n]
+			t.lines[n-1] = textlayout.Ellipsize(t.lines[n-1], face, key.maxW, true)
+		}
+		if key.ellipsis {
+			for i, line := range t.lines {
+				t.lines[i] = textlayout.Ellipsize(line, face, key.maxW, false)
+			}
+		}
+		t.widths = t.widths[:0]
+		var w float64
+		for _, line := range t.lines {
+			lw := textlayout.Width(line, face)
+			t.widths = append(t.widths, lw)
+			w = max(w, lw)
+		}
+		m := face.Metrics()
+		t.natural = Sz(w, float64(len(t.lines)-1)*t.spacing()+m.HAscent+m.HDescent)
+		t.ascent = m.HAscent
+	}
+	t.layoutBidi(env)
+}
+
+// Baseline implements Baseliner: the first line's baseline is its ascent
+// below the top, where paintLines puts the line.
+func (t *TextWidget) Baseline() (float64, bool) {
+	if t.rich != nil {
+		return t.rich.Baseline()
+	}
+	return t.ascent, t.resolved.Font != nil
+}
+
+// Paint implements Widget.
+func (t *TextWidget) Paint(dst *Canvas, r Rect) {
+	// Text is half of what a screen reader reads, and none of it takes
+	// input, so it goes in the semantics tree and never in the hit list,
+	// which input scans backwards on every pointer event. Text a control
+	// already painted as its own label is that control's name, not an
+	// element of its own, so it stays quiet there.
+	if t.rich != nil {
+		t.rich.Paint(dst, r)
+		return
+	}
+	t.paintLines(dst, r, true, func(op *text.DrawOptions, x, y float64) {
+		op.GeoM.Translate(dst.px(x), dst.px(y))
+	})
+}
+
+// paintLines emits the semantics leaf, then draws every laid-out line with the
+// shared style and line-advance math. place positions one line: it receives the
+// freshly reset GeoM and the line's logical origin, so Paint translates and
+// PaintRotated translates, rotates and translates back.
+// paintLines draws the lines with place moving each to where it is drawn.
+// upright says place only translates them, so that a line wholly outside
+// the clip is skipped rather than shaped and drawn to be clipped: a long
+// Text in a Scroll draws only what shows.
+func (t *TextWidget) paintLines(dst *Canvas, r Rect, upright bool, place func(op *text.DrawOptions, x, y float64)) {
+	if t.value != "" && !dst.named(r) {
+		dst.Leaf(r, Node{Role: roleOr(t.role, RoleText), Name: t.value})
+	}
+	if dst == nil || dst.Image == nil || dst.Image.Bounds().Empty() {
+		return
+	}
+	if t.rich != nil {
+		t.layoutLines(t.richAt.maxW, t.richAt.env)
+	}
+	face := t.faceAt(dst.Scale())
+	op := &t.drawOp
+	*op = text.DrawOptions{}
+	col := pick(t.style.Color != nil && !IsEnvColor(t.style.Color), t.style.Color, t.current().Color)
+	op.ColorScale.ScaleWithColor(col)
+	align := pick(t.alignSet, t.align, startAlign(t.bidi.dir))
+	for i, line := range t.lines {
+		x := r.Origin.X + (r.Size.W-t.widths[i])*align
+		y := r.Origin.Y + float64(i)*t.spacing()
+		// A line's glyphs can reach past its box, by an accent, a tall
+		// emoji or a long tail, by up to a line more.
+		if upright && !dst.visiblePaintBounds(Rct(Pt(r.Origin.X, y), Sz(r.Size.W, t.spacing())), t.spacing()) {
+			continue
+		}
+		if t.paintBidi(dst, i, r, align, y, col, place) {
+			continue
+		}
+		op.GeoM.Reset()
+		place(op, x, y)
+		t.drawLine(dst.Image, i, line, face, op)
+	}
+}
+
+// drawLine draws line i, from the glyphs it keeps when it can.
+func (t *TextWidget) drawLine(dst *ggfx.Image, i int, line string, face text.Face, op *text.DrawOptions) {
+	plain := fontsys.PlainFace(face, line)
+	if plain == nil {
+		fontsys.DrawText(dst, line, face, op)
+		return
+	}
+	if t.glyphFace != plain || len(t.glyphs) != len(t.lines) {
+		for j := range t.glyphs {
+			t.glyphs[j] = t.glyphs[j][:0]
+		}
+		t.glyphs = slices.Grow(t.glyphs[:0], len(t.lines))[:len(t.lines)]
+		for j := range t.glyphs {
+			t.glyphs[j] = t.glyphs[j][:0]
+		}
+		t.glyphFace = plain
+	}
+	if len(t.glyphs[i]) == 0 && line != "" {
+		t.glyphs[i] = text.AppendLazyGlyphs(t.glyphs[i][:0], line, plain, nil)
+	}
+	text.DrawLazyGlyphs(dst, t.glyphs[i], op)
+}
+
+// StyledWidget sets the text style its subtree inherits. Build one with
+// Styled.
+type StyledWidget struct {
+	props property.Owner
+	style TextStyle
+	child Widget
+}
+
+// Styled gives every Text below child a new base style: what the setters
+// here set, over what was inherited from above. A Text's own setters still
+// win over it.
+//
+//	Styled(Column(Text("a"), Text("b"))).Color(muted).Size(12)
+func Styled(child Widget) *StyledWidget { return &StyledWidget{child: child} }
+
+// Style merges ts onto the style the subtree inherits.
+func (s *StyledWidget) Style(ts TextStyle) *StyledWidget {
+	defer property.Watch(&s.props, &s.style)()
+	s.style = s.style.Merge(ts)
+	return s
+}
+
+// Color sets the inherited text color.
+func (s *StyledWidget) Color(c color.Color) *StyledWidget {
+	defer property.Watch(&s.props, &s.style)()
+	s.style.Color = c
+	return s
+}
+
+// Font sets the inherited font.
+func (s *StyledWidget) Font(f *Font) *StyledWidget {
+	defer property.Watch(&s.props, &s.style)()
+	s.style.Font = f
+	return s
+}
+
+// Weight sets the inherited font weight.
+func (s *StyledWidget) Weight(w FontWeight) *StyledWidget {
+	defer property.Watch(&s.props, &s.style)()
+	s.style.Weight = w
+	return s
+}
+
+// Size sets the inherited font size.
+func (s *StyledWidget) Size(px float64) *StyledWidget {
+	defer property.Watch(&s.props, &s.style)()
+	s.style.Size = px
+	return s
+}
+
+// LineHeight sets the inherited line height.
+func (s *StyledWidget) LineHeight(mult float64) *StyledWidget {
+	defer property.Watch(&s.props, &s.style)()
+	s.style.LineHeight = mult
+	return s
+}
+
+// Layout implements Widget.
+func (s *StyledWidget) Layout(c Constraints, env Env) Size {
+	defer s.props.Layout().EndLayout()
+	return s.child.Layout(c, env.WithText(s.style))
+}
+
+// Baseline implements Baseliner: the child's.
+func (s *StyledWidget) Baseline() (float64, bool) { return baselineOf(s.child) }
+
+// Paint implements Widget.
+func (s *StyledWidget) Paint(dst *Canvas, r Rect) { dst.Paint(s.child, r) }
