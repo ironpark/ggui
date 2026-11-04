@@ -2,8 +2,10 @@ package ggui
 
 import (
 	"image/color"
+	"sync/atomic"
 	"time"
 
+	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/pkg/layout"
 )
 
@@ -248,3 +250,311 @@ func (r *ResponsiveWidget) Baseline() (float64, bool) { return baselineOf(r.curr
 
 // Paint implements Widget.
 func (r *ResponsiveWidget) Paint(dst *Canvas, rect Rect) { dst.Paint(r.current, rect) }
+
+// Styling has three layers. A TextStyle is a value: build one, merge others
+// onto it, hand it to Text or Styled. An Env flows down the tree at layout
+// time, so a Styled container sets the text style every descendant starts
+// from, the way CSS inherits font and color. Design systems can provide
+// additional typed values through EnvKey without coupling the core to them.
+
+// TextStyle describes how text is drawn. The zero value of a field means
+// "inherit": Merge lets a set field win over an unset one, and Text resolves
+// what is still unset from the Env and then from built-in defaults.
+type TextStyle struct {
+	Font       *Font
+	Size       float64 // pixels
+	Color      color.Color
+	LineHeight float64    // multiple of Size between baselines
+	Weight     FontWeight // drawn with the Font's face nearest this weight
+}
+
+// Equal reports whether s and o draw the same: the same Font, size, line
+// height and weight, and colors that draw alike.
+func (s TextStyle) Equal(o TextStyle) bool {
+	if s.Font != o.Font || s.Size != o.Size || s.LineHeight != o.LineHeight || s.Weight != o.Weight {
+		return false
+	}
+	if s.Color == nil || o.Color == nil {
+		return s.Color == nil && o.Color == nil
+	}
+	ar, ag, ab, aa := s.Color.RGBA()
+	br, bg, bb, ba := o.Color.RGBA()
+	return ar == br && ag == bg && ab == bb && aa == ba
+}
+
+func init() { property.RegisterEqual(TextStyle.Equal) }
+
+// Merge returns s with every set field of o laid over it.
+func (s TextStyle) Merge(o TextStyle) TextStyle {
+	if o.Font != nil {
+		s.Font = o.Font
+	}
+	if o.Size != 0 {
+		s.Size = o.Size
+	}
+	if o.Color != nil {
+		s.Color = o.Color
+	}
+	if o.LineHeight != 0 {
+		s.LineHeight = o.LineHeight
+	}
+	if o.Weight != 0 {
+		s.Weight = o.Weight
+	}
+	return s
+}
+
+// resolved fills what is still unset with the built-in defaults.
+func (s TextStyle) resolved() TextStyle {
+	if s.Font == nil {
+		s.Font = fallbackFont()
+	}
+	if s.Size == 0 {
+		s.Size = DefaultTextSize
+	}
+	if s.Color == nil {
+		s.Color = color.Black
+	}
+	if s.LineHeight == 0 {
+		s.LineHeight = 1.2
+	}
+	return s
+}
+
+// Env is the set of inherited values a widget lays out under. The runtime
+// hands the root one to the tree; containers pass it down unchanged, and
+// Styled or Provide hand their child a modified copy. It is a value: adding
+// to it never changes the parent's.
+type Env struct {
+	text TextStyle
+	vals *envNode
+	rev  uint64 // advanced by every change; Cached compares it
+}
+
+// envRev numbers every distinct Env, so a layout cache can tell whether
+// anything inherited changed without comparing the values themselves.
+var envRev atomic.Uint64
+
+func nextRev() uint64 { return envRev.Add(1) }
+
+type envNode struct {
+	key  *byte // the EnvKey's id: a pointer, which an interface holds without allocating
+	val  any
+	next *envNode
+}
+
+// Text returns the inherited text style, the base a Text merges its own
+// style onto.
+func (e Env) Text() TextStyle { return e.text }
+
+// ResolveText returns the style a Text with style s draws in under e: s
+// merged onto the inherited style, unset fields filled with the defaults
+// and the size multiplied by TextScale. A custom widget keeps it from
+// Layout to draw a label with Canvas.DrawText in Paint.
+func (e Env) ResolveText(s TextStyle) TextStyle {
+	r := e.text.Merge(s).resolved()
+	r.Size *= e.TextScale()
+	r.Color = ResolveColor(r.Color, e)
+	return r
+}
+
+// WithText returns e with s merged onto the inherited text style.
+func (e Env) WithText(s TextStyle) Env {
+	return e.WithTextReplaced(e.text.Merge(s))
+}
+
+// WithTextReplaced replaces the inherited text style, including zero fields.
+// Use WithText to merge a partial style instead.
+func (e Env) WithTextReplaced(s TextStyle) Env {
+	if sameAny(s, e.text) {
+		return e
+	}
+	val := any(s)
+	out, ok, hashable := e.memo(textKey, val)
+	if ok {
+		return out
+	}
+	out = e
+	out.text, out.rev = s, nextRev()
+	if hashable {
+		e.remember(textKey, val, out)
+	}
+	return out
+}
+
+var textKey = new(byte)
+
+// TextScaleKey holds the factor every Text and TextInput multiplies its
+// size by, for a user who asked for larger text: Provide it above the tree
+// or a subtree. Env.TextScale reads it, 1 by default.
+var TextScaleKey = NewEnvKey[float64]("text scale")
+
+// InputDisabledKey disables TextInput editing in a subtree without replacing the
+// editor's own Disabled or BindDisabled setting. Containers combine inherited
+// and local values with OR; false must not enable an already-disabled ancestor.
+var InputDisabledKey = NewEnvKey[bool]("input disabled")
+
+// ReducedMotionKey asks widgets not to animate: transitions land at once,
+// eased motions jump. Provide it above the tree; Env.Motion reads it.
+var ReducedMotionKey = NewEnvKey[bool]("reduced motion")
+
+// TextScale returns the factor text sizes are multiplied by under e.
+func (e Env) TextScale() float64 {
+	if s, ok := e.Get(TextScaleKey); ok && s > 0 {
+		return s
+	}
+	return 1
+}
+
+// ReducedMotion reports whether the tree under e asked for no animation.
+func (e Env) ReducedMotion() bool {
+	r, _ := e.Get(ReducedMotionKey)
+	return r
+}
+
+// Motion returns d, or zero when the tree under e asked for reduced
+// motion: what a widget hands to Ease or a Transition.
+func (e Env) Motion(d time.Duration) time.Duration {
+	if e.ReducedMotion() {
+		return 0
+	}
+	return d
+}
+
+// EnvKey names a value that can travel down the tree in an Env. Make one per
+// concept with NewEnvKey; the type parameter keeps reads and writes in step.
+type EnvKey[T any] struct {
+	id   *byte
+	name string
+}
+
+// NewEnvKey creates a distinct EnvKey; name is for messages only.
+func NewEnvKey[T any](name string) EnvKey[T] { return EnvKey[T]{id: new(byte), name: name} }
+
+// With returns e with v stored under k for the subtree below. Storing the
+// value already there, by ==, leaves e unchanged, and storing the value
+// stored last frame under the same parent yields the same revision, so
+// caches below a Provide rebuilt every frame hold. InputDisabledKey is cumulative:
+// once true in an ancestor, a descendant cannot clear it.
+func (e Env) With[T any](k EnvKey[T], v T) Env {
+	if k.id == InputDisabledKey.id {
+		if disabled, _ := e.Get(InputDisabledKey); disabled {
+			return e
+		}
+	}
+	cur, exists := e.Get(k)
+	if exists && sameAny(cur, v) {
+		return e
+	}
+	val := any(v)
+	out, ok, hashable := e.memo(k.id, val)
+	if ok {
+		return out
+	}
+	out = e
+	if exists {
+		out.vals = withEnvValue(e.vals, k.id, val)
+	} else {
+		out.vals = &envNode{key: k.id, val: val, next: e.vals}
+	}
+	out.rev = nextRev()
+	if hashable {
+		e.remember(k.id, val, out)
+	}
+	return out
+}
+
+// Replace the nearest binding persistently instead of retaining every old
+// value. Root environment updates remain bounded while ancestor Envs stay intact.
+func withEnvValue(node *envNode, key *byte, value any) *envNode {
+	if node == nil {
+		return &envNode{key: key, val: value}
+	}
+	if node.key == key {
+		return &envNode{key: key, val: value, next: node.next}
+	}
+	return &envNode{key: node.key, val: node.val, next: withEnvValue(node.next, key, value)}
+}
+
+// derivedKey names an Env derived from another: the parent's revision and
+// what was added.
+type derivedKey struct {
+	from uint64
+	key  any
+	val  any
+}
+
+// envMemo remembers derived Envs, so the same derivation yields the same
+// revision every time it is made and a Cached below it holds. Each world
+// keeps its own, written from derive on the goroutine running that world's
+// frames. A revision names one Env across every world, so an Env derived in
+// one is never mistaken for another's.
+//
+// Entries age by how many new ones arrive, not by frames: a subtree a
+// Cached skipped derives nothing for as long as it is skipped, and when it
+// is next laid out it must find its Envs again, or it mints new revisions
+// and every cache inside it misses. So an entry lives in two generations.
+// One that is used moves into the current one; the current one becomes the
+// old one once it is as large as the old one, and whatever the old one
+// still held then is dropped. A tree that stops deriving new Envs keeps all
+// of its own, and the memo stays within about twice what is in use.
+type envMemo struct {
+	cur, prev map[derivedKey]Env
+}
+
+// envMemoMin is the size below which the memo never ages anything out.
+const envMemoMin = 256
+
+func (m *envMemo) get(k derivedKey) (Env, bool) {
+	if out, ok := m.cur[k]; ok {
+		return out, true
+	}
+	out, ok := m.prev[k]
+	if ok {
+		m.put(k, out)
+	}
+	return out, ok
+}
+
+func (m *envMemo) put(k derivedKey, e Env) {
+	if m.cur == nil {
+		m.cur = map[derivedKey]Env{}
+	}
+	if len(m.cur) >= max(envMemoMin, len(m.prev)) {
+		m.prev, m.cur = m.cur, m.prev
+		if m.cur == nil {
+			m.cur = map[derivedKey]Env{}
+		}
+		clear(m.cur)
+	}
+	m.cur[k] = e
+}
+
+// memo returns the Env derived from e with key and val before, if one
+// was. A val a map cannot hash is never memoized: hashable reports it.
+func (e Env) memo(key, val any) (out Env, ok, hashable bool) {
+	defer func() {
+		if recover() != nil {
+			hashable = false
+		}
+	}()
+	out, ok = activeWorld().envMemo.get(derivedKey{e.rev, key, val})
+	return out, ok, true
+}
+
+// remember keeps out as the Env derived from e with key and val, for the
+// same derivation to yield the same revision.
+func (e Env) remember(key, val any, out Env) {
+	activeWorld().envMemo.put(derivedKey{e.rev, key, val}, out)
+}
+
+// Get returns the nearest value stored under k, if any ancestor set one.
+func (e Env) Get[T any](k EnvKey[T]) (T, bool) {
+	for n := e.vals; n != nil; n = n.next {
+		if n.key == k.id {
+			return n.val.(T), true
+		}
+	}
+	var zero T
+	return zero, false
+}

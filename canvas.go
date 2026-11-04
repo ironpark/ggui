@@ -38,7 +38,7 @@ type Canvas struct {
 	inert   bool        // registers no hit regions: a widget on its way out
 	scope   *focusScope // the focus trap regions are registered under, if any
 	group   any         // what regions painted now belong to, for EachKeyed's eviction
-	space   *paintSpace // inside a Transform or a shape clip; see transform.go
+	space   *paintSpace // inside a Transform or a shape clip; see effects.go
 
 	// window is set on a Canvas that draws into the window's own image,
 	// its screen or its backbuffer, and onScreen when that is the screen,

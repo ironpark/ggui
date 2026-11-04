@@ -5,9 +5,9 @@ import (
 	"runtime"
 	"slices"
 	"strings"
-	"sync"
 
 	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggui/internal/framestats"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/region"
@@ -127,7 +127,7 @@ func (w *Window) noteMotion(target *ggfx.Image) {
 	default:
 		w.motionWhy = "ok"
 	}
-	noteMovers(f.movers)
+	framestats.SetMovers(f.movers)
 	w.motionGen = reactive.StateGen()
 	w.motionSize = target.Bounds().Size()
 	w.freeSeen, w.fontSeen = reactive.FreeGen(), fontGen()
@@ -224,27 +224,24 @@ func (w *Window) takeContained() []Rect {
 // regions contain paints, or empty, saying why, when it must be painted
 // whole.
 func (w *Window) containedDamage(target *ggfx.Image, kept bool, contained, asked []Rect) image.Rectangle {
+	why := w.partialRefusal(target)
 	switch {
 	case !kept:
-		refusePartial("not kept")
-		return image.Rectangle{}
-	case w.motionWhy != "ok":
-		refusePartial(w.motionWhy)
-		return image.Rectangle{}
-	case target.Bounds().Size() != w.motionSize || w.closed || w.root == nil:
-		refusePartial("resized")
-		return image.Rectangle{}
+		why = "not kept"
+	case why != "":
 	case reactive.FreeGen() != w.freeSeen || fontGen() != w.fontSeen:
-		refusePartial("state changed")
+		why = "state changed"
 		w.frameLoop.endFrameFree(true, true)
+	}
+	if why != "" {
+		framestats.Refuse(why)
 		return image.Rectangle{}
 	}
-	logical := Sz(w.canvas.dp(float64(target.Bounds().Dx())), w.canvas.dp(float64(target.Bounds().Dy())))
-	window := Rct(Point{}, logical)
+	window := Rct(Point{}, w.logicalSize(target))
 	all := region.CoverAll(contained, w.motion, asked)
 	all = all.Intersect(window)
 	if all.Empty() || all.Size.W*all.Size.H > mostContained*window.Size.W*window.Size.H {
-		refusePartial("too much changed")
+		framestats.Refuse("too much changed")
 		return image.Rectangle{}
 	}
 	return w.canvas.physical(all).Intersect(target.Bounds())
@@ -255,18 +252,14 @@ func (w *Window) containedDamage(target *ggfx.Image, kept bool, contained, asked
 // and reports false, painting nothing, when the frame must be painted
 // whole. It gives setDamage, when there is one, what changed.
 func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect, setDamage func([]image.Rectangle)) bool {
-	if w.motionWhy != "ok" {
-		refusePartial(w.motionWhy)
-		return false
-	}
-	if target.Bounds().Size() != w.motionSize || w.closed || w.root == nil {
-		refusePartial("resized")
+	if why := w.partialRefusal(target); why != "" {
+		framestats.Refuse(why)
 		return false
 	}
 	changed := func() bool { return reactive.StateGen() != w.motionGen || layoutGen() != w.seenGen }
-	logical := Sz(w.canvas.dp(float64(screen.Bounds().Dx())), w.canvas.dp(float64(screen.Bounds().Dy())))
+	logical := w.logicalSize(screen)
 	if changed() || Untrack(w.viewport.Get) != logical {
-		refusePartial("state changed")
+		framestats.Refuse("state changed")
 		return false
 	}
 	window := Rct(Point{}, logical)
@@ -276,7 +269,7 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect
 	}
 	damage, why := repaintFor(kept, now, window)
 	if why != "" {
-		refusePartial(why)
+		framestats.Refuse(why)
 		return false
 	}
 	setRunning(&w.frameLoop)
@@ -285,7 +278,7 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect
 		return true
 	}
 	if changed() || w.closed || w.root == nil {
-		refusePartial("state changed")
+		framestats.Refuse("state changed")
 		return false
 	}
 	c := &w.canvas
@@ -318,7 +311,7 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect
 	// The layers are trimmed by whole frames alone: one painted in part
 	// uses those of the regions it paints, and freeing the rest would make
 	// the next whole frame allocate them again.
-	partialFrames.Add(1)
+	framestats.CountPartial()
 	if setDamage != nil {
 		px := make([]image.Rectangle, len(now))
 		for i, r := range now {
@@ -329,6 +322,24 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect
 	w.noteMotion(target)
 	w.presentBackdrop(screen, target)
 	return true
+}
+
+// partialRefusal is why the next frame cannot be painted over the last one
+// into target, which noteMotion judged, or "" when it may be.
+func (w *Window) partialRefusal(target *ggfx.Image) string {
+	switch {
+	case w.motionWhy != "ok":
+		return w.motionWhy
+	case target.Bounds().Size() != w.motionSize || w.closed || w.root == nil:
+		return "resized"
+	}
+	return ""
+}
+
+// logicalSize is the size of img in logical pixels.
+func (w *Window) logicalSize(img *ggfx.Image) Size {
+	b := img.Bounds()
+	return Sz(w.canvas.dp(float64(b.Dx())), w.canvas.dp(float64(b.Dy())))
 }
 
 // mostPartial is the share of the window past which a frame is painted
@@ -351,30 +362,6 @@ func repaintFor(kept bool, now []Rect, window Rect) ([]Rect, string) {
 		return nil, "too much changed"
 	}
 	return now, ""
-}
-
-// What moved and why frames were painted whole, for MotionReport.
-var (
-	motionMu        sync.Mutex
-	lastMovers      []string
-	partialRefusals = map[string]int64{}
-)
-
-func noteMovers(movers []string) {
-	motionMu.Lock()
-	lastMovers = append(lastMovers[:0], movers...)
-	motionMu.Unlock()
-}
-
-// refusePartial counts a frame only time asked for that was painted whole,
-// by why: "" when nothing had moved is not counted.
-func refusePartial(why string) {
-	if why == "" {
-		return
-	}
-	motionMu.Lock()
-	partialRefusals[why]++
-	motionMu.Unlock()
 }
 
 // dirtyReason records what marked the window dirty, keeping partial
@@ -412,28 +399,19 @@ var dirtyReasons = []struct {
 	{dirtyFree, "state changed"},
 }
 
-// dirtiers counts, by code address, what marked frames dirty: posted work
-// that wrote a signal, and the callers of Repaint. Most are a handful of
-// sites, so the map stays small; past mostDirtiers it takes no new ones.
-var dirtiers = map[dirtier]int64{}
-
-type dirtier struct {
-	why dirtyReason
-	pc  uintptr
+// name is how a report names d.
+func (d dirtyReason) name() string {
+	for _, r := range dirtyReasons {
+		if r.flag == d {
+			return r.name
+		}
+	}
+	return "dirty"
 }
-
-const mostDirtiers = 256
 
 // noteDirtier counts pc, a function's entry or a call site, as having
 // marked a frame dirty for why.
-func noteDirtier(why dirtyReason, pc uintptr) {
-	k := dirtier{why, pc}
-	motionMu.Lock()
-	if _, ok := dirtiers[k]; ok || len(dirtiers) < mostDirtiers {
-		dirtiers[k]++
-	}
-	motionMu.Unlock()
-}
+func noteDirtier(why dirtyReason, pc uintptr) { framestats.Dirtied(why.name(), pc) }
 
 // noteCaller counts the caller of the function calling it.
 func noteCaller(why dirtyReason) {
@@ -461,66 +439,13 @@ func callerOutside() uintptr {
 	}
 }
 
-// dirtierName names a dirtier as "why: function".
-func dirtierName(d dirtier) string {
-	why := "dirty"
-	for _, r := range dirtyReasons {
-		if r.flag == d.why {
-			why = r.name
-		}
-	}
-	name := "?"
-	if f := runtime.FuncForPC(d.pc); f != nil {
-		name = f.Name()
-	}
-	return why + " " + name
-}
-
+// refusePartialDirty counts a frame painted whole for each of bits.
 func refusePartialDirty(bits dirtyReason) {
-	if bits == 0 {
-		return
-	}
-	motionMu.Lock()
-	defer motionMu.Unlock()
 	for _, d := range dirtyReasons {
 		if bits&d.flag != 0 {
-			partialRefusals[d.name]++
+			framestats.Refuse(d.name)
 		}
 	}
-}
-
-// MotionReport is what moved in the last frame a window painted, by
-// widget type, and how many frames since the program started could have
-// been painted in part but were painted whole, by why: "dirty" when
-// something else asked for them, "state changed", "overlay",
-// "unplaced" when what moved was under a transform, "inspected",
-// "resized", "not kept" when the last frame was not, "too much
-// changed".
-//
-// Dirtiers counts, by name, the posted work that wrote a signal
-// ("dirty(signal) pkg.func") and the callers of Repaint
-// ("dirty(repaint) pkg.func"), whether or not the frame could have been
-// painted in part.
-type MotionReport struct {
-	Movers   []string
-	Refusals map[string]int64
-	Dirtiers map[string]int64
-}
-
-// ReadMotionReport reports what moves and what keeps frames whole. It is
-// safe to call from any goroutine.
-func ReadMotionReport() MotionReport {
-	motionMu.Lock()
-	defer motionMu.Unlock()
-	r := MotionReport{Movers: slices.Clone(lastMovers), Refusals: make(map[string]int64, len(partialRefusals))}
-	for k, v := range partialRefusals {
-		r.Refusals[k] = v
-	}
-	r.Dirtiers = make(map[string]int64, len(dirtiers))
-	for k, v := range dirtiers {
-		r.Dirtiers[dirtierName(k)] += v
-	}
-	return r
 }
 
 // RepaintRect asks for r, in the window's logical coordinates, to be
@@ -533,12 +458,7 @@ func (w *Window) RepaintRect(r Rect) {
 		return
 	}
 	w.repaintMu.Lock()
-	if len(w.repaints) >= mostRepaints {
-		// Past so many, the one region around them all.
-		r = r.Cover(region.CoverAll(w.repaints))
-		w.repaints = w.repaints[:0]
-	}
-	w.repaints = append(w.repaints, r)
+	w.addRepaintLocked(r)
 	w.repaintMu.Unlock()
 	w.wakeFrame()
 }
@@ -552,16 +472,20 @@ func (w *Window) addRepaints(rs []Rect) {
 	w.repaintMu.Lock()
 	defer w.repaintMu.Unlock()
 	for _, r := range rs {
-		if r.Empty() {
-			continue
+		if !r.Empty() {
+			w.addRepaintLocked(r.Grow(damageReach))
 		}
-		r = r.Grow(damageReach)
-		if len(w.repaints) >= mostRepaints {
-			r = r.Cover(region.CoverAll(w.repaints))
-			w.repaints = w.repaints[:0]
-		}
-		w.repaints = append(w.repaints, r)
 	}
+}
+
+// addRepaintLocked keeps r among the asked regions; past mostRepaints of
+// them, they become the one region around them all.
+func (w *Window) addRepaintLocked(r Rect) {
+	if len(w.repaints) >= mostRepaints {
+		r = r.Cover(region.CoverAll(w.repaints))
+		w.repaints = w.repaints[:0]
+	}
+	w.repaints = append(w.repaints, r)
 }
 
 // mostRepaints is how many asked regions a frame keeps apart.

@@ -649,7 +649,7 @@ control supports `.Name("Appearance")`, `.OnChange(fn)`, `.Disabled(v)`, and
 
 | Concern | File |
 | --- | --- |
-| `TextStyle`, `Env`, typed environment values | [style.go](../style.go) |
+| `TextStyle`, `Env`, typed environment values | [environment.go](../environment.go) |
 | Root environment, editor/scrollbar styles, spacing and background | [environment.go](../environment.go) |
 | Theme tokens, followers, defaults, presets and application | [ui/theme/](../ui/theme/) |
 | Reading shadcn/ui CSS | [ui/theme/css.go](../ui/theme/css.go) |
