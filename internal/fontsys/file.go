@@ -1,4 +1,4 @@
-package ggui
+package fontsys
 
 import (
 	"encoding/binary"
@@ -109,7 +109,7 @@ func faceCount(r io.ReaderAt) (int, error) {
 // w as the system's index has it: its light source read when f is first
 // asked about, and the rest when it first draws. A family's faces are
 // many, and most are never chosen.
-func indexedFont(file fontFile, w FontWeight) *Font {
+func indexedFont(file fontFile, w Weight) *Font {
 	f := &Font{weight: w}
 	f.lightLoad = func() *text.GoTextFaceSource {
 		if r, size, err := openFontFile(file.path); err == nil {
@@ -119,7 +119,7 @@ func indexedFont(file fontFile, w FontWeight) *Font {
 		}
 		// The file is gone or changed since it was indexed. The built-in
 		// font stands in rather than leave f with no source.
-		return builtinFont().source()
+		return Builtin().Source()
 	}
 	f.load = func() *text.GoTextFaceSource {
 		light := f.lightSource()
@@ -140,7 +140,7 @@ func fileFont(r io.ReaderAt, size int64, index int) (*Font, error) {
 	if err != nil {
 		return nil, err
 	}
-	f := &Font{light: light, weight: FontWeight(light.Metadata().Weight)}
+	f := &Font{light: light, weight: Weight(light.Metadata().Weight)}
 	f.load = func() *text.GoTextFaceSource {
 		src, err := text.NewGoTextFaceSourceAt(r, size, text.SourceOptions{Index: index})
 		if err != nil {

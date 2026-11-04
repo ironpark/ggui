@@ -3,6 +3,7 @@ package ggui
 import (
 	"iter"
 
+	"github.com/ironpark/ggui/internal/fontsys"
 	"github.com/ironpark/ggui/internal/reactive"
 )
 
@@ -32,7 +33,7 @@ type world struct {
 	font        *Font                      // see SetDefaultFont; nil inherits
 	mono        *Font                      // see SetDefaultMonoFont; nil inherits
 	nativeFonts bool                       // an App's: defaults to the platform's fonts
-	emoji       *emojiChoice               // see SetEmojiFont; nil inherits
+	emoji       *fontsys.EmojiChoice       // see SetEmojiFont; nil inherits
 	fontGen     uint64                     // counts this world's font and emoji settings
 	ime         func(*TextInputWidget) ime // a test's IME; nil inherits
 }

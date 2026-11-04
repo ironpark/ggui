@@ -4,7 +4,9 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/ironpark/ggui/internal/fontsys"
 	"github.com/ironpark/ggui/internal/text"
+	"github.com/ironpark/ggui/internal/textlayout"
 	"golang.org/x/image/font/gofont/goregular"
 )
 
@@ -14,17 +16,17 @@ func TestKoreanFallsBackToASystemFont(t *testing.T) {
 		t.Skip("no system font draws Korean on this machine")
 	}
 	face := fallbackFont().face(14, 0)
-	if ef, ok := face.(*emojiFace); ok {
+	if ef, ok := face.(*fontsys.EmojiFace); ok {
 		face = ef.Face
 	}
 	if _, ok := face.(*text.MultiFace); !ok {
 		t.Fatalf("default face is %T, want a MultiFace with system fallbacks", face)
 	}
-	if lineWidth("한글", face) <= 0 {
+	if textlayout.Width("한글", face) <= 0 {
 		t.Fatal("Korean measures as zero width: no glyphs")
 	}
 	bare := MustFont(goregular.TTF).NoFallback()
-	if bare.face(14, 0).(*text.GoTextFace) == nil || lineWidth("한글", bare.face(14, 0)) >= lineWidth("한글", face) {
+	if bare.face(14, 0).(*text.GoTextFace) == nil || textlayout.Width("한글", bare.face(14, 0)) >= textlayout.Width("한글", face) {
 		t.Fatal("NoFallback still draws Korean, or the fallback did not change the measurement")
 	}
 }
@@ -54,7 +56,7 @@ func TestGlyphsNoListedFontHasComeFromAnyFontThatDoes(t *testing.T) {
 	}
 	var s string
 	for _, r := range []rune{'𓀀', 'ᚠ', 'Ꭰ', 'ⴰ', 'ሀ', 'ก', 'ა', 'अ'} {
-		if systemFallback(r) == nil || slices.ContainsFunc(SystemFonts(), func(f *Font) bool { return drawn(string(r), f.face(14, 0)) }) {
+		if fontsys.SystemFallback(r) == nil || slices.ContainsFunc(SystemFonts(), func(f *Font) bool { return drawn(string(r), f.face(14, 0)) }) {
 			continue
 		}
 		s = string(r)
@@ -64,13 +66,13 @@ func TestGlyphsNoListedFontHasComeFromAnyFontThatDoes(t *testing.T) {
 		t.Skip("no system font has a rune that the listed ones lack")
 	}
 	face := fallbackFont().face(14, 0)
-	if ef, ok := face.(*emojiFace); ok {
+	if ef, ok := face.(*fontsys.EmojiFace); ok {
 		face = ef.Face
 	}
 	if !drawn(s, face) {
-		t.Fatalf("%q draws .notdef, though %s has it", s, systemFallback([]rune(s)[0]).meta().Metadata().Family)
+		t.Fatalf("%q draws .notdef, though %s has it", s, fontsys.SystemFallback([]rune(s)[0]).Meta().Metadata().Family)
 	}
-	if !drawn("a"+s+"b", face) || lineWidth("a"+s+"b", face) <= lineWidth("ab", face) {
+	if !drawn("a"+s+"b", face) || textlayout.Width("a"+s+"b", face) <= textlayout.Width("ab", face) {
 		t.Fatalf("%q between Latin letters is not drawn", s)
 	}
 }

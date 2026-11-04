@@ -1,4 +1,4 @@
-package ggui
+package fontsys
 
 import (
 	"runtime"
@@ -54,7 +54,7 @@ func systemFamily(family string) *Font {
 func indexedFamily(fps []fontscan.Footprint, family string) *Font {
 	var base *Font
 	for _, fp := range familyFaces(fps, family) {
-		w := FontWeight(fp.Aspect.Weight)
+		w := Weight(fp.Aspect.Weight)
 		if base != nil && (base.weight == w || slices.ContainsFunc(base.weights, func(f *Font) bool { return f.weight == w })) {
 			continue
 		}
@@ -100,7 +100,7 @@ func weightDistance(w font.Weight) int {
 	return int(max(w-font.WeightNormal, font.WeightNormal-w))
 }
 
-// fallbackChoices are the fonts systemFallback chose, by normalized family,
+// fallbackChoices are the fonts SystemFallback chose, by normalized family,
 // and its answer for each rune asked about.
 type fallbackChoices struct {
 	sync.Mutex
@@ -111,14 +111,14 @@ type fallbackChoices struct {
 
 var systemFallbacks = fallbackChoices{families: map[string]*Font{}, runes: map[rune]*Font{}, runeLens: map[int]int{}}
 
-// systemFallback returns a system font that has r, for text whose fonts
+// SystemFallback returns a system font that has r, for text whose fonts
 // lack it, or nil if none has. Of the fonts that have r it prefers an
 // upright one, then one that reads as interface text (see fallbackRank),
 // then the one covering the fewest runes, so that a font made for r's
 // script wins over a font covering all of Unicode, which is also large to
 // load. Placeholder fonts, emoji fonts, which have their own place, and
 // fonts private to the platform are never chosen.
-func systemFallback(r rune) *Font {
+func SystemFallback(r rune) *Font {
 	s := &systemFallbacks
 	s.Lock()
 	defer s.Unlock()
@@ -241,12 +241,12 @@ var platformTextFamilies = func() []string {
 }()
 
 // systemFallbackFace returns a FallbackFace that draws, at size and
-// weight, what the faces before it lack with systemFallback's fonts, and
+// weight, what the faces before it lack with SystemFallback's fonts, and
 // what no font has with last.
-func systemFallbackFace(size float64, weight FontWeight, last text.Face) text.Face {
+func systemFallbackFace(size float64, weight Weight, last text.Face) text.Face {
 	return text.NewFallbackFace(func(r rune) text.Face {
-		if f := systemFallback(r); f != nil {
-			return f.face(size, weight)
+		if f := SystemFallback(r); f != nil {
+			return f.Face(size, weight, nil)
 		}
 		return nil
 	}, last)

@@ -5,7 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ironpark/ggui/internal/fontsys"
 	"github.com/ironpark/ggui/internal/textedit"
+	"github.com/ironpark/ggui/internal/textlayout"
 
 	"github.com/ironpark/ggui/internal/text"
 )
@@ -29,7 +31,7 @@ func TestEmojiSequencesStayInOneColorGlyph(t *testing.T) {
 	face := fallbackFont().face(20, 0)
 	for _, s := range []string{"👍", "👍🏽", "🇰🇷", "👩🏽‍💻", "👨‍👩‍👧‍👦", "1️⃣", "🏳️‍🌈", "❤️", "🫩"} {
 		t.Run(s, func(t *testing.T) {
-			for run, f := range textRuns(s, face) {
+			for run, f := range fontsys.TextRuns(s, face) {
 				if run != s {
 					t.Fatalf("split sequence: %q", run)
 				}
@@ -38,7 +40,7 @@ func TestEmojiSequencesStayInOneColorGlyph(t *testing.T) {
 					t.Fatalf("%q: expected one color glyph, got %d", s, len(glyphs))
 				}
 			}
-			if lineWidth(s, face) <= 0 {
+			if textlayout.Width(s, face) <= 0 {
 				t.Fatal("zero width")
 			}
 		})
@@ -48,15 +50,15 @@ func TestEmojiPresentationAndTextShaping(t *testing.T) {
 	t.Parallel()
 	useTestEmoji(t)
 	face := fallbackFont().face(20, 0)
-	ef := face.(*emojiFace)
+	ef := face.(*fontsys.EmojiFace)
 	for _, s := range []string{"AV 123 # * © ♥︎", "plain text"} {
-		if got, want := lineWidth(s, face), text.AdvanceAt(s, len(s), ef.Face); got != want {
+		if got, want := textlayout.Width(s, face), text.AdvanceAt(s, len(s), ef.Face); got != want {
 			t.Fatalf("ordinary text width changed: %q %v != %v", s, got, want)
 		}
 	}
 	for _, s := range []string{"👍🏽", "🇰🇷", "👩🏽‍💻", "1️⃣", "🏳️‍🌈", "❤️"} {
 		source := strings.Repeat(s, 3)
-		if got := wrapText(source, face, 1); len(got) != 3 {
+		if got := textlayout.Wrap(source, face, 1); len(got) != 3 {
 			t.Fatalf("split emoji clusters: %q", got)
 		} else {
 			for _, line := range got {
@@ -65,12 +67,12 @@ func TestEmojiPresentationAndTextShaping(t *testing.T) {
 				}
 			}
 		}
-		spans := wrapSpans(source, face, 1)
+		spans := textlayout.WrapSpans(source, face, 1)
 		if len(spans) != 3 {
 			t.Fatalf("editor wrap: %+v", spans)
 		}
 		for _, span := range spans {
-			if source[span.start:span.end] != s {
+			if source[span.Start:span.End] != s {
 				t.Fatalf("editor broke cluster: %+v", span)
 			}
 		}
@@ -109,7 +111,7 @@ func TestEmojiPointerCaretAndBackspace(t *testing.T) {
 			w := TextInput(value)
 			w.Layout(Tight(Sz(300, 30)), rootEnv())
 			for x := 0.0; x <= w.advance(s)+5; x += .5 {
-				i := w.indexInLine(lineSpan{0, len(s)}, x)
+				i := w.indexInLine(textlayout.Span{Start: 0, End: len(s)}, x)
 				if i != 0 && i != len(s) {
 					t.Fatalf("click at x=%v placed caret inside emoji at byte %d/%d", x, i, len(s))
 				}

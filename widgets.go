@@ -7,9 +7,11 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/internal/fn"
+	"github.com/ironpark/ggui/internal/fontsys"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/text"
+	"github.com/ironpark/ggui/internal/textlayout"
 	"github.com/ironpark/ggui/pkg/layout"
 )
 
@@ -94,7 +96,7 @@ type richAt struct {
 	env  Env
 }
 
-// wrapKey is the input wrapText was last run with.
+// wrapKey is the input textlayout.Wrap was last run with.
 type wrapKey struct {
 	generation uint64
 	value      string
@@ -331,20 +333,20 @@ func (t *TextWidget) layoutLines(maxW float64, env Env) {
 	if key != t.wrapped {
 		t.wrapped = key
 		t.glyphFace = nil // the lines' glyphs are of the lines before
-		t.lines = wrapText(key.value, face, pick(t.wrap, key.maxW, 0))
+		t.lines = textlayout.Wrap(key.value, face, pick(t.wrap, key.maxW, 0))
 		if n := key.maxLines; n > 0 && len(t.lines) > n {
 			t.lines = t.lines[:n]
-			t.lines[n-1] = ellipsize(t.lines[n-1], face, key.maxW, true)
+			t.lines[n-1] = textlayout.Ellipsize(t.lines[n-1], face, key.maxW, true)
 		}
 		if key.ellipsis {
 			for i, line := range t.lines {
-				t.lines[i] = ellipsize(line, face, key.maxW, false)
+				t.lines[i] = textlayout.Ellipsize(line, face, key.maxW, false)
 			}
 		}
 		t.widths = t.widths[:0]
 		var w float64
 		for _, line := range t.lines {
-			lw := lineWidth(line, face)
+			lw := textlayout.Width(line, face)
 			t.widths = append(t.widths, lw)
 			w = max(w, lw)
 		}
@@ -423,9 +425,9 @@ func (t *TextWidget) paintLines(dst *Canvas, r Rect, upright bool, place func(op
 
 // drawLine draws line i, from the glyphs it keeps when it can.
 func (t *TextWidget) drawLine(dst *ggfx.Image, i int, line string, face text.Face, op *text.DrawOptions) {
-	plain := plainFace(face, line)
+	plain := fontsys.PlainFace(face, line)
 	if plain == nil {
-		drawText(dst, line, face, op)
+		fontsys.DrawText(dst, line, face, op)
 		return
 	}
 	if t.glyphFace != plain || len(t.glyphs) != len(t.lines) {

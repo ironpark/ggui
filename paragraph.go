@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"github.com/ironpark/ggui/internal/text"
+	"github.com/ironpark/ggui/internal/textlayout"
 )
 
 // paragraph is text in several styles laid out as one: it wraps across
@@ -58,7 +59,7 @@ func (p *paragraph) width(a, b int) float64 {
 	for i, r := range p.runs {
 		lo, hi := max(a, r.start), min(b, r.end)
 		if lo < hi {
-			w += lineWidth(p.text[lo:hi], p.face(i))
+			w += textlayout.Width(p.text[lo:hi], p.face(i))
 		}
 	}
 	return w
@@ -79,7 +80,7 @@ func (p *paragraph) prefix(a, b int) func(x int) float64 {
 		if lo >= hi {
 			continue
 		}
-		w := prefixWidths(p.text[lo:hi], p.face(i))
+		w := textlayout.PrefixWidths(p.text[lo:hi], p.face(i))
 		parts = append(parts, part{lo, hi, total, w})
 		total += w(hi - lo)
 	}
@@ -114,17 +115,17 @@ func (p *paragraph) runAt(pos int) int {
 // that is positive, the last cut with "…" when text goes on past it; and
 // with ellipsis every line too wide cut to fit.
 func (p *paragraph) layout(maxW float64, wrap bool, maxLines int, ellipsis bool) {
-	spans := wrapSpansBy(p.text, p.width, pick(wrap, maxW, 0))
+	spans := textlayout.WrapSpansBy(p.text, p.width, pick(wrap, maxW, 0))
 	truncated := maxLines > 0 && len(spans) > maxLines
 	if truncated {
 		spans = spans[:maxLines]
 	}
 	p.lines = p.lines[:0]
 	for i, sp := range spans {
-		ln := paraLine{start: sp.start, end: sp.end}
-		ell, cut := -1, truncated && i == len(spans)-1 || ellipsis && p.width(sp.start, sp.end) > maxW
+		ln := paraLine{start: sp.Start, end: sp.End}
+		ell, cut := -1, truncated && i == len(spans)-1 || ellipsis && p.width(sp.Start, sp.End) > maxW
 		if cut {
-			ln.end, ell = p.cut(sp.start, sp.end, maxW)
+			ln.end, ell = p.cut(sp.Start, sp.End, maxW)
 		}
 		p.buildLine(&ln, cut, ell)
 		p.lines = append(p.lines, ln)
@@ -171,8 +172,8 @@ func (p *paragraph) leading(ln *paraLine) float64 {
 // style draws the "…".
 func (p *paragraph) cut(a, b int, maxW float64) (int, int) {
 	ell := p.runAt(max(b-1, a))
-	room := maxW - lineWidth(ellipsisText, p.face(ell))
-	keep := ellipsizeBy(p.text, a, b, p.prefix(a, b), room)
+	room := maxW - textlayout.Width(textlayout.Ellipsis, p.face(ell))
+	keep := textlayout.EllipsizeBy(p.text, a, b, p.prefix(a, b), room)
 	for keep > a && (p.text[keep-1] == ' ' || p.text[keep-1] == '\t') {
 		keep--
 	}
@@ -194,7 +195,7 @@ func (p *paragraph) buildLine(ln *paraLine, cut bool, ell int) {
 	if cut {
 		st := p.style(ell)
 		n := len(ln.s)
-		ln.s += ellipsisText
+		ln.s += textlayout.Ellipsis
 		ln.styles = append(ln.styles, lineStyle{start: n, end: len(ln.s), font: st.Font, size: st.Size, weight: st.Weight, run: ell})
 	}
 	for _, st := range ln.styles {

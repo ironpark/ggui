@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui/internal/text"
 	"github.com/ironpark/ggui/internal/textedit"
+	"github.com/ironpark/ggui/internal/textlayout"
 	"golang.org/x/image/font/gofont/gomono"
 )
 
@@ -14,7 +15,7 @@ import (
 func TestDrawTextCellsKeepsEveryGraphemeOnItsCell(t *testing.T) {
 	t.Parallel()
 	face := MustFont(gomono.TTF).NoFallback().face(13*2, 0)
-	adv := lineWidth("M", face)
+	adv := textlayout.Width("M", face)
 	cell := math.Round(adv) + 1 // well off the advance, so drift would show
 	const x0 = 20.25
 	s := "é" + "abcdefghijklmnopqrstuvwxyz0123456789"

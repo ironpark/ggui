@@ -6,6 +6,7 @@ import (
 	"unsafe"
 
 	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/internal/textlayout"
 	"github.com/ironpark/ggui/runtime"
 )
 
@@ -311,19 +312,19 @@ func TestTextInputMultilineWrapsGrowsAndNavigates(t *testing.T) {
 		t.Fatalf("click at the top left: focused %v caret %d", w.Focused(), w.ed.Caret)
 	}
 	typeKeys(&in, Mods{}, KeyEnd)
-	if w.ed.Caret != spans[0].end {
-		t.Fatalf("End went to %d, want the end of the first line %d", w.ed.Caret, spans[0].end)
+	if w.ed.Caret != spans[0].End {
+		t.Fatalf("End went to %d, want the end of the first line %d", w.ed.Caret, spans[0].End)
 	}
 	typeKeys(&in, Mods{}, KeyArrowDown)
-	if got := lineOf(spans, w.ed.Caret); got != 1 {
+	if got := textlayout.LineOf(spans, w.ed.Caret); got != 1 {
 		t.Fatalf("Down landed on line %d", got)
 	}
 	typeKeys(&in, Mods{}, KeyHome)
-	if w.ed.Caret != spans[1].start {
-		t.Fatalf("Home on line 2 went to %d, want %d", w.ed.Caret, spans[1].start)
+	if w.ed.Caret != spans[1].Start {
+		t.Fatalf("Home on line 2 went to %d, want %d", w.ed.Caret, spans[1].Start)
 	}
 	typeKeys(&in, Mods{}, KeyEnter)
-	if got := Untrack(w.value.Get); got[spans[1].start] != '\n' {
+	if got := Untrack(w.value.Get); got[spans[1].Start] != '\n' {
 		t.Fatalf("Enter did not insert a line break: %q", got)
 	}
 	submitted := ""
@@ -335,7 +336,7 @@ func TestTextInputMultilineWrapsGrowsAndNavigates(t *testing.T) {
 	// A click on the second line lands there.
 	paintFrame(&in, w, Sz(200, grown.H))
 	in.dispatch(frameInput{pos: Pt(5, w.spacing()+2), down: []MouseButton{MouseButtonLeft}})
-	if got := lineOf(w.spans(w.ed.Text), w.ed.Caret); got != 1 {
+	if got := textlayout.LineOf(w.spans(w.ed.Text), w.ed.Caret); got != 1 {
 		t.Fatalf("click on the second line put the caret on line %d", got)
 	}
 }
@@ -388,7 +389,7 @@ func TestTextInputKeyHookLeavesCompositionWithIME(t *testing.T) {
 func TestNoWrapBreaksOnlyAtLineBreaks(t *testing.T) {
 	useFakeIME(t)
 	w := TextInput(State("a long first line that would wrap\nsecond")).NoWrap()
-	if got := w.spans(w.ed.Text); len(got) != 2 || got[1] != (lineSpan{34, 40}) {
+	if got := w.spans(w.ed.Text); len(got) != 2 || got[1] != (textlayout.Span{Start: 34, End: 40}) {
 		t.Fatalf("spans = %v, want the two lines as written", got)
 	}
 	var in inputState

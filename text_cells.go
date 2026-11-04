@@ -5,10 +5,10 @@ import (
 	"slices"
 
 	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggui/internal/fontsys"
 	"github.com/ironpark/ggui/internal/pool"
 	"github.com/ironpark/ggui/internal/text"
 
-	"github.com/ironpark/ggui/internal/emojidata"
 	"github.com/ironpark/ggui/internal/textedit"
 )
 
@@ -37,18 +37,16 @@ func (c *Canvas) DrawTextCells(s string, st TextStyle, at Point, cellW float64) 
 	}()
 	buf.bounds = textedit.AppendBounds(buf.bounds[:0], s)
 	face := st.Font.face(c.px(st.Size), st.Weight)
-	if ef, ok := face.(*emojiFace); ok {
-		if emojidata.MayHold(s) {
-			// An emoji is drawn from a font of its own, with its own
-			// metrics: one grapheme at a time keeps it in its cell.
-			x := at.X
-			for k := 0; k+1 < len(buf.bounds); k++ {
-				c.DrawTextStyle(s[buf.bounds[k]:buf.bounds[k+1]], st, Pt(x, at.Y))
-				x += cellW
-			}
-			return
+	face = fontsys.PlainFace(face, s)
+	if face == nil {
+		// An emoji is drawn from a font of its own, with its own
+		// metrics: one grapheme at a time keeps it in its cell.
+		x := at.X
+		for k := 0; k+1 < len(buf.bounds); k++ {
+			c.DrawTextStyle(s[buf.bounds[k]:buf.bounds[k+1]], st, Pt(x, at.Y))
+			x += cellW
 		}
-		face = ef.Face
+		return
 	}
 
 	var tint, colored ggfx.ColorScale

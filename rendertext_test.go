@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"golang.org/x/image/font/gofont/goregular"
+
+	"github.com/ironpark/ggui/internal/textlayout"
 )
 
 // inked counts the pixels of img with any alpha, and those with a color
@@ -30,7 +32,7 @@ func TestRenderTextDrawsWhatTextMeasures(t *testing.T) {
 	font := MustFont(goregular.TTF).NoFallback()
 	st := TextStyle{Font: font, Size: 20}
 	img := RenderText("Hello, world", st, 0)
-	want := lineWidth("Hello, world", font.face(20, 0))
+	want := textlayout.Width("Hello, world", font.face(20, 0))
 	if w := float64(img.Bounds().Dx()); math.Abs(w-want) > 1 {
 		t.Errorf("image is %v wide, Text measures %v", w, want)
 	}

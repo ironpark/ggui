@@ -4,7 +4,9 @@ import (
 	"image"
 	"image/color"
 
+	"github.com/ironpark/ggui/internal/fontsys"
 	"github.com/ironpark/ggui/internal/text"
+	"github.com/ironpark/ggui/internal/textlayout"
 )
 
 // An overlay is drawn over the whole window after the widget tree, and is
@@ -83,7 +85,7 @@ func (c *Canvas) DrawText(s string, font *Font, size float64, at Point, col colo
 	op := &text.DrawOptions{}
 	op.ColorScale.ScaleWithColor(col)
 	op.GeoM.Translate(c.px(at.X), c.px(at.Y))
-	drawText(c.Image, s, font.face(c.px(size), 0), op)
+	fontsys.DrawText(c.Image, s, font.face(c.px(size), 0), op)
 }
 
 // TextWidth measures s as DrawText would draw it, in logical pixels.
@@ -91,7 +93,7 @@ func (c *Canvas) TextWidth(s string, font *Font, size float64) float64 {
 	if font == nil {
 		font = fallbackFont()
 	}
-	return c.dp(lineWidth(s, font.face(c.px(size), 0)))
+	return c.dp(textlayout.Width(s, font.face(c.px(size), 0)))
 }
 
 // DrawTextStyle is DrawText in a whole TextStyle: its Font, Size and Color,
@@ -106,14 +108,14 @@ func (c *Canvas) DrawTextStyle(s string, st TextStyle, at Point) {
 	op := &text.DrawOptions{}
 	op.ColorScale.ScaleWithColor(st.Color)
 	op.GeoM.Translate(c.px(at.X), c.px(at.Y))
-	drawText(c.Image, s, st.Font.face(c.px(st.Size), st.Weight), op)
+	fontsys.DrawText(c.Image, s, st.Font.face(c.px(st.Size), st.Weight), op)
 }
 
 // TextStyleWidth measures s as DrawTextStyle would draw it, in logical
 // pixels.
 func (c *Canvas) TextStyleWidth(s string, st TextStyle) float64 {
 	st = st.resolved()
-	return c.dp(lineWidth(s, st.Font.face(c.px(st.Size), st.Weight)))
+	return c.dp(textlayout.Width(s, st.Font.face(c.px(st.Size), st.Weight)))
 }
 
 // FitText returns s as it fits in width at size, cut with "…" when it is
@@ -122,7 +124,7 @@ func (c *Canvas) FitText(s string, font *Font, size, width float64) string {
 	if font == nil {
 		font = fallbackFont()
 	}
-	return ellipsize(s, font.face(c.px(size), 0), c.px(width), false)
+	return textlayout.Ellipsize(s, font.face(c.px(size), 0), c.px(width), false)
 }
 
 // Physical is r in the pixels of Image, for an Overlay that keeps an image
