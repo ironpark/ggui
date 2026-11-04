@@ -409,18 +409,11 @@ func (l *frameLoop) paint(p paintPass) (bool, error) {
 	c.prev, c.hits = c.hits, p.hits
 	f := c.fs()
 	f.logical = p.size
-	clear(f.trace)
-	clear(f.traceWidgets)
-	f.tracing = p.tracing
-	f.trace, f.traceWidgets = f.trace[:0], f.traceWidgets[:0]
-	f.focusBounds, f.focusKey, f.focusPainted = Rect{}, nil, false
-	if p.in.focused != nil {
-		f.focusBounds, f.focusKey = p.in.focused.rect, p.in.focused.key
-	}
-	f.focusVisible = p.in.focused != nil && p.in.focusVisible
-	f.pressed = p.in.pressed != nil
+	f.clock = &l.world().frame
+	defer func() { f.clock = nil }()
+	f.traceState.reset(p.tracing)
+	f.inputView.take(p.in)
 	f.resetCanvases()
-	f.pointerRead = false
 	f.startMotion()
 	c.nextFrame()
 	c.resetSemantics()

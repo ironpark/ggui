@@ -14,6 +14,260 @@ import (
 	"github.com/ironpark/ggui/pkg/geom"
 )
 
+// Drawing on a Canvas. The rectangles, circles and lines a widget draws
+// most go first: a rectangle as one batched image, the rest as signed
+// distance fields the render package shades. Paths, gradients, clips to a
+// shape and layers follow. Each culls what lands outside the image, while
+// noting where it would have drawn for a frame painted in part.
+
+// visiblePaintBounds tests drawing only; callers must still collect input,
+// semantics and traces. Keep one physical pixel for antialiasing and round to
+// float32 like the vector API. Unusual geometry takes the original draw path.
+func (c *Canvas) visiblePaintBounds(r Rect, extra float64) bool {
+	if c == nil {
+		return false
+	}
+	// Seen or not, it is where the widget painting draws.
+	c.fs().drew(r, extra)
+	return c.overlaps(r, extra)
+}
+
+// Shows reports whether any of r, in the canvas's coordinates, lands where
+// this frame paints. A frame painted in part paints only around what
+// changed: a widget whose drawing costs more than the draws themselves,
+// copying a screen out of a terminal say, need not do that work for a
+// frame that keeps what it showed. It must still collect input and
+// semantics, as all widgets do.
+//
+// Only r itself counts, not the pixel drawing at its edge may smear past
+// it, and r's edge on the edge of what is painted does not.
+func (c *Canvas) Shows(r Rect) bool {
+	if c == nil || c.Image == nil {
+		return false
+	}
+	return c.physical(r).Overlaps(c.Image.Bounds())
+}
+
+func (c *Canvas) overlaps(r Rect, extra float64) bool {
+	if c.Image == nil {
+		return false
+	}
+	bounds := c.Image.Bounds()
+	if bounds.Empty() {
+		return false
+	}
+	x, y, w, h := c.Px(r.Origin.X), c.Px(r.Origin.Y), c.Px(r.Size.W), c.Px(r.Size.H)
+	pad := c.px(extra) + 1
+	// Avoid culling huge coordinates where float32 intermediate rounding
+	// can exceed the one-pixel guard.
+	for _, v := range [...]float64{float64(x), float64(y), float64(w), float64(h), pad} {
+		if math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > 1<<20 {
+			return true
+		}
+	}
+	if w < 0 || h < 0 || pad < 1 {
+		return true
+	}
+	return float64(x+w)+pad > float64(bounds.Min.X) && float64(y+h)+pad > float64(bounds.Min.Y) &&
+		float64(x)-pad < float64(bounds.Max.X) && float64(y)-pad < float64(bounds.Max.Y)
+}
+
+// FillRect fills the logical Rect r with col.
+//
+// A rectangle is drawn without anti-aliasing, which its axis-aligned edges
+// have no use for. That matters more than it sounds: ggfx draws an
+// anti-aliased shape by rendering it eight times into an offscreen stencil
+// buffer the size of the shape and compositing the result, which breaks the
+// batch both ways. A plain rectangle is instead one batched image, and most
+// of the large fills in a frame are rectangles: table rows, sidebars, text
+// selection, a modal's scrim.
+func (c *Canvas) FillRect(r Rect, col color.Color) {
+	if c == nil || c.Image == nil || col == nil {
+		return
+	}
+	if !c.visiblePaintBounds(r, 0) {
+		return
+	}
+	w, h := c.Px(r.Size.W), c.Px(r.Size.H)
+	// Without anti-aliasing a shape thinner than a pixel covers no pixel
+	// centre and disappears. A hairline divider asked for is drawn.
+	if r.Size.W > 0 {
+		w = max(w, 1)
+	}
+	if r.Size.H > 0 {
+		h = max(h, 1)
+	}
+	vector.FillRect(c.Image, c.Px(r.Origin.X), c.Px(r.Origin.Y), w, h, col, false)
+}
+
+// FillCircle fills a circle of logical radius around center with col.
+func (c *Canvas) FillCircle(center Point, radius float64, col color.Color) {
+	if c == nil || c.Image == nil || col == nil || radius <= 0 {
+		return
+	}
+	r := Rct(center.Add(Pt(-radius, -radius)), Sz(2*radius, 2*radius))
+	if !c.visiblePaintBounds(r, 0) {
+		return
+	}
+	// A circle is a rounded rectangle whose corner is its own half size.
+	c.shadeRoundRect(r, radius, 0, col)
+}
+
+// StrokeLine draws a line of logical width w from a to b in col. The ends
+// are cut square, so a line drawn in pieces joins up.
+func (c *Canvas) StrokeLine(a, b Point, w float64, col color.Color) {
+	if c == nil || c.Image == nil || col == nil || w <= 0 || c.Image.Bounds().Empty() {
+		return
+	}
+	if !c.visiblePaintBounds(Rct(Pt(min(a.X, b.X), min(a.Y, b.Y)), Sz(math.Abs(b.X-a.X), math.Abs(b.Y-a.Y))), w/2) {
+		return
+	}
+	// A line along an axis is a rectangle, and a rectangle draws as one
+	// batched image rather than a shaded quad of its own. Rules, table
+	// borders and the straight runs of a dashed outline are all this.
+	switch {
+	case a.Y == b.Y:
+		c.FillRect(Rct(Pt(min(a.X, b.X), a.Y-w/2), Sz(math.Abs(b.X-a.X), w)), col)
+	case a.X == b.X:
+		c.FillRect(Rct(Pt(a.X-w/2, min(a.Y, b.Y)), Sz(w, math.Abs(b.Y-a.Y))), col)
+	default:
+		c.shadeSegment(a, b, w, col)
+	}
+}
+
+// FillRoundRect fills the logical Rect r with col, with corners rounded by
+// radius. A zero radius is FillRect.
+func (c *Canvas) FillRoundRect(r Rect, radius float64, col color.Color) {
+	if c == nil || c.Image == nil || col == nil {
+		return
+	}
+	if !c.visiblePaintBounds(r, 0) {
+		return
+	}
+	if radius <= 0 {
+		c.FillRect(r, col)
+		return
+	}
+	c.shadeRoundRect(r, radius, 0, col)
+}
+
+// StrokeRoundRect draws a line of logical width w in col just inside r,
+// with corners rounded by radius.
+func (c *Canvas) StrokeRoundRect(r Rect, radius, w float64, col color.Color) {
+	if c == nil || c.Image == nil || col == nil || w <= 0 || c.Image.Bounds().Empty() {
+		return
+	}
+	if w <= r.Size.W && w <= r.Size.H && !c.visiblePaintBounds(r, w) {
+		return
+	}
+	// A border as thick as the box it outlines leaves no hole to draw
+	// around, so it is that box filled.
+	if w >= r.Size.W || w >= r.Size.H {
+		c.FillRoundRect(r, radius, col)
+		return
+	}
+	// The border straddles a rectangle inset by half its width, which is
+	// what keeps it just inside r.
+	inset := Rct(r.Origin.Add(Pt(w/2, w/2)), Sz(r.Size.W-w, r.Size.H-w))
+	c.shadeRoundRect(inset, max(radius-w/2, 0), w/2, col)
+}
+
+func pathOptions(col color.Color) *vector.DrawPathOptions {
+	op := &vector.DrawPathOptions{AntiAlias: true}
+	op.ColorScale.ScaleWithColor(col)
+	return op
+}
+
+// The shapes below are drawn by the render package from signed distance
+// fields; these methods turn logical coordinates into the Image's pixels.
+
+// shadeRoundRect draws the rounded rectangle shape in col. A zero halfStroke
+// fills it; otherwise shape is the centreline of a border of twice that
+// width. Both are logical, as radius is.
+func (c *Canvas) shadeRoundRect(shape Rect, radius, halfStroke float64, col color.Color) {
+	scale := c.Scale()
+	if math.IsNaN(scale) || math.IsInf(scale, 0) {
+		return
+	}
+	render.Shade(c.Image, render.Field{
+		Centre: Pt(c.px(shape.Origin.X+shape.Size.W/2), c.px(shape.Origin.Y+shape.Size.H/2)),
+		Axis:   Pt(1, 0),
+		Half:   Sz(shape.Size.W*scale/2, shape.Size.H*scale/2),
+		Radius: radius * scale,
+		Stroke: halfStroke * scale,
+	}, col)
+}
+
+// shadeSegment draws the line from a to b, w wide, in col. The ends are cut
+// square, as the vector renderer's default cap is.
+func (c *Canvas) shadeSegment(a, b Point, w float64, col color.Color) {
+	scale := c.Scale()
+	if math.IsNaN(scale) || math.IsInf(scale, 0) {
+		return
+	}
+	dx, dy := c.px(b.X-a.X), c.px(b.Y-a.Y)
+	length := math.Hypot(dx, dy)
+	if length == 0 || math.IsNaN(length) || math.IsInf(length, 0) {
+		return
+	}
+	render.Shade(c.Image, render.Field{
+		Centre: Pt(c.px((a.X+b.X)/2), c.px((a.Y+b.Y)/2)),
+		Axis:   Pt(dx/length, dy/length),
+		Half:   Sz(length/2, w*scale/2),
+	}, col)
+}
+
+// maskRoundRect draws img, a part of a layer, onto c where it lies within
+// the logical Rect r with corners rounded by radius.
+func (c *Canvas) maskRoundRect(img *ggfx.Image, r Rect, radius float64) {
+	scale := c.Scale()
+	centre := r.Center()
+	render.MaskRoundRect(c.Image, img, Pt(c.px(centre.X), c.px(centre.Y)), Sz(r.Size.W*scale/2, r.Size.H*scale/2), radius*scale)
+}
+
+// shadeImage draws img placed at the logical Rect at, cut to r with its
+// corners rounded by o.Radius, in one draw: a quad over r and a pixel of
+// edge, whose source positions follow at.
+func (c *Canvas) shadeImage(img *ggfx.Image, r, at Rect, o ImageOptions) {
+	scale := c.Scale()
+	reach := 1 / scale
+	if o.Rotation != 0 {
+		reach += math.Hypot(r.Size.W, r.Size.H)/2 - min(r.Size.W, r.Size.H)/2
+	}
+	if at.Size.W <= 0 || at.Size.H <= 0 || !c.visiblePaintBounds(r, reach) {
+		return
+	}
+	b := img.Bounds()
+	kx, ky := float64(b.Dx())/at.Size.W, float64(b.Dy())/at.Size.H
+	centre := r.Center()
+	sin, cos := math.Sincos(o.Rotation)
+	red, green, blue, alpha := float32(1), float32(1), float32(1), float32(1)
+	if o.Tint != nil {
+		t := render.Premul(o.Tint)
+		red, green, blue, alpha = t[0], t[1], t[2], t[3]
+	}
+	if o.Fade != 0 {
+		k := float32(1 - o.Fade)
+		red, green, blue, alpha = red*k, green*k, blue*k, alpha*k
+	}
+	e := 1 / scale // one device pixel of edge to antialias into
+	var vs [4]ggfx.Vertex
+	for i, p := range [4]Point{
+		{X: r.Origin.X - e, Y: r.Origin.Y - e}, {X: r.Origin.X + r.Size.W + e, Y: r.Origin.Y - e},
+		{X: r.Origin.X - e, Y: r.Origin.Y + r.Size.H + e}, {X: r.Origin.X + r.Size.W + e, Y: r.Origin.Y + r.Size.H + e},
+	} {
+		d := Pt(p.X-centre.X, p.Y-centre.Y)
+		turned := centre.Add(Pt(d.X*cos-d.Y*sin, d.X*sin+d.Y*cos))
+		vs[i] = ggfx.Vertex{
+			DstX: float32(c.px(turned.X)), DstY: float32(c.px(turned.Y)),
+			SrcX: float32(float64(b.Min.X) + (p.X-at.Origin.X)*kx), SrcY: float32(float64(b.Min.Y) + (p.Y-at.Origin.Y)*ky),
+			ColorR: red, ColorG: green, ColorB: blue, ColorA: alpha,
+			Custom0: float32(d.X * scale), Custom1: float32(d.Y * scale),
+		}
+	}
+	render.RoundRectImage(c.Image, img, vs, Sz(r.Size.W*scale/2, r.Size.H*scale/2), o.Radius*scale, o.Pixelated)
+}
+
 // Path is a reusable vector outline in logical pixels. Mutating a path invalidates
 // its device-scale cache. Like widgets, paths belong to the UI thread.
 type Path struct {

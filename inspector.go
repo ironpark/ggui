@@ -2,7 +2,10 @@ package ggui
 
 import (
 	"fmt"
+	"reflect"
 	"strconv"
+	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/ironpark/ggui/inspect"
@@ -309,4 +312,79 @@ func (c *ComponentWidget) InspectFields() []inspect.Field {
 		out = append(out, inspect.Field{Key: "made at", Value: c.origin})
 	}
 	return out
+}
+
+// traceState is every widget painted this frame, in paint order, while
+// the inspector or a sink reads it.
+type traceState struct {
+	trace        []inspect.Node // every Paint call
+	traceWidgets []Widget       // the widget behind each trace node
+	tracing      bool
+	depth        int
+	traceParent  int // index plus one of the widget currently painting
+	traceRoots   int
+}
+
+// reset begins a paint's trace, taken when tracing.
+func (t *traceState) reset(tracing bool) {
+	clear(t.trace)
+	clear(t.traceWidgets)
+	t.trace, t.traceWidgets = t.trace[:0], t.traceWidgets[:0]
+	t.tracing, t.traceParent, t.traceRoots = tracing, 0, 0
+}
+
+// traceEnter records w, painting into r through c, as the next node of the
+// frame's trace, and returns what traceLeave takes once w has painted.
+func (f *frameState) traceEnter(c *Canvas, w Widget, r Rect) (parent int) {
+	parent = f.traceParent
+	path := "/" + strconv.Itoa(f.traceRoots)
+	if parent > 0 {
+		p := &f.trace[parent-1]
+		path = p.Path + "/" + strconv.Itoa(p.Children)
+		p.Children++
+	} else {
+		f.traceRoots++
+	}
+	f.trace = append(f.trace, inspect.Node{
+		Rect: r, Depth: f.depth, Name: widgetName(w), Kind: inspectKind(w),
+		ID: inspectComparable(idOf(w)), Instance: inspectComparable(w),
+		Path: path, Clip: c.clip, Clipped: c.clipped,
+	})
+	f.traceWidgets = append(f.traceWidgets, w)
+	f.traceParent = len(f.trace)
+	f.depth++
+	return parent
+}
+
+// traceLeave ends the node traceEnter began.
+func (f *traceState) traceLeave(parent int) { f.depth--; f.traceParent = parent }
+
+var widgetNames sync.Map // reflect.Type -> string; names never change
+
+// inspectComparable keeps a widget id only when it can be compared, so an
+// inspect.Node stays usable as a map key however a widget was identified.
+func inspectComparable(v any) any {
+	if v != nil && reflect.ValueOf(v).Comparable() {
+		return v
+	}
+	return nil
+}
+
+// widgetName is a widget's type for the inspector: Box for *ggui.BoxWidget.
+func widgetName(w Widget) string {
+	t := reflect.TypeOf(w)
+	if name, ok := widgetNames.Load(t); ok {
+		return name.(string)
+	}
+	original := t
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	name := t.Name()
+	if i := strings.Index(name, "["); i >= 0 {
+		name = name[:i]
+	}
+	name = strings.TrimSuffix(name, "Widget")
+	widgetNames.Store(original, name)
+	return name
 }
