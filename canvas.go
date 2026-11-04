@@ -33,6 +33,9 @@ type Canvas struct {
 	scope   *focusScope // the focus trap regions are registered under, if any
 	group   any         // what regions painted now belong to, for EachKeyed's eviction
 	space   *paintSpace // inside a Transform or a shape clip; see effects.go
+	// enclosing is what the widget painting now set for those inside it to
+	// find; see Enclose.
+	enclosing any
 
 	// window is set on a Canvas that draws into the window's own image,
 	// its screen or its backbuffer, and onScreen when that is the screen,
@@ -534,6 +537,41 @@ func (c *Canvas) Clip(r Rect) *Canvas {
 	return c.clipInto(child, r)
 }
 
+// Enclose paints fn with v as what encloses what fn paints: a widget
+// painted inside finds v with Enclosing, as a context menu inside another
+// finds the other.
+func (c *Canvas) Enclose(v any, fn func()) {
+	if c == nil {
+		fn()
+		return
+	}
+	prev := c.enclosing
+	c.enclosing = v
+	defer func() { c.enclosing = prev }()
+	fn()
+}
+
+// TakesInput reports whether the hit regions registered through c take
+// input: not on an Inert Canvas, nor in a frame painted over the last one
+// in part, whose regions stay the last whole frame's.
+func (c *Canvas) TakesInput() bool { return c != nil && !c.inert }
+
+// Enclosing is what the nearest Enclose around this paint set, or nil.
+func (c *Canvas) Enclosing() any {
+	if c == nil {
+		return nil
+	}
+	return c.enclosing
+}
+
+// Visible is the part of r this Canvas draws in: r within its clip.
+func (c *Canvas) Visible(r Rect) Rect {
+	if c != nil && c.clipped {
+		return r.Intersect(c.clip)
+	}
+	return r
+}
+
 // ClipReusing is Clip made in reuse, a Canvas the caller keeps from frame
 // to frame, for a widget that clips each time it paints: a row of a long
 // list clipping its content would otherwise make a Canvas a row a frame.
@@ -548,7 +586,7 @@ func (c *Canvas) ClipReusing(reuse *Canvas, r Rect) *Canvas {
 
 // clipInto makes child the Clip of c to r.
 func (c *Canvas) clipInto(child *Canvas, r Rect) *Canvas {
-	*child = Canvas{parent: c, frame: c.fs(), clip: r, clipped: true, scale: c.scale, inert: c.inert, scope: c.scope, group: c.group, space: c.space, window: c.window, onScreen: c.onScreen}
+	*child = Canvas{parent: c, frame: c.fs(), clip: r, clipped: true, scale: c.scale, inert: c.inert, scope: c.scope, group: c.group, space: c.space, enclosing: c.enclosing, window: c.window, onScreen: c.onScreen}
 	if c.clipped {
 		child.clip = c.clip.Intersect(r)
 	}

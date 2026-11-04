@@ -19,6 +19,10 @@ type ContextMenuWidget struct {
 	nativeEntries func() []ggui.MenuItem
 	entries       func() []ggui.Widget
 	lazy          *lazyEntries
+
+	// inner are where the context menus inside content were painted last,
+	// whose secondary clicks are theirs and not this one's.
+	inner []ggui.Rect
 }
 
 // ContextMenu opens entries at the right-click position. Tab focuses the
@@ -178,8 +182,18 @@ func (c *ContextMenuWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if !c.IsInert() {
 		dst.HitKey(r, c)
 	}
-	dst.Paint(c.Popup(), r)
-	// Secondary clicks take precedence over child controls; other events pass on.
+	// A context menu inside another tells it where it is, in a frame whose
+	// regions take input; one painted in part keeps the last whole frame's.
+	if dst.TakesInput() {
+		if outer, ok := dst.Enclosing().(*ContextMenuWidget); ok && !c.IsInert() {
+			outer.inner = append(outer.inner, dst.Visible(r))
+		}
+		c.inner = c.inner[:0]
+	}
+	dst.Enclose(c, func() { dst.Paint(c.Popup(), r) })
+	// Secondary clicks take precedence over child controls, though not over
+	// a context menu inside this one, as a row's in a list that has its own;
+	// other events pass on.
 	if !c.IsInert() {
 		dst.HitPointer(r, c)
 	}
@@ -190,6 +204,11 @@ func (c *ContextMenuWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 func (c *ContextMenuWidget) HandlePointer(ev ggui.PointerEvent) bool {
 	if c.IsInert() || ev.Button != ggui.MouseButtonRight {
 		return false
+	}
+	for _, r := range c.inner {
+		if r.Contains(ev.Pos) {
+			return false
+		}
 	}
 	switch ev.Kind {
 	case ggui.PointerDown:
