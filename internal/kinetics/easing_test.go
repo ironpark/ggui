@@ -1,4 +1,4 @@
-package ggui
+package kinetics
 
 import (
 	"math"
