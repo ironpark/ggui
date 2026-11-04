@@ -5,7 +5,7 @@ vars:
   # The packages bench:save and bench:compare measure by default. Those
   # among them below the UI are also listed in boundary_test.go, which
   # keeps them from importing it.
-  ENGINES: ./internal/reactive ./internal/fontsys ./internal/textlayout ./internal/paragraph ./internal/imgcache ./internal/render ./pkg/kinetics ./pkg/virtual ./pkg/geom ./pkg/layout
+  ENGINES: ./internal/reactive ./internal/fontsys ./internal/textlayout ./internal/paragraph ./internal/imgcache ./internal/render ./internal/region ./pkg/kinetics ./pkg/virtual ./pkg/geom ./pkg/layout
 
 tasks:
   default:

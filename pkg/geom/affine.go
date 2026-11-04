@@ -1,8 +1,7 @@
 // Package geom is 2D geometry beyond boxes: affine transforms of points
-// and rectangles, outlines of lines and Bézier curves that can say
-// whether they hold a point and what they cover, and regions, the sets of
-// rectangles a partial repaint covers. It builds on pkg/layout's Point
-// and Rect, which ggui's own are.
+// and rectangles, and outlines of lines and Bézier curves that can say
+// whether they hold a point and what they cover. It builds on
+// pkg/layout's Point and Rect, which ggui's own are.
 package geom
 
 import (

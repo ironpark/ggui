@@ -10,7 +10,7 @@ import (
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
-	"github.com/ironpark/ggui/pkg/geom"
+	"github.com/ironpark/ggui/internal/region"
 )
 
 // A frame that only time asks for, because a widget read the clock, eased
@@ -76,7 +76,7 @@ func (f *frameState) closeScope(w Widget, marks uint64) {
 	if n := len(f.scopes); n > 0 {
 		p := &f.scopes[n-1]
 		p.kids += total
-		p.bounds = geom.Cover(p.bounds, s.bounds)
+		p.bounds = p.bounds.Cover(s.bounds)
 	}
 }
 
@@ -84,7 +84,7 @@ func (f *frameState) closeScope(w Widget, marks uint64) {
 func (f *frameState) drew(r Rect, extra float64) {
 	if n := len(f.scopes); n > 0 && !r.Empty() {
 		s := &f.scopes[n-1]
-		s.bounds = geom.Cover(s.bounds, geom.Grow(r, extra))
+		s.bounds = s.bounds.Cover(r.Grow(extra))
 	}
 }
 
@@ -92,14 +92,14 @@ func (f *frameState) drew(r Rect, extra float64) {
 // one outside a Transform or a shape clip whose Rect, with damageReach
 // around it, misses the region being painted.
 func (f *frameState) skips(c *Canvas, r Rect) bool {
-	return f.partial && c.space == nil && !r.Empty() && !geom.Overlaps(geom.Grow(r, damageReach), f.damage)
+	return f.partial && c.space == nil && !r.Empty() && !r.Grow(damageReach).Overlaps(f.damage)
 }
 
 // motionRegions are a frame's motion regions as the next frame paints
 // them: grown by motionSlack, cut to the window, and merged where they
 // overlap, or into one when there are many.
 func motionRegions(motion []Rect, window Rect) []Rect {
-	return geom.MergeRegions(motion, window, motionSlack, mostMotionRegions)
+	return region.Merge(motion, window, motionSlack, mostMotionRegions)
 }
 
 // startMotion clears what the last frame noted of its motion.
@@ -241,7 +241,7 @@ func (w *Window) containedDamage(target *ggfx.Image, kept bool, contained, asked
 	}
 	logical := Sz(w.canvas.dp(float64(target.Bounds().Dx())), w.canvas.dp(float64(target.Bounds().Dy())))
 	window := Rct(Point{}, logical)
-	all := geom.CoverAll(contained, w.motion, asked)
+	all := region.CoverAll(contained, w.motion, asked)
 	all = all.Intersect(window)
 	if all.Empty() || all.Size.W*all.Size.H > mostContained*window.Size.W*window.Size.H {
 		refusePartial("too much changed")
@@ -535,7 +535,7 @@ func (w *Window) RepaintRect(r Rect) {
 	w.repaintMu.Lock()
 	if len(w.repaints) >= mostRepaints {
 		// Past so many, the one region around them all.
-		r = geom.Cover(r, geom.CoverAll(w.repaints))
+		r = r.Cover(region.CoverAll(w.repaints))
 		w.repaints = w.repaints[:0]
 	}
 	w.repaints = append(w.repaints, r)
@@ -555,9 +555,9 @@ func (w *Window) addRepaints(rs []Rect) {
 		if r.Empty() {
 			continue
 		}
-		r = geom.Grow(r, damageReach)
+		r = r.Grow(damageReach)
 		if len(w.repaints) >= mostRepaints {
-			r = geom.Cover(r, geom.CoverAll(w.repaints))
+			r = r.Cover(region.CoverAll(w.repaints))
 			w.repaints = w.repaints[:0]
 		}
 		w.repaints = append(w.repaints, r)

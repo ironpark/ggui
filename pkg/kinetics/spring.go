@@ -20,33 +20,59 @@ func NewSpring(at float64) Spring {
 	return Spring{Pos: at, To: at, Stiffness: 170, Damping: 18, Precision: 0.01}
 }
 
-// springSubstep is the longest step Step integrates in one go: semi-implicit
-// Euler in steps this small keeps the springs widgets use stable.
-const springSubstep = 1.0 / 240
-
 // MaxSpringStep is the most time one Step advances, so that a frame that
-// came late, or a window that was hidden, does not fling the spring.
+// came late, or a window that was hidden, does not jump the spring ahead.
 const MaxSpringStep = 0.1
 
 // Step advances the spring dt seconds, at most MaxSpringStep, and reports
 // whether it has come to rest: within Precision of To and moving slower
 // than Precision, at which it lands on To and stops.
+//
+// The motion is the damped oscillator's own solution, not an integration
+// of it, so it is exact for any step and stable for any stiffness and
+// damping.
 func (s *Spring) Step(dt float64) (rest bool) {
-	// A stiffer or more heavily damped spring takes shorter steps: past
-	// about one over its damping plus twice its natural frequency, each
-	// step overshoots the last and the spring flies apart.
-	h := springSubstep
-	if r := s.Damping + 2*math.Sqrt(max(s.Stiffness, 0)); r*h > 1 {
-		h = 1 / r
-	}
-	for dt = min(dt, MaxSpringStep); dt > 0; dt -= h {
-		d := min(dt, h)
-		s.Vel += (-s.Stiffness*(s.Pos-s.To) - s.Damping*s.Vel) * d
-		s.Pos += s.Vel * d
+	if dt = min(dt, MaxSpringStep); dt > 0 {
+		x, v := oscillate(s.Pos-s.To, s.Vel, max(s.Stiffness, 0), max(s.Damping, 0), dt)
+		s.Pos, s.Vel = s.To+x, v
 	}
 	if math.Abs(s.Pos-s.To) >= s.Precision || math.Abs(s.Vel) >= s.Precision {
 		return false
 	}
 	s.Pos, s.Vel = s.To, 0
 	return true
+}
+
+// oscillate returns where a unit mass at x moving at v is t seconds later,
+// and how fast, pulled to zero by a spring of stiffness k and slowed by
+// damping c: x” = -k x - c x'.
+func oscillate(x, v, k, c, t float64) (float64, float64) {
+	if k == 0 { // no spring: friction alone
+		if c == 0 {
+			return x + v*t, v
+		}
+		e := math.Exp(-c * t)
+		return x + v*(1-e)/c, v * e
+	}
+	w := math.Sqrt(k) // the natural frequency
+	z := c / (2 * w)  // the damping ratio
+	switch {
+	case math.Abs(z-1) < 1e-6: // critically damped
+		e := math.Exp(-w * t)
+		b := v + w*x
+		return e * (x + b*t), e * (b - w*(x+b*t))
+	case z < 1: // under: it overshoots and rings down
+		a, wd := z*w, w*math.Sqrt(1-z*z)
+		e := math.Exp(-a * t)
+		sin, cos := math.Sincos(wd * t)
+		b := (v + a*x) / wd
+		return e * (x*cos + b*sin), e * (v*cos - (a*b+wd*x)*sin)
+	default: // over: it creeps in without crossing
+		q := w * math.Sqrt(z*z-1)
+		r1, r2 := -z*w+q, -z*w-q
+		c1 := (v - r2*x) / (r1 - r2)
+		c2 := x - c1
+		e1, e2 := math.Exp(r1*t), math.Exp(r2*t)
+		return c1*e1 + c2*e2, c1*r1*e1 + c2*r2*e2
+	}
 }

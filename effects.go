@@ -8,7 +8,6 @@ import (
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/render"
-	"github.com/ironpark/ggui/pkg/geom"
 )
 
 // Blur paints a subtree blurred by a Gaussian of sigma logical pixels, as
@@ -26,7 +25,7 @@ func (c *Canvas) Blur(r Rect, sigma float64, paint func(dst *Canvas)) {
 		return
 	}
 	reach := 3 * sigma
-	area := c.physical(geom.Grow(r, reach)).Intersect(c.root().Image.Bounds())
+	area := c.physical(r.Grow(reach)).Intersect(c.root().Image.Bounds())
 	if area.Empty() {
 		paint(c)
 		return
@@ -60,7 +59,7 @@ func (c *Canvas) BackdropBlur(r Rect, radius, sigma float64) {
 	}
 	bounds := c.Image.Bounds()
 	target := c.physical(r).Intersect(bounds)
-	area := c.physical(geom.Grow(r, 3*sigma)).Intersect(bounds)
+	area := c.physical(r.Grow(3 * sigma)).Intersect(bounds)
 	if target.Empty() || area.Empty() {
 		return
 	}

@@ -66,7 +66,7 @@ func ready(t testing.TB, c *Cache[*tex], h *Handle[*tex], k Key, load Loader, u 
 	h.Acquire(c, k, load, Waiter{Post: u.post, Notify: func() { notified <- struct{}{} }})
 	deadline := time.After(time.Second)
 	for {
-		if st, tx, _ := h.State(); st != Pending {
+		if st, tx, _, _ := h.Get(c, k); st != Pending {
 			return tx
 		}
 		u.pump()
@@ -99,7 +99,7 @@ func TestTwoHoldersShareOneLoad(t *testing.T) {
 	if calls.Load() != 2 {
 		t.Fatalf("%d loads, want a second for another Max", calls.Load())
 	}
-	if _, tm, _ := m.State(); tm.w != 1 {
+	if _, tm, _, _ := m.Get(c, Key{Src: "x", Max: 1}); tm.w != 1 {
 		t.Fatalf("Max 1 gave a texture %d wide", tm.w)
 	}
 }
@@ -133,7 +133,7 @@ func TestFailedLoadIsForgottenOnRelease(t *testing.T) {
 	ready(t, c, &h, Key{Src: "bad"}, func(context.Context, string) (image.Image, error) {
 		return nil, errors.New("nope")
 	}, &u)
-	if st, _, err := h.State(); st != Failed || err == nil {
+	if st, _, err, _ := h.Get(c, Key{Src: "bad"}); st != Failed || err == nil {
 		t.Fatalf("state %v, %v; want Failed with an error", st, err)
 	}
 	h.Release()
@@ -144,7 +144,7 @@ func TestFailedLoadIsForgottenOnRelease(t *testing.T) {
 	ready(t, c, &h, Key{Src: "empty"}, func(context.Context, string) (image.Image, error) {
 		return image.NewRGBA(image.Rectangle{}), nil
 	}, &u)
-	if st, _, _ := h.State(); st != Failed {
+	if st, _, _, _ := h.Get(c, Key{Src: "empty"}); st != Failed {
 		t.Fatalf("an empty image is %v, want Failed", st)
 	}
 }
@@ -182,7 +182,7 @@ func TestIdleImagesAreEvictedOldestFirst(t *testing.T) {
 	}
 }
 
-func TestHandleKnowsWhatItHolds(t *testing.T) {
+func TestGetFindsOnlyWhatIsHeld(t *testing.T) {
 	t.Parallel()
 	c, _ := newCache(1 << 20)
 	var calls atomic.Int32
@@ -190,14 +190,17 @@ func TestHandleKnowsWhatItHolds(t *testing.T) {
 	var h Handle[*tex]
 	k := Key{Src: "x"}
 	ready(t, c, &h, k, sized(2, 2, &calls), &u)
-	if !h.Holds(c, k) || h.Holds(c, Key{Src: "y"}) {
-		t.Fatal("Holds disagrees with what was acquired")
+	if _, _, _, ok := h.Get(c, k); !ok {
+		t.Fatal("Get misses what was acquired")
+	}
+	if _, _, _, ok := h.Get(c, Key{Src: "y"}); ok {
+		t.Fatal("Get finds a key never acquired")
 	}
 	if h.entry == nil || h.entry.key != k {
 		t.Fatal("the handle holds another entry")
 	}
 	h.Release()
-	if h.Holds(c, k) {
+	if _, _, _, ok := h.Get(c, k); ok {
 		t.Fatal("a released handle still holds")
 	}
 	if h.entry != nil {
@@ -263,6 +266,21 @@ func BenchmarkAcquireCached(b *testing.B) {
 	}
 }
 
+// A layout of a widget showing a loaded image: what it holds, found
+// again.
+func BenchmarkLayoutHeld(b *testing.B) {
+	c, _ := newCache(1 << 30)
+	var calls atomic.Int32
+	var u ui
+	var h Handle[*tex]
+	k := Key{Src: "a"}
+	ready(b, c, &h, k, sized(8, 8, &calls), &u)
+	b.ReportAllocs()
+	for b.Loop() {
+		h.Get(c, k)
+	}
+}
+
 // Images scrolling past a budget that holds a few: each new one loads,
 // uploads and evicts the oldest.
 func BenchmarkChurn(b *testing.B) {
@@ -274,9 +292,10 @@ func BenchmarkChurn(b *testing.B) {
 	b.ReportAllocs()
 	i := 0
 	for b.Loop() {
-		h.Acquire(c, Key{Src: fmt.Sprint(i)}, load, Waiter{Post: u.post, Notify: func() {}})
+		k := Key{Src: fmt.Sprint(i)}
+		h.Acquire(c, k, load, Waiter{Post: u.post, Notify: func() {}})
 		for {
-			if st, _, _ := h.State(); st != Pending {
+			if st, _, _, _ := h.Get(c, k); st != Pending {
 				break
 			}
 			u.pump()

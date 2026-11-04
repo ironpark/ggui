@@ -5,7 +5,6 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/internal/property"
-	"github.com/ironpark/ggui/pkg/geom"
 )
 
 // Transform paints through m: what paint draws is moved by m, and so is the
@@ -70,7 +69,7 @@ func (c *Canvas) transformArea(inverse Affine) (image.Rectangle, bool) {
 	if dest.Empty() {
 		return image.Rectangle{}, false
 	}
-	area := c.physical(geom.Grow(inverse.Bounds(dest), c.dp(2)))
+	area := c.physical(inverse.Bounds(dest).Grow(c.dp(2)))
 	if window := c.root().Image; window != nil {
 		area = area.Intersect(window.Bounds())
 	}

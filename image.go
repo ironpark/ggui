@@ -434,7 +434,8 @@ func (a *AsyncImageWidget) sync() {
 		a.status, a.err, a.inner.img = Failed, errNoSrc, nil
 		return
 	}
-	if !h.Holds(a.cache, key) {
+	st, img, err, ok := h.Get(a.cache, key)
+	if !ok {
 		post := loopPost(reactive.CurrentOwner())
 		if l := runningLoop(); post == nil && l != nil {
 			post = l.post
@@ -448,10 +449,9 @@ func (a *AsyncImageWidget) sync() {
 				a.props.Changed()
 			}
 		}
-		h.Acquire(a.cache, key, imgcache.Loader(a.loader), imgcache.Waiter{Post: post, Notify: notify})
+		st, img, err = h.Acquire(a.cache, key, imgcache.Loader(a.loader), imgcache.Waiter{Post: post, Notify: notify})
 	}
-	var st imgcache.Status
-	st, a.inner.img, a.err = h.State()
+	a.inner.img, a.err = img, err
 	a.status = asyncStatus(st)
 }
 

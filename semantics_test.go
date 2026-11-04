@@ -269,12 +269,16 @@ func TestSemTreeReusesEqualValuesAndFreezesDescriptions(t *testing.T) {
 
 // Exercise every field, including nested structs/slices. A field added to
 // Node, TextRun or TextStop must participate in equality without having to
-// remember to add a new test case beside the production comparison.
+// remember to add a new test case beside the production comparison. An
+// unexported field is what a11y.Build derives from the rest, not part of
+// a description, so it is left out.
 func semanticFieldChanges(v reflect.Value, visit func()) {
 	switch v.Kind() {
 	case reflect.Struct:
 		for i := 0; i < v.NumField(); i++ {
-			semanticFieldChanges(v.Field(i), visit)
+			if v.Type().Field(i).IsExported() {
+				semanticFieldChanges(v.Field(i), visit)
+			}
 		}
 	case reflect.Bool:
 		v.SetBool(true)
@@ -330,6 +334,9 @@ func TestNodeEqualityCoversEveryField(t *testing.T) {
 	})
 	for _, typ := range []reflect.Type{reflect.TypeFor[Node](), reflect.TypeFor[TextRun](), reflect.TypeFor[TextStop]()} {
 		for i := 0; i < typ.NumField(); i++ {
+			if !typ.Field(i).IsExported() {
+				continue
+			}
 			t.Run(typ.Name()+"/"+typ.Field(i).Name, func(t *testing.T) {
 				a := Node{Expanded: Expandable(false), Runs: []TextRun{{Stops: []TextStop{{}}}}}
 				b := freezeNode(a)
