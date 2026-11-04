@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"github.com/ironpark/ggui/internal/kinetics"
 	"math"
 	"time"
 
@@ -151,24 +152,9 @@ func (s *ScrollWidget) wheelBy(d float64, momentum bool) bool {
 }
 
 // rubber moves raw, the offset the content shows at, by d, with movement
-// past either end resisted the further it goes.
+// past either end resisted the further it goes; see kinetics.Rubber.
 func (s *ScrollWidget) rubber(raw, d float64, momentum bool) float64 {
-	lo, hi := 0.0, s.maxOffset()
-	next := raw + d
-	if next >= lo && next <= hi || raw < lo && d > 0 || raw > hi && d < 0 {
-		return next
-	}
-	edge := pick(next < lo, lo, hi)
-	from := raw
-	if raw >= lo && raw <= hi {
-		from = edge
-	}
-	extent := max(s.extent(s.viewport), 1)
-	k := 0.5 * (1 - min(math.Abs(from-edge)/extent, 1))
-	if momentum {
-		k *= 0.4
-	}
-	return from + (next-from)*k
+	return kinetics.Rubber(raw, d, 0, s.maxOffset(), s.extent(s.viewport), momentum)
 }
 
 // step advances a programmatic scroll; Layout calls it before laying out
@@ -250,20 +236,7 @@ func (s *ScrollWidget) snapTarget() (float64, bool) {
 	if step <= 0 || !s.laidOut {
 		return 0, false
 	}
-	pos, end := s.position(), s.maxOffset()
-	n := pos / step
-	t := math.Round(n)
-	if p.paging {
-		t = math.Round(p.from / step)
-		if math.Abs(pos-p.from) > step/6 {
-			t = pick(p.dir > 0, math.Ceil(n), math.Floor(n))
-		}
-	}
-	v := clamp(t*step, 0, end)
-	if !p.paging && math.Abs(end-pos) < math.Abs(v-pos) {
-		v = end // the end is a stop too, so the last rows can be reached
-	}
-	return v, true
+	return kinetics.SnapTarget(s.position(), s.maxOffset(), step, p.from, p.dir, p.paging), true
 }
 
 // animateTo moves the window to v, eased over the scroll animation unless
@@ -321,7 +294,7 @@ func (s *ScrollWidget) paintContent(dst *Canvas, r Rect) {
 	}
 	// Stretched from the end being pulled: the start when the content is
 	// pulled down (or right), the far end when it is pulled up.
-	k := 1 + 0.5*min(math.Abs(p.over)/extent, 1)
+	k := kinetics.Stretch(p.over, extent)
 	about := r.Origin
 	if p.over < 0 {
 		about = about.Add(pick(s.horizontal, Pt(r.Size.W, 0), Pt(0, r.Size.H)))

@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"github.com/ironpark/ggui/internal/kinetics"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
 	"math"
@@ -35,19 +36,83 @@ func EaseLinear(t float64) float64 { return t }
 
 // EaseOut starts fast and decelerates (cubic). It is the default: most UI
 // motion should arrive gently.
-func EaseOut(t float64) float64 { u := 1 - t; return 1 - u*u*u }
+func EaseOut(t float64) float64 { return kinetics.EaseOut(t) }
 
 // EaseIn starts slowly and accelerates (cubic).
-func EaseIn(t float64) float64 { return t * t * t }
+func EaseIn(t float64) float64 { return kinetics.EaseIn(t) }
 
 // EaseInOut accelerates, then decelerates (cubic).
-func EaseInOut(t float64) float64 {
-	if t < 0.5 {
-		return 4 * t * t * t
-	}
-	u := -2*t + 2
-	return 1 - u*u*u/2
-}
+func EaseInOut(t float64) float64 { return kinetics.EaseInOut(t) }
+
+// The curves below are internal/kinetics', where their tests and
+// benchmarks are.
+
+// CubicBezier returns the easing CSS writes cubic-bezier(x1, y1, x2, y2): the
+// curve from (0, 0) to (1, 1) with control points (x1, y1) and (x2, y2),
+// read as progress y at time x. x1 and x2 are held to [0, 1] so time runs
+// forward; y1 and y2 may leave it to overshoot.
+//
+//	ease := ggui.CubicBezier(0.4, 0, 0.2, 1)
+func CubicBezier(x1, y1, x2, y2 float64) Easing { return kinetics.CubicBezier(x1, y1, x2, y2) }
+
+// Interval runs e over the stretch of time from begin to end, both in
+// [0, 1]: zero before it, one after. Give the parts of one animation
+// overlapping or consecutive intervals to sequence them. A nil e is linear.
+//
+//	fade := ggui.Interval(0, 0.5, ggui.EaseOut)   // first half
+//	grow := ggui.Interval(0.25, 1, ggui.EaseInOut) // overlapping the rest
+func Interval(begin, end float64, e Easing) Easing { return kinetics.Interval(begin, end, e) }
+
+// Reverse returns e flipped end for end: t maps to 1 - e(1-t), so an easing
+// in becomes the matching easing out. Use it for the way back, so a panel
+// that slid in with EaseOutBack leaves with the same curve mirrored. A nil
+// e is linear, as in Interval.
+func Reverse(e Easing) Easing { return kinetics.Reverse(e) }
+
+// EaseInOutCubic is EaseInOut, by its full name.
+func EaseInOutCubic(t float64) float64 { return kinetics.EaseInOutCubic(t) }
+
+// EaseInBack pulls back a little before it moves forward.
+func EaseInBack(t float64) float64 { return kinetics.EaseInBack(t) }
+
+// EaseOutBack overshoots its target a little and settles back.
+func EaseOutBack(t float64) float64 { return kinetics.EaseOutBack(t) }
+
+// EaseInOutBack pulls back at the start and overshoots at the end.
+func EaseInOutBack(t float64) float64 { return kinetics.EaseInOutBack(t) }
+
+// EaseOutElastic overshoots and rings around its target like a plucked
+// band before settling.
+func EaseOutElastic(t float64) float64 { return kinetics.EaseOutElastic(t) }
+
+// EaseInElastic is EaseOutElastic reversed: it winds up before it leaves.
+func EaseInElastic(t float64) float64 { return kinetics.EaseInElastic(t) }
+
+// EaseOutBounce drops onto its target and bounces to rest.
+func EaseOutBounce(t float64) float64 { return kinetics.EaseOutBounce(t) }
+
+// EaseInBounce is EaseOutBounce reversed: it bounces off its start.
+func EaseInBounce(t float64) float64 { return kinetics.EaseInBounce(t) }
+
+// EaseStandard is Material's standard curve, cubic-bezier(0.2, 0, 0, 1).
+func EaseStandard(t float64) float64 { return kinetics.EaseStandard(t) }
+
+// EaseStandardAccelerate is Material's standard curve for an exit.
+func EaseStandardAccelerate(t float64) float64 { return kinetics.EaseStandardAccelerate(t) }
+
+// EaseStandardDecelerate is Material's standard curve for an entrance.
+func EaseStandardDecelerate(t float64) float64 { return kinetics.EaseStandardDecelerate(t) }
+
+// EaseEmphasized is Material's emphasized curve: a slow start, a quick
+// middle and a long, gentle arrival. It is the two halves below joined at
+// (1/6, 0.4), as Material specifies it.
+func EaseEmphasized(t float64) float64 { return kinetics.EaseEmphasized(t) }
+
+// EaseEmphasizedAccelerate is Material's emphasized curve for an exit.
+func EaseEmphasizedAccelerate(t float64) float64 { return kinetics.EaseEmphasizedAccelerate(t) }
+
+// EaseEmphasizedDecelerate is Material's emphasized curve for an entrance.
+func EaseEmphasizedDecelerate(t float64) float64 { return kinetics.EaseEmphasizedDecelerate(t) }
 
 // stepper is an animation the runtime advances each frame.
 type stepper interface {

@@ -1,15 +1,38 @@
-package ggui
+package kinetics
 
-import "math"
+import (
+	"math"
+
+	"github.com/ironpark/ggui/internal/fn"
+)
+
+// Easing maps normalized time in [0, 1] to normalized progress.
+type Easing = func(t float64) float64
+
+// EaseLinear moves at constant speed.
+func EaseLinear(t float64) float64 { return t }
+
+// EaseOut starts fast and decelerates (cubic).
+func EaseOut(t float64) float64 { u := 1 - t; return 1 - u*u*u }
+
+// EaseIn starts slowly and accelerates (cubic).
+func EaseIn(t float64) float64 { return t * t * t }
+
+// EaseInOut accelerates, then decelerates (cubic).
+func EaseInOut(t float64) float64 {
+	if t < 0.5 {
+		return 4 * t * t * t
+	}
+	u := -2*t + 2
+	return 1 - u*u*u/2
+}
 
 // CubicBezier returns the easing CSS writes cubic-bezier(x1, y1, x2, y2): the
 // curve from (0, 0) to (1, 1) with control points (x1, y1) and (x2, y2),
 // read as progress y at time x. x1 and x2 are held to [0, 1] so time runs
 // forward; y1 and y2 may leave it to overshoot.
-//
-//	ease := ggui.CubicBezier(0.4, 0, 0.2, 1)
 func CubicBezier(x1, y1, x2, y2 float64) Easing {
-	x1, x2 = clamp(x1, 0, 1), clamp(x2, 0, 1)
+	x1, x2 = fn.Clamp(x1, 0, 1), fn.Clamp(x2, 0, 1)
 	// Polynomial coefficients of x(s) and y(s) for the curve parameter s.
 	cx := 3 * x1
 	bx := 3*(x2-x1) - cx
@@ -59,9 +82,6 @@ func CubicBezier(x1, y1, x2, y2 float64) Easing {
 // Interval runs e over the stretch of time from begin to end, both in
 // [0, 1]: zero before it, one after. Give the parts of one animation
 // overlapping or consecutive intervals to sequence them. A nil e is linear.
-//
-//	fade := ggui.Interval(0, 0.5, ggui.EaseOut)   // first half
-//	grow := ggui.Interval(0.25, 1, ggui.EaseInOut) // overlapping the rest
 func Interval(begin, end float64, e Easing) Easing {
 	if e == nil {
 		e = EaseLinear
@@ -115,7 +135,7 @@ func EaseInOutBack(t float64) float64 {
 // band before settling.
 func EaseOutElastic(t float64) float64 {
 	if t <= 0 || t >= 1 {
-		return clamp(t, 0, 1)
+		return fn.Clamp(t, 0, 1)
 	}
 	return math.Pow(2, -10*t)*math.Sin((10*t-0.75)*(2*math.Pi/3)) + 1
 }

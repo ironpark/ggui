@@ -1,6 +1,9 @@
 package ggui
 
 import (
+	"time"
+
+	"github.com/ironpark/ggui/internal/kinetics"
 	"slices"
 
 	"github.com/ironpark/ggwd"
@@ -56,7 +59,7 @@ func (in *inputState) panTouch(f *frameInput) {
 	if len(f.down) != 0 {
 		in.touchStart, in.touchLast = f.pos, f.pos
 		in.touchScroll, in.touchPanning = nil, false
-		in.touchMotion = touchMotion{last: now, pos: f.pos}
+		in.touchMotion = touchMotion{Tracker: kinetics.Tracker{Last: now, Pos: f.pos}}
 		return
 	}
 	// Assert before re-resolving: the scan only pays off for the rare control
@@ -70,7 +73,7 @@ func (in *inputState) panTouch(f *frameInput) {
 			}
 		}
 	}
-	in.touchMotion.sample(now, f.pos)
+	in.touchMotion.Sample(now, f.pos, maxFrameStep)
 	delta := f.pos.Sub(in.touchLast)
 	if !in.touchPanning {
 		delta = f.pos.Sub(in.touchStart)
@@ -104,11 +107,56 @@ func (in *inputState) panTouch(f *frameInput) {
 		ended := len(f.up) != 0
 		f.down, f.up = nil, nil
 		if ended {
-			in.touchMotion.boostRelease()
+			in.touchMotion.Boost()
 			in.touchMotion.target = in.touchScroll
 			in.touchMotion.origin = in.touchStart
-			in.touchMotion.last = now
+			in.touchMotion.Last = now
 			in.touchPanning, in.touchScroll = false, nil
 		}
+	}
+}
+
+// touchMotion is a touch's velocity, tracked while the finger is down,
+// and the fling that carries on from it after release: at target, from
+// origin. Finger-down movement stays one-to-one; only released motion is
+// decelerated.
+type touchMotion struct {
+	kinetics.Tracker
+	origin Point
+	target *hitRegion
+}
+
+func (m *touchMotion) stop() { m.target, m.Velocity = nil, Point{} }
+
+// stepTouchMomentum advances a fling to now, scrolling its target by what
+// it travels since the last step.
+func (in *inputState) stepTouchMomentum(now time.Time) {
+	m := &in.touchMotion
+	if m.target == nil {
+		return
+	}
+	dt := now.Sub(m.Last).Seconds()
+	if dt <= 0 {
+		return
+	}
+	// Background tabs should not resume an old fling or jump forward.
+	if dt > maxFrameStep.Seconds() || !kinetics.Flinging(m.Velocity) {
+		m.stop()
+		return
+	}
+	cur := in.findPointer(m.target)
+	if cur == nil {
+		m.stop()
+		return
+	}
+	if scope := in.activeScope(); scope != nil && (cur.scope == nil || !sameAny(scope.owner, cur.scope.owner)) {
+		m.stop()
+		return
+	}
+	travel, next, finished := kinetics.Fling(m.Velocity, dt)
+	ev := PointerEvent{Kind: PointerScroll, Pos: m.origin, Scroll: travel, ScrollPixels: true, ScrollMomentum: true}
+	m.Last, m.Velocity = now, next
+	if moved := cur.pointer.HandlePointer(ev); !moved || finished {
+		m.stop()
 	}
 }
