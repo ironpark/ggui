@@ -81,10 +81,9 @@ func (r *textRenderer) drawEmoji(img *image.RGBA, s string, x, y int) int {
 // sources it draws with.
 type textRenderer struct {
 	style     Style
-	face      text.Face    // the style's face, as Text has it, for wrapping and metrics
-	chain     []*font.Face // the font and its fallbacks, at the style's weight
-	system    bool         // whether runes the chain lacks are looked for among the system's fonts
-	found     map[*fontsys.Font]*font.Face
+	face      text.Face       // the style's face, as Text has it, for wrapping and metrics
+	picker    *fontsys.Picker // the font and its fallbacks, at the style's weight
+	chain     []*font.Face    // the picker's fonts' faces, in its order
 	runes     map[rune]*font.Face
 	emoji     *font.Face // the emoji font, nil without one
 	emojiFace text.Face  // the emoji font as Text draws it, fitted to the line box
@@ -96,12 +95,8 @@ type textRenderer struct {
 }
 
 func newTextRenderer(st Style) *textRenderer {
-	r := &textRenderer{style: st, face: st.Face(1), found: map[*fontsys.Font]*font.Face{}, runes: map[rune]*font.Face{}}
-	fonts, system, _ := st.Font.Resolve().Chain(st.Weight)
-	r.system = system
-	for _, cf := range fonts {
-		r.chain = append(r.chain, ownFace(cf.Font.Source(), st.Weight, cf.Axis))
-	}
+	r := &textRenderer{style: st, face: st.Face(1), picker: st.Font.Picker(st.Weight), runes: map[rune]*font.Face{}}
+	r.grow()
 	if ef, ok := r.face.(*fontsys.EmojiFace); ok {
 		if e, ok := ef.ColorFace().(*text.GoTextFace); ok && e != nil {
 			r.emoji = ownFace(e.Source, 0, false)
@@ -123,23 +118,24 @@ func ownFace(src *text.GoTextFaceSource, w fontsys.Weight, axis bool) *font.Face
 	return face
 }
 
-// ResolveFace implements shaping.Fontmap: the first face of the chain that
-// has r, else a system font that has it, else the font's own.
+// grow makes faces of the fonts the picker has added since.
+func (r *textRenderer) grow() {
+	for len(r.chain) < r.picker.Len() {
+		cf := r.picker.Font(len(r.chain))
+		r.chain = append(r.chain, ownFace(cf.Font.Source(), r.style.Weight, cf.Axis))
+	}
+}
+
+// ResolveFace implements shaping.Fontmap: the face of the font the picker
+// finds for r, else the font's own.
 func (r *textRenderer) ResolveFace(c rune) *font.Face {
 	if f, ok := r.runes[c]; ok {
 		return f
 	}
 	face := r.chain[0]
-	if i := slices.IndexFunc(r.chain, func(f *font.Face) bool { _, ok := f.NominalGlyph(c); return ok }); i >= 0 {
+	if i, ok := r.picker.Pick(c); ok {
+		r.grow()
 		face = r.chain[i]
-	} else if r.system {
-		if fb := fontsys.SystemFallback(c); fb != nil {
-			if face = r.found[fb]; face == nil {
-				font, axis := fb.ForWeight(r.style.Weight)
-				face = ownFace(font.Source(), r.style.Weight, axis)
-				r.found[fb] = face
-			}
-		}
 	}
 	r.runes[c] = face
 	return face

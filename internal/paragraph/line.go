@@ -13,7 +13,6 @@ import (
 	"github.com/ironpark/ggui/internal/text"
 	"github.com/ironpark/ggui/internal/textlayout"
 	"github.com/ironpark/ggui/internal/typesetting/bidi"
-	gofont "github.com/ironpark/ggui/internal/typesetting/font"
 	"golang.org/x/text/language"
 
 	"github.com/ironpark/ggui/internal/emojidata"
@@ -219,71 +218,41 @@ func rtlSegs(s string, off int, chain *rtlChain) ([]rtlSeg, float64) {
 }
 
 // rtlChain is a Font's faces at one size, weight and language, set right
-// to left, with what each covers: their light sources, which hold the cmap
-// and not the glyphs, so a font is loaded only once a glyph only it has is
-// drawn, as in fontsys.Font.Face's chain.
+// to left, in the order its Picker finds them: a font is loaded only once a
+// glyph only it has is drawn, as in fontsys.Font.Face's chain.
 type rtlChain struct {
-	srcs  []*text.GoTextFaceSource
-	faces []text.Face
-	emoji *fontsys.EmojiFace // the emoji fallback, if the font has one
+	// mu guards picker and faces, which grow as pick finds system fonts:
+	// a chain is shared by every line laid out in it.
+	mu     sync.Mutex
+	picker *fontsys.Picker
+	faces  []text.Face        // the picker's fonts' faces, in its order
+	last   int                // the face a rune no font has falls to: the chain's last own one
+	emoji  *fontsys.EmojiFace // the emoji fallback, if the font has one
 
-	// system makes pick look among all the system's fonts for a rune no
-	// face has, as the font's own chain does, adding the face it finds
-	// before the last. size, weight and tag are what such a face is made
-	// with, and found the fonts added, by their place in faces.
-	system bool
 	size   float64
 	weight fontsys.Weight
 	tag    language.Tag
-	found  map[*fontsys.Font]int
 }
 
-// nominalMu guards NominalGlyph, which bypasses the source's own lock, and
-// the faces an rtlChain adds as it picks.
-var nominalMu sync.Mutex
-
 // pick returns the index of the face that draws grapheme g: the emoji
-// font's for an emoji, else the first face that has its first rune, else
-// the last, as a fallback face picks.
+// font's for an emoji, else the face of the font the picker finds for its
+// first rune, else the chain's last, as a fallback face picks.
 func (c *rtlChain) pick(g string) int {
 	if c.emoji != nil && emojidata.IsCluster(g) && c.emoji.ColorFace() != nil {
 		return -1
 	}
 	r, _ := utf8.DecodeRuneInString(g)
-	// A face's cmap caches its lookups unguarded, and sources are shared
-	// across goroutines.
-	nominalMu.Lock()
-	defer nominalMu.Unlock()
-	for i, src := range c.srcs {
-		if f, ok := src.UnsafeInternal().(*gofont.Face); ok {
-			if _, has := f.NominalGlyph(r); has {
-				return i
-			}
-		}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	i, ok := c.picker.Pick(r)
+	if !ok {
+		return c.last
 	}
-	if c.system {
-		if fb := fontsys.SystemFallback(r); fb != nil {
-			return c.addLocked(fb)
-		}
+	for len(c.faces) < c.picker.Len() {
+		cf := c.picker.Font(len(c.faces))
+		c.faces = append(c.faces, cf.Font.ChainFaceWith(c.size, c.weight, cf.Axis, c.setRTL))
 	}
-	return len(c.faces) - 1
-}
-
-// addLocked returns the place of fb's face, adding it before the last if
-// it is not in c yet. nominalMu must be held.
-func (c *rtlChain) addLocked(fb *fontsys.Font) int {
-	if i, ok := c.found[fb]; ok {
-		return i
-	}
-	font, axis := fb.ForWeight(c.weight)
-	last := len(c.faces) - 1
-	c.srcs = slices.Insert(c.srcs, last, font.Meta())
-	c.faces = slices.Insert(c.faces, last, font.ChainFaceWith(c.size, c.weight, axis, c.setRTL))
-	if c.found == nil {
-		c.found = map[*fontsys.Font]int{}
-	}
-	c.found[fb] = last
-	return last
+	return i
 }
 
 // setRTL sets g to shape right to left in c's language.
@@ -296,8 +265,8 @@ func (c *rtlChain) face(i int) text.Face {
 	if i < 0 {
 		return c.emoji.ColorFace()
 	}
-	nominalMu.Lock()
-	defer nominalMu.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return c.faces[i]
 }
 
@@ -357,14 +326,13 @@ func rtlFaces(st Style, scale float64, lang shapeLang) *rtlChain {
 // same faces fontsys.Font.Face puts in its fallback chain, in its order,
 // with the emoji font choice resolves to.
 func newRTLChain(f *fontsys.Font, size float64, sw fontsys.Weight, choice *fontsys.EmojiChoice, tag language.Tag) *rtlChain {
-	c := &rtlChain{size: size, weight: sw, tag: tag}
-	fonts, system, emoji := f.Chain(sw)
-	c.system = system
-	for _, cf := range fonts {
-		c.srcs = append(c.srcs, cf.Font.Meta())
+	c := &rtlChain{picker: f.Picker(sw), size: size, weight: sw, tag: tag}
+	for i := range c.picker.Len() {
+		cf := c.picker.Font(i)
 		c.faces = append(c.faces, cf.Font.ChainFaceWith(size, sw, cf.Axis, c.setRTL))
 	}
-	if emoji {
+	c.last = len(c.faces) - 1
+	if f.DrawsEmoji() {
 		c.emoji, _ = f.FaceFor(size, sw, choice).(*fontsys.EmojiFace)
 	}
 	return c
