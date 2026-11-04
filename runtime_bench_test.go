@@ -2,30 +2,8 @@ package ggui
 
 import (
 	"fmt"
-	"github.com/ironpark/ggui/internal/reactive"
 	"testing"
 )
-
-func BenchmarkIdleEffects(b *testing.B) {
-	for _, n := range []int{1000, 10000} {
-		b.Run(fmt.Sprint(n), func(b *testing.B) {
-			value := State(0)
-			dispose := Root(func() {
-				for range n {
-					reactive.Observe(func() { value.Get() })
-				}
-			})
-			defer dispose()
-			reactive.Flush()
-			b.ReportAllocs()
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				reactive.Flush()
-			}
-			b.StopTimer()
-		})
-	}
-}
 
 // Exercise real Interactive registrations: each control registers pointer,
 // keyboard and cursor regions, and rebuilt controls adopt their prior state.
@@ -74,26 +52,6 @@ func BenchmarkFocusedNode(b *testing.B) {
 				if focusedNode(&c, &focused) != n-1 {
 					b.Fatal("focused node was lost")
 				}
-			}
-		})
-	}
-}
-
-func BenchmarkIdleUserEffects(b *testing.B) {
-	for _, n := range []int{1000, 10000} {
-		b.Run(fmt.Sprint(n), func(b *testing.B) {
-			value := State(0)
-			dispose := Root(func() {
-				for range n {
-					Effect(func() Cleanup { value.Get(); return nil })
-				}
-			})
-			defer dispose()
-			reactive.FlushUsers(nil)
-			b.ReportAllocs()
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				reactive.FlushUsers(nil)
 			}
 		})
 	}
