@@ -353,16 +353,6 @@ type ChainFont struct {
 	Axis bool // it draws the weight on its weight axis
 }
 
-// Chain returns the fonts f draws weight w with, in order, as Face chains
-// them; whether a rune none of them has is then looked for among all the
-// system's fonts; and whether Face sets an emoji font beside them.
-func (f *Font) Chain(w Weight) (fonts []ChainFont, system, emoji bool) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	fonts, _ = f.chainLocked(w)
-	return fonts, f.systemFallback(), !f.noFallback
-}
-
 // systemFallback reports whether f falls back to the system's fonts: to
 // SystemFonts, and then to any font that has a glyph they lack.
 func (f *Font) systemFallback() bool {
