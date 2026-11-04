@@ -13,7 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/ironpark/ggui/internal/fn"
+	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/internal/third_party/text"
 	"golang.org/x/image/font/gofont/goregular"
 )
@@ -254,7 +254,7 @@ func (f *Font) goFace(size float64, w Weight, axis bool) *text.GoTextFace {
 func (f *Font) setWeight(g *text.GoTextFace, w Weight, axis bool) {
 	if axis {
 		lo, hi, _ := f.weightAxis()
-		g.SetVariation(wghtTag, fn.Clamp(float32(w), lo, hi))
+		g.SetVariation(wghtTag, gem.Clamp(float32(w), lo, hi))
 	}
 }
 

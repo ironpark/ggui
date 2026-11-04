@@ -3,7 +3,7 @@ package kinetics
 import (
 	"math"
 
-	"github.com/ironpark/ggui/internal/fn"
+	"github.com/ironpark/ggui/pkg/gem"
 )
 
 // Easing maps normalized time in [0, 1] to normalized progress.
@@ -32,7 +32,7 @@ func EaseInOut(t float64) float64 {
 // read as progress y at time x. x1 and x2 are held to [0, 1] so time runs
 // forward; y1 and y2 may leave it to overshoot.
 func CubicBezier(x1, y1, x2, y2 float64) Easing {
-	x1, x2 = fn.Clamp(x1, 0, 1), fn.Clamp(x2, 0, 1)
+	x1, x2 = gem.Clamp(x1, 0, 1), gem.Clamp(x2, 0, 1)
 	// Polynomial coefficients of x(s) and y(s) for the curve parameter s.
 	cx := 3 * x1
 	bx := 3*(x2-x1) - cx
@@ -135,7 +135,7 @@ func EaseInOutBack(t float64) float64 {
 // band before settling.
 func EaseOutElastic(t float64) float64 {
 	if t <= 0 || t >= 1 {
-		return fn.Clamp(t, 0, 1)
+		return gem.Clamp(t, 0, 1)
 	}
 	return math.Pow(2, -10*t)*math.Sin((10*t-0.75)*(2*math.Pi/3)) + 1
 }

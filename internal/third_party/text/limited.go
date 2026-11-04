@@ -19,7 +19,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/ironpark/ggfx/vector"
-	"github.com/ironpark/ggui/internal/pool"
+	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/internal/third_party/text/internal/textutil"
 )
 
@@ -116,7 +116,7 @@ func (l *LimitedFace) appendLazyGlyphsForLine(glyphs []LazyGlyph, line string, i
 	return glyphs
 }
 
-var theLimitedFilterMappingPool = pool.Pool[*[]int]{
+var theLimitedFilterMappingPool = gem.Pool[*[]int]{
 	New: func() *[]int {
 		// 64 is an arbitrary number for the initial capacity.
 		s := make([]int, 0, 64)

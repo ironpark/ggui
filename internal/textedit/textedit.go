@@ -14,7 +14,7 @@ import (
 
 	"github.com/ironpark/ggui/internal/third_party/typesetting/segmenter"
 
-	"github.com/ironpark/ggui/internal/fn"
+	"github.com/ironpark/ggui/pkg/gem"
 )
 
 // Editor is the model behind TextInput: a string and a selection. The
@@ -205,7 +205,7 @@ func (e *Editor) MoveTo(pos int, extend bool) {
 func (e *Editor) MoveBy(dir int, word, extend bool) {
 	if !extend && e.HasSelection() && !word {
 		lo, hi := e.Selection()
-		e.MoveTo(fn.Pick(dir < 0, lo, hi), false)
+		e.MoveTo(gem.Pick(dir < 0, lo, hi), false)
 		return
 	}
 	pos := e.Caret
@@ -225,7 +225,7 @@ func (e *Editor) MoveBy(dir int, word, extend bool) {
 // Backspace deletes the selection, or the grapheme or word before the caret.
 func (e *Editor) Backspace(word bool) {
 	if !e.HasSelection() {
-		e.Anchor = fn.Pick(word, prevWord(e.Text, e.Caret), PrevGrapheme(e.Text, e.Caret))
+		e.Anchor = gem.Pick(word, prevWord(e.Text, e.Caret), PrevGrapheme(e.Text, e.Caret))
 	}
 	e.Replace("")
 }
@@ -233,7 +233,7 @@ func (e *Editor) Backspace(word bool) {
 // DeleteForward deletes the selection, or the grapheme or word after the caret.
 func (e *Editor) DeleteForward(word bool) {
 	if !e.HasSelection() {
-		e.Anchor = fn.Pick(word, nextWord(e.Text, e.Caret), NextGrapheme(e.Text, e.Caret))
+		e.Anchor = gem.Pick(word, nextWord(e.Text, e.Caret), NextGrapheme(e.Text, e.Caret))
 	}
 	e.Replace("")
 }

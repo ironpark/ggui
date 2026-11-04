@@ -1,7 +1,7 @@
 package paragraph
 
 import (
-	"github.com/ironpark/ggui/internal/fn"
+	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/internal/textlayout"
 	"github.com/ironpark/ggui/internal/third_party/text"
 	"github.com/ironpark/ggui/pkg/layout"
@@ -115,7 +115,7 @@ func (p *Paragraph) RunAt(pos int) int {
 // that is positive, the last cut with "…" when text goes on past it; and
 // with ellipsis every line too wide cut to fit.
 func (p *Paragraph) Layout(maxW float64, wrap bool, maxLines int, ellipsis bool) {
-	spans := textlayout.WrapSpansBy(p.Text, p.width, fn.Pick(wrap, maxW, 0))
+	spans := textlayout.WrapSpansBy(p.Text, p.width, gem.Pick(wrap, maxW, 0))
 	truncated := maxLines > 0 && len(spans) > maxLines
 	if truncated {
 		spans = spans[:maxLines]

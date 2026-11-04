@@ -7,7 +7,7 @@ package kinetics
 import (
 	"math"
 
-	"github.com/ironpark/ggui/internal/fn"
+	"github.com/ironpark/ggui/pkg/gem"
 )
 
 // Rubber moves raw, the offset a scroll's content shows at, by d, with
@@ -19,7 +19,7 @@ func Rubber(raw, d, lo, hi, extent float64, momentum bool) float64 {
 	if next >= lo && next <= hi || raw < lo && d > 0 || raw > hi && d < 0 {
 		return next
 	}
-	edge := fn.Pick(next < lo, lo, hi)
+	edge := gem.Pick(next < lo, lo, hi)
 	from := raw
 	if raw >= lo && raw <= hi {
 		from = edge
@@ -51,10 +51,10 @@ func SnapTarget(pos, end, step, from, dir float64, paging bool) float64 {
 	if paging {
 		t = math.Round(from / step)
 		if math.Abs(pos-from) > step/6 {
-			t = fn.Pick(dir > 0, math.Ceil(n), math.Floor(n))
+			t = gem.Pick(dir > 0, math.Ceil(n), math.Floor(n))
 		}
 	}
-	v := fn.Clamp(t*step, 0, end)
+	v := gem.Clamp(t*step, 0, end)
 	if !paging && math.Abs(end-pos) < math.Abs(v-pos) {
 		v = end
 	}

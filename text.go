@@ -10,7 +10,7 @@ import (
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/internal/fontsys"
 	"github.com/ironpark/ggui/internal/paragraph"
-	"github.com/ironpark/ggui/internal/pool"
+	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/textedit"
@@ -185,7 +185,7 @@ type cellsBuf struct {
 	entries []ggfx.ImageDraw
 }
 
-var theCellsBufPool = pool.Pool[*cellsBuf]{
+var theCellsBufPool = gem.Pool[*cellsBuf]{
 	New: func() *cellsBuf { return &cellsBuf{} },
 }
 
