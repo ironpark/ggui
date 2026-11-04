@@ -2,6 +2,10 @@ version: '3'
 
 vars:
   GO: '{{default "go" .GO}}'
+  # The packages bench:save and bench:compare measure by default. Those
+  # among them below the UI are also listed in boundary_test.go, which
+  # keeps them from importing it.
+  ENGINES: ./internal/reactive ./internal/fontsys ./internal/textlayout ./internal/paragraph ./internal/kinetics ./internal/virtual ./internal/region ./pkg/geom
 
 tasks:
   default:
@@ -44,13 +48,13 @@ tasks:
       - '"{{.GO}}" test -run xxx -bench . -count {{.COUNT}} ./...'
 
   # The engine packages' benchmarks run alone, with no window or GPU: what
-  # a refactor of text, motion or geometry is measured with. PKGS=./... takes
-  # in the rest.
+  # a refactor of reactivity, text, motion, virtual lists, repaint regions
+  # or geometry is measured with. PKGS=./... takes in the rest.
   bench:save:
     desc: Save benchmarks to .bench/NAME.txt (NAME=base, PKGS=engines, BENCH=., COUNT=6)
     vars:
       NAME: '{{default "base" .NAME}}'
-      PKGS: '{{default "./internal/fontsys ./internal/textlayout ./internal/paragraph ./internal/kinetics ./pkg/geom" .PKGS}}'
+      PKGS: '{{default .ENGINES .PKGS}}'
       BENCH: '{{default "." .BENCH}}'
       COUNT: '{{default 6 .COUNT}}'
     cmds:
@@ -66,7 +70,7 @@ tasks:
     # go install golang.org/x/perf/cmd/benchstat@latest
     vars:
       BASE: '{{default "base" .BASE}}'
-      PKGS: '{{default "./internal/fontsys ./internal/textlayout ./internal/paragraph ./internal/kinetics ./pkg/geom" .PKGS}}'
+      PKGS: '{{default .ENGINES .PKGS}}'
       BENCH: '{{default "." .BENCH}}'
       COUNT: '{{default 6 .COUNT}}'
       BENCHSTAT: '{{default "benchstat" .BENCHSTAT}}'
