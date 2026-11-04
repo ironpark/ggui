@@ -22,7 +22,7 @@ type scope struct {
 	measuring       func(src LayoutSource, version uint64)
 	derivedDepth    int
 	building        bool // inside Build: see SnapshotRead
-	memory          any  // what Remember keeps values in; see ggui's memory.go
+	memory          any  // what Remember keeps values in; see ggui's reactivity.go
 	layoutDepth     int
 	layoutGen       uint64 // see RequestLayout
 	stateGen        uint64 // see StateGen
