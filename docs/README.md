@@ -67,4 +67,4 @@ Package-specific READMEs remain beside their code and assets:
 - [Optional Go fonts, with bold, for every platform](../fonts/gofont/README.md)
 - [Gallery chat assets and licenses](../examples/gallery/assets/chat/README.md)
 - [Theme package and migration](../ui/theme/README.md)
-- [Vendored theme palettes and sources](../internal/themedata/README.md)
+- [Vendored theme palettes and sources](../ui/theme/README.md#palette-sources)

@@ -1,7 +1,7 @@
 // Package a11y is ggui's accessibility vocabulary: the terms a widget
 // describes itself in and the frozen tree one frame publishes. The bridges
 // that hand that tree to the platform's own accessibility API live in
-// internal/a11ybridge, so this package is plain Go on every platform.
+// internal/platform/a11ybridge, so this package is plain Go on every platform.
 //
 // Most programs never import it. The ggui package re-exports every name
 // here -- Node, Role, Action and the rest are the same types under the same

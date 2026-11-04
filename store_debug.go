@@ -6,8 +6,8 @@ import (
 	"sync"
 	"weak"
 
-	"github.com/ironpark/ggui/internal/goid"
 	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/internal/reactive/goid"
 )
 
 // A ggui_debug build checks every live Store after each frame's input.

@@ -1,6 +1,7 @@
 package theme
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"image/color"
@@ -9,7 +10,6 @@ import (
 	"sync"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/internal/themedata"
 )
 
 // BaseColor selects the neutral surfaces and foregrounds of a Preset.
@@ -175,12 +175,18 @@ func compositeColor(fg, bg color.Color, opacity float64) color.Color {
 	return color.NRGBA{ch(f.R, b.R), ch(f.G, b.G), ch(f.B, b.B), 255}
 }
 
+// shadcnJSON is the shadcn/ui theme registry, vendored: see the README
+// for its source and LICENSE-shadcn.txt for its license.
+//
+//go:embed shadcn.json
+var shadcnJSON []byte
+
 var themePalettes = sync.OnceValue(func() map[string][2]map[string]color.Color {
 	var data []struct {
 		Name    string                                  `json:"name"`
 		CSSVars struct{ Light, Dark map[string]string } `json:"cssVars"`
 	}
-	if err := json.Unmarshal(themedata.JSON, &data); err != nil {
+	if err := json.Unmarshal(shadcnJSON, &data); err != nil {
 		panic(err)
 	}
 	out := make(map[string][2]map[string]color.Color)

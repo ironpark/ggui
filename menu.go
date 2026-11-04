@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ironpark/ggui/internal/nativemenu"
+	"github.com/ironpark/ggui/internal/platform/nativemenu"
 	"github.com/ironpark/ggwd/native"
 )
 

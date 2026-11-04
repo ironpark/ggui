@@ -8,7 +8,7 @@ import (
 
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
-	"github.com/ironpark/ggui/internal/virtual"
+	"github.com/ironpark/ggui/pkg/virtual"
 )
 
 // EachWidget is a keyed, reactive list: it watches a Readable of items, keeps one

@@ -10,10 +10,10 @@ import (
 
 	"github.com/ironpark/ggui/a11y"
 	"github.com/ironpark/ggui/internal/fontsys"
+	"github.com/ironpark/ggui/internal/platform/textinput"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/textedit"
-	"github.com/ironpark/ggui/internal/textinput"
 	"github.com/ironpark/ggui/internal/textlayout"
 	"github.com/ironpark/ggui/internal/third_party/text"
 	"github.com/ironpark/ggui/runtime"
@@ -29,7 +29,7 @@ const caretBlink = 530 * time.Millisecond
 // adds the themed box around it.
 //
 // Text comes in through the platform IME (a patched copy of Ebitengine's
-// exp/textinput, in internal/textinput), so composed
+// exp/textinput, in internal/platform/textinput), so composed
 // scripts such as Korean and Japanese work, with the composition shown
 // underlined in place. Keys: arrows (with Shift to select, Alt or Ctrl to
 // jump words, ⌘ on macOS to reach the ends), Home and End, Backspace and

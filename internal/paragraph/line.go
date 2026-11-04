@@ -8,14 +8,13 @@ import (
 	"unicode/utf8"
 
 	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/internal/fontsys"
 	"github.com/ironpark/ggui/internal/textlayout"
 	"github.com/ironpark/ggui/internal/third_party/text"
 	"github.com/ironpark/ggui/internal/third_party/typesetting/bidi"
+	"github.com/ironpark/ggui/pkg/gem"
 	"golang.org/x/text/language"
 
-	"github.com/ironpark/ggui/internal/emojidata"
 	"github.com/ironpark/ggui/internal/textedit"
 )
 
@@ -238,7 +237,7 @@ type rtlChain struct {
 // font's for an emoji, else the face of the font the picker finds for its
 // first rune, else the chain's last, as a fallback face picks.
 func (c *rtlChain) pick(g string) int {
-	if c.emoji != nil && emojidata.IsCluster(g) && c.emoji.ColorFace() != nil {
+	if c.emoji != nil && fontsys.IsEmojiCluster(g) && c.emoji.ColorFace() != nil {
 		return -1
 	}
 	r, _ := utf8.DecodeRuneInString(g)

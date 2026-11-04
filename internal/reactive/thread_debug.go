@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/ironpark/ggui/internal/goid"
+	"github.com/ironpark/ggui/internal/reactive/goid"
 )
 
 // Signals, effects, layout and paint all belong to the UI goroutine, and a

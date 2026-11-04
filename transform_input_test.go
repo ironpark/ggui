@@ -92,11 +92,11 @@ func TestTransformLayerCoversOnlyWhatShows(t *testing.T) {
 	}
 	tg := &target{}
 	c.Transform(Affine{}.Translate(500, 0), func(dst *Canvas) { tg.Paint(dst, Rct(Pt(0, 0), Sz(10, 10))) })
-	if c.fs().layerDepth != 0 || layerCount(c.root()) != 0 {
+	if c.fs().layers.Depth() != 0 || layerCount(c.root()) != 0 {
 		t.Fatal("a transform with nothing to show borrowed a layer")
 	}
 	c.Transform(Affine{}.Translate(30, 0), func(dst *Canvas) { tg.Paint(dst, Rct(Pt(0, 0), Sz(10, 10))) })
-	if c.fs().layerDepth != 0 || layerCount(c.root()) != 1 {
+	if c.fs().layers.Depth() != 0 || layerCount(c.root()) != 1 {
 		t.Fatal("a visible transform did not paint through one returned layer")
 	}
 	c.root().freeLayers()

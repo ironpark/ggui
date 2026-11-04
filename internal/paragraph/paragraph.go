@@ -1,9 +1,9 @@
 package paragraph
 
 import (
-	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/internal/textlayout"
 	"github.com/ironpark/ggui/internal/third_party/text"
+	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/pkg/layout"
 )
 

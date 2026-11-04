@@ -27,7 +27,7 @@ On macOS, install it with `brew install go-task`.
 | `task fmt` | Format Go sources. |
 | `task tidy` | Update module dependency metadata. |
 | `task bench COUNT=6` | Run package benchmarks repeatedly for comparison. |
-| `task bench:save NAME=base` | Save the engine packages' benchmarks (reactivity, fonts, text layout, motion, virtual lists, repaint regions, geometry) to `.bench/NAME.txt`. `PKGS`, `BENCH` and `COUNT` narrow or widen the run. |
+| `task bench:save NAME=base` | Save the engine packages' benchmarks (reactivity, fonts, text layout, motion, virtual lists, geometry and repaint regions, the image cache, layer images) to `.bench/NAME.txt`. `PKGS`, `BENCH` and `COUNT` narrow or widen the run. |
 | `task bench:compare REF=main` | Run the same benchmarks now and compare them by `benchstat` with a baseline: `.bench/BASE.txt`, or `REF` measured in a temporary worktree of that commit. |
 | `task clean` | Clean Go artifacts and remove `bin/`, including app bundles. |
 
@@ -63,7 +63,7 @@ request:
   tested through a `go work init . ./examples/sqlite` workspace, so it
   builds against the checkout rather than a published ggui.
 - **wasm**: builds everything for `js/wasm` and runs the packages that do
-  not start ggfx under node, `internal/goid` among them.
+  not start ggfx under node, `internal/reactive/goid` among them.
 - **lint**: `gofmt`, `go vet`, the Windows vet of `task vet:windows`,
   `task lint`'s staticcheck for every platform, and builds for
   linux/riscv64 and windows/arm64.
@@ -143,14 +143,14 @@ those guides as historical measurements; rerun them on your target hardware.
 | Area | Source |
 | --- | --- |
 | Application and frame loop | [app.go](../app.go), [loop.go](../loop.go) |
-| Reactivity and component ownership | [reactivity.go](../reactivity.go), [widget.go](../widget.go), [for.go](../for.go), [internal/virtual/](../internal/virtual/) (which rows a virtual list lays out, and where) |
-| Layout, geometry, and drawing | [widgets.go](../widgets.go), [scroll.go](../scroll.go), [geometry.go](../geometry.go), [canvas.go](../canvas.go), [damage.go](../damage.go) and [internal/region/](../internal/region/) (the regions a partial frame repaints), [pkg/geom/](../pkg/geom/) (affine transforms and path outlines), [internal/render/](../internal/render/) (the shaders behind the Canvas) |
+| Reactivity and component ownership | [reactivity.go](../reactivity.go), [widget.go](../widget.go), [for.go](../for.go), [pkg/virtual/](../pkg/virtual/) (which rows a virtual list lays out, and where) |
+| Layout, geometry, and drawing | [widgets.go](../widgets.go), [scroll.go](../scroll.go), [canvas.go](../canvas.go), [paint.go](../paint.go) (paths, gradients and layers), [damage.go](../damage.go), [pkg/layout/](../pkg/layout/) (box layout), [pkg/geom/](../pkg/geom/) (affine transforms, path outlines, and the regions a partial frame repaints), [internal/render/](../internal/render/) (the shaders behind the Canvas, and the layer images it lends) |
 | UI controls | [ui/](../ui/) |
-| Text editing and fonts | [editor.go](../editor.go), [font.go](../font.go), [text.go](../text.go), [internal/fontsys/](../internal/fontsys/) (fonts, fallback chains and emoji), [internal/textlayout/](../internal/textlayout/) (measuring and wrapping), [internal/paragraph/](../internal/paragraph/) (bidi lines, styled paragraphs and CPU rendering), [internal/textedit/](../internal/textedit/) (the buffer, selection and undo), [internal/textinput/](../internal/textinput/) (the IME) |
-| Input and shortcuts | [input.go](../input.go), [keys.go](../keys.go), [touch.go](../touch.go) |
+| Text editing and fonts | [editor.go](../editor.go), [font.go](../font.go), [text.go](../text.go), [internal/fontsys/](../internal/fontsys/) (fonts, fallback chains and emoji), [internal/textlayout/](../internal/textlayout/) (measuring and wrapping), [internal/paragraph/](../internal/paragraph/) (bidi lines, styled paragraphs and CPU rendering), [internal/textedit/](../internal/textedit/) (the buffer, selection and undo), [internal/platform/textinput/](../internal/platform/textinput/) (the IME) |
+| Input and shortcuts | [input.go](../input.go) (pointer, keys and touch), [keys.go](../keys.go) |
 | Platform services | [runtime/](../runtime/) (file dialogs and the clipboard, reached through `Host`) |
-| Accessibility and semantics | [a11y/](../a11y/) (the vocabulary), [internal/a11ybridge/](../internal/a11ybridge/) (the platform bridges), [semantics.go](../semantics.go) |
-| Styling and animation | [style.go](../style.go), [anim.go](../anim.go), [transition.go](../transition.go), [effects.go](../effects.go), [internal/kinetics/](../internal/kinetics/) (easing curves and scroll and touch physics) — see [Styling and themes](styling.md) |
-| Overlays and images | [popup.go](../popup.go), [image.go](../image.go) |
-| Testing and diagnostics | [probe.go](../probe.go), [inspect/panel/](../inspect/panel) (the panel, build tag `ggui_inspector`), [inspector.go](../inspector.go) (its registration, and the frame built from the trace), [inspect/](../inspect) (the frame model the panel and `App.OnInspect` share), [overlay.go](../overlay.go) (the Overlay the panel draws as), [cache.go](../cache.go) |
+| Accessibility and semantics | [a11y/](../a11y/) (the vocabulary), [internal/platform/a11ybridge/](../internal/platform/a11ybridge/) (the platform bridges), [semantics.go](../semantics.go) |
+| Styling and animation | [style.go](../style.go), [anim.go](../anim.go), [transition.go](../transition.go), [effects.go](../effects.go), [pkg/kinetics/](../pkg/kinetics/) (easing curves, springs, and scroll and touch physics) — see [Styling and themes](styling.md) |
+| Overlays and images | [popup.go](../popup.go), [image.go](../image.go), [internal/imgcache/](../internal/imgcache/) (the cache AsyncImage loads into) |
+| Testing and diagnostics | [probe.go](../probe.go), [inspect/panel/](../inspect/panel) (the panel, build tag `ggui_inspector`), [inspector.go](../inspector.go) (its registration, and the frame built from the trace), [inspect/](../inspect) (the frame model the panel and `App.OnInspect` share), [popup.go](../popup.go) (the Overlay the panel draws as), [cache.go](../cache.go) |
 | Runnable applications | [examples/](../examples/) |

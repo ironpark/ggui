@@ -1,6 +1,9 @@
 package a11y
 
-import "sync/atomic"
+import (
+	"sort"
+	"sync/atomic"
+)
 
 // A text field is the one node an assistive technology does not merely read
 // out: it walks it, character by character and line by line, and moves the
@@ -107,10 +110,10 @@ func StringForRange(n Node, loc, length int) string {
 // honest answer for a field that is.
 func LineForIndex(n Node, u int) int {
 	b := axByteAt(n.Value, u)
-	for i, r := range n.Runs {
-		if b <= r.End {
-			return i
-		}
+	// Runs are in order, so the first that ends at or past b is found by
+	// halving.
+	if i := sort.Search(len(n.Runs), func(i int) bool { return b <= n.Runs[i].End }); i < len(n.Runs) {
+		return i
 	}
 	return max(len(n.Runs)-1, 0)
 }
@@ -124,9 +127,14 @@ func RangeForLine(n Node, line int) (loc, length int, ok bool) {
 		}
 		return 0, 0, false
 	}
+	// One walk: to the start, then on through the line alone.
 	r := n.Runs[line]
-	loc = axUTF16At(n.Value, r.Start)
-	return loc, axUTF16At(n.Value, r.End) - loc, true
+	start, end := min(max(r.Start, 0), len(n.Value)), min(max(r.End, 0), len(n.Value))
+	loc = axUTF16At(n.Value, start)
+	if end <= start {
+		return loc, 0, true
+	}
+	return loc, axUTF16At(n.Value[start:], end-start), true
 }
 
 // InsertionLine is the line the caret is on, which is what VoiceOver says

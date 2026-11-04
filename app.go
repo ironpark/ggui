@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui/a11y"
-	"github.com/ironpark/ggui/internal/nativemenu"
+	"github.com/ironpark/ggui/internal/platform/nativemenu"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/runtime"
 	"github.com/ironpark/ggwd"

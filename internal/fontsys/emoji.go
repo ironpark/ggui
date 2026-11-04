@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggui/internal/emojidata"
 	"github.com/ironpark/ggui/internal/textedit"
 	"github.com/ironpark/ggui/internal/third_party/text"
 )
@@ -96,12 +95,12 @@ func (ef *EmojiFace) ColorFace() text.Face {
 func TextRuns(s string, face text.Face) iter.Seq2[string, text.Face] {
 	return func(yield func(string, text.Face) bool) {
 		ef, ok := face.(*EmojiFace)
-		if !ok || !emojidata.MayHold(s) {
+		if !ok || !MayHoldEmoji(s) {
 			yield(s, face)
 			return
 		}
 		pick := func(g string) text.Face {
-			if emojidata.IsCluster(g) {
+			if IsEmojiCluster(g) {
 				if e := ef.ColorFace(); e != nil {
 					return e
 				}
@@ -119,7 +118,7 @@ func PlainFace(face text.Face, s string) text.Face {
 	if !ok {
 		return face
 	}
-	if emojidata.MayHold(s) {
+	if MayHoldEmoji(s) {
 		return nil
 	}
 	return ef.Face
@@ -139,7 +138,7 @@ func DrawText(dst *ggfx.Image, s string, face text.Face, options *text.DrawOptio
 	// holds, drawn where it was asked for. Saying so here skips the line
 	// metrics and the advance that only matter when runs have to be placed
 	// one after another, and most text a frame draws is this.
-	if !emojidata.MayHold(s) {
+	if !MayHoldEmoji(s) {
 		text.Draw(dst, s, ef.Face, options)
 		return
 	}

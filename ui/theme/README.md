@@ -77,4 +77,17 @@ This move changes public import paths and APIs; the old paths are not aliases.
 
 Unlike the old `WithTheme`, `Apply` also maps the theme's text, spacing, editor,
 scrollbar and popup settings. See [styling](../../docs/styling.md) for usage and
-[palette sources](../../internal/themedata/README.md) for upstream data and licenses.
+[palette sources](#palette-sources) for upstream data and licenses.
+
+## Palette sources
+
+`shadcn.json` is the theme registry from:
+https://github.com/shadcn-ui/ui/blob/main/apps/v4/registry/themes.ts
+Retrieved 2026-09-18. It contains seven neutral base palettes and seventeen
+accent palettes, with light/dark semantic tokens. Only TypeScript type syntax
+was removed. Source license: MIT, included in [LICENSE-shadcn.txt](LICENSE-shadcn.txt).
+
+The palette loader retains the original OKLCH values until conversion to sRGB.
+Nova/Rhea geometry mappings are in [presets.go](presets.go), informed by:
+https://github.com/shadcn-ui/ui/blob/main/apps/v4/registry/styles/style-nova.css
+https://github.com/shadcn-ui/ui/blob/main/apps/v4/registry/styles/style-rhea.css

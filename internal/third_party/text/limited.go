@@ -19,8 +19,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/ironpark/ggfx/vector"
-	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/internal/third_party/text/internal/textutil"
+	"github.com/ironpark/ggui/pkg/gem"
 )
 
 var _ Face = (*LimitedFace)(nil)

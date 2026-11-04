@@ -13,8 +13,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/internal/third_party/text"
+	"github.com/ironpark/ggui/pkg/gem"
 	"golang.org/x/image/font/gofont/goregular"
 )
 

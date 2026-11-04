@@ -101,9 +101,7 @@ type frameState struct {
 	// The images Layer lends, by depth: as large as the areas the layers
 	// at that depth took this frame, kept for the next frame's, and freed
 	// at the end of one that took them no more.
-	layers     [][]layerImage
-	layerDepth int // Layers open now
-	layerPeak  int // the most open at once this frame
+	layers render.LayerPool[*ggfx.Image]
 
 	// backdrop records that a BackdropBlur read the window's own image
 	// this frame, or wanted to: the window keeps a backbuffer for it, as
