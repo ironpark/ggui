@@ -653,11 +653,11 @@ control supports `.Name("Appearance")`, `.OnChange(fn)`, `.Disabled(v)`, and
 | Root environment, editor/scrollbar styles, spacing and background | [environment.go](../environment.go) |
 | Theme tokens, followers, defaults, presets and application | [ui/theme/](../ui/theme/) |
 | Reading shadcn/ui CSS | [ui/theme/css.go](../ui/theme/css.go) |
-| Color tokens, `EnvColor` | [ui/theme/tokens.go](../ui/theme/tokens.go), [envcolor.go](../envcolor.go) |
+| Color tokens, `EnvColor` | [ui/theme/tokens.go](../ui/theme/tokens.go), [environment.go](../environment.go) |
 | `Variant`, `Restyle` | [ui/variant.go](../ui/variant.go) |
 | `Text`, `Styled`, `Provide`, `WithEnv` | [widgets.go](../widgets.go) |
 | `ui.Title`, `ui.Heading`, `ui.Caption`, `ui.Mono` | [ui/text.go](../ui/text.go) |
-| Shadows | [shadow.go](../shadow.go) |
+| Shadows | [effects.go](../effects.go) |
 | Motion and transitions | [anim.go](../anim.go), [transition.go](../transition.go) |
 | The controls that consume the tokens | [ui/](../ui/) |
 

@@ -3,7 +3,9 @@ package ggui
 import (
 	"image"
 
+	"github.com/ironpark/ggui/runtime"
 	"github.com/ironpark/ggwd"
+	"github.com/ironpark/ggwd/native"
 )
 
 // The methods here change the native window. Called before the window
@@ -209,4 +211,13 @@ func Screens() []Screen {
 		out = append(out, screenOf(m))
 	}
 	return out
+}
+
+func (w *Window) nativeDialogs() runtime.Dialogs {
+	return runtime.NativeDialogsForWindow(func() uintptr {
+		if nw := w.window.Load(); nw != nil {
+			return native.Handle(nw)
+		}
+		return 0
+	})
 }

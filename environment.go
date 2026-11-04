@@ -3,6 +3,8 @@ package ggui
 import (
 	"image/color"
 	"time"
+
+	"github.com/ironpark/ggui/pkg/layout"
 )
 
 // BackgroundKey supplies the window background when Config.Background is nil.
@@ -114,3 +116,102 @@ func SetEnv(env Env) {
 }
 
 func rootEnv() Env { return Untrack(UseEnv) }
+
+// TextDirection is the direction a subtree reads in: left to right, as
+// English does, or right to left, as Arabic and Hebrew do. The zero value
+// is DirLTR.
+type TextDirection = layout.Direction
+
+const (
+	DirLTR = layout.LTR
+	DirRTL = layout.RTL
+)
+
+// DirectionKey holds the direction of the subtree below it; Directionality
+// provides it and Env.Direction reads it, DirLTR by default.
+var DirectionKey = NewEnvKey[TextDirection]("text direction")
+
+// LanguageKey holds the BCP 47 language of the subtree below it, such as
+// "ar" or "he-IL", which text hands the shaper with each right-to-left
+// run so that it picks the language's forms. Env.Language reads it.
+var LanguageKey = NewEnvKey[string]("language")
+
+// Direction returns the direction the tree under e reads in.
+func (e Env) Direction() TextDirection {
+	d, _ := e.Get(DirectionKey)
+	return d
+}
+
+// Language returns the BCP 47 language set for the tree under e, or "".
+func (e Env) Language() string {
+	l, _ := e.Get(LanguageKey)
+	return l
+}
+
+// Directionality lays child out reading in dir. Under DirRTL a paragraph
+// orders its runs right to left, text starts at the right edge, a Row
+// places its first child rightmost and a Column puts AlignStart children
+// on the right; Align's Left and Right, and an explicit Text.Align, stay
+// where they say.
+//
+//	ggui.Directionality(ggui.DirRTL, ggui.Text("שלום עולם"))
+func Directionality(dir TextDirection, child Widget) *EnvWidget {
+	return Provide(DirectionKey, dir, child)
+}
+
+// startAlign is where a line of text starts by default: the left edge, or
+// the right one under DirRTL.
+func startAlign(d TextDirection) float64 {
+	if d == DirRTL {
+		return 1
+	}
+	return 0
+}
+
+// EnvColor is a color the Env holds, such as a theme's primary color. A
+// widget given one resolves it against the Env it is laid out in, so the
+// widget follows a theme switch, or a subtree's own theme, without being
+// rebuilt. Its RGBA is the value in the application's environment, for code
+// that draws it without an Env.
+//
+// An EnvColor is compared with ==, as every color property is, so it must
+// be comparable; the theme package's tokens are.
+type EnvColor interface {
+	color.Color
+	Resolve(env Env) color.Color
+}
+
+// ResolveColor returns c as env has it: an EnvColor's value there, and any
+// other color as it is. A custom widget that takes a color resolves it this
+// way in Layout and paints the result.
+func ResolveColor(c color.Color, env Env) color.Color {
+	if e, ok := c.(EnvColor); ok {
+		return e.Resolve(env)
+	}
+	return c
+}
+
+// IsEnvColor reports whether c is an EnvColor, which a widget can only
+// paint once layout has resolved it.
+func IsEnvColor(c color.Color) bool {
+	_, ok := c.(EnvColor)
+	return ok
+}
+
+// shownColor is a color property as it was given and as it is painted: the
+// given color itself, or an EnvColor's value in the Env of the last layout.
+type shownColor struct{ given, shown color.Color }
+
+// set gives the property c. A widget lays out again for an EnvColor, given
+// or replaced, since only layout knows its Env.
+func (s *shownColor) set(c color.Color, changed func()) {
+	if c == s.given {
+		return
+	}
+	if IsEnvColor(c) || IsEnvColor(s.given) {
+		changed()
+	}
+	s.given, s.shown = c, c
+}
+
+func (s *shownColor) layout(env Env) { s.shown = ResolveColor(s.given, env) }

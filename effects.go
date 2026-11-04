@@ -1,6 +1,8 @@
 package ggui
 
 import (
+	"image"
+	"image/color"
 	"math"
 
 	"github.com/ironpark/ggfx"
@@ -221,4 +223,186 @@ func (b *BackdropBlurWidget) Paint(dst *Canvas, r Rect) {
 	if b.child != nil {
 		dst.Paint(b.child, r)
 	}
+}
+
+// OpacityWidget paints its child as a whole at an opacity: overlapping parts
+// of the child do not show through each other, as they would if each were
+// faded on its own. Build one with Opacity.
+type OpacityWidget struct {
+	props   property.Owner
+	child   Widget
+	opacity property.Value[float64]
+	shown   float64
+}
+
+// Opacity paints child at opacity, from 0, invisible, to 1, as it is. An
+// invisible child is still laid out and still takes input, as Flutter's
+// Opacity does; wrap it in Inert as well to stop that.
+func Opacity(child Widget, opacity float64) *OpacityWidget {
+	o := &OpacityWidget{child: child}
+	o.opacity.Set(opacity)
+	return o
+}
+
+// Opacity sets the opacity, clamped to [0, 1].
+func (o *OpacityWidget) Opacity(v float64) *OpacityWidget {
+	property.Set(&o.props, &o.opacity, v)
+	return o
+}
+
+// BindOpacity follows a non-nil opacity reader, a Tween say.
+func (o *OpacityWidget) BindOpacity(r Readable[float64]) *OpacityWidget {
+	property.Bind(&o.props, &o.opacity, r, "BindOpacity")
+	return o
+}
+
+// Baseline implements Baseliner: the child's.
+func (o *OpacityWidget) Baseline() (float64, bool) { return baselineOf(o.child) }
+
+// Layout implements Widget.
+func (o *OpacityWidget) Layout(c Constraints, env Env) Size {
+	defer o.props.Layout().EndLayout()
+	o.shown = clamp(o.opacity.Get(), 0, 1)
+	return o.child.Layout(c, env)
+}
+
+// Paint implements Widget. A fully opaque child paints directly, with no
+// layer, and an invisible one with no image, so that it still registers its
+// input and semantics.
+func (o *OpacityWidget) Paint(dst *Canvas, r Rect) {
+	switch {
+	case o.shown >= 1 || dst == nil:
+		dst.Paint(o.child, r)
+		return
+	case o.shown <= 0:
+		dst.into(nil).Paint(o.child, r)
+		return
+	}
+	dst.Layer(LayerOptions{Fade: 1 - o.shown}, func(layer *Canvas) { layer.Paint(o.child, r) })
+}
+
+// ShadowStyle describes an outer, rounded-rectangle shadow in logical pixels.
+// Blur is the feather distance on either side of the edge, not Gaussian sigma.
+// Positive Spread grows the silhouette; negative Spread shrinks it. Nil Color
+// disables the shadow. Shadows do not change layout or pointer hit regions.
+type ShadowStyle struct {
+	Offset       Point
+	Blur, Spread float64
+	Color        color.Color
+}
+
+func (c *Canvas) shadowGeometry(r Rect, radius float64, s ShadowStyle) (render.Shadow, bool) {
+	for _, v := range [...]float64{r.Origin.X, r.Origin.Y, r.Size.W, r.Size.H, radius, s.Offset.X, s.Offset.Y, s.Blur, s.Spread, c.Scale()} {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return render.Shadow{}, false
+		}
+	}
+	if r.Size.W <= 0 || r.Size.H <= 0 {
+		return render.Shadow{}, false
+	}
+	w, h := r.Size.W+2*s.Spread, r.Size.H+2*s.Spread
+	if w <= 0 || h <= 0 {
+		return render.Shadow{}, false
+	}
+	scale := c.Scale()
+	feather := max(max(s.Blur, 0)*scale, .5)
+	center := r.Origin.Add(s.Offset).Add(Pt(r.Size.W/2, r.Size.H/2))
+	cx, cy := c.px(center.X), c.px(center.Y)
+	hw, hh := w*scale/2, h*scale/2
+	// Clip before converting to integers: large offscreen shadows need no large
+	// intermediate texture or unbounded draw quad.
+	bounds, ok := render.Bounds(c.Image.Bounds(), cx, cy, hw, hh, feather)
+	if !ok {
+		return render.Shadow{}, false
+	}
+	// The corner never exceeds half the rect, grows with the spread and, once
+	// scaled, never exceeds half the silhouette.
+	corner := max(min(max(radius, 0), r.Size.W/2, r.Size.H/2)+s.Spread, 0)
+	return render.Shadow{
+		Bounds:  bounds,
+		Centre:  Pt(cx, cy),
+		Half:    Sz(hw, hh),
+		Radius:  float32(min(corner*scale, hw, hh)),
+		Feather: float32(feather),
+	}, true
+}
+
+// Shadow draws a soft rounded-rectangle silhouette behind a surface. Paint the
+// surface afterward. It uses one shared shader, one DrawTrianglesShader call,
+// and no intermediate images or CPU rasterization. This distance-field feather
+// approximates UI shadows; it is not an image blur. Parent clipping is respected.
+func (c *Canvas) Shadow(r Rect, radius float64, s ShadowStyle) {
+	if c == nil || c.Image == nil || s.Color == nil {
+		return
+	}
+	tint := render.Premul(s.Color)
+	if tint[3] == 0 {
+		return
+	}
+	g, ok := c.shadowGeometry(r, radius, s)
+	if !ok {
+		return
+	}
+	render.DrawShadow(c.Image, g, tint)
+}
+
+// FadeEdges paints paint into a layer over r and draws it with its ends
+// along an axis faded out: the first lead logical pixels from clear to
+// opaque, and the last trail from opaque to clear, across x when
+// horizontal and across y otherwise. What is under r shows through the
+// faded ends, as it would through the content's own transparency.
+func (c *Canvas) FadeEdges(r Rect, horizontal bool, lead, trail float64, paint func(dst *Canvas)) {
+	if lead <= 0 && trail <= 0 || c == nil || c.Image == nil || c.Image.Bounds().Empty() {
+		paint(c)
+		return
+	}
+	c.layer(c.Image.Bounds(), paint, func(img *ggfx.Image) {
+		ramp := fadeRamp()
+		// A ramp of fadeRampLength pixels, clear to opaque, stretched over
+		// an end and turned to face into r.
+		end := func(from, length float64, flip bool) {
+			if length <= 0 {
+				return
+			}
+			op := &ggfx.DrawImageOptions{Blend: ggfx.BlendDestinationIn, Filter: ggfx.FilterLinear}
+			along, across := c.px(length)/fadeRampLength, c.px(pick(horizontal, r.Size.H, r.Size.W))
+			if flip {
+				along = -along
+			}
+			op.GeoM.Scale(along, across)
+			if horizontal {
+				op.GeoM.Translate(c.px(from), c.px(r.Origin.Y))
+			} else {
+				// The ramp runs across x; turned a quarter clockwise, it
+				// runs down y, from r's right edge back over its width.
+				op.GeoM.Rotate(math.Pi / 2)
+				op.GeoM.Translate(c.px(r.Origin.X+r.Size.W), c.px(from))
+			}
+			img.DrawImage(ramp, op)
+		}
+		start, stop := pick(horizontal, r.Origin.X, r.Origin.Y), pick(horizontal, r.Origin.X+r.Size.W, r.Origin.Y+r.Size.H)
+		end(start, min(lead, stop-start), false)
+		end(stop, min(trail, stop-start), true)
+		op := &ggfx.DrawImageOptions{}
+		op.GeoM.Translate(float64(img.Bounds().Min.X), float64(img.Bounds().Min.Y))
+		c.Image.DrawImage(img, op)
+	})
+}
+
+const fadeRampLength = 64
+
+// rampImage is the ramp FadeEdges masks with: a row of white from clear to
+// opaque, made once.
+var rampImage *ggfx.Image
+
+func fadeRamp() *ggfx.Image {
+	if rampImage == nil {
+		src := image.NewRGBA(image.Rect(0, 0, fadeRampLength, 1))
+		for x := range fadeRampLength {
+			a := uint8((float64(x) + .5) / fadeRampLength * 255)
+			src.SetRGBA(x, 0, color.RGBA{a, a, a, a})
+		}
+		rampImage = ggfx.NewImageFromImage(src)
+	}
+	return rampImage
 }

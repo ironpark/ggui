@@ -141,14 +141,14 @@ those guides as historical measurements; rerun them on your target hardware.
 | Area | Source |
 | --- | --- |
 | Application and frame loop | [app.go](../app.go), [loop.go](../loop.go) |
-| Reactivity and component ownership | [signal.go](../signal.go), [widget.go](../widget.go), [for.go](../for.go) |
-| Layout, geometry, and drawing | [widgets.go](../widgets.go), [geometry.go](../geometry.go), [canvas.go](../canvas.go), [internal/render/](../internal/render/) (the shaders behind the Canvas) |
+| Reactivity and component ownership | [reactivity.go](../reactivity.go), [widget.go](../widget.go), [for.go](../for.go) |
+| Layout, geometry, and drawing | [widgets.go](../widgets.go), [geometry.go](../geometry.go), [canvas.go](../canvas.go), [pkg/geom/](../pkg/geom/) (affine transforms and path outlines), [internal/render/](../internal/render/) (the shaders behind the Canvas) |
 | UI controls | [ui/](../ui/) |
-| Text editing and fonts | [editor.go](../editor.go), [font.go](../font.go), [internal/textedit/](../internal/textedit/) (the buffer, selection and undo), [internal/textinput/](../internal/textinput/) (the IME) |
-| Input and shortcuts | [input.go](../input.go), [chord.go](../chord.go), [clipboard.go](../clipboard.go) |
+| Text editing and fonts | [editor.go](../editor.go), [font.go](../font.go), [text.go](../text.go), [internal/fontsys/](../internal/fontsys/) (fonts, fallback chains and emoji), [internal/textlayout/](../internal/textlayout/) (measuring and wrapping), [internal/paragraph/](../internal/paragraph/) (bidi lines, styled paragraphs and CPU rendering), [internal/textedit/](../internal/textedit/) (the buffer, selection and undo), [internal/textinput/](../internal/textinput/) (the IME) |
+| Input and shortcuts | [input.go](../input.go), [keys.go](../keys.go), [touch.go](../touch.go) |
 | Platform services | [runtime/](../runtime/) (file dialogs and the clipboard, reached through `Host`) |
 | Accessibility and semantics | [a11y/](../a11y/) (the vocabulary), [internal/a11ybridge/](../internal/a11ybridge/) (the platform bridges), [semantics.go](../semantics.go) |
-| Styling and animation | [style.go](../style.go), [anim.go](../anim.go), [transition.go](../transition.go) — see [Styling and themes](styling.md) |
+| Styling and animation | [style.go](../style.go), [anim.go](../anim.go), [transition.go](../transition.go), [effects.go](../effects.go), [internal/kinetics/](../internal/kinetics/) (easing curves and scroll and touch physics) — see [Styling and themes](styling.md) |
 | Overlays and images | [popup.go](../popup.go), [image.go](../image.go) |
 | Testing and diagnostics | [probe.go](../probe.go), [inspect/panel/](../inspect/panel) (the panel, build tag `ggui_inspector`), [inspector.go](../inspector.go) (its registration, and the frame built from the trace), [inspect/](../inspect) (the frame model the panel and `App.OnInspect` share), [overlay.go](../overlay.go) (the Overlay the panel draws as), [cache.go](../cache.go) |
 | Runnable applications | [examples/](../examples/) |
