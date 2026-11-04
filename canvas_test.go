@@ -1,9 +1,13 @@
 package ggui
 
 import (
+	"fmt"
 	"image"
+	"math"
+	"strings"
 	"testing"
 
+	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/internal/text"
 	"golang.org/x/image/font/gofont/goregular"
 )
@@ -154,3 +158,190 @@ func TestClipReusingIsAClipMadeAgain(t *testing.T) {
 		t.Fatalf("reused clip %+v; want %+v made anew", *got, *want)
 	}
 }
+
+func TestVisiblePaintBounds(t *testing.T) {
+	t.Parallel()
+	img := ggfx.NewImage(100, 100)
+	defer img.Deallocate()
+	c := (&Canvas{Image: img, scale: 2}).Clip(Rct(Pt(10, 10), Sz(20, 20)))
+	for _, tc := range []struct {
+		name  string
+		r     Rect
+		extra float64
+		want  bool
+	}{
+		{"inside", Rct(Pt(12, 12), Sz(4, 4)), 0, true},
+		{"outside", Rct(Pt(35, 12), Sz(4, 4)), 0, false},
+		{"stroke reaches clip", Rct(Pt(31, 12), Sz(4, 4)), 2, true},
+		{"antialias edge", Rct(Pt(30.25, 12), Sz(4, 4)), 0, true},
+		{"negative dimensions fallback", Rct(Pt(40, 12), Sz(-30, 4)), 0, true},
+		{"nonfinite fallback", Rct(Pt(math.NaN(), 12), Sz(4, 4)), 0, true},
+		{"large float32 fallback", Rct(Pt(1<<24, 12), Sz(4, 4)), 0, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := c.visiblePaintBounds(tc.r, tc.extra); got != tc.want {
+				t.Fatalf("got %v want %v", got, tc.want)
+			}
+		})
+	}
+	empty := c.Clip(Rct(Pt(80, 80), Sz(1, 1)))
+	if empty.visiblePaintBounds(Rct(Point{}, Sz(100, 100)), 0) {
+		t.Fatal("empty clip draws")
+	}
+}
+
+func TestEmptyClipRetainsTextSemanticsAndTrace(t *testing.T) {
+	img := ggfx.NewImage(100, 100)
+	defer img.Deallocate()
+	c := &Canvas{Image: img}
+	inspectorEnabled.Store(true)
+	c.fs().tracing = true
+	txt := Text("offscreen text")
+	size := txt.Layout(Tight(Sz(100, 20)), rootEnv())
+	clipped := c.Clip(Rct(Pt(200, 200), Sz(10, 10)))
+	clipped.Paint(txt, Rct(Pt(200, 200), size))
+	if len(c.fs().sem) != 1 || c.fs().sem[0].node.Name != "offscreen text" {
+		t.Fatal("drawing cull lost semantics")
+	}
+	// The trace is collected only once something asked for frames.
+	if len(c.fs().trace) != 1 {
+		t.Fatal("drawing cull lost inspection")
+	}
+}
+
+func BenchmarkOffscreenPaintBounds(b *testing.B) {
+	img := ggfx.NewImage(100, 100)
+	defer img.Deallocate()
+	c := &Canvas{Image: img}
+	r := Rct(Pt(0, 500), Sz(120, 40))
+	b.ReportAllocs()
+	for b.Loop() {
+		c.visiblePaintBounds(r, 0)
+	}
+}
+
+// TestTextSkipsLinesOutsideTheClip paints a long Text into a canvas that
+// shows one line of it: the lines outside are not shaped and drawn, so it
+// allocates a fraction of what painting all of them does.
+func TestTextSkipsLinesOutsideTheClip(t *testing.T) {
+	img := ggfx.NewImage(400, 400)
+	defer img.Deallocate()
+	var s strings.Builder
+	for i := range 200 {
+		fmt.Fprintf(&s, "line %d of a long text\n", i)
+	}
+	txt := Text(s.String()).NoWrap()
+	size := txt.Layout(Loose(Sz(400, 1e6)), rootEnv())
+	full := &Canvas{Image: img}
+	shown := full.Clip(Rct(Pt(0, 0), Sz(400, 20)))
+	all := testing.AllocsPerRun(5, func() { full.Paint(txt, Rct(Point{}, size)) })
+	one := testing.AllocsPerRun(5, func() { shown.Paint(txt, Rct(Point{}, size)) })
+	// One line allocates about a twelfth of what all do, but about a tenth
+	// under the race detector; painting all of them would allocate as much.
+	if one*5 > all {
+		t.Errorf("painting one line of 200 allocates %v, all of them %v", one, all)
+	}
+}
+
+// shortcutKeeper registers a chord from Paint, under a focus trap if trap
+// is set and on an inert canvas while inert is, with a key region so the
+// trap has something to hold.
+type shortcutKeeper struct {
+	chord Chord
+	fn    func()
+	trap  bool
+	inert *StateValue[bool]
+}
+
+func (s *shortcutKeeper) Layout(c Constraints, _ Env) Size { return c.Constrain(Sz(20, 20)) }
+func (s *shortcutKeeper) HandleKey(KeyEvent)               {}
+func (s *shortcutKeeper) Paint(dst *Canvas, r Rect) {
+	if s.inert != nil && Untrack(s.inert.Get) {
+		dst = dst.Inert()
+	}
+	paint := func(dst *Canvas) {
+		dst.HitKey(r, s)
+		dst.Shortcut(s.chord, s.fn)
+	}
+	if s.trap {
+		dst.FocusTrap(s, nil, paint)
+		return
+	}
+	paint(dst)
+}
+
+// A painted shortcut runs while its widget is painted and stops when the
+// widget goes, when it is inert, or while a trap it is outside is open.
+func TestCanvasShortcutFollowsWhatIsPainted(t *testing.T) {
+	t.Parallel()
+	shown, inert, dialog := State(true), State(false), State(false)
+	var saves, dialogSaves int
+	p := ProbeBuilder(func() Widget {
+		return Column(
+			If(shown, func() Widget {
+				return &shortcutKeeper{chord: MustChord("cmd+s"), fn: func() { saves++ }, inert: inert}
+			}),
+			If(dialog, func() Widget {
+				return &shortcutKeeper{chord: MustChord("cmd+s"), fn: func() { dialogSaves++ }, trap: true}
+			}),
+		)
+	}, Sz(100, 100))
+	defer p.Close()
+	press := func(what string, wantSaves, wantDialog int) {
+		t.Helper()
+		p.Key("cmd+s")
+		if saves != wantSaves || dialogSaves != wantDialog {
+			t.Fatalf("%s: saves %d, dialog saves %d; want %d, %d", what, saves, dialogSaves, wantSaves, wantDialog)
+		}
+	}
+	p.Frame()
+	press("painted", 1, 0)
+	dialog.Set(true)
+	p.Frame()
+	press("behind a dialog", 1, 1)
+	dialog.Set(false)
+	inert.Set(true)
+	p.Frame()
+	press("inert", 1, 1)
+	inert.Set(false)
+	shown.Set(false)
+	p.Frame()
+	press("gone", 1, 1)
+	shown.Set(true)
+	p.Frame()
+	press("back", 2, 1)
+}
+
+func TestClipTakesNoAllocationOnceItsCanvasesAreMade(t *testing.T) {
+	c := &Canvas{}
+	f := c.fs()
+	paint := func() {
+		f.resetCanvases()
+		for i := range 8 {
+			c.Clip(Rct(Pt(float64(i), 0), Sz(10, 10))).Clip(Rct(Point{}, Sz(5, 5)))
+		}
+	}
+	paint()
+	if n := testing.AllocsPerRun(100, paint); n != 0 {
+		t.Fatalf("a paint's Clips took %v allocations", n)
+	}
+	if len(f.canvases) != 16 {
+		t.Fatalf("%d canvases kept, want the 16 a paint takes", len(f.canvases))
+	}
+}
+
+func TestAProbesClipsAreHandedOutAgainEachFrame(t *testing.T) {
+	p := ProbeBuilder(func() Widget { return twoClips{} }, Sz(20, 20))
+	for range 5 {
+		p.Frame()
+	}
+	if n := len(p.canvas.fs().canvases); n != 2 {
+		t.Fatalf("%d canvases after 5 frames of 2 Clips each", n)
+	}
+}
+
+// twoClips paints through two nested Clips.
+type twoClips struct{}
+
+func (twoClips) Layout(cs Constraints, _ Env) Size { return cs.Max() }
+func (twoClips) Paint(dst *Canvas, r Rect)         { dst.Clip(r).Clip(r) }
