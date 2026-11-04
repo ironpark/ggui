@@ -47,23 +47,49 @@ func benchTextNode() Node {
 	return Node{Role: RoleTextField, Value: b.String(), Runs: runs}
 }
 
+// Each as a node fresh from Build answers, with its lines indexed, and as
+// one made without it, which walks from the start of the text.
+func benchTextNodes() map[string]Node {
+	walk := benchTextNode()
+	indexed := walk
+	indexed.indexRuns()
+	return map[string]Node{"indexed": indexed, "walk": walk}
+}
+
 func BenchmarkLineForIndex(b *testing.B) {
-	n := benchTextNode()
-	end := CharCount(n)
-	b.ReportAllocs()
-	i := 0
-	for b.Loop() {
-		LineForIndex(n, i*7919%end)
-		i++
+	for name, n := range benchTextNodes() {
+		b.Run(name, func(b *testing.B) {
+			end := CharCount(n)
+			b.ReportAllocs()
+			i := 0
+			for b.Loop() {
+				LineForIndex(n, i*7919%end)
+				i++
+			}
+		})
 	}
 }
 
 func BenchmarkRangeForLine(b *testing.B) {
+	for name, n := range benchTextNodes() {
+		b.Run(name, func(b *testing.B) {
+			b.ReportAllocs()
+			i := 0
+			for b.Loop() {
+				RangeForLine(n, i%len(n.Runs))
+				i++
+			}
+		})
+	}
+}
+
+// Indexing a node's lines, which Build does once per frame for each text
+// node that froze its layout.
+func BenchmarkIndexRuns(b *testing.B) {
 	n := benchTextNode()
 	b.ReportAllocs()
-	i := 0
 	for b.Loop() {
-		RangeForLine(n, i%len(n.Runs))
-		i++
+		m := n
+		m.indexRuns()
 	}
 }

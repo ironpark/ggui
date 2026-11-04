@@ -236,13 +236,46 @@ func TestSpringStepIsCapped(t *testing.T) {
 	}
 }
 
-// Any stiffness and damping a widget might choose stays finite at frame
-// steps: the substeps keep the integration stable.
+// The solution agrees with the motion integrated in steps too small to
+// stray, under, at and over critical damping, and with no spring at all.
+func TestSpringFollowsTheOscillator(t *testing.T) {
+	t.Parallel()
+	for _, p := range []struct{ k, c float64 }{{170, 18}, {400, 40}, {100, 60}, {0, 5}, {0, 0}, {900, 0}} {
+		s := Spring{Pos: 3, Vel: -7, To: 1, Stiffness: p.k, Damping: p.c}
+		x, v := s.Pos-s.To, s.Vel
+		const h = 1e-6
+		for range int(0.05 / h) {
+			v += (-p.k*x - p.c*v) * h
+			x += v * h
+		}
+		s.Step(0.05)
+		if math.Abs(s.Pos-s.To-x) > 1e-3 || math.Abs(s.Vel-v) > 1e-2 {
+			t.Errorf("k=%v c=%v: at %v moving %v, want %v moving %v", p.k, p.c, s.Pos-s.To, s.Vel, x, v)
+		}
+	}
+}
+
+// Steps of any length make the same motion as one of their sum.
+func TestSpringStepsCompose(t *testing.T) {
+	t.Parallel()
+	a := Spring{Pos: 0, To: 1, Stiffness: 170, Damping: 18}
+	b := a
+	for range 6 {
+		a.Step(1.0 / 60)
+	}
+	b.Step(0.1)
+	if math.Abs(a.Pos-b.Pos) > 1e-9 || math.Abs(a.Vel-b.Vel) > 1e-9 {
+		t.Fatalf("six frames reached %v, %v; one step of their sum %v, %v", a.Pos, a.Vel, b.Pos, b.Vel)
+	}
+}
+
+// Any stiffness and damping stays finite, however stiff or heavily damped:
+// the solution has no step to outrun.
 func FuzzSpringStaysFinite(f *testing.F) {
 	f.Add(170.0, 18.0, 1.0/60)
 	f.Add(2000.0, 1.0, 0.1)
 	f.Fuzz(func(t *testing.T, k, c, dt float64) {
-		if !(k > 0 && k <= 5000 && c >= 0 && c <= 500 && dt >= 0 && dt <= 1) {
+		if !(k >= 0 && k <= 1e6 && c >= 0 && c <= 1e5 && dt >= 0 && dt <= 1) {
 			return
 		}
 		s := Spring{To: 4, Stiffness: k, Damping: c, Precision: 0.01}

@@ -76,13 +76,71 @@ func axUTF16At(s string, b int) int {
 }
 
 // CharCount is the length of the field, in the units AppKit counts in.
-func CharCount(n Node) int { return axUTF16Len(n.Value) }
+func CharCount(n Node) int {
+	if n.runUnits != nil {
+		return n.runUnits[len(n.Runs)]
+	}
+	return axUTF16Len(n.Value)
+}
+
+// indexRuns fills runUnits in one walk of Value, if every run starts on a
+// rune boundary of it and none before the one ahead of it: anything else
+// is left to the walk from the start, which takes it as it is.
+func (n *Node) indexRuns() {
+	if len(n.Runs) == 0 {
+		return
+	}
+	units := make([]int, len(n.Runs)+1)
+	i, u := 0, 0
+	for b, r := range n.Value {
+		for ; i < len(n.Runs) && n.Runs[i].Start <= b; i++ {
+			if n.Runs[i].Start != b {
+				return
+			}
+			units[i] = u
+		}
+		u++
+		if r > 0xFFFF {
+			u++
+		}
+	}
+	for ; i < len(n.Runs); i++ {
+		if n.Runs[i].Start != len(n.Value) {
+			return
+		}
+		units[i] = u
+	}
+	units[len(n.Runs)] = u
+	n.runUnits = units
+}
+
+// unitsAt is axUTF16At over Value, from the start of b's line.
+func (n Node) unitsAt(b int) int {
+	b0, u0 := 0, 0
+	if n.runUnits != nil {
+		if i := sort.Search(len(n.Runs), func(i int) bool { return n.Runs[i].Start > b }) - 1; i >= 0 {
+			b0, u0 = n.Runs[i].Start, n.runUnits[i]
+		}
+	}
+	return u0 + axUTF16At(n.Value[b0:], b-b0)
+}
+
+// byteAt is axByteAt over Value, from the start of u's line.
+func (n Node) byteAt(u int) int {
+	b0, u0 := 0, 0
+	if n.runUnits != nil {
+		if i := sort.Search(len(n.Runs), func(i int) bool { return n.runUnits[i] > u }) - 1; i >= 0 {
+			b0, u0 = n.Runs[i].Start, n.runUnits[i]
+		}
+	}
+	return b0 + axByteAt(n.Value[b0:], u-u0)
+}
 
 // Selection is the selected range, as a UTF-16 location and length. An
 // empty selection is the caret, which is what it usually is.
 func Selection(n Node) (loc, length int) {
-	lo := axUTF16At(n.Value, n.SelStart)
-	return lo, axUTF16At(n.Value, n.SelEnd) - lo
+	lo := n.unitsAt(n.SelStart)
+	return lo, n.unitsAt(n.SelEnd) - lo
 }
 
 // Selected is the selected text.
@@ -94,8 +152,8 @@ func Selected(n Node) string {
 // ByteRange converts a UTF-16 location and length into the byte range an
 // Action carries, clamped to the text.
 func ByteRange(n Node, loc, length int) (start, end int) {
-	start = axByteAt(n.Value, loc)
-	end = axByteAt(n.Value, loc+max(length, 0))
+	start = n.byteAt(loc)
+	end = n.byteAt(loc + max(length, 0))
 	return start, max(end, start)
 }
 
@@ -109,7 +167,7 @@ func StringForRange(n Node, loc, length int) string {
 // A field that never said how it was laid out is one line, which is the
 // honest answer for a field that is.
 func LineForIndex(n Node, u int) int {
-	b := axByteAt(n.Value, u)
+	b := n.byteAt(u)
 	// Runs are in order, so the first that ends at or past b is found by
 	// halving.
 	if i := sort.Search(len(n.Runs), func(i int) bool { return b <= n.Runs[i].End }); i < len(n.Runs) {
@@ -123,14 +181,14 @@ func LineForIndex(n Node, u int) int {
 func RangeForLine(n Node, line int) (loc, length int, ok bool) {
 	if line < 0 || line >= len(n.Runs) {
 		if line == 0 {
-			return 0, axUTF16Len(n.Value), true
+			return 0, CharCount(n), true
 		}
 		return 0, 0, false
 	}
-	// One walk: to the start, then on through the line alone.
+	// To the start of the line, then on through it alone.
 	r := n.Runs[line]
 	start, end := min(max(r.Start, 0), len(n.Value)), min(max(r.End, 0), len(n.Value))
-	loc = axUTF16At(n.Value, start)
+	loc = n.unitsAt(start)
 	if end <= start {
 		return loc, 0, true
 	}
@@ -139,7 +197,7 @@ func RangeForLine(n Node, line int) (loc, length int, ok bool) {
 
 // InsertionLine is the line the caret is on, which is what VoiceOver says
 // when the user moves between lines.
-func InsertionLine(n Node) int { return LineForIndex(n, axUTF16At(n.Value, n.SelEnd)) }
+func InsertionLine(n Node) int { return LineForIndex(n, n.unitsAt(n.SelEnd)) }
 
 // RectForRange is the area a UTF-16 range covers, in the same logical
 // coordinates as SemNode.Full. A range spanning several lines comes back as

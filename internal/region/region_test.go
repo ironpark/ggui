@@ -1,4 +1,4 @@
-package geom
+package region
 
 import (
 	"fmt"
@@ -14,34 +14,14 @@ var (
 	rct = layout.Rct
 )
 
-func TestCoverLeavesEmptyRectsOut(t *testing.T) {
-	a := rct(pt(10, 10), sz(5, 5))
-	if got := Cover(Rect{}, a); got != a {
-		t.Fatalf("Cover(empty, a) = %v", got)
-	}
-	if got := Cover(a, rct(pt(-100, -100), sz(0, 9))); got != a {
-		t.Fatalf("Cover(a, empty) = %v: an empty Rect far off widened it", got)
-	}
+func TestCoverAllLeavesEmptyRectsOut(t *testing.T) {
 	if got := CoverAll(nil); !got.Empty() {
 		t.Fatalf("CoverAll(nil) = %v", got)
 	}
+	a := rct(pt(10, 10), sz(5, 5))
 	want := rct(pt(0, 0), sz(15, 15))
-	if got := CoverAll([]Rect{{}, rct(pt(0, 0), sz(1, 1)), a}); got != want {
+	if got := CoverAll([]Rect{{}, rct(pt(0, 0), sz(1, 1))}, []Rect{a}); got != want {
 		t.Fatalf("CoverAll = %v, want %v", got, want)
-	}
-}
-
-func TestGrowAndOverlaps(t *testing.T) {
-	r := rct(pt(10, 10), sz(10, 10))
-	if got := Grow(r, 2); got != rct(pt(8, 8), sz(14, 14)) {
-		t.Fatalf("Grow = %v", got)
-	}
-	touching := rct(pt(20, 10), sz(5, 5))
-	if Overlaps(r, touching) {
-		t.Fatal("rects that only touch overlap")
-	}
-	if !Overlaps(Grow(r, 1), touching) {
-		t.Fatal("a grown rect misses its neighbour")
 	}
 }
 
@@ -53,7 +33,7 @@ func TestMergeJoinsNearRegionsAndCutsToTheWindow(t *testing.T) {
 		rct(pt(-50, -50), sz(10, 10)), // off the window
 	}
 	keep := append([]Rect(nil), in...)
-	got := MergeRegions(in, window, 4, 6)
+	got := Merge(in, window, 4, 6)
 	if len(got) != 2 {
 		t.Fatalf("regions %v; want the two near ones as one and the far one", got)
 	}
@@ -64,7 +44,7 @@ func TestMergeJoinsNearRegionsAndCutsToTheWindow(t *testing.T) {
 	for i := range 7 {
 		many = append(many, rct(pt(float64(i)*100, 0), sz(10, 10)))
 	}
-	if got := MergeRegions(many, window, 4, 6); len(got) != 1 {
+	if got := Merge(many, window, 4, 6); len(got) != 1 {
 		t.Fatalf("%d regions for 7 apart; want one around them all", len(got))
 	}
 }
@@ -77,14 +57,14 @@ func TestMergeFollowsAChain(t *testing.T) {
 	for _, i := range []int{0, 4, 2, 6, 1, 5, 3} {
 		chain = append(chain, rct(pt(float64(i)*12, 0), sz(10, 10)))
 	}
-	if got := MergeRegions(chain, window, 4, 100); len(got) != 1 {
+	if got := Merge(chain, window, 4, 100); len(got) != 1 {
 		t.Fatalf("chain merged to %v", got)
 	}
 }
 
 // Whatever comes in, what comes out is inside the window, covers every
 // part of the input inside it, and no two regions are within slack.
-func FuzzMergeRegions(f *testing.F) {
+func FuzzMerge(f *testing.F) {
 	f.Add(uint64(1), 10)
 	f.Add(uint64(9), 40)
 	f.Fuzz(func(t *testing.T, seed uint64, n int) {
@@ -98,7 +78,7 @@ func FuzzMergeRegions(f *testing.F) {
 			in[i] = rct(pt(r.Float64()*500-50, r.Float64()*400-50), sz(r.Float64()*40, r.Float64()*40))
 		}
 		const slack, most = 4, 6
-		out := MergeRegions(in, window, slack, most)
+		out := Merge(in, window, slack, most)
 		if len(out) > most {
 			t.Fatalf("%d regions, most %d", len(out), most)
 		}
@@ -107,7 +87,7 @@ func FuzzMergeRegions(f *testing.F) {
 				t.Fatalf("region %v leaves the window", o)
 			}
 			for _, p := range out[i+1:] {
-				if len(out) > 1 && Overlaps(Grow(o, slack), p) {
+				if len(out) > 1 && o.Grow(slack).Overlaps(p) {
 					t.Fatalf("regions %v and %v were left apart", o, p)
 				}
 			}
@@ -130,7 +110,7 @@ func FuzzMergeRegions(f *testing.F) {
 	})
 }
 
-func BenchmarkMergeRegions(b *testing.B) {
+func BenchmarkMerge(b *testing.B) {
 	window := rct(pt(0, 0), sz(1920, 1080))
 	for _, n := range []int{4, 32, 128} {
 		b.Run(fmt.Sprint(n), func(b *testing.B) {
@@ -141,7 +121,7 @@ func BenchmarkMergeRegions(b *testing.B) {
 			}
 			b.ReportAllocs()
 			for b.Loop() {
-				MergeRegions(in, window, 4, 6)
+				Merge(in, window, 4, 6)
 			}
 		})
 	}

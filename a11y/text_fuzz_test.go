@@ -85,6 +85,7 @@ func FuzzTextOffsets(f *testing.F) {
 		}
 
 		n := Node{Value: s, Runs: layOut(s, breaks)}
+		sameIndexed(t, n, u, length)
 		start, end := ByteRange(n, u, length)
 		if start > end || !isStart[start] || !isStart[end] {
 			t.Fatalf("ByteRange(%q, %d, %d) = %d..%d, not an ordered pair of rune boundaries", s, u, length, start, end)
@@ -139,4 +140,62 @@ func FuzzTextOffsets(f *testing.F) {
 			t.Fatalf("RectForRange(%d, %d) = %+v, outside the laid-out text", u, length, rect)
 		}
 	})
+}
+
+// sameIndexed checks that a node with its line offsets indexed, as Build
+// leaves it, answers as the walk from the start does.
+func sameIndexed(t *testing.T, n Node, u, length int) {
+	t.Helper()
+	ix := n
+	ix.indexRuns()
+	if len(n.Runs) > 0 && ix.runUnits == nil && runsOnBoundaries(n) {
+		t.Fatalf("runs %v of %q on rune boundaries went unindexed", n.Runs, n.Value)
+	}
+	for _, sel := range [][2]int{{0, 0}, {0, len(n.Value)}, {len(n.Value) / 3, len(n.Value) / 2}} {
+		n.SelStart, n.SelEnd = sel[0], sel[1]
+		ix.SelStart, ix.SelEnd = sel[0], sel[1]
+		if a, b := InsertionLine(n), InsertionLine(ix); a != b {
+			t.Fatalf("InsertionLine %d, indexed %d", a, b)
+		}
+		la, na := Selection(n)
+		lb, nb := Selection(ix)
+		if la != lb || na != nb {
+			t.Fatalf("Selection %d+%d, indexed %d+%d", la, na, lb, nb)
+		}
+	}
+	for _, v := range []int{u, u + 1, u - 1, -1, 0, CharCount(n), CharCount(n) + 3} {
+		if a, b := LineForIndex(n, v), LineForIndex(ix, v); a != b {
+			t.Fatalf("LineForIndex(%d) = %d, indexed %d", v, a, b)
+		}
+		s0, e0 := ByteRange(n, v, length)
+		s1, e1 := ByteRange(ix, v, length)
+		if s0 != s1 || e0 != e1 {
+			t.Fatalf("ByteRange(%d, %d) = %d..%d, indexed %d..%d", v, length, s0, e0, s1, e1)
+		}
+	}
+	if a, b := CharCount(n), CharCount(ix); a != b {
+		t.Fatalf("CharCount %d, indexed %d", a, b)
+	}
+	for i := -1; i <= len(n.Runs); i++ {
+		la, na, oa := RangeForLine(n, i)
+		lb, nb, ob := RangeForLine(ix, i)
+		if la != lb || na != nb || oa != ob {
+			t.Fatalf("RangeForLine(%d) = %d+%d %v, indexed %d+%d %v", i, la, na, oa, lb, nb, ob)
+		}
+	}
+}
+
+// runsOnBoundaries reports whether every run of n starts on a rune
+// boundary of its text, in order.
+func runsOnBoundaries(n Node) bool {
+	starts := map[int]bool{len(n.Value): true}
+	for b := range n.Value {
+		starts[b] = true
+	}
+	for i, r := range n.Runs {
+		if !starts[r.Start] || (i > 0 && r.Start < n.Runs[i-1].Start) {
+			return false
+		}
+	}
+	return true
 }

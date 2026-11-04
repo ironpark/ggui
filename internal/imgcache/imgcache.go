@@ -271,23 +271,31 @@ type Handle[T any] struct {
 	entry *Entry[T]
 }
 
-// Holds reports whether h holds a live entry of c for k.
-func (h *Handle[T]) Holds(c *Cache[T], k Key) bool {
+// Get returns what the entry h holds for k of c has to show, and false
+// when it holds none: nothing, another key or cache, or an entry evicted
+// since, which the holder must Acquire again.
+func (h *Handle[T]) Get(c *Cache[T], k Key) (st Status, tex T, err error, ok bool) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.entry == nil || h.cache != c || h.entry.key != k {
-		return false
+	e := h.entry
+	if e == nil || h.cache != c || e.key != k {
+		h.mu.Unlock()
+		return Pending, tex, nil, false
 	}
+	h.mu.Unlock()
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return !h.entry.dead
+	if e.dead {
+		return Pending, tex, nil, false
+	}
+	return e.status, e.tex, e.err, true
 }
 
 // Acquire holds the entry of c for k in place of the one held before,
 // starting its load with load when there is none. The new one is taken
 // first, so that going back to an idle image cannot evict it to make room
 // for the one being let go. w is told on its UI thread when the load ends.
-func (h *Handle[T]) Acquire(c *Cache[T], k Key, load Loader, w Waiter) {
+// It returns what the entry has to show now, as Get does.
+func (h *Handle[T]) Acquire(c *Cache[T], k Key, load Loader, w Waiter) (Status, T, error) {
 	e := c.acquire(k, load, w)
 	h.mu.Lock()
 	oldCache, old := h.cache, h.entry
@@ -296,6 +304,9 @@ func (h *Handle[T]) Acquire(c *Cache[T], k Key, load Loader, w Waiter) {
 	if old != nil {
 		oldCache.release(old)
 	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return e.status, e.tex, e.err
 }
 
 // Release lets go of the entry h holds.
@@ -307,20 +318,6 @@ func (h *Handle[T]) Release() {
 	if e != nil {
 		c.release(e)
 	}
-}
-
-// State is what the held entry has to show: Pending with nothing held.
-func (h *Handle[T]) State() (Status, T, error) {
-	h.mu.Lock()
-	c, e := h.cache, h.entry
-	h.mu.Unlock()
-	var zero T
-	if e == nil {
-		return Pending, zero, nil
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return e.status, e.tex, e.err
 }
 
 // Downscale shrinks img so that its larger side is at most side pixels,

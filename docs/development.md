@@ -27,7 +27,7 @@ On macOS, install it with `brew install go-task`.
 | `task fmt` | Format Go sources. |
 | `task tidy` | Update module dependency metadata. |
 | `task bench COUNT=6` | Run package benchmarks repeatedly for comparison. |
-| `task bench:save NAME=base` | Save the engine packages' benchmarks (reactivity, fonts, text layout, motion, virtual lists, geometry and repaint regions, the image cache, layer images) to `.bench/NAME.txt`. `PKGS`, `BENCH` and `COUNT` narrow or widen the run. |
+| `task bench:save NAME=base` | Save the engine packages' benchmarks (reactivity, fonts, text layout, motion, virtual lists, repaint regions, geometry, the image cache, layer images) to `.bench/NAME.txt`. `PKGS`, `BENCH` and `COUNT` narrow or widen the run. |
 | `task bench:compare REF=main` | Run the same benchmarks now and compare them by `benchstat` with a baseline: `.bench/BASE.txt`, or `REF` measured in a temporary worktree of that commit. |
 | `task clean` | Clean Go artifacts and remove `bin/`, including app bundles. |
 
@@ -144,7 +144,7 @@ those guides as historical measurements; rerun them on your target hardware.
 | --- | --- |
 | Application and frame loop | [app.go](../app.go), [loop.go](../loop.go) |
 | Reactivity and component ownership | [reactivity.go](../reactivity.go), [widget.go](../widget.go), [for.go](../for.go), [pkg/virtual/](../pkg/virtual/) (which rows a virtual list lays out, and where) |
-| Layout, geometry, and drawing | [widgets.go](../widgets.go), [scroll.go](../scroll.go), [canvas.go](../canvas.go), [paint.go](../paint.go) (paths, gradients and layers), [damage.go](../damage.go), [pkg/layout/](../pkg/layout/) (box layout), [pkg/geom/](../pkg/geom/) (affine transforms, path outlines, and the regions a partial frame repaints), [internal/render/](../internal/render/) (the shaders behind the Canvas, and the layer images it lends) |
+| Layout, geometry, and drawing | [widgets.go](../widgets.go), [scroll.go](../scroll.go), [canvas.go](../canvas.go), [paint.go](../paint.go) (paths, gradients and layers), [damage.go](../damage.go) and [internal/region/](../internal/region/) (the regions a partial frame repaints), [pkg/layout/](../pkg/layout/) (box layout and rectangles), [pkg/geom/](../pkg/geom/) (affine transforms and path outlines), [internal/render/](../internal/render/) (the shaders behind the Canvas, and the layer images it lends) |
 | UI controls | [ui/](../ui/) |
 | Text editing and fonts | [editor.go](../editor.go), [font.go](../font.go), [text.go](../text.go), [internal/fontsys/](../internal/fontsys/) (fonts, fallback chains and emoji), [internal/textlayout/](../internal/textlayout/) (measuring and wrapping), [internal/paragraph/](../internal/paragraph/) (bidi lines, styled paragraphs and CPU rendering), [internal/textedit/](../internal/textedit/) (the buffer, selection and undo), [internal/platform/textinput/](../internal/platform/textinput/) (the IME) |
 | Input and shortcuts | [input.go](../input.go) (pointer, keys and touch), [keys.go](../keys.go) |

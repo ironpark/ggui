@@ -200,7 +200,9 @@ func (n *SemNode) Flags() string {
 //
 // It fills in the roots and every node's children. Counting first keeps
 // this to two passes and one allocation for the whole tree, rather than
-// growing a slice per parent as it goes.
+// growing a slice per parent as it goes. A text node that froze its layout
+// also gets the UTF-16 offset of each line, so that the offsets a platform
+// text API asks in are converted from the start of a line, not of the text.
 //
 // The tree is finished when it is returned and is never written again,
 // which is what lets a bridge on another thread keep one as long as it
@@ -229,6 +231,9 @@ func Build(nodes []SemNode, focused int) *SemTree {
 	for i := range nodes {
 		if p := nodes[i].Parent; p >= 0 {
 			nodes[p].Children = append(nodes[p].Children, i)
+		}
+		if len(nodes[i].Runs) > 0 {
+			nodes[i].indexRuns()
 		}
 	}
 	return t

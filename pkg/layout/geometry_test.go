@@ -189,3 +189,30 @@ func FuzzRectAlgebra(f *testing.F) {
 		}
 	})
 }
+
+func TestCoverLeavesEmptyRectsOut(t *testing.T) {
+	a := Rct(Pt(10, 10), Sz(5, 5))
+	if got := (Rect{}).Cover(a); got != a {
+		t.Fatalf("empty.Cover(a) = %v", got)
+	}
+	if got := a.Cover(Rct(Pt(-100, -100), Sz(0, 9))); got != a {
+		t.Fatalf("a.Cover(empty) = %v: an empty Rect far off widened it", got)
+	}
+	if got, want := a.Cover(Rct(Pt(0, 0), Sz(1, 1))), Rct(Pt(0, 0), Sz(15, 15)); got != want {
+		t.Fatalf("Cover = %v, want %v", got, want)
+	}
+}
+
+func TestGrowAndOverlaps(t *testing.T) {
+	r := Rct(Pt(10, 10), Sz(10, 10))
+	if got := r.Grow(2); got != Rct(Pt(8, 8), Sz(14, 14)) {
+		t.Fatalf("Grow = %v", got)
+	}
+	touching := Rct(Pt(20, 10), Sz(5, 5))
+	if r.Overlaps(touching) {
+		t.Fatal("rects that only touch overlap")
+	}
+	if !r.Grow(1).Overlaps(touching) {
+		t.Fatal("a grown rect misses its neighbour")
+	}
+}

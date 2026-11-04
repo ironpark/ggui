@@ -171,6 +171,12 @@ type Node struct {
 	// are frozen into the snapshot with everything else.
 	SelStart, SelEnd int
 	Runs             []TextRun
+
+	// runUnits is where each of Runs starts in UTF-16 units, and after
+	// them the length of Value in them, so that an offset is converted by
+	// walking from the start of its line rather than of Value. Build fills
+	// it; a Node without it walks from the start, to the same answers.
+	runUnits []int
 }
 
 // TextRun is one painted line of a text node: which bytes of Node.Value it

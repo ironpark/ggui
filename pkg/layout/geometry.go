@@ -60,6 +60,28 @@ func (r Rect) Union(o Rect) Rect {
 	return Rect{Origin: Point{x0, y0}, Size: Size{x1 - x0, y1 - y0}}
 }
 
+// Cover returns the smallest Rect covering both r and o, as Union does,
+// but leaves an empty one out: the Cover of r and an empty Rect is r,
+// wherever the empty one lies.
+func (r Rect) Cover(o Rect) Rect {
+	switch {
+	case r.Empty():
+		return o
+	case o.Empty():
+		return r
+	}
+	return r.Union(o)
+}
+
+// Grow returns r with d added on every side; a negative d shrinks it.
+func (r Rect) Grow(d float64) Rect {
+	return Rect{Origin: Point{r.Origin.X - d, r.Origin.Y - d}, Size: Size{r.Size.W + 2*d, r.Size.H + 2*d}}
+}
+
+// Overlaps reports whether r and o share some area. Rects that only touch
+// do not.
+func (r Rect) Overlaps(o Rect) bool { return !r.Intersect(o).Empty() }
+
 // Empty reports whether r has no area.
 func (r Rect) Empty() bool { return r.Size.W <= 0 || r.Size.H <= 0 }
 
