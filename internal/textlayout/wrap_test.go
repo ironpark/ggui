@@ -1,4 +1,4 @@
-package ggui
+package textlayout
 
 import (
 	"math"
@@ -6,54 +6,56 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/ironpark/ggui/internal/fontsys"
 )
 
 func TestWrapSpansCoverTheTextWithinWidth(t *testing.T) {
 	t.Parallel()
-	face := fallbackFont().face(14, 0)
+	face := fontsys.Builtin().Face(14, 0, nil)
 	for _, s := range []string{
 		"", "one", "the quick brown fox jumps over the lazy dog",
 		"line one\nline two\n\nafter blank", "  leading and   inner   spaces",
 		"averyveryveryverylongwordwithoutanyspacesinit then short", "한글 텍스트도 잘 감싸야 합니다 한글 텍스트도",
 	} {
 		for _, w := range []float64{0, 40, 90, 1000} {
-			spans := wrapSpans(s, face, w)
+			spans := WrapSpans(s, face, w)
 			if len(spans) == 0 {
 				t.Errorf("%q at %v: no lines", s, w)
 				continue
 			}
 			prev := 0
 			for i, sp := range spans {
-				if sp.start < prev || sp.end < sp.start || sp.end > len(s) {
+				if sp.Start < prev || sp.End < sp.Start || sp.End > len(s) {
 					t.Fatalf("%q at %v: span %d = %+v out of order", s, w, i, sp)
 				}
-				for _, r := range s[prev:sp.start] {
+				for _, r := range s[prev:sp.Start] {
 					if r != ' ' && r != '\t' && r != '\n' {
 						t.Errorf("%q at %v: %q skipped between lines", s, w, r)
 					}
 				}
-				line := s[sp.start:sp.end]
-				if w > 0 && utf8.RuneCountInString(line) > 1 && lineWidth(line, face) > w {
+				line := s[sp.Start:sp.End]
+				if w > 0 && utf8.RuneCountInString(line) > 1 && Width(line, face) > w {
 					t.Errorf("%q at %v: line %q is too wide", s, w, line)
 				}
-				prev = sp.end
+				prev = sp.End
 			}
 		}
 	}
-	if got := len(wrapSpans("a\nb\n", face, 0)); got != 3 {
+	if got := len(WrapSpans("a\nb\n", face, 0)); got != 3 {
 		t.Fatalf("trailing newline gives %d lines, want 3", got)
 	}
-	if got := len(wrapSpans("the quick brown fox", face, 1000)); got != 1 {
+	if got := len(WrapSpans("the quick brown fox", face, 1000)); got != 1 {
 		t.Fatalf("wide line split into %d", got)
 	}
 }
 
 func TestLineOf(t *testing.T) {
 	t.Parallel()
-	spans := []lineSpan{{0, 3}, {4, 7}, {8, 8}}
+	spans := []Span{{0, 3}, {4, 7}, {8, 8}}
 	for pos, want := range map[int]int{0: 0, 3: 0, 4: 1, 7: 1, 8: 2, 20: 2} {
-		if got := lineOf(spans, pos); got != want {
-			t.Errorf("lineOf(%d) = %d, want %d", pos, got, want)
+		if got := LineOf(spans, pos); got != want {
+			t.Errorf("LineOf(%d) = %d, want %d", pos, got, want)
 		}
 	}
 }
@@ -75,8 +77,8 @@ func TestWrapBreaksWhereUAX14Allows(t *testing.T) {
 	} {
 		width := func(a, b int) float64 { return 10 * float64(utf8.RuneCountInString(c.s[a:b])) }
 		var got []string
-		for _, sp := range wrapParagraphBy(c.s, width, c.maxW) {
-			got = append(got, c.s[sp.start:sp.end])
+		for _, sp := range wrapParagraph(c.s, width, c.maxW) {
+			got = append(got, c.s[sp.Start:sp.End])
 		}
 		if !slices.Equal(got, c.want) {
 			t.Errorf("%s: %q at %v wraps to %q, want %q", c.name, c.s, c.maxW, got, c.want)
@@ -92,7 +94,7 @@ func BenchmarkWrapParagraph(b *testing.B) {
 	w := 200.0
 	for b.Loop() {
 		w = 200 + math.Mod(w*1.618, 300)
-		wrapSpans(s, face, w)
+		WrapSpans(s, face, w)
 	}
 }
 

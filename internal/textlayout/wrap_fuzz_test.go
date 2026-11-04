@@ -1,4 +1,4 @@
-package ggui
+package textlayout
 
 import (
 	"math"
@@ -9,15 +9,15 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/ironpark/ggui/internal/fontsys"
 	"github.com/ironpark/ggui/internal/text"
 	"github.com/ironpark/ggui/internal/textedit"
-	"golang.org/x/image/font/gofont/goregular"
 )
 
 // wrapFace is Go Regular at 14px with no fallbacks, so wrapping measures
 // the same on every machine.
 var wrapFace = sync.OnceValue(func() text.Face {
-	return &text.GoTextFace{Source: MustFont(goregular.TTF).source(), Size: 14}
+	return &text.GoTextFace{Source: fontsys.Builtin().Source(), Size: 14}
 })
 
 // graphemes counts the grapheme clusters in s.
@@ -83,35 +83,35 @@ func FuzzWrapSpans(f *testing.F) {
 			return // measuring is quadratic in a word's length
 		}
 		face := wrapFace()
-		spans := wrapSpans(s, face, maxW)
+		spans := WrapSpans(s, face, maxW)
 		if len(spans) < strings.Count(s, "\n")+1 {
 			t.Fatalf("%q at %v: %d lines for %d hard breaks", s, maxW, len(spans), strings.Count(s, "\n"))
 		}
 		prev := 0
 		for i, sp := range spans {
-			if sp.start < prev || sp.end < sp.start || sp.end > len(s) {
+			if sp.Start < prev || sp.End < sp.Start || sp.End > len(s) {
 				t.Fatalf("%q at %v: span %d = %+v is out of order after %d", s, maxW, i, sp, prev)
 			}
 			// Between lines lie only the spaces a soft break fell on and
 			// the hard breaks.
-			if gap := strings.Trim(s[prev:sp.start], " \t\n"); gap != "" {
+			if gap := strings.Trim(s[prev:sp.Start], " \t\n"); gap != "" {
 				t.Fatalf("%q at %v: %q was dropped before line %d", s, maxW, gap, i)
 			}
-			line := s[sp.start:sp.end]
+			line := s[sp.Start:sp.End]
 			if strings.Contains(line, "\n") {
 				t.Fatalf("%q at %v: line %d = %q holds a hard break", s, maxW, i, line)
 			}
 			// Invalid bytes make no clusters to keep whole.
-			if utf8.ValidString(s) && (!utf8.ValidString(line) || breaksInsideWord(s, sp.start) || breaksInsideWord(s, sp.end)) {
+			if utf8.ValidString(s) && (!utf8.ValidString(line) || breaksInsideWord(s, sp.Start) || breaksInsideWord(s, sp.End)) {
 				t.Fatalf("%q at %v: line %d = %q cuts a grapheme", s, maxW, i, line)
 			}
-			if maxW > 0 && graphemes(line) > 1 && lineWidth(line, face) > maxW {
-				t.Fatalf("%q at %v: line %d = %q is %v wide", s, maxW, i, line, lineWidth(line, face))
+			if maxW > 0 && graphemes(line) > 1 && Width(line, face) > maxW {
+				t.Fatalf("%q at %v: line %d = %q is %v wide", s, maxW, i, line, Width(line, face))
 			}
-			if got := lineOf(spans, sp.start); got != i {
-				t.Fatalf("%q at %v: lineOf(%d) = %d, want %d", s, maxW, sp.start, got, i)
+			if got := LineOf(spans, sp.Start); got != i {
+				t.Fatalf("%q at %v: LineOf(%d) = %d, want %d", s, maxW, sp.Start, got, i)
 			}
-			prev = sp.end
+			prev = sp.End
 		}
 		if gap := strings.Trim(s[prev:], " \t\n"); gap != "" {
 			t.Fatalf("%q at %v: %q was dropped after the last line", s, maxW, gap)
@@ -136,7 +136,7 @@ func FuzzWrapText(f *testing.F) {
 			return
 		}
 		face := wrapFace()
-		lines := wrapText(s, face, maxW)
+		lines := Wrap(s, face, maxW)
 		if len(lines) < strings.Count(s, "\n")+1 {
 			t.Fatalf("%q at %v: %d lines for %d hard breaks", s, maxW, len(lines), strings.Count(s, "\n"))
 		}
@@ -144,8 +144,8 @@ func FuzzWrapText(f *testing.F) {
 			if strings.Contains(line, "\n") {
 				t.Fatalf("%q at %v: line %d = %q holds a hard break", s, maxW, i, line)
 			}
-			if maxW > 0 && graphemes(line) > 1 && lineWidth(line, face) > maxW {
-				t.Fatalf("%q at %v: line %d = %q is %v wide", s, maxW, i, line, lineWidth(line, face))
+			if maxW > 0 && graphemes(line) > 1 && Width(line, face) > maxW {
+				t.Fatalf("%q at %v: line %d = %q is %v wide", s, maxW, i, line, Width(line, face))
 			}
 		}
 		// The lines rejoin to the text: only the spaces breaks fell on
@@ -167,16 +167,12 @@ func FuzzTextRunsCoverTheTextByGrapheme(f *testing.F) {
 	}
 	f.Add("a👍b👍🏽c1\ufe0f\u20e3❤\ufe0f")
 	f.Add("🏳\ufe0f\u200d🌈x🫩")
-	data, err := os.ReadFile("testdata/emoji-subset.ttf")
-	if err != nil {
-		f.Fatal(err)
-	}
-	emoji := MustFont(data)
+	emoji := testEmoji(f)
 	f.Fuzz(func(t *testing.T, s string) {
-		face := withEmoji(wrapFace(), 14, &emojiChoice{font: emoji})
+		face := fontsys.WithEmoji(wrapFace(), 14, emoji)
 		var joined strings.Builder
 		var last text.Face
-		for run, rf := range textRuns(s, face) {
+		for run, rf := range fontsys.TextRuns(s, face) {
 			if run == "" && s != "" {
 				t.Fatalf("%q: an empty run", s)
 			}
@@ -194,4 +190,18 @@ func FuzzTextRunsCoverTheTextByGrapheme(f *testing.F) {
 			t.Fatalf("%q: runs join to %q", s, joined.String())
 		}
 	})
+}
+
+// testEmoji is the emoji subset ggui's tests draw with, as an emoji choice.
+func testEmoji(tb testing.TB) *fontsys.EmojiChoice {
+	tb.Helper()
+	data, err := os.ReadFile("../../testdata/emoji-subset.ttf")
+	if err != nil {
+		tb.Fatal(err)
+	}
+	f, err := fontsys.Load(data)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	return &fontsys.EmojiChoice{Font: f}
 }

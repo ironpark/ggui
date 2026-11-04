@@ -1,20 +1,21 @@
-package ggui
+package textlayout
 
 import (
 	"math"
 	"testing"
 
+	"github.com/ironpark/ggui/internal/fontsys"
 	"github.com/ironpark/ggui/internal/textedit"
 )
 
 func TestPrefixWidthsMatchMeasuringEachPrefix(t *testing.T) {
 	t.Parallel()
-	useTestEmoji(t)
-	face := fallbackFont().face(20, 0)
+	emoji := testEmoji(t)
+	face := fontsys.Builtin().Face(20, 0, func() *fontsys.EmojiChoice { return emoji })
 	for _, s := range []string{"", "Hello, world", "a b  c", "안녕하세요 세계", "été", "ok 👍🏽 then 👨‍👩‍👧‍👦!", "1️⃣2"} {
-		width := prefixWidths(s, face)
+		width := PrefixWidths(s, face)
 		for b := 0; ; b = textedit.NextGrapheme(s, b) {
-			if got, want := width(b), lineWidth(s[:b], face); math.Abs(got-want) > 0.5 {
+			if got, want := width(b), Width(s[:b], face); math.Abs(got-want) > 0.5 {
 				t.Errorf("%q[:%d]: width %v, measured %v", s, b, got, want)
 			}
 			if b >= len(s) {

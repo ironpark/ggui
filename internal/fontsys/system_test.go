@@ -1,4 +1,4 @@
-package ggui
+package fontsys
 
 import (
 	"os/exec"
@@ -25,13 +25,13 @@ func TestSystemUIFontsAreFound(t *testing.T) {
 		t.Skip("no interface fonts to look for")
 	}
 	t.Parallel()
-	sans, mono := systemUIFonts()
+	sans, mono := SystemUI()
 	if sans == nil || mono == nil {
 		t.Fatalf("interface fonts %v, mono %v: want both found", sans, mono)
 	}
 	if runtime.GOOS == "darwin" {
 		for _, f := range []*Font{sans, mono} {
-			if _, axis := f.forWeight(WeightBold); !axis {
+			if _, axis := f.ForWeight(700); !axis {
 				t.Fatal("a macOS interface font has no weight axis")
 			}
 		}
@@ -50,7 +50,7 @@ func TestLoadFamilyTakesACollectionsWeights(t *testing.T) {
 	if f == nil || len(f.weights) == 0 {
 		t.Fatal("the collection loaded no other weights")
 	}
-	if got, _ := f.forWeight(WeightBold); got.weight != WeightBold {
+	if got, _ := f.ForWeight(700); got.weight != 700 {
 		t.Fatalf("bold drew weight %d", got.weight)
 	}
 }
@@ -64,7 +64,7 @@ func TestSystemFontsCoverTerminalSymbols(t *testing.T) {
 	t.Parallel()
 	for _, r := range "❯⏵⏺⎿✳✻" {
 		if !slices.ContainsFunc(SystemFonts(), func(f *Font) bool {
-			face, ok := f.source().UnsafeInternal().(*gofont.Face)
+			face, ok := f.Source().UnsafeInternal().(*gofont.Face)
 			if !ok {
 				return false
 			}
@@ -83,12 +83,12 @@ func TestSystemItalicFontsAreItalic(t *testing.T) {
 		t.Skip("SF's italics are only known to be installed on macOS")
 	}
 	t.Parallel()
-	sans, mono := SystemItalicFonts()
+	sans, mono := SystemItalic()
 	if sans == nil || mono == nil {
 		t.Fatalf("italic interface font %v, mono %v: want both", sans, mono)
 	}
 	for _, f := range append([]*Font{sans, mono}, append(sans.weights, mono.weights...)...) {
-		if f.source().Metadata().Style != text.StyleItalic {
+		if f.Source().Metadata().Style != text.StyleItalic {
 			t.Fatal("an italic family holds an upright face")
 		}
 	}

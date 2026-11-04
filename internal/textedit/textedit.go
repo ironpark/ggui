@@ -501,3 +501,26 @@ func nextWord(s string, i int) int {
 	r, _ := utf8.DecodeRuneInString(s[i:])
 	return runEnd(s, runEnd(s, i, runeClass(r)), spaceClass)
 }
+
+// GraphemeRuns yields the maximal runs of s, as byte ranges, whose
+// graphemes pick maps to one value, with that value; it stops when yield
+// returns false.
+func GraphemeRuns[K comparable](s string, pick func(g string) K, yield func(start, end int, k K) bool) {
+	start := 0
+	var cur K
+	bounds := Bounds(s)
+	for j := 0; j+1 < len(bounds); j++ {
+		i, end := bounds[j], bounds[j+1]
+		k := pick(s[i:end])
+		if i > 0 && k != cur {
+			if !yield(start, i, cur) {
+				return
+			}
+			start = i
+		}
+		cur = k
+	}
+	if len(s) > 0 {
+		yield(start, len(s), cur)
+	}
+}

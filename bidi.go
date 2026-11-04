@@ -8,7 +8,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggui/internal/fontsys"
 	"github.com/ironpark/ggui/internal/text"
+	"github.com/ironpark/ggui/internal/textlayout"
 	"github.com/ironpark/ggui/internal/typesetting/bidi"
 	gofont "github.com/ironpark/ggui/internal/typesetting/font"
 	"golang.org/x/text/language"
@@ -106,7 +108,7 @@ func layoutLine(s string, styles []lineStyle, base TextDirection, lang string) [
 			if st.start == st.end {
 				continue
 			}
-			w := lineWidth(s[st.start:st.end], st.font.face(st.size, st.weight))
+			w := textlayout.Width(s[st.start:st.end], st.font.face(st.size, st.weight))
 			out = append(out, piece{start: st.start, end: st.end, style: i, x: x, w: w})
 			x += w
 		}
@@ -151,7 +153,7 @@ func layoutLine(s string, styles []lineStyle, base TextDirection, lang string) [
 			p.lang = newShapeLang(lang, s[p.start:p.end])
 			p.segs, p.w = rtlSegs(s[p.start:p.end], p.start, rtlFaces(st.font, st.size, st.weight, p.lang))
 		} else {
-			p.w = lineWidth(s[p.start:p.end], st.font.face(st.size, st.weight))
+			p.w = textlayout.Width(s[p.start:p.end], st.font.face(st.size, st.weight))
 		}
 		p.x = x
 		x += p.w
@@ -208,7 +210,7 @@ func piecesWidth(ps []piece) float64 {
 func rtlSegs(s string, off int, chain *rtlChain) ([]rtlSeg, float64) {
 	var segs []rtlSeg
 	total := 0.0
-	graphemeRuns(s, chain.pick, func(start, end, face int) bool {
+	textedit.GraphemeRuns(s, chain.pick, func(start, end, face int) bool {
 		w := text.AdvanceAt(s[start:end], end-start, chain.face(face))
 		segs = append(segs, rtlSeg{start: off + start, end: off + end, face: face, w: w})
 		total += w
@@ -220,11 +222,11 @@ func rtlSegs(s string, off int, chain *rtlChain) ([]rtlSeg, float64) {
 // rtlChain is a Font's faces at one size, weight and language, set right
 // to left, with what each covers: their light sources, which hold the cmap
 // and not the glyphs, so a font is loaded only once a glyph only it has is
-// drawn, as in Font.face's chain.
+// drawn, as in fontsys.Font.Face's chain.
 type rtlChain struct {
 	srcs  []*text.GoTextFaceSource
 	faces []text.Face
-	emoji *emojiFace // the emoji fallback, if the font has one
+	emoji *fontsys.EmojiFace // the emoji fallback, if the font has one
 
 	// system makes pick look among all the system's fonts for a rune no
 	// face has, as the font's own chain does, adding the face it finds
@@ -232,9 +234,9 @@ type rtlChain struct {
 	// with, and found the fonts added, by their place in faces.
 	system bool
 	size   float64
-	weight FontWeight
+	weight fontsys.Weight
 	tag    language.Tag
-	found  map[*Font]int
+	found  map[*fontsys.Font]int
 }
 
 // nominalMu guards NominalGlyph, which bypasses the source's own lock, and
@@ -245,7 +247,7 @@ var nominalMu sync.Mutex
 // font's for an emoji, else the first face that has its first rune, else
 // the last, as a fallback face picks.
 func (c *rtlChain) pick(g string) int {
-	if c.emoji != nil && emojidata.IsCluster(g) && c.emoji.colorFace() != nil {
+	if c.emoji != nil && emojidata.IsCluster(g) && c.emoji.ColorFace() != nil {
 		return -1
 	}
 	r, _ := utf8.DecodeRuneInString(g)
@@ -261,7 +263,7 @@ func (c *rtlChain) pick(g string) int {
 		}
 	}
 	if c.system {
-		if fb := systemFallback(r); fb != nil {
+		if fb := fontsys.SystemFallback(r); fb != nil {
 			return c.addLocked(fb)
 		}
 	}
@@ -270,16 +272,16 @@ func (c *rtlChain) pick(g string) int {
 
 // addLocked returns the place of fb's face, adding it before the last if
 // it is not in c yet. nominalMu must be held.
-func (c *rtlChain) addLocked(fb *Font) int {
+func (c *rtlChain) addLocked(fb *fontsys.Font) int {
 	if i, ok := c.found[fb]; ok {
 		return i
 	}
-	font, axis := fb.forWeight(c.weight)
+	font, axis := fb.ForWeight(c.weight)
 	last := len(c.faces) - 1
-	c.srcs = slices.Insert(c.srcs, last, font.meta())
-	c.faces = slices.Insert(c.faces, last, font.chainFaceWith(c.size, c.weight, axis, c.rtl))
+	c.srcs = slices.Insert(c.srcs, last, font.Meta())
+	c.faces = slices.Insert(c.faces, last, font.ChainFaceWith(c.size, c.weight, axis, c.rtl))
 	if c.found == nil {
-		c.found = map[*Font]int{}
+		c.found = map[*fontsys.Font]int{}
 	}
 	c.found[fb] = last
 	return last
@@ -293,7 +295,7 @@ func (c *rtlChain) rtl(g *text.GoTextFace) {
 
 func (c *rtlChain) face(i int) text.Face {
 	if i < 0 {
-		return c.emoji.colorFace()
+		return c.emoji.ColorFace()
 	}
 	nominalMu.Lock()
 	defer nominalMu.Unlock()
@@ -301,7 +303,7 @@ func (c *rtlChain) face(i int) text.Face {
 }
 
 type rtlKey struct {
-	font   *Font
+	font   *fontsys.Font
 	size   float64
 	weight FontWeight
 	lang   string
@@ -321,10 +323,8 @@ var rtlCache struct {
 const rtlCacheMin = 64
 
 // rtlFaces returns f's chain at size and weight, shaping in lang.
-func rtlFaces(f *Font, size float64, w FontWeight, lang shapeLang) *rtlChain {
-	for f.alias != nil {
-		f = f.alias()
-	}
+func rtlFaces(font *Font, size float64, w FontWeight, lang shapeLang) *rtlChain {
+	f := font.engine().Resolve()
 	gen := fontGen()
 	key := rtlKey{f, size, w, lang.key, gen}
 	rtlCache.Lock()
@@ -354,20 +354,18 @@ func rtlFaces(f *Font, size float64, w FontWeight, lang shapeLang) *rtlChain {
 }
 
 // newRTLChain builds f's chain at size and weight, shaping in tag: the
-// same faces Font.face puts in its fallback chain, in its order.
-func newRTLChain(f *Font, size float64, w FontWeight, tag language.Tag) *rtlChain {
-	c := &rtlChain{size: size, weight: w, tag: tag}
-	f.mu.Lock()
-	fonts, _ := f.chainLocked(w)
-	noFallback := f.noFallback
-	c.system = f.systemFallback()
-	f.mu.Unlock()
+// same faces fontsys.Font.Face puts in its fallback chain, in its order.
+func newRTLChain(f *fontsys.Font, size float64, w FontWeight, tag language.Tag) *rtlChain {
+	sw := fontsys.Weight(w)
+	c := &rtlChain{size: size, weight: sw, tag: tag}
+	fonts, system, emoji := f.Chain(sw)
+	c.system = system
 	for _, cf := range fonts {
-		c.srcs = append(c.srcs, cf.font.meta())
-		c.faces = append(c.faces, cf.font.chainFaceWith(size, w, cf.axis, c.rtl))
+		c.srcs = append(c.srcs, cf.Font.Meta())
+		c.faces = append(c.faces, cf.Font.ChainFaceWith(size, sw, cf.Axis, c.rtl))
 	}
-	if !noFallback {
-		c.emoji, _ = f.face(size, w).(*emojiFace)
+	if emoji {
+		c.emoji, _ = f.Face(size, sw, activeEmoji).(*fontsys.EmojiFace)
 	}
 	return c
 }
@@ -452,13 +450,13 @@ func (p *piece) offsetX(s string, styles []lineStyle, b int) float64 {
 	if p.pos == nil {
 		st := styles[p.style]
 		if !p.rtl {
-			w := prefixWidths(s[p.start:p.end], st.font.face(st.size, st.weight))
+			w := textlayout.PrefixWidths(s[p.start:p.end], st.font.face(st.size, st.weight))
 			p.pos = func(b int) float64 { return w(b - p.start) }
 		} else {
 			chain := rtlFaces(st.font, st.size, st.weight, p.lang)
 			widths := make([]func(int) float64, len(p.segs))
 			for i, sg := range p.segs {
-				widths[i] = prefixWidths(s[sg.start:sg.end], chain.face(sg.face))
+				widths[i] = textlayout.PrefixWidths(s[sg.start:sg.end], chain.face(sg.face))
 			}
 			p.pos = func(b int) float64 {
 				x := 0.0
@@ -550,9 +548,9 @@ func drawPieces(dst *ggfx.Image, op *text.DrawOptions, s string, ps []piece, sty
 			op.GeoM.Translate(p.x*scale, baseline-face.Metrics().HAscent)
 			place(op)
 			t := s[p.start:p.end]
-			plain := plainFace(face, t)
+			plain := fontsys.PlainFace(face, t)
 			if plain == nil {
-				drawText(dst, t, face, op)
+				fontsys.DrawText(dst, t, face, op)
 				continue
 			}
 			if p.glyphFace != plain {

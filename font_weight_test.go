@@ -5,9 +5,10 @@ import (
 	"testing"
 
 	"golang.org/x/image/font/gofont/gobold"
-	"golang.org/x/image/font/gofont/gomedium"
 	"golang.org/x/image/font/gofont/gomono"
 	"golang.org/x/image/font/gofont/goregular"
+
+	"github.com/ironpark/ggui/internal/textlayout"
 )
 
 func TestTextWeightDrawsTheHeavierFace(t *testing.T) {
@@ -26,27 +27,6 @@ func TestTextWeightDrawsTheHeavierFace(t *testing.T) {
 	// The built-in font has no bold, so it draws regular.
 	if plain, heavy := Text("Weighty words").Layout(loose, Env{}), Text("Weighty words").Weight(WeightBold).Layout(loose, Env{}); plain != heavy {
 		t.Fatalf("the built-in font drew bold %v against regular %v, want the same face", heavy, plain)
-	}
-}
-
-func TestFontPicksTheNearestWeight(t *testing.T) {
-	t.Parallel()
-	medium, bold := MustFont(gomedium.TTF), MustFont(gobold.TTF)
-	f := MustFont(goregular.TTF).WithWeight(WeightMedium, medium).WithWeight(WeightBold, bold)
-	for _, tc := range []struct {
-		ask  FontWeight
-		want *Font
-	}{
-		{0, f}, {WeightLight, f}, {WeightRegular, f}, {450, medium}, {WeightMedium, medium},
-		{WeightSemibold, bold}, // equally near 500 and 700: the heavier, as CSS does
-		{WeightBlack, bold},
-	} {
-		if got, _ := f.forWeight(tc.ask); got != tc.want {
-			t.Errorf("weight %d drew the face of weight %d, want %d", tc.ask, got.weight, tc.want.weight)
-		}
-	}
-	if f.weight != WeightRegular || medium.weight != WeightMedium {
-		t.Fatalf("weights %d and %d, want the metadata's and the one WithWeight gave", f.weight, medium.weight)
 	}
 }
 
@@ -78,11 +58,11 @@ func TestDefaultMonoFontFollowsItsSetting(t *testing.T) {
 	p.Frame()
 	var monoWidth, textWidth float64
 	p.Post(func() {
-		monoWidth = lineWidth("iiii", DefaultMonoFont().face(14, 0))
-		textWidth = lineWidth("iiii", fallbackFont().face(14, 0))
+		monoWidth = textlayout.Width("iiii", DefaultMonoFont().face(14, 0))
+		textWidth = textlayout.Width("iiii", fallbackFont().face(14, 0))
 	})
 	p.Frame()
-	if want := lineWidth("iiii", mono.face(14, 0)); monoWidth != want || textWidth == want {
+	if want := textlayout.Width("iiii", mono.face(14, 0)); monoWidth != want || textWidth == want {
 		t.Fatalf("DefaultMonoFont drew %v wide and the text font %v, want Go Mono's %v for the first only", monoWidth, textWidth, want)
 	}
 }

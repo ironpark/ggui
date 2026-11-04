@@ -6,6 +6,9 @@ import (
 	"math"
 	"slices"
 
+	"github.com/ironpark/ggui/internal/fontsys"
+	"github.com/ironpark/ggui/internal/textedit"
+	"github.com/ironpark/ggui/internal/textlayout"
 	"github.com/ironpark/ggui/internal/typesetting/di"
 	"github.com/ironpark/ggui/internal/typesetting/font"
 	"github.com/ironpark/ggui/internal/typesetting/font/opentype"
@@ -33,7 +36,7 @@ import (
 func RenderText(s string, st TextStyle, maxWidth float64) *image.RGBA {
 	st = st.resolved()
 	r := newTextRenderer(st)
-	lines := wrapText(s, r.face, max(maxWidth, 0))
+	lines := textlayout.Wrap(s, r.face, max(maxWidth, 0))
 	shaped := make([]shaping.Line, len(lines))
 	texts := make([][]rune, len(lines))
 	width := 0.0
@@ -84,7 +87,7 @@ type textRenderer struct {
 	face      text.Face    // the style's face, as Text has it, for wrapping and metrics
 	chain     []*font.Face // the font and its fallbacks, at the style's weight
 	system    bool         // whether runes the chain lacks are looked for among the system's fonts
-	found     map[*Font]*font.Face
+	found     map[*fontsys.Font]*font.Face
 	runes     map[rune]*font.Face
 	emoji     *font.Face // the emoji font, nil without one
 	emojiFace text.Face  // the emoji font as Text draws it, fitted to the line box
@@ -96,20 +99,14 @@ type textRenderer struct {
 }
 
 func newTextRenderer(st TextStyle) *textRenderer {
-	r := &textRenderer{style: st, face: st.Font.face(st.Size, st.Weight), found: map[*Font]*font.Face{}, runes: map[rune]*font.Face{}}
-	f := st.Font
-	for f.alias != nil {
-		f = f.alias()
-	}
-	f.mu.Lock()
-	fonts, _ := f.chainLocked(st.Weight)
-	r.system = f.systemFallback()
-	f.mu.Unlock()
+	r := &textRenderer{style: st, face: st.Font.face(st.Size, st.Weight), found: map[*fontsys.Font]*font.Face{}, runes: map[rune]*font.Face{}}
+	fonts, system, _ := st.Font.engine().Resolve().Chain(fontsys.Weight(st.Weight))
+	r.system = system
 	for _, cf := range fonts {
-		r.chain = append(r.chain, ownFace(cf.font.source(), st.Weight, cf.axis))
+		r.chain = append(r.chain, ownFace(cf.Font.Source(), st.Weight, cf.Axis))
 	}
-	if ef, ok := r.face.(*emojiFace); ok {
-		if e, ok := ef.colorFace().(*text.GoTextFace); ok && e != nil {
+	if ef, ok := r.face.(*fontsys.EmojiFace); ok {
+		if e, ok := ef.ColorFace().(*text.GoTextFace); ok && e != nil {
 			r.emoji = ownFace(e.Source, 0, false)
 			r.emojiFace, r.esize = e, e.Size
 		}
@@ -139,10 +136,10 @@ func (r *textRenderer) ResolveFace(c rune) *font.Face {
 	if i := slices.IndexFunc(r.chain, func(f *font.Face) bool { _, ok := f.NominalGlyph(c); return ok }); i >= 0 {
 		face = r.chain[i]
 	} else if r.system {
-		if fb := systemFallback(c); fb != nil {
+		if fb := fontsys.SystemFallback(c); fb != nil {
 			if face = r.found[fb]; face == nil {
-				font, axis := fb.forWeight(r.style.Weight)
-				face = ownFace(font.source(), r.style.Weight, axis)
+				font, axis := fb.ForWeight(fontsys.Weight(r.style.Weight))
+				face = ownFace(font.Source(), r.style.Weight, axis)
 				r.found[fb] = face
 			}
 		}
@@ -166,7 +163,7 @@ func (r *textRenderer) shapeLine(line string) (shaping.Line, []rune) {
 	var outs []shaping.Output
 	size := fixed.Int26_6(math.Round(r.style.Size * 64))
 	pick := func(g string) bool { return r.emoji != nil && emojidata.IsCluster(g) }
-	graphemeRuns(line, pick, func(start, end int, emoji bool) bool {
+	textedit.GraphemeRuns(line, pick, func(start, end int, emoji bool) bool {
 		in := shaping.Input{Text: runes, RunStart: runeAt[start], RunEnd: runeAt[end], Direction: di.DirectionLTR, Size: size}
 		if emoji {
 			in.Face, in.Size, in.Script = r.emoji, fixed.Int26_6(math.Round(r.esize*64)), language.Common

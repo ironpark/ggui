@@ -5,6 +5,8 @@ import (
 	"math"
 	"strings"
 	"testing"
+
+	"github.com/ironpark/ggui/internal/textlayout"
 )
 
 func TestTextHeightFollowsLines(t *testing.T) {
@@ -44,7 +46,7 @@ func TestTextBreaksLongWordsBetweenRunes(t *testing.T) {
 		t.Fatalf("%d lines, want at least 4", len(w.lines))
 	}
 	for _, l := range w.lines {
-		if lineWidth(l, w.faceAt(1)) > full.W/4 {
+		if textlayout.Width(l, w.faceAt(1)) > full.W/4 {
 			t.Fatalf("line %q is wider than the limit", l)
 		}
 	}
@@ -120,7 +122,7 @@ func TestTextMaxLinesEndsTheLastShownLine(t *testing.T) {
 		t.Fatalf("lines = %q, want two, the second ending in an ellipsis", w.lines)
 	}
 	for _, l := range w.lines {
-		if lineWidth(l, w.faceAt(1)) > wide.W*0.3 {
+		if textlayout.Width(l, w.faceAt(1)) > wide.W*0.3 {
 			t.Fatalf("line %q is wider than the limit", l)
 		}
 	}

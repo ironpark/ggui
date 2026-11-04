@@ -1,6 +1,6 @@
 //go:build unix
 
-package ggui
+package fontsys
 
 import (
 	"os"
