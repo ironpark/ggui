@@ -415,3 +415,168 @@ var appRunning atomic.Bool
 // of the process's own, such as the SystemDark poller, which no frame loop
 // runs on.
 var runningApp atomic.Pointer[App]
+
+// OnQuitRequest registers fn to run when the user asks the app to quit, as
+// with ⌘Q or the Dock's Quit, before every window's OnCloseRequest handlers
+// are asked: how an app whose window hides on its close button, to live on
+// in the tray, tells a quit from that button. fn runs on the UI thread.
+// Only macOS reports a quit.
+func (a *App) OnQuitRequest(fn func()) { a.quitAsked = append(a.quitAsked, fn) }
+
+// OnReopen registers fn to run when the user opens the running app again,
+// as by clicking its Dock icon: the way back to a window it hid, which the
+// system does not show on its own. fn runs on the UI thread. Only macOS
+// reports it.
+func (a *App) OnReopen(fn func()) { a.reopened = append(a.reopened, fn) }
+
+// postAll runs fns on the UI thread, in the order of the work posted before
+// them: a quit's handlers run before the close requests that follow it.
+func (a *App) postAll(fns []func()) {
+	w := a.activeWindow()
+	if w == nil {
+		return
+	}
+	for _, fn := range fns {
+		w.post(fn)
+	}
+}
+
+// SetDockIcon puts the app's icon in the Dock and its menu in the menu bar,
+// or takes both out, as an app that lives in the tray does while it shows
+// no window. Out of the Dock, the app is not in the ⌘-Tab switcher, and
+// its windows have no menu bar: put it back before showing one. Call it
+// while the app runs, from any goroutine. Only macOS has a Dock.
+func SetDockIcon(visible bool) {
+	if appRunning.Load() {
+		ggwd.SetDockIcon(visible)
+	}
+}
+
+// SingleInstance makes the app the only one named id running for the
+// user, where id is reverse-DNS by convention: "com.example.editor". Call
+// it before Run. When another process already runs the app, that process
+// is handed this launch's arguments and working directory, and
+// SingleInstance returns runtime.ErrRunning: return from main without
+// calling Run.
+//
+// In the process that runs, fn receives every later launch on the UI
+// thread, where UseWindow is the window that last had the focus. It is
+// where the app brings a window forward and opens the files it was given:
+//
+//	err := app.SingleInstance("com.example.editor", func(l runtime.Launch) {
+//		app.Focus()
+//		m.open(l.Args...)
+//	})
+//	if errors.Is(err, runtime.ErrRunning) {
+//		return
+//	}
+func (a *App) SingleInstance(id string, fn func(runtime.Launch)) error {
+	release, err := runtime.ClaimInstance(id, func(l runtime.Launch) {
+		if w := a.activeWindow(); w != nil {
+			w.post(func() { fn(l) })
+		}
+	})
+	if err != nil {
+		return err
+	}
+	a.releaseInstance = release
+	return nil
+}
+
+// Appearance is the light or dark look of what the platform draws for the
+// app: title bars, and on some desktops scroll bars and menus.
+type Appearance uint8
+
+// The appearances.
+const (
+	// AppearanceSystem follows the desktop's setting.
+	AppearanceSystem Appearance = iota
+	AppearanceLight
+	AppearanceDark
+)
+
+// appearance is what SetAppearance asked for, applied when Run starts if
+// it was asked for before.
+var appearance atomic.Uint32
+
+// SetAppearance sets the look of the chrome the platform draws around the
+// app's windows. It does not change the app's own theme: uitheme.Set does
+// that, and calls this to match. It may be called from any goroutine, and
+// before Run.
+func SetAppearance(a Appearance) {
+	if Appearance(appearance.Swap(uint32(a))) == a {
+		return
+	}
+	if appRunning.Load() {
+		applyAppearance()
+	}
+}
+
+// applyAppearance hands the appearance to the engine, which needs a
+// running app to change a window.
+func applyAppearance() {
+	mode := ggwd.ColorModeUnknown
+	switch Appearance(appearance.Load()) {
+	case AppearanceLight:
+		mode = ggwd.ColorModeLight
+	case AppearanceDark:
+		mode = ggwd.ColorModeDark
+	}
+	ggwd.SetPreferredColorMode(mode)
+}
+
+var (
+	systemDark      = State(false)
+	systemDarkWatch sync.Once
+)
+
+// systemDarkPoll is how often SystemDark asks the platform, which reports
+// no change as an event.
+const systemDarkPoll = time.Second
+
+// SystemDark follows whether the desktop is set to a dark appearance, for
+// an app that follows it:
+//
+//	uitheme.Bind(ggui.SystemDark(), uitheme.Dark(), uitheme.Default())
+//
+// It is read while an App runs, about once a second, so a change shows
+// within a second. Before Run, under a Probe and where the platform cannot
+// tell, it is false.
+func SystemDark() Readable[bool] {
+	systemDarkWatch.Do(func() { go watchSystemDark() })
+	return systemDark
+}
+
+// watchSystemDark polls the platform for the life of the process and posts
+// each change to whichever window is running.
+func watchSystemDark() {
+	last := false
+	for ; ; time.Sleep(systemDarkPoll) {
+		if !appRunning.Load() {
+			continue
+		}
+		dark := ggwd.SystemColorMode() == ggwd.ColorModeDark
+		if dark == last {
+			continue
+		}
+		if a := runningApp.Load(); a != nil {
+			last = dark
+			a.post(func() { systemDark.Set(dark) })
+		}
+	}
+}
+
+// CurrentClipboard is the clipboard of the App or Probe whose frame is
+// running, for a widget that cuts, copies or pastes: text fields use it.
+// Replace an app's with App.SetClipboard; a Probe has one of its own.
+func CurrentClipboard() runtime.Clipboard { return currentClipboard() }
+
+// systemClipboard serves a clipboard use with no frame loop running.
+var systemClipboard = runtime.NativeClipboard()
+
+func currentClipboard() runtime.Clipboard {
+	if l := runningLoop(); l != nil && l.clipboard != nil {
+		return l.clipboard
+	}
+	return systemClipboard
+}
