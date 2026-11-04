@@ -1377,6 +1377,14 @@ func (g *GoTextFaceSource) metrics(size float64) Metrics {
 	}
 }
 
+// HasRune reports whether the font's cmap maps r to a glyph. It reads the
+// cmap itself, which is read-only, so it takes no lock and is safe from
+// any goroutine; hasGlyph caches the same answer for the shaper.
+func (g *GoTextFaceSource) HasRune(r rune) bool {
+	_, ok := g.f.Cmap.Lookup(r)
+	return ok
+}
+
 func (g *GoTextFaceSource) hasGlyph(r rune) bool {
 	if has, ok := g.hasGlyphCache.get(r); ok {
 		return has
