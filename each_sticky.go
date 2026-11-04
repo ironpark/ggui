@@ -173,11 +173,8 @@ func (f *EachWidget[T, K]) placeKey(r Rect) {
 			return start + float64(i)*f.pin.pitch, i >= 0
 		}
 		if f.estimated() {
-			i := slices.Index(f.keys, key)
-			if i < 0 || i >= len(f.est.starts) {
-				return 0, false
-			}
-			return start + f.est.starts[i], true
+			at, ok := f.est.Start(slices.Index(f.keys, key))
+			return start + at, ok
 		}
 		e := f.entries[key]
 		if e == nil {
