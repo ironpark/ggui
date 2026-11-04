@@ -196,3 +196,27 @@ func TestNativeContextMenuFallback(t *testing.T) {
 		t.Fatal("disabled native menu invoked")
 	}
 }
+
+// A context menu inside another, as a row's in a list with its own, opens
+// for a secondary click on it; the outer opens on the rest.
+func TestContextMenuNested(t *testing.T) {
+	t.Parallel()
+	picked := ""
+	row := ui.ContextMenu(ggui.Box(ggui.Text("Row")).Size(200, 40), ui.MenuItem("Open row", func() { picked = "row" })).Name("Row actions")
+	list := ui.ContextMenu(ggui.Column(row, ggui.Box().Size(200, 200)), ui.MenuItem("New file", func() { picked = "list" })).Name("List actions")
+	p := ggui.NewProbe(list, ggui.Sz(320, 300))
+	defer p.Close()
+	target, _ := p.Find("Row")
+	p.ClickButton(target.Center(), ggui.MouseButtonRight)
+	if !row.Popup().IsOpen() || list.Popup().IsOpen() {
+		t.Fatal("a row's secondary click went to the list")
+	}
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
+	if picked != "row" {
+		t.Fatal("row action", picked)
+	}
+	p.ClickButton(ggui.Pt(100, 150), ggui.MouseButtonRight)
+	if !list.Popup().IsOpen() || row.Popup().IsOpen() {
+		t.Fatal("the list's empty part did not open its menu")
+	}
+}
