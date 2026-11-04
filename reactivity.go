@@ -1,6 +1,8 @@
 package ggui
 
 import (
+	"reflect"
+
 	"github.com/ironpark/ggui/internal/reactive"
 )
 
@@ -166,3 +168,248 @@ func Or(rs ...Readable[bool]) *DerivedValue[bool] {
 		return false
 	})
 }
+
+// Remember returns the value made for key the last time the widgets around
+// it were built, or makes one with init the first time. It is how state a
+// View or Reactive builds outlives that View's rebuilds, as a field's draft
+// should when the page around it is rebuilt:
+//
+//	ggui.View(fields, func(fs []Field) ggui.Widget {
+//		rows := []ggui.Widget{}
+//		for _, f := range fs {
+//			text := ggui.Remember(f.ID, func() *ggui.StateValue[string] { return ggui.State(f.Value) })
+//			rows = append(rows, ui.TextField(text))
+//		}
+//		return ggui.Column(rows...)
+//	})
+//
+// A value is kept while the builds around it keep asking for it: one a
+// View's build stops asking for is let go when that build ends, and so is
+// one asked for by a View its parent rebuilt without, and everything made
+// in a Component, an If or Key branch or an Each row goes with it. init
+// runs untracked under an owner of its own, so a Derived or an Effect it
+// makes lives exactly as long as the value.
+//
+// Keys belong to the nearest Component, branch or row, together with the
+// type of the value, so different kinds of state can share a key; two
+// Views asking for one key and type share the value. Outside every
+// builder, Remember just returns init().
+func Remember[K comparable, T any](key K, init func() T) T {
+	b, _ := reactive.Memory().(*boundary)
+	if b == nil {
+		return Untrack(init)
+	}
+	m := b.mem
+	k := memoKey{key, reflect.TypeFor[T]()}
+	e := m.entries[k]
+	if e == nil {
+		e = &memoEntry{}
+		reactive.WithOwner(m.owner, func() {
+			e.dispose = reactive.Root(func() { e.value = init() })
+		})
+		if m.entries == nil {
+			m.entries = map[memoKey]*memoEntry{}
+		}
+		m.entries[k] = e
+	}
+	if e.by != b || e.seen != b.gen {
+		e.by, e.seen = b, b.gen
+		b.asked = append(b.asked, k)
+	}
+	return e.value.(T)
+}
+
+// memory is what one Component, branch, row or app keeps remembered values
+// in; it goes when its owner does, and the values with it.
+type memory struct {
+	owner   *reactive.Computation
+	entries map[memoKey]*memoEntry
+	orphans []memoKey // asked for by Views since disposed; see boundary.build
+}
+
+type memoKey struct {
+	key any
+	typ reflect.Type
+}
+
+type memoEntry struct {
+	value   any
+	dispose func()
+	by      *boundary // the builder that asked for it last
+	seen    uint64    // by's build that did
+}
+
+// boundary is a builder Remember is asked in: a View or Reactive, which
+// runs again, or the setup of a Component, branch, row or app, which runs
+// once and owns the memory.
+type boundary struct {
+	mem      *memory
+	own      memory    // the memory, when this builder owns it
+	gen      uint64    // its builds so far
+	asked    []memoKey // what its last build asked for
+	disposed bool
+}
+
+// remembering runs fn, a builder that runs once, with a memory of its own
+// that lasts as long as the owner running it.
+func remembering[T any](fn func() T) T {
+	b := &boundary{}
+	b.own.owner = reactive.CurrentOwner()
+	b.mem = &b.own
+	prev := reactive.SwapMemory(b)
+	defer reactive.SwapMemory(prev)
+	return reactive.Build(fn)
+}
+
+// newBoundary is the boundary of a View or Reactive being made now, in the
+// memory of the builder making it, or nil outside every builder.
+func newBoundary() *boundary {
+	parent, _ := reactive.Memory().(*boundary)
+	if parent == nil {
+		return nil
+	}
+	b := &boundary{mem: parent.mem}
+	if reactive.CurrentOwner() != nil {
+		OnCleanup(func() {
+			b.disposed = true
+			b.mem.orphans = append(b.mem.orphans, b.asked...)
+		})
+	}
+	return b
+}
+
+// build runs one build of the boundary, then lets go of what it asked for
+// last time and not this time, and of what a View this build replaced
+// asked for and no new one did.
+func (b *boundary) build(fn func() Widget) Widget {
+	if b == nil {
+		return fn()
+	}
+	b.gen++
+	last := b.asked
+	b.asked = nil
+	prev := reactive.SwapMemory(b)
+	defer reactive.SwapMemory(prev)
+	w := fn()
+	b.mem.drop(last, func(e *memoEntry) bool { return e.by == b && e.seen != b.gen })
+	orphans := b.mem.orphans
+	b.mem.orphans = nil
+	b.mem.drop(orphans, func(e *memoEntry) bool { return e.by.disposed })
+	return w
+}
+
+// drop disposes the entries of keys that gone reports gone.
+func (m *memory) drop(keys []memoKey, gone func(*memoEntry) bool) {
+	for _, k := range keys {
+		if e := m.entries[k]; e != nil && gone(e) {
+			e.dispose()
+			delete(m.entries, k)
+		}
+	}
+}
+
+// DraftValue is an edit held back from the value it edits until it is
+// committed. Build one with Draft.
+type DraftValue[T any] struct {
+	source Readable[T]
+	commit func(T) error
+	value  *StateValue[T]
+	dirty  *StateValue[bool]
+	err    *StateValue[string]
+	eq     func(a, b T) bool
+}
+
+// Committer is a Binding that holds an edit back until it is committed, as
+// a Draft does. A text input bound to one commits it when it loses focus
+// or submits, and reverts it on Escape.
+type Committer interface {
+	// Commit hands the edit on and reports whether it was taken.
+	Commit() bool
+	// Revert drops the edit and any error, reporting whether there was
+	// either.
+	Revert() bool
+}
+
+// Draft is a Binding for a text field that edits source without writing
+// it on every keystroke: the field shows source until it is edited, then
+// the edit, until a commit hands the edit to commit. A commit that fails
+// keeps the edit and shows commit's error through Error, so the user can
+// repair it; Escape, or Revert, goes back to source.
+//
+//	name := ggui.Draft(ggui.Select(store, (*Project).Name), func(v string) error {
+//		return project.Rename(v)
+//	})
+//	ui.Field("Name", ui.TextField(name)).BindError(name.Error())
+//
+// commit runs when the field loses focus or submits, as Commit does. It
+// writes the value on to the model, and source follows from there; source
+// may normalize what it was given. A Draft made in a View's build is lost
+// with that build; keep one with Remember to have it, edit and error
+// included, outlive the page rebuilding around it.
+func Draft[T any](source Readable[T], commit func(T) error) *DraftValue[T] {
+	return &DraftValue[T]{
+		source: source,
+		commit: commit,
+		value:  State(*new(T)),
+		dirty:  State(false),
+		err:    State(""),
+		eq:     reactive.ComparableEqual[T](),
+	}
+}
+
+// Get returns the edit while there is one, and source otherwise.
+func (d *DraftValue[T]) Get() T {
+	if d.dirty.Get() {
+		return d.value.Get()
+	}
+	return d.source.Get()
+}
+
+// GetAny implements the reader Textf and Sprintf unwrap.
+func (d *DraftValue[T]) GetAny() any { return d.Get() }
+
+// Set makes v the edit, or drops the edit when v is what source holds, and
+// clears the error a failed commit left.
+func (d *DraftValue[T]) Set(v T) {
+	if d.eq != nil && d.eq(v, Untrack(d.source.Get)) {
+		d.dirty.Set(false)
+	} else {
+		d.value.Set(v)
+		d.dirty.Set(true)
+	}
+	d.err.Set("")
+}
+
+// Commit hands the edit to commit, if there is one, and reports whether it
+// was taken. A failed commit keeps the edit and sets Error.
+func (d *DraftValue[T]) Commit() bool {
+	if !Untrack(d.dirty.Get) {
+		return true
+	}
+	if err := d.commit(Untrack(d.value.Get)); err != nil {
+		d.err.Set(err.Error())
+		return false
+	}
+	d.dirty.Set(false)
+	d.err.Set("")
+	return true
+}
+
+// Revert drops the edit and the error, and reports whether there was
+// either.
+func (d *DraftValue[T]) Revert() bool {
+	had := Untrack(d.dirty.Get) || Untrack(d.err.Get) != ""
+	d.dirty.Set(false)
+	d.err.Set("")
+	return had
+}
+
+// Fail shows msg as the error, as a check made elsewhere does; Set and a
+// commit clear it.
+func (d *DraftValue[T]) Fail(msg string) { d.err.Set(msg) }
+
+// Error is the error of the last failed commit, or Fail's, or "".
+func (d *DraftValue[T]) Error() Readable[string] { return d.err }
+
+// Dirty reports whether there is an edit not yet committed.
+func (d *DraftValue[T]) Dirty() Readable[bool] { return d.dirty }
