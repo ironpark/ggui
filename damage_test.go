@@ -1,21 +1,23 @@
 package ggui
 
 import (
-	"github.com/ironpark/ggwd"
 	"image/color"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/ironpark/ggwd"
+
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/internal/region"
 )
 
 // breathing reads the time as it paints, and draws past its Rect.
 func breathing(reach float64) Widget {
 	return FromFuncs(func(c Constraints, _ Env) Size { return c.Constrain(Sz(10, 10)) }, func(dst *Canvas, r Rect) {
 		Now()
-		dst.FillRect(grow(r, reach), color.White)
+		dst.FillRect(region.Grow(r, reach), color.White)
 	})
 }
 
@@ -115,10 +117,7 @@ func TestRepaintRectQueuesRegionsForTheNextFrame(t *testing.T) {
 	if len(got) > mostRepaints {
 		t.Fatalf("%d regions kept apart; want at most %d", len(got), mostRepaints)
 	}
-	all := got[0]
-	for _, r := range got[1:] {
-		all = cover(all, r)
-	}
+	all := region.CoverAll(got)
 	if all.Origin.X != 0 || all.Origin.X+all.Size.W != float64(mostRepaints)*10+5 {
 		t.Fatalf("regions %v lost some of what was asked", got)
 	}

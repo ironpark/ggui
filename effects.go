@@ -7,6 +7,7 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/internal/region"
 	"github.com/ironpark/ggui/internal/render"
 )
 
@@ -25,7 +26,7 @@ func (c *Canvas) Blur(r Rect, sigma float64, paint func(dst *Canvas)) {
 		return
 	}
 	reach := 3 * sigma
-	area := c.physical(grow(r, reach)).Intersect(c.root().Image.Bounds())
+	area := c.physical(region.Grow(r, reach)).Intersect(c.root().Image.Bounds())
 	if area.Empty() {
 		paint(c)
 		return
@@ -59,7 +60,7 @@ func (c *Canvas) BackdropBlur(r Rect, radius, sigma float64) {
 	}
 	bounds := c.Image.Bounds()
 	target := c.physical(r).Intersect(bounds)
-	area := c.physical(grow(r, 3*sigma)).Intersect(bounds)
+	area := c.physical(region.Grow(r, 3*sigma)).Intersect(bounds)
 	if target.Empty() || area.Empty() {
 		return
 	}
@@ -107,11 +108,6 @@ func (c *Canvas) blurImage(src *ggfx.Image, sigma float64, clampEdge bool) {
 		op.GeoM.Translate(float64(area.Min.X), float64(area.Min.Y))
 		src.DrawImage(shrunk, op)
 	})
-}
-
-// grow returns r grown by d on every side.
-func grow(r Rect, d float64) Rect {
-	return Rct(Pt(r.Origin.X-d, r.Origin.Y-d), Sz(r.Size.W+2*d, r.Size.H+2*d))
 }
 
 // BlurWidget paints its child blurred. Build one with Blur.
