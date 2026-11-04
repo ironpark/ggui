@@ -34,3 +34,6 @@ coverage.*
 # Local Go workspace, for developing against a ggfx checkout beside this one
 go.work
 go.work.sum
+
+# Benchmark baselines and runs from task bench:save and bench:compare.
+/.bench/

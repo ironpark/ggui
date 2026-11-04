@@ -27,6 +27,8 @@ On macOS, install it with `brew install go-task`.
 | `task fmt` | Format Go sources. |
 | `task tidy` | Update module dependency metadata. |
 | `task bench COUNT=6` | Run package benchmarks repeatedly for comparison. |
+| `task bench:save NAME=base` | Save the engine packages' benchmarks (fonts, text layout, motion, geometry) to `.bench/NAME.txt`. `PKGS`, `BENCH` and `COUNT` narrow or widen the run. |
+| `task bench:compare REF=main` | Run the same benchmarks now and compare them by `benchstat` with a baseline: `.bench/BASE.txt`, or `REF` measured in a temporary worktree of that commit. |
 | `task clean` | Clean Go artifacts and remove `bin/`, including app bundles. |
 
 Override the Go executable with `task build GO=/path/to/go` when needed.
