@@ -10,6 +10,7 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/inspect"
+	"github.com/ironpark/ggui/internal/framestats"
 	"github.com/ironpark/ggui/internal/platform/a11ybridge"
 	"github.com/ironpark/ggui/internal/platform/textinput"
 	"github.com/ironpark/ggui/internal/reactive"
@@ -566,7 +567,7 @@ func (w *Window) runFrameEvent(ev ggwd.FrameEvent) error {
 		return nil
 	}
 	start := time.Now()
-	defer func() { countFrame(time.Since(start)) }()
+	defer func() { framestats.Frame(time.Since(start)) }()
 	// The glyph and shaping caches expire after so many frames unused.
 	text.AdvanceTick()
 	// Frames run here, whichever goroutine the engine calls this on. A Probe
@@ -707,20 +708,20 @@ func (w *Window) wantsFrame(f frameInput) bool {
 	wd := w.world()
 	switch {
 	case wd.anims.active():
-		framesFor[frameForAnimation].Add(1)
+		framestats.For(framestats.Animation)
 		w.dirty.Or(uint32(dirtyAnim))
 		wd.anims.noteDirtiers()
 	case wd.frame.timeRead():
 		// Only what read the time changes: the frame may be painted in
 		// part. What else changes by then marks it dirty itself.
-		framesFor[frameForTime].Add(1)
+		framestats.For(framestats.Time)
 	case len(w.frame) > 0:
-		framesFor[frameForCallback].Add(1)
+		framestats.For(framestats.Callback)
 		w.dirty.Or(uint32(dirtyCallback))
 	case w.hasPosted():
-		framesFor[frameForPosted].Add(1)
+		framestats.For(framestats.Posted)
 	case f.drag || w.touch.active || w.touch.waiting || w.input.touchMotion.target != nil:
-		framesFor[frameForInput].Add(1)
+		framestats.For(framestats.Input)
 		w.dirty.Or(uint32(dirtyInput))
 	default:
 		return false
@@ -784,7 +785,7 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 		reactive.StateGen() == w.motionGen && layoutGen() == w.seenGen {
 		// Nothing changed: work was posted that wrote nothing, say. The
 		// screen keeps the last frame, and untouched, nothing is presented.
-		framesSkipped.Add(1)
+		framestats.CountSkipped()
 		return
 	}
 	target, kept := w.paintTarget(screen, kept)
@@ -825,8 +826,7 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 	w.canvas.window, w.canvas.onScreen = true, target == screen
 	w.canvas.fs().backdrop = false
 	defer w.presentBackdrop(screen, target)
-	b := screen.Bounds()
-	logical := Sz(w.canvas.dp(float64(b.Dx())), w.canvas.dp(float64(b.Dy())))
+	logical := w.logicalSize(screen)
 	if Untrack(w.viewport.Get) != logical {
 		w.viewport.Set(logical)
 	}
@@ -840,7 +840,7 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 		settled: func() {
 			if dst != target && (reactive.FreeGen() != w.freeSeen || fontGen() != w.fontSeen) {
 				// The layout changed more than the scroll: paint all of it.
-				refusePartial("state changed")
+				framestats.Refuse("state changed")
 				w.frameLoop.endFrameFree(true, true)
 				dst = target
 				w.canvas.Image = target
@@ -857,7 +857,7 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 		painted: func() {
 			// Counted once the settle had its chance to paint it whole.
 			if dst != target {
-				containedFrames.Add(1)
+				framestats.CountContained()
 			}
 			w.ax.Publish(w.semantics(), w.takeAnnouncements())
 			if tracing {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"runtime"
+	"slices"
 	"testing"
 	"time"
 
@@ -822,5 +823,353 @@ func TestTouchMomentumStopsOnPauseOrMissingTarget(t *testing.T) {
 		if s.position() != 0 || in.touchMotion.target != nil {
 			t.Fatal("stale fling continued")
 		}
+	}
+}
+
+func TestParseChord(t *testing.T) {
+	t.Parallel()
+	cases := map[string]Chord{
+		"cmd+s":        {Key: KeyS, Cmd: true},
+		"Ctrl+Shift+Z": {Key: KeyZ, Mods: Mods{Ctrl: true, Shift: true}},
+		"escape":       {Key: KeyEscape},
+		"alt+enter":    {Key: KeyEnter, Mods: Mods{Alt: true}},
+		"up":           {Key: KeyArrowUp},
+		"f1":           {Key: KeyF1},
+	}
+	for in, want := range cases {
+		got, err := ParseChord(in)
+		if err != nil || got != want {
+			t.Errorf("ParseChord(%q) = %+v, %v; want %+v", in, got, err, want)
+		}
+	}
+	for _, bad := range []string{"", "ctrl+", "bogus", "s+ctrl"} {
+		if _, err := ParseChord(bad); err == nil {
+			t.Errorf("ParseChord(%q) accepted", bad)
+		}
+	}
+	if s := MustChord("ctrl+shift+z").String(); s != "ctrl+shift+z" {
+		t.Fatalf("String = %q", s)
+	}
+}
+
+func TestKeyEventIs(t *testing.T) {
+	t.Parallel()
+	ev := KeyEvent{Kind: KeyPress, Key: KeyS, Mods: Mods{Ctrl: true}}
+	if !ev.Is(MustChord("ctrl+s")) || ev.Is(MustChord("ctrl+shift+s")) || ev.Is(MustChord("s")) {
+		t.Fatal("ctrl+s matched wrongly")
+	}
+	if (KeyEvent{Kind: KeyFocus, Key: KeyS, Mods: Mods{Ctrl: true}}).Is(MustChord("ctrl+s")) {
+		t.Fatal("a focus event is not a press")
+	}
+}
+
+// spaceEater is a focusable region that consumes Space.
+type spaceEater struct {
+	FocusWidget
+	seen []KeyboardKey
+}
+
+func (e *spaceEater) HandleKey(ev KeyEvent) {
+	if ev.Kind == KeyPress {
+		e.seen = append(e.seen, ev.Key)
+	}
+}
+func (e *spaceEater) ConsumesKey(ev KeyEvent) bool { return ev.Key == KeySpace }
+func (e *spaceEater) Paint(dst *Canvas, r Rect)    { dst.HitKey(r, e) }
+
+func TestShortcutsRunAroundTheFocusedWidget(t *testing.T) {
+	t.Parallel()
+	e := &spaceEater{FocusWidget: *Focus(Box().Size(20, 20))}
+	p := NewProbe(e, Sz(50, 50))
+	defer p.Close()
+	runs := map[string]int{}
+	p.Shortcut("space", func() { runs["space"]++ })
+	p.Shortcut("s", func() { runs["s"]++ })
+	p.Shortcut("ctrl+s", func() { runs["ctrl+s"]++ })
+	p.Type(Mods{}, KeySpace) // nothing focused: the bare key runs
+	if runs["space"] != 1 {
+		t.Fatalf("space ran %d times with nothing focused, want 1", runs["space"])
+	}
+	p.Click(Pt(5, 5))
+	p.Type(Mods{}, KeySpace, KeyS)
+	if runs["space"] != 1 || runs["s"] != 1 || len(e.seen) != 2 {
+		t.Fatalf("space %d s %d, widget saw %v; want the widget to keep Space and s to run after it", runs["space"], runs["s"], e.seen)
+	}
+	p.Type(Mods{Ctrl: true}, KeyS)
+	if runs["ctrl+s"] != 1 || len(e.seen) != 2 {
+		t.Fatalf("ctrl+s ran %d, widget saw %v; a modified chord goes before the widget", runs["ctrl+s"], e.seen)
+	}
+	p.Shortcut("space", func() { runs["excl"]++ }).Exclusive()
+	p.Type(Mods{}, KeySpace)
+	if runs["excl"] != 1 || len(e.seen) != 2 {
+		t.Fatalf("exclusive ran %d, widget saw %v; want it to take the key", runs["excl"], e.seen)
+	}
+}
+
+func TestPopupTrapsTabAndRestoresFocus(t *testing.T) {
+	t.Parallel()
+	focused := ""
+	track := func(name string, size float64) *FocusWidget {
+		return Focus(Box().Size(size, size)).OnFocus(func(on bool) {
+			if on {
+				focused = name
+			} else if focused == name {
+				focused = ""
+			}
+		})
+	}
+	a, b := track("a", 20), track("b", 20)
+	c1, c2 := track("c1", 20), track("c2", 20)
+	pop := Popup(a, Column(c1, c2))
+	p := NewProbe(Column(pop, b), Sz(100, 200))
+	defer p.Close()
+	p.Click(Pt(10, 10))
+	if focused != "a" {
+		t.Fatalf("focused %q after clicking a", focused)
+	}
+	pop.Show()
+	p.Frame()
+	p.Type(Mods{}, KeyTab)
+	if focused != "c2" {
+		t.Fatalf("focused %q; the scope should take focus to c1 and Tab move it to c2", focused)
+	}
+	p.Type(Mods{}, KeyTab)
+	if focused != "c1" {
+		t.Fatalf("focused %q; Tab must wrap inside the popup, not reach b", focused)
+	}
+	p.Type(Mods{}, KeyEscape)
+	if pop.IsOpen() {
+		t.Fatal("Escape did not close the popup")
+	}
+	p.Move(Pt(90, 190)) // the next frame's dispatch restores focus
+	if focused != "a" {
+		t.Fatalf("focused %q after closing, want a", focused)
+	}
+}
+
+func TestTabScrollsTheTargetIntoView(t *testing.T) {
+	t.Parallel()
+	items := Column(Focus(Box().Size(50, 50)), Focus(Box().Size(50, 50)), Focus(Box().Size(50, 50)))
+	sc := Scroll(items)
+	p := NewProbe(sc, Sz(50, 70))
+	defer p.Close()
+	p.Type(Mods{}, KeyTab, KeyTab)
+	if sc.offset != 30 {
+		t.Fatalf("offset = %v after tabbing to the second item, want 30 so it is fully shown", sc.offset)
+	}
+}
+
+// RequestReveal scrolls its Rect into view, once, and leaves focus alone.
+func TestRequestRevealScrollsWithoutFocusing(t *testing.T) {
+	t.Parallel()
+	reveal := -1
+	rows := make([]Widget, 10)
+	for i := range rows {
+		rows[i] = &revealer{i: i, want: &reveal}
+	}
+	sc := Scroll(Column(rows...))
+	p := NewProbe(sc, Sz(50, 70))
+	defer p.Close()
+	p.Frame()
+	reveal = 5
+	p.Frame()
+	if sc.offset != 50*6-70 {
+		t.Fatalf("offset = %v after revealing row 5, want %v", sc.offset, 50*6-70)
+	}
+	if p.in.focused != nil {
+		t.Fatal("RequestReveal moved focus")
+	}
+	reveal = -1
+	p.Scroll(Pt(10, 10), Pt(0, -40))
+	p.Frame()
+	if sc.offset == 50*6-70 {
+		t.Fatal("the reveal held the scroll after it was asked once")
+	}
+}
+
+type revealer struct {
+	i    int
+	want *int
+}
+
+func (w *revealer) Layout(Constraints, Env) Size { return Sz(50, 50) }
+func (w *revealer) Paint(dst *Canvas, r Rect) {
+	if *w.want == w.i {
+		dst.RequestReveal(r)
+	}
+}
+
+// PaintFocus tells the widget that painted the focused handler from one
+// that only overlaps it: a badge floating over a focused editor, a parent
+// around it.
+func TestPaintFocusKnowsWhoPaintedTheFocus(t *testing.T) {
+	t.Parallel()
+	var inEditor, inBadge, inColumn bool
+	tracked := func(w Widget, held *bool) Widget {
+		return FromFuncs(
+			func(c Constraints, env Env) Size { return w.Layout(c, env) },
+			func(dst *Canvas, r Rect) { *held = dst.PaintFocus(w, r) },
+		)
+	}
+	editor := Focus(Box().Size(200, 100))
+	badge := Box().Size(40, 20)
+	p := NewProbe(tracked(Stack(tracked(editor, &inEditor), Padding(tracked(badge, &inBadge), 10.5, 3.3)), &inColumn), Sz(200, 100))
+	defer p.Close()
+	p.Frame()
+	if inEditor || inBadge || inColumn {
+		t.Fatalf("before any focus: editor %v, badge %v, around both %v", inEditor, inBadge, inColumn)
+	}
+	p.Click(Pt(150, 80))
+	p.Frame()
+	if !inEditor || inBadge || !inColumn {
+		t.Fatalf("with the editor focused: editor %v, badge over it %v, around both %v; want true, false, true", inEditor, inBadge, inColumn)
+	}
+}
+
+// FocusRef focuses the first focusable widget in what it is attached to,
+// from posted work, and leaves focus alone when a trap it is outside is open
+// or the widget has nothing to focus.
+func TestFocusRefFocusesTheAttachedWidget(t *testing.T) {
+	t.Parallel()
+	var first, second, empty FocusRef
+	dialog := State(false)
+	p := ProbeBuilder(func() Widget {
+		return Column(
+			first.Attach(Focus(Box().Size(20, 20))),
+			second.Attach(Row(Box().Size(5, 5), Focus(Box().Size(20, 20)), Focus(Box().Size(20, 20)))),
+			empty.Attach(Box().Size(20, 20)),
+			If(dialog, func() Widget { return &shortcutKeeper{trap: true} }),
+		)
+	}, Sz(200, 200))
+	defer p.Close()
+	focusedOnly := func(what string, want *FocusRef) {
+		t.Helper()
+		p.Frame() // runs the posted Focus and paints the request
+		p.Frame() // paints with the focus in place
+		for name, ref := range map[string]*FocusRef{"first": &first, "second": &second, "empty": &empty} {
+			if ref.Focused() != (ref == want) {
+				t.Fatalf("%s: %s.Focused() = %v", what, name, ref.Focused())
+			}
+		}
+	}
+	p.Frame()
+	focusedOnly("at start", nil)
+	p.Post(second.Focus)
+	focusedOnly("second", &second)
+	p.Post(first.Focus)
+	focusedOnly("first", &first)
+	p.Post(empty.Focus)
+	focusedOnly("nothing to focus", &first)
+	dialog.Set(true)
+	p.Frame()
+	p.Post(second.Focus)
+	p.Frame()
+	p.Frame()
+	if second.Focused() {
+		t.Fatal("Focus reached a widget behind an open dialog")
+	}
+}
+
+// A FocusRef whose widget was scrolled into view by Focus reports the focus
+// once the scroll has painted, without waiting for input to refresh it.
+func TestFocusRefFocusedAfterScrollingIntoView(t *testing.T) {
+	t.Parallel()
+	refs := make([]FocusRef, 30)
+	rows := make([]Widget, len(refs))
+	for i := range rows {
+		rows[i] = refs[i].Attach(Focus(Box().Size(100, 20)))
+	}
+	p := NewProbe(Scroll(Column(rows...)), Sz(100, 100))
+	defer p.Close()
+	p.Frame()
+	p.Post(refs[25].Focus)
+	p.Frame() // focuses the row, out of view, and scrolls to it
+	p.Frame() // paints it in view
+	p.Frame() // paints with the focus where it now is
+	if !refs[25].Focused() {
+		t.Fatal("Focused() = false after the row scrolled into view")
+	}
+}
+
+// A widget rebuilt where the focused one was is still told it has focus.
+func TestRebuiltFocusedWidgetIsToldItHasFocus(t *testing.T) {
+	t.Parallel()
+	var got []string
+	gen := State(0)
+	var ref FocusRef
+	p := NewProbe(ref.Attach(View(gen, func(n int) Widget { return &keyLog{n: n, got: &got} })), Sz(100, 100))
+	defer p.Close()
+	p.Frame()
+	p.Post(ref.Focus)
+	p.Frame()
+	gen.Set(1)
+	p.Type(Mods{}, KeyA)
+	want := []string{"0 focus", "1 focus", "1 press"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("events = %v, want %v", got, want)
+	}
+}
+
+type keyLog struct {
+	n   int
+	got *[]string
+}
+
+func (k *keyLog) Layout(Constraints, Env) Size { return Sz(20, 20) }
+func (k *keyLog) Paint(dst *Canvas, r Rect)    { dst.HitKey(r, k) }
+func (k *keyLog) HandleKey(e KeyEvent) {
+	kind := map[KeyKind]string{KeyFocus: "focus", KeyPress: "press", KeyBlur: "blur"}[e.Kind]
+	*k.got = append(*k.got, fmt.Sprint(k.n, " ", kind))
+}
+
+// Exercise real Interactive registrations: each control registers pointer,
+// keyboard and cursor regions, and rebuilt controls adopt their prior state.
+func BenchmarkInteractiveRegistration(b *testing.B) {
+	for _, n := range []int{100, 1000} {
+		b.Run(fmt.Sprint(n), func(b *testing.B) {
+			c := Canvas{}
+			old, next := make([]twice, n), make([]twice, n)
+			for i := range old {
+				old[i].SetKey(i)
+				next[i].SetKey(i)
+				old[i].Hit(&c, Rct(Pt(0, float64(i)*20), Sz(100, 20)), &old[i], CursorShapePointer)
+			}
+			c.prev, c.hits = c.hits, make([]hitRegion, 0, n)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for k := 0; k < b.N; k++ {
+				c.hits = c.hits[:0]
+				// A real frame starts here, so whatever adoption builds
+				// once per frame is built again and shows up in the number.
+				c.nextFrame()
+				c.resetSemantics()
+				for i := range next {
+					next[i].Hit(&c, Rct(Pt(0, float64(i)*20), Sz(100, 20)), &next[i], CursorShapePointer)
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkFocusedNode(b *testing.B) {
+	for _, n := range []int{1000, 10000} {
+		b.Run(fmt.Sprint(n), func(b *testing.B) {
+			c := Canvas{}
+			for i := range n - 1 {
+				c.Leaf(Rct(Pt(0, float64(i)), Sz(100, 1)), Node{Role: RoleText})
+			}
+			w := &twice{}
+			w.Role = RoleTextField
+			r := Rct(Pt(0, float64(n)), Sz(100, 20))
+			c.Describe(r, w)
+			focused := hitRegion{key: w, rect: r}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				if focusedNode(&c, &focused) != n-1 {
+					b.Fatal("focused node was lost")
+				}
+			}
+		})
 	}
 }

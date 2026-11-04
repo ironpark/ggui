@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"math"
 	"testing"
+	"time"
 
 	"github.com/ironpark/ggfx"
 )
@@ -472,5 +473,197 @@ func TestShadowDoesNotChangeLayoutOrHits(t *testing.T) {
 	b.Shadow()
 	if len(b.shadows) != 0 {
 		t.Fatal("shadow not cleared")
+	}
+}
+
+// overlayTarget is a target that paints itself through an Overlay, as a
+// popup or tooltip places its content beside the Rect it was painted in.
+type overlayTarget struct{ target }
+
+func (o *overlayTarget) Paint(dst *Canvas, r Rect) {
+	dst.Overlay(func(dst *Canvas) { o.target.Paint(dst, r) })
+}
+
+func TestTransformCarriesOverlaysWithIt(t *testing.T) {
+	t.Parallel()
+	tg := &overlayTarget{target{size: Sz(40, 40)}}
+	p := NewProbe(topLeft(Transform(tg).Translate(100, 0)), Sz(200, 200))
+	defer p.Close()
+	p.Click(Pt(10, 10))
+	if len(tg.taps()) != 0 {
+		t.Fatal("an overlay under a Transform stayed where its anchor was laid out")
+	}
+	p.Click(Pt(110, 10))
+	if taps := tg.taps(); len(taps) != 1 || !nearPt(taps[0], Pt(10, 10)) {
+		t.Fatalf("taps %v; want one at the overlay's own (10, 10), beside the moved anchor", taps)
+	}
+	gone := &overlayTarget{target{size: Sz(40, 40)}}
+	q := NewProbe(topLeft(Transform(gone).Scale(0)), Sz(200, 200))
+	defer q.Close()
+	q.Click(Pt(20, 20))
+	if len(gone.taps()) != 0 {
+		t.Fatal("an overlay scheduled under a zero scale took a click")
+	}
+}
+
+func TestTransformTurnsScrollDeltas(t *testing.T) {
+	t.Parallel()
+	tg := &target{size: Sz(40, 40)}
+	p := NewProbe(topLeft(Transform(tg).Rotate(math.Pi/2).Scale(2)), Sz(200, 200))
+	defer p.Close()
+	p.Scroll(Pt(20, 20), Pt(0, 10))
+	var got []Point
+	for _, ev := range tg.events {
+		if ev.Kind == PointerScroll {
+			got = append(got, ev.Scroll)
+		}
+	}
+	// Down the screen is along the turned child's x, at half the length.
+	if len(got) != 1 || !nearPt(Pt(math.Round(got[0].X*1e9)/1e9, math.Round(got[0].Y*1e9)/1e9), Pt(5, 0)) {
+		t.Fatalf("scroll deltas %v; want (5, 0) in the child's coordinates", got)
+	}
+}
+
+func TestDragAndDropOffsetsUnderATransform(t *testing.T) {
+	t.Parallel()
+	var got []Dropped[int]
+	source := DragSource(Box().Size(100, 40), 7)
+	zone := DropZone(Box().Size(100, 40), func(d Dropped[int]) { got = append(got, d) })
+	p := NewProbe(topLeft(Column(Transform(source).Scale(2).Origin(0, 0), Transform(zone).Translate(50, 0))), Sz(300, 200))
+	defer p.Close()
+	p.Frame()
+	p.Press(Pt(30, 10))
+	p.Move(Pt(30, 40))
+	p.Move(Pt(120, 60))
+	if !source.Dragging() || source.grab != Pt(15, 5) {
+		t.Fatalf("dragging %v, grab %v; want the hold at (15, 5) on the source's own coordinates", source.Dragging(), source.grab)
+	}
+	p.Release(Pt(120, 60))
+	if len(got) != 1 || got[0].Pos != Pt(70, 20) {
+		t.Fatalf("dropped %+v; want one at (70, 20) in the moved zone's coordinates", got)
+	}
+}
+
+func TestTransformLayerCoversOnlyWhatShows(t *testing.T) {
+	t.Parallel()
+	img := ggfx.NewImage(100, 100)
+	defer img.Deallocate()
+	c := (&Canvas{Image: img}).Clip(Rct(Pt(0, 0), Sz(50, 50)))
+	inv, _ := Affine{}.Translate(30, 0).Invert()
+	area, ok := c.transformArea(inv)
+	if !ok || area != image.Rect(0, 0, 22, 52) {
+		t.Fatalf("area %v %v; want the clip moved back, a pixel or two to spare, cut to the window", area, ok)
+	}
+	inv, _ = Affine{}.Translate(500, 0).Invert()
+	if _, ok := c.transformArea(inv); ok {
+		t.Fatal("a layer moved wholly out of the clip still shows")
+	}
+	tg := &target{}
+	c.Transform(Affine{}.Translate(500, 0), func(dst *Canvas) { tg.Paint(dst, Rct(Pt(0, 0), Sz(10, 10))) })
+	if c.fs().layers.Depth() != 0 || layerCount(c.root()) != 0 {
+		t.Fatal("a transform with nothing to show borrowed a layer")
+	}
+	c.Transform(Affine{}.Translate(30, 0), func(dst *Canvas) { tg.Paint(dst, Rct(Pt(0, 0), Sz(10, 10))) })
+	if c.fs().layers.Depth() != 0 || layerCount(c.root()) != 1 {
+		t.Fatal("a visible transform did not paint through one returned layer")
+	}
+	c.root().freeLayers()
+}
+
+func TestBoxGradientEqualAssignmentIsANoOp(t *testing.T) {
+	t.Parallel()
+	box := Box().Gradient(LinearGradient(0, Stops(testColor{}, testColor{})...))
+	before := box.props.Version()
+	box.Gradient(LinearGradient(0, Stops(testColor{}, testColor{})...))
+	if box.props.Version() != before {
+		t.Fatal("setting an equal themed gradient asked for a layout")
+	}
+	box.Gradient(Gradient{})
+	if box.props.Version() == before {
+		t.Fatal("removing a themed gradient did not ask for a layout")
+	}
+}
+
+// These tests check that the parity tracks compose: text under paint
+// effects, animation values driving paint effects, and selectable text
+// inside the scroll track's sticky headers.
+
+func TestRichTextLinkTapsUnderATransform(t *testing.T) {
+	t.Parallel()
+	taps := 0
+	text := RichText(Span("Read the "), Span("guide").OnTap(func() { taps++ }), Span(" first.")).Selectable()
+	p := NewProbe(topLeft(Transform(text).Translate(120, 40)), Sz(500, 200))
+	defer p.Close()
+	p.Frame()
+	link, ok := p.FindRole(RoleLink, "guide")
+	if !ok {
+		t.Fatal("no link")
+	}
+	if link.Center().X < 120 || link.Center().Y < 40 {
+		t.Fatalf("link reported at %v; want its moved on-screen box", link)
+	}
+	p.Click(link.Center())
+	if taps != 1 {
+		t.Fatalf("taps %d; want the moved link to take the click", taps)
+	}
+	if got := text.SelectedText(); got != "" {
+		t.Fatalf("a link tap selected %q", got)
+	}
+}
+
+func TestSelectableTextSelectsUnderAScale(t *testing.T) {
+	t.Parallel()
+	w := Text("hello world").Selectable()
+	p := NewProbe(topLeft(Transform(w).Scale(2).Origin(0, 0)), Sz(600, 100))
+	defer p.Close()
+	p.Frame()
+	local := textAt(w.rich, Rct(Pt(0, 0), Sz(300, 50)), 4) // late in "hello", where an unmapped 2x point lands in "world"
+	at := Pt(local.X*2, local.Y*2)
+	p.Click(at)
+	p.Click(at)
+	if got := w.rich.SelectedText(); got != "hello" {
+		t.Fatalf("double click under a 2x scale selected %q, want hello", got)
+	}
+}
+
+func TestTimelineDrivesATransformOffset(t *testing.T) {
+	t.Parallel()
+	activeWorld().anims.list = nil
+	tl := Timeline(time.Second)
+	tg := &target{size: Sz(20, 20)}
+	w := Transform(tg).BindOffset(Interpolate(tl, Pt(0, 0), Pt(100, 0), LerpPoint)).Origin(0, 0)
+	p := NewProbe(topLeft(w), Sz(300, 100))
+	defer p.Close()
+	p.Click(Pt(5, 5))
+	if len(tg.taps()) != 1 {
+		t.Fatal("the child at rest missed its click")
+	}
+	tl.Seek(0.5)
+	p.Frame()
+	p.Click(Pt(55, 5))
+	if taps := tg.taps(); len(taps) != 2 || !nearPt(taps[1], Pt(5, 5)) {
+		t.Fatalf("taps %v; want the second at (5, 5) after the timeline moved the child 50", taps)
+	}
+}
+
+func TestSelectableTextInAPinnedStickyHeader(t *testing.T) {
+	t.Parallel()
+	head := Text("alpha beta").Selectable()
+	var body Rect
+	a := Sticky(head, probe(200, 300, &body))
+	offset := State(0.0)
+	p := NewProbe(Scroll(Column(a)).BindOffset(offset), Sz(200, 100))
+	defer p.Close()
+	p.Frame()
+	offset.Set(120)
+	p.Frame()
+	if !a.Pinned() {
+		t.Fatal("header did not pin")
+	}
+	at := textAt(head.rich, Rct(Pt(0, 0), Sz(200, 30)), 7) // inside "beta"
+	p.Click(at)
+	p.Click(at)
+	if got := head.rich.SelectedText(); got != "beta" {
+		t.Fatalf("double click on the pinned header selected %q, want beta", got)
 	}
 }

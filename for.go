@@ -54,7 +54,7 @@ type EachWidget[T any, K comparable] struct {
 	visible      []Widget
 	virtualRects []Rect
 
-	pin eachPin[T] // sticky headers and ScrollToKey; see sticky.go
+	pin eachPin[T] // sticky headers and ScrollToKey; see scroll.go
 }
 
 type forEntry[T any] struct {
