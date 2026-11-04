@@ -1,4 +1,4 @@
-package ggui
+package paragraph
 
 import (
 	"image/color"
@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggui/internal/fn"
 	"github.com/ironpark/ggui/internal/fontsys"
 	"github.com/ironpark/ggui/internal/text"
 	"github.com/ironpark/ggui/internal/textlayout"
@@ -29,27 +30,25 @@ import (
 // face draws the runs of a line in the order they were written, which is
 // backwards for Arabic or Hebrew set in a Latin font's fallbacks.
 
-// lineStyle is one style's stretch of a line: s[start:end] in font at
-// size and weight. run is the caller's index for the style.
-type lineStyle struct {
-	start, end int
-	font       *Font
-	size       float64
-	weight     FontWeight
-	run        int
+// LineStyle is one style's stretch of a line: s[Start:End] in Style. Run
+// is the caller's index for the style.
+type LineStyle struct {
+	Start, End int
+	Style      Style
+	Run        int
 }
 
-// piece is a stretch of a line drawn in one direction and one style, at x
+// Piece is a stretch of a line drawn in one direction and one style, at x
 // from the line's left edge and w wide, both at scale 1.
-type piece struct {
-	start, end int // in the line
-	style      int // index into the line's styles
-	rtl        bool
-	x, w       float64
-	segs       []rtlSeg  // a right-to-left piece's runs, in logical order
-	lang       shapeLang // what a right-to-left piece is shaped in
+type Piece struct {
+	Start, End int // in the line
+	Style      int // index into the line's styles
+	RTL        bool
+	X, W       float64
+	segs       []rtlSeg  // a right-to-left Piece's runs, in logical order
+	lang       shapeLang // what a right-to-left Piece is shaped in
 
-	pos func(b int) float64 // x of offset b within the piece; built on first use
+	pos func(b int) float64 // x of offset b within the Piece; built on first use
 
 	// glyphs are the piece's glyphs laid out in glyphFace, the face it was
 	// last drawn in: kept until the line is laid out again, so that a
@@ -62,14 +61,14 @@ type piece struct {
 // rtlSeg is a run of a right-to-left piece drawn by one face of its chain:
 // face indexes rtlChain.faces, or is -1 for the emoji font.
 type rtlSeg struct {
-	start, end int
+	Start, End int
 	face       int
-	w          float64
+	W          float64
 }
 
-// hasRTL reports whether s holds a right-to-left character or an explicit
+// HasRTL reports whether s holds a right-to-left character or an explicit
 // right-to-left mark, embedding or isolate.
-func hasRTL(s string) bool {
+func HasRTL(s string) bool {
 	quick := false
 	for i := 0; i < len(s); i++ {
 		if s[i] >= 0xD6 {
@@ -91,25 +90,25 @@ func hasRTL(s string) bool {
 	return false
 }
 
-// needsBidi reports whether a line must be reordered: it is in a right-to-
+// NeedsBidi reports whether a line must be reordered: it is in a right-to-
 // left paragraph, or holds right-to-left text.
-func needsBidi(s string, base TextDirection) bool { return base == DirRTL || hasRTL(s) }
+func NeedsBidi(s string, rtl bool) bool { return rtl || HasRTL(s) }
 
 var bidiPool = sync.Pool{New: func() any { return new(bidi.Paragraph) }}
 
-// layoutLine cuts s into pieces in visual order and measures them at scale
+// LayoutLine cuts s into pieces in visual order and measures them at scale
 // 1. A line with no right-to-left text in a left-to-right paragraph is one
 // piece per style.
-func layoutLine(s string, styles []lineStyle, base TextDirection, lang string) []piece {
-	var out []piece
-	if !needsBidi(s, base) {
+func LayoutLine(s string, styles []LineStyle, rtl bool, lang string) []Piece {
+	var out []Piece
+	if !NeedsBidi(s, rtl) {
 		x := 0.0
 		for i, st := range styles {
-			if st.start == st.end {
+			if st.Start == st.End {
 				continue
 			}
-			w := textlayout.Width(s[st.start:st.end], st.font.face(st.size, st.weight))
-			out = append(out, piece{start: st.start, end: st.end, style: i, x: x, w: w})
+			w := textlayout.Width(s[st.Start:st.End], st.Style.Face(1))
+			out = append(out, Piece{Start: st.Start, End: st.End, Style: i, X: x, W: w})
 			x += w
 		}
 		return out
@@ -117,7 +116,7 @@ func layoutLine(s string, styles []lineStyle, base TextDirection, lang string) [
 	para := bidiPool.Get().(*bidi.Paragraph)
 	defer bidiPool.Put(para)
 	dir := bidi.LeftToRight
-	if base == DirRTL {
+	if rtl {
 		dir = bidi.RightToLeft
 	}
 	runs := para.SegmentString(s, dir)
@@ -132,31 +131,31 @@ func layoutLine(s string, styles []lineStyle, base TextDirection, lang string) [
 		r := runs.Run(i)
 		a, b := starts[r.Start], starts[r.End]
 		for si, st := range styles {
-			lo, hi := max(a, st.start), min(b, st.end)
+			lo, hi := max(a, st.Start), min(b, st.End)
 			if lo >= hi {
 				continue
 			}
-			out = append(out, piece{start: lo, end: hi, style: si, rtl: r.Level%2 == 1})
+			out = append(out, Piece{Start: lo, End: hi, Style: si, RTL: r.Level%2 == 1})
 			levels = append(levels, r.Level)
 		}
 	}
 	order := visualOrder(levels)
-	sorted := make([]piece, len(out))
+	sorted := make([]Piece, len(out))
 	for i, li := range order {
 		sorted[i] = out[li]
 	}
 	x := 0.0
 	for i := range sorted {
 		p := &sorted[i]
-		st := styles[p.style]
-		if p.rtl {
-			p.lang = newShapeLang(lang, s[p.start:p.end])
-			p.segs, p.w = rtlSegs(s[p.start:p.end], p.start, rtlFaces(st.font, st.size, st.weight, p.lang))
+		st := styles[p.Style]
+		if p.RTL {
+			p.lang = newShapeLang(lang, s[p.Start:p.End])
+			p.segs, p.W = rtlSegs(s[p.Start:p.End], p.Start, rtlFaces(st.Style, 1, p.lang))
 		} else {
-			p.w = textlayout.Width(s[p.start:p.end], st.font.face(st.size, st.weight))
+			p.W = textlayout.Width(s[p.Start:p.End], st.Style.Face(1))
 		}
-		p.x = x
-		x += p.w
+		p.X = x
+		x += p.W
 	}
 	return sorted
 }
@@ -196,13 +195,13 @@ func visualOrder(levels []bidi.Level) []int {
 	return order
 }
 
-// width returns the line's width: where its last piece ends.
-func piecesWidth(ps []piece) float64 {
+// Width returns the line's width: where its last piece ends.
+func Width(ps []Piece) float64 {
 	if len(ps) == 0 {
 		return 0
 	}
 	last := ps[len(ps)-1]
-	return last.x + last.w
+	return last.X + last.W
 }
 
 // rtlSegs cuts s, a right-to-left run starting at off in its line, into
@@ -212,7 +211,7 @@ func rtlSegs(s string, off int, chain *rtlChain) ([]rtlSeg, float64) {
 	total := 0.0
 	textedit.GraphemeRuns(s, chain.pick, func(start, end, face int) bool {
 		w := text.AdvanceAt(s[start:end], end-start, chain.face(face))
-		segs = append(segs, rtlSeg{start: off + start, end: off + end, face: face, w: w})
+		segs = append(segs, rtlSeg{Start: off + start, End: off + end, face: face, W: w})
 		total += w
 		return true
 	})
@@ -279,7 +278,7 @@ func (c *rtlChain) addLocked(fb *fontsys.Font) int {
 	font, axis := fb.ForWeight(c.weight)
 	last := len(c.faces) - 1
 	c.srcs = slices.Insert(c.srcs, last, font.Meta())
-	c.faces = slices.Insert(c.faces, last, font.ChainFaceWith(c.size, c.weight, axis, c.rtl))
+	c.faces = slices.Insert(c.faces, last, font.ChainFaceWith(c.size, c.weight, axis, c.setRTL))
 	if c.found == nil {
 		c.found = map[*fontsys.Font]int{}
 	}
@@ -287,8 +286,8 @@ func (c *rtlChain) addLocked(fb *fontsys.Font) int {
 	return last
 }
 
-// rtl sets g to shape right to left in c's language.
-func (c *rtlChain) rtl(g *text.GoTextFace) {
+// setRTL sets g to shape right to left in c's language.
+func (c *rtlChain) setRTL(g *text.GoTextFace) {
 	g.Direction = text.DirectionRightToLeft
 	g.Language = c.tag
 }
@@ -305,7 +304,8 @@ func (c *rtlChain) face(i int) text.Face {
 type rtlKey struct {
 	font   *fontsys.Font
 	size   float64
-	weight FontWeight
+	weight fontsys.Weight
+	emoji  *fontsys.EmojiChoice
 	lang   string
 	gen    uint64
 }
@@ -322,11 +322,11 @@ var rtlCache struct {
 // rtlCacheMin is the size below which rtlCache never ages anything out.
 const rtlCacheMin = 64
 
-// rtlFaces returns f's chain at size and weight, shaping in lang.
-func rtlFaces(font *Font, size float64, w FontWeight, lang shapeLang) *rtlChain {
-	f := font.engine().Resolve()
-	gen := fontGen()
-	key := rtlKey{f, size, w, lang.key, gen}
+// rtlFaces returns st's chain at scale, shaping in lang.
+func rtlFaces(st Style, scale float64, lang shapeLang) *rtlChain {
+	f, size := st.Font.Resolve(), st.Size*scale
+	gen := fontsys.Generation()
+	key := rtlKey{f, size, st.Weight, st.Emoji, lang.key, gen}
 	rtlCache.Lock()
 	defer rtlCache.Unlock()
 	if rtlCache.gen != gen {
@@ -337,7 +337,7 @@ func rtlFaces(font *Font, size float64, w FontWeight, lang shapeLang) *rtlChain 
 	}
 	c, ok := rtlCache.prev[key]
 	if !ok {
-		c = newRTLChain(f, size, w, lang.tag)
+		c = newRTLChain(f, size, st.Weight, st.Emoji, lang.tag)
 	}
 	if rtlCache.cur == nil {
 		rtlCache.cur = map[rtlKey]*rtlChain{}
@@ -354,18 +354,18 @@ func rtlFaces(font *Font, size float64, w FontWeight, lang shapeLang) *rtlChain 
 }
 
 // newRTLChain builds f's chain at size and weight, shaping in tag: the
-// same faces fontsys.Font.Face puts in its fallback chain, in its order.
-func newRTLChain(f *fontsys.Font, size float64, w FontWeight, tag language.Tag) *rtlChain {
-	sw := fontsys.Weight(w)
+// same faces fontsys.Font.Face puts in its fallback chain, in its order,
+// with the emoji font choice resolves to.
+func newRTLChain(f *fontsys.Font, size float64, sw fontsys.Weight, choice *fontsys.EmojiChoice, tag language.Tag) *rtlChain {
 	c := &rtlChain{size: size, weight: sw, tag: tag}
 	fonts, system, emoji := f.Chain(sw)
 	c.system = system
 	for _, cf := range fonts {
 		c.srcs = append(c.srcs, cf.Font.Meta())
-		c.faces = append(c.faces, cf.Font.ChainFaceWith(size, sw, cf.Axis, c.rtl))
+		c.faces = append(c.faces, cf.Font.ChainFaceWith(size, sw, cf.Axis, c.setRTL))
 	}
 	if emoji {
-		c.emoji, _ = f.Face(size, sw, activeEmoji).(*fontsys.EmojiFace)
+		c.emoji, _ = f.FaceFor(size, sw, choice).(*fontsys.EmojiFace)
 	}
 	return c
 }
@@ -444,65 +444,65 @@ var rtlScripts = []struct {
 	{"Thaa", unicode.Thaana}, {"Nkoo", unicode.Nko}, {"Adlm", unicode.Adlam},
 }
 
-// offsetX returns the x, from the line's left edge at scale 1, of offset b
+// OffsetX returns the x, from the line's left edge at scale 1, of offset b
 // within p: a right-to-left piece counts from its right edge.
-func (p *piece) offsetX(s string, styles []lineStyle, b int) float64 {
+func (p *Piece) OffsetX(s string, styles []LineStyle, b int) float64 {
 	if p.pos == nil {
-		st := styles[p.style]
-		if !p.rtl {
-			w := textlayout.PrefixWidths(s[p.start:p.end], st.font.face(st.size, st.weight))
-			p.pos = func(b int) float64 { return w(b - p.start) }
+		st := styles[p.Style]
+		if !p.RTL {
+			w := textlayout.PrefixWidths(s[p.Start:p.End], st.Style.Face(1))
+			p.pos = func(b int) float64 { return w(b - p.Start) }
 		} else {
-			chain := rtlFaces(st.font, st.size, st.weight, p.lang)
+			chain := rtlFaces(st.Style, 1, p.lang)
 			widths := make([]func(int) float64, len(p.segs))
 			for i, sg := range p.segs {
-				widths[i] = textlayout.PrefixWidths(s[sg.start:sg.end], chain.face(sg.face))
+				widths[i] = textlayout.PrefixWidths(s[sg.Start:sg.End], chain.face(sg.face))
 			}
 			p.pos = func(b int) float64 {
 				x := 0.0
 				for i, sg := range p.segs {
-					if b < sg.end {
-						return x + widths[i](max(b-sg.start, 0))
+					if b < sg.End {
+						return x + widths[i](max(b-sg.Start, 0))
 					}
-					x += sg.w
+					x += sg.W
 				}
 				return x
 			}
 		}
 	}
-	b = min(max(b, p.start), p.end)
-	if p.rtl {
-		return p.x + p.w - p.pos(b)
+	b = min(max(b, p.Start), p.End)
+	if p.RTL {
+		return p.X + p.W - p.pos(b)
 	}
-	return p.x + p.pos(b)
+	return p.X + p.pos(b)
 }
 
-// caretAt returns the offset in s nearest x on a line laid out as ps: past
+// CaretAt returns the offset in s nearest x on a line laid out as ps: past
 // either end, the offset at that visual edge.
-func caretAt(s string, ps []piece, styles []lineStyle, x float64) int {
+func CaretAt(s string, ps []Piece, styles []LineStyle, x float64) int {
 	if len(ps) == 0 {
 		return 0
 	}
-	edge := func(p *piece, right bool) int { return pick(p.rtl != right, p.end, p.start) }
-	if x <= ps[0].x {
+	edge := func(p *Piece, right bool) int { return fn.Pick(p.RTL != right, p.End, p.Start) }
+	if x <= ps[0].X {
 		return edge(&ps[0], false)
 	}
-	if last := &ps[len(ps)-1]; x >= last.x+last.w {
+	if last := &ps[len(ps)-1]; x >= last.X+last.W {
 		return edge(last, true)
 	}
 	for i := range ps {
 		p := &ps[i]
-		if x > p.x+p.w {
+		if x > p.X+p.W {
 			continue
 		}
-		best, bestD := p.start, -1.0
-		for b := p.start; ; b = textedit.NextGrapheme(s, b) {
-			d := p.offsetX(s, styles, b) - x
+		best, bestD := p.Start, -1.0
+		for b := p.Start; ; b = textedit.NextGrapheme(s, b) {
+			d := p.OffsetX(s, styles, b) - x
 			d = max(d, -d)
 			if bestD < 0 || d < bestD {
 				best, bestD = b, d
 			}
-			if b >= p.end {
+			if b >= p.End {
 				break
 			}
 		}
@@ -511,43 +511,43 @@ func caretAt(s string, ps []piece, styles []lineStyle, x float64) int {
 	return len(s)
 }
 
-// spanX returns the stretches, from the line's left edge, that the offsets
+// SpanX returns the stretches, from the line's left edge, that the offsets
 // lo to hi of the line cover, one per piece they touch.
-func spanX(s string, ps []piece, styles []lineStyle, lo, hi int, yield func(x0, x1 float64)) {
+func SpanX(s string, ps []Piece, styles []LineStyle, lo, hi int, yield func(x0, x1 float64)) {
 	for i := range ps {
 		p := &ps[i]
-		a, b := max(lo, p.start), min(hi, p.end)
+		a, b := max(lo, p.Start), min(hi, p.End)
 		if a >= b {
 			continue
 		}
-		x0, x1 := p.offsetX(s, styles, a), p.offsetX(s, styles, b)
+		x0, x1 := p.OffsetX(s, styles, a), p.OffsetX(s, styles, b)
 		yield(min(x0, x1), max(x0, x1))
 	}
 }
 
-// drawPieces draws a laid-out line. scale is the Canvas's, baseline the
+// Draw draws a laid-out line. scale is the Canvas's, baseline the
 // line's baseline below where place puts the line's origin, in image
 // pixels, and col the color of a style; place moves a freshly translated
 // GeoM to the line. op is scratch space the caller keeps, so that drawing
 // allocates no options.
-func drawPieces(dst *ggfx.Image, op *text.DrawOptions, s string, ps []piece, styles []lineStyle, scale, baseline float64, col func(style int) color.Color, place func(op *text.DrawOptions)) {
+func Draw(dst *ggfx.Image, op *text.DrawOptions, s string, ps []Piece, styles []LineStyle, scale, baseline float64, col func(style int) color.Color, place func(op *text.DrawOptions)) {
 	if dst == nil || dst.Bounds().Empty() {
 		return
 	}
 	for i := range ps {
 		p := &ps[i]
-		st := styles[p.style]
+		st := styles[p.Style]
 		*op = text.DrawOptions{}
-		c := col(p.style)
+		c := col(p.Style)
 		if c == nil {
 			c = color.Black // as a style resolves no color
 		}
 		op.ColorScale.ScaleWithColor(c)
-		if !p.rtl {
-			face := st.font.face(st.size*scale, st.weight)
-			op.GeoM.Translate(p.x*scale, baseline-face.Metrics().HAscent)
+		if !p.RTL {
+			face := st.Style.Face(scale)
+			op.GeoM.Translate(p.X*scale, baseline-face.Metrics().HAscent)
 			place(op)
-			t := s[p.start:p.end]
+			t := s[p.Start:p.End]
 			plain := fontsys.PlainFace(face, t)
 			if plain == nil {
 				fontsys.DrawText(dst, t, face, op)
@@ -560,10 +560,10 @@ func drawPieces(dst *ggfx.Image, op *text.DrawOptions, s string, ps []piece, sty
 			text.DrawLazyGlyphs(dst, p.glyphs, op)
 			continue
 		}
-		chain := rtlFaces(st.font, st.size*scale, st.weight, p.lang)
-		right := p.x + p.w
+		chain := rtlFaces(st.Style, scale, p.lang)
+		right := p.X + p.W
 		for _, sg := range p.segs {
-			right -= sg.w
+			right -= sg.W
 			face := chain.face(sg.face)
 			op.GeoM.Reset()
 			op.GeoM.Translate(right*scale, baseline-face.Metrics().HAscent)
@@ -573,7 +573,7 @@ func drawPieces(dst *ggfx.Image, op *text.DrawOptions, s string, ps []piece, sty
 				// A right-to-left face starts at the right; its end is the left.
 				op.LayoutOptions.PrimaryAlign = text.AlignEnd
 			}
-			text.Draw(dst, s[sg.start:sg.end], face, op)
+			text.Draw(dst, s[sg.Start:sg.End], face, op)
 		}
 	}
 }

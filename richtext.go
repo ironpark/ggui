@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"github.com/ironpark/ggui/internal/paragraph"
 	"image/color"
 	"slices"
 	"strings"
@@ -79,7 +80,10 @@ type RichTextWidget struct {
 	// Layout keeps the spans it read, the paragraph they made and what it
 	// was laid out for.
 	cur       []TextSpan
-	para      paragraph
+	para      paragraph.Paragraph
+	styles    []TextStyle   // each of para.Runs' style, resolved, for what the engine does not take
+	base      TextStyle     // the paragraph's style, resolved
+	dir       TextDirection // what para was laid out in
 	laid      richKey
 	runKeys   []runKey
 	keyBuf    []runKey // the other of runKeys' two arrays, which layouts take in turn
@@ -93,7 +97,7 @@ type RichTextWidget struct {
 	clicks  clickSelector
 	rect    Rect
 
-	pieceOp text.DrawOptions // reused by drawPieces, which would allocate one a piece
+	pieceOp text.DrawOptions // reused by paragraph.Draw, which would allocate one a piece
 }
 
 // richKey is what the paragraph was last laid out for, beside its runs.
@@ -232,11 +236,11 @@ func (t *RichTextWidget) Role(role Role) *RichTextWidget {
 
 // Text returns the paragraph's text as last laid out: every span's, one
 // after another.
-func (t *RichTextWidget) Text() string { return t.para.text }
+func (t *RichTextWidget) Text() string { return t.para.Text }
 
 // alignment is the fraction lines are placed at.
 func (t *RichTextWidget) alignment() float64 {
-	return pick(t.alignSet, t.align, startAlign(t.para.dir))
+	return pick(t.alignSet, t.align, startAlign(t.dir))
 }
 
 // Layout implements Widget.
@@ -265,7 +269,7 @@ func (t *RichTextWidget) Layout(c Constraints, env Env) Size {
 	}
 	base := env.ResolveText(t.style)
 	p := &t.para
-	p.runs = p.runs[:0]
+	p.Runs, t.styles = p.Runs[:0], t.styles[:0]
 	// The keys go in the array runKeys is not in, which they are compared
 	// with below.
 	keys := t.keyBuf[:0]
@@ -277,11 +281,12 @@ func (t *RichTextWidget) Layout(c Constraints, env Env) Size {
 		st := env.ResolveText(t.style.Merge(sp.style))
 		start := end
 		end += len(sp.text)
-		p.runs = append(p.runs, paraRun{start: start, end: end, style: st, span: i})
+		p.Runs = append(p.Runs, paragraph.Run{Start: start, End: end, Style: st.engine(), Span: i})
+		t.styles = append(t.styles, st)
 		keys = append(keys, runKey{start, end, st.Font, st.Size, st.LineHeight, st.Weight})
 	}
 	// The same spans hold the same text.
-	text := p.text
+	text := p.Text
 	if !same || len(text) != end {
 		var sb strings.Builder
 		sb.Grow(end)
@@ -290,21 +295,22 @@ func (t *RichTextWidget) Layout(c Constraints, env Env) Size {
 		}
 		text = sb.String()
 	}
-	p.base = base
-	p.dir, p.lang = env.Direction(), env.Language()
+	p.Base, t.base = base.engine(), base
+	t.dir, p.Lang = env.Direction(), env.Language()
+	p.RTL = t.dir == DirRTL
 	t.selection = env.EditorStyle().Selection
 	// As Text's: the width only matters when something wraps or cuts to it.
 	fits := t.wrap || t.ellipsis || t.maxLines > 0
 	key := richKey{generation: fontGen(), text: text, maxW: pick(fits, c.MaxW, 0), wrap: t.wrap, ellipsis: t.ellipsis, maxLines: t.maxLines,
-		dir: p.dir, lang: p.lang, base: runKey{font: base.Font, size: base.Size, lineHeight: base.LineHeight, weight: base.Weight}}
-	if key != t.laid || !slices.Equal(keys, t.runKeys) || p.lines == nil {
+		dir: t.dir, lang: p.Lang, base: runKey{font: base.Font, size: base.Size, lineHeight: base.LineHeight, weight: base.Weight}}
+	if key != t.laid || !slices.Equal(keys, t.runKeys) || p.Lines == nil {
 		t.laid = key
-		p.text = key.text
-		p.layout(key.maxW, t.wrap, t.maxLines, t.ellipsis)
+		p.Text = key.text
+		p.Layout(key.maxW, t.wrap, t.maxLines, t.ellipsis)
 	}
 	t.runKeys, t.keyBuf = keys, t.runKeys
-	if t.ed.Text != p.text {
-		t.ed.SetText(p.text)
+	if t.ed.Text != p.Text {
+		t.ed.SetText(p.Text)
 	}
 	if t.links == nil {
 		for i, sp := range t.cur {
@@ -316,7 +322,15 @@ func (t *RichTextWidget) Layout(c Constraints, env Env) Size {
 			}
 		}
 	}
-	return c.Constrain(p.size)
+	return c.Constrain(p.Size)
+}
+
+// runStyle returns run i's resolved style, or the paragraph's for -1.
+func (t *RichTextWidget) runStyle(i int) TextStyle {
+	if i < 0 {
+		return t.base
+	}
+	return t.styles[i]
 }
 
 // sameSpan compares spans by what they show, and their tap by presence.
@@ -327,10 +341,10 @@ func sameSpan(a, b TextSpan) bool {
 
 // Baseline implements Baseliner: the first line's baseline.
 func (t *RichTextWidget) Baseline() (float64, bool) {
-	if len(t.para.lines) == 0 {
+	if len(t.para.Lines) == 0 {
 		return 0, false
 	}
-	return t.para.lines[0].baseline, true
+	return t.para.Lines[0].Baseline, true
 }
 
 // roleOr returns role, or fallback when it is unset.
@@ -357,8 +371,8 @@ func (t *RichTextWidget) Paint(dst *Canvas, r Rect) {
 		}
 		dst.HitCursor(r, CursorShapeText)
 		dst.DescribeNode(r, t, described)
-	case p.text != "" && !dst.named(r):
-		dst.Node(r, Node{Role: roleOr(t.role, RoleText), Name: p.text}, described)
+	case p.Text != "" && !dst.named(r):
+		dst.Node(r, Node{Role: roleOr(t.role, RoleText), Name: p.Text}, described)
 	default:
 		described(dst)
 	}
@@ -369,51 +383,51 @@ func (t *RichTextWidget) Paint(dst *Canvas, r Rect) {
 	// selection runs through many texts, and only one has the focus.
 	if t.selectable && (t.focused || t.area != nil) && t.ed.HasSelection() {
 		lo, hi := t.ed.Selection()
-		p.rects(lo, hi, r.Size.W, align, func(b Rect) {
+		p.Rects(lo, hi, r.Size.W, align, func(b Rect) {
 			dst.FillRect(Rct(r.Origin.Add(b.Origin), b.Size), t.selection)
 		})
 	}
 	scale := dst.Scale()
-	for i := range p.lines {
-		ln := &p.lines[i]
+	for i := range p.Lines {
+		ln := &p.Lines[i]
 		// A line wholly outside the clip is not shaped and drawn to be
 		// clipped, with a line's height to spare for what reaches past it.
-		top, h := ln.baseline-ln.ascent, ln.ascent+ln.descent
+		top, h := ln.Baseline-ln.Ascent, ln.Ascent+ln.Descent
 		if !dst.visiblePaintBounds(Rct(Pt(r.Origin.X, r.Origin.Y+top), Sz(r.Size.W, h)), h) {
 			continue
 		}
-		x := r.Origin.X + p.lineX(i, r.Size.W, align)
-		for _, pc := range ln.pieces {
-			st := ln.styles[pc.style]
-			if st.run < 0 || t.cur[p.runs[st.run].span].background == nil {
+		x := r.Origin.X + p.LineX(i, r.Size.W, align)
+		for _, pc := range ln.Pieces {
+			st := ln.Styles[pc.Style]
+			if st.Run < 0 || t.cur[p.Runs[st.Run].Span].background == nil {
 				continue
 			}
-			rs := p.style(st.run)
+			rs := t.runStyle(st.Run)
 			// The run's own ascent and descent, a little past them.
 			pad := rs.Size * 0.12
-			bg := Rct(Pt(x+pc.x-pad, r.Origin.Y+ln.baseline-rs.Size*0.92), Sz(pc.w+2*pad, rs.Size*1.18))
-			dst.FillRoundRect(bg, rs.Size*0.2, t.cur[p.runs[st.run].span].background)
+			bg := Rct(Pt(x+pc.X-pad, r.Origin.Y+ln.Baseline-rs.Size*0.92), Sz(pc.W+2*pad, rs.Size*1.18))
+			dst.FillRoundRect(bg, rs.Size*0.2, t.cur[p.Runs[st.Run].Span].background)
 		}
-		col := func(style int) color.Color { return p.style(ln.styles[style].run).Color }
-		drawPieces(dst.Image, &t.pieceOp, ln.s, ln.pieces, ln.styles, scale, dst.px(ln.baseline), col, func(op *text.DrawOptions) {
+		col := func(style int) color.Color { return t.runStyle(ln.Styles[style].Run).Color }
+		paragraph.Draw(dst.Image, &t.pieceOp, ln.S, ln.Pieces, ln.Styles, scale, dst.px(ln.Baseline), col, func(op *text.DrawOptions) {
 			op.GeoM.Translate(dst.px(x), dst.px(r.Origin.Y))
 		})
-		for _, pc := range ln.pieces {
-			st := ln.styles[pc.style]
-			if st.run < 0 {
+		for _, pc := range ln.Pieces {
+			st := ln.Styles[pc.Style]
+			if st.Run < 0 {
 				continue
 			}
-			span := t.cur[p.runs[st.run].span]
-			rs := p.style(st.run)
+			span := t.cur[p.Runs[st.Run].Span]
+			rs := t.runStyle(st.Run)
 			thick := max(1/scale, rs.Size/14)
 			if span.underline {
-				y := r.Origin.Y + ln.baseline + max(1, rs.Size*0.08)
-				dst.FillRect(Rct(Pt(x+pc.x, y), Sz(pc.w, thick)), rs.Color)
+				y := r.Origin.Y + ln.Baseline + max(1, rs.Size*0.08)
+				dst.FillRect(Rct(Pt(x+pc.X, y), Sz(pc.W, thick)), rs.Color)
 			}
 			if span.strike {
 				// Through the middle of the lower case letters.
-				y := r.Origin.Y + ln.baseline - rs.Size*0.3
-				dst.FillRect(Rct(Pt(x+pc.x, y), Sz(pc.w, thick)), rs.Color)
+				y := r.Origin.Y + ln.Baseline - rs.Size*0.3
+				dst.FillRect(Rct(Pt(x+pc.X, y), Sz(pc.W, thick)), rs.Color)
 			}
 		}
 	}
@@ -449,11 +463,11 @@ func (l *spanLink) Describe() Node {
 func (l *spanLink) paint(dst *Canvas, r Rect, align float64) {
 	p := &l.w.para
 	var boxes []Rect
-	for _, run := range p.runs {
-		if run.span != l.span {
+	for _, run := range p.Runs {
+		if run.Span != l.span {
 			continue
 		}
-		p.rects(run.start, run.end, r.Size.W, align, func(b Rect) {
+		p.Rects(run.Start, run.End, r.Size.W, align, func(b Rect) {
 			boxes = append(boxes, Rct(r.Origin.Add(b.Origin), b.Size))
 		})
 	}
@@ -473,10 +487,10 @@ func (l *spanLink) paint(dst *Canvas, r Rect, align float64) {
 		dst.HitCursor(b, CursorShapePointer)
 	}
 	if l.Focused && l.FocusVisible && dst != nil && dst.Image != nil {
-		col := l.w.para.base.Color
-		for _, run := range p.runs {
-			if run.span == l.span {
-				col = run.style.Color
+		col := l.w.base.Color
+		for i, run := range p.Runs {
+			if run.Span == l.span {
+				col = l.w.styles[i].Color
 				break
 			}
 		}

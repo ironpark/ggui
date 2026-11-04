@@ -10,8 +10,8 @@ import (
 // lineTexts returns what each line of a laid-out RichText draws.
 func lineTexts(t *RichTextWidget) []string {
 	var out []string
-	for _, ln := range t.para.lines {
-		out = append(out, ln.s)
+	for _, ln := range t.para.Lines {
+		out = append(out, ln.S)
 	}
 	return out
 }
@@ -35,7 +35,7 @@ func TestRichTextWrapsAcrossSpans(t *testing.T) {
 	}
 	// The first line holds the regular and the bold span, the bold one
 	// in a style of its own.
-	if n := len(w.para.lines[0].styles); n != 2 {
+	if n := len(w.para.Lines[0].Styles); n != 2 {
 		t.Fatalf("first line has %d styles, want 2", n)
 	}
 }
@@ -78,8 +78,8 @@ func TestRichTextMaxLinesAndEllipsis(t *testing.T) {
 	if len(got) != 1 || !strings.HasSuffix(got[0], "…") || strings.HasSuffix(got[0], " …") {
 		t.Fatalf("lines = %q, want one cut with an ellipsis", got)
 	}
-	if w.para.lines[0].width > full.W/2+0.01 {
-		t.Fatalf("cut line is %v wide, want at most %v", w.para.lines[0].width, full.W/2)
+	if w.para.Lines[0].Width > full.W/2+0.01 {
+		t.Fatalf("cut line is %v wide, want at most %v", w.para.Lines[0].Width, full.W/2)
 	}
 
 	e := RichText(Span("aaa bbb ccc ddd")).NoWrap().Ellipsis()
@@ -99,7 +99,7 @@ func TestRichTextAlignAndSpansSetter(t *testing.T) {
 	w := RichText(Span("ab")).Align(1)
 	w.Layout(Tight(Sz(200, 20)), Env{})
 	var box Rect
-	w.para.rects(0, 2, 200, w.alignment(), func(r Rect) { box = r })
+	w.para.Rects(0, 2, 200, w.alignment(), func(r Rect) { box = r })
 	if math.Abs(box.Origin.X+box.Size.W-200) > 0.01 {
 		t.Fatalf("right-aligned text covers %v, want it to end at 200", box)
 	}
@@ -123,7 +123,7 @@ func TestRichTextSpansInheritAndOverride(t *testing.T) {
 	env := Env{}.WithText(TextStyle{Color: red, Size: 20})
 	w := RichText(Span("a"), Span("b").Color(blue).Size(10))
 	w.Layout(Loose(Sz(1000, 1000)), env)
-	a, b := w.para.runs[0].style, w.para.runs[1].style
+	a, b := w.styles[0], w.styles[1]
 	if a.Color != red || a.Size != 20 {
 		t.Fatalf("plain span drew in %v at %v, want the inherited red at 20", a.Color, a.Size)
 	}

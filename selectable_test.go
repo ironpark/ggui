@@ -6,12 +6,12 @@ import "testing"
 // painted at r, halfway down its line.
 func textAt(w *RichTextWidget, r Rect, b int) Point {
 	var at Point
-	n := len(w.para.text)
+	n := len(w.para.Text)
 	lo, hi := b, min(b+1, n)
 	if lo == hi {
 		lo = max(b-1, 0)
 	}
-	w.para.rects(lo, hi, r.Size.W, w.alignment(), func(box Rect) {
+	w.para.Rects(lo, hi, r.Size.W, w.alignment(), func(box Rect) {
 		x := box.Origin.X
 		if b == n {
 			x += box.Size.W

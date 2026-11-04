@@ -49,7 +49,7 @@ func TestSelectableRTLWordsHitWhereTheyAreDrawn(t *testing.T) {
 	if got := w.SelectedText(); got != "שלום" {
 		t.Fatalf("double click at the right selected %q", got)
 	}
-	left := Pt(r.Origin.X+r.Size.W-w.para.lines[0].width+3, r.Origin.Y+r.Size.H/2)
+	left := Pt(r.Origin.X+r.Size.W-w.para.Lines[0].Width+3, r.Origin.Y+r.Size.H/2)
 	p.Frame()
 	p.Click(left)
 	p.Click(left)

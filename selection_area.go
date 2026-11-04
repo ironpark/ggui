@@ -223,7 +223,7 @@ func (a *SelectionAreaWidget) Find(needle string, top float64, n int) (at Rect, 
 			t.ed.MoveTo(hi, true)
 			a.anchor, a.anchorAt, a.focus, a.focusAt = t, lo, t, hi
 			first := true
-			t.para.rects(lo, hi, t.rect.Size.W, t.alignment(), func(b Rect) {
+			t.para.Rects(lo, hi, t.rect.Size.W, t.alignment(), func(b Rect) {
 				b.Origin = t.rect.Origin.Add(b.Origin)
 				if first {
 					at, first = b, false
