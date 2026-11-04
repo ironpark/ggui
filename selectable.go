@@ -50,7 +50,7 @@ func (t *RichTextWidget) Describe() Node {
 	lo, hi := t.ed.Selection()
 	return Node{
 		Role:     roleOr(t.role, RoleText),
-		Name:     t.para.text,
+		Name:     t.para.Text,
 		Actions:  ActionFocus | ActionSetSelection,
 		SelStart: lo,
 		SelEnd:   hi,
@@ -160,7 +160,7 @@ func (t *RichTextWidget) CaptureTouchDrag() bool { return t.selectable }
 
 // offsetAt returns the text offset nearest the window point at.
 func (t *RichTextWidget) offsetAt(at Point) int {
-	return t.para.offsetAt(Pt(at.X-t.rect.Origin.X, at.Y-t.rect.Origin.Y), t.rect.Size.W, t.alignment())
+	return t.para.OffsetAt(Pt(at.X-t.rect.Origin.X, at.Y-t.rect.Origin.Y), t.rect.Size.W, t.alignment())
 }
 
 // Adopt implements Adopter: a rebuilt paragraph at the same place keeps

@@ -1,7 +1,8 @@
-package ggui
+package paragraph
 
 import (
 	"image"
+	"image/color"
 	"image/draw"
 	"math"
 	"slices"
@@ -21,20 +22,16 @@ import (
 	"github.com/ironpark/ggui/internal/text"
 )
 
-// RenderText draws s in st on the CPU, with no GPU, window or App, into an
-// image just large enough to hold it: for icons, thumbnails, files and
-// tests. Lines break at hard breaks and, when maxWidth is positive, wrap to
-// maxWidth as Text wraps them. Fields st leaves unset are Text's defaults:
-// the built-in font, DefaultTextSize, black, and 1.2 times the size between
-// baselines. A pixel of the image is a pixel of st.Size; scale st.Size for a
-// denser image.
+// Render draws s in st and col on the CPU, with no GPU, window or App,
+// into an image just large enough to hold it. Lines break at hard breaks
+// and, when maxWidth is positive, wrap to maxWidth as Text wraps them. A
+// pixel of the image is a pixel of st.Size.
 //
 // Glyphs come from st.Font and its fallbacks, as Text draws them, and emoji
 // from the emoji font, in color. Text is shaped with go-text and drawn with
 // go-text/render; emoji are drawn as Text draws them, from sbix, CBDT,
 // COLRv0 or SVG glyphs, rasterized on the CPU.
-func RenderText(s string, st TextStyle, maxWidth float64) *image.RGBA {
-	st = st.resolved()
+func Render(s string, st Style, col color.Color, maxWidth float64) *image.RGBA {
 	r := newTextRenderer(st)
 	lines := textlayout.Wrap(s, r.face, max(maxWidth, 0))
 	shaped := make([]shaping.Line, len(lines))
@@ -52,7 +49,7 @@ func RenderText(s string, st TextStyle, maxWidth float64) *image.RGBA {
 	lh := st.LineHeight * st.Size
 	height := m.HAscent + float64(max(len(lines)-1, 0))*lh + m.HDescent
 	img := image.NewRGBA(image.Rect(0, 0, int(math.Ceil(width)), int(math.Ceil(height))))
-	pen := render.Renderer{PixScale: 1, Color: st.Color}
+	pen := render.Renderer{PixScale: 1, Color: col}
 	for i, line := range shaped {
 		x, y := 0, int(math.Round(m.HAscent+float64(i)*lh))
 		for _, run := range line {
@@ -80,10 +77,10 @@ func (r *textRenderer) drawEmoji(img *image.RGBA, s string, x, y int) int {
 }
 
 // textRenderer shapes text in a style with go-text's own faces: a Face is
-// not safe for concurrent use, so each RenderText makes its own of the
+// not safe for concurrent use, so each Render makes its own of the
 // sources it draws with.
 type textRenderer struct {
-	style     TextStyle
+	style     Style
 	face      text.Face    // the style's face, as Text has it, for wrapping and metrics
 	chain     []*font.Face // the font and its fallbacks, at the style's weight
 	system    bool         // whether runes the chain lacks are looked for among the system's fonts
@@ -98,9 +95,9 @@ type textRenderer struct {
 	wrap   shaping.LineWrapper
 }
 
-func newTextRenderer(st TextStyle) *textRenderer {
-	r := &textRenderer{style: st, face: st.Font.face(st.Size, st.Weight), found: map[*fontsys.Font]*font.Face{}, runes: map[rune]*font.Face{}}
-	fonts, system, _ := st.Font.engine().Resolve().Chain(fontsys.Weight(st.Weight))
+func newTextRenderer(st Style) *textRenderer {
+	r := &textRenderer{style: st, face: st.Face(1), found: map[*fontsys.Font]*font.Face{}, runes: map[rune]*font.Face{}}
+	fonts, system, _ := st.Font.Resolve().Chain(st.Weight)
 	r.system = system
 	for _, cf := range fonts {
 		r.chain = append(r.chain, ownFace(cf.Font.Source(), st.Weight, cf.Axis))
@@ -118,7 +115,7 @@ var wghtAxis = opentype.MustNewTag("wght")
 
 // ownFace returns a Face of its own for src, drawing weight w on its weight
 // axis when axis is set.
-func ownFace(src *text.GoTextFaceSource, w FontWeight, axis bool) *font.Face {
+func ownFace(src *text.GoTextFaceSource, w fontsys.Weight, axis bool) *font.Face {
 	face := font.NewFace(src.UnsafeInternal().(*font.Face).Font)
 	if axis {
 		face.SetVariations([]font.Variation{{Tag: wghtAxis, Value: float32(w)}})
@@ -138,7 +135,7 @@ func (r *textRenderer) ResolveFace(c rune) *font.Face {
 	} else if r.system {
 		if fb := fontsys.SystemFallback(c); fb != nil {
 			if face = r.found[fb]; face == nil {
-				font, axis := fb.ForWeight(fontsys.Weight(r.style.Weight))
+				font, axis := fb.ForWeight(r.style.Weight)
 				face = ownFace(font.Source(), r.style.Weight, axis)
 				r.found[fb] = face
 			}

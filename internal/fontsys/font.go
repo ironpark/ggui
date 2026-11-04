@@ -296,12 +296,22 @@ func abs(n int) int { return max(n, -n) }
 // asked only for a font that draws emoji at all, and may itself be nil.
 // Faces are cached until f or the generation changes.
 func (f *Font) Face(size float64, weight Weight, emoji func() *EmojiChoice) text.Face {
-	if f.alias != nil {
-		return f.alias().Face(size, weight, emoji)
-	}
-	key := faceKey{size: size, weight: weight}
+	f = f.Resolve()
+	var choice *EmojiChoice
 	if !f.noFallback && emoji != nil {
-		key.emoji = emoji()
+		choice = emoji()
+	}
+	return f.FaceFor(size, weight, choice)
+}
+
+// FaceFor is Face with the emoji choice already made: emoji is the font's
+// beside f's faces, nil for the system's, and ignored for a font that
+// draws no emoji.
+func (f *Font) FaceFor(size float64, weight Weight, emoji *EmojiChoice) text.Face {
+	f = f.Resolve()
+	key := faceKey{size: size, weight: weight}
+	if !f.noFallback {
+		key.emoji = emoji
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()

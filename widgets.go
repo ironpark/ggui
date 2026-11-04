@@ -87,7 +87,7 @@ type TextWidget struct {
 	rich      *RichTextWidget  // what a Selectable Text lays out and paints as
 	richAt    richAt           // what a Selectable Text was laid out for, to lay its lines out when rotated
 	drawOp    text.DrawOptions // reused by paintLines, which would allocate one a paint
-	pieceOp   text.DrawOptions // reused by drawPieces for the same
+	pieceOp   text.DrawOptions // reused by paragraph.Draw for the same
 }
 
 // richAt is the width and Env a Selectable Text last laid out in.
