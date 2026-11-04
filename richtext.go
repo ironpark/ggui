@@ -14,11 +14,13 @@ import (
 // description value: build one with Span, and each setter returns a
 // changed copy.
 type TextSpan struct {
-	text      string
-	style     TextStyle
-	underline bool
-	onTap     func()
-	name      string
+	text       string
+	style      TextStyle
+	underline  bool
+	strike     bool
+	background color.Color // behind the span's text, nil for none
+	onTap      func()
+	name       string
 }
 
 // Span is s in the paragraph's style, until a setter changes it.
@@ -44,6 +46,13 @@ func (s TextSpan) Size(px float64) TextSpan { s.style.Size = px; return s }
 
 // Underline draws a line under the span.
 func (s TextSpan) Underline() TextSpan { s.underline = true; return s }
+
+// Strike draws a line through the span, as struck out.
+func (s TextSpan) Strike() TextSpan { s.strike = true; return s }
+
+// Background fills the line's height behind the span with c, as inline
+// code is set apart; nil fills nothing.
+func (s TextSpan) Background(c color.Color) TextSpan { s.background = c; return s }
 
 // OnTap makes the span a link: fn runs when it is clicked, or pressed
 // with Enter or Space once Tab has reached it, and the pointer turns into
@@ -248,6 +257,12 @@ func (t *RichTextWidget) Layout(c Constraints, env Env) Size {
 	// what it keeps is kept in arrays it reuses. The spans are copied in
 	// either way, for their tap funcs.
 	t.cur = append(t.cur[:0], spans...)
+	// A span's background, resolved here for the paint, which has no Env.
+	for i := range t.cur {
+		if t.cur[i].background != nil {
+			t.cur[i].background = ResolveColor(t.cur[i].background, env)
+		}
+	}
 	base := env.ResolveText(t.style)
 	p := &t.para
 	p.runs = p.runs[:0]
@@ -306,7 +321,8 @@ func (t *RichTextWidget) Layout(c Constraints, env Env) Size {
 
 // sameSpan compares spans by what they show, and their tap by presence.
 func sameSpan(a, b TextSpan) bool {
-	return a.text == b.text && sameAny(a.style, b.style) && a.underline == b.underline && a.name == b.name && (a.onTap == nil) == (b.onTap == nil)
+	return a.text == b.text && sameAny(a.style, b.style) && a.underline == b.underline && a.strike == b.strike &&
+		sameAny(a.background, b.background) && a.name == b.name && (a.onTap == nil) == (b.onTap == nil)
 }
 
 // Baseline implements Baseliner: the first line's baseline.
@@ -367,19 +383,38 @@ func (t *RichTextWidget) Paint(dst *Canvas, r Rect) {
 			continue
 		}
 		x := r.Origin.X + p.lineX(i, r.Size.W, align)
+		for _, pc := range ln.pieces {
+			st := ln.styles[pc.style]
+			if st.run < 0 || t.cur[p.runs[st.run].span].background == nil {
+				continue
+			}
+			rs := p.style(st.run)
+			// The run's own ascent and descent, a little past them.
+			pad := rs.Size * 0.12
+			bg := Rct(Pt(x+pc.x-pad, r.Origin.Y+ln.baseline-rs.Size*0.92), Sz(pc.w+2*pad, rs.Size*1.18))
+			dst.FillRoundRect(bg, rs.Size*0.2, t.cur[p.runs[st.run].span].background)
+		}
 		col := func(style int) color.Color { return p.style(ln.styles[style].run).Color }
 		drawPieces(dst.Image, &t.pieceOp, ln.s, ln.pieces, ln.styles, scale, dst.px(ln.baseline), col, func(op *text.DrawOptions) {
 			op.GeoM.Translate(dst.px(x), dst.px(r.Origin.Y))
 		})
 		for _, pc := range ln.pieces {
 			st := ln.styles[pc.style]
-			if st.run < 0 || !t.cur[p.runs[st.run].span].underline {
+			if st.run < 0 {
 				continue
 			}
+			span := t.cur[p.runs[st.run].span]
 			rs := p.style(st.run)
 			thick := max(1/scale, rs.Size/14)
-			y := r.Origin.Y + ln.baseline + max(1, rs.Size*0.08)
-			dst.FillRect(Rct(Pt(x+pc.x, y), Sz(pc.w, thick)), rs.Color)
+			if span.underline {
+				y := r.Origin.Y + ln.baseline + max(1, rs.Size*0.08)
+				dst.FillRect(Rct(Pt(x+pc.x, y), Sz(pc.w, thick)), rs.Color)
+			}
+			if span.strike {
+				// Through the middle of the lower case letters.
+				y := r.Origin.Y + ln.baseline - rs.Size*0.3
+				dst.FillRect(Rct(Pt(x+pc.x, y), Sz(pc.w, thick)), rs.Color)
+			}
 		}
 	}
 }

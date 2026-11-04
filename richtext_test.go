@@ -182,3 +182,24 @@ func TestRichTextRelayoutKeepsWhatItMade(t *testing.T) {
 		t.Errorf("laying out unchanged spans allocates %v times, want 0", allocs)
 	}
 }
+
+// A span struck out, or set apart by a background, is another span than
+// the same text without: a paragraph changing one is laid out again, its
+// background resolved for the paint.
+func TestASpanStruckOutAndOneSetApart(t *testing.T) {
+	t.Parallel()
+	plain := Span("x")
+	if sameSpan(plain, plain.Strike()) || sameSpan(plain, plain.Background(color.Black)) {
+		t.Fatal("a span struck out or set apart is the same as the plain one")
+	}
+	if !sameSpan(plain.Strike(), Span("x").Strike()) {
+		t.Fatal("two spans struck out alike differ")
+	}
+	r := RichText(Span("code").Background(color.RGBA{1, 2, 3, 255}).Strike())
+	p := NewProbe(topLeft(r), Sz(200, 40))
+	defer p.Close()
+	p.Frame()
+	if len(r.cur) != 1 || r.cur[0].background == nil || !r.cur[0].strike {
+		t.Fatalf("laid out as %+v", r.cur)
+	}
+}
