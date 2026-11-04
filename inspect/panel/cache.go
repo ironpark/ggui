@@ -9,7 +9,7 @@ import (
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/inspect"
-	"github.com/ironpark/ggui/internal/fn"
+	"github.com/ironpark/ggui/pkg/gem"
 )
 
 type inspectVisibility struct {
@@ -18,8 +18,8 @@ type inspectVisibility struct {
 }
 
 func inspectRowRange(count int, scroll, height float64) (int, int) {
-	first := fn.Clamp(int(math.Floor(scroll/inspectRowHeight)), 0, count)
-	end := fn.Clamp(int(math.Ceil((scroll+max(height, 0))/inspectRowHeight)), first, count)
+	first := gem.Clamp(int(math.Floor(scroll/inspectRowHeight)), 0, count)
+	end := gem.Clamp(int(math.Ceil((scroll+max(height, 0))/inspectRowHeight)), first, count)
 	return first, end
 }
 

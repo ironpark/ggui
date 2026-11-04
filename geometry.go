@@ -4,7 +4,7 @@ import (
 	"cmp"
 	"math"
 
-	"github.com/ironpark/ggui/internal/fn"
+	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/pkg/geom"
 	"github.com/ironpark/ggui/pkg/layout"
 )
@@ -49,7 +49,7 @@ func Rct(origin Point, size Size) Rect { return layout.Rct(origin, size) }
 var Unbounded = math.Inf(1)
 
 // bounded returns v, or fallback when v is Unbounded.
-func bounded(v, fallback float64) float64 { return fn.Bounded(v, fallback) }
+func bounded(v, fallback float64) float64 { return gem.Bounded(v, fallback) }
 
 // Constraints bound the size a widget may choose during layout.
 type Constraints = layout.Constraints
@@ -61,4 +61,4 @@ func Tight(s Size) Constraints { return layout.Tight(s) }
 func Loose(s Size) Constraints { return layout.Loose(s) }
 
 // clamp keeps v within [lo, hi]; lo wins when the bounds contradict.
-func clamp[T cmp.Ordered](v, lo, hi T) T { return fn.Clamp(v, lo, hi) }
+func clamp[T cmp.Ordered](v, lo, hi T) T { return gem.Clamp(v, lo, hi) }

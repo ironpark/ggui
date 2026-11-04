@@ -4,7 +4,7 @@ import (
 	"image/color"
 	"slices"
 
-	"github.com/ironpark/ggui/internal/fn"
+	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/pkg/layout"
 )
@@ -391,8 +391,8 @@ func resize[T any](s []T, n int) []T {
 	return s
 }
 
-// pick is fn.Pick under the name the package reads it by.
-func pick[T any](cond bool, a, b T) T { return fn.Pick(cond, a, b) }
+// pick is gem.Pick under the name the package reads it by.
+func pick[T any](cond bool, a, b T) T { return gem.Pick(cond, a, b) }
 
 // ColumnWidget stacks its children vertically. Build one with Column.
 type ColumnWidget struct {

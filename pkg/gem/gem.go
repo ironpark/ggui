@@ -1,12 +1,9 @@
-// Package fn holds the few tiny helpers that both ggui and ggui/ui need.
-// The ui package builds on ggui, so it cannot reach ggui's unexported
-// helpers, and each had grown its own copy. The copies had drifted: ui's
-// clamp was min(max(v, lo), hi), which returns hi when the bounds
-// contradict, while ggui's returned lo. One definition settles it.
-//
-// Nothing here is part of the public API. A helper earns a place only when
-// two packages want it and it is too small to belong to either.
-package fn
+// Package gem holds the small generic helpers ggui's packages share and
+// an app built on them may as well: choosing a value inline, keeping one
+// within bounds, reading an unbounded constraint, and a typed sync.Pool.
+// A helper earns a place only when it is too small to belong to any one
+// package and more than one wants it.
+package gem
 
 import (
 	"cmp"

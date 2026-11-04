@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/internal/fn"
+	"github.com/ironpark/ggui/pkg/gem"
 
 	"github.com/ironpark/ggfx"
 	"golang.org/x/image/font/gofont/gomono"
@@ -104,7 +104,7 @@ func (in *View) bounds(size ggui.Size) {
 		if h == 0 {
 			h = min(430, size.H*.55)
 		}
-		h = fn.Clamp(h, min(180.0, size.H*.8), size.H*.85)
+		h = gem.Clamp(h, min(180.0, size.H*.8), size.H*.85)
 		in.panel = ggui.Rct(ggui.Pt(0, size.H-h), ggui.Sz(size.W, h))
 		in.edge = ggui.Rct(ggui.Pt(0, in.panel.Origin.Y-3), ggui.Sz(size.W, 6))
 	} else {
@@ -112,7 +112,7 @@ func (in *View) bounds(size ggui.Size) {
 		if w == 0 {
 			w = min(440, size.W*.48)
 		}
-		w = fn.Clamp(w, min(260.0, size.W*.6), size.W*.85)
+		w = gem.Clamp(w, min(260.0, size.W*.6), size.W*.85)
 		in.panel = ggui.Rct(ggui.Pt(size.W-w, 0), ggui.Sz(w, size.H))
 		in.edge = ggui.Rct(ggui.Pt(in.panel.Origin.X-3, 0), ggui.Sz(6, size.H))
 	}
@@ -292,7 +292,7 @@ func (in *View) paintFilter(dst *ggui.Canvas, pane ggui.Rect, font *ggui.Font, p
 	in.filterRect = r
 	clip := dst.Clip(pane)
 	clip.FillRoundRect(r, 4, pal.field)
-	clip.StrokeRoundRect(r, 4, 1, fn.Pick(in.filterFocus, pal.num, pal.edge))
+	clip.StrokeRoundRect(r, 4, 1, gem.Pick(in.filterFocus, pal.num, pal.edge))
 	x, y := r.Origin.X, r.Origin.Y
 	clip.StrokeRoundRect(ggui.Rct(ggui.Pt(x+7, y+7), ggui.Sz(9, 9)), 4, 1.2, pal.dim)
 	clip.StrokeLine(ggui.Pt(x+15, y+15), ggui.Pt(x+19, y+19), 1.2, pal.dim)
@@ -324,7 +324,7 @@ func (in *View) paintTree(dst *ggui.Canvas, font *ggui.Font, pal inspectPalette,
 			in.scroll = top + lh - r.Size.H
 		}
 	}
-	in.scroll = fn.Clamp(in.scroll, 0, max(in.treeContent-r.Size.H, 0))
+	in.scroll = gem.Clamp(in.scroll, 0, max(in.treeContent-r.Size.H, 0))
 	clip := dst.Clip(r)
 	if len(shown) == 0 {
 		fittedLine(clip, font, "No matching widgets", r.Origin.X+12, r.Origin.Y+16, r.Size.W-24, pal.dim)
@@ -427,7 +427,7 @@ func (in *View) paintCrumbs(dst *ggui.Canvas, r ggui.Rect, font *ggui.Font, pal 
 	for n, i := range chain {
 		e := &nodes[i]
 		w := textWidth(dst, font, e.Name)
-		drawLine(clip, font, e.Name, x, r.Origin.Y+6, fn.Pick(i == sel, pal.fg, pal.dim))
+		drawLine(clip, font, e.Name, x, r.Origin.Y+6, gem.Pick(i == sel, pal.fg, pal.dim))
 		in.chips = append(in.chips, inspectChip{rect: ggui.Rct(ggui.Pt(x, r.Origin.Y), ggui.Sz(w, r.Size.H)).Intersect(r), act: inspectPin, key: keyOf(e)})
 		x += w + 6
 		if n < len(chain)-1 {
@@ -442,7 +442,7 @@ func (in *View) tabButton(dst *ggui.Canvas, font *ggui.Font, pal inspectPalette,
 	if on {
 		dst.FillRect(ggui.Rct(ggui.Pt(x, y+29), ggui.Sz(w, 2)), pal.num)
 	}
-	drawLine(dst, font, label, x+9, y+10, fn.Pick(on, pal.num, pal.dim))
+	drawLine(dst, font, label, x+9, y+10, gem.Pick(on, pal.num, pal.dim))
 	in.chips = append(in.chips, inspectChip{rect: r.Intersect(in.detail), act: inspectSelectTab, tab: tab})
 	return x + w
 }
@@ -498,7 +498,7 @@ func (in *View) paintDetail(dst *ggui.Canvas, font *ggui.Font, pal inspectPalett
 		boxH = inspectBoxHeight(in.frame.BoxOf(sel))
 	}
 	in.detailContent = 32 + boxH + inspectFieldsHeight(fields) + 8
-	in.detailScroll = fn.Clamp(in.detailScroll, 0, max(in.detailContent-in.detailBody.Size.H, 0))
+	in.detailScroll = gem.Clamp(in.detailScroll, 0, max(in.detailContent-in.detailBody.Size.H, 0))
 	content := clip.Clip(in.detailBody)
 	cy := in.detailBody.Origin.Y + 10 - in.detailScroll
 	fittedLine(content, font, nodes[sel].Name, r.Origin.X+12, cy, r.Size.W-24, pal.fg)
@@ -513,7 +513,7 @@ func (in *View) paintDetail(dst *ggui.Canvas, font *ggui.Font, pal inspectPalett
 func inspectFieldsHeight(fields []inspect.Field) float64 {
 	h := 0.0
 	for _, f := range fields {
-		h += fn.Pick(f.Value == "", 28.0, 23.0)
+		h += gem.Pick(f.Value == "", 28.0, 23.0)
 	}
 	return h
 }
@@ -543,7 +543,7 @@ func paintInspectFields(dst *ggui.Canvas, font *ggui.Font, pal inspectPalette, r
 				vx += 17
 			}
 		}
-		fittedLine(dst, font, value, vx, y+4, r.Origin.X+r.Size.W-vx-12, fn.Pick(f.Number, pal.num, pal.fg))
+		fittedLine(dst, font, value, vx, y+4, r.Origin.X+r.Size.W-vx-12, gem.Pick(f.Number, pal.num, pal.fg))
 		y += 23
 	}
 }
@@ -562,7 +562,7 @@ func (in *View) paintBox(dst *ggui.Canvas, font *ggui.Font, pal inspectPalette, 
 		label = "BOX MODEL"
 	}
 	drawLine(dst, font, label, r.Origin.X, r.Origin.Y, pal.dim)
-	outer := ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+24), ggui.Sz(r.Size.W, fn.Pick(box.Valid, 132.0, 44.0)))
+	outer := ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+24), ggui.Sz(r.Size.W, gem.Pick(box.Valid, 132.0, 44.0)))
 	if !box.Valid {
 		dst.FillRect(outer, pal.content)
 		dst.StrokeRoundRect(outer, 0, 1, pal.edge)
@@ -605,7 +605,7 @@ func (in *View) paintLayout(dst *ggui.Canvas, font *ggui.Font, pal inspectPalett
 	body := ggui.Rct(r.Origin.Add(ggui.Pt(0.0, 32.0)), ggui.Sz(r.Size.W, max(r.Size.H-32, 0)))
 	content := inspectBoxHeight(box) + inspectFieldsHeight(fields) + 24
 	in.layoutBody, in.layoutContent = body, content
-	in.layoutScroll = fn.Clamp(in.layoutScroll, 0, max(content-body.Size.H, 0))
+	in.layoutScroll = gem.Clamp(in.layoutScroll, 0, max(content-body.Size.H, 0))
 	bc := clip.Clip(body)
 	y := body.Origin.Y + 12 - in.layoutScroll
 	in.paintBox(bc, font, pal, ggui.Rct(ggui.Pt(r.Origin.X+12, y), ggui.Sz(r.Size.W-24, inspectBoxHeight(box))), box)
@@ -637,7 +637,7 @@ func (in *View) paintHighlight(dst *ggui.Canvas, font *ggui.Font, pal inspectPal
 	}
 	label := e.Name + "  " + num(r.Size.W) + " × " + num(r.Size.H)
 	w := min(textWidth(dst, font, label)+18, dst.Size().W-12)
-	x := fn.Clamp(visible.Origin.X, 6, max(dst.Size().W-w-6, 6))
+	x := gem.Clamp(visible.Origin.X, 6, max(dst.Size().W-w-6, 6))
 	y := max(6.0, visible.Origin.Y-29)
 	badge := ggui.Rct(ggui.Pt(x, y), ggui.Sz(w, 24))
 	if !badge.Intersect(in.panel).Empty() {

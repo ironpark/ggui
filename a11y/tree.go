@@ -5,7 +5,7 @@ import (
 	"iter"
 	"strings"
 
-	"github.com/ironpark/ggui/internal/fn"
+	"github.com/ironpark/ggui/pkg/gem"
 )
 
 // NodeID identifies a node from frame to frame. It is the handler's
@@ -174,7 +174,7 @@ func (n *SemNode) Flags() string {
 		b.WriteString(" mixed")
 	}
 	if n.Expanded != nil {
-		b.WriteString(fn.Pick(*n.Expanded, " expanded", " collapsed"))
+		b.WriteString(gem.Pick(*n.Expanded, " expanded", " collapsed"))
 	}
 	if n.Selected {
 		b.WriteString(" selected")

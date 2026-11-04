@@ -18,10 +18,10 @@ import (
 	"image"
 
 	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggui/internal/pool"
+	"github.com/ironpark/ggui/pkg/gem"
 )
 
-var theRGBAPool = pool.Pool[*image.RGBA]{
+var theRGBAPool = gem.Pool[*image.RGBA]{
 	New: func() *image.RGBA {
 		return &image.RGBA{}
 	},

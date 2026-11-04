@@ -11,31 +11,34 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+//
+// The license is in LICENSE-pool, beside this file.
 
-package pool_test
+package gem
 
 import (
-	"testing"
-
-	"github.com/ironpark/ggui/internal/pool"
+	"sync"
 )
 
-func TestPoolNew(t *testing.T) {
-	var created int
-	p := pool.Pool[*[]int]{
-		New: func() *[]int {
-			created++
-			s := make([]int, 0, 4)
-			return &s
-		},
+// Pool is a sync.Pool that holds values of T only.
+//
+// A Pool must not be copied after first use.
+type Pool[T any] struct {
+	// New creates a value when the pool is empty.
+	New func() T
+
+	p sync.Pool
+}
+
+// Get takes a value from the pool, or creates one with New when the pool is empty.
+func (p *Pool[T]) Get() T {
+	if v := p.p.Get(); v != nil {
+		return v.(T)
 	}
-	s := p.Get()
-	if s == nil || cap(*s) != 4 {
-		t.Fatalf("Get() = %v, want a new slice of capacity 4", s)
-	}
-	if created != 1 {
-		t.Errorf("created = %d, want 1", created)
-	}
-	p.Put(s)
-	_ = p.Get()
+	return p.New()
+}
+
+// Put returns v to the pool. Resetting v is the caller's responsibility.
+func (p *Pool[T]) Put(v T) {
+	p.p.Put(v)
 }

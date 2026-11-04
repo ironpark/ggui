@@ -8,7 +8,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/ironpark/ggui/internal/fn"
+	"github.com/ironpark/ggui/pkg/gem"
 )
 
 // palette is what the editor fuzz target types: scripts and sequences whose
@@ -232,7 +232,7 @@ func FuzzEditorOperations(f *testing.F) {
 			case 1, 2: // backspace, by cluster or word
 				word = op%18 == 2
 				if !e.HasSelection() {
-					lo = fn.Pick(word, prevWord(old.text, old.caret), PrevGrapheme(old.text, old.caret))
+					lo = gem.Pick(word, prevWord(old.text, old.caret), PrevGrapheme(old.text, old.caret))
 					if aligned && !word && !onBoundary(lo) {
 						t.Fatalf("backspace in %q at %d would stop inside a cluster, at %d", old.text, old.caret, lo)
 					}
@@ -243,19 +243,19 @@ func FuzzEditorOperations(f *testing.F) {
 			case 3, 4: // delete forward, by cluster or word
 				word = op%18 == 4
 				if !e.HasSelection() {
-					hi = fn.Pick(word, nextWord(old.text, old.caret), NextGrapheme(old.text, old.caret))
+					hi = gem.Pick(word, nextWord(old.text, old.caret), NextGrapheme(old.text, old.caret))
 				}
 				e.DeleteForward(word)
 				edits++
 				want, wantCaret = old.text[:lo]+old.text[hi:], lo
 			case 5, 6: // arrows
-				e.MoveBy(fn.Pick(op%18 == 5, -1, 1), false, extend)
+				e.MoveBy(gem.Pick(op%18 == 5, -1, 1), false, extend)
 				motion = true
 			case 7, 8: // word arrows
-				e.MoveBy(fn.Pick(op%18 == 7, -1, 1), true, extend)
+				e.MoveBy(gem.Pick(op%18 == 7, -1, 1), true, extend)
 				motion, word = true, true
 			case 9: // home and end
-				e.MoveTo(fn.Pick(arg&2 != 0, len(e.Text), 0), extend)
+				e.MoveTo(gem.Pick(arg&2 != 0, len(e.Text), 0), extend)
 				motion = true
 			case 10:
 				e.SelectAll()

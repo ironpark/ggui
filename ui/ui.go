@@ -20,7 +20,7 @@ import (
 	"maps"
 
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/internal/fn"
+	"github.com/ironpark/ggui/pkg/gem"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
@@ -34,13 +34,13 @@ func squareGlyph(t uitheme.Theme) ggui.Size { return ggui.Sz(t.ControlSize, t.Co
 // sprint is the default option label.
 func sprint[T any](v T) string { return fmt.Sprint(v) }
 
-// pick, bounded and clamp come from internal/fn, shared with ggui: see the
-// package comment there for why clamp's contradicting-bounds case matters.
-func pick[T any](cond bool, a, b T) T { return fn.Pick(cond, a, b) }
+// pick, bounded and clamp come from pkg/gem, shared with ggui, so the two
+// agree on clamp's contradicting bounds: see gem.Clamp.
+func pick[T any](cond bool, a, b T) T { return gem.Pick(cond, a, b) }
 
-func bounded(v, fallback float64) float64 { return fn.Bounded(v, fallback) }
+func bounded(v, fallback float64) float64 { return gem.Bounded(v, fallback) }
 
-func clamp[T cmp.Ordered](v, lo, hi T) T { return fn.Clamp(v, lo, hi) }
+func clamp[T cmp.Ordered](v, lo, hi T) T { return gem.Clamp(v, lo, hi) }
 
 // fade and mix are theme.Fade and theme.Mix, short for the many controls
 // that draw with them.

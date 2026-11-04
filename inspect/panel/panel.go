@@ -10,7 +10,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/inspect"
-	"github.com/ironpark/ggui/internal/fn"
+	"github.com/ironpark/ggui/pkg/gem"
 )
 
 // inspectKey prefers the widget's explicit identity, then its instance and
@@ -417,9 +417,9 @@ func (in *View) selection(dst *ggui.Canvas, fr *inspect.Frame) (int, []int) {
 	if in.move != 0 && len(shown) > 0 {
 		at := slices.Index(shown, sel)
 		if at < 0 {
-			at = fn.Pick(in.move < 0, len(shown), -1)
+			at = gem.Pick(in.move < 0, len(shown), -1)
 		}
-		sel = shown[fn.Clamp(at+in.move, 0, len(shown)-1)]
+		sel = shown[gem.Clamp(at+in.move, 0, len(shown)-1)]
 		in.selectEntry(fr, sel)
 	}
 	in.move = 0

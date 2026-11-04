@@ -21,7 +21,7 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggfx/vector"
-	"github.com/ironpark/ggui/internal/pool"
+	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/internal/third_party/text/internal/textutil"
 )
 
@@ -70,7 +70,7 @@ type LayoutOptions struct {
 	SecondaryAlign Align
 }
 
-var theDrawGlyphsPool = pool.Pool[*[]LazyGlyph]{
+var theDrawGlyphsPool = gem.Pool[*[]LazyGlyph]{
 	New: func() *[]LazyGlyph {
 		// 64 is an arbitrary number for the initial capacity.
 		s := make([]LazyGlyph, 0, 64)
@@ -82,7 +82,7 @@ var theDrawGlyphsPool = pool.Pool[*[]LazyGlyph]{
 // theDrawGlyphEntriesPool holds the realized glyph images [Draw] collects,
 // each with its destination-space translation and color scale, so that it
 // draws them in one DrawImages once all are rasterized.
-var theDrawGlyphEntriesPool = pool.Pool[*[]ggfx.ImageDraw]{
+var theDrawGlyphEntriesPool = gem.Pool[*[]ggfx.ImageDraw]{
 	New: func() *[]ggfx.ImageDraw {
 		s := make([]ggfx.ImageDraw, 0, 64)
 		return &s
@@ -393,7 +393,7 @@ func appendLazyGlyphs(glyphs []LazyGlyph, text string, face Face, x, y float64, 
 	return glyphs
 }
 
-var theAppendGlyphsLazyBufPool = pool.Pool[*[]LazyGlyph]{
+var theAppendGlyphsLazyBufPool = gem.Pool[*[]LazyGlyph]{
 	New: func() *[]LazyGlyph {
 		s := make([]LazyGlyph, 0, 64)
 		return &s

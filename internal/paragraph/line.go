@@ -8,7 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggui/internal/fn"
+	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/internal/fontsys"
 	"github.com/ironpark/ggui/internal/textlayout"
 	"github.com/ironpark/ggui/internal/third_party/text"
@@ -451,7 +451,7 @@ func CaretAt(s string, ps []Piece, styles []LineStyle, x float64) int {
 	if len(ps) == 0 {
 		return 0
 	}
-	edge := func(p *Piece, right bool) int { return fn.Pick(p.RTL != right, p.End, p.Start) }
+	edge := func(p *Piece, right bool) int { return gem.Pick(p.RTL != right, p.End, p.Start) }
 	if x <= ps[0].X {
 		return edge(&ps[0], false)
 	}

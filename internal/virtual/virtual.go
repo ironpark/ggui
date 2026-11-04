@@ -11,7 +11,7 @@ import (
 	"slices"
 	"sort"
 
-	"github.com/ironpark/ggui/internal/fn"
+	"github.com/ironpark/ggui/pkg/gem"
 )
 
 // Fixed returns the rows [first, last) of n, each pitch apart (a row's
@@ -21,8 +21,8 @@ func Fixed(n int, pitch, at, extent float64) (first, last int) {
 	if n <= 0 || pitch <= 0 {
 		return 0, max(n, 0)
 	}
-	first = fn.Clamp(int(math.Floor(at/pitch)), 0, n)
-	last = fn.Clamp(int(math.Ceil((at+extent)/pitch)), first, n)
+	first = gem.Clamp(int(math.Floor(at/pitch)), 0, n)
+	last = gem.Clamp(int(math.Ceil((at+extent)/pitch)), first, n)
 	return first, last
 }
 

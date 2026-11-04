@@ -5,7 +5,7 @@ package panel
 import (
 	"fmt"
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/internal/fn"
+	"github.com/ironpark/ggui/pkg/gem"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -36,7 +36,7 @@ func (in *View) Input(f ggui.OverlayInput) bool {
 				body := in.body()
 				in.split = (f.Pos.Y - body.Origin.Y) / max(body.Size.H, 1)
 			}
-			in.split = fn.Clamp(in.split, .25, .75)
+			in.split = gem.Clamp(in.split, .25, .75)
 		case inspectScrollTree:
 			in.scroll = in.dragValue + (f.Pos.Y-in.dragStart.Y)*max(in.treeContent-in.tree.Size.H, 0)/max(in.tree.Size.H-in.treeThumb.Size.H, 1)
 		case inspectScrollLayout:
@@ -119,7 +119,7 @@ func (in *View) Input(f ggui.OverlayInput) bool {
 				in.act(inspectChip{act: inspectUnpin})
 				return true
 			case ggui.KeyD:
-				in.dock = fn.Pick(in.dock == ggui.InspectorRight, ggui.InspectorBottom, ggui.InspectorRight)
+				in.dock = gem.Pick(in.dock == ggui.InspectorRight, ggui.InspectorBottom, ggui.InspectorRight)
 				return true
 			case ggui.KeyO:
 				in.outlines = !in.outlines
@@ -300,9 +300,9 @@ func (in *View) sideBySide() bool { return in.dock == ggui.InspectorBottom && in
 func (in *View) Cursor(p ggui.Point) (ggui.CursorShape, bool) {
 	switch {
 	case in.drag == inspectResizePanel || in.edge.Contains(p):
-		return fn.Pick(in.dock == ggui.InspectorBottom, ggui.CursorShapeNSResize, ggui.CursorShapeEWResize), true
+		return gem.Pick(in.dock == ggui.InspectorBottom, ggui.CursorShapeNSResize, ggui.CursorShapeEWResize), true
 	case in.drag == inspectResizeSplit || in.divider.Contains(p):
-		return fn.Pick(in.sideBySide(), ggui.CursorShapeEWResize, ggui.CursorShapeNSResize), true
+		return gem.Pick(in.sideBySide(), ggui.CursorShapeEWResize, ggui.CursorShapeNSResize), true
 	case in.filterRect.Contains(p):
 		return ggui.CursorShapeText, true
 	case in.panel.Contains(p):
