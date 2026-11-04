@@ -2,11 +2,18 @@ package ggui
 
 import (
 	"fmt"
+	"image"
+	"image/color"
 	"math"
 	"strings"
 	"testing"
 
+	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/internal/text"
+	"github.com/ironpark/ggui/internal/textedit"
 	"github.com/ironpark/ggui/internal/textlayout"
+	"golang.org/x/image/font/gofont/gomono"
+	"golang.org/x/image/font/gofont/goregular"
 )
 
 func TestTextHeightFollowsLines(t *testing.T) {
@@ -148,5 +155,158 @@ func TestCanvasFitTextCutsToTheWidth(t *testing.T) {
 	got := c.FitText(s, nil, 14, full/2)
 	if !strings.HasSuffix(got, "…") || c.TextWidth(got, nil, 14) > full/2 {
 		t.Fatalf("FitText = %q, %v wide; want an ellipsis within %v", got, c.TextWidth(got, nil, 14), full/2)
+	}
+}
+
+// inked counts the pixels of img with any alpha, and those with a color
+// other than gray.
+func inked(img *image.RGBA) (ink, colored int) {
+	for i := 0; i < len(img.Pix); i += 4 {
+		r, g, b, a := img.Pix[i], img.Pix[i+1], img.Pix[i+2], img.Pix[i+3]
+		if a == 0 {
+			continue
+		}
+		ink++
+		if r != g || g != b {
+			colored++
+		}
+	}
+	return ink, colored
+}
+
+func TestRenderTextDrawsWhatTextMeasures(t *testing.T) {
+	t.Parallel()
+	font := MustFont(goregular.TTF).NoFallback()
+	st := TextStyle{Font: font, Size: 20}
+	img := RenderText("Hello, world", st, 0)
+	want := textlayout.Width("Hello, world", font.face(20, 0))
+	if w := float64(img.Bounds().Dx()); math.Abs(w-want) > 1 {
+		t.Errorf("image is %v wide, Text measures %v", w, want)
+	}
+	if ink, colored := inked(img); ink == 0 || colored != 0 {
+		t.Errorf("black text has %d pixels drawn, %d of them colored", ink, colored)
+	}
+	m := font.face(20, 0).Metrics()
+	if h := float64(img.Bounds().Dy()); math.Abs(h-(m.HAscent+m.HDescent)) > 1 {
+		t.Errorf("one line is %v high, want its ascent and descent, %v", h, m.HAscent+m.HDescent)
+	}
+
+	red := RenderText("Hello", TextStyle{Font: font, Size: 20, Color: color.RGBA{R: 0xff, A: 0xff}}, 0)
+	if _, colored := inked(red); colored == 0 {
+		t.Error("red text has no colored pixels")
+	}
+
+	one := RenderText("one two three four five", st, 0)
+	wrapped := RenderText("one two three four five", st, 80)
+	if wrapped.Bounds().Dx() > 80 || wrapped.Bounds().Dy() <= one.Bounds().Dy() {
+		t.Errorf("wrapped to 80 the text is %v, on one line %v", wrapped.Bounds().Size(), one.Bounds().Size())
+	}
+	lines := RenderText("a\nb\nc", st, 0)
+	if want := m.HAscent + 2*1.2*20 + m.HDescent; math.Abs(float64(lines.Bounds().Dy())-want) > 1 {
+		t.Errorf("three lines are %v high, want %v", lines.Bounds().Dy(), want)
+	}
+}
+
+func TestRenderTextDrawsEmojiInColor(t *testing.T) {
+	useTestEmoji(t)
+	img := RenderText("a👍b", TextStyle{Font: MustFont(goregular.TTF), Size: 24}, 0)
+	if _, colored := inked(img); colored == 0 {
+		t.Error("the emoji drew no colored pixels")
+	}
+}
+
+func TestRenderTextIsSafeAcrossGoroutines(t *testing.T) {
+	t.Parallel()
+	font := MustFont(goregular.TTF)
+	done := make(chan *image.RGBA)
+	for range 8 {
+		go func() { done <- RenderText("concurrent ascent", TextStyle{Font: font, Size: 16}, 0) }()
+	}
+	first := <-done
+	for range 7 {
+		if img := <-done; !img.Bounds().Eq(first.Bounds()) || string(img.Pix) != string(first.Pix) {
+			t.Fatal("the same text renders differently on different goroutines")
+		}
+	}
+}
+
+// Each grapheme starts its own cell on a whole pixel, however far the
+// font's advance is from the cell's width, so a long row does not drift.
+func TestDrawTextCellsKeepsEveryGraphemeOnItsCell(t *testing.T) {
+	t.Parallel()
+	face := MustFont(gomono.TTF).NoFallback().face(13*2, 0)
+	adv := textlayout.Width("M", face)
+	cell := math.Round(adv) + 1 // well off the advance, so drift would show
+	const x0 = 20.25
+	s := "é" + "abcdefghijklmnopqrstuvwxyz0123456789"
+	glyphs := text.AppendLazyGlyphs(nil, s, face, nil)
+	shifts := cellShifts(nil, textedit.Bounds(s), glyphs, x0, cell)
+	k, last := -1, -1
+	for i, g := range glyphs {
+		at := x0 + g.OriginX + shifts[i]
+		if g.StartIndexInBytes < 3 { // é, its mark included
+			if g.StartIndexInBytes == 0 {
+				k = 0
+			}
+			if want := math.Round(x0) + g.OriginX - glyphs[0].OriginX; math.Abs(at-want) > 1e-9 {
+				t.Fatalf("glyph %d of é at %v, want %v: the mark left its letter", i, at, want)
+			}
+			continue
+		}
+		if g.StartIndexInBytes != last {
+			k++
+			last = g.StartIndexInBytes
+		}
+		if want := math.Round(x0 + float64(k)*cell); at != want {
+			t.Fatalf("grapheme %d at %v, want its cell at %v", k, at, want)
+		}
+	}
+	if k != 36 {
+		t.Fatalf("placed %d graphemes after é, want 36", k)
+	}
+	(&Canvas{}).DrawTextCells("no image, no panic", TextStyle{}, Pt(0, 0), 8)
+}
+
+// Shifts found from a run's bounds are those stepping through it grapheme
+// by grapheme finds, whatever its clusters are.
+func TestCellShiftsFollowTheRunsGraphemes(t *testing.T) {
+	face := MustFont(gomono.TTF).NoFallback().face(13*2, 0)
+	const x0, cell = 20.25, 17.0
+	for _, s := range []string{"é" + "abc", "한글 ok", "á̂b", "👩‍💻x", "ffi fl", "\xffz", "❯ go test"} {
+		glyphs := text.AppendLazyGlyphs(nil, s, face, nil)
+		got := cellShifts(nil, textedit.Bounds(s), glyphs, x0, cell)
+		k, next, shift := -1, 0, 0.0
+		for i, g := range glyphs {
+			if g.StartIndexInBytes >= next {
+				for g.StartIndexInBytes >= next && next < len(s) {
+					next = textedit.NextGrapheme(s, next)
+					k++
+				}
+				shift = math.Round(x0+float64(k)*cell) - x0 - g.OriginX
+			}
+			if got[i] != shift {
+				t.Errorf("%q glyph %d: shift %v, want %v", s, i, got[i], shift)
+			}
+		}
+	}
+}
+
+func TestTextStylesCompareWithoutAllocating(t *testing.T) {
+	a := TextStyle{Size: 13, Color: color.RGBA{1, 2, 3, 255}, LineHeight: 1.4, Weight: 500}
+	b := a
+	b.Color = color.NRGBA{1, 2, 3, 255}
+	if !property.Equal(a, b) {
+		t.Fatal("styles of colors drawing alike are not equal")
+	}
+	c := a
+	c.Size = 14
+	if property.Equal(a, c) {
+		t.Fatal("styles of two sizes are equal")
+	}
+	if property.Equal(a, TextStyle{Size: 13, LineHeight: 1.4, Weight: 500}) {
+		t.Fatal("a style with a color equals one without")
+	}
+	if n := testing.AllocsPerRun(100, func() { property.Equal(a, b) }); n != 0 {
+		t.Fatalf("comparing two styles took %v allocations", n)
 	}
 }
