@@ -41,6 +41,34 @@ func TestASelectionRunsThroughTheTextsOfAnArea(t *testing.T) {
 	}
 }
 
+// A click in one paragraph clears what a drag selected of the others, and
+// has them painted again, not only the paragraph clicked.
+func TestAClickClearsTheSelectionOfTheOtherTexts(t *testing.T) {
+	t.Parallel()
+	a, b := Text("first line").Selectable(), Text("second line").Selectable()
+	area := SelectionArea(Column(a, b).Gap(10).Stretch())
+	p := NewProbe(area, Sz(300, 100))
+	defer p.Close()
+	p.Frame()
+	p.Press(textAt(a.rich, a.rich.rect, 2))
+	p.Move(textAt(b.rich, b.rich.rect, 4))
+	p.Release(textAt(b.rich, b.rich.rect, 4))
+	p.Frame()
+	if area.SelectedText() == "" {
+		t.Fatal("the drag selected nothing")
+	}
+	before := delivered.Load()
+	p.Press(textAt(a.rich, a.rich.rect, 3))
+	p.Release(textAt(a.rich, a.rich.rect, 3))
+	p.Frame()
+	if got := area.SelectedText(); got != "" {
+		t.Fatalf("a click left %q selected", got)
+	}
+	if delivered.Load() == before {
+		t.Fatal("the other paragraph was left to show its selection")
+	}
+}
+
 func TestADragWithinOneTextOfAnAreaSelectsAsItsOwn(t *testing.T) {
 	t.Parallel()
 	a, b := Text("hello world").Selectable(), Text("other").Selectable()

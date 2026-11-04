@@ -125,6 +125,9 @@ func (a *SelectionAreaWidget) extend(u *RichTextWidget, at int) {
 	}
 	a.focus, a.focusAt, a.spans = u, at, i != j
 	lo, hi := min(i, j), max(i, j)
+	// The texts it runs through are not the one the pointer reached, which
+	// alone the frame would paint again.
+	delivered.Add(1)
 	for k, t := range a.texts {
 		switch {
 		case k == i && k == j:
@@ -156,11 +159,14 @@ func (a *SelectionAreaWidget) selectAll() {
 	}
 }
 
-// clear drops the selection of every text but keep.
+// clear drops the selection of every text but keep. A text it drops one
+// in is painted again with the frame, though the pointer reached another
+// or none: a click in one paragraph clears the rest of a selection.
 func (a *SelectionAreaWidget) clear(keep *RichTextWidget) {
 	for _, t := range a.texts {
-		if t != keep {
+		if t != keep && t.ed.HasSelection() {
 			t.ed.MoveTo(t.ed.Caret, false)
+			delivered.Add(1)
 		}
 	}
 	a.spans = false
