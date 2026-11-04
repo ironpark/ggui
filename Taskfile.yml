@@ -43,6 +43,53 @@ tasks:
     cmds:
       - '"{{.GO}}" test -run xxx -bench . -count {{.COUNT}} ./...'
 
+  # The engine packages' benchmarks run alone, with no window or GPU: what
+  # a refactor of text, motion or geometry is measured with. PKGS=./... takes
+  # in the rest.
+  bench:save:
+    desc: Save benchmarks to .bench/NAME.txt (NAME=base, PKGS=engines, BENCH=., COUNT=6)
+    vars:
+      NAME: '{{default "base" .NAME}}'
+      PKGS: '{{default "./internal/fontsys ./internal/textlayout ./internal/paragraph ./internal/kinetics ./pkg/geom" .PKGS}}'
+      BENCH: '{{default "." .BENCH}}'
+      COUNT: '{{default 6 .COUNT}}'
+    cmds:
+      - mkdir -p .bench
+      - '"{{.GO}}" test -run "^$" -bench "{{.BENCH}}" -benchmem -count {{.COUNT}} {{.PKGS}} | tee .bench/{{.NAME}}.txt'
+
+  bench:compare:
+    desc: Compare benchmarks now with .bench/BASE.txt (BASE=base), or with git ref REF, by benchstat
+    # REF runs the baseline in a temporary worktree of that commit, so a
+    # change is measured against where it started without stashing it:
+    # task bench:compare REF=main. Benchmarks the ref does not have are
+    # left out of the comparison. Install benchstat with
+    # go install golang.org/x/perf/cmd/benchstat@latest
+    vars:
+      BASE: '{{default "base" .BASE}}'
+      PKGS: '{{default "./internal/fontsys ./internal/textlayout ./internal/paragraph ./internal/kinetics ./pkg/geom" .PKGS}}'
+      BENCH: '{{default "." .BENCH}}'
+      COUNT: '{{default 6 .COUNT}}'
+      BENCHSTAT: '{{default "benchstat" .BENCHSTAT}}'
+      BASEFILE: '{{if .REF}}.bench/ref.txt{{else}}.bench/{{.BASE}}.txt{{end}}'
+    cmds:
+      - mkdir -p .bench
+      - |
+        if [ -n "{{.REF}}" ]; then
+          dir=$(mktemp -d)
+          git worktree add --detach "$dir" "{{.REF}}" >/dev/null
+          pkgs=""
+          for p in {{.PKGS}}; do
+            if [ -d "$dir/$p" ]; then pkgs="$pkgs $p"; fi
+          done
+          (cd "$dir" && "{{.GO}}" test -run "^$" -bench "{{.BENCH}}" -benchmem -count {{.COUNT}} $pkgs) > {{.BASEFILE}}
+          status=$?
+          git worktree remove --force "$dir"
+          exit $status
+        fi
+      - 'test -f {{.BASEFILE}} || (echo "no baseline {{.BASEFILE}}: run task bench:save, or pass REF" >&2; exit 1)'
+      - '"{{.GO}}" test -run "^$" -bench "{{.BENCH}}" -benchmem -count {{.COUNT}} {{.PKGS}} | tee .bench/new.txt'
+      - '{{.BENCHSTAT}} {{.BASEFILE}} .bench/new.txt'
+
   vet:
     desc: Run Go static checks
     cmds:
