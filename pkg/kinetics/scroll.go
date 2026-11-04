@@ -1,6 +1,6 @@
 // Package kinetics is the arithmetic of motion in ggui: easing curves, the
 // resistance a scroll meets past its ends, where a snapping scroll comes to
-// rest, and a touch's velocity and the fling that carries on from it. It
+// rest, a touch's pan and velocity, and the fling that carries on from it. It
 // holds no widget, frame or clock: callers pass the time and positions in.
 package kinetics
 

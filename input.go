@@ -140,41 +140,6 @@ type ChordClaimer interface {
 	ClaimsChord(ev KeyEvent) bool
 }
 
-// claimedBy returns the focused handler when it claims ev, else nil.
-func (in *inputState) claimedBy(ev KeyEvent) KeyHandler {
-	if in.focused == nil {
-		return nil
-	}
-	cur := in.findKeyRegion(in.focused)
-	if cur == nil {
-		return nil
-	}
-	if c, ok := cur.key.(ChordClaimer); ok && c.ClaimsChord(ev) {
-		return cur.key
-	}
-	return nil
-}
-
-// sendClaimed delivers ev to the focused handler if it claims it, and
-// reports whether it did: how a menu action's chord reaches a focused
-// field rather than the action.
-func (in *inputState) sendClaimed(ev KeyEvent) bool {
-	h := in.claimedBy(ev)
-	if h == nil {
-		return false
-	}
-	h.HandleKey(ev)
-	return true
-}
-
-// consumes reports whether h claims ev through KeyConsumer.
-func consumes(h KeyHandler, ev KeyEvent) bool {
-	if c, ok := h.(KeyConsumer); ok {
-		return c.ConsumesKey(ev)
-	}
-	return false
-}
-
 // Revealer is a container that can scroll to show a Rect: Scroll is one.
 // Focus moved by the keyboard into a region asks every Revealer painted to
 // reveal it, in window coordinates; one that does not contain r ignores
@@ -201,6 +166,135 @@ type frameInput struct {
 	dragAt   Point         // where, when drag is set
 }
 
+// A hitRegion is a part of the window a widget registered with the Canvas
+// for input in the frame painted last: its handlers, what it is called,
+// and the space it was painted in. Input reads the regions of the last
+// paint, top down, and keeps copies of the ones it follows across frames.
+type hitRegion struct {
+	rect    Rect
+	full    Rect // rect before clipping, for scrolling it into view
+	id      any  // from an Identified handler, else nil
+	pointer PointerHandler
+	key     KeyHandler
+	cursor  CursorShape
+	scope   *focusScope // the focus trap the region was painted in, if any
+	role    Role        // from a Semantic handler
+	label   string
+	group   any        // set by inGroup: the EachKeyed entry that painted it
+	drag    dragSource // a DragSource beneath its child; see dragdrop.go
+
+	space  *paintSpace // the space it was painted in, nil for the window's
+	local  Rect        // rect in that space, clipped there; see contains
+	origin Point       // full's corner in that space, before placeRegion moved it
+}
+
+// merge folds o into r when they share a Rect and o only adds what r lacks.
+func (r *hitRegion) merge(o hitRegion) bool {
+	if r.rect != o.rect || r.space != o.space || (o.id != nil && r.id != nil && o.id != r.id) ||
+		o.drag != nil || r.drag != nil ||
+		(o.pointer != nil && r.pointer != nil) ||
+		(o.key != nil && r.key != nil) ||
+		(o.cursor != 0 && r.cursor != 0) {
+		return false
+	}
+	if o.pointer != nil {
+		r.pointer = o.pointer
+	}
+	if o.key != nil {
+		r.key = o.key
+	}
+	if o.cursor != 0 {
+		r.cursor = o.cursor
+	}
+	if o.id != nil {
+		r.id = o.id
+	}
+	if o.role != "" {
+		r.role, r.label = o.role, o.label
+	}
+	return true
+}
+
+// contains reports whether the window point p lands on r.
+func (r *hitRegion) contains(p Point) bool {
+	if !r.rect.Contains(p) {
+		return false
+	}
+	if r.space == nil {
+		return true
+	}
+	q, ok := r.space.reach(p)
+	return ok && r.local.Contains(q)
+}
+
+// at returns the transform for the child painted in r.
+func (t *TransformWidget) at(r Rect) Affine {
+	return t.shown.About(Pt(r.Origin.X+r.Size.W*t.originX, r.Origin.Y+r.Size.H*t.originY))
+}
+
+// offset returns the window point p from the corner of the Rect r was
+// registered for, in the coordinates it was painted in: where on a drag
+// source the pointer took hold, or where in a drop zone it let go.
+func (r *hitRegion) offset(p Point) Point {
+	if r.space == nil {
+		return p.Sub(r.full.Origin)
+	}
+	return r.at(p).Sub(r.origin)
+}
+
+// pointerAt is ev as r's handler sees it.
+func (r *hitRegion) pointerAt(ev PointerEvent) PointerEvent {
+	if r.space == nil {
+		return ev
+	}
+	if ev.Scroll != (Point{}) {
+		// A delta is a direction, so it turns and scales but does not move:
+		// a scroll view turned on its side scrolls along its own axis, and
+		// a pan under a zoom follows the finger.
+		ev.Scroll = r.at(ev.Scroll).Sub(r.at(Point{}))
+	}
+	ev.Pos = r.at(ev.Pos)
+	return ev
+}
+
+// keep returns a copy of r that outlives the regions buffer.
+func keep(r *hitRegion) *hitRegion {
+	if r == nil {
+		return nil
+	}
+	c := *r
+	return &c
+}
+
+// regionSlot keeps a region the input follows every frame, as keep does,
+// in one of two buffers it alternates between: keeping one allocates
+// nothing, and the copy kept before stays valid while the next is made,
+// as a hover's exit needs the region it leaves. A pointer it returned is
+// good until the second keep after it, so only the field it fills may hold
+// one past the call.
+type regionSlot struct {
+	buf [2]hitRegion
+	cur uint8
+}
+
+func (s *regionSlot) keep(r *hitRegion) *hitRegion {
+	s.cur ^= 1
+	if r == nil {
+		// Let go of the handlers kept here, all but the copy just
+		// replaced, which its caller may still read.
+		s.buf[s.cur] = hitRegion{}
+		return nil
+	}
+	s.buf[s.cur] = *r
+	return &s.buf[s.cur]
+}
+
+// handle delivers the window-space ev to r's PointerHandler in the
+// coordinates r was painted in and reports whether it consumed it.
+func (r *hitRegion) handle(ev PointerEvent) bool {
+	return r.pointer.HandlePointer(r.pointerAt(ev))
+}
+
 // inputState routes frameInput to the regions painted last frame. A pressed
 // or focused region is matched across frames by its handler when the widget
 // survived, or by Rect when a rebuild replaced it, so a widget that moves
@@ -221,18 +315,20 @@ type inputState struct {
 
 	// These are copies: regions is rebuilt every frame in a reused buffer,
 	// so a pointer into it would soon describe a different region.
-	hovered               *hitRegion
-	pressed               *hitRegion
-	pressedBtn            MouseButton
-	focused               *hitRegion
-	focusVisible          bool        // focused moved there with the keyboard
-	cursor                CursorShape // what the hovered region asked for
-	dragTarget            *hitRegion  // the region files are being dragged over
-	drag                  *appDrag    // a drag inside the app; see dragdrop.go
-	touchStart, touchLast Point
-	touchScroll           *hitRegion
-	touchPanning          bool
-	touchMotion           touchMotion
+	hovered    *hitRegion
+	pressed    *hitRegion
+	pressedBtn MouseButton
+	focused    *hitRegion
+	// The slots hovered and focused are kept in: they are kept again
+	// every frame, which a slot does without allocating.
+	hoverSlot, focusSlot regionSlot
+	focusVisible         bool        // focused moved there with the keyboard
+	cursor               CursorShape // what the hovered region asked for
+	dragTarget           *hitRegion  // the region files are being dragged over
+	drag                 *appDrag    // a drag inside the app; see dragdrop.go
+	touchPan             kinetics.Pan
+	touchScroll          *hitRegion // what took the pan
+	touchMotion          touchMotion
 
 	shortcuts []func(KeyEvent) bool // App.OnKey handlers, tried before the focused widget
 	chords    []*ShortcutHandle     // App.Shortcut handlers
@@ -244,73 +340,6 @@ type inputState struct {
 	// was when the scope appeared, restored when it goes.
 	trap       any
 	trapReturn *hitRegion
-}
-
-// shortcut registers a chord.
-func (in *inputState) addShortcut(chord string, fn func()) *ShortcutHandle {
-	h := &ShortcutHandle{chord: MustChord(chord), fn: fn}
-	in.chords = append(in.chords, h)
-	return h
-}
-
-// runChords runs the shortcuts that match k, either the ones that go
-// before the focused widget (modified or exclusive) or the rest, and
-// reports whether one ran.
-func (in *inputState) runChords(k KeyboardKey, mods Mods, before bool) bool {
-	ran := false
-	ev := KeyEvent{Kind: KeyPress, Key: k, Mods: mods}
-	for _, h := range in.chords {
-		if h.removed || (h.chord.Modified() || h.exclusive) != before || !ev.Is(h.chord) {
-			continue
-		}
-		h.fn()
-		ran = true
-	}
-	in.chords = slices.DeleteFunc(in.chords, func(h *ShortcutHandle) bool { return h.removed })
-	scope := in.activeScope()
-	for _, p := range in.painted {
-		if p.chord.Modified() != before || !ev.Is(p.chord) || (scope != nil && p.scope != scope) {
-			continue
-		}
-		p.fn()
-		ran = true
-	}
-	return ran
-}
-
-// withoutShortcuts returns keys less those a shortcut consumed, copying
-// only once one has.
-func (in *inputState) withoutShortcuts(keys []KeyboardKey, mods Mods, claimed func(KeyboardKey) bool) []KeyboardKey {
-	out, copied := keys, false
-	for i, k := range keys {
-		switch taken := !claimed(k) && in.shortcut(k, mods); {
-		case taken && !copied:
-			out, copied = slices.Clone(keys[:i]), true
-		case !taken && copied:
-			out = append(out, k)
-		}
-	}
-	return out
-}
-
-// shortcut offers a key press to the OnKey handlers and reports whether
-// one consumed it.
-func (in *inputState) shortcut(k KeyboardKey, mods Mods) bool {
-	for _, fn := range in.shortcuts {
-		if fn(KeyEvent{Kind: KeyPress, Key: k, Mods: mods}) {
-			return true
-		}
-	}
-	return false
-}
-
-// keep returns a copy of r that outlives the regions buffer.
-func keep(r *hitRegion) *hitRegion {
-	if r == nil {
-		return nil
-	}
-	c := *r
-	return &c
 }
 
 // dispatch turns one frame's raw input into handler calls, in the order the
@@ -353,8 +382,12 @@ func (in *inputState) markBusyGroups() {
 // inside them, or reached the widget that has focus. A trap in front of an
 // observer hides the input from it.
 func (in *inputState) notifyObservers(f frameInput) {
+	if len(in.observers) == 0 {
+		return
+	}
+	scope := in.activeScope()
 	for _, observer := range in.observers {
-		if scope := in.activeScope(); scope != nil && observer.scope != scope {
+		if scope != nil && observer.scope != scope {
 			continue
 		}
 		pointer := (len(f.down) > 0 || f.wheel != (Point{})) && observer.rect.Contains(f.pos)
@@ -392,7 +425,7 @@ func (in *inputState) updateHover(f frameInput) {
 		// one it replaced is gone, and hears no exit.
 		in.deliver(now, PointerEvent{Kind: PointerEnter, Pos: f.pos})
 	}
-	in.hovered = keep(now)
+	in.hovered = in.hoverSlot.keep(now)
 }
 
 // updateDrag moves the drag target to the topmost region taking DragOver,
@@ -459,29 +492,6 @@ func (in *inputState) dispatchPointer(f frameInput) {
 	}
 }
 
-// consumeBindings takes the keys that belong to the runtime rather than to a
-// widget -- Tab, registered shortcuts and the chords that fire before the
-// focused widget sees them -- and returns what is left for the widget. The
-// frame's slice belongs to the caller of dispatch, so a removal clones it.
-func (in *inputState) consumeBindings(keys []KeyboardKey, mods Mods) []KeyboardKey {
-	// A chord the focused handler claims is its own: none of the bindings
-	// below sees it.
-	claimed := func(k KeyboardKey) bool { return in.claimedBy(KeyEvent{Kind: KeyPress, Key: k, Mods: mods}) != nil }
-	if i := slices.Index(keys, KeyTab); i >= 0 && !claimed(KeyTab) {
-		keys = slices.Delete(slices.Clone(keys), i, i+1)
-		in.moveFocus(pick(mods.Shift, -1, 1))
-	}
-	if len(in.shortcuts) > 0 {
-		keys = in.withoutShortcuts(keys, mods, claimed)
-	}
-	if len(in.chords) > 0 || len(in.painted) > 0 {
-		keys = slices.DeleteFunc(slices.Clone(keys), func(k KeyboardKey) bool {
-			return !claimed(k) && in.runChords(k, mods, true)
-		})
-	}
-	return keys
-}
-
 // dispatchKeys hands the remaining keys and text to the focused widget, then
 // runs what the widget did not consume through afterFocused. A widget whose
 // tick handled the input this frame keeps the keys to itself.
@@ -505,7 +515,7 @@ func (in *inputState) dispatchKeys(f frameInput) {
 			cur.key.HandleKey(KeyEvent{Kind: KeyFocus})
 		}
 	}
-	in.focused = keep(cur)
+	in.focused = in.focusSlot.keep(cur)
 	if th, ok := cur.key.(TickHandler); ok && th.HandleTick() {
 		releaseKeys(cur.key, f)
 		return
@@ -528,25 +538,6 @@ func releaseKeys(h KeyHandler, f frameInput) {
 		for _, k := range f.released {
 			rh.HandleKeyRelease(KeyEvent{Kind: KeyRelease, Key: k, Mods: f.mods})
 		}
-	}
-}
-
-// afterFocused runs what comes after the focused widget saw the keys: the
-// bare-key shortcuts and the trap's Escape, for keys the widget did not
-// consume.
-func (in *inputState) afterFocused(f frameInput, h KeyHandler) {
-	for _, k := range f.keys {
-		ev := KeyEvent{Kind: KeyPress, Key: k, Mods: f.mods}
-		if h != nil && consumes(h, ev) {
-			continue
-		}
-		if k == KeyEscape && f.mods == (Mods{}) {
-			if s := in.activeScope(); s != nil && s.escape != nil {
-				s.escape()
-				continue
-			}
-		}
-		in.runChords(k, f.mods, false)
 	}
 }
 
@@ -606,12 +597,6 @@ func (in *inputState) topmost(match func(*hitRegion) bool) *hitRegion {
 		}
 	}
 	return nil
-}
-
-// handle delivers the window-space ev to r's PointerHandler in the
-// coordinates r was painted in and reports whether it consumed it.
-func (r *hitRegion) handle(ev PointerEvent) bool {
-	return r.pointer.HandlePointer(r.pointerAt(ev))
 }
 
 // deliver hands ev to r as handle does, noting where: a widget a pointer
@@ -687,7 +672,7 @@ func (in *inputState) refreshFocused() {
 	}
 	key := in.focused.key
 	if r := in.topmost(func(r *hitRegion) bool { return r.key != nil && sameAny(r.key, key) }); r != nil {
-		in.focused = keep(r)
+		in.focused = in.focusSlot.keep(r)
 	}
 }
 
@@ -704,7 +689,7 @@ func (in *inputState) focus(r *hitRegion, keyboard bool) {
 		// The same widget, perhaps in another region, such as a dropdown's
 		// list under its field: focus stays, without a blur, and becomes
 		// visible if the keyboard moved it there.
-		in.focused = keep(r)
+		in.focused = in.focusSlot.keep(r)
 		in.focusVisible = in.focusVisible || keyboard
 		return
 	}
@@ -720,7 +705,7 @@ func (in *inputState) focus(r *hitRegion, keyboard bool) {
 		}
 		r.key.HandleKey(ev)
 	}
-	in.focused = keep(r)
+	in.focused = in.focusSlot.keep(r)
 	in.focusVisible = keyboard
 }
 
@@ -1100,7 +1085,8 @@ func (t *touchInput) apply(f *frameInput, ids []ggwd.TouchID, position func(ggwd
 	f.pos = t.pos
 }
 
-// panTouch lets a scroll region take over a touch after a small movement.
+// panTouch lets a scroll region take over a touch once kinetics.Pan says
+// it pans.
 // Hit testing stays at the gesture origin; a captured scroller continues
 // receiving movement even when the finger leaves its viewport.
 func (in *inputState) panTouch(f *frameInput) {
@@ -1113,8 +1099,8 @@ func (in *inputState) panTouch(f *frameInput) {
 		return
 	}
 	if len(f.down) != 0 {
-		in.touchStart, in.touchLast = f.pos, f.pos
-		in.touchScroll, in.touchPanning = nil, false
+		in.touchPan.Down(f.pos)
+		in.touchScroll = nil
 		in.touchMotion = touchMotion{Tracker: kinetics.Tracker{Last: now, Pos: f.pos}}
 		return
 	}
@@ -1130,44 +1116,31 @@ func (in *inputState) panTouch(f *frameInput) {
 		}
 	}
 	in.touchMotion.Sample(now, f.pos, maxFrameStep)
-	delta := f.pos.Sub(in.touchLast)
-	if !in.touchPanning {
-		delta = f.pos.Sub(in.touchStart)
-		if delta.X*delta.X+delta.Y*delta.Y < 64 {
-			return
-		}
+	delta, ok := in.touchPan.Move(f.pos)
+	if !ok {
+		return
 	}
-	// Lock to the dominant axis so horizontal controls in vertical lists
-	// can still be dragged without moving the list.
-	if !in.touchPanning {
-		if delta.X*delta.X > delta.Y*delta.Y {
-			delta.Y = 0
-		} else {
-			delta.X = 0
-		}
-	}
-	ev := PointerEvent{Kind: PointerScroll, Pos: in.touchStart, Scroll: delta, ScrollPixels: true}
-	if in.touchPanning {
+	ev := PointerEvent{Kind: PointerScroll, Pos: in.touchPan.Start, Scroll: delta, ScrollPixels: true}
+	if in.touchPan.Panning {
 		if cur := in.findPointer(in.touchScroll); cur != nil && delta != (Point{}) {
 			cur.pointer.HandlePointer(ev)
 		}
 	} else if delta != (Point{}) {
 		if target := in.send(ev); target != nil {
-			in.touchScroll, in.touchPanning = keep(target), true
+			in.touchScroll, in.touchPan.Panning = keep(target), true
 			in.releasePress(f.pos, f.mods)
 		}
 	}
-	in.touchLast = f.pos
-	if in.touchPanning {
+	if in.touchPan.Panning {
 		// The original target has already been released. Never generate a tap.
 		ended := len(f.up) != 0
 		f.down, f.up = nil, nil
 		if ended {
 			in.touchMotion.Boost()
 			in.touchMotion.target = in.touchScroll
-			in.touchMotion.origin = in.touchStart
+			in.touchMotion.origin = in.touchPan.Start
 			in.touchMotion.Last = now
-			in.touchPanning, in.touchScroll = false, nil
+			in.touchPan.Panning, in.touchScroll = false, nil
 		}
 	}
 }

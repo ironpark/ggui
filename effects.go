@@ -568,11 +568,6 @@ func (t *TransformWidget) Layout(c Constraints, env Env) Size {
 	return t.child.Layout(c, env)
 }
 
-// at returns the transform for the child painted in r.
-func (t *TransformWidget) at(r Rect) Affine {
-	return t.shown.About(Pt(r.Origin.X+r.Size.W*t.originX, r.Origin.Y+r.Size.H*t.originY))
-}
-
 // Paint implements Widget.
 func (t *TransformWidget) Paint(dst *Canvas, r Rect) {
 	dst.Transform(t.at(r), func(dst *Canvas) { dst.Paint(t.child, r) })
@@ -698,43 +693,6 @@ func (s *paintSpace) placeRegion(h *hitRegion) bool {
 	return true
 }
 
-// contains reports whether the window point p lands on r.
-func (r *hitRegion) contains(p Point) bool {
-	if !r.rect.Contains(p) {
-		return false
-	}
-	if r.space == nil {
-		return true
-	}
-	q, ok := r.space.reach(p)
-	return ok && r.local.Contains(q)
-}
-
 // at returns the window point p in the coordinates r was painted in, which
 // is where its handler expects an event.
 func (r *hitRegion) at(p Point) Point { return r.space.local(p) }
-
-// offset returns the window point p from the corner of the Rect r was
-// registered for, in the coordinates it was painted in: where on a drag
-// source the pointer took hold, or where in a drop zone it let go.
-func (r *hitRegion) offset(p Point) Point {
-	if r.space == nil {
-		return p.Sub(r.full.Origin)
-	}
-	return r.at(p).Sub(r.origin)
-}
-
-// pointerAt is ev as r's handler sees it.
-func (r *hitRegion) pointerAt(ev PointerEvent) PointerEvent {
-	if r.space == nil {
-		return ev
-	}
-	if ev.Scroll != (Point{}) {
-		// A delta is a direction, so it turns and scales but does not move:
-		// a scroll view turned on its side scrolls along its own axis, and
-		// a pan under a zoom follows the finger.
-		ev.Scroll = r.at(ev.Scroll).Sub(r.at(Point{}))
-	}
-	ev.Pos = r.at(ev.Pos)
-	return ev
-}
