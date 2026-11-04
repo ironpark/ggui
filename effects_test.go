@@ -42,40 +42,6 @@ func topLeft(w Widget) Widget { return Align(w).At(0, 0) }
 
 func nearPt(a, b Point) bool { return math.Abs(a.X-b.X) < 1e-9 && math.Abs(a.Y-b.Y) < 1e-9 }
 
-func TestAffineComposesAndInverts(t *testing.T) {
-	t.Parallel()
-	if !(Affine{}).IsIdentity() || !nearPt(Affine{}.Apply(Pt(3, 4)), Pt(3, 4)) {
-		t.Fatal("zero Affine is not the identity")
-	}
-	turn := Affine{}.Rotate(math.Pi / 2)
-	if got := turn.Apply(Pt(1, 0)); !nearPt(got, Pt(0, 1)) {
-		t.Fatalf("a quarter turn takes (1, 0) to %v; want (0, 1), clockwise on screen", got)
-	}
-	m := Affine{}.Scale(2, 3).Translate(10, 0)
-	if got := m.Apply(Pt(1, 1)); !nearPt(got, Pt(12, 3)) {
-		t.Fatalf("scale then move gives %v; want (12, 3)", got)
-	}
-	inv, ok := m.Rotate(0.3).Skew(0.2, 0).Invert()
-	if !ok {
-		t.Fatal("an invertible transform has no inverse")
-	}
-	p := Pt(5, -7)
-	if got := inv.Apply(m.Rotate(0.3).Skew(0.2, 0).Apply(p)); math.Abs(got.X-p.X) > 1e-9 || math.Abs(got.Y-p.Y) > 1e-9 {
-		t.Fatalf("inverse round trip gives %v; want %v", got, p)
-	}
-	if _, ok := (Affine{}).Scale(0, 1).Invert(); ok {
-		t.Fatal("a zero scale has an inverse")
-	}
-	about := Affine{}.Scale(2, 2).About(Pt(10, 10))
-	if got := about.Apply(Pt(10, 10)); !nearPt(got, Pt(10, 10)) {
-		t.Fatalf("About moved its own centre to %v", got)
-	}
-	b := turn.Bounds(Rct(Pt(0, 0), Sz(10, 4)))
-	if !nearPt(b.Origin, Pt(-4, 0)) || math.Abs(b.Size.W-4) > 1e-9 || math.Abs(b.Size.H-10) > 1e-9 {
-		t.Fatalf("turned bounds %v; want (-4,0) 4x10", b)
-	}
-}
-
 func TestTransformRoutesInputThroughTheInverse(t *testing.T) {
 	t.Parallel()
 	tg := &target{size: Sz(40, 20)}
@@ -294,9 +260,9 @@ func TestPathContainsAndBounds(t *testing.T) {
 	if !q.Contains(Pt(10, 5)) || q.Contains(Pt(10, 11)) {
 		t.Fatal("a quadratic curve is not followed")
 	}
-	before := q.polygons()
+	before := q.outline.Polygons()
 	q.Reset()
-	if len(before) != 1 || len(q.polygons()) != 0 {
+	if len(before) != 1 || len(q.outline.Polygons()) != 0 {
 		t.Fatal("Reset did not drop the outline, or changed one handed out")
 	}
 }

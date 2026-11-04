@@ -5,6 +5,7 @@ import (
 	"math"
 
 	"github.com/ironpark/ggui/internal/fn"
+	"github.com/ironpark/ggui/pkg/geom"
 	"github.com/ironpark/ggui/pkg/layout"
 )
 
@@ -25,6 +26,12 @@ type (
 	// Rect is an axis-aligned rectangle anchored at Origin. Paint receives
 	// one: the origin its parent chose and the size its own Layout returned.
 	Rect = layout.Rect
+
+	// Affine is a 2D affine transform of logical points. The zero value
+	// is the identity, and each method returns the transform followed by
+	// one more step: Affine{}.Scale(2, 2).Translate(10, 0) scales a point
+	// and then moves it.
+	Affine = geom.Affine
 )
 
 // Pt returns the Point at (x, y), whatever numeric type they are.

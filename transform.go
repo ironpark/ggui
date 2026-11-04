@@ -48,7 +48,7 @@ func (c *Canvas) Transform(m Affine, paint func(dst *Canvas)) {
 	c.layer(area, func(layer *Canvas) { paint(layer.enter(m, inverse, nil)) }, func(img *ggfx.Image) {
 		op := &ggfx.DrawImageOptions{Filter: ggfx.FilterLinear}
 		op.GeoM.Translate(float64(img.Bounds().Min.X), float64(img.Bounds().Min.Y))
-		op.GeoM.Concat(m.geoM(c.Scale()))
+		op.GeoM.Concat(affineGeoM(m, c.Scale()))
 		c.Image.DrawImage(img, op)
 	})
 }
@@ -181,4 +181,18 @@ func (t *TransformWidget) at(r Rect) Affine {
 // Paint implements Widget.
 func (t *TransformWidget) Paint(dst *Canvas, r Rect) {
 	dst.Transform(t.at(r), func(dst *Canvas) { dst.Paint(t.child, r) })
+}
+
+// affineGeoM returns m as a ggfx transform on Image pixels, at scale
+// pixels to a logical one.
+func affineGeoM(m Affine, scale float64) ggfx.GeoM {
+	a, b, c, d, tx, ty := m.Matrix()
+	var g ggfx.GeoM
+	g.SetElement(0, 0, a)
+	g.SetElement(0, 1, c)
+	g.SetElement(0, 2, tx*scale)
+	g.SetElement(1, 0, b)
+	g.SetElement(1, 1, d)
+	g.SetElement(1, 2, ty*scale)
+	return g
 }

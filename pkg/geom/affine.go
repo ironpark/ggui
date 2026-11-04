@@ -1,10 +1,21 @@
-package ggui
+// Package geom is 2D geometry beyond boxes: affine transforms of points
+// and rectangles, and outlines of lines and Bézier curves that can say
+// whether they hold a point and what they cover. It builds on
+// pkg/layout's Point and Rect, which ggui's own are.
+package geom
 
 import (
 	"iter"
 	"math"
 
-	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggui/pkg/layout"
+)
+
+type (
+	// Point is layout's Point, which ggui's is.
+	Point = layout.Point
+	// Rect is layout's Rect, which ggui's is.
+	Rect = layout.Rect
 )
 
 // Affine is a 2D affine transform of logical points. The zero value is the
@@ -90,7 +101,7 @@ func (m Affine) Bounds(r Rect) Rect {
 	if m.IsIdentity() {
 		return r
 	}
-	return pointBounds(func(yield func(Point) bool) {
+	return PointBounds(func(yield func(Point) bool) {
 		for _, p := range [4]Point{
 			r.Origin, {X: r.Origin.X + r.Size.W, Y: r.Origin.Y},
 			{X: r.Origin.X, Y: r.Origin.Y + r.Size.H}, {X: r.Origin.X + r.Size.W, Y: r.Origin.Y + r.Size.H},
@@ -102,9 +113,9 @@ func (m Affine) Bounds(r Rect) Rect {
 	})
 }
 
-// pointBounds returns the smallest Rect holding every point of pts, or the
+// PointBounds returns the smallest Rect holding every point of pts, or the
 // zero Rect when there are none.
-func pointBounds(pts iter.Seq[Point]) Rect {
+func PointBounds(pts iter.Seq[Point]) Rect {
 	x0, y0 := math.Inf(1), math.Inf(1)
 	x1, y1 := math.Inf(-1), math.Inf(-1)
 	for q := range pts {
@@ -113,18 +124,11 @@ func pointBounds(pts iter.Seq[Point]) Rect {
 	if x0 > x1 {
 		return Rect{}
 	}
-	return Rct(Pt(x0, y0), Sz(x1-x0, y1-y0))
+	return layout.Rct(layout.Pt(x0, y0), layout.Sz(x1-x0, y1-y0))
 }
 
-// geoM returns m as a ggfx transform on Image pixels, at scale pixels to
-// a logical one.
-func (m Affine) geoM(scale float64) ggfx.GeoM {
-	var g ggfx.GeoM
-	g.SetElement(0, 0, m.a1+1)
-	g.SetElement(0, 1, m.c)
-	g.SetElement(0, 2, m.tx*scale)
-	g.SetElement(1, 0, m.b)
-	g.SetElement(1, 1, m.d1+1)
-	g.SetElement(1, 2, m.ty*scale)
-	return g
+// Matrix returns m as the matrix [a c tx; b d ty], which takes (x, y) to
+// (a·x + c·y + tx, b·x + d·y + ty).
+func (m Affine) Matrix() (a, b, c, d, tx, ty float64) {
+	return m.a1 + 1, m.b, m.c, m.d1 + 1, m.tx, m.ty
 }

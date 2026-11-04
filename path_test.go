@@ -45,7 +45,7 @@ func TestPathArcFollowsTheCircle(t *testing.T) {
 	if !near(b.Origin.X, 50) || !near(b.Origin.Y, 30) || !near(b.Size.W, 20) || !near(b.Size.H, 40) {
 		t.Fatalf("half arc bounds %v, want the right half of the circle", b)
 	}
-	for _, poly := range p.polygons() {
+	for _, poly := range p.outline.Polygons() {
 		for _, pt := range poly {
 			if d := math.Hypot(pt.X-50, pt.Y-50); !near(d, 20) {
 				t.Fatalf("point %v is %.3f from the centre, want 20", pt, d)
