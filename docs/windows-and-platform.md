@@ -209,6 +209,13 @@ A `Template` icon is drawn from its alpha alone in the menu bar's own color,
 which suits a monochrome glyph. `SetTitle`, `SetTooltip`, `SetIcon` and
 `SetMenu` change a tray, and `Remove` takes it away.
 
+On Windows the icon goes in the taskbar's notification area. A `Template` icon
+is drawn white on a dark taskbar and black on a light one, following the
+setting as it changes. The tray shows no text, so `Title` serves as the tooltip
+when `Tooltip` is empty, and a tray without an `Icon` shows the executable's.
+The menu opens on a click of either button; `OnClick` runs on the primary
+button or Enter. The icons come back if Explorer restarts.
+
 The app runs as long as a window is open, so an app that lives in the tray
 keeps its window and hides it rather than closing it:
 
