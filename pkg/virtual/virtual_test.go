@@ -280,10 +280,14 @@ func TestPlaceAfterMeasureAtMatchesAFreshPlace(t *testing.T) {
 			t.Fatalf("round %d: the anchor moved %v, want %v", round, got, above)
 		}
 	}
-	// Keys changed in place are placed afresh once forgotten.
+	// Keys changed in place are placed afresh once pruned.
 	keys[0], keys[1] = keys[1], keys[0]
+	e.Prune(keys)
+	e.Place(keys, 25, 2)
+	if got, _ := e.Start(1); got != sizes[1]+2 {
+		t.Fatalf("row 1 starts at %v after the keys changed, want %v", got, sizes[1]+2)
+	}
 	e.Measure(keys[0], 1000)
-	e.Forget()
 	e.Place(keys, 25, 2)
 	if got, _ := e.Start(1); got != 1002 {
 		t.Fatalf("row 1 starts at %v after the keys changed, want 1002", got)
