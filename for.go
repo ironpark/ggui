@@ -46,8 +46,12 @@ type EachWidget[T any, K comparable] struct {
 	leaveKeys  []K
 	reduced    bool
 
-	// Entries in the same paint order as children, including leaving rows.
+	// Entries in the same paint order as children, including leaving rows,
+	// and for each child the index of the last item at or before it: its
+	// own item's, or for a leaving row the one before it, -1 for none. It
+	// never decreases, so the child of an item is found by binary search.
 	childEntries []*forEntry[T]
+	childItem    []int
 
 	// The buffers placeLeaving merges children and leaving rows into, the
 	// ones it last merged out of, kept so a list with rows leaving
@@ -389,9 +393,10 @@ func (f *EachWidget[T, K]) Layout(c Constraints, env Env) Size {
 			clear(f.childEntries)
 			f.childEntries = resize(f.childEntries, n)
 			f.children = resize(f.children, n)
+			f.childItem = resize(f.childItem, n)
 			for i := range n {
 				e := f.entry(i)
-				f.children[i], f.childEntries[i] = e.widget, e
+				f.children[i], f.childEntries[i], f.childItem[i] = e.widget, e, i
 			}
 			f.stale = false
 			f.placeLeaving()
@@ -470,16 +475,25 @@ func (f *EachWidget[T, K]) placeLeaving() {
 		n := len(f.children) + kept
 		children := resize(f.spareChildren, n)[:0]
 		entries := resize(f.spareEntries, n)[:0]
+		// Before the merge child c is item c, so childItem is written
+		// afresh rather than merged.
+		items := resize(f.childItem, n)[:0]
 		c := 0
 		for _, e := range f.leaving {
 			for len(children) < e.index && c < len(f.children) {
 				children, entries = append(children, f.children[c]), append(entries, f.childEntries[c])
+				items = append(items, c)
 				c++
 			}
 			children, entries = append(children, e.widget), append(entries, e)
+			items = append(items, c-1)
 		}
 		children = append(children, f.children[c:]...)
 		entries = append(entries, f.childEntries[c:]...)
+		for ; c < len(f.children); c++ {
+			items = append(items, c)
+		}
+		f.childItem = items
 		// The arrays merged out of become the spares, emptied so that they
 		// keep no row that has gone alive.
 		clear(f.children)
@@ -612,7 +626,7 @@ func (f *EachWidget[T, K]) virtual() bool { return f.extent > 0 || f.estimate > 
 func (f *EachWidget[T, K]) layoutEstimated(c Constraints, env Env) Size {
 	est := &f.est
 	if f.stale {
-		est.Prune(f.keys)
+		est.KeysChanged(f.keys)
 		f.stale = false
 	}
 	n := len(f.items)

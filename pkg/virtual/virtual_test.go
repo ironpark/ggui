@@ -76,6 +76,7 @@ func TestAnchorMovesWithTheRowsAboveIt(t *testing.T) {
 	}
 	// A row coming in above moves it by as much again.
 	keys = append([]int{0}, keys...)
+	e.KeysChanged(keys)
 	e.Place(keys, 20, 0)
 	if got := e.TakeMoved(keys); got != 50 {
 		t.Fatalf("TakeMoved after an insert above = %v, want 50", got)
@@ -85,10 +86,12 @@ func TestAnchorMovesWithTheRowsAboveIt(t *testing.T) {
 	}
 	// The anchor gone: nothing to measure from.
 	e.Anchor(keys, 45)
+	e.KeysChanged([]int{4, 5})
 	e.Place([]int{4, 5}, 20, 0)
 	if got := e.Moved([]int{4, 5}); got != 0 {
 		t.Fatalf("Moved with the anchor gone = %v", got)
 	}
+	e.KeysChanged(keys)
 	e.Place(keys, 20, 0)
 	// Past the end there is no row to anchor.
 	e.Anchor(keys, 1e9)
@@ -97,12 +100,12 @@ func TestAnchorMovesWithTheRowsAboveIt(t *testing.T) {
 	}
 }
 
-func TestPruneForgetsRowsThatLeft(t *testing.T) {
+func TestKeysChangedForgetsRowsThatLeft(t *testing.T) {
 	var e Estimate[int]
 	for k := range 10 {
 		e.Measure(k, 100)
 	}
-	e.Prune([]int{2, 3})
+	e.KeysChanged([]int{2, 3})
 	if len(e.measured) != 2 {
 		t.Fatalf("%d sizes kept, want 2", len(e.measured))
 	}
@@ -212,7 +215,7 @@ func BenchmarkEstimateLayout(b *testing.B) {
 	}
 }
 
-func BenchmarkEstimatePrune(b *testing.B) {
+func BenchmarkEstimateKeysChanged(b *testing.B) {
 	keys := make([]int, 10_000)
 	for i := range keys {
 		keys[i] = i
@@ -223,7 +226,7 @@ func BenchmarkEstimatePrune(b *testing.B) {
 		for k := range 12_000 {
 			e.Measure(k, 1)
 		}
-		e.Prune(keys)
+		e.KeysChanged(keys)
 	}
 }
 
@@ -280,9 +283,9 @@ func TestPlaceAfterMeasureAtMatchesAFreshPlace(t *testing.T) {
 			t.Fatalf("round %d: the anchor moved %v, want %v", round, got, above)
 		}
 	}
-	// Keys changed in place are placed afresh once pruned.
+	// Keys changed in place are placed afresh once KeysChanged says so.
 	keys[0], keys[1] = keys[1], keys[0]
-	e.Prune(keys)
+	e.KeysChanged(keys)
 	e.Place(keys, 25, 2)
 	if got, _ := e.Start(1); got != sizes[1]+2 {
 		t.Fatalf("row 1 starts at %v after the keys changed, want %v", got, sizes[1]+2)

@@ -928,3 +928,43 @@ func BenchmarkStickyPlainFrame(b *testing.B) {
 		frame(s, painted)
 	}
 }
+
+// Rows leaving a list with sticky headers keep their places, and the
+// header pinned over the window is still the one of the section it starts
+// in, found among the live rows and pushed out by the next header's.
+func TestStickyHeadersPinAmongLeavingRows(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	defer SetClock(func() time.Time { return now })()
+	list := make([]int, 100)
+	for i := range list {
+		list[i] = i
+	}
+	items := State(list)
+	painted := map[int]Rect{}
+	each := EachKeyed(items, func(v int) int { return v }, func(it EachItem[int]) Widget {
+		v := it.Item
+		return FromFuncs(
+			func(c Constraints, _ Env) Size { return c.Constrain(Sz(100, 20)) },
+			func(_ *Canvas, r Rect) { painted[v] = r },
+		)
+	}).StickyHeaders(func(v int) bool { return v%10 == 0 }).Transition(func(w Widget) *TransitionWidget {
+		return Transition(w).Fade().Duration(time.Hour)
+	})
+	offset := State(250.0)
+	p := NewProbe(Scroll(each).BindOffset(offset), Sz(100, 60))
+	defer p.Close()
+	p.Frame()
+	Remove(items, func(v int) bool { return v == 3 || v == 15 })
+	clear(painted)
+	p.Frame()
+	if painted[10].Origin.Y != 0 {
+		t.Fatalf("with rows leaving, header 10 at %v, want pinned at 0", painted[10])
+	}
+	offset.Set(390)
+	clear(painted)
+	p.Frame()
+	if painted[10].Origin.Y != -10 || painted[20].Origin.Y != 10 {
+		t.Fatalf("with rows leaving at 390: header 10 at %v, 20 at %v; want 10 pushed to -10", painted[10], painted[20])
+	}
+}
