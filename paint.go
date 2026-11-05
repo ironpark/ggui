@@ -9,8 +9,11 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggfx/vector"
+	"github.com/ironpark/ggui/internal/fontsys"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/render"
+	"github.com/ironpark/ggui/internal/textlayout"
+	"github.com/ironpark/ggui/internal/third_party/text"
 	"github.com/ironpark/ggui/pkg/geom"
 )
 
@@ -18,7 +21,8 @@ import (
 // most go first: a rectangle as one batched image, the rest as signed
 // distance fields the render package shades. Paths, gradients, clips to a
 // shape and layers follow. Each culls what lands outside the image, while
-// noting where it would have drawn for a frame painted in part.
+// noting where it would have drawn for a frame painted in part. A line of
+// text drawn by hand comes last.
 
 // visiblePaintBounds tests drawing only; callers must still collect input,
 // semantics and traces. Keep one physical pixel for antialiasing and round to
@@ -836,14 +840,76 @@ func newLayerImage(b image.Rectangle) *ggfx.Image {
 // trimLayers ends a frame for the layer images: it keeps as many as the frame
 // had open at once and frees the rest.
 func (c *Canvas) trimLayers() {
-	if f := c.frame; f != nil {
+	if f := c.frameState; f != nil {
 		f.layers.EndFrame()
 	}
 }
 
 // freeLayers frees every layer image, for an App or Probe that is closing.
 func (c *Canvas) freeLayers() {
-	if f := c.frame; f != nil {
+	if f := c.frameState; f != nil {
 		f.layers.FreeAll()
 	}
 }
+
+// DrawText draws s as one unwrapped line with its top-left corner at the
+// logical point at, in font at size logical pixels; a nil font is the
+// default. A custom widget's Paint draws a label with it in the style its
+// Layout kept from Env.ResolveText, so the label follows the theme; text
+// that wraps, selects or is read by a screen reader is a Text painted with
+// Canvas.Paint.
+func (c *Canvas) DrawText(s string, font *Font, size float64, at Point, col color.Color) {
+	if c == nil || c.Image == nil {
+		return
+	}
+	if font == nil {
+		font = fallbackFont()
+	}
+	op := &text.DrawOptions{}
+	op.ColorScale.ScaleWithColor(col)
+	op.GeoM.Translate(c.px(at.X), c.px(at.Y))
+	fontsys.DrawText(c.Image, s, font.face(c.px(size), 0), op)
+}
+
+// TextWidth measures s as DrawText would draw it, in logical pixels.
+func (c *Canvas) TextWidth(s string, font *Font, size float64) float64 {
+	if font == nil {
+		font = fallbackFont()
+	}
+	return c.dp(textlayout.Width(s, font.face(c.px(size), 0)))
+}
+
+// DrawTextStyle is DrawText in a whole TextStyle: its Font, Size and Color,
+// and its Weight, drawn with the font's face nearest it or along the weight
+// axis of a variable font. A label kept from Env.ResolveText keeps its
+// weight this way; zero fields fall back as a Text's would.
+func (c *Canvas) DrawTextStyle(s string, st TextStyle, at Point) {
+	if c == nil || c.Image == nil {
+		return
+	}
+	st = st.resolved()
+	op := &text.DrawOptions{}
+	op.ColorScale.ScaleWithColor(st.Color)
+	op.GeoM.Translate(c.px(at.X), c.px(at.Y))
+	fontsys.DrawText(c.Image, s, st.Font.face(c.px(st.Size), st.Weight), op)
+}
+
+// TextStyleWidth measures s as DrawTextStyle would draw it, in logical
+// pixels.
+func (c *Canvas) TextStyleWidth(s string, st TextStyle) float64 {
+	st = st.resolved()
+	return c.dp(textlayout.Width(s, st.Font.face(c.px(st.Size), st.Weight)))
+}
+
+// FitText returns s as it fits in width at size, cut with "…" when it is
+// too wide: what Text's Ellipsis draws, for a widget drawing its own.
+func (c *Canvas) FitText(s string, font *Font, size, width float64) string {
+	if font == nil {
+		font = fallbackFont()
+	}
+	return textlayout.Ellipsize(s, font.face(c.px(size), 0), c.px(width), false)
+}
+
+// Physical is r in the pixels of Image, for an Overlay that keeps an image
+// of its own the size of what it draws.
+func (c *Canvas) Physical(r Rect) image.Rectangle { return c.physical(r) }

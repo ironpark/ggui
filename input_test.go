@@ -25,9 +25,9 @@ func paintFrame(in *inputState, w Widget, size Size) {
 	// A frame settles its effects before it lays out, as the runtime's tick
 	// does: a widget that follows a binding has then seen the last write.
 	reactive.Flush()
-	c := Canvas{prev: in.regions}
-	w.Paint(&c, Rct(Pt(0, 0), w.Layout(Tight(size), Env{})))
-	in.regions = c.hits
+	c := withPrev(in.regions)
+	w.Paint(c, Rct(Pt(0, 0), w.Layout(Tight(size), Env{})))
+	in.regions = c.fs().hits
 }
 
 func TestTapFiresOnDownAndUpInside(t *testing.T) {
@@ -1128,17 +1128,18 @@ func BenchmarkInteractiveRegistration(b *testing.B) {
 	for _, n := range []int{100, 1000} {
 		b.Run(fmt.Sprint(n), func(b *testing.B) {
 			c := Canvas{}
+			f := c.fs()
 			old, next := make([]twice, n), make([]twice, n)
 			for i := range old {
 				old[i].SetKey(i)
 				next[i].SetKey(i)
 				old[i].Hit(&c, Rct(Pt(0, float64(i)*20), Sz(100, 20)), &old[i], CursorShapePointer)
 			}
-			c.prev, c.hits = c.hits, make([]hitRegion, 0, n)
+			f.prev, f.hits = f.hits, make([]hitRegion, 0, n)
 			b.ReportAllocs()
 			b.ResetTimer()
 			for k := 0; k < b.N; k++ {
-				c.hits = c.hits[:0]
+				f.hits = f.hits[:0]
 				// A real frame starts here, so whatever adoption builds
 				// once per frame is built again and shows up in the number.
 				c.nextFrame()
@@ -1278,9 +1279,9 @@ func TestRegionLookupFindsTheTopmost(t *testing.T) {
 		c.HitPointer(over, h)
 		c.HitKey(over, h)
 		if painted {
-			in.setRegions(c.hits, c.fs().found)
+			in.setRegions(c.fs().hits, c.fs().found)
 		} else {
-			in.regions = c.hits
+			in.regions = c.fs().hits
 		}
 		for range 2 {
 			if r := in.findPointer(in.pressed); r == nil || r.rect != over {

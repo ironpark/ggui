@@ -142,8 +142,8 @@ func TestTransformNestsAndPaintsThroughALayer(t *testing.T) {
 	img := ggfx.NewImage(100, 100)
 	defer img.Deallocate()
 	p.Draw(img)
-	if p.canvas.frame.layers.Depth() != 0 || layerCount(&p.canvas) != 2 {
-		t.Fatalf("depth %d with %d layers; want two nested layers, all returned", p.canvas.frame.layers.Depth(), layerCount(&p.canvas))
+	if p.canvas.frameState.layers.Depth() != 0 || layerCount(&p.canvas) != 2 {
+		t.Fatalf("depth %d with %d layers; want two nested layers, all returned", p.canvas.frameState.layers.Depth(), layerCount(&p.canvas))
 	}
 	p.Click(Pt(25, 5))
 	taps := tg.taps()
@@ -198,7 +198,7 @@ func TestClipOvalKeepsInputInsideTheOval(t *testing.T) {
 	if len(tg.taps()) != 2 {
 		t.Fatalf("taps %v; want the centre and the right edge", tg.taps())
 	}
-	if p.canvas.frame.layers.Depth() != 0 {
+	if p.canvas.frameState.layers.Depth() != 0 {
 		t.Fatal("a layer was not returned")
 	}
 }
@@ -466,7 +466,7 @@ func TestShadowDoesNotChangeLayoutOrHits(t *testing.T) {
 	}
 	c := &Canvas{}
 	b.Paint(c, Rct(Pt(0, 0), Sz(50, 30)))
-	if len(c.hits) != 0 {
+	if len(c.fs().hits) != 0 {
 		t.Fatal("shadow added hits")
 	}
 	(*Canvas)(nil).Shadow(Rect{}, 0, ShadowStyle{Color: color.Black})

@@ -16,17 +16,9 @@ import (
 // events to those regions, topmost (last painted) first. A nil Canvas paints
 // nothing and collects nothing, which is what layout tests want.
 type Canvas struct {
-	Image          *ggfx.Image
-	focusRequest   KeyHandler
-	focusClaim     *FocusRef // a Focus waiting for the next key region painted
-	revealRequests []Rect
-	inputObservers []inputObserver
-	shortcuts      []paintedShortcut
-
+	Image   *ggfx.Image
 	scale   float64
-	hits    []hitRegion
-	prev    []hitRegion // last frame's regions, for Adopter handoff
-	parent  *Canvas     // set on a Clip; hit regions go to the root
+	parent  *Canvas // set on a Clip
 	clip    Rect
 	clipped bool
 	inert   bool        // registers no hit regions: a widget on its way out
@@ -43,12 +35,13 @@ type Canvas struct {
 	// layer's Canvas draws into an image of its own and clears them.
 	window, onScreen bool
 
-	// frame is the state there is one of per frame rather than one per
-	// Canvas. The root makes it on first use and every Canvas derived from
-	// the root points to the same one, so a field added there is shared by
-	// construction, and reaching it, which every Paint does, takes no walk
-	// up the chain.
-	frame *frameState
+	// frameState is the state there is one of per frame rather than one
+	// per Canvas, the regions registered among it. The root makes it on
+	// first use and every Canvas derived from the root points to the same
+	// one, so a field added there is shared by construction, and reaching
+	// it, which every Paint does, takes no walk up the chain. Reach it with
+	// fs, which makes it.
+	*frameState
 }
 
 // frameState is everything a frame accumulates once: what was painted, what
@@ -73,13 +66,27 @@ type frameState struct {
 	// its screen cannot be read.
 	backdrop bool
 
-	inputView   // where the pointer and focus were as the paint began
-	retained    // what Retain kept, this frame and last
-	adoptIndex  // where last frame's regions are, for adopt
-	canvasPool  // the Canvases Clip hands out
-	traceState  // every widget painted, for the inspector; see inspector.go
-	semState    // the accessibility tree; see semantics.go
-	motionState // what a frame painted in part repaints; see damage.go
+	inputView    // where the pointer and focus were as the paint began
+	paintedInput // what the paint registers for input
+	retained     // what Retain kept, this frame and last
+	adoptIndex   // where last frame's regions are, for adopt
+	canvasPool   // the Canvases Clip hands out
+	traceState   // every widget painted, for the inspector; see inspector.go
+	semState     // the accessibility tree; see semantics.go
+	motionState  // what a frame painted in part repaints; see damage.go
+}
+
+// paintedInput is what a paint registers for input to take when it ends:
+// the hit regions, with the last frame's for Adopter handoff, and the
+// requests, observers and shortcuts widgets made as they painted.
+type paintedInput struct {
+	hits           []hitRegion
+	prev           []hitRegion // last frame's regions, for Adopter handoff
+	focusRequest   KeyHandler
+	focusClaim     *FocusRef // a Focus waiting for the next key region painted
+	revealRequests []Rect
+	inputObservers []inputObserver
+	shortcuts      []paintedShortcut
 }
 
 // inputView is where input stood as the paint began, which the Canvas's
@@ -196,15 +203,15 @@ func (f *canvasPool) resetCanvases() {
 // Probe and the zero Canvas in App rely on. One made by hand with a parent
 // finds its root's the first time and keeps it.
 func (c *Canvas) fs() *frameState {
-	if c.frame != nil {
-		return c.frame
+	if c.frameState != nil {
+		return c.frameState
 	}
 	r := c.root()
-	if r.frame == nil {
-		r.frame = &frameState{}
+	if r.frameState == nil {
+		r.frameState = &frameState{}
 	}
-	c.frame = r.frame
-	return c.frame
+	c.frameState = r.frameState
+	return c.frameState
 }
 
 // overlay is one deferred paint and the semantics node it belongs under.
@@ -289,9 +296,9 @@ func (c *Canvas) Ease(at Anchor, s Slot[*Motion], target float64, d time.Duratio
 // nextFrame moves this frame's retained values to last frame's place and
 // clears the current slots, ready for a paint.
 func (c *Canvas) nextFrame() {
-	c.inputObservers = c.inputObservers[:0]
-	c.shortcuts = c.shortcuts[:0]
 	f := c.fs()
+	f.inputObservers = f.inputObservers[:0]
+	f.shortcuts = f.shortcuts[:0]
 	f.retained.next()
 	// prev is a different slice now, so what adopt knew about it is stale.
 	f.adoptIndex.reset()
@@ -313,7 +320,7 @@ func (c *Canvas) Inert() *Canvas {
 // semantics stay where they are: there is nothing here to clear.
 func (c *Canvas) derive() *Canvas {
 	child := *c
-	child.parent, child.frame = c, c.fs()
+	child.parent, child.frameState = c, c.fs()
 	return &child
 }
 
@@ -620,7 +627,7 @@ func (c *Canvas) ClipReusing(reuse *Canvas, r Rect) *Canvas {
 
 // clipInto makes child the Clip of c to r.
 func (c *Canvas) clipInto(child *Canvas, r Rect) *Canvas {
-	*child = Canvas{parent: c, frame: c.fs(), clip: r, clipped: true, scale: c.scale, inert: c.inert, scope: c.scope, group: c.group, space: c.space, enclosing: c.enclosing, window: c.window, onScreen: c.onScreen}
+	*child = Canvas{parent: c, frameState: c.fs(), clip: r, clipped: true, scale: c.scale, inert: c.inert, scope: c.scope, group: c.group, space: c.space, enclosing: c.enclosing, window: c.window, onScreen: c.onScreen}
 	if c.clipped {
 		child.clip = c.clip.Intersect(r)
 	}
@@ -653,31 +660,27 @@ func (c *Canvas) add(h hitRegion) {
 	if c.space != nil && !c.space.placeRegion(&h) {
 		return
 	}
-	root := c
-	for root.parent != nil {
-		root = root.parent
-	}
-	root.adopt(&h)
-	f := root.fs()
+	f := c.fs()
+	f.adopt(&h)
 	if h.key != nil && f.focusKey != nil && sameAny(h.key, f.focusKey) {
 		f.focusPainted = true
 	}
-	if h.key != nil && root.focusClaim != nil {
-		root.focusRequest, root.focusClaim = h.key, nil
+	if h.key != nil && f.focusClaim != nil {
+		f.focusRequest, f.focusClaim = h.key, nil
 	}
-	i := len(root.hits)
-	if i > 0 && root.hits[i-1].merge(h) {
+	i := len(f.hits)
+	if i > 0 && f.hits[i-1].merge(h) {
 		i--
 	} else {
-		root.hits = append(root.hits, h)
+		f.hits = append(f.hits, h)
 	}
-	f.note(&root.hits[i], i)
+	f.note(&f.hits[i], i)
 }
 
 // adopt hands h's new handlers the ones that held the same region last
 // frame: by ID when h has one, else by Rect.
-func (c *Canvas) adopt(h *hitRegion) {
-	if len(c.prev) == 0 {
+func (f *frameState) adopt(h *hitRegion) {
+	if len(f.prev) == 0 {
 		return
 	}
 	pointer, adoptsPointer := h.pointer.(Adopter)
@@ -685,7 +688,7 @@ func (c *Canvas) adopt(h *hitRegion) {
 	if !adoptsPointer && !adoptsKey {
 		return
 	}
-	old := c.lastFrame(h)
+	old := f.lastFrame(h)
 	if old == nil {
 		return
 	}
@@ -703,22 +706,21 @@ func (c *Canvas) adopt(h *hitRegion) {
 //
 // An ID the language cannot compare, which Interactive.SetKey accepts, matches
 // nothing rather than bringing the process down.
-func (c *Canvas) lastFrame(h *hitRegion) *hitRegion {
-	f := c.fs()
+func (f *frameState) lastFrame(h *hitRegion) *hitRegion {
 	if !f.prevIndexed {
-		c.indexPrev()
+		f.indexPrev()
 	}
 	if h.id != nil {
 		if !comparableID(h.id) {
 			return nil
 		}
 		if i, ok := f.prevByID[h.id]; ok {
-			return &c.prev[i]
+			return &f.prev[i]
 		}
 		return nil
 	}
 	if i, ok := f.prevByRect[h.rect]; ok {
-		return &c.prev[i]
+		return &f.prev[i]
 	}
 	return nil
 }
@@ -726,15 +728,14 @@ func (c *Canvas) lastFrame(h *hitRegion) *hitRegion {
 // indexPrev records where each of last frame's regions is. Walking forward
 // leaves the last of any duplicates in the map, which is the one a scan
 // backwards from the end would have stopped at.
-func (c *Canvas) indexPrev() {
-	f := c.fs()
+func (f *frameState) indexPrev() {
 	f.prevIndexed = true
 	if f.prevByID == nil {
-		f.prevByID = make(map[any]int, len(c.prev))
-		f.prevByRect = make(map[Rect]int, len(c.prev))
+		f.prevByID = make(map[any]int, len(f.prev))
+		f.prevByRect = make(map[Rect]int, len(f.prev))
 	}
-	for i := range c.prev {
-		switch p := &c.prev[i]; {
+	for i := range f.prev {
+		switch p := &f.prev[i]; {
 		case p.id == nil:
 			f.prevByRect[p.rect] = i
 		case comparableID(p.id):
@@ -854,7 +855,7 @@ func (c *Canvas) HitCursor(r Rect, shape CursorShape) {
 // are ignored; normal focus trapping still applies.
 func (c *Canvas) RequestFocus(h KeyHandler) {
 	if c != nil && !c.inert {
-		c.root().focusRequest = h
+		c.fs().focusRequest = h
 	}
 }
 
@@ -865,8 +866,8 @@ func (c *Canvas) RequestFocus(h KeyHandler) {
 // changes, or the user can no longer scroll away from it.
 func (c *Canvas) RequestReveal(r Rect) {
 	if c != nil && !c.inert {
-		root := c.root()
-		root.revealRequests = append(root.revealRequests, c.toWindow(r))
+		f := c.fs()
+		f.revealRequests = append(f.revealRequests, c.toWindow(r))
 	}
 }
 
@@ -887,8 +888,8 @@ func (c *Canvas) Shortcut(chord Chord, fn func()) {
 	if c == nil || c.inert || fn == nil {
 		return
 	}
-	root := c.root()
-	root.shortcuts = append(root.shortcuts, paintedShortcut{chord, fn, c.scope})
+	f := c.fs()
+	f.shortcuts = append(f.shortcuts, paintedShortcut{chord, fn, c.scope})
 }
 
 type inputObserver struct {
@@ -911,6 +912,7 @@ func (c *Canvas) ObserveInput(r Rect, notify func()) {
 		r = c.space.window(r, false)
 	}
 	if !r.Empty() {
-		c.root().inputObservers = append(c.root().inputObservers, inputObserver{r, c.scope, notify})
+		f := c.fs()
+		f.inputObservers = append(f.inputObservers, inputObserver{r, c.scope, notify})
 	}
 }
