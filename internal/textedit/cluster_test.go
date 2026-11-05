@@ -155,3 +155,65 @@ func TestAppendBoundsFindsBoundsWithoutAllocating(t *testing.T) {
 		t.Errorf("AppendBounds allocates %v times, want at most the string's", allocs)
 	}
 }
+
+// NextGrapheme and PrevGrapheme segment only the line around the offset.
+// What they find must be what segmenting the whole text finds, at every
+// offset, inside a rune too: at a line's ends, where a mark, a joiner or
+// a flag's half meets a line break, and across CR LF.
+func TestSteppingALineFindsWhatTheWholeTextHas(t *testing.T) {
+	t.Parallel()
+	texts := []string{
+		"é\né",
+		"👩‍💻\n👩‍💻\n",
+		"\n\ńx‍\n🇰🇷\n🇰",
+		"a\r\nb\r\n\r\nc",
+		"\xff\n\xe2\x80\nz",
+		"한글\n안녕 👍🏽\nok",
+		"no breaks at all, é and 👨‍👩‍👧",
+		"",
+		"\n",
+	}
+	for _, s := range texts {
+		bounds := AppendBounds(nil, s) // the whole text segmented at once
+		for i := -1; i <= len(s)+1; i++ {
+			at := min(max(i, 0), len(s)) // an offset outside the text is its nearer end
+			next := len(s)
+			if k := slices.IndexFunc(bounds, func(b int) bool { return b > at }); k >= 0 {
+				next = bounds[k]
+			}
+			prev := 0
+			for _, b := range bounds {
+				if b < at {
+					prev = b
+				}
+			}
+			if got := NextGrapheme(s, i); got != next {
+				t.Errorf("NextGrapheme(%q, %d) = %d, want %d", s, i, got, next)
+			}
+			if got := PrevGrapheme(s, i); got != prev {
+				t.Errorf("PrevGrapheme(%q, %d) = %d, want %d", s, i, got, prev)
+			}
+		}
+	}
+}
+
+// The line last stepped in is remembered with the text it is in. A text
+// of the same length with its lines elsewhere, as an edit that moves a
+// line break makes, must not be stepped by the other's line.
+func TestSteppingAnotherTextDoesNotReuseItsLine(t *testing.T) {
+	t.Parallel()
+	a, b := "ab\ncd é", "a\nbcd é"
+	for _, c := range []struct {
+		s             string
+		i, next, prev int
+	}{
+		{a, 1, 2, 0}, {b, 1, 2, 0}, {a, 2, 3, 1}, {b, 2, 3, 1}, {a, len(a) - 1, len(a), len(a) - 3}, {b, 3, 4, 2},
+	} {
+		if got := NextGrapheme(c.s, c.i); got != c.next {
+			t.Errorf("NextGrapheme(%q, %d) = %d, want %d", c.s, c.i, got, c.next)
+		}
+		if got := PrevGrapheme(c.s, c.i); got != c.prev {
+			t.Errorf("PrevGrapheme(%q, %d) = %d, want %d", c.s, c.i, got, c.prev)
+		}
+	}
+}

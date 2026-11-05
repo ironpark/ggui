@@ -17,6 +17,7 @@ package text
 import (
 	"image"
 	"slices"
+	"strings"
 	"unicode/utf8"
 
 	"golang.org/x/image/font"
@@ -65,6 +66,7 @@ func NewGoXFace(face font.Face) *GoXFace {
 	g.addr = g
 	g.glyphImageCache = newCache[goXFaceGlyphImageCacheKey, *ggfx.Image](128 * glyphVariationCount(g))
 	g.originXCache = newCache[string, []fixed.Int26_6](512)
+	g.originXCache.own = strings.Clone
 	return g
 }
 

@@ -1,13 +1,18 @@
 package textlayout
 
 import (
+	"fmt"
 	"math"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
+	"unsafe"
 
 	"github.com/ironpark/ggui/internal/fontsys"
+	"github.com/ironpark/ggui/internal/textedit"
 )
 
 func TestWrapSpansCoverTheTextWithinWidth(t *testing.T) {
@@ -111,4 +116,37 @@ func benchParagraph() string {
 		b.WriteByte(' ')
 	}
 	return b.String()
+}
+
+// Wrapping keeps no reference to the text it wrapped: the caches it fills,
+// its own line breaks' and the shaper's, copy what they key on. An editor
+// wraps a new copy of its document at every keystroke, and a cache that
+// kept the lines it was given would keep a whole document for each.
+func TestWrapKeepsNoTextItWasGiven(t *testing.T) {
+	var b strings.Builder
+	for i := range 200 {
+		fmt.Fprintf(&b, "line %d of a document, 한글 and é and a word long enough to wrap\n", i)
+	}
+	buf := []byte(b.String())
+	freed := make(chan struct{})
+	runtime.AddCleanup(&buf[0], func(ch chan struct{}) { close(ch) }, freed)
+	doc := unsafe.String(&buf[0], len(buf))
+	before := WrapSpans(doc, wrapFace(), 120)
+	WrapSpans(doc, fontsys.Builtin().Face(14, 0, nil), 120)
+	if again := WrapSpans(strings.Clone(doc), wrapFace(), 120); !slices.Equal(before, again) {
+		t.Fatalf("the same text wrapped from the caches as %v, want %v", again, before)
+	}
+	// Stepping by grapheme remembers the line it last stepped in, and the
+	// text it is in: step in another.
+	textedit.NextGrapheme("elsewhere", 0)
+	buf, doc = nil, ""
+	for range 20 {
+		runtime.GC()
+		select {
+		case <-freed:
+			return
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	t.Fatal("the text wrapped is still reachable after it was dropped")
 }

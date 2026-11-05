@@ -24,6 +24,7 @@ import (
 	"io"
 	"math"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/ironpark/ggui/internal/third_party/typesetting/bidi"
@@ -50,6 +51,12 @@ type goTextOutputCacheKey struct {
 	language   xlanguage.Tag
 	variations string
 	features   string
+}
+
+// ownOutputKey is k with a text of its own: see cache.own.
+func ownOutputKey(k goTextOutputCacheKey) goTextOutputCacheKey {
+	k.text = strings.Clone(k.text)
+	return k
 }
 
 type goTextGlyph struct {
@@ -433,6 +440,9 @@ func newGoTextFaceSource(face *font.Face, loader *opentype.Loader) *GoTextFaceSo
 	s.outputCache = newCache[goTextOutputCacheKey, *goTextOutputCacheValue](256)
 	s.chunkedGlyphsCache = newCache[goTextOutputCacheKey, []goTextGlyph](256)
 	s.chunkPlanCache = newCache[chunkPlanKey, []chunk.Chunk](512)
+	s.outputCache.own = ownOutputKey
+	s.chunkedGlyphsCache.own = ownOutputKey
+	s.chunkPlanCache.own = func(k chunkPlanKey) chunkPlanKey { k.text = strings.Clone(k.text); return k }
 	// 4 is an arbitrary number, which should not cause troubles.
 	s.shaper.SetFontCacheSize(4)
 	s.initUnscaledMetrics()

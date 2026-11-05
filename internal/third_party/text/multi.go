@@ -16,6 +16,7 @@ package text
 
 import (
 	"errors"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/ironpark/ggfx/vector"
@@ -64,6 +65,7 @@ func NewMultiFace(faces ...Face) (*MultiFace, error) {
 	m := &MultiFace{
 		splitTextCache: newCache[string, []textChunk](32),
 	}
+	m.splitTextCache.own = strings.Clone
 	m.faces = make([]Face, len(faces))
 	copy(m.faces, faces)
 	return m, nil

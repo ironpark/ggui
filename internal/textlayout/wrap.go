@@ -18,6 +18,12 @@ import (
 
 // Width is how wide s draws in face.
 func Width(s string, face text.Face) float64 {
+	// Text with no emoji in it is one run, measured without the iterator,
+	// whose closure and sum would go to the heap: wrapping measures a
+	// line once a word.
+	if f := fontsys.PlainFace(face, s); f != nil {
+		return text.AdvanceAt(s, len(s), f)
+	}
 	width := 0.0
 	for run, f := range fontsys.TextRuns(s, face) {
 		width += text.AdvanceAt(run, len(run), f)
@@ -175,12 +181,16 @@ func wrapParagraph(p string, width func(a, b int) float64, maxW float64) []Span 
 		if wend == start {
 			continue // spaces alone, before the first word
 		}
-		if lineEnd > lineStart && width(lineStart, wend) > maxW {
+		// The line with this word on it, measured once: again only when
+		// the word starts a new line.
+		w := width(lineStart, wend)
+		if lineEnd > lineStart && w > maxW {
 			// Does not fit after what is on the line: break before it.
 			lines = append(lines, Span{lineStart, lineEnd})
 			lineStart, lineEnd = start, start
+			w = width(lineStart, wend)
 		}
-		if width(lineStart, wend) <= maxW {
+		if w <= maxW {
 			lineEnd = wend
 			continue
 		}

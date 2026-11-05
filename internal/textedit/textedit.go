@@ -245,8 +245,11 @@ func (e *Editor) DeleteForward(word bool) {
 // so each line is segmented apart.
 
 // clusterCache holds the cluster boundaries of the strings last stepped
-// through. An entry keeps its string alive, so a string at the same address
-// and length is the same string.
+// through: lines, for NextGrapheme and PrevGrapheme. An entry holds a copy
+// of its string, found again by its contents. Holding the caller's string
+// would keep alive the whole text it was cut from, an editor's document,
+// which each keystroke copies anew; and a line an edit left alone is
+// found again in the text the edit made.
 var clusterCache struct {
 	mu      sync.Mutex
 	seg     segmenter.Segmenter
@@ -254,6 +257,20 @@ var clusterCache struct {
 	offsets []int
 	entries [32]clusterEntry
 	next    int
+
+	// last is the line NextGrapheme or PrevGrapheme stepped in last, in
+	// the string it was found in, which it keeps alive: one string, the
+	// one being stepped through. A caret walking a long line finds it
+	// here, where finding the line's ends again would cost a scan of the
+	// line a step.
+	last lineEntry
+}
+
+// lineEntry is a line of s, s[start:end], and the bounds of its clusters.
+type lineEntry struct {
+	s          string
+	start, end int
+	bounds     []int
 }
 
 type clusterEntry struct {
@@ -267,15 +284,22 @@ func clusterBounds(s string) []int {
 	c := &clusterCache
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	return clusterBoundsLocked(s)
+}
+
+// clusterBoundsLocked is clusterBounds for a caller that holds the cache's
+// lock.
+func clusterBoundsLocked(s string) []int {
+	c := &clusterCache
 	for _, e := range c.entries {
-		if len(e.s) == len(s) && unsafe.StringData(e.s) == unsafe.StringData(s) {
+		if e.bounds != nil && len(e.s) == len(s) && e.s == s { // an empty slot is no empty string
 			return e.bounds
 		}
 	}
 	// One more than the runes is the most bounds there can be, so the
 	// slice is allocated once.
 	bounds := appendBoundsLocked(make([]int, 0, utf8.RuneCountInString(s)+1), s)
-	c.entries[c.next] = clusterEntry{s: s, bounds: bounds}
+	c.entries[c.next] = clusterEntry{s: strings.Clone(s), bounds: bounds}
 	c.next = (c.next + 1) % len(c.entries)
 	return bounds
 }
@@ -367,20 +391,51 @@ func AppendBounds(dst []int, s string) []int {
 
 // NextGrapheme returns the byte offset after the cluster starting at i.
 func NextGrapheme(s string, i int) int {
+	i = max(i, 0)
 	if i >= len(s) {
 		return len(s)
 	}
-	bounds := clusterBounds(s)
-	return bounds[sort.SearchInts(bounds, max(i, 0)+1)]
+	start, bounds := lineClusters(s, i)
+	return start + bounds[sort.SearchInts(bounds, i-start+1)]
 }
 
 // PrevGrapheme returns the byte offset of the cluster ending at i.
 func PrevGrapheme(s string, i int) int {
+	i = min(i, len(s))
 	if i <= 0 {
 		return 0
 	}
-	bounds := clusterBounds(s)
-	return bounds[sort.SearchInts(bounds, min(i, len(s)))-1]
+	start, bounds := lineClusters(s, i-1)
+	return start + bounds[sort.SearchInts(bounds, i-start)-1]
+}
+
+// lineClusters returns where the line holding byte i of s starts, and the
+// bounds of its clusters from there.
+func lineClusters(s string, i int) (int, []int) {
+	c := &clusterCache
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if l := &c.last; len(l.s) == len(s) && unsafe.StringData(l.s) == unsafe.StringData(s) && l.start <= i && i < l.end {
+		return l.start, l.bounds
+	}
+	start, end := lineAround(s, i)
+	bounds := clusterBoundsLocked(s[start:end])
+	c.last = lineEntry{s: s, start: start, end: end, bounds: bounds}
+	return start, bounds
+}
+
+// lineAround returns the line that holds byte i of s, its line break
+// included, as appendBoundsLocked segments s: no cluster crosses its ends,
+// so stepping by cluster segments that line alone. Segmenting all of s
+// instead would cost a keystroke in a long text as much as the text,
+// since each one makes a new string.
+func lineAround(s string, i int) (start, end int) {
+	start = strings.LastIndexByte(s[:i], '\n') + 1
+	end = len(s)
+	if k := strings.IndexByte(s[i:], '\n'); k >= 0 {
+		end = i + k + 1
+	}
+	return start, end
 }
 
 // SelectLine selects the line around i, from the hard line break before

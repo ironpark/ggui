@@ -1,6 +1,7 @@
 package textlayout
 
 import (
+	"strings"
 	"sync"
 	"unicode/utf8"
 
@@ -39,7 +40,10 @@ func lineBreaks(p string) []int {
 	if c.cur == nil {
 		c.cur = make(map[string][]int, lineBreakCacheSize)
 	}
-	c.cur[p] = breaks
+	// The key is a copy: p is most often a line cut from a longer text,
+	// an editor's document, which a new one replaces at each keystroke,
+	// and as a key it would keep that whole text alive for each line.
+	c.cur[strings.Clone(p)] = breaks
 	return breaks
 }
 
