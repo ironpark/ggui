@@ -31,8 +31,14 @@ const (
 // squareGlyph is the box a checkbox or radio draws itself in.
 func squareGlyph(t uitheme.Theme) ggui.Size { return ggui.Sz(t.ControlSize, t.ControlSize) }
 
-// sprint is the default option label.
-func sprint[T any](v T) string { return fmt.Sprint(v) }
+// sprint is the default option label. A string is its own label, without
+// the allocation fmt makes for it: a Select describes its value every frame.
+func sprint[T any](v T) string {
+	if s, ok := any(v).(string); ok {
+		return s
+	}
+	return fmt.Sprint(v)
+}
 
 // pick, bounded and clamp come from pkg/gem, shared with ggui, so the two
 // agree on clamp's contradicting bounds: see gem.Clamp.
