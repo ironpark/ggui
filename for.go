@@ -24,7 +24,9 @@ type EachWidget[T any, K comparable] struct {
 	emptyDispose Cleanup
 	key          func(int, T) K
 	build        func(EachItem[T]) Widget
-	retain       int // offscreen rows kept mounted with ItemExtent; 0 keeps all
+	retain       int               // offscreen rows kept mounted with ItemExtent; 0 keeps all
+	itemEq       func(a, b T) bool // see ItemEqual, when itemEqSet
+	itemEqSet    bool
 	frame        uint64
 	owner        *reactive.Computation
 	items        []T
@@ -95,6 +97,12 @@ type EachItem[T any] struct {
 // values and indices change. Factories run untracked once per row instance.
 // Rows lay out vertically unless Horizontal is set. ItemExtent virtualizes
 // fixed-size rows inside Scroll; Else mounts an empty-list branch.
+//
+// When the list changes, each kept row's Value is told of its item only if
+// the item differs from the one it held, by T's Equal method or by ==. A T
+// with neither, such as a struct holding a slice, cannot be compared, so
+// every kept row is told and whatever reads its Value runs again, for any
+// change to the list; ItemEqual supplies the comparison.
 func EachKeyed[T any, K comparable](items Readable[[]T], key func(T) K, build func(EachItem[T]) Widget) *EachWidget[T, K] {
 	return each(items, func(_ int, value T) K { return key(value) }, build)
 }
@@ -318,6 +326,24 @@ func (f *EachWidget[T, K]) ItemExtent(v float64) *EachWidget[T, K] {
 // stays. A row holding focus or a pointer capture is never evicted.
 func (f *EachWidget[T, K]) Retain(n int) *EachWidget[T, K] { f.checkConfig(); f.retain = n; return f }
 
+// ItemEqual compares a row's item with the one it held when the list
+// changes, so that a row whose item is the same is not told of it, for an
+// item type with no Equal method that == cannot compare:
+//
+//	ggui.EachKeyed(files, File.Path, row).ItemEqual(func(a, b File) bool {
+//		return a.Path == b.Path && a.Size == b.Size && slices.Equal(a.Tags, b.Tags)
+//	})
+//
+// It replaces the comparison T has of its own, and nil makes every kept row
+// told of every change. An item changed in place, through a pointer or a
+// slice it shares with the one before, compares equal to itself however
+// eq is written: give the list a new item for a row that should update.
+func (f *EachWidget[T, K]) ItemEqual(eq func(a, b T) bool) *EachWidget[T, K] {
+	f.checkConfig()
+	f.itemEq, f.itemEqSet = eq, true
+	return f
+}
+
 // Len returns the number of items the list currently holds.
 func (f *EachWidget[T, K]) Len() int { return len(f.items) }
 
@@ -327,6 +353,9 @@ func (f *EachWidget[T, K]) entry(i int) *forEntry[T] {
 	e := f.entries[k]
 	if e == nil {
 		e = &forEntry[T]{item: State(f.items[i]), position: State(i)}
+		if f.itemEqSet {
+			e.item.WithEqual(f.itemEq)
+		}
 		reactive.WithOwner(f.owner, func() {
 			e.dispose = reactive.RootWith(e, fmt.Sprint(k), func() {
 				e.widget = remembering(func() Widget { return f.build(EachItem[T]{Value: e.item, Index: e.position, Item: f.items[i]}) })
@@ -607,7 +636,7 @@ func (f *EachWidget[T, K]) layoutEstimated(c Constraints, env Env) Size {
 		e := f.entry(i)
 		e.seen = f.frame
 		s := e.widget.Layout(f.constraints(0, Unbounded, crossMin, crossMax), env)
-		resized = est.Measure(f.keys[i], f.main(s)) || resized
+		resized = est.MeasureAt(i, f.keys[i], f.main(s)) || resized
 		f.visible = append(f.visible, e.widget)
 		f.virtualRects = append(f.virtualRects, Rect{Size: s})
 		crossUsed = max(crossUsed, f.cross(s))
