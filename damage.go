@@ -437,20 +437,35 @@ func noteCaller(why dirtyReason) {
 	}
 }
 
-// callerOutside returns the first call site outside this package, past
-// the function calling it: what in an app or a widget package started an
-// animation, say.
-func callerOutside() uintptr {
-	var pcs [12]uintptr
-	n := runtime.Callers(3, pcs[:])
-	frames := runtime.CallersFrames(pcs[:n])
+// callStack is the call stack past a function that recorded it, kept
+// unresolved: what in an app or a widget package started an animation,
+// say. Turning program counters into frames is what cost an animation's
+// start most of its time, and a report needs only the animations still
+// running when a frame is counted, so outside resolves it then, once.
+type callStack struct {
+	pcs [12]uintptr
+	n   int
+	pc  uintptr // the call site outside this package, once resolved
+}
+
+// callerStack records the stack past the function calling it.
+func callerStack() (s callStack) {
+	s.n = runtime.Callers(3, s.pcs[:])
+	return s
+}
+
+// outside returns the first call site in s outside this package,
+// resolving it on the first call.
+func (s *callStack) outside() uintptr {
+	if s.pc != 0 || s.n == 0 {
+		return s.pc
+	}
+	frames := runtime.CallersFrames(s.pcs[:s.n])
 	for {
 		f, more := frames.Next()
-		if !strings.HasPrefix(f.Function, "github.com/ironpark/ggui.") {
-			return f.PC
-		}
-		if !more {
-			return f.PC
+		if !strings.HasPrefix(f.Function, "github.com/ironpark/ggui.") || !more {
+			s.pc = f.PC
+			return s.pc
 		}
 	}
 }

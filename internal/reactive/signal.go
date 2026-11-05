@@ -246,16 +246,33 @@ func (e *Computation) reset() {
 		child.dispose()
 	}
 
-	WithOwner(nil, func() {
-		for _, v := range slices.Backward(e.cleanups) {
-			v()
-		}
-	})
+	// The cleanups and sources slices are kept for the next run, emptied,
+	// so that a computation running again allocates nothing to record what
+	// it reads: every re-run used to grow both afresh. The cleanups are
+	// taken first, so that one which somehow registers another sees an
+	// empty list rather than the one being run.
+	cleanups := e.cleanups
 	e.cleanups = nil
+	if len(cleanups) > 0 {
+		WithOwner(nil, func() {
+			for _, v := range slices.Backward(cleanups) {
+				v()
+			}
+		})
+	}
 	for _, s := range e.sources {
 		s.unsubscribe(e)
 	}
-	e.sources = nil
+	if e.disposed {
+		e.sources = nil
+		return
+	}
+	clear(cleanups)
+	if e.cleanups == nil {
+		e.cleanups = cleanups[:0]
+	}
+	clear(e.sources)
+	e.sources = e.sources[:0]
 }
 
 func (e *Computation) dispose() {
@@ -441,15 +458,26 @@ func (s *StateValue[T]) producer() *Computation { return s.memo }
 // markSubsCheck implements downstream: every reader of this memo may now be
 // stale. Collected under the lock and marked outside it, as Set does.
 func (s *StateValue[T]) markSubsCheck() {
+	// This recurses down a chain of memos, so each level copies into an
+	// array on its own stack: a buffer shared through the scope would be
+	// taken by the outermost level and leave every inner one allocating.
+	var small [8]*Computation
 	s.mu.Lock()
-	subs := make([]*Computation, 0, len(s.subs))
-	for e := range s.subs {
-		subs = append(subs, e)
-	}
+	subs := s.copySubs(small[:0])
 	s.mu.Unlock()
 	for _, e := range subs {
 		markCheck(e)
 	}
+}
+
+// copySubs appends the subscribers to buf, under the lock the caller
+// holds. Marking happens after the lock is released, as marking another
+// value's readers takes that value's lock.
+func (s *StateValue[T]) copySubs(buf []*Computation) []*Computation {
+	for e := range s.subs {
+		buf = append(buf, e)
+	}
+	return buf
 }
 
 func (s *StateValue[T]) unsubscribe(e *Computation) {
@@ -487,15 +515,19 @@ func (s *StateValue[T]) store(sc *scope, v T) {
 			sc.onFree()
 		}
 	}
-	subs := make([]*Computation, 0, len(s.subs))
-	for e := range s.subs {
-		subs = append(subs, e)
-	}
+	// The copy goes into the scope's scratch buffer, taken for the length
+	// of the marking, so a write reaching a thousand readers allocates
+	// nothing. Marking runs no user code, but a write it somehow led to
+	// would find the buffer gone and make its own.
+	subs := s.copySubs(sc.subsScratch[:0])
+	sc.subsScratch = nil
 	s.mu.Unlock()
 
 	for _, e := range subs {
 		markDirty(e)
 	}
+	clear(subs)
+	sc.subsScratch = subs[:0]
 }
 
 // Update applies fn to the current value and stores the result. Like Set
@@ -899,6 +931,11 @@ type effectSet struct {
 	// The effects the last pass ran, kept for ErrCycle. The slice is
 	// reused, so a settled frame allocates nothing for it.
 	lastPass []*Computation
+
+	// passBuf is runPass's sorted copy of the queue, kept from pass to
+	// pass and taken while one runs, so that a flush nested in a binding
+	// makes its own.
+	passBuf []*Computation
 }
 
 // Runtime is one reactive graph's scheduler: the computations it owns and
@@ -1028,16 +1065,32 @@ func (h *orderHeap) Pop() any {
 // marked while the pass runs joins it if it comes later in that order, and
 // waits for the next pass if it comes earlier, as the scan would leave it.
 //
-// The pass is a heap of its own, not a buffer of the set, since a binding
-// may flush in the middle of one.
+// The queue is sorted once and walked in order. Only what is marked while
+// the pass runs, usually nothing, goes into a heap, merged with the walk
+// by order: heaping the whole queue spent a third of a large flush in
+// container/heap's interface calls. The sorted copy is taken from the set
+// for the length of the pass, since a binding may flush in the middle of
+// one.
 func (s *effectSet) runPass() (ran bool) {
-	pass := orderHeap(slices.Clone(s.queue))
+	pass := append(s.passBuf[:0], s.queue...)
+	s.passBuf = nil
+	defer func() {
+		clear(pass)
+		s.passBuf = pass[:0]
+	}()
 	clear(s.queue)
 	s.queue = s.queue[:0]
-	heap.Init(&pass)
+	slices.SortFunc(pass, func(a, b *Computation) int { return cmp.Compare(a.order, b.order) })
+	var marked orderHeap
 	var later []*Computation
-	for pass.Len() > 0 {
-		e := heap.Pop(&pass).(*Computation)
+	for i := 0; i < len(pass) || marked.Len() > 0; {
+		var e *Computation
+		if marked.Len() > 0 && (i == len(pass) || marked[0].order < pass[i].order) {
+			e = heap.Pop(&marked).(*Computation)
+		} else {
+			e = pass[i]
+			i++
+		}
 		e.queued = false
 		if Refresh(e) {
 			ran = true
@@ -1045,7 +1098,7 @@ func (s *effectSet) runPass() (ran bool) {
 		}
 		for _, n := range s.queue {
 			if n.order > e.order {
-				heap.Push(&pass, n)
+				heap.Push(&marked, n)
 			} else {
 				later = append(later, n)
 			}

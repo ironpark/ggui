@@ -611,3 +611,89 @@ func BenchmarkForFrame(b *testing.B) {
 		}
 	}
 }
+
+// Many rows removed at once with a Transition each leave from their own
+// place: the leaving rows are merged back among the rest in the order of
+// the places they left, however the removals were ranged over, and a row
+// whose item comes back mid-leave returns to the list.
+func TestForManyRowsLeaveInTheirPlaces(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	defer SetClock(func() time.Time { return now })()
+	ids := make([]int, 20)
+	for i := range ids {
+		ids[i] = i
+	}
+	items := State(ids)
+	painted := map[int]Rect{}
+	list := EachKeyed(items, func(i int) int { return i }, func(row EachItem[int]) Widget {
+		i := row.Item
+		return FromFuncs(
+			func(c Constraints, _ Env) Size { return c.Constrain(Sz(50, 10)) },
+			func(_ *Canvas, rect Rect) { painted[i] = rect },
+		)
+	}).Transition(func(w Widget) *TransitionWidget {
+		return Transition(w).Fade().Duration(100 * time.Millisecond)
+	})
+	p := NewProbe(list, Sz(100, 400))
+	defer p.Close()
+	p.Frame()
+	now = now.Add(time.Second)
+	p.Frame()
+	gone := map[int]bool{0: true, 1: true, 2: true, 7: true, 8: true, 13: true, 19: true}
+	Remove(items, func(i int) bool { return gone[i] })
+	clear(painted)
+	p.Frame()
+	for i := range ids {
+		if r, ok := painted[i]; !ok || r.Origin.Y != float64(i*10) {
+			t.Fatalf("row %d painted at %+v (painted %t) while rows leave, want at y=%d", i, r, ok, i*10)
+		}
+	}
+	// 8 comes back before it has gone; the rest finish leaving.
+	Append(items, 8)
+	now = now.Add(time.Second)
+	clear(painted)
+	p.Frame()
+	p.Frame()
+	if len(list.leaving) != 0 || len(list.leaveKeys) != 0 {
+		t.Fatalf("%d rows still leaving after their Transition ended", len(list.leaving))
+	}
+	if _, ok := painted[8]; !ok || len(painted) != len(ids)-len(gone)+1 {
+		t.Fatalf("painted %d rows, with 8 %v, want %d with 8 back", len(painted), painted[8], len(ids)-len(gone)+1)
+	}
+	for k := range gone {
+		if _, ok := painted[k]; ok && k != 8 {
+			t.Fatalf("row %d painted after it left", k)
+		}
+	}
+}
+
+// Clearing a list whose rows have a Transition: every removed row's place
+// is found in one map rather than by searching the list for each.
+func BenchmarkForClearWithTransition(b *testing.B) {
+	for _, n := range []int{1000, 4000} {
+		b.Run(fmt.Sprint(n), func(b *testing.B) {
+			ids := make([]int, n)
+			for i := range ids {
+				ids[i] = i
+			}
+			items := State(ids)
+			p := ProbeBuilder(func() Widget {
+				return EachKeyed(items, func(id int) int { return id }, func(EachItem[int]) Widget {
+					return Box().Size(1, 1)
+				}).Transition(func(w Widget) *TransitionWidget { return Transition(w).Fade().Duration(time.Hour) })
+			}, Sz(100, 100))
+			defer p.Close()
+			p.Frame()
+			b.ReportAllocs()
+			for b.Loop() {
+				items.Set(nil)
+				p.Frame()
+				b.StopTimer()
+				items.Set(ids)
+				p.Frame()
+				b.StartTimer()
+			}
+		})
+	}
+}

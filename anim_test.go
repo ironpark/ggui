@@ -631,3 +631,40 @@ func TestTimelineDurationCutToZeroMidRunLands(t *testing.T) {
 		t.Fatalf("after Duration(0): progress %v running %v done %d", Untrack(tl.Get), tl.Running(), done)
 	}
 }
+
+// A tween set again while it runs, as one retargeted every frame is, stays
+// registered once, and one stopped and started again takes a place of its
+// own beside the others without disturbing theirs.
+func TestTweenSetTwiceRegistersOnce(t *testing.T) {
+	t.Parallel()
+	a := &activeWorld().anims
+	a.list, a.origins = nil, nil
+	tw, other := Tween(0.0, time.Second), Tween(0.0, time.Second)
+	tw.Set(10)
+	tw.Set(20)
+	other.Set(5)
+	tw.Set(30)
+	count := func(s stepper) (n int) {
+		for _, x := range a.list {
+			if x == s {
+				n++
+			}
+		}
+		return n
+	}
+	if count(tw) != 1 || count(other) != 1 || len(a.origins) != len(a.list) {
+		t.Fatalf("registered %d and %d times, %d origins for %d animations", count(tw), count(other), len(a.origins), len(a.list))
+	}
+	tw.Jump(0)
+	if count(tw) != 0 || count(other) != 1 {
+		t.Fatal("Jump did not take the tween out, or took the other with it")
+	}
+	tw.Set(40)
+	other.Set(6)
+	if count(tw) != 1 || count(other) != 1 {
+		t.Fatalf("after a restart registered %d and %d times", count(tw), count(other))
+	}
+	if a.origins[0].outside() == 0 {
+		t.Fatal("the place an animation was started is not known")
+	}
+}

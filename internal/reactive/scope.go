@@ -35,6 +35,10 @@ type scope struct {
 	// base is the runtime what this goroutine creates with no owner
 	// belongs to; see Base.
 	base *Runtime
+
+	// subsScratch is where a write copies its readers before marking
+	// them, kept from write to write; see StateValue.store.
+	subsScratch []*Computation
 }
 
 // scopes holds a scope for every goroutine that has entered one. They are

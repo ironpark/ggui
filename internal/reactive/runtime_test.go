@@ -157,3 +157,65 @@ func TestRuntimesRunOnGoroutinesOfTheirOwn(t *testing.T) {
 		}
 	}
 }
+
+// A flush walks its queue in creation order, and a computation marked
+// while the pass runs joins it in that order if it comes later than the
+// one that marked it, or waits for the next pass if it comes earlier: the
+// sorted queue and the heap of what was marked meanwhile merge as one.
+func TestFlushOrdersComputationsMarkedMidPass(t *testing.T) {
+	s, mid := State(0), State(0)
+	var log []string
+	dispose := Root(func() {
+		Observe(func() { mid.Get(); log = append(log, "early") })
+		Observe(func() {
+			if v := s.Get(); v > 0 {
+				mid.Set(v)
+			}
+			log = append(log, "writer")
+		})
+		Observe(func() { mid.Get(); log = append(log, "between") })
+		Observe(func() { s.Get(); log = append(log, "last") })
+	})
+	defer dispose()
+	Flush()
+	log = nil
+	s.Set(1)
+	if !Flush() {
+		t.Fatal("the flush did not settle")
+	}
+	if got, want := fmt.Sprint(log), "[writer between last early]"; got != want {
+		t.Fatalf("ran %s, want %s", got, want)
+	}
+}
+
+// Running again reuses what the last run recorded its reads and cleanups
+// in, and a re-run reading fewer values leaves none of the old ones
+// subscribed.
+func TestRerunDropsReadsItNoLongerMakes(t *testing.T) {
+	a, b, gate := State(0), State(0), State(true)
+	runs, cleaned := 0, 0
+	dispose := Root(func() {
+		Observe(func() {
+			runs++
+			a.Get()
+			if gate.Get() {
+				b.Get()
+			}
+			OnCleanup(func() { cleaned++ })
+		})
+	})
+	defer dispose()
+	gate.Set(false)
+	Flush()
+	runs = 0
+	b.Set(1)
+	Flush()
+	if runs != 0 {
+		t.Fatalf("a value read only by an earlier run ran the computation %d times", runs)
+	}
+	a.Set(1)
+	Flush()
+	if runs != 1 || cleaned != 2 {
+		t.Fatalf("runs %d and cleanups %d after a write, want 1 and 2", runs, cleaned)
+	}
+}

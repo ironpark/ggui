@@ -47,6 +47,12 @@ type EachWidget[T any, K comparable] struct {
 	// Entries in the same paint order as children, including leaving rows.
 	childEntries []*forEntry[T]
 
+	// The buffers placeLeaving merges children and leaving rows into, the
+	// ones it last merged out of, kept so a list with rows leaving
+	// allocates nothing frame to frame.
+	spareChildren []Widget
+	spareEntries  []*forEntry[T]
+
 	// The virtual path: the range of items laid out this frame and their
 	// widgets; rects are indexed the same way. Those rects live in
 	// virtualRects, owned here, never in the flow engine's borrowed buffer.
@@ -129,21 +135,43 @@ func each[T any, K comparable](items Readable[[]T], key func(int, T) K, build fu
 				}
 				seen[k], keys[i] = true, k
 			}
+			// Where each removed row was is looked up in one map of the
+			// last list, made only when a row is removed with a
+			// Transition: searching the list for every removed key made
+			// clearing a long list quadratic.
+			var was map[K]int
+			leaving := len(f.leaving)
 			for k, e := range f.entries {
-				if !seen[k] {
-					f.remove(k, e)
-				}
-			}
-			for i := 0; i < len(f.leaving); i++ {
-				if !seen[f.leaveKeys[i]] {
+				if seen[k] {
 					continue
 				}
-				f.entries[f.leaveKeys[i]] = f.leaving[i]
-				f.leaving[i].transition().drive(1, false)
-				f.leaving = slices.Delete(f.leaving, i, i+1)
-				f.leaveKeys = slices.Delete(f.leaveKeys, i, i+1)
-				i--
+				if was == nil && f.leaves(e) {
+					was = make(map[K]int, len(f.keys))
+					for i, k := range f.keys {
+						was[k] = i
+					}
+				}
+				f.remove(k, e, was)
 			}
+			if len(f.leaving) > leaving {
+				f.sortLeaving()
+			}
+			// Rows whose items came back return from leaving, in one pass
+			// over the rows on their way out.
+			kept := 0
+			for i, e := range f.leaving {
+				k := f.leaveKeys[i]
+				if seen[k] {
+					f.entries[k] = e
+					e.transition().drive(1, false)
+					continue
+				}
+				f.leaving[kept], f.leaveKeys[kept] = e, k
+				kept++
+			}
+			clear(f.leaving[kept:])
+			clear(f.leaveKeys[kept:])
+			f.leaving, f.leaveKeys = f.leaving[:kept], f.leaveKeys[:kept]
 			for i, k := range keys {
 				if e := f.entries[k]; e != nil {
 					e.item.Set(list[i])
@@ -176,18 +204,47 @@ func (f *EachWidget[T, K]) Else(build func() Widget) *EachWidget[T, K] {
 	return f
 }
 
+// leaves reports whether the row e, once its item is removed, plays its
+// Transition backwards rather than going at once.
+func (f *EachWidget[T, K]) leaves(e *forEntry[T]) bool {
+	return f.transition != nil && !f.virtual() && !f.reduced && e.transition() != nil
+}
+
 // remove takes the row for k out of the list: disposed at once, or kept
-// while it plays its Transition backwards.
-func (f *EachWidget[T, K]) remove(k K, e *forEntry[T]) {
+// while it plays its Transition backwards. was holds each key's index in
+// the list before this change, wherever a row leaves.
+func (f *EachWidget[T, K]) remove(k K, e *forEntry[T], was map[K]int) {
 	delete(f.entries, k)
-	if f.transition == nil || f.virtual() || f.reduced || e.transition() == nil {
+	if !f.leaves(e) {
 		e.dispose()
 		return
 	}
-	e.index = slices.Index(f.keys, k)
+	i, ok := was[k]
+	if !ok {
+		i = -1
+	}
+	e.index = i
 	e.since = Now()
 	f.leaving = append(f.leaving, e)
 	f.leaveKeys = append(f.leaveKeys, k)
+}
+
+// sortLeaving puts the rows on their way out in the order of the places
+// they left, which placeLeaving merges them back in by. Rows were removed
+// in the order a map ranges, so without it one leaving row could land
+// beside another's place instead of its own.
+func (f *EachWidget[T, K]) sortLeaving() {
+	order := make([]int, len(f.leaving))
+	for i := range order {
+		order[i] = i
+	}
+	slices.SortStableFunc(order, func(a, b int) int { return cmp.Compare(f.leaving[a].index, f.leaving[b].index) })
+	leaving := make([]*forEntry[T], len(order))
+	keys := make([]K, len(order))
+	for i, j := range order {
+		leaving[i], keys[i] = f.leaving[j], f.leaveKeys[j]
+	}
+	f.leaving, f.leaveKeys = leaving, keys
 }
 
 // Transition wraps every row in the Transition wrap returns, so a row
@@ -357,10 +414,14 @@ type forRowKey[K comparable] struct{ k K }
 // their old places, drives their Transitions by the time since removal,
 // and drops the ones that finished. The list lays out every frame while
 // any is leaving.
+//
+// The rows still leaving are merged with the children in one pass, in the
+// order of their places, as inserting each where it was would have put
+// them: inserting them one at a time moved the whole list for each.
 func (f *EachWidget[T, K]) placeLeaving() {
 	now := Now()
-	for i := 0; i < len(f.leaving); i++ {
-		e := f.leaving[i]
+	kept := 0
+	for i, e := range f.leaving {
 		t := e.transition()
 		p := 1.0
 		if t.duration > 0 {
@@ -368,15 +429,35 @@ func (f *EachWidget[T, K]) placeLeaving() {
 		}
 		if p <= 0 {
 			e.dispose()
-			f.leaving = slices.Delete(f.leaving, i, i+1)
-			f.leaveKeys = slices.Delete(f.leaveKeys, i, i+1)
-			i--
 			continue
 		}
 		t.drive(p, true)
-		at := min(max(e.index, 0), len(f.children))
-		f.children = slices.Insert(f.children, at, e.widget)
-		f.childEntries = slices.Insert(f.childEntries, at, e)
+		f.leaving[kept], f.leaveKeys[kept] = e, f.leaveKeys[i]
+		kept++
+	}
+	clear(f.leaving[kept:])
+	clear(f.leaveKeys[kept:])
+	f.leaving, f.leaveKeys = f.leaving[:kept], f.leaveKeys[:kept]
+	if kept > 0 {
+		n := len(f.children) + kept
+		children := resize(f.spareChildren, n)[:0]
+		entries := resize(f.spareEntries, n)[:0]
+		c := 0
+		for _, e := range f.leaving {
+			for len(children) < e.index && c < len(f.children) {
+				children, entries = append(children, f.children[c]), append(entries, f.childEntries[c])
+				c++
+			}
+			children, entries = append(children, e.widget), append(entries, e)
+		}
+		children = append(children, f.children[c:]...)
+		entries = append(entries, f.childEntries[c:]...)
+		// The arrays merged out of become the spares, emptied so that they
+		// keep no row that has gone alive.
+		clear(f.children)
+		clear(f.childEntries)
+		f.spareChildren, f.spareEntries = f.children[:0], f.childEntries[:0]
+		f.children, f.childEntries = children, entries
 	}
 	if len(f.leaving) > 0 {
 		reactive.RequestLayout()
