@@ -204,7 +204,7 @@ func TestEmojiPointerCaretAndBackspace(t *testing.T) {
 			w := TextInput(value)
 			w.Layout(Tight(Sz(300, 30)), rootEnv())
 			for x := 0.0; x <= w.advance(s)+5; x += .5 {
-				i := w.indexInLine(textlayout.Span{Start: 0, End: len(s)}, x)
+				i := w.indexOnLine(w.wrap(s), 0, x)
 				if i != 0 && i != len(s) {
 					t.Fatalf("click at x=%v placed caret inside emoji at byte %d/%d", x, i, len(s))
 				}
