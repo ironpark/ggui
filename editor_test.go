@@ -445,8 +445,8 @@ func TestNoWrapLayoutCountsLinesWithoutTheirTable(t *testing.T) {
 	one := TextInput(State("one")).NoWrap()
 	h3 := w.Layout(Loose(Sz(200, Unbounded)), Env{}).H
 	h1 := one.Layout(Loose(Sz(200, Unbounded)), Env{}).H
-	if h3 <= h1 || w.wrapped.spans != nil {
-		t.Fatalf("six lines %v tall against one's %v; line table made: %v", h3, h1, w.wrapped.spans != nil)
+	if h3 <= h1 || w.wrapped[0].spans != nil {
+		t.Fatalf("six lines %v tall against one's %v; line table made: %v", h3, h1, w.wrapped[0].spans != nil)
 	}
 }
 
@@ -1092,4 +1092,159 @@ func TestTextInputMetaArrowsKeepToTheLine(t *testing.T) {
 	if got := Untrack(value.Get); got != "one\ntwo\nthree" {
 		t.Fatalf("moving edited the text: %q", got)
 	}
+}
+
+// editorDoc is a text of n lines, some wrapping at the widths the tests
+// lay it out at, some blank.
+func editorDoc(n int) string {
+	words := strings.Fields("the quick brown fox jumps over the lazy dog and keeps on running far away 한글 é")
+	var lines []string
+	for i := range n {
+		if i%7 == 3 {
+			lines = append(lines, "")
+			continue
+		}
+		lines = append(lines, strings.Join(words[:1+i%len(words)], " "))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// A multiline editor wraps an edit again line by line, keeping the lines
+// it did not change; what it finds must be what wrapping the whole text
+// afresh finds, after edits anywhere, edits that split and join lines,
+// and a new width or size, which change every line.
+func TestTextInputWrapsEditsAsTheWholeText(t *testing.T) {
+	t.Parallel()
+	useFakeIME(t)
+	w := TextInput(State(editorDoc(60))).Multiline()
+	layout := func(width float64) { w.Layout(Loose(Sz(width, Unbounded)), Env{}) }
+	check := func(what string) {
+		t.Helper()
+		got := w.spans(w.ed.Text)
+		if want := textlayout.WrapSpans(w.ed.Text, w.face(1), w.width); !slices.Equal(got, want) {
+			t.Fatalf("after %s, the wrap is %v, want %v", what, got, want)
+		}
+	}
+	layout(160)
+	check("the first layout")
+	edit := func(what string, at func() int, s string) {
+		t.Helper()
+		w.ed.MoveTo(at(), false)
+		w.ed.Replace(s)
+		layout(160)
+		check(what)
+	}
+	edit("typing at the start", func() int { return 0 }, "x")
+	edit("typing in the middle", func() int { return len(w.ed.Text) / 2 }, " more words to wrap ")
+	edit("typing at the end", func() int { return len(w.ed.Text) }, " the end")
+	edit("splitting a line", func() int { return len(w.ed.Text) / 3 }, "\n")
+	edit("pasting lines", func() int { return len(w.ed.Text) / 4 }, "one\ntwo three four five six seven\n\nfour")
+	// Joining lines: delete the line break after the middle.
+	w.ed.MoveTo(strings.IndexByte(w.ed.Text[len(w.ed.Text)/2:], '\n')+len(w.ed.Text)/2+1, false)
+	w.ed.Backspace(false)
+	layout(160)
+	check("joining two lines")
+	w.ed.SelectAll()
+	w.ed.Replace(editorDoc(20))
+	layout(160)
+	check("replacing the text")
+	layout(97)
+	check("narrowing")
+	w.Style(TextStyle{Size: 23})
+	layout(97)
+	check("a new size")
+	for i := range 300 { // edits leave lines no wrap uses, which go
+		edit("typing", func() int { return 0 }, string(rune('a'+i%26)))
+	}
+	if n, lines := len(w.lines.byText), strings.Count(w.ed.Text, "\n")+1; n > 2*lines+64 {
+		t.Errorf("%d lines kept for a text of %d", n, lines)
+	}
+}
+
+// While the IME composes, paint wraps the text with the composition in
+// it and the rest the text without: each is wrapped once, as the whole
+// text would wrap, however often the two are asked for in turn.
+func TestTextInputComposingWrapsEachTextOnce(t *testing.T) {
+	t.Parallel()
+	useFakeIME(t)
+	w := TextInput(State(editorDoc(30))).Multiline()
+	w.Layout(Loose(Sz(160, Unbounded)), Env{})
+	w.ed.MoveTo(len(w.ed.Text)/2, false)
+	w.composition, w.compCaret = "한글 조합 중인 긴 글자", len("한글")
+	shown, _ := w.rendered()
+	plain, composed := w.spans(w.ed.Text), w.spans(shown)
+	if want := textlayout.WrapSpans(shown, w.face(1), w.width); !slices.Equal(composed, want) {
+		t.Fatalf("the composed text wraps as %v, want %v", composed, want)
+	}
+	for range 3 {
+		if a, b := w.spans(w.ed.Text), w.spans(shown); &a[0] != &plain[0] || &b[0] != &composed[0] {
+			t.Fatal("asking for the text and the composed text in turn wrapped them again")
+		}
+	}
+}
+
+// A keystroke and the frame after it in a multiline editor of 300 lines:
+// the line typed in is wrapped again, not the text. A sentence is typed
+// into the middle and the text put back, so the line stays a line's
+// length however long the benchmark runs.
+func BenchmarkTextInputKeystrokeFrame(b *testing.B) {
+	doc := editorDoc(300)
+	w := TextInput(State(doc)).Multiline()
+	var in inputState
+	paintFrame(&in, w, Sz(300, 400))
+	const typed = "a few words typed "
+	b.ReportAllocs()
+	i := 0
+	for b.Loop() {
+		if i%len(typed) == 0 {
+			w.ed.SetText(doc)
+			w.ed.MoveTo(len(doc)/2, false)
+		}
+		w.ed.Replace(typed[i%len(typed) : i%len(typed)+1])
+		i++
+		paintFrame(&in, w, Sz(300, 400))
+	}
+}
+
+// A frame of the same editor while the IME composes and nothing changes.
+func BenchmarkTextInputComposingFrame(b *testing.B) {
+	w := TextInput(State(editorDoc(300))).Multiline()
+	var in inputState
+	paintFrame(&in, w, Sz(300, 400))
+	w.ed.MoveTo(len(w.ed.Text)/2, false)
+	w.composition = "ㅎ"
+	b.ReportAllocs()
+	for b.Loop() {
+		paintFrame(&in, w, Sz(300, 400))
+	}
+}
+
+// What the screen reader is told is kept until the text, its wrap or
+// where it was painted change, and then measured again.
+func TestTextInputRunsFollowTheTextAndThePaint(t *testing.T) {
+	t.Parallel()
+	useFakeIME(t)
+	w := TextInput(State(editorDoc(12))).Multiline()
+	var in inputState
+	paintFrame(&in, w, Sz(160, 80))
+	same := func(what string) {
+		t.Helper()
+		got, want := w.runs(), w.measureRuns()
+		if !slices.EqualFunc(got, want, func(a, b TextRun) bool {
+			return a.Start == b.Start && a.End == b.End && a.Rect == b.Rect && slices.Equal(a.Stops, b.Stops)
+		}) {
+			t.Fatalf("after %s, the runs are %v, want %v", what, got, want)
+		}
+	}
+	same("the first paint")
+	if a, b := w.runs(), w.runs(); &a[0] != &b[0] {
+		t.Fatal("the runs of an unchanged editor were measured again")
+	}
+	w.ed.MoveTo(0, false)
+	w.ed.Replace("new words ")
+	same("an edit")
+	w.scroll += 7
+	same("a scroll")
+	paintFrame(&in, w, Sz(120, 80))
+	same("a narrower paint")
 }
