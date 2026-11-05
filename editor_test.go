@@ -1282,8 +1282,8 @@ func BenchmarkTextInputComposingFrame(b *testing.B) {
 	}
 }
 
-// What the screen reader is told is kept until the text, its wrap or
-// where it was painted change, and then measured again.
+// What the screen reader is told is measured again only when the text,
+// its wrap or its style change: a scroll or a move only moves it.
 func TestTextInputRunsFollowTheTextAndThePaint(t *testing.T) {
 	t.Parallel()
 	useFakeIME(t)
@@ -1293,21 +1293,29 @@ func TestTextInputRunsFollowTheTextAndThePaint(t *testing.T) {
 	same := func(what string) {
 		t.Helper()
 		got, want := w.runs(), w.measureRuns()
+		for i := range want {
+			want[i].Rect.Origin = want[i].Rect.Origin.Add(w.rect.Origin).Sub(Pt(0, w.scroll))
+		}
 		if !slices.EqualFunc(got, want, func(a, b TextRun) bool {
 			return a.Start == b.Start && a.End == b.End && a.Rect == b.Rect && slices.Equal(a.Stops, b.Stops)
 		}) {
 			t.Fatalf("after %s, the runs are %v, want %v", what, got, want)
 		}
 	}
+	measured := func() *TextRun { w.runs(); return &w.described.measured[0] }
 	same("the first paint")
-	if a, b := w.runs(), w.runs(); &a[0] != &b[0] {
+	if a, b := measured(), measured(); a != b {
 		t.Fatal("the runs of an unchanged editor were measured again")
 	}
 	w.ed.MoveTo(0, false)
 	w.ed.Replace("new words ")
 	same("an edit")
+	before := measured()
 	w.scroll += 7
 	same("a scroll")
+	if measured() != before {
+		t.Fatal("a scroll measured the runs again")
+	}
 	paintFrame(&in, w, Sz(120, 80))
 	same("a narrower paint")
 }
@@ -1382,5 +1390,67 @@ func TestTextInputDescribeKeepsItsRunsFromTheCallback(t *testing.T) {
 	own = []TextRun{{Start: 0, End: 3}}
 	if n := w.Describe(); len(n.Runs) != 1 || n.Runs[0].End != 3 {
 		t.Fatalf("the callback's own runs became %v", n.Runs)
+	}
+}
+
+// Typing in a long line keeps no copy of the line per keystroke: a
+// single-line field keeps none of its text, and a long paragraph's copies
+// go once they add up to more than the text twice over.
+func TestTextInputKeepsNoCopyOfALongLinePerKeystroke(t *testing.T) {
+	t.Parallel()
+	useFakeIME(t)
+	long := strings.Repeat("a long line of words ", 500)
+	for _, multiline := range []bool{false, true} {
+		w := TextInput(State(long))
+		if multiline {
+			w.Multiline()
+		}
+		w.Layout(Loose(Sz(300, Unbounded)), Env{})
+		w.ed.MoveTo(len(long)/2, false)
+		for range 300 {
+			w.ed.Replace("x")
+			w.spans(w.ed.Text)
+		}
+		if c := &w.lines; c.bytes > 2*len(w.ed.Text)+4096 || !multiline && len(c.byText) != 0 {
+			t.Errorf("multiline %v: %d lines of %d bytes kept for a text of %d", multiline, len(c.byText), c.bytes, len(w.ed.Text))
+		}
+	}
+}
+
+// A frame of a 300-line editor with a screen reader attached, scrolled a
+// little each time: the runs move, measured once.
+func BenchmarkTextInputScrollFrameWithScreenReader(b *testing.B) {
+	a11y.SetWantsDetail(true)
+	b.Cleanup(func() { a11y.SetWantsDetail(false) })
+	w := TextInput(State(editorDoc(300))).Multiline()
+	var in inputState
+	paintFrame(&in, w, Sz(300, 400))
+	b.ReportAllocs()
+	i := 0
+	for b.Loop() {
+		w.scroll = float64(i % 500)
+		i++
+		w.Describe()
+	}
+}
+
+// A keystroke and the frame after it in a single-line field holding a
+// long text.
+func BenchmarkTextInputKeystrokeFrameOneLine(b *testing.B) {
+	doc := strings.Repeat("a long line of words ", 500)
+	w := TextInput(State(doc))
+	var in inputState
+	paintFrame(&in, w, Sz(300, 30))
+	const typed = "a few words typed "
+	b.ReportAllocs()
+	i := 0
+	for b.Loop() {
+		if i%len(typed) == 0 {
+			w.ed.SetText(doc)
+			w.ed.MoveTo(len(doc)/2, false)
+		}
+		w.ed.Replace(typed[i%len(typed) : i%len(typed)+1])
+		i++
+		paintFrame(&in, w, Sz(300, 30))
 	}
 }

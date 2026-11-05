@@ -92,10 +92,11 @@ type TextInputWidget struct {
 	lines   lineWraps
 	lang    string           // the Env's language, which right-to-left text is shaped in
 	pieceOp text.DrawOptions // reused by paragraph.Draw
-	// described caches what runs last found for the screen reader.
+	// described caches what runs last measured for the screen reader, and
+	// holds what it last handed out, moved to where the editor is.
 	described struct {
-		key  runsKey
-		runs []TextRun
+		key           runsKey
+		measured, out []TextRun
 	}
 	// composed caches the text with the composition in it, which every
 	// paint, tick and EditingState asks for while the IME composes: built
@@ -259,36 +260,43 @@ func (t *TextInputWidget) Describe() Node {
 // field that moved or scrolled this frame therefore reports character
 // positions one frame behind, which is a frame that has not been shown yet.
 func (t *TextInputWidget) runs() []TextRun {
-	key := runsKey{t.ed.Text, t.wrapStyle(), t.textStyle().LineHeight, t.rect.Origin, t.scroll}
-	if d := &t.described; d.runs != nil && d.key == key {
-		return d.runs
+	d := &t.described
+	key := runsKey{spanKey{t.ed.Text, t.wrapStyle()}, t.textStyle().LineHeight}
+	if d.measured == nil || d.key != key {
+		d.key, d.measured = key, t.measureRuns()
 	}
-	out := t.measureRuns()
-	t.described.key, t.described.runs = key, out
-	return out
+	// The runs are measured from the editor's top left, unscrolled, and
+	// moved to where it was painted here: a scroll moves them all, and
+	// measures none of them again.
+	d.out = append(d.out[:0], d.measured...)
+	for i := range d.out {
+		r := &d.out[i].Rect
+		r.Origin = r.Origin.Add(t.rect.Origin)
+		if t.multiline {
+			r.Origin.Y -= t.scroll
+		} else {
+			r.Origin.X -= t.scroll
+		}
+	}
+	return d.out
 }
 
-// runsKey is what runs depends on: the text, how it is wrapped and in
-// what, and where the editor was painted, scrolled.
+// runsKey is what the runs' measures depend on: the text, how it is
+// wrapped and in what, and how far apart its lines are.
 type runsKey struct {
-	text       string
-	wrap       wrapStyle
+	spanKey
 	lineHeight float64
-	origin     Point
-	scroll     float64
 }
 
-// measureRuns is runs, measured.
+// measureRuns is runs, measured from the editor's top left, unscrolled.
 func (t *TextInputWidget) measureRuns() []TextRun {
 	r := t.wrap(t.ed.Text)
 	out := make([]TextRun, 0, len(r.spans))
 	h := t.height()
 	for i, sp := range r.spans {
-		x, y := t.rect.Origin.X, t.rect.Origin.Y
+		y := 0.0
 		if t.multiline {
-			y += float64(i)*t.spacing() - t.scroll
-		} else {
-			x -= t.scroll
+			y = float64(i) * t.spacing()
 		}
 		var width func(b int) float64
 		var w float64
@@ -298,7 +306,7 @@ func (t *TextInputWidget) measureRuns() []TextRun {
 			width = t.prefixWidths(sp)
 			w = width(sp.End)
 		}
-		run := TextRun{Start: sp.Start, End: sp.End, Rect: Rct(Pt(x, y), Sz(w, h))}
+		run := TextRun{Start: sp.Start, End: sp.End, Rect: Rct(Pt(0, y), Sz(w, h))}
 		for b := sp.Start; ; b = textedit.NextRune(t.ed.Text, b) {
 			run.Stops = append(run.Stops, TextStop{Byte: b, X: width(b)})
 			if b >= sp.End {
@@ -617,13 +625,16 @@ type wrapStyle struct {
 
 // wrapStyle is what the editor's wrap depends on now beside its text.
 func (t *TextInputWidget) wrapStyle() wrapStyle {
+	ws := wrapStyle{text: t.measureKey()}
 	switch {
 	case !t.multiline:
-		return wrapStyle{text: t.measureKey(), mode: oneLine}
+		ws.mode = oneLine
 	case t.noWrap:
-		return wrapStyle{text: t.measureKey(), mode: breakOnly}
+		ws.mode = breakOnly
+	default:
+		ws.mode, ws.width = wrapWidth, t.width
 	}
-	return wrapStyle{text: t.measureKey(), width: t.width, mode: wrapWidth}
+	return ws
 }
 
 // spanKey is what a wrap depends on.
@@ -651,6 +662,7 @@ type lineRef struct {
 type lineWraps struct {
 	style  wrapStyle
 	byText map[string]*lineWrap
+	bytes  int // the keys' bytes
 	gen    uint64
 }
 
@@ -688,18 +700,25 @@ func (t *TextInputWidget) wrap(s string) *wrapResult {
 // last, are prev's, those after moved by what the text grew or shrank by.
 // An edit wraps again only the lines it changed, and a line whose text
 // t.lines holds, as an undo brings back, not even those. The wrap is made
-// in spare's memory, the wrap before prev, which this one replaces: a
-// keystroke in a long text allocates none.
+// in spare, the wrap before prev, which this one replaces, and in its
+// memory: a keystroke in a long text allocates for the lines it changed
+// only.
 func (t *TextInputWidget) wrapText(key spanKey, prev, spare *wrapResult) *wrapResult {
 	s, style := key.text, key.style
 	c := &t.lines
 	if c.byText == nil || c.style != style {
-		c.style, c.byText = style, map[string]*lineWrap{}
+		c.style, c.byText, c.bytes = style, map[string]*lineWrap{}, 0
 	}
-	r := &wrapResult{key: key}
+	r := spare
+	if r == nil {
+		r = new(wrapResult)
+	}
+	r.key = key
 	if style.mode == oneLine {
-		r.spans, r.lines = []textlayout.Span{{Start: 0, End: len(s)}}, []lineRef{{t.lineWrap(s), 0}}
-		t.prune(r)
+		// The text is the line, and a new one at each keystroke: kept by
+		// it, each would be a copy of the text for nothing.
+		r.spans = append(r.spans[:0], textlayout.Span{Start: 0, End: len(s)})
+		r.lines = append(r.lines[:0], lineRef{t.newLineWrap(s), 0})
 		return r
 	}
 	from, to := 0, len(s) // the lines of s wrapped here
@@ -707,8 +726,14 @@ func (t *TextInputWidget) wrapText(key spanKey, prev, spare *wrapResult) *wrapRe
 	delta := 0            // how much longer s is than prev's text
 	if prev != nil && prev.key.style == style {
 		old := prev.key.text
-		a := textedit.CommonPrefix(old, s)
-		z := textedit.CommonSuffix(old[a:], s[a:])
+		// Where the texts differ: what the editor's last edit changed,
+		// when it made the one from the other, else found by comparing.
+		a, cut, _, ok := t.ed.Changed(old, s)
+		z := len(old) - a - cut
+		if !ok {
+			a = textedit.CommonPrefix(old, s)
+			z = textedit.CommonSuffix(old[a:], s[a:])
+		}
 		delta = len(s) - len(old)
 		from = strings.LastIndexByte(s[:a], '\n') + 1
 		head = sort.Search(len(prev.spans), func(k int) bool { return prev.spans[k].Start >= from })
@@ -717,16 +742,10 @@ func (t *TextInputWidget) wrapText(key spanKey, prev, spare *wrapResult) *wrapRe
 			tail = sort.Search(len(prev.spans), func(k int) bool { return prev.spans[k].Start > to-delta })
 		}
 	}
-	n := head + 8
-	if tail >= 0 {
-		n += len(prev.spans) - tail
+	r.spans, r.lines = r.spans[:0], r.lines[:0]
+	if head > 0 {
+		r.spans, r.lines = append(r.spans, prev.spans[:head]...), append(r.lines, prev.lines[:head]...)
 	}
-	if spare != nil && cap(spare.spans) >= n && cap(spare.lines) >= n {
-		r.spans, r.lines = spare.spans[:0], spare.lines[:0]
-	} else {
-		r.spans, r.lines = make([]textlayout.Span, 0, n), make([]lineRef, 0, n)
-	}
-	r.spans, r.lines = append(r.spans, prev.spansBefore(head)...), append(r.lines, prev.linesBefore(head)...)
 	for start, line := range textlayout.Lines(s[from:to]) {
 		start += from
 		lw := t.lineWrap(line)
@@ -745,22 +764,6 @@ func (t *TextInputWidget) wrapText(key spanKey, prev, spare *wrapResult) *wrapRe
 	return r
 }
 
-// spansBefore and linesBefore are r's first n spans and their lines, none
-// of a nil r.
-func (r *wrapResult) spansBefore(n int) []textlayout.Span {
-	if r == nil {
-		return nil
-	}
-	return r.spans[:n]
-}
-
-func (r *wrapResult) linesBefore(n int) []lineRef {
-	if r == nil {
-		return nil
-	}
-	return r.lines[:n]
-}
-
 // lineWrap returns line's wrap in t.lines' style, wrapping it when t.lines
 // holds none.
 func (t *TextInputWidget) lineWrap(line string) *lineWrap {
@@ -768,21 +771,29 @@ func (t *TextInputWidget) lineWrap(line string) *lineWrap {
 	if lw := c.byText[line]; lw != nil {
 		return lw
 	}
-	lw := &lineWrap{spans: []textlayout.Span{{Start: 0, End: len(line)}}}
-	if c.style.mode == wrapWidth {
-		lw.spans = textlayout.WrapSpans(line, t.face(1), c.style.width)
-	}
+	lw := t.newLineWrap(line)
 	// The key is a copy: the line is cut from a text the next keystroke
 	// replaces, which it would otherwise keep.
 	c.byText[strings.Clone(line)] = lw
+	c.bytes += len(line)
+	return lw
+}
+
+// newLineWrap wraps line in t.lines' style.
+func (t *TextInputWidget) newLineWrap(line string) *lineWrap {
+	lw := &lineWrap{spans: []textlayout.Span{{Start: 0, End: len(line)}}}
+	if t.lines.style.mode == wrapWidth {
+		lw.spans = textlayout.WrapSpans(line, t.face(1), t.lines.style.width)
+	}
 	return lw
 }
 
 // prune lets go of the lines neither r nor the wrap before it uses, once
-// there are many more than they have: an edit's leftovers.
+// there are many more than they have, or many more bytes, as a long line
+// typed in leaves a copy of itself at each keystroke: an edit's leftovers.
 func (t *TextInputWidget) prune(r *wrapResult) {
 	c := &t.lines
-	if len(c.byText) <= 2*len(r.lines)+64 {
+	if len(c.byText) <= 2*len(r.lines)+64 && c.bytes <= 2*len(r.key.text)+4096 {
 		return
 	}
 	c.gen++
@@ -796,6 +807,7 @@ func (t *TextInputWidget) prune(r *wrapResult) {
 	for k, lw := range c.byText {
 		if lw.used != c.gen {
 			delete(c.byText, k)
+			c.bytes -= len(k)
 		}
 	}
 }
@@ -1115,15 +1127,10 @@ func (t *TextInputWidget) indexAt(p Point) int {
 	return t.indexOnLine(r, li, x)
 }
 
-// indexInLine returns the grapheme boundary within sp nearest x. Measuring
-// partial emoji sequences can give the same width as the whole glyph, so
-// rune boundaries would put the caret inside a joined emoji or modifier.
-func (t *TextInputWidget) indexInLine(sp textlayout.Span, x float64) int {
-	r := t.wrap(t.ed.Text)
-	return t.indexOnLine(r, textlayout.LineOf(r.spans, sp.Start), x)
-}
-
-// indexOnLine is indexInLine for line i of r.
+// indexOnLine returns the grapheme boundary on line i of r nearest x.
+// Measuring partial emoji sequences can give the same width as the whole
+// glyph, so rune boundaries would put the caret inside a joined emoji or
+// modifier.
 func (t *TextInputWidget) indexOnLine(r *wrapResult, i int, x float64) int {
 	sp := r.spans[i]
 	if bl := t.bidiAt(r, i); bl != nil {

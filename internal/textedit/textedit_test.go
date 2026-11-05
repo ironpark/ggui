@@ -294,3 +294,26 @@ func TestCommonPrefixAndSuffixFindTheFirstDifference(t *testing.T) {
 		t.Error("a text and a part of it share that part")
 	}
 }
+
+// Changed tells where the last Replace changed the text, for those very
+// strings only: another text, even an equal one, is the caller's to
+// compare.
+func TestChangedReportsTheLastReplace(t *testing.T) {
+	t.Parallel()
+	var e Editor
+	e.SetText("hello world")
+	e.Anchor, e.Caret = 6, 11
+	before := e.Text
+	e.Replace("there!")
+	at, cut, ins, ok := e.Changed(before, e.Text)
+	if !ok || at != 6 || cut != 5 || ins != 6 {
+		t.Fatalf("Changed = %d, %d, %d, %v; want 6, 5, 6, true", at, cut, ins, ok)
+	}
+	if _, _, _, ok := e.Changed(strings.Clone(before), e.Text); ok {
+		t.Error("an equal copy of the text before was taken for it")
+	}
+	e.SetText("other")
+	if _, _, _, ok := e.Changed(before, e.Text); ok {
+		t.Error("a text SetText made was taken for the last Replace's")
+	}
+}

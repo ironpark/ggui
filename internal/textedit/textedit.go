@@ -38,6 +38,14 @@ type Editor struct {
 	undo, redo []delta
 	lastEdit   time.Time
 	lastInsert bool
+
+	// replaced is what the last Replace did: the cut bytes at at of
+	// before became ins bytes, making after. Whoever lays the text out
+	// learns from it where the text changed without comparing the texts.
+	replaced struct {
+		before, after string
+		at, cut, ins  int
+	}
 }
 
 // snapshot is the editor's state at one point of the history.
@@ -208,9 +216,30 @@ func (e *Editor) Selected() string {
 func (e *Editor) Replace(s string) {
 	e.record(s)
 	lo, hi := e.Selection()
+	before := e.Text
 	e.Text = e.Text[:lo] + s + e.Text[hi:]
 	e.Caret = lo + len(s)
 	e.Anchor = e.Caret
+	e.replaced.before, e.replaced.after = before, e.Text
+	e.replaced.at, e.replaced.cut, e.replaced.ins = lo, hi-lo, len(s)
+}
+
+// Changed reports where after differs from before when the editor's last
+// Replace made the one from the other, these very strings: the cut bytes
+// at at of before became ins bytes. ok is false for any other two texts,
+// which the caller compares itself.
+func (e *Editor) Changed(before, after string) (at, cut, ins int, ok bool) {
+	r := &e.replaced
+	if !same(r.before, before) || !same(r.after, after) {
+		return 0, 0, 0, false
+	}
+	return r.at, r.cut, r.ins, true
+}
+
+// same reports whether a and b are the same string, not merely equal: one
+// kept alive by the editor cannot share its memory with another.
+func same(a, b string) bool {
+	return len(a) == len(b) && unsafe.StringData(a) == unsafe.StringData(b)
 }
 
 // MoveTo puts the caret at pos, extending the selection or collapsing it.
