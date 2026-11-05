@@ -37,7 +37,7 @@ type AccordionWidget struct {
 	multiple bool
 	active   int
 	onChange func([]string)
-	theme    uitheme.Theme
+	theme    *uitheme.Theme
 	sizes    []ggui.Size
 	heights  []float64
 	env      ggui.Env
@@ -106,32 +106,15 @@ func (a *AccordionWidget) toggle(i int) {
 
 // ConsumesKey implements ggui.KeyConsumer.
 func (a *AccordionWidget) ConsumesKey(ev ggui.KeyEvent) bool {
-	if ev.Kind != ggui.KeyPress {
-		return false
-	}
-	switch ev.Key {
-	case ggui.KeyArrowUp, ggui.KeyArrowDown, ggui.KeyHome, ggui.KeyEnd:
-		return true
-	}
-	return ggui.Activates(ev)
+	return navConsumes(ev, navVertical) || ggui.Activates(ev)
 }
 
 // HandleKey implements ggui.KeyHandler.
 func (a *AccordionWidget) HandleKey(ev ggui.KeyEvent) {
 	a.Keyboard(ev, func() { a.toggle(a.active) })
-	if ev.Kind != ggui.KeyPress {
-		return
-	}
 	enabled := func(i int) bool { return !a.items[i].disabled }
-	switch ev.Key {
-	case ggui.KeyArrowDown:
-		a.active = stepIndex(a.active, 1, len(a.items), enabled)
-	case ggui.KeyArrowUp:
-		a.active = stepIndex(a.active, -1, len(a.items), enabled)
-	case ggui.KeyHome:
-		a.active = stepIndex(-1, 1, len(a.items), enabled)
-	case ggui.KeyEnd:
-		a.active = stepIndex(-1, -1, len(a.items), enabled)
+	if i, ok := navIndex(ev, navVertical, true, a.active, len(a.items), enabled); ok {
+		a.active = i
 	}
 }
 
@@ -152,7 +135,7 @@ func (a *AccordionWidget) Adopt(prev any) {
 // Layout implements ggui.Widget.
 func (a *AccordionWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer a.props.Layout().EndLayout()
-	a.env, a.theme = env, uitheme.From(env)
+	a.env, a.theme = env, uitheme.Of(env)
 	a.laidOpen = append(a.laidOpen[:0], a.open.Get()...)
 	a.sizes = slices.Grow(a.sizes[:0], len(a.items))[:len(a.items)]
 	clear(a.sizes)

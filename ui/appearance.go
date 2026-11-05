@@ -10,7 +10,7 @@ import (
 
 // panelBox applies the chrome every floating surface shares: menus, context
 // menus, the menubar, select lists and the date picker panel.
-func panelBox(b *ggui.BoxWidget, t uitheme.Theme) *ggui.BoxWidget {
+func panelBox(b *ggui.BoxWidget, t *uitheme.Theme) *ggui.BoxWidget {
 	return b.Shadow(t.PanelShadow).Fill(t.Popover).Border(t.BorderWidth, t.Border).Radius(t.Radius).Padding(t.PanelPad)
 }
 
@@ -19,7 +19,7 @@ func panelBox(b *ggui.BoxWidget, t uitheme.Theme) *ggui.BoxWidget {
 // while the editor inside has the keyboard. A disabled field drops back to
 // the Card surface, so it reads as a surface rather than something to type
 // in.
-func fieldBox(b *ggui.BoxWidget, t uitheme.Theme, focused, inert bool) *ggui.BoxWidget {
+func fieldBox(b *ggui.BoxWidget, t *uitheme.Theme, focused, inert bool) *ggui.BoxWidget {
 	return b.Padding(t.FieldPad).Radius(t.Radius).
 		Fill(pick(inert, t.Card, t.Input)).
 		Border(t.BorderWidth, pick(focused, t.Ring, t.InputBorder))
@@ -27,21 +27,21 @@ func fieldBox(b *ggui.BoxWidget, t uitheme.Theme, focused, inert bool) *ggui.Box
 
 // chevron resolves the directional role shared by selects and accordions.
 // dy points the tip down when positive and up when negative.
-func chevron(dst *ggui.Canvas, env ggui.Env, t uitheme.Theme, center ggui.Point, dy float64, col color.Color) {
+func chevron(dst *ggui.Canvas, env ggui.Env, t *uitheme.Theme, center ggui.Point, dy float64, col color.Color) {
 	paintIconAt(dst, env, pick(dy < 0, icons.ChevronUp, icons.ChevronDown), center, t.IconSize, col, 0)
 }
 
 // fieldHalo draws the focus ring just outside a text field, at the theme's
 // halo opacity.
-func fieldHalo(dst *ggui.Canvas, t uitheme.Theme, r ggui.Rect, radius float64, ring color.Color) {
+func fieldHalo(dst *ggui.Canvas, t *uitheme.Theme, r ggui.Rect, radius float64, ring color.Color) {
 	dst.StrokeRoundRect(ggui.Rct(r.Origin.Add(ggui.Pt(-2, -2)), ggui.Sz(r.Size.W+4, r.Size.H+4)), radius+2, 3, t.Halo(ring))
 }
 
 // fieldRing is the focus ring for a field: the theme's, or the destructive
 // one while the field is invalid.
-func fieldRing(t uitheme.Theme, invalid bool) color.Color {
+func fieldRing(t *uitheme.Theme, invalid bool) color.Color {
 	if invalid {
-		return destructiveRing(t)
+		return destructiveRing(*t)
 	}
 	return t.Ring
 }
@@ -58,7 +58,7 @@ func isDark(c color.Color) bool {
 
 // iconButtonSide is the side of a square button holding one icon, as
 // ButtonIcon pads it.
-func iconButtonSide(t uitheme.Theme) float64 { return t.IconSize + 2*t.ButtonPad.Top }
+func iconButtonSide(t *uitheme.Theme) float64 { return t.IconSize + 2*t.ButtonPad.Top }
 
 // paintDisclosure paints content folding open below y: the body is clipped
 // to progress of its height, inert while closing, and asks for another

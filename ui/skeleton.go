@@ -13,7 +13,7 @@ import (
 type SkeletonWidget struct {
 	props           property.Owner
 	width, height   float64
-	theme           uitheme.Theme
+	theme           *uitheme.Theme
 	reduced, circle bool
 }
 
@@ -32,7 +32,7 @@ func (s *SkeletonWidget) Circle() *SkeletonWidget {
 // Layout implements ggui.Widget.
 func (s *SkeletonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer s.props.Layout().EndLayout()
-	s.theme, s.reduced = uitheme.From(env), env.ReducedMotion()
+	s.theme, s.reduced = uitheme.Of(env), env.ReducedMotion()
 	return c.Constrain(ggui.Sz(s.width, s.height))
 }
 

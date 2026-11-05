@@ -31,7 +31,7 @@ type SelectWidget[T comparable] struct {
 	pad       ggui.EdgeInsets
 	textSize  ggui.Size
 	highlight int // the option the keyboard is on while open, or -1
-	theme     uitheme.Theme
+	theme     *uitheme.Theme
 	env       ggui.Env
 }
 
@@ -191,7 +191,7 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if s.IsInert() {
 		s.popup.Hide()
 	}
-	t := uitheme.From(env)
+	t := uitheme.Of(env)
 	s.theme = t
 	s.env = env
 	s.pad = t.FieldPad

@@ -158,12 +158,12 @@ type listRow[T any, K comparable] struct {
 	index  ggui.Readable[int]
 	key    K
 	box    *ggui.BoxWidget
-	theme  uitheme.Theme
+	theme  *uitheme.Theme
 	motion time.Duration
 }
 
 func (r *listRow[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	r.theme = uitheme.From(env)
+	r.theme = uitheme.Of(env)
 	r.Sync()
 	r.SetName(r.list.label(r.item.Get()))
 	r.motion = env.Motion(r.theme.MotionFast)
@@ -247,14 +247,7 @@ func (r *listRow[T, K]) ConsumesKey(ev ggui.KeyEvent) bool {
 	if ggui.Activates(ev) {
 		return true
 	}
-	if ev.Kind != ggui.KeyPress || ev.Mods != (ggui.Mods{}) {
-		return false
-	}
-	switch ev.Key {
-	case ggui.KeyArrowUp, ggui.KeyArrowDown, ggui.KeyHome, ggui.KeyEnd:
-		return true
-	}
-	return false
+	return ev.Mods == (ggui.Mods{}) && navConsumes(ev, navVertical)
 }
 
 // HandleKey implements KeyHandler: the WAI-ARIA listbox keys.
@@ -271,15 +264,8 @@ func (r *listRow[T, K]) HandleKey(ev ggui.KeyEvent) {
 		return
 	}
 	list, i := ggui.Untrack(l.items.Get), ggui.Untrack(r.index.Get)
-	switch ev.Key {
-	case ggui.KeyArrowUp:
-		l.moveTo(list, i-1)
-	case ggui.KeyArrowDown:
-		l.moveTo(list, i+1)
-	case ggui.KeyHome:
-		l.moveTo(list, 0)
-	case ggui.KeyEnd:
-		l.moveTo(list, len(list)-1)
+	if to, ok := navTarget(ev.Key, navVertical, i, len(list)); ok {
+		l.moveTo(list, to)
 	}
 }
 

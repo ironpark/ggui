@@ -604,7 +604,7 @@ type questionChoice struct {
 	index    int
 	shortcut string
 	body     *ggui.BoxWidget
-	theme    uitheme.Theme
+	theme    *uitheme.Theme
 
 	// The parts of body, kept to restyle across layouts.
 	label, description, key  *ggui.TextWidget
@@ -619,7 +619,7 @@ func (c *questionChoice) selected() bool {
 	return slices.Contains(c.q.answer(c.item).Values, c.option.Value)
 }
 func (c *questionChoice) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
-	c.theme = uitheme.From(env)
+	c.theme = uitheme.Of(env)
 	c.env = env
 	t := c.theme
 	tokens := t.Chat

@@ -49,7 +49,7 @@ var SetKey = ggui.NewEnvKey[Set]("icons")
 // Resolve looks in the local Env, the theme, and finally fallback.
 func Resolve(env ggui.Env, fallback Set, role Role) *SVG {
 	local, _ := env.Get(SetKey)
-	themed, _ := uitheme.From(env).Get(SetKey)
+	themed, _ := uitheme.Of(env).Get(SetKey)
 	for _, set := range []Set{local, themed, fallback} {
 		if set != nil {
 			if asset := set.Resolve(role); asset != nil {
@@ -70,6 +70,11 @@ type Widget struct {
 	rotation float64
 	alt      string
 	env      ggui.Env
+
+	// What Layout resolved under env, for Paint: the asset of role, or
+	// nil to resolve it there, and the color an unset Color draws in.
+	resolved *SVG
+	inherit  color.Color
 }
 
 // Placeholder resolves a role during paint using the Env captured in Layout.
@@ -78,7 +83,7 @@ func Placeholder(role Role) *Widget { return &Widget{role: role, size: 16} }
 
 // New uses an explicit asset independent of the inherited icon set.
 func New(asset *SVG) *Widget                  { return &Widget{asset: asset, size: 16} }
-func (w *Widget) Fallback(set Set) *Widget    { w.fallback = set; return w }
+func (w *Widget) Fallback(set Set) *Widget    { w.fallback, w.resolved = set, nil; return w }
 func (w *Widget) Size(px float64) *Widget     { w.size = max(0, px); return w }
 func (w *Widget) Color(c color.Color) *Widget { w.color = c; return w }
 
@@ -87,6 +92,15 @@ func (w *Widget) Rotate(radians float64) *Widget { w.rotation = radians; return 
 func (w *Widget) Alt(name string) *Widget        { w.alt = name; return w }
 func (w *Widget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	w.env = env
+	w.resolved = nil
+	if w.asset == nil {
+		w.resolved = Resolve(env, w.fallback, w.role)
+	}
+	w.inherit = env.Text().Color
+	if w.inherit == nil {
+		w.inherit = uitheme.Of(env).Fg
+	}
+	w.inherit = ggui.ResolveColor(w.inherit, env)
 	return c.Constrain(ggui.Sz(w.size, w.size))
 }
 func (w *Widget) Paint(dst *ggui.Canvas, r ggui.Rect) {
@@ -95,16 +109,17 @@ func (w *Widget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	asset := w.asset
 	if asset == nil {
+		asset = w.resolved
+	}
+	if asset == nil {
 		asset = Resolve(w.env, w.fallback, w.role)
 	}
-	col := w.color
-	if col == nil {
-		col = w.env.Text().Color
+	col := w.inherit
+	if w.color != nil {
+		col = ggui.ResolveColor(w.color, w.env)
+	} else if col == nil {
+		col = ggui.ResolveColor(uitheme.Of(w.env).Fg, w.env)
 	}
-	if col == nil {
-		col = uitheme.From(w.env).Fg
-	}
-	col = ggui.ResolveColor(col, w.env)
 	side := min(w.size, r.Size.W, r.Size.H)
 	at := ggui.Rct(r.Origin.Add(ggui.Pt((r.Size.W-side)/2, (r.Size.H-side)/2)), ggui.Sz(side, side))
 	asset.Draw(dst, at, col, w.rotation)

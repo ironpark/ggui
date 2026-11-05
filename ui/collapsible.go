@@ -19,7 +19,7 @@ type CollapsibleWidget struct {
 	progress float64
 	ggui.Interactive
 
-	theme     uitheme.Theme
+	theme     *uitheme.Theme
 	env       ggui.Env
 	motion    time.Duration
 	pad       ggui.EdgeInsets
@@ -83,7 +83,7 @@ func (c *CollapsibleWidget) Act(a ggui.Action) bool {
 // Layout implements Widget.
 func (c *CollapsibleWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	c.Sync()
-	t := uitheme.From(env)
+	t := uitheme.Of(env)
 	c.theme = t
 	c.env = env
 	c.motion = env.Motion(t.MotionFast)

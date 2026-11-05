@@ -12,7 +12,7 @@ type TextFieldWidget struct {
 	ggui.Interactive // only disabled is used; the editor tracks its own focus
 	input            *ggui.TextInputWidget
 	box              *ggui.BoxWidget
-	theme            uitheme.Theme
+	theme            *uitheme.Theme
 	plain            bool
 	invalid          bool
 }
@@ -140,7 +140,7 @@ func (f *TextFieldWidget) Input() *ggui.TextInputWidget { return f.input }
 // Layout implements Widget.
 func (f *TextFieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	f.Sync()
-	t := uitheme.From(env)
+	t := uitheme.Of(env)
 	f.theme = t
 	f.invalid, _ = env.Get(fieldInvalid)
 	if f.plain {

@@ -32,7 +32,7 @@ type NumberInputWidget struct {
 	dec, inc *numberStepper
 	row      *ggui.RowWidget
 	box      *ggui.BoxWidget
-	theme    uitheme.Theme
+	theme    *uitheme.Theme
 	disabled bool // own or inherited, as of the last Layout
 	invalid  bool // inside a Field showing an error
 }
@@ -291,7 +291,7 @@ func (n *NumberInputWidget) act(a ggui.Action) bool {
 func (n *NumberInputWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer n.props.Layout().EndLayout()
 	n.Sync()
-	t := uitheme.From(env)
+	t := uitheme.Of(env)
 	n.theme = t
 	inherited, _ := env.Get(ggui.InputDisabledKey)
 	n.disabled = n.IsInert() || inherited

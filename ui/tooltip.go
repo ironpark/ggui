@@ -27,7 +27,7 @@ type TooltipWidget struct {
 	box    *ggui.BoxWidget
 	effect *ggui.TransitionWidget
 	env    ggui.Env
-	theme  uitheme.Theme
+	theme  *uitheme.Theme
 }
 
 // tooltipHover is the hover timer, retained on the Canvas by Rect so a
@@ -79,7 +79,7 @@ func (t *TooltipWidget) Delay(d time.Duration) *TooltipWidget {
 // Layout implements ggui.Widget.
 func (t *TooltipWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer t.props.Layout().EndLayout()
-	t.theme = uitheme.From(env)
+	t.theme = uitheme.Of(env)
 	t.env = env
 	t.pad = ggui.Insets(t.theme.Space*.75, t.theme.Space*1.5)
 	t.tip.Style(t.theme.Caption).Color(t.theme.Bg)

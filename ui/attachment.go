@@ -51,7 +51,7 @@ type AttachmentWidget struct {
 	size                                 AttachmentSize
 	vertical                             bool
 	width                                float64
-	theme                                uitheme.Theme
+	theme                                *uitheme.Theme
 	reduced                              bool
 	current                              AttachmentState
 	padX, padY, gap, radius, mediaSide   float64
@@ -150,7 +150,7 @@ func (a *AttachmentWidget) uploadState() AttachmentState {
 
 func (a *AttachmentWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer a.props.Layout().EndLayout()
-	a.theme, a.reduced, a.current = uitheme.From(env), env.ReducedMotion(), a.uploadState()
+	a.theme, a.reduced, a.current = uitheme.Of(env), env.ReducedMotion(), a.uploadState()
 	a.padX, a.padY, a.gap, a.mediaSide = 10, 8, 8, 40
 	a.radius = a.theme.Chat.AttachmentRadius
 	fontSize := 14.0

@@ -29,7 +29,7 @@ const (
 )
 
 // squareGlyph is the box a checkbox or radio draws itself in.
-func squareGlyph(t uitheme.Theme) ggui.Size { return ggui.Sz(t.ControlSize, t.ControlSize) }
+func squareGlyph(t *uitheme.Theme) ggui.Size { return ggui.Sz(t.ControlSize, t.ControlSize) }
 
 // sprint is the default option label. A string is its own label, without
 // the allocation fmt makes for it: a Select describes its value every frame.

@@ -22,7 +22,7 @@ type ResizableWidget struct {
 	vertical                            bool
 	minFirst, minSecond                 float64
 	onChange                            func(float64)
-	theme                               uitheme.Theme
+	theme                               *uitheme.Theme
 	env                                 ggui.Env
 	rect, firstRect, secondRect, handle ggui.Rect
 	available, lo, hi, dragOffset       float64
@@ -102,7 +102,7 @@ func (r *ResizableWidget) axis(p ggui.Point) float64 {
 func (r *ResizableWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer r.props.Layout().EndLayout()
 	r.Sync()
-	r.env, r.theme = env, uitheme.From(env)
+	r.env, r.theme = env, uitheme.Of(env)
 	size := c.Constrain(ggui.Sz(bounded(c.MaxW, 320), bounded(c.MaxH, 200)))
 	main := size.W
 	if r.vertical {

@@ -22,7 +22,7 @@ type modal struct {
 	onClose     func()
 
 	panel *ggui.BoxWidget
-	theme uitheme.Theme
+	theme *uitheme.Theme
 	env   ggui.Env
 	rect  ggui.Rect
 }
@@ -51,7 +51,7 @@ func (m *modal) Semantics() (ggui.Role, string) { return ggui.RoleDialog, m.name
 // every floating thing uses. The caller finishes it with the border and
 // radius its own shape wants, and lays it out when it knows the room.
 func (m *modal) build(env ggui.Env) *ggui.BoxWidget {
-	t := uitheme.From(env)
+	t := uitheme.Of(env)
 	m.theme, m.env = t, env
 	body := m.content
 	if m.title != nil {

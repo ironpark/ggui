@@ -75,7 +75,7 @@ func (c *CheckboxWidget) Describe() ggui.Node {
 // Layout implements Widget.
 func (c *CheckboxWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	defer c.props.Layout().EndLayout()
-	return c.layout(cs, env, squareGlyph(uitheme.From(env)))
+	return c.layout(cs, env, squareGlyph(uitheme.Of(env)))
 }
 
 // Paint implements Widget.

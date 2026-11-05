@@ -13,7 +13,7 @@ type ContextMenuWidget struct {
 	menu    *MenuWidget
 	rect    ggui.Rect
 	at      *ggui.Point
-	theme   uitheme.Theme
+	theme   *uitheme.Theme
 
 	// entries makes a ContextMenuFunc's entries into lazy as the menu opens.
 	nativeEntries func() []ggui.MenuItem
@@ -166,7 +166,7 @@ func (c *ContextMenuWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 	if c.Popup().IsOpen() {
 		c.build()
 	}
-	c.theme = uitheme.From(env)
+	c.theme = uitheme.Of(env)
 	t := c.theme
 	c.menu.chrome(t)
 	return c.Popup().Layout(cs, env)
@@ -226,7 +226,7 @@ func (c *ContextMenuWidget) ConsumesKey(ev ggui.KeyEvent) bool {
 		return false
 	}
 	return ggui.Activates(ev) || (ev.Key == ggui.KeyF10 && ev.Mods.Shift) ||
-		(c.Popup().IsOpen() && (ev.Key == ggui.KeyArrowDown || ev.Key == ggui.KeyArrowUp || ev.Key == ggui.KeyHome || ev.Key == ggui.KeyEnd))
+		(c.Popup().IsOpen() && navConsumes(ev, navVertical))
 }
 
 // HandleKey implements ggui.KeyHandler.
@@ -241,21 +241,12 @@ func (c *ContextMenuWidget) HandleKey(ev ggui.KeyEvent) {
 		}
 		return
 	}
-	switch ev.Key {
-	case ggui.KeyEscape:
+	switch {
+	case ev.Key == ggui.KeyEscape:
 		c.Popup().Hide()
-	case ggui.KeyArrowDown:
-		c.menu.step(1)
-	case ggui.KeyArrowUp:
-		c.menu.step(-1)
-	case ggui.KeyHome:
-		c.menu.jump(1)
-	case ggui.KeyEnd:
-		c.menu.jump(-1)
-	default:
-		if ggui.Activates(ev) {
-			c.menu.activate()
-		}
+	case c.menu.navigate(ev):
+	case ggui.Activates(ev):
+		c.menu.activate()
 	}
 }
 

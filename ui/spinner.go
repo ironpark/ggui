@@ -14,7 +14,7 @@ import (
 type SpinnerWidget struct {
 	props   property.Owner
 	size    float64
-	theme   uitheme.Theme
+	theme   *uitheme.Theme
 	env     ggui.Env
 	reduced bool
 }
@@ -33,7 +33,7 @@ func (s *SpinnerWidget) Size(px float64) *SpinnerWidget {
 func (s *SpinnerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer s.props.Layout().EndLayout()
 	s.env = env
-	s.theme, s.reduced = uitheme.From(env), env.ReducedMotion()
+	s.theme, s.reduced = uitheme.Of(env), env.ReducedMotion()
 	return c.Constrain(ggui.Sz(s.size, s.size))
 }
 

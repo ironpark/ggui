@@ -19,7 +19,7 @@ type SliderWidget struct {
 	onChange func(float64)
 	onCommit func(float64)
 
-	theme uitheme.Theme
+	theme *uitheme.Theme
 	rect  ggui.Rect
 }
 
@@ -118,7 +118,7 @@ func (s *SliderWidget) Act(a ggui.Action) bool {
 func (s *SliderWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer s.props.Layout().EndLayout()
 	s.Sync()
-	s.theme = uitheme.From(env)
+	s.theme = uitheme.Of(env)
 	return c.Constrain(ggui.Sz(bounded(c.MaxW, defaultStripe), s.theme.ControlSize+4))
 }
 

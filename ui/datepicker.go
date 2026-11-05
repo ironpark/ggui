@@ -124,7 +124,7 @@ func (d *DatePickerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	d.calendar.Disabled(d.button.IsInert())
 	t := uitheme.From(env)
-	panelBox(d.panel, t)
+	panelBox(d.panel, &t)
 	text := d.placeholder
 	if v := d.value.Get(); !v.IsZero() {
 		text = d.format(d.calendar.date(v))

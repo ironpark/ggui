@@ -27,7 +27,7 @@ type HoverCardWidget struct {
 	panel  *ggui.BoxWidget
 	effect *ggui.TransitionWidget
 	env    ggui.Env
-	theme  uitheme.Theme
+	theme  *uitheme.Theme
 	size   ggui.Size
 }
 
@@ -86,7 +86,7 @@ func (h *HoverCardWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if h.nameReader != nil {
 		h.name = h.nameReader.Get()
 	}
-	h.env, h.theme = env, uitheme.From(env)
+	h.env, h.theme = env, uitheme.Of(env)
 	if h.panel == nil {
 		h.panel = ggui.Box(h.content)
 		h.effect = ggui.PopIn(h.panel)

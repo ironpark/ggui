@@ -22,7 +22,7 @@ type InputGroupWidget struct {
 	leading, trailing ggui.Widget
 	row               *ggui.RowWidget
 	box               *ggui.BoxWidget
-	theme             uitheme.Theme
+	theme             *uitheme.Theme
 	effectiveDisabled bool
 	invalid           bool
 	focused           func() bool
@@ -114,7 +114,7 @@ func (g *InputGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	g.Sync()
 	inherited, _ := env.Get(ggui.InputDisabledKey)
 	g.effectiveDisabled = g.IsInert() || inherited
-	t := uitheme.From(env)
+	t := uitheme.Of(env)
 	g.theme = t
 	g.invalid, _ = env.Get(fieldInvalid)
 	if g.row == nil {
