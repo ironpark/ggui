@@ -26,10 +26,10 @@ func TestAdoptPreservesHandlerKindsAndPaintOrder(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			first, last, next := &adoptionCounter{}, &adoptionCounter{}, &adoptionCounter{}
 			r := Rct(Pt(0, 0), Sz(20, 20))
-			c := Canvas{prev: []hitRegion{
+			c := withPrev([]hitRegion{
 				{rect: r, pointer: first, key: first},
 				{rect: r, pointer: last, key: last},
-			}}
+			})
 			h := hitRegion{rect: r}
 			if kind != "key" {
 				h.pointer = next
@@ -49,10 +49,10 @@ func TestAdoptTakesTheLastRegionWithTheSameID(t *testing.T) {
 	t.Parallel()
 	first, last, next := &adoptionCounter{}, &adoptionCounter{}, &adoptionCounter{}
 	id := new(byte)
-	c := Canvas{prev: []hitRegion{
+	c := withPrev([]hitRegion{
 		{rect: Rct(Pt(0, 0), Sz(20, 20)), id: id, pointer: first},
 		{rect: Rct(Pt(50, 50), Sz(20, 20)), id: id, pointer: last},
-	}}
+	})
 	h := hitRegion{rect: Rct(Pt(90, 90), Sz(20, 20)), id: id, pointer: next}
 	c.adopt(&h)
 	if next.calls != 1 || next.from != last {
@@ -66,7 +66,7 @@ func TestAdoptSkipsIDsTheLanguageCannotCompare(t *testing.T) {
 	// is impossible, but it must not bring the frame down either.
 	old, next := &adoptionCounter{}, &adoptionCounter{}
 	r := Rct(Pt(0, 0), Sz(20, 20))
-	c := Canvas{prev: []hitRegion{{rect: r, id: []int{1}, pointer: old}}}
+	c := withPrev([]hitRegion{{rect: r, id: []int{1}, pointer: old}})
 	h := hitRegion{rect: r, id: []int{1}, pointer: next}
 	c.adopt(&h)
 	if next.calls != 0 {
@@ -78,12 +78,12 @@ func TestAdoptIndexIsRebuiltEachFrame(t *testing.T) {
 	t.Parallel()
 	first, second := &adoptionCounter{}, &adoptionCounter{}
 	r := Rct(Pt(0, 0), Sz(20, 20))
-	c := Canvas{prev: []hitRegion{{rect: r, pointer: first}}}
+	c := withPrev([]hitRegion{{rect: r, pointer: first}})
 	h := hitRegion{rect: r, pointer: &adoptionCounter{}}
 	c.adopt(&h)
 
 	// The next frame's prev holds someone else at the same Rect.
-	c.prev, c.hits = []hitRegion{{rect: r, pointer: second}}, nil
+	c.fs().prev, c.fs().hits = []hitRegion{{rect: r, pointer: second}}, nil
 	c.nextFrame()
 	next := &adoptionCounter{}
 	h = hitRegion{rect: r, pointer: next}
@@ -149,12 +149,12 @@ func TestClipReusingIsAClipMadeAgain(t *testing.T) {
 	t.Parallel()
 	c := &Canvas{scale: 2, clip: Rct(Pt(0, 0), Sz(50, 50)), clipped: true}
 	var reuse Canvas
-	reuse.hits = []hitRegion{{}}
+	reuse.frameState = &frameState{} // another frame's
 	reuse.inert = true
 	r := Rct(Pt(10, 10), Sz(100, 100))
 	got := c.ClipReusing(&reuse, r)
 	want := c.Clip(r)
-	if got != &reuse || got.clip != want.clip || got.parent != c || got.Scale() != 2 || got.inert || len(got.hits) != 0 {
+	if got != &reuse || got.clip != want.clip || got.parent != c || got.Scale() != 2 || got.inert || got.fs() != c.fs() {
 		t.Fatalf("reused clip %+v; want %+v made anew", *got, *want)
 	}
 }
@@ -389,7 +389,7 @@ func TestPaintHoldsTheClockOnlyWhilePainting(t *testing.T) {
 	}
 	// A Clip shares its root's frame state rather than walking to it.
 	clip := p.canvas.Clip(Rct(Point{}, Sz(5, 5)))
-	if clip.frame != p.canvas.fs() {
+	if clip.frameState != p.canvas.fs() {
 		t.Fatal("a Clip has a frame state of its own")
 	}
 }
@@ -399,3 +399,10 @@ type paintFunc func(dst *Canvas, r Rect)
 
 func (paintFunc) Layout(c Constraints, _ Env) Size { return c.Max() }
 func (f paintFunc) Paint(dst *Canvas, r Rect)      { f(dst, r) }
+
+// withPrev is a root Canvas whose last frame registered prev.
+func withPrev(prev []hitRegion) *Canvas {
+	c := &Canvas{}
+	c.fs().prev = prev
+	return c
+}

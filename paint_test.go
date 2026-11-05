@@ -64,10 +64,10 @@ func TestPathArcFollowsTheCircle(t *testing.T) {
 }
 
 func layerCount(c *Canvas) int {
-	if c.frame == nil {
+	if c.frameState == nil {
 		return 0
 	}
-	return c.frame.layers.Len()
+	return c.frameState.layers.Len()
 }
 
 func TestLayerSiblingsShareOneImage(t *testing.T) {
@@ -100,8 +100,8 @@ func TestLayerNestedGetsItsOwnImage(t *testing.T) {
 	if outer == inner || layerCount(c) != 2 {
 		t.Fatalf("nested layers borrowed %p and %p with %d pooled; want two images", outer, inner, layerCount(c))
 	}
-	if c.frame.layers.Depth() != 0 {
-		t.Fatalf("depth %d after the layers returned; want 0", c.frame.layers.Depth())
+	if c.frameState.layers.Depth() != 0 {
+		t.Fatalf("depth %d after the layers returned; want 0", c.frameState.layers.Depth())
 	}
 	c.freeLayers()
 }
@@ -153,8 +153,8 @@ func TestLayerCanvasIsTheCallersButForTheImage(t *testing.T) {
 	root := &Canvas{Image: img}
 	clipped := root.Clip(Rct(Pt(10, 10), Sz(20, 20))).Inert()
 	clipped.Layer(LayerOptions{}, func(l *Canvas) {
-		if !l.inert || !l.clipped || l.clip != clipped.clip || l.root() != root || l.frame != root.fs() {
-			t.Fatalf("layer canvas lost the caller's state: inert %v clipped %v clip %v, its frame state shared %v", l.inert, l.clipped, l.clip, l.frame == root.fs())
+		if !l.inert || !l.clipped || l.clip != clipped.clip || l.root() != root || l.frameState != root.fs() {
+			t.Fatalf("layer canvas lost the caller's state: inert %v clipped %v clip %v, its frame state shared %v", l.inert, l.clipped, l.clip, l.frameState == root.fs())
 		}
 	})
 	root.freeLayers()
@@ -187,7 +187,7 @@ func TestClipRoundRectPaintsIntoALayerCoveringOnlyTheRect(t *testing.T) {
 	if got.Image == img || got.Image.Bounds() != image.Rect(20, 10, 60, 70) {
 		t.Fatalf("round clip painted into %v; want a layer over the rect's pixels", got.Image.Bounds())
 	}
-	if !got.clipped || got.clip != r || layerCount(c) != 1 || c.frame.layers.Depth() != 0 {
+	if !got.clipped || got.clip != r || layerCount(c) != 1 || c.frameState.layers.Depth() != 0 {
 		t.Fatalf("round clip canvas clip %v (%v) with %d pooled; want %v and one returned layer", got.clip, got.clipped, layerCount(c), r)
 	}
 	c.freeLayers()

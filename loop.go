@@ -402,23 +402,20 @@ type paintPass struct {
 // closed or had no root by the time it settled.
 func (l *frameLoop) paint(p paintPass) (bool, error) {
 	c := p.canvas
+	f := l.beginPaint(c)
+	defer endPaint(f)
 	// Last frame's regions stay readable while this frame paints, for
 	// Adopter handoff, and input keeps routing to them until the paint is
 	// done. The buffer of the frame before takes the new regions: input
 	// keeps copies of the regions it follows, never a pointer into it.
-	spare := c.prev
-	c.prev, c.hits = c.hits, spare[:0]
+	spare := f.prev
+	f.prev, f.hits = f.hits, spare[:0]
 	// A frame that ends before painting leaves the buffers as they were,
 	// so the one input routes to is never painted into.
-	unswap := func() { c.hits, c.prev = c.prev, spare }
-	f := c.fs()
+	unswap := func() { f.hits, f.prev = f.prev, spare }
 	f.logical = p.size
-	f.clock = &l.world().frame
-	defer func() { f.clock = nil }()
 	f.traceState.reset(p.tracing)
 	f.inputView.take(p.in)
-	f.resetCanvases()
-	f.startMotion()
 	c.nextFrame()
 	c.resetSemantics()
 	f.semOff = p.semOff
@@ -434,17 +431,17 @@ func (l *frameLoop) paint(p paintPass) (bool, error) {
 		p.settled()
 	}
 	l.paintTree(c)
-	p.in.setRegions(c.hits, f.found)
-	p.in.observers = c.inputObservers
-	p.in.painted = c.shortcuts
+	p.in.setRegions(f.hits, f.found)
+	p.in.observers = f.inputObservers
+	p.in.painted = f.shortcuts
 	p.in.refreshFocused()
 	// A widget that changed its cursor over what the pointer just did, as
 	// a link underlined when a key is held, shows it this frame.
 	if f.hasPointer {
 		p.in.updateCursor(f.pointer)
 	}
-	p.in.applyFocusRequest(c)
-	p.in.applyRevealRequests(c)
+	p.in.applyFocusRequest(f)
+	p.in.applyRevealRequests(f)
 	if !p.semOff {
 		l.publishSemantics(c, p.in.focused)
 	}
@@ -455,6 +452,26 @@ func (l *frameLoop) paint(p paintPass) (bool, error) {
 		p.overlay.Paint(c)
 	}
 	return true, nil
+}
+
+// beginPaint starts a paint of the tree through c, the root Canvas, whole
+// or in part: the Canvases Clip handed out are taken back, the world's
+// clock is the one Paint finds, the motion is noted afresh, and no
+// BackdropBlur has read the image yet. Defer endPaint with what it returns.
+func (l *frameLoop) beginPaint(c *Canvas) *frameState {
+	f := c.fs()
+	f.resetCanvases()
+	f.clock = &l.world().frame
+	f.startMotion()
+	f.backdrop = false
+	return f
+}
+
+// endPaint ends the paint beginPaint began: no Canvas Clip handed out
+// outlives it, and outside a paint, Paint asks for the clock.
+func endPaint(f *frameState) {
+	f.resetCanvases()
+	f.clock = nil
 }
 
 // settle completes structural work, including mounts discovered by layout,

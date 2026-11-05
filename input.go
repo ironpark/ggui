@@ -368,6 +368,25 @@ func (in *inputState) dispatch(f frameInput) {
 	in.dispatchKeys(f)
 }
 
+// dispatchOver offers f to the overlay before the widgets, unless a widget
+// holds a press, so that a drag that began in the app finishes there.
+func (in *inputState) dispatchOver(o Overlay, f frameInput) {
+	if o == nil || in.pressed != nil || !o.Input(overlayInput(f)) {
+		in.dispatch(f)
+	}
+}
+
+// cursorOver is the cursor at p: the overlay's when it wants one and no
+// widget holds a press, else what the widgets asked for.
+func (in *inputState) cursorOver(o Overlay, p Point) CursorShape {
+	if o != nil && in.pressed == nil {
+		if shape, ok := o.Cursor(p); ok {
+			return shape
+		}
+	}
+	return in.cursor
+}
+
 // markBusyGroups records the groups holding focus or a pointer capture after
 // this dispatch, so EachKeyed.Retain leaves them be.
 func (in *inputState) markBusyGroups() {
@@ -756,28 +775,35 @@ func (in *inputState) findKey(p Point) *hitRegion {
 	return in.topmost(func(r *hitRegion) bool { return r.key != nil && r.contains(p) })
 }
 
-// findPointer returns the region that continues p this frame: the one
-// with the same handler, wherever it moved to, or else the topmost pointer
-// region painted exactly where p was, which is a rebuilt widget.
-func (in *inputState) findPointer(p *hitRegion) *hitRegion {
-	if r := in.regionOf(p.pointer, false); r != nil {
-		return r
-	}
-	if p.id != nil {
-		return in.topmost(func(r *hitRegion) bool { return r.pointer != nil && r.id == p.id })
-	}
-	return in.topmost(func(r *hitRegion) bool { return r.pointer != nil && r.id == nil && r.rect == p.rect })
-}
+// findPointer returns the region that continues p this frame by its
+// pointer handler; see continuing.
+func (in *inputState) findPointer(p *hitRegion) *hitRegion { return in.continuing(p, false) }
 
 // findKeyRegion is findPointer for a key region.
-func (in *inputState) findKeyRegion(p *hitRegion) *hitRegion {
-	if r := in.regionOf(p.key, true); r != nil {
+func (in *inputState) findKeyRegion(p *hitRegion) *hitRegion { return in.continuing(p, true) }
+
+// continuing returns the region that continues p this frame, matched by
+// its key handler when key is set and by its pointer handler otherwise:
+// the one with the same handler, wherever it moved to, or else the topmost
+// region with such a handler and p's ID, or with none and painted exactly
+// where p was, which is a rebuilt widget.
+func (in *inputState) continuing(p *hitRegion, key bool) *hitRegion {
+	if r := in.regionOf(handlerOf(p, key), key); r != nil {
 		return r
 	}
 	if p.id != nil {
-		return in.topmost(func(r *hitRegion) bool { return r.key != nil && r.id == p.id })
+		return in.topmost(func(r *hitRegion) bool { return r.handles(key) && r.id == p.id })
 	}
-	return in.topmost(func(r *hitRegion) bool { return r.key != nil && r.id == nil && r.rect == p.rect })
+	return in.topmost(func(r *hitRegion) bool { return r.handles(key) && r.id == nil && r.rect == p.rect })
+}
+
+// handles reports whether r has a key handler, when key is set, or else a
+// pointer handler.
+func (r *hitRegion) handles(key bool) bool {
+	if key {
+		return r.key != nil
+	}
+	return r.pointer != nil
 }
 
 // refreshFocused moves the focused region to where its widget painted this
@@ -1135,16 +1161,16 @@ func (f *FocusWidget) Paint(dst *Canvas, r Rect) {
 }
 
 // applyRevealRequests runs the Canvas.RequestReveal calls this paint made.
-func (in *inputState) applyRevealRequests(c *Canvas) {
-	for _, r := range c.revealRequests {
+func (in *inputState) applyRevealRequests(f *frameState) {
+	for _, r := range f.revealRequests {
 		in.reveal(r)
 	}
-	c.revealRequests = c.revealRequests[:0]
+	f.revealRequests = f.revealRequests[:0]
 }
 
-func (in *inputState) applyFocusRequest(c *Canvas) {
-	h := c.focusRequest
-	c.focusRequest = nil
+func (in *inputState) applyFocusRequest(f *frameState) {
+	h := f.focusRequest
+	f.focusRequest = nil
 	if h == nil {
 		return
 	}

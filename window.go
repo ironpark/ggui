@@ -826,8 +826,6 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 	} else if wanted && w.drawPartial(screen, target, kept, asked, setDamage) {
 		return
 	}
-	w.canvas.fs().resetCanvases()
-	defer w.canvas.fs().resetCanvases()
 	dst := target
 	if !within.Empty() {
 		dst = target.SubImage(within).(*ggfx.Image)
@@ -845,9 +843,7 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 		return
 	}
 	defer w.canvas.trimLayers()
-	w.canvas.Image = dst
-	w.canvas.window, w.canvas.onScreen = true, target == screen
-	w.canvas.fs().backdrop = false
+	w.aim(dst, target, screen)
 	defer w.presentBackdrop(screen, target)
 	logical := w.logicalSize(screen)
 	if Untrack(w.viewport.Get) != logical {
@@ -868,7 +864,7 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 				framestats.Refuse("state changed")
 				w.frameLoop.endFrameFree(true, true)
 				dst = target
-				w.canvas.Image = target
+				w.aim(dst, target, screen)
 				if setDamage != nil {
 					setDamage([]image.Rectangle{screen.Bounds()})
 				}
@@ -897,6 +893,13 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 		return
 	}
 	w.noteMotion(target)
+}
+
+// aim points the window's Canvas at dst, which is target or a part of
+// it, target being screen or the backbuffer.
+func (w *Window) aim(dst, target, screen *ggfx.Image) {
+	w.canvas.Image = dst
+	w.canvas.window, w.canvas.onScreen = true, target == screen
 }
 
 // The methods here change the native window. Called before the window

@@ -296,18 +296,12 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect
 		return false
 	}
 	c := &w.canvas
-	c.Image = target
-	c.window, c.onScreen = true, target == screen
-	f := c.fs()
-	f.resetCanvases()
-	defer f.resetCanvases()
-	f.clock = &w.world().frame
-	defer func() { f.clock = nil }()
-	f.startMotion()
-	f.backdrop = false
-	// Nothing painted registers anything, but what slips past the inert
-	// Canvas is let go after.
-	observers, shortcuts, reveals := len(c.inputObservers), len(c.shortcuts), len(c.revealRequests)
+	w.aim(target, target, screen)
+	f := w.beginPaint(c)
+	defer endPaint(f)
+	// Painted inert, nothing registers input, requests focus or a reveal,
+	// observes input or listens for a shortcut: what the last whole frame
+	// registered stands.
 	background := w.background()
 	f.partial = true
 	func() {
@@ -322,8 +316,6 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect
 		}
 	}()
 	f.partial = false
-	c.inputObservers, c.shortcuts, c.revealRequests = c.inputObservers[:observers], c.shortcuts[:shortcuts], c.revealRequests[:reveals]
-	c.focusRequest, c.focusClaim = nil, nil
 	// The layers are trimmed by whole frames alone: one painted in part
 	// uses those of the regions it paints, and freeing the rest would make
 	// the next whole frame allocate them again.
