@@ -878,3 +878,53 @@ func TestStickyHeadersFollowTheItems(t *testing.T) {
 		t.Fatal("the row where a header used to be is pinned")
 	}
 }
+
+// ItemEqual(nil) tells every kept row of every change, even of items ==
+// could compare, as WithEqual(nil) does for a State.
+func TestItemEqualNilTellsEveryRow(t *testing.T) {
+	t.Parallel()
+	items := State([]int{1, 2, 3})
+	runs := 0
+	p := ProbeBuilder(func() Widget {
+		return Each(items, func(row EachItem[int]) Widget {
+			return Reactive(func() Widget { row.Value.Get(); runs++; return Box().Size(1, 1) })
+		}).ItemEqual(nil)
+	}, Sz(100, 100))
+	defer p.Close()
+	p.Frame()
+	runs = 0
+	items.Set([]int{1, 2, 3, 4})
+	p.Frame()
+	if runs != 4 {
+		t.Fatalf("%d rows ran after an append, want all 3 kept and the new one", runs)
+	}
+}
+
+// Frames of a list of 5000 rows, every one laid out, with sticky headers,
+// scrolled into its middle: finding the header pinned over the window.
+func BenchmarkStickyPlainFrame(b *testing.B) {
+	ids := make([]int, 5000)
+	for i := range ids {
+		ids[i] = i
+	}
+	painted := map[int]Rect{}
+	var f *EachWidget[int, int]
+	dispose := reactive.Observe(func() {
+		f = EachKeyed(State(ids), func(i int) int { return i }, func(row EachItem[int]) Widget {
+			id := row.Item
+			return FromFuncs(
+				func(c Constraints, _ Env) Size { return c.Constrain(Sz(50, 20)) },
+				func(_ *Canvas, r Rect) { painted[id] = r },
+			)
+		}).StickyHeaders(func(i int) bool { return i%1000 == 0 })
+	})
+	defer dispose()
+	offset := State(50000.0)
+	s := Scroll(f).BindOffset(offset)
+	frame(s, painted)
+	b.ReportAllocs()
+	for i := 0; b.Loop(); i++ {
+		offset.Set(50000 + float64(i%2)*5)
+		frame(s, painted)
+	}
+}

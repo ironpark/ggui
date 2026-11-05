@@ -25,7 +25,6 @@ type eachPin[T any] struct {
 	// asking isHeader of every row back from the window each frame.
 	headers []int
 	gen     uint64
-	found   bool
 }
 
 // StickyHeaders makes the rows isHeader picks section headers: inside a
@@ -47,14 +46,16 @@ func (f *EachWidget[T, K]) StickyHeaders(isHeader func(T) bool) *EachWidget[T, K
 // them again only when the items have changed since.
 func (f *EachWidget[T, K]) headerRows() []int {
 	p := &f.pin
-	if !p.found || p.gen != f.itemsGen {
+	// The items are set before the first layout, so their generation is
+	// never the zero that a pin which has found nothing starts at.
+	if p.gen != f.itemsGen {
 		p.headers = p.headers[:0]
 		for i, item := range f.items {
 			if p.header(item) {
 				p.headers = append(p.headers, i)
 			}
 		}
-		p.gen, p.found = f.itemsGen, true
+		p.gen = f.itemsGen
 	}
 	return p.headers
 }
@@ -155,6 +156,11 @@ func (f *EachWidget[T, K]) pinned(r Rect) (*forEntry[T], int, Rect) {
 	}
 	// Every row is laid out: find the header above the window's start and
 	// the end of its section, which is where the next header's row begins.
+	// With no row leaving, child i is item i, and the headers are looked
+	// up rather than asked of every row above the window.
+	if len(f.leaving) == 0 {
+		return f.pinnedAmong(edge, at)
+	}
 	head := -1
 	for i, e := range f.childEntries {
 		if f.mainAt(i) > edge {
@@ -184,6 +190,33 @@ func (f *EachWidget[T, K]) pinned(r Rect) (*forEntry[T], int, Rect) {
 	e := f.childEntries[head]
 	cross := f.crossAt(head)
 	return e, Untrack(e.position.Get), Rct(at(pos, cross), f.rects[head].Size)
+}
+
+// pinnedAmong is pinned for a list whose every row is laid out and none
+// leaving: the header of the row the window starts on, and the end of its
+// section, the end of the row before the next header or of the last row.
+func (f *EachWidget[T, K]) pinnedAmong(edge float64, at func(main, cross float64) Point) (*forEntry[T], int, Rect) {
+	n := min(len(f.childEntries), len(f.items))
+	row := sort.Search(n, func(i int) bool { return f.mainAt(i) > edge }) - 1
+	if row < 0 {
+		return nil, 0, Rect{}
+	}
+	head := f.headerBefore(row)
+	if head < 0 {
+		return nil, 0, Rect{}
+	}
+	start := f.mainAt(head)
+	lead := f.main(f.rects[head].Size)
+	last := n - 1
+	if next := f.headerAfter(head); next >= 0 && next <= n {
+		last = next - 1
+	}
+	end := max(start+lead, f.mainAt(last)+f.main(f.rects[last].Size))
+	pos := pinPos(edge, start, end, lead)
+	if pos == start {
+		return nil, 0, Rect{}
+	}
+	return f.childEntries[head], head, Rct(at(pos, f.crossAt(head)), f.rects[head].Size)
 }
 
 // placeKey answers the enclosing Scroll's ScrollToKey when the key is one

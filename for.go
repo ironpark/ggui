@@ -25,8 +25,7 @@ type EachWidget[T any, K comparable] struct {
 	key          func(int, T) K
 	build        func(EachItem[T]) Widget
 	retain       int               // offscreen rows kept mounted with ItemExtent; 0 keeps all
-	itemEq       func(a, b T) bool // see ItemEqual, when itemEqSet
-	itemEqSet    bool
+	itemEq       func(a, b T) bool // how a row's item is compared; see ItemEqual
 	frame        uint64
 	owner        *reactive.Computation
 	items        []T
@@ -114,7 +113,7 @@ func Each[T any](items Readable[[]T], build func(EachItem[T]) Widget) *EachWidge
 }
 
 func each[T any, K comparable](items Readable[[]T], key func(int, T) K, build func(EachItem[T]) Widget) *EachWidget[T, K] {
-	f := &EachWidget[T, K]{key: key, build: build, entries: map[K]*forEntry[T]{}}
+	f := &EachWidget[T, K]{key: key, build: build, entries: map[K]*forEntry[T]{}, itemEq: reactive.ComparableEqual[T]()}
 	f.mount = Component(func() Widget {
 		f.mounted = true
 		f.owner = reactive.CurrentOwner()
@@ -342,7 +341,7 @@ func (f *EachWidget[T, K]) Retain(n int) *EachWidget[T, K] { f.checkConfig(); f.
 // eq is written: give the list a new item for a row that should update.
 func (f *EachWidget[T, K]) ItemEqual(eq func(a, b T) bool) *EachWidget[T, K] {
 	f.checkConfig()
-	f.itemEq, f.itemEqSet = eq, true
+	f.itemEq = eq
 	return f
 }
 
@@ -355,9 +354,7 @@ func (f *EachWidget[T, K]) entry(i int) *forEntry[T] {
 	e := f.entries[k]
 	if e == nil {
 		e = &forEntry[T]{item: State(f.items[i]), position: State(i)}
-		if f.itemEqSet {
-			e.item.WithEqual(f.itemEq)
-		}
+		e.item.WithEqual(f.itemEq) // nil, as for State, tells the row of every write
 		reactive.WithOwner(f.owner, func() {
 			e.dispose = reactive.RootWith(e, fmt.Sprint(k), func() {
 				e.widget = remembering(func() Widget { return f.build(EachItem[T]{Value: e.item, Index: e.position, Item: f.items[i]}) })
