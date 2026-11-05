@@ -50,6 +50,14 @@ type cache[Key comparable, Value any] struct {
 	// swept is when entries were last looked over for age (see maxAge).
 	swept int64
 
+	// own, when set, returns a key that shares no memory with the one
+	// asked for. A key holding a substring keeps the whole string it was
+	// cut from alive for as long as the entry lives: an editor's every
+	// keystroke makes a new copy of its document, and the lines shaped
+	// from each would keep one copy apiece. own runs only on a miss, so a
+	// hit costs nothing.
+	own func(Key) Key
+
 	m sync.Mutex
 }
 
@@ -76,6 +84,9 @@ func (c *cache[Key, Value]) getOrCreate(key Key, create func() (Value, bool)) Va
 	}
 
 	ent, canExpire := create()
+	if c.own != nil {
+		key = c.own(key)
+	}
 	e = &cacheValue[Value]{
 		value: ent,
 		atime: infTick,

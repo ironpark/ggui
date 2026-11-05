@@ -51,6 +51,21 @@ func BenchmarkTyping(b *testing.B) {
 	}
 }
 
+// Holding Backspace at the document's end: each press steps back over a
+// cluster of the text the press before made, so what one costs is finding
+// the clusters of a new string, the line the caret is on.
+func BenchmarkBackspace(b *testing.B) {
+	var e Editor
+	b.ReportAllocs()
+	for b.Loop() {
+		if e.Caret < 64 {
+			e.SetText(benchDoc)
+			e.MoveTo(len(benchDoc), false)
+		}
+		e.Backspace(false)
+	}
+}
+
 // Moving by word from one end of the document to the other.
 func BenchmarkMoveByWord(b *testing.B) {
 	var e Editor
