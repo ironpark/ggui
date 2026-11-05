@@ -44,6 +44,7 @@ func Select[T comparable](value ggui.Binding[T]) *SelectWidget[T] {
 	s.Role = ggui.RoleSelect
 	s.AutoKey()
 	s.box = ggui.Box()
+	s.text = ggui.Text("").NoWrap()
 	column := ggui.Column().Align(ggui.AlignStretch)
 	s.viewport = &selectViewport[T]{owner: s, column: column, offset: ggui.State(0.0)}
 	s.viewport.scroll = ggui.Scroll(column).BindOffset(s.viewport.offset)
@@ -196,7 +197,9 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	s.pad = t.FieldPad
 	s.box.Radius(t.Radius).Fill(t.Input)
 	panelBox(s.list, t)
-	s.text = ggui.Text(s.label(ggui.Untrack(s.value.Get))).NoWrap().Color(pick[color.Color](s.IsInert(), t.MutedFg, t.Fg))
+	// The label is one Text for the field's life, so its shaping survives
+	// a relayout that changes neither the value nor the style.
+	s.text.Content(s.label(ggui.Untrack(s.value.Get))).Color(pick[color.Color](s.IsInert(), t.MutedFg, t.Fg))
 	// As wide as the widest option, so the field does not resize as the
 	// value changes, and never wider than the row wants unless told to.
 	widest := 0.0

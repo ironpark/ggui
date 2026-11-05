@@ -17,6 +17,7 @@ type chartTextKey struct {
 type chartText struct {
 	widget *ggui.TextWidget
 	size   ggui.Size
+	layout uint64 // the chart's textLayout this was measured at
 }
 
 func (c *ChartWidget) text(dst *ggui.Canvas, text string, p ggui.Point, size float64, col color.Color, align float64) {
@@ -32,14 +33,21 @@ func (c *ChartWidget) measuredText(text string, size float64, col color.Color) *
 	if c.textCache == nil {
 		c.textCache = make(map[chartTextKey]*chartText)
 	}
+	free := ggui.Loose(ggui.Sz(ggui.Unbounded, ggui.Unbounded))
 	t := c.textCache[key]
 	if t == nil {
 		w := ggui.Text(text).Size(size).Color(col)
-		t = &chartText{w, w.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, ggui.Unbounded)), c.env)}
+		t = &chartText{widget: w, size: w.Layout(free, c.env), layout: c.textLayout}
 		if len(c.textCache) > 512 {
 			clear(c.textCache)
 		}
 		c.textCache[key] = t
+	} else if t.layout != c.textLayout {
+		// Measured under an earlier Layout: lay it out again under this
+		// one's env. A Text keeps its lines while its value, resolved style
+		// and fonts are unchanged, so this is cheap unless a theme, font or
+		// text scale moved, and then it is the measurement that changed.
+		t.size, t.layout = t.widget.Layout(free, c.env), c.textLayout
 	}
 	return t
 }

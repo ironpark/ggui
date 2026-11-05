@@ -169,6 +169,7 @@ type ChartWidget struct {
 	revision, cacheRevision                                        uint64
 	started                                                        time.Time
 	textCache                                                      map[chartTextKey]*chartText
+	textLayout                                                     uint64 // counts Layouts, so a cached label re-measures once under each
 	curves                                                         [][]chartCurvePaths
 	curveRect                                                      ggui.Rect
 }
@@ -412,7 +413,7 @@ func (c *ChartWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	c.env = env
 	c.theme = uitheme.From(env)
 	c.reduced = env.ReducedMotion()
-	c.textCache = nil
+	c.textLayout++ // cached labels re-measure under env as they are next used
 	return cs.Constrain(ggui.Sz(bounded(cs.MaxW, 400), c.height))
 }
 func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }

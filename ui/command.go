@@ -51,6 +51,12 @@ type CommandWidget struct {
 	offset             *ggui.StateValue[float64]
 	panel              *ggui.BoxWidget
 	body               *ggui.ColumnWidget
+	styled             *ggui.StyledWidget
+	resultsBox         *ggui.BoxWidget  // the scroll at its height
+	searchBox          *ggui.BoxWidget  // the inset search's fill, nil when not inset
+	hint               *ggui.TextWidget // the key hints under the results
+	builtInset         bool             // the insetSearch body was built for
+	builtHints         bool             // the hints body was built for
 	matched            []int
 	highlight          int
 	lastQuery          string
@@ -259,25 +265,52 @@ func (c *CommandWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	if c.stable {
 		height = c.height
 	}
-	results := ggui.Box(c.scroll).Height(height + 8).Pad(4)
-	search := ggui.Padding(ggui.Row(commandSearchIcon{c}, ggui.Expanded(c.field)).Gap(0), 0, 8)
-	parts := []ggui.Widget{search, Divider(), results}
-	if c.insetSearch {
-		search = ggui.Padding(ggui.Box(search).Fill(t.Muted).Radius(t.Radius), 8, 8, 0, 8)
-		parts = []ggui.Widget{search, results}
+	// The panel is built once, and again only when the search inset or the
+	// hints come or go, so the hint's shaping and the boxes' layout caches
+	// survive a relayout.
+	if c.panel == nil || c.builtInset != c.insetSearch || c.builtHints != c.hints {
+		c.buildPanel()
 	}
-	if c.hints {
-		parts = append(parts, Divider(), ggui.Padding(Caption("↑↓ "+c.hintNav+"   ↵ "+c.hintSel), 8, 12))
+	c.resultsBox.Height(height + 8)
+	if c.searchBox != nil {
+		c.searchBox.Fill(t.Muted).Radius(t.Radius)
 	}
-	c.body = ggui.Column(parts...).Gap(0).Align(ggui.AlignStretch)
-	c.panel = ggui.Box(ggui.Styled(c.body).Color(t.PopoverFg)).Fill(t.Popover).Border(t.BorderWidth, t.Border).Radius(t.Radius)
+	if c.hint != nil {
+		c.hint.Content("↑↓ " + c.hintNav + "   ↵ " + c.hintSel)
+	}
+	c.styled.Color(t.PopoverFg)
+	c.panel.Fill(t.Popover).Border(t.BorderWidth, t.Border).Radius(t.Radius)
 	if c.borderless {
 		c.panel.Border(0, nil)
 	}
 	if _, ok := ggui.PopupOf(env); ok {
 		c.panel.Shadow(t.PanelShadow)
+	} else {
+		c.panel.Shadow()
 	}
 	return c.panel.Layout(cs, env)
+}
+
+// buildPanel assembles the panel for the current insetSearch and hints;
+// Layout styles it from the theme.
+func (c *CommandWidget) buildPanel() {
+	c.resultsBox = ggui.Box(c.scroll).Pad(4)
+	search := ggui.Padding(ggui.Row(commandSearchIcon{c}, ggui.Expanded(c.field)).Gap(0), 0, 8)
+	parts := []ggui.Widget{search, Divider(), c.resultsBox}
+	c.searchBox = nil
+	if c.insetSearch {
+		c.searchBox = ggui.Box(search)
+		parts = []ggui.Widget{ggui.Padding(c.searchBox, 8, 8, 0, 8), c.resultsBox}
+	}
+	c.hint = nil
+	if c.hints {
+		c.hint = Caption("")
+		parts = append(parts, Divider(), ggui.Padding(c.hint, 8, 12))
+	}
+	c.body = ggui.Column(parts...).Gap(0).Align(ggui.AlignStretch)
+	c.styled = ggui.Styled(c.body)
+	c.panel = ggui.Box(c.styled)
+	c.builtInset, c.builtHints = c.insetSearch, c.hints
 }
 
 // Paint implements ggui.Widget.
