@@ -173,8 +173,8 @@ func (n *SemNode) Flags() string {
 	case TriMixed:
 		b.WriteString(" mixed")
 	}
-	if n.Expanded != nil {
-		b.WriteString(gem.Pick(*n.Expanded, " expanded", " collapsed"))
+	if n.Expanded.Expandable() {
+		b.WriteString(gem.Pick(n.Expanded.Open(), " expanded", " collapsed"))
 	}
 	if n.Selected {
 		b.WriteString(" selected")

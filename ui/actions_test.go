@@ -87,7 +87,7 @@ func TestActOpensAndChoosesInASelect(t *testing.T) {
 	p := ggui.NewProbe(ggui.Column(ui.Select(value).Options([]int{1, 2, 3}).Name("Count")), ggui.Sz(200, 300))
 	defer p.Close()
 	act(t, p, ggui.RoleSelect, "Count", ggui.Action{Kind: ggui.ActionExpand})
-	if n, _ := p.Semantics().Find(ggui.RoleSelect, "Count"); n.Expanded == nil || !*n.Expanded {
+	if n, _ := p.Semantics().Find(ggui.RoleSelect, "Count"); !n.Expanded.Open() {
 		t.Fatal("the list did not open")
 	}
 	act(t, p, ggui.RoleOption, "3", ggui.Action{Kind: ggui.ActionSelect})

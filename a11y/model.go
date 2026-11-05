@@ -110,15 +110,33 @@ func Tri(v bool) Tristate {
 	return TriOff
 }
 
-// Expandable returns a pointer to v, for Node.Expanded: a nil Expanded
-// means the node does not expand at all, which is not the same as being
-// expandable and closed.
-//
-// go fix offers to inline this into new(v) at every call site. Decline it:
-// the name is the point. A bare new(open) beside Role and Name says nothing
-// about the three states Expanded has, and this is the only place the
-// difference between "closed" and "does not expand" is written down.
-func Expandable(v bool) *bool { return &v }
+// Expansion is whether a node expands, and if it does whether it is open:
+// a disclosure, an accordion section, a combobox. The zero value says the
+// node does not expand at all, which is not the same as being expandable
+// and closed. It is a value rather than a pointer to a bool so that
+// describing a node allocates nothing and no two nodes can share one.
+type Expansion uint8
+
+const (
+	ExpandNone   Expansion = iota // does not expand
+	ExpandClosed                  // expandable and closed
+	ExpandOpen                    // expandable and open
+)
+
+// Expandable returns ExpandOpen for true and ExpandClosed for false, for
+// Node.Expanded of a control whose open state is a plain bool.
+func Expandable(open bool) Expansion {
+	if open {
+		return ExpandOpen
+	}
+	return ExpandClosed
+}
+
+// Expandable reports whether the node expands at all.
+func (e Expansion) Expandable() bool { return e != ExpandNone }
+
+// Open reports whether the node is expandable and open.
+func (e Expansion) Open() bool { return e == ExpandOpen }
 
 // ActionSet is the set of actions a node accepts, as a bitset. A node
 // advertises what it supports so an assistive technology can offer it; see
@@ -144,21 +162,21 @@ func (a ActionSet) Has(b ActionSet) bool { return a&b == b }
 // Node describes one element of the accessibility tree: what it is, what it
 // is called, and what may be done to it. A widget fills in only the fields
 // its role gives meaning to; the zero value of every other field says "not
-// applicable", which is why Expanded is a pointer and Checked has a TriNone.
-// Pointers and slices are borrowed until the frame finishes; the published
+// applicable", which is why Expanded has an ExpandNone and Checked a
+// TriNone. Slices are borrowed until the frame finishes; the published
 // SemTree copies them, so a widget may reuse their storage next frame.
 type Node struct {
 	Role        Role
-	Name        string   // what the element is called, read first
-	Description string   // the longer explanation, read after the name
-	Value       string   // a text field's contents, a select's current option
-	Checked     Tristate // checkbox, radio, switch
-	Expanded    *bool    // accordion, collapsible, combobox; nil is not expandable
-	Selected    bool     // tab, option, row
-	Disabled    bool     // from Interactive.Inert: present, but takes no input
-	Min         float64  // slider, progress: the bottom of the range
-	Max         float64  // the top of the range, or a list's item count
-	Now         float64  // where the value sits in it, or an item's place in a list
+	Name        string    // what the element is called, read first
+	Description string    // the longer explanation, read after the name
+	Value       string    // a text field's contents, a select's current option
+	Checked     Tristate  // checkbox, radio, switch
+	Expanded    Expansion // accordion, collapsible, combobox; ExpandNone is not expandable
+	Selected    bool      // tab, option, row
+	Disabled    bool      // from Interactive.Inert: present, but takes no input
+	Min         float64   // slider, progress: the bottom of the range
+	Max         float64   // the top of the range, or a list's item count
+	Now         float64   // where the value sits in it, or an item's place in a list
 	Actions     ActionSet
 	Offscreen   bool // clipped out of view, but present with its true bounds
 	Level       int  // a tree item's depth, from 1; 0 where there is none

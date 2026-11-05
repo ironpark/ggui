@@ -433,7 +433,7 @@ func axElementSelected(self objc.ID, _ objc.SEL) bool {
 
 func axElementExpanded(self objc.ID, _ objc.SEL) bool {
 	_, _, n, ok := axSelf(self)
-	return ok && n.Expanded != nil && *n.Expanded
+	return ok && n.Expanded.Open()
 }
 
 func axElementHitTest(self objc.ID, _ objc.SEL, p nsPoint) objc.ID {

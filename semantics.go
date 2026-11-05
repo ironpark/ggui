@@ -13,6 +13,9 @@ type (
 	// Tristate is a checkbox-like state: not checkable, off, on or mixed.
 	Tristate = a11y.Tristate
 
+	// Expansion is whether a node expands, and if so whether it is open.
+	Expansion = a11y.Expansion
+
 	// ActionSet is the set of actions a node claims to support.
 	ActionSet = a11y.ActionSet
 
@@ -35,6 +38,13 @@ const (
 	TriMixed = a11y.TriMixed
 )
 
+// The expansion values.
+const (
+	ExpandNone   = a11y.ExpandNone
+	ExpandClosed = a11y.ExpandClosed
+	ExpandOpen   = a11y.ExpandOpen
+)
+
 // The actions a node may offer.
 const (
 	ActionPress          = a11y.ActionPress
@@ -53,8 +63,9 @@ const (
 // state is a plain boolean.
 func Tri(v bool) Tristate { return a11y.Tri(v) }
 
-// Expandable returns a pointer to v, for Node.Expanded.
-func Expandable(v bool) *bool { return a11y.Expandable(v) }
+// Expandable returns ExpandOpen for true and ExpandClosed for false, for
+// Node.Expanded.
+func Expandable(open bool) Expansion { return a11y.Expandable(open) }
 
 // The accessibility tree is built explicitly, not inferred from the hit
 // regions. It cannot be inferred: layout containers register no region at
@@ -353,11 +364,7 @@ func sameNode(a, b *Node) bool {
 		a.Value != b.Value || a.Checked != b.Checked || a.Selected != b.Selected ||
 		a.Disabled != b.Disabled || a.Min != b.Min || a.Max != b.Max || a.Now != b.Now ||
 		a.Actions != b.Actions || a.Offscreen != b.Offscreen || a.Level != b.Level ||
-		a.SelStart != b.SelStart || a.SelEnd != b.SelEnd {
-		return false
-	}
-	if (a.Expanded == nil) != (b.Expanded == nil) ||
-		a.Expanded != nil && *a.Expanded != *b.Expanded {
+		a.SelStart != b.SelStart || a.SelEnd != b.SelEnd || a.Expanded != b.Expanded {
 		return false
 	}
 	return (a.Runs == nil) == (b.Runs == nil) && slices.EqualFunc(a.Runs, b.Runs, func(a, b TextRun) bool {
@@ -369,10 +376,6 @@ func sameNode(a, b *Node) bool {
 // Describers may reuse their buffers next frame. Detach every mutable part
 // of the description before publishing it to readers on other threads.
 func freezeNode(n Node) Node {
-	if n.Expanded != nil {
-		expanded := *n.Expanded
-		n.Expanded = &expanded
-	}
 	n.Runs = slices.Clone(n.Runs)
 	for i := range n.Runs {
 		n.Runs[i].Stops = slices.Clone(n.Runs[i].Stops)

@@ -145,7 +145,7 @@ func TestSemanticsComboboxOwnsItsSearch(t *testing.T) {
 	c.Popup().Show()
 	tree := p.Semantics()
 	trigger := node(t, tree, ggui.RoleCombobox, "Choose option")
-	if trigger.Expanded == nil || !*trigger.Expanded {
+	if !trigger.Expanded.Open() {
 		t.Fatalf("the trigger does not report the open list:\n%s", tree)
 	}
 	if len(trigger.Children) == 0 {
@@ -172,7 +172,7 @@ accordion "Accordion"
 
 	tree := semantics(t, ui.Collapsible(ggui.State(true), "More", ggui.Text("body")), ggui.Sz(200, 200))
 	n := node(t, tree, ggui.RoleDisclosure, "More")
-	if n.Expanded == nil || !*n.Expanded {
+	if !n.Expanded.Open() {
 		t.Errorf("the collapsible does not report itself open:\n%s", tree)
 	}
 	if !n.Actions.Has(ggui.ActionCollapse) {

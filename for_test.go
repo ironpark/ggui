@@ -811,3 +811,70 @@ func TestEstimatedScrollFramesPlaceAsAFreshPlace(t *testing.T) {
 		}
 	}
 }
+
+// Scroll frames deep into a list of 100k fixed rows with sticky headers
+// far apart: finding the header of the section in view.
+func BenchmarkStickyScrollFrame(b *testing.B) {
+	ids := make([]int, 100000)
+	for i := range ids {
+		ids[i] = i
+	}
+	painted := map[int]Rect{}
+	var f *EachWidget[int, int]
+	dispose := reactive.Observe(func() {
+		f = EachKeyed(State(ids), func(i int) int { return i }, func(row EachItem[int]) Widget {
+			id := row.Item
+			return FromFuncs(
+				func(c Constraints, _ Env) Size { return c.Constrain(Sz(50, 20)) },
+				func(_ *Canvas, r Rect) { painted[id] = r },
+			)
+		}).ItemExtent(20).StickyHeaders(func(i int) bool { return i%50000 == 0 })
+	})
+	defer dispose()
+	offset := State(1900000.0)
+	s := Scroll(f).BindOffset(offset)
+	frame(s, painted)
+	b.ReportAllocs()
+	for i := 0; b.Loop(); i++ {
+		offset.Set(1900000 + float64(i%2)*5)
+		frame(s, painted)
+	}
+}
+
+// The header rows a virtual list pins are found again when its items
+// change, so the header pinned is the one now above the window.
+func TestStickyHeadersFollowTheItems(t *testing.T) {
+	t.Parallel()
+	values := func(from int) []int {
+		v := make([]int, 100)
+		for i := range v {
+			v[i] = from + i
+		}
+		return v
+	}
+	items := State(values(0))
+	painted := map[int]Rect{}
+	each := EachKeyed(items, func(v int) int { return v }, func(it EachItem[int]) Widget {
+		v := it.Item
+		return FromFuncs(
+			func(c Constraints, _ Env) Size { return c.Constrain(Sz(100, 20)) },
+			func(_ *Canvas, r Rect) { painted[v] = r },
+		)
+	}).ItemExtent(20).StickyHeaders(func(v int) bool { return v%10 == 0 })
+	p := NewProbe(Scroll(each).BindOffset(State(250.0)), Sz(100, 60))
+	defer p.Close()
+	p.Frame()
+	if painted[10].Origin.Y != 0 {
+		t.Fatalf("header 10 at %v, want pinned at 0", painted[10])
+	}
+	// Now 10 is the row at index 7, and the row at index 10 is no header.
+	items.Set(values(3))
+	clear(painted)
+	p.Frame()
+	if r, ok := painted[10]; !ok || r.Origin.Y != 0 {
+		t.Fatalf("after the items moved, header 10 at %v (painted %t), want pinned at 0", r, ok)
+	}
+	if r, ok := painted[13]; ok && r.Origin.Y == 0 {
+		t.Fatal("the row where a header used to be is pinned")
+	}
+}

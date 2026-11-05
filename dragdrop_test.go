@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -539,5 +540,21 @@ func TestReorderableRowsAnswerScrollToKey(t *testing.T) {
 	p.Frame()
 	if sc.Offset() != 150 {
 		t.Fatalf("JumpToKey(f) reached %v, want 150", sc.Offset())
+	}
+}
+
+// A frame of a Reorderable list at rest: each row painted as a list item.
+func BenchmarkReorderableFrame(b *testing.B) {
+	names := make([]string, 300)
+	for i := range names {
+		names[i] = fmt.Sprint("row ", i)
+	}
+	items := State(names)
+	p := NewProbe(reorderFixture(items, map[string]Rect{}, false), Sz(200, 400))
+	defer p.Close()
+	p.Frame()
+	b.ReportAllocs()
+	for b.Loop() {
+		p.Frame()
 	}
 }

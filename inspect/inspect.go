@@ -273,8 +273,8 @@ func (f *Frame) semantic(i int) []Field {
 	case a11y.TriMixed:
 		add("checked", "mixed")
 	}
-	if n.Expanded != nil {
-		add("expanded", strconv.FormatBool(*n.Expanded))
+	if n.Expanded.Expandable() {
+		add("expanded", strconv.FormatBool(n.Expanded.Open()))
 	}
 	if n.Selected {
 		add("selected", "true")
