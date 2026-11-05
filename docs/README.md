@@ -25,8 +25,8 @@ from the repository root unless a guide says otherwise.
 > **macOS and Windows**; the Linux bridge is not implemented. Native file
 > dialogs run on macOS, Windows, and desktops with `zenity` or `kdialog`
 > on `PATH`; elsewhere they report `runtime.ErrUnsupported`. App menus in the
-> menu bar and tray icons are **macOS** only; elsewhere menus are drawn with
-> `ui.AppMenubar` and a tray does nothing.
+> menu bar are **macOS** only; elsewhere menus are drawn with `ui.AppMenubar`.
+> Tray icons show on **macOS and Windows**; elsewhere a tray does nothing.
 
 ## Find a topic
 

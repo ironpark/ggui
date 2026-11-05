@@ -347,19 +347,27 @@ func (w *Window) ShowContextMenu(at Point, items ...MenuItem) bool {
 }
 
 // TrayConfig describes an icon in the system tray: the status area at the
-// right of the menu bar on macOS.
+// right of the menu bar on macOS, the notification area of the taskbar on
+// Windows.
 type TrayConfig struct {
-	// Icon is the picture, drawn about 18 points high. On macOS a
-	// Template icon is drawn from its alpha alone, in the menu bar's own
-	// color, which is what suits a monochrome glyph.
+	// Icon is the picture, drawn about 18 points high on macOS and at the
+	// small icon size, square, on Windows. A Template icon is drawn from
+	// its alpha alone, in the menu bar's own color on macOS and in the
+	// taskbar's, white or black, on Windows, which is what suits a
+	// monochrome glyph. On Windows a tray with no Icon shows the
+	// executable's.
 	Icon     image.Image
 	Template bool
-	// Title is text beside the icon, or in its place.
+	// Title is text beside the icon, or in its place. Windows shows no
+	// text in the tray, and uses Title as the tooltip when Tooltip is
+	// empty.
 	Title   string
 	Tooltip string
-	// Menu opens when the icon is clicked.
+	// Menu opens when the icon is clicked; on Windows, with either button.
+	// Key equivalents are not shown in it.
 	Menu []MenuItem
-	// OnClick runs when an icon with no Menu is clicked.
+	// OnClick runs when an icon with no Menu is clicked; on Windows, with
+	// the primary button or chosen with the keyboard.
 	OnClick func()
 }
 
@@ -373,7 +381,7 @@ type Tray struct {
 }
 
 // TraySupported reports whether AddTray's icons show, which is so on
-// macOS. Elsewhere a Tray does nothing.
+// macOS and Windows. Elsewhere a Tray does nothing.
 func TraySupported() bool { return nativemenu.TraySupported() }
 
 // AddTray puts an icon in the system tray. Call it from the UI thread or
@@ -435,9 +443,9 @@ func (t *Tray) Remove() {
 	a.trays = slices.DeleteFunc(a.trays, func(o *Tray) bool { return o == t })
 	a.release(t.set)
 	t.set = nil
-	if a.running {
-		nativemenu.RemoveTray(t.key)
-	}
+	// Even once Run has stopped: Windows keeps an icon its process did not
+	// take out, until the pointer passes over it.
+	nativemenu.RemoveTray(t.key)
 }
 
 func (t *Tray) encodeIcon() {
