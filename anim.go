@@ -119,25 +119,42 @@ func EaseEmphasizedDecelerate(t float64) float64 { return kinetics.EaseEmphasize
 type stepper interface {
 	step(now time.Time) (running bool)
 	active() bool
+	// slot is where the animator keeps the animation's place in its list.
+	slot() *animSlot
 }
+
+// animSlot is an animation's place in its animator's list, so that a Set
+// on one already running, as a tween retargeted every frame is, finds it
+// registered without searching the list or recording where it was set.
+// The place is confirmed against the list rather than trusted, so a list
+// emptied from outside, as tests do, leaves no animation thinking itself
+// registered.
+type animSlot struct{ index int }
 
 type animator struct {
 	mu   sync.Mutex
 	list []stepper
-	// origins are where list's animations were started, for MotionReport.
-	origins  []uintptr
+	// origins are where list's animations were started, for MotionReport,
+	// resolved only when a frame is counted against them.
+	origins  []callStack
 	stepping []stepper // step's copy of list
 }
 
+// registered reports whether s is in the list, at the place it keeps.
+func (a *animator) registered(s stepper) bool {
+	i := s.slot().index
+	return i >= 0 && i < len(a.list) && a.list[i] == s
+}
+
 func (a *animator) add(s stepper) {
-	pc := callerOutside()
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if slices.Contains(a.list, s) {
+	if a.registered(s) {
 		return
 	}
+	s.slot().index = len(a.list)
 	a.list = append(a.list, s)
-	a.origins = append(a.origins, pc)
+	a.origins = append(a.origins, callerStack())
 }
 
 // noteDirtiers counts where the running animations were started as having
@@ -145,8 +162,8 @@ func (a *animator) add(s stepper) {
 func (a *animator) noteDirtiers() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	for _, pc := range a.origins {
-		noteDirtier(dirtyAnim, pc)
+	for i := range a.origins {
+		noteDirtier(dirtyAnim, a.origins[i].outside())
 	}
 }
 
@@ -154,9 +171,14 @@ func (a *animator) noteDirtiers() {
 func (a *animator) remove(s stepper) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if i := slices.Index(a.list, s); i >= 0 {
-		a.list = slices.Delete(a.list, i, i+1)
-		a.origins = slices.Delete(a.origins, i, i+1)
+	if !a.registered(s) {
+		return
+	}
+	i := s.slot().index
+	a.list = slices.Delete(a.list, i, i+1)
+	a.origins = slices.Delete(a.origins, i, i+1)
+	for j := i; j < len(a.list); j++ {
+		a.list[j].slot().index = j
 	}
 }
 
@@ -187,6 +209,7 @@ func (a *animator) step(now time.Time) {
 	for i, s := range a.list {
 		if s.active() {
 			a.list[n], a.origins[n] = s, a.origins[i]
+			s.slot().index = n
 			n++
 		}
 	}
@@ -212,6 +235,7 @@ type Tweened[T any] struct {
 	start    time.Time
 	running  bool
 	disposed bool
+	place    animSlot
 }
 
 // Tween creates a Tweened at v that takes d to reach each new target, with
@@ -295,7 +319,8 @@ func (t *Tweened[T]) Jump(v T) {
 	t.sig.Set(v)
 }
 
-func (t *Tweened[T]) active() bool { return t.running }
+func (t *Tweened[T]) active() bool    { return t.running }
+func (t *Tweened[T]) slot() *animSlot { return &t.place }
 
 func (t *Tweened[T]) step(now time.Time) bool {
 	if !t.running {
@@ -340,6 +365,7 @@ type Sprung[T any] struct {
 	last     time.Time
 	running  bool
 	disposed bool
+	place    animSlot
 }
 
 // Spring creates a Sprung at v. Stiffness and Damping tune the motion; the
@@ -437,7 +463,8 @@ func (s *Sprung[T]) Jump(v T) {
 	s.sig.Set(v)
 }
 
-func (s *Sprung[T]) active() bool { return s.running }
+func (s *Sprung[T]) active() bool    { return s.running }
+func (s *Sprung[T]) slot() *animSlot { return &s.place }
 
 func (s *Sprung[T]) step(now time.Time) bool {
 	if !s.running {
@@ -670,6 +697,7 @@ type TimelineValue struct {
 	start     time.Time
 	running   bool
 	disposed  bool
+	place     animSlot
 }
 
 // Timeline creates a TimelineValue at zero that takes d to play through.
@@ -763,7 +791,8 @@ func (tl *TimelineValue) finish() {
 // end is the progress the current run is heading for.
 func (tl *TimelineValue) end() float64 { return pick(tl.dir > 0, 1.0, 0.0) }
 
-func (tl *TimelineValue) active() bool { return tl.running }
+func (tl *TimelineValue) active() bool    { return tl.running }
+func (tl *TimelineValue) slot() *animSlot { return &tl.place }
 
 func (tl *TimelineValue) step(now time.Time) bool {
 	if !tl.running {
