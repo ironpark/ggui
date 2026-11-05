@@ -97,6 +97,11 @@ type inputView struct {
 	focusPainted bool       // the focused handler registered since PaintFocus began
 	focusVisible bool       // focus came there by keyboard
 	pressed      bool       // a pointer button is held
+	pressPointer PointerHandler
+
+	// found is what the paint learns of its regions as it registers them,
+	// for input to start from: see regionIndex.
+	found regionIndex
 }
 
 // take records where in stands, for a paint about to begin.
@@ -106,8 +111,37 @@ func (v *inputView) take(in *inputState) {
 		v.focusBounds, v.focusKey = in.focused.rect, in.focused.key
 	}
 	v.focusVisible = in.focused != nil && in.focusVisible
-	v.pressed = in.pressed != nil
+	v.pressed, v.pressPointer = in.pressed != nil, nil
+	if in.pressed != nil {
+		v.pressPointer = in.pressed.pointer
+	}
 	v.pointerRead = false
+	v.found = regionIndex{scopeAt: -1}
+	if v.focusKey != nil {
+		v.found.key = handlerHint{h: v.focusKey, at: -1}
+	}
+	if v.pressPointer != nil {
+		v.found.pointer = handlerHint{h: v.pressPointer, at: -1}
+	}
+}
+
+// note records that the region at i of the paint's regions is r, which
+// was just registered there or merged into: the last registered of a
+// handler or a scope is the topmost.
+func (v *inputView) note(r *hitRegion, i int) {
+	x := &v.found
+	if r.scope != nil {
+		x.scopeAt = i
+	}
+	if r.cursor != 0 {
+		x.cursors = true
+	}
+	if r.key != nil && x.key.h != nil && sameAny(r.key, x.key.h) {
+		x.key.at = i
+	}
+	if r.pointer != nil && x.pointer.h != nil && sameAny(r.pointer, x.pointer.h) {
+		x.pointer.at = i
+	}
 }
 
 // retained is what Retain stored this frame, and last frame's, which
@@ -624,18 +658,20 @@ func (c *Canvas) add(h hitRegion) {
 		root = root.parent
 	}
 	root.adopt(&h)
-	if h.key != nil {
-		if f := root.fs(); f.focusKey != nil && sameAny(h.key, f.focusKey) {
-			f.focusPainted = true
-		}
+	f := root.fs()
+	if h.key != nil && f.focusKey != nil && sameAny(h.key, f.focusKey) {
+		f.focusPainted = true
 	}
 	if h.key != nil && root.focusClaim != nil {
 		root.focusRequest, root.focusClaim = h.key, nil
 	}
-	if n := len(root.hits); n > 0 && root.hits[n-1].merge(h) {
-		return
+	i := len(root.hits)
+	if i > 0 && root.hits[i-1].merge(h) {
+		i--
+	} else {
+		root.hits = append(root.hits, h)
 	}
-	root.hits = append(root.hits, h)
+	f.note(&root.hits[i], i)
 }
 
 // adopt hands h's new handlers the ones that held the same region last
@@ -713,7 +749,30 @@ func (c *Canvas) indexPrev() {
 func comparableID(id any) bool { return reflect.TypeOf(id).Comparable() }
 
 // sameAny compares two handlers, treating uncomparable ones as different.
-func sameAny(a, b any) (same bool) {
+// Handlers are pointers, and IDs mostly strings and numbers, which compare
+// as they are; input compares every region's handler this way, so only
+// another kind pays for the recover that guards a comparison which panics.
+func sameAny(a, b any) bool {
+	t := reflect.TypeOf(a)
+	if t != reflect.TypeOf(b) {
+		return false
+	}
+	if t == nil {
+		return true
+	}
+	switch t.Kind() {
+	case reflect.Pointer, reflect.UnsafePointer, reflect.Chan, reflect.String, reflect.Bool,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128:
+		return a == b
+	}
+	return sameAnyGuarded(a, b)
+}
+
+// sameAnyGuarded is a == b, false where the comparison panics: a slice, a
+// map or a func, or a struct or array holding one, even in an interface.
+func sameAnyGuarded(a, b any) (same bool) {
 	defer func() {
 		if recover() != nil {
 			same = false

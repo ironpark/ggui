@@ -312,6 +312,8 @@ type inputState struct {
 
 	regions   []hitRegion
 	observers []inputObserver
+	// ix is what is known of regions without scanning them again.
+	ix regionIndex
 
 	// These are copies: regions is rebuilt every frame in a reused buffer,
 	// so a pointer into it would soon describe a different region.
@@ -449,6 +451,9 @@ func (in *inputState) updateDrag(f frameInput) {
 // updateCursor picks the shape of the topmost region at pos asking for one.
 func (in *inputState) updateCursor(pos Point) {
 	in.cursor = CursorShapeDefault
+	if !in.index().cursors {
+		return
+	}
 	if r := in.topmost(func(r *hitRegion) bool { return r.cursor != 0 && r.contains(pos) }); r != nil {
 		in.cursor = r.cursor
 	}
@@ -543,8 +548,8 @@ func releaseKeys(h KeyHandler, f frameInput) {
 
 // activeScope returns the topmost focus scope painted this frame.
 func (in *inputState) activeScope() *focusScope {
-	if r := in.topmost(func(r *hitRegion) bool { return r.scope != nil }); r != nil {
-		return r.scope
+	if i := in.index().scopeAt; i >= 0 {
+		return in.regions[i].scope
 	}
 	return nil
 }
@@ -599,6 +604,120 @@ func (in *inputState) topmost(match func(*hitRegion) bool) *hitRegion {
 	return nil
 }
 
+// regionIndex is what input knows of a list of regions without scanning
+// it: the topmost region in a focus scope, whether any asks for a cursor,
+// and where the handlers input follows were found. A paint fills it as it
+// registers the regions; for regions set otherwise, as a test sets them,
+// one scan fills it the first time it is asked. It holds for the buffer
+// and length it was made for alone, so a later paint into the same buffer
+// must hand input a new one with the regions.
+type regionIndex struct {
+	made    bool
+	base    *hitRegion // regions[0] of the list it describes, nil if empty
+	n       int
+	scopeAt int  // the topmost region with a focus scope, or -1
+	cursors bool // a region asks for a cursor
+	// The last key and pointer handlers looked up, and where.
+	key, pointer handlerHint
+}
+
+// handlerHint is where the topmost region with handler h is, or -1 when
+// none has it; a zero hint knows of no handler.
+type handlerHint struct {
+	h  any
+	at int
+}
+
+// describes reports whether x is the index of rs.
+func (x *regionIndex) describes(rs []hitRegion) bool {
+	if !x.made || x.n != len(rs) {
+		return false
+	}
+	return len(rs) == 0 || x.base == &rs[0]
+}
+
+// setRegions hands input the regions a paint registered, and what the
+// paint learned of them as it did.
+func (in *inputState) setRegions(rs []hitRegion, found regionIndex) {
+	in.regions, in.ix = rs, found
+	in.ix.made, in.ix.n, in.ix.base = true, len(rs), nil
+	if len(rs) > 0 {
+		in.ix.base = &rs[0]
+	}
+}
+
+// index returns the index of the regions, scanning them once for one
+// made where they were not painted.
+func (in *inputState) index() *regionIndex {
+	x := &in.ix
+	if x.describes(in.regions) {
+		return x
+	}
+	*x = regionIndex{made: true, n: len(in.regions), scopeAt: -1}
+	if len(in.regions) > 0 {
+		x.base = &in.regions[0]
+	}
+	for i := range in.regions {
+		r := &in.regions[i]
+		if r.scope != nil {
+			x.scopeAt = i
+		}
+		if r.cursor != 0 {
+			x.cursors = true
+		}
+	}
+	return x
+}
+
+// regionOf returns the topmost region whose key handler, or pointer
+// handler when key is false, is h, or nil. The answer is remembered for
+// the next lookup of h over the same regions: a focused or pressed widget
+// is looked up every frame, and the regions change only when painted.
+func (in *inputState) regionOf(h any, key bool) *hitRegion {
+	if h == nil {
+		return nil
+	}
+	x := in.index()
+	hint := &x.pointer
+	if key {
+		hint = &x.key
+	}
+	if hint.h != nil && sameAny(hint.h, h) {
+		if hint.at < 0 {
+			return nil
+		}
+		if r := &in.regions[hint.at]; sameAny(handlerOf(r, key), h) {
+			return r
+		}
+	}
+	at := -1
+	for i := len(in.regions) - 1; i >= 0; i-- {
+		if r := handlerOf(&in.regions[i], key); r != nil && sameAny(r, h) {
+			at = i
+			break
+		}
+	}
+	*hint = handlerHint{h: h, at: at}
+	if at < 0 {
+		return nil
+	}
+	return &in.regions[at]
+}
+
+// handlerOf is r's key handler when key is set, else its pointer handler.
+func handlerOf(r *hitRegion, key bool) any {
+	if key {
+		if r.key == nil {
+			return nil
+		}
+		return r.key
+	}
+	if r.pointer == nil {
+		return nil
+	}
+	return r.pointer
+}
+
 // deliver hands ev to r as handle does, noting where: a widget a pointer
 // event reached may look otherwise with no signal written, as a button
 // pressed or hovered does, and the frame paints its region again.
@@ -641,7 +760,7 @@ func (in *inputState) findKey(p Point) *hitRegion {
 // with the same handler, wherever it moved to, or else the topmost pointer
 // region painted exactly where p was, which is a rebuilt widget.
 func (in *inputState) findPointer(p *hitRegion) *hitRegion {
-	if r := in.topmost(func(r *hitRegion) bool { return r.pointer != nil && sameAny(r.pointer, p.pointer) }); r != nil {
+	if r := in.regionOf(p.pointer, false); r != nil {
 		return r
 	}
 	if p.id != nil {
@@ -652,7 +771,7 @@ func (in *inputState) findPointer(p *hitRegion) *hitRegion {
 
 // findKeyRegion is findPointer for a key region.
 func (in *inputState) findKeyRegion(p *hitRegion) *hitRegion {
-	if r := in.topmost(func(r *hitRegion) bool { return r.key != nil && sameAny(r.key, p.key) }); r != nil {
+	if r := in.regionOf(p.key, true); r != nil {
 		return r
 	}
 	if p.id != nil {
@@ -670,8 +789,7 @@ func (in *inputState) refreshFocused() {
 	if in.focused == nil {
 		return
 	}
-	key := in.focused.key
-	if r := in.topmost(func(r *hitRegion) bool { return r.key != nil && sameAny(r.key, key) }); r != nil {
+	if r := in.regionOf(in.focused.key, true); r != nil {
 		in.focused = in.focusSlot.keep(r)
 	}
 }
