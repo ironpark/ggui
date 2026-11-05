@@ -160,7 +160,7 @@ type ChartWidget struct {
 	duration                                                       time.Duration
 	delay                                                          time.Duration
 	env                                                            ggui.Env
-	theme                                                          uitheme.Theme
+	theme                                                          *uitheme.Theme
 	reduced                                                        bool
 	active, selected                                               int
 	plot                                                           ggui.Rect
@@ -411,7 +411,7 @@ func (c *ChartWidget) Replay() { c.started = time.Time{} }
 func (c *ChartWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	defer c.props.Layout().EndLayout()
 	c.env = env
-	c.theme = uitheme.From(env)
+	c.theme = uitheme.Of(env)
 	c.reduced = env.ReducedMotion()
 	c.textLayout++ // cached labels re-measure under env as they are next used
 	return cs.Constrain(ggui.Sz(bounded(cs.MaxW, 400), c.height))
@@ -427,7 +427,7 @@ func (c *ChartWidget) value(i, j int) (float64, bool) {
 func (c *ChartWidget) seriesColor(j int) color.Color {
 	s := c.config[j]
 	if s.ThemeColor != nil {
-		if col := s.ThemeColor(c.theme); col != nil {
+		if col := s.ThemeColor(*c.theme); col != nil {
 			return col
 		}
 	}

@@ -78,7 +78,7 @@ type CarouselWidget struct {
 	stopped, stopOnInteraction                 bool
 	onChange                                   func(int)
 	env                                        ggui.Env
-	theme                                      uitheme.Theme
+	theme                                      *uitheme.Theme
 	reduced, canLoop                           bool
 	viewport                                   ggui.Rect
 	starts, extents, snaps                     []float64
@@ -280,7 +280,7 @@ func (c *CarouselWidget) position() float64 {
 func (c *CarouselWidget) Layout(con ggui.Constraints, e ggui.Env) ggui.Size {
 	defer c.props.Layout().EndLayout()
 	c.Sync()
-	c.env, c.theme, c.reduced = e, uitheme.From(e), e.ReducedMotion()
+	c.env, c.theme, c.reduced = e, uitheme.Of(e), e.ReducedMotion()
 	size := con.Constrain(ggui.Sz(bounded(con.MaxW, 416), c.height))
 	gutter := 0.
 	if c.controls {
@@ -597,7 +597,7 @@ func carouselNavigation(c *CarouselWidget, prev bool) *CarouselNavigationWidget 
 }
 func (b *CarouselNavigationWidget) Layout(c ggui.Constraints, e ggui.Env) ggui.Size {
 	b.env = e
-	side := iconButtonSide(uitheme.From(e))
+	side := iconButtonSide(uitheme.Of(e))
 	return c.Constrain(ggui.Sz(side, side))
 }
 func (b *CarouselNavigationWidget) enabled() bool {

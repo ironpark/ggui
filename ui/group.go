@@ -22,7 +22,7 @@ type ButtonGroupWidget struct {
 	vertical   bool
 	name       string
 
-	theme uitheme.Theme
+	theme *uitheme.Theme
 	sizes []ggui.Size
 }
 
@@ -56,7 +56,7 @@ func (g *ButtonGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if g.nameReader != nil {
 		g.name = g.nameReader.Get()
 	}
-	g.theme = uitheme.From(env)
+	g.theme = uitheme.Of(env)
 	g.sizes = g.sizes[:0]
 	var main, cross float64
 	for _, child := range g.children {
@@ -129,7 +129,7 @@ type ToggleGroupWidget[T comparable] struct {
 	vertical         bool
 	hover            int
 
-	theme uitheme.Theme
+	theme *uitheme.Theme
 	sizes []ggui.Size    // each segment's content
 	parts []segmentParts // and what is in it
 	rects []ggui.Rect
@@ -291,7 +291,7 @@ func (g *ToggleGroupWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Siz
 	defer g.props.Layout().EndLayout()
 	g.setOptions(g.optionProp.Get())
 	g.Sync()
-	t := uitheme.From(env)
+	t := uitheme.Of(env)
 	g.theme, g.pad = t, t.TabPad
 	g.sizes = g.sizes[:0]
 	cur := g.index()
@@ -403,22 +403,14 @@ func (g *ToggleGroupWidget[T]) HandleKey(ev ggui.KeyEvent) {
 	if ev.Kind != ggui.KeyPress || len(g.options) == 0 {
 		return
 	}
-	switch ev.Key {
-	case ggui.KeyArrowLeft, ggui.KeyArrowUp:
-		g.pick(stepIndex(g.index(), -1, len(g.options), nil))
-	case ggui.KeyArrowRight, ggui.KeyArrowDown:
-		g.pick(stepIndex(g.index(), 1, len(g.options), nil))
-	case ggui.KeyHome:
-		g.pick(0)
-	case ggui.KeyEnd:
-		g.pick(len(g.options) - 1)
+	if i, ok := navIndex(ev, navBoth, true, g.index(), len(g.options), nil); ok {
+		g.pick(i)
 	}
 }
 
 // ConsumesKey implements ggui.KeyConsumer: the arrows, Home and End move.
 func (g *ToggleGroupWidget[T]) ConsumesKey(ev ggui.KeyEvent) bool {
-	switch ev.Key {
-	case ggui.KeyArrowLeft, ggui.KeyArrowRight, ggui.KeyArrowUp, ggui.KeyArrowDown, ggui.KeyHome, ggui.KeyEnd:
+	if navMoveOf(ev.Key, navBoth) != navNone {
 		return ev.Kind == ggui.KeyPress
 	}
 	return g.Interactive.ConsumesKey(ev)

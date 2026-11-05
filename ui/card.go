@@ -121,7 +121,7 @@ type BadgeWidget struct {
 	style   BadgeStyle
 	pad     ggui.EdgeInsets
 	size    ggui.Size
-	theme   uitheme.Theme
+	theme   *uitheme.Theme
 }
 
 // Badge creates a pill labelled s on the Secondary surface; Variant, or
@@ -157,9 +157,9 @@ func (b *BadgeWidget) Radius(r float64) *BadgeWidget {
 // Layout implements Widget.
 func (b *BadgeWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer b.props.Layout().EndLayout()
-	t := uitheme.From(env)
+	t := uitheme.Of(env)
 	b.theme = t
-	b.style = b.variant.Style(t)
+	b.style = b.variant.Style(*t)
 	b.pad = ggui.Insets(2, t.Space*0.75)
 	b.text.Style(t.Caption.Merge(t.Label)).Color(b.style.Label)
 	b.size = b.text.Layout(b.pad.Shrink(c).Loosen(), env)
@@ -183,7 +183,7 @@ type ProgressWidget struct {
 	props  property.Owner
 	value  ggui.Readable[float64]
 	height float64
-	theme  uitheme.Theme
+	theme  *uitheme.Theme
 	motion time.Duration
 }
 
@@ -205,7 +205,7 @@ func (p *ProgressWidget) Height(h float64) *ProgressWidget {
 // Layout implements Widget.
 func (p *ProgressWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer p.props.Layout().EndLayout()
-	p.theme = uitheme.From(env)
+	p.theme = uitheme.Of(env)
 	p.motion = env.Motion(uitheme.From(env).MotionFast)
 	return c.Constrain(ggui.Sz(bounded(c.MaxW, defaultStripe), p.height))
 }
@@ -228,7 +228,7 @@ type ProgressRingWidget struct {
 	value        ggui.Readable[float64]
 	size, stroke float64
 	fill, track  color.Color
-	theme        uitheme.Theme
+	theme        *uitheme.Theme
 	motion       time.Duration
 
 	arc   ggui.Path // the filled part, kept while the ring and value hold
@@ -274,7 +274,7 @@ func (p *ProgressRingWidget) Track(c color.Color) *ProgressRingWidget {
 // Layout implements Widget.
 func (p *ProgressRingWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer p.props.Layout().EndLayout()
-	p.theme = uitheme.From(env)
+	p.theme = uitheme.Of(env)
 	p.motion = env.Motion(p.theme.MotionFast)
 	return c.Constrain(ggui.Sz(p.size, p.size))
 }

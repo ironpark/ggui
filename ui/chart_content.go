@@ -50,7 +50,7 @@ func (w *chartContent) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 		categoryColors: c.categoryColors,
 		active:         c.active,
 		env:            env,
-		theme:          uitheme.From(env),
+		theme:          uitheme.Of(env),
 		// The labels measured at the last layout carry over, to re-measure
 		// under this one as Layout has them do on the chart itself.
 		textCache:  w.context.textCache,

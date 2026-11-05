@@ -24,7 +24,7 @@ type BubbleWidget struct {
 	reactionBox                *ggui.BoxWidget
 	reactionTop, reactionStart bool
 	bodySize, reactionSize     ggui.Size
-	theme                      uitheme.Theme
+	theme                      *uitheme.Theme
 	action                     func()
 }
 
@@ -134,7 +134,7 @@ func (b *BubbleWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	b.Sync()
 	inheritedEnd, _ := env.Get(messageEndKey)
 	b.alignedEnd = b.end || inheritedEnd
-	b.theme = uitheme.From(env)
+	b.theme = uitheme.Of(env)
 	_, fg, _ := b.colors()
 	if b.IsInert() {
 		fg = b.theme.Disabled(fg)

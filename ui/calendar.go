@@ -31,7 +31,7 @@ type CalendarWidget struct {
 	previous, next  *ButtonWidget
 	title           *ggui.TextWidget
 	header          ggui.Widget
-	theme           uitheme.Theme
+	theme           *uitheme.Theme
 	env             ggui.Env
 	headerSize      ggui.Size
 	cellH           float64
@@ -183,7 +183,7 @@ func (c *CalendarWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	defer c.props.Layout().EndLayout()
 	c.Sync()
 	c.env = env
-	c.theme = uitheme.From(env)
+	c.theme = uitheme.Of(env)
 	c.syncDate()
 	c.lowest, c.highest = c.date(c.min), c.date(c.max)
 	month := c.month()

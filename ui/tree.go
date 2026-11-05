@@ -293,7 +293,7 @@ type treeRow[T any, K comparable] struct {
 	box    *ggui.BoxWidget
 	toggle treeToggle[T, K]
 	env    ggui.Env
-	theme  uitheme.Theme
+	theme  *uitheme.Theme
 	motion time.Duration
 	clip   ggui.Canvas // the Canvas its content paints through, made anew each frame
 }
@@ -322,7 +322,7 @@ func (r *treeRow[T, K]) inset(e treeEntry[T, K]) float64 {
 }
 
 func (r *treeRow[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	r.env, r.theme = env, uitheme.From(env)
+	r.env, r.theme = env, uitheme.Of(env)
 	r.Sync()
 	e := r.entry.Get()
 	r.SetName(r.tree.label(e.item))
@@ -428,14 +428,7 @@ func (r *treeRow[T, K]) ConsumesKey(ev ggui.KeyEvent) bool {
 	if ggui.Activates(ev) {
 		return true
 	}
-	if ev.Kind != ggui.KeyPress || ev.Mods != (ggui.Mods{}) {
-		return false
-	}
-	switch ev.Key {
-	case ggui.KeyArrowUp, ggui.KeyArrowDown, ggui.KeyArrowLeft, ggui.KeyArrowRight, ggui.KeyHome, ggui.KeyEnd:
-		return true
-	}
-	return false
+	return ev.Mods == (ggui.Mods{}) && navConsumes(ev, navBoth)
 }
 
 // HandleKey implements KeyHandler: the WAI-ARIA tree keys.
@@ -456,15 +449,12 @@ func (r *treeRow[T, K]) HandleKey(ev ggui.KeyEvent) {
 		return
 	}
 	e := list[i]
+	if to, ok := navTarget(ev.Key, navVertical, i, len(list)); ok {
+		t.moveTo(list, to)
+		return
+	}
+	// Right and Left open and close a branch, or move into and out of it.
 	switch ev.Key {
-	case ggui.KeyArrowUp:
-		t.moveTo(list, i-1)
-	case ggui.KeyArrowDown:
-		t.moveTo(list, i+1)
-	case ggui.KeyHome:
-		t.moveTo(list, 0)
-	case ggui.KeyEnd:
-		t.moveTo(list, len(list)-1)
 	case ggui.KeyArrowRight:
 		if e.hasChildren && !e.open {
 			r.setOpen(true)

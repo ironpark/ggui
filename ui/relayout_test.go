@@ -193,3 +193,35 @@ func BenchmarkRelayoutChartAndSelects(b *testing.B) {
 		p.Frame()
 	}
 }
+
+// A widget keeps the theme by pointer from Layout to Paint; a theme switch
+// must reach it at the next layout, as the copy it kept before did.
+func TestKeptThemeFollowsAThemeSwitch(t *testing.T) {
+	t.Parallel()
+	dark := ggui.State(false)
+	b := Button("Go", nil)
+	p := ggui.NewProbe(ggui.Reactive(func() ggui.Widget {
+		return uitheme.With(pick(dark.Get(), uitheme.Dark(), uitheme.Default()), ggui.Widget(b))
+	}), ggui.Sz(200, 60))
+	defer p.Close()
+	p.Frame()
+	light := b.theme
+	if light.Bg != uitheme.Default().Bg {
+		t.Fatal("button not laid out under the light theme")
+	}
+	dark.Set(true)
+	p.Frame()
+	if b.theme.Bg != uitheme.Dark().Bg || light.Bg != uitheme.Default().Bg {
+		t.Fatalf("button theme %v after the switch, light %v", b.theme.Bg, light.Bg)
+	}
+}
+
+func TestIconResolvedAtLayoutFollowsItsFallback(t *testing.T) {
+	t.Parallel()
+	env := uitheme.Default().Apply(ggui.Env{})
+	w := Icon("search")
+	w.Layout(ggui.Loose(ggui.Sz(16, 16)), env)
+	w.Fallback(nil)
+	w.Layout(ggui.Loose(ggui.Sz(16, 16)), env)
+	w.Paint(nil, ggui.Rct(ggui.Point{}, ggui.Sz(16, 16))) // no fallback, no asset: draws nothing, does not panic
+}

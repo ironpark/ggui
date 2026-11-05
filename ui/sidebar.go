@@ -52,7 +52,7 @@ type SidebarWidget struct {
 	active           int
 	hover            int
 
-	theme                  uitheme.Theme
+	theme                  *uitheme.Theme
 	cur                    int // the current destination, found once a frame by paint
 	labelSize              []ggui.Size
 	rowH                   []float64
@@ -167,9 +167,8 @@ func (s *SidebarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t.Primary, t.PrimaryFg = t.SidebarPrimary, t.SidebarPrimaryFg
 	t.Accent, t.AccentFg = t.SidebarAccent, t.SidebarAccentFg
 	t.Border, t.Ring = t.SidebarBorder, t.SidebarRing
-	t = t.Resolve()
 	env = t.Apply(env)
-	s.theme = t
+	s.theme = uitheme.Of(env) // t, resolved, shared with the children
 	s.hidden = s.collapsed.Get()
 	if s.hidden {
 		return c.Constrain(ggui.Size{})
@@ -274,22 +273,14 @@ func (s *SidebarWidget) HandleKey(ev ggui.KeyEvent) {
 	if ev.Kind != ggui.KeyPress || len(s.entries) == 0 {
 		return
 	}
-	switch ev.Key {
-	case ggui.KeyArrowDown:
-		s.active = stepIndex(s.active, 1, len(s.entries), s.enabled)
-	case ggui.KeyArrowUp:
-		s.active = stepIndex(s.active, -1, len(s.entries), s.enabled)
-	case ggui.KeyHome:
-		s.active = stepIndex(-1, 1, len(s.entries), s.enabled)
-	case ggui.KeyEnd:
-		s.active = stepIndex(-1, -1, len(s.entries), s.enabled)
+	if i, ok := navIndex(ev, navVertical, true, s.active, len(s.entries), s.enabled); ok {
+		s.active = i
 	}
 }
 
 // ConsumesKey implements ggui.KeyConsumer.
 func (s *SidebarWidget) ConsumesKey(ev ggui.KeyEvent) bool {
-	switch ev.Key {
-	case ggui.KeyArrowUp, ggui.KeyArrowDown, ggui.KeyHome, ggui.KeyEnd:
+	if navMoveOf(ev.Key, navVertical) != navNone {
 		return ev.Kind == ggui.KeyPress
 	}
 	return s.Interactive.ConsumesKey(ev)

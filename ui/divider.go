@@ -9,7 +9,7 @@ import (
 // with Divider.
 type DividerWidget struct {
 	vertical bool
-	theme    uitheme.Theme
+	theme    *uitheme.Theme
 }
 
 // Divider creates a horizontal rule that fills the width it is given.
@@ -20,7 +20,7 @@ func (d *DividerWidget) Vertical() *DividerWidget { d.vertical = true; return d 
 
 // Layout implements Widget.
 func (d *DividerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	d.theme = uitheme.From(env)
+	d.theme = uitheme.Of(env)
 	if d.vertical {
 		return c.Constrain(ggui.Sz(1, bounded(c.MaxH, 0)))
 	}

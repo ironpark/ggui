@@ -68,7 +68,7 @@ type CommandWidget struct {
 	emptyText          string
 	dismiss            func() // closes the dialog it is in, set by CommandDialog
 	insetSearch        bool
-	theme              uitheme.Theme
+	theme              *uitheme.Theme
 	env                ggui.Env
 	rects              []ggui.Rect
 }
@@ -257,7 +257,7 @@ func (c *CommandWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	defer c.props.Layout().EndLayout()
 	c.env = env
 	c.filter()
-	t := uitheme.From(env)
+	t := uitheme.Of(env)
 	c.theme = t
 	inner := t.PanelPad.Shrink(cs)
 	natural := c.results.Layout(ggui.Loose(ggui.Sz(inner.MaxW, ggui.Unbounded)), env)

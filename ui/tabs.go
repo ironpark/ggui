@@ -27,7 +27,7 @@ type TabsWidget struct {
 	labelSize        []ggui.Size       // padding included
 	hover            int               // the label under the pointer, or -1
 
-	theme     uitheme.Theme
+	theme     *uitheme.Theme
 	motion    time.Duration
 	headerH   float64
 	stripW    float64   // the strip's natural width, inset included
@@ -120,7 +120,7 @@ func (t *TabsWidget) pick(i int) {
 func (t *TabsWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer t.props.Layout().EndLayout()
 	t.Sync()
-	th := uitheme.From(env)
+	th := uitheme.Of(env)
 	t.theme = th
 	t.motion = env.Motion(uitheme.From(env).MotionFast)
 	t.pad = th.TabPad
@@ -212,25 +212,14 @@ func (t *TabsWidget) HandleKey(ev ggui.KeyEvent) {
 	if t.IsInert() || ev.Kind != ggui.KeyPress || len(t.tabs) == 0 {
 		return
 	}
-	switch ev.Key {
-	case ggui.KeyArrowLeft, ggui.KeyArrowUp:
-		t.pick((t.index() + len(t.tabs) - 1) % len(t.tabs))
-	case ggui.KeyArrowRight, ggui.KeyArrowDown:
-		t.pick((t.index() + 1) % len(t.tabs))
-	case ggui.KeyHome:
-		t.pick(0)
-	case ggui.KeyEnd:
-		t.pick(len(t.tabs) - 1)
+	if i, ok := navIndex(ev, navBoth, true, t.index(), len(t.tabs), nil); ok {
+		t.pick(i)
 	}
 }
 
 // ConsumesKey implements ggui.KeyConsumer: the arrows, Home and End move.
 func (t *TabsWidget) ConsumesKey(ev ggui.KeyEvent) bool {
-	switch ev.Key {
-	case ggui.KeyArrowLeft, ggui.KeyArrowRight, ggui.KeyArrowUp, ggui.KeyArrowDown, ggui.KeyHome, ggui.KeyEnd:
-		return ev.Kind == ggui.KeyPress
-	}
-	return false
+	return navConsumes(ev, navBoth)
 }
 
 // Adopt implements ggui.Adopter.

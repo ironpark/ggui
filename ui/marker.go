@@ -15,7 +15,7 @@ type MarkerWidget struct {
 	view                  *ggui.StyledWidget
 	variant               string
 	contentSize, iconSize ggui.Size
-	theme                 uitheme.Theme
+	theme                 *uitheme.Theme
 }
 
 func Marker(content ggui.Widget) *MarkerWidget {
@@ -34,7 +34,7 @@ func (m *MarkerWidget) Border() *MarkerWidget {
 }
 func (m *MarkerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer m.props.Layout().EndLayout()
-	m.theme = uitheme.From(env)
+	m.theme = uitheme.Of(env)
 	m.view.Color(m.theme.MutedFg).Size(m.theme.Text.Size)
 	width := c.MaxW
 	m.iconSize = ggui.Size{}

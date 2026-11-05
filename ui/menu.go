@@ -17,7 +17,7 @@ type MenuWidget struct {
 	current  int // the item the keyboard is on while open, or -1
 	width    float64
 	widthSet bool
-	theme    uitheme.Theme
+	theme    *uitheme.Theme
 }
 
 // Menu creates a secondary button labelled label that opens entries below
@@ -125,7 +125,7 @@ func (m *MenuWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if m.button.IsInert() {
 		m.popup.Hide()
 	}
-	t := uitheme.From(env)
+	t := uitheme.Of(env)
 	m.theme = t
 	m.chrome(t)
 	return m.popup.Layout(c, env)
@@ -174,13 +174,26 @@ func (m *MenuWidget) HandleKey(ev ggui.KeyEvent) {
 
 // chrome dresses the panel. A menubar and a context menu paint the panel
 // through their own popup, so the width lives here rather than in Layout.
-func (m *MenuWidget) chrome(t uitheme.Theme) *ggui.BoxWidget {
+func (m *MenuWidget) chrome(t *uitheme.Theme) *ggui.BoxWidget {
 	return panelBox(m.panel, t).Width(pick(m.widthSet, m.width, t.MenuWidth))
 }
 
 // step moves the keyboard highlight by dir, skipping disabled items.
 func (m *MenuWidget) step(dir int) {
-	m.current = stepIndex(m.current, dir, len(m.items), func(i int) bool { return !m.items[i].IsInert() })
+	m.current = stepIndex(m.current, dir, len(m.items), m.enabled)
+}
+
+// enabled reports whether item i can take the highlight.
+func (m *MenuWidget) enabled(i int) bool { return !m.items[i].IsInert() }
+
+// navigate moves the highlight for Up, Down, Home or End, wrapping and
+// skipping disabled items, and reports whether ev was one of them.
+func (m *MenuWidget) navigate(ev ggui.KeyEvent) bool {
+	i, ok := navIndex(ev, navVertical, true, m.current, len(m.items), m.enabled)
+	if ok {
+		m.current = i
+	}
+	return ok
 }
 
 // jump restarts the highlight from the near end, for Home and End.
@@ -234,7 +247,7 @@ type MenuItemWidget struct {
 
 	pad      ggui.EdgeInsets
 	textSize ggui.Size
-	theme    uitheme.Theme
+	theme    *uitheme.Theme
 	popup    *ggui.PopupWidget
 }
 
@@ -311,7 +324,7 @@ func (it *MenuItemWidget) run() {
 func (it *MenuItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer it.props.Layout().EndLayout()
 	it.Sync()
-	t := uitheme.From(env)
+	t := uitheme.Of(env)
 	it.theme = t
 	it.popup, _ = ggui.PopupOf(env)
 	it.pad = t.ItemPad

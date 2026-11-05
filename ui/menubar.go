@@ -16,7 +16,7 @@ type MenubarWidget struct {
 	popup        *ggui.PopupWidget
 	sizes        []ggui.Size
 	rects        []ggui.Rect
-	theme        uitheme.Theme
+	theme        *uitheme.Theme
 	motion       pointerMotion
 	compact      bool
 	naturalWidth float64
@@ -72,7 +72,7 @@ func (b *MenubarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	for _, m := range b.menus {
 		m.button.Sync()
 	}
-	b.theme = uitheme.From(env)
+	b.theme = uitheme.Of(env)
 	if len(b.menus) > 0 && b.menus[b.active].button.IsInert() {
 		b.popup.Hide()
 		b.active = stepIndex(b.active, 1, len(b.menus), func(i int) bool { return !b.menus[i].button.IsInert() })
@@ -115,11 +115,7 @@ func (b *MenubarWidget) ConsumesKey(e ggui.KeyEvent) bool {
 	if e.Kind != ggui.KeyPress {
 		return false
 	}
-	switch e.Key {
-	case ggui.KeyArrowLeft, ggui.KeyArrowRight, ggui.KeyArrowUp, ggui.KeyArrowDown, ggui.KeyHome, ggui.KeyEnd:
-		return true
-	}
-	return ggui.Activates(e)
+	return navConsumes(e, navBoth) || ggui.Activates(e)
 }
 
 // HandleKey implements ggui.KeyHandler.
@@ -128,30 +124,28 @@ func (b *MenubarWidget) HandleKey(e ggui.KeyEvent) {
 	if b.IsInert() || e.Kind != ggui.KeyPress || len(b.menus) == 0 {
 		return
 	}
-	switch e.Key {
-	case ggui.KeyEscape:
+	enabled := func(i int) bool { return !b.menus[i].button.IsInert() }
+	open := b.popup.IsOpen()
+	switch move := navMoveOf(e.Key, navBoth); {
+	case e.Key == ggui.KeyEscape:
 		b.popup.Hide()
-	case ggui.KeyArrowLeft, ggui.KeyArrowRight:
-		b.active = stepIndex(b.active, pick(e.Key == ggui.KeyArrowLeft, -1, 1), len(b.menus), func(i int) bool { return !b.menus[i].button.IsInert() })
-		if b.popup.IsOpen() {
-			b.open(b.active)
+	case move != navNone && navMoveOf(e.Key, navHorizontal) == navNone && !open:
+		// Up or Down opens the menu, Up on its last item.
+		b.open(b.active)
+		if move == navPrev {
+			b.menus[b.active].jump(-1)
 		}
-	case ggui.KeyArrowDown, ggui.KeyArrowUp:
-		if !b.popup.IsOpen() {
+	case open && navMoveOf(e.Key, navVertical) != navNone:
+		b.menus[b.active].navigate(e)
+	case move == navFirst || move == navLast:
+		// Home and End while closed move to the ends of the bar.
+		i, _ := navIndex(e, navHorizontal, true, b.active, len(b.menus), enabled)
+		b.active = max(i, 0)
+	case move != navNone:
+		// Left and Right move along the bar, taking an open menu along.
+		b.active, _ = navIndex(e, navHorizontal, true, b.active, len(b.menus), enabled)
+		if open {
 			b.open(b.active)
-			if e.Key == ggui.KeyArrowUp {
-				b.menus[b.active].jump(-1)
-			}
-		} else {
-			b.menus[b.active].step(pick(e.Key == ggui.KeyArrowUp, -1, 1))
-		}
-	case ggui.KeyHome, ggui.KeyEnd:
-		if b.popup.IsOpen() {
-			b.menus[b.active].jump(pick(e.Key == ggui.KeyHome, 1, -1))
-		} else {
-			dir := pick(e.Key == ggui.KeyHome, 1, -1)
-			enabled := func(i int) bool { return !b.menus[i].button.IsInert() }
-			b.active = max(stepIndex(-1, dir, len(b.menus), enabled), 0)
 		}
 	default:
 		if ggui.Activates(e) {
@@ -227,7 +221,7 @@ func (p menubarPanel) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		return ggui.Size{}
 	}
 	t := uitheme.From(env)
-	return b.menus[b.active].chrome(t).Layout(c, env)
+	return b.menus[b.active].chrome(&t).Layout(c, env)
 }
 func (p menubarPanel) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	b := p.b

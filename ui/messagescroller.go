@@ -62,7 +62,7 @@ type MessageScrollerWidget struct {
 	opened, auto, following                                       bool
 	anchor                                                        string
 	rect                                                          ggui.Rect
-	theme                                                         uitheme.Theme
+	theme                                                         *uitheme.Theme
 	duration                                                      time.Duration
 	animFrom, animTo                                              float64
 	animStart                                                     time.Time
@@ -213,7 +213,7 @@ func (s *MessageScrollerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Si
 	defer s.props.Layout().EndLayout()
 	saved := s.Save()
 	oldRows := s.rows
-	s.theme, s.reduced = uitheme.From(env), env.ReducedMotion()
+	s.theme, s.reduced = uitheme.Of(env), env.ReducedMotion()
 	size := c.Constrain(ggui.Sz(bounded(c.MaxW, 400), min(c.MaxH, s.height)))
 	s.viewport = size.H
 	rows := s.source.Get()

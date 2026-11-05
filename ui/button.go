@@ -101,7 +101,7 @@ type ButtonWidget struct {
 	opener      ggui.Actor
 	value       func() string // optional accessible value for composite triggers
 	motion      time.Duration
-	theme       uitheme.Theme
+	theme       *uitheme.Theme
 	chord       ggui.Chord
 	chorded     bool
 }
@@ -257,16 +257,16 @@ func (b *ButtonWidget) Pad(sides ...float64) *ButtonWidget {
 func (b *ButtonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer b.props.Layout().EndLayout()
 	b.Sync()
-	t := uitheme.From(env)
+	t := uitheme.Of(env)
 	b.theme = t
 	b.motion = env.Motion(t.MotionFast)
-	size := b.size.Style(t)
+	size := b.size.Style(*t)
 	if !b.padded {
 		b.pad = size.Pad
 		b.box.Padding(b.pad)
 	}
 	b.box.Radius(pick(b.radius >= 0, b.radius, t.Radius))
-	b.style = b.variant.Style(t)
+	b.style = b.variant.Style(*t)
 	label := b.style.Label
 	if b.IsInert() {
 		label = t.Disabled(label)

@@ -99,7 +99,7 @@ type TableWidget[T any, K comparable] struct {
 	headBox *ggui.BoxWidget
 	scroll  *ggui.ScrollWidget
 	column  *ggui.ColumnWidget
-	theme   uitheme.Theme
+	theme   *uitheme.Theme
 	headH   float64
 }
 
@@ -239,15 +239,10 @@ func (t *TableWidget[T, K]) selectable() bool {
 // target is the row a navigation key takes the keyboard to from row i of
 // n, unclamped, and whether key is one.
 func (t *TableWidget[T, K]) target(key ggui.KeyboardKey, i, n int) (int, bool) {
+	if to, ok := navTarget(key, navVertical, i, n); ok {
+		return to, true
+	}
 	switch key {
-	case ggui.KeyArrowUp:
-		return i - 1, true
-	case ggui.KeyArrowDown:
-		return i + 1, true
-	case ggui.KeyHome:
-		return 0, true
-	case ggui.KeyEnd:
-		return n - 1, true
 	case ggui.KeyPageUp:
 		return i - t.page(), true
 	case ggui.KeyPageDown:
@@ -346,7 +341,7 @@ func (t *TableWidget[T, K]) row(row ggui.EachItem[T]) ggui.Widget {
 // Layout implements Widget.
 func (t *TableWidget[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer t.props.Layout().EndLayout()
-	th := uitheme.From(env)
+	th := uitheme.Of(env)
 	t.theme = th
 	t.head.Gap(0)
 	if t.height > 0 {
@@ -376,11 +371,11 @@ type tableRow[T any, K comparable] struct {
 	motion time.Duration
 	cells  *ggui.RowWidget
 	box    *ggui.BoxWidget
-	theme  uitheme.Theme
+	theme  *uitheme.Theme
 }
 
 func (r *tableRow[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	th := uitheme.From(env)
+	th := uitheme.Of(env)
 	r.theme = th
 	r.Sync()
 	r.SetName(r.table.label(r.item.Get()))
@@ -511,8 +506,7 @@ func (r *tableRow[T, K]) HandleKey(ev ggui.KeyEvent) {
 // ConsumesKey implements ggui.KeyConsumer: the keys that move between rows
 // stay with the table.
 func (r *tableRow[T, K]) ConsumesKey(ev ggui.KeyEvent) bool {
-	switch ev.Key {
-	case ggui.KeyArrowUp, ggui.KeyArrowDown, ggui.KeyHome, ggui.KeyEnd, ggui.KeyPageUp, ggui.KeyPageDown:
+	if navMoveOf(ev.Key, navVertical) != navNone || ev.Key == ggui.KeyPageUp || ev.Key == ggui.KeyPageDown {
 		return ev.Kind == ggui.KeyPress
 	}
 	return r.Interactive.ConsumesKey(ev)

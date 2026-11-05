@@ -20,7 +20,7 @@ type AvatarWidget struct {
 	img        *ggfx.Image
 	side       float64
 	square     bool
-	theme      uitheme.Theme
+	theme      *uitheme.Theme
 	textSize   ggui.Size
 }
 
@@ -82,7 +82,7 @@ func (a *AvatarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if a.nameReader != nil {
 		a.name = a.nameReader.Get()
 	}
-	a.theme = uitheme.From(env)
+	a.theme = uitheme.Of(env)
 	size := c.Constrain(ggui.Sz(a.side, a.side))
 	a.initials.Style(a.theme.Text).Size(max(size.H*0.4, 1)).Color(a.theme.MutedFg).Align(.5)
 	a.textSize = a.initials.Layout(ggui.Loose(size), env)

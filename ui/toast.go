@@ -267,7 +267,7 @@ type toastPanel struct {
 	title, description *ggui.TextWidget
 	destructive        bool
 	body               *ggui.BoxWidget
-	theme              uitheme.Theme
+	theme              *uitheme.Theme
 
 	// The panel's parts, built once at the first layout (the entry's action
 	// and mark never change), so their layout caches survive a relayout.
@@ -278,7 +278,7 @@ type toastPanel struct {
 }
 
 func (p *toastPanel) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	p.theme = uitheme.From(env)
+	p.theme = uitheme.Of(env)
 	t := p.theme
 	accent := t.Primary
 	mark := icons.Check
