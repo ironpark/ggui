@@ -101,9 +101,6 @@ func Measure(record func(src LayoutSource, version uint64), fn func()) {
 	fn()
 }
 
-// Recording reports whether a layout recorder is installed.
-func Recording() bool { return current().measuring != nil }
-
 // Recorder returns the installed layout recorder, or nil, for a caller
 // reporting many reads at once.
 func Recorder() func(src LayoutSource, version uint64) { return current().measuring }

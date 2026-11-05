@@ -185,11 +185,11 @@ func TestTreeSemantics(t *testing.T) {
 		expanded string
 		selected bool
 	}
-	state := func(b *bool) string {
+	state := func(e ggui.Expansion) string {
 		switch {
-		case b == nil:
+		case !e.Expandable():
 			return "leaf"
-		case *b:
+		case e.Open():
 			return "open"
 		}
 		return "closed"

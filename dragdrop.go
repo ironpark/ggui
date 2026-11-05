@@ -705,7 +705,7 @@ func (l *ReorderableWidget[T, K]) Paint(dst *Canvas, r Rect) {
 			focus, keyed = dst.space.local(fb.Center()), true
 		}
 	}
-	dst.Node(r, Node{Role: RoleList, Min: 1, Max: float64(n)}, func(dst *Canvas) {
+	dst.Node(r, listNode(n), func(dst *Canvas) {
 		for i, child := range f.children {
 			k := f.keys[i]
 			if i == d {
@@ -796,7 +796,7 @@ func (l *ReorderableWidget[T, K]) drawn() map[K]float64 {
 // paintRow paints one row as a list item that knows its place and offers
 // the move actions.
 func (l *ReorderableWidget[T, K]) paintRow(dst *Canvas, w Widget, rc Rect, i, n int) {
-	item := Node{Role: RoleListItem, Min: 1, Now: float64(i + 1), Max: float64(n)}
+	item := listItem(i, n)
 	if !l.disabled {
 		item.Actions = ActionIncrement | ActionDecrement
 		item.Description = "Alt+Up or Alt+Down moves it"

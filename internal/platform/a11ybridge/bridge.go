@@ -548,19 +548,7 @@ func axSpeaks(before, after a11y.Node) bool {
 	if before.Value != after.Value || before.Checked != after.Checked || before.Now != after.Now {
 		return true
 	}
-	return axExpanded(before) != axExpanded(after)
-}
-
-// axExpanded folds Node.Expanded into a comparable tri-state: -1 for a node
-// that does not expand at all, 0 closed, 1 open.
-func axExpanded(n a11y.Node) int {
-	if n.Expanded == nil {
-		return -1
-	}
-	if *n.Expanded {
-		return 1
-	}
-	return 0
+	return before.Expanded != after.Expanded
 }
 
 // axParentNote is the selection note for a node: it goes to whatever

@@ -148,7 +148,7 @@ func winPattern(n a11y.Node, k int) bool {
 	case ifToggle:
 		return n.Checked != a11y.TriNone
 	case ifExpandCollapse:
-		return n.Expanded != nil
+		return n.Expanded.Expandable()
 	case ifSelectionItem:
 		return n.Selected || axAllows(n, axPick)
 	}
@@ -220,7 +220,7 @@ func winGetPropertyValue(this, propertyID, pRetVal uintptr) uintptr {
 		}
 		return varI4(v, winToggleOf(n.Node))
 	case uiaExpandCollapseStateProperty:
-		if n.Expanded == nil {
+		if !n.Expanded.Expandable() {
 			return sOK
 		}
 		return varI4(v, winExpandStateOf(n.Node))

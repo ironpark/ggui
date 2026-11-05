@@ -253,9 +253,9 @@ func winToggleOf(n a11y.Node) int32 {
 // and a leaf for one that is not.
 func winExpandStateOf(n a11y.Node) int32 {
 	switch {
-	case n.Expanded == nil:
+	case !n.Expanded.Expandable():
 		return uiaLeafNode
-	case *n.Expanded:
+	case n.Expanded.Open():
 		return uiaExpanded
 	}
 	return uiaCollapsed

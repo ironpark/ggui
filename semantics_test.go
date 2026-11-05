@@ -241,9 +241,8 @@ func TestSemanticsStagingReusePreservesOldTree(t *testing.T) {
 }
 
 func TestSemTreeReusesEqualValuesAndFreezesDescriptions(t *testing.T) {
-	expanded := false
 	runs := []TextRun{{Start: 0, End: 2, Rect: Rct(Pt(1, 2), Sz(20, 10)), Stops: []TextStop{{Byte: 0, X: 0}, {Byte: 2, X: 20}}}}
-	n := Node{Role: RoleTextField, Name: "editor", Expanded: &expanded, Runs: runs}
+	n := Node{Role: RoleTextField, Name: "editor", Expanded: Expandable(false), Runs: runs}
 	c := &Canvas{}
 	c.Leaf(Rct(Pt(0, 0), Sz(100, 20)), n)
 	first := buildSemTree(c, nil, nil)
@@ -253,15 +252,15 @@ func TestSemTreeReusesEqualValuesAndFreezesDescriptions(t *testing.T) {
 		t.Fatal("equal description allocated a new snapshot")
 	}
 	// A custom widget may reuse the buffers supplied in the previous frame.
-	expanded = true
+	n.Expanded = Expandable(true)
 	runs[0].End = 3
 	runs[0].Stops[1].X = 30
 	c.fs().sem[0].node = n
 	second := buildSemTree(c, nil, first)
-	if second == first || !*second.At(0).Expanded || second.At(0).Runs[0].Stops[1].X != 30 {
+	if second == first || !second.At(0).Expanded.Open() || second.At(0).Runs[0].Stops[1].X != 30 {
 		t.Fatal("new frame lost changed description values")
 	}
-	if *first.At(0).Expanded || first.At(0).Runs[0].End != 2 || first.At(0).Runs[0].Stops[1].X != 20 {
+	if first.At(0).Expanded.Open() || first.At(0).Runs[0].End != 2 || first.At(0).Runs[0].Stops[1].X != 20 {
 		t.Fatal("widget buffer reuse mutated an older snapshot")
 	}
 	if allocs := testing.AllocsPerRun(100, func() { buildSemTree(c, nil, second) }); allocs != 0 {
@@ -426,14 +425,13 @@ func TestSemTreeOldSnapshotCanBeReadDuringBufferReuse(t *testing.T) {
 		defer close(done)
 		for range 1000 {
 			e := old.At(0)
-			if *e.Expanded || e.Runs[0].Stops[0].X != 0 {
+			if e.Expanded.Open() || e.Runs[0].Stops[0].X != 0 {
 				t.Error("published snapshot changed")
 				return
 			}
 		}
 	}()
 	for i := range 1000 {
-		*n.Expanded = i%2 == 0
 		n.Runs[0].Stops[0].X = float64(i)
 		buildSemTree(c, nil, old)
 	}

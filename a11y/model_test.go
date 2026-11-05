@@ -8,11 +8,15 @@ func TestTriAndExpandableEncodeTheirStates(t *testing.T) {
 		t.Errorf("Tri(true), Tri(false) = %v, %v; want TriOn, TriOff", Tri(true), Tri(false))
 	}
 	open, closed := Expandable(true), Expandable(false)
-	if open == nil || !*open || closed == nil || *closed {
-		t.Error("Expandable should point at the value it was given")
+	if open != ExpandOpen || closed != ExpandClosed {
+		t.Errorf("Expandable(true), Expandable(false) = %v, %v; want ExpandOpen, ExpandClosed", open, closed)
 	}
-	if Expandable(true) == open {
-		t.Error("Expandable should return a fresh pointer each call, so nodes never share one")
+	if !open.Open() || !open.Expandable() || closed.Open() || !closed.Expandable() {
+		t.Error("an expandable node should report itself expandable, and open only when open")
+	}
+	var none Expansion
+	if none != ExpandNone || none.Expandable() || none.Open() {
+		t.Error("the zero Expansion should be a node that does not expand")
 	}
 }
 
