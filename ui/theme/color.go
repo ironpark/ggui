@@ -11,6 +11,14 @@ import (
 // tint: Mix(fill, t.Fg, t.HoverMix) is fill under the pointer. A nil color
 // gives the other one.
 func Mix(a, b color.Color, amount float64) color.Color {
+	// At either end the mix is one of the two, as it is: a control at rest
+	// mixes no tint, every frame, and needs no new color for it.
+	if amount <= 0 && a != nil {
+		return a
+	}
+	if amount >= 1 && b != nil {
+		return b
+	}
 	if ggui.IsEnvColor(a) || ggui.IsEnvColor(b) {
 		return mixed{a, b, amount}
 	}
