@@ -51,6 +51,10 @@ func (w *chartContent) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 		active:         c.active,
 		env:            env,
 		theme:          uitheme.From(env),
+		// The labels measured at the last layout carry over, to re-measure
+		// under this one as Layout has them do on the chart itself.
+		textCache:  w.context.textCache,
+		textLayout: w.context.textLayout + 1,
 	}
 	if w.legend {
 		return cs.Constrain(ggui.Sz(bounded(cs.MaxW, 240), w.context.legendHeight(bounded(cs.MaxW, 240))))

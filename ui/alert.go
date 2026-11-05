@@ -13,6 +13,8 @@ type AlertWidget struct {
 	action             ggui.Widget
 	destructive        bool
 	box                *ggui.BoxWidget
+	stale              bool // Action changed what box should hold
+	column             *ggui.ColumnWidget
 }
 
 // Alert creates an inline notice. It does not interrupt focus or open a modal.
@@ -28,7 +30,10 @@ func (a *AlertWidget) Destructive() *AlertWidget {
 }
 
 // Action places a widget below the notice, such as a retry button.
-func (a *AlertWidget) Action(w ggui.Widget) *AlertWidget { a.action = w; return a }
+func (a *AlertWidget) Action(w ggui.Widget) *AlertWidget {
+	a.action, a.stale = w, true // the next layout builds the box around it
+	return a
+}
 
 // Layout implements ggui.Widget.
 func (a *AlertWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
@@ -40,11 +45,19 @@ func (a *AlertWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	a.title.Style(t.Text).Color(fg)
 	a.description.Style(t.Text).Color(pick(a.destructive, fade(t.Destructive, .9), t.MutedFg))
-	parts := []ggui.Widget{a.title, a.description}
-	if a.action != nil {
-		parts = append(parts, a.action)
+	// The box and column are built once, and again only after Action
+	// changes what they hold, so their layout caches survive a relayout.
+	if a.box == nil || a.stale {
+		parts := []ggui.Widget{a.title, a.description}
+		if a.action != nil {
+			parts = append(parts, a.action)
+		}
+		a.column = ggui.Column(parts...)
+		a.box = ggui.Box(a.column)
+		a.stale = false
 	}
-	a.box = ggui.Box(ggui.Column(parts...).Gap(t.Space/2)).Pad(t.Space*2).Fill(t.Card).Border(t.BorderWidth, border).Radius(t.Radius)
+	a.column.Gap(t.Space / 2)
+	a.box.Pad(t.Space*2).Fill(t.Card).Border(t.BorderWidth, border).Radius(t.Radius)
 	return a.box.Layout(c, env)
 }
 

@@ -20,6 +20,7 @@ type FieldWidget struct {
 	caption *ggui.TextWidget
 	note    *ggui.TextWidget
 	column  *ggui.ColumnWidget
+	noted   bool // whether column holds note
 }
 
 var fieldInvalid = ggui.NewEnvKey[bool]("field invalid")
@@ -83,11 +84,17 @@ func (f *FieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	f.caption.Style(t.Text).Color(t.Fg)
 	f.note.Content(note).Style(t.Caption).Color(col)
-	parts := []ggui.Widget{f.caption, f.input}
-	if note != "" {
-		parts = append(parts, f.note)
+	// The column is rebuilt only when the note comes or goes, so its layout
+	// cache and the caption's survive a relayout.
+	if f.column == nil || f.noted != (note != "") {
+		parts := []ggui.Widget{f.caption, f.input}
+		if note != "" {
+			parts = append(parts, f.note)
+		}
+		f.column = ggui.Column(parts...).Align(ggui.AlignStretch)
+		f.noted = note != ""
 	}
-	f.column = ggui.Column(parts...).Gap(t.Space / 2).Align(ggui.AlignStretch)
+	f.column.Gap(t.Space / 2)
 	if invalid {
 		env = env.With(fieldInvalid, true)
 	}

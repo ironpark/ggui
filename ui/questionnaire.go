@@ -603,9 +603,16 @@ type questionChoice struct {
 	option   QuestionOption
 	index    int
 	shortcut string
-	body     ggui.Widget
+	body     *ggui.BoxWidget
 	theme    uitheme.Theme
-	env      ggui.Env
+
+	// The parts of body, kept to restyle across layouts.
+	label, description, key  *ggui.TextWidget
+	glyphBox, keyBox         *ggui.BoxWidget
+	text                     *ggui.ColumnWidget
+	row                      *ggui.RowWidget
+	builtLabel, builtCaption ggui.TextStyle // the theme styles the parts were built with
+	env                      ggui.Env
 }
 
 func (c *questionChoice) selected() bool {
@@ -615,18 +622,44 @@ func (c *questionChoice) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	c.theme = uitheme.From(env)
 	c.env = env
 	t := c.theme
-	text := []ggui.Widget{ggui.Text(c.option.Label).Style(t.Label).LineHeight(1.5).Color(pick(c.IsInert(), t.MutedFg, t.Fg))}
-	if c.option.Description != "" {
-		text = append(text, ggui.Text(c.option.Description).LineHeight(1.5).Color(t.MutedFg))
+	tokens := t.Chat
+	// The parts are built once, and again only when the theme's Label or
+	// Caption style changes (Style merges, so a dropped field would stick),
+	// so the label's shaping and the boxes' layout caches survive a relayout.
+	if c.body == nil || !property.Equal(c.builtLabel, t.Label) || !property.Equal(c.builtCaption, t.Caption) {
+		c.label = ggui.Text(c.option.Label).Style(t.Label).LineHeight(1.5)
+		text := []ggui.Widget{c.label}
+		c.description = nil
+		if c.option.Description != "" {
+			c.description = ggui.Text(c.option.Description).LineHeight(1.5)
+			text = append(text, c.description)
+		}
+		c.glyphBox = ggui.Box()
+		c.text = ggui.Column(text...)
+		parts := []ggui.Widget{c.glyphBox, ggui.Expanded(c.text)}
+		c.keyBox, c.key = nil, nil
+		if c.shortcut != "" {
+			c.key = ggui.Text(c.shortcut).Style(t.Caption)
+			c.keyBox = ggui.Box(ggui.Center(c.key))
+			parts = append(parts, c.keyBox)
+		}
+		c.row = ggui.Row(parts...).Align(ggui.AlignStart)
+		c.body = ggui.Box(c.row)
+		c.builtLabel, c.builtCaption = t.Label, t.Caption
 	}
-	parts := []ggui.Widget{ggui.Box().Width(t.ControlSize).Height(t.ControlSize), ggui.Expanded(ggui.Column(text...).Gap(t.Chat.QuestionTextGap))}
-	if c.shortcut != "" {
+	c.label.Color(pick(c.IsInert(), t.MutedFg, t.Fg))
+	if c.description != nil {
+		c.description.Color(t.MutedFg)
+	}
+	c.glyphBox.Width(t.ControlSize).Height(t.ControlSize)
+	c.text.Gap(tokens.QuestionTextGap)
+	if c.keyBox != nil {
 		key := t.ControlSize + 4
-		parts = append(parts, ggui.Box(ggui.Center(ggui.Text(c.shortcut).Style(t.Caption).Size(t.Caption.Size*.85).Color(t.MutedFg))).
-			Width(key).Height(key).Radius(t.RadiusSm).Fill(t.Bg).Border(t.BorderWidth, t.Border))
+		c.key.Size(t.Caption.Size * .85).Color(t.MutedFg)
+		c.keyBox.Width(key).Height(key).Radius(t.RadiusSm).Fill(t.Bg).Border(t.BorderWidth, t.Border)
 	}
-	tokens := c.theme.Chat
-	c.body = ggui.Box(ggui.Row(parts...).Gap(tokens.QuestionChoiceGap).Align(ggui.AlignStart)).Padding(tokens.QuestionChoicePadding)
+	c.row.Gap(tokens.QuestionChoiceGap)
+	c.body.Padding(tokens.QuestionChoicePadding)
 	s := c.body.Layout(cs, env)
 	s.H = max(44, s.H)
 	return cs.Constrain(s)
@@ -724,6 +757,8 @@ type questionActions struct {
 	children []ggui.Widget
 	previous bool
 	body     ggui.Widget
+	wrap     *ggui.WrapWidget // body when the actions do not fit on a line
+	row      *ggui.RowWidget  // body when they do
 }
 
 func (a *questionActions) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
@@ -731,16 +766,23 @@ func (a *questionActions) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	for _, child := range a.children {
 		width += child.Layout(c.Loosen(), env).W
 	}
+	// Both bodies are built once, so their layout caches survive switching.
 	if width > c.MaxW {
-		a.body = ggui.Wrap(a.children...).Gap(8)
-	} else {
-		parts := slices.Clone(a.children)
-		at := 0
-		if a.previous {
-			at = 1
+		if a.wrap == nil {
+			a.wrap = ggui.Wrap(a.children...).Gap(8)
 		}
-		parts = slices.Insert(parts, at, ggui.Widget(ggui.Spacer()))
-		a.body = ggui.Row(parts...).Gap(8)
+		a.body = a.wrap
+	} else {
+		if a.row == nil {
+			parts := slices.Clone(a.children)
+			at := 0
+			if a.previous {
+				at = 1
+			}
+			parts = slices.Insert(parts, at, ggui.Widget(ggui.Spacer()))
+			a.row = ggui.Row(parts...).Gap(8)
+		}
+		a.body = a.row
 	}
 	return a.body.Layout(c, env)
 }

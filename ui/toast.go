@@ -266,8 +266,15 @@ type toastPanel struct {
 	entry              *toastEntry
 	title, description *ggui.TextWidget
 	destructive        bool
-	body               ggui.Widget
+	body               *ggui.BoxWidget
 	theme              uitheme.Theme
+
+	// The panel's parts, built once at the first layout (the entry's action
+	// and mark never change), so their layout caches survive a relayout.
+	rowFlow *ggui.RowWidget
+	column  *ggui.ColumnWidget
+	badge   *ggui.BoxWidget
+	icon    *icons.Widget
 }
 
 func (p *toastPanel) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
@@ -281,16 +288,23 @@ func (p *toastPanel) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	p.title.Style(t.Text.Merge(t.Label)).Color(t.PopoverFg)
 	p.description.Style(t.Caption).Color(t.MutedFg)
-	parts := []ggui.Widget{p.title, p.description}
-	if p.entry.action != nil {
-		parts = append(parts, ggui.Row(p.entry.action))
+	if p.body == nil {
+		parts := []ggui.Widget{p.title, p.description}
+		if p.entry.action != nil {
+			parts = append(parts, ggui.Row(p.entry.action))
+		}
+		p.column = ggui.Column(parts...).Align(ggui.AlignStretch)
+		p.icon = Icon(mark)
+		p.badge = ggui.Box(ggui.Center(p.icon))
+		p.rowFlow = ggui.Row(p.badge, ggui.Expanded(p.column), p.entry.dismiss).Align(ggui.AlignStart)
+		p.body = ggui.Box(p.rowFlow)
 	}
-	text := ggui.Column(parts...).Gap(t.Space / 2).Align(ggui.AlignStretch)
+	p.column.Gap(t.Space / 2)
 	badge := t.IconSize * 1.5
-	p.body = ggui.Box(ggui.Row(
-		ggui.Box(ggui.Center(Icon(mark).Color(t.PrimaryFg).Size(t.IconSize*.875))).Size(badge, badge).Fill(accent).Radius(badge/2),
-		ggui.Expanded(text), p.entry.dismiss,
-	).Gap(t.Space*1.5).Align(ggui.AlignStart)).Pad(t.Space*2).Fill(t.Popover).Border(t.BorderWidth, t.Border).Radius(t.RadiusLg)
+	p.icon.Color(t.PrimaryFg).Size(t.IconSize * .875)
+	p.badge.Size(badge, badge).Fill(accent).Radius(badge / 2)
+	p.rowFlow.Gap(t.Space * 1.5)
+	p.body.Pad(t.Space*2).Fill(t.Popover).Border(t.BorderWidth, t.Border).Radius(t.RadiusLg)
 	return p.body.Layout(c, env)
 }
 
