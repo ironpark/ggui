@@ -119,7 +119,7 @@ func (a *AlertDialogWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if a.dialog == nil {
 		a.build()
 	}
-	t := uitheme.From(env)
+	t := uitheme.Of(env)
 	a.text.Style(t.Text).Color(t.MutedFg)
 	a.actions.Gap(t.Space)
 	a.body.Gap(t.Space * 2)

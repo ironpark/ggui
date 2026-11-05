@@ -619,7 +619,7 @@ func (b *CarouselNavigationWidget) activate() {
 func (b *CarouselNavigationWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 	b.SetInert(!b.enabled())
 	b.Hit(d, r, b, ggui.CursorShapePointer)
-	t := uitheme.From(b.env)
+	t := uitheme.Of(b.env)
 	fill, col, border := t.Bg, t.Fg, t.Border
 	if b.Hovered && !b.IsInert() {
 		fill, col = t.Accent, t.AccentFg

@@ -344,7 +344,7 @@ type dataTableFrame struct {
 }
 
 func (f *dataTableFrame) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	t := uitheme.From(env)
+	t := uitheme.Of(env)
 	width := c.MaxW
 	if width == ggui.Unbounded {
 		width = f.minWidth

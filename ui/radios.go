@@ -160,7 +160,7 @@ func (g *RadiosWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		r.Key(childKey{owner, radioPart[T]{r.value, seen[r.value]}})
 		seen[r.value]++
 	}
-	t := uitheme.From(env)
+	t := uitheme.Of(env)
 	if g.column != nil {
 		return g.column.Gap(pick(g.gapSet, g.gap, t.Space)).Layout(c, env)
 	}

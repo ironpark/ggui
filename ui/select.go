@@ -292,10 +292,10 @@ func (s *SelectWidget[T]) HandleKey(ev ggui.KeyEvent) {
 		}
 		dir := pick(ev.Key == ggui.KeyArrowUp, -1, 1)
 		if open {
-			s.highlight = stepIndex(s.highlight, dir, len(s.options), nil)
+			s.highlight = stepIndex(s.highlight, dir, len(s.options), true, nil)
 			s.viewport.reveal = true
 		} else {
-			s.choose(stepIndex(s.index(), dir, len(s.options), nil))
+			s.choose(stepIndex(s.index(), dir, len(s.options), true, nil))
 		}
 	}
 }
@@ -342,7 +342,7 @@ type selectItem[T comparable] struct {
 
 func (it *selectItem[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	it.Sync()
-	t := uitheme.From(env)
+	t := uitheme.Of(env)
 	it.pad = t.ItemPad
 	it.text.Color(t.PopoverFg) // Paint swaps in AccentFg under the highlight
 	inner := it.pad.Shrink(c).Loosen()

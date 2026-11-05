@@ -109,3 +109,24 @@ func TestListsSkipDisabledItemsAlike(t *testing.T) {
 		}
 	}
 }
+
+// A dropdown Menu, like a context menu, takes Home and End while open.
+func TestMenuHomeAndEndWhileOpen(t *testing.T) {
+	t.Parallel()
+	m := Menu("Menu", MenuItem("A", nil), MenuItem("B", nil), MenuItem("C", nil).Disabled(true))
+	if m.ConsumesKey(press(ggui.KeyEnd)) {
+		t.Fatal("a closed menu took End")
+	}
+	m.HandleKey(press(ggui.KeyArrowDown))
+	if !m.popup.IsOpen() || !m.ConsumesKey(press(ggui.KeyEnd)) {
+		t.Fatal("an open menu does not take End")
+	}
+	m.HandleKey(press(ggui.KeyEnd))
+	if m.current != 1 {
+		t.Fatalf("End at %d, want 1, the last enabled item", m.current)
+	}
+	m.HandleKey(press(ggui.KeyHome))
+	if m.current != 0 {
+		t.Fatalf("Home at %d, want 0", m.current)
+	}
+}

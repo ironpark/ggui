@@ -169,7 +169,7 @@ func (t *ToasterWidget) Paint(dst *ggui.Canvas, _ ggui.Rect) {
 	now := ggui.Now()
 	t.entries = slices.DeleteFunc(t.entries, func(e *toastEntry) bool {
 		if e.leaving {
-			return t.env.ReducedMotion() || now.Sub(e.exitAt) >= uitheme.From(t.env).MotionSlow
+			return t.env.ReducedMotion() || now.Sub(e.exitAt) >= uitheme.Of(t.env).MotionSlow
 		}
 		paused := e.hover || e.dismiss.Focused || e.dismiss.Hovered || (e.action != nil && (e.action.Focused || e.action.Hovered))
 		if !e.persistent && !paused {
@@ -189,7 +189,7 @@ func (t *ToasterWidget) Paint(dst *ggui.Canvas, _ ggui.Rect) {
 func (t *ToasterWidget) paintNotices(dst *ggui.Canvas) {
 	now := ggui.Now()
 	screen := dst.Size()
-	theme := uitheme.From(t.env)
+	theme := uitheme.Of(t.env)
 	margin := theme.Space * 2
 	if screen.W <= 0 || screen.H <= 0 {
 		return
@@ -202,7 +202,7 @@ func (t *ToasterWidget) paintNotices(dst *ggui.Canvas) {
 		}
 		size := e.panel.Layout(ggui.Constraints{MinW: width, MaxW: width, MaxH: bottom - margin}, t.env)
 		targetY := bottom - size.H
-		duration := t.env.Motion(uitheme.From(t.env).MotionSlow)
+		duration := t.env.Motion(uitheme.Of(t.env).MotionSlow)
 		e.position.MoveTo(targetY, now, duration)
 		target := 1.0
 		if e.leaving {

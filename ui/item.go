@@ -74,7 +74,7 @@ func (i *ItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if i.box == nil {
 		i.build()
 	}
-	t := uitheme.From(env)
+	t := uitheme.Of(env)
 	i.title.Style(t.Text).Color(t.Fg)
 	if i.description != nil {
 		i.description.Style(t.Caption).Color(t.MutedFg)

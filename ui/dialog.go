@@ -92,7 +92,7 @@ func (d *DialogWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if d.nameReader != nil {
 		d.name = d.nameReader.Get()
 	}
-	t := uitheme.From(env)
+	t := uitheme.Of(env)
 	d.build(env).Border(t.BorderWidth, t.Border).Radius(t.RadiusLg)
 	if d.effect == nil {
 		d.effect = ggui.PopIn(ggui.FromFuncs(

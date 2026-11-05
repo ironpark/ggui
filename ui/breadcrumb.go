@@ -127,7 +127,7 @@ func (b *BreadcrumbWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if b.row == nil {
 		b.build()
 	}
-	t := uitheme.From(env)
+	t := uitheme.Of(env)
 	for _, w := range b.muted {
 		w.Style(t.Text).Color(t.MutedFg)
 	}

@@ -50,7 +50,7 @@ func (s *SwitchWidget) Describe() ggui.Node {
 // Layout implements Widget.
 func (s *SwitchWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	// The track is a control glyph tall, plus the thumb's inset.
-	h := uitheme.From(env).ControlSize + 4
+	h := uitheme.Of(env).ControlSize + 4
 	return s.layout(c, env, ggui.Sz(h*1.8, h))
 }
 

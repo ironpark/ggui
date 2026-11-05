@@ -343,7 +343,7 @@ type numberStepper struct {
 
 func (s *numberStepper) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	s.env = env
-	side := uitheme.From(env).IconSize * 1.25
+	side := uitheme.Of(env).IconSize * 1.25
 	return c.Constrain(ggui.Sz(side, side))
 }
 

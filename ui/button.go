@@ -48,7 +48,7 @@ var (
 		if isDark(t.Bg) {
 			fill = mix(fill, t.Bg, .4)
 		}
-		return ButtonStyle{Fill: fill, Hover: mix(fill, t.Bg, .1), Label: t.DestructiveFg, Ring: destructiveRing(t), Shadow: true}
+		return ButtonStyle{Fill: fill, Hover: mix(fill, t.Bg, .1), Label: t.DestructiveFg, Ring: destructiveRing(&t), Shadow: true}
 	})
 	// ButtonLink is a label in the Primary color, underlined under the
 	// pointer.
