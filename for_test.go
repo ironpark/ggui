@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/pkg/virtual"
 )
 
 // layoutFor lays a EachKeyed out with room for everything, which is when its
@@ -695,5 +696,118 @@ func BenchmarkForClearWithTransition(b *testing.B) {
 				b.StartTimer()
 			}
 		})
+	}
+}
+
+// Scroll frames over rows already measured, in a list of 100k rows of any
+// size: what a frame costs when only the window moved.
+func BenchmarkEstimatedScrollFrame(b *testing.B) {
+	items := State(todos(0, 100000))
+	painted, builds := map[int]Rect{}, 0
+	var f *EachWidget[todo, int]
+	dispose := reactive.Observe(func() {
+		f = EachKeyed(items, func(t todo) int { return t.ID }, func(row EachItem[todo]) Widget {
+			id := row.Item.ID
+			builds++
+			return FromFuncs(
+				func(c Constraints, _ Env) Size { return c.Constrain(Sz(50, rowHeight(id))) },
+				func(_ *Canvas, r Rect) { painted[id] = r },
+			)
+		}).EstimatedExtent(30)
+	})
+	defer dispose()
+	offset := State(1500000.0)
+	s := Scroll(f).BindOffset(offset)
+	for range 4 {
+		frame(s, painted)
+	}
+	at := Untrack(offset.Get)
+	b.ReportAllocs()
+	for i := 0; b.Loop(); i++ {
+		offset.Set(at + float64(i%2)*5)
+		frame(s, painted)
+	}
+}
+
+// tagged is an item == cannot compare, for its slice.
+type tagged struct {
+	ID   int
+	Tags []string
+}
+
+// Without a comparison a list of items == cannot compare tells every row
+// of every change; with ItemEqual only the rows whose items differ run
+// again.
+func TestItemEqualKeepsUnchangedRowsStill(t *testing.T) {
+	t.Parallel()
+	for _, withEq := range []bool{false, true} {
+		list := make([]tagged, 50)
+		for i := range list {
+			list[i] = tagged{i, []string{"a"}}
+		}
+		items := State(list)
+		runs := map[int]int{}
+		p := ProbeBuilder(func() Widget {
+			each := EachKeyed(items, func(r tagged) int { return r.ID }, func(row EachItem[tagged]) Widget {
+				return Reactive(func() Widget {
+					r := row.Value.Get()
+					runs[r.ID]++
+					return Box().Size(1, 1)
+				})
+			})
+			if withEq {
+				each.ItemEqual(func(a, b tagged) bool { return a.ID == b.ID && slices.Equal(a.Tags, b.Tags) })
+			}
+			return each
+		}, Sz(100, 100))
+		p.Frame()
+		clear(runs)
+		next := slices.Clone(list)
+		next[7] = tagged{7, []string{"a", "b"}}
+		next = append(next, tagged{50, nil})
+		items.Set(next)
+		p.Frame()
+		p.Close()
+		if runs[7] != 1 || runs[50] != 1 {
+			t.Fatalf("withEq=%t: the changed row ran %d times and the new one %d, want 1 each", withEq, runs[7], runs[50])
+		}
+		if want := map[bool]int{false: 51, true: 2}[withEq]; len(runs) != want {
+			t.Fatalf("withEq=%t: %d rows ran again, want %d", withEq, len(runs), want)
+		}
+	}
+}
+
+// Frames that only scroll an EstimatedExtent list keep its rows where
+// placing them afresh puts them, and rows measured as they scroll in keep
+// what is in view in place as before.
+func TestEstimatedScrollFramesPlaceAsAFreshPlace(t *testing.T) {
+	t.Parallel()
+	items := State(todos(0, 2000))
+	painted, builds := map[int]Rect{}, 0
+	f := estimatedRows(t, items, painted, &builds)
+	offset := State(30000.0)
+	s := Scroll(f).BindOffset(offset)
+	frame(s, painted)
+	frame(s, painted)
+	for step := range 120 {
+		// Back and forth over rows measured, and on down into new ones.
+		d := []float64{-23, 23, 41}[step%3]
+		offset.Set(Peek(offset) + d)
+		reactive.Flush()
+		frame(s, painted)
+		var fresh virtual.Estimate[int]
+		for i, k := range f.keys {
+			if e := f.entries[k]; e != nil && e.seen > 0 {
+				fresh.Measure(k, rowHeight(i))
+			}
+		}
+		fresh.Place(f.keys, f.estimate, 0)
+		for i := range len(f.keys) + 1 {
+			got, _ := f.est.Start(i)
+			want, _ := fresh.Start(i)
+			if got != want {
+				t.Fatalf("step %d: row %d starts at %v, a fresh Place puts it at %v", step, i, got, want)
+			}
+		}
 	}
 }

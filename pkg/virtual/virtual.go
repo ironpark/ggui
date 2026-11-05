@@ -10,6 +10,7 @@ import (
 	"math"
 	"slices"
 	"sort"
+	"unsafe"
 
 	"github.com/ironpark/ggui/pkg/gem"
 )
@@ -41,12 +42,38 @@ type Estimate[K comparable] struct {
 	anchor   K       // the row at the window's start
 	anchorI  int     // its index when anchored, where Moved looks first
 	anchorAt float64 // where it started
+
+	// What the last Place placed, and what has changed since: placed is
+	// the keys it was given, stale whether a size changed for a row whose
+	// index is not known, and from the first index MeasureAt changed, or
+	// past the end for none. A Place with nothing changed keeps the starts
+	// it has, and one after MeasureAt works them out from there on, so a
+	// frame that only scrolled costs nothing however long the list.
+	placed []K
+	stale  bool
+	from   int
 }
 
 // Measure records the size of the row k, and reports whether it differs
 // from the size the last Place gave it, so that the rows need placing
-// again.
+// again. MeasureAt is the same for a row whose index is known, and lets
+// the next Place work out only the rows from there on.
 func (e *Estimate[K]) Measure(k K, size float64) (changed bool) {
+	changed = e.measure(k, size)
+	e.stale = e.stale || changed
+	return changed
+}
+
+// MeasureAt is Measure for the row at index i of the keys the next Place
+// is given.
+func (e *Estimate[K]) MeasureAt(i int, k K, size float64) (changed bool) {
+	if changed = e.measure(k, size); changed {
+		e.from = min(e.from, i)
+	}
+	return changed
+}
+
+func (e *Estimate[K]) measure(k K, size float64) (changed bool) {
 	if e.measured == nil {
 		e.measured = map[K]float64{}
 	}
@@ -60,13 +87,32 @@ func (e *Estimate[K]) Measure(k K, size float64) (changed bool) {
 
 // Place works out where each row of keys starts, at the sizes measured and
 // estimate for the rest, with gap after each.
+//
+// Given the slice the last Place was, unchanged in length, the same
+// estimate and gap, it takes the keys to be the same and works out again
+// only what was measured differently since: a caller that changes its keys
+// in place, rather than making a new slice, calls Forget first.
 func (e *Estimate[K]) Place(keys []K, estimate, gap float64) {
+	from := 0
+	if e.same(keys, estimate, gap) && !e.stale {
+		from = min(e.from, len(keys))
+	}
 	e.estimate, e.gap = estimate, gap
-	e.starts = slices.Grow(e.starts[:0], len(keys)+1)[:len(keys)+1]
+	e.placed, e.stale, e.from = keys, false, math.MaxInt
+	if from == len(keys) && len(e.starts) == len(keys)+1 {
+		return
+	}
+	// The rows before from keep their starts, and row from starts where
+	// it did: only sizes from there on changed.
 	at := 0.0
-	for i, k := range keys {
+	if from > 0 {
+		at = e.starts[from]
+	} else {
+		e.starts = slices.Grow(e.starts[:0], len(keys)+1)[:len(keys)+1]
+	}
+	for i := from; i < len(keys); i++ {
 		e.starts[i] = at
-		size, ok := e.measured[k]
+		size, ok := e.measured[keys[i]]
 		if !ok {
 			size = estimate
 		}
@@ -74,6 +120,17 @@ func (e *Estimate[K]) Place(keys []K, estimate, gap float64) {
 	}
 	e.starts[len(keys)] = at
 }
+
+// same reports whether keys, estimate and gap are what the last Place was
+// given.
+func (e *Estimate[K]) same(keys []K, estimate, gap float64) bool {
+	return e.starts != nil && len(keys) == len(e.placed) && len(e.starts) == len(keys)+1 &&
+		unsafe.SliceData(keys) == unsafe.SliceData(e.placed) && estimate == e.estimate && gap == e.gap
+}
+
+// Forget makes the next Place work out every row's start afresh, for a
+// caller that changed the keys it gave the last one in place.
+func (e *Estimate[K]) Forget() { e.placed = nil }
 
 // Start returns where row i starts as last placed, and, at i equal to the
 // count of rows, the end of the last plus its gap. It is false for an i

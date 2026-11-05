@@ -226,3 +226,80 @@ func BenchmarkEstimatePrune(b *testing.B) {
 		e.Prune(keys)
 	}
 }
+
+// A Place after rows were measured by index works out only the rows from
+// the first one changed, and lands every start where placing afresh does;
+// the anchor moves by the change in size of the rows above it all the
+// same. A Place with nothing changed keeps every start.
+func TestPlaceAfterMeasureAtMatchesAFreshPlace(t *testing.T) {
+	r := rand.New(rand.NewPCG(3, 0))
+	keys := make([]int, 500)
+	for i := range keys {
+		keys[i] = i * 7
+	}
+	var e Estimate[int]
+	e.Place(keys, 25, 2)
+	sizes := make([]float64, len(keys)) // each row's size, as the test keeps it
+	for i := range sizes {
+		sizes[i] = 25
+	}
+	for round := range 40 {
+		a := r.IntN(len(keys))
+		at, _ := e.Start(a)
+		e.Anchor(keys, at)
+		before := 0.0
+		for _, size := range sizes[:a] {
+			before += size
+		}
+		for range 1 + r.IntN(10) {
+			i := r.IntN(len(keys))
+			sizes[i] = float64(r.IntN(80))
+			e.MeasureAt(i, keys[i], sizes[i])
+		}
+		above := -before
+		for _, size := range sizes[:a] {
+			above += size
+		}
+		e.Place(keys, 25, 2)
+		if round%3 == 0 {
+			e.Place(keys, 25, 2) // nothing changed: every start kept
+		}
+		var fresh Estimate[int]
+		for k, size := range e.measured {
+			fresh.Measure(k, size)
+		}
+		fresh.Place(keys, 25, 2)
+		for i := range len(keys) + 1 {
+			got, _ := e.Start(i)
+			want, _ := fresh.Start(i)
+			if got != want {
+				t.Fatalf("round %d: row %d starts at %v, a fresh Place puts it at %v", round, i, got, want)
+			}
+		}
+		if got := e.TakeMoved(keys); math.Abs(got-above) > 1e-9 {
+			t.Fatalf("round %d: the anchor moved %v, want %v", round, got, above)
+		}
+	}
+	// Keys changed in place are placed afresh once forgotten.
+	keys[0], keys[1] = keys[1], keys[0]
+	e.Measure(keys[0], 1000)
+	e.Forget()
+	e.Place(keys, 25, 2)
+	if got, _ := e.Start(1); got != 1002 {
+		t.Fatalf("row 1 starts at %v after the keys changed, want 1002", got)
+	}
+}
+
+// A layout that only scrolled places nothing again.
+func BenchmarkEstimatePlaceUnchanged(b *testing.B) {
+	keys := make([]int, 100_000)
+	for i := range keys {
+		keys[i] = i
+	}
+	var e Estimate[int]
+	e.Place(keys, 30, 4)
+	b.ReportAllocs()
+	for b.Loop() {
+		e.Place(keys, 30, 4)
+	}
+}
