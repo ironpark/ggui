@@ -444,6 +444,24 @@ func (p *Piece) OffsetX(s string, styles []LineStyle, b int) float64 {
 	return p.X + p.pos(b)
 }
 
+// CaretX returns the x, from the line's left edge at scale 1, where the
+// caret at offset b of a line laid out as ps stands: in the piece that
+// holds the text at b, or at the end of the piece that b ends, the line's
+// last offset.
+func CaretX(s string, ps []Piece, styles []LineStyle, b int) float64 {
+	for i := range ps {
+		if p := &ps[i]; p.Start <= b && b < p.End {
+			return p.OffsetX(s, styles, b)
+		}
+	}
+	for i := range ps {
+		if p := &ps[i]; b == p.End {
+			return p.OffsetX(s, styles, b)
+		}
+	}
+	return 0
+}
+
 // CaretAt returns the offset in s nearest x on a line laid out as ps: past
 // either end, the offset at that visual edge.
 func CaretAt(s string, ps []Piece, styles []LineStyle, x float64) int {

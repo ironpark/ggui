@@ -150,3 +150,56 @@ func TestWrapKeepsNoTextItWasGiven(t *testing.T) {
 	}
 	t.Fatal("the text wrapped is still reachable after it was dropped")
 }
+
+// breakWordByCluster is breakWord as it was, trying each cluster in turn:
+// what breakWord must find, in fewer measures.
+func breakWordByCluster(p string, lineStart, wend int, width func(a, b int) float64, maxW float64, lines []Span) ([]Span, int) {
+	for j := lineStart; j < wend; {
+		k := textedit.NextGrapheme(p, j)
+		if k < wend && width(lineStart, textedit.NextGrapheme(p, k)) > maxW {
+			lines = append(lines, Span{lineStart, k})
+			lineStart, j = k, k
+			continue
+		}
+		j = k
+	}
+	return lines, lineStart
+}
+
+// A word too wide for a line breaks where trying each cluster in turn
+// breaks it: a URL, a run of Hangul (which breaks at spaces only), a run
+// of emoji sequences, at widths from under a cluster to most of the word.
+func TestBreakWordBreaksWhereEachClusterInTurnDoes(t *testing.T) {
+	t.Parallel()
+	face := fontsys.Builtin().Face(14, 0, nil)
+	words := []string{
+		"https://example.com/a/very/long/path/that/keeps/going?with=query&and=more#fragment",
+		strings.Repeat("가나다라마바사아자차카타파하", 6),
+		strings.Repeat("👩‍💻👨‍👩‍👧🇰🇷👍🏽", 8),
+		strings.Repeat("éa", 40),
+	}
+	for _, w := range words {
+		width := func(a, b int) float64 { return Width(w[a:b], face) }
+		for _, maxW := range []float64{1, 9, 31, 80, 157, 400} {
+			for _, start := range []int{0, textedit.NextGrapheme(w, 0)} {
+				got, gotStart := breakWord(w, start, len(w), width, maxW, nil)
+				want, wantStart := breakWordByCluster(w, start, len(w), width, maxW, nil)
+				if !slices.Equal(got, want) || gotStart != wantStart {
+					t.Errorf("breakWord(%q from %d, %v) = %v, %d; want %v, %d", w, start, maxW, got, gotStart, want, wantStart)
+				}
+			}
+		}
+	}
+}
+
+// BenchmarkWrapLongWord wraps a word of 5,000 characters, a pasted URL or
+// a line of minified code, to a new width each time.
+func BenchmarkWrapLongWord(b *testing.B) {
+	face := wrapFace()
+	s := strings.Repeat("abcdefghij", 500)
+	w := 200.0
+	for b.Loop() {
+		w = 200 + math.Mod(w*1.618, 300)
+		WrapSpans(s, face, w)
+	}
+}

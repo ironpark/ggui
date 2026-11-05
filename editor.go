@@ -10,6 +10,7 @@ import (
 
 	"github.com/ironpark/ggui/a11y"
 	"github.com/ironpark/ggui/internal/fontsys"
+	"github.com/ironpark/ggui/internal/paragraph"
 	"github.com/ironpark/ggui/internal/platform/textinput"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
@@ -88,6 +89,14 @@ type TextInputWidget struct {
 	// edit wraps again only the lines it changed: wrapping all of a long
 	// text at each keystroke costs milliseconds.
 	lines lineWraps
+	// bidi holds the lines with right-to-left text in them laid out in
+	// visual order, by their text: see bidiOf.
+	bidi struct {
+		style bidiStyle
+		lines map[string]*bidiLine
+	}
+	lang    string           // the Env's language, which right-to-left text is shaped in
+	pieceOp text.DrawOptions // reused by paragraph.Draw
 	// described caches what runs last found for the screen reader.
 	described struct {
 		key  runsKey
@@ -256,7 +265,7 @@ func (t *TextInputWidget) runs() []TextRun {
 	if st.Font == nil {
 		st = t.style.resolved()
 	}
-	key := runsKey{t.ed.Text, t.wrapStyle(), fontGen(), st.Font, st.Weight, st.Size, st.LineHeight, t.multiline, t.rect.Origin, t.scroll}
+	key := runsKey{t.ed.Text, t.wrapStyle(), t.lang, fontGen(), st.Font, st.Weight, st.Size, st.LineHeight, t.multiline, t.rect.Origin, t.scroll}
 	if d := &t.described; d.runs != nil && d.key == key {
 		return d.runs
 	}
@@ -270,6 +279,7 @@ func (t *TextInputWidget) runs() []TextRun {
 type runsKey struct {
 	text       string
 	wrap       wrapStyle
+	lang       string
 	generation uint64
 	font       *Font
 	weight     FontWeight
@@ -292,8 +302,13 @@ func (t *TextInputWidget) measureRuns() []TextRun {
 		} else {
 			x -= t.scroll
 		}
-		width := t.prefixWidths(sp)
-		r := TextRun{Start: sp.Start, End: sp.End, Rect: Rct(Pt(x, y), Sz(width(sp.End), h))}
+		width, w := t.prefixWidths(sp), 0.0
+		if bl := t.bidiOf(t.ed.Text[sp.Start:sp.End]); bl != nil {
+			width, w = func(b int) float64 { return bl.x(b - sp.Start) }, bl.width()
+		} else {
+			w = width(sp.End)
+		}
+		r := TextRun{Start: sp.Start, End: sp.End, Rect: Rct(Pt(x, y), Sz(w, h))}
 		for b := sp.Start; ; b = textedit.NextRune(t.ed.Text, b) {
 			r.Stops = append(r.Stops, TextStop{Byte: b, X: width(b)})
 			if b >= sp.End {
@@ -707,6 +722,7 @@ func (t *TextInputWidget) Layout(c Constraints, env Env) Size {
 	t.Sync()
 	t.inheritedDisabled, _ = env.Get(InputDisabledKey)
 	t.resolved = env.ResolveText(t.style)
+	t.lang = env.Language()
 	t.cache, _ = env.Get(cacheOwner)
 	style := env.EditorStyle()
 	if t.IsDisabled() {
@@ -750,8 +766,13 @@ func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
 
 	shown, caret := t.rendered()
 	h := t.height()
-	caretX := t.advance(shown[:caret])
-	total := t.advance(shown)
+	bl := t.bidiOf(shown)
+	var caretX, total float64
+	if bl != nil {
+		caretX, total = bl.x(caret), bl.width()
+	} else {
+		caretX, total = t.advance(shown[:caret]), t.advance(shown)
+	}
 	t.scroll = clamp(t.scroll, 0, max(total-r.Size.W+1, 0))
 	if caretX-t.scroll > r.Size.W-1 {
 		t.scroll = caretX - r.Size.W + 1
@@ -771,8 +792,9 @@ func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
 
 	if t.Focused() && t.composition == "" && t.ed.HasSelection() {
 		lo, hi := t.ed.Selection()
-		a, b := t.advance(t.ed.Text[:lo]), t.advance(t.ed.Text[:hi])
-		clip.FillRect(Rct(Pt(x0+a, r.Origin.Y), Sz(b-a, h)), t.selection)
+		t.spanX(shown, textlayout.Span{End: len(shown)}, bl, lo, hi, func(a, b float64) {
+			clip.FillRect(Rct(Pt(x0+a, r.Origin.Y), Sz(b-a, h)), t.selection)
+		})
 	}
 
 	op := &text.DrawOptions{}
@@ -782,15 +804,16 @@ func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
 		fontsys.DrawText(clip.Image, t.placeholder, t.face(dst.Scale()), op)
 	} else {
 		op.ColorScale.ScaleWithColor(t.resolved.Color)
-		fontsys.DrawText(clip.Image, t.display(shown), t.face(dst.Scale()), op)
+		op.GeoM.Reset()
+		t.drawLine(clip, shown, bl, x0, r.Origin.Y, op)
 	}
 
 	if t.composition != "" {
 		lo, _ := t.ed.Selection()
-		a := t.advance(t.ed.Text[:lo])
-		b := a + t.advance(t.composition)
 		y := r.Origin.Y + h - 1
-		clip.FillRect(Rct(Pt(x0+a, y), Sz(b-a, 1)), t.resolved.Color)
+		t.spanX(shown, textlayout.Span{End: len(shown)}, bl, lo, lo+len(t.composition), func(a, b float64) {
+			clip.FillRect(Rct(Pt(x0+a, y), Sz(b-a, 1)), t.resolved.Color)
+		})
 	}
 
 	if t.Focused() {
@@ -808,7 +831,7 @@ func (t *TextInputWidget) paintLines(dst *Canvas, r Rect) {
 	shown, caret := t.rendered()
 	spans := t.spans(shown)
 	li := textlayout.LineOf(spans, caret)
-	caretX := t.advance(shown[spans[li].Start:caret])
+	caretX := t.xIn(shown, spans[li], caret)
 	caretY := float64(li) * t.spacing()
 	h := t.height()
 	t.scroll = clamp(t.scroll, 0, max(t.linesHeight(len(spans))-r.Size.H, 0))
@@ -840,12 +863,24 @@ func (t *TextInputWidget) paintLines(dst *Canvas, r Rect) {
 			if hi < sp.Start || lo > sp.End || !shows(i) {
 				continue
 			}
-			a, b := max(lo, sp.Start), min(hi, sp.End)
-			ax, bx := t.advance(shown[sp.Start:a]), t.advance(shown[sp.Start:b])
-			if hi > sp.End && i+1 < len(spans) {
-				bx += t.advance(" ")
+			// A range that runs on past the line takes a space's width at
+			// its end, which shows the line break in it.
+			runsOn := hi > sp.End && i+1 < len(spans)
+			bl := t.bidiOf(shown[sp.Start:sp.End])
+			if bl == nil {
+				a, b := max(lo, sp.Start), min(hi, sp.End)
+				ax, bx := t.advance(shown[sp.Start:a]), t.advance(shown[sp.Start:b])
+				if runsOn {
+					bx += t.advance(" ")
+				}
+				fn(i, ax, bx)
+				continue
 			}
-			fn(i, ax, bx)
+			t.spanX(shown, sp, bl, lo, hi, func(a, b float64) { fn(i, a, b) })
+			if runsOn {
+				end := bl.width()
+				fn(i, end, end+t.advance(" "))
+			}
 		}
 	}
 
@@ -867,9 +902,9 @@ func (t *TextInputWidget) paintLines(dst *Canvas, r Rect) {
 			if !shows(i) {
 				continue
 			}
+			line := shown[sp.Start:sp.End]
 			op.GeoM.Reset()
-			op.GeoM.Translate(dst.px(x0), dst.px(lineY(i)))
-			fontsys.DrawText(clip.Image, t.display(shown[sp.Start:sp.End]), t.face(dst.Scale()), op)
+			t.drawLine(clip, line, t.bidiOf(line), x0, lineY(i), op)
 		}
 	}
 
@@ -886,6 +921,95 @@ func (t *TextInputWidget) paintLines(dst *Canvas, r Rect) {
 		}
 		WakeAt(blinkWake(t.blink, FrameTime(), caretBlink))
 	}
+}
+
+// bidiStyle is what a line's visual layout depends on beside its text.
+type bidiStyle struct {
+	generation uint64
+	font       *Font
+	weight     FontWeight
+	size       float64
+	lang       string
+}
+
+// bidiLine is a line holding right-to-left text, laid out in visual order
+// by paragraph as Text lays out such a line: the caret, the selection, a
+// click and the drawing all go by its pieces. A line of left-to-right text
+// alone is measured and drawn as it is.
+type bidiLine struct {
+	s      string
+	pieces []paragraph.Piece
+	styles []paragraph.LineStyle
+}
+
+// x is where the caret at offset b of the line stands.
+func (l *bidiLine) x(b int) float64 { return paragraph.CaretX(l.s, l.pieces, l.styles, b) }
+
+// at is the offset of the line nearest x.
+func (l *bidiLine) at(x float64) int { return paragraph.CaretAt(l.s, l.pieces, l.styles, x) }
+
+func (l *bidiLine) width() float64 { return paragraph.Width(l.pieces) }
+
+// bidiOf returns line laid out in visual order, or nil when it needs no
+// reordering: it holds no right-to-left text, or is a password's bullets.
+// The layouts are kept by the line's text, so that a line an edit did not
+// change is not laid out again.
+func (t *TextInputWidget) bidiOf(line string) *bidiLine {
+	if t.password || !paragraph.NeedsBidi(line, false) {
+		return nil
+	}
+	st := t.resolved
+	if st.Font == nil {
+		st = t.style.resolved()
+	}
+	c := &t.bidi
+	if key := (bidiStyle{fontGen(), st.Font, st.Weight, st.Size, t.lang}); c.lines == nil || c.style != key || len(c.lines) > 256 {
+		c.style, c.lines = key, map[string]*bidiLine{}
+	}
+	if l := c.lines[line]; l != nil {
+		return l
+	}
+	line = strings.Clone(line) // the key outlives the text it was cut from
+	styles := []paragraph.LineStyle{{Start: 0, End: len(line), Style: st.engine()}}
+	l := &bidiLine{s: line, pieces: paragraph.LayoutLine(line, styles, false, t.lang), styles: styles}
+	c.lines[line] = l
+	return l
+}
+
+// xIn is where the caret at offset b of s stands on the line sp of it.
+func (t *TextInputWidget) xIn(s string, sp textlayout.Span, b int) float64 {
+	if bl := t.bidiOf(s[sp.Start:sp.End]); bl != nil {
+		return bl.x(b - sp.Start)
+	}
+	return t.advance(s[sp.Start:b])
+}
+
+// spanX calls fn with the stretches, from the line's left edge, that the
+// offsets lo to hi of s cover on the line sp of it, laid out as bl, or
+// as it is when bl is nil: one stretch, or one per piece of a reordered
+// line.
+func (t *TextInputWidget) spanX(s string, sp textlayout.Span, bl *bidiLine, lo, hi int, fn func(a, b float64)) {
+	a, b := max(lo, sp.Start), min(hi, sp.End)
+	if bl == nil {
+		fn(t.advance(s[sp.Start:a]), t.advance(s[sp.Start:b]))
+		return
+	}
+	paragraph.SpanX(bl.s, bl.pieces, bl.styles, a-sp.Start, b-sp.Start, fn)
+}
+
+// drawLine draws line, laid out as bl or as it is when bl is nil, with its
+// top left at x, y. op holds the color, and a GeoM drawLine moves.
+func (t *TextInputWidget) drawLine(dst *Canvas, line string, bl *bidiLine, x, y float64, op *text.DrawOptions) {
+	if bl == nil {
+		op.GeoM.Translate(dst.px(x), dst.px(y))
+		fontsys.DrawText(dst.Image, t.display(line), t.face(dst.Scale()), op)
+		return
+	}
+	col := t.resolved.Color
+	baseline := t.face(dst.Scale()).Metrics().HAscent
+	paragraph.Draw(dst.Image, &t.pieceOp, bl.s, bl.pieces, bl.styles, dst.Scale(), baseline,
+		func(int) color.Color { return col },
+		func(op *text.DrawOptions) { op.GeoM.Translate(dst.px(x), dst.px(y)) })
 }
 
 // indexAt returns the byte offset in the text nearest to a logical point.
@@ -906,6 +1030,9 @@ func (t *TextInputWidget) indexAt(p Point) int {
 // partial emoji sequences can give the same width as the whole glyph, so
 // rune boundaries would put the caret inside a joined emoji or modifier.
 func (t *TextInputWidget) indexInLine(sp textlayout.Span, x float64) int {
+	if bl := t.bidiOf(t.ed.Text[sp.Start:sp.End]); bl != nil {
+		return sp.Start + bl.at(x)
+	}
 	width := t.prefixWidths(sp)
 	best, bestDist := sp.Start, math.Inf(1)
 	for i := sp.Start; ; i = textedit.NextGrapheme(t.ed.Text, i) {
@@ -925,7 +1052,7 @@ func (t *TextInputWidget) indexInLine(sp textlayout.Span, x float64) int {
 func (t *TextInputWidget) moveLine(dir int, extend bool) {
 	spans := t.spans(t.ed.Text)
 	li := textlayout.LineOf(spans, t.ed.Caret)
-	x := t.advance(t.ed.Text[spans[li].Start:t.ed.Caret])
+	x := t.xIn(t.ed.Text, spans[li], t.ed.Caret)
 	to := li + dir
 	switch {
 	case to < 0:

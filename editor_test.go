@@ -1248,3 +1248,49 @@ func TestTextInputRunsFollowTheTextAndThePaint(t *testing.T) {
 	paintFrame(&in, w, Sz(120, 80))
 	same("a narrower paint")
 }
+
+// Right-to-left text draws right to left, and the caret, a click and the
+// selection go where it is drawn: the caret before the first letter of a
+// Hebrew word stands at its right, a click at its right puts the caret
+// there, and a click at its left after the word. Each holds wherever the
+// machine's fonts draw Hebrew, since the order is the characters'.
+func TestTextInputPlacesTheCaretInRightToLeftText(t *testing.T) {
+	t.Parallel()
+	useFakeIME(t)
+	for _, multiline := range []bool{false, true} {
+		w := TextInput(State("שלום עולם")).Style(TextStyle{Size: 30})
+		if multiline {
+			w.Multiline()
+		}
+		var in inputState
+		paintFrame(&in, w, Sz(600, 50))
+		bl := w.bidiOf(w.ed.Text)
+		if bl == nil {
+			t.Fatal("a Hebrew line was not laid out in visual order")
+		}
+		total := bl.width()
+		caretAt := func(b int) float64 {
+			w.ed.MoveTo(b, false)
+			paintFrame(&in, w, Sz(600, 50))
+			return float64(w.caretBounds.Min.X)
+		}
+		if x := caretAt(0); x < total-2 {
+			t.Errorf("multiline %v: the caret at the start stands at %v, want the right end, %v", multiline, x, total)
+		}
+		if a, b := caretAt(len("ש")), caretAt(len("של")); !(b < a && a < total) {
+			t.Errorf("multiline %v: the caret moves right as it goes through the word: %v then %v", multiline, a, b)
+		}
+		if i := w.indexAt(Pt(total-1, 10)); i != 0 {
+			t.Errorf("multiline %v: a click at the right end puts the caret at %d, want 0", multiline, i)
+		}
+		if i := w.indexAt(Pt(1, 10)); i != len(w.ed.Text) {
+			t.Errorf("multiline %v: a click at the left end puts the caret at %d, want %d", multiline, i, len(w.ed.Text))
+		}
+		// The first word selected is the right of the line.
+		var xs []float64
+		w.spanX(w.ed.Text, textlayout.Span{End: len(w.ed.Text)}, bl, 0, len("שלום"), func(a, b float64) { xs = append(xs, a, b) })
+		if len(xs) != 2 || xs[0] < total/3 || xs[1] < total-2 {
+			t.Errorf("multiline %v: the first word selected covers %v of %v, want its right end", multiline, xs, total)
+		}
+	}
+}
