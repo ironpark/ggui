@@ -146,6 +146,7 @@ type Window struct {
 	semWanted     atomic.Bool  // a caller of Semantics reads the tree
 	performs      atomic.Int32 // Perform calls not yet carried out, which need a tree
 	dragOver      bool
+	closeAsked    bool // a close the OnCloseRequest handlers have yet to answer
 	dragAt        Point
 	seenGen       uint64            // layoutGen as this window's last frame left it
 	menuShortcuts []*ShortcutHandle // the app menus' chords, where the menu bar does not run them
@@ -242,6 +243,19 @@ func (w *Window) open() error {
 		nw.SetIcon(w.cfg.Icon)
 	}
 	w.ax.SetWindow(nw)
+	// Hide, Maximize and Restore before the window opened changed the
+	// Config it opened with, not the signals newWindow set; the platform
+	// reports no change from the state it opened in, so set them here.
+	// Posted, they run before what the window's events post.
+	focused := !w.cfg.Unfocused && !w.cfg.Hidden
+	state := WindowNormal
+	if w.cfg.Maximized {
+		state = WindowMaximized
+	}
+	w.post(func() {
+		w.focused.Set(focused)
+		w.state.Set(state)
+	})
 	return nil
 }
 
@@ -319,10 +333,14 @@ func (w *Window) handle(ev ggwd.Event) error {
 			// not lost when its modifier was released before the frame ran.
 			m := w.keyboard.Mods().Or(ev.Modifiers)
 			w.pending.mods = w.pending.mods.Or(m)
-			w.pending.keys = append(w.pending.keys, ev.Key)
-			if w.cfg.Inspector != "" && !ev.Repeat &&
-				(KeyEvent{Kind: KeyPress, Key: ev.Key, Mods: m}).Is(w.inspectChord) {
-				w.Inspector(!w.inspect)
+			if w.cfg.Inspector != "" && (KeyEvent{Kind: KeyPress, Key: ev.Key, Mods: m}).Is(w.inspectChord) {
+				// The inspector's chord is the inspector's: the focused
+				// widget sees neither the press nor its repeats.
+				if !ev.Repeat {
+					w.Inspector(!w.inspect)
+				}
+			} else {
+				w.pending.keys = append(w.pending.keys, ev.Key)
 			}
 		} else {
 			w.pending.released = append(w.pending.released, ev.Key)
@@ -392,7 +410,13 @@ func (w *Window) handle(ev ggwd.Event) error {
 			// The handlers decide in a frame, where they may put up a
 			// question; the window stays until they agree or Close is called.
 			ev.KeepOpen()
+			if w.closeAsked {
+				// A second click before they ran asks them nothing more.
+				break
+			}
+			w.closeAsked = true
 			w.post(func() {
+				w.closeAsked = false
 				if w.closeAllowed() {
 					w.Close()
 				}
@@ -884,9 +908,7 @@ func (w *Window) Title() string { return w.cfg.Title }
 // SetTitle changes the window's title.
 func (w *Window) SetTitle(title string) {
 	w.cfg.Title = title
-	if nw := w.window.Load(); nw != nil {
-		nw.SetTitle(title)
-	}
+	w.native(func(nw *ggwd.Window) { nw.SetTitle(title) })
 }
 
 // Size returns the size of the window's content, in logical pixels.
@@ -917,9 +939,7 @@ func (w *Window) Position() Point {
 // SetPosition moves the window to p on the screen, in logical pixels.
 func (w *Window) SetPosition(p Point) {
 	w.cfg.Position = &p
-	if nw := w.window.Load(); nw != nil {
-		nw.SetPosition(p.X, p.Y)
-	}
+	w.native(func(nw *ggwd.Window) { nw.SetPosition(p.X, p.Y) })
 }
 
 // SetSizeLimits bounds the size the user can resize the window's content
@@ -935,9 +955,7 @@ func (w *Window) SetSizeLimits(minSize, maxSize Size) {
 // SetResizable sets whether the user can resize the window.
 func (w *Window) SetResizable(resizable bool) {
 	w.cfg.Resizable = resizable
-	if nw := w.window.Load(); nw != nil {
-		nw.SetResizable(resizable)
-	}
+	w.native(func(nw *ggwd.Window) { nw.SetResizable(resizable) })
 }
 
 // SetFrameless shows or hides the window's title bar and border.
@@ -949,17 +967,13 @@ func (w *Window) SetFrameless(frameless bool) {
 // SetAlwaysOnTop sets whether the window stays above ordinary windows.
 func (w *Window) SetAlwaysOnTop(on bool) {
 	w.cfg.AlwaysOnTop = on
-	if nw := w.window.Load(); nw != nil {
-		nw.SetFloating(on)
-	}
+	w.native(func(nw *ggwd.Window) { nw.SetFloating(on) })
 }
 
 // SetIcon sets the window's icon, in several sizes; see Config.Icon.
 func (w *Window) SetIcon(icon []image.Image) {
 	w.cfg.Icon = icon
-	if nw := w.window.Load(); nw != nil {
-		nw.SetIcon(icon)
-	}
+	w.native(func(nw *ggwd.Window) { nw.SetIcon(icon) })
 }
 
 // Minimize minimizes the window.

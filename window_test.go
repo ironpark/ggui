@@ -385,3 +385,20 @@ func TestScrollPhaseReachesTheFrame(t *testing.T) {
 		t.Fatalf("a lift alone: phase %v wheel %v", f.phase, f.wheel)
 	}
 }
+
+func TestTheInspectorChordReachesNoWidget(t *testing.T) {
+	t.Parallel()
+	w := &Window{cfg: Config{Inspector: "f1"}, inspectChord: MustChord("f1")}
+	for _, e := range []ggwd.KeyEvent{
+		{Key: ggwd.KeyF1, Pressed: true},
+		{Key: ggwd.KeyF1, Pressed: true, Repeat: true},
+		{Key: ggwd.KeyA, Pressed: true},
+	} {
+		if err := w.handle(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if keys := w.takeInput().keys; len(keys) != 1 || keys[0] != ggwd.KeyA {
+		t.Fatalf("keys = %v; want only A, the inspector's F1 kept from the widgets", keys)
+	}
+}
