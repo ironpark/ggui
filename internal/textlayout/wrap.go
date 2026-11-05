@@ -195,18 +195,47 @@ func wrapParagraph(p string, width func(a, b int) float64, maxW float64) []Span 
 			continue
 		}
 		// A word wider than the line, alone on it: break between grapheme clusters.
-		for j := lineStart; j < wend; {
-			k := textedit.NextGrapheme(p, j)
-			if k < wend && width(lineStart, textedit.NextGrapheme(p, k)) > maxW {
-				lines = append(lines, Span{lineStart, k})
-				lineStart, j = k, k
-				continue
-			}
-			j = k
-		}
+		lines, lineStart = breakWord(p, lineStart, wend, width, maxW, lines)
 		lineEnd = wend
 	}
 	return append(lines, Span{lineStart, lineEnd})
+}
+
+// breakWord breaks p[lineStart:wend], a word too wide for a line, between
+// grapheme clusters, appending each full line to lines, and returns them
+// and where the last, which may take more words, starts. A line ends
+// before the first cluster that takes it past maxW, and holds one cluster
+// at least.
+//
+// Line widths grow with the clusters on them, so where a line ends is
+// found by doubling the clusters tried and then halving between the last
+// two tries: a few measures a line, where trying each cluster in turn
+// would measure the line once per cluster on it, which for a long URL or
+// a pasted run of text is thousands of measures of a line's length.
+func breakWord(p string, lineStart, wend int, width func(a, b int) float64, maxW float64, lines []Span) ([]Span, int) {
+	bounds := textedit.Bounds(p)
+	// A line from lineStart ending at bounds[k] is too wide when the
+	// cluster after it would not fit on it as well: it ends there.
+	too := func(k int) bool { return width(lineStart, bounds[k+1]) > maxW }
+	end := sort.SearchInts(bounds, wend) // the lines end before bounds[end]
+	for k := sort.SearchInts(bounds, lineStart+1); k < end; {
+		// Every candidate before k fits; find the first that does not.
+		at, step := end, 1
+		for k < end {
+			probe := min(k+step-1, end-1)
+			if too(probe) {
+				at = k + sort.Search(probe-k, func(i int) bool { return too(k + i) })
+				break
+			}
+			k, step = probe+1, step*2
+		}
+		if at == end {
+			break
+		}
+		lines = append(lines, Span{lineStart, bounds[at]})
+		lineStart, k = bounds[at], at+1
+	}
+	return lines, lineStart
 }
 
 // BreakSpans splits s at its line breaks only.
