@@ -1,9 +1,10 @@
 package ggui
 
 import (
-	"math"
 	"slices"
 	"sort"
+
+	"github.com/ironpark/ggui/pkg/virtual"
 )
 
 // The parts of EachWidget that work with an enclosing Scroll: section
@@ -100,12 +101,13 @@ func (f *EachWidget[T, K]) crossAt(i int) float64 {
 // the window's start when it is not among the rows in view.
 func (f *EachWidget[T, K]) layoutPinned(pitch, gap, crossMin, crossMax float64, env Env) {
 	f.pin.row, f.pin.pitch, f.pin.gap = -1, pitch, gap
-	vp, ok := viewportAlong(env, f.horizontal)
+	_, ok := viewportAlong(env, f.horizontal)
 	n := len(f.items)
 	if f.pin.header == nil || !ok || n == 0 || pitch <= 0 {
 		return
 	}
-	h := f.headerBefore(clamp(int(math.Floor((vp.Offset-f.lead)/pitch)), 0, n-1))
+	// f.first is the row virtual.Fixed found the window starting on.
+	h := f.headerBefore(min(f.first, n-1))
 	if h < 0 {
 		return
 	}
@@ -134,14 +136,15 @@ func (f *EachWidget[T, K]) pinned(r Rect) (*forEntry[T], int, Rect) {
 	}
 	if f.extent > 0 {
 		pitch, n := f.pin.pitch, len(f.items)
-		h := f.headerBefore(clamp(int(math.Floor(edge/pitch)), 0, n-1))
+		first, last := virtual.Fixed(n, pitch, edge, f.extent)
+		h := f.headerBefore(min(first, n-1))
 		if h < 0 || h != f.pin.row {
 			return nil, 0, Rect{}
 		}
 		start := float64(h) * pitch
 		end := max(float64(n)*pitch-f.pin.gap, start)
 		// Only a header that reaches the window's start can push.
-		if next := f.headerAfter(h); next >= 0 && next < min(n, int(math.Ceil((edge+f.extent)/pitch))+1) {
+		if next := f.headerAfter(h); next >= 0 && next < min(n, last+1) {
 			end = float64(next)*pitch - f.pin.gap
 		}
 		pos := pinPos(edge, start, end, f.extent)
@@ -154,69 +157,39 @@ func (f *EachWidget[T, K]) pinned(r Rect) (*forEntry[T], int, Rect) {
 		}
 		return f.entries[f.keys[h]], h, Rct(at(pos, cross), f.pin.size)
 	}
-	// Every row is laid out: find the header above the window's start and
-	// the end of its section, which is where the next header's row begins.
-	// With no row leaving, child i is item i, and the headers are looked
-	// up rather than asked of every row above the window.
-	if len(f.leaving) == 0 {
-		return f.pinnedAmong(edge, at)
-	}
-	head := -1
-	for i, e := range f.childEntries {
-		if f.mainAt(i) > edge {
-			break
-		}
-		if f.entries[f.keys[clamp(Untrack(e.position.Get), 0, len(f.keys)-1)]] == e && f.pin.header(Untrack(e.item.Get)) {
-			head = i
-		}
-	}
-	if head < 0 {
-		return nil, 0, Rect{}
-	}
-	start := f.mainAt(head)
-	lead := f.main(f.rects[head].Size)
-	end := start + lead
-	for i := head + 1; i < len(f.childEntries); i++ {
-		e := f.childEntries[i]
-		if f.pin.header(Untrack(e.item.Get)) {
-			break
-		}
-		end = f.mainAt(i) + f.main(f.rects[i].Size)
-	}
-	pos := pinPos(edge, start, end, lead)
-	if pos == start {
-		return nil, 0, Rect{}
-	}
-	e := f.childEntries[head]
-	cross := f.crossAt(head)
-	return e, Untrack(e.position.Get), Rct(at(pos, cross), f.rects[head].Size)
-}
-
-// pinnedAmong is pinned for a list whose every row is laid out and none
-// leaving: the header of the row the window starts on, and the end of its
-// section, the end of the row before the next header or of the last row.
-func (f *EachWidget[T, K]) pinnedAmong(edge float64, at func(main, cross float64) Point) (*forEntry[T], int, Rect) {
-	n := min(len(f.childEntries), len(f.items))
+	// Every row is laid out, rows leaving among them: find the item the
+	// window starts on, the header at or before it, and the end of its
+	// section, the end of the child before the next header's, or of the
+	// last child.
+	n := min(len(f.childEntries), len(f.childItem), len(f.rects))
 	row := sort.Search(n, func(i int) bool { return f.mainAt(i) > edge }) - 1
-	if row < 0 {
+	if row < 0 || f.childItem[row] < 0 {
 		return nil, 0, Rect{}
 	}
-	head := f.headerBefore(row)
-	if head < 0 {
+	h := f.headerBefore(f.childItem[row])
+	if h < 0 {
 		return nil, 0, Rect{}
+	}
+	head := f.childOf(h, n)
+	last := n - 1
+	if next := f.headerAfter(h); next >= 0 {
+		last = f.childOf(next, n) - 1
 	}
 	start := f.mainAt(head)
 	lead := f.main(f.rects[head].Size)
-	last := n - 1
-	if next := f.headerAfter(head); next >= 0 && next <= n {
-		last = next - 1
-	}
 	end := max(start+lead, f.mainAt(last)+f.main(f.rects[last].Size))
 	pos := pinPos(edge, start, end, lead)
 	if pos == start {
 		return nil, 0, Rect{}
 	}
-	return f.childEntries[head], head, Rct(at(pos, f.crossAt(head)), f.rects[head].Size)
+	return f.childEntries[head], h, Rct(at(pos, f.crossAt(head)), f.rects[head].Size)
+}
+
+// childOf returns the child painting item i, of the first n, or n when it
+// is past them: the first whose childItem reaches i, which is the item's
+// own, a leaving row after it carrying its index too.
+func (f *EachWidget[T, K]) childOf(i, n int) int {
+	return sort.Search(n, func(c int) bool { return f.childItem[c] >= i })
 }
 
 // placeKey answers the enclosing Scroll's ScrollToKey when the key is one

@@ -85,8 +85,9 @@ func (e *Estimate[K]) measure(k K, size float64) (changed bool) {
 
 // Place works out where each row of keys starts, at the sizes measured and
 // estimate for the rest, with gap after each. It takes keys to be the ones
-// it was given last unless Prune was called since, and works out again
-// only the rows from the first measured differently.
+// it was given last unless KeysChanged was called since, and works out
+// again only the rows from the first measured differently: a caller whose
+// rows changed calls KeysChanged before placing them.
 func (e *Estimate[K]) Place(keys []K, estimate, gap float64) {
 	from := min(e.from, len(keys))
 	if estimate != e.estimate || gap != e.gap || len(e.starts) != len(keys)+1 {
@@ -174,10 +175,10 @@ func (e *Estimate[K]) Anchor(keys []K, v float64) {
 	e.anchored, e.anchor, e.anchorI, e.anchorAt = true, keys[a], a, e.starts[a]
 }
 
-// Prune forgets the sizes of rows no longer among keys. It is how a
-// caller says its keys changed: the next Place works out every row's
-// start afresh, where otherwise it takes the keys to be the ones it had.
-func (e *Estimate[K]) Prune(keys []K) {
+// KeysChanged tells the estimate the rows are now keys: the next Place
+// works out every row's start afresh, and the sizes of rows no longer
+// among keys are forgotten.
+func (e *Estimate[K]) KeysChanged(keys []K) {
 	e.from = 0
 	if len(e.measured) <= len(keys) {
 		return
