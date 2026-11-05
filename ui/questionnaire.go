@@ -478,7 +478,7 @@ func (q *QuestionnaireWidget) focusAnswer(direction, from int) {
 		}
 		return q.input != nil
 	}
-	next := stepIndex(from, direction, len(q.choices)+1, enabled)
+	next := stepIndex(from, direction, len(q.choices)+1, true, enabled)
 	if !enabled(next) {
 		return
 	}
@@ -806,14 +806,14 @@ func (f *questionInput) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 type questionStack struct{ *ggui.ColumnWidget }
 
 func (s *questionStack) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	s.Gap(uitheme.From(env).Chat.QuestionGap)
+	s.Gap(uitheme.Of(env).Chat.QuestionGap)
 	return s.ColumnWidget.Layout(c, env)
 }
 
 type questionError struct{ *ggui.TextWidget }
 
 func (e *questionError) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	e.Color(uitheme.From(env).Destructive)
+	e.Color(uitheme.Of(env).Destructive)
 	return e.TextWidget.Layout(c, env)
 }
 

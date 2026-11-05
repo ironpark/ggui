@@ -68,7 +68,7 @@ func (c *CardWidget) Pad(sides ...float64) *CardWidget {
 // Layout implements Widget.
 func (c *CardWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	defer c.props.Layout().EndLayout()
-	t := uitheme.From(env)
+	t := uitheme.Of(env)
 	if !c.shadowSet {
 		c.box.Shadow(t.CardShadow)
 	}
@@ -206,7 +206,7 @@ func (p *ProgressWidget) Height(h float64) *ProgressWidget {
 func (p *ProgressWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer p.props.Layout().EndLayout()
 	p.theme = uitheme.Of(env)
-	p.motion = env.Motion(uitheme.From(env).MotionFast)
+	p.motion = env.Motion(p.theme.MotionFast)
 	return c.Constrain(ggui.Sz(bounded(c.MaxW, defaultStripe), p.height))
 }
 

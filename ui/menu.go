@@ -55,9 +55,11 @@ func (m *MenuWidget) Disabled(v bool) *MenuWidget {
 // Semantics implements ggui.Semantic through the button.
 func (m *MenuWidget) Semantics() (ggui.Role, string) { return m.button.Semantics() }
 
-// ConsumesKey implements ggui.KeyConsumer: Up and Down open and move.
+// ConsumesKey implements ggui.KeyConsumer: Up and Down open and move,
+// and Home and End move while open.
 func (m *MenuWidget) ConsumesKey(ev ggui.KeyEvent) bool {
-	return ev.Kind == ggui.KeyPress && (ggui.Activates(ev) || ev.Key == ggui.KeyArrowUp || ev.Key == ggui.KeyArrowDown)
+	return ggui.Activates(ev) || ev.Kind == ggui.KeyPress && (ev.Key == ggui.KeyArrowUp || ev.Key == ggui.KeyArrowDown) ||
+		m.popup.IsOpen() && navConsumes(ev, navVertical)
 }
 
 func (m *MenuWidget) init(entries []ggui.Widget) {
@@ -161,7 +163,11 @@ func (m *MenuWidget) HandleKey(ev ggui.KeyEvent) {
 		if !open {
 			m.toggle()
 		}
-		m.step(pick(ev.Key == ggui.KeyArrowUp, -1, 1))
+		m.navigate(ev)
+	case ggui.KeyHome, ggui.KeyEnd:
+		if !open || !m.navigate(ev) {
+			m.button.HandleKey(ev)
+		}
 	case ggui.KeyEnter, ggui.KeyNumpadEnter, ggui.KeySpace:
 		if open && m.activate() {
 			return
@@ -176,11 +182,6 @@ func (m *MenuWidget) HandleKey(ev ggui.KeyEvent) {
 // through their own popup, so the width lives here rather than in Layout.
 func (m *MenuWidget) chrome(t *uitheme.Theme) *ggui.BoxWidget {
 	return panelBox(m.panel, t).Width(pick(m.widthSet, m.width, t.MenuWidth))
-}
-
-// step moves the keyboard highlight by dir, skipping disabled items.
-func (m *MenuWidget) step(dir int) {
-	m.current = stepIndex(m.current, dir, len(m.items), m.enabled)
 }
 
 // enabled reports whether item i can take the highlight.
@@ -198,8 +199,7 @@ func (m *MenuWidget) navigate(ev ggui.KeyEvent) bool {
 
 // jump restarts the highlight from the near end, for Home and End.
 func (m *MenuWidget) jump(dir int) {
-	m.current = -1
-	m.step(dir)
+	m.current = stepIndex(-1, dir, len(m.items), true, m.enabled)
 }
 
 // reopen refreshes the items and highlights the first one. Owners that show

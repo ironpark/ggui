@@ -41,14 +41,14 @@ func fieldHalo(dst *ggui.Canvas, t *uitheme.Theme, r ggui.Rect, radius float64, 
 // one while the field is invalid.
 func fieldRing(t *uitheme.Theme, invalid bool) color.Color {
 	if invalid {
-		return destructiveRing(*t)
+		return destructiveRing(t)
 	}
 	return t.Ring
 }
 
 // destructiveRing is the focus ring of anything that warns: destructive
 // buttons and invalid fields.
-func destructiveRing(t uitheme.Theme) color.Color { return fade(t.Destructive, t.RingAlpha*.8) }
+func destructiveRing(t *uitheme.Theme) color.Color { return fade(t.Destructive, t.RingAlpha*.8) }
 
 // isDark reports whether c is closer to black than to white.
 func isDark(c color.Color) bool {

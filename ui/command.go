@@ -55,8 +55,6 @@ type CommandWidget struct {
 	resultsBox         *ggui.BoxWidget  // the scroll at its height
 	searchBox          *ggui.BoxWidget  // the inset search's fill, nil when not inset
 	hint               *ggui.TextWidget // the key hints under the results
-	builtInset         bool             // the insetSearch body was built for
-	builtHints         bool             // the hints body was built for
 	matched            []int
 	highlight          int
 	lastQuery          string
@@ -146,8 +144,14 @@ func (c *CommandWidget) HintLabels(navigate, choose string) *CommandWidget {
 	defer property.Watch(&c.props, &c.hintNav)()
 	defer property.Watch(&c.props, &c.hintSel)()
 	c.hintNav, c.hintSel = navigate, choose
+	if c.hint != nil {
+		c.hint.Content(c.hintText())
+	}
 	return c
 }
+
+// hintText is the footer Hints shows.
+func (c *CommandWidget) hintText() string { return "↑↓ " + c.hintNav + "   ↵ " + c.hintSel }
 
 // Empty sets what the list says when nothing matches; "No results" by
 // default.
@@ -242,7 +246,7 @@ func (c *CommandWidget) key(ev ggui.KeyEvent) bool {
 				break
 			}
 		}
-		next := stepIndex(at, pick(ev.Key == ggui.KeyArrowUp, -1, 1), len(c.matched), func(j int) bool { return !c.entries[c.matched[j]].disabled })
+		next := stepIndex(at, pick(ev.Key == ggui.KeyArrowUp, -1, 1), len(c.matched), true, func(j int) bool { return !c.entries[c.matched[j]].disabled })
 		if next >= 0 {
 			c.highlight = c.matched[next]
 			c.scroll.Reveal(c.rects[c.highlight])
@@ -268,15 +272,12 @@ func (c *CommandWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	// The panel is built once, and again only when the search inset or the
 	// hints come or go, so the hint's shaping and the boxes' layout caches
 	// survive a relayout.
-	if c.panel == nil || c.builtInset != c.insetSearch || c.builtHints != c.hints {
+	if c.panel == nil || (c.searchBox != nil) != c.insetSearch || (c.hint != nil) != c.hints {
 		c.buildPanel()
 	}
 	c.resultsBox.Height(height + 8)
 	if c.searchBox != nil {
 		c.searchBox.Fill(t.Muted).Radius(t.Radius)
-	}
-	if c.hint != nil {
-		c.hint.Content("↑↓ " + c.hintNav + "   ↵ " + c.hintSel)
 	}
 	c.styled.Color(t.PopoverFg)
 	c.panel.Fill(t.Popover).Border(t.BorderWidth, t.Border).Radius(t.Radius)
@@ -304,13 +305,12 @@ func (c *CommandWidget) buildPanel() {
 	}
 	c.hint = nil
 	if c.hints {
-		c.hint = Caption("")
+		c.hint = Caption(c.hintText())
 		parts = append(parts, Divider(), ggui.Padding(c.hint, 8, 12))
 	}
 	c.body = ggui.Column(parts...).Gap(0).Align(ggui.AlignStretch)
 	c.styled = ggui.Styled(c.body)
 	c.panel = ggui.Box(c.styled)
-	c.builtInset, c.builtHints = c.insetSearch, c.hints
 }
 
 // Paint implements ggui.Widget.

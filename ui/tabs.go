@@ -122,7 +122,7 @@ func (t *TabsWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t.Sync()
 	th := uitheme.Of(env)
 	t.theme = th
-	t.motion = env.Motion(uitheme.From(env).MotionFast)
+	t.motion = env.Motion(th.MotionFast)
 	t.pad = th.TabPad
 	t.labelSize, t.labelX = t.labelSize[:0], t.labelX[:0]
 	t.headerH, t.stripW = 0, 0

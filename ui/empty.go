@@ -34,7 +34,7 @@ func (e *EmptyWidget) Action(w ggui.Widget) *EmptyWidget {
 
 // Layout implements ggui.Widget.
 func (e *EmptyWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	t := uitheme.From(env)
+	t := uitheme.Of(env)
 	e.title.Style(t.Text).Color(t.Fg)
 	e.description.Style(t.Caption).Color(t.MutedFg)
 	// Built once, and again only after Media or Action changes what it

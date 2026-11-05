@@ -75,7 +75,7 @@ func (b *MenubarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	b.theme = uitheme.Of(env)
 	if len(b.menus) > 0 && b.menus[b.active].button.IsInert() {
 		b.popup.Hide()
-		b.active = stepIndex(b.active, 1, len(b.menus), func(i int) bool { return !b.menus[i].button.IsInert() })
+		b.active = stepIndex(b.active, 1, len(b.menus), true, func(i int) bool { return !b.menus[i].button.IsInert() })
 	}
 	return b.popup.Layout(c, env)
 }
@@ -124,26 +124,26 @@ func (b *MenubarWidget) HandleKey(e ggui.KeyEvent) {
 	if b.IsInert() || e.Kind != ggui.KeyPress || len(b.menus) == 0 {
 		return
 	}
-	enabled := func(i int) bool { return !b.menus[i].button.IsInert() }
 	open := b.popup.IsOpen()
-	switch move := navMoveOf(e.Key, navBoth); {
+	vertical := e.Key == ggui.KeyArrowUp || e.Key == ggui.KeyArrowDown
+	ends := e.Key == ggui.KeyHome || e.Key == ggui.KeyEnd
+	switch {
 	case e.Key == ggui.KeyEscape:
 		b.popup.Hide()
-	case move != navNone && navMoveOf(e.Key, navHorizontal) == navNone && !open:
+	case vertical && !open:
 		// Up or Down opens the menu, Up on its last item.
 		b.open(b.active)
-		if move == navPrev {
+		if e.Key == ggui.KeyArrowUp {
 			b.menus[b.active].jump(-1)
 		}
-	case open && navMoveOf(e.Key, navVertical) != navNone:
+	case open && (vertical || ends):
 		b.menus[b.active].navigate(e)
-	case move == navFirst || move == navLast:
-		// Home and End while closed move to the ends of the bar.
-		i, _ := navIndex(e, navHorizontal, true, b.active, len(b.menus), enabled)
+	case ends || e.Key == ggui.KeyArrowLeft || e.Key == ggui.KeyArrowRight:
+		// Left and Right move along the bar, taking an open menu along;
+		// Home and End, with the menu closed, go to its ends. Active is
+		// never -1, which stays put only when every menu is disabled.
+		i, _ := navIndex(e, navHorizontal, true, b.active, len(b.menus), func(i int) bool { return !b.menus[i].button.IsInert() })
 		b.active = max(i, 0)
-	case move != navNone:
-		// Left and Right move along the bar, taking an open menu along.
-		b.active, _ = navIndex(e, navHorizontal, true, b.active, len(b.menus), enabled)
 		if open {
 			b.open(b.active)
 		}
@@ -220,8 +220,8 @@ func (p menubarPanel) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if len(b.menus) == 0 {
 		return ggui.Size{}
 	}
-	t := uitheme.From(env)
-	return b.menus[b.active].chrome(&t).Layout(c, env)
+	t := uitheme.Of(env)
+	return b.menus[b.active].chrome(t).Layout(c, env)
 }
 func (p menubarPanel) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	b := p.b

@@ -38,7 +38,7 @@ func (a *AlertWidget) Action(w ggui.Widget) *AlertWidget {
 // Layout implements ggui.Widget.
 func (a *AlertWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer a.props.Layout().EndLayout()
-	t := uitheme.From(env)
+	t := uitheme.Of(env)
 	fg, border := t.Fg, t.Border
 	if a.destructive {
 		fg, border = t.Destructive, mix(t.Border, t.Destructive, .3)

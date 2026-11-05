@@ -49,41 +49,47 @@ var defaultTheme = sync.OnceValue(func() *Theme {
 })
 
 // interned holds the themes Apply supplied last, most recent first, so
-// that equal themes share a pointer. A theme is compared by ==; a few
-// entries cover an app's themes and the overrides inside them, and one
-// beyond them costs an Env revision, as a changed theme does.
+// that equal themes share a pointer. A miss mints a new pointer and with
+// it a new Env revision, which relays out what is under it, so there is
+// room for an app's themes in both appearances with the overrides inside
+// them (sidebar, popovers, inputs) and plenty to spare.
 var interned struct {
 	sync.Mutex
-	themes [8]*Theme
+	themes [32]*Theme
 }
 
-// intern returns the shared pointer to a theme equal to t.
-func intern(t Theme) *Theme {
+// intern returns the shared pointer to a theme equal to *t, copying *t
+// only when none is.
+func intern(t *Theme) *Theme {
 	interned.Lock()
 	defer interned.Unlock()
 	list := &interned.themes
 	for i, p := range list {
-		if p != nil && sameTheme(*p, t) {
+		if p == nil {
+			break
+		}
+		if sameTheme(p, t) {
 			copy(list[1:i+1], list[:i])
 			list[0] = p
 			return p
 		}
 	}
-	p := &t
+	p := new(Theme)
+	*p = *t
 	copy(list[1:], list[:len(list)-1])
 	list[0] = p
 	return p
 }
 
-// sameTheme is a == b, false where the comparison panics on a token of a
-// type == cannot compare.
-func sameTheme(a, b Theme) (same bool) {
+// sameTheme is *a == *b, false where == panics on a token of a type it
+// cannot compare.
+func sameTheme(a, b *Theme) (same bool) {
 	defer func() {
 		if recover() != nil {
 			same = false
 		}
 	}()
-	return a == b
+	return *a == *b
 }
 
 // Apply supplies this theme, resolved, and the corresponding core styles to
@@ -91,7 +97,7 @@ func sameTheme(a, b Theme) (same bool) {
 // survive.
 func (t Theme) Apply(env ggui.Env) ggui.Env {
 	t = t.Resolve()
-	return env.With(key, intern(t)).WithText(t.Text).
+	return env.With(key, intern(&t)).WithText(t.Text).
 		With(TitleKey, t.Title).With(HeadingKey, t.Heading).With(LabelKey, t.Label).
 		With(CaptionKey, t.Caption).With(MonoKey, t.Mono).
 		With(ggui.BackgroundKey, t.Bg).With(ggui.SpacingKey, t.Space).

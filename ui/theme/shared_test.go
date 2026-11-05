@@ -42,3 +42,15 @@ func BenchmarkFromWithoutATheme(b *testing.B) {
 		_ = theme.From(ggui.Env{})
 	}
 }
+
+// Applying a theme already applied, as a theme.With subtree does at every
+// layout.
+func BenchmarkApply(b *testing.B) {
+	t := theme.Default()
+	env := ggui.Env{}
+	t.Apply(env)
+	b.ReportAllocs()
+	for b.Loop() {
+		t.Apply(env)
+	}
+}

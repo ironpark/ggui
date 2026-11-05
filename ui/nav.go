@@ -57,28 +57,15 @@ func navIndex(ev ggui.KeyEvent, axis navAxis, wrap bool, cur, n int, enabled fun
 	}
 	switch navMoveOf(ev.Key, axis) {
 	case navPrev:
-		return navStep(cur, -1, n, wrap, enabled), true
+		return stepIndex(cur, -1, n, wrap, enabled), true
 	case navNext:
-		return navStep(cur, 1, n, wrap, enabled), true
+		return stepIndex(cur, 1, n, wrap, enabled), true
 	case navFirst:
-		return stepIndex(-1, 1, n, enabled), true
+		return stepIndex(-1, 1, n, true, enabled), true
 	case navLast:
-		return stepIndex(-1, -1, n, enabled), true
+		return stepIndex(-1, -1, n, true, enabled), true
 	}
 	return cur, false
-}
-
-// navStep is stepIndex, stopping at the ends unless wrap is set.
-func navStep(cur, dir, n int, wrap bool, enabled func(int) bool) int {
-	if wrap || cur < 0 {
-		return stepIndex(cur, dir, n, enabled)
-	}
-	for i := cur + dir; i >= 0 && i < n; i += dir {
-		if enabled == nil || enabled(i) {
-			return i
-		}
-	}
-	return cur
 }
 
 // navTarget is the row a navigation key takes the keyboard to from row i
