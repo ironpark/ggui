@@ -101,22 +101,16 @@ func withKey[K comparable](m map[K]bool, k K, on bool) map[K]bool {
 	return next
 }
 
-// stepIndex moves cur by dir through n items, skipping items enabled
-// rejects (nil rejects none); from -1 it starts at the near end. Past an
-// end it wraps around when wrap is set and stops otherwise. It returns cur
-// when no enabled item lies that way.
-func stepIndex(cur, dir, n int, wrap bool, enabled func(int) bool) int {
+// stepIndex moves cur by dir through n items, wrapping around and skipping
+// items enabled rejects (nil rejects none); from -1 it starts at the near
+// end. It returns cur when nothing is enabled.
+func stepIndex(cur, dir, n int, enabled func(int) bool) int {
 	i := cur
 	for range n {
-		switch {
-		case i < 0:
+		if i < 0 {
 			i = pick(dir < 0, n-1, 0)
-		case wrap:
+		} else {
 			i = (i + dir + n) % n
-		case i+dir < 0 || i+dir >= n:
-			return cur
-		default:
-			i += dir
 		}
 		if enabled == nil || enabled(i) {
 			return i

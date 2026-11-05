@@ -190,16 +190,17 @@ func (m *MenuWidget) enabled(i int) bool { return !m.items[i].IsInert() }
 // navigate moves the highlight for Up, Down, Home or End, wrapping and
 // skipping disabled items, and reports whether ev was one of them.
 func (m *MenuWidget) navigate(ev ggui.KeyEvent) bool {
-	i, ok := navIndex(ev, navVertical, true, m.current, len(m.items), m.enabled)
+	i, ok := navIndex(ev, navVertical, m.current, len(m.items), m.enabled)
 	if ok {
 		m.current = i
 	}
 	return ok
 }
 
-// jump restarts the highlight from the near end, for Home and End.
+// jump puts the highlight on the first enabled item from the near end:
+// the top for dir 1, the bottom for -1.
 func (m *MenuWidget) jump(dir int) {
-	m.current = stepIndex(-1, dir, len(m.items), true, m.enabled)
+	m.current = stepIndex(-1, dir, len(m.items), m.enabled)
 }
 
 // reopen refreshes the items and highlights the first one. Owners that show

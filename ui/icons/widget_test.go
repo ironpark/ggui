@@ -9,6 +9,7 @@ import (
 	"testing/fstest"
 
 	"github.com/ironpark/ggui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 const squareSVG = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect width="24" height="24" fill="currentColor"/></svg>`
@@ -91,5 +92,21 @@ func TestLoadReadsFromAFilesystem(t *testing.T) {
 	}
 	if _, err := Load(files, "bad.svg"); err == nil || !strings.HasPrefix(err.Error(), "icons:") {
 		t.Errorf("Load(bad.svg) = %v, want a parse error from icons", err)
+	}
+}
+
+func TestIconInkFollowsColorBeforeAndAfterLayout(t *testing.T) {
+	env := uitheme.Default().Apply(ggui.Env{})
+	w := Placeholder("x")
+	w.Layout(ggui.Loose(ggui.Sz(16, 16)), env)
+	if w.ink != uitheme.Default().Fg {
+		t.Fatalf("an unset color draws in %v, want the theme's Fg", w.ink)
+	}
+	red := color.RGBA{255, 0, 0, 255}
+	if w.Color(red); w.ink != red {
+		t.Fatal("Color after Layout is not what Paint draws in")
+	}
+	if w.Color(nil); w.ink != uitheme.Default().Fg {
+		t.Fatal("clearing Color does not go back to the inherited color")
 	}
 }

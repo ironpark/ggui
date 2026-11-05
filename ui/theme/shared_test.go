@@ -54,3 +54,21 @@ func BenchmarkApply(b *testing.B) {
 		t.Apply(env)
 	}
 }
+
+// More distinct themes than any small cache, applied in turn under one
+// parent, each keep their pointer and Env.
+func TestManyThemesKeepTheirEnvs(t *testing.T) {
+	base := ggui.Env{}.With(ggui.SpacingKey, 5.)
+	envs := make([]ggui.Env, 48)
+	for round := range 3 {
+		for i := range envs {
+			th := theme.Default()
+			th.Space = float64(i + 1)
+			env := th.Apply(base)
+			if round > 0 && theme.Of(env) != theme.Of(envs[i]) {
+				t.Fatalf("theme %d got a new pointer in round %d", i, round)
+			}
+			envs[i] = env
+		}
+	}
+}

@@ -467,16 +467,7 @@ func (c *CarouselWidget) Act(a ggui.Action) bool {
 	return true
 }
 func (c *CarouselWidget) ConsumesKey(e ggui.KeyEvent) bool {
-	if e.Kind != ggui.KeyPress {
-		return false
-	}
-	if e.Key == ggui.KeyHome || e.Key == ggui.KeyEnd {
-		return true
-	}
-	if c.vertical {
-		return e.Key == ggui.KeyArrowUp || e.Key == ggui.KeyArrowDown
-	}
-	return e.Key == ggui.KeyArrowLeft || e.Key == ggui.KeyArrowRight
+	return navConsumes(e, pick(c.vertical, navVertical, navHorizontal))
 }
 func (c *CarouselWidget) HandleKey(e ggui.KeyEvent) {
 	c.Keyboard(e, nil)

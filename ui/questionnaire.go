@@ -478,7 +478,7 @@ func (q *QuestionnaireWidget) focusAnswer(direction, from int) {
 		}
 		return q.input != nil
 	}
-	next := stepIndex(from, direction, len(q.choices)+1, true, enabled)
+	next := stepIndex(from, direction, len(q.choices)+1, enabled)
 	if !enabled(next) {
 		return
 	}

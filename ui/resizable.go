@@ -197,16 +197,7 @@ func (r *ResizableWidget) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 
 // ConsumesKey implements ggui.KeyConsumer.
 func (r *ResizableWidget) ConsumesKey(ev ggui.KeyEvent) bool {
-	if ev.Kind != ggui.KeyPress {
-		return false
-	}
-	if ev.Key == ggui.KeyHome || ev.Key == ggui.KeyEnd {
-		return true
-	}
-	if r.vertical {
-		return ev.Key == ggui.KeyArrowUp || ev.Key == ggui.KeyArrowDown
-	}
-	return ev.Key == ggui.KeyArrowLeft || ev.Key == ggui.KeyArrowRight
+	return navConsumes(ev, pick(r.vertical, navVertical, navHorizontal))
 }
 
 // HandleKey implements ggui.KeyHandler.

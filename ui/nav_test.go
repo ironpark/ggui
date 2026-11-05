@@ -16,35 +16,31 @@ func TestNavIndexMovesAsWAIARIACompositesDo(t *testing.T) {
 		name     string
 		ev       ggui.KeyEvent
 		axis     navAxis
-		wrap     bool
 		cur, n   int
 		enabled  func(int) bool
 		want     int
 		consumed bool
 	}{
-		{"down steps", press(ggui.KeyArrowDown), navVertical, true, 1, 5, nil, 2, true},
-		{"down wraps", press(ggui.KeyArrowDown), navVertical, true, 4, 5, nil, 0, true},
-		{"up wraps", press(ggui.KeyArrowUp), navVertical, true, 0, 5, nil, 4, true},
-		{"down stops at the end", press(ggui.KeyArrowDown), navVertical, false, 4, 5, nil, 4, true},
-		{"up stops at the start", press(ggui.KeyArrowUp), navVertical, false, 0, 5, nil, 0, true},
-		{"down from nothing starts at the top", press(ggui.KeyArrowDown), navVertical, false, -1, 5, nil, 0, true},
-		{"up from nothing starts at the bottom", press(ggui.KeyArrowUp), navVertical, true, -1, 5, nil, 4, true},
-		{"down skips disabled", press(ggui.KeyArrowDown), navVertical, true, 1, 5, odd, 3, true},
-		{"down wraps past disabled", press(ggui.KeyArrowDown), navVertical, true, 3, 5, odd, 1, true},
-		{"down stops past disabled", press(ggui.KeyArrowDown), navVertical, false, 3, 5, odd, 3, true},
-		{"home is the first enabled", press(ggui.KeyHome), navVertical, false, 3, 5, odd, 1, true},
-		{"end is the last enabled", press(ggui.KeyEnd), navVertical, false, 1, 5, odd, 3, true},
-		{"a step with nothing enabled stays", press(ggui.KeyArrowDown), navVertical, true, 2, 5, none, 2, true},
-		{"home with nothing enabled is nothing", press(ggui.KeyHome), navVertical, true, 2, 5, none, -1, true},
-		{"right is not vertical", press(ggui.KeyArrowRight), navVertical, true, 1, 5, nil, 1, false},
-		{"right is horizontal", press(ggui.KeyArrowRight), navHorizontal, true, 1, 5, nil, 2, true},
-		{"left is horizontal", press(ggui.KeyArrowLeft), navBoth, true, 0, 5, nil, 4, true},
-		{"down is not horizontal", press(ggui.KeyArrowDown), navHorizontal, true, 1, 5, nil, 1, false},
-		{"a release does nothing", ggui.KeyEvent{Kind: ggui.KeyRelease, Key: ggui.KeyArrowDown}, navVertical, true, 1, 5, nil, 1, false},
-		{"another key does nothing", press(ggui.KeyA), navBoth, true, 1, 5, nil, 1, false},
+		{"down steps", press(ggui.KeyArrowDown), navVertical, 1, 5, nil, 2, true},
+		{"down wraps", press(ggui.KeyArrowDown), navVertical, 4, 5, nil, 0, true},
+		{"up wraps", press(ggui.KeyArrowUp), navVertical, 0, 5, nil, 4, true},
+		{"down from nothing starts at the top", press(ggui.KeyArrowDown), navVertical, -1, 5, nil, 0, true},
+		{"up from nothing starts at the bottom", press(ggui.KeyArrowUp), navVertical, -1, 5, nil, 4, true},
+		{"down skips disabled", press(ggui.KeyArrowDown), navVertical, 1, 5, odd, 3, true},
+		{"down wraps past disabled", press(ggui.KeyArrowDown), navVertical, 3, 5, odd, 1, true},
+		{"home is the first enabled", press(ggui.KeyHome), navVertical, 3, 5, odd, 1, true},
+		{"end is the last enabled", press(ggui.KeyEnd), navVertical, 1, 5, odd, 3, true},
+		{"a step with nothing enabled stays", press(ggui.KeyArrowDown), navVertical, 2, 5, none, 2, true},
+		{"home with nothing enabled is nothing", press(ggui.KeyHome), navVertical, 2, 5, none, -1, true},
+		{"right is not vertical", press(ggui.KeyArrowRight), navVertical, 1, 5, nil, 1, false},
+		{"right is horizontal", press(ggui.KeyArrowRight), navHorizontal, 1, 5, nil, 2, true},
+		{"left is horizontal", press(ggui.KeyArrowLeft), navBoth, 0, 5, nil, 4, true},
+		{"down is not horizontal", press(ggui.KeyArrowDown), navHorizontal, 1, 5, nil, 1, false},
+		{"a release does nothing", ggui.KeyEvent{Kind: ggui.KeyRelease, Key: ggui.KeyArrowDown}, navVertical, 1, 5, nil, 1, false},
+		{"another key does nothing", press(ggui.KeyA), navBoth, 1, 5, nil, 1, false},
 	}
 	for _, c := range cases {
-		got, ok := navIndex(c.ev, c.axis, c.wrap, c.cur, c.n, c.enabled)
+		got, ok := navIndex(c.ev, c.axis, c.cur, c.n, c.enabled)
 		if got != c.want || ok != c.consumed {
 			t.Errorf("%s: got %d, %v; want %d, %v", c.name, got, ok, c.want, c.consumed)
 		}

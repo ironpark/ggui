@@ -113,7 +113,7 @@ func (a *AccordionWidget) ConsumesKey(ev ggui.KeyEvent) bool {
 func (a *AccordionWidget) HandleKey(ev ggui.KeyEvent) {
 	a.Keyboard(ev, func() { a.toggle(a.active) })
 	enabled := func(i int) bool { return !a.items[i].disabled }
-	if i, ok := navIndex(ev, navVertical, true, a.active, len(a.items), enabled); ok {
+	if i, ok := navIndex(ev, navVertical, a.active, len(a.items), enabled); ok {
 		a.active = i
 	}
 }

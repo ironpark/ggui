@@ -212,7 +212,7 @@ func (t *TabsWidget) HandleKey(ev ggui.KeyEvent) {
 	if t.IsInert() || ev.Kind != ggui.KeyPress || len(t.tabs) == 0 {
 		return
 	}
-	if i, ok := navIndex(ev, navBoth, true, t.index(), len(t.tabs), nil); ok {
+	if i, ok := navIndex(ev, navBoth, t.index(), len(t.tabs), nil); ok {
 		t.pick(i)
 	}
 }

@@ -284,3 +284,48 @@ func TestResolveTextMatchesText(t *testing.T) {
 		t.Fatalf("Text resolved %+v, ResolveText %+v", txt.resolved, got)
 	}
 }
+
+type boxedValue struct{ n int }
+
+func sameBoxed(a, b *boxedValue) bool { return *a == *b }
+
+func TestEnvKeyFuncComparesByItsEquality(t *testing.T) {
+	k := NewEnvKeyFunc("boxed", sameBoxed)
+	base := Env{}.With(SpacingKey, 3.)
+	first := base.With(k, &boxedValue{1})
+	again := base.With(k, &boxedValue{1})
+	if again.rev != first.rev {
+		t.Fatal("an equal value under the same parent gave a new revision")
+	}
+	kept, _ := first.Get(k)
+	if got, _ := again.Get(k); got != kept {
+		t.Fatal("an equal value replaced the one stored first")
+	}
+	if first.With(k, &boxedValue{1}).rev != first.rev {
+		t.Fatal("storing an equal value over itself changed the Env")
+	}
+	if base.With(k, &boxedValue{2}).rev == first.rev {
+		t.Fatal("a different value kept the revision")
+	}
+	if NewEnvKeyFunc("a", sameBoxed) == NewEnvKeyFunc("a", sameBoxed) {
+		t.Fatal("two keys are the same key")
+	}
+}
+
+// More values than an interning list would hold, derived from one parent
+// in turn, as a page of many themed subtrees does each layout: each finds
+// its Env again.
+func TestEnvKeyFuncKeepsManyValuesUnderOneParent(t *testing.T) {
+	k := NewEnvKeyFunc("boxed", sameBoxed)
+	base := Env{}.With(SpacingKey, 4.)
+	revs := make([]uint64, 48)
+	for round := range 3 {
+		for i := range revs {
+			rev := base.With(k, &boxedValue{i}).rev
+			if round > 0 && rev != revs[i] {
+				t.Fatalf("value %d got a new revision in round %d", i, round)
+			}
+			revs[i] = rev
+		}
+	}
+}

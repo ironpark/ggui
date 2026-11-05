@@ -8,9 +8,10 @@ import (
 )
 
 // key holds the applied theme by pointer, so a widget keeps a pointer to
-// it rather than a copy; intern makes equal themes share one, so applying
-// the same theme again leaves the Env, and the caches under it, unchanged.
-var key = ggui.NewEnvKey[*Theme]("ui theme")
+// it rather than a copy. Themes compare by what they hold, so applying an
+// equal theme again gives back the Env it gave before, pointer and caches
+// under it included.
+var key = ggui.NewEnvKeyFunc("ui theme", sameTheme)
 
 // TitleKey, HeadingKey, LabelKey, CaptionKey and MonoKey hold the theme's
 // named text styles for layout-time resolution, as TextWidget.StyleKey
@@ -42,48 +43,21 @@ func Of(env ggui.Env) *Theme {
 	return defaultTheme()
 }
 
+// scratch holds themes Apply copied for an Env that already had them.
+var scratch = sync.Pool{New: func() any { return new(Theme) }}
+
 // defaultTheme is Default made once, for an Env no theme was applied to.
 var defaultTheme = sync.OnceValue(func() *Theme {
 	t := Default()
 	return &t
 })
 
-// interned holds the themes Apply supplied last, most recent first, so
-// that equal themes share a pointer. A miss mints a new pointer and with
-// it a new Env revision, which relays out what is under it, so there is
-// room for an app's themes in both appearances with the overrides inside
-// them (sidebar, popovers, inputs) and plenty to spare.
-var interned struct {
-	sync.Mutex
-	themes [32]*Theme
-}
-
-// intern returns the shared pointer to a theme equal to *t, copying *t
-// only when none is.
-func intern(t *Theme) *Theme {
-	interned.Lock()
-	defer interned.Unlock()
-	list := &interned.themes
-	for i, p := range list {
-		if p == nil {
-			break
-		}
-		if sameTheme(p, t) {
-			copy(list[1:i+1], list[:i])
-			list[0] = p
-			return p
-		}
-	}
-	p := new(Theme)
-	*p = *t
-	copy(list[1:], list[:len(list)-1])
-	list[0] = p
-	return p
-}
-
 // sameTheme is *a == *b, false where == panics on a token of a type it
 // cannot compare.
 func sameTheme(a, b *Theme) (same bool) {
+	if a == b {
+		return true
+	}
 	defer func() {
 		if recover() != nil {
 			same = false
@@ -97,7 +71,17 @@ func sameTheme(a, b *Theme) (same bool) {
 // survive.
 func (t Theme) Apply(env ggui.Env) ggui.Env {
 	t = t.Resolve()
-	return env.With(key, intern(&t)).WithText(t.Text).
+	// The theme goes into the Env by pointer. An equal theme applied before
+	// under the same parent is found by value and its pointer reused, so a
+	// copy is made for the Env only when none is: in a scratch theme that
+	// goes back to the pool when it was not kept.
+	p := scratch.Get().(*Theme)
+	*p = t
+	env = env.With(key, p)
+	if Of(env) != p {
+		scratch.Put(p)
+	}
+	return env.WithText(t.Text).
 		With(TitleKey, t.Title).With(HeadingKey, t.Heading).With(LabelKey, t.Label).
 		With(CaptionKey, t.Caption).With(MonoKey, t.Mono).
 		With(ggui.BackgroundKey, t.Bg).With(ggui.SpacingKey, t.Space).

@@ -532,9 +532,9 @@ func (c *ChartWidget) Act(a ggui.Action) bool {
 	}
 	switch a.Kind {
 	case ggui.ActionIncrement:
-		c.active = stepIndex(c.active, 1, len(c.data), true, nil)
+		c.active = stepIndex(c.active, 1, len(c.data), nil)
 	case ggui.ActionDecrement:
-		c.active = stepIndex(c.active, -1, len(c.data), true, nil)
+		c.active = stepIndex(c.active, -1, len(c.data), nil)
 	case ggui.ActionSetValue:
 		if !finite(a.Num) {
 			return false
@@ -564,9 +564,9 @@ func (c *ChartWidget) HandleKey(ev ggui.KeyEvent) {
 	}
 	switch ev.Key {
 	case ggui.KeyArrowLeft, ggui.KeyArrowDown:
-		c.active = stepIndex(c.active, -1, len(c.data), true, nil)
+		c.active = stepIndex(c.active, -1, len(c.data), nil)
 	case ggui.KeyArrowRight, ggui.KeyArrowUp:
-		c.active = stepIndex(c.active, 1, len(c.data), true, nil)
+		c.active = stepIndex(c.active, 1, len(c.data), nil)
 	case ggui.KeyHome:
 		c.active = 0
 	case ggui.KeyEnd:
