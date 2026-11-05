@@ -1174,8 +1174,10 @@ func BenchmarkFocusedNode(b *testing.B) {
 	}
 }
 
-// benchRow is a list row that takes the pointer and the keys.
-type benchRow struct{}
+// benchRow is a list row that takes the pointer and the keys. It has a
+// size, so each row is a handler of its own: pointers to a zero-size type
+// may all be equal, and every lookup by handler would stop at the first.
+type benchRow struct{ _ int }
 
 func (*benchRow) HandlePointer(ev PointerEvent) bool { return true }
 func (*benchRow) HandleKey(KeyEvent)                 {}
@@ -1255,5 +1257,157 @@ func TestRegionSlotKeepsThePreviousCopy(t *testing.T) {
 	s.keep(nil)
 	if s.buf[0].pointer != nil || s.buf[1].pointer != nil {
 		t.Fatal("a slot keeping nothing holds a handler")
+	}
+}
+
+// A region found by its handler is the topmost one holding it, whether
+// the paint said where it registered it or a scan found it, and the
+// answer remembered for the next frame is the same.
+func TestRegionLookupFindsTheTopmost(t *testing.T) {
+	t.Parallel()
+	for _, painted := range []bool{false, true} {
+		h, other := &benchRow{}, &benchRow{}
+		in := &inputState{}
+		in.focused, in.pressed = &hitRegion{key: h}, &hitRegion{pointer: h}
+		c := Canvas{}
+		c.fs().take(in)
+		under, between, over := Rct(Pt(0, 0), Sz(50, 50)), Rct(Pt(10, 10), Sz(50, 50)), Rct(Pt(20, 20), Sz(50, 50))
+		c.HitPointer(under, h)
+		c.HitKey(under, h)
+		c.HitPointer(between, other)
+		c.HitPointer(over, h)
+		c.HitKey(over, h)
+		if painted {
+			in.setRegions(c.hits, c.fs().found)
+		} else {
+			in.regions = c.hits
+		}
+		for range 2 {
+			if r := in.findPointer(in.pressed); r == nil || r.rect != over {
+				t.Fatalf("painted=%v: pointer region = %v, want the topmost at %v", painted, r, over)
+			}
+			if r := in.findKeyRegion(in.focused); r == nil || r.rect != over {
+				t.Fatalf("painted=%v: key region = %v, want the topmost at %v", painted, r, over)
+			}
+		}
+	}
+}
+
+// twoPlaces registers its key handler at a, and at b too when both is
+// set, as a dropdown registers its field and the list it opened.
+type twoPlaces struct {
+	both bool
+	keys int
+}
+
+var twoPlacesA, twoPlacesB = Rct(Pt(0, 0), Sz(20, 20)), Rct(Pt(0, 40), Sz(20, 20))
+
+func (w *twoPlaces) Layout(Constraints, Env) Size { return Sz(100, 100) }
+func (w *twoPlaces) Paint(dst *Canvas, r Rect) {
+	dst.HitKey(twoPlacesA, w)
+	dst.HitPointer(Rct(Pt(0, 20), Sz(20, 20)), &benchRow{})
+	if w.both {
+		dst.HitKey(twoPlacesB, w)
+	}
+}
+func (w *twoPlaces) HandleKey(e KeyEvent) {
+	if e.Kind == KeyPress {
+		w.keys++
+	}
+}
+
+// A focused handler painted in a second region, over the first, is found
+// there, in the buffer the frame before last painted into, and back where
+// it was once the second goes.
+func TestHandlerInTwoRegionsIsFoundOnTop(t *testing.T) {
+	t.Parallel()
+	w := &twoPlaces{}
+	p := NewProbe(w, Sz(100, 100))
+	defer p.Close()
+	p.Frame()
+	p.Click(Pt(5, 5))
+	if p.in.focused == nil || p.in.focused.rect != twoPlacesA {
+		t.Fatalf("focused = %v, want the region at %v", p.in.focused, twoPlacesA)
+	}
+	for _, step := range []struct {
+		both bool
+		want Rect
+	}{{true, twoPlacesB}, {true, twoPlacesB}, {false, twoPlacesA}, {true, twoPlacesB}} {
+		w.both = step.both
+		p.Frame()
+		if p.in.focused == nil || p.in.focused.rect != step.want {
+			t.Fatalf("both=%v: focused = %v, want the region at %v", step.both, p.in.focused, step.want)
+		}
+		if r := p.in.findKeyRegion(p.in.focused); r == nil || r.rect != step.want {
+			t.Fatalf("both=%v: found %v, want the region at %v", step.both, r, step.want)
+		}
+	}
+	p.Type(Mods{}, KeyA)
+	if w.keys != 1 {
+		t.Fatalf("keys = %d, want 1", w.keys)
+	}
+}
+
+// orderedRows paints its rows top to bottom in the order given, each
+// taking the pointer and the keys.
+type orderedRows struct{ rows []*orderedRow }
+
+type orderedRow struct {
+	name        string
+	keys, drags int
+}
+
+func (o *orderedRows) Layout(Constraints, Env) Size { return Sz(100, 100) }
+func (o *orderedRows) Paint(dst *Canvas, r Rect) {
+	for i, row := range o.rows {
+		at := Rct(Pt(0, float64(i)*20), Sz(100, 20))
+		dst.HitPointer(at, row)
+		dst.HitKey(at, row)
+	}
+}
+func (r *orderedRow) HandlePointer(ev PointerEvent) bool {
+	if ev.Kind == PointerDrag {
+		r.drags++
+	}
+	return true
+}
+func (r *orderedRow) HandleKey(e KeyEvent) {
+	if e.Kind == KeyPress {
+		r.keys++
+	}
+}
+
+// The focused and the pressed row are followed by handler when the rows
+// are painted in another order, frame after frame.
+func TestLookupFollowsRowsReordered(t *testing.T) {
+	t.Parallel()
+	a, b, c := &orderedRow{name: "a"}, &orderedRow{name: "b"}, &orderedRow{name: "c"}
+	w := &orderedRows{rows: []*orderedRow{a, b, c}}
+	p := NewProbe(w, Sz(100, 100))
+	defer p.Close()
+	p.Frame()
+	p.Click(Pt(5, 25)) // b
+	for i, order := range [][]*orderedRow{{b, a, c}, {c, a, b}, {a, c, b}, {b, c, a}} {
+		w.rows = order
+		p.Frame()
+		at := Rct(Pt(0, float64(slices.Index(order, b))*20), Sz(100, 20))
+		if p.in.focused == nil || p.in.focused.rect != at {
+			t.Fatalf("order %d: focused = %v, want b at %v", i, p.in.focused, at)
+		}
+		p.Type(Mods{}, KeyA)
+		if b.keys != i+1 || a.keys+c.keys != 0 {
+			t.Fatalf("order %d: keys a=%d b=%d c=%d, want only b's, %d", i, a.keys, b.keys, c.keys, i+1)
+		}
+	}
+	// A press held while the rows move keeps dragging the row it took.
+	w.rows = []*orderedRow{a, b, c}
+	p.Frame()
+	p.Press(Pt(5, 45)) // c
+	for _, order := range [][]*orderedRow{{c, a, b}, {b, c, a}} {
+		w.rows = order
+		p.Move(Pt(5, 46))
+	}
+	if c.drags == 0 || a.drags+b.drags != 0 {
+		t.Fatalf("drags a=%d b=%d c=%d, want only c's", a.drags, b.drags, c.drags)
 	}
 }

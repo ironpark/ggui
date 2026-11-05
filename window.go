@@ -131,7 +131,6 @@ type Window struct {
 	cfg Config
 
 	canvas Canvas // also holds the frame's screen-pixels-per-logical-pixel scale
-	spare  []hitRegion
 	input  inputState
 	touch  touchInput
 	cursor CursorShape
@@ -841,8 +840,8 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 			setDamage([]image.Rectangle{within})
 		}
 	}
-	dst.Fill(w.background())
 	if w.root == nil {
+		dst.Fill(w.background())
 		return
 	}
 	defer w.canvas.trimLayers()
@@ -855,10 +854,12 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 		w.viewport.Set(logical)
 	}
 	tracing := w.inspect || len(w.sinks) > 0
+	// The background is filled once the settle has run, which may change
+	// the theme it comes from, or turn a frame a scroll contains into a
+	// whole one; filled is whether it has been.
+	filled := false
 	_, err := w.paint(paintPass{
 		canvas: &w.canvas, in: &w.input, overlay: w.overlay, size: logical,
-		// The buffer freed two frames ago takes the new regions.
-		hits:    w.spare[:0],
 		tracing: tracing,
 		semOff:  !w.semWanted.Load() && w.performs.Load() == 0 && !tracing && !w.ax.Listening(),
 		settled: func() {
@@ -868,15 +869,12 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 				w.frameLoop.endFrameFree(true, true)
 				dst = target
 				w.canvas.Image = target
-				target.Fill(w.background())
 				if setDamage != nil {
 					setDamage([]image.Rectangle{screen.Bounds()})
 				}
 			}
-			// The settle may have changed the theme the background is.
-			if w.cfg.Background == nil && !w.cfg.Transparent {
-				dst.Fill(rootEnv().Background())
-			}
+			dst.Fill(w.background())
+			filled = true
 		},
 		painted: func() {
 			// Counted once the settle had its chance to paint it whole.
@@ -889,11 +887,15 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 			}
 		},
 	})
+	if !filled {
+		// The loop closed or lost its root as it settled: what is
+		// presented is the background, not what the screen kept.
+		dst.Fill(w.background())
+	}
 	if err != nil {
 		w.frameErr = err
 		return
 	}
-	w.spare = w.canvas.prev
 	w.noteMotion(target)
 }
 

@@ -384,10 +384,9 @@ type paintPass struct {
 	canvas  *Canvas
 	in      *inputState
 	overlay Overlay
-	size    Size        // the logical viewport
-	hits    []hitRegion // a spare buffer for the regions the paint registers
-	tracing bool        // the inspector or a sink reads the paint's trace
-	semOff  bool        // nothing reads the accessibility tree
+	size    Size // the logical viewport
+	tracing bool // the inspector or a sink reads the paint's trace
+	semOff  bool // nothing reads the accessibility tree
 	// settled runs after the settle, before the paint; it may be nil.
 	settled func()
 	// painted runs once the tree is painted and the accessibility tree
@@ -405,8 +404,13 @@ func (l *frameLoop) paint(p paintPass) (bool, error) {
 	c := p.canvas
 	// Last frame's regions stay readable while this frame paints, for
 	// Adopter handoff, and input keeps routing to them until the paint is
-	// done.
-	c.prev, c.hits = c.hits, p.hits
+	// done. The buffer of the frame before takes the new regions: input
+	// keeps copies of the regions it follows, never a pointer into it.
+	spare := c.prev
+	c.prev, c.hits = c.hits, spare[:0]
+	// A frame that ends before painting leaves the buffers as they were,
+	// so the one input routes to is never painted into.
+	unswap := func() { c.hits, c.prev = c.prev, spare }
 	f := c.fs()
 	f.logical = p.size
 	f.clock = &l.world().frame
@@ -419,16 +423,18 @@ func (l *frameLoop) paint(p paintPass) (bool, error) {
 	c.resetSemantics()
 	f.semOff = p.semOff
 	if err := l.settle(p.size); err != nil {
+		unswap()
 		return false, err
 	}
 	if l.closed || l.root == nil {
+		unswap()
 		return false, nil
 	}
 	if p.settled != nil {
 		p.settled()
 	}
 	l.paintTree(c)
-	p.in.regions = c.hits
+	p.in.setRegions(c.hits, f.found)
 	p.in.observers = c.inputObservers
 	p.in.painted = c.shortcuts
 	p.in.refreshFocused()
