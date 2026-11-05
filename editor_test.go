@@ -2,6 +2,7 @@ package ggui
 
 import (
 	"image"
+	"math/rand/v2"
 	"slices"
 	"strings"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"unicode"
 	"unsafe"
 
+	"github.com/ironpark/ggui/a11y"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/textlayout"
 	"github.com/ironpark/ggui/runtime"
@@ -445,8 +447,8 @@ func TestNoWrapLayoutCountsLinesWithoutTheirTable(t *testing.T) {
 	one := TextInput(State("one")).NoWrap()
 	h3 := w.Layout(Loose(Sz(200, Unbounded)), Env{}).H
 	h1 := one.Layout(Loose(Sz(200, Unbounded)), Env{}).H
-	if h3 <= h1 || w.wrapped[0].spans != nil {
-		t.Fatalf("six lines %v tall against one's %v; line table made: %v", h3, h1, w.wrapped[0].spans != nil)
+	if h3 <= h1 || w.wrapped[0] != nil {
+		t.Fatalf("six lines %v tall against one's %v; line table made: %v", h3, h1, w.wrapped[0] != nil)
 	}
 }
 
@@ -1161,6 +1163,46 @@ func TestTextInputWrapsEditsAsTheWholeText(t *testing.T) {
 	}
 }
 
+// Edits anywhere, of any size, with and without line breaks, wrap as the
+// whole text afresh would, wrapped to a width or at line breaks only; so
+// does the text with a composition in it, asked for in turn with the text.
+func TestTextInputWrapsRandomEditsAsTheWholeText(t *testing.T) {
+	t.Parallel()
+	useFakeIME(t)
+	rng := rand.New(rand.NewPCG(1, 2))
+	pieces := []string{"", "x", " ", "\n", "\n\n", "two words", "a line\nand another ", "한글 e\u0301", "שלום", strings.Repeat("long ", 12)}
+	for _, noWrap := range []bool{false, true} {
+		w := TextInput(State(editorDoc(25))).Multiline()
+		if noWrap {
+			w.NoWrap()
+		}
+		w.Layout(Loose(Sz(140, Unbounded)), Env{})
+		want := func(s string) []textlayout.Span {
+			if noWrap {
+				return textlayout.BreakSpans(s)
+			}
+			return textlayout.WrapSpans(s, w.face(1), w.width)
+		}
+		for i := range 400 {
+			lo := w.ed.Snap(rng.IntN(len(w.ed.Text) + 1))
+			hi := w.ed.Snap(min(lo+rng.IntN(40), len(w.ed.Text)))
+			w.ed.Anchor, w.ed.Caret = lo, hi
+			w.ed.Replace(pieces[rng.IntN(len(pieces))])
+			if got := w.spans(w.ed.Text); !slices.Equal(got, want(w.ed.Text)) {
+				t.Fatalf("noWrap %v, edit %d: %q wraps as %v, want %v", noWrap, i, w.ed.Text, got, want(w.ed.Text))
+			}
+			if i%10 == 0 {
+				w.composition = "조합"
+				shown, _ := w.rendered()
+				if got := w.spans(shown); !slices.Equal(got, want(shown)) {
+					t.Fatalf("noWrap %v, edit %d: composed %q wraps as %v, want %v", noWrap, i, shown, got, want(shown))
+				}
+				w.composition = ""
+			}
+		}
+	}
+}
+
 // While the IME composes, paint wraps the text with the composition in
 // it and the rest the text without: each is wrapped once, as the whole
 // text would wrap, however often the two are asked for in turn.
@@ -1189,6 +1231,27 @@ func TestTextInputComposingWrapsEachTextOnce(t *testing.T) {
 // length however long the benchmark runs.
 func BenchmarkTextInputKeystrokeFrame(b *testing.B) {
 	doc := editorDoc(300)
+	w := TextInput(State(doc)).Multiline()
+	var in inputState
+	paintFrame(&in, w, Sz(300, 400))
+	const typed = "a few words typed "
+	b.ReportAllocs()
+	i := 0
+	for b.Loop() {
+		if i%len(typed) == 0 {
+			w.ed.SetText(doc)
+			w.ed.MoveTo(len(doc)/2, false)
+		}
+		w.ed.Replace(typed[i%len(typed) : i%len(typed)+1])
+		i++
+		paintFrame(&in, w, Sz(300, 400))
+	}
+}
+
+// The same in a text of 10,000 lines: what a keystroke costs beside the
+// line it changed, finding which lines those are and keeping the rest.
+func BenchmarkTextInputKeystrokeFrameLongText(b *testing.B) {
+	doc := editorDoc(10000)
 	w := TextInput(State(doc)).Multiline()
 	var in inputState
 	paintFrame(&in, w, Sz(300, 400))
@@ -1264,7 +1327,7 @@ func TestTextInputPlacesTheCaretInRightToLeftText(t *testing.T) {
 		}
 		var in inputState
 		paintFrame(&in, w, Sz(600, 50))
-		bl := w.bidiOf(w.ed.Text)
+		bl := w.bidiAt(w.wrap(w.ed.Text), 0)
 		if bl == nil {
 			t.Fatal("a Hebrew line was not laid out in visual order")
 		}
@@ -1288,9 +1351,36 @@ func TestTextInputPlacesTheCaretInRightToLeftText(t *testing.T) {
 		}
 		// The first word selected is the right of the line.
 		var xs []float64
-		w.spanX(w.ed.Text, textlayout.Span{End: len(w.ed.Text)}, bl, 0, len("שלום"), func(a, b float64) { xs = append(xs, a, b) })
+		w.spanX(w.ed.Text, textlayout.Span{End: len(w.ed.Text)}, bl, 0, len("שלום"), 0, func(a, b float64) { xs = append(xs, a, b) })
 		if len(xs) != 2 || xs[0] < total/3 || xs[1] < total-2 {
 			t.Errorf("multiline %v: the first word selected covers %v of %v, want its right end", multiline, xs, total)
 		}
+	}
+}
+
+// An OnDescribe callback amends the node without being handed the runs
+// kept for the next description, which it could otherwise change; runs it
+// sets itself are the node's.
+func TestTextInputDescribeKeepsItsRunsFromTheCallback(t *testing.T) {
+	useFakeIME(t)
+	a11y.SetWantsDetail(true)
+	t.Cleanup(func() { a11y.SetWantsDetail(false) })
+	saw := -1
+	var own []TextRun
+	w := TextInput(State("two words")).OnDescribe(func(n *Node) {
+		saw = len(n.Runs)
+		if own != nil {
+			n.Runs = own
+		}
+	})
+	var in inputState
+	paintFrame(&in, w, Sz(200, 30))
+	n := w.Describe()
+	if saw != 0 || len(n.Runs) == 0 || &n.Runs[0] != &w.runs()[0] {
+		t.Fatalf("the callback saw %d runs; the node has %d, kept: %v", saw, len(n.Runs), len(n.Runs) > 0 && &n.Runs[0] == &w.runs()[0])
+	}
+	own = []TextRun{{Start: 0, End: 3}}
+	if n := w.Describe(); len(n.Runs) != 1 || n.Runs[0].End != 3 {
+		t.Fatalf("the callback's own runs became %v", n.Runs)
 	}
 }

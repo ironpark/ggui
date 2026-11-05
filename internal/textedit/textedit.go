@@ -57,15 +57,37 @@ type delta struct {
 // diff returns the delta from the text from to the state to, holding only
 // the bytes that differ.
 func diff(from string, to snapshot) delta {
+	p := CommonPrefix(from, to.text)
+	s := CommonSuffix(from[p:], to.text[p:])
+	return delta{at: p, cut: len(from) - p - s, text: strings.Clone(to.text[p : len(to.text)-s]), anchor: to.anchor, caret: to.caret}
+}
+
+// CommonPrefix returns how many bytes a and b start with alike. A text
+// an edit made is most of the text before it, so the bytes are compared a
+// block at a time, as the runtime compares strings, before byte by byte.
+func CommonPrefix(a, b string) int {
+	n := min(len(a), len(b))
 	p := 0
-	for p < len(from) && p < len(to.text) && from[p] == to.text[p] {
+	for p+64 <= n && a[p:p+64] == b[p:p+64] {
+		p += 64
+	}
+	for p < n && a[p] == b[p] {
 		p++
 	}
+	return p
+}
+
+// CommonSuffix returns how many bytes a and b end with alike.
+func CommonSuffix(a, b string) int {
+	n := min(len(a), len(b))
 	s := 0
-	for s < len(from)-p && s < len(to.text)-p && from[len(from)-1-s] == to.text[len(to.text)-1-s] {
+	for s+64 <= n && a[len(a)-s-64:len(a)-s] == b[len(b)-s-64:len(b)-s] {
+		s += 64
+	}
+	for s < n && a[len(a)-1-s] == b[len(b)-1-s] {
 		s++
 	}
-	return delta{at: p, cut: len(from) - p - s, text: strings.Clone(to.text[p : len(to.text)-s]), anchor: to.anchor, caret: to.caret}
+	return s
 }
 
 func (d delta) apply(from string) snapshot {

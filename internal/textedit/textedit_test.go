@@ -274,3 +274,23 @@ func TestUndoKeepsOnlyWhatEachStepChanged(t *testing.T) {
 		t.Fatal("undoing every step did not restore the text")
 	}
 }
+
+// CommonPrefix and CommonSuffix compare a block at a time and then byte by
+// byte: what they find must be where the texts first differ, on either
+// side of a block's edge.
+func TestCommonPrefixAndSuffixFindTheFirstDifference(t *testing.T) {
+	t.Parallel()
+	base := strings.Repeat("abcdefgh", 40)
+	for _, at := range []int{0, 1, 63, 64, 65, 128, 200, len(base) - 1} {
+		other := base[:at] + "#" + base[at+1:]
+		if got := CommonPrefix(base, other); got != at {
+			t.Errorf("CommonPrefix differing at %d = %d", at, got)
+		}
+		if got, want := CommonSuffix(base, other), len(base)-at-1; got != want {
+			t.Errorf("CommonSuffix differing at %d = %d, want %d", at, got, want)
+		}
+	}
+	if CommonPrefix(base, base[:100]) != 100 || CommonSuffix(base, base[100:]) != len(base)-100 || CommonPrefix("", base) != 0 {
+		t.Error("a text and a part of it share that part")
+	}
+}

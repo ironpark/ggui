@@ -6,6 +6,7 @@
 package textlayout
 
 import (
+	"iter"
 	"slices"
 	"sort"
 	"strings"
@@ -143,20 +144,29 @@ func WrapSpans(s string, face text.Face, maxW float64) []Span {
 // draws it, so text in several styles wraps as one paragraph.
 func WrapSpansBy(s string, width func(a, b int) float64, maxW float64) []Span {
 	var out []Span
-	start := 0
-	for {
-		stop := len(s)
-		if i := strings.IndexByte(s[start:], '\n'); i >= 0 {
-			stop = start + i
-		}
-		off := start
-		for _, sp := range wrapParagraph(s[start:stop], func(a, b int) float64 { return width(off+a, off+b) }, maxW) {
+	for start, line := range Lines(s) {
+		for _, sp := range wrapParagraph(line, func(a, b int) float64 { return width(start+a, start+b) }, maxW) {
 			out = append(out, Span{start + sp.Start, start + sp.End})
 		}
-		if stop == len(s) {
-			return out
+	}
+	return out
+}
+
+// Lines yields the hard lines of s, each without its line break, and the
+// offset in s where it starts: one empty line for an empty s, and an empty
+// last line after a line break that ends s, as a caret can stand there.
+func Lines(s string) iter.Seq2[int, string] {
+	return func(yield func(int, string) bool) {
+		for start := 0; ; {
+			end := len(s)
+			if i := strings.IndexByte(s[start:], '\n'); i >= 0 {
+				end = start + i
+			}
+			if !yield(start, s[start:end]) || end == len(s) {
+				return
+			}
+			start = end + 1
 		}
-		start = stop + 1
 	}
 }
 
@@ -213,27 +223,33 @@ func wrapParagraph(p string, width func(a, b int) float64, maxW float64) []Span 
 // would measure the line once per cluster on it, which for a long URL or
 // a pasted run of text is thousands of measures of a line's length.
 func breakWord(p string, lineStart, wend int, width func(a, b int) float64, maxW float64, lines []Span) ([]Span, int) {
-	bounds := textedit.Bounds(p)
-	// A line from lineStart ending at bounds[k] is too wide when the
+	// The word's clusters alone, as offsets from its start, base: the
+	// whole paragraph's would cost each long word in it the paragraph.
+	// They are kept, by the word, for the next wrap of it at another
+	// width.
+	base := lineStart
+	bounds := textedit.Bounds(p[base:wend])
+	at := func(k int) int { return base + bounds[k] }
+	// A line from lineStart ending at cluster k is too wide when the
 	// cluster after it would not fit on it as well: it ends there.
-	too := func(k int) bool { return width(lineStart, bounds[k+1]) > maxW }
-	end := sort.SearchInts(bounds, wend) // the lines end before bounds[end]
-	for k := sort.SearchInts(bounds, lineStart+1); k < end; {
+	too := func(k int) bool { return width(lineStart, at(k+1)) > maxW }
+	end := len(bounds) - 1 // the lines end before cluster end, the word's end
+	for k := 1; k < end; {
 		// Every candidate before k fits; find the first that does not.
-		at, step := end, 1
+		first, step := end, 1
 		for k < end {
 			probe := min(k+step-1, end-1)
 			if too(probe) {
-				at = k + sort.Search(probe-k, func(i int) bool { return too(k + i) })
+				first = k + sort.Search(probe-k, func(i int) bool { return too(k + i) })
 				break
 			}
 			k, step = probe+1, step*2
 		}
-		if at == end {
+		if first == end {
 			break
 		}
-		lines = append(lines, Span{lineStart, bounds[at]})
-		lineStart, k = bounds[at], at+1
+		lines = append(lines, Span{lineStart, at(first)})
+		lineStart, k = at(first), first+1
 	}
 	return lines, lineStart
 }
@@ -241,14 +257,10 @@ func breakWord(p string, lineStart, wend int, width func(a, b int) float64, maxW
 // BreakSpans splits s at its line breaks only.
 func BreakSpans(s string) []Span {
 	spans := make([]Span, 0, strings.Count(s, "\n")+1)
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			spans = append(spans, Span{start, i})
-			start = i + 1
-		}
+	for start, line := range Lines(s) {
+		spans = append(spans, Span{start, start + len(line)})
 	}
-	return append(spans, Span{start, len(s)})
+	return spans
 }
 
 // LineOf returns the index of the span that holds byte offset pos: the
