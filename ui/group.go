@@ -403,7 +403,7 @@ func (g *ToggleGroupWidget[T]) HandleKey(ev ggui.KeyEvent) {
 	if ev.Kind != ggui.KeyPress || len(g.options) == 0 {
 		return
 	}
-	if i, ok := navIndex(ev, navBoth, true, g.index(), len(g.options), nil); ok {
+	if i, ok := navIndex(ev, navBoth, g.index(), len(g.options), nil); ok {
 		g.pick(i)
 	}
 }

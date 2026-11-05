@@ -75,7 +75,7 @@ func (b *MenubarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	b.theme = uitheme.Of(env)
 	if len(b.menus) > 0 && b.menus[b.active].button.IsInert() {
 		b.popup.Hide()
-		b.active = stepIndex(b.active, 1, len(b.menus), true, func(i int) bool { return !b.menus[i].button.IsInert() })
+		b.active = stepIndex(b.active, 1, len(b.menus), b.enabled)
 	}
 	return b.popup.Layout(c, env)
 }
@@ -118,6 +118,9 @@ func (b *MenubarWidget) ConsumesKey(e ggui.KeyEvent) bool {
 	return navConsumes(e, navBoth) || ggui.Activates(e)
 }
 
+// enabled reports whether menu i can take the keyboard.
+func (b *MenubarWidget) enabled(i int) bool { return !b.menus[i].button.IsInert() }
+
 // HandleKey implements ggui.KeyHandler.
 func (b *MenubarWidget) HandleKey(e ggui.KeyEvent) {
 	b.Keyboard(e, nil)
@@ -125,8 +128,9 @@ func (b *MenubarWidget) HandleKey(e ggui.KeyEvent) {
 		return
 	}
 	open := b.popup.IsOpen()
-	vertical := e.Key == ggui.KeyArrowUp || e.Key == ggui.KeyArrowDown
-	ends := e.Key == ggui.KeyHome || e.Key == ggui.KeyEnd
+	along := navMoveOf(e.Key, navHorizontal) // Left, Right, Home or End
+	ends := along == navFirst || along == navLast
+	vertical := along == navNone && navMoveOf(e.Key, navVertical) != navNone // Up or Down
 	switch {
 	case e.Key == ggui.KeyEscape:
 		b.popup.Hide()
@@ -138,11 +142,11 @@ func (b *MenubarWidget) HandleKey(e ggui.KeyEvent) {
 		}
 	case open && (vertical || ends):
 		b.menus[b.active].navigate(e)
-	case ends || e.Key == ggui.KeyArrowLeft || e.Key == ggui.KeyArrowRight:
+	case along != navNone:
 		// Left and Right move along the bar, taking an open menu along;
 		// Home and End, with the menu closed, go to its ends. Active is
 		// never -1, which stays put only when every menu is disabled.
-		i, _ := navIndex(e, navHorizontal, true, b.active, len(b.menus), func(i int) bool { return !b.menus[i].button.IsInert() })
+		i, _ := navIndex(e, navHorizontal, b.active, len(b.menus), b.enabled)
 		b.active = max(i, 0)
 		if open {
 			b.open(b.active)

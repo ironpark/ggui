@@ -290,12 +290,12 @@ func (s *SelectWidget[T]) HandleKey(ev ggui.KeyEvent) {
 		if len(s.options) == 0 {
 			return
 		}
-		dir := pick(ev.Key == ggui.KeyArrowUp, -1, 1)
 		if open {
-			s.highlight = stepIndex(s.highlight, dir, len(s.options), true, nil)
+			s.highlight, _ = navIndex(ev, navVertical, s.highlight, len(s.options), nil)
 			s.viewport.reveal = true
 		} else {
-			s.choose(stepIndex(s.index(), dir, len(s.options), true, nil))
+			i, _ := navIndex(ev, navVertical, s.index(), len(s.options), nil)
+			s.choose(i)
 		}
 	}
 }

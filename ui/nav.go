@@ -47,23 +47,23 @@ func navConsumes(ev ggui.KeyEvent, axis navAxis) bool {
 // navIndex is the item a key press moves the keyboard to from cur, one of
 // n items, skipping those enabled rejects (nil rejects none), as WAI-ARIA
 // has composite widgets do: the arrows step to the next enabled item,
-// wrapping past the ends when wrap is set and stopping at them otherwise,
-// and Home and End go to the first and last enabled item. A step from -1,
+// wrapping past the ends, and Home and End go to the first and last
+// enabled item. A step from -1,
 // nothing yet, starts at the near end. ok is false for any other key or
 // event. With nothing enabled a step stays at cur and Home and End give -1.
-func navIndex(ev ggui.KeyEvent, axis navAxis, wrap bool, cur, n int, enabled func(int) bool) (i int, ok bool) {
+func navIndex(ev ggui.KeyEvent, axis navAxis, cur, n int, enabled func(int) bool) (i int, ok bool) {
 	if ev.Kind != ggui.KeyPress {
 		return cur, false
 	}
 	switch navMoveOf(ev.Key, axis) {
 	case navPrev:
-		return stepIndex(cur, -1, n, wrap, enabled), true
+		return stepIndex(cur, -1, n, enabled), true
 	case navNext:
-		return stepIndex(cur, 1, n, wrap, enabled), true
+		return stepIndex(cur, 1, n, enabled), true
 	case navFirst:
-		return stepIndex(-1, 1, n, true, enabled), true
+		return stepIndex(-1, 1, n, enabled), true
 	case navLast:
-		return stepIndex(-1, -1, n, true, enabled), true
+		return stepIndex(-1, -1, n, enabled), true
 	}
 	return cur, false
 }

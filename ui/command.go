@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/ironpark/ggui"
@@ -239,14 +240,8 @@ func (c *CommandWidget) key(ev ggui.KeyEvent) bool {
 		return true
 	case ggui.KeyArrowDown, ggui.KeyArrowUp:
 		c.filter()
-		at := -1
-		for j, i := range c.matched {
-			if i == c.highlight {
-				at = j
-				break
-			}
-		}
-		next := stepIndex(at, pick(ev.Key == ggui.KeyArrowUp, -1, 1), len(c.matched), true, func(j int) bool { return !c.entries[c.matched[j]].disabled })
+		at := slices.Index(c.matched, c.highlight)
+		next, _ := navIndex(ev, navVertical, at, len(c.matched), func(j int) bool { return !c.entries[c.matched[j]].disabled })
 		if next >= 0 {
 			c.highlight = c.matched[next]
 			c.scroll.Reveal(c.rects[c.highlight])

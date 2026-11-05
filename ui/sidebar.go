@@ -273,7 +273,7 @@ func (s *SidebarWidget) HandleKey(ev ggui.KeyEvent) {
 	if ev.Kind != ggui.KeyPress || len(s.entries) == 0 {
 		return
 	}
-	if i, ok := navIndex(ev, navVertical, true, s.active, len(s.entries), s.enabled); ok {
+	if i, ok := navIndex(ev, navVertical, s.active, len(s.entries), s.enabled); ok {
 		s.active = i
 	}
 }

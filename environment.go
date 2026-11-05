@@ -426,10 +426,34 @@ func (e Env) Motion(d time.Duration) time.Duration {
 type EnvKey[T any] struct {
 	id   *byte
 	name string
+	same *envSame[T] // what equal means for With; nil is ==
 }
 
 // NewEnvKey creates a distinct EnvKey; name is for messages only.
 func NewEnvKey[T any](name string) EnvKey[T] { return EnvKey[T]{id: new(byte), name: name} }
+
+// NewEnvKeyFunc is NewEnvKey for values whose == is not what equal means,
+// as for a pointer to a value that is the same as another when what they
+// point to is. With takes same in place of ==: storing a value same to
+// the one there leaves the Env unchanged, and storing one same to a value
+// stored before under the same parent gives back that Env, revision and
+// value included, so the caches below hold and the first value stays the
+// one read. same must not panic.
+func NewEnvKeyFunc[T any](name string, same func(a, b T) bool) EnvKey[T] {
+	return EnvKey[T]{id: new(byte), name: name, same: &envSame[T]{same}}
+}
+
+// envSame holds an EnvKey's equality behind a pointer, so EnvKeys stay
+// comparable.
+type envSame[T any] struct{ fn func(a, b T) bool }
+
+// equal reports whether With treats a and b as the same value.
+func (k EnvKey[T]) equal(a, b T) bool {
+	if k.same != nil {
+		return k.same.fn(a, b)
+	}
+	return sameAny(a, b)
+}
 
 // With returns e with v stored under k for the subtree below. Storing the
 // value already there, by ==, leaves e unchanged, and storing the value
@@ -443,8 +467,11 @@ func (e Env) With[T any](k EnvKey[T], v T) Env {
 		}
 	}
 	cur, exists := e.Get(k)
-	if exists && sameAny(cur, v) {
+	if exists && k.equal(cur, v) {
 		return e
+	}
+	if k.same != nil {
+		return e.withSame(k, v, exists)
 	}
 	val := any(v)
 	out, ok, hashable := e.memo(k.id, val)
@@ -461,6 +488,36 @@ func (e Env) With[T any](k EnvKey[T], v T) Env {
 	if hashable {
 		e.remember(k.id, val, out)
 	}
+	return out
+}
+
+// withSame is With for a key with its own equality, which a map cannot
+// hash by: the Envs derived from e under k are kept in a list and found by
+// k.same.
+func (e Env) withSame[T any](k EnvKey[T], v T, exists bool) Env {
+	m := &activeWorld().envMemo.same
+	key := derivedKey{from: e.rev, key: k.id}
+	derived := m.get(key)
+	for i, d := range derived {
+		if k.same.fn(d.val.(T), v) {
+			if i > 0 { // most recent first, so the one in use is found at once
+				copy(derived[1:i+1], derived[:i])
+				derived[0] = d
+			}
+			return d.out
+		}
+	}
+	out := e
+	if exists {
+		out.vals = withEnvValue(e.vals, k.id, v)
+	} else {
+		out.vals = &envNode{key: k.id, val: v, next: e.vals}
+	}
+	out.rev = nextRev()
+	if len(derived) == envSameMax {
+		derived = derived[:envSameMax-1]
+	}
+	m.put(key, append([]derivedSame{{v, out}}, derived...))
 	return out
 }
 
@@ -500,6 +557,51 @@ type derivedKey struct {
 // of its own, and the memo stays within about twice what is in use.
 type envMemo struct {
 	cur, prev map[derivedKey]Env
+	same      envMemoSame // for keys with their own equality
+}
+
+// derivedSame is an Env derived with a value of a key with its own
+// equality.
+type derivedSame struct {
+	val any
+	out Env
+}
+
+// envSameMax bounds the values remembered for one key under one parent:
+// enough for every theme an app derives in one place, with room to spare,
+// while a value that changes every frame churns through it.
+const envSameMax = 64
+
+// envMemoSame is envMemo for keys with their own equality: the Envs
+// derived from one parent under one key, most recent first, found by the
+// key's equality. It ages as envMemo does.
+type envMemoSame struct {
+	cur, prev map[derivedKey][]derivedSame
+}
+
+func (m *envMemoSame) get(k derivedKey) []derivedSame {
+	if d, ok := m.cur[k]; ok {
+		return d
+	}
+	d, ok := m.prev[k]
+	if ok {
+		m.put(k, d)
+	}
+	return d
+}
+
+func (m *envMemoSame) put(k derivedKey, d []derivedSame) {
+	if m.cur == nil {
+		m.cur = map[derivedKey][]derivedSame{}
+	}
+	if _, ok := m.cur[k]; !ok && len(m.cur) >= max(envMemoMin, len(m.prev)) {
+		m.prev, m.cur = m.cur, m.prev
+		if m.cur == nil {
+			m.cur = map[derivedKey][]derivedSame{}
+		}
+		clear(m.cur)
+	}
+	m.cur[k] = d
 }
 
 // envMemoMin is the size below which the memo never ages anything out.
