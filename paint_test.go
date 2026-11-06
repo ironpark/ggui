@@ -4,10 +4,12 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"runtime"
 	"testing"
 	"time"
 
 	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggui/internal/framestats"
 )
 
 func TestPathScaleCacheInvalidation(t *testing.T) {
@@ -285,4 +287,124 @@ func TestALayerOverAStripTakesAnImageTheSizeOfTheStrip(t *testing.T) {
 		}
 	}
 	c.freeLayers()
+}
+
+// A gradient path whose bounds grow and shrink each frame, as one animated
+// does, rebuilds its coverage mask every frame.
+func BenchmarkPathGradientResize(b *testing.B) {
+	img := ggfx.NewImage(800, 800)
+	defer img.Deallocate()
+	c := &Canvas{Image: img, scale: 2}
+	var p Path
+	p.MoveTo(0, 0)
+	p.LineTo(300, 0)
+	p.LineTo(300, 300)
+	p.Close()
+	i := 0
+	b.ReportAllocs()
+	for b.Loop() {
+		s := 200 + float64(i%40)*2
+		i++
+		c.FillPathGradient(&p, Rct(Point{}, Sz(s, s)), color.White, color.Black)
+	}
+}
+
+func triangle(side float64) *Path {
+	p := &Path{}
+	p.MoveTo(0, 0)
+	p.LineTo(side, 0)
+	p.LineTo(side, side)
+	p.Close()
+	return p
+}
+
+// A gradient path's mask is kept while the coverage fits it and takes a
+// quarter of it at least, made anew past that, and the PathMasks gauge
+// holds its bytes. Not parallel: the gauge is the process's.
+func TestPathMaskReusesShrinksAndGauges(t *testing.T) {
+	img := ggfx.NewImage(800, 800)
+	defer img.Deallocate()
+	c := &Canvas{Image: img}
+	base := framestats.ReadTextures().PathMasks
+	p := triangle(700)
+	fill := func(side float64) *ggfx.Image {
+		t.Helper()
+		c.FillPathGradient(p, Rct(Point{}, Sz(side, side)), color.White, color.Black)
+		if b := p.gradientMask.Bounds(); b != image.Rect(0, 0, int(side), int(side)) {
+			t.Fatalf("coverage of %v: mask part %v", side, b)
+		}
+		s := p.maskStore.Bounds()
+		if got, want := framestats.ReadTextures().PathMasks-base, framestats.ImageBytes(s.Dx(), s.Dy()); got != want {
+			t.Fatalf("coverage of %v: gauge %d, mask %v of %d bytes", side, got, s, want)
+		}
+		return p.maskStore
+	}
+	first := fill(200)
+	if s := first.Bounds(); s.Dx() != 208 || s.Dy() != 208 {
+		t.Fatalf("mask %v, want the coverage rounded up to 16", s)
+	}
+	if fill(190) != first || fill(204) != first || fill(120) != first {
+		t.Fatal("a coverage within the mask took a new one")
+	}
+	grown := fill(300)
+	if grown == first {
+		t.Fatal("a larger coverage kept the mask")
+	}
+	if fill(100) == grown {
+		t.Fatal("a coverage under a quarter of the mask kept it")
+	}
+	if s := fill(600).Bounds(); s.Dx() != 640 {
+		t.Fatalf("a large mask %v, want rounded up to 64", s)
+	}
+	p.freeMask()
+	if got := framestats.ReadTextures().PathMasks - base; got != 0 {
+		t.Fatalf("after freeing, the gauge is %d off", got)
+	}
+}
+
+// A Path the app drops counts its mask gone once it is collected.
+func TestDroppedPathMaskLeavesTheGauge(t *testing.T) {
+	img := ggfx.NewImage(200, 200)
+	defer img.Deallocate()
+	c := &Canvas{Image: img}
+	runtime.GC()
+	base := framestats.ReadTextures().PathMasks
+	func() {
+		c.FillPathGradient(triangle(100), Rct(Point{}, Sz(100, 100)), color.White, color.Black)
+	}()
+	if framestats.ReadTextures().PathMasks == base {
+		t.Fatal("the mask was not counted")
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for framestats.ReadTextures().PathMasks != base {
+		if time.Now().After(deadline) {
+			t.Fatalf("a dropped path's mask still counted: %d", framestats.ReadTextures().PathMasks-base)
+		}
+		runtime.GC()
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// Layers count their images' bytes while kept, and nothing once freed.
+func TestLayerGaugeBalances(t *testing.T) {
+	img := ggfx.NewImage(300, 200)
+	defer img.Deallocate()
+	c := &Canvas{Image: img}
+	base := framestats.ReadTextures().Layers
+	c.Layer(LayerOptions{}, func(l *Canvas) {
+		l.Layer(LayerOptions{}, func(*Canvas) {})
+	})
+	if got := framestats.ReadTextures().Layers - base; got != 2*framestats.ImageBytes(300, 200) {
+		t.Fatalf("two nested layers over the window: gauge %d", got)
+	}
+	c.trimLayers()
+	c.trimLayers() // a frame with no layers frees them
+	if got := framestats.ReadTextures().Layers - base; got != 0 {
+		t.Fatalf("after an idle frame the gauge is %d off", got)
+	}
+	c.Layer(LayerOptions{}, func(*Canvas) {})
+	c.freeLayers()
+	if got := framestats.ReadTextures().Layers - base; got != 0 {
+		t.Fatalf("after freeing the gauge is %d off", got)
+	}
 }

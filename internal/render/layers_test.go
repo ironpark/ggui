@@ -112,3 +112,47 @@ func BenchmarkLayerPoolFrame(b *testing.B) {
 		frame()
 	}
 }
+
+// The gauge is told every image made and freed: what it holds is the bytes
+// of the images kept, nothing once all are freed.
+func TestLayerPoolGaugeBalances(t *testing.T) {
+	var p LayerPool[*fakeTex]
+	var gauge int64
+	p.Gauge = func(b int64) { gauge += b }
+	kept := func() int64 {
+		var n int64
+		for _, pool := range p.depths {
+			for _, l := range pool {
+				n += textureBytes(l.img)
+			}
+		}
+		return n
+	}
+	check := func(when string) {
+		t.Helper()
+		if k := kept(); gauge != k {
+			t.Fatalf("%s: gauge %d, images kept %d bytes", when, gauge, k)
+		}
+	}
+	p.Borrow(window, image.Rect(0, 0, 10, 10), allocFake)
+	p.Borrow(window, image.Rect(0, 0, 100, 100), allocFake)
+	p.Return()
+	p.Return()
+	check("nested")
+	if gauge == 0 {
+		t.Fatal("the gauge counted nothing")
+	}
+	p.Borrow(window, image.Rectangle{}, allocFake) // replaces the small one
+	p.Return()
+	check("replaced")
+	p.EndFrame()
+	check("frame end")
+	p.EndFrame() // nothing taken: all freed
+	check("idle frame")
+	p.Borrow(window, image.Rect(0, 0, 300, 300), allocFake)
+	p.Return()
+	p.FreeAll()
+	if gauge != 0 {
+		t.Fatalf("after FreeAll the gauge holds %d", gauge)
+	}
+}
