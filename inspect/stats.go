@@ -18,3 +18,11 @@ func ReadFrameStats() FrameStats { return framestats.Read() }
 // ReadMotionReport reports what moves and what keeps frames whole. It is
 // safe to call from any goroutine.
 func ReadMotionReport() MotionReport { return framestats.ReadReport() }
+
+// TextureBytes is how many bytes of GPU images ggui keeps now, by kind:
+// the ones that grow with the display's scale. See the fields.
+type TextureBytes = framestats.TextureBytes
+
+// ReadTextureBytes reports the bytes of GPU images ggui keeps now. It is
+// safe to call from any goroutine.
+func ReadTextureBytes() TextureBytes { return framestats.ReadTextures() }

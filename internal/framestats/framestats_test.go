@@ -111,3 +111,14 @@ func BenchmarkSetMovers(b *testing.B) {
 		SetMovers(m)
 	}
 }
+
+func TestTexturesGaugeWhatIsKept(t *testing.T) {
+	before := ReadTextures()
+	AddTexture(Layers, ImageBytes(10, 10))
+	AddTexture(Icons, 64)
+	AddTexture(Layers, -ImageBytes(10, 5))
+	got := ReadTextures()
+	if got.Layers-before.Layers != 200 || got.Icons-before.Icons != 64 || got.Total()-before.Total() != 264 {
+		t.Fatalf("from %+v to %+v", before, got)
+	}
+}
