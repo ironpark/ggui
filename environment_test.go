@@ -112,8 +112,8 @@ func TestEnvColorsResolveAtLayout(t *testing.T) {
 	box := Box(text).Fill(testColor{}).Border(1, testColor{}).Shadow(ShadowStyle{Color: testColor{}})
 	for _, want := range []color.Color{red, blue} {
 		box.Layout(Loose(Sz(100, 100)), Env{}.With(testColorKey, color.Color(want)))
-		if box.fill.shown != want || box.borderColor.shown != want || box.shownShadows[0].Color != want {
-			t.Errorf("box shows %v, %v, %v; want %v", box.fill.shown, box.borderColor.shown, box.shownShadows[0].Color, want)
+		if box.fill.shown != want || box.borderColor.shown != want || box.deco.shownShadows[0].Color != want {
+			t.Errorf("box shows %v, %v, %v; want %v", box.fill.shown, box.borderColor.shown, box.deco.shownShadows[0].Color, want)
 		}
 		if text.resolved.Color != want {
 			t.Errorf("text shows %v, want %v", text.resolved.Color, want)
