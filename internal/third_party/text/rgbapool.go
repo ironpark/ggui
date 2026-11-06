@@ -75,3 +75,51 @@ func releasePooledRGBA(rgba *image.RGBA) {
 // mostPooledRGBA is the largest buffer, in bytes, the pool keeps: a glyph
 // 128 pixels square.
 const mostPooledRGBA = 64 << 10
+
+var theAlphaPool = gem.Pool[*image.Alpha]{
+	New: func() *image.Alpha {
+		return &image.Alpha{}
+	},
+}
+
+// newPooledAlpha is newPooledRGBA for the coverage of a monochrome glyph,
+// one byte a pixel. The returned image must be passed to
+// releasePooledAlpha, or uploadPooledAlpha, when it is no longer used.
+func newPooledAlpha(w, h int) *image.Alpha {
+	size := w * h
+	a := theAlphaPool.Get()
+	if cap(a.Pix) < size {
+		a.Pix = make([]byte, size)
+	} else {
+		a.Pix = a.Pix[:size]
+	}
+	a.Stride = w
+	a.Rect = image.Rect(0, 0, w, h)
+	return a
+}
+
+// glyphMaskOptions makes a monochrome glyph's image alpha-only: it is
+// white coverage, which an alpha image draws as.
+var glyphMaskOptions = &ggfx.NewImageFromImageOptions{Format: ggfx.PixelFormatAlpha}
+
+// uploadPooledAlpha returns an alpha-only image of img, made by
+// newPooledAlpha, and returns img to the pool; nil for nil.
+func uploadPooledAlpha(img *image.Alpha) *ggfx.Image {
+	if img == nil {
+		return nil
+	}
+	defer releasePooledAlpha(img)
+	return ggfx.NewImageFromImageWithOptions(img, glyphMaskOptions)
+}
+
+// releasePooledAlpha returns an image obtained from newPooledAlpha to the
+// pool, unless it is larger than a glyph 128 pixels square, as
+// releasePooledRGBA does.
+func releasePooledAlpha(a *image.Alpha) {
+	if cap(a.Pix) > mostPooledRGBA/4 {
+		return
+	}
+	clear(a.Pix[:cap(a.Pix)])
+	a.Pix = a.Pix[:0]
+	theAlphaPool.Put(a)
+}

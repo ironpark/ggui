@@ -38,7 +38,11 @@ type raster struct {
 	prev, next *raster
 }
 
-func (r *raster) bytes() int64 { return framestats.ImageBytes(r.size, r.size) }
+// rasterFormat is a raster's pixel format: an icon is white coverage, so
+// alpha-only, a byte a pixel.
+const rasterFormat = ggfx.PixelFormatAlpha
+
+func (r *raster) bytes() int64 { return framestats.ImageBytesOf(r.size, r.size, rasterFormat) }
 
 func (r *raster) bounds() image.Rectangle { return image.Rect(0, 0, r.size, r.size) }
 
@@ -85,7 +89,7 @@ func (l *rasterList) pushFront(r *raster) {
 func (l *rasterList) add(r *raster) {
 	l.pushFront(r)
 	l.bytes += r.bytes()
-	framestats.Kept(framestats.Icons, r.bounds())
+	framestats.KeptOf(framestats.Icons, r.bounds(), rasterFormat)
 }
 
 // touch marks r drawn now.
@@ -106,7 +110,7 @@ func (l *rasterList) free(r *raster) {
 		}
 	}
 	r.image.Deallocate()
-	framestats.Freed(framestats.Icons, r.bounds())
+	framestats.FreedOf(framestats.Icons, r.bounds(), rasterFormat)
 }
 
 // trim frees the least recently drawn rasters past the budget, sparing the
@@ -150,12 +154,13 @@ func releaseScratch(img *image.RGBA) {
 	}
 }
 
-// upload makes the GPU image of a raster of size, by way of scratch.
+// upload makes the GPU image of a raster of size, by way of scratch: only
+// its alpha, which the image keeps, so the mask is not whitened first.
 func (s *SVG) upload(size int) *ggfx.Image {
 	img := scratchRGBA(size)
 	defer releaseScratch(img)
-	s.draw(img)
-	return render.NewTexture(img)
+	s.drawCoverage(img)
+	return render.NewTextureOf(img, rasterFormat)
 }
 
 // Parse compiles SVG paths once without creating GPU resources.
@@ -189,6 +194,17 @@ func (s *SVG) rasterize(size int) *image.RGBA {
 
 // draw draws the icon as a white mask over img, clear and square.
 func (s *SVG) draw(img *image.RGBA) {
+	s.drawCoverage(img)
+	// Store a white coverage mask so recoloring never requires rasterization.
+	for i := 0; i < len(img.Pix); i += 4 {
+		a := img.Pix[i+3]
+		img.Pix[i], img.Pix[i+1], img.Pix[i+2] = a, a, a
+	}
+}
+
+// drawCoverage draws the icon over img, clear and square, as the document
+// colors it: only its alpha is the icon.
+func (s *SVG) drawCoverage(img *image.RGBA) {
 	size := img.Rect.Dx()
 	x, y, w, h := s.doc.ViewBox()
 	scale := float64(size) / max(w, h)
@@ -197,11 +213,6 @@ func (s *SVG) draw(img *image.RGBA) {
 	g.Scale(scale, scale)
 	g.Translate((float64(size)-w*scale)/2, (float64(size)-h*scale)/2)
 	s.doc.Draw(img, g)
-	// Store a white coverage mask so recoloring never requires rasterization.
-	for i := 0; i < len(img.Pix); i += 4 {
-		a := img.Pix[i+3]
-		img.Pix[i], img.Pix[i+1], img.Pix[i+2] = a, a, a
-	}
 }
 
 // Image is the icon drawn size pixels square, in white over clear: a mask

@@ -711,3 +711,10 @@ func TestSelectableTextInAPinnedStickyHeader(t *testing.T) {
 		t.Fatalf("double click on the pinned header selected %q, want beta", got)
 	}
 }
+
+// FadeEdges' ramp is white coverage, alpha-only.
+func TestFadeRampIsAlpha(t *testing.T) {
+	if f := fadeRamp().Format(); f != ggfx.PixelFormatAlpha {
+		t.Fatalf("fade ramp of format %v, want alpha", f)
+	}
+}

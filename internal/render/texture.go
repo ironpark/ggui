@@ -16,18 +16,24 @@ const LargeImage = 512
 func Large(w, h int) bool { return w > LargeImage || h > LargeImage }
 
 // NewTexture uploads img, a texture of exactly its size when it is large.
-func NewTexture(img image.Image) *ggfx.Image {
+func NewTexture(img image.Image) *ggfx.Image { return NewTextureOf(img, ggfx.PixelFormatRGBA) }
+
+// NewTextureOf is NewTexture in format f: [ggfx.PixelFormatAlpha] keeps
+// only img's alpha, for a white mask to tint.
+func NewTextureOf(img image.Image, f ggfx.PixelFormat) *ggfx.Image {
+	op := &ggfx.NewImageFromImageOptions{Format: f}
 	if b := img.Bounds(); Large(b.Dx(), b.Dy()) {
-		return ggfx.NewImageFromImageWithOptions(img, &ggfx.NewImageFromImageOptions{Unmanaged: true})
+		op.Unmanaged = true
 	}
-	return ggfx.NewImageFromImage(img)
+	return ggfx.NewImageFromImageWithOptions(img, op)
 }
 
 // NewBlank makes a clear w×h image to draw into, a texture of exactly its
 // size when it is large.
-func NewBlank(w, h int) *ggfx.Image {
-	if Large(w, h) {
-		return ggfx.NewImageWithOptions(image.Rect(0, 0, w, h), &ggfx.NewImageOptions{Unmanaged: true})
-	}
-	return ggfx.NewImage(w, h)
+func NewBlank(w, h int) *ggfx.Image { return NewBlankOf(w, h, ggfx.PixelFormatRGBA) }
+
+// NewBlankOf is NewBlank in format f: [ggfx.PixelFormatAlpha] for white
+// coverage drawn into it, such as a mask.
+func NewBlankOf(w, h int, f ggfx.PixelFormat) *ggfx.Image {
+	return ggfx.NewImageWithOptions(image.Rect(0, 0, w, h), &ggfx.NewImageOptions{Unmanaged: Large(w, h), Format: f})
 }

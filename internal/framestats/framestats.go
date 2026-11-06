@@ -6,6 +6,7 @@
 package framestats
 
 import (
+	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggfx/vector"
 	"image"
 	"maps"
@@ -186,7 +187,7 @@ var textureBytes [textures]atomic.Int64
 // AddTexture counts bytes more of t kept, or fewer when bytes is negative.
 func AddTexture(t Texture, bytes int64) { textureBytes[t].Add(bytes) }
 
-// TextureBytes is how many bytes of RGBA pixels each kind of GPU image
+// TextureBytes is how many bytes of pixels each kind of GPU image
 // ggui keeps takes now, as a gauge rather than a count.
 type TextureBytes struct {
 	Layers, Backbuffer, PathMasks, Icons, Images int64
@@ -209,9 +210,32 @@ func ReadTextures() TextureBytes {
 	}
 }
 
-// Kept counts an image of bounds b more of t kept, and Freed one less.
-func Kept(t Texture, b image.Rectangle)  { AddTexture(t, ImageBytes(b.Dx(), b.Dy())) }
-func Freed(t Texture, b image.Rectangle) { AddTexture(t, -ImageBytes(b.Dx(), b.Dy())) }
+// Kept counts an RGBA image of bounds b more of t kept, and Freed one less.
+func Kept(t Texture, b image.Rectangle)  { KeptOf(t, b, ggfx.PixelFormatRGBA) }
+func Freed(t Texture, b image.Rectangle) { FreedOf(t, b, ggfx.PixelFormatRGBA) }
+
+// KeptOf is Kept for an image of format f, and FreedOf is Freed.
+func KeptOf(t Texture, b image.Rectangle, f ggfx.PixelFormat) {
+	AddTexture(t, ImageBytesOf(b.Dx(), b.Dy(), f))
+}
+func FreedOf(t Texture, b image.Rectangle, f ggfx.PixelFormat) {
+	AddTexture(t, -ImageBytesOf(b.Dx(), b.Dy(), f))
+}
 
 // ImageBytes is the RGBA bytes of a w×h image.
-func ImageBytes(w, h int) int64 { return int64(w) * int64(h) * 4 }
+func ImageBytes(w, h int) int64 { return ImageBytesOf(w, h, ggfx.PixelFormatRGBA) }
+
+// ImageBytesOf is the bytes of a w×h image of format f: one a pixel for
+// [ggfx.PixelFormatAlpha], four for RGBA. An alpha image is counted at one
+// even where the driver keeps it as RGBA.
+func ImageBytesOf(w, h int, f ggfx.PixelFormat) int64 {
+	return int64(w) * int64(h) * PixelBytes(f)
+}
+
+// PixelBytes is the bytes a pixel of format f takes.
+func PixelBytes(f ggfx.PixelFormat) int64 {
+	if f == ggfx.PixelFormatAlpha {
+		return 1
+	}
+	return 4
+}

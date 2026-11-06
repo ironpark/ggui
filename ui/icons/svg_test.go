@@ -147,8 +147,14 @@ func TestSVGRasterBudgetAndGauge(t *testing.T) {
 	for size := 10; size < 20; size++ {
 		draw(svgs[0], float64(size))
 	}
+	// A raster is alpha-only, a byte a pixel.
 	for size := 12; size < 20; size++ {
-		want += framestats.ImageBytes(size, size)
+		want += int64(size * size)
+	}
+	for _, r := range svgs[0].cache {
+		if f := r.image.Format(); f != ggfx.PixelFormatAlpha {
+			t.Fatalf("a raster of %d of format %v, want alpha", r.size, f)
+		}
 	}
 	if len(svgs[0].cache) != 8 || gauge() != want {
 		t.Fatalf("ten sizes: %d kept, gauge %d want %d", len(svgs[0].cache), gauge(), want)
@@ -158,7 +164,7 @@ func TestSVGRasterBudgetAndGauge(t *testing.T) {
 		t.Fatalf("drained: gauge %d", gauge())
 	}
 
-	one := framestats.ImageBytes(32, 32)
+	one := int64(32 * 32)
 	rasters.mu.Lock()
 	rasters.budget = rasters.bytes + 3*one
 	rasters.mu.Unlock()

@@ -389,17 +389,16 @@ func (c *Canvas) FadeEdges(r Rect, horizontal bool, lead, trail float64, paint f
 const fadeRampLength = 64
 
 // rampImage is the ramp FadeEdges masks with: a row of white from clear to
-// opaque, made once.
+// opaque, made once, alpha-only.
 var rampImage *ggfx.Image
 
 func fadeRamp() *ggfx.Image {
 	if rampImage == nil {
-		src := image.NewRGBA(image.Rect(0, 0, fadeRampLength, 1))
+		src := image.NewAlpha(image.Rect(0, 0, fadeRampLength, 1))
 		for x := range fadeRampLength {
-			a := uint8((float64(x) + .5) / fadeRampLength * 255)
-			src.SetRGBA(x, 0, color.RGBA{a, a, a, a})
+			src.Pix[x] = uint8((float64(x) + .5) / fadeRampLength * 255)
 		}
-		rampImage = ggfx.NewImageFromImage(src)
+		rampImage = ggfx.NewImageFromImageWithOptions(src, &ggfx.NewImageFromImageOptions{Format: ggfx.PixelFormatAlpha})
 	}
 	return rampImage
 }
