@@ -59,10 +59,73 @@ func ownOutputKey(k goTextOutputCacheKey) goTextOutputCacheKey {
 	return k
 }
 
+// shapedGlyph is what drawing and measuring read of a glyph HarfBuzz
+// shaped: its ID, advance, offset and bearings. A cache keeps this in
+// place of the shaping.Glyph, a third its size, for every string shaped.
+type shapedGlyph struct {
+	GlyphID            font.GID
+	Advance            fixed.Int26_6
+	XOffset, YOffset   fixed.Int26_6
+	XBearing, YBearing fixed.Int26_6
+}
+
+// runGlyph is a shaped glyph with the runes it was shaped from: its
+// cluster's first rune and how many runes the cluster holds.
+type runGlyph struct {
+	shapedGlyph
+	cluster, runes int32
+}
+
+// shapedRun is a shaping.Output as the caches keep it: the direction,
+// size and advance of a run, and its glyphs in visual order.
+type shapedRun struct {
+	glyphs    []runGlyph
+	advance   fixed.Int26_6
+	size      fixed.Int26_6
+	direction di.Direction
+}
+
+// compactRuns keeps of outputs what buildAdvances and buildGlyphs read,
+// in one allocation for the glyphs of every run.
+func compactRuns(outputs []shaping.Output) []shapedRun {
+	var n int
+	for i := range outputs {
+		n += len(outputs[i].Glyphs)
+	}
+	glyphs := make([]runGlyph, 0, n)
+	runs := make([]shapedRun, len(outputs))
+	for i := range outputs {
+		out := &outputs[i]
+		start := len(glyphs)
+		for j := range out.Glyphs {
+			gl := &out.Glyphs[j]
+			glyphs = append(glyphs, runGlyph{
+				shapedGlyph: shapedGlyph{
+					GlyphID:  gl.GlyphID,
+					Advance:  gl.Advance,
+					XOffset:  gl.XOffset,
+					YOffset:  gl.YOffset,
+					XBearing: gl.XBearing,
+					YBearing: gl.YBearing,
+				},
+				cluster: int32(gl.ClusterIndex),
+				runes:   int32(gl.RuneCount),
+			})
+		}
+		runs[i] = shapedRun{
+			glyphs:    glyphs[start:len(glyphs):len(glyphs)],
+			advance:   out.Advance,
+			size:      out.Size,
+			direction: out.Direction,
+		}
+	}
+	return runs
+}
+
 type goTextGlyph struct {
-	shapingGlyph *shaping.Glyph
-	startIndex   int
-	endIndex     int
+	shapingGlyph shapedGlyph
+	startIndex   int32
+	endIndex     int32
 
 	// render is a pointer to the shared render data (bounds plus the
 	// lazily-realized segments and bitmap). It is nil for glyphs with
@@ -71,15 +134,15 @@ type goTextGlyph struct {
 }
 
 type goTextOutputCacheValue struct {
-	outputs []shaping.Output
+	runs []shapedRun
 
-	// advances is lazily built by ensureAdvances from outputs. The text
+	// advances is lazily built by ensureAdvances from runs. The text
 	// used to derive advances is implied by the cache key, so it is passed
 	// in to ensureAdvances rather than retained on the value.
 	advances     []fixed.Int26_6
 	advancesOnce sync.Once
 
-	// glyphs is lazily built by ensureGlyphs from outputs plus the
+	// glyphs is lazily built by ensureGlyphs from runs plus the
 	// (text, face) inputs implied by the cache key.
 	glyphs     []goTextGlyph
 	glyphsOnce sync.Once
@@ -90,7 +153,7 @@ type goTextOutputCacheValue struct {
 // for the meaning of the returned slice.
 func (v *goTextOutputCacheValue) ensureAdvances(text string) []fixed.Int26_6 {
 	v.advancesOnce.Do(func() {
-		v.advances = buildAdvances(v.outputs, text)
+		v.advances = buildAdvances(v.runs, text)
 	})
 	return v.advances
 }
@@ -100,7 +163,7 @@ func (v *goTextOutputCacheValue) ensureGlyphs(g *GoTextFaceSource, text string, 
 	v.glyphsOnce.Do(func() {
 		g.shapeMu.Lock()
 		defer g.shapeMu.Unlock()
-		v.glyphs = g.buildGlyphs(v.outputs, text, face)
+		v.glyphs = g.buildGlyphs(v.runs, text, face)
 	})
 	return v.glyphs
 }
@@ -596,7 +659,7 @@ func (g *GoTextFaceSource) UnsafeInternal() any {
 //
 // The leading-edge convention picks one of the two visually valid carets
 // at a bidi level boundary; affinity-aware positioning is not exposed.
-func buildAdvances(outputs []shaping.Output, text string) []fixed.Int26_6 {
+func buildAdvances(outputs []shapedRun, text string) []fixed.Int26_6 {
 	// Rune index → byte index, plus a final entry at len(text).
 	runeToByte := make([]int, 0, len(text)+1)
 	for i := range text {
@@ -616,11 +679,11 @@ func buildAdvances(outputs []shaping.Output, text string) []fixed.Int26_6 {
 	for oi := range outputs {
 		out := &outputs[oi]
 		runLeftX := x
-		rtl := out.Direction.Progression() == di.TowardTopLeft
+		rtl := out.direction.Progression() == di.TowardTopLeft
 		var cum fixed.Int26_6 // sum of advances of earlier glyphs in this run
-		for gi := range out.Glyphs {
-			gl := &out.Glyphs[gi]
-			startByte := runeToByte[gl.TextIndex()]
+		for gi := range out.glyphs {
+			gl := &out.glyphs[gi]
+			startByte := runeToByte[gl.cluster]
 			var leading fixed.Int26_6
 			if rtl {
 				leading = runLeftX + cum + gl.Advance
@@ -635,7 +698,7 @@ func buildAdvances(outputs []shaping.Output, text string) []fixed.Int26_6 {
 			}
 			cum += gl.Advance
 		}
-		x += out.Advance
+		x += out.advance
 	}
 	totalWidth := x
 
@@ -744,8 +807,8 @@ func (g *GoTextFaceSource) joinChunkGlyphs(text string, face *GoTextFace, chunks
 		ch := chunks[li]
 		for _, gl := range chunkGlyphs[li] {
 			translated := gl
-			translated.startIndex += ch.Start
-			translated.endIndex += ch.Start
+			translated.startIndex += int32(ch.Start)
+			translated.endIndex += int32(ch.Start)
 			result = append(result, translated)
 		}
 	}
@@ -763,7 +826,7 @@ func (g *GoTextFaceSource) outputCacheValue(text string, face *GoTextFace) *goTe
 		g.shapeMu.Lock()
 		defer g.shapeMu.Unlock()
 		return &goTextOutputCacheValue{
-			outputs: g.buildOutputs(text, face),
+			runs: compactRuns(g.buildOutputs(text, face)),
 		}, true
 	})
 }
@@ -949,7 +1012,7 @@ func appendChunksVisualOrder(dstOrder []int, levelsBuf []bidi.Level, chunks []ch
 // for a later realize).
 //
 // The caller must hold g.shapeMu.
-func (g *GoTextFaceSource) buildGlyphs(outputs []shaping.Output, text string, face *GoTextFace) []goTextGlyph {
+func (g *GoTextFaceSource) buildGlyphs(runs []shapedRun, text string, face *GoTextFace) []goTextGlyph {
 	bm := g.applyFaceState(face)
 
 	var indices []int
@@ -967,10 +1030,14 @@ func (g *GoTextFaceSource) buildGlyphs(outputs []shaping.Output, text string, fa
 	// call can safely point at the same snapshot.
 	variationsSnapshot := slices.Clone(face.variations)
 
-	var gs []goTextGlyph
-	for _, out := range outputs {
-		sideways := out.Direction.IsSideways()
-		for _, gl := range out.Glyphs {
+	var n int
+	for i := range runs {
+		n += len(runs[i].glyphs)
+	}
+	gs := make([]goTextGlyph, 0, n)
+	for _, out := range runs {
+		sideways := out.direction.IsSideways()
+		for _, gl := range out.glyphs {
 			if g.renderDataCache == nil {
 				g.renderDataCache = newCache[glyphRenderDataCacheKey, *glyphRenderData](512)
 			}
@@ -978,16 +1045,16 @@ func (g *GoTextFaceSource) buildGlyphs(outputs []shaping.Output, text string, fa
 				gid:        gl.GlyphID,
 				variations: variations,
 				sideways:   sideways,
-				size:       out.Size,
+				size:       out.size,
 			}
 			render := g.renderDataCache.getOrCreate(renderKey, func() (*glyphRenderData, bool) {
-				return g.buildRenderData(gl, out.Size, sideways, variationsSnapshot, variations, bm)
+				return g.buildRenderData(gl.shapedGlyph, out.size, sideways, variationsSnapshot, variations, bm)
 			})
 
 			gs = append(gs, goTextGlyph{
-				shapingGlyph: &gl,
-				startIndex:   indices[gl.TextIndex()],
-				endIndex:     indices[gl.TextIndex()+gl.RunesCount()],
+				shapingGlyph: gl.shapedGlyph,
+				startIndex:   int32(indices[gl.cluster]),
+				endIndex:     int32(indices[gl.cluster+gl.runes]),
 				render:       render,
 			})
 		}
@@ -1006,7 +1073,7 @@ func (g *GoTextFaceSource) buildGlyphs(outputs []shaping.Output, text string, fa
 // realize step finds a usable bitmap entry for the glyph.
 //
 // The caller must hold g.shapeMu.
-func (g *GoTextFaceSource) buildRenderData(gl shaping.Glyph, size fixed.Int26_6, sideways bool, variations []font.Variation, variationsString string, bm faceBitmapState) (*glyphRenderData, bool) {
+func (g *GoTextFaceSource) buildRenderData(gl shapedGlyph, size fixed.Int26_6, sideways bool, variations []font.Variation, variationsString string, bm faceBitmapState) (*glyphRenderData, bool) {
 	useBitmap := bm.useBitmap
 	if useBitmap && !bm.exact {
 		// At a size without a pixel-perfect strike, decide per glyph

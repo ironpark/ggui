@@ -308,8 +308,8 @@ func (g *GoTextFace) appendLazyGlyphsForLineAdvance(glyphs []LazyGlyph, line str
 			}
 
 			lg := LazyGlyph{
-				StartIndexInBytes: indexOffset + glyph.startIndex,
-				EndIndexInBytes:   indexOffset + glyph.endIndex,
+				StartIndexInBytes: indexOffset + int(glyph.startIndex),
+				EndIndexInBytes:   indexOffset + int(glyph.endIndex),
 				GID:               uint32(glyph.shapingGlyph.GlyphID),
 				ImageBounds:       bounds,
 				OriginX:           fixed26_6ToFloat64(origin.X),
