@@ -1,9 +1,11 @@
 package textedit
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 )
 
 func TestEditorMovesByRuneAndWord(t *testing.T) {
@@ -304,16 +306,76 @@ func TestChangedReportsTheLastReplace(t *testing.T) {
 	e.SetText("hello world")
 	e.Anchor, e.Caret = 6, 11
 	before := e.Text
+	from := e.Rev(before)
+	if from == 0 || e.Rev(before) != from {
+		t.Fatalf("Rev of the editor's text = %d, then %d", from, e.Rev(before))
+	}
+	if e.Rev(strings.Clone(before)) != 0 {
+		t.Error("an equal copy of the text was given the text's name")
+	}
 	e.Replace("there!")
-	at, cut, ins, ok := e.Changed(before, e.Text)
+	at, cut, ins, ok := e.Changed(from, e.Text)
 	if !ok || at != 6 || cut != 5 || ins != 6 {
 		t.Fatalf("Changed = %d, %d, %d, %v; want 6, 5, 6, true", at, cut, ins, ok)
 	}
-	if _, _, _, ok := e.Changed(strings.Clone(before), e.Text); ok {
-		t.Error("an equal copy of the text before was taken for it")
+	if _, _, _, ok := e.Changed(from, strings.Clone(e.Text)); ok {
+		t.Error("an equal copy of the text after was taken for it")
 	}
+	if _, _, _, ok := e.Changed(e.Rev(e.Text), e.Text); ok {
+		t.Error("the text after was taken for the text before")
+	}
+	after := e.Text
 	e.SetText("other")
-	if _, _, _, ok := e.Changed(before, e.Text); ok {
+	if _, _, _, ok := e.Changed(from, e.Text); ok {
 		t.Error("a text SetText made was taken for the last Replace's")
 	}
+	// Text is a field: one assigned outside the editor, even back to the
+	// text Replace made, is not taken for it once something else has been.
+	e.Text = after
+	if _, _, _, ok := e.Changed(from, e.Text); ok {
+		t.Error("a text assigned after SetText was taken for the last Replace's")
+	}
+}
+
+// A text the editor assigned outside its methods gets a name of its own,
+// so a Replace from it is not taken for one from the text before.
+func TestChangedSeesTextAssignedDirectly(t *testing.T) {
+	t.Parallel()
+	var e Editor
+	e.SetText("one two")
+	stale := e.Rev(e.Text)
+	e.Text = "three four"
+	e.MoveTo(len(e.Text), false)
+	e.Replace("!")
+	if _, _, _, ok := e.Changed(stale, e.Text); ok {
+		t.Error("a Replace from an assigned text was taken for one from the text before it")
+	}
+}
+
+// The text before the last Replace is not kept by the editor: once the
+// undo history and the caller let go of it, it is freed. The undo history
+// keeps the start of a typed run, so the text between two keystrokes of
+// one run is held by nothing else.
+func TestReplaceKeepsNoTextBefore(t *testing.T) {
+	now := time.Unix(0, 0)
+	e := Editor{Now: func() time.Time { return now }}
+	e.SetText(strings.Repeat("x", 1<<16))
+	e.MoveTo(100, false)
+	e.Replace("a")
+	freed := make(chan struct{})
+	runtime.AddCleanup(unsafe.StringData(e.Text), func(ch chan struct{}) { close(ch) }, freed)
+	e.Replace("b")
+	for range 20 {
+		runtime.GC()
+		select {
+		case <-freed:
+			if e.Undo(); e.Text != strings.Repeat("x", 1<<16) {
+				t.Fatal("undo lost the text before the typed run")
+			}
+			return
+		default:
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("the text before the last Replace is still alive")
 }

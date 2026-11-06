@@ -649,6 +649,7 @@ type wrapResult struct {
 	key   spanKey
 	spans []textlayout.Span
 	lines []lineRef
+	rev   uint64 // the editor's name for key.text, or 0 if it gave none
 }
 
 type lineRef struct {
@@ -691,6 +692,7 @@ func (t *TextInputWidget) wrap(s string) *wrapResult {
 		return w[0]
 	}
 	r := t.wrapText(key, w[0], w[1])
+	r.rev = t.ed.Rev(s)
 	w[0], w[1] = r, w[0]
 	return r
 }
@@ -728,7 +730,7 @@ func (t *TextInputWidget) wrapText(key spanKey, prev, spare *wrapResult) *wrapRe
 		old := prev.key.text
 		// Where the texts differ: what the editor's last edit changed,
 		// when it made the one from the other, else found by comparing.
-		a, cut, _, ok := t.ed.Changed(old, s)
+		a, cut, _, ok := t.ed.Changed(prev.rev, s)
 		z := len(old) - a - cut
 		if !ok {
 			a = textedit.CommonPrefix(old, s)

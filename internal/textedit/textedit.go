@@ -39,12 +39,24 @@ type Editor struct {
 	lastEdit   time.Time
 	lastInsert bool
 
-	// replaced is what the last Replace did: the cut bytes at at of
-	// before became ins bytes, making after. Whoever lays the text out
-	// learns from it where the text changed without comparing the texts.
+	// rev names the text the editor holds: it changes whenever Text does,
+	// so two texts with one rev are the same string. cur is the Text rev
+	// was given to; Text is compared with it, not trusted, since Text is a
+	// field anyone may assign. It is Text itself unless Text was assigned
+	// since, so it keeps nothing alive beside it but for that moment.
+	rev uint64
+	cur string
+
+	// replaced is what the last Replace did: the cut bytes at at of the
+	// text at rev from became ins bytes, making the text at rev to.
+	// Whoever lays the text out learns from it where the text changed
+	// without comparing the texts. It names the texts by rev rather than
+	// holding them: the one before would be a whole document kept alive
+	// for nothing, and an address kept without it could be reused by
+	// another string of the same length.
 	replaced struct {
-		before, after string
-		at, cut, ins  int
+		from, to     uint64
+		at, cut, ins int
 	}
 }
 
@@ -216,21 +228,45 @@ func (e *Editor) Selected() string {
 func (e *Editor) Replace(s string) {
 	e.record(s)
 	lo, hi := e.Selection()
-	before := e.Text
+	from := e.sync()
+	// The edit makes a new string: Text is shared, as it is, with the undo
+	// history, the state it is bound to and the layout made of it, none of
+	// which may see it change.
 	e.Text = e.Text[:lo] + s + e.Text[hi:]
 	e.Caret = lo + len(s)
 	e.Anchor = e.Caret
-	e.replaced.before, e.replaced.after = before, e.Text
+	e.replaced.from, e.replaced.to = from, e.sync()
 	e.replaced.at, e.replaced.cut, e.replaced.ins = lo, hi-lo, len(s)
 }
 
-// Changed reports where after differs from before when the editor's last
-// Replace made the one from the other, these very strings: the cut bytes
-// at at of before became ins bytes. ok is false for any other two texts,
-// which the caller compares itself.
-func (e *Editor) Changed(before, after string) (at, cut, ins int, ok bool) {
+// sync returns the rev of Text, giving it a new one if Text is not the
+// string the last rev was given to.
+func (e *Editor) sync() uint64 {
+	if e.rev == 0 || !same(e.Text, e.cur) {
+		e.rev++
+		e.cur = e.Text
+	}
+	return e.rev
+}
+
+// Rev returns a name for s if it is the text the editor holds, and 0 if
+// not. Another string, even an equal one, has none. The name stays s's for
+// as long as the editor lives: a later Changed knows it again.
+func (e *Editor) Rev(s string) uint64 {
+	if !same(s, e.Text) {
+		return 0
+	}
+	return e.sync()
+}
+
+// Changed reports where after differs from the text Rev named from, when
+// the editor's last Replace made the one from the other and after is that
+// very string, still the editor's text: the cut bytes at at of the text
+// before became ins bytes. ok is false for any other two texts, which the
+// caller compares itself.
+func (e *Editor) Changed(from uint64, after string) (at, cut, ins int, ok bool) {
 	r := &e.replaced
-	if !same(r.before, before) || !same(r.after, after) {
+	if from == 0 || from != r.from || !same(after, e.Text) || e.sync() != r.to {
 		return 0, 0, 0, false
 	}
 	return r.at, r.cut, r.ins, true
