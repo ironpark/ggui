@@ -5,7 +5,7 @@ go 1.27.0
 require (
 	github.com/ebitengine/purego v0.11.0
 	github.com/hajimehoshi/bitmapfont/v4 v4.2.0
-	github.com/ironpark/ggfx v0.0.0-20261106101321-4adbcd8fea65
+	github.com/ironpark/ggfx v0.0.0-20261106111915-af59cd627d82
 	github.com/ironpark/ggwd v0.0.0-20261102030823-b0d6ceac0632
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
