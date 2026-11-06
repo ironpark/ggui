@@ -24,6 +24,12 @@ func AdvanceTick() {
 	tick.Add(1)
 }
 
+// Tick returns the clock AdvanceTick advances, for a cache outside the
+// package that ages with the glyph and shaping caches.
+func Tick() int64 {
+	return tick.Load()
+}
+
 func currentTick() int64 {
 	return tick.Load()
 }

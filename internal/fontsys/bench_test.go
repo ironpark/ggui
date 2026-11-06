@@ -3,6 +3,8 @@ package fontsys
 import (
 	"testing"
 
+	"github.com/ironpark/ggui/internal/third_party/text"
+
 	"golang.org/x/image/font/gofont/goregular"
 )
 
@@ -68,5 +70,23 @@ func BenchmarkFace(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		f.Face(14, 400, nil)
+	}
+}
+
+// A frame's faces at a few sizes, frame after frame, as a screen of text
+// asks for them: the cache turns over generations, and lookups allocate
+// nothing.
+func BenchmarkFaceSteadyFrames(b *testing.B) {
+	f := emojiChain(b)
+	sizes := []float64{11, 12, 13, 14, 16, 18, 24, 32}
+	for _, s := range sizes {
+		f.Face(s, 400, nil)
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		text.AdvanceTick()
+		for _, s := range sizes {
+			f.Face(s, 400, nil)
+		}
 	}
 }
