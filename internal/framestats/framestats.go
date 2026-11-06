@@ -6,6 +6,7 @@
 package framestats
 
 import (
+	"github.com/ironpark/ggfx/vector"
 	"maps"
 	"runtime"
 	"slices"
@@ -165,3 +166,47 @@ func ReadReport() Report {
 	}
 	return r
 }
+
+// Texture is a kind of GPU image ggui keeps, whose bytes grow with the
+// display's scale.
+type Texture uint8
+
+const (
+	Layers     Texture = iota // the images Layers, blurs and clips paint into
+	Backbuffer                // a window's copy of its screen, while BackdropBlurs last
+	PathMasks                 // the coverage masks gradient-filled Paths keep
+	Icons                     // SVG icons rasterized at device resolution
+	Images                    // AsyncImage textures, held or idle in the cache
+	textures
+)
+
+var textureBytes [textures]atomic.Int64
+
+// AddTexture counts bytes more of t kept, or fewer when bytes is negative.
+func AddTexture(t Texture, bytes int64) { textureBytes[t].Add(bytes) }
+
+// TextureBytes is how many bytes of RGBA pixels each kind of GPU image
+// ggui keeps takes now, as a gauge rather than a count.
+type TextureBytes struct {
+	Layers, Backbuffer, PathMasks, Icons, Images int64
+	// Stencils is what ggfx keeps to fill paths with: its stencil atlas,
+	// which grows with the largest path filled lately and shrinks after.
+	Stencils int64
+}
+
+// Total is the bytes of every kind.
+func (b TextureBytes) Total() int64 {
+	return b.Layers + b.Backbuffer + b.PathMasks + b.Icons + b.Images + b.Stencils
+}
+
+// ReadTextures reports the bytes each kind of GPU image takes now.
+func ReadTextures() TextureBytes {
+	return TextureBytes{
+		Layers: textureBytes[Layers].Load(), Backbuffer: textureBytes[Backbuffer].Load(),
+		PathMasks: textureBytes[PathMasks].Load(), Icons: textureBytes[Icons].Load(),
+		Images: textureBytes[Images].Load(), Stencils: vector.StencilBytes(),
+	}
+}
+
+// ImageBytes is the RGBA bytes of a w×h image.
+func ImageBytes(w, h int) int64 { return int64(w) * int64(h) * 4 }
