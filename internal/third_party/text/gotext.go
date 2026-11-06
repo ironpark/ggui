@@ -361,6 +361,10 @@ func (face *GoTextFace) glyphImage(args glyphImageArgs) *ggfx.Image {
 	subpixelOffset := args.subpixelOffset
 	return face.Source.getOrCreateGlyphImage(face, key, func() (*ggfx.Image, bool) {
 		if bm := rd.bitmap(); bm != nil {
+			if !rd.colored() {
+				// A black-and-white strike is white coverage.
+				return ggfx.NewImageFromImageWithOptions(bm, glyphMaskOptions), true
+			}
 			return ggfx.NewImageFromImage(bm), true
 		}
 		if svg := rd.svg(); svg != nil {

@@ -1,11 +1,14 @@
 package framestats
 
 import (
+	"image"
 	"reflect"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/ironpark/ggfx"
 )
 
 // The counters are the process's, so the tests read what they add.
@@ -120,5 +123,25 @@ func TestTexturesGaugeWhatIsKept(t *testing.T) {
 	got := ReadTextures()
 	if got.Layers-before.Layers != 200 || got.Icons-before.Icons != 64 || got.Total()-before.Total() != 264 {
 		t.Fatalf("from %+v to %+v", before, got)
+	}
+}
+
+// An alpha image counts a byte a pixel, an RGBA image four.
+func TestImageBytesOfFormat(t *testing.T) {
+	if got := ImageBytesOf(30, 20, ggfx.PixelFormatAlpha); got != 600 {
+		t.Errorf("alpha 30×20: %d bytes, want 600", got)
+	}
+	if got := ImageBytesOf(30, 20, ggfx.PixelFormatRGBA); got != 2400 || ImageBytes(30, 20) != got {
+		t.Errorf("RGBA 30×20: %d bytes, want 2400", got)
+	}
+	before := ReadTextures().Icons
+	b := image.Rect(0, 0, 16, 16)
+	KeptOf(Icons, b, ggfx.PixelFormatAlpha)
+	if got := ReadTextures().Icons - before; got != 256 {
+		t.Errorf("kept a 16×16 alpha image: gauge %d, want 256", got)
+	}
+	FreedOf(Icons, b, ggfx.PixelFormatAlpha)
+	if got := ReadTextures().Icons - before; got != 0 {
+		t.Errorf("freed it: gauge %d off", got)
 	}
 }

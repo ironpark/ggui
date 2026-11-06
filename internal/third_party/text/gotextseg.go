@@ -95,19 +95,35 @@ func newGlyphRasterizer(w, h int, segs []opentype.Segment, subpixelOffset fixed.
 	return rast
 }
 
+// segmentsToImage returns the outline's coverage as an alpha-only image:
+// white coverage, tinted by the ColorScale it is drawn with as a white RGBA
+// image would be, at a quarter of the bytes.
 func segmentsToImage(segs []opentype.Segment, subpixelOffset fixed.Point26_6, glyphBounds fixed.Rectangle26_6) *ggfx.Image {
-	return uploadPooledRGBA(segmentsToRGBA(segs, subpixelOffset, glyphBounds, newPooledRGBA))
+	img, ok := rasterizeSegments(segs, subpixelOffset, glyphBounds, newPooledAlpha)
+	if !ok {
+		return nil
+	}
+	return uploadPooledAlpha(img)
 }
 
-// segmentsToRGBA is segmentsToImage on the CPU, into an image alloc makes.
+// segmentsToRGBA is segmentsToImage on the CPU, as a white mask in an image
+// alloc makes.
 func segmentsToRGBA(segs []opentype.Segment, subpixelOffset fixed.Point26_6, glyphBounds fixed.Rectangle26_6, alloc func(w, h int) *image.RGBA) *image.RGBA {
+	img, _ := rasterizeSegments(segs, subpixelOffset, glyphBounds, alloc)
+	return img
+}
+
+// rasterizeSegments draws the outline's coverage, white, into an image
+// alloc makes; false when the outline has no pixels.
+func rasterizeSegments[T draw.Image](segs []opentype.Segment, subpixelOffset fixed.Point26_6, glyphBounds fixed.Rectangle26_6, alloc func(w, h int) T) (T, bool) {
+	var zero T
 	if len(segs) == 0 {
-		return nil
+		return zero, false
 	}
 
 	w, h := (glyphBounds.Max.X - glyphBounds.Min.X).Ceil(), (glyphBounds.Max.Y - glyphBounds.Min.Y).Ceil()
 	if w == 0 || h == 0 {
-		return nil
+		return zero, false
 	}
 
 	// Add always 1 to the size.
@@ -120,7 +136,7 @@ func segmentsToRGBA(segs []opentype.Segment, subpixelOffset fixed.Point26_6, gly
 
 	dst := alloc(w, h)
 	rast.Draw(dst, dst.Bounds(), image.Opaque, image.Point{})
-	return dst
+	return dst, true
 }
 
 func appendVectorPathFromSegments(path *vector.Path, segs []opentype.Segment, x, y float32) {

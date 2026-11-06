@@ -457,6 +457,9 @@ func (p *Path) coverage(c *Canvas, bounds Rect) (*ggfx.Image, image.Point, bool)
 	return p.gradientMask, coverage.Min, true
 }
 
+// maskFormat is the pixel format of a path's gradient mask.
+const maskFormat = ggfx.PixelFormatAlpha
+
 // maskFor returns the top-left part of the mask the path keeps for a w×h
 // coverage: w×h when exact, else its sides rounded up by maskSide, so that
 // a coverage changing size by a little every frame, as an animated one
@@ -472,7 +475,8 @@ func (p *Path) maskFor(w, h int, exact bool) *ggfx.Image {
 	}
 	if p.maskStore == nil {
 		// A large mask is a texture of its own size, as a large image is.
-		p.maskStore = render.NewBlank(maskSide(w), maskSide(h))
+		// It holds white coverage only, so it is alpha-only, a byte a pixel.
+		p.maskStore = render.NewBlankOf(maskSide(w), maskSide(h), maskFormat)
 		if p.maskBytes == nil {
 			// A Path the app drops takes its mask with it: ggfx frees the
 			// texture once it is collected, and this counts its bytes gone.
@@ -482,8 +486,8 @@ func (p *Path) maskFor(w, h int, exact bool) *ggfx.Image {
 			}, p.maskBytes)
 		}
 		b := p.maskStore.Bounds()
-		p.maskBytes.Store(framestats.ImageBytes(b.Dx(), b.Dy()))
-		framestats.Kept(framestats.PathMasks, b)
+		p.maskBytes.Store(framestats.ImageBytesOf(b.Dx(), b.Dy(), maskFormat))
+		framestats.KeptOf(framestats.PathMasks, b, maskFormat)
 	}
 	if !exact {
 		w, h = maskSide(w), maskSide(h)

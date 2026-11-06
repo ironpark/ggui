@@ -318,9 +318,9 @@ func triangle(side float64) *Path {
 	return p
 }
 
-// A gradient path's mask is kept while the coverage fits it and takes a
-// quarter of it at least, made anew past that, and the PathMasks gauge
-// holds its bytes. Not parallel: the gauge is the process's.
+// A gradient path's mask, alpha-only, is kept while the coverage fits it and
+// takes a quarter of it at least, made anew past that, and the PathMasks
+// gauge holds its bytes, one a pixel. Not parallel: the gauge is the process's.
 func TestPathMaskReusesShrinksAndGauges(t *testing.T) {
 	img := ggfx.NewImage(800, 800)
 	defer img.Deallocate()
@@ -333,8 +333,12 @@ func TestPathMaskReusesShrinksAndGauges(t *testing.T) {
 		if b := p.gradientMask.Bounds(); b != image.Rect(0, 0, int(side), int(side)) {
 			t.Fatalf("coverage of %v cutting the path: mask part %v", side, b)
 		}
+		if f := p.maskStore.Format(); f != ggfx.PixelFormatAlpha {
+			t.Fatalf("coverage of %v: mask of format %v, want alpha", side, f)
+		}
+		// An alpha mask is a byte a pixel.
 		s := p.maskStore.Bounds()
-		if got, want := framestats.ReadTextures().PathMasks-base, framestats.ImageBytes(s.Dx(), s.Dy()); got != want {
+		if got, want := framestats.ReadTextures().PathMasks-base, int64(s.Dx()*s.Dy()); got != want {
 			t.Fatalf("coverage of %v: gauge %d, mask %v of %d bytes", side, got, s, want)
 		}
 		return p.maskStore

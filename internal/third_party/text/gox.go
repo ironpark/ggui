@@ -16,6 +16,7 @@ package text
 
 import (
 	"image"
+	"image/draw"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -318,14 +319,28 @@ func goXGlyphImageInfo(face *GoXFace, r rune, origin fixed.Point26_6, granularit
 }
 
 func (g *GoXFace) glyphImageImpl(r rune, subpixelOffset fixed.Point26_6, glyphBounds fixed.Rectangle26_6) *ggfx.Image {
-	return uploadPooledRGBA(g.glyphRGBA(r, subpixelOffset, glyphBounds, newPooledRGBA))
+	// A GoXFace glyph is white coverage: alpha-only, as an outline glyph.
+	img, ok := drawGoXGlyph(g, r, subpixelOffset, glyphBounds, newPooledAlpha)
+	if !ok {
+		return nil
+	}
+	return uploadPooledAlpha(img)
 }
 
-// glyphRGBA is glyphImageImpl on the CPU, into an image alloc makes.
+// glyphRGBA is glyphImageImpl on the CPU, as a white mask in an image alloc
+// makes.
 func (g *GoXFace) glyphRGBA(r rune, subpixelOffset fixed.Point26_6, glyphBounds fixed.Rectangle26_6, alloc func(w, h int) *image.RGBA) *image.RGBA {
+	img, _ := drawGoXGlyph(g, r, subpixelOffset, glyphBounds, alloc)
+	return img
+}
+
+// drawGoXGlyph draws the glyph of r, white, into an image alloc makes; false
+// when the glyph has no pixels.
+func drawGoXGlyph[T draw.Image](g *GoXFace, r rune, subpixelOffset fixed.Point26_6, glyphBounds fixed.Rectangle26_6, alloc func(w, h int) T) (T, bool) {
 	w, h := (glyphBounds.Max.X - glyphBounds.Min.X).Ceil(), (glyphBounds.Max.Y - glyphBounds.Min.Y).Ceil()
 	if w == 0 || h == 0 {
-		return nil
+		var zero T
+		return zero, false
 	}
 
 	// Add always 1 to the size.
@@ -333,12 +348,12 @@ func (g *GoXFace) glyphRGBA(r rune, subpixelOffset fixed.Point26_6, glyphBounds 
 	w++
 	h++
 
-	rgba := alloc(w, h)
-	g.f.drawString(rgba, image.White, fixed.Point26_6{
+	dst := alloc(w, h)
+	g.f.drawString(dst, image.White, fixed.Point26_6{
 		X: -glyphBounds.Min.X + subpixelOffset.X,
 		Y: -glyphBounds.Min.Y + subpixelOffset.Y,
 	}, string(r))
-	return rgba
+	return dst, true
 }
 
 // direction implements Face.
