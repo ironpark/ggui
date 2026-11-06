@@ -39,23 +39,44 @@ type SemNode struct {
 // writes to it after App.Draw or Probe.Frame published it, so it is safe to
 // read from any goroutine and at any time; the slices it hands back are
 // shared with every other reader and must not be written to.
+//
+// The nodes are kept in pages of pageSize, every page full but the last.
+// A tree that Builder.Build published shares each page whose nodes did not
+// change with the tree before it, so a frame that changed one row copies
+// one page rather than the whole tree. A shared page is never written
+// again, by either tree.
 type SemTree struct {
-	nodes   []SemNode
+	pages   [][]SemNode
+	n       int
 	roots   []int
 	focused int // index of the node holding keyboard focus, or -1
 }
 
+// pageSize is how many nodes a page holds: a power of two, so that finding
+// a node is a shift and a mask. Smaller pages copy less around a change and
+// cost a slice header each.
+const (
+	pageShift = 6
+	pageSize  = 1 << pageShift
+	pageMask  = pageSize - 1
+)
+
 // Len returns the number of nodes in the tree.
-func (t *SemTree) Len() int { return len(t.nodes) }
+func (t *SemTree) Len() int { return t.n }
 
 // At returns node i, in paint order: a parent always comes before its
 // children, and siblings are in the order they were painted.
-func (t *SemTree) At(i int) SemNode { return t.nodes[i] }
+func (t *SemTree) At(i int) SemNode { return *t.Ref(i) }
 
 // Ref is At without the copy: a pointer into the tree's own storage, for a
 // caller that reads a field or two from many nodes. The tree is frozen, so
 // the pointer stays valid; what it points at must not be written.
-func (t *SemTree) Ref(i int) *SemNode { return &t.nodes[i] }
+func (t *SemTree) Ref(i int) *SemNode {
+	if uint(i) >= uint(t.n) {
+		panic(fmt.Sprintf("a11y: node index %d out of range [0:%d]", i, t.n))
+	}
+	return &t.pages[i>>pageShift][i&pageMask]
+}
 
 // Roots returns the indices of the nodes with no parent.
 func (t *SemTree) Roots() []int { return t.roots }
@@ -67,7 +88,7 @@ func (t *SemTree) Focused() (SemNode, bool) {
 	if t.focused < 0 {
 		return SemNode{}, false
 	}
-	return t.nodes[t.focused], true
+	return t.At(t.focused), true
 }
 
 // Find returns the first node with the given role and name; either may be
@@ -84,8 +105,8 @@ func (t *SemTree) Find(role Role, name string) (SemNode, bool) {
 // All yields every node with its index, in paint order.
 func (t *SemTree) All() iter.Seq2[int, SemNode] {
 	return func(yield func(int, SemNode) bool) {
-		for i := range t.nodes {
-			if !yield(i, t.nodes[i]) {
+		for i := range t.n {
+			if !yield(i, *t.Ref(i)) {
 				return
 			}
 		}
@@ -96,8 +117,8 @@ func (t *SemTree) All() iter.Seq2[int, SemNode] {
 // node when role is empty. Collect with slices.Collect when a slice is needed.
 func (t *SemTree) Nodes(role Role) iter.Seq2[int, SemNode] {
 	return func(yield func(int, SemNode) bool) {
-		for i := range t.nodes {
-			if (role == "" || t.nodes[i].Role == role) && !yield(i, t.nodes[i]) {
+		for i := range t.n {
+			if n := t.Ref(i); (role == "" || n.Role == role) && !yield(i, *n) {
 				return
 			}
 		}
@@ -110,10 +131,11 @@ func (t *SemTree) Nodes(role Role) iter.Seq2[int, SemNode] {
 func (t *SemTree) Ancestors(i int) iter.Seq2[int, SemNode] {
 	return func(yield func(int, SemNode) bool) {
 		for i >= 0 {
-			if !yield(i, t.nodes[i]) {
+			n := t.Ref(i)
+			if !yield(i, *n) {
 				return
 			}
-			i = t.nodes[i].Parent
+			i = n.Parent
 		}
 	}
 }
@@ -130,7 +152,7 @@ func (t *SemTree) walk(i, depth int, yield func(int, int) bool) bool {
 	if !yield(i, depth) {
 		return false
 	}
-	for _, c := range t.nodes[i].Children {
+	for _, c := range t.Ref(i).Children {
 		if !t.walk(c, depth+1, yield) {
 			return false
 		}
@@ -145,7 +167,7 @@ func (t *SemTree) String() string {
 	var b strings.Builder
 	for _, r := range t.roots {
 		for i, depth := range t.Walk(r) {
-			n := &t.nodes[i]
+			n := t.Ref(i)
 			b.WriteString(strings.Repeat("  ", depth))
 			b.WriteString(string(n.Role))
 			if n.Name != "" {
@@ -207,8 +229,16 @@ func (n *SemNode) Flags() string {
 // The tree is finished when it is returned and is never written again,
 // which is what lets a bridge on another thread keep one as long as it
 // likes.
+//
+// The tree takes nodes as its storage without copying it; the caller must
+// not write to nodes afterwards. Builder.Build is the form that shares
+// storage with an earlier tree instead.
 func Build(nodes []SemNode, focused int) *SemTree {
-	t := &SemTree{nodes: nodes, focused: focused}
+	t := &SemTree{n: len(nodes), focused: focused}
+	for lo := 0; lo < len(nodes); lo += pageSize {
+		hi := min(lo+pageSize, len(nodes))
+		t.pages = append(t.pages, nodes[lo:hi:hi])
+	}
 	if len(nodes) == 0 {
 		return t
 	}

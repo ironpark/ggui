@@ -1,8 +1,10 @@
 package ggui
 
 import (
+	"fmt"
 	"math/rand/v2"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -241,14 +243,15 @@ func TestSemanticsStagingReusePreservesOldTree(t *testing.T) {
 }
 
 func TestSemTreeReusesEqualValuesAndFreezesDescriptions(t *testing.T) {
+	var b a11y.Builder
 	runs := []TextRun{{Start: 0, End: 2, Rect: Rct(Pt(1, 2), Sz(20, 10)), Stops: []TextStop{{Byte: 0, X: 0}, {Byte: 2, X: 20}}}}
 	n := Node{Role: RoleTextField, Name: "editor", Expanded: Expandable(false), Runs: runs}
 	c := &Canvas{}
 	c.Leaf(Rct(Pt(0, 0), Sz(100, 20)), n)
-	first := buildSemTree(c, nil, nil)
+	first := buildSemTree(c, nil, nil, nil)
 	// Equal contents in fresh buffers must compare by value.
 	c.fs().sem[0].node = freezeNode(n)
-	if next := buildSemTree(c, nil, first); next != first {
+	if next := buildSemTree(c, nil, first, nil); next != first {
 		t.Fatal("equal description allocated a new snapshot")
 	}
 	// A custom widget may reuse the buffers supplied in the previous frame.
@@ -256,14 +259,14 @@ func TestSemTreeReusesEqualValuesAndFreezesDescriptions(t *testing.T) {
 	runs[0].End = 3
 	runs[0].Stops[1].X = 30
 	c.fs().sem[0].node = n
-	second := buildSemTree(c, nil, first)
+	second := buildSemTree(c, nil, first, nil)
 	if second == first || !second.At(0).Expanded.Open() || second.At(0).Runs[0].Stops[1].X != 30 {
 		t.Fatal("new frame lost changed description values")
 	}
 	if first.At(0).Expanded.Open() || first.At(0).Runs[0].End != 2 || first.At(0).Runs[0].Stops[1].X != 20 {
 		t.Fatal("widget buffer reuse mutated an older snapshot")
 	}
-	if allocs := testing.AllocsPerRun(100, func() { buildSemTree(c, nil, second) }); allocs != 0 {
+	if allocs := testing.AllocsPerRun(100, func() { buildSemTree(c, nil, second, &b) }); allocs != 0 {
 		t.Fatalf("equal descriptions allocated %g times", allocs)
 	}
 }
@@ -381,7 +384,7 @@ func TestSemTreeInvalidatesGeometryIdentityHierarchyAndFocus(t *testing.T) {
 	c := &Canvas{}
 	r := Rct(Pt(0, 0), Sz(100, 20))
 	c.Node(r, Node{Role: RoleGroup}, func(c *Canvas) { c.Describe(r, w) })
-	base := buildSemTree(c, nil, nil)
+	base := buildSemTree(c, nil, nil, nil)
 	for _, test := range []struct {
 		name string
 		edit func(*Canvas)
@@ -397,19 +400,19 @@ func TestSemTreeInvalidatesGeometryIdentityHierarchyAndFocus(t *testing.T) {
 			dst := *c
 			dst.fs().sem = append([]semNode(nil), c.fs().sem...)
 			test.edit(&dst)
-			if buildSemTree(&dst, nil, base) == base {
+			if buildSemTree(&dst, nil, base, nil) == base {
 				t.Fatal("changed frame reused stale snapshot")
 			}
 		})
 	}
 	focus := &hitRegion{key: w, rect: r}
-	next := buildSemTree(c, focus, base)
-	if next == base || next.FocusIndex() != 1 || buildSemTree(c, nil, next) == next {
+	next := buildSemTree(c, focus, base, nil)
+	if next == base || next.FocusIndex() != 1 || buildSemTree(c, nil, next, nil) == next {
 		t.Fatal("focus changes were not published")
 	}
 	empty := &Canvas{}
-	first := buildSemTree(empty, nil, next)
-	if first.Len() != 0 || buildSemTree(empty, nil, first) != first {
+	first := buildSemTree(empty, nil, next, nil)
+	if first.Len() != 0 || buildSemTree(empty, nil, first, nil) != first {
 		t.Fatal("empty snapshot was not reusable")
 	}
 }
@@ -419,7 +422,7 @@ func TestSemTreeOldSnapshotCanBeReadDuringBufferReuse(t *testing.T) {
 	c := &Canvas{}
 	n := Node{Role: RoleTextField, Expanded: Expandable(false), Runs: []TextRun{{Stops: []TextStop{{}}}}}
 	c.Leaf(Rect{}, n)
-	old := buildSemTree(c, nil, nil)
+	old := buildSemTree(c, nil, nil, nil)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -433,7 +436,7 @@ func TestSemTreeOldSnapshotCanBeReadDuringBufferReuse(t *testing.T) {
 	}()
 	for i := range 1000 {
 		n.Runs[0].Stops[0].X = float64(i)
-		buildSemTree(c, nil, old)
+		buildSemTree(c, nil, old, nil)
 	}
 	<-done
 }
@@ -687,5 +690,79 @@ func TestAXPressRingsTheWidget(t *testing.T) {
 	p.Perform(node.ID, Action{Kind: ActionPress})
 	if w.rung != 1 {
 		t.Errorf("rung %d times, want 1", w.rung)
+	}
+}
+
+// A tree is published once and never written again, though the next one
+// shares every page of nodes that did not change with it: a reader holding
+// an old tree across later frames sees exactly what it saw first.
+func TestSemTreePublishedTreeNeverChanges(t *testing.T) {
+	t.Parallel()
+	names := make([]string, 1000)
+	for i := range names {
+		names[i] = fmt.Sprint("row ", i)
+	}
+	changed := State(0)
+	w := FromFuncs(
+		func(c Constraints, _ Env) Size { return c.Constrain(Sz(100, 100)) },
+		func(dst *Canvas, r Rect) {
+			at := changed.Get()
+			dst.Node(r, Node{Role: RoleList}, func(dst *Canvas) {
+				for i, name := range names {
+					if i == at && at != 0 {
+						name += " (changed)"
+					}
+					dst.Leaf(Rct(Pt(0, float64(i)), Sz(10, 1)), Node{Role: RoleListItem, Name: name})
+				}
+				if at%2 == 1 {
+					dst.Leaf(r, Node{Role: RoleButton, Name: "extra"})
+				}
+			})
+		})
+	p := NewProbe(w, Sz(100, 100))
+	defer p.Close()
+	type held struct {
+		tree  *SemTree
+		text  string
+		nodes []SemNode
+	}
+	hold := func() held {
+		tr := p.Semantics()
+		return held{tr, tr.String(), slices.Collect(func(yield func(SemNode) bool) {
+			for _, n := range tr.All() {
+				if !yield(n) {
+					return
+				}
+			}
+		})}
+	}
+	var trees []held
+	trees = append(trees, hold())
+	for _, at := range []int{500, 501, 3, 998, 0} {
+		changed.Set(at)
+		p.Frame()
+		trees = append(trees, hold())
+	}
+	for k, h := range trees {
+		if got := h.tree.String(); got != h.text {
+			t.Fatalf("tree %d changed after publication", k)
+		}
+		for i := range h.tree.Len() {
+			if !reflect.DeepEqual(h.tree.At(i), h.nodes[i]) {
+				t.Fatalf("tree %d node %d changed after publication", k, i)
+			}
+		}
+	}
+	// One changed row shares the pages that hold none of the change.
+	a, b := trees[0].tree, trees[1].tree
+	if a == b || b.At(501).Name != "row 500 (changed)" || a.At(501).Name != "row 500" {
+		t.Fatal("the changed row was not published")
+	}
+	if a.Ref(1) != b.Ref(1) || a.Ref(1000) != b.Ref(1000) {
+		t.Error("pages without a change were copied instead of shared")
+	}
+	// An added node changes its parent's children, which are on the first page.
+	if c := trees[2].tree; c.Ref(0) == b.Ref(0) || len(c.At(0).Children) != 1001 || len(b.At(0).Children) != 1000 {
+		t.Error("a parent whose children changed kept its old page")
 	}
 }
