@@ -51,8 +51,24 @@ type Font struct {
 	mu         sync.Mutex
 	used       bool // a face has been made, so something may have measured with f
 	generation uint64
-	faces      map[faceKey]text.Face // reused across frames
+	// faces and oldFaces are the faces asked for lately, in two
+	// generations: once faces holds faceCacheMin and a frame has passed
+	// since it began, it becomes oldFaces, and a face asked for again
+	// from there moves back. A size animated frame by frame so keeps the
+	// faces of the last frames, not one for every size it passed through,
+	// while every face a frame draws stays however many there are.
+	faces, oldFaces map[faceKey]text.Face
+	facesTick       int64 // the text tick when faces began
 }
+
+// faceCacheMin is how many faces a Font keeps in its current generation
+// before a new frame may turn it over.
+const faceCacheMin = 32
+
+// faceCacheMax is how many faces a generation holds before it turns
+// over within a frame: a bound for a caller that never advances the
+// text tick.
+const faceCacheMax = 1024
 
 // faceKey is what a face depends on beside the Font: its size and weight,
 // and the emoji font the world measuring with it chose.
@@ -201,7 +217,7 @@ func (f *Font) SetNoFallback() {
 func (f *Font) changed() {
 	f.mu.Lock()
 	used := f.used
-	f.faces = nil
+	f.faces, f.oldFaces = nil, nil
 	f.mu.Unlock()
 	if used {
 		generation.Add(1)
@@ -294,7 +310,8 @@ func abs(n int) int { return max(n, -n) }
 // fallbacks', then, unless it has fallbacks of its own, the system's, and
 // beside them the emoji font emoji returns, nil for the system's. emoji is
 // asked only for a font that draws emoji at all, and may itself be nil.
-// Faces are cached until f or the generation changes.
+// Faces are cached until f or the generation changes, and while they are
+// asked for: one no frame has asked for lately goes.
 func (f *Font) Face(size float64, weight Weight, emoji func() *EmojiChoice) text.Face {
 	f = f.Resolve()
 	var choice *EmojiChoice
@@ -316,13 +333,42 @@ func (f *Font) FaceFor(size float64, weight Weight, emoji *EmojiChoice) text.Fac
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if gen := generation.Load(); f.generation != gen {
-		f.faces = nil
+		f.faces, f.oldFaces = nil, nil
 		f.generation = gen
 	}
 	f.used = true
 	if face, ok := f.faces[key]; ok {
 		return face
 	}
+	face, ok := f.oldFaces[key]
+	if !ok {
+		face = f.newFaceLocked(size, weight, key.emoji)
+	}
+	f.keepFaceLocked(key, face)
+	return face
+}
+
+// keepFaceLocked puts face in the current generation, turning the
+// generations over first when the current one is full: past
+// faceCacheMin with a frame gone by since it began, or past faceCacheMax
+// at all. f.mu must be held.
+func (f *Font) keepFaceLocked(key faceKey, face text.Face) {
+	now := text.Tick()
+	if n := len(f.faces); n >= faceCacheMax || n >= faceCacheMin && now != f.facesTick {
+		f.faces, f.oldFaces = f.oldFaces, f.faces
+		clear(f.faces)
+		f.facesTick = now
+	}
+	if f.faces == nil {
+		f.faces = make(map[faceKey]text.Face)
+		f.facesTick = now
+	}
+	f.faces[key] = face
+}
+
+// newFaceLocked makes f's face at size and weight beside emoji, for
+// FaceFor to cache. f.mu must be held.
+func (f *Font) newFaceLocked(size float64, weight Weight, emoji *EmojiChoice) text.Face {
 	fonts, multi := f.chainLocked(weight)
 	var face text.Face = fonts[0].Font.chainFace(size, weight, fonts[0].Axis)
 	if multi {
@@ -338,12 +384,8 @@ func (f *Font) FaceFor(size float64, weight Weight, emoji *EmojiChoice) text.Fac
 		}
 	}
 	if !f.noFallback {
-		face = WithEmoji(face, size, key.emoji)
+		face = WithEmoji(face, size, emoji)
 	}
-	if f.faces == nil {
-		f.faces = make(map[faceKey]text.Face)
-	}
-	f.faces[key] = face
 	return face
 }
 
