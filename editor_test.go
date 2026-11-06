@@ -1454,3 +1454,42 @@ func BenchmarkTextInputKeystrokeFrameOneLine(b *testing.B) {
 		paintFrame(&in, w, Sz(300, 30))
 	}
 }
+
+// A keystroke's wrap learns where the text changed from the editor, by the
+// name it gave the text the last wrap was made of, rather than comparing
+// the texts; and undo, redo and a text the IME assigned outside the editor
+// still wrap as the whole text would.
+func TestTextInputWrapsFromTheEditorsNameForTheTextBefore(t *testing.T) {
+	t.Parallel()
+	useFakeIME(t)
+	w := TextInput(State(editorDoc(80))).Multiline()
+	layout := func() { w.Layout(Loose(Sz(150, Unbounded)), Env{}) }
+	check := func(what string) {
+		t.Helper()
+		layout()
+		if got, want := w.spans(w.ed.Text), textlayout.WrapSpans(w.ed.Text, w.face(1), w.width); !slices.Equal(got, want) {
+			t.Fatalf("after %s, the wrap is %v, want %v", what, got, want)
+		}
+	}
+	check("the first layout")
+	prev := w.wrapped[0]
+	if prev.rev == 0 {
+		t.Fatal("the wrap of the editor's text has no name for it")
+	}
+	w.ed.MoveTo(len(w.ed.Text)/2, false)
+	w.ed.Replace("typed")
+	at := w.ed.Caret - len("typed")
+	if a, cut, ins, ok := w.ed.Changed(prev.rev, w.ed.Text); !ok || a != at || cut != 0 || ins != len("typed") {
+		t.Fatalf("Changed from the last wrap = %d, %d, %d, %v; want %d, 0, 5, true", a, cut, ins, ok, at)
+	}
+	check("typing")
+	w.ed.Undo()
+	check("undo")
+	w.ed.Redo()
+	check("redo")
+	w.imeStart, w.imeEnd = 10, 20
+	w.imeReplace("a", "\nb", "c")
+	check("an IME commit")
+	w.ed.Replace("x")
+	check("typing after an IME commit")
+}

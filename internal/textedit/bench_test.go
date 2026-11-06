@@ -1,6 +1,7 @@
 package textedit
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -96,4 +97,32 @@ func BenchmarkUndoRedo(b *testing.B) {
 		for e.Redo() {
 		}
 	}
+}
+
+// Typing a key at a time into a 1 MiB document, measuring besides what a
+// keystroke allocates how many copies of the document stay alive between
+// keystrokes: held-docs. The text and the start of the undo step are two;
+// anything above that is the editor keeping a text it no longer needs.
+func BenchmarkTypingHeld(b *testing.B) {
+	doc := strings.Repeat(benchDoc, 1<<20/len(benchDoc))
+	now := time.Unix(0, 0)
+	e := &Editor{Now: func() time.Time { return now }}
+	e.SetText(strings.Clone(doc))
+	e.MoveTo(e.Snap(len(doc)/2), false)
+	e.Replace("x")
+	doc = ""
+	b.ReportAllocs()
+	for b.Loop() {
+		e.Replace("x") // within undoCoalesce of the last: one undo step
+	}
+	b.StopTimer()
+	var m runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&m)
+	held := m.HeapAlloc
+	n := len(e.Text)
+	e = nil
+	runtime.GC()
+	runtime.ReadMemStats(&m)
+	b.ReportMetric(float64(held-m.HeapAlloc)/float64(n), "held-docs")
 }
