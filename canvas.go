@@ -283,6 +283,10 @@ func (c *Canvas) Retained[T any](at Anchor, s Slot[T]) (T, bool) {
 // animating; a switch knob and a tab underline use it.
 func (c *Canvas) Ease(at Anchor, s Slot[*Motion], target float64, d time.Duration) float64 {
 	now := FrameTime()
+	if c == nil {
+		// Nothing keeps the motion: a new one would be at target at once.
+		return target
+	}
 	m, ok := c.Retained(at, s)
 	if !ok {
 		m = new(Motion)
@@ -304,7 +308,8 @@ func (c *Canvas) nextFrame() {
 }
 
 // Inert returns a Canvas that draws where c does but registers no hit
-// regions, for a widget that is leaving and must not take input.
+// regions, for a widget that is leaving and must not take input. Like a
+// Clip's, it is the frame's: a widget keeps none past its frame.
 func (c *Canvas) Inert() *Canvas {
 	if c == nil {
 		return nil
@@ -316,11 +321,14 @@ func (c *Canvas) Inert() *Canvas {
 
 // derive returns a copy of c that paints through it. The copy shares the
 // root's frameState, so the frame's overlays, trace, retained slots and
-// semantics stay where they are: there is nothing here to clear.
+// semantics stay where they are: there is nothing here to clear. It is
+// the frame's, as a Clip is, so no widget keeps it past its frame.
 func (c *Canvas) derive() *Canvas {
-	child := *c
-	child.parent, child.frameState = c, c.fs()
-	return &child
+	f := c.fs()
+	child := f.takeCanvas()
+	*child = *c
+	child.parent, child.frameState = c, f
+	return child
 }
 
 // into returns a Canvas like c that draws into img, an image of its own
@@ -566,7 +574,12 @@ func (c *Canvas) Clip(r Rect) *Canvas {
 	if c == nil {
 		return nil
 	}
-	f := c.fs()
+	return c.clipInto(c.fs().takeCanvas(), r)
+}
+
+// takeCanvas hands out a Canvas of the frame's, made once and handed out
+// again from the next paint on.
+func (f *canvasPool) takeCanvas() *Canvas {
 	var child *Canvas
 	if f.canvasIdx < len(f.canvases) {
 		child = f.canvases[f.canvasIdx]
@@ -575,7 +588,7 @@ func (c *Canvas) Clip(r Rect) *Canvas {
 		f.canvases = append(f.canvases, child)
 	}
 	f.canvasIdx++
-	return c.clipInto(child, r)
+	return child
 }
 
 // Enclose paints fn with v as what encloses what fn paints: a widget

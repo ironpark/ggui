@@ -321,11 +321,12 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect
 	// the next whole frame allocate them again.
 	framestats.CountPartial()
 	if setDamage != nil {
-		px := make([]image.Rectangle, len(now))
-		for i, r := range now {
-			px[i] = c.physical(r)
+		// setDamage copies what it is given: the slice is the window's.
+		w.damagePx = w.damagePx[:0]
+		for _, r := range now {
+			w.damagePx = append(w.damagePx, c.physical(r))
 		}
-		setDamage(px)
+		setDamage(w.damagePx)
 	}
 	w.noteMotion(target)
 	w.presentBackdrop(screen, target)

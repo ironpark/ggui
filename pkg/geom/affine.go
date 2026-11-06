@@ -101,16 +101,18 @@ func (m Affine) Bounds(r Rect) Rect {
 	if m.IsIdentity() {
 		return r
 	}
-	return PointBounds(func(yield func(Point) bool) {
-		for _, p := range [4]Point{
-			r.Origin, {X: r.Origin.X + r.Size.W, Y: r.Origin.Y},
-			{X: r.Origin.X, Y: r.Origin.Y + r.Size.H}, {X: r.Origin.X + r.Size.W, Y: r.Origin.Y + r.Size.H},
-		} {
-			if !yield(m.Apply(p)) {
-				return
-			}
-		}
-	})
+	x0, x1 := r.Origin.X, r.Origin.X+r.Size.W
+	y0, y1 := r.Origin.Y, r.Origin.Y+r.Size.H
+	return boundsOf4(m.Apply(Point{X: x0, Y: y0}), m.Apply(Point{X: x1, Y: y0}),
+		m.Apply(Point{X: x0, Y: y1}), m.Apply(Point{X: x1, Y: y1}))
+}
+
+// boundsOf4 is PointBounds over four points, without an iterator, so a
+// transformed rect's bounds cost no allocation.
+func boundsOf4(a, b, c, d Point) Rect {
+	x0, x1 := min(a.X, b.X, c.X, d.X), max(a.X, b.X, c.X, d.X)
+	y0, y1 := min(a.Y, b.Y, c.Y, d.Y), max(a.Y, b.Y, c.Y, d.Y)
+	return layout.Rct(layout.Pt(x0, y0), layout.Sz(x1-x0, y1-y0))
 }
 
 // PointBounds returns the smallest Rect holding every point of pts, or the

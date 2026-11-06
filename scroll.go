@@ -65,13 +65,18 @@ type ScrollWidget struct {
 	laidOut, decideAtPaint bool
 	adoptedAtEnd           *bool // whether the scroll it adopted was at its end
 
-	childSize             Size
-	viewport              Size
-	laidAt                float64 // the offset the child was last laid out for
-	anchorShift           float64 // how far the child asked, as it laid out, to move to keep what is in view
-	cache                 *CachedWidget
-	rect                  Rect // where the window was last painted
-	thumbHit              Rect
+	childSize   Size
+	viewport    Size
+	laidAt      float64 // the offset the child was last laid out for
+	anchorShift float64 // how far the child asked, as it laid out, to move to keep what is in view
+	cache       *CachedWidget
+	rect        Rect // where the window was last painted
+	thumbHit    Rect
+	// thumbID is the thumb's HitID as last boxed, of the key when
+	// thumbIDKeyed, else of thumbIDRect.
+	thumbID               any
+	thumbIDKeyed          bool
+	thumbIDRect           Rect
 	barEnv                Env
 	thumbHovered          bool
 	dragging              bool
@@ -84,7 +89,10 @@ type ScrollWidget struct {
 
 // Key gives the scroll an identity, so a rebuilt one that also moved keeps
 // its offset. Without one its Rect identifies it.
-func (s *ScrollWidget) Key(k any) *ScrollWidget { s.id = k; return s }
+func (s *ScrollWidget) Key(k any) *ScrollWidget {
+	s.id, s.thumbID, s.thumbIDKeyed = k, nil, false
+	return s
+}
 
 // HitID implements Identified.
 func (s *ScrollWidget) HitID() any { return s.id }
@@ -239,8 +247,11 @@ func (s *ScrollWidget) layout(c Constraints, env Env) Size {
 	s.phys.step(s)
 	s.laidAt = s.position()
 	vp := Viewport{Offset: s.laidAt, Extent: s.extent(c.Max()), Horizontal: s.horizontal}
-	env = env.With(viewportKey, vp).With(scrollPortKey, s).
-		With(pick(s.horizontal, viewportXKey, viewportYKey), vp).With(pick(s.horizontal, scrollPortXKey, scrollPortYKey), s)
+	// The viewport, a new value as the scroll moves, is boxed once for
+	// both of its keys.
+	var boxed any
+	env = env.withBoxed(viewportKey, vp, &boxed).With(scrollPortKey, s).
+		withBoxed(pick(s.horizontal, viewportXKey, viewportYKey), vp, &boxed).With(pick(s.horizontal, scrollPortXKey, scrollPortYKey), s)
 	// What the content builds as it is laid out, rows mounting as they
 	// scroll in, reacts within the viewport too; see Layout.
 	reactive.InRegion(&s.containedMove, func() { s.childSize = s.child.Layout(Loose(inner), env) })
@@ -372,10 +383,19 @@ func (h scrollThumb) HandlePointer(ev PointerEvent) bool {
 }
 func (h scrollThumb) CaptureTouchDrag() bool { return h.scroll.dragging }
 func (h scrollThumb) HitID() any {
-	if h.scroll.id != nil {
-		return struct{ Thumb any }{h.scroll.id}
+	s := h.scroll
+	// The ID is boxed once, not on each of the frame's calls, until the
+	// key or, for a scroll with none, the rect it is made of changes.
+	if s.id != nil {
+		if !s.thumbIDKeyed {
+			s.thumbID, s.thumbIDKeyed = struct{ Thumb any }{s.id}, true
+		}
+		return s.thumbID
 	}
-	return struct{ Thumb Rect }{h.scroll.rect}
+	if s.thumbID == nil || s.thumbIDKeyed || s.thumbIDRect != s.rect {
+		s.thumbID, s.thumbIDKeyed, s.thumbIDRect = struct{ Thumb Rect }{s.rect}, false, s.rect
+	}
+	return s.thumbID
 }
 
 // CaptureTouchDrag keeps a thumb drag from becoming content panning.

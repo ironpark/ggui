@@ -153,16 +153,7 @@ func (p *Probe) Frame() Size {
 	defer c.trimLayers()
 	f := c.fs()
 	f.pointer, f.hasPointer = p.pointer, p.hasPointer
-	ok, err := p.paint(paintPass{canvas: c, in: &p.in, overlay: p.overlay, size: p.size, tracing: len(p.sinks) > 0,
-		painted: func() {
-			if len(p.sinks) == 0 {
-				return
-			}
-			fr := inspectFrame(c, p.semantics())
-			for _, fn := range p.sinks {
-				fn(fr)
-			}
-		}})
+	ok, err := p.paint(paintPass{canvas: c, in: &p.in, overlay: p.overlay, size: p.size, tracing: len(p.sinks) > 0, hooks: probeHooks{p}})
 	if err != nil {
 		panic(err)
 	}
@@ -373,3 +364,19 @@ func (p *Probe) Cursor() CursorShape { return p.in.cursorOver(p.overlay, p.point
 
 // Focused reports whether some region holds keyboard focus.
 func (p *Probe) Focused() bool { return p.in.focused != nil }
+
+// probeHooks are a Probe's paintHooks: the sinks see each frame.
+type probeHooks struct{ p *Probe }
+
+func (probeHooks) settled() {}
+
+func (h probeHooks) painted() {
+	p := h.p
+	if len(p.sinks) == 0 {
+		return
+	}
+	fr := inspectFrame(&p.canvas, p.semantics())
+	for _, fn := range p.sinks {
+		fn(fr)
+	}
+}

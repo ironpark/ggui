@@ -178,6 +178,8 @@ type Window struct {
 	// says, as a dialog that takes no room does: the next is painted
 	// whole, never skipped.
 	motionLost bool
+	drawing    windowDraw        // the whole frame being drawn
+	damagePx   []image.Rectangle // what a frame painted in part hands setDamage
 	dirty      atomic.Uint32
 	repaintMu  sync.Mutex
 	repaints   []Rect // asked for by RepaintRect since the last frame
@@ -830,67 +832,40 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 	} else if wanted && w.drawPartial(screen, target, kept, asked, setDamage) {
 		return
 	}
-	dst := target
+	d := &w.drawing
+	*d = windowDraw{w: w, screen: screen, target: target, dst: target, setDamage: setDamage}
+	defer d.release()
 	if !within.Empty() {
-		dst = target.SubImage(within).(*ggfx.Image)
+		d.dst = target.SubImage(within).(*ggfx.Image)
 	}
-	if setDamage != nil {
-		if within.Empty() {
-			// All of it changes: the screen need not start from a copy of the last frame.
-			setDamage([]image.Rectangle{screen.Bounds()})
-		} else {
-			setDamage([]image.Rectangle{within})
-		}
+	if within.Empty() {
+		// All of it changes: the screen need not start from a copy of the last frame.
+		d.damage(screen.Bounds())
+	} else {
+		d.damage(within)
 	}
 	if w.root == nil {
-		dst.Fill(w.background())
+		d.dst.Fill(w.background())
 		return
 	}
 	defer w.canvas.trimLayers()
-	w.aim(dst)
+	w.aim(d.dst)
 	defer w.presentBackdrop(screen, target)
 	logical := w.logicalSize(screen)
 	if Untrack(w.viewport.Get) != logical {
 		w.viewport.Set(logical)
 	}
-	tracing := w.inspect || len(w.sinks) > 0
-	// The background is filled once the settle has run, which may change
-	// the theme it comes from, or turn a frame a scroll contains into a
-	// whole one; filled is whether it has been.
-	filled := false
+	d.tracing = w.inspect || len(w.sinks) > 0
 	_, err := w.paint(paintPass{
 		canvas: &w.canvas, in: &w.input, overlay: w.overlay, size: logical,
-		tracing: tracing,
-		semOff:  !w.semWanted.Load() && w.performs.Load() == 0 && !tracing && !w.ax.Listening(),
-		settled: func() {
-			if dst != target && (reactive.FreeGen() != w.freeSeen || fontGen() != w.fontSeen) {
-				// The layout changed more than the scroll: paint all of it.
-				framestats.Refuse("state changed")
-				w.frameLoop.endFrameFree(true, true)
-				dst = target
-				w.aim(dst)
-				if setDamage != nil {
-					setDamage([]image.Rectangle{screen.Bounds()})
-				}
-			}
-			dst.Fill(w.background())
-			filled = true
-		},
-		painted: func() {
-			// Counted once the settle had its chance to paint it whole.
-			if dst != target {
-				framestats.CountContained()
-			}
-			w.ax.Publish(w.semantics(), w.takeAnnouncements())
-			if tracing {
-				w.publishInspect(&w.canvas, w.semantics())
-			}
-		},
+		tracing: d.tracing,
+		semOff:  !w.semWanted.Load() && w.performs.Load() == 0 && !d.tracing && !w.ax.Listening(),
+		hooks:   d,
 	})
-	if !filled {
+	if !d.filled {
 		// The loop closed or lost its root as it settled: what is
 		// presented is the background, not what the screen kept.
-		dst.Fill(w.background())
+		d.dst.Fill(w.background())
 	}
 	if err != nil {
 		w.frameErr = err
@@ -1107,4 +1082,58 @@ func (w *Window) nativeDialogs() runtime.Dialogs {
 		}
 		return 0
 	})
+}
+
+// windowDraw is what a Window's whole frame keeps while it paints, the
+// paint's hooks among it: kept on the Window, a frame allocates none of it.
+type windowDraw struct {
+	w                   *Window
+	screen, target, dst *ggfx.Image // dst is where the frame paints: target, or the part a scroll contains
+	setDamage           func([]image.Rectangle)
+	tracing             bool
+	// filled is whether the background was filled: once the settle has
+	// run, which may change the theme it comes from, or turn a frame a
+	// scroll contains into a whole one.
+	filled bool
+	rects  [1]image.Rectangle // what damage hands setDamage
+}
+
+// damage tells the host, when it asked, that r is what the frame changes.
+func (d *windowDraw) damage(r image.Rectangle) {
+	if d.setDamage != nil {
+		d.rects[0] = r
+		d.setDamage(d.rects[:])
+	}
+}
+
+// release lets go of what the frame held, but for the damage last given,
+// which the host may read until the next frame.
+func (d *windowDraw) release() { *d = windowDraw{rects: d.rects} }
+
+// settled implements paintHooks.
+func (d *windowDraw) settled() {
+	w := d.w
+	if d.dst != d.target && (reactive.FreeGen() != w.freeSeen || fontGen() != w.fontSeen) {
+		// The layout changed more than the scroll: paint all of it.
+		framestats.Refuse("state changed")
+		w.frameLoop.endFrameFree(true, true)
+		d.dst = d.target
+		w.aim(d.dst)
+		d.damage(d.screen.Bounds())
+	}
+	d.dst.Fill(w.background())
+	d.filled = true
+}
+
+// painted implements paintHooks.
+func (d *windowDraw) painted() {
+	w := d.w
+	// Counted once the settle had its chance to paint it whole.
+	if d.dst != d.target {
+		framestats.CountContained()
+	}
+	w.ax.Publish(w.semantics(), w.takeAnnouncements())
+	if d.tracing {
+		w.publishInspect(&w.canvas, w.semantics())
+	}
 }
