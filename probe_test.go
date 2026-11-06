@@ -9,6 +9,7 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/internal/third_party/text"
 	"github.com/ironpark/ggui/runtime"
 )
 
@@ -322,5 +323,23 @@ func TestEachProbeHasItsOwnClipboard(t *testing.T) {
 	}
 	if got := b.Clipboard().Read(); got != "" {
 		t.Fatalf("copy in one probe reached another's clipboard: %q", got)
+	}
+}
+
+// A probe's frame advances the clock the glyph, shaping and face caches
+// age by, once, as a window's frame does: under a probe they would
+// otherwise keep every string ever shaped. Not parallel, so no other
+// probe's frames run in between.
+func TestProbeFramesAgeTheTextCaches(t *testing.T) {
+	p := NewProbe(Text("aging"), Sz(100, 20))
+	defer p.Close()
+	p.Frame()
+	before := text.Tick()
+	for range 3 {
+		p.Frame()
+	}
+	p.Advance(16 * time.Millisecond)
+	if got := text.Tick() - before; got != 4 {
+		t.Errorf("4 probe frames advanced the text tick by %d, want 4", got)
 	}
 }

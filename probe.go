@@ -7,6 +7,7 @@ import (
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/inspect"
 	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/internal/third_party/text"
 	"github.com/ironpark/ggui/runtime"
 )
 
@@ -135,6 +136,10 @@ func (p *Probe) Frame() Size {
 	if p.dispose == nil && !p.closed {
 		p.start()
 	}
+	// The glyph, shaping and face caches age by the frames they go
+	// unused, as a window's do: a test or headless run showing thousands
+	// of strings over its frames lets go of those it stopped showing.
+	text.AdvanceTick()
 	p.runFrame()
 	p.runPosted()
 	clk := &p.world().frame
