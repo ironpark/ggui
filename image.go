@@ -16,6 +16,7 @@ import (
 	"weak"
 
 	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggui/internal/framestats"
 	"github.com/ironpark/ggui/internal/imgcache"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
@@ -40,6 +41,9 @@ type ImageWidget struct {
 	height    float64
 	pixelated bool
 	alt       string
+	// source is the image's natural size when img is a smaller copy of
+	// it, as an AsyncImage decoded for its display is; zero for img's own.
+	source Size
 }
 
 // Image draws img. With no Size it asks for the image's natural size in
@@ -99,6 +103,9 @@ func (w *ImageWidget) Alt(s string) *ImageWidget {
 
 // natural is the image's size in logical pixels.
 func (w *ImageWidget) natural() Size {
+	if w.source != (Size{}) {
+		return w.source
+	}
 	if w.img == nil {
 		return Size{}
 	}
@@ -161,7 +168,50 @@ func (w *ImageWidget) Paint(dst *Canvas, r Rect) {
 	if w.alt != "" {
 		dst.Leaf(r, Node{Role: RoleImage, Name: w.alt})
 	}
-	dst.DrawImage(w.img, r, ImageOptions{Fit: w.fit, Pixelated: w.pixelated})
+	dst.drawImageAs(w.img, w.natural(), r, ImageOptions{Fit: w.fit, Pixelated: w.pixelated})
+}
+
+// imageBox is the most room an image may be drawn in, in logical pixels,
+// which an AsyncImage decodes it for. Without Cover the image is fitted
+// inside W×H, and an infinite side sets no limit; with Cover it must cover
+// W×H, and a side of 0 asks for nothing. Full asks for the image's own
+// size.
+type imageBox struct {
+	W, H  float64
+	Cover bool
+	Full  bool
+}
+
+// drawBound is the box Layout under c can draw the image in at most.
+//
+// A side the image is sized to, or that c fixes, is known; another is at
+// most what c allows. FitCover and FitFill must cover the known sides,
+// and the least c asks of the others; with no side known, the box keeps
+// the image's own shape, so fitting inside c's bounds is what covering it
+// takes too. FitNone draws the image at its natural size, so it needs all
+// of it.
+func (w *ImageWidget) drawBound(c Constraints) imageBox {
+	if w.fit == FitNone {
+		return imageBox{Full: true}
+	}
+	side := func(fixed, lo, hi float64) (float64, bool) {
+		if fixed > 0 {
+			return min(max(fixed, lo), hi), true
+		}
+		return hi, lo == hi
+	}
+	bw, wKnown := side(w.width, c.MinW, c.MaxW)
+	bh, hKnown := side(w.height, c.MinH, c.MaxH)
+	if (w.fit == FitCover || w.fit == FitFill) && (wKnown || hKnown) {
+		if !wKnown {
+			bw = c.MinW
+		}
+		if !hKnown {
+			bh = c.MinH
+		}
+		return imageBox{W: bw, H: bh, Cover: true}
+	}
+	return imageBox{W: bw, H: bh}
 }
 
 // ImageOptions says how DrawImage draws an image. The zero value fits it
@@ -186,14 +236,24 @@ type ImageOptions struct {
 
 // DrawImage draws img in the logical Rect r, as o says.
 func (c *Canvas) DrawImage(img *ggfx.Image, r Rect, o ImageOptions) {
-	if c == nil || c.Image == nil || img == nil || o.Fade >= 1 {
+	if img == nil {
 		return
 	}
 	b := img.Bounds()
-	if b.Empty() {
+	c.drawImageAs(img, Sz(float64(b.Dx()), float64(b.Dy())), r, o)
+}
+
+// drawImageAs draws img as DrawImage does, placed as an image of natural
+// size n: img may be a smaller copy of the image, which covers the same
+// Rect.
+func (c *Canvas) drawImageAs(img *ggfx.Image, n Size, r Rect, o ImageOptions) {
+	if c == nil || c.Image == nil || img == nil || o.Fade >= 1 {
 		return
 	}
-	at := o.Fit.Place(Sz(b.Dx(), b.Dy()), r)
+	if img.Bounds().Empty() {
+		return
+	}
+	at := o.Fit.Place(n, r)
 	if o.Radius > 0 {
 		c.shadeImage(img, r, at, o)
 		return
@@ -307,14 +367,34 @@ type AsyncImageWidget struct {
 	props       property.Owner
 	src         property.Value[string]
 	loader      ImageLoader
-	maxSize     int
+	maxSize     int // a MaxSize, 0 to decode for the display, or fullSize
 	placeholder Widget
 	fallback    Widget
 	inner       *ImageWidget
 	cache       *imageCache
-	h           *imgcache.Handle[*ggfx.Image]
+	hs          *asyncHandles
+	key         imgcache.Key // what hs.cur holds
+	nextKey     imgcache.Key // what hs.next holds, the zero Key for nothing
+	box         imageBox     // the room the last layout gave the image
+	scale       float64      // device pixels per logical pixel where it was last painted
+	waiter      imgcache.Waiter
 	status      AsyncStatus
 	err         error
+}
+
+// fullSize is the maxSize of an AsyncImage decoded at its own size.
+const fullSize = -1
+
+// asyncHandles are an AsyncImage's holds on the cache: cur, the image it
+// shows, and next, a copy for another size that is loading meanwhile. They
+// are apart from the widget so that collecting it can release them.
+type asyncHandles struct {
+	cur, next *imgcache.Handle[*ggfx.Image]
+}
+
+func (h *asyncHandles) release() {
+	h.next.Release()
+	h.cur.Release()
 }
 
 // AsyncImage shows the image at src, which the Loader turns into pixels --
@@ -322,26 +402,34 @@ type AsyncImageWidget struct {
 // goroutine, the Placeholder shows until it is ready, and the decoded
 // image is kept in a process-wide cache bounded in bytes (see
 // SetImageCacheLimit), so the same src shown twice, or again later, is
-// decoded once. The cache is keyed by src and MaxSize, not by loader: give
-// each loader srcs of its own.
+// decoded once. The cache is keyed by src and the size it was decoded at,
+// not by loader: give each loader srcs of its own.
+//
+// The image is decoded no larger than it is shown, in the screen's pixels:
+// a photo of 6000×4000 shown at 200×200 on a screen of two pixels to the
+// point costs a texture of about 512×341, not one of 96 MB. The size is
+// rounded up to a power of two, so that resizing it a little, or
+// animating it, does not decode it again; shown larger than that, a larger
+// copy is decoded while the one it has stays on screen. MaxSize fixes the
+// size instead, and FullResolution keeps the image's own.
 //
 // Once loaded it lays out and paints as Image does, with the same Fit,
 // Size, Width, Height, Pixelated and Alt.
 //
-//	ggui.AsyncImage(photo.Path).MaxSize(512).Size(96, 96).Fit(ggui.FitCover).
+//	ggui.AsyncImage(photo.Path).Size(96, 96).Fit(ggui.FitCover).
 //		Placeholder(ui.Skeleton(96, 96))
 func AsyncImage(src string) *AsyncImageWidget {
 	a := &AsyncImageWidget{loader: LoadImage, inner: Image(nil), cache: defaultImageCache}
 	a.src.Set(src)
-	a.h = &imgcache.Handle[*ggfx.Image]{}
+	a.hs = &asyncHandles{cur: &imgcache.Handle[*ggfx.Image]{}, next: &imgcache.Handle[*ggfx.Image]{}}
 	// A widget dropped by a rebuild lets go of its image, so the cache may
 	// evict it: through its owner when it was built under one, else when
 	// it is collected.
-	h := a.h
+	hs := a.hs
 	if reactive.CurrentOwner() != nil {
-		OnCleanup(h.Release)
+		OnCleanup(hs.release)
 	}
-	runtime.AddCleanup(a, func(h *imgcache.Handle[*ggfx.Image]) { h.Release() }, h)
+	runtime.AddCleanup(a, func(hs *asyncHandles) { hs.release() }, hs)
 	return a
 }
 
@@ -373,11 +461,22 @@ func (a *AsyncImageWidget) Loader(fn ImageLoader) *AsyncImageWidget {
 }
 
 // MaxSize downscales an image whose larger side exceeds px pixels to that
-// size before it is uploaded, keeping its aspect ratio: a thumbnail of a
-// photo costs a thumbnail's memory. 0, the default, keeps the full size.
+// size before it is uploaded, keeping its aspect ratio, whatever size it
+// is shown at; the image then lays out at that smaller size, as an Image
+// of it would. 0, the default, decodes it for the size it is shown at
+// instead, and lays it out at its own size.
 func (a *AsyncImageWidget) MaxSize(px int) *AsyncImageWidget {
 	defer property.Watch(&a.props, &a.maxSize)()
 	a.maxSize = max(px, 0)
+	return a
+}
+
+// FullResolution decodes the image at its own size whatever it is shown
+// at, for one that is zoomed into, or drawn larger than its layout. MaxSize
+// undoes it.
+func (a *AsyncImageWidget) FullResolution() *AsyncImageWidget {
+	defer property.Watch(&a.props, &a.maxSize)()
+	a.maxSize = fullSize
 	return a
 }
 
@@ -424,42 +523,275 @@ func (a *AsyncImageWidget) Status() AsyncStatus { return a.status }
 // Err is why the image failed to load, when Status is Failed.
 func (a *AsyncImageWidget) Err() error { return a.err }
 
-// sync makes the handle hold the entry for the current src and reads its
-// state. It runs on the UI thread, in Layout.
-func (a *AsyncImageWidget) sync() {
-	key := imgcache.Key{Src: a.src.Get(), Max: a.maxSize}
-	h := a.h
-	if key.Src == "" {
-		h.Release()
-		a.status, a.err, a.inner.img = Failed, errNoSrc, nil
+// The sides an image decoded for its display is rounded up to are powers
+// of two from minBucket; past maxBucket it is decoded at its own size.
+const (
+	minBucket = 64
+	maxBucket = 1 << 14
+)
+
+// bucket is the side of n device pixels rounded up to a power of two. A
+// side with no bound is 0, as is one asking for nothing of a covering box.
+func bucket(n float64, cover bool) int {
+	if math.IsInf(n, 0) || math.IsNaN(n) || n > maxBucket || cover && n <= 0 {
+		return 0
+	}
+	b := minBucket
+	for float64(b) < n {
+		b <<= 1
+	}
+	return b
+}
+
+// displayKey is the Key of src decoded for the box b on a canvas of scale
+// device pixels per logical pixel.
+func displayKey(src string, b imageBox, scale float64) imgcache.Key {
+	if b.Full {
+		return imgcache.Key{Src: src}
+	}
+	return imgcache.Key{Src: src, W: bucket(b.W*scale, b.Cover), H: bucket(b.H*scale, b.Cover), Cover: b.Cover}
+}
+
+// grownKey is the Key an image decoded for cur should move to when it is
+// now shown as want asks. It moves only when want needs more pixels on a
+// side, and then to enough for both; and when every side needs a quarter
+// or less of what it has, a sixteenth of the memory, to want. Anything in
+// between keeps cur, so that an image shrunk for a moment, or measured
+// with other bounds, is not decoded again.
+func grownKey(cur, want imgcache.Key) imgcache.Key {
+	if cur.Src != want.Src || cur.Cover != want.Cover {
+		return want
+	}
+	quarter := func(a, b int) bool {
+		if want.Cover {
+			return 4*b <= a
+		}
+		return b != 0 && (a == 0 || 4*b <= a)
+	}
+	larger := func(a, b int) int {
+		if !want.Cover && (a == 0 || b == 0) {
+			return 0
+		}
+		return max(a, b)
+	}
+	if keyHolds(cur, want) {
+		if quarter(cur.W, want.W) && quarter(cur.H, want.H) {
+			return want
+		}
+		return cur
+	}
+	return imgcache.Key{Src: want.Src, W: larger(cur.W, want.W), H: larger(cur.H, want.H), Cover: want.Cover}
+}
+
+// keyHolds reports whether an image decoded for have has the pixels want
+// asks for: the same src fitted to as large a box or larger, or covering
+// one.
+func keyHolds(have, want imgcache.Key) bool {
+	if have.Src != want.Src || have.Cover != want.Cover {
+		return false
+	}
+	// A side of 0 is unbounded when fitting inside, and asks nothing when
+	// covering.
+	side := func(a, b int) bool {
+		if want.Cover {
+			return a >= b
+		}
+		return a == 0 || b != 0 && a >= b
+	}
+	return side(have.W, want.W) && side(have.H, want.H)
+}
+
+// fixedKey is the Key MaxSize or FullResolution fix for src, and false
+// when the image is decoded for its display.
+func (a *AsyncImageWidget) fixedKey(src string) (imgcache.Key, bool) {
+	switch {
+	case a.maxSize > 0:
+		return imgcache.Max(src, a.maxSize), true
+	case a.maxSize == fullSize:
+		return imgcache.Key{Src: src}, true
+	}
+	return imgcache.Key{}, false
+}
+
+// hostScale is the device pixels per logical pixel of the window or probe
+// being laid out, 1 when there is none.
+func hostScale() float64 {
+	l := loopOf(reactive.CurrentOwner())
+	if l == nil {
+		l = runningLoop()
+	}
+	if l != nil {
+		switch h := l.host.(type) {
+		case *Window:
+			return h.canvas.Scale()
+		case *Probe:
+			return h.canvas.Scale()
+		}
+	}
+	return 1
+}
+
+// sync makes the handles hold the entries for the current src and reads
+// what to show. It runs on the UI thread, in Layout.
+//
+// A new src is asked for at once, sized for the room c gives it, so that
+// one already cached shows in this very frame. A change of size for the
+// same src waits for Paint, which knows the room the image was finally
+// given; Layout may be asked to measure it under other bounds first.
+func (a *AsyncImageWidget) sync(c Constraints) {
+	src := a.src.Get()
+	a.box = a.inner.drawBound(c)
+	if src == "" {
+		a.hs.release()
+		a.key, a.nextKey = imgcache.Key{}, imgcache.Key{}
+		a.status, a.err, a.inner.img, a.inner.source = Failed, errNoSrc, nil, Size{}
 		return
 	}
-	st, img, err, ok := h.Get(a.cache, key)
+	want, fixed := a.fixedKey(src)
+	if !fixed {
+		scale := a.scale
+		if scale == 0 {
+			scale = hostScale()
+		}
+		want = displayKey(src, a.box, scale)
+	}
+	switch {
+	case a.key.Src != src && !fixed:
+		a.adopt(want)
+	case a.key.Src != src:
+		a.retarget(want)
+	case fixed && a.key != want:
+		a.retarget(want)
+	default:
+		a.promote()
+	}
+	a.read()
+}
+
+// adopt starts showing a new src decoded for its display, as want asks.
+// When the cache has no entry for want but has the image ready at another
+// size, as when it is shown elsewhere or this widget was built anew, that
+// copy is used instead of loading another: as it is, if it has the pixels
+// want asks for, or as a stand-in on screen while want loads.
+func (a *AsyncImageWidget) adopt(want imgcache.Key) {
+	a.hs.next.Release()
+	a.key, a.nextKey = imgcache.Key{}, imgcache.Key{}
+	if a.cache.Has(want) {
+		a.retarget(want)
+		return
+	}
+	var buf [4]imgcache.Key
+	ready := a.cache.ReadyKeys(buf[:0], want.Src)
+	if len(ready) == 0 {
+		a.retarget(want)
+		return
+	}
+	use := ready[0]
+	for _, k := range ready {
+		if grownKey(k, want) == k {
+			use = k
+			break
+		}
+	}
+	a.retarget(use)
+	if st, _, _, ok := a.hs.cur.Get(a.cache, use); !ok || st != imgcache.Ready {
+		// Evicted since it was listed.
+		a.retarget(want)
+		return
+	}
+	if grownKey(use, want) != use {
+		a.retarget(want)
+	}
+}
+
+// retarget moves the image to the entry for k. While the one shown is
+// ready it stays on screen, and k loads in next until promote can swap
+// them; otherwise k is loaded in its place.
+func (a *AsyncImageWidget) retarget(k imgcache.Key) {
+	hs := a.hs
+	if k == a.key {
+		if a.nextKey != (imgcache.Key{}) {
+			hs.next.Release()
+			a.nextKey = imgcache.Key{}
+		}
+		return
+	}
+	if st, _, _, ok := hs.cur.Get(a.cache, a.key); !ok || st != imgcache.Ready || k.Src != a.key.Src {
+		hs.next.Release()
+		a.key, a.nextKey = k, imgcache.Key{}
+		hs.cur.Acquire(a.cache, k, imgcache.Loader(a.loader), a.notifier())
+		return
+	}
+	if _, _, _, ok := hs.next.Get(a.cache, k); !ok {
+		hs.next.Acquire(a.cache, k, imgcache.Loader(a.loader), a.notifier())
+	}
+	a.nextKey = k
+	a.promote()
+}
+
+// promote swaps in the copy next was loading, once it is ready. One that
+// failed stays held, so that it is not asked for again while the image it
+// was to replace still shows.
+func (a *AsyncImageWidget) promote() {
+	hs := a.hs
+	if a.nextKey == (imgcache.Key{}) {
+		return
+	}
+	if st, _, _, ok := hs.next.Get(a.cache, a.nextKey); !ok || st != imgcache.Ready {
+		return
+	}
+	hs.cur, hs.next = hs.next, hs.cur
+	hs.next.Release()
+	a.key, a.nextKey = a.nextKey, imgcache.Key{}
+}
+
+// read takes what the entry shown has, asking for it again when the
+// cache let go of it.
+func (a *AsyncImageWidget) read() {
+	hs := a.hs
+	st, img, err, ok := hs.cur.Get(a.cache, a.key)
 	if !ok {
-		post := loopPost(reactive.CurrentOwner())
-		if l := runningLoop(); post == nil && l != nil {
-			post = l.post
-		}
-		// The cache keeps notify until the load ends; holding the widget
-		// weakly lets a widget dropped meanwhile be collected, and its
-		// cleanup cancel the load.
-		wa := weak.Make(a)
-		notify := func() {
-			if a := wa.Value(); a != nil {
-				a.props.Changed()
-			}
-		}
-		st, img, err = h.Acquire(a.cache, key, imgcache.Loader(a.loader), imgcache.Waiter{Post: post, Notify: notify})
+		st, img, err = hs.cur.Acquire(a.cache, a.key, imgcache.Loader(a.loader), a.notifier())
 	}
 	a.inner.img, a.err = img, err
 	a.status = asyncStatus(st)
+	a.inner.source = Size{}
+	if a.status == Ready && a.maxSize <= 0 {
+		// A copy decoded for the display lays out as the image does.
+		s := hs.cur.Source()
+		a.inner.source = Sz(float64(s.X), float64(s.Y))
+	}
+}
+
+// notifier is how the cache tells the widget a load ended.
+func (a *AsyncImageWidget) notifier() imgcache.Waiter {
+	if a.waiter.Notify != nil {
+		return a.waiter
+	}
+	post := loopPost(reactive.CurrentOwner())
+	if l := runningLoop(); post == nil && l != nil {
+		post = l.post
+	}
+	if post == nil {
+		return imgcache.Waiter{}
+	}
+	// The cache keeps notify until the load ends; holding the widget
+	// weakly lets a widget dropped meanwhile be collected, and its cleanup
+	// cancel the load.
+	wa := weak.Make(a)
+	a.waiter = imgcache.Waiter{Post: post, Notify: func() {
+		if a := wa.Value(); a != nil {
+			a.props.Changed()
+		}
+	}}
+	return a.waiter
 }
 
 // Layout implements Widget.
 func (a *AsyncImageWidget) Layout(c Constraints, env Env) Size {
 	defer a.props.Layout().EndLayout()
 	a.inner.props.Read()
-	a.sync()
+	a.sync(c)
 	if a.status == Ready {
 		return a.inner.Layout(c, env)
 	}
@@ -483,6 +815,7 @@ func (a *AsyncImageWidget) shown() Widget {
 
 // Paint implements Widget.
 func (a *AsyncImageWidget) Paint(dst *Canvas, r Rect) {
+	a.resize(dst.Scale())
 	if a.status == Ready {
 		a.inner.Paint(dst, r)
 		return
@@ -492,6 +825,29 @@ func (a *AsyncImageWidget) Paint(dst *Canvas, r Rect) {
 	}
 	if p := a.shown(); p != nil {
 		dst.Paint(p, r)
+	}
+}
+
+// resize moves an image decoded for its display to the size the last
+// layout gave it on a canvas of scale, as grownKey says.
+func (a *AsyncImageWidget) resize(scale float64) {
+	a.scale = scale
+	src := a.key.Src
+	if src == "" {
+		return
+	}
+	if _, fixed := a.fixedKey(src); fixed {
+		return
+	}
+	k := grownKey(a.key, displayKey(src, a.box, scale))
+	if k == a.key && a.nextKey == (imgcache.Key{}) {
+		return
+	}
+	before, img := a.status, a.inner.img
+	a.retarget(k)
+	a.read()
+	if a.status != before || a.status == Ready && a.inner.img != img {
+		a.props.Changed()
 	}
 }
 
@@ -511,15 +867,25 @@ var errNoSrc = errors.New("ggui: AsyncImage has no src")
 type imageCache = imgcache.Cache[*ggfx.Image]
 
 func newImageCache(limit int64) *imageCache {
-	return imgcache.New(limit, uploadImage, (*ggfx.Image).Deallocate)
+	return imgcache.New(limit, uploadImage, freeImage)
 }
 
 // uploadImage makes a texture of a decoded image, and says what it costs
-// in bytes of RGBA pixels.
+// in bytes of RGBA pixels. The cache hands it RGBA pixels, which it only
+// copies.
 func uploadImage(src image.Image) (*ggfx.Image, int64) {
 	img := newTexture(src)
 	b := img.Bounds()
-	return img, int64(b.Dx()) * int64(b.Dy()) * 4
+	bytes := framestats.ImageBytes(b.Dx(), b.Dy())
+	framestats.AddTexture(framestats.Images, bytes)
+	return img, bytes
+}
+
+// freeImage deallocates a texture the cache dropped.
+func freeImage(img *ggfx.Image) {
+	b := img.Bounds()
+	framestats.AddTexture(framestats.Images, -framestats.ImageBytes(b.Dx(), b.Dy()))
+	img.Deallocate()
 }
 
 // asyncStatus is the AsyncStatus of a cache entry's.
