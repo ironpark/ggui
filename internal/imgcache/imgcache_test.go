@@ -95,11 +95,11 @@ func TestTwoHoldersShareOneLoad(t *testing.T) {
 	}
 	// A different Max is a different image.
 	var m Handle[*tex]
-	ready(t, c, &m, Key{Src: "x", Max: 1}, sized(3, 2, &calls), &u)
+	ready(t, c, &m, Max("x", 1), sized(3, 2, &calls), &u)
 	if calls.Load() != 2 {
 		t.Fatalf("%d loads, want a second for another Max", calls.Load())
 	}
-	if _, tm, _, _ := m.Get(c, Key{Src: "x", Max: 1}); tm.w != 1 {
+	if _, tm, _, _ := m.Get(c, Max("x", 1)); tm.w != 1 {
 		t.Fatalf("Max 1 gave a texture %d wide", tm.w)
 	}
 }
@@ -223,6 +223,103 @@ func TestDownscaleKeepsTheAspect(t *testing.T) {
 	}
 }
 
+func TestFitSize(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		iw, ih, w, h int
+		cover        bool
+		ww, wh       int
+	}{
+		{4000, 3000, 512, 512, false, 512, 384},  // inside a square: the larger side
+		{4000, 3000, 512, 512, true, 683, 512},   // covering it: the smaller side, rounded up
+		{4000, 3000, 512, 0, false, 512, 384},    // only a width to fit
+		{3000, 4000, 0, 512, false, 384, 512},    // only a height
+		{4000, 3000, 1024, 128, false, 170, 128}, // a wide box: the height limits
+		{4000, 3000, 1024, 128, true, 1024, 768}, // and covering, the width
+		{4000, 3000, 0, 0, false, 4000, 3000},    // no box
+		{4000, 3000, 0, 0, true, 4000, 3000},
+		{300, 200, 512, 512, true, 300, 200}, // never enlarged
+		{300, 200, 512, 512, false, 300, 200},
+	} {
+		if w, h := FitSize(tt.iw, tt.ih, tt.w, tt.h, tt.cover); w != tt.ww || h != tt.wh {
+			t.Errorf("FitSize(%dx%d, %dx%d, cover %v) = %dx%d, want %dx%d",
+				tt.iw, tt.ih, tt.w, tt.h, tt.cover, w, h, tt.ww, tt.wh)
+		}
+	}
+}
+
+// What upload is given is RGBA pixels however the loader decoded them, so
+// that the UI thread only copies them; and the holder learns the size the
+// image was loaded at.
+func TestUploadIsGivenRGBA(t *testing.T) {
+	t.Parallel()
+	var got []image.Image
+	var mu sync.Mutex
+	c := New(1<<20, func(img image.Image) (*tex, int64) {
+		mu.Lock()
+		got = append(got, img)
+		mu.Unlock()
+		b := img.Bounds()
+		return &tex{w: b.Dx(), h: b.Dy()}, int64(b.Dx() * b.Dy() * 4)
+	}, func(*tex) {})
+	var u ui
+	for i, load := range []Loader{
+		func(context.Context, string) (image.Image, error) {
+			return image.NewYCbCr(image.Rect(0, 0, 40, 30), image.YCbCrSubsampleRatio420), nil
+		},
+		func(context.Context, string) (image.Image, error) {
+			return image.NewNRGBA(image.Rect(0, 0, 40, 30)), nil
+		},
+		func(context.Context, string) (image.Image, error) {
+			// A part of a larger image.
+			return image.NewRGBA(image.Rect(0, 0, 80, 60)).SubImage(image.Rect(10, 10, 50, 40)), nil
+		},
+	} {
+		for _, k := range []Key{{Src: fmt.Sprint(i)}, Max(fmt.Sprint(i), 20)} {
+			var h Handle[*tex]
+			ready(t, c, &h, k, load, &u)
+			if s := h.Source(); s != image.Pt(40, 30) {
+				t.Errorf("%v: source %v, want 40x30", k, s)
+			}
+			h.Release()
+		}
+	}
+	if len(got) != 6 {
+		t.Fatalf("%d uploads, want 6", len(got))
+	}
+	for i, img := range got {
+		m, ok := img.(*image.RGBA)
+		if !ok {
+			t.Errorf("upload %d was given %T", i, img)
+			continue
+		}
+		if b := m.Bounds(); len(m.Pix) != 4*b.Dx()*b.Dy() {
+			t.Errorf("upload %d: %d bytes of pixels for %v", i, len(m.Pix), b)
+		}
+	}
+}
+
+func TestReadyKeysListsASrcAtEverySize(t *testing.T) {
+	t.Parallel()
+	c, _ := newCache(1 << 20)
+	var calls atomic.Int32
+	var u ui
+	var a, b, other Handle[*tex]
+	ready(t, c, &a, Max("x", 4), sized(8, 8, &calls), &u)
+	ready(t, c, &b, Key{Src: "x"}, sized(8, 8, &calls), &u)
+	ready(t, c, &other, Key{Src: "y"}, sized(8, 8, &calls), &u)
+	b.Release() // idle, still ready
+	got := c.ReadyKeys(nil, "x")
+	if len(got) != 2 {
+		t.Fatalf("ReadyKeys(x) = %v, want both sizes of x", got)
+	}
+	a.Release()
+	c.SetLimit(0)
+	if got := c.ReadyKeys(nil, "x"); len(got) != 0 {
+		t.Fatalf("after eviction ReadyKeys(x) = %v", got)
+	}
+}
+
 // Many holders taking and letting go of images at once, from goroutines,
 // as widgets coming and going on several windows would: run with -race.
 func TestConcurrentHolders(t *testing.T) {
@@ -309,5 +406,14 @@ func BenchmarkDownscale(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		Downscale(img, 256)
+	}
+}
+
+// A JPEG's pixels made RGBA, as the loader's goroutine does before upload.
+func BenchmarkRGBAFromYCbCr(b *testing.B) {
+	img := image.NewYCbCr(image.Rect(0, 0, 1024, 768), image.YCbCrSubsampleRatio420)
+	b.ReportAllocs()
+	for b.Loop() {
+		RGBA(img)
 	}
 }

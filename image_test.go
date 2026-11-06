@@ -10,6 +10,7 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggui/internal/framestats"
 	"github.com/ironpark/ggui/internal/imgcache"
 	"github.com/ironpark/ggui/internal/reactive/goid"
 )
@@ -268,10 +270,10 @@ func TestAsyncImageSameSrcDecodesOnce(t *testing.T) {
 	if calls.Load() != 1 {
 		t.Fatalf("loaded %d times, want once", calls.Load())
 	}
-	// A third, shown later, finds it ready.
+	// A third, shown later at the same size, finds it ready.
 	c := AsyncImage("same").Loader(sized(10, 10, &calls))
 	c.cache = cache
-	q := NewProbe(c, Sz(100, 100))
+	q := NewProbe(Column(c), Sz(300, 300))
 	defer q.Close()
 	q.Frame()
 	if c.Status() != Ready || calls.Load() != 1 {
@@ -377,5 +379,292 @@ func TestAsyncImageDefaultLoaderReadsFiles(t *testing.T) {
 	pumpUntil(t, p, func() bool { return a.Status() != Pending })
 	if got := size(); a.Status() != Ready || got != Sz(6, 3) {
 		t.Fatalf("status %v size %v err %v", a.Status(), got, a.Err())
+	}
+}
+
+func TestImageBucket(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		n     float64
+		cover bool
+		want  int
+	}{
+		{0, false, 64}, // a box with no room still has a floor
+		{0, true, 0},   // but a side asking nothing of a cover asks nothing
+		{1, false, 64},
+		{64, false, 64},
+		{64.5, false, 128},
+		{400, false, 512},
+		{512, true, 512},
+		{513, true, 1024},
+		{math.Inf(1), false, 0}, // unbounded
+		{1 << 15, false, 0},     // past the largest bucket: its own size
+	} {
+		if got := bucket(tt.n, tt.cover); got != tt.want {
+			t.Errorf("bucket(%v, cover %v) = %d, want %d", tt.n, tt.cover, got, tt.want)
+		}
+	}
+}
+
+func TestImageGrownKey(t *testing.T) {
+	t.Parallel()
+	k := func(w, h int, cover bool) imgcache.Key { return imgcache.Key{Src: "x", W: w, H: h, Cover: cover} }
+	for _, tt := range []struct {
+		name            string
+		cur, want, then imgcache.Key
+	}{
+		{"same", k(512, 512, false), k(512, 512, false), k(512, 512, false)},
+		{"a little smaller", k(512, 512, false), k(256, 256, false), k(512, 512, false)},
+		{"smaller on one side only", k(512, 512, false), k(64, 512, false), k(512, 512, false)},
+		{"a quarter on every side", k(512, 512, false), k(128, 128, false), k(128, 128, false)},
+		{"larger", k(512, 512, false), k(1024, 1024, false), k(1024, 1024, false)},
+		{"larger on one side keeps the other", k(512, 512, false), k(1024, 128, false), k(1024, 512, false)},
+		{"unbounded", k(512, 512, false), k(512, 0, false), k(512, 0, false)},
+		{"unbounded holds any", k(0, 0, false), k(0, 1024, false), k(0, 0, false)},
+		{"unbounded to a small box", k(0, 0, false), k(64, 64, false), k(64, 64, false)},
+		{"covering more", k(512, 0, true), k(512, 1024, true), k(512, 1024, true)},
+		{"covering less", k(512, 512, true), k(256, 0, true), k(512, 512, true)},
+		{"another fit", k(512, 512, false), k(512, 512, true), k(512, 512, true)},
+		{"another src", k(512, 512, false), imgcache.Key{Src: "y", W: 64, H: 64}, imgcache.Key{Src: "y", W: 64, H: 64}},
+	} {
+		if got := grownKey(tt.cur, tt.want); got != tt.then {
+			t.Errorf("%s: grownKey(%v, %v) = %v, want %v", tt.name, tt.cur, tt.want, got, tt.then)
+		}
+	}
+}
+
+// photo loads a w×h image as a JPEG decoder gives it, counting the loads;
+// a load after the first waits for gate, when it is not nil.
+func photo(w, h int, calls *atomic.Int32, gate chan struct{}) ImageLoader {
+	return func(ctx context.Context, src string) (image.Image, error) {
+		if calls.Add(1) > 1 && gate != nil {
+			select {
+			case <-gate:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		return image.NewYCbCr(image.Rect(0, 0, w, h), image.YCbCrSubsampleRatio420), nil
+	}
+}
+
+// texSize is the size of the texture a shows.
+func texSize(a *AsyncImageWidget) image.Point {
+	if a.inner.img == nil {
+		return image.Point{}
+	}
+	return a.inner.img.Bounds().Size()
+}
+
+// hiDPI is a probe of a on a canvas of two device pixels per logical one.
+func hiDPI(a Widget, size Size) (*Probe, func() Size) {
+	p, measure := measure(a, size)
+	p.canvas.scale = 2
+	return p, measure
+}
+
+func TestAsyncImageDecodesForItsDisplay(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name string
+		fit  ImageFit
+		tex  image.Point
+	}{
+		// 50×50 at 2× is 100 device pixels, rounded up to 128.
+		{"contain", FitContain, image.Pt(128, 96)},
+		{"cover", FitCover, image.Pt(171, 128)},
+		{"fill", FitFill, image.Pt(171, 128)},
+		{"none", FitNone, image.Pt(1000, 750)},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var calls atomic.Int32
+			a := AsyncImage(t.Name()).Loader(photo(1000, 750, &calls, nil)).Size(50, 50).Fit(tt.fit)
+			a.cache = newImageCache(1 << 30)
+			p, size := hiDPI(a, Sz(300, 300))
+			defer p.Close()
+			pumpUntil(t, p, func() bool { return a.Status() == Ready })
+			if got := texSize(a); got != tt.tex {
+				t.Errorf("texture %v, want %v", got, tt.tex)
+			}
+			if got := size(); got != Sz(50, 50) {
+				t.Errorf("size %v, want 50x50", got)
+			}
+			if calls.Load() != 1 {
+				t.Errorf("%d loads, want 1: the first frame knew the size", calls.Load())
+			}
+		})
+	}
+}
+
+// An image with no Size lays out at its own size, shrunk to fit, whatever
+// size its texture was decoded at.
+func TestAsyncImageUnsizedLaysOutAsTheImage(t *testing.T) {
+	t.Parallel()
+	var calls atomic.Int32
+	a := AsyncImage(t.Name()).Loader(photo(1000, 750, &calls, nil))
+	a.cache = newImageCache(1 << 30)
+	p, size := hiDPI(a, Sz(100, 100))
+	defer p.Close()
+	pumpUntil(t, p, func() bool { return a.Status() == Ready })
+	if got := size(); got != Sz(100, 75) {
+		t.Errorf("size %v, want 100x75", got)
+	}
+	if got := texSize(a); got != image.Pt(256, 192) { // 200 device pixels, rounded up
+		t.Errorf("texture %v, want 256x192", got)
+	}
+}
+
+func TestAsyncImageResizes(t *testing.T) {
+	t.Parallel()
+	var calls atomic.Int32
+	gate := make(chan struct{})
+	a := AsyncImage(t.Name()).Loader(photo(1000, 750, &calls, gate)).Size(50, 50)
+	a.cache = newImageCache(1 << 30)
+	p, size := hiDPI(a, Sz(1000, 1000))
+	defer p.Close()
+	pumpUntil(t, p, func() bool { return a.Status() == Ready })
+	first := a.inner.img
+
+	// A little larger fits the bucket it has.
+	a.Size(60, 60)
+	for range 3 {
+		size()
+	}
+	if calls.Load() != 1 || a.inner.img != first {
+		t.Fatalf("grown a little: %d loads, texture %v", calls.Load(), texSize(a))
+	}
+
+	// Past it, a larger copy loads while the one it has stays on screen.
+	a.Size(100, 100)
+	pumpUntil(t, p, func() bool { return calls.Load() == 2 })
+	if a.Status() != Ready || a.inner.img != first {
+		t.Fatalf("while the larger loads: status %v, texture %v, want the first shown", a.Status(), texSize(a))
+	}
+	if got := size(); got != Sz(100, 100) {
+		t.Fatalf("size %v, want 100x100", got)
+	}
+	close(gate)
+	pumpUntil(t, p, func() bool { return a.inner.img != first })
+	if got := texSize(a); got != image.Pt(256, 192) {
+		t.Fatalf("texture %v, want 256x192", got)
+	}
+
+	// Smaller again keeps what it has.
+	a.Size(50, 50)
+	for range 3 {
+		size()
+	}
+	if calls.Load() != 2 || texSize(a) != image.Pt(256, 192) {
+		t.Fatalf("shrunk: %d loads, texture %v", calls.Load(), texSize(a))
+	}
+}
+
+func TestAsyncImageMaxSizeAndFullResolutionAreKept(t *testing.T) {
+	t.Parallel()
+	var calls atomic.Int32
+	a := AsyncImage(t.Name()).Loader(photo(1000, 750, &calls, nil)).Size(200, 200).MaxSize(100)
+	a.cache = newImageCache(1 << 30)
+	p, _ := hiDPI(a, Sz(1000, 1000))
+	defer p.Close()
+	pumpUntil(t, p, func() bool { return a.Status() == Ready })
+	if got := texSize(a); got != image.Pt(100, 75) {
+		t.Fatalf("MaxSize 100: texture %v", got)
+	}
+	a.FullResolution()
+	pumpUntil(t, p, func() bool { return texSize(a) != image.Pt(100, 75) })
+	if got := texSize(a); got != image.Pt(1000, 750) {
+		t.Fatalf("FullResolution: texture %v", got)
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("%d loads, want 2", calls.Load())
+	}
+}
+
+// A widget showing a src the cache has at another size shows that copy at
+// once, while its own loads.
+func TestAsyncImageShowsAnotherSizeWhileItsOwnLoads(t *testing.T) {
+	t.Parallel()
+	var calls atomic.Int32
+	gate := make(chan struct{})
+	cache := newImageCache(1 << 30)
+	a := AsyncImage("photo").Loader(photo(1000, 750, &calls, gate)).Size(50, 50)
+	a.cache = cache
+	p, _ := hiDPI(a, Sz(1000, 1000))
+	defer p.Close()
+	pumpUntil(t, p, func() bool { return a.Status() == Ready })
+
+	b := AsyncImage("photo").Loader(photo(1000, 750, &calls, gate)).Size(200, 200)
+	b.cache = cache
+	q, _ := hiDPI(b, Sz(1000, 1000))
+	defer q.Close()
+	q.Frame()
+	if b.Status() != Ready || b.inner.img != a.inner.img {
+		t.Fatalf("status %v, want the small copy shown", b.Status())
+	}
+	close(gate)
+	pumpUntil(t, q, func() bool { return texSize(b) == image.Pt(512, 384) })
+	if calls.Load() != 2 {
+		t.Fatalf("%d loads, want 2", calls.Load())
+	}
+}
+
+// The pixels reaching the UI thread are RGBA already: a JPEG's YCbCr was
+// converted on the loader's goroutine.
+func TestAsyncImageUploadsRGBA(t *testing.T) {
+	t.Parallel()
+	ui := goid.ID()
+	type upload struct {
+		img image.Image
+		gid int64
+	}
+	uploads := make(chan upload, 4)
+	var calls atomic.Int32
+	a := AsyncImage(t.Name()).Loader(photo(300, 200, &calls, nil))
+	a.cache = imgcache.New(1<<20, func(img image.Image) (*ggfx.Image, int64) {
+		uploads <- upload{img, goid.ID()}
+		return uploadImage(img)
+	}, freeImage)
+	p, _ := measure(a, Sz(1000, 1000))
+	defer p.Close()
+	pumpUntil(t, p, func() bool { return a.Status() == Ready })
+	u := <-uploads
+	if u.gid != ui {
+		t.Fatalf("uploaded on goroutine %d, the UI goroutine is %d", u.gid, ui)
+	}
+	if _, ok := u.img.(*image.RGBA); !ok {
+		t.Fatalf("upload was given %T, want *image.RGBA", u.img)
+	}
+}
+
+// The Images gauge counts a texture while the cache keeps it. It runs
+// alone, as no parallel test can change the gauge meanwhile.
+func TestImageTexturesAreCounted(t *testing.T) {
+	before := framestats.ReadTextures().Images
+	img, n := uploadImage(image.NewRGBA(image.Rect(0, 0, 30, 20)))
+	if got := framestats.ReadTextures().Images - before; got != 30*20*4 || n != got {
+		t.Fatalf("uploaded: gauge %+d, cost %d, want 2400", got, n)
+	}
+	freeImage(img)
+	if got := framestats.ReadTextures().Images - before; got != 0 {
+		t.Fatalf("freed: gauge %+d, want 0", got)
+	}
+}
+
+// Uploading a decoded photo: what the UI thread does once the cache has
+// made it RGBA, against what it did with the JPEG's own pixels.
+func BenchmarkUploadImage(b *testing.B) {
+	ycc := image.NewYCbCr(image.Rect(0, 0, 1024, 768), image.YCbCrSubsampleRatio420)
+	for _, bb := range []struct {
+		name string
+		img  image.Image
+	}{{"RGBA", imgcache.RGBA(ycc)}, {"YCbCr", ycc}} {
+		b.Run(bb.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				img, _ := uploadImage(bb.img)
+				freeImage(img)
+			}
+		})
 	}
 }

@@ -1,7 +1,8 @@
 // Package imgcache keeps the images an app loads off its UI thread: each
-// loaded once however many widgets show it, decoded and scaled on a
-// goroutine, uploaded on the UI thread, and kept while nothing shows it
-// only within a budget of bytes, the least recently shown going first.
+// loaded once however many widgets show it, decoded, scaled and turned
+// into RGBA pixels on a goroutine, uploaded on the UI thread, and kept
+// while nothing shows it only within a budget of bytes, the least recently
+// shown going first.
 //
 // It is generic in the texture an image is uploaded to, so that it can be
 // tested and measured with no GPU behind it.
@@ -25,12 +26,22 @@ const (
 	Failed
 )
 
-// Key is what an entry is decoded for: a source, and the most pixels its
-// larger side may have, 0 for no limit.
+// Key is what an entry is decoded for: a source, and the box of pixels it
+// is scaled to.
+//
+// Without Cover the image is shrunk, keeping its aspect ratio, until it
+// fits inside W×H, and a side of 0 sets no limit. With Cover it is shrunk
+// only as far as it still covers W×H, and a side of 0 asks for nothing.
+// An image already within the box keeps its size: it is never enlarged.
 type Key struct {
-	Src string
-	Max int
+	Src   string
+	W, H  int
+	Cover bool
 }
+
+// Max is the Key of src no larger than side pixels on its larger side, 0
+// for its full size.
+func Max(src string, side int) Key { return Key{Src: src, W: side, H: side} }
 
 // Loader produces the image for src. It runs on a goroutine of its own and
 // should give up when ctx is cancelled.
@@ -48,6 +59,7 @@ type Entry[T any] struct {
 	key     Key
 	status  Status
 	decoded image.Image // handed over by the loader, until it is uploaded
+	source  image.Point // the loaded image's size, before it was scaled
 	tex     T
 	err     error
 	bytes   int64
@@ -68,17 +80,20 @@ type Cache[T any] struct {
 	limit   int64
 	idleSum int64 // bytes of the idle entries, the ones the limit applies to
 	entries map[Key]*Entry[T]
-	front   *Entry[T] // the idle entry released last
-	back    *Entry[T] // and first, which goes first
+	bySrc   map[string][]*Entry[T] // the entries, by Src
+	front   *Entry[T]              // the idle entry released last
+	back    *Entry[T]              // and first, which goes first
 	upload  func(image.Image) (T, int64)
 	free    func(T)
 }
 
 // New returns a cache that keeps up to limit bytes of images nothing
 // holds. upload turns a decoded image into a texture on the UI thread and
-// says how many bytes it costs; free lets go of a texture the cache drops.
+// says how many bytes it costs; the image it is given is always an
+// *image.RGBA holding exactly its own pixels, so that it has only to copy
+// them. free lets go of a texture the cache drops.
 func New[T any](limit int64, upload func(image.Image) (T, int64), free func(T)) *Cache[T] {
-	return &Cache[T]{limit: max(limit, 0), entries: map[Key]*Entry[T]{}, upload: upload, free: free}
+	return &Cache[T]{limit: max(limit, 0), entries: map[Key]*Entry[T]{}, bySrc: map[string][]*Entry[T]{}, upload: upload, free: free}
 }
 
 // SetLimit changes the budget, dropping what no longer fits.
@@ -114,6 +129,7 @@ func (c *Cache[T]) acquire(k Key, load Loader, w Waiter) *Entry[T] {
 		ctx, cancel := context.WithCancel(context.Background())
 		e = &Entry[T]{key: k, status: Pending, cancel: cancel}
 		c.entries[k] = e
+		c.bySrc[k.Src] = append(c.bySrc[k.Src], e)
 		go c.run(ctx, e, load)
 	}
 	if e.idle {
@@ -131,6 +147,38 @@ func (c *Cache[T]) acquire(k Key, load Loader, w Waiter) *Entry[T] {
 	return e
 }
 
+// forget takes e out of the cache's maps.
+func (c *Cache[T]) forget(e *Entry[T]) {
+	delete(c.entries, e.key)
+	same := c.bySrc[e.key.Src]
+	for i, o := range same {
+		if o == e {
+			same[i] = same[len(same)-1]
+			same[len(same)-1] = nil
+			same = same[:len(same)-1]
+			break
+		}
+	}
+	if len(same) == 0 {
+		delete(c.bySrc, e.key.Src)
+	} else {
+		c.bySrc[e.key.Src] = same
+	}
+}
+
+// ReadyKeys appends to dst the Keys of src whose images are ready to show,
+// held or idle, for a holder that has none to show while its own loads.
+func (c *Cache[T]) ReadyKeys(dst []Key, src string) []Key {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, e := range c.bySrc[src] {
+		if e.status == Ready && !e.dead {
+			dst = append(dst, e.key)
+		}
+	}
+	return dst
+}
+
 // release drops one holder. An entry nothing holds is cancelled while it
 // loads, forgotten when it failed and kept, within the budget, when it is
 // ready.
@@ -146,7 +194,7 @@ func (c *Cache[T]) release(e *Entry[T]) {
 		} else {
 			e.dead = true
 			e.cancel()
-			delete(c.entries, e.key)
+			c.forget(e)
 		}
 	}
 	c.mu.Unlock()
@@ -159,10 +207,10 @@ func (c *Cache[T]) run(ctx context.Context, e *Entry[T], load Loader) {
 	if err == nil && (img == nil || img.Bounds().Empty()) {
 		err = errors.New("ggui: load image: the image has no pixels")
 	}
-	if err == nil && e.key.Max > 0 {
-		img = Downscale(img, e.key.Max)
-	}
+	var source image.Point
 	if err == nil {
+		source = img.Bounds().Size()
+		img = RGBA(Fit(img, e.key.W, e.key.H, e.key.Cover))
 		err = ctx.Err()
 	}
 	c.mu.Lock()
@@ -173,7 +221,7 @@ func (c *Cache[T]) run(ctx context.Context, e *Entry[T], load Loader) {
 	if err != nil {
 		e.status, e.err = Failed, err
 	} else {
-		e.decoded = img
+		e.decoded, e.source = img, source
 	}
 	waiters := e.waiters
 	e.waiters = nil
@@ -220,7 +268,7 @@ func (c *Cache[T]) evictLocked() []T {
 		e := c.back
 		c.unidle(e)
 		e.dead = true
-		delete(c.entries, e.key)
+		c.forget(e)
 		// Only a Ready entry is ever idle, so it has a texture.
 		var zero T
 		victims = append(victims, e.tex)
@@ -290,6 +338,20 @@ func (h *Handle[T]) Get(c *Cache[T], k Key) (st Status, tex T, err error, ok boo
 	return e.status, e.tex, e.err, true
 }
 
+// Source is the size the held entry's image was loaded at, before it was
+// scaled to its Key; zero until it has loaded.
+func (h *Handle[T]) Source() image.Point {
+	h.mu.Lock()
+	c, e := h.cache, h.entry
+	h.mu.Unlock()
+	if e == nil {
+		return image.Point{}
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return e.source
+}
+
 // Acquire holds the entry of c for k in place of the one held before,
 // starting its load with load when there is none. The new one is taken
 // first, so that going back to an idle image cannot evict it to make room
@@ -322,18 +384,72 @@ func (h *Handle[T]) Release() {
 
 // Downscale shrinks img so that its larger side is at most side pixels,
 // keeping the aspect ratio; a smaller image is returned as it is.
-func Downscale(img image.Image, side int) image.Image {
+func Downscale(img image.Image, side int) image.Image { return Fit(img, side, side, false) }
+
+// Fit scales img down to the box w×h as a Key with those sides and cover
+// says, keeping its aspect ratio; an image already within it is returned as
+// it is. A scaled image is an *image.RGBA.
+func Fit(img image.Image, w, h int, cover bool) image.Image {
 	b := img.Bounds()
-	w, h := b.Dx(), b.Dy()
-	if w <= side && h <= side {
+	dw, dh := FitSize(b.Dx(), b.Dy(), w, h, cover)
+	if dw == b.Dx() && dh == b.Dy() {
 		return img
 	}
-	if w >= h {
-		w, h = side, max(1, h*side/w)
-	} else {
-		w, h = max(1, w*side/h), side
-	}
-	dst := image.NewRGBA(image.Rect(0, 0, w, h))
+	dst := image.NewRGBA(image.Rect(0, 0, dw, dh))
 	draw.CatmullRom.Scale(dst, dst.Bounds(), img, b, draw.Src, nil)
+	return dst
+}
+
+// FitSize is the size Fit scales an iw×ih image to.
+func FitSize(iw, ih, w, h int, cover bool) (int, int) {
+	// The image is scaled by w/iw, to the box's width, or by h/ih, to its
+	// height: for a box to fit inside, the smaller of the two; to cover,
+	// the larger. A side of 0 does not take part.
+	var byWidth bool
+	switch {
+	case w > 0 && h > 0:
+		wide := int64(w)*int64(ih) <= int64(h)*int64(iw) // w/iw <= h/ih
+		byWidth = wide != cover
+		if int64(w)*int64(ih) == int64(h)*int64(iw) {
+			byWidth = true
+		}
+	case w > 0:
+		byWidth = true
+	case h > 0:
+		byWidth = false
+	default:
+		return iw, ih
+	}
+	// Covering rounds the other side up, so that it still covers.
+	scale := func(other, side, of int) int {
+		n := int64(other) * int64(side)
+		q := n / int64(of)
+		if cover && n%int64(of) != 0 {
+			q++
+		}
+		return max(1, int(q))
+	}
+	if byWidth {
+		if w >= iw {
+			return iw, ih
+		}
+		return w, scale(ih, w, iw)
+	}
+	if h >= ih {
+		return iw, ih
+	}
+	return scale(iw, h, ih), h
+}
+
+// RGBA returns img as an *image.RGBA of exactly its pixels, converting it
+// when it is another kind -- a JPEG's YCbCr, a PNG's NRGBA, a GIF's
+// palette -- or a part of a larger one.
+func RGBA(img image.Image) *image.RGBA {
+	b := img.Bounds()
+	if m, ok := img.(*image.RGBA); ok && len(m.Pix) == 4*b.Dx()*b.Dy() {
+		return m
+	}
+	dst := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
+	draw.Draw(dst, dst.Bounds(), img, b.Min, draw.Src)
 	return dst
 }
