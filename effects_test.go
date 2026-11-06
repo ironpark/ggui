@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggui/internal/framestats"
 )
 
 // target is a fixed-size widget that records the pointer events it is given.
@@ -382,10 +383,10 @@ func TestBackdropBlurNeverReadsTheScreen(t *testing.T) {
 	t.Parallel()
 	img := ggfx.NewImage(80, 80)
 	defer img.Deallocate()
-	c := &Canvas{Image: img, window: true, onScreen: true}
+	c := &Canvas{Image: img, window: true, unreadable: true}
 	f := c.fs()
-	// Reading a ggfx screen panics; on it the blur must not touch it, only
-	// ask for a backbuffer.
+	// Reading a screen its driver cannot sample panics; on it the blur must
+	// not touch it, only ask for a backbuffer.
 	c.BackdropBlur(Rct(Pt(10, 10), Sz(20, 20)), 4, 3)
 	if !f.backdrop || layerCount(c) != 0 {
 		t.Fatalf("backdrop wanted %v, %d layers borrowed", f.backdrop, layerCount(c))
@@ -399,7 +400,7 @@ func TestBackdropBlurNeverReadsTheScreen(t *testing.T) {
 		t.Fatal("a blur inside a layer asked for a backbuffer")
 	}
 	// On the backbuffer it reads the window's image and keeps asking.
-	c.onScreen = false
+	c.unreadable = false
 	c.Clip(Rct(Pt(0, 0), Sz(40, 40))).BackdropBlur(Rct(Pt(10, 10), Sz(20, 20)), 4, 3)
 	if !f.backdrop {
 		t.Fatal("a blur on the backbuffer let it go")
@@ -407,32 +408,71 @@ func TestBackdropBlurNeverReadsTheScreen(t *testing.T) {
 	c.freeLayers()
 }
 
-func TestWindowKeepsABackbufferWhileBackdropsPaint(t *testing.T) {
+// TestBackdropBlurReadsAReadableScreen paints a blur on a screen its driver
+// can sample, an offscreen image standing in for it: the first frame blurs
+// it in place, and the window never makes a backbuffer. (What it reads is
+// checked on a real Metal screen in ggfx's rendertest.)
+func TestBackdropBlurReadsAReadableScreen(t *testing.T) {
 	t.Parallel()
+	screen := ggfx.NewImage(40, 40)
+	defer screen.Deallocate()
+	w := &Window{}
+	target, _ := w.paintTarget(screen, false, true)
+	if target != screen {
+		t.Fatal("a readable screen painted off screen")
+	}
+	w.aim(screen, target, screen, true)
+	c := &w.canvas
+	if c.unreadable || !c.readable() {
+		t.Fatal("the Canvas on a readable screen cannot read it")
+	}
+	// The blur reads the screen this frame: it borrows its scratch layers.
+	c.BackdropBlur(Rct(Pt(10, 10), Sz(20, 20)), 4, 3)
+	if layerCount(c) == 0 {
+		t.Fatal("the blur on a readable screen went without")
+	}
+	w.presentBackdrop(screen, target, true)
+	// The blur wanted it, and the next frame still goes without a backbuffer.
+	if target, _ := w.paintTarget(screen, true, true); target != screen || w.backbuf != nil || w.backdropTTL != 0 {
+		t.Fatal("a readable screen made a backbuffer")
+	}
+	c.freeLayers()
+}
+
+// TestWindowKeepsABackbufferWhileBackdropsPaint is not parallel: it reads
+// the backbuffer gauge, which every window adds to.
+func TestWindowKeepsABackbufferWhileBackdropsPaint(t *testing.T) {
+	before := framestats.ReadTextures().Backbuffer
 	screen := ggfx.NewImage(40, 30)
 	defer screen.Deallocate()
 	w := &Window{}
-	target := func() *ggfx.Image { img, _ := w.paintTarget(screen, false); return img }
+	target := func() *ggfx.Image { img, _ := w.paintTarget(screen, false, false); return img }
 	if target() != screen {
 		t.Fatal("a window with no backdrop painted off screen")
 	}
 	// A frame on the screen that wanted a blur turns the backbuffer on.
 	w.canvas.fs().backdrop = true
-	w.presentBackdrop(screen, screen)
-	back, kept := w.paintTarget(screen, false)
+	w.presentBackdrop(screen, screen, false)
+	back, kept := w.paintTarget(screen, false, false)
 	if back == screen || back.Bounds() != screen.Bounds() || kept {
 		t.Fatalf("backbuffer %v, kept %v, for screen %v; want a new one", back.Bounds(), kept, screen.Bounds())
 	}
-	if _, kept := w.paintTarget(screen, false); !kept {
+	if _, kept := w.paintTarget(screen, false, false); !kept {
 		t.Fatal("the backbuffer did not keep the last frame")
+	}
+	if got, want := framestats.ReadTextures().Backbuffer-before, framestats.ImageBytes(40, 30); got != want {
+		t.Fatalf("backbuffer gauged at %d bytes, want %d", got, want)
 	}
 	// Frames without one count it down and free it.
 	w.canvas.fs().backdrop = false
 	for range backdropFrames {
-		w.presentBackdrop(screen, target())
+		w.presentBackdrop(screen, target(), false)
 	}
 	if w.backbuf != nil || target() != screen {
 		t.Fatal("the backbuffer outlived its backdrops")
+	}
+	if got := framestats.ReadTextures().Backbuffer; got != before {
+		t.Fatalf("backbuffer gauged at %d bytes once freed, want %d", got, before)
 	}
 }
 

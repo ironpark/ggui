@@ -657,9 +657,12 @@ func (w *Window) runFrameEvent(ev ggwd.FrameEvent) error {
 // paintTarget returns the image this frame paints into, and whether it
 // holds the last frame: screen, as its driver keeps it, or the backbuffer
 // while a BackdropBlur has wanted one recently, unless it was made for
-// this frame.
-func (w *Window) paintTarget(screen *ggfx.Image, kept bool) (*ggfx.Image, bool) {
-	if w.backdropTTL == 0 {
+// this frame. A readable screen, one its driver can sample, needs none:
+// a BackdropBlur reads it.
+func (w *Window) paintTarget(screen *ggfx.Image, kept, readable bool) (*ggfx.Image, bool) {
+	if w.backdropTTL == 0 || readable {
+		w.backdropTTL = 0
+		w.freeBackbuf()
 		return screen, kept
 	}
 	size := screen.Bounds().Size()
@@ -667,6 +670,7 @@ func (w *Window) paintTarget(screen *ggfx.Image, kept bool) (*ggfx.Image, bool) 
 		w.freeBackbuf()
 		// Unmanaged for the reason a layer is: see newLayerImage.
 		w.backbuf = ggfx.NewImageWithOptions(image.Rect(0, 0, size.X, size.Y), &ggfx.NewImageOptions{Unmanaged: true})
+		framestats.AddTexture(framestats.Backbuffer, framestats.ImageBytes(size.X, size.Y))
 		return w.backbuf, false
 	}
 	return w.backbuf, true
@@ -677,10 +681,13 @@ func (w *Window) paintTarget(screen *ggfx.Image, kept bool) (*ggfx.Image, bool) 
 const backdropFrames = 120
 
 // presentBackdrop copies a backbuffer frame to the screen and decides
-// whether the next frame needs one.
-func (w *Window) presentBackdrop(screen, target *ggfx.Image) {
+// whether the next frame needs one, which a readable screen never does.
+func (w *Window) presentBackdrop(screen, target *ggfx.Image, readable bool) {
 	if target != screen {
 		screen.DrawImage(target, &ggfx.DrawImageOptions{Blend: ggfx.BlendCopy})
+	}
+	if readable {
+		return
 	}
 	if w.canvas.fs().backdrop {
 		w.backdropTTL = backdropFrames
@@ -700,6 +707,8 @@ func (w *Window) presentBackdrop(screen, target *ggfx.Image) {
 // freeBackbuf frees the backbuffer, if there is one.
 func (w *Window) freeBackbuf() {
 	if w.backbuf != nil {
+		size := w.backbuf.Bounds().Size()
+		framestats.AddTexture(framestats.Backbuffer, -framestats.ImageBytes(size.X, size.Y))
 		w.backbuf.Deallocate()
 		w.backbuf = nil
 	}
@@ -811,7 +820,9 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 		framestats.CountSkipped()
 		return
 	}
-	target, kept := w.paintTarget(screen, kept)
+	// A screen its driver samples is read by a BackdropBlur in place.
+	readable := screen.CanBeSource()
+	target, kept := w.paintTarget(screen, kept, readable)
 	contained := w.takeContained()
 	defer w.frameLoop.endFrameFree(len(contained) > 0, false)
 	// within is where a frame whose changes a scroll contains paints, in
@@ -843,8 +854,8 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 		return
 	}
 	defer w.canvas.trimLayers()
-	w.aim(dst, target, screen)
-	defer w.presentBackdrop(screen, target)
+	w.aim(dst, target, screen, readable)
+	defer w.presentBackdrop(screen, target, readable)
 	logical := w.logicalSize(screen)
 	if Untrack(w.viewport.Get) != logical {
 		w.viewport.Set(logical)
@@ -864,7 +875,7 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 				framestats.Refuse("state changed")
 				w.frameLoop.endFrameFree(true, true)
 				dst = target
-				w.aim(dst, target, screen)
+				w.aim(dst, target, screen, readable)
 				if setDamage != nil {
 					setDamage([]image.Rectangle{screen.Bounds()})
 				}
@@ -896,10 +907,11 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 }
 
 // aim points the window's Canvas at dst, which is target or a part of
-// it, target being screen or the backbuffer.
-func (w *Window) aim(dst, target, screen *ggfx.Image) {
+// it, target being screen or the backbuffer; readable reports whether
+// screen can be read.
+func (w *Window) aim(dst, target, screen *ggfx.Image, readable bool) {
 	w.canvas.Image = dst
-	w.canvas.window, w.canvas.onScreen = true, target == screen
+	w.canvas.window, w.canvas.unreadable = true, target == screen && !readable
 }
 
 // The methods here change the native window. Called before the window
