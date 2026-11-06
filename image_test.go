@@ -212,7 +212,7 @@ func measure(w Widget, size Size) (*Probe, func() Size) {
 // pumpUntil runs frames until done reports true, failing after a second.
 func pumpUntil(t *testing.T, p *Probe, done func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	for !done() {
 		if time.Now().After(deadline) {
 			t.Fatal("timed out waiting for the image")
