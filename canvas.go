@@ -30,10 +30,11 @@ type Canvas struct {
 	enclosing any
 
 	// window is set on a Canvas that draws into the window's own image,
-	// its screen or its backbuffer, and onScreen when that is the screen,
-	// which ggfx draws to but never reads. derive and Clip keep them; a
-	// layer's Canvas draws into an image of its own and clears them.
-	window, onScreen bool
+	// its screen or its backbuffer, and unreadable when that is a screen
+	// its driver draws to but cannot read (Metal's it can). derive and Clip
+	// keep them; a layer's Canvas draws into an image of its own and clears
+	// them.
+	window, unreadable bool
 
 	// frameState is the state there is one of per frame rather than one
 	// per Canvas, the regions registered among it. The root makes it on
@@ -62,7 +63,7 @@ type frameState struct {
 	layers render.LayerPool[*ggfx.Image]
 
 	// backdrop records that a BackdropBlur read the window's own image
-	// this frame, or wanted to: the window keeps a backbuffer for it, as
+	// this frame, or wanted to: the window keeps a backbuffer for it where
 	// its screen cannot be read.
 	backdrop bool
 
@@ -328,13 +329,13 @@ func (c *Canvas) derive() *Canvas {
 // such as a layer's.
 func (c *Canvas) into(img *ggfx.Image) *Canvas {
 	child := c.derive()
-	child.Image, child.window, child.onScreen = img, false, false
+	child.Image, child.window, child.unreadable = img, false, false
 	return child
 }
 
 // readable reports whether what c has drawn can be read back, which a
-// window's screen cannot be.
-func (c *Canvas) readable() bool { return c.Image != nil && !c.onScreen }
+// window's screen cannot be where its driver cannot sample it.
+func (c *Canvas) readable() bool { return c.Image != nil && !c.unreadable }
 
 // root returns the Canvas a Clip chain started from.
 func (c *Canvas) root() *Canvas {
@@ -627,7 +628,7 @@ func (c *Canvas) ClipReusing(reuse *Canvas, r Rect) *Canvas {
 
 // clipInto makes child the Clip of c to r.
 func (c *Canvas) clipInto(child *Canvas, r Rect) *Canvas {
-	*child = Canvas{parent: c, frameState: c.fs(), clip: r, clipped: true, scale: c.scale, inert: c.inert, scope: c.scope, group: c.group, space: c.space, enclosing: c.enclosing, window: c.window, onScreen: c.onScreen}
+	*child = Canvas{parent: c, frameState: c.fs(), clip: r, clipped: true, scale: c.scale, inert: c.inert, scope: c.scope, group: c.group, space: c.space, enclosing: c.enclosing, window: c.window, unreadable: c.unreadable}
 	if c.clipped {
 		child.clip = c.clip.Intersect(r)
 	}

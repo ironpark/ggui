@@ -42,16 +42,17 @@ func (c *Canvas) Blur(r Rect, sigma float64, paint func(dst *Canvas)) {
 // sigma logical pixels, with corners rounded by radius: frosted glass behind
 // a panel painted next. It reads the image c draws into, so inside a Layer
 // it blurs only what that layer holds. Pixels beyond the edge of what can be
-// read repeat its edge, so the backdrop does not darken there. A window's
-// screen cannot be read, so the first frame a window paints one in goes
-// without it, and the window paints into a backbuffer while they last.
+// read repeat its edge, so the backdrop does not darken there. A window
+// reads its screen where the graphics driver can (Metal); elsewhere the
+// first frame a window paints one in goes without it, and the window paints
+// into a backbuffer while they last.
 func (c *Canvas) BackdropBlur(r Rect, radius, sigma float64) {
 	if c == nil || c.Image == nil || !(sigma > 0) || math.IsInf(sigma, 0) {
 		return
 	}
 	if c.window {
-		// A window's screen cannot be read, so the window paints into a
-		// backbuffer from the next frame on and this one goes without.
+		// A screen that cannot be read has the window paint into a
+		// backbuffer from the next frame on, and this one goes without.
 		c.fs().backdrop = true
 	}
 	if !c.readable() {
