@@ -318,45 +318,37 @@ type (
 // as it likes.
 
 // buildSemTree reuses the last snapshot only when all observable values are
-// equal. Changed frames own fresh storage; readers can retain any old tree.
-func buildSemTree(c *Canvas, focused *hitRegion, prev *SemTree) *SemTree {
-	f := c.fs()
-	focus := focusedNode(c, focused)
-	if sameSemTree(c, focus, prev) {
-		return prev
+// equal. Otherwise it shares every page of nodes that did not change with
+// prev and copies only the rest, so readers can retain any old tree. b holds
+// scratch from one frame to the next; nil uses a fresh one.
+func buildSemTree(c *Canvas, focused *hitRegion, prev *SemTree, b *a11y.Builder) *SemTree {
+	if b == nil {
+		b = new(a11y.Builder)
 	}
-	if len(f.sem) == 0 {
-		return a11y.Build(nil, focus)
-	}
-	nodes := make([]SemNode, len(f.sem))
-	for i := range f.sem {
-		e := &f.sem[i]
-		nodes[i] = SemNode{
-			Node:   freezeNode(e.node),
-			ID:     NodeID{ID: e.id, Rect: e.full, Role: e.node.Role},
-			Rect:   e.rect,
-			Full:   e.full,
-			Parent: e.parent - 1,
-		}
-	}
-	return a11y.Build(nodes, focus)
+	return b.Build(prev, semSource{c.fs()}, focusedNode(c, focused))
 }
 
+// semSource is the frame's staged nodes as a11y.Builder reads them.
 // Parent indices and paint order fully determine roots and child lists.
 // Handlers, scopes and groups are frame-local and are not published.
-func sameSemTree(c *Canvas, focus int, prev *SemTree) bool {
-	f := c.fs()
-	if prev == nil || prev.FocusIndex() != focus || prev.Len() != len(f.sem) {
-		return false
+type semSource struct{ f *frameState }
+
+func (s semSource) Len() int         { return len(s.f.sem) }
+func (s semSource) Parent(i int) int { return s.f.sem[i].parent - 1 }
+
+func (s semSource) Same(i int, b *SemNode) bool {
+	a := &s.f.sem[i]
+	return a.rect == b.Rect && a.full == b.Full && sameAny(a.id, b.ID.ID) && sameNode(&a.node, &b.Node)
+}
+
+func (s semSource) Fill(i int, dst *SemNode) {
+	e := &s.f.sem[i]
+	*dst = SemNode{
+		Node: freezeNode(e.node),
+		ID:   NodeID{ID: e.id, Rect: e.full, Role: e.node.Role},
+		Rect: e.rect,
+		Full: e.full,
 	}
-	for i := range f.sem {
-		a, b := &f.sem[i], prev.Ref(i)
-		if a.parent-1 != b.Parent || a.rect != b.Rect || a.full != b.Full ||
-			!sameAny(a.id, b.ID.ID) || !sameNode(&a.node, &b.Node) {
-			return false
-		}
-	}
-	return true
 }
 
 func sameNode(a, b *Node) bool {

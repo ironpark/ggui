@@ -113,6 +113,9 @@ type frameLoop struct {
 	// end of a frame and read from anywhere, including a thread that is not
 	// this one, which is why it is a pointer swap and not a buffer.
 	sem atomic.Pointer[SemTree]
+	// semBuild is the scratch publishSemantics builds each tree with, so a
+	// frame that changed a row copies one page of nodes and nothing else.
+	semBuild a11y.Builder
 }
 
 // Dialogs is the host's file and message dialogs: the platform's under an App, a
@@ -151,7 +154,7 @@ func (l *frameLoop) Clipboard() runtime.Clipboard { return l.clipboard }
 // focus, which only the UI goroutine may look at, mirrored into the tree
 // so that everyone else can.
 func (l *frameLoop) publishSemantics(c *Canvas, focused *hitRegion) {
-	l.sem.Store(buildSemTree(c, focused, l.sem.Load()))
+	l.sem.Store(buildSemTree(c, focused, l.sem.Load(), &l.semBuild))
 }
 
 // announce queues something to say out loud. It shares the post lock, as
