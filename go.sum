@@ -30,6 +30,8 @@ github.com/ironpark/ggfx v0.0.0-20261106132411-378ba0712758 h1:LDnX/Wnk+Ek026xqj
 github.com/ironpark/ggfx v0.0.0-20261106132411-378ba0712758/go.mod h1:g4KK8bnQr3VQ65W26/Sa+WL9HlSshg/PZUMfWRMK42c=
 github.com/ironpark/ggfx v0.0.0-20261106135432-066b5ab5dbd3 h1:ONV148XhTSTsxV3ykd1FsgaxTlGk7JOZsmHsmbzC4bA=
 github.com/ironpark/ggfx v0.0.0-20261106135432-066b5ab5dbd3/go.mod h1:g4KK8bnQr3VQ65W26/Sa+WL9HlSshg/PZUMfWRMK42c=
+github.com/ironpark/ggfx v0.0.0-20261106143633-7260753e9e45 h1:bbqPZKTvEA+tN51DGBvgEquUaHcnKRDAGbbQSAlzYx0=
+github.com/ironpark/ggfx v0.0.0-20261106143633-7260753e9e45/go.mod h1:g4KK8bnQr3VQ65W26/Sa+WL9HlSshg/PZUMfWRMK42c=
 github.com/ironpark/ggwd v0.0.0-20261031170520-65df921002d2 h1:nmxj3TXyOv9d395vzT4amTQJ3knhybLx+Uu/AsN/xbE=
 github.com/ironpark/ggwd v0.0.0-20261031170520-65df921002d2/go.mod h1:U4G78bhALXLxCSDvvWL4CMlJ6pMTFwQZfFLxp5J4tN0=
 github.com/ironpark/ggwd v0.0.0-20261102030823-b0d6ceac0632 h1:o57TDsvU378U3Y5e42qoTlF5boZqlxzOttKOau9DuVI=
