@@ -657,20 +657,18 @@ func (w *Window) runFrameEvent(ev ggwd.FrameEvent) error {
 // paintTarget returns the image this frame paints into, and whether it
 // holds the last frame: screen, as its driver keeps it, or the backbuffer
 // while a BackdropBlur has wanted one recently, unless it was made for
-// this frame. A readable screen, one its driver can sample, needs none:
-// a BackdropBlur reads it.
-func (w *Window) paintTarget(screen *ggfx.Image, kept, readable bool) (*ggfx.Image, bool) {
-	if w.backdropTTL == 0 || readable {
-		w.backdropTTL = 0
+// this frame.
+func (w *Window) paintTarget(screen *ggfx.Image, kept bool) (*ggfx.Image, bool) {
+	if w.backdropTTL == 0 {
 		w.freeBackbuf()
 		return screen, kept
 	}
-	size := screen.Bounds().Size()
-	if w.backbuf == nil || w.backbuf.Bounds().Size() != size {
+	bounds := screen.Bounds()
+	if w.backbuf == nil || w.backbuf.Bounds().Size() != bounds.Size() {
 		w.freeBackbuf()
 		// Unmanaged for the reason a layer is: see newLayerImage.
-		w.backbuf = ggfx.NewImageWithOptions(image.Rect(0, 0, size.X, size.Y), &ggfx.NewImageOptions{Unmanaged: true})
-		framestats.AddTexture(framestats.Backbuffer, framestats.ImageBytes(size.X, size.Y))
+		w.backbuf = ggfx.NewImageWithOptions(image.Rectangle{Max: bounds.Size()}, &ggfx.NewImageOptions{Unmanaged: true})
+		framestats.Kept(framestats.Backbuffer, w.backbuf.Bounds())
 		return w.backbuf, false
 	}
 	return w.backbuf, true
@@ -681,15 +679,13 @@ func (w *Window) paintTarget(screen *ggfx.Image, kept, readable bool) (*ggfx.Ima
 const backdropFrames = 120
 
 // presentBackdrop copies a backbuffer frame to the screen and decides
-// whether the next frame needs one, which a readable screen never does.
-func (w *Window) presentBackdrop(screen, target *ggfx.Image, readable bool) {
+// whether the next frame needs one, which a screen its driver can sample
+// never does: a BackdropBlur reads it in place.
+func (w *Window) presentBackdrop(screen, target *ggfx.Image) {
 	if target != screen {
 		screen.DrawImage(target, &ggfx.DrawImageOptions{Blend: ggfx.BlendCopy})
 	}
-	if readable {
-		return
-	}
-	if w.canvas.fs().backdrop {
+	if w.canvas.fs().backdrop && !screen.CanBeSource() {
 		w.backdropTTL = backdropFrames
 		if target == screen {
 			// This frame skipped its blurs; draw the next one with them.
@@ -707,8 +703,7 @@ func (w *Window) presentBackdrop(screen, target *ggfx.Image, readable bool) {
 // freeBackbuf frees the backbuffer, if there is one.
 func (w *Window) freeBackbuf() {
 	if w.backbuf != nil {
-		size := w.backbuf.Bounds().Size()
-		framestats.AddTexture(framestats.Backbuffer, -framestats.ImageBytes(size.X, size.Y))
+		framestats.Freed(framestats.Backbuffer, w.backbuf.Bounds())
 		w.backbuf.Deallocate()
 		w.backbuf = nil
 	}
@@ -820,9 +815,7 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 		framestats.CountSkipped()
 		return
 	}
-	// A screen its driver samples is read by a BackdropBlur in place.
-	readable := screen.CanBeSource()
-	target, kept := w.paintTarget(screen, kept, readable)
+	target, kept := w.paintTarget(screen, kept)
 	contained := w.takeContained()
 	defer w.frameLoop.endFrameFree(len(contained) > 0, false)
 	// within is where a frame whose changes a scroll contains paints, in
@@ -854,8 +847,8 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 		return
 	}
 	defer w.canvas.trimLayers()
-	w.aim(dst, target, screen, readable)
-	defer w.presentBackdrop(screen, target, readable)
+	w.aim(dst)
+	defer w.presentBackdrop(screen, target)
 	logical := w.logicalSize(screen)
 	if Untrack(w.viewport.Get) != logical {
 		w.viewport.Set(logical)
@@ -875,7 +868,7 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 				framestats.Refuse("state changed")
 				w.frameLoop.endFrameFree(true, true)
 				dst = target
-				w.aim(dst, target, screen, readable)
+				w.aim(dst)
 				if setDamage != nil {
 					setDamage([]image.Rectangle{screen.Bounds()})
 				}
@@ -906,12 +899,10 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 	w.noteMotion(target)
 }
 
-// aim points the window's Canvas at dst, which is target or a part of
-// it, target being screen or the backbuffer; readable reports whether
-// screen can be read.
-func (w *Window) aim(dst, target, screen *ggfx.Image, readable bool) {
-	w.canvas.Image = dst
-	w.canvas.window, w.canvas.unreadable = true, target == screen && !readable
+// aim points the window's Canvas at dst, which is the screen or the
+// backbuffer, or a part of it.
+func (w *Window) aim(dst *ggfx.Image) {
+	w.canvas.Image, w.canvas.window = dst, true
 }
 
 // The methods here change the native window. Called before the window

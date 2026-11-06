@@ -52,7 +52,8 @@ func (c *Canvas) BackdropBlur(r Rect, radius, sigma float64) {
 	}
 	if c.window {
 		// A screen that cannot be read has the window paint into a
-		// backbuffer from the next frame on, and this one goes without.
+		// backbuffer from the next frame on, and this one goes without;
+		// one that can needs none (see presentBackdrop).
 		c.fs().backdrop = true
 	}
 	if !c.readable() {

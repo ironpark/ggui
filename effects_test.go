@@ -383,7 +383,9 @@ func TestBackdropBlurNeverReadsTheScreen(t *testing.T) {
 	t.Parallel()
 	img := ggfx.NewImage(80, 80)
 	defer img.Deallocate()
-	c := &Canvas{Image: img, window: true, unreadable: true}
+	// The zero Image, which cannot be a source, stands in for a screen its
+	// driver cannot sample.
+	c := &Canvas{Image: &ggfx.Image{}, window: true}
 	f := c.fs()
 	// Reading a screen its driver cannot sample panics; on it the blur must
 	// not touch it, only ask for a backbuffer.
@@ -393,6 +395,7 @@ func TestBackdropBlurNeverReadsTheScreen(t *testing.T) {
 	}
 	// Inside a layer the image read is the layer's, which is allowed.
 	f.backdrop = false
+	c.Image = img
 	c.Layer(LayerOptions{}, func(dst *Canvas) {
 		dst.BackdropBlur(Rct(Pt(10, 10), Sz(20, 20)), 4, 3)
 	})
@@ -400,7 +403,6 @@ func TestBackdropBlurNeverReadsTheScreen(t *testing.T) {
 		t.Fatal("a blur inside a layer asked for a backbuffer")
 	}
 	// On the backbuffer it reads the window's image and keeps asking.
-	c.unreadable = false
 	c.Clip(Rct(Pt(0, 0), Sz(40, 40))).BackdropBlur(Rct(Pt(10, 10), Sz(20, 20)), 4, 3)
 	if !f.backdrop {
 		t.Fatal("a blur on the backbuffer let it go")
@@ -417,13 +419,13 @@ func TestBackdropBlurReadsAReadableScreen(t *testing.T) {
 	screen := ggfx.NewImage(40, 40)
 	defer screen.Deallocate()
 	w := &Window{}
-	target, _ := w.paintTarget(screen, false, true)
+	target, _ := w.paintTarget(screen, false)
 	if target != screen {
 		t.Fatal("a readable screen painted off screen")
 	}
-	w.aim(screen, target, screen, true)
+	w.aim(screen)
 	c := &w.canvas
-	if c.unreadable || !c.readable() {
+	if !c.readable() {
 		t.Fatal("the Canvas on a readable screen cannot read it")
 	}
 	// The blur reads the screen this frame: it borrows its scratch layers.
@@ -431,9 +433,9 @@ func TestBackdropBlurReadsAReadableScreen(t *testing.T) {
 	if layerCount(c) == 0 {
 		t.Fatal("the blur on a readable screen went without")
 	}
-	w.presentBackdrop(screen, target, true)
+	w.presentBackdrop(screen, target)
 	// The blur wanted it, and the next frame still goes without a backbuffer.
-	if target, _ := w.paintTarget(screen, true, true); target != screen || w.backbuf != nil || w.backdropTTL != 0 {
+	if target, _ := w.paintTarget(screen, true); target != screen || w.backbuf != nil || w.backdropTTL != 0 {
 		t.Fatal("a readable screen made a backbuffer")
 	}
 	c.freeLayers()
@@ -446,18 +448,20 @@ func TestWindowKeepsABackbufferWhileBackdropsPaint(t *testing.T) {
 	screen := ggfx.NewImage(40, 30)
 	defer screen.Deallocate()
 	w := &Window{}
-	target := func() *ggfx.Image { img, _ := w.paintTarget(screen, false, false); return img }
+	target := func() *ggfx.Image { img, _ := w.paintTarget(screen, false); return img }
 	if target() != screen {
 		t.Fatal("a window with no backdrop painted off screen")
 	}
-	// A frame on the screen that wanted a blur turns the backbuffer on.
+	// A frame on a screen that cannot be read, the zero Image standing in
+	// for it, that wanted a blur turns the backbuffer on.
 	w.canvas.fs().backdrop = true
-	w.presentBackdrop(screen, screen, false)
-	back, kept := w.paintTarget(screen, false, false)
+	unreadable := &ggfx.Image{}
+	w.presentBackdrop(unreadable, unreadable)
+	back, kept := w.paintTarget(screen, false)
 	if back == screen || back.Bounds() != screen.Bounds() || kept {
 		t.Fatalf("backbuffer %v, kept %v, for screen %v; want a new one", back.Bounds(), kept, screen.Bounds())
 	}
-	if _, kept := w.paintTarget(screen, false, false); !kept {
+	if _, kept := w.paintTarget(screen, false); !kept {
 		t.Fatal("the backbuffer did not keep the last frame")
 	}
 	if got, want := framestats.ReadTextures().Backbuffer-before, framestats.ImageBytes(40, 30); got != want {
@@ -466,7 +470,7 @@ func TestWindowKeepsABackbufferWhileBackdropsPaint(t *testing.T) {
 	// Frames without one count it down and free it.
 	w.canvas.fs().backdrop = false
 	for range backdropFrames {
-		w.presentBackdrop(screen, target(), false)
+		w.presentBackdrop(screen, target())
 	}
 	if w.backbuf != nil || target() != screen {
 		t.Fatal("the backbuffer outlived its backdrops")

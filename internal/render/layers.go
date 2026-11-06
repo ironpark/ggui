@@ -3,6 +3,8 @@ package render
 import (
 	"image"
 	"slices"
+
+	"github.com/ironpark/ggui/internal/framestats"
 )
 
 // Texture is what a LayerPool lends: an image with bounds, which it frees
@@ -150,5 +152,5 @@ func (p *LayerPool[T]) free(img T) {
 // textureBytes is the bytes of RGBA pixels t takes.
 func textureBytes(t Texture) int64 {
 	b := t.Bounds()
-	return int64(b.Dx()) * int64(b.Dy()) * 4
+	return framestats.ImageBytes(b.Dx(), b.Dy())
 }

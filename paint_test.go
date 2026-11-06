@@ -331,7 +331,7 @@ func TestPathMaskReusesShrinksAndGauges(t *testing.T) {
 		t.Helper()
 		c.FillPathGradient(p, Rct(Point{}, Sz(side, side)), color.White, color.Black)
 		if b := p.gradientMask.Bounds(); b != image.Rect(0, 0, int(side), int(side)) {
-			t.Fatalf("coverage of %v: mask part %v", side, b)
+			t.Fatalf("coverage of %v cutting the path: mask part %v", side, b)
 		}
 		s := p.maskStore.Bounds()
 		if got, want := framestats.ReadTextures().PathMasks-base, framestats.ImageBytes(s.Dx(), s.Dy()); got != want {
@@ -356,6 +356,24 @@ func TestPathMaskReusesShrinksAndGauges(t *testing.T) {
 	if s := fill(600).Bounds(); s.Dx() != 640 {
 		t.Fatalf("a large mask %v, want rounded up to 64", s)
 	}
+	// A path the bounds do not cut takes the mask's part rounded up, the
+	// same part for coverages a little apart.
+	whole := triangle(590)
+	c.FillPathGradient(whole, Rct(Point{}, Sz(600, 600)), color.White, color.Black)
+	part := whole.gradientMask
+	if b := part.Bounds(); b != image.Rect(0, 0, 640, 640) {
+		t.Fatalf("an uncut coverage of 590: mask part %v, want rounded up to 64", b)
+	}
+	whole.Reset()
+	whole.MoveTo(0, 0)
+	whole.LineTo(600, 0)
+	whole.LineTo(600, 600)
+	whole.Close()
+	c.FillPathGradient(whole, Rct(Point{}, Sz(600, 600)), color.White, color.Black)
+	if whole.gradientMask != part {
+		t.Fatalf("an uncut coverage of 600 took part %v, not the one of 590", whole.gradientMask.Bounds())
+	}
+	whole.freeMask()
 	p.freeMask()
 	if got := framestats.ReadTextures().PathMasks - base; got != 0 {
 		t.Fatalf("after freeing, the gauge is %d off", got)

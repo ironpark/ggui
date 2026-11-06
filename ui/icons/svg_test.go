@@ -3,7 +3,6 @@ package icons
 import (
 	"image"
 	"image/color"
-	"slices"
 	"testing"
 
 	"github.com/ironpark/ggfx"
@@ -85,14 +84,11 @@ func BenchmarkSVGDrawAnimatedSize(b *testing.B) {
 
 // drain frees every raster of the SVGs given.
 func drain(svgs ...*SVG) {
+	rasters.mu.Lock()
+	defer rasters.mu.Unlock()
 	for _, s := range svgs {
-		s.mu.Lock()
-		cache := slices.Clone(s.cache)
-		s.mu.Unlock()
-		for _, r := range cache {
-			if rasters.take(r) {
-				r.free()
-			}
+		for len(s.cache) > 0 {
+			rasters.free(s.cache[0])
 		}
 	}
 }
@@ -104,7 +100,7 @@ func TestScratchIsClearAndSized(t *testing.T) {
 	for i := range a.Pix {
 		a.Pix[i] = 0xff
 	}
-	scratch.Put(a)
+	releaseScratch(a)
 	b := scratchRGBA(10)
 	if b.Bounds() != image.Rect(0, 0, 10, 10) || b.Stride != 40 || len(b.Pix) != 400 {
 		t.Fatalf("scratch %v stride %d len %d", b.Bounds(), b.Stride, len(b.Pix))
@@ -116,6 +112,14 @@ func TestScratchIsClearAndSized(t *testing.T) {
 	}
 	if b == a && cap(b.Pix) != 1600 {
 		t.Fatal("the reused scratch did not keep its buffer")
+	}
+	releaseScratch(b)
+
+	// A buffer past mostScratch is let go, not kept for every small one.
+	big := scratchRGBA(1024)
+	releaseScratch(big)
+	if c := scratchRGBA(10); c == big {
+		t.Fatal("scratch kept a buffer past mostScratch")
 	}
 }
 
