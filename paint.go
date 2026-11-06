@@ -5,11 +5,14 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"runtime"
 	"slices"
+	"sync/atomic"
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggfx/vector"
 	"github.com/ironpark/ggui/internal/fontsys"
+	"github.com/ironpark/ggui/internal/framestats"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/render"
 	"github.com/ironpark/ggui/internal/textlayout"
@@ -275,7 +278,12 @@ func (c *Canvas) shadeImage(img *ggfx.Image, r, at Rect, o ImageOptions) {
 // Path is a reusable vector outline in logical pixels. Mutating a path invalidates
 // its device-scale cache. Like widgets, paths belong to the UI thread.
 type Path struct {
+	// gradientMask is the part of maskStore the coverage takes; maskBytes
+	// counts maskStore's bytes for the PathMasks gauge, apart from the Path
+	// so the cleanup that counts them gone does not keep it alive.
 	gradientMask *ggfx.Image
+	maskStore    *ggfx.Image
+	maskBytes    *atomic.Int64
 	gradientKey  gradientKey
 	gradientRev  uint64
 	path         vector.Path
@@ -431,14 +439,8 @@ func (p *Path) coverage(c *Canvas, bounds Rect) (*ggfx.Image, image.Point, bool)
 	}
 	key := gradientKey{bounds: bounds, coverage: coverage, scale: scale}
 	if p.gradientRev != p.revision || p.gradientKey != key || p.gradientMask == nil {
-		if p.gradientMask == nil || p.gradientMask.Bounds().Dx() != w || p.gradientMask.Bounds().Dy() != h {
-			if p.gradientMask != nil {
-				p.gradientMask.Deallocate()
-			}
-			p.gradientMask = ggfx.NewImage(w, h)
-		} else {
-			p.gradientMask.Clear()
-		}
+		p.gradientMask = p.maskFor(w, h)
+		p.gradientMask.Clear()
 		var local vector.Path
 		op := &vector.AddPathOptions{}
 		op.GeoM.Translate(-float64(coverage.Min.X), -float64(coverage.Min.Y))
@@ -448,6 +450,66 @@ func (p *Path) coverage(c *Canvas, bounds Rect) (*ggfx.Image, image.Point, bool)
 		p.gradientRev = p.revision
 	}
 	return p.gradientMask, coverage.Min, true
+}
+
+// maskFor returns a w×h image for the coverage, the top-left part of
+// the mask the path keeps. One that grows or shrinks a little, as an
+// animated one does every frame, keeps the mask while it fits and takes at
+// least a quarter of it; past that a new one is made, its sides rounded up
+// a little so the next frame's growth fits too.
+func (p *Path) maskFor(w, h int) *ggfx.Image {
+	if s := p.maskStore; s != nil {
+		b := s.Bounds()
+		if w <= b.Dx() && h <= b.Dy() && 4*w*h >= b.Dx()*b.Dy() {
+			if g := p.gradientMask; g != nil && g.Bounds() == image.Rect(0, 0, w, h) {
+				return g
+			}
+			if w == b.Dx() && h == b.Dy() {
+				return s
+			}
+			return s.SubImage(image.Rect(0, 0, w, h)).(*ggfx.Image)
+		}
+		p.freeMask()
+	}
+	mw, mh := maskSide(w), maskSide(h)
+	// A large mask is a texture of its own size, as a large image is: on
+	// the atlas it would take a page rounded up to powers of two.
+	large := mw > largeImage || mh > largeImage
+	p.maskStore = ggfx.NewImageWithOptions(image.Rect(0, 0, mw, mh), &ggfx.NewImageOptions{Unmanaged: large})
+	if p.maskBytes == nil {
+		// A Path the app drops takes its mask with it: ggfx frees the
+		// texture once it is collected, and this counts its bytes gone.
+		p.maskBytes = new(atomic.Int64)
+		runtime.AddCleanup(p, func(n *atomic.Int64) {
+			framestats.AddTexture(framestats.PathMasks, -n.Swap(0))
+		}, p.maskBytes)
+	}
+	n := framestats.ImageBytes(mw, mh)
+	p.maskBytes.Add(n)
+	framestats.AddTexture(framestats.PathMasks, n)
+	if mw == w && mh == h {
+		return p.maskStore
+	}
+	return p.maskStore.SubImage(image.Rect(0, 0, w, h)).(*ggfx.Image)
+}
+
+// maskSide rounds a coverage mask's side up: to 16 pixels for one on the
+// atlas, to 64 for a texture of its own.
+func maskSide(n int) int {
+	if n > largeImage {
+		return (n + 63) &^ 63
+	}
+	return (n + 15) &^ 15
+}
+
+// freeMask frees the path's coverage mask.
+func (p *Path) freeMask() {
+	if p.maskStore == nil {
+		return
+	}
+	p.maskStore.Deallocate()
+	p.maskStore, p.gradientMask = nil, nil
+	framestats.AddTexture(framestats.PathMasks, -p.maskBytes.Swap(0))
 }
 
 // ClipPath is Clip to the inside of path, antialiased, for a subtree: paint
@@ -517,6 +579,9 @@ func (c *Canvas) clipShape(bounds Rect, inside func(Point) bool, drawMask func(*
 // window when empty: a Layer's, or one more for an effect that needs it.
 func (c *Canvas) scratch(area image.Rectangle, fn func(img *ggfx.Image)) {
 	f := c.fs()
+	if f.layers.Gauge == nil {
+		f.layers.Gauge = gaugeLayers
+	}
 	img := f.layers.Borrow(c.root().Image.Bounds(), area, newLayerImage)
 	defer f.layers.Return()
 	if !area.Empty() {
@@ -836,6 +901,9 @@ func (c *Canvas) layer(area image.Rectangle, paint func(*Canvas), draw func(*ggf
 func newLayerImage(b image.Rectangle) *ggfx.Image {
 	return ggfx.NewImageWithOptions(b, &ggfx.NewImageOptions{Unmanaged: true})
 }
+
+// gaugeLayers counts the bytes of layer images made and freed.
+func gaugeLayers(bytes int64) { framestats.AddTexture(framestats.Layers, bytes) }
 
 // trimLayers ends a frame for the layer images: it keeps as many as the frame
 // had open at once and frees the rest.

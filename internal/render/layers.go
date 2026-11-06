@@ -25,6 +25,10 @@ type Texture interface {
 //
 // The zero LayerPool is ready to use.
 type LayerPool[T Texture] struct {
+	// Gauge, when set, is told the bytes of RGBA pixels of each image the
+	// pool makes, and their negation as it frees one.
+	Gauge func(bytes int64)
+
 	depths [][]pooled[T]
 	depth  int // layers open now
 	peak   int // the most open at once this frame
@@ -75,12 +79,15 @@ func (p *LayerPool[T]) Borrow(whole, area image.Rectangle, alloc func(image.Rect
 	// What the new image holds, it replaces.
 	pool = slices.DeleteFunc(pool, func(l pooled[T]) bool {
 		if l.img.Bounds().In(b) {
-			l.img.Deallocate()
+			p.free(l.img)
 			return true
 		}
 		return false
 	})
 	img := alloc(b)
+	if p.Gauge != nil {
+		p.Gauge(textureBytes(img))
+	}
 	p.depths[i] = append(pool, pooled[T]{img: img, used: true})
 	return img
 }
@@ -106,7 +113,7 @@ func (p *LayerPool[T]) EndFrame() {
 	for i, pool := range p.depths {
 		p.depths[i] = slices.DeleteFunc(pool, func(l pooled[T]) bool {
 			if i >= p.peak || !l.used {
-				l.img.Deallocate()
+				p.free(l.img)
 				return true
 			}
 			return false
@@ -125,9 +132,23 @@ func (p *LayerPool[T]) EndFrame() {
 func (p *LayerPool[T]) FreeAll() {
 	for _, pool := range p.depths {
 		for _, l := range pool {
-			l.img.Deallocate()
+			p.free(l.img)
 		}
 	}
 	p.depths = p.depths[:0]
 	p.peak = 0
+}
+
+// free frees img, a pool's image.
+func (p *LayerPool[T]) free(img T) {
+	if p.Gauge != nil {
+		p.Gauge(-textureBytes(img))
+	}
+	img.Deallocate()
+}
+
+// textureBytes is the bytes of RGBA pixels t takes.
+func textureBytes(t Texture) int64 {
+	b := t.Bounds()
+	return int64(b.Dx()) * int64(b.Dy()) * 4
 }
