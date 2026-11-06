@@ -24,10 +24,11 @@ type Source interface {
 // keeps scratch from one build to the next and is for one goroutine; the
 // trees it returns are frozen and are for any.
 type Builder struct {
-	start []int // node i's children are kids[start[i]:start[i+1]]
-	next  []int // where the next child of node i goes in kids
-	kids  []int
-	roots []int
+	parents []int // node i's parent, as src.Parent gave it
+	start   []int // node i's children are kids[start[i]:start[i+1]]
+	next    []int // where the next child of node i goes in kids
+	kids    []int
+	roots   []int
 }
 
 // Build assembles the tree src describes, focused naming the focused node
@@ -39,34 +40,56 @@ type Builder struct {
 func (b *Builder) Build(prev *SemTree, src Source, focused int) *SemTree {
 	n := src.Len()
 	b.link(src, n)
-	if prev != nil && prev.n == n && prev.focused == focused && slices.Equal(prev.roots, b.roots) {
-		if b.samePages(prev, src, n, nil) {
+	np := (n + pageMask) >> pageShift
+	// pages is made only at the first page that differs from prev's, so
+	// an unchanged frame allocates nothing.
+	var pages [][]SemNode
+	for k := range np {
+		lo, hi := k<<pageShift, min(n, (k+1)<<pageShift)
+		if prev != nil && k < len(prev.pages) && len(prev.pages[k]) == hi-lo && b.samePage(prev.pages[k], src, lo) {
+			if pages != nil {
+				pages[k] = prev.pages[k]
+			}
+			continue
+		}
+		if pages == nil {
+			pages = make([][]SemNode, np)
+			if prev != nil {
+				copy(pages, prev.pages[:k])
+			}
+		}
+		pages[k] = b.page(src, k, hi)
+	}
+	sameRoots := prev != nil && slices.Equal(prev.roots, b.roots)
+	if pages == nil {
+		if sameRoots && prev.n == n && prev.focused == focused {
 			return prev
 		}
+		pages = make([][]SemNode, np)
+		if prev != nil {
+			copy(pages, prev.pages[:np])
+		}
 	}
-	t := &SemTree{n: n, focused: focused, pages: make([][]SemNode, (n+pageMask)>>pageShift)}
-	if prev != nil && slices.Equal(prev.roots, b.roots) {
+	t := &SemTree{n: n, focused: focused, pages: pages}
+	if sameRoots {
 		t.roots = prev.roots
 	} else if len(b.roots) > 0 {
 		t.roots = slices.Clone(b.roots)
 	}
-	b.samePages(prev, src, n, t.pages)
-	for k := range t.pages {
-		if t.pages[k] == nil {
-			t.pages[k] = b.page(src, k, min(n, (k+1)<<pageShift))
-		}
-	}
 	return t
 }
 
-// link counts and lists every node's children, in paint order, and the
-// roots, into the builder's scratch.
+// link records every node's parent, counts and lists its children, in
+// paint order, and the roots, into the builder's scratch.
 func (b *Builder) link(src Source, n int) {
+	b.parents = slices.Grow(b.parents[:0], n)[:n]
 	b.start = slices.Grow(b.start[:0], n+1)[:n+1]
 	clear(b.start)
 	b.roots = b.roots[:0]
 	for i := range n {
-		if p := src.Parent(i); p >= 0 {
+		p := src.Parent(i)
+		b.parents[i] = p
+		if p >= 0 {
 			b.start[p+1]++
 		} else {
 			b.roots = append(b.roots, i)
@@ -77,42 +100,20 @@ func (b *Builder) link(src Source, n int) {
 	}
 	b.next = append(b.next[:0], b.start[:n]...)
 	b.kids = slices.Grow(b.kids[:0], b.start[n])[:b.start[n]]
-	for i := range n {
-		if p := src.Parent(i); p >= 0 {
+	for i, p := range b.parents {
+		if p >= 0 {
 			b.kids[b.next[p]] = i
 			b.next[p]++
 		}
 	}
 }
 
-// samePages reports whether every page of prev still holds what src says.
-// With out, it records each such page there and checks every page; without
-// it, it stops at the first that differs.
-func (b *Builder) samePages(prev *SemTree, src Source, n int, out [][]SemNode) bool {
-	if prev == nil {
-		return false
-	}
-	all := true
-	for k := 0; k<<pageShift < n; k++ {
-		lo, hi := k<<pageShift, min(n, (k+1)<<pageShift)
-		if k >= len(prev.pages) || len(prev.pages[k]) != hi-lo || !b.samePage(prev.pages[k], src, lo) {
-			if out == nil {
-				return false
-			}
-			all = false
-			continue
-		}
-		if out != nil {
-			out[k] = prev.pages[k]
-		}
-	}
-	return all
-}
-
+// samePage reports whether page, of the nodes from lo, still holds what
+// src says.
 func (b *Builder) samePage(page []SemNode, src Source, lo int) bool {
 	for j := range page {
 		i, old := lo+j, &page[j]
-		if old.Parent != src.Parent(i) || !slices.Equal(old.Children, b.kids[b.start[i]:b.start[i+1]]) || !src.Same(i, old) {
+		if old.Parent != b.parents[i] || !slices.Equal(old.Children, b.kids[b.start[i]:b.start[i+1]]) || !src.Same(i, old) {
 			return false
 		}
 	}
@@ -131,7 +132,7 @@ func (b *Builder) page(src Source, k, hi int) []SemNode {
 	for j := range page {
 		i, n := lo+j, &page[j]
 		src.Fill(i, n)
-		n.Parent = src.Parent(i)
+		n.Parent = b.parents[i]
 		n.Children = nil
 		if s, e := b.start[i]-b.start[lo], b.start[i+1]-b.start[lo]; e > s {
 			n.Children = kids[s:e:e]

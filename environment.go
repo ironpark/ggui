@@ -465,14 +465,6 @@ func (k EnvKey[T]) equal(a, b T) bool {
 // caches below a Provide rebuilt every frame hold. InputDisabledKey is cumulative:
 // once true in an ancestor, a descendant cannot clear it.
 func (e Env) With[T any](k EnvKey[T], v T) Env {
-	var box any
-	return e.withBoxed(k, v, &box)
-}
-
-// withBoxed is With boxing v into *box, unless an earlier call boxed it
-// there: a value stored under two keys is boxed once, and only when it is
-// stored.
-func (e Env) withBoxed[T any](k EnvKey[T], v T, box *any) Env {
 	if k.id == InputDisabledKey.id {
 		if disabled, _ := e.Get(InputDisabledKey); disabled {
 			return e
@@ -485,23 +477,43 @@ func (e Env) withBoxed[T any](k EnvKey[T], v T, box *any) Env {
 	if k.same != nil {
 		return e.withSame(k, v, exists)
 	}
-	if *box == nil {
-		*box = any(v)
+	// The memo below is found by v as an any, which boxing a value that
+	// is not a pointer allocates. The Env last derived from e under k is
+	// found without: when it holds v already, as it does on a frame where
+	// nothing changed, it is the answer.
+	m := &activeWorld().envMemo
+	lastKey := derivedKey{from: e.rev, key: k.id, val: envLastDerived{}}
+	if last, ok := m.get(lastKey); ok {
+		if lv, _ := last.Get(k); k.equal(lv, v) {
+			return last
+		}
 	}
-	val := *box
-	out, ok, hashable := e.memo(k.id, val)
+	out := e.derive(k.id, v, exists)
+	m.put(lastKey, out)
+	return out
+}
+
+// envLastDerived marks the memo entry of the Env last derived from a
+// parent under a key, apart from the entries of the values derived.
+type envLastDerived struct{}
+
+// derive returns e with val stored under key: the Env derived the same
+// way before, if the memo has it. exists says whether e stores a value
+// under key already.
+func (e Env) derive(key *byte, val any, exists bool) Env {
+	out, ok, hashable := e.memo(key, val)
 	if ok {
 		return out
 	}
 	out = e
 	if exists {
-		out.vals = withEnvValue(e.vals, k.id, val)
+		out.vals = withEnvValue(e.vals, key, val)
 	} else {
-		out.vals = &envNode{key: k.id, val: val, next: e.vals}
+		out.vals = &envNode{key: key, val: val, next: e.vals}
 	}
 	out.rev = nextRev()
 	if hashable {
-		e.remember(k.id, val, out)
+		e.remember(key, val, out)
 	}
 	return out
 }

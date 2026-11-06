@@ -248,10 +248,10 @@ func TestSemTreeReusesEqualValuesAndFreezesDescriptions(t *testing.T) {
 	n := Node{Role: RoleTextField, Name: "editor", Expanded: Expandable(false), Runs: runs}
 	c := &Canvas{}
 	c.Leaf(Rct(Pt(0, 0), Sz(100, 20)), n)
-	first := buildSemTree(c, nil, nil, nil)
+	first := buildSemTree(c, nil, nil, new(a11y.Builder))
 	// Equal contents in fresh buffers must compare by value.
 	c.fs().sem[0].node = freezeNode(n)
-	if next := buildSemTree(c, nil, first, nil); next != first {
+	if next := buildSemTree(c, nil, first, new(a11y.Builder)); next != first {
 		t.Fatal("equal description allocated a new snapshot")
 	}
 	// A custom widget may reuse the buffers supplied in the previous frame.
@@ -259,7 +259,7 @@ func TestSemTreeReusesEqualValuesAndFreezesDescriptions(t *testing.T) {
 	runs[0].End = 3
 	runs[0].Stops[1].X = 30
 	c.fs().sem[0].node = n
-	second := buildSemTree(c, nil, first, nil)
+	second := buildSemTree(c, nil, first, new(a11y.Builder))
 	if second == first || !second.At(0).Expanded.Open() || second.At(0).Runs[0].Stops[1].X != 30 {
 		t.Fatal("new frame lost changed description values")
 	}
@@ -384,7 +384,7 @@ func TestSemTreeInvalidatesGeometryIdentityHierarchyAndFocus(t *testing.T) {
 	c := &Canvas{}
 	r := Rct(Pt(0, 0), Sz(100, 20))
 	c.Node(r, Node{Role: RoleGroup}, func(c *Canvas) { c.Describe(r, w) })
-	base := buildSemTree(c, nil, nil, nil)
+	base := buildSemTree(c, nil, nil, new(a11y.Builder))
 	for _, test := range []struct {
 		name string
 		edit func(*Canvas)
@@ -400,19 +400,19 @@ func TestSemTreeInvalidatesGeometryIdentityHierarchyAndFocus(t *testing.T) {
 			dst := *c
 			dst.fs().sem = append([]semNode(nil), c.fs().sem...)
 			test.edit(&dst)
-			if buildSemTree(&dst, nil, base, nil) == base {
+			if buildSemTree(&dst, nil, base, new(a11y.Builder)) == base {
 				t.Fatal("changed frame reused stale snapshot")
 			}
 		})
 	}
 	focus := &hitRegion{key: w, rect: r}
-	next := buildSemTree(c, focus, base, nil)
-	if next == base || next.FocusIndex() != 1 || buildSemTree(c, nil, next, nil) == next {
+	next := buildSemTree(c, focus, base, new(a11y.Builder))
+	if next == base || next.FocusIndex() != 1 || buildSemTree(c, nil, next, new(a11y.Builder)) == next {
 		t.Fatal("focus changes were not published")
 	}
 	empty := &Canvas{}
-	first := buildSemTree(empty, nil, next, nil)
-	if first.Len() != 0 || buildSemTree(empty, nil, first, nil) != first {
+	first := buildSemTree(empty, nil, next, new(a11y.Builder))
+	if first.Len() != 0 || buildSemTree(empty, nil, first, new(a11y.Builder)) != first {
 		t.Fatal("empty snapshot was not reusable")
 	}
 }
@@ -422,7 +422,7 @@ func TestSemTreeOldSnapshotCanBeReadDuringBufferReuse(t *testing.T) {
 	c := &Canvas{}
 	n := Node{Role: RoleTextField, Expanded: Expandable(false), Runs: []TextRun{{Stops: []TextStop{{}}}}}
 	c.Leaf(Rect{}, n)
-	old := buildSemTree(c, nil, nil, nil)
+	old := buildSemTree(c, nil, nil, new(a11y.Builder))
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -436,7 +436,7 @@ func TestSemTreeOldSnapshotCanBeReadDuringBufferReuse(t *testing.T) {
 	}()
 	for i := range 1000 {
 		n.Runs[0].Stops[0].X = float64(i)
-		buildSemTree(c, nil, old, nil)
+		buildSemTree(c, nil, old, new(a11y.Builder))
 	}
 	<-done
 }

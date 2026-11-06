@@ -752,7 +752,8 @@ func (t *RichTextWidget) Selectable() *RichTextWidget {
 // RichTextWidget.Selectable does.
 func (t *TextWidget) Selectable() *TextWidget {
 	if t.rich == nil {
-		t.rich, t.richAt = RichText().Selectable(), new(richAt)
+		t.rich = &selectableText{w: RichTextWidget{wrap: true}}
+		t.rich.w.Selectable()
 		t.props.Changed()
 	}
 	return t
@@ -768,7 +769,7 @@ func (t *RichTextWidget) SelectedText() string { return t.ed.Selected() }
 // layoutRich lays a Selectable Text out as a one-span RichText in style,
 // the Text's own merged onto the one it inherits.
 func (t *TextWidget) layoutRich(c Constraints, env Env, style TextStyle) Size {
-	r := t.rich
+	r := &t.rich.w
 	if len(r.cur) != 1 || r.cur[0].text != t.value {
 		r.spans.Set([]TextSpan{Span(t.value)})
 	}

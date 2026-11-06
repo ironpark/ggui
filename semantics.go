@@ -320,11 +320,8 @@ type (
 // buildSemTree reuses the last snapshot only when all observable values are
 // equal. Otherwise it shares every page of nodes that did not change with
 // prev and copies only the rest, so readers can retain any old tree. b holds
-// scratch from one frame to the next; nil uses a fresh one.
+// scratch from one frame to the next.
 func buildSemTree(c *Canvas, focused *hitRegion, prev *SemTree, b *a11y.Builder) *SemTree {
-	if b == nil {
-		b = new(a11y.Builder)
-	}
 	return b.Build(prev, semSource{c.fs()}, focusedNode(c, focused))
 }
 
