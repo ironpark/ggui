@@ -128,3 +128,24 @@ func BenchmarkAffineThenApply(b *testing.B) {
 		}
 	}
 }
+
+// Bounds runs for every region registered under a transform: it must
+// allocate nothing.
+func TestAffineBoundsAllocatesNothing(t *testing.T) {
+	m := Affine{}.Rotate(0.3).Scale(2, 1)
+	r := layout.Rct(layout.Pt(1, 2), layout.Sz(10, 4))
+	var b Rect
+	if n := testing.AllocsPerRun(100, func() { b = m.Bounds(r) }); n != 0 {
+		t.Fatalf("Bounds allocates %v times", n)
+	}
+	want := PointBounds(func(yield func(Point) bool) {
+		for _, p := range []Point{r.Origin, {X: 11, Y: 2}, {X: 1, Y: 6}, {X: 11, Y: 6}} {
+			if !yield(m.Apply(p)) {
+				return
+			}
+		}
+	})
+	if !nearPt(b.Origin, want.Origin) || math.Abs(b.Size.W-want.Size.W) > 1e-9 || math.Abs(b.Size.H-want.Size.H) > 1e-9 {
+		t.Fatalf("Bounds %v; PointBounds of its corners %v", b, want)
+	}
+}

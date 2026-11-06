@@ -387,15 +387,21 @@ type paintPass struct {
 	canvas  *Canvas
 	in      *inputState
 	overlay Overlay
-	size    Size // the logical viewport
-	tracing bool // the inspector or a sink reads the paint's trace
-	semOff  bool // nothing reads the accessibility tree
-	// settled runs after the settle, before the paint; it may be nil.
-	settled func()
+	size    Size       // the logical viewport
+	tracing bool       // the inspector or a sink reads the paint's trace
+	semOff  bool       // nothing reads the accessibility tree
+	hooks   paintHooks // may be nil
+}
+
+// paintHooks is what a paint calls back into its host with, kept by the
+// host from frame to frame so that a frame makes no closures for them.
+type paintHooks interface {
+	// settled runs after the settle, before the paint.
+	settled()
 	// painted runs once the tree is painted and the accessibility tree
 	// published, before the overlay paints over it, for what the host
-	// does with the frame. It may be nil.
-	painted func()
+	// does with the frame.
+	painted()
 }
 
 // paint is the paint half of a frame, the same for a Window and a Probe:
@@ -430,8 +436,8 @@ func (l *frameLoop) paint(p paintPass) (bool, error) {
 		unswap()
 		return false, nil
 	}
-	if p.settled != nil {
-		p.settled()
+	if p.hooks != nil {
+		p.hooks.settled()
 	}
 	l.paintTree(c)
 	p.in.setRegions(f.hits, f.found)
@@ -448,8 +454,8 @@ func (l *frameLoop) paint(p paintPass) (bool, error) {
 	if !p.semOff {
 		l.publishSemantics(c, p.in.focused)
 	}
-	if p.painted != nil {
-		p.painted()
+	if p.hooks != nil {
+		p.hooks.painted()
 	}
 	if p.overlay != nil {
 		p.overlay.Paint(c)

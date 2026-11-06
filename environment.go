@@ -39,8 +39,12 @@ func (e Env) Background() color.Color {
 	if c, ok := e.Get(BackgroundKey); ok && c != nil {
 		return c
 	}
-	return color.White
+	return defaultBackground
 }
+
+// defaultBackground is color.White boxed once: boxing it on each call, a
+// frame's background fill would allocate.
+var defaultBackground color.Color = color.White
 
 // Spacing returns the inherited layout unit, or eight logical pixels.
 func (e Env) Spacing() float64 {
@@ -461,6 +465,14 @@ func (k EnvKey[T]) equal(a, b T) bool {
 // caches below a Provide rebuilt every frame hold. InputDisabledKey is cumulative:
 // once true in an ancestor, a descendant cannot clear it.
 func (e Env) With[T any](k EnvKey[T], v T) Env {
+	var box any
+	return e.withBoxed(k, v, &box)
+}
+
+// withBoxed is With boxing v into *box, unless an earlier call boxed it
+// there: a value stored under two keys is boxed once, and only when it is
+// stored.
+func (e Env) withBoxed[T any](k EnvKey[T], v T, box *any) Env {
 	if k.id == InputDisabledKey.id {
 		if disabled, _ := e.Get(InputDisabledKey); disabled {
 			return e
@@ -473,7 +485,10 @@ func (e Env) With[T any](k EnvKey[T], v T) Env {
 	if k.same != nil {
 		return e.withSame(k, v, exists)
 	}
-	val := any(v)
+	if *box == nil {
+		*box = any(v)
+	}
+	val := *box
 	out, ok, hashable := e.memo(k.id, val)
 	if ok {
 		return out
