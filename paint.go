@@ -432,14 +432,19 @@ func (c *Canvas) FillPathGradient(path *Path, bounds Rect, top, bottom color.Col
 func (p *Path) coverage(c *Canvas, bounds Rect) (*ggfx.Image, image.Point, bool) {
 	scale := c.Scale()
 	device := p.device(scale)
-	coverage := device.Bounds().Intersect(c.physical(bounds))
+	whole := device.Bounds()
+	coverage := whole.Intersect(c.physical(bounds))
 	w, h := coverage.Dx(), coverage.Dy()
 	if w <= 0 || h <= 0 {
 		return nil, image.Point{}, false
 	}
 	key := gradientKey{bounds: bounds, coverage: coverage, scale: scale}
 	if p.gradientRev != p.revision || p.gradientKey != key || p.gradientMask == nil {
-		p.gradientMask = p.maskFor(w, h)
+		// Where bounds cut the path short on the right or below, the mask
+		// is the coverage exactly, so the path is cut there too; else it
+		// may run past the coverage, on maskSide's grid, clear beyond it.
+		cut := whole.Max.X > coverage.Max.X || whole.Max.Y > coverage.Max.Y
+		p.gradientMask = p.maskFor(w, h, cut)
 		p.gradientMask.Clear()
 		var local vector.Path
 		op := &vector.AddPathOptions{}
@@ -452,54 +457,60 @@ func (p *Path) coverage(c *Canvas, bounds Rect) (*ggfx.Image, image.Point, bool)
 	return p.gradientMask, coverage.Min, true
 }
 
-// maskFor returns a w×h image for the coverage, the top-left part of
-// the mask the path keeps. One that grows or shrinks a little, as an
-// animated one does every frame, keeps the mask while it fits and takes at
-// least a quarter of it; past that a new one is made, its sides rounded up
-// a little so the next frame's growth fits too.
-func (p *Path) maskFor(w, h int) *ggfx.Image {
+// maskFor returns the top-left part of the mask the path keeps for a w×h
+// coverage: w×h when exact, else its sides rounded up by maskSide, so that
+// a coverage changing size by a little every frame, as an animated one
+// does, takes the same part rather than a sub-image of its own each frame.
+// The mask is kept while the coverage fits it and takes at least a quarter
+// of it; past that a new one is made, its sides rounded up a little so the
+// next frame's growth fits too.
+func (p *Path) maskFor(w, h int, exact bool) *ggfx.Image {
 	if s := p.maskStore; s != nil {
-		b := s.Bounds()
-		if w <= b.Dx() && h <= b.Dy() && 4*w*h >= b.Dx()*b.Dy() {
-			if g := p.gradientMask; g != nil && g.Bounds() == image.Rect(0, 0, w, h) {
-				return g
-			}
-			if w == b.Dx() && h == b.Dy() {
-				return s
-			}
-			return s.SubImage(image.Rect(0, 0, w, h)).(*ggfx.Image)
+		if b := s.Bounds(); w > b.Dx() || h > b.Dy() || 4*w*h < b.Dx()*b.Dy() {
+			p.freeMask()
 		}
-		p.freeMask()
 	}
-	mw, mh := maskSide(w), maskSide(h)
-	// A large mask is a texture of its own size, as a large image is: on
-	// the atlas it would take a page rounded up to powers of two.
-	large := mw > largeImage || mh > largeImage
-	p.maskStore = ggfx.NewImageWithOptions(image.Rect(0, 0, mw, mh), &ggfx.NewImageOptions{Unmanaged: large})
-	if p.maskBytes == nil {
-		// A Path the app drops takes its mask with it: ggfx frees the
-		// texture once it is collected, and this counts its bytes gone.
-		p.maskBytes = new(atomic.Int64)
-		runtime.AddCleanup(p, func(n *atomic.Int64) {
-			framestats.AddTexture(framestats.PathMasks, -n.Swap(0))
-		}, p.maskBytes)
+	if p.maskStore == nil {
+		// A large mask is a texture of its own size, as a large image is.
+		p.maskStore = render.NewBlank(maskSide(w), maskSide(h))
+		if p.maskBytes == nil {
+			// A Path the app drops takes its mask with it: ggfx frees the
+			// texture once it is collected, and this counts its bytes gone.
+			p.maskBytes = new(atomic.Int64)
+			runtime.AddCleanup(p, func(n *atomic.Int64) {
+				framestats.AddTexture(framestats.PathMasks, -n.Swap(0))
+			}, p.maskBytes)
+		}
+		b := p.maskStore.Bounds()
+		p.maskBytes.Store(framestats.ImageBytes(b.Dx(), b.Dy()))
+		framestats.Kept(framestats.PathMasks, b)
 	}
-	n := framestats.ImageBytes(mw, mh)
-	p.maskBytes.Add(n)
-	framestats.AddTexture(framestats.PathMasks, n)
-	if mw == w && mh == h {
-		return p.maskStore
+	if !exact {
+		w, h = maskSide(w), maskSide(h)
 	}
-	return p.maskStore.SubImage(image.Rect(0, 0, w, h)).(*ggfx.Image)
+	if g := p.gradientMask; g != nil && g.Bounds() == image.Rect(0, 0, w, h) {
+		return g
+	}
+	return maskCorner(p.maskStore, w, h)
+}
+
+// maskCorner is the w×h part of img at its corner, img itself when that is
+// all of it.
+func maskCorner(img *ggfx.Image, w, h int) *ggfx.Image {
+	if b := img.Bounds(); b.Dx() == w && b.Dy() == h {
+		return img
+	}
+	return img.SubImage(image.Rect(0, 0, w, h)).(*ggfx.Image)
 }
 
 // maskSide rounds a coverage mask's side up: to 16 pixels for one on the
-// atlas, to 64 for a texture of its own.
+// atlas, to render.LayerGrid for a texture of its own.
 func maskSide(n int) int {
-	if n > largeImage {
-		return (n + 63) &^ 63
+	grid := 16
+	if n > render.LargeImage {
+		grid = render.LayerGrid
 	}
-	return (n + 15) &^ 15
+	return (n + grid - 1) &^ (grid - 1)
 }
 
 // freeMask frees the path's coverage mask.
@@ -579,9 +590,6 @@ func (c *Canvas) clipShape(bounds Rect, inside func(Point) bool, drawMask func(*
 // window when empty: a Layer's, or one more for an effect that needs it.
 func (c *Canvas) scratch(area image.Rectangle, fn func(img *ggfx.Image)) {
 	f := c.fs()
-	if f.layers.Gauge == nil {
-		f.layers.Gauge = gaugeLayers
-	}
 	img := f.layers.Borrow(c.root().Image.Bounds(), area, newLayerImage)
 	defer f.layers.Return()
 	if !area.Empty() {

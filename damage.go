@@ -296,8 +296,7 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect
 		return false
 	}
 	c := &w.canvas
-	readable := screen.CanBeSource()
-	w.aim(target, target, screen, readable)
+	w.aim(target)
 	f := w.beginPaint(c)
 	defer endPaint(f)
 	// Painted inert, nothing registers input, requests focus or a reveal,
@@ -329,7 +328,7 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect
 		setDamage(px)
 	}
 	w.noteMotion(target)
-	w.presentBackdrop(screen, target, readable)
+	w.presentBackdrop(screen, target)
 	return true
 }
 

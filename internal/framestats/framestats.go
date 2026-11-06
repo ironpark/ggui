@@ -7,6 +7,7 @@ package framestats
 
 import (
 	"github.com/ironpark/ggfx/vector"
+	"image"
 	"maps"
 	"runtime"
 	"slices"
@@ -207,6 +208,10 @@ func ReadTextures() TextureBytes {
 		Images: textureBytes[Images].Load(), Stencils: vector.StencilBytes(),
 	}
 }
+
+// Kept counts an image of bounds b more of t kept, and Freed one less.
+func Kept(t Texture, b image.Rectangle)  { AddTexture(t, ImageBytes(b.Dx(), b.Dy())) }
+func Freed(t Texture, b image.Rectangle) { AddTexture(t, -ImageBytes(b.Dx(), b.Dy())) }
 
 // ImageBytes is the RGBA bytes of a w×h image.
 func ImageBytes(w, h int) int64 { return int64(w) * int64(h) * 4 }
