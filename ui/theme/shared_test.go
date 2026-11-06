@@ -18,7 +18,7 @@ func TestOfSharesOneThemePerValue(t *testing.T) {
 	if dark := theme.Of(theme.Dark().Apply(ggui.Env{})); dark == a || dark.Bg == a.Bg {
 		t.Fatal("a different theme shares the pointer")
 	}
-	if theme.Of(ggui.Env{}) != theme.Of(ggui.Env{}) {
+	if d1, d2 := theme.Of(ggui.Env{}), theme.Of(ggui.Env{}); d1 != d2 {
 		t.Fatal("the default theme is made again for every Env without one")
 	}
 	if *theme.Of(ggui.Env{}) != theme.Default() {
