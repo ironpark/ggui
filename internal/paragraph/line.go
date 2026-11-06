@@ -269,6 +269,15 @@ func (c *rtlChain) face(i int) text.Face {
 	return c.faces[i]
 }
 
+// faceOf is the face c draws seg's text t with. seg's face indexes the
+// chain it was measured with, at scale 1: a chain at another size has a
+// picker of its own, which adds the system fonts in the order its own picks
+// need them, so the same index may name another font there, or none yet.
+// A segment is one face's run, so its first grapheme picks it again.
+func (c *rtlChain) faceOf(t string) text.Face {
+	return c.face(c.pick(t[:textedit.NextGrapheme(t, 0)]))
+}
+
 type rtlKey struct {
 	font   *fontsys.Font
 	size   float64
@@ -423,7 +432,7 @@ func (p *Piece) OffsetX(s string, styles []LineStyle, b int) float64 {
 			chain := rtlFaces(st.Style, 1, p.lang)
 			widths := make([]func(int) float64, len(p.segs))
 			for i, sg := range p.segs {
-				widths[i] = textlayout.PrefixWidths(s[sg.Start:sg.End], chain.face(sg.face))
+				widths[i] = textlayout.PrefixWidths(s[sg.Start:sg.End], chain.faceOf(s[sg.Start:sg.End]))
 			}
 			p.pos = func(b int) float64 {
 				x := 0.0
@@ -549,7 +558,7 @@ func Draw(dst *ggfx.Image, op *text.DrawOptions, s string, ps []Piece, styles []
 		right := p.X + p.W
 		for _, sg := range p.segs {
 			right -= sg.W
-			face := chain.face(sg.face)
+			face := chain.faceOf(s[sg.Start:sg.End])
 			op.GeoM.Reset()
 			op.GeoM.Translate(right*scale, baseline-face.Metrics().HAscent)
 			place(op)

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggui/internal/fontsys"
+	"github.com/ironpark/ggui/internal/third_party/text"
 	"github.com/ironpark/ggui/internal/third_party/typesetting/bidi"
 	"golang.org/x/image/font/gofont/goregular"
 )
@@ -108,5 +109,30 @@ func TestRightToLeftFallbackRunsAreReversed(t *testing.T) {
 	first := ps[0].OffsetX(s, []LineStyle{{Start: 0, End: len(s), Style: Style{Font: f, Size: 14}}}, 0)
 	if math.Abs(first-ps[0].W) > 1e-6 {
 		t.Fatalf("the first word starts at %v, want the right edge %v", first, ps[0].W)
+	}
+}
+
+// Chains at two sizes each find the system fonts in the order their own
+// picks need them, so a segment measured with one is drawn with the face
+// the other picks for it, not the face at its index there.
+func TestARightToLeftSegmentDrawsInItsOwnFontAtAnotherSize(t *testing.T) {
+	f := fontsys.Builtin()
+	tag := newShapeLang("", "שלום").tag
+	measured := newRTLChain(f, 14, 400, nil, tag)
+	own := len(measured.faces)
+	hebrew, arabic := "שלום", "مرحبا"
+	if measured.pick(hebrew) < own || measured.pick(arabic) < own {
+		t.Skip("the built-in font draws Hebrew or Arabic itself, or no system font does")
+	}
+	segs, _ := rtlSegs(arabic, 0, measured)
+	drawn := newRTLChain(f, 28, 400, nil, tag) // has found no system font yet
+	for _, sg := range segs {
+		seg := arabic[sg.Start:sg.End]
+		face := drawn.faceOf(seg)
+		font := measured.picker.Font(sg.face).Font
+		j := slices.IndexFunc(drawn.faces, func(f text.Face) bool { return f == face })
+		if j < 0 || drawn.picker.Font(j).Font != font {
+			t.Fatalf("segment %q drawn in another font than it was measured in", seg)
+		}
 	}
 }
