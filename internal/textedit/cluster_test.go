@@ -140,7 +140,7 @@ func TestLineFeedEndsCluster(t *testing.T) {
 // AppendBounds finds what Bounds does, and into a slice it is given, so a
 // caller stepping through a new string each time allocates nothing.
 func TestAppendBoundsFindsBoundsWithoutAllocating(t *testing.T) {
-	texts := []string{"áb", "한글", "한", "👩‍💻 ok", "🇰🇷x", "a\r\nb\nc", "\xffz", "❯ go test"}
+	texts := []string{"áb", "한글", "한", "👩\u200d💻 ok", "🇰🇷x", "a\r\nb\nc", "\xffz", "❯ go test"}
 	for _, s := range texts {
 		if got, want := AppendBounds(nil, s), Bounds(s); !slices.Equal(got, want) {
 			t.Errorf("AppendBounds(%q) = %v, want %v", s, got, want)
@@ -164,12 +164,12 @@ func TestSteppingALineFindsWhatTheWholeTextHas(t *testing.T) {
 	t.Parallel()
 	texts := []string{
 		"é\né",
-		"👩‍💻\n👩‍💻\n",
-		"\n\ńx‍\n🇰🇷\n🇰",
+		"👩\u200d💻\n👩\u200d💻\n",
+		"\n\ńx\u200d\n🇰🇷\n🇰",
 		"a\r\nb\r\n\r\nc",
 		"\xff\n\xe2\x80\nz",
 		"한글\n안녕 👍🏽\nok",
-		"no breaks at all, é and 👨‍👩‍👧",
+		"no breaks at all, é and 👨\u200d👩\u200d👧",
 		"",
 		"\n",
 	}

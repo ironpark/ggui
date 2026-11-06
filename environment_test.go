@@ -307,7 +307,7 @@ func TestEnvKeyFuncComparesByItsEquality(t *testing.T) {
 	if base.With(k, &boxedValue{2}).rev == first.rev {
 		t.Fatal("a different value kept the revision")
 	}
-	if NewEnvKeyFunc("a", sameBoxed) == NewEnvKeyFunc("a", sameBoxed) {
+	if k1, k2 := NewEnvKeyFunc("a", sameBoxed), NewEnvKeyFunc("a", sameBoxed); k1 == k2 {
 		t.Fatal("two keys are the same key")
 	}
 }

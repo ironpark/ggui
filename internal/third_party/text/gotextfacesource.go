@@ -108,8 +108,8 @@ func compactRuns(outputs []shaping.Output) []shapedRun {
 					XBearing: gl.XBearing,
 					YBearing: gl.YBearing,
 				},
-				cluster: int32(gl.ClusterIndex),
-				runes:   int32(gl.RuneCount),
+				cluster: int32(gl.TextIndex()),
+				runes:   int32(gl.RunesCount()),
 			})
 		}
 		runs[i] = shapedRun{
