@@ -208,17 +208,40 @@ func TestGetFindsOnlyWhatIsHeld(t *testing.T) {
 	}
 }
 
-func TestDownscaleKeepsTheAspect(t *testing.T) {
+// Fit gives the size FitSize says, keeping the aspect, whether it scales
+// in one step or, from many times larger, in two.
+func TestFitKeepsTheAspect(t *testing.T) {
 	t.Parallel()
-	for _, tt := range []struct{ w, h, side, ww, wh int }{
-		{100, 50, 10, 10, 5},
-		{50, 100, 10, 5, 10},
-		{8, 4, 10, 8, 4}, // already small
-		{1000, 1, 10, 10, 1},
+	for _, tt := range []struct {
+		w, h, bw, bh int
+		cover        bool
+		ww, wh       int
+	}{
+		{100, 50, 10, 10, false, 10, 5},
+		{50, 100, 10, 10, false, 5, 10},
+		{8, 4, 10, 10, false, 8, 4}, // already small
+		{1000, 1, 10, 10, false, 10, 1},
+		{6000, 4000, 512, 512, false, 512, 341}, // in two steps
+		{4000, 6000, 512, 512, false, 341, 512},
+		{6000, 4000, 512, 512, true, 768, 512},
+		{6000, 4000, 1024, 128, true, 1024, 683},
+		{3000, 2000, 1000, 1000, false, 1000, 666}, // three times: in one
 	} {
-		b := Downscale(image.NewRGBA(image.Rect(0, 0, tt.w, tt.h)), tt.side).Bounds()
+		src := image.NewRGBA(image.Rect(0, 0, tt.w, tt.h))
+		for i := range src.Pix {
+			src.Pix[i] = 0x80
+		}
+		img := Fit(src, tt.bw, tt.bh, tt.cover)
+		b := img.Bounds()
 		if b.Dx() != tt.ww || b.Dy() != tt.wh {
-			t.Errorf("Downscale(%dx%d, %d) = %dx%d, want %dx%d", tt.w, tt.h, tt.side, b.Dx(), b.Dy(), tt.ww, tt.wh)
+			t.Errorf("Fit(%dx%d, %dx%d, cover %v) = %dx%d, want %dx%d",
+				tt.w, tt.h, tt.bw, tt.bh, tt.cover, b.Dx(), b.Dy(), tt.ww, tt.wh)
+		}
+		if w, h := FitSize(tt.w, tt.h, tt.bw, tt.bh, tt.cover); b.Dx() != w || b.Dy() != h {
+			t.Errorf("Fit and FitSize disagree: %v, %dx%d", b, w, h)
+		}
+		if r, g, bl, a := img.At(b.Dx()/2, b.Dy()/2).RGBA(); r>>8 != 0x80 || g>>8 != 0x80 || bl>>8 != 0x80 || a>>8 != 0x80 {
+			t.Errorf("Fit(%dx%d) changed a flat image to %x %x %x %x", tt.w, tt.h, r, g, bl, a)
 		}
 	}
 }
@@ -299,24 +322,36 @@ func TestUploadIsGivenRGBA(t *testing.T) {
 	}
 }
 
-func TestReadyKeysListsASrcAtEverySize(t *testing.T) {
+// AcquireReady holds a ready copy of a src at another size: one pick
+// accepts over a larger one, and none once they are evicted.
+func TestAcquireReadyHoldsASrcAtAnotherSize(t *testing.T) {
 	t.Parallel()
 	c, _ := newCache(1 << 20)
 	var calls atomic.Int32
 	var u ui
-	var a, b, other Handle[*tex]
+	var a, b, other, h Handle[*tex]
 	ready(t, c, &a, Max("x", 4), sized(8, 8, &calls), &u)
 	ready(t, c, &b, Key{Src: "x"}, sized(8, 8, &calls), &u)
 	ready(t, c, &other, Key{Src: "y"}, sized(8, 8, &calls), &u)
 	b.Release() // idle, still ready
-	got := c.ReadyKeys(nil, "x")
-	if len(got) != 2 {
-		t.Fatalf("ReadyKeys(x) = %v, want both sizes of x", got)
+	none := func(Key) bool { return false }
+	if k, ok := h.AcquireReady(c, "x", none); !ok || k != (Key{Src: "x"}) {
+		t.Fatalf("AcquireReady(x) = %v, %v, want the larger copy", k, ok)
 	}
+	if k, ok := h.AcquireReady(c, "x", func(k Key) bool { return k.W == 4 }); !ok || k != Max("x", 4) {
+		t.Fatalf("AcquireReady(x, picking 4) = %v, %v", k, ok)
+	}
+	if st, _, _, ok := h.Get(c, Max("x", 4)); !ok || st != Ready {
+		t.Fatalf("held %v, %v", st, ok)
+	}
+	if _, ok := h.AcquireReady(c, "z", none); ok {
+		t.Fatal("AcquireReady found a src never loaded")
+	}
+	h.Release()
 	a.Release()
 	c.SetLimit(0)
-	if got := c.ReadyKeys(nil, "x"); len(got) != 0 {
-		t.Fatalf("after eviction ReadyKeys(x) = %v", got)
+	if k, ok := h.AcquireReady(c, "x", none); ok {
+		t.Fatalf("after eviction AcquireReady(x) = %v", k)
 	}
 }
 
@@ -401,11 +436,23 @@ func BenchmarkChurn(b *testing.B) {
 	}
 }
 
-func BenchmarkDownscale(b *testing.B) {
-	img := image.NewRGBA(image.Rect(0, 0, 1024, 768))
-	b.ReportAllocs()
-	for b.Loop() {
-		Downscale(img, 256)
+// A photo's pixels scaled to a few times smaller, and to many: the
+// default AsyncImage decodes a 6000×4000 JPEG shown at a thumbnail's size.
+func BenchmarkFit(b *testing.B) {
+	for _, bb := range []struct {
+		name       string
+		w, h, side int
+	}{
+		{"1024x768to256", 1024, 768, 256},
+		{"6000x4000to512", 6000, 4000, 512},
+	} {
+		b.Run(bb.name, func(b *testing.B) {
+			img := image.NewYCbCr(image.Rect(0, 0, bb.w, bb.h), image.YCbCrSubsampleRatio420)
+			b.ReportAllocs()
+			for b.Loop() {
+				Fit(img, bb.side, bb.side, false)
+			}
+		})
 	}
 }
 

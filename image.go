@@ -20,6 +20,7 @@ import (
 	"github.com/ironpark/ggui/internal/imgcache"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/internal/render"
 )
 
 // ImageFit says how an image is placed in a box of another shape.
@@ -174,12 +175,10 @@ func (w *ImageWidget) Paint(dst *Canvas, r Rect) {
 // imageBox is the most room an image may be drawn in, in logical pixels,
 // which an AsyncImage decodes it for. Without Cover the image is fitted
 // inside W×H, and an infinite side sets no limit; with Cover it must cover
-// W×H, and a side of 0 asks for nothing. Full asks for the image's own
-// size.
+// W×H, and a side of 0 asks for nothing.
 type imageBox struct {
 	W, H  float64
 	Cover bool
-	Full  bool
 }
 
 // drawBound is the box Layout under c can draw the image in at most.
@@ -189,10 +188,10 @@ type imageBox struct {
 // and the least c asks of the others; with no side known, the box keeps
 // the image's own shape, so fitting inside c's bounds is what covering it
 // takes too. FitNone draws the image at its natural size, so it needs all
-// of it.
+// of it, and no box limits it.
 func (w *ImageWidget) drawBound(c Constraints) imageBox {
 	if w.fit == FitNone {
-		return imageBox{Full: true}
+		return imageBox{W: math.Inf(1), H: math.Inf(1)}
 	}
 	side := func(fixed, lo, hi float64) (float64, bool) {
 		if fixed > 0 {
@@ -304,21 +303,7 @@ func DecodeImage(data []byte) (*ggfx.Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newTexture(img), nil
-}
-
-// largeImage is the side past which an image is a texture of its own: the
-// atlas would round it up to a page of powers of two, 2048×2048 and 16 MB
-// for a 1254-pixel square, and it packs badly with the small images the
-// atlas batches.
-const largeImage = 512
-
-// newTexture uploads img, a texture of exactly its size when it is large.
-func newTexture(img image.Image) *ggfx.Image {
-	if b := img.Bounds(); b.Dx() > largeImage || b.Dy() > largeImage {
-		return ggfx.NewImageFromImageWithOptions(img, &ggfx.NewImageFromImageOptions{Unmanaged: true})
-	}
-	return ggfx.NewImageFromImage(img)
+	return render.NewTexture(img), nil
 }
 
 // decodeImage decodes PNG, JPEG or GIF bytes, refusing an image with no
@@ -373,10 +358,8 @@ type AsyncImageWidget struct {
 	inner       *ImageWidget
 	cache       *imageCache
 	hs          *asyncHandles
-	key         imgcache.Key // what hs.cur holds
-	nextKey     imgcache.Key // what hs.next holds, the zero Key for nothing
-	box         imageBox     // the room the last layout gave the image
-	scale       float64      // device pixels per logical pixel where it was last painted
+	box         imageBox // the room the last layout gave the image
+	scale       float64  // device pixels per logical pixel where it was last painted
 	waiter      imgcache.Waiter
 	status      AsyncStatus
 	err         error
@@ -386,15 +369,43 @@ type AsyncImageWidget struct {
 const fullSize = -1
 
 // asyncHandles are an AsyncImage's holds on the cache: cur, the image it
-// shows, and next, a copy for another size that is loading meanwhile. They
-// are apart from the widget so that collecting it can release them.
+// shows, and next, a copy for another size that is loading meanwhile, with
+// the Keys they hold. They are apart from the widget so that collecting it
+// can release them.
 type asyncHandles struct {
-	cur, next *imgcache.Handle[*ggfx.Image]
+	cur, next       *imgcache.Handle[*ggfx.Image]
+	curKey, nextKey imgcache.Key // nextKey is the zero Key for nothing
+	source          Size         // the size cur's image was loaded at, once read
 }
 
+// release lets go of both entries; it may run on the collector's
+// goroutine, so it leaves the Keys, which only the UI thread touches.
 func (h *asyncHandles) release() {
 	h.next.Release()
 	h.cur.Release()
+}
+
+// clear lets go of both entries and forgets their Keys.
+func (h *asyncHandles) clear() {
+	h.release()
+	h.setCur(imgcache.Key{})
+	h.nextKey = imgcache.Key{}
+}
+
+// setCur records that cur now holds k.
+func (h *asyncHandles) setCur(k imgcache.Key) { h.curKey, h.source = k, Size{} }
+
+// dropNext lets go of the copy next was loading.
+func (h *asyncHandles) dropNext() {
+	h.next.Release()
+	h.nextKey = imgcache.Key{}
+}
+
+// swap makes the copy next loaded the one shown, and lets go of the other.
+func (h *asyncHandles) swap() {
+	h.cur, h.next = h.next, h.cur
+	h.setCur(h.nextKey)
+	h.dropNext()
 }
 
 // AsyncImage shows the image at src, which the Loader turns into pixels --
@@ -546,9 +557,6 @@ func bucket(n float64, cover bool) int {
 // displayKey is the Key of src decoded for the box b on a canvas of scale
 // device pixels per logical pixel.
 func displayKey(src string, b imageBox, scale float64) imgcache.Key {
-	if b.Full {
-		return imgcache.Key{Src: src}
-	}
 	return imgcache.Key{Src: src, W: bucket(b.W*scale, b.Cover), H: bucket(b.H*scale, b.Cover), Cover: b.Cover}
 }
 
@@ -562,43 +570,34 @@ func grownKey(cur, want imgcache.Key) imgcache.Key {
 	if cur.Src != want.Src || cur.Cover != want.Cover {
 		return want
 	}
-	quarter := func(a, b int) bool {
-		if want.Cover {
-			return 4*b <= a
-		}
-		return b != 0 && (a == 0 || 4*b <= a)
-	}
-	larger := func(a, b int) int {
-		if !want.Cover && (a == 0 || b == 0) {
-			return 0
-		}
-		return max(a, b)
-	}
-	if keyHolds(cur, want) {
-		if quarter(cur.W, want.W) && quarter(cur.H, want.H) {
+	cw, ch := keySides(cur)
+	ww, wh := keySides(want)
+	if cw >= ww && ch >= wh { // cur holds want
+		if ww <= cw/4 && wh <= ch/4 {
 			return want
 		}
 		return cur
 	}
-	return imgcache.Key{Src: want.Src, W: larger(cur.W, want.W), H: larger(cur.H, want.H), Cover: want.Cover}
+	bound := func(n int) int { // back to a Key's side
+		if n == math.MaxInt {
+			return 0
+		}
+		return n
+	}
+	return imgcache.Key{Src: want.Src, W: bound(max(cw, ww)), H: bound(max(ch, wh)), Cover: want.Cover}
 }
 
-// keyHolds reports whether an image decoded for have has the pixels want
-// asks for: the same src fitted to as large a box or larger, or covering
-// one.
-func keyHolds(have, want imgcache.Key) bool {
-	if have.Src != want.Src || have.Cover != want.Cover {
-		return false
-	}
-	// A side of 0 is unbounded when fitting inside, and asks nothing when
-	// covering.
-	side := func(a, b int) bool {
-		if want.Cover {
-			return a >= b
+// keySides are k's sides in pixels, math.MaxInt for one without a limit: a
+// side of 0 sets none when fitting inside, and asks for nothing when
+// covering.
+func keySides(k imgcache.Key) (w, h int) {
+	side := func(n int) int {
+		if n == 0 && !k.Cover {
+			return math.MaxInt
 		}
-		return a == 0 || b != 0 && a >= b
+		return n
 	}
-	return side(have.W, want.W) && side(have.H, want.H)
+	return side(k.W), side(k.H)
 }
 
 // fixedKey is the Key MaxSize or FullResolution fix for src, and false
@@ -642,8 +641,7 @@ func (a *AsyncImageWidget) sync(c Constraints) {
 	src := a.src.Get()
 	a.box = a.inner.drawBound(c)
 	if src == "" {
-		a.hs.release()
-		a.key, a.nextKey = imgcache.Key{}, imgcache.Key{}
+		a.hs.clear()
 		a.status, a.err, a.inner.img, a.inner.source = Failed, errNoSrc, nil, Size{}
 		return
 	}
@@ -656,11 +654,9 @@ func (a *AsyncImageWidget) sync(c Constraints) {
 		want = displayKey(src, a.box, scale)
 	}
 	switch {
-	case a.key.Src != src && !fixed:
+	case !fixed && a.hs.curKey.Src != src:
 		a.adopt(want)
-	case a.key.Src != src:
-		a.retarget(want)
-	case fixed && a.key != want:
+	case fixed && a.hs.curKey != want:
 		a.retarget(want)
 	default:
 		a.promote()
@@ -674,34 +670,18 @@ func (a *AsyncImageWidget) sync(c Constraints) {
 // copy is used instead of loading another: as it is, if it has the pixels
 // want asks for, or as a stand-in on screen while want loads.
 func (a *AsyncImageWidget) adopt(want imgcache.Key) {
-	a.hs.next.Release()
-	a.key, a.nextKey = imgcache.Key{}, imgcache.Key{}
-	if a.cache.Has(want) {
-		a.retarget(want)
-		return
-	}
-	var buf [4]imgcache.Key
-	ready := a.cache.ReadyKeys(buf[:0], want.Src)
-	if len(ready) == 0 {
-		a.retarget(want)
-		return
-	}
-	use := ready[0]
-	for _, k := range ready {
-		if grownKey(k, want) == k {
-			use = k
-			break
+	hs := a.hs
+	hs.dropNext()
+	if !a.cache.Has(want) {
+		holds := func(k imgcache.Key) bool { return grownKey(k, want) == k }
+		if k, ok := hs.cur.AcquireReady(a.cache, want.Src, holds); ok {
+			hs.setCur(k)
+			if holds(k) {
+				return
+			}
 		}
 	}
-	a.retarget(use)
-	if st, _, _, ok := a.hs.cur.Get(a.cache, use); !ok || st != imgcache.Ready {
-		// Evicted since it was listed.
-		a.retarget(want)
-		return
-	}
-	if grownKey(use, want) != use {
-		a.retarget(want)
-	}
+	a.retarget(want)
 }
 
 // retarget moves the image to the entry for k. While the one shown is
@@ -709,23 +689,20 @@ func (a *AsyncImageWidget) adopt(want imgcache.Key) {
 // them; otherwise k is loaded in its place.
 func (a *AsyncImageWidget) retarget(k imgcache.Key) {
 	hs := a.hs
-	if k == a.key {
-		if a.nextKey != (imgcache.Key{}) {
-			hs.next.Release()
-			a.nextKey = imgcache.Key{}
-		}
+	if k == hs.curKey {
+		hs.dropNext()
 		return
 	}
-	if st, _, _, ok := hs.cur.Get(a.cache, a.key); !ok || st != imgcache.Ready || k.Src != a.key.Src {
-		hs.next.Release()
-		a.key, a.nextKey = k, imgcache.Key{}
+	if st, _, _, ok := hs.cur.Get(a.cache, hs.curKey); !ok || st != imgcache.Ready || k.Src != hs.curKey.Src {
+		hs.dropNext()
+		hs.setCur(k)
 		hs.cur.Acquire(a.cache, k, imgcache.Loader(a.loader), a.notifier())
 		return
 	}
 	if _, _, _, ok := hs.next.Get(a.cache, k); !ok {
 		hs.next.Acquire(a.cache, k, imgcache.Loader(a.loader), a.notifier())
 	}
-	a.nextKey = k
+	hs.nextKey = k
 	a.promote()
 }
 
@@ -734,32 +711,35 @@ func (a *AsyncImageWidget) retarget(k imgcache.Key) {
 // was to replace still shows.
 func (a *AsyncImageWidget) promote() {
 	hs := a.hs
-	if a.nextKey == (imgcache.Key{}) {
+	if hs.nextKey == (imgcache.Key{}) {
 		return
 	}
-	if st, _, _, ok := hs.next.Get(a.cache, a.nextKey); !ok || st != imgcache.Ready {
+	if st, _, _, ok := hs.next.Get(a.cache, hs.nextKey); !ok || st != imgcache.Ready {
 		return
 	}
-	hs.cur, hs.next = hs.next, hs.cur
-	hs.next.Release()
-	a.key, a.nextKey = a.nextKey, imgcache.Key{}
+	hs.swap()
 }
 
 // read takes what the entry shown has, asking for it again when the
 // cache let go of it.
 func (a *AsyncImageWidget) read() {
 	hs := a.hs
-	st, img, err, ok := hs.cur.Get(a.cache, a.key)
+	st, img, err, ok := hs.cur.Get(a.cache, hs.curKey)
 	if !ok {
-		st, img, err = hs.cur.Acquire(a.cache, a.key, imgcache.Loader(a.loader), a.notifier())
+		st, img, err = hs.cur.Acquire(a.cache, hs.curKey, imgcache.Loader(a.loader), a.notifier())
 	}
 	a.inner.img, a.err = img, err
 	a.status = asyncStatus(st)
 	a.inner.source = Size{}
 	if a.status == Ready && a.maxSize <= 0 {
-		// A copy decoded for the display lays out as the image does.
-		s := hs.cur.Source()
-		a.inner.source = Sz(float64(s.X), float64(s.Y))
+		// A copy decoded for the display lays out as the image does. The
+		// size it was loaded at is the same for every copy of the src, so
+		// it is asked for once per Key.
+		if hs.source == (Size{}) {
+			s := hs.cur.Source()
+			hs.source = Sz(float64(s.X), float64(s.Y))
+		}
+		a.inner.source = hs.source
 	}
 }
 
@@ -832,15 +812,16 @@ func (a *AsyncImageWidget) Paint(dst *Canvas, r Rect) {
 // layout gave it on a canvas of scale, as grownKey says.
 func (a *AsyncImageWidget) resize(scale float64) {
 	a.scale = scale
-	src := a.key.Src
+	hs := a.hs
+	src := hs.curKey.Src
 	if src == "" {
 		return
 	}
 	if _, fixed := a.fixedKey(src); fixed {
 		return
 	}
-	k := grownKey(a.key, displayKey(src, a.box, scale))
-	if k == a.key && a.nextKey == (imgcache.Key{}) {
+	k := grownKey(hs.curKey, displayKey(src, a.box, scale))
+	if k == hs.curKey && hs.nextKey == (imgcache.Key{}) {
 		return
 	}
 	before, img := a.status, a.inner.img
@@ -874,7 +855,7 @@ func newImageCache(limit int64) *imageCache {
 // in bytes of RGBA pixels. The cache hands it RGBA pixels, which it only
 // copies.
 func uploadImage(src image.Image) (*ggfx.Image, int64) {
-	img := newTexture(src)
+	img := render.NewTexture(src)
 	b := img.Bounds()
 	bytes := framestats.ImageBytes(b.Dx(), b.Dy())
 	framestats.AddTexture(framestats.Images, bytes)

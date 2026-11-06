@@ -80,9 +80,8 @@ type Cache[T any] struct {
 	limit   int64
 	idleSum int64 // bytes of the idle entries, the ones the limit applies to
 	entries map[Key]*Entry[T]
-	bySrc   map[string][]*Entry[T] // the entries, by Src
-	front   *Entry[T]              // the idle entry released last
-	back    *Entry[T]              // and first, which goes first
+	front   *Entry[T] // the idle entry released last
+	back    *Entry[T] // and first, which goes first
 	upload  func(image.Image) (T, int64)
 	free    func(T)
 }
@@ -93,7 +92,7 @@ type Cache[T any] struct {
 // *image.RGBA holding exactly its own pixels, so that it has only to copy
 // them. free lets go of a texture the cache drops.
 func New[T any](limit int64, upload func(image.Image) (T, int64), free func(T)) *Cache[T] {
-	return &Cache[T]{limit: max(limit, 0), entries: map[Key]*Entry[T]{}, bySrc: map[string][]*Entry[T]{}, upload: upload, free: free}
+	return &Cache[T]{limit: max(limit, 0), entries: map[Key]*Entry[T]{}, upload: upload, free: free}
 }
 
 // SetLimit changes the budget, dropping what no longer fits.
@@ -129,7 +128,6 @@ func (c *Cache[T]) acquire(k Key, load Loader, w Waiter) *Entry[T] {
 		ctx, cancel := context.WithCancel(context.Background())
 		e = &Entry[T]{key: k, status: Pending, cancel: cancel}
 		c.entries[k] = e
-		c.bySrc[k.Src] = append(c.bySrc[k.Src], e)
 		go c.run(ctx, e, load)
 	}
 	if e.idle {
@@ -147,37 +145,8 @@ func (c *Cache[T]) acquire(k Key, load Loader, w Waiter) *Entry[T] {
 	return e
 }
 
-// forget takes e out of the cache's maps.
-func (c *Cache[T]) forget(e *Entry[T]) {
-	delete(c.entries, e.key)
-	same := c.bySrc[e.key.Src]
-	for i, o := range same {
-		if o == e {
-			same[i] = same[len(same)-1]
-			same[len(same)-1] = nil
-			same = same[:len(same)-1]
-			break
-		}
-	}
-	if len(same) == 0 {
-		delete(c.bySrc, e.key.Src)
-	} else {
-		c.bySrc[e.key.Src] = same
-	}
-}
-
-// ReadyKeys appends to dst the Keys of src whose images are ready to show,
-// held or idle, for a holder that has none to show while its own loads.
-func (c *Cache[T]) ReadyKeys(dst []Key, src string) []Key {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	for _, e := range c.bySrc[src] {
-		if e.status == Ready && !e.dead {
-			dst = append(dst, e.key)
-		}
-	}
-	return dst
-}
+// forget takes e out of the cache.
+func (c *Cache[T]) forget(e *Entry[T]) { delete(c.entries, e.key) }
 
 // release drops one holder. An entry nothing holds is cancelled while it
 // loads, forgotten when it failed and kept, within the budget, when it is
@@ -359,6 +328,51 @@ func (h *Handle[T]) Source() image.Point {
 // It returns what the entry has to show now, as Get does.
 func (h *Handle[T]) Acquire(c *Cache[T], k Key, load Loader, w Waiter) (Status, T, error) {
 	e := c.acquire(k, load, w)
+	h.hold(c, e)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return e.status, e.tex, e.err
+}
+
+// AcquireReady holds, in place of the entry held before, an entry of c for
+// src whose image is ready to show, for a holder with nothing to show while
+// the size it wants loads: one that pick accepts when there is one, else
+// the one of the most bytes. It returns the entry's Key, and false, holding
+// what it held, when c has none ready. pick runs under the cache's lock.
+//
+// It looks through every entry, which is fine for what a holder does once
+// when it is first given a src.
+func (h *Handle[T]) AcquireReady(c *Cache[T], src string, pick func(Key) bool) (Key, bool) {
+	c.mu.Lock()
+	var e *Entry[T]
+	for k, o := range c.entries {
+		if k.Src != src || o.status != Ready || o.dead {
+			continue
+		}
+		if pick(k) {
+			e = o
+			break
+		}
+		if e == nil || o.bytes > e.bytes {
+			e = o
+		}
+	}
+	if e == nil {
+		c.mu.Unlock()
+		return Key{}, false
+	}
+	if e.idle {
+		c.unidle(e)
+	}
+	e.refs++
+	c.mu.Unlock()
+	h.hold(c, e)
+	return e.key, true
+}
+
+// hold puts e, which the caller has taken a hold on, in place of what h
+// held, and lets go of that.
+func (h *Handle[T]) hold(c *Cache[T], e *Entry[T]) {
 	h.mu.Lock()
 	oldCache, old := h.cache, h.entry
 	h.cache, h.entry = c, e
@@ -366,9 +380,6 @@ func (h *Handle[T]) Acquire(c *Cache[T], k Key, load Loader, w Waiter) (Status, 
 	if old != nil {
 		oldCache.release(old)
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return e.status, e.tex, e.err
 }
 
 // Release lets go of the entry h holds.
@@ -382,18 +393,25 @@ func (h *Handle[T]) Release() {
 	}
 }
 
-// Downscale shrinks img so that its larger side is at most side pixels,
-// keeping the aspect ratio; a smaller image is returned as it is.
-func Downscale(img image.Image, side int) image.Image { return Fit(img, side, side, false) }
-
 // Fit scales img down to the box w×h as a Key with those sides and cover
 // says, keeping its aspect ratio; an image already within it is returned as
 // it is. A scaled image is an *image.RGBA.
+//
+// CatmullRom costs in proportion to the pixels it reads, so an image many
+// times larger than the box is first brought to twice its size by the
+// cheap ApproxBiLinear, which costs in proportion to the pixels it writes,
+// and CatmullRom smooths that last step: a 6000×4000 photo fitted to 512
+// takes a fifteenth of the time.
 func Fit(img image.Image, w, h int, cover bool) image.Image {
 	b := img.Bounds()
 	dw, dh := FitSize(b.Dx(), b.Dy(), w, h, cover)
 	if dw == b.Dx() && dh == b.Dy() {
 		return img
+	}
+	if b.Dx() > 4*dw && b.Dy() > 4*dh {
+		mid := image.NewRGBA(image.Rect(0, 0, 2*dw, 2*dh))
+		draw.ApproxBiLinear.Scale(mid, mid.Bounds(), img, b, draw.Src, nil)
+		img, b = mid, mid.Bounds()
 	}
 	dst := image.NewRGBA(image.Rect(0, 0, dw, dh))
 	draw.CatmullRom.Scale(dst, dst.Bounds(), img, b, draw.Src, nil)
