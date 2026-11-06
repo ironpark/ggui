@@ -752,7 +752,7 @@ func (t *RichTextWidget) Selectable() *RichTextWidget {
 // RichTextWidget.Selectable does.
 func (t *TextWidget) Selectable() *TextWidget {
 	if t.rich == nil {
-		t.rich = RichText().Selectable()
+		t.rich, t.richAt = RichText().Selectable(), new(richAt)
 		t.props.Changed()
 	}
 	return t

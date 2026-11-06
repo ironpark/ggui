@@ -75,22 +75,36 @@ type BoxWidget struct {
 	widthProp   property.Value[float64]
 	heightProp  property.Value[float64]
 	props       property.Owner
-	shadows     []ShadowStyle
 	fill        shownColor
-	gradient    Gradient // as given; see BoxWidget.Gradient
+	deco        *boxDeco // shadows and gradient, made when one is first set
 	radius      float64
 	borderWidth float64
 	borderColor shownColor
 
-	shownShadows  []ShadowStyle // shadows with their colors resolved
-	shownGradient Gradient      // gradient with its colors resolved
-	padding       EdgeInsets
-	width         float64 // 0 means "as small as the child allows"
-	height        float64
-	maxW, maxH    float64 // 0 means no limit
-	child         Widget
+	padding    EdgeInsets
+	width      float64 // 0 means "as small as the child allows"
+	height     float64
+	maxW, maxH float64 // 0 means no limit
+	child      Widget
 
 	childRect Rect // inside the padding, from the last Layout
+}
+
+// boxDeco is what few boxes paint: shadows and a gradient. A BoxWidget
+// makes one only when one is set.
+type boxDeco struct {
+	shadows       []ShadowStyle
+	gradient      Gradient      // as given; see BoxWidget.Gradient
+	shownShadows  []ShadowStyle // shadows with their colors resolved
+	shownGradient Gradient      // gradient with its colors resolved
+}
+
+// decorate returns the box's boxDeco, making it on first use.
+func (b *BoxWidget) decorate() *boxDeco {
+	if b.deco == nil {
+		b.deco = new(boxDeco)
+	}
+	return b.deco
 }
 
 // Box wraps at most one child. With no child it is an empty rectangle, sized
@@ -116,12 +130,16 @@ func (b *BoxWidget) Fill(c color.Color) *BoxWidget {
 // Shadow replaces the outer shadow layers. Calling it without arguments clears
 // them. Shadows paint in argument order and do not reserve layout space.
 func (b *BoxWidget) Shadow(styles ...ShadowStyle) *BoxWidget {
+	if b.deco == nil && len(styles) == 0 {
+		return b
+	}
+	d := b.decorate()
 	themed := func(s ShadowStyle) bool { return IsEnvColor(s.Color) }
-	if !slices.Equal(b.shadows, styles) && (slices.ContainsFunc(b.shadows, themed) || slices.ContainsFunc(styles, themed)) {
+	if !slices.Equal(d.shadows, styles) && (slices.ContainsFunc(d.shadows, themed) || slices.ContainsFunc(styles, themed)) {
 		b.props.Changed()
 	}
-	b.shadows = append(b.shadows[:0], styles...)
-	b.shownShadows = append(b.shownShadows[:0], styles...)
+	d.shadows = append(d.shadows[:0], styles...)
+	d.shownShadows = append(d.shownShadows[:0], styles...)
 	return b
 }
 
@@ -212,9 +230,11 @@ func (b *BoxWidget) Layout(c Constraints, env Env) Size {
 	defer b.props.Layout().EndLayout()
 	b.fill.layout(env)
 	b.borderColor.layout(env)
-	b.shownGradient = b.gradient.resolve(env)
-	for i, s := range b.shadows {
-		b.shownShadows[i].Color = ResolveColor(s.Color, env)
+	if d := b.deco; d != nil {
+		d.shownGradient = d.gradient.resolve(env)
+		for i, s := range d.shadows {
+			d.shownShadows[i].Color = ResolveColor(s.Color, env)
+		}
 	}
 	b.width, b.height = b.widthProp.Get(), b.heightProp.Get()
 	var measure layout.MeasureFunc
@@ -234,11 +254,15 @@ func (b *BoxWidget) Baseline() (float64, bool) { return baselineAt(b.child, b.pa
 
 // Paint implements Widget.
 func (b *BoxWidget) Paint(dst *Canvas, r Rect) {
-	for _, s := range b.shownShadows {
-		dst.Shadow(r, b.radius, s)
+	if b.deco != nil {
+		for _, s := range b.deco.shownShadows {
+			dst.Shadow(r, b.radius, s)
+		}
 	}
 	dst.FillRoundRect(r, b.radius, b.fill.shown)
-	dst.FillGradientRoundRect(r, b.radius, b.shownGradient)
+	if b.deco != nil {
+		dst.FillGradientRoundRect(r, b.radius, b.deco.shownGradient)
+	}
 	if b.borderWidth > 0 {
 		dst.StrokeRoundRect(r, b.radius, b.borderWidth, b.borderColor.shown)
 	}

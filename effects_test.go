@@ -312,7 +312,7 @@ func TestBoxGradientResolvesThemeColors(t *testing.T) {
 	box := Box().Size(40, 20).Gradient(LinearGradient(0, Stops(testColor{}, color.White)...)).Radius(4)
 	env := Env{}.With(testColorKey, color.Color(color.RGBA{G: 200, A: 255}))
 	box.Layout(Loose(Sz(100, 100)), env)
-	if got := box.shownGradient.stops[0].Color; got != (color.RGBA{G: 200, A: 255}) {
+	if got := box.deco.shownGradient.stops[0].Color; got != (color.RGBA{G: 200, A: 255}) {
 		t.Fatalf("painted stop %v; want the Env's color", got)
 	}
 	img := ggfx.NewImage(50, 50)
@@ -328,7 +328,7 @@ func TestBoxGradientResolvesThemeColors(t *testing.T) {
 	c.FillGradientPath(&path, Rct(Pt(0, 0), Sz(20, 20)), RadialGradient(Stops(color.White, color.Black)...))
 	c.FillPathGradient(&path, Rct(Pt(0, 0), Sz(20, 20)), color.White, color.Black)
 	var none *Canvas
-	none.FillGradientRoundRect(Rct(Pt(0, 0), Sz(1, 1)), 1, box.shownGradient)
+	none.FillGradientRoundRect(Rct(Pt(0, 0), Sz(1, 1)), 1, box.deco.shownGradient)
 }
 
 func TestBlurPaintsTheSubtreeOnceAndReturnsItsImages(t *testing.T) {
@@ -515,7 +515,7 @@ func TestShadowDoesNotChangeLayoutOrHits(t *testing.T) {
 	}
 	(*Canvas)(nil).Shadow(Rect{}, 0, ShadowStyle{Color: color.Black})
 	b.Shadow()
-	if len(b.shadows) != 0 {
+	if len(b.deco.shadows) != 0 {
 		t.Fatal("shadow not cleared")
 	}
 }

@@ -45,19 +45,34 @@ func RenderText(s string, st TextStyle, maxWidth float64) *image.RGBA {
 // textBidi is a Text's lines in visual order, for the lines that need
 // reordering: every line in a right-to-left paragraph, and a line holding
 // right-to-left text in a left-to-right one. Other lines draw as they are.
+//
+// A Text keeps one only once it is laid out under DirRTL or with a line
+// that needs reordering; most never do.
 type textBidi struct {
-	dir    TextDirection
-	lang   string
-	key    wrapKey
-	laid   bool
-	lines  [][]paragraph.Piece     // nil for a line drawn as it is
-	styles [][]paragraph.LineStyle // each reordered line's styles
+	dir     TextDirection
+	lang    string
+	key     wrapKey
+	laid    bool
+	lines   [][]paragraph.Piece     // nil for a line drawn as it is
+	styles  [][]paragraph.LineStyle // each reordered line's styles
+	pieceOp text.DrawOptions        // reused by paragraph.Draw, which would allocate one a paint
 }
 
 // layoutBidi orders the lines Layout just wrapped for the Env's direction.
-func (t *TextWidget) layoutBidi(env Env) {
-	b := &t.bidi
-	dir, lang := env.Direction(), env.Language()
+// rewrapped says the lines changed since the last call.
+func (t *TextWidget) layoutBidi(env Env, rewrapped bool) {
+	dir := env.Direction()
+	if t.bidi == nil {
+		// Under DirLTR, lines with no right-to-left text draw as they
+		// are, whatever the language: they need no textBidi until the
+		// lines or the direction change.
+		if dir != DirRTL && (!rewrapped || !slices.ContainsFunc(t.lines, paragraph.HasRTL)) {
+			return
+		}
+		t.bidi = new(textBidi)
+	}
+	b := t.bidi
+	lang := env.Language()
 	if b.laid && b.dir == dir && b.lang == lang && b.key == t.wrapped {
 		return
 	}
@@ -83,13 +98,13 @@ func (t *TextWidget) lineStyles(line string) []paragraph.LineStyle {
 // reports whether it did; a line that needs no reordering is left to the
 // caller.
 func (t *TextWidget) paintBidi(dst *Canvas, i int, r Rect, align, y float64, col color.Color, place func(op *text.DrawOptions, x, y float64)) bool {
-	if i >= len(t.bidi.lines) || t.bidi.lines[i] == nil {
+	if t.bidi == nil || i >= len(t.bidi.lines) || t.bidi.lines[i] == nil {
 		return false
 	}
 	ps, line := t.bidi.lines[i], t.lines[i]
 	x := r.Origin.X + (r.Size.W-paragraph.Width(ps))*align
 	baseline := t.faceAt(dst.Scale()).Metrics().HAscent
-	paragraph.Draw(dst.Image, &t.pieceOp, line, ps, t.bidi.styles[i], dst.Scale(), baseline,
+	paragraph.Draw(dst.Image, &t.bidi.pieceOp, line, ps, t.bidi.styles[i], dst.Scale(), baseline,
 		func(int) color.Color { return col },
 		func(op *text.DrawOptions) { place(op, x, y) })
 	return true
@@ -215,22 +230,19 @@ func cellShifts(dst []float64, bounds []int, glyphs []text.LazyGlyph, x0, cell f
 // then the widget's own setters on top, then built-in defaults for whatever
 // is still unset.
 type TextWidget struct {
-	props         property.Owner
-	value         string
-	content       property.Value[string]
-	format        string
-	formatArgs    []any
-	formatted     bool
-	style         TextStyle
-	wrap          bool
-	ellipsis      bool
-	maxLines      int
-	align         float64
-	alignSet      bool
-	role          Role
-	styleKey      EnvKey[TextStyle]
-	styleFallback TextStyle
-	cache         *CachedWidget
+	props     property.Owner
+	value     string
+	content   property.Value[string]
+	formatted bool
+	style     TextStyle
+	wrap      bool
+	ellipsis  bool
+	maxLines  int
+	align     float64
+	alignSet  bool
+	role      Role
+	opts      *textOpts // set by Textf and StyleKey only
+	cache     *CachedWidget
 
 	// Layout caches the wrapped lines, their widths and the size they add up
 	// to, and re-measures only when the text, the face or the width it must
@@ -246,11 +258,27 @@ type TextWidget struct {
 	natural   Size
 	ascent    float64 // the first baseline, below the top
 	wrapped   wrapKey
-	bidi      textBidi         // the lines in visual order, when the direction or the text needs it
+	bidi      *textBidi        // the lines in visual order, when the direction or the text needs it
 	rich      *RichTextWidget  // what a Selectable Text lays out and paints as
-	richAt    richAt           // what a Selectable Text was laid out for, to lay its lines out when rotated
+	richAt    *richAt          // what a Selectable Text was laid out for, to lay its lines out when rotated
 	drawOp    text.DrawOptions // reused by paintLines, which would allocate one a paint
-	pieceOp   text.DrawOptions // reused by paragraph.Draw for the same
+}
+
+// textOpts are the setters of a Text that few Texts call, kept apart so
+// that the rest do not carry them.
+type textOpts struct {
+	format        string
+	formatArgs    []any
+	styleKey      EnvKey[TextStyle]
+	styleFallback TextStyle
+}
+
+// options returns the Text's textOpts, making them on first use.
+func (t *TextWidget) options() *textOpts {
+	if t.opts == nil {
+		t.opts = new(textOpts)
+	}
+	return t.opts
 }
 
 // richAt is the width and Env a Selectable Text last laid out in.
@@ -281,12 +309,13 @@ func Text(s string) *TextWidget {
 // StyleKey selects an inherited text style, merged below explicit setters.
 // An optional fallback is used when the environment has no value for key.
 func (t *TextWidget) StyleKey(key EnvKey[TextStyle], fallback ...TextStyle) *TextWidget {
-	defer property.Watch(&t.props, &t.styleKey)()
-	defer property.Watch(&t.props, &t.styleFallback)()
-	t.styleKey = key
-	t.styleFallback = TextStyle{}
+	o := t.options()
+	defer property.Watch(&t.props, &o.styleKey)()
+	defer property.Watch(&t.props, &o.styleFallback)()
+	o.styleKey = key
+	o.styleFallback = TextStyle{}
 	if len(fallback) > 0 {
-		t.styleFallback = fallback[0]
+		o.styleFallback = fallback[0]
 	}
 	return t
 }
@@ -305,8 +334,9 @@ func TextOf(r Readable[string]) *TextWidget { return Text("").BindContent(r) }
 // args and creates no computation; construction needs no owner.
 func Textf(format string, args ...any) *TextWidget {
 	t := Text("")
-	t.format = format
-	t.formatArgs = append([]any(nil), args...)
+	o := t.options()
+	o.format = format
+	o.formatArgs = append([]any(nil), args...)
 	t.formatted = true
 	return t
 }
@@ -384,8 +414,9 @@ func (t *TextWidget) LineHeight(mult float64) *TextWidget {
 func (t *TextWidget) Content(s string) *TextWidget {
 	changed := t.content.Set(s) || t.formatted || t.value != s
 	t.formatted = false
-	t.format = ""
-	t.formatArgs = nil
+	if t.opts != nil {
+		t.opts.format, t.opts.formatArgs = "", nil
+	}
 	t.value = s
 	if changed {
 		t.props.Changed()
@@ -397,8 +428,9 @@ func (t *TextWidget) Content(s string) *TextWidget {
 func (t *TextWidget) BindContent(r Readable[string]) *TextWidget {
 	changed := t.content.Bind(r, "BindContent") || t.formatted
 	t.formatted = false
-	t.format = ""
-	t.formatArgs = nil
+	if t.opts != nil {
+		t.opts.format, t.opts.formatArgs = "", nil
+	}
 	if changed {
 		t.props.Changed()
 	}
@@ -449,6 +481,15 @@ func (t *TextWidget) current() TextStyle {
 	return t.resolved
 }
 
+// dir is the direction the lines were last ordered for: DirLTR, unless
+// they were laid out in another.
+func (t *TextWidget) dir() TextDirection {
+	if t.bidi == nil {
+		return DirLTR
+	}
+	return t.bidi.dir
+}
+
 // faceAt returns the face at the resolved size times scale, so that on a
 // HiDPI Canvas glyphs are rasterized at full resolution instead of scaled up.
 func (t *TextWidget) faceAt(scale float64) text.Face {
@@ -465,21 +506,25 @@ func (t *TextWidget) spacing() float64 {
 // Layout implements Widget.
 func (t *TextWidget) Layout(c Constraints, env Env) Size {
 	defer t.props.Layout().EndLayout()
+	var opts textOpts
+	if t.opts != nil {
+		opts = *t.opts
+	}
 	if t.formatted {
-		t.value = formatValues(t.format, t.formatArgs)
+		t.value = formatValues(opts.format, opts.formatArgs)
 	} else {
 		t.value = t.content.Get()
 	}
 	t.cache, _ = env.Get(cacheOwner)
-	style, ok := env.Get(t.styleKey)
+	style, ok := env.Get(opts.styleKey)
 	if !ok {
-		style = t.styleFallback
+		style = opts.styleFallback
 	}
 	t.resolved = env.ResolveText(style.Merge(t.style))
 	if t.rich != nil {
 		// A Selectable Text lays out and paints as its RichText. Only
 		// PaintRotated draws the lines, so they wait for it.
-		t.richAt = richAt{c.MaxW, env}
+		*t.richAt = richAt{c.MaxW, env}
 		return t.layoutRich(c, env, style.Merge(t.style))
 	}
 	t.layoutLines(c.MaxW, env)
@@ -493,7 +538,8 @@ func (t *TextWidget) layoutLines(maxW float64, env Env) {
 	fits := t.wrap || t.ellipsis || t.maxLines > 0
 	key := wrapKey{generation: fontGen(), value: t.value, font: t.resolved.Font, weight: t.resolved.Weight, size: t.resolved.Size, lineHeight: t.resolved.LineHeight,
 		maxW: pick(fits, maxW, 0), maxLines: t.maxLines, ellipsis: t.ellipsis}
-	if key != t.wrapped {
+	rewrapped := key != t.wrapped
+	if rewrapped {
 		t.wrapped = key
 		t.glyphFace = nil // the lines' glyphs are of the lines before
 		t.lines = textlayout.Wrap(key.value, face, pick(t.wrap, key.maxW, 0))
@@ -517,7 +563,7 @@ func (t *TextWidget) layoutLines(maxW float64, env Env) {
 		t.natural = Sz(w, float64(len(t.lines)-1)*t.spacing()+m.HAscent+m.HDescent)
 		t.ascent = m.HAscent
 	}
-	t.layoutBidi(env)
+	t.layoutBidi(env, rewrapped)
 }
 
 // Baseline implements Baseliner: the first line's baseline is its ascent
@@ -568,7 +614,7 @@ func (t *TextWidget) paintLines(dst *Canvas, r Rect, upright bool, place func(op
 	*op = text.DrawOptions{}
 	col := pick(t.style.Color != nil && !IsEnvColor(t.style.Color), t.style.Color, t.current().Color)
 	op.ColorScale.ScaleWithColor(col)
-	align := pick(t.alignSet, t.align, startAlign(t.bidi.dir))
+	align := pick(t.alignSet, t.align, startAlign(t.dir()))
 	for i, line := range t.lines {
 		x := r.Origin.X + (r.Size.W-t.widths[i])*align
 		y := r.Origin.Y + float64(i)*t.spacing()

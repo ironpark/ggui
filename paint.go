@@ -818,13 +818,18 @@ func (c *Canvas) FillGradientPath(path *Path, bounds Rect, g Gradient) {
 // the same rounded corners. A zero Gradient removes it. EnvColor stops are
 // resolved at layout, as Fill's color is.
 func (b *BoxWidget) Gradient(g Gradient) *BoxWidget {
-	if property.Equal(g, b.gradient) {
+	var was Gradient
+	if b.deco != nil {
+		was = b.deco.gradient
+	}
+	if property.Equal(g, was) {
 		return b
 	}
-	if g.themed() || b.gradient.themed() {
+	if g.themed() || was.themed() {
 		b.props.Changed()
 	}
-	b.gradient, b.shownGradient = g, g
+	d := b.decorate()
+	d.gradient, d.shownGradient = g, g
 	return b
 }
 
