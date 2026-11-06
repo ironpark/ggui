@@ -661,11 +661,11 @@ func TestSelectableTextSelectsUnderAScale(t *testing.T) {
 	p := NewProbe(topLeft(Transform(w).Scale(2).Origin(0, 0)), Sz(600, 100))
 	defer p.Close()
 	p.Frame()
-	local := textAt(w.rich, Rct(Pt(0, 0), Sz(300, 50)), 4) // late in "hello", where an unmapped 2x point lands in "world"
+	local := textAt(&w.rich.w, Rct(Pt(0, 0), Sz(300, 50)), 4) // late in "hello", where an unmapped 2x point lands in "world"
 	at := Pt(local.X*2, local.Y*2)
 	p.Click(at)
 	p.Click(at)
-	if got := w.rich.SelectedText(); got != "hello" {
+	if got := w.rich.w.SelectedText(); got != "hello" {
 		t.Fatalf("double click under a 2x scale selected %q, want hello", got)
 	}
 }
@@ -704,10 +704,10 @@ func TestSelectableTextInAPinnedStickyHeader(t *testing.T) {
 	if !a.Pinned() {
 		t.Fatal("header did not pin")
 	}
-	at := textAt(head.rich, Rct(Pt(0, 0), Sz(200, 30)), 7) // inside "beta"
+	at := textAt(&head.rich.w, Rct(Pt(0, 0), Sz(200, 30)), 7) // inside "beta"
 	p.Click(at)
 	p.Click(at)
-	if got := head.rich.SelectedText(); got != "beta" {
+	if got := head.rich.w.SelectedText(); got != "beta" {
 		t.Fatalf("double click on the pinned header selected %q, want beta", got)
 	}
 }

@@ -72,11 +72,9 @@ type ScrollWidget struct {
 	cache       *CachedWidget
 	rect        Rect // where the window was last painted
 	thumbHit    Rect
-	// thumbID is the thumb's HitID as last boxed, of the key when
-	// thumbIDKeyed, else of thumbIDRect.
+	// thumbID is the thumb's HitID as last boxed: of the key, or for a
+	// scroll with none of its rect.
 	thumbID               any
-	thumbIDKeyed          bool
-	thumbIDRect           Rect
 	barEnv                Env
 	thumbHovered          bool
 	dragging              bool
@@ -90,7 +88,7 @@ type ScrollWidget struct {
 // Key gives the scroll an identity, so a rebuilt one that also moved keeps
 // its offset. Without one its Rect identifies it.
 func (s *ScrollWidget) Key(k any) *ScrollWidget {
-	s.id, s.thumbID, s.thumbIDKeyed = k, nil, false
+	s.id, s.thumbID = k, nil
 	return s
 }
 
@@ -247,11 +245,8 @@ func (s *ScrollWidget) layout(c Constraints, env Env) Size {
 	s.phys.step(s)
 	s.laidAt = s.position()
 	vp := Viewport{Offset: s.laidAt, Extent: s.extent(c.Max()), Horizontal: s.horizontal}
-	// The viewport, a new value as the scroll moves, is boxed once for
-	// both of its keys.
-	var boxed any
-	env = env.withBoxed(viewportKey, vp, &boxed).With(scrollPortKey, s).
-		withBoxed(pick(s.horizontal, viewportXKey, viewportYKey), vp, &boxed).With(pick(s.horizontal, scrollPortXKey, scrollPortYKey), s)
+	env = env.With(viewportKey, vp).With(scrollPortKey, s).
+		With(pick(s.horizontal, viewportXKey, viewportYKey), vp).With(pick(s.horizontal, scrollPortXKey, scrollPortYKey), s)
 	// What the content builds as it is laid out, rows mounting as they
 	// scroll in, reacts within the viewport too; see Layout.
 	reactive.InRegion(&s.containedMove, func() { s.childSize = s.child.Layout(Loose(inner), env) })
@@ -387,13 +382,13 @@ func (h scrollThumb) HitID() any {
 	// The ID is boxed once, not on each of the frame's calls, until the
 	// key or, for a scroll with none, the rect it is made of changes.
 	if s.id != nil {
-		if !s.thumbIDKeyed {
-			s.thumbID, s.thumbIDKeyed = struct{ Thumb any }{s.id}, true
+		if _, ok := s.thumbID.(struct{ Thumb any }); !ok {
+			s.thumbID = struct{ Thumb any }{s.id}
 		}
 		return s.thumbID
 	}
-	if s.thumbID == nil || s.thumbIDKeyed || s.thumbIDRect != s.rect {
-		s.thumbID, s.thumbIDKeyed, s.thumbIDRect = struct{ Thumb Rect }{s.rect}, false, s.rect
+	if id, ok := s.thumbID.(struct{ Thumb Rect }); !ok || id.Thumb != s.rect {
+		s.thumbID = struct{ Thumb Rect }{s.rect}
 	}
 	return s.thumbID
 }

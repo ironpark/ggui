@@ -4,12 +4,15 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/ironpark/ggui/a11y"
 	"github.com/ironpark/ggui/inspect"
 )
 
 // inspectFrameOf builds the frame for a canvas outside an App, publishing
 // its semantics first.
-func inspectFrameOf(c *Canvas) *inspect.Frame { return inspectFrame(c, buildSemTree(c, nil, nil, nil)) }
+func inspectFrameOf(c *Canvas) *inspect.Frame {
+	return inspectFrame(c, buildSemTree(c, nil, nil, new(a11y.Builder)))
+}
 
 // inspectorCanvas paints w with the trace on, as a frame with the
 // inspector open would.
@@ -119,7 +122,7 @@ func TestInspectorDrivesTheRegisteredPanel(t *testing.T) {
 		t.Fatal("turning the inspector on did not install the registered panel as the overlay")
 	}
 	c := inspectorCanvas(Box(Text("hello")), Sz(800, 600))
-	a.publishInspect(c, buildSemTree(c, nil, nil, nil))
+	a.publishInspect(c, buildSemTree(c, nil, nil, new(a11y.Builder)))
 	if panel.frames != 1 {
 		t.Fatal("the open panel was not handed the frame")
 	}
@@ -128,7 +131,7 @@ func TestInspectorDrivesTheRegisteredPanel(t *testing.T) {
 	if a.inspect || a.overlay != nil || panel.resets != 1 {
 		t.Fatal("a panel that closed itself was not turned off")
 	}
-	a.publishInspect(c, buildSemTree(c, nil, nil, nil))
+	a.publishInspect(c, buildSemTree(c, nil, nil, new(a11y.Builder)))
 	if panel.frames != 1 {
 		t.Fatal("a closed panel was handed a frame")
 	}
@@ -169,7 +172,7 @@ func TestOnInspectReceivesFramesWithThePanelClosed(t *testing.T) {
 		}
 	})
 	c := inspectorCanvas(Box(Text("hello")), Sz(800, 600))
-	a.publishInspect(c, buildSemTree(c, nil, nil, nil))
+	a.publishInspect(c, buildSemTree(c, nil, nil, new(a11y.Builder)))
 	if frames != 1 || !slices.Equal(names, []string{"Box", "Text"}) {
 		t.Fatalf("frames = %d, names = %v", frames, names)
 	}

@@ -179,7 +179,7 @@ type Window struct {
 	// whole, never skipped.
 	motionLost bool
 	drawing    windowDraw        // the whole frame being drawn
-	damagePx   []image.Rectangle // what a frame painted in part hands setDamage
+	damagePx   []image.Rectangle // what a frame hands setDamage
 	dirty      atomic.Uint32
 	repaintMu  sync.Mutex
 	repaints   []Rect // asked for by RepaintRect since the last frame
@@ -1095,20 +1095,19 @@ type windowDraw struct {
 	// run, which may change the theme it comes from, or turn a frame a
 	// scroll contains into a whole one.
 	filled bool
-	rects  [1]image.Rectangle // what damage hands setDamage
 }
 
 // damage tells the host, when it asked, that r is what the frame changes.
 func (d *windowDraw) damage(r image.Rectangle) {
 	if d.setDamage != nil {
-		d.rects[0] = r
-		d.setDamage(d.rects[:])
+		d.w.damagePx = append(d.w.damagePx[:0], r)
+		d.setDamage(d.w.damagePx)
 	}
 }
 
-// release lets go of what the frame held, but for the damage last given,
-// which the host may read until the next frame.
-func (d *windowDraw) release() { *d = windowDraw{rects: d.rects} }
+// release lets go of what the frame held. The damage last given stays in
+// the Window's damagePx, which the host may read until the next frame.
+func (d *windowDraw) release() { *d = windowDraw{} }
 
 // settled implements paintHooks.
 func (d *windowDraw) settled() {

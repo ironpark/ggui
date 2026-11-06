@@ -268,9 +268,9 @@ func TestASelectionRunsThroughTheTextsOfAnArea(t *testing.T) {
 	defer p.Close()
 	p.Frame()
 	// From inside the first paragraph to inside the third.
-	p.Press(textAt(a.rich, a.rich.rect, 6))
-	p.Move(textAt(c.rich, c.rich.rect, 5))
-	p.Release(textAt(c.rich, c.rich.rect, 5))
+	p.Press(textAt(&a.rich.w, a.rich.w.rect, 6))
+	p.Move(textAt(&c.rich.w, c.rich.w.rect, 5))
+	p.Release(textAt(&c.rich.w, c.rich.w.rect, 5))
 	p.Frame()
 	if got, want := area.SelectedText(), "line\nsecond line\nthird"; got != want {
 		t.Fatalf("drag across three paragraphs selected %q, want %q", got, want)
@@ -280,9 +280,9 @@ func TestASelectionRunsThroughTheTextsOfAnArea(t *testing.T) {
 		t.Fatalf("copy put %q on the clipboard", got)
 	}
 	// Back up into the first: the selection runs the other way.
-	p.Press(textAt(c.rich, c.rich.rect, 5))
-	p.Move(textAt(a.rich, a.rich.rect, 6))
-	p.Release(textAt(a.rich, a.rich.rect, 6))
+	p.Press(textAt(&c.rich.w, c.rich.w.rect, 5))
+	p.Move(textAt(&a.rich.w, a.rich.w.rect, 6))
+	p.Release(textAt(&a.rich.w, a.rich.w.rect, 6))
 	p.Frame()
 	if got, want := area.SelectedText(), "line\nsecond line\nthird"; got != want {
 		t.Fatalf("drag up across three paragraphs selected %q, want %q", got, want)
@@ -306,16 +306,16 @@ func TestAClickClearsTheSelectionOfTheOtherTexts(t *testing.T) {
 	p := NewProbe(area, Sz(300, 100))
 	defer p.Close()
 	p.Frame()
-	p.Press(textAt(a.rich, a.rich.rect, 2))
-	p.Move(textAt(b.rich, b.rich.rect, 4))
-	p.Release(textAt(b.rich, b.rich.rect, 4))
+	p.Press(textAt(&a.rich.w, a.rich.w.rect, 2))
+	p.Move(textAt(&b.rich.w, b.rich.w.rect, 4))
+	p.Release(textAt(&b.rich.w, b.rich.w.rect, 4))
 	p.Frame()
 	if area.SelectedText() == "" {
 		t.Fatal("the drag selected nothing")
 	}
 	before := delivered.Load()
-	p.Press(textAt(a.rich, a.rich.rect, 3))
-	p.Release(textAt(a.rich, a.rich.rect, 3))
+	p.Press(textAt(&a.rich.w, a.rich.w.rect, 3))
+	p.Release(textAt(&a.rich.w, a.rich.w.rect, 3))
 	p.Frame()
 	if got := area.SelectedText(); got != "" {
 		t.Fatalf("a click left %q selected", got)
@@ -332,9 +332,9 @@ func TestADragWithinOneTextOfAnAreaSelectsAsItsOwn(t *testing.T) {
 	p := NewProbe(area, Sz(300, 100))
 	defer p.Close()
 	p.Frame()
-	p.Press(textAt(a.rich, a.rich.rect, 0))
-	p.Move(textAt(a.rich, a.rich.rect, 5))
-	p.Release(textAt(a.rich, a.rich.rect, 5))
+	p.Press(textAt(&a.rich.w, a.rich.w.rect, 0))
+	p.Move(textAt(&a.rich.w, a.rich.w.rect, 5))
+	p.Release(textAt(&a.rich.w, a.rich.w.rect, 5))
 	if got := area.SelectedText(); got != "hello" {
 		t.Fatalf("drag within one paragraph selected %q, want hello", got)
 	}
@@ -356,7 +356,7 @@ func TestFindSelectsTheMatchesOfAnAreaInTurn(t *testing.T) {
 		if !ok || area.SelectedText() != want {
 			t.Fatalf("match %d: found %v, selected %q; want %q", n, ok, area.SelectedText(), want)
 		}
-		if at.Size.W <= 0 || (n == 0) != (at.Origin.Y < b.rich.rect.Origin.Y) {
+		if at.Size.W <= 0 || (n == 0) != (at.Origin.Y < b.rich.w.rect.Origin.Y) {
 			t.Fatalf("match %d painted at %v", n, at)
 		}
 	}
@@ -364,7 +364,7 @@ func TestFindSelectsTheMatchesOfAnAreaInTurn(t *testing.T) {
 		t.Fatalf("a fourth match was found, or the third let go: %q", area.SelectedText())
 	}
 	// From below the first text, its match does not count.
-	if _, ok := area.Find("error", b.rich.rect.Origin.Y, 0); !ok || area.SelectedText() != "error" {
+	if _, ok := area.Find("error", b.rich.w.rect.Origin.Y, 0); !ok || area.SelectedText() != "error" {
 		t.Fatalf("from the second text, the first match is %q", area.SelectedText())
 	}
 }
@@ -395,10 +395,10 @@ func TestSelectableTextDoubleClickSelectsAWordAndCopies(t *testing.T) {
 	defer p.Close()
 	p.Frame()
 	r := Rct(Pt(0, 0), Sz(300, 30))
-	at := textAt(w.rich, r, 7) // inside "world"
+	at := textAt(&w.rich.w, r, 7) // inside "world"
 	p.Click(at)
 	p.Click(at)
-	if got := w.rich.SelectedText(); got != "world" {
+	if got := w.rich.w.SelectedText(); got != "world" {
 		t.Fatalf("double click selected %q, want world", got)
 	}
 	p.Key("cmd+c")
@@ -410,7 +410,7 @@ func TestSelectableTextDoubleClickSelectsAWordAndCopies(t *testing.T) {
 		t.Fatalf("select all copied %q", got)
 	}
 	p.Key("escape")
-	if lo, hi := w.rich.Selection(); lo != hi {
+	if lo, hi := w.rich.w.Selection(); lo != hi {
 		t.Fatalf("escape left %d..%d selected", lo, hi)
 	}
 }

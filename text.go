@@ -259,8 +259,7 @@ type TextWidget struct {
 	ascent    float64 // the first baseline, below the top
 	wrapped   wrapKey
 	bidi      *textBidi        // the lines in visual order, when the direction or the text needs it
-	rich      *RichTextWidget  // what a Selectable Text lays out and paints as
-	richAt    *richAt          // what a Selectable Text was laid out for, to lay its lines out when rotated
+	rich      *selectableText  // what a Selectable Text lays out and paints as
 	drawOp    text.DrawOptions // reused by paintLines, which would allocate one a paint
 }
 
@@ -281,8 +280,11 @@ func (t *TextWidget) options() *textOpts {
 	return t.opts
 }
 
-// richAt is the width and Env a Selectable Text last laid out in.
-type richAt struct {
+// selectableText is the RichText a Selectable Text lays out and paints
+// as, and the width and Env it last laid out in, to lay its lines out
+// when rotated.
+type selectableText struct {
+	w    RichTextWidget
 	maxW float64
 	env  Env
 }
@@ -524,7 +526,7 @@ func (t *TextWidget) Layout(c Constraints, env Env) Size {
 	if t.rich != nil {
 		// A Selectable Text lays out and paints as its RichText. Only
 		// PaintRotated draws the lines, so they wait for it.
-		*t.richAt = richAt{c.MaxW, env}
+		t.rich.maxW, t.rich.env = c.MaxW, env
 		return t.layoutRich(c, env, style.Merge(t.style))
 	}
 	t.layoutLines(c.MaxW, env)
@@ -570,7 +572,7 @@ func (t *TextWidget) layoutLines(maxW float64, env Env) {
 // below the top, where paintLines puts the line.
 func (t *TextWidget) Baseline() (float64, bool) {
 	if t.rich != nil {
-		return t.rich.Baseline()
+		return t.rich.w.Baseline()
 	}
 	return t.ascent, t.resolved.Font != nil
 }
@@ -583,7 +585,7 @@ func (t *TextWidget) Paint(dst *Canvas, r Rect) {
 	// already painted as its own label is that control's name, not an
 	// element of its own, so it stays quiet there.
 	if t.rich != nil {
-		t.rich.Paint(dst, r)
+		t.rich.w.Paint(dst, r)
 		return
 	}
 	t.paintLines(dst, r, true, func(op *text.DrawOptions, x, y float64) {
@@ -607,7 +609,7 @@ func (t *TextWidget) paintLines(dst *Canvas, r Rect, upright bool, place func(op
 		return
 	}
 	if t.rich != nil {
-		t.layoutLines(t.richAt.maxW, t.richAt.env)
+		t.layoutLines(t.rich.maxW, t.rich.env)
 	}
 	face := t.faceAt(dst.Scale())
 	op := &t.drawOp

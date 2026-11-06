@@ -108,7 +108,7 @@ func TestTextKeepsRarePartsApart(t *testing.T) {
 	w := Text("hello world")
 	w.Layout(c, Env{})
 	w.Paint(&Canvas{}, Rct(Pt(0, 0), Sz(300, 100)))
-	if w.bidi != nil || w.opts != nil || w.rich != nil || w.richAt != nil {
+	if w.bidi != nil || w.opts != nil || w.rich != nil {
 		t.Fatalf("a plain Text made bidi %v, opts %v, rich %v", w.bidi, w.opts, w.rich)
 	}
 	rtl := Env{}.With(DirectionKey, DirRTL)
