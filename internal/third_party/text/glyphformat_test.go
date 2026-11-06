@@ -91,15 +91,6 @@ func TestAlphaGlyphDrawsAsWhiteRGBA(t *testing.T) {
 				got, want := draw(img), draw(ref)
 				worst, at := 0, -1
 				for i := range got {
-					// Linear filtering reads a texel left of and above the
-					// image for the destination's first column and its first
-					// two rows, which is its atlas neighbour's padding, or,
-					// at its texture's origin, the image's own edge
-					// (src0_unsafe_at truncates toward zero): it depends on
-					// where the image is placed, not on its format.
-					if x, y := i/4%64, i/4/64; filter == ggfx.FilterLinear && (x < 4 || y < 6) {
-						continue
-					}
 					if d := int(got[i]) - int(want[i]); max(d, -d) > worst {
 						worst, at = max(d, -d), i
 					}
