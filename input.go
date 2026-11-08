@@ -148,14 +148,18 @@ type Revealer interface {
 	Reveal(r Rect)
 }
 
+// scrolled reports whether the frame scrolled anything.
+func (f *frameInput) scrolled() bool { return f.wheel != (Point{}) || f.wheelPx != (Point{}) }
+
 // frameInput is everything the runtime read from the platform this frame.
 type frameInput struct {
 	touch bool
 	pos   Point
 	down  []MouseButton
 	up    []MouseButton
-	wheel Point
-	phase ScrollPhase   // of the frame's scrolls, the lift outranking the rest
+	wheel   Point       // a wheel's notches
+	wheelPx Point       // a precise scroll's logical pixels, a trackpad's
+	phase   ScrollPhase // of the frame's scrolls, the lift outranking the rest
 	keys  []KeyboardKey // just pressed, plus repeats of held keys
 	// released are the keys let go of, for a KeyReleaseHandler.
 	released []KeyboardKey
@@ -411,7 +415,7 @@ func (in *inputState) notifyObservers(f frameInput) {
 		if scope != nil && observer.scope != scope {
 			continue
 		}
-		pointer := (len(f.down) > 0 || f.wheel != (Point{})) && observer.rect.Contains(f.pos)
+		pointer := (len(f.down) > 0 || f.scrolled()) && observer.rect.Contains(f.pos)
 		keyboard := (len(f.keys) > 0 || f.text != "") && in.focused != nil && !observer.rect.Intersect(in.focused.rect).Empty()
 		if pointer || keyboard {
 			observer.notify()
@@ -510,9 +514,15 @@ func (in *inputState) dispatchPointer(f frameInput) {
 		}
 		in.pressed = nil
 	}
-	if f.wheel != (Point{}) || f.phase == ScrollPhaseEnded || f.phase == ScrollPhaseMomentumEnded {
-		in.send(PointerEvent{Kind: PointerScroll, Pos: f.pos, Scroll: f.wheel, Mods: f.mods,
-			ScrollMomentum: f.phase == ScrollPhaseMomentum || f.phase == ScrollPhaseMomentumEnded, ScrollPhase: f.phase})
+	// A wheel's notches and a trackpad's pixels go as scrolls of their own;
+	// a gesture's lift, which moves nothing, goes as the trackpad's.
+	lifted := f.phase == ScrollPhaseEnded || f.phase == ScrollPhaseMomentumEnded
+	momentum := f.phase == ScrollPhaseMomentum || f.phase == ScrollPhaseMomentumEnded
+	if f.wheel != (Point{}) {
+		in.send(PointerEvent{Kind: PointerScroll, Pos: f.pos, Scroll: f.wheel, Mods: f.mods, ScrollMomentum: momentum, ScrollPhase: f.phase})
+	}
+	if f.wheelPx != (Point{}) || lifted && f.wheel == (Point{}) {
+		in.send(PointerEvent{Kind: PointerScroll, Pos: f.pos, Scroll: f.wheelPx, ScrollPixels: true, Mods: f.mods, ScrollMomentum: momentum, ScrollPhase: f.phase})
 	}
 }
 
@@ -1235,7 +1245,7 @@ func (t *touchInput) apply(f *frameInput, ids []ggwd.TouchID, position func(ggwd
 // receiving movement even when the finger leaves its viewport.
 func (in *inputState) panTouch(f *frameInput) {
 	now := activeWorld().frame.raw()
-	if len(f.down) != 0 || f.wheel != (Point{}) || len(f.keys) != 0 {
+	if len(f.down) != 0 || f.scrolled() || len(f.keys) != 0 {
 		in.touchMotion.stop()
 	}
 	in.stepTouchMomentum(now)
