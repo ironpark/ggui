@@ -402,3 +402,22 @@ func TestTheInspectorChordReachesNoWidget(t *testing.T) {
 		t.Fatalf("keys = %v; want only A, the inspector's F1 kept from the widgets", keys)
 	}
 }
+
+// A precise scroll, a trackpad's, is taken in the logical pixels it moves,
+// apart from a wheel's notches in the same frame.
+func TestAPreciseScrollIsTakenInPixels(t *testing.T) {
+	t.Parallel()
+	a := &Window{}
+	for _, e := range []ggwd.Event{
+		ggwd.ScrollEvent{Y: -1.5, Precise: true, Phase: ggwd.ScrollPhaseChanged},
+		ggwd.ScrollEvent{Y: -1},
+	} {
+		if err := a.handle(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f := a.takeInput()
+	if f.wheelPx != Pt(0, -1.5*ggwd.PreciseLine) || f.wheel != Pt(0, -1) {
+		t.Fatalf("took %v pixels and %v notches", f.wheelPx, f.wheel)
+	}
+}

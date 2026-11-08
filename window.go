@@ -379,7 +379,12 @@ func (w *Window) handle(ev ggwd.Event) error {
 	case ggwd.ScrollEvent:
 		w.keyboard.SyncMods(ev.Modifiers)
 		w.pending.mods = w.pending.mods.Or(ev.Modifiers)
-		w.pending.wheel = w.pending.wheel.Add(Pt(ev.X, ev.Y))
+		if ev.Precise {
+			// A trackpad's points, as the logical pixels they move.
+			w.pending.wheelPx = w.pending.wheelPx.Add(Pt(ev.X*ggwd.PreciseLine, ev.Y*ggwd.PreciseLine))
+		} else {
+			w.pending.wheel = w.pending.wheel.Add(Pt(ev.X, ev.Y))
+		}
 		w.pending.phase = laterPhase(w.pending.phase, ev.Phase)
 		// The wheel is a pointer event: what it reaches is painted again
 		// (see deliver), and what it scrolls through a signal or a layout
