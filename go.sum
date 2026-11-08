@@ -38,6 +38,8 @@ github.com/ironpark/ggwd v0.0.0-20261031170520-65df921002d2 h1:nmxj3TXyOv9d395vz
 github.com/ironpark/ggwd v0.0.0-20261031170520-65df921002d2/go.mod h1:U4G78bhALXLxCSDvvWL4CMlJ6pMTFwQZfFLxp5J4tN0=
 github.com/ironpark/ggwd v0.0.0-20261102030823-b0d6ceac0632 h1:o57TDsvU378U3Y5e42qoTlF5boZqlxzOttKOau9DuVI=
 github.com/ironpark/ggwd v0.0.0-20261102030823-b0d6ceac0632/go.mod h1:5j6FtfpTNHuQUDSxWPVSlBm8spczqe26OHuR6ldxyWk=
+github.com/ironpark/ggwd v0.0.0-20261108123105-88d7a700fa02 h1:z1r5vW0qgRpHOiiMs/e1IpkQIR3QkAgunvir63QaoRE=
+github.com/ironpark/ggwd v0.0.0-20261108123105-88d7a700fa02/go.mod h1:5j6FtfpTNHuQUDSxWPVSlBm8spczqe26OHuR6ldxyWk=
 github.com/pierrec/lz4/v4 v4.1.29 h1:CDQY6qZOLI4DW0Nx6R1vRrifrCeQHnNXkMb0hZWXFjg=
 github.com/pierrec/lz4/v4 v4.1.29/go.mod h1:EoQMVJgeeEOMsCqCzqFm2O0cJvljX2nGZjcRIPL34O4=
 github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c h1:km8GpoQut05eY3GiYWEedbTT0qnSxrCjsVbb7yKY1KE=
