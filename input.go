@@ -153,14 +153,14 @@ func (f *frameInput) scrolled() bool { return f.wheel != (Point{}) || f.wheelPx 
 
 // frameInput is everything the runtime read from the platform this frame.
 type frameInput struct {
-	touch bool
-	pos   Point
-	down  []MouseButton
-	up    []MouseButton
-	wheel   Point       // a wheel's notches
-	wheelPx Point       // a precise scroll's logical pixels, a trackpad's
-	phase   ScrollPhase // of the frame's scrolls, the lift outranking the rest
-	keys  []KeyboardKey // just pressed, plus repeats of held keys
+	touch   bool
+	pos     Point
+	down    []MouseButton
+	up      []MouseButton
+	wheel   Point         // a wheel's notches
+	wheelPx Point         // a precise scroll's logical pixels, a trackpad's
+	phase   ScrollPhase   // of the frame's scrolls, the lift outranking the rest
+	keys    []KeyboardKey // just pressed, plus repeats of held keys
 	// released are the keys let go of, for a KeyReleaseHandler.
 	released []KeyboardKey
 	text     string
