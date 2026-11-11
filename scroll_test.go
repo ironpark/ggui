@@ -687,3 +687,228 @@ func TestRevealTakesOverFromAnEasedScroll(t *testing.T) {
 		t.Fatalf("after revealing row 0 mid-scroll: offset %v animating %v; want the reveal to win", sc.Offset(), sc.Animating())
 	}
 }
+
+// wheeled is a window of a scroll, the left half of it, over content 2000
+// tall, with config to configure the scroll, and its controller.
+func wheeled(config func(*ScrollWidget)) (*WindowProbe, *ScrollController) {
+	sc := &ScrollController{}
+	p := NewWindowProbe(func() Widget {
+		s := Scroll(Box().Size(100, 2000)).Controller(sc)
+		if config != nil {
+			config(s)
+		}
+		return Row(Box(s).Size(100, 100), Box().Size(100, 100))
+	}, Sz(200, 100))
+	p.Run(frameTime, 10)
+	return p, sc
+}
+
+// offsets runs p's frames until the window rests and returns the scroll's
+// offset after each.
+func offsets(t *testing.T, p *WindowProbe, sc *ScrollController) (at []float64) {
+	t.Helper()
+	for range 60 {
+		fr := p.Step(frameTime)
+		at = append(at, sc.Offset())
+		if !fr.Next {
+			return at
+		}
+	}
+	t.Fatalf("the window did not come to rest; offsets %v", at)
+	return nil
+}
+
+// A wheel's notch moves a view as far as the platform scrolls for it, not
+// a distance of the view's own, and the view eases over it: Windows and a
+// browser scroll a hundred pixels a notch, and a jump that long loses the
+// reader's place.
+func TestAWheelsNotchScrollsThePlatformsDistanceEased(t *testing.T) {
+	p, sc := wheeled(nil)
+	defer p.Close()
+	p.Wheel(Pt(50, 50), Pt(0, -1), 100)
+	at := offsets(t, p, sc)
+	if got := at[len(at)-1]; got != 100 {
+		t.Fatalf("a notch of 100 came to rest at %v; offsets %v", got, at)
+	}
+	between := 0
+	for i, v := range at {
+		if i > 0 && v < at[i-1] {
+			t.Fatalf("the notch went back: %v", at)
+		}
+		if v > 0 && v < 100 {
+			between++
+		}
+	}
+	if between < 3 {
+		t.Fatalf("the notch jumped: offsets %v", at)
+	}
+	if n := len(at); n > 15 {
+		t.Fatalf("the notch took %d frames; a wheel must not feel slow: %v", n, at)
+	}
+	// Another platform's notch is another distance.
+	p.Wheel(Pt(50, 50), Pt(0, -1), 53)
+	if at := offsets(t, p, sc); at[len(at)-1] != 153 {
+		t.Fatalf("a notch of 53 more came to rest at %v", at[len(at)-1])
+	}
+}
+
+// Notches that come while the last is still easing add to where it was
+// heading: three quick notches scroll three notches.
+func TestWheelNotchesAddUpWhileEasing(t *testing.T) {
+	p, sc := wheeled(nil)
+	defer p.Close()
+	for range 3 {
+		p.Wheel(Pt(50, 50), Pt(0, -1), 100)
+		p.Step(frameTime)
+		p.Step(frameTime)
+	}
+	if at := offsets(t, p, sc); at[len(at)-1] != 300 {
+		t.Fatalf("three notches of 100 came to rest at %v", at[len(at)-1])
+	}
+	// And one back takes one off, from wherever the view has got to.
+	p.Wheel(Pt(50, 50), Pt(0, -1), 100)
+	p.Step(frameTime)
+	p.Wheel(Pt(50, 50), Pt(0, 1), 100)
+	if at := offsets(t, p, sc); at[len(at)-1] != 300 {
+		t.Fatalf("a notch on and a notch back came to rest at %v, not where they began", at[len(at)-1])
+	}
+}
+
+// A trackpad's scroll is the view's movement itself, momentum and all, and
+// is followed as it comes: easing it would trail the fingers.
+func TestATrackpadsScrollIsFollowedAtOnce(t *testing.T) {
+	p, sc := wheeled(nil)
+	defer p.Close()
+	p.Trackpad(Pt(50, 50), Pt(0, -37.5))
+	p.Step(frameTime)
+	if got := sc.Offset(); got != 37.5 {
+		t.Fatalf("a trackpad's 37.5 pixels moved the view %v in its frame", got)
+	}
+}
+
+// A view eases nothing under reduced motion, and Speed still sets a
+// distance of the view's own for a wheel's unit.
+func TestAWheelsNotchJumpsUnderReducedMotionAndSpeedSetsItsDistance(t *testing.T) {
+	sc := &ScrollController{}
+	p := NewWindowProbe(func() Widget {
+		return Provide(ReducedMotionKey, true, Box(Scroll(Box().Size(100, 2000)).Controller(sc)).Size(100, 100))
+	}, Sz(200, 100))
+	p.Run(frameTime, 10)
+	p.Wheel(Pt(50, 50), Pt(0, -1), 100)
+	p.Step(frameTime)
+	if got := sc.Offset(); got != 100 {
+		t.Fatalf("under reduced motion a notch moved the view %v in its frame", got)
+	}
+	p.Close()
+
+	p, sc = wheeled(func(s *ScrollWidget) { s.Speed(30) })
+	defer p.Close()
+	p.Wheel(Pt(50, 50), Pt(0, -2), 100)
+	if at := offsets(t, p, sc); at[len(at)-1] != 60 {
+		t.Fatalf("two notches at Speed(30) came to rest at %v", at[len(at)-1])
+	}
+}
+
+// A notch at the end of the content is the scroll around's: the inner one
+// does not take it, and the outer eases as it would for its own.
+func TestAWheelsNotchAtTheEndGoesToTheScrollAround(t *testing.T) {
+	inner, outer := &ScrollController{}, &ScrollController{}
+	p := NewWindowProbe(func() Widget {
+		in := Box(Scroll(Box().Size(100, 150)).Controller(inner)).Size(100, 100)
+		return Scroll(Column(in, Box().Size(100, 2000))).Controller(outer)
+	}, Sz(200, 100))
+	defer p.Close()
+	p.Run(frameTime, 10)
+	p.Wheel(Pt(50, 50), Pt(0, -1), 100)
+	for range 30 {
+		p.Step(frameTime)
+	}
+	if inner.Offset() != 50 || outer.Offset() != 0 {
+		t.Fatalf("a notch moved the inner scroll to %v of 50 and the outer to %v", inner.Offset(), outer.Offset())
+	}
+	p.Wheel(Pt(50, 50), Pt(0, -1), 100)
+	for range 30 {
+		p.Step(frameTime)
+	}
+	if inner.Offset() != 50 || outer.Offset() != 100 {
+		t.Fatalf("a notch at the inner scroll's end left it at %v and moved the outer to %v, not 100", inner.Offset(), outer.Offset())
+	}
+}
+
+// A snapping scroll settles from where a notch led, not from part of the
+// way there.
+func TestAWheelsNotchOnASnappingScrollSettlesFromWhereItLed(t *testing.T) {
+	p, sc := wheeled(func(s *ScrollWidget) { s.Snap(40) })
+	defer p.Close()
+	p.Wheel(Pt(50, 50), Pt(0, -1), 100)
+	var at []float64
+	for range 80 {
+		fr := p.Step(frameTime)
+		at = append(at, sc.Offset())
+		if !fr.Next && fr.Wake.IsZero() {
+			break
+		}
+	}
+	if got := at[len(at)-1]; got != 80 && got != 120 {
+		t.Fatalf("a notch of 100 on a scroll snapping by 40 came to rest at %v; offsets %v", got, at)
+	}
+	reached := false
+	for _, v := range at {
+		reached = reached || v == 100
+	}
+	if !reached {
+		t.Fatalf("the snap cut the notch short: offsets %v", at)
+	}
+}
+
+// The frames a notch eases over are painted within the viewport.
+func TestAWheelsNotchEasingPaintsWithinTheViewport(t *testing.T) {
+	p, _ := wheeled(nil)
+	defer p.Close()
+	p.Wheel(Pt(50, 50), Pt(0, -1), 100)
+	frames := p.Run(frameTime, 60)
+	for i, fr := range frames[1:] {
+		if fr.Painted != FrameContained {
+			t.Fatalf("frame %d of the notch was painted %v: %v", i+1, fr.Painted, frames)
+		}
+	}
+}
+
+// What a window's scroll events say of distance reaches a handler in
+// ScrollBy, and an event that says nothing counts WheelLine a unit.
+func TestScrollByIsThePlatformsDistance(t *testing.T) {
+	if got := (PointerEvent{Kind: PointerScroll, Scroll: Pt(0, -2)}).ScrollBy(); got != Pt(0, -2*WheelLine) {
+		t.Fatalf("an event that says no distance scrolls by %v", got)
+	}
+	if got := (PointerEvent{Kind: PointerScroll, Scroll: Pt(3, -7), ScrollPixels: true}).ScrollBy(); got != Pt(3, -7) {
+		t.Fatalf("a scroll in pixels scrolls by %v", got)
+	}
+	var got []PointerEvent
+	p := NewWindowProbe(func() Widget { return &scrollCatcher{got: &got} }, Sz(100, 100))
+	defer p.Close()
+	p.Run(frameTime, 3)
+	p.Wheel(Pt(50, 50), Pt(0, -1), 100)
+	p.Wheel(Pt(50, 50), Pt(0, -2), 100)
+	p.Step(frameTime)
+	if len(got) != 1 || got[0].Scroll != Pt(0, -3) || got[0].ScrollBy() != Pt(0, -300) || !got[0].ScrollStep || got[0].ScrollPixels {
+		t.Fatalf("three notches of 100 reached the handler as %+v", got)
+	}
+	got = nil
+	p.Trackpad(Pt(50, 50), Pt(0, -12))
+	p.Step(frameTime)
+	if len(got) != 1 || got[0].ScrollBy() != Pt(0, -12) || got[0].ScrollStep || !got[0].ScrollPixels {
+		t.Fatalf("a trackpad's 12 pixels reached the handler as %+v", got)
+	}
+}
+
+// scrollCatcher fills the window and keeps the scrolls that reach it.
+type scrollCatcher struct{ got *[]PointerEvent }
+
+func (c *scrollCatcher) Layout(cs Constraints, _ Env) Size { return cs.Max() }
+func (c *scrollCatcher) Paint(dst *Canvas, r Rect)         { dst.HitPointer(r, c) }
+func (c *scrollCatcher) HandlePointer(ev PointerEvent) bool {
+	if ev.Kind == PointerScroll {
+		*c.got = append(*c.got, ev)
+	}
+	return true
+}

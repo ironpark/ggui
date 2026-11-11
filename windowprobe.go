@@ -244,10 +244,28 @@ func (p *WindowProbe) Click(pos Point) {
 	p.Release(pos)
 }
 
-// Scroll turns the wheel by delta, in lines, over pos, for the next frame.
+// Scroll turns the wheel by delta, in lines, over pos, for the next frame,
+// as an event that does not say how far a line goes: each moves a view
+// WheelLine, at once. Wheel and Trackpad scroll as a platform's devices do.
 func (p *WindowProbe) Scroll(pos, delta Point) {
 	p.Move(pos)
 	p.handle(ggwd.ScrollEvent{X: delta.X, Y: delta.Y})
+}
+
+// Wheel turns a wheel by notches over pos, for the next frame, on a
+// platform that scrolls line logical pixels for each: 100 on Windows as it
+// ships and in a browser. A view eases over the step.
+func (p *WindowProbe) Wheel(pos, notches Point, line float64) {
+	p.Move(pos)
+	p.handle(ggwd.ScrollEvent{X: notches.X, Y: notches.Y, Line: line})
+}
+
+// Trackpad scrolls by pixels, in logical pixels, over pos, for the next
+// frame, as a trackpad does, or a browser for any scroll that is not a
+// wheel's whole notches: a view follows it as it comes.
+func (p *WindowProbe) Trackpad(pos, pixels Point) {
+	p.Move(pos)
+	p.handle(ggwd.ScrollEvent{X: pixels.X / ggwd.PreciseLine, Y: pixels.Y / ggwd.PreciseLine, Line: ggwd.PreciseLine, Precise: true})
 }
 
 // Key presses and releases each chord, written as ParseChord reads it,

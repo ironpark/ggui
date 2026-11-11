@@ -389,7 +389,9 @@ func (w *Window) handle(ev ggwd.Event) error {
 			// A trackpad's points, as the logical pixels they move.
 			w.pending.wheelPx = w.pending.wheelPx.Add(Pt(ev.X*ggwd.PreciseLine, ev.Y*ggwd.PreciseLine))
 		} else {
+			// A wheel's notches, and how far the platform scrolls for them.
 			w.pending.wheel = w.pending.wheel.Add(Pt(ev.X, ev.Y))
+			w.pending.wheelBy = w.pending.wheelBy.Add(Pt(ev.X*ev.Line, ev.Y*ev.Line))
 		}
 		w.pending.phase = laterPhase(w.pending.phase, ev.Phase)
 		// The wheel is a pointer event: what it reaches is painted again

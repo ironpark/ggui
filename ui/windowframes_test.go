@@ -312,3 +312,45 @@ func TestAnAttachmentStripSnapsAfterTheWheelWithoutWatching(t *testing.T) {
 		t.Fatalf("%d frames to snap, want the one it waited for: %v", len(frames), frames)
 	}
 }
+
+// A transcript scrolls a wheel's notch as far as the platform does, eased,
+// with the next notch adding to where the last was heading, and follows a
+// trackpad at once.
+func TestAMessageScrollerEasesAWheelsNotchAndFollowsATrackpad(t *testing.T) {
+	rows := ggui.State(transcript(12))
+	s := ui.MessageScroller(rows).Height(200).Gap(10)
+	p := ggui.NewWindowProbe(func() ggui.Widget { return s }, ggui.Sz(300, 200))
+	defer p.Close()
+	p.Run(frameStep, 10)
+	end := s.Position()
+	p.Wheel(ggui.Pt(10, 100), ggui.Pt(0, 1), 100)
+	var at []float64
+	for range 30 {
+		p.Step(frameStep)
+		at = append(at, s.Position())
+	}
+	between := 0
+	for _, v := range at {
+		if v < end && v > end-100 {
+			between++
+		}
+	}
+	if got := at[len(at)-1]; got != end-100 || between < 3 {
+		t.Fatalf("a notch of 100 from %v came to rest at %v with %d frames on the way: %v", end, got, between, at)
+	}
+	p.Wheel(ggui.Pt(10, 100), ggui.Pt(0, 1), 100)
+	p.Step(frameStep)
+	p.Step(frameStep)
+	p.Wheel(ggui.Pt(10, 100), ggui.Pt(0, 1), 100)
+	for range 30 {
+		p.Step(frameStep)
+	}
+	if got := s.Position(); got != end-300 {
+		t.Fatalf("two more notches came to rest at %v, want %v", got, end-300)
+	}
+	p.Trackpad(ggui.Pt(10, 100), ggui.Pt(0, 12.5))
+	p.Step(frameStep)
+	if got := s.Position(); got != end-312.5 {
+		t.Fatalf("a trackpad's 12.5 pixels left the transcript at %v in its frame, want %v", got, end-312.5)
+	}
+}

@@ -122,7 +122,7 @@ func (s *ScrollWidget) Adopt(prev any) {
 // is given. The offset lives in the widget and carries across a rebuild;
 // bind it to a StateValue with Offset to read or set it.
 func Scroll(child Widget) *ScrollWidget {
-	return &ScrollWidget{child: child, speed: 20, id: reactive.AutoID()}
+	return &ScrollWidget{child: child, id: reactive.AutoID()}
 }
 
 // Horizontal scrolls along the x axis instead of the y axis.
@@ -139,9 +139,10 @@ func (s *ScrollWidget) FadeEdges(width float64) *ScrollWidget { s.fade = max(wid
 // of tabs in a Flexible, with what follows them right after the last.
 func (s *ScrollWidget) Shrink() *ScrollWidget { s.shrink = true; return s }
 
-// Speed sets how many pixels one wheel unit moves. A unit is one mouse
-// notch on the desktop; on the web, where browsers report pixels, it is
-// 20 CSS pixels, so the default matches the browser's own scrolling.
+// Speed sets how many pixels one unit of a wheel moves, in place of what
+// the platform scrolls for it, which is the default and what its other
+// applications do: see PointerEvent.ScrollBy. Zero is that default again.
+// A trackpad's scroll and a pan are in pixels already, and move by them.
 func (s *ScrollWidget) Speed(px float64) *ScrollWidget {
 	defer property.Watch(&s.props, &s.speed)()
 	s.speed = px
@@ -514,15 +515,55 @@ func (s *ScrollWidget) HandlePointer(ev PointerEvent) bool {
 	if ev.Kind != PointerScroll {
 		return false
 	}
-	delta := pick(s.horizontal, ev.Scroll.X, ev.Scroll.Y)
+	by := ev.ScrollBy()
+	if s.speed > 0 && !ev.ScrollPixels {
+		by = Pt(ev.Scroll.X*s.speed, ev.Scroll.Y*s.speed)
+	}
+	delta := pick(s.horizontal, by.X, by.Y)
 	if delta == 0 || s.maxOffset() == 0 {
 		return false
 	}
-	speed := s.speed
-	if ev.ScrollPixels {
-		speed = 1
+	if ev.ScrollStep && !ev.ScrollMomentum {
+		return s.wheelStep(delta)
 	}
-	return s.wheel(delta*speed, ev.ScrollMomentum)
+	return s.wheel(delta, ev.ScrollMomentum)
+}
+
+// wheelStep moves the content by d as a wheel's notch does: eased, over
+// scrollWheelEase, to where the notch leads, and from wherever it has got
+// to when the next notch comes, which adds to where the last was heading.
+// A notch as the platform counts it is a long way, a hundred pixels on
+// Windows and in a browser, and a view that jumps it loses the reader's
+// place; every platform's own views ease it. It reports whether the event
+// was used: one at the end of the content is left to the scroll around.
+//
+// Under reduced motion, and where the content is pulled past an end or the
+// notch would pull it there, the move is the wheel's plain one.
+func (s *ScrollWidget) wheelStep(d float64) bool {
+	p := &s.phys
+	ease := s.barEnv.Motion(scrollWheelEase)
+	from := s.position()
+	heading := from
+	if p.animating && p.stepping {
+		heading = p.anim.to
+	}
+	to := heading - d
+	if ease <= 0 || p.over != 0 || p.mode != OverscrollClamp && (to < 0 || to > s.maxOffset()) {
+		return s.wheel(d, false)
+	}
+	to = clamp(to, 0, s.maxOffset())
+	if to == heading {
+		return false
+	}
+	p.input(s)
+	p.dir = math.Copysign(1, to-from)
+	now := FrameTime()
+	p.anim = Motion{}
+	p.anim.MoveTo(from, now, 0)
+	p.anim.MoveTo(to, now, ease)
+	p.animating, p.stepping = true, true
+	s.contain(true, s.cache.invalidate)
+	return true
 }
 
 // Overscroll says what a Scroll does when a touch pan, a fling or the wheel
@@ -547,7 +588,11 @@ const (
 	// pause is the signal.
 	scrollSettleDelay = 120 * time.Millisecond
 	scrollSpringBack  = 350 * time.Millisecond
-	scrollAnimation   = 300 * time.Millisecond
+	// scrollWheelEase is how long a wheel's notch takes; see wheelStep. It
+	// is no shorter than scrollSettleDelay, so a snapping scroll settles
+	// from where the notch led and not from part of the way.
+	scrollWheelEase = 150 * time.Millisecond
+	scrollAnimation = 300 * time.Millisecond
 )
 
 // scrollPhysics is the part of a ScrollWidget that moves on its own:
@@ -576,6 +621,7 @@ type scrollMotionState struct {
 	settle     bool    // waiting for input to pause
 	anim       Motion
 	animating  bool
+	stepping   bool // anim is a wheel's notch easing; see wheelStep
 }
 
 func (p *scrollPhysics) adopt(q *scrollPhysics) { p.scrollMotionState = q.scrollMotionState }
@@ -615,7 +661,7 @@ func (p *scrollPhysics) input(s *ScrollWidget) {
 		p.from = s.position()
 	}
 	p.lastInput = now
-	p.animating, p.relaxing = false, false
+	p.animating, p.stepping, p.relaxing = false, false, false
 	p.settle = p.mode != OverscrollClamp || p.snap > 0 || p.paging
 	if p.settle {
 		WakeAt(now.Add(scrollSettleDelay))
@@ -720,7 +766,7 @@ func (p *scrollPhysics) paint(s *ScrollWidget) {
 		p.over = p.overMotion.Value(now)
 		p.relaxing = p.over != 0
 	}
-	if !p.settle || s.dragging {
+	if !p.settle || s.dragging || p.animating && p.stepping {
 		return
 	}
 	if wait := p.lastInput.Add(scrollSettleDelay); now.Before(wait) {
@@ -770,7 +816,7 @@ func (s *ScrollWidget) animateTo(v float64, animate bool) {
 	p.anim = Motion{}
 	p.anim.MoveTo(s.position(), now, 0)
 	p.anim.MoveTo(v, now, d)
-	p.animating = true
+	p.animating, p.stepping = true, false
 	s.contain(true, s.cache.invalidate)
 }
 

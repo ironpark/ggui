@@ -66,14 +66,18 @@ type MessageScrollerWidget struct {
 	duration                                                      time.Duration
 	animFrom, animTo                                              float64
 	animStart                                                     time.Time
-	reduced                                                       bool
-	pendingID                                                     string
-	pendingAlign                                                  ScrollAlignment
-	restore                                                       *TranscriptPosition
-	visibility                                                    TranscriptVisibility
-	onVisibility                                                  func(TranscriptVisibility)
-	startButton, endButton                                        *ButtonWidget
-	pause                                                         func()
+	// animFor is how long the move under way takes, and stepping that it
+	// is a wheel's notch easing, which the next notch adds to.
+	animFor                time.Duration
+	stepping               bool
+	reduced                bool
+	pendingID              string
+	pendingAlign           ScrollAlignment
+	restore                *TranscriptPosition
+	visibility             TranscriptVisibility
+	onVisibility           func(TranscriptVisibility)
+	startButton, endButton *ButtonWidget
+	pause                  func()
 }
 
 func MessageScroller(items ggui.Readable[[]MessageEntry]) *MessageScrollerWidget {
@@ -150,14 +154,23 @@ func (s *MessageScrollerWidget) index(id string) int {
 func (s *MessageScrollerWidget) clearTargets() { s.pendingID, s.restore, s.anchor = "", nil, "" }
 
 // Pause releases output following and smooth scrolling, without moving the reader.
-func (s *MessageScrollerWidget) Pause() { s.following = false; s.animStart = time.Time{} }
+// Pause stops following the end, and a move a command began. A wheel's
+// notch easing goes on: it is the reader's own scroll, and the input that
+// pauses, a move of the pointer among it, comes while it eases.
+func (s *MessageScrollerWidget) Pause() {
+	s.following = false
+	if !s.stepping {
+		s.animStart = time.Time{}
+	}
+}
 func (s *MessageScrollerWidget) jump(v float64, animate bool) {
 	v = clamp(v, 0, s.limit())
 	if animate && !s.reduced && s.duration > 0 {
 		s.animFrom, s.animTo, s.animStart = s.offset, v, ggui.Now()
+		s.animFor, s.stepping = s.duration, false
 	} else {
 		s.offset = v
-		s.animStart = time.Time{}
+		s.animStart, s.stepping = time.Time{}, false
 	}
 }
 func (s *MessageScrollerWidget) ScrollToStart() {
@@ -305,10 +318,10 @@ func (s *MessageScrollerWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		}
 	}
 	if !s.animStart.IsZero() {
-		f := min(1, float64(ggui.Now().Sub(s.animStart))/float64(s.duration))
+		f := min(1, float64(ggui.Now().Sub(s.animStart))/float64(s.animFor))
 		s.offset = s.animFrom + (s.animTo-s.animFrom)*(1-math.Pow(1-f, 3))
 		if f >= 1 {
-			s.animStart = time.Time{}
+			s.animStart, s.stepping = time.Time{}, false
 		}
 	}
 	s.offset = clamp(s.offset, 0, s.limit())
@@ -345,18 +358,34 @@ func (s *MessageScrollerWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 func (s *MessageScrollerWidget) Describe() ggui.Node {
 	return ggui.Node{Role: ggui.RoleGroup, Name: s.SemanticName(), Actions: ggui.ActionFocus | ggui.ActionScrollIntoView}
 }
+
+// wheelEase is how long a wheel's notch takes to scroll a transcript, as
+// long as a Scroll takes.
+const wheelEase = 150 * time.Millisecond
+
 func (s *MessageScrollerWidget) HandlePointer(ev ggui.PointerEvent) bool {
 	if ev.Kind != ggui.PointerScroll || ev.Scroll.Y == 0 {
 		return false
 	}
+	before, by := s.offset, ev.ScrollBy().Y
+	if ev.ScrollStep && !ev.ScrollMomentum && !s.reduced && s.duration > 0 {
+		// A wheel's notch is eased over, as Scroll eases it, and one that
+		// comes while the last is easing adds to where that was heading.
+		heading := before
+		if s.stepping && !s.animStart.IsZero() {
+			heading = s.animTo
+		}
+		s.Pause()
+		s.anchor = ""
+		if to := clamp(heading-by, 0, s.limit()); to != before {
+			s.animFrom, s.animTo, s.animStart = before, to, ggui.Now()
+			s.animFor, s.stepping = wheelEase, true
+		}
+		return s.limit() > 0
+	}
 	s.Pause()
 	s.anchor = ""
-	speed := 20.0
-	if ev.ScrollPixels {
-		speed = 1
-	}
-	before := s.offset
-	s.jump(before-ev.Scroll.Y*speed, false)
+	s.jump(before-by, false)
 	return s.limit() > 0 && (!ev.ScrollMomentum || s.offset != before)
 }
 func (s *MessageScrollerWidget) HandleKey(ev ggui.KeyEvent) {

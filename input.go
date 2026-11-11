@@ -31,8 +31,16 @@ type PointerEvent struct {
 	Pos            Point // where the handler painted: window coordinates, unless under a Transform
 	Button         MouseButton
 	Scroll         Point // wheel delta, for PointerScroll
-	ScrollPixels   bool  // Scroll is in logical pixels (touch panning), not wheel units
+	ScrollPixels   bool  // Scroll is in logical pixels (a trackpad's, or touch panning), not wheel units
 	ScrollMomentum bool  // inertial scrolling; return false when no further movement is possible
+	// ScrollStep is set for the notches of a wheel the platform said how
+	// far to scroll for: a step, which a scrolling view eases over rather
+	// than jumps, where a trackpad's scroll or a pan is followed as it
+	// comes. ScrollBy says how far.
+	ScrollStep bool
+	// scrollBy is how far the platform scrolls for Scroll's wheel units,
+	// in logical pixels, or zero where it did not say; see ScrollBy.
+	scrollBy Point
 	// ScrollPhase is where a trackpad's scroll is in its gesture, on a
 	// platform that says: ScrollPhaseEnded is the fingers lifting, and may
 	// come with no Scroll at all. A wheel's is ScrollPhaseNone.
@@ -148,6 +156,28 @@ type Revealer interface {
 	Reveal(r Rect)
 }
 
+// WheelLine is how far a unit of a wheel's Scroll moves a scrolling view,
+// in logical pixels, where the platform did not say: for an event made by
+// hand or by a Probe. A window's own say how far in ScrollBy.
+const WheelLine = 20
+
+// ScrollBy returns how far a PointerScroll moves a scrolling view, in
+// logical pixels with Scroll's signs: Scroll itself when it is in pixels,
+// and for a wheel what the platform and its settings scroll for its
+// notches, which is not the same from one to the next: a notch is 100
+// pixels on Windows as it ships, 53 under X, and what the page would have
+// scrolled in a browser. A view that scrolls moves by this; what steps by
+// the notch, a zoom or a pager, counts Scroll.
+func (ev PointerEvent) ScrollBy() Point {
+	switch {
+	case ev.ScrollPixels:
+		return ev.Scroll
+	case ev.scrollBy != (Point{}):
+		return ev.scrollBy
+	}
+	return Pt(ev.Scroll.X*WheelLine, ev.Scroll.Y*WheelLine)
+}
+
 // scrolled reports whether the frame scrolled anything.
 func (f *frameInput) scrolled() bool { return f.wheel != (Point{}) || f.wheelPx != (Point{}) }
 
@@ -158,6 +188,7 @@ type frameInput struct {
 	down    []MouseButton
 	up      []MouseButton
 	wheel   Point         // a wheel's notches
+	wheelBy Point         // how far the platform scrolls for them, in logical pixels; zero where it did not say
 	wheelPx Point         // a precise scroll's logical pixels, a trackpad's
 	phase   ScrollPhase   // of the frame's scrolls, the lift outranking the rest
 	keys    []KeyboardKey // just pressed, plus repeats of held keys
@@ -519,7 +550,7 @@ func (in *inputState) dispatchPointer(f frameInput) {
 	lifted := f.phase == ScrollPhaseEnded || f.phase == ScrollPhaseMomentumEnded
 	momentum := f.phase == ScrollPhaseMomentum || f.phase == ScrollPhaseMomentumEnded
 	if f.wheel != (Point{}) {
-		in.send(PointerEvent{Kind: PointerScroll, Pos: f.pos, Scroll: f.wheel, Mods: f.mods, ScrollMomentum: momentum, ScrollPhase: f.phase})
+		in.send(PointerEvent{Kind: PointerScroll, Pos: f.pos, Scroll: f.wheel, scrollBy: f.wheelBy, ScrollStep: f.wheelBy != (Point{}), Mods: f.mods, ScrollMomentum: momentum, ScrollPhase: f.phase})
 	}
 	if f.wheelPx != (Point{}) || lifted && f.wheel == (Point{}) {
 		in.send(PointerEvent{Kind: PointerScroll, Pos: f.pos, Scroll: f.wheelPx, ScrollPixels: true, Mods: f.mods, ScrollMomentum: momentum, ScrollPhase: f.phase})
