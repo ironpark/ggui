@@ -242,9 +242,15 @@ func (p *Probe) FindRole(role Role, label string) (Found, bool) {
 // region with a role when role is empty.
 func (p *Probe) FindAll(role Role) []Found {
 	p.Frame()
+	return foundIn(&p.in, role)
+}
+
+// foundIn returns every region in routes to with role, in paint order, or
+// every region with a role when role is empty.
+func foundIn(in *inputState, role Role) []Found {
 	var out []Found
-	for i := range p.in.regions {
-		r := &p.in.regions[i]
+	for i := range in.regions {
+		r := &in.regions[i]
 		if r.role == "" || (role != "" && r.role != role) {
 			continue
 		}

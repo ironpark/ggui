@@ -180,6 +180,7 @@ type Window struct {
 	motionLost bool
 	drawing    windowDraw        // the whole frame being drawn
 	damagePx   []image.Rectangle // what a frame hands setDamage
+	drew       FramePaint        // how the last frame was painted, for a WindowProbe
 	dirty      atomic.Uint32
 	repaintMu  sync.Mutex
 	repaints   []Rect // asked for by RepaintRect since the last frame
@@ -598,17 +599,50 @@ func (w *Window) runFrameEvent(ev ggwd.FrameEvent) error {
 	}
 	start := time.Now()
 	defer func() { framestats.Frame(time.Since(start)) }()
-	// The glyph and shaping caches expire after so many frames unused.
-	text.AdvanceTick()
 	// Frames run here, whichever goroutine the engine calls this on. A Probe
 	// does not arm the check: it runs on its test's goroutine, and several
 	// live in one process, so there is no single UI goroutine to compare
 	// with and no frame racing the write either.
 	reactive.MarkUIThread()
-	// Handlers dispatched below reach this window through UseHost.
-	setRunning(&w.frameLoop)
 	restoreInput := textinput.WithWindow(ev.Window)
 	defer restoreInput()
+	cursor := w.cursor
+	next, wake, err := w.frameOn(ev.Screen, ev.Scale, ev.Kept, ev.SetDamage)
+	if err != nil {
+		return err
+	}
+	if w.closed {
+		return nil
+	}
+	// The regions just painted decide the cursor, so one a widget changed
+	// over this frame's input shows now rather than at the next event.
+	if w.cursor != cursor {
+		ev.Window.SetCursorShape(w.cursor)
+	}
+	if next {
+		ev.Window.RequestFrame()
+	} else if !wake.IsZero() {
+		// A caret or a delayed tooltip changes at a known time; sleep
+		// until then rather than painting every frame.
+		if w.wakeTimer != nil {
+			w.wakeTimer.Stop()
+		}
+		w.wakeTimer = time.AfterFunc(max(wake.Sub(FrameTime()), 0), w.wakeFrame)
+	}
+	return nil
+}
+
+// frameOn runs one frame into screen: all of runFrameEvent that needs no
+// native window, which a WindowProbe runs as well, so that a test sees the
+// frames a window paints and asks for, not ones like them. It reports
+// whether the next frame must run without waiting for input and, when it
+// need not, the instant a widget asked to be painted again at, or zero.
+// The cursor the frame leaves is w.cursor.
+func (w *Window) frameOn(screen *ggfx.Image, scale float64, kept bool, setDamage func([]image.Rectangle)) (next bool, wake time.Time, err error) {
+	// The glyph and shaping caches expire after so many frames unused.
+	text.AdvanceTick()
+	// Handlers dispatched below reach this window through UseHost.
+	setRunning(&w.frameLoop)
 	w.runFrame()
 	w.runPosted()
 	f := w.takeInput()
@@ -628,36 +662,24 @@ func (w *Window) runFrameEvent(ev ggwd.FrameEvent) error {
 		w.addRepaints(touched)
 	}
 	if w.closed {
-		return nil
+		return false, time.Time{}, nil
 	}
 	wd := w.world()
 	if err := w.tick(wd.frame.begin(wd.frame.raw())); err != nil {
-		return err
+		return false, time.Time{}, err
 	}
-	w.draw(ev.Screen, ev.Scale, ev.Kept, ev.SetDamage)
+	w.draw(screen, scale, kept, setDamage)
 	if w.frameErr != nil {
-		return w.frameErr
+		return false, time.Time{}, w.frameErr
 	}
-	// The regions just painted decide the cursor, so one a widget changed
-	// over this frame's input shows now rather than at the next event.
-	if cursor := w.input.cursorOver(w.overlay, f.pos); cursor != w.cursor {
-		w.cursor = cursor
-		ev.Window.SetCursorShape(w.cursor)
-	}
+	w.cursor = w.input.cursorOver(w.overlay, f.pos)
 	if w.closed {
-		return nil
+		return false, time.Time{}, nil
 	}
 	if w.endFrame(f) {
-		ev.Window.RequestFrame()
-	} else if wake := wd.frame.takeWake(); !wake.IsZero() {
-		// A caret or a delayed tooltip changes at a known time; sleep
-		// until then rather than painting every frame.
-		if w.wakeTimer != nil {
-			w.wakeTimer.Stop()
-		}
-		w.wakeTimer = time.AfterFunc(max(wake.Sub(FrameTime()), 0), w.wakeFrame)
+		return true, time.Time{}, nil
 	}
-	return nil
+	return false, wd.frame.takeWake(), nil
 }
 
 // paintTarget returns the image this frame paints into, and whether it
@@ -844,6 +866,7 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 		// Nothing changed: work was posted that wrote nothing, say. The
 		// screen keeps the last frame, and untouched, nothing is presented.
 		framestats.CountSkipped()
+		w.drew = FrameSkipped
 		return
 	}
 	target, kept := w.paintTarget(screen, kept)
@@ -863,6 +886,7 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 	}
 	d := &w.drawing
 	*d = windowDraw{w: w, screen: screen, target: target, dst: target, setDamage: setDamage}
+	w.drew = FrameWhole
 	defer d.release()
 	if !within.Empty() {
 		d.dst = target.SubImage(within).(*ggfx.Image)
@@ -1159,6 +1183,7 @@ func (d *windowDraw) painted() {
 	// Counted once the settle had its chance to paint it whole.
 	if d.dst != d.target {
 		framestats.CountContained()
+		w.drew = FrameContained
 	}
 	w.ax.Publish(w.semantics(), w.takeAnnouncements())
 	if d.tracing {
