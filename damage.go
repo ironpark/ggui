@@ -112,14 +112,16 @@ func (f *frameState) notePointer(s *paintScope) {
 // spill notes, in a frame painted in part, that a widget whose look
 // follows the pointer drew at bounds outside every region the frame paints,
 // past where it drew last: what it drew there was cut off, and the frame is
-// painted whole instead.
+// painted whole instead. In a frame no mouse move asked for, the pointer
+// is where it was, and such a widget, one beside what moves, shows there
+// what it showed before.
 //
 // A widget that reads the time is not held to it: one that starts to move
 // in a frame painted in part, a hover fading in beside the row the pointer
 // touched, is often painted only partly within the regions, and shows
 // there what it showed before, as an easing shows its start at first.
 func (f *frameState) spill(bounds Rect) {
-	if !f.partial || f.spilled {
+	if !f.partial || !f.moved || f.spilled {
 		return
 	}
 	// The regions are cut to the window, as what is drawn past it is.
@@ -161,7 +163,8 @@ func motionRegions(motion []Rect, window Rect) []Rect {
 // are the widgets being painted, motion the regions of those that read the
 // time, and motionLost that one did where it cannot be placed. partial is
 // set while such a frame paints within regions, damage the one it paints
-// now, and spilled that a widget it painted drew outside them all.
+// now, moved that a mouse move asked for it too, and spilled that a widget
+// it painted drew outside them all.
 type motionState struct {
 	scopes     []paintScope
 	motion     []Rect
@@ -170,6 +173,7 @@ type motionState struct {
 	partial    bool
 	regions    []Rect
 	damage     Rect
+	moved      bool
 	spilled    bool
 	overlaid   bool // an overlay was painted this frame
 }
@@ -379,7 +383,7 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect
 	// observes input or listens for a shortcut: what the last whole frame
 	// registered stands.
 	background := w.background()
-	f.partial, f.regions = true, damage
+	f.partial, f.regions, f.moved = true, damage, pointer
 	opened := func() bool {
 		defer property.EnterLayout()()
 		for _, d := range damage {
@@ -400,7 +404,7 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect
 		}
 		return false
 	}()
-	f.partial, f.regions = false, nil
+	f.partial, f.regions, f.moved = false, nil, false
 	f.retained.endPartial()
 	switch {
 	case opened:
