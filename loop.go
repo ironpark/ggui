@@ -104,6 +104,10 @@ type frameLoop struct {
 	laidGen  uint64
 	laidFree uint64 // freeGen at that layout
 	rootSize Size
+	settles  uint64 // counts the settles, for a layout boundary's checks
+	// unheld is that a layout boundary found, as it was laid out, that a
+	// layout it held moved what lies around it: the frame is painted whole.
+	unheld bool
 
 	notices []Announcement // queued by Announce, drained by the bridge
 
@@ -492,6 +496,7 @@ func endPaint(f *frameState) {
 // before running user effects. Both App and Probe use this exact ordering.
 func (l *frameLoop) settle(size Size) error {
 	setRunning(l)
+	l.settles++
 	rt := l.runtime()
 	for range reactive.MaxFlushPasses {
 		if l.closed {

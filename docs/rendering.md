@@ -148,7 +148,22 @@ subtree that sits under something that does rebuild.
 widget whose size depends on state outside a signal **must** call
 `Invalidate(env)` with the Env it was laid out under; without it the widget
 keeps the size it was last measured at, since the cache above it has no
-reason to measure again.
+reason to measure again. A size still easing somewhere calls it from its own
+`Layout` for the next step, which `Motion.LayoutTo` does for it: the layout
+asked for runs in the next frame, not again in this one.
+
+A change `Invalidate` reports is held by the nearest layout boundary around
+the widget: a `Scroll` whose viewport keeps its size, a `Contain(child)`, or
+a pane of `ui.Resizable`. A boundary clips what is inside it to its own
+Rect, so while its size stays as it was nothing outside it moves or draws
+differently, and a frame nothing else changed for is painted within it
+alone: a disclosure easing open in a fixed panel repaints the panel, not the
+window. Wrap a panel whose size its parent decides, a `Box` of fixed `Size`
+or an `Expanded` share, in `Contain` to make it one. A boundary checks every
+layout it held: one whose size or baseline turned out to follow its content
+paints that frame whole and from then on leaves the next change to the
+boundary around it. Under a `Transform` or a shape clip a boundary cannot
+tell where it is in the window, and holds nothing.
 
 ## Retained paint state
 

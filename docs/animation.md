@@ -41,8 +41,10 @@ in `Layout` with `LayoutTo(env, target, d)`, or `LayoutToggle(env, on, d)`
 for a progress from zero to one. Each returns the value at the frame's
 instant and, while it is still moving, asks for the next layout under `env`
 as `Invalidate(env)` does, so the widget keeps no `Env` and checks nothing
-in `Paint`. Inside a `Scroll` whose viewport keeps its size, those frames are
-painted within it alone. Under reduced motion it lands at once.
+in `Paint`. Inside a `Scroll` whose viewport keeps its size, a `Contain` or
+another layout boundary, those frames are painted within it alone; see
+[Layout caching](rendering.md#layout-caching). Under reduced motion it lands
+at once.
 
 ```go
 func (p *panel) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {

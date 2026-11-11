@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/internal/framestats"
@@ -321,7 +322,7 @@ func TestAFrameAfterMotionNotPlacedIsPainted(t *testing.T) {
 	setRunning(&w.frameLoop)
 	screen := ggfx.NewImage(16, 16)
 	w.draw(screen, 1, false, nil)
-	w.endFrame(frameInput{}) // as the frame's handler does after drawing
+	w.endFrame(frameInput{})
 	if !w.motionLost || len(w.motion) != 0 {
 		t.Fatalf("motion %v, lost %v: want motion no region says", w.motion, w.motionLost)
 	}
@@ -613,5 +614,314 @@ func TestALayoutEasedInsideAScrollSizedByItsContentIsNotHeldThere(t *testing.T) 
 		if !tc.whole && (len(last.Damage) != 1 || last.Damage[0].Intersect(Rct(Point{}, Sz(100, 100))) != last.Damage[0]) {
 			t.Fatalf("%s: last damage %v, want within the outer scroll's viewport", tc.name, last.Damage)
 		}
+	}
+}
+
+// frameTime is a 60Hz refresh.
+const frameTime = 16 * time.Millisecond
+
+// scrolledList is a window of a scroll of a virtualized list of 200 rows,
+// 20 tall, with a sticky header every tenth, beside a box: the scroll is
+// the left half of it. config configures the scroll.
+func scrolledList(sc *ScrollController, config func(*ScrollWidget)) *WindowProbe {
+	items := make([]int, 200)
+	for i := range items {
+		items[i] = i
+	}
+	list := EachKeyed(State(items), func(i int) int { return i }, func(EachItem[int]) Widget { return Box().Size(100, 20) }).
+		EstimatedExtent(20).StickyHeaders(func(i int) bool { return i%10 == 0 })
+	return NewWindowProbe(func() Widget {
+		s := Scroll(list).Controller(sc)
+		if config != nil {
+			config(s)
+		}
+		return Row(Box(s).Size(100, 100), Box().Size(100, 100))
+	}, Sz(200, 100))
+}
+
+// atRest runs p's frames until the window asks for no other, as its list
+// mounts and measures its rows.
+func atRest(t *testing.T, p *WindowProbe) {
+	t.Helper()
+	if fr := p.Run(frameTime, 10); fr[len(fr)-1].Next {
+		t.Fatalf("the window did not come to rest: %v", fr)
+	}
+}
+
+// paintedWithin fails t unless every frame was painted contained, or in
+// part where partial says it may be, within the scroll's viewport grown by
+// reach, and, for rest, the last asks for no other.
+func paintedWithin(t *testing.T, name string, frames []WindowFrame, partial bool, reach float64, rest bool) {
+	t.Helper()
+	viewport := Rct(Point{}, Sz(100, 100)).Grow(reach)
+	for i, fr := range frames {
+		if fr.Painted != FrameContained && (!partial || fr.Painted != FramePartial) || len(fr.Damage) == 0 {
+			t.Fatalf("%s: frame %d was painted %v, want within the scroll: %v", name, i, fr.Painted, frames)
+		}
+		for _, d := range fr.Damage {
+			if d.Empty() || d.Intersect(viewport) != d {
+				t.Fatalf("%s: frame %d damaged %v, want within the scroll's viewport", name, i, fr.Damage)
+			}
+		}
+	}
+	if rest && (len(frames) == 0 || frames[len(frames)-1].Next) {
+		t.Fatalf("%s: the window did not come to rest: %v", name, frames)
+	}
+}
+
+// A scroll moving on its own, as a ScrollController eases it, changes what
+// its viewport shows and nothing else: every frame of the move is painted
+// there, the rows that scroll into the list mounting within it.
+func TestAScrollControllersMovePaintsWithinItsViewport(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		move func(*ScrollController)
+		want float64
+	}{
+		{"ScrollTo", func(sc *ScrollController) { sc.ScrollTo(1000) }, 1000},
+		{"JumpTo", func(sc *ScrollController) { sc.JumpTo(1000) }, 1000},
+		{"ScrollToKey", func(sc *ScrollController) { sc.ScrollToKey(150) }, 3000},
+	} {
+		var sc ScrollController
+		p := scrolledList(&sc, nil)
+		atRest(t, p)
+		tc.move(&sc)
+		frames := p.Run(frameTime, 60)
+		p.Close()
+		paintedWithin(t, tc.name, frames, false, 0, true)
+		if sc.Offset() != tc.want {
+			t.Fatalf("%s reached %v, want %v", tc.name, sc.Offset(), tc.want)
+		}
+	}
+}
+
+// A snapping scroll settles once the wheel stops, within its viewport: the
+// frames that wait on the pause read the clock alone and are painted in
+// part, and the eased settle is contained as the wheel's move was.
+func TestAScrollSettlingOnASnapPaintsWithinItsViewport(t *testing.T) {
+	var sc ScrollController
+	p := scrolledList(&sc, func(s *ScrollWidget) { s.Snap(20) })
+	defer p.Close()
+	atRest(t, p)
+	p.Scroll(Pt(50, 50), Pt(0, -0.6)) // 12 pixels down
+	// The wheel's frame paints what the pointer reached with damageReach
+	// around it, and what reads the clock is painted with motionSlack.
+	paintedWithin(t, "the wheel", []WindowFrame{p.Step(frameTime)}, false, damageReach, false)
+	frames := p.Idle(frameTime, time.Second)
+	paintedWithin(t, "snap", frames, true, motionSlack, true)
+	if !slices.ContainsFunc(frames, func(fr WindowFrame) bool { return fr.Painted == FrameContained }) {
+		t.Fatalf("no frame of the settle was contained: %v", frames)
+	}
+	if sc.Offset() != 20 {
+		t.Fatalf("the scroll settled at %v, want 20", sc.Offset())
+	}
+}
+
+// A dragged scrollbar thumb moves the content within the viewport alone;
+// what the pointer touched, the thumb, is painted again with damageReach
+// around it as for any pointer event.
+func TestAScrollsThumbDraggedPaintsWithinItsViewport(t *testing.T) {
+	var sc ScrollController
+	p := scrolledList(&sc, nil)
+	defer p.Close()
+	atRest(t, p)
+	p.Press(Pt(97, 5))
+	p.Step(frameTime) // pressing focuses and is painted whole
+	var frames []WindowFrame
+	for i := 1; i <= 4; i++ {
+		p.Move(Pt(97, 5+float64(i)*10))
+		frames = append(frames, p.Step(frameTime))
+	}
+	// Held, the thumb asks for frames until it is let go.
+	paintedWithin(t, "thumb", frames, false, damageReach, false)
+	p.Release(Pt(97, 45))
+	atRest(t, p)
+	travel := 100 - 16.0 // the track less the shortest thumb
+	if want := 40 * sc.MaxOffset() / travel; sc.Offset() != want {
+		t.Fatalf("the drag moved the scroll to %v, want %v", sc.Offset(), want)
+	}
+}
+
+// A scroll following the end of a log that grows paints the growth whole,
+// which it changes the layout for, and the move to the new end it asks for
+// within its viewport, the rows that move brings into view mounting there.
+func TestAScrollFollowingTheEndMovesWithinItsViewport(t *testing.T) {
+	lines := State([]int{})
+	for i := range 30 {
+		lines.Set(append(lines.Get(), i))
+	}
+	var sc ScrollController
+	p := NewWindowProbe(func() Widget {
+		// A line learns its height as it is laid out, as a chat's turn does:
+		// one mounting writes it.
+		line := func(EachItem[int]) Widget {
+			h := State(10.0)
+			return View(h, func(got float64) Widget {
+				return FromFuncs(func(Constraints, Env) Size {
+					h.Set(20)
+					return Sz(100, got)
+				}, func(*Canvas, Rect) {})
+			})
+		}
+		log := EachKeyed(lines, func(i int) int { return i }, line).EstimatedExtent(20)
+		return Row(Box(Scroll(log).FollowEnd().Controller(&sc)).Size(100, 100), Box().Size(100, 100))
+	}, Sz(200, 100))
+	defer p.Close()
+	atRest(t, p)
+	// A line at a time, and a page and more of them at once.
+	for _, n := range []int{1, 1, 20, 1} {
+		before := sc.Offset()
+		more := slices.Clone(lines.Get())
+		for range n {
+			more = append(more, len(more))
+		}
+		lines.Set(more)
+		frames := p.Run(frameTime, 10)
+		if frames[0].Painted != FrameWhole {
+			t.Fatalf("%d lines: the log's growth was painted %v, want whole", n, frames[0].Painted)
+		}
+		paintedWithin(t, "FollowEnd", frames[1:], false, 0, false)
+		if frames[len(frames)-1].Next {
+			t.Fatalf("%d lines: the window did not come to rest: %v", n, frames)
+		}
+		if sc.Offset() <= before || sc.Offset() != sc.MaxOffset() {
+			t.Fatalf("%d lines: the scroll moved from %v to %v, want on to the end, %v", n, before, sc.Offset(), sc.MaxOffset())
+		}
+	}
+}
+
+// A move a scroll makes as it lays out, following the end, asks for the
+// layout of the next frame, which lays the content out for the new window:
+// what the content does there, noting the window as a virtualized list
+// mounts the rows it brings, is contained as the move was.
+func TestTheLayoutAScrollsOwnMoveAsksForIsContained(t *testing.T) {
+	n := State(10)
+	window := State(0.0)
+	var sc ScrollController
+	p := NewWindowProbe(func() Widget {
+		content := View(n, func(k int) Widget {
+			return FromFuncs(func(c Constraints, env Env) Size {
+				vp, _ := ScrollViewport(env)
+				window.Set(vp.Offset)
+				return Sz(100, float64(k)*20)
+			}, func(*Canvas, Rect) {})
+		})
+		return Row(Box(Scroll(content).FollowEnd().Controller(&sc)).Size(100, 100), Box().Size(100, 100))
+	}, Sz(200, 100))
+	defer p.Close()
+	atRest(t, p)
+	n.Set(20)
+	frames := p.Run(frameTime, 10)
+	if len(frames) < 2 || frames[0].Painted != FrameWhole {
+		t.Fatalf("the content's growth was painted %v, want whole and a frame after", frames)
+	}
+	paintedWithin(t, "the layout after", frames[1:], false, 0, true)
+	if window.Get() != 300 || sc.Offset() != 300 {
+		t.Fatalf("the content was laid out for %v, the scroll at %v; want both at the end, 300", window.Get(), sc.Offset())
+	}
+}
+
+// A widget beside a scroll that reads its bound offset is painted when what
+// it shows changes as a ScrollController eases the scroll: that frame is
+// whole, and those it reads nothing new in are contained.
+func TestAReaderOfAnAnimatedScrollsOffsetBesideItIsPainted(t *testing.T) {
+	offset := State(0.0)
+	builds := 0
+	var sc ScrollController
+	p := NewWindowProbe(func() Widget {
+		rows := make([]Widget, 40)
+		for i := range rows {
+			rows[i] = Box().Size(100, 20)
+		}
+		far := Map(offset, func(o float64) bool { return o > 100 })
+		side := View(far, func(bool) Widget { builds++; return Box().Size(100, 100) })
+		return Row(Box(Scroll(Column(rows...)).BindOffset(offset).Controller(&sc)).Size(100, 100), side)
+	}, Sz(200, 100))
+	defer p.Close()
+	p.Step(0)
+	sc.ScrollTo(300)
+	crossings := 0
+	for k := 0; ; k++ {
+		if k > 60 {
+			t.Fatal("the scroll did not come to rest")
+		}
+		built := builds
+		fr := p.Step(frameTime)
+		crossed := builds != built
+		if crossed {
+			crossings++
+		}
+		if whole := fr.Painted == FrameWhole; crossed != whole || !whole && fr.Painted != FrameContained {
+			t.Fatalf("frame %d at %v: the reader beside was rebuilt %v, the frame painted %v", k, offset.Get(), crossed, fr.Painted)
+		}
+		if !fr.Next {
+			break
+		}
+	}
+	if crossings != 1 || offset.Get() != 300 {
+		t.Fatalf("the reader was rebuilt %d times on the way to %v, want once on the way to 300", crossings, offset.Get())
+	}
+}
+
+// A scroll whose viewport follows its content's size, which here changes
+// with the offset, moves what lies below it as it moves: those frames are
+// painted whole. One that lays it out at the offset it was at, its height
+// as it was, moves nothing and may be contained.
+func TestAnAnimatedScrollSizedByItsContentIsNotHeldThere(t *testing.T) {
+	var h float64
+	content := FromFuncs(func(c Constraints, env Env) Size {
+		vp, _ := ScrollViewport(env)
+		h = 20 + vp.Offset/10
+		return Sz(400, h)
+	}, func(*Canvas, Rect) {})
+	var sc ScrollController
+	p := NewWindowProbe(func() Widget {
+		// Inside a vertical scroll, the horizontal one is as tall as its
+		// content, and the box below it moves as it grows.
+		inner := Scroll(content).Horizontal().Controller(&sc)
+		return Row(Box(Scroll(Column(inner, Box().Size(100, 400)))).Size(100, 100), Box().Size(100, 100))
+	}, Sz(200, 100))
+	defer p.Close()
+	atRest(t, p)
+	sc.ScrollTo(300)
+	var frames []WindowFrame
+	for i := range 60 {
+		was := h
+		fr := p.Step(frameTime)
+		frames = append(frames, fr)
+		if h != was && fr.Painted == FrameContained {
+			t.Fatalf("frame %d, the scroll's height changing from %v to %v, was contained: %v", i, was, h, frames)
+		}
+		if !fr.Next {
+			break
+		}
+	}
+	if sc.Offset() != 300 || frames[len(frames)-1].Next {
+		t.Fatalf("the scroll reached %v, want 300 and at rest: %v", sc.Offset(), frames)
+	}
+}
+
+// A scroll under a Transform cannot tell where its viewport is in the
+// window: its eased move is painted whole.
+func TestAnAnimatedScrollUnderATransformPaintsWhole(t *testing.T) {
+	var sc ScrollController
+	p := NewWindowProbe(func() Widget {
+		rows := make([]Widget, 40)
+		for i := range rows {
+			rows[i] = Box().Size(100, 20)
+		}
+		return Row(Transform(Box(Scroll(Column(rows...)).Controller(&sc)).Size(100, 100)).Rotate(0.01), Box().Size(100, 100))
+	}, Sz(200, 100))
+	defer p.Close()
+	p.Step(0)
+	sc.ScrollTo(300)
+	frames := p.Run(frameTime, 60)
+	for i, fr := range frames {
+		if fr.Painted != FrameWhole {
+			t.Fatalf("frame %d was painted %v, want whole: %v", i, fr.Painted, frames)
+		}
+	}
+	if sc.Offset() != 300 {
+		t.Fatalf("the scroll reached %v, want 300", sc.Offset())
 	}
 }

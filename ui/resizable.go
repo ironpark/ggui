@@ -12,6 +12,10 @@ import (
 // ResizableWidget splits its space into two clipped panes with a draggable divider.
 // Nest splitters for more panes. The binding is the first pane's fraction of
 // available space, excluding the handle.
+//
+// Each pane is a ggui.Contain: its size is the split's to decide, so a
+// change of size inside one, a disclosure easing open, is painted within
+// that pane alone.
 type ResizableWidget struct {
 	props property.Owner
 	ggui.Interactive
@@ -32,7 +36,7 @@ type ResizableWidget struct {
 // Home/End move to the allowed limits. It fills finite constraints and uses
 // 320x200 logical pixels as its fallback under an unbounded parent.
 func Resizable(fraction ggui.Binding[float64], first, second ggui.Widget) *ResizableWidget {
-	r := &ResizableWidget{fraction: fraction, first: first, second: second}
+	r := &ResizableWidget{fraction: fraction, first: ggui.Contain(first), second: ggui.Contain(second)}
 	r.Role = ggui.RoleSeparator
 	r.AutoKey()
 	if r.HitID() == nil {
@@ -154,7 +158,7 @@ func (r *ResizableWidget) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 			at = r.secondRect
 		}
 		at.Origin = at.Origin.Add(rect.Origin)
-		dst.Clip(at).Paint(w, at)
+		dst.Paint(w, at) // a Contain, clipped to at
 	}
 	handle := r.handle
 	handle.Origin = handle.Origin.Add(rect.Origin)
