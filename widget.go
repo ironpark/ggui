@@ -909,21 +909,24 @@ func dedupeReads(reads []sourceRead) []sourceRead {
 // write does the first half by itself; a widget that keeps size-affecting
 // state outside signals calls Invalidate when that state changes.
 //
-// Under a Scroll whose viewport keeps its size whatever its content's, the
-// change shows within that viewport alone, and a frame nothing else
-// changed for is painted there and nowhere else: a disclosure easing open
-// in a scrolling pane does not paint the window again at every step.
+// Under a layout boundary, a Scroll whose viewport keeps its size whatever
+// its content's, a Contain or a pane of ui.Resizable, the change shows
+// within that boundary alone, and a frame nothing else changed for is
+// painted there and nowhere else: a disclosure easing open in a scrolling
+// pane or a fixed panel does not paint the window again at every step. A
+// boundary that turns out to follow its content's size is painted whole
+// once and passes the next change to the one around it; see
+// layoutBoundary.
 //
 // It may be called from the widget's own Layout, for a size that is still
 // on its way somewhere, as Motion.LayoutTo does: the layout asked for is
 // the next frame's, and runs then, not again in this one.
 func Invalidate(env Env) {
 	c, _ := env.Get(cacheOwner)
-	if s := scrollPortOf(env).holding(); s != nil {
+	if b := boundaryOf(env).holding(); b != nil {
 		reactive.Contained(reactive.RequestLayout)
 		c.stale()
-		s.heldLayout = true
-		noteContained(s.win)
+		b.hold()
 		return
 	}
 	reactive.RequestLayout()

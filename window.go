@@ -1165,10 +1165,17 @@ func (d *windowDraw) release() { *d = windowDraw{} }
 // settled implements paintHooks.
 func (d *windowDraw) settled() {
 	w := d.w
-	if d.dst != d.target && w.freeChanged() {
-		// The layout changed more than the scroll: paint all of it.
-		framestats.Refuse("state changed")
-		w.frameLoop.endFrameFree(true, true)
+	unheld := w.frameLoop.unheld
+	w.frameLoop.unheld = false
+	if d.dst != d.target && (w.freeChanged() || unheld) {
+		// The layout changed more than the boundaries held: paint all of
+		// it.
+		if unheld {
+			framestats.Refuse("sized by content")
+		} else {
+			framestats.Refuse("state changed")
+			w.frameLoop.endFrameFree(true, true)
+		}
 		d.dst = d.target
 		w.aim(d.dst)
 		d.damage(d.screen.Bounds())

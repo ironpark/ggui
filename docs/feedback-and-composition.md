@@ -31,6 +31,8 @@ work. Both loading indicators respect reduced motion.
 
 `ui.Resizable(fraction, first, second)` splits space into two panes with a draggable,
 keyboard-operable divider; `.Vertical()` and `.MinSizes(a, b)` configure it.
+Each pane is clipped to its share and is a layout boundary, as `ggui.Contain`
+makes one: a disclosure easing open in a pane repaints that pane alone.
 
 ## Toast notifications
 

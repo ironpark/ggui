@@ -177,9 +177,14 @@ func (w *Window) freeChanged() bool {
 const mostContained = 0.85
 
 // noteContained records r, in window coordinates, as all that a change
-// just made shows in, for the frame running on this goroutine.
+// just made shows in, for the frame running on this goroutine. A scroll
+// that moves twice before the frame, its offset and its overscroll, notes
+// its viewport once.
 func noteContained(r Rect) {
 	if l, ok := reactive.RunningLoop().(*frameLoop); ok {
+		if n := len(l.contained); n > 0 && l.contained[n-1] == r {
+			return
+		}
 		l.contained = append(l.contained, r)
 		l.watchFree()
 	}
@@ -304,7 +309,7 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect
 		w.frameErr = err
 		return true
 	}
-	if w.stateChanged() || w.closed || w.root == nil {
+	if w.stateChanged() || w.frameLoop.unheld || w.closed || w.root == nil {
 		framestats.Refuse("state changed")
 		return false
 	}

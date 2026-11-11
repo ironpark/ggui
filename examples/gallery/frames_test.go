@@ -93,3 +93,45 @@ func TestTheGalleryAtRestAnywhereCostsOnlyItsLoops(t *testing.T) {
 		t.Fatal("the gallery never scrolled the carousel into view")
 	}
 }
+
+// Opening a disclosure in the gallery, a Collapsible or an Accordion,
+// eases it open in frames painted within the page's scroll alone, the
+// header and footer left as they are: the preview cards follow their
+// content, so the page's scroll is the nearest boundary that holds the
+// change.
+func TestTheGallerysDisclosuresEaseWithinThePage(t *testing.T) {
+	size := ggui.Sz(1180, 820)
+	for _, tc := range []struct{ query, label string }{{"Collapsible", "Delivery preferences"}, {"Accordion", "Keyboard controls"}} {
+		p := galleryWindow(size)
+		p.Idle(refresh, time.Second)
+		field, ok := p.Find("Search components")
+		if !ok {
+			t.Fatal("no search field")
+		}
+		p.Click(field.Rect.Center())
+		p.Step(refresh)
+		p.Text(tc.query)
+		p.Step(refresh)
+		p.Idle(refresh, time.Second)
+		header, ok := p.Find(tc.label)
+		if !ok {
+			t.Fatalf("%s: no %q to open", tc.query, tc.label)
+		}
+		p.Click(header.Rect.Center())
+		frames := p.Run(refresh, 60)
+		p.Close()
+		if len(frames) < 4 || frames[len(frames)-1].Next {
+			t.Fatalf("%s: %d frames, want an easing that comes to rest: %v", tc.query, len(frames), frames)
+		}
+		for i, fr := range frames[1:] {
+			if fr.Painted != ggui.FrameContained {
+				t.Fatalf("%s: frame %d was painted %v, want within the page: %v", tc.query, i+1, fr.Painted, frames)
+			}
+			for _, d := range fr.Damage {
+				if d.Origin.Y <= 0 || d.Origin.Y+d.Size.H >= size.H {
+					t.Fatalf("%s: frame %d painted %v, over the header or the footer", tc.query, i+1, fr.Damage)
+				}
+			}
+		}
+	}
+}

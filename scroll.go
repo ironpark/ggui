@@ -41,30 +41,26 @@ func viewportAlong(env Env, horizontal bool) (Viewport, bool) {
 // Horizontal, wider) than the space it has, and moves that window with the
 // wheel or by dragging the scrollbar thumb. Build one with Scroll.
 type ScrollWidget struct {
-	// win is where the last paint put the viewport in the window, placed
-	// whether it could tell, and containedMove that the wheel moved the
-	// content since the last layout; see wheel.
-	win           Rect
-	placed        bool
-	containedMove bool
-	// heldLayout is that something inside asked, through Invalidate, for a
-	// layout this scroll holds within its viewport, sizedByContent that it
-	// once failed to, its viewport changing size with its content, and
-	// outer the nearest Scroll around it; see holding.
-	heldLayout     bool
-	sizedByContent bool
-	outer          *ScrollWidget
-	props          property.Owner
-	child          Widget
-	horizontal     bool
-	shrink         bool // along its axis, as long as its content and no longer
-	speed          float64
-	bar            color.Color
-	barSet         bool
-	bound          Binding[float64]
-	offset         float64
-	follow         bool
-	id             any
+	// hold is the scroll as a layout boundary: where the last paint put
+	// the viewport in the window, and whether it could tell, and the
+	// layouts it holds within it; see layoutBoundary. containedMove is that
+	// the content made a contained move since the last paint or as the
+	// last layout ran, and movedSinceLayout that it made one since the last
+	// layout began, which asks for another; see contain.
+	hold             layoutBoundary
+	containedMove    bool
+	movedSinceLayout bool
+	props            property.Owner
+	child            Widget
+	horizontal       bool
+	shrink           bool // along its axis, as long as its content and no longer
+	speed            float64
+	bar              color.Color
+	barSet           bool
+	bound            Binding[float64]
+	offset           float64
+	follow           bool
+	id               any
 
 	// FollowEnd's state. A scroll laid out for the first time cannot know
 	// yet whether it replaces one that was at its end, as Adopt says only
@@ -205,59 +201,73 @@ func (s *ScrollWidget) position() float64 {
 	return s.offset
 }
 
+// scrollTo moves the window to v, clamped to the content; see contain.
 func (s *ScrollWidget) scrollTo(v float64) {
 	v = clamp(v, 0, s.maxOffset())
-	if s.bound != nil {
-		s.bound.Set(v)
-	} else if v != s.offset {
-		s.offset = v
-		reactive.RequestLayout() // what a virtualized child shows depends on it
-	}
-	if v != s.laidAt {
-		s.cache.invalidate()
-	}
+	s.contain(v != s.position() || v != s.laidAt, func() {
+		if s.bound != nil {
+			s.bound.Set(v)
+		} else if v != s.offset {
+			s.offset = v
+			reactive.RequestLayout() // what a virtualized child shows depends on it
+		}
+		if v != s.laidAt {
+			s.cache.invalidate()
+		}
+	})
 }
 
-// Layout implements Widget. After a move of the wheel's, all it changes
-// laying the content out again for the new window, mounting what scrolls
-// into it and keeping what is in view in place as it is measured, is
-// contained in the viewport too, in every pass of the frame until Paint.
+// contain runs move, which changes what the viewport shows and nothing
+// else when moves is set: the window moving, by the wheel, an animation or
+// a dragged thumb, or the layout that move asks for. A scroll placed in
+// the window, as its last paint found it, makes that change in
+// reactive.Contained and notes its viewport, for the frame to paint that
+// alone; one it cannot place makes it as any other change. A bound
+// offset is written contained too, but what reads it outside the scroll
+// reacts outside the region, as any change there, and the frame that shows
+// it is painted whole.
+//
+// The move asks for a layout, and the frame that runs it is contained too:
+// a move between frames or in Paint, the next frame's, and one in Layout,
+// as an animation steps there, the frame after, which Paint leaves
+// containedMove set for.
+func (s *ScrollWidget) contain(moves bool, move func()) {
+	if !moves || !s.hold.placed {
+		move()
+		return
+	}
+	reactive.Contained(move)
+	s.moved()
+}
+
+// moved notes a move made in reactive.Contained; see contain.
+func (s *ScrollWidget) moved() {
+	s.containedMove, s.movedSinceLayout = true, true
+	noteContained(s.hold.win)
+}
+
+// Layout implements Widget. After a contained move, all it changes laying
+// the content out again for the new window, mounting what scrolls into it
+// and keeping what is in view in place as it is measured, is contained in
+// the viewport too, in every pass of the frame until Paint.
+//
+// The viewport is a layout boundary, and a layout it held is checked as
+// any boundary's is, and so is one after a contained move: a viewport that
+// grew or shrank with its content, as a Shrink scroll's does, moved what
+// lies beside it, and the frame is painted whole; the next layout held is
+// the business of the boundary around this one.
 func (s *ScrollWidget) Layout(c Constraints, env Env) Size {
-	s.outer = scrollPortOf(env)
-	before, laidOut := s.viewport, s.laidOut
+	check := s.hold.begin(env)
+	s.movedSinceLayout = false
 	var size Size
-	if s.containedMove {
+	contained := s.containedMove
+	if contained {
 		reactive.Contained(func() { size = s.layout(c, env) })
 	} else {
 		size = s.layout(c, env)
 	}
-	if s.heldLayout {
-		s.heldLayout = false
-		if laidOut && size != before {
-			// The viewport grew or shrank with its content, moving what
-			// lies beside it: the frame is painted whole, and the next such
-			// layout is the business of the scroll around this one.
-			s.sizedByContent = true
-			reactive.RequestLayout()
-		}
-	}
+	s.hold.end(check || contained, c, size, 0, false)
 	return size
-}
-
-// holding returns the scroll that holds a change of size made inside s
-// within its viewport, for the frame to paint that alone: s, or the nearest
-// one around it whose own size does not follow its content's, and nil when
-// there is none or where it was painted cannot be told.
-func (s *ScrollWidget) holding() *ScrollWidget {
-	for ; s != nil; s = s.outer {
-		if !s.placed || !s.laidOut {
-			return nil
-		}
-		if !s.sizedByContent {
-			return s
-		}
-	}
-	return nil
 }
 
 func (s *ScrollWidget) layout(c Constraints, env Env) Size {
@@ -331,14 +341,17 @@ func (s *ScrollWidget) atEnd() bool { return s.position() >= s.maxOffset()-0.5 }
 
 // Paint implements Widget.
 func (s *ScrollWidget) Paint(dst *Canvas, r Rect) {
-	if s.position() != s.laidAt {
+	if s.position() != s.laidAt && !s.movedSinceLayout {
 		// Written through the bound signal since the layout: a virtualized
-		// child must be laid out again for the new window.
+		// child must be laid out again for the new window. A contained move
+		// the layout made, following the end, asked for that already.
 		s.cache.invalidate()
 	}
 	s.rect = r
-	s.win, s.placed = dst.WindowRect(r)
-	s.containedMove = false
+	s.hold.paint(dst, r)
+	// A move made as the content was laid out asks for the next layout,
+	// which is contained as the move was; see contain.
+	s.containedMove = s.movedSinceLayout
 	dst.HitPointer(r, s) // adopts the scroll this one replaces
 	s.followFirst()
 	s.phys.paint(s)
@@ -612,19 +625,17 @@ func (p *scrollPhysics) input(s *ScrollWidget) {
 // wheel moves the content by d along the axis, as the wheel, a trackpad or
 // a touch pan asks, and reports whether the event was used.
 //
-// A scroll placed in the window, as its last paint found it, moves in
-// reactive.Contained: what the move changes shows in its viewport alone,
-// for the frame to paint that alone.
+// The move is contained, as contain says; so is pulling the content past
+// an end, which moves it with the offset where it is.
 func (s *ScrollWidget) wheel(d float64, momentum bool) bool {
-	if !s.placed {
+	if !s.hold.placed {
 		return s.wheelBy(d, momentum)
 	}
 	var used bool
-	before, over := s.position(), s.phys.over
+	over := s.phys.over
 	reactive.Contained(func() { used = s.wheelBy(d, momentum) })
-	if s.position() != before || s.phys.over != over {
-		s.containedMove = true
-		noteContained(s.win)
+	if s.phys.over != over {
+		s.moved()
 	}
 	return used
 }
@@ -703,7 +714,7 @@ func (p *scrollPhysics) paint(s *ScrollWidget) {
 	now := FrameTime()
 	p.applied, p.painted = nil, true // Adopt, if any, has run
 	if p.animating {
-		s.cache.invalidate() // the next frame lays out the child for the next step
+		s.contain(true, s.cache.invalidate) // the next frame lays out the child for the next step
 	}
 	if p.relaxing {
 		p.over = p.overMotion.Value(now)
@@ -760,7 +771,7 @@ func (s *ScrollWidget) animateTo(v float64, animate bool) {
 	p.anim.MoveTo(s.position(), now, 0)
 	p.anim.MoveTo(v, now, d)
 	p.animating = true
-	s.cache.invalidate()
+	s.contain(true, s.cache.invalidate)
 }
 
 // jumpTo moves the window to v at once. Before the first layout the extent
@@ -920,6 +931,12 @@ func (c *ScrollController) ScrollBy(d float64) {
 func (c *ScrollController) ScrollToKey(k any) {
 	c.key, c.keyed, c.animate = k, true, true
 	c.pending = nil
+	// The frame the list places the key in changes nothing but the
+	// window, which it starts moving.
+	if s := c.scroll; s != nil {
+		s.contain(s.phys.painted, reactive.RequestLayout)
+		return
+	}
 	reactive.RequestLayout()
 }
 
