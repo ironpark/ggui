@@ -161,15 +161,20 @@ func (t *ToasterWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 
 // Paint implements ggui.Widget. Adding a toast does not move keyboard focus.
 func (t *ToasterWidget) Paint(dst *ggui.Canvas, _ ggui.Rect) {
-	// Only a notice needs the clock: an idle host must not keep the app
-	// painting. Push reads it, so the frame after one arrives comes.
+	// Only a notice that counts down or moves needs the next frame: an
+	// idle host, or one showing only persistent notices, must not keep the
+	// app painting. Push reads the clock, so the frame after one arrives
+	// comes.
 	if t.closed || len(t.entries) == 0 {
 		return
 	}
-	now := ggui.Now()
+	now := ggui.FrameTime()
+	moving := false
 	t.entries = slices.DeleteFunc(t.entries, func(e *toastEntry) bool {
 		if e.leaving {
-			return t.env.ReducedMotion() || now.Sub(e.exitAt) >= uitheme.Of(t.env).MotionSlow
+			gone := t.env.ReducedMotion() || now.Sub(e.exitAt) >= uitheme.Of(t.env).MotionSlow
+			moving = moving || !gone
+			return gone
 		}
 		paused := e.hover || e.dismiss.Focused || e.dismiss.Hovered || (e.action != nil && (e.action.Focused || e.action.Hovered))
 		if !e.persistent && !paused {
@@ -178,16 +183,24 @@ func (t *ToasterWidget) Paint(dst *ggui.Canvas, _ ggui.Rect) {
 		e.last = now
 		if !e.persistent && e.remaining <= 0 {
 			e.leaving, e.exitAt = true, now
+			moving = true
 			return t.env.ReducedMotion()
 		}
+		// A countdown asks for frames even while held: each frame counts
+		// down from the one before, which is right only while they come.
+		moving = moving || !e.persistent
 		return false
 	})
+	if moving {
+		ggui.Now()
+	}
 	if len(t.entries) > 0 {
 		dst.Overlay(t.paintNotices)
 	}
 }
 func (t *ToasterWidget) paintNotices(dst *ggui.Canvas) {
-	now := ggui.Now()
+	// The motions ask for frames themselves while they move.
+	now := ggui.FrameTime()
 	screen := dst.Size()
 	theme := uitheme.Of(t.env)
 	margin := theme.Space * 2

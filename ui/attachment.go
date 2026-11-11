@@ -4,7 +4,6 @@ import (
 	"image/color"
 	"math"
 	"strings"
-	"time"
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
@@ -304,7 +303,7 @@ func (a *AttachmentWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		a.titleText.Paint(inner, titleRect)
 		if !a.reduced && (state == AttachmentUploading || state == AttachmentProcessing) {
 			// A moving highlight across the glyphs, rather than pulsing the whole card.
-			phase := float64(ggui.Paced(time.Second/20).UnixMilli()%2000) / 2000
+			phase := float64(ggui.Paced(loopStep).UnixMilli()%2000) / 2000
 			center := (titleRect.Size.W+80)*phase - 40
 			highlight := t.Card
 			if isDark(t.Card) {

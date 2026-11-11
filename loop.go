@@ -622,6 +622,10 @@ type frameClock struct {
 	// blink or a tooltip delay, which need no frame until then.
 	wake time.Time
 
+	// due is the wake the last frame asked for, which the frame that
+	// comes for it reaches however far off it lies; see begin.
+	due time.Time
+
 	// pinned is the raw time this clock advances from, or zero; see raw.
 	// Probe.Advance sets it.
 	pinned time.Time
@@ -684,7 +688,7 @@ func (f *frameClock) takeWake() time.Time {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	w := f.wake
-	f.wake = time.Time{}
+	f.wake, f.due = time.Time{}, w
 	return w
 }
 
@@ -702,16 +706,29 @@ func (f *frameClock) peek() time.Time {
 // begin moves the clock forward by the time that has passed since the last
 // frame, at most maxFrameStep, and returns the instant this frame reads.
 // App calls it once per frame, before input.
+//
+// The frame the last one asked to be woken for may move further, as far
+// as the instant it was woken for: nothing moved in between to jump, and
+// held to the cap, a caret that blinks every 530ms would see a tenth of a
+// second pass at each wake and ask again for what is left, painting six
+// frames for each blink and blinking three times too slowly.
 func (f *frameClock) begin(raw time.Time) time.Time {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.read = false
 	f.wake = time.Time{}
+	due := f.due
+	f.due = time.Time{}
 	switch {
 	case f.now.IsZero():
 		f.now = raw
 	case raw.After(f.real):
-		f.now = f.now.Add(min(raw.Sub(f.real), maxFrameStep))
+		passed := raw.Sub(f.real)
+		step := min(passed, maxFrameStep)
+		if due.After(f.now) {
+			step = max(step, min(passed, due.Sub(f.now)))
+		}
+		f.now = f.now.Add(step)
 	}
 	f.real = raw
 	return f.now
@@ -783,17 +800,21 @@ func Paced(every time.Duration) time.Time {
 
 // WakeAt asks for a frame at t, for a look that changes at a known time
 // such as a caret blink or a tooltip delay. Nothing is painted before then
-// unless something else asks. The earliest request in a frame wins.
+// unless something else asks. The earliest request in a frame wins. A
+// request made while painting a widget wholly outside its clip, as Now's
+// read there is, wakes nothing: a spinner scrolled out of view would
+// otherwise wake the window at its pace with nothing to show, and the
+// frame that scrolls it back paints it and asks again.
 func WakeAt(t time.Time) {
 	if t.IsZero() {
 		return
 	}
 	f := &activeWorld().frame
 	f.mu.Lock()
-	if f.wake.IsZero() || t.Before(f.wake) {
-		f.wake = t
-	}
 	if f.hidden == 0 {
+		if f.wake.IsZero() || t.Before(f.wake) {
+			f.wake = t
+		}
 		f.marks.Add(1)
 	}
 	f.mu.Unlock()

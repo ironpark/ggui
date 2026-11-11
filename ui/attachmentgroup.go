@@ -77,9 +77,15 @@ func (g *AttachmentGroupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.HitPointer(r, g)
 	dst.HitKey(r, g)
 	g.scrollTo(g.offset)
-	if !g.settle.IsZero() && !ggui.Now().Before(g.settle) {
-		g.scrollTo(g.nearest(g.offset))
-		g.settle = time.Time{}
+	// A wheel's snap waits for the wheel to stop, which needs no frame
+	// until then.
+	if !g.settle.IsZero() {
+		if ggui.FrameTime().Before(g.settle) {
+			ggui.WakeAt(g.settle)
+		} else {
+			g.scrollTo(g.nearest(g.offset))
+			g.settle = time.Time{}
+		}
 	}
 	dst.DescribeNode(r, g, func(dst *ggui.Canvas) {
 		clipped := dst.Clip(r)
@@ -112,7 +118,7 @@ func (g *AttachmentGroupWidget) HandlePointer(ev ggui.PointerEvent) bool {
 	}
 	// Touch already supplies logical pixels. Keep finger tracking and inertia
 	// continuous; a wheel's delayed snap would fight both.
-	speed, settle := 20.0, ggui.Now().Add(120*time.Millisecond)
+	speed, settle := 20.0, ggui.FrameTime().Add(120*time.Millisecond)
 	if ev.ScrollPixels {
 		speed, settle = 1, time.Time{}
 	}

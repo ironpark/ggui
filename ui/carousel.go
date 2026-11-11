@@ -76,6 +76,7 @@ type CarouselWidget struct {
 	duration                                   time.Duration
 	autoplay                                   time.Duration
 	stopped, stopOnInteraction                 bool
+	paused                                     bool // autoplay was paused when last painted
 	onChange                                   func(int)
 	env                                        ggui.Env
 	theme                                      *uitheme.Theme
@@ -256,6 +257,10 @@ func (c *CarouselWidget) animate(target float64) {
 		c.offset = target
 	}
 }
+
+// carouselSettle is how near its snap, in logical pixels, a glide stops.
+const carouselSettle = .05
+
 func (c *CarouselWidget) position() float64 {
 	if c.dragging {
 		return c.offset
@@ -263,7 +268,7 @@ func (c *CarouselWidget) position() float64 {
 	if c.reduced || c.duration <= 0 || c.began.IsZero() {
 		return c.target
 	}
-	t := clamp(float64(ggui.Now().Sub(c.began))/float64(c.duration), 0, 1)
+	t := clamp(float64(ggui.FrameTime().Sub(c.began))/float64(c.duration), 0, 1)
 	// Closed form of Embla's 60 Hz spring (duration 25, friction .68).
 	// This retains its glide without iterating physics steps or allocating.
 	const friction = .68
@@ -272,9 +277,15 @@ func (c *CarouselWidget) position() float64 {
 	r1, r2 := (trace+root)/2, (trace-root)/2
 	a := (1 - friction/25 - r2) / (r1 - r2)
 	remaining := a*math.Pow(r1, 108*t) + (1-a)*math.Pow(r2, 108*t)
-	if t >= 1 || math.Abs((c.target-c.from)*remaining) < .001 {
+	// Embla stops within a thousandth of a pixel: the glide's last half
+	// second of frames, whole ones for a carousel filling most of the
+	// window, creeping the last twentieth of a pixel, which no display
+	// shows. It stops here within that twentieth.
+	if t >= 1 || math.Abs((c.target-c.from)*remaining) < carouselSettle {
 		return c.target
 	}
+	// Still gliding, so ask for the next frame; one at rest asks for none.
+	ggui.Now()
 	return c.target + (c.from-c.target)*remaining
 }
 func (c *CarouselWidget) Layout(con ggui.Constraints, e ggui.Env) ggui.Size {
@@ -365,23 +376,32 @@ func (c *CarouselWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 		}
 	}
 	c.offset = c.position()
-	now := ggui.Now()
+	// The time is read without asking for the next frame: a carousel at
+	// rest needs none, and autoplay needs one only when its interval ends.
+	now := ggui.FrameTime()
 	p, has := d.Pointer()
 	hover := has && r.Contains(p)
 	paused := c.IsInert() || c.reduced || c.dragging || hover || d.FocusWithin(r) || c.Focused || c.prev.Focused || c.next.Focused
 	if c.autoplay > 0 && !c.IsInert() {
 		d.ObserveInput(r, c.interact)
 	}
-	if c.lastAuto.IsZero() || paused {
+	// A pause holds the interval at its start. No frame comes while one
+	// lasts, so the first frame after it starts the interval again, as the
+	// last paused frame would have.
+	if c.lastAuto.IsZero() || paused || c.paused {
 		c.lastAuto = now
 	}
-	if c.autoplay > 0 && !c.stopped && !paused && now.Sub(c.lastAuto) >= c.autoplay {
-		c.lastAuto = now
-		i := c.Selected() + 1
-		if i >= len(c.snaps) {
-			i = 0
+	c.paused = paused
+	if c.autoplay > 0 && !c.stopped && !paused {
+		if now.Sub(c.lastAuto) >= c.autoplay {
+			c.lastAuto = now
+			i := c.Selected() + 1
+			if i >= len(c.snaps) {
+				i = 0
+			}
+			c.scroll(i, 1, false)
 		}
-		c.scroll(i, 1, false)
+		ggui.WakeAt(c.lastAuto.Add(c.autoplay))
 	}
 	d.DescribeNode(r, c, func(d *ggui.Canvas) {
 		if !c.IsInert() {
