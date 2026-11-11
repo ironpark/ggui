@@ -147,6 +147,20 @@ func (w *Window) noteMotion(target *ggfx.Image) {
 	w.freeSeen, w.fontSeen = reactive.FreeGen(), fontGen()
 }
 
+// stateChanged reports whether a signal was written since the last frame
+// painted, or a layout asked for since the last frame ended or the window
+// caught up: either way what the screen keeps may no longer show it.
+func (w *Window) stateChanged() bool {
+	return reactive.StateGen() != w.motionGen || layoutGen() != w.seenGen
+}
+
+// freeChanged reports whether, since the last frame painted, a signal was
+// written outside a scroll's Contained or a font loaded, either of which
+// may show beyond the scroll's viewport.
+func (w *Window) freeChanged() bool {
+	return reactive.FreeGen() != w.freeSeen || fontGen() != w.fontSeen
+}
+
 // A scroll that moves its content changes what its viewport shows and
 // nothing else: its writes and layout requests are made in
 // reactive.Contained, and it notes its viewport with noteContained. A
@@ -243,7 +257,7 @@ func (w *Window) containedDamage(target *ggfx.Image, kept bool, contained, asked
 	case !kept:
 		why = "not kept"
 	case why != "":
-	case reactive.FreeGen() != w.freeSeen || fontGen() != w.fontSeen:
+	case w.freeChanged():
 		why = "state changed"
 		w.frameLoop.endFrameFree(true, true)
 	}
@@ -270,9 +284,8 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect
 		framestats.Refuse(why)
 		return false
 	}
-	changed := func() bool { return reactive.StateGen() != w.motionGen || layoutGen() != w.seenGen }
 	logical := w.logicalSize(screen)
-	if changed() || Untrack(w.viewport.Get) != logical {
+	if w.stateChanged() || Untrack(w.viewport.Get) != logical {
 		framestats.Refuse("state changed")
 		return false
 	}
@@ -291,7 +304,7 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect
 		w.frameErr = err
 		return true
 	}
-	if changed() || w.closed || w.root == nil {
+	if w.stateChanged() || w.closed || w.root == nil {
 		framestats.Refuse("state changed")
 		return false
 	}

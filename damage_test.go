@@ -321,7 +321,7 @@ func TestAFrameAfterMotionNotPlacedIsPainted(t *testing.T) {
 	setRunning(&w.frameLoop)
 	screen := ggfx.NewImage(16, 16)
 	w.draw(screen, 1, false, nil)
-	w.seenGen = layoutGen() // as the frame's handler does after drawing
+	w.endFrame(frameInput{}) // as the frame's handler does after drawing
 	if !w.motionLost || len(w.motion) != 0 {
 		t.Fatalf("motion %v, lost %v: want motion no region says", w.motion, w.motionLost)
 	}
@@ -528,8 +528,7 @@ func TestALayoutAskedForWhilePaintingGetsAWholeFrame(t *testing.T) {
 	screen := ggfx.NewImage(16, 16)
 	w.draw(screen, 1, false, nil)
 	for range 2 * steps {
-		w.seenGen = layoutGen() // as the frame's handler does after drawing
-		if !w.wantsFrame(frameInput{}) {
+		if !w.endFrame(frameInput{}) { // as the frame's handler does after drawing
 			break
 		}
 		w.draw(screen, 1, true, nil)
@@ -537,7 +536,7 @@ func TestALayoutAskedForWhilePaintingGetsAWholeFrame(t *testing.T) {
 	if laid != steps || painted != steps {
 		t.Fatalf("laid out %d times and painted the %dth; want %d of each, with no input", laid, painted, steps)
 	}
-	if w.wantsFrame(frameInput{}) {
+	if w.endFrame(frameInput{}) {
 		t.Fatal("the window still asks for frames after the layout settled")
 	}
 }
@@ -564,8 +563,7 @@ func easing(steps int) (w Widget, laid, painted *int) {
 // until none is asked for, and returns the damage of each.
 func runEasing(w *Window, screen *ggfx.Image, most int) (damage []image.Rectangle) {
 	for range most {
-		w.seenGen = layoutGen() // as the frame's handler does after drawing
-		if !w.wantsFrame(frameInput{}) {
+		if !w.endFrame(frameInput{}) { // as the frame's handler does after drawing
 			break
 		}
 		w.draw(screen, 1, true, func(rs []image.Rectangle) { damage = append(damage, rs...) })

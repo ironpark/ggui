@@ -147,7 +147,7 @@ type Window struct {
 	dragOver      bool
 	closeAsked    bool // a close the OnCloseRequest handlers have yet to answer
 	dragAt        Point
-	seenGen       uint64            // layoutGen as this window's last frame left it
+	seenGen       uint64            // layoutGen as endFrame or catchUp last left it
 	menuShortcuts []*ShortcutHandle // the app menus' chords, where the menu bar does not run them
 
 	inspect      bool
@@ -647,8 +647,7 @@ func (w *Window) runFrameEvent(ev ggwd.FrameEvent) error {
 	if w.closed {
 		return nil
 	}
-	w.seenGen = layoutGen()
-	if w.wantsFrame(f) {
+	if w.endFrame(f) {
 		ev.Window.RequestFrame()
 	} else if wake := wd.frame.takeWake(); !wake.IsZero() {
 		// A caret or a delayed tooltip changes at a known time; sleep
@@ -732,6 +731,17 @@ func (w *Window) catchUp() error {
 	}
 	w.seenGen = layoutGen()
 	return nil
+}
+
+// endFrame closes a frame drawn with input f: it takes the layout the frame
+// left as seen, so the next is not painted again for it, and reports, as
+// wantsFrame does, whether the next frame must run without waiting for
+// input. It is all of a frame's end that needs no native window; asking for
+// that frame, or setting the timer that wakes the window instead, is left
+// to the caller, which tests are without.
+func (w *Window) endFrame(f frameInput) bool {
+	w.seenGen = layoutGen()
+	return w.wantsFrame(f)
 }
 
 // wantsFrame reports whether the next frame must run without waiting for
@@ -830,7 +840,7 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 	}
 	asked := w.takeRepaints()
 	if kept && dirtyBits == 0 && len(asked) == 0 && len(w.motion) == 0 && !w.motionLost && len(w.frameLoop.contained) == 0 &&
-		reactive.StateGen() == w.motionGen && layoutGen() == w.seenGen {
+		!w.stateChanged() {
 		// Nothing changed: work was posted that wrote nothing, say. The
 		// screen keeps the last frame, and untouched, nothing is presented.
 		framestats.CountSkipped()
@@ -1131,7 +1141,7 @@ func (d *windowDraw) release() { *d = windowDraw{} }
 // settled implements paintHooks.
 func (d *windowDraw) settled() {
 	w := d.w
-	if d.dst != d.target && (reactive.FreeGen() != w.freeSeen || fontGen() != w.fontSeen) {
+	if d.dst != d.target && w.freeChanged() {
 		// The layout changed more than the scroll: paint all of it.
 		framestats.Refuse("state changed")
 		w.frameLoop.endFrameFree(true, true)
