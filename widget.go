@@ -722,8 +722,10 @@ type CachedWidget struct {
 	rev     uint64 // the Env revision the size was measured under
 	size    Size
 	gen     uint64 // counts the measurements
-	// measuring is set while the cache measures its child.
+	// measuring is set while the cache measures its child, and again that
+	// a Layout inside that measurement called Invalidate; see stale.
 	measuring bool
+	again     bool
 }
 
 // mostLateKids is how many caches laid out after a cache measured, as a
@@ -759,6 +761,22 @@ func (c *CachedWidget) invalidate() {
 	}
 }
 
+// stale marks this cache and every one above it stale, as invalidate does,
+// for the next layout, asking for none itself. A cache measuring now, as
+// one is above a Layout that calls Invalidate, takes the mark when the
+// measurement ends: marked now, the end would clear it as done with, and
+// the layout asked for would find every cache above the widget as it was
+// and lay none of it out again.
+func (c *CachedWidget) stale() {
+	for ; c != nil; c = c.outer {
+		if c.measuring {
+			c.again = true
+		} else {
+			c.dirty = true
+		}
+	}
+}
+
 // Layout implements Widget.
 func (c *CachedWidget) Layout(cs Constraints, env Env) Size {
 	c.outer, _ = env.Get(cacheOwner)
@@ -776,7 +794,7 @@ func (c *CachedWidget) Layout(cs Constraints, env Env) Size {
 	c.kids = slices.Clip(c.kids)
 	c.gen++
 	c.fontGen = gen
-	c.cons, c.rev, c.valid, c.dirty = cs, env.rev, true, false
+	c.cons, c.rev, c.valid, c.dirty, c.again = cs, env.rev, true, c.again, false
 	c.tellOuter()
 	return c.size
 }
@@ -895,17 +913,19 @@ func dedupeReads(reads []sourceRead) []sourceRead {
 // change shows within that viewport alone, and a frame nothing else
 // changed for is painted there and nowhere else: a disclosure easing open
 // in a scrolling pane does not paint the window again at every step.
+//
+// It may be called from the widget's own Layout, for a size that is still
+// on its way somewhere, as Motion.LayoutTo does: the layout asked for is
+// the next frame's, and runs then, not again in this one.
 func Invalidate(env Env) {
 	c, _ := env.Get(cacheOwner)
 	if s := scrollPortOf(env).holding(); s != nil {
-		reactive.Contained(func() {
-			reactive.RequestLayout()
-			c.invalidate()
-		})
+		reactive.Contained(reactive.RequestLayout)
+		c.stale()
 		s.heldLayout = true
 		noteContained(s.win)
 		return
 	}
 	reactive.RequestLayout()
-	c.invalidate()
+	c.stale()
 }

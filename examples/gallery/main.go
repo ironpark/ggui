@@ -69,6 +69,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 	notes := ggui.State("")
 	fruit := ggui.State("Banana")
 	details := ggui.State(true)
+	revealed := ggui.State(false)
 	tab := ggui.State(0)
 	more := ggui.State(false)
 	progress := ggui.State(0.3)
@@ -354,6 +355,13 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 					ggui.Box(ggui.Text("Slides and fades in, and back out when hidden. A leaving widget takes no input.")).
 						Fill(t.Card).Radius(t.Radius).Pad(t.Space),
 				).Slide(0, -8).Fade()),
+			).Space(1).Stretch()),
+
+			preview("Reveal", ggui.Column(
+				ui.Switch(revealed, "Show more"),
+				ggui.Reveal(revealed, ggui.Box(ggui.Text("Folds open beneath the switch, moving what follows down, and back up when hidden.")).
+					Fill(t.Card).Radius(t.Radius).Pad(t.Space)),
+				ui.Caption("Below the reveal."),
 			).Space(1).Stretch()),
 
 			preview("Dialog", ggui.Column(

@@ -140,7 +140,6 @@ func (a *AccordionWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	a.sizes = slices.Grow(a.sizes[:0], len(a.items))[:len(a.items)]
 	clear(a.sizes)
 	a.heights = slices.Grow(a.heights[:0], len(a.items))[:len(a.items)]
-	now, motion := ggui.FrameTime(), env.Motion(a.theme.MotionFast)
 	var width, height float64
 	t := a.theme
 	chevron := t.IconSize + t.Space // the room the chevron takes beside a header
@@ -152,7 +151,7 @@ func (a *AccordionWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		width = max(width, h.size.W+chevron)
 		height += a.heights[i]
 		h.open = a.isOpen(i)
-		h.progress = h.reveal.Toggle(h.open, now, motion)
+		h.progress = h.reveal.LayoutToggle(env, h.open, t.MotionFast)
 		if h.open || h.progress > 0 {
 			a.sizes[i] = item.content.Layout(ggui.Loose(ggui.Sz(c.MaxW, ggui.Unbounded)), env)
 			width = max(width, a.sizes[i].W)
@@ -168,6 +167,8 @@ func (a *AccordionWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 }
 
 func (a *AccordionWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
+	// The sections ease by themselves; this is for a binding that is no
+	// signal, whose change asks for no layout of its own.
 	if !slices.Equal(a.laidOpen, ggui.Untrack(a.open.Get)) {
 		ggui.Invalidate(a.env)
 	}
@@ -195,7 +196,7 @@ func (a *AccordionWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 			a.FocusRing(dst, rect, t.Radius, t.Ring)
 		}
 		y += a.heights[i]
-		paintDisclosure(dst, a.env, item.content, ggui.Pt(r.Origin.X, y), r.Size.W, a.sizes[i], h.progress, h.open)
+		paintDisclosure(dst, item.content, ggui.Pt(r.Origin.X, y), r.Size.W, a.sizes[i], h.progress, h.open)
 		y += (a.sizes[i].H + 2*t.Space) * h.progress
 		if i < len(a.items)-1 {
 			dst.StrokeLine(ggui.Pt(r.Origin.X, y), ggui.Pt(r.Origin.X+r.Size.W, y), t.BorderWidth, t.Border)
