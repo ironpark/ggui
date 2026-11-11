@@ -502,3 +502,42 @@ func TestAReaderOfAScrollsOffsetBesideItIsPainted(t *testing.T) {
 		}
 	}
 }
+
+// A widget that eases its size, as a disclosure opening does, asks while
+// it paints for the layout that moves it on. The window runs that layout in
+// a frame of its own and paints it whole: the frame would otherwise be
+// taken as one nothing changed for, and the widget would stand where it
+// was until the next input.
+func TestALayoutAskedForWhilePaintingGetsAWholeFrame(t *testing.T) {
+	const steps = 4
+	var env Env
+	laid, painted := 0, 0
+	grows := FromFuncs(func(c Constraints, e Env) Size {
+		env = e
+		laid++
+		return c.Constrain(Sz(10, float64(laid)))
+	}, func(dst *Canvas, r Rect) {
+		painted = laid
+		if laid < steps {
+			Invalidate(env)
+		}
+	})
+	w := newWindow(nil, nil, Config{}, func() Widget { return topLeft(grows) })
+	w.start()
+	setRunning(&w.frameLoop)
+	screen := ggfx.NewImage(16, 16)
+	w.draw(screen, 1, false, nil)
+	for range 2 * steps {
+		w.seenGen = layoutGen() // as the frame's handler does after drawing
+		if !w.wantsFrame(frameInput{}) {
+			break
+		}
+		w.draw(screen, 1, true, nil)
+	}
+	if laid != steps || painted != steps {
+		t.Fatalf("laid out %d times and painted the %dth; want %d of each, with no input", laid, painted, steps)
+	}
+	if w.wantsFrame(frameInput{}) {
+		t.Fatal("the window still asks for frames after the layout settled")
+	}
+}

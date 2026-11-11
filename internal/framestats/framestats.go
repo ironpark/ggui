@@ -26,6 +26,7 @@ const (
 	Callback                // a callback waiting for the next frame
 	Posted                  // work posted to the window
 	Input                   // a drag or touch going on
+	Layout                  // a layout asked for after the frame's own, as it painted
 	reasons
 )
 
@@ -69,7 +70,7 @@ type Stats struct {
 	// callback waiting for the next frame, work posted to the window, or a
 	// drag or touch going on. The rest came from outside: an event, an
 	// Invalidate, a new frame the window or the platform asked for.
-	ForAnimation, ForTime, ForCallback, ForPosted, ForInput int64
+	ForAnimation, ForTime, ForCallback, ForPosted, ForInput, ForLayout int64
 
 	// Partial counts the frames painted in part, where only what moves
 	// with time changed. Skipped counts those that painted nothing, as
@@ -85,8 +86,8 @@ func Read() Stats {
 		Frames: frames.Load(), Busy: time.Duration(nanos.Load()),
 		ForAnimation: asked[Animation].Load(), ForTime: asked[Time].Load(),
 		ForCallback: asked[Callback].Load(), ForPosted: asked[Posted].Load(),
-		ForInput: asked[Input].Load(),
-		Partial:  partial.Load(), Skipped: skipped.Load(), Contained: contained.Load(),
+		ForInput: asked[Input].Load(), ForLayout: asked[Layout].Load(),
+		Partial: partial.Load(), Skipped: skipped.Load(), Contained: contained.Load(),
 	}
 }
 
