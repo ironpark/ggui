@@ -354,3 +354,20 @@ func TestAMessageScrollerEasesAWheelsNotchAndFollowsATrackpad(t *testing.T) {
 		t.Fatalf("a trackpad's 12.5 pixels left the transcript at %v in its frame, want %v", got, end-312.5)
 	}
 }
+
+// A spinner turning beside a button with a tooltip, which reads where the
+// pointer is as it paints, is painted in part: the pointer does not move,
+// so the button shows what it showed.
+func TestASpinnerBesideATooltipIsPaintedInPart(t *testing.T) {
+	p := ggui.NewWindowProbe(func() ggui.Widget {
+		return ggui.Row(ui.Spinner(), ui.Tooltip(ui.Button("Stop", func() {}), "Stop the work")).Gap(8)
+	}, ggui.Sz(400, 300))
+	defer p.Close()
+	p.Move(ggui.Pt(300, 200))
+	p.Run(frameStep, 5)
+	for i, fr := range p.Run(frameStep, 20) {
+		if fr.Painted != ggui.FramePartial {
+			t.Fatalf("frame %d was painted %v, want in part", i, fr.Painted)
+		}
+	}
+}

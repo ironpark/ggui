@@ -101,6 +101,29 @@ func TestAPartialFrameSkipsWhatItsRegionMisses(t *testing.T) {
 	}
 }
 
+// A widget that reads the pointer beside what moves, a tooltip's button by
+// a spinner, is painted partly within the region of a frame time alone
+// asked for. The pointer is where it was, so it shows what it showed, and
+// the frame stays painted in part; one a mouse move asked for does not.
+func TestAPointerReaderBesideMotionSpillsOnlyWhenThePointerMoved(t *testing.T) {
+	paint := func(moved bool) bool {
+		f := &frameState{}
+		f.logical = Sz(400, 400)
+		f.partial, f.moved, f.regions = true, moved, []Rect{Rct(Pt(100, 100), Sz(10, 10))}
+		c := &Canvas{}
+		f.openScope(c, Rct(Pt(90, 90), Sz(60, 30)), 0)
+		f.scopes[len(f.scopes)-1].pointer = true
+		f.closeScope(Box(), 0)
+		return f.spilled
+	}
+	if paint(false) {
+		t.Fatal("a widget that read a pointer that did not move made the frame whole")
+	}
+	if !paint(true) {
+		t.Fatal("a widget that follows the pointer drew past the regions of a move's frame, and the frame stayed in part")
+	}
+}
+
 func TestRepaintRectQueuesRegionsForTheNextFrame(t *testing.T) {
 	w := &Window{}
 	w.RepaintRect(Rect{})
