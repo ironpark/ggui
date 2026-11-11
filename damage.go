@@ -19,8 +19,11 @@ import (
 // Where the frame is painted into what still holds the last one, a screen
 // its driver keeps (Metal's does) or the backbuffer a BackdropBlur keeps,
 // such a frame is painted over it within those regions alone, rather than
-// the whole window again for a few pixels. Anything else that asks for a frame, input, a
-// signal written, a layout, a resize, paints it whole.
+// the whole window again for a few pixels. A mouse move is painted so too,
+// over the widgets that read where the pointer is in their own Paint, as a
+// tooltip does, and the hit regions the move entered or left. Anything else
+// that asks for a frame, input, a signal written, a layout, a resize, paints
+// it whole.
 //
 // Canvas.Paint keeps, for each widget, the bounds of what it and its
 // subtree drew. A widget that read the time while painting, in its own
@@ -50,6 +53,7 @@ type paintScope struct {
 	bounds      Rect
 	start, kids uint64
 	placed      bool // drawn in window coordinates, not under a Transform or a shape clip
+	pointer     bool // it read the pointer in its own Paint
 }
 
 // openScope begins a widget's scope at r.
@@ -61,7 +65,9 @@ func (f *frameState) openScope(c *Canvas, r Rect, marks uint64) {
 // leaves its bounds as a motion region, and its bounds and marks go to its
 // parent's.
 func (f *frameState) closeScope(w Widget, marks uint64) {
-	s := f.scopes[len(f.scopes)-1]
+	// Read in place: what is popped stays in the backing array until the
+	// next scope opens.
+	s := &f.scopes[len(f.scopes)-1]
 	f.scopes = f.scopes[:len(f.scopes)-1]
 	total := marks - s.start
 	if total-s.kids > 0 {
@@ -73,11 +79,60 @@ func (f *frameState) closeScope(w Widget, marks uint64) {
 			f.movers = append(f.movers, widgetName(w)+" (unplaced)")
 		}
 	}
+	if s.pointer {
+		f.notePointer(s)
+	}
 	if n := len(f.scopes); n > 0 {
 		p := &f.scopes[n-1]
 		p.kids += total
 		p.bounds = p.bounds.Cover(s.bounds)
 	}
+}
+
+// notePointer keeps the bounds of s, a widget that read the pointer, for
+// a mouse move to paint again. A frame painted in part paints such a widget
+// where the last whole one did, and keeps it once.
+func (f *frameState) notePointer(s *paintScope) {
+	if !s.placed || s.bounds.Empty() {
+		f.pointerLost = true
+		return
+	}
+	f.spill(s.bounds)
+	switch {
+	case f.partial && slices.Contains(f.pointerAt, s.bounds):
+	case len(f.pointerAt) >= mostRepaints:
+		// Past so many, one that moves as it is painted in part, they are
+		// the one region around them all.
+		f.pointerAt = append(f.pointerAt[:0], region.CoverAll(f.pointerAt).Cover(s.bounds))
+	default:
+		f.pointerAt = append(f.pointerAt, s.bounds)
+	}
+}
+
+// spill notes, in a frame painted in part, that a widget whose look
+// follows the pointer drew at bounds outside every region the frame paints,
+// past where it drew last: what it drew there was cut off, and the frame is
+// painted whole instead.
+//
+// A widget that reads the time is not held to it: one that starts to move
+// in a frame painted in part, a hover fading in beside the row the pointer
+// touched, is often painted only partly within the regions, and shows
+// there what it showed before, as an easing shows its start at first.
+func (f *frameState) spill(bounds Rect) {
+	if !f.partial || f.spilled {
+		return
+	}
+	// The regions are cut to the window, as what is drawn past it is.
+	bounds = bounds.Intersect(Rct(Point{}, f.logical))
+	if bounds.Empty() {
+		return
+	}
+	for _, d := range f.regions {
+		if bounds.Intersect(d) == bounds {
+			return
+		}
+	}
+	f.spilled = true
 }
 
 // drew adds r, with extra around it, to the bounds of the widget painting.
@@ -105,21 +160,24 @@ func motionRegions(motion []Rect, window Rect) []Rect {
 // motionState is what a frame that only time asks for repaints. scopes
 // are the widgets being painted, motion the regions of those that read the
 // time, and motionLost that one did where it cannot be placed. partial is
-// set while such a frame paints within damage.
+// set while such a frame paints within regions, damage the one it paints
+// now, and spilled that a widget it painted drew outside them all.
 type motionState struct {
 	scopes     []paintScope
 	motion     []Rect
 	motionLost bool
 	movers     []string // the widgets behind motion, by type
 	partial    bool
+	regions    []Rect
 	damage     Rect
+	spilled    bool
 	overlaid   bool // an overlay was painted this frame
 }
 
 // startMotion clears what the last frame noted of its motion.
 func (f *motionState) startMotion() {
 	f.scopes, f.motion, f.movers = f.scopes[:0], f.motion[:0], f.movers[:0]
-	f.motionLost, f.overlaid = false, false
+	f.motionLost, f.overlaid, f.spilled = false, false, false
 }
 
 // noteMotion decides, after a frame painted into target, whether the next
@@ -284,7 +342,7 @@ func (w *Window) containedDamage(target *ggfx.Image, kept bool, contained, asked
 // the last frame, which target holds when kept, within what changes now,
 // and reports false, painting nothing, when the frame must be painted
 // whole. It gives setDamage, when there is one, what changed.
-func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect, setDamage func([]image.Rectangle)) bool {
+func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect, pointer bool, setDamage func([]image.Rectangle)) bool {
 	if why := w.partialRefusal(target); why != "" {
 		framestats.Refuse(why)
 		return false
@@ -321,8 +379,8 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect
 	// observes input or listens for a shortcut: what the last whole frame
 	// registered stands.
 	background := w.background()
-	f.partial = true
-	func() {
+	f.partial, f.regions = true, damage
+	opened := func() bool {
 		defer property.EnterLayout()()
 		for _, d := range damage {
 			f.damage = d
@@ -330,14 +388,35 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect
 			at.inert = true
 			at.Image.Fill(background)
 			at.Paint(w.root, Rect{Size: w.rootSize})
-			at.paintOverlays()
+			if len(f.overlays) > 0 {
+				// The last frame painted no overlay, or this one would not be
+				// painted in part: one opens now, as a tooltip does at its
+				// delay, and shows beyond the regions. The frame is painted
+				// whole instead, over what this one painted, and its overlays
+				// queued again.
+				f.overlays = f.overlays[:0]
+				return true
+			}
 		}
+		return false
 	}()
-	f.partial = false
+	f.partial, f.regions = false, nil
+	f.retained.endPartial()
+	switch {
+	case opened:
+		framestats.Refuse("overlay")
+		return false
+	case f.spilled:
+		framestats.Refuse("spilled")
+		return false
+	}
 	// The layers are trimmed by whole frames alone: one painted in part
 	// uses those of the regions it paints, and freeing the rest would make
 	// the next whole frame allocate them again.
 	framestats.CountPartial()
+	if pointer {
+		framestats.CountPointer()
+	}
 	w.drew = FramePartial
 	if setDamage != nil {
 		// setDamage copies what it is given: the slice is the window's.
@@ -529,6 +608,28 @@ func (w *Window) addRepaintLocked(r Rect) {
 		w.repaints = w.repaints[:0]
 	}
 	w.repaints = append(w.repaints, r)
+}
+
+// pointerMoved asks for the widgets that read where the pointer is, which
+// f, the frame state, noted as they painted, to be painted again in the
+// frame being run, for the pointer moved: each where it drew, as one that
+// reads the time is. Where one of them cannot be placed, the frame is
+// painted whole.
+func (w *Window) pointerMoved(f *frameState) {
+	if f.pointerLost {
+		framestats.Refuse("pointer unplaced")
+		w.dirty.Or(uint32(dirtyEvent))
+		return
+	}
+	if len(f.pointerAt) == 0 {
+		return
+	}
+	w.repaintMu.Lock()
+	for _, r := range f.pointerAt {
+		w.addRepaintLocked(r)
+	}
+	w.repaintMu.Unlock()
+	w.pointerAsked = true
 }
 
 // mostRepaints is how many asked regions a frame keeps apart.

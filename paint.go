@@ -27,6 +27,18 @@ import (
 // noting where it would have drawn for a frame painted in part. A line of
 // text drawn by hand comes last.
 
+// drewPath notes path, with extra around it, as drawn, in a frame painted
+// in part: that one painted where a widget drew must catch what it now
+// draws past its Rect. A whole frame skips the walk over every point of the
+// path, which a chart's would make cost as much as drawing it: what a widget
+// drew past its Rect there shows up as the frame painted in part after it
+// finds the widget drawing past what it painted, and paints whole.
+func (c *Canvas) drewPath(path *Path, extra float64) {
+	if f := c.fs(); f.partial {
+		f.drew(path.Bounds(), extra)
+	}
+}
+
 // visiblePaintBounds tests drawing only; callers must still collect input,
 // semantics and traces. Keep one physical pixel for antialiasing and round to
 // float32 like the vector API. Unusual geometry takes the original draw path.
@@ -404,6 +416,7 @@ func (c *Canvas) FillPath(path *Path, col color.Color) {
 	if c == nil || c.Image == nil || path == nil || col == nil {
 		return
 	}
+	c.drewPath(path, 0)
 	vector.FillPath(c.Image, path.device(c.Scale()), nil, pathOptions(col))
 }
 
@@ -412,6 +425,7 @@ func (c *Canvas) StrokePath(path *Path, width float64, col color.Color) {
 	if c == nil || c.Image == nil || path == nil || col == nil || width <= 0 {
 		return
 	}
+	c.drewPath(path, width/2)
 	vector.StrokePath(c.Image, path.device(c.Scale()), &vector.StrokeOptions{Width: c.Px(width), LineJoin: vector.LineJoinRound}, pathOptions(col))
 }
 

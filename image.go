@@ -266,10 +266,14 @@ func (c *Canvas) drawImageAs(img *ggfx.Image, n Size, r Rect, o ImageOptions) {
 // drawImage draws img stretched over the logical Rect r.
 func (c *Canvas) drawImage(img *ggfx.Image, r Rect, o ImageOptions) {
 	b := img.Bounds()
-	// A turned image reaches as far as its corners do.
+	// A turned image reaches as far as its corners do at this angle: no
+	// further than r when hardly turned, so that a spinner turning from
+	// upright stays within what the frame before it drew.
 	reach := 0.0
 	if o.Rotation != 0 {
-		reach = math.Hypot(r.Size.W, r.Size.H) / 2
+		sin, cos := math.Abs(math.Sin(o.Rotation)), math.Abs(math.Cos(o.Rotation))
+		w, h := r.Size.W, r.Size.H
+		reach = max((w*cos+h*sin-w)/2, (w*sin+h*cos-h)/2, 0)
 	}
 	if !c.visiblePaintBounds(r, reach) {
 		return

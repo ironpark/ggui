@@ -94,10 +94,16 @@ type inputView struct {
 	pointer    Point
 	hasPointer bool
 	// pointerRead records that a widget read the pointer in the last
-	// whole paint, or in a part painted since: a mouse move then repaints
-	// the whole window, as what such a widget draws follows the pointer
-	// with no event reaching it.
+	// whole paint, or in a part painted since: what such a widget draws
+	// follows the pointer with no event reaching it, so a mouse move paints
+	// it again. pointerAt are the bounds those widgets drew in, in the
+	// window, which the move paints in part, as it would a widget that read
+	// the time; pointerLost, that one read it where that cannot be told,
+	// under a Transform or outside any widget's Paint, and the move repaints
+	// the whole window.
 	pointerRead  bool
+	pointerLost  bool
+	pointerAt    []Rect
 	focusBounds  Rect       // focused input region at the start of this paint
 	focusKey     KeyHandler // its handler
 	focusPainted bool       // the focused handler registered since PaintFocus began
@@ -121,7 +127,7 @@ func (v *inputView) take(in *inputState) {
 	if in.pressed != nil {
 		v.pressPointer = in.pressed.pointer
 	}
-	v.pointerRead = false
+	v.pointerRead, v.pointerLost, v.pointerAt = false, false, v.pointerAt[:0]
 	v.found = regionIndex{scopeAt: -1}
 	if v.focusKey != nil {
 		v.found.key = handlerHint{h: v.focusKey, at: -1}
@@ -152,15 +158,35 @@ func (v *inputView) note(r *hitRegion, i int) {
 
 // retained is what Retain stored this frame, and last frame's, which
 // Retained reads.
+//
+// A frame painted in part paints some widgets and leaves the rest as they
+// were, so it keeps what the frame before stored and stores over it: keeps
+// is then both. read and stored are the slots the widgets it painted read
+// and stored, and a slot read but not stored again is dropped as the frame
+// ends, as a whole frame drops it, while one no widget it painted touched
+// stays.
 type retained struct {
-	keeps     map[retainKey]any
-	prevKeeps map[retainKey]any
+	keeps        map[retainKey]any
+	prevKeeps    map[retainKey]any
+	read, stored map[retainKey]struct{}
 }
 
 // next makes this frame's values last frame's.
 func (r *retained) next() {
 	r.prevKeeps, r.keeps = r.keeps, r.prevKeeps
 	clear(r.keeps)
+}
+
+// endPartial drops, at the end of a frame painted in part, the slots read
+// in it and not stored again.
+func (r *retained) endPartial() {
+	for k := range r.read {
+		if _, ok := r.stored[k]; !ok {
+			delete(r.keeps, k)
+		}
+	}
+	clear(r.read)
+	clear(r.stored)
 }
 
 // adoptIndex is where last frame's regions are, for adopt. It is built on
@@ -265,7 +291,14 @@ func (c *Canvas) Retain[T any](at Anchor, s Slot[T], v T) {
 	if f.keeps == nil {
 		f.keeps = make(map[retainKey]any)
 	}
-	f.keeps[at.key(s.id)] = v
+	k := at.key(s.id)
+	f.keeps[k] = v
+	if f.partial {
+		if f.stored == nil {
+			f.stored = make(map[retainKey]struct{})
+		}
+		f.stored[k] = struct{}{}
+	}
 }
 
 // Retained returns what Retain stored under at and s last frame.
@@ -274,7 +307,21 @@ func (c *Canvas) Retained[T any](at Anchor, s Slot[T]) (T, bool) {
 		var zero T
 		return zero, false
 	}
-	v, ok := c.fs().prevKeeps[at.key(s.id)].(T)
+	f := c.fs()
+	k := at.key(s.id)
+	keeps := f.prevKeeps
+	if f.partial {
+		// The last frame's values are what keeps holds; see retained. Read
+		// from those the whole frame before that left, a Transition that
+		// appeared in the last whole frame would start again at every frame
+		// painted in part, and never end.
+		keeps = f.keeps
+		if f.read == nil {
+			f.read = make(map[retainKey]struct{})
+		}
+		f.read[k] = struct{}{}
+	}
+	v, ok := keeps[k].(T)
 	return v, ok
 }
 
@@ -390,13 +437,23 @@ func (c *Canvas) Paint(w Widget, r Rect) {
 
 // Pointer returns where the mouse cursor was when this frame began, in
 // logical pixels, and whether it is known. Widgets that react to hovering
-// without a hit region, such as ui.Tooltip, read it in Paint.
+// without a hit region, such as ui.Tooltip, read it in Paint. A mouse move
+// paints such a widget again where it drew last, and what lies around it
+// only when it draws beyond that or opens an Overlay: what it draws as the
+// pointer moves belongs in what it drew before, its own Rect say.
 func (c *Canvas) Pointer() (Point, bool) {
 	if c == nil {
 		return Point{}, false
 	}
 	f := c.fs()
 	f.pointerRead = true
+	if n := len(f.scopes); n > 0 {
+		// The widget painting now leaves its bounds for a move to paint
+		// again, as closeScope does a widget's that read the time.
+		f.scopes[n-1].pointer = true
+	} else {
+		f.pointerLost = true
+	}
 	return c.space.local(f.pointer), f.hasPointer
 }
 
@@ -564,6 +621,12 @@ func (c *Canvas) physical(r Rect) image.Rectangle {
 		int(math.Floor(c.px(r.Origin.X))), int(math.Floor(c.px(r.Origin.Y))),
 		int(math.Ceil(c.px(r.Origin.X+r.Size.W))), int(math.Ceil(c.px(r.Origin.Y+r.Size.H))),
 	)
+}
+
+// logicalRect is r, in physical pixels, in logical ones: physical's
+// inverse, for a part of the image that holds r.
+func (c *Canvas) logicalRect(r image.Rectangle) Rect {
+	return Rct(Pt(c.dp(float64(r.Min.X)), c.dp(float64(r.Min.Y))), Sz(c.dp(float64(r.Dx())), c.dp(float64(r.Dy()))))
 }
 
 // Clip returns a Canvas that draws only inside r and registers hit regions

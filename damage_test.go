@@ -221,8 +221,10 @@ func writeForTheReport(s *StateValue[int]) func() {
 }
 
 // A mouse move asks for the whole window only when the last paint read
-// where the pointer is; otherwise what the move reaches is painted again.
-func TestAMouseMoveRepaintsTheWholeOnlyWhenPaintReadThePointer(t *testing.T) {
+// where the pointer is where what it drew cannot be placed, here outside
+// any widget's Paint. A widget that read it in its own Paint is painted
+// again in part (see frameOn), and otherwise what the move reaches is.
+func TestAMouseMoveRepaintsTheWholeOnlyWhereWhatReadThePointerCannotBePlaced(t *testing.T) {
 	w := newWindow(nil, nil, Config{}, func() Widget { return Box() })
 	if err := w.handle(ggwd.MouseMoveEvent{X: 5, Y: 5}); err != nil {
 		t.Fatal(err)
@@ -230,8 +232,21 @@ func TestAMouseMoveRepaintsTheWholeOnlyWhenPaintReadThePointer(t *testing.T) {
 	if w.dirty.Load() != 0 {
 		t.Fatal("a mouse move nothing read asked for the whole window")
 	}
+	f := w.canvas.fs()
+	f.openScope(&w.canvas, Rct(Pt(0, 0), Sz(20, 20)), 0)
 	w.canvas.Pointer()
+	f.closeScope(Box(), 0)
 	if err := w.handle(ggwd.MouseMoveEvent{X: 6, Y: 6}); err != nil {
+		t.Fatal(err)
+	}
+	if w.dirty.Load() != 0 {
+		t.Fatal("a mouse move asked for the whole window a widget read the pointer in, in its own Paint")
+	}
+	if len(f.pointerAt) != 1 || f.pointerAt[0] != Rct(Pt(0, 0), Sz(20, 20)) {
+		t.Fatalf("the widget that read the pointer left %v to paint again", f.pointerAt)
+	}
+	w.canvas.Pointer()
+	if err := w.handle(ggwd.MouseMoveEvent{X: 7, Y: 7}); err != nil {
 		t.Fatal(err)
 	}
 	if w.dirty.Load() == 0 {

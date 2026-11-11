@@ -25,6 +25,8 @@ func (c *Canvas) Blur(r Rect, sigma float64, paint func(dst *Canvas)) {
 		return
 	}
 	reach := 3 * sigma
+	// What paint draws is smeared as far as reach past it.
+	c.fs().drew(r, reach)
 	area := c.physical(r.Grow(reach)).Intersect(c.root().Image.Bounds())
 	if area.Empty() {
 		paint(c)
@@ -56,6 +58,7 @@ func (c *Canvas) BackdropBlur(r Rect, radius, sigma float64) {
 		// one that can needs none (see presentBackdrop).
 		c.fs().backdrop = true
 	}
+	c.fs().drew(r, 0)
 	if !c.readable() {
 		return
 	}
@@ -336,6 +339,9 @@ func (c *Canvas) Shadow(r Rect, radius float64, s ShadowStyle) {
 	if tint[3] == 0 {
 		return
 	}
+	// Seen or not, the shadow is where the widget painting draws, as far
+	// past r as it spreads and blurs.
+	c.fs().drew(Rct(r.Origin.Add(s.Offset), r.Size), max(s.Spread, 0)+max(s.Blur, 0)+1)
 	g, ok := c.shadowGeometry(r, radius, s)
 	if !ok {
 		return
@@ -441,6 +447,9 @@ func (c *Canvas) Transform(m Affine, paint func(dst *Canvas)) {
 		paint(c.into(nil).enter(m, inverse, nil))
 		return
 	}
+	// The transformed subtree lands within area, which is where the
+	// widget painting draws: what it drew inside is in other coordinates.
+	c.fs().drew(c.logicalRect(area), 0)
 	c.layer(area, func(layer *Canvas) { paint(layer.enter(m, inverse, nil)) }, func(img *ggfx.Image) {
 		op := &ggfx.DrawImageOptions{Filter: ggfx.FilterLinear}
 		op.GeoM.Translate(float64(img.Bounds().Min.X), float64(img.Bounds().Min.Y))

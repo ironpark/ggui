@@ -165,6 +165,19 @@ paints that frame whole and from then on leaves the next change to the
 boundary around it. Under a `Transform` or a shape clip a boundary cannot
 tell where it is in the window, and holds nothing.
 
+A frame that only time asks for, a caret blinking or a spinner turning, is
+painted in part: over what the screen kept, within the bounds the widgets
+that read the time drew in last frame. A mouse move is painted the same way
+over the widgets that read `dst.Pointer()` in their `Paint`, a tooltip's
+anchor say, beside whatever hit regions the move entered or left, so a
+window with a tooltip in it does not repaint all of itself as the pointer
+crosses it. Such a widget should draw what follows the pointer within what
+it drew before, its own Rect: one that draws past it, or opens an
+`Overlay`, has that frame painted whole, as does one under a `Transform` or
+a shape clip, which cannot be placed in the window. A signal written, a
+layout asked for outside a boundary, a key, a click or a resize still paint
+the whole window.
+
 ## Retained paint state
 
 State that has no signal and must outlive a rebuild can be kept on the

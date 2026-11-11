@@ -36,6 +36,7 @@ var (
 	partial       atomic.Int64
 	skipped       atomic.Int64
 	contained     atomic.Int64
+	pointer       atomic.Int64
 )
 
 // Frame counts a frame run, which took d.
@@ -57,6 +58,10 @@ func CountSkipped() { skipped.Add(1) }
 // that moved.
 func CountContained() { contained.Add(1) }
 
+// CountPointer counts a frame painted in part, counted by CountPartial
+// too, that painted widgets that read the pointer again as it moved.
+func CountPointer() { pointer.Add(1) }
+
 // Stats counts the frames the app's windows have run since the program
 // started, and the time they took: input, layout, paint and the draw
 // handed to the GPU, not the GPU's own. Read twice, they give the frame
@@ -76,8 +81,10 @@ type Stats struct {
 	// with time changed. Skipped counts those that painted nothing, as
 	// nothing had changed, and presented nothing. Contained counts those
 	// painted within the viewports of scrolls that moved, as nothing else
-	// changed.
-	Partial, Skipped, Contained int64
+	// changed. Pointer counts those of the frames painted in part that
+	// painted again the widgets that read the pointer, as it moved over
+	// a window that would otherwise have been painted whole for it.
+	Partial, Skipped, Contained, Pointer int64
 }
 
 // Read reports the frames run so far.
@@ -88,6 +95,7 @@ func Read() Stats {
 		ForCallback: asked[Callback].Load(), ForPosted: asked[Posted].Load(),
 		ForInput: asked[Input].Load(), ForLayout: asked[Layout].Load(),
 		Partial: partial.Load(), Skipped: skipped.Load(), Contained: contained.Load(),
+		Pointer: pointer.Load(),
 	}
 }
 
@@ -143,7 +151,9 @@ func Dirtied(why string, pc uintptr) {
 // in part but were painted whole, by why: "dirty" when something else
 // asked for them, "state changed", "overlay", "unplaced" when what moved
 // was under a transform, "inspected", "resized", "not kept" when the last
-// frame was not, "too much changed".
+// frame was not, "too much changed", "spilled" when a widget that moves
+// drew past every region the frame painted, "pointer unplaced" when the
+// pointer moved over a widget that read it under a transform.
 //
 // Dirtiers counts, by name, the posted work that wrote a signal
 // ("dirty(signal) pkg.func") and the callers of Repaint
