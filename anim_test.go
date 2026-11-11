@@ -668,3 +668,110 @@ func TestTweenSetTwiceRegistersOnce(t *testing.T) {
 		t.Fatal("the place an animation was started is not known")
 	}
 }
+
+// layoutEased is a widget whose height a Motion eases toward target, read
+// as it is laid out, over 100ms along a straight line. It counts its
+// layouts and keeps the heights they gave.
+type layoutEased struct {
+	m       Motion
+	target  *StateValue[float64]
+	heights []float64
+}
+
+func newLayoutEased(from float64) *layoutEased {
+	e := &layoutEased{target: State(from)}
+	e.m.Easing(EaseLinear)
+	return e
+}
+
+func (e *layoutEased) Layout(c Constraints, env Env) Size {
+	h := e.m.LayoutTo(env, e.target.Get(), 100*time.Millisecond)
+	e.heights = append(e.heights, h)
+	return c.Constrain(Sz(10, h))
+}
+
+func (e *layoutEased) Paint(*Canvas, Rect) {}
+
+// last is the height the last layout gave.
+func (e *layoutEased) last() float64 { return e.heights[len(e.heights)-1] }
+
+// A Motion moved in Layout lays its widget out again for each step, one
+// frame and one layout at a time, with no input and nothing else asking,
+// and the window rests once it has arrived: the frame it arrives in asks
+// for no other. The layout cache above it, which the request is made
+// within the measurement of, takes it up for the next frame.
+func TestAMotionMovedInLayoutLaysOutEachStepAndComesToRest(t *testing.T) {
+	e := newLayoutEased(0)
+	p := NewWindowProbe(func() Widget { return topLeft(Cached(Column(e, Box().Size(10, 10)))) }, Sz(50, 200))
+	defer p.Close()
+	p.Run(10*time.Millisecond, 10)
+	e.target.Set(100)
+	e.heights = nil
+	frames := p.Run(10*time.Millisecond, 30)
+	if n := len(frames); n != 11 || frames[n-1].Next {
+		t.Fatalf("eased over %d frames, want 11, the last at rest: %v", n, frames)
+	}
+	if len(e.heights) != len(frames) {
+		t.Fatalf("laid out %d times in %d frames, want once in each", len(e.heights), len(frames))
+	}
+	for i, h := range e.heights {
+		if want := float64(10 * i); math.Abs(h-want) > 1e-9 {
+			t.Fatalf("frame %d is %v tall, want %v: %v", i, h, want, e.heights)
+		}
+	}
+	if e.last() != 100 {
+		t.Fatalf("came to rest %v tall, want exactly 100", e.last())
+	}
+	if rest := p.Idle(10*time.Millisecond, time.Second); len(rest) != 0 {
+		t.Fatalf("at rest the window ran %d more frames", len(rest))
+	}
+}
+
+// Retargeted on its way, a Motion moved in Layout turns round from where
+// it has got to, not from either end.
+func TestAMotionMovedInLayoutRetargetsFromWhereItIs(t *testing.T) {
+	e := newLayoutEased(0)
+	p := NewWindowProbe(func() Widget { return topLeft(e) }, Sz(50, 200))
+	defer p.Close()
+	p.Run(10*time.Millisecond, 10)
+	e.target.Set(100)
+	for range 4 {
+		p.Step(10 * time.Millisecond) // 0, 10, 20, 30
+	}
+	e.target.Set(0)
+	e.heights = nil
+	frames := p.Run(10*time.Millisecond, 30)
+	// It turns at 40, the instant of the frame that read the new target,
+	// and takes the whole 100ms to come back from there.
+	if math.Abs(e.heights[0]-40) > 1e-9 || math.Abs(e.heights[1]-36) > 1e-9 {
+		t.Fatalf("turned round at %v, then %v; want 40, then 36", e.heights[0], e.heights[1])
+	}
+	if n := len(frames); n != 11 || frames[n-1].Next || e.last() != 0 {
+		t.Fatalf("came back over %d frames to %v: %v", n, e.last(), e.heights)
+	}
+}
+
+// Under reduced motion a Motion moved in Layout lands at once, and asks
+// for no frame to get there.
+func TestAMotionMovedInLayoutJumpsUnderReducedMotion(t *testing.T) {
+	e := newLayoutEased(0)
+	p := NewWindowProbe(func() Widget { return Provide(ReducedMotionKey, true, topLeft(e)) }, Sz(50, 200))
+	defer p.Close()
+	p.Run(10*time.Millisecond, 10)
+	e.target.Set(100)
+	frames := p.Run(10*time.Millisecond, 30)
+	if len(frames) != 1 || frames[0].Next || e.last() != 100 {
+		t.Fatalf("under reduced motion it took %d frames to reach %v", len(frames), e.last())
+	}
+}
+
+// Moving a Motion in Layout allocates nothing, frame after frame.
+func TestAMotionMovedInLayoutAllocatesNothing(t *testing.T) {
+	var m Motion
+	env := Env{}
+	m.LayoutTo(env, 0, time.Hour)
+	m.LayoutTo(env, 1, time.Hour) // under way for the rest of the test
+	if n := testing.AllocsPerRun(100, func() { m.LayoutTo(env, 1, time.Hour) }); n != 0 {
+		t.Fatalf("%v allocations a step", n)
+	}
+}

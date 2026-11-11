@@ -61,12 +61,10 @@ func isDark(c color.Color) bool {
 func iconButtonSide(t *uitheme.Theme) float64 { return t.IconSize + 2*t.ButtonPad.Top }
 
 // paintDisclosure paints content folding open below y: the body is clipped
-// to progress of its height, inert while closing, and asks for another
-// layout until the motion settles.
-func paintDisclosure(dst *ggui.Canvas, env ggui.Env, content ggui.Widget, at ggui.Point, width float64, size ggui.Size, progress float64, open bool) {
-	if progress != pick(open, 1.0, 0.0) {
-		ggui.Invalidate(env)
-	}
+// to progress of its height and inert while closing. The progress comes
+// from Motion.LayoutToggle, which lays the disclosure out again for each
+// step while it moves.
+func paintDisclosure(dst *ggui.Canvas, content ggui.Widget, at ggui.Point, width float64, size ggui.Size, progress float64, open bool) {
 	if progress <= 0 {
 		return
 	}

@@ -32,6 +32,38 @@ animations once per frame, before effects are flushed. For a look that moves
 inside one widget, `Motion` is the same tween driven from `Paint` with the
 current time and no signal; `ui.Switch` slides its knob with one.
 
+## Sizes that move
+
+A `Motion` moved in `Paint` asks for the next frame, and that frame only
+paints: right for a knob or a chevron, wrong for a size, which needs the
+widget laid out again. A custom widget whose size eases moves its `Motion`
+in `Layout` with `LayoutTo(env, target, d)`, or `LayoutToggle(env, on, d)`
+for a progress from zero to one. Each returns the value at the frame's
+instant and, while it is still moving, asks for the next layout under `env`
+as `Invalidate(env)` does, so the widget keeps no `Env` and checks nothing
+in `Paint`. Inside a `Scroll` whose viewport keeps its size, those frames are
+painted within it alone. Under reduced motion it lands at once.
+
+```go
+func (p *panel) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	size := p.body.Layout(c, env)
+	size.H *= p.open.LayoutToggle(env, p.shown, 200*time.Millisecond)
+	return c.Constrain(size)
+}
+```
+
+`Reveal(open, child)` is that panel ready made: it eases its height between
+nothing and the child's while `open` changes (`.Horizontal()` eases the
+width), over `.Duration(d)` with `.Easing(e)`. It clips the child, keeps it
+inert while it folds away, and once closed neither lays it out nor paints it,
+so it registers no regions, focus or semantics. `Progress()` is how far open
+it is, for a chevron that turns with it; `ui.Collapsible` and `ui.Accordion`
+fold their sections the same way.
+
+```go
+ggui.Column(ggui.Tap(ggui.Text("Details"), func() { ggui.Toggle(more) }), ggui.Reveal(more, details))
+```
+
 ## Colors, points and other values
 
 `TweenWith(v, d, lerp)` tweens any type with a lerp that returns `a` at zero
@@ -127,5 +159,5 @@ anew starts where it is told.
 card := ggui.AnimatedBox(content).BindFill(tint).BindPadding(inset).Radius(8)
 ```
 
-`Switcher`, `AnimatedBox`, `Transition` and `Each` rows land at once under
-`ReducedMotionKey`.
+`Switcher`, `AnimatedBox`, `Reveal`, `Transition` and `Each` rows land at once
+under `ReducedMotionKey`.

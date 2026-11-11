@@ -968,3 +968,50 @@ func TestStickyHeadersPinAmongLeavingRows(t *testing.T) {
 		t.Fatalf("with rows leaving at 390: header 10 at %v, 20 at %v; want 10 pushed to -10", painted[10], painted[20])
 	}
 }
+
+// Rows leaving a list under a layout cache, as every Component is, slide
+// out in a window's own frames, one layout a frame with no input, until
+// they have gone and the window rests. The layout each frame asks for is
+// asked as the list is laid out, within the measurement of the caches
+// above it.
+func TestForRowsLeaveInAWindowsFrames(t *testing.T) {
+	items := State([]int{1, 2, 3})
+	painted := map[int]Rect{}
+	p := NewWindowProbe(func() Widget {
+		list := EachKeyed(items, func(i int) int { return i }, func(rowItem EachItem[int]) Widget {
+			i := rowItem.Value.Get()
+			return FromFuncs(
+				func(c Constraints, _ Env) Size { return c.Constrain(Sz(50, 10)) },
+				func(_ *Canvas, rect Rect) { painted[i] = rect },
+			)
+		}).Transition(func(w Widget) *TransitionWidget {
+			return Transition(w).Slide(-20, 0).Easing(EaseLinear).Duration(100 * time.Millisecond)
+		})
+		return Column(Component(func() Widget { return Column(list) }), Box().Size(50, 10))
+	}, Sz(200, 200))
+	defer p.Close()
+	p.Run(16*time.Millisecond, 10)
+	Remove(items, func(i int) bool { return i == 2 })
+	var xs []float64
+	var frames []WindowFrame
+	for range 30 {
+		clear(painted)
+		fr := p.Step(16 * time.Millisecond)
+		frames = append(frames, fr)
+		if r, ok := painted[2]; ok {
+			xs = append(xs, r.Origin.X)
+		}
+		if !fr.Next {
+			break
+		}
+	}
+	if n := len(frames); frames[n-1].Next {
+		t.Fatalf("the window never came to rest: %v", frames)
+	}
+	if len(xs) < 4 || xs[len(xs)-1] > -15 {
+		t.Fatalf("the leaving row was painted at %v, want it sliding out over several frames", xs)
+	}
+	if _, ok := painted[2]; ok || painted[3].Origin.Y != 10 {
+		t.Fatalf("after leaving: row 2 painted %v, row 3 at %+v", ok, painted[3])
+	}
+}

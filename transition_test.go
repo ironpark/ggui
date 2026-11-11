@@ -300,3 +300,76 @@ func TestAnimatedBoxCollapsibleEasesToZero(t *testing.T) {
 		t.Fatalf("closed, the next child is at %v, want 0", shown.Origin.X)
 	}
 }
+
+// A Switcher cross-fading in a scrolling pane of fixed size, beside other
+// content, is painted within the pane's viewport alone: the layouts it
+// asks for to drive each step are held there, as a size easing is. Only
+// the frame of the write that switched it is painted whole. It asserts how
+// frames are painted, which input to other tests can change, so it runs
+// alone.
+func TestASwitcherInAScrollPaintsWithinItsViewport(t *testing.T) {
+	key := State(0)
+	disposed := 0
+	p := NewWindowProbe(func() Widget {
+		sw := Switcher(key, func(k int) Widget {
+			OnCleanup(func() { disposed++ })
+			return Box().Size(80, float64(20+10*k))
+		}).Slide(0, 10)
+		pane := Box(Scroll(Column(sw, Box().Size(100, 400)))).Size(100, 100)
+		return Row(pane, Box().Size(100, 100))
+	}, Sz(200, 100))
+	defer p.Close()
+	p.Run(16*time.Millisecond, 10)
+	key.Set(1)
+	frames := p.Run(16*time.Millisecond, 60)
+	if n := len(frames); n < 5 || frames[n-1].Next {
+		t.Fatalf("switched over %d frames, want several and then rest: %v", n, frames)
+	}
+	if disposed != 1 {
+		t.Fatalf("%d subtrees disposed after the switch, want the old one", disposed)
+	}
+	viewport := Rct(Point{}, Sz(100, 100))
+	for i, fr := range frames[1:] {
+		if fr.Painted != FrameContained || len(fr.Damage) == 0 {
+			t.Fatalf("frame %d was painted %v, want contained: %v", i+1, fr.Painted, frames)
+		}
+		for _, d := range fr.Damage {
+			if d.Empty() || d.Intersect(viewport) != d {
+				t.Fatalf("frame %d damaged %v, want within the viewport %v", i+1, fr.Damage, viewport)
+			}
+		}
+	}
+}
+
+// An AnimatedBox in a scrolling pane of fixed size eases its height in a
+// window's own frames, painted within the pane's viewport, lands exactly
+// on its target and rests.
+func TestAnAnimatedBoxEasesInAWindowsFramesWithinAScroll(t *testing.T) {
+	height := State(20.0)
+	var got Rect
+	box := AnimatedBox(probe(0, 0, &got)).Width(80).BindHeight(height).Duration(100 * time.Millisecond)
+	p := NewWindowProbe(func() Widget {
+		pane := Box(Scroll(Column(box, Box().Size(100, 400)))).Size(100, 100)
+		return Row(pane, Box().Size(100, 100))
+	}, Sz(200, 100))
+	defer p.Close()
+	p.Run(16*time.Millisecond, 10)
+	height.Set(60)
+	var heights []float64
+	var frames []WindowFrame
+	for range 30 {
+		fr := p.Step(16 * time.Millisecond)
+		frames, heights = append(frames, fr), append(heights, got.Size.H)
+		if !fr.Next {
+			break
+		}
+	}
+	if n := len(frames); n < 5 || frames[n-1].Next || got.Size.H != 60 {
+		t.Fatalf("came to %v over %d frames, want 60 after several, then rest: %v", got.Size.H, n, heights)
+	}
+	for i, fr := range frames[1:] {
+		if fr.Painted != FrameContained {
+			t.Fatalf("frame %d was painted %v, want contained: %v", i+1, fr.Painted, frames)
+		}
+	}
+}

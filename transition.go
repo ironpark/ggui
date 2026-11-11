@@ -231,7 +231,7 @@ type SwitcherWidget[K comparable] struct {
 	duration time.Duration
 	ease     Easing
 
-	props   property.Owner // changed while moving, to lay out again
+	props   property.Owner
 	entries []*switchEntry // oldest first; the last is the current key's
 	sizes   []Size
 	reduced bool
@@ -366,30 +366,28 @@ func (b *switcherBody[K]) Layout(c Constraints, env Env) Size {
 	})
 	s.sizes = s.sizes[:0]
 	var total Size
+	moving := false
 	for _, e := range s.entries {
 		e.t.drive(pick(s.reduced, 1.0, e.progress(now)), e.leaving)
+		moving = moving || e.leaving || e.t.progress < 1
 		size := e.t.Layout(c.Loosen(), env)
 		s.sizes = append(s.sizes, size)
 		total.W, total.H = max(total.W, size.W), max(total.H, size.H)
 	}
+	if moving && !s.reduced {
+		// The next step is driven, and a finished subtree dropped, by the
+		// next layout, which the switcher asks for as a size on its way
+		// does: held within the Scroll around it, if one holds it.
+		Invalidate(env)
+	}
 	return c.Constrain(total)
 }
 
-// Paint implements Widget. While a subtree is moving it asks for another
-// frame and another layout, in which the finished ones are dropped.
+// Paint implements Widget.
 func (b *switcherBody[K]) Paint(dst *Canvas, r Rect) {
 	s := b.s
-	moving := false
 	for i, e := range s.entries {
-		moving = moving || e.leaving || e.t.progress < 1
 		dst.Paint(e.t, Rct(r.Origin, s.sizes[i]))
-	}
-	if moving && !s.reduced {
-		// Paint runs as layout does, where a change schedules nothing: ask
-		// for the next layout outright.
-		activeWorld().frame.animate()
-		s.props.Changed()
-		reactive.RequestLayout()
 	}
 }
 
@@ -545,13 +543,13 @@ func (a *AnimatedBoxWidget) Layout(c Constraints, env Env) Size {
 	defer a.props.Layout().EndLayout()
 	d := env.Motion(a.duration)
 	b := a.box
-	b.Fill(a.fillTo.follow(ResolveColor(a.fill.Get(), env), d, a.ease, LerpColor))
-	b.Border(a.borderWidthTo.follow(a.borderWidth.Get(), d, a.ease, LerpFloat),
-		a.borderTo.follow(ResolveColor(a.border.Get(), env), d, a.ease, LerpColor))
-	b.Radius(a.radiusTo.follow(a.radius.Get(), d, a.ease, LerpFloat))
-	b.Width(a.boxSize(followSize(&a.widthTo, a.width.Get(), a.size.W, d, a.ease, a.collapsible)))
-	b.Height(a.boxSize(followSize(&a.heightTo, a.height.Get(), a.size.H, d, a.ease, a.collapsible)))
-	b.Padding(a.paddingTo.follow(a.padding.Get(), d, a.ease, LerpInsets))
+	b.Fill(a.fillTo.follow(env, ResolveColor(a.fill.Get(), env), d, a.ease, LerpColor))
+	b.Border(a.borderWidthTo.follow(env, a.borderWidth.Get(), d, a.ease, LerpFloat),
+		a.borderTo.follow(env, ResolveColor(a.border.Get(), env), d, a.ease, LerpColor))
+	b.Radius(a.radiusTo.follow(env, a.radius.Get(), d, a.ease, LerpFloat))
+	b.Width(a.boxSize(followSize(env, &a.widthTo, a.width.Get(), a.size.W, d, a.ease, a.collapsible)))
+	b.Height(a.boxSize(followSize(env, &a.heightTo, a.height.Get(), a.size.H, d, a.ease, a.collapsible)))
+	b.Padding(a.paddingTo.follow(env, a.padding.Get(), d, a.ease, LerpInsets))
 	a.size = b.Layout(c, env)
 	return a.size
 }
@@ -563,28 +561,55 @@ func (a *AnimatedBoxWidget) Paint(dst *Canvas, r Rect) { a.box.Paint(dst, r) }
 func (a *AnimatedBoxWidget) Baseline() (float64, bool) { return a.box.Baseline() }
 
 // follower eases one property of a widget toward the value its layout
-// asks for. Its tween is made at the first layout, in that frame's world,
-// and owned by nothing: it stops when it settles.
-type follower[T any] struct{ tw *Tweened[T] }
+// asks for, from where it was when the target changed. Its progress is a
+// Motion moved in Layout, which lays the widget out again for each step
+// while it moves, as a size eased there must be, whether the property is
+// one or only paints: one Motion for both kinds keeps them in step.
+type follower[T any] struct {
+	from, to T
+	p        Motion // from zero at from to one at to
+	set      bool   // to is a target followed, not a zero value
+}
 
-// follow heads for target over d and returns the value of the moment; a
-// layout that calls it reads the tween, so it lays out again as it moves.
-func (f *follower[T]) follow(target T, d time.Duration, e Easing, lerp func(a, b T, t float64) T) T {
+// follow heads for target over d and returns the value of the moment.
+func (f *follower[T]) follow(env Env, target T, d time.Duration, e Easing, lerp func(a, b T, t float64) T) T {
 	if d <= 0 {
-		if f.tw != nil && f.tw.running {
-			f.tw.Jump(target)
-		}
-		f.tw = nil
+		f.jump(target)
 		return target
 	}
-	if f.tw == nil {
-		reactive.WithOwner(nil, func() { f.tw = TweenWith(target, d, lerp) })
+	if !f.set {
+		f.jump(target)
+		f.set = true
 		return target
 	}
-	if !property.Equal(f.tw.Target(), target) {
-		f.tw.Duration(d).Easing(e).Set(target)
+	if !property.Equal(f.to, target) {
+		f.start(f.at(FrameTime(), lerp), target, e)
 	}
-	return f.tw.Get()
+	f.p.LayoutTo(env, 1, d)
+	return f.at(FrameTime(), lerp)
+}
+
+// jump lands on v at once, with nothing to follow from.
+func (f *follower[T]) jump(v T) {
+	f.from, f.to, f.set = v, v, false
+	f.p = Motion{}
+}
+
+// start sets off from from toward to along e, from this frame.
+func (f *follower[T]) start(from, to T, e Easing) {
+	f.from, f.to = from, to
+	f.p = Motion{}
+	f.p.Easing(e).MoveTo(0, time.Time{}, 0)
+}
+
+// at is where the property is at now: to itself once there, so a target
+// lands exactly, whatever lerp makes of one.
+func (f *follower[T]) at(now time.Time, lerp func(a, b T, t float64) T) T {
+	p, moving := f.p.at(now)
+	if !moving {
+		return f.to
+	}
+	return lerp(f.from, f.to, p)
 }
 
 // boxSize is the size the inner Box is given for v: where zero is zero,
@@ -600,14 +625,15 @@ func (a *AnimatedBoxWidget) boxSize(v float64) float64 {
 // but "as the child sizes it": a move to zero lands at once, and a move
 // away from it starts at shown, the size the box last had. A collapsible
 // box's zero is a number like any other.
-func followSize(f *follower[float64], target, shown float64, d time.Duration, e Easing, collapsible bool) float64 {
+func followSize(env Env, f *follower[float64], target, shown float64, d time.Duration, e Easing, collapsible bool) float64 {
 	if collapsible {
-		return f.follow(target, d, e, LerpFloat)
+		return f.follow(env, target, d, e, LerpFloat)
 	}
 	if target <= 0 {
 		d = 0
-	} else if f.tw == nil && shown > 0 && d > 0 {
-		reactive.WithOwner(nil, func() { f.tw = TweenWith(shown, d, LerpFloat) })
+	} else if !f.set && shown > 0 && d > 0 {
+		f.jump(shown)
+		f.set = true
 	}
-	return f.follow(target, d, e, LerpFloat)
+	return f.follow(env, target, d, e, LerpFloat)
 }

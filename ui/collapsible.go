@@ -2,7 +2,6 @@ package ui
 
 import (
 	"math"
-	"time"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui/icons"
@@ -17,11 +16,11 @@ type CollapsibleWidget struct {
 	content  ggui.Widget
 	reveal   ggui.Motion
 	progress float64
+	laidOpen bool // open, as the last layout read it
 	ggui.Interactive
 
 	theme     *uitheme.Theme
 	env       ggui.Env
-	motion    time.Duration
 	pad       ggui.EdgeInsets
 	titleSize ggui.Size
 	headerH   float64
@@ -86,9 +85,9 @@ func (c *CollapsibleWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 	t := uitheme.Of(env)
 	c.theme = t
 	c.env = env
-	c.motion = env.Motion(t.MotionFast)
 	open := c.open.Get()
-	c.progress = c.reveal.Toggle(open, ggui.FrameTime(), c.motion)
+	c.laidOpen = open
+	c.progress = c.reveal.LayoutToggle(env, open, t.MotionFast)
 	c.pad = t.FieldPad
 	c.title.Color(pick(c.IsInert(), t.MutedFg, t.Fg))
 	c.titleSize = c.title.Layout(ggui.Loose(ggui.Sz(max(cs.MaxW-c.pad.Left-c.pad.Right-t.ControlSize-t.ControlGap, 0), cs.MaxH)), env)
@@ -105,6 +104,11 @@ func (c *CollapsibleWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := c.theme
 	open := ggui.Untrack(c.open.Get)
+	// The body eases by itself; this is for a binding that is no signal,
+	// whose change asks for no layout of its own.
+	if open != c.laidOpen {
+		ggui.Invalidate(c.env)
+	}
 	header := ggui.Rct(r.Origin, ggui.Sz(r.Size.W, c.headerH))
 	c.Hit(dst, header, c, ggui.CursorShapePointer)
 	if c.Hovered && !c.IsInert() {
@@ -117,7 +121,7 @@ func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	paintIconAt(dst, c.env, icons.ChevronRight, ggui.Pt(cx, cy), t.IconSize, t.MutedFg, v*math.Pi/2)
 	dst.Paint(c.title, ggui.Rct(ggui.Pt(r.Origin.X+c.pad.Left+t.ControlSize+t.ControlGap, r.Origin.Y+c.pad.Top), c.titleSize))
 	c.FocusRing(dst, header, t.Radius, t.Ring)
-	paintDisclosure(dst, c.env, c.content, ggui.Pt(r.Origin.X, r.Origin.Y+c.headerH), r.Size.W, c.bodySize, c.progress, open)
+	paintDisclosure(dst, c.content, ggui.Pt(r.Origin.X, r.Origin.Y+c.headerH), r.Size.W, c.bodySize, c.progress, open)
 }
 
 // HandleKey implements KeyHandler: Space or Enter toggles.

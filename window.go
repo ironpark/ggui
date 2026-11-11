@@ -773,8 +773,8 @@ func (w *Window) endFrame(f frameInput) bool {
 func (w *Window) wantsFrame(f frameInput) bool {
 	wd := w.world()
 	// A layout asked for since the tree was last laid out, by a widget as
-	// it painted (a disclosure easing open calls Invalidate there) or by
-	// the layout itself, is run in a frame of its own. Nothing else
+	// it painted or by the layout itself (a disclosure easing open asks
+	// there, through Motion.LayoutTo), is run in a frame of its own. Nothing else
 	// records it: seenGen takes the request as seen, and the frame would be
 	// skipped as one nothing changed for, leaving the widget where it stood
 	// until the next input. The frame is painted whole unless every such

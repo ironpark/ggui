@@ -399,7 +399,7 @@ func (f *EachWidget[T, K]) Layout(c Constraints, env Env) Size {
 				f.children[i], f.childEntries[i], f.childItem[i] = e.widget, e, i
 			}
 			f.stale = false
-			f.placeLeaving()
+			f.placeLeaving(env)
 		}
 		if n == 0 && len(f.leaving) == 0 && f.empty != nil {
 			return f.empty.Layout(c, env)
@@ -446,13 +446,14 @@ type forRowKey[K comparable] struct{ k K }
 // placeLeaving puts the rows on their way out back among the children at
 // their old places, drives their Transitions by the time since removal,
 // and drops the ones that finished. The list lays out every frame while
-// any is leaving.
+// any is leaving, asking for the next layout as a size on its way does:
+// the rows hold their places until they have gone.
 //
 // The rows still leaving are merged with the children in one pass, in the
 // order of their places, as inserting each where it was would have put
 // them: inserting them one at a time moved the whole list for each.
-func (f *EachWidget[T, K]) placeLeaving() {
-	now := Now()
+func (f *EachWidget[T, K]) placeLeaving(env Env) {
+	now := FrameTime()
 	kept := 0
 	for i, e := range f.leaving {
 		t := e.transition()
@@ -502,8 +503,7 @@ func (f *EachWidget[T, K]) placeLeaving() {
 		f.children, f.childEntries = children, entries
 	}
 	if len(f.leaving) > 0 {
-		reactive.RequestLayout()
-		f.cache.invalidate()
+		Invalidate(env)
 	}
 }
 

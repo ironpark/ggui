@@ -491,11 +491,15 @@ func (s *Sprung[T]) step(now time.Time) bool {
 	return true
 }
 
-// Motion is a tween a widget runs inside Paint, for looks that move (a
-// switch knob sliding over) without a signal or a rebuild. The zero value is
-// ready: the first MoveTo sets the position without animating, later ones
-// ease to the target with EaseOut, starting from wherever the previous move
-// had got to, and Value reports where it is at a given time.
+// Motion is a number a widget eases by itself, without a signal or a
+// rebuild. The zero value is ready: the first move sets the position
+// without animating, later ones ease to the target with EaseOut, starting
+// from wherever the previous move had got to.
+//
+// It moves one of two kinds of thing, and each has its own calls. A look
+// that changes nothing's size, a switch knob sliding over or a chevron
+// turning, moves in Paint, with MoveTo, Toggle and Value: Value asks for
+// the next frame while it moves, and that frame paints again.
 //
 //	func (s *knob) Paint(dst *ggui.Canvas, r ggui.Rect) {
 //		now := ggui.Now()
@@ -503,25 +507,56 @@ func (s *Sprung[T]) step(now time.Time) bool {
 //		x := r.Origin.X + s.pos.Value(now)*r.Size.W
 //		...
 //	}
+//
+// A size, a panel folding open or a gap closing, moves in Layout, with
+// LayoutTo and LayoutToggle. A frame that only paints again would paint
+// the size the last layout left, so these ask for the next layout instead,
+// under the Env the widget is laid out with, as Invalidate does: the
+// widget keeps nothing to call later and checks nothing in Paint.
+//
+//	func (p *panel) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+//		size := p.body.Layout(c, env)
+//		size.H *= p.open.LayoutToggle(env, p.shown, 200*time.Millisecond)
+//		return c.Constrain(size)
+//	}
+//
+// Reveal is such a panel, ready made.
 type Motion struct {
 	from, to float64
 	start    time.Time
 	duration time.Duration
+	ease     Easing
 	init     bool
 }
+
+// Easing sets the curve the motion moves along, EaseOut until it is set or
+// when it is nil. Set it before the move it is for: the position is read
+// along it, so one set mid-move jumps to the same time on the new curve.
+func (m *Motion) Easing(e Easing) *Motion { m.ease = e; return m }
 
 // MoveTo retargets the motion, starting from its position at now and
 // arriving after d.
 func (m *Motion) MoveTo(target float64, now time.Time, d time.Duration) {
+	if m.moveTo(target, now, d) {
+		activeWorld().frame.animate()
+	}
+}
+
+// moveTo is MoveTo, reporting whether the motion was under way at now
+// rather than asking for a frame for it.
+func (m *Motion) moveTo(target float64, now time.Time, d time.Duration) (moving bool) {
 	if !m.init || d <= 0 {
 		m.duration = 0
 		m.from, m.to, m.init = target, target, true
-		return
+		return false
 	}
 	if target == m.to {
-		return
+		return false
 	}
-	m.from, m.to, m.start, m.duration = m.Value(now), target, now, d
+	var from float64
+	from, moving = m.at(now)
+	m.from, m.to, m.start, m.duration = from, target, now, d
+	return moving
 }
 
 // Toggle moves toward one while on and zero while off, over d, and
@@ -535,16 +570,58 @@ func (m *Motion) Toggle(on bool, now time.Time, d time.Duration) float64 {
 // Value returns the position at now. While the motion is still moving it
 // asks for another frame, so the caller may read now with FrameTime.
 func (m *Motion) Value(now time.Time) float64 {
+	v, moving := m.at(now)
+	if moving {
+		activeWorld().frame.animate()
+	}
+	return v
+}
+
+// at returns the position at now and whether the motion is still moving
+// there, asking for nothing.
+func (m *Motion) at(now time.Time) (float64, bool) {
 	if m.duration <= 0 || m.from == m.to {
-		return m.to
+		return m.to, false
 	}
 	p := float64(now.Sub(m.start)) / float64(m.duration)
 	if p >= 1 {
 		m.from = m.to
-		return m.to
+		return m.to, false
 	}
-	activeWorld().frame.animate()
-	return m.from + (m.to-m.from)*EaseOut(clamp(p, 0, 1))
+	ease := m.ease
+	if ease == nil {
+		ease = EaseOut
+	}
+	return m.from + (m.to-m.from)*ease(clamp(p, 0, 1)), true
+}
+
+// LayoutTo is MoveTo and Value for a size, called from the Layout of a
+// widget laid out under env: it heads for target, arriving d after the
+// frame's instant, and returns the position at that instant. While the
+// motion is still moving it asks for the next frame and, in it, for the
+// widget to be laid out again, as Invalidate(env) does, so the frame that
+// follows lays out the next step; one held within a Scroll's viewport is
+// painted there alone. When env asks for reduced motion, d is zero and the
+// position lands on target at once, as Env.Motion says.
+//
+// However often the widget is laid out in a frame, the frame asks for one
+// more, and the frame in which it arrives asks for none: the request is
+// taken up by the next frame's layout, not by another pass of this one.
+func (m *Motion) LayoutTo(env Env, target float64, d time.Duration) float64 {
+	now := FrameTime()
+	m.moveTo(target, now, env.Motion(d))
+	v, moving := m.at(now)
+	if moving {
+		Invalidate(env)
+	}
+	return v
+}
+
+// LayoutToggle is Toggle for a size: it moves toward one while on and
+// zero while off, over d, as LayoutTo does, and returns how far it has
+// got, which is the share of its size a panel folding open shows.
+func (m *Motion) LayoutToggle(env Env, on bool, d time.Duration) float64 {
+	return m.LayoutTo(env, pick(on, 1.0, 0.0), d)
 }
 
 // A lerp moves between two values: it returns a at t = 0, b at t = 1, and
