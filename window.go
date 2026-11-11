@@ -742,12 +742,14 @@ func (w *Window) wantsFrame(f frameInput) bool {
 	wd := w.world()
 	// A layout asked for since the tree was last laid out, by a widget as
 	// it painted (a disclosure easing open calls Invalidate there) or by
-	// the layout itself, is run in a frame of its own and painted whole.
-	// Nothing else records it: seenGen takes the request as seen, and the
-	// frame would be skipped as one nothing changed for, leaving the
-	// widget where it stood until the next input.
+	// the layout itself, is run in a frame of its own. Nothing else
+	// records it: seenGen takes the request as seen, and the frame would be
+	// skipped as one nothing changed for, leaving the widget where it stood
+	// until the next input. The frame is painted whole unless every such
+	// request was held within a scroll's viewport, which is then noted as
+	// contained; see Invalidate.
 	relayout := w.root != nil && layoutGen() != w.laidGen
-	if relayout {
+	if relayout && (freeGen() != w.laidFree || len(w.frameLoop.contained) == 0) {
 		w.dirty.Or(uint32(dirtyLayout))
 	}
 	switch {

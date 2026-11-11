@@ -47,17 +47,24 @@ type ScrollWidget struct {
 	win           Rect
 	placed        bool
 	containedMove bool
-	props         property.Owner
-	child         Widget
-	horizontal    bool
-	shrink        bool // along its axis, as long as its content and no longer
-	speed         float64
-	bar           color.Color
-	barSet        bool
-	bound         Binding[float64]
-	offset        float64
-	follow        bool
-	id            any
+	// heldLayout is that something inside asked, through Invalidate, for a
+	// layout this scroll holds within its viewport, sizedByContent that it
+	// once failed to, its viewport changing size with its content, and
+	// outer the nearest Scroll around it; see holding.
+	heldLayout     bool
+	sizedByContent bool
+	outer          *ScrollWidget
+	props          property.Owner
+	child          Widget
+	horizontal     bool
+	shrink         bool // along its axis, as long as its content and no longer
+	speed          float64
+	bar            color.Color
+	barSet         bool
+	bound          Binding[float64]
+	offset         float64
+	follow         bool
+	id             any
 
 	// FollowEnd's state. A scroll laid out for the first time cannot know
 	// yet whether it replaces one that was at its end, as Adopt says only
@@ -216,12 +223,41 @@ func (s *ScrollWidget) scrollTo(v float64) {
 // into it and keeping what is in view in place as it is measured, is
 // contained in the viewport too, in every pass of the frame until Paint.
 func (s *ScrollWidget) Layout(c Constraints, env Env) Size {
+	s.outer = scrollPortOf(env)
+	before, laidOut := s.viewport, s.laidOut
+	var size Size
 	if s.containedMove {
-		var size Size
 		reactive.Contained(func() { size = s.layout(c, env) })
-		return size
+	} else {
+		size = s.layout(c, env)
 	}
-	return s.layout(c, env)
+	if s.heldLayout {
+		s.heldLayout = false
+		if laidOut && size != before {
+			// The viewport grew or shrank with its content, moving what
+			// lies beside it: the frame is painted whole, and the next such
+			// layout is the business of the scroll around this one.
+			s.sizedByContent = true
+			reactive.RequestLayout()
+		}
+	}
+	return size
+}
+
+// holding returns the scroll that holds a change of size made inside s
+// within its viewport, for the frame to paint that alone: s, or the nearest
+// one around it whose own size does not follow its content's, and nil when
+// there is none or where it was painted cannot be told.
+func (s *ScrollWidget) holding() *ScrollWidget {
+	for ; s != nil; s = s.outer {
+		if !s.placed || !s.laidOut {
+			return nil
+		}
+		if !s.sizedByContent {
+			return s
+		}
+	}
+	return nil
 }
 
 func (s *ScrollWidget) layout(c Constraints, env Env) Size {
