@@ -890,9 +890,22 @@ func dedupeReads(reads []sourceRead) []sourceRead {
 // nearest Cached above the widget measures its subtree afresh. A StateValue
 // write does the first half by itself; a widget that keeps size-affecting
 // state outside signals calls Invalidate when that state changes.
+//
+// Under a Scroll whose viewport keeps its size whatever its content's, the
+// change shows within that viewport alone, and a frame nothing else
+// changed for is painted there and nowhere else: a disclosure easing open
+// in a scrolling pane does not paint the window again at every step.
 func Invalidate(env Env) {
-	reactive.RequestLayout()
-	if c, ok := env.Get(cacheOwner); ok {
-		c.invalidate()
+	c, _ := env.Get(cacheOwner)
+	if s := scrollPortOf(env).holding(); s != nil {
+		reactive.Contained(func() {
+			reactive.RequestLayout()
+			c.invalidate()
+		})
+		s.heldLayout = true
+		noteContained(s.win)
+		return
 	}
+	reactive.RequestLayout()
+	c.invalidate()
 }

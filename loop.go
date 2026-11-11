@@ -102,6 +102,7 @@ type frameLoop struct {
 
 	laidSize Size
 	laidGen  uint64
+	laidFree uint64 // freeGen at that layout
 	rootSize Size
 
 	notices []Announcement // queued by Announce, drained by the bridge
@@ -355,6 +356,10 @@ func (l *frameLoop) tick(now time.Time) error {
 // their sum changes whenever either does.
 func layoutGen() uint64 { return reactive.LayoutGen() + fontGen() }
 
+// freeGen is layoutGen without what was changed in reactive.Contained:
+// it changes with what can move the tree anywhere in the window.
+func freeGen() uint64 { return reactive.FreeGen() + fontGen() }
+
 // needsLayout reports whether the tree must be laid out again for a
 // viewport of the given logical size, and records that it will be: when
 // the viewport changed size, or a StateValue was written or Invalidate called
@@ -366,7 +371,7 @@ func (l *frameLoop) needsLayout(logical Size) bool {
 	if logical == l.laidSize && gen == l.laidGen {
 		return false
 	}
-	l.laidSize, l.laidGen = logical, gen
+	l.laidSize, l.laidGen, l.laidFree = logical, gen, freeGen()
 	return true
 }
 

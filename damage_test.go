@@ -541,3 +541,105 @@ func TestALayoutAskedForWhilePaintingGetsAWholeFrame(t *testing.T) {
 		t.Fatal("the window still asks for frames after the layout settled")
 	}
 }
+
+// easing is a widget that grows a step taller at each layout until it is
+// steps tall, asking for the next layout as it paints, the way a disclosure
+// easing open does. It reports the layouts run and the last one painted.
+func easing(steps int) (w Widget, laid, painted *int) {
+	var env Env
+	laid, painted = new(int), new(int)
+	return FromFuncs(func(c Constraints, e Env) Size {
+		env = e
+		*laid++
+		return c.Constrain(Sz(10, float64(*laid)))
+	}, func(dst *Canvas, r Rect) {
+		*painted = *laid
+		if *laid < steps {
+			Invalidate(env)
+		}
+	}), laid, painted
+}
+
+// runEasing draws w's frames, as its handler would with no input coming,
+// until none is asked for, and returns the damage of each.
+func runEasing(w *Window, screen *ggfx.Image, most int) (damage []image.Rectangle) {
+	for range most {
+		w.seenGen = layoutGen() // as the frame's handler does after drawing
+		if !w.wantsFrame(frameInput{}) {
+			break
+		}
+		w.draw(screen, 1, true, func(rs []image.Rectangle) { damage = append(damage, rs...) })
+	}
+	return damage
+}
+
+// A change of size inside a scroll whose viewport keeps its own shows in
+// that viewport alone: the frames that ease it are painted there, not over
+// the whole window.
+func TestALayoutEasedInsideAScrollPaintsWithinItsViewport(t *testing.T) {
+	const steps = 5
+	grows, laid, painted := easing(steps)
+	w := newWindow(nil, nil, Config{}, func() Widget {
+		return Row(Box(Scroll(Column(grows, Box().Size(100, 400)))).Size(100, 100), Box().Size(100, 100))
+	})
+	w.start()
+	setRunning(&w.frameLoop)
+	screen := ggfx.NewImage(200, 100)
+	w.draw(screen, 1, false, nil)
+	before := framestats.Read().Contained
+	damage := runEasing(w, screen, 2*steps)
+	if *laid != steps || *painted != steps {
+		t.Fatalf("laid out %d times and painted the %dth; want %d of each", *laid, *painted, steps)
+	}
+	if got := framestats.Read().Contained - before; got != steps-1 {
+		t.Fatalf("%d of the %d frames were painted within the scroll; damage %v", got, steps-1, damage)
+	}
+	for _, d := range damage {
+		if d.Empty() || !d.In(image.Rect(0, 0, 100, 100)) {
+			t.Fatalf("damage %v, want within the scroll's viewport", damage)
+		}
+	}
+	if len(w.input.regions) == 0 {
+		t.Fatal("the frames registered no regions")
+	}
+}
+
+// A scroll as long as its content moves what lies below it when the
+// content grows: the change is not held there, and the frame is painted
+// whole, or within a scroll around it that keeps its size.
+func TestALayoutEasedInsideAScrollSizedByItsContentIsNotHeldThere(t *testing.T) {
+	const steps = 6
+	// A scroll no longer than its content, with a box below it that the
+	// content's growth moves.
+	sized := func(w Widget) Widget { return Column(Scroll(w).Shrink(), Box().Size(50, 50)) }
+	for _, tc := range []struct {
+		name   string
+		around func(Widget) Widget
+		whole  bool
+	}{
+		{"alone", func(w Widget) Widget { return topLeft(sized(w)) }, true},
+		{"in a scroll that keeps its size", func(w Widget) Widget {
+			return Row(Box(Scroll(Column(sized(w), Box().Size(100, 400)))).Size(100, 100), Box().Size(100, 100))
+		}, false},
+	} {
+		grows, laid, painted := easing(steps)
+		w := newWindow(nil, nil, Config{}, func() Widget { return tc.around(grows) })
+		w.start()
+		setRunning(&w.frameLoop)
+		screen := ggfx.NewImage(200, 100)
+		w.draw(screen, 1, false, nil)
+		damage := runEasing(w, screen, 3*steps)
+		if *laid < steps || *painted != *laid {
+			t.Fatalf("%s: laid out %d times and painted the %dth; want %d", tc.name, *laid, *painted, steps)
+		}
+		// Whatever the first frames found, the last ones show how the
+		// change is painted once the scroll is known to follow its content.
+		last := damage[len(damage)-1]
+		if whole := last == screen.Bounds(); whole != tc.whole {
+			t.Fatalf("%s: last damage %v of %v; painted whole %v, want %v", tc.name, last, damage, whole, tc.whole)
+		}
+		if !tc.whole && !last.In(image.Rect(0, 0, 100, 100)) {
+			t.Fatalf("%s: last damage %v, want within the outer scroll's viewport", tc.name, last)
+		}
+	}
+}
