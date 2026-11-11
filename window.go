@@ -185,6 +185,10 @@ type Window struct {
 	repaintMu  sync.Mutex
 	repaints   []Rect // asked for by RepaintRect since the last frame
 
+	// pointerAsked is that the pointer moved over widgets that read it,
+	// whose regions are among those asked for.
+	pointerAsked bool
+
 	focused  *StateValue[bool]
 	viewport *StateValue[Size]
 	state    *StateValue[WindowState]
@@ -358,11 +362,12 @@ func (w *Window) handle(ev ggwd.Event) error {
 		w.markDirty(dirtyEvent)
 	case ggwd.MouseMoveEvent:
 		w.pos = Pt(ev.X, ev.Y)
-		if w.canvas.fs().pointerRead {
+		if f := w.canvas.fs(); f.pointerRead && f.pointerLost {
 			w.markDirty(dirtyEvent)
 		} else {
 			// What the move reaches is painted again, as hovering it
-			// enters or leaves a region; see deliver.
+			// enters or leaves a region (see deliver), and so are the
+			// widgets that read where the pointer is (see frameOn).
 			w.wakeFrame()
 		}
 	case ggwd.MouseButtonEvent:
@@ -647,6 +652,7 @@ func (w *Window) frameOn(screen *ggfx.Image, scale float64, kept bool, setDamage
 	w.runPosted()
 	f := w.takeInput()
 	cf := w.canvas.fs()
+	moved := !cf.hasPointer || cf.pointer != f.pos
 	cf.pointer, cf.hasPointer = f.pos, true
 	before := delivered.Load()
 	w.dispatchInput(f)
@@ -660,6 +666,9 @@ func (w *Window) frameOn(screen *ggfx.Image, scale float64, kept bool, setDamage
 		// What a pointer event reached is painted again, and what lies
 		// beside it left as it was, unless a signal was written too.
 		w.addRepaints(touched)
+	}
+	if moved && cf.pointerRead {
+		w.pointerMoved(cf)
 	}
 	if w.closed {
 		return false, time.Time{}, nil
@@ -861,6 +870,8 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 		}
 	}
 	asked := w.takeRepaints()
+	pointer := w.pointerAsked
+	w.pointerAsked = false
 	if kept && dirtyBits == 0 && len(asked) == 0 && len(w.motion) == 0 && !w.motionLost && len(w.frameLoop.contained) == 0 &&
 		!w.stateChanged() {
 		// Nothing changed: work was posted that wrote nothing, say. The
@@ -881,7 +892,7 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 		}
 	} else if len(contained) > 0 {
 		within = w.containedDamage(target, kept, contained, asked)
-	} else if wanted && w.drawPartial(screen, target, kept, asked, setDamage) {
+	} else if wanted && w.drawPartial(screen, target, kept, asked, pointer, setDamage) {
 		return
 	}
 	d := &w.drawing

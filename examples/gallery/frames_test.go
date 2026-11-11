@@ -135,3 +135,27 @@ func TestTheGallerysDisclosuresEaseWithinThePage(t *testing.T) {
 		}
 	}
 }
+
+// The pointer moving over the gallery, which has tooltips on it that read
+// where the pointer is, paints in part: the tooltips' anchors and what the
+// pointer enters, not the whole window at every move.
+func TestThePointerMovingOverTheGalleryPaintsInPart(t *testing.T) {
+	size := ggui.Sz(1180, 820)
+	p := galleryWindow(size)
+	defer p.Close()
+	p.Idle(refresh, time.Second)
+	for i := range 30 {
+		p.Move(ggui.Pt(300+float64(i%10)*7, 150+float64(i%7)*5))
+		fr := p.Step(refresh)
+		if fr.Painted != ggui.FramePartial {
+			t.Fatalf("move %d was painted %v, want in part", i, fr.Painted)
+		}
+		area := 0.0
+		for _, d := range fr.Damage {
+			area += d.Size.W * d.Size.H
+		}
+		if area > .1*size.W*size.H {
+			t.Fatalf("move %d painted %v, %.0f of the window's %.0f", i, fr.Damage, area, size.W*size.H)
+		}
+	}
+}

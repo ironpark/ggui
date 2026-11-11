@@ -22,11 +22,13 @@ func TestReadCountsWhatWasAdded(t *testing.T) {
 	CountPartial()
 	CountSkipped()
 	CountContained()
+	CountPointer()
 	got := Read()
 	if got.Frames-before.Frames != 1 || got.Busy-before.Busy != 3*time.Millisecond ||
 		got.ForAnimation-before.ForAnimation != 1 || got.ForInput-before.ForInput != 2 ||
 		got.ForTime != before.ForTime || got.Partial-before.Partial != 1 ||
-		got.Skipped-before.Skipped != 1 || got.Contained-before.Contained != 1 {
+		got.Skipped-before.Skipped != 1 || got.Contained-before.Contained != 1 ||
+		got.Pointer-before.Pointer != 1 {
 		t.Fatalf("from %+v to %+v", before, got)
 	}
 }
