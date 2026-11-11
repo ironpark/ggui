@@ -510,33 +510,19 @@ func TestAReaderOfAScrollsOffsetBesideItIsPainted(t *testing.T) {
 // was until the next input.
 func TestALayoutAskedForWhilePaintingGetsAWholeFrame(t *testing.T) {
 	const steps = 4
-	var env Env
-	laid, painted := 0, 0
-	grows := FromFuncs(func(c Constraints, e Env) Size {
-		env = e
-		laid++
-		return c.Constrain(Sz(10, float64(laid)))
-	}, func(dst *Canvas, r Rect) {
-		painted = laid
-		if laid < steps {
-			Invalidate(env)
-		}
-	})
-	w := newWindow(nil, nil, Config{}, func() Widget { return topLeft(grows) })
-	w.start()
-	setRunning(&w.frameLoop)
-	screen := ggfx.NewImage(16, 16)
-	w.draw(screen, 1, false, nil)
-	for range 2 * steps {
-		if !w.endFrame(frameInput{}) { // as the frame's handler does after drawing
-			break
-		}
-		w.draw(screen, 1, true, nil)
+	grows, laid, painted := easing(steps)
+	p := NewWindowProbe(func() Widget { return topLeft(grows) }, Sz(16, 16))
+	defer p.Close()
+	frames := p.Run(0, 2*steps+1)
+	if *laid != steps || *painted != steps {
+		t.Fatalf("laid out %d times and painted the %dth; want %d of each, with no input", *laid, *painted, steps)
 	}
-	if laid != steps || painted != steps {
-		t.Fatalf("laid out %d times and painted the %dth; want %d of each, with no input", laid, painted, steps)
+	for i, fr := range frames {
+		if fr.Painted != FrameWhole {
+			t.Fatalf("frame %d was painted %v, want whole: %v", i, fr.Painted, frames)
+		}
 	}
-	if w.endFrame(frameInput{}) {
+	if frames[len(frames)-1].Next {
 		t.Fatal("the window still asks for frames after the layout settled")
 	}
 }
@@ -559,45 +545,36 @@ func easing(steps int) (w Widget, laid, painted *int) {
 	}), laid, painted
 }
 
-// runEasing draws w's frames, as its handler would with no input coming,
-// until none is asked for, and returns the damage of each.
-func runEasing(w *Window, screen *ggfx.Image, most int) (damage []image.Rectangle) {
-	for range most {
-		if !w.endFrame(frameInput{}) { // as the frame's handler does after drawing
-			break
-		}
-		w.draw(screen, 1, true, func(rs []image.Rectangle) { damage = append(damage, rs...) })
-	}
-	return damage
-}
-
 // A change of size inside a scroll whose viewport keeps its own shows in
 // that viewport alone: the frames that ease it are painted there, not over
 // the whole window.
 func TestALayoutEasedInsideAScrollPaintsWithinItsViewport(t *testing.T) {
 	const steps = 5
 	grows, laid, painted := easing(steps)
-	w := newWindow(nil, nil, Config{}, func() Widget {
+	p := NewWindowProbe(func() Widget {
 		return Row(Box(Scroll(Column(grows, Box().Size(100, 400)))).Size(100, 100), Box().Size(100, 100))
-	})
-	w.start()
-	setRunning(&w.frameLoop)
-	screen := ggfx.NewImage(200, 100)
-	w.draw(screen, 1, false, nil)
-	before := framestats.Read().Contained
-	damage := runEasing(w, screen, 2*steps)
+	}, Sz(200, 100))
+	defer p.Close()
+	p.Step(0)
+	frames := p.Run(0, 2*steps)
 	if *laid != steps || *painted != steps {
 		t.Fatalf("laid out %d times and painted the %dth; want %d of each", *laid, *painted, steps)
 	}
-	if got := framestats.Read().Contained - before; got != steps-1 {
-		t.Fatalf("%d of the %d frames were painted within the scroll; damage %v", got, steps-1, damage)
+	if len(frames) != steps-1 {
+		t.Fatalf("%d frames after the first, want %d: %v", len(frames), steps-1, frames)
 	}
-	for _, d := range damage {
-		if d.Empty() || !d.In(image.Rect(0, 0, 100, 100)) {
-			t.Fatalf("damage %v, want within the scroll's viewport", damage)
+	viewport := Rct(Point{}, Sz(100, 100))
+	for i, fr := range frames {
+		if fr.Painted != FrameContained || len(fr.Damage) == 0 {
+			t.Fatalf("frame %d was painted %v, want within the scroll: %v", i, fr.Painted, frames)
+		}
+		for _, d := range fr.Damage {
+			if d.Empty() || d.Intersect(viewport) != d {
+				t.Fatalf("frame %d damaged %v, want within the scroll's viewport", i, fr.Damage)
+			}
 		}
 	}
-	if len(w.input.regions) == 0 {
+	if len(p.Window().input.regions) == 0 {
 		t.Fatal("the frames registered no regions")
 	}
 }
@@ -621,23 +598,20 @@ func TestALayoutEasedInsideAScrollSizedByItsContentIsNotHeldThere(t *testing.T) 
 		}, false},
 	} {
 		grows, laid, painted := easing(steps)
-		w := newWindow(nil, nil, Config{}, func() Widget { return tc.around(grows) })
-		w.start()
-		setRunning(&w.frameLoop)
-		screen := ggfx.NewImage(200, 100)
-		w.draw(screen, 1, false, nil)
-		damage := runEasing(w, screen, 3*steps)
+		p := NewWindowProbe(func() Widget { return tc.around(grows) }, Sz(200, 100))
+		frames := p.Run(0, 3*steps)
+		p.Close()
 		if *laid < steps || *painted != *laid {
 			t.Fatalf("%s: laid out %d times and painted the %dth; want %d", tc.name, *laid, *painted, steps)
 		}
 		// Whatever the first frames found, the last ones show how the
 		// change is painted once the scroll is known to follow its content.
-		last := damage[len(damage)-1]
-		if whole := last == screen.Bounds(); whole != tc.whole {
-			t.Fatalf("%s: last damage %v of %v; painted whole %v, want %v", tc.name, last, damage, whole, tc.whole)
+		last := frames[len(frames)-1]
+		if whole := last.Painted == FrameWhole; whole != tc.whole {
+			t.Fatalf("%s: the last of %v was painted %v; whole %v, want %v", tc.name, frames, last.Painted, whole, tc.whole)
 		}
-		if !tc.whole && !last.In(image.Rect(0, 0, 100, 100)) {
-			t.Fatalf("%s: last damage %v, want within the outer scroll's viewport", tc.name, last)
+		if !tc.whole && (len(last.Damage) != 1 || last.Damage[0].Intersect(Rct(Point{}, Sz(100, 100))) != last.Damage[0]) {
+			t.Fatalf("%s: last damage %v, want within the outer scroll's viewport", tc.name, last.Damage)
 		}
 	}
 }

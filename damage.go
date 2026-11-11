@@ -333,6 +333,7 @@ func (w *Window) drawPartial(screen, target *ggfx.Image, kept bool, asked []Rect
 	// uses those of the regions it paints, and freeing the rest would make
 	// the next whole frame allocate them again.
 	framestats.CountPartial()
+	w.drew = FramePartial
 	if setDamage != nil {
 		// setDamage copies what it is given: the slice is the window's.
 		w.damagePx = w.damagePx[:0]
