@@ -41,9 +41,22 @@ button := ggui.Pointer(ggui.Box(ggui.Text("+")).Pad(6, 16)).
 `.Horizontal()`), shows a window onto it, moves that window with the wheel and
 clips both drawing and hit regions to the window. The offset carries across
 a rebuild; `.BindOffset(sig)` binds it to a `StateValue[float64]` for programmatic
-scrolling; `.Speed(px)` and `.Bar(color)` tune it. Widgets that fill their space
+scrolling; `.Bar(color)` tunes it. Widgets that fill their space
 fall back to their content size on an unbounded axis, so `Center`, `Expanded`
 and `.Justify` inside a `Scroll` do not blow up.
+
+A scroll moves as far as the platform scrolls for the same input, which is
+not one distance: a wheel's notch is 100 pixels on Windows as it ships, and as
+far as the user set it; 53 under X; what the page would have scrolled in a
+browser; and on macOS the system speeds the wheel up itself. A notch is a
+step, and the view eases over it, each new one adding to where the last was
+heading. A trackpad's scroll, a precision touchpad's and a pan are the view's
+movement itself, the system's momentum included, and are followed as they
+come. `PointerEvent.ScrollBy()` is that distance in logical pixels, for a
+widget of your own that scrolls; `Scroll` still counts a wheel's notches, for
+one that steps by them, and `ScrollStep` says the scroll is a wheel's.
+`.Speed(px)` sets a distance of the view's own for a wheel's unit in place of
+the platform's.
 
 `.FollowEnd()` keeps the window at the end as the content grows, as a build
 log or a terminal does: scrolling back stops following and scrolling to the
