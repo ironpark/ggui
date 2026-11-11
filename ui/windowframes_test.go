@@ -1,6 +1,7 @@
 package ui_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -151,5 +152,163 @@ func TestCollapsibleEasingInAScrollPaintsWithinItsViewport(t *testing.T) {
 				t.Fatalf("frame %d damaged %v, want within the viewport %v", i+1, fr.Damage, viewport)
 			}
 		}
+	}
+}
+
+// woken counts the frames that came for a Wake, not as the next of one
+// still moving.
+func woken(first ggui.WindowFrame, frames []ggui.WindowFrame) int {
+	n := 0
+	for i, fr := range frames {
+		prev := first
+		if i > 0 {
+			prev = frames[i-1]
+		}
+		if !prev.Next && fr.At.Equal(prev.Wake) {
+			n++
+		}
+	}
+	return n
+}
+
+func carouselSlides() []ggui.Widget {
+	return []ggui.Widget{ui.Card(ggui.Center(ui.Title("1"))), ui.Card(ggui.Center(ui.Title("2"))), ui.Card(ggui.Center(ui.Title("3")))}
+}
+
+// A carousel with nothing to do asks for no frames: it reads the time only
+// while a slide glides into place.
+func TestACarouselAtRestAsksForNoFrames(t *testing.T) {
+	selected := ggui.State(0)
+	p := ggui.NewWindowProbe(func() ggui.Widget { return ui.Carousel(selected, carouselSlides()...) }, ggui.Sz(500, 240))
+	defer p.Close()
+	atRest(t, p)
+	if frames := p.Idle(frameStep, time.Second); len(frames) != 0 {
+		t.Fatalf("a carousel at rest ran %d frames: %v", len(frames), frames)
+	}
+	selected.Set(1)
+	frames := append([]ggui.WindowFrame{p.Step(frameStep)}, p.Idle(frameStep, 2*time.Second)...)
+	if len(frames) < 3 {
+		t.Fatalf("the slide glided over %d frames, want several", len(frames))
+	}
+	if last := frames[len(frames)-1]; last.Next || !last.Wake.IsZero() {
+		t.Fatalf("the carousel did not come to rest after gliding over %d frames", len(frames))
+	}
+}
+
+// An autoplaying carousel wakes the window once at each interval to move
+// on, rather than painting every refresh to watch the time; held by the
+// pointer it asks for nothing, and let go it counts its interval again.
+func TestAnAutoplayingCarouselWakesOnlyAtItsInterval(t *testing.T) {
+	const interval = 3 * time.Second
+	selected := ggui.State(0)
+	moves := 0
+	c := ui.Carousel(selected, carouselSlides()...).Autoplay(interval).StopOnInteraction(false).OnChange(func(int) { moves++ })
+	p := ggui.NewWindowProbe(func() ggui.Widget { return ggui.Padding(c, 40) }, ggui.Sz(580, 320))
+	defer p.Close()
+	first := p.Step(0)
+	frames := p.Idle(frameStep, 3*interval+interval/2)
+	if moves != 3 || woken(first, frames) != 3 {
+		t.Fatalf("in %v the carousel moved %d times, woken for %d frames, want 3 of each", 3*interval+interval/2, moves, woken(first, frames))
+	}
+	// Gliding takes the frames it takes; waiting between slides takes none.
+	if glide := len(frames) / 3; glide > int(1500*time.Millisecond/frameStep) {
+		t.Fatalf("%d frames for each slide", glide)
+	}
+	p.Move(ggui.Pt(290, 160))
+	if fr := p.Step(frameStep); !fr.Wake.IsZero() {
+		t.Fatalf("a hovered carousel asked to be woken at %v", fr.Wake)
+	}
+	if frames := p.Idle(frameStep, 2*interval); len(frames) != 0 || moves != 3 {
+		t.Fatalf("a hovered carousel ran %d frames and moved %d times", len(frames), moves-3)
+	}
+	p.Move(ggui.Pt(10, 10))
+	fr := p.Step(frameStep)
+	if want := fr.At.Add(interval); !fr.Wake.Equal(want) {
+		t.Fatalf("let go, the carousel woke at %v, want an interval on at %v", fr.Wake, want)
+	}
+	p.Idle(frameStep, interval+interval/2)
+	if moves != 4 {
+		t.Fatalf("let go, the carousel moved %d times, want once", moves-3)
+	}
+}
+
+// A toast that stays until dismissed asks for no frames once it has come
+// in; one with a countdown asks for them until it has gone.
+func TestAPersistentToastAsksForNoFrames(t *testing.T) {
+	toaster := ui.NewToaster()
+	p := ggui.NewWindowProbe(func() ggui.Widget { return ggui.Column(toaster) }, ggui.Sz(500, 400))
+	defer p.Close()
+	atRest(t, p)
+	toaster.Push(ui.Toast("Saved", "Stays until dismissed").Duration(0))
+	p.Window().Repaint()
+	p.Step(frameStep)
+	frames := p.Idle(frameStep, 2*time.Second)
+	if len(frames) == 0 || len(frames) > 30 || frames[len(frames)-1].Next {
+		t.Fatalf("a persistent toast came in over %d frames, want it to rest after", len(frames))
+	}
+	if toaster.Len() != 1 {
+		t.Fatal("the persistent toast went")
+	}
+	toaster.Push(ui.Toast("Sent", "Counts down").Duration(time.Second))
+	p.Window().Repaint()
+	p.Step(frameStep)
+	frames = p.Idle(frameStep, 3*time.Second)
+	if toaster.Len() != 1 || len(frames) == 0 || frames[len(frames)-1].Next {
+		t.Fatalf("after %d frames %d toasts remain, want the timed one gone and the window at rest", len(frames), toaster.Len())
+	}
+}
+
+// Loops showing together step on the same beat: a spinner, a pulsing
+// skeleton and an upload's shimmer wake the window at the spinner's pace,
+// not at each of theirs in turn, and paint only where they are.
+func TestLoopsShowingTogetherShareTheirFrames(t *testing.T) {
+	p := ggui.NewWindowProbe(func() ggui.Widget {
+		return ggui.Column(
+			ui.Spinner(),
+			ui.Skeleton(120, 16),
+			ui.Attachment("report.pdf", "1 MB").State(ui.AttachmentUploading).Width(220),
+			ggui.Box().Size(600, 400),
+		)
+	}, ggui.Sz(600, 600))
+	defer p.Close()
+	p.Step(0)
+	p.Idle(frameStep, 500*time.Millisecond)
+	frames := p.Idle(frameStep, time.Second)
+	if len(frames) < 25 || len(frames) > 31 {
+		t.Fatalf("%d frames in a second, want the spinner's 30", len(frames))
+	}
+	for i, fr := range frames {
+		if fr.Next || fr.Painted != ggui.FramePartial {
+			t.Fatalf("frame %d was painted %v and asked for the next %v; want painted in part, woken for", i, fr.Painted, fr.Next)
+		}
+		area := 0.0
+		for _, d := range fr.Damage {
+			area += d.Size.W * d.Size.H
+		}
+		if area > 600*600/4 {
+			t.Fatalf("frame %d painted %v, %.0f of the window's %d", i, fr.Damage, area, 600*600)
+		}
+	}
+}
+
+// A wheel's snap in an attachment strip waits for the wheel to stop with
+// no frames, then snaps in one.
+func TestAnAttachmentStripSnapsAfterTheWheelWithoutWatching(t *testing.T) {
+	var cards []*ui.AttachmentWidget
+	for i := range 4 {
+		cards = append(cards, ui.Attachment(fmt.Sprintf("File %d", i), "PDF").Width(180))
+	}
+	group := ui.AttachmentGroup(cards...)
+	p := ggui.NewWindowProbe(func() ggui.Widget { return ggui.Column(group) }, ggui.Sz(230, 140))
+	defer p.Close()
+	atRest(t, p)
+	p.Scroll(ggui.Pt(100, 20), ggui.Pt(-8, 0))
+	p.Step(frameStep)
+	frames := p.Idle(frameStep, time.Second)
+	if group.Position() != 192 {
+		t.Fatalf("the strip came to %v, want the snap at 192", group.Position())
+	}
+	if len(frames) > 2 {
+		t.Fatalf("%d frames to snap, want the one it waited for: %v", len(frames), frames)
 	}
 }

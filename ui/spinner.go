@@ -37,11 +37,15 @@ func (s *SpinnerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	return c.Constrain(ggui.Sz(s.size, s.size))
 }
 
-// Paint implements ggui.Widget.
-// spinnerStep is how often a spinner turns: 30 times a second, smooth for
-// a turn a second, a quarter of the frames the display would ask for.
-const spinnerStep = time.Second / 30
+// loopStep is how often a look that loops with no end steps, for
+// ggui.Paced: 30 times a second, smooth for a spinner's turn a second, a
+// quarter of the frames the display would ask for. Every loop here steps
+// on it, so loops showing together share their frames: a spinner at 30 a
+// second beside a pulse at 20 would wake the window 50 times a second,
+// their steps falling between each other's.
+const loopStep = time.Second / 30
 
+// Paint implements ggui.Widget.
 func (s *SpinnerWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	diameter := min(r.Size.W, r.Size.H)
 	if diameter <= 0 {
@@ -49,7 +53,7 @@ func (s *SpinnerWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	phase := 0.0
 	if !s.reduced {
-		phase = float64(ggui.Paced(spinnerStep).UnixMilli()%1000) * 2 * math.Pi / 1000
+		phase = float64(ggui.Paced(loopStep).UnixMilli()%1000) * 2 * math.Pi / 1000
 	}
 	paintIcon(dst, s.env, icons.Loader, r, s.theme.Primary, phase)
 }

@@ -737,3 +737,78 @@ func TestSignalWithoutEqualityNotifiesEveryWrite(t *testing.T) {
 		t.Fatalf("effect ran %d times, want a notification for an uncomparable write", runs)
 	}
 }
+
+// The frame a window is woken for reaches the instant it was woken for,
+// however far past the cap on a frame's step it lies, so that a look
+// waiting half a second changes at the first frame after. A frame after a
+// pause no one asked to be woken from keeps the cap.
+func TestAWokenFrameReachesItsWake(t *testing.T) {
+	t.Parallel()
+	var f frameClock
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	f.begin(t0)
+	f.wake = t0.Add(530 * time.Millisecond)
+	f.takeWake()
+	if got := f.begin(t0.Add(530 * time.Millisecond)); got != t0.Add(530*time.Millisecond) {
+		t.Fatalf("the woken frame is at %v, want the wake at %v", got, t0.Add(530*time.Millisecond))
+	}
+	// Woken late, it goes no further than the wake.
+	f.wake = t0.Add(time.Second)
+	f.takeWake()
+	if got := f.begin(t0.Add(5 * time.Second)); got != t0.Add(time.Second) {
+		t.Fatalf("a late woken frame is at %v, want the wake at %v", got, t0.Add(time.Second))
+	}
+	if got := f.begin(t0.Add(10 * time.Second)); got != t0.Add(time.Second+maxFrameStep) {
+		t.Fatalf("a frame after a pause is at %v, want %v", got, t0.Add(time.Second+maxFrameStep))
+	}
+}
+
+// waiter asks to be painted again every period, as a caret blinks.
+type waiter struct{ period time.Duration }
+
+func (waiter) Layout(c Constraints, _ Env) Size { return c.Constrain(Sz(20, 20)) }
+func (w waiter) Paint(*Canvas, Rect) {
+	now := FrameTime()
+	WakeAt(now.Truncate(w.period).Add(w.period))
+}
+
+// A look that changes every half second costs a window one frame each
+// time, at the instant it asked for.
+func TestAWindowWakesOnceForEachWake(t *testing.T) {
+	p := NewWindowProbe(func() Widget { return waiter{500 * time.Millisecond} }, Sz(40, 40))
+	defer p.Close()
+	p.Step(0)
+	frames := p.Idle(16*time.Millisecond, 2*time.Second)
+	if len(frames) < 3 || len(frames) > 4 {
+		t.Fatalf("%d frames over two seconds, want one each half second: %v", len(frames), frames)
+	}
+	for i, fr := range frames {
+		if fr.Next || fr.At.Sub(fr.At.Truncate(500*time.Millisecond)) != 0 {
+			t.Fatalf("frame %d at %v asked for the next %v; want one at each half second and no more", i, fr.At, fr.Next)
+		}
+	}
+}
+
+// pacer loops on with no end, as a spinner does.
+type pacer struct{}
+
+func (pacer) Layout(c Constraints, _ Env) Size { return c.Constrain(Sz(20, 20)) }
+func (pacer) Paint(*Canvas, Rect)              { Paced(50 * time.Millisecond) }
+
+// A paced look painted wholly outside its clip, as one in a card scrolled
+// half out of view is, wakes no window: nothing it paints can show. Within
+// the clip, it paces.
+func TestAWakeOutsideTheClipWakesNothing(t *testing.T) {
+	for _, y := range []float64{80, 0} {
+		p := NewWindowProbe(func() Widget {
+			return FromFuncs(func(c Constraints, _ Env) Size { return c.Constrain(Sz(100, 100)) }, func(dst *Canvas, r Rect) {
+				dst.Clip(Rct(r.Origin, Sz(100, 50))).Paint(pacer{}, Rct(r.Origin.Add(Pt(0, y)), Sz(20, 20)))
+			})
+		}, Sz(100, 100))
+		fr := p.Step(0)
+		p.Close()
+		if hidden := y > 50; fr.Next || fr.Wake.IsZero() != hidden {
+			t.Fatalf("a paced look at %v, the clip 50 tall, asked for the next frame %v and woke at %v", y, fr.Next, fr.Wake)
+		}
+	}
+}
