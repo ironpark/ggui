@@ -143,11 +143,11 @@ func TestGalleryControlFlows(t *testing.T) {
 	}
 	searchGallery(p, "Search and commands")
 	p.Tap("Search fruit")
-	p.Tap("Search options")
+	p.Key("cmd+a")
 	pasteText(p, "Mango")
 	p.Type(ggui.Mods{}, ggui.KeyEnter)
-	if _, ok := p.Find("Search options"); ok {
-		t.Fatal("combobox did not close after selection")
+	if n, ok := p.Semantics().Find(ggui.RoleCombobox, "Search fruit"); !ok || n.Value != "Mango" || n.Expanded.Open() {
+		t.Fatal("combobox did not choose and close")
 	}
 	searchGallery(p, "Toast")
 	p.Tap("Notify with action")
