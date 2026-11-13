@@ -46,7 +46,8 @@ content := ggui.Provide(icons.SetKey, customSet,
 ```
 
 SVG files are trusted local, monochrome assets, using the static SVG subset
-supported by oksvg (paths, strokes, fills, transforms). `currentColor` is
+that `ggfx/svg` draws (paths, shapes, strokes, fills, transforms, clip paths,
+masks). `currentColor` is
 supported. Other source colors become alpha coverage too; use `ggui.Image` for
 multicolor artwork. Color inherits from text styling, then theme foreground,
 unless `.Color(...)` overrides it. A `ButtonOf` supplies its foreground color to
