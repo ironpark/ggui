@@ -1,10 +1,12 @@
 package ui
 
 import (
+	"image/color"
 	"testing"
 	"time"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
@@ -400,5 +402,33 @@ func TestNavigationMenuPanelScalesDownAsItLeaves(t *testing.T) {
 	p.Frame()
 	if got := nav.enter.Value(ggui.FrameTime()); !(got > 0 && got < 1) || nav.popup.IsOpen() {
 		t.Fatalf("75ms after closing the panel is %v of the way to its size (open %v), want it on its way down", got, nav.popup.IsOpen())
+	}
+}
+
+// A rail's tip is shadcn's Tooltip, bg-foreground: the page's text color,
+// where a palette gives the sidebar a foreground of its own.
+func TestSidebarTipIsFilledWithThePagesForeground(t *testing.T) {
+	t.Parallel()
+	theme := uitheme.Default()
+	theme.SidebarFg = color.NRGBA{R: 200, G: 30, B: 30, A: 255}
+	collapsed := ggui.State(true)
+	bar := Sidebar(ggui.State("a"), SidebarItem("a", "Alpha").Icon(icons.File).Tooltip("Alpha tip")).
+		Collapsible(SidebarCollapseIcon).BindCollapsed(collapsed)
+	p := ggui.NewProbe(ggui.WithEnv(theme.Apply, ggui.Row(bar, ggui.Expanded(ggui.Box()))), ggui.Sz(600, 400))
+	defer p.Close()
+	p.Frame()
+	p.Advance(time.Second)
+	alpha, ok := p.FindRole(ggui.RoleTab, "Alpha")
+	if !ok {
+		t.Fatal("no row on the rail")
+	}
+	p.Move(alpha.Center())
+	p.Advance(time.Second)
+	p.Frame()
+	if bar.tip.surface == nil {
+		t.Fatal("no tip over the rail's row")
+	}
+	if got := bar.tip.surface.fill; !sameColor(got, theme.Fg) || sameColor(got, bar.theme.Fg) {
+		t.Fatalf("the tip is filled with %v, want the page's %v and not the sidebar's %v", got, theme.Fg, bar.theme.Fg)
 	}
 }
