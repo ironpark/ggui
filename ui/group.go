@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"image/color"
 	"slices"
+	"time"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
@@ -9,12 +11,19 @@ import (
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
-// ButtonGroupWidget joins several controls into one bordered strip, with a
-// hairline between each pair. Build one with ButtonGroup.
+// ButtonGroupWidget joins several controls into one strip: the corners
+// between two neighbours are squared and they share one border, so the row
+// reads as a single control. Build one with ButtonGroup.
 //
-// It is a container and nothing more: every child keeps its own tab stop,
-// its own keyboard behavior and its own action. Ghost buttons suit it best,
-// since the strip draws the border they would otherwise each draw.
+// It is a container and nothing more: it draws no frame of its own, and
+// every child keeps its own tab stop, its own keyboard behavior and its own
+// action. Outline buttons suit it best. A child learns where it sits from
+// JoinedSidesKey; Button, Toggle and ButtonGroupText follow it, and a
+// control that does not simply keeps its own corners.
+//
+// A ButtonGroupSeparator between two children draws a line where they have
+// no border to tell them apart. A group whose children are groups keeps
+// them a Space apart instead of joining them.
 type ButtonGroupWidget struct {
 	nameReader ggui.Readable[string]
 	props      property.Owner
@@ -25,16 +34,26 @@ type ButtonGroupWidget struct {
 
 	theme *uitheme.Theme
 	sizes []ggui.Size
+	gap   float64     // between children, for a group of groups
+	focus joinedFocus // the focused child's ring, drawn over the others
+
+	// What Paint hands to enclosed, made once: a closure a frame would be
+	// garbage.
+	paintDst  *ggui.Canvas
+	paintRect ggui.Rect
+	enclosed  func()
 }
 
 // ButtonGroup lines children up in one strip.
 //
 //	ui.ButtonGroup(
-//		ui.Button("Copy", copyIt).Ghost(),
-//		ui.Button("Paste", pasteIt).Ghost(),
+//		ui.Button("Copy", copyIt).Outline(),
+//		ui.Button("Paste", pasteIt).Outline(),
 //	)
 func ButtonGroup(children ...ggui.Widget) *ButtonGroupWidget {
-	return &ButtonGroupWidget{children: children, name: "Actions"}
+	g := &ButtonGroupWidget{children: children, name: "Actions"}
+	g.enclosed = func() { g.paint(g.paintDst, g.paintRect) }
+	return g
 }
 
 // Vertical stacks the children instead of lining them up.
@@ -51,6 +70,32 @@ func (g *ButtonGroupWidget) Name(s string) *ButtonGroupWidget {
 	return g
 }
 
+// nested reports whether a child is itself a ButtonGroup, which makes this
+// one a row of strips rather than a strip.
+func (g *ButtonGroupWidget) nested() bool {
+	for _, child := range g.children {
+		if _, ok := child.(*ButtonGroupWidget); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// sidesAt are the sides on which child i meets a neighbour.
+func (g *ButtonGroupWidget) sidesAt(i int, nested bool) JoinedSides {
+	if nested {
+		return JoinedSides{}
+	}
+	before, after := i > 0, i < len(g.children)-1
+	switch {
+	case g.vertical:
+		return JoinedSides{Top: before, Bottom: after}
+	case g.rtl:
+		return JoinedSides{Right: before, Left: after}
+	}
+	return JoinedSides{Left: before, Right: after}
+}
+
 // Layout implements ggui.Widget.
 func (g *ButtonGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer g.props.Layout().EndLayout()
@@ -59,10 +104,18 @@ func (g *ButtonGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	g.theme = uitheme.Of(env)
 	g.rtl = env.Direction() == ggui.DirRTL
+	nested := g.nested()
+	g.gap = pick(nested, g.theme.Space, 0)
 	g.sizes = g.sizes[:0]
 	var main, cross float64
-	for _, child := range g.children {
-		s := child.Layout(c.Loosen(), env)
+	fields := 0
+	for i, child := range g.children {
+		if g.grows(child) {
+			fields++
+			g.sizes = append(g.sizes, ggui.Size{})
+			continue
+		}
+		s := child.Layout(c.Loosen(), env.With(JoinedSidesKey, g.sidesAt(i, nested)))
 		g.sizes = append(g.sizes, s)
 		if g.vertical {
 			main, cross = main+s.H, max(cross, s.W)
@@ -70,44 +123,176 @@ func (g *ButtonGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 			main, cross = main+s.W, max(cross, s.H)
 		}
 	}
-	if n := len(g.children); n > 1 {
-		main += float64(n-1) * g.theme.BorderWidth
+	main += float64(max(len(g.children)-1, 0)) * g.gap
+	// Text fields share the width the other children leave, as shadcn's
+	// [&>input]:flex-1 has them do.
+	if fields > 0 {
+		share := c.Loosen()
+		share.MaxW = max(c.MaxW-main, 0) / float64(fields)
+		for i, child := range g.children {
+			if g.grows(child) {
+				s := child.Layout(share, env.With(JoinedSidesKey, g.sidesAt(i, nested)))
+				g.sizes[i] = s
+				main, cross = main+s.W, max(cross, s.H)
+			}
+		}
 	}
-	return c.Constrain(pick(g.vertical, ggui.Sz(cross, main), ggui.Sz(main, cross)))
+	out := c.Constrain(pick(g.vertical, ggui.Sz(cross, main), ggui.Sz(main, cross)))
+	cross = pick(g.vertical, out.W, out.H)
+	// The children are stretched across the strip, as align-items: stretch
+	// does, so one that came out shorter is laid out again at its height.
+	for i, child := range g.children {
+		s := g.sizes[i]
+		if pick(g.vertical, s.W, s.H) == cross {
+			continue
+		}
+		tight := ggui.Constraints{MinW: cross, MaxW: cross, MaxH: c.MaxH}
+		if !g.vertical {
+			tight = ggui.Constraints{MinH: cross, MaxH: cross, MaxW: c.MaxW}
+			if g.grows(child) {
+				tight.MinW, tight.MaxW = s.W, s.W
+			}
+		}
+		g.sizes[i] = child.Layout(tight, env.With(JoinedSidesKey, g.sidesAt(i, nested)))
+	}
+	return out
+}
+
+// grows reports whether child takes the width the others leave: a text
+// field in a horizontal group.
+func (g *ButtonGroupWidget) grows(child ggui.Widget) bool {
+	_, field := child.(*TextFieldWidget)
+	return field && !g.vertical
 }
 
 // Paint implements ggui.Widget. The strip is one group, so a screen reader
 // reads the actions as belonging together.
 func (g *ButtonGroupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Node(r, ggui.Node{Role: ggui.RoleToolbar, Name: g.name}, func(dst *ggui.Canvas) {
-		g.paint(dst, r)
+		// The children find the group by what encloses them: one painted
+		// here is joined, one in a popup a child opened is not.
+		g.paintDst, g.paintRect = dst, r
+		dst.Enclose(g, g.enclosed)
+		g.paintDst = nil
 	})
 }
 
 func (g *ButtonGroupWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
-	t := g.theme
-	inner := dst.Clip(r)
-	// The children are stretched across the strip, so a hairline between
-	// two of them runs the whole way and the strip reads as one control.
+	g.focus.on = false
 	cross := pick(g.vertical, r.Size.W, r.Size.H)
 	at := r.Origin
 	for i, child := range g.children {
 		s := g.sizes[i]
-		if i > 0 {
-			line := ggui.Rct(at, pick(g.vertical, ggui.Sz(cross, t.BorderWidth), ggui.Sz(t.BorderWidth, cross)))
-			inner.FillRect(mirrorHorizontal(line, r, g.rtl && !g.vertical), t.Border)
-			at = at.Add(pick(g.vertical, ggui.Pt(0, t.BorderWidth), ggui.Pt(t.BorderWidth, 0)))
-		}
 		box := ggui.Rct(at, pick(g.vertical, ggui.Sz(cross, s.H), ggui.Sz(s.W, cross)))
-		inner.Paint(child, mirrorHorizontal(box, r, g.rtl && !g.vertical))
-		at = at.Add(pick(g.vertical, ggui.Pt(0, s.H), ggui.Pt(s.W, 0)))
+		dst.Paint(child, mirrorHorizontal(box, r, g.rtl && !g.vertical))
+		at = at.Add(pick(g.vertical, ggui.Pt(0, s.H+g.gap), ggui.Pt(s.W+g.gap, 0)))
 	}
-	dst.StrokeRoundRect(r, t.Radius, t.BorderWidth, t.Border)
+	// Nothing clips the children, and the focused one's ring is drawn last:
+	// its halo lies over its neighbours, as shadcn's focus-visible:z-10 has it.
+	if g.focus.on {
+		g.focus.paint(dst)
+	}
 }
 
-// ToggleGroupWidget is a segmented single choice: one option of several,
-// picked by clicking a segment or by the arrow keys. Build one with
-// ToggleGroup.
+// ButtonGroupSeparatorWidget is a line between two children of a
+// ButtonGroup. Build one with ButtonGroupSeparator.
+type ButtonGroupSeparatorWidget struct {
+	theme *uitheme.Theme
+	flat  bool // a horizontal line, in a vertical group
+}
+
+// ButtonGroupSeparator creates a line in the InputBorder color to put
+// between two children of a ButtonGroup that have no border between them,
+// as the two halves of a split button have none. It runs across the strip,
+// whichever way the group is laid out.
+//
+//	ui.ButtonGroup(
+//		ui.Button("Merge", merge).Secondary(),
+//		ui.ButtonGroupSeparator(),
+//		ui.ButtonOf(ui.Icon(icons.ChevronDown), more).Secondary().Size(ui.ButtonIcon).Name("More"),
+//	)
+func ButtonGroupSeparator() *ButtonGroupSeparatorWidget { return &ButtonGroupSeparatorWidget{} }
+
+// Layout implements ggui.Widget.
+func (s *ButtonGroupSeparatorWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	s.theme = uitheme.Of(env)
+	sides := joinedSidesOf(env)
+	s.flat = sides.Top || sides.Bottom
+	w := s.theme.BorderWidth
+	return c.Constrain(pick(s.flat, ggui.Sz(c.MinW, w), ggui.Sz(w, c.MinH)))
+}
+
+// Paint implements ggui.Widget. The line stops a border's width short of
+// each end, as shadcn's my-px has it.
+func (s *ButtonGroupSeparatorWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	w := s.theme.BorderWidth
+	if s.flat {
+		r = ggui.Rct(r.Origin.Add(ggui.Pt(w, 0)), ggui.Sz(max(r.Size.W-2*w, 0), r.Size.H))
+	} else {
+		r = ggui.Rct(r.Origin.Add(ggui.Pt(0, w)), ggui.Sz(r.Size.W, max(r.Size.H-2*w, 0)))
+	}
+	dst.FillRect(r, s.theme.InputBorder)
+}
+
+// ButtonGroupTextWidget is a caption inside a ButtonGroup: a unit, a
+// prefix or a label on the Muted surface, bordered and joined as the
+// controls beside it are. Build one with ButtonGroupText.
+type ButtonGroupTextWidget struct {
+	child ggui.Widget
+	theme *uitheme.Theme
+	sides JoinedSides
+	size  ggui.Size // the child's
+	pad   float64
+}
+
+// ButtonGroupText creates a text caption for a ButtonGroup.
+//
+//	ui.ButtonGroup(ui.ButtonGroupText("https://"), ui.TextField(host))
+func ButtonGroupText(label string) *ButtonGroupTextWidget {
+	return ButtonGroupTextOf(ggui.Text(label).NoWrap())
+}
+
+// ButtonGroupTextOf is ButtonGroupText around any content, such as an icon
+// beside a label.
+func ButtonGroupTextOf(child ggui.Widget) *ButtonGroupTextWidget {
+	return &ButtonGroupTextWidget{child: child}
+}
+
+// Layout implements ggui.Widget.
+func (x *ButtonGroupTextWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	t := uitheme.Of(env)
+	x.theme, x.sides, x.pad = t, joinedSidesOf(env), t.ButtonPad.Left
+	inner := ggui.Loose(ggui.Sz(max(c.MaxW-2*x.pad, 0), max(c.MaxH-2*t.BorderWidth, 0)))
+	x.size = x.child.Layout(inner, env.WithText(t.Text.Merge(t.Label).Merge(ggui.TextStyle{Color: t.Fg})))
+	return c.Constrain(ggui.Sz(x.size.W+2*x.pad, x.size.H+2*t.BorderWidth))
+}
+
+// Baseline implements ggui.Baseliner: the content's, at the top border. It
+// is the one measured, before a ButtonGroup stretched the caption.
+func (x *ButtonGroupTextWidget) Baseline() (float64, bool) {
+	if child, ok := x.child.(ggui.Baseliner); ok {
+		base, ok := child.Baseline()
+		return base + x.theme.BorderWidth, ok
+	}
+	return 0, false
+}
+
+// Paint implements ggui.Widget.
+func (x *ButtonGroupTextWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	t := x.theme
+	paintJoinedBox(dst, r, t.Radius, x.sides.within(dst), t.Muted, t.BorderWidth, t.Border)
+	dst.Paint(x.child, ggui.Rct(ggui.Pt(r.Origin.X+x.pad, r.Origin.Y+(r.Size.H-x.size.H)/2), x.size))
+}
+
+// ToggleGroupWidget is a row of toggles bound to one choice: one option of
+// several, picked by clicking it or by the arrow keys. Build one with
+// ToggleGroup, or with ToggleGroupMultiple for options pressed
+// independently.
+//
+// Each option is drawn as a Toggle is: no surface until the pointer is
+// over it or it is chosen, when it rests on the Muted one. Outline borders
+// them, Size takes the Toggle's sizes, and Spacing sets the gap between
+// them, where none joins them into one strip.
 //
 // The group is one tab stop, as a set of radio buttons is. Left and Right
 // (Up and Down when Vertical) move the choice and wrap around, Home and End
@@ -135,8 +320,12 @@ type ToggleGroupWidget[T comparable] struct {
 	vertical         bool
 	rtl              bool
 	hover            int
+	variant          *ButtonVariant
+	size             *ButtonSizeVariant
+	spacing          float64 // the gap, in halves of the theme's Space
 
 	theme *uitheme.Theme
+	style ButtonStyle
 	sizes []ggui.Size    // each segment's content
 	parts []segmentParts // and what is in it
 	rects []ggui.Rect
@@ -145,6 +334,13 @@ type ToggleGroupWidget[T comparable] struct {
 	segs []*toggleSegment[T]
 	pad  ggui.EdgeInsets
 	cur  int // the chosen segment, found once a frame by paint
+
+	side     float64 // the least a segment measures either way
+	radius   float64
+	gap      float64 // between segments
+	iconGap  float64 // between a segment's icon and its label
+	iconSize float64
+	motion   time.Duration
 }
 
 // ToggleGroup creates one segment per option, bound to value and labelled
@@ -154,7 +350,7 @@ type ToggleGroupWidget[T comparable] struct {
 //	align := ggui.State("left")
 //	ui.ToggleGroup(align, []string{"left", "center", "right"})
 func ToggleGroup[T comparable](value ggui.Binding[T]) *ToggleGroupWidget[T] {
-	g := &ToggleGroupWidget[T]{value: value, label: sprint[T], hover: -1}
+	g := &ToggleGroupWidget[T]{value: value, label: sprint[T], hover: -1, variant: ToggleDefault, size: ButtonDefault, spacing: 2}
 	g.Role = ggui.RoleGroup
 	g.AutoKey()
 	if g.HitID() == nil {
@@ -268,9 +464,6 @@ func (g *ToggleGroupWidget[T]) IconOnly() *ToggleGroupWidget[T] {
 // it does not show.
 type segmentParts struct{ icon, label ggui.Size }
 
-// iconGap is the space between a segment's icon and its label.
-const iconGap = 6
-
 // Format sets how each option is shown and named.
 func (g *ToggleGroupWidget[T]) Format(fn func(T) string) *ToggleGroupWidget[T] {
 	g.label = fn
@@ -287,6 +480,36 @@ func (g *ToggleGroupWidget[T]) Name(s string) *ToggleGroupWidget[T] { g.SetName(
 
 // Vertical stacks the segments instead of lining them up.
 func (g *ToggleGroupWidget[T]) Vertical() *ToggleGroupWidget[T] { g.vertical = true; return g }
+
+// Variant draws every segment in v: ToggleDefault, ToggleOutline or a
+// variant of your own. A segment takes its border, its label and the
+// surface under the pointer from it; the chosen one rests on Muted.
+func (g *ToggleGroupWidget[T]) Variant(v *ButtonVariant) *ToggleGroupWidget[T] {
+	defer property.Watch(&g.props, &g.variant)()
+	g.variant = v
+	return g
+}
+
+// Outline draws a border around every segment, as ToggleOutline does.
+func (g *ToggleGroupWidget[T]) Outline() *ToggleGroupWidget[T] { return g.Variant(ToggleOutline) }
+
+// Size sets the size of every segment: ButtonSmall, ButtonDefault or
+// ButtonLarge, as for a Toggle.
+func (g *ToggleGroupWidget[T]) Size(v *ButtonSizeVariant) *ToggleGroupWidget[T] {
+	defer property.Watch(&g.props, &g.size)()
+	g.size = v
+	return g
+}
+
+// Spacing sets the gap between segments in shadcn/ui's spacing units, half
+// the theme's Space each; the default is 2. With 0 the segments join into
+// one strip: only the corners at its ends are rounded, the padding
+// narrows, and outlined segments share the border between them.
+func (g *ToggleGroupWidget[T]) Spacing(units float64) *ToggleGroupWidget[T] {
+	defer property.Watch(&g.props, &g.spacing)()
+	g.spacing = max(units, 0)
+	return g
+}
 
 // Disabled greys every segment out and ignores input while v is true.
 func (g *ToggleGroupWidget[T]) Disabled(v bool) *ToggleGroupWidget[T] { g.SetInert(v); return g }
@@ -339,13 +562,27 @@ func (g *ToggleGroupWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Siz
 	g.setOptions(g.optionProp.Get())
 	g.Sync()
 	t := uitheme.Of(env)
-	g.theme, g.pad = t, t.TabPad
+	size := g.size.Style(*t)
+	g.theme, g.style = t, g.variant.Style(*t)
+	g.motion = env.Motion(t.MotionFast)
 	g.rtl = env.Direction() == ggui.DirRTL
+	g.gap = g.spacing * t.Space / 2
+	// Joined segments are padded as shadcn's px-2 rather than px-2.5.
+	g.pad = ggui.Insets(size.Pad.Top, pick(g.spacing > 0, size.Pad.Left, max(size.Pad.Left-2, 0)))
+	g.side = pick(size.Height > 0, size.Height, 20+2*t.ButtonPad.Top)
+	g.radius = pick(size.Radius > 0, size.Radius, t.Radius)
+	g.iconGap = t.Space / 2
+	g.iconSize = pick(size.IconSize > 0, size.IconSize, t.IconSize)
+	fg := pick(g.IsInert(), t.Disabled(g.style.Label), g.style.Label)
+	text := t.Text.Merge(t.Label).Merge(ggui.TextStyle{Color: fg})
+	if size.TextSize > 0 {
+		text.Size, text.LineHeight = size.TextSize, size.LineHeight
+	}
+	env = env.WithText(text)
 	g.sizes = g.sizes[:0]
 	var main, cross float64
 	g.parts = g.parts[:0]
 	for i, l := range g.labels {
-		fg := pick(g.IsInert(), t.MutedFg, pick(g.chosen(i), t.Fg, t.MutedFg))
 		l.Color(fg)
 		var p segmentParts
 		if !g.iconOnly || g.iconAt(i) == nil {
@@ -353,26 +590,48 @@ func (g *ToggleGroupWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Siz
 		}
 		s := p.label
 		if ic := g.iconAt(i); ic != nil {
-			p.icon = ic.Color(fg).Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env)
+			p.icon = ic.Color(fg).Layout(ggui.Tight(ggui.Sz(g.iconSize, g.iconSize)), env)
 			if s.W > 0 {
-				s.W += iconGap
+				s.W += g.iconGap
 			}
 			s = ggui.Sz(s.W+p.icon.W, max(s.H, p.icon.H))
 		}
 		g.parts = append(g.parts, p)
 		g.sizes = append(g.sizes, s)
+		o := g.outer(s)
 		if g.vertical {
-			main, cross = main+s.H+g.pad.Top+g.pad.Bottom, max(cross, s.W+g.pad.Left+g.pad.Right)
+			main, cross = main+o.H, max(cross, o.W)
 		} else {
-			main, cross = main+s.W+g.pad.Left+g.pad.Right, max(cross, s.H+g.pad.Top+g.pad.Bottom)
+			main, cross = main+o.W, max(cross, o.H)
 		}
 	}
 	for i, tip := range g.tips {
-		s := g.sizes[i]
-		tip.Layout(ggui.Tight(ggui.Sz(s.W+g.pad.Left+g.pad.Right, s.H+g.pad.Top+g.pad.Bottom)), env)
+		tip.Layout(ggui.Tight(g.outer(g.sizes[i])), env)
 	}
-	main, cross = main+2*tabInset, cross+2*tabInset
+	main += float64(max(len(g.sizes)-1, 0)) * g.gap
 	return c.Constrain(pick(g.vertical, ggui.Sz(cross, main), ggui.Sz(main, cross)))
+}
+
+// outer is the size of a segment around content: padded, and at least as
+// wide and as tall as the size variant's height, as a Toggle is.
+func (g *ToggleGroupWidget[T]) outer(content ggui.Size) ggui.Size {
+	return ggui.Sz(max(content.W+g.pad.Left+g.pad.Right, g.side), max(content.H+g.pad.Top+g.pad.Bottom, g.side))
+}
+
+// sidesAt are the sides on which segment i meets a neighbour: none unless
+// Spacing is 0.
+func (g *ToggleGroupWidget[T]) sidesAt(i int) JoinedSides {
+	if g.spacing > 0 {
+		return JoinedSides{}
+	}
+	before, after := i > 0, i < len(g.sizes)-1
+	switch {
+	case g.vertical:
+		return JoinedSides{Top: before, Bottom: after}
+	case g.rtl:
+		return JoinedSides{Right: before, Left: after}
+	}
+	return JoinedSides{Left: before, Right: after}
 }
 
 // iconAt is option i's icon, or nil.
@@ -390,66 +649,83 @@ func (g *ToggleGroupWidget[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.DescribeNode(r, g, func(dst *ggui.Canvas) { g.paint(dst, r) })
 }
 
+var toggleSegmentSlot = ggui.NewSlot[*ggui.Motion]("toggle group segment")
+
 func (g *ToggleGroupWidget[T]) paint(dst *ggui.Canvas, r ggui.Rect) {
-	t := g.theme
-	dst = dst.Clip(r)
-	dst.FillRoundRect(r, t.Radius, t.Muted)
-	if g.multiple == nil && !g.IsInert() && len(g.options) > 0 {
+	t, st := g.theme, g.style
+	inert := g.IsInert()
+	if g.multiple == nil && !inert && len(g.options) > 0 {
 		dst.HitKey(r, g)
 	}
 	// Layout is skipped on a still frame, so the chosen segment is found
 	// here, where the segments' own nodes read it back.
 	g.cur = g.index()
-	cur, hover := g.cur, pick(g.IsInert(), -1, g.hover)
+	cur, hover := g.cur, pick(inert, -1, g.hover)
 	g.rects = g.rects[:0]
-	at := r.Origin.Add(ggui.Pt(tabInset, tabInset))
-	cross := pick(g.vertical, r.Size.W, r.Size.H) - 2*tabInset
-	radius := max(t.Radius-tabInset, 0)
+	at := r.Origin
+	cross := pick(g.vertical, r.Size.W, r.Size.H)
+	border := st.Border
+	if border != nil && inert {
+		border = t.Disabled(border)
+	}
 	for i, s := range g.sizes {
-		main := pick(g.vertical, s.H+g.pad.Top+g.pad.Bottom, s.W+g.pad.Left+g.pad.Right)
+		o := g.outer(s)
+		main := pick(g.vertical, o.H, o.W)
 		seg := ggui.Rct(at, pick(g.vertical, ggui.Sz(cross, main), ggui.Sz(main, cross)))
 		seg = mirrorHorizontal(seg, r, g.rtl && !g.vertical)
 		g.rects = append(g.rects, seg)
 		h := g.segment(i)
 		dst.Describe(seg, h)
-		if !g.IsInert() {
+		if !inert {
 			dst.HitPointer(seg, h)
 			if g.multiple != nil {
 				dst.HitKey(seg, h)
 			}
-			dst.HitCursor(seg, ggui.CursorShapePointer)
+			dst.HitCursor(seg, ggui.CursorShapeDefault)
 		}
-		switch {
-		case g.chosen(i):
-			dst.Shadow(seg, radius, t.CardShadow)
-			dst.FillRoundRect(seg, radius, t.Card)
-		case i == hover:
-			dst.FillRoundRect(seg, radius, mix(t.Muted, t.Fg, t.HoverMix))
+		// A segment is a Toggle: nothing under it until it is chosen or the
+		// pointer is over it, and then the surface eases in.
+		on := g.chosen(i)
+		shown := dst.Ease(ggui.Anchor{Rect: seg}, toggleSegmentSlot, pick(on || i == hover, 1.0, 0.0), g.motion)
+		fill := st.Fill
+		if shown > 0 {
+			fill = mix(colorOr(st.Fill, color.Transparent), pick(on, t.Muted, colorOr(st.Hover, t.Muted)), shown)
 		}
+		if inert && fill != nil {
+			fill = t.Disabled(fill)
+		}
+		paintJoinedBox(dst, seg, g.radius, g.sidesAt(i), fill, t.BorderWidth, border)
 		// The icon and the label, centred together and each on the line.
 		p, x := g.parts[i], seg.Origin.X+(seg.Size.W-s.W)/2
-		middle := func(sz ggui.Size) ggui.Rect {
-			return mirrorHorizontal(ggui.Rct(ggui.Pt(x, seg.Origin.Y+(seg.Size.H-sz.H)/2), sz), seg, g.rtl)
-		}
 		if ic := g.iconAt(i); ic != nil {
-			dst.Paint(ic, middle(p.icon))
-			x += p.icon.W + iconGap
+			dst.Paint(ic, g.middle(seg, x, p.icon))
+			x += p.icon.W + g.iconGap
 		}
 		if p.label.W > 0 {
-			dst.Paint(g.labels[i], middle(p.label))
+			dst.Paint(g.labels[i], g.middle(seg, x, p.label))
 		}
 		if i < len(g.tips) {
 			dst.Paint(g.tips[i], seg)
 		}
-		at = at.Add(pick(g.vertical, ggui.Pt(0, main), ggui.Pt(main, 0)))
+		at = at.Add(pick(g.vertical, ggui.Pt(0, main+g.gap), ggui.Pt(main+g.gap, 0)))
 	}
 	if g.multiple != nil && g.focusPending && cur >= 0 {
 		dst.RequestFocus(g.segment(cur))
 		g.focusPending = false
 	}
-	if cur >= 0 {
-		controlFocusRing(dst, &g.Interactive, t, g.rects[cur], radius, t.Ring)
+	// The ring is drawn after every segment, so in a joined strip its halo
+	// lies over the neighbours rather than under the one painted next.
+	if cur >= 0 && g.Focused && g.FocusVisible && !inert {
+		ring := colorOr(st.Ring, t.Ring)
+		f := joinedFocus{r: g.rects[cur], radius: g.radius, sides: g.sidesAt(cur), width: t.BorderWidth, line: colorOr(st.FocusBorder, ring), halo: t.Halo(ring)}
+		f.paint(dst)
 	}
+}
+
+// middle is the Rect of a part of a segment's content starting at x,
+// centred on the segment's line.
+func (g *ToggleGroupWidget[T]) middle(seg ggui.Rect, x float64, size ggui.Size) ggui.Rect {
+	return mirrorHorizontal(ggui.Rct(ggui.Pt(x, seg.Origin.Y+(seg.Size.H-size.H)/2), size), seg, g.rtl)
 }
 
 // HandleKey implements ggui.KeyHandler: the arrows move the choice.
