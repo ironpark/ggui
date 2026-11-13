@@ -2,6 +2,7 @@ package ui
 
 import (
 	"image/color"
+	"math"
 	"time"
 
 	"github.com/ironpark/ggui"
@@ -13,6 +14,9 @@ const (
 	tabInset = 3.0 // strip padding all round the label row
 	tabGap   = 4.0 // between the labels of a line strip
 	tabBar   = 2.0 // the bar marking the shown label of a line strip
+	// How far a horizontal strip's bar reaches past the strip's foot:
+	// the trigger's padding box ends 4.5 above it and the bar 5 below that.
+	tabBarDrop = 0.5
 )
 
 // TabsWidget shows one of several pages, picked by a row of labels above.
@@ -215,6 +219,21 @@ func (t *TabsWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	return c.Constrain(ggui.Sz(max(t.stripW, t.bodySize.W), t.headerH+t.bodySize.H))
 }
 
+// barRect is where a line strip marks the label at lr. shadcn hangs the
+// bar off the trigger's padding box, the label less its one-pixel border:
+// as long as that box, and after:bottom-[-5px] h-0.5 under a trigger that
+// is a pixel shorter than the strip's inside and centered in it, which
+// lands half a pixel past the strip's foot; after:-right-1 w-0.5 beside a
+// vertical one, which lands on the strip's edge.
+func (t *TabsWidget) barRect(strip, lr ggui.Rect) ggui.Rect {
+	b := t.theme.BorderWidth
+	if t.vertical {
+		x := pick(t.rtl, strip.Origin.X, strip.Origin.X+strip.Size.W-tabBar)
+		return ggui.Rct(ggui.Pt(x, lr.Origin.Y+b), ggui.Sz(tabBar, max(0, lr.Size.H-2*b)))
+	}
+	return ggui.Rct(ggui.Pt(lr.Origin.X+b, strip.Origin.Y+strip.Size.H-tabBar+tabBarDrop), ggui.Sz(max(0, lr.Size.W-2*b), tabBar))
+}
+
 // labelColor is the color of label i when it is k of the way to the text
 // color, which the shown page's label and one under the pointer have at
 // one: from the quieter color shadcn gives a tab at rest, 60% of the text
@@ -313,12 +332,13 @@ func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		// and nothing is ruled along the rest of the strip. It fades in
 		// and out with its label, shadcn's after:transition-opacity.
 		bar := fade(pick(t.IsInert() || !t.enabled(i), th.Disabled(th.Fg), th.Fg), k)
-		if t.vertical {
-			x := pick(t.rtl, strip.Origin.X, strip.Origin.X+strip.Size.W-tabBar)
-			dst.FillRect(ggui.Rct(ggui.Pt(x, lr.Origin.Y), ggui.Sz(tabBar, lr.Size.H)), bar)
-		} else {
-			dst.FillRect(ggui.Rct(ggui.Pt(lr.Origin.X, r.Origin.Y+strip.Size.H-tabBar), ggui.Sz(lr.Size.W, tabBar)), bar)
+		at := t.barRect(strip, lr)
+		if s := dst.Scale(); s > 0 && !t.vertical {
+			// On whole device pixels, as a browser snaps a box it paints:
+			// a pixel past the strip at 1x rather than a blurred edge.
+			at.Origin.Y = math.Round(at.Origin.Y*s) / s
 		}
+		dst.FillRect(at, bar)
 	}
 	if t.focusPending && t.focusIndex() >= 0 {
 		dst.RequestFocus(tabLabel{t, t.focusIndex()})
