@@ -3,8 +3,8 @@ module github.com/ironpark/ggui/examples/sqlite
 go 1.27.0
 
 require (
-	github.com/ironpark/ggfx v0.0.0-20261025124736-3c3d65b81c58
-	github.com/ironpark/ggui v0.0.0-20261025124931-a9aef976cd9b
+	github.com/ironpark/ggfx v0.0.0-20261113094343-c43826d114fb
+	github.com/ironpark/ggui v0.0.0-20261113094639-959a2994a510
 	modernc.org/sqlite v1.59.0
 )
 
@@ -12,15 +12,12 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/ebitengine/hideconsole v1.0.0 // indirect
 	github.com/ebitengine/purego v0.11.0 // indirect
-	github.com/go-text/typesetting v0.3.5 // indirect
-	github.com/gogpu/naga v0.19.0 // indirect
+	github.com/gogpu/naga v0.21.10 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/ironpark/ggip v0.0.0-20261025124749-3c7a3f9bb4d9 // indirect
-	github.com/ironpark/ggip/ggfxinput v0.0.0-20261025124834-79651b13b701 // indirect
+	github.com/ironpark/ggwd v0.0.0-20261111130937-a92bc32058b8 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
 	golang.org/x/image v0.46.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
