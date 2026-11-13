@@ -80,9 +80,9 @@ func TestComboboxKeyKeepsPopupAndSearchFocusAfterMovingRebuild(t *testing.T) {
 	if value.Get() != "Beta" || control.Popup().IsOpen() {
 		t.Fatal("search lost focus or selected the wrong option after moving")
 	}
-	p.Type(ggui.Mods{}, ggui.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyArrowDown)
 	if !control.Popup().IsOpen() {
-		t.Fatal("closing did not restore focus to the keyed trigger")
+		t.Fatal("closing did not leave focus in the keyed input")
 	}
 }
 

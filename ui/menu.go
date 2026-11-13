@@ -681,6 +681,8 @@ func (it *MenuItemWidget) Describe() ggui.Node {
 	n := ggui.Node{Role: it.Role, Name: it.SemanticName(), Disabled: it.IsInert(), Actions: ggui.ActionPress | ggui.ActionFocus}
 	if it.checkable {
 		n.Checked = ggui.Tri(it.isChecked())
+		// A combobox's option is selected, as a Select's is, when checked.
+		n.Selected = it.Role == ggui.RoleOption && it.isChecked()
 	}
 	if it.sub != nil {
 		open := it.subPopup.IsOpen()

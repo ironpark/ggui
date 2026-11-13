@@ -85,6 +85,7 @@ type CommandWidget struct {
 	// panel, and a muted empty line.
 	menuRows bool
 	keepOpen bool                     // choosing leaves the popup open, as a multiple combobox does
+	bare     bool                     // no search pill: a combobox's input above the list filters it
 	onKey    func(ggui.KeyEvent) bool // sees a key before the list does, set by its owner
 	theme    *uitheme.Theme
 	env      ggui.Env
@@ -329,11 +330,13 @@ func (c *CommandWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 		c.buildPanel()
 	}
 	c.resultsBox.Height(height)
-	c.searchWrap.Padding(ggui.Insets(edge, edge, 0, edge))
-	// The pill is a field's height with a fainter fill and border than one.
-	pill := fade(t.InputBorder, .3)
-	c.searchBox.Padding(ggui.Insets(t.FieldPad.Top, t.Space, t.FieldPad.Bottom, t.FieldPad.Left)).
-		Fill(pill).Border(t.BorderWidth, pill).Radius(t.Radius)
+	if !c.bare {
+		c.searchWrap.Padding(ggui.Insets(edge, edge, 0, edge))
+		// The pill is a field's height with a fainter fill and border than one.
+		pill := fade(t.InputBorder, .3)
+		c.searchBox.Padding(ggui.Insets(t.FieldPad.Top, t.Space, t.FieldPad.Bottom, t.FieldPad.Left)).
+			Fill(pill).Border(t.BorderWidth, pill).Radius(t.Radius)
+	}
 	if c.hintBox != nil {
 		c.hintBox.Padding(ggui.Insets(t.Space, t.Space*1.5))
 	}
@@ -358,9 +361,12 @@ func (c *CommandWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 // from the theme.
 func (c *CommandWidget) buildPanel() {
 	c.resultsBox = ggui.Box(c.scroll)
-	c.searchBox = ggui.Box(ggui.Row(ggui.Expanded(c.field.input), commandSearchIcon{c}).Gap(0))
-	c.searchWrap = ggui.Box(&commandSearch{c})
-	parts := []ggui.Widget{c.searchWrap, c.resultsBox}
+	parts := []ggui.Widget{c.resultsBox}
+	if !c.bare {
+		c.searchBox = ggui.Box(ggui.Row(ggui.Expanded(c.field.input), commandSearchIcon{c}).Gap(0))
+		c.searchWrap = ggui.Box(&commandSearch{c})
+		parts = []ggui.Widget{c.searchWrap, c.resultsBox}
+	}
 	c.hint, c.hintBox = nil, nil
 	if c.hints {
 		c.hint = Caption(c.hintText())

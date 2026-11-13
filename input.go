@@ -922,9 +922,17 @@ func (in *inputState) moveFocus(dir int) {
 		if r.key == nil || (scope != nil && (r.scope == nil || r.scope.owner != scope.owner)) {
 			continue
 		}
-		if r == focused {
-			cur = len(keyed)
-		} else if t, ok := r.key.(TabStopper); ok && !t.TabStop() {
+		if r == focused || focused != nil && sameAny(r.key, focused.key) {
+			// The focused widget is one stop, at its first region, however
+			// many it painted: a combobox's input also takes the keyboard
+			// over its list.
+			if cur < 0 {
+				cur = len(keyed)
+				keyed = append(keyed, r)
+			}
+			continue
+		}
+		if t, ok := r.key.(TabStopper); ok && !t.TabStop() {
 			continue
 		}
 		keyed = append(keyed, r)
