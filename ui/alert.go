@@ -114,10 +114,14 @@ func (a *AlertWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	return c.Constrain(size)
 }
 
-// Paint implements ggui.Widget.
+// Paint implements ggui.Widget. The notice is a status to a screen reader,
+// the nearest there is to shadcn's role="alert", holding its text and its
+// action.
 func (a *AlertWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	dst.Paint(a.box, r)
-	if a.action != nil {
-		dst.Paint(a.action, ggui.Rct(ggui.Pt(r.Origin.X+r.Size.W-a.inset-a.actionSize.W, r.Origin.Y+a.inset), a.actionSize))
-	}
+	dst.Node(r, ggui.Node{Role: ggui.RoleStatus}, func(dst *ggui.Canvas) {
+		dst.Paint(a.box, r)
+		if a.action != nil {
+			dst.Paint(a.action, ggui.Rct(ggui.Pt(r.Origin.X+r.Size.W-a.inset-a.actionSize.W, r.Origin.Y+a.inset), a.actionSize))
+		}
+	})
 }

@@ -113,6 +113,29 @@ func TestSpinnerIsAStatusNamedLoading(t *testing.T) {
 	}
 }
 
+// An alert is one status holding its title, its description and its
+// action, the nearest role to shadcn's role="alert".
+func TestAlertIsAStatusAroundItsTextAndAction(t *testing.T) {
+	t.Parallel()
+	a := Alert("Upload failed", "Try again when connected.").Action(Button("Retry", nil))
+	p := ggui.NewProbe(ggui.Column(a), ggui.Sz(320, 200))
+	defer p.Close()
+	tree := p.Semantics()
+	status, ok := tree.Find(ggui.RoleStatus, "")
+	if !ok {
+		t.Fatalf("no status in\n%s", tree)
+	}
+	for _, want := range []struct {
+		role ggui.Role
+		name string
+	}{{ggui.RoleText, "Upload failed"}, {ggui.RoleText, "Try again when connected."}, {ggui.RoleButton, "Retry"}} {
+		n, ok := tree.Find(want.role, want.name)
+		if !ok || !status.Rect.Contains(n.Rect.Origin) {
+			t.Errorf("%s %q found=%v at %v, want it inside the status at %v\n%s", want.role, want.name, ok, n.Rect, status.Rect, tree)
+		}
+	}
+}
+
 // An ItemSeparator keeps shadcn's my-2 around its line, which a plain
 // Divider does not.
 func TestItemSeparatorKeepsASpaceAboveAndBelowItsLine(t *testing.T) {
