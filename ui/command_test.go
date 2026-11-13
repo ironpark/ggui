@@ -87,7 +87,9 @@ func TestCommandRowsSeparatorsAndDialogWidth(t *testing.T) {
 	}
 	calendar, _ := p.Find("Calendar")
 	calculator, _ := p.Find("Calculator")
-	if h := calendar.Rect.Size.H; h < 31 || h > 33 {
+	// A row is its line and 12 of padding: 32 with a 20 pixel line, and as
+	// little as 28 with the shorter line of a runner's system font.
+	if h := calendar.Rect.Size.H; h < 28 || h > 33 {
 		t.Fatalf("a row is %v tall, want about 32", h)
 	}
 	if gap := calculator.Rect.Origin.Y - calendar.Rect.Origin.Y; gap != calendar.Rect.Size.H {
