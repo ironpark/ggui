@@ -276,3 +276,37 @@ func TestMenuLabelInAMenubarIsTheSizeOfARow(t *testing.T) {
 		t.Fatalf("a dropdown's label is %v tall and a menubar's %v, want %v and %v", small.H, large.H, caption+rows, body+rows)
 	}
 }
+
+// A sheet's scrim is shadcn's transition-opacity duration-150 under a
+// panel that takes 200ms: it is all there while the panel is still
+// sliding. A drawer's fades over the drawer's own time on its own curve,
+// which is behind the panel's early on.
+func TestSheetScrimFadesOnItsOwnClock(t *testing.T) {
+	t.Parallel()
+	open := ggui.State(false)
+	sheet := Sheet(open, ggui.Text("body"))
+	p := ggui.NewProbe(ggui.Column(sheet), ggui.Sz(600, 400))
+	defer p.Close()
+	p.Frame()
+	open.Set(true)
+	p.Frame()
+	p.Advance(sheet.theme.MotionFast)
+	p.Frame()
+	if v := sheet.slide.Value(ggui.FrameTime()); sheet.dim != 1 || !(v > 0 && v < 1) {
+		t.Fatalf("150ms in the scrim is %v in and the panel %v, want the scrim there and the panel on its way", sheet.dim, v)
+	}
+
+	rises := ggui.State(false)
+	drawer := Drawer(rises, ggui.Box().Height(200))
+	q := ggui.NewProbe(ggui.Column(drawer), ggui.Sz(600, 400))
+	defer q.Close()
+	q.Frame()
+	rises.Set(true)
+	q.Frame()
+	q.Advance(drawer.theme.MotionDrawer / 5)
+	q.Frame()
+	now := ggui.FrameTime()
+	if v := drawer.slide.Value(now); !(drawer.dim > 0 && drawer.dim < v) {
+		t.Fatalf("90ms in a drawer's scrim is %v in and its panel %v, want the scrim behind on cubic-bezier(.32,.72,0,1)", drawer.dim, v)
+	}
+}
