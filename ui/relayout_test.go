@@ -111,7 +111,9 @@ func TestAlertAndEmptyRebuildForALaterAction(t *testing.T) {
 	t.Parallel()
 	env := uitheme.Default().Apply(ggui.Env{})
 	cs := ggui.Loose(ggui.Sz(300, 400))
-	a := Alert("Saved", "All changes are stored")
+	// The action hangs at the top right and the text keeps clear of it,
+	// so a description that just fit beside nothing wraps beside it.
+	a := Alert("Saved", "All of your changes are stored safely")
 	bare := a.Layout(cs, env)
 	if got := a.Action(Button("Undo", nil)).Layout(cs, env); got.H <= bare.H {
 		t.Fatalf("alert ignored its action: %v <= %v", got.H, bare.H)

@@ -214,6 +214,8 @@ func TestToasterLifecycleAndNonmodalActions(t *testing.T) {
 	first := toaster.Push(ui.Toast("One", "Persistent").Duration(0))
 	toaster.Push(ui.Toast("Two", "Persistent").Duration(0))
 	toaster.Push(ui.Toast("Three", "Undo available").Duration(0).Action("Undo", func() { clicks += 10 }))
+	p.Advance(0)
+	p.Advance(time.Second) // a notice comes in from below the window
 	if toaster.Len() != 2 {
 		t.Fatal("queue was not bounded")
 	}
@@ -243,6 +245,8 @@ func TestToasterPausesWhileInteracting(t *testing.T) {
 	defer p.Close()
 	p.Advance(0)
 	toaster.Push(ui.Toast("Pause", "Hover the dismiss button").Duration(time.Second))
+	p.Advance(0)
+	p.Advance(600 * time.Millisecond) // a notice comes in from below the window
 	p.Move(find(t, p, ggui.RoleButton, "Dismiss Pause").Center())
 	p.Advance(2 * time.Second)
 	if toaster.Len() != 1 {
