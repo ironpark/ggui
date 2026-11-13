@@ -216,11 +216,11 @@ func (s *SheetWidget) fitsContent() bool {
 func (s *SheetWidget) shape(t *uitheme.Theme) modalShape {
 	shape := modalShape{
 		headerGap: t.Space / 4, closeInset: t.Space * 1.5,
-		fill: !s.fitsContent(), shadow: t.OverlayShadow, fillColor: t.Popover,
+		fill: !s.fitsContent(), shadow: [2]ggui.ShadowStyle{t.OverlayShadow, t.OverlayContact}, fillColor: t.Popover,
 	}
 	if s.isDrawer() {
 		// A drawer's surface is painted with its corners; see paintDrawerSurface.
-		shape.shadow, shape.fillColor = ggui.ShadowStyle{}, nil
+		shape.shadow, shape.fillColor = [2]ggui.ShadowStyle{}, nil
 		if s.handle {
 			shape.topInset = drawerHandleStrip
 		}
