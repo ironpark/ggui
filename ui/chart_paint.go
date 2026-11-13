@@ -284,6 +284,18 @@ func (c *ChartWidget) paintCartesian(dst *ggui.Canvas, progress float64) {
 		}
 		dst.FillRect(h, c.theme.Muted)
 	}
+	// A line or area chart's cursor is one border-coloured line behind the
+	// series, drawn once: a translucent border stroked again for each series
+	// would brighten with their number.
+	if c.active >= 0 && c.active < n && c.tooltipCursor && c.kind != ChartBar {
+		for _, s := range c.geometry.series {
+			if s.valid[c.active] {
+				x := chartPosition(r, s.top[c.active]).X
+				dst.StrokeLine(ggui.Pt(x, r.Origin.Y), ggui.Pt(x, r.Origin.Y+r.Size.H), c.theme.BorderWidth, c.theme.Border)
+				break
+			}
+		}
+	}
 	clipped := dst.Clip(r)
 	for j, s := range c.geometry.series {
 		if c.kind == ChartBar {
@@ -335,9 +347,6 @@ func (c *ChartWidget) paintCartesian(dst *ggui.Canvas, progress float64) {
 		}
 		if c.active >= 0 && c.active < n && s.valid[c.active] {
 			p := chartPosition(r, s.top[c.active])
-			if c.tooltipCursor {
-				dst.StrokeLine(ggui.Pt(p.X, r.Origin.Y), ggui.Pt(p.X, r.Origin.Y+r.Size.H), 1, c.theme.Border)
-			}
 			c.paintDot(dst, c.context(c.active, j, p))
 		}
 	}
