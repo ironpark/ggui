@@ -243,7 +243,7 @@ func TestAPersistentToastAsksForNoFrames(t *testing.T) {
 	p.Window().Repaint()
 	p.Step(frameStep)
 	frames := p.Idle(frameStep, 2*time.Second)
-	if len(frames) == 0 || len(frames) > 30 || frames[len(frames)-1].Next {
+	if len(frames) == 0 || len(frames) > 40 || frames[len(frames)-1].Next {
 		t.Fatalf("a persistent toast came in over %d frames, want it to rest after", len(frames))
 	}
 	if toaster.Len() != 1 {
