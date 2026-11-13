@@ -4,7 +4,7 @@
 
 Build tables, menus, date pickers, search, and navigation using themed controls.
 
-Examples use `ggui` and `ui` imports and application-defined placeholders.
+Examples use `ggui`, `ui` and `ui/icons` imports and application-defined placeholders.
 See [example conventions](README.md#start-here) before copying snippets.
 
 ## On this page
@@ -27,10 +27,10 @@ See [example conventions](README.md#start-here) before copying snippets.
 | Control | Behavior |
 | --- | --- |
 | `ui.Tabs(selected, ui.Tab("One", page), ...)` | Displays the selected index, with an animated segmented selection. Arrows move focus; Enter/Space activates. `.ActivateOnFocus(true)` opts into automatic selection; `.Line()` uses an underline. Only the active page is laid out. `Tab(...).Header(widget)` draws an icon, count or badge in place of the label's text, which still names the tab; `Tab(...).Tooltip(text)` explains it. |
-| `ui.Collapsible(open, "Title", content)` | A titled section whose content eases open and closed, as `Reveal` does. |
-| `ui.Card(child)` | Adds a surface, foreground/10 outline, radius and padding; `.Shadow(...)` opts into elevation. |
-| `ui.Badge("new")` | Displays a small label; `.Primary()`, `.Outline()` and `.Destructive()` change its look. |
-| `ui.Progress(value)` | Eases toward a fraction from a `Readable[float64]`. |
+| `ui.Collapsible(open, "Title", content)` | A titled section whose content eases open and closed, as `Reveal` does. `ui.CollapsibleOf(open, trigger, content)` takes a header of your own, painted as it is, all of which toggles the content. |
+| `ui.Card(child)` | Adds a surface, foreground/10 outline, radius and padding; `.Shadow(...)` opts into elevation. Given `CardHeader`, `CardContent` and `CardFooter` sections it lays them out as shadcn's card does; see [composition helpers](feedback-and-composition.md#composition-helpers). |
+| `ui.Badge("new")` | Displays a small label; `.Secondary()`, `.Outline()`, `.Ghost()`, `.Link()` and `.Destructive()` change its look, and `.Icon(role)` or `.TrailingIcon(role)` add an icon. |
+| `ui.Progress(value)` | Eases toward a fraction from a `Readable[float64]`. `.Label(text)` writes a label above its left end, `.ShowValue()` the percentage above its right end, and `.FormatValue(fn)` that value in words of your own, "3 of 12". |
 | `ui.Dialog(open, content)` | Shows a modal while the binding is true; see [focus scopes](input.md#focus-scopes). |
 
 ## Tables
@@ -51,6 +51,8 @@ Choose unique keys, then configure columns and selection:
 | `.Height(h)` | Scroll the body beneath a fixed heading and virtualize rows. |
 | `.RowHeight(h)` | Set the fixed row height (default: 40 logical pixels). |
 | `.RowName(fn)` | Set each row's accessible name; otherwise the key is used. |
+| `.Footer(cells...)` | A summary row under the body on a muted surface, one cell per column (`nil` leaves one empty); it stays put under a scrolling body. |
+| `.Caption(text)` | A line of muted text centered under the table; a `Height` includes it. |
 
 Without `Height`, the table grows to fit all rows.
 
@@ -222,10 +224,36 @@ All four constructors start empty and take only the selected-value binding.
 
 `ui.Menu("File", ui.MenuItem("New", fn), ui.MenuDivider(), ...)` is a
 secondary button that opens a list of actions the same way; an item runs
-its function and closes the menu.
+its function and closes the menu. The entries take the parts of shadcn's
+dropdown menu:
 
-`ui.ContextMenu(content, entries...)` attaches the same `MenuItem` and
-`MenuDivider` entries to a secondary-click target. Right-click opens at the
+| Entry | Behavior |
+| --- | --- |
+| `ui.MenuItem(label, fn)` | An action. `.Icon(widget)` puts an icon before the label, `.Inset()` lines a row without one up with those that have one, `.Shortcut(chord)` shows a key hint, and `.Destructive()` draws it in the Destructive color. |
+| `ui.MenuLabel(text)` | A small muted heading over the entries after it, which the keyboard passes over; `.Inset()` lines it up with inset rows. |
+| `ui.MenuCheckbox(label, checked)` | A row that toggles a `Binding[bool]` and shows a check at its right while it is true; choosing it leaves the menu open. |
+| `ui.MenuRadioGroup(value, options...)` | One row per option with a check on the one the binding holds; `.Format(fn)`, `.Inset()`, `.Items()`. |
+| `ui.MenuSub(label, entries...)` | A row that opens its entries as a submenu beside it, on hover, a click, or Right, Enter or Space; Left or Escape closes it alone. |
+| `ui.MenuDivider()` | A line between groups of entries. |
+
+Menus, selects and comboboxes draw in the theme's `Menu()`, which a Config's
+`MenuColor` can make the inverted dark one.
+
+```go
+ui.Menu("Account",
+	ui.MenuLabel("My account"),
+	ui.MenuItem("Profile", openProfile).Icon(ui.Icon(icons.File)).Shortcut("cmd+p"),
+	ui.MenuSub("Invite users", ui.MenuItem("By email", byEmail), ui.MenuItem("By link", byLink)),
+	ui.MenuDivider(),
+	ui.MenuCheckbox("Status bar", showStatus),
+	ui.MenuRadioGroup(sortBy, "Newest", "Oldest", "Name"),
+	ui.MenuDivider(),
+	ui.MenuItem("Log out", logOut).Destructive(),
+)
+```
+
+`ui.ContextMenu(content, entries...)` attaches the same entries to a
+secondary-click target. Right-click opens at the
 pointer, with placement adjusted to fit the window. Left clicks and scrolling
 continue to the wrapped content. Use `.Name("File actions")` for its accessible
 name; `.Disabled(true)` disables the menu while keeping the content usable.
@@ -235,7 +263,6 @@ through enabled items, Home/End jump to the first/last enabled item, and
 Enter/Space runs the highlighted action. Escape or an outside click closes it.
 Accessibility clients can expand/collapse the menu and press its items. Keep
 the instance in a persistent tree or assign a stable `.Key(...)` across rebuilds.
-Nested submenus are not yet supported.
 
 ```go
 ui.ContextMenu(ggui.Text("Project notes"),
@@ -258,7 +285,7 @@ actions and Home/End go to the first/last. Left/Right switch menus without closi
 the popup. Hovering another trigger also switches menus. Escape and outside
 clicks dismiss it; selection runs the action and restores focus to the bar.
 Use a persistent instance or a stable `Key` across rebuilds. This is an in-window
-control, not the macOS system menu bar; nested submenus are not included.
+control, not the macOS system menu bar.
 
 ## Calendar and date picker
 
@@ -288,7 +315,13 @@ select them. Month controls and the date grid are separate tab stops.
 
 `.WeekdayLabels([7]string{...})` takes Sunday-to-Saturday labels;
 `.MonthLabel(fn)` formats the heading. `.Disabled(true)` disables the calendar.
-The calendar includes six weeks, with adjacent-month dates muted but selectable.
+The calendar includes six weeks of 28-pixel cells, with adjacent-month dates
+muted but selectable and today marked. `.Months(n)` shows n consecutive months
+side by side, wrapping onto further rows where the width runs out; the previous
+and next buttons still move one month. `.CaptionDropdown(true)` replaces the
+heading with a month and a year Select, as shadcn's `captionLayout="dropdown"`
+does, offering the years `.DropdownYears(from, to)` names, or the bounds, or a
+hundred years back to ten ahead; `.MonthNames(names)` localizes the month list.
 Keep it persistent or give it a stable `Key` when rebuilding.
 
 `ui.DatePicker(date)` opens the same calendar in a popup. `.Calendar()` exposes
@@ -299,14 +332,27 @@ Escape or an outside click cancels navigation without changing the value.
 `.Disabled(true)` closes and disables the picker. DatePicker owns the disabled
 state of the Calendar returned by `.Calendar()`; configure `Disabled` or
 `BindDisabled` on the picker, not that internal calendar. `.Key(key)` preserves its
-state across rebuilds. Date ranges and editable date text are not included.
+state across rebuilds. Editable date text is not included.
+
+`ui.DateRangePicker(trip)` binds a `ui.DateRange` through a `CalendarRange`
+showing two months. Its popup stays open while the range is picked; Escape or a
+click outside closes it. An empty range reads "Choose dates", and
+`.FormatRange(fn)` and `.OnRangeChange(fn)` take the place of `Format` and
+`OnChange`. Configure the range's limits on `.Calendar()`.
+
+```go
+trip := ggui.State(ui.DateRange{})
+picker := ui.DateRangePicker(trip).Name("Trip dates")
+picker.Calendar().RangeNights(1, 14)
+```
 
 ## Pagination
 
 `ui.Pagination(page, pageCount)` binds a one-based page and reads the number of
 pages. It shows at most five numbered buttons, Previous and Next, with standard
 button keyboard support. `.OnChange(fn)` reports user changes; `.Disabled(v)`
-disables navigation. Data slicing or fetching stays with the application.
+disables navigation, and `.Labels(previous, next)` renames the Previous and Next
+buttons for another language. Data slicing or fetching stays with the application.
 
 Explore these controls in the [component gallery](../examples/gallery).
 
@@ -325,25 +371,52 @@ ui.CommandItem(label, action), ...)` provides an inline command search; put it i
 `ui.Sidebar(selected, entries...)` is a column of destinations down the side of
 a window. `ui.SidebarItem(key, label)` is a destination, whose key the binding
 holds while it is the current one, and `ui.SidebarSection(title)` is a heading
-over the ones that follow. `.Header(widget)` and `.Footer(widget)` frame the
-list, `.Width(px)` sets the column width, and `.BindCollapsed(reader)` takes the
-sidebar off the page while the reader is true, which is what a narrow window
-wants. There is no icon rail: an entry is named by its label alone.
+over the ones that follow; `ui.SidebarSeparator()`, `ui.SidebarSkeleton()` and
+`ui.SidebarCustom(widget)` fill out a group. The column is 256 logical pixels
+wide until `.Width(px)` says otherwise. `.Header(widget)` and `.Footer(widget)`,
+or `.HeaderItems(entries...)` and `.FooterItems(entries...)`, stay put while the
+groups between them scroll.
+
+An item takes `.Icon(role)` or `.Leading(widget)` before its label, `.Badge(text)`
+or `.Action(widget)` at its end (`.ActionOnHover()` shows the action only under
+the pointer), `.Detail(text)` under the label on a large row, and `.Size(...)`
+among `ui.SidebarSizeDefault`, `SidebarSizeSmall` and `SidebarSizeLarge`.
+`.Sub(entries...)` nests items under it, and `.Collapsible()` folds them behind a
+chevron, `.Open(true)` or `.BindOpen(binding)` saying whether they show. `.OnTap(fn)`
+runs an action instead of choosing a destination, and `.Tooltip(text)` is what
+the icon rail shows for it.
+
+`.BindCollapsed(binding)` collapses the sidebar while it is true, as
+`.Collapsible(mode)` says: `ui.SidebarCollapseOffcanvas`, the default, slides it
+off its edge; `ui.SidebarCollapseIcon` narrows it to a 48-pixel rail of icons
+whose items show their tooltips; `ui.SidebarCollapseNone` ignores it. The width
+moves over the theme's MotionSlow. `ui.SidebarTrigger(binding)` is the panel
+button that toggles the same binding, `.Rail(true)` adds a strip along the inner
+edge that toggles it on a click, and `.Shortcut("cmd+b")` toggles it from the
+keyboard. `.Variant(ui.SidebarVariantFloating)` raises it as a rounded panel and
+`ui.SidebarVariantInset` sets the content beside it in a `ui.SidebarInset(child)`;
+`.Side(...)` says which edge it stands at.
 
 ```go
-page := ggui.State("inbox")
-ui.Sidebar(page,
-	ui.SidebarSection("Mail"),
-	ui.SidebarItem("inbox", "Inbox"),
-	ui.SidebarItem("sent", "Sent"),
-	ui.SidebarItem("spam", "Spam").Disabled(true),
-).Header(ui.Title("Acme")).BindCollapsed(narrow) // narrow is a Readable[bool]
+page, collapsed := ggui.State("inbox"), ggui.State(false)
+ggui.Row(
+	ui.Sidebar(page,
+		ui.SidebarSection("Mail"),
+		ui.SidebarItem("inbox", "Inbox").Icon(icons.Download).Badge("12").Tooltip("Inbox"),
+		ui.SidebarItem("sent", "Sent").Icon(icons.Redo).Tooltip("Sent"),
+		ui.SidebarItem("projects", "Projects").Icon(icons.File).Collapsible().Open(true).
+			Sub(ui.SidebarItem("design", "Design"), ui.SidebarItem("research", "Research")),
+	).Header(ui.Title("Acme")).
+		Collapsible(ui.SidebarCollapseIcon).BindCollapsed(collapsed).Rail(true).Shortcut("cmd+b"),
+	ggui.Expanded(ggui.Column(ui.SidebarTrigger(collapsed), content)),
+)
 ```
 
 The column is one keyboard tab stop: Up and Down move the highlight over the
 enabled entries and wrap, skipping headings and disabled items, Home and End go
-to the ends, and Space or Enter goes to the highlighted destination. A click
-goes there directly. The highlight follows its entry by key across a rebuild.
+to the ends, Space or Enter goes to the highlighted destination, and Right and
+Left open and close a collapsible row. A click goes there directly. The
+highlight follows its entry by key across a rebuild.
 
 ## Command and menu presentation
 
@@ -369,7 +442,8 @@ items register and label their chords together.
 
 For a compact command palette, use `ui.CommandDialog(open, command)`. It supplies
 an accessible "Commands" name without a visible heading, removes the surrounding
-dialog padding, and gives the search field a muted inset background. Use
+dialog padding, and holds the 384-pixel panel's top a third of the way down the
+window, so it stays put while the results change. Use
 `.Name("...")` on the returned dialog to customize its accessible name.
 
 ```go
@@ -379,9 +453,11 @@ ui.CommandDialog(open, ui.Command(query,
 ).Height(176).StableHeight().Hints())
 ```
 
-`CommandEntry.Group` labels consecutive entries. Filtering hides headings with no
-matching entries, and keyboard navigation skips headings. `Command.InsetSearch()`
-also enables the rounded search treatment for inline commands.
+`CommandEntry.Group` labels consecutive entries, `CommandEntry.Icon(widget)` puts
+an icon before one, and `ui.CommandSeparator()` draws a line between entries
+while the search is empty. Filtering hides headings with no matching entries,
+and keyboard navigation skips headings. The search field is always a rounded,
+muted inset; `Command.InsetSearch()` is kept for code that asked for it.
 `Menubar.Compact()` keeps the painted strip at its content width inside a stretched
 layout; omit it for a full-width application menu bar.
 
@@ -410,9 +486,16 @@ activated. Horizontal geometry and arrows follow `ggui.Directionality`.
 `ui.NavigationMenu` groups direct `NavigationMenuLink` callbacks and
 `NavigationMenuItem(label, content)` dropdowns. Panel content is arbitrary Go
 widgets, so link descriptions, columns and cards compose normally. Links expose
-link semantics, and `.Active(true)` marks the current destination.
+link semantics, and `.Active(true)` marks the current destination. Resting the
+pointer on a trigger for 200ms opens its dropdown, as shadcn's does, and it
+closes shortly after the pointer leaves both; one opened by a click or the
+keyboard stays open until dismissed. `.OpenOnHover(false)` opens dropdowns by
+activation alone.
 
-`ui.Popover(label, content)` provides a themed interactive panel. Use
+`ui.Popover(label, content)` provides a themed interactive panel. `.Title(text)`
+and `.Description(text)` head it, `.Side(ggui.PopupRight)` and the other sides
+choose where it opens (below by default, flipping when that side has no room),
+and `.Align(a)` and `.AlignOffset(px)` place it along that side. Use
 `PopoverOf(face, content)` for a custom trigger, `.BindOpen(binding)` for
 controlled visibility, and `Show`, `Hide` or `Toggle` for programmatic control.
 `Trigger()` exposes button variants and `Popup()` the lower-level configuration.

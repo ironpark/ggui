@@ -173,7 +173,7 @@ an `Env`, a token is the color the application's theme has.
 | `Muted` / `MutedFg` | `--muted` / `--muted-foreground` | the quiet surface of tracks and strips; the grey of secondary text | neutral-100 / neutral-500 | neutral-800 / neutral-400 |
 | `Destructive` / `DestructiveFg` | `--destructive` / `--destructive-foreground` | an irreversible action | `oklch(0.577 0.245 27.325)` / neutral-50 | `oklch(0.704 0.191 22.216)` / neutral-50 |
 | `Border` | `--border` | outlines of inputs, dividers, hairlines | neutral-200 | white at 10% |
-| `Input` | — | the painted input surface | follows `Bg` | follows `InputBorder`, at 30% over `Bg` |
+| `Input` | — | the surface a field paints over whatever it sits on, Nova's `bg-transparent dark:bg-input/30` | follows `InputBorder`, at the style's light opacity: clear under Nova | follows `InputBorder`, at 30% |
 | `InputBorder` | `--input` | input outlines | follows `Border` | white at 15% |
 | `Accent` / `AccentFg` | `--accent` / `--accent-foreground` | the highlighted row or button under the pointer, and its text | follow `Muted` / `Fg` | same |
 | `Ring` | `--ring` | the focus halo, deliberately not `Primary` | neutral-400 | neutral-500 |
@@ -186,9 +186,12 @@ The sidebar uses separate `Sidebar`/`SidebarFg`, `SidebarPrimary`/
 the rest follow the matching page tokens. Inside a `Sidebar`, its children
 see these in place of the page's.
 
-`Chart` contains five optional series colors. Default themes leave them unset,
-so charts fall back to `Primary`; choose a `theme.Preset` or set `Chart` for a
-multicolor palette. `Chat` controls bubble, attachment, and questionnaire
+`Input` is translucent: it tints whatever is behind a field rather than
+replacing it, so paint it over the surface, not instead of it, and expect a
+light Nova field to show the card or page it sits on.
+
+`Chart` contains five series colors. The stock themes and every preset carry
+their palette's; a theme that leaves them unset falls back to `Primary`. `Chat` controls bubble, attachment, and questionnaire
 geometry; see [Theme presets](#theme-presets) and [Chat components](chat.md).
 
 ### Elevation
@@ -200,15 +203,17 @@ Three shadows, in the order a surface rises off the page. They are
 | --- | --- | --- |
 | `CardShadow` | raised tab and custom shadowed variants | `0 1px`, blur 2, 6% black |
 | `PanelShadow` | menus, select lists, date pickers, toasts | `0 4px`, blur 10, 10% black |
-| `OverlayShadow` | sheets | `0 12px`, blur 28, 25% black |
+| `OverlayShadow` | dialogs and sheets, shadcn's `shadow-lg` | `0 10px`, blur 15, spread −3, 10% black |
 
 ### Size and space
 
 | Token | For | Default |
 | --- | --- | --- |
 | `Radius` | buttons, inputs and boxes that ask for one | 10 |
+| `RadiusXs` | chips, keys and the smallest insets | follows `Radius` × 0.6 |
 | `RadiusSm` | rows and pills inside a rounded container | follows `Radius` × 0.8 |
-| `RadiusLg` | cards, dialogs, toasts | follows `Radius` × 1.4 |
+| `RadiusLg` | cards and dialogs | follows `Radius` × 1.4 |
+| `RadiusXl` | toasts | follows `Radius` × 1.8 |
 | `Space` | the unit every gap and padding is a multiple of | 8 |
 | `BorderWidth` | the line `Box.Border` and the controls draw | 1 |
 | `ControlSize` | a checkbox or radio glyph; switch and slider geometry scales with it | 16 |
@@ -236,6 +241,7 @@ Each is an `EdgeInsets`, built with the CSS shorthand `Insets` takes.
 | `MotionFast` | hover and control transitions | 150ms |
 | `MotionSlow` | disclosures and sheets | 200ms |
 | `MotionOverlay` | dialogs and popups | 100ms |
+| `MotionDrawer` | a drawer sliding in or out | 450ms |
 | `HoverMix` | how far a color moves toward `Fg` under the pointer | 0.06 |
 | `PressMix` | how far it moves toward `Fg` while pressed | 0.08 |
 | `DisabledMix` | how much opacity a disabled control loses | 0.5 |
@@ -254,7 +260,7 @@ it. See [Local styles](#local-styles) for how the merge resolves.
 | --- | --- | --- |
 | `Text` | everything; its `Color` follows `Fg` | 14px, line height 1.4 |
 | `Title` | page headings, `ui.Title` | 24px semibold |
-| `Heading` | dialog, sheet and card titles, `ui.Heading` | 18px semibold |
+| `Heading` | dialog, sheet and card titles, `ui.Heading` | 16px medium, line height 22px |
 | `Label` | the labels of buttons, tabs, badges and accordion headers | medium weight |
 | `Caption` | small secondary text, `ui.Caption`; its `Color` follows `MutedFg` | 12px |
 | `Mono` | code, `ui.Mono` | the platform's monospaced font, `ggui.DefaultMonoFont()` |
@@ -277,8 +283,8 @@ func brandTheme() theme.Theme {
 ```
 
 Some tokens **follow** others, as the tables mark: `PrimaryHover` and
-`Selection` follow `Primary`, the foregrounds follow `Fg`, `RadiusSm` and
-`RadiusLg` follow `Radius`, and so on. A token follows its source until you
+`Selection` follow `Primary`, the foregrounds follow `Fg`, `RadiusXs`,
+`RadiusSm`, `RadiusLg` and `RadiusXl` follow `Radius`, and so on. A token follows its source until you
 set it, so above the hover color, the text selection and the smaller and
 larger radii all move with the brand without being named. Setting a follower
 pins it: `t.PrimaryHover = darker` keeps `darker` whatever `Primary` becomes.
@@ -319,7 +325,8 @@ may sit inside `@layer`, other rules such as `@theme inline` are skipped, and
 a value may be `var()` of another variable. Each color variable sets the
 token the color table names, with `--input` setting `InputBorder`. `--radius`
 sets the Base UI Nova radii: `Radius` equals the variable for `rounded-lg`
-controls, `RadiusSm` is 0.8 times it and `RadiusLg` is 1.4 times it.
+controls, and `RadiusXs`, `RadiusSm`, `RadiusLg` and `RadiusXl` are 0.6, 0.8,
+1.4 and 1.8 times it.
 A color variable with no token of its own, such as the `--warning` or
 `--success` shadcn leaves to the app, is kept as a token of your own (below)
 under `theme.CSSColor(name)`:
@@ -473,20 +480,21 @@ t.Chat.BubblePadding = ggui.Insets(10, 14)
 theme.Set(t)
 ```
 
-The zero preset uses Neutral/Nova with no accent override. `theme.Default()` and
-`theme.Dark()` preserve the existing ggui appearance.
+The zero preset uses Neutral/Nova with no accent override, and `theme.Default()`
+and `theme.Dark()` are exactly its light and dark themes: shadcn/ui's base-nova.
 
 | Axis | Presets |
 | --- | --- |
 | `BaseColor` | Neutral, Stone, Zinc, Mauve, Olive, Mist, Taupe |
 | `AccentColor` | Base (no override), Amber, Blue, Cyan, Emerald, Fuchsia, Green, Indigo, Lime, Orange, Pink, Purple, Red, Rose, Sky, Teal, Violet, Yellow |
-| `theme.Style` | Nova, Rhea |
+| `theme.Style` | Nova, Vega, Maia, Lyra, Mira, Luma, Rhea |
 
 `theme.BaseColors()`, `theme.AccentColors()` and `theme.Styles()` return independent slices
 for pickers. Unknown enum names panic. An accent changes primary, secondary,
 chart and sidebar-primary tokens while preserving the selected base surfaces.
-Nova uses tighter corners and spacing; Rhea uses rounder controls, 24px bubble
-corners and 16px attachment corners. These are native token mappings for ggui's
+Each style sets the proportions of the radii to `Radius`, the paddings and the
+opacity of `Input`: Nova uses tighter corners and spacing; Rhea uses rounder
+controls, 24px bubble corners and 16px attachment corners. These are native token mappings for ggui's
 components, not CSS execution. `Theme.Chat` controls bubble padding/radius,
 attachment radii and questionnaire geometry. Fonts remain caller-configurable
 through `Theme.Text.Font` and `Theme.Title.Font`.
@@ -499,8 +507,28 @@ on dark borders. CSS `--input` maps to `InputBorder`; ggui's existing `Input`
 continues to mean the painted input surface. Color values are converted from
 OKLCH to sRGB, clipping out-of-gamut channels at the rendering boundary.
 
-The gallery's **Theme presets** preview switches base, accent and style for the
-whole gallery, and the dark-mode switch preserves all three choices. **Emoji**
+`theme.Config` goes further, with the rest of the choices of shadcn/ui's own
+builder: `Radius` (none, or a `--radius` of 7.2, 10 or 14 logical pixels),
+`MenuAccent` (subtle, or bold rows in the primary color), `MenuColor` (default,
+or menus inverted to the dark theme in a light one), `Chart` (follow the
+accent, keep the base's, or any accent), body and heading `Font`, and an
+`Icons` library. `Config{}` is exactly `Preset{}`. `theme.Mode` with
+`theme.BindMode` and `ui.ThemeMode` choose light, dark or the system's
+appearance. See [ui/theme](../ui/theme/README.md) for both.
+
+```go
+recipe := theme.Config{
+	Preset:     theme.Preset{Base: theme.BaseZinc, Accent: theme.AccentBlue},
+	Radius:     theme.RadiusLarge,
+	MenuAccent: theme.MenuAccentBold,
+}
+mode := ggui.State(theme.ModeSystem)
+app.Setup(func() { theme.BindMode(mode, recipe.Dark(), recipe.Light()) })
+```
+
+The gallery's **Theme presets** preview switches base, accent, style, radius,
+menu accent and color, chart color, icon library and mode for the whole
+gallery, and the header's dark-mode switch preserves every choice. **Emoji**
 demonstrates color glyphs in labels and editable text. Gallery fonts and emoji
 assets are embedded, so the same previews run offline in native and WASM builds.
 
@@ -568,9 +596,9 @@ and ggui's existing APIs.
 | Buttons | Primary by default, with 80% hover opacity. Outline and ghost use muted hover surfaces; destructive uses a subtle red surface and red text. Text/icon sizes are 24/28/32/36px; `Pad(...)` and `Radius(...)` override the defaults. |
 | Focus | Controls use a separate, softer focus color. Text fields add an outer halo while editing. |
 | Tabs | A muted rounded strip with an animated raised selection; `.Line()` opts into the underline treatment. Reduced-motion settings still apply. |
-| Cards and floating panels | Cards have a foreground/10 outline without a default shadow. Menus retain panel shadows; dialogs use the larger radius without a shadow. Modal backdrops blur and dim content. |
+| Cards and floating panels | Cards have a foreground/10 outline without a default shadow. Menus retain panel shadows; dialogs and sheets cast `OverlayShadow`, and dialogs take the larger radius. Modal backdrops blur and dim content. |
 | Labels and notices | Field labels use the body size; help text remains smaller. Alerts use body-size descriptions and tighter title spacing. |
-| Badges and calendar | Badges default to Primary; `.Secondary()`, `.Outline()` and `.Destructive()` select other looks. Calendar month navigation uses ghost buttons with contrasting selected-date text. |
+| Badges and calendar | Badges default to Primary; `.Secondary()`, `.Outline()`, `.Ghost()`, `.Link()` and `.Destructive()` select other looks. Calendar month navigation uses ghost buttons with contrasting selected-date text. |
 | Menus, selects and dialogs | A highlighted item turns `Accent` with an `AccentFg` label. Floating surfaces draw their text in `PopoverFg`; dialog and sheet titles use the `Heading` style. |
 
 These choices follow a brand by changing the theme rather than the widgets.
