@@ -389,8 +389,17 @@ func TestDroppedPathMaskLeavesTheGauge(t *testing.T) {
 	img := ggfx.NewImage(200, 200)
 	defer img.Deallocate()
 	c := &Canvas{Image: img}
-	runtime.GC()
+	// Paths that earlier tests dropped leave the gauge as their cleanups
+	// run, which is some time after a collection: wait for it to rest, or
+	// one leaving during the test would be taken for this one's.
 	base := framestats.ReadTextures().PathMasks
+	for still := 0; still < 20; still++ {
+		runtime.GC()
+		time.Sleep(time.Millisecond)
+		if now := framestats.ReadTextures().PathMasks; now != base {
+			base, still = now, 0
+		}
+	}
 	func() {
 		c.FillPathGradient(triangle(100), Rct(Point{}, Sz(100, 100)), color.White, color.Black)
 	}()
