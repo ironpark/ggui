@@ -175,14 +175,13 @@ func TestComboboxOptionsKeepSearchQueryAndFocus(t *testing.T) {
 	p := ggui.NewProbe(ggui.Component(func() ggui.Widget { return ggui.Column(w) }), ggui.Sz(450, 400))
 	defer p.Close()
 	p.Tap("Choice")
-	p.Tap("Search options")
-	act(t, p, ggui.RoleTextField, "Search options", ggui.Action{Kind: ggui.ActionSetValue, Text: "be"})
+	act(t, p, ggui.RoleCombobox, "Choice", ggui.Action{Kind: ggui.ActionSetValue, Text: "be"})
 	w.Options([]string{"Alpine", "Berry", "Beet"})
 	p.Frame()
 	if !w.Popup().IsOpen() {
 		t.Fatal("option replacement closed the popup")
 	}
-	if got := node(t, p.Semantics(), ggui.RoleTextField, "Search options").Value; got != "be" {
+	if got := node(t, p.Semantics(), ggui.RoleCombobox, "Choice").Value; got != "be" {
 		t.Fatalf("search query reset to %q", got)
 	}
 	if _, ok := p.Find("Alpine"); ok {

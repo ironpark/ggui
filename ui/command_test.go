@@ -125,7 +125,7 @@ func TestComboboxListChecksItsValueAndIsAtLeastItsTriggerWide(t *testing.T) {
 	p.Tap("Pick")
 	trigger, _ := p.Find("Pick")
 	tree := p.Semantics()
-	if n, ok := tree.Find(ggui.RoleMenuItem, "Beta"); !ok || !(n.Checked == ggui.Tri(true)) {
+	if n, ok := tree.Find(ggui.RoleOption, "Beta"); !ok || !n.Selected || !(n.Checked == ggui.Tri(true)) {
 		t.Fatalf("the chosen row is not checked:\n%s", tree)
 	}
 	alpha, _ := p.Find("Alpha")
