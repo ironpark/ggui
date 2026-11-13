@@ -15,9 +15,9 @@ type TooltipWidget struct {
 	props        property.Owner
 	child        ggui.Widget
 	tip          *ggui.TextWidget
-	keys         *ggui.TextWidget // the shortcut hint, if any
-	hint         string           // what Shortcut set, before the child's chord
-	text         func() string    // the text, asked as the tip opens; nil keeps tip's
+	keys         *KbdWidget    // the shortcut hint, if any, as a key cap
+	hint         string        // what Shortcut set, before the child's chord
+	text         func() string // the text, asked as the tip opens; nil keeps tip's
 	delay        time.Duration
 	pad          ggui.EdgeInsets
 	arrow        bool
@@ -178,11 +178,11 @@ func (t *TooltipWidget) showKeys() {
 		return
 	}
 	if t.keys == nil {
-		t.keys = ggui.Text(label).NoWrap()
-		t.box = ggui.Box(ggui.Row(t.tip, t.keys).Gap(t.theme.Space * .75).Align(ggui.AlignBaseline))
+		t.keys = Kbd(label)
+		t.box = ggui.Box(ggui.Row(t.tip, t.keys).Gap(t.theme.Space * .75).Align(ggui.AlignCenter))
 		t.effect = ggui.PopIn(tooltipSurface{t})
 	}
-	t.keys.Content(label).Style(t.theme.Caption).Color(fade(t.theme.Bg, .65))
+	t.keys.Content(label)
 }
 
 // Baseline implements ggui.Baseliner: the child's.
@@ -321,7 +321,8 @@ func (s tooltipSurface) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		inner.MinH = max(0, inner.MinH-arrow)
 		inner.MaxH = max(0, inner.MaxH-arrow)
 	}
-	size := s.t.box.Layout(inner, env)
+	// The tip is the inverse of the page, and so is a key cap on it.
+	size := s.t.box.Layout(inner, env.With(KbdInverseKey, true))
 	if s.t.horizontal() {
 		size.W += arrow
 	} else {

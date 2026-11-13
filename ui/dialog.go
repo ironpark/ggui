@@ -17,6 +17,7 @@ type DialogWidget struct {
 	modal
 	width  float64
 	top    float64 // the panel's distance from the window's top; 0 centres it
+	topAt  float64 // the share of the window's height above the panel, when top is 0
 	effect *ggui.TransitionWidget
 	reveal ggui.Motion
 }
@@ -108,6 +109,16 @@ func (d *DialogWidget) Top(y float64) *DialogWidget {
 	return d
 }
 
+// TopAt holds the panel's top at share of the window's height below its
+// top, as shadcn's command dialog does at a third, rather than centring
+// it; like Top it keeps the panel in place as its content grows. Top, when
+// set, wins; 0 centres the panel again.
+func (d *DialogWidget) TopAt(share float64) *DialogWidget {
+	defer property.Watch(&d.props, &d.topAt)()
+	d.topAt = clamp(share, 0, 1)
+	return d
+}
+
 // OnClose fires when the dialog closes, however it closed.
 func (d *DialogWidget) OnClose(fn func()) *DialogWidget { d.onClose = fn; return d }
 
@@ -150,10 +161,14 @@ func (d *DialogWidget) paintPanel(dst *ggui.Canvas, progress float64, open bool)
 		screen = ggui.Sz(d.width+t.Space*4, ggui.Unbounded)
 	}
 	margin := t.Space * 2
-	top := max(d.top, margin)
+	fixed := d.top
+	if fixed == 0 && d.topAt > 0 && screen.H != ggui.Unbounded {
+		fixed = screen.H * d.topAt
+	}
+	top := max(fixed, margin)
 	w := min(d.width, max(screen.W-2*margin, 0))
 	maxH := screen.H - 2*margin
-	if d.top > 0 {
+	if fixed > 0 {
 		maxH = screen.H - top - margin
 	}
 	if screen.H == ggui.Unbounded {
@@ -162,7 +177,7 @@ func (d *DialogWidget) paintPanel(dst *ggui.Canvas, progress float64, open bool)
 	size := d.effect.Layout(ggui.Constraints{MinW: w, MaxW: w, MaxH: max(maxH, 0)}, d.env)
 	at := ggui.Pt((screen.W-size.W)/2, margin)
 	switch {
-	case d.top > 0 && screen.H != ggui.Unbounded:
+	case fixed > 0 && screen.H != ggui.Unbounded:
 		at.Y = min(top, max(screen.H-margin-size.H, margin))
 	case screen.H != ggui.Unbounded:
 		at.Y = (screen.H - size.H) / 2
