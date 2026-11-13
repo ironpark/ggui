@@ -54,6 +54,17 @@ func (c *CheckboxWidget) BindIndeterminate(r ggui.Readable[bool]) *CheckboxWidge
 	return c
 }
 
+// Invalid marks the box as having failed validation: a destructive border
+// while it is not ticked and a destructive halo around it. A box inside a
+// Field holding an error is invalid without it.
+func (c *CheckboxWidget) Invalid(v bool) *CheckboxWidget { c.invalidProp.Set(v); return c }
+
+// BindInvalid follows r for Invalid without a rebuild.
+func (c *CheckboxWidget) BindInvalid(r ggui.Readable[bool]) *CheckboxWidget {
+	c.invalidProp.Bind(r, "BindInvalid")
+	return c
+}
+
 // OnChange fires with the new value after a click toggled it.
 func (c *CheckboxWidget) OnChange(fn func(bool)) *CheckboxWidget { c.onChange = fn; return c }
 
@@ -78,22 +89,30 @@ func (c *CheckboxWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	return c.layout(cs, env, squareGlyph(uitheme.Of(env)))
 }
 
+// checkSlot eases a checkbox's fill between unticked and ticked.
+var checkSlot = ggui.NewSlot[*ggui.Motion]("checkbox fill")
+
 // Paint implements Widget.
 func (c *CheckboxWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := c.theme
 	box := c.paint(dst, r, c)
 	on := ggui.Untrack(c.checked.Get)
 	mixed := c.mixed != nil && ggui.Untrack(c.mixed.Get)
-	radius := 4.0
-	opacity := pick(c.IsInert(), 1-t.DisabledMix, 1.0)
-	fill, border := t.Input, t.InputBorder
-	if on || mixed {
-		fill, border = t.Primary, t.Primary
+	radius := t.ControlSize / 4
+	invalid := c.invalidAmount(dst, box)
+	// The surface and the border ease to Primary as shadcn's
+	// transition-colors does; the mark itself appears at once.
+	k := dst.Ease(c.Anchor(box), checkSlot, pick(on || mixed, 1.0, 0.0), c.motion)
+	fill := mix(t.Input, t.Primary, k)
+	border := mix(mix(t.InputBorder, invalidBorder(t), invalid), t.Primary, k)
+	mark := t.PrimaryFg
+	if c.IsInert() {
+		fill, border, mark = t.Disabled(fill), t.Disabled(border), t.Disabled(mark)
 	}
-	dst.FillRoundRect(box, radius, fade(fill, opacity))
-	dst.StrokeRoundRect(box, radius, t.BorderWidth, fade(border, opacity))
+	dst.FillRoundRect(box, radius, fill)
+	dst.StrokeRoundRect(box, radius, t.BorderWidth, border)
 	if on || mixed {
-		paintIconAt(dst, c.env, pick(mixed, icons.Minus, icons.Check), box.Center(), 14, fade(t.PrimaryFg, opacity), 0)
+		paintIconAt(dst, c.env, pick(mixed, icons.Minus, icons.Check), box.Center(), t.ControlSize*.875, mark, 0)
 	}
-	controlFocusRing(dst, &c.Interactive, t, box, radius, t.Ring)
+	c.stateRing(dst, box, radius, invalid)
 }
