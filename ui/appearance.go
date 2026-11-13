@@ -113,7 +113,7 @@ func fieldSurface(dst *ggui.Canvas, at ggui.Anchor, t *uitheme.Theme, r ggui.Rec
 	}
 	f := joinedFocus{on: true, r: r, radius: radius, sides: sides, width: t.BorderWidth, line: border, halo: halo}
 	if g, ok := dst.Enclosing().(*ButtonGroupWidget); ok && sides.Any() {
-		g.focus = f
+		g.ring(f)
 		return
 	}
 	f.paint(dst)

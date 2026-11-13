@@ -530,11 +530,11 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		}
 	}
 	// The ring eases in and out with the rest of the button, as shadcn's
-	// transition-all has it, and rests once it arrives. A ButtonGroup draws
-	// one ring for its children, the focused one's, so there a ring that
-	// lost the focus goes at once rather than over the one coming in.
+	// transition-all has it, and rests once it arrives. In a ButtonGroup
+	// the group draws it, over the children, and the one easing out around
+	// the button that lost the focus beside the one coming in.
 	focused := b.Focused && b.FocusVisible && !inert
-	if k := dst.Ease(anchor, focusRingSlot, pick(focused, 1.0, 0.0), b.motion); k > 0 && (focused || !sides.Any()) {
+	if k := dst.Ease(anchor, focusRingSlot, pick(focused, 1.0, 0.0), b.motion); k > 0 {
 		ring := colorOr(st.Ring, t.Ring)
 		line := colorOr(st.FocusBorder, ring)
 		// An invalid control keeps its destructive border and ring while

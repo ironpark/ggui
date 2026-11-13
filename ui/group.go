@@ -35,8 +35,8 @@ type ButtonGroupWidget struct {
 
 	theme *uitheme.Theme
 	sizes []ggui.Size
-	gap   float64     // between children, for a group of groups
-	focus joinedFocus // the focused child's ring, drawn over the others
+	gap   float64       // between children, for a group of groups
+	rings []joinedFocus // the children's rings of this paint, drawn over them all
 
 	// What Paint hands to enclosed, made once: a closure a frame would be
 	// garbage.
@@ -181,8 +181,23 @@ func (g *ButtonGroupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	})
 }
 
+// ring takes the ring of a child being painted, to draw once every child
+// is. There may be two while focus moves: the one easing out around the
+// child that had it and the one easing in around the child that has it.
+func (g *ButtonGroupWidget) ring(f joinedFocus) { g.rings = append(g.rings, f) }
+
+// ringAt is the ring handed over for the child painted in r, if any.
+func (g *ButtonGroupWidget) ringAt(r ggui.Rect) (joinedFocus, bool) {
+	for _, f := range g.rings {
+		if f.r == r {
+			return f, true
+		}
+	}
+	return joinedFocus{}, false
+}
+
 func (g *ButtonGroupWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
-	g.focus.on = false
+	g.rings = g.rings[:0]
 	cross := pick(g.vertical, r.Size.W, r.Size.H)
 	at := r.Origin
 	for i, child := range g.children {
@@ -191,10 +206,10 @@ func (g *ButtonGroupWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.Paint(child, mirrorHorizontal(box, r, g.rtl && !g.vertical))
 		at = at.Add(pick(g.vertical, ggui.Pt(0, s.H+g.gap), ggui.Pt(s.W+g.gap, 0)))
 	}
-	// Nothing clips the children, and the focused one's ring is drawn last:
-	// its halo lies over its neighbours, as shadcn's focus-visible:z-10 has it.
-	if g.focus.on {
-		g.focus.paint(dst)
+	// Nothing clips the children, and their rings are drawn last: a halo
+	// lies over the neighbours, as shadcn's focus-visible:z-10 has it.
+	for i := range g.rings {
+		g.rings[i].paint(dst)
 	}
 }
 

@@ -501,7 +501,7 @@ func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 			ring.on = false
 		}
 		if g, ok := dst.Enclosing().(*ButtonGroupWidget); ok && ring.on {
-			g.focus = ring
+			g.ring(ring)
 		}
 	} else {
 		if s.shownInvalid && !inert {
