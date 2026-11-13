@@ -342,3 +342,39 @@ func TestCommandEntryCheckedShowsATrailingCheckUnlessItHasAShortcut(t *testing.T
 		t.Fatalf("a checked entry is read out as %v", n.Checked)
 	}
 }
+
+// Moving from one open menu of a bar to the next is, in shadcn, one popup
+// playing data-closed:animate-out where it was while another plays
+// data-open:animate-in: MenubarContent hands its classes to
+// DropdownMenuContent, whose exit classes stay through the merge. The bar
+// has the menu left go out as the one moved to comes in.
+func TestMenubarCrossesTheMenuLeftWithTheMenuMovedTo(t *testing.T) {
+	t.Parallel()
+	bar := Menubar(Menu("File", MenuItem("New", nil)), Menu("Edit", MenuItem("Copy", nil)))
+	p := ggui.NewProbe(bar, ggui.Sz(400, 300))
+	defer p.Close()
+	p.Tap("File")
+	p.Advance(time.Second)
+	p.Frame()
+	if bar.left != -1 || bar.arriving {
+		t.Fatal("opening a menu from a closed bar crosses with nothing")
+	}
+	first := bar.popup.Rect()
+	p.Type(ggui.Mods{}, ggui.KeyArrowRight)
+	p.Frame()
+	if bar.active != 1 || bar.left != 0 || bar.leftAt != first || !bar.arriving {
+		t.Fatalf("after Right the bar is on %d with %d leaving from %v (arriving %v), want 1 with 0 leaving from %v", bar.active, bar.left, bar.leftAt, bar.arriving, first)
+	}
+	p.Advance(bar.env.PopupDuration() / 2)
+	p.Frame()
+	now := ggui.FrameTime()
+	if in, out := bar.arrive.Value(now), bar.depart.Value(now); !(in > 0 && in < 1) || !(out > 0 && out < 1) {
+		t.Fatalf("halfway the menu moved to is %v in and the one left %v, want both on their way", in, out)
+	}
+	p.Advance(time.Second)
+	p.Frame()
+	p.Frame()
+	if bar.left != -1 || bar.arriving || !bar.popup.IsOpen() {
+		t.Fatalf("settled, menu %d is still leaving (arriving %v, open %v)", bar.left, bar.arriving, bar.popup.IsOpen())
+	}
+}
