@@ -314,14 +314,14 @@ func TestAClickClearsTheSelectionOfTheOtherTexts(t *testing.T) {
 	if area.SelectedText() == "" {
 		t.Fatal("the drag selected nothing")
 	}
-	before := delivered.Load()
+	before := p.world().delivered
 	p.Press(textAt(&a.rich.w, a.rich.w.rect, 3))
 	p.Release(textAt(&a.rich.w, a.rich.w.rect, 3))
 	p.Frame()
 	if got := area.SelectedText(); got != "" {
 		t.Fatalf("a click left %q selected", got)
 	}
-	if delivered.Load() == before {
+	if p.world().delivered == before {
 		t.Fatal("the other paragraph was left to show its selection")
 	}
 }
