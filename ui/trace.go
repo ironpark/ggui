@@ -42,8 +42,12 @@ type TraceStep struct {
 	Description string
 	Status      TraceStatus
 	Duration    time.Duration
-	Details     ggui.Widget
-	Children    []TraceStep
+	// Icon draws the icon for a role before the title, in the line's
+	// color: what kind of step this is. The rule beside an open step's
+	// details drops from under its middle.
+	Icon     icons.Role
+	Details  ggui.Widget
+	Children []TraceStep
 	// OnActivate turns a leaf without Details or Children into a button. Put
 	// actions in Details for expandable rows, whose header remains a disclosure.
 	OnActivate func()
@@ -230,6 +234,7 @@ type traceRow struct {
 	env                   ggui.Env
 	reduced               bool
 	gap, chevron          float64 // between the title and the run, and the chevron's box with its gap
+	lead                  float64 // the icon before the title with its gap
 	titleSize, runSize    ggui.Size
 	line, bodySize        ggui.Size
 	header                ggui.Rect   // where the line was last painted
@@ -335,7 +340,11 @@ func (r *traceRow) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	// The run keeps its width and the title gives way, down to a third of
 	// the line, so neither a long description nor a long title hides the other.
-	avail := max(0, cs.MaxW-r.chevron)
+	r.lead = 0
+	if r.step.Icon != "" {
+		r.lead = t.IconSize + r.gap
+	}
+	avail := max(0, cs.MaxW-r.chevron-r.lead)
 	r.title.Style(t.Text)
 	r.run.Style(t.Text)
 	r.runSize = ggui.Size{}
@@ -344,11 +353,11 @@ func (r *traceRow) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 		avail = max(0, avail-r.runSize.W-r.gap)
 	}
 	r.titleSize = r.title.Layout(ggui.Loose(ggui.Sz(avail, ggui.Unbounded)), env)
-	r.line = ggui.Sz(r.titleSize.W+r.chevron, max(r.titleSize.H, r.runSize.H))
+	r.line = ggui.Sz(r.lead+r.titleSize.W+r.chevron, max(r.titleSize.H, r.runSize.H))
 	if r.shown != "" {
 		r.line.W += r.gap + r.runSize.W
 	}
-	if expandable {
+	if expandable || r.lead > 0 {
 		r.line.H = max(r.line.H, t.IconSize)
 	}
 	r.line.W = min(r.line.W, cs.MaxW)
@@ -403,6 +412,10 @@ func (r *traceRow) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 			r.Hit(dst, header, r, ggui.CursorShapePointer)
 		}
 		x := header.Origin.X
+		if r.lead > 0 {
+			paintIcon(dst, r.env, r.step.Icon, ggui.Rct(ggui.Pt(x, header.Origin.Y+(r.line.H-t.IconSize)/2), ggui.Sz(t.IconSize, t.IconSize)), ink, 0)
+			x += r.lead
+		}
 		titleRect := ggui.Rct(ggui.Pt(x, header.Origin.Y+(r.line.H-r.titleSize.H)/2), r.titleSize)
 		dst.Paint(r.title, titleRect)
 		// A highlight moves across a running step's title, and only while

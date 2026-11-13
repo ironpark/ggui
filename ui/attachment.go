@@ -4,6 +4,7 @@ import (
 	"image/color"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
@@ -53,6 +54,7 @@ type AttachmentWidget struct {
 	width                                float64
 	theme                                *uitheme.Theme
 	reduced                              bool
+	motion                               time.Duration
 	current                              AttachmentState
 	padX, padY, gap, radius, mediaSide   float64
 	mediaRect, textRect, descriptionRect ggui.Rect
@@ -151,6 +153,7 @@ func (a *AttachmentWidget) uploadState() AttachmentState {
 func (a *AttachmentWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer a.props.Layout().EndLayout()
 	a.theme, a.reduced, a.current = uitheme.Of(env), env.ReducedMotion(), a.uploadState()
+	a.motion = env.Motion(a.theme.MotionFast)
 	a.padX, a.padY, a.gap, a.mediaSide = 10, 8, 8, 40
 	a.radius = a.theme.Chat.AttachmentRadius
 	fontSize := 14.0
@@ -278,6 +281,9 @@ func (a *AttachmentWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 
 func translated(r ggui.Rect, at ggui.Point) ggui.Rect { r.Origin = r.Origin.Add(at); return r }
 
+// attachmentHoverSlot keeps a card's hover easing across frames.
+var attachmentHoverSlot = ggui.NewSlot[*ggui.Motion]("attachment hover")
+
 func (a *AttachmentWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	state := a.current
 	t := a.theme
@@ -285,8 +291,10 @@ func (a *AttachmentWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// opens something, inside the border, or the destructive color at 30%
 	// for an error.
 	fill, border := t.Card, t.Border
-	if a.trigger != nil && a.trigger.Hovered {
-		fill = fade(t.Muted, .5)
+	if a.trigger != nil {
+		// transition-colors: the hover surface eases in and out.
+		hover := dst.Ease(a.trigger.Anchor(r), attachmentHoverSlot, pick(a.trigger.Hovered, 1.0, 0.0), a.motion)
+		fill = mix(fill, fade(t.Muted, .5), hover)
 	}
 	if state == AttachmentError {
 		border = fade(t.Destructive, .3)

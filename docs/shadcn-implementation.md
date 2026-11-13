@@ -110,7 +110,7 @@ explicit composition already exists, not that every optional web prop is covered
 | Sliders | `RangeSlider` accepts any number of values with independent focus/accessible ranges, `MinGap`, named thumbs and copied callbacks; scalar/range sliders support `Vertical`, RTL, `Step`, `LargeStep` and commits. |
 | Drawers | Bottom-handle drag, positional snap heights, controlled `BindSnapPoint`, `OnSnapChange`, dismissal and keyboard/accessibility resizing. |
 | Code | `CodeBlock` / `CodeBlockOf`, title/language, exact copy/selection, line numbers, `StartLine`, `Wrap`, `LineStyles`, bounded keyboard scrolling and LTR code inside RTL interfaces. |
-| Trace | Hierarchical keyed `TraceStep` rows with status, description, duration, details, children and leaf actions; controlled steps/expansion and retained focus across reorders. |
+| Trace | Hierarchical keyed `TraceStep` rows with an icon, status, description, duration, details, children and leaf actions; controlled steps/expansion and retained focus across reorders. |
 | Buttons/forms | `Toggle` binds pressed state; `ToggleGroupMultiple` binds selected values; `Label.For` focuses or activates its associated control. `Field` uses associated labels. |
 | Tabs | `Vertical`, `Tab.Disabled`, manual activation default and `ActivateOnFocus(true)` opt-in; independent accessible targets with a roving Tab stop. |
 | Combobox | An editable input as the trigger that filters as it is typed in, with focus kept there; `ClearButton`, `Empty`; `ComboboxMultiple` with its search inline after removable chips, checked rows, keyboard toggles/backspace, live options and copied selection callbacks. |

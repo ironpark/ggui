@@ -27,9 +27,21 @@ func TestCalendarNavigationAndConstraints(t *testing.T) {
 		t.Fatal("month rollover", ggui.Untrack(value.Get))
 	}
 	c.Bounds(date(2024, 3, 1), date(2024, 3, 10)).DisabledDate(func(d time.Time) bool { return d.Weekday() == time.Saturday })
+	// The arrow passes over the disabled Saturday to the Sunday after it.
 	p.Type(ggui.Mods{}, ggui.KeyArrowRight, ggui.KeyEnter)
-	if !ggui.Untrack(value.Get).Equal(date(2024, 3, 1)) {
-		t.Fatal("disabled date selected")
+	if !ggui.Untrack(value.Get).Equal(date(2024, 3, 3)) {
+		t.Fatal("the arrow did not pass over the disabled date", ggui.Untrack(value.Get))
+	}
+	// Past the bounds there is no day to reach, and the keys stay put.
+	p.Type(ggui.Mods{}, ggui.KeyPageDown, ggui.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyArrowUp, ggui.KeyArrowUp, ggui.KeyEnter)
+	if !ggui.Untrack(value.Get).Equal(date(2024, 3, 3)) {
+		t.Fatal("the keys left the bounds", ggui.Untrack(value.Get))
+	}
+	for name, want := range map[string]bool{"Previous month": true, "Next month": true} {
+		if n, ok := p.Semantics().Find(ggui.RoleButton, name); !ok || n.Disabled != want {
+			t.Fatalf("%s disabled=%v inside one month of bounds, want %v", name, n.Disabled, want)
+		}
 	}
 	act(t, p, ggui.RoleOption, "2024-03-03", ggui.Action{Kind: ggui.ActionSelect})
 	if !ggui.Untrack(value.Get).Equal(date(2024, 3, 3)) {
@@ -39,15 +51,22 @@ func TestCalendarNavigationAndConstraints(t *testing.T) {
 	if !ggui.Untrack(value.Get).Equal(date(2024, 3, 3)) {
 		t.Fatal("out of bounds selection")
 	}
+	c.Bounds(time.Time{}, time.Time{}).DisabledDate(nil)
 	value.Set(date(2025, 12, 15))
 	p.Frame()
 	if _, ok := p.Semantics().Find(ggui.RoleOption, "2025-12-15"); !ok {
 		t.Fatal("external binding did not change month")
 	}
+	// Shift with PageUp and PageDown browses by the year.
+	p.Type(ggui.Mods{Shift: true}, ggui.KeyPageDown)
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
+	if !ggui.Untrack(value.Get).Equal(date(2026, 12, 15)) {
+		t.Fatal("Shift+PageDown did not browse a year on", ggui.Untrack(value.Get))
+	}
 	c.Disabled(true)
 	p.Frame()
 	p.Type(ggui.Mods{}, ggui.KeyArrowRight, ggui.KeyEnter)
-	if !ggui.Untrack(value.Get).Equal(date(2025, 12, 15)) {
+	if !ggui.Untrack(value.Get).Equal(date(2026, 12, 15)) {
 		t.Fatal("disabled calendar")
 	}
 }
