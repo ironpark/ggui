@@ -21,8 +21,11 @@ type TooltipWidget struct {
 	delay        time.Duration
 	pad          ggui.EdgeInsets
 	arrow        bool
-	below        bool
-	arrowX       float64
+	side         ggui.PopupSide
+	align        ggui.PopupAlignment
+	alignOffset  float64
+	placed       ggui.PopupSide // the side the tip was last painted on
+	arrowAt      float64        // how far along the surface's edge the arrow points
 	disabled     bool
 	disabledProp property.Value[bool]
 	escaped      bool // Escape dismissed the tip, as of the last paint
@@ -46,6 +49,15 @@ type tooltipHover struct {
 	escape    *bool
 }
 
+const (
+	// tooltipMaxWidth is the most a tip's text runs to before it wraps:
+	// shadcn's max-w-xs.
+	tooltipMaxWidth = 320
+	// tooltipGap is the room between a tip's body and its anchor, which
+	// the arrow, when there is one, stands in.
+	tooltipGap = 4
+)
+
 // tooltipEscape closes an open tip.
 var tooltipEscape = ggui.MustChord("escape")
 
@@ -56,7 +68,7 @@ var tooltipSlot = ggui.NewSlot[tooltipHover]("tooltip hover")
 // gives the child does not open it, as focus moved with the keyboard does. It registers no hit
 // region, so the child gets every event, and paints through Canvas.Overlay.
 func Tooltip(child ggui.Widget, text string) *TooltipWidget {
-	t := &TooltipWidget{child: child, tip: ggui.Text(text), delay: 0, arrow: true}
+	t := &TooltipWidget{child: child, tip: ggui.Text(text), delay: 0, arrow: true, side: ggui.PopupTop, placed: ggui.PopupTop, align: ggui.PopupCenter}
 	t.box = ggui.Box(t.tip)
 	t.effect = ggui.PopIn(tooltipSurface{t})
 	return t
@@ -99,6 +111,31 @@ func (t *TooltipWidget) Arrow(v bool) *TooltipWidget {
 	return t
 }
 
+// Side sets the side of the child the tip opens on, ggui.PopupTop by
+// default. It opens on the opposite side when only that one has the room,
+// and the arrow points at the child from wherever the tip ends up.
+func (t *TooltipWidget) Side(v ggui.PopupSide) *TooltipWidget {
+	defer property.Watch(&t.props, &t.side)()
+	t.side = v
+	return t
+}
+
+// Align sets where the tip sits along the child's side: centered by
+// default, or lined up with its logical start or end.
+func (t *TooltipWidget) Align(v ggui.PopupAlignment) *TooltipWidget {
+	defer property.Watch(&t.props, &t.align)()
+	t.align = v
+	return t
+}
+
+// AlignOffset moves the tip along the child's side, away from the edge
+// Align lines it up with; see ggui.PopupWidget.AlignOffset.
+func (t *TooltipWidget) AlignOffset(v float64) *TooltipWidget {
+	defer property.Watch(&t.props, &t.alignOffset)()
+	t.alignOffset = v
+	return t
+}
+
 // Delay sets how long the cursor must rest before the tip appears.
 func (t *TooltipWidget) Delay(d time.Duration) *TooltipWidget {
 	defer property.Watch(&t.props, &t.delay)()
@@ -115,6 +152,15 @@ func (t *TooltipWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t.pad = ggui.Insets(t.theme.Space*.75, t.theme.Space*1.5)
 	t.tip.Style(t.theme.Caption).Color(t.theme.Bg)
 	t.showKeys()
+	if t.keys != nil {
+		// A key hint is a block of its own, and sits closer to the edge
+		// than text does.
+		if env.Direction() == ggui.DirRTL {
+			t.pad.Left = t.theme.Space * .75
+		} else {
+			t.pad.Right = t.theme.Space * .75
+		}
+	}
 	t.box.Padding(t.pad).Fill(t.theme.Fg).Radius(t.theme.RadiusSm)
 	return t.child.Layout(c, env)
 }
@@ -133,7 +179,7 @@ func (t *TooltipWidget) showKeys() {
 	}
 	if t.keys == nil {
 		t.keys = ggui.Text(label).NoWrap()
-		t.box = ggui.Box(ggui.Row(t.tip, t.keys).Gap(t.theme.Space).Align(ggui.AlignBaseline))
+		t.box = ggui.Box(ggui.Row(t.tip, t.keys).Gap(t.theme.Space * .75).Align(ggui.AlignBaseline))
 		t.effect = ggui.PopIn(tooltipSurface{t})
 	}
 	t.keys.Content(label).Style(t.theme.Caption).Color(fade(t.theme.Bg, .65))
@@ -208,7 +254,7 @@ func (t *TooltipWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 
 func (t *TooltipWidget) paintTip(dst *ggui.Canvas, anchor ggui.Rect) {
 	screen := dst.Size()
-	maxW := 320.0
+	maxW := float64(tooltipMaxWidth)
 	if screen.W > 0 {
 		maxW = min(maxW, screen.W)
 	}
@@ -216,53 +262,100 @@ func (t *TooltipWidget) paintTip(dst *ggui.Canvas, anchor ggui.Rect) {
 	if screen.H > 0 {
 		maxH = screen.H
 	}
+	// The surface is the body and, on the side facing the anchor, the
+	// arrow. Which side that is takes the body's size to settle, and the
+	// opposite side is along the same axis, so the size holds either way.
+	rtl := t.env.Direction() == ggui.DirRTL
+	_, t.placed, _ = floatBeside(ggui.Size{}, anchor, ggui.Size{}, t.side, t.align, 0, 0, rtl)
 	size := t.effect.Layout(ggui.Loose(ggui.Sz(maxW, maxH)), t.env)
-	gap := pick(t.arrow, 0.0, 4.0)
-	at := ggui.Pt(anchor.Origin.X+(anchor.Size.W-size.W)/2, anchor.Origin.Y-size.H-gap)
-	t.below = false
-	if screen != (ggui.Size{}) {
-		at.X = clamp(at.X, 0, max(screen.W-size.W, 0))
-		if at.Y < 0 {
-			t.below = true
-			at.Y = min(anchor.Origin.Y+anchor.Size.H+gap, max(screen.H-size.H, 0))
+	body := size
+	if t.arrow {
+		if t.horizontal() {
+			body.W -= tooltipGap
+		} else {
+			body.H -= tooltipGap
 		}
 	}
+	at, placed, _ := floatBeside(screen, anchor, body, t.side, t.align, t.alignOffset, tooltipGap, rtl)
+	t.placed = placed
 	// Keep the arrow pointed at the anchor when collision shifts the body,
 	// without letting it emerge from one of the rounded corners.
-	margin := min(t.theme.RadiusSm+5, size.W/2)
-	t.arrowX = clamp(anchor.Center().X-at.X, margin, size.W-margin)
-	dst.Node(ggui.Rct(at, size), ggui.Node{Role: ggui.RoleGroup}, func(dst *ggui.Canvas) { dst.Paint(t.effect, ggui.Rct(at, size)) })
+	extent, center := body.W, anchor.Center().X-at.Origin.X
+	if t.horizontal() {
+		extent, center = body.H, anchor.Center().Y-at.Origin.Y
+	}
+	margin := min(t.theme.RadiusSm+5, extent/2)
+	t.arrowAt = clamp(center, margin, extent-margin)
+	if t.arrow {
+		switch placed {
+		case ggui.PopupBottom:
+			at.Origin.Y -= tooltipGap
+		case ggui.PopupRight:
+			at.Origin.X -= tooltipGap
+		}
+		at.Size = size
+	}
+	t.effect.PopFrom(placed, t.arrowAt/max(extent, 1))
+	dst.Node(at, ggui.Node{Role: ggui.RoleGroup}, func(dst *ggui.Canvas) { dst.Paint(t.effect, at) })
+}
+
+// horizontal reports whether the tip was last placed to the left or right
+// of its child.
+func (t *TooltipWidget) horizontal() bool {
+	return t.placed == ggui.PopupLeft || t.placed == ggui.PopupRight
 }
 
 // tooltipSurface includes the arrow in the same transition layer as the body.
 // A 10px square with 2px rounded corners, rotated 45 degrees, forms its tip.
-// Its four-pixel protrusion occupies the existing body-to-anchor gap.
+// Its four-pixel protrusion occupies the body-to-anchor gap, on whichever
+// side of the body faces the anchor.
 type tooltipSurface struct{ t *TooltipWidget }
 
 func (s tooltipSurface) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	arrow := pick(s.t.arrow, 4.0, 0.0)
+	arrow := pick(s.t.arrow, float64(tooltipGap), 0.0)
 	inner := c
-	inner.MinH = max(0, inner.MinH-arrow)
-	inner.MaxH = max(0, inner.MaxH-arrow)
+	if s.t.horizontal() {
+		inner.MinW = max(0, inner.MinW-arrow)
+		inner.MaxW = max(0, inner.MaxW-arrow)
+	} else {
+		inner.MinH = max(0, inner.MinH-arrow)
+		inner.MaxH = max(0, inner.MaxH-arrow)
+	}
 	size := s.t.box.Layout(inner, env)
-	size.H += arrow
+	if s.t.horizontal() {
+		size.W += arrow
+	} else {
+		size.H += arrow
+	}
 	return c.Constrain(size)
 }
+
 func (s tooltipSurface) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := s.t
 	body := r
 	if t.arrow {
-		body.Size.H = max(0, body.Size.H-4)
-		if t.below {
-			body.Origin.Y += 4
+		// The square's center sits three pixels inside the body's edge, so
+		// that its corner reaches the gap's far side.
+		const half, inset = 5, 3
+		var center ggui.Point
+		switch t.placed {
+		case ggui.PopupBottom:
+			body.Origin.Y += tooltipGap
+			body.Size.H = max(0, body.Size.H-tooltipGap)
+			center = ggui.Pt(body.Origin.X+t.arrowAt, body.Origin.Y+inset)
+		case ggui.PopupLeft:
+			body.Size.W = max(0, body.Size.W-tooltipGap)
+			center = ggui.Pt(body.Origin.X+body.Size.W-inset, body.Origin.Y+t.arrowAt)
+		case ggui.PopupRight:
+			body.Origin.X += tooltipGap
+			body.Size.W = max(0, body.Size.W-tooltipGap)
+			center = ggui.Pt(body.Origin.X+inset, body.Origin.Y+t.arrowAt)
+		default:
+			body.Size.H = max(0, body.Size.H-tooltipGap)
+			center = ggui.Pt(body.Origin.X+t.arrowAt, body.Origin.Y+body.Size.H-inset)
 		}
-		y := body.Origin.Y + body.Size.H - 3
-		if t.below {
-			y = body.Origin.Y + 3
-		}
-		center := ggui.Pt(r.Origin.X+t.arrowX, y)
 		dst.Transform(ggui.Affine{}.Rotate(math.Pi/4).About(center), func(dst *ggui.Canvas) {
-			dst.FillRoundRect(ggui.Rct(center.Sub(ggui.Pt(5, 5)), ggui.Sz(10, 10)), 2, t.theme.Fg)
+			dst.FillRoundRect(ggui.Rct(center.Sub(ggui.Pt(half, half)), ggui.Sz(2*half, 2*half)), 2, t.theme.Fg)
 		})
 	}
 	dst.Paint(t.box, body)

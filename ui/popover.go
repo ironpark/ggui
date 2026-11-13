@@ -18,15 +18,21 @@ type PopoverWidget struct {
 	pad                          ggui.EdgeInsets
 	padded                       bool
 	content                      ggui.Widget
-	body                         ggui.Widget
+	body                         *ggui.ColumnWidget
+	header                       *ggui.ColumnWidget
+	heading, text                *ggui.TextWidget
 	title, description           string
 	builtTitle, builtDescription string
 }
 
+// popoverWidth is a popover's width until Width says otherwise: shadcn's
+// w-72.
+const popoverWidth = 288
+
 // Popover creates a button that toggles content in a 288px floating panel.
 // Content can close the panel through PopupOf(env), or through Hide.
 func Popover(label string, content ggui.Widget) *PopoverWidget {
-	p := &PopoverWidget{width: 288}
+	p := &PopoverWidget{width: popoverWidth}
 	p.button = Button(label, p.Toggle).Outline()
 	p.init(content)
 	return p
@@ -36,7 +42,7 @@ func Popover(label string, content ggui.Widget) *PopoverWidget {
 // accessible label. The face is rendered inside a button; it is not a second
 // interactive trigger.
 func PopoverOf(face, content ggui.Widget) *PopoverWidget {
-	p := &PopoverWidget{width: 288}
+	p := &PopoverWidget{width: popoverWidth}
 	p.button = ButtonOf(face, p.Toggle).Outline()
 	p.init(content)
 	return p
@@ -104,8 +110,17 @@ func (p *PopoverWidget) Pad(v ...float64) *PopoverWidget {
 // nonmodal, allowing keyboard and pointer access to surrounding content.
 func (p *PopoverWidget) Modal(v bool) *PopoverWidget { p.popup.Modal(v); return p }
 
-// Align chooses center (the default), logical start, or logical end alignment.
+// Align chooses center (the default), logical start, or logical end
+// alignment along the trigger's side.
 func (p *PopoverWidget) Align(v ggui.PopupAlignment) *PopoverWidget { p.popup.Align(v); return p }
+
+// Side sets the side of the trigger the panel opens on, ggui.PopupBottom by
+// default. It opens on the opposite side when only that one has the room.
+func (p *PopoverWidget) Side(v ggui.PopupSide) *PopoverWidget { p.popup.Side(v); return p }
+
+// AlignOffset moves the panel along the trigger's side, away from the edge
+// Align lines it up with; see ggui.PopupWidget.AlignOffset.
+func (p *PopoverWidget) AlignOffset(v float64) *PopoverWidget { p.popup.AlignOffset(v); return p }
 
 // Gap sets the distance from the trigger to the panel (4px by default).
 func (p *PopoverWidget) Gap(v float64) *PopoverWidget { p.popup.Gap(v); return p }
@@ -178,7 +193,7 @@ func (p *PopoverWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		p.Hide()
 	}
 	t := uitheme.Of(env)
-	pad := ggui.Insets(t.Space * 2)
+	pad := ggui.Insets(t.Space * 1.25)
 	if p.padded {
 		pad = p.pad
 	}
@@ -213,18 +228,40 @@ type popoverBody struct{ p *PopoverWidget }
 
 func (b popoverBody) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	p := b.p
+	t := uitheme.Of(env)
 	if p.body == nil || p.builtTitle != p.title || p.builtDescription != p.description {
-		children := []ggui.Widget{}
+		// The title and the description are one block, closer to each
+		// other than the block is to the content.
+		var lines, children []ggui.Widget
+		p.heading, p.text, p.header = nil, nil, nil
 		if p.title != "" {
-			children = append(children, Heading(p.title))
+			p.heading = ggui.Text(p.title).Role(ggui.RoleHeading)
+			lines = append(lines, p.heading)
 		}
 		if p.description != "" {
-			children = append(children, Caption(p.description))
+			p.text = ggui.Text(p.description)
+			lines = append(lines, p.text)
+		}
+		if len(lines) > 0 {
+			p.header = ggui.Column(lines...).Align(ggui.AlignStretch)
+			children = append(children, p.header)
 		}
 		children = append(children, p.content)
-		p.body = ggui.Column(children...).Gap(uitheme.Of(env).Space).Align(ggui.AlignStretch)
+		p.body = ggui.Column(children...).Align(ggui.AlignStretch)
 		p.builtTitle, p.builtDescription = p.title, p.description
 	}
+	if p.heading != nil {
+		title := t.Text
+		title.Weight, title.Color = ggui.WeightMedium, t.PopoverFg
+		p.heading.Style(title)
+	}
+	if p.text != nil {
+		p.text.Style(mutedText(t))
+	}
+	if p.header != nil {
+		p.header.Gap(t.Space / 4)
+	}
+	p.body.Gap(t.Space * 1.25)
 	return p.body.Layout(c, env)
 }
 func (b popoverBody) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(b.p.body, r) }
