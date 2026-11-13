@@ -253,6 +253,12 @@ tasks:
       - task: serve
         vars: {EXAMPLE: gallery, PORT: 3000}
 
+  serve-create:
+    desc: Serve the theme builder in a browser at http://localhost:3000
+    cmds:
+      - task: serve
+        vars: {EXAMPLE: create, PORT: 3000}
+
   clean:
     desc: Clean Go build artifacts and app bundles
     cmds:
