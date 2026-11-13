@@ -141,7 +141,7 @@ func TestToggleOptionsRejectStaleSegmentsAndKeepFocus(t *testing.T) {
 	if !old.Describe().Disabled {
 		t.Fatal("old segment exposes active semantics")
 	}
-	p.Type(ggui.Mods{}, ggui.KeyArrowRight)
+	p.Type(ggui.Mods{}, ggui.KeyArrowRight, ggui.KeyArrowRight, ggui.KeySpace)
 	if value.Get() != "c" {
 		t.Fatal("group keyboard focus lost or absent selection mishandled", value.Get())
 	}

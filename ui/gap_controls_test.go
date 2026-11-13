@@ -91,6 +91,9 @@ func TestRTLControlsMirrorGeometryAndKeyboard(t *testing.T) {
 	tabs.HandleKey(ggui.KeyEvent{Kind: ggui.KeyPress, Key: ggui.KeyArrowLeft})
 	group.HandleKey(ggui.KeyEvent{Kind: ggui.KeyPress, Key: ggui.KeyArrowLeft})
 	tabs.HandleKey(ggui.KeyEvent{Kind: ggui.KeyPress, Key: ggui.KeySpace})
+	// The arrow moved the group's keyboard; Space presses where it went.
+	p.Frame()
+	p.Type(ggui.Mods{}, ggui.KeySpace)
 	if selected.Get() != 1 || choice.Get() != "B" {
 		t.Fatal("RTL left arrow did not move to next logical item")
 	}
