@@ -542,8 +542,7 @@ func (t *TextInputWidget) textStyle() TextStyle {
 }
 
 func (t *TextInputWidget) face(scale float64) text.Face {
-	st := t.textStyle()
-	return st.Font.face(st.Size*scale, st.Weight)
+	return t.textStyle().face(scale)
 }
 
 // advance is the logical width of s as drawn.
@@ -599,12 +598,13 @@ type measureKey struct {
 	font       *Font
 	weight     FontWeight
 	size       float64
+	tracking   float64
 	lang       string
 }
 
 func (t *TextInputWidget) measureKey() measureKey {
 	st := t.textStyle()
-	return measureKey{fontGen(), st.Font, st.Weight, st.Size, t.lang}
+	return measureKey{fontGen(), st.Font, st.Weight, st.Size, st.Tracking, t.lang}
 }
 
 // wrapMode is how the editor's text is cut into lines.

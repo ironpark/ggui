@@ -206,7 +206,7 @@ never evicted.
 Japanese characters, never before closing punctuation such as `。`. Korean
 breaks at spaces only, as CSS's `word-break: keep-all` does. A word wider than
 the line breaks between grapheme clusters. Spaces are kept as written. `.Size(px)`,
-`.Color(c)`, `.Font(f)`, `.LineHeight(mult)`, `.Style(ts)`, `.Align(0.5)` and
+`.Color(c)`, `.Font(f)`, `.LineHeight(mult)`, `.Tracking(em)`, `.Style(ts)`, `.Align(0.5)` and
 `.NoWrap()` adjust it; what is not set is inherited (see [Styling and themes](styling.md)). The
 default font is the platform's (see [Fonts](fonts.md#choose-text-fonts));
 `LoadFont(ttf)` or `LoadFontFile(path)` load your own, and `SetDefaultFont`

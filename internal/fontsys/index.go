@@ -241,12 +241,12 @@ var platformTextFamilies = func() []string {
 }()
 
 // systemFallbackFace returns a FallbackFace that draws, at size and
-// weight, what the faces before it lack with SystemFallback's fonts, and
-// what no font has with last.
-func systemFallbackFace(size float64, weight Weight, last text.Face) text.Face {
+// weight and with spacing after each letter, what the faces before it
+// lack with SystemFallback's fonts, and what no font has with last.
+func systemFallbackFace(size float64, weight Weight, spacing float64, last text.Face) text.Face {
 	return text.NewFallbackFace(func(r rune) text.Face {
 		if f := SystemFallback(r); f != nil {
-			return f.Face(size, weight, nil)
+			return f.SpacedFace(size, weight, spacing, nil)
 		}
 		return nil
 	}, last)

@@ -685,6 +685,10 @@ func MenuSub(label string, entries ...ggui.Widget) *MenuItemWidget {
 	return it
 }
 
+// shortcutTracking is the letter spacing of a shortcut hint in a menu,
+// command, context-menu or menubar row: shadcn's tracking-widest.
+const shortcutTracking = 0.1
+
 // Shortcut displays a right-aligned key hint; it does not register a
 // shortcut. A chord such as "cmd+shift+z" shows as the platform writes it,
 // "⇧⌘Z" on macOS and "Ctrl+Shift+Z" elsewhere; other text, such as "⌘N",
@@ -693,7 +697,7 @@ func (it *MenuItemWidget) Shortcut(s string) *MenuItemWidget {
 	defer property.Watch(&it.props, &it.shortcut)()
 	s = shortcutLabel(s)
 	if it.shortcut == nil {
-		it.shortcut = Caption(s).NoWrap()
+		it.shortcut = Caption(s).NoWrap().Tracking(shortcutTracking)
 	} else {
 		it.shortcut.Content(s)
 	}

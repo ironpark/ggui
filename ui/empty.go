@@ -27,10 +27,14 @@ type EmptyWidget struct {
 	text, content      *ggui.BoxWidget    // the header and the action, held to the measure
 }
 
+// emptyTitleTracking is the letter spacing of an Empty's title: shadcn's
+// tracking-tight.
+const emptyTitleTracking = -0.025
+
 // Empty creates a centered empty-state panel. An empty description is
 // left out.
 func Empty(title, description string) *EmptyWidget {
-	e := &EmptyWidget{title: ggui.Text(title).Align(.5)}
+	e := &EmptyWidget{title: ggui.Text(title).Align(.5).Tracking(emptyTitleTracking)}
 	if description != "" {
 		e.description = ggui.Text(description).Align(.5)
 	}

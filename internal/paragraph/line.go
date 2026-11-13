@@ -228,9 +228,10 @@ type rtlChain struct {
 	last   int                // the face a rune no font has falls to: the chain's last own one
 	emoji  *fontsys.EmojiFace // the emoji fallback, if the font has one
 
-	size   float64
-	weight fontsys.Weight
-	tag    language.Tag
+	size    float64
+	weight  fontsys.Weight
+	spacing float64 // pixels added after each letter
+	tag     language.Tag
 }
 
 // pick returns the index of the face that draws grapheme g: the emoji
@@ -258,6 +259,7 @@ func (c *rtlChain) pick(g string) int {
 func (c *rtlChain) setRTL(g *text.GoTextFace) {
 	g.Direction = text.DirectionRightToLeft
 	g.Language = c.tag
+	fontsys.SetLetterSpacing(g, c.spacing)
 }
 
 func (c *rtlChain) face(i int) text.Face {
@@ -279,12 +281,13 @@ func (c *rtlChain) faceOf(t string) text.Face {
 }
 
 type rtlKey struct {
-	font   *fontsys.Font
-	size   float64
-	weight fontsys.Weight
-	emoji  *fontsys.EmojiChoice
-	lang   string
-	gen    uint64
+	font    *fontsys.Font
+	size    float64
+	weight  fontsys.Weight
+	spacing float64
+	emoji   *fontsys.EmojiChoice
+	lang    string
+	gen     uint64
 }
 
 // rtlCache holds the chains asked for lately in two generations, as
@@ -302,8 +305,9 @@ const rtlCacheMin = 64
 // rtlFaces returns st's chain at scale, shaping in lang.
 func rtlFaces(st Style, scale float64, lang shapeLang) *rtlChain {
 	f, size := st.Font.Resolve(), st.Size*scale
+	spacing := st.Tracking * size
 	gen := fontsys.Generation()
-	key := rtlKey{f, size, st.Weight, st.Emoji, lang.key, gen}
+	key := rtlKey{f, size, st.Weight, spacing, st.Emoji, lang.key, gen}
 	rtlCache.Lock()
 	defer rtlCache.Unlock()
 	if rtlCache.gen != gen {
@@ -314,7 +318,7 @@ func rtlFaces(st Style, scale float64, lang shapeLang) *rtlChain {
 	}
 	c, ok := rtlCache.prev[key]
 	if !ok {
-		c = newRTLChain(f, size, st.Weight, st.Emoji, lang.tag)
+		c = newRTLChain(f, size, st.Weight, spacing, st.Emoji, lang.tag)
 	}
 	if rtlCache.cur == nil {
 		rtlCache.cur = map[rtlKey]*rtlChain{}
@@ -333,15 +337,15 @@ func rtlFaces(st Style, scale float64, lang shapeLang) *rtlChain {
 // newRTLChain builds f's chain at size and weight, shaping in tag: the
 // same faces fontsys.Font.Face puts in its fallback chain, in its order,
 // with the emoji font choice resolves to.
-func newRTLChain(f *fontsys.Font, size float64, sw fontsys.Weight, choice *fontsys.EmojiChoice, tag language.Tag) *rtlChain {
-	c := &rtlChain{picker: f.Picker(sw), size: size, weight: sw, tag: tag}
+func newRTLChain(f *fontsys.Font, size float64, sw fontsys.Weight, spacing float64, choice *fontsys.EmojiChoice, tag language.Tag) *rtlChain {
+	c := &rtlChain{picker: f.Picker(sw), size: size, weight: sw, spacing: spacing, tag: tag}
 	for i := range c.picker.Len() {
 		cf := c.picker.Font(i)
 		c.faces = append(c.faces, cf.Font.ChainFaceWith(size, sw, cf.Axis, c.setRTL))
 	}
 	c.last = len(c.faces) - 1
 	if f.DrawsEmoji() {
-		c.emoji, _ = f.FaceFor(size, sw, choice).(*fontsys.EmojiFace)
+		c.emoji, _ = f.SpacedFaceFor(size, sw, spacing, choice).(*fontsys.EmojiFace)
 	}
 	return c
 }

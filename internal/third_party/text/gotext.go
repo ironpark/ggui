@@ -62,6 +62,11 @@ type GoTextFace struct {
 	// Language is a hint for a language (BCP 47).
 	Language language.Tag
 
+	// LetterSpacing is added after every cluster that advances, in
+	// pixels, as CSS letter-spacing is: negative draws the letters closer.
+	// Advances, glyph positions and the width of a line all include it.
+	LetterSpacing float64
+
 	variations []font.Variation
 	features   []shaping.FontFeature
 
@@ -229,6 +234,7 @@ func (g *GoTextFace) outputCacheKey(text string) goTextOutputCacheKey {
 		text:       text,
 		direction:  g.Direction,
 		size:       g.Size,
+		spacing:    g.LetterSpacing,
 		language:   g.Language,
 		variations: g.variationsString,
 		features:   g.featuresString,

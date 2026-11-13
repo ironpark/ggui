@@ -120,6 +120,7 @@ type runKey struct {
 	size       float64
 	lineHeight float64
 	weight     FontWeight
+	tracking   float64
 }
 
 // RichText draws spans as one paragraph in the inherited style, each span
@@ -283,7 +284,7 @@ func (t *RichTextWidget) Layout(c Constraints, env Env) Size {
 		end += len(sp.text)
 		p.Runs = append(p.Runs, paragraph.Run{Start: start, End: end, Style: st.engine(), Span: i})
 		t.styles = append(t.styles, st)
-		keys = append(keys, runKey{start, end, st.Font, st.Size, st.LineHeight, st.Weight})
+		keys = append(keys, runKey{start, end, st.Font, st.Size, st.LineHeight, st.Weight, st.Tracking})
 	}
 	// The same spans hold the same text.
 	text := p.Text
@@ -302,7 +303,7 @@ func (t *RichTextWidget) Layout(c Constraints, env Env) Size {
 	// As Text's: the width only matters when something wraps or cuts to it.
 	fits := t.wrap || t.ellipsis || t.maxLines > 0
 	key := richKey{generation: fontGen(), text: text, maxW: pick(fits, c.MaxW, 0), wrap: t.wrap, ellipsis: t.ellipsis, maxLines: t.maxLines,
-		dir: t.dir, lang: p.Lang, base: runKey{font: base.Font, size: base.Size, lineHeight: base.LineHeight, weight: base.Weight}}
+		dir: t.dir, lang: p.Lang, base: runKey{font: base.Font, size: base.Size, lineHeight: base.LineHeight, weight: base.Weight, tracking: base.Tracking}}
 	if key != t.laid || !slices.Equal(keys, t.runKeys) || p.Lines == nil {
 		t.laid = key
 		p.Text = key.text

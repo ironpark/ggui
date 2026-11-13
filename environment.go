@@ -290,12 +290,17 @@ type TextStyle struct {
 	Color      color.Color
 	LineHeight float64    // multiple of Size between baselines
 	Weight     FontWeight // drawn with the Font's face nearest this weight
+	// Tracking is the space added after each letter as a multiple of
+	// Size, as CSS letter-spacing in em is: -0.025 sets a heading tight,
+	// 0.1 a shortcut hint wide. Text is measured, wrapped, hit and drawn
+	// with it. Zero inherits.
+	Tracking float64
 }
 
 // Equal reports whether s and o draw the same: the same Font, size, line
-// height and weight, and colors that draw alike.
+// height, weight and tracking, and colors that draw alike.
 func (s TextStyle) Equal(o TextStyle) bool {
-	if s.Font != o.Font || s.Size != o.Size || s.LineHeight != o.LineHeight || s.Weight != o.Weight {
+	if s.Font != o.Font || s.Size != o.Size || s.LineHeight != o.LineHeight || s.Weight != o.Weight || s.Tracking != o.Tracking {
 		return false
 	}
 	if s.Color == nil || o.Color == nil {
@@ -324,6 +329,9 @@ func (s TextStyle) Merge(o TextStyle) TextStyle {
 	}
 	if o.Weight != 0 {
 		s.Weight = o.Weight
+	}
+	if o.Tracking != 0 {
+		s.Tracking = o.Tracking
 	}
 	return s
 }

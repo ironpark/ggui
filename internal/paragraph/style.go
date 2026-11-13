@@ -16,17 +16,18 @@ import (
 )
 
 // Style is what text is set in: a font at a size and weight, LineHeight
-// times the size between baselines, and the emoji font chosen beside it,
-// nil for the system's.
+// times the size between baselines, Tracking times the size added after
+// each letter, and the emoji font chosen beside it, nil for the system's.
 type Style struct {
 	Font       *fontsys.Font
 	Size       float64
 	Weight     fontsys.Weight
 	LineHeight float64
+	Tracking   float64
 	Emoji      *fontsys.EmojiChoice
 }
 
 // Face is the style's face at scale times its size.
 func (s Style) Face(scale float64) text.Face {
-	return s.Font.FaceFor(s.Size*scale, s.Weight, s.Emoji)
+	return s.Font.SpacedFaceFor(s.Size*scale, s.Weight, s.Tracking*s.Size*scale, s.Emoji)
 }

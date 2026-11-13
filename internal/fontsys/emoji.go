@@ -52,6 +52,7 @@ var SystemEmoji = sync.OnceValue(func() *Font {
 type EmojiFace struct {
 	text.Face
 	size     float64
+	spacing  float64      // what the text beside it adds after each letter
 	choice   *EmojiChoice // the emoji font to resolve; nil for the system's
 	emoji    text.Face
 	resolved sync.Once // a face is cached per Font, size and choice, so shared
@@ -84,6 +85,7 @@ func (ef *EmojiFace) ColorFace() text.Face {
 		if h := em.HAscent + em.HDescent; h > 0 {
 			e.Size *= (m.HAscent + m.HDescent) / h
 		}
+		e.LetterSpacing = ef.spacing
 		ef.emoji = e
 	})
 	return ef.emoji

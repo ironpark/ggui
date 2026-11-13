@@ -18,11 +18,11 @@ import (
 	"github.com/ironpark/ggui/pkg/gem"
 )
 
-// engine is st as the text engine sets text in it: its font, size, weight
-// and line height, beside the emoji font the active world chose. st must
+// engine is st as the text engine sets text in it: its font, size, weight,
+// line height and tracking, beside the emoji font the active world chose. st must
 // be resolved.
 func (st TextStyle) engine() paragraph.Style {
-	return paragraph.Style{Font: st.Font.engine(), Size: st.Size, Weight: fontsys.Weight(st.Weight), LineHeight: st.LineHeight, Emoji: activeEmoji()}
+	return paragraph.Style{Font: st.Font.engine(), Size: st.Size, Weight: fontsys.Weight(st.Weight), LineHeight: st.LineHeight, Tracking: st.Tracking, Emoji: activeEmoji()}
 }
 
 // RenderText draws s in st on the CPU, with no GPU, window or App, into an
@@ -153,6 +153,8 @@ func (c *Canvas) DrawTextCells(s string, st TextStyle, at Point, cellW float64) 
 		theCellsBufPool.Put(buf)
 	}()
 	buf.bounds = textedit.AppendBounds(buf.bounds[:0], s)
+	// A grid sets its own advance, so a cell's glyph is the font's, with
+	// no tracking.
 	face := st.Font.face(c.px(st.Size), st.Weight)
 	face = fontsys.PlainFace(face, s)
 	if face == nil {
@@ -297,6 +299,7 @@ type wrapKey struct {
 	weight     FontWeight
 	size       float64
 	lineHeight float64
+	tracking   float64
 	maxW       float64
 	maxLines   int
 	ellipsis   bool
@@ -411,6 +414,15 @@ func (t *TextWidget) LineHeight(mult float64) *TextWidget {
 	return t
 }
 
+// Tracking sets the space added after each letter as a multiple of Size,
+// as CSS letter-spacing in em: negative sets the text tighter. Zero
+// inherits.
+func (t *TextWidget) Tracking(em float64) *TextWidget {
+	defer property.Watch(&t.props, &t.style)()
+	t.style.Tracking = em
+	return t
+}
+
 // Content replaces any literal, reader or formatted source and refreshes
 // measurement when needed. Call it on the UI goroutine.
 func (t *TextWidget) Content(s string) *TextWidget {
@@ -495,8 +507,7 @@ func (t *TextWidget) dir() TextDirection {
 // faceAt returns the face at the resolved size times scale, so that on a
 // HiDPI Canvas glyphs are rasterized at full resolution instead of scaled up.
 func (t *TextWidget) faceAt(scale float64) text.Face {
-	st := t.current()
-	return st.Font.face(st.Size*scale, st.Weight)
+	return t.current().face(scale)
 }
 
 // spacing is the distance between baselines.
@@ -538,7 +549,7 @@ func (t *TextWidget) Layout(c Constraints, env Env) Size {
 func (t *TextWidget) layoutLines(maxW float64, env Env) {
 	face := t.faceAt(1)
 	fits := t.wrap || t.ellipsis || t.maxLines > 0
-	key := wrapKey{generation: fontGen(), value: t.value, font: t.resolved.Font, weight: t.resolved.Weight, size: t.resolved.Size, lineHeight: t.resolved.LineHeight,
+	key := wrapKey{generation: fontGen(), value: t.value, font: t.resolved.Font, weight: t.resolved.Weight, size: t.resolved.Size, lineHeight: t.resolved.LineHeight, tracking: t.resolved.Tracking,
 		maxW: pick(fits, maxW, 0), maxLines: t.maxLines, ellipsis: t.ellipsis}
 	rewrapped := key != t.wrapped
 	if rewrapped {
@@ -711,6 +722,13 @@ func (s *StyledWidget) Size(px float64) *StyledWidget {
 func (s *StyledWidget) LineHeight(mult float64) *StyledWidget {
 	defer property.Watch(&s.props, &s.style)()
 	s.style.LineHeight = mult
+	return s
+}
+
+// Tracking sets the inherited letter spacing, as a multiple of Size.
+func (s *StyledWidget) Tracking(em float64) *StyledWidget {
+	defer property.Watch(&s.props, &s.style)()
+	s.style.Tracking = em
 	return s
 }
 

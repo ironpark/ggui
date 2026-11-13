@@ -118,14 +118,14 @@ func TestRightToLeftFallbackRunsAreReversed(t *testing.T) {
 func TestARightToLeftSegmentDrawsInItsOwnFontAtAnotherSize(t *testing.T) {
 	f := fontsys.Builtin()
 	tag := newShapeLang("", "שלום").tag
-	measured := newRTLChain(f, 14, 400, nil, tag)
+	measured := newRTLChain(f, 14, 400, 0, nil, tag)
 	own := len(measured.faces)
 	hebrew, arabic := "שלום", "مرحبا"
 	if measured.pick(hebrew) < own || measured.pick(arabic) < own {
 		t.Skip("the built-in font draws Hebrew or Arabic itself, or no system font does")
 	}
 	segs, _ := rtlSegs(arabic, 0, measured)
-	drawn := newRTLChain(f, 28, 400, nil, tag) // has found no system font yet
+	drawn := newRTLChain(f, 28, 400, 0, nil, tag) // has found no system font yet
 	for _, sg := range segs {
 		seg := arabic[sg.Start:sg.End]
 		face := drawn.faceOf(seg)

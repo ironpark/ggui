@@ -71,11 +71,13 @@ const faceCacheMin = 32
 const faceCacheMax = 1024
 
 // faceKey is what a face depends on beside the Font: its size and weight,
-// and the emoji font the world measuring with it chose.
+// the space it adds after each letter, and the emoji font the world
+// measuring with it chose.
 type faceKey struct {
-	size   float64
-	weight Weight
-	emoji  *EmojiChoice
+	size    float64
+	weight  Weight
+	spacing float64
+	emoji   *EmojiChoice
 }
 
 // generation counts the changes to fonts something has measured with. It
@@ -278,8 +280,27 @@ func (f *Font) setWeight(g *text.GoTextFace, w Weight, axis bool) {
 // stands in as a LazyFace, answering from its light source, until text
 // needs one of its glyphs, so a chain of fonts for many scripts reads
 // only those of the scripts drawn.
-func (f *Font) chainFace(size float64, w Weight, axis bool) text.Face {
-	return f.ChainFaceWith(size, w, axis, nil)
+func (f *Font) chainFace(size float64, w Weight, axis bool, spacing float64) text.Face {
+	if spacing == 0 {
+		return f.ChainFaceWith(size, w, axis, nil)
+	}
+	return f.ChainFaceWith(size, w, axis, func(g *text.GoTextFace) { SetLetterSpacing(g, spacing) })
+}
+
+var (
+	ligaTag = text.MustParseTag("liga")
+	cligTag = text.MustParseTag("clig")
+)
+
+// SetLetterSpacing has g add spacing pixels after each letter, and, as CSS
+// letter-spacing does, draw no optional ligatures, whose letters could not
+// be spaced.
+func SetLetterSpacing(g *text.GoTextFace, spacing float64) {
+	g.LetterSpacing = spacing
+	if spacing != 0 {
+		g.SetFeature(ligaTag, 0)
+		g.SetFeature(cligTag, 0)
+	}
 }
 
 // ChainFaceWith is chainFace with set, when not nil, applied to each
@@ -321,12 +342,27 @@ func (f *Font) Face(size float64, weight Weight, emoji func() *EmojiChoice) text
 	return f.FaceFor(size, weight, choice)
 }
 
+// SpacedFace is Face with spacing pixels added after each letter.
+func (f *Font) SpacedFace(size float64, weight Weight, spacing float64, emoji func() *EmojiChoice) text.Face {
+	f = f.Resolve()
+	var choice *EmojiChoice
+	if !f.noFallback && emoji != nil {
+		choice = emoji()
+	}
+	return f.SpacedFaceFor(size, weight, spacing, choice)
+}
+
 // FaceFor is Face with the emoji choice already made: emoji is the font's
 // beside f's faces, nil for the system's, and ignored for a font that
 // draws no emoji.
 func (f *Font) FaceFor(size float64, weight Weight, emoji *EmojiChoice) text.Face {
+	return f.SpacedFaceFor(size, weight, 0, emoji)
+}
+
+// SpacedFaceFor is FaceFor with spacing pixels added after each letter.
+func (f *Font) SpacedFaceFor(size float64, weight Weight, spacing float64, emoji *EmojiChoice) text.Face {
 	f = f.Resolve()
-	key := faceKey{size: size, weight: weight}
+	key := faceKey{size: size, weight: weight, spacing: spacing}
 	if !f.noFallback {
 		key.emoji = emoji
 	}
@@ -342,7 +378,7 @@ func (f *Font) FaceFor(size float64, weight Weight, emoji *EmojiChoice) text.Fac
 	}
 	face, ok := f.oldFaces[key]
 	if !ok {
-		face = f.newFaceLocked(size, weight, key.emoji)
+		face = f.newFaceLocked(size, weight, spacing, key.emoji)
 	}
 	f.keepFaceLocked(key, face)
 	return face
@@ -366,18 +402,18 @@ func (f *Font) keepFaceLocked(key faceKey, face text.Face) {
 	f.faces[key] = face
 }
 
-// newFaceLocked makes f's face at size and weight beside emoji, for
-// FaceFor to cache. f.mu must be held.
-func (f *Font) newFaceLocked(size float64, weight Weight, emoji *EmojiChoice) text.Face {
+// newFaceLocked makes f's face at size and weight beside emoji, with
+// spacing after each letter, for FaceFor to cache. f.mu must be held.
+func (f *Font) newFaceLocked(size float64, weight Weight, spacing float64, emoji *EmojiChoice) text.Face {
 	fonts, multi := f.chainLocked(weight)
-	var face text.Face = fonts[0].Font.chainFace(size, weight, fonts[0].Axis)
+	var face text.Face = fonts[0].Font.chainFace(size, weight, fonts[0].Axis, spacing)
 	if multi {
 		faces := []text.Face{face}
 		for _, cf := range fonts[1:] {
-			faces = append(faces, cf.Font.chainFace(size, weight, cf.Axis))
+			faces = append(faces, cf.Font.chainFace(size, weight, cf.Axis, spacing))
 		}
 		if f.systemFallback() {
-			faces = append(faces, systemFallbackFace(size, weight, face))
+			faces = append(faces, systemFallbackFace(size, weight, spacing, face))
 		}
 		if m, err := text.NewMultiFace(faces...); err == nil {
 			face = m
@@ -385,6 +421,9 @@ func (f *Font) newFaceLocked(size float64, weight Weight, emoji *EmojiChoice) te
 	}
 	if !f.noFallback {
 		face = WithEmoji(face, size, emoji)
+		if ef, ok := face.(*EmojiFace); ok {
+			ef.spacing = spacing
+		}
 	}
 	return face
 }
