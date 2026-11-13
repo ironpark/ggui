@@ -12,7 +12,10 @@ var popupEscape = MustChord("escape")
 
 // PopupWidget shows content floating over the tree, anchored below (or,
 // when there is no room, above) its anchor widget: the base of dropdowns
-// and menus. Build one with Popup. The anchor is laid out and painted in
+// and menus. Side opens it on another side of the anchor, and Align and
+// AlignOffset place it along that side. It enters with a fade, a slight
+// scale from the edge that faces the anchor and a short slide away from it,
+// and leaves the same way backwards. Build one with Popup. The anchor is laid out and painted in
 // place; while the popup is open the content is painted through
 // Canvas.Overlay, above everything, and a click anywhere outside it closes
 // it without reaching what was clicked. The content is a focus scope: Tab
@@ -34,6 +37,10 @@ type PopupWidget struct {
 	onClose         func()
 	nonmodal        bool
 	align           PopupAlignment
+	side            PopupSide
+	placed          PopupSide // side, once direction and collisions are settled
+	alignOffset     float64
+	still           bool // Animated(false): no entrance or exit
 	anchorRect      Rect
 	paintedOpen     bool
 	hadContentFocus bool
@@ -65,12 +72,72 @@ const (
 	PopupEnd
 )
 
-// Align sets horizontal anchor alignment (logical start by default).
+// Align sets where the content sits along the anchor's side: for a popup
+// below or above, its horizontal alignment (logical start by default); for
+// one to the left or right, PopupStart lines the tops up and PopupEnd the
+// bottoms.
 func (p *PopupWidget) Align(v PopupAlignment) *PopupWidget {
 	defer property.Watch(&p.props, &p.align)()
 	p.align = v
 	return p
 }
+
+// PopupSide is the side of its anchor a popup opens on.
+type PopupSide uint8
+
+const (
+	// PopupBottom opens below the anchor. It is the default.
+	PopupBottom PopupSide = iota
+	// PopupTop opens above the anchor.
+	PopupTop
+	// PopupLeft opens to the left of the anchor.
+	PopupLeft
+	// PopupRight opens to the right of the anchor.
+	PopupRight
+	// PopupInlineStart opens where a line of text starts: to the left, or
+	// to the right under a right-to-left direction.
+	PopupInlineStart
+	// PopupInlineEnd opens where a line of text ends: to the right, or to
+	// the left under a right-to-left direction. A submenu opens here.
+	PopupInlineEnd
+)
+
+// Side sets the side of the anchor the content opens on, PopupBottom by
+// default. When the content does not fit there and the opposite side has
+// more room, it opens on the opposite side instead; PlacedSide reports
+// which. Below and above, the content is at least as wide as the anchor;
+// to the left and right it takes its own width.
+func (p *PopupWidget) Side(v PopupSide) *PopupWidget {
+	defer property.Watch(&p.props, &p.side)()
+	p.side = v
+	return p
+}
+
+// AlignOffset moves the content along the anchor's side, away from the edge
+// Align lines it up with: a positive offset moves a PopupStart popup toward
+// the end and a PopupEnd one toward the start, and a negative one the other
+// way, so that -4 lets either overhang its anchor by four pixels. A
+// PopupCenter popup moves toward the end.
+func (p *PopupWidget) AlignOffset(v float64) *PopupWidget {
+	defer property.Watch(&p.props, &p.alignOffset)()
+	p.alignOffset = v
+	return p
+}
+
+// Animated says whether the content plays its entrance and exit; it does by
+// default. A popup that opens over its own anchor, as a list aligned with
+// the item it shows does, has nowhere to come from and turns it off.
+func (p *PopupWidget) Animated(v bool) *PopupWidget {
+	defer property.Watch(&p.props, &p.still)()
+	p.still = !v
+	return p
+}
+
+// PlacedSide returns the side the content was last painted on: Side with
+// the writing direction applied, or its opposite when it had to flip. It is
+// one of PopupBottom, PopupTop, PopupLeft and PopupRight.
+func (p *PopupWidget) PlacedSide() PopupSide { return p.placed }
+
 
 // Modal controls focus trapping and outside-click interception. The default
 // is true. A nonmodal popup focuses its content on opening, permits Tab to
@@ -293,7 +360,11 @@ func (p *PopupWidget) Paint(dst *Canvas, r Rect) {
 	}
 	p.paintedOpen = open
 	now := FrameTime()
-	progress := p.reveal.Toggle(open, now, p.env.Motion(p.env.PopupDuration()))
+	duration := p.env.Motion(p.env.PopupDuration())
+	if p.still {
+		duration = 0
+	}
+	progress := p.reveal.Toggle(open, now, duration)
 	if !open && progress <= 0 {
 		return
 	}
@@ -328,39 +399,31 @@ func (p *PopupWidget) paintContent(dst *Canvas, anchor Rect) {
 	if screen == (Size{}) {
 		screen = Sz(Unbounded, Unbounded)
 	}
-	maxW := max(screen.W-anchor.Origin.X, anchor.Size.W)
-	if p.align != PopupStart || p.env.Direction() == DirRTL {
-		maxW = screen.W
-	}
 	if p.point != nil {
 		// Point placement is clamped to the screen, so the whole width is
 		// available regardless of where the anchor happened to be.
 		anchor = Rct(Pt(clamp(p.point.X, 0, screen.W), clamp(p.point.Y, 0, screen.H)), Size{})
-		maxW = screen.W
 	}
-	natural := p.effect.Layout(Constraints{MinW: anchor.Size.W, MaxW: maxW, MaxH: Unbounded}, p.env)
-	below := screen.H - (anchor.Origin.Y + anchor.Size.H + p.gap)
-	above := anchor.Origin.Y - p.gap
-	room, y := below, anchor.Origin.Y+anchor.Size.H+p.gap
-	if natural.H > below && above > below {
-		room = above
-		y = max(anchor.Origin.Y-p.gap-min(natural.H, above), 0)
+	rtl := p.env.Direction() == DirRTL
+	side := p.side
+	switch side {
+	case PopupInlineStart:
+		side = pick(rtl, PopupRight, PopupLeft)
+	case PopupInlineEnd:
+		side = pick(rtl, PopupLeft, PopupRight)
 	}
-	size := natural
-	if size.H > room {
-		size = p.effect.Layout(Constraints{MinW: anchor.Size.W, MaxW: maxW, MaxH: max(room, 0)}, p.env)
+	var size Size
+	var at Point
+	var along float64
+	if side == PopupLeft || side == PopupRight {
+		size, at, along, side = p.placeBeside(screen, anchor, side)
+	} else {
+		size, at, along, side = p.placeBelow(screen, anchor, side, rtl)
 	}
-	x := anchor.Origin.X
-	if p.align == PopupCenter {
-		x += (anchor.Size.W - size.W) / 2
-	} else if p.align == PopupEnd && p.env.Direction() != DirRTL || p.align == PopupStart && p.env.Direction() == DirRTL {
-		x += anchor.Size.W - size.W
-	}
-	if screen.W != Unbounded {
-		x = clamp(x, 0, max(screen.W-size.W, 0))
-	}
+	p.placed = side
 	p.contentSize = size
-	p.rect = Rct(Pt(x, y), size)
+	p.rect = Rct(at, size)
+	p.effect.PopFrom(side, along)
 
 	dst.HitPointer(Rect{Size: screen}, popupScrim{p})
 	paint := func(dst *Canvas) {
@@ -402,6 +465,89 @@ func (p *PopupWidget) paintContent(dst *Canvas, anchor Rect) {
 	} else {
 		dst.FocusTrap(p, p.Hide, paint)
 	}
+}
+
+// placeBelow lays the content out below or above the anchor, whichever side
+// asks for unless only the other has the room, and aligns it across. It
+// returns the content's size and place, how far along the anchor's side its
+// entrance grows from, and the side it ended on.
+func (p *PopupWidget) placeBelow(screen Size, anchor Rect, side PopupSide, rtl bool) (Size, Point, float64, PopupSide) {
+	maxW := max(screen.W-anchor.Origin.X, anchor.Size.W)
+	if p.align != PopupStart || rtl || p.point != nil {
+		maxW = screen.W
+	}
+	natural := p.effect.Layout(Constraints{MinW: anchor.Size.W, MaxW: maxW, MaxH: Unbounded}, p.env)
+	below := screen.H - (anchor.Origin.Y + anchor.Size.H + p.gap)
+	above := anchor.Origin.Y - p.gap
+	room, other := below, above
+	if side == PopupTop {
+		room, other = above, below
+	}
+	if natural.H > room && other > room {
+		room, side = other, pick(side == PopupTop, PopupBottom, PopupTop)
+	}
+	size := natural
+	if size.H > room {
+		size = p.effect.Layout(Constraints{MinW: anchor.Size.W, MaxW: maxW, MaxH: max(room, 0)}, p.env)
+	}
+	y := anchor.Origin.Y + anchor.Size.H + p.gap
+	if side == PopupTop {
+		y = max(anchor.Origin.Y-p.gap-min(size.H, max(above, 0)), 0)
+	}
+	along := 0.0
+	// The alignment is logical: its start is the right edge under RTL.
+	x := anchor.Origin.X
+	switch {
+	case p.align == PopupCenter:
+		x += (anchor.Size.W-size.W)/2 + pick(rtl, -p.alignOffset, p.alignOffset)
+		along = .5
+	case (p.align == PopupEnd) != rtl:
+		x += anchor.Size.W - size.W - p.alignOffset
+		along = 1
+	default:
+		x += p.alignOffset
+	}
+	if screen.W != Unbounded {
+		x = clamp(x, 0, max(screen.W-size.W, 0))
+	}
+	return size, Pt(x, y), along, side
+}
+
+// placeBeside is placeBelow for a popup to the left or right of its anchor.
+func (p *PopupWidget) placeBeside(screen Size, anchor Rect, side PopupSide) (Size, Point, float64, PopupSide) {
+	natural := p.effect.Layout(Constraints{MaxW: screen.W, MaxH: Unbounded}, p.env)
+	left := anchor.Origin.X - p.gap
+	right := screen.W - (anchor.Origin.X + anchor.Size.W + p.gap)
+	room, other := right, left
+	if side == PopupLeft {
+		room, other = left, right
+	}
+	if natural.W > room && other > room {
+		room, side = other, pick(side == PopupLeft, PopupRight, PopupLeft)
+	}
+	size := natural
+	if size.W > room || size.H > screen.H {
+		size = p.effect.Layout(Constraints{MaxW: max(min(room, screen.W), 0), MaxH: screen.H}, p.env)
+	}
+	x := anchor.Origin.X + anchor.Size.W + p.gap
+	if side == PopupLeft {
+		x = max(anchor.Origin.X-p.gap-size.W, 0)
+	}
+	y, along := anchor.Origin.Y, 0.0
+	switch p.align {
+	case PopupCenter:
+		y += (anchor.Size.H-size.H)/2 + p.alignOffset
+		along = .5
+	case PopupEnd:
+		y += anchor.Size.H - size.H - p.alignOffset
+		along = 1
+	default:
+		y += p.alignOffset
+	}
+	if screen.H != Unbounded {
+		y = clamp(y, 0, max(screen.H-size.H, 0))
+	}
+	return size, Pt(x, y), along, side
 }
 
 // popupScrim covers the window under an open popup: a press closes the

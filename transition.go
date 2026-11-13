@@ -24,6 +24,8 @@ type TransitionWidget struct {
 	fade     bool
 	dx, dy   float64
 	from     float64 // starting scale, 0 for none
+	origin   Point   // where the scale is anchored, as fractions of the child
+	travel   Point   // how far a scaled entrance also comes from, in pixels
 	duration time.Duration
 	ease     Easing
 	id       any // from the keyed component it was constructed in
@@ -41,7 +43,7 @@ type transitionStart struct{ at time.Time }
 // Transition wraps child in an enter animation: a fade over 200ms until
 // Fade, Slide or Scale say otherwise.
 func Transition(child Widget) *TransitionWidget {
-	return &TransitionWidget{child: child, duration: 200 * time.Millisecond, ease: EaseOut, id: reactive.AutoID()}
+	return &TransitionWidget{child: child, origin: Pt(.5, .5), duration: 200 * time.Millisecond, ease: EaseOut, id: reactive.AutoID()}
 }
 
 // PopIn is the entrance every floating panel shares: a fade with a slight
@@ -66,10 +68,50 @@ func (t *TransitionWidget) Slide(dx, dy float64) *TransitionWidget {
 	return t
 }
 
-// Scale animates size from the given factor around the child's center.
+// Scale animates size from the given factor around the child's center, or
+// around the point ScaleOrigin names.
 func (t *TransitionWidget) Scale(from float64) *TransitionWidget {
 	defer property.Watch(&t.props, &t.from)()
 	t.from = from
+	return t
+}
+
+// ScaleOrigin sets the point a Scale grows from, as fractions of the child's
+// width and height: 0, 0 is its top-left corner, 1, 1 its bottom-right, and
+// .5, .5, the default, its center. It is CSS's transform-origin: a panel
+// that opens below a button scales from its top edge with ScaleOrigin(.5, 0).
+func (t *TransitionWidget) ScaleOrigin(x, y float64) *TransitionWidget {
+	defer property.Watch(&t.props, &t.origin)()
+	t.origin = Pt(x, y)
+	return t
+}
+
+// popTravel is how far a floating panel travels from its anchor as it
+// enters.
+const popTravel = 8
+
+// PopFrom makes a scaled entrance, PopIn's, come from the anchor of a
+// floating panel that sits on side of it: the scale is anchored on the
+// panel's edge facing the anchor, along of the way down or across that edge
+// (0 its start, .5 its middle, 1 its end), and the panel travels eight
+// pixels away from the anchor as it grows. side is one of PopupBottom,
+// PopupTop, PopupLeft and PopupRight.
+//
+// The travel is drawn, not laid out: the panel's hit regions and its Rect
+// are where it lands from the first frame, so a press during the entrance
+// goes where it will be. Nothing here needs another layout either, so a
+// panel that learns its side while it paints may call this then.
+func (t *TransitionWidget) PopFrom(side PopupSide, along float64) *TransitionWidget {
+	switch side {
+	case PopupTop:
+		t.origin, t.travel = Pt(along, 1), Pt(0, popTravel)
+	case PopupLeft:
+		t.origin, t.travel = Pt(1, along), Pt(popTravel, 0)
+	case PopupRight:
+		t.origin, t.travel = Pt(0, along), Pt(-popTravel, 0)
+	default:
+		t.origin, t.travel = Pt(along, 0), Pt(0, -popTravel)
+	}
 	return t
 }
 
@@ -164,7 +206,11 @@ func (t *TransitionWidget) Paint(dst *Canvas, r Rect) {
 	var o LayerOptions
 	if scale {
 		o.Scale = t.from + (1-t.from)*e
-		o.About = at.Center()
+		// Scaling about a point moved travel/(1-from) off the origin moves
+		// the child by travel at the start and by nothing at the end, which
+		// is the slide, without moving what the child registers.
+		k := 1 / (1 - t.from)
+		o.About = at.Origin.Add(Pt(at.Size.W*t.origin.X+t.travel.X*k, at.Size.H*t.origin.Y+t.travel.Y*k))
 	}
 	if fade {
 		o.Fade = 1 - e
