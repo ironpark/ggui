@@ -137,33 +137,68 @@ func (c *CalendarWidget) selectionAnchor() time.Time {
 	}
 	return c.date(c.value.Get())
 }
-func (c *CalendarWidget) selected(day time.Time) bool {
-	if c.rangeValue != nil {
-		v := c.normalizedRange(ggui.Untrack(c.rangeValue.Get))
-		if v.Start.IsZero() {
-			return false
+
+// calendarMark is a day's part in the selection.
+type calendarMark uint8
+
+const (
+	calendarUnmarked calendarMark = iota
+	calendarSingle                // a selected day on its own, or a range of one day
+	calendarStart                 // the first day of a longer range
+	calendarMiddle                // between the ends of a range
+	calendarEnd                   // the last day of a longer range
+)
+
+// calendarSelection is the binding's selection as civil dates, normalized
+// once a layout so that marking the days does not read and convert the
+// binding again for each of them.
+type calendarSelection struct {
+	start, end time.Time   // single and range modes; equal for one day, zero for none
+	dates      []time.Time // multiple mode, reused between layouts
+}
+
+// mark reports day's part in the selection.
+func (s *calendarSelection) mark(day time.Time) calendarMark {
+	for _, t := range s.dates {
+		if t.Equal(day) {
+			return calendarSingle
 		}
-		if v.End.IsZero() {
-			return day.Equal(v.Start)
-		}
-		return !day.Before(v.Start) && !day.After(v.End)
 	}
-	if c.multipleValue != nil {
+	switch {
+	case s.start.IsZero() || day.Before(s.start) || day.After(s.end):
+		return calendarUnmarked
+	case s.start.Equal(s.end):
+		return calendarSingle
+	case day.Equal(s.start):
+		return calendarStart
+	case day.Equal(s.end):
+		return calendarEnd
+	}
+	return calendarMiddle
+}
+
+// resolveSelection reads the binding into c.selection without tracking it;
+// Layout follows the binding through syncDate.
+func (c *CalendarWidget) resolveSelection() {
+	s := &c.selection
+	s.start, s.end, s.dates = time.Time{}, time.Time{}, s.dates[:0]
+	switch {
+	case c.rangeValue != nil:
+		v := c.normalizedRange(ggui.Untrack(c.rangeValue.Get))
+		s.start, s.end = v.Start, v.End
+		if s.end.IsZero() {
+			s.end = s.start
+		}
+	case c.multipleValue != nil:
 		for _, t := range ggui.Untrack(c.multipleValue.Get) {
-			if !t.IsZero() && c.date(t).Equal(day) {
-				return true
+			if !t.IsZero() {
+				s.dates = append(s.dates, c.date(t))
 			}
 		}
-		return false
+	default:
+		s.start = c.date(ggui.Untrack(c.value.Get))
+		s.end = s.start
 	}
-	return c.date(ggui.Untrack(c.value.Get)).Equal(day)
-}
-func (c *CalendarWidget) selectionEdge(day time.Time) bool {
-	if c.rangeValue != nil {
-		v := c.normalizedRange(ggui.Untrack(c.rangeValue.Get))
-		return !v.Start.IsZero() && (day.Equal(v.Start) || day.Equal(v.End))
-	}
-	return c.selected(day)
 }
 
 func (c *CalendarWidget) chooseMultiple(day time.Time) {
