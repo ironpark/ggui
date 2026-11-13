@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // Picking a tab fades its surface in where it stands while the one left
@@ -58,5 +59,20 @@ func TestTabLabelColorEasesTowardTheTextColor(t *testing.T) {
 	}
 	if got := tabs.labelColor(1, .5); !sameColor(got, mix(rest, th.Fg, .5)) {
 		t.Fatalf("label halfway %v, want %v", got, mix(rest, th.Fg, .5))
+	}
+}
+
+// A closed section is shadcn's trigger: a 20px line inside py-2.5 and the
+// one-pixel border that only focus colors, 42 in all, with the line under
+// every section but the last taking a pixel more.
+func TestAccordionSectionsHaveTheTriggerBorderAndRuleInTheirHeight(t *testing.T) {
+	t.Parallel()
+	one := Accordion(ggui.State([]string(nil)), AccordionItem("a", "A", ggui.Text("a")))
+	three := Accordion(ggui.State([]string(nil)), AccordionItem("a", "A", ggui.Text("a")), AccordionItem("b", "B", ggui.Text("b")), AccordionItem("c", "C", ggui.Text("c")))
+	env := uitheme.Default().Apply(ggui.Env{})
+	c := ggui.Loose(ggui.Sz(320, 400))
+	h1, h3 := one.Layout(c, env).H, three.Layout(c, env).H
+	if h1 != 42 || h3 != 3*42+2 {
+		t.Fatalf("one section is %v tall and three are %v, want 42 and 128", h1, h3)
 	}
 }

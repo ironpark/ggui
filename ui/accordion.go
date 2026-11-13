@@ -178,7 +178,9 @@ func (a *AccordionWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		} else {
 			h.size = item.header.Layout(room, env.WithText(t.Label.Merge(ggui.TextStyle{Color: fg})))
 		}
-		a.heights[i] = max(a.line, h.size.H) + 2.5*t.Space
+		// shadcn's py-2.5 inside the trigger's border, which is drawn
+		// only as the focus ring but always has its room.
+		a.heights[i] = max(a.line, h.size.H) + 2.5*t.Space + 2*t.BorderWidth
 		width = max(width, h.size.W+chevron)
 		height += a.heights[i]
 		h.open = a.isOpen(i)
@@ -187,6 +189,9 @@ func (a *AccordionWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 			a.sizes[i] = item.content.Layout(ggui.Loose(ggui.Sz(c.MaxW, ggui.Unbounded)), env)
 			width = max(width, a.sizes[i].W)
 			height += (a.sizes[i].H + 1.25*t.Space) * h.progress
+		}
+		if i < len(a.items)-1 {
+			height += t.BorderWidth // the line under the section, not-last:border-b
 		}
 	}
 	return c.Constrain(ggui.Sz(width, height))
@@ -214,26 +219,28 @@ func (a *AccordionWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		h := a.headers[i]
 		rect := ggui.Rct(ggui.Pt(r.Origin.X, y), ggui.Sz(r.Size.W, a.heights[i]))
 		h.Hit(dst, rect, h, ggui.CursorShapeDefault)
+		top := y + t.BorderWidth + 1.25*t.Space // of the header's text
 		hover := dst.Ease(h.Anchor(rect), disclosureHoverSlot, pick(h.Hovered && !item.disabled, 1.0, 0.0), a.env.Motion(t.MotionFast))
 		if hover > 0 && h.text != nil {
-			under := y + 1.25*t.Space + h.size.H - 1
+			under := top + h.size.H - 1
 			dst.StrokeLine(ggui.Pt(rect.Origin.X, under), ggui.Pt(rect.Origin.X+h.size.W, under), 1, fade(t.Fg, hover))
 		}
 		// The chevron sits level with the header's first line, as shadcn's
 		// items-start puts it, which shows once a title wraps.
 		first := pick(a.line > 0, a.line, h.size.H)
-		paintIconAt(dst, a.env, pick(h.open, icons.ChevronUp, icons.ChevronDown), ggui.Pt(rect.Origin.X+rect.Size.W-t.IconSize/2, y+1.25*t.Space+first/2), t.IconSize, pick(item.disabled, t.Disabled(t.MutedFg), t.MutedFg), 0)
+		paintIconAt(dst, a.env, pick(h.open, icons.ChevronUp, icons.ChevronDown), ggui.Pt(rect.Origin.X+rect.Size.W-t.IconSize/2, top+first/2), t.IconSize, pick(item.disabled, t.Disabled(t.MutedFg), t.MutedFg), 0)
 		var face ggui.Widget = h.text
 		if h.text == nil {
 			face = item.header
 		}
-		dst.Paint(face, ggui.Rct(ggui.Pt(rect.Origin.X, y+1.25*t.Space), h.size))
+		dst.Paint(face, ggui.Rct(ggui.Pt(rect.Origin.X, top), h.size))
 		controlFocusRing(dst, &h.Interactive, t, rect, t.Radius, t.Ring)
 		y += a.heights[i]
 		paintDisclosure(dst, item.content, ggui.Pt(r.Origin.X, y), r.Size.W, a.sizes[i], h.progress, h.open)
 		y += (a.sizes[i].H + 1.25*t.Space) * h.progress
 		if i < len(a.items)-1 {
-			dst.StrokeLine(ggui.Pt(r.Origin.X, y), ggui.Pt(r.Origin.X+r.Size.W, y), t.BorderWidth, t.Border)
+			dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X, y), ggui.Sz(r.Size.W, t.BorderWidth)), t.Border)
+			y += t.BorderWidth
 		}
 	}
 }
