@@ -183,7 +183,9 @@ func TestDatePickerFitsItsCalendarUnderAWideTrigger(t *testing.T) {
 	t.Parallel()
 	d := ui.DatePicker(ggui.State(civil(2026, time.June, 10))).Name("Due")
 	d.Calendar().Location(time.UTC)
-	p := ggui.NewProbe(ggui.Column(d).Align(ggui.AlignStretch), ggui.Sz(600, 480))
+	// Padded, so the trigger is not at the window's edge, which a popup
+	// keeps 5px from.
+	p := ggui.NewProbe(ggui.Box(ggui.Column(d).Align(ggui.AlignStretch)).Pad(0, 16), ggui.Sz(600, 480))
 	defer p.Close()
 	p.Tap("Due")
 	trigger, cal := semNode(t, p, ggui.RoleButton, "Due"), semNode(t, p, ggui.RoleGroup, "Due")

@@ -163,7 +163,11 @@ with `PopupOf(env)` to close it after acting. `.Side(...)` among the
 `PopupSide` values (`PopupBottom` by default, `PopupTop`, `PopupLeft`,
 `PopupRight`, `PopupInlineStart`, `PopupInlineEnd`), `.Align(...)` and
 `.AlignOffset(px)` place it, and it flips to the opposite side when only that
-one has room; `PlacedSide()` reports where it went. Content below or above the
+one has room; `PlacedSide()` reports where it went. It keeps 5 pixels from the
+window's edges (`PopupCollisionPadding`, a Base UI positioner's default
+`collisionPadding`): the room on each side ends there, and it is moved along the
+anchor's side to stay inside. `.CollisionPadding(px)` changes that, and zero
+lets it sit flush. Content below or above the
 anchor is at least as wide as the anchor until `.MatchAnchorWidth(false)`, as a
 date picker's calendar under a wide field keeps its own width. A nonmodal popup
 moves focus into its content as it opens; `.FocusOnOpen(false)` leaves it in

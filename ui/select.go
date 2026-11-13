@@ -523,6 +523,12 @@ func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 	}
 }
 
+// selectAlignMargin is how far a list aligned to its selected item keeps
+// from the top and the bottom of the window: the margin Base UI's
+// SelectPopup falls back to there, where the positioner's collision
+// padding does not apply.
+const selectAlignMargin = 10.0
+
 // positionList uses Popup's point placement, retaining its focus scope and
 // dismissal behavior. Measuring selectViewport does not reset its scroll state.
 func (s *SelectWidget[T]) positionList(dst *ggui.Canvas, r ggui.Rect) {
@@ -550,15 +556,18 @@ func (s *SelectWidget[T]) positionList(dst *ggui.Canvas, r ggui.Rect) {
 	top, rowHeight := s.rowSpan(index)
 	center := s.theme.PanelPad.Top + top + rowHeight/2
 	wantedY := r.Center().Y - center
-	height := min(natural.H, screen.H)
-	y := clamp(wantedY, 0, max(0, screen.H-height))
+	// An aligned list keeps selectAlignMargin from the window's top and
+	// bottom.
+	room := max(screen.H-2*selectAlignMargin, 0)
+	height := min(natural.H, room)
+	y := clamp(wantedY, selectAlignMargin, selectAlignMargin+room-height)
 	offset := clamp(y-wantedY, 0, max(0, natural.H-height))
-	if natural.H > screen.H {
+	if natural.H > room {
 		// For a scrolling list, reserve only the room needed below the
 		// selected row. This permits exact alignment even near the last row.
-		y = max(0, wantedY)
-		offset = max(0, -wantedY)
-		height = max(0, min(natural.H-offset, screen.H-y))
+		y = max(selectAlignMargin, wantedY)
+		offset = max(0, selectAlignMargin-wantedY)
+		height = max(0, min(natural.H-offset, selectAlignMargin+room-y))
 	}
 	s.alignedHeight = height
 	s.list.MaxHeight(height)

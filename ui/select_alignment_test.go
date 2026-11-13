@@ -41,8 +41,14 @@ func TestSelectAlignedCollisionAndOptOut(t *testing.T) {
 		p.Advance(time.Second)
 		trigger, _ := p.Find("Choice")
 		r := box.Popup().Rect()
-		if r.Origin.Y < 0 || r.Origin.Y+r.Size.H > 220 {
-			t.Fatalf("align=%v overflow: %v", align, r)
+		// An aligned list keeps the 10px Base UI's SelectPopup keeps from
+		// the top and bottom of the window, any other the positioner's 5px.
+		edge := 5.0
+		if align {
+			edge = 10
+		}
+		if r.Origin.Y < edge || r.Origin.Y+r.Size.H > 220-edge || r.Origin.X < 5 {
+			t.Fatalf("align=%v: popup at %v, want it %vpx inside the window above and below and 5px at the side", align, r, edge)
 		}
 		if !align && r.Origin.Y < trigger.Rect.Origin.Y+trigger.Rect.Size.H+4 {
 			t.Fatalf("opt-out overlapped trigger: %v", r)

@@ -6,8 +6,9 @@ import "github.com/ironpark/ggui"
 // gap away from it, as ggui.Popup places its content: for the tooltip and
 // the hover card, which open on hover and so are not popups. The panel goes
 // to the opposite side when it does not fit on side and that one has more
-// room, is lined up along the side by align and offset, and is kept inside
-// screen, unless screen is the zero Size.
+// room, is lined up along the side by align and offset, and is kept
+// ggui.PopupCollisionPadding inside screen, as a Base UI positioner keeps
+// its popup, unless screen is the zero Size.
 //
 // It returns the panel's place, the side it ended on -- one of the four
 // physical ones -- and how far along that side's edge the panel's entrance
@@ -19,14 +20,15 @@ func floatBeside(screen ggui.Size, anchor ggui.Rect, size ggui.Size, side ggui.P
 	case ggui.PopupInlineEnd:
 		side = pick(rtl, ggui.PopupLeft, ggui.PopupRight)
 	}
+	const edge = ggui.PopupCollisionPadding
 	bounded := screen != (ggui.Size{})
-	before := anchor.Origin.Y - gap                             // room above
-	after := screen.H - (anchor.Origin.Y + anchor.Size.H + gap) // and below
+	before := anchor.Origin.Y - gap - edge                             // room above
+	after := screen.H - edge - (anchor.Origin.Y + anchor.Size.H + gap) // and below
 	need := size.H
 	horizontal := side == ggui.PopupLeft || side == ggui.PopupRight
 	if horizontal {
-		before = anchor.Origin.X - gap
-		after = screen.W - (anchor.Origin.X + anchor.Size.W + gap)
+		before = anchor.Origin.X - gap - edge
+		after = screen.W - edge - (anchor.Origin.X + anchor.Size.W + gap)
 		need = size.W
 	}
 	if bounded {
@@ -85,8 +87,8 @@ func floatBeside(screen ggui.Size, anchor ggui.Rect, size ggui.Size, side ggui.P
 		}
 	}
 	if bounded {
-		at.X = clamp(at.X, 0, max(screen.W-size.W, 0))
-		at.Y = clamp(at.Y, 0, max(screen.H-size.H, 0))
+		at.X = clamp(at.X, edge, max(screen.W-edge-size.W, edge))
+		at.Y = clamp(at.Y, edge, max(screen.H-edge-size.H, edge))
 	}
 	return ggui.Rct(at, size), side, along
 }

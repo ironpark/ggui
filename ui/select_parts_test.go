@@ -52,7 +52,10 @@ func TestSelectGroupsAddHeadingsAndSeparatorsAndKeepAlignment(t *testing.T) {
 		return "Vegetables"
 	}
 	height := func(box *ui.SelectWidget[string]) float64 {
-		p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(ggui.Box().Height(120), box)), ggui.Sz(300, 400))
+		// Away from the window's edges, which a popup keeps 5px from and an
+		// aligned list 10px from above and below: Base UI
+		// holds an aligned Select's popup that far inside too.
+		p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Box(ggui.Column(ggui.Box().Height(160), box)).Pad(0, 16)), ggui.Sz(300, 400))
 		defer p.Close()
 		p.Tap("Choice")
 		p.Frame()

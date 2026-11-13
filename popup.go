@@ -40,9 +40,10 @@ type PopupWidget struct {
 	side            PopupSide
 	placed          PopupSide // side, once direction and collisions are settled
 	alignOffset     float64
-	still           bool // Animated(false): no entrance or exit
-	ownWidth        bool // MatchAnchorWidth(false): below or above, the content keeps its width
-	keepFocus       bool // FocusOnOpen(false): opening leaves focus where it is
+	edge            float64 // CollisionPadding: how far the content keeps from the window's edges
+	still           bool    // Animated(false): no entrance or exit
+	ownWidth        bool    // MatchAnchorWidth(false): below or above, the content keeps its width
+	keepFocus       bool    // FocusOnOpen(false): opening leaves focus where it is
 	anchorRect      Rect
 	paintedOpen     bool
 	hadContentFocus bool
@@ -162,7 +163,24 @@ func (p *PopupWidget) Modal(v bool) *PopupWidget {
 
 // Popup creates a closed popup that opens content next to anchor.
 func Popup(anchor, content Widget) *PopupWidget {
-	return &PopupWidget{anchor: anchor, content: content, gap: 4, id: reactive.AutoID(), effect: PopIn(content)}
+	return &PopupWidget{anchor: anchor, content: content, gap: 4, edge: PopupCollisionPadding, id: reactive.AutoID(), effect: PopIn(content)}
+}
+
+// PopupCollisionPadding is how far a popup keeps from the edges of the
+// window unless CollisionPadding says otherwise: the 5 pixels a Base UI
+// positioner's collisionPadding defaults to.
+const PopupCollisionPadding = 5.0
+
+// CollisionPadding sets how far the content keeps from the edges of the
+// window, PopupCollisionPadding by default: the room it is given beside
+// the anchor ends that far from the edge, so it flips to the other side
+// or is held to a size that much sooner, and it is moved along the
+// anchor's side to stay that far inside. Zero lets it sit flush against
+// the edge.
+func (p *PopupWidget) CollisionPadding(px float64) *PopupWidget {
+	defer property.Watch(&p.props, &p.edge)()
+	p.edge = max(px, 0)
+	return p
 }
 
 // BindOpen stores the open state in sig: writing it opens or closes the popup,
@@ -492,17 +510,20 @@ func (p *PopupWidget) paintContent(dst *Canvas, anchor Rect) {
 // returns the content's size and place, how far along the anchor's side its
 // entrance grows from, and the side it ended on.
 func (p *PopupWidget) placeBelow(screen Size, anchor Rect, side PopupSide, rtl bool) (Size, Point, float64, PopupSide) {
-	maxW := max(screen.W-anchor.Origin.X, anchor.Size.W)
-	if p.align != PopupStart || rtl || p.point != nil {
-		maxW = screen.W
-	}
+	// The content stays edge inside the window: its room on each side of
+	// the anchor, and across, ends there.
+	edge := p.edge
 	minW := anchor.Size.W
 	if p.ownWidth {
 		minW = 0
 	}
+	maxW := max(screen.W-edge-max(anchor.Origin.X, edge), minW)
+	if p.align != PopupStart || rtl || p.point != nil {
+		maxW = max(screen.W-2*edge, minW)
+	}
 	natural := p.effect.Layout(Constraints{MinW: minW, MaxW: maxW, MaxH: Unbounded}, p.env)
-	below := screen.H - (anchor.Origin.Y + anchor.Size.H + p.gap)
-	above := anchor.Origin.Y - p.gap
+	below := screen.H - edge - (anchor.Origin.Y + anchor.Size.H + p.gap)
+	above := anchor.Origin.Y - p.gap - edge
 	room, other := below, above
 	if side == PopupTop {
 		room, other = above, below
@@ -516,7 +537,7 @@ func (p *PopupWidget) placeBelow(screen Size, anchor Rect, side PopupSide, rtl b
 	}
 	y := anchor.Origin.Y + anchor.Size.H + p.gap
 	if side == PopupTop {
-		y = max(anchor.Origin.Y-p.gap-min(size.H, max(above, 0)), 0)
+		y = max(anchor.Origin.Y-p.gap-min(size.H, max(above, 0)), edge)
 	}
 	along := 0.0
 	// The alignment is logical: its start is the right edge under RTL.
@@ -532,16 +553,17 @@ func (p *PopupWidget) placeBelow(screen Size, anchor Rect, side PopupSide, rtl b
 		x += p.alignOffset
 	}
 	if screen.W != Unbounded {
-		x = clamp(x, 0, max(screen.W-size.W, 0))
+		x = clamp(x, edge, max(screen.W-edge-size.W, edge))
 	}
 	return size, Pt(x, y), along, side
 }
 
 // placeBeside is placeBelow for a popup to the left or right of its anchor.
 func (p *PopupWidget) placeBeside(screen Size, anchor Rect, side PopupSide) (Size, Point, float64, PopupSide) {
-	natural := p.effect.Layout(Constraints{MaxW: screen.W, MaxH: Unbounded}, p.env)
-	left := anchor.Origin.X - p.gap
-	right := screen.W - (anchor.Origin.X + anchor.Size.W + p.gap)
+	edge := p.edge
+	natural := p.effect.Layout(Constraints{MaxW: max(screen.W-2*edge, 0), MaxH: Unbounded}, p.env)
+	left := anchor.Origin.X - p.gap - edge
+	right := screen.W - edge - (anchor.Origin.X + anchor.Size.W + p.gap)
 	room, other := right, left
 	if side == PopupLeft {
 		room, other = left, right
@@ -551,17 +573,17 @@ func (p *PopupWidget) placeBeside(screen Size, anchor Rect, side PopupSide) (Siz
 	}
 	// A height is given only to content that has to be held to one: a
 	// scrolling panel takes all of the height it is offered.
-	size, maxW := natural, screen.W
+	size, maxW := natural, max(screen.W-2*edge, 0)
 	if size.W > room {
 		maxW = max(room, 0)
 		size = p.effect.Layout(Constraints{MaxW: maxW, MaxH: Unbounded}, p.env)
 	}
-	if size.H > screen.H {
-		size = p.effect.Layout(Constraints{MaxW: maxW, MaxH: screen.H}, p.env)
+	if maxH := max(screen.H-2*edge, 0); size.H > maxH {
+		size = p.effect.Layout(Constraints{MaxW: maxW, MaxH: maxH}, p.env)
 	}
 	x := anchor.Origin.X + anchor.Size.W + p.gap
 	if side == PopupLeft {
-		x = max(anchor.Origin.X-p.gap-size.W, 0)
+		x = max(anchor.Origin.X-p.gap-size.W, edge)
 	}
 	y, along := anchor.Origin.Y, 0.0
 	switch p.align {
@@ -575,7 +597,7 @@ func (p *PopupWidget) placeBeside(screen Size, anchor Rect, side PopupSide) (Siz
 		y += p.alignOffset
 	}
 	if screen.H != Unbounded {
-		y = clamp(y, 0, max(screen.H-size.H, 0))
+		y = clamp(y, edge, max(screen.H-edge-size.H, edge))
 	}
 	return size, Pt(x, y), along, side
 }
