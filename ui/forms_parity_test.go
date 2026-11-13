@@ -194,6 +194,16 @@ func TestInputGroupBlockAddons(t *testing.T) {
 	if g.topRect.Origin.Y >= g.rowRect.Origin.Y || g.rowRect.Origin.Y >= g.botRect.Origin.Y {
 		t.Fatalf("rows out of order: top %v, editor %v, bottom %v", g.topRect, g.rowRect, g.botRect)
 	}
+	// A text area keeps its own padding towards a row of addons, and the
+	// row its own towards the text area: shadcn's py-2 and py-1.5.
+	if above, below := g.rowRect.Origin.Y-g.topRect.Origin.Y-g.topRect.Size.H, g.botRect.Origin.Y-g.rowRect.Origin.Y-g.rowRect.Size.H; math.Abs(above-14) > 1e-9 || math.Abs(below-14) > 1e-9 {
+		t.Fatalf("the editor is %v below the top row and %v above the bottom one, want 14 each", above, below)
+	}
+	line := InputGroup(ggui.TextInput(ggui.State(""))).Bottom(Button("Send", nil))
+	line.Layout(c, env)
+	if below := line.botRect.Origin.Y - line.rowRect.Origin.Y - line.rowRect.Size.H; math.Abs(below-6) > 1e-9 {
+		t.Fatalf("a single line is %v above its bottom row, want 6", below)
+	}
 	// The button below still takes its own clicks; the rest of the group
 	// focuses the editor.
 	taps := 0
