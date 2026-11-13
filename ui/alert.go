@@ -102,7 +102,10 @@ func (a *AlertWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	a.inset, a.actionSize = t.Space, ggui.Size{}
 	if a.action != nil {
 		// The action hangs at the top right, and the text stops short
-		// of it.
+		// of it by the action's own width. shadcn reserves a fixed pr-18,
+		// 72px, for an action it places absolutely: an action wider than
+		// 56px runs over the text there, and a narrower one leaves the
+		// text short of room it could have had.
 		a.actionSize = a.action.Layout(ggui.Loose(ggui.Sz(max(0, c.MaxW-2*a.inset), max(0, c.MaxH-2*a.inset))), env)
 		pad.Right = a.inset + a.actionSize.W + t.Space
 	}
