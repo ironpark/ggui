@@ -34,7 +34,8 @@ const (
 
 // AttachmentWidget presents a file's media, metadata and independent actions.
 // Its optional full-card trigger sits behind the actions in the hit order.
-// Geometry follows shadcn/ui's Rhea attachment; colors follow the theme.
+// Geometry follows shadcn/ui's default attachment; colors and corners follow
+// the theme.
 type AttachmentWidget struct {
 	props                                property.Owner
 	title, description                   string
@@ -166,11 +167,13 @@ func (a *AttachmentWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	// Reserve the border separately from content padding, like CSS border-box.
 	a.padX += 1
 	a.padY += 1
+	// The title is the body font in medium weight; an error's description
+	// is the destructive color at 80%.
 	a.titleText.set(a.title, fontSize, a.theme.Fg)
-	a.titleText.text.Font(a.theme.Title.Font)
+	a.titleText.text.Weight(ggui.WeightMedium)
 	descColor := a.theme.MutedFg
 	if a.current == AttachmentError {
-		descColor = mix(a.theme.Destructive, a.theme.Card, .2)
+		descColor = fade(a.theme.Destructive, .8)
 	}
 	a.descriptionText.set(a.description, 12, descColor)
 	free := ggui.Loose(ggui.Sz(ggui.Unbounded, ggui.Unbounded))
@@ -278,12 +281,15 @@ func translated(r ggui.Rect, at ggui.Point) ggui.Rect { r.Origin = r.Origin.Add(
 func (a *AttachmentWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	state := a.current
 	t := a.theme
-	fill, border := mix(t.Bg, t.Muted, .4), t.Border
+	// The card surface, half the muted one under the pointer when the card
+	// opens something, inside the border, or the destructive color at 30%
+	// for an error.
+	fill, border := t.Card, t.Border
 	if a.trigger != nil && a.trigger.Hovered {
-		fill = mix(t.Card, t.Muted, .5)
+		fill = fade(t.Muted, .5)
 	}
 	if state == AttachmentError {
-		border = mix(t.Destructive, t.Card, .7)
+		border = fade(t.Destructive, .3)
 	}
 	dst.FillRoundRect(r, a.radius, fill)
 	if state == AttachmentIdle {
@@ -295,31 +301,21 @@ func (a *AttachmentWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		// Register the full-card trigger before painting the independent actions.
 		if a.trigger != nil {
 			a.trigger.Hit(dst, r, a.trigger, ggui.CursorShapePointer)
-			controlFocusRing(dst, &a.trigger.Interactive, t, r, a.radius, t.Ring)
+			// shadcn's focus-within:ring-1 ring-ring/50: a 1px ring just
+			// outside the border, which stays as it is.
+			if tr := &a.trigger.Interactive; tr.Focused && tr.FocusVisible {
+				dst.StrokeRoundRect(r.Grow(t.BorderWidth/2), a.radius+t.BorderWidth/2, t.BorderWidth, fade(t.Ring, .5))
+			}
 		}
 		inner := dst.Clip(r)
 		a.paintMedia(inner, translated(a.mediaRect, r.Origin), state)
 		titleRect := translated(a.textRect, r.Origin)
 		a.titleText.Paint(inner, titleRect)
 		if !a.reduced && (state == AttachmentUploading || state == AttachmentProcessing) {
-			// A moving highlight across the glyphs, rather than pulsing the whole card.
-			phase := float64(ggui.Paced(loopStep).UnixMilli()%2000) / 2000
-			center := (titleRect.Size.W+80)*phase - 40
-			highlight := t.Card
-			if isDark(t.Card) {
-				highlight = color.White
-			}
-			for i := 0; i < 16; i++ {
-				x := center + float64(i)*4 - 32
-				band := ggui.Rct(titleRect.Origin.Add(ggui.Pt(x, 0.0)), ggui.Sz(4.0, titleRect.Size.H)).Intersect(titleRect)
-				if band.Empty() {
-					continue
-				}
-				strength := 1 - math.Abs(float64(i)-7.5)/8
-				a.titleText.text.Color(mix(t.Fg, highlight, .8*strength))
-				inner.Clip(band).Inert().Paint(a.titleText.text, titleRect)
-			}
-			a.titleText.text.Color(t.Fg)
+			// A moving highlight across the glyphs, rather than pulsing the
+			// whole card: from the foreground toward the muted one, which
+			// reads on the card surface whichever way the theme runs.
+			paintShimmer(inner, a.titleText.text, titleRect, t.Fg, t.MutedFg)
 		}
 		if a.description != "" {
 			a.descriptionText.Paint(inner, translated(a.descriptionRect, r.Origin))
@@ -334,10 +330,12 @@ func (a *AttachmentWidget) paintMedia(dst *ggui.Canvas, r ggui.Rect, state Attac
 	if r.Empty() {
 		return
 	}
-	radius := pick(a.size == AttachmentExtraSmall, 6.0, 8.0)
+	// shadcn's rounded-lg, rounded-md for the extra small size, and a tenth
+	// of the destructive color for an error.
+	radius := pick(a.size == AttachmentExtraSmall, a.theme.RadiusSm, a.theme.Radius)
 	bg := a.theme.Muted
 	if state == AttachmentError {
-		bg = mix(a.theme.Destructive, a.theme.Card, .9)
+		bg = fade(a.theme.Destructive, .1)
 	}
 	dst.FillRoundRect(r, radius, bg)
 	if a.image != nil {

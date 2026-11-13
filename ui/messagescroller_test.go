@@ -2,8 +2,10 @@ package ui_test
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
@@ -150,5 +152,41 @@ func TestMessageScrollerRevealsARowScrolledIntoView(t *testing.T) {
 	p.Frame()
 	if got := s.Position(); got > 90 || got+200 < 170 {
 		t.Fatalf("revealing row 1 (90..170) left the transcript at %v", got)
+	}
+}
+
+func TestMessageScrollerEdgeButtonEasesInAndOut(t *testing.T) {
+	t.Parallel()
+	// Six 80px rows a default 24 apart are 600 tall: 400 past a 200px viewport.
+	s := ui.MessageScroller(ggui.State(transcript(6))).Height(200).Opening(ui.ScrollStart).Animation(0)
+	p := ggui.NewProbe(s, ggui.Sz(300, 200))
+	defer p.Close()
+	p.Frame()
+	if _, ok := p.Find("Scroll to start"); ok {
+		t.Fatal("a transcript at its start offers to scroll to the start")
+	}
+	end, ok := p.Find("Scroll to end")
+	if !ok {
+		t.Fatal("no scroll-to-end button while the transcript has more below")
+	}
+	if end.Rect.Size != ggui.Sz(28, 28) || math.Abs(end.Rect.Origin.Y+28-(200-16)) > .5 {
+		t.Fatalf("the button is at %v, want a 28px square 16px off the bottom", end.Rect)
+	}
+	p.Tap("Scroll to end")
+	p.Advance(16 * time.Millisecond)
+	if got := s.Position(); got != 400 {
+		t.Fatalf("the transcript is at %v after scroll to end, want 400", got)
+	}
+	if _, ok := p.Find("Scroll to end"); ok {
+		t.Fatal("the scroll-to-end button easing out still takes input")
+	}
+	p.Advance(30 * time.Millisecond)
+	start, ok := p.Find("Scroll to start")
+	if !ok || start.Rect.Origin.Y >= 16-.5 {
+		t.Fatalf("the scroll-to-start button easing in is at %v (found %v), want above its place", start.Rect, ok)
+	}
+	p.Advance(400 * time.Millisecond)
+	if start, _ = p.Find("Scroll to start"); math.Abs(start.Rect.Origin.Y-16) > .5 {
+		t.Fatalf("the settled scroll-to-start button is at %v, want 16px off the top", start.Rect)
 	}
 }

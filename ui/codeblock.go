@@ -5,49 +5,68 @@ import (
 	"maps"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 // CodeLineStyle decorates a logical source line without changing its contents.
 type CodeLineStyle uint8
 
+// The decorations of a source line.
 const (
-	CodeLineNormal CodeLineStyle = iota
-	CodeLineHighlighted
-	CodeLineAdded
-	CodeLineRemoved
+	CodeLineNormal      CodeLineStyle = iota // no decoration
+	CodeLineHighlighted                      // a muted band behind the line
+	CodeLineAdded                            // a muted band and a + before the line
+	CodeLineRemoved                          // a destructive band and a − before the line
 )
 
+// codeCopiedFor is how long the copy action shows that it copied.
+const codeCopiedFor = 2 * time.Second
+
 // CodeBlockWidget presents selectable code with a copy action, optional wrapping
-// and line decorations, and scrolling along both axes. Build one with CodeBlock.
+// and line decorations, and scrolling along both axes. It is a bordered surface
+// with no fill of its own on a light page. A Header or Language gives it a
+// header row holding the copy action; without one the action floats over the
+// top end corner and shows while the pointer or focus is in the block. Build
+// one with CodeBlock.
 type CodeBlockWidget struct {
 	ggui.Interactive
-	wrap                          bool
-	rtl                           bool
-	viewportW                     float64
-	lineStyles                    map[int]CodeLineStyle
-	lineStylesGen                 int // counts LineStyles calls, for the body to tell one map from the next
-	startLine                     int
-	xController, yController      ggui.ScrollController
-	props                         property.Owner
-	code                          property.Value[string]
-	language, header              string
-	lineNumbers, copyButton       bool
-	height                        float64
-	onCopy                        func(string)
-	text                          *ggui.RichTextWidget
-	label, copyLabel              *ggui.TextWidget
-	copy                          *ButtonWidget
-	xScroll, yScroll              *ggui.ScrollWidget
-	body                          *codeBlockBody
-	theme                         *uitheme.Theme
-	labelSize, copySize, bodySize ggui.Size
-	headerH                       float64
-	laidCode                      string
-	copied                        bool
+	wrap                     bool
+	rtl                      bool
+	viewportW                float64
+	lineStyles               map[int]CodeLineStyle
+	lineStylesGen            int // counts LineStyles calls, for the body to tell one map from the next
+	startLine                int
+	xController, yController ggui.ScrollController
+	props                    property.Owner
+	code                     property.Value[string]
+	language, header         string
+	lineNumbers, copyButton  bool
+	destructive, small       bool
+	height                   float64
+	onCopy                   func(string)
+	footer                   ggui.Widget
+	text                     *ggui.RichTextWidget
+	title, lang              *ggui.TextWidget
+	glyph                    *codeCopyGlyph
+	copy                     *ButtonWidget
+	xScroll, yScroll         *ggui.ScrollWidget
+	body                     *codeBlockBody
+	theme                    *uitheme.Theme
+	motion                   time.Duration
+	codeStyle                ggui.TextStyle
+	// The header row, the code's padding and the footer, as last laid out.
+	hasHeader                       bool
+	pad, padTop, padBottom, headerH float64
+	titleSize, langSize, copySize   ggui.Size
+	bodySize, footerSize            ggui.Size
+	laidCode                        string
+	copied                          bool
+	copiedAt                        time.Time
 }
 
 // CodeBlock creates a code surface. The language is a label, not a syntax
@@ -60,9 +79,10 @@ func CodeBlock(code string) *CodeBlockWidget {
 	c.AutoKey()
 	c.code.Set(code)
 	c.text = ggui.RichText().Selectable()
-	c.label = ggui.Text("").NoWrap().Ellipsis()
-	c.copyLabel = ggui.Text("Copy")
-	c.copy = ButtonOf(c.copyLabel, c.copyCode).Name("Copy code").Ghost().Size(ButtonSmall)
+	c.title = ggui.Text("").NoWrap().Ellipsis()
+	c.lang = ggui.Text("").NoWrap().Ellipsis()
+	c.glyph = &codeCopyGlyph{owner: c}
+	c.copy = ButtonOf(c.glyph, c.copyCode).Name("Copy code").Ghost().Size(ButtonIconExtraSmall)
 	c.body = &codeBlockBody{owner: c, measure: ggui.RichText()}
 	c.xScroll = ggui.Scroll(c.body).Horizontal().Controller(&c.xController)
 	c.yScroll = ggui.Scroll(c.xScroll).Shrink().Controller(&c.yController)
@@ -105,17 +125,42 @@ func (c *CodeBlockWidget) BindCode(code ggui.Readable[string]) *CodeBlockWidget 
 	return c
 }
 
-// Language sets the language label. Unknown languages render as plain code.
+// Language sets the language label, drawn muted in the header row. Unknown
+// languages render as plain code.
 func (c *CodeBlockWidget) Language(language string) *CodeBlockWidget {
 	defer property.Watch(&c.props, &c.language)()
 	c.language = language
 	return c
 }
 
-// Header sets an optional title, such as a filename, before the language label.
+// Header sets an optional title, such as a filename, before the language
+// label. A block with neither has no header row.
 func (c *CodeBlockWidget) Header(header string) *CodeBlockWidget {
 	defer property.Watch(&c.props, &c.header)()
 	c.header = header
+	return c
+}
+
+// Footer places a row under the code, such as a caption or a show-more
+// action, inset as the header is and drawn in the muted color. Nil removes it.
+func (c *CodeBlockWidget) Footer(w ggui.Widget) *CodeBlockWidget {
+	defer property.Watch(&c.props, &c.footer)()
+	c.footer = w
+	return c
+}
+
+// Destructive draws the block as an error's output: a destructive border,
+// title and code.
+func (c *CodeBlockWidget) Destructive() *CodeBlockWidget {
+	defer property.Watch(&c.props, &c.destructive)()
+	c.destructive = true
+	return c
+}
+
+// Small sets the code and the title at the caption size, in tighter padding.
+func (c *CodeBlockWidget) Small() *CodeBlockWidget {
+	defer property.Watch(&c.props, &c.small)()
+	c.small = true
 	return c
 }
 
@@ -140,8 +185,9 @@ func (c *CodeBlockWidget) CopyButton(show bool) *CodeBlockWidget {
 	return c
 }
 
-// Height caps the code viewport in logical pixels, excluding the header.
-// Zero lets the parent alone constrain its height. The default is 320.
+// Height caps the code viewport in logical pixels, excluding the header and
+// the footer. Zero lets the parent alone constrain its height. The default
+// is 320.
 func (c *CodeBlockWidget) Height(px float64) *CodeBlockWidget {
 	defer property.Watch(&c.props, &c.height)()
 	c.height = max(0, px)
@@ -151,16 +197,18 @@ func (c *CodeBlockWidget) Height(px float64) *CodeBlockWidget {
 // OnCopy runs after copying, with the exact source that was written.
 func (c *CodeBlockWidget) OnCopy(fn func(string)) *CodeBlockWidget { c.onCopy = fn; return c }
 
+// copyCode writes the source to the clipboard. The action's icon turns to a
+// check for codeCopiedFor, or until the source changes.
 func (c *CodeBlockWidget) copyCode() {
 	code := ggui.Untrack(c.code.Get)
 	ggui.CurrentClipboard().Write(code)
-	c.copied = true
-	c.copyLabel.Content("Copied")
+	c.copied, c.copiedAt = true, ggui.Now()
 	if c.onCopy != nil {
 		c.onCopy(code)
 	}
 }
 
+// caption names the block for assistive technology.
 func (c *CodeBlockWidget) caption() string {
 	if c.header != "" && c.language != "" {
 		return c.header + " · " + c.language
@@ -174,6 +222,11 @@ func (c *CodeBlockWidget) caption() string {
 	return "Code"
 }
 
+// ink is the color of the code and the title.
+func (c *CodeBlockWidget) ink() color.Color {
+	return pick(c.destructive, c.theme.Destructive, c.theme.Fg)
+}
+
 // Layout implements Widget.
 func (c *CodeBlockWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	defer c.props.Layout().EndLayout()
@@ -181,44 +234,113 @@ func (c *CodeBlockWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	c.rtl = env.Direction() == ggui.DirRTL
 	c.theme = uitheme.Of(env)
 	t := c.theme
+	c.motion = env.Motion(t.MotionFast)
 	code := c.code.Get()
 	if code != c.laidCode {
 		c.copied = false
-		c.copyLabel.Content("Copy")
 	}
 	c.laidCode = code
-	c.text.Spans(ggui.Span(code)).Style(t.Text.Merge(t.Mono)).Color(t.Fg)
-	c.label.Content(c.caption()).Style(t.Caption).Color(t.MutedFg)
-	innerW := max(0, cs.MaxW-24)
+	// Small is the caption's share of the text size; the code keeps a
+	// relaxed line either way.
+	scale := 1.0
+	if c.small && t.Text.Size > 0 && t.Caption.Size > 0 {
+		scale = t.Caption.Size / t.Text.Size
+	}
+	c.codeStyle = t.Text.Merge(t.Mono)
+	c.codeStyle.Size *= scale
+	c.codeStyle.LineHeight = 1.625
+	c.text.Spans(ggui.Span(code)).Style(c.codeStyle).Color(c.ink())
+	c.pad = t.Space * pick(c.small, 1.25, 1.5)
+	c.padTop, c.padBottom = c.pad, c.pad
+	innerW := max(0, cs.MaxW-2*c.pad)
+
 	c.copySize = ggui.Size{}
 	if c.copyButton {
-		c.copySize = c.copy.Layout(ggui.Loose(ggui.Sz(innerW, cs.MaxH)), env)
+		c.copy.Radius(min(t.RadiusSm, 10))
+		c.copySize = c.copy.Layout(ggui.Loose(ggui.Sz(cs.MaxW, cs.MaxH)), env)
 	}
-	c.labelSize = c.label.Layout(ggui.Loose(ggui.Sz(max(0, innerW-c.copySize.W-8), cs.MaxH)), env)
-	c.headerH = min(cs.MaxH, max(c.labelSize.H, c.copySize.H)+16)
-	bodyH := max(0, cs.MaxH-c.headerH)
+	c.hasHeader = c.header != "" || c.language != ""
+	c.headerH, c.titleSize, c.langSize = 0, ggui.Size{}, ggui.Size{}
+	if c.hasHeader {
+		label := t.Text
+		label.Size *= scale
+		c.title.Content(c.header).Style(label.Merge(t.Label)).Size(label.Size).Color(c.ink())
+		c.lang.Content(c.language).Style(label).Color(pick(c.destructive, t.Destructive, t.MutedFg))
+		avail := innerW
+		if c.copyButton {
+			// The action hangs half a space into the padding.
+			avail = max(0, avail-c.copySize.W+t.Space*.75-t.Space)
+		}
+		if c.language != "" {
+			share := avail
+			if c.header != "" {
+				share = avail / 2
+			}
+			c.langSize = c.lang.Layout(ggui.Loose(ggui.Sz(share, cs.MaxH)), env)
+			avail = max(0, avail-c.langSize.W-t.Space)
+		}
+		if c.header != "" {
+			c.titleSize = c.title.Layout(ggui.Loose(ggui.Sz(avail, cs.MaxH)), env)
+		}
+		c.headerH = min(cs.MaxH, c.pad+max(c.titleSize.H, c.langSize.H))
+		c.padTop = t.Space * pick(c.small, .75, 1.0)
+	}
+	c.footerSize = ggui.Size{}
+	footerH := 0.0
+	if c.footer != nil {
+		c.footerSize = c.footer.Layout(ggui.Loose(ggui.Sz(innerW, max(0, cs.MaxH-c.headerH))), env.WithText(ggui.TextStyle{Color: t.MutedFg, Size: t.Text.Size * scale}))
+		footerH = min(max(0, cs.MaxH-c.headerH), c.footerSize.H+c.pad)
+		c.padBottom = t.Space
+	}
+	bodyH := max(0, cs.MaxH-c.headerH-footerH)
 	if c.height > 0 {
 		bodyH = min(bodyH, c.height)
 	}
 	c.bodySize = c.yScroll.Layout(ggui.Constraints{MinW: cs.MinW, MaxW: cs.MaxW, MaxH: bodyH}, env.With(ggui.DirectionKey, ggui.DirLTR))
-	return cs.Constrain(ggui.Sz(max(c.bodySize.W, c.labelSize.W+c.copySize.W+32), c.headerH+c.bodySize.H))
+	headW := c.titleSize.W + c.langSize.W + c.copySize.W + 2*c.pad + t.Space
+	return cs.Constrain(ggui.Sz(max(c.bodySize.W, headW, c.footerSize.W+2*c.pad), c.headerH+c.bodySize.H+footerH))
 }
+
+// codeActionsSlot keeps the floating action's fade across frames.
+var codeActionsSlot = ggui.NewSlot[*ggui.Motion]("code block actions")
 
 // Paint implements Widget.
 func (c *CodeBlockWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := c.theme
-	dst.FillRoundRect(r, t.Radius, t.Muted)
-	dst.StrokeRoundRect(r, t.Radius, t.BorderWidth, t.Border)
+	dark := isDark(t.Bg)
+	if c.copied {
+		// The check turns back into the copy icon by itself.
+		if until := c.copiedAt.Add(codeCopiedFor); ggui.FrameTime().Before(until) {
+			ggui.WakeAt(until)
+		} else {
+			c.copied = false
+		}
+	}
+	// The floating action shows while the pointer or focus is in the block.
+	shown := 1.0
+	if c.copyButton && !c.hasHeader {
+		p, ok := dst.Pointer()
+		shown = dst.Ease(c.Anchor(r), codeActionsSlot, pick(ok && r.Contains(p) || dst.FocusWithin(r), 1.0, 0.0), c.motion)
+	}
+	border := t.InputBorder
+	if c.destructive {
+		border = fade(t.Destructive, pick(dark, .4, .3))
+	} else if dark {
+		dst.FillRoundRect(r, t.Radius, fade(t.InputBorder, .3))
+	}
+	outer := dst
 	dst = dst.Clip(r)
 	dst.Node(r, ggui.Node{Role: ggui.RoleGroup, Name: c.caption(), Description: "Code block"}, func(dst *ggui.Canvas) {
-		labelX := 12.0
-		copyX := max(0, r.Size.W-12-c.copySize.W)
-		if c.rtl {
-			labelX, copyX = max(0, r.Size.W-12-c.labelSize.W), 12
-		}
-		dst.Paint(c.label, ggui.Rct(r.Origin.Add(ggui.Pt(labelX, (c.headerH-c.labelSize.H)/2)), c.labelSize))
-		if c.copyButton {
-			dst.Paint(c.copy, ggui.Rct(r.Origin.Add(ggui.Pt(copyX, (c.headerH-c.copySize.H)/2)), c.copySize))
+		line := max(0, c.headerH-c.pad)
+		if c.hasHeader {
+			x := c.pad
+			if c.header != "" {
+				dst.Paint(c.title, ggui.Rct(r.Origin.Add(ggui.Pt(c.side(r, x, c.titleSize.W), c.pad+(line-c.titleSize.H)/2)), c.titleSize))
+				x += c.titleSize.W + t.Space
+			}
+			if c.language != "" {
+				dst.Paint(c.lang, ggui.Rct(r.Origin.Add(ggui.Pt(c.side(r, x, c.langSize.W), c.pad+(line-c.langSize.H)/2)), c.langSize))
+			}
 		}
 		if c.copied {
 			dst.Leaf(r, ggui.Node{Role: ggui.RoleStatus, Name: "Code copied"})
@@ -226,8 +348,53 @@ func (c *CodeBlockWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		viewport := ggui.Rct(r.Origin.Add(ggui.Pt(0, c.headerH)), ggui.Sz(r.Size.W, c.bodySize.H))
 		c.Hit(dst, viewport, c, ggui.CursorShapeDefault)
 		dst.Paint(c.yScroll, viewport)
-		c.FocusRing(dst, viewport, t.Radius, t.Ring)
+		if c.footer != nil {
+			at := ggui.Pt(c.side(r, c.pad, c.footerSize.W), c.headerH+c.bodySize.H)
+			dst.Paint(c.footer, ggui.Rct(r.Origin.Add(at), c.footerSize))
+		}
+		if !c.copyButton {
+			return
+		}
+		if c.hasHeader {
+			// In the header the action hangs into the padding, so its icon
+			// lines up with the code's edge.
+			x := r.Size.W - c.pad + t.Space*.75 - c.copySize.W
+			dst.Paint(c.copy, ggui.Rct(r.Origin.Add(ggui.Pt(c.side(r, x, c.copySize.W), c.pad+(line-c.copySize.H)/2)), c.copySize))
+			return
+		}
+		inset := t.Space * pick(c.small, .75, 1.0)
+		at := ggui.Rct(r.Origin.Add(ggui.Pt(c.side(r, r.Size.W-inset-c.copySize.W, c.copySize.W), inset)), c.copySize)
+		if shown <= 0 {
+			// Out of sight it still takes Tab and a click, which bring it back.
+			c.copy.Hit(dst, at, c.copy, ggui.CursorShapeDefault)
+			return
+		}
+		float := func(dst *ggui.Canvas) {
+			radius := min(t.RadiusSm, 10)
+			dst.FillRoundRect(at, radius, t.Bg)
+			dst.StrokeRoundRect(at.Grow(1), radius+1, 1, fade(t.Fg, .1))
+			dst.Paint(c.copy, at)
+		}
+		if shown < 1 {
+			dst.Layer(ggui.LayerOptions{Fade: 1 - shown}, float)
+		} else {
+			float(dst)
+		}
 	})
+	focused := c.Focused && c.FocusVisible && !c.IsInert()
+	outer.StrokeRoundRect(r, t.Radius, t.BorderWidth, pick(focused && !c.destructive, t.Ring, border))
+	if focused {
+		fieldHalo(outer, t, r, t.Radius, pick(c.destructive, destructiveRing(t), t.Ring))
+	}
+}
+
+// side places a run w wide x in from the block's start edge: from the left,
+// or from the right under a right-to-left direction.
+func (c *CodeBlockWidget) side(r ggui.Rect, x, w float64) float64 {
+	if c.rtl {
+		return max(0, r.Size.W-x-w)
+	}
+	return x
 }
 
 // Describe exposes the focusable code viewport separately from its copy action.
@@ -270,6 +437,29 @@ func (c *CodeBlockWidget) HandleKey(ev ggui.KeyEvent) {
 	}
 }
 
+// codeCopyGlyph is the copy action's icon: a copy sign that is a check
+// while the block shows it copied.
+type codeCopyGlyph struct {
+	owner *CodeBlockWidget
+	env   ggui.Env
+}
+
+func (g *codeCopyGlyph) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
+	g.env = env
+	side := uitheme.Of(env).IconSize * .75
+	return cs.Constrain(ggui.Sz(side, side))
+}
+
+func (g *codeCopyGlyph) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	c := g.owner
+	// In a header the action is muted until the pointer or focus is on it.
+	ink := c.ink()
+	if c.hasHeader && !c.destructive && !c.copy.Hovered && !c.copy.Focused {
+		ink = c.theme.MutedFg
+	}
+	paintChatIcon(dst, g.env, pick(c.copied, icons.Check, iconCopy), r, ink, 0)
+}
+
 // The gutter is painted separately so selecting or copying code cannot include it.
 type codeBlockBody struct {
 	owner                           *CodeBlockWidget
@@ -277,6 +467,7 @@ type codeBlockBody struct {
 	lines                           []codeBlockLine
 	textSize                        ggui.Size
 	gutter, numberW, markerW, lineH float64
+	leading                         float64 // the space a line keeps under its glyphs
 	laid                            codeBlockGutter
 }
 
@@ -285,15 +476,16 @@ type codeBlockBody struct {
 // a long file again for the same answer is most of what that cost.
 type codeBlockGutter struct {
 	code                string
-	style               ggui.TextStyle
+	style               ggui.TextStyle // the code's, with its size and line height
 	theme               *uitheme.Theme
 	wrapW               float64 // the viewport's width when lines wrap, else 0
+	pad                 float64 // the code's side padding, which a wrapped line's width leaves out
 	lineNumbers         bool
 	startLine, styleGen int
 }
 
 func (g codeBlockGutter) same(o codeBlockGutter) bool {
-	return g.code == o.code && g.style.Equal(o.style) && g.theme == o.theme && g.wrapW == o.wrapW &&
+	return g.code == o.code && g.style.Equal(o.style) && g.theme == o.theme && g.wrapW == o.wrapW && g.pad == o.pad &&
 		g.lineNumbers == o.lineNumbers && g.startLine == o.startLine && g.styleGen == o.styleGen
 }
 
@@ -303,29 +495,37 @@ type codeBlockLine struct {
 	style          CodeLineStyle
 }
 
+// codeNumberMin is the least width of the line number column, and
+// codeNumberGap what parts it from the code.
+const (
+	codeNumberMin = 24
+	codeNumberGap = 12
+)
+
 func (b *codeBlockBody) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	c := b.owner
+	sides, ends := 2*c.pad, c.padTop+c.padBottom
 	// Plain logs need no second pass over every source line for gutter geometry.
 	if !c.lineNumbers && len(c.lineStyles) == 0 {
 		b.lines, b.gutter = b.lines[:0], 0
 		textW := ggui.Unbounded
 		if c.wrap {
-			textW = max(1, c.viewportW-24)
+			textW = max(1, c.viewportW-sides)
 		}
 		b.textSize = c.text.Layout(ggui.Loose(ggui.Sz(textW, ggui.Unbounded)), env)
-		return cs.Constrain(ggui.Sz(b.textSize.W+24, b.textSize.H+24))
+		return cs.Constrain(ggui.Sz(b.textSize.W+sides, b.textSize.H+ends))
 	}
-	style := c.theme.Text.Merge(c.theme.Mono)
+	style := c.codeStyle
 	resolved := env.ResolveText(style)
 	textW := ggui.Unbounded
-	inputs := codeBlockGutter{code: c.laidCode, style: resolved, theme: c.theme, lineNumbers: c.lineNumbers, startLine: c.startLine, styleGen: c.lineStylesGen}
+	inputs := codeBlockGutter{code: c.laidCode, style: resolved, theme: c.theme, pad: c.pad, lineNumbers: c.lineNumbers, startLine: c.startLine, styleGen: c.lineStylesGen}
 	if c.wrap {
 		inputs.wrapW = c.viewportW
-		textW = max(1, c.viewportW-b.gutter-24)
+		textW = max(1, c.viewportW-b.gutter-sides)
 	}
 	if len(b.lines) > 0 && inputs.same(b.laid) {
 		b.textSize = c.text.Layout(ggui.Loose(ggui.Sz(textW, ggui.Unbounded)), env)
-		return cs.Constrain(ggui.Sz(b.textSize.W+b.gutter+24, b.textSize.H+24))
+		return cs.Constrain(ggui.Sz(b.textSize.W+b.gutter+sides, b.textSize.H+ends))
 	}
 	b.laid = inputs
 	b.measure.Style(style)
@@ -333,7 +533,7 @@ func (b *codeBlockBody) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	b.lineH = b.measure.Spans(ggui.Span("")).Layout(loose, env).H
 	// Every line uses the same font metrics. A paragraph omits the final line's
 	// leading; adding it back gives the next logical line's exact top offset.
-	leading := resolved.Size*resolved.LineHeight - b.lineH
+	b.leading = resolved.Size*resolved.LineHeight - b.lineH
 	sourceLines := strings.Split(c.laidCode, "\n")
 	for len(b.lines) < len(sourceLines) {
 		b.lines = append(b.lines, codeBlockLine{number: ggui.Text("").NoWrap().Align(1), marker: ggui.Text("").NoWrap()})
@@ -349,18 +549,17 @@ func (b *codeBlockBody) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 		}
 		// Only a changed line has a marker to shape; Paint asks the same.
 		if line.style == CodeLineAdded || line.style == CodeLineRemoved {
-			line.marker.Content(pick(line.style == CodeLineAdded, "+", "−")).Style(style).Color(pick(line.style == CodeLineRemoved, c.theme.Destructive, c.theme.Fg))
+			line.marker.Content(pick(line.style == CodeLineAdded, "+", "−")).Style(style).Color(pick(line.style == CodeLineRemoved, c.theme.Destructive, c.theme.MutedFg))
 			b.markerW = max(b.markerW, line.marker.Layout(loose, env).W)
 		}
 	}
-	if b.numberW > 0 {
-		b.gutter += b.numberW + 16
-	}
-	if b.markerW > 0 {
-		b.gutter += b.markerW + 8
+	// The numbers take a column; a marker sits in the padding before it.
+	if c.lineNumbers {
+		b.numberW = max(b.numberW, codeNumberMin)
+		b.gutter = b.numberW + codeNumberGap
 	}
 	if c.wrap {
-		textW = max(1, c.viewportW-b.gutter-24)
+		textW = max(1, c.viewportW-b.gutter-sides)
 	}
 	textCS := ggui.Loose(ggui.Sz(textW, ggui.Unbounded))
 	b.textSize = c.text.Layout(textCS, env)
@@ -368,10 +567,10 @@ func (b *codeBlockBody) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	for i, source := range sourceLines {
 		line := &b.lines[i]
 		line.top = top
-		line.height = b.measure.Spans(ggui.Span(source)).Layout(textCS, env).H + leading
+		line.height = b.measure.Spans(ggui.Span(source)).Layout(textCS, env).H + b.leading
 		top += line.height
 	}
-	return cs.Constrain(ggui.Sz(b.textSize.W+b.gutter+24, b.textSize.H+24))
+	return cs.Constrain(ggui.Sz(b.textSize.W+b.gutter+sides, b.textSize.H+ends))
 }
 
 func (b *codeBlockBody) Paint(dst *ggui.Canvas, r ggui.Rect) {
@@ -380,31 +579,33 @@ func (b *codeBlockBody) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	visible, gutter := dst.Visible(r), dst.Inert()
 	for i := range b.lines {
 		line := &b.lines[i]
-		at := r.Origin.Add(ggui.Pt(12, 12+line.top))
+		at := r.Origin.Add(ggui.Pt(c.pad, c.padTop+line.top))
 		var fill color.Color
 		var annotation string
 		switch line.style {
 		case CodeLineHighlighted:
-			fill, annotation = mix(c.theme.Muted, c.theme.Fg, .08), "Highlighted line "
+			fill, annotation = c.theme.Muted, "Highlighted line "
 		case CodeLineAdded:
-			fill, annotation = fade(c.theme.Primary, .12), "Added line "
+			fill, annotation = c.theme.Muted, "Added line "
 		case CodeLineRemoved:
-			fill, annotation = fade(c.theme.Destructive, .12), "Removed line "
+			fill, annotation = fade(c.theme.Destructive, .1), "Removed line "
 		}
 		if annotation != "" {
-			dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X, at.Y), ggui.Sz(r.Size.W, line.height)), fill)
-			dst.Leaf(ggui.Rct(at, ggui.Sz(max(0, r.Size.W-24), line.height)), ggui.Node{Role: ggui.RoleText, Name: annotation + strconv.Itoa(c.startLine+i)})
+			// The band runs from edge to edge of the viewport or the longest
+			// line, whichever is wider, with the line's leading shared above
+			// and below its glyphs.
+			dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X, at.Y-b.leading/2), ggui.Sz(max(r.Size.W, c.viewportW), line.height)), fill)
+			dst.Leaf(ggui.Rct(at, ggui.Sz(max(0, r.Size.W-2*c.pad), line.height)), ggui.Node{Role: ggui.RoleText, Name: annotation + strconv.Itoa(c.startLine+i)})
 		}
 		if at.Y+line.height < visible.Origin.Y || at.Y > visible.Origin.Y+visible.Size.H {
 			continue
 		}
+		if line.style == CodeLineAdded || line.style == CodeLineRemoved {
+			gutter.Paint(line.marker, ggui.Rct(ggui.Pt(r.Origin.X+c.theme.Space/2, at.Y), ggui.Sz(b.markerW, b.lineH)))
+		}
 		if c.lineNumbers {
 			gutter.Paint(line.number, ggui.Rct(at, ggui.Sz(b.numberW, b.lineH)))
-			at.X += b.numberW + 16
-		}
-		if line.style == CodeLineAdded || line.style == CodeLineRemoved {
-			gutter.Paint(line.marker, ggui.Rct(at, ggui.Sz(b.markerW, b.lineH)))
 		}
 	}
-	dst.Paint(c.text, ggui.Rct(r.Origin.Add(ggui.Pt(12+b.gutter, 12)), b.textSize))
+	dst.Paint(c.text, ggui.Rct(r.Origin.Add(ggui.Pt(c.pad+b.gutter, c.padTop)), b.textSize))
 }

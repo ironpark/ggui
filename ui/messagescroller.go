@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"image/color"
 	"math"
 	"slices"
 	"time"
@@ -78,18 +79,65 @@ type MessageScrollerWidget struct {
 	onVisibility           func(TranscriptVisibility)
 	startButton, endButton *ButtonWidget
 	pause                  func()
+	// The scroll-to-edge buttons: their sizes, how far each has eased in,
+	// and how long easing in and out takes.
+	startSize, endSize   ggui.Size
+	startShown, endShown ggui.Motion
+	buttonIn, buttonOut  time.Duration
+	fadeLen, buttonInset float64 // the faded end's length, and a button's distance from its edge
+	// What paintRows paints into and reports to, and paintRows as a value,
+	// so painting the rows behind a fade makes no closure a frame.
+	rowsRect    ggui.Rect
+	painting    *TranscriptVisibility
+	paintRowsFn func(*ggui.Canvas)
 }
 
+// MessageScroller creates a transcript viewport over items, 320px tall, with
+// three spaces between rows until Gap says otherwise. A round icon button
+// eases in at an edge the reader has scrolled away from and scrolls back to it.
 func MessageScroller(items ggui.Readable[[]MessageEntry]) *MessageScrollerWidget {
-	s := &MessageScrollerWidget{source: items, height: 320, gap: 32, peek: 64, threshold: 8, opening: ScrollEnd, duration: 200 * time.Millisecond}
+	s := &MessageScrollerWidget{source: items, height: 320, gap: -1, peek: 64, threshold: 8, opening: ScrollEnd, duration: 200 * time.Millisecond}
 	s.Role = ggui.RoleGroup
 	s.SetName("Conversation")
 	s.AutoKey()
 	s.pause = s.Pause
-	s.startButton = Button("↑", func() { s.ScrollToStart() }).Name("Scroll to start").Outline().Pad(4, 10)
-	s.endButton = Button("↓", func() { s.ScrollToEnd() }).Name("Scroll to end").Outline().Pad(4, 10)
+	s.paintRowsFn = s.paintRows
+	s.startButton = ButtonOf(&scrollEdgeGlyph{up: true}, func() { s.ScrollToStart() }).Name("Scroll to start").Variant(scrollEdgeButton).Size(ButtonIconSmall)
+	s.endButton = ButtonOf(&scrollEdgeGlyph{}, func() { s.ScrollToEnd() }).Name("Scroll to end").Variant(scrollEdgeButton).Size(ButtonIconSmall)
 	return s
 }
+
+// scrollEdgeButton is the look of a transcript's scroll-to-edge button: the
+// page's background inside a border, and the muted surface under the pointer.
+var scrollEdgeButton = NewVariant("message-scroller", func(t uitheme.Theme) ButtonStyle {
+	return ButtonStyle{Fill: t.Bg, Hover: t.Muted, Label: t.Fg, HoverLabel: t.Fg, Border: t.Border}
+})
+
+// The curves a scroll-to-edge button eases in and out along.
+var (
+	scrollButtonIn  = ggui.CubicBezier(.23, 1, .32, 1)
+	scrollButtonOut = ggui.CubicBezier(.7, 0, .84, 0)
+)
+
+// scrollEdgeGlyph is the arrow on a scroll-to-edge button, pointing down to
+// the end or up to the start.
+type scrollEdgeGlyph struct {
+	up  bool
+	env ggui.Env
+	ink color.Color
+}
+
+func (g *scrollEdgeGlyph) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
+	t := uitheme.Of(env)
+	g.env, g.ink = env, colorOr(env.Text().Color, t.Fg)
+	return cs.Constrain(ggui.Sz(t.IconSize, t.IconSize))
+}
+
+func (g *scrollEdgeGlyph) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	paintChatIcon(dst, g.env, iconArrowDown, r, g.ink, pick(g.up, math.Pi, 0))
+}
+
+// Name names the transcript for assistive technology.
 func (s *MessageScrollerWidget) Name(v string) *MessageScrollerWidget { s.SetName(v); return s }
 func (s *MessageScrollerWidget) Height(v float64) *MessageScrollerWidget {
 	defer property.Watch(&s.props, &s.height)()
@@ -227,6 +275,13 @@ func (s *MessageScrollerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Si
 	saved := s.Save()
 	oldRows := s.rows
 	s.theme, s.reduced = uitheme.Of(env), env.ReducedMotion()
+	t := s.theme
+	gap := s.gap
+	if gap < 0 {
+		gap = 3 * t.Space
+	}
+	s.fadeLen, s.buttonInset = 3*t.Space, 2*t.Space
+	s.buttonIn, s.buttonOut = env.Motion(t.MotionSlow), env.Motion(2*t.MotionSlow)
 	size := c.Constrain(ggui.Sz(bounded(c.MaxW, 400), min(c.MaxH, s.height)))
 	s.viewport = size.H
 	rows := s.source.Get()
@@ -244,7 +299,7 @@ func (s *MessageScrollerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Si
 			panic("ui.MessageScroller: nil content")
 		}
 		if i > 0 {
-			s.total += s.gap
+			s.total += gap
 		}
 		s.starts = append(s.starts, s.total)
 		sz := row.Content.Layout(ggui.Loose(ggui.Sz(size.W, ggui.Unbounded)), env)
@@ -295,8 +350,8 @@ func (s *MessageScrollerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Si
 		}
 	}
 	s.offset = clamp(s.offset, 0, s.limit())
-	s.startButton.Layout(c.Loosen(), env)
-	s.endButton.Layout(c.Loosen(), env)
+	s.startSize = s.startButton.Layout(c.Loosen(), env)
+	s.endSize = s.endButton.Layout(c.Loosen(), env)
 	return size
 }
 func (s *MessageScrollerWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
@@ -328,25 +383,14 @@ func (s *MessageScrollerWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	v := TranscriptVisibility{CanScrollStart: s.offset > s.threshold, CanScrollEnd: s.limit()-s.offset > s.threshold}
 	dst.DescribeNode(r, s, func(dst *ggui.Canvas) {
 		clip := dst.Clip(r)
-		for i, row := range s.rows {
-			y := s.starts[i] - s.offset
-			if row.Anchor && y <= s.margin+s.peek {
-				v.CurrentAnchorID = row.ID
-			}
-			if y+s.sizes[i].H > 0 && y < r.Size.H {
-				v.VisibleMessageIDs = append(v.VisibleMessageIDs, row.ID)
-			}
-			clip.Paint(row.Content, ggui.Rct(r.Origin.Add(ggui.Pt(0.0, y)), ggui.Sz(r.Size.W, s.sizes[i].H)))
-		}
-		if v.CanScrollEnd {
-			edgeFade(clip, r, 0, -1, s.theme.Card, .8)
-		}
-		if v.CanScrollStart {
-			clip.Paint(s.startButton, ggui.Rct(r.Origin.Add(ggui.Pt((r.Size.W-32)/2, 16.0)), ggui.Sz(32, 32)))
-		}
-		if v.CanScrollEnd {
-			clip.Paint(s.endButton, ggui.Rct(r.Origin.Add(ggui.Pt((r.Size.W-32)/2, max(0, r.Size.H-48))), ggui.Sz(32, 32)))
-		}
+		// The rows fade out toward an end there is more beyond, by as much
+		// as there is, up to fadeLen: a mask, so whatever surface is behind
+		// the transcript shows through it.
+		s.rowsRect, s.painting = r, &v
+		clip.FadeEdges(r, false, 0, min(s.limit()-s.offset, s.fadeLen), s.paintRowsFn)
+		s.painting = nil
+		s.paintEdgeButton(clip, r, s.startButton, &s.startShown, s.startSize, v.CanScrollStart, -1)
+		s.paintEdgeButton(clip, r, s.endButton, &s.endShown, s.endSize, v.CanScrollEnd, 1)
 	})
 	changed := v.CurrentAnchorID != s.visibility.CurrentAnchorID || v.CanScrollStart != s.visibility.CanScrollStart || v.CanScrollEnd != s.visibility.CanScrollEnd || !slices.Equal(v.VisibleMessageIDs, s.visibility.VisibleMessageIDs)
 	s.visibility = v
@@ -355,6 +399,52 @@ func (s *MessageScrollerWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	s.FocusRing(dst, r, 0, s.theme.Ring)
 }
+
+// paintRows paints the transcript's rows over rowsRect and notes in painting
+// which are in view and which anchor leads them.
+func (s *MessageScrollerWidget) paintRows(dst *ggui.Canvas) {
+	r, v := s.rowsRect, s.painting
+	for i, row := range s.rows {
+		y := s.starts[i] - s.offset
+		if row.Anchor && y <= s.margin+s.peek {
+			v.CurrentAnchorID = row.ID
+		}
+		if y+s.sizes[i].H > 0 && y < r.Size.H {
+			v.VisibleMessageIDs = append(v.VisibleMessageIDs, row.ID)
+		}
+		dst.Paint(row.Content, ggui.Rct(r.Origin.Add(ggui.Pt(0.0, y)), ggui.Sz(r.Size.W, s.sizes[i].H)))
+	}
+}
+
+// paintEdgeButton paints a scroll-to-edge button in the middle of the edge
+// that side names, -1 the start and 1 the end. It eases in while active,
+// and out, twice as slowly, when the reader is back at the edge: fading,
+// shrinking a little and sliding its own height toward the edge, taking no
+// input on its way out.
+func (s *MessageScrollerWidget) paintEdgeButton(dst *ggui.Canvas, r ggui.Rect, b *ButtonWidget, shown *ggui.Motion, size ggui.Size, active bool, side float64) {
+	shown.Easing(pick(active, scrollButtonIn, scrollButtonOut))
+	v := shown.Toggle(active, ggui.FrameTime(), pick(active, s.buttonIn, s.buttonOut))
+	if v <= 0 {
+		return
+	}
+	y := s.buttonInset
+	if side > 0 {
+		y = max(0, r.Size.H-s.buttonInset-size.H)
+	}
+	at := ggui.Rct(r.Origin.Add(ggui.Pt((r.Size.W-size.W)/2, y+side*(1-v)*size.H)), size)
+	if v >= 1 && active {
+		dst.Paint(b, at)
+		return
+	}
+	dst.Layer(ggui.LayerOptions{Fade: 1 - v, Scale: .95 + .05*v, About: at.Center()}, func(dst *ggui.Canvas) {
+		if !active {
+			dst = dst.Inert()
+		}
+		dst.Paint(b, at)
+	})
+}
+
+// Describe implements ggui.Describer.
 func (s *MessageScrollerWidget) Describe() ggui.Node {
 	return ggui.Node{Role: ggui.RoleGroup, Name: s.SemanticName(), Actions: ggui.ActionFocus | ggui.ActionScrollIntoView}
 }
