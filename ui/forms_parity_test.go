@@ -91,6 +91,30 @@ func TestButtonFocusRingEasesIn(t *testing.T) {
 	}
 }
 
+// A toggle group's ring eases as its toggles' do.
+func TestToggleGroupFocusRingEasesIn(t *testing.T) {
+	t.Parallel()
+	g := ToggleGroup(ggui.State("left")).Options([]string{"left", "center", "right"}).Name("Align")
+	var ring float64
+	p := ggui.NewProbe(watchMotion(g, &g.Interactive, focusRingSlot, &ring), ggui.Sz(300, 60))
+	defer p.Close()
+	p.Advance(0)
+	p.Advance(0)
+	if ring > 0 {
+		t.Fatalf("an unfocused group has its ring at %v", ring)
+	}
+	p.Key("tab")
+	p.Advance(0)
+	p.Advance(uitheme.Default().MotionFast / 2)
+	if ring <= 0 || ring >= 1 {
+		t.Fatalf("the ring is at %v half way through MotionFast, want between 0 and 1", ring)
+	}
+	p.Advance(time.Second)
+	if ring != 1 {
+		t.Fatalf("the ring settled at %v, want 1", ring)
+	}
+}
+
 // A checkbox's fill eases to Primary when it is ticked.
 func TestCheckboxFillEases(t *testing.T) {
 	t.Parallel()

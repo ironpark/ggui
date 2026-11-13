@@ -720,9 +720,11 @@ func (g *ToggleGroupWidget[T]) paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	// The ring is drawn after every segment, so in a joined strip its halo
 	// lies over the neighbours rather than under the one painted next.
-	if cur >= 0 && g.Focused && g.FocusVisible && !inert {
+	// It eases in and out over the group's motion, as a Toggle's does.
+	focused := cur >= 0 && g.Focused && g.FocusVisible && !inert
+	if k := dst.Ease(g.Anchor(r), focusRingSlot, pick(focused, 1.0, 0.0), g.motion); k > 0 && cur >= 0 {
 		ring := colorOr(st.Ring, t.Ring)
-		f := joinedFocus{r: g.rects[cur], radius: g.radius, sides: g.sidesAt(cur), width: t.BorderWidth, line: colorOr(st.FocusBorder, ring), halo: t.Halo(ring)}
+		f := joinedFocus{r: g.rects[cur], radius: g.radius, sides: g.sidesAt(cur), width: t.BorderWidth, line: fade(colorOr(st.FocusBorder, ring), k), halo: fade(t.Halo(ring), k)}
 		f.paint(dst)
 	}
 }
