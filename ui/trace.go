@@ -145,8 +145,11 @@ func (t *TraceWidget) build(steps []TraceStep, seen map[string]bool) []*traceRow
 		row.step = step
 		row.body.children.rows = t.build(step.Children, seen)
 		row.disclosure.SetName(step.Title)
-		row.disclosure.title.Content(row.label())
-		row.text.Content(row.label())
+		// Said once a layout: a running step paints every frame.
+		row.described, row.statusName = row.description(), step.Title+": "+string(step.Status)
+		label := row.label()
+		row.disclosure.title.Content(label)
+		row.text.Content(label)
 		row.action.Name(step.Title)
 		rows = append(rows, row)
 	}
@@ -203,16 +206,17 @@ func (l *traceList) Paint(dst *ggui.Canvas, r ggui.Rect) {
 }
 
 type traceRow struct {
-	id          string
-	step        TraceStep
-	disclosure  *CollapsibleWidget
-	text        *ggui.TextWidget
-	action      *ButtonWidget
-	body        traceBody
-	theme       *uitheme.Theme
-	headerTheme uitheme.Theme
-	reduced     bool
-	textSize    ggui.Size
+	described, statusName string // the row's description and status, as a screen reader hears them
+	id                    string
+	step                  TraceStep
+	disclosure            *CollapsibleWidget
+	text                  *ggui.TextWidget
+	action                *ButtonWidget
+	body                  traceBody
+	theme                 *uitheme.Theme
+	headerTheme           uitheme.Theme
+	reduced               bool
+	textSize              ggui.Size
 }
 
 func (r *traceRow) expandable() bool { return r.step.Details != nil || len(r.step.Children) > 0 }
@@ -292,9 +296,9 @@ func (r *traceRow) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 	r.text.Color(foreground)
 	r.disclosure.title.Color(foreground)
 	r.headerTheme.Fg, r.headerTheme.MutedFg = foreground, icon
-	dst.Node(rect, ggui.Node{Role: ggui.RoleListItem, Name: r.step.Title, Description: r.description()}, func(dst *ggui.Canvas) {
+	dst.Node(rect, ggui.Node{Role: ggui.RoleListItem, Name: r.step.Title, Description: r.described}, func(dst *ggui.Canvas) {
 		if r.step.Status != "" {
-			dst.Leaf(header, ggui.Node{Role: ggui.RoleStatus, Name: r.step.Title + ": " + string(r.step.Status)})
+			dst.Leaf(header, ggui.Node{Role: ggui.RoleStatus, Name: r.statusName})
 		}
 		if r.expandable() {
 			dst.Paint(r.disclosure, rect)

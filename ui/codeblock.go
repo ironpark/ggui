@@ -29,6 +29,7 @@ type CodeBlockWidget struct {
 	rtl                           bool
 	viewportW                     float64
 	lineStyles                    map[int]CodeLineStyle
+	lineStylesGen                 int // counts LineStyles calls, for the body to tell one map from the next
 	startLine                     int
 	xController, yController      ggui.ScrollController
 	props                         property.Owner
@@ -88,6 +89,7 @@ func (c *CodeBlockWidget) Wrap(wrap bool) *CodeBlockWidget {
 func (c *CodeBlockWidget) LineStyles(styles map[int]CodeLineStyle) *CodeBlockWidget {
 	defer property.Watch(&c.props, &c.lineStyles)()
 	c.lineStyles = maps.Clone(styles)
+	c.lineStylesGen++
 	return c
 }
 
@@ -275,6 +277,24 @@ type codeBlockBody struct {
 	lines                           []codeBlockLine
 	textSize                        ggui.Size
 	gutter, numberW, markerW, lineH float64
+	laid                            codeBlockGutter
+}
+
+// codeBlockGutter is what the gutter's geometry was measured from. A view
+// lays its content out at every step of a scroll, and shaping each line of
+// a long file again for the same answer is most of what that cost.
+type codeBlockGutter struct {
+	code                string
+	style               ggui.TextStyle
+	theme               *uitheme.Theme
+	wrapW               float64 // the viewport's width when lines wrap, else 0
+	lineNumbers         bool
+	startLine, styleGen int
+}
+
+func (g codeBlockGutter) same(o codeBlockGutter) bool {
+	return g.code == o.code && g.style.Equal(o.style) && g.theme == o.theme && g.wrapW == o.wrapW &&
+		g.lineNumbers == o.lineNumbers && g.startLine == o.startLine && g.styleGen == o.styleGen
 }
 
 type codeBlockLine struct {
@@ -297,6 +317,17 @@ func (b *codeBlockBody) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	style := c.theme.Text.Merge(c.theme.Mono)
 	resolved := env.ResolveText(style)
+	textW := ggui.Unbounded
+	inputs := codeBlockGutter{code: c.laidCode, style: resolved, theme: c.theme, lineNumbers: c.lineNumbers, startLine: c.startLine, styleGen: c.lineStylesGen}
+	if c.wrap {
+		inputs.wrapW = c.viewportW
+		textW = max(1, c.viewportW-b.gutter-24)
+	}
+	if len(b.lines) > 0 && inputs.same(b.laid) {
+		b.textSize = c.text.Layout(ggui.Loose(ggui.Sz(textW, ggui.Unbounded)), env)
+		return cs.Constrain(ggui.Sz(b.textSize.W+b.gutter+24, b.textSize.H+24))
+	}
+	b.laid = inputs
 	b.measure.Style(style)
 	loose := ggui.Loose(ggui.Sz(ggui.Unbounded, ggui.Unbounded))
 	b.lineH = b.measure.Spans(ggui.Span("")).Layout(loose, env).H
@@ -328,7 +359,6 @@ func (b *codeBlockBody) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	if b.markerW > 0 {
 		b.gutter += b.markerW + 8
 	}
-	textW := ggui.Unbounded
 	if c.wrap {
 		textW = max(1, c.viewportW-b.gutter-24)
 	}
