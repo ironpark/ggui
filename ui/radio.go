@@ -41,6 +41,17 @@ func (r *RadioWidget[T]) BindDisabled(when ggui.Readable[bool]) *RadioWidget[T] 
 	return r
 }
 
+// Invalid marks the option as having failed validation: a destructive
+// border while it is not chosen and a destructive halo around it. An
+// option inside a Field holding an error is invalid without it.
+func (r *RadioWidget[T]) Invalid(v bool) *RadioWidget[T] { r.invalidProp.Set(v); return r }
+
+// BindInvalid follows when for Invalid without a rebuild.
+func (r *RadioWidget[T]) BindInvalid(when ggui.Readable[bool]) *RadioWidget[T] {
+	r.invalidProp.Bind(when, "BindInvalid")
+	return r
+}
+
 // Describe implements ggui.Describer: an option reports whether the group
 // currently holds its value.
 func (r *RadioWidget[T]) Describe() ggui.Node {
@@ -64,18 +75,24 @@ func (r *RadioWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 func (r *RadioWidget[T]) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 	t := r.theme
 	box := r.paint(dst, rect, r)
-	center := ggui.Pt(box.Origin.X+box.Size.W/2, box.Origin.Y+box.Size.H/2)
+	center := box.Center()
 	radius := box.Size.W / 2
 	on := ggui.Untrack(r.selected.Get) == r.value
-	opacity := pick(r.IsInert(), 1-t.DisabledMix, 1.0)
-	border, fill := t.InputBorder, t.Input
+	invalid := r.invalidAmount(dst, box)
+	// shadcn's radio item has no transition: the fill switches at once.
+	border, fill, dot := mix(t.InputBorder, invalidBorder(t), invalid), t.Input, t.PrimaryFg
 	if on {
 		border, fill = t.Primary, t.Primary
 	}
-	dst.FillCircle(center, radius, fade(border, opacity))
-	dst.FillCircle(center, radius-t.BorderWidth, fade(fill, opacity))
-	if on {
-		dst.FillCircle(center, radius*.5, fade(t.PrimaryFg, opacity))
+	if r.IsInert() {
+		border, fill, dot = t.Disabled(border), t.Disabled(fill), t.Disabled(dot)
 	}
-	controlFocusRing(dst, &r.Interactive, t, box, radius, t.Ring)
+	// The border is stroked over the fill rather than filled under it, so
+	// a translucent Input does not show a disc of the border color.
+	dst.FillCircle(center, radius, fill)
+	dst.StrokeRoundRect(box, radius, t.BorderWidth, border)
+	if on {
+		dst.FillCircle(center, radius*.5, dot)
+	}
+	r.stateRing(dst, box, radius, invalid)
 }
