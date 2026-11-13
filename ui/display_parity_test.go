@@ -77,6 +77,25 @@ func TestAccordionSectionsHaveTheTriggerBorderAndRuleInTheirHeight(t *testing.T)
 	}
 }
 
+// An ItemSeparator keeps shadcn's my-2 around its line, which a plain
+// Divider does not.
+func TestItemSeparatorKeepsASpaceAboveAndBelowItsLine(t *testing.T) {
+	t.Parallel()
+	env := uitheme.Default().Apply(ggui.Env{})
+	c := ggui.Loose(ggui.Sz(200, 100))
+	if got := Divider().Layout(c, env); got != ggui.Sz(200, 1) {
+		t.Fatalf("a divider is %v, want 200x1", got)
+	}
+	sep := ItemSeparator()
+	if got := sep.Layout(c, env); got != ggui.Sz(200, 17) {
+		t.Fatalf("an item separator is %v, want 200x17", got)
+	}
+	r := ggui.Rct(ggui.Pt(10, 30), ggui.Sz(200, 17))
+	if got, want := sep.line(r), ggui.Rct(ggui.Pt(10, 38), ggui.Sz(200, 1)); got != want {
+		t.Fatalf("its line is at %v, want %v", got, want)
+	}
+}
+
 // A progress bar's indicator is a square-ended run from the end reading
 // starts at, which the track's round ends cut: the left of the track, or
 // the right under a right-to-left direction.
