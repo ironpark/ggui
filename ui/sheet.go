@@ -216,7 +216,7 @@ func (s *SheetWidget) fitsContent() bool {
 func (s *SheetWidget) shape(t *uitheme.Theme) modalShape {
 	shape := modalShape{
 		headerGap: t.Space / 4, closeInset: t.Space * 1.5,
-		fill: !s.fitsContent(), shadow: sheetShadow(t), fillColor: t.Popover,
+		fill: !s.fitsContent(), shadow: t.OverlayShadow, fillColor: t.Popover,
 	}
 	if s.isDrawer() {
 		// A drawer's surface is painted with its corners; see paintDrawerSurface.
@@ -226,17 +226,6 @@ func (s *SheetWidget) shape(t *uitheme.Theme) modalShape {
 		}
 	}
 	return shape
-}
-
-// sheetShadow is the shadow a sheet casts on the window: the theme's
-// OverlayShadow at the weight of shadcn's shadow-lg, which is half its blur
-// and two fifths of its strength. The token is as heavy as it is for the
-// dialogs that no longer cast one.
-func sheetShadow(t *uitheme.Theme) ggui.ShadowStyle {
-	s := t.OverlayShadow
-	s.Blur /= 2
-	s.Color = fade(s.Color, .4)
-	return s
 }
 
 // Layout implements ggui.Widget: the sheet takes no room in the tree.
