@@ -163,3 +163,24 @@ func semNode(t *testing.T, p *ggui.Probe, role ggui.Role, name string) ggui.SemN
 	}
 	return n
 }
+
+func TestDatePickerCentresItsCalendarUnderAWideTrigger(t *testing.T) {
+	t.Parallel()
+	d := ui.DatePicker(ggui.State(civil(2026, time.June, 10))).Name("Due")
+	d.Calendar().Location(time.UTC)
+	p := ggui.NewProbe(ggui.Column(d).Align(ggui.AlignStretch), ggui.Sz(600, 480))
+	defer p.Close()
+	p.Tap("Due")
+	trigger, cal := semNode(t, p, ggui.RoleButton, "Due"), semNode(t, p, ggui.RoleGroup, "Due")
+	// The popup is as wide as the trigger; the calendar inside keeps its
+	// 7×28 + 2×8 and sits in the middle, with no padding of the popup's own.
+	if cal.Rect.Size.W != 7*28+16 {
+		t.Fatalf("calendar is %v wide, want 212", cal.Rect.Size.W)
+	}
+	if got, want := cal.Rect.Center().X, trigger.Rect.Center().X; got-want > .5 || want-got > .5 {
+		t.Fatalf("calendar centred at %v, want under the trigger's middle %v", got, want)
+	}
+	if d.Popup().Rect().Size.H != cal.Rect.Size.H {
+		t.Fatalf("popup %v tall around a %v calendar, want no padding of its own", d.Popup().Rect().Size.H, cal.Rect.Size.H)
+	}
+}

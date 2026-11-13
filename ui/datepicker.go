@@ -53,8 +53,12 @@ func newDatePicker(calendar *CalendarWidget, placeholder string) *DatePickerWidg
 	d.button = Button("", func() { d.popup.Toggle() }).Outline()
 	d.button.defaultName = placeholder
 	d.button.value = func() string { return ggui.Untrack(d.text) }
-	d.panel = ggui.Box(d.calendar)
-	d.popup = ggui.Popup(d.button, d.panel).Owner(d.button)
+	// A popup is at least as wide as its trigger; the calendar keeps its own
+	// width, as shadcn's w-auto popover does, and sits in the middle.
+	fit := &datePickerFit{inner: datePickerInner{calendar: calendar}}
+	fit.panel = ggui.Box(&fit.inner)
+	d.panel = fit.panel
+	d.popup = ggui.Popup(d.button, fit).Owner(d.button)
 	d.button.Expands(d.popup.IsOpen).Opens(d)
 	return d
 }
@@ -72,6 +76,38 @@ func (d *DatePickerWidget) text() string {
 		return d.format(d.calendar.date(v))
 	}
 	return ""
+}
+
+// datePickerFit is the popup's content: the panel, at least as wide as the
+// trigger as a popup is, with the calendar at its own width in the middle.
+// The panel's box lays its child out loosely, so the fit tells the calendar
+// side how wide the popup has to be.
+type datePickerFit struct {
+	panel *ggui.BoxWidget
+	inner datePickerInner
+}
+
+// datePickerInner is the panel's child, the calendar centred in minW.
+type datePickerInner struct {
+	calendar *CalendarWidget
+	minW     float64
+	size     ggui.Size
+}
+
+func (f *datePickerFit) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	f.inner.minW = c.MinW
+	return f.panel.Layout(c, env)
+}
+
+func (f *datePickerFit) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(f.panel, r) }
+
+func (in *datePickerInner) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	in.size = in.calendar.Layout(c, env)
+	return c.Constrain(ggui.Sz(max(in.size.W, in.minW), in.size.H))
+}
+
+func (in *datePickerInner) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	dst.Paint(in.calendar, ggui.Rct(ggui.Pt(r.Origin.X+(r.Size.W-in.size.W)/2, r.Origin.Y), in.size))
 }
 
 // datePickerKey keeps the trigger, calendar and popup keys distinct while all
@@ -177,7 +213,9 @@ func (d *DatePickerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	d.calendar.Disabled(d.button.IsInert())
 	t := uitheme.Of(env)
-	panelBox(d.panel, t)
+	// panelBox's surface without its padding: the calendar brings its own,
+	// as shadcn's date picker sets p-0 on the popover around it.
+	d.panel.Shadow(t.PanelShadow).Fill(t.Popover).Border(t.BorderWidth, fade(t.Fg, .1)).Radius(t.Radius).Padding(ggui.EdgeInsets{})
 	text := d.text()
 	d.button.label.Content(pick(text == "", d.placeholder, text))
 	return d.popup.Layout(c, env)
