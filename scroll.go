@@ -192,8 +192,20 @@ func (s *ScrollWidget) Offset(v float64) *ScrollWidget {
 func (s *ScrollWidget) extent(sz Size) float64 { return pick(s.horizontal, sz.W, sz.H) }
 
 func (s *ScrollWidget) maxOffset() float64 {
-	return max(s.extent(s.childSize)-s.extent(s.viewport), 0)
+	over := s.extent(s.childSize) - s.extent(s.viewport)
+	if over < scrollSlack {
+		return 0
+	}
+	return over
 }
+
+// scrollSlack is how far content may reach past its viewport and still
+// fit it. Sizes are sums of fractions, and a viewport given back the
+// height its content asked for, less a header added and taken away again,
+// can come out a rounding error short: that is nothing to scroll, and a
+// bar for it would be a thumb as long as its track. Half a pixel is what
+// atEnd already takes for the end.
+const scrollSlack = 0.5
 
 func (s *ScrollWidget) position() float64 {
 	if s.bound != nil {
@@ -381,7 +393,7 @@ func (s *ScrollWidget) paintBar(dst *Canvas, r Rect) {
 	s.thumbHit = Rect{}
 	track, content := s.extent(r.Size), s.extent(s.childSize)
 	bar := ResolveColor(s.bar, s.barEnv)
-	if bar == nil || content <= track || track <= 0 {
+	if bar == nil || content-track < scrollSlack || track <= 0 {
 		s.dragging, s.thumbHovered = false, false
 		return
 	}

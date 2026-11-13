@@ -125,6 +125,8 @@ func (m *MenuWidget) adopt(entries []ggui.Widget) {
 			index := len(m.items)
 			e.onHover = func() { m.pointAt(index) }
 			m.items = append(m.items, e)
+		case *MenuLabelWidget:
+			e.menu = m
 		case menuGroup:
 			m.adopt(e.menuEntries())
 		}
@@ -617,6 +619,7 @@ type MenuItemWidget struct {
 	destructive bool
 	checkable   bool
 	checked     ggui.Readable[bool]
+	markHidden  bool // checkable, but with no mark drawn or room kept for one: a command entry beside its shortcut
 	stay        bool // a click leaves the menu open, as a checkbox or radio row does
 	style       menuItemStyle
 	radius      float64 // the highlight's corner radius, or 0 for the style's own
@@ -798,13 +801,15 @@ func (d *menuDivider) Paint(dst *ggui.Canvas, r ggui.Rect) {
 type MenuLabelWidget struct {
 	props property.Owner
 	text  *ggui.TextWidget
+	menu  *MenuWidget // the menu the heading is in, which sets its size
 	inset bool
 	pad   ggui.EdgeInsets
 	size  ggui.Size
 }
 
 // MenuLabel creates a small, muted heading for the entries after it. It
-// takes no input and the keyboard passes over it.
+// takes no input and the keyboard passes over it. In a Menubar's menu it
+// is set at the size of the rows.
 func MenuLabel(label string) *MenuLabelWidget {
 	return &MenuLabelWidget{text: Caption(label).Weight(ggui.WeightMedium).NoWrap()}
 }
@@ -823,6 +828,11 @@ func (l *MenuLabelWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	l.pad = t.ItemPad
 	if l.inset {
 		l.pad.Left = menuInset(t)
+	}
+	if l.menu != nil && l.menu.checkLeft {
+		// shadcn's MenubarLabel passes text-sm over the dropdown label's
+		// text-xs and keeps its text-muted-foreground.
+		l.text.Style(ggui.TextStyle{Size: t.Text.Size, LineHeight: t.Text.LineHeight})
 	}
 	l.size = l.text.Color(t.MutedFg).Layout(l.pad.Shrink(c).Loosen(), env)
 	return c.Constrain(l.pad.Inflate(l.size))
@@ -1034,7 +1044,7 @@ func (it *MenuItemWidget) layoutRow(c ggui.Constraints, env ggui.Env) ggui.Size 
 	case it.inset, it.checkable && markLeft:
 		it.pad.Left = menuInset(t)
 	}
-	if it.checkable && !markLeft {
+	if it.checkable && !markLeft && !it.markHidden {
 		it.pad.Right = menuMarkRoom(t)
 	}
 	ink := it.ink(false)
@@ -1101,7 +1111,7 @@ func (it *MenuItemWidget) paintRow(dst *ggui.Canvas, r ggui.Rect) {
 		}
 		dst.Paint(it.icon, ggui.Rct(ggui.Pt(r.Origin.X+it.pad.Left, r.Origin.Y+(r.Size.H-it.iconSize.H)/2), it.iconSize))
 	}
-	if it.checkable && it.isChecked() {
+	if it.checkable && it.isChecked() && !it.markHidden {
 		x := r.Origin.X + r.Size.W - t.Space - t.IconSize/2
 		if it.menu != nil && it.menu.checkLeft {
 			x = r.Origin.X + t.ItemPad.Left + t.IconSize/2

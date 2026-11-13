@@ -17,6 +17,8 @@ const (
 	avatarSmall   = 24.0
 	avatarDefault = 32.0
 	avatarLarge   = 40.0
+
+	avatarBadgeIcon = 8.0 // the icon in an avatar's badge, at either size that has room for one
 )
 
 // AvatarWidget is a round portrait with a fallback: the person's initials on
@@ -30,6 +32,7 @@ type AvatarWidget struct {
 	img        *ggfx.Image
 	side       float64 // negative is the default size
 	square     bool
+	counts     bool // a group's count bubble: no hairline, and the body text at any size
 	theme      *uitheme.Theme
 	env        ggui.Env
 	textSize   ggui.Size
@@ -130,7 +133,7 @@ func (a *AvatarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	// with one larger than the set's.
 	style := t.Text
 	switch {
-	case size.H <= avatarSmall:
+	case size.H <= avatarSmall && !a.counts:
 		style = t.Text.Merge(t.Caption)
 	case size.H > avatarLarge:
 		style.Size = size.H * .35
@@ -157,8 +160,10 @@ func (a *AvatarWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	} else {
 		dst.DrawImage(a.img, ggui.Rct(r.Origin, ggui.Sz(side, side)), ggui.ImageOptions{Fit: ggui.FitCover, Radius: radius})
 	}
-	// A hairline keeps a portrait as pale as the page apart from it.
-	dst.StrokeRoundRect(r, radius, t.BorderWidth, t.Border)
+	if !a.counts {
+		// A hairline keeps a portrait as pale as the page apart from it.
+		dst.StrokeRoundRect(r, radius, t.BorderWidth, t.Border)
+	}
 	if !a.badge {
 		return
 	}
@@ -176,7 +181,8 @@ func (a *AvatarWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.FillCircle(center, dot/2+ring, t.Bg)
 	dst.FillCircle(center, dot/2, colorOr(a.badgeColor, t.Primary))
 	if a.badgeIcon != "" && side > avatarSmall {
-		paintIconAt(dst, a.env, a.badgeIcon, center, dot*.8, t.PrimaryFg, 0)
+		// shadcn's [&>svg]:size-2 in the default dot and the large one alike.
+		paintIconAt(dst, a.env, a.badgeIcon, center, avatarBadgeIcon, t.PrimaryFg, 0)
 	}
 }
 
@@ -245,7 +251,7 @@ func (g *AvatarGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		// of the first one beside it.
 		if g.count == nil || g.counted != hidden {
 			label := "+" + strconv.Itoa(hidden)
-			g.count = &AvatarWidget{name: strconv.Itoa(hidden) + " more", initials: ggui.Text(label).NoWrap(), side: -1}
+			g.count = &AvatarWidget{name: strconv.Itoa(hidden) + " more", initials: ggui.Text(label).NoWrap(), side: -1, counts: true}
 			g.counted = hidden
 		}
 		side := -1.0

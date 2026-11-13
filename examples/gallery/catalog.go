@@ -67,7 +67,7 @@ var previewDetails = map[string]previewInfo{
 	"Tabs modes":               {"Navigation", "Vertical tabs, disabled pages and manual keyboard activation."},
 	"RTL controls":             {"Inputs", "Mirrored geometry and directional keyboard behavior."},
 	"Groups and addons":        {"Inputs", "ToggleGroup, ButtonGroup and InputGroup: joined segments, group text and separators, a search field with its action, and URL previews."},
-	"Card":                     {"Layout", "Header with an action, content and a footer, at the default and the small size."},
+	"Card":                     {"Layout", "Header with an action, content and a footer, leading media, and the small size."},
 	"Form layout":              {"Inputs", "A field set with a legend, grouped select options, separators and horizontal fields."},
 	"Validation states":        {"Inputs", "Checkbox, radio, switch and select marked invalid until answered."},
 	"Dropdown menu":            {"Navigation", "Labels, icons, shortcuts, check and radio rows, a submenu and a destructive row."},
