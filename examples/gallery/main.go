@@ -402,7 +402,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 			)),
 
 			preview("Search and commands", ggui.Wrap(
-				ui.Combobox(fruit).Options([]string{"Apple", "Banana", "Cherry", "Durian", "Grape", "Mango", "Orange"}).Name("Search fruit"),
+				ui.Combobox(fruit).Options([]string{"Apple", "Banana", "Cherry", "Durian", "Grape", "Mango", "Orange"}).Name("Search fruit").Placeholder("Search fruit…").ClearButton(true).Empty("No fruit found."),
 				ui.Button("Commands…", func() { paletteOpen.Set(true) }).Outline(),
 			).Space(1)),
 			ui.CommandDialog(paletteOpen, ui.Command(commandQuery,

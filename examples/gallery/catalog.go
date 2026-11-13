@@ -36,7 +36,7 @@ var previewDetails = map[string]previewInfo{
 	"Calendar":                 {"Inputs", "Single-date selection with month and year dropdowns and day, week and month keyboard navigation."},
 	"Date picker":              {"Inputs", "Calendar popups for an appointment date and for a range of nights."},
 	"Context menu":             {"Navigation", "Right-click actions with a label, icons, a submenu and a destructive row, or focus the target and press Shift+F10."},
-	"Search and commands":      {"Inputs", "Searchable options and a keyboard-friendly command palette."},
+	"Search and commands":      {"Inputs", "A combobox typed into, with a clear button, and a keyboard-friendly command palette."},
 	"Notices and empty states": {"Feedback", "Alerts with icons and actions, and an outlined starting point for an empty collection."},
 	"Loading and shortcuts":    {"Feedback", "Spinners, skeleton placeholders and grouped key caps."},
 	"Toast":                    {"Feedback", "Transient messages by type, a loading notice that resolves, undo actions, persistent errors and six positions."},
