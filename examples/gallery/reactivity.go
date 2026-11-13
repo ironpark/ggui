@@ -17,6 +17,12 @@ type reactivePerson struct {
 	Name string
 }
 
+// searchLatency is how long the demo's request takes to answer, as one over
+// a network would. The answer is posted when it comes, by the wall clock
+// and not a window's frames, so a test of what frames cost sets it past
+// its own end.
+var searchLatency = 180 * time.Millisecond
+
 func reactivityPreview() ggui.Widget {
 	return preview("Reactive blocks", ggui.Component(func() ggui.Widget {
 		query := ggui.State("")
@@ -24,7 +30,7 @@ func reactivityPreview() ggui.Widget {
 		cleaned := ggui.State(0)
 		people := ggui.State([]reactivePerson{{1, "Ada"}, {2, "Grace"}, {3, "Linus"}})
 		results := ggui.Resource(query.Get, func(ctx context.Context, q string) ([]reactivePerson, error) {
-			timer := time.NewTimer(180 * time.Millisecond)
+			timer := time.NewTimer(searchLatency)
 			defer timer.Stop()
 			select {
 			case <-ctx.Done():

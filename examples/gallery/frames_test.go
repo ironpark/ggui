@@ -11,6 +11,13 @@ import (
 // refresh is a display's, the time between a window's frames.
 const refresh = 16 * time.Millisecond
 
+// The Reactive blocks request answers by the wall clock, 180ms after the
+// gallery is built, and its answer, a signal written from outside, paints
+// the frame it lands in whole: on a slow machine that is a frame these
+// tests count, in the middle of a disclosure easing open. Here it never
+// answers, and the gallery is at rest as soon as it is built.
+func init() { searchLatency = time.Hour }
+
 // galleryWindow runs the gallery as a window of size, for what its frames
 // cost with no input coming.
 func galleryWindow(size ggui.Size) *ggui.WindowProbe {
