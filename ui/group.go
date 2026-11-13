@@ -18,8 +18,9 @@ import (
 // It is a container and nothing more: it draws no frame of its own, and
 // every child keeps its own tab stop, its own keyboard behavior and its own
 // action. Outline buttons suit it best. A child learns where it sits from
-// JoinedSidesKey; Button, Toggle and ButtonGroupText follow it, and a
-// control that does not simply keeps its own corners.
+// JoinedSidesKey; Button, Toggle, ButtonGroupText, the text fields and
+// Select follow it, and a control that does not simply keeps its own
+// corners.
 //
 // A ButtonGroupSeparator between two children draws a line where they have
 // no border to tell them apart. A group whose children are groups keeps
