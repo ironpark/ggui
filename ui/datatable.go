@@ -327,6 +327,7 @@ func DataTable[T any, K comparable](m *TableModel[T, K]) ggui.Widget {
 		// shadcn opens the column menu with align="end", under the button's
 		// trailing edge, so it does not run past the table's.
 		columns := Menu("Columns", entries...)
+		columns.button.TrailingIcon(Icon(icons.ChevronDown))
 		columns.Popup().Align(ggui.PopupEnd)
 		toolbar := ggui.Row(ggui.Expanded(search), columns).Gap(12)
 		isEmpty := ggui.Map(m.visible, func(rows []T) bool { return len(rows) == 0 })
