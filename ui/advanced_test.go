@@ -115,10 +115,10 @@ func TestComboboxSelectionAndEscape(t *testing.T) {
 	if ggui.Untrack(value.Get) != "Banana" || changes != 1 || c.Popup().IsOpen() {
 		t.Fatalf("selection: %s, %d, %v", ggui.Untrack(value.Get), changes, c.Popup().IsOpen())
 	}
-	// Closing restores focus to the trigger, so Enter opens it again.
-	p.Type(ggui.Mods{}, ggui.KeyEnter)
+	// The keyboard stays in the input, so Down opens the list again.
+	p.Type(ggui.Mods{}, ggui.KeyArrowDown)
 	if !c.Popup().IsOpen() {
-		t.Fatal("focus did not return to the trigger")
+		t.Fatal("the input lost the keyboard")
 	}
 	p.Type(ggui.Mods{}, ggui.KeyEscape)
 	if ggui.Untrack(value.Get) != "Banana" || c.Popup().IsOpen() {
