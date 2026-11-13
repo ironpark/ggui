@@ -86,6 +86,7 @@ type CommandWidget struct {
 	// panel, and a muted empty line.
 	menuRows bool
 	keepOpen bool                     // choosing leaves the popup open, as a multiple combobox does
+	loop     bool                     // the arrows wrap past the ends of the list
 	bare     bool                     // no search pill: a combobox's input above the list filters it
 	onKey    func(ggui.KeyEvent) bool // sees a key before the list does, set by its owner
 	theme    *uitheme.Theme
@@ -98,8 +99,9 @@ type CommandWidget struct {
 const commandListHeight = 276
 
 // Command filters labels and Keywords by case-insensitive substring. Up/Down
-// wrap through enabled matches; Enter runs the highlighted action. IME
-// composition and normal editing keys stay with TextInput.
+// move through enabled matches and stop at the ends unless Loop is set, Home
+// and End go to the first and last, and Enter runs the highlighted action.
+// IME composition and the other editing keys stay with TextInput.
 func Command(query ggui.Binding[string], entries ...CommandEntry) *CommandWidget {
 	c := &CommandWidget{query: query, highlight: -1, height: commandListHeight, offset: ggui.State(0.0),
 		hintNav: "Navigate", hintSel: "Select", emptyText: "No results"}
@@ -207,6 +209,14 @@ func (c *CommandWidget) Borderless() *CommandWidget {
 	return c
 }
 
+// Loop makes Down from the last match go to the first and Up from the first
+// to the last. The highlight stops at either end by default, as cmdk's does
+// without its loop option.
+func (c *CommandWidget) Loop(v bool) *CommandWidget {
+	c.loop = v
+	return c
+}
+
 // StableHeight reserves Height pixels even when filtering leaves fewer results.
 func (c *CommandWidget) StableHeight() *CommandWidget {
 	defer property.Watch(&c.props, &c.stable)()
@@ -278,10 +288,20 @@ func (c *CommandWidget) key(ev ggui.KeyEvent) bool {
 		c.filter()
 		c.choose(c.highlight)
 		return true
+	case ggui.KeyHome, ggui.KeyEnd:
+		if c.menuRows {
+			// In a combobox these move the caret in its input.
+			return false
+		}
+		fallthrough
 	case ggui.KeyArrowDown, ggui.KeyArrowUp:
 		c.filter()
 		at := slices.Index(c.matched, c.highlight)
 		next, _ := navIndex(ev, navVertical, at, len(c.matched), func(j int) bool { return !c.entries[c.matched[j]].disabled })
+		if !c.loop && !c.menuRows && at >= 0 && (ev.Key == ggui.KeyArrowDown && next < at || ev.Key == ggui.KeyArrowUp && next > at) {
+			// Past either end the highlight stays where it is.
+			next = at
+		}
 		if next >= 0 {
 			c.highlight = c.matched[next]
 			c.scroll.Reveal(c.rects[c.highlight])

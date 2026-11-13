@@ -159,6 +159,12 @@ See [forms](forms.md), [navigation](data-and-navigation.md), and
   as a no-op.
 - `NavigationMenu` opens a dropdown after the pointer rests on its trigger;
   `.OpenOnHover(false)` restores activation-only opening.
+- A `ContextMenu` or a `Menubar` menu the pointer opened starts with no row
+  highlighted, as a `Menu` does, so Enter runs nothing until an arrow key or a
+  typed letter has moved to a row; opened from the keyboard, all three start on
+  their first row.
+- A `Command`'s highlight stops at the first and last match instead of wrapping;
+  `.Loop(true)` restores wrapping. Its search icon leads the field.
 - The theme's `Heading` is 16px medium (was 18px semibold), so dialog, sheet and
   card titles are smaller.
 - `Input` is translucent: clear in a light Nova theme and `--input` at 30% in a
