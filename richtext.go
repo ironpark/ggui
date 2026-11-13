@@ -111,6 +111,7 @@ type richKey struct {
 	dir        TextDirection
 	lang       string
 	base       runKey
+	lineBox    bool
 }
 
 // runKey is what of a run's style changes its measure: not its color.
@@ -189,7 +190,8 @@ func (t *RichTextWidget) Size(px float64) *RichTextWidget {
 	return t
 }
 
-// LineHeight sets the distance between baselines as a multiple of Size.
+// LineHeight sets the height of a line as a multiple of Size, as
+// TextWidget.LineHeight does.
 func (t *RichTextWidget) LineHeight(mult float64) *RichTextWidget {
 	defer property.Watch(&t.props, &t.style)()
 	t.style.LineHeight = mult
@@ -275,10 +277,12 @@ func (t *RichTextWidget) Layout(c Constraints, env Env) Size {
 	// with below.
 	keys := t.keyBuf[:0]
 	end := 0
+	lineBox := lineHeightSet(env, t.style)
 	for i, sp := range t.cur {
 		if sp.text == "" {
 			continue
 		}
+		lineBox = lineBox || sp.style.LineHeight != 0
 		st := env.ResolveText(t.style.Merge(sp.style))
 		start := end
 		end += len(sp.text)
@@ -303,7 +307,8 @@ func (t *RichTextWidget) Layout(c Constraints, env Env) Size {
 	// As Text's: the width only matters when something wraps or cuts to it.
 	fits := t.wrap || t.ellipsis || t.maxLines > 0
 	key := richKey{generation: fontGen(), text: text, maxW: pick(fits, c.MaxW, 0), wrap: t.wrap, ellipsis: t.ellipsis, maxLines: t.maxLines,
-		dir: t.dir, lang: p.Lang, base: runKey{font: base.Font, size: base.Size, lineHeight: base.LineHeight, weight: base.Weight, tracking: base.Tracking}}
+		dir: t.dir, lang: p.Lang, base: runKey{font: base.Font, size: base.Size, lineHeight: base.LineHeight, weight: base.Weight, tracking: base.Tracking}, lineBox: lineBox}
+	p.LineBox = lineBox
 	if key != t.laid || !slices.Equal(keys, t.runKeys) || p.Lines == nil {
 		t.laid = key
 		p.Text = key.text

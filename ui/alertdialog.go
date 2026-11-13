@@ -141,7 +141,8 @@ func (a *AlertDialogWidget) finish(fn func()) {
 // the media and the text go is the alert dialog's own, and the two buttons
 // in the dialog's footer.
 func (a *AlertDialogWidget) build() {
-	a.heading, a.text = Heading(a.title), ggui.Text(a.description)
+	// The title is left in text-base, whose lines are 1.5 times its size.
+	a.heading, a.text = Heading(a.title).LineHeight(1.5), ggui.Text(a.description)
 	a.lines = ggui.Column(a.heading, a.text)
 	a.tile, a.beside, a.stacked = nil, nil, nil
 	a.header = a.lines

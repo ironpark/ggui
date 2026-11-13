@@ -235,13 +235,14 @@ type TextWidget struct {
 	props     property.Owner
 	value     string
 	content   property.Value[string]
-	formatted bool
 	style     TextStyle
+	formatted bool
 	wrap      bool
 	ellipsis  bool
+	alignSet  bool
+	lineBox   bool // a line height was set: every line is a box of it
 	maxLines  int
 	align     float64
-	alignSet  bool
 	role      Role
 	opts      *textOpts // set by Textf and StyleKey only
 	cache     *CachedWidget
@@ -259,6 +260,7 @@ type TextWidget struct {
 	widths    []float64
 	natural   Size
 	ascent    float64 // the first baseline, below the top
+	lead      float64 // from the top to the first line's glyphs, in a line box; negative when they are taller than a line
 	wrapped   wrapKey
 	bidi      *textBidi        // the lines in visual order, when the direction or the text needs it
 	rich      *selectableText  // what a Selectable Text lays out and paints as
@@ -303,6 +305,7 @@ type wrapKey struct {
 	maxW       float64
 	maxLines   int
 	ellipsis   bool
+	lineBox    bool
 }
 
 // Text draws s in the inherited style, wrapping at spaces when it is wider
@@ -407,7 +410,12 @@ func (t *TextWidget) Size(px float64) *TextWidget {
 	return t
 }
 
-// LineHeight sets the distance between baselines as a multiple of Size.
+// LineHeight sets the height of a line as a multiple of Size, as CSS's
+// line-height does: every line is a box that high with its glyphs centered
+// in it, so one line at LineHeight(1) is exactly Size high whatever the
+// font's own ascent and descent, which then reach a little past it. Text
+// that no line height was set for, its own or an inherited one, is as tall
+// as its glyphs, with 1.2 times the size between baselines.
 func (t *TextWidget) LineHeight(mult float64) *TextWidget {
 	defer property.Watch(&t.props, &t.style)()
 	t.style.LineHeight = mult
@@ -533,15 +541,24 @@ func (t *TextWidget) Layout(c Constraints, env Env) Size {
 	if !ok {
 		style = opts.styleFallback
 	}
-	t.resolved = env.ResolveText(style.Merge(t.style))
+	own := style.Merge(t.style)
+	t.resolved = env.ResolveText(own)
+	t.lineBox = lineHeightSet(env, own)
 	if t.rich != nil {
 		// A Selectable Text lays out and paints as its RichText. Only
 		// PaintRotated draws the lines, so they wait for it.
 		t.rich.maxW, t.rich.env = c.MaxW, env
-		return t.layoutRich(c, env, style.Merge(t.style))
+		return t.layoutRich(c, env, own)
 	}
 	t.layoutLines(c.MaxW, env)
 	return c.Constrain(t.natural)
+}
+
+// lineHeightSet reports whether text in style s under env was given a line
+// height, by s or by a style it inherits, rather than left the default:
+// its lines are then boxes of that height.
+func lineHeightSet(env Env, s TextStyle) bool {
+	return s.LineHeight != 0 || env.text.LineHeight != 0
 }
 
 // layoutLines wraps, cuts and orders the lines for a width of maxW, when
@@ -550,7 +567,7 @@ func (t *TextWidget) layoutLines(maxW float64, env Env) {
 	face := t.faceAt(1)
 	fits := t.wrap || t.ellipsis || t.maxLines > 0
 	key := wrapKey{generation: fontGen(), value: t.value, font: t.resolved.Font, weight: t.resolved.Weight, size: t.resolved.Size, lineHeight: t.resolved.LineHeight, tracking: t.resolved.Tracking,
-		maxW: pick(fits, maxW, 0), maxLines: t.maxLines, ellipsis: t.ellipsis}
+		maxW: pick(fits, maxW, 0), maxLines: t.maxLines, ellipsis: t.ellipsis, lineBox: t.lineBox}
 	rewrapped := key != t.wrapped
 	if rewrapped {
 		t.wrapped = key
@@ -573,8 +590,14 @@ func (t *TextWidget) layoutLines(maxW float64, env Env) {
 			w = max(w, lw)
 		}
 		m := face.Metrics()
-		t.natural = Sz(w, float64(len(t.lines)-1)*t.spacing()+m.HAscent+m.HDescent)
-		t.ascent = m.HAscent
+		t.lead = 0
+		if t.lineBox {
+			// Half of what the line height leaves beside the glyphs goes
+			// above them and half below, as CSS's half-leading does.
+			t.lead = (t.spacing() - m.HAscent - m.HDescent) / 2
+		}
+		t.natural = Sz(w, float64(len(t.lines)-1)*t.spacing()+m.HAscent+m.HDescent+2*t.lead)
+		t.ascent = t.lead + m.HAscent
 	}
 	t.layoutBidi(env, rewrapped)
 }
@@ -630,7 +653,7 @@ func (t *TextWidget) paintLines(dst *Canvas, r Rect, upright bool, place func(op
 	align := pick(t.alignSet, t.align, startAlign(t.dir()))
 	for i, line := range t.lines {
 		x := r.Origin.X + (r.Size.W-t.widths[i])*align
-		y := r.Origin.Y + float64(i)*t.spacing()
+		y := r.Origin.Y + t.lead + float64(i)*t.spacing()
 		// A line's glyphs can reach past its box, by an accent, a tall
 		// emoji or a long tail, by up to a line more.
 		if upright && !dst.visiblePaintBounds(Rct(Pt(r.Origin.X, y), Sz(r.Size.W, t.spacing())), t.spacing()) {

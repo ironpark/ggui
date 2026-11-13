@@ -12,6 +12,12 @@ import (
 // pieces by the bidi algorithm. Offsets are bytes of Text, the runs'
 // strings one after another.
 type Paragraph struct {
+	// LineBox makes the first and last lines boxes of their line height
+	// too, as CSS lays lines out: half of a line's leading goes above the
+	// first and half below the last. Without it the paragraph starts at
+	// the first line's ascent and ends at the last one's descent.
+	LineBox bool
+
 	Text  string
 	Runs  []Run
 	Base  Style // what an empty paragraph is measured in
@@ -138,6 +144,9 @@ func (p *Paragraph) Layout(maxW float64, wrap bool, maxLines int, ellipsis bool)
 		ln := &p.Lines[i]
 		if i == 0 {
 			y = ln.Ascent
+			if p.LineBox {
+				y += p.leading(ln) / 2
+			}
 		} else {
 			prev := &p.Lines[i-1]
 			y += prev.Descent + ln.Ascent + max(p.leading(prev), p.leading(ln))
@@ -148,6 +157,9 @@ func (p *Paragraph) Layout(maxW float64, wrap bool, maxLines int, ellipsis bool)
 	h := 0.0
 	if n := len(p.Lines); n > 0 {
 		h = p.Lines[n-1].Baseline + p.Lines[n-1].Descent
+		if p.LineBox {
+			h += p.leading(&p.Lines[n-1]) / 2
+		}
 	}
 	p.Size = layout.Sz(w, h)
 }

@@ -215,7 +215,7 @@ func (s *SheetWidget) fitsContent() bool {
 // painted over it.
 func (s *SheetWidget) shape(t *uitheme.Theme) modalShape {
 	shape := modalShape{
-		headerGap: t.Space / 4, closeInset: t.Space * 1.5,
+		headerGap: t.Space / 4, titleLeading: 1.5, closeInset: t.Space * 1.5,
 		fill: !s.fitsContent(), shadow: t.OverlayShadow, fillColor: t.Popover,
 	}
 	if s.isDrawer() {

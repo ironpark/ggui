@@ -553,8 +553,13 @@ func TestLineHeightSpacesTextLines(t *testing.T) {
 	free := Loose(Sz(500, 500))
 	one := Text("a\nb").LineHeight(1).Layout(free, Env{})
 	three := Text("a\nb").LineHeight(3).Layout(free, Env{})
-	if !closeTo(three.H-one.H, 2*DefaultTextSize) {
-		t.Fatalf("two lines at line height 3 are %v taller than at 1, want %v", three.H-one.H, 2*DefaultTextSize)
+	// A line with a line height set is a box of it, so each of the two
+	// lines grows by twice the size.
+	if !closeTo(three.H-one.H, 4*DefaultTextSize) {
+		t.Fatalf("two lines at line height 3 are %v taller than at 1, want %v", three.H-one.H, 4*DefaultTextSize)
+	}
+	if !closeTo(one.H, 2*DefaultTextSize) {
+		t.Fatalf("two lines at line height 1 are %v tall, want twice the size, %v", one.H, 2*DefaultTextSize)
 	}
 	inherited := Styled(Text("a\nb")).LineHeight(3).Layout(free, Env{})
 	if inherited != three {
