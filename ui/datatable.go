@@ -324,7 +324,11 @@ func DataTable[T any, K comparable](m *TableModel[T, K]) ggui.Widget {
 			item.SetName("Show " + title)
 			entries = append(entries, item)
 		}
-		toolbar := ggui.Row(ggui.Expanded(search), Menu("Columns", entries...)).Gap(12)
+		// shadcn opens the column menu with align="end", under the button's
+		// trailing edge, so it does not run past the table's.
+		columns := Menu("Columns", entries...)
+		columns.Popup().Align(ggui.PopupEnd)
+		toolbar := ggui.Row(ggui.Expanded(search), columns).Gap(12)
 		isEmpty := ggui.Map(m.visible, func(rows []T) bool { return len(rows) == 0 })
 		page := ggui.Derived(m.pageSelection)
 		table := ggui.Reactive(func() ggui.Widget {
