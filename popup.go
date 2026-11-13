@@ -464,8 +464,15 @@ func (p *PopupWidget) paintContent(dst *Canvas, anchor Rect) {
 	p.effect.PopFrom(side, along)
 
 	dst.HitPointer(Rect{Size: screen}, popupScrim{p})
+	if !p.nonmodal {
+		// A modal popup leaves nothing under its scrim to point at.
+		dst.HitCursor(Rect{Size: screen}, CursorShapeDefault)
+	}
 	paint := func(dst *Canvas) {
 		dst.HitPointer(p.rect, popupSink{})
+		// The content is a surface of its own: what it floats over does
+		// not choose the cursor on it.
+		dst.HitCursor(p.rect, CursorShapeDefault)
 		if p.keys != nil {
 			dst.HitKey(p.rect, p.keys)
 		}

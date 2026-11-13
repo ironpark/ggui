@@ -570,7 +570,7 @@ func (s *Interactive) Hit(dst *Canvas, r Rect, h Control, cursor CursorShape) {
 	}
 	// One region with all three, as the three registrations would merge
 	// into: the identity, semantics and handoff are looked up once.
-	dst.add(dst.region(r, h, hitRegion{pointer: h, key: h, cursor: cursor}))
+	dst.add(dst.region(r, h, hitRegion{pointer: h, key: h, cursor: cursor, shaped: true}))
 }
 
 // Pointer tracks hover and press and calls onTap on a left click. Press is

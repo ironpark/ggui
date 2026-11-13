@@ -118,7 +118,8 @@ gesture. Carousel uses this to keep slide dragging within the control.
 
 `Pointer` has `OnTap`, `OnDown`, `OnUp`, `OnMove`, `OnDrag`, `OnEnter`,
 `OnExit`, `OnHover` and `OnScroll`, and `.Cursor(shape)` sets the mouse
-cursor over it; `Tap(child, fn)` is the one-callback shortcut. A tap is a
+cursor over it, the topmost region under the pointer that asks deciding
+(`CursorShapeDefault` asks for the arrow, over an I-beam beneath); `Tap(child, fn)` is the one-callback shortcut. A tap is a
 press and a release inside the same region, matched by `Rect`, so a tree
 rebuilt in between still completes it. The region that took a press captures
 the pointer: it gets `OnDrag` every frame until the release, wherever the

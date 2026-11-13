@@ -273,6 +273,9 @@ func (m *modal) paintContent(dst *ggui.Canvas, screen ggui.Size, rect ggui.Rect,
 	dst.BackdropBlur(ggui.Rect{Size: screen}, 0, modalBlur)
 	dst.FillRect(ggui.Rect{Size: screen}, scrim)
 	dst.HitPointer(ggui.Rect{Size: screen}, modalScrim{m})
+	// Nothing under the scrim can be pointed at, so nothing there chooses
+	// the cursor: the panel's own controls ask over it.
+	dst.HitCursor(ggui.Rect{Size: screen}, ggui.CursorShapeDefault)
 	// The panel is the node; the scrim is a way of taking clicks, not an
 	// element, so it describes nothing.
 	dst.DescribeNode(rect, owner, func(dst *ggui.Canvas) {

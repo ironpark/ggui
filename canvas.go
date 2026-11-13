@@ -145,7 +145,7 @@ func (v *inputView) note(r *hitRegion, i int) {
 	if r.scope != nil {
 		x.scopeAt = i
 	}
-	if r.cursor != 0 {
+	if r.shaped {
 		x.cursors = true
 	}
 	if r.key != nil && x.key.h != nil && sameAny(r.key, x.key.h) {
@@ -948,8 +948,12 @@ func (c *Canvas) region(r Rect, h any, reg hitRegion) hitRegion {
 }
 
 // HitCursor asks for the mouse cursor to take shape while it is over r.
+// The topmost region under the pointer that asks decides, so one that
+// asks for CursorShapeDefault shows the arrow over a region beneath it
+// that asks for another shape: a panel floating over a text field, or a
+// button inside one.
 func (c *Canvas) HitCursor(r Rect, shape CursorShape) {
-	c.add(c.region(r, nil, hitRegion{cursor: shape}))
+	c.add(c.region(r, nil, hitRegion{cursor: shape, shaped: true}))
 }
 
 // RequestFocus asks the frame to focus a painted, enabled key handler. Composite

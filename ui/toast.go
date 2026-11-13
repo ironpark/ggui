@@ -486,6 +486,7 @@ func (t *ToasterWidget) paintNotice(dst *ggui.Canvas, e *toastEntry, theme *uith
 			}
 		}
 		dst.HitPointer(e.hit, e)
+		dst.HitCursor(e.hit, ggui.CursorShapeDefault) // not what the notice lies over asks for
 	}
 	// A notice is a live region: it appeared without the user asking,
 	// so it is announced where it stands rather than waited for.
