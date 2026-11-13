@@ -18,6 +18,8 @@ import (
 // CardFooter among several children, it stacks them a CardPad apart, each
 // padded at its sides, and a footer in last place runs to the card's
 // bottom edge; a child that is not a section is laid out as CardContent.
+// A CardMedia runs from side to side, and in first place to the card's
+// top edge under its rounded corners.
 //
 //	ui.Card(
 //		ui.CardHeader("Team", "Invite people to the project.").Action(ui.Button("Add", add).Size(ui.ButtonSmall)),
@@ -46,6 +48,8 @@ func Card(children ...ggui.Widget) *CardWidget {
 	}
 	if n := len(parts); n > 0 {
 		_, c.footed = parts[n-1].(*CardFooterWidget)
+		c.lead, _ = parts[0].(*CardMediaWidget)
+		c.trail, _ = parts[n-1].(*CardMediaWidget)
 	}
 	c.column = ggui.Column(parts...).Align(ggui.AlignStretch)
 	c.box = ggui.Box(c.column)
@@ -58,7 +62,8 @@ type CardWidget struct {
 	box         *ggui.BoxWidget
 	column      *ggui.ColumnWidget // the sections, when the card has them
 	sectioned   bool
-	footed      bool // the last section is a footer, which takes the bottom padding's place
+	footed      bool             // the last section is a footer, which takes the bottom padding's place
+	lead, trail *CardMediaWidget // media in first and in last place, whose outer corners the card rounds
 	small       bool
 	pad         bool
 	shadowSet   bool
@@ -68,8 +73,8 @@ type CardWidget struct {
 	radius      float64     // negative is the theme's RadiusLg
 }
 
-// cardSection is a part of a card that pads its own sides: CardHeader,
-// CardContent and CardFooter.
+// cardSection is a part of a card that sees to its own sides: CardHeader,
+// CardContent, CardFooter and CardMedia.
 type cardSection interface{ cardSection() }
 
 // cardContext is what a card tells its sections.
@@ -165,6 +170,17 @@ func (c *CardWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 			pad.Bottom = border
 			ctx.radius = max(0, radius-border)
 		}
+		// Leading media takes the top padding's place, shadcn's
+		// has-[>img:first-child]:pt-0, under the card's top corners;
+		// media in last place keeps the padding under it and has the
+		// bottom corners, *:[img:last-child]:rounded-b-xl.
+		if c.lead != nil {
+			pad.Top = border
+			c.lead.top = max(0, radius-border)
+		}
+		if c.trail != nil {
+			c.trail.bottom = max(0, radius-border)
+		}
 		if !c.pad {
 			c.box.Padding(pad)
 		}
@@ -242,8 +258,9 @@ func (h *CardHeaderWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if h.description != nil {
 		h.description.Style(t.Text).Color(t.MutedFg)
 	}
+	// shadcn's grid gap-1 is between the rows and the columns alike.
 	h.column.Gap(t.Space / 2)
-	h.row.Gap(t.Space)
+	h.row.Gap(t.Space / 2)
 	h.box.Padding(ggui.EdgeInsets{Left: ctx.pad.Left, Right: ctx.pad.Right})
 	return h.box.Layout(c, env)
 }
@@ -273,6 +290,51 @@ func (c *CardContentWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 
 // Paint implements ggui.Widget.
 func (c *CardContentWidget) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(c.box, r) }
+
+// CardMediaWidget is a section of a Card that runs from one side of it to
+// the other, with no padding: a cover image, a map, a chart. Build one
+// with CardMedia.
+type CardMediaWidget struct {
+	child       ggui.Widget
+	top, bottom float64 // the radius of its top and of its bottom corners, set by the card
+}
+
+// CardMedia creates a section that shows child from edge to edge of the
+// card. In first place it also reaches the card's top edge, where the
+// card's rounded corners cut it; an image usually comes inside an
+// AspectRatio, which gives it its height.
+//
+//	ui.Card(
+//		ui.CardMedia(ui.AspectRatio(16.0/9, ggui.Image(cover).Fit(ggui.FitCover))),
+//		ui.CardHeader("Lisbon", "Three days by the river."),
+//	)
+func CardMedia(child ggui.Widget) *CardMediaWidget { return &CardMediaWidget{child: child} }
+
+func (m *CardMediaWidget) cardSection() {}
+
+// Layout implements ggui.Widget.
+func (m *CardMediaWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	return m.child.Layout(c, env)
+}
+
+// Paint implements ggui.Widget.
+func (m *CardMediaWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	radius := max(m.top, m.bottom)
+	if radius <= 0 {
+		dst.Clip(r).Paint(m.child, r)
+		return
+	}
+	// A round rect that reaches past the side whose corners stay square.
+	shape := r
+	if m.top <= 0 {
+		shape.Origin.Y -= radius
+		shape.Size.H += radius
+	}
+	if m.bottom <= 0 {
+		shape.Size.H += radius
+	}
+	dst.ClipRoundRect(shape, radius, func(dst *ggui.Canvas) { dst.Clip(r).Paint(m.child, r) })
+}
 
 // CardFooterWidget is the bottom section of a Card: a band on a muted
 // surface under a line, holding the card's actions in a row. Build one
@@ -327,6 +389,15 @@ func (f *CardFooterWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 // BadgeStyle is the look of a badge variant under a theme.
 type BadgeStyle struct {
 	Fill, Label, Border color.Color // nil Fill or Border draws none
+	// HoverFill and HoverLabel take the place of Fill and Label under
+	// the pointer, and Underline draws a line under the label there; nil
+	// and false leave the badge as it is.
+	HoverFill, HoverLabel color.Color
+	Underline             bool
+	// LinkFill and LinkLabel are HoverFill and HoverLabel for a badge
+	// that acts when tapped, where they are set: the looks shadcn/ui
+	// gives a badge only when it is a link.
+	LinkFill, LinkLabel color.Color
 }
 
 // BadgeVariant is a look for Badge.Variant.
@@ -336,30 +407,40 @@ type BadgeVariant = Variant[BadgeStyle]
 // with it under a theme, or make more with NewVariant.
 var (
 	BadgePrimary = NewVariant("primary", func(t uitheme.Theme) BadgeStyle {
-		return BadgeStyle{Fill: t.Primary, Label: t.PrimaryFg}
+		return BadgeStyle{Fill: t.Primary, Label: t.PrimaryFg, LinkFill: fade(t.Primary, .8)}
 	})
 	BadgeSecondary = NewVariant("secondary", func(t uitheme.Theme) BadgeStyle {
-		return BadgeStyle{Fill: t.Secondary, Label: t.SecondaryFg}
+		return BadgeStyle{Fill: t.Secondary, Label: t.SecondaryFg, LinkFill: fade(t.Secondary, .8)}
 	})
 	BadgeOutline = NewVariant("outline", func(t uitheme.Theme) BadgeStyle {
-		return BadgeStyle{Label: t.Fg, Border: t.Border}
+		return BadgeStyle{Label: t.Fg, Border: t.Border, LinkFill: t.Muted, LinkLabel: t.MutedFg}
 	})
 	BadgeDestructive = NewVariant("destructive", func(t uitheme.Theme) BadgeStyle {
-		return BadgeStyle{Fill: fade(t.Destructive, pick(isDark(t.Bg), .2, .1)), Label: t.Destructive}
+		return BadgeStyle{Fill: fade(t.Destructive, pick(isDark(t.Bg), .2, .1)), Label: t.Destructive, LinkFill: fade(t.Destructive, .2)}
 	})
-	// BadgeGhost is a bare label in the page's text color.
+	// BadgeGhost is a bare label in the page's text color, on the Muted
+	// surface under the pointer.
 	BadgeGhost = NewVariant("ghost", func(t uitheme.Theme) BadgeStyle {
-		return BadgeStyle{Label: t.Fg}
+		return BadgeStyle{Label: t.Fg, HoverFill: fade(t.Muted, pick(isDark(t.Bg), .5, 1)), HoverLabel: t.MutedFg}
 	})
-	// BadgeLink is a bare label in the Primary color.
+	// BadgeLink is a bare label in the Primary color, underlined under
+	// the pointer.
 	BadgeLink = NewVariant("link", func(t uitheme.Theme) BadgeStyle {
-		return BadgeStyle{Label: t.Primary}
+		return BadgeStyle{Label: t.Primary, Underline: true}
 	})
 )
 
 // BadgeWidget is a small pill with a short label. Build one with Badge.
+// It takes no input unless OnTap gives it an action: the looks a variant
+// has under the pointer follow where the pointer is without claiming it,
+// so a badge inside a button or a tab leaves the hover and the click to
+// what it sits in.
 type BadgeWidget struct {
+	ggui.Interactive
 	props          property.Owner
+	action         func()
+	motion         time.Duration
+	hover          float64 // how far into its look under the pointer the badge was painted
 	text           *ggui.TextWidget
 	variant        *BadgeVariant
 	radius         float64 // set by Radius; negative is a pill
@@ -378,7 +459,22 @@ type BadgeWidget struct {
 // Badge creates a pill labelled s on the Primary surface; Variant, or
 // Secondary, Outline, Destructive, Ghost and Link, change its look.
 func Badge(s string) *BadgeWidget {
-	return &BadgeWidget{text: ggui.Text(s).NoWrap(), variant: BadgePrimary, radius: -1}
+	b := &BadgeWidget{text: ggui.Text(s).NoWrap(), variant: BadgePrimary, radius: -1}
+	b.Role = ggui.RoleLink
+	b.SetName(s)
+	b.AutoKey()
+	return b
+}
+
+// OnTap makes the badge a link that runs fn on a click, or on Space or
+// Enter while it has the keyboard focus: it shows the pointer cursor and
+// a focus ring, and takes its variant's look for a link under the
+// pointer. A nil fn takes the action away. The caller decides what the
+// link opens.
+func (b *BadgeWidget) OnTap(fn func()) *BadgeWidget {
+	defer property.Watch(&b.props, &b.action)()
+	b.action = fn
+	return b
 }
 
 // Variant draws the badge in v, one of the Badge variables or a variant of
@@ -435,6 +531,7 @@ func (b *BadgeWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer b.props.Layout().EndLayout()
 	t := uitheme.Of(env)
 	b.theme, b.env = t, env
+	b.motion = env.Motion(t.MotionFast)
 	b.style = b.variant.Style(*t)
 	b.leads, b.trails = b.lead != "", b.trail != ""
 	// An icon is three quarters of the theme's, half a space from the
@@ -470,21 +567,79 @@ func (b *BadgeWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 
 // Paint implements Widget.
 func (b *BadgeWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	st := b.style
 	radius := pick(b.radius >= 0, b.radius, r.Size.H/2)
-	if b.style.Fill != nil {
-		dst.FillRoundRect(r, radius, b.style.Fill)
+	overFill, overLabel := st.HoverFill, st.HoverLabel
+	hovered := false
+	if b.action != nil {
+		b.Hit(dst, r, b, ggui.CursorShapePointer)
+		overFill, overLabel = colorOr(st.LinkFill, overFill), colorOr(st.LinkLabel, overLabel)
+		hovered = b.Hovered && !b.IsInert()
+	} else if overFill != nil || overLabel != nil || st.Underline {
+		// Read rather than claimed: the pointer stays with whatever the
+		// badge is inside.
+		p, ok := dst.Pointer()
+		hovered = ok && r.Contains(p) && dst.TakesInput()
 	}
-	if b.style.Border != nil {
-		dst.StrokeRoundRect(r, radius, b.theme.BorderWidth, b.style.Border)
+	fill, label := st.Fill, st.Label
+	b.hover = dst.Ease(b.Anchor(r), badgeHoverSlot, pick(hovered, 1.0, 0.0), b.motion)
+	if k := b.hover; k > 0 {
+		if overFill != nil {
+			fill = pick(fill == nil, fade(overFill, k), mix(colorOr(fill, overFill), overFill, k))
+		}
+		if overLabel != nil {
+			label = mix(label, overLabel, k)
+		}
+	}
+	b.text.Color(label)
+	if fill != nil {
+		dst.FillRoundRect(r, radius, fill)
+	}
+	if st.Border != nil {
+		dst.StrokeRoundRect(r, radius, b.theme.BorderWidth, st.Border)
 	}
 	iconY := r.Origin.Y + (r.Size.H-b.iconSide)/2
 	if b.leads {
-		paintIcon(dst, b.env, b.lead, ggui.Rct(ggui.Pt(r.Origin.X+b.leadAt, iconY), ggui.Sz(b.iconSide, b.iconSide)), b.style.Label, 0)
+		paintIcon(dst, b.env, b.lead, ggui.Rct(ggui.Pt(r.Origin.X+b.leadAt, iconY), ggui.Sz(b.iconSide, b.iconSide)), label, 0)
 	}
-	dst.Paint(b.text, ggui.Rct(ggui.Pt(r.Origin.X+b.textAt, r.Origin.Y+(r.Size.H-b.size.H)/2), b.size))
+	textAt := ggui.Pt(r.Origin.X+b.textAt, r.Origin.Y+(r.Size.H-b.size.H)/2)
+	dst.Paint(b.text, ggui.Rct(textAt, b.size))
+	if st.Underline && b.hover > 0 {
+		if base, ok := b.text.Baseline(); ok {
+			// shadcn's underline-offset-4, as a link button's.
+			dst.FillRect(ggui.Rct(ggui.Pt(textAt.X, textAt.Y+base+b.theme.Space/2), ggui.Sz(b.size.W, 1)), fade(label, b.hover))
+		}
+	}
 	if b.trails {
-		paintIcon(dst, b.env, b.trail, ggui.Rct(ggui.Pt(r.Origin.X+b.trailAt, iconY), ggui.Sz(b.iconSide, b.iconSide)), b.style.Label, 0)
+		paintIcon(dst, b.env, b.trail, ggui.Rct(ggui.Pt(r.Origin.X+b.trailAt, iconY), ggui.Sz(b.iconSide, b.iconSide)), label, 0)
 	}
+	if b.action != nil {
+		focusRing(dst, &b.Interactive, b.theme, r, radius, b.theme.Ring, b.motion)
+	}
+}
+
+// badgeHoverSlot keeps a badge's easing into its look under the pointer.
+var badgeHoverSlot = ggui.NewSlot[*ggui.Motion]("badge hover")
+
+// HandlePointer implements ggui.PointerHandler, for a badge with an action.
+func (b *BadgeWidget) HandlePointer(ev ggui.PointerEvent) bool { return b.Pointer(ev, b.action) }
+
+// HandleKey implements ggui.KeyHandler: Space or Enter runs the action.
+func (b *BadgeWidget) HandleKey(ev ggui.KeyEvent) { b.Keyboard(ev, b.action) }
+
+// Describe implements ggui.Describer: a badge with an action is a link
+// named by its label.
+func (b *BadgeWidget) Describe() ggui.Node {
+	return ggui.Node{Role: b.Role, Name: b.SemanticName(), Actions: ggui.ActionFocus | ggui.ActionPress}
+}
+
+// Act implements ggui.Actor: a press runs the action.
+func (b *BadgeWidget) Act(a ggui.Action) bool {
+	if a.Kind != ggui.ActionPress || b.action == nil {
+		return false
+	}
+	b.action()
+	return true
 }
 
 // ProgressWidget is a bar filled to a fraction, under an optional label

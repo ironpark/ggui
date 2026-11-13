@@ -62,6 +62,10 @@ func newPartPreviews(toasts *ui.ToasterWidget) func() []ggui.Widget {
 					})).Justify(ggui.SpaceBetween),
 				),
 				ui.Card(
+					ui.CardMedia(ui.AspectRatio(3, ggui.Box(ggui.Center(ggui.Text("Cover").Color(color.White))).Fill(color.NRGBA{R: 37, G: 99, B: 235, A: 255}))),
+					ui.CardHeader("Leading media", "Flush with the card's top and sides, under its rounded corners."),
+				),
+				ui.Card(
 					ui.CardHeader("Small card", "Tighter padding for dense layouts."),
 					ui.CardContent(ui.Caption("The header, the content and the footer keep their spacing at either size.")),
 				).Small(),
