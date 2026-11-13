@@ -111,7 +111,7 @@ func (b *MenubarWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		r.Size.W = min(r.Size.W, b.naturalWidth)
 	}
 	dst.Describe(r, b)
-	dst.FillRoundRect(r, b.theme.Radius, b.theme.Card)
+	// Only a border: the bar takes the surface it is on.
 	dst.StrokeRoundRect(r, b.theme.Radius, b.theme.BorderWidth, b.theme.Border)
 	dst.Paint(b.popup, r)
 }
@@ -224,7 +224,8 @@ func (a menubarAnchor) Paint(dst *ggui.Canvas, r ggui.Rect) {
 			dst.HitCursor(rr, ggui.CursorShapePointer)
 		}
 		if b.Focused && b.FocusVisible && i == b.active {
-			dst.StrokeRoundRect(rr, radius, 2, b.theme.Ring)
+			dst.StrokeRoundRect(rr, radius, b.theme.BorderWidth, b.theme.Ring)
+			fieldHalo(dst, b.theme, rr, radius, b.theme.Ring)
 		}
 		x += rr.Size.W + b.gap()
 	}
