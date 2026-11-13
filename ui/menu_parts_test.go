@@ -229,3 +229,67 @@ func TestMenusStartOnARowOnlyFromTheKeyboard(t *testing.T) {
 		t.Fatalf("a menubar menu the arrows opened ran %q, want its first row", ran)
 	}
 }
+
+// Typing in an open menu moves to the row whose label starts with it, as
+// Base UI's typeahead does.
+func TestMenuTypeaheadMovesToTheRowTyped(t *testing.T) {
+	t.Parallel()
+	ran := ""
+	item := func(label string) *ui.MenuItemWidget { return ui.MenuItem(label, func() { ran = label }) }
+	entries := func() []ggui.Widget {
+		return []ggui.Widget{item("Open"), item("Save"), item("Share").Disabled(true), item("Save as"), item("Print")}
+	}
+	menu := ui.Menu("File", entries()...)
+	ctx := ui.ContextMenu(ggui.Box(ggui.Text("Target")).Size(100, 40), entries()...).Name("Target actions")
+	bar := ui.Menubar(ui.Menu("Edit", entries()...))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(menu, bar, ctx)), ggui.Sz(400, 400))
+	defer p.Close()
+	pick := func(want string) {
+		t.Helper()
+		p.Key("enter")
+		if ran != want {
+			t.Fatalf("ran %q, want %q", ran, want)
+		}
+	}
+
+	p.Tap("File")
+	p.Text("s")
+	pick("Save")
+	// The same letter again goes on to the next row under it, past a
+	// disabled one, and around.
+	p.Tap("File")
+	p.Text("s")
+	p.Text("s")
+	pick("Save as")
+	p.Tap("File")
+	p.Text("s")
+	p.Text("s")
+	p.Text("s")
+	pick("Save")
+	// More letters narrow the search, a space among them; after a pause a
+	// letter starts a new one.
+	p.Tap("File")
+	p.Text("s")
+	p.Text("a")
+	p.Text("v")
+	p.Text("e")
+	p.TypeText(ggui.Mods{}, ggui.KeySpace, " ")
+	if !menu.Popup().IsOpen() {
+		t.Fatal("a space in a search ran the row")
+	}
+	pick("Save as")
+	p.Tap("File")
+	p.Text("s")
+	p.Advance(time.Second)
+	p.Text("p")
+	pick("Print")
+
+	// A menubar's menu and a context menu search the same way.
+	p.Tap("Edit")
+	p.Text("p")
+	pick("Print")
+	target, _ := p.Find("Target actions")
+	p.ClickButton(target.Center(), ggui.MouseButtonRight)
+	p.Text("o")
+	pick("Open")
+}

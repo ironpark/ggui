@@ -140,6 +140,10 @@ func (b *MenubarWidget) enabled(i int) bool { return !b.menus[i].button.IsInert(
 // HandleKey implements ggui.KeyHandler.
 func (b *MenubarWidget) HandleKey(e ggui.KeyEvent) {
 	b.Keyboard(e, nil)
+	if e.Kind == ggui.KeyText && !b.IsInert() && len(b.menus) > 0 && b.popup.IsOpen() {
+		b.menus[b.active].typeahead(e.Text)
+		return
+	}
 	if b.IsInert() || e.Kind != ggui.KeyPress || len(b.menus) == 0 {
 		return
 	}
