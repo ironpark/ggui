@@ -75,6 +75,7 @@ func Accordion(open ggui.Binding[[]string], items ...AccordionSection) *Accordio
 		h := &accordionHeader{owner: a, index: i}
 		if item.header == nil {
 			h.text = ggui.Text(item.title)
+			h.lined = ggui.RichText(ggui.Span(item.title).Underline())
 		}
 		h.Role = ggui.RoleDisclosure
 		h.SetName(item.title)
@@ -176,6 +177,9 @@ func (a *AccordionWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		if h.text != nil {
 			h.text.Style(t.Label).Color(fg)
 			h.size = h.text.Layout(room, env)
+			// The same lines, each underlined as far as it runs.
+			h.lined.Style(t.Label).Color(fg)
+			h.linedSize = h.lined.Layout(room, env)
 		} else {
 			h.size = item.header.Layout(room, env.WithText(t.Label.Merge(ggui.TextStyle{Color: fg})))
 		}
@@ -221,11 +225,6 @@ func (a *AccordionWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		rect := ggui.Rct(ggui.Pt(r.Origin.X, y), ggui.Sz(r.Size.W, a.heights[i]))
 		h.Hit(dst, rect, h, ggui.CursorShapeDefault)
 		top := y + t.BorderWidth + 1.25*t.Space // of the header's text
-		hover := dst.Ease(h.Anchor(rect), disclosureHoverSlot, pick(h.Hovered && !item.disabled, 1.0, 0.0), a.env.Motion(t.MotionFast))
-		if hover > 0 && h.text != nil {
-			under := ggui.Pt(rect.Origin.X, top+a.underline(h))
-			dst.FillRect(ggui.Rct(under, ggui.Sz(h.size.W, 1)), fade(t.Fg, hover))
-		}
 		// The chevron sits level with the header's first line, as shadcn's
 		// items-start puts it, which shows once a title wraps.
 		first := pick(a.line > 0, a.line, h.size.H)
@@ -234,7 +233,12 @@ func (a *AccordionWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		if h.text == nil {
 			face = item.header
 		}
-		dst.Paint(face, ggui.Rct(ggui.Pt(rect.Origin.X, top), h.size))
+		at := ggui.Rct(ggui.Pt(rect.Origin.X, top), h.size)
+		dst.Paint(face, at)
+		hover := dst.Ease(h.Anchor(rect), disclosureHoverSlot, pick(h.Hovered && !item.disabled, 1.0, 0.0), a.env.Motion(t.MotionFast))
+		if hover > 0 && h.text != nil {
+			a.underline(dst, h, at, hover)
+		}
 		controlFocusRing(dst, &h.Interactive, t, rect, t.Radius, t.Ring)
 		y += a.heights[i]
 		paintDisclosure(dst, item.content, ggui.Pt(r.Origin.X, y), r.Size.W, a.sizes[i], h.progress, h.open)
@@ -246,28 +250,55 @@ func (a *AccordionWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 }
 
-// underline is how far under the top of a header's text the line a pointer
-// over it draws is: two pixels under the baseline of its last line, where a
-// link button's is and about where CSS underlines, rather than at the foot
-// of the line box.
-func (a *AccordionWidget) underline(h *accordionHeader) float64 {
+// underline draws shadcn's hover:underline under a header's title at r,
+// hover of the way in: a line under every line of a title that wraps, as
+// long as that line, where CSS draws one. The lines are the underlined
+// copy's, shown through a band under each baseline, over the title
+// already painted.
+func (a *AccordionWidget) underline(dst *ggui.Canvas, h *accordionHeader, r ggui.Rect, hover float64) {
 	base, ok := h.text.Baseline()
-	if !ok || a.line <= 0 {
-		return h.size.H - 1
+	if !ok || a.line <= 0 || h.linedSize != h.size {
+		dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+r.Size.H-1), ggui.Sz(r.Size.W, 1)), fade(a.theme.Fg, hover))
+		return
 	}
-	lines := max(1, math.Round(h.size.H/a.line))
-	return base + (lines-1)*a.line + 2
+	lines := int(max(1, math.Round(h.size.H/a.line)))
+	bands := func(dst *ggui.Canvas) {
+		// A picture of the title: it is described and takes input once,
+		// where it was painted.
+		dst = dst.Inert()
+		for i := range lines {
+			band := ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+base+float64(i)*a.line+accordionUnderlineTop), ggui.Sz(r.Size.W, accordionUnderlineBand))
+			dst.Clip(band).Paint(h.lined, r)
+		}
+	}
+	if hover < 1 {
+		dst.Layer(ggui.LayerOptions{Fade: 1 - hover}, bands)
+		return
+	}
+	bands(dst)
 }
+
+// Where under a baseline the band an underline shows through starts, and
+// how tall it is: a text's underline is a pixel under its baseline and
+// about one thick.
+const (
+	accordionUnderlineTop  = .75
+	accordionUnderlineBand = 2
+)
 
 type accordionHeader struct {
 	ggui.Interactive
-	owner    *AccordionWidget
-	index    int
-	text     *ggui.TextWidget
-	size     ggui.Size
-	reveal   ggui.Motion
-	progress float64
-	open     bool // as laid out
+	owner *AccordionWidget
+	index int
+	text  *ggui.TextWidget
+	size  ggui.Size
+	// lined is the title again with every line underlined, painted in
+	// text's place under the pointer.
+	lined     *ggui.RichTextWidget
+	linedSize ggui.Size
+	reveal    ggui.Motion
+	progress  float64
+	open      bool // as laid out
 }
 
 // Describe implements ggui.Describer: a header reports whether its section
