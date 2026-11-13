@@ -20,6 +20,12 @@ func render(dir string) error {
 	}
 	index := 0
 	return offscreen.Run(func() (bool, error) {
+		if index >= 24 {
+			// The whole desktop collage, which no window shows at once.
+			err := renderCollage(dir, index == 24)
+			index++
+			return index == 26, err
+		}
 		sizes := []ggui.Size{ggui.Sz(1440, 1000), ggui.Sz(1024, 768), ggui.Sz(390, 844)}
 		size := sizes[index%3]
 		dark := index/3%2 == 0
@@ -73,6 +79,28 @@ func render(dir string) error {
 			return true, err
 		}
 		index++
-		return index == 24, nil
+		return false, nil
 	})
+}
+
+// renderCollage draws every preview card, in the baseline theme.
+func renderCollage(dir string, dark bool) error {
+	now := time.Date(2026, time.November, 13, 12, 0, 0, 0, time.UTC)
+	restore := ggui.SetClock(func() time.Time { return now })
+	defer restore()
+	size, selected := ggui.Sz(previewWidth, 2340), defaults().Theme.For(dark)
+	p := ggui.ProbeBuilder(func() ggui.Widget { return theme.With(selected, newPreview().build()) }, size).Setup(func() { gofont.Enable() })
+	defer p.Close()
+	img := ggfx.NewImage(int(size.W), int(size.H))
+	defer img.Deallocate()
+	for range 4 {
+		img.Fill(selected.Bg)
+		p.Draw(img)
+		now = now.Add(time.Second)
+	}
+	mode := "light"
+	if dark {
+		mode = "dark"
+	}
+	return offscreen.SavePNG(filepath.Join(dir, "create-"+mode+"-collage.png"), img)
 }

@@ -188,7 +188,7 @@ func TestReferencePayoutAmountDoesNotCrowdItsLabel(t *testing.T) {
 	if !ok {
 		t.Fatal("missing amount label")
 	}
-	value, ok := p.Semantics().Find(ggui.RoleText, "$2500.00")
+	value, ok := p.Semantics().Find(ggui.RoleText, "$3000.00")
 	if !ok {
 		t.Fatal("missing amount value")
 	}

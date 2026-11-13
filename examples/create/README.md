@@ -22,10 +22,12 @@ For the repository's browser runner, use `task serve EXAMPLE=create`.
 - **Get Code** exports a complete Go `applyTheme` function: the recipe, with its
   icon library registered and its menu accent, applied in the chosen mode. `Cmd+Shift+C` copies it directly.
 - On narrow windows, **Customize** opens the settings sheet. The preview cards
-  reflow to two columns and then one. Wide previews keep 376px cards with horizontal
-  scrolling so the reference collage retains its proportions.
-- The preview's forms, savings controls, charts and notifications update local
-  sample state. They require no network service or account.
+  reflow to two columns and then one. Wide previews keep the reference collage:
+  375px columns around a double one, 3000px across, panned horizontally.
+- The collage has the reference's 36 cards: charts, forms, menus, tabs with an
+  accordion, a breadcrumb, a calendar, empty and loading states. Their forms,
+  filters, sliders and selections update local sample state. They require no
+  network service or account.
 
 ## Reuse the theme
 
@@ -52,7 +54,8 @@ so changing the preview's accent or fonts does not recolor the settings panel.
 ## Scope and reference
 
 The live reference was inspected on 2026-11-13 and refined against the supplied
-Create screenshot. The two-line setting tiles, neutral chart bars, contribution
+Create screenshot, then compared card by card with
+[shadcn-svelte's preview-02](https://www.shadcn-svelte.com/create/preview-02?preset=b0). The two-line setting tiles, neutral chart bars, contribution
 summary tiles, payout form, savings targets, merchant icons and shaded card footers
 follow that reference. This example reproduces its
 theme-editor/card-collage workflow with GGUI controls. It opens directly in the
@@ -63,7 +66,9 @@ font and Go Sans/Go Mono, so it works offline. See the [Inter](../../fonts/inter
 and [Geist](../../fonts/geist/README.md) sources and licenses. A preset's JSON is the
 recipe and the mode; the recipe's inverted menu color is carried but has no tile,
 since the preview's menus do not draw it yet. Styles and icon sets show those implemented
-by GGUI. Narrow screens reflow the cards rather than retaining a 2400px canvas.
+by GGUI. Narrow screens reflow the cards rather than retaining the 3000px canvas.
+The preview's decorative icons are outlines drawn for this example (`glyphs.go`);
+the QR code is a sample pattern that encodes nothing.
 
 ## Verification and screenshots
 
@@ -73,10 +78,10 @@ go run ./examples/create -render-dir /tmp/ggui-create-renders
 ```
 
 The render command captures the actual widget tree in light/dark at desktop,
-tablet and phone widths, with baseline, customized, overlay and component-specimen states (24 PNGs). Tests
+tablet and phone widths, with baseline, customized, overlay and component-specimen states,
+and the whole desktop collage in each mode (26 PNGs). Tests
 exercise theme selection, preserved preview drafts, clipboard/code export,
 preset validation and narrow-to-wide resizing.
 
-Verified on 2026-11-13: `go test ./...`, `go vet ./...`, macOS app bundling,
-JS/WASM compilation and all 24 screenshot renders passed. Representative
-desktop, customized, code-dialog and narrow specimen frames were inspected.
+Verified on 2026-11-13: `go test ./...`, `go vet ./...` and all 26 screenshot
+renders passed. The collage frames were inspected beside the reference in both modes.
