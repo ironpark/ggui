@@ -19,27 +19,6 @@ func panelBox(b *ggui.BoxWidget, t *uitheme.Theme) *ggui.BoxWidget {
 	return b.Shadow(t.PanelShadow).Fill(t.Popover).Border(t.BorderWidth, fade(t.Fg, .1)).Radius(t.Radius).Padding(t.PanelPad)
 }
 
-// fieldBox applies the chrome every input shares: the Input surface, the
-// theme's padding and radius, and a border that becomes the focus ring
-// while the editor inside has the keyboard. A disabled field takes the
-// muted surface shadcn gives one. It sets the colors at once; a field that
-// eases between its states sets only fieldBoxShape in Layout and calls
-// fieldChrome in Paint.
-func fieldBox(b *ggui.BoxWidget, t *uitheme.Theme, focused, inert bool) *ggui.BoxWidget {
-	return fieldBoxPadded(b, t, focused, inert, t.FieldPad)
-}
-
-// fieldBoxPadded is fieldBox with the caller's padding, set once: writing
-// the theme's and then another would change the box twice a layout, and a
-// box that changed after it was measured is never cached.
-func fieldBoxPadded(b *ggui.BoxWidget, t *uitheme.Theme, focused, inert bool, pad ggui.EdgeInsets) *ggui.BoxWidget {
-	border := pick(focused, t.Ring, t.InputBorder)
-	if inert {
-		border = t.Disabled(border)
-	}
-	return fieldBoxShape(b, t, pad).Fill(fieldFill(t, inert)).Border(t.BorderWidth, border)
-}
-
 // fieldBoxShape gives a field's box what its size depends on, the padding
 // and the radius, and leaves its colors to fieldChrome.
 func fieldBoxShape(b *ggui.BoxWidget, t *uitheme.Theme, pad ggui.EdgeInsets) *ggui.BoxWidget {
@@ -182,10 +161,6 @@ func isDark(c color.Color) bool {
 	r, g, b, _ := c.RGBA()
 	return r+g+b < 3*32768
 }
-
-// iconButtonSide is the side of a square button holding one icon, as
-// ButtonIcon pads it.
-func iconButtonSide(t *uitheme.Theme) float64 { return max(t.IconSize, 20+2*t.ButtonPad.Top) }
 
 // paintDisclosure paints content folding open below y: the body is clipped
 // to progress of its height and inert while closing. The progress comes

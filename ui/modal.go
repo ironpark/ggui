@@ -18,7 +18,6 @@ const modalBlur = 4
 // in where the panel goes and whether it slides there, which is the half
 // each of them keeps.
 type modal struct {
-	surface     ggui.Widget // the panel under its close button, as paint hands it on
 	open        ggui.Binding[bool]
 	content     ggui.Widget
 	title       *ggui.TextWidget
@@ -266,17 +265,9 @@ func (f *modalFooter) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Paint(f.box, r)
 }
 
-// paint dims the window, takes what lands on it, and paints the panel at
-// rect inside a focus trap. owner is the widget the node belongs to, so a
+// paintContent dims the window, takes what lands on it, and paints content
+// at rect inside a focus trap. owner is the widget the node belongs to, so a
 // screen reader and Probe.Find see the dialog or the sheet rather than this.
-func (m *modal) paint(dst *ggui.Canvas, screen ggui.Size, rect ggui.Rect, scrim color.Color, owner ggui.Semantic) {
-	if m.surface == nil {
-		// Built once: the panel is asked for each time, since build replaces it.
-		m.surface = ggui.FromFuncs(func(c ggui.Constraints, e ggui.Env) ggui.Size { return m.panel.Layout(c, e) }, m.paintSurface)
-	}
-	m.paintContent(dst, screen, rect, scrim, owner, m.surface)
-}
-
 func (m *modal) paintContent(dst *ggui.Canvas, screen ggui.Size, rect ggui.Rect, scrim color.Color, owner ggui.Semantic, content ggui.Widget) {
 	m.rect = rect
 	dst.BackdropBlur(ggui.Rect{Size: screen}, 0, modalBlur)

@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"go/format"
@@ -282,7 +283,7 @@ func (m *model) importPreset() {
 		return
 	}
 	if err := validateCustomization(s); err != nil {
-		m.presetError.Set(err.Error())
+		m.presetError.Set("Invalid preset: " + err.Error() + ".")
 		return
 	}
 	m.settings.Set(s)
@@ -292,14 +293,14 @@ func (m *model) importPreset() {
 
 func validateCustomization(s customization) (err error) {
 	if !slices.Contains(iconChoices(), s.Theme.Icons) {
-		return fmt.Errorf("Icon library must be lucide or tabler.")
+		return errors.New("icon library must be lucide or tabler")
 	}
 	if !slices.Contains(theme.Modes(), s.Mode) {
-		return fmt.Errorf("Mode must be light, dark or system.")
+		return errors.New("mode must be light, dark or system")
 	}
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("Invalid theme: %v", r)
+			err = fmt.Errorf("invalid theme: %v", r)
 		}
 	}()
 	_ = s.Theme.For(false)
