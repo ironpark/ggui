@@ -87,12 +87,20 @@ func FromCSS(css string) (light, dark Theme, err error) {
 // Each color variable sets the token the Theme field comments name,
 // --input setting InputBorder; ParseColor lists the color syntaxes. A value
 // may be var() of another variable in decls. --radius sets the radii as
-// shadcn derives its own from it: Radius the length itself, RadiusSm 0.8
-// of it and RadiusLg 1.4. A later declaration wins.
+// shadcn derives its own from it: under Nova, Radius the length itself,
+// RadiusXs 0.6 of it, RadiusSm 0.8, RadiusLg 1.4 and RadiusXl 1.8, with
+// Chat's corners following; under another Style, that style's steps of it.
+// A later declaration wins.
+//
+// --font-sans sets the font of Text, --font-heading that of Title and
+// Heading, and --font-mono that of Mono, to the first family in the list
+// that RegisterFont knows: the bundled Inter, Geist, Geist Mono, Go and Go
+// Mono, and what the app registered. A list naming none of them, such as
+// one of system fonts alone, leaves the font as it is.
 //
 // A color variable with no token of its own, such as the --warning shadcn
-// suggests adding, is kept under CSSColor of its name; other variables,
-// such as fonts, are ignored.
+// suggests adding, is kept under CSSColor of its name; other variables are
+// ignored.
 func (t Theme) ApplyCSS(decls string) (Theme, error) {
 	vars := map[string]string{}
 	var order []string
@@ -109,6 +117,14 @@ func (t Theme) ApplyCSS(decls string) (Theme, error) {
 		vars[name] = strings.TrimSpace(value)
 	}
 	for _, name := range order {
+		if styles := cssFonts[name]; styles != nil {
+			if font := cssFont(vars, name); font != nil {
+				for _, style := range styles(&t) {
+					style.Font = font
+				}
+			}
+			continue
+		}
 		value, err := resolveVar(vars, name, 0)
 		if err != nil {
 			return t, err
@@ -128,8 +144,7 @@ func (t Theme) ApplyCSS(decls string) (Theme, error) {
 			if err != nil {
 				return t, fmt.Errorf("theme: --radius: %w", err)
 			}
-			t.Radius, t.RadiusSm, t.RadiusLg = r, r*.8, r*1.4
-			t.auto.radiusSm, t.auto.radiusLg = 0, 0
+			t.setRadius(r)
 			continue
 		}
 		if c, err := ParseColor(value); err == nil {

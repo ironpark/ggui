@@ -4,6 +4,7 @@ package theme
 import (
 	"fmt"
 	"image/color"
+	"math"
 	"slices"
 	"time"
 
@@ -16,8 +17,8 @@ import (
 // the root Env.
 //
 // Some tokens follow others: PrimaryHover and Selection follow Primary,
-// CardFg and the other foregrounds follow Fg, RadiusSm and RadiusLg follow
-// Radius, and so on, as each field's comment says. A token left unset
+// CardFg and the other foregrounds follow Fg, the other radii, the chat
+// corners among them, follow Radius, and so on, as each field's comment says. A token left unset
 // follows its source, and so does one still holding the value it was given
 // that way, so changing Primary on a copy of Default moves its hover too.
 // Setting the token itself pins it. Resolve fills the followers in; the
@@ -57,19 +58,31 @@ type Theme struct {
 	Muted, MutedFg             color.Color // --muted / --muted-foreground
 	Destructive, DestructiveFg color.Color // --destructive; DestructiveFg is retained for custom solid variants
 	Border                     color.Color // --border: outlines of inputs and dividers
-	Input                      color.Color // the surface a text field or select paints; follows Bg
-	Ring                       color.Color // --ring: the focus halo, separate from Primary
-	Selection                  color.Color // selected text; follows Primary
-	Scrim                      color.Color // dims the window behind a modal
+	// Input is the surface a text field or select paints over whatever it
+	// sits on, as shadcn's bg-transparent dark:bg-input/30 does: unless set,
+	// it is InputBorder at the opacity of the theme's Style, which under Nova
+	// is clear in a light theme and 30% in a dark one. Paint it over the
+	// surface, not instead of it.
+	Input     color.Color
+	Ring      color.Color // --ring: the focus halo, separate from Primary
+	Selection color.Color // selected text; follows Primary
+	Scrim     color.Color // dims the window behind a modal
 
 	// Elevation, in the order a surface rises off the page.
 	CardShadow    ggui.ShadowStyle // cards and the raised tab
 	PanelShadow   ggui.ShadowStyle // menus, select lists, date pickers, toasts
 	OverlayShadow ggui.ShadowStyle // dialogs
 
-	Radius   float64 // --radius: corner radius for boxes that ask for one
-	RadiusSm float64 // rows and pills inside a rounded container; follows Radius
-	RadiusLg float64 // cards, dialogs and toasts; follows Radius
+	// The radii are shadcn's scale of --radius, each named a step smaller
+	// than Tailwind names it: Radius is rounded-lg, the corner of a button
+	// or a field, and the rest follow it in the proportions of the theme's
+	// Style, which under Nova are the ones given here. Chat's corners
+	// follow it too.
+	Radius   float64 // --radius, rounded-lg: buttons, fields and boxes that ask for one
+	RadiusXs float64 // rounded-sm, 0.6 of Radius: chips, keys and the smallest insets
+	RadiusSm float64 // rounded-md, 0.8: rows and pills inside a rounded container
+	RadiusLg float64 // rounded-xl, 1.4: cards and dialogs
+	RadiusXl float64 // rounded-2xl, 1.8: toasts
 
 	Space       float64 // the unit gaps and padding are multiples of
 	BorderWidth float64 // the line Box.Border and the controls draw
@@ -97,8 +110,10 @@ type Theme struct {
 	// of a warning ring.
 	RingAlpha float64
 
-	ext  *tokenNode // extension tokens, a persistent list; see Set
-	auto followed   // what Resolve filled in last; see Resolve
+	ext   *tokenNode // extension tokens, a persistent list; see Set
+	auto  followed   // what Resolve filled in last; see Resolve
+	style Style      // whose proportions the radii follow Radius in; "" is Nova
+	menu  *Theme     // what Menu returns, nil for the theme itself
 }
 
 // tokenNode is one extension token; the list is shared between the themes
@@ -131,17 +146,37 @@ func (t Theme) Get[T any](k ggui.EnvKey[T]) (T, bool) {
 	return zero, false
 }
 
-// Default is a neutral light theme inspired by shadcn/ui, in the default font.
-// The palette is the neutral palette used by the current Base UI documentation.
-func Default() Theme { return lightBase().Resolve() }
+// Default is shadcn/ui's stock light theme: the Neutral palette in the Nova
+// style, with the tokens of Preset{}.Light(). Unlike a Preset's, a color of
+// it that has the value it would follow does follow, so changing Primary or
+// Fg on a copy moves what derives from them.
+func Default() Theme { return stock(false) }
 
-// lightBase is Default before Resolve: the tokens nothing else derives.
+// Dark is the dark counterpart of Default, with the tokens of Preset{}.Dark().
+func Dark() Theme { return stock(true) }
+
+// stock is the zero Preset with every color that equals what it would
+// follow left to follow it.
+func stock(dark bool) Theme {
+	t := Preset{}.build(dark)
+	resolved := t.Resolve()
+	for _, f := range followers {
+		if p := f.field(&t); *p != nil && sameColor(*p, f.from(&resolved)) {
+			*p = nil
+		}
+	}
+	return t.Resolve()
+}
+
+// lightBase is what a Preset lays its palette and Style over: the Neutral
+// light colors nothing else derives, and Nova's geometry, before Resolve.
 func lightBase() Theme {
 	n := themePalettes()["neutral"][0]
 	fg, quiet, nearWhite := n["foreground"], n["muted"], n["primary-foreground"]
+	g := styles[StyleNova]
 	return Theme{
 		Chart:   chartColors(n),
-		Chat:    defaultChat(),
+		Chat:    g.chat,
 		Text:    ggui.TextStyle{Size: 14, LineHeight: 20.0 / 14},
 		Title:   ggui.TextStyle{Size: 24, Weight: ggui.WeightSemibold},
 		Heading: ggui.TextStyle{Size: 16, LineHeight: 22.0 / 16, Weight: ggui.WeightMedium},
@@ -158,10 +193,6 @@ func lightBase() Theme {
 		Ring:   n["ring"],
 		Scrim:  color.NRGBA{A: 26},
 
-		// The sidebar is shadcn's near-white surface; the rest of its
-		// palette follows the page's.
-		Sidebar: nearWhite,
-
 		CardShadow:    ggui.ShadowStyle{Offset: ggui.Pt(0, 1), Blur: 2, Color: color.NRGBA{A: 15}},
 		PanelShadow:   ggui.ShadowStyle{Offset: ggui.Pt(0, 4), Blur: 10, Color: color.NRGBA{A: 26}},
 		OverlayShadow: ggui.ShadowStyle{Offset: ggui.Pt(0, 12), Blur: 28, Color: color.NRGBA{A: 65}},
@@ -169,30 +200,13 @@ func lightBase() Theme {
 		Radius: 10,
 		Space:  8, BorderWidth: 1, ControlSize: 16, ControlGap: 8, IconSize: 16, MenuWidth: 224,
 
-		ButtonPad: ggui.Insets(6, 10), FieldPad: ggui.Insets(6, 10),
-		ItemPad: ggui.Insets(4, 6), CardPad: ggui.Insets(16), PanelPad: ggui.Insets(4),
-		TabPad: ggui.Insets(3, 8),
+		ButtonPad: g.button, FieldPad: g.field,
+		ItemPad: g.item, CardPad: g.card, PanelPad: g.panel,
+		TabPad: g.tab,
 
 		MotionFast: 150 * time.Millisecond, MotionSlow: 200 * time.Millisecond, MotionOverlay: 100 * time.Millisecond,
 		HoverMix: .06, PressMix: .08, DisabledMix: .5, RingAlpha: .5,
 	}
-}
-
-// Dark is a dark counterpart of Default.
-func Dark() Theme { return darkBase().Resolve() }
-
-// darkBase is Dark before Resolve.
-func darkBase() Theme {
-	t := lightBase()
-	n := themePalettes()["neutral"][1]
-	t.Bg, t.Fg, t.Card = n["background"], n["foreground"], n["card"]
-	t.Primary, t.PrimaryFg = n["primary"], n["primary-foreground"]
-	t.Border, t.InputBorder = n["border"], n["input"]
-	t.Secondary, t.Muted = n["secondary"], n["muted"]
-	t.MutedFg, t.Ring, t.Destructive = n["muted-foreground"], n["ring"], n["destructive"]
-	t.Sidebar = n["sidebar"]
-	t.Chart = chartColors(n)
-	return t
 }
 
 // chartColors are a palette's five series colors, chart-1 to chart-5.
@@ -226,11 +240,18 @@ var followers = [nFollowers]follower{
 	{func(t *Theme) *color.Color { return &t.AccentFg }, func(t *Theme) color.Color { return t.Fg }},
 	{func(t *Theme) *color.Color { return &t.InputBorder }, func(t *Theme) color.Color { return t.Border }},
 	{func(t *Theme) *color.Color { return &t.Input }, func(t *Theme) color.Color {
-		// shadcn's dark inputs are --input at 30% over the page.
+		// shadcn's inputs are --input at the style's opacity, Nova's
+		// bg-transparent dark:bg-input/30, over whatever surface they sit
+		// on rather than over the page.
+		alpha := styles[t.styleName()].input[0]
 		if isDark(t.Bg) {
-			return compositeColor(t.InputBorder, t.Bg, .3)
+			alpha = styles[t.styleName()].input[1]
 		}
-		return t.Bg
+		c := color.NRGBAModel.Convert(t.InputBorder).(color.NRGBA)
+		if c.A = uint8(math.Round(float64(c.A) * alpha)); c.A == 0 {
+			return color.NRGBA{}
+		}
+		return c
 	}},
 	{func(t *Theme) *color.Color { return &t.Selection }, func(t *Theme) color.Color { return compositeColor(t.Primary, t.Bg, .25) }},
 	{func(t *Theme) *color.Color { return &t.Sidebar }, func(t *Theme) color.Color { return t.Card }},
@@ -243,12 +264,64 @@ var followers = [nFollowers]follower{
 	{func(t *Theme) *color.Color { return &t.SidebarRing }, func(t *Theme) color.Color { return t.Ring }},
 }
 
+// The radii that follow Radius, in the order of radiusSteps.follow.
+const (
+	stepXs = iota
+	stepSm
+	stepLg
+	stepXl
+	stepBubble
+	stepAttachment
+	stepAttachmentXS
+	stepQuestion
+	stepQuestionInput
+	nRadii
+)
+
+// radiusSteps are a Style's corners as multiples of --radius: Radius
+// itself, the radii that follow it, and the most RadiusLg grows to, zero for
+// no limit.
+type radiusSteps struct {
+	control float64
+	follow  [nRadii]float64
+	lgMax   float64
+}
+
+// radii are t's radii that follow Radius, in the order of radiusSteps.follow.
+func (t *Theme) radii() [nRadii]*float64 {
+	return [nRadii]*float64{&t.RadiusXs, &t.RadiusSm, &t.RadiusLg, &t.RadiusXl,
+		&t.Chat.BubbleRadius, &t.Chat.AttachmentRadius, &t.Chat.AttachmentXSRadius,
+		&t.Chat.QuestionRadius, &t.Chat.QuestionInputRadius}
+}
+
+// setRadius sets Radius to what a --radius of base is in t's Style, and
+// leaves the other radii to follow it.
+func (t *Theme) setRadius(base float64) {
+	t.Radius = snap(base * styles[t.styleName()].radii.control)
+	for _, p := range t.radii() {
+		*p = 0
+	}
+	t.auto.radii = [nRadii]float64{}
+}
+
+// styleName is the Style t's radii follow Radius in.
+func (t *Theme) styleName() Style {
+	if t.style == "" {
+		return StyleNova
+	}
+	return t.style
+}
+
+// snap rounds away the error of multiplying and dividing by a step, so a
+// radius of 14 is 14.
+func snap(v float64) float64 { return math.Round(v*1e6) / 1e6 }
+
 // followed is what Resolve filled in: nil, or zero, where the token was set.
 // It is a value, so equal themes stay equal and an Env holding one is
 // reused across layouts.
 type followed struct {
-	colors             [nFollowers]color.Color
-	radiusSm, radiusLg float64
+	colors [nFollowers]color.Color
+	radii  [nRadii]float64
 }
 
 // Resolve fills in the tokens that follow others, and gives every unset
@@ -260,6 +333,9 @@ type followed struct {
 //	t.Primary = brand
 //	theme.Set(t) // PrimaryHover and Selection follow brand
 //
+// A radius left at zero follows Radius, so a square corner in a rounded
+// theme is a Radius of zero rather than one of the others.
+//
 // Apply resolves the theme it applies, so only code that reads a derived
 // token from a theme it changed itself needs to call Resolve.
 func (t Theme) Resolve() Theme {
@@ -268,11 +344,10 @@ func (t Theme) Resolve() Theme {
 			*p = nil
 		}
 	}
-	if t.auto.radiusSm != 0 && t.RadiusSm == t.auto.radiusSm {
-		t.RadiusSm = 0
-	}
-	if t.auto.radiusLg != 0 && t.RadiusLg == t.auto.radiusLg {
-		t.RadiusLg = 0
+	for i, p := range t.radii() {
+		if t.auto.radii[i] != 0 && *p == t.auto.radii[i] {
+			*p = 0
+		}
 	}
 	t.fillUnset()
 	var a followed
@@ -282,13 +357,18 @@ func (t Theme) Resolve() Theme {
 			a.colors[i] = *p
 		}
 	}
-	if t.RadiusSm == 0 {
-		t.RadiusSm = t.Radius * .8
-		a.radiusSm = t.RadiusSm
+	steps, base := styles[t.styleName()].radii, 0.
+	if steps.control != 0 {
+		base = t.Radius / steps.control
 	}
-	if t.RadiusLg == 0 {
-		t.RadiusLg = t.Radius * 1.4
-		a.radiusLg = t.RadiusLg
+	for i, p := range t.radii() {
+		if *p == 0 {
+			*p = snap(base * steps.follow[i])
+			if i == stepLg && steps.lgMax != 0 {
+				*p = min(*p, steps.lgMax)
+			}
+			a.radii[i] = *p
+		}
 	}
 	t.auto = a
 	return t
@@ -328,8 +408,13 @@ func (t *Theme) fillUnset() {
 	if t.Mono.Font == nil {
 		t.Mono.Font = ggui.DefaultMonoFont()
 	}
-	if t.Chat == (ChatTokens{}) {
-		t.Chat = defaultChat()
+	// A Chat with corners alone, or none, takes Nova's padding and gaps;
+	// the corners follow Radius.
+	if c := &t.Chat; c.BubblePadding == (ggui.EdgeInsets{}) && c.QuestionChoicePadding == (ggui.EdgeInsets{}) &&
+		c.QuestionGap == 0 && c.QuestionChoiceGap == 0 && c.QuestionTextGap == 0 {
+		n := styles[StyleNova].chat
+		c.BubblePadding, c.QuestionChoicePadding = n.BubblePadding, n.QuestionChoicePadding
+		c.QuestionGap, c.QuestionChoiceGap, c.QuestionTextGap = n.QuestionGap, n.QuestionChoiceGap, n.QuestionTextGap
 	}
 }
 

@@ -7,10 +7,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/fonts/geist"
 	"github.com/ironpark/ggui/fonts/gofont"
 	"github.com/ironpark/ggui/fonts/inter"
 	"github.com/ironpark/ggui/ui/theme"
@@ -43,40 +45,56 @@ func TestConfigZeroPreservesPresetAndDefaults(t *testing.T) {
 	}
 }
 
-func TestConfigChartChoiceIsIndependentOfAccent(t *testing.T) {
+// The chart colors follow the accent, as shadcn's chartColor defaults to its
+// theme, unless Chart names the base's own or another accent's; either way
+// only the five chart tokens change.
+func TestConfigChartFollowsAccentUnlessChosen(t *testing.T) {
 	t.Parallel()
 	for _, dark := range []bool{false, true} {
 		for _, base := range theme.BaseColors() {
-			for _, chart := range theme.AccentColors() {
-				p := theme.Preset{Base: base, Accent: theme.AccentBlue, Style: theme.StyleRhea}
+			p := theme.Preset{Base: base, Accent: theme.AccentBlue, Style: theme.StyleRhea}
+			for _, chart := range theme.ChartColors() {
 				got := (theme.Config{Preset: p, Chart: chart}).For(dark)
 				want := p.For(dark)
-				want.Chart = theme.Preset{Base: base, Accent: chart, Style: p.Style}.For(dark).Chart
+				switch chart {
+				case theme.AccentBase:
+				case theme.ChartBase:
+					want.Chart = theme.Preset{Base: base, Style: p.Style}.For(dark).Chart
+				default:
+					want.Chart = theme.Preset{Base: base, Accent: chart, Style: p.Style}.For(dark).Chart
+				}
 				if got != want {
 					t.Fatalf("chart modified other tokens: base=%s chart=%s dark=%v", base, chart, dark)
 				}
+			}
+			if (theme.Config{Preset: p}).For(dark).Chart == (theme.Config{Preset: p, Chart: theme.ChartBase}).For(dark).Chart {
+				t.Fatalf("an accent's charts are the base's: base=%s dark=%v", base, dark)
 			}
 		}
 	}
 }
 
+// A radius choice is shadcn's --radius for it, and every corner, the chat
+// corners among them, is the style's step of it.
 func TestConfigRadiusReachesEveryCornerAndSurvivesResolve(t *testing.T) {
 	t.Parallel()
 	for _, style := range theme.Styles() {
 		p := theme.Preset{Style: style}
 		base := p.Light()
-		for choice, radius := range map[theme.Radius]float64{theme.RadiusNone: 0, theme.RadiusSmall: 4, theme.RadiusMedium: 8, theme.RadiusLarge: 16} {
+		for choice, radius := range map[theme.Radius]float64{theme.RadiusNone: 0, theme.RadiusSmall: 7.2, theme.RadiusMedium: 10, theme.RadiusLarge: 14} {
 			got := (theme.Config{Preset: p, Radius: choice}).Light()
-			factor := radius / base.Radius
-			if got.Radius != radius || got.RadiusSm != radius*.8 || got.RadiusLg != radius*1.4 {
-				t.Fatalf("radii %s: %v/%v/%v", choice, got.RadiusSm, got.Radius, got.RadiusLg)
+			css, err := base.ApplyCSS(fmt.Sprintf("--radius: %vpx", radius))
+			if err != nil {
+				t.Fatal(err)
 			}
-			corners := []float64{got.Chat.BubbleRadius, got.Chat.AttachmentRadius, got.Chat.AttachmentXSRadius, got.Chat.QuestionRadius, got.Chat.QuestionInputRadius}
-			bases := []float64{base.Chat.BubbleRadius, base.Chat.AttachmentRadius, base.Chat.AttachmentXSRadius, base.Chat.QuestionRadius, base.Chat.QuestionInputRadius}
-			for i, v := range corners {
-				if v != bases[i]*factor {
-					t.Fatalf("chat corner %d stayed unchanged for %s", i, choice)
-				}
+			if got != css {
+				t.Fatalf("%s/%s differs from --radius %v: radii %v/%v/%v, chat %+v", style, choice, radius, got.RadiusSm, got.Radius, got.RadiusLg, got.Chat)
+			}
+			if choice == theme.RadiusMedium && got != base {
+				t.Fatalf("%s: medium is not the stock radius", style)
+			}
+			if choice == theme.RadiusNone && (got.Radius != 0 || got.RadiusLg != 0 || got.Chat.BubbleRadius != 0) {
+				t.Fatalf("%s: none left a corner round", style)
 			}
 			if got.CardPad != base.CardPad || got.ButtonPad != base.ButtonPad || got.Chat.BubblePadding != base.Chat.BubblePadding {
 				t.Fatal("radius changed padding")
@@ -85,6 +103,63 @@ func TestConfigRadiusReachesEveryCornerAndSurvivesResolve(t *testing.T) {
 				t.Fatal("radius lost on resolve/apply")
 			}
 		}
+	}
+	nova := (theme.Config{Radius: theme.RadiusLarge}).Light()
+	if nova.Radius != 14 || nova.RadiusXs != 8.4 || nova.RadiusSm != 11.2 || nova.RadiusLg != 19.6 || nova.RadiusXl != 25.2 || nova.Chat.BubbleRadius != 19.6 {
+		t.Fatalf("Nova large radii %v/%v/%v/%v/%v, bubble %v", nova.RadiusXs, nova.RadiusSm, nova.Radius, nova.RadiusLg, nova.RadiusXl, nova.Chat.BubbleRadius)
+	}
+}
+
+// Bold menus take the brand pair for Accent, as shadcn's menuAccent does,
+// and leave the sidebar's own accent alone.
+func TestConfigMenuAccentAndColor(t *testing.T) {
+	t.Parallel()
+	p := theme.Preset{Accent: theme.AccentBlue}
+	for _, dark := range []bool{false, true} {
+		plain := p.For(dark)
+		bold := (theme.Config{Preset: p, MenuAccent: theme.MenuAccentBold}).For(dark)
+		if bold.Accent != plain.Primary || bold.AccentFg != plain.PrimaryFg || bold.SidebarAccent != plain.SidebarAccent {
+			t.Fatalf("bold menu accent: Accent %v, AccentFg %v, SidebarAccent %v", bold.Accent, bold.AccentFg, bold.SidebarAccent)
+		}
+		if bold.Resolve() != bold {
+			t.Fatal("bold accent lost on resolve")
+		}
+		if plain.Menu() != plain {
+			t.Fatal("a default menu is not drawn in its own theme")
+		}
+	}
+	c := theme.Config{Preset: p, MenuColor: theme.MenuColorInverted}
+	if got, want := c.Light().Menu(), p.Dark(); got != want {
+		t.Fatalf("an inverted light menu is not the recipe's dark theme: Bg %v", got.Bg)
+	}
+	if c.Dark().Menu() != c.Dark() || c.Dark() != p.Dark() {
+		t.Fatal("an inverted dark menu changed the dark theme")
+	}
+	if c.Light() != c.Light() || c.Light().Bg != p.Light().Bg {
+		t.Fatal("inverted menus made a recipe's light themes differ")
+	}
+}
+
+type testIcons string
+
+// An icon library is a token the recipe stores in its themes, the same one
+// each time so that they stay equal.
+func TestConfigIconsStoresTheRegisteredSet(t *testing.T) {
+	t.Parallel()
+	key := ggui.NewEnvKey[testIcons]("test icons")
+	theme.RegisterIcons("test-set", key, testIcons("outline"))
+	c := theme.Config{Icons: "test-set"}
+	if got, ok := c.Dark().Get(key); !ok || got != "outline" {
+		t.Fatalf("the theme holds %q, %v", got, ok)
+	}
+	if c.Light() != c.Light() {
+		t.Fatal("an icon library made a recipe's themes differ")
+	}
+	if _, ok := (theme.Config{}).Light().Get(key); ok {
+		t.Fatal("the default recipe holds an icon set")
+	}
+	if !slices.Contains(theme.IconLibraries(), "test-set") || theme.IconLibraries()[0] != theme.IconsDefault {
+		t.Fatalf("libraries %v", theme.IconLibraries())
 	}
 }
 
@@ -123,6 +198,7 @@ func TestConfigOptionsAreIndependentAndInvalidNamesPanic(t *testing.T) {
 	for _, c := range []theme.Config{
 		{Preset: theme.Preset{Base: "bad"}}, {Preset: theme.Preset{Accent: "bad"}}, {Preset: theme.Preset{Style: "bad"}},
 		{Chart: "bad"}, {Radius: "bad"}, {Font: "bad"}, {Heading: "bad"},
+		{MenuAccent: "bad"}, {MenuColor: "bad"}, {Icons: "never registered"},
 	} {
 		for _, build := range []func(){func() { c.Light() }, func() { c.Dark() }, func() { c.GoCode(false) }} {
 			func() {
@@ -139,7 +215,7 @@ func TestConfigOptionsAreIndependentAndInvalidNamesPanic(t *testing.T) {
 
 func TestConfigGoCodeCompilesAndReproducesTheme(t *testing.T) {
 	t.Parallel()
-	c := theme.Config{Preset: theme.Preset{Base: theme.BaseOlive, Accent: theme.AccentCyan, Style: theme.StyleRhea}, Chart: theme.AccentAmber, Radius: theme.RadiusSmall, Font: theme.FontMono, Heading: theme.FontSans}
+	c := theme.Config{Preset: theme.Preset{Base: theme.BaseOlive, Accent: theme.AccentCyan, Style: theme.StyleRhea}, Chart: theme.AccentAmber, Radius: theme.RadiusSmall, Font: theme.FontMono, Heading: theme.FontSans, MenuAccent: theme.MenuAccentBold, MenuColor: theme.MenuColorInverted}
 	code := c.GoCode(true)
 	if code != c.GoCode(true) || !strings.Contains(code, "\n") {
 		t.Fatal("export is unstable or not formatted")
@@ -155,14 +231,18 @@ func TestConfigGoCodeCompilesAndReproducesTheme(t *testing.T) {
 import("fmt"; "github.com/ironpark/ggui/ui/theme")
 func main(){
  got := %s
- want := (theme.Config{Preset:theme.Preset{Base:theme.BaseOlive,Accent:theme.AccentCyan,Style:theme.StyleRhea},Chart:theme.AccentAmber,Radius:theme.RadiusSmall,Font:theme.FontMono,Heading:theme.FontSans}).Dark()
+ want := (theme.Config{Preset:theme.Preset{Base:theme.BaseOlive,Accent:theme.AccentCyan,Style:theme.StyleRhea},Chart:theme.AccentAmber,Radius:theme.RadiusSmall,Font:theme.FontMono,Heading:theme.FontSans,MenuAccent:theme.MenuAccentBold,MenuColor:theme.MenuColorInverted}).Dark()
+ if got.Accent != got.Primary { panic("exported configuration lost its bold menus") }
  if got != want { panic("exported configuration changed the theme") }
  zero := %s
  if zero != (theme.Preset{}).Light() { panic("zero export changed the preset") }
  interTheme := %s
  if interTheme != (theme.Config{Font:theme.FontInter,Heading:theme.FontInter}).Light() { panic("Inter export changed the font") }
+ inverted := %s
+ if inverted.Menu().Bg != (theme.Preset{}).Dark().Bg || inverted.Bg != (theme.Preset{}).Light().Bg { panic("inverted export lost its dark menus") }
  fmt.Print("ok")
-}`, code, (theme.Config{}).GoCode(false), (theme.Config{Font: theme.FontInter, Heading: theme.FontInter}).GoCode(false))
+}`, code, (theme.Config{}).GoCode(false), (theme.Config{Font: theme.FontInter, Heading: theme.FontInter}).GoCode(false),
+		(theme.Config{MenuColor: theme.MenuColorInverted}).GoCode(false))
 	if _, err := parser.ParseFile(token.NewFileSet(), "export.go", source, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -199,5 +279,16 @@ func TestConfigInterIsExplicitAndPreservesDefaultRecipe(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("Inter missing from font choices")
+	}
+}
+
+func TestConfigGeistReachesBodyHeadingAndCSS(t *testing.T) {
+	t.Parallel()
+	got := (theme.Config{Font: theme.FontGeist, Heading: theme.FontGeistMono}).Dark()
+	if got.Text.Font != geist.Font() || got.Title.Font != geist.Mono() || got.Heading.Font != geist.Mono() {
+		t.Fatal("Geist did not reach body and heading styles")
+	}
+	if !slices.Contains(theme.Fonts(), theme.FontGeist) || !slices.Contains(theme.Fonts(), theme.FontGeistMono) {
+		t.Fatal("Geist missing from font choices")
 	}
 }
