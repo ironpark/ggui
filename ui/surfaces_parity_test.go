@@ -203,3 +203,56 @@ func TestTabsLineBarHangsOffTheTriggersPaddingBox(t *testing.T) {
 		t.Fatalf("the vertical bar is at %v, want %v", got, want)
 	}
 }
+
+// An item given an action is shadcn's Item rendered as a link: the Muted
+// surface eased in under the pointer over 100ms, the pointer cursor, a
+// link named by the title that Enter runs, while its own Action button
+// keeps its click. An item with no action takes no input at all.
+func TestItemWithAnActionIsALinkAndOneWithoutTakesNoInput(t *testing.T) {
+	t.Parallel()
+	taps, runs := 0, 0
+	plain := Item("Backups", "Last run 2 hours ago")
+	link := Item("Changelog", "What is new").Action(Button("Run", func() { runs++ })).OnTap(func() { taps++ })
+	a, b := &placed{Widget: plain}, &placed{Widget: link}
+	p := ggui.NewProbe(ggui.Column(a, b).Align(ggui.AlignStretch), ggui.Sz(320, 300))
+	defer p.Close()
+	p.Frame()
+	p.Move(center(a.at))
+	p.Frame()
+	if p.Cursor() == ggui.CursorShapePointer || plain.Hovered {
+		t.Fatal("an item with no action took the pointer")
+	}
+	if _, ok := p.FindRole(ggui.RoleLink, "Backups"); ok {
+		t.Fatal("an item with no action is a link")
+	}
+	at := ggui.Pt(b.at.Origin.X+20, b.at.Origin.Y+b.at.Size.H/2)
+	p.Move(at)
+	p.Frame()
+	p.Advance(link.theme.MotionFast / 3)
+	p.Frame()
+	if k := link.hover; !(k > 0 && k < 1) || p.Cursor() != ggui.CursorShapePointer {
+		t.Fatalf("50ms in the row is %v onto its hover surface with cursor %v, want it easing under a pointer cursor", k, p.Cursor())
+	}
+	p.Advance(link.theme.MotionFast)
+	p.Frame()
+	if link.hover != 1 {
+		t.Fatalf("the settled row is %v onto its hover surface", link.hover)
+	}
+	p.Click(at)
+	if f, ok := p.FindRole(ggui.RoleLink, "Changelog"); !ok || f.Rect != b.at {
+		t.Fatalf("the row is not a link named by its title: %v %v", f, ok)
+	}
+	p.Tap("Run")
+	if taps != 1 || runs != 1 {
+		t.Fatalf("a click on the row and one on its button ran the row %d times and the button %d, want 1 and 1", taps, runs)
+	}
+	p.Type(ggui.Mods{}, ggui.KeyTab)
+	p.Frame()
+	if !link.Focused || !link.FocusVisible {
+		t.Fatal("Tab did not bring the focus to the row")
+	}
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
+	if taps != 2 {
+		t.Fatalf("Enter on the focused row ran it %d times in all, want 2", taps)
+	}
+}
