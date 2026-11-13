@@ -164,7 +164,9 @@ See [forms](forms.md), [navigation](data-and-navigation.md), and
   typed letter has moved to a row; opened from the keyboard, all three start on
   their first row.
 - A `Command`'s highlight stops at the first and last match instead of wrapping;
-  `.Loop(true)` restores wrapping. Its search icon leads the field.
+  `.Loop(true)` restores wrapping. Its search icon leads the field. A query
+  matches what it abbreviates rather than only what contains it, and lists the
+  closer matches first, so a filtered list is not in the order it was given.
 - The theme's `Heading` is 16px medium (was 18px semibold), so dialog, sheet and
   card titles are smaller.
 - `Input` is translucent: clear in a light Nova theme and `--input` at 30% in a

@@ -98,7 +98,10 @@ type CommandWidget struct {
 // list scrolls: 288 with the padding around them.
 const commandListHeight = 276
 
-// Command filters labels and Keywords by case-insensitive substring. Up/Down
+// Command keeps the entries whose label and Keywords the query abbreviates,
+// as cmdk does: its letters in their order, in either case, so "tdt" finds
+// "Toggle dark theme". The closer matches come first, inside each group and
+// group by group, and the first of them is highlighted. Up/Down
 // move through enabled matches and stop at the ends unless Loop is set, Home
 // and End go to the first and last, and Enter runs the highlighted action.
 // IME composition and the other editing keys stay with TextInput.
@@ -240,6 +243,19 @@ func (c *CommandWidget) filter() {
 	c.lastQuery = query
 	c.matched = c.matched[:0]
 	c.highlight = -1
+	if query != "" && !c.menuRows {
+		// A palette finds what the query abbreviates, best match first; a
+		// combobox's list, below, keeps what contains it, in its order.
+		c.matched = append(c.matched, c.rank(strings.TrimSpace(c.query.Get()))...)
+		for _, i := range c.matched {
+			if !c.entries[i].disabled {
+				c.highlight = i
+				break
+			}
+		}
+		c.offset.Set(0)
+		return
+	}
 	for i, e := range c.entries {
 		if e.line {
 			// A separator divides the whole list, not what a query left of it.
