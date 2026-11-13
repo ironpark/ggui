@@ -85,11 +85,12 @@ func track(out *shaping.Output, spacing fixed.Int26_6) {
 	for i := range out.Glyphs {
 		g := &out.Glyphs[i]
 		cluster += g.Advance
-		if i+1 < len(out.Glyphs) && out.Glyphs[i+1].ClusterIndex == g.ClusterIndex {
+		if i+1 < len(out.Glyphs) && out.Glyphs[i+1].TextIndex() == g.TextIndex() {
 			continue
 		}
 		if cluster != 0 {
 			g.Advance += spacing
+			//lint:ignore SA1019 the shaper keeps the old field level with Advance
 			g.XAdvance += spacing
 		}
 		cluster = 0
