@@ -378,3 +378,27 @@ func TestMenubarCrossesTheMenuLeftWithTheMenuMovedTo(t *testing.T) {
 		t.Fatalf("settled, menu %d is still leaving (arriving %v, open %v)", bar.left, bar.arriving, bar.popup.IsOpen())
 	}
 }
+
+// The navigation panel leaves as it came, at data-ending-style:scale-90:
+// its own scale runs back down over the 150ms the popup fades it in.
+func TestNavigationMenuPanelScalesDownAsItLeaves(t *testing.T) {
+	t.Parallel()
+	nav := NavigationMenu(NavigationMenuItem("Products", ggui.Column(NavigationMenuLink("Editor", nil))))
+	p := ggui.NewProbe(ggui.Column(nav), ggui.Sz(500, 300))
+	defer p.Close()
+	p.Tap("Products")
+	p.Frame()
+	p.Advance(time.Second)
+	p.Frame()
+	if got := nav.enter.Value(ggui.FrameTime()); got != 1 {
+		t.Fatalf("the settled panel is %v of the way to its size", got)
+	}
+	p.Move(ggui.Pt(490, 290))
+	nav.popup.Hide()
+	p.Frame()
+	p.Advance(navigationMenuExit / 2)
+	p.Frame()
+	if got := nav.enter.Value(ggui.FrameTime()); !(got > 0 && got < 1) || nav.popup.IsOpen() {
+		t.Fatalf("75ms after closing the panel is %v of the way to its size (open %v), want it on its way down", got, nav.popup.IsOpen())
+	}
+}
