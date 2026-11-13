@@ -36,7 +36,8 @@ type InputGroupWidget struct {
 	rowRect           ggui.Rect       // the editor's row, from the group's origin
 	topRect, botRect  ggui.Rect
 	motion            time.Duration
-	styledRadius      float64 // the radius the styled buttons were last given
+	sides             JoinedSides // the sides a ButtonGroup joins it on
+	styledRadius      float64     // the radius the styled buttons were last given
 	effectiveDisabled bool
 	invalid           bool
 	focused           func() bool
@@ -189,6 +190,7 @@ func (g *InputGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := uitheme.Of(env)
 	g.theme = t
 	g.motion = env.Motion(t.MotionFast)
+	g.sides, env = takeJoinedSides(env)
 	g.invalid, _ = env.Get(fieldInvalid)
 	if g.row == nil {
 		parts := make([]ggui.Widget, 0, 3)
@@ -290,9 +292,7 @@ func (g *InputGroupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	} else {
 		dst.Describe(r, g)
 	}
-	fill, border := fieldTones(dst, g.Anchor(r), t, r, t.Radius, fieldState{g.hasFocus(), g.invalid, g.effectiveDisabled}, g.motion)
-	dst.FillRoundRect(r, t.Radius, fill)
-	dst.StrokeRoundRect(r, t.Radius, t.BorderWidth, border)
+	fieldSurface(dst, g.Anchor(r), t, r, t.Radius, fieldState{g.hasFocus(), g.invalid, g.effectiveDisabled}, g.motion, g.sides.within(dst))
 	place := func(at ggui.Rect) ggui.Rect { at.Origin = at.Origin.Add(r.Origin); return at }
 	if g.top != nil {
 		dst.Paint(g.top, place(g.topRect))

@@ -159,10 +159,13 @@ func (g *ButtonGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 }
 
 // grows reports whether child takes the width the others leave: a text
-// field in a horizontal group.
+// field, a number input or an input group in a horizontal group.
 func (g *ButtonGroupWidget) grows(child ggui.Widget) bool {
-	_, field := child.(*TextFieldWidget)
-	return field && !g.vertical
+	switch child.(type) {
+	case *TextFieldWidget, *NumberInputWidget, *InputGroupWidget:
+		return !g.vertical
+	}
+	return false
 }
 
 // Paint implements ggui.Widget. The strip is one group, so a screen reader
@@ -261,7 +264,8 @@ func ButtonGroupTextOf(child ggui.Widget) *ButtonGroupTextWidget {
 // Layout implements ggui.Widget.
 func (x *ButtonGroupTextWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := uitheme.Of(env)
-	x.theme, x.sides, x.pad = t, joinedSidesOf(env), t.ButtonPad.Left
+	x.theme, x.pad = t, t.ButtonPad.Left
+	x.sides, env = takeJoinedSides(env)
 	inner := ggui.Loose(ggui.Sz(max(c.MaxW-2*x.pad, 0), max(c.MaxH-2*t.BorderWidth, 0)))
 	x.size = x.child.Layout(inner, env.WithText(t.Text.Merge(t.Label).Merge(ggui.TextStyle{Color: t.Fg})))
 	return c.Constrain(ggui.Sz(x.size.W+2*x.pad, x.size.H+2*t.BorderWidth))

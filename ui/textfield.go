@@ -21,6 +21,7 @@ type TextFieldWidget struct {
 	plain            bool
 	invalid          bool
 	motion           time.Duration // MotionFast, or zero under reduced motion
+	sides            JoinedSides   // the sides a ButtonGroup joins it on
 }
 
 // TextField creates a text field bound to value.
@@ -155,6 +156,7 @@ func (f *TextFieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := uitheme.Of(env)
 	f.theme = t
 	f.motion = env.Motion(t.MotionFast)
+	f.sides, env = takeJoinedSides(env)
 	f.invalid, _ = env.Get(fieldInvalid)
 	if f.plain {
 		// A bare editor is padded by a field's side padding above and
@@ -189,7 +191,7 @@ func (f *TextFieldWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	if !f.plain {
 		at := ggui.Anchor{Rect: r, ID: f.input.HitID()}
-		fieldChrome(dst, at, f.box, f.theme, r, f.theme.Radius, fieldState{f.input.Focused(), f.invalid, inert}, f.motion)
+		fieldChromeJoined(dst, at, f.box, f.theme, r, f.theme.Radius, fieldState{f.input.Focused(), f.invalid, inert}, f.motion, f.sides.within(dst))
 	}
 	dst.Paint(f.box, r)
 }

@@ -203,6 +203,7 @@ func TestJoinedControlsLeaveACachedParentHeld(t *testing.T) {
 		"ToggleGroup":        ui.ToggleGroup(ggui.State("a")).Options(options),
 		"ToggleGroup joined": ui.ToggleGroup(ggui.State("a")).Options(options).Outline().Spacing(0).Size(ui.ButtonSmall),
 		"KbdGroup":           ui.KbdGroup(ui.Kbd("Ctrl"), ui.Kbd("K")),
+		"ButtonGroup fields": ui.ButtonGroup(ui.ButtonGroupText("https://"), ui.TextField(ggui.State("")).Name("Host"), ui.NumberInput(ggui.State(1.0)), ui.Button("Go", nil).Outline()),
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -223,5 +224,40 @@ func TestJoinedControlsLeaveACachedParentHeld(t *testing.T) {
 				t.Fatalf("a sibling under the same Cached was laid out %d times in 5 frames that changed nothing in it", got)
 			}
 		})
+	}
+}
+
+// A field in a group shares the spare width as a text field does, whether
+// it is a text field, a number input or an input group.
+func TestButtonGroupGivesEveryFieldTheSpareWidth(t *testing.T) {
+	t.Parallel()
+	for name, field := range map[string]ggui.Widget{
+		"NumberInput": ui.NumberInput(ggui.State(1.0)).Name("Count"),
+		"InputGroup":  ui.InputGroup(ui.TextField(ggui.State(""))).Leading(ggui.Text("$")).Name("Amount"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			g := ui.ButtonGroup(field, ui.Button("Open", nil).Outline())
+			p := ggui.NewProbe(ggui.Row(ggui.Box(g).Width(400), ggui.Spacer()), ggui.Sz(500, 100))
+			defer p.Close()
+			open := find(t, p, ggui.RoleButton, "Open").Rect
+			if end := open.Origin.X + open.Size.W; end != 400 {
+				t.Fatalf("the strip ends at %v, want the 400 its parent gave it", end)
+			}
+		})
+	}
+}
+
+// The sides are the field's: a button the field holds is not joined, so
+// an input group in a group keeps its own button round.
+func TestJoinedSidesStopAtTheControl(t *testing.T) {
+	t.Parallel()
+	inner := &sidesRecorder{size: ggui.Sz(20, 20)}
+	g := ui.ButtonGroup(ui.Button("a", nil), ui.InputGroup(ggui.TextInput(ggui.State(""))).Trailing(inner), ui.Button("b", nil))
+	p := ggui.NewProbe(g, ggui.Sz(400, 100))
+	defer p.Close()
+	p.Frame()
+	if inner.sides.Any() {
+		t.Fatalf("a part inside a joined field was laid out as joined on %+v", inner.sides)
 	}
 }

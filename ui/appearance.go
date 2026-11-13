@@ -79,6 +79,37 @@ func fieldChrome(dst *ggui.Canvas, at ggui.Anchor, b *ggui.BoxWidget, t *uitheme
 	b.Fill(fill).Border(t.BorderWidth, border)
 }
 
+// fieldChromeJoined is fieldChrome for a field that may sit in a
+// ButtonGroup: on the sides joined to a neighbour its corners are square,
+// its border gives way to the neighbour's, and its halo, which the group
+// draws above its children, runs past the seam. With no side joined it is
+// fieldChrome.
+func fieldChromeJoined(dst *ggui.Canvas, at ggui.Anchor, b *ggui.BoxWidget, t *uitheme.Theme, r ggui.Rect, radius float64, s fieldState, motion time.Duration, sides JoinedSides) {
+	if !sides.Any() {
+		fieldChrome(dst, at, b, t, r, radius, s, motion)
+		return
+	}
+	b.Fill(nil).Border(0, nil)
+	fieldSurface(dst, at, t, r, radius, s, motion, sides)
+}
+
+// fieldSurface paints a field's fill, border and halo in r itself, for a
+// field that draws its own surface rather than through a box, following
+// the sides it is joined on.
+func fieldSurface(dst *ggui.Canvas, at ggui.Anchor, t *uitheme.Theme, r ggui.Rect, radius float64, s fieldState, motion time.Duration, sides JoinedSides) {
+	fill, border, halo, ringed := fieldToneParts(dst, at, t, s, motion)
+	paintJoinedBox(dst, r, radius, sides, fill, t.BorderWidth, border)
+	if !ringed {
+		return
+	}
+	f := joinedFocus{on: true, r: r, radius: radius, sides: sides, width: t.BorderWidth, line: border, halo: halo}
+	if g, ok := dst.Enclosing().(*ButtonGroupWidget); ok && sides.Any() {
+		g.focus = f
+		return
+	}
+	f.paint(dst)
+}
+
 // fieldTones draws the halo around a field in r and returns the fill and
 // the border its state calls for, easing between states over motion: the
 // border moves from InputBorder to the Ring while the editor has the
@@ -87,6 +118,16 @@ func fieldChrome(dst *ggui.Canvas, at ggui.Anchor, b *ggui.BoxWidget, t *uitheme
 // retained under at and rest once they arrive, so an idle field asks for
 // no frame.
 func fieldTones(dst *ggui.Canvas, at ggui.Anchor, t *uitheme.Theme, r ggui.Rect, radius float64, s fieldState, motion time.Duration) (fill, border color.Color) {
+	fill, border, halo, ringed := fieldToneParts(dst, at, t, s, motion)
+	if ringed {
+		haloStroke(dst, r, radius, halo)
+	}
+	return fill, border
+}
+
+// fieldToneParts is fieldTones without the drawing: the fill, the border,
+// and the halo with whether there is one to draw.
+func fieldToneParts(dst *ggui.Canvas, at ggui.Anchor, t *uitheme.Theme, s fieldState, motion time.Duration) (fill, border, halo color.Color, ringed bool) {
 	focus := dst.Ease(at, fieldFocusSlot, pick(s.focused && !s.inert, 1.0, 0.0), motion)
 	invalid := dst.Ease(at, fieldInvalidSlot, pick(s.invalid, 1.0, 0.0), motion)
 	border = mix(mix(t.InputBorder, t.Ring, focus), invalidBorder(t), invalid)
@@ -95,9 +136,9 @@ func fieldTones(dst *ggui.Canvas, at ggui.Anchor, t *uitheme.Theme, r ggui.Rect,
 	} else if focus > 0 || invalid > 0 {
 		// An invalid field shows the destructive halo whether or not it
 		// is focused, as aria-invalid outranks focus-visible in shadcn.
-		haloStroke(dst, r, radius, mix(fade(t.Halo(t.Ring), focus), t.Halo(destructiveRing(t)), invalid))
+		halo, ringed = mix(fade(t.Halo(t.Ring), focus), t.Halo(destructiveRing(t)), invalid), true
 	}
-	return fieldFill(t, s.inert), border
+	return fieldFill(t, s.inert), border, halo, ringed
 }
 
 // haloStroke draws the three-pixel halo just outside r in col, as it is.

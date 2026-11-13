@@ -35,6 +35,17 @@ func joinedSidesOf(env ggui.Env) JoinedSides {
 	return j
 }
 
+// takeJoinedSides is joinedSidesOf, and env without them for the control's
+// own parts: the sides are the control's, and a button inside a field the
+// group joins is not itself joined.
+func takeJoinedSides(env ggui.Env) (JoinedSides, ggui.Env) {
+	j, ok := env.Get(JoinedSidesKey)
+	if !ok || !j.Any() {
+		return j, env
+	}
+	return j, env.With(JoinedSidesKey, JoinedSides{})
+}
+
 // within is j while dst paints a child of a ButtonGroup, and no sides
 // anywhere else: in a popup, which is laid out under the environment of
 // the child that opened it.
