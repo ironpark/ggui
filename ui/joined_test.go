@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"image/color"
 	"testing"
+	"time"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui/icons"
@@ -172,7 +174,7 @@ func TestButtonGroupDrawsTheFocusedChildsRingItself(t *testing.T) {
 	p := ggui.NewProbe(ggui.Column(g, alone), ggui.Sz(400, 200))
 	defer p.Close()
 	p.Frame()
-	if g.focus.on {
+	if len(g.rings) != 0 {
 		t.Fatal("a ring with nothing focused")
 	}
 	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyTab)
@@ -181,13 +183,62 @@ func TestButtonGroupDrawsTheFocusedChildsRingItself(t *testing.T) {
 	if !ok {
 		t.Fatal("no Two")
 	}
-	if want := (JoinedSides{Left: true, Right: true}); !g.focus.on || g.focus.sides != want || g.focus.r != two.Rect {
-		t.Fatalf("ring %+v, want one around Two at %+v joined on both sides", g.focus, two.Rect)
+	ring, ok := g.ringAt(two.Rect)
+	if want := (JoinedSides{Left: true, Right: true}); !ok || ring.sides != want {
+		t.Fatalf("ring %+v, want one around Two at %+v joined on both sides", ring, two.Rect)
+	}
+	p.Advance(time.Second)
+	p.Advance(0)
+	if len(g.rings) != 1 {
+		t.Fatalf("%d rings once focus has settled on Two, want its own alone", len(g.rings))
 	}
 	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyTab)
-	p.Frame()
-	if g.focus.on {
+	p.Advance(0) // the frame the ring starts to go in
+	p.Advance(time.Second)
+	p.Advance(0)
+	if len(g.rings) != 0 {
 		t.Fatal("the ring stayed after focus left the group")
+	}
+}
+
+// A joined button's ring eases out as it eased in: shadcn's button is
+// transition-all in a group as out of one. The group draws the ring of the
+// button that lost the focus, fading, beside the one coming in.
+func TestButtonGroupRingEasesOut(t *testing.T) {
+	t.Parallel()
+	g := ButtonGroup(Button("One", nil).Outline(), Button("Two", nil).Outline())
+	p := ggui.NewProbe(ggui.Column(g).Align(ggui.AlignStart), ggui.Sz(400, 120))
+	defer p.Close()
+	th := uitheme.Default()
+	alpha := func(c color.Color) uint32 { _, _, _, a := c.RGBA(); return a }
+	p.Key("tab")
+	p.Advance(0)
+	p.Advance(time.Second)
+	p.Advance(0)
+	one, _ := p.FindRole(ggui.RoleButton, "One")
+	two, _ := p.FindRole(ggui.RoleButton, "Two")
+	full, ok := g.ringAt(one.Rect)
+	if !ok || len(g.rings) != 1 {
+		t.Fatalf("%d rings with One focused, want its own", len(g.rings))
+	}
+	p.Key("tab")
+	p.Advance(0)
+	p.Advance(th.MotionFast / 2)
+	out, leaving := g.ringAt(one.Rect)
+	in, arriving := g.ringAt(two.Rect)
+	if !leaving || !arriving {
+		t.Fatalf("half way through MotionFast the group draws %d rings, want One's going and Two's coming", len(g.rings))
+	}
+	if a := alpha(out.line); a == 0 || a >= alpha(full.line) {
+		t.Fatalf("One's ring is at %v of %v half way out, want between", a, alpha(full.line))
+	}
+	if a := alpha(in.line); a == 0 || a >= alpha(full.line) {
+		t.Fatalf("Two's ring is at %v of %v half way in, want between", a, alpha(full.line))
+	}
+	p.Advance(time.Second)
+	p.Advance(0)
+	if _, still := g.ringAt(one.Rect); still || len(g.rings) != 1 {
+		t.Fatalf("%d rings after the motion, want Two's alone", len(g.rings))
 	}
 }
 
@@ -212,13 +263,13 @@ func TestSelectJoinsAButtonGroup(t *testing.T) {
 	if field.Rect.Size.H != button.Rect.Size.H || field.Rect.Origin.X+field.Rect.Size.W != button.Rect.Origin.X {
 		t.Fatalf("select %v and button %v do not meet at one height", field.Rect, button.Rect)
 	}
-	if g.focus.on {
+	if len(g.rings) != 0 {
 		t.Fatal("a ring with nothing focused")
 	}
 	p.Key("tab")
 	p.Frame()
-	if !g.focus.on || g.focus.r != field.Rect || g.focus.sides != unit.sides {
-		t.Fatalf("ring %+v, want the group to draw one around the select at %v", g.focus, field.Rect)
+	if ring, ok := g.ringAt(field.Rect); !ok || ring.sides != unit.sides {
+		t.Fatalf("ring %+v, want the group to draw one around the select at %v", ring, field.Rect)
 	}
 	// The list it opens is not part of the strip.
 	p.Key("space")
@@ -228,7 +279,7 @@ func TestSelectJoinsAButtonGroup(t *testing.T) {
 	}
 	p.Key("escape", "tab")
 	p.Frame()
-	if g.focus.on && g.focus.r == field.Rect {
+	if _, ok := g.ringAt(field.Rect); ok {
 		t.Fatal("the select's ring stayed after focus moved on")
 	}
 }
