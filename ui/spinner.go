@@ -17,13 +17,20 @@ type SpinnerWidget struct {
 	size    float64     // negative is the theme's IconSize
 	color   color.Color // nil is the text color around it
 	ink     color.Color // what it is painted in, from the last Layout
+	name    string      // what a screen reader calls it; empty is nothing
 	env     ggui.Env
 	reduced bool
 }
 
 // Spinner creates an indicator the size of the theme's icons, in the color
-// of the text around it. Add adjacent text to describe the operation.
-func Spinner() *SpinnerWidget { return &SpinnerWidget{size: -1} }
+// of the text around it. A screen reader reads it as a status named
+// "Loading"; add adjacent text to describe the operation to everyone.
+func Spinner() *SpinnerWidget { return &SpinnerWidget{size: -1, name: "Loading"} }
+
+// Name sets what a screen reader calls the spinner in place of "Loading":
+// the operation, or the word in another language. An empty name leaves the
+// spinner out of what is read, for one beside text that says it all.
+func (s *SpinnerWidget) Name(label string) *SpinnerWidget { s.name = label; return s }
 
 // Size sets the requested diameter in logical pixels.
 func (s *SpinnerWidget) Size(px float64) *SpinnerWidget {
@@ -75,6 +82,9 @@ func spinPhase() float64 {
 func (s *SpinnerWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if min(r.Size.W, r.Size.H) <= 0 {
 		return
+	}
+	if s.name != "" {
+		dst.Leaf(r, ggui.Node{Role: ggui.RoleStatus, Name: s.name})
 	}
 	phase := 0.0
 	if !s.reduced {
