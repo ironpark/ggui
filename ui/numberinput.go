@@ -361,7 +361,7 @@ func (s *numberStepper) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	enabled := s.n.canStep(s.dir)
 	if enabled {
 		dst.HitPointer(r, s)
-		dst.HitCursor(r, ggui.CursorShapePointer)
+		dst.HitCursor(r, ggui.CursorShapeDefault)
 		if s.Hovered {
 			dst.FillRoundRect(r, t.Radius/2, t.Accent)
 		}

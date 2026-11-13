@@ -561,7 +561,9 @@ func (s *Interactive) state() *Interactive { return s }
 // describes the control into the frame's semantics tree either way. A
 // disabled control takes no input, which is why the regions are skipped,
 // but it is still on screen and a screen reader must still read it out,
-// which is why the node is not.
+// which is why the node is not. cursor is what the pointer shows over the
+// control whatever it is painted over: one asking for CursorShapeDefault
+// inside a text field shows the arrow there, not the field's beam.
 func (s *Interactive) Hit(dst *Canvas, r Rect, h Control, cursor CursorShape) {
 	s.HitReach(dst, r, Rect{}, h, cursor)
 }
@@ -580,7 +582,7 @@ func (s *Interactive) HitReach(dst *Canvas, r, reach Rect, h Control, cursor Cur
 	}
 	// One region with all three, as the three registrations would merge
 	// into: the identity, semantics and handoff are looked up once.
-	dst.add(dst.region(r, h, hitRegion{pointer: h, key: h, cursor: cursor, reach: reach}))
+	dst.add(dst.region(r, h, hitRegion{pointer: h, key: h, cursor: cursor, arrow: cursor == CursorShapeDefault, reach: reach}))
 }
 
 // Pointer tracks hover and press and calls onTap on a left click. Press is
