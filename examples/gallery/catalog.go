@@ -70,6 +70,7 @@ var previewDetails = map[string]previewInfo{
 	"Card":                     {"Layout", "Header with an action, content and a footer, leading media, and the small size."},
 	"Form layout":              {"Inputs", "A field set with a legend, grouped select options, separators and horizontal fields."},
 	"Validation states":        {"Inputs", "Checkbox, radio, switch and select marked invalid until answered."},
+	"Choice cards":             {"Inputs", "Radio, checkbox and switch cards that are their control's label, tinted while chosen, and a field listing several errors."},
 	"Dropdown menu":            {"Navigation", "Labels, icons, shortcuts, check and radio rows, a submenu and a destructive row."},
 	"Input group":              {"Inputs", "Icons, text and badges as addons, and a multiline composer with rows above and below."},
 	"Tooltip":                  {"Feedback", "Tips on each side of their trigger and a key hint drawn as a key cap."},

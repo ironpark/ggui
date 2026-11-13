@@ -241,7 +241,7 @@ func (i *ItemWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	i.hover = 0
 	if i.onTap != nil {
 		// shadcn's [a]:hover:bg-muted, whatever the row's own surface.
-		i.hover = dst.Ease(i.Anchor(r), itemHoverSlot, pick(i.Hovered && !i.IsInert(), 1.0, 0.0), i.motion)
+		i.hover = ease(dst, t, i.Anchor(r), itemHoverSlot, pick(i.Hovered && !i.IsInert(), 1.0, 0.0), i.motion)
 	}
 	var fill color.Color
 	if i.look == itemMuted {

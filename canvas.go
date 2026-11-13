@@ -744,6 +744,11 @@ func (c *Canvas) add(h hitRegion) {
 			// so Tab can reach it and Reveal can scroll it into view.
 			h.rect = Rect{Origin: h.full.Origin}
 		}
+		// A reach is cut as the Rect is, and goes with it: a control
+		// scrolled out of a list is not hit through the list's edge.
+		if h.reach = h.reach.Intersect(c.clip); h.reach.Empty() || h.rect.Empty() {
+			h.reach = Rect{}
+		}
 	}
 	if c.space != nil && !c.space.placeRegion(&h) {
 		return

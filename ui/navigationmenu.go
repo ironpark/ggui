@@ -635,7 +635,7 @@ func (p navigationMenuPanel) Layout(c ggui.Constraints, env ggui.Env) ggui.Size 
 	}
 	t := uitheme.Of(env)
 	// shadcn's ring-1 ring-foreground/10, as every floating panel's.
-	n.chrome.Shadow(t.PanelShadow).Fill(t.Popover).Border(t.BorderWidth, fade(t.Fg, .1)).Radius(t.Radius)
+	panelShadow(n.chrome, t).Fill(t.Popover).Border(t.BorderWidth, fade(t.Fg, .1)).Radius(t.Radius)
 	// What is inside the panel opens its own popups in the theme's time.
 	env = env.With(ggui.PopupDurationKey, n.env.PopupDuration())
 	return n.chrome.Layout(c, env.With(navigationMenuOwnerKey, n))

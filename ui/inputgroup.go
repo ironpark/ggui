@@ -242,39 +242,57 @@ func (g *InputGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	tall := g.multiline || g.top != nil || g.bottom != nil
 	padY := pick(tall, t.Space, t.Space/2)
 	band := pick(tall, 0, 20+t.FieldPad.Top+t.FieldPad.Bottom-2*padY)
+	if tall && !g.multiline {
+		band = 20 // the line a field's height is made around
+	}
 	// A row of addons keeps three quarters of a Space on the editor's
 	// side, shadcn's py-1.5, and a text area its own Space of padding
 	// towards the row besides: the textarea's py-2.
-	blockPad, blockGap := t.FieldPad.Left, t.Space*.75
-	if g.multiline {
-		blockGap += t.Space
+	blockPad, addonGap := t.FieldPad.Left, t.Space*.75
+	padTop, padBottom, gapTop, gapBottom := padY, padY, addonGap+t.Space, addonGap+t.Space
+	if tall && !g.multiline {
+		// A single line stays a field's height, and its text moves away
+		// from a row of addons within it: shadcn's pt-3 on the input over
+		// a block-end addon and pb-3 under a block-start one, for the
+		// half Space it has otherwise.
+		slack := t.FieldPad.Top + t.FieldPad.Bottom
+		pt, pb := pick(g.bottom != nil, t.Space*1.5, t.Space/2), pick(g.top != nil, t.Space*1.5, t.Space/2)
+		above := (slack + pt - pb) / 2
+		below := slack - above
+		padTop, padBottom, gapTop, gapBottom = above, below, addonGap+above, addonGap+below
+		if g.top != nil {
+			padTop = t.Space
+		}
+		if g.bottom != nil {
+			padBottom = t.Space
+		}
 	}
 
 	width := max(c.MaxW-left-right, 0)
-	row := g.row.Layout(ggui.Constraints{MinW: clamp(c.MinW-left-right, 0, width), MaxW: width, MaxH: max(c.MaxH-2*padY, 0)}, env)
+	row := g.row.Layout(ggui.Constraints{MinW: clamp(c.MinW-left-right, 0, width), MaxW: width, MaxH: max(c.MaxH-padTop-padBottom, 0)}, env)
 	block := ggui.Loose(ggui.Sz(max(c.MaxW-2*blockPad, 0), c.MaxH))
 	var top, bottom ggui.Size
-	want := ggui.Sz(left+row.W+right, 2*padY+max(row.H, band))
+	want := ggui.Sz(left+row.W+right, padTop+padBottom+max(row.H, band))
 	if g.top != nil {
 		top = g.top.Layout(block, g.addonEnv)
-		want.W, want.H = max(want.W, top.W+2*blockPad), want.H+top.H+blockGap
+		want.W, want.H = max(want.W, top.W+2*blockPad), want.H+top.H+gapTop
 	}
 	if g.bottom != nil {
 		bottom = g.bottom.Layout(block, g.addonEnv)
-		want.W, want.H = max(want.W, bottom.W+2*blockPad), want.H+bottom.H+blockGap
+		want.W, want.H = max(want.W, bottom.W+2*blockPad), want.H+bottom.H+gapBottom
 	}
 	size := c.Constrain(want)
 	// The rows of addons keep their heights at the two ends, and the
 	// editor's row is centered in what is left between them.
-	y, rest := padY, size.H-2*padY
+	y, rest := padTop, size.H-padTop-padBottom
 	rtl := env.Direction() == ggui.DirRTL
 	if g.top != nil {
 		g.topRect = ggui.Rct(ggui.Pt(pick(rtl, size.W-blockPad-top.W, blockPad), y), top)
-		y, rest = y+top.H+blockGap, rest-top.H-blockGap
+		y, rest = y+top.H+gapTop, rest-top.H-gapTop
 	}
 	if g.bottom != nil {
-		g.botRect = ggui.Rct(ggui.Pt(pick(rtl, size.W-blockPad-bottom.W, blockPad), size.H-padY-bottom.H), bottom)
-		rest -= bottom.H + blockGap
+		g.botRect = ggui.Rct(ggui.Pt(pick(rtl, size.W-blockPad-bottom.W, blockPad), size.H-padBottom-bottom.H), bottom)
+		rest -= bottom.H + gapBottom
 	}
 	g.rowRect = ggui.Rct(ggui.Pt(left, y+max(rest-row.H, 0)/2), row)
 

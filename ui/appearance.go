@@ -2,6 +2,7 @@ package ui
 
 import (
 	"image/color"
+	"math"
 	"time"
 
 	"github.com/ironpark/ggui"
@@ -16,7 +17,44 @@ import (
 func menuSurface(content ggui.Widget) ggui.Widget { return ggui.WithEnv(uitheme.MenuEnv, content) }
 
 func panelBox(b *ggui.BoxWidget, t *uitheme.Theme) *ggui.BoxWidget {
-	return b.Shadow(t.PanelShadow).Fill(t.Popover).Border(t.BorderWidth, fade(t.Fg, .1)).Radius(t.Radius).Padding(t.PanelPad)
+	return panelShadow(b, t).Fill(t.Popover).Border(t.BorderWidth, fade(t.Fg, .1)).Radius(t.Radius).Padding(t.PanelPad)
+}
+
+// panelShadow gives b the shadow of a popup, shadcn's shadow-md: a select
+// list, a combobox list, a menu, a popover, a hover card. It is the theme's
+// PanelShadow over its PanelContact, the two layers Tailwind draws.
+func panelShadow(b *ggui.BoxWidget, t *uitheme.Theme) *ggui.BoxWidget {
+	layers := [2]ggui.ShadowStyle{t.PanelShadow, t.PanelContact}
+	return b.Shadow(layers[:]...)
+}
+
+// overlayShadow gives b the shadow of what floats higher, shadcn's
+// shadow-lg: a submenu, a sheet. It is the theme's OverlayShadow over its
+// OverlayContact.
+func overlayShadow(b *ggui.BoxWidget, t *uitheme.Theme) *ggui.BoxWidget {
+	layers := [2]ggui.ShadowStyle{t.OverlayShadow, t.OverlayContact}
+	return b.Shadow(layers[:]...)
+}
+
+// paintShadows draws the layers of a shadow under r, for a surface that is
+// painted rather than a Box.
+func paintShadows(dst *ggui.Canvas, r ggui.Rect, radius float64, layers ...ggui.ShadowStyle) {
+	for _, s := range layers {
+		if s.Color != nil {
+			dst.Shadow(r, radius, s)
+		}
+	}
+}
+
+// paintedBaseline is where the glyphs of a line of text stand, for a line
+// whose box starts at top with the ascent layout reports, at the canvas's
+// scale. It is not quite top+ascent: text is drawn on whole pixels, the
+// line's top rounded to one and the baseline's place under it cut down to
+// one. A rule drawn a set distance from the letters, as an underline is,
+// starts from here; at top+ascent it would stand up to a pixel and a bit
+// further off, by a different amount from one position to the next.
+func paintedBaseline(top, ascent, scale float64) float64 {
+	return (math.Round(top*scale) + math.Floor(ascent*scale)) / scale
 }
 
 // fieldBoxShape gives a field's box what its size depends on, the padding
@@ -87,7 +125,7 @@ func fieldSurface(dst *ggui.Canvas, at ggui.Anchor, t *uitheme.Theme, r ggui.Rec
 	}
 	f := joinedFocus{on: true, r: r, radius: radius, sides: sides, width: t.BorderWidth, line: border, halo: halo}
 	if g, ok := dst.Enclosing().(*ButtonGroupWidget); ok && sides.Any() {
-		g.focus = f
+		g.ring(f)
 		return
 	}
 	f.paint(dst)

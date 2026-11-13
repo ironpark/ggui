@@ -187,6 +187,26 @@ ui.FieldSet(ui.FieldGroup(
 )).Legend("Preferences").Description("How the workspace reaches you.")
 ```
 
+`.Card()` makes a field a choice card, shadcn's `FieldLabel` around a `Field`:
+a bordered box that is the control's label, so a click anywhere in it acts on
+the control. It is tinted while the control is checked and under the pointer,
+and carries the keyboard's focus ring in place of the control's own.
+`ui.FieldCard(control, content)` is the same around content of your own, built
+from `ui.FieldContent(children...)`, `ui.FieldTitle(text)` and
+`ui.FieldDescription(text)`; `.ControlFirst()` puts the control before it.
+
+```go
+ui.Field("Kubernetes", ui.Radio(target, "k8s", "")).Help("Run GPU workloads on a K8s cluster.").Card()
+ui.FieldCard(ui.Checkbox(digest, ""), ui.FieldContent(
+	ui.FieldTitle("Weekly digest"),
+	ui.FieldDescription("A summary of activity, every Monday."),
+)).ControlFirst()
+```
+
+`.Errors(messages)` and `.BindErrors(reader)` take every error a field holds
+at once. Empty and repeated messages are dropped; one that is left reads as
+`.Error` does and several as a bulleted list.
+
 ### Committing an edit
 
 A field that should change the model only once the user is done with it,
