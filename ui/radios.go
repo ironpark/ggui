@@ -19,12 +19,12 @@ type RadiosWidget[T comparable] struct {
 
 	props property.Owner
 	ggui.Interactive
-	radios     []*RadioWidget[T]
-	row        *ggui.RowWidget
-	column     *ggui.ColumnWidget
-	horizontal bool // set by Horizontal
-	gap        float64
-	gapSet     bool
+	radios      []*RadioWidget[T]
+	row         *ggui.RowWidget
+	column      *ggui.ColumnWidget
+	horizontal  bool // set by Horizontal
+	gap         float64
+	gapSet      bool
 	invalidProp property.Value[bool] // set by Invalid or BindInvalid
 }
 
