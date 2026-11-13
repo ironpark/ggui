@@ -385,11 +385,9 @@ func (s *ScrollWidget) paintBar(dst *Canvas, r Rect) {
 		s.dragging, s.thumbHovered = false, false
 		return
 	}
-	const margin, hitWidth = 2.0, 10.0
 	style := s.barEnv.ScrollStyle()
 	active := s.thumbHovered || s.dragging
 	amount := dst.Ease(Anchor{Rect: r, ID: scrollThumb{s}.HitID()}, scrollThumbHoverSlot, pick(active, 1.0, 0.0), s.barEnv.Motion(style.Duration))
-	thickness := 3 + 1.5*amount
 	fill := bar
 	if amount > 0 {
 		// Keep the thumb close to its resting gray, including while dragging.
@@ -398,17 +396,29 @@ func (s *ScrollWidget) paintBar(dst *Canvas, r Rect) {
 	thumb := s.thumbLength()
 	at := (track - thumb) * s.position() / s.maxOffset()
 	var visual Rect
-	if s.horizontal {
-		visual = Rct(Pt(r.Origin.X+at, r.Origin.Y+r.Size.H-thickness-margin), Sz(thumb, thickness))
-		s.thumbHit = Rct(Pt(r.Origin.X+at, r.Origin.Y+max(0, r.Size.H-hitWidth)), Sz(thumb, min(hitWidth, r.Size.H)))
-	} else {
-		visual = Rct(Pt(r.Origin.X+r.Size.W-thickness-margin, r.Origin.Y+at), Sz(thickness, thumb))
-		s.thumbHit = Rct(Pt(r.Origin.X+max(0, r.Size.W-hitWidth), r.Origin.Y+at), Sz(min(hitWidth, r.Size.W), thumb))
-	}
+	visual, s.thumbHit = style.thumbRects(r, s.horizontal, at, thumb, amount)
 	// Register after the content so grabbing the thumb never activates a row.
 	dst.HitPointer(s.thumbHit, scrollThumb{s})
 	dst.HitCursor(s.thumbHit, CursorShapePointer)
-	dst.Clip(r).FillRoundRect(visual, thickness/2, fill)
+	dst.Clip(r).FillRoundRect(visual, min(visual.Size.W, visual.Size.H)/2, fill)
+}
+
+// thumbRects places a thumb of length thumb, at along the bar of a scroll
+// painted in r: where it is drawn, amount of the way from its resting
+// thickness to its hovered one, and where it is grabbed, which is across at
+// least 10 logical pixels however thin it is drawn. s is a resolved style,
+// as Env.ScrollStyle returns.
+func (s ScrollStyle) thumbRects(r Rect, horizontal bool, at, thumb, amount float64) (visual, hit Rect) {
+	thickness := s.Thickness + (s.HoverThickness-s.Thickness)*amount
+	hitWidth := max(10, max(s.Thickness, s.HoverThickness)+2*s.Margin)
+	if horizontal {
+		visual = Rct(Pt(r.Origin.X+at, r.Origin.Y+r.Size.H-thickness-s.Margin), Sz(thumb, thickness))
+		hit = Rct(Pt(r.Origin.X+at, r.Origin.Y+max(0, r.Size.H-hitWidth)), Sz(thumb, min(hitWidth, r.Size.H)))
+		return visual, hit
+	}
+	visual = Rct(Pt(r.Origin.X+r.Size.W-thickness-s.Margin, r.Origin.Y+at), Sz(thickness, thumb))
+	hit = Rct(Pt(r.Origin.X+max(0, r.Size.W-hitWidth), r.Origin.Y+at), Sz(min(hitWidth, r.Size.W), thumb))
+	return visual, hit
 }
 
 // A separate handler keeps the thumb from being treated as a second scroll
