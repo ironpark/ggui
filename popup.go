@@ -42,6 +42,7 @@ type PopupWidget struct {
 	alignOffset     float64
 	still           bool // Animated(false): no entrance or exit
 	ownWidth        bool // MatchAnchorWidth(false): below or above, the content keeps its width
+	keepFocus       bool // FocusOnOpen(false): opening leaves focus where it is
 	anchorRect      Rect
 	paintedOpen     bool
 	hadContentFocus bool
@@ -274,6 +275,15 @@ func (p *PopupWidget) SetOpen(v bool) {
 	}
 }
 
+// FocusOnOpen says whether a nonmodal popup moves focus into its content
+// as it opens; it does by default. A popup that opens under an editor the
+// user goes on typing into, as a combobox's list does under its input,
+// turns it off and leaves focus in the editor. FocusContent still moves it.
+func (p *PopupWidget) FocusOnOpen(v bool) *PopupWidget {
+	p.keepFocus = !v
+	return p
+}
+
 // FocusContent requests the first focusable content control on the next paint.
 // This is useful when a nonmodal popup switches between different panels.
 func (p *PopupWidget) FocusContent() *PopupWidget {
@@ -350,7 +360,7 @@ func (p *PopupWidget) Paint(dst *Canvas, r Rect) {
 	if p.nonmodal {
 		if open && !p.paintedOpen {
 			p.opener = dst.fs().focusKey
-			p.focusContent = true
+			p.focusContent = !p.keepFocus
 			p.hadContentFocus = false
 		}
 		inside := p.ownsFocus(dst)

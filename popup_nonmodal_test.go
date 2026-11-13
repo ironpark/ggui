@@ -36,3 +36,28 @@ func TestPopupRejectedControlledCloseDoesNotNotify(t *testing.T) {
 		t.Fatalf("rejected close: open=%v requests=%d closes=%d", p.IsOpen(), requests, closes)
 	}
 }
+
+// A nonmodal popup that does not focus on open leaves the keyboard in the
+// editor that opened it, as a combobox's list leaves it in its input.
+func TestNonmodalPopupFocusOnOpenFalseKeepsTheOpenersFocus(t *testing.T) {
+	t.Parallel()
+	for _, keep := range []bool{false, true} {
+		input := TextInput(State("")).Name("Query")
+		item := TextInput(State("")).Name("Item")
+		p := Popup(input, Box(item).Size(120, 40)).Modal(false).FocusOnOpen(!keep)
+		pr := NewProbe(Column(p), Sz(300, 250))
+		pr.Tap("Query")
+		p.Show()
+		pr.Frame()
+		pr.Frame()
+		focused, _ := pr.Semantics().Focused()
+		want := "Item"
+		if keep {
+			want = "Query"
+		}
+		if focused.Name != want {
+			t.Errorf("FocusOnOpen(%v): %q has focus, want %q", !keep, focused.Name, want)
+		}
+		pr.Close()
+	}
+}
