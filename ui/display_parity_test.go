@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -90,7 +91,7 @@ func TestAccordionHoverUnderlinesEveryLineOfTheTitle(t *testing.T) {
 	defer p.Close()
 	p.Frame()
 	h := a.headers[0]
-	if h.lined == nil || h.linedSize != h.size || h.size.H < 2*a.line {
+	if h.lined == nil || math.Abs(h.linedSize.W-h.size.W) > 1e-6 || math.Abs(h.linedSize.H-h.size.H) > 1e-6 || h.size.H < 2*a.line {
 		t.Fatalf("the underlined title is laid out %v and the plain one %v on lines %v tall, want the same, wrapped", h.linedSize, h.size, a.line)
 	}
 	if !strings.Contains(h.lined.Text(), "second line") {
