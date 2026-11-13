@@ -441,7 +441,7 @@ func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 	t := s.theme
 	inert := s.IsInert()
 	s.anchorRect = r
-	s.Hit(dst, r, s, ggui.CursorShapePointer)
+	s.Hit(dst, r, s, ggui.CursorShapeDefault)
 	s.positionList(dst, r)
 	open := s.popup.IsOpen()
 	radius := s.radius(t)
@@ -681,7 +681,7 @@ func (it *selectItem[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	ink := t.Disabled(t.PopoverFg)
 	if !it.IsInert() {
 		dst.HitPointer(r, it)
-		dst.HitCursor(r, ggui.CursorShapePointer)
+		dst.HitCursor(r, ggui.CursorShapeDefault)
 		lit := it.Hovered || it.active
 		if lit {
 			dst.FillRoundRect(r, t.RadiusSm, t.Accent)

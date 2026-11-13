@@ -546,7 +546,7 @@ func (a *comboboxAddon) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		ink = t.Disabled(ink)
 	} else {
 		dst.HitPointer(r, a)
-		dst.HitCursor(r, ggui.CursorShapePointer)
+		dst.HitCursor(r, ggui.CursorShapeDefault)
 		if a.Hovered {
 			// The ghost button's hover, with the cross brought up to the
 			// foreground; the chevron stays muted.
