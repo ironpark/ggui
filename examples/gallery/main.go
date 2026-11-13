@@ -409,7 +409,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 				ui.CommandItem("Toggle dark theme", func() {
 					dark.Set(!ggui.Peek(dark))
 					paletteOpen.Set(false)
-				}).Keywords("appearance", "light").Group("Appearance"),
+				}).Keywords("appearance", "light").Group("Appearance").Checked(ggui.Peek(dark)),
 				ui.CommandItem("Reset text size", func() {
 					size.Set(16)
 					paletteOpen.Set(false)

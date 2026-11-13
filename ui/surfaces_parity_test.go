@@ -310,3 +310,35 @@ func TestSheetScrimFadesOnItsOwnClock(t *testing.T) {
 		t.Fatalf("90ms in a drawer's scrim is %v in and its panel %v, want the scrim behind on cubic-bezier(.32,.72,0,1)", drawer.dim, v)
 	}
 }
+
+// A checked command entry carries shadcn's trailing check,
+// group-data-[checked=true]/command-item:opacity-100, which an entry with
+// a shortcut hides: group-has-data-[slot=command-shortcut]/command-item:hidden.
+func TestCommandEntryCheckedShowsATrailingCheckUnlessItHasAShortcut(t *testing.T) {
+	t.Parallel()
+	c := Command(ggui.State(""),
+		CommandItem("Light", nil).Checked(true),
+		CommandItem("Dark", nil).Checked(false),
+		CommandItem("System", nil).Checked(true).Shortcut("cmd+s"),
+		CommandItem("Plain", nil),
+	)
+	p := ggui.NewProbe(c, ggui.Sz(400, 300))
+	defer p.Close()
+	p.Frame()
+	light, dark, system, plain := c.items[0], c.items[1], c.items[2], c.items[3]
+	if !light.checkable || !light.isChecked() || light.markHidden {
+		t.Fatal("a checked entry shows no check")
+	}
+	if !dark.checkable || dark.isChecked() {
+		t.Fatal("an unchecked entry is not a checkable row left unchecked")
+	}
+	if !system.isChecked() || !system.markHidden || system.pad.Right != light.theme.Space {
+		t.Fatalf("an entry with a shortcut keeps room for a check: right padding %v", system.pad.Right)
+	}
+	if plain.checkable {
+		t.Fatal("an entry never given Checked is checkable")
+	}
+	if n := light.Describe(); n.Checked != ggui.Tri(true) {
+		t.Fatalf("a checked entry is read out as %v", n.Checked)
+	}
+}

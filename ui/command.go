@@ -21,6 +21,8 @@ type CommandEntry struct {
 	group    string
 	icon     ggui.Widget
 	line     bool // a separator rather than an action
+	checks   bool // Checked was called: the row is one that can be checked
+	checked  bool
 }
 
 // CommandItem creates an action. Labels need not be unique.
@@ -49,6 +51,13 @@ func (e CommandEntry) Keywords(terms ...string) CommandEntry {
 
 // Disabled leaves the entry visible but excludes it from selection.
 func (e CommandEntry) Disabled(v bool) CommandEntry { e.disabled = v; return e }
+
+// Checked marks the entry as one that is on or off, the current theme
+// among the themes say, and shows a check mark at its right edge while v
+// is true. An entry with a Shortcut shows that there instead, as shadcn's
+// item hides its check beside a shortcut; it is read out as checked either
+// way.
+func (e CommandEntry) Checked(v bool) CommandEntry { e.checks, e.checked = true, v; return e }
 
 // CommandWidget is an inline search field and scrollable action list. Put it in
 // Dialog for a command palette. Query state belongs to the caller.
@@ -138,6 +147,10 @@ func (c *CommandWidget) setEntries(entries []CommandEntry) {
 		}
 		if e.icon != nil {
 			item.Icon(e.icon)
+		}
+		if e.checks {
+			item.Checked(e.checked)
+			item.markHidden = e.shortcut != ""
 		}
 		item.onHover = func() { c.highlight = i }
 		c.items = append(c.items, item)

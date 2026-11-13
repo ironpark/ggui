@@ -640,6 +640,7 @@ type MenuItemWidget struct {
 	destructive bool
 	checkable   bool
 	checked     ggui.Readable[bool]
+	markHidden  bool // checkable, but with no mark drawn or room kept for one: a command entry beside its shortcut
 	stay        bool // a click leaves the menu open, as a checkbox or radio row does
 	style       menuItemStyle
 	radius      float64 // the highlight's corner radius, or 0 for the style's own
@@ -1059,7 +1060,7 @@ func (it *MenuItemWidget) layoutRow(c ggui.Constraints, env ggui.Env) ggui.Size 
 	case it.inset, it.checkable && markLeft:
 		it.pad.Left = menuInset(t)
 	}
-	if it.checkable && !markLeft {
+	if it.checkable && !markLeft && !it.markHidden {
 		it.pad.Right = menuMarkRoom(t)
 	}
 	ink := it.ink(false)
@@ -1126,7 +1127,7 @@ func (it *MenuItemWidget) paintRow(dst *ggui.Canvas, r ggui.Rect) {
 		}
 		dst.Paint(it.icon, ggui.Rct(ggui.Pt(r.Origin.X+it.pad.Left, r.Origin.Y+(r.Size.H-it.iconSize.H)/2), it.iconSize))
 	}
-	if it.checkable && it.isChecked() {
+	if it.checkable && it.isChecked() && !it.markHidden {
 		x := r.Origin.X + r.Size.W - t.Space - t.IconSize/2
 		if it.menu != nil && it.menu.checkLeft {
 			x = r.Origin.X + t.ItemPad.Left + t.IconSize/2
