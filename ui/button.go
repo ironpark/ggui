@@ -525,7 +525,14 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if st.Underline && hover > 0 {
 		if base, ok := b.box.Baseline(); ok {
 			pad := b.pad
-			y := r.Origin.Y + base + t.Space/2 // shadcn's underline-offset-4
+			// shadcn's underline-offset-4: the line's top edge is 4px
+			// under the alphabetic baseline, and it grows down from there.
+			y := r.Origin.Y + base + t.Space/2
+			if b.label != nil {
+				if ascent, ok := b.label.Baseline(); ok {
+					y = paintedBaseline(r.Origin.Y+base-ascent, ascent, dst.Scale()) + t.Space/2
+				}
+			}
 			dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X+pad.Left, y), ggui.Sz(r.Size.W-pad.Left-pad.Right, 1)), fade(label, hover))
 		}
 	}

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"image/color"
+	"math"
 	"time"
 
 	"github.com/ironpark/ggui"
@@ -43,6 +44,17 @@ func paintShadows(dst *ggui.Canvas, r ggui.Rect, radius float64, layers ...ggui.
 			dst.Shadow(r, radius, s)
 		}
 	}
+}
+
+// paintedBaseline is where the glyphs of a line of text stand, for a line
+// whose box starts at top with the ascent layout reports, at the canvas's
+// scale. It is not quite top+ascent: text is drawn on whole pixels, the
+// line's top rounded to one and the baseline's place under it cut down to
+// one. A rule drawn a set distance from the letters, as an underline is,
+// starts from here; at top+ascent it would stand up to a pixel and a bit
+// further off, by a different amount from one position to the next.
+func paintedBaseline(top, ascent, scale float64) float64 {
+	return (math.Round(top*scale) + math.Floor(ascent*scale)) / scale
 }
 
 // fieldBoxShape gives a field's box what its size depends on, the padding
