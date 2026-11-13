@@ -232,3 +232,15 @@ func TestDataTableWideColumnsRemainReachable(t *testing.T) {
 		t.Fatal("last column cannot sort")
 	}
 }
+
+func TestDataTableColumnMenuOpensUnderTheButtonsTrailingEdge(t *testing.T) {
+	t.Parallel()
+	p := ggui.NewProbe(ggui.Column(ui.DataTable(dataModel(people()))).Align(ggui.AlignStretch), ggui.Sz(640, 600))
+	defer p.Close()
+	p.Tap("Columns")
+	button, item := semNode(t, p, ggui.RoleMenu, "Columns"), semNode(t, p, ggui.RoleMenuItem, "Show Age")
+	// shadcn's align="end": the menu ends where the button does, inside the table.
+	if right := button.Rect.Origin.X + button.Rect.Size.W; item.Rect.Origin.X+item.Rect.Size.W > right || item.Rect.Origin.X >= button.Rect.Origin.X {
+		t.Fatalf("menu item at %v, want it to end at the right edge of the button %v", item.Rect, button.Rect)
+	}
+}

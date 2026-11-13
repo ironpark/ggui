@@ -102,22 +102,49 @@ func (c *ChartWidget) legendHeight(width float64) float64 {
 	x := 0.
 	lines := 1
 	for _, row := range c.legendRows() {
-		w := c.measuredText(row.label, 12, c.theme.Fg).size.W + 30
+		w := c.measuredText(row.label, 12, c.theme.Fg).size.W + chartLegendItem
 		if x > 0 && x+w > width {
 			lines++
 			x = 0
 		}
 		x += w
 	}
-	return float64(lines)*24 + 8
+	return chartLegendInset + float64(lines)*chartLegendPitch - (chartLegendPitch - chartLine)
+}
+
+// The metrics of shadcn's chart legend and tooltip, which are set in 12px
+// text on 16px lines whatever the theme's body text is.
+const (
+	chartLine        = 16. // a line of text-xs
+	chartLegendInset = 12. // pt-3 between the plot and the legend
+	chartLegendPitch = 24. // from one wrapped line of the legend to the next
+	chartLegendItem  = 30. // an 8px swatch, 6px to its label, and gap-4 after it
+	chartTipPadX     = 10. // px-2.5
+	chartTipPadY     = 6.  // py-1.5
+	chartTipGap      = 6.  // gap-1.5 between the heading and the rows
+	chartTipRow      = 12. // a row is one leading-none line
+	chartTipMinW     = 128.
+)
+
+// chartIndicatorWidth is how wide the mark before a tooltip row is.
+func chartIndicatorWidth(kind ChartIndicator, icon bool) float64 {
+	switch {
+	case icon:
+		return 10
+	case kind == ChartIndicatorLine:
+		return 4
+	case kind == ChartIndicatorDashed:
+		return 3
+	}
+	return 10
 }
 func (c *ChartWidget) paintLegend(dst *ggui.Canvas, r ggui.Rect) {
 	rows := c.legendRows()
 	widths := make([]float64, len(rows))
 	for i, row := range rows {
-		widths[i] = c.measuredText(row.label, 12, c.theme.Fg).size.W + 30
+		widths[i] = c.measuredText(row.label, 12, c.theme.Fg).size.W + chartLegendItem
 	}
-	y := r.Origin.Y + 8
+	y := r.Origin.Y + chartLegendInset + chartLine/2 // the middle of the first line
 	for start := 0; start < len(rows); {
 		end, total := start, 0.
 		for end < len(rows) && (end == start || total+widths[end] <= r.Size.W) {
@@ -128,14 +155,14 @@ func (c *ChartWidget) paintLegend(dst *ggui.Canvas, r ggui.Rect) {
 		for i := start; i < end; i++ {
 			row := rows[i]
 			if row.icon != "" {
-				paintIcon(dst, c.env, row.icon, ggui.Rct(ggui.Pt(x, y), ggui.Sz(12., 12.)), row.col, 0)
+				paintIcon(dst, c.env, row.icon, ggui.Rct(ggui.Pt(x, y-6), ggui.Sz(12., 12.)), row.col, 0)
 			} else {
-				dst.FillRoundRect(ggui.Rct(ggui.Pt(x, y+2), ggui.Sz(8., 8.)), 2, row.col)
+				dst.FillRoundRect(ggui.Rct(ggui.Pt(x, y-4), ggui.Sz(8., 8.)), 2, row.col)
 			}
-			c.text(dst, row.label, ggui.Pt(x+14, y-1), 12, c.theme.Fg, 0)
+			c.textMiddle(dst, row.label, ggui.Pt(x+14, y), chartRegular, c.theme.Fg, 0)
 			x += widths[i]
 		}
-		y += 24
+		y += chartLegendPitch
 		start = end
 	}
 }
@@ -144,7 +171,7 @@ func (c *ChartWidget) tooltipRows(index int) ([]chartContentRow, ggui.Size) {
 		return nil, ggui.Size{}
 	}
 	rows := make([]chartContentRow, 0, len(c.config))
-	width := 112.
+	width := chartTipMinW
 	for j, s := range c.config {
 		v, ok := c.value(index, j)
 		if !ok {
@@ -161,16 +188,21 @@ func (c *ChartWidget) tooltipRows(index int) ([]chartContentRow, ggui.Size) {
 		}
 		value := c.formatValue(index, j, v)
 		rows = append(rows, chartContentRow{label, value, c.pointColor(index, j), icon})
-		size := c.measuredText(label+"   "+value, 12, c.theme.Fg).size
-		width = max(width, size.W+40)
+		w := c.measuredText(label, 12, c.theme.MutedFg).size.W + 2*c.theme.Space + c.measuredFace(value, 12, c.theme.Fg, chartMono).size.W
+		if !c.tooltip.HideIndicator {
+			w += chartIndicatorWidth(c.tooltip.Indicator, icon != "") + c.theme.Space
+		}
+		width = max(width, w+2*chartTipPadX)
 	}
-	height := 16. + float64(len(rows))*22
+	// Rows of one line each with a gap between, inside the padding; the
+	// heading is a full line above them, the total a row under a rule.
+	height := 2*chartTipPadY + float64(len(rows))*(chartTipRow+chartTipGap) - chartTipGap
 	if c.tooltip.ShowTotal {
-		height += 30
+		height += 2*chartTipGap + chartTipRow
 	}
 	if !c.tooltip.HideLabel {
-		width = max(width, c.measuredText(c.tooltipLabel(index), 12, c.theme.Fg).size.W+20)
-		height += 22
+		width = max(width, c.measuredFace(c.tooltipLabel(index), 12, c.theme.Fg, chartMedium).size.W+2*chartTipPadX)
+		height += chartLine + chartTipGap
 	}
 	return rows, ggui.Sz(width, height)
 }
@@ -191,41 +223,42 @@ func (c *ChartWidget) paintTooltipContent(dst *ggui.Canvas, r ggui.Rect, index i
 	if len(rows) == 0 {
 		return
 	}
-	dst.Shadow(r, 8, c.theme.PanelShadow)
-	dst.FillRoundRect(r, 8, c.theme.Popover)
-	dst.StrokeRoundRect(r, 8, 1, c.theme.Border)
-	y := r.Origin.Y + 8
+	t := c.theme
+	// shadcn's rounded-lg border-border/50 bg-background shadow-xl.
+	dst.Shadow(r, t.Radius, t.PanelShadow)
+	dst.FillRoundRect(r, t.Radius, t.Bg)
+	dst.StrokeRoundRect(r, t.Radius, t.BorderWidth, fade(t.Border, .5))
+	left, right := r.Origin.X+chartTipPadX, r.Origin.X+r.Size.W-chartTipPadX
+	y := r.Origin.Y + chartTipPadY // the top of the next line
 	if !c.tooltip.HideLabel {
-		c.text(dst, c.tooltipLabel(index), ggui.Pt(r.Origin.X+10, y), 12, c.theme.Fg, 0)
-		y += 22
+		c.textMiddle(dst, c.tooltipLabel(index), ggui.Pt(left, y+chartLine/2), chartMedium, t.Fg, 0)
+		y += chartLine + chartTipGap
 	}
 	for _, row := range rows {
-		x := r.Origin.X + 10
+		x, mid := left, y+chartTipRow/2
 		if !c.tooltip.HideIndicator {
-			if row.icon != "" {
-				paintIcon(dst, c.env, row.icon, ggui.Rct(ggui.Pt(x, y+1), ggui.Sz(12., 12.)), row.col, 0)
-			} else {
-				switch c.tooltip.Indicator {
-				case ChartIndicatorLine:
-					dst.FillRoundRect(ggui.Rct(ggui.Pt(x, y), ggui.Sz(3., 16.)), 1, row.col)
-				case ChartIndicatorDashed:
-					for k := 0; k < 3; k++ {
-						dst.FillRect(ggui.Rct(ggui.Pt(x, y+float64(k)*6), ggui.Sz(3., 3.)), row.col)
-					}
-				default:
-					dst.FillRoundRect(ggui.Rct(ggui.Pt(x, y+3), ggui.Sz(10., 10.)), 2, row.col)
+			w := chartIndicatorWidth(c.tooltip.Indicator, row.icon != "")
+			switch {
+			case row.icon != "":
+				paintIcon(dst, c.env, row.icon, ggui.Rct(ggui.Pt(x, mid-w/2), ggui.Sz(w, w)), row.col, 0)
+			case c.tooltip.Indicator == ChartIndicatorLine:
+				dst.FillRoundRect(ggui.Rct(ggui.Pt(x, y), ggui.Sz(w, chartTipRow)), 2, row.col)
+			case c.tooltip.Indicator == ChartIndicatorDashed:
+				for k := 0; k < 3; k++ {
+					dst.FillRect(ggui.Rct(ggui.Pt(x, y+float64(k)*4.5), ggui.Sz(w, 3.)), row.col)
 				}
+			default:
+				dst.FillRoundRect(ggui.Rct(ggui.Pt(x, mid-w/2), ggui.Sz(w, w)), 2, row.col)
 			}
-			x += 18
+			x += w + t.Space
 		}
-		c.text(dst, row.label, ggui.Pt(x, y), 12, c.theme.MutedFg, 0)
-		c.text(dst, row.value, ggui.Pt(r.Origin.X+r.Size.W-10, y), 12, c.theme.Fg, 1)
-		y += 22
+		c.textMiddle(dst, row.label, ggui.Pt(x, mid), chartRegular, t.MutedFg, 0)
+		c.textMiddle(dst, row.value, ggui.Pt(right, mid), chartMono, t.Fg, 1)
+		y += chartTipRow + chartTipGap
 	}
 	if c.tooltip.ShowTotal {
-		y += 4
-		dst.StrokeLine(ggui.Pt(r.Origin.X+10, y), ggui.Pt(r.Origin.X+r.Size.W-10, y), 1, c.theme.Border)
-		y += 8
+		dst.StrokeLine(ggui.Pt(left, y), ggui.Pt(right, y), t.BorderWidth, fade(t.Border, .5))
+		y += chartTipGap
 		total := 0.
 		for j := range c.config {
 			if v, ok := c.value(index, j); ok {
@@ -240,8 +273,8 @@ func (c *ChartWidget) paintTooltipContent(dst *ggui.Canvas, r ggui.Rect, index i
 		if len(c.config) > 0 {
 			value = c.formatValue(index, 0, total)
 		}
-		c.text(dst, label, ggui.Pt(r.Origin.X+10, y), 12, c.theme.Fg, 0)
-		c.text(dst, value, ggui.Pt(r.Origin.X+r.Size.W-10, y), 12, c.theme.Fg, 1)
+		c.textMiddle(dst, label, ggui.Pt(left, y+chartTipRow/2), chartMedium, t.Fg, 0)
+		c.textMiddle(dst, value, ggui.Pt(right, y+chartTipRow/2), chartMono, t.Fg, 1)
 	}
 
 }
