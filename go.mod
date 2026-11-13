@@ -7,7 +7,6 @@ require (
 	github.com/hajimehoshi/bitmapfont/v4 v4.2.0
 	github.com/ironpark/ggfx v0.0.0-20261113075659-534c8f4274c3
 	github.com/ironpark/ggwd v0.0.0-20261111130937-a92bc32058b8
-	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
 	golang.org/x/image v0.46.0
 	golang.org/x/sys v0.48.0
 	golang.org/x/text v0.42.0
