@@ -41,6 +41,7 @@ type PopupWidget struct {
 	placed          PopupSide // side, once direction and collisions are settled
 	alignOffset     float64
 	still           bool // Animated(false): no entrance or exit
+	ownWidth        bool // MatchAnchorWidth(false): below or above, the content keeps its width
 	anchorRect      Rect
 	paintedOpen     bool
 	hadContentFocus bool
@@ -121,6 +122,16 @@ func (p *PopupWidget) Side(v PopupSide) *PopupWidget {
 func (p *PopupWidget) AlignOffset(v float64) *PopupWidget {
 	defer property.Watch(&p.props, &p.alignOffset)()
 	p.alignOffset = v
+	return p
+}
+
+// MatchAnchorWidth says whether content below or above the anchor is at
+// least as wide as the anchor, as a dropdown's list is; it is by default.
+// A panel with a width of its own, such as a date picker's calendar under
+// a wide field, turns it off, as shadcn's w-auto does.
+func (p *PopupWidget) MatchAnchorWidth(v bool) *PopupWidget {
+	defer property.Watch(&p.props, &p.ownWidth)()
+	p.ownWidth = !v
 	return p
 }
 
@@ -475,7 +486,11 @@ func (p *PopupWidget) placeBelow(screen Size, anchor Rect, side PopupSide, rtl b
 	if p.align != PopupStart || rtl || p.point != nil {
 		maxW = screen.W
 	}
-	natural := p.effect.Layout(Constraints{MinW: anchor.Size.W, MaxW: maxW, MaxH: Unbounded}, p.env)
+	minW := anchor.Size.W
+	if p.ownWidth {
+		minW = 0
+	}
+	natural := p.effect.Layout(Constraints{MinW: minW, MaxW: maxW, MaxH: Unbounded}, p.env)
 	below := screen.H - (anchor.Origin.Y + anchor.Size.H + p.gap)
 	above := anchor.Origin.Y - p.gap
 	room, other := below, above
@@ -487,7 +502,7 @@ func (p *PopupWidget) placeBelow(screen Size, anchor Rect, side PopupSide, rtl b
 	}
 	size := natural
 	if size.H > room {
-		size = p.effect.Layout(Constraints{MinW: anchor.Size.W, MaxW: maxW, MaxH: max(room, 0)}, p.env)
+		size = p.effect.Layout(Constraints{MinW: minW, MaxW: maxW, MaxH: max(room, 0)}, p.env)
 	}
 	y := anchor.Origin.Y + anchor.Size.H + p.gap
 	if side == PopupTop {
