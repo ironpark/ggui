@@ -671,6 +671,14 @@ func (c *questionChoice) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	s.H = max(44, s.H)
 	return cs.Constrain(s)
 }
+
+// The slots that keep a choice's hover and its chosen surface easing
+// across frames.
+var (
+	questionHoverSlot  = ggui.NewSlot[*ggui.Motion]("question choice hover")
+	questionChosenSlot = ggui.NewSlot[*ggui.Motion]("question choice chosen")
+)
+
 func (c *questionChoice) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := c.theme
 	selected := c.selected()
@@ -678,16 +686,16 @@ func (c *questionChoice) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// shadcn's choice is clear inside the input border, a fifth of the input
 	// color on a dark page; half the muted surface under the pointer; and
 	// the muted surface inside a faint primary border once chosen.
+	// The colors ease from one to the next, as transition-colors has them.
 	var fill color.Color = color.Transparent
 	if isDark(t.Bg) {
 		fill = fade(t.InputBorder, .2)
 	}
-	border := t.InputBorder
-	if selected {
-		fill, border = t.Muted, fade(t.Primary, .4)
-	} else if c.Hovered && !c.IsInert() {
-		fill = fade(t.Muted, .5)
-	}
+	motion := c.env.Motion(t.MotionFast)
+	hover := dst.Ease(c.Anchor(r), questionHoverSlot, pick(c.Hovered && !c.IsInert(), 1.0, 0.0), motion)
+	chosen := dst.Ease(c.Anchor(r), questionChosenSlot, pick(selected, 1.0, 0.0), motion)
+	fill = mix(mix(fill, fade(t.Muted, .5), hover), t.Muted, chosen)
+	border := mix(t.InputBorder, fade(t.Primary, .4), chosen)
 	if c.q.errors[c.item.Name] != "" {
 		border = t.Destructive
 	}
