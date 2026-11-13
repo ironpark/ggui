@@ -102,7 +102,7 @@ ui.Sheet(filters, filterForm).Title("Filters").Description("Narrow the list.").L
 corners rounded. It is as tall as its content, up to 96 logical pixels short of
 the window, until `.Size(px)` or `SnapPoints` say otherwise. It drags by the
 middle of its top edge either way; `.Handle(true)` draws the short bar that says
-so. Sheets slide in and out over the theme's `MotionSlow` and drawers over
+so, and `.CloseButton(true)` gives it the close button a sheet has. Sheets slide in and out over the theme's `MotionSlow` and drawers over
 `MotionDrawer`, 450ms, and both land at once under reduced motion. The motion lives in the widget, so keep
 the sheet across rebuilds — construct it beside the signal it binds, or inside
 a `Component` — and one rebuilt every frame simply appears and goes, as

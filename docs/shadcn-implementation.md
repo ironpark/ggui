@@ -150,6 +150,7 @@ See [forms](forms.md), [navigation](data-and-navigation.md), and
 - A `Drawer` is as tall as its content (up to 96px short of the window) rather
   than 280px, its top corners are rounded, it moves over `MotionDrawer` (450ms),
   and its handle bar is opt-in with `.Handle(true)`; dragging works either way.
+  It has no close button until `.CloseButton(true)`.
 - `Avatar` is 32px by default; `Spinner` is the theme's 16px icon size in the
   text color around it; `Empty` has no border until `.Outline()`.
 - Toasts show no countdown bar unless `.Countdown()`; they stack and move over 500ms.

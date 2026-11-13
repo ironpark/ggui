@@ -161,6 +161,25 @@ func TestDrawerIsAsTallAsItsContentUpToItsHeadroom(t *testing.T) {
 	}
 }
 
+func TestDrawerHasNoCloseButtonUntilAsked(t *testing.T) {
+	t.Parallel()
+	bare := ui.Drawer(ggui.State(true), ggui.Text("Body")).Title("Share")
+	p := openModal(t, bare, ggui.Sz(400, 600))
+	if _, ok := p.FindRole(ggui.RoleButton, "Close"); ok {
+		t.Error("a drawer shows a close button nobody asked for")
+	}
+	asked := ui.Drawer(ggui.State(true), ggui.Text("Body")).Title("Share").CloseButton(true)
+	p = openModal(t, asked, ggui.Sz(400, 600))
+	if _, ok := p.FindRole(ggui.RoleButton, "Close"); !ok {
+		t.Error("CloseButton(true) gave a drawer no close button")
+	}
+	sheet := ui.Sheet(ggui.State(true), ggui.Text("Body")).Title("Share")
+	p = openModal(t, sheet, ggui.Sz(400, 600))
+	if _, ok := p.FindRole(ggui.RoleButton, "Close"); !ok {
+		t.Error("a sheet lost its close button")
+	}
+}
+
 func TestDrawerRisesOverItsOwnDuration(t *testing.T) {
 	t.Parallel()
 	open := ggui.State(false)

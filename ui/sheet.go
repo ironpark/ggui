@@ -91,10 +91,12 @@ func Sheet(open ggui.Binding[bool], content ggui.Widget) *SheetWidget {
 // until Size or SnapPoints say otherwise. Drag it down by the middle of its
 // top edge to dismiss it, or configure SnapPoints; Handle draws the bar
 // that says it can be dragged. Content keeps its own pointer and scrolling
-// behavior.
+// behavior. It has no close button, as shadcn's Drawer has none, until
+// CloseButton(true) asks for one: Escape, the scrim, the drag and whatever
+// its content offers close it.
 func Drawer(open ggui.Binding[bool], content ggui.Widget) *SheetWidget {
 	s := Sheet(open, content).Bottom()
-	s.drawer, s.draggable = true, true
+	s.drawer, s.draggable, s.hideClose = true, true, true
 	return s
 }
 
@@ -373,7 +375,8 @@ func (s *SheetWidget) BindName(r ggui.Readable[string]) *SheetWidget {
 	return s
 }
 
-// CloseButton controls the close action, visible by default.
+// CloseButton controls the close action: shown by default on a Sheet, and
+// hidden on a Drawer.
 func (s *SheetWidget) CloseButton(show bool) *SheetWidget {
 	defer property.Watch(&s.props, &s.hideClose)()
 	s.hideClose = !show
