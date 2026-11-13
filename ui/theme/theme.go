@@ -70,8 +70,8 @@ type Theme struct {
 
 	// Elevation, in the order a surface rises off the page.
 	CardShadow    ggui.ShadowStyle // cards and the raised tab
-	PanelShadow   ggui.ShadowStyle // menus, select lists, date pickers, toasts
-	OverlayShadow ggui.ShadowStyle // dialogs and sheets, shadcn's shadow-lg
+	PanelShadow   ggui.ShadowStyle // menus, select lists, date pickers
+	OverlayShadow ggui.ShadowStyle // sheets, toasts and submenus: shadcn's shadow-lg
 
 	// The radii are shadcn's scale of --radius, each named a step smaller
 	// than Tailwind names it: Radius is rounded-lg, the corner of a button

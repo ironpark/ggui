@@ -138,3 +138,35 @@ func TestComboboxListChecksItsValueAndIsAtLeastItsTriggerWide(t *testing.T) {
 		t.Fatalf("the list is %v below its trigger", gap)
 	}
 }
+
+// cmdk stops at the ends of its list unless it is given loop, and takes
+// Home and End to the first and last item.
+func TestCommandStopsAtItsEndsUnlessItLoops(t *testing.T) {
+	t.Parallel()
+	picked := ""
+	entries := func() []ui.CommandEntry {
+		var out []ui.CommandEntry
+		for _, name := range []string{"Alpha", "Beta", "Gamma"} {
+			out = append(out, ui.CommandItem(name, func() { picked = name }))
+		}
+		return out
+	}
+	command := ui.Command(ggui.State(""), entries()...)
+	p := ggui.NewProbe(command, ggui.Sz(400, 400))
+	defer p.Close()
+	p.Tap("Search commands")
+	run := func(want string, keys ...ggui.KeyboardKey) {
+		t.Helper()
+		p.Type(ggui.Mods{}, append(keys, ggui.KeyEnter)...)
+		if picked != want {
+			t.Fatalf("picked %q, want %q", picked, want)
+		}
+	}
+	run("Alpha", ggui.KeyArrowUp)
+	run("Gamma", ggui.KeyArrowDown, ggui.KeyArrowDown, ggui.KeyArrowDown)
+	run("Alpha", ggui.KeyHome)
+	run("Gamma", ggui.KeyEnd)
+	command.Loop(true)
+	run("Alpha", ggui.KeyArrowDown)
+	run("Gamma", ggui.KeyArrowUp)
+}

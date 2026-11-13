@@ -121,7 +121,7 @@ func (c *ContextMenuWidget) Disabled(v bool) *ContextMenuWidget {
 // Popup returns the menu's popup.
 func (c *ContextMenuWidget) Popup() *ggui.PopupWidget { return c.menu.popup }
 
-func (c *ContextMenuWidget) open(at ggui.Point) {
+func (c *ContextMenuWidget) open(at ggui.Point, first bool) {
 	if c.IsInert() {
 		return
 	}
@@ -136,7 +136,7 @@ func (c *ContextMenuWidget) open(at ggui.Point) {
 	}
 	c.at = &at
 	c.build()
-	c.menu.reopen()
+	c.menu.reopen(first)
 	c.menu.popup.ShowAt(at)
 }
 
@@ -154,7 +154,7 @@ func (c *ContextMenuWidget) Act(a ggui.Action) bool {
 	}
 	switch a.Kind {
 	case ggui.ActionPress, ggui.ActionExpand:
-		c.open(c.rect.Origin.Add(ggui.Pt(0, c.rect.Size.H)))
+		c.open(c.rect.Origin.Add(ggui.Pt(0, c.rect.Size.H)), true)
 	case ggui.ActionCollapse:
 		c.Popup().Hide()
 	default:
@@ -215,7 +215,7 @@ func (c *ContextMenuWidget) HandlePointer(ev ggui.PointerEvent) bool {
 	}
 	switch ev.Kind {
 	case ggui.PointerDown:
-		c.open(ev.Pos)
+		c.open(ev.Pos, false)
 		return true
 	case ggui.PointerUp, ggui.PointerTap:
 		return true
@@ -235,12 +235,16 @@ func (c *ContextMenuWidget) ConsumesKey(ev ggui.KeyEvent) bool {
 // HandleKey implements ggui.KeyHandler.
 func (c *ContextMenuWidget) HandleKey(ev ggui.KeyEvent) {
 	c.Keyboard(ev, nil)
+	if ev.Kind == ggui.KeyText && !c.IsInert() && c.Popup().IsOpen() {
+		c.menu.typeahead(ev.Text)
+		return
+	}
 	if c.IsInert() || ev.Kind != ggui.KeyPress {
 		return
 	}
 	if !c.Popup().IsOpen() {
 		if ggui.Activates(ev) || (ev.Key == ggui.KeyF10 && ev.Mods.Shift) {
-			c.open(c.rect.Origin.Add(ggui.Pt(0, c.rect.Size.H)))
+			c.open(c.rect.Origin.Add(ggui.Pt(0, c.rect.Size.H)), true)
 		}
 		return
 	}

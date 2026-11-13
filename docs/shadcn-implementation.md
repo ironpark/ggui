@@ -155,6 +155,7 @@ See [forms](forms.md), [navigation](data-and-navigation.md), and
 - A `Drawer` is as tall as its content (up to 96px short of the window) rather
   than 280px, its top corners are rounded, it moves over `MotionDrawer` (450ms),
   and its handle bar is opt-in with `.Handle(true)`; dragging works either way.
+  It has no close button until `.CloseButton(true)`.
 - `Avatar` is 32px by default; `Spinner` is the theme's 16px icon size in the
   text color around it; `Empty` has no border until `.Outline()`.
 - Toasts show no countdown bar unless `.Countdown()`; they stack and move over 500ms.
@@ -163,6 +164,14 @@ See [forms](forms.md), [navigation](data-and-navigation.md), and
   as a no-op.
 - `NavigationMenu` opens a dropdown after the pointer rests on its trigger;
   `.OpenOnHover(false)` restores activation-only opening.
+- A `ContextMenu` or a `Menubar` menu the pointer opened starts with no row
+  highlighted, as a `Menu` does, so Enter runs nothing until an arrow key or a
+  typed letter has moved to a row; opened from the keyboard, all three start on
+  their first row.
+- A `Command`'s highlight stops at the first and last match instead of wrapping;
+  `.Loop(true)` restores wrapping. Its search icon leads the field. A query
+  matches what it abbreviates rather than only what contains it, and lists the
+  closer matches first, so a filtered list is not in the order it was given.
 - The theme's `Heading` is 16px medium (was 18px semibold), so dialog, sheet and
   card titles are smaller.
 - `Input` is translucent: clear in a light Nova theme and `--input` at 30% in a

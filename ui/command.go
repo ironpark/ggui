@@ -65,8 +65,9 @@ type CommandWidget struct {
 	panel              *ggui.BoxWidget
 	body               *ggui.ColumnWidget
 	styled             *ggui.StyledWidget
-	resultsBox         *ggui.BoxWidget  // the scroll at its height
-	searchBox          *ggui.BoxWidget  // the search field's pill
+	resultsBox         *ggui.BoxWidget // the scroll at its height
+	searchBox          *ggui.BoxWidget // the search field's pill
+	searchRow          *commandSearchRow
 	searchWrap         *ggui.BoxWidget  // the space around the pill
 	hintBox            *ggui.BoxWidget  // the space around the hint
 	hint               *ggui.TextWidget // the key hints under the results
@@ -85,6 +86,7 @@ type CommandWidget struct {
 	// panel, and a muted empty line.
 	menuRows bool
 	keepOpen bool                     // choosing leaves the popup open, as a multiple combobox does
+	loop     bool                     // the arrows wrap past the ends of the list
 	bare     bool                     // no search pill: a combobox's input above the list filters it
 	onKey    func(ggui.KeyEvent) bool // sees a key before the list does, set by its owner
 	theme    *uitheme.Theme
@@ -96,9 +98,13 @@ type CommandWidget struct {
 // list scrolls: 288 with the padding around them.
 const commandListHeight = 276
 
-// Command filters labels and Keywords by case-insensitive substring. Up/Down
-// wrap through enabled matches; Enter runs the highlighted action. IME
-// composition and normal editing keys stay with TextInput.
+// Command keeps the entries whose label and Keywords the query abbreviates,
+// as cmdk does: its letters in their order, in either case, so "tdt" finds
+// "Toggle dark theme". The closer matches come first, inside each group and
+// group by group, and the first of them is highlighted. Up/Down
+// move through enabled matches and stop at the ends unless Loop is set, Home
+// and End go to the first and last, and Enter runs the highlighted action.
+// IME composition and the other editing keys stay with TextInput.
 func Command(query ggui.Binding[string], entries ...CommandEntry) *CommandWidget {
 	c := &CommandWidget{query: query, highlight: -1, height: commandListHeight, offset: ggui.State(0.0),
 		hintNav: "Navigate", hintSel: "Select", emptyText: "No results"}
@@ -206,6 +212,14 @@ func (c *CommandWidget) Borderless() *CommandWidget {
 	return c
 }
 
+// Loop makes Down from the last match go to the first and Up from the first
+// to the last. The highlight stops at either end by default, as cmdk's does
+// without its loop option.
+func (c *CommandWidget) Loop(v bool) *CommandWidget {
+	c.loop = v
+	return c
+}
+
 // StableHeight reserves Height pixels even when filtering leaves fewer results.
 func (c *CommandWidget) StableHeight() *CommandWidget {
 	defer property.Watch(&c.props, &c.stable)()
@@ -229,6 +243,19 @@ func (c *CommandWidget) filter() {
 	c.lastQuery = query
 	c.matched = c.matched[:0]
 	c.highlight = -1
+	if query != "" && !c.menuRows {
+		// A palette finds what the query abbreviates, best match first; a
+		// combobox's list, below, keeps what contains it, in its order.
+		c.matched = append(c.matched, c.rank(strings.TrimSpace(c.query.Get()))...)
+		for _, i := range c.matched {
+			if !c.entries[i].disabled {
+				c.highlight = i
+				break
+			}
+		}
+		c.offset.Set(0)
+		return
+	}
 	for i, e := range c.entries {
 		if e.line {
 			// A separator divides the whole list, not what a query left of it.
@@ -277,10 +304,20 @@ func (c *CommandWidget) key(ev ggui.KeyEvent) bool {
 		c.filter()
 		c.choose(c.highlight)
 		return true
+	case ggui.KeyHome, ggui.KeyEnd:
+		if c.menuRows {
+			// In a combobox these move the caret in its input.
+			return false
+		}
+		fallthrough
 	case ggui.KeyArrowDown, ggui.KeyArrowUp:
 		c.filter()
 		at := slices.Index(c.matched, c.highlight)
 		next, _ := navIndex(ev, navVertical, at, len(c.matched), func(j int) bool { return !c.entries[c.matched[j]].disabled })
+		if !c.loop && !c.menuRows && at >= 0 && (ev.Key == ggui.KeyArrowDown && next < at || ev.Key == ggui.KeyArrowUp && next > at) {
+			// Past either end the highlight stays where it is.
+			next = at
+		}
 		if next >= 0 {
 			c.highlight = c.matched[next]
 			c.scroll.Reveal(c.rects[c.highlight])
@@ -334,8 +371,13 @@ func (c *CommandWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 		c.searchWrap.Padding(ggui.Insets(edge, edge, 0, edge))
 		// The pill is a field's height with a fainter fill and border than one.
 		pill := fade(t.InputBorder, .3)
-		c.searchBox.Padding(ggui.Insets(t.FieldPad.Top, t.Space, t.FieldPad.Bottom, t.FieldPad.Left)).
-			Fill(pill).Border(t.BorderWidth, pill).Radius(t.Radius)
+		// The icon leads, 8 from the pill's edge, as shadcn's inline-start
+		// addon does.
+		pad := ggui.Insets(t.FieldPad.Top, t.FieldPad.Right, t.FieldPad.Bottom, t.Space)
+		if env.Direction() == ggui.DirRTL {
+			pad.Left, pad.Right = pad.Right, pad.Left
+		}
+		c.searchBox.Padding(pad).Fill(pill).Border(t.BorderWidth, pill).Radius(t.Radius)
 	}
 	if c.hintBox != nil {
 		c.hintBox.Padding(ggui.Insets(t.Space, t.Space*1.5))
@@ -363,7 +405,8 @@ func (c *CommandWidget) buildPanel() {
 	c.resultsBox = ggui.Box(c.scroll)
 	parts := []ggui.Widget{c.resultsBox}
 	if !c.bare {
-		c.searchBox = ggui.Box(ggui.Row(ggui.Expanded(c.field.input), commandSearchIcon{c}).Gap(0))
+		c.searchRow = &commandSearchRow{c: c}
+		c.searchBox = ggui.Box(c.searchRow)
 		c.searchWrap = ggui.Box(&commandSearch{c})
 		parts = []ggui.Widget{c.searchWrap, c.resultsBox}
 	}
@@ -527,15 +570,41 @@ func (r *commandResults) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 	}
 }
 
-// A drawn search glyph avoids relying on font coverage for an icon character.
-type commandSearchIcon struct{ c *CommandWidget }
-
-func (i commandSearchIcon) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
-	size := uitheme.Of(env).IconSize
-	return cs.Constrain(ggui.Sz(size, size))
+// commandSearchRow is what the search pill holds: the search icon, drawn
+// rather than typed so it needs no font to cover it, and after it the
+// editor, which takes the rest of the pill. The icon leads in the reading
+// direction, as the addon of shadcn's CommandInput does.
+type commandSearchRow struct {
+	c     *CommandWidget
+	icon  ggui.Rect // where the icon was last painted
+	input ggui.Size
+	rtl   bool
 }
-func (i commandSearchIcon) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	paintIcon(dst, i.c.env, icons.Search, r, fade(i.c.theme.PopoverFg, .5), 0)
+
+func (w *commandSearchRow) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
+	t := uitheme.Of(env)
+	w.rtl = env.Direction() == ggui.DirRTL
+	lead := t.IconSize + t.Space*.75
+	inner := cs
+	inner.MinW, inner.MaxW = max(0, cs.MinW-lead), max(0, cs.MaxW-lead)
+	if inner.MaxW < ggui.Unbounded {
+		inner.MinW = inner.MaxW
+	}
+	w.input = w.c.field.input.Layout(inner, env)
+	return cs.Constrain(ggui.Sz(w.input.W+lead, max(w.input.H, t.IconSize)))
+}
+
+func (w *commandSearchRow) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	t := w.c.theme
+	lead := t.IconSize + t.Space*.75
+	w.icon = ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+(r.Size.H-t.IconSize)/2), ggui.Sz(t.IconSize, t.IconSize))
+	at := ggui.Rct(ggui.Pt(r.Origin.X+lead, r.Origin.Y+(r.Size.H-w.input.H)/2), ggui.Sz(max(0, r.Size.W-lead), w.input.H))
+	if w.rtl {
+		w.icon.Origin.X = r.Origin.X + r.Size.W - t.IconSize
+		at.Origin.X = r.Origin.X
+	}
+	paintIcon(dst, w.c.env, icons.Search, w.icon, fade(t.PopoverFg, .5), 0)
+	dst.Paint(w.c.field.input, at)
 }
 
 // BindName follows the accessible name on the same targets as Name.

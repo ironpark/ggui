@@ -465,8 +465,14 @@ ui.CommandDialog(open, ui.Command(query,
 `CommandEntry.Group` labels consecutive entries, `CommandEntry.Icon(widget)` puts
 an icon before one, and `ui.CommandSeparator()` draws a line between entries
 while the search is empty. Filtering hides headings with no matching entries,
-and keyboard navigation skips headings. The search field is always a rounded,
-muted inset; `Command.InsetSearch()` is kept for code that asked for it.
+and keyboard navigation skips headings. A query finds the entries whose label
+or `Keywords` it abbreviates, its letters in their order: "tdt" finds "Toggle
+dark theme". The closer matches come first, the entries outside a group before
+the groups and the group with the best match before the others, and the first
+of them is highlighted. Up and Down stop at the ends of the list unless
+`.Loop(true)`; Home and End go to the first and last match. The search field is
+always a rounded, muted inset led by its icon; `Command.InsetSearch()` is kept
+for code that asked for it.
 `Menubar.Compact()` keeps the painted strip at its content width inside a stretched
 layout; omit it for a full-width application menu bar.
 
