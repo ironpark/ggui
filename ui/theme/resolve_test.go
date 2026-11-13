@@ -3,6 +3,7 @@ package theme
 import (
 	"image/color"
 	"testing"
+	"time"
 )
 
 var brand = color.NRGBA{0x25, 0x63, 0xeb, 0xff}
@@ -62,6 +63,9 @@ func TestStockThemesAreTheZeroPreset(t *testing.T) {
 	}
 	if light.Chart[0] == nil || dark.Chart[4] == nil {
 		t.Error("the stock themes have no chart colors")
+	}
+	if s := dark.OverlayShadow; s.Offset.Y != 10 || s.Blur != 15 || s.Spread != -3 || dark.MotionDrawer != 450*time.Millisecond {
+		t.Errorf("overlay shadow %+v and drawer motion %v: want shadow-lg and 450ms", s, dark.MotionDrawer)
 	}
 }
 
