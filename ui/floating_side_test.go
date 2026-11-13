@@ -45,11 +45,12 @@ func TestHoverCardOpensOnTheSideItIsGiven(t *testing.T) {
 		check func(card, anchor ggui.Rect) bool
 	}{
 		{"bottom", ggui.PopupBottom, func(c, a ggui.Rect) bool {
-			return c.Origin.Y == a.Origin.Y+a.Size.H+4 && near(c.Center().X, a.Center().X)
+			// shadcn's alignOffset = 4 moves a centered card toward the end.
+			return c.Origin.Y == a.Origin.Y+a.Size.H+4 && near(c.Center().X, a.Center().X+4)
 		}},
 		{"top", ggui.PopupTop, func(c, a ggui.Rect) bool { return c.Origin.Y+c.Size.H == a.Origin.Y-4 }},
 		{"right", ggui.PopupRight, func(c, a ggui.Rect) bool {
-			return c.Origin.X == a.Origin.X+a.Size.W+4 && near(c.Center().Y, a.Center().Y)
+			return c.Origin.X == a.Origin.X+a.Size.W+4 && near(c.Center().Y, a.Center().Y+4)
 		}},
 		{"left", ggui.PopupLeft, func(c, a ggui.Rect) bool { return c.Origin.X+c.Size.W == a.Origin.X-4 }},
 	} {

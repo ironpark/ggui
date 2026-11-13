@@ -72,12 +72,21 @@ func NativeContextMenuFunc(content ggui.Widget, entries func() []ggui.MenuItem) 
 	return c
 }
 
+// contextMenuDrop is how far under the point pressed a context menu's top
+// is.
+const contextMenuDrop = 4
+
 func newContextMenu(content ggui.Widget, m *MenuWidget) *ContextMenuWidget {
 	c := &ContextMenuWidget{content: content, menu: m}
 	c.Role = ggui.RoleMenu
 	c.AutoKey()
 	c.menu.keys = c
-	c.menu.popup = ggui.Popup(content, menuSurface(c.menu.panel)).Gap(0).Keys(c).Owner(c)
+	// shadcn's side="right" sideOffset=0 align="start" alignOffset=4 about
+	// the point pressed: the panel's corner is at the pointer and four
+	// pixels under it, and it opens to the left where the right has no
+	// room.
+	c.menu.popup = ggui.Popup(content, menuSurface(c.menu.panel)).Gap(0).Keys(c).Owner(c).
+		Side(ggui.PopupRight).Align(ggui.PopupStart).AlignOffset(contextMenuDrop)
 	return c
 }
 
