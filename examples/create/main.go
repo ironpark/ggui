@@ -349,7 +349,9 @@ func (m *model) build() ggui.Widget {
 		content = m.specimens
 	}
 	preview := theme.With(selected, content)
-	switches := ggui.Padding(ggui.Box(ui.ToggleGroup(m.example).Options([]string{"01", "02"}).Key("preview-mode")).Fill(shell.Card).Radius(12).Pad(4), 12)
+	// The two previews are one joined strip of outline toggles, shadcn's
+	// segmented look, on the preview's own surface.
+	switches := ggui.Padding(ui.ToggleGroup(m.example).Options([]string{"01", "02"}).Outline().Spacing(0).Size(ui.ButtonSmall).Key("preview-mode"), 12)
 	previewFrame := ggui.Box(ggui.Stack(preview, ggui.Align(switches).Right().Bottom())).Fill(selected.Bg).Radius(18).Border(1, shell.Border)
 	panel := ggui.Box(m.panel).Fill(shell.Card).Radius(16).Border(1, shell.Border).Width(208)
 	modeRole := icons.Sun

@@ -25,7 +25,7 @@ type RadiosWidget[T comparable] struct {
 	horizontal bool // set by Horizontal
 	gap        float64
 	gapSet     bool
-	invalid    bool
+	invalidProp property.Value[bool] // set by Invalid or BindInvalid
 }
 
 // Radios creates one Radio per option, bound to selected and labelled
@@ -152,8 +152,17 @@ func (g *RadiosWidget[T]) BindDisabled(r ggui.Readable[bool]) *RadiosWidget[T] {
 // RadioWidget.Invalid. Options inside a Field holding an error are invalid
 // without it.
 func (g *RadiosWidget[T]) Invalid(v bool) *RadiosWidget[T] {
-	defer property.Watch(&g.props, &g.invalid)()
-	g.invalid = v
+	if g.invalidProp.Set(v) {
+		g.props.Changed()
+	}
+	return g
+}
+
+// BindInvalid follows when for Invalid without a rebuild.
+func (g *RadiosWidget[T]) BindInvalid(when ggui.Readable[bool]) *RadiosWidget[T] {
+	if g.invalidProp.Bind(when, "BindInvalid") {
+		g.props.Changed()
+	}
 	return g
 }
 
@@ -174,9 +183,10 @@ func (g *RadiosWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	// Each option is keyed by the group and its value, and by how many
 	// options before it share that value.
 	owner, seen := ownerOf(&g.Interactive, g), map[T]int{}
+	invalid := g.invalidProp.Get()
 	for _, r := range g.radios {
 		r.Disabled(g.IsInert())
-		r.Invalid(g.invalid)
+		r.Invalid(invalid)
 		r.Key(childKey{owner, radioPart[T]{r.value, seen[r.value]}})
 		seen[r.value]++
 	}
