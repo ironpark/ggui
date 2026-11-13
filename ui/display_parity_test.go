@@ -76,3 +76,20 @@ func TestAccordionSectionsHaveTheTriggerBorderAndRuleInTheirHeight(t *testing.T)
 		t.Fatalf("one section is %v tall and three are %v, want 42 and 128", h1, h3)
 	}
 }
+
+// A progress bar's indicator is a square-ended run from the end reading
+// starts at, which the track's round ends cut: the left of the track, or
+// the right under a right-to-left direction.
+func TestProgressIndicatorRunsFromTheReadingEdge(t *testing.T) {
+	t.Parallel()
+	bar := ggui.Rct(ggui.Pt(10, 20), ggui.Sz(200, 4))
+	if got, want := progressFill(bar, .25, false), ggui.Rct(ggui.Pt(10, 20), ggui.Sz(50, 4)); got != want {
+		t.Fatalf("left to right the indicator covers %v, want %v", got, want)
+	}
+	if got, want := progressFill(bar, .25, true), ggui.Rct(ggui.Pt(160, 20), ggui.Sz(50, 4)); got != want {
+		t.Fatalf("right to left the indicator covers %v, want %v", got, want)
+	}
+	if got := progressFill(bar, 2, false); got != bar {
+		t.Fatalf("a value past one covers %v, want the track %v", got, bar)
+	}
+}

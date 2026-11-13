@@ -625,9 +625,18 @@ func (p *ProgressWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	dst.Leaf(bar, node)
 	dst.FillRoundRect(bar, bar.Size.H/2, t.Muted)
-	if w := bar.Size.W * v; w > 0 {
-		dst.FillRoundRect(ggui.Rct(bar.Origin, ggui.Sz(w, bar.Size.H)), bar.Size.H/2, t.Primary)
+	if fill := progressFill(bar, v, p.env.Direction() == ggui.DirRTL); fill.Size.W > 0 {
+		// The indicator is square, and the track's round ends cut it:
+		// shadcn's h-full bg-primary inside overflow-hidden rounded-full.
+		dst.Clip(fill).FillRoundRect(bar, bar.Size.H/2, t.Primary)
 	}
+}
+
+// progressFill is the part of a progress bar's track the indicator covers
+// at v, from the end reading starts at.
+func progressFill(bar ggui.Rect, v float64, rtl bool) ggui.Rect {
+	fill := ggui.Rct(bar.Origin, ggui.Sz(bar.Size.W*clamp(v, 0, 1), bar.Size.H))
+	return mirrorHorizontal(fill, bar, rtl)
 }
 
 // ProgressRingWidget is a ring filled clockwise from the top to a fraction:
