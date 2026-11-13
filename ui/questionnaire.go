@@ -408,10 +408,16 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 	if item.Description != "" {
 		heading = append(heading, ggui.Text(item.Description).Color(uitheme.MutedFg))
 	}
-	body := []ggui.Widget{ggui.Column(
+	// shadcn's Questionnaire is flex-col gap-4 around the progress, the
+	// item and the actions, and its item a fieldset, flex-col gap-4 too,
+	// whose title is the legend: a legend stands outside the flex box, so
+	// the description follows it with no gap, and without one the title's
+	// mb-4 is the gap to the choices. One gap between every part here is
+	// the same thing.
+	body := []ggui.Widget{
 		&questionProgress{Caption(fmt.Sprintf("Question %d of %d", current, total)).Weight(ggui.WeightMedium), current, total},
-		ggui.Column(heading...).Gap(2).Align(ggui.AlignStretch),
-	).Gap(20).Align(ggui.AlignStretch)}
+		ggui.Column(heading...).Gap(0).Align(ggui.AlignStretch),
+	}
 	rows := []ggui.Widget{}
 	shortcut := 0
 	for ci, choice := range item.Choices {
@@ -452,7 +458,8 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 	}
 	body = append(body, ggui.Column(rows...).Gap(8).Align(ggui.AlignStretch))
 	if message := q.errors[item.Name]; message != "" {
-		body = append(body, &questionError{ggui.Text(message)})
+		// The error's mt-2, beside the gap.
+		body = append(body, ggui.Box(&questionError{ggui.Text(message)}).Pad(8, 0, 0, 0))
 	}
 	actions := []ggui.Widget{}
 	if current > 1 {

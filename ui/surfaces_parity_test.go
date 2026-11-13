@@ -2,6 +2,7 @@ package ui
 
 import (
 	"image/color"
+	"math"
 	"testing"
 	"time"
 
@@ -430,5 +431,51 @@ func TestSidebarTipIsFilledWithThePagesForeground(t *testing.T) {
 	}
 	if got := bar.tip.surface.fill; !sameColor(got, theme.Fg) || sameColor(got, bar.theme.Fg) {
 		t.Fatalf("the tip is filled with %v, want the page's %v and not the sidebar's %v", got, theme.Fg, bar.theme.Fg)
+	}
+}
+
+// shadcn's Questionnaire and its item are both flex-col gap-4, and the
+// item is a fieldset whose title is its legend, which no flex gap reaches:
+// 16 from the progress to the title, the description straight under the
+// title, 16 on to the choices, and the title's mb-4 in the description's
+// place where there is none.
+func TestQuestionnairePartsAreAGapApartAndTheDescriptionUnderTheTitle(t *testing.T) {
+	t.Parallel()
+	rects := func(q Question) (progress, title, description, choice ggui.Rect) {
+		w := Questionnaire(ggui.State(QuestionAnswers{}), q)
+		p := ggui.NewProbe(w, ggui.Sz(450, 450))
+		defer p.Close()
+		for _, n := range p.Semantics().All() {
+			switch {
+			case n.Role == ggui.RoleProgress:
+				progress = n.Rect
+			case n.Name == q.Title:
+				title = n.Rect
+			case q.Description != "" && n.Name == q.Description:
+				description = n.Rect
+			case n.Name == "Task A":
+				choice = n.Rect
+			}
+		}
+		return
+	}
+	bottom := func(r ggui.Rect) float64 { return r.Origin.Y + r.Size.H }
+	choices := []QuestionOption{{Value: "a", Label: "Task A"}}
+	progress, title, description, choice := rects(Question{Name: "one", Title: "Choose a task", Description: "Pick the one to start with.", Choices: choices})
+	if title.Size.H == 0 || description.Size.H == 0 || choice.Size.H == 0 {
+		t.Fatalf("the parts were not found: %v %v %v", title, description, choice)
+	}
+	if got := title.Origin.Y - bottom(progress); math.Abs(got-16) > .01 {
+		t.Errorf("the title is %v under the progress, want 16", got)
+	}
+	if got := description.Origin.Y - bottom(title); math.Abs(got) > .01 {
+		t.Errorf("the description is %v under the title, want 0", got)
+	}
+	if got := choice.Origin.Y - bottom(description); math.Abs(got-16) > .01 {
+		t.Errorf("the choices are %v under the description, want 16", got)
+	}
+	_, title, _, choice = rects(Question{Name: "one", Title: "Choose a task", Choices: choices})
+	if got := choice.Origin.Y - bottom(title); math.Abs(got-16) > .01 {
+		t.Errorf("with no description the choices are %v under the title, want 16", got)
 	}
 }
