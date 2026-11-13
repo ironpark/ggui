@@ -375,16 +375,24 @@ func (c *CalendarWidget) choose(t time.Time) {
 func (c *CalendarWidget) layoutDropdown(p *calendarPane, index int, cs ggui.Constraints, env ggui.Env) {
 	if p.month == nil {
 		shown := func() time.Time { return c.first.AddDate(0, index, 0) }
+		monthName := func(m time.Month) string { return c.monthNames[(int(m)+11)%12] }
 		p.month = Select[time.Month](calendarPart[time.Month]{
 			get: func() time.Month { return shown().Month() },
 			set: func(m time.Month) { c.browse(index, shown().Year(), m) },
-		}).Format(func(m time.Month) string { return c.monthNames[(int(m)+11)%12] }).Options(calendarMonths).Name("Month")
+		}).Format(monthName).Options(calendarMonths).Name("Month").Small().
+			TriggerContent(&calendarCaptionFace{owner: c, label: func() string { return monthName(shown().Month()) }})
 		p.year = Select[int](calendarPart[int]{
 			get: func() int { return shown().Year() },
 			set: func(y int) { c.browse(index, y, shown().Month()) },
-		}).Name("Year")
+		}).Name("Year").Small().
+			TriggerContent(&calendarCaptionFace{owner: c, label: func() string { return strconv.Itoa(shown().Year()) }})
 		p.yearFrom, p.yearTo = 0, 0
 	}
+	// shadcn's caption dropdown is a bordered label six units high, shorter
+	// than a field, so that the caption stays a cell high.
+	t := uitheme.From(env)
+	t.FieldPad = ggui.Insets(t.Space*.625, t.Space*.625)
+	env = t.Apply(env)
 	if from, to := c.years[0], c.years[len(c.years)-1]; p.yearFrom != from || p.yearTo != to {
 		p.yearFrom, p.yearTo = from, to
 		p.year.Options(c.years)
@@ -394,6 +402,37 @@ func (c *CalendarWidget) layoutDropdown(p *calendarPane, index int, cs ggui.Cons
 	p.monthSize = p.month.Layout(cs, env)
 	p.yearSize = p.year.Layout(cs, env)
 }
+
+// calendarCaptionFace is what a caption dropdown shows: its value in the
+// caption's medium weight, then a small muted chevron, as shadcn's
+// caption label (h-6 pr-1 pl-1.5, gap-1, a size-3.5 chevron).
+type calendarCaptionFace struct {
+	owner *CalendarWidget
+	label func() string
+	text  *ggui.TextWidget
+	size  ggui.Size
+	env   ggui.Env
+}
+
+func (f *calendarCaptionFace) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
+	t := uitheme.Of(env)
+	if f.text == nil {
+		f.text = ggui.Text("").NoWrap()
+	}
+	f.env = env
+	f.size = f.text.Content(f.label()).Weight(pick(t.Label.Weight != 0, t.Label.Weight, ggui.WeightMedium)).Layout(cs.Loosen(), env)
+	return cs.Constrain(ggui.Sz(t.Space/4+f.size.W+t.Space/2+calendarCaptionChevron, max(f.size.H, calendarCaptionChevron)))
+}
+
+func (f *calendarCaptionFace) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	t := uitheme.Of(f.env)
+	dst.Paint(f.text, ggui.Rct(ggui.Pt(r.Origin.X+t.Space/4, r.Origin.Y+(r.Size.H-f.size.H)/2), f.size))
+	center := ggui.Pt(r.Origin.X+r.Size.W-calendarCaptionChevron/2, r.Origin.Y+r.Size.H/2)
+	paintIconAt(dst, f.env, icons.ChevronDown, center, calendarCaptionChevron, pick(f.owner.IsInert(), t.Disabled(t.MutedFg), t.MutedFg), 0)
+}
+
+// calendarCaptionChevron is the side of a caption dropdown's chevron.
+const calendarCaptionChevron = 14
 
 // syncYears lists the years the dropdown offers, widened to the years shown.
 func (c *CalendarWidget) syncYears() {
