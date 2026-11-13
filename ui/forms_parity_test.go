@@ -59,6 +59,62 @@ func TestFocusRingEasesIn(t *testing.T) {
 	}
 }
 
+// A button's focus ring eases as a checkbox's does: shadcn's button is
+// transition-all. A toggle is a button too.
+func TestButtonFocusRingEasesIn(t *testing.T) {
+	t.Parallel()
+	for _, reduced := range []bool{false, true} {
+		b := Button("Save", nil)
+		var ring float64
+		root := ggui.Provide(ggui.ReducedMotionKey, reduced, watchMotion(b, &b.Interactive, focusRingSlot, &ring))
+		p := ggui.NewProbe(root, ggui.Sz(200, 60))
+		p.Advance(0)
+		p.Advance(0)
+		if ring > 0 {
+			t.Fatalf("reduced=%v: an unfocused button has its ring at %v", reduced, ring)
+		}
+		p.Key("tab")
+		p.Advance(0)
+		p.Advance(uitheme.Default().MotionFast / 2)
+		if reduced {
+			if ring != 1 {
+				t.Fatalf("under reduced motion the ring is at %v half way, want 1", ring)
+			}
+		} else if ring <= 0 || ring >= 1 {
+			t.Fatalf("the ring is at %v half way through MotionFast, want between 0 and 1", ring)
+		}
+		p.Advance(time.Second)
+		if ring != 1 {
+			t.Fatalf("reduced=%v: the ring settled at %v, want 1", reduced, ring)
+		}
+		p.Close()
+	}
+}
+
+// A toggle group's ring eases as its toggles' do.
+func TestToggleGroupFocusRingEasesIn(t *testing.T) {
+	t.Parallel()
+	g := ToggleGroup(ggui.State("left")).Options([]string{"left", "center", "right"}).Name("Align")
+	var ring float64
+	p := ggui.NewProbe(watchMotion(g, &g.Interactive, focusRingSlot, &ring), ggui.Sz(300, 60))
+	defer p.Close()
+	p.Advance(0)
+	p.Advance(0)
+	if ring > 0 {
+		t.Fatalf("an unfocused group has its ring at %v", ring)
+	}
+	p.Key("tab")
+	p.Advance(0)
+	p.Advance(uitheme.Default().MotionFast / 2)
+	if ring <= 0 || ring >= 1 {
+		t.Fatalf("the ring is at %v half way through MotionFast, want between 0 and 1", ring)
+	}
+	p.Advance(time.Second)
+	if ring != 1 {
+		t.Fatalf("the ring settled at %v, want 1", ring)
+	}
+}
+
 // A checkbox's fill eases to Primary when it is ticked.
 func TestCheckboxFillEases(t *testing.T) {
 	t.Parallel()
@@ -193,6 +249,16 @@ func TestInputGroupBlockAddons(t *testing.T) {
 	}
 	if g.topRect.Origin.Y >= g.rowRect.Origin.Y || g.rowRect.Origin.Y >= g.botRect.Origin.Y {
 		t.Fatalf("rows out of order: top %v, editor %v, bottom %v", g.topRect, g.rowRect, g.botRect)
+	}
+	// A text area keeps its own padding towards a row of addons, and the
+	// row its own towards the text area: shadcn's py-2 and py-1.5.
+	if above, below := g.rowRect.Origin.Y-g.topRect.Origin.Y-g.topRect.Size.H, g.botRect.Origin.Y-g.rowRect.Origin.Y-g.rowRect.Size.H; math.Abs(above-14) > 1e-9 || math.Abs(below-14) > 1e-9 {
+		t.Fatalf("the editor is %v below the top row and %v above the bottom one, want 14 each", above, below)
+	}
+	line := InputGroup(ggui.TextInput(ggui.State(""))).Bottom(Button("Send", nil))
+	line.Layout(c, env)
+	if below := line.botRect.Origin.Y - line.rowRect.Origin.Y - line.rowRect.Size.H; math.Abs(below-6) > 1e-9 {
+		t.Fatalf("a single line is %v above its bottom row, want 6", below)
 	}
 	// The button below still takes its own clicks; the rest of the group
 	// focuses the editor.

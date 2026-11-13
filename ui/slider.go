@@ -192,7 +192,7 @@ func (s *SliderWidget) setFromPosition(pos ggui.Point) {
 func (s *SliderWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := s.theme
 	s.rect = r
-	s.Hit(dst, r, s, ggui.CursorShapePointer)
+	s.Hit(dst, r, s, ggui.CursorShapeDefault)
 	g := s.geometry()
 	inert := s.IsInert()
 	f := s.fraction()

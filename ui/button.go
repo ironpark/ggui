@@ -438,7 +438,8 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// An open outline or ghost trigger reads as hovered; a secondary one
 	// keeps its resting surface, as shadcn's aria-expanded:bg-secondary does.
 	expanded := b.expands != nil && b.expands() && (b.variant == ButtonOutline || b.variant == ButtonGhost)
-	hover := dst.Ease(b.Anchor(r), buttonHoverSlot, pick((b.Hovered || expanded) && !inert, 1.0, 0.0), b.motion)
+	anchor := b.Anchor(r)
+	hover := dst.Ease(anchor, buttonHoverSlot, pick((b.Hovered || expanded) && !inert, 1.0, 0.0), b.motion)
 	if hover >= 1 {
 		fill = st.Hover
 	} else if hover > 0 {
@@ -485,13 +486,18 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if st.Underline && hover > 0 {
 		if base, ok := b.box.Baseline(); ok {
 			pad := b.pad
-			y := r.Origin.Y + base + 2
+			y := r.Origin.Y + base + t.Space/2 // shadcn's underline-offset-4
 			dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X+pad.Left, y), ggui.Sz(r.Size.W-pad.Left-pad.Right, 1)), fade(label, hover))
 		}
 	}
-	if b.Focused && b.FocusVisible && !inert {
+	// The ring eases in and out with the rest of the button, as shadcn's
+	// transition-all has it, and rests once it arrives. A ButtonGroup draws
+	// one ring for its children, the focused one's, so there a ring that
+	// lost the focus goes at once rather than over the one coming in.
+	focused := b.Focused && b.FocusVisible && !inert
+	if k := dst.Ease(anchor, focusRingSlot, pick(focused, 1.0, 0.0), b.motion); k > 0 && (focused || !sides.Any()) {
 		ring := colorOr(st.Ring, t.Ring)
-		joinedFocusRing(dst, t, r, radius, sides, colorOr(st.FocusBorder, ring), ring)
+		joinedFocusRing(dst, t, r, radius, sides, fade(colorOr(st.FocusBorder, ring), k), fade(ring, k))
 	}
 }
 

@@ -236,3 +236,31 @@ func TestComboboxShowsAnExternalValueAndDisables(t *testing.T) {
 		t.Fatal("the disabled chevron takes input")
 	}
 }
+
+// The list of a Combobox is 28 pixels wider than its field, from the same
+// leading edge, as shadcn's min-w-[calc(var(--anchor-width)+--spacing(7))];
+// the chips of a ComboboxMultiple keep theirs as wide as the field.
+func TestComboboxListIsWiderThanItsField(t *testing.T) {
+	t.Parallel()
+	single := ui.Combobox(ggui.State("Go")).Options([]string{"Go", "Rust", "Zig"}).Name("Language")
+	multiple := ui.ComboboxMultiple(ggui.State([]string{"Go"})).Options([]string{"Go", "Rust", "Zig"}).Name("Languages")
+	root := ggui.Padding(ggui.Column(ggui.Box(single).Width(200), ggui.Box(multiple).Width(200)).Gap(8), 20)
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, root), ggui.Sz(500, 500))
+	defer p.Close()
+	p.Key("tab", "down")
+	p.Frame()
+	if !single.Popup().IsOpen() {
+		t.Fatal("Down in the input did not open the list")
+	}
+	list := single.Popup().Rect()
+	if list.Size.W != 228 || list.Origin.X != 20 {
+		t.Fatalf("list %v under a field 200 wide at x=20, want it 228 wide from the same edge", list)
+	}
+	p.Key("escape")
+	multiple.Popup().Show()
+	p.Frame()
+	p.Frame()
+	if list := multiple.Popup().Rect(); list.Size.W != 200 {
+		t.Fatalf("the list under chips is %v wide, want 200 as the field is", list.Size.W)
+	}
+}
