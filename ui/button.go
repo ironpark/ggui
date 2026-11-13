@@ -352,7 +352,7 @@ func (b *ButtonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	b.motion = env.Motion(t.MotionFast)
 	size := b.size.Style(*t)
 	toggle := b.toggleValue != nil
-	b.sides = joinedSidesOf(env)
+	b.sides, env = takeJoinedSides(env)
 	// A size's own radius gives way inside a ButtonGroup, whose strip is
 	// rounded as a default button is whatever the size of its children.
 	b.corner = pick(size.Radius > 0 && !b.sides.Any(), size.Radius, t.Radius)

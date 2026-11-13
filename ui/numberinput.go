@@ -37,6 +37,7 @@ type NumberInputWidget struct {
 	disabled bool // own or inherited, as of the last Layout
 	invalid  bool // inside a Field showing an error
 	motion   time.Duration
+	sides    JoinedSides // the sides a ButtonGroup joins it on
 }
 
 // NumberInput creates a number field bound to value, stepping by 1 with no
@@ -299,6 +300,7 @@ func (n *NumberInputWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	n.disabled = n.IsInert() || inherited
 	n.invalid, _ = env.Get(fieldInvalid)
 	n.motion = env.Motion(t.MotionFast)
+	n.sides, env = takeJoinedSides(env)
 	if n.row == nil {
 		n.row = ggui.Row(ggui.Expanded(n.input), n.dec, n.inc)
 		n.box = ggui.Box(n.row)
@@ -325,7 +327,7 @@ func (n *NumberInputWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		n.Hit(dst, r, n.input, ggui.CursorShapeText)
 	}
 	at := ggui.Anchor{Rect: r, ID: n.input.HitID()}
-	fieldChrome(dst, at, n.box, n.theme, r, n.theme.Radius, fieldState{n.input.Focused(), n.invalid, n.disabled}, n.motion)
+	fieldChromeJoined(dst, at, n.box, n.theme, r, n.theme.Radius, fieldState{n.input.Focused(), n.invalid, n.disabled}, n.motion, n.sides.within(dst))
 	dst.Paint(n.box, r)
 }
 
