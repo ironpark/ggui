@@ -154,3 +154,52 @@ func TestCardMediaInFirstPlaceIsFlushWithTheTopAndSides(t *testing.T) {
 		t.Fatalf("media in last place makes the card %v taller than media in first place, want the top padding it does not replace", got)
 	}
 }
+
+// A group's count bubble is shadcn's AvatarGroupCount, which has neither
+// the avatar's after:border hairline nor the fallback's text-xs at the
+// small size: text-sm whatever the avatars beside it.
+func TestAvatarGroupCountHasNoHairlineAndKeepsTheBodyText(t *testing.T) {
+	t.Parallel()
+	theme := uitheme.Default()
+	env := theme.Apply(ggui.Env{})
+	g := AvatarGroup(Avatar("Ada").Small(), Avatar("Bea").Small(), Avatar("Cy").Small()).Max(1)
+	g.Layout(ggui.Loose(ggui.Sz(300, 100)), env)
+	if g.count == nil || !g.count.counts || g.avatars[0].counts {
+		t.Fatal("only the bubble at the end counts")
+	}
+	if got := g.sizes[len(g.sizes)-1]; got != ggui.Sz(24, 24) {
+		t.Fatalf("the bubble beside small avatars is %v, want 24 across", got)
+	}
+	body := ggui.Text("+2").NoWrap().Style(theme.Text).Layout(ggui.Loose(ggui.Sz(100, 100)), env)
+	if g.count.textSize != body {
+		t.Fatalf("the count is set %v, want the body text's %v", g.count.textSize, body)
+	}
+	if small := g.avatars[0].textSize; small.H >= body.H {
+		t.Fatalf("a small avatar's initials are %v tall, want the caption's, under %v", small.H, body.H)
+	}
+}
+
+// A line strip's bar hangs off the trigger's padding box: after:inset-x-0
+// after:bottom-[-5px] h-0.5 under a 25px trigger centered in the list's
+// 26px inside, which is 30.5 to 32.5 down a 32px list, and
+// after:inset-y-0 after:-right-1 w-0.5 in the last two pixels of a
+// vertical one.
+func TestTabsLineBarHangsOffTheTriggersPaddingBox(t *testing.T) {
+	t.Parallel()
+	tabs := Tabs(ggui.State(0), Tab("One", nil), Tab("Two", nil)).Line()
+	p := ggui.NewProbe(ggui.Column(tabs), ggui.Sz(320, 200))
+	defer p.Close()
+	p.Frame()
+	strip, lr := ggui.Rct(ggui.Pt(0, 0), ggui.Sz(tabs.stripW, tabs.stripH)), tabs.labelRect[0]
+	if got, want := tabs.barRect(strip, lr), ggui.Rct(ggui.Pt(lr.Origin.X+1, strip.Size.H-1.5), ggui.Sz(lr.Size.W-2, 2)); got != want {
+		t.Fatalf("the bar is at %v, want %v", got, want)
+	}
+	side := Tabs(ggui.State(0), Tab("One", nil), Tab("Two", nil)).Line().Vertical()
+	q := ggui.NewProbe(ggui.Column(side), ggui.Sz(320, 200))
+	defer q.Close()
+	q.Frame()
+	strip, lr = ggui.Rct(ggui.Pt(0, 0), ggui.Sz(side.stripW, side.stripH)), side.labelRect[0]
+	if got, want := side.barRect(strip, lr), ggui.Rct(ggui.Pt(strip.Size.W-2, lr.Origin.Y+1), ggui.Sz(2, lr.Size.H-2)); got != want {
+		t.Fatalf("the vertical bar is at %v, want %v", got, want)
+	}
+}
