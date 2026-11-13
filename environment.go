@@ -27,6 +27,16 @@ var EditorStyleKey = NewEnvKey[EditorStyle]("editor style")
 type ScrollStyle struct {
 	Color, HoverColor color.Color
 	Duration          time.Duration
+	// Thickness is how wide the thumb is across the direction it moves in,
+	// in logical pixels; zero is 3.
+	Thickness float64
+	// HoverThickness is how wide the thumb grows under the pointer and
+	// while it is dragged; zero is one and a half times Thickness, and a
+	// value equal to Thickness keeps the thumb from growing.
+	HoverThickness float64
+	// Margin is the space between the thumb and the edge of the scroll it
+	// rides along; zero is 2.
+	Margin float64
 }
 
 var ScrollStyleKey = NewEnvKey[ScrollStyle]("scroll style")
@@ -66,7 +76,8 @@ func (e Env) EditorStyle() EditorStyle {
 	return s
 }
 
-// ScrollStyle resolves missing colors to standalone scrollbar defaults.
+// ScrollStyle resolves missing colors and sizes to standalone scrollbar
+// defaults.
 func (e Env) ScrollStyle() ScrollStyle {
 	s, ok := e.Get(ScrollStyleKey)
 	if !ok {
@@ -77,6 +88,15 @@ func (e Env) ScrollStyle() ScrollStyle {
 	}
 	if s.HoverColor == nil {
 		s.HoverColor = color.Black
+	}
+	if s.Thickness <= 0 {
+		s.Thickness = 3
+	}
+	if s.HoverThickness <= 0 {
+		s.HoverThickness = 1.5 * s.Thickness
+	}
+	if s.Margin <= 0 {
+		s.Margin = 2
 	}
 	return s
 }

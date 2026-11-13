@@ -912,3 +912,34 @@ func (c *scrollCatcher) HandlePointer(ev PointerEvent) bool {
 	}
 	return true
 }
+
+// A scroll draws its thumb at the thickness and margin of the ScrollStyle
+// in its Env, and at 3 logical pixels, 2 from the edge, without them.
+func TestScrollbarThumbTakesItsThicknessAndMarginFromTheStyle(t *testing.T) {
+	t.Parallel()
+	def := Env{}.ScrollStyle()
+	if def.Thickness != 3 || def.HoverThickness != 4.5 || def.Margin != 2 {
+		t.Fatalf("default bar is %v thick, %v under the pointer, %v from the edge; want 3, 4.5, 2", def.Thickness, def.HoverThickness, def.Margin)
+	}
+	style := ScrollStyle{Color: color.Black, Thickness: 7, HoverThickness: 7, Margin: 1}
+	if got := (Env{}).With(ScrollStyleKey, style).ScrollStyle(); got.Thickness != 7 || got.HoverThickness != 7 || got.Margin != 1 {
+		t.Fatalf("a style's sizes were replaced: %+v", got)
+	}
+	r := Rct(Pt(0, 0), Sz(100, 100))
+	visual, hit := def.thumbRects(r, false, 10, 30, 0)
+	if visual != Rct(Pt(95, 10), Sz(3, 30)) || hit != Rct(Pt(90, 10), Sz(10, 30)) {
+		t.Fatalf("the default thumb is drawn at %v and grabbed at %v", visual, hit)
+	}
+	if visual, _ = def.thumbRects(r, false, 10, 30, 1); visual.Size.W != 4.5 {
+		t.Fatalf("the default thumb is %v wide under the pointer, want 4.5", visual.Size.W)
+	}
+	themed := (Env{}).With(ScrollStyleKey, style).ScrollStyle()
+	for _, amount := range []float64{0, 1} {
+		if visual, _ = themed.thumbRects(r, false, 10, 30, amount); visual != Rct(Pt(92, 10), Sz(7, 30)) {
+			t.Fatalf("a 7px thumb 1px from the edge is drawn at %v, hovered %v", visual, amount)
+		}
+	}
+	if visual, hit = themed.thumbRects(r, true, 10, 30, 0); visual != Rct(Pt(10, 92), Sz(30, 7)) || hit != Rct(Pt(10, 90), Sz(30, 10)) {
+		t.Fatalf("a horizontal 7px thumb is drawn at %v and grabbed at %v", visual, hit)
+	}
+}

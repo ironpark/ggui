@@ -83,7 +83,7 @@ func TestBreadcrumbElidesTheMiddleAtMax(t *testing.T) {
 	p := ggui.NewProbe(ui.Breadcrumb(crumbs...).Max(3), ggui.Sz(400, 40))
 	defer p.Close()
 	tree := p.Semantics()
-	if _, ok := tree.Find(ggui.RoleText, "…"); !ok {
+	if _, ok := tree.Find(ggui.RoleImage, "More"); !ok {
 		t.Fatal("nothing stands for the elided steps")
 	}
 	for _, gone := range []string{"B", "C", "D"} {
