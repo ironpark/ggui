@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/ironpark/ggui/ui/icons"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 //go:embed svg/*.svg
@@ -46,6 +47,10 @@ type library struct{}
 
 // Set returns the immutable mapping from common roles to Lucide icons.
 func Set() icons.Set { return library{} }
+
+// Linking the package makes it a choice of theme.Config's Icons, under
+// theme.IconsLucide.
+func init() { uitheme.RegisterIcons(uitheme.IconsLucide, icons.SetKey, Set()) }
 func (library) Resolve(role icons.Role) *icons.SVG {
 	name, ok := roles[role]
 	if !ok {
