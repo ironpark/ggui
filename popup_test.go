@@ -20,8 +20,10 @@ func TestPopupPaintsContentAboveAndClosesOnOutsidePress(t *testing.T) {
 	}
 	p.Show()
 	pr.Frame()
-	if contentRect != Rct(Pt(0, 124), Sz(80, 40)) {
-		t.Fatalf("content at %+v, want below the anchor at (0,124) 80x40", contentRect)
+	// The anchor is at the window's left edge, which the content keeps
+	// PopupCollisionPadding from.
+	if contentRect != Rct(Pt(5, 124), Sz(80, 40)) {
+		t.Fatalf("content at %+v, want below the anchor at (5,124) 80x40", contentRect)
 	}
 	// A press inside the content stays there; one outside closes and is
 	// swallowed, so the anchor's tap does not fire.
@@ -115,16 +117,17 @@ func TestPopupShowAtPlacesContentAtAPointUntilAnchored(t *testing.T) {
 	if content != Rct(Pt(100, 54), Sz(80, 40)) {
 		t.Fatalf("ShowAt(100, 50) painted the content at %+v, want the gap below the point at (100,54)", content)
 	}
-	// A point near the edge keeps the content on screen.
+	// A point near the edge keeps the content on screen, the collision
+	// padding inside it.
 	p.ShowAt(Pt(290, 50))
 	pr.Frame()
-	if content.Origin.X != 300-80 {
-		t.Fatalf("ShowAt near the right edge put the content at x=%v, want 220", content.Origin.X)
+	if content.Origin.X != 300-80-PopupCollisionPadding {
+		t.Fatalf("ShowAt near the right edge put the content at x=%v, want 215", content.Origin.X)
 	}
 	p.AnchorPosition()
 	pr.Frame()
-	if content.Origin != Pt(0, 24) {
-		t.Fatalf("after AnchorPosition the content is at %v, want below the anchor at (0,24)", content.Origin)
+	if content.Origin != Pt(PopupCollisionPadding, 24) {
+		t.Fatalf("after AnchorPosition the content is at %v, want below the anchor at (5,24)", content.Origin)
 	}
 }
 
