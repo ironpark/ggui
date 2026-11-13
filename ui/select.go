@@ -3,6 +3,7 @@ package ui
 import (
 	"image/color"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/ironpark/ggui"
@@ -48,15 +49,19 @@ type SelectWidget[T comparable] struct {
 	textSize       ggui.Size
 	triggerContent ggui.Widget
 	triggerSize    ggui.Size
-	highlight      int // the option the keyboard is on while open, or -1
+	highlight      int       // the option the keyboard is on while open, or -1
+	typed          string    // the letters of the typeahead search under way
+	typedAt        time.Time // when the last of them was typed
 	theme          *uitheme.Theme
 	env            ggui.Env
 }
 
 // Select creates a dropdown bound to value, showing each option through
-// fmt.Sprint until Format says otherwise. Space or Enter opens it, the arrow
-// keys move through the options (or change the value directly while closed)
-// and Escape closes it. The options slice is shallow-copied.
+// fmt.Sprint until Format says otherwise. Space, Enter, Up or Down opens it;
+// the arrow keys, Home and End move through the options and Escape closes
+// it. Typing letters goes to the option they start: it is highlighted in
+// the open list, and chosen while the list is closed. The options slice is
+// shallow-copied.
 func Select[T comparable](value ggui.Binding[T]) *SelectWidget[T] {
 	s := &SelectWidget[T]{value: value, label: sprint[T], highlight: -1, alignItem: true}
 	s.Role = ggui.RoleSelect
@@ -291,9 +296,19 @@ func (s *SelectWidget[T]) Act(a ggui.Action) bool {
 // Name names the dropdown for Probe.Find and the inspector.
 func (s *SelectWidget[T]) Name(name string) *SelectWidget[T] { s.SetName(name); return s }
 
-// ConsumesKey implements ggui.KeyConsumer: Up and Down step or move.
+// ConsumesKey implements ggui.KeyConsumer: Up and Down open the list or
+// move through it, and Home and End go to its ends while it is open.
 func (s *SelectWidget[T]) ConsumesKey(ev ggui.KeyEvent) bool {
-	return ev.Kind == ggui.KeyPress && (ggui.Activates(ev) || ev.Key == ggui.KeyArrowUp || ev.Key == ggui.KeyArrowDown)
+	if ev.Kind != ggui.KeyPress {
+		return false
+	}
+	switch ev.Key {
+	case ggui.KeyArrowUp, ggui.KeyArrowDown:
+		return true
+	case ggui.KeyHome, ggui.KeyEnd:
+		return s.popup.IsOpen()
+	}
+	return ggui.Activates(ev)
 }
 
 // Disabled greys the dropdown out and ignores input while v is true.
@@ -443,14 +458,16 @@ func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 	s.anchorRect = r
 	s.Hit(dst, r, s, ggui.CursorShapeDefault)
 	s.positionList(dst, r)
-	open := s.popup.IsOpen()
 	radius := s.radius(t)
 	// On a dark theme the field lightens under the pointer.
 	fill := t.Input
 	if hover := dst.Ease(s.Anchor(r), selectHoverSlot, pick(s.Hovered && !inert && isDark(t.Bg), 1.0, 0.0), s.motion); hover > 0 {
 		fill = mix(fill, fade(t.InputBorder, .5), hover)
 	}
-	border := pick(open || s.Focused, t.Ring, t.InputBorder)
+	// The border keeps the InputBorder while the list is open or the field
+	// was clicked: the Ring is the keyboard's, drawn by controlFocusRing
+	// below, as shadcn's focus-visible:border-ring.
+	border := t.InputBorder
 	if s.shownInvalid {
 		border = pick(isDark(t.Bg), fade(t.Destructive, .5), t.Destructive)
 	}
@@ -569,6 +586,10 @@ func (s *SelectWidget[T]) HandleKey(ev ggui.KeyEvent) {
 	if ev.Kind == ggui.KeyBlur {
 		s.popup.Hide()
 	}
+	if ev.Kind == ggui.KeyText {
+		s.typeahead(ev.Text)
+		return
+	}
 	if ev.Kind != ggui.KeyPress {
 		return
 	}
@@ -584,17 +605,61 @@ func (s *SelectWidget[T]) HandleKey(ev ggui.KeyEvent) {
 	switch ev.Key {
 	case ggui.KeyEscape:
 		s.popup.Hide()
-	case ggui.KeyArrowUp, ggui.KeyArrowDown:
+	case ggui.KeyArrowUp, ggui.KeyArrowDown, ggui.KeyHome, ggui.KeyEnd:
 		if len(s.options) == 0 {
 			return
 		}
 		if open {
 			s.highlight, _ = navIndex(ev, navVertical, s.highlight, len(s.options), s.enabled)
 			s.viewport.reveal = true
-		} else {
-			i, _ := navIndex(ev, navVertical, s.index(), len(s.options), s.enabled)
-			s.choose(i)
+		} else if ev.Key == ggui.KeyArrowUp || ev.Key == ggui.KeyArrowDown {
+			// An arrow opens the list on the chosen option, as Base UI's
+			// trigger does, or on the near end when nothing is chosen.
+			s.toggle()
+			if s.highlight < 0 {
+				s.highlight, _ = navIndex(ev, navVertical, -1, len(s.options), s.enabled)
+			}
 		}
+	}
+}
+
+// selectTypeaheadReset is how long after a letter the next one still
+// continues the same search, as Base UI's typeahead has it.
+const selectTypeaheadReset = 750 * time.Millisecond
+
+// typeahead takes typed text as a search of the options' labels: while the
+// list is open the match is highlighted, and while it is closed the match
+// becomes the value. Letters typed in quick succession spell a prefix; one
+// letter repeated steps through the options starting with it.
+func (s *SelectWidget[T]) typeahead(text string) {
+	now := ggui.Now()
+	if now.Sub(s.typedAt) > selectTypeaheadReset {
+		s.typed = ""
+	}
+	if s.typed == "" && strings.TrimSpace(text) == "" {
+		return // Space opens the list; it starts no search
+	}
+	s.typed, s.typedAt = s.typed+strings.ToLower(text), now
+	open := s.popup.IsOpen()
+	from := pick(open, s.highlight, s.index())
+	query, step := s.typed, 0
+	if runes := []rune(query); len(runes) > 1 && strings.Count(query, string(runes[0])) == len(runes) {
+		query, step = string(runes[0]), 1 // the same letter again: the next option under it
+	} else if len(runes) == 1 {
+		step = 1
+	}
+	n, start := len(s.options), max(from+step, 0)
+	for k := range n {
+		i := (start + k) % n
+		if !s.enabled(i) || !strings.HasPrefix(strings.ToLower(s.label(s.options[i])), query) {
+			continue
+		}
+		if open {
+			s.highlight, s.viewport.reveal = i, true
+		} else if i != s.index() {
+			setChanged(s.value, s.options[i], s.onChange)
+		}
+		return
 	}
 }
 
@@ -603,6 +668,7 @@ func (s *SelectWidget[T]) Adopt(prev any) {
 	s.Interactive.Adopt(prev)
 	if p, ok := prev.(*SelectWidget[T]); ok {
 		s.highlight = p.highlight
+		s.typed, s.typedAt = p.typed, p.typedAt
 		s.viewport.offset.Set(ggui.Untrack(p.viewport.offset.Get))
 		s.viewport.reveal = p.viewport.reveal
 		s.wasOpen = p.wasOpen
