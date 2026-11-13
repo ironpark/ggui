@@ -140,7 +140,7 @@ func TestResizableCaptureLimitsAndKeyboard(t *testing.T) {
 	t.Parallel()
 	fraction := ggui.State(.5)
 	r := ui.Resizable(fraction, ggui.Box(), ggui.Box()).WithHandle().MinSizes(40, 60)
-	p := ggui.NewProbe(r, ggui.Sz(208, 100))
+	p := ggui.NewProbe(r, ggui.Sz(201, 100)) // 200 for the panes and the divider's line
 	defer p.Close()
 	at := find(t, p, ggui.RoleSeparator, "Resize panels").Center()
 	p.Press(at)
@@ -161,13 +161,14 @@ func TestResizableCaptureLimitsAndKeyboard(t *testing.T) {
 	fraction.Set(.9)
 	p.Frame()
 	rect := find(t, p, ggui.RoleSeparator, "Resize panels").Rect
-	if math.Abs(rect.Origin.X-140) > 1e-9 || ggui.Untrack(fraction.Get) != .9 {
+	// The divider's line is at 140, and it is grabbed 4 either side of its middle.
+	if math.Abs(rect.Origin.X-136.5) > 1e-9 || ggui.Untrack(fraction.Get) != .9 {
 		t.Fatal("external value not clamped for display", rect, ggui.Untrack(fraction.Get))
 	}
-	p.Resize(ggui.Sz(58, 40))
+	p.Resize(ggui.Sz(51, 40))
 	p.Frame()
 	rect = find(t, p, ggui.RoleSeparator, "Resize panels").Rect
-	if math.Abs(rect.Origin.X-20) > 1e-9 {
+	if math.Abs(rect.Origin.X-16.5) > 1e-9 {
 		t.Fatal("overconstrained minima are not proportional", rect)
 	}
 	r.Disabled(true)
@@ -293,7 +294,7 @@ func TestAdvancedBindingsInvalidateCachedLayout(t *testing.T) {
 			ggui.Cached(ui.Accordion(open, ui.AccordionItem("a", "Header", ui.Button("Content", func() {})))),
 			ggui.Box(ggui.Cached(ui.Resizable(fraction, ggui.Box(), ggui.Box()))).Height(100),
 		)
-	}, ggui.Sz(208, 300))
+	}, ggui.Sz(201, 300))
 	defer p.Close()
 	p.Frame()
 	open.Set([]string{"a"})
@@ -302,7 +303,7 @@ func TestAdvancedBindingsInvalidateCachedLayout(t *testing.T) {
 	p.Advance(time.Second) // the section opens
 	find(t, p, ggui.RoleButton, "Content")
 	r := find(t, p, ggui.RoleSeparator, "Resize panels").Rect
-	if math.Abs(r.Origin.X-150) > 1e-9 {
+	if math.Abs(r.Origin.X-146.5) > 1e-9 { // the line at 150, grabbed 4 either side of its middle
 		t.Fatal("cached splitter did not follow binding", r)
 	}
 }

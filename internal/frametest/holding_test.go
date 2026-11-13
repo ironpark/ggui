@@ -368,8 +368,8 @@ func TestACollapsibleInAResizablePanePaintsWithinIt(t *testing.T) {
 				open.Set(true)
 			}
 	})
-	// The first pane, less the divider's half.
-	within(t, frames, ggui.Rct(ggui.Pt(0, 0), ggui.Sz(146, 200)))
+	// The first pane, to the pixel its edge at 149.5 falls in.
+	within(t, frames, ggui.Rct(ggui.Pt(0, 0), ggui.Sz(150, 200)))
 }
 
 // A horizontal scroll as tall as its content, which grows as it moves,
