@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"image/color"
 	"math"
 	"strconv"
 	"time"
@@ -24,27 +25,68 @@ type CalendarWidget struct {
 	required, excludeDisabled, resetOnSelect       bool
 	minSelected, maxSelected, minNights, maxNights int
 	active, last                                   time.Time
+	first                                          time.Time // the first month shown; the browsed date stays within the months from it
 	location                                       *time.Location
 	weekStart                                      time.Weekday
 	weekdays                                       [7]string
+	monthNames                                     [12]string
 	monthLabel                                     func(time.Time) string
 	disabledDate                                   func(time.Time) bool
 	onChange                                       func(time.Time)
 	onPick                                         func()
 	min, max                                       time.Time
-	lowest, highest                                time.Time // min and max normalized, refreshed each layout
-	days                                           [42]*calendarDay
-	weekdayText                                    [7]*ggui.TextWidget
-	weekdaySize                                    [7]ggui.Size
+	lowest, highest                                time.Time         // min and max normalized, refreshed each layout
+	today                                          time.Time         // refreshed each layout
+	selection                                      calendarSelection // the binding normalized, refreshed each layout
+	count                                          int               // months shown at once
+	dropdown                                       bool              // month and year selects in place of the caption
+	yearFrom, yearTo                               int               // the years the dropdown offers; zero follows the bounds
+	years                                          []int
+	panes                                          []*calendarPane
 	previous, next                                 *ButtonWidget
 	previousIcon, nextIcon                         *icons.Widget
-	title                                          *ggui.TextWidget
-	header                                         ggui.Widget
 	theme                                          *uitheme.Theme
 	env                                            ggui.Env
-	headerSize                                     ggui.Size
-	cellH                                          float64
+	hover                                          color.Color // the fill under the pointer, resolved each layout
+	metrics                                        calendarMetrics
 }
+
+// calendarMetrics is the geometry one layout settles for Paint.
+type calendarMetrics struct {
+	pad, cell, rowGap, monthGap float64 // root padding, the square day fill, and the gaps between weeks and months
+	column                      float64 // the width of a weekday column, the cell's unless the calendar is stretched
+	caption, weekday            float64 // the heights of the caption and weekday rows
+	captionGap                  float64 // between the caption and the weekday row
+	monthW, monthH              float64
+	perRow                      int
+	nav                         ggui.Size
+}
+
+// calendarPane is one month: its caption, weekday labels and six weeks.
+type calendarPane struct {
+	title               *ggui.TextWidget
+	titleSize           ggui.Size
+	weekdayText         [7]*ggui.TextWidget
+	weekdaySize         [7]ggui.Size
+	days                [42]*calendarDay
+	month               *SelectWidget[time.Month]
+	year                *SelectWidget[int]
+	monthSize, yearSize ggui.Size
+	yearFrom, yearTo    int // the years the year select was last given
+}
+
+// calendarPart is the binding behind a caption dropdown: it reads what a
+// pane shows and browses elsewhere when the user picks another value.
+type calendarPart[T any] struct {
+	get func() T
+	set func(T)
+}
+
+func (p calendarPart[T]) Get() T  { return p.get() }
+func (p calendarPart[T]) Set(v T) { p.set(v) }
+
+var calendarMonths = []time.Month{time.January, time.February, time.March, time.April, time.May, time.June,
+	time.July, time.August, time.September, time.October, time.November, time.December}
 
 // Calendar binds a date; zero means no selection. Dates are interpreted in
 // Location (time.Local by default), and user selections are local midnight.
@@ -56,23 +98,33 @@ func Calendar(value ggui.Binding[time.Time]) *CalendarWidget {
 }
 
 func newCalendar() *CalendarWidget {
-	c := &CalendarWidget{location: time.Local, weekStart: time.Sunday,
-		weekdays: [7]string{"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"}, monthLabel: func(t time.Time) string { return t.Format("January 2006") }}
+	c := &CalendarWidget{location: time.Local, weekStart: time.Sunday, count: 1,
+		weekdays:   [7]string{"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"},
+		monthNames: [12]string{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"},
+		monthLabel: func(t time.Time) string { return t.Format("January 2006") }}
 	c.Role = ggui.RoleGroup
 	c.AutoKey()
 	c.previousIcon, c.nextIcon = Icon(icons.ChevronLeft), Icon(icons.ChevronRight)
-	c.previous = ButtonOf(c.previousIcon, func() { c.moveMonth(-1) }).Ghost().Name("Previous month")
-	c.next = ButtonOf(c.nextIcon, func() { c.moveMonth(1) }).Ghost().Name("Next month")
-	c.title = ggui.Text("").NoWrap()
-	c.header = ggui.Row(c.previous, ggui.Expanded(ggui.Center(c.title)), c.next).Gap(8)
-	for i := range c.days {
-		c.days[i] = &calendarDay{owner: c, text: ggui.Text("").NoWrap()}
-		c.days[i].Role = ggui.RoleOption
-	}
-	for i := range c.weekdayText {
-		c.weekdayText[i] = ggui.Text("").NoWrap()
-	}
+	c.previous = ButtonOf(c.previousIcon, func() { c.moveMonth(-1) }).Ghost().Size(ButtonIconSmall).Name("Previous month")
+	c.next = ButtonOf(c.nextIcon, func() { c.moveMonth(1) }).Ghost().Size(ButtonIconSmall).Name("Next month")
+	c.setPanes(1)
 	return c
+}
+
+// setPanes keeps n month panes, reusing the ones already there.
+func (c *CalendarWidget) setPanes(n int) {
+	for len(c.panes) < n {
+		p := &calendarPane{title: ggui.Text("").NoWrap()}
+		for i := range p.days {
+			p.days[i] = &calendarDay{owner: c, column: i % 7, text: ggui.Text("").NoWrap()}
+			p.days[i].Role = ggui.RoleOption
+		}
+		for i := range p.weekdayText {
+			p.weekdayText[i] = ggui.Text("").NoWrap()
+		}
+		c.panes = append(c.panes, p)
+	}
+	c.panes = c.panes[:n]
 }
 
 // Name sets the calendar's accessible name.
@@ -90,7 +142,7 @@ func (c *CalendarWidget) Location(l *time.Location) *CalendarWidget {
 		c.location = l
 		c.props.Changed()
 	}
-	c.active = time.Time{}
+	c.active, c.first = time.Time{}, time.Time{}
 	return c
 }
 
@@ -115,6 +167,54 @@ func (c *CalendarWidget) WeekdayLabels(labels [7]string) *CalendarWidget {
 func (c *CalendarWidget) MonthLabel(fn func(time.Time) string) *CalendarWidget {
 	if fn != nil {
 		c.monthLabel = fn
+		c.props.Changed()
+	}
+	return c
+}
+
+// Months shows n consecutive months side by side, wrapping onto further
+// rows where the width does not hold them all. The previous and next
+// buttons still move one month at a time. One month is the default.
+func (c *CalendarWidget) Months(n int) *CalendarWidget {
+	if n < 1 {
+		panic("ui: a calendar shows at least one month")
+	}
+	defer property.Watch(&c.props, &c.count)()
+	c.count = n
+	c.setPanes(n)
+	return c
+}
+
+// CaptionDropdown replaces the month heading with a month Select and a year
+// Select, as shadcn's captionLayout="dropdown" does. The years offered
+// follow DropdownYears, then Bounds; without either they run from a hundred
+// years back to ten ahead. The year shown is always among them.
+func (c *CalendarWidget) CaptionDropdown(v bool) *CalendarWidget {
+	defer property.Watch(&c.props, &c.dropdown)()
+	c.dropdown = v
+	return c
+}
+
+// DropdownYears sets the inclusive years the caption dropdown offers. Zero
+// for either end follows Bounds, then the default span around today.
+func (c *CalendarWidget) DropdownYears(from, to int) *CalendarWidget {
+	if from != 0 && to != 0 && to < from {
+		panic("ui: invalid calendar dropdown years")
+	}
+	defer property.Watch(&c.props, &c.yearTo)()
+	defer property.Watch(&c.props, &c.yearFrom)()
+	c.yearFrom, c.yearTo = from, to
+	return c
+}
+
+// MonthNames sets the localized short month names the caption dropdown
+// lists, January first.
+func (c *CalendarWidget) MonthNames(names [12]string) *CalendarWidget {
+	if names != c.monthNames {
+		c.monthNames = names
+		for _, p := range c.panes {
+			p.month, p.year = nil, nil // built again with the new names at the next layout
+		}
 		c.props.Changed()
 	}
 	return c
@@ -151,7 +251,7 @@ func (c *CalendarWidget) enabled(t time.Time) bool {
 	return !c.IsInert() && (c.lowest.IsZero() || !t.Before(c.lowest)) && (c.highest.IsZero() || !t.After(c.highest)) && (c.disabledDate == nil || !c.disabledDate(t))
 }
 
-// month is the first of the browsed month; the browsed date defines it.
+// month is the first of the browsed month.
 func (c *CalendarWidget) month() time.Time {
 	return time.Date(c.active.Year(), c.active.Month(), 1, 0, 0, 0, 0, c.location)
 }
@@ -171,15 +271,38 @@ func (c *CalendarWidget) syncDate() {
 		c.last = v
 	}
 }
+
+// syncView moves the months shown just far enough to hold the browsed date.
+func (c *CalendarWidget) syncView() {
+	m := c.month()
+	switch {
+	case c.first.IsZero() || m.Before(c.first):
+		c.first = m
+	case m.After(c.first.AddDate(0, c.count-1, 0)):
+		c.first = m.AddDate(0, 1-c.count, 0)
+	}
+}
+
+// moveMonth browses n months on, keeping the day of the month where the
+// month is long enough, and slides the months shown along with it.
 func (c *CalendarWidget) moveMonth(n int) {
-	if c.IsInert() {
+	if c.IsInert() || n == 0 {
 		return
 	}
 	c.syncDate()
+	c.syncView()
+	c.first = c.first.AddDate(0, n, 0)
 	m := c.month().AddDate(0, n, 0)
 	last := m.AddDate(0, 1, -1).Day()
 	c.show(m.AddDate(0, 0, min(c.active.Day(), last)-1))
 }
+
+// browse shows year and month in the pane at index, as its dropdowns ask.
+func (c *CalendarWidget) browse(index, year int, month time.Month) {
+	shown := c.first.AddDate(0, index, 0)
+	c.moveMonth((year-shown.Year())*12 + int(month-shown.Month()))
+}
+
 func (c *CalendarWidget) choose(t time.Time) {
 	if !c.enabled(t) {
 		return
@@ -201,6 +324,50 @@ func (c *CalendarWidget) choose(t time.Time) {
 	}
 }
 
+// layoutDropdown measures the month and year selects of the pane at index,
+// building them the first time.
+func (c *CalendarWidget) layoutDropdown(p *calendarPane, index int, cs ggui.Constraints, env ggui.Env) {
+	if p.month == nil {
+		shown := func() time.Time { return c.first.AddDate(0, index, 0) }
+		p.month = Select[time.Month](calendarPart[time.Month]{
+			get: func() time.Month { return shown().Month() },
+			set: func(m time.Month) { c.browse(index, shown().Year(), m) },
+		}).Format(func(m time.Month) string { return c.monthNames[(int(m)+11)%12] }).Options(calendarMonths).Name("Month")
+		p.year = Select[int](calendarPart[int]{
+			get: func() int { return shown().Year() },
+			set: func(y int) { c.browse(index, y, shown().Month()) },
+		}).Name("Year")
+		p.yearFrom, p.yearTo = 0, 0
+	}
+	if from, to := c.years[0], c.years[len(c.years)-1]; p.yearFrom != from || p.yearTo != to {
+		p.yearFrom, p.yearTo = from, to
+		p.year.Options(c.years)
+	}
+	p.month.Disabled(c.IsInert())
+	p.year.Disabled(c.IsInert())
+	p.monthSize = p.month.Layout(cs, env)
+	p.yearSize = p.year.Layout(cs, env)
+}
+
+// syncYears lists the years the dropdown offers, widened to the years shown.
+func (c *CalendarWidget) syncYears() {
+	from, to := c.yearFrom, c.yearTo
+	if from == 0 {
+		from = pick(c.lowest.IsZero(), c.today.Year()-100, c.lowest.Year())
+	}
+	if to == 0 {
+		to = pick(c.highest.IsZero(), c.today.Year()+10, c.highest.Year())
+	}
+	from = min(from, c.first.Year())
+	to = max(to, from, c.first.AddDate(0, c.count-1, 0).Year())
+	if n := to - from + 1; len(c.years) != n || c.years[0] != from {
+		c.years = make([]int, n)
+		for i := range c.years {
+			c.years[i] = from + i
+		}
+	}
+}
+
 // Layout implements ggui.Widget.
 func (c *CalendarWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	defer c.props.Layout().EndLayout()
@@ -209,57 +376,164 @@ func (c *CalendarWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	angle := pick(env.Direction() == ggui.DirRTL, math.Pi, 0.0)
 	c.previousIcon.Rotate(angle)
 	c.nextIcon.Rotate(angle)
-	c.theme = uitheme.Of(env)
+	t := uitheme.Of(env)
+	c.theme = t
 	c.syncDate()
+	c.syncView()
 	c.lowest, c.highest = c.date(c.min), c.date(c.max)
-	month := c.month()
-	c.title.Content(c.monthLabel(month))
+	// FrameTime, not Now: marking today must not keep the app painting.
+	c.today = c.date(ggui.FrameTime())
+	c.resolveSelection()
 	c.previous.Disabled(c.IsInert())
 	c.next.Disabled(c.IsInert())
-	w := cs.Constrain(ggui.Sz(294, 0)).W
-	headerHeight := c.previous.Layout(ggui.Loose(ggui.Sz(w, cs.MaxH)), env).H
-	c.headerSize = c.header.Layout(ggui.Loose(ggui.Sz(w, headerHeight)), env)
-	c.cellH = max(36, c.theme.Text.Size+16)
-	cell := ggui.Loose(ggui.Sz(w/7, c.cellH))
-	for i, label := range c.weekdayText {
-		c.weekdaySize[i] = label.Content(c.weekdays[(i+int(c.weekStart))%7]).Color(c.theme.MutedFg).Layout(cell, env)
+
+	m := &c.metrics
+	m.pad, m.cell, m.rowGap, m.monthGap, m.captionGap = t.Space, 3.5*t.Space, t.Space, 2*t.Space, 2*t.Space
+	loose := ggui.Loose(ggui.Sz(cs.MaxW, cs.MaxH))
+	m.nav = c.previous.Layout(loose, env)
+	c.next.Layout(loose, env)
+	if c.dropdown {
+		c.syncYears()
 	}
-	start := month.AddDate(0, 0, -(int(month.Weekday())-int(c.weekStart)+7)%7)
-	for i, d := range c.days {
-		if date := start.AddDate(0, 0, i); !date.Equal(d.date) {
-			d.date = date
-			d.SetName(date.Format("2006-01-02"))
+	captionW := 0.0
+	m.caption = max(m.cell, m.nav.H)
+	captionStyle := t.Text.Merge(t.Label)
+	for i, p := range c.panes {
+		size := ggui.Size{}
+		if c.dropdown {
+			c.layoutDropdown(p, i, loose, env)
+			size = ggui.Sz(p.monthSize.W+calendarDropdownGap(t)+p.yearSize.W, max(p.monthSize.H, p.yearSize.H))
+		} else {
+			p.titleSize = p.title.Content(c.monthLabel(c.first.AddDate(0, i, 0))).Style(captionStyle).Layout(loose, env)
+			size = p.titleSize
 		}
-		d.SetInert(!c.enabled(d.date))
-		col := c.theme.Fg
-		if d.IsInert() || d.date.Month() != month.Month() {
-			col = c.theme.MutedFg
-		}
-		if c.selectionEdge(d.date) {
-			col = c.theme.PrimaryFg
-		}
-		d.size = d.text.Content(strconv.Itoa(d.date.Day())).Color(col).Layout(cell, env)
+		captionW, m.caption = max(captionW, size.W), max(m.caption, size.H)
 	}
-	return cs.Constrain(ggui.Sz(w, c.headerSize.H+7*c.cellH+8))
+
+	// A month is seven cells wide, or as wide as its caption between the
+	// two buttons; as many months share a row as the width holds.
+	monthW := max(7*m.cell, captionW+2*(m.nav.W+t.Space/2))
+	m.perRow = c.count
+	if avail := cs.MaxW - 2*m.pad; !math.IsInf(avail, 1) {
+		m.perRow = clamp(int((avail+m.monthGap)/(monthW+m.monthGap)), 1, c.count)
+	}
+	gaps := float64(m.perRow-1) * m.monthGap
+	w := cs.Constrain(ggui.Sz(2*m.pad+float64(m.perRow)*monthW+gaps, 0)).W
+	m.monthW = max(0, (w-2*m.pad-gaps)/float64(m.perRow))
+	m.column = m.monthW / 7
+	m.cell = min(m.cell, m.column)
+
+	cell := ggui.Loose(ggui.Sz(m.column, m.cell))
+	disabled := fade(t.MutedFg, .5)
+	c.hover = pick[color.Color](isDark(t.Bg), fade(t.Muted, .5), t.Muted)
+	end := c.first.AddDate(0, c.count, 0)
+	m.weekday = 0
+	for i, p := range c.panes {
+		for j, label := range p.weekdayText {
+			p.weekdaySize[j] = label.Content(c.weekdays[(j+int(c.weekStart))%7]).Color(t.MutedFg).Size(12.8).Layout(cell, env)
+			m.weekday = max(m.weekday, p.weekdaySize[j].H)
+		}
+		month := c.first.AddDate(0, i, 0)
+		start := month.AddDate(0, 0, -(int(month.Weekday())-int(c.weekStart)+7)%7)
+		for j, d := range p.days {
+			if date := start.AddDate(0, 0, j); !date.Equal(d.date) {
+				d.date = date
+				d.SetName(date.Format("2006-01-02"))
+			}
+			d.outside = d.date.Month() != month.Month()
+			// With several months a day outside its month may be another
+			// pane's own day; only that one is described.
+			d.repeat = d.outside && c.count > 1 && !d.date.Before(c.first) && d.date.Before(end)
+			d.mark = c.selection.mark(d.date)
+			d.today = d.date.Equal(c.today)
+			d.SetInert(!c.enabled(d.date))
+			col := t.Fg
+			switch {
+			case d.mark == calendarSingle || d.mark == calendarStart || d.mark == calendarEnd:
+				col = t.PrimaryFg
+			case d.IsInert():
+				col = disabled
+			case d.mark == calendarMiddle || d.today:
+			case d.outside:
+				col = t.MutedFg
+			}
+			d.size = d.text.Content(strconv.Itoa(d.date.Day())).Color(col).Layout(cell, env)
+		}
+	}
+	m.monthH = m.caption + m.captionGap + m.weekday + 6*(m.rowGap+m.cell)
+	rows := float64((c.count + m.perRow - 1) / m.perRow)
+	return cs.Constrain(ggui.Sz(w, 2*m.pad+rows*m.monthH+(rows-1)*m.monthGap))
+}
+
+// calendarDropdownGap separates the month select from the year select.
+func calendarDropdownGap(t *uitheme.Theme) float64 { return t.Space * .75 }
+
+// paneRect is where the pane at index sits in r, before mirroring.
+func (m *calendarMetrics) paneRect(index int, r ggui.Rect) ggui.Rect {
+	x := r.Origin.X + m.pad + float64(index%m.perRow)*(m.monthW+m.monthGap)
+	y := r.Origin.Y + m.pad + float64(index/m.perRow)*(m.monthH+m.monthGap)
+	return ggui.Rct(ggui.Pt(x, y), ggui.Sz(m.monthW, m.monthH))
+}
+
+// gridTop is the top of a pane's first week, including half the row gap
+// that belongs to each day's hit target.
+func (m *calendarMetrics) gridTop(pane ggui.Rect) float64 {
+	return pane.Origin.Y + m.caption + m.captionGap + m.weekday + m.rowGap/2
+}
+
+// dayRect is the hit target of the day at index in pane: a whole column
+// wide and a row with its gap tall.
+func (m *calendarMetrics) dayRect(pane ggui.Rect, index int) ggui.Rect {
+	return ggui.Rct(ggui.Pt(pane.Origin.X+float64(index%7)*m.column, m.gridTop(pane)+float64(index/7)*(m.cell+m.rowGap)), ggui.Sz(m.column, m.cell+m.rowGap))
+}
+
+// fill is the square a day paints, centred in its hit target.
+func (m *calendarMetrics) fill(day ggui.Rect) ggui.Rect {
+	return ggui.Rct(ggui.Pt(day.Origin.X+(day.Size.W-m.cell)/2, day.Origin.Y+(day.Size.H-m.cell)/2), ggui.Sz(m.cell, m.cell))
 }
 
 // Paint implements ggui.Widget.
 func (c *CalendarWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Node(r, ggui.Node{Role: ggui.RoleGroup, Name: c.name(), Disabled: c.IsInert()}, func(dst *ggui.Canvas) {
-		dst.Paint(c.header, ggui.Rct(r.Origin, ggui.Sz(r.Size.W, c.headerSize.H)))
-		y := r.Origin.Y + c.headerSize.H + 8
-		w := r.Size.W / 7
-		grid := ggui.Rct(ggui.Pt(r.Origin.X, y+c.cellH), ggui.Sz(r.Size.W, 6*c.cellH))
+		m, t := &c.metrics, c.theme
+		rtl := c.env.Direction() == ggui.DirRTL
+		head, tail := m.paneRect(0, r), m.paneRect(m.perRow-1, r)
+		navY := head.Origin.Y + (m.caption-m.nav.H)/2
+		dst.Paint(c.previous, mirrorHorizontal(ggui.Rct(ggui.Pt(head.Origin.X, navY), m.nav), r, rtl))
+		dst.Paint(c.next, mirrorHorizontal(ggui.Rct(ggui.Pt(tail.Origin.X+tail.Size.W-m.nav.W, navY), m.nav), r, rtl))
 		if !c.IsInert() {
-			dst.HitKey(grid, c)
-		}
-		for i, label := range c.weekdayText {
-			s := c.weekdaySize[i]
-			dst.Paint(label, mirrorHorizontal(ggui.Rct(ggui.Pt(r.Origin.X+float64(i)*w+(w-s.W)/2, y+(c.cellH-s.H)/2), s), r, c.env.Direction() == ggui.DirRTL))
+			top := m.gridTop(head)
+			dst.HitKey(ggui.Rct(ggui.Pt(r.Origin.X+m.pad, top), ggui.Sz(r.Size.W-2*m.pad, r.Origin.Y+r.Size.H-m.pad-top)), c)
 		}
 		cells := dst.Clip(r)
-		for i, d := range c.days {
-			cells.Paint(d, mirrorHorizontal(ggui.Rct(ggui.Pt(r.Origin.X+float64(i%7)*w, y+float64(i/7+1)*c.cellH), ggui.Sz(w, c.cellH)), r, c.env.Direction() == ggui.DirRTL))
+		var focus ggui.Rect
+		for i, p := range c.panes {
+			pane := m.paneRect(i, r)
+			if c.dropdown && p.month != nil {
+				x := pane.Origin.X + (pane.Size.W-p.monthSize.W-calendarDropdownGap(t)-p.yearSize.W)/2
+				dst.Paint(p.month, mirrorHorizontal(ggui.Rct(ggui.Pt(x, pane.Origin.Y+(m.caption-p.monthSize.H)/2), p.monthSize), r, rtl))
+				x += p.monthSize.W + calendarDropdownGap(t)
+				dst.Paint(p.year, mirrorHorizontal(ggui.Rct(ggui.Pt(x, pane.Origin.Y+(m.caption-p.yearSize.H)/2), p.yearSize), r, rtl))
+			} else {
+				at := ggui.Pt(pane.Origin.X+(pane.Size.W-p.titleSize.W)/2, pane.Origin.Y+(m.caption-p.titleSize.H)/2)
+				dst.Paint(p.title, mirrorHorizontal(ggui.Rct(at, p.titleSize), r, rtl))
+			}
+			y := pane.Origin.Y + m.caption + m.captionGap
+			for j, label := range p.weekdayText {
+				s := p.weekdaySize[j]
+				dst.Paint(label, mirrorHorizontal(ggui.Rct(ggui.Pt(pane.Origin.X+float64(j)*m.column+(m.column-s.W)/2, y+(m.weekday-s.H)/2), s), r, rtl))
+			}
+			for j, d := range p.days {
+				day := mirrorHorizontal(m.dayRect(pane, j), r, rtl)
+				cells.Paint(d, day)
+				if !d.repeat && d.date.Equal(c.active) {
+					focus = m.fill(day)
+				}
+			}
+		}
+		// Last, so the halo lies over the neighbouring days' fills.
+		if focus.Size.W > 0 {
+			controlFocusRing(dst, &c.Interactive, t, focus, t.RadiusSm, t.Ring)
 		}
 	})
 }
@@ -299,9 +573,11 @@ func (c *CalendarWidget) HandleKey(e ggui.KeyEvent) {
 	case ggui.KeyEnd:
 		delta = 6 - (int(c.active.Weekday())-int(c.weekStart)+7)%7
 	case ggui.KeyPageUp:
+		c.FocusVisible = true
 		c.moveMonth(-1)
 		return
 	case ggui.KeyPageDown:
+		c.FocusVisible = true
 		c.moveMonth(1)
 		return
 	default:
@@ -310,6 +586,8 @@ func (c *CalendarWidget) HandleKey(e ggui.KeyEvent) {
 		}
 		return
 	}
+	// A grid focused by a click shows no ring until the keys browse it.
+	c.FocusVisible = true
 	c.show(c.active.AddDate(0, 0, delta))
 }
 
@@ -317,22 +595,27 @@ func (c *CalendarWidget) HandleKey(e ggui.KeyEvent) {
 func (c *CalendarWidget) Adopt(prev any) {
 	c.Interactive.Adopt(prev)
 	if p, ok := prev.(*CalendarWidget); ok && p.location == c.location {
-		c.active, c.last = p.active, p.last
+		c.active, c.last, c.first = p.active, p.last, p.first
 		c.syncDate()
 	}
 }
 
 type calendarDay struct {
 	ggui.Interactive
-	owner *CalendarWidget
-	date  time.Time
-	text  *ggui.TextWidget
-	size  ggui.Size
+	owner   *CalendarWidget
+	date    time.Time
+	text    *ggui.TextWidget
+	size    ggui.Size
+	column  int          // 0 on the side the week starts
+	mark    calendarMark // its part in the selection
+	today   bool
+	outside bool // belongs to the month before or after its pane's
+	repeat  bool // outside, and shown by another pane as its own
 }
 
 func (d *calendarDay) Layout(cs ggui.Constraints, _ ggui.Env) ggui.Size { return cs.Constrain(d.size) }
 func (d *calendarDay) Describe() ggui.Node {
-	return ggui.Node{Role: ggui.RoleOption, Name: d.SemanticName(), Selected: d.owner.selected(d.date), Disabled: d.IsInert(), Actions: ggui.ActionPress | ggui.ActionSelect}
+	return ggui.Node{Role: ggui.RoleOption, Name: d.SemanticName(), Selected: d.mark != calendarUnmarked, Disabled: d.IsInert(), Actions: ggui.ActionPress | ggui.ActionSelect}
 }
 func (d *calendarDay) Act(a ggui.Action) bool {
 	if !d.owner.enabled(d.date) || (a.Kind != ggui.ActionPress && a.Kind != ggui.ActionSelect) {
@@ -347,27 +630,61 @@ func (d *calendarDay) HandlePointer(e ggui.PointerEvent) bool {
 	}
 	return d.Pointer(e, func() { d.owner.choose(d.date) })
 }
+
+// Paint fills the day's square inside r, its hit target. A range paints as
+// one band: the days between its ends fill the whole column, rounded only
+// where a week begins or ends, and each end lays the band's half behind its
+// own primary square.
 func (d *calendarDay) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	c := d.owner
-	t := c.theme
-	dst.Describe(r, d)
+	t, m := c.theme, &c.metrics
+	if !d.repeat {
+		dst.Describe(r, d)
+	}
 	if !d.IsInert() {
 		dst.HitPointer(r, d)
 		dst.HitCursor(r, ggui.CursorShapePointer)
 	}
-	if c.selected(d.date) {
-		if c.selectionEdge(d.date) {
-			dst.FillRoundRect(r, t.Radius, t.Primary)
-		} else {
-			dst.FillRect(r, t.Muted)
+	fill := m.fill(r)
+	center := fill.Origin.X + fill.Size.W/2
+	// The halves of the column on the side of earlier and of later dates.
+	before := ggui.Rct(ggui.Pt(r.Origin.X, fill.Origin.Y), ggui.Sz(center-r.Origin.X, fill.Size.H))
+	after := ggui.Rct(ggui.Pt(center, fill.Origin.Y), ggui.Sz(r.Origin.X+r.Size.W-center, fill.Size.H))
+	if c.env.Direction() == ggui.DirRTL {
+		before, after = after, before
+	}
+	weekStart, weekEnd := d.column == 0, d.column == 6
+	switch d.mark {
+	case calendarMiddle:
+		if weekStart || weekEnd {
+			dst.FillRoundRect(fill, t.RadiusSm, t.Muted)
 		}
-	} else if d.Hovered {
-		dst.FillRoundRect(r, t.Radius, t.Muted)
+		if !weekStart {
+			dst.FillRect(before, t.Muted)
+		}
+		if !weekEnd {
+			dst.FillRect(after, t.Muted)
+		}
+	case calendarStart:
+		if !weekEnd {
+			dst.FillRect(after, t.Muted)
+		}
+		dst.FillRoundRect(fill, t.RadiusSm, t.Primary)
+	case calendarEnd:
+		if !weekStart {
+			dst.FillRect(before, t.Muted)
+		}
+		dst.FillRoundRect(fill, t.RadiusSm, t.Primary)
+	case calendarSingle:
+		dst.FillRoundRect(fill, t.RadiusSm, t.Primary)
+	default:
+		if d.today {
+			dst.FillRoundRect(fill, t.RadiusSm, t.Muted)
+		} else if d.Hovered && !d.IsInert() {
+			dst.FillRoundRect(fill, t.RadiusSm, c.hover)
+		}
 	}
-	if c.Focused && c.active.Equal(d.date) {
-		dst.StrokeRoundRect(r, t.Radius, 2, t.Primary)
-	}
-	dst.Paint(d.text, ggui.Rct(ggui.Pt(r.Origin.X+(r.Size.W-d.size.W)/2, r.Origin.Y+(r.Size.H-d.size.H)/2), d.size))
+	dst.Paint(d.text, ggui.Rct(ggui.Pt(fill.Origin.X+(fill.Size.W-d.size.W)/2, fill.Origin.Y+(fill.Size.H-d.size.H)/2), d.size))
 }
 
 // BindDisabled follows r for Disabled without rebuilding the control.
