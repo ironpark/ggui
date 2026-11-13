@@ -31,7 +31,7 @@ other bases, accents, styles, radii, menu colors and modes a choice away.
 | [Tabs](https://ui.shadcn.com/docs/components/base/tabs) | Compact 32px list geometry; background-colored active segment with dark input surface and border. |
 | [Dialog](https://ui.shadcn.com/docs/components/base/dialog) | 384px maximum default width, 16px outer margin/padding, 100ms fade/95% scale, black/10 scrim with 4px backdrop blur, default close button. |
 | [Sheet](https://ui.shadcn.com/docs/components/base/sheet) | Right-side default, 75% viewport width capped at 384px, 200ms ease-in-out, fade and 40px entrance translation, default close button, description and footer. Explicit `.Size()` overrides remain. |
-| [Drawer](https://ui.shadcn.com/docs/components/base/drawer) | As tall as its content, rounded top corners, 450ms motion; the handle bar is opt-in with `.Handle(true)`, and the drag works without it. |
+| [Drawer](https://ui.shadcn.com/docs/components/base/drawer) | As tall as its content, rounded top corners, 450ms motion; the handle bar is opt-in with `.Handle(true)`, and the drag works without it. No close button until `.CloseButton(true)`. |
 | [Tooltip](https://ui.shadcn.com/docs/components/base/tooltip) | No default opening delay, top/center placement with 4px gap and collision fallback, any side on request, 320px max width, 8px radius, 12/6px horizontal/vertical padding; key hints as key caps. |
 | [Hover Card](https://ui.shadcn.com/docs/components/base/hover-card) | 256px width, 10px radius/padding, 600ms opening delay, 300ms closing grace period, 100ms transition. |
 | [Alert](https://ui.shadcn.com/docs/components/base/alert) | 10/8px horizontal/vertical padding, 2px row gap, medium title, optional leading icon and top-right action; destructive changes text while retaining the neutral border. |
@@ -53,7 +53,7 @@ is 150ms, `MotionSlow` 200ms, and the new `MotionOverlay` 100ms. Setting motion
 tokens to zero or providing `ReducedMotionKey` disables their animations.
 
 Dialogs and sheets expose `.CloseButton(false)` for surfaces that supply their
-own closing UI. AlertDialog and CommandDialog omit this button by default.
+own closing UI. AlertDialog, CommandDialog and Drawer omit this button by default.
 HoverCard exposes `.CloseDelay(...)`; Tooltip's existing `.Delay(...)` can
 restore delayed opening. Accordion's group is a semantic container; its
 individual headers now own focus and keep identity across keyed rebuilds.
