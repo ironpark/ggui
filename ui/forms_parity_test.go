@@ -255,10 +255,29 @@ func TestInputGroupBlockAddons(t *testing.T) {
 	if above, below := g.rowRect.Origin.Y-g.topRect.Origin.Y-g.topRect.Size.H, g.botRect.Origin.Y-g.rowRect.Origin.Y-g.rowRect.Size.H; math.Abs(above-14) > 1e-9 || math.Abs(below-14) > 1e-9 {
 		t.Fatalf("the editor is %v below the top row and %v above the bottom one, want 14 each", above, below)
 	}
+	// A single line keeps a field's 32px and moves its text away from the
+	// addons' row inside it: shadcn's pt-3 over a block-end addon, pb-3
+	// under a block-start one, with the row's own py-1.5 between.
+	text := ggui.TextInput(ggui.State("")).Layout(c, env).H
 	line := InputGroup(ggui.TextInput(ggui.State(""))).Bottom(Button("Send", nil))
-	line.Layout(c, env)
-	if below := line.botRect.Origin.Y - line.rowRect.Origin.Y - line.rowRect.Size.H; math.Abs(below-6) > 1e-9 {
-		t.Fatalf("a single line is %v above its bottom row, want 6", below)
+	size := line.Layout(c, env)
+	above, below := line.rowRect.Origin.Y, line.botRect.Origin.Y-line.rowRect.Origin.Y-line.rowRect.Size.H
+	if want := 10 + (20-text)/2; math.Abs(above-want) > 1e-9 || math.Abs(below-(want-2)) > 1e-9 {
+		t.Fatalf("a single line starts %v down and ends %v above its bottom row, want %v and %v", above, below, want, want-2)
+	}
+	if want := 32 + 6 + line.botRect.Size.H + 8; math.Abs(size.H-want) > 1e-9 {
+		t.Fatalf("a single line over a row of addons is %v tall, want %v", size.H, want)
+	}
+	head := InputGroup(ggui.TextInput(ggui.State(""))).Top(ggui.Text("To"))
+	size = head.Layout(c, env)
+	above, below = head.rowRect.Origin.Y-head.topRect.Origin.Y-head.topRect.Size.H, size.H-head.rowRect.Origin.Y-head.rowRect.Size.H
+	if want := 10 + (20-text)/2; math.Abs(below-want) > 1e-9 || math.Abs(above-(want-2)) > 1e-9 {
+		t.Fatalf("a single line starts %v under its top row and ends %v up, want %v and %v", above, below, want-2, want)
+	}
+	both := InputGroup(ggui.TextInput(ggui.State(""))).Top(ggui.Text("To")).Bottom(Button("Send", nil))
+	size = both.Layout(c, env)
+	if want := 8 + both.topRect.Size.H + 6 + 32 + 6 + both.botRect.Size.H + 8; math.Abs(size.H-want) > 1e-9 {
+		t.Fatalf("a single line between two rows of addons is %v tall, want %v", size.H, want)
 	}
 	// The button below still takes its own clicks; the rest of the group
 	// focuses the editor.
