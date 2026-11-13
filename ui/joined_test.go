@@ -178,7 +178,11 @@ func TestButtonGroupDrawsTheFocusedChildsRingItself(t *testing.T) {
 		t.Fatal("a ring with nothing focused")
 	}
 	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyTab)
-	p.Frame()
+	// The ring eases in, so it is looked for part of the way there on the
+	// probe's own clock: two frames of the wall clock can read the same
+	// time where the timer is coarse, and the ring is then not begun.
+	p.Advance(0)
+	p.Advance(uitheme.Default().MotionFast / 2)
 	two, ok := p.FindRole(ggui.RoleButton, "Two")
 	if !ok {
 		t.Fatal("no Two")
