@@ -47,7 +47,8 @@ func TestCodeBlockKeyboardViewportAndSelection(t *testing.T) {
 	block := ui.CodeBlock(code).Height(100)
 	p := ggui.NewProbe(ggui.Column(block), ggui.Sz(260, 220))
 	defer p.Close()
-	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyTab)
+	// Without a header the copy action floats over the code, after it in the Tab order.
+	p.Type(ggui.Mods{}, ggui.KeyTab)
 	if focused, ok := p.Semantics().Focused(); !ok || focused.Name != "Code content" {
 		t.Fatal("code viewport is not a Tab stop", focused)
 	}
@@ -74,8 +75,8 @@ func TestCodeBlockKeepsCodeLTRInsideRTL(t *testing.T) {
 	p := ggui.NewProbe(ggui.Directionality(ggui.DirRTL, ggui.Column(block)), ggui.Sz(360, 180))
 	defer p.Close()
 	text := node(t, p.Semantics(), ggui.RoleText, code)
-	if copy := node(t, p.Semantics(), ggui.RoleButton, "Copy code"); copy.Rect.Origin.X != 12 {
-		t.Fatal("header did not follow RTL", copy.Rect)
+	if copy := node(t, p.Semantics(), ggui.RoleButton, "Copy code"); copy.Rect.Origin.X != 8 {
+		t.Fatal("floating copy action did not follow RTL", copy.Rect)
 	}
 	p.Click(text.Full.Origin.Add(ggui.Pt(1, 4)))
 	text = node(t, p.Semantics(), ggui.RoleText, code)
