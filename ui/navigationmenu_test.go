@@ -153,3 +153,107 @@ func TestNavigationMenuRTLAndNoWrap(t *testing.T) {
 		t.Fatalf("arrow wrapped: %s", focused.Name)
 	}
 }
+
+func TestNavigationMenuHoverOpensAndCloses(t *testing.T) {
+	t.Parallel()
+	build := func() *ui.NavigationMenuWidget {
+		return ui.NavigationMenu(
+			ui.NavigationMenuItem("Products", ui.NavigationMenuLink("Editor", nil)),
+			ui.NavigationMenuItem("Learn", ui.NavigationMenuLink("Docs", nil)),
+		)
+	}
+	nav := build()
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(nav)), ggui.Sz(500, 350))
+	defer p.Close()
+	p.Frame()
+	products, _ := p.Find("Products")
+	p.Move(products.Center())
+	p.Advance(100 * time.Millisecond)
+	if nav.Popup().IsOpen() {
+		t.Fatal("dropdown opened before the hover delay")
+	}
+	p.Advance(150 * time.Millisecond)
+	if _, ok := p.FindRole(ggui.RoleLink, "Editor"); !ok || !nav.Popup().IsOpen() {
+		t.Fatal("resting on a trigger did not open its dropdown")
+	}
+	learn, _ := p.Find("Learn")
+	p.Move(learn.Center())
+	if _, ok := p.FindRole(ggui.RoleLink, "Docs"); !ok {
+		t.Fatal("moving to another trigger did not switch dropdowns")
+	}
+	p.Move(ggui.Pt(495, 345))
+	p.Advance(100 * time.Millisecond)
+	if !nav.Popup().IsOpen() {
+		t.Fatal("dropdown closed before the pointer had been away a while")
+	}
+	p.Advance(100 * time.Millisecond)
+	if nav.Popup().IsOpen() {
+		t.Fatal("a dropdown the pointer opened stayed open after it left")
+	}
+
+	// A click opens it to stay, even once the pointer has left.
+	p.Tap("Learn")
+	p.Move(ggui.Pt(495, 345))
+	p.Advance(time.Second)
+	if !nav.Popup().IsOpen() {
+		t.Fatal("a dropdown opened with a click closed when the pointer left")
+	}
+	p.Key("escape")
+
+	// A click on a dropdown the pointer just opened keeps it open.
+	p.Move(products.Center())
+	p.Advance(300 * time.Millisecond)
+	p.Click(products.Center())
+	p.Move(ggui.Pt(495, 345))
+	p.Advance(time.Second)
+	if !nav.Popup().IsOpen() {
+		t.Fatal("clicking a hover-opened trigger closed it or left it closing on leave")
+	}
+	p.Click(products.Center())
+	p.Advance(time.Second)
+	if nav.Popup().IsOpen() {
+		t.Fatal("a second click did not close the dropdown")
+	}
+
+	off := build().OpenOnHover(false)
+	q := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(off)), ggui.Sz(500, 350))
+	defer q.Close()
+	q.Frame()
+	trigger, _ := q.Find("Products")
+	q.Move(trigger.Center())
+	q.Advance(time.Second)
+	if off.Popup().IsOpen() {
+		t.Fatal("OpenOnHover(false) still opened on hover")
+	}
+}
+
+func TestNavigationMenuPanelMotionSettles(t *testing.T) {
+	t.Parallel()
+	nav := ui.NavigationMenu(
+		ui.NavigationMenuItem("Products", ui.NavigationMenuLink("Editor", nil)).Width(200),
+		ui.NavigationMenuItem("Learn", ui.NavigationMenuLink("Docs", nil)).Width(300),
+	).OpenOnHover(false)
+	p := ggui.NewProbe(ggui.Column(nav), ggui.Sz(600, 350))
+	defer p.Close()
+	p.Tap("Products")
+	p.Advance(time.Second)
+	first := nav.Popup().Rect()
+	p.Tap("Learn")
+	for range 5 {
+		p.Advance(20 * time.Millisecond)
+	}
+	mid := nav.Popup().Rect()
+	if mid.Size.W <= first.Size.W || mid.Size.W >= 300 {
+		t.Fatalf("panel width mid-switch=%v, want between %v and 300", mid.Size.W, first.Size.W)
+	}
+	if _, ok := p.FindRole(ggui.RoleLink, "Docs"); !ok {
+		t.Fatal("the arriving content is not in the panel")
+	}
+	p.Advance(time.Second)
+	if end := nav.Popup().Rect(); end.Size.W != 300 || end.Origin.X <= first.Origin.X {
+		t.Fatalf("panel after switch=%v, from %v", end, first)
+	}
+	if _, ok := p.FindRole(ggui.RoleLink, "Editor"); ok {
+		t.Fatal("the leaving content stayed after the switch")
+	}
+}

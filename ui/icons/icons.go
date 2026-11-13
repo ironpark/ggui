@@ -32,6 +32,8 @@ const (
 	Loader       Role = "loader"
 	Undo         Role = "undo"
 	Redo         Role = "redo"
+	// MoreHorizontal is three dots in a row: steps or pages left out.
+	MoreHorizontal Role = "more-horizontal"
 )
 
 // Set resolves semantic roles to reusable SVG assets. Return nil for an unknown
