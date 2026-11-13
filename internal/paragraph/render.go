@@ -75,6 +75,28 @@ func (r *textRenderer) drawEmoji(img *image.RGBA, s string, x, y int) int {
 	return x + int(math.Ceil(text.AdvanceAt(s, len(s), r.emojiFace)))
 }
 
+// track adds spacing after every cluster of out that advances, as a
+// GoTextFace with a LetterSpacing does.
+func track(out *shaping.Output, spacing fixed.Int26_6) {
+	if spacing == 0 {
+		return
+	}
+	var cluster fixed.Int26_6
+	for i := range out.Glyphs {
+		g := &out.Glyphs[i]
+		cluster += g.Advance
+		if i+1 < len(out.Glyphs) && out.Glyphs[i+1].ClusterIndex == g.ClusterIndex {
+			continue
+		}
+		if cluster != 0 {
+			g.Advance += spacing
+			g.XAdvance += spacing
+		}
+		cluster = 0
+	}
+	out.RecomputeAdvance()
+}
+
 // textRenderer shapes text in a style with go-text's own faces: a Face is
 // not safe for concurrent use, so each Render makes its own of the
 // sources it draws with.
@@ -163,7 +185,9 @@ func (r *textRenderer) shapeLine(line string) (shaping.Line, []rune) {
 			return true
 		}
 		for _, part := range r.seg.Split(in, r) {
-			outs = append(outs, r.shaper.Shape(part))
+			out := r.shaper.Shape(part)
+			track(&out, fixed.Int26_6(math.Round(r.style.Tracking*r.style.Size*64)))
+			outs = append(outs, out)
 		}
 		return true
 	})

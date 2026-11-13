@@ -48,6 +48,7 @@ type goTextOutputCacheKey struct {
 	text       string
 	direction  Direction
 	size       float64
+	spacing    float64
 	language   xlanguage.Tag
 	variations string
 	features   string
@@ -86,8 +87,10 @@ type shapedRun struct {
 }
 
 // compactRuns keeps of outputs what buildAdvances and buildGlyphs read,
-// in one allocation for the glyphs of every run.
-func compactRuns(outputs []shaping.Output) []shapedRun {
+// in one allocation for the glyphs of every run, with spacing added after
+// every cluster that advances: to the advance of the last of its glyphs,
+// which follow each other in a run.
+func compactRuns(outputs []shaping.Output, spacing fixed.Int26_6) []shapedRun {
 	var n int
 	for i := range outputs {
 		n += len(outputs[i].Glyphs)
@@ -112,9 +115,25 @@ func compactRuns(outputs []shaping.Output) []shapedRun {
 				runes:   int32(gl.RunesCount()),
 			})
 		}
+		advance := out.Advance
+		if spacing != 0 {
+			run := glyphs[start:]
+			var cluster fixed.Int26_6 // the advance of the cluster so far
+			for j := range run {
+				cluster += run[j].Advance
+				if j+1 < len(run) && run[j+1].cluster == run[j].cluster {
+					continue
+				}
+				if cluster != 0 {
+					run[j].Advance += spacing
+					advance += spacing
+				}
+				cluster = 0
+			}
+		}
 		runs[i] = shapedRun{
 			glyphs:    glyphs[start:len(glyphs):len(glyphs)],
-			advance:   out.Advance,
+			advance:   advance,
 			size:      out.Size,
 			direction: out.Direction,
 		}
@@ -826,7 +845,7 @@ func (g *GoTextFaceSource) outputCacheValue(text string, face *GoTextFace) *goTe
 		g.shapeMu.Lock()
 		defer g.shapeMu.Unlock()
 		return &goTextOutputCacheValue{
-			runs: compactRuns(g.buildOutputs(text, face)),
+			runs: compactRuns(g.buildOutputs(text, face), float64ToFixed26_6(face.LetterSpacing)),
 		}, true
 	})
 }

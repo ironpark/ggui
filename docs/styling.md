@@ -42,7 +42,7 @@ that were built long before it.
 
 ## Local styles
 
-`TextStyle` is a plain value with five fields:
+`TextStyle` is a plain value with six fields:
 
 ```go
 type TextStyle struct {
@@ -51,8 +51,14 @@ type TextStyle struct {
 	Color      color.Color
 	LineHeight float64     // multiple of Size between baselines
 	Weight     FontWeight  // drawn with the Font's face nearest it
+	Tracking   float64     // multiple of Size added after each letter
 }
 ```
+
+`Tracking` is CSS's `letter-spacing` in em: `-0.025` sets a heading tight, `0.1`
+spaces a shortcut hint out. Text is measured, wrapped, cut, hit and drawn with
+it, in a `Text`, a `RichText` and a `TextInput` alike, and optional ligatures
+are left out, as a browser leaves them out of spaced text.
 
 **A zero field means "inherit", not "zero".** `a.Merge(b)` lays the set fields
 of `b` over `a` and leaves the rest of `a` alone, which is what makes a style

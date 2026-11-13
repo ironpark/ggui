@@ -255,6 +255,13 @@ func (f *Font) face(size float64, weight FontWeight) text.Face {
 	return f.f.Face(size, fontsys.Weight(weight), activeEmoji)
 }
 
+// face is the face st draws in at scale times its size, its tracking
+// with it. st must be resolved.
+func (st TextStyle) face(scale float64) text.Face {
+	size := st.Size * scale
+	return st.Font.f.SpacedFace(size, fontsys.Weight(st.Weight), st.Tracking*size, activeEmoji)
+}
+
 // fontGen changes whenever a measurement made in the active world with the
 // fonts it resolves may no longer hold: a Font changed (fontsys.Generation
 // counts those, which reach every world that measures with it), or the
