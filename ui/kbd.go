@@ -34,7 +34,7 @@ func (k *KbdWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	// shadcn's h-5 min-w-5 px-1 rounded-sm: two and a half Spaces square at
 	// the least, and taller only when the text is scaled up.
 	side := t.Space * 2.5
-	k.box.Pad(0, t.Space/2).Fill(fill).Radius(t.Radius * .6)
+	k.box.Pad(0, t.Space/2).Fill(fill).Radius(t.RadiusXs)
 	c.MinW, c.MinH = min(c.MaxW, max(c.MinW, side)), min(c.MaxH, max(c.MinH, side))
 	return k.box.Layout(c, env)
 }

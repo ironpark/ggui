@@ -86,7 +86,7 @@ func (t Theme) Apply(env ggui.Env) ggui.Env {
 		With(CaptionKey, t.Caption).With(MonoKey, t.Mono).
 		With(ggui.BackgroundKey, t.Bg).With(ggui.SpacingKey, t.Space).
 		With(ggui.EditorStyleKey, ggui.EditorStyle{Muted: t.MutedFg, Selection: t.Selection}).
-		With(ggui.ScrollStyleKey, ggui.ScrollStyle{Color: t.MutedFg, HoverColor: t.Fg, Duration: t.MotionFast}).
+		With(ggui.ScrollStyleKey, ggui.ScrollStyle{Color: t.Border, HoverColor: t.MutedFg, Thickness: 7, HoverThickness: 7, Margin: 1, Duration: t.MotionFast}).
 		With(ggui.PopupDurationKey, t.MotionOverlay)
 }
 

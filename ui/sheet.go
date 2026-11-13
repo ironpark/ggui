@@ -3,7 +3,6 @@ package ui
 import (
 	"math"
 	"slices"
-	"time"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
@@ -18,10 +17,6 @@ const (
 	sheetWidthShare = .75
 	// sheetSlide is how far a sheet travels from its edge as it fades in.
 	sheetSlide = 40
-	// drawerMotion is how long a drawer takes to rise, to fall, and to move
-	// between snap points: shadcn's duration-450. It stands in for a theme
-	// token, which the theme does not have for it yet.
-	drawerMotion = 450 * time.Millisecond
 	// drawerHeadroom is what a drawer as tall as its content leaves of the
 	// window above it: shadcn's max-height of 100dvh - 6rem.
 	drawerHeadroom = 96
@@ -277,7 +272,7 @@ func (s *SheetWidget) Paint(dst *ggui.Canvas, _ ggui.Rect) {
 	}
 	ease, duration := ggui.EaseInOut, s.theme.MotionSlow
 	if s.isDrawer() {
-		ease, duration = drawerEase, drawerMotion
+		ease, duration = drawerEase, s.theme.MotionDrawer
 	}
 	v := clamp(s.slide.Easing(ease).Toggle(open, now, s.env.Motion(duration)), 0, 1)
 	if !open && v <= 0.001 {
@@ -329,7 +324,7 @@ func (s *SheetWidget) paintPanel(dst *ggui.Canvas, v float64, open bool) {
 		if !open {
 			target = s.visibleExtent
 		}
-		duration := s.env.Motion(drawerMotion)
+		duration := s.env.Motion(s.theme.MotionDrawer)
 		if s.dragging {
 			duration = 0
 		}
