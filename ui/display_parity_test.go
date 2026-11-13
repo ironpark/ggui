@@ -93,6 +93,26 @@ func TestAccordionHoverUnderlineSitsUnderTheBaseline(t *testing.T) {
 	}
 }
 
+// A spinner is a status named "Loading" to a screen reader, shadcn's
+// role="status" aria-label="Loading", until Name renames or removes it.
+func TestSpinnerIsAStatusNamedLoading(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		spinner *SpinnerWidget
+		name    string
+	}{{Spinner(), "Loading"}, {Spinner().Name("Saving"), "Saving"}, {Spinner().Name(""), ""}} {
+		p := ggui.NewProbe(ggui.Column(tc.spinner), ggui.Sz(100, 100))
+		n, ok := p.Semantics().Find(ggui.RoleStatus, tc.name)
+		if ok != (tc.name != "") {
+			t.Errorf("spinner named %q: found a status %v, want %v", tc.name, ok, tc.name != "")
+		}
+		if ok && n.Rect.Size != ggui.Sz(16, 16) {
+			t.Errorf("spinner named %q: its status is %v, want the spinner's 16x16", tc.name, n.Rect.Size)
+		}
+		p.Close()
+	}
+}
+
 // An ItemSeparator keeps shadcn's my-2 around its line, which a plain
 // Divider does not.
 func TestItemSeparatorKeepsASpaceAboveAndBelowItsLine(t *testing.T) {
