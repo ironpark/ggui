@@ -195,6 +195,7 @@ func (r *retained) endPartial() {
 type adoptIndex struct {
 	prevByID    map[any]int  // id to its place in prev, the last one painted
 	prevByRect  map[Rect]int // the same for a region with no id
+	prevHandler map[any]bool // the handlers of prev that are pointers
 	prevIndexed bool
 }
 
@@ -204,6 +205,7 @@ func (x *adoptIndex) reset() {
 	x.prevIndexed = false
 	clear(x.prevByID)
 	clear(x.prevByRect)
+	clear(x.prevHandler)
 }
 
 // canvasPool holds the Canvases Clip hands out, made once and handed out
@@ -768,13 +770,21 @@ func (f *frameState) adopt(h *hitRegion) {
 	if old == nil {
 		return
 	}
-	if adoptsPointer && old.pointer != nil && !sameAny(old.pointer, h.pointer) {
+	// A handler that held a region last frame is the widget it was, not one
+	// rebuilt in another's place, wherever it is now and whatever else held
+	// this Rect: a scroll and the scroll inside it are clipped to one
+	// viewport, and the outer must not take the inner's offset for its own.
+	if adoptsPointer && old.pointer != nil && !sameAny(old.pointer, h.pointer) && !f.heldLastFrame(h.pointer) {
 		pointer.Adopt(old.pointer)
 	}
-	if adoptsKey && old.key != nil && !sameAny(old.key, h.key) && !sameAny(h.key, h.pointer) {
+	if adoptsKey && old.key != nil && !sameAny(old.key, h.key) && !sameAny(h.key, h.pointer) && !f.heldLastFrame(h.key) {
 		key.Adopt(old.key)
 	}
 }
+
+// heldLastFrame reports whether handler, a pointer, was a handler of one
+// of last frame's regions. One of another kind is not looked for.
+func (f *frameState) heldLastFrame(handler any) bool { return f.prevHandler[handler] }
 
 // lastFrame finds the region h takes over from: the one with the same ID,
 // or, when h has none, the one that held the same Rect. Where two match,
@@ -809,8 +819,14 @@ func (f *frameState) indexPrev() {
 	if f.prevByID == nil {
 		f.prevByID = make(map[any]int, len(f.prev))
 		f.prevByRect = make(map[Rect]int, len(f.prev))
+		f.prevHandler = make(map[any]bool, len(f.prev))
 	}
 	for i := range f.prev {
+		for _, handler := range [2]any{f.prev[i].pointer, f.prev[i].key} {
+			if handler != nil && reflect.TypeOf(handler).Kind() == reflect.Pointer {
+				f.prevHandler[handler] = true
+			}
+		}
 		switch p := &f.prev[i]; {
 		case p.id == nil:
 			f.prevByRect[p.rect] = i
