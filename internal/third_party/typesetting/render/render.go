@@ -1,6 +1,7 @@
 package render
 
 import (
+	"image"
 	"image/color"
 	"image/draw"
 	"math"
@@ -9,8 +10,8 @@ import (
 	"github.com/ironpark/ggui/internal/third_party/typesetting/font"
 	"github.com/ironpark/ggui/internal/third_party/typesetting/font/opentype"
 	"github.com/ironpark/ggui/internal/third_party/typesetting/shaping"
-	"github.com/srwiley/rasterx"
 	"golang.org/x/image/math/fixed"
+	"golang.org/x/image/vector"
 )
 
 // Renderer defines a type that can render strings to a bitmap canvas.
@@ -27,11 +28,14 @@ type Renderer struct {
 	// Color is the pen colour for rendering
 	Color color.Color
 
-	segmenter   shaping.Segmenter
-	shaper      shaping.HarfbuzzShaper
-	wrapper     shaping.LineWrapper
-	filler      *rasterx.Filler
-	fillerScale float32
+	segmenter shaping.Segmenter
+	shaper    shaping.HarfbuzzShaper
+	wrapper   shaping.LineWrapper
+	// filler accumulates a run's outline glyphs, which are then painted
+	// in Color at once; it is kept to reuse its buffer.
+	filler       vector.Rasterizer
+	fillerScale  float32
+	fillerOrigin image.Point // the image's top left corner, the filler's origin
 }
 
 func (r *Renderer) shape(str string, face *font.Face) (_ shaping.Line, ascent int) {
@@ -103,10 +107,9 @@ func (r *Renderer) DrawShapedRunAt(run shaping.Output, img draw.Image, startX, s
 	r.fillerScale = scale
 
 	b := img.Bounds()
-	scanner := rasterx.NewScannerGV(b.Dx(), b.Dy(), img, b)
-	f := rasterx.NewFiller(b.Dx(), b.Dy(), scanner)
-	r.filler = f
-	f.SetColor(r.Color)
+	f := &r.filler
+	f.Reset(b.Dx(), b.Dy())
+	r.fillerOrigin = b.Min
 	x := float32(startX)
 	y := float32(startY)
 	for _, g := range run.Glyphs {
@@ -124,36 +127,40 @@ func (r *Renderer) DrawShapedRunAt(run shaping.Output, img draw.Image, startX, s
 
 		x += fixed266ToFloat(g.Advance) * r.PixScale
 	}
-	f.Draw()
-	r.filler = nil
+	f.Draw(img, b, image.NewUniform(r.Color), image.Point{})
 	return int(math.Ceil(float64(x)))
 }
 
-func (r *Renderer) drawOutline(g shaping.Glyph, bitmap font.GlyphOutline, f *rasterx.Filler, scale float32, x, y float32) {
+func (r *Renderer) drawOutline(g shaping.Glyph, bitmap font.GlyphOutline, f *vector.Rasterizer, scale float32, x, y float32) {
+	x -= float32(r.fillerOrigin.X)
+	y -= float32(r.fillerOrigin.Y)
+	open := false
 	for _, s := range bitmap.Segments {
 		switch s.Op {
 		case opentype.SegmentOpMoveTo:
-			f.Start(fixed.Point26_6{X: floatToFixed266(s.Args[0].X*scale + x), Y: floatToFixed266(-s.Args[0].Y*scale + y)})
+			if open {
+				f.ClosePath()
+			}
+			f.MoveTo(s.Args[0].X*scale+x, -s.Args[0].Y*scale+y)
+			open = true
 		case opentype.SegmentOpLineTo:
-			f.Line(fixed.Point26_6{X: floatToFixed266(s.Args[0].X*scale + x), Y: floatToFixed266(-s.Args[0].Y*scale + y)})
+			f.LineTo(s.Args[0].X*scale+x, -s.Args[0].Y*scale+y)
 		case opentype.SegmentOpQuadTo:
-			f.QuadBezier(fixed.Point26_6{X: floatToFixed266(s.Args[0].X*scale + x), Y: floatToFixed266(-s.Args[0].Y*scale + y)},
-				fixed.Point26_6{X: floatToFixed266(s.Args[1].X*scale + x), Y: floatToFixed266(-s.Args[1].Y*scale + y)})
+			f.QuadTo(s.Args[0].X*scale+x, -s.Args[0].Y*scale+y,
+				s.Args[1].X*scale+x, -s.Args[1].Y*scale+y)
 		case opentype.SegmentOpCubeTo:
-			f.CubeBezier(fixed.Point26_6{X: floatToFixed266(s.Args[0].X*scale + x), Y: floatToFixed266(-s.Args[0].Y*scale + y)},
-				fixed.Point26_6{X: floatToFixed266(s.Args[1].X*scale + x), Y: floatToFixed266(-s.Args[1].Y*scale + y)},
-				fixed.Point26_6{X: floatToFixed266(s.Args[2].X*scale + x), Y: floatToFixed266(-s.Args[2].Y*scale + y)})
+			f.CubeTo(s.Args[0].X*scale+x, -s.Args[0].Y*scale+y,
+				s.Args[1].X*scale+x, -s.Args[1].Y*scale+y,
+				s.Args[2].X*scale+x, -s.Args[2].Y*scale+y)
 		}
 	}
-	f.Stop(true)
+	if open {
+		f.ClosePath()
+	}
 }
 
 func fixed266ToFloat(i fixed.Int26_6) float32 {
 	return float32(float64(i) / 64)
-}
-
-func floatToFixed266(f float32) fixed.Int26_6 {
-	return fixed.Int26_6(int(float64(f) * 64))
 }
 
 type singleFontMap struct {
