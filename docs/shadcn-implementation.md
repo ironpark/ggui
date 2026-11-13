@@ -149,7 +149,9 @@ See [forms](forms.md), [navigation](data-and-navigation.md), and
   go to the option they start, chosen while the list is closed.
 - Field labels now focus/activate their controls. Label interaction adds no Tab stop.
 - `Radios` stacks its options vertically, 8 logical pixels apart, as shadcn's
-  RadioGroup does; `.Horizontal()` restores a row.
+  RadioGroup does; `.Horizontal()` restores a row. It is one Tab stop, on the
+  chosen option, and the arrow keys move the choice; a `Radio` built on its own
+  stays a stop of its own.
 - A `Drawer` is as tall as its content (up to 96px short of the window) rather
   than 280px, its top corners are rounded, it moves over `MotionDrawer` (450ms),
   and its handle bar is opt-in with `.Handle(true)`; dragging works either way.

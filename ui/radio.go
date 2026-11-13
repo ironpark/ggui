@@ -12,6 +12,9 @@ type RadioWidget[T comparable] struct {
 	selected ggui.Binding[T]
 	value    T
 	onChange func(T)
+
+	group   *RadiosWidget[T] // the Radios it is an option of, if any
+	pending bool             // an arrow key moved here: take the keyboard at the next paint
 }
 
 // Radio creates a round option that is filled while selected holds value
@@ -75,6 +78,10 @@ func (r *RadioWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 func (r *RadioWidget[T]) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 	t := r.theme
 	box := r.paint(dst, rect, r)
+	if r.pending {
+		r.pending = false
+		dst.RequestFocus(r)
+	}
 	center := box.Center()
 	radius := box.Size.W / 2
 	on := ggui.Untrack(r.selected.Get) == r.value
@@ -95,4 +102,36 @@ func (r *RadioWidget[T]) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 		dst.FillCircle(center, radius*.5, dot)
 	}
 	r.stateRing(dst, box, radius, invalid)
+}
+
+// TabStop implements ggui.TabStopper. The options of a Radios are one stop
+// in the Tab order, as a radio group is: the chosen option, or the first
+// enabled one while none is chosen. A Radio on its own is always a stop.
+func (r *RadioWidget[T]) TabStop() bool { return r.group == nil || r.group.stop() == r }
+
+// ConsumesKey implements ggui.KeyConsumer: in a Radios the arrows move the
+// choice.
+func (r *RadioWidget[T]) ConsumesKey(ev ggui.KeyEvent) bool {
+	if r.group != nil && navConsumes(ev, navBoth) && ev.Key != ggui.KeyHome && ev.Key != ggui.KeyEnd {
+		return true
+	}
+	return r.toggle.ConsumesKey(ev)
+}
+
+// HandleKey implements ggui.KeyHandler: Space or Enter chooses the option,
+// and in a Radios the arrows move to the option before or after it.
+func (r *RadioWidget[T]) HandleKey(ev ggui.KeyEvent) {
+	r.toggle.HandleKey(ev)
+	if r.group != nil && !r.IsInert() && r.ConsumesKey(ev) && !ggui.Activates(ev) {
+		r.group.move(r, directionalKey(ev, r.env.Direction() == ggui.DirRTL))
+	}
+}
+
+// Adopt implements ggui.Adopter: a move from the keyboard that a rebuild
+// came between still takes the keyboard to the option it chose.
+func (r *RadioWidget[T]) Adopt(prev any) {
+	r.toggle.Adopt(prev)
+	if p, ok := prev.(*RadioWidget[T]); ok && p != r {
+		r.pending, p.pending = r.pending || p.pending, false
+	}
 }

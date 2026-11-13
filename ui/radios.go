@@ -33,6 +33,10 @@ type RadiosWidget[T comparable] struct {
 // the theme's Space between them as shadcn's RadioGroup is; Horizontal
 // lines them up instead. It is the Select signature for a choice small
 // enough to show all at once.
+//
+// The group is one stop in the Tab order, on its chosen option, and the
+// arrow keys move the choice to the option before or after it, around the
+// ends and past disabled options.
 func Radios[T comparable](selected ggui.Binding[T]) *RadiosWidget[T] {
 	g := &RadiosWidget[T]{selected: selected, label: sprint[T]}
 	g.Role = ggui.RoleGroup
@@ -76,6 +80,7 @@ func (g *RadiosWidget[T]) setOptions(options []T) bool {
 			r = Radio(g.selected, v, g.label(v))
 		}
 		r.OnChange(g.onChange)
+		r.group = g
 		next = append(next, r)
 	}
 	// Removed handlers can still be referenced by an in-progress pointer event.
@@ -90,6 +95,41 @@ func (g *RadiosWidget[T]) setOptions(options []T) bool {
 	// Only the flow of the current direction is laid out and painted.
 	g.row, g.column = ggui.Row(g.children()...), ggui.Column(g.children()...)
 	return true
+}
+
+// stop is the option that stands for the group in the Tab order: the
+// chosen one, or the first enabled one while none is chosen or the chosen
+// one is disabled.
+func (g *RadiosWidget[T]) stop() *RadioWidget[T] {
+	selected := ggui.Untrack(g.selected.Get)
+	var first *RadioWidget[T]
+	for _, r := range g.radios {
+		if r.IsInert() {
+			continue
+		}
+		if r.value == selected {
+			return r
+		}
+		if first == nil {
+			first = r
+		}
+	}
+	return first
+}
+
+// move takes an arrow key pressed on from: the option before or after it,
+// past disabled ones and around the ends, is chosen and takes the
+// keyboard, as Base UI's RadioGroup has it.
+func (g *RadiosWidget[T]) move(from *RadioWidget[T], ev ggui.KeyEvent) {
+	i, ok := navIndex(ev, navBoth, slices.Index(g.radios, from), len(g.radios), func(i int) bool { return !g.radios[i].IsInert() })
+	if !ok || i < 0 || g.radios[i] == from {
+		return
+	}
+	to := g.radios[i]
+	to.pending = true
+	if to.onTap != nil {
+		to.onTap()
+	}
 }
 
 // radioPart is the part an option plays in Radios; see childKey.
