@@ -25,13 +25,14 @@ var auditNames = []string{
 	"Toast", "Dialog", "Progress", "Collapsible", "Pagination", "Accordion", "Tabs", "Resizable",
 	"Data Table", "Table", "Sheets and drawers", "Sidebar", "Groups and addons", "Profile and media",
 	"Attachment", "Bubble", "Message", "Marker", "Message Scroller", "Questionnaire", "Control states",
+	"Theme presets", "Card", "Form layout", "Validation states", "Dropdown menu", "Input group", "Tooltip", "Alert dialog",
 }
 
 // actionNames is the control each example activates for its alternate
 // state, and hoverNames the one the pointer rests on.
-var actionNames = map[string]string{"Multiple combobox": "Languages", "Popover": "Edit profile", "Navigation menu": "Explore", "Code block": "Copy code", "Trace": "Build application", "Native select": "Delivery speed", "Drawer snapping": "Try drawer snapping", "Toggle and label": "Bold", "Data Table": "Select row p2", "Table": "Grace", "Accordion": "Keyboard controls", "Collapsible": "Delivery preferences", "Dialog": "Reset form…", "Sheets and drawers": "Open filters", "Date picker": "Appointment date", "Menubar": "File", "Choices": "Choose fruit", "Toast": "Notify", "Progress": "Advance download", "Tabs": "Details", "Search and commands": "Commands…", "Groups and addons": "Lock alignment", "Control states": "Enabled switch"}
+var actionNames = map[string]string{"Multiple combobox": "Languages", "Popover": "Edit profile", "Navigation menu": "Explore", "Code block": "Copy code", "Trace": "Build application", "Native select": "Delivery speed", "Drawer snapping": "Try drawer snapping", "Toggle and label": "Bold", "Data Table": "Select row p2", "Table": "Grace", "Accordion": "Keyboard controls", "Collapsible": "Delivery preferences", "Dialog": "Reset form…", "Sheets and drawers": "Open filters", "Date picker": "Stay dates", "Menubar": "File", "Choices": "Choose fruit", "Toast": "Warning", "Progress": "Advance download", "Tabs": "Details", "Search and commands": "Commands…", "Groups and addons": "Lock alignment", "Sidebar": "Toggle Sidebar", "Control states": "Enabled switch", "Dropdown menu": "Open menu", "Alert dialog": "Allow notifications…", "Form layout": "Time zone", "Context menu": "Project notes actions"}
 
-var hoverNames = map[string]string{"Buttons": "Hover for help", "Profile and media": "Details"}
+var hoverNames = map[string]string{"Buttons": "Hover for help", "Profile and media": "Details", "Tooltip": "Left"}
 
 type galleryAudit struct {
 	dir   string
