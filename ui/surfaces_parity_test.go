@@ -497,3 +497,20 @@ func TestVerticalAttachmentIsNarrowerWithNoText(t *testing.T) {
 		t.Fatalf("media alone makes a card %v, want it square", bare)
 	}
 }
+
+// A code block given exactly the height it asked for takes its header off
+// that height again, and the fractions leave the code a rounding error
+// short of what it needs. That is not overflow: the block has nothing to
+// scroll down and shows no bar as long as itself.
+func TestCodeBlockAtItsOwnHeightHasNothingToScroll(t *testing.T) {
+	t.Parallel()
+	env := uitheme.Default().Apply(ggui.Env{})
+	c := CodeBlock("go build ./...\n").Language("shell")
+	size := c.Layout(ggui.Loose(ggui.Sz(300, ggui.Unbounded)), env)
+	p := ggui.NewProbe(ggui.Column(c), ggui.Sz(300, size.H))
+	defer p.Close()
+	p.Frame()
+	if got := c.yController.MaxOffset(); got != 0 {
+		t.Fatalf("a block as tall as its code scrolls %v down", got)
+	}
+}
