@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"math/rand/v2"
+	"slices"
 	"strings"
 
 	"github.com/ironpark/ggui"
@@ -21,16 +22,32 @@ import (
 	"github.com/ironpark/ggui/ui/theme"
 )
 
+// customization is everything the playground edits: the recipe, which
+// carries the icon library and the menu accent, and the appearance the
+// preview is drawn in.
 type customization struct {
-	Theme    theme.Config
-	Dark     bool
-	Icons    string
-	BoldMenu bool
+	Theme theme.Config
+	Mode  theme.Mode
 }
 
 func defaults() customization {
-	return customization{Theme: theme.Config{Preset: theme.Preset{Base: theme.BaseNeutral, Style: theme.StyleNova}, Font: theme.FontInter, Heading: theme.FontInter}, Dark: true, Icons: "Lucide"}
+	return customization{Theme: theme.Config{Preset: theme.Preset{Base: theme.BaseNeutral, Style: theme.StyleNova}, Font: theme.FontInter, Heading: theme.FontInter, Icons: theme.IconsLucide}, Mode: theme.ModeDark}
 }
+
+// The icon sets the playground offers, registered so a recipe can name them.
+func init() {
+	theme.RegisterIcons(theme.IconsLucide, icons.SetKey, icons.Set(lucide.Set()))
+	theme.RegisterIcons(theme.IconsTabler, icons.SetKey, icons.Set(tabler.Set()))
+}
+
+// iconChoices are the libraries of the Icon library tile.
+func iconChoices() []theme.IconLibrary {
+	return []theme.IconLibrary{theme.IconsLucide, theme.IconsTabler}
+}
+
+// dark reports whether the preview is drawn dark, following the desktop in
+// System mode.
+func (s customization) dark() bool { return s.Mode.Dark(ggui.SystemDark().Get()) }
 
 type model struct {
 	locked                             *ggui.StateValue[[lockCount]bool]
@@ -85,6 +102,10 @@ func fontTitle(v theme.FontFamily) string {
 	switch v {
 	case theme.FontInter:
 		return "Inter"
+	case theme.FontGeist:
+		return "Geist"
+	case theme.FontGeistMono:
+		return "Geist Mono"
 	case theme.FontSans:
 		return "Go Sans"
 	case theme.FontMono:
@@ -101,6 +122,18 @@ func accentTitle(v theme.AccentColor) string {
 	return title(v)
 }
 
+// chartTitle names a chart color: the zero choice follows the theme's
+// accent, and the base's own is named as shadcn names it.
+func chartTitle(v theme.AccentColor) string {
+	switch v {
+	case theme.AccentBase:
+		return "Same as theme"
+	case theme.ChartBase:
+		return "Neutral"
+	}
+	return title(v)
+}
+
 func (m *model) customizer() ggui.Widget {
 	base := m.settings.Field(func(s *customization) *theme.BaseColor { return &s.Theme.Preset.Base })
 	accent := m.settings.Field(func(s *customization) *theme.AccentColor { return &s.Theme.Preset.Accent })
@@ -109,8 +142,8 @@ func (m *model) customizer() ggui.Widget {
 	radius := m.settings.Field(func(s *customization) *theme.Radius { return &s.Theme.Radius })
 	font := m.settings.Field(func(s *customization) *theme.FontFamily { return &s.Theme.Font })
 	heading := m.settings.Field(func(s *customization) *theme.FontFamily { return &s.Theme.Heading })
-	iconSet := m.settings.Field(func(s *customization) *string { return &s.Icons })
-	bold := m.settings.Field(func(s *customization) *bool { return &s.BoldMenu })
+	iconSet := m.settings.Field(func(s *customization) *theme.IconLibrary { return &s.Theme.Icons })
+	menuAccent := m.settings.Field(func(s *customization) *theme.MenuAccent { return &s.Theme.MenuAccent })
 	group := func(children ...ggui.Widget) ggui.Widget {
 		return ggui.Padding(ggui.Column(children...).Gap(12).Stretch(), 12)
 	}
@@ -130,25 +163,27 @@ func (m *model) customizer() ggui.Widget {
 				return title(v)
 			}),
 			choice(m, lockAccent, "Theme", accent, theme.AccentColors(), accentTitle),
-			choice(m, lockChart, "Chart color", chart, theme.AccentColors(), accentTitle),
+			choice(m, lockChart, "Chart color", chart, theme.ChartColors(), chartTitle),
 		), ui.Divider(), group(
 			choice(m, lockHeading, "Heading", heading, theme.Fonts(), fontTitle),
 			choice(m, lockFont, "Font", font, theme.Fonts(), fontTitle),
 		), ui.Divider(), group(
-			choice(m, lockIcons, "Icon library", iconSet, []string{"Lucide", "Tabler"}, func(s string) string { return s }),
+			choice(m, lockIcons, "Icon library", iconSet, iconChoices(), title[theme.IconLibrary]),
 			choice(m, lockRadius, "Radius", radius, theme.RadiusOptions(), title[theme.Radius]),
-			choice(m, lockMenu, "Menu accent", bold, []bool{false, true}, func(v bool) string {
-				if v {
-					return "Bold"
+			choice(m, lockMenu, "Menu accent", menuAccent, theme.MenuAccents(), func(v theme.MenuAccent) string {
+				if v == theme.MenuAccentSubtle {
+					return "Subtle"
 				}
-				return "Subtle"
+				return title(v)
 			}),
 		),
 	).Gap(0).Stretch()
 	menu := ui.MenuOf(ggui.Row(ggui.Text("Menu"), ggui.Spacer(), menuMark()).Gap(12),
 		ui.MenuItem("Reset", m.reset),
 		ui.MenuItem("Shuffle", m.shuffle),
-		ui.MenuItem("Light / Dark", m.toggleAppearance),
+		ui.MenuItem("Light", func() { m.setMode(theme.ModeLight) }),
+		ui.MenuItem("Dark", func() { m.setMode(theme.ModeDark) }),
+		ui.MenuItem("System", func() { m.setMode(theme.ModeSystem) }),
 		ui.MenuDivider(),
 		ui.MenuItem("Open preset", m.openPreset),
 		ui.MenuItem("Copy preset", m.copyPreset),
@@ -177,7 +212,21 @@ func (m *model) reset() {
 	m.status.Set("Default theme restored.")
 }
 
-func (m *model) toggleAppearance() { s := ggui.Peek(m.settings); s.Dark = !s.Dark; m.settings.Set(s) }
+// toggleAppearance flips the preview between light and dark, leaving
+// System mode for the opposite of what the desktop shows.
+func (m *model) toggleAppearance() {
+	if ggui.Untrack(ggui.Peek(m.settings).dark) {
+		m.setMode(theme.ModeLight)
+	} else {
+		m.setMode(theme.ModeDark)
+	}
+}
+
+func (m *model) setMode(mode theme.Mode) {
+	s := ggui.Peek(m.settings)
+	s.Mode = mode
+	m.settings.Set(s)
+}
 
 func randomItem[T any](items []T) T { return items[rand.IntN(len(items))] }
 
@@ -194,7 +243,7 @@ func (m *model) shuffle() {
 		s.Theme.Preset.Style = randomItem(theme.Styles())
 	}
 	if !locks[lockChart] {
-		s.Theme.Chart = randomItem(theme.AccentColors())
+		s.Theme.Chart = randomItem(theme.ChartColors())
 	}
 	if !locks[lockRadius] {
 		s.Theme.Radius = randomItem(theme.RadiusOptions())
@@ -206,10 +255,10 @@ func (m *model) shuffle() {
 		s.Theme.Font = randomItem(theme.Fonts())
 	}
 	if !locks[lockIcons] {
-		s.Icons = randomItem([]string{"Lucide", "Tabler"})
+		s.Theme.Icons = randomItem(iconChoices())
 	}
 	if !locks[lockMenu] {
-		s.BoldMenu = randomItem([]bool{false, true})
+		s.Theme.MenuAccent = randomItem(theme.MenuAccents())
 	}
 	m.settings.Set(s)
 	m.status.Set("A new palette. Make it yours.")
@@ -248,39 +297,48 @@ func (m *model) importPreset() {
 }
 
 func validateCustomization(s customization) (err error) {
-	if s.Icons != "Lucide" && s.Icons != "Tabler" {
-		return fmt.Errorf("Icon library must be Lucide or Tabler.")
+	if !slices.Contains(iconChoices(), s.Theme.Icons) {
+		return fmt.Errorf("Icon library must be lucide or tabler.")
+	}
+	if !slices.Contains(theme.Modes(), s.Mode) {
+		return fmt.Errorf("Mode must be light, dark or system.")
 	}
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("Invalid theme: %v", r)
 		}
 	}()
-	_ = s.Theme.For(s.Dark)
+	_ = s.Theme.For(false)
 	return nil
 }
 
+// sourceCode is a Go file that applies the recipe: it registers the icon
+// library the recipe names, then follows the chosen mode.
 func sourceCode(s customization) string {
-	library := "lucide"
-	if s.Icons == "Tabler" {
-		library = "tabler"
+	library := string(s.Theme.Icons)
+	recipe := strings.TrimSuffix(s.Theme.GoCode(false), ".For(false)")
+	apply := fmt.Sprintf("theme.Set(recipe.%s())", title(s.Mode))
+	imports := ""
+	if s.Mode == theme.ModeSystem {
+		imports = ` "github.com/ironpark/ggui"
+`
+		apply = "theme.Bind(ggui.SystemDark(), recipe.Dark(), recipe.Light())"
 	}
 	code := fmt.Sprintf(`package main
 
 import (
- "github.com/ironpark/ggui/ui/theme"
- "github.com/ironpark/ggui/ui/icons"
+%s "github.com/ironpark/ggui/ui/icons"
  "github.com/ironpark/ggui/ui/icons/%s"
+ "github.com/ironpark/ggui/ui/theme"
 )
 
-// Call applyTheme before creating your application window.
+// Call applyTheme from your application's Setup.
 func applyTheme() {
- t := %s
-`, library, s.Theme.GoCode(s.Dark))
-	if s.BoldMenu {
-		code += "t.Accent, t.AccentFg = t.Primary, t.PrimaryFg\n"
-	}
-	code += fmt.Sprintf("t = t.Set(icons.SetKey, %s.Set())\ntheme.Set(t)\n}\n", library)
+ theme.RegisterIcons(%q, icons.SetKey, icons.Set(%s.Set()))
+ recipe := %s
+ %s
+}
+`, imports, library, library, library, recipe, apply)
 	formatted, err := format.Source([]byte(code))
 	if err != nil {
 		panic(err)
@@ -290,25 +348,19 @@ func applyTheme() {
 
 func (m *model) build() ggui.Widget {
 	s := m.settings.Get()
-	shell := (theme.Config{Font: theme.FontInter}).For(s.Dark)
-	selected := s.Theme.For(s.Dark)
-	if s.BoldMenu {
-		selected.Accent, selected.AccentFg = selected.Primary, selected.PrimaryFg
-	}
-	var set icons.Set = lucide.Set()
-	if s.Icons == "Tabler" {
-		set = tabler.Set()
-	}
+	dark := s.dark()
+	shell := (theme.Config{Font: theme.FontInter}).For(dark)
+	selected := s.Theme.For(dark)
 	content := m.preview.build()
 	if m.example.Get() == "02" {
 		content = m.specimens
 	}
-	preview := theme.With(selected, ggui.Provide(icons.SetKey, set, content))
+	preview := theme.With(selected, content)
 	switches := ggui.Padding(ggui.Box(ui.ToggleGroup(m.example).Options([]string{"01", "02"}).Key("preview-mode")).Fill(shell.Card).Radius(12).Pad(4), 12)
 	previewFrame := ggui.Box(ggui.Stack(preview, ggui.Align(switches).Right().Bottom())).Fill(selected.Bg).Radius(18).Border(1, shell.Border)
 	panel := ggui.Box(m.panel).Fill(shell.Card).Radius(16).Border(1, shell.Border).Width(208)
 	modeRole := icons.Sun
-	if !s.Dark {
+	if !dark {
 		modeRole = icons.Moon
 	}
 	mode := ui.ButtonOf(icon(modeRole), m.toggleAppearance).Ghost().Name("Toggle appearance").Key("toggle-appearance")

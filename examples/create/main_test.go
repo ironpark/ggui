@@ -45,7 +45,7 @@ func TestThemeEditorAndExport(t *testing.T) {
 	}
 	p.Tap("Toggle appearance")
 	settle()
-	if ggui.Peek(m.settings).Dark {
+	if ggui.Peek(m.settings).Mode != theme.ModeLight {
 		t.Fatal("appearance toggle did not change mode")
 	}
 	p.Tap("Get Code")
@@ -79,8 +79,9 @@ func TestPresetRoundTripAndInvalidInput(t *testing.T) {
 	want.Theme.Preset.Base = theme.BaseStone
 	want.Theme.Chart = theme.AccentBlue
 	want.Theme.Heading = theme.FontMono
-	want.Icons = "Tabler"
-	want.BoldMenu = true
+	want.Theme.Icons = theme.IconsTabler
+	want.Theme.MenuAccent = theme.MenuAccentBold
+	want.Mode = theme.ModeSystem
 	m.settings.Set(want)
 	settle()
 	p.Tap("Copy preset")
@@ -93,7 +94,7 @@ func TestPresetRoundTripAndInvalidInput(t *testing.T) {
 	if ggui.Peek(m.settings) != want {
 		t.Fatal("preset round trip lost settings")
 	}
-	for _, input := range []string{`{"Icons":"Lucide","Theme":{"Radius":"invalid"}}`, data + ` {}`, `{"Icons":"invalid"}`, `{"Unknown":1}`} {
+	for _, input := range []string{`{"Mode":"dark","Theme":{"Icons":"lucide","Radius":"invalid"}}`, data + ` {}`, `{"Mode":"dark","Theme":{"Icons":"invalid"}}`, `{"Mode":"dusk","Theme":{"Icons":"lucide"}}`, `{"Unknown":1}`} {
 		m.presetOpen.Set(true)
 		m.presetText.Set(input)
 		m.importPreset()

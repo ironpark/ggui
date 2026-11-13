@@ -32,7 +32,10 @@ func render(dir string) error {
 		defer p.Close()
 		p.Frame()
 		s := defaults()
-		s.Dark = dark
+		s.Mode = theme.ModeLight
+		if dark {
+			s.Mode = theme.ModeDark
+		}
 		if variant == 1 {
 			s.Theme.Preset.Accent = theme.AccentViolet
 			s.Theme.Chart = theme.AccentBlue
@@ -40,8 +43,8 @@ func render(dir string) error {
 			s.Theme.Font = theme.FontSans
 			s.Theme.Heading = theme.FontMono
 			s.Theme.Preset.Style = theme.StyleRhea
-			s.Icons = "Tabler"
-			s.BoldMenu = true
+			s.Theme.Icons = theme.IconsTabler
+			s.Theme.MenuAccent = theme.MenuAccentBold
 		}
 		m.settings.Set(s)
 		if variant == 3 {
