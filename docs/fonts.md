@@ -175,7 +175,11 @@ Lucide SVGs. Use `lucide.Icon("download")` to request an explicit bundled icon.
 Both support `.Size(20)`, `.Color(col)`, and `.Alt("Download")`.
 
 Provide `icons.SetKey` through `ggui.Provide` for a subtree, or store it in a
-`Theme` with `.Set(icons.SetKey, set)` to replace built-in control icons. Sets
+`Theme` with `.Set(icons.SetKey, set)` to replace built-in control icons. The
+bundled Lucide, Tabler and Heroicons sets register themselves with the theme as
+they are linked, so importing one (`import _ "github.com/ironpark/ggui/ui/icons/tabler"`)
+is enough for `theme.Config{Icons: theme.IconsTabler}`; another set registers
+with `theme.RegisterIcons`. Sets
 map roles such as `Check`, `Close`, and `ChevronDown` to parsed SVGs. Missing
 roles retain the Lucide defaults. Decorative icons stay out of accessibility;
 name the button that contains them, or use `Alt` for a standalone image.

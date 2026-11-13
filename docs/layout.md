@@ -159,8 +159,16 @@ anywhere outside closes it and reaches nothing underneath. `Show`, `Hide`,
 `Toggle` and `IsOpen` drive it, or `.BindOpen(sig)` keeps the state in a
 `StateValue[bool]`; `.Keys(h)` keeps keyboard focus on the widget that opened it
 while the pointer is in the content, and a widget inside can find its popup
-with `PopupOf(env)` to close it after acting. `ui.Select` and `ui.Menu` are
-built on it. `ui.Tooltip` and `ui.HoverCard` paint through the same
+with `PopupOf(env)` to close it after acting. `.Side(...)` among the
+`PopupSide` values (`PopupBottom` by default, `PopupTop`, `PopupLeft`,
+`PopupRight`, `PopupInlineStart`, `PopupInlineEnd`), `.Align(...)` and
+`.AlignOffset(px)` place it, and it flips to the opposite side when only that
+one has room; `PlacedSide()` reports where it went. Content below or above the
+anchor is at least as wide as the anchor until `.MatchAnchorWidth(false)`, as a
+date picker's calendar under a wide field keeps its own width. A nonmodal popup
+moves focus into its content as it opens; `.FocusOnOpen(false)` leaves it in
+the editor that opened it, as a combobox's list does. `ui.Select` and `ui.Menu`
+are built on it. `ui.Tooltip` and `ui.HoverCard` paint through the same
 `Canvas.Overlay` without a scrim, so their anchors keep every event.
 
 ## Images

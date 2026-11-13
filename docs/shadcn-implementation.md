@@ -50,7 +50,7 @@ explicit composition already exists, not that every optional web prop is covered
 | [Checkbox](https://ui.shadcn.com/docs/components/base/checkbox) | `Checkbox` | Existing |
 | [Code Block](https://ui.shadcn.com/docs/components/base/code-block) | `CodeBlock / CodeBlockOf` | Added |
 | [Collapsible](https://ui.shadcn.com/docs/components/base/collapsible) | `Collapsible / CollapsibleOf` | Existing; custom trigger added |
-| [Combobox](https://ui.shadcn.com/docs/components/base/combobox) | `Combobox / ComboboxMultiple` | Existing; multiple selection added |
+| [Combobox](https://ui.shadcn.com/docs/components/base/combobox) | `Combobox / ComboboxMultiple` | Existing; multiple selection, input trigger and clear button added |
 | [Command](https://ui.shadcn.com/docs/components/base/command) | `Command / CommandDialog` | Existing; separators and icons added |
 | [Context Menu](https://ui.shadcn.com/docs/components/base/context-menu) | `ContextMenu / NativeContextMenu` | Existing |
 | [Data Table](https://ui.shadcn.com/docs/components/base/data-table) | `DataTable` | Existing |
@@ -113,12 +113,12 @@ explicit composition already exists, not that every optional web prop is covered
 | Trace | Hierarchical keyed `TraceStep` rows with status, description, duration, details, children and leaf actions; controlled steps/expansion and retained focus across reorders. |
 | Buttons/forms | `Toggle` binds pressed state; `ToggleGroupMultiple` binds selected values; `Label.For` focuses or activates its associated control. `Field` uses associated labels. |
 | Tabs | `Vertical`, `Tab.Disabled`, manual activation default and `ActivateOnFocus(true)` opt-in; independent accessible targets with a roving Tab stop. |
-| Combobox | `ComboboxMultiple`, searchable checked rows, removable chips, keyboard toggles/backspace, live options and copied selection callbacks. |
+| Combobox | An editable input as the trigger that filters as it is typed in, with focus kept there; `ClearButton`, `Empty`; `ComboboxMultiple` with its search inline after removable chips, checked rows, keyboard toggles/backspace, live options and copied selection callbacks. |
 | Calendars | `CalendarRange` / `CalendarMultiple`, inclusive civil dates, required/count/night limits, disabled-interior policy, controlled rejection, copied/sorted selection callbacks. |
 | Direction | Tabs, button/toggle groups, toggle glyph/label placement, sliders, calendar, pagination icons, sidebar labels/border and resizable panes honor `Directionality`. Code content deliberately stays LTR. |
 | Buttons and groups | `Button.Icon` / `TrailingIcon`; `ToggleOf`; `ButtonGroup` joins its children with squared inner corners and shared borders and takes `ButtonGroupText` / `ButtonGroupTextOf` and `ButtonGroupSeparator`, while text fields and input groups in it take the spare width; `ToggleGroup.Outline` / `Size` / `Spacing(0)`; `KbdGroup`. |
 | Fields | `Checkbox` / `Radio` / `Radios` / `Switch` / `Select` `.Invalid(v)`; `Switch.Small`; `Field.Horizontal` / `ControlFirst`; `FieldGroup`, `FieldSet(...).Legend / Description`, `FieldSeparator().Label`; `InputGroup.Top` / `Bottom` / `Multiline`; `Select.Placeholder` / `GroupBy` / `DisabledOption` / `Small`. |
-| Overlays | `Dialog.Description` / `Footer` / `TopAt`; `Sheet.Description` / `Footer` / `Handle`; `AlertDialog.Small` / `Media`; `Popover`, `HoverCard` and `Tooltip` `.Side` / `Align` / `AlignOffset` over `ggui.PopupSide`. |
+| Overlays | `PopupWidget.Side` / `AlignOffset` / `MatchAnchorWidth` / `FocusOnOpen`; `Dialog.Description` / `Footer` / `TopAt`; `Sheet.Description` / `Footer` / `Handle`; `AlertDialog.Small` / `Media`; `Popover`, `HoverCard` and `Tooltip` `.Side` / `Align` / `AlignOffset` over `ggui.PopupSide`. |
 | Menus | `MenuLabel`, `MenuSub`, `MenuCheckbox`, `MenuRadioGroup`; `MenuItem.Icon` / `Inset` / `Destructive`; `CommandSeparator`, `CommandEntry.Icon`; menus draw in `Theme.Menu()`. |
 | Cards and feedback | `Card` sections (`CardHeader(...).Action`, `CardContent`, `CardFooter(...).Justify`), `Card.Small`; toast types, `ToastMessage.Loading` / `Countdown`, `Toaster.Position` / `Update`; `AvatarGroup`, `Avatar.Small` / `Large` / `Badge` / `BadgeIcon`; `ItemGroup`, `ItemSeparator`, `Item.MediaIcon` / `Header` / `Footer` / `Muted` / `Small`; `Empty.MediaIcon` / `Outline`; `Alert.Icon`; `Badge.Ghost` / `Link` / `Icon`; `Progress.Label` / `ShowValue` / `FormatValue`; `Spinner.Color`. |
 | Data | `Calendar.Months(n)`, `CaptionDropdown`, `DropdownYears`, `MonthNames`; `DateRangePicker` with `FormatRange` / `OnRangeChange`; `Table.Footer` / `Caption`. |
@@ -163,6 +163,8 @@ See [forms](forms.md), [navigation](data-and-navigation.md), and
 - `Input` is translucent: clear in a light Nova theme and `--input` at 30% in a
   dark one, painted over whatever a field sits on. Custom controls that painted
   `Input` as an opaque fill should paint their surface first or set `Input`.
+- A Combobox's trigger is the editable input itself; the separate search field
+  in its popup is gone, and focus stays in the input while the list is open.
 - `ToggleGroup` segments have no track behind them; `ButtonGroup` joins its
   children rather than drawing one border around ghost buttons, so outline
   buttons suit it now.

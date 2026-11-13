@@ -147,7 +147,10 @@ model.SetPageSize(10)
 return ui.DataTable(model)
 ```
 
-Use `Col` for custom cells, including menus and row actions. `TextCol` supplies
+The Columns menu, a button with a chevron, lists each hideable column as a
+checked row; sortable headings show their direction with an icon, and the
+pagination buttons are the small size. Use `Col` for custom cells, including
+menus and row actions. `TextCol` supplies
 searchable text automatically; custom columns can set `Column.Search`.
 Columns use their title as an ID by default. Set `.Identified("actions")` for
 blank titles or titles that are not unique. Keys and column IDs must be unique
@@ -215,7 +218,7 @@ list remains formatted in Select; Combobox displays its placeholder.
 
 Updating the options keeps an open popup open. Select highlights the current
 value if present, otherwise nothing; the next Down/Up starts at the first/last
-option. Combobox retains its query and search editor, re-filters the new list,
+option. Combobox retains what was typed in its input, re-filters the new list,
 highlights the first match and resets result scrolling. Empty lists are valid.
 Configure `.Format(fn)` before layout; replacement options use that formatter.
 Radios keeps surviving value/duplicate-occurrence identities and their focus.
@@ -362,7 +365,12 @@ Explore these controls in the [component gallery](../examples/gallery).
 keyed disclosures; `.Multiple()` allows several open sections. The group supports
 Up/Down, Home/End and Enter/Space, and its open content remains tabbable.
 
-`ui.Combobox(value).Options(options)` adds search to dropdown selection. `ui.Command(query,
+`ui.Combobox(value).Options(options)` adds search to dropdown selection: its
+trigger is an editable input with a chevron, and typing there filters the list
+below it while focus stays in the input; the options are menu-style rows with a
+check at the right of the chosen one, read as options by a screen reader.
+`.ClearButton(true)` puts a button that clears the value in place of the chevron
+while one is chosen, and `.Empty(text)` replaces "No items found." `ui.Command(query,
 ui.CommandItem(label, action), ...)` provides an inline command search; put it in
 `ui.Dialog` for a palette. Both keep IME input with the existing editor.
 
@@ -443,7 +451,8 @@ items register and label their chords together.
 For a compact command palette, use `ui.CommandDialog(open, command)`. It supplies
 an accessible "Commands" name without a visible heading, removes the surrounding
 dialog padding, and holds the 384-pixel panel's top a third of the way down the
-window, so it stays put while the results change. Use
+window, so it stays put while the results change. Any dialog does the same with
+`Dialog.TopAt(share)`. Use
 `.Name("...")` on the returned dialog to customize its accessible name.
 
 ```go
