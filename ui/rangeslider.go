@@ -266,13 +266,13 @@ func (s *RangeSliderWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		t, vs := s.theme, s.values()
 		g := s.geometry()
 		inert := s.IsInert()
-		dst.FillRoundRect(g.track(0, 1), 2, sliderTone(t, t.Muted, inert))
+		dst.FillRoundRect(g.track(0, 1), g.thick/2, sliderTone(t, t.Muted, inert))
 		if len(vs) > 0 {
 			start := 0.0
 			if len(vs) > 1 {
 				start = s.fraction(vs[0])
 			}
-			dst.FillRoundRect(g.track(start, s.fraction(vs[len(vs)-1])), 2, sliderTone(t, t.Primary, inert))
+			dst.FillRoundRect(g.track(start, s.fraction(vs[len(vs)-1])), g.thick/2, sliderTone(t, t.Primary, inert))
 		}
 		for i, h := range s.thumbs {
 			group := s.HitID()
@@ -288,7 +288,8 @@ func (s *RangeSliderWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 			}
 			f := s.fraction(vs[i])
 			h.Hit(dst, g.thumb(f), h, ggui.CursorShapePointer)
-			g.paintThumb(dst, t, f, inert, h.Hovered || h.Pressed || (h.Focused && h.FocusVisible))
+			active := !inert && (h.Hovered || h.Pressed || (h.Focused && h.FocusVisible))
+			g.paintThumb(dst, t, f, inert, dst.Ease(h.Anchor(g.thumb(f)), sliderHaloSlot, pick(active, 1.0, 0.0), s.env.Motion(t.MotionFast)))
 		}
 		if s.focusThumb && s.active >= 0 && s.active < len(s.thumbs) {
 			dst.RequestFocus(s.thumbs[s.active])
