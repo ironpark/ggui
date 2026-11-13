@@ -2,7 +2,9 @@ package ui
 
 import (
 	"image/color"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
@@ -46,12 +48,20 @@ type MenuWidget struct {
 	hover   int       // the row the pointer came to and has not been acted on, or -1
 	hoverAt time.Time // when it came there
 	took    time.Time // the frame a submenu last used Escape, Left or Right
+
+	typed   string    // what has been typed to find a row, lower-cased
+	typedAt time.Time // when its last character came
 }
+
+// menuTypeReset is how long after a character the next one starts a new
+// search rather than adding to it: Base UI's typeahead reset.
+const menuTypeReset = 750 * time.Millisecond
 
 // Menu creates a secondary button labelled label that opens entries below
 // it. Space or Enter opens the menu, the arrow keys move through the
 // items, Enter runs one and Escape closes it. Right or Enter opens a
-// submenu, and Left or Escape closes just that submenu.
+// submenu, and Left or Escape closes just that submenu. Typing moves to the
+// next row whose label starts with what was typed.
 func Menu(label string, entries ...ggui.Widget) *MenuWidget {
 	m := newMenu()
 	m.button = Button(label, m.toggle).Outline()
@@ -189,7 +199,7 @@ func (m *MenuWidget) toggle() {
 		return
 	}
 	m.closeSub()
-	m.current, m.hover = -1, -1
+	m.current, m.hover, m.typed = -1, -1, ""
 	m.popup.Show()
 }
 
@@ -239,6 +249,10 @@ func (m *MenuWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 func (m *MenuWidget) HandleKey(ev ggui.KeyEvent) {
 	if ev.Kind == ggui.KeyBlur {
 		m.popup.Hide()
+	}
+	if ev.Kind == ggui.KeyText && m.popup.IsOpen() {
+		m.typeahead(ev.Text)
+		return
 	}
 	if ev.Kind != ggui.KeyPress || len(m.items) == 0 {
 		m.button.HandleKey(ev)
@@ -320,7 +334,7 @@ func (m *MenuWidget) jump(dir int) {
 // toggle.
 func (m *MenuWidget) reopen(first bool) {
 	m.closeSub()
-	m.hover, m.current = -1, -1
+	m.hover, m.current, m.typed = -1, -1, ""
 	for _, it := range m.items {
 		it.Sync()
 	}
@@ -400,6 +414,48 @@ func (m *MenuWidget) opens() bool {
 	return m.current >= 0 && m.current < len(m.items) && m.items[m.current].sub != nil && !m.items[m.current].IsInert()
 }
 
+// typing reports whether a search by typing is under way in m.
+func (m *MenuWidget) typing() bool {
+	return m.typed != "" && ggui.FrameTime().Sub(m.typedAt) < menuTypeReset
+}
+
+// typeahead gives typed text to the innermost open menu under m, which
+// moves its highlight to the next enabled row whose label starts with what
+// has been typed since the last pause. The same letter again moves on to
+// the next row that starts with it. It reports whether a row was found.
+func (m *MenuWidget) typeahead(text string) bool {
+	leaf := m.leaf()
+	text = strings.ToLower(text)
+	if !leaf.typing() {
+		leaf.typed = ""
+		if strings.TrimSpace(text) == "" {
+			// A space starts no search: it runs the highlighted row.
+			return false
+		}
+	}
+	from := max(leaf.current, -1)
+	switch {
+	case leaf.typed == text && utf8.RuneCountInString(text) == 1:
+		// The same letter again: on to the next row under it.
+	case leaf.typed != "":
+		// A longer search may still be the row it is on.
+		leaf.typed += text
+		from = max(from-1, -1)
+	default:
+		leaf.typed = text
+	}
+	leaf.typedAt = ggui.FrameTime()
+	n := len(leaf.items)
+	for step := 1; step <= n; step++ {
+		i := ((from+step)%n + n) % n
+		if leaf.enabled(i) && strings.HasPrefix(strings.ToLower(leaf.items[i].label), leaf.typed) {
+			leaf.current, leaf.hover = i, -1
+			return true
+		}
+	}
+	return false
+}
+
 // key gives a key press to the innermost open menu under m and reports
 // whether it was used: the arrows, Home and End move, Enter and Space run
 // the highlighted item or open its submenu, Right opens a submenu, and
@@ -424,6 +480,9 @@ func (m *MenuWidget) key(ev ggui.KeyEvent) bool {
 		}
 		leaf.items[leaf.current].openSub(true)
 		m.took = ggui.FrameTime()
+		return true
+	case ev.Key == ggui.KeySpace && leaf.typing():
+		// A space in the middle of a search is part of it.
 		return true
 	case ggui.Activates(ev):
 		return leaf.activate()
@@ -898,7 +957,7 @@ func (it *MenuItemWidget) openSub(first bool) {
 		it.menu.hover = -1
 	}
 	it.sub.closeSub()
-	it.sub.current, it.sub.hover = -1, -1
+	it.sub.current, it.sub.hover, it.sub.typed = -1, -1, ""
 	for _, row := range it.sub.items {
 		row.Sync()
 	}

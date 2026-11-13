@@ -235,6 +235,10 @@ func (c *ContextMenuWidget) ConsumesKey(ev ggui.KeyEvent) bool {
 // HandleKey implements ggui.KeyHandler.
 func (c *ContextMenuWidget) HandleKey(ev ggui.KeyEvent) {
 	c.Keyboard(ev, nil)
+	if ev.Kind == ggui.KeyText && !c.IsInert() && c.Popup().IsOpen() {
+		c.menu.typeahead(ev.Text)
+		return
+	}
 	if c.IsInert() || ev.Kind != ggui.KeyPress {
 		return
 	}
