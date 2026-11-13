@@ -132,6 +132,8 @@ func (m *MenuWidget) adopt(entries []ggui.Widget) {
 			index := len(m.items)
 			e.onHover = func() { m.pointAt(index) }
 			m.items = append(m.items, e)
+		case *MenuLabelWidget:
+			e.menu = m
 		case menuGroup:
 			m.adopt(e.menuEntries())
 		}
@@ -815,13 +817,15 @@ func (d *menuDivider) Paint(dst *ggui.Canvas, r ggui.Rect) {
 type MenuLabelWidget struct {
 	props property.Owner
 	text  *ggui.TextWidget
+	menu  *MenuWidget // the menu the heading is in, which sets its size
 	inset bool
 	pad   ggui.EdgeInsets
 	size  ggui.Size
 }
 
 // MenuLabel creates a small, muted heading for the entries after it. It
-// takes no input and the keyboard passes over it.
+// takes no input and the keyboard passes over it. In a Menubar's menu it
+// is set at the size of the rows.
 func MenuLabel(label string) *MenuLabelWidget {
 	return &MenuLabelWidget{text: Caption(label).Weight(ggui.WeightMedium).NoWrap()}
 }
@@ -840,6 +844,11 @@ func (l *MenuLabelWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	l.pad = t.ItemPad
 	if l.inset {
 		l.pad.Left = menuInset(t)
+	}
+	if l.menu != nil && l.menu.checkLeft {
+		// shadcn's MenubarLabel passes text-sm over the dropdown label's
+		// text-xs and keeps its text-muted-foreground.
+		l.text.Style(ggui.TextStyle{Size: t.Text.Size, LineHeight: t.Text.LineHeight})
 	}
 	l.size = l.text.Color(t.MutedFg).Layout(l.pad.Shrink(c).Loosen(), env)
 	return c.Constrain(l.pad.Inflate(l.size))
