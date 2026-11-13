@@ -68,7 +68,7 @@ References:
 ## Bundled libraries
 
 Each library exposes the same `Set()`, `Asset(name)`, and `Icon(name)` API and
-maps all 19 semantic roles. Each embeds only a curated outline subset.
+maps all 20 semantic roles. Each embeds only a curated outline subset.
 
 | Package | Style | Source and license |
 | --- | --- | --- |
