@@ -296,5 +296,10 @@ func (g *ItemGroupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Node(r, ggui.Node{Role: ggui.RoleList}, func(dst *ggui.Canvas) { dst.Paint(g.column, r) })
 }
 
-// ItemSeparator is a line between two items of an ItemGroup.
-func ItemSeparator() *DividerWidget { return Divider() }
+// ItemSeparator is a line between two items of an ItemGroup, with a Space
+// above and below it beside the group's gap, shadcn's my-2.
+func ItemSeparator() *DividerWidget {
+	d := Divider()
+	d.margin = 1
+	return d
+}
