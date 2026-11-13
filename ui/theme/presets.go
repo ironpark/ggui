@@ -105,7 +105,7 @@ var styles = map[Style]geometry{
 		radii: radiusSteps{control: roundedLg, follow: [nRadii]float64{
 			roundedSm, roundedMd, roundedXl, rounded2xl, roundedXl, roundedXl, roundedLg, roundedLg, roundedLg}},
 		button: ggui.Insets(6, 10), field: ggui.Insets(6, 10), item: ggui.Insets(4, 6),
-		card: ggui.Insets(16), panel: ggui.Insets(4), tab: ggui.Insets(3, 8),
+		card: ggui.Insets(16), panel: ggui.Insets(4), tab: ggui.Insets(3, 7),
 		chat: ChatTokens{BubblePadding: ggui.Insets(9, 13), QuestionGap: 16, QuestionChoiceGap: 10,
 			QuestionTextGap: 2, QuestionChoicePadding: ggui.Insets(10, 12)},
 		input: [2]float64{0, .3},
