@@ -962,3 +962,33 @@ func TestNestedScrollsOfOneViewportKeepTheirOwnOffsets(t *testing.T) {
 		t.Fatalf("five swipes down scrolled to x %v, y %v, want 0 and 50", x.Offset(), y.Offset())
 	}
 }
+
+// Content a rounding error taller than its viewport, as a sum of
+// fractional heights given back less one of them comes out, has nothing to
+// scroll: no thumb as long as the track, and the wheel is left to what is
+// around. Content a pixel taller scrolls as ever.
+func TestScrollTakesARoundingErrorOfOverflowForNone(t *testing.T) {
+	t.Parallel()
+	header, body := 31.516000000000002, 62.266
+	total := header + body
+	if total-header >= body {
+		t.Fatal("the sum no longer loses a rounding error; pick another")
+	}
+	var got Point
+	s := Scroll(Box().Size(100, body))
+	w := Pointer(s).OnScroll(func(d Point) { got = d })
+	var in inputState
+	paintFrame(&in, w, Sz(100, total-header))
+	if s.maxOffset() != 0 || s.thumbHit != (Rect{}) {
+		t.Fatalf("content %v over its viewport scrolls %v with a thumb at %v", s.childSize.H-s.viewport.H, s.maxOffset(), s.thumbHit)
+	}
+	in.dispatch(frameInput{pos: Pt(5, 5), wheel: Pt(0, -1)})
+	if got != (Point{X: 0, Y: -1}) {
+		t.Fatalf("the wheel did not fall through: got %v", got)
+	}
+	tall := Scroll(Box().Size(100, 101))
+	paintFrame(&in, tall, Sz(100, 100))
+	if tall.maxOffset() != 1 || tall.thumbHit == (Rect{}) {
+		t.Fatalf("content a pixel over scrolls %v with a thumb at %v", tall.maxOffset(), tall.thumbHit)
+	}
+}
