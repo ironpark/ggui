@@ -25,7 +25,13 @@ func TestContextMenuPointerKeyboardAndAccessibility(t *testing.T) {
 	if !menu.Popup().IsOpen() || clicks != 1 {
 		t.Fatal("secondary click did not open exclusively")
 	}
+	// The pointer opened it, so no row is highlighted and Enter runs none;
+	// Down goes to the first enabled one.
 	p.Type(ggui.Mods{}, ggui.KeyEnter)
+	if picked != "" || !menu.Popup().IsOpen() {
+		t.Fatal("a menu the pointer opened started on a row", picked)
+	}
+	p.Type(ggui.Mods{}, ggui.KeyArrowDown, ggui.KeyEnter)
 	if picked != "copy" || menu.Popup().IsOpen() {
 		t.Fatal("initial enabled action", picked)
 	}
@@ -211,7 +217,7 @@ func TestContextMenuNested(t *testing.T) {
 	if !row.Popup().IsOpen() || list.Popup().IsOpen() {
 		t.Fatal("a row's secondary click went to the list")
 	}
-	p.Type(ggui.Mods{}, ggui.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyArrowDown, ggui.KeyEnter)
 	if picked != "row" {
 		t.Fatal("row action", picked)
 	}

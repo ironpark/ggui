@@ -260,10 +260,17 @@ func (m *MenuWidget) HandleKey(ev ggui.KeyEvent) {
 			m.button.HandleKey(ev)
 		}
 	case ggui.KeyEnter, ggui.KeyNumpadEnter, ggui.KeySpace:
-		if open && m.key(ev) {
+		if open {
+			// With no row highlighted there is nothing to run, and the
+			// menu stays as it is.
+			m.key(ev)
 			return
 		}
 		m.button.HandleKey(ev)
+		if m.popup.IsOpen() {
+			// Opened from the keyboard, the menu starts on its first row.
+			m.jump(1)
+		}
 	default:
 		m.button.HandleKey(ev)
 	}
@@ -306,15 +313,20 @@ func (m *MenuWidget) jump(dir int) {
 	m.current = stepIndex(-1, dir, len(m.items), m.enabled)
 }
 
-// reopen refreshes the items and highlights the first one. Owners that show
-// the panel through their own popup call it in place of toggle.
-func (m *MenuWidget) reopen() {
+// reopen refreshes the items and, when first is set, highlights the first
+// one: a menu opened from the keyboard starts there, and one the pointer
+// opened shows no highlight until the pointer or a key gives it one.
+// Owners that show the panel through their own popup call it in place of
+// toggle.
+func (m *MenuWidget) reopen(first bool) {
 	m.closeSub()
-	m.hover = -1
+	m.hover, m.current = -1, -1
 	for _, it := range m.items {
 		it.Sync()
 	}
-	m.jump(1)
+	if first {
+		m.jump(1)
+	}
 }
 
 // activate runs the highlighted item, or opens its submenu, and reports

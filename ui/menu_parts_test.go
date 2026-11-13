@@ -105,8 +105,9 @@ func TestMenubarKeepsLeftAndRightForAnOpenSubmenu(t *testing.T) {
 		ui.Menu("Edit", ui.MenuItem("Undo", nil)))
 	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(bar)), ggui.Sz(600, 400))
 	defer p.Close()
+	// A click opens the menu on no row; Down goes to the first.
 	p.Tap("File")
-	p.Key("right")
+	p.Key("down", "right")
 	find(t, p, ggui.RoleMenuItem, "notes.txt")
 	p.Key("left")
 	if _, ok := p.FindRole(ggui.RoleMenuItem, "notes.txt"); ok {
@@ -172,5 +173,59 @@ func TestMenuPanelsFitTheirEntriesAndTheDividerBleeds(t *testing.T) {
 	item := find(t, q, ggui.RoleMenuItem, "An entry far wider than the least a context menu is").Rect
 	if w := wide.Popup().Rect().Size.W; w <= th.Space*18 || w != item.Size.W+th.PanelPad.Horizontal() {
 		t.Fatalf("a context menu is %v wide around an entry %v wide", w, item.Size.W)
+	}
+}
+
+// A menu starts on its first row only when the keyboard opened it, as Base
+// UI's does: one the pointer opened shows no highlight until the pointer or
+// a key gives it one.
+func TestMenusStartOnARowOnlyFromTheKeyboard(t *testing.T) {
+	t.Parallel()
+	ran := ""
+	entries := func() []ggui.Widget {
+		return []ggui.Widget{ui.MenuItem("Open", func() { ran = "open" }), ui.MenuItem("Save", func() { ran = "save" })}
+	}
+	menu := ui.Menu("File", entries()...)
+	bar := ui.Menubar(ui.Menu("Edit", entries()...), ui.Menu("View", ui.MenuItem("Zoom", func() { ran = "zoom" })))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(menu, bar)), ggui.Sz(400, 300))
+	defer p.Close()
+
+	// The dropdown: a click, then Enter, runs nothing.
+	p.Tap("File")
+	p.Key("enter")
+	if ran != "" || !menu.Popup().IsOpen() {
+		t.Fatalf("a dropdown the pointer opened ran %q", ran)
+	}
+	p.Key("escape")
+	// Enter on its trigger opens it on the first row.
+	p.Key("enter")
+	if !menu.Popup().IsOpen() {
+		t.Fatal("Enter did not open the dropdown")
+	}
+	p.Key("enter")
+	if ran != "open" {
+		t.Fatalf("a dropdown the keyboard opened ran %q, want its first row", ran)
+	}
+
+	// The menubar: the same for a click, and for the menu the pointer moves
+	// on to.
+	ran = ""
+	p.Tap("Edit")
+	p.Key("enter")
+	if ran != "" || !bar.Popup().IsOpen() {
+		t.Fatalf("a menubar menu the pointer opened ran %q", ran)
+	}
+	view, _ := p.Find("View")
+	p.Move(view.Center().Add(ggui.Pt(-2, 0)))
+	p.Move(view.Center())
+	find(t, p, ggui.RoleMenuItem, "Zoom")
+	p.Key("enter")
+	if ran != "" {
+		t.Fatalf("a menubar menu the pointer moved to ran %q", ran)
+	}
+	// Left moves to the menu before it, on its first row.
+	p.Key("left", "enter")
+	if ran != "open" {
+		t.Fatalf("a menubar menu the arrows opened ran %q, want its first row", ran)
 	}
 }
