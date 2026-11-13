@@ -28,8 +28,25 @@ const (
 // word. "tdt" finds "Toggle dark theme", and "dark" ranks it above
 // "Drag marker".
 func commandScore(text, query string) float64 {
+	if text == "" {
+		return 0
+	}
 	s, q := []rune(text), []rune(query)
 	return commandScoreFrom(s, q, lowerRunes(s), lowerRunes(q), 0, 0, map[[2]int]float64{})
+}
+
+// commandText is what an entry is scored on, as cmdk builds it: the label
+// and then the keywords, each trimmed and a space apart. An entry with no
+// label is not found, whatever its keywords.
+func commandText(label string, keywords []string) string {
+	text := strings.TrimSpace(label)
+	if text == "" {
+		return ""
+	}
+	for _, k := range keywords {
+		text += " " + strings.TrimSpace(k)
+	}
+	return text
 }
 
 // lowerRunes is s in lower case with a hyphen or any space as one space,
@@ -103,9 +120,16 @@ func commandScoreFrom(s, q, ls, lq []rune, si, qi int, memo map[[2]int]float64) 
 				score *= penaltyCase
 			}
 		}
-		// Two letters the wrong way round still find the text, for little.
-		if at > 0 && qi+1 < len(q) &&
-			(score < scoreTransposed && ls[at-1] == lq[qi+1] || lq[qi+1] == lq[qi] && ls[at-1] != lq[qi]) {
+		// Two letters the wrong way round still find the text, for little,
+		// and so does a letter the query doubles. before is the letter
+		// ahead of this one, none at the start of the text, where cmdk
+		// compares an empty string.
+		before := rune(-1)
+		if at > 0 {
+			before = ls[at-1]
+		}
+		if qi+1 < len(q) &&
+			(score < scoreTransposed && before == lq[qi+1] || lq[qi+1] == lq[qi] && before != lq[qi]) {
 			if swapped := commandScoreFrom(s, q, ls, lq, at+1, qi+2, memo) * scoreTransposed; swapped > score {
 				score = swapped
 			}
@@ -133,11 +157,7 @@ func (c *CommandWidget) rank(query string) []int {
 		if e.line {
 			continue
 		}
-		text := e.label
-		if len(e.keywords) > 0 {
-			text += " " + strings.Join(e.keywords, " ")
-		}
-		score := commandScore(text, query)
+		score := commandScore(commandText(e.label, e.keywords), query)
 		if score <= 0 {
 			continue
 		}
