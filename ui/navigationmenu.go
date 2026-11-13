@@ -634,7 +634,8 @@ func (p navigationMenuPanel) Layout(c ggui.Constraints, env ggui.Env) ggui.Size 
 		return ggui.Size{}
 	}
 	t := uitheme.Of(env)
-	n.chrome.Shadow(t.PanelShadow).Fill(t.Popover).Border(t.BorderWidth, t.Border).Radius(t.Radius)
+	// shadcn's ring-1 ring-foreground/10, as every floating panel's.
+	n.chrome.Shadow(t.PanelShadow).Fill(t.Popover).Border(t.BorderWidth, fade(t.Fg, .1)).Radius(t.Radius)
 	// What is inside the panel opens its own popups in the theme's time.
 	env = env.With(ggui.PopupDurationKey, n.env.PopupDuration())
 	return n.chrome.Layout(c, env.With(navigationMenuOwnerKey, n))
@@ -644,12 +645,17 @@ func (p navigationMenuPanel) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	n := p.n
 	if item := n.current(); item != nil && item.panel != nil {
 		now := ggui.FrameTime()
-		n.enter.MoveTo(1, now, n.motion)
-		if e := n.enter.Value(now); e < 1 && n.popup.IsOpen() {
-			// The popup scales its content up a little as it fades it in;
-			// this takes the panel the rest of the way down to
-			// navigationMenuFrom, about the trigger it hangs from, and
-			// brings it back along the panel's own longer curve.
+		if n.popup.IsOpen() {
+			n.enter.MoveTo(1, now, n.motion)
+		} else {
+			// data-ending-style:scale-90 over duration-150, on the same curve.
+			n.enter.MoveTo(0, now, n.env.Motion(navigationMenuExit))
+		}
+		if e := n.enter.Value(now); e < 1 {
+			// The popup scales its content up a little as it fades it in,
+			// and down as it fades it out; this takes the panel the rest
+			// of the way to navigationMenuFrom, about the trigger it hangs
+			// from, along the panel's own curve: the longer one coming.
 			const popIn = .95
 			from := navigationMenuFrom / popIn
 			about := ggui.Pt(clamp(item.rect.Center().X, r.Origin.X, r.Origin.X+r.Size.W), pick(r.Origin.Y >= item.rect.Origin.Y, r.Origin.Y, r.Origin.Y+r.Size.H))
