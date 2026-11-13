@@ -13,6 +13,7 @@ import (
 type AccordionSection struct {
 	key, title string
 	content    ggui.Widget
+	header     ggui.Widget
 	disabled   bool
 }
 
@@ -20,6 +21,17 @@ type AccordionSection struct {
 func AccordionItem(key, title string, content ggui.Widget) AccordionSection {
 	return AccordionSection{key: key, title: title, content: content}
 }
+
+// Header draws w in the header in place of the title's text, for a section
+// headed by an icon and a label, say, or a title with a count beside it:
+//
+//	ui.AccordionItem("billing", "Billing", body).
+//		Header(ggui.Row(ui.Icon(icons.File), ggui.Text("Billing")).Gap(8))
+//
+// The title still names the section to screen readers and Probe. Text in w
+// takes the header's style and color unless it sets its own; the chevron
+// stays at the end of the header, level with w's first line.
+func (s AccordionSection) Header(w ggui.Widget) AccordionSection { s.header = w; return s }
 
 // Disabled prevents user interaction with the section header.
 func (s AccordionSection) Disabled(v bool) AccordionSection { s.disabled = v; return s }
@@ -41,6 +53,7 @@ type AccordionWidget struct {
 	sizes       []ggui.Size
 	heights     []float64
 	env         ggui.Env
+	line        float64 // one line of a header's text
 }
 
 // Accordion binds open section keys. By default opening a section closes the
@@ -58,7 +71,10 @@ func Accordion(open ggui.Binding[[]string], items ...AccordionSection) *Accordio
 			panic("ui: duplicate Accordion key")
 		}
 		seen[item.key] = true
-		h := &accordionHeader{owner: a, index: i, text: ggui.Text(item.title)}
+		h := &accordionHeader{owner: a, index: i}
+		if item.header == nil {
+			h.text = ggui.Text(item.title)
+		}
 		h.Role = ggui.RoleDisclosure
 		h.SetName(item.title)
 		h.SetInert(item.disabled)
@@ -144,15 +160,25 @@ func (a *AccordionWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	var width, height float64
 	t := a.theme
 	chevron := t.IconSize + t.Space // the room the chevron takes beside a header
+	// One line of a header, which the chevron is centered on however many
+	// lines the header runs to.
+	label := env.ResolveText(t.Label)
+	a.line = label.Size * label.LineHeight
 	for i, item := range a.items {
 		h := a.headers[i]
 		h.SetKey(struct {
 			Group any
 			Item  string
 		}{a.HitID(), item.key})
-		h.text.Style(t.Label).Color(pick(item.disabled, t.Disabled(t.Fg), t.Fg))
-		h.size = h.text.Layout(ggui.Loose(ggui.Sz(max(c.MaxW-chevron, 0), ggui.Unbounded)), env)
-		a.heights[i] = max(20, h.size.H) + 2.5*t.Space
+		fg := pick(item.disabled, t.Disabled(t.Fg), t.Fg)
+		room := ggui.Loose(ggui.Sz(max(c.MaxW-chevron, 0), ggui.Unbounded))
+		if h.text != nil {
+			h.text.Style(t.Label).Color(fg)
+			h.size = h.text.Layout(room, env)
+		} else {
+			h.size = item.header.Layout(room, env.WithText(t.Label.Merge(ggui.TextStyle{Color: fg})))
+		}
+		a.heights[i] = max(a.line, h.size.H) + 2.5*t.Space
 		width = max(width, h.size.W+chevron)
 		height += a.heights[i]
 		h.open = a.isOpen(i)
@@ -189,12 +215,19 @@ func (a *AccordionWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		rect := ggui.Rct(ggui.Pt(r.Origin.X, y), ggui.Sz(r.Size.W, a.heights[i]))
 		h.Hit(dst, rect, h, ggui.CursorShapeDefault)
 		hover := dst.Ease(h.Anchor(rect), disclosureHoverSlot, pick(h.Hovered && !item.disabled, 1.0, 0.0), a.env.Motion(t.MotionFast))
-		if hover > 0 {
+		if hover > 0 && h.text != nil {
 			under := y + 1.25*t.Space + h.size.H - 1
 			dst.StrokeLine(ggui.Pt(rect.Origin.X, under), ggui.Pt(rect.Origin.X+h.size.W, under), 1, fade(t.Fg, hover))
 		}
-		paintIconAt(dst, a.env, pick(h.open, icons.ChevronUp, icons.ChevronDown), ggui.Pt(rect.Origin.X+rect.Size.W-t.IconSize/2, y+a.heights[i]/2), t.IconSize, pick(item.disabled, t.Disabled(t.MutedFg), t.MutedFg), 0)
-		dst.Paint(h.text, ggui.Rct(ggui.Pt(rect.Origin.X, y+1.25*t.Space), h.size))
+		// The chevron sits level with the header's first line, as shadcn's
+		// items-start puts it, which shows once a title wraps.
+		first := pick(a.line > 0, a.line, h.size.H)
+		paintIconAt(dst, a.env, pick(h.open, icons.ChevronUp, icons.ChevronDown), ggui.Pt(rect.Origin.X+rect.Size.W-t.IconSize/2, y+1.25*t.Space+first/2), t.IconSize, pick(item.disabled, t.Disabled(t.MutedFg), t.MutedFg), 0)
+		var face ggui.Widget = h.text
+		if h.text == nil {
+			face = item.header
+		}
+		dst.Paint(face, ggui.Rct(ggui.Pt(rect.Origin.X, y+1.25*t.Space), h.size))
 		controlFocusRing(dst, &h.Interactive, t, rect, t.Radius, t.Ring)
 		y += a.heights[i]
 		paintDisclosure(dst, item.content, ggui.Pt(r.Origin.X, y), r.Size.W, a.sizes[i], h.progress, h.open)
