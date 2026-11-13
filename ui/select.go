@@ -49,9 +49,10 @@ type SelectWidget[T comparable] struct {
 	textSize       ggui.Size
 	triggerContent ggui.Widget
 	triggerSize    ggui.Size
-	highlight      int       // the option the keyboard is on while open, or -1
-	typed          string    // the letters of the typeahead search under way
-	typedAt        time.Time // when the last of them was typed
+	highlight      int         // the option the keyboard is on while open, or -1
+	sides          JoinedSides // the sides a ButtonGroup joins the field on
+	typed          string      // the letters of the typeahead search under way
+	typedAt        time.Time   // when the last of them was typed
 	theme          *uitheme.Theme
 	env            ggui.Env
 }
@@ -370,6 +371,9 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	t := uitheme.Of(env)
 	s.theme = t
+	// The sides a ButtonGroup joins the field on are the field's own: the
+	// list it opens is laid out without them.
+	s.sides, env = takeJoinedSides(env)
 	s.env = env
 	s.motion = env.Motion(t.MotionFast)
 	inField, _ := env.Get(fieldInvalid)
@@ -475,10 +479,34 @@ func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 	if inert {
 		fill, border, muted = t.Disabled(fill), t.Disabled(border), t.Disabled(muted)
 	}
-	if s.shownInvalid && !inert {
-		fieldHalo(dst, t, r, radius, fieldRing(t, true))
+	// In a ButtonGroup the field is joined to its neighbours as a button
+	// is: square corners and no border of its own on the joined sides, the
+	// group's radius, and its ring drawn by the group over them.
+	sides := s.sides.within(dst)
+	if sides.Any() {
+		radius = t.Radius
+		s.box.Fill(nil).Border(0, nil)
+		paintJoinedBox(dst, r, radius, sides, fill, t.BorderWidth, border)
+		ring := joinedFocus{on: true, r: r, radius: radius, sides: sides, width: t.BorderWidth}
+		switch {
+		case inert:
+			ring.on = false
+		case s.shownInvalid:
+			ring.line, ring.halo = border, t.Halo(fieldRing(t, true))
+		case s.Focused && s.FocusVisible:
+			ring.line, ring.halo = t.Ring, t.Halo(t.Ring)
+		default:
+			ring.on = false
+		}
+		if g, ok := dst.Enclosing().(*ButtonGroupWidget); ok && ring.on {
+			g.focus = ring
+		}
+	} else {
+		if s.shownInvalid && !inert {
+			fieldHalo(dst, t, r, radius, fieldRing(t, true))
+		}
+		s.box.Fill(fill).Border(t.BorderWidth, border)
 	}
-	s.box.Fill(fill).Border(t.BorderWidth, border)
 	dst.Paint(s.box, r)
 	if s.triggerContent != nil {
 		inner := ggui.Rct(r.Origin.Add(ggui.Pt(s.pad.Left, s.pad.Top)), ggui.Sz(max(0, r.Size.W-s.pad.Horizontal()), max(0, r.Size.H-s.pad.Vertical())))
@@ -490,7 +518,7 @@ func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 		center := ggui.Pt(r.Origin.X+r.Size.W-s.pad.Right-t.IconSize/2, r.Origin.Y+r.Size.H/2)
 		chevron(dst, s.env, t, center, 2, muted)
 	}
-	if !s.shownInvalid {
+	if !s.shownInvalid && !sides.Any() {
 		controlFocusRing(dst, &s.Interactive, t, r, radius, t.Ring)
 	}
 }

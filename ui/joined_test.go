@@ -190,3 +190,45 @@ func TestButtonGroupDrawsTheFocusedChildsRingItself(t *testing.T) {
 		t.Fatal("the ring stayed after focus left the group")
 	}
 }
+
+// A Select in a ButtonGroup is joined as a button is: it squares the side
+// it meets its neighbour on, and its keyboard ring is the group's to draw.
+func TestSelectJoinsAButtonGroup(t *testing.T) {
+	t.Parallel()
+	unit := Select(ggui.State("USD")).Options([]string{"USD", "EUR"}).Name("Currency")
+	g := ButtonGroup(unit, Button("Convert", nil).Outline())
+	alone := Select(ggui.State("USD")).Options([]string{"USD", "EUR"}).Name("Alone")
+	p := ggui.NewProbe(ggui.Column(g, alone).Gap(8), ggui.Sz(400, 300))
+	defer p.Close()
+	p.Frame()
+	if want := (JoinedSides{Right: true}); unit.sides != want {
+		t.Fatalf("the select in the group is joined on %+v, want %+v", unit.sides, want)
+	}
+	if alone.sides.Any() {
+		t.Fatalf("a select outside a group is joined on %+v", alone.sides)
+	}
+	field, _ := p.FindRole(ggui.RoleSelect, "Currency")
+	button, _ := p.FindRole(ggui.RoleButton, "Convert")
+	if field.Rect.Size.H != button.Rect.Size.H || field.Rect.Origin.X+field.Rect.Size.W != button.Rect.Origin.X {
+		t.Fatalf("select %v and button %v do not meet at one height", field.Rect, button.Rect)
+	}
+	if g.focus.on {
+		t.Fatal("a ring with nothing focused")
+	}
+	p.Key("tab")
+	p.Frame()
+	if !g.focus.on || g.focus.r != field.Rect || g.focus.sides != unit.sides {
+		t.Fatalf("ring %+v, want the group to draw one around the select at %v", g.focus, field.Rect)
+	}
+	// The list it opens is not part of the strip.
+	p.Key("space")
+	p.Frame()
+	if _, ok := p.FindRole(ggui.RoleOption, "EUR"); !ok {
+		t.Fatal("the joined select did not open its list")
+	}
+	p.Key("escape", "tab")
+	p.Frame()
+	if g.focus.on && g.focus.r == field.Rect {
+		t.Fatal("the select's ring stayed after focus moved on")
+	}
+}
