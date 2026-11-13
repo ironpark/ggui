@@ -18,6 +18,9 @@ func Kbd(label string) *KbdWidget {
 	return &KbdWidget{text: text, box: ggui.Box(&buttonContent{child: text})}
 }
 
+// Content changes the label on the cap.
+func (k *KbdWidget) Content(label string) *KbdWidget { k.text.Content(label); return k }
+
 // KbdInverseKey marks a subtree drawn on the inverse of the page, as a
 // tooltip's is. A Kbd under it is drawn in the page's background color on
 // a translucent wash of it, where its usual Muted surface would not show.

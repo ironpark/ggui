@@ -152,7 +152,7 @@ func (c *CommandWidget) Entries(entries ...CommandEntry) *CommandWidget {
 func CommandDialog(open ggui.Binding[bool], command *CommandWidget) *DialogWidget {
 	command.dismiss = func() { open.Set(false) }
 	command.inDialog = true
-	return Dialog(open, command.Borderless()).CloseButton(false).Compact().Name("Commands").Width(384)
+	return Dialog(open, command.Borderless()).CloseButton(false).Compact().Name("Commands").Width(384).TopAt(1.0 / 3)
 }
 
 // Placeholder sets the search hint.

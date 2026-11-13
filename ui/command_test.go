@@ -97,6 +97,9 @@ func TestCommandRowsSeparatorsAndDialogWidth(t *testing.T) {
 	if w := dialog.Rect.Size.W; w != 384 {
 		t.Fatalf("the palette is %v wide, want 384", w)
 	}
+	if y := dialog.Rect.Origin.Y; y != 200 {
+		t.Fatalf("the palette's top is at %v, want a third of the 600 high window", y)
+	}
 	query.Set("o")
 	p.Frame()
 	if got := separators(p); got != 0 {
