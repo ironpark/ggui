@@ -2,6 +2,7 @@ package main
 
 import (
 	"image/color"
+	"strings"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
@@ -19,6 +20,7 @@ func newPartPreviews(toasts *ui.ToasterWidget) func() []ggui.Widget {
 	tier := ggui.State("")
 	shipping := ggui.State("none")
 	alerts := ggui.State(false)
+	compute, digest, password := ggui.State("kubernetes"), ggui.State(false), ggui.State("")
 	showStatus, showPanel := ggui.State(true), ggui.State(false)
 	sortBy := ggui.State("Newest")
 	prompt, url, amount := ggui.State(""), ggui.State(""), ggui.State("")
@@ -105,6 +107,17 @@ func newPartPreviews(toasts *ui.ToasterWidget) func() []ggui.Widget {
 				ui.Caption("Each control turns destructive until it holds a valid answer."),
 			).Gap(12).Stretch()),
 
+			preview("Choice cards", ggui.Column(
+				ui.Field("Kubernetes", ui.Radio(compute, "kubernetes", "")).Help("Run GPU workloads on a K8s cluster.").Card(),
+				ui.Field("Virtual machine", ui.Radio(compute, "vm", "")).Help("Access a cluster to run GPU workloads.").Card(),
+				ui.FieldCard(ui.Checkbox(digest, ""), ui.FieldContent(
+					ui.FieldTitle("Weekly digest"),
+					ui.FieldDescription("A summary of activity, every Monday."),
+				)).ControlFirst(),
+				ui.Field("Airplane mode", ui.Switch(ggui.State(false), "").Disabled(true)).Card(),
+				ui.Field("Password", ui.TextField(password).Placeholder("New password")).BindErrors(password.Map(passwordErrors)),
+			).Gap(12).Stretch()),
+
 			preview("Dropdown menu", ggui.Column(
 				menu,
 				ui.Captionf("Sorted by %s", sortBy),
@@ -185,4 +198,16 @@ func (w *colorChipWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.FillRoundRect(r, w.radius, w.bg)
 	dst.FillRoundRect(r, w.radius, w.c)
 	dst.StrokeRoundRect(r, w.radius, 1, w.border)
+}
+
+// passwordErrors is every rule a new password breaks.
+func passwordErrors(v string) []string {
+	var out []string
+	if len(v) < 8 {
+		out = append(out, "Use at least 8 characters.")
+	}
+	if !strings.ContainsAny(v, "0123456789") {
+		out = append(out, "Add a number.")
+	}
+	return out
 }

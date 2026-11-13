@@ -24,7 +24,12 @@ type toggle struct {
 
 	invalidProp  property.Value[bool] // set by Invalid or BindInvalid
 	fieldInvalid bool                 // the Field around the control holds an error
+	inCard       bool                 // a FieldCard around the control shows its focus
 }
+
+// hovered reports whether the pointer is on the control, for the FieldCard
+// around it.
+func (g *toggle) hovered() bool { return g.Hovered && !g.IsInert() }
 
 // toggleInvalidSlot eases the destructive halo of an invalid control.
 var toggleInvalidSlot = ggui.NewSlot[*ggui.Motion]("toggle invalid")
@@ -47,7 +52,11 @@ func (g *toggle) stateRing(dst *ggui.Canvas, box ggui.Rect, radius, invalid floa
 	if invalid > 0 && !g.IsInert() {
 		haloStroke(dst, box, radius, fade(t.Halo(destructiveRing(t)), invalid))
 	}
-	focusRing(dst, &g.Interactive, t, box, radius, fieldRing(t, g.invalid()), g.motion)
+	// In a FieldCard the ring is the card's, and the glyph keeps its
+	// border: shadcn's group-has-[:focus-visible]/field-label:ring-0.
+	if !g.inCard {
+		focusRing(dst, &g.Interactive, t, box, radius, fieldRing(t, g.invalid()), g.motion)
+	}
 }
 
 // layout takes the glyph size because each embedder sizes its own: a
@@ -59,6 +68,7 @@ func (g *toggle) layout(c ggui.Constraints, env ggui.Env, glyph ggui.Size) ggui.
 	g.motion = env.Motion(g.theme.MotionFast)
 	g.glyph = glyph
 	g.fieldInvalid, _ = env.Get(fieldInvalid)
+	g.inCard, _ = env.Get(inFieldCard)
 	size := g.glyph
 	if g.label != nil {
 		// A label inherits the destructive text of an invalid Field, as
