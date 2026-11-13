@@ -192,15 +192,17 @@ func (s *SliderWidget) setFromPosition(pos ggui.Point) {
 func (s *SliderWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := s.theme
 	s.rect = r
-	s.Hit(dst, r, s, ggui.CursorShapeDefault)
 	g := s.geometry()
 	inert := s.IsInert()
 	f := s.fraction()
+	// The thumb is taken from a little outside the slider too, as shadcn's
+	// after:-inset-2 has it.
+	s.HitReach(dst, r, g.knobReach(f, t.Space), s, ggui.CursorShapeDefault)
 	dst.FillRoundRect(g.track(0, 1), g.thick/2, sliderTone(t, t.Muted, inert))
 	dst.FillRoundRect(g.track(0, f), g.thick/2, sliderTone(t, t.Primary, inert))
 	// The halo belongs to the thumb, as shadcn's hover:ring-3 does: the
 	// pointer elsewhere on the track leaves it alone.
-	over := s.Hovered && g.thumbReach(f, t.Space).Contains(s.pointer)
+	over := s.Hovered && (g.thumbReach(f, t.Space).Contains(s.pointer) || g.knobReach(f, t.Space).Contains(s.pointer))
 	active := !inert && (over || s.Pressed || (s.Focused && s.FocusVisible))
 	g.paintThumb(dst, t, f, inert, dst.Ease(s.Anchor(r), sliderHaloSlot, pick(active, 1.0, 0.0), s.motion))
 }
@@ -392,6 +394,14 @@ func (g sliderGeometry) thumbReach(f, reach float64) ggui.Rect {
 		r.Size.W += 2 * reach
 	}
 	return r
+}
+
+// knobReach is the knob at fraction f grown by reach on every side: the
+// margin around shadcn's thumb, which takes the pointer past the slider's
+// own edges.
+func (g sliderGeometry) knobReach(f, reach float64) ggui.Rect {
+	p, d := g.point(f), g.knob+reach
+	return ggui.Rct(ggui.Pt(p.X-d, p.Y-d), ggui.Sz(2*d, 2*d))
 }
 
 // thumb is the hit rect of the thumb at fraction f: the knob along the

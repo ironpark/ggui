@@ -698,7 +698,10 @@ func (s *paintSpace) placeRegion(h *hitRegion) bool {
 		if h.key == nil {
 			return false
 		}
-		h.rect = Rect{Origin: h.full.Origin}
+		h.rect, h.reach = Rect{Origin: h.full.Origin}, Rect{}
+	}
+	if !h.reach.Empty() {
+		h.near, h.reach = h.reach, s.window(h.reach, false)
 	}
 	return true
 }

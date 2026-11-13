@@ -208,6 +208,7 @@ type frameInput struct {
 type hitRegion struct {
 	rect    Rect
 	full    Rect // rect before clipping, for scrolling it into view
+	reach   Rect // set by HitReach: where the pointer lands on it besides rect
 	id      any  // from an Identified handler, else nil
 	pointer PointerHandler
 	key     KeyHandler
@@ -220,12 +221,13 @@ type hitRegion struct {
 
 	space  *paintSpace // the space it was painted in, nil for the window's
 	local  Rect        // rect in that space, clipped there; see contains
+	near   Rect        // reach in that space
 	origin Point       // full's corner in that space, before placeRegion moved it
 }
 
 // merge folds o into r when they share a Rect and o only adds what r lacks.
 func (r *hitRegion) merge(o hitRegion) bool {
-	if r.rect != o.rect || r.space != o.space || (o.id != nil && r.id != nil && o.id != r.id) ||
+	if r.rect != o.rect || r.reach != o.reach || r.space != o.space || (o.id != nil && r.id != nil && o.id != r.id) ||
 		o.drag != nil || r.drag != nil ||
 		(o.pointer != nil && r.pointer != nil) ||
 		(o.key != nil && r.key != nil) ||
@@ -250,16 +252,17 @@ func (r *hitRegion) merge(o hitRegion) bool {
 	return true
 }
 
-// contains reports whether the window point p lands on r.
+// contains reports whether the window point p lands on r: in its Rect, or
+// in the reach a control gave it around that.
 func (r *hitRegion) contains(p Point) bool {
-	if !r.rect.Contains(p) {
+	if !r.rect.Contains(p) && !r.reach.Contains(p) {
 		return false
 	}
 	if r.space == nil {
 		return true
 	}
 	q, ok := r.space.reach(p)
-	return ok && r.local.Contains(q)
+	return ok && (r.local.Contains(q) || r.near.Contains(q))
 }
 
 // at returns the transform for the child painted in r.
