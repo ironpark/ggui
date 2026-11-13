@@ -2,6 +2,7 @@
 package theme
 
 import (
+	"fmt"
 	"image/color"
 	"slices"
 	"time"
@@ -139,6 +140,7 @@ func lightBase() Theme {
 	n := themePalettes()["neutral"][0]
 	fg, quiet, nearWhite := n["foreground"], n["muted"], n["primary-foreground"]
 	return Theme{
+		Chart:   chartColors(n),
 		Chat:    defaultChat(),
 		Text:    ggui.TextStyle{Size: 14, LineHeight: 20.0 / 14},
 		Title:   ggui.TextStyle{Size: 24, Weight: ggui.WeightSemibold},
@@ -189,7 +191,16 @@ func darkBase() Theme {
 	t.Secondary, t.Muted = n["secondary"], n["muted"]
 	t.MutedFg, t.Ring, t.Destructive = n["muted-foreground"], n["ring"], n["destructive"]
 	t.Sidebar = n["sidebar"]
+	t.Chart = chartColors(n)
 	return t
+}
+
+// chartColors are a palette's five series colors, chart-1 to chart-5.
+func chartColors(tokens map[string]color.Color) (c [5]color.Color) {
+	for i := range c {
+		c[i] = tokens[fmt.Sprintf("chart-%d", i+1)]
+	}
+	return c
 }
 
 // nFollowers is the number of colors that follow another.

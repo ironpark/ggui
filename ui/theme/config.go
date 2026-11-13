@@ -98,9 +98,7 @@ func (c Config) For(dark bool) Theme {
 	if dark {
 		mode = 1
 	}
-	for i := range t.Chart {
-		t.Chart[i] = themePalettes()[chart][mode][fmt.Sprintf("chart-%d", i+1)]
-	}
+	t.Chart = chartColors(themePalettes()[chart][mode])
 	if c.Radius != RadiusDefault {
 		radius := map[Radius]float64{RadiusNone: 0, RadiusSmall: 4, RadiusMedium: 8, RadiusLarge: 16}[c.Radius]
 		factor := radius / t.Radius
