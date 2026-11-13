@@ -71,7 +71,7 @@ type Theme struct {
 	// Elevation, in the order a surface rises off the page.
 	CardShadow    ggui.ShadowStyle // cards and the raised tab
 	PanelShadow   ggui.ShadowStyle // menus, select lists, date pickers, toasts
-	OverlayShadow ggui.ShadowStyle // dialogs
+	OverlayShadow ggui.ShadowStyle // dialogs and sheets, shadcn's shadow-lg
 
 	// The radii are shadcn's scale of --radius, each named a step smaller
 	// than Tailwind names it: Radius is rounded-lg, the corner of a button
@@ -101,6 +101,7 @@ type Theme struct {
 	MotionFast    time.Duration // hover and control transitions
 	MotionSlow    time.Duration // disclosures and sheets
 	MotionOverlay time.Duration // dialog and popup entrances/exits
+	MotionDrawer  time.Duration // a drawer sliding in or out
 
 	// How far a state tints the color it starts from, as Mix takes it:
 	// toward Fg under the pointer and while pressed, and toward transparent
@@ -193,9 +194,10 @@ func lightBase() Theme {
 		Ring:   n["ring"],
 		Scrim:  color.NRGBA{A: 26},
 
-		CardShadow:    ggui.ShadowStyle{Offset: ggui.Pt(0, 1), Blur: 2, Color: color.NRGBA{A: 15}},
-		PanelShadow:   ggui.ShadowStyle{Offset: ggui.Pt(0, 4), Blur: 10, Color: color.NRGBA{A: 26}},
-		OverlayShadow: ggui.ShadowStyle{Offset: ggui.Pt(0, 12), Blur: 28, Color: color.NRGBA{A: 65}},
+		CardShadow:  ggui.ShadowStyle{Offset: ggui.Pt(0, 1), Blur: 2, Color: color.NRGBA{A: 15}},
+		PanelShadow: ggui.ShadowStyle{Offset: ggui.Pt(0, 4), Blur: 10, Color: color.NRGBA{A: 26}},
+		// shadow-lg: 0 10px 15px -3px black at 10%.
+		OverlayShadow: ggui.ShadowStyle{Offset: ggui.Pt(0, 10), Blur: 15, Spread: -3, Color: color.NRGBA{A: 26}},
 
 		Radius: 10,
 		Space:  8, BorderWidth: 1, ControlSize: 16, ControlGap: 8, IconSize: 16, MenuWidth: 224,
@@ -205,7 +207,8 @@ func lightBase() Theme {
 		TabPad: g.tab,
 
 		MotionFast: 150 * time.Millisecond, MotionSlow: 200 * time.Millisecond, MotionOverlay: 100 * time.Millisecond,
-		HoverMix: .06, PressMix: .08, DisabledMix: .5, RingAlpha: .5,
+		MotionDrawer: 450 * time.Millisecond,
+		HoverMix:     .06, PressMix: .08, DisabledMix: .5, RingAlpha: .5,
 	}
 }
 

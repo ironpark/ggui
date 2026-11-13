@@ -97,6 +97,18 @@ Vega and Lyra are clear in a light theme and 30% in a dark one; Maia is 30% in
 both, Mira 20% and 30%, Luma and Rhea 50% in both. A control paints it over its
 surface, never instead of it. Set `Input` to pin an opaque surface.
 
+### Motion and elevation
+
+| Token | Default | Used for |
+| --- | --- | --- |
+| `MotionFast` | 150ms | hover and control transitions |
+| `MotionSlow` | 200ms | disclosures and sheets |
+| `MotionOverlay` | 100ms | dialog and popup entrances and exits |
+| `MotionDrawer` | 450ms | a drawer sliding in or out |
+| `CardShadow` | `shadow-xs`: 0 1px 2px, 6% black | cards, the raised tab |
+| `PanelShadow` | 0 4px 10px, 10% black | menus, select lists, toasts |
+| `OverlayShadow` | `shadow-lg`: 0 10px 15px -3px, 10% black | dialogs, sheets |
+
 ### Styles
 
 A `Style` maps one of shadcn/ui's style sheets onto the geometry tokens: which
