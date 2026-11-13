@@ -87,9 +87,8 @@ func FromCSS(css string) (light, dark Theme, err error) {
 // Each color variable sets the token the Theme field comments name,
 // --input setting InputBorder; ParseColor lists the color syntaxes. A value
 // may be var() of another variable in decls. --radius sets the radii as
-// shadcn derives its own from it: Radius 2px less, for the rounded-md
-// controls, RadiusSm 4px less and RadiusLg 4px more. A later declaration
-// wins.
+// shadcn derives its own from it: Radius the length itself, RadiusSm 0.8
+// of it and RadiusLg 1.4. A later declaration wins.
 //
 // A color variable with no token of its own, such as the --warning shadcn
 // suggests adding, is kept under CSSColor of its name; other variables,
