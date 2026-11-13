@@ -4,6 +4,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
@@ -35,6 +36,7 @@ type NumberInputWidget struct {
 	theme    *uitheme.Theme
 	disabled bool // own or inherited, as of the last Layout
 	invalid  bool // inside a Field showing an error
+	motion   time.Duration
 }
 
 // NumberInput creates a number field bound to value, stepping by 1 with no
@@ -296,15 +298,16 @@ func (n *NumberInputWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	inherited, _ := env.Get(ggui.InputDisabledKey)
 	n.disabled = n.IsInert() || inherited
 	n.invalid, _ = env.Get(fieldInvalid)
+	n.motion = env.Motion(t.MotionFast)
 	if n.row == nil {
 		n.row = ggui.Row(ggui.Expanded(n.input), n.dec, n.inc)
 		n.box = ggui.Box(n.row)
 	}
 	n.row.Gap(t.Space / 2)
-	fieldBox(n.box, t, n.input.Focused(), n.disabled)
+	// The colors follow the field's state in Paint; see fieldChrome.
+	fieldBoxShape(n.box, t, t.FieldPad)
 	size := n.box.Layout(c, env.With(ggui.InputDisabledKey, n.IsInert()))
 	n.disabled = n.disabled || n.input.IsDisabled()
-	fieldBox(n.box, t, n.input.Focused(), n.disabled)
 	return size
 }
 
@@ -321,12 +324,8 @@ func (n *NumberInputWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	} else {
 		n.Hit(dst, r, n.input, ggui.CursorShapeText)
 	}
-	if n.input.Focused() && !n.disabled {
-		fieldHalo(dst, n.theme, r, n.theme.Radius, fieldRing(n.theme, n.invalid))
-	}
-	if n.invalid {
-		n.box.Border(n.theme.BorderWidth, n.theme.Destructive)
-	}
+	at := ggui.Anchor{Rect: r, ID: n.input.HitID()}
+	fieldChrome(dst, at, n.box, n.theme, r, n.theme.Radius, fieldState{n.input.Focused(), n.invalid, n.disabled}, n.motion)
 	dst.Paint(n.box, r)
 }
 

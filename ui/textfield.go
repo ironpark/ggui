@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"time"
+
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
@@ -18,6 +20,7 @@ type TextFieldWidget struct {
 	theme            *uitheme.Theme
 	plain            bool
 	invalid          bool
+	motion           time.Duration // MotionFast, or zero under reduced motion
 }
 
 // TextField creates a text field bound to value.
@@ -151,20 +154,25 @@ func (f *TextFieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	f.Sync()
 	t := uitheme.Of(env)
 	f.theme = t
+	f.motion = env.Motion(t.MotionFast)
 	f.invalid, _ = env.Get(fieldInvalid)
 	if f.plain {
-		f.box.Fill(nil).Pad(10, 8).Radius(t.Radius).Border(0, nil)
+		// A bare editor is padded by a field's side padding above and
+		// below, and by the theme's Space left and right.
+		f.box.Fill(nil).Padding(ggui.Insets(t.FieldPad.Left, t.Space)).Radius(t.Radius).Border(0, nil)
 		return f.box.Layout(c, env.With(ggui.InputDisabledKey, f.IsInert()))
 	}
 	pad := t.FieldPad
 	if f.multiline {
 		pad = ggui.Insets(t.Space, t.FieldPad.Left)
 	}
-	fieldBoxPadded(f.box, t, f.input.Focused(), f.IsInert(), pad)
-	c.MinH = min(c.MaxH, max(c.MinH, pick(f.multiline, 64.0, 20+t.FieldPad.Top+t.FieldPad.Bottom)))
-	size := f.box.Layout(c, env.With(ggui.InputDisabledKey, f.IsInert()))
-	fieldBoxPadded(f.box, t, f.input.Focused(), f.input.IsDisabled(), pad)
-	return size
+	// Only the shape is set here: the colors follow the field's state in
+	// Paint, where fieldChrome eases them.
+	fieldBoxShape(f.box, t, pad)
+	// A line of text and the padding, or shadcn's four-line minimum of a
+	// textarea: eight of the theme's Space.
+	c.MinH = min(c.MaxH, max(c.MinH, pick(f.multiline, t.Space*8, 20+t.FieldPad.Top+t.FieldPad.Bottom)))
+	return f.box.Layout(c, env.With(ggui.InputDisabledKey, f.IsInert()))
 }
 
 // Baseline implements ggui.Baseliner: the editor's, inside the padding.
@@ -173,16 +181,15 @@ func (f *TextFieldWidget) Baseline() (float64, bool) { return f.box.Baseline() }
 // Paint implements Widget.
 func (f *TextFieldWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// The whole box, padding included, focuses and clicks into the editor.
-	if f.input.IsDisabled() {
+	inert := f.input.IsDisabled()
+	if inert {
 		dst.Describe(r, f.input)
 	} else {
 		f.Hit(dst, r, f.input, ggui.CursorShapeText)
 	}
-	if !f.plain && f.input.Focused() && !f.input.IsDisabled() {
-		fieldHalo(dst, f.theme, r, f.theme.Radius, fieldRing(f.theme, f.invalid))
-	}
-	if f.invalid && !f.plain {
-		f.box.Border(f.theme.BorderWidth, f.theme.Destructive)
+	if !f.plain {
+		at := ggui.Anchor{Rect: r, ID: f.input.HitID()}
+		fieldChrome(dst, at, f.box, f.theme, r, f.theme.Radius, fieldState{f.input.Focused(), f.invalid, inert}, f.motion)
 	}
 	dst.Paint(f.box, r)
 }
