@@ -103,7 +103,7 @@ func (m *MenuWidget) ConsumesKey(ev ggui.KeyEvent) bool {
 func (m *MenuWidget) init(entries []ggui.Widget) {
 	m.body.content = m.column(entries)
 	m.keys = m
-	m.popup = ggui.Popup(m.button, m.panel).Keys(m).Owner(m.button)
+	m.popup = ggui.Popup(m.button, menuSurface(m.panel)).Keys(m).Owner(m.button)
 	m.button.Expands(m.popup.IsOpen).Opens(m)
 }
 
@@ -273,6 +273,10 @@ func (m *MenuWidget) HandleKey(ev ggui.KeyEvent) {
 // through their own popup, so the width lives here rather than in Layout.
 func (m *MenuWidget) chrome(t *uitheme.Theme) *ggui.BoxWidget {
 	m.theme = t
+	if t.Menu().Popover != t.Popover {
+		mt := t.Menu()
+		t = &mt
+	}
 	panelBox(m.panel, t)
 	switch {
 	case m.widthSet:
@@ -562,7 +566,6 @@ type MenuItemWidget struct {
 
 	sub      *MenuWidget       // the submenu this row opens, if any
 	subPopup *ggui.PopupWidget // the popup it opens in
-	subAt    ggui.Point
 
 	pad      ggui.EdgeInsets
 	textSize ggui.Size
@@ -599,7 +602,8 @@ func MenuSub(label string, entries ...ggui.Widget) *MenuItemWidget {
 	it.sub = newMenu()
 	it.sub.fit, it.sub.parent = true, it
 	it.sub.body.content = it.sub.column(entries)
-	it.subPopup = ggui.Popup(menuItemFace{it}, it.sub.panel).Gap(0).Modal(false).Owner(it)
+	it.subPopup = ggui.Popup(menuItemFace{it}, menuSurface(it.sub.panel)).Gap(0).Modal(false).Owner(it).
+		Side(ggui.PopupInlineEnd).Align(ggui.PopupStart)
 	return it
 }
 
@@ -890,9 +894,10 @@ func (it *MenuItemWidget) openSub(first bool) {
 	it.subPopup.Show()
 }
 
-// placeSub puts an open submenu beside the row at r: to its right, or to
-// its left where the window has no room.
-func (it *MenuItemWidget) placeSub(dst *ggui.Canvas, r ggui.Rect) {
+// placeSub closes an open submenu whose menu has closed. The popup itself
+// keeps it beside the row: at the end of it in the reading direction, or
+// at the start where the window has no room, entering from that side.
+func (it *MenuItemWidget) placeSub() {
 	if !it.subPopup.IsOpen() {
 		return
 	}
@@ -900,19 +905,6 @@ func (it *MenuItemWidget) placeSub(dst *ggui.Canvas, r ggui.Rect) {
 	if it.popup != nil && !it.popup.IsOpen() || it.IsInert() {
 		it.sub.closeSub()
 		it.subPopup.Hide()
-		return
-	}
-	t := it.theme
-	at := ggui.Pt(r.Origin.X+r.Size.W, r.Origin.Y-t.PanelPad.Top+t.BorderWidth)
-	if screen := dst.Size(); screen.W > 0 {
-		w := it.sub.panel.Layout(ggui.Constraints{MaxW: screen.W, MaxH: ggui.Unbounded}, it.env).W
-		if at.X+w > screen.W && r.Origin.X-w >= 0 {
-			at.X = r.Origin.X - w
-		}
-	}
-	if at != it.subAt {
-		it.subAt = at
-		it.subPopup.ShowAt(at)
 	}
 }
 
@@ -935,6 +927,9 @@ func (it *MenuItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		return it.layoutRow(c, env)
 	}
 	it.sub.chrome(it.theme)
+	// The submenu's first row lines up with this one: it rises by the
+	// panel's padding less its border, shadcn's alignOffset of -3.
+	it.subPopup.AlignOffset(-(it.theme.PanelPad.Top - it.theme.BorderWidth))
 	if it.menu != nil {
 		root := it.menu.root()
 		it.sub.checkLeft = root.checkLeft
@@ -1007,7 +1002,7 @@ func (it *MenuItemWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		it.paintRow(dst, r)
 		return
 	}
-	it.placeSub(dst, r)
+	it.placeSub()
 	dst.Paint(it.subPopup, r)
 }
 

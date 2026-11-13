@@ -66,7 +66,7 @@ func Combobox[T comparable](value ggui.Binding[T]) *ComboboxWidget[T] {
 	c.search = Command(c.query).Name("Search options").Placeholder("Search options…").Height(comboboxListHeight)
 	c.search.menuRows = true
 	c.content = ggui.Box(c.search)
-	c.popup = ggui.Popup(c.button, c.content).Owner(c.button)
+	c.popup = ggui.Popup(c.button, menuSurface(c.content)).Owner(c.button)
 	c.button.Expands(c.popup.IsOpen)
 	return c
 }
@@ -302,7 +302,7 @@ func ComboboxMultiple[T comparable](values ggui.Binding[[]T]) *ComboboxMultipleW
 	c.search.onKey = c.handleKey
 	c.field = &comboboxChips[T]{c: c, hint: ggui.Text("").NoWrap()}
 	c.content = ggui.Box(c.search)
-	c.popup = ggui.Popup(c.field, c.content).Owner(c.button).Modal(false)
+	c.popup = ggui.Popup(c.field, menuSurface(c.content)).Owner(c.button).Modal(false)
 	c.button.Expands(c.popup.IsOpen).Opens(c)
 	return c
 }

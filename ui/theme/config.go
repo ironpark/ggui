@@ -270,6 +270,16 @@ func (t Theme) Menu() Theme {
 	return t
 }
 
+// MenuEnv is env under the theme of Of(env).Menu: env itself unless the
+// theme's menus are drawn in another. A menu-like control lays its popup's
+// content out under it.
+func MenuEnv(env ggui.Env) ggui.Env {
+	if t := Of(env); t.menu != nil {
+		return t.menu.Apply(env)
+	}
+	return env
+}
+
 func configFont(font FontFamily) *ggui.Font {
 	switch font {
 	case FontSans:

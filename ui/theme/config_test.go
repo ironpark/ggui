@@ -292,3 +292,20 @@ func TestConfigGeistReachesBodyHeadingAndCSS(t *testing.T) {
 		t.Fatal("Geist missing from font choices")
 	}
 }
+
+// A menu under MenuEnv draws in the recipe's menu theme: the dark one for
+// an inverted light theme, and the theme itself otherwise.
+func TestMenuEnvTakesTheMenuTheme(t *testing.T) {
+	t.Parallel()
+	inverted := theme.Config{MenuColor: theme.MenuColorInverted}
+	light, dark := inverted.Light(), inverted.Dark()
+	env := light.Apply(ggui.Env{})
+	if got := theme.Of(theme.MenuEnv(env)).Popover; got != dark.Popover {
+		t.Fatalf("an inverted light theme's menu Popover is %v, want the dark one %v", got, dark.Popover)
+	}
+	plain := theme.Config{}.Light()
+	env = plain.Apply(ggui.Env{})
+	if got := theme.Of(theme.MenuEnv(env)).Popover; got != plain.Popover {
+		t.Fatalf("a plain theme's menu Popover is %v, want its own %v", got, plain.Popover)
+	}
+}
