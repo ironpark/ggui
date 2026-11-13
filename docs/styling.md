@@ -248,6 +248,7 @@ Each is an `EdgeInsets`, built with the CSS shorthand `Insets` takes.
 | `MotionSlow` | disclosures and sheets | 200ms |
 | `MotionOverlay` | dialogs and popups | 100ms |
 | `MotionDrawer` | a drawer sliding in or out | 450ms |
+| `Ease` | the curve control transitions run on, a `theme.Curve` | `cubic-bezier(0.4, 0, 0.2, 1)` |
 | `HoverMix` | how far a color moves toward `Fg` under the pointer | 0.06 |
 | `PressMix` | how far it moves toward `Fg` while pressed | 0.08 |
 | `DisabledMix` | how much opacity a disabled control loses | 0.5 |
@@ -463,6 +464,18 @@ w.motion = env.Motion(t.MotionFast)   // zero under reduced motion
 
 Transitions then land at once and eased motions jump, without every widget
 having to know the preference exists.
+
+The controls move along the theme's `Ease`, Tailwind's default
+`transition-timing-function` (and its `ease-in-out`), rather than along the
+`EaseOut` that `Canvas.Ease` and `Motion` default to. A widget of your own
+joins them with `Canvas.EaseWith`:
+
+```go
+k := dst.EaseWith(w.Anchor(r), hoverSlot, target, w.motion, t.Ease.Easing())
+```
+
+`theme.Curve` is a `cubic-bezier` as its four numbers, so that a theme holding
+one still compares; `Easing()` makes its `ggui.Easing` once.
 
 ## Theme presets
 

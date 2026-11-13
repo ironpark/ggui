@@ -102,7 +102,7 @@ func (c *CheckboxWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	invalid := c.invalidAmount(dst, box)
 	// The surface and the border ease to Primary as shadcn's
 	// transition-colors does; the mark itself appears at once.
-	k := dst.Ease(c.Anchor(box), checkSlot, pick(on || mixed, 1.0, 0.0), c.motion)
+	k := ease(dst, c.theme, c.Anchor(box), checkSlot, pick(on || mixed, 1.0, 0.0), c.motion)
 	fill := mix(t.Input, t.Primary, k)
 	border := mix(mix(t.InputBorder, invalidBorder(t), invalid), t.Primary, k)
 	mark := t.PrimaryFg

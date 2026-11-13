@@ -532,7 +532,7 @@ func (r *tableRow[T, K]) paint(dst *ggui.Canvas, rc ggui.Rect) {
 	} else if r.Hovered && !r.IsInert() {
 		target = .5
 	}
-	amount := dst.Ease(r.Anchor(rc), tableRowFillSlot, target, r.motion)
+	amount := ease(dst, r.theme, r.Anchor(rc), tableRowFillSlot, target, r.motion)
 	if amount > 0 {
 		dst.FillRect(rc, fade(th.Muted, amount))
 	}

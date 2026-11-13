@@ -256,7 +256,7 @@ func (b *BubbleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	fill, fg, border := b.colors()
 	if b.action != nil {
 		// Each variant has its own surface under the pointer, eased into.
-		hover := dst.Ease(b.Anchor(body), bubbleHoverSlot, pick(b.Hovered && !b.IsInert(), 1.0, 0.0), b.motion)
+		hover := ease(dst, b.theme, b.Anchor(body), bubbleHoverSlot, pick(b.Hovered && !b.IsInert(), 1.0, 0.0), b.motion)
 		if hover > 0 {
 			if over := b.hoverFill(); fill == nil {
 				fill = fade(over, hover)

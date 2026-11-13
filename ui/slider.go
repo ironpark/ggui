@@ -202,7 +202,7 @@ func (s *SliderWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// pointer elsewhere on the track leaves it alone.
 	over := s.Hovered && g.thumbReach(f, t.Space).Contains(s.pointer)
 	active := !inert && (over || s.Pressed || (s.Focused && s.FocusVisible))
-	g.paintThumb(dst, t, f, inert, dst.Ease(s.Anchor(r), sliderHaloSlot, pick(active, 1.0, 0.0), s.motion))
+	g.paintThumb(dst, t, f, inert, ease(dst, s.theme, s.Anchor(r), sliderHaloSlot, pick(active, 1.0, 0.0), s.motion))
 }
 
 // sliderHaloSlot eases the halo of a slider's thumb.

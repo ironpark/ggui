@@ -659,7 +659,7 @@ func (b *CarouselNavigationWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 	b.Hit(d, r, b, ggui.CursorShapeDefault)
 	t, st := b.theme, b.style
 	fill, col, border := st.Fill, st.Label, st.Border
-	hover := d.Ease(ggui.Anchor{Rect: r, ID: b.HitID()}, carouselHoverSlot, pick(b.Hovered && !b.IsInert(), 1.0, 0.0), b.motion)
+	hover := ease(d, b.theme, ggui.Anchor{Rect: r, ID: b.HitID()}, carouselHoverSlot, pick(b.Hovered && !b.IsInert(), 1.0, 0.0), b.motion)
 	// An outline Button to shadcn, which sets a pressed one a pixel lower.
 	if b.Pressed && b.Hovered && !b.IsInert() {
 		r.Origin.Y++

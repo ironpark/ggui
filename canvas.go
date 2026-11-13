@@ -329,8 +329,18 @@ func (c *Canvas) Retained[T any](at Anchor, s Slot[T]) (T, bool) {
 
 // Ease moves a Motion retained under at and s toward target over d and
 // returns where it is now, so a control rebuilt every frame keeps
-// animating; a switch knob and a tab underline use it.
+// animating; a switch knob and a tab underline use it. It moves along
+// EaseOut; EaseWith takes another curve.
 func (c *Canvas) Ease(at Anchor, s Slot[*Motion], target float64, d time.Duration) float64 {
+	return c.EaseWith(at, s, target, d, nil)
+}
+
+// EaseWith is Ease along e, as Motion.Easing takes it: a design system
+// whose transitions run on a curve of its own, CSS's
+// cubic-bezier(0.4, 0, 0.2, 1) say, passes it here. Pass the same Easing
+// every frame rather than one made anew, which would be an allocation a
+// frame; a nil e is EaseOut.
+func (c *Canvas) EaseWith(at Anchor, s Slot[*Motion], target float64, d time.Duration, e Easing) float64 {
 	now := FrameTime()
 	if c == nil {
 		// Nothing keeps the motion: a new one would be at target at once.
@@ -340,7 +350,7 @@ func (c *Canvas) Ease(at Anchor, s Slot[*Motion], target float64, d time.Duratio
 	if !ok {
 		m = new(Motion)
 	}
-	m.MoveTo(target, now, d)
+	m.Easing(e).MoveTo(target, now, d)
 	c.Retain(at, s, m)
 	return m.Value(now)
 }

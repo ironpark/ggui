@@ -362,12 +362,12 @@ func (r *treeRow[T, K]) paint(dst *ggui.Canvas, rc ggui.Rect) {
 	} else if r.Hovered && !r.IsInert() {
 		target = .5
 	}
-	if amount := dst.Ease(r.Anchor(rc), treeRowFillSlot, target, r.motion); amount > 0 {
+	if amount := ease(dst, r.theme, r.Anchor(rc), treeRowFillSlot, target, r.motion); amount > 0 {
 		dst.FillRoundRect(rc, th.Radius, fade(th.Muted, amount))
 	}
 	if e.hasChildren && !r.tree.noChevrons {
 		x := rc.Origin.X + r.chevronX(e)
-		turn := dst.Ease(r.Anchor(rc), treeChevronSlot, pick(e.open, 1.0, 0.0), r.motion)
+		turn := ease(dst, r.theme, r.Anchor(rc), treeChevronSlot, pick(e.open, 1.0, 0.0), r.motion)
 		paintIconAt(dst, r.env, icons.ChevronRight, ggui.Pt(x+th.IconSize/2, rc.Center().Y), th.IconSize, th.MutedFg, turn*math.Pi/2)
 		if !r.IsInert() {
 			dst.HitPointer(ggui.Rct(ggui.Pt(x-th.Space/2, rc.Origin.Y), ggui.Sz(th.IconSize+th.Space, rc.Size.H)), &r.toggle)

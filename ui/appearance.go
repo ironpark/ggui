@@ -108,11 +108,22 @@ func fieldTones(dst *ggui.Canvas, at ggui.Anchor, t *uitheme.Theme, r ggui.Rect,
 	return fill, border
 }
 
+// ease is Canvas.Ease along the theme's Ease, the curve of a Tailwind
+// transition: what a control's hover, focus, checked and invalid states
+// move on. A nil t is the default theme's.
+func ease(dst *ggui.Canvas, t *uitheme.Theme, at ggui.Anchor, s ggui.Slot[*ggui.Motion], target float64, d time.Duration) float64 {
+	var c uitheme.Curve
+	if t != nil {
+		c = t.Ease
+	}
+	return dst.EaseWith(at, s, target, d, c.Easing())
+}
+
 // fieldToneParts is fieldTones without the drawing: the fill, the border,
 // and the halo with whether there is one to draw.
 func fieldToneParts(dst *ggui.Canvas, at ggui.Anchor, t *uitheme.Theme, s fieldState, motion time.Duration) (fill, border, halo color.Color, ringed bool) {
-	focus := dst.Ease(at, fieldFocusSlot, pick(s.focused && !s.inert, 1.0, 0.0), motion)
-	invalid := dst.Ease(at, fieldInvalidSlot, pick(s.invalid, 1.0, 0.0), motion)
+	focus := ease(dst, t, at, fieldFocusSlot, pick(s.focused && !s.inert, 1.0, 0.0), motion)
+	invalid := ease(dst, t, at, fieldInvalidSlot, pick(s.invalid, 1.0, 0.0), motion)
 	border = mix(mix(t.InputBorder, t.Ring, focus), invalidBorder(t), invalid)
 	if s.inert {
 		border = t.Disabled(border)
@@ -200,7 +211,7 @@ func controlFocusRing(dst *ggui.Canvas, state *ggui.Interactive, t *uitheme.Them
 // focusRing is controlFocusRing easing over motion; zero switches at once.
 func focusRing(dst *ggui.Canvas, state *ggui.Interactive, t *uitheme.Theme, r ggui.Rect, radius float64, ring color.Color, motion time.Duration) {
 	on := state.Focused && state.FocusVisible && !state.IsInert()
-	k := dst.Ease(state.Anchor(r), focusRingSlot, pick(on, 1.0, 0.0), motion)
+	k := ease(dst, t, state.Anchor(r), focusRingSlot, pick(on, 1.0, 0.0), motion)
 	if k <= 0 {
 		return
 	}

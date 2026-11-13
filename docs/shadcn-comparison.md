@@ -49,7 +49,11 @@ Default sizes and colors intentionally change existing applications. Use
 `theme.Override`, variant restyling, and explicit padding to preserve a custom
 look. `DestructiveFg` remains available for custom solid variants; built-in
 subtle destructive buttons/badges use `Destructive` for the text. `MotionFast`
-is 150ms, `MotionSlow` 200ms, and the new `MotionOverlay` 100ms. Setting motion
+is 150ms, `MotionSlow` 200ms, and the new `MotionOverlay` 100ms. Hover, focus,
+checked and invalid fills, tab indicators, switch thumbs, progress bars, a
+sheet's slide and a trace row's height move along the theme's `Ease`, Tailwind's
+default `cubic-bezier(0.4, 0, 0.2, 1)`; an accordion panel opens on CSS's
+`ease-out` as `animate-accordion-down` does. Setting motion
 tokens to zero or providing `ReducedMotionKey` disables their animations.
 
 Dialogs and sheets expose `.CloseButton(false)` for surfaces that supply their

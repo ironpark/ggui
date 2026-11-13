@@ -261,7 +261,8 @@ func (s *SheetWidget) Paint(dst *ggui.Canvas, _ ggui.Rect) {
 	if !open {
 		s.dragging = false
 	}
-	ease, duration := ggui.EaseInOut, s.theme.MotionSlow
+	// A sheet's ease-in-out is Tailwind's, the curve of its transitions.
+	ease, duration := s.theme.Ease.Easing(), s.theme.MotionSlow
 	if s.isDrawer() {
 		ease, duration = drawerEase, s.theme.MotionDrawer
 	}

@@ -199,7 +199,7 @@ func (r *listRow[T, K]) paint(dst *ggui.Canvas, rc ggui.Rect) {
 	} else if r.Hovered && !r.IsInert() {
 		target = .5
 	}
-	if amount := dst.Ease(r.Anchor(rc), listRowFillSlot, target, r.motion); amount > 0 {
+	if amount := ease(dst, r.theme, r.Anchor(rc), listRowFillSlot, target, r.motion); amount > 0 {
 		dst.FillRoundRect(rc, th.Radius, fade(th.Accent, amount))
 	}
 	dst.Clip(rc).Paint(r.box, rc)

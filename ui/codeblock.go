@@ -325,7 +325,7 @@ func (c *CodeBlockWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	shown := 1.0
 	if c.copyButton && !c.hasHeader {
 		p, ok := dst.Pointer()
-		shown = dst.Ease(c.Anchor(r), codeActionsSlot, pick(ok && r.Contains(p) || dst.FocusWithin(r), 1.0, 0.0), c.motion)
+		shown = ease(dst, c.theme, c.Anchor(r), codeActionsSlot, pick(ok && r.Contains(p) || dst.FocusWithin(r), 1.0, 0.0), c.motion)
 	}
 	border := t.InputBorder
 	if c.destructive {

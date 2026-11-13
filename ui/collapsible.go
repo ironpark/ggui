@@ -156,7 +156,7 @@ func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		return
 	}
 	c.Hit(dst, header, c, ggui.CursorShapePointer)
-	hover := dst.Ease(c.Anchor(header), disclosureHoverSlot, pick(c.Hovered && !c.IsInert(), 1.0, 0.0), c.env.Motion(t.MotionFast))
+	hover := ease(dst, c.theme, c.Anchor(header), disclosureHoverSlot, pick(c.Hovered && !c.IsInert(), 1.0, 0.0), c.env.Motion(t.MotionFast))
 	if hover > 0 {
 		dst.FillRoundRect(header, t.Radius, fade(t.Muted, hover))
 	}

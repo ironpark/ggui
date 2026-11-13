@@ -465,7 +465,7 @@ func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 	radius := s.radius(t)
 	// On a dark theme the field lightens under the pointer.
 	fill := t.Input
-	if hover := dst.Ease(s.Anchor(r), selectHoverSlot, pick(s.Hovered && !inert && isDark(t.Bg), 1.0, 0.0), s.motion); hover > 0 {
+	if hover := ease(dst, s.theme, s.Anchor(r), selectHoverSlot, pick(s.Hovered && !inert && isDark(t.Bg), 1.0, 0.0), s.motion); hover > 0 {
 		fill = mix(fill, fade(t.InputBorder, .5), hover)
 	}
 	// The border keeps the InputBorder while the list is open or the field

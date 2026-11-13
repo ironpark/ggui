@@ -102,6 +102,11 @@ type Theme struct {
 	MotionSlow    time.Duration // disclosures and sheets
 	MotionOverlay time.Duration // dialog and popup entrances/exits
 	MotionDrawer  time.Duration // a drawer sliding in or out
+	// Ease is the curve a control's transitions run on: a hover, focus or
+	// checked fill, a tab's indicator, a switch's thumb, a sheet sliding
+	// in. Unset, it is Tailwind's default transition-timing-function,
+	// cubic-bezier(0.4, 0, 0.2, 1), which is its ease-in-out too.
+	Ease Curve
 
 	// How far a state tints the color it starts from, as Mix takes it:
 	// toward Fg under the pointer and while pressed, and toward transparent
@@ -207,8 +212,8 @@ func lightBase() Theme {
 		TabPad: g.tab,
 
 		MotionFast: 150 * time.Millisecond, MotionSlow: 200 * time.Millisecond, MotionOverlay: 100 * time.Millisecond,
-		MotionDrawer: 450 * time.Millisecond,
-		HoverMix:     .06, PressMix: .08, DisabledMix: .5, RingAlpha: .5,
+		MotionDrawer: 450 * time.Millisecond, Ease: EaseDefault,
+		HoverMix: .06, PressMix: .08, DisabledMix: .5, RingAlpha: .5,
 	}
 }
 

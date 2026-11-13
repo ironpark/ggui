@@ -236,7 +236,7 @@ func (l *breadcrumbLink) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 // Paint implements ggui.Widget.
 func (l *breadcrumbLink) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := l.theme
-	hover := dst.Ease(l.Anchor(r), breadcrumbHoverSlot, pick(l.Hovered && !l.IsInert(), 1.0, 0.0), l.motion)
+	hover := ease(dst, l.theme, l.Anchor(r), breadcrumbHoverSlot, pick(l.Hovered && !l.IsInert(), 1.0, 0.0), l.motion)
 	l.ink = t.MutedFg
 	if hover >= 1 {
 		l.ink = t.Fg
