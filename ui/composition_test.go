@@ -169,8 +169,12 @@ func TestHoverCardWaitsForTheCursorToRest(t *testing.T) {
 		t.Fatal("the card never came up")
 	}
 	p.Move(ggui.Pt(300, 280))
+	if !shown() {
+		t.Fatal("preview did not preserve the close grace period")
+	}
+	p.Advance(300 * time.Millisecond)
 	if shown() {
-		t.Fatal("the card stayed up after the cursor left")
+		t.Fatal("the card stayed up after the close delay")
 	}
 }
 

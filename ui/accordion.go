@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"math"
 	"slices"
 
 	"github.com/ironpark/ggui"
@@ -25,22 +24,23 @@ func AccordionItem(key, title string, content ggui.Widget) AccordionSection {
 // Disabled prevents user interaction with the section header.
 func (s AccordionSection) Disabled(v bool) AccordionSection { s.disabled = v; return s }
 
-// AccordionWidget groups disclosures under one keyboard tab stop. Up/Down,
-// Home/End select a header; Space/Enter toggle it. Open content remains tabbable.
+// AccordionWidget gives each enabled header a keyboard tab stop.
+// Space/Enter toggle it; arrow navigation is also supported. Open content remains tabbable.
 type AccordionWidget struct {
 	props property.Owner
 	ggui.Interactive
-	laidOpen []string
-	open     ggui.Binding[[]string]
-	items    []AccordionSection
-	headers  []*accordionHeader
-	multiple bool
-	active   int
-	onChange func([]string)
-	theme    *uitheme.Theme
-	sizes    []ggui.Size
-	heights  []float64
-	env      ggui.Env
+	laidOpen    []string
+	open        ggui.Binding[[]string]
+	items       []AccordionSection
+	headers     []*accordionHeader
+	multiple    bool
+	active      int
+	focusHeader *accordionHeader
+	onChange    func([]string)
+	theme       *uitheme.Theme
+	sizes       []ggui.Size
+	heights     []float64
+	env         ggui.Env
 }
 
 // Accordion binds open section keys. By default opening a section closes the
@@ -115,6 +115,7 @@ func (a *AccordionWidget) HandleKey(ev ggui.KeyEvent) {
 	enabled := func(i int) bool { return !a.items[i].disabled }
 	if i, ok := navIndex(ev, navVertical, a.active, len(a.items), enabled); ok {
 		a.active = i
+		a.focusHeader = a.headers[i]
 	}
 }
 
@@ -145,17 +146,21 @@ func (a *AccordionWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	chevron := t.IconSize + t.Space // the room the chevron takes beside a header
 	for i, item := range a.items {
 		h := a.headers[i]
+		h.SetKey(struct {
+			Group any
+			Item  string
+		}{a.HitID(), item.key})
 		h.text.Style(t.Label).Color(pick(item.disabled, t.Disabled(t.Fg), t.Fg))
 		h.size = h.text.Layout(ggui.Loose(ggui.Sz(max(c.MaxW-chevron, 0), ggui.Unbounded)), env)
-		a.heights[i] = h.size.H + 4*t.Space
+		a.heights[i] = max(20, h.size.H) + 2.5*t.Space
 		width = max(width, h.size.W+chevron)
 		height += a.heights[i]
 		h.open = a.isOpen(i)
-		h.progress = h.reveal.LayoutToggle(env, h.open, t.MotionFast)
+		h.progress = h.reveal.LayoutToggle(env, h.open, t.MotionSlow)
 		if h.open || h.progress > 0 {
 			a.sizes[i] = item.content.Layout(ggui.Loose(ggui.Sz(c.MaxW, ggui.Unbounded)), env)
 			width = max(width, a.sizes[i].W)
-			height += (a.sizes[i].H + 2*t.Space) * h.progress
+			height += (a.sizes[i].H + 1.25*t.Space) * h.progress
 		}
 	}
 	return c.Constrain(ggui.Sz(width, height))
@@ -173,31 +178,27 @@ func (a *AccordionWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		ggui.Invalidate(a.env)
 	}
 	dst = dst.Clip(r)
-	if a.active >= 0 {
-		dst.HitKey(r, a)
+	if a.focusHeader != nil {
+		dst.RequestFocus(a.focusHeader)
+		a.focusHeader = nil
 	}
 	y := r.Origin.Y
 	t := a.theme
 	for i, item := range a.items {
 		h := a.headers[i]
 		rect := ggui.Rct(ggui.Pt(r.Origin.X, y), ggui.Sz(r.Size.W, a.heights[i]))
-		dst.Describe(rect, h)
-		if !item.disabled {
-			dst.HitPointer(rect, h)
-			dst.HitCursor(rect, ggui.CursorShapePointer)
+		h.Hit(dst, rect, h, ggui.CursorShapeDefault)
+		hover := dst.Ease(h.Anchor(rect), disclosureHoverSlot, pick(h.Hovered && !item.disabled, 1.0, 0.0), a.env.Motion(t.MotionFast))
+		if hover > 0 {
+			under := y + 1.25*t.Space + h.size.H - 1
+			dst.StrokeLine(ggui.Pt(rect.Origin.X, under), ggui.Pt(rect.Origin.X+h.size.W, under), 1, fade(t.Fg, hover))
 		}
-		if h.Hovered && !item.disabled {
-			under := y + 2*t.Space + h.size.H - 1
-			dst.StrokeLine(ggui.Pt(rect.Origin.X, under), ggui.Pt(rect.Origin.X+h.size.W, under), 1, t.Fg)
-		}
-		paintIconAt(dst, a.env, icons.ChevronDown, ggui.Pt(rect.Origin.X+rect.Size.W-t.IconSize/2, y+a.heights[i]/2), t.IconSize, t.MutedFg, h.progress*math.Pi)
-		dst.Paint(h.text, ggui.Rct(ggui.Pt(rect.Origin.X, y+2*t.Space), h.size))
-		if i == a.active {
-			a.FocusRing(dst, rect, t.Radius, t.Ring)
-		}
+		paintIconAt(dst, a.env, pick(h.open, icons.ChevronUp, icons.ChevronDown), ggui.Pt(rect.Origin.X+rect.Size.W-t.IconSize/2, y+a.heights[i]/2), t.IconSize, pick(item.disabled, t.Disabled(t.MutedFg), t.MutedFg), 0)
+		dst.Paint(h.text, ggui.Rct(ggui.Pt(rect.Origin.X, y+1.25*t.Space), h.size))
+		controlFocusRing(dst, &h.Interactive, t, rect, t.Radius, t.Ring)
 		y += a.heights[i]
 		paintDisclosure(dst, item.content, ggui.Pt(r.Origin.X, y), r.Size.W, a.sizes[i], h.progress, h.open)
-		y += (a.sizes[i].H + 2*t.Space) * h.progress
+		y += (a.sizes[i].H + 1.25*t.Space) * h.progress
 		if i < len(a.items)-1 {
 			dst.StrokeLine(ggui.Pt(r.Origin.X, y), ggui.Pt(r.Origin.X+r.Size.W, y), t.BorderWidth, t.Border)
 		}
@@ -259,3 +260,20 @@ func (a *AccordionWidget) name() string {
 
 // Semantics implements ggui.Semantic, including the built-in fallback name.
 func (a *AccordionWidget) Semantics() (ggui.Role, string) { return a.Role, a.name() }
+
+func (h *accordionHeader) HandleKey(ev ggui.KeyEvent) {
+	h.owner.active = h.index
+	if navConsumes(ev, navVertical) {
+		h.owner.HandleKey(ev)
+		return
+	}
+	h.Keyboard(ev, func() { h.owner.toggle(h.index) })
+}
+func (h *accordionHeader) ConsumesKey(ev ggui.KeyEvent) bool {
+	return navConsumes(ev, navVertical) || ggui.Activates(ev)
+}
+
+// Describe exposes the group as a container; its headers own focus actions.
+func (a *AccordionWidget) Describe() ggui.Node {
+	return ggui.Node{Role: ggui.RoleAccordion, Name: a.name()}
+}

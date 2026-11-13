@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"math"
-
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
@@ -37,13 +35,13 @@ func (s *SkeletonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 
 // Paint implements ggui.Widget.
 func (s *SkeletonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	radius := s.theme.Radius
+	radius := s.theme.RadiusSm
 	if s.circle {
 		radius = min(r.Size.W, r.Size.H) / 2
 	}
 	factor := 1.0
 	if !s.reduced {
-		factor = .75 + .25*math.Cos(float64(ggui.Paced(loopStep).UnixMilli()%2000)*2*math.Pi/2000)
+		factor = pulse(.5)
 	}
 	dst.FillRoundRect(r, radius, fade(s.theme.Muted, factor))
 }

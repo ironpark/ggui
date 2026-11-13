@@ -68,7 +68,7 @@ func TestNavTargetLeavesClampingToTheList(t *testing.T) {
 func TestTabsAndToggleGroupNavigateAlike(t *testing.T) {
 	t.Parallel()
 	tab := ggui.State(0)
-	tabs := Tabs(tab, Tab("A", nil), Tab("B", nil), Tab("C", nil))
+	tabs := Tabs(tab, Tab("A", nil), Tab("B", nil), Tab("C", nil)).ActivateOnFocus(true)
 	choice := ggui.State("a")
 	group := ToggleGroup(choice).Options([]string{"a", "b", "c"})
 	read := []func() int{func() int { return ggui.Peek(tab) }, func() int { return map[string]int{"a": 0, "b": 1, "c": 2}[ggui.Peek(choice)] }}

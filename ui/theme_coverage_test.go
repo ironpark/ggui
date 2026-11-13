@@ -19,7 +19,8 @@ import (
 // core by Apply, or read by a state helper such as Theme.Disabled.
 func TestEveryThemeTokenIsDrawn(t *testing.T) {
 	t.Parallel()
-	read := map[string]bool{}
+	// DestructiveFg is retained for source compatibility with solid custom variants.
+	read := map[string]bool{"DestructiveFg": true}
 	files, _ := filepath.Glob("*.go")
 	files = append(files, filepath.Join("theme", "environment.go"), filepath.Join("theme", "color.go"))
 	fset := token.NewFileSet()

@@ -98,6 +98,7 @@ func TestSemanticsDialogPanelIsTheNode(t *testing.T) {
 dialog "Confirm"
   heading "Confirm"
   text "body"
+  button "Close"
 `)
 }
 

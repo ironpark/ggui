@@ -50,8 +50,8 @@ func (s *SwitchWidget) Describe() ggui.Node {
 // Layout implements Widget.
 func (s *SwitchWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	// The track is a control glyph tall, plus the thumb's inset.
-	h := uitheme.Of(env).ControlSize + 4
-	return s.layout(c, env, ggui.Sz(h*1.8, h))
+	scale := uitheme.Of(env).ControlSize / 16
+	return s.layout(c, env, ggui.Sz(32*scale, 18.4*scale))
 }
 
 // Paint implements Widget.
@@ -63,14 +63,19 @@ func (s *SwitchWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// As shadcn's: the page's background on a light page, and on a dark one
 	// the foreground, or PrimaryFg once on.
 	dark := isDark(t.Bg)
-	track := mix(t.InputBorder, t.Primary, k)
+	off := t.InputBorder
+	if dark {
+		off = fade(off, .8)
+	}
+	track := mix(off, t.Primary, k)
 	thumb := mix(pick(dark, t.Fg, t.Bg), pick(dark, t.PrimaryFg, t.Bg), k)
 	if s.IsInert() {
 		track, thumb = t.Disabled(track), t.Disabled(thumb)
 	}
 	dst.FillRoundRect(box, box.Size.H/2, track)
-	radius := box.Size.H/2 - 2
-	x := box.Origin.X + 2 + radius + k*(box.Size.W-4-2*radius)
+	radius := t.ControlSize / 2
+	inset := (box.Size.H - 2*radius) / 2
+	x := box.Origin.X + inset + radius + k*(box.Size.W-2*inset-2*radius)
 	dst.FillCircle(ggui.Pt(x, box.Origin.Y+box.Size.H/2), radius, thumb)
-	s.FocusRing(dst, box, box.Size.H/2, t.Ring)
+	controlFocusRing(dst, &s.Interactive, t, box, box.Size.H/2, t.Ring)
 }

@@ -123,7 +123,7 @@ func (c *CommandWidget) Entries(entries ...CommandEntry) *CommandWidget {
 // closes the dialog before the action runs.
 func CommandDialog(open ggui.Binding[bool], command *CommandWidget) *DialogWidget {
 	command.dismiss = func() { open.Set(false) }
-	return Dialog(open, command.Borderless().InsetSearch()).Compact().Name("Commands").Width(440)
+	return Dialog(open, command.Borderless().InsetSearch()).CloseButton(false).Compact().Name("Commands").Width(440)
 }
 
 // Placeholder sets the search hint.

@@ -87,7 +87,7 @@ func (t Theme) Apply(env ggui.Env) ggui.Env {
 		With(ggui.BackgroundKey, t.Bg).With(ggui.SpacingKey, t.Space).
 		With(ggui.EditorStyleKey, ggui.EditorStyle{Muted: t.MutedFg, Selection: t.Selection}).
 		With(ggui.ScrollStyleKey, ggui.ScrollStyle{Color: t.MutedFg, HoverColor: t.Fg, Duration: t.MotionFast}).
-		With(ggui.PopupDurationKey, t.MotionFast)
+		With(ggui.PopupDurationKey, t.MotionOverlay)
 }
 
 // Use reads the application theme and subscribes the current Reactive or

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
@@ -49,9 +50,10 @@ func TestButtonSizes(t *testing.T) {
 	t.Parallel()
 	loose := ggui.Loose(ggui.Sz(300, 300))
 	normal := Button("go", nil).Layout(loose, ggui.Env{})
+	extraSmall := Button("go", nil).Size(ButtonExtraSmall).Layout(loose, ggui.Env{})
 	small := Button("go", nil).Size(ButtonSmall).Layout(loose, ggui.Env{})
 	large := Button("go", nil).Size(ButtonLarge).Layout(loose, ggui.Env{})
-	if !(small.W < normal.W && small.H < normal.H && large.W > normal.W && large.H > normal.H) {
+	if !(extraSmall.W < small.W && extraSmall.H < small.H && small.W < normal.W && small.H < normal.H && large.W >= normal.W && large.H > normal.H) {
 		t.Fatalf("sizes small %v, default %v, large %v: want them in order", small, normal, large)
 	}
 	icon := ButtonOf(Icon("x"), nil).Name("x").Size(ButtonIcon).Layout(loose, ggui.Env{})
@@ -68,11 +70,11 @@ func TestButtonSizes(t *testing.T) {
 func TestButtonVariantsReadTheirTokens(t *testing.T) {
 	t.Parallel()
 	th := uitheme.Default()
-	if s := ButtonDestructive.Style(th); s.Fill != th.Destructive || s.Label != th.DestructiveFg {
+	if s := ButtonDestructive.Style(th); s.Fill != fade(th.Destructive, .1) || s.Label != th.Destructive {
 		t.Errorf("destructive = %+v, want the Destructive surface with a DestructiveFg label", s)
 	}
 	for _, v := range []*ButtonVariant{ButtonOutline, ButtonGhost} {
-		if s := v.Style(th); s.Hover != th.Accent || s.HoverLabel != th.AccentFg {
+		if s := v.Style(th); s.Hover != th.Muted || s.HoverLabel != th.Fg {
 			t.Errorf("%s = %+v, want Accent under the pointer with an AccentFg label", v, s)
 		}
 	}
@@ -88,14 +90,33 @@ func TestBadgeVariants(t *testing.T) {
 		badge       *BadgeWidget
 		fill, label color.Color
 	}{
-		{Badge("a"), th.Secondary, th.SecondaryFg},
+		{Badge("a"), th.Primary, th.PrimaryFg},
+		{Badge("a").Secondary(), th.Secondary, th.SecondaryFg},
 		{Badge("a").Primary(), th.Primary, th.PrimaryFg},
-		{Badge("a").Destructive(), th.Destructive, th.DestructiveFg},
+		{Badge("a").Destructive(), fade(th.Destructive, .1), th.Destructive},
 		{Badge("a").Outline(), nil, th.Fg},
 	} {
 		tc.badge.Layout(ggui.Loose(ggui.Sz(300, 300)), ggui.Env{})
 		if s := tc.badge.style; s.Fill != tc.fill || s.Label != tc.label {
 			t.Errorf("%s badge = %+v, want fill %v label %v", tc.badge.variant, s, tc.fill, tc.label)
+		}
+	}
+}
+
+func TestIconSizeVariantsAndPaddingOverride(t *testing.T) {
+	t.Parallel()
+	loose := ggui.Loose(ggui.Sz(300, 300))
+	previous := 0.0
+	for _, variant := range []*ButtonSizeVariant{ButtonIconExtraSmall, ButtonIconSmall, ButtonIcon, ButtonIconLarge} {
+		size := ButtonOf(Icon(icons.Plus), nil).Size(variant).Layout(loose, ggui.Env{})
+		if size.W != size.H || size.H <= previous {
+			t.Fatalf("%s: %v after height %v", variant, size, previous)
+		}
+		previous = size.H
+		overridden := Button("Padding", nil).Size(variant).Pad(3, 7).Layout(loose, ggui.Env{})
+		plain := Button("Padding", nil).Pad(3, 7).Layout(loose, ggui.Env{})
+		if overridden != plain {
+			t.Fatalf("%s overrides explicit padding: %v != %v", variant, overridden, plain)
 		}
 	}
 }

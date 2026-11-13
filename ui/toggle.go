@@ -46,9 +46,9 @@ func (g *toggle) paint(dst *ggui.Canvas, r ggui.Rect, handler ggui.Control) ggui
 	g.Hit(dst, r, handler, ggui.CursorShapePointer)
 	if g.label != nil {
 		at := ggui.Pt(r.Origin.X+g.glyph.W+g.theme.ControlGap, r.Origin.Y+(r.Size.H-g.labelSize.H)/2)
-		dst.Paint(g.label, ggui.Rct(at, g.labelSize))
+		dst.Paint(g.label, mirrorHorizontal(ggui.Rct(at, g.labelSize), r, g.env.Direction() == ggui.DirRTL))
 	}
-	return ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+(r.Size.H-g.glyph.H)/2), g.glyph)
+	return mirrorHorizontal(ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+(r.Size.H-g.glyph.H)/2), g.glyph), r, g.env.Direction() == ggui.DirRTL)
 }
 
 // HandleKey implements KeyHandler: Space or Enter toggles.

@@ -84,7 +84,7 @@ func (c *CheckboxWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	box := c.paint(dst, r, c)
 	on := ggui.Untrack(c.checked.Get)
 	mixed := c.mixed != nil && ggui.Untrack(c.mixed.Get)
-	radius := t.Radius * 0.4
+	radius := 4.0
 	opacity := pick(c.IsInert(), 1-t.DisabledMix, 1.0)
 	fill, border := t.Input, t.InputBorder
 	if on || mixed {
@@ -93,7 +93,7 @@ func (c *CheckboxWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.FillRoundRect(box, radius, fade(fill, opacity))
 	dst.StrokeRoundRect(box, radius, t.BorderWidth, fade(border, opacity))
 	if on || mixed {
-		paintIcon(dst, c.env, pick(mixed, icons.Minus, icons.Check), box, fade(t.PrimaryFg, opacity), 0)
+		paintIconAt(dst, c.env, pick(mixed, icons.Minus, icons.Check), box.Center(), 14, fade(t.PrimaryFg, opacity), 0)
 	}
-	c.FocusRing(dst, box, radius, t.Ring)
+	controlFocusRing(dst, &c.Interactive, t, box, radius, t.Ring)
 }

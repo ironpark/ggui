@@ -17,7 +17,7 @@ type FieldWidget struct {
 	help  string
 	err   property.Value[string]
 
-	caption *ggui.TextWidget
+	caption *LabelWidget
 	note    *ggui.TextWidget
 	column  *ggui.ColumnWidget
 	noted   bool // whether column holds note
@@ -43,7 +43,7 @@ func Field(label string, input ggui.Widget) *FieldWidget {
 			n.SetName(label)
 		}
 	}
-	f.caption = ggui.Text(label).NoWrap()
+	f.caption = Label(label).For(input)
 	f.note = ggui.Text("")
 	return f
 }
@@ -82,7 +82,7 @@ func (f *FieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		note, col = e, t.Destructive
 		invalid = true
 	}
-	f.caption.Style(t.Text).Color(t.Fg)
+	// Label inherits the form theme and targets the input.
 	f.note.Content(note).Style(t.Caption).Color(col)
 	// The column is rebuilt only when the note comes or goes, so its layout
 	// cache and the caption's survive a relayout.

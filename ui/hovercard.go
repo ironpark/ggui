@@ -21,6 +21,7 @@ type HoverCardWidget struct {
 	props           property.Owner
 	anchor, content ggui.Widget
 	delay           time.Duration
+	closeDelay      time.Duration
 	width           float64
 	name            string
 
@@ -36,19 +37,21 @@ type HoverCardWidget struct {
 // the cursor has rested nor loses the cursor as it crosses onto the panel.
 type hoverCardState struct {
 	since  time.Time
+	left   time.Time
+	open   bool
 	panel  ggui.Rect
 	reveal ggui.Motion
 }
 
 var hoverCardSlot = ggui.NewSlot[hoverCardState]("hover card")
 
-// HoverCard wraps anchor and shows content below it after half a second.
+// HoverCard wraps anchor and shows content below it after 600ms.
 //
 //	ui.HoverCard(ui.Button("@ada", nil).Ghost(), ggui.Column(
 //		Title("Ada Lovelace"), Caption("Joined 1843"),
 //	).Gap(4))
 func HoverCard(anchor, content ggui.Widget) *HoverCardWidget {
-	return &HoverCardWidget{anchor: anchor, content: content, delay: 500 * time.Millisecond, width: 260}
+	return &HoverCardWidget{anchor: anchor, content: content, delay: 600 * time.Millisecond, closeDelay: 300 * time.Millisecond, width: 256}
 }
 
 // Delay sets how long the cursor must rest before the card appears.
@@ -91,7 +94,7 @@ func (h *HoverCardWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		h.panel = ggui.Box(h.content)
 		h.effect = ggui.PopIn(h.panel)
 	}
-	panelBox(h.panel, h.theme).Radius(h.theme.RadiusLg).Pad(h.theme.Space * 1.25)
+	panelBox(h.panel, h.theme).Radius(h.theme.Radius).Pad(h.theme.Space * 1.25)
 	return h.anchor.Layout(c, env)
 }
 
@@ -112,14 +115,29 @@ func (h *HoverCardWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if hovered && state.since.IsZero() {
 		state.since = now
 	}
-	if !hovered {
+	if hovered {
+		state.left = time.Time{}
+		if now.Sub(state.since) >= h.delay {
+			state.open = true
+		}
+		if !state.open {
+			ggui.WakeAt(state.since.Add(h.delay))
+		}
+	} else {
 		state.since = time.Time{}
+		if state.open {
+			if state.left.IsZero() {
+				state.left = now
+			}
+			if now.Sub(state.left) >= h.closeDelay {
+				state.open = false
+			} else {
+				ggui.WakeAt(state.left.Add(h.closeDelay))
+			}
+		}
 	}
-	open := hovered && now.Sub(state.since) >= h.delay
-	if hovered && !open {
-		ggui.WakeAt(state.since.Add(h.delay))
-	}
-	progress := state.reveal.Toggle(open, now, h.env.Motion(h.theme.MotionFast))
+	open := state.open
+	progress := state.reveal.Toggle(open, now, h.env.Motion(h.theme.MotionOverlay))
 	if !open && progress <= 0 {
 		state.panel = ggui.Rect{}
 		dst.Retain(at, hoverCardSlot, state)
@@ -169,5 +187,12 @@ func (h *HoverCardWidget) BindName(r ggui.Readable[string]) *HoverCardWidget {
 		h.nameReader = r
 		h.props.Changed()
 	}
+	return h
+}
+
+// CloseDelay sets the grace period for moving off the preview, 300ms by default.
+func (h *HoverCardWidget) CloseDelay(d time.Duration) *HoverCardWidget {
+	defer property.Watch(&h.props, &h.closeDelay)()
+	h.closeDelay = max(d, 0)
 	return h
 }

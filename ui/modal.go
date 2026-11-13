@@ -4,6 +4,7 @@ import (
 	"image/color"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
@@ -13,6 +14,7 @@ import (
 // in where the panel goes and whether it slides there, which is the half
 // each of them keeps.
 type modal struct {
+	surface     ggui.Widget // the panel under its close button, as paint hands it on
 	open        ggui.Binding[bool]
 	content     ggui.Widget
 	title       *ggui.TextWidget
@@ -20,6 +22,9 @@ type modal struct {
 	compact     bool
 	dismissible bool
 	onClose     func()
+	hideClose   bool
+	closeButton *ButtonWidget
+	closeSize   ggui.Size
 
 	panel *ggui.BoxWidget
 	theme *uitheme.Theme
@@ -36,7 +41,7 @@ func (m *modal) Close() {
 		return
 	}
 	m.open.Set(false)
-	if m.onClose != nil {
+	if !ggui.Untrack(m.open.Get) && m.onClose != nil {
 		m.onClose()
 	}
 }
@@ -57,6 +62,10 @@ func (m *modal) build(env ggui.Env) *ggui.BoxWidget {
 	if m.title != nil {
 		body = ggui.Column(m.title, m.content).Gap(t.Space * 2).Align(ggui.AlignStretch)
 	}
+	if m.closeButton == nil {
+		m.closeButton = ButtonOf(Icon(icons.Close), m.Close).Name("Close").Ghost().Size(ButtonIconSmall)
+	}
+	m.closeSize = m.closeButton.Layout(ggui.Loose(ggui.Sz(28, 28)), env)
 	m.panel = ggui.Box(ggui.Styled(body).Color(t.PopoverFg)).Padding(t.CardPad).Fill(t.Popover).Shadow(t.OverlayShadow)
 	if m.compact {
 		m.panel.Pad(0)
@@ -68,11 +77,16 @@ func (m *modal) build(env ggui.Env) *ggui.BoxWidget {
 // rect inside a focus trap. owner is the widget the node belongs to, so a
 // screen reader and Probe.Find see the dialog or the sheet rather than this.
 func (m *modal) paint(dst *ggui.Canvas, screen ggui.Size, rect ggui.Rect, scrim color.Color, owner ggui.Semantic) {
-	m.paintContent(dst, screen, rect, scrim, owner, m.panel)
+	if m.surface == nil {
+		// Built once: the panel is asked for each time, since build replaces it.
+		m.surface = ggui.FromFuncs(func(c ggui.Constraints, e ggui.Env) ggui.Size { return m.panel.Layout(c, e) }, m.paintSurface)
+	}
+	m.paintContent(dst, screen, rect, scrim, owner, m.surface)
 }
 
 func (m *modal) paintContent(dst *ggui.Canvas, screen ggui.Size, rect ggui.Rect, scrim color.Color, owner ggui.Semantic, content ggui.Widget) {
 	m.rect = rect
+	dst.BackdropBlur(ggui.Rect{Size: screen}, 0, 4)
 	dst.FillRect(ggui.Rect{Size: screen}, scrim)
 	dst.HitPointer(ggui.Rect{Size: screen}, modalScrim{m})
 	// The panel is the node; the scrim is a way of taking clicks, not an
@@ -103,3 +117,10 @@ type modalSink struct{ owner ggui.Semantic }
 func (s modalSink) HandlePointer(ev ggui.PointerEvent) bool { return ev.Kind != ggui.PointerScroll }
 
 func (s modalSink) Semantics() (ggui.Role, string) { return s.owner.Semantics() }
+
+func (m *modal) paintSurface(dst *ggui.Canvas, r ggui.Rect) {
+	dst.Paint(m.panel, r)
+	if !m.hideClose {
+		dst.Paint(m.closeButton, ggui.Rct(ggui.Pt(r.Origin.X+r.Size.W-m.closeSize.W-8, r.Origin.Y+8), m.closeSize))
+	}
+}

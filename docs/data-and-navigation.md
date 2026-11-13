@@ -26,9 +26,9 @@ See [example conventions](README.md#start-here) before copying snippets.
 
 | Control | Behavior |
 | --- | --- |
-| `ui.Tabs(selected, ui.Tab("One", page), ...)` | Displays the selected index, with an animated segmented selection and Left/Right navigation; `.Line()` uses an underline. Only the active page is laid out. `Tab(...).Header(widget)` draws an icon, count or badge in place of the label's text, which still names the tab; `Tab(...).Tooltip(text)` explains it. |
+| `ui.Tabs(selected, ui.Tab("One", page), ...)` | Displays the selected index, with an animated segmented selection. Arrows move focus; Enter/Space activates. `.ActivateOnFocus(true)` opts into automatic selection; `.Line()` uses an underline. Only the active page is laid out. `Tab(...).Header(widget)` draws an icon, count or badge in place of the label's text, which still names the tab; `Tab(...).Tooltip(text)` explains it. |
 | `ui.Collapsible(open, "Title", content)` | A titled section whose content eases open and closed, as `Reveal` does. |
-| `ui.Card(child)` | Adds a surface, border, radius, padding and subtle shadow. |
+| `ui.Card(child)` | Adds a surface, foreground/10 outline, radius and padding; `.Shadow(...)` opts into elevation. |
 | `ui.Badge("new")` | Displays a small label; `.Primary()`, `.Outline()` and `.Destructive()` change its look. |
 | `ui.Progress(value)` | Eases toward a fraction from a `Readable[float64]`. |
 | `ui.Dialog(open, content)` | Shows a modal while the binding is true; see [focus scopes](input.md#focus-scopes). |
@@ -394,3 +394,49 @@ Accordion places its chevron on the right, aligns header and body text, and adds
 space beneath expanded content. Tabs uses a compact segmented strip; wrap the
 content in a Card only when a separate content surface is needed. Menubar and
 ContextMenu share the same subdued floating-panel shadow.
+
+
+## Tab orientation and activation
+
+`Tabs` uses manual keyboard activation by default. Arrows, Home and End move
+focus without replacing the panel; Space or Enter selects the focused tab.
+Use `.ActivateOnFocus(true)` to restore automatic selection. `.Vertical()` places
+the list beside the content and uses Up/Down navigation. `.Line()` works in both
+orientations. `ui.Tab(...).Disabled(true)` is skipped by navigation and cannot be
+activated. Horizontal geometry and arrows follow `ggui.Directionality`.
+
+## Rich navigation and popovers
+
+`ui.NavigationMenu` groups direct `NavigationMenuLink` callbacks and
+`NavigationMenuItem(label, content)` dropdowns. Panel content is arbitrary Go
+widgets, so link descriptions, columns and cards compose normally. Links expose
+link semantics, and `.Active(true)` marks the current destination.
+
+`ui.Popover(label, content)` provides a themed interactive panel. Use
+`PopoverOf(face, content)` for a custom trigger, `.BindOpen(binding)` for
+controlled visibility, and `Show`, `Hide` or `Toggle` for programmatic control.
+`Trigger()` exposes button variants and `Popup()` the lower-level configuration.
+Keep popovers mounted or give them a stable `Key` across rebuilds.
+
+## Calendar selection modes
+
+`Calendar` selects one date. `CalendarRange` binds `ui.DateRange{Start, End}`;
+`CalendarMultiple` binds `[]time.Time`. All return `*CalendarWidget`, sharing
+localization, bounds, disabled dates and keyboard navigation.
+
+```go
+trip := ggui.State(ui.DateRange{})
+ui.CalendarRange(trip).RangeNights(1, 14).ExcludeDisabled(true).
+    ResetOnSelect(true).OnRangeChange(updateTrip)
+
+dates := ggui.State([]time.Time{})
+ui.CalendarMultiple(dates).SelectionLimits(0, 4).OnMultipleChange(updateDates)
+```
+
+A zero `Start` means no range; a zero `End` with a start is unfinished. Nights
+are civil-day differences, including across daylight saving changes. Range
+endpoints cannot be disabled. `.ExcludeDisabled(true)` also rejects intervals
+containing a disabled date. `.Required(true)` prevents clearing the last
+selection; it does not invent an initial value. Multiple selections publish
+sorted, deduplicated copies. Callbacks receive requests; a controlled binding's
+getter remains authoritative if it rejects a request.

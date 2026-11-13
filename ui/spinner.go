@@ -45,6 +45,13 @@ func (s *SpinnerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 // their steps falling between each other's.
 const loopStep = time.Second / 30
 
+// pulse is the factor of a look that breathes every two seconds: 1 at its
+// fullest, lo at its faintest, stepped on loopStep.
+func pulse(lo float64) float64 {
+	mid := (1 + lo) / 2
+	return mid + (1-mid)*math.Cos(float64(ggui.Paced(loopStep).UnixMilli()%2000)*2*math.Pi/2000)
+}
+
 // Paint implements ggui.Widget.
 func (s *SpinnerWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	diameter := min(r.Size.W, r.Size.H)

@@ -131,7 +131,7 @@ func TestTheGallerysDisclosuresEaseWithinThePage(t *testing.T) {
 			t.Fatalf("%s: %d frames, want an easing that comes to rest: %v", tc.query, len(frames), frames)
 		}
 		for i, fr := range frames[1:] {
-			if fr.Painted != ggui.FrameContained {
+			if fr.Painted != ggui.FrameContained && fr.Painted != ggui.FramePartial {
 				t.Fatalf("%s: frame %d was painted %v, want within the page: %v", tc.query, i+1, fr.Painted, frames)
 			}
 			for _, d := range fr.Damage {

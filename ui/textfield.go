@@ -2,6 +2,7 @@ package ui
 
 import (
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
@@ -9,6 +10,8 @@ import (
 // border that turns Accent while focused, the theme's padding and radius.
 // Build one with TextField.
 type TextFieldWidget struct {
+	props            property.Owner
+	multiline        bool
 	ggui.Interactive // only disabled is used; the editor tracks its own focus
 	input            *ggui.TextInputWidget
 	box              *ggui.BoxWidget
@@ -67,13 +70,18 @@ func (f *TextFieldWidget) MinWidth(w float64) *TextFieldWidget { f.input.MinWidt
 
 // Multiline wraps the text and grows the field by the line; Enter breaks
 // the line and ⌘/Ctrl+Enter submits.
-func (f *TextFieldWidget) Multiline() *TextFieldWidget { f.input.Multiline(); return f }
+func (f *TextFieldWidget) Multiline() *TextFieldWidget { return f.Lines(1) }
 
 // NoWrap makes the field Multiline with lines that do not wrap.
-func (f *TextFieldWidget) NoWrap() *TextFieldWidget { f.input.NoWrap(); return f }
+func (f *TextFieldWidget) NoWrap() *TextFieldWidget { f.Multiline(); f.input.NoWrap(); return f }
 
 // Lines sets the fewest lines a Multiline field is tall.
-func (f *TextFieldWidget) Lines(n int) *TextFieldWidget { f.input.Lines(n); return f }
+func (f *TextFieldWidget) Lines(n int) *TextFieldWidget {
+	defer property.Watch(&f.props, &f.multiline)()
+	f.multiline = true
+	f.input.Lines(n)
+	return f
+}
 
 // OnKey handles non-composing key presses before the editor; return true to consume.
 func (f *TextFieldWidget) OnKey(fn func(ggui.KeyEvent) bool) *TextFieldWidget {
@@ -139,19 +147,23 @@ func (f *TextFieldWidget) Input() *ggui.TextInputWidget { return f.input }
 
 // Layout implements Widget.
 func (f *TextFieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	defer f.props.Layout().EndLayout()
 	f.Sync()
 	t := uitheme.Of(env)
 	f.theme = t
 	f.invalid, _ = env.Get(fieldInvalid)
 	if f.plain {
 		f.box.Fill(nil).Pad(10, 8).Radius(t.Radius).Border(0, nil)
-	} else {
-		fieldBox(f.box, t, f.input.Focused(), f.IsInert())
+		return f.box.Layout(c, env.With(ggui.InputDisabledKey, f.IsInert()))
 	}
+	pad := t.FieldPad
+	if f.multiline {
+		pad = ggui.Insets(t.Space, t.FieldPad.Left)
+	}
+	fieldBoxPadded(f.box, t, f.input.Focused(), f.IsInert(), pad)
+	c.MinH = min(c.MaxH, max(c.MinH, pick(f.multiline, 64.0, 20+t.FieldPad.Top+t.FieldPad.Bottom)))
 	size := f.box.Layout(c, env.With(ggui.InputDisabledKey, f.IsInert()))
-	if !f.plain {
-		fieldBox(f.box, t, f.input.Focused(), f.input.IsDisabled())
-	}
+	fieldBoxPadded(f.box, t, f.input.Focused(), f.input.IsDisabled(), pad)
 	return size
 }
 

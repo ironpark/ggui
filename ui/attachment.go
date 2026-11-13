@@ -295,7 +295,7 @@ func (a *AttachmentWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		// Register the full-card trigger before painting the independent actions.
 		if a.trigger != nil {
 			a.trigger.Hit(dst, r, a.trigger, ggui.CursorShapePointer)
-			a.trigger.FocusRing(dst, r, a.radius, t.Ring)
+			controlFocusRing(dst, &a.trigger.Interactive, t, r, a.radius, t.Ring)
 		}
 		inner := dst.Clip(r)
 		a.paintMedia(inner, translated(a.mediaRect, r.Origin), state)

@@ -15,6 +15,7 @@ import (
 	"github.com/ironpark/ggui"
 	_ "github.com/ironpark/ggui/inspect/panel"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
@@ -33,11 +34,12 @@ func newGallery() (ggui.Builder, func(), func()) { return newGalleryPreview(nil)
 func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, func(), func()) {
 	dark := ggui.State(false)
 	baseColor := ggui.State(uitheme.BaseNeutral)
-	accentColor := ggui.State(uitheme.AccentBlue)
-	themeStyle := ggui.State(uitheme.StyleRhea)
+	accentColor := ggui.State(uitheme.AccentBase)
+	themeStyle := ggui.State(uitheme.StyleNova)
 	themeAction := ggui.State("Change a token preset or try the actions.")
 	emojiText := ggui.State("Hello 👋🏽  🇰🇷  👩🏽‍💻  1️⃣")
 	chatPreviews := newChatPreviews()
+	parityPreviews := newParityPreviews()
 	selectedDate := ggui.State(time.Now())
 	calendar := ui.Calendar(selectedDate).WeekStartsOn(time.Monday)
 	datePicker := ui.DatePicker(selectedDate).Name("Appointment date")
@@ -195,6 +197,19 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 				ggui.Wrap(ui.Button("Secondary", nil).Secondary(), ui.Button("Ghost", nil).Ghost(), ui.Button("Delete", func() {
 					toasts.Push(ui.Toast("Destructive action", "A red button makes the intent clear.").Destructive())
 				}).Destructive()).Gap(8),
+				ggui.Wrap(
+					ui.Button("Extra small", nil).Size(ui.ButtonExtraSmall).Outline(),
+					ui.Button("Small", nil).Size(ui.ButtonSmall).Outline(),
+					ui.Button("Default", nil).Outline(),
+					ui.Button("Large", nil).Size(ui.ButtonLarge).Outline(),
+				).Gap(8),
+				ggui.Wrap(
+					ui.ButtonOf(ui.Icon(icons.Plus), nil).Name("Extra small icon").Size(ui.ButtonIconExtraSmall).Outline(),
+					ui.ButtonOf(ui.Icon(icons.Plus), nil).Name("Small icon").Size(ui.ButtonIconSmall).Outline(),
+					ui.ButtonOf(ui.Icon(icons.Plus), nil).Name("Default icon").Size(ui.ButtonIcon).Outline(),
+					ui.ButtonOf(ui.Icon(icons.Plus), nil).Name("Large icon").Size(ui.ButtonIconLarge).Outline(),
+					ui.Button("Link", nil).Link(),
+				).Gap(8),
 				ggui.Wrap(
 					ui.Badge("Draft"),
 					ui.Badge("Published").Primary(),
@@ -473,6 +488,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 			).Space(1))),
 		}
 		entries = append(entries, chatPreviews()...)
+		entries = append(entries, parityPreviews()...)
 		entries = append(entries, reactivityPreview())
 		entries = append(entries, preview("Carousel", ui.Carousel(carouselIndex, ui.Card(ggui.Center(ui.Title("1"))), ui.Card(ggui.Center(ui.Title("2"))), ui.Card(ggui.Center(ui.Title("3")))).Height(180)))
 		entries = append(entries, preview("Rich text", ggui.Column(

@@ -11,6 +11,7 @@ import (
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/examples/internal/offscreen"
+	"github.com/ironpark/ggui/fonts/gofont"
 	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
@@ -18,6 +19,7 @@ import (
 // This catalog deliberately excludes the recently added charts, Carousel and OTP,
 // and framework-only demonstrations. It exercises the actual gallery widgets.
 var auditNames = []string{
+	"Popover", "Navigation menu", "Code block", "Trace", "Range slider", "Toggle and label", "Native select", "Drawer snapping", "RTL controls", "Tabs modes", "Calendar modes", "Multiple combobox",
 	"Buttons", "Text", "Field", "Choices", "Menubar", "Calendar", "Date picker",
 	"Context menu", "Search and commands", "Notices and empty states", "Loading and shortcuts",
 	"Toast", "Dialog", "Progress", "Collapsible", "Pagination", "Accordion", "Tabs", "Resizable",
@@ -27,7 +29,7 @@ var auditNames = []string{
 
 // actionNames is the control each example activates for its alternate
 // state, and hoverNames the one the pointer rests on.
-var actionNames = map[string]string{"Data Table": "Select row p2", "Table": "Grace", "Accordion": "Keyboard controls", "Collapsible": "Delivery preferences", "Dialog": "Reset form…", "Sheets and drawers": "Open filters", "Date picker": "Appointment date", "Menubar": "File", "Choices": "Choose fruit", "Toast": "Notify", "Progress": "Advance download", "Tabs": "Details", "Search and commands": "Commands…", "Groups and addons": "Lock alignment", "Control states": "Enabled switch"}
+var actionNames = map[string]string{"Multiple combobox": "Languages", "Popover": "Edit profile", "Navigation menu": "Explore", "Code block": "Copy code", "Trace": "Build application", "Native select": "Delivery speed", "Drawer snapping": "Try drawer snapping", "Toggle and label": "Bold", "Data Table": "Select row p2", "Table": "Grace", "Accordion": "Keyboard controls", "Collapsible": "Delivery preferences", "Dialog": "Reset form…", "Sheets and drawers": "Open filters", "Date picker": "Appointment date", "Menubar": "File", "Choices": "Choose fruit", "Toast": "Notify", "Progress": "Advance download", "Tabs": "Details", "Search and commands": "Commands…", "Groups and addons": "Lock alignment", "Control states": "Enabled switch"}
 
 var hoverNames = map[string]string{"Buttons": "Hover for help", "Profile and media": "Details"}
 
@@ -52,7 +54,7 @@ func (g *galleryAudit) step() (bool, error) {
 	if g.index/(len(g.names)*4) == 1 {
 		style = uitheme.StyleRhea
 	}
-	preset := uitheme.Preset{Base: uitheme.BaseNeutral, Accent: uitheme.AccentBlue, Style: style}
+	preset := uitheme.Preset{Base: uitheme.BaseNeutral, Accent: uitheme.AccentBase, Style: style}
 	theme := preset.For(dark)
 	mode := "light"
 	if dark {
@@ -77,7 +79,7 @@ func (g *galleryAudit) step() (bool, error) {
 			return ggui.Stack(widgets...)
 		})
 		return build()
-	}, ggui.Sz(width, 1200))
+	}, ggui.Sz(width, 1200)).Setup(func() { ggui.SetDefaultMonoFont(gofont.Mono()) })
 	defer app.Close()
 	img := ggfx.NewImage(width, 1200)
 	defer img.Deallocate()
@@ -101,7 +103,14 @@ func (g *galleryAudit) step() (bool, error) {
 	// Activate a real accessible control where the example has a meaningful
 	// alternate state. Capture both the transition and its settled appearance.
 	if target, ok := actionNames[name]; ok {
-		node, found := app.Semantics().Find("", target)
+		var node ggui.SemNode
+		found := false
+		for _, candidate := range app.Semantics().Nodes("") {
+			if candidate.Name == target && candidate.Actions&(ggui.ActionPress|ggui.ActionExpand) != 0 {
+				node, found = candidate, true
+				break
+			}
+		}
 		if !found {
 			return false, fmt.Errorf("%s: missing action %q", name, target)
 		}

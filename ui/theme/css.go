@@ -129,7 +129,7 @@ func (t Theme) ApplyCSS(decls string) (Theme, error) {
 			if err != nil {
 				return t, fmt.Errorf("theme: --radius: %w", err)
 			}
-			t.Radius, t.RadiusSm, t.RadiusLg = max(r-2, 0), max(r-4, 0), r+4
+			t.Radius, t.RadiusSm, t.RadiusLg = r, r*.8, r*1.4
 			t.auto.radiusSm, t.auto.radiusLg = 0, 0
 			continue
 		}

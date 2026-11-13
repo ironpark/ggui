@@ -1,6 +1,6 @@
 # GGUI documentation
 
-[Project README](../README.md) · [Runnable counter](../README.md#quick-start) · [Component gallery](../examples/gallery)
+[Project README](../README.md) · [Runnable counter](../README.md#quick-start) · [Component gallery](../examples/gallery) · [Theme playground](../examples/create)
 
 Build a Go UI by composing widgets, binding controls to state, and styling the
 result with a theme. These guides explain the current repository API and require
@@ -45,6 +45,7 @@ from the repository root unless a guide says otherwise.
 | Build swipeable slides | [Carousel](carousel-and-otp.md#carousel) |
 | Visualize data | [Charts](charts.md) |
 | Build chat screens or questionnaires | [Chat components and questionnaires](chat.md) |
+| Compare component coverage and behavior with shadcn/ui | [shadcn/ui comparison](shadcn-comparison.md) · [66-component implementation audit](shadcn-implementation.md) |
 | Customize colors, spacing, shadows, and themes | [Styling and themes](styling.md) |
 | Load fonts, render emoji, or change icon sets | [Fonts, emoji, and icons](fonts.md) |
 | Show rich, selectable or right-to-left text | [Rich text](layout.md#rich-text) · [Selectable text](layout.md#selectable-text) · [Right-to-left text](fonts.md#right-to-left-text) |

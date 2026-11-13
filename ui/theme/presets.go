@@ -153,7 +153,7 @@ func (p Preset) For(dark bool) Theme {
 	for i := range t.Chart {
 		t.Chart[i] = tokens[fmt.Sprintf("chart-%d", i+1)]
 	}
-	t.RadiusSm, t.Radius, t.RadiusLg = 6, 8, 10
+	t.RadiusSm, t.Radius, t.RadiusLg = 8, 10, 14
 	t.Chat = novaChat()
 	switch p.Style {
 	case "", StyleNova:

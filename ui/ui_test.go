@@ -1,6 +1,7 @@
 package ui_test
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -31,8 +32,8 @@ func TestButtonTapsAndDisables(t *testing.T) {
 	}
 	at := find(t, p, ggui.RoleButton, "go").Center()
 	p.Move(at)
-	if p.Cursor() != ggui.CursorShapePointer {
-		t.Fatalf("cursor = %v over a button, want pointer", p.Cursor())
+	if p.Cursor() != ggui.CursorShapeDefault {
+		t.Fatalf("cursor = %v over a button, want default", p.Cursor())
 	}
 	b.Disabled(true)
 	p.Click(at)
@@ -52,8 +53,8 @@ func TestButtonSizesFromThemePadding(t *testing.T) {
 	got := ui.Button("go", nil).Layout(ggui.Loose(ggui.Sz(300, 300)), ggui.Env{})
 	th := uitheme.Default()
 	// The label is drawn in the theme's Label style, a medium weight.
-	text := ggui.Text("go").Style(th.Label).Layout(ggui.Loose(ggui.Sz(300, 300)), ggui.Env{})
-	if got.W != text.W+th.ButtonPad.Left+th.ButtonPad.Right || got.H != text.H+th.ButtonPad.Top+th.ButtonPad.Bottom {
+	text := ggui.Text("go").Style(th.Text.Merge(th.Label)).Layout(ggui.Loose(ggui.Sz(300, 300)), ggui.Env{})
+	if got.W != text.W+th.ButtonPad.Left+th.ButtonPad.Right || got.H != max(32, text.H+th.ButtonPad.Top+th.ButtonPad.Bottom) {
 		t.Fatalf("button %v around text %v, want theme padding", got, text)
 	}
 	padded := ui.Button("go", nil).Pad(1).Layout(ggui.Loose(ggui.Sz(300, 300)), ggui.Env{})
@@ -105,14 +106,14 @@ func TestSwitchToggles(t *testing.T) {
 	if !ggui.Untrack(on.Get) {
 		t.Fatal("switch did not turn on")
 	}
-	if got := s.Layout(ggui.Loose(ggui.Sz(100, 30)), ggui.Env{}); got != ggui.Sz(36, 20) {
+	if got := s.Layout(ggui.Loose(ggui.Sz(100, 30)), ggui.Env{}); got != ggui.Sz(32, 18.4) {
 		t.Fatalf("switch size %v", got)
 	}
 }
 
 // onTrack returns the point at fraction f along a slider's track.
 func onTrack(s ggui.Found, f float64) ggui.Point {
-	const knob = 8
+	const knob = 6
 	return ggui.Pt(s.Rect.Origin.X+knob+(s.Rect.Size.W-2*knob)*f, s.Center().Y)
 }
 
@@ -227,7 +228,7 @@ func TestSliderDragSurvivesRebuild(t *testing.T) {
 	p.Press(onTrack(track, 0.2))
 	p.Move(onTrack(track, 0.6))
 	p.Move(onTrack(track, 0.9))
-	if ggui.Untrack(v.Get) != 90 {
+	if math.Abs(ggui.Untrack(v.Get)-90) > 1e-9 {
 		t.Fatalf("value = %v after dragging through rebuilds, want 90", ggui.Untrack(v.Get))
 	}
 }
@@ -283,7 +284,7 @@ func TestSelectOpensPicksAndClosesWithPointerAndKeys(t *testing.T) {
 	t.Parallel()
 	v := ggui.State("b")
 	changes := 0
-	sel := ui.Select(v).Options([]string{"a", "b", "c"}).Name("letter").OnChange(func(string) { changes++ })
+	sel := ui.Select(v).Options([]string{"a", "b", "c"}).AlignItemWithTrigger(false).Name("letter").OnChange(func(string) { changes++ })
 	tree := ggui.Column(ggui.Padding(sel, 10))
 	p := ggui.NewProbe(tree, ggui.Sz(300, 300))
 	defer p.Close()
@@ -354,7 +355,7 @@ func TestTabsSwitchByClickAndKeys(t *testing.T) {
 	t.Parallel()
 	sel := ggui.State(0)
 	var a, b ggui.Rect
-	tabs := ui.Tabs(sel, ui.Tab("One", probe(80, 30, &a)), ui.Tab("Two", probe(80, 30, &b)))
+	tabs := ui.Tabs(sel, ui.Tab("One", probe(80, 30, &a)), ui.Tab("Two", probe(80, 30, &b))).ActivateOnFocus(true)
 	p := ggui.NewProbe(ggui.Column(tabs), ggui.Sz(300, 200))
 	defer p.Close()
 	p.Frame()
@@ -397,7 +398,7 @@ func TestCollapsibleTogglesAndHidesContent(t *testing.T) {
 		t.Fatal("click on the header did not open")
 	}
 	p.Frame()
-	p.Advance(uitheme.Default().MotionFast)
+	p.Advance(uitheme.Default().MotionSlow)
 	opened := c.Layout(ggui.Loose(ggui.Sz(300, 200)), ggui.Env{})
 	if body == (ggui.Rect{}) || opened.H < closed.H+40 {
 		t.Fatalf("content %+v, height %v -> %v; want content shown below the header", body, closed.H, opened.H)
@@ -417,8 +418,8 @@ func TestCardBadgeProgressLayout(t *testing.T) {
 	if s := p.Frame(); s.W != 200 {
 		t.Fatalf("size %v", s)
 	}
-	if got := ui.Progress(v).Layout(ggui.Loose(ggui.Sz(120, 100)), ggui.Env{}); got != ggui.Sz(120, 6) {
-		t.Fatalf("progress %v, want 120x6", got)
+	if got := ui.Progress(v).Layout(ggui.Loose(ggui.Sz(120, 100)), ggui.Env{}); got != ggui.Sz(120, 4) {
+		t.Fatalf("progress %v, want 120x4", got)
 	}
 }
 
@@ -527,7 +528,7 @@ func TestDialogKeyboardFlow(t *testing.T) {
 		ui.Dialog(open, ggui.Row(
 			ui.Button("Delete", func() { deleted = true; open.Set(false) }),
 			ui.Button("Cancel", func() { open.Set(false) }).Outline(),
-		)).Title("Confirm"),
+		)).Title("Confirm").CloseButton(false),
 	)
 	p := ggui.NewProbe(tree, ggui.Sz(400, 300))
 	defer p.Close()

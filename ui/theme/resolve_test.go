@@ -16,13 +16,13 @@ func TestFollowersFollowAChangedSource(t *testing.T) {
 		th := base
 		th.Primary, th.Fg, th.Radius = brand, color.NRGBA{1, 2, 3, 255}, 4
 		th = th.Resolve()
-		if !sameColor(th.PrimaryHover, compositeColor(brand, th.Bg, .9)) || !sameColor(th.Selection, compositeColor(brand, th.Bg, .25)) {
+		if !sameColor(th.PrimaryHover, compositeColor(brand, th.Bg, .8)) || !sameColor(th.Selection, compositeColor(brand, th.Bg, .25)) {
 			t.Errorf("%s: PrimaryHover %v and Selection %v did not follow Primary", name, th.PrimaryHover, th.Selection)
 		}
 		if th.Text.Color != th.Fg || !preset && (th.AccentFg != th.Fg || th.SidebarPrimary != th.Primary) {
 			t.Errorf("%s: Text.Color %v, AccentFg %v or SidebarPrimary %v did not follow", name, th.Text.Color, th.AccentFg, th.SidebarPrimary)
 		}
-		if !preset && (th.RadiusSm != 3 || th.RadiusLg != 6) {
+		if !preset && (th.RadiusSm != 3.2 || th.RadiusLg != 5.6) {
 			t.Errorf("%s: radii %v/%v did not follow Radius 4", name, th.RadiusSm, th.RadiusLg)
 		}
 	}
@@ -64,7 +64,7 @@ func TestALiteralThemeDraws(t *testing.T) {
 	if th.ControlSize == 0 || th.IconSize == 0 || th.MenuWidth == 0 || th.Chat == (ChatTokens{}) || th.Mono.Font == nil {
 		t.Fatalf("unset sizes stayed zero: %+v", th)
 	}
-	if th.Primary != color.Color(brand) || !sameColor(th.PrimaryHover, compositeColor(brand, th.Bg, .9)) {
+	if th.Primary != color.Color(brand) || !sameColor(th.PrimaryHover, compositeColor(brand, th.Bg, .8)) {
 		t.Fatalf("the literal's own Primary was lost or not followed: %v, %v", th.Primary, th.PrimaryHover)
 	}
 	for i, f := range followers {
