@@ -590,6 +590,8 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 						Action(ui.ButtonOf(ui.Icon(icons.Download), nil).Name("Download report").Size(ui.ButtonIconSmall).Ghost()),
 				),
 				ui.Item("Two-factor sign-in is on", "").MediaIcon(icons.Check).Small().Muted(),
+				ui.Item("Read the changelog", "The whole row is a link.").MediaIcon(icons.File).Outline().
+					Action(ui.Icon(icons.ChevronRight)).OnTap(func() {}),
 				ui.AspectRatio(16.0/9, ggui.Box(ggui.Center(ui.Caption("16 : 9"))).Fill(t.Muted).Radius(t.Radius)),
 			).Space(1).Stretch()),
 
