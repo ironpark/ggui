@@ -943,3 +943,22 @@ func TestScrollbarThumbTakesItsThicknessAndMarginFromTheStyle(t *testing.T) {
 		t.Fatalf("a horizontal 7px thumb is drawn at %v and grabbed at %v", visual, hit)
 	}
 }
+
+// A scroll and the scroll inside it, along the other axis, are clipped to
+// one viewport and so hold one Rect. Each is the widget it was last frame:
+// the outer must not adopt the inner's offset as a rebuilt scroll would.
+func TestNestedScrollsOfOneViewportKeepTheirOwnOffsets(t *testing.T) {
+	var x, y ScrollController
+	inner := Scroll(Box().Size(600, 900)).Horizontal().Controller(&x)
+	outer := Scroll(inner).Controller(&y)
+	p := NewWindowProbe(func() Widget { return outer }, Sz(300, 300))
+	defer p.Close()
+	p.Run(time.Second, 10)
+	for range 5 {
+		p.Trackpad(Pt(150, 150), Pt(0, -10))
+		p.Step(16 * time.Millisecond)
+	}
+	if x.Offset() != 0 || y.Offset() != 50 {
+		t.Fatalf("five swipes down scrolled to x %v, y %v, want 0 and 50", x.Offset(), y.Offset())
+	}
+}
