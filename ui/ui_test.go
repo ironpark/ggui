@@ -578,8 +578,8 @@ func TestFieldNamesAndReportsErrors(t *testing.T) {
 	plain := f.Layout(loose, ggui.Env{})
 	errText.Set("Required")
 	withErr := f.Layout(loose, ggui.Env{})
-	if withErr.H != plain.H {
-		t.Fatalf("height %v with an error, %v with help; the error takes the help's line", withErr.H, plain.H)
+	if withErr.H <= plain.H {
+		t.Fatalf("height %v with an error, %v with help; the error is shown under the help, not in its place", withErr.H, plain.H)
 	}
 	if bare := ui.Field("Name", ui.TextField(email)).Layout(loose, ggui.Env{}); bare.H >= plain.H {
 		t.Fatalf("a field without help is %v tall, with help %v", bare.H, plain.H)
