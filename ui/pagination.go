@@ -1,8 +1,8 @@
 package ui
 
 import (
-	"fmt"
 	"math"
+	"strconv"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui/icons"
@@ -13,16 +13,25 @@ import (
 // At most five numbered buttons are shown, plus Previous, Next and ellipses for hidden pages.
 type PaginationWidget struct {
 	ggui.Interactive
-	page                   ggui.Binding[int]
-	pages                  ggui.Readable[int]
-	previous, next         *ButtonWidget
-	previousIcon, nextIcon *icons.Widget
-	numbers                [5]*ButtonWidget
-	targets                [5]int
-	gaps                   [2]ggui.Widget // the leading and trailing ellipses
-	children               []ggui.Widget
-	row                    *ggui.WrapWidget
-	onChange               func(int)
+	page                     ggui.Binding[int]
+	pages                    ggui.Readable[int]
+	previous, next           *ButtonWidget
+	previousIcon, nextIcon   *icons.Widget
+	previousLabel, nextLabel *ggui.TextWidget
+	numbers                  [5]*ButtonWidget
+	targets                  [5]int
+	gaps                     [2]ggui.Widget // the leading and trailing ellipses
+	children                 []ggui.Widget
+	row                      *ggui.WrapWidget
+	shape                    paginationShape // what row was built for
+	onChange                 func(int)
+}
+
+// paginationShape is which of its parts a pager shows: enough to tell
+// whether the row built for one layout serves the next.
+type paginationShape struct {
+	lead, trail bool
+	numbers     int
 }
 
 // Pagination creates navigation for pages pages. Zero or negative counts disable it.
@@ -30,14 +39,29 @@ type PaginationWidget struct {
 func Pagination(page ggui.Binding[int], pages ggui.Readable[int]) *PaginationWidget {
 	p := &PaginationWidget{page: page, pages: pages}
 	p.previousIcon, p.nextIcon = Icon(icons.ChevronLeft), Icon(icons.ChevronRight)
-	p.previous = ButtonOf(ggui.Row(p.previousIcon, ggui.Text("Previous")).Gap(4), func() { p.move(-1) }).Name("Previous").Ghost().Pad(6, 10)
-	p.next = ButtonOf(ggui.Row(ggui.Text("Next"), p.nextIcon).Gap(4), func() { p.move(1) }).Name("Next").Ghost().Pad(6, 10)
+	p.previousLabel, p.nextLabel = ggui.Text("Previous").NoWrap(), ggui.Text("Next").NoWrap()
+	p.previous = ButtonOf(ggui.Row(p.previousIcon, p.previousLabel).Gap(paginationGap), func() { p.move(-1) }).Name("Previous").Ghost()
+	p.next = ButtonOf(ggui.Row(p.nextLabel, p.nextIcon).Gap(paginationGap), func() { p.move(1) }).Name("Next").Ghost()
 	for i := range p.numbers {
-		p.numbers[i] = Button("", func() { p.selectPage(p.targets[i]) })
+		p.numbers[i] = Button("", func() { p.selectPage(p.targets[i]) }).Size(ButtonIcon)
 	}
 	for i := range p.gaps {
-		p.gaps[i] = ggui.Padding(ggui.Text("…"), 6, 4)
+		p.gaps[i] = &moreIcon{icon: Icon(icons.MoreHorizontal).Alt("More pages"), side: func(t *uitheme.Theme) float64 { return ButtonIcon.Style(*t).Height }}
 	}
+	return p
+}
+
+// paginationGap is between the chevron and the word of Previous and Next,
+// the gap shadcn's button puts between an icon and its label.
+const paginationGap = 6.0
+
+// Labels replaces the words on the Previous and Next buttons, which also
+// name them, for an application in another language.
+func (p *PaginationWidget) Labels(previous, next string) *PaginationWidget {
+	p.previousLabel.Content(previous)
+	p.nextLabel.Content(next)
+	p.previous.Name(previous)
+	p.next.Name(next)
 	return p
 }
 
@@ -64,6 +88,17 @@ func (p *PaginationWidget) selectPage(page int) {
 // Layout implements ggui.Widget.
 func (p *PaginationWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	p.Sync()
+	t := uitheme.Of(env)
+	// Previous and Next are default-size buttons with less padding on the
+	// side their chevron is on.
+	pad, near := t.ButtonPad, t.ButtonPad.Left*.6
+	if env.Direction() == ggui.DirRTL {
+		p.previous.Pad(pad.Top, near, pad.Bottom, pad.Left)
+		p.next.Pad(pad.Top, pad.Right, pad.Bottom, near)
+	} else {
+		p.previous.Pad(pad.Top, pad.Right, pad.Bottom, near)
+		p.next.Pad(pad.Top, near, pad.Bottom, pad.Left)
+	}
 	angle := pick(env.Direction() == ggui.DirRTL, math.Pi, 0.0)
 	p.previousIcon.Rotate(angle)
 	p.nextIcon.Rotate(angle)
@@ -71,32 +106,39 @@ func (p *PaginationWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	current := p.current(n)
 	p.previous.Disabled(p.IsInert() || n == 0 || current == 1)
 	p.next.Disabled(p.IsInert() || n == 0 || current == n)
-	children := append(p.children[:0], p.previous)
 	start := max(1, min(current-2, n-4))
-	if start > 1 {
-		children = append(children, p.gaps[0])
-	}
-	for i := range min(n, len(p.numbers)) {
+	shape := paginationShape{lead: start > 1, trail: start+len(p.numbers) <= n, numbers: min(n, len(p.numbers))}
+	for i := range shape.numbers {
 		target := start + i
-		p.targets[i] = target
 		b := p.numbers[i]
-		b.label.Content(fmt.Sprint(target))
-		b.SetName(fmt.Sprintf("Page %d", target))
+		if p.targets[i] != target {
+			p.targets[i] = target
+			b.label.Content(strconv.Itoa(target))
+			b.SetName("Page " + strconv.Itoa(target))
+		}
 		b.selected = target == current
 		if target == current {
 			b.Outline()
 		} else {
 			b.Ghost()
 		}
-		b.Disabled(p.IsInert()).Pad(6, 10)
-		children = append(children, b)
+		b.Disabled(p.IsInert())
 	}
-	if start+len(p.numbers) <= n {
-		children = append(children, p.gaps[1])
+	if p.row == nil || shape != p.shape {
+		children := append(p.children[:0], p.previous)
+		if shape.lead {
+			children = append(children, p.gaps[0])
+		}
+		for i := range shape.numbers {
+			children = append(children, p.numbers[i])
+		}
+		if shape.trail {
+			children = append(children, p.gaps[1])
+		}
+		p.children = append(children, p.next)
+		p.row, p.shape = ggui.Wrap(p.children...).Align(ggui.AlignCenter), shape
 	}
-	p.children = append(children, p.next)
-	p.row = ggui.Wrap(p.children...).Gap(uitheme.Of(env).Space / 2)
-	return p.row.Layout(c, env)
+	return p.row.Gap(t.Space/4).Layout(c, env)
 }
 
 // Paint implements ggui.Widget. The buttons are one group, named by Name
