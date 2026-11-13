@@ -162,6 +162,7 @@ type ChartWidget struct {
 	env                                                            ggui.Env
 	theme                                                          *uitheme.Theme
 	reduced                                                        bool
+	gridLine                                                       color.Color // the cartesian grid, resolved each layout
 	active, selected                                               int
 	plot                                                           ggui.Rect
 	geometry                                                       chartGeometry
@@ -413,7 +414,8 @@ func (c *ChartWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	c.env = env
 	c.theme = uitheme.Of(env)
 	c.reduced = env.ReducedMotion()
-	c.textLayout++ // cached labels re-measure under env as they are next used
+	c.gridLine = fade(c.theme.Border, .5) // shadcn strokes the grid at border/50
+	c.textLayout++                        // cached labels re-measure under env as they are next used
 	return cs.Constrain(ggui.Sz(bounded(cs.MaxW, 400), c.height))
 }
 func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
