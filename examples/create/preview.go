@@ -114,15 +114,9 @@ func previewFooterCard(header, body, footer ggui.Widget) ggui.Widget {
 			clipped.StrokeRoundRect(r, radius, borderWidth, border)
 		})
 	})
-	return uitheme.Override(func(t *uitheme.Theme) {
-		// Dark reference forms sit on a slightly raised surface. Keep the
-		// inherited input token untouched for light themes and outside these cards.
-		cr, cg, cb, _ := t.Card.RGBA()
-		fr, fg, fb, _ := t.Fg.RGBA()
-		if cr+cg+cb < fr+fg+fb {
-			t.Input = uitheme.Mix(t.Card, t.Fg, .04)
-		}
-	}, clippedCard)
+	// A dark theme's Input is translucent, so the forms sit on a slightly
+	// raised surface over the card without a token of their own.
+	return clippedCard
 }
 
 func previewTile(content ggui.Widget) ggui.Widget {

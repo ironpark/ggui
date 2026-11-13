@@ -124,6 +124,58 @@ func Bind(sw ggui.Readable[bool], on, off Theme) func() {
 	})
 }
 
+// Mode is which appearance an application draws in: the desktop's, or one
+// of its own choosing, as shadcn/ui's light, dark and system modes are.
+type Mode string
+
+const (
+	// ModeSystem follows the desktop's appearance. It is the zero Mode's
+	// meaning too, so a setting never chosen follows the system.
+	ModeSystem Mode = "system"
+	// ModeLight is always light.
+	ModeLight Mode = "light"
+	// ModeDark is always dark.
+	ModeDark Mode = "dark"
+)
+
+// Modes returns the modes in the order shadcn/ui's mode menu lists them:
+// light, dark, system.
+func Modes() []Mode { return []Mode{ModeLight, ModeDark, ModeSystem} }
+
+// Dark reports whether the mode draws dark, given whether the desktop does.
+func (m Mode) Dark(system bool) bool {
+	switch m {
+	case ModeLight:
+		return false
+	case ModeDark:
+		return true
+	}
+	return system
+}
+
+// String is the mode's name with a capital, for a menu or a segmented
+// control: "Light", "Dark" or "System".
+func (m Mode) String() string {
+	switch m {
+	case ModeLight:
+		return "Light"
+	case ModeDark:
+		return "Dark"
+	}
+	return "System"
+}
+
+// BindMode applies dark or light as mode says, following the desktop's
+// appearance through ggui.SystemDark while mode is ModeSystem. Like Bind,
+// its first application runs when effects flush; the returned function
+// stops it.
+//
+//	mode := ggui.State(theme.ModeSystem)
+//	app.Setup(func() { theme.BindMode(mode, recipe.Dark(), recipe.Light()) })
+func BindMode(mode ggui.Readable[Mode], dark, light Theme) func() {
+	return Bind(ggui.Combine(mode, ggui.SystemDark(), Mode.Dark), dark, light)
+}
+
 // With applies a theme to a subtree at layout time.
 func With(t Theme, child ggui.Widget) *ggui.EnvWidget {
 	return ggui.WithEnv(t.Apply, child)

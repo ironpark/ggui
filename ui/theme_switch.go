@@ -4,7 +4,23 @@ import (
 	"image/color"
 
 	"github.com/ironpark/ggui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
+
+// ThemeMode shows Light, Dark and System as one segmented control bound to
+// the mode, as shadcn/ui's mode toggle offers them. Like ThemeSwitch, it
+// updates its binding; the application applies the chosen theme, which
+// theme.BindMode does for a light and a dark one:
+//
+//	mode := ggui.State(theme.ModeSystem)
+//	app.Setup(func() { theme.BindMode(mode, theme.Dark(), theme.Default()) })
+//	ui.ThemeMode(mode)
+//
+// Its default accessible name is "Theme". It is a ToggleGroup, so its
+// options, format and icons can be changed as one's are.
+func ThemeMode(mode ggui.Binding[uitheme.Mode]) *ToggleGroupWidget[uitheme.Mode] {
+	return ToggleGroup(mode).Options(uitheme.Modes()).Name("Theme")
+}
 
 // ThemeSwitchWidget is a day/night switch bound to whether dark mode is enabled.
 // Like Switch, it updates its binding; the application applies the chosen theme.

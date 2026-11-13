@@ -397,12 +397,14 @@ func TestGalleryEmojiEditingAndThemePresets(t *testing.T) {
 	p.Tap("Theme style")
 	p.Type(ggui.Mods{}, ggui.KeyArrowDown, ggui.KeyEnter)
 	p.Frame()
-	if uitheme.Use().Chat.BubbleRadius != 24 {
-		t.Fatal("Rhea geometry not applied")
+	// The style after Nova in the list, whichever it is.
+	next := uitheme.Styles()[1]
+	if got, want := uitheme.Use(), (uitheme.Preset{Base: uitheme.BaseStone, Style: next}).Light(); got.ButtonPad != want.ButtonPad || got.Radius != want.Radius || got.Chat != want.Chat {
+		t.Fatalf("%s geometry not applied", next)
 	}
 	p.Tap("Dark mode")
 	p.Frame()
-	want = uitheme.Preset{Base: uitheme.BaseStone, Accent: uitheme.AccentBase, Style: uitheme.StyleRhea}.Dark()
+	want = uitheme.Preset{Base: uitheme.BaseStone, Accent: uitheme.AccentBase, Style: next}.Dark()
 	if uitheme.Use().Bg != want.Bg || uitheme.Use().Primary != want.Primary {
 		t.Fatal("preset was lost during dark mode switch")
 	}

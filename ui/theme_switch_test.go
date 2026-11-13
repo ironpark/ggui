@@ -6,7 +6,27 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
+
+// ThemeMode offers the three modes by name and writes the one tapped.
+func TestThemeModeChoosesLightDarkOrSystem(t *testing.T) {
+	t.Parallel()
+	mode := ggui.State(uitheme.ModeSystem)
+	p := ggui.NewProbe(ggui.Row(ui.ThemeMode(mode)), ggui.Sz(320, 80))
+	defer p.Close()
+	p.Frame()
+	if _, ok := p.Semantics().Find(ggui.RoleGroup, "Theme"); !ok {
+		t.Fatalf("no group named Theme:\n%s", p.Semantics())
+	}
+	for _, want := range []uitheme.Mode{uitheme.ModeDark, uitheme.ModeLight, uitheme.ModeSystem} {
+		p.Tap(want.String())
+		p.Frame()
+		if got := ggui.Untrack(mode.Get); got != want {
+			t.Fatalf("tapping %s set %q", want, string(got))
+		}
+	}
+}
 
 func TestThemeSwitchPointerKeyboardAndDisabled(t *testing.T) {
 	t.Parallel()

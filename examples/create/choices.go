@@ -34,7 +34,6 @@ func choice[T comparable](m *model, slot int, label string, value ggui.Binding[T
 	selectWidget := ui.Select(value).Options(options).Format(format).Name(label).
 		AlignItemWithTrigger(false).TriggerContent(face).Key("setting-" + label)
 	styled := theme.Override(func(t *theme.Theme) {
-		t.Input = t.Card
 		t.FieldPad = ggui.Insets(8, 10)
 		t.Radius = 10
 	}, selectWidget)
@@ -81,14 +80,14 @@ func tileMark(m *model, slot int) ggui.Widget {
 		s := m.settings.Get()
 		switch slot {
 		case lockBase:
-			ink = (theme.Preset{Base: s.Theme.Preset.Base}).For(s.Dark).MutedFg
+			ink = (theme.Preset{Base: s.Theme.Preset.Base}).For(s.dark()).MutedFg
 		case lockAccent:
-			ink = s.Theme.For(s.Dark).Primary
+			ink = s.Theme.For(s.dark()).Primary
 			if s.Theme.Preset.Accent == theme.AccentBase {
-				ink = (theme.Preset{}).For(s.Dark).MutedFg
+				ink = (theme.Preset{}).For(s.dark()).MutedFg
 			}
 		case lockChart:
-			ink = s.Theme.For(s.Dark).Chart[1]
+			ink = s.Theme.For(s.dark()).Chart[1]
 		}
 		return c.Constrain(ggui.Sz(16, 16))
 	}, func(dst *ggui.Canvas, r ggui.Rect) {
