@@ -30,7 +30,7 @@ func Menubar(menus ...*MenuWidget) *MenubarWidget {
 	b := &MenubarWidget{menus: menus, active: 0, sizes: make([]ggui.Size, len(menus)), rects: make([]ggui.Rect, len(menus))}
 	b.Role = ggui.RoleToolbar
 	b.AutoKey()
-	b.popup = ggui.Popup(menubarAnchor{b}, menubarPanel{b}).Keys(b).Owner(b)
+	b.popup = ggui.Popup(menubarAnchor{b}, menuSurface(menubarPanel{b})).Keys(b).Owner(b)
 	for i, m := range menus {
 		m.fit, m.checkLeft, m.keys = true, true, b
 		m.button.Ghost()

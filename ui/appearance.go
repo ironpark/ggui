@@ -11,6 +11,10 @@ import (
 
 // panelBox applies the chrome every floating surface shares: menus, context
 // menus, the menubar, select lists and the date picker panel.
+// menuSurface lays content out under the theme its theme draws menus in,
+// for the popup of a menu, a select or a combobox; see Theme.Menu.
+func menuSurface(content ggui.Widget) ggui.Widget { return ggui.WithEnv(uitheme.MenuEnv, content) }
+
 func panelBox(b *ggui.BoxWidget, t *uitheme.Theme) *ggui.BoxWidget {
 	return b.Shadow(t.PanelShadow).Fill(t.Popover).Border(t.BorderWidth, fade(t.Fg, .1)).Radius(t.Radius).Padding(t.PanelPad)
 }

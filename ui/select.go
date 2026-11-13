@@ -68,7 +68,7 @@ func Select[T comparable](value ggui.Binding[T]) *SelectWidget[T] {
 	s.viewport = &selectViewport[T]{owner: s, column: column, offset: ggui.State(0.0)}
 	s.viewport.scroll = ggui.Scroll(column).BindOffset(s.viewport.offset)
 	s.list = ggui.Box(s.viewport)
-	s.popup = ggui.Popup(selectAnchor[T]{s}, s.list).Keys(s).Owner(s)
+	s.popup = ggui.Popup(selectAnchor[T]{s}, menuSurface(s.list)).Keys(s).Owner(s)
 	return s
 }
 
@@ -367,14 +367,16 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		s.pad.Right = t.Space
 	}
 	s.box.Radius(s.radius(t))
-	panelBox(s.list, t)
+	if t.Menu().Popover != t.Popover {
+		mt := t.Menu()
+		panelBox(s.list, &mt)
+	} else {
+		panelBox(s.list, t)
+	}
 	// A list that opens over its trigger appears at once: it has no side
 	// to come from.
 	index := s.index()
-	popupEnv := env
-	if s.alignItem && index >= 0 {
-		popupEnv = env.With(ggui.ReducedMotionKey, true)
-	}
+	s.popup.Animated(!(s.alignItem && index >= 0))
 	least := t.Space * 18 // the list is never narrower than this
 	// The label is one Text for the field's life, so its shaping survives
 	// a relayout that changes neither the value nor the style.
@@ -402,7 +404,7 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		inner.MaxW = inner.MinW
 		s.triggerSize = s.triggerContent.Layout(inner, faceEnv)
 		s.list.Width(max(w, least))
-		return s.popup.Layout(ggui.Constraints{MinW: w, MaxW: w, MinH: min(c.MaxH, max(c.MinH, minH)), MaxH: c.MaxH}, popupEnv)
+		return s.popup.Layout(ggui.Constraints{MinW: w, MaxW: w, MinH: min(c.MaxH, max(c.MinH, minH)), MaxH: c.MaxH}, env)
 	}
 	// As wide as the widest option, so the field does not resize as the
 	// value changes, and never wider than the row wants unless told to.
@@ -421,7 +423,7 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	s.list.Width(max(w, least)) // the popup follows its trigger, not the window width
 	s.textSize = s.text.Layout(ggui.Loose(ggui.Sz(max(w-s.pad.Left-trail, 0), c.MaxH)), env)
 	inner := ggui.Constraints{MinW: w, MaxW: w, MinH: min(c.MaxH, max(c.MinH, minH)), MaxH: c.MaxH}
-	return s.popup.Layout(inner, popupEnv)
+	return s.popup.Layout(inner, env)
 }
 
 // chevronRoom is the width the field keeps right of its label: a gap, the
@@ -499,7 +501,7 @@ func (s *SelectWidget[T]) positionList(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	s.placedAnchor, s.placedScreen = r, screen
 	s.list.MaxHeight(0)
-	natural := s.list.Layout(ggui.Loose(ggui.Sz(screen.W, ggui.Unbounded)), s.env)
+	natural := s.list.Layout(ggui.Loose(ggui.Sz(screen.W, ggui.Unbounded)), uitheme.MenuEnv(s.env))
 	top, rowHeight := s.rowSpan(index)
 	center := s.theme.PanelPad.Top + top + rowHeight/2
 	wantedY := r.Center().Y - center
@@ -646,11 +648,13 @@ type selectItem[T comparable] struct {
 
 	pad      ggui.EdgeInsets
 	textSize ggui.Size
+	theme    *uitheme.Theme // the list's, which may be the menus' own
 }
 
 func (it *selectItem[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	it.Sync()
 	t := uitheme.Of(env)
+	it.theme = t
 	// The label starts at the row's padding, and the room at the right is
 	// the check mark's.
 	it.pad = t.ItemPad
@@ -672,7 +676,7 @@ func (it *selectItem[T]) Describe() ggui.Node {
 }
 
 func (it *selectItem[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	t := it.owner.theme
+	t := it.theme
 	dst.Describe(r, it)
 	ink := t.Disabled(t.PopoverFg)
 	if !it.IsInert() {

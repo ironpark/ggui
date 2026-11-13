@@ -77,7 +77,7 @@ func newContextMenu(content ggui.Widget, m *MenuWidget) *ContextMenuWidget {
 	c.Role = ggui.RoleMenu
 	c.AutoKey()
 	c.menu.keys = c
-	c.menu.popup = ggui.Popup(content, c.menu.panel).Gap(0).Keys(c).Owner(c)
+	c.menu.popup = ggui.Popup(content, menuSurface(c.menu.panel)).Gap(0).Keys(c).Owner(c)
 	return c
 }
 
