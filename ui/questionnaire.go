@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"image/color"
 	"slices"
 	"strings"
 
@@ -401,12 +402,14 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 	}
 	item := q.items[i]
 	current, total := q.Progress()
-	heading := []ggui.Widget{Heading(item.Title).LineHeight(1.5)}
+	// The title in the heading style, the description at the text size in
+	// the muted color, and the progress a medium-weight caption.
+	heading := []ggui.Widget{Heading(item.Title)}
 	if item.Description != "" {
-		heading = append(heading, Caption(item.Description).LineHeight(1.5))
+		heading = append(heading, ggui.Text(item.Description).Color(uitheme.MutedFg))
 	}
 	body := []ggui.Widget{ggui.Column(
-		&questionProgress{Caption(fmt.Sprintf("Question %d of %d", current, total)), current, total},
+		&questionProgress{Caption(fmt.Sprintf("Question %d of %d", current, total)).Weight(ggui.WeightMedium), current, total},
 		ggui.Column(heading...).Gap(2).Align(ggui.AlignStretch),
 	).Gap(20).Align(ggui.AlignStretch)}
 	rows := []ggui.Widget{}
@@ -607,12 +610,12 @@ type questionChoice struct {
 	theme    *uitheme.Theme
 
 	// The parts of body, kept to restyle across layouts.
-	label, description, key  *ggui.TextWidget
-	glyphBox, keyBox         *ggui.BoxWidget
-	text                     *ggui.ColumnWidget
-	row                      *ggui.RowWidget
-	builtLabel, builtCaption ggui.TextStyle // the theme styles the parts were built with
-	env                      ggui.Env
+	label, description, key *ggui.TextWidget
+	glyphBox, keyBox        *ggui.BoxWidget
+	text                    *ggui.ColumnWidget
+	row                     *ggui.RowWidget
+	builtMono               ggui.TextStyle // the theme's mono style the shortcut was built with
+	env                     ggui.Env
 }
 
 func (c *questionChoice) selected() bool {
@@ -623,15 +626,17 @@ func (c *questionChoice) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	c.env = env
 	t := c.theme
 	tokens := t.Chat
-	// The parts are built once, and again only when the theme's Label or
-	// Caption style changes (Style merges, so a dropped field would stick),
-	// so the label's shaping and the boxes' layout caches survive a relayout.
-	if c.body == nil || !property.Equal(c.builtLabel, t.Label) || !property.Equal(c.builtCaption, t.Caption) {
-		c.label = ggui.Text(c.option.Label).Style(t.Label).LineHeight(1.5)
+	// The parts are built once, and again only when the theme's Mono style
+	// changes (Style merges, so a dropped field would stick), so the label's
+	// shaping and the boxes' layout caches survive a relayout. The label and
+	// description are the text size at a snug line height, the label in the
+	// regular weight.
+	if c.body == nil || !property.Equal(c.builtMono, t.Mono) {
+		c.label = ggui.Text(c.option.Label).LineHeight(1.375)
 		text := []ggui.Widget{c.label}
 		c.description = nil
 		if c.option.Description != "" {
-			c.description = ggui.Text(c.option.Description).LineHeight(1.5)
+			c.description = ggui.Text(c.option.Description).LineHeight(1.375)
 			text = append(text, c.description)
 		}
 		c.glyphBox = ggui.Box()
@@ -639,24 +644,26 @@ func (c *questionChoice) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 		parts := []ggui.Widget{c.glyphBox, ggui.Expanded(c.text)}
 		c.keyBox, c.key = nil, nil
 		if c.shortcut != "" {
-			c.key = ggui.Text(c.shortcut).Style(t.Caption)
+			c.key = ggui.Text(c.shortcut).Style(t.Mono).Weight(ggui.WeightMedium).LineHeight(1)
 			c.keyBox = ggui.Box(ggui.Center(c.key))
 			parts = append(parts, c.keyBox)
 		}
 		c.row = ggui.Row(parts...).Align(ggui.AlignStart)
 		c.body = ggui.Box(c.row)
-		c.builtLabel, c.builtCaption = t.Label, t.Caption
+		c.builtMono = t.Mono
 	}
-	c.label.Color(pick(c.IsInert(), t.MutedFg, t.Fg))
+	// A disabled choice is drawn at half strength, as shadcn's opacity-50.
+	strength := pick(c.IsInert(), 1-t.DisabledMix, 1.0)
+	c.label.Color(fade(t.Fg, strength))
 	if c.description != nil {
-		c.description.Color(t.MutedFg)
+		c.description.Color(fade(t.MutedFg, strength))
 	}
 	c.glyphBox.Width(t.ControlSize).Height(t.ControlSize)
 	c.text.Gap(tokens.QuestionTextGap)
 	if c.keyBox != nil {
 		key := t.ControlSize + 4
-		c.key.Size(t.Caption.Size * .85).Color(t.MutedFg)
-		c.keyBox.Width(key).Height(key).Radius(t.RadiusSm).Fill(t.Bg).Border(t.BorderWidth, t.Border)
+		c.key.Size(t.Caption.Size * 5 / 6).Color(t.MutedFg)
+		c.keyBox.Width(key).Height(key).Radius(t.RadiusSm).Fill(t.Bg).Border(t.BorderWidth, t.InputBorder)
 	}
 	c.row.Gap(tokens.QuestionChoiceGap)
 	c.body.Padding(tokens.QuestionChoicePadding)
@@ -667,29 +674,38 @@ func (c *questionChoice) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 func (c *questionChoice) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := c.theme
 	selected := c.selected()
-	fill, border := mix(t.Bg, t.Muted, .2), t.Border
+	strength := pick(c.IsInert(), 1-t.DisabledMix, 1.0)
+	// shadcn's choice is clear inside the input border, a fifth of the input
+	// color on a dark page; half the muted surface under the pointer; and
+	// the muted surface inside a faint primary border once chosen.
+	var fill color.Color = color.Transparent
+	if isDark(t.Bg) {
+		fill = fade(t.InputBorder, .2)
+	}
+	border := t.InputBorder
 	if selected {
-		fill = t.Muted
-		border = mix(t.Primary, t.Card, .6)
+		fill, border = t.Muted, fade(t.Primary, .4)
 	} else if c.Hovered && !c.IsInert() {
-		fill = mix(t.Card, t.Muted, .5)
+		fill = fade(t.Muted, .5)
 	}
 	if c.q.errors[c.item.Name] != "" {
 		border = t.Destructive
 	}
 	tokens := t.Chat
-	dst.FillRoundRect(r, tokens.QuestionRadius, fill)
-	dst.StrokeRoundRect(r, tokens.QuestionRadius, t.BorderWidth, border)
+	dst.FillRoundRect(r, tokens.QuestionRadius, fade(fill, strength))
+	dst.StrokeRoundRect(r, tokens.QuestionRadius, t.BorderWidth, fade(border, strength))
 	c.Hit(dst, r, c, ggui.CursorShapePointer)
 	dst.Paint(c.body, r)
+	// The indicator is a checkbox's 4px-round square, or a radio's circle,
+	// with a 14px check or an 8px dot, as the Checkbox and RadioGroup draw.
 	glyph := ggui.Rct(r.Origin.Add(ggui.Pt(tokens.QuestionChoicePadding.Left, tokens.QuestionChoicePadding.Top+2)), squareGlyph(t))
-	radius := pick(c.item.Multiple, t.Radius*.5, t.ControlSize/2)
-	dst.FillRoundRect(glyph, radius, pick(selected, t.Primary, t.Input))
-	dst.StrokeRoundRect(glyph, radius, t.BorderWidth, pick(selected, t.Primary, t.InputBorder))
+	radius := pick(c.item.Multiple, 4, t.ControlSize/2)
+	dst.FillRoundRect(glyph, radius, fade(pick(selected, t.Primary, t.Input), strength))
+	dst.StrokeRoundRect(glyph, radius, t.BorderWidth, fade(pick(selected, t.Primary, t.InputBorder), strength))
 	if selected && c.item.Multiple {
-		paintIcon(dst, c.env, icons.Check, glyph, t.PrimaryFg, 0)
+		paintIconAt(dst, c.env, icons.Check, glyph.Center(), 14, t.PrimaryFg, 0)
 	} else if selected {
-		dst.FillCircle(glyph.Center(), t.ControlSize/4, t.PrimaryFg)
+		dst.FillCircle(glyph.Center(), 4, t.PrimaryFg)
 	}
 	controlFocusRing(dst, &c.Interactive, t, r, tokens.QuestionRadius, t.Ring)
 }
