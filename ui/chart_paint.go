@@ -218,26 +218,39 @@ func (c *ChartWidget) paintAxes(dst *ggui.Canvas) {
 	if c.horizontal {
 		span = r.Size.H
 	}
+	var names []string // the formatted names, where they were measured
+	label := func(i int) string {
+		if names != nil {
+			return names[i]
+		}
+		if c.tickFormat != nil {
+			return c.tickFormat(c.data[i].Label)
+		}
+		return c.data[i].Label
+	}
 	gap := 60.
 	if c.horizontal {
 		gap = 24
+	} else if c.theme.MutedFg != nil && float64(len(c.data))*24 <= span {
+		// Few enough categories that every name may fit: space them by the
+		// widest, so six months are not thinned to five.
+		widest, formatted := 0., make([]string, len(c.data))
+		for i := range c.data {
+			formatted[i] = label(i)
+			widest = max(widest, c.measuredText(formatted[i], 12, c.theme.MutedFg).size.W)
+		}
+		names = formatted
+		gap = widest + 16
 	}
-	count := min(len(c.data), max(2, int(span/gap)))
-	for tick := 0; tick < count; tick++ {
-		i := 0
-		if count > 1 {
-			i = int(math.Round(float64(tick) * float64(len(c.data)-1) / float64(count-1)))
-		}
-		d := c.data[i]
+	// Every stride-th category from the first, so the names stay evenly
+	// apart whatever is left out.
+	stride := max(1, int(math.Ceil(float64(len(c.data))/float64(max(2, int(span/gap))))))
+	for i := 0; i < len(c.data); i += stride {
 		f := c.categoryFraction(i)
-		label := d.Label
-		if c.tickFormat != nil {
-			label = c.tickFormat(label)
-		}
 		if c.horizontal {
-			c.text(dst, label, ggui.Pt(r.Origin.X-10, r.Origin.Y+f*r.Size.H-6), 12, c.theme.MutedFg, 1)
+			c.text(dst, label(i), ggui.Pt(r.Origin.X-10, r.Origin.Y+f*r.Size.H-6), 12, c.theme.MutedFg, 1)
 		} else {
-			c.text(dst, label, ggui.Pt(r.Origin.X+f*r.Size.W, r.Origin.Y+r.Size.H+10), 12, c.theme.MutedFg, .5)
+			c.text(dst, label(i), ggui.Pt(r.Origin.X+f*r.Size.W, r.Origin.Y+r.Size.H+10), 12, c.theme.MutedFg, .5)
 		}
 	}
 }
