@@ -33,69 +33,69 @@ explicit composition already exists, not that every optional web prop is covered
 | shadcn/ui component | GGUI API | Coverage |
 | --- | --- | --- |
 | [Accordion](https://ui.shadcn.com/docs/components/base/accordion) | `Accordion` | Existing |
-| [Alert](https://ui.shadcn.com/docs/components/base/alert) | `Alert` | Existing |
-| [Alert Dialog](https://ui.shadcn.com/docs/components/base/alert-dialog) | `AlertDialog` | Existing |
+| [Alert](https://ui.shadcn.com/docs/components/base/alert) | `Alert` | Existing; icon and top-right action added |
+| [Alert Dialog](https://ui.shadcn.com/docs/components/base/alert-dialog) | `AlertDialog` | Existing; `Small` and `Media` added |
 | [Aspect Ratio](https://ui.shadcn.com/docs/components/base/aspect-ratio) | `AspectRatio` | Existing |
 | [Attachment](https://ui.shadcn.com/docs/components/base/attachment) | `Attachment / AttachmentGroup` | Existing |
-| [Avatar](https://ui.shadcn.com/docs/components/base/avatar) | `Avatar` | Existing |
-| [Badge](https://ui.shadcn.com/docs/components/base/badge) | `Badge` | Existing |
-| [Breadcrumb](https://ui.shadcn.com/docs/components/base/breadcrumb) | `Breadcrumb / Crumb` | Existing |
+| [Avatar](https://ui.shadcn.com/docs/components/base/avatar) | `Avatar / AvatarGroup` | Existing; sizes, badges and groups added |
+| [Badge](https://ui.shadcn.com/docs/components/base/badge) | `Badge` | Existing; ghost/link variants and icons added |
+| [Breadcrumb](https://ui.shadcn.com/docs/components/base/breadcrumb) | `Breadcrumb / Crumb` | Existing; chevron separator and `SeparatorOf` added |
 | [Bubble](https://ui.shadcn.com/docs/components/base/bubble) | `Bubble` | Existing |
-| [Button](https://ui.shadcn.com/docs/components/base/button) | `Button / ButtonOf` | Existing |
-| [Button Group](https://ui.shadcn.com/docs/components/base/button-group) | `ButtonGroup` | Existing |
-| [Calendar](https://ui.shadcn.com/docs/components/base/calendar) | `Calendar / CalendarRange / CalendarMultiple` | Existing; selection modes added |
-| [Card](https://ui.shadcn.com/docs/components/base/card) | `Card` | Existing |
+| [Button](https://ui.shadcn.com/docs/components/base/button) | `Button / ButtonOf` | Existing; leading and trailing icons added |
+| [Button Group](https://ui.shadcn.com/docs/components/base/button-group) | `ButtonGroup / ButtonGroupText / ButtonGroupSeparator` | Existing; joined children, text and separators added |
+| [Calendar](https://ui.shadcn.com/docs/components/base/calendar) | `Calendar / CalendarRange / CalendarMultiple` | Existing; selection modes, `Months(n)` and caption dropdowns added |
+| [Card](https://ui.shadcn.com/docs/components/base/card) | `Card / CardHeader / CardContent / CardFooter` | Existing; sections and small size added |
 | [Carousel](https://ui.shadcn.com/docs/components/base/carousel) | `Carousel` | Existing |
 | [Chart](https://ui.shadcn.com/docs/components/base/chart) | `AreaChart / BarChart / LineChart / PieChart / RadarChart / RadialChart` | Existing |
 | [Checkbox](https://ui.shadcn.com/docs/components/base/checkbox) | `Checkbox` | Existing |
 | [Code Block](https://ui.shadcn.com/docs/components/base/code-block) | `CodeBlock / CodeBlockOf` | Added |
-| [Collapsible](https://ui.shadcn.com/docs/components/base/collapsible) | `Collapsible` | Existing |
+| [Collapsible](https://ui.shadcn.com/docs/components/base/collapsible) | `Collapsible / CollapsibleOf` | Existing; custom trigger added |
 | [Combobox](https://ui.shadcn.com/docs/components/base/combobox) | `Combobox / ComboboxMultiple` | Existing; multiple selection added |
-| [Command](https://ui.shadcn.com/docs/components/base/command) | `Command / CommandDialog` | Existing |
+| [Command](https://ui.shadcn.com/docs/components/base/command) | `Command / CommandDialog` | Existing; separators and icons added |
 | [Context Menu](https://ui.shadcn.com/docs/components/base/context-menu) | `ContextMenu / NativeContextMenu` | Existing |
 | [Data Table](https://ui.shadcn.com/docs/components/base/data-table) | `DataTable` | Existing |
-| [Date Picker](https://ui.shadcn.com/docs/components/base/date-picker) | `DatePicker` | Existing |
-| [Dialog](https://ui.shadcn.com/docs/components/base/dialog) | `Dialog` | Existing |
+| [Date Picker](https://ui.shadcn.com/docs/components/base/date-picker) | `DatePicker / DateRangePicker` | Existing; date ranges added |
+| [Dialog](https://ui.shadcn.com/docs/components/base/dialog) | `Dialog` | Existing; description and footer added |
 | [Direction](https://ui.shadcn.com/docs/components/base/direction) | `ggui.Directionality` | Existing; controls expanded |
-| [Drawer](https://ui.shadcn.com/docs/components/base/drawer) | `Drawer` | Existing; drag/snap added |
-| [Dropdown Menu](https://ui.shadcn.com/docs/components/base/dropdown-menu) | `Menu` | Existing |
-| [Empty](https://ui.shadcn.com/docs/components/base/empty) | `Empty` | Existing |
-| [Field](https://ui.shadcn.com/docs/components/base/field) | `Field` | Existing; associated label added |
-| [Hover Card](https://ui.shadcn.com/docs/components/base/hover-card) | `HoverCard` | Existing |
+| [Drawer](https://ui.shadcn.com/docs/components/base/drawer) | `Drawer` | Existing; drag/snap and opt-in handle added |
+| [Dropdown Menu](https://ui.shadcn.com/docs/components/base/dropdown-menu) | `Menu / MenuLabel / MenuCheckbox / MenuRadioGroup / MenuSub` | Existing; labels, icons, check/radio rows, destructive rows and submenus added |
+| [Empty](https://ui.shadcn.com/docs/components/base/empty) | `Empty` | Existing; media icon and outline added |
+| [Field](https://ui.shadcn.com/docs/components/base/field) | `Field / FieldGroup / FieldSet / FieldSeparator` | Existing; associated label, horizontal layout and field sets added |
+| [Hover Card](https://ui.shadcn.com/docs/components/base/hover-card) | `HoverCard` | Existing; side and alignment added |
 | [Input](https://ui.shadcn.com/docs/components/base/input) | `TextField` | Existing |
-| [Input Group](https://ui.shadcn.com/docs/components/base/input-group) | `InputGroup` | Existing |
+| [Input Group](https://ui.shadcn.com/docs/components/base/input-group) | `InputGroup` | Existing; block-start/end rows and multiline added |
 | [Input OTP](https://ui.shadcn.com/docs/components/base/input-otp) | `InputOTP` | Existing |
-| [Item](https://ui.shadcn.com/docs/components/base/item) | `Item` | Existing |
-| [Kbd](https://ui.shadcn.com/docs/components/base/kbd) | `Kbd` | Existing |
+| [Item](https://ui.shadcn.com/docs/components/base/item) | `Item / ItemGroup / ItemSeparator` | Existing; media icons, header/footer, sizes and groups added |
+| [Kbd](https://ui.shadcn.com/docs/components/base/kbd) | `Kbd / KbdGroup` | Existing; groups added |
 | [Label](https://ui.shadcn.com/docs/components/base/label) | `Label` | Added |
 | [Marker](https://ui.shadcn.com/docs/components/base/marker) | `Marker` | Existing |
 | [Menubar](https://ui.shadcn.com/docs/components/base/menubar) | `Menubar / AppMenubar` | Existing |
 | [Message](https://ui.shadcn.com/docs/components/base/message) | `Message` | Existing |
 | [Message Scroller](https://ui.shadcn.com/docs/components/base/message-scroller) | `MessageScroller` | Existing |
 | [Native Select](https://ui.shadcn.com/docs/components/base/native-select) | `NativeSelect` | Added |
-| [Navigation Menu](https://ui.shadcn.com/docs/components/base/navigation-menu) | `NavigationMenu` | Added |
+| [Navigation Menu](https://ui.shadcn.com/docs/components/base/navigation-menu) | `NavigationMenu` | Added; hover-open added |
 | [Pagination](https://ui.shadcn.com/docs/components/base/pagination) | `Pagination` | Existing |
-| [Popover](https://ui.shadcn.com/docs/components/base/popover) | `Popover / PopoverOf` | Added |
-| [Progress](https://ui.shadcn.com/docs/components/base/progress) | `Progress / ProgressRing` | Existing |
+| [Popover](https://ui.shadcn.com/docs/components/base/popover) | `Popover / PopoverOf` | Added; sides added |
+| [Progress](https://ui.shadcn.com/docs/components/base/progress) | `Progress / ProgressRing` | Existing; label and value added |
 | [Questionnaire](https://ui.shadcn.com/docs/components/base/questionnaire) | `Questionnaire` | Existing |
-| [Radio Group](https://ui.shadcn.com/docs/components/base/radio-group) | `Radios / Radio` | Existing |
+| [Radio Group](https://ui.shadcn.com/docs/components/base/radio-group) | `Radios / Radio` | Existing; vertical default and invalid state added |
 | [Resizable](https://ui.shadcn.com/docs/components/base/resizable) | `Resizable` | Existing |
 | [Scroll Area](https://ui.shadcn.com/docs/components/base/scroll-area) | `ggui.Scroll` | Existing core widget |
-| [Select](https://ui.shadcn.com/docs/components/base/select) | `Select` | Existing; alignment added |
+| [Select](https://ui.shadcn.com/docs/components/base/select) | `Select` | Existing; alignment, placeholder, groups and disabled options added |
 | [Separator](https://ui.shadcn.com/docs/components/base/separator) | `Divider` | Existing |
-| [Sheet](https://ui.shadcn.com/docs/components/base/sheet) | `Sheet` | Existing |
-| [Sidebar](https://ui.shadcn.com/docs/components/base/sidebar) | `Sidebar` | Existing |
+| [Sheet](https://ui.shadcn.com/docs/components/base/sheet) | `Sheet` | Existing; description and footer added |
+| [Sidebar](https://ui.shadcn.com/docs/components/base/sidebar) | `Sidebar / SidebarTrigger / SidebarInset` | Existing; icons, badges, sub-menus, icon rail, trigger, rail and variants added |
 | [Skeleton](https://ui.shadcn.com/docs/components/base/skeleton) | `Skeleton` | Existing |
 | [Slider](https://ui.shadcn.com/docs/components/base/slider) | `Slider / RangeSlider` | Existing; multiple thumbs added |
 | [Spinner](https://ui.shadcn.com/docs/components/base/spinner) | `Spinner` | Existing |
-| [Switch](https://ui.shadcn.com/docs/components/base/switch) | `Switch` | Existing |
-| [Table](https://ui.shadcn.com/docs/components/base/table) | `Table` | Existing |
+| [Switch](https://ui.shadcn.com/docs/components/base/switch) | `Switch` | Existing; small size and invalid state added |
+| [Table](https://ui.shadcn.com/docs/components/base/table) | `Table` | Existing; footer and caption added |
 | [Tabs](https://ui.shadcn.com/docs/components/base/tabs) | `Tabs` | Existing; vertical/manual/disabled/RTL added |
 | [Textarea](https://ui.shadcn.com/docs/components/base/textarea) | `TextField(...).Multiline()` | Existing |
-| [Toast](https://ui.shadcn.com/docs/components/base/toast) | `NewToaster / Toast` | Existing |
-| [Toggle](https://ui.shadcn.com/docs/components/base/toggle) | `Toggle` | Added |
-| [Toggle Group](https://ui.shadcn.com/docs/components/base/toggle-group) | `ToggleGroup / ToggleGroupMultiple` | Existing; multiple selection added |
-| [Tooltip](https://ui.shadcn.com/docs/components/base/tooltip) | `Tooltip` | Existing; arrow added |
+| [Toast](https://ui.shadcn.com/docs/components/base/toast) | `NewToaster / Toast` | Existing; types, loading updates and positions added |
+| [Toggle](https://ui.shadcn.com/docs/components/base/toggle) | `Toggle / ToggleOf` | Added; icon content added |
+| [Toggle Group](https://ui.shadcn.com/docs/components/base/toggle-group) | `ToggleGroup / ToggleGroupMultiple` | Existing; multiple selection, outline and joined spacing added |
+| [Tooltip](https://ui.shadcn.com/docs/components/base/tooltip) | `Tooltip` | Existing; arrow and sides added |
 | [Trace](https://ui.shadcn.com/docs/components/base/trace) | `Trace` | Added |
 | [Typography](https://ui.shadcn.com/docs/components/base/typography) | `ggui.Text / RichText, Title / Heading / Caption / Mono` | Existing composition |
 
@@ -116,10 +116,23 @@ explicit composition already exists, not that every optional web prop is covered
 | Combobox | `ComboboxMultiple`, searchable checked rows, removable chips, keyboard toggles/backspace, live options and copied selection callbacks. |
 | Calendars | `CalendarRange` / `CalendarMultiple`, inclusive civil dates, required/count/night limits, disabled-interior policy, controlled rejection, copied/sorted selection callbacks. |
 | Direction | Tabs, button/toggle groups, toggle glyph/label placement, sliders, calendar, pagination icons, sidebar labels/border and resizable panes honor `Directionality`. Code content deliberately stays LTR. |
+| Buttons and groups | `Button.Icon` / `TrailingIcon`; `ToggleOf`; `ButtonGroup` joins its children with squared inner corners and shared borders and takes `ButtonGroupText` / `ButtonGroupTextOf` and `ButtonGroupSeparator`, while text fields and input groups in it take the spare width; `ToggleGroup.Outline` / `Size` / `Spacing(0)`; `KbdGroup`. |
+| Fields | `Checkbox` / `Radio` / `Radios` / `Switch` / `Select` `.Invalid(v)`; `Switch.Small`; `Field.Horizontal` / `ControlFirst`; `FieldGroup`, `FieldSet(...).Legend / Description`, `FieldSeparator().Label`; `InputGroup.Top` / `Bottom` / `Multiline`; `Select.Placeholder` / `GroupBy` / `DisabledOption` / `Small`. |
+| Overlays | `Dialog.Description` / `Footer` / `TopAt`; `Sheet.Description` / `Footer` / `Handle`; `AlertDialog.Small` / `Media`; `Popover`, `HoverCard` and `Tooltip` `.Side` / `Align` / `AlignOffset` over `ggui.PopupSide`. |
+| Menus | `MenuLabel`, `MenuSub`, `MenuCheckbox`, `MenuRadioGroup`; `MenuItem.Icon` / `Inset` / `Destructive`; `CommandSeparator`, `CommandEntry.Icon`; menus draw in `Theme.Menu()`. |
+| Cards and feedback | `Card` sections (`CardHeader(...).Action`, `CardContent`, `CardFooter(...).Justify`), `Card.Small`; toast types, `ToastMessage.Loading` / `Countdown`, `Toaster.Position` / `Update`; `AvatarGroup`, `Avatar.Small` / `Large` / `Badge` / `BadgeIcon`; `ItemGroup`, `ItemSeparator`, `Item.MediaIcon` / `Header` / `Footer` / `Muted` / `Small`; `Empty.MediaIcon` / `Outline`; `Alert.Icon`; `Badge.Ghost` / `Link` / `Icon`; `Progress.Label` / `ShowValue` / `FormatValue`; `Spinner.Color`. |
+| Data | `Calendar.Months(n)`, `CaptionDropdown`, `DropdownYears`, `MonthNames`; `DateRangePicker` with `FormatRange` / `OnRangeChange`; `Table.Footer` / `Caption`. |
+| Sidebar | `SidebarEntry.Icon` / `Badge` / `Action` / `Sub` / `Collapsible` / `Tooltip` and the rest; `SidebarSeparator`, `SidebarSkeleton`, `SidebarCustom`; `Sidebar.Collapsible(SidebarCollapseIcon)`, `Variant`, `Side`, `Rail`, `Shortcut`, `HeaderItems` / `FooterItems`; `SidebarTrigger`, `SidebarInset`. |
+| Theme | `theme.Config` with `Radius`, `MenuAccent`, `MenuColor`, `Chart`, fonts and `Icons`; `theme.Mode`, `BindMode` and `ui.ThemeMode`; the Vega, Maia, Lyra, Mira and Luma styles beside Nova and Rhea. |
 
 Examples live in the gallery: **Popover**, **Navigation menu**, **Code block**,
 **Trace**, **Range slider**, **Toggle and label**, **Native select**,
-**Drawer snapping**, **RTL controls**, **Tabs modes**, **Calendar modes**, and **Multiple combobox**.
+**Drawer snapping**, **RTL controls**, **Tabs modes**, **Calendar modes**, and **Multiple combobox**;
+the parity round's parts in **Buttons**, **Groups and addons**, **Card**, **Form layout**,
+**Validation states**, **Dropdown menu**, **Context menu**, **Input group**, **Tooltip**,
+**Dialog**, **Alert dialog**, **Sheets and drawers**, **Notices and empty states**,
+**Loading and shortcuts**, **Progress**, **Toast**, **Profile and media**, **Table**,
+**Calendar**, **Date picker**, **Sidebar** and **Theme presets**.
 See [forms](forms.md), [navigation](data-and-navigation.md), and
 [feedback](feedback-and-composition.md) for composition examples.
 
@@ -132,6 +145,27 @@ See [forms](forms.md), [navigation](data-and-navigation.md), and
 - Select opens with its selected row over the trigger where the viewport allows;
   opt out with `.AlignItemWithTrigger(false)`.
 - Field labels now focus/activate their controls. Label interaction adds no Tab stop.
+- `Radios` stacks its options vertically, 8 logical pixels apart, as shadcn's
+  RadioGroup does; `.Horizontal()` restores a row.
+- A `Drawer` is as tall as its content (up to 96px short of the window) rather
+  than 280px, its top corners are rounded, it moves over `MotionDrawer` (450ms),
+  and its handle bar is opt-in with `.Handle(true)`; dragging works either way.
+- `Avatar` is 32px by default; `Spinner` is the theme's 16px icon size in the
+  text color around it; `Empty` has no border until `.Outline()`.
+- Toasts show no countdown bar unless `.Countdown()`; they stack and move over 500ms.
+- `Sidebar` is 256px wide by default.
+- `Resizable` draws a hairline divider that takes no room; `Hairline()` is kept
+  as a no-op.
+- `NavigationMenu` opens a dropdown after the pointer rests on its trigger;
+  `.OpenOnHover(false)` restores activation-only opening.
+- The theme's `Heading` is 16px medium (was 18px semibold), so dialog, sheet and
+  card titles are smaller.
+- `Input` is translucent: clear in a light Nova theme and `--input` at 30% in a
+  dark one, painted over whatever a field sits on. Custom controls that painted
+  `Input` as an opaque fill should paint their surface first or set `Input`.
+- `ToggleGroup` segments have no track behind them; `ButtonGroup` joins its
+  children rather than drawing one border around ghost buttons, so outline
+  buttons suit it now.
 
 ## Remaining boundaries
 
@@ -141,15 +175,16 @@ it is not an exhaustive copy of every Base UI/React prop or example composition.
 - Drawer gesture support is for the bottom handle with logical-pixel snap heights.
   Velocity/sequential snaps, whole-panel scroll handoff, nested drawer scaling,
   viewport-fraction snap syntax and mobile virtual-keyboard providers remain absent.
-- Calendar uses one month at a time and DatePicker remains single-date. Month/year
-  dropdowns, multi-month views, week-number columns and non-Gregorian calendars
-  are not supplied by the new selection APIs.
+- Week-number columns and non-Gregorian calendars are not supplied; a date
+  picker's text cannot be typed.
 - Code renders plain source without a syntax tokenizer. A caller can compose a
   wrap/show-more toolbar using the public APIs; no built-in toolbar preset is added.
-- Navigation Menu destinations use caller callbacks and panels open by activation;
-  automatic hover-open and browser routing are not supplied. Disabled entries are
-  skipped during keyboard traversal. Links stay open unless `CloseOnClick(true)`
-  is set.
+- Navigation Menu destinations use caller callbacks; browser routing is not
+  supplied. Disabled entries are skipped during keyboard traversal. Links stay
+  open unless `CloseOnClick(true)` is set.
+- Menus draw opaque: shadcn's translucent, blurred menu color is not offered.
+  The bundled icon sets hold the roles the controls use, not the whole of
+  Lucide, Tabler or Heroicons.
 - RTL support applies to the controls named above and existing core layout/text.
   It is not a guarantee that every custom widget, chart or table mirrors itself.
 - Native Select's OS menu is platform-dependent; headless probes verify the themed
@@ -177,3 +212,14 @@ The render command is reproducible from the repository root:
 ```sh
 go run ./examples/gallery -render-dir /tmp/ggui-shadcn-implemented -render-examples 'Popover,Navigation menu,Code block,Trace,Range slider,Toggle and label,Native select,Drawer snapping,RTL controls,Tabs modes,Calendar modes,Multiple combobox'
 ```
+
+The parity round's previews were rendered the same way, in Nova and Rhea, light
+and dark, at 640 and 320 logical pixels, and inspected:
+
+```sh
+go run ./examples/gallery -render-dir /tmp/ggui-parity -render-examples 'Theme presets,Buttons,Groups and addons,Card,Form layout,Validation states,Dropdown menu,Context menu,Input group,Tooltip,Alert dialog,Dialog,Sheets and drawers,Notices and empty states,Loading and shortcuts,Progress,Toast,Profile and media,Table,Calendar,Date picker,Calendar modes,Popover,Drawer snapping,Sidebar'
+```
+
+Each example is drawn at rest, opened by the control `actionNames` in
+`examples/gallery/render.go` names (or hovered, for `hoverNames`), settled, and
+dismissed with Escape.

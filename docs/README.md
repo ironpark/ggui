@@ -39,14 +39,14 @@ from the repository root unless a guide says otherwise.
 | Update the UI from background work | [Threads](reactivity.md#threads) · [Resources](reactivity.md#resources-and-await-blocks) |
 | Render changing or large collections | [Keyed lists](reactivity.md#keyed-lists) · [Tables](data-and-navigation.md#tables) |
 | Arrange text, images, and overlays | [Widgets and layout](layout.md) |
-| Build forms and show validation | [Forms and controls](forms.md) · [Input OTP](carousel-and-otp.md#input-otp) |
-| Add menus, dates, search, or navigation | [Data and navigation](data-and-navigation.md) |
-| Show notices, dialogs, sheets, and loading states | [Feedback and composition](feedback-and-composition.md) |
+| Build forms, field sets and validation states | [Forms and controls](forms.md) · [Input OTP](carousel-and-otp.md#input-otp) |
+| Add menus, dates and date ranges, search, a sidebar, or navigation | [Data and navigation](data-and-navigation.md) |
+| Show notices, toasts, dialogs, sheets, cards, and loading states | [Feedback and composition](feedback-and-composition.md) |
 | Build swipeable slides | [Carousel](carousel-and-otp.md#carousel) |
 | Visualize data | [Charts](charts.md) |
 | Build chat screens or questionnaires | [Chat components and questionnaires](chat.md) |
 | Compare component coverage and behavior with shadcn/ui | [shadcn/ui comparison](shadcn-comparison.md) · [66-component implementation audit](shadcn-implementation.md) |
-| Customize colors, spacing, shadows, and themes | [Styling and themes](styling.md) |
+| Customize colors, spacing, shadows, and themes, or offer light, dark and system modes | [Styling and themes](styling.md) · [Theme recipes and modes](../ui/theme/README.md) |
 | Load fonts, render emoji, or change icon sets | [Fonts, emoji, and icons](fonts.md) |
 | Show rich, selectable or right-to-left text | [Rich text](layout.md#rich-text) · [Selectable text](layout.md#selectable-text) · [Right-to-left text](fonts.md#right-to-left-text) |
 | Animate values or entering/leaving content | [Animation](animation.md) |

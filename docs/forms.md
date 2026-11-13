@@ -4,7 +4,7 @@
 
 Bind inputs to application state, name controls, and show validation feedback.
 
-Examples use `ggui` and `ui` imports and application-defined placeholders.
+Examples use `ggui`, `ui` and `ui/icons` imports and application-defined placeholders.
 See [example conventions](README.md#start-here) before copying snippets.
 
 ## On this page
@@ -49,9 +49,28 @@ ggui.Column(
 `.Secondary()`, `.Ghost()`, `.Destructive()` or `.Link()` for the other
 shadcn/ui variants, `.Size(ui.ButtonSmall)`, `ui.ButtonLarge` or
 `ui.ButtonIcon` for the sizes, and `ui.ButtonOf(child, onTap)` for custom
-content. [Component variants](styling.md#component-variants) covers variants
+content. `.Icon(ui.Icon(role))` puts an icon before the label and
+`.TrailingIcon(...)` one after it, at the size's icon size and gap; a button
+holding nothing but an icon is `ui.ButtonOf(ui.Icon(role), onTap)` with one of
+the `ui.ButtonIcon` sizes and a `.Name`.
+[Component variants](styling.md#component-variants) covers variants
 of your own and restyling the built-in ones.
-`ui.Radio(plan, value, label)` creates one radio option; `ui.Radios` builds a group.
+
+```go
+ui.Button("New branch", create).Outline().Icon(ui.Icon(icons.Plus))
+ui.Button("Next", next).TrailingIcon(ui.Icon(icons.ChevronRight))
+ui.ButtonOf(ui.Icon(icons.Search), search).Name("Search").Size(ui.ButtonIconSmall).Ghost()
+```
+
+`ui.Radio(plan, value, label)` creates one radio option; `ui.Radios` builds a
+group, stacked with 8 logical pixels between options as shadcn's RadioGroup is.
+`.Horizontal()` lays the options out in a row instead. `ui.Switch(on, label)`
+takes `.Small()` for shadcn's small switch.
+
+`Checkbox`, `Radio`, `Radios`, `Switch` and `Select` take `.Invalid(true)` for
+a value that failed validation: a destructive border and ring. `Checkbox`, `Radio` and `Switch` also take
+`.BindInvalid(reader)`. A control inside a `Field` that holds an error is
+invalid without either.
 
 Common options on interactive controls include:
 
@@ -142,8 +161,31 @@ field := ui.Field("Name", ui.TextField(name)).
 	BindError(problem)
 ```
 
-A nonempty error replaces the help text. The field label names the control
-for `Probe.Find` unless the control already has an explicit name.
+A nonempty error is shown under the help text in the theme's Destructive
+color, the label turns destructive too, and the control inside is marked
+invalid. The field label names the control for `Probe.Find` unless the control
+already has an explicit name.
+
+`.Horizontal()` lays a field out as a row, shadcn's horizontal orientation: the
+label, with its help and error under it, takes the width that is left and the
+control sits at the end, as a switch does in a list of settings.
+`.ControlFirst()` puts the control at the start instead, as a checkbox sits
+before what it chooses.
+
+`ui.FieldGroup(children...)` stacks fields, and whatever a form holds between
+them, two and a half Space apart. `ui.FieldSet(children...)` groups related
+fields under `.Legend(text)` and `.Description(text)`, and is read as a group
+named by its legend. `ui.FieldSeparator()` draws a hairline between parts of a
+group; `.Label(text)` breaks it around a word.
+
+```go
+ui.FieldSet(ui.FieldGroup(
+	ui.Field("Time zone", ui.Select(zone).Options(zones).Placeholder("Select a time zone")),
+	ui.FieldSeparator().Label("Notifications"),
+	ui.Field("Marketing emails", ui.Switch(marketing, "")).Help("News about products.").Horizontal(),
+	ui.Field("Accept the terms", ui.Checkbox(terms, "")).ControlFirst(),
+)).Legend("Preferences").Description("How the workspace reaches you.")
+```
 
 ### Committing an edit
 
@@ -199,7 +241,9 @@ For font fallbacks, IME-related text coverage, and emoji, see
 ## Pressed buttons, labels and ranges
 
 `ui.Toggle(pressed, "Bold")` is a two-state button with `.Outline()`, button size
-variants and `.OnChange(fn)`. `ui.ToggleGroupMultiple(values).Options(options)`
+variants, `.Icon(...)` and `.TrailingIcon(...)`, and `.OnChange(fn)`.
+`ui.ToggleOf(pressed, ui.Icon(role)).Name("Bold")` holds an icon or other
+content instead of a label. `ui.ToggleGroupMultiple(values).Options(options)`
 binds a slice of independent selections. Its arrows move focus without changing
 the selection; Space and Enter toggle the focused option. `.OnValuesChange(fn)`
 receives an owned snapshot.
@@ -235,6 +279,20 @@ Selected values appear as removable chips. `Options` / `BindOptions`, `Format`,
 `Placeholder`, `Disabled` / `BindDisabled` and `Key` follow the single-combobox
 conventions. Callbacks receive separate slice snapshots. An empty search accepts
 Backspace to remove the last selected value.
+
+`ui.Select(value).Options(options)` lists its options in a menu-style popup with
+a check at the right of the chosen one, opening with that row over the field.
+`.Placeholder(text)` shows muted text while the value is not one of the
+options, `.GroupBy(fn)` puts runs of options under the heading `fn` names with a
+separator between groups, `.DisabledOption(fn)` greys out the options it reports,
+and `.Small()` makes the field 28 logical pixels tall instead of 32.
+
+```go
+ui.Select(zone).Options([]string{"Eastern", "Pacific", "London", "Tokyo"}).
+	Placeholder("Select a time zone").
+	GroupBy(func(z string) string { return regionOf[z] }).
+	DisabledOption(func(z string) bool { return z == "Tokyo" })
+```
 
 `ui.NativeSelect(value).Options(options)` attempts the platform's checked native
 menu. It uses the regular themed Select popup when the platform cannot provide
