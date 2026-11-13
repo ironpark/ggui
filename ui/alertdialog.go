@@ -106,6 +106,7 @@ func (a *AlertDialogWidget) build() {
 	a.dialog = Dialog(a.open, a.body).
 		Title(a.title).
 		Dismissible(false).
+		CloseButton(false).
 		OnClose(func() {
 			if !a.answered && a.onCancel != nil {
 				a.onCancel()

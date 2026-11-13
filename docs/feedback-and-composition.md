@@ -126,7 +126,7 @@ otherwise get rebuilt by hand in every application.
 | `ui.Item(title, description)` | One row of a list: `.Media(widget)` before the text, `.Action(widget)` after it, `.Outline()` for a bordered card. It takes no input, so the action keeps its own. |
 | `ui.Breadcrumb(crumbs...)` | The path to the page the user is on, built from `ui.Crumb(label, onTap)`. Every step but the last is a link with its own tab stop; `.Separator(s)` replaces the "/", and `.Max(n)` elides the middle behind an ellipsis. |
 | `ui.InputGroup(input)` | One field chrome around a bare `ggui.TextInput` and the widgets that flank it: `.Leading(widget)`, `.Trailing(widget)`. The group owns the border, fill, padding and focus ring, so it takes the editor rather than `ui.TextField`, which draws a box of its own. |
-| `ui.Tooltip(child, text)` | A line of help shown below the child once the cursor has rested on it for half a second (`.Delay(d)`), or while focus moved there with the keyboard is within it. A press closes it until the cursor leaves, and the focus a click gives does not open it. It registers no hit region, so the child gets every event, and paints through `Canvas.Overlay` above everything else. |
+| `ui.Tooltip(child, text)` | A line of help shown above the child immediately on hover (customize with `.Delay(d)`), or while focus moved there with the keyboard is within it. A press closes it until the cursor leaves, and the focus a click gives does not open it. It registers no hit region, so the child gets every event, and paints through `Canvas.Overlay` above everything else. |
 | `ui.HoverCard(anchor, content)` | A panel of content shown near the anchor once the cursor has rested on it, and kept up while the cursor is on either one. `.Delay(d)` and `.Width(px)` tune it. Nothing about it takes focus: a hover card is an aside, and the keyboard never has to visit it. |
 
 ```go
@@ -143,3 +143,42 @@ Custom containers can pass `ggui.InputDisabledKey` through `Env` or `Provide`;
 TextInput combines that inherited value with its own settings. A descendant
 `false` cannot clear an ancestor's `true`. Disabled editors remain in the
 accessibility tree and reject pointer, keyboard, and accessibility edits.
+
+## Draggable drawers
+
+A bottom `Drawer` supports dragging its handle. Use `.Draggable(false)` to
+turn this off. Snap heights are positive, increasing logical pixels:
+
+```go
+open := ggui.State(false)
+snap := ggui.State(1)
+ui.Drawer(open, content).SnapPoints(160, 280, 420).BindSnapPoint(snap)
+```
+
+Releasing settles to the nearest point; dragging below half the smallest point
+requests dismissal when `.Dismissible(true)`. `OnSnapChange` reports the requested
+index. Controlled bindings may reject a request. This native handle gesture does
+not implement browser scroll handoff, velocity snapping or nested drawer scaling.
+The handle also offers keyboard and accessibility resizing.
+
+## Code and execution traces
+
+```go
+ui.CodeBlock(source).Header("main.go").Language("go").LineNumbers(true).
+    StartLine(1).Wrap(false).Height(320)
+
+ui.Trace(
+    ui.TraceStep{ID: "fetch", Title: "Fetch source", Status: ui.TraceCompleted},
+    ui.TraceStep{ID: "build", Title: "Build", Status: ui.TraceRunning,
+        Details: ui.CodeBlock(buildLog)},
+)
+```
+
+Code remains selectable and its copy action preserves the source, excluding
+line numbers and decoration. It stays LTR inside an RTL interface. `CodeBlockOf`
+or `BindCode` follows streaming source. Language labels do not install a syntax
+highlighter. Trace IDs must be globally unique within the hierarchy; they retain
+disclosure identity during updates. `Children` nests steps, `Description` and
+`Duration` add context, and `OnActivate` makes a leaf an action. `BindSteps` follows
+execution state; `BindExpanded` controls the map of open step IDs. Plain rows do
+not add tab stops.

@@ -87,7 +87,7 @@ func (c *CollapsibleWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 	c.env = env
 	open := c.open.Get()
 	c.laidOpen = open
-	c.progress = c.reveal.LayoutToggle(env, open, t.MotionFast)
+	c.progress = c.reveal.LayoutToggle(env, open, t.MotionSlow)
 	c.pad = t.FieldPad
 	c.title.Color(pick(c.IsInert(), t.MutedFg, t.Fg))
 	c.titleSize = c.title.Layout(ggui.Loose(ggui.Sz(max(cs.MaxW-c.pad.Left-c.pad.Right-t.ControlSize-t.ControlGap, 0), cs.MaxH)), env)
@@ -111,8 +111,9 @@ func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	header := ggui.Rct(r.Origin, ggui.Sz(r.Size.W, c.headerH))
 	c.Hit(dst, header, c, ggui.CursorShapePointer)
-	if c.Hovered && !c.IsInert() {
-		dst.FillRoundRect(header, t.Radius, t.Muted)
+	hover := dst.Ease(c.Anchor(header), disclosureHoverSlot, pick(c.Hovered && !c.IsInert(), 1.0, 0.0), c.env.Motion(t.MotionFast))
+	if hover > 0 {
+		dst.FillRoundRect(header, t.Radius, fade(t.Muted, hover))
 	}
 	// The chevron turns from pointing right (0) to pointing down (1) with
 	// the body it reveals.
@@ -120,7 +121,7 @@ func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	cx, cy := r.Origin.X+c.pad.Left+t.ControlSize*0.4, r.Origin.Y+c.headerH/2
 	paintIconAt(dst, c.env, icons.ChevronRight, ggui.Pt(cx, cy), t.IconSize, t.MutedFg, v*math.Pi/2)
 	dst.Paint(c.title, ggui.Rct(ggui.Pt(r.Origin.X+c.pad.Left+t.ControlSize+t.ControlGap, r.Origin.Y+c.pad.Top), c.titleSize))
-	c.FocusRing(dst, header, t.Radius, t.Ring)
+	controlFocusRing(dst, &c.Interactive, t, header, t.Radius, t.Ring)
 	paintDisclosure(dst, c.content, ggui.Pt(r.Origin.X, r.Origin.Y+c.headerH), r.Size.W, c.bodySize, c.progress, open)
 }
 

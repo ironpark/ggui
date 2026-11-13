@@ -386,19 +386,19 @@ func TestGalleryEmojiEditingAndThemePresets(t *testing.T) {
 	p.Tap("Theme base")
 	p.Type(ggui.Mods{}, ggui.KeyArrowDown, ggui.KeyEnter)
 	p.Frame()
-	want := uitheme.Preset{Base: uitheme.BaseStone, Accent: uitheme.AccentBlue, Style: uitheme.StyleRhea}.Light()
+	want := uitheme.Preset{Base: uitheme.BaseStone, Accent: uitheme.AccentBase, Style: uitheme.StyleNova}.Light()
 	if uitheme.Use().Bg != want.Bg || uitheme.Use().Muted != want.Muted {
 		t.Fatal("base palette not applied")
 	}
 	p.Tap("Theme style")
-	p.Type(ggui.Mods{}, ggui.KeyArrowUp, ggui.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyArrowDown, ggui.KeyEnter)
 	p.Frame()
-	if uitheme.Use().Chat.BubbleRadius != 12 {
-		t.Fatal("Nova geometry not applied")
+	if uitheme.Use().Chat.BubbleRadius != 24 {
+		t.Fatal("Rhea geometry not applied")
 	}
 	p.Tap("Dark mode")
 	p.Frame()
-	want = uitheme.Preset{Base: uitheme.BaseStone, Accent: uitheme.AccentBlue, Style: uitheme.StyleNova}.Dark()
+	want = uitheme.Preset{Base: uitheme.BaseStone, Accent: uitheme.AccentBase, Style: uitheme.StyleRhea}.Dark()
 	if uitheme.Use().Bg != want.Bg || uitheme.Use().Primary != want.Primary {
 		t.Fatal("preset was lost during dark mode switch")
 	}

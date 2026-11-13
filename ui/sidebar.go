@@ -51,6 +51,7 @@ type SidebarWidget struct {
 	collapsed        property.Value[bool]
 	active           int
 	hover            int
+	rtl              bool
 
 	theme                  *uitheme.Theme
 	cur                    int // the current destination, found once a frame by paint
@@ -159,6 +160,7 @@ func (s *SidebarWidget) current() int {
 func (s *SidebarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer s.props.Layout().EndLayout()
 	s.Sync()
+	s.rtl = env.Direction() == ggui.DirRTL
 	// Children see the sidebar palette in place of the page's, so a button
 	// or badge inside an item paints against the sidebar surface, and the
 	// tokens that follow these follow them here too.
@@ -219,7 +221,7 @@ func (s *SidebarWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 func (s *SidebarWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := s.theme
 	dst.FillRect(r, t.Card)
-	dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X+r.Size.W-t.BorderWidth, r.Origin.Y), ggui.Sz(t.BorderWidth, r.Size.H)), t.Border)
+	dst.FillRect(mirrorHorizontal(ggui.Rct(ggui.Pt(r.Origin.X+r.Size.W-t.BorderWidth, r.Origin.Y), ggui.Sz(t.BorderWidth, r.Size.H)), r, s.rtl), t.Border)
 	dst = dst.Clip(r)
 	if !s.IsInert() && s.active >= 0 {
 		dst.HitKey(r, s)
@@ -236,7 +238,7 @@ func (s *SidebarWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 	cur, hover := s.cur, pick(s.IsInert(), -1, s.hover)
 	for i, e := range s.entries {
 		row := ggui.Rct(ggui.Pt(x, y), ggui.Sz(w, s.rowH[i]))
-		label := ggui.Rct(ggui.Pt(x+t.ItemPad.Left, y+(s.rowH[i]-s.labelSize[i].H)/2), s.labelSize[i])
+		label := mirrorHorizontal(ggui.Rct(ggui.Pt(x+t.ItemPad.Left, y+(s.rowH[i]-s.labelSize[i].H)/2), s.labelSize[i]), r, s.rtl)
 		if e.section {
 			dst.Paint(s.labels[i], label)
 			y += s.rowH[i]
@@ -256,7 +258,7 @@ func (s *SidebarWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		}
 		dst.Paint(s.labels[i], label)
 		if i == s.active {
-			s.FocusRing(dst, row, t.RadiusSm, t.Ring)
+			controlFocusRing(dst, &s.Interactive, t, row, t.RadiusSm, t.Ring)
 		}
 		y += s.rowH[i]
 	}

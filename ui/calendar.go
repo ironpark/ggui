@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"math"
 	"strconv"
 	"time"
 
@@ -10,42 +11,58 @@ import (
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
-// CalendarWidget selects a single civil date. Navigation does not change value.
+// CalendarWidget selects civil dates in single, range or multiple mode.
+// Navigation does not change the selection.
 type CalendarWidget struct {
 	props property.Owner
 	ggui.Interactive
-	value           ggui.Binding[time.Time]
-	active, last    time.Time
-	location        *time.Location
-	weekStart       time.Weekday
-	weekdays        [7]string
-	monthLabel      func(time.Time) string
-	disabledDate    func(time.Time) bool
-	onChange        func(time.Time)
-	onPick          func()
-	min, max        time.Time
-	lowest, highest time.Time // min and max normalized, refreshed each layout
-	days            [42]*calendarDay
-	weekdayText     [7]*ggui.TextWidget
-	weekdaySize     [7]ggui.Size
-	previous, next  *ButtonWidget
-	title           *ggui.TextWidget
-	header          ggui.Widget
-	theme           *uitheme.Theme
-	env             ggui.Env
-	headerSize      ggui.Size
-	cellH           float64
+	value                                          ggui.Binding[time.Time]
+	rangeValue                                     ggui.Binding[DateRange]
+	multipleValue                                  ggui.Binding[[]time.Time]
+	onRangeChange                                  func(DateRange)
+	onMultipleChange                               func([]time.Time)
+	required, excludeDisabled, resetOnSelect       bool
+	minSelected, maxSelected, minNights, maxNights int
+	active, last                                   time.Time
+	location                                       *time.Location
+	weekStart                                      time.Weekday
+	weekdays                                       [7]string
+	monthLabel                                     func(time.Time) string
+	disabledDate                                   func(time.Time) bool
+	onChange                                       func(time.Time)
+	onPick                                         func()
+	min, max                                       time.Time
+	lowest, highest                                time.Time // min and max normalized, refreshed each layout
+	days                                           [42]*calendarDay
+	weekdayText                                    [7]*ggui.TextWidget
+	weekdaySize                                    [7]ggui.Size
+	previous, next                                 *ButtonWidget
+	previousIcon, nextIcon                         *icons.Widget
+	title                                          *ggui.TextWidget
+	header                                         ggui.Widget
+	theme                                          *uitheme.Theme
+	env                                            ggui.Env
+	headerSize                                     ggui.Size
+	cellH                                          float64
 }
 
 // Calendar binds a date; zero means no selection. Dates are interpreted in
 // Location (time.Local by default), and user selections are local midnight.
 func Calendar(value ggui.Binding[time.Time]) *CalendarWidget {
-	c := &CalendarWidget{value: value, location: time.Local, weekStart: time.Sunday,
+	property.Require(value, "Calendar")
+	c := newCalendar()
+	c.value = value
+	return c
+}
+
+func newCalendar() *CalendarWidget {
+	c := &CalendarWidget{location: time.Local, weekStart: time.Sunday,
 		weekdays: [7]string{"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"}, monthLabel: func(t time.Time) string { return t.Format("January 2006") }}
 	c.Role = ggui.RoleGroup
 	c.AutoKey()
-	c.previous = ButtonOf(Icon(icons.ChevronLeft), func() { c.moveMonth(-1) }).Ghost().Name("Previous month")
-	c.next = ButtonOf(Icon(icons.ChevronRight), func() { c.moveMonth(1) }).Ghost().Name("Next month")
+	c.previousIcon, c.nextIcon = Icon(icons.ChevronLeft), Icon(icons.ChevronRight)
+	c.previous = ButtonOf(c.previousIcon, func() { c.moveMonth(-1) }).Ghost().Name("Previous month")
+	c.next = ButtonOf(c.nextIcon, func() { c.moveMonth(1) }).Ghost().Name("Next month")
 	c.title = ggui.Text("").NoWrap()
 	c.header = ggui.Row(c.previous, ggui.Expanded(ggui.Center(c.title)), c.next).Gap(8)
 	for i := range c.days {
@@ -98,6 +115,7 @@ func (c *CalendarWidget) WeekdayLabels(labels [7]string) *CalendarWidget {
 func (c *CalendarWidget) MonthLabel(fn func(time.Time) string) *CalendarWidget {
 	if fn != nil {
 		c.monthLabel = fn
+		c.props.Changed()
 	}
 	return c
 }
@@ -113,6 +131,7 @@ func (c *CalendarWidget) Bounds(minimum, maximum time.Time) *CalendarWidget {
 // DisabledDate prevents selection of dates for which fn returns true.
 func (c *CalendarWidget) DisabledDate(fn func(time.Time) bool) *CalendarWidget {
 	c.disabledDate = fn
+	c.props.Changed()
 	return c
 }
 
@@ -142,7 +161,7 @@ func (c *CalendarWidget) show(t time.Time) {
 	ggui.Invalidate(c.env)
 }
 func (c *CalendarWidget) syncDate() {
-	v := c.date(c.value.Get())
+	v := c.selectionAnchor()
 	if c.active.IsZero() || !v.Equal(c.last) {
 		if v.IsZero() {
 			c.show(c.date(ggui.Now()))
@@ -166,13 +185,17 @@ func (c *CalendarWidget) choose(t time.Time) {
 		return
 	}
 	c.show(t)
-	if !c.date(ggui.Untrack(c.value.Get)).Equal(t) {
+	if c.rangeValue != nil {
+		c.chooseRange(t)
+	} else if c.multipleValue != nil {
+		c.chooseMultiple(t)
+	} else if !c.date(ggui.Untrack(c.value.Get)).Equal(t) {
 		c.value.Set(t)
-		c.last = t
 		if c.onChange != nil {
 			c.onChange(t)
 		}
 	}
+	c.last = ggui.Untrack(c.selectionAnchor)
 	if c.onPick != nil {
 		c.onPick()
 	}
@@ -183,6 +206,9 @@ func (c *CalendarWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	defer c.props.Layout().EndLayout()
 	c.Sync()
 	c.env = env
+	angle := pick(env.Direction() == ggui.DirRTL, math.Pi, 0.0)
+	c.previousIcon.Rotate(angle)
+	c.nextIcon.Rotate(angle)
 	c.theme = uitheme.Of(env)
 	c.syncDate()
 	c.lowest, c.highest = c.date(c.min), c.date(c.max)
@@ -198,7 +224,6 @@ func (c *CalendarWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	for i, label := range c.weekdayText {
 		c.weekdaySize[i] = label.Content(c.weekdays[(i+int(c.weekStart))%7]).Color(c.theme.MutedFg).Layout(cell, env)
 	}
-	selected := c.date(ggui.Untrack(c.value.Get))
 	start := month.AddDate(0, 0, -(int(month.Weekday())-int(c.weekStart)+7)%7)
 	for i, d := range c.days {
 		if date := start.AddDate(0, 0, i); !date.Equal(d.date) {
@@ -210,7 +235,7 @@ func (c *CalendarWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 		if d.IsInert() || d.date.Month() != month.Month() {
 			col = c.theme.MutedFg
 		}
-		if selected.Equal(d.date) {
+		if c.selectionEdge(d.date) {
 			col = c.theme.PrimaryFg
 		}
 		d.size = d.text.Content(strconv.Itoa(d.date.Day())).Color(col).Layout(cell, env)
@@ -230,11 +255,11 @@ func (c *CalendarWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		}
 		for i, label := range c.weekdayText {
 			s := c.weekdaySize[i]
-			dst.Paint(label, ggui.Rct(ggui.Pt(r.Origin.X+float64(i)*w+(w-s.W)/2, y+(c.cellH-s.H)/2), s))
+			dst.Paint(label, mirrorHorizontal(ggui.Rct(ggui.Pt(r.Origin.X+float64(i)*w+(w-s.W)/2, y+(c.cellH-s.H)/2), s), r, c.env.Direction() == ggui.DirRTL))
 		}
 		cells := dst.Clip(r)
 		for i, d := range c.days {
-			cells.Paint(d, ggui.Rct(ggui.Pt(r.Origin.X+float64(i%7)*w, y+float64(i/7+1)*c.cellH), ggui.Sz(w, c.cellH)))
+			cells.Paint(d, mirrorHorizontal(ggui.Rct(ggui.Pt(r.Origin.X+float64(i%7)*w, y+float64(i/7+1)*c.cellH), ggui.Sz(w, c.cellH)), r, c.env.Direction() == ggui.DirRTL))
 		}
 	})
 }
@@ -259,6 +284,7 @@ func (c *CalendarWidget) HandleKey(e ggui.KeyEvent) {
 	}
 	c.syncDate()
 	delta := 0
+	e = directionalKey(e, c.env.Direction() == ggui.DirRTL)
 	switch e.Key {
 	case ggui.KeyArrowLeft:
 		delta = -1
@@ -306,7 +332,7 @@ type calendarDay struct {
 
 func (d *calendarDay) Layout(cs ggui.Constraints, _ ggui.Env) ggui.Size { return cs.Constrain(d.size) }
 func (d *calendarDay) Describe() ggui.Node {
-	return ggui.Node{Role: ggui.RoleOption, Name: d.SemanticName(), Selected: d.owner.date(ggui.Untrack(d.owner.value.Get)).Equal(d.date), Disabled: d.IsInert(), Actions: ggui.ActionPress | ggui.ActionSelect}
+	return ggui.Node{Role: ggui.RoleOption, Name: d.SemanticName(), Selected: d.owner.selected(d.date), Disabled: d.IsInert(), Actions: ggui.ActionPress | ggui.ActionSelect}
 }
 func (d *calendarDay) Act(a ggui.Action) bool {
 	if !d.owner.enabled(d.date) || (a.Kind != ggui.ActionPress && a.Kind != ggui.ActionSelect) {
@@ -329,8 +355,12 @@ func (d *calendarDay) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.HitPointer(r, d)
 		dst.HitCursor(r, ggui.CursorShapePointer)
 	}
-	if c.date(ggui.Untrack(c.value.Get)).Equal(d.date) {
-		dst.FillRoundRect(r, t.Radius, t.Primary)
+	if c.selected(d.date) {
+		if c.selectionEdge(d.date) {
+			dst.FillRoundRect(r, t.Radius, t.Primary)
+		} else {
+			dst.FillRect(r, t.Muted)
+		}
 	} else if d.Hovered {
 		dst.FillRoundRect(r, t.Radius, t.Muted)
 	}

@@ -74,21 +74,21 @@ func TestFromCSS(t *testing.T) {
 	if light.Primary != color.Color(blue) || light.Ring != color.Color(blue) {
 		t.Errorf("light Primary %v, Ring %v: want %v from --primary and var(--primary)", light.Primary, light.Ring, blue)
 	}
-	if light.Radius != 8 || light.RadiusSm != 6 || light.RadiusLg != 14 {
-		t.Errorf("light radii %v/%v/%v, want 8/6/14 from --radius 10px", light.Radius, light.RadiusSm, light.RadiusLg)
+	if light.Radius != 10 || light.RadiusSm != 8 || light.RadiusLg != 14 {
+		t.Errorf("light radii %v/%v/%v, want 10/8/14 from --radius 10px", light.Radius, light.RadiusSm, light.RadiusLg)
 	}
-	if !sameColor(light.PrimaryHover, compositeColor(blue, light.Bg, .9)) {
+	if !sameColor(light.PrimaryHover, compositeColor(blue, light.Bg, .8)) {
 		t.Errorf("PrimaryHover %v did not follow the CSS --primary", light.PrimaryHover)
 	}
 	// .dark inherits what it does not set from :root, and its own wins.
-	if dark.Primary != color.Color(blue) || dark.Radius != 8 {
+	if dark.Primary != color.Color(blue) || dark.Radius != 10 {
 		t.Errorf("dark Primary %v, Radius %v: want :root's", dark.Primary, dark.Radius)
 	}
 	if !near(dark.Bg, color.NRGBA{10, 10, 10, 255}) || !near(dark.Border, color.NRGBA{255, 255, 255, 26}) {
 		t.Errorf("dark Bg %v, Border %v: want .dark's", dark.Bg, dark.Border)
 	}
-	if dark.InputBorder != dark.Border {
-		t.Errorf("dark InputBorder %v did not follow Border %v", dark.InputBorder, dark.Border)
+	if !near(dark.InputBorder, color.NRGBA{255, 255, 255, 38}) {
+		t.Errorf("dark InputBorder %v, want the default 15%% input border", dark.InputBorder)
 	}
 	if _, _, err := FromCSS(`:root { --primary: oklch(nope); }`); err == nil {
 		t.Error("a bad color parsed")

@@ -164,25 +164,25 @@ an `Env`, a token is the color the application's theme has.
 
 | Token | CSS variable | For | Light | Dark |
 | --- | --- | --- | --- | --- |
-| `Bg` / `Fg` | `--background` / `--foreground` | the window and the text on it | white / zinc-900 | zinc-950 / zinc-50 |
-| `Card` / `CardFg` | `--card` / `--card-foreground` | raised inline surfaces and their text | follow `Bg` / `Fg` | zinc-900 / follows `Fg` |
+| `Bg` / `Fg` | `--background` / `--foreground` | the window and the text on it | white / neutral-950 | neutral-950 / neutral-50 |
+| `Card` / `CardFg` | `--card` / `--card-foreground` | raised inline surfaces and their text | follow `Bg` / `Fg` | neutral-900 / follows `Fg` |
 | `Popover` / `PopoverFg` | `--popover` / `--popover-foreground` | floating surfaces: menus, dialogs, toasts | follow `Card` / `CardFg` | same |
-| `Primary` / `PrimaryFg` | `--primary` / `--primary-foreground` | the main action | zinc-900 / zinc-50 | zinc-200 / zinc-900 |
-| `PrimaryHover` | — | `Primary` under the pointer | follows `Primary`, at 90% over `Bg` | same |
-| `Secondary` / `SecondaryFg` | `--secondary` / `--secondary-foreground` | a supporting action | zinc-100 / follows `Fg` | zinc-800 / follows `Fg` |
-| `Muted` / `MutedFg` | `--muted` / `--muted-foreground` | the quiet surface of tracks and strips; the grey of secondary text | zinc-100 / zinc-500 | zinc-800 / zinc-400 |
-| `Destructive` / `DestructiveFg` | `--destructive` / `--destructive-foreground` | an irreversible action | `#d32f2f` / zinc-50 | same |
-| `Border` | `--border` | outlines of inputs, dividers, hairlines | zinc-200 | `#323236` |
+| `Primary` / `PrimaryFg` | `--primary` / `--primary-foreground` | the main action | neutral-900 / neutral-50 | neutral-200 / neutral-900 |
+| `PrimaryHover` | — | `Primary` under the pointer | follows `Primary`, at 80% over `Bg` | same |
+| `Secondary` / `SecondaryFg` | `--secondary` / `--secondary-foreground` | a supporting action | neutral-100 / follows `Fg` | neutral-800 / follows `Fg` |
+| `Muted` / `MutedFg` | `--muted` / `--muted-foreground` | the quiet surface of tracks and strips; the grey of secondary text | neutral-100 / neutral-500 | neutral-800 / neutral-400 |
+| `Destructive` / `DestructiveFg` | `--destructive` / `--destructive-foreground` | an irreversible action | `oklch(0.577 0.245 27.325)` / neutral-50 | `oklch(0.704 0.191 22.216)` / neutral-50 |
+| `Border` | `--border` | outlines of inputs, dividers, hairlines | neutral-200 | white at 10% |
 | `Input` | — | the painted input surface | follows `Bg` | follows `InputBorder`, at 30% over `Bg` |
-| `InputBorder` | `--input` | input outlines | follows `Border` | same |
+| `InputBorder` | `--input` | input outlines | follows `Border` | white at 15% |
 | `Accent` / `AccentFg` | `--accent` / `--accent-foreground` | the highlighted row or button under the pointer, and its text | follow `Muted` / `Fg` | same |
-| `Ring` | `--ring` | the focus halo, deliberately not `Primary` | zinc-400 | zinc-500 |
+| `Ring` | `--ring` | the focus halo, deliberately not `Primary` | neutral-400 | neutral-500 |
 | `Selection` | — | selected text | follows `Primary`, at 25% over `Bg` | same |
-| `Scrim` | — | dims the window behind a modal | 38% black | same |
+| `Scrim` | — | dims the window behind a modal | 10% black | same |
 
 The sidebar uses separate `Sidebar`/`SidebarFg`, `SidebarPrimary`/
 `SidebarPrimaryFg`, `SidebarAccent`/`SidebarAccentFg`, `SidebarBorder`, and
-`SidebarRing` tokens. `Sidebar` is near-white in light and zinc-900 in dark;
+`SidebarRing` tokens. `Sidebar` is near-white in light and neutral-900 in dark;
 the rest follow the matching page tokens. Inside a `Sidebar`, its children
 see these in place of the page's.
 
@@ -198,20 +198,20 @@ Three shadows, in the order a surface rises off the page. They are
 
 | Token | For | Default |
 | --- | --- | --- |
-| `CardShadow` | cards, the raised tab, a resting button | `0 1px`, blur 2, 6% black |
+| `CardShadow` | raised tab and custom shadowed variants | `0 1px`, blur 2, 6% black |
 | `PanelShadow` | menus, select lists, date pickers, toasts | `0 4px`, blur 10, 10% black |
-| `OverlayShadow` | dialogs and sheets | `0 12px`, blur 28, 25% black |
+| `OverlayShadow` | sheets | `0 12px`, blur 28, 25% black |
 
 ### Size and space
 
 | Token | For | Default |
 | --- | --- | --- |
-| `Radius` | buttons, inputs and boxes that ask for one | 8 |
-| `RadiusSm` | rows and pills inside a rounded container | follows `Radius` × 0.75 |
-| `RadiusLg` | cards, dialogs, toasts | follows `Radius` × 1.5 |
+| `Radius` | buttons, inputs and boxes that ask for one | 10 |
+| `RadiusSm` | rows and pills inside a rounded container | follows `Radius` × 0.8 |
+| `RadiusLg` | cards, dialogs, toasts | follows `Radius` × 1.4 |
 | `Space` | the unit every gap and padding is a multiple of | 8 |
 | `BorderWidth` | the line `Box.Border` and the controls draw | 1 |
-| `ControlSize` | a checkbox or radio glyph; a switch track is 4px taller, a slider knob this wide | 16 |
+| `ControlSize` | a checkbox or radio glyph; switch and slider geometry scales with it | 16 |
 | `ControlGap` | between a glyph and its label | 8 |
 | `IconSize` | chevrons, checks and other icons inside a control | 16 |
 | `MenuWidth` | a dropdown panel, which does not stretch | 224 |
@@ -222,19 +222,20 @@ Each is an `EdgeInsets`, built with the CSS shorthand `Insets` takes.
 
 | Token | Inside | Default |
 | --- | --- | --- |
-| `ButtonPad` | a button | `8 16` |
-| `FieldPad` | a text field, select or other input | `8 12` |
-| `ItemPad` | one row of a list or menu | `6 8` |
-| `CardPad` | a card, dialog or sheet | `24` |
+| `ButtonPad` | a button | `6 10` |
+| `FieldPad` | a text field, select or other input | `6 10` |
+| `ItemPad` | one row of a list or menu | `4 6` |
+| `CardPad` | a card, dialog or sheet | `16` |
 | `PanelPad` | a popup panel, around its items | `4` |
-| `TabPad` | one tab label | `5 10` |
+| `TabPad` | one tab label | `3 8` |
 
 ### Motion and state
 
 | Token | For | Default |
 | --- | --- | --- |
-| `MotionFast` | knobs, tab indicators, collapsing content | 150ms |
-| `MotionSlow` | entrances and exits | 240ms |
+| `MotionFast` | hover and control transitions | 150ms |
+| `MotionSlow` | disclosures and sheets | 200ms |
+| `MotionOverlay` | dialogs and popups | 100ms |
 | `HoverMix` | how far a color moves toward `Fg` under the pointer | 0.06 |
 | `PressMix` | how far it moves toward `Fg` while pressed | 0.08 |
 | `DisabledMix` | how much opacity a disabled control loses | 0.5 |
@@ -317,8 +318,8 @@ As in a browser, `.dark` inherits whatever it leaves out from `:root`. Blocks
 may sit inside `@layer`, other rules such as `@theme inline` are skipped, and
 a value may be `var()` of another variable. Each color variable sets the
 token the color table names, with `--input` setting `InputBorder`. `--radius`
-sets the radii the way shadcn derives its own: `Radius` 2px less for the
-`rounded-md` controls, `RadiusSm` 4px less and `RadiusLg` 4px more.
+sets the Base UI Nova radii: `Radius` equals the variable for `rounded-lg`
+controls, `RadiusSm` is 0.8 times it and `RadiusLg` is 1.4 times it.
 A color variable with no token of its own, such as the `--warning` or
 `--success` shadcn leaves to the app, is kept as a token of your own (below)
 under `theme.CSSColor(name)`:
@@ -564,12 +565,12 @@ and ggui's existing APIs.
 
 | Element | Appearance and configuration |
 | --- | --- |
-| Buttons | Primary by default; `Outline()` draws a border around the background. `Secondary()` adds a subdued fill, `Ghost()` removes the resting surface, `Destructive()` fills it with `Destructive` under a `DestructiveFg` label, and `Link()` underlines a `Primary` label under the pointer. Outline and ghost buttons turn `Accent` with an `AccentFg` label under the pointer. `Size(ui.ButtonSmall)`, `ui.ButtonLarge` and `ui.ButtonIcon` scale `ButtonPad`; `Radius(r)` and `Pad(...)` override the theme for one button. Labels use the `Label` text style. |
+| Buttons | Primary by default, with 80% hover opacity. Outline and ghost use muted hover surfaces; destructive uses a subtle red surface and red text. Text/icon sizes are 24/28/32/36px; `Pad(...)` and `Radius(...)` override the defaults. |
 | Focus | Controls use a separate, softer focus color. Text fields add an outer halo while editing. |
 | Tabs | A muted rounded strip with an animated raised selection; `.Line()` opts into the underline treatment. Reduced-motion settings still apply. |
-| Cards and floating panels | Cards receive a subtle shadow; menus, select lists, comboboxes and date pickers use a stronger shared panel shadow. Dialogs use a larger radius and deeper elevation. |
+| Cards and floating panels | Cards have a foreground/10 outline without a default shadow. Menus retain panel shadows; dialogs use the larger radius without a shadow. Modal backdrops blur and dim content. |
 | Labels and notices | Field labels use the body size; help text remains smaller. Alerts use body-size descriptions and tighter title spacing. |
-| Badges and calendar | Badges are pills on the `Secondary` surface; `Primary()`, `Outline()` and `Destructive()` change the look and `Radius(r)` the corners. Calendar month navigation uses ghost buttons, with a centered month heading and contrasting selected-date text. |
+| Badges and calendar | Badges default to Primary; `.Secondary()`, `.Outline()` and `.Destructive()` select other looks. Calendar month navigation uses ghost buttons with contrasting selected-date text. |
 | Menus, selects and dialogs | A highlighted item turns `Accent` with an `AccentFg` label. Floating surfaces draw their text in `PopoverFg`; dialog and sheet titles use the `Heading` style. |
 
 These choices follow a brand by changing the theme rather than the widgets.

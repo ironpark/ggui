@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui/icons"
@@ -12,23 +13,25 @@ import (
 // At most five numbered buttons are shown, plus Previous, Next and ellipses for hidden pages.
 type PaginationWidget struct {
 	ggui.Interactive
-	page           ggui.Binding[int]
-	pages          ggui.Readable[int]
-	previous, next *ButtonWidget
-	numbers        [5]*ButtonWidget
-	targets        [5]int
-	gaps           [2]ggui.Widget // the leading and trailing ellipses
-	children       []ggui.Widget
-	row            *ggui.WrapWidget
-	onChange       func(int)
+	page                   ggui.Binding[int]
+	pages                  ggui.Readable[int]
+	previous, next         *ButtonWidget
+	previousIcon, nextIcon *icons.Widget
+	numbers                [5]*ButtonWidget
+	targets                [5]int
+	gaps                   [2]ggui.Widget // the leading and trailing ellipses
+	children               []ggui.Widget
+	row                    *ggui.WrapWidget
+	onChange               func(int)
 }
 
 // Pagination creates navigation for pages pages. Zero or negative counts disable it.
 // Out-of-range page values are clamped for display, without writing the binding.
 func Pagination(page ggui.Binding[int], pages ggui.Readable[int]) *PaginationWidget {
 	p := &PaginationWidget{page: page, pages: pages}
-	p.previous = ButtonOf(ggui.Row(Icon(icons.ChevronLeft), ggui.Text("Previous")).Gap(4), func() { p.move(-1) }).Name("Previous").Ghost().Pad(6, 10)
-	p.next = ButtonOf(ggui.Row(ggui.Text("Next"), Icon(icons.ChevronRight)).Gap(4), func() { p.move(1) }).Name("Next").Ghost().Pad(6, 10)
+	p.previousIcon, p.nextIcon = Icon(icons.ChevronLeft), Icon(icons.ChevronRight)
+	p.previous = ButtonOf(ggui.Row(p.previousIcon, ggui.Text("Previous")).Gap(4), func() { p.move(-1) }).Name("Previous").Ghost().Pad(6, 10)
+	p.next = ButtonOf(ggui.Row(ggui.Text("Next"), p.nextIcon).Gap(4), func() { p.move(1) }).Name("Next").Ghost().Pad(6, 10)
 	for i := range p.numbers {
 		p.numbers[i] = Button("", func() { p.selectPage(p.targets[i]) })
 	}
@@ -61,6 +64,9 @@ func (p *PaginationWidget) selectPage(page int) {
 // Layout implements ggui.Widget.
 func (p *PaginationWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	p.Sync()
+	angle := pick(env.Direction() == ggui.DirRTL, math.Pi, 0.0)
+	p.previousIcon.Rotate(angle)
+	p.nextIcon.Rotate(angle)
 	n := max(p.pages.Get(), 0)
 	current := p.current(n)
 	p.previous.Disabled(p.IsInert() || n == 0 || current == 1)

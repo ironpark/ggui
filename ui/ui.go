@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"image/color"
 	"maps"
+	"slices"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/pkg/gem"
@@ -99,6 +100,15 @@ func withKey[K comparable](m map[K]bool, k K, on bool) map[K]bool {
 		delete(next, k)
 	}
 	return next
+}
+
+// withValue returns a copy of the list s with v appended when on and every
+// v removed when not, the way a multiple selection's binding is written.
+func withValue[T comparable](s []T, v T, on bool) []T {
+	if on {
+		return append(slices.Clone(s), v)
+	}
+	return slices.DeleteFunc(slices.Clone(s), func(item T) bool { return item == v })
 }
 
 // stepIndex moves cur by dir through n items, wrapping around and skipping

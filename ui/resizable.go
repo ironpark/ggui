@@ -141,6 +141,12 @@ func (r *ResizableWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		// the line, within the split.
 		r.handle = grabArea(r.handle, r.vertical, size)
 	}
+	if r.mirrored() {
+		parent := ggui.Rct(ggui.Pt(0, 0), size)
+		r.firstRect = mirrorHorizontal(r.firstRect, parent, true)
+		r.secondRect = mirrorHorizontal(r.secondRect, parent, true)
+		r.handle = mirrorHorizontal(r.handle, parent, true)
+	}
 	r.first.Layout(ggui.Tight(r.firstRect.Size), env)
 	r.second.Layout(ggui.Tight(r.secondRect.Size), env)
 	return size
@@ -179,6 +185,7 @@ func (r *ResizableWidget) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 			gap = r.firstRect.Size.H
 			line = ggui.Rct(ggui.Pt(rect.Origin.X, rect.Origin.Y+gap), ggui.Sz(rect.Size.W, 1))
 		}
+		line = mirrorHorizontal(line, rect, r.mirrored())
 		center = line.Origin.Add(ggui.Pt(line.Size.W/2, line.Size.H/2))
 	}
 	dst.FillRect(line, col)
@@ -214,6 +221,7 @@ func (r *ResizableWidget) HandleKey(ev ggui.KeyEvent) {
 	if ev.Mods.Shift {
 		step = .1
 	}
+	ev = directionalKey(ev, r.mirrored())
 	switch ev.Key {
 	case ggui.KeyHome:
 		r.set(r.lo)
@@ -239,10 +247,10 @@ func (r *ResizableWidget) HandlePointer(ev ggui.PointerEvent) bool {
 		if ev.Button != ggui.MouseButtonLeft {
 			return false
 		}
-		r.dragOffset = r.axis(ev.Pos) - r.axis(r.rect.Origin) - r.available*r.value()
+		r.dragOffset = r.pointerAxis(ev.Pos) - r.available*r.value()
 	case ggui.PointerDrag:
 		if r.Pressed && r.available > 0 {
-			r.set((r.axis(ev.Pos) - r.axis(r.rect.Origin) - r.dragOffset) / r.available)
+			r.set((r.pointerAxis(ev.Pos) - r.dragOffset) / r.available)
 		}
 	}
 	return r.Pointer(ev, nil)
@@ -279,4 +287,18 @@ func grabArea(line ggui.Rect, vertical bool, size ggui.Size) ggui.Rect {
 	}
 	x := clamp(line.Origin.X+line.Size.W/2-grab/2, 0, max(0, size.W-grab))
 	return ggui.Rct(ggui.Pt(x, 0), ggui.Sz(min(grab, size.W), size.H))
+}
+
+// mirrored reports whether the panes run right to left: a horizontal split
+// under a right-to-left direction.
+func (r *ResizableWidget) mirrored() bool {
+	return !r.vertical && r.env.Direction() == ggui.DirRTL
+}
+
+func (r *ResizableWidget) pointerAxis(p ggui.Point) float64 {
+	v := r.axis(p) - r.axis(r.rect.Origin)
+	if r.mirrored() {
+		return r.rect.Size.W - v
+	}
+	return v
 }

@@ -70,13 +70,13 @@ func (c *CardWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	defer c.props.Layout().EndLayout()
 	t := uitheme.Of(env)
 	if !c.shadowSet {
-		c.box.Shadow(t.CardShadow)
+		c.box.Shadow()
 	}
 	if !c.pad {
 		c.box.Padding(t.CardPad)
 	}
 	c.box.Fill(colorOr(c.fill, t.Card)).
-		Border(pick(c.borderWidth >= 0, c.borderWidth, t.BorderWidth), colorOr(c.border, t.Border)).
+		Border(pick(c.borderWidth >= 0, c.borderWidth, t.BorderWidth), colorOr(c.border, fade(t.Fg, .1))).
 		Radius(pick(c.radius >= 0, c.radius, t.RadiusLg))
 	return c.box.Layout(cs, env.WithText(ggui.TextStyle{Color: t.CardFg}))
 }
@@ -108,7 +108,7 @@ var (
 		return BadgeStyle{Label: t.Fg, Border: t.Border}
 	})
 	BadgeDestructive = NewVariant("destructive", func(t uitheme.Theme) BadgeStyle {
-		return BadgeStyle{Fill: t.Destructive, Label: t.DestructiveFg}
+		return BadgeStyle{Fill: fade(t.Destructive, pick(isDark(t.Bg), .2, .1)), Label: t.Destructive}
 	})
 )
 
@@ -124,10 +124,10 @@ type BadgeWidget struct {
 	theme   *uitheme.Theme
 }
 
-// Badge creates a pill labelled s on the Secondary surface; Variant, or
+// Badge creates a pill labelled s on the Primary surface; Variant, or
 // Primary, Outline and Destructive, change its look.
 func Badge(s string) *BadgeWidget {
-	return &BadgeWidget{text: ggui.Text(s).NoWrap(), variant: BadgeSecondary, radius: -1}
+	return &BadgeWidget{text: ggui.Text(s).NoWrap(), variant: BadgePrimary, radius: -1}
 }
 
 // Variant draws the badge in v, one of the Badge variables or a variant of
@@ -137,6 +137,9 @@ func (b *BadgeWidget) Variant(v *BadgeVariant) *BadgeWidget {
 	b.variant = v
 	return b
 }
+
+// Secondary fills the badge with the Secondary color.
+func (b *BadgeWidget) Secondary() *BadgeWidget { return b.Variant(BadgeSecondary) }
 
 // Primary fills the badge with the Primary color.
 func (b *BadgeWidget) Primary() *BadgeWidget { return b.Variant(BadgePrimary) }
@@ -160,10 +163,16 @@ func (b *BadgeWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := uitheme.Of(env)
 	b.theme = t
 	b.style = b.variant.Style(*t)
-	b.pad = ggui.Insets(2, t.Space*0.75)
+	b.pad = ggui.Insets(2, t.Space)
 	b.text.Style(t.Caption.Merge(t.Label)).Color(b.style.Label)
 	b.size = b.text.Layout(b.pad.Shrink(c).Loosen(), env)
-	return c.Constrain(b.pad.Inflate(b.size))
+	size := b.pad.Inflate(b.size)
+	if env.TextScale() <= 1 && b.size.H <= 20 {
+		size.H = 20
+	} else {
+		size.H = max(20, size.H)
+	}
+	return c.Constrain(size)
 }
 
 // Paint implements Widget.
@@ -190,7 +199,7 @@ type ProgressWidget struct {
 // Progress creates a bar that shows value, a fraction from 0 to 1, read
 // every frame, and eases toward it as it changes.
 func Progress(value ggui.Readable[float64]) *ProgressWidget {
-	return &ProgressWidget{value: value, height: 6}
+	return &ProgressWidget{value: value, height: 4}
 }
 
 var progressSlot = ggui.NewSlot[*ggui.Motion]("progressSlot")
@@ -213,9 +222,11 @@ func (p *ProgressWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 // Paint implements Widget.
 func (p *ProgressWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := p.theme
-	v := dst.Ease(ggui.Anchor{Rect: r}, progressSlot, clamp(p.value.Get(), 0, 1), p.motion)
-	dst.Leaf(r, ggui.Node{Role: ggui.RoleProgress, Min: 0, Max: 1, Now: v})
-	dst.FillRoundRect(r, r.Size.H/2, t.Border)
+	target := clamp(p.value.Get(), 0, 1)
+	v := dst.Ease(ggui.Anchor{Rect: r}, progressSlot, target, p.motion)
+	// Assistive technology reports the data, independently of visual easing.
+	dst.Leaf(r, ggui.Node{Role: ggui.RoleProgress, Min: 0, Max: 1, Now: target})
+	dst.FillRoundRect(r, r.Size.H/2, t.Muted)
 	if w := r.Size.W * v; w > 0 {
 		dst.FillRoundRect(ggui.Rct(r.Origin, ggui.Sz(w, r.Size.H)), r.Size.H/2, t.Primary)
 	}
@@ -281,8 +292,10 @@ func (p *ProgressRingWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size 
 
 // Paint implements Widget.
 func (p *ProgressRingWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	v := dst.Ease(ggui.Anchor{Rect: r}, progressSlot, clamp(p.value.Get(), 0, 1), p.motion)
-	dst.Leaf(r, ggui.Node{Role: ggui.RoleProgress, Min: 0, Max: 1, Now: v})
+	target := clamp(p.value.Get(), 0, 1)
+	v := dst.Ease(ggui.Anchor{Rect: r}, progressSlot, target, p.motion)
+	// Assistive technology reports the data, independently of visual easing.
+	dst.Leaf(r, ggui.Node{Role: ggui.RoleProgress, Min: 0, Max: 1, Now: target})
 	d := min(r.Size.W, r.Size.H) - p.stroke
 	if d <= 0 {
 		return

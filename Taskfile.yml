@@ -148,7 +148,7 @@ tasks:
       - '"{{.GO}}" work sync'
 
   bundle:
-    desc: Build a macOS app bundle (EXAMPLE=counter, todo, workspace, gallery, or router)
+    desc: Build a macOS app bundle (EXAMPLE=counter, todo, workspace, gallery, create, or router)
     vars:
       EXAMPLE: '{{default "counter" .EXAMPLE}}'
       # Empty by default: a bundle is a release build. launch sets it.
@@ -156,7 +156,7 @@ tasks:
     requires:
       vars:
         - name: EXAMPLE
-          enum: [counter, todo, workspace, gallery, router]
+          enum: [counter, todo, workspace, gallery, create, router]
     preconditions:
       - sh: 'test "$(uname -s)" = Darwin'
         msg: App bundles require macOS.
@@ -217,6 +217,12 @@ tasks:
       - task: launch
         vars: {EXAMPLE: gallery}
 
+  run-create:
+    desc: Bundle and launch the theme playground
+    cmds:
+      - task: launch
+        vars: {EXAMPLE: create}
+
   launch:
     internal: true
     # The run-* tasks are the development loop, so they get the inspector.
@@ -237,7 +243,7 @@ tasks:
     requires:
       vars:
         - name: EXAMPLE
-          enum: [counter, todo, workspace, gallery, router]
+          enum: [counter, todo, workspace, gallery, create, router]
     cmds:
       - '"{{.GO}}" run ./internal/tools/serve -http ":{{.PORT}}" -wasm-opt "{{.WASM_OPT}}" -tags "{{.TAGS}}" "./examples/{{.EXAMPLE}}"'
 

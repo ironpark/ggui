@@ -27,28 +27,36 @@ type ButtonVariant = Variant[ButtonStyle]
 var (
 	// ButtonPrimary is the main action: the Primary surface.
 	ButtonPrimary = NewVariant("primary", func(t uitheme.Theme) ButtonStyle {
-		return ButtonStyle{Fill: t.Primary, Hover: t.PrimaryHover, Label: t.PrimaryFg, Shadow: true}
+		return ButtonStyle{Fill: t.Primary, Hover: t.PrimaryHover, Label: t.PrimaryFg}
 	})
 	// ButtonOutline is a border around the page's background.
 	ButtonOutline = NewVariant("outline", func(t uitheme.Theme) ButtonStyle {
-		return ButtonStyle{Fill: t.Bg, Hover: t.Accent, Label: t.Fg, HoverLabel: t.AccentFg, Border: t.Border, Shadow: true}
+		fill, hover, border := t.Bg, t.Muted, t.Border
+		if isDark(t.Bg) {
+			fill, hover, border = fade(t.InputBorder, .3), fade(t.InputBorder, .5), t.InputBorder
+		}
+		return ButtonStyle{Fill: fill, Hover: hover, Label: t.Fg, HoverLabel: t.Fg, Border: border}
 	})
 	// ButtonSecondary is a supporting action on the Secondary surface.
 	ButtonSecondary = NewVariant("secondary", func(t uitheme.Theme) ButtonStyle {
-		return ButtonStyle{Fill: t.Secondary, Hover: t.Hovered(t.Secondary), Label: t.SecondaryFg}
+		return ButtonStyle{Fill: t.Secondary, Hover: mix(t.Secondary, t.Fg, .05), Label: t.SecondaryFg}
 	})
 	// ButtonGhost has no surface until the pointer is over it.
 	ButtonGhost = NewVariant("ghost", func(t uitheme.Theme) ButtonStyle {
-		return ButtonStyle{Hover: t.Accent, Label: t.Fg, HoverLabel: t.AccentFg}
+		hover := t.Muted
+		if isDark(t.Bg) {
+			hover = fade(hover, .5)
+		}
+		return ButtonStyle{Hover: hover, Label: t.Fg, HoverLabel: t.Fg}
 	})
 	// ButtonDestructive is an irreversible action: the Destructive surface,
 	// toned down on a dark page as shadcn does.
 	ButtonDestructive = NewVariant("destructive", func(t uitheme.Theme) ButtonStyle {
-		fill := t.Destructive
+		opacity := .1
 		if isDark(t.Bg) {
-			fill = mix(fill, t.Bg, .4)
+			opacity = .2
 		}
-		return ButtonStyle{Fill: fill, Hover: mix(fill, t.Bg, .1), Label: t.DestructiveFg, Ring: destructiveRing(&t), Shadow: true}
+		return ButtonStyle{Fill: fade(t.Destructive, opacity), Hover: fade(t.Destructive, opacity+.1), Label: t.Destructive, Ring: destructiveRing(&t)}
 	})
 	// ButtonLink is a label in the Primary color, underlined under the
 	// pointer.
@@ -59,8 +67,11 @@ var (
 
 // ButtonSize is the padding of a button size variant.
 type ButtonSize struct {
-	Pad    ggui.EdgeInsets
-	Square bool // as wide as it is tall, for a button holding one icon
+	Pad        ggui.EdgeInsets
+	Height     float64 // minimum height; zero measures the content
+	TextSize   float64 // optional label size
+	LineHeight float64 // optional label line height
+	Square     bool    // as wide as it is tall, for a button holding one icon
 }
 
 // ButtonSizeVariant is a size for Button.Size.
@@ -68,23 +79,36 @@ type ButtonSizeVariant = Variant[ButtonSize]
 
 // The button sizes of shadcn/ui, from the theme's ButtonPad.
 var (
-	ButtonDefault = NewVariant("default", func(t uitheme.Theme) ButtonSize { return ButtonSize{Pad: t.ButtonPad} })
-	ButtonSmall   = NewVariant("sm", func(t uitheme.Theme) ButtonSize {
-		p := t.ButtonPad
-		return ButtonSize{Pad: ggui.Insets(p.Top*.75, p.Left*.75)}
+	ButtonDefault = NewVariant("default", func(t uitheme.Theme) ButtonSize {
+		return ButtonSize{Pad: t.ButtonPad, Height: 20 + 2*t.ButtonPad.Top}
+	})
+	ButtonExtraSmall = NewVariant("xs", func(t uitheme.Theme) ButtonSize {
+		return ButtonSize{Pad: ggui.Insets(4, t.ButtonPad.Left*.8), Height: 24, TextSize: 12, LineHeight: 16.0 / 12}
+	})
+	ButtonSmall = NewVariant("sm", func(t uitheme.Theme) ButtonSize {
+		return ButtonSize{Pad: ggui.Insets(4, t.ButtonPad.Left), Height: 28, TextSize: 12.8, LineHeight: 20.0 / 12.8}
 	})
 	ButtonLarge = NewVariant("lg", func(t uitheme.Theme) ButtonSize {
-		p := t.ButtonPad
-		return ButtonSize{Pad: ggui.Insets(p.Top*1.25, p.Left*1.5)}
+		return ButtonSize{Pad: ggui.Insets(t.ButtonPad.Top+2, t.ButtonPad.Left), Height: 24 + 2*t.ButtonPad.Top}
 	})
 	ButtonIcon = NewVariant("icon", func(t uitheme.Theme) ButtonSize {
-		return ButtonSize{Pad: ggui.Insets(t.ButtonPad.Top), Square: true}
+		return ButtonSize{Height: 20 + 2*t.ButtonPad.Top, Square: true}
+	})
+	ButtonIconExtraSmall = NewVariant("icon-xs", func(t uitheme.Theme) ButtonSize {
+		return ButtonSize{Height: 24, Square: true}
+	})
+	ButtonIconSmall = NewVariant("icon-sm", func(t uitheme.Theme) ButtonSize {
+		return ButtonSize{Height: 28, Square: true}
+	})
+	ButtonIconLarge = NewVariant("icon-lg", func(t uitheme.Theme) ButtonSize {
+		return ButtonSize{Height: 24 + 2*t.ButtonPad.Top, Square: true}
 	})
 )
 
 // ButtonWidget is a clickable box with a label. Build one with Button.
 type ButtonWidget struct {
-	props property.Owner
+	toggleValue func() bool
+	props       property.Owner
 	ggui.Interactive
 	label       *ggui.TextWidget
 	box         *ggui.BoxWidget
@@ -110,7 +134,7 @@ type ButtonWidget struct {
 // label.
 func Button(label string, onTap func()) *ButtonWidget {
 	b := &ButtonWidget{onTap: onTap, label: ggui.Text(label).NoWrap(), variant: ButtonPrimary, size: ButtonDefault, radius: -1}
-	b.box = ggui.Box(b.label)
+	b.box = ggui.Box(&buttonContent{child: b.label})
 	b.Role = ggui.RoleButton
 	b.SetName(label)
 	b.AutoKey()
@@ -120,7 +144,7 @@ func Button(label string, onTap func()) *ButtonWidget {
 // ButtonOf creates a button around any content instead of a text label.
 // Give it a name with Name, since nothing on it says what it is.
 func ButtonOf(child ggui.Widget, onTap func()) *ButtonWidget {
-	b := &ButtonWidget{onTap: onTap, box: ggui.Box(child), variant: ButtonPrimary, size: ButtonDefault, radius: -1}
+	b := &ButtonWidget{onTap: onTap, box: ggui.Box(&buttonContent{child: child}), variant: ButtonPrimary, size: ButtonDefault, radius: -1}
 	b.Role = ggui.RoleButton
 	b.AutoKey()
 	return b
@@ -185,6 +209,10 @@ func (b *ButtonWidget) Describe() ggui.Node {
 		Selected: b.selected,
 		Actions:  ggui.ActionPress | ggui.ActionFocus,
 	}
+	if b.toggleValue != nil {
+		n.Checked = ggui.Tri(b.toggleValue())
+		n.Selected = b.toggleValue()
+	}
 	if b.expands != nil {
 		open := b.expands()
 		n.Expanded = ggui.Expandable(open)
@@ -222,9 +250,10 @@ func (b *ButtonWidget) Destructive() *ButtonWidget { return b.Variant(ButtonDest
 // pointer.
 func (b *ButtonWidget) Link() *ButtonWidget { return b.Variant(ButtonLink) }
 
-// Size sets the button's size: ButtonSmall, ButtonLarge, ButtonIcon for a
-// square button holding one icon, or a size of your own. Pad overrides its
-// padding.
+// Size sets a text or icon size variant, or a size of your own.
+// ButtonExtraSmall, ButtonSmall and ButtonLarge size text actions;
+// ButtonIcon and its ExtraSmall, Small and Large variants are square.
+// Pad overrides the size variant's padding.
 func (b *ButtonWidget) Size(v *ButtonSizeVariant) *ButtonWidget {
 	defer property.Watch(&b.props, &b.size)()
 	b.size = v
@@ -274,10 +303,32 @@ func (b *ButtonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if b.label != nil {
 		b.label.Color(label) // Paint swaps in HoverLabel
 	}
-	out := b.box.Layout(c, env.WithText(t.Label.Merge(ggui.TextStyle{Color: label})))
+	textStyle := t.Text.Merge(t.Label).Merge(ggui.TextStyle{Color: label})
+	if size.TextSize > 0 {
+		textStyle.Size, textStyle.LineHeight = size.TextSize, size.LineHeight
+	}
+	contentEnv := env.WithText(textStyle)
+	// CSS heights include the line box. Center the native font metrics in
+	// that height instead of adding web line-height padding a second time.
+	if b.label != nil && !b.padded && size.Height > 0 && env.TextScale() <= 1 {
+		labelSize := b.label.Layout(b.pad.Shrink(c).Loosen(), contentEnv)
+		if labelSize.H <= size.Height {
+			b.pad.Top, b.pad.Bottom = (size.Height-labelSize.H)/2, (size.Height-labelSize.H)/2
+			b.box.Padding(b.pad)
+		}
+	}
+	if !b.padded {
+		c.MinH = min(c.MaxH, max(c.MinH, size.Height))
+	}
+	b.box.Size(0, 0)
+
+	out := b.box.Layout(c, contentEnv)
+	b.box.Size(out.W, out.H)
+	out = b.box.Layout(ggui.Tight(out), contentEnv)
 	if size.Square && !b.padded {
 		side := c.Constrain(ggui.Sz(max(out.W, out.H), max(out.W, out.H)))
-		out = b.box.Layout(ggui.Tight(side), env.WithText(t.Label.Merge(ggui.TextStyle{Color: label})))
+		b.box.Size(side.W, side.H)
+		out = b.box.Layout(ggui.Tight(side), contentEnv)
 	}
 	return out
 }
@@ -290,7 +341,11 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t, st := b.theme, b.style
 	inert := b.IsInert()
 	fill, label := st.Fill, st.Label
-	hover := dst.Ease(b.Anchor(r), buttonHoverSlot, pick(b.Hovered && !inert, 1.0, 0.0), b.motion)
+	if b.toggleValue != nil && b.toggleValue() {
+		fill, label = t.Muted, t.Fg
+	}
+	expanded := b.expands != nil && b.expands() && (b.variant == ButtonOutline || b.variant == ButtonGhost || b.variant == ButtonSecondary)
+	hover := dst.Ease(b.Anchor(r), buttonHoverSlot, pick((b.Hovered || expanded) && !inert, 1.0, 0.0), b.motion)
 	if hover >= 1 {
 		fill = st.Hover
 	} else if hover > 0 {
@@ -299,9 +354,7 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if st.HoverLabel != nil && hover > 0 {
 		label = mix(label, st.HoverLabel, hover)
 	}
-	if b.Pressed && b.Hovered && !inert {
-		fill = t.Pressed(fill)
-	}
+
 	if inert {
 		fill, label = t.Disabled(fill), t.Disabled(label)
 	}
@@ -314,12 +367,16 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	b.box.Fill(fill)
 	radius := pick(b.radius >= 0, b.radius, t.Radius)
-	if st.Shadow && !inert {
-		dst.Shadow(r, radius, t.CardShadow)
-	}
-	b.Hit(dst, r, b, ggui.CursorShapePointer)
+
+	b.Hit(dst, r, b, pick(b.variant == ButtonLink, ggui.CursorShapePointer, ggui.CursorShapeDefault))
 	if b.chorded && !inert && b.onTap != nil {
 		dst.Shortcut(b.chord, b.onTap)
+	}
+	if b.Pressed && b.Hovered && !inert && b.expands == nil {
+		r.Origin.Y++
+	}
+	if st.Shadow && !inert {
+		dst.Shadow(r, radius, t.CardShadow)
 	}
 	dst.Paint(b.box, r)
 	if st.Underline && hover > 0 {
@@ -329,7 +386,7 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 			dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X+pad.Left, y), ggui.Sz(r.Size.W-pad.Left-pad.Right, 1)), fade(label, hover))
 		}
 	}
-	b.FocusRing(dst, r, radius, colorOr(st.Ring, t.Ring))
+	controlFocusRing(dst, &b.Interactive, t, r, radius, colorOr(st.Ring, t.Ring))
 }
 
 var buttonHoverSlot = ggui.NewSlot[*ggui.Motion]("button hover")
@@ -346,3 +403,27 @@ func (b *ButtonWidget) name() string {
 
 // Semantics implements ggui.Semantic, including a composite trigger's fallback.
 func (b *ButtonWidget) Semantics() (ggui.Role, string) { return b.Role, b.name() }
+
+// buttonContent centers without consuming loose space like a layout Align does.
+type buttonContent struct {
+	child  ggui.Widget
+	size   ggui.Size
+	height float64
+}
+
+func (b *buttonContent) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	b.size = b.child.Layout(c.Loosen(), env)
+	out := c.Constrain(b.size)
+	b.height = out.H
+	return out
+}
+func (b *buttonContent) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	dst.Paint(b.child, ggui.Rct(r.Origin.Add(ggui.Pt((r.Size.W-b.size.W)/2, (r.Size.H-b.size.H)/2)), b.size))
+}
+func (b *buttonContent) Baseline() (float64, bool) {
+	if child, ok := b.child.(ggui.Baseliner); ok {
+		baseline, ok := child.Baseline()
+		return baseline + (b.height-b.size.H)/2, ok
+	}
+	return 0, false
+}

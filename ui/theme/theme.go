@@ -54,7 +54,7 @@ type Theme struct {
 	PrimaryHover               color.Color // Primary under the pointer; follows Primary
 	Secondary, SecondaryFg     color.Color // --secondary / --secondary-foreground; SecondaryFg follows Fg
 	Muted, MutedFg             color.Color // --muted / --muted-foreground
-	Destructive, DestructiveFg color.Color // --destructive / --destructive-foreground
+	Destructive, DestructiveFg color.Color // --destructive; DestructiveFg is retained for custom solid variants
 	Border                     color.Color // --border: outlines of inputs and dividers
 	Input                      color.Color // the surface a text field or select paints; follows Bg
 	Ring                       color.Color // --ring: the focus halo, separate from Primary
@@ -84,8 +84,9 @@ type Theme struct {
 	PanelPad  ggui.EdgeInsets // inside a popup panel, around its items
 	TabPad    ggui.EdgeInsets // inside one tab label
 
-	MotionFast time.Duration // knobs, tab indicators, collapsing content
-	MotionSlow time.Duration // entrances and exits
+	MotionFast    time.Duration // hover and control transitions
+	MotionSlow    time.Duration // disclosures and sheets
+	MotionOverlay time.Duration // dialog and popup entrances/exits
 
 	// How far a state tints the color it starts from, as Mix takes it:
 	// toward Fg under the pointer and while pressed, and toward transparent
@@ -130,32 +131,30 @@ func (t Theme) Get[T any](k ggui.EnvKey[T]) (T, bool) {
 }
 
 // Default is a neutral light theme inspired by shadcn/ui, in the default font.
-// The palette is shadcn's zinc scale, so its CSS variables map across a token
-// at a time.
+// The palette is the neutral palette used by the current Base UI documentation.
 func Default() Theme { return lightBase().Resolve() }
 
 // lightBase is Default before Resolve: the tokens nothing else derives.
 func lightBase() Theme {
-	fg := color.RGBA{0x18, 0x18, 0x1b, 0xff}    // zinc-900
-	quiet := color.RGBA{0xf4, 0xf4, 0xf5, 0xff} // zinc-100
-	nearWhite := color.RGBA{0xfa, 0xfa, 0xfa, 0xff}
+	n := themePalettes()["neutral"][0]
+	fg, quiet, nearWhite := n["foreground"], n["muted"], n["primary-foreground"]
 	return Theme{
 		Chat:    defaultChat(),
-		Text:    ggui.TextStyle{Size: 14, LineHeight: 1.4},
+		Text:    ggui.TextStyle{Size: 14, LineHeight: 20.0 / 14},
 		Title:   ggui.TextStyle{Size: 24, Weight: ggui.WeightSemibold},
 		Heading: ggui.TextStyle{Size: 18, Weight: ggui.WeightSemibold},
 		Label:   ggui.TextStyle{Weight: ggui.WeightMedium},
-		Caption: ggui.TextStyle{Size: 12},
+		Caption: ggui.TextStyle{Size: 12, LineHeight: 16.0 / 12},
 		Mono:    ggui.TextStyle{Font: ggui.DefaultMonoFont()},
 
 		Bg: color.White, Fg: fg,
-		Primary: fg, PrimaryFg: nearWhite,
+		Primary: n["primary"], PrimaryFg: nearWhite,
 		Secondary: quiet, Muted: quiet,
-		MutedFg:     color.RGBA{0x71, 0x71, 0x7a, 0xff}, // zinc-500
-		Destructive: color.RGBA{0xd3, 0x2f, 0x2f, 0xff}, DestructiveFg: nearWhite,
-		Border: color.RGBA{0xe4, 0xe4, 0xe7, 0xff}, // zinc-200
-		Ring:   color.RGBA{0xa1, 0xa1, 0xaa, 0xff}, // zinc-400
-		Scrim:  color.NRGBA{A: 0x60},
+		MutedFg:     n["muted-foreground"],
+		Destructive: n["destructive"], DestructiveFg: nearWhite,
+		Border: n["border"],
+		Ring:   n["ring"],
+		Scrim:  color.NRGBA{A: 26},
 
 		// The sidebar is shadcn's near-white surface; the rest of its
 		// palette follows the page's.
@@ -165,14 +164,14 @@ func lightBase() Theme {
 		PanelShadow:   ggui.ShadowStyle{Offset: ggui.Pt(0, 4), Blur: 10, Color: color.NRGBA{A: 26}},
 		OverlayShadow: ggui.ShadowStyle{Offset: ggui.Pt(0, 12), Blur: 28, Color: color.NRGBA{A: 65}},
 
-		Radius: 8,
+		Radius: 10,
 		Space:  8, BorderWidth: 1, ControlSize: 16, ControlGap: 8, IconSize: 16, MenuWidth: 224,
 
-		ButtonPad: ggui.Insets(8, 16), FieldPad: ggui.Insets(8, 12),
-		ItemPad: ggui.Insets(6, 8), CardPad: ggui.Insets(24), PanelPad: ggui.Insets(4),
-		TabPad: ggui.Insets(5, 10),
+		ButtonPad: ggui.Insets(6, 10), FieldPad: ggui.Insets(6, 10),
+		ItemPad: ggui.Insets(4, 6), CardPad: ggui.Insets(16), PanelPad: ggui.Insets(4),
+		TabPad: ggui.Insets(3, 8),
 
-		MotionFast: 150 * time.Millisecond, MotionSlow: 240 * time.Millisecond,
+		MotionFast: 150 * time.Millisecond, MotionSlow: 200 * time.Millisecond, MotionOverlay: 100 * time.Millisecond,
 		HoverMix: .06, PressMix: .08, DisabledMix: .5, RingAlpha: .5,
 	}
 }
@@ -183,18 +182,13 @@ func Dark() Theme { return darkBase().Resolve() }
 // darkBase is Dark before Resolve.
 func darkBase() Theme {
 	t := lightBase()
-	dark := color.RGBA{0x18, 0x18, 0x1b, 0xff}  // zinc-900
-	quiet := color.RGBA{0x27, 0x27, 0x2a, 0xff} // zinc-800
-	t.Fg = color.RGBA{0xfa, 0xfa, 0xfa, 0xff}
-	t.Bg = color.RGBA{0x09, 0x09, 0x0b, 0xff} // zinc-950
-	t.Card = dark
-	t.Border = color.RGBA{0x32, 0x32, 0x36, 0xff}
-	t.Primary = color.RGBA{0xe4, 0xe4, 0xe7, 0xff}
-	t.PrimaryFg = dark
-	t.Secondary, t.Muted = quiet, quiet
-	t.MutedFg = color.RGBA{0xa1, 0xa1, 0xaa, 0xff} // zinc-400
-	t.Ring = color.RGBA{0x71, 0x71, 0x7a, 0xff}    // zinc-500
-	t.Sidebar = dark
+	n := themePalettes()["neutral"][1]
+	t.Bg, t.Fg, t.Card = n["background"], n["foreground"], n["card"]
+	t.Primary, t.PrimaryFg = n["primary"], n["primary-foreground"]
+	t.Border, t.InputBorder = n["border"], n["input"]
+	t.Secondary, t.Muted = n["secondary"], n["muted"]
+	t.MutedFg, t.Ring, t.Destructive = n["muted-foreground"], n["ring"], n["destructive"]
+	t.Sidebar = n["sidebar"]
 	return t
 }
 
@@ -215,7 +209,7 @@ var followers = [nFollowers]follower{
 	{func(t *Theme) *color.Color { return &t.CardFg }, func(t *Theme) color.Color { return t.Fg }},
 	{func(t *Theme) *color.Color { return &t.Popover }, func(t *Theme) color.Color { return t.Card }},
 	{func(t *Theme) *color.Color { return &t.PopoverFg }, func(t *Theme) color.Color { return t.CardFg }},
-	{func(t *Theme) *color.Color { return &t.PrimaryHover }, func(t *Theme) color.Color { return compositeColor(t.Primary, t.Bg, .9) }},
+	{func(t *Theme) *color.Color { return &t.PrimaryHover }, func(t *Theme) color.Color { return compositeColor(t.Primary, t.Bg, .8) }},
 	{func(t *Theme) *color.Color { return &t.SecondaryFg }, func(t *Theme) color.Color { return t.Fg }},
 	{func(t *Theme) *color.Color { return &t.Accent }, func(t *Theme) color.Color { return t.Muted }},
 	{func(t *Theme) *color.Color { return &t.AccentFg }, func(t *Theme) color.Color { return t.Fg }},
@@ -278,11 +272,11 @@ func (t Theme) Resolve() Theme {
 		}
 	}
 	if t.RadiusSm == 0 {
-		t.RadiusSm = t.Radius * .75
+		t.RadiusSm = t.Radius * .8
 		a.radiusSm = t.RadiusSm
 	}
 	if t.RadiusLg == 0 {
-		t.RadiusLg = t.Radius * 1.5
+		t.RadiusLg = t.Radius * 1.4
 		a.radiusLg = t.RadiusLg
 	}
 	t.auto = a

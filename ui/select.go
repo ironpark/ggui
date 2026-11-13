@@ -15,24 +15,33 @@ import (
 type SelectWidget[T comparable] struct {
 	props property.Owner
 	ggui.Interactive
-	value      ggui.Binding[T]
-	options    []T
-	optionProp property.Value[[]T]
-	label      func(T) string
-	minWidth   float64
-	onChange   func(T)
+	value         ggui.Binding[T]
+	options       []T
+	optionProp    property.Value[[]T]
+	label         func(T) string
+	minWidth      float64
+	onChange      func(T)
+	alignItem     bool
+	wasOpen       bool
+	native        bool
+	anchorRect    ggui.Rect
+	alignedHeight float64
+	placedAnchor  ggui.Rect
+	placedScreen  ggui.Size
 
-	popup     *ggui.PopupWidget
-	text      *ggui.TextWidget
-	box       *ggui.BoxWidget // the field's fill and border
-	viewport  *selectViewport[T]
-	list      *ggui.BoxWidget // the open list's panel
-	items     []*selectItem[T]
-	pad       ggui.EdgeInsets
-	textSize  ggui.Size
-	highlight int // the option the keyboard is on while open, or -1
-	theme     *uitheme.Theme
-	env       ggui.Env
+	popup          *ggui.PopupWidget
+	text           *ggui.TextWidget
+	box            *ggui.BoxWidget // the field's fill and border
+	viewport       *selectViewport[T]
+	list           *ggui.BoxWidget // the open list's panel
+	items          []*selectItem[T]
+	pad            ggui.EdgeInsets
+	textSize       ggui.Size
+	triggerContent ggui.Widget
+	triggerSize    ggui.Size
+	highlight      int // the option the keyboard is on while open, or -1
+	theme          *uitheme.Theme
+	env            ggui.Env
 }
 
 // Select creates a dropdown bound to value, showing each option through
@@ -40,7 +49,7 @@ type SelectWidget[T comparable] struct {
 // keys move through the options (or change the value directly while closed)
 // and Escape closes it. The options slice is shallow-copied.
 func Select[T comparable](value ggui.Binding[T]) *SelectWidget[T] {
-	s := &SelectWidget[T]{value: value, label: sprint[T], highlight: -1}
+	s := &SelectWidget[T]{value: value, label: sprint[T], highlight: -1, alignItem: true}
 	s.Role = ggui.RoleSelect
 	s.AutoKey()
 	s.box = ggui.Box()
@@ -51,6 +60,36 @@ func Select[T comparable](value ggui.Binding[T]) *SelectWidget[T] {
 	s.list = ggui.Box(s.viewport)
 	s.popup = ggui.Popup(selectAnchor[T]{s}, s.list).Keys(s).Owner(s)
 	return s
+}
+
+// NativeSelect prefers the platform's checked native menu and falls back to
+// the regular Select popup when no native menu is available (including probes).
+func NativeSelect[T comparable](value ggui.Binding[T]) *SelectWidget[T] {
+	return Select(value).Native(true)
+}
+
+// Native chooses whether opening first attempts a platform-native menu.
+func (s *SelectWidget[T]) Native(v bool) *SelectWidget[T] { s.native = v; return s }
+
+func (s *SelectWidget[T]) show() {
+	if s.IsInert() {
+		return
+	}
+	if s.native {
+		entries := make([]ggui.MenuItem, len(s.options))
+		selected := ggui.Untrack(s.value.Get)
+		for j, value := range s.options {
+			entries[j] = ggui.MenuAction(s.label(value), "", func() {
+				if !s.IsInert() {
+					setChanged(s.value, value, s.onChange)
+				}
+			}).BindChecked(ggui.Const(value == selected))
+		}
+		if w := ggui.UseWindow(); w != nil && w.ShowContextMenu(s.anchorRect.Origin.Add(ggui.Pt(0, s.anchorRect.Size.H)), entries...) {
+			return
+		}
+	}
+	s.popup.Show()
 }
 
 // Options replaces the options with a shallow copy, including after mount,
@@ -135,7 +174,7 @@ func (s *SelectWidget[T]) Act(a ggui.Action) bool {
 	case ggui.ActionExpand:
 		s.highlight = s.index()
 		s.viewport.reveal = true
-		s.popup.Show()
+		s.show()
 	case ggui.ActionCollapse:
 		s.popup.Hide()
 	case ggui.ActionSetValue, ggui.ActionSelect:
@@ -169,8 +208,21 @@ func (s *SelectWidget[T]) BindDisabled(r ggui.Readable[bool]) *SelectWidget[T] {
 	return s
 }
 
+// TriggerContent replaces the visible label and chevron with a decorative
+// widget inside the field's padding. The Select keeps its own input handling,
+// accessible name, formatted value and option list; the face cannot take focus
+// or intercept presses. Bind the face's text to value when it shows selection.
+// Passing nil restores the default label and chevron.
+func (s *SelectWidget[T]) TriggerContent(child ggui.Widget) *SelectWidget[T] {
+	if !property.Same(s.triggerContent, child) {
+		s.triggerContent = child
+		s.props.Changed()
+	}
+	return s
+}
+
 // MinWidth sets the least width the field asks for; it is otherwise as
-// wide as its widest option, and fills a tight width.
+// wide as its widest option or custom trigger content, and fills a tight width.
 func (s *SelectWidget[T]) MinWidth(w float64) *SelectWidget[T] {
 	defer property.Watch(&s.props, &s.minWidth)()
 	s.minWidth = w
@@ -179,6 +231,18 @@ func (s *SelectWidget[T]) MinWidth(w float64) *SelectWidget[T] {
 
 // OnChange fires with the new value after the user picks one.
 func (s *SelectWidget[T]) OnChange(fn func(T)) *SelectWidget[T] { s.onChange = fn; return s }
+
+// AlignItemWithTrigger places the selected row over the trigger when opening
+// (the default). Near window edges the list scrolls to preserve that alignment.
+// False restores the usual below/above dropdown placement.
+func (s *SelectWidget[T]) AlignItemWithTrigger(v bool) *SelectWidget[T] {
+	defer property.Watch(&s.props, &s.alignItem)()
+	if s.alignItem != v {
+		s.wasOpen = false
+	}
+	s.alignItem = v
+	return s
+}
 
 // Popup returns the popup the options open in.
 func (s *SelectWidget[T]) Popup() *ggui.PopupWidget { return s.popup }
@@ -195,11 +259,28 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	s.theme = t
 	s.env = env
 	s.pad = t.FieldPad
+	if s.triggerContent == nil {
+		s.pad.Right = t.Space
+	}
 	s.box.Radius(t.Radius).Fill(t.Input)
 	panelBox(s.list, t)
 	// The label is one Text for the field's life, so its shaping survives
 	// a relayout that changes neither the value nor the style.
 	s.text.Content(s.label(ggui.Untrack(s.value.Get))).Color(pick[color.Color](s.IsInert(), t.MutedFg, t.Fg))
+	if s.triggerContent != nil {
+		// A custom face owns all available inner width, including the space the
+		// default chevron occupies. Measure again at the chosen width so wrapped
+		// labels and trailing icons respond to MinWidth and stretched layouts.
+		faceEnv := env.WithText(ggui.TextStyle{Color: pick[color.Color](s.IsInert(), t.MutedFg, t.Fg)})
+		inner := s.pad.Shrink(c).Loosen()
+		natural := s.triggerContent.Layout(inner, faceEnv)
+		w := clamp(max(s.pad.Inflate(natural).W, s.minWidth), c.MinW, c.MaxW)
+		inner.MinW = max(0, w-s.pad.Horizontal())
+		inner.MaxW = inner.MinW
+		s.triggerSize = s.triggerContent.Layout(inner, faceEnv)
+		s.list.Width(w)
+		return s.popup.Layout(ggui.Constraints{MinW: w, MaxW: w, MinH: min(c.MaxH, max(c.MinH, 20+s.pad.Vertical())), MaxH: c.MaxH}, env)
+	}
 	// As wide as the widest option, so the field does not resize as the
 	// value changes, and never wider than the row wants unless told to.
 	widest := 0.0
@@ -210,7 +291,7 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	w := clamp(max(natural, s.minWidth), c.MinW, c.MaxW)
 	s.list.Width(w) // the popup follows its trigger, not the window width
 	s.textSize = s.text.Layout(ggui.Loose(ggui.Sz(max(w-s.pad.Left-s.pad.Right-t.ControlSize-t.ControlGap, 0), c.MaxH)), env)
-	inner := ggui.Constraints{MinW: w, MaxW: w, MinH: c.MinH, MaxH: c.MaxH}
+	inner := ggui.Constraints{MinW: w, MaxW: w, MinH: min(c.MaxH, max(c.MinH, 20+t.FieldPad.Top+t.FieldPad.Bottom)), MaxH: c.MaxH}
 	return s.popup.Layout(inner, env)
 }
 
@@ -218,15 +299,75 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 // what the popup's anchor draws.
 func (s *SelectWidget[T]) paintField(dst *ggui.Canvas, r ggui.Rect) {
 	t := s.theme
+	s.anchorRect = r
+	s.Hit(dst, r, s, ggui.CursorShapePointer)
+	s.positionList(dst, r)
 	open := s.popup.IsOpen()
 	s.box.Border(t.BorderWidth, pick(open || s.Focused, t.Ring, t.InputBorder))
-	s.Hit(dst, r, s, ggui.CursorShapePointer)
 	dst.Paint(s.box, r)
-	dst.Clip(r).Paint(s.text, ggui.Rct(ggui.Pt(r.Origin.X+s.pad.Left, r.Origin.Y+(r.Size.H-s.textSize.H)/2), s.textSize))
-	// Chevron, pointing down, or up while open.
-	center := ggui.Pt(r.Origin.X+r.Size.W-t.Space-t.ControlSize*0.3, r.Origin.Y+r.Size.H/2)
-	chevron(dst, s.env, t, center, pick(open, -2.0, 2.0), pick(s.IsInert(), t.MutedFg, t.Fg))
-	s.FocusRing(dst, r, t.Radius, t.Ring)
+	if s.triggerContent != nil {
+		inner := ggui.Rct(r.Origin.Add(ggui.Pt(s.pad.Left, s.pad.Top)), ggui.Sz(max(0, r.Size.W-s.pad.Horizontal()), max(0, r.Size.H-s.pad.Vertical())))
+		at := ggui.Rct(inner.Origin.Add(ggui.Pt(0, (inner.Size.H-s.triggerSize.H)/2)), s.triggerSize)
+		dst.Clip(inner).Inert().Paint(s.triggerContent, at)
+	} else {
+		dst.Clip(r).Paint(s.text, ggui.Rct(ggui.Pt(r.Origin.X+s.pad.Left, r.Origin.Y+(r.Size.H-s.textSize.H)/2), s.textSize))
+		// Chevron, pointing down, or up while open.
+		center := ggui.Pt(r.Origin.X+r.Size.W-t.Space-t.ControlSize*0.3, r.Origin.Y+r.Size.H/2)
+		chevron(dst, s.env, t, center, pick(open, -2.0, 2.0), pick(s.IsInert(), t.MutedFg, t.Fg))
+	}
+	controlFocusRing(dst, &s.Interactive, t, r, t.Radius, t.Ring)
+}
+
+// positionList uses Popup's point placement, retaining its focus scope and
+// dismissal behavior. Measuring selectViewport does not reset its scroll state.
+func (s *SelectWidget[T]) positionList(dst *ggui.Canvas, r ggui.Rect) {
+	open := s.popup.IsOpen()
+	opening := open && !s.wasOpen
+	s.wasOpen = open
+	if !open {
+		return
+	}
+	index := s.index()
+	screen := dst.Size()
+	if !s.alignItem || index < 0 || screen.H <= 0 {
+		s.list.MaxHeight(0)
+		s.popup.AnchorPosition()
+		s.popup.Gap(4)
+		return
+	}
+	// Keep placement stable while the user highlights or scrolls other rows.
+	if !opening && r == s.placedAnchor && screen == s.placedScreen {
+		return
+	}
+	s.placedAnchor, s.placedScreen = r, screen
+	s.list.MaxHeight(0)
+	natural := s.list.Layout(ggui.Loose(ggui.Sz(min(r.Size.W, screen.W), ggui.Unbounded)), s.env)
+	center := s.theme.PanelPad.Top
+	for j, item := range s.items {
+		if j == index {
+			center += item.height / 2
+			break
+		}
+		center += item.height
+	}
+	wantedY := r.Center().Y - center
+	height := min(natural.H, screen.H)
+	y := clamp(wantedY, 0, max(0, screen.H-height))
+	offset := clamp(y-wantedY, 0, max(0, natural.H-height))
+	if natural.H > screen.H {
+		// For a scrolling list, reserve only the room needed below the
+		// selected row. This permits exact alignment even near the last row.
+		y = max(0, wantedY)
+		offset = max(0, -wantedY)
+		height = max(0, min(natural.H-offset, screen.H-y))
+	}
+	s.alignedHeight = height
+	s.list.MaxHeight(height)
+	s.viewport.offset.Set(offset)
+	s.viewport.reveal = true
+	// Align label starts as well where the window has enough horizontal room.
+	x := r.Origin.X + s.pad.Left - s.theme.PanelPad.Left - s.theme.ItemPad.Left - s.theme.ControlSize - s.theme.ControlGap
+	s.popup.Gap(0).ShowAt(ggui.Pt(x, y))
 }
 
 // Paint implements Widget.
@@ -262,11 +403,14 @@ func (s *SelectWidget[T]) toggle() {
 	}
 	s.highlight = s.index()
 	s.viewport.reveal = true
-	s.popup.Show()
+	s.show()
 }
 
 // HandleKey implements KeyHandler.
 func (s *SelectWidget[T]) HandleKey(ev ggui.KeyEvent) {
+	if s.IsInert() {
+		return
+	}
 	s.Keyboard(ev, nil)
 	if ev.Kind == ggui.KeyBlur {
 		s.popup.Hide()
@@ -307,6 +451,10 @@ func (s *SelectWidget[T]) Adopt(prev any) {
 		s.highlight = p.highlight
 		s.viewport.offset.Set(ggui.Untrack(p.viewport.offset.Get))
 		s.viewport.reveal = p.viewport.reveal
+		s.wasOpen = p.wasOpen
+		s.alignedHeight = p.alignedHeight
+		s.placedAnchor, s.placedScreen = p.placedAnchor, p.placedScreen
+		s.list.MaxHeight(s.alignedHeight)
 		if p.popup.IsOpen() {
 			s.popup.Show()
 		}
@@ -314,14 +462,23 @@ func (s *SelectWidget[T]) Adopt(prev any) {
 }
 
 // HandlePointer implements PointerHandler.
-func (s *SelectWidget[T]) HandlePointer(ev ggui.PointerEvent) bool { return s.Pointer(ev, s.toggle) }
+func (s *SelectWidget[T]) HandlePointer(ev ggui.PointerEvent) bool {
+	if s.IsInert() {
+		return false
+	}
+	return s.Pointer(ev, s.toggle)
+}
 
 // selectAnchor is the popup's anchor: the field, painted by its Select.
 type selectAnchor[T comparable] struct{ s *SelectWidget[T] }
 
 func (a selectAnchor[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	s := a.s
-	s.box.Size(c.MaxW, s.pad.Inflate(s.textSize).H)
+	size := s.textSize
+	if s.triggerContent != nil {
+		size = s.triggerSize
+	}
+	s.box.Size(c.MaxW, s.pad.Inflate(size).H)
 	return s.box.Layout(c, env)
 }
 

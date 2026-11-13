@@ -123,6 +123,7 @@ and launch macOS app bundles.
 | [Workspace](examples/workspace) | A project dashboard combining searchable tables, form lenses, live options, dialogs, charts, animated progress, toasts, and theme switching. | `task run-workspace` |
 | [SQLite](examples/sqlite) | A SQLite client with table browsing, filters, paging, typed edits, row creation/deletion, cancellable SQL, and CSV export. | `go run ./examples/sqlite` |
 | [Gallery](examples/gallery) | Searchable previews across Inputs, Navigation, Feedback, Layout, and Data. | `task run-gallery` |
+| [Create](examples/create) | Live theme editor with interactive card previews, independent palettes, typography, radius, preset import/export and Go code. | `go run ./examples/create` |
 
 On other platforms, use `go run ./examples/counter`, `go run ./examples/todo`,
 or `go run ./examples/gallery`. The gallery adapts from two columns to one in

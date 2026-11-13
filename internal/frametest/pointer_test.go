@@ -3,6 +3,7 @@ package frametest_test
 import (
 	"image/color"
 	"testing"
+	"time"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/framestats"
@@ -195,7 +196,7 @@ func TestHoverHighlightsFadingAsThePointerCrossesRows(t *testing.T) {
 func TestATooltipFollowsThePointerInPartAndOpensWhole(t *testing.T) {
 	frames := sameAsWholeAlong(t, ggui.Sz(260, 160), along(func() ggui.Widget {
 		anchor := ggui.Box().Size(60, 24).Fill(blue)
-		return topLeft(ggui.Column(ui.Tooltip(anchor, "A tip that runs past its anchor"), ggui.Box().Size(200, 80).Fill(green)))
+		return topLeft(ggui.Column(ui.Tooltip(anchor, "A tip that runs past its anchor").Delay(500*time.Millisecond), ggui.Box().Size(200, 80).Fill(green)))
 	}, path(ggui.Pt(150, 100), ggui.Pt(30, 12), 8), nil))
 	if counts(frames)[ggui.FramePartial] < 6 {
 		t.Fatalf("want the moves before the tooltip opened painted in part: %v", counts(frames))

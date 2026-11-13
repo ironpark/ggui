@@ -195,3 +195,47 @@ ui.NumberInput(opacity).Range(0, 1).Step(0.05) // shows two decimals
 For segmented verification codes, see [Input OTP](carousel-and-otp.md#input-otp).
 For font fallbacks, IME-related text coverage, and emoji, see
 [Fonts, emoji, and icons](fonts.md).
+
+## Pressed buttons, labels and ranges
+
+`ui.Toggle(pressed, "Bold")` is a two-state button with `.Outline()`, button size
+variants and `.OnChange(fn)`. `ui.ToggleGroupMultiple(values).Options(options)`
+binds a slice of independent selections. Its arrows move focus without changing
+the selection; Space and Enter toggle the focused option. `.OnValuesChange(fn)`
+receives an owned snapshot.
+
+`ui.Label("Email").For(editor)` associates a separate label with a control.
+Clicking focuses the editor or activates an associated choice control, without
+adding a Tab stop. `Field` uses this association automatically.
+
+```go
+budget := ggui.State([]float64{25, 75})
+ui.RangeSlider(budget, 0, 100).Step(5).MinGap(10).
+    ThumbNames("Minimum budget", "Maximum budget")
+```
+
+`RangeSlider` supports any number of independently focusable thumbs. `MinGap`
+is measured in value units; thumbs never cross. Each thumb exposes its permitted
+minimum and maximum to accessibility. `Slider` and `RangeSlider` support
+`.Vertical()`, `.LargeStep(n)`, `.OnChange(fn)` and `.OnCommit(fn)`. Defaults are
+step 1 and large step 10; use `.Step(0)` for continuous pointer movement. Page
+keys and Shift+arrows use the large step. Home/End respect neighboring thumbs.
+Horizontal pointer position and Left/Right keys mirror under `DirRTL`.
+
+## Multiple comboboxes and native selects
+
+```go
+languages := ggui.State([]string{"Go"})
+ui.ComboboxMultiple(languages).Options([]string{"Go", "Rust", "TypeScript"}).
+    Name("Languages").OnValuesChange(updateLanguages)
+```
+
+The popup filters options, marks selections and stays open while toggling them.
+Selected values appear as removable chips. `Options` / `BindOptions`, `Format`,
+`Placeholder`, `Disabled` / `BindDisabled` and `Key` follow the single-combobox
+conventions. Callbacks receive separate slice snapshots. An empty search accepts
+Backspace to remove the last selected value.
+
+`ui.NativeSelect(value).Options(options)` attempts the platform's checked native
+menu. It uses the regular themed Select popup when the platform cannot provide
+one, including in headless tests. `ui.Select(value).Native(true)` is equivalent.

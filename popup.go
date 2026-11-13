@@ -1,9 +1,14 @@
 package ggui
 
 import (
+	"slices"
+
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
 )
+
+// popupEscape closes the innermost open popup.
+var popupEscape = MustChord("escape")
 
 // PopupWidget shows content floating over the tree, anchored below (or,
 // when there is no room, above) its anchor widget: the base of dropdowns
@@ -18,17 +23,28 @@ import (
 // bind it to a StateValue with BindOpen. Widgets inside the content can find the
 // popup with PopupOf and close it after acting.
 type PopupWidget struct {
-	props   property.Owner
-	anchor  Widget
-	content Widget
-	open    bool
-	bound   Binding[bool]
-	gap     float64
-	keys    KeyHandler
-	owner   any
-	onClose func()
-	id      any
-	point   *Point
+	props           property.Owner
+	anchor          Widget
+	content         Widget
+	open            bool
+	bound           Binding[bool]
+	gap             float64
+	keys            KeyHandler
+	owner           any
+	onClose         func()
+	nonmodal        bool
+	align           PopupAlignment
+	anchorRect      Rect
+	paintedOpen     bool
+	hadContentFocus bool
+	contentKeys     []KeyHandler
+	children        []*PopupWidget
+	parent          *PopupWidget
+	opener          KeyHandler
+	restore         bool
+	focusContent    bool
+	id              any
+	point           *Point
 
 	env         Env
 	contentSize Size
@@ -38,6 +54,33 @@ type PopupWidget struct {
 }
 
 var popupKey = NewEnvKey[*PopupWidget]("popup")
+
+// PopupAlignment positions content horizontally relative to its anchor.
+// Start and End follow the environment's writing direction.
+type PopupAlignment uint8
+
+const (
+	PopupStart PopupAlignment = iota
+	PopupCenter
+	PopupEnd
+)
+
+// Align sets horizontal anchor alignment (logical start by default).
+func (p *PopupWidget) Align(v PopupAlignment) *PopupWidget {
+	defer property.Watch(&p.props, &p.align)()
+	p.align = v
+	return p
+}
+
+// Modal controls focus trapping and outside-click interception. The default
+// is true. A nonmodal popup focuses its content on opening, permits Tab to
+// leave, closes when focus leaves both anchor and content, and lets outside
+// presses reach their targets. Escape returns focus to the opener.
+func (p *PopupWidget) Modal(v bool) *PopupWidget {
+	defer property.Watch(&p.props, &p.nonmodal)()
+	p.nonmodal = !v
+	return p
+}
 
 // Popup creates a closed popup that opens content next to anchor.
 func Popup(anchor, content Widget) *PopupWidget {
@@ -88,6 +131,9 @@ func (p *PopupWidget) HitID() any { return p.id }
 func (p *PopupWidget) Adopt(prev any) {
 	if q, ok := prev.(*PopupWidget); ok {
 		p.reveal = q.reveal
+		p.paintedOpen, p.opener = q.paintedOpen, q.opener
+		p.hadContentFocus, p.contentKeys = q.hadContentFocus, q.contentKeys
+		p.children = q.children
 		if p.bound == nil {
 			p.open = q.IsOpen()
 			p.point = q.point
@@ -98,6 +144,16 @@ func (p *PopupWidget) Adopt(prev any) {
 // HandlePointer implements PointerHandler for the anchor region, which
 // exists only so a rebuilt popup can adopt: it consumes nothing.
 func (p *PopupWidget) HandlePointer(PointerEvent) bool { return false }
+
+// HandleKey handles Escape when a text-only nonmodal panel owns focus.
+func (p *PopupWidget) HandleKey(e KeyEvent) {
+	if e.Kind == KeyPress && e.Key == KeyEscape {
+		p.Hide()
+	}
+}
+
+// ConsumesKey reserves Escape for a text-only popup's focus target.
+func (p *PopupWidget) ConsumesKey(e KeyEvent) bool { return e.Kind == KeyPress && e.Key == KeyEscape }
 
 // Keys registers h as the key handler over the content, so a click inside
 // the popup keeps keyboard focus on h (the widget that opened it) instead
@@ -129,15 +185,24 @@ func (p *PopupWidget) SetOpen(v bool) {
 	} else {
 		p.open = v
 	}
-	if was != v {
+	actual := p.IsOpen()
+	if was != actual {
 		Invalidate(p.env)
 	}
-	if was && !v {
+	if was && !actual {
 		Invalidate(p.env)
 		if p.onClose != nil {
 			p.onClose()
 		}
 	}
+}
+
+// FocusContent requests the first focusable content control on the next paint.
+// This is useful when a nonmodal popup switches between different panels.
+func (p *PopupWidget) FocusContent() *PopupWidget {
+	p.focusContent = true
+	p.paintedOpen = false
+	return p
 }
 
 // Show opens the popup.
@@ -151,7 +216,13 @@ func (p *PopupWidget) ShowAt(at Point) { p.point = &at; p.Show() }
 func (p *PopupWidget) AnchorPosition() { p.point = nil }
 
 // Hide closes the popup.
-func (p *PopupWidget) Hide() { p.SetOpen(false) }
+func (p *PopupWidget) Hide() {
+	was := p.IsOpen()
+	p.SetOpen(false)
+	if p.nonmodal && was && !p.IsOpen() {
+		p.restore = p.opener != nil
+	}
+}
 
 // Toggle opens a closed popup and closes an open one.
 func (p *PopupWidget) Toggle() { p.SetOpen(!p.IsOpen()) }
@@ -164,18 +235,63 @@ func (p *PopupWidget) Rect() Rect { return p.rect }
 // part of, if any. A menu item closes its menu this way.
 func PopupOf(env Env) (*PopupWidget, bool) { return env.Get(popupKey) }
 
+// attach lists p among its parent popup's children, once. The parent
+// empties the list as it paints, so both passes ask.
+func (p *PopupWidget) attach() {
+	if p.parent != nil && !slices.Contains(p.parent.children, p) {
+		p.parent.children = append(p.parent.children, p)
+	}
+}
+
 // Layout implements Widget.
 func (p *PopupWidget) Layout(c Constraints, env Env) Size {
 	defer p.props.Layout().EndLayout()
+	if parent, ok := PopupOf(env); ok && parent != p {
+		p.parent = parent
+		p.attach()
+	}
 	p.env = env.With(popupKey, p)
 	return p.anchor.Layout(c, env)
 }
 
 // Paint implements Widget.
 func (p *PopupWidget) Paint(dst *Canvas, r Rect) {
+	p.attach()
 	dst.HitPointer(r, p)
-	dst.Paint(p.anchor, r)
+	p.anchorRect = r
+	anchorFocused := dst.PaintFocus(p.anchor, r)
+	if p.restore {
+		for _, hit := range dst.fs().hits {
+			if hit.key != nil && (sameAny(hit.key, p.opener) || idOf(p.opener) != nil && sameAny(hit.id, idOf(p.opener))) {
+				dst.RequestFocus(hit.key)
+				break
+			}
+		}
+		p.restore = false
+	}
 	open := p.IsOpen()
+	if p.nonmodal {
+		if open && !p.paintedOpen {
+			p.opener = dst.fs().focusKey
+			p.focusContent = true
+			p.hadContentFocus = false
+		}
+		inside := p.ownsFocus(dst)
+		p.hadContentFocus = p.hadContentFocus || inside
+		if open && p.hadContentFocus && !inside && !anchorFocused && dst.fs().focusKey != nil {
+			present := false
+			for _, hit := range dst.fs().prev {
+				present = present || sameAny(hit.key, dst.fs().focusKey)
+			}
+			if present {
+				p.SetOpen(false)
+				open = p.IsOpen()
+			} else {
+				p.focusContent = true
+			}
+		}
+	}
+	p.paintedOpen = open
 	now := FrameTime()
 	progress := p.reveal.Toggle(open, now, p.env.Motion(p.env.PopupDuration()))
 	if !open && progress <= 0 {
@@ -192,12 +308,30 @@ func (p *PopupWidget) Paint(dst *Canvas, r Rect) {
 
 // paintContent lays the content out for the room around the anchor and
 // paints it, on a scrim that closes the popup when clicked.
+func (p *PopupWidget) ownsFocus(dst *Canvas) bool {
+	for _, key := range p.contentKeys {
+		if dst.HasFocus(key) {
+			return true
+		}
+	}
+	for _, child := range p.children {
+		if (child.IsOpen() || child.restore || child.paintedOpen) && child.ownsFocus(dst) {
+			return true
+		}
+	}
+	return false
+}
+
 func (p *PopupWidget) paintContent(dst *Canvas, anchor Rect) {
+	p.children = p.children[:0]
 	screen := dst.Size()
 	if screen == (Size{}) {
 		screen = Sz(Unbounded, Unbounded)
 	}
 	maxW := max(screen.W-anchor.Origin.X, anchor.Size.W)
+	if p.align != PopupStart || p.env.Direction() == DirRTL {
+		maxW = screen.W
+	}
 	if p.point != nil {
 		// Point placement is clamped to the screen, so the whole width is
 		// available regardless of where the anchor happened to be.
@@ -217,6 +351,11 @@ func (p *PopupWidget) paintContent(dst *Canvas, anchor Rect) {
 		size = p.effect.Layout(Constraints{MinW: anchor.Size.W, MaxW: maxW, MaxH: max(room, 0)}, p.env)
 	}
 	x := anchor.Origin.X
+	if p.align == PopupCenter {
+		x += (anchor.Size.W - size.W) / 2
+	} else if p.align == PopupEnd && p.env.Direction() != DirRTL || p.align == PopupStart && p.env.Direction() == DirRTL {
+		x += anchor.Size.W - size.W
+	}
 	if screen.W != Unbounded {
 		x = clamp(x, 0, max(screen.W-size.W, 0))
 	}
@@ -224,14 +363,45 @@ func (p *PopupWidget) paintContent(dst *Canvas, anchor Rect) {
 	p.rect = Rct(Pt(x, y), size)
 
 	dst.HitPointer(Rect{Size: screen}, popupScrim{p})
-	// A focus scope: Tab stays inside the content and Escape closes.
-	dst.FocusTrap(p, p.Hide, func(dst *Canvas) {
+	paint := func(dst *Canvas) {
 		dst.HitPointer(p.rect, popupSink{})
 		if p.keys != nil {
 			dst.HitKey(p.rect, p.keys)
 		}
+		first := len(dst.fs().hits)
 		dst.Paint(p.effect, p.rect)
-	})
+		p.contentKeys = p.contentKeys[:0]
+		for _, hit := range dst.fs().hits[first:] {
+			if hit.key != nil {
+				p.contentKeys = append(p.contentKeys, hit.key)
+			}
+		}
+		if p.nonmodal && len(p.contentKeys) == 0 {
+			dst.HitKey(p.rect, p)
+			p.contentKeys = append(p.contentKeys, p)
+		}
+		if p.nonmodal && p.focusContent {
+			p.focusContent = false
+			for _, hit := range dst.fs().hits[first:] {
+				if hit.key != nil {
+					dst.RequestFocus(hit.key)
+					break
+				}
+			}
+		}
+	}
+	if p.nonmodal {
+		paint(dst)
+		childOpen := false
+		for _, child := range p.children {
+			childOpen = childOpen || child.IsOpen()
+		}
+		if p.IsOpen() && !childOpen {
+			dst.Shortcut(popupEscape, p.Hide)
+		}
+	} else {
+		dst.FocusTrap(p, p.Hide, paint)
+	}
 }
 
 // popupScrim covers the window under an open popup: a press closes the
@@ -241,6 +411,10 @@ type popupScrim struct{ p *PopupWidget }
 func (s popupScrim) HandlePointer(ev PointerEvent) bool {
 	switch ev.Kind {
 	case PointerDown:
+		if s.p.nonmodal {
+			s.p.SetOpen(false)
+			return s.p.anchorRect.Contains(ev.Pos)
+		}
 		s.p.Hide()
 		return true
 	case PointerUp, PointerTap:

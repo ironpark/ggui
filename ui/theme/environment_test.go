@@ -62,7 +62,7 @@ func TestLocalThemeMapsCoreStylesAndPreservesPreferences(t *testing.T) {
 	preserveEnv(t)
 	theme.Set(theme.Default())
 	local := theme.Dark()
-	local.Space, local.MotionFast = 13, 97*time.Millisecond
+	local.Space, local.MotionFast, local.MotionOverlay = 13, 97*time.Millisecond, 73*time.Millisecond
 	local.Title.Size = 31
 	custom := ggui.NewEnvKey[string]("custom")
 	parent := theme.Default().Apply(ggui.Env{}).With(custom, "kept").With(ggui.ReducedMotionKey, true)
@@ -76,7 +76,7 @@ func TestLocalThemeMapsCoreStylesAndPreservesPreferences(t *testing.T) {
 	if theme.From(seen).Bg != local.Bg || seen.Background() != local.Bg || seen.Spacing() != 13 {
 		t.Fatal("subtree did not receive local theme and core settings")
 	}
-	if seen.Text().Color != local.Fg || seen.EditorStyle().Selection != local.Selection || seen.ScrollStyle().Color != local.MutedFg || seen.PopupDuration() != local.MotionFast {
+	if seen.Text().Color != local.Fg || seen.EditorStyle().Selection != local.Selection || seen.ScrollStyle().Color != local.MutedFg || seen.PopupDuration() != local.MotionOverlay {
 		t.Fatal("theme did not reach core text, editor, scrollbar, and popup styles")
 	}
 	if value, _ := seen.Get(custom); value != "kept" || !seen.ReducedMotion() || seen.Motion(seen.PopupDuration()) != 0 {

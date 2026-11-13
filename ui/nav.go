@@ -84,3 +84,24 @@ func navTarget(key ggui.KeyboardKey, axis navAxis, i, n int) (int, bool) {
 	}
 	return 0, false
 }
+
+// directionalKey maps physical horizontal movement to logical item order.
+func directionalKey(ev ggui.KeyEvent, rtl bool) ggui.KeyEvent {
+	if rtl {
+		switch ev.Key {
+		case ggui.KeyArrowLeft:
+			ev.Key = ggui.KeyArrowRight
+		case ggui.KeyArrowRight:
+			ev.Key = ggui.KeyArrowLeft
+		}
+	}
+	return ev
+}
+
+// mirrorHorizontal mirrors a local rectangle without changing its hit identity.
+func mirrorHorizontal(r, parent ggui.Rect, rtl bool) ggui.Rect {
+	if rtl {
+		r.Origin.X = parent.Origin.X + parent.Size.W - (r.Origin.X - parent.Origin.X) - r.Size.W
+	}
+	return r
+}

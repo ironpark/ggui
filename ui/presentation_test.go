@@ -162,6 +162,7 @@ func TestHoverCardBridgeAndNarrowViewport(t *testing.T) {
 	}
 	p.Move(ggui.Pt(-1, -1))
 	p.Frame()
+	p.Advance(300 * time.Millisecond)
 	if _, ok := p.Find("Preview action"); ok {
 		t.Fatal("leaving hover card accepts input")
 	}
@@ -332,5 +333,82 @@ func TestDialogTopHoldsItsPanelAsItGrows(t *testing.T) {
 	p.Frame()
 	if r := d.Rect(); r.Origin.Y != (400-r.Size.H)/2 {
 		t.Fatalf("Top(0) left the panel at %v", r)
+	}
+}
+
+func TestProgressSemanticsUseTargetDuringMotion(t *testing.T) {
+	t.Parallel()
+	for _, ring := range []bool{false, true} {
+		for _, reduced := range []bool{false, true} {
+			value := ggui.State(.2)
+			var w ggui.Widget = Progress(value)
+			if ring {
+				w = ProgressRing(value)
+			}
+			p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, reduced, w), ggui.Sz(200, 40))
+			p.Advance(0)
+			p.Frame()
+			for _, target := range []float64{.8, -.5, 1.5} {
+				value.Set(target)
+				p.Frame()
+				p.Advance(30 * time.Millisecond)
+				n, ok := p.Semantics().Find(ggui.RoleProgress, "")
+				if !ok || n.Now != clamp(target, 0, 1) {
+					t.Errorf("ring=%v reduced=%v: accessible progress=%v, target=%v", ring, reduced, n.Now, target)
+				}
+			}
+			p.Close()
+		}
+	}
+}
+
+func TestDisclosureHoverMotion(t *testing.T) {
+	t.Parallel()
+	for _, accordion := range []bool{false, true} {
+		for _, reduced := range []bool{false, true} {
+			var w ggui.Widget
+			var anchor func(ggui.Rect) ggui.Anchor
+			if accordion {
+				a := Accordion(ggui.State([]string{}), AccordionItem("a", "Reveal", ggui.Text("Body")))
+				w = a
+				anchor = func(r ggui.Rect) ggui.Anchor {
+					r.Size.H = a.heights[0]
+					return a.headers[0].Anchor(r)
+				}
+			} else {
+				c := Collapsible(ggui.State(false), "Reveal", ggui.Text("Body"))
+				w = c
+				anchor = func(r ggui.Rect) ggui.Anchor {
+					r.Size.H = c.headerH
+					return c.Anchor(r)
+				}
+			}
+			var amount float64
+			watch := ggui.FromFuncs(w.Layout, func(dst *ggui.Canvas, r ggui.Rect) {
+				dst.Paint(w, r)
+				if m, ok := dst.Retained(anchor(r), disclosureHoverSlot); ok {
+					amount = m.Value(ggui.Now())
+				}
+			})
+			p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, reduced, watch), ggui.Sz(300, 100))
+			p.Advance(0)
+			p.Frame()
+			n, _ := p.Find("Reveal")
+			p.Move(n.Center())
+			p.Frame()
+			p.Advance(30 * time.Millisecond)
+			p.Frame()
+			if reduced && amount != 1 || !reduced && !(amount > 0 && amount < 1) {
+				t.Errorf("accordion=%v reduced=%v: hover=%v", accordion, reduced, amount)
+			}
+			p.Move(ggui.Pt(-1, -1))
+			p.Frame()
+			p.Advance(time.Second)
+			p.Frame()
+			if amount != 0 {
+				t.Errorf("hover did not settle after leaving: %v", amount)
+			}
+			p.Close()
+		}
 	}
 }

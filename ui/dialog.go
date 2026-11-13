@@ -29,7 +29,7 @@ type DialogWidget struct {
 //		ggui.Row(ui.Button("Delete", del), ui.Button("Cancel", func() { confirm.Set(false) }).Outline()),
 //	)).Title("Confirm")
 func Dialog(open ggui.Binding[bool], content ggui.Widget) *DialogWidget {
-	d := &DialogWidget{width: 360}
+	d := &DialogWidget{width: 384}
 	d.open, d.content, d.dismissible = open, content, true
 	return d
 }
@@ -93,11 +93,11 @@ func (d *DialogWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		d.name = d.nameReader.Get()
 	}
 	t := uitheme.Of(env)
-	d.build(env).Border(t.BorderWidth, t.Border).Radius(t.RadiusLg)
+	d.build(env).Shadow().Border(t.BorderWidth, fade(t.Fg, .1)).Radius(t.RadiusLg)
 	if d.effect == nil {
 		d.effect = ggui.PopIn(ggui.FromFuncs(
 			func(c ggui.Constraints, e ggui.Env) ggui.Size { return d.panel.Layout(c, e) },
-			func(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(d.panel, r) },
+			d.paintSurface,
 		))
 	}
 	return c.Constrain(ggui.Size{})
@@ -107,7 +107,7 @@ func (d *DialogWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 func (d *DialogWidget) Paint(dst *ggui.Canvas, _ ggui.Rect) {
 	open := ggui.Untrack(d.open.Get)
 	now := ggui.FrameTime()
-	v := d.reveal.Toggle(open, now, d.env.Motion(d.theme.MotionFast))
+	v := d.reveal.Toggle(open, now, d.env.Motion(d.theme.MotionOverlay))
 	if !open && v <= 0 {
 		d.rect = ggui.Rect{}
 		return
@@ -153,5 +153,12 @@ func (d *DialogWidget) BindName(r ggui.Readable[string]) *DialogWidget {
 		d.nameReader = r
 		d.props.Changed()
 	}
+	return d
+}
+
+// CloseButton controls the top-right close action, visible by default.
+func (d *DialogWidget) CloseButton(show bool) *DialogWidget {
+	defer property.Watch(&d.props, &d.hideClose)()
+	d.hideClose = !show
 	return d
 }

@@ -39,11 +39,11 @@ func (a *AlertWidget) Action(w ggui.Widget) *AlertWidget {
 func (a *AlertWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer a.props.Layout().EndLayout()
 	t := uitheme.Of(env)
-	fg, border := t.Fg, t.Border
+	fg, border := t.CardFg, t.Border
 	if a.destructive {
-		fg, border = t.Destructive, mix(t.Border, t.Destructive, .3)
+		fg = t.Destructive
 	}
-	a.title.Style(t.Text).Color(fg)
+	a.title.Style(t.Text.Merge(t.Label)).Color(fg)
 	a.description.Style(t.Text).Color(pick(a.destructive, fade(t.Destructive, .9), t.MutedFg))
 	// The box and column are built once, and again only after Action
 	// changes what they hold, so their layout caches survive a relayout.
@@ -56,8 +56,8 @@ func (a *AlertWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		a.box = ggui.Box(a.column)
 		a.stale = false
 	}
-	a.column.Gap(t.Space / 2)
-	a.box.Pad(t.Space*2).Fill(t.Card).Border(t.BorderWidth, border).Radius(t.Radius)
+	a.column.Gap(t.Space / 4)
+	a.box.Pad(t.Space, t.Space*1.25).Fill(t.Card).Border(t.BorderWidth, border).Radius(t.Radius)
 	return a.box.Layout(c, env)
 }
 
