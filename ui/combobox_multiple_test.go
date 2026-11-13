@@ -125,14 +125,57 @@ func TestComboboxMultipleChipsSitInsideItsField(t *testing.T) {
 	}
 	p.Tap("Pick")
 	tree := p.Semantics()
-	if n, ok := tree.Find(ggui.RoleMenuItem, "Beta"); !ok || !(n.Checked == ggui.Tri(true)) {
+	if n, ok := tree.Find(ggui.RoleOption, "Beta"); !ok || !n.Selected || !(n.Checked == ggui.Tri(true)) {
 		t.Fatalf("a chosen row is not checked:\n%s", tree)
 	}
-	if n, _ := tree.Find(ggui.RoleMenuItem, "Gamma"); n.Checked == ggui.Tri(true) {
+	if n, _ := tree.Find(ggui.RoleOption, "Gamma"); n.Checked == ggui.Tri(true) {
 		t.Fatal("a row not chosen is checked")
 	}
-	list, _ := p.Find("Search options")
+	list, _ := p.Find("Gamma")
 	if list.Rect.Size.W > 300 {
 		t.Fatalf("the list is wider than its field: %v", list.Rect)
+	}
+}
+
+func TestComboboxMultipleTypesAfterItsChipsAndKeepsTheKeyboard(t *testing.T) {
+	t.Parallel()
+	values := ggui.State([]string{"Alpha"})
+	combo := ui.ComboboxMultiple(values).Options([]string{"Alpha", "Beta", "Gamma"}).Name("Pick")
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(combo, ui.Button("After", nil))), ggui.Sz(400, 300))
+	defer p.Close()
+	p.Tap("Pick")
+	p.Type(ggui.Mods{}, ggui.KeyEscape)
+	if got := focusedName(t, p); got != "Pick" {
+		t.Fatalf("%q has the keyboard, not the input", got)
+	}
+	p.Text("am")
+	if !combo.Popup().IsOpen() {
+		t.Fatal("typing did not open the list")
+	}
+	if _, ok := p.Find("Beta"); ok {
+		t.Fatal("a nonmatch is listed")
+	}
+	p.Type(ggui.Mods{}, ggui.KeyArrowDown, ggui.KeyEnter)
+	if !slices.Equal(values.Get(), []string{"Alpha", "Gamma"}) || !combo.Popup().IsOpen() {
+		t.Fatalf("Enter toggled to %v, open=%v", values.Get(), combo.Popup().IsOpen())
+	}
+	if got := focusedName(t, p); got != "Pick" {
+		t.Fatalf("%q has the keyboard", got)
+	}
+	p.Type(ggui.Mods{}, ggui.KeyEscape)
+	if combo.Popup().IsOpen() {
+		t.Fatal("Escape did not close the list")
+	}
+	if n := node(t, p.Semantics(), ggui.RoleCombobox, "Pick"); n.Value != "am" || n.Description != "Alpha, Gamma" {
+		t.Fatalf("after the first Escape the input holds %q, described %q", n.Value, n.Description)
+	}
+	p.Type(ggui.Mods{}, ggui.KeyEscape)
+	if n := node(t, p.Semantics(), ggui.RoleCombobox, "Pick"); n.Value != "" {
+		t.Fatalf("the second Escape left %q", n.Value)
+	}
+	p.Text("x")
+	p.Type(ggui.Mods{}, ggui.KeyTab)
+	if combo.Popup().IsOpen() || node(t, p.Semantics(), ggui.RoleCombobox, "Pick").Value != "" {
+		t.Fatal("leaving the input kept the list or what was typed")
 	}
 }

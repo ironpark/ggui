@@ -175,7 +175,7 @@ func TestCompositeNamesUseSameTargetsAndDetach(t *testing.T) {
 				w := Combobox(ggui.State("a")).BindName(source)
 				widget = w
 				literal = func(s string) { w.Name(s) }
-				name = w.button.SemanticName
+				name = w.input.SemanticName
 			case "group":
 				field := TextField(ggui.State(""))
 				w := InputGroup(field).BindName(source)

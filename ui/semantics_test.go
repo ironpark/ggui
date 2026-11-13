@@ -137,7 +137,7 @@ menu "File" expanded
 `)
 }
 
-func TestSemanticsComboboxOwnsItsSearch(t *testing.T) {
+func TestSemanticsComboboxOwnsItsOptions(t *testing.T) {
 	t.Parallel()
 	c := ui.Combobox(ggui.State(1)).Options([]int{1, 2})
 	p := ggui.NewProbe(c, ggui.Sz(400, 400))
@@ -145,15 +145,15 @@ func TestSemanticsComboboxOwnsItsSearch(t *testing.T) {
 	p.Frame()
 	c.Popup().Show()
 	tree := p.Semantics()
-	trigger := node(t, tree, ggui.RoleCombobox, "Choose option")
-	if !trigger.Expanded.Open() {
-		t.Fatalf("the trigger does not report the open list:\n%s", tree)
+	input := node(t, tree, ggui.RoleCombobox, "Choose option")
+	if !input.Expanded.Open() || input.Value != "1" {
+		t.Fatalf("the input does not report its value and the open list:\n%s", tree)
 	}
-	if len(trigger.Children) == 0 {
-		t.Fatalf("the search panel is not inside the trigger:\n%s", tree)
+	if len(input.Children) == 0 {
+		t.Fatalf("the list is not inside the input:\n%s", tree)
 	}
-	if _, ok := tree.Find(ggui.RoleTextField, "Search options"); !ok {
-		t.Errorf("no search field:\n%s", tree)
+	if n, ok := tree.Find(ggui.RoleOption, "1"); !ok || !n.Selected {
+		t.Errorf("the chosen option is not selected:\n%s", tree)
 	}
 }
 
