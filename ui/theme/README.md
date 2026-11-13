@@ -158,7 +158,7 @@ var AppTheme = theme.Config{
     Heading:    theme.FontGeistMono,
     MenuAccent: theme.MenuAccentBold,
     MenuColor:  theme.MenuColorInverted,
-    Icons:      theme.IconsLucide, // registered with theme.RegisterIcons
+    Icons:      theme.IconsLucide, // registered by linking ui/icons/lucide
 }
 
 // Apply globally, bind appearance, or scope a preview:

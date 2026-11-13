@@ -93,8 +93,8 @@ Public control `.Key(id)` setters return the concrete control, so identity can
 be assigned inline: `ui.Button("Save", save).Key("save").Outline()`. Configure
 keys before mount and use stable, comparable values. A key identifies the
 control's input state; it does not automatically key all children of a group.
-Combobox keys its trigger, popup and search editor separately; keep it mounted
-to preserve the search query.
+Combobox keys its input and popup separately; keep it mounted to preserve
+what was typed.
 
 Use `.Name(name)` for a control's accessible and Probe name. `Field` supplies
 its label only when the control has no explicit name, taking precedence over a
@@ -274,8 +274,10 @@ ui.ComboboxMultiple(languages).Options([]string{"Go", "Rust", "TypeScript"}).
     Name("Languages").OnValuesChange(updateLanguages)
 ```
 
-The popup filters options, marks selections and stays open while toggling them.
-Selected values appear as removable chips. `Options` / `BindOptions`, `Format`,
+The field is one input with the chosen values as removable chips before the
+text, and typing there filters the list, which marks selections and stays open
+while toggling them; focus stays in the input. `.Empty(text)` replaces "No
+items found." when nothing matches. `Options` / `BindOptions`, `Format`,
 `Placeholder`, `Disabled` / `BindDisabled` and `Key` follow the single-combobox
 conventions. Callbacks receive separate slice snapshots. An empty search accepts
 Backspace to remove the last selected value.
