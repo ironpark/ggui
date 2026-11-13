@@ -61,6 +61,13 @@ type AttachmentWidget struct {
 	actionRects                          []ggui.Rect
 }
 
+// The widths of a vertical attachment: with a title or a description under
+// its media, and with the media alone.
+const (
+	attachmentVerticalWidth = 120.0
+	attachmentMediaWidth    = 96.0
+)
+
 // Attachment creates a completed, horizontal file card. Media and actions are
 // optional. State and BindState change presentation without owning the upload.
 func Attachment(title, description string) *AttachmentWidget {
@@ -195,8 +202,11 @@ func (a *AttachmentWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		actionH = max(actionH, s.H)
 	}
 	w := a.padX*2 + textW
+	// A card with no text is media alone: shadcn's w-24, which
+	// has-data-[slot=attachment-content] widens to w-30.
+	hasContent := a.title != "" || a.description != ""
 	if a.vertical {
-		w = 120
+		w = pick(hasContent, attachmentVerticalWidth, attachmentMediaWidth)
 	} else {
 		if hasMedia {
 			w += a.mediaSide + a.gap
@@ -245,6 +255,10 @@ func (a *AttachmentWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		}
 		x += 4
 		h = y + textH + a.padY
+		if !hasContent {
+			// Nothing under the media, and no gap kept for it.
+			h = a.padY + pick(hasMedia, a.mediaSide, 0) + a.padY
+		}
 		for i := range a.actionRects {
 			a.actionRects[i].Origin = ggui.Pt(max(a.padX, w-12-actionW)+a.actionRects[i].Origin.X, 12)
 		}

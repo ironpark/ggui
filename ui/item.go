@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"image/color"
 	"math"
+	"time"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
@@ -31,9 +33,14 @@ const (
 // optional description in the middle, and an action on the right. Build one
 // with Item. It is the composition helper a settings list, a file row or a
 // chosen-option summary is made of; it takes no input of its own, so the
-// widget given to Action keeps its own keyboard and pointer behavior.
+// widget given to Action keeps its own keyboard and pointer behavior,
+// unless OnTap makes the whole row a link.
 type ItemWidget struct {
+	ggui.Interactive
 	props              property.Owner
+	onTap              func()
+	motion             time.Duration
+	hover              float64 // how far onto the surface under the pointer the row was painted
 	title, description *ggui.TextWidget
 	media, action      ggui.Widget
 	header, footer     ggui.Widget
@@ -54,6 +61,9 @@ type ItemWidget struct {
 //		Action(ui.Button("Run", run).Outline())
 func Item(title, description string) *ItemWidget {
 	i := &ItemWidget{title: ggui.Text(title).MaxLines(1)}
+	i.Role = ggui.RoleLink
+	i.SetName(title)
+	i.AutoKey()
 	if description != "" {
 		i.description = ggui.Text(description).MaxLines(2)
 	}
@@ -95,6 +105,17 @@ func (i *ItemWidget) Footer(w ggui.Widget) *ItemWidget {
 	return i
 }
 
+// OnTap makes the row a link that runs fn on a click, or on Space or Enter
+// while it has the keyboard focus: the row takes the Muted surface under
+// the pointer, shows the pointer cursor and a focus ring, and is a link
+// named by its title. What Action placed in the row still takes the input
+// over itself. A nil fn makes the row plain again.
+func (i *ItemWidget) OnTap(fn func()) *ItemWidget {
+	defer property.Watch(&i.props, &i.onTap)()
+	i.onTap = fn
+	return i
+}
+
 // Outline draws a border around the row.
 func (i *ItemWidget) Outline() *ItemWidget {
 	defer property.Watch(&i.props, &i.look)()
@@ -130,6 +151,9 @@ func (i *ItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer i.props.Layout().EndLayout()
 	t := uitheme.Of(env)
 	i.theme = t
+	// shadcn's transition-colors duration-100, two thirds of the 150ms
+	// the theme's MotionFast stands for.
+	i.motion = env.Motion(t.MotionFast * 2 / 3)
 	// The padding counts the border every item keeps room for, drawn or
 	// not, so the three looks line up in one list.
 	pad, gap := ggui.Insets(t.Space*1.25+t.BorderWidth, t.Space*1.5+t.BorderWidth), t.Space*1.25
@@ -214,14 +238,31 @@ func (i *ItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 // reader reads the title, the description and the action as one item.
 func (i *ItemWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := i.theme
-	switch i.look {
-	case itemOutline:
+	i.hover = 0
+	if i.onTap != nil {
+		// shadcn's [a]:hover:bg-muted, whatever the row's own surface.
+		i.hover = dst.Ease(i.Anchor(r), itemHoverSlot, pick(i.Hovered && !i.IsInert(), 1.0, 0.0), i.motion)
+	}
+	var fill color.Color
+	if i.look == itemMuted {
+		fill = fade(t.Muted, .5)
+	}
+	if i.hover > 0 {
+		fill = pick(fill == nil, fade(t.Muted, i.hover), mix(colorOr(fill, t.Muted), t.Muted, i.hover))
+	}
+	if fill != nil {
+		dst.FillRoundRect(r, t.Radius, fill)
+	}
+	if i.look == itemOutline {
 		dst.StrokeRoundRect(r, t.Radius, t.BorderWidth, t.Border)
-	case itemMuted:
-		dst.FillRoundRect(r, t.Radius, fade(t.Muted, .5))
 	}
 	at := func(part ggui.Rect) ggui.Rect { return ggui.Rct(r.Origin.Add(part.Origin), part.Size) }
 	dst.Node(r, ggui.Node{Role: ggui.RoleListItem}, func(dst *ggui.Canvas) {
+		if i.onTap != nil {
+			// Registered before the parts, which are painted over it and
+			// so keep their own input.
+			i.Hit(dst, r, i, ggui.CursorShapePointer)
+		}
 		if i.header != nil {
 			dst.Paint(i.header, at(i.headerAt))
 		}
@@ -240,6 +281,34 @@ func (i *ItemWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 			dst.Paint(i.footer, at(i.footerAt))
 		}
 	})
+	if i.onTap != nil {
+		// The ring is a shadow, which transition-colors does not ease.
+		focusRing(dst, &i.Interactive, t, r, t.Radius, t.Ring, 0)
+	}
+}
+
+// itemHoverSlot keeps a tappable item's easing onto its hover surface.
+var itemHoverSlot = ggui.NewSlot[*ggui.Motion]("item hover")
+
+// HandlePointer implements ggui.PointerHandler, for an item made a link.
+func (i *ItemWidget) HandlePointer(ev ggui.PointerEvent) bool { return i.Pointer(ev, i.onTap) }
+
+// HandleKey implements ggui.KeyHandler: Space or Enter runs the action.
+func (i *ItemWidget) HandleKey(ev ggui.KeyEvent) { i.Keyboard(ev, i.onTap) }
+
+// Describe implements ggui.Describer: an item with an action is a link
+// named by its title.
+func (i *ItemWidget) Describe() ggui.Node {
+	return ggui.Node{Role: i.Role, Name: i.SemanticName(), Actions: ggui.ActionFocus | ggui.ActionPress}
+}
+
+// Act implements ggui.Actor: a press runs the action.
+func (i *ItemWidget) Act(a ggui.Action) bool {
+	if a.Kind != ggui.ActionPress || i.onTap == nil {
+		return false
+	}
+	i.onTap()
+	return true
 }
 
 // itemIcon is an item's media drawn as an icon at the theme's size.

@@ -22,15 +22,31 @@ type MenubarWidget struct {
 	motion       pointerMotion
 	compact      bool
 	naturalWidth float64
+	env          ggui.Env
+
+	// Moving from one open menu to another is two popups in shadcn: the
+	// one left plays its exit where it was while the one moved to plays
+	// its entrance. The bar has one popup, so it replays the entrance in
+	// swap and paints the menu left as a ghost on its way out.
+	swap     *ggui.TransitionWidget
+	ghost    *ggui.TransitionWidget
+	arrive   ggui.Motion
+	depart   ggui.Motion
+	arriving bool
+	shown    int       // the menu the popup was last opened with
+	left     int       // the menu on its way out, or -1
+	leftAt   ggui.Rect // where it was
 }
 
 // Menubar creates an application menu strip. Left/Right wrap top-level menus;
 // Up/Down and Enter/Space open actions. Escape closes without invoking an action.
 func Menubar(menus ...*MenuWidget) *MenubarWidget {
-	b := &MenubarWidget{menus: menus, active: 0, sizes: make([]ggui.Size, len(menus)), rects: make([]ggui.Rect, len(menus))}
+	b := &MenubarWidget{menus: menus, active: 0, left: -1, sizes: make([]ggui.Size, len(menus)), rects: make([]ggui.Rect, len(menus))}
 	b.Role = ggui.RoleToolbar
 	b.AutoKey()
-	b.popup = ggui.Popup(menubarAnchor{b}, menuSurface(menubarPanel{b})).Keys(b).Owner(b)
+	b.swap = ggui.PopIn(menuSurface(menubarPanel{b}))
+	b.ghost = ggui.PopIn(menuSurface(menubarGhost{b}))
+	b.popup = ggui.Popup(menubarAnchor{b}, b.swap).Keys(b).Owner(b)
 	for i, m := range menus {
 		m.fit, m.checkLeft, m.keys = true, true, b
 		m.button.Ghost()
@@ -56,7 +72,18 @@ func (b *MenubarWidget) open(i int, first bool) {
 	if b.IsInert() || i < 0 || i >= len(b.menus) || b.menus[i].button.IsInert() {
 		return
 	}
-	b.active = i
+	if b.popup.IsOpen() && b.shown != i && b.shown >= 0 && b.shown < len(b.menus) {
+		// The menu left goes out where it is as the other comes in.
+		now, d := ggui.FrameTime(), b.env.Motion(b.env.PopupDuration())
+		b.left, b.leftAt = b.shown, b.popup.Rect()
+		b.menus[b.left].closeSub()
+		b.depart, b.arrive, b.arriving = ggui.Motion{}, ggui.Motion{}, true
+		b.depart.MoveTo(1, now, 0)
+		b.depart.MoveTo(0, now, d)
+		b.arrive.MoveTo(0, now, 0)
+		b.arrive.MoveTo(1, now, d)
+	}
+	b.active, b.shown = i, i
 	b.menus[i].reopen(first)
 	r := b.rects[i]
 	// The panel hangs a little left of its trigger, clear of the bar.
@@ -76,7 +103,7 @@ func (b *MenubarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	for _, m := range b.menus {
 		m.button.Sync()
 	}
-	b.theme = uitheme.Of(env)
+	b.theme, b.env = uitheme.Of(env), env
 	t := b.theme
 	b.popup.Gap(t.Space)
 	for _, m := range b.menus {
@@ -113,6 +140,26 @@ func (b *MenubarWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Describe(r, b)
 	// Only a border: the bar takes the surface it is on.
 	dst.StrokeRoundRect(r, b.theme.Radius, b.theme.BorderWidth, b.theme.Border)
+	now, side := ggui.FrameTime(), b.popup.PlacedSide()
+	if b.left >= 0 {
+		out := b.depart.Value(now)
+		if out <= 0 || !b.popup.IsOpen() || b.left >= len(b.menus) {
+			b.left = -1
+		} else {
+			// Under the popup, which is painted after it, and inert.
+			dst.Overlay(func(dst *ggui.Canvas) {
+				b.ghost.PopFrom(side, 0).Progress(out, true)
+				b.ghost.Layout(ggui.Tight(b.leftAt.Size), b.env)
+				dst.Inert().Paint(b.ghost, b.leftAt)
+			})
+		}
+	}
+	in := 1.0
+	if b.arriving {
+		in = b.arrive.Value(now)
+		b.arriving = in < 1
+	}
+	b.swap.PopFrom(side, 0).Progress(in, false)
 	dst.Paint(b.popup, r)
 }
 
@@ -258,6 +305,23 @@ func (p menubarPanel) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		if !b.menus[i].button.IsInert() {
 			dst.HitPointer(rr, menubarTarget{b, i})
 		}
+	}
+}
+
+// menubarGhost is the panel of the menu the bar has just left.
+type menubarGhost struct{ b *MenubarWidget }
+
+func (g menubarGhost) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	b := g.b
+	if b.left < 0 || b.left >= len(b.menus) {
+		return ggui.Size{}
+	}
+	return b.menus[b.left].chrome(uitheme.Of(env)).Layout(c, env)
+}
+
+func (g menubarGhost) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	if b := g.b; b.left >= 0 && b.left < len(b.menus) {
+		dst.Paint(b.menus[b.left].panel, r)
 	}
 }
 

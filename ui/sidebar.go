@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"image/color"
+
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
@@ -219,7 +221,8 @@ type SidebarWidget struct {
 	active           int
 	hover            int
 	railHover        bool
-	reveal           bool // the highlight moved by key: bring it into view
+	pageFg           color.Color // the page's text color, which the palette here replaces
+	reveal           bool        // the highlight moved by key: bring it into view
 
 	theme                  *uitheme.Theme
 	env                    ggui.Env
@@ -545,6 +548,7 @@ func (s *SidebarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	// or badge inside an item paints against the sidebar surface, and the
 	// tokens that follow these follow them here too.
 	t := uitheme.From(env)
+	s.pageFg = t.Fg // what a Tooltip is filled with, on the page and here
 	t.Card, t.Fg = t.Sidebar, t.SidebarFg
 	t.Primary, t.PrimaryFg = t.SidebarPrimary, t.SidebarPrimaryFg
 	t.Accent, t.AccentFg = t.SidebarAccent, t.SidebarAccentFg

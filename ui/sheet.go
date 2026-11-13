@@ -31,6 +31,15 @@ const (
 // cubic-bezier(0.22, 1, 0.36, 1), quick to start and long to settle.
 var drawerEase = ggui.CubicBezier(.22, 1, .36, 1)
 
+// The scrim under a sheet and under a drawer fades on a clock of its own:
+// shadcn's transition-opacity duration-150 on the default curve beside a
+// sheet's 200ms, and the drawer's duration but
+// cubic-bezier(0.32, 0.72, 0, 1) beside its panel.
+var (
+	sheetScrimEase  = ggui.CubicBezier(.4, 0, .2, 1)
+	drawerScrimEase = ggui.CubicBezier(.32, .72, 0, 1)
+)
+
 // sheetSide says which edge a sheet slides in from.
 type sheetSide int
 
@@ -62,6 +71,8 @@ type SheetWidget struct {
 	drawer bool // made by Drawer: rises whole, rounded, and can be dragged
 	handle bool // the drawer shows its swipe handle
 	slide  ggui.Motion
+	scrim  ggui.Motion // the dimming behind the panel, on its own duration and curve
+	dim    float64     // how far in the scrim was last painted, before a drawer's height scales it
 	effect *ggui.TransitionWidget
 
 	draggable                                            bool
@@ -267,6 +278,11 @@ func (s *SheetWidget) Paint(dst *ggui.Canvas, _ ggui.Rect) {
 		ease, duration = drawerEase, s.theme.MotionDrawer
 	}
 	v := clamp(s.slide.Easing(ease).Toggle(open, now, s.env.Motion(duration)), 0, 1)
+	scrimEase, scrimFor := sheetScrimEase, s.theme.MotionFast
+	if s.isDrawer() {
+		scrimEase, scrimFor = drawerScrimEase, s.theme.MotionDrawer
+	}
+	s.dim = clamp(s.scrim.Easing(scrimEase).Toggle(open, now, s.env.Motion(scrimFor)), 0, 1)
 	if !open && v <= 0.001 {
 		s.rect = ggui.Rect{}
 		s.snapMotion = ggui.Motion{}
@@ -348,7 +364,7 @@ func (s *SheetWidget) paintPanel(dst *ggui.Canvas, v float64, open bool) {
 	rect := ggui.Rct(at, size)
 	// A drawer is opaque all the way: it comes into view by rising.
 	s.effect.Progress(pick(s.isDrawer(), 1, v), !open)
-	scrimProgress := v
+	scrimProgress := s.dim
 	if s.isDrawer() && size.H > 0 {
 		scrimProgress *= clamp(visible/size.H, 0, 1)
 	}

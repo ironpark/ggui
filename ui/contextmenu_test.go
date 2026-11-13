@@ -2,6 +2,7 @@ package ui_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
@@ -224,5 +225,28 @@ func TestContextMenuNested(t *testing.T) {
 	p.ClickButton(ggui.Pt(100, 150), ggui.MouseButtonRight)
 	if !list.Popup().IsOpen() || row.Popup().IsOpen() {
 		t.Fatal("the list's empty part did not open its menu")
+	}
+}
+
+// A context menu is placed as shadcn's side="right" sideOffset=0
+// align="start" alignOffset=4 about the point pressed: its left edge at
+// the pointer and its top four pixels under it, and to the pointer's left
+// where the right has no room for it.
+func TestContextMenuOpensBesideThePointerFourPixelsDown(t *testing.T) {
+	t.Parallel()
+	menu := ui.ContextMenu(ggui.Box().Size(600, 400), ui.MenuItem("Copy", nil), ui.MenuItem("Paste", nil))
+	p := ggui.NewProbe(menu, ggui.Sz(600, 400))
+	defer p.Close()
+	p.ClickButton(ggui.Pt(100, 50), ggui.MouseButtonRight)
+	p.Frame()
+	if r := menu.Popup().Rect(); r.Origin != ggui.Pt(100, 54) {
+		t.Fatalf("the menu opened at %v, want 100, 54", r.Origin)
+	}
+	p.Type(ggui.Mods{}, ggui.KeyEscape)
+	p.Advance(time.Second)
+	p.ClickButton(ggui.Pt(590, 50), ggui.MouseButtonRight)
+	p.Frame()
+	if r := menu.Popup().Rect(); r.Origin.X+r.Size.W != 590 || r.Origin.Y != 54 || menu.Popup().PlacedSide() != ggui.PopupLeft {
+		t.Fatalf("by the right edge the menu is at %v on side %v, want it ending at the pointer on the left", r, menu.Popup().PlacedSide())
 	}
 }

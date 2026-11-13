@@ -52,13 +52,18 @@ var hoverCardSlot = ggui.NewSlot[hoverCardState]("hover card")
 // shadcn's w-64.
 const hoverCardWidth = 256
 
+// hoverCardAlignOffset is how far along its anchor's side a hover card
+// starts until AlignOffset says otherwise, shadcn's alignOffset = 4: a
+// centered card sits four pixels toward the end.
+const hoverCardAlignOffset = 4
+
 // HoverCard wraps anchor and shows content below it after 600ms.
 //
 //	ui.HoverCard(ui.Button("@ada", nil).Ghost(), ggui.Column(
 //		Title("Ada Lovelace"), Caption("Joined 1843"),
 //	).Gap(4))
 func HoverCard(anchor, content ggui.Widget) *HoverCardWidget {
-	return &HoverCardWidget{anchor: anchor, content: content, delay: 600 * time.Millisecond, closeDelay: 300 * time.Millisecond, width: hoverCardWidth, align: ggui.PopupCenter}
+	return &HoverCardWidget{anchor: anchor, content: content, delay: 600 * time.Millisecond, closeDelay: 300 * time.Millisecond, width: hoverCardWidth, align: ggui.PopupCenter, alignOffset: hoverCardAlignOffset}
 }
 
 // Delay sets how long the cursor must rest before the card appears.
@@ -92,7 +97,8 @@ func (h *HoverCardWidget) Align(v ggui.PopupAlignment) *HoverCardWidget {
 }
 
 // AlignOffset moves the card along the anchor's side, away from the edge
-// Align lines it up with; see ggui.PopupWidget.AlignOffset.
+// Align lines it up with; see ggui.PopupWidget.AlignOffset. It is four
+// pixels by default.
 func (h *HoverCardWidget) AlignOffset(v float64) *HoverCardWidget {
 	defer property.Watch(&h.props, &h.alignOffset)()
 	h.alignOffset = v
