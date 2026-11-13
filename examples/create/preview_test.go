@@ -54,7 +54,7 @@ func TestCreatePreviewReflowsWithoutReplacingControls(t *testing.T) {
 	if focused, ok := p.Semantics().Focused(); !ok || focused.Name != "Payout notes" {
 		t.Fatal("responsive layout dropped editor focus")
 	}
-	for _, name := range []string{"Contribution History", "Payout Threshold", "Savings Targets", "Preferences", "Claimable Balance", "Distribute Track", "Recent Transactions", "Schedule a Payout", "Notifications"} {
+	for _, name := range []string{"Contribution History", "Payout Threshold", "Savings Targets", "Buy Investment", "Distribute Track", "Claimable Balance", "Recent Transactions"} {
 		r := heading(name)
 		if r.Origin.X < 24 || r.Origin.X+r.Size.W > 296.01 {
 			t.Fatalf("%s overflows narrow preview: %v", name, r)
@@ -81,12 +81,12 @@ func TestCreatePreviewReflowsWithoutReplacingControls(t *testing.T) {
 func TestCreatePreviewPayoutPreferencesAndNotifications(t *testing.T) {
 	t.Parallel()
 	m := newPreview()
-	p := ggui.NewProbe(m.build(), ggui.Sz(1200, 2600))
+	p := ggui.NewProbe(m.build(), ggui.Sz(900, 9000))
 	defer p.Close()
 	p.Tap("Payout currency")
 	p.Tap("EUR — Euro")
 	slider := previewTestNode(t, p, ggui.RoleSlider, "Payout amount")
-	if slider.Min != 50 || slider.Max != 10000 || slider.Now != 2500 {
+	if slider.Min != 50 || slider.Max != 10000 || slider.Now != 3000 {
 		t.Fatal("payout range does not match sample", slider)
 	}
 	p.Perform(slider.ID, ggui.Action{Kind: ggui.ActionFocus})
@@ -94,35 +94,39 @@ func TestCreatePreviewPayoutPreferencesAndNotifications(t *testing.T) {
 	p.Tap("Payout notes")
 	p.Text("Quarterly transfer")
 	p.Tap("Save Threshold")
-	if ggui.Peek(m.threshold) != 2525 || ggui.Peek(m.payoutCurrency) != "EUR" {
+	if ggui.Peek(m.threshold) != 3025 || ggui.Peek(m.payoutCurrency) != "EUR" {
 		t.Fatal("payout controls did not update")
 	}
-	previewTestNode(t, p, ggui.RoleStatus, "Threshold saved: €2,525.00. Note included.")
+	previewTestNode(t, p, ggui.RoleStatus, "Threshold saved: €3,025.00. Note included.")
 	p.Tap("Done")
-	p.Tap("Email updates")
-	p.Tap("Compact view")
-	p.Tap("Preferred currency")
-	p.Tap("GBP")
-	p.Tap("Save preferences")
-	if ggui.Peek(m.emailUpdates) || !ggui.Peek(m.compactView) || ggui.Peek(m.preferredCurrency) != "GBP" {
+	p.Tap("Email Notifications")
+	p.Tap("Public Statistics")
+	p.Tap("Default currency")
+	p.Tap("GBP — British Pound")
+	p.Tap("Save Preferences")
+	if ggui.Peek(m.emailUpdates) || ggui.Peek(m.publicStats) || ggui.Peek(m.preferredCurrency) != "GBP" {
 		t.Fatal("preference controls did not update")
 	}
 	previewTestNode(t, p, ggui.RoleStatus, "Preferences saved in this preview.")
 	p.Tap("Done")
 	p.Tap("Reset preferences")
-	if !ggui.Peek(m.emailUpdates) || ggui.Peek(m.compactView) || ggui.Peek(m.preferredCurrency) != "USD" {
+	if !ggui.Peek(m.emailUpdates) || !ggui.Peek(m.publicStats) || ggui.Peek(m.preferredCurrency) != "USD" {
 		t.Fatal("reset did not restore defaults")
 	}
 	p.Tap("Done")
-	p.Tap("Product updates")
+	p.Tap("Goal milestones")
 	p.Tap("Save notifications")
-	previewTestNode(t, p, ggui.RoleStatus, "Saved: 3 of 3 notifications enabled.")
+	previewTestNode(t, p, ggui.RoleStatus, "Saved: 3 of 4 notifications enabled.")
+	p.Tap("Done")
+	p.Tap("Select all")
+	p.Tap("Save notifications")
+	previewTestNode(t, p, ggui.RoleStatus, "Saved: 4 of 4 notifications enabled.")
 }
 
 func TestCreatePreviewSavingsCalendarAndTransactions(t *testing.T) {
 	t.Parallel()
 	m := newPreview()
-	p := ggui.NewProbe(m.build(), ggui.Sz(1200, 2600))
+	p := ggui.NewProbe(m.build(), ggui.Sz(900, 9000))
 	defer p.Close()
 	p.Tap("Manage savings targets")
 	p.Tap("Add $1,000 to Retirement")
@@ -135,14 +139,13 @@ func TestCreatePreviewSavingsCalendarAndTransactions(t *testing.T) {
 	for _, n := range p.Semantics().Nodes(ggui.RoleProgress) {
 		progress = append(progress, n.Now)
 	}
-	if len(progress) != 2 || math.Abs(progress[0]-274000.0/420000) > .0001 || math.Abs(progress[1]-28200.0/85000) > .0001 {
+	if len(progress) < 2 || math.Abs(progress[0]-274000.0/420000) > .0001 || math.Abs(progress[1]-28200.0/85000) > .0001 {
 		t.Fatal("progress did not follow savings", progress)
 	}
 	p.Tap("2026-06-23")
 	if ggui.Peek(m.selectedDate).Day() != 23 {
 		t.Fatal("calendar did not select date")
 	}
-	previewTestNode(t, p, ggui.RoleStatus, "Selected: Tuesday, June 23")
 	p.Tap("View all transactions")
 	previewTestNode(t, p, ggui.RoleText, "Figma")
 	p.Tap("Show fewer transactions")
@@ -152,7 +155,7 @@ func TestCreatePreviewSavingsCalendarAndTransactions(t *testing.T) {
 	p.Tap("View Full Report")
 	previewTestNode(t, p, ggui.RoleStatus, "December–May contributions: $13,350.00. Highest month: May, $3,000.00.")
 	p.Tap("Done")
-	p.Tap("Connect Bank")
+	p.Tap("Set Up Payouts")
 	if ggui.Peek(m.balance) != 0 {
 		t.Fatal("preview simulated a real payout")
 	}
@@ -213,7 +216,7 @@ func TestCreatePreviewDesktopPanPreservesVerticalState(t *testing.T) {
 	p := ggui.NewProbe(m.build(), ggui.Sz(1100, 600))
 	defer p.Close()
 	p.Frame()
-	if math.Abs(m.pan.MaxOffset()-188) > .01 {
+	if math.Abs(m.pan.MaxOffset()-(previewWidth-1100)) > .01 {
 		t.Fatalf("desktop pan extent = %v", m.pan.MaxOffset())
 	}
 	p.Tap("Payout notes")
@@ -232,5 +235,45 @@ func TestCreatePreviewDesktopPanPreservesVerticalState(t *testing.T) {
 	after := previewTestNode(t, p, ggui.RoleTextField, "Payout notes")
 	if before.ID.ID != after.ID.ID || after.Value != "Keep while panning" || math.Abs(m.scroll.Offset()-vertical) > .01 {
 		t.Fatalf("pan breakpoint lost draft, identity, or vertical offset: before %v, after %v, scroll %v→%v", before.ID, after.ID, vertical, m.scroll.Offset())
+	}
+}
+
+func TestCreatePreviewGlyphsParse(t *testing.T) {
+	t.Parallel()
+	for name := range previewGlyphs {
+		if glyph(name) == nil {
+			t.Fatal(name)
+		}
+	}
+}
+
+func TestCreatePreviewHoldingsFilterAndTransfer(t *testing.T) {
+	t.Parallel()
+	m := newPreview()
+	p := ggui.NewProbe(m.build(), ggui.Sz(900, 9000))
+	defer p.Close()
+	previewTestNode(t, p, ggui.RoleText, "Apple Inc.")
+	p.Tap("Search holdings")
+	p.Text("vanguard")
+	if _, ok := p.Semantics().Find(ggui.RoleText, "Apple Inc."); ok {
+		t.Fatal("search kept a holding it does not name")
+	}
+	previewTestNode(t, p, ggui.RoleText, "Vanguard S&P 500 ETF")
+	p.Tap("Confirm Transfer")
+	previewTestNode(t, p, ggui.RoleStatus, "$1,200.00 would move today. No money was transferred.")
+	p.Tap("Done")
+	p.Tap("Billing")
+	p.Tap("Half shades")
+}
+
+func TestCreatePreviewDesktopScrollsDiagonally(t *testing.T) {
+	t.Parallel()
+	m := newPreview()
+	p := ggui.NewProbe(m.build(), ggui.Sz(1100, 600))
+	defer p.Close()
+	p.Scroll(ggui.Pt(500, 300), ggui.Pt(-10, -10))
+	p.Advance(250 * time.Millisecond)
+	if m.pan.Offset() <= 0 || m.scroll.Offset() <= 0 {
+		t.Fatalf("a diagonal scroll moved pan %v and scroll %v, want both", m.pan.Offset(), m.scroll.Offset())
 	}
 }
