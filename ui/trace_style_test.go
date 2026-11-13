@@ -135,3 +135,22 @@ func TestTraceRunningShimmerStopsForReducedMotionAndCompletion(t *testing.T) {
 		}
 	}
 }
+
+// An Icon leads the line, a gap before the title, and makes the line that
+// much wider and at least as tall as the icon.
+func TestTraceStepIconLeadsItsTitle(t *testing.T) {
+	t.Parallel()
+	theme := uitheme.Default()
+	trace := Trace(
+		TraceStep{ID: "plain", Title: "Read file"},
+		TraceStep{ID: "icon", Title: "Read file", Icon: "file"},
+	)
+	p := ggui.NewProbe(uitheme.With(theme, ggui.Column(trace)), ggui.Sz(300, 200))
+	defer p.Close()
+	p.Frame()
+	plain, icon := trace.rows["plain"], trace.rows["icon"]
+	lead := theme.IconSize + theme.Space
+	if plain.lead != 0 || icon.lead != lead || icon.line.W != plain.line.W+lead || icon.line.H < theme.IconSize {
+		t.Fatalf("lines %v and %v with leads %v and %v, want the icon's %v wider", plain.line, icon.line, plain.lead, icon.lead, lead)
+	}
+}

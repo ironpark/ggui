@@ -13,7 +13,10 @@ import (
 )
 
 // CalendarWidget selects civil dates in single, range or multiple mode.
-// Navigation does not change the selection.
+// Navigation does not change the selection. The arrow keys browse by day
+// and week, Home and End to the ends of the week, PageUp and PageDown by
+// month and, with Shift, by year; they pass over dates that cannot be
+// chosen.
 type CalendarWidget struct {
 	props property.Owner
 	ggui.Interactive
@@ -48,6 +51,7 @@ type CalendarWidget struct {
 	theme                                          *uitheme.Theme
 	env                                            ggui.Env
 	hover                                          color.Color // the fill under the pointer, resolved each layout
+	motion                                         time.Duration
 	metrics                                        calendarMetrics
 }
 
@@ -221,6 +225,7 @@ func (c *CalendarWidget) MonthNames(names [12]string) *CalendarWidget {
 }
 
 // Bounds sets inclusive selectable dates; a zero endpoint is unbounded.
+// The previous and next buttons stop at the months that hold them.
 func (c *CalendarWidget) Bounds(minimum, maximum time.Time) *CalendarWidget {
 	defer property.Watch(&c.props, &c.max)()
 	defer property.Watch(&c.props, &c.min)()
@@ -297,6 +302,47 @@ func (c *CalendarWidget) moveMonth(n int) {
 	c.show(m.AddDate(0, 0, min(c.active.Day(), last)-1))
 }
 
+// canBrowse reports whether a month of the bounds lies before the months
+// shown, for a negative direction, or after them.
+func (c *CalendarWidget) canBrowse(direction int) bool {
+	if direction < 0 {
+		return c.lowest.IsZero() || c.lowest.Before(c.first)
+	}
+	return c.highest.IsZero() || !c.highest.Before(c.first.AddDate(0, c.count, 0))
+}
+
+// step browses to the date move gives for the browsed one and, while that
+// day cannot be chosen, on to the one move gives for it: the keyboard
+// passes over disabled days as react-day-picker's focus does, and stays
+// where it is when a year of steps reaches none. The months shown slide
+// by as many months as the date moved when slide is set, as PageUp and
+// PageDown have them do.
+func (c *CalendarWidget) step(slide bool, move func(time.Time) time.Time) {
+	d := c.active
+	for range 366 {
+		next := move(d)
+		if next.Equal(d) {
+			return
+		}
+		if d = next; !c.enabled(d) {
+			continue
+		}
+		if slide {
+			c.syncView()
+			c.first = c.first.AddDate(0, (d.Year()-c.active.Year())*12+int(d.Month()-c.active.Month()), 0)
+		}
+		c.show(d)
+		return
+	}
+}
+
+// addMonths is the same day n months from d, or the last day of a month
+// too short to have it.
+func (c *CalendarWidget) addMonths(d time.Time, n int) time.Time {
+	m := time.Date(d.Year(), d.Month(), 1, 0, 0, 0, 0, c.location).AddDate(0, n, 0)
+	return m.AddDate(0, 0, min(d.Day(), m.AddDate(0, 1, -1).Day())-1)
+}
+
 // browse shows year and month in the pane at index, as its dropdowns ask.
 func (c *CalendarWidget) browse(index, year int, month time.Month) {
 	shown := c.first.AddDate(0, index, 0)
@@ -329,16 +375,24 @@ func (c *CalendarWidget) choose(t time.Time) {
 func (c *CalendarWidget) layoutDropdown(p *calendarPane, index int, cs ggui.Constraints, env ggui.Env) {
 	if p.month == nil {
 		shown := func() time.Time { return c.first.AddDate(0, index, 0) }
+		monthName := func(m time.Month) string { return c.monthNames[(int(m)+11)%12] }
 		p.month = Select[time.Month](calendarPart[time.Month]{
 			get: func() time.Month { return shown().Month() },
 			set: func(m time.Month) { c.browse(index, shown().Year(), m) },
-		}).Format(func(m time.Month) string { return c.monthNames[(int(m)+11)%12] }).Options(calendarMonths).Name("Month")
+		}).Format(monthName).Options(calendarMonths).Name("Month").Small().
+			TriggerContent(&calendarCaptionFace{owner: c, label: func() string { return monthName(shown().Month()) }})
 		p.year = Select[int](calendarPart[int]{
 			get: func() int { return shown().Year() },
 			set: func(y int) { c.browse(index, y, shown().Month()) },
-		}).Name("Year")
+		}).Name("Year").Small().
+			TriggerContent(&calendarCaptionFace{owner: c, label: func() string { return strconv.Itoa(shown().Year()) }})
 		p.yearFrom, p.yearTo = 0, 0
 	}
+	// shadcn's caption dropdown is a bordered label six units high, shorter
+	// than a field, so that the caption stays a cell high.
+	t := uitheme.From(env)
+	t.FieldPad = ggui.Insets(t.Space*.625, t.Space*.625)
+	env = t.Apply(env)
 	if from, to := c.years[0], c.years[len(c.years)-1]; p.yearFrom != from || p.yearTo != to {
 		p.yearFrom, p.yearTo = from, to
 		p.year.Options(c.years)
@@ -348,6 +402,37 @@ func (c *CalendarWidget) layoutDropdown(p *calendarPane, index int, cs ggui.Cons
 	p.monthSize = p.month.Layout(cs, env)
 	p.yearSize = p.year.Layout(cs, env)
 }
+
+// calendarCaptionFace is what a caption dropdown shows: its value in the
+// caption's medium weight, then a small muted chevron, as shadcn's
+// caption label (h-6 pr-1 pl-1.5, gap-1, a size-3.5 chevron).
+type calendarCaptionFace struct {
+	owner *CalendarWidget
+	label func() string
+	text  *ggui.TextWidget
+	size  ggui.Size
+	env   ggui.Env
+}
+
+func (f *calendarCaptionFace) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
+	t := uitheme.Of(env)
+	if f.text == nil {
+		f.text = ggui.Text("").NoWrap()
+	}
+	f.env = env
+	f.size = f.text.Content(f.label()).Weight(pick(t.Label.Weight != 0, t.Label.Weight, ggui.WeightMedium)).Layout(cs.Loosen(), env)
+	return cs.Constrain(ggui.Sz(t.Space/4+f.size.W+t.Space/2+calendarCaptionChevron, max(f.size.H, calendarCaptionChevron)))
+}
+
+func (f *calendarCaptionFace) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	t := uitheme.Of(f.env)
+	dst.Paint(f.text, ggui.Rct(ggui.Pt(r.Origin.X+t.Space/4, r.Origin.Y+(r.Size.H-f.size.H)/2), f.size))
+	center := ggui.Pt(r.Origin.X+r.Size.W-calendarCaptionChevron/2, r.Origin.Y+r.Size.H/2)
+	paintIconAt(dst, f.env, icons.ChevronDown, center, calendarCaptionChevron, pick(f.owner.IsInert(), t.Disabled(t.MutedFg), t.MutedFg), 0)
+}
+
+// calendarCaptionChevron is the side of a caption dropdown's chevron.
+const calendarCaptionChevron = 14
 
 // syncYears lists the years the dropdown offers, widened to the years shown.
 func (c *CalendarWidget) syncYears() {
@@ -384,8 +469,10 @@ func (c *CalendarWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	// FrameTime, not Now: marking today must not keep the app painting.
 	c.today = c.date(ggui.FrameTime())
 	c.resolveSelection()
-	c.previous.Disabled(c.IsInert())
-	c.next.Disabled(c.IsInert())
+	// As react-day-picker's start and end months do, the bounds end the
+	// browsing: a button that would show only months outside them is off.
+	c.previous.Disabled(c.IsInert() || !c.canBrowse(-1))
+	c.next.Disabled(c.IsInert() || !c.canBrowse(1))
 
 	m := &c.metrics
 	m.pad, m.cell, m.rowGap, m.monthGap, m.captionGap = t.Space, 3.5*t.Space, t.Space, 2*t.Space, 2*t.Space
@@ -426,6 +513,7 @@ func (c *CalendarWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	cell := ggui.Loose(ggui.Sz(m.column, m.cell))
 	disabled := fade(t.MutedFg, .5)
 	c.hover = pick[color.Color](isDark(t.Bg), fade(t.Muted, .5), t.Muted)
+	c.motion = env.Motion(t.MotionFast)
 	end := c.first.AddDate(0, c.count, 0)
 	m.weekday = 0
 	for i, p := range c.panes {
@@ -550,36 +638,38 @@ func (c *CalendarWidget) ConsumesKey(e ggui.KeyEvent) bool {
 	return ggui.Activates(e)
 }
 
-// HandleKey navigates by day/week, Home/End within the week, and PageUp/Down by month.
+// HandleKey navigates by day and week with the arrows, to the ends of the
+// week with Home and End, by month with PageUp and PageDown and by year
+// with Shift held, passing over the days that cannot be chosen.
 func (c *CalendarWidget) HandleKey(e ggui.KeyEvent) {
 	c.Keyboard(e, nil)
 	if c.IsInert() || e.Kind != ggui.KeyPress {
 		return
 	}
 	c.syncDate()
-	delta := 0
 	e = directionalKey(e, c.env.Direction() == ggui.DirRTL)
+	days := func(n int) func(time.Time) time.Time {
+		return func(d time.Time) time.Time { return d.AddDate(0, 0, n) }
+	}
+	weekday := func(d time.Time) int { return (int(d.Weekday()) - int(c.weekStart) + 7) % 7 }
+	slide := false
+	var move func(time.Time) time.Time
 	switch e.Key {
 	case ggui.KeyArrowLeft:
-		delta = -1
+		move = days(-1)
 	case ggui.KeyArrowRight:
-		delta = 1
+		move = days(1)
 	case ggui.KeyArrowUp:
-		delta = -7
+		move = days(-7)
 	case ggui.KeyArrowDown:
-		delta = 7
+		move = days(7)
 	case ggui.KeyHome:
-		delta = -(int(c.active.Weekday()) - int(c.weekStart) + 7) % 7
+		move = func(d time.Time) time.Time { return d.AddDate(0, 0, -weekday(d)) }
 	case ggui.KeyEnd:
-		delta = 6 - (int(c.active.Weekday())-int(c.weekStart)+7)%7
-	case ggui.KeyPageUp:
-		c.FocusVisible = true
-		c.moveMonth(-1)
-		return
-	case ggui.KeyPageDown:
-		c.FocusVisible = true
-		c.moveMonth(1)
-		return
+		move = func(d time.Time) time.Time { return d.AddDate(0, 0, 6-weekday(d)) }
+	case ggui.KeyPageUp, ggui.KeyPageDown:
+		n := pick(e.Key == ggui.KeyPageUp, -1, 1) * pick(e.Mods.Shift, 12, 1)
+		slide, move = true, func(d time.Time) time.Time { return c.addMonths(d, n) }
 	default:
 		if ggui.Activates(e) {
 			c.choose(c.active)
@@ -588,7 +678,7 @@ func (c *CalendarWidget) HandleKey(e ggui.KeyEvent) {
 	}
 	// A grid focused by a click shows no ring until the keys browse it.
 	c.FocusVisible = true
-	c.show(c.active.AddDate(0, 0, delta))
+	c.step(slide, move)
 }
 
 // Adopt preserves the browsed month across rebuilds; binding changes still win.
@@ -631,10 +721,14 @@ func (d *calendarDay) HandlePointer(e ggui.PointerEvent) bool {
 	return d.Pointer(e, func() { d.owner.choose(d.date) })
 }
 
+// calendarDayHoverSlot keeps a day's hover easing across frames.
+var calendarDayHoverSlot = ggui.NewSlot[*ggui.Motion]("calendar day hover")
+
 // Paint fills the day's square inside r, its hit target. A range paints as
 // one band: the days between its ends fill the whole column, rounded only
 // where a week begins or ends, and each end lays the band's half behind its
-// own primary square.
+// own primary square. A day is a ghost Button to shadcn: the fill under the
+// pointer eases in, and a pressed day sits a pixel lower.
 func (d *calendarDay) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	c := d.owner
 	t, m := c.theme, &c.metrics
@@ -644,6 +738,10 @@ func (d *calendarDay) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if !d.IsInert() {
 		dst.HitPointer(r, d)
 		dst.HitCursor(r, ggui.CursorShapePointer)
+	}
+	hover := dst.Ease(d.Anchor(r), calendarDayHoverSlot, pick(d.Hovered && !d.IsInert(), 1.0, 0.0), c.motion)
+	if d.Pressed && d.Hovered && !d.IsInert() {
+		r.Origin.Y++
 	}
 	fill := m.fill(r)
 	center := fill.Origin.X + fill.Size.W/2
@@ -680,8 +778,8 @@ func (d *calendarDay) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	default:
 		if d.today {
 			dst.FillRoundRect(fill, t.RadiusSm, t.Muted)
-		} else if d.Hovered && !d.IsInert() {
-			dst.FillRoundRect(fill, t.RadiusSm, c.hover)
+		} else if hover > 0 {
+			dst.FillRoundRect(fill, t.RadiusSm, fade(c.hover, hover))
 		}
 	}
 	dst.Paint(d.text, ggui.Rct(ggui.Pt(fill.Origin.X+(fill.Size.W-d.size.W)/2, fill.Origin.Y+(fill.Size.H-d.size.H)/2), d.size))

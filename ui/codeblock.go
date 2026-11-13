@@ -65,8 +65,12 @@ type CodeBlockWidget struct {
 	titleSize, langSize, copySize   ggui.Size
 	bodySize, footerSize            ggui.Size
 	laidCode                        string
-	copied                          bool
-	copiedAt                        time.Time
+	// Where the code was last painted, and paintBody as a value, so that
+	// painting it behind a fade makes no closure a frame.
+	viewport    ggui.Rect
+	paintBodyFn func(*ggui.Canvas)
+	copied      bool
+	copiedAt    time.Time
 }
 
 // CodeBlock creates a code surface. The language is a label, not a syntax
@@ -86,6 +90,7 @@ func CodeBlock(code string) *CodeBlockWidget {
 	c.body = &codeBlockBody{owner: c, measure: ggui.RichText()}
 	c.xScroll = ggui.Scroll(c.body).Horizontal().Controller(&c.xController)
 	c.yScroll = ggui.Scroll(c.xScroll).Shrink().Controller(&c.yController)
+	c.paintBodyFn = c.paintBody
 	return c
 }
 
@@ -347,7 +352,15 @@ func (c *CodeBlockWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		}
 		viewport := ggui.Rct(r.Origin.Add(ggui.Pt(0, c.headerH)), ggui.Sz(r.Size.W, c.bodySize.H))
 		c.Hit(dst, viewport, c, ggui.CursorShapeDefault)
-		dst.Paint(c.yScroll, viewport)
+		// shadcn's scroll-fade-x, and scroll-fade-y for wrapped code: the
+		// code fades out toward an end there is more beyond, by as much as
+		// there is, as a mask over whatever the block stands on.
+		c.viewport = viewport
+		lead, trail := codeFade(&c.xController, 2*t.Space)
+		if c.wrap {
+			lead, trail = codeFade(&c.yController, 3*t.Space)
+		}
+		dst.FadeEdges(viewport, !c.wrap, lead, trail, c.paintBodyFn)
 		if c.footer != nil {
 			at := ggui.Pt(c.side(r, c.pad, c.footerSize.W), c.headerH+c.bodySize.H)
 			dst.Paint(c.footer, ggui.Rct(r.Origin.Add(at), c.footerSize))
@@ -386,6 +399,16 @@ func (c *CodeBlockWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if focused {
 		fieldHalo(outer, t, r, t.Radius, pick(c.destructive, destructiveRing(t), t.Ring))
 	}
+}
+
+// paintBody paints the scrolling code into the viewport Paint noted.
+func (c *CodeBlockWidget) paintBody(dst *ggui.Canvas) { dst.Paint(c.yScroll, c.viewport) }
+
+// codeFade is how long the faded ends of a scrolled axis are: what lies
+// beyond each end, up to limit.
+func codeFade(axis *ggui.ScrollController, limit float64) (lead, trail float64) {
+	at := axis.Offset()
+	return clamp(at, 0, limit), clamp(axis.MaxOffset()-at, 0, limit)
 }
 
 // side places a run w wide x in from the block's start edge: from the left,

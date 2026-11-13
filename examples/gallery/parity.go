@@ -34,8 +34,8 @@ func newParityPreviews() func() []ggui.Widget {
 		ui.NavigationMenuLink("Settings", func() { destination.Set("Settings selected") }),
 	).Name("Main navigation")
 	trace := ui.Trace(
-		ui.TraceStep{ID: "fetch", Title: "Fetched repository", Status: ui.TraceCompleted, Duration: 240 * time.Millisecond},
-		ui.TraceStep{ID: "build", Title: "Build application", Status: ui.TraceRunning, Details: ui.CodeBlock("go build ./...\n").Language("shell"), Children: []ui.TraceStep{
+		ui.TraceStep{ID: "fetch", Title: "Fetched repository", Icon: icons.Download, Status: ui.TraceCompleted, Duration: 240 * time.Millisecond},
+		ui.TraceStep{ID: "build", Title: "Build application", Icon: icons.File, Status: ui.TraceRunning, Details: ui.CodeBlock("go build ./...\n").Language("shell"), Children: []ui.TraceStep{
 			{ID: "compile", Title: "Compile packages", Status: ui.TraceCompleted, Duration: 120 * time.Millisecond},
 			{ID: "bundle", Title: "Bundle assets", Status: ui.TracePending},
 		}},

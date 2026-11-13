@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"image/color"
 	"math"
 	"sync"
 
@@ -159,12 +160,46 @@ func (s *SidebarWidget) paintRail(dst *ggui.Canvas, r ggui.Rect, right bool) {
 // sidebarTip is the tip a rail shows beside the item under the pointer or
 // the keyboard: one for the sidebar, since one row has either at a time.
 type sidebarTip struct {
-	text   *ggui.TextWidget
-	box    *ggui.BoxWidget
-	effect *ggui.TransitionWidget
-	label  string
-	anchor ggui.Rect
-	reveal ggui.Motion
+	text    *ggui.TextWidget
+	box     *ggui.BoxWidget
+	surface *sidebarTipSurface
+	effect  *ggui.TransitionWidget
+	label   string
+	anchor  ggui.Rect
+	reveal  ggui.Motion
+}
+
+// sidebarTipSurface is a tip's body and, in the gap between it and the row
+// it names, the arrow a Tooltip points with, in the one transition layer.
+type sidebarTipSurface struct {
+	box     *ggui.BoxWidget
+	fill    color.Color
+	right   bool    // the sidebar stands at the right, the tip to its left
+	arrowAt float64 // how far down the body the arrow points
+}
+
+func (s *sidebarTipSurface) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	inner := c
+	inner.MinW, inner.MaxW = max(0, c.MinW-tooltipGap), max(0, c.MaxW-tooltipGap)
+	size := s.box.Layout(inner, env)
+	size.W += tooltipGap
+	return c.Constrain(size)
+}
+
+func (s *sidebarTipSurface) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	// As a Tooltip's: a 10px square with 2px corners on its point, its
+	// center three pixels inside the body's edge.
+	const half, inset = 5, 3
+	body := ggui.Rct(r.Origin, ggui.Sz(max(0, r.Size.W-tooltipGap), r.Size.H))
+	center := ggui.Pt(body.Origin.X+body.Size.W-inset, body.Origin.Y+s.arrowAt)
+	if !s.right {
+		body.Origin.X += tooltipGap
+		center.X = body.Origin.X + inset
+	}
+	dst.Transform(ggui.Affine{}.Rotate(math.Pi/4).About(center), func(dst *ggui.Canvas) {
+		dst.FillRoundRect(ggui.Rct(center.Sub(ggui.Pt(half, half)), ggui.Sz(2*half, 2*half)), 2, s.fill)
+	})
+	dst.Paint(s.box, body)
 }
 
 // paintTip shows the Tooltip of the row the pointer is over, or the
@@ -189,7 +224,8 @@ func (s *SidebarWidget) paintTip(dst *ggui.Canvas, right bool) {
 		if tip.effect == nil {
 			tip.text = ggui.Text("")
 			tip.box = ggui.Box(tip.text)
-			tip.effect = ggui.PopIn(tip.box)
+			tip.surface = &sidebarTipSurface{box: tip.box}
+			tip.effect = ggui.PopIn(tip.surface)
 		}
 		tip.label, tip.anchor = s.rows[want].e.tooltip, s.rows[want].rect
 	}
@@ -198,19 +234,26 @@ func (s *SidebarWidget) paintTip(dst *ggui.Canvas, right bool) {
 		return
 	}
 	tip.text.Content(tip.label).Style(ggui.TextStyle{Size: t.Caption.Size}).Color(t.Bg)
-	tip.box.Padding(ggui.Insets(t.Space*.75, t.Space*1.5)).Fill(t.Fg).Radius(t.Radius * .75)
+	tip.box.Padding(ggui.Insets(t.Space*.75, t.Space*1.5)).Fill(t.Fg).Radius(t.RadiusSm)
+	tip.surface.fill, tip.surface.right = t.Fg, right
 	tip.effect.Progress(progress, want < 0)
 	dst.Overlay(func(dst *ggui.Canvas) {
-		gap, anchor := t.Space/2, tip.anchor
-		size := tip.effect.Layout(ggui.Loose(ggui.Sz(280, ggui.Unbounded)), s.env)
-		at := ggui.Pt(anchor.Origin.X+anchor.Size.W+gap, anchor.Origin.Y+(anchor.Size.H-size.H)/2)
+		// The surface holds the arrow in the gap, so it starts at the row.
+		anchor := tip.anchor
+		size := tip.effect.Layout(ggui.Loose(ggui.Sz(tooltipMaxWidth, ggui.Unbounded)), s.env)
+		at := ggui.Pt(anchor.Origin.X+anchor.Size.W, anchor.Origin.Y+(anchor.Size.H-size.H)/2)
 		if right {
-			at.X = anchor.Origin.X - gap - size.W
+			at.X = anchor.Origin.X - size.W
 		}
 		if screen := dst.Size(); screen != (ggui.Size{}) {
 			at.X = clamp(at.X, 0, max(screen.W-size.W, 0))
 			at.Y = clamp(at.Y, 0, max(screen.H-size.H, 0))
 		}
+		// The arrow stays on the row where the screen's edge moved the tip,
+		// clear of the body's corners.
+		margin := min(t.RadiusSm+5, size.H/2)
+		tip.surface.arrowAt = clamp(anchor.Center().Y-at.Y, margin, size.H-margin)
+		tip.effect.PopFrom(pick(right, ggui.PopupLeft, ggui.PopupRight), tip.surface.arrowAt/max(size.H, 1))
 		dst.Node(ggui.Rct(at, size), ggui.Node{Role: ggui.RoleGroup}, func(dst *ggui.Canvas) { dst.Paint(tip.effect, ggui.Rct(at, size)) })
 	})
 }
