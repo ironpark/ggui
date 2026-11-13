@@ -15,7 +15,8 @@ import (
 // CalendarWidget selects civil dates in single, range or multiple mode.
 // Navigation does not change the selection. The arrow keys browse by day
 // and week, Home and End to the ends of the week, PageUp and PageDown by
-// month and, with Shift, by year; they pass over dates that cannot be
+// month and, with Shift, by year; Shift with Left or Right also browses by
+// month and with Up or Down by year. They pass over dates that cannot be
 // chosen.
 type CalendarWidget struct {
 	props property.Owner
@@ -314,13 +315,24 @@ func (c *CalendarWidget) canBrowse(direction int) bool {
 // step browses to the date move gives for the browsed one and, while that
 // day cannot be chosen, on to the one move gives for it: the keyboard
 // passes over disabled days as react-day-picker's focus does, and stays
-// where it is when a year of steps reaches none. The months shown slide
-// by as many months as the date moved when slide is set, as PageUp and
-// PageDown have them do.
+// where it is when a year of steps reaches none. A step past the months of
+// the Bounds stops at the first day of the first month, or the last of the
+// last, as react-day-picker holds a move to its startMonth and endMonth.
+// The months shown slide by as many months as the date moved when slide is
+// set, as PageUp and PageDown have them do.
 func (c *CalendarWidget) step(slide bool, move func(time.Time) time.Time) {
 	d := c.active
 	for range 366 {
 		next := move(d)
+		if next.Before(d) && !c.lowest.IsZero() {
+			if start := time.Date(c.lowest.Year(), c.lowest.Month(), 1, 0, 0, 0, 0, c.location); next.Before(start) {
+				next = start
+			}
+		} else if next.After(d) && !c.highest.IsZero() {
+			if end := time.Date(c.highest.Year(), c.highest.Month()+1, 0, 0, 0, 0, 0, c.location); next.After(end) {
+				next = end
+			}
+		}
 		if next.Equal(d) {
 			return
 		}
@@ -638,9 +650,11 @@ func (c *CalendarWidget) ConsumesKey(e ggui.KeyEvent) bool {
 	return ggui.Activates(e)
 }
 
-// HandleKey navigates by day and week with the arrows, to the ends of the
-// week with Home and End, by month with PageUp and PageDown and by year
-// with Shift held, passing over the days that cannot be chosen.
+// HandleKey navigates as react-day-picker does: by day and week with the
+// arrows, to the ends of the week with Home and End, and by month with
+// PageUp and PageDown or Shift and Left or Right; Shift makes PageUp,
+// PageDown, Up and Down move by year. The days that cannot be chosen are
+// passed over.
 func (c *CalendarWidget) HandleKey(e ggui.KeyEvent) {
 	c.Keyboard(e, nil)
 	if c.IsInert() || e.Kind != ggui.KeyPress {
@@ -654,6 +668,24 @@ func (c *CalendarWidget) HandleKey(e ggui.KeyEvent) {
 	weekday := func(d time.Time) int { return (int(d.Weekday()) - int(c.weekStart) + 7) % 7 }
 	slide := false
 	var move func(time.Time) time.Time
+	months := func(n int) {
+		slide, move = true, func(d time.Time) time.Time { return c.addMonths(d, n) }
+	}
+	switch {
+	case e.Mods.Shift && e.Key == ggui.KeyArrowLeft:
+		months(-1)
+	case e.Mods.Shift && e.Key == ggui.KeyArrowRight:
+		months(1)
+	case e.Mods.Shift && e.Key == ggui.KeyArrowUp:
+		months(-12)
+	case e.Mods.Shift && e.Key == ggui.KeyArrowDown:
+		months(12)
+	}
+	if move != nil {
+		c.FocusVisible = true
+		c.step(slide, move)
+		return
+	}
 	switch e.Key {
 	case ggui.KeyArrowLeft:
 		move = days(-1)
@@ -668,8 +700,7 @@ func (c *CalendarWidget) HandleKey(e ggui.KeyEvent) {
 	case ggui.KeyEnd:
 		move = func(d time.Time) time.Time { return d.AddDate(0, 0, 6-weekday(d)) }
 	case ggui.KeyPageUp, ggui.KeyPageDown:
-		n := pick(e.Key == ggui.KeyPageUp, -1, 1) * pick(e.Mods.Shift, 12, 1)
-		slide, move = true, func(d time.Time) time.Time { return c.addMonths(d, n) }
+		months(pick(e.Key == ggui.KeyPageUp, -1, 1) * pick(e.Mods.Shift, 12, 1))
 	default:
 		if ggui.Activates(e) {
 			c.choose(c.active)
