@@ -65,8 +65,9 @@ type CommandWidget struct {
 	panel              *ggui.BoxWidget
 	body               *ggui.ColumnWidget
 	styled             *ggui.StyledWidget
-	resultsBox         *ggui.BoxWidget  // the scroll at its height
-	searchBox          *ggui.BoxWidget  // the search field's pill
+	resultsBox         *ggui.BoxWidget // the scroll at its height
+	searchBox          *ggui.BoxWidget // the search field's pill
+	searchRow          *commandSearchRow
 	searchWrap         *ggui.BoxWidget  // the space around the pill
 	hintBox            *ggui.BoxWidget  // the space around the hint
 	hint               *ggui.TextWidget // the key hints under the results
@@ -334,8 +335,13 @@ func (c *CommandWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 		c.searchWrap.Padding(ggui.Insets(edge, edge, 0, edge))
 		// The pill is a field's height with a fainter fill and border than one.
 		pill := fade(t.InputBorder, .3)
-		c.searchBox.Padding(ggui.Insets(t.FieldPad.Top, t.Space, t.FieldPad.Bottom, t.FieldPad.Left)).
-			Fill(pill).Border(t.BorderWidth, pill).Radius(t.Radius)
+		// The icon leads, 8 from the pill's edge, as shadcn's inline-start
+		// addon does.
+		pad := ggui.Insets(t.FieldPad.Top, t.FieldPad.Right, t.FieldPad.Bottom, t.Space)
+		if env.Direction() == ggui.DirRTL {
+			pad.Left, pad.Right = pad.Right, pad.Left
+		}
+		c.searchBox.Padding(pad).Fill(pill).Border(t.BorderWidth, pill).Radius(t.Radius)
 	}
 	if c.hintBox != nil {
 		c.hintBox.Padding(ggui.Insets(t.Space, t.Space*1.5))
@@ -363,7 +369,8 @@ func (c *CommandWidget) buildPanel() {
 	c.resultsBox = ggui.Box(c.scroll)
 	parts := []ggui.Widget{c.resultsBox}
 	if !c.bare {
-		c.searchBox = ggui.Box(ggui.Row(ggui.Expanded(c.field.input), commandSearchIcon{c}).Gap(0))
+		c.searchRow = &commandSearchRow{c: c}
+		c.searchBox = ggui.Box(c.searchRow)
 		c.searchWrap = ggui.Box(&commandSearch{c})
 		parts = []ggui.Widget{c.searchWrap, c.resultsBox}
 	}
@@ -527,15 +534,41 @@ func (r *commandResults) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 	}
 }
 
-// A drawn search glyph avoids relying on font coverage for an icon character.
-type commandSearchIcon struct{ c *CommandWidget }
-
-func (i commandSearchIcon) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
-	size := uitheme.Of(env).IconSize
-	return cs.Constrain(ggui.Sz(size, size))
+// commandSearchRow is what the search pill holds: the search icon, drawn
+// rather than typed so it needs no font to cover it, and after it the
+// editor, which takes the rest of the pill. The icon leads in the reading
+// direction, as the addon of shadcn's CommandInput does.
+type commandSearchRow struct {
+	c     *CommandWidget
+	icon  ggui.Rect // where the icon was last painted
+	input ggui.Size
+	rtl   bool
 }
-func (i commandSearchIcon) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	paintIcon(dst, i.c.env, icons.Search, r, fade(i.c.theme.PopoverFg, .5), 0)
+
+func (w *commandSearchRow) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
+	t := uitheme.Of(env)
+	w.rtl = env.Direction() == ggui.DirRTL
+	lead := t.IconSize + t.Space*.75
+	inner := cs
+	inner.MinW, inner.MaxW = max(0, cs.MinW-lead), max(0, cs.MaxW-lead)
+	if inner.MaxW < ggui.Unbounded {
+		inner.MinW = inner.MaxW
+	}
+	w.input = w.c.field.input.Layout(inner, env)
+	return cs.Constrain(ggui.Sz(w.input.W+lead, max(w.input.H, t.IconSize)))
+}
+
+func (w *commandSearchRow) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	t := w.c.theme
+	lead := t.IconSize + t.Space*.75
+	w.icon = ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+(r.Size.H-t.IconSize)/2), ggui.Sz(t.IconSize, t.IconSize))
+	at := ggui.Rct(ggui.Pt(r.Origin.X+lead, r.Origin.Y+(r.Size.H-w.input.H)/2), ggui.Sz(max(0, r.Size.W-lead), w.input.H))
+	if w.rtl {
+		w.icon.Origin.X = r.Origin.X + r.Size.W - t.IconSize
+		at.Origin.X = r.Origin.X
+	}
+	paintIcon(dst, w.c.env, icons.Search, w.icon, fade(t.PopoverFg, .5), 0)
+	dst.Paint(w.c.field.input, at)
 }
 
 // BindName follows the accessible name on the same targets as Name.
