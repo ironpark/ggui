@@ -19,21 +19,24 @@ type RadiosWidget[T comparable] struct {
 
 	props property.Owner
 	ggui.Interactive
-	radios []*RadioWidget[T]
-	row    *ggui.RowWidget
-	column *ggui.ColumnWidget // set by Vertical
-	gap    float64
-	gapSet bool
+	radios     []*RadioWidget[T]
+	row        *ggui.RowWidget
+	column     *ggui.ColumnWidget
+	horizontal bool // set by Horizontal
+	gap        float64
+	gapSet     bool
+	invalid    bool
 }
 
 // Radios creates one Radio per option, bound to selected and labelled
-// through fmt.Sprint until Format says otherwise, side by side with a theme
-// gap between them. It is the Select signature for a choice small enough to
-// show all at once.
+// through fmt.Sprint until Format says otherwise, stacked in a column with
+// the theme's Space between them as shadcn's RadioGroup is; Horizontal
+// lines them up instead. It is the Select signature for a choice small
+// enough to show all at once.
 func Radios[T comparable](selected ggui.Binding[T]) *RadiosWidget[T] {
 	g := &RadiosWidget[T]{selected: selected, label: sprint[T]}
 	g.Role = ggui.RoleGroup
-	g.row = ggui.Row()
+	g.row, g.column = ggui.Row(), ggui.Column()
 	g.AutoKey()
 	return g
 }
@@ -84,10 +87,8 @@ func (g *RadiosWidget[T]) setOptions(options []T) bool {
 	}
 	g.options = slices.Clone(options)
 	g.radios = next
-	g.row = ggui.Row(g.children()...)
-	if g.column != nil {
-		g.column = ggui.Column(g.children()...)
-	}
+	// Only the flow of the current direction is laid out and painted.
+	g.row, g.column = ggui.Row(g.children()...), ggui.Column(g.children()...)
 	return true
 }
 
@@ -112,9 +113,18 @@ func (g *RadiosWidget[T]) children() []ggui.Widget {
 	return ggui.Children(g.radios, func(r *RadioWidget[T]) ggui.Widget { return r })
 }
 
-// Vertical stacks the options instead of lining them up.
+// Vertical stacks the options in a column, which is the default.
 func (g *RadiosWidget[T]) Vertical() *RadiosWidget[T] {
-	g.column = ggui.Column(g.children()...)
+	defer property.Watch(&g.props, &g.horizontal)()
+	g.horizontal = false
+	return g
+}
+
+// Horizontal lines the options up side by side, with twice the theme's
+// Space between them, instead of stacking them.
+func (g *RadiosWidget[T]) Horizontal() *RadiosWidget[T] {
+	defer property.Watch(&g.props, &g.horizontal)()
+	g.horizontal = true
 	return g
 }
 
@@ -138,6 +148,15 @@ func (g *RadiosWidget[T]) BindDisabled(r ggui.Readable[bool]) *RadiosWidget[T] {
 	return g
 }
 
+// Invalid marks every option as having failed validation; see
+// RadioWidget.Invalid. Options inside a Field holding an error are invalid
+// without it.
+func (g *RadiosWidget[T]) Invalid(v bool) *RadiosWidget[T] {
+	defer property.Watch(&g.props, &g.invalid)()
+	g.invalid = v
+	return g
+}
+
 // OnChange fires with the value after a click selected it.
 func (g *RadiosWidget[T]) OnChange(fn func(T)) *RadiosWidget[T] {
 	g.onChange = fn
@@ -157,25 +176,26 @@ func (g *RadiosWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	owner, seen := ownerOf(&g.Interactive, g), map[T]int{}
 	for _, r := range g.radios {
 		r.Disabled(g.IsInert())
+		r.Invalid(g.invalid)
 		r.Key(childKey{owner, radioPart[T]{r.value, seen[r.value]}})
 		seen[r.value]++
 	}
 	t := uitheme.Of(env)
-	if g.column != nil {
-		return g.column.Gap(pick(g.gapSet, g.gap, t.Space)).Layout(c, env)
+	if g.horizontal {
+		return g.row.Gap(pick(g.gapSet, g.gap, t.Space*2)).Layout(c, env)
 	}
-	return g.row.Gap(pick(g.gapSet, g.gap, t.Space*2)).Layout(c, env)
+	return g.column.Gap(pick(g.gapSet, g.gap, t.Space)).Layout(c, env)
 }
 
 // Paint implements Widget. The options are one group, so a screen reader
 // says how many there are and which of them is chosen.
 func (g *RadiosWidget[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Node(r, ggui.Node{Role: ggui.RoleGroup, Name: g.SemanticName(), Disabled: g.IsInert(), Min: 1, Max: float64(len(g.radios))}, func(dst *ggui.Canvas) {
-		if g.column != nil {
-			dst.Paint(g.column, r)
+		if g.horizontal {
+			dst.Paint(g.row, r)
 			return
 		}
-		dst.Paint(g.row, r)
+		dst.Paint(g.column, r)
 	})
 }
 

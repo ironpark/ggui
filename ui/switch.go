@@ -10,6 +10,7 @@ type SwitchWidget struct {
 	toggle
 	on       ggui.Binding[bool]
 	onChange func(bool)
+	small    bool
 }
 
 // Switch binds a toggle to on; a click flips it and the knob slides over.
@@ -36,6 +37,21 @@ func (s *SwitchWidget) Disabled(v bool) *SwitchWidget { s.SetInert(v); return s 
 // BindDisabled follows r for Disabled without a rebuild.
 func (s *SwitchWidget) BindDisabled(r ggui.Readable[bool]) *SwitchWidget { s.BindInert(r); return s }
 
+// Small draws shadcn's sm switch: a 24 by 14 track with a 12px thumb, at
+// the theme's default ControlSize.
+func (s *SwitchWidget) Small() *SwitchWidget { s.small = true; return s }
+
+// Invalid marks the switch as having failed validation: a destructive
+// border and halo around the track. A switch inside a Field holding an
+// error is invalid without it.
+func (s *SwitchWidget) Invalid(v bool) *SwitchWidget { s.invalidProp.Set(v); return s }
+
+// BindInvalid follows r for Invalid without a rebuild.
+func (s *SwitchWidget) BindInvalid(r ggui.Readable[bool]) *SwitchWidget {
+	s.invalidProp.Bind(r, "BindInvalid")
+	return s
+}
+
 // Describe implements ggui.Describer: a switch reports whether it is on.
 func (s *SwitchWidget) Describe() ggui.Node {
 	return ggui.Node{
@@ -49,8 +65,12 @@ func (s *SwitchWidget) Describe() ggui.Node {
 
 // Layout implements Widget.
 func (s *SwitchWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	// The track is a control glyph tall, plus the thumb's inset.
+	// The track is a thumb tall plus its inset, in shadcn's proportions,
+	// scaled with the theme's control glyph.
 	scale := uitheme.Of(env).ControlSize / 16
+	if s.small {
+		return s.layout(c, env, ggui.Sz(24*scale, 14*scale))
+	}
 	return s.layout(c, env, ggui.Sz(32*scale, 18.4*scale))
 }
 
@@ -60,6 +80,7 @@ func (s *SwitchWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	box := s.paint(dst, r, s)
 	on := ggui.Untrack(s.on.Get)
 	k := dst.Ease(s.Anchor(box), knobSlot, pick(on, 1.0, 0.0), s.motion)
+	invalid := s.invalidAmount(dst, box)
 	// As shadcn's: the page's background on a light page, and on a dark one
 	// the foreground, or PrimaryFg once on.
 	dark := isDark(t.Bg)
@@ -69,13 +90,19 @@ func (s *SwitchWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	track := mix(off, t.Primary, k)
 	thumb := mix(pick(dark, t.Fg, t.Bg), pick(dark, t.PrimaryFg, t.Bg), k)
+	edge := fade(invalidBorder(t), invalid)
 	if s.IsInert() {
-		track, thumb = t.Disabled(track), t.Disabled(thumb)
+		track, thumb, edge = t.Disabled(track), t.Disabled(thumb), t.Disabled(edge)
 	}
 	dst.FillRoundRect(box, box.Size.H/2, track)
-	radius := t.ControlSize / 2
+	if invalid > 0 {
+		dst.StrokeRoundRect(box, box.Size.H/2, t.BorderWidth, edge)
+	}
+	// The thumb is a control glyph across, or three quarters of one when
+	// Small, and sits centered in the track's height.
+	radius := t.ControlSize / 2 * pick(s.small, .75, 1.0)
 	inset := (box.Size.H - 2*radius) / 2
 	x := box.Origin.X + inset + radius + k*(box.Size.W-2*inset-2*radius)
 	dst.FillCircle(ggui.Pt(x, box.Origin.Y+box.Size.H/2), radius, thumb)
-	controlFocusRing(dst, &s.Interactive, t, box, box.Size.H/2, t.Ring)
+	s.stateRing(dst, box, box.Size.H/2, invalid)
 }
