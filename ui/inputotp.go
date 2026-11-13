@@ -10,6 +10,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
@@ -51,7 +52,11 @@ type InputOTPWidget struct {
 	invalidWhen          ggui.Readable[bool]
 	disabled             bool
 	rtl                  bool
-	slotSize, gap        float64
+	slotSize             float64 // set by SlotSize; zero follows the theme
+	slot, gap, sepWidth  float64 // as of the last Layout
+	motion               time.Duration
+	anchors              []ggui.Anchor // one per slot, for its eased ring
+	anchorOwner          any
 	placeholder          []rune
 	onChange, onComplete func(string)
 	theme                *uitheme.Theme
@@ -72,7 +77,7 @@ type InputOTPWidget struct {
 // one joined group. Values are limited to maxLength Unicode code points.
 // Filtering removes disallowed characters, including separators in pasted codes.
 func InputOTP(value ggui.Binding[string], maxLength int, parts ...InputOTPPart) *InputOTPWidget {
-	o := &InputOTPWidget{maxLength: max(1, maxLength), slotSize: 32, gap: 8, parts: append([]InputOTPPart(nil), parts...), lastText: "\x00"}
+	o := &InputOTPWidget{maxLength: max(1, maxLength), parts: append([]InputOTPPart(nil), parts...), lastText: "\x00"}
 	o.Role = ggui.RoleTextField
 	o.AutoKey()
 	o.accept = func(r rune) bool { return r >= '0' && r <= '9' }
@@ -151,6 +156,9 @@ func (o *InputOTPWidget) RTL(v bool) *InputOTPWidget {
 	o.rtl = v
 	return o
 }
+
+// SlotSize sets the side of one slot. Without it a slot is as tall as a
+// text field under the theme: a line of text and the field's padding.
 func (o *InputOTPWidget) SlotSize(s float64) *InputOTPWidget {
 	defer property.Watch(&o.props, &o.slotSize)()
 	o.slotSize = max(1, s)
@@ -199,6 +207,18 @@ func (o *InputOTPWidget) Layout(c ggui.Constraints, e ggui.Env) ggui.Size {
 		o.invalid = o.invalidWhen.Get()
 	}
 	o.input.Layout(c, e.With(ggui.InputDisabledKey, o.disabled))
+	t := o.theme
+	o.motion = e.Motion(t.MotionFast)
+	// shadcn's size-8 slot, gap-2 between parts and size-4 separator, from
+	// the tokens a text field and an icon take theirs from.
+	o.slot = pick(o.slotSize > 0, o.slotSize, 20+t.FieldPad.Top+t.FieldPad.Bottom)
+	o.gap, o.sepWidth = t.Space, t.IconSize
+	if owner := ownerOf(&o.Interactive, o); len(o.anchors) != o.maxLength || owner != o.anchorOwner {
+		o.anchors, o.anchorOwner = make([]ggui.Anchor, o.maxLength), owner
+		for i := range o.anchors {
+			o.anchors[i] = ggui.Anchor{ID: childKey{owner, i}}
+		}
+	}
 	o.cells = o.cells[:0]
 	o.groups = o.groups[:0]
 	o.separators = o.separators[:0]
@@ -216,13 +236,13 @@ func (o *InputOTPWidget) Layout(c ggui.Constraints, e ggui.Env) ggui.Size {
 					panic("ui.InputOTP: each slot index must occur exactly once")
 				}
 				seen[slot.Index] = true
-				o.cells = append(o.cells, otpCell{slot.Index, ggui.Rct(ggui.Pt(x, 0.), ggui.Sz(o.slotSize, o.slotSize))})
-				x += o.slotSize
+				o.cells = append(o.cells, otpCell{slot.Index, ggui.Rct(ggui.Pt(x, 0.), ggui.Sz(o.slot, o.slot))})
+				x += o.slot
 			}
-			o.groups = append(o.groups, otpGroup{ggui.Rct(ggui.Pt(start, 0.), ggui.Sz(x-start, o.slotSize))})
+			o.groups = append(o.groups, otpGroup{ggui.Rct(ggui.Pt(start, 0.), ggui.Sz(x-start, o.slot))})
 		case InputOTPSeparatorSpec:
-			o.separators = append(o.separators, ggui.Rct(ggui.Pt(x, 0.), ggui.Sz(16, o.slotSize)))
-			x += 16
+			o.separators = append(o.separators, ggui.Rct(ggui.Pt(x, 0.), ggui.Sz(o.sepWidth, o.slot)))
+			x += o.sepWidth
 		}
 	}
 	for _, ok := range seen {
@@ -230,7 +250,7 @@ func (o *InputOTPWidget) Layout(c ggui.Constraints, e ggui.Env) ggui.Size {
 			panic("ui.InputOTP: groups must cover every slot")
 		}
 	}
-	size := c.Constrain(ggui.Sz(x, o.slotSize))
+	size := c.Constrain(ggui.Sz(x, o.slot))
 	scale := 1.
 	if x > size.W && x > 0 {
 		scale = size.W / x
@@ -238,7 +258,7 @@ func (o *InputOTPWidget) Layout(c ggui.Constraints, e ggui.Env) ggui.Size {
 	adapt := func(r ggui.Rect) ggui.Rect {
 		r.Origin.X *= scale
 		r.Size.W *= scale
-		r.Size.H = min(o.slotSize, size.H)
+		r.Size.H = min(o.slot, size.H)
 		if o.rtl {
 			r.Origin.X = min(x, size.W) - r.Origin.X - r.Size.W
 		}
@@ -293,22 +313,24 @@ func (o *InputOTPWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 }
 func (o *InputOTPWidget) paintSlots(d *ggui.Canvas, r ggui.Rect, state ggui.TextInputState) ggui.Rect {
 	t := o.theme
-	fg, border, fill := t.Fg, t.InputBorder, t.Input
-	if o.invalid {
-		border = t.Destructive
-	}
+	// The border and the halo of an invalid code ease in and out together.
+	invalid := d.Ease(o.Anchor(r), fieldInvalidSlot, pick(o.invalid, 1.0, 0.0), o.motion)
+	fg, border, fill := t.Fg, mix(t.InputBorder, t.Destructive, invalid), t.Input
 	if o.disabled {
 		fg, border, fill = t.Disabled(fg), t.Disabled(border), t.Disabled(fill)
 	}
 	translate := func(at ggui.Rect) ggui.Rect { at.Origin = at.Origin.Add(r.Origin); return at }
 	for _, group := range o.groups {
 		at := translate(group.rect)
+		// An invalid group keeps its destructive halo, focused or not.
+		if invalid > 0 && !o.disabled {
+			haloStroke(d, at, t.Radius, fade(t.Halo(destructiveRing(t)), invalid))
+		}
 		d.FillRoundRect(at, t.Radius, fill)
 		d.StrokeRoundRect(at, t.Radius, t.BorderWidth, border)
 	}
 	for _, sep := range o.separators {
-		at := translate(sep)
-		d.FillRoundRect(ggui.Rct(at.Center().Add(ggui.Pt(-4, -.75)), ggui.Sz(8, 1.5)), .75, fg)
+		paintIconAt(d, o.env, icons.Minus, translate(sep).Center(), o.sepWidth, fg, 0)
 	}
 	runes := []rune(state.Text)
 	active := min(utf8.RuneCountInString(state.Text[:state.Caret]), o.maxLength-1)
@@ -328,7 +350,7 @@ func (o *InputOTPWidget) paintSlots(d *ggui.Canvas, r ggui.Rect, state ggui.Text
 				s = string(o.placeholder[i])
 			}
 			l.Content(s).Style(t.Text).Color(fg)
-			o.sizes[i] = l.Layout(ggui.Loose(ggui.Sz(o.slotSize, o.slotSize)), o.env)
+			o.sizes[i] = l.Layout(ggui.Loose(ggui.Sz(o.slot, o.slot)), o.env)
 		}
 	}
 	caret := r
@@ -348,13 +370,16 @@ func (o *InputOTPWidget) paintSlots(d *ggui.Canvas, r ggui.Rect, state ggui.Text
 			right = right || cell.rect.Origin.X+cell.rect.Size.W == group.rect.Origin.X+group.rect.Size.W
 		}
 		selected := state.Focused && !o.disabled && (i == active || (i >= start && i < end))
-		if selected {
-			ring := t.Ring
+		// The ring of the slot being typed into eases in and out, as
+		// the slot's transition-all does. An invalid one keeps the
+		// destructive line and takes the halo an invalid field has.
+		if k := d.Ease(o.anchors[i], focusRingSlot, pick(selected, 1.0, 0.0), o.motion); k > 0 {
+			line, halo := t.Ring, t.Halo(t.Ring)
 			if o.invalid {
-				ring = t.Destructive
+				line, halo = t.Destructive, t.Halo(destructiveRing(t))
 			}
-			otpSlotBorder(d, ggui.Rct(at.Origin.Add(ggui.Pt(-1, -1)), ggui.Sz(at.Size.W+2, at.Size.H+2)), t.Radius+1, 3, t.Halo(ring), left, right)
-			otpSlotBorder(d, at, t.Radius, 1, ring, left, right)
+			otpSlotBorder(d, ggui.Rct(at.Origin.Add(ggui.Pt(-1, -1)), ggui.Sz(at.Size.W+2, at.Size.H+2)), t.Radius+1, 3, fade(halo, k), left, right)
+			otpSlotBorder(d, at, t.Radius, 1, fade(line, k), left, right)
 		}
 		if i == active {
 			caret = ggui.Rct(at.Center().Add(ggui.Pt(-.5, -8)), ggui.Sz(1, 16))
@@ -370,13 +395,45 @@ func (o *InputOTPWidget) paintSlots(d *ggui.Canvas, r ggui.Rect, state ggui.Text
 		sz := o.sizes[i]
 		d.Clip(at).Paint(o.labels[i], ggui.Rct(at.Center().Add(ggui.Pt(-sz.W/2, -sz.H/2)), sz))
 		if i == active && selected && i >= len(runes) && !state.Composing {
-			ggui.WakeAt(o.blink.Add((ggui.FrameTime().Sub(o.blink)/(500*time.Millisecond) + 1) * 500 * time.Millisecond))
-		}
-		if i == active && selected && i >= len(runes) && !state.Composing && (o.reduced || (ggui.FrameTime().Sub(o.blink)/(500*time.Millisecond))%2 == 0) {
-			d.FillRect(caret, fg)
+			if alpha := o.caretAlpha(); alpha > 0 {
+				d.FillRect(caret, fade(fg, alpha))
+			}
 		}
 	}
 	return caret
+}
+
+// caretAlpha is the opacity of the fake caret now, and asks for the frame
+// in which it next changes. It follows shadcn's caret-blink over one
+// second: out over the first fifth, gone until the half, back in over the
+// next fifth and solid for the rest. Under reduced motion it stays solid.
+func (o *InputOTPWidget) caretAlpha() float64 {
+	if o.reduced {
+		return 1
+	}
+	const period = time.Second
+	now := ggui.FrameTime()
+	since := now.Sub(o.blink)
+	if since < 0 {
+		return 1
+	}
+	phase := since % period
+	cycle := now.Add(-phase)
+	const frame = time.Second / 60
+	switch {
+	case phase < period/5:
+		ggui.WakeAt(now.Add(frame))
+		return 1 - float64(phase)/float64(period/5)
+	case phase < period/2:
+		ggui.WakeAt(cycle.Add(period / 2))
+		return 0
+	case phase < period*7/10:
+		ggui.WakeAt(now.Add(frame))
+		return float64(phase-period/2) / float64(period/5)
+	default:
+		ggui.WakeAt(cycle.Add(period))
+		return 1
+	}
 }
 func (o *InputOTPWidget) byteAt(index int) int {
 	s := o.input.EditingState().Text

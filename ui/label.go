@@ -59,7 +59,16 @@ func (l *LabelWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer l.props.Layout().EndLayout()
 	l.Sync()
 	l.theme = uitheme.Of(env)
-	l.text.Style(l.theme.Text.Merge(l.theme.Label)).Color(pick(l.disabled(), l.theme.MutedFg, l.theme.Fg))
+	// A disabled label is the foreground at half strength, as shadcn's
+	// opacity-50, and the label of an invalid Field turns destructive.
+	col := l.theme.Fg
+	if invalid, _ := env.Get(fieldInvalid); invalid {
+		col = l.theme.Destructive
+	}
+	if l.disabled() {
+		col = l.theme.Disabled(col)
+	}
+	l.text.Style(l.theme.Text.Merge(l.theme.Label)).Color(col)
 	return l.text.Layout(c, env)
 }
 
