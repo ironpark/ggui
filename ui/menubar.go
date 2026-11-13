@@ -221,7 +221,6 @@ func (a menubarAnchor) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.Paint(m.button.box, rr)
 		if !m.button.IsInert() {
 			dst.HitPointer(rr, menubarTarget{b, i})
-			dst.HitCursor(rr, ggui.CursorShapePointer)
 		}
 		if b.Focused && b.FocusVisible && i == b.active {
 			dst.StrokeRoundRect(rr, radius, b.theme.BorderWidth, b.theme.Ring)

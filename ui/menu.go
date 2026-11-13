@@ -1016,7 +1016,6 @@ func (it *MenuItemWidget) paintRow(dst *ggui.Canvas, r ggui.Rect) {
 	lit := false
 	if !it.IsInert() {
 		dst.HitPointer(r, it)
-		dst.HitCursor(r, ggui.CursorShapePointer)
 		lit = it.active || (it.onHover == nil && it.Hovered)
 		if lit {
 			var fill color.Color = t.Accent
