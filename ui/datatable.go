@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
@@ -29,7 +30,8 @@ func (s TableSort) Toggle(id string) TableSort {
 	}
 }
 
-// Mark is the heading suffix that shows whether id orders the rows.
+// Mark is a text suffix that shows whether id orders the rows, for a heading
+// built by hand. DataTable's own headings draw an icon instead.
 func (s TableSort) Mark(id string) string {
 	if s.Column != id {
 		return " ↕"
@@ -38,10 +40,50 @@ func (s TableSort) Mark(id string) string {
 }
 
 // sortHeading is a ghost heading button that toggles sorting by id and shows
-// the current direction from sort.
+// the current direction from sort as an icon after the title.
 func sortHeading(title string, sort ggui.Readable[TableSort], id string, toggle func()) *ButtonWidget {
-	text := ggui.TextOf(ggui.Derived(func() string { return title + sort.Get().Mark(id) })).NoWrap()
-	return ButtonOf(text, toggle).Ghost().Pad(0, 0).Name("Sort " + title)
+	face := ggui.Row(ggui.Text(title).NoWrap(), &sortMark{sort: sort, id: id}).Gap(4).Align(ggui.AlignCenter)
+	b := ButtonOf(face, toggle).Ghost().Pad(0, 0).Name("Sort " + title)
+	b.value = func() string {
+		if s := ggui.Untrack(sort.Get); s.Column == id {
+			return pick(s.Descending, "descending", "ascending")
+		}
+		return ""
+	}
+	return b
+}
+
+// sortMark is the icon of a sortable heading: a chevron pointing the way the
+// column orders the rows, or a muted pair of them while it does not.
+type sortMark struct {
+	sort  ggui.Readable[TableSort]
+	id    string
+	state TableSort
+	theme *uitheme.Theme
+	env   ggui.Env
+}
+
+func (m *sortMark) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	m.theme, m.env, m.state = uitheme.Of(env), env, m.sort.Get()
+	return c.Constrain(ggui.Sz(m.theme.IconSize, m.theme.IconSize))
+}
+
+func (m *sortMark) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	t, center := m.theme, r.Center()
+	if m.state.Column == m.id {
+		paintIconAt(dst, m.env, pick(m.state.Descending, icons.ChevronDown, icons.ChevronUp), center, t.IconSize, t.Fg, 0)
+		return
+	}
+	// The two chevrons of an up-down icon, drawn from the roles there are.
+	size, shift := t.IconSize*5/6, t.IconSize*.23
+	paintIconAt(dst, m.env, icons.ChevronUp, center.Add(ggui.Pt(0, -shift)), size, t.MutedFg, 0)
+	paintIconAt(dst, m.env, icons.ChevronDown, center.Add(ggui.Pt(0, shift)), size, t.MutedFg, 0)
+}
+
+// mutedText draws the text widgets under child in the theme's muted
+// foreground, as shadcn's text-muted-foreground does.
+func mutedText(child ggui.Widget) ggui.Widget {
+	return ggui.WithEnv(func(e ggui.Env) ggui.Env { return e.WithText(ggui.TextStyle{Color: uitheme.Of(e).MutedFg}) }, child)
 }
 
 // TableModel owns client-side DataTable operations independently of presentation.
@@ -277,17 +319,16 @@ func DataTable[T any, K comparable](m *TableModel[T, K]) ggui.Widget {
 			if title == "" {
 				title = c.ID
 			}
-			item := MenuItem(title, func() { m.SetColumnVisible(c.ID, !m.ColumnVisible(c.ID)) })
+			item := MenuItem(title, func() { m.SetColumnVisible(c.ID, !m.ColumnVisible(c.ID)) }).
+				BindChecked(ggui.Derived(func() bool { return m.ColumnVisible(c.ID) }))
 			item.SetName("Show " + title)
-			item.text.BindContent(ggui.Derived(func() string {
-				if m.ColumnVisible(c.ID) {
-					return "✓  " + title
-				}
-				return "    " + title
-			}))
 			entries = append(entries, item)
 		}
-		toolbar := ggui.Row(ggui.Expanded(search), Menu("Columns", entries...)).Gap(12)
+		// shadcn opens the column menu with align="end", under the button's
+		// trailing edge, so it does not run past the table's.
+		columns := Menu("Columns", entries...)
+		columns.Popup().Align(ggui.PopupEnd)
+		toolbar := ggui.Row(ggui.Expanded(search), columns).Gap(12)
 		isEmpty := ggui.Map(m.visible, func(rows []T) bool { return len(rows) == 0 })
 		page := ggui.Derived(m.pageSelection)
 		table := ggui.Reactive(func() ggui.Widget {
@@ -319,17 +360,17 @@ func DataTable[T any, K comparable](m *TableModel[T, K]) ggui.Widget {
 			for _, c := range cols {
 				minWidth += cmp.Or(c.Width, 160)
 			}
-			return &dataTableFrame{minWidth: max(560, minWidth), box: box, scroll: ggui.Scroll(box).Horizontal(), isEmpty: isEmpty, message: ggui.Center(Caption("No results."))}
+			return &dataTableFrame{minWidth: max(560, minWidth), box: box, scroll: ggui.Scroll(box).Horizontal(), isEmpty: isEmpty, message: ggui.Center(ggui.Text("No results."))}
 		})
-		summary := CaptionOf(ggui.Derived(func() string {
+		summary := mutedText(ggui.TextOf(ggui.Derived(func() string {
 			rows := m.filtered.Get()
 			return fmt.Sprintf("%d of %d row(s) selected.", m.countSelected(rows), len(rows))
-		}))
+		})))
 		pageLabel := ggui.TextOf(ggui.Derived(func() string { return fmt.Sprintf("Page %d of %d", m.Page(), m.PageCount()) })).NoWrap()
-		previous := Button("Previous", func() { m.SetPage(m.Page() - 1) }).Outline().BindDisabled(ggui.Derived(func() bool { return m.Page() <= 1 }))
-		next := Button("Next", func() { m.SetPage(m.Page() + 1) }).Outline().BindDisabled(ggui.Derived(func() bool { return m.Page() >= m.PageCount() }))
+		previous := Button("Previous", func() { m.SetPage(m.Page() - 1) }).Outline().Size(ButtonSmall).BindDisabled(ggui.Derived(func() bool { return m.Page() <= 1 }))
+		next := Button("Next", func() { m.SetPage(m.Page() + 1) }).Outline().Size(ButtonSmall).BindDisabled(ggui.Derived(func() bool { return m.Page() >= m.PageCount() }))
 		size := ggui.Box(Select(ggui.Bind(m.PageSize, m.SetPageSize)).Options([]int{5, 10, 20, 50}).Name("Rows per page")).Width(72)
-		footer := ggui.Wrap(summary, ggui.Row(Caption("Rows per page"), size).Gap(8).Align(ggui.AlignCenter), pageLabel, ggui.Row(previous, next).Gap(8)).Gap(12).Align(ggui.AlignCenter)
+		footer := ggui.Wrap(summary, ggui.Row(ggui.WithEnv(tableLabelText, ggui.Text("Rows per page").NoWrap()), size).Gap(8).Align(ggui.AlignCenter), pageLabel, ggui.Row(previous, next).Gap(8)).Gap(12).Align(ggui.AlignCenter)
 		return ggui.Column(toolbar, table, footer).Gap(16).Align(ggui.AlignStretch)
 	})
 }
@@ -341,6 +382,7 @@ type dataTableFrame struct {
 	scroll   *ggui.ScrollWidget
 	isEmpty  ggui.Readable[bool]
 	message  ggui.Widget
+	head     float64
 }
 
 func (f *dataTableFrame) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
@@ -349,7 +391,8 @@ func (f *dataTableFrame) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	if width == ggui.Unbounded {
 		width = f.minWidth
 	}
-	f.box.Width(max(f.minWidth, width)).Border(1, t.Border).Radius(t.Radius)
+	f.head = 5 * t.Space // the table's heading row
+	f.box.Width(max(f.minWidth, width)).Border(t.BorderWidth, t.Border).Radius(t.RadiusSm)
 	natural := f.box.Layout(ggui.Constraints{MaxW: max(f.minWidth, width), MaxH: ggui.Unbounded}, env)
 	c.MinH = min(c.MinH, natural.H)
 	c.MaxH = min(c.MaxH, natural.H)
@@ -362,6 +405,6 @@ func (f *dataTableFrame) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 func (f *dataTableFrame) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Paint(f.scroll, r)
 	if f.isEmpty.Get() {
-		dst.Clip(r).Paint(f.message, ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+40), ggui.Sz(r.Size.W, 96)))
+		dst.Clip(r).Paint(f.message, ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+f.head), ggui.Sz(r.Size.W, 96)))
 	}
 }

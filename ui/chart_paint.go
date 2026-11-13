@@ -13,7 +13,18 @@ type chartTextKey struct {
 	text string
 	size float64
 	rgba uint64
+	face chartFace
 }
+
+// chartFace is the cut of a chart label: most are the regular body face.
+type chartFace uint8
+
+const (
+	chartRegular chartFace = iota
+	chartMedium            // the theme's label weight, for a tooltip's heading
+	chartMono              // the theme's mono face at the label weight, for a tooltip's values
+)
+
 type chartText struct {
 	widget *ggui.TextWidget
 	size   ggui.Size
@@ -27,9 +38,19 @@ func (c *ChartWidget) text(dst *ggui.Canvas, text string, p ggui.Point, size flo
 	t := c.measuredText(text, size, col)
 	dst.Paint(t.widget, ggui.Rct(ggui.Pt(p.X-align*t.size.W, p.Y), t.size))
 }
+
+// textMiddle is text in face, centered vertically on p.Y: the rows of a
+// tooltip and a legend place their labels by the middle of the row.
+func (c *ChartWidget) textMiddle(dst *ggui.Canvas, text string, p ggui.Point, face chartFace, col color.Color, align float64) {
+	t := c.measuredFace(text, 12, col, face)
+	dst.Paint(t.widget, ggui.Rct(ggui.Pt(p.X-align*t.size.W, p.Y-t.size.H/2), t.size))
+}
 func (c *ChartWidget) measuredText(text string, size float64, col color.Color) *chartText {
+	return c.measuredFace(text, size, col, chartRegular)
+}
+func (c *ChartWidget) measuredFace(text string, size float64, col color.Color, face chartFace) *chartText {
 	r, g, b, a := col.RGBA()
-	key := chartTextKey{text, size, uint64(r)<<48 | uint64(g)<<32 | uint64(b)<<16 | uint64(a)}
+	key := chartTextKey{text, size, uint64(r)<<48 | uint64(g)<<32 | uint64(b)<<16 | uint64(a), face}
 	if c.textCache == nil {
 		c.textCache = make(map[chartTextKey]*chartText)
 	}
@@ -37,6 +58,12 @@ func (c *ChartWidget) measuredText(text string, size float64, col color.Color) *
 	t := c.textCache[key]
 	if t == nil {
 		w := ggui.Text(text).Size(size).Color(col)
+		switch face {
+		case chartMedium:
+			w.Weight(c.theme.Label.Weight)
+		case chartMono:
+			w.Font(c.theme.Mono.Font).Weight(c.theme.Label.Weight)
+		}
 		t = &chartText{widget: w, size: w.Layout(free, c.env), layout: c.textLayout}
 		if len(c.textCache) > 512 {
 			clear(c.textCache)
@@ -112,9 +139,7 @@ func (c *ChartWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if c.legend {
 		c.paintLegend(dst, ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+r.Size.H-legendH), ggui.Sz(r.Size.W, legendH)))
 	}
-	if c.Focused && c.FocusVisible {
-		dst.StrokeRoundRect(r, 4, 2, c.theme.Ring)
-	}
+	controlFocusRing(dst, &c.Interactive, c.theme, r, c.theme.RadiusSm, c.theme.Ring)
 	if c.active >= 0 && c.active < len(c.data) && !c.tooltip.Disabled {
 		c.paintTooltip(dst, r)
 	}
@@ -173,9 +198,9 @@ func (c *ChartWidget) paintAxes(dst *ggui.Canvas) {
 		if c.grid {
 			if c.horizontal {
 				x := r.Origin.X + r.Size.W*f
-				dst.StrokeLine(ggui.Pt(x, r.Origin.Y), ggui.Pt(x, r.Origin.Y+r.Size.H), 1, c.theme.Border)
+				dst.StrokeLine(ggui.Pt(x, r.Origin.Y), ggui.Pt(x, r.Origin.Y+r.Size.H), c.theme.BorderWidth, c.gridLine)
 			} else {
-				dst.StrokeLine(ggui.Pt(r.Origin.X, y), ggui.Pt(r.Origin.X+r.Size.W, y), 1, c.theme.Border)
+				dst.StrokeLine(ggui.Pt(r.Origin.X, y), ggui.Pt(r.Origin.X+r.Size.W, y), c.theme.BorderWidth, c.gridLine)
 			}
 		}
 		if c.yAxis && !c.horizontal {
@@ -259,6 +284,18 @@ func (c *ChartWidget) paintCartesian(dst *ggui.Canvas, progress float64) {
 		}
 		dst.FillRect(h, c.theme.Muted)
 	}
+	// A line or area chart's cursor is one border-coloured line behind the
+	// series, drawn once: a translucent border stroked again for each series
+	// would brighten with their number.
+	if c.active >= 0 && c.active < n && c.tooltipCursor && c.kind != ChartBar {
+		for _, s := range c.geometry.series {
+			if s.valid[c.active] {
+				x := chartPosition(r, s.top[c.active]).X
+				dst.StrokeLine(ggui.Pt(x, r.Origin.Y), ggui.Pt(x, r.Origin.Y+r.Size.H), c.theme.BorderWidth, c.theme.Border)
+				break
+			}
+		}
+	}
 	clipped := dst.Clip(r)
 	for j, s := range c.geometry.series {
 		if c.kind == ChartBar {
@@ -310,9 +347,6 @@ func (c *ChartWidget) paintCartesian(dst *ggui.Canvas, progress float64) {
 		}
 		if c.active >= 0 && c.active < n && s.valid[c.active] {
 			p := chartPosition(r, s.top[c.active])
-			if c.tooltipCursor {
-				dst.StrokeLine(ggui.Pt(p.X, r.Origin.Y), ggui.Pt(p.X, r.Origin.Y+r.Size.H), 1, c.theme.Border)
-			}
 			c.paintDot(dst, c.context(c.active, j, p))
 		}
 	}

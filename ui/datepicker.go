@@ -8,10 +8,13 @@ import (
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
-// DatePickerWidget opens a Calendar in a focus-trapped popup.
+// DatePickerWidget opens a Calendar in a focus-trapped popup. Build one with
+// DatePicker for a single date or DateRangePicker for a range.
 type DatePickerWidget struct {
 	props       property.Owner
 	value       ggui.Binding[time.Time]
+	rangeValue  ggui.Binding[DateRange]
+	formatRange func(DateRange) string
 	calendar    *CalendarWidget
 	button      *ButtonWidget
 	popup       *ggui.PopupWidget
@@ -20,23 +23,91 @@ type DatePickerWidget struct {
 	placeholder string
 }
 
-// DatePicker selects a single date. Zero displays "Choose date".
+// DatePicker selects a single date and closes once one is picked. Zero
+// displays "Choose date".
 func DatePicker(value ggui.Binding[time.Time]) *DatePickerWidget {
-	d := &DatePickerWidget{value: value, placeholder: "Choose date", format: func(t time.Time) string { return t.Format("2006-01-02") }}
-	d.calendar = Calendar(value)
+	d := newDatePicker(Calendar(value), "Choose date")
+	d.value = value
+	d.calendar.onPick = d.popup.Hide
+	return d
+}
+
+// DateRangePicker selects an inclusive range of dates from a CalendarRange
+// showing two months. Its popup stays open while the range is picked;
+// Escape or a click outside closes it. An empty range displays "Choose
+// dates". Configure the range's limits on Calendar.
+func DateRangePicker(value ggui.Binding[DateRange]) *DatePickerWidget {
+	d := newDatePicker(CalendarRange(value).Months(2), "Choose dates")
+	d.rangeValue = value
+	d.formatRange = func(r DateRange) string {
+		if r.End.IsZero() || r.End.Equal(r.Start) {
+			return d.format(r.Start)
+		}
+		return d.format(r.Start) + " – " + d.format(r.End)
+	}
+	return d
+}
+
+func newDatePicker(calendar *CalendarWidget, placeholder string) *DatePickerWidget {
+	d := &DatePickerWidget{calendar: calendar, placeholder: placeholder, format: func(t time.Time) string { return t.Format("2006-01-02") }}
 	d.button = Button("", func() { d.popup.Toggle() }).Outline()
-	d.button.defaultName = "Choose date"
-	d.button.value = func() string {
-		if v := ggui.Untrack(d.value.Get); !v.IsZero() {
-			return d.format(d.calendar.date(v))
+	d.button.defaultName = placeholder
+	d.button.value = func() string { return ggui.Untrack(d.text) }
+	// A popup is at least as wide as its trigger; the calendar keeps its own
+	// width, as shadcn's w-auto popover does, and sits in the middle.
+	fit := &datePickerFit{inner: datePickerInner{calendar: calendar}}
+	fit.panel = ggui.Box(&fit.inner)
+	d.panel = fit.panel
+	d.popup = ggui.Popup(d.button, fit).Owner(d.button)
+	d.button.Expands(d.popup.IsOpen).Opens(d)
+	return d
+}
+
+// text is the selection as the trigger shows it, or "" for none. It reads
+// the binding in the caller's tracking scope.
+func (d *DatePickerWidget) text() string {
+	if d.rangeValue != nil {
+		if r := d.calendar.normalizedRange(d.rangeValue.Get()); !r.Start.IsZero() {
+			return d.formatRange(r)
 		}
 		return ""
 	}
-	d.panel = ggui.Box(d.calendar)
-	d.popup = ggui.Popup(d.button, d.panel).Owner(d.button)
-	d.button.Expands(d.popup.IsOpen).Opens(d)
-	d.calendar.onPick = d.popup.Hide
-	return d
+	if v := d.value.Get(); !v.IsZero() {
+		return d.format(d.calendar.date(v))
+	}
+	return ""
+}
+
+// datePickerFit is the popup's content: the panel, at least as wide as the
+// trigger as a popup is, with the calendar at its own width in the middle.
+// The panel's box lays its child out loosely, so the fit tells the calendar
+// side how wide the popup has to be.
+type datePickerFit struct {
+	panel *ggui.BoxWidget
+	inner datePickerInner
+}
+
+// datePickerInner is the panel's child, the calendar centred in minW.
+type datePickerInner struct {
+	calendar *CalendarWidget
+	minW     float64
+	size     ggui.Size
+}
+
+func (f *datePickerFit) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	f.inner.minW = c.MinW
+	return f.panel.Layout(c, env)
+}
+
+func (f *datePickerFit) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(f.panel, r) }
+
+func (in *datePickerInner) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	in.size = in.calendar.Layout(c, env)
+	return c.Constrain(ggui.Sz(max(in.size.W, in.minW), in.size.H))
+}
+
+func (in *datePickerInner) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	dst.Paint(in.calendar, ggui.Rct(ggui.Pt(r.Origin.X+(r.Size.W-in.size.W)/2, r.Origin.Y), in.size))
 }
 
 // datePickerKey keeps the trigger, calendar and popup keys distinct while all
@@ -83,9 +154,27 @@ func (d *DatePickerWidget) Format(fn func(time.Time) string) *DatePickerWidget {
 	return d
 }
 
+// FormatRange customizes how a DateRangePicker displays its range; nil keeps
+// the current formatter. The range it is given is normalized: Start is set,
+// and End is zero while the range is unfinished. Without it each end is
+// shown through Format.
+func (d *DatePickerWidget) FormatRange(fn func(DateRange) string) *DatePickerWidget {
+	if fn != nil {
+		d.formatRange = fn
+		d.props.Changed()
+	}
+	return d
+}
+
 // OnChange reports user selections of a different date.
 func (d *DatePickerWidget) OnChange(fn func(time.Time)) *DatePickerWidget {
 	d.calendar.OnChange(fn)
+	return d
+}
+
+// OnRangeChange reports the range edits a DateRangePicker's user asks for.
+func (d *DatePickerWidget) OnRangeChange(fn func(DateRange)) *DatePickerWidget {
+	d.calendar.OnRangeChange(fn)
 	return d
 }
 
@@ -124,12 +213,11 @@ func (d *DatePickerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	d.calendar.Disabled(d.button.IsInert())
 	t := uitheme.Of(env)
-	panelBox(d.panel, t)
-	text := d.placeholder
-	if v := d.value.Get(); !v.IsZero() {
-		text = d.format(d.calendar.date(v))
-	}
-	d.button.label.Content(text)
+	// panelBox's surface without its padding: the calendar brings its own,
+	// as shadcn's date picker sets p-0 on the popover around it.
+	d.panel.Shadow(t.PanelShadow).Fill(t.Popover).Border(t.BorderWidth, fade(t.Fg, .1)).Radius(t.Radius).Padding(ggui.EdgeInsets{})
+	text := d.text()
+	d.button.label.Content(pick(text == "", d.placeholder, text))
 	return d.popup.Layout(c, env)
 }
 

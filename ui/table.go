@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"image/color"
 	"slices"
 	"time"
 
@@ -83,6 +84,7 @@ type TableWidget[T any, K comparable] struct {
 	localSelection *ggui.StateValue[map[K]bool]
 	onSelect       func(T)
 	rowH           float64
+	rowSet         bool // RowHeight chose rowH; otherwise it follows the theme
 	height         float64
 	label          func(T) string
 
@@ -97,10 +99,27 @@ type TableWidget[T any, K comparable] struct {
 	body    *ggui.EachWidget[T, K]
 	head    *ggui.RowWidget
 	headBox *ggui.BoxWidget
+	foot    *ggui.RowWidget  // the footer's cells, nil without Footer
+	footBox *ggui.BoxWidget  // foot at the height of a row
+	caption *ggui.TextWidget // nil without Caption
+	capSize ggui.Size
 	scroll  *ggui.ScrollWidget
 	column  *ggui.ColumnWidget
 	theme   *uitheme.Theme
 	headH   float64
+	footH   float64
+	footBg  color.Color // the footer surface, resolved each layout
+	capH    float64
+}
+
+// tableLabelText gives a table's headings and footer the theme's medium
+// label weight, whatever text widgets they hold.
+func tableLabelText(e ggui.Env) ggui.Env { return e.WithText(uitheme.Of(e).Label) }
+
+// tableRowHeight is the height of a row of text under t: a line inside the
+// cell padding, and the line below the row.
+func tableRowHeight(t *uitheme.Theme) float64 {
+	return t.Text.Size*t.Text.LineHeight + 2*t.Space + t.BorderWidth
 }
 
 // Table creates a table over rows, one row per item keyed by key so a
@@ -111,7 +130,7 @@ type TableWidget[T any, K comparable] struct {
 //		ui.TextCol("Age", func(p Person) string { return strconv.Itoa(p.Age) }).W(60).Right(),
 //	).BindSelected(chosen).Height(240)
 func Table[T any, K comparable](rows ggui.Readable[[]T], key func(T) K, cols ...Column[T]) *TableWidget[T, K] {
-	t := &TableWidget[T, K]{cols: cols, rows: rows, key: key, rowH: 40}
+	t := &TableWidget[T, K]{cols: cols, rows: rows, key: key, rowH: 37} // until the first layout reads the theme
 	t.label = func(item T) string { return sprint(key(item)) }
 	t.widths = make([]*ggui.StateValue[float64], len(cols))
 	heads := make([]ggui.Widget, len(cols))
@@ -129,11 +148,69 @@ func Table[T any, K comparable](rows ggui.Readable[[]T], key func(T) K, cols ...
 		}
 	}
 	t.head = ggui.Row(heads...).Align(ggui.AlignStretch)
-	t.headBox = ggui.Box(t.head).Height(40)
+	t.headBox = ggui.Box(ggui.WithEnv(tableLabelText, t.head))
 	t.body = ggui.EachKeyed(rows, key, func(row ggui.EachItem[T]) ggui.Widget { return t.row(row) }).Gap(0).Align(ggui.AlignStretch).ItemExtent(t.rowH).Unlisted()
 	t.offset = ggui.State(0.0)
 	t.scroll = ggui.Scroll(t.body).BindOffset(t.offset)
-	t.column = ggui.Column(t.headBox, t.body).Align(ggui.AlignStretch)
+	t.compose()
+	return t
+}
+
+// compose stacks the table's parts: the headings, the rows (scrolling under
+// a Height), then the footer where there is one. The caption is laid out
+// apart, under the column.
+func (t *TableWidget[T, K]) compose() {
+	parts := []ggui.Widget{t.headBox, t.body}
+	if t.height > 0 {
+		parts[1] = ggui.Expanded(t.scroll)
+	}
+	if t.footBox != nil {
+		parts = append(parts, t.footBox)
+	}
+	t.column = ggui.Column(parts...).Align(ggui.AlignStretch)
+}
+
+// Footer adds a summary row under the rows, as shadcn's TableFooter: on a
+// muted surface, above a line, in the medium weight. Each cell sits in the
+// column of the same position and takes its width and alignment; pass nil
+// to leave a column empty. The footer stays in place under a scrolling
+// body. Calling it with no cells removes it.
+//
+//	ui.Table(...).Footer(ggui.Text("Total"), nil, ggui.Text("$2,500.00"))
+func (t *TableWidget[T, K]) Footer(cells ...ggui.Widget) *TableWidget[T, K] {
+	defer property.Watch(&t.props, &t.column)()
+	t.foot, t.footBox = nil, nil
+	if len(cells) > 0 {
+		row := make([]ggui.Widget, len(t.cols))
+		for i := range row {
+			var w ggui.Widget = ggui.Box()
+			if i < len(cells) && cells[i] != nil {
+				w = cells[i]
+			}
+			row[i] = t.cell(i, w, ggui.RoleCell)
+		}
+		t.foot = ggui.Row(row...).Align(ggui.AlignStretch)
+		t.footBox = ggui.Box(ggui.WithEnv(tableLabelText, t.foot))
+	}
+	t.compose()
+	return t
+}
+
+// Caption sets a line of muted text centered under the table, as shadcn's
+// TableCaption. An empty string removes it. A Height includes the caption.
+func (t *TableWidget[T, K]) Caption(text string) *TableWidget[T, K] {
+	switch {
+	case text == "":
+		if t.caption != nil {
+			t.caption = nil
+			t.props.Changed()
+		}
+	case t.caption != nil:
+		t.caption.Content(text)
+	default:
+		t.caption = ggui.Text(text).Align(.5)
+		t.props.Changed()
+	}
 	return t
 }
 
@@ -202,12 +279,13 @@ func (t *TableWidget[T, K]) Selected(v K) *TableWidget[T, K] {
 // OnSelect fires with the item whose row was clicked or activated.
 func (t *TableWidget[T, K]) OnSelect(fn func(T)) *TableWidget[T, K] { t.onSelect = fn; return t }
 
-// RowHeight fixes every row's height; the default is 40. With Height the
-// body then lays out only the rows in view.
+// RowHeight fixes every row's height. The default follows the theme: a
+// line of text inside the cell padding, 37 under the stock themes. With
+// Height the body then lays out only the rows in view.
 func (t *TableWidget[T, K]) RowHeight(h float64) *TableWidget[T, K] {
 	defer property.Watch(&t.props, &t.rowH)()
 	h = max(1, h)
-	t.rowH = h
+	t.rowH, t.rowSet = h, true
 	t.body.ItemExtent(h)
 	return t
 }
@@ -217,14 +295,11 @@ func (t *TableWidget[T, K]) RowHeight(h float64) *TableWidget[T, K] {
 func (t *TableWidget[T, K]) Height(h float64) *TableWidget[T, K] {
 	defer property.Watch(&t.props, &t.column)()
 	defer property.Watch(&t.props, &t.height)()
-	if (t.height > 0) != (h > 0) {
-		if h > 0 {
-			t.column = ggui.Column(t.headBox, ggui.Expanded(t.scroll)).Align(ggui.AlignStretch)
-		} else {
-			t.column = ggui.Column(t.headBox, t.body).Align(ggui.AlignStretch)
-		}
-	}
+	was := t.height > 0
 	t.height = h
+	if was != (h > 0) {
+		t.compose()
+	}
 	return t
 }
 
@@ -314,7 +389,7 @@ func (t *TableWidget[T, K]) cell(i int, w ggui.Widget, role ggui.Role) ggui.Widg
 	c := t.cols[i]
 	// Align the whole cell, including custom widgets, and clip long content so
 	// it cannot paint or receive input in the adjacent column.
-	w = &tableCell{box: ggui.Box(ggui.Align(w).At(c.Align, .5)).Pad(8), role: role}
+	w = &tableCell{box: ggui.Box(ggui.Align(w).At(c.Align, .5)), role: role}
 	if width := t.widths[i]; width != nil {
 		return ggui.Box(w).BindWidth(width)
 	}
@@ -344,21 +419,55 @@ func (t *TableWidget[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	th := uitheme.Of(env)
 	t.theme = th
 	t.head.Gap(0)
+	if !t.rowSet {
+		if h := tableRowHeight(th); h != t.rowH {
+			t.rowH = h
+			t.body.ItemExtent(h)
+		}
+	}
+	// shadcn's h-10 heading row, and a footer row as tall as the others.
+	t.headH, t.footH, t.capH = 5*th.Space, 0, 0
+	t.headBox.Height(t.headH)
+	if t.footBox != nil {
+		t.foot.Gap(0)
+		t.footH = t.rowH
+		t.footBox.Height(t.footH)
+		t.footBg = fade(th.Muted, .5)
+	}
+	if t.caption != nil {
+		// shadcn's mt-4 above a line of muted text.
+		t.capSize = t.caption.Color(th.MutedFg).Layout(ggui.Loose(ggui.Sz(c.MaxW, c.MaxH)), env)
+		t.capH = t.capSize.H + 2*th.Space
+	}
 	if t.height > 0 {
 		h := min(t.height, c.MaxH)
 		c.MinH, c.MaxH = h, h
 	}
+	c.MinH, c.MaxH = max(0, c.MinH-t.capH), max(0, c.MaxH-t.capH)
 	sz := t.column.Layout(c, env)
-	t.headH = t.headBox.Layout(ggui.Loose(sz), env).H
-	t.bodyH = sz.H - t.headH
-	return sz
+	t.bodyH = sz.H - t.headH - t.footH
+	return ggui.Sz(sz.W, sz.H+t.capH)
 }
 
 // Paint implements Widget.
 func (t *TableWidget[T, K]) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	dst.Node(r, ggui.Node{Role: ggui.RoleTable}, func(dst *ggui.Canvas) { dst.Paint(t.column, r) })
-	y := r.Origin.Y + t.headH
-	dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X, y-1), ggui.Sz(r.Size.W, 1)), t.theme.Border)
+	th := t.theme
+	footer := ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+r.Size.H-t.capH-t.footH), ggui.Sz(r.Size.W, t.footH))
+	if t.footH > 0 {
+		dst.FillRect(footer, t.footBg)
+	}
+	dst.Node(r, ggui.Node{Role: ggui.RoleTable}, func(dst *ggui.Canvas) {
+		dst.Paint(t.column, ggui.Rct(r.Origin, ggui.Sz(r.Size.W, r.Size.H-t.capH)))
+		if t.caption != nil {
+			at := ggui.Pt(r.Origin.X+(r.Size.W-t.capSize.W)/2, r.Origin.Y+r.Size.H-t.capSize.H)
+			dst.Paint(t.caption, ggui.Rct(at, t.capSize))
+		}
+	})
+	line := ggui.Sz(r.Size.W, th.BorderWidth)
+	dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+t.headH-th.BorderWidth), line), th.Border)
+	if t.footH > 0 {
+		dst.FillRect(ggui.Rct(footer.Origin, line), th.Border)
+	}
 }
 
 // tableRow is one row: its cells in a Row, hover and selection.
@@ -429,7 +538,7 @@ func (r *tableRow[T, K]) paint(dst *ggui.Canvas, rc ggui.Rect) {
 	}
 	dst.Clip(rc).Paint(r.box, rc)
 	if r.index.Get() < len(r.table.rows.Get())-1 {
-		dst.FillRect(ggui.Rct(ggui.Pt(rc.Origin.X, rc.Origin.Y+rc.Size.H-1), ggui.Sz(rc.Size.W, 1)), th.Border)
+		dst.FillRect(ggui.Rct(ggui.Pt(rc.Origin.X, rc.Origin.Y+rc.Size.H-th.BorderWidth), ggui.Sz(rc.Size.W, th.BorderWidth)), th.Border)
 	}
 	controlFocusRing(dst, &r.Interactive, th, rc, th.Radius, th.Ring)
 }
@@ -581,7 +690,10 @@ type tableCell struct {
 	role ggui.Role
 }
 
-func (c *tableCell) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size { return c.box.Layout(cs, env) }
+func (c *tableCell) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
+	// shadcn's p-2; the row's fixed height decides the vertical room.
+	return c.box.Pad(uitheme.Of(env).Space).Layout(cs, env)
+}
 func (c *tableCell) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.Node(r, ggui.Node{Role: c.role}, func(dst *ggui.Canvas) { dst.Clip(r).Paint(c.box, r) })
 }
