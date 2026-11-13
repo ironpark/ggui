@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
@@ -15,6 +16,7 @@ type ButtonStyle struct {
 	Label, HoverLabel color.Color // the label at rest and under the pointer; a nil HoverLabel keeps Label
 	Border            color.Color // a line just inside the edge; nil draws none
 	Ring              color.Color // the focus ring; nil is the theme's Ring
+	FocusBorder       color.Color // the line at the edge while focused; nil is Ring
 	Shadow            bool        // rests on the theme's CardShadow
 	Underline         bool        // underlines the label under the pointer, as a link does
 }
@@ -56,7 +58,7 @@ var (
 		if isDark(t.Bg) {
 			opacity = .2
 		}
-		return ButtonStyle{Fill: fade(t.Destructive, opacity), Hover: fade(t.Destructive, opacity+.1), Label: t.Destructive, Ring: destructiveRing(&t)}
+		return ButtonStyle{Fill: fade(t.Destructive, opacity), Hover: fade(t.Destructive, opacity+.1), Label: t.Destructive, Ring: destructiveRing(&t), FocusBorder: fade(t.Destructive, .4)}
 	})
 	// ButtonLink is a label in the Primary color, underlined under the
 	// pointer.
@@ -65,45 +67,77 @@ var (
 	})
 )
 
-// ButtonSize is the padding of a button size variant.
+// ButtonSize is the geometry of a button size variant.
 type ButtonSize struct {
 	Pad        ggui.EdgeInsets
 	Height     float64 // minimum height; zero measures the content
 	TextSize   float64 // optional label size
 	LineHeight float64 // optional label line height
 	Square     bool    // as wide as it is tall, for a button holding one icon
+	Radius     float64 // corner radius; zero is the theme's Radius, which a ButtonGroup always uses
+	Gap        float64 // between an inline icon and the label; zero is three quarters of the theme's Space
+	IconSize   float64 // the side of an inline icon; zero is the theme's IconSize
+	IconPad    float64 // horizontal padding on a side holding an inline icon; zero keeps Pad's
 }
 
 // ButtonSizeVariant is a size for Button.Size.
 type ButtonSizeVariant = Variant[ButtonSize]
 
-// The button sizes of shadcn/ui, from the theme's ButtonPad.
+// The button sizes of shadcn/ui, from the theme's ButtonPad, Text size,
+// Space, IconSize and radii.
 var (
 	ButtonDefault = NewVariant("default", func(t uitheme.Theme) ButtonSize {
-		return ButtonSize{Pad: t.ButtonPad, Height: 20 + 2*t.ButtonPad.Top}
+		return ButtonSize{Pad: t.ButtonPad, Height: 20 + 2*t.ButtonPad.Top, Gap: t.Space * .75, IconSize: t.IconSize, IconPad: t.ButtonPad.Left - 2}
 	})
 	ButtonExtraSmall = NewVariant("xs", func(t uitheme.Theme) ButtonSize {
-		return ButtonSize{Pad: ggui.Insets(4, t.ButtonPad.Left*.8), Height: 24, TextSize: 12, LineHeight: 16.0 / 12}
+		size := buttonExtraSmall(t)
+		size.Pad, size.IconPad = ggui.Insets(t.ButtonPad.Top-2, t.ButtonPad.Left*.8), t.ButtonPad.Left*.8-2
+		return size
 	})
 	ButtonSmall = NewVariant("sm", func(t uitheme.Theme) ButtonSize {
-		return ButtonSize{Pad: ggui.Insets(4, t.ButtonPad.Left), Height: 28, TextSize: 12.8, LineHeight: 20.0 / 12.8}
+		size := buttonSmall(t)
+		size.Pad, size.IconPad = ggui.Insets(t.ButtonPad.Top-2, t.ButtonPad.Left), t.ButtonPad.Left-4
+		return size
 	})
 	ButtonLarge = NewVariant("lg", func(t uitheme.Theme) ButtonSize {
-		return ButtonSize{Pad: ggui.Insets(t.ButtonPad.Top+2, t.ButtonPad.Left), Height: 24 + 2*t.ButtonPad.Top}
+		return ButtonSize{Pad: ggui.Insets(t.ButtonPad.Top+2, t.ButtonPad.Left), Height: 24 + 2*t.ButtonPad.Top, Gap: t.Space * .75, IconSize: t.IconSize, IconPad: t.ButtonPad.Left - 2}
 	})
 	ButtonIcon = NewVariant("icon", func(t uitheme.Theme) ButtonSize {
-		return ButtonSize{Height: 20 + 2*t.ButtonPad.Top, Square: true}
+		return ButtonSize{Height: 20 + 2*t.ButtonPad.Top, Square: true, Gap: t.Space * .75, IconSize: t.IconSize}
 	})
 	ButtonIconExtraSmall = NewVariant("icon-xs", func(t uitheme.Theme) ButtonSize {
-		return ButtonSize{Height: 24, Square: true}
+		size := buttonExtraSmall(t)
+		size.Square, size.TextSize, size.LineHeight = true, 0, 0
+		return size
 	})
 	ButtonIconSmall = NewVariant("icon-sm", func(t uitheme.Theme) ButtonSize {
-		return ButtonSize{Height: 28, Square: true}
+		size := buttonSmall(t)
+		size.Square, size.TextSize, size.LineHeight = true, 0, 0
+		size.IconSize = t.IconSize // shadcn shrinks the icon of sm, not of icon-sm
+		return size
 	})
 	ButtonIconLarge = NewVariant("icon-lg", func(t uitheme.Theme) ButtonSize {
-		return ButtonSize{Height: 24 + 2*t.ButtonPad.Top, Square: true}
+		return ButtonSize{Height: 24 + 2*t.ButtonPad.Top, Square: true, Gap: t.Space * .75, IconSize: t.IconSize}
 	})
 )
+
+// buttonExtraSmall is what the xs text and icon sizes share: shadcn's h-6,
+// text-xs, gap-1, size-3 icons and rounded-[min(var(--radius-md),10px)].
+func buttonExtraSmall(t uitheme.Theme) ButtonSize {
+	return ButtonSize{
+		Height: 12 + 2*t.ButtonPad.Top, TextSize: t.Text.Size * 12 / 14, LineHeight: 16.0 / 12,
+		Radius: min(t.RadiusSm, 10), Gap: t.Space / 2, IconSize: t.IconSize * .75,
+	}
+}
+
+// buttonSmall is what the sm text and icon sizes share: shadcn's h-7,
+// text-[0.8rem], gap-1, size-3.5 icons and rounded-[min(var(--radius-md),12px)].
+func buttonSmall(t uitheme.Theme) ButtonSize {
+	return ButtonSize{
+		Height: 16 + 2*t.ButtonPad.Top, TextSize: t.Text.Size * 12.8 / 14, LineHeight: 20.0 / 12.8,
+		Radius: min(t.RadiusSm, 12), Gap: t.Space / 2, IconSize: t.IconSize * .875,
+	}
+}
 
 // ButtonWidget is a clickable box with a label. Build one with Button.
 type ButtonWidget struct {
@@ -112,6 +146,7 @@ type ButtonWidget struct {
 	ggui.Interactive
 	label       *ggui.TextWidget
 	box         *ggui.BoxWidget
+	content     *buttonContent
 	onTap       func()
 	defaultName string
 	variant     *ButtonVariant
@@ -119,8 +154,10 @@ type ButtonWidget struct {
 	style       ButtonStyle
 	padded      bool
 	pad         ggui.EdgeInsets
-	radius      float64 // set by Radius; negative follows the theme
-	selected    bool    // current item for composite navigation controls
+	radius      float64 // set by Radius; negative follows the size and the theme
+	corner      float64 // the radius drawn, from the last Layout
+	sides       JoinedSides
+	selected    bool // current item for composite navigation controls
 	expands     func() bool
 	opener      ggui.Actor
 	value       func() string // optional accessible value for composite triggers
@@ -134,7 +171,8 @@ type ButtonWidget struct {
 // label.
 func Button(label string, onTap func()) *ButtonWidget {
 	b := &ButtonWidget{onTap: onTap, label: ggui.Text(label).NoWrap(), variant: ButtonPrimary, size: ButtonDefault, radius: -1}
-	b.box = ggui.Box(&buttonContent{child: b.label})
+	b.content = &buttonContent{child: b.label}
+	b.box = ggui.Box(b.content)
 	b.Role = ggui.RoleButton
 	b.SetName(label)
 	b.AutoKey()
@@ -142,11 +180,33 @@ func Button(label string, onTap func()) *ButtonWidget {
 }
 
 // ButtonOf creates a button around any content instead of a text label.
-// Give it a name with Name, since nothing on it says what it is.
+// Give it a name with Name, since nothing on it says what it is. An icon
+// left at the theme's IconSize is drawn at the size variant's, smaller in
+// an extra small button.
 func ButtonOf(child ggui.Widget, onTap func()) *ButtonWidget {
-	b := &ButtonWidget{onTap: onTap, box: ggui.Box(&buttonContent{child: child}), variant: ButtonPrimary, size: ButtonDefault, radius: -1}
+	b := &ButtonWidget{onTap: onTap, content: &buttonContent{child: child}, variant: ButtonPrimary, size: ButtonDefault, radius: -1}
+	b.box = ggui.Box(b.content)
 	b.Role = ggui.RoleButton
 	b.AutoKey()
+	return b
+}
+
+// Icon puts an icon before the label, at the size variant's icon size and
+// gap and tinted as the label is, and narrows the padding on that side as
+// shadcn/ui does for an inline-start icon. Nil removes it. For a button
+// holding nothing but an icon use ButtonOf with one of the ButtonIcon sizes.
+//
+//	ui.Button("New branch", create).Outline().Icon(ui.Icon(icons.Plus))
+func (b *ButtonWidget) Icon(icon *icons.Widget) *ButtonWidget {
+	defer property.Watch(&b.props, &b.content.lead)()
+	b.content.lead = icon
+	return b
+}
+
+// TrailingIcon puts an icon after the label, as Icon puts one before it.
+func (b *ButtonWidget) TrailingIcon(icon *icons.Widget) *ButtonWidget {
+	defer property.Watch(&b.props, &b.content.trail)()
+	b.content.trail = icon
 	return b
 }
 
@@ -260,7 +320,8 @@ func (b *ButtonWidget) Size(v *ButtonSizeVariant) *ButtonWidget {
 	return b
 }
 
-// Radius overrides the theme's corner radius for this button.
+// Radius overrides the corner radius of the size variant and the theme for
+// this button.
 func (b *ButtonWidget) Radius(r float64) *ButtonWidget {
 	defer property.Watch(&b.props, &b.radius)()
 	b.radius = max(r, 0)
@@ -290,11 +351,15 @@ func (b *ButtonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	b.theme = t
 	b.motion = env.Motion(t.MotionFast)
 	size := b.size.Style(*t)
-	if !b.padded {
-		b.pad = size.Pad
-		b.box.Padding(b.pad)
+	toggle := b.toggleValue != nil
+	b.sides = joinedSidesOf(env)
+	// A size's own radius gives way inside a ButtonGroup, whose strip is
+	// rounded as a default button is whatever the size of its children.
+	b.corner = pick(size.Radius > 0 && !b.sides.Any(), size.Radius, t.Radius)
+	if b.radius >= 0 {
+		b.corner = b.radius
 	}
-	b.box.Radius(pick(b.radius >= 0, b.radius, t.Radius))
+	b.box.Radius(b.corner)
 	b.style = b.variant.Style(*t)
 	label := b.style.Label
 	if b.IsInert() {
@@ -308,17 +373,42 @@ func (b *ButtonWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		textStyle.Size, textStyle.LineHeight = size.TextSize, size.LineHeight
 	}
 	contentEnv := env.WithText(textStyle)
-	// CSS heights include the line box. Center the native font metrics in
-	// that height instead of adding web line-height padding a second time.
-	if b.label != nil && !b.padded && size.Height > 0 && env.TextScale() <= 1 {
-		labelSize := b.label.Layout(b.pad.Shrink(c).Loosen(), contentEnv)
-		if labelSize.H <= size.Height {
-			b.pad.Top, b.pad.Bottom = (size.Height-labelSize.H)/2, (size.Height-labelSize.H)/2
-			b.box.Padding(b.pad)
-		}
-	}
+	ct := b.content
+	ct.rtl = env.Direction() == ggui.DirRTL
+	// A toggle keeps shadcn's gap-1 at every size.
+	ct.gap = pick(size.Gap > 0 && !toggle, size.Gap, pick(toggle, t.Space/2, t.Space*.75))
+	ct.iconSize = pick(size.IconSize > 0, size.IconSize, t.IconSize)
+	ct.themeIcon = t.IconSize
+	pad := b.pad
 	if !b.padded {
+		pad = size.Pad
+		if size.IconPad > 0 {
+			left, right := ct.lead != nil, ct.trail != nil
+			if ct.rtl {
+				left, right = right, left
+			}
+			if left {
+				pad.Left = min(pad.Left, size.IconPad)
+			}
+			if right {
+				pad.Right = min(pad.Right, size.IconPad)
+			}
+		}
+		// CSS heights include the line box. Center the native font metrics in
+		// that height instead of adding web line-height padding a second time.
+		if b.label != nil && size.Height > 0 && env.TextScale() <= 1 {
+			content := ct.Layout(pad.Shrink(c).Loosen(), contentEnv)
+			if content.H <= size.Height {
+				pad.Top, pad.Bottom = (size.Height-content.H)/2, (size.Height-content.H)/2
+			}
+		}
+		b.pad = pad
+		b.box.Padding(pad)
 		c.MinH = min(c.MaxH, max(c.MinH, size.Height))
+		if toggle {
+			// shadcn's min-w-8: a toggle is never narrower than it is tall.
+			c.MinW = min(c.MaxW, max(c.MinW, size.Height))
+		}
 	}
 	b.box.Size(0, 0)
 
@@ -341,10 +431,13 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t, st := b.theme, b.style
 	inert := b.IsInert()
 	fill, label := st.Fill, st.Label
-	if b.toggleValue != nil && b.toggleValue() {
+	toggle := b.toggleValue != nil
+	if toggle && b.toggleValue() {
 		fill, label = t.Muted, t.Fg
 	}
-	expanded := b.expands != nil && b.expands() && (b.variant == ButtonOutline || b.variant == ButtonGhost || b.variant == ButtonSecondary)
+	// An open outline or ghost trigger reads as hovered; a secondary one
+	// keeps its resting surface, as shadcn's aria-expanded:bg-secondary does.
+	expanded := b.expands != nil && b.expands() && (b.variant == ButtonOutline || b.variant == ButtonGhost)
 	hover := dst.Ease(b.Anchor(r), buttonHoverSlot, pick((b.Hovered || expanded) && !inert, 1.0, 0.0), b.motion)
 	if hover >= 1 {
 		fill = st.Hover
@@ -361,22 +454,32 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if b.label != nil {
 		b.label.Color(label)
 	}
-	b.box.Border(0, nil)
-	if st.Border != nil {
-		b.box.Border(t.BorderWidth, pick(inert, t.Disabled(st.Border), st.Border))
+	b.content.tint(label)
+	border := st.Border
+	if border != nil && inert {
+		border = t.Disabled(border)
 	}
-	b.box.Fill(fill)
-	radius := pick(b.radius >= 0, b.radius, t.Radius)
+	radius := b.corner
+	sides := b.sides.within(dst)
 
 	b.Hit(dst, r, b, pick(b.variant == ButtonLink, ggui.CursorShapePointer, ggui.CursorShapeDefault))
 	if b.chorded && !inert && b.onTap != nil {
 		dst.Shortcut(b.chord, b.onTap)
 	}
-	if b.Pressed && b.Hovered && !inert && b.expands == nil {
+	// A menu trigger and a toggle stay put: shadcn nudges neither.
+	if b.Pressed && b.Hovered && !inert && b.expands == nil && !toggle {
 		r.Origin.Y++
 	}
 	if st.Shadow && !inert {
 		dst.Shadow(r, radius, t.CardShadow)
+	}
+	if sides.Any() {
+		// A box rounds every corner alike, so the surface of a button joined
+		// to a neighbour is drawn here and the box draws the content alone.
+		b.box.Fill(nil).Border(0, nil)
+		paintJoinedBox(dst, r, radius, sides, fill, t.BorderWidth, border)
+	} else {
+		b.box.Fill(fill).Border(pick(border != nil, t.BorderWidth, 0), border)
 	}
 	dst.Paint(b.box, r)
 	if st.Underline && hover > 0 {
@@ -386,7 +489,10 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 			dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X+pad.Left, y), ggui.Sz(r.Size.W-pad.Left-pad.Right, 1)), fade(label, hover))
 		}
 	}
-	controlFocusRing(dst, &b.Interactive, t, r, radius, colorOr(st.Ring, t.Ring))
+	if b.Focused && b.FocusVisible && !inert {
+		ring := colorOr(st.Ring, t.Ring)
+		joinedFocusRing(dst, t, r, radius, sides, colorOr(st.FocusBorder, ring), ring)
+	}
 }
 
 var buttonHoverSlot = ggui.NewSlot[*ggui.Motion]("button hover")
@@ -404,22 +510,81 @@ func (b *ButtonWidget) name() string {
 // Semantics implements ggui.Semantic, including a composite trigger's fallback.
 func (b *ButtonWidget) Semantics() (ggui.Role, string) { return b.Role, b.name() }
 
-// buttonContent centers without consuming loose space like a layout Align does.
+// buttonContent is what a button holds: its label or child, with an icon
+// before and after it when Icon and TrailingIcon set them. It centers them
+// without consuming loose space like a layout Align does.
 type buttonContent struct {
-	child  ggui.Widget
-	size   ggui.Size
-	height float64
+	child       ggui.Widget
+	lead, trail *icons.Widget
+	gap         float64 // between an icon and the child
+	iconSize    float64
+	themeIcon   float64 // the theme's IconSize, which an icon left at its own size has
+	rtl         bool
+	size        ggui.Size // the child's
+	all         ggui.Size // the child and the icons
+	height      float64
 }
 
 func (b *buttonContent) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	b.size = b.child.Layout(c.Loosen(), env)
-	out := c.Constrain(b.size)
+	inner, beside := c.Loosen(), 0.0
+	for _, ic := range [...]*icons.Widget{b.lead, b.trail} {
+		if ic != nil {
+			ic.Layout(ggui.Tight(ggui.Sz(b.iconSize, b.iconSize)), env)
+			beside += b.iconSize + b.gap
+		}
+	}
+	inner.MaxW = max(inner.MaxW-beside, 0)
+	b.size = b.child.Layout(inner, env)
+	// An icon that is all a button holds follows the size variant too,
+	// unless it was given a size of its own: shadcn's size-3 in an xs button.
+	if _, bare := b.child.(*icons.Widget); bare && b.size == ggui.Sz(b.themeIcon, b.themeIcon) {
+		b.size = ggui.Sz(b.iconSize, b.iconSize)
+	}
+	b.all = b.size
+	if beside > 0 {
+		if b.size.W == 0 {
+			beside -= b.gap // nothing to keep the last icon away from
+		}
+		b.all = ggui.Sz(b.size.W+beside, max(b.size.H, b.iconSize))
+	}
+	out := c.Constrain(b.all)
 	b.height = out.H
 	return out
 }
+
 func (b *buttonContent) Paint(dst *ggui.Canvas, r ggui.Rect) {
-	dst.Paint(b.child, ggui.Rct(r.Origin.Add(ggui.Pt((r.Size.W-b.size.W)/2, (r.Size.H-b.size.H)/2)), b.size))
+	x := r.Origin.X + (r.Size.W-b.all.W)/2
+	icon := ggui.Sz(b.iconSize, b.iconSize)
+	if b.lead != nil {
+		x = b.place(dst, r, b.lead, x, icon)
+	}
+	if b.size.W > 0 {
+		x = b.place(dst, r, b.child, x, b.size)
+	}
+	if b.trail != nil {
+		b.place(dst, r, b.trail, x, icon)
+	}
 }
+
+// place paints w at x, centered on the line, and returns where the next
+// part starts.
+func (b *buttonContent) place(dst *ggui.Canvas, r ggui.Rect, w ggui.Widget, x float64, size ggui.Size) float64 {
+	at := ggui.Rct(ggui.Pt(x, r.Origin.Y+(r.Size.H-size.H)/2), size)
+	dst.Paint(w, mirrorHorizontal(at, r, b.rtl))
+	return x + size.W + b.gap
+}
+
+// tint draws the icons in the label's color, which Paint eases under the
+// pointer.
+func (b *buttonContent) tint(c color.Color) {
+	if b.lead != nil {
+		b.lead.Color(c)
+	}
+	if b.trail != nil {
+		b.trail.Color(c)
+	}
+}
+
 func (b *buttonContent) Baseline() (float64, bool) {
 	if child, ok := b.child.(ggui.Baseliner); ok {
 		baseline, ok := child.Baseline()
