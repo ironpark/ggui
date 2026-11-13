@@ -739,7 +739,7 @@ func (d *calendarDay) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.HitPointer(r, d)
 		dst.HitCursor(r, ggui.CursorShapePointer)
 	}
-	hover := dst.Ease(d.Anchor(r), calendarDayHoverSlot, pick(d.Hovered && !d.IsInert(), 1.0, 0.0), c.motion)
+	hover := ease(dst, c.theme, d.Anchor(r), calendarDayHoverSlot, pick(d.Hovered && !d.IsInert(), 1.0, 0.0), c.motion)
 	if d.Pressed && d.Hovered && !d.IsInert() {
 		r.Origin.Y++
 	}

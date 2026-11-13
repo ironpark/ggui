@@ -185,7 +185,8 @@ func (a *AccordionWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		width = max(width, h.size.W+chevron)
 		height += a.heights[i]
 		h.open = a.isOpen(i)
-		h.progress = h.reveal.LayoutToggle(env, h.open, t.MotionSlow)
+		// animate-accordion-down and -up run on CSS's ease-out.
+		h.progress = h.reveal.Easing(uitheme.EaseOutCSS.Easing()).LayoutToggle(env, h.open, t.MotionSlow)
 		if h.open || h.progress > 0 {
 			a.sizes[i] = item.content.Layout(ggui.Loose(ggui.Sz(c.MaxW, ggui.Unbounded)), env)
 			width = max(width, a.sizes[i].W)
@@ -221,7 +222,7 @@ func (a *AccordionWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		rect := ggui.Rct(ggui.Pt(r.Origin.X, y), ggui.Sz(r.Size.W, a.heights[i]))
 		h.Hit(dst, rect, h, ggui.CursorShapeDefault)
 		top := y + t.BorderWidth + 1.25*t.Space // of the header's text
-		hover := dst.Ease(h.Anchor(rect), disclosureHoverSlot, pick(h.Hovered && !item.disabled, 1.0, 0.0), a.env.Motion(t.MotionFast))
+		hover := ease(dst, a.theme, h.Anchor(rect), disclosureHoverSlot, pick(h.Hovered && !item.disabled, 1.0, 0.0), a.env.Motion(t.MotionFast))
 		if hover > 0 && h.text != nil {
 			under := ggui.Pt(rect.Origin.X, top+a.underline(h))
 			dst.FillRect(ggui.Rct(under, ggui.Sz(h.size.W, 1)), fade(t.Fg, hover))

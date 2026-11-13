@@ -257,8 +257,8 @@ func (i *NavigationMenuItemWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// for the current destination and the open dropdown.
 	focused := i.Focused && i.FocusVisible && !i.quiet
 	at := i.Anchor(r)
-	hover := dst.Ease(at, navigationHoverSlot, pick((i.Hovered || focused) && !inert, 1.0, 0.0), i.motion)
-	on := dst.Ease(at, navigationActiveSlot, pick((i.selected || i.isOpen()) && !inert, 1.0, 0.0), i.motion)
+	hover := ease(dst, i.theme, at, navigationHoverSlot, pick((i.Hovered || focused) && !inert, 1.0, 0.0), i.motion)
+	on := ease(dst, i.theme, at, navigationActiveSlot, pick((i.selected || i.isOpen()) && !inert, 1.0, 0.0), i.motion)
 	var fill color.Color
 	if alpha := .5*on + (1-.5*on)*hover; alpha > 0 {
 		fill = fade(t.Muted, alpha)
@@ -799,7 +799,7 @@ func (f *navigationMenuFace) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	// The chevron turns over as the dropdown opens, a pixel below center as
 	// shadcn's top-px sets it.
-	turn := dst.Ease(i.Anchor(r), navigationTurnSlot, pick(i.isOpen(), math.Pi, 0.0), f.env.Motion(navigationMenuTurn))
+	turn := ease(dst, i.theme, i.Anchor(r), navigationTurnSlot, pick(i.isOpen(), math.Pi, 0.0), f.env.Motion(navigationMenuTurn))
 	cx := pick(f.env.Direction() == ggui.DirRTL, r.Origin.X+navigationMenuChevron/2, r.Origin.X+r.Size.W-navigationMenuChevron/2)
 	paintIconAt(dst, f.env, icons.ChevronDown, ggui.Pt(cx, r.Center().Y+1), navigationMenuChevron, col, turn)
 }

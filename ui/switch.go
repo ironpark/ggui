@@ -79,7 +79,7 @@ func (s *SwitchWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := s.theme
 	box := s.paint(dst, r, s)
 	on := ggui.Untrack(s.on.Get)
-	k := dst.Ease(s.Anchor(box), knobSlot, pick(on, 1.0, 0.0), s.motion)
+	k := ease(dst, s.theme, s.Anchor(box), knobSlot, pick(on, 1.0, 0.0), s.motion)
 	invalid := s.invalidAmount(dst, box)
 	// As shadcn's: the page's background on a light page, and on a dark one
 	// the foreground, or PrimaryFg once on.

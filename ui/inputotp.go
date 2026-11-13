@@ -314,7 +314,7 @@ func (o *InputOTPWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 func (o *InputOTPWidget) paintSlots(d *ggui.Canvas, r ggui.Rect, state ggui.TextInputState) ggui.Rect {
 	t := o.theme
 	// The border and the halo of an invalid code ease in and out together.
-	invalid := d.Ease(o.Anchor(r), fieldInvalidSlot, pick(o.invalid, 1.0, 0.0), o.motion)
+	invalid := ease(d, o.theme, o.Anchor(r), fieldInvalidSlot, pick(o.invalid, 1.0, 0.0), o.motion)
 	fg, border, fill := t.Fg, mix(t.InputBorder, t.Destructive, invalid), t.Input
 	if o.disabled {
 		fg, border, fill = t.Disabled(fg), t.Disabled(border), t.Disabled(fill)
@@ -373,7 +373,7 @@ func (o *InputOTPWidget) paintSlots(d *ggui.Canvas, r ggui.Rect, state ggui.Text
 		// The ring of the slot being typed into eases in and out, as
 		// the slot's transition-all does. An invalid one keeps the
 		// destructive line and takes the halo an invalid field has.
-		if k := d.Ease(o.anchors[i], focusRingSlot, pick(selected, 1.0, 0.0), o.motion); k > 0 {
+		if k := ease(d, o.theme, o.anchors[i], focusRingSlot, pick(selected, 1.0, 0.0), o.motion); k > 0 {
 			line, halo := t.Ring, t.Halo(t.Ring)
 			if o.invalid {
 				line, halo = t.Destructive, t.Halo(destructiveRing(t))

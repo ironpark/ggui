@@ -269,7 +269,7 @@ func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 	// slides between them.
 	t.shown = t.shown[:0]
 	for i := range t.labelRect {
-		t.shown = append(t.shown, dst.Ease(ggui.Anchor{Rect: header, ID: i}, tabShownSlot, pick(i == cur, 1.0, 0.0), t.motion))
+		t.shown = append(t.shown, ease(dst, t.theme, ggui.Anchor{Rect: header, ID: i}, tabShownSlot, pick(i == cur, 1.0, 0.0), t.motion))
 	}
 	if !t.line {
 		dst.FillRoundRect(strip, th.Radius, th.Muted)
@@ -299,7 +299,7 @@ func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		}
 		if label := t.labels[i]; label != nil {
 			over := i == t.hover && i != cur && !t.IsInert() && t.enabled(i)
-			hover := dst.Ease(ggui.Anchor{Rect: header, ID: i}, tabHoverSlot, pick(over, 1.0, 0.0), t.motion)
+			hover := ease(dst, t.theme, ggui.Anchor{Rect: header, ID: i}, tabHoverSlot, pick(over, 1.0, 0.0), t.motion)
 			label.Color(t.labelColor(i, max(hover, t.shown[i])))
 		}
 		dst.Paint(t.heads[i], lr)

@@ -692,8 +692,8 @@ func (c *questionChoice) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		fill = fade(t.InputBorder, .2)
 	}
 	motion := c.env.Motion(t.MotionFast)
-	hover := dst.Ease(c.Anchor(r), questionHoverSlot, pick(c.Hovered && !c.IsInert(), 1.0, 0.0), motion)
-	chosen := dst.Ease(c.Anchor(r), questionChosenSlot, pick(selected, 1.0, 0.0), motion)
+	hover := ease(dst, c.theme, c.Anchor(r), questionHoverSlot, pick(c.Hovered && !c.IsInert(), 1.0, 0.0), motion)
+	chosen := ease(dst, c.theme, c.Anchor(r), questionChosenSlot, pick(selected, 1.0, 0.0), motion)
 	fill = mix(mix(fill, fade(t.Muted, .5), hover), t.Muted, chosen)
 	border := mix(t.InputBorder, fade(t.Primary, .4), chosen)
 	if c.q.errors[c.item.Name] != "" {

@@ -439,7 +439,7 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// keeps its resting surface, as shadcn's aria-expanded:bg-secondary does.
 	expanded := b.expands != nil && b.expands() && (b.variant == ButtonOutline || b.variant == ButtonGhost)
 	anchor := b.Anchor(r)
-	hover := dst.Ease(anchor, buttonHoverSlot, pick((b.Hovered || expanded) && !inert, 1.0, 0.0), b.motion)
+	hover := ease(dst, b.theme, anchor, buttonHoverSlot, pick((b.Hovered || expanded) && !inert, 1.0, 0.0), b.motion)
 	if hover >= 1 {
 		fill = st.Hover
 	} else if hover > 0 {
@@ -495,7 +495,7 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// one ring for its children, the focused one's, so there a ring that
 	// lost the focus goes at once rather than over the one coming in.
 	focused := b.Focused && b.FocusVisible && !inert
-	if k := dst.Ease(anchor, focusRingSlot, pick(focused, 1.0, 0.0), b.motion); k > 0 && (focused || !sides.Any()) {
+	if k := ease(dst, b.theme, anchor, focusRingSlot, pick(focused, 1.0, 0.0), b.motion); k > 0 && (focused || !sides.Any()) {
 		ring := colorOr(st.Ring, t.Ring)
 		joinedFocusRing(dst, t, r, radius, sides, fade(colorOr(st.FocusBorder, ring), k), fade(ring, k))
 	}

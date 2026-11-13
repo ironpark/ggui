@@ -613,7 +613,7 @@ func (p *ProgressWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if p.head <= 0 {
 		bar = r
 	}
-	v := dst.Ease(ggui.Anchor{Rect: bar}, progressSlot, target, p.motion)
+	v := ease(dst, p.theme, ggui.Anchor{Rect: bar}, progressSlot, target, p.motion)
 	// Assistive technology reports the data, independently of visual easing.
 	node := ggui.Node{Role: ggui.RoleProgress, Name: p.name, Min: 0, Max: 1, Now: target}
 	if p.label != nil {
@@ -700,7 +700,7 @@ func (p *ProgressRingWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size 
 // Paint implements Widget.
 func (p *ProgressRingWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	target := clamp(p.value.Get(), 0, 1)
-	v := dst.Ease(ggui.Anchor{Rect: r}, progressSlot, target, p.motion)
+	v := ease(dst, p.theme, ggui.Anchor{Rect: r}, progressSlot, target, p.motion)
 	// Assistive technology reports the data, independently of visual easing.
 	dst.Leaf(r, ggui.Node{Role: ggui.RoleProgress, Min: 0, Max: 1, Now: target})
 	d := min(r.Size.W, r.Size.H) - p.stroke

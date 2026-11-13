@@ -36,7 +36,7 @@ func (g *toggle) invalid() bool { return g.invalidProp.Get() || g.fieldInvalid }
 // invalidAmount is how far the control is into the invalid state, from 0
 // to 1, eased over the control's motion: what its border and halo follow.
 func (g *toggle) invalidAmount(dst *ggui.Canvas, box ggui.Rect) float64 {
-	return dst.Ease(g.Anchor(box), toggleInvalidSlot, pick(g.invalid(), 1.0, 0.0), g.motion)
+	return ease(dst, g.theme, g.Anchor(box), toggleInvalidSlot, pick(g.invalid(), 1.0, 0.0), g.motion)
 }
 
 // stateRing draws what surrounds the glyph in box, over it: the destructive

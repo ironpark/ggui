@@ -363,7 +363,7 @@ func (r *traceRow) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	r.line.W = min(r.line.W, cs.MaxW)
 	open := expandable && r.open()
 	r.laidOpen = open
-	r.progress = r.reveal.LayoutToggle(env, open, t.MotionSlow)
+	r.progress = r.reveal.Easing(t.Ease.Easing()).LayoutToggle(env, open, t.MotionSlow)
 	r.bodySize = ggui.Size{}
 	if expandable && (r.progress > 0 || open) {
 		r.bodySize = r.body.Layout(ggui.Constraints{MinW: cs.MinW, MaxW: cs.MaxW, MaxH: ggui.Unbounded}, env)
@@ -387,7 +387,7 @@ func (r *traceRow) Paint(dst *ggui.Canvas, rect ggui.Rect) {
 	r.header = header
 	hover := 0.0
 	if actionable {
-		hover = dst.Ease(r.Anchor(header), traceHoverSlot, pick(r.Hovered, 1.0, 0.0), r.env.Motion(t.MotionFast))
+		hover = ease(dst, r.theme, r.Anchor(header), traceHoverSlot, pick(r.Hovered, 1.0, 0.0), r.env.Motion(t.MotionFast))
 	}
 	// Muted until the pointer is over a line that does something; the run
 	// beside the title stays fainter either way.
