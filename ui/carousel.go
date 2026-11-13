@@ -72,6 +72,7 @@ type CarouselWidget struct {
 	items                                      []*CarouselItemWidget
 	prev, next                                 *CarouselNavigationWidget
 	vertical, rtl, loop, controls, dragEnabled bool
+	rtlSet, gapSet                             bool // RTL and Gap were called; otherwise the Env and theme decide
 	height, gap, align                         float64
 	duration                                   time.Duration
 	autoplay                                   time.Duration
@@ -93,6 +94,8 @@ type CarouselWidget struct {
 // Carousel binds the selected snap to selected. Slides default to full width;
 // wrap them with CarouselItem to set a smaller Basis. Navigation buttons reserve
 // 48 logical pixels on either side, so controls never overflow their parent.
+// Slides run in the Env's reading direction, two spacing units apart, unless
+// RTL and Gap say otherwise.
 func Carousel(selected ggui.Binding[int], items ...ggui.Widget) *CarouselWidget {
 	c := &CarouselWidget{selected: selected, height: 240, gap: 16, align: .5, controls: true, dragEnabled: true, duration: 1800 * time.Millisecond, stopOnInteraction: true}
 	c.Role = ggui.RoleGroup
@@ -128,9 +131,12 @@ func (c *CarouselWidget) Height(h float64) *CarouselWidget {
 	return c
 }
 func (c *CarouselWidget) Vertical() *CarouselWidget { c.vertical = true; return c }
+
+// RTL runs the slides right to left when v is true and left to right when
+// it is false, whatever the Env's direction, which decides otherwise.
 func (c *CarouselWidget) RTL(v bool) *CarouselWidget {
 	defer property.Watch(&c.props, &c.rtl)()
-	c.rtl = v
+	c.rtl, c.rtlSet = v, true
 	return c
 }
 func (c *CarouselWidget) Loop(v bool) *CarouselWidget {
@@ -148,9 +154,12 @@ func (c *CarouselWidget) Draggable(v bool) *CarouselWidget {
 	c.dragEnabled = v
 	return c
 }
+
+// Gap sets the space between slides, which is otherwise two of the theme's
+// spacing units.
 func (c *CarouselWidget) Gap(g float64) *CarouselWidget {
 	defer property.Watch(&c.props, &c.gap)()
-	c.gap = max(0, g)
+	c.gap, c.gapSet = max(0, g), true
 	return c
 }
 
@@ -292,10 +301,17 @@ func (c *CarouselWidget) Layout(con ggui.Constraints, e ggui.Env) ggui.Size {
 	defer c.props.Layout().EndLayout()
 	c.Sync()
 	c.env, c.theme, c.reduced = e, uitheme.Of(e), e.ReducedMotion()
+	if !c.rtlSet {
+		c.rtl = e.Direction() == ggui.DirRTL
+	}
+	if !c.gapSet {
+		c.gap = 2 * c.theme.Space
+	}
 	size := con.Constrain(ggui.Sz(bounded(con.MaxW, 416), c.height))
 	gutter := 0.
 	if c.controls {
-		gutter = iconButtonSide(c.theme) + 2*c.theme.Space
+		// shadcn hangs the 28px buttons 48px outside the slides.
+		gutter = carouselButtonSide(c.theme) + 2.5*c.theme.Space
 	}
 	if c.vertical {
 		gutter = min(gutter, size.H/2)
@@ -360,7 +376,7 @@ func (c *CarouselWidget) Layout(con ggui.Constraints, e ggui.Env) ggui.Size {
 		c.ready = true
 		c.dragging = false
 	}
-	side := iconButtonSide(c.theme)
+	side := carouselButtonSide(c.theme)
 	c.prev.Layout(ggui.Tight(ggui.Sz(side, side)), e)
 	c.next.Layout(ggui.Tight(ggui.Sz(side, side)), e)
 	return size
@@ -450,7 +466,7 @@ func (c *CarouselWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 			clip.Node(at, ggui.Node{Role: ggui.RoleGroup, Name: fmt.Sprintf("Slide %d of %d", i+1, len(c.items))}, func(dst *ggui.Canvas) { dst.Paint(c.items[i], at) })
 		}
 		c.FocusRing(d, v, c.theme.Radius, c.theme.Ring)
-		side := iconButtonSide(c.theme)
+		side := carouselButtonSide(c.theme)
 		if c.controls && ((!c.vertical && r.Size.W >= 2*side) || (c.vertical && r.Size.H >= 2*side)) {
 			a, b := ggui.Rct(ggui.Pt(r.Origin.X, r.Center().Y-side/2), ggui.Sz(side, side)), ggui.Rct(ggui.Pt(r.Origin.X+r.Size.W-side, r.Center().Y-side/2), ggui.Sz(side, side))
 			if c.vertical {
@@ -587,14 +603,24 @@ func (c *CarouselWidget) Adopt(prev any) {
 	}
 }
 
-// CarouselNavigationWidget is a standalone previous/next control. Use
-// Controls(false) when placing these elsewhere in an application layout.
+// CarouselNavigationWidget is a standalone previous/next control: a round
+// outline button of the small icon size. Use Controls(false) when placing
+// these elsewhere in an application layout.
 type CarouselNavigationWidget struct {
 	ggui.Interactive
 	carousel *CarouselWidget
 	previous bool
 	env      ggui.Env
+	theme    *uitheme.Theme
+	style    ButtonStyle
+	motion   time.Duration
 }
+
+// carouselButtonSide is the side of a previous or next button: shadcn's
+// icon-sm.
+func carouselButtonSide(t *uitheme.Theme) float64 { return ButtonIconSmall.Style(*t).Height }
+
+var carouselHoverSlot = ggui.NewSlot[*ggui.Motion]("carousel button hover")
 
 func CarouselPrevious(c *CarouselWidget) *CarouselNavigationWidget {
 	return carouselNavigation(c, true)
@@ -607,8 +633,9 @@ func carouselNavigation(c *CarouselWidget, prev bool) *CarouselNavigationWidget 
 	return b
 }
 func (b *CarouselNavigationWidget) Layout(c ggui.Constraints, e ggui.Env) ggui.Size {
-	b.env = e
-	side := iconButtonSide(uitheme.Of(e))
+	b.env, b.theme = e, uitheme.Of(e)
+	b.style, b.motion = ButtonOutline.Style(*b.theme), e.Motion(b.theme.MotionFast)
+	side := carouselButtonSide(b.theme)
 	return c.Constrain(ggui.Sz(side, side))
 }
 func (b *CarouselNavigationWidget) enabled() bool {
@@ -629,14 +656,17 @@ func (b *CarouselNavigationWidget) activate() {
 }
 func (b *CarouselNavigationWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 	b.SetInert(!b.enabled())
-	b.Hit(d, r, b, ggui.CursorShapePointer)
-	t := uitheme.Of(b.env)
-	fill, col, border := t.Bg, t.Fg, t.Border
-	if b.Hovered && !b.IsInert() {
-		fill, col = t.Accent, t.AccentFg
+	b.Hit(d, r, b, ggui.CursorShapeDefault)
+	t, st := b.theme, b.style
+	fill, col, border := st.Fill, st.Label, st.Border
+	hover := d.Ease(ggui.Anchor{Rect: r, ID: b.HitID()}, carouselHoverSlot, pick(b.Hovered && !b.IsInert(), 1.0, 0.0), b.motion)
+	if hover >= 1 {
+		fill = st.Hover
+	} else if hover > 0 {
+		fill = mix(fill, st.Hover, hover)
 	}
 	if b.IsInert() {
-		col, border = t.Disabled(col), t.Disabled(border)
+		fill, col, border = t.Disabled(fill), t.Disabled(col), t.Disabled(border)
 	}
 	d.FillRoundRect(r, min(r.Size.W, r.Size.H)/2, fill)
 	d.StrokeRoundRect(r, min(r.Size.W, r.Size.H)/2, t.BorderWidth, border)
@@ -651,7 +681,7 @@ func (b *CarouselNavigationWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 		angle = math.Pi
 	}
 	paintIconAt(d, b.env, role, r.Center(), t.IconSize, col, angle)
-	b.FocusRing(d, r, min(r.Size.W, r.Size.H)/2, t.Ring)
+	controlFocusRing(d, &b.Interactive, t, r, min(r.Size.W, r.Size.H)/2, t.Ring)
 }
 func (b *CarouselNavigationWidget) HandlePointer(e ggui.PointerEvent) bool {
 	return b.Pointer(e, b.activate)
