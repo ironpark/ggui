@@ -42,6 +42,7 @@ type TabsWidget struct {
 	headerH   float64
 	stripW    float64   // the strip's natural width, inset included
 	labelX    []float64 // each label's offset from the strip's left inset
+	shown     []float64 // how far each label is into being the shown one, as last painted
 	pad       ggui.EdgeInsets
 	bodySize  ggui.Size
 	labelRect []ggui.Rect
@@ -179,7 +180,7 @@ func (t *TabsWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		t.boxes[i].Padding(t.pad)
 		// A label of the strip's own is recolored in Paint as the pointer
 		// crosses it; what a Header draws takes the resting color from here.
-		fg := t.labelColor(i, cur, 0)
+		fg := t.labelColor(i, pick(i == cur, 1.0, 0.0))
 		if t.labels[i] != nil {
 			t.labels[i].Color(fg)
 		}
@@ -214,21 +215,19 @@ func (t *TabsWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	return c.Constrain(ggui.Sz(max(t.stripW, t.bodySize.W), t.headerH+t.bodySize.H))
 }
 
-// labelColor is the color of label i while cur is the shown page and the
-// pointer is hover of the way onto it: the text color for the shown page,
-// and otherwise the quieter one shadcn gives a tab at rest, 60% of the text
-// color on a light page and the muted one on a dark page, easing to the text
-// color under the pointer. A tab that cannot be picked is at half strength.
-func (t *TabsWidget) labelColor(i, cur int, hover float64) color.Color {
+// labelColor is the color of label i when it is k of the way to the text
+// color, which the shown page's label and one under the pointer have at
+// one: from the quieter color shadcn gives a tab at rest, 60% of the text
+// color on a light page and the muted one on a dark page. A tab that cannot
+// be picked is at half strength.
+func (t *TabsWidget) labelColor(i int, k float64) color.Color {
 	th := t.theme
 	fg := th.Fg
-	if i != cur {
+	if k < 1 {
 		rest := pick(isDark(th.Bg), th.MutedFg, fade(th.Fg, .6))
 		fg = rest
-		if hover >= 1 {
-			fg = th.Fg
-		} else if hover > 0 {
-			fg = mix(rest, th.Fg, hover)
+		if k > 0 {
+			fg = mix(rest, th.Fg, k)
 		}
 	}
 	if t.IsInert() || !t.enabled(i) {
@@ -264,24 +263,31 @@ func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		t.labelRect = append(t.labelRect, lr)
 	}
 	cur := t.index()
+	// Each label eases into and out of being the shown one where it stands,
+	// as shadcn's triggers do under transition-all: the surface of the one
+	// left fades out while that of the one picked fades in, and nothing
+	// slides between them.
+	t.shown = t.shown[:0]
+	for i := range t.labelRect {
+		t.shown = append(t.shown, dst.Ease(ggui.Anchor{Rect: header, ID: i}, tabShownSlot, pick(i == cur, 1.0, 0.0), t.motion))
+	}
 	if !t.line {
 		dst.FillRoundRect(strip, th.Radius, th.Muted)
-		if cur >= 0 {
-			lr := t.labelRect[cur]
-			at := ggui.Pt(dst.Ease(ggui.Anchor{Rect: header}, underlineSlot, lr.Origin.X, t.motion), dst.Ease(ggui.Anchor{Rect: header}, tabYSlot, lr.Origin.Y, t.motion))
-			size := ggui.Sz(dst.Ease(ggui.Anchor{Rect: header}, widthSlot, lr.Size.W, t.motion), dst.Ease(ggui.Anchor{Rect: header}, tabHeightSlot, lr.Size.H, t.motion))
-			active := ggui.Rct(at, size)
-			fill := th.Bg
-			if isDark(th.Bg) {
-				fill = fade(th.InputBorder, .3)
+		dark := isDark(th.Bg)
+		for i, lr := range t.labelRect {
+			k := t.shown[i]
+			if k <= 0 {
+				continue
 			}
-			if !isDark(th.Bg) {
-				dst.Shadow(active, th.RadiusSm, th.CardShadow)
+			if dark {
+				dst.FillRoundRect(lr, th.RadiusSm, fade(fade(th.InputBorder, .3), k))
+				dst.StrokeRoundRect(lr, th.RadiusSm, th.BorderWidth, fade(th.InputBorder, k))
+				continue
 			}
-			dst.FillRoundRect(active, th.RadiusSm, fill)
-			if isDark(th.Bg) {
-				dst.StrokeRoundRect(active, th.RadiusSm, th.BorderWidth, th.InputBorder)
-			}
+			shadow := th.CardShadow
+			shadow.Color = fade(shadow.Color, k)
+			dst.Shadow(lr, th.RadiusSm, shadow)
+			dst.FillRoundRect(lr, th.RadiusSm, fade(th.Bg, k))
 		}
 	}
 	for i, lr := range t.labelRect {
@@ -294,23 +300,24 @@ func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		if label := t.labels[i]; label != nil {
 			over := i == t.hover && i != cur && !t.IsInert() && t.enabled(i)
 			hover := dst.Ease(ggui.Anchor{Rect: header, ID: i}, tabHoverSlot, pick(over, 1.0, 0.0), t.motion)
-			label.Color(t.labelColor(i, cur, hover))
+			label.Color(t.labelColor(i, max(hover, t.shown[i])))
 		}
 		dst.Paint(t.heads[i], lr)
 	}
-	if t.line && cur >= 0 {
+	for i, lr := range t.labelRect {
+		k := t.shown[i]
+		if !t.line || k <= 0 {
+			continue
+		}
 		// The bar by the shown label is the text color whatever the accent,
-		// and nothing is ruled along the rest of the strip.
-		lr := t.labelRect[cur]
-		bar := pick(t.IsInert() || !t.enabled(cur), th.Disabled(th.Fg), th.Fg)
+		// and nothing is ruled along the rest of the strip. It fades in
+		// and out with its label, shadcn's after:transition-opacity.
+		bar := fade(pick(t.IsInert() || !t.enabled(i), th.Disabled(th.Fg), th.Fg), k)
 		if t.vertical {
 			x := pick(t.rtl, strip.Origin.X, strip.Origin.X+strip.Size.W-tabBar)
-			y := dst.Ease(ggui.Anchor{Rect: header}, tabYSlot, lr.Origin.Y, t.motion)
-			dst.FillRect(ggui.Rct(ggui.Pt(x, y), ggui.Sz(tabBar, lr.Size.H)), bar)
+			dst.FillRect(ggui.Rct(ggui.Pt(x, lr.Origin.Y), ggui.Sz(tabBar, lr.Size.H)), bar)
 		} else {
-			x := dst.Ease(ggui.Anchor{Rect: header}, underlineSlot, lr.Origin.X, t.motion)
-			w := dst.Ease(ggui.Anchor{Rect: header}, widthSlot, lr.Size.W, t.motion)
-			dst.FillRect(ggui.Rct(ggui.Pt(x, r.Origin.Y+strip.Size.H-tabBar), ggui.Sz(w, tabBar)), bar)
+			dst.FillRect(ggui.Rct(ggui.Pt(lr.Origin.X, r.Origin.Y+strip.Size.H-tabBar), ggui.Sz(lr.Size.W, tabBar)), bar)
 		}
 	}
 	if t.focusPending && t.focusIndex() >= 0 {
@@ -368,11 +375,8 @@ func (t *TabsWidget) Adopt(prev any) {
 }
 
 var (
-	underlineSlot = ggui.NewSlot[*ggui.Motion]("underlineSlot")
-	widthSlot     = ggui.NewSlot[*ggui.Motion]("widthSlot")
-	tabYSlot      = ggui.NewSlot[*ggui.Motion]("tab y")
-	tabHeightSlot = ggui.NewSlot[*ggui.Motion]("tab height")
-	tabHoverSlot  = ggui.NewSlot[*ggui.Motion]("tab hover")
+	tabShownSlot = ggui.NewSlot[*ggui.Motion]("tab shown")
+	tabHoverSlot = ggui.NewSlot[*ggui.Motion]("tab hover")
 )
 
 // tabLabel is the pointer handler for one label.
