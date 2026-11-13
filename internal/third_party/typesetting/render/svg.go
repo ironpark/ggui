@@ -6,10 +6,10 @@ import (
 	"image/draw"
 	"io"
 
+	"github.com/ironpark/ggfx"
+	ggsvg "github.com/ironpark/ggfx/svg"
 	"github.com/ironpark/ggui/internal/third_party/typesetting/font"
 	"github.com/ironpark/ggui/internal/third_party/typesetting/shaping"
-	"github.com/srwiley/oksvg"
-	"github.com/srwiley/rasterx"
 )
 
 func (r *Renderer) drawSVG(g shaping.Glyph, svg font.GlyphSVG, img draw.Image, x, y float32) error {
@@ -28,13 +28,14 @@ func (r *Renderer) drawSVG(g shaping.Glyph, svg font.GlyphSVG, img draw.Image, x
 	return nil
 }
 
-func renderSVGStream(stream io.Reader, width, height int) (*image.NRGBA, error) {
-	icon, err := oksvg.ReadIconStream(stream)
+func renderSVGStream(stream io.Reader, width, height int) (*image.RGBA, error) {
+	doc, err := ggsvg.Parse(stream)
 	if err != nil {
 		return nil, err
 	}
 
-	iconAspect := float32(icon.ViewBox.W / icon.ViewBox.H)
+	vx, vy, vw, vh := doc.ViewBox()
+	iconAspect := float32(vw / vh)
 	viewAspect := float32(width) / float32(height)
 	imgW, imgH := width, height
 	if viewAspect > iconAspect {
@@ -43,12 +44,11 @@ func renderSVGStream(stream io.Reader, width, height int) (*image.NRGBA, error) 
 		imgH = int(float32(width) / iconAspect)
 	}
 
-	icon.SetTarget(icon.ViewBox.X, icon.ViewBox.Y, float64(imgW), float64(imgH))
+	var g ggfx.GeoM
+	g.Translate(-vx, -vy)
+	g.Scale(float64(imgW)/vw, float64(imgH)/vh)
 
-	out := image.NewNRGBA(image.Rect(0, 0, imgW, imgH))
-	scanner := rasterx.NewScannerGV(int(icon.ViewBox.W), int(icon.ViewBox.H), out, out.Bounds())
-	raster := rasterx.NewDasher(width, height, scanner)
-
-	icon.Draw(raster, 1)
+	out := image.NewRGBA(image.Rect(0, 0, imgW, imgH))
+	doc.Draw(out, g)
 	return out, nil
 }
