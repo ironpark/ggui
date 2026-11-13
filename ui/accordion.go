@@ -258,7 +258,10 @@ func (a *AccordionWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 // already painted.
 func (a *AccordionWidget) underline(dst *ggui.Canvas, h *accordionHeader, r ggui.Rect, hover float64) {
 	base, ok := h.text.Baseline()
-	if !ok || a.line <= 0 || h.linedSize != h.size {
+	// The two are the same lines when they are the same size, to within
+	// what summing fractional advances twice can differ by.
+	same := math.Abs(h.linedSize.W-h.size.W) < .01 && math.Abs(h.linedSize.H-h.size.H) < .01
+	if !ok || a.line <= 0 || !same {
 		dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+r.Size.H-1), ggui.Sz(r.Size.W, 1)), fade(a.theme.Fg, hover))
 		return
 	}
