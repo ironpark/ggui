@@ -63,7 +63,11 @@ func TestSelectTriggerContentPreservesSemanticsAndInput(t *testing.T) {
 			t.Fatal("decorative face exposed a second interactive semantic node")
 		}
 		p.Key("tab", "down")
-		if value.Get() != "beta" {
+		if value.Get() != "alpha" || !control.Popup().IsOpen() {
+			t.Fatal("Down on the closed field did not open the list and leave the value")
+		}
+		p.Key("down", "enter")
+		if value.Get() != "beta" || control.Popup().IsOpen() {
 			t.Fatal("closed keyboard selection failed")
 		}
 		p.Key("space", "down", "enter")

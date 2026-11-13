@@ -305,10 +305,15 @@ func TestSelectOpensPicksAndClosesWithPointerAndKeys(t *testing.T) {
 	if ggui.Untrack(v.Get) != "c" || changes != 1 || sel.Popup().IsOpen() {
 		t.Fatalf("value %q changes %d open %v after clicking the third row", ggui.Untrack(v.Get), changes, sel.Popup().IsOpen())
 	}
-	// Keyboard: focus is on the field; Down while closed steps the value.
+	// Keyboard: focus is on the field; Down while closed opens the list on
+	// the value and leaves it alone, and Down from the last option wraps.
 	p.Type(ggui.Mods{}, ggui.KeyArrowDown)
-	if ggui.Untrack(v.Get) != "a" {
-		t.Fatalf("Down wrapped to %q, want a", ggui.Untrack(v.Get))
+	if ggui.Untrack(v.Get) != "c" || !sel.Popup().IsOpen() {
+		t.Fatalf("Down on the closed field gave %q open %v; want c and open", ggui.Untrack(v.Get), sel.Popup().IsOpen())
+	}
+	p.Type(ggui.Mods{}, ggui.KeyArrowDown, ggui.KeyEnter)
+	if ggui.Untrack(v.Get) != "a" || sel.Popup().IsOpen() {
+		t.Fatalf("Down wrapped to %q open %v, want a and closed", ggui.Untrack(v.Get), sel.Popup().IsOpen())
 	}
 	p.Type(ggui.Mods{}, ggui.KeySpace, ggui.KeyArrowDown, ggui.KeyEnter)
 	if ggui.Untrack(v.Get) != "b" || sel.Popup().IsOpen() {

@@ -106,7 +106,7 @@ explicit composition already exists, not that every optional web prop is covered
 | Anchored content | `Popover` / `PopoverOf`, controlled `BindOpen`, `Trigger`, `Title` / `Description`, logical `Align`, 288px default panel, outside/Escape dismissal and focus restoration, including nested and text-only panels. Nonmodal by default; `Modal(true)` opts into trapping. |
 | Navigation | `NavigationMenu`, `NavigationMenuItem`, `NavigationMenuLink` / `NavigationMenuLinkOf`; real link semantics, active destinations, shared rich panel, keyboard navigation and RTL order. |
 | Tooltip | Matching arrow with collision-side placement; `Arrow(false)` opt-out, Escape dismissal, `Disabled` / `BindDisabled` independent from the trigger. |
-| Select | Selected-item alignment by default; `AlignItemWithTrigger(false)` restores edge placement. `NativeSelect` / `Native(true)` attempts a platform menu and falls back to the themed popup. |
+| Select | Selected-item alignment by default; `AlignItemWithTrigger(false)` restores edge placement. Arrows open the closed list, Home/End reach its ends and typed letters search the options. `NativeSelect` / `Native(true)` attempts a platform menu and falls back to the themed popup. |
 | Sliders | `RangeSlider` accepts any number of values with independent focus/accessible ranges, `MinGap`, named thumbs and copied callbacks; scalar/range sliders support `Vertical`, RTL, `Step`, `LargeStep` and commits. |
 | Drawers | Bottom-handle drag, positional snap heights, controlled `BindSnapPoint`, `OnSnapChange`, dismissal and keyboard/accessibility resizing. |
 | Code | `CodeBlock` / `CodeBlockOf`, title/language, exact copy/selection, line numbers, `StartLine`, `Wrap`, `LineStyles`, bounded keyboard scrolling and LTR code inside RTL interfaces. |
@@ -144,6 +144,9 @@ See [forms](forms.md), [navigation](data-and-navigation.md), and
   an explicit fractional step; `Step(0)` enables continuous pointer movement.
 - Select opens with its selected row over the trigger where the viewport allows;
   opt out with `.AlignItemWithTrigger(false)`.
+- Up and Down on a closed `Select` open its list on the chosen option instead of
+  stepping the value; Home and End move through the open list, and typed letters
+  go to the option they start, chosen while the list is closed.
 - Field labels now focus/activate their controls. Label interaction adds no Tab stop.
 - `Radios` stacks its options vertically, 8 logical pixels apart, as shadcn's
   RadioGroup does; `.Horizontal()` restores a row.
