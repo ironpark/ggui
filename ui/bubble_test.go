@@ -19,10 +19,10 @@ func TestBubbleVariantsPickTheirThemeColors(t *testing.T) {
 		{"default", func(b *BubbleWidget) *BubbleWidget { return b }, th.Primary, th.PrimaryFg, nil},
 		{"secondary", (*BubbleWidget).Secondary, th.Secondary, th.SecondaryFg, nil},
 		{"muted", (*BubbleWidget).Muted, th.Muted, th.Fg, nil},
-		{"tinted", (*BubbleWidget).Tinted, mix(th.Card, th.Primary, .12), th.Fg, nil},
+		{"tinted", (*BubbleWidget).Tinted, tintOf(th.Bg, th.Primary, .91), th.Fg, nil},
 		{"outline", (*BubbleWidget).Outline, th.Bg, th.Fg, th.Border},
 		{"ghost", (*BubbleWidget).Ghost, nil, th.Fg, nil},
-		{"destructive", (*BubbleWidget).Destructive, mix(th.Card, th.Destructive, .12), th.Destructive, nil},
+		{"destructive", (*BubbleWidget).Destructive, fade(th.Destructive, .1), th.Destructive, nil},
 	} {
 		b := Bubble(ggui.Text("hi"))
 		if tc.set(b) != b {
