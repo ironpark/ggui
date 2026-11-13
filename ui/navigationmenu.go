@@ -41,8 +41,8 @@ const (
 	navigationMenuMotion  = 350 * time.Millisecond // the panel arriving, moving and changing content
 	navigationMenuExit    = 150 * time.Millisecond // the panel leaving
 	navigationMenuFrom    = .9                     // the panel's scale as it arrives
-	navigationMenuDelay   = 200 * time.Millisecond // resting on a trigger before its dropdown opens
-	navigationMenuLinger  = 150 * time.Millisecond // off the menu before a dropdown hover opened closes
+	navigationMenuDelay   = 50 * time.Millisecond  // resting on a trigger before its dropdown opens: Base UI's delay
+	navigationMenuLinger  = 50 * time.Millisecond  // off the menu before a dropdown hover opened closes: its closeDelay
 )
 
 // navigationMenuEase is the curve the panel moves along: shadcn's

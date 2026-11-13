@@ -33,7 +33,11 @@ func TestButtonGroupVerticalStacksAndNamesTheToolbar(t *testing.T) {
 	}
 }
 
-func TestToggleGroupVerticalMovesWithEveryArrow(t *testing.T) {
+// A vertical group's keyboard moves with Up and Down, Home and End, not
+// with Left and Right, and only Space or Enter changes the choice: Base
+// UI's ToggleGroup is a CompositeRoot on the group's orientation whose
+// items are pressed, not chosen by focus.
+func TestToggleGroupVerticalMovesWithUpAndDown(t *testing.T) {
 	t.Parallel()
 	value := ggui.State("b")
 	var changes []string
@@ -57,18 +61,61 @@ func TestToggleGroupVerticalMovesWithEveryArrow(t *testing.T) {
 		{ggui.KeyArrowDown, "c"},
 		{ggui.KeyArrowDown, "a"}, // wraps
 		{ggui.KeyArrowUp, "c"},
-		{ggui.KeyArrowLeft, "b"},
+		{ggui.KeyArrowLeft, "c"}, // not this group's axis
 		{ggui.KeyHome, "a"},
 		{ggui.KeyEnd, "c"},
 	} {
+		was := ggui.Untrack(value.Get)
 		p.Type(ggui.Mods{}, step.key)
+		if got := ggui.Untrack(value.Get); got != was {
+			t.Fatalf("%v alone changed the choice to %q", step.key, got)
+		}
+		p.Type(ggui.Mods{}, ggui.KeySpace)
 		if got := ggui.Untrack(value.Get); got != step.want {
-			t.Fatalf("after %v the group chose %q, want %q", step.key, got, step.want)
+			t.Fatalf("after %v and Space the group chose %q, want %q", step.key, got, step.want)
 		}
 	}
 	p.Type(ggui.Mods{}, ggui.KeySpace) // re-picking the chosen segment is no change
-	if len(changes) != 6 {
-		t.Fatalf("OnChange ran %d times, want once per change (6)", len(changes))
+	if len(changes) != 5 {
+		t.Fatalf("OnChange ran %d times (%v), want once per change (5)", len(changes), changes)
+	}
+}
+
+// An Optional group clears its choice when the chosen option is pressed
+// again, by the pointer or the keyboard, as Base UI's single ToggleGroup
+// does; without it the choice stays.
+func TestToggleGroupOptionalClearsOnASecondPress(t *testing.T) {
+	t.Parallel()
+	kept, cleared := ggui.State("b"), ggui.State("b")
+	var changes []string
+	root := ggui.Column(
+		ui.ToggleGroup(kept).Options([]string{"a", "b"}).Name("Kept").Format(func(s string) string { return "kept " + s }),
+		ui.ToggleGroup(cleared).Options([]string{"a", "b"}).Name("Cleared").Format(func(s string) string { return "cleared " + s }).
+			Optional().OnChange(func(s string) { changes = append(changes, s) }),
+	)
+	p := ggui.NewProbe(root, ggui.Sz(300, 300))
+	defer p.Close()
+	p.Tap("kept b")
+	p.Tap("cleared b")
+	if kept.Get() != "b" || cleared.Get() != "" {
+		t.Fatalf("a second press: kept=%q cleared=%q, want b and none", kept.Get(), cleared.Get())
+	}
+	if n, ok := p.Semantics().Find(ggui.RoleRadio, "cleared b"); !ok || n.Checked == ggui.TriOn {
+		t.Fatal("the cleared option is still marked")
+	}
+	// The keyboard stays on the option it pressed: Space chooses it again,
+	// and once more clears it.
+	p.Type(ggui.Mods{}, ggui.KeySpace)
+	if cleared.Get() != "b" {
+		t.Fatalf("Space on the cleared option chose %q, want b", cleared.Get())
+	}
+	p.Type(ggui.Mods{}, ggui.KeyEnter)
+	p.Type(ggui.Mods{}, ggui.KeyArrowLeft, ggui.KeySpace)
+	if cleared.Get() != "a" {
+		t.Fatalf("Enter, Left, Space chose %q, want a", cleared.Get())
+	}
+	if want := []string{"", "b", "", "a"}; len(changes) != len(want) {
+		t.Fatalf("OnChange saw %q, want %q", changes, want)
 	}
 }
 

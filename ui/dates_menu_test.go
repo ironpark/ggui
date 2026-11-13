@@ -32,11 +32,21 @@ func TestCalendarNavigationAndConstraints(t *testing.T) {
 	if !ggui.Untrack(value.Get).Equal(date(2024, 3, 3)) {
 		t.Fatal("the arrow did not pass over the disabled date", ggui.Untrack(value.Get))
 	}
-	// Past the bounds there is no day to reach, and the keys stay put.
+	// Past the bounds there is no day to reach, and the keys stay put:
+	// PageDown is held to the end of March, which is outside them.
 	p.Type(ggui.Mods{}, ggui.KeyPageDown, ggui.KeyEnter)
-	p.Type(ggui.Mods{}, ggui.KeyArrowUp, ggui.KeyArrowUp, ggui.KeyEnter)
 	if !ggui.Untrack(value.Get).Equal(date(2024, 3, 3)) {
 		t.Fatal("the keys left the bounds", ggui.Untrack(value.Get))
+	}
+	// A move out of the first month of the bounds stops on its first day,
+	// as react-day-picker holds one to its startMonth.
+	p.Type(ggui.Mods{}, ggui.KeyArrowUp, ggui.KeyArrowUp, ggui.KeyEnter)
+	if !ggui.Untrack(value.Get).Equal(date(2024, 3, 1)) {
+		t.Fatal("Up out of the first month did not stop on its first day", ggui.Untrack(value.Get))
+	}
+	p.Type(ggui.Mods{}, ggui.KeyArrowRight, ggui.KeyEnter)
+	if !ggui.Untrack(value.Get).Equal(date(2024, 3, 3)) {
+		t.Fatal("the arrow did not come back over the disabled date", ggui.Untrack(value.Get))
 	}
 	for name, want := range map[string]bool{"Previous month": true, "Next month": true} {
 		if n, ok := p.Semantics().Find(ggui.RoleButton, name); !ok || n.Disabled != want {
@@ -62,6 +72,23 @@ func TestCalendarNavigationAndConstraints(t *testing.T) {
 	p.Type(ggui.Mods{}, ggui.KeyEnter)
 	if !ggui.Untrack(value.Get).Equal(date(2026, 12, 15)) {
 		t.Fatal("Shift+PageDown did not browse a year on", ggui.Untrack(value.Get))
+	}
+	// Shift with the arrows browses as react-day-picker's keyMap has it:
+	// Left and Right by the month, Up and Down by the year.
+	for _, step := range []struct {
+		key  ggui.KeyboardKey
+		want time.Time
+	}{
+		{ggui.KeyArrowLeft, date(2026, 11, 15)},
+		{ggui.KeyArrowUp, date(2025, 11, 15)},
+		{ggui.KeyArrowRight, date(2025, 12, 15)},
+		{ggui.KeyArrowDown, date(2026, 12, 15)},
+	} {
+		p.Type(ggui.Mods{Shift: true}, step.key)
+		p.Type(ggui.Mods{}, ggui.KeyEnter)
+		if got := ggui.Untrack(value.Get); !got.Equal(step.want) {
+			t.Fatalf("Shift+%v browsed to %v, want %v", step.key, got.Format(time.DateOnly), step.want.Format(time.DateOnly))
+		}
 	}
 	c.Disabled(true)
 	p.Frame()
