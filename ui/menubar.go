@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"image/color"
+
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
@@ -28,9 +30,10 @@ func Menubar(menus ...*MenuWidget) *MenubarWidget {
 	b := &MenubarWidget{menus: menus, active: 0, sizes: make([]ggui.Size, len(menus)), rects: make([]ggui.Rect, len(menus))}
 	b.Role = ggui.RoleToolbar
 	b.AutoKey()
-	b.popup = ggui.Popup(menubarAnchor{b}, menubarPanel{b}).Keys(b).Owner(b).Gap(4)
+	b.popup = ggui.Popup(menubarAnchor{b}, menubarPanel{b}).Keys(b).Owner(b)
 	for i, m := range menus {
-		m.button.Ghost().Pad(4, 8)
+		m.fit, m.checkLeft, m.keys = true, true, b
+		m.button.Ghost()
 		m.button.onTap = func() { b.toggle(i) }
 		m.button.Expands(func() bool { return b.popup.IsOpen() && b.active == i }).Opens(menubarAction{b, i})
 	}
@@ -56,7 +59,8 @@ func (b *MenubarWidget) open(i int) {
 	b.active = i
 	b.menus[i].reopen()
 	r := b.rects[i]
-	b.popup.ShowAt(r.Origin.Add(ggui.Pt(0, r.Size.H)))
+	// The panel hangs a little left of its trigger, clear of the bar.
+	b.popup.ShowAt(r.Origin.Add(ggui.Pt(-b.inset(), r.Size.H)))
 }
 func (b *MenubarWidget) toggle(i int) {
 	if b.popup.IsOpen() && i == b.active {
@@ -73,6 +77,11 @@ func (b *MenubarWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		m.button.Sync()
 	}
 	b.theme = uitheme.Of(env)
+	t := b.theme
+	b.popup.Gap(t.Space)
+	for _, m := range b.menus {
+		m.button.Pad(t.Space/4, t.Space*.75)
+	}
 	if len(b.menus) > 0 && b.menus[b.active].button.IsInert() {
 		b.popup.Hide()
 		b.active = stepIndex(b.active, 1, len(b.menus), b.enabled)
@@ -103,7 +112,7 @@ func (b *MenubarWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	dst.Describe(r, b)
 	dst.FillRoundRect(r, b.theme.Radius, b.theme.Card)
-	dst.StrokeRoundRect(r, b.theme.Radius, 1, b.theme.Border)
+	dst.StrokeRoundRect(r, b.theme.Radius, b.theme.BorderWidth, b.theme.Border)
 	dst.Paint(b.popup, r)
 }
 
@@ -115,8 +124,15 @@ func (b *MenubarWidget) ConsumesKey(e ggui.KeyEvent) bool {
 	if e.Kind != ggui.KeyPress {
 		return false
 	}
-	return navConsumes(e, navBoth) || ggui.Activates(e)
+	return navConsumes(e, navBoth) || ggui.Activates(e) || b.popup.IsOpen() && b.menus[b.active].consumes(e)
 }
+
+// inset is the space between the bar's edge and its triggers: the border
+// and the padding inside it.
+func (b *MenubarWidget) inset() float64 { return b.theme.BorderWidth + b.theme.Space*.375 }
+
+// gap is the space between two triggers.
+func (b *MenubarWidget) gap() float64 { return b.theme.Space / 4 }
 
 // enabled reports whether menu i can take the keyboard.
 func (b *MenubarWidget) enabled(i int) bool { return !b.menus[i].button.IsInert() }
@@ -132,6 +148,9 @@ func (b *MenubarWidget) HandleKey(e ggui.KeyEvent) {
 	ends := along == navFirst || along == navLast
 	vertical := along == navNone && navMoveOf(e.Key, navVertical) != navNone // Up or Down
 	switch {
+	case open && b.menus[b.active].key(e):
+		// The open menu moved or ran an item; Left, Right and Escape
+		// belong to a submenu of it before they belong to the bar.
 	case e.Key == ggui.KeyEscape:
 		b.popup.Hide()
 	case vertical && !open:
@@ -141,7 +160,7 @@ func (b *MenubarWidget) HandleKey(e ggui.KeyEvent) {
 			b.menus[b.active].jump(-1)
 		}
 	case open && (vertical || ends):
-		b.menus[b.active].navigate(e)
+		// The menu had nothing to move to.
 	case along != navNone:
 		// Left and Right move along the bar, taking an open menu along;
 		// Home and End, with the menu closed, go to its ends. Active is
@@ -152,12 +171,8 @@ func (b *MenubarWidget) HandleKey(e ggui.KeyEvent) {
 			b.open(b.active)
 		}
 	default:
-		if ggui.Activates(e) {
-			if !b.popup.IsOpen() {
-				b.open(b.active)
-			} else {
-				b.menus[b.active].activate()
-			}
+		if ggui.Activates(e) && !open {
+			b.open(b.active)
 		}
 	}
 }
@@ -182,25 +197,26 @@ func (a menubarAction) Act(e ggui.Action) bool {
 type menubarAnchor struct{ b *MenubarWidget }
 
 func (a menubarAnchor) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	w, h := 6.0, 0.0
-	for i, m := range a.b.menus {
-		a.b.sizes[i] = m.button.Layout(c.Loosen(), env)
-		w += a.b.sizes[i].W
-		h = max(h, a.b.sizes[i].H)
+	b := a.b
+	w, h := 2*b.inset(), 0.0
+	for i, m := range b.menus {
+		b.sizes[i] = m.button.Layout(c.Loosen(), env)
+		w += b.sizes[i].W
+		h = max(h, b.sizes[i].H)
 	}
-	a.b.naturalWidth = w
-	return c.Constrain(ggui.Sz(w, h+6))
+	w += b.gap() * float64(max(len(b.menus)-1, 0))
+	b.naturalWidth = w
+	return c.Constrain(ggui.Sz(w, h+2*b.inset()))
 }
 func (a menubarAnchor) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	b := a.b
-	x := r.Origin.X + 3
+	inset, radius := b.inset(), b.theme.Radius*.6
+	x := r.Origin.X + inset
 	for i, m := range b.menus {
-		rr := ggui.Rct(ggui.Pt(x, r.Origin.Y+3), ggui.Sz(b.sizes[i].W, max(0, r.Size.H-6)))
+		rr := ggui.Rct(ggui.Pt(x, r.Origin.Y+inset), ggui.Sz(b.sizes[i].W, max(0, r.Size.H-2*inset)))
 		b.rects[i] = rr
-		m.button.box.Fill(nil).Border(0, nil)
-		if (b.popup.IsOpen() && b.active == i) || m.button.Hovered {
-			m.button.box.Fill(b.theme.Muted)
-		}
+		lit := (b.popup.IsOpen() && b.active == i) || m.button.Hovered
+		m.button.box.Radius(radius).Fill(pick[color.Color](lit, b.theme.Muted, nil)).Border(0, nil)
 		dst.Describe(rr, m.button)
 		dst.Paint(m.button.box, rr)
 		if !m.button.IsInert() {
@@ -208,9 +224,9 @@ func (a menubarAnchor) Paint(dst *ggui.Canvas, r ggui.Rect) {
 			dst.HitCursor(rr, ggui.CursorShapePointer)
 		}
 		if b.Focused && b.FocusVisible && i == b.active {
-			dst.StrokeRoundRect(rr, b.theme.Radius, 2, b.theme.Ring)
+			dst.StrokeRoundRect(rr, radius, 2, b.theme.Ring)
 		}
-		x += rr.Size.W
+		x += rr.Size.W + b.gap()
 	}
 	if len(b.menus) > 0 {
 		dst.HitKey(r, b)
@@ -232,11 +248,7 @@ func (p menubarPanel) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if len(b.menus) == 0 {
 		return
 	}
-	m := b.menus[b.active]
-	for i, it := range m.items {
-		it.active = i == m.current
-	}
-	dst.Paint(m.panel, r)
+	dst.Paint(b.menus[b.active].panel, r)
 	for i, rr := range b.rects {
 		if !b.menus[i].button.IsInert() {
 			dst.HitPointer(rr, menubarTarget{b, i})

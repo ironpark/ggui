@@ -10,7 +10,7 @@ import "github.com/ironpark/ggui"
 //
 //	ggui.Column(ui.AppMenubar(app.Menu()), ggui.Expanded(content))
 //
-// A submenu shows its entries inline, under a divider.
+// A submenu opens beside its row, as MenuSub's does.
 func AppMenubar(menus []ggui.MenuItem) ggui.Widget {
 	if ggui.NativeMenu() || len(menus) == 0 {
 		return ggui.Box()
@@ -30,8 +30,11 @@ func menuEntries(items []ggui.MenuItem) []ggui.Widget {
 		case m.Separator:
 			out = append(out, MenuDivider())
 		case len(m.Items) > 0:
-			out = append(out, MenuDivider(), Caption(m.Label))
-			out = append(out, menuEntries(m.Items)...)
+			sub := MenuSub(m.Label, menuEntries(m.Items)...)
+			if m.Enabled != nil {
+				sub.BindDisabled(ggui.Not(m.Enabled))
+			}
+			out = append(out, sub)
 		default:
 			it := MenuItem(m.Label, m.Run)
 			if m.Chord != "" {
