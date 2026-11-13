@@ -36,6 +36,9 @@ func (w *AccordionWidget) Key(k any) *AccordionWidget { w.Interactive.SetKey(k);
 func (w *AttachmentGroupWidget) Key(k any) *AttachmentGroupWidget { w.Interactive.SetKey(k); return w }
 
 // Key assigns this control an input identity. Configure it before mount.
+func (w *BadgeWidget) Key(k any) *BadgeWidget { w.Interactive.SetKey(k); return w }
+
+// Key assigns this control an input identity. Configure it before mount.
 func (w *BubbleWidget) Key(k any) *BubbleWidget { w.Interactive.SetKey(k); return w }
 
 // Key assigns this control an input identity. Configure it before mount.
