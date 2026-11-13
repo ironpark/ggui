@@ -213,6 +213,7 @@ type hitRegion struct {
 	pointer PointerHandler
 	key     KeyHandler
 	cursor  CursorShape
+	arrow   bool        // asks for the default cursor over whatever lies under it
 	scope   *focusScope // the focus trap the region was painted in, if any
 	role    Role        // from a Semantic handler
 	label   string
@@ -231,9 +232,10 @@ func (r *hitRegion) merge(o hitRegion) bool {
 		o.drag != nil || r.drag != nil ||
 		(o.pointer != nil && r.pointer != nil) ||
 		(o.key != nil && r.key != nil) ||
-		(o.cursor != 0 && r.cursor != 0) {
+		(o.cursor != 0 && (r.cursor != 0 || r.arrow)) || (o.arrow && r.cursor != 0) {
 		return false
 	}
+	r.arrow = r.arrow || o.arrow
 	if o.pointer != nil {
 		r.pointer = o.pointer
 	}
@@ -506,12 +508,14 @@ func (in *inputState) updateDrag(f frameInput) {
 }
 
 // updateCursor picks the shape of the topmost region at pos asking for one.
+// A region that asked for the default cursor counts, so that a button over
+// a text field shows the arrow and not the field's beam.
 func (in *inputState) updateCursor(pos Point) {
 	in.cursor = CursorShapeDefault
 	if !in.index().cursors {
 		return
 	}
-	if r := in.topmost(func(r *hitRegion) bool { return r.cursor != 0 && r.contains(pos) }); r != nil {
+	if r := in.topmost(func(r *hitRegion) bool { return (r.cursor != 0 || r.arrow) && r.contains(pos) }); r != nil {
 		in.cursor = r.cursor
 	}
 }

@@ -191,7 +191,7 @@ func (r *listRow[T, K]) Paint(dst *ggui.Canvas, rc ggui.Rect) {
 
 func (r *listRow[T, K]) paint(dst *ggui.Canvas, rc ggui.Rect) {
 	th, l := r.theme, r.list
-	r.Hit(dst, rc, r, ggui.CursorShapePointer)
+	r.Hit(dst, rc, r, ggui.CursorShapeDefault)
 	chosen := r.chosen()
 	target := 0.0
 	if chosen {

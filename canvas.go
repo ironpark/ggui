@@ -943,8 +943,10 @@ func (c *Canvas) region(r Rect, h any, reg hitRegion) hitRegion {
 }
 
 // HitCursor asks for the mouse cursor to take shape while it is over r.
+// CursorShapeDefault is a request like any other: it puts the arrow over r
+// whatever a region painted before, under it, asked for.
 func (c *Canvas) HitCursor(r Rect, shape CursorShape) {
-	c.add(c.region(r, nil, hitRegion{cursor: shape}))
+	c.add(c.region(r, nil, hitRegion{cursor: shape, arrow: shape == CursorShapeDefault}))
 }
 
 // RequestFocus asks the frame to focus a painted, enabled key handler. Composite
