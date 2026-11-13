@@ -550,11 +550,28 @@ func (in *inputState) dispatchPointer(f frameInput) {
 	lifted := f.phase == ScrollPhaseEnded || f.phase == ScrollPhaseMomentumEnded
 	momentum := f.phase == ScrollPhaseMomentum || f.phase == ScrollPhaseMomentumEnded
 	if f.wheel != (Point{}) {
-		in.send(PointerEvent{Kind: PointerScroll, Pos: f.pos, Scroll: f.wheel, scrollBy: f.wheelBy, ScrollStep: f.wheelBy != (Point{}), Mods: f.mods, ScrollMomentum: momentum, ScrollPhase: f.phase})
+		in.sendScroll(PointerEvent{Kind: PointerScroll, Pos: f.pos, Scroll: f.wheel, scrollBy: f.wheelBy, ScrollStep: f.wheelBy != (Point{}), Mods: f.mods, ScrollMomentum: momentum, ScrollPhase: f.phase})
 	}
 	if f.wheelPx != (Point{}) || lifted && f.wheel == (Point{}) {
-		in.send(PointerEvent{Kind: PointerScroll, Pos: f.pos, Scroll: f.wheelPx, ScrollPixels: true, Mods: f.mods, ScrollMomentum: momentum, ScrollPhase: f.phase})
+		in.sendScroll(PointerEvent{Kind: PointerScroll, Pos: f.pos, Scroll: f.wheelPx, ScrollPixels: true, Mods: f.mods, ScrollMomentum: momentum, ScrollPhase: f.phase})
 	}
+}
+
+// sendScroll sends a wheel's or a trackpad's scroll. One that moves along
+// both axes goes as two, an axis each, so that each finds the view that
+// scrolls its way: a diagonal swipe over a vertical list inside a
+// horizontal one moves both, where a single event would stop at the first
+// to use either part of it.
+func (in *inputState) sendScroll(ev PointerEvent) {
+	if ev.Scroll.X == 0 || ev.Scroll.Y == 0 {
+		in.send(ev)
+		return
+	}
+	x, y := ev, ev
+	x.Scroll.Y, x.scrollBy.Y = 0, 0
+	y.Scroll.X, y.scrollBy.X = 0, 0
+	in.send(x)
+	in.send(y)
 }
 
 // dispatchKeys hands the remaining keys and text to the focused widget, then
