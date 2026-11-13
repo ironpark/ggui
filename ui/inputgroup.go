@@ -242,7 +242,13 @@ func (g *InputGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	tall := g.multiline || g.top != nil || g.bottom != nil
 	padY := pick(tall, t.Space, t.Space/2)
 	band := pick(tall, 0, 20+t.FieldPad.Top+t.FieldPad.Bottom-2*padY)
+	// A row of addons keeps three quarters of a Space on the editor's
+	// side, shadcn's py-1.5, and a text area its own Space of padding
+	// towards the row besides: the textarea's py-2.
 	blockPad, blockGap := t.FieldPad.Left, t.Space*.75
+	if g.multiline {
+		blockGap += t.Space
+	}
 
 	width := max(c.MaxW-left-right, 0)
 	row := g.row.Layout(ggui.Constraints{MinW: clamp(c.MinW-left-right, 0, width), MaxW: width, MaxH: max(c.MaxH-2*padY, 0)}, env)
