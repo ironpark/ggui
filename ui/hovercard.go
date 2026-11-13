@@ -24,6 +24,9 @@ type HoverCardWidget struct {
 	closeDelay      time.Duration
 	width           float64
 	name            string
+	side            ggui.PopupSide
+	align           ggui.PopupAlignment
+	alignOffset     float64
 
 	panel  *ggui.BoxWidget
 	effect *ggui.TransitionWidget
@@ -45,13 +48,17 @@ type hoverCardState struct {
 
 var hoverCardSlot = ggui.NewSlot[hoverCardState]("hover card")
 
+// hoverCardWidth is a hover card's width until Width says otherwise:
+// shadcn's w-64.
+const hoverCardWidth = 256
+
 // HoverCard wraps anchor and shows content below it after 600ms.
 //
 //	ui.HoverCard(ui.Button("@ada", nil).Ghost(), ggui.Column(
 //		Title("Ada Lovelace"), Caption("Joined 1843"),
 //	).Gap(4))
 func HoverCard(anchor, content ggui.Widget) *HoverCardWidget {
-	return &HoverCardWidget{anchor: anchor, content: content, delay: 600 * time.Millisecond, closeDelay: 300 * time.Millisecond, width: 256}
+	return &HoverCardWidget{anchor: anchor, content: content, delay: 600 * time.Millisecond, closeDelay: 300 * time.Millisecond, width: hoverCardWidth, align: ggui.PopupCenter}
 }
 
 // Delay sets how long the cursor must rest before the card appears.
@@ -65,6 +72,30 @@ func (h *HoverCardWidget) Delay(d time.Duration) *HoverCardWidget {
 func (h *HoverCardWidget) Width(w float64) *HoverCardWidget {
 	defer property.Watch(&h.props, &h.width)()
 	h.width = w
+	return h
+}
+
+// Side sets the side of the anchor the card opens on, ggui.PopupBottom by
+// default. It opens on the opposite side when only that one has the room.
+func (h *HoverCardWidget) Side(v ggui.PopupSide) *HoverCardWidget {
+	defer property.Watch(&h.props, &h.side)()
+	h.side = v
+	return h
+}
+
+// Align sets where the card sits along the anchor's side: centered by
+// default, or lined up with its logical start or end.
+func (h *HoverCardWidget) Align(v ggui.PopupAlignment) *HoverCardWidget {
+	defer property.Watch(&h.props, &h.align)()
+	h.align = v
+	return h
+}
+
+// AlignOffset moves the card along the anchor's side, away from the edge
+// Align lines it up with; see ggui.PopupWidget.AlignOffset.
+func (h *HoverCardWidget) AlignOffset(v float64) *HoverCardWidget {
+	defer property.Watch(&h.props, &h.alignOffset)()
+	h.alignOffset = v
 	return h
 }
 
@@ -148,7 +179,8 @@ func (h *HoverCardWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		w = min(w, screen.W)
 	}
 	h.size = h.effect.Layout(ggui.Constraints{MinW: w, MaxW: w, MaxH: ggui.Unbounded}, h.env)
-	panel := h.place(dst.Size(), r)
+	panel, side, along := floatBeside(dst.Size(), r, h.size, h.side, h.align, h.alignOffset, h.theme.Space/2, h.env.Direction() == ggui.DirRTL)
+	h.effect.PopFrom(side, along)
 	state.panel = panel
 	dst.Retain(at, hoverCardSlot, state)
 	h.effect.Progress(progress, !open)
@@ -158,20 +190,6 @@ func (h *HoverCardWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		}
 		dst.DescribeNode(panel, hoverCardPanel{h}, func(dst *ggui.Canvas) { dst.Paint(h.effect, panel) })
 	})
-}
-
-// place puts the card under the anchor, or above it when there is no room,
-// kept inside the window either way.
-func (h *HoverCardWidget) place(screen ggui.Size, anchor ggui.Rect) ggui.Rect {
-	gap := h.theme.Space / 2
-	at := ggui.Pt(anchor.Origin.X+(anchor.Size.W-h.size.W)/2, anchor.Origin.Y+anchor.Size.H+gap)
-	if screen != (ggui.Size{}) {
-		at.X = clamp(at.X, 0, max(screen.W-h.size.W, 0))
-		if at.Y+h.size.H > screen.H {
-			at.Y = max(anchor.Origin.Y-h.size.H-gap, 0)
-		}
-	}
-	return ggui.Rct(at, h.size)
 }
 
 // hoverCardPanel names the panel in the accessibility tree without giving
