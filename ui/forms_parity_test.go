@@ -368,3 +368,26 @@ func TestFormControlsLeaveACachedParentHeld(t *testing.T) {
 		})
 	}
 }
+
+// A Radios group bound to a validity state marks every option as it changes,
+// without a rebuild.
+func TestRadiosBindInvalidMarksEveryOption(t *testing.T) {
+	t.Parallel()
+	bad := ggui.State(false)
+	g := Radios(ggui.State("a")).Options([]string{"a", "b"}).BindInvalid(bad)
+	p := ggui.NewProbe(g, ggui.Sz(320, 200))
+	defer p.Close()
+	p.Frame()
+	for _, r := range g.radios {
+		if r.invalid() {
+			t.Fatal("an option is invalid before the binding says so")
+		}
+	}
+	bad.Set(true)
+	p.Frame()
+	for _, r := range g.radios {
+		if !r.invalid() {
+			t.Fatal("BindInvalid did not reach an option")
+		}
+	}
+}

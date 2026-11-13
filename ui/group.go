@@ -352,7 +352,7 @@ type ToggleGroupWidget[T comparable] struct {
 // shallow-copied; configure the group before layout.
 //
 //	align := ggui.State("left")
-//	ui.ToggleGroup(align, []string{"left", "center", "right"})
+//	ui.ToggleGroup(align).Options([]string{"left", "center", "right"})
 func ToggleGroup[T comparable](value ggui.Binding[T]) *ToggleGroupWidget[T] {
 	g := &ToggleGroupWidget[T]{value: value, label: sprint[T], hover: -1, variant: ToggleDefault, size: ButtonDefault, spacing: 2}
 	g.Role = ggui.RoleGroup
