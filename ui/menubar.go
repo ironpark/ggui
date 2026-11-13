@@ -34,7 +34,7 @@ func Menubar(menus ...*MenuWidget) *MenubarWidget {
 	for i, m := range menus {
 		m.fit, m.checkLeft, m.keys = true, true, b
 		m.button.Ghost()
-		m.button.onTap = func() { b.toggle(i) }
+		m.button.onTap = func() { b.toggle(i, false) }
 		m.button.Expands(func() bool { return b.popup.IsOpen() && b.active == i }).Opens(menubarAction{b, i})
 	}
 	return b
@@ -52,21 +52,21 @@ func (b *MenubarWidget) Compact() *MenubarWidget {
 
 // Popup returns the shared popup.
 func (b *MenubarWidget) Popup() *ggui.PopupWidget { return b.popup }
-func (b *MenubarWidget) open(i int) {
+func (b *MenubarWidget) open(i int, first bool) {
 	if b.IsInert() || i < 0 || i >= len(b.menus) || b.menus[i].button.IsInert() {
 		return
 	}
 	b.active = i
-	b.menus[i].reopen()
+	b.menus[i].reopen(first)
 	r := b.rects[i]
 	// The panel hangs a little left of its trigger, clear of the bar.
 	b.popup.ShowAt(r.Origin.Add(ggui.Pt(-b.inset(), r.Size.H)))
 }
-func (b *MenubarWidget) toggle(i int) {
+func (b *MenubarWidget) toggle(i int, first bool) {
 	if b.popup.IsOpen() && i == b.active {
 		b.popup.Hide()
 	} else {
-		b.open(i)
+		b.open(i, first)
 	}
 }
 
@@ -96,7 +96,7 @@ func (b *MenubarWidget) Adopt(prev any) {
 		b.active = p.active
 		b.motion = p.motion
 		if p.popup.IsOpen() {
-			b.open(b.active)
+			b.open(b.active, false)
 			current := p.menus[p.active].current
 			if current >= 0 && current < len(b.menus[b.active].items) {
 				b.menus[b.active].current = current
@@ -140,6 +140,10 @@ func (b *MenubarWidget) enabled(i int) bool { return !b.menus[i].button.IsInert(
 // HandleKey implements ggui.KeyHandler.
 func (b *MenubarWidget) HandleKey(e ggui.KeyEvent) {
 	b.Keyboard(e, nil)
+	if e.Kind == ggui.KeyText && !b.IsInert() && len(b.menus) > 0 && b.popup.IsOpen() {
+		b.menus[b.active].typeahead(e.Text)
+		return
+	}
 	if b.IsInert() || e.Kind != ggui.KeyPress || len(b.menus) == 0 {
 		return
 	}
@@ -155,7 +159,7 @@ func (b *MenubarWidget) HandleKey(e ggui.KeyEvent) {
 		b.popup.Hide()
 	case vertical && !open:
 		// Up or Down opens the menu, Up on its last item.
-		b.open(b.active)
+		b.open(b.active, true)
 		if e.Key == ggui.KeyArrowUp {
 			b.menus[b.active].jump(-1)
 		}
@@ -168,11 +172,11 @@ func (b *MenubarWidget) HandleKey(e ggui.KeyEvent) {
 		i, _ := navIndex(e, navHorizontal, b.active, len(b.menus), b.enabled)
 		b.active = max(i, 0)
 		if open {
-			b.open(b.active)
+			b.open(b.active, true)
 		}
 	default:
 		if ggui.Activates(e) && !open {
-			b.open(b.active)
+			b.open(b.active, true)
 		}
 	}
 }
@@ -185,7 +189,7 @@ type menubarAction struct {
 func (a menubarAction) Act(e ggui.Action) bool {
 	switch e.Kind {
 	case ggui.ActionExpand:
-		a.b.open(a.i)
+		a.b.open(a.i, true)
 	case ggui.ActionCollapse:
 		a.b.popup.Hide()
 	default:
@@ -221,7 +225,6 @@ func (a menubarAnchor) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.Paint(m.button.box, rr)
 		if !m.button.IsInert() {
 			dst.HitPointer(rr, menubarTarget{b, i})
-			dst.HitCursor(rr, ggui.CursorShapePointer)
 		}
 		if b.Focused && b.FocusVisible && i == b.active {
 			dst.StrokeRoundRect(rr, radius, b.theme.BorderWidth, b.theme.Ring)
@@ -275,12 +278,12 @@ func (t menubarTarget) HandlePointer(e ggui.PointerEvent) bool {
 		return true
 	case ggui.PointerMove:
 		if t.b.motion.drifted(e.Pos) && t.b.popup.IsOpen() && t.b.active != t.i {
-			t.b.open(t.i)
+			t.b.open(t.i, false)
 		}
 		return true
 	case ggui.PointerDown:
 		if e.Button == ggui.MouseButtonLeft {
-			t.b.toggle(t.i)
+			t.b.toggle(t.i, false)
 		}
 		return true
 	case ggui.PointerUp, ggui.PointerTap:

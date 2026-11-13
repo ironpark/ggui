@@ -105,8 +105,9 @@ func TestMenubarKeepsLeftAndRightForAnOpenSubmenu(t *testing.T) {
 		ui.Menu("Edit", ui.MenuItem("Undo", nil)))
 	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(bar)), ggui.Sz(600, 400))
 	defer p.Close()
+	// A click opens the menu on no row; Down goes to the first.
 	p.Tap("File")
-	p.Key("right")
+	p.Key("down", "right")
 	find(t, p, ggui.RoleMenuItem, "notes.txt")
 	p.Key("left")
 	if _, ok := p.FindRole(ggui.RoleMenuItem, "notes.txt"); ok {
@@ -172,5 +173,169 @@ func TestMenuPanelsFitTheirEntriesAndTheDividerBleeds(t *testing.T) {
 	item := find(t, q, ggui.RoleMenuItem, "An entry far wider than the least a context menu is").Rect
 	if w := wide.Popup().Rect().Size.W; w <= th.Space*18 || w != item.Size.W+th.PanelPad.Horizontal() {
 		t.Fatalf("a context menu is %v wide around an entry %v wide", w, item.Size.W)
+	}
+}
+
+// A menu starts on its first row only when the keyboard opened it, as Base
+// UI's does: one the pointer opened shows no highlight until the pointer or
+// a key gives it one.
+func TestMenusStartOnARowOnlyFromTheKeyboard(t *testing.T) {
+	t.Parallel()
+	ran := ""
+	entries := func() []ggui.Widget {
+		return []ggui.Widget{ui.MenuItem("Open", func() { ran = "open" }), ui.MenuItem("Save", func() { ran = "save" })}
+	}
+	menu := ui.Menu("File", entries()...)
+	bar := ui.Menubar(ui.Menu("Edit", entries()...), ui.Menu("View", ui.MenuItem("Zoom", func() { ran = "zoom" })))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(menu, bar)), ggui.Sz(400, 300))
+	defer p.Close()
+
+	// The dropdown: a click, then Enter, runs nothing.
+	p.Tap("File")
+	p.Key("enter")
+	if ran != "" || !menu.Popup().IsOpen() {
+		t.Fatalf("a dropdown the pointer opened ran %q", ran)
+	}
+	p.Key("escape")
+	// Enter on its trigger opens it on the first row.
+	p.Key("enter")
+	if !menu.Popup().IsOpen() {
+		t.Fatal("Enter did not open the dropdown")
+	}
+	p.Key("enter")
+	if ran != "open" {
+		t.Fatalf("a dropdown the keyboard opened ran %q, want its first row", ran)
+	}
+
+	// The menubar: the same for a click, and for the menu the pointer moves
+	// on to.
+	ran = ""
+	p.Tap("Edit")
+	p.Key("enter")
+	if ran != "" || !bar.Popup().IsOpen() {
+		t.Fatalf("a menubar menu the pointer opened ran %q", ran)
+	}
+	view, _ := p.Find("View")
+	p.Move(view.Center().Add(ggui.Pt(-2, 0)))
+	p.Move(view.Center())
+	find(t, p, ggui.RoleMenuItem, "Zoom")
+	p.Key("enter")
+	if ran != "" {
+		t.Fatalf("a menubar menu the pointer moved to ran %q", ran)
+	}
+	// Left moves to the menu before it, on its first row.
+	p.Key("left", "enter")
+	if ran != "open" {
+		t.Fatalf("a menubar menu the arrows opened ran %q, want its first row", ran)
+	}
+}
+
+// Typing in an open menu moves to the row whose label starts with it, as
+// Base UI's typeahead does.
+func TestMenuTypeaheadMovesToTheRowTyped(t *testing.T) {
+	t.Parallel()
+	ran := ""
+	item := func(label string) *ui.MenuItemWidget { return ui.MenuItem(label, func() { ran = label }) }
+	entries := func() []ggui.Widget {
+		return []ggui.Widget{item("Open"), item("Save"), item("Share").Disabled(true), item("Save as"), item("Print")}
+	}
+	menu := ui.Menu("File", entries()...)
+	ctx := ui.ContextMenu(ggui.Box(ggui.Text("Target")).Size(100, 40), entries()...).Name("Target actions")
+	bar := ui.Menubar(ui.Menu("Edit", entries()...))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(menu, bar, ctx)), ggui.Sz(400, 400))
+	defer p.Close()
+	pick := func(want string) {
+		t.Helper()
+		p.Key("enter")
+		if ran != want {
+			t.Fatalf("ran %q, want %q", ran, want)
+		}
+	}
+
+	p.Tap("File")
+	p.Text("s")
+	pick("Save")
+	// The same letter again goes on to the next row under it, past a
+	// disabled one, and around.
+	p.Tap("File")
+	p.Text("s")
+	p.Text("s")
+	pick("Save as")
+	p.Tap("File")
+	p.Text("s")
+	p.Text("s")
+	p.Text("s")
+	pick("Save")
+	// More letters narrow the search, a space among them; after a pause a
+	// letter starts a new one.
+	p.Tap("File")
+	p.Text("s")
+	p.Text("a")
+	p.Text("v")
+	p.Text("e")
+	p.TypeText(ggui.Mods{}, ggui.KeySpace, " ")
+	if !menu.Popup().IsOpen() {
+		t.Fatal("a space in a search ran the row")
+	}
+	pick("Save as")
+	p.Tap("File")
+	p.Text("s")
+	p.Advance(time.Second)
+	p.Text("p")
+	pick("Print")
+
+	// A menubar's menu and a context menu search the same way.
+	p.Tap("Edit")
+	p.Text("p")
+	pick("Print")
+	target, _ := p.Find("Target actions")
+	p.ClickButton(target.Center(), ggui.MouseButtonRight)
+	p.Text("o")
+	pick("Open")
+}
+
+// A row is lit under the pointer and not where the pointer last was, as
+// Base UI clears the highlight when the pointer leaves an item; a row the
+// keyboard went to stays lit.
+func TestMenuRowLosesThePointersHighlightWhenThePointerLeaves(t *testing.T) {
+	t.Parallel()
+	ran := ""
+	menu := ui.Menu("File",
+		ui.MenuItem("Open", func() { ran = "open" }),
+		ui.MenuSub("Recent", ui.MenuItem("notes.txt", func() { ran = "notes" })),
+		ui.MenuItem("Save", func() { ran = "save" }))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(menu)), ggui.Sz(500, 400))
+	defer p.Close()
+	p.Tap("File")
+	open := find(t, p, ggui.RoleMenuItem, "Open").Rect
+	p.Move(open.Center())
+	p.Move(ggui.Pt(450, 350))
+	p.Key("enter")
+	if ran != "" || !menu.Popup().IsOpen() {
+		t.Fatalf("the row the pointer left ran %q", ran)
+	}
+	// The keyboard's highlight is its own: the pointer leaving the row it
+	// rests on does not take it.
+	p.Move(open.Center())
+	p.Key("end")
+	p.Move(ggui.Pt(450, 350))
+	p.Key("enter")
+	if ran != "save" {
+		t.Fatalf("ran %q, want the row the keyboard went to", ran)
+	}
+	// The row of an open submenu stays lit while the pointer is in it.
+	p.Tap("File")
+	recent := find(t, p, ggui.RoleMenuItem, "Recent").Rect
+	p.Move(recent.Center())
+	p.Advance(200 * time.Millisecond)
+	notes := find(t, p, ggui.RoleMenuItem, "notes.txt").Rect
+	p.Move(notes.Center())
+	p.Move(ggui.Pt(450, 350))
+	if _, ok := p.FindRole(ggui.RoleMenuItem, "notes.txt"); !ok {
+		t.Fatal("the submenu closed as the pointer left it")
+	}
+	p.Key("enter")
+	if ran != "save" {
+		t.Fatalf("the submenu's row the pointer left ran %q", ran)
 	}
 }

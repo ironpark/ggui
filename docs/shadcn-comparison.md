@@ -31,12 +31,12 @@ other bases, accents, styles, radii, menu colors and modes a choice away.
 | [Tabs](https://ui.shadcn.com/docs/components/base/tabs) | Compact 32px list geometry; background-colored active segment with dark input surface and border, fading in where it stands over 150ms while the one left fades out, as a line strip's bar does. |
 | [Dialog](https://ui.shadcn.com/docs/components/base/dialog) | 384px maximum default width, 16px outer margin/padding, 100ms fade/95% scale, black/10 scrim with 4px backdrop blur, default close button. |
 | [Sheet](https://ui.shadcn.com/docs/components/base/sheet) | Right-side default, 75% viewport width capped at 384px, 200ms ease-in-out, fade and 40px entrance translation, default close button, description and footer. Explicit `.Size()` overrides remain. |
-| [Drawer](https://ui.shadcn.com/docs/components/base/drawer) | As tall as its content, rounded top corners, 450ms motion; the handle bar is opt-in with `.Handle(true)`, and the drag works without it. |
+| [Drawer](https://ui.shadcn.com/docs/components/base/drawer) | As tall as its content, rounded top corners, 450ms motion; the handle bar is opt-in with `.Handle(true)`, and the drag works without it. No close button until `.CloseButton(true)`. |
 | [Tooltip](https://ui.shadcn.com/docs/components/base/tooltip) | No default opening delay, top/center placement with 4px gap and collision fallback, any side on request, 320px max width, 8px radius, 12/6px horizontal/vertical padding; key hints as key caps. |
 | [Hover Card](https://ui.shadcn.com/docs/components/base/hover-card) | 256px width, 10px radius/padding, 600ms opening delay, 300ms closing grace period, 100ms transition. |
 | [Alert](https://ui.shadcn.com/docs/components/base/alert) | 10/8px horizontal/vertical padding, 2px row gap, medium title, optional leading icon and top-right action; destructive changes text while retaining the neutral border. |
 | [Skeleton](https://ui.shadcn.com/docs/components/base/skeleton) | 8px corners, muted fill, existing 2-second opacity pulse. |
-| Floating menus and shared controls | 4px popup padding, 6/4px item padding, foreground/10 popup outline, 100ms popup duration entering 8px from the anchor's side, soft 3px focus halos; labels, icons, right-hand checks and submenus beside their row; menus drawn in the theme's menu colors. |
+| Floating menus and shared controls | 4px popup padding, 6/4px item padding, foreground/10 popup outline, 100ms popup duration entering 8px from the anchor's side, soft 3px focus halos; labels, icons, right-hand checks and submenus beside their row; menus drawn in the theme's menu colors. A menu starts on its first row when the keyboard opened it and on none when the pointer did, and typing moves to the row that starts with what was typed; its rows keep the arrow cursor. |
 | [Resizable](https://ui.shadcn.com/docs/components/base/resizable) / [Navigation Menu](https://ui.shadcn.com/docs/components/base/navigation-menu) | A hairline divider that takes no room. Navigation triggers are 36px with a rotating chevron and open on a 200ms hover. |
 
 Dimensions are logical pixels at normal text scale. Buttons allow larger text
@@ -53,7 +53,7 @@ is 150ms, `MotionSlow` 200ms, and the new `MotionOverlay` 100ms. Setting motion
 tokens to zero or providing `ReducedMotionKey` disables their animations.
 
 Dialogs and sheets expose `.CloseButton(false)` for surfaces that supply their
-own closing UI. AlertDialog and CommandDialog omit this button by default.
+own closing UI. AlertDialog, CommandDialog and Drawer omit this button by default.
 HoverCard exposes `.CloseDelay(...)`; Tooltip's existing `.Delay(...)` can
 restore delayed opening. Accordion's group is a semantic container; its
 individual headers now own focus and keep identity across keyed rebuilds.

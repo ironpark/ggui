@@ -91,10 +91,12 @@ func Sheet(open ggui.Binding[bool], content ggui.Widget) *SheetWidget {
 // until Size or SnapPoints say otherwise. Drag it down by the middle of its
 // top edge to dismiss it, or configure SnapPoints; Handle draws the bar
 // that says it can be dragged. Content keeps its own pointer and scrolling
-// behavior.
+// behavior. It has no close button, as shadcn's Drawer has none, until
+// CloseButton(true) asks for one: Escape, the scrim, the drag and whatever
+// its content offers close it.
 func Drawer(open ggui.Binding[bool], content ggui.Widget) *SheetWidget {
 	s := Sheet(open, content).Bottom()
-	s.drawer, s.draggable = true, true
+	s.drawer, s.draggable, s.hideClose = true, true, true
 	return s
 }
 
@@ -214,7 +216,7 @@ func (s *SheetWidget) fitsContent() bool {
 func (s *SheetWidget) shape(t *uitheme.Theme) modalShape {
 	shape := modalShape{
 		headerGap: t.Space / 4, closeInset: t.Space * 1.5,
-		fill: !s.fitsContent(), shadow: sheetShadow(t), fillColor: t.Popover,
+		fill: !s.fitsContent(), shadow: t.OverlayShadow, fillColor: t.Popover,
 	}
 	if s.isDrawer() {
 		// A drawer's surface is painted with its corners; see paintDrawerSurface.
@@ -224,17 +226,6 @@ func (s *SheetWidget) shape(t *uitheme.Theme) modalShape {
 		}
 	}
 	return shape
-}
-
-// sheetShadow is the shadow a sheet casts on the window: the theme's
-// OverlayShadow at the weight of shadcn's shadow-lg, which is half its blur
-// and two fifths of its strength. The token is as heavy as it is for the
-// dialogs that no longer cast one.
-func sheetShadow(t *uitheme.Theme) ggui.ShadowStyle {
-	s := t.OverlayShadow
-	s.Blur /= 2
-	s.Color = fade(s.Color, .4)
-	return s
 }
 
 // Layout implements ggui.Widget: the sheet takes no room in the tree.
@@ -373,7 +364,8 @@ func (s *SheetWidget) BindName(r ggui.Readable[string]) *SheetWidget {
 	return s
 }
 
-// CloseButton controls the close action, visible by default.
+// CloseButton controls the close action: shown by default on a Sheet, and
+// hidden on a Drawer.
 func (s *SheetWidget) CloseButton(show bool) *SheetWidget {
 	defer property.Watch(&s.props, &s.hideClose)()
 	s.hideClose = !show
