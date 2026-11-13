@@ -16,7 +16,33 @@ import (
 func menuSurface(content ggui.Widget) ggui.Widget { return ggui.WithEnv(uitheme.MenuEnv, content) }
 
 func panelBox(b *ggui.BoxWidget, t *uitheme.Theme) *ggui.BoxWidget {
-	return b.Shadow(t.PanelShadow).Fill(t.Popover).Border(t.BorderWidth, fade(t.Fg, .1)).Radius(t.Radius).Padding(t.PanelPad)
+	return panelShadow(b, t).Fill(t.Popover).Border(t.BorderWidth, fade(t.Fg, .1)).Radius(t.Radius).Padding(t.PanelPad)
+}
+
+// panelShadow gives b the shadow of a popup, shadcn's shadow-md: a select
+// list, a combobox list, a menu, a popover, a hover card. It is the theme's
+// PanelShadow over its PanelContact, the two layers Tailwind draws.
+func panelShadow(b *ggui.BoxWidget, t *uitheme.Theme) *ggui.BoxWidget {
+	layers := [2]ggui.ShadowStyle{t.PanelShadow, t.PanelContact}
+	return b.Shadow(layers[:]...)
+}
+
+// overlayShadow gives b the shadow of what floats higher, shadcn's
+// shadow-lg: a submenu, a sheet. It is the theme's OverlayShadow over its
+// OverlayContact.
+func overlayShadow(b *ggui.BoxWidget, t *uitheme.Theme) *ggui.BoxWidget {
+	layers := [2]ggui.ShadowStyle{t.OverlayShadow, t.OverlayContact}
+	return b.Shadow(layers[:]...)
+}
+
+// paintShadows draws the layers of a shadow under r, for a surface that is
+// painted rather than a Box.
+func paintShadows(dst *ggui.Canvas, r ggui.Rect, radius float64, layers ...ggui.ShadowStyle) {
+	for _, s := range layers {
+		if s.Color != nil {
+			dst.Shadow(r, radius, s)
+		}
+	}
 }
 
 // fieldBoxShape gives a field's box what its size depends on, the padding

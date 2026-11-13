@@ -106,8 +106,8 @@ surface, never instead of it. Set `Input` to pin an opaque surface.
 | `MotionOverlay` | 100ms | dialog and popup entrances and exits |
 | `MotionDrawer` | 450ms | a drawer sliding in or out |
 | `CardShadow` | `shadow-xs`: 0 1px 2px, 6% black | cards, the raised tab |
-| `PanelShadow` | 0 4px 10px, 10% black | menus, select lists, toasts |
-| `OverlayShadow` | `shadow-lg`: 0 10px 15px -3px, 10% black | dialogs, sheets |
+| `PanelShadow` / `PanelContact` | `shadow-md`: 0 4px 6px -1px and 0 2px 4px -2px, 10% black | menus, select and combobox lists, popovers, hover cards, date pickers |
+| `OverlayShadow` / `OverlayContact` | `shadow-lg`: 0 10px 15px -3px and 0 4px 6px -4px, 10% black | sheets, toasts, submenus |
 
 ### Styles
 

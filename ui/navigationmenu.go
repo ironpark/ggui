@@ -634,7 +634,7 @@ func (p navigationMenuPanel) Layout(c ggui.Constraints, env ggui.Env) ggui.Size 
 		return ggui.Size{}
 	}
 	t := uitheme.Of(env)
-	n.chrome.Shadow(t.PanelShadow).Fill(t.Popover).Border(t.BorderWidth, t.Border).Radius(t.Radius)
+	panelShadow(n.chrome, t).Fill(t.Popover).Border(t.BorderWidth, t.Border).Radius(t.Radius)
 	// What is inside the panel opens its own popups in the theme's time.
 	env = env.With(ggui.PopupDurationKey, n.env.PopupDuration())
 	return n.chrome.Layout(c, env.With(navigationMenuOwnerKey, n))

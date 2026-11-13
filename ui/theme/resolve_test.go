@@ -4,6 +4,8 @@ import (
 	"image/color"
 	"testing"
 	"time"
+
+	"github.com/ironpark/ggui"
 )
 
 var brand = color.NRGBA{0x25, 0x63, 0xeb, 0xff}
@@ -66,6 +68,18 @@ func TestStockThemesAreTheZeroPreset(t *testing.T) {
 	}
 	if s := dark.OverlayShadow; s.Offset.Y != 10 || s.Blur != 15 || s.Spread != -3 || dark.MotionDrawer != 450*time.Millisecond {
 		t.Errorf("overlay shadow %+v and drawer motion %v: want shadow-lg and 450ms", s, dark.MotionDrawer)
+	}
+	// Tailwind v4's shadow-md and shadow-lg, two layers each at 10% black.
+	layer := func(y, blur, spread float64) ggui.ShadowStyle {
+		return ggui.ShadowStyle{Offset: ggui.Pt(0, y), Blur: blur, Spread: spread, Color: color.NRGBA{A: 26}}
+	}
+	for _, th := range []Theme{light, dark} {
+		if th.PanelShadow != layer(4, 6, -1) || th.PanelContact != layer(2, 4, -2) {
+			t.Errorf("panel shadow %+v over %+v: want shadow-md's 0 4px 6px -1px and 0 2px 4px -2px", th.PanelShadow, th.PanelContact)
+		}
+		if th.OverlayShadow != layer(10, 15, -3) || th.OverlayContact != layer(4, 6, -4) {
+			t.Errorf("overlay shadow %+v over %+v: want shadow-lg's 0 10px 15px -3px and 0 4px 6px -4px", th.OverlayShadow, th.OverlayContact)
+		}
 	}
 }
 

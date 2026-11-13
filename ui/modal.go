@@ -72,8 +72,8 @@ type modalShape struct {
 	// topInset is room kept clear above the header, inside the padding or
 	// without it: where a drawer's handle goes.
 	topInset    float64
-	fillColor   color.Color // nil for an owner that paints the surface itself
-	shadow      ggui.ShadowStyle
+	fillColor   color.Color         // nil for an owner that paints the surface itself
+	shadow      [2]ggui.ShadowStyle // the layers; a nil Color leaves one out
 	borderWidth float64
 	border      color.Color
 	radius      float64
@@ -153,7 +153,7 @@ func (m *modal) build(env ggui.Env, shape modalShape) *ggui.BoxWidget {
 	pad := pick(m.compact, ggui.EdgeInsets{}, t.CardPad)
 	pad.Top += shape.topInset
 	m.inner.Padding(pad)
-	m.panel.Fill(shape.fillColor).Shadow(shape.shadow).Border(shape.borderWidth, shape.border).Radius(shape.radius)
+	m.panel.Fill(shape.fillColor).Shadow(shape.shadow[:]...).Border(shape.borderWidth, shape.border).Radius(shape.radius)
 	return m.panel
 }
 

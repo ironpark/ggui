@@ -181,7 +181,7 @@ func (d *DatePickerWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := uitheme.Of(env)
 	// panelBox's surface without its padding: the calendar brings its own,
 	// as shadcn's date picker sets p-0 on the popover around it.
-	d.panel.Shadow(t.PanelShadow).Fill(t.Popover).Border(t.BorderWidth, fade(t.Fg, .1)).Radius(t.Radius).Padding(ggui.EdgeInsets{})
+	panelShadow(d.panel, t).Fill(t.Popover).Border(t.BorderWidth, fade(t.Fg, .1)).Radius(t.Radius).Padding(ggui.EdgeInsets{})
 	text := d.text()
 	d.button.label.Content(pick(text == "", d.placeholder, text))
 	return d.popup.Layout(c, env)

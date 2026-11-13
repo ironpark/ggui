@@ -392,7 +392,7 @@ func (c *CommandWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 		c.panel.Border(0, nil)
 	}
 	if _, ok := ggui.PopupOf(env); ok {
-		c.panel.Shadow(t.PanelShadow)
+		panelShadow(c.panel, t)
 	} else {
 		c.panel.Shadow()
 	}
