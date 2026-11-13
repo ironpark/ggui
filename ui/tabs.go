@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"image/color"
 	"time"
 
 	"github.com/ironpark/ggui"
@@ -10,6 +11,8 @@ import (
 
 const (
 	tabInset = 3.0 // strip padding all round the label row
+	tabGap   = 4.0 // between the labels of a line strip
+	tabBar   = 2.0 // the bar marking the shown label of a line strip
 )
 
 // TabsWidget shows one of several pages, picked by a row of labels above.
@@ -27,11 +30,12 @@ type TabsWidget struct {
 	tabs            []TabPage
 	onChange        func(int)
 
-	ggui.Interactive                   // hovered is unused; hover holds the label instead
-	boxes            []*ggui.BoxWidget // each label, padded
-	heads            []ggui.Widget     // each box, in its Tooltip if it has one
-	labelSize        []ggui.Size       // padding included
-	hover            int               // the label under the pointer, or -1
+	ggui.Interactive                    // hovered is unused; hover holds the label instead
+	boxes            []*ggui.BoxWidget  // each label, padded
+	heads            []ggui.Widget      // each box, in its Tooltip if it has one
+	labels           []*ggui.TextWidget // each label's own text, nil under a Header
+	labelSize        []ggui.Size        // padding included
+	hover            int                // the label under the pointer, or -1
 
 	theme     *uitheme.Theme
 	motion    time.Duration
@@ -76,9 +80,14 @@ func Tabs(selected ggui.Binding[int], tabs ...TabPage) *TabsWidget {
 	t.Role = ggui.RoleTabs
 	t.AutoKey()
 	for i, tab := range tabs {
-		var head ggui.Widget = ggui.Text(tab.Label).NoWrap()
+		var head ggui.Widget
 		if tab.header != nil {
 			head = tab.header
+			t.labels = append(t.labels, nil)
+		} else {
+			label := ggui.Text(tab.Label).NoWrap()
+			head = label
+			t.labels = append(t.labels, label)
 		}
 		box := ggui.Box(head)
 		t.boxes = append(t.boxes, box)
@@ -96,7 +105,9 @@ func Tabs(selected ggui.Binding[int], tabs ...TabPage) *TabsWidget {
 	return t
 }
 
-// Line uses the underline-style strip instead of the default segmented surface.
+// Line uses the underline-style strip instead of the default segmented
+// surface: bare labels a little apart, with a bar in the text color under
+// the shown one, or beside it in a Vertical strip.
 func (t *TabsWidget) Line() *TabsWidget {
 	defer property.Watch(&t.props, &t.line)()
 	t.line = true
@@ -163,16 +174,24 @@ func (t *TabsWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t.labelSize, t.labelX = t.labelSize[:0], t.labelX[:0]
 	t.headerH, t.stripW, t.stripH = 0, 0, 0
 	cur := t.index()
+	gap := pick(t.line, tabGap, 0.0)
 	for i, head := range t.heads {
 		t.boxes[i].Padding(t.pad)
-		fg := pick(i == cur && !t.IsInert() && t.enabled(i), th.Fg, th.MutedFg)
+		// A label of the strip's own is recolored in Paint as the pointer
+		// crosses it; what a Header draws takes the resting color from here.
+		fg := t.labelColor(i, cur, 0)
+		if t.labels[i] != nil {
+			t.labels[i].Color(fg)
+		}
 		s := head.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, c.MaxH)), env.WithText(th.Label.Merge(ggui.TextStyle{Color: fg})))
 		t.labelSize = append(t.labelSize, s)
 		if t.vertical {
+			t.stripH += pick(i > 0, gap, 0.0)
 			t.labelX = append(t.labelX, t.stripH)
 			t.stripH += s.H
 			t.stripW = max(t.stripW, s.W)
 		} else {
+			t.stripW += pick(i > 0, gap, 0.0)
 			t.labelX = append(t.labelX, t.stripW)
 			t.stripW += s.W
 			t.stripH = max(t.stripH, s.H)
@@ -193,6 +212,29 @@ func (t *TabsWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		return c.Constrain(ggui.Sz(t.stripW+th.Space+t.bodySize.W, max(t.stripH, t.bodySize.H)))
 	}
 	return c.Constrain(ggui.Sz(max(t.stripW, t.bodySize.W), t.headerH+t.bodySize.H))
+}
+
+// labelColor is the color of label i while cur is the shown page and the
+// pointer is hover of the way onto it: the text color for the shown page,
+// and otherwise the quieter one shadcn gives a tab at rest, 60% of the text
+// color on a light page and the muted one on a dark page, easing to the text
+// color under the pointer. A tab that cannot be picked is at half strength.
+func (t *TabsWidget) labelColor(i, cur int, hover float64) color.Color {
+	th := t.theme
+	fg := th.Fg
+	if i != cur {
+		rest := pick(isDark(th.Bg), th.MutedFg, fade(th.Fg, .6))
+		fg = rest
+		if hover >= 1 {
+			fg = th.Fg
+		} else if hover > 0 {
+			fg = mix(rest, th.Fg, hover)
+		}
+	}
+	if t.IsInert() || !t.enabled(i) {
+		fg = th.Disabled(fg)
+	}
+	return fg
 }
 
 // Paint implements Widget. The strip is one semantics node holding a tab
@@ -233,6 +275,9 @@ func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 			if isDark(th.Bg) {
 				fill = fade(th.InputBorder, .3)
 			}
+			if !isDark(th.Bg) {
+				dst.Shadow(active, th.RadiusSm, th.CardShadow)
+			}
 			dst.FillRoundRect(active, th.RadiusSm, fill)
 			if isDark(th.Bg) {
 				dst.StrokeRoundRect(active, th.RadiusSm, th.BorderWidth, th.InputBorder)
@@ -246,29 +291,26 @@ func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 			dst.HitKey(lr, tabLabel{t, i})
 			dst.HitCursor(lr, ggui.CursorShapeDefault)
 		}
-		if i == t.hover && i != cur && !t.IsInert() && t.enabled(i) {
-			dst.FillRoundRect(lr, th.Radius, th.Muted)
+		if label := t.labels[i]; label != nil {
+			over := i == t.hover && i != cur && !t.IsInert() && t.enabled(i)
+			hover := dst.Ease(ggui.Anchor{Rect: header, ID: i}, tabHoverSlot, pick(over, 1.0, 0.0), t.motion)
+			label.Color(t.labelColor(i, cur, hover))
 		}
 		dst.Paint(t.heads[i], lr)
 	}
-	if t.line {
+	if t.line && cur >= 0 {
+		// The bar by the shown label is the text color whatever the accent,
+		// and nothing is ruled along the rest of the strip.
+		lr := t.labelRect[cur]
+		bar := pick(t.IsInert() || !t.enabled(cur), th.Disabled(th.Fg), th.Fg)
 		if t.vertical {
-			x := pick(t.rtl, strip.Origin.X, strip.Origin.X+strip.Size.W-1)
-			dst.FillRect(ggui.Rct(ggui.Pt(x, strip.Origin.Y), ggui.Sz(1, strip.Size.H)), th.Border)
-			if cur >= 0 {
-				lr := t.labelRect[cur]
-				y := dst.Ease(ggui.Anchor{Rect: header}, tabYSlot, lr.Origin.Y, t.motion)
-				dst.FillRoundRect(ggui.Rct(ggui.Pt(x, y), ggui.Sz(2, lr.Size.H)), 1, th.Primary)
-			}
+			x := pick(t.rtl, strip.Origin.X, strip.Origin.X+strip.Size.W-tabBar)
+			y := dst.Ease(ggui.Anchor{Rect: header}, tabYSlot, lr.Origin.Y, t.motion)
+			dst.FillRect(ggui.Rct(ggui.Pt(x, y), ggui.Sz(tabBar, lr.Size.H)), bar)
 		} else {
-			y := r.Origin.Y + strip.Size.H - 1
-			dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X, y), ggui.Sz(r.Size.W, 1)), th.Border)
-			if cur >= 0 {
-				lr := t.labelRect[cur]
-				x := dst.Ease(ggui.Anchor{Rect: header}, underlineSlot, lr.Origin.X, t.motion)
-				w := dst.Ease(ggui.Anchor{Rect: header}, widthSlot, lr.Size.W, t.motion)
-				dst.FillRoundRect(ggui.Rct(ggui.Pt(x, y-1), ggui.Sz(w, 2)), 1, pick(t.IsInert(), th.MutedFg, th.Primary))
-			}
+			x := dst.Ease(ggui.Anchor{Rect: header}, underlineSlot, lr.Origin.X, t.motion)
+			w := dst.Ease(ggui.Anchor{Rect: header}, widthSlot, lr.Size.W, t.motion)
+			dst.FillRect(ggui.Rct(ggui.Pt(x, r.Origin.Y+strip.Size.H-tabBar), ggui.Sz(w, tabBar)), bar)
 		}
 	}
 	if t.focusPending && t.focusIndex() >= 0 {
@@ -276,7 +318,7 @@ func (t *TabsWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		t.focusPending = false
 	}
 	if focus := t.focusIndex(); focus >= 0 {
-		controlFocusRing(dst, &t.Interactive, th, t.labelRect[focus], th.Radius, th.Ring)
+		controlFocusRing(dst, &t.Interactive, th, t.labelRect[focus], th.RadiusSm, th.Ring)
 	}
 	if cur >= 0 && t.tabs[cur].Content != nil {
 		at := ggui.Pt(r.Origin.X, r.Origin.Y+t.headerH)
@@ -330,6 +372,7 @@ var (
 	widthSlot     = ggui.NewSlot[*ggui.Motion]("widthSlot")
 	tabYSlot      = ggui.NewSlot[*ggui.Motion]("tab y")
 	tabHeightSlot = ggui.NewSlot[*ggui.Motion]("tab height")
+	tabHoverSlot  = ggui.NewSlot[*ggui.Motion]("tab hover")
 )
 
 // tabLabel is the pointer handler for one label.
