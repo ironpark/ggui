@@ -366,7 +366,7 @@ func (t *RichTextWidget) Paint(dst *Canvas, r Rect) {
 		// after them, are on top and take the clicks and the cursor.
 		dst.HitPointer(r, t)
 		dst.HitKey(r, t)
-		if t.area != nil {
+		if t.area != nil && dst.TakesInput() {
 			t.area.painted(t)
 		}
 		dst.HitCursor(r, CursorShapeText)
@@ -538,7 +538,16 @@ func (a *SelectionAreaWidget) Layout(c Constraints, env Env) Size {
 
 // Paint implements Widget. A press on the area between its texts clears
 // the selection.
+//
+// A frame painted in part paints inert, around what changed, and keeps the
+// texts the last whole frame found, as it keeps that frame's hit regions:
+// gathered from it, they would be the few around a hovered row, and a
+// click would clear the selection of those alone.
 func (a *SelectionAreaWidget) Paint(dst *Canvas, r Rect) {
+	if !dst.TakesInput() {
+		dst.Paint(a.child, r)
+		return
+	}
 	dst.HitPointer(r, a)
 	a.painting = a.painting[:0]
 	dst.Paint(a.child, r)
