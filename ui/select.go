@@ -383,7 +383,9 @@ func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		s.pad.Top, s.pad.Bottom = max(s.pad.Top-t.Space/4, 0), max(s.pad.Bottom-t.Space/4, 0)
 	}
 	if s.triggerContent == nil {
-		s.pad.Right = t.Space
+		// The chevron stands 8px in from the edge of a Select, shadcn's
+		// pr-2, and 10px in from a NativeSelect's, its right-2.5.
+		s.pad.Right = pick(s.native, t.Space*1.25, t.Space)
 	}
 	s.box.Radius(s.radius(t))
 	if t.Menu().Popover != t.Popover {
