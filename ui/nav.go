@@ -68,6 +68,25 @@ func navIndex(ev ggui.KeyEvent, axis navAxis, cur, n int, enabled func(int) bool
 	return cur, false
 }
 
+// navIndexBounded is navIndex for a list that does not wrap: an arrow at
+// the last enabled item, or the first, stays there.
+func navIndexBounded(ev ggui.KeyEvent, axis navAxis, cur, n int, enabled func(int) bool) (i int, ok bool) {
+	if ev.Kind != ggui.KeyPress {
+		return cur, false
+	}
+	move := navMoveOf(ev.Key, axis)
+	if cur < 0 || cur >= n || move != navPrev && move != navNext {
+		return navIndex(ev, axis, cur, n, enabled)
+	}
+	dir := pick(move == navPrev, -1, 1)
+	for i := cur + dir; i >= 0 && i < n; i += dir {
+		if enabled == nil || enabled(i) {
+			return i, true
+		}
+	}
+	return cur, true
+}
+
 // navTarget is the row a navigation key takes the keyboard to from row i
 // of n, unclamped, for a list that clamps and skips rows itself as it
 // moves: a ListBox, Tree or Table. ok is false for any other key.
