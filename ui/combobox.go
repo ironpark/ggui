@@ -43,7 +43,7 @@ type ComboboxWidget[T comparable] struct {
 
 // Combobox creates a field holding an editable input and a muted chevron,
 // as shadcn's ComboboxInput is. Typing filters a list of the options that
-// opens below the field as wide as it, with a check on the chosen one; the
+// opens below the field, a little wider than it, with a check on the chosen one; the
 // list also opens on Up or Down, on a click in the input and on the
 // chevron. The keyboard stays in the input throughout: Up and Down move
 // the highlight, Enter chooses the highlighted option, Escape closes the
@@ -357,7 +357,11 @@ func (c *ComboboxWidget[T]) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 	t := uitheme.Of(env)
 	c.popup.Gap(t.Space * .75)
 	size := c.popup.Layout(cs, env)
-	c.content.Width(size.W)
+	// The list is three and a half of the theme's Space wider than the
+	// field and starts at its leading edge: shadcn's
+	// min-w-[calc(var(--anchor-width)+--spacing(7))], which the chips of a
+	// ComboboxMultiple do not take.
+	c.content.Width(size.W + t.Space*3.5)
 	return size
 }
 
@@ -546,7 +550,7 @@ func (a *comboboxAddon) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		ink = t.Disabled(ink)
 	} else {
 		dst.HitPointer(r, a)
-		dst.HitCursor(r, ggui.CursorShapePointer)
+		dst.HitCursor(r, ggui.CursorShapeDefault)
 		if a.Hovered {
 			// The ghost button's hover, with the cross brought up to the
 			// foreground; the chevron stays muted.

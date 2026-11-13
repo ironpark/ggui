@@ -15,8 +15,9 @@ func TestSelectDisabledOptionsAreSkippedAndCannotBeChosen(t *testing.T) {
 		DisabledOption(func(v string) bool { return v == "Beta" })
 	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(box)), ggui.Sz(300, 300))
 	defer p.Close()
-	// Closed, the arrows step over the disabled option.
-	p.Key("tab", "down")
+	// Down opens the list on the value, and from there the highlight steps
+	// over the disabled option.
+	p.Key("tab", "down", "down", "enter")
 	if value.Get() != "Gamma" {
 		t.Fatalf("Down from Alpha chose %q, want Gamma past the disabled Beta", value.Get())
 	}

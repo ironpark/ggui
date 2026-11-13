@@ -18,8 +18,8 @@ type JoinedSides struct{ Left, Top, Right, Bottom bool }
 func (j JoinedSides) Any() bool { return j.Left || j.Top || j.Right || j.Bottom }
 
 // JoinedSidesKey holds the JoinedSides of the control being laid out. A
-// ButtonGroup sets it for each child; Button, Toggle and ButtonGroupText
-// read it, and a control of your own may.
+// ButtonGroup sets it for each child; Button, Toggle, ButtonGroupText, the
+// text fields and Select read it, and a control of your own may.
 //
 // The sides are the ones in the window, so a control need not look at the
 // group's orientation or the reading direction. A control keeps what it

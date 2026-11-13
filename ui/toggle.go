@@ -81,7 +81,7 @@ func (g *toggle) layout(c ggui.Constraints, env ggui.Env, glyph ggui.Size) ggui.
 // paint registers the region and paints the label, and returns the Rect the
 // glyph should be drawn in.
 func (g *toggle) paint(dst *ggui.Canvas, r ggui.Rect, handler ggui.Control) ggui.Rect {
-	g.Hit(dst, r, handler, ggui.CursorShapePointer)
+	g.Hit(dst, r, handler, ggui.CursorShapeDefault)
 	if g.label != nil {
 		at := ggui.Pt(r.Origin.X+g.glyph.W+g.theme.ControlGap, r.Origin.Y+(r.Size.H-g.labelSize.H)/2)
 		dst.Paint(g.label, mirrorHorizontal(ggui.Rct(at, g.labelSize), r, g.env.Direction() == ggui.DirRTL))

@@ -551,6 +551,11 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 					ui.TextField(searchQuery).Placeholder("Search the docs…").Name("Search query"),
 					ui.ButtonOf(ui.Icon(icons.Search), func() { groupAction.Set("Searched for " + ggui.Peek(searchQuery)) }).Name("Run search").Size(ui.ButtonIcon).Outline(),
 				),
+				ui.ButtonGroup(
+					ui.Select(ggui.State("USD")).Options([]string{"USD", "EUR", "GBP"}).Name("Currency"),
+					ui.TextField(ggui.State("")).Placeholder("10.00").Name("Amount"),
+					ui.Button("Send", func() { groupAction.Set("Sent the amount") }).Outline(),
+				),
 				ui.InputGroup(ggui.TextInput(site).Placeholder("example.com").Name("Site")).
 					Leading(ggui.Text("https://").Color(t.MutedFg)).
 					Trailing(ui.Button("Go", func() {
