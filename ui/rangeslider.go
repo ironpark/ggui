@@ -287,7 +287,7 @@ func (s *RangeSliderWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 				break
 			}
 			f := s.fraction(vs[i])
-			h.Hit(dst, g.thumb(f), h, ggui.CursorShapeDefault)
+			h.HitReach(dst, g.thumb(f), g.knobReach(f, t.Space), h, ggui.CursorShapeDefault)
 			active := !inert && (h.Hovered || h.Pressed || (h.Focused && h.FocusVisible))
 			g.paintThumb(dst, t, f, inert, dst.Ease(h.Anchor(g.thumb(f)), sliderHaloSlot, pick(active, 1.0, 0.0), s.env.Motion(t.MotionFast)))
 		}
