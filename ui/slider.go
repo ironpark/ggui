@@ -3,6 +3,7 @@ package ui
 import (
 	"image/color"
 	"math"
+	"time"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
@@ -21,8 +22,10 @@ type SliderWidget struct {
 	onChange        func(float64)
 	onCommit        func(float64)
 
-	theme *uitheme.Theme
-	rect  ggui.Rect
+	theme   *uitheme.Theme
+	rect    ggui.Rect
+	motion  time.Duration // MotionFast, or zero under reduced motion
+	pointer ggui.Point    // where the pointer last was while over the slider
 }
 
 // Slider binds a horizontal slider to value, clamped to [lo, hi]. It fills
@@ -150,6 +153,7 @@ func (s *SliderWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		s.Pressed = false
 	}
 	s.theme = uitheme.Of(env)
+	s.motion = env.Motion(s.theme.MotionFast)
 	s.rtl = env.Direction() == ggui.DirRTL
 	if s.vertical {
 		return c.Constrain(ggui.Sz(s.theme.ControlSize+4, bounded(c.MaxH, defaultStripe)))
@@ -191,10 +195,18 @@ func (s *SliderWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	s.Hit(dst, r, s, ggui.CursorShapePointer)
 	g := s.geometry()
 	inert := s.IsInert()
-	dst.FillRoundRect(g.track(0, 1), 2, sliderTone(t, t.Muted, inert))
-	dst.FillRoundRect(g.track(0, s.fraction()), 2, sliderTone(t, t.Primary, inert))
-	g.paintThumb(dst, t, s.fraction(), inert, s.Hovered || s.Pressed || (s.Focused && s.FocusVisible))
+	f := s.fraction()
+	dst.FillRoundRect(g.track(0, 1), g.thick/2, sliderTone(t, t.Muted, inert))
+	dst.FillRoundRect(g.track(0, f), g.thick/2, sliderTone(t, t.Primary, inert))
+	// The halo belongs to the thumb, as shadcn's hover:ring-3 does: the
+	// pointer elsewhere on the track leaves it alone.
+	over := s.Hovered && g.thumbReach(f, t.Space).Contains(s.pointer)
+	active := !inert && (over || s.Pressed || (s.Focused && s.FocusVisible))
+	g.paintThumb(dst, t, f, inert, dst.Ease(s.Anchor(r), sliderHaloSlot, pick(active, 1.0, 0.0), s.motion))
 }
+
+// sliderHaloSlot eases the halo of a slider's thumb.
+var sliderHaloSlot = ggui.NewSlot[*ggui.Motion]("slider halo")
 
 // HandleKey implements KeyHandler: the arrow keys nudge the value by one
 // step (1 by default), or a hundredth of the range with Step(0).
@@ -238,16 +250,21 @@ func (s *SliderWidget) HandlePointer(ev ggui.PointerEvent) bool {
 		return false
 	}
 	switch ev.Kind {
+	case ggui.PointerEnter, ggui.PointerMove:
+		s.pointer = ev.Pos
 	case ggui.PointerDown:
 		if ev.Button != ggui.MouseButtonLeft {
 			return false
 		}
+		s.pointer = ev.Pos
 		s.setFromPosition(ev.Pos)
 	case ggui.PointerDrag:
+		s.pointer = ev.Pos
 		if s.Pressed {
 			s.setFromPosition(ev.Pos)
 		}
 	case ggui.PointerUp:
+		s.pointer = ev.Pos
 		if s.Pressed {
 			s.setFromPosition(ev.Pos)
 			s.commit()
@@ -261,15 +278,24 @@ func (s *SliderWidget) HandlePointer(ev ggui.PointerEvent) bool {
 
 // sliderGeometry keeps pointer mapping, track fill and thumb placement in the
 // same coordinate system, including small constraints and RTL/vertical axes.
+// The track spans the whole rect and the thumb stays inside it, its edge
+// meeting the track's end at either extreme, as shadcn's edge-aligned thumb
+// does.
 type sliderGeometry struct {
 	rect              ggui.Rect
-	knob              float64
+	knob              float64 // the thumb's radius
+	thick             float64 // the track's thickness
 	vertical, reverse bool
 }
 
+// newSliderGeometry lays a slider out in r around a thumb of radius knob;
+// the track is two thirds of that thick, a quarter of the control glyph.
 func newSliderGeometry(r ggui.Rect, knob float64, vertical, rtl bool) sliderGeometry {
-	return sliderGeometry{r, max(0, min(knob, r.Size.W/2, r.Size.H/2)), vertical, vertical || rtl}
+	knob = max(0, min(knob, r.Size.W/2, r.Size.H/2))
+	return sliderGeometry{r, knob, knob * 2 / 3, vertical, vertical || rtl}
 }
+
+// point is the thumb's center at fraction f.
 func (g sliderGeometry) point(f float64) ggui.Point {
 	if g.reverse {
 		f = 1 - f
@@ -293,19 +319,41 @@ func (g sliderGeometry) fraction(pos ggui.Point) (float64, bool) {
 	}
 	return f, true
 }
-func (g sliderGeometry) track(from, to float64) ggui.Rect {
-	a, b := g.point(from), g.point(to)
+
+// along is where fraction f lies on the track's axis: the thumb's center
+// there, or the track's very end at 0 and 1, so that the track and a range
+// reaching an extreme run the full length of the rect.
+func (g sliderGeometry) along(f float64) float64 {
+	p := g.point(f)
+	at, start, length := p.X, g.rect.Origin.X, g.rect.Size.W
 	if g.vertical {
-		return ggui.Rct(ggui.Pt(a.X-2, min(a.Y, b.Y)), ggui.Sz(4, math.Abs(b.Y-a.Y)))
+		at, start, length = p.Y, g.rect.Origin.Y, g.rect.Size.H
 	}
-	return ggui.Rct(ggui.Pt(min(a.X, b.X), a.Y-2), ggui.Sz(math.Abs(b.X-a.X), 4))
+	if f <= 0 || f >= 1 {
+		if (f >= 1) != g.reverse {
+			return start + length
+		}
+		return start
+	}
+	return at
 }
 
-// paintThumb draws the knob at fraction f, haloed while active.
-func (g sliderGeometry) paintThumb(dst *ggui.Canvas, t *uitheme.Theme, f float64, inert, active bool) {
+// track is the stretch of the track between two fractions.
+func (g sliderGeometry) track(from, to float64) ggui.Rect {
+	a, b := g.along(from), g.along(to)
+	lo, length := min(a, b), math.Abs(b-a)
+	if g.vertical {
+		return ggui.Rct(ggui.Pt(g.rect.Origin.X+(g.rect.Size.W-g.thick)/2, lo), ggui.Sz(g.thick, length))
+	}
+	return ggui.Rct(ggui.Pt(lo, g.rect.Origin.Y+(g.rect.Size.H-g.thick)/2), ggui.Sz(length, g.thick))
+}
+
+// paintThumb draws the knob at fraction f with its halo at strength halo,
+// from 0 for none to 1.
+func (g sliderGeometry) paintThumb(dst *ggui.Canvas, t *uitheme.Theme, f float64, inert bool, halo float64) {
 	center, radius := g.point(f), g.knob
-	if active && !inert {
-		dst.StrokeRoundRect(ggui.Rct(center.Add(ggui.Pt(-radius-2, -radius-2)), ggui.Sz(2*radius+4, 2*radius+4)), radius+2, 3, t.Halo(t.Ring))
+	if halo > 0 && !inert {
+		haloStroke(dst, ggui.Rct(center.Add(ggui.Pt(-radius, -radius)), ggui.Sz(2*radius, 2*radius)), radius, fade(t.Halo(t.Ring), halo))
 	}
 	ring, face := t.Ring, color.Color(color.White)
 	if inert {
@@ -332,6 +380,22 @@ func sliderKeyStep(step, lo, hi float64) float64 {
 	return math.Abs(hi-lo) / 100
 }
 
+// thumbReach is thumb grown by reach along the track: where the pointer
+// counts as over the thumb, as the margin around shadcn's does.
+func (g sliderGeometry) thumbReach(f, reach float64) ggui.Rect {
+	r := g.thumb(f)
+	if g.vertical {
+		r.Origin.Y -= reach
+		r.Size.H += 2 * reach
+	} else {
+		r.Origin.X -= reach
+		r.Size.W += 2 * reach
+	}
+	return r
+}
+
+// thumb is the hit rect of the thumb at fraction f: the knob along the
+// track and the whole slider across it.
 func (g sliderGeometry) thumb(f float64) ggui.Rect {
 	p := g.point(f)
 	if g.vertical {
