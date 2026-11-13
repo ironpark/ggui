@@ -77,6 +77,22 @@ func TestAccordionSectionsHaveTheTriggerBorderAndRuleInTheirHeight(t *testing.T)
 	}
 }
 
+// The line a pointer over an accordion header draws sits just under the
+// title's baseline, as an underline does, not at the foot of its line box.
+func TestAccordionHoverUnderlineSitsUnderTheBaseline(t *testing.T) {
+	t.Parallel()
+	a := Accordion(ggui.State([]string(nil)), AccordionItem("a", "Alpha", ggui.Text("a")))
+	a.Layout(ggui.Loose(ggui.Sz(320, 400)), uitheme.Default().Apply(ggui.Env{}))
+	h := a.headers[0]
+	base, ok := h.text.Baseline()
+	if !ok {
+		t.Fatal("the header's text has no baseline")
+	}
+	if got := a.underline(h); got != base+2 || got >= h.size.H-1 {
+		t.Fatalf("the underline is %v under the text's top, want %v, above the line box's foot at %v", got, base+2, h.size.H-1)
+	}
+}
+
 // An ItemSeparator keeps shadcn's my-2 around its line, which a plain
 // Divider does not.
 func TestItemSeparatorKeepsASpaceAboveAndBelowItsLine(t *testing.T) {
