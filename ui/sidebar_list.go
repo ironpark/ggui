@@ -449,7 +449,7 @@ func (s *SidebarWidget) paintGroup(dst, face *ggui.Canvas, n *sidebarNode, x, y,
 			}
 			s.paintChevron(c, n, s.place(row, n.chevronX, (n.fullH-m.icon)/2, ggui.Sz(m.icon, m.icon)), col)
 			if n.index == s.active {
-				controlFocusRing(dst, &s.Interactive, t, row, t.RadiusSm, t.Ring)
+				s.focusRing(dst, row)
 				if s.reveal {
 					dst.RequestReveal(row)
 				}
@@ -555,12 +555,25 @@ func (s *SidebarWidget) paintItem(dst, face *ggui.Canvas, n *sidebarNode, row gg
 		}
 	}
 	if n.index == s.active {
-		controlFocusRing(dst, &s.Interactive, t, row, t.RadiusSm, t.Ring)
+		s.focusRing(dst, row)
 		if s.reveal {
 			dst.RequestReveal(row)
 		}
 	}
 	n.rect = row
+}
+
+// sidebarRing is the width of the ring around the row the keyboard is on.
+const sidebarRing = 2
+
+// focusRing draws the keyboard's place as shadcn/ui's sidebar rows do,
+// focus-visible:ring-2 in the sidebar's ring color: a solid line around the
+// row, at once, in place of the soft halo the page's controls have.
+func (s *SidebarWidget) focusRing(dst *ggui.Canvas, row ggui.Rect) {
+	if !s.Focused || !s.FocusVisible || s.IsInert() {
+		return
+	}
+	dst.StrokeRoundRect(row.Grow(sidebarRing), s.theme.RadiusSm+sidebarRing, sidebarRing, s.theme.Ring)
 }
 
 // showsAction reports whether a row's action is on screen: always, or for
