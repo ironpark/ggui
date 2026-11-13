@@ -623,8 +623,9 @@ func (s *SidebarWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 	pad, right := t.Space, s.onRight()
 	root, outer := dst, r
 	// A sidebar going off its edge keeps its width and slides under the
-	// column's clip, taking no input on the way out.
-	if s.mode != SidebarCollapseIcon && s.progress < 1 {
+	// column's clip, taking no input on the way out: from the frame it is
+	// collapsed in, when the slide has yet to move it.
+	if s.mode != SidebarCollapseIcon && (s.progress < 1 || s.laidCollapsed) {
 		w := s.fullW + s.chrome(t)
 		outer = ggui.Rct(ggui.Pt(pick(right, r.Origin.X, r.Origin.X+r.Size.W-w), r.Origin.Y), ggui.Sz(w, r.Size.H))
 		dst = dst.Clip(r)
