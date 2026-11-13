@@ -51,6 +51,7 @@ type CalendarWidget struct {
 	theme                                          *uitheme.Theme
 	env                                            ggui.Env
 	hover                                          color.Color // the fill under the pointer, resolved each layout
+	motion                                         time.Duration
 	metrics                                        calendarMetrics
 }
 
@@ -473,6 +474,7 @@ func (c *CalendarWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	cell := ggui.Loose(ggui.Sz(m.column, m.cell))
 	disabled := fade(t.MutedFg, .5)
 	c.hover = pick[color.Color](isDark(t.Bg), fade(t.Muted, .5), t.Muted)
+	c.motion = env.Motion(t.MotionFast)
 	end := c.first.AddDate(0, c.count, 0)
 	m.weekday = 0
 	for i, p := range c.panes {
@@ -680,10 +682,14 @@ func (d *calendarDay) HandlePointer(e ggui.PointerEvent) bool {
 	return d.Pointer(e, func() { d.owner.choose(d.date) })
 }
 
+// calendarDayHoverSlot keeps a day's hover easing across frames.
+var calendarDayHoverSlot = ggui.NewSlot[*ggui.Motion]("calendar day hover")
+
 // Paint fills the day's square inside r, its hit target. A range paints as
 // one band: the days between its ends fill the whole column, rounded only
 // where a week begins or ends, and each end lays the band's half behind its
-// own primary square.
+// own primary square. A day is a ghost Button to shadcn: the fill under the
+// pointer eases in, and a pressed day sits a pixel lower.
 func (d *calendarDay) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	c := d.owner
 	t, m := c.theme, &c.metrics
@@ -693,6 +699,10 @@ func (d *calendarDay) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if !d.IsInert() {
 		dst.HitPointer(r, d)
 		dst.HitCursor(r, ggui.CursorShapePointer)
+	}
+	hover := dst.Ease(d.Anchor(r), calendarDayHoverSlot, pick(d.Hovered && !d.IsInert(), 1.0, 0.0), c.motion)
+	if d.Pressed && d.Hovered && !d.IsInert() {
+		r.Origin.Y++
 	}
 	fill := m.fill(r)
 	center := fill.Origin.X + fill.Size.W/2
@@ -729,8 +739,8 @@ func (d *calendarDay) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	default:
 		if d.today {
 			dst.FillRoundRect(fill, t.RadiusSm, t.Muted)
-		} else if d.Hovered && !d.IsInert() {
-			dst.FillRoundRect(fill, t.RadiusSm, c.hover)
+		} else if hover > 0 {
+			dst.FillRoundRect(fill, t.RadiusSm, fade(c.hover, hover))
 		}
 	}
 	dst.Paint(d.text, ggui.Rct(ggui.Pt(fill.Origin.X+(fill.Size.W-d.size.W)/2, fill.Origin.Y+(fill.Size.H-d.size.H)/2), d.size))
