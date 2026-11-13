@@ -3,10 +3,38 @@ package ui
 import (
 	"math"
 	"slices"
+	"time"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
+
+const (
+	// sheetWidth is how wide a sheet on the left or right is, and
+	// sheetWidthShare the most of the window it takes: shadcn's sm:max-w-sm
+	// and w-3/4.
+	sheetWidth      = 384
+	sheetWidthShare = .75
+	// sheetSlide is how far a sheet travels from its edge as it fades in.
+	sheetSlide = 40
+	// drawerMotion is how long a drawer takes to rise, to fall, and to move
+	// between snap points: shadcn's duration-450. It stands in for a theme
+	// token, which the theme does not have for it yet.
+	drawerMotion = 450 * time.Millisecond
+	// drawerHeadroom is what a drawer as tall as its content leaves of the
+	// window above it: shadcn's max-height of 100dvh - 6rem.
+	drawerHeadroom = 96
+	// drawerHandleStrip is the height of the strip the swipe handle sits at
+	// the bottom of, and the two after it the handle's own size.
+	drawerHandleStrip  = 12
+	drawerHandleWidth  = 96
+	drawerHandleHeight = 4
+)
+
+// drawerEase is the curve a drawer moves along: shadcn's
+// cubic-bezier(0.22, 1, 0.36, 1), quick to start and long to settle.
+var drawerEase = ggui.CubicBezier(.22, 1, .36, 1)
 
 // sheetSide says which edge a sheet slides in from.
 type sheetSide int
@@ -24,7 +52,9 @@ const (
 // with Sheet, or with Drawer for the bottom edge. It takes no space where it
 // sits in the tree; put it anywhere.
 //
-// The sheet slides in and out over the theme's MotionSlow. The motion lives
+// The sheet fades in while it slides a short way from its edge, over the
+// theme's MotionSlow; a Drawer rises the whole of its height instead, without
+// fading, over 450ms. The motion lives
 // in the widget, so a sheet kept across rebuilds -- in a Component, or
 // simply constructed once beside the signal it binds -- animates, and one
 // rebuilt from scratch every frame appears and goes at once, as Dialog does.
@@ -34,7 +64,8 @@ type SheetWidget struct {
 	modal
 	side   sheetSide
 	extent float64
-	handle bool
+	drawer bool // made by Drawer: rises whole, rounded, and can be dragged
+	handle bool // the drawer shows its swipe handle
 	slide  ggui.Motion
 	effect *ggui.TransitionWidget
 
@@ -60,12 +91,45 @@ func Sheet(open ggui.Binding[bool], content ggui.Widget) *SheetWidget {
 	return s
 }
 
-// Drawer is a Sheet that rises from the bottom edge, with the grab handle
-// that says so. Drag the handle down to dismiss, or configure SnapPoints.
-// Content keeps its own pointer and scrolling behavior.
+// Drawer is a Sheet that rises from the bottom edge with its top corners
+// rounded. It is as tall as its content, up to 96px short of the window,
+// until Size or SnapPoints say otherwise. Drag it down by the middle of its
+// top edge to dismiss it, or configure SnapPoints; Handle draws the bar
+// that says it can be dragged. Content keeps its own pointer and scrolling
+// behavior.
 func Drawer(open ggui.Binding[bool], content ggui.Widget) *SheetWidget {
 	s := Sheet(open, content).Bottom()
-	s.extent, s.handle, s.draggable = 280, true, true
+	s.drawer, s.draggable = true, true
+	return s
+}
+
+// Handle shows or hides a Drawer's swipe handle, the short bar centered
+// above its content. It is hidden by default; the drawer drags by the same
+// place either way. A Sheet has none.
+func (s *SheetWidget) Handle(show bool) *SheetWidget {
+	defer property.Watch(&s.props, &s.handle)()
+	s.handle = show
+	return s
+}
+
+// Description puts a line of muted text under the title, saying what the
+// sheet is for. An empty string removes it.
+func (s *SheetWidget) Description(v string) *SheetWidget {
+	s.setDescription(v)
+	s.props.Changed()
+	return s
+}
+
+// Footer puts actions at the foot of the sheet, stacked at its full width:
+// at the bottom edge of a sheet that fills the window's height, and under
+// the content of one as tall as its content. Calling it with no actions
+// removes them.
+//
+//	ui.Sheet(open, form).Title("Edit profile").
+//		Footer(ui.Button("Save changes", save), ui.Button("Close", shut).Outline())
+func (s *SheetWidget) Footer(actions ...ggui.Widget) *SheetWidget {
+	s.setFooter(actions)
+	s.props.Changed()
 	return s
 }
 
@@ -142,14 +206,49 @@ func (s *SheetWidget) OnClose(fn func()) *SheetWidget { s.onClose = fn; return s
 // horizontal reports whether the sheet slides along the x axis.
 func (s *SheetWidget) horizontal() bool { return s.side == sheetLeft || s.side == sheetRight }
 
-// Layout implements ggui.Widget: the sheet takes no room in the tree. The
-// panel gets no border or radius: it is flush with the edge it came from.
+// fitsContent reports whether the panel is as tall as its content rather
+// than a height it was given.
+func (s *SheetWidget) fitsContent() bool {
+	return !s.horizontal() && s.extent <= 0 && !(s.isDrawer() && len(s.snapPoints) > 0)
+}
+
+// shape is the look the sheet asks of the panel it shares with Dialog. A
+// sheet is flush with the edge it came from, so the box has no border or
+// radius: the line along its inner edge, and a drawer's rounded top, are
+// painted over it.
+func (s *SheetWidget) shape(t *uitheme.Theme) modalShape {
+	shape := modalShape{
+		headerGap: t.Space / 4, closeInset: t.Space * 1.5,
+		fill: !s.fitsContent(), shadow: sheetShadow(t), fillColor: t.Popover,
+	}
+	if s.isDrawer() {
+		// A drawer's surface is painted with its corners; see paintDrawerSurface.
+		shape.shadow, shape.fillColor = ggui.ShadowStyle{}, nil
+		if s.handle {
+			shape.topInset = drawerHandleStrip
+		}
+	}
+	return shape
+}
+
+// sheetShadow is the shadow a sheet casts on the window: the theme's
+// OverlayShadow at the weight of shadcn's shadow-lg, which is half its blur
+// and two fifths of its strength. The token is as heavy as it is for the
+// dialogs that no longer cast one.
+func sheetShadow(t *uitheme.Theme) ggui.ShadowStyle {
+	s := t.OverlayShadow
+	s.Blur /= 2
+	s.Color = fade(s.Color, .4)
+	return s
+}
+
+// Layout implements ggui.Widget: the sheet takes no room in the tree.
 func (s *SheetWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer s.props.Layout().EndLayout()
 	if s.nameReader != nil {
 		s.name = s.nameReader.Get()
 	}
-	s.build(env)
+	s.build(env, s.shape(uitheme.Of(env)))
 	if s.snapBinding != nil {
 		s.snapBinding.Get()
 	}
@@ -176,7 +275,11 @@ func (s *SheetWidget) Paint(dst *ggui.Canvas, _ ggui.Rect) {
 	if !open {
 		s.dragging = false
 	}
-	v := clamp(s.slide.Easing(ggui.EaseInOut).Toggle(open, now, s.env.Motion(s.theme.MotionSlow)), 0, 1)
+	ease, duration := ggui.EaseInOut, s.theme.MotionSlow
+	if s.isDrawer() {
+		ease, duration = drawerEase, drawerMotion
+	}
+	v := clamp(s.slide.Easing(ease).Toggle(open, now, s.env.Motion(duration)), 0, 1)
 	if !open && v <= 0.001 {
 		s.rect = ggui.Rect{}
 		s.snapMotion = ggui.Motion{}
@@ -193,7 +296,7 @@ func (s *SheetWidget) paintPanel(dst *ggui.Canvas, v float64, open bool) {
 	}
 	var cs ggui.Constraints
 	if s.horizontal() {
-		w := min(384, screen.W*.75)
+		w := min(sheetWidth, screen.W*sheetWidthShare)
 		if s.extent > 0 {
 			w = min(s.extent, screen.W)
 		}
@@ -203,8 +306,12 @@ func (s *SheetWidget) paintPanel(dst *ggui.Canvas, v float64, open bool) {
 		if s.isDrawer() && len(s.snapPoints) > 0 {
 			h = min(s.snapPoints[len(s.snapPoints)-1], screen.H)
 		}
-		if s.extent <= 0 && !(s.isDrawer() && len(s.snapPoints) > 0) {
-			h = s.panel.Layout(ggui.Constraints{MinW: screen.W, MaxW: screen.W, MaxH: screen.H}, s.env).H
+		if s.fitsContent() {
+			room := screen.H
+			if s.isDrawer() {
+				room = max(screen.H-drawerHeadroom, 0)
+			}
+			h = s.panel.Layout(ggui.Constraints{MinW: screen.W, MaxW: screen.W, MaxH: room}, s.env).H
 		}
 		cs = ggui.Constraints{MinW: screen.W, MaxW: screen.W, MinH: h, MaxH: h}
 	}
@@ -222,18 +329,15 @@ func (s *SheetWidget) paintPanel(dst *ggui.Canvas, v float64, open bool) {
 		if !open {
 			target = s.visibleExtent
 		}
-		duration := s.env.Motion(t.MotionSlow)
+		duration := s.env.Motion(drawerMotion)
 		if s.dragging {
 			duration = 0
 		}
-		s.snapMotion.MoveTo(target, ggui.FrameTime(), duration)
+		s.snapMotion.Easing(drawerEase).MoveTo(target, ggui.FrameTime(), duration)
 		visible = s.snapMotion.Value(ggui.FrameTime())
 		s.visibleExtent = visible
 	}
-	distance := 40.0
-	if s.handle {
-		distance = size.H
-	}
+	distance := float64(sheetSlide)
 	var at ggui.Point
 	switch s.side {
 	case sheetLeft:
@@ -255,7 +359,8 @@ func (s *SheetWidget) paintPanel(dst *ggui.Canvas, v float64, open bool) {
 		dst = dst.Inert()
 	}
 	rect := ggui.Rct(at, size)
-	s.effect.Progress(v, !open)
+	// A drawer is opaque all the way: it comes into view by rising.
+	s.effect.Progress(pick(s.isDrawer(), 1, v), !open)
 	scrimProgress := v
 	if s.isDrawer() && size.H > 0 {
 		scrimProgress *= clamp(visible/size.H, 0, 1)
@@ -338,7 +443,7 @@ func (s *SheetWidget) BindSnapPoint(index ggui.Binding[int]) *SheetWidget {
 // OnSnapChange reports a requested snap index after a drag or keyboard action.
 func (s *SheetWidget) OnSnapChange(fn func(int)) *SheetWidget { s.onSnapChange = fn; return s }
 
-func (s *SheetWidget) isDrawer() bool { return s.handle && s.side == sheetBottom }
+func (s *SheetWidget) isDrawer() bool { return s.drawer && s.side == sheetBottom }
 func (s *SheetWidget) selectedSnap() int {
 	i := s.snapIndex
 	if s.snapBinding != nil {
@@ -362,18 +467,42 @@ func (s *SheetWidget) selectSnap(index int) {
 	}
 }
 
+// paintDrawerSurface paints the panel and what a sheet adds to it: the line
+// along its inner edge, or a drawer's rounded top and handle.
 func (s *SheetWidget) paintDrawerSurface(dst *ggui.Canvas, r ggui.Rect) {
-	s.paintSurface(dst, r)
-	if !s.handle {
+	t := s.theme
+	bw := t.BorderWidth
+	if !s.isDrawer() {
+		s.paintSurface(dst, r)
+		edge := ggui.Rct(r.Origin, ggui.Sz(bw, r.Size.H))
+		switch s.side {
+		case sheetLeft:
+			edge.Origin.X = r.Origin.X + r.Size.W - bw
+		case sheetTop:
+			edge = ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+r.Size.H-bw), ggui.Sz(r.Size.W, bw))
+		case sheetBottom:
+			edge = ggui.Rct(r.Origin, ggui.Sz(r.Size.W, bw))
+		}
+		dst.FillRect(edge, t.Border)
 		return
 	}
-	grip := ggui.Sz(36, 4)
-	at := ggui.Pt(r.Origin.X+(r.Size.W-grip.W)/2, r.Origin.Y+s.theme.Space/2)
-	dst.FillRoundRect(ggui.Rct(at, grip), grip.H/2, s.theme.Border)
-	if s.isDrawer() && s.draggable && s.grip != nil {
-		hit := ggui.Rct(ggui.Pt(r.Origin.X+max(0, (r.Size.W-72)/2), r.Origin.Y), ggui.Sz(min(72, r.Size.W), min(24, r.Size.H)))
+	// Only the top corners are round, which no box is: a rounded one taller
+	// than the panel by its radius is painted with the bottom cut off, and
+	// its border let through no lower than the corners reach.
+	radius := min(t.RadiusLg, r.Size.H)
+	tall := ggui.Rct(r.Origin, ggui.Sz(r.Size.W, r.Size.H+radius))
+	dst.Clip(r).FillRoundRect(tall, radius, t.Popover)
+	dst.Clip(ggui.Rct(r.Origin, ggui.Sz(r.Size.W, radius))).StrokeRoundRect(tall, radius, bw, t.Border)
+	s.paintSurface(dst, r)
+	if s.handle {
+		at := ggui.Pt(r.Origin.X+(r.Size.W-drawerHandleWidth)/2, r.Origin.Y+drawerHandleStrip-drawerHandleHeight)
+		dst.FillRoundRect(ggui.Rct(at, ggui.Sz(drawerHandleWidth, drawerHandleHeight)), drawerHandleHeight/2, t.Muted)
+	}
+	if s.draggable && s.grip != nil {
+		w := min(drawerHandleWidth, r.Size.W)
+		hit := ggui.Rct(ggui.Pt(r.Origin.X+(r.Size.W-w)/2, r.Origin.Y), ggui.Sz(w, min(2*drawerHandleStrip, r.Size.H)))
 		s.grip.Hit(dst, hit, s.grip, ggui.CursorShapePointer)
-		s.grip.FocusRing(dst, hit, s.theme.Radius, s.theme.Ring)
+		s.grip.FocusRing(dst, hit, t.Radius, t.Ring)
 	}
 }
 

@@ -21,6 +21,10 @@ type DialogWidget struct {
 	reveal ggui.Motion
 }
 
+// dialogWidth is a dialog's width until Width says otherwise: shadcn's
+// sm:max-w-sm.
+const dialogWidth = 384
+
 // Dialog creates a dialog that shows content while open is true.
 //
 //	confirm := ggui.State(false)
@@ -29,7 +33,7 @@ type DialogWidget struct {
 //		ggui.Row(ui.Button("Delete", del), ui.Button("Cancel", func() { confirm.Set(false) }).Outline()),
 //	)).Title("Confirm")
 func Dialog(open ggui.Binding[bool], content ggui.Widget) *DialogWidget {
-	d := &DialogWidget{width: 384}
+	d := &DialogWidget{width: dialogWidth}
 	d.open, d.content, d.dismissible = open, content, true
 	return d
 }
@@ -37,6 +41,27 @@ func Dialog(open ggui.Binding[bool], content ggui.Widget) *DialogWidget {
 // Title puts a heading above the content, which also names the dialog for
 // Probe.Find.
 func (d *DialogWidget) Title(s string) *DialogWidget { d.setTitle(s); return d }
+
+// Description puts a line of muted text under the title, saying what the
+// dialog is for. An empty string removes it.
+func (d *DialogWidget) Description(s string) *DialogWidget {
+	d.setDescription(s)
+	d.props.Changed()
+	return d
+}
+
+// Footer puts actions in a band along the dialog's bottom edge, in a row at
+// its end: the buttons that answer it. The band is tinted and runs from
+// edge to edge, whatever Compact says about the content. Calling it with no
+// actions removes the band.
+//
+//	ui.Dialog(open, form).Title("Edit profile").
+//		Footer(ui.Button("Cancel", cancel).Outline(), ui.Button("Save", save))
+func (d *DialogWidget) Footer(actions ...ggui.Widget) *DialogWidget {
+	d.setFooter(actions)
+	d.props.Changed()
+	return d
+}
 
 // Name sets an accessible name without adding a visible heading.
 func (d *DialogWidget) Name(name string) *DialogWidget {
@@ -93,7 +118,10 @@ func (d *DialogWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		d.name = d.nameReader.Get()
 	}
 	t := uitheme.Of(env)
-	d.build(env).Shadow().Border(t.BorderWidth, fade(t.Fg, .1)).Radius(t.RadiusLg)
+	d.build(env, modalShape{
+		headerGap: t.Space, closeInset: t.Space, band: true, fillColor: t.Popover,
+		borderWidth: t.BorderWidth, border: fade(t.Fg, .1), radius: t.RadiusLg,
+	})
 	if d.effect == nil {
 		d.effect = ggui.PopIn(ggui.FromFuncs(
 			func(c ggui.Constraints, e ggui.Env) ggui.Size { return d.panel.Layout(c, e) },
