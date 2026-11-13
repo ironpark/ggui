@@ -226,7 +226,7 @@ func TestChartTooltipFormatsTotalAndLegendWrap(t *testing.T) {
 	c := BarChart(chartTestData(), chartTestConfig).Tooltip(ChartTooltipOptions{ShowTotal: true, Label: "Total visits in the selected month", FormatValue: func(v float64, _ ChartSeries, _ ChartDatum) string { return fmt.Sprintf("%.0f visitors", v) }})
 	c.Layout(ggui.Loose(ggui.Sz(400, 240)), uitheme.Default().Apply(ggui.Env{}))
 	rows, size := c.tooltipRows(0)
-	if len(rows) != 2 || rows[0].value != "10 visitors" || size.H != 112 {
+	if len(rows) != 2 || rows[0].value != "10 visitors" || size.H != 88 || size.W < 128 {
 		t.Fatalf("tooltip rows/size %v %v", rows, size)
 	}
 	if c.legendHeight(70) <= c.legendHeight(400) {
@@ -941,5 +941,27 @@ func TestChartPieHitTestAcceptsAnyStartAngle(t *testing.T) {
 	// The second sector spans 1080..1260 degrees; its middle, 1170, points straight up.
 	if got := c.hitIndex(polarPoint(center, radius/2, 1170)); got != 1 {
 		t.Fatalf("middle of the second sector hit-tests as %d, want 1", got)
+	}
+}
+
+func TestChartTooltipAndLegendUseShadcnMetrics(t *testing.T) {
+	t.Parallel()
+	c := BarChart(chartTestData(), chartTestConfig)
+	c.Layout(ggui.Loose(ggui.Sz(400, 240)), uitheme.Default().Apply(ggui.Env{}))
+	// A 16px heading and two 12px rows, 6px apart, inside 6px of padding.
+	if rows, size := c.tooltipRows(0); len(rows) != 2 || size.H != 6+16+6+12+6+12+6 || size.W < 128 {
+		t.Fatalf("tooltip %v for %d rows, want 64 tall and at least 128 wide", size, len(rows))
+	}
+	c.Tooltip(ChartTooltipOptions{HideLabel: true})
+	if _, size := c.tooltipRows(0); size.H != 6+12+6+12+6 {
+		t.Fatalf("tooltip without a heading is %v tall, want 42", size.H)
+	}
+	// One 16px line of legend, 12px under the plot.
+	if h := c.legendHeight(400); h != 28 {
+		t.Fatalf("one line of legend is %v tall, want 28", h)
+	}
+	// The grid is drawn at half the border.
+	if _, _, _, a := c.gridLine.RGBA(); a == 0 || a == 0xffff {
+		t.Fatalf("grid line alpha %#x, want the border at half strength", a)
 	}
 }
