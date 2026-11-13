@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"math"
 	"slices"
 
 	"github.com/ironpark/ggui"
@@ -222,8 +223,8 @@ func (a *AccordionWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 		top := y + t.BorderWidth + 1.25*t.Space // of the header's text
 		hover := dst.Ease(h.Anchor(rect), disclosureHoverSlot, pick(h.Hovered && !item.disabled, 1.0, 0.0), a.env.Motion(t.MotionFast))
 		if hover > 0 && h.text != nil {
-			under := top + h.size.H - 1
-			dst.StrokeLine(ggui.Pt(rect.Origin.X, under), ggui.Pt(rect.Origin.X+h.size.W, under), 1, fade(t.Fg, hover))
+			under := ggui.Pt(rect.Origin.X, top+a.underline(h))
+			dst.FillRect(ggui.Rct(under, ggui.Sz(h.size.W, 1)), fade(t.Fg, hover))
 		}
 		// The chevron sits level with the header's first line, as shadcn's
 		// items-start puts it, which shows once a title wraps.
@@ -243,6 +244,19 @@ func (a *AccordionWidget) paint(dst *ggui.Canvas, r ggui.Rect) {
 			y += t.BorderWidth
 		}
 	}
+}
+
+// underline is how far under the top of a header's text the line a pointer
+// over it draws is: two pixels under the baseline of its last line, where a
+// link button's is and about where CSS underlines, rather than at the foot
+// of the line box.
+func (a *AccordionWidget) underline(h *accordionHeader) float64 {
+	base, ok := h.text.Baseline()
+	if !ok || a.line <= 0 {
+		return h.size.H - 1
+	}
+	lines := max(1, math.Round(h.size.H/a.line))
+	return base + (lines-1)*a.line + 2
 }
 
 type accordionHeader struct {
