@@ -3,7 +3,6 @@ package theme
 import (
 	_ "embed"
 	"encoding/json"
-	"fmt"
 	"image/color"
 	"math"
 	"slices"
@@ -150,9 +149,7 @@ func (p Preset) For(dark bool) Theme {
 	t.SidebarPrimary, t.SidebarPrimaryFg = tokens["sidebar-primary"], tokens["sidebar-primary-foreground"]
 	t.SidebarAccent, t.SidebarAccentFg = tokens["sidebar-accent"], tokens["sidebar-accent-foreground"]
 	t.SidebarBorder, t.SidebarRing = tokens["sidebar-border"], tokens["sidebar-ring"]
-	for i := range t.Chart {
-		t.Chart[i] = tokens[fmt.Sprintf("chart-%d", i+1)]
-	}
+	t.Chart = chartColors(tokens)
 	t.RadiusSm, t.Radius, t.RadiusLg = 8, 10, 14
 	t.Chat = novaChat()
 	switch p.Style {
