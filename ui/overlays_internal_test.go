@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggui"
+	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
 func TestCommandSearchIconLeadsTheField(t *testing.T) {
@@ -27,5 +28,17 @@ func TestCommandSearchIconLeadsTheField(t *testing.T) {
 	icon = rtl.searchRow.icon
 	if got, want := pill.Rect.Origin.X+pill.Rect.Size.W-icon.Origin.X-icon.Size.W, 8.0; got != want {
 		t.Fatalf("under RTL the search icon ends %v from the field's right, want %v", got, want)
+	}
+}
+
+func TestSheetCastsTheOverlayShadowAndADrawerNone(t *testing.T) {
+	t.Parallel()
+	th := uitheme.Default()
+	// shadcn's SheetContent is shadow-lg, which is the token as it stands.
+	if got := Sheet(ggui.State(true), ggui.Text("Body")).shape(&th).shadow; got != th.OverlayShadow {
+		t.Fatalf("a sheet casts %+v, want the theme's OverlayShadow %+v", got, th.OverlayShadow)
+	}
+	if got := Drawer(ggui.State(true), ggui.Text("Body")).shape(&th).shadow; got != (ggui.ShadowStyle{}) {
+		t.Fatalf("a drawer casts %+v, want none", got)
 	}
 }
