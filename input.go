@@ -212,6 +212,7 @@ type hitRegion struct {
 	pointer PointerHandler
 	key     KeyHandler
 	cursor  CursorShape
+	shaped  bool        // the region asks for cursor, the default arrow included
 	scope   *focusScope // the focus trap the region was painted in, if any
 	role    Role        // from a Semantic handler
 	label   string
@@ -229,7 +230,7 @@ func (r *hitRegion) merge(o hitRegion) bool {
 		o.drag != nil || r.drag != nil ||
 		(o.pointer != nil && r.pointer != nil) ||
 		(o.key != nil && r.key != nil) ||
-		(o.cursor != 0 && r.cursor != 0) {
+		(o.shaped && r.shaped) {
 		return false
 	}
 	if o.pointer != nil {
@@ -238,8 +239,8 @@ func (r *hitRegion) merge(o hitRegion) bool {
 	if o.key != nil {
 		r.key = o.key
 	}
-	if o.cursor != 0 {
-		r.cursor = o.cursor
+	if o.shaped {
+		r.cursor, r.shaped = o.cursor, true
 	}
 	if o.id != nil {
 		r.id = o.id
@@ -502,13 +503,16 @@ func (in *inputState) updateDrag(f frameInput) {
 	in.dragTarget = keep(now)
 }
 
-// updateCursor picks the shape of the topmost region at pos asking for one.
+// updateCursor picks the shape of the topmost region at pos asking for
+// one. A region that asks for the default arrow is asking too: under the
+// pointer it keeps the shape of a region beneath it, a text field's I-beam
+// under a menu say, from showing through.
 func (in *inputState) updateCursor(pos Point) {
 	in.cursor = CursorShapeDefault
 	if !in.index().cursors {
 		return
 	}
-	if r := in.topmost(func(r *hitRegion) bool { return r.cursor != 0 && r.contains(pos) }); r != nil {
+	if r := in.topmost(func(r *hitRegion) bool { return r.shaped && r.contains(pos) }); r != nil {
 		in.cursor = r.cursor
 	}
 }
@@ -739,7 +743,7 @@ func (in *inputState) index() *regionIndex {
 		if r.scope != nil {
 			x.scopeAt = i
 		}
-		if r.cursor != 0 {
+		if r.shaped {
 			x.cursors = true
 		}
 	}
@@ -1002,6 +1006,7 @@ type PointerWidget struct {
 	props       property.Owner
 	child       Widget
 	cursor      CursorShape
+	shaped      bool // Cursor was called: the region asks for cursor
 	onDown      func(PointerEvent)
 	onUp        func(PointerEvent)
 	onTap       func()
@@ -1039,10 +1044,12 @@ func (p *PointerWidget) OnMove(fn func(PointerEvent)) *PointerWidget { p.onMove 
 func (p *PointerWidget) OnDrag(fn func(PointerEvent)) *PointerWidget { p.onDrag = fn; return p }
 
 // Cursor sets the mouse cursor shown while the pointer is over the child,
-// such as CursorShapePointer for something clickable.
+// such as CursorShapePointer for something clickable. CursorShapeDefault
+// asks for the arrow, over whatever a widget painted beneath asks for.
 func (p *PointerWidget) Cursor(shape CursorShape) *PointerWidget {
 	defer property.Watch(&p.props, &p.cursor)()
-	p.cursor = shape
+	defer property.Watch(&p.props, &p.shaped)()
+	p.cursor, p.shaped = shape, true
 	return p
 }
 
@@ -1164,7 +1171,7 @@ func (p *PointerWidget) Baseline() (float64, bool) { return baselineOf(p.child) 
 // Paint implements Widget.
 func (p *PointerWidget) Paint(dst *Canvas, r Rect) {
 	dst.HitPointer(r, p)
-	if p.cursor != 0 {
+	if p.shaped {
 		dst.HitCursor(r, p.cursor)
 	}
 	dst.Paint(p.child, r)

@@ -29,7 +29,9 @@ const KeyMax = ggwd.KeyMax
 type CursorShape = ggwd.CursorShape
 
 // The cursor shapes a platform offers. CursorShapeDefault is the arrow, and
-// the zero value, which means a region does not ask for a shape at all.
+// the zero value: what shows where no region asks for a shape, and what a
+// region asks for to show the arrow over one beneath it that asks for
+// another.
 const (
 	CursorShapeDefault    = ggwd.CursorShapeDefault
 	CursorShapeText       = ggwd.CursorShapeText

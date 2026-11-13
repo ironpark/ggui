@@ -188,6 +188,9 @@ func (h *HoverCardWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		if !open {
 			dst = dst.Inert()
 		}
+		// The card is a surface of its own: what it floats over does not
+		// choose the cursor on it.
+		dst.HitCursor(panel, ggui.CursorShapeDefault)
 		dst.DescribeNode(panel, hoverCardPanel{h}, func(dst *ggui.Canvas) { dst.Paint(h.effect, panel) })
 	})
 }
