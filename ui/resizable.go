@@ -35,7 +35,8 @@ type ResizableWidget struct {
 	available, lo, hi, dragOffset       float64
 }
 
-// Resizable creates a horizontal split. Arrow keys move 1% (10% with Shift);
+// Resizable creates a horizontal split. Arrow keys move 5%, as
+// react-resizable-panels' do (10% with Shift);
 // Home/End move to the allowed limits. It fills finite constraints and uses
 // 320x200 logical pixels as its fallback under an unbounded parent.
 func Resizable(fraction ggui.Binding[float64], first, second ggui.Widget) *ResizableWidget {
@@ -211,7 +212,9 @@ func (r *ResizableWidget) HandleKey(ev ggui.KeyEvent) {
 	if r.IsInert() || !r.ConsumesKey(ev) {
 		return
 	}
-	step := .01
+	// react-resizable-panels moves a separator 5 of the group's 100 for an
+	// arrow key; Shift, which it does not read, is twice that here.
+	step := .05
 	if ev.Mods.Shift {
 		step = .1
 	}
