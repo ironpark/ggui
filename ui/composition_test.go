@@ -275,19 +275,24 @@ func TestToggleGroupPicksWithThePointerAndTheArrows(t *testing.T) {
 	if node, ok := p.Semantics().Find(ggui.RoleRadio, "center"); !ok || node.Checked != ggui.TriOn {
 		t.Fatal("the chosen segment is not marked")
 	}
+	// The arrows move the keyboard and leave the choice; Space presses.
 	p.Type(ggui.Mods{}, ggui.KeyArrowRight)
+	if ggui.Untrack(value.Get) != "center" {
+		t.Fatalf("right arrow alone chose %q", ggui.Untrack(value.Get))
+	}
+	p.Type(ggui.Mods{}, ggui.KeySpace)
 	if ggui.Untrack(value.Get) != "right" {
-		t.Fatalf("right arrow: %q", ggui.Untrack(value.Get))
+		t.Fatalf("right arrow, Space: %q", ggui.Untrack(value.Get))
 	}
-	p.Type(ggui.Mods{}, ggui.KeyArrowRight)
+	p.Type(ggui.Mods{}, ggui.KeyArrowRight, ggui.KeyEnter)
 	if ggui.Untrack(value.Get) != "left" {
-		t.Fatalf("the choice does not wrap: %q", ggui.Untrack(value.Get))
+		t.Fatalf("the keyboard does not wrap: %q", ggui.Untrack(value.Get))
 	}
-	p.Type(ggui.Mods{}, ggui.KeyEnd)
+	p.Type(ggui.Mods{}, ggui.KeyEnd, ggui.KeySpace)
 	if ggui.Untrack(value.Get) != "right" {
 		t.Fatalf("End: %q", ggui.Untrack(value.Get))
 	}
-	p.Type(ggui.Mods{}, ggui.KeyHome)
+	p.Type(ggui.Mods{}, ggui.KeyHome, ggui.KeySpace)
 	if ggui.Untrack(value.Get) != "left" {
 		t.Fatalf("Home: %q", ggui.Untrack(value.Get))
 	}

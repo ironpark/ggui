@@ -299,9 +299,12 @@ func (x *ButtonGroupTextWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 // them, Size takes the Toggle's sizes, and Spacing sets the gap between
 // them, where none joins them into one strip.
 //
-// The group is one tab stop, as a set of radio buttons is. Left and Right
-// (Up and Down when Vertical) move the choice and wrap around, Home and End
-// go to the ends, and Space or Enter re-picks where the choice already is.
+// The group is one tab stop with a roving focus, as Base UI's ToggleGroup
+// is: Left and Right (Up and Down when Vertical) move the keyboard from
+// one option to the next and wrap around, Home and End go to the ends, and
+// none of them changes the choice. Space or Enter presses the option the
+// keyboard is on. Pressing the chosen option leaves it chosen unless the
+// group is Optional.
 type ToggleGroupWidget[T comparable] struct {
 	optionProp     property.Value[[]T]
 	label          func(T) string
@@ -312,7 +315,8 @@ type ToggleGroupWidget[T comparable] struct {
 	value            ggui.Binding[T]
 	multiple         ggui.Binding[[]T]
 	onMultipleChange func([]T)
-	active           int
+	active           int  // the option the keyboard is on, -1 before it has been on any
+	optional         bool // a press on the chosen option clears the choice
 	focusPending     bool
 	options          []T
 	labels           []*ggui.TextWidget
@@ -355,7 +359,7 @@ type ToggleGroupWidget[T comparable] struct {
 //	align := ggui.State("left")
 //	ui.ToggleGroup(align).Options([]string{"left", "center", "right"})
 func ToggleGroup[T comparable](value ggui.Binding[T]) *ToggleGroupWidget[T] {
-	g := &ToggleGroupWidget[T]{value: value, label: sprint[T], hover: -1, variant: ToggleDefault, size: ButtonDefault, spacing: 2}
+	g := &ToggleGroupWidget[T]{value: value, label: sprint[T], hover: -1, active: -1, variant: ToggleDefault, size: ButtonDefault, spacing: 2}
 	g.Role = ggui.RoleGroup
 	g.AutoKey()
 	if g.HitID() == nil {
@@ -385,8 +389,16 @@ func (g *ToggleGroupWidget[T]) chosen(i int) bool {
 	if g.multiple != nil {
 		return slices.Contains(ggui.Untrack(g.multiple.Get), g.options[i])
 	}
-	return i == g.index()
+	return i == g.chosenIndex()
 }
+
+// Optional lets a press on the chosen option clear the choice, as a press
+// on the pressed item of Base UI's ToggleGroup does: the binding is set to
+// T's zero value, which stands for no choice and should not be one of the
+// options. Without it the group is a segmented control that always keeps
+// one option chosen. It has no effect on ToggleGroupMultiple, whose
+// options are each cleared by a second press already.
+func (g *ToggleGroupWidget[T]) Optional() *ToggleGroupWidget[T] { g.optional = true; return g }
 
 // Options replaces the option snapshot without changing the selected value.
 func (g *ToggleGroupWidget[T]) Options(options []T) *ToggleGroupWidget[T] {
@@ -528,13 +540,23 @@ func (g *ToggleGroupWidget[T]) BindDisabled(r ggui.Readable[bool]) *ToggleGroupW
 // OnChange fires with the value after the user picked another segment.
 func (g *ToggleGroupWidget[T]) OnChange(fn func(T)) *ToggleGroupWidget[T] { g.onChange = fn; return g }
 
-// index returns the segment the binding currently names, or -1.
+// index returns the segment the keyboard is on, the group's stop in the
+// Tab order, or -1 with no options: the one it last went to, and until
+// then the chosen one, or the first.
 func (g *ToggleGroupWidget[T]) index() int {
+	if len(g.options) == 0 {
+		return -1
+	}
+	if g.active < 0 && g.multiple == nil {
+		return max(g.chosenIndex(), 0)
+	}
+	return min(max(g.active, 0), len(g.options)-1)
+}
+
+// chosenIndex returns the segment a single choice's binding names, or -1.
+func (g *ToggleGroupWidget[T]) chosenIndex() int {
 	if g.multiple != nil {
-		if len(g.options) == 0 {
-			return -1
-		}
-		return min(max(g.active, 0), len(g.options)-1)
+		return -1
 	}
 	cur := ggui.Untrack(g.value.Get)
 	for i, o := range g.options {
@@ -547,14 +569,17 @@ func (g *ToggleGroupWidget[T]) index() int {
 
 func (g *ToggleGroupWidget[T]) pick(i int) {
 	if i >= 0 && i < len(g.options) && !g.IsInert() {
+		g.active = i
 		if g.multiple != nil {
-			g.active = i
 			current := ggui.Untrack(g.multiple.Get)
 			next := withValue(current, g.options[i], !slices.Contains(current, g.options[i]))
 			g.multiple.Set(next)
 			if g.onMultipleChange != nil {
 				g.onMultipleChange(slices.Clone(next))
 			}
+		} else if g.optional && i == g.chosenIndex() {
+			var none T
+			setChanged(g.value, none, g.onChange)
 		} else {
 			setChanged(g.value, g.options[i], g.onChange)
 		}
@@ -659,11 +684,8 @@ var toggleSegmentSlot = ggui.NewSlot[*ggui.Motion]("toggle group segment")
 func (g *ToggleGroupWidget[T]) paint(dst *ggui.Canvas, r ggui.Rect) {
 	t, st := g.theme, g.style
 	inert := g.IsInert()
-	if g.multiple == nil && !inert && len(g.options) > 0 {
-		dst.HitKey(r, g)
-	}
-	// Layout is skipped on a still frame, so the chosen segment is found
-	// here, where the segments' own nodes read it back.
+	// Layout is skipped on a still frame, so the segment the keyboard is
+	// on is found here, where the segments' own nodes read it back.
 	g.cur = g.index()
 	cur, hover := g.cur, pick(inert, -1, g.hover)
 	g.rects = g.rects[:0]
@@ -683,9 +705,7 @@ func (g *ToggleGroupWidget[T]) paint(dst *ggui.Canvas, r ggui.Rect) {
 		dst.Describe(seg, h)
 		if !inert {
 			dst.HitPointer(seg, h)
-			if g.multiple != nil {
-				dst.HitKey(seg, h)
-			}
+			dst.HitKey(seg, h)
 			dst.HitCursor(seg, ggui.CursorShapeDefault)
 		}
 		// A segment is a Toggle: nothing under it until it is chosen or the
@@ -714,7 +734,7 @@ func (g *ToggleGroupWidget[T]) paint(dst *ggui.Canvas, r ggui.Rect) {
 		}
 		at = at.Add(pick(g.vertical, ggui.Pt(0, main+g.gap), ggui.Pt(main+g.gap, 0)))
 	}
-	if g.multiple != nil && g.focusPending && cur >= 0 {
+	if g.focusPending && cur >= 0 {
 		dst.RequestFocus(g.segment(cur))
 		g.focusPending = false
 	}
@@ -735,25 +755,27 @@ func (g *ToggleGroupWidget[T]) middle(seg ggui.Rect, x float64, size ggui.Size) 
 	return mirrorHorizontal(ggui.Rct(ggui.Pt(x, seg.Origin.Y+(seg.Size.H-size.H)/2), size), seg, g.rtl)
 }
 
-// HandleKey implements ggui.KeyHandler: the arrows move the choice.
+// HandleKey implements ggui.KeyHandler: the arrows along the group, Home
+// and End move the keyboard from option to option without pressing any,
+// and Space or Enter presses the one it is on.
 func (g *ToggleGroupWidget[T]) HandleKey(ev ggui.KeyEvent) {
 	g.Keyboard(ev, func() { g.pick(g.index()) })
 	if g.IsInert() || ev.Kind != ggui.KeyPress || len(g.options) == 0 {
 		return
 	}
-	if i, ok := navIndex(directionalKey(ev, g.rtl && !g.vertical), navBoth, g.index(), len(g.options), nil); ok {
-		if g.multiple != nil {
-			g.active = i
-			g.focusPending = true
-		} else {
-			g.pick(i)
-		}
+	if i, ok := navIndex(directionalKey(ev, g.rtl && !g.vertical), g.axis(), g.index(), len(g.options), nil); ok {
+		g.active = i
+		g.focusPending = true
 	}
 }
 
+// axis is the arrows that move along the group: Base UI's ToggleGroup
+// gives its CompositeRoot the group's orientation.
+func (g *ToggleGroupWidget[T]) axis() navAxis { return pick(g.vertical, navVertical, navHorizontal) }
+
 // ConsumesKey implements ggui.KeyConsumer: the arrows, Home and End move.
 func (g *ToggleGroupWidget[T]) ConsumesKey(ev ggui.KeyEvent) bool {
-	if navMoveOf(ev.Key, navBoth) != navNone {
+	if navMoveOf(ev.Key, g.axis()) != navNone {
 		return ev.Kind == ggui.KeyPress
 	}
 	return g.Interactive.ConsumesKey(ev)
@@ -861,7 +883,7 @@ func (g *ButtonGroupWidget) BindName(r ggui.Readable[string]) *ButtonGroupWidget
 }
 
 func (s *toggleSegment[T]) TabStop() bool {
-	return s.valid() && s.g.multiple != nil && s.i == s.g.index()
+	return s.valid() && s.i == s.g.index()
 }
 func (s *toggleSegment[T]) HitID() any {
 	if owner := s.g.HitID(); owner != nil {
@@ -880,10 +902,9 @@ func (s *toggleSegment[T]) HandleKey(ev ggui.KeyEvent) {
 	s.g.HandleKey(ev)
 }
 
-// Act forwards multiple-group focus to its roving option. Single selection
-// retains its existing group keyboard region and the runtime focuses that.
+// Act forwards the group's focus to its roving option.
 func (g *ToggleGroupWidget[T]) Act(a ggui.Action) bool {
-	if g.multiple == nil || a.Kind != ggui.ActionFocus || g.IsInert() || g.index() < 0 {
+	if a.Kind != ggui.ActionFocus || g.IsInert() || g.index() < 0 {
 		return false
 	}
 	g.focusPending = true
