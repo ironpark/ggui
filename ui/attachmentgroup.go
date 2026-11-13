@@ -20,12 +20,16 @@ type AttachmentGroupWidget struct {
 	rect                      ggui.Rect
 	settle                    time.Time
 	theme                     *uitheme.Theme
+	gap, padY, fadeLen        float64 // between cards, above and below them, and a faded end's length
+	paintCardsFn              func(*ggui.Canvas)
 }
 
-// AttachmentGroup lays cards out with a 12px gap and 4px vertical breathing room.
+// AttachmentGroup lays cards out a space and a half apart with half a space of
+// vertical breathing room, and fades them out toward an end there is more beyond.
 // Left/Right, Home/End and PageUp/PageDown scroll while the group is focused.
 func AttachmentGroup(cards ...*AttachmentWidget) *AttachmentGroupWidget {
 	g := &AttachmentGroupWidget{children: cards}
+	g.paintCardsFn = g.paintCards
 	g.Role = ggui.RoleGroup
 	g.SetName("Attachments")
 	g.AutoKey()
@@ -36,26 +40,29 @@ func AttachmentGroup(cards ...*AttachmentWidget) *AttachmentGroupWidget {
 func (g *AttachmentGroupWidget) Name(s string) *AttachmentGroupWidget { g.SetName(s); return g }
 
 // Position returns the current scroll offset in logical pixels.
-func (g *AttachmentGroupWidget) Position() float64  { return g.offset }
+func (g *AttachmentGroupWidget) Position() float64 { return g.offset }
+
 func (g *AttachmentGroupWidget) limit() float64     { return max(0, g.content-g.viewport) }
 func (g *AttachmentGroupWidget) scrollTo(v float64) { g.offset = max(0, min(v, g.limit())) }
 
+// Layout implements Widget.
 func (g *AttachmentGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	g.theme = uitheme.Of(env)
+	g.gap, g.padY, g.fadeLen = g.theme.Space*1.5, g.theme.Space/2, g.theme.Space*2
 	g.sizes, g.starts = g.sizes[:0], g.starts[:0]
 	width, height := 0.0, 0.0
 	for i, card := range g.children {
 		if i > 0 {
-			width += 12
+			width += g.gap
 		}
 		g.starts = append(g.starts, width)
 		// A card cannot exceed the viewport; its title truncates before its actions.
-		s := card.Layout(ggui.Loose(ggui.Sz(c.MaxW, max(0, c.MaxH-8))), env)
+		s := card.Layout(ggui.Loose(ggui.Sz(c.MaxW, max(0, c.MaxH-2*g.padY))), env)
 		g.sizes = append(g.sizes, s)
 		width += s.W
 		height = max(height, s.H)
 	}
-	size := c.Constrain(ggui.Sz(width, height+8))
+	size := c.Constrain(ggui.Sz(width, height+2*g.padY))
 	g.content, g.viewport = width, size.W
 	g.scrollTo(g.offset)
 	return size
@@ -70,6 +77,8 @@ func (g *AttachmentGroupWidget) nearest(v float64) float64 {
 	}
 	return best
 }
+
+// Paint implements Widget.
 func (g *AttachmentGroupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	g.rect = r
 	// Hit registration adopts offset before using it, so keyed rebuilds do not
@@ -88,20 +97,22 @@ func (g *AttachmentGroupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		}
 	}
 	dst.DescribeNode(r, g, func(dst *ggui.Canvas) {
-		clipped := dst.Clip(r)
-		for i, card := range g.children {
-			clipped.Paint(card, ggui.Rct(r.Origin.Add(ggui.Pt(g.starts[i]-g.offset, 4.0)), g.sizes[i]))
-		}
-		// Scroll-aware edge fades stay visual: they register no hit regions.
-		if g.offset > 0 {
-			edgeFade(clipped, r, 1, 0, g.theme.Card, .85)
-		}
-		if g.offset < g.limit() {
-			edgeFade(clipped, r, -1, 0, g.theme.Card, .85)
-		}
+		// The cards fade out toward an end there is more beyond, by as much
+		// as there is, up to fadeLen: a mask, so the surface behind the
+		// strip shows through whatever it is.
+		dst.Clip(r).FadeEdges(r, true, min(g.offset, g.fadeLen), min(g.limit()-g.offset, g.fadeLen), g.paintCardsFn)
 	})
 	g.FocusRing(dst, r, g.theme.Radius, g.theme.Ring)
 }
+
+// paintCards paints the strip's cards where the scroll offset puts them.
+func (g *AttachmentGroupWidget) paintCards(dst *ggui.Canvas) {
+	for i, card := range g.children {
+		dst.Paint(card, ggui.Rct(g.rect.Origin.Add(ggui.Pt(g.starts[i]-g.offset, g.padY)), g.sizes[i]))
+	}
+}
+
+// Describe implements ggui.Describer.
 func (g *AttachmentGroupWidget) Describe() ggui.Node {
 	return ggui.Node{Role: ggui.RoleGroup, Name: g.SemanticName(), Actions: ggui.ActionFocus | ggui.ActionScrollIntoView}
 }
