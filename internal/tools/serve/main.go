@@ -196,6 +196,7 @@ var wasmFeatures = []string{
 	"--enable-nontrapping-float-to-int",
 	"--enable-sign-ext",
 	"--enable-mutable-globals",
+	"--enable-simd", // the runtime's memory routines, from Go 1.27
 }
 
 // errNoWasmOpt reports that binaryen is not installed, which is a reason to
