@@ -41,3 +41,38 @@ func TestCodeBlockKeepsScrollingDownInAWindow(t *testing.T) {
 		t.Fatalf("six swipes of (-6, -10) scrolled to x %v, y %v, want 36 and 60", x, y)
 	}
 }
+
+// Code fades out toward an end there is more of: none at the start it rests
+// at, a full fade at the other, and as much as was scrolled once it moves.
+// Wrapped code has nothing beyond its sides and fades along its height.
+func TestCodeBlockFadesTowardWhatIsBeyondItsEnds(t *testing.T) {
+	code := strings.Repeat("recipe := theme.Config{Preset: theme.Preset{Base: theme.BaseNeutral, Accent: theme.AccentViolet}, Chart: theme.AccentBlue}\n", 60)
+	c := CodeBlock(code).Height(200)
+	p := ggui.NewProbe(ggui.Box(c).Width(400), ggui.Sz(400, 300))
+	defer p.Close()
+	p.Frame()
+	if lead, trail := codeFade(&c.xController, 16); lead != 0 || trail != 16 {
+		t.Fatalf("at rest the sides fade %v and %v, want 0 and 16", lead, trail)
+	}
+	c.xController.JumpTo(6)
+	p.Frame()
+	p.Frame()
+	if lead, trail := codeFade(&c.xController, 16); lead != 6 || trail != 16 {
+		t.Fatalf("six pixels along the sides fade %v and %v, want 6 and 16", lead, trail)
+	}
+	c.xController.JumpTo(c.xController.MaxOffset())
+	p.Frame()
+	p.Frame()
+	if lead, trail := codeFade(&c.xController, 16); lead != 16 || trail != 0 {
+		t.Fatalf("at the end the sides fade %v and %v, want 16 and 0", lead, trail)
+	}
+	c.Wrap(true)
+	p.Frame()
+	p.Frame()
+	if lead, trail := codeFade(&c.xController, 16); lead != 0 || trail != 0 {
+		t.Fatalf("wrapped code fades its sides %v and %v", lead, trail)
+	}
+	if lead, trail := codeFade(&c.yController, 24); lead != 0 || trail != 24 {
+		t.Fatalf("wrapped code fades its top and bottom %v and %v, want 0 and 24", lead, trail)
+	}
+}
