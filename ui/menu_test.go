@@ -17,26 +17,27 @@ func openMenu(p *ggui.Probe, label string) {
 
 func TestMenuItemCheckMarksFollowTheirBinding(t *testing.T) {
 	t.Parallel()
-	// The mark is drawn before the label, so a checked item asks for more room.
-	env := uitheme.Default().Apply(ggui.Env{})
+	// A checkable item keeps room for the mark at its right edge whether or
+	// not it is checked, so its label never moves.
+	th := uitheme.Default()
+	env := th.Apply(ggui.Env{})
 	width := func(it *ui.MenuItemWidget) float64 {
 		return it.Layout(ggui.Loose(ggui.Sz(ggui.Unbounded, 100)), env).W
 	}
 	plain := width(ui.MenuItem("Grid", nil))
-	if checked := width(ui.MenuItem("Grid", nil).Checked(true)); checked <= plain {
-		t.Fatalf("a checked item is %v wide, not wider than the plain %v", checked, plain)
+	room := th.IconSize + 2*th.Space - th.ItemPad.Right
+	if checked := width(ui.MenuItem("Grid", nil).Checked(true)); checked != plain+room {
+		t.Fatalf("a checked item is %v wide, want the plain %v and %v for the mark", checked, plain, room)
 	}
-	if cleared := width(ui.MenuItem("Grid", nil).Checked(true).Checked(false)); cleared != plain {
-		t.Fatalf("an unchecked item is %v wide, want the plain %v", cleared, plain)
+	if cleared := width(ui.MenuItem("Grid", nil).Checked(true).Checked(false)); cleared != plain+room {
+		t.Fatalf("an unchecked item is %v wide, want the same %v as a checked one", cleared, plain+room)
 	}
 	grid := ggui.State(false)
 	bound := ui.MenuItem("Grid", nil).BindChecked(grid)
-	if got := width(bound); got != plain {
-		t.Fatalf("a bound item reading false is %v wide, want %v", got, plain)
-	}
+	off := width(bound)
 	grid.Set(true)
-	if got := width(bound); got <= plain {
-		t.Fatalf("a bound item reading true is %v wide, want the check mark", got)
+	if on := width(bound); on != off || on != plain+room {
+		t.Fatalf("a bound item is %v wide unchecked and %v checked, want %v both ways", off, on, plain+room)
 	}
 	menu := ui.Menu("View", ui.MenuItem("Grid", nil).Checked(true))
 	p := ggui.NewProbe(menu, ggui.Sz(300, 300))

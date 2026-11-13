@@ -1,13 +1,19 @@
 package ui
 
 import (
+	"image/color"
 	"slices"
 	"strings"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
+
+// comboboxListHeight is the most a combobox's rows take before its list
+// scrolls: 288, less the search above them and the padding around them.
+const comboboxListHeight = 244
 
 // ComboboxWidget is a searchable selection popup. Keep it mounted to retain its query.
 type ComboboxWidget[T comparable] struct {
@@ -18,6 +24,8 @@ type ComboboxWidget[T comparable] struct {
 	label       func(T) string
 	placeholder string
 	button      *ButtonWidget
+	face        *comboboxFace
+	content     *ggui.BoxWidget // the list, as wide as the trigger
 	popup       *ggui.PopupWidget
 	search      *CommandWidget
 	query       *ggui.StateValue[string]
@@ -25,12 +33,15 @@ type ComboboxWidget[T comparable] struct {
 	env         ggui.Env
 }
 
-// Combobox creates a closed dropdown; its popup focuses a search field and
-// supports typing, Up/Down, Enter, pointer selection and Escape cancellation.
-// The options slice is shallow-copied.
+// Combobox creates a closed dropdown: an outline trigger showing the value
+// and a muted chevron, opening a list as wide as itself with a search field
+// at its top and a check on the chosen option. The popup supports typing,
+// Up/Down, Enter, pointer selection and Escape cancellation. The options
+// slice is shallow-copied.
 func Combobox[T comparable](value ggui.Binding[T]) *ComboboxWidget[T] {
 	c := &ComboboxWidget[T]{value: value, label: sprint[T], placeholder: "Select…", query: ggui.State("")}
-	c.button = Button("", func() {
+	c.face = &comboboxFace{text: ggui.Text("").NoWrap().Weight(ggui.WeightRegular)}
+	c.button = ButtonOf(c.face, func() {
 		if c.popup.IsOpen() {
 			c.popup.Hide()
 		} else {
@@ -48,11 +59,14 @@ func Combobox[T comparable](value ggui.Binding[T]) *ComboboxWidget[T] {
 	}).Outline()
 	c.button.Role = ggui.RoleCombobox
 	c.button.defaultName = "Choose option"
+	c.button.value = func() string { return c.face.value }
 	if c.button.HitID() == nil {
 		c.button.Key(c)
 	}
-	c.search = Command(c.query).Name("Search options").Placeholder("Search options…")
-	c.popup = ggui.Popup(c.button, ggui.Box(c.search).Width(280)).Owner(c.button)
+	c.search = Command(c.query).Name("Search options").Placeholder("Search options…").Height(comboboxListHeight)
+	c.search.menuRows = true
+	c.content = ggui.Box(c.search)
+	c.popup = ggui.Popup(c.button, c.content).Owner(c.button)
 	c.button.Expands(c.popup.IsOpen)
 	return c
 }
@@ -106,6 +120,9 @@ func (c *ComboboxWidget[T]) setOptions(options []T) bool {
 		entries[i] = CommandItem(c.label(v), func() { setChanged(c.value, v, c.onChange); c.popup.Hide() })
 	}
 	c.search.setEntries(entries)
+	for i, v := range c.options {
+		c.search.items[i].BindChecked(ggui.Map(c.value, func(x T) bool { return x == v }))
+	}
 	return true
 }
 
@@ -156,15 +173,63 @@ func (c *ComboboxWidget[T]) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 	if c.button.IsInert() {
 		c.popup.Hide()
 	}
-	label := c.placeholder
+	label, chosen := c.placeholder, false
 	for _, v := range c.options {
 		if v == ggui.Untrack(c.value.Get) {
-			label = c.label(v)
+			label, chosen = c.label(v), true
 			break
 		}
 	}
-	c.button.label.Content(label + "  ▾")
-	return c.popup.Layout(cs, env)
+	t := uitheme.Of(env)
+	c.face.text.Content(label)
+	c.face.placeholder, c.face.value = !chosen, pick(chosen, label, "")
+	c.face.inert = c.button.IsInert()
+	// A trigger stretched wider than its label keeps the label at the
+	// start and the chevron at the end.
+	c.face.least = max(0, cs.MinW-ButtonDefault.Style(*t).Pad.Horizontal()-2*t.BorderWidth)
+	c.popup.Gap(t.Space * .75)
+	size := c.popup.Layout(cs, env)
+	// As wide as the trigger, and never narrower than 200, room for the
+	// search and a few words.
+	c.content.Width(max(size.W, t.Space*25))
+	return size
+}
+
+// comboboxFace is a combobox trigger's content: the value, or a muted
+// placeholder, at the start, and a muted chevron at the end.
+type comboboxFace struct {
+	text               *ggui.TextWidget
+	value              string // the chosen option's label, the trigger's accessible value
+	placeholder, inert bool
+	least              float64 // the width it takes at least, when its trigger is stretched
+	textSize           ggui.Size
+	theme              *uitheme.Theme
+	env                ggui.Env
+}
+
+func (f *comboboxFace) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	t := uitheme.Of(env)
+	f.theme, f.env = t, env
+	var ink color.Color = t.Fg
+	if f.placeholder {
+		ink = t.MutedFg
+	}
+	if f.inert {
+		ink = t.Disabled(ink)
+	}
+	trail := t.Space + t.IconSize
+	f.textSize = f.text.Color(ink).Layout(ggui.Loose(ggui.Sz(max(0, c.MaxW-trail), c.MaxH)), env)
+	return c.Constrain(ggui.Sz(max(f.textSize.W+trail, f.least), max(f.textSize.H, t.IconSize)))
+}
+
+func (f *comboboxFace) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	t := f.theme
+	dst.Paint(f.text, ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+(r.Size.H-f.textSize.H)/2), f.textSize))
+	ink := t.MutedFg
+	if f.inert {
+		ink = t.Disabled(ink)
+	}
+	paintIconAt(dst, f.env, icons.ChevronDown, ggui.Pt(r.Origin.X+r.Size.W-t.IconSize/2, r.Origin.Y+r.Size.H/2), t.IconSize, ink, 0)
 }
 
 // Paint implements ggui.Widget.
@@ -191,9 +256,11 @@ func (c *ComboboxWidget[T]) BindName(r ggui.Readable[string]) *ComboboxWidget[T]
 	return c
 }
 
-// ComboboxMultipleWidget combines a searchable checkbox popup with removable
-// selected-value chips. Selection writes fresh slices and never mutates the
-// caller's slice. Values absent from Options remain visible as removable chips.
+// ComboboxMultipleWidget is a field of removable chips, one per selected
+// value, that opens a searchable list of options with a check on each
+// selected one. Selection writes fresh slices and never mutates the
+// caller's slice. Values absent from Options remain visible as removable
+// chips.
 type ComboboxMultipleWidget[T comparable] struct {
 	props       property.Owner
 	values      ggui.Binding[[]T]
@@ -201,16 +268,15 @@ type ComboboxMultipleWidget[T comparable] struct {
 	optionProp  property.Value[[]T]
 	label       func(T) string
 	placeholder string
-	button      *ButtonWidget
+	button      *ButtonWidget // the field's opening part, after the chips
 	popup       *ggui.PopupWidget
+	content     *ggui.BoxWidget // the list, as wide as the field
 	query       *ggui.StateValue[string]
-	field       *TextFieldWidget
-	rows        *comboboxMultipleRows[T]
-	scroll      *ggui.ScrollWidget
-	panel       *ggui.BoxWidget
-	root        *ggui.WrapWidget
-	chips       []*ButtonWidget
+	search      *CommandWidget
+	field       *comboboxChips[T]
+	chips       []*comboboxChip
 	shown       []T
+	built       bool // the chips and entries follow label
 	onChange    func([]T)
 	key         any
 }
@@ -221,15 +287,7 @@ type ComboboxMultipleWidget[T comparable] struct {
 func ComboboxMultiple[T comparable](values ggui.Binding[[]T]) *ComboboxMultipleWidget[T] {
 	property.Require(values, "ComboboxMultiple")
 	c := &ComboboxMultipleWidget[T]{values: values, label: sprint[T], placeholder: "Select…", query: ggui.State("")}
-	c.button = Button("", func() {
-		if c.popup.IsOpen() {
-			c.popup.Hide()
-			return
-		}
-		c.query.Set("")
-		c.rows.highlight = 0
-		c.popup.Show()
-	}).Outline()
+	c.button = ButtonOf(ggui.Box(), c.toggle)
 	c.button.Role = ggui.RoleCombobox
 	c.button.defaultName = "Choose options"
 	c.button.value = func() string {
@@ -239,13 +297,25 @@ func ComboboxMultiple[T comparable](values ggui.Binding[[]T]) *ComboboxMultipleW
 		}
 		return strings.Join(labels, ", ")
 	}
-	c.field = TextField(c.query).Name("Search options").Placeholder("Search options…").OnKey(c.handleKey)
-	c.rows = &comboboxMultipleRows[T]{owner: c}
-	c.scroll = ggui.Scroll(c.rows).Shrink()
-	c.panel = ggui.Box(ggui.Column(c.field, ggui.Box(c.scroll).MaxHeight(200)).Gap(4).Align(ggui.AlignStretch)).Width(280)
-	c.popup = ggui.Popup(c.button, c.panel).Owner(c.button).Modal(false)
+	c.search = Command(c.query).Name("Search options").Placeholder("Search options…").Height(comboboxListHeight)
+	c.search.menuRows, c.search.keepOpen = true, true
+	c.search.onKey = c.handleKey
+	c.field = &comboboxChips[T]{c: c, hint: ggui.Text("").NoWrap()}
+	c.content = ggui.Box(c.search)
+	c.popup = ggui.Popup(c.field, c.content).Owner(c.button).Modal(false)
 	c.button.Expands(c.popup.IsOpen).Opens(c)
 	return c
+}
+
+// toggle opens the list with an empty search, or closes it.
+func (c *ComboboxMultipleWidget[T]) toggle() {
+	if c.popup.IsOpen() {
+		c.popup.Hide()
+		return
+	}
+	c.query.Set("")
+	c.search.initialized = false
+	c.popup.Show()
 }
 
 // Options snapshots the available choices without changing selected values.
@@ -265,8 +335,7 @@ func (c *ComboboxMultipleWidget[T]) BindOptions(v ggui.Readable[[]T]) *ComboboxM
 // Format formats options and selected chips.
 func (c *ComboboxMultipleWidget[T]) Format(fn func(T) string) *ComboboxMultipleWidget[T] {
 	c.label = fn
-	c.root = nil
-	c.rows.checks = nil
+	c.built = false
 	c.props.Changed()
 	return c
 }
@@ -289,7 +358,7 @@ func (c *ComboboxMultipleWidget[T]) SetName(v string) { c.button.SetName(v) }
 // HasName reports whether the trigger has an accessible name.
 func (c *ComboboxMultipleWidget[T]) HasName() bool { return c.button.HasName() }
 
-// Placeholder labels the add-selection trigger.
+// Placeholder is the muted text after the chips that opens the list.
 func (c *ComboboxMultipleWidget[T]) Placeholder(v string) *ComboboxMultipleWidget[T] {
 	defer property.Watch(&c.props, &c.placeholder)()
 	c.placeholder = v
@@ -301,7 +370,8 @@ func (c *ComboboxMultipleWidget[T]) Key(k any) *ComboboxMultipleWidget[T] {
 	c.key = k
 	c.button.Key(comboboxKey{"trigger", k})
 	c.popup.Key(comboboxKey{"popup", k})
-	c.field.Key(comboboxKey{"search", k})
+	c.search.field.Key(comboboxKey{"search", k})
+	c.built = false
 	return c
 }
 
@@ -364,29 +434,16 @@ func (c *ComboboxMultipleWidget[T]) selectValue(v T, on bool) {
 		c.onChange(slices.Clone(next))
 	}
 }
+
+// handleKey takes Backspace in an empty search, which removes the last
+// chip; the list handles the rest.
 func (c *ComboboxMultipleWidget[T]) handleKey(e ggui.KeyEvent) bool {
-	if c.button.IsInert() || e.Kind != ggui.KeyPress || e.Mods != (ggui.Mods{}) {
+	if c.button.IsInert() || e.Kind != ggui.KeyPress || e.Key != ggui.KeyBackspace {
 		return false
 	}
-	switch e.Key {
-	case ggui.KeyBackspace:
-		values := ggui.Untrack(c.values.Get)
-		if ggui.Untrack(c.query.Get) == "" && len(values) > 0 {
-			c.selectValue(values[len(values)-1], false)
-			return true
-		}
-	case ggui.KeyArrowDown, ggui.KeyArrowUp:
-		if len(c.rows.matches) > 0 {
-			dir := pick(e.Key == ggui.KeyArrowDown, 1, -1)
-			c.rows.highlight = max(0, min(c.rows.highlight+dir, len(c.rows.matches)-1))
-			c.rows.reveal = true
-		}
-		return true
-	case ggui.KeyEnter, ggui.KeyNumpadEnter:
-		if at := c.rows.highlight; at >= 0 && at < len(c.rows.matches) {
-			v := c.options[c.rows.matches[at]]
-			c.selectValue(v, !slices.Contains(ggui.Untrack(c.values.Get), v))
-		}
+	values := ggui.Untrack(c.values.Get)
+	if ggui.Untrack(c.query.Get) == "" && len(values) > 0 {
+		c.selectValue(values[len(values)-1], false)
 		return true
 	}
 	return false
@@ -396,110 +453,172 @@ func (c *ComboboxMultipleWidget[T]) handleKey(e ggui.KeyEvent) bool {
 func (c *ComboboxMultipleWidget[T]) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	defer c.props.Layout().EndLayout()
 	c.button.Sync()
+	inert := c.button.IsInert()
 	options := c.optionProp.Get()
-	if !slices.Equal(c.options, options) || c.rows.checks == nil {
+	if !slices.Equal(c.options, options) || !c.built {
 		c.options = slices.Clone(options)
-		c.rows.checks = make([]*CheckboxWidget, len(options))
-		c.rows.labels = make([]string, len(options))
-		for j, v := range options {
-			c.rows.labels[j] = strings.ToLower(c.label(v))
-			binding := ggui.Bind(func() bool { return slices.Contains(c.values.Get(), v) }, func(on bool) { c.selectValue(v, on) })
-			c.rows.checks[j] = Checkbox(binding, c.label(v))
+		entries := make([]CommandEntry, len(options))
+		for j, v := range c.options {
+			entries[j] = CommandItem(c.label(v), func() {
+				c.selectValue(v, !slices.Contains(ggui.Untrack(c.values.Get), v))
+			})
+		}
+		c.search.Entries(entries...)
+		for j, v := range c.options {
+			c.search.items[j].BindChecked(ggui.Map(c.values, func(vs []T) bool { return slices.Contains(vs, v) }))
 		}
 	}
 	values := c.values.Get()
-	if c.root == nil || !slices.Equal(values, c.shown) {
+	if !c.built || !slices.Equal(values, c.shown) {
 		c.shown = slices.Clone(values)
-		c.chips = nil
-		children := make([]ggui.Widget, 0, len(values)+1)
+		c.chips = c.chips[:0]
 		for j, v := range values {
-			chip := Button(c.label(v)+" ×", func() { c.selectValue(v, false) }).Secondary().Size(ButtonExtraSmall).Name("Remove " + c.label(v))
+			label := c.label(v)
+			remove := ButtonOf(ggui.Box(), func() { c.selectValue(v, false) }).Ghost().Size(ButtonIconExtraSmall).Name("Remove " + label)
 			if c.key != nil {
-				chip.Key(childKey{owner: c.key, part: j})
+				remove.Key(childKey{owner: c.key, part: j})
 			}
-			c.chips = append(c.chips, chip)
-			children = append(children, chip)
+			c.chips = append(c.chips, &comboboxChip{text: caption(ggui.Text(label)).NoWrap().Weight(ggui.WeightMedium), remove: remove})
 		}
-		children = append(children, c.popup)
-		c.root = ggui.Wrap(children...).Gap(4).RunGap(4)
 	}
+	c.built = true
 	for _, chip := range c.chips {
-		chip.Disabled(c.button.IsInert())
+		chip.remove.Disabled(inert)
 	}
-	for _, check := range c.rows.checks {
-		check.Disabled(c.button.IsInert())
-	}
-	if c.button.IsInert() {
+	if inert {
 		c.popup.Hide()
 	}
-	c.button.label.Content(c.placeholder + "  ▾")
-	panelBox(c.panel, uitheme.Of(env))
-	return c.root.Layout(cs, env)
+	c.field.hint.Content(c.placeholder)
+	c.popup.Gap(uitheme.Of(env).Space * .75)
+	size := c.popup.Layout(cs, env)
+	c.content.Width(size.W)
+	return size
 }
 
 // Paint implements ggui.Widget.
-func (c *ComboboxMultipleWidget[T]) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(c.root, r) }
+func (c *ComboboxMultipleWidget[T]) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(c.popup, r) }
 
-type comboboxMultipleRows[T comparable] struct {
-	owner     *ComboboxMultipleWidget[T]
-	checks    []*CheckboxWidget
-	labels    []string // each option's label, lower-cased for the search
-	matches   []int
-	sizes     []ggui.Size
-	highlight int
-	query     string
-	reveal    bool
-	theme     *uitheme.Theme
-	empty     *ggui.TextWidget
+// comboboxChips is a multiple combobox's field: its chips wrapped across
+// lines, then the part that opens the list, taking the rest of the last
+// line or a line of its own.
+type comboboxChips[T comparable] struct {
+	c        *ComboboxMultipleWidget[T]
+	hint     *ggui.TextWidget // the placeholder in the opening part
+	hintSize ggui.Size
+	rects    []ggui.Rect // each chip's, from the field's origin
+	open     ggui.Rect   // the opening part's
+	theme    *uitheme.Theme
 }
 
-func (r *comboboxMultipleRows[T]) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
-	r.theme = uitheme.Of(env)
-	query := strings.ToLower(strings.TrimSpace(r.owner.query.Get()))
-	if query != r.query {
-		r.highlight = 0
-		r.query = query
+// comboboxChipHeight is a chip's height: 21, as shadcn's.
+const comboboxChipHeight = 21
+
+func (f *comboboxChips[T]) pad(t *uitheme.Theme) ggui.EdgeInsets {
+	// The field is narrower at the sides once a chip is in it.
+	side := pick(len(f.c.chips) > 0, t.Space/2, t.FieldPad.Left)
+	return ggui.Insets(t.Space/2, side)
+}
+
+func (f *comboboxChips[T]) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
+	t := uitheme.Of(env)
+	f.theme = t
+	c := f.c
+	pad, gap := f.pad(t), t.Space/2
+	ink := pick(c.button.IsInert(), t.Disabled(t.MutedFg), t.MutedFg)
+	f.hintSize = f.hint.Color(ink).Layout(ggui.Constraints{MaxW: ggui.Unbounded, MaxH: ggui.Unbounded}, env)
+	least := t.Space * 8 // the opening part's narrowest
+	natural := pad.Horizontal() + max(least, f.hintSize.W)
+	sizes := make([]ggui.Size, len(c.chips))
+	for i, chip := range c.chips {
+		sizes[i] = chip.Layout(ggui.Loose(ggui.Sz(max(0, cs.MaxW-pad.Horizontal()), comboboxChipHeight)), env)
+		natural += sizes[i].W + gap
 	}
-	r.matches, r.sizes = r.matches[:0], r.sizes[:0]
-	w, h := 0.0, 0.0
-	for j := range r.owner.options {
-		if !strings.Contains(r.labels[j], query) {
-			continue
+	w := clamp(max(natural, t.Space*30), cs.MinW, cs.MaxW)
+	inner := max(0, w-pad.Horizontal())
+	line := max(comboboxChipHeight, f.hintSize.H)
+	f.rects = f.rects[:0]
+	x, y := 0.0, 0.0
+	for _, s := range sizes {
+		if x > 0 && x+s.W > inner {
+			x, y = 0, y+line+gap
 		}
-		size := r.checks[j].Layout(ggui.Loose(ggui.Sz(max(0, cs.MaxW-12), ggui.Unbounded)), env)
-		size.W += 12
-		size.H += 8
-		r.matches = append(r.matches, j)
-		r.sizes = append(r.sizes, size)
-		w, h = max(w, size.W), h+size.H
+		f.rects = append(f.rects, ggui.Rct(ggui.Pt(pad.Left+x, pad.Top+y+(line-s.H)/2), s))
+		x += s.W + gap
 	}
-	r.highlight = max(0, min(r.highlight, len(r.matches)-1))
-	if len(r.matches) == 0 {
-		if r.empty == nil {
-			r.empty = ggui.Text("No results")
+	if x > 0 && inner-x < least {
+		x, y = 0, y+line+gap
+	}
+	f.open = ggui.Rct(ggui.Pt(pad.Left+x, pad.Top+y), ggui.Sz(max(0, inner-x), line))
+	h := max(t.ControlSize, y+line+pad.Vertical())
+	if h > y+line+pad.Vertical() {
+		// One line in a field taller than it: centered.
+		shift := (h - (y + line + pad.Vertical())) / 2
+		for i := range f.rects {
+			f.rects[i].Origin.Y += shift
 		}
-		size := r.empty.Color(r.theme.MutedFg).Layout(cs, env)
-		return cs.Constrain(size)
+		f.open.Origin.Y += shift
 	}
 	return cs.Constrain(ggui.Sz(w, h))
 }
-func (r *comboboxMultipleRows[T]) Paint(dst *ggui.Canvas, rect ggui.Rect) {
-	if len(r.matches) == 0 {
-		dst.Paint(r.empty, rect)
-		return
+
+func (f *comboboxChips[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	t, c := f.theme, f.c
+	inert := c.button.IsInert()
+	focused := c.button.Focused
+	for _, chip := range c.chips {
+		focused = focused || chip.remove.Focused && chip.remove.FocusVisible
 	}
-	y := rect.Origin.Y
-	for j, index := range r.matches {
-		row := ggui.Rct(ggui.Pt(rect.Origin.X, y), ggui.Sz(rect.Size.W, r.sizes[j].H))
-		if j == r.highlight {
-			dst.FillRoundRect(row, r.theme.RadiusSm, r.theme.Accent)
-		}
-		inner := ggui.Rct(row.Origin.Add(ggui.Pt(6, 4)), ggui.Sz(max(0, row.Size.W-12), max(0, row.Size.H-8)))
-		dst.Paint(r.checks[index], inner)
-		if r.reveal && j == r.highlight {
-			dst.RequestReveal(row)
-		}
-		y += row.Size.H
+	fill, border := t.Input, pick(focused, t.Ring, t.InputBorder)
+	if inert {
+		fill, border = fade(t.InputBorder, pick(isDark(t.Bg), .8, .5)), t.Disabled(t.InputBorder)
 	}
-	r.reveal = false
+	dst.FillRoundRect(r, t.Radius, fill)
+	dst.StrokeRoundRect(r, t.Radius, t.BorderWidth, border)
+	if focused && !inert {
+		fieldHalo(dst, t, r, t.Radius, t.Ring)
+	}
+	// The opening part first, so the chips' buttons sit over it.
+	open := f.open
+	open.Origin = open.Origin.Add(r.Origin)
+	c.button.Hit(dst, open, c.button, ggui.CursorShapePointer)
+	dst.Paint(f.hint, ggui.Rct(ggui.Pt(open.Origin.X, open.Origin.Y+(open.Size.H-f.hintSize.H)/2), f.hintSize))
+	for i, chip := range c.chips {
+		at := f.rects[i]
+		at.Origin = at.Origin.Add(r.Origin)
+		dst.Paint(chip, at)
+	}
+}
+
+// comboboxChip is one selected value in a multiple combobox's field: its
+// label on a muted pill, and a button that removes it.
+type comboboxChip struct {
+	text     *ggui.TextWidget
+	remove   *ButtonWidget
+	textSize ggui.Size
+	theme    *uitheme.Theme
+	env      ggui.Env
+}
+
+func (ch *comboboxChip) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	t := uitheme.Of(env)
+	ch.theme, ch.env = t, env
+	ink := pick(ch.remove.IsInert(), t.Disabled(t.Fg), t.Fg)
+	ch.textSize = ch.text.Color(ink).Layout(ggui.Loose(ggui.Sz(max(0, c.MaxW-comboboxChipHeight-t.Space*.75), c.MaxH)), env)
+	ch.remove.Layout(ggui.Tight(ggui.Sz(comboboxChipHeight, comboboxChipHeight)), env)
+	return c.Constrain(ggui.Sz(t.Space*.75+ch.textSize.W+comboboxChipHeight, comboboxChipHeight))
+}
+
+func (ch *comboboxChip) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	t := ch.theme
+	inert := ch.remove.IsInert()
+	dst.FillRoundRect(r, t.Radius*.6, pick(inert, t.Disabled(t.Muted), t.Muted))
+	dst.Paint(ch.text, ggui.Rct(ggui.Pt(r.Origin.X+t.Space*.75, r.Origin.Y+(r.Size.H-ch.textSize.H)/2), ch.textSize))
+	// The cross is half strength until the pointer is on it.
+	at := ggui.Rct(ggui.Pt(r.Origin.X+r.Size.W-comboboxChipHeight, r.Origin.Y), ggui.Sz(comboboxChipHeight, comboboxChipHeight))
+	dst.Paint(ch.remove, at)
+	ink := fade(t.Fg, pick(ch.remove.Hovered && !inert, 1.0, .5))
+	if inert {
+		ink = t.Disabled(fade(t.Fg, .5))
+	}
+	paintIconAt(dst, ch.env, icons.Close, at.Center(), t.Space*1.5, ink, 0)
 }
