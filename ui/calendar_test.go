@@ -19,7 +19,8 @@ var calendarKeys = []ggui.KeyboardKey{
 // or a week with the arrows, the ends of the displayed week with Home and
 // End, and the same day of the next or previous month, clamped to its
 // length, with PageUp and PageDown, each repeated past the dates outside
-// the bounds. Enter then picks the browsed date.
+// the bounds and held to the months the bounds are in. Enter then picks
+// the browsed date.
 func FuzzCalendarKeyboardDateMath(f *testing.F) {
 	f.Add(int16(2024), uint8(1), uint8(31), uint8(0), []byte{7, 7, 6}, uint8(3))
 	f.Add(int16(2023), uint8(12), uint8(31), uint8(1), []byte{1, 5, 4, 3, 2, 0}, uint8(0))
@@ -70,9 +71,20 @@ func FuzzCalendarKeyboardDateMath(f *testing.F) {
 			}
 			// The move repeats past the days outside the bounds, and is
 			// given up when a year of them reaches none inside.
-			moved := false
+			// A move past the months of the bounds stops at the first
+			// day of the first, or the last day of the last.
+			moved, held := false, false
 			for d, n := want, 0; n < 366; n++ {
 				next := move(d)
+				if !lo.IsZero() {
+					first := time.Date(lo.Year(), lo.Month(), 1, 0, 0, 0, 0, time.UTC)
+					last := time.Date(hi.Year(), hi.Month()+1, 0, 0, 0, 0, 0, time.UTC)
+					if next.Before(d) && next.Before(first) {
+						next, held = first, true
+					} else if next.After(d) && next.After(last) {
+						next, held = last, true
+					}
+				}
 				if next.Equal(d) {
 					break
 				}
@@ -84,7 +96,7 @@ func FuzzCalendarKeyboardDateMath(f *testing.F) {
 			if !c.active.Equal(want) {
 				t.Fatalf("from %v (week starts %v, bounds %v..%v), %v browsed to %v, want %v", start.Format(time.DateOnly), weekStart, lo.Format(time.DateOnly), hi.Format(time.DateOnly), key, c.active.Format(time.DateOnly), want.Format(time.DateOnly))
 			}
-			if key == ggui.KeyHome && moved && c.active.Weekday() != weekStart {
+			if key == ggui.KeyHome && moved && !held && c.active.Weekday() != weekStart {
 				t.Fatalf("Home landed on a %v, want the week start %v", c.active.Weekday(), weekStart)
 			}
 		}

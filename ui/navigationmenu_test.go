@@ -167,12 +167,13 @@ func TestNavigationMenuHoverOpensAndCloses(t *testing.T) {
 	defer p.Close()
 	p.Frame()
 	products, _ := p.Find("Products")
+	// Base UI's NavigationMenu waits 50ms to open and 50ms to close.
 	p.Move(products.Center())
-	p.Advance(100 * time.Millisecond)
+	p.Advance(30 * time.Millisecond)
 	if nav.Popup().IsOpen() {
 		t.Fatal("dropdown opened before the hover delay")
 	}
-	p.Advance(150 * time.Millisecond)
+	p.Advance(30 * time.Millisecond)
 	if _, ok := p.FindRole(ggui.RoleLink, "Editor"); !ok || !nav.Popup().IsOpen() {
 		t.Fatal("resting on a trigger did not open its dropdown")
 	}
@@ -182,11 +183,11 @@ func TestNavigationMenuHoverOpensAndCloses(t *testing.T) {
 		t.Fatal("moving to another trigger did not switch dropdowns")
 	}
 	p.Move(ggui.Pt(495, 345))
-	p.Advance(100 * time.Millisecond)
+	p.Advance(30 * time.Millisecond)
 	if !nav.Popup().IsOpen() {
 		t.Fatal("dropdown closed before the pointer had been away a while")
 	}
-	p.Advance(100 * time.Millisecond)
+	p.Advance(30 * time.Millisecond)
 	if nav.Popup().IsOpen() {
 		t.Fatal("a dropdown the pointer opened stayed open after it left")
 	}

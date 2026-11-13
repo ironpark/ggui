@@ -2,9 +2,7 @@ package ui
 
 import (
 	"image/color"
-	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
@@ -50,13 +48,8 @@ type MenuWidget struct {
 	took    time.Time // the frame a submenu last used Escape, Left or Right
 
 	pointed bool      // the pointer, not the keyboard, put the highlight where it is
-	typed   string    // what has been typed to find a row, lower-cased
-	typedAt time.Time // when its last character came
+	search  typeahead // the search by typing under way
 }
-
-// menuTypeReset is how long after a character the next one starts a new
-// search rather than adding to it: Base UI's typeahead reset.
-const menuTypeReset = 750 * time.Millisecond
 
 // Menu creates a secondary button labelled label that opens entries below
 // it. Space or Enter opens the menu, the arrow keys move through the
@@ -200,7 +193,8 @@ func (m *MenuWidget) toggle() {
 		return
 	}
 	m.closeSub()
-	m.current, m.hover, m.typed = -1, -1, ""
+	m.current, m.hover = -1, -1
+	m.search.clear()
 	m.popup.Show()
 }
 
@@ -212,9 +206,14 @@ func (m *MenuWidget) Act(a ggui.Action) bool {
 	}
 	switch a.Kind {
 	case ggui.ActionExpand:
+		// An assistive technology's open is not a pointer's: like Base
+		// UI's virtual click, and like the keyboard, it starts the menu
+		// on its first row.
 		m.closeSub()
 		m.current, m.hover = -1, -1
+		m.search.clear()
 		m.popup.Show()
+		m.jump(1)
 	case ggui.ActionCollapse:
 		m.popup.Hide()
 	default:
@@ -335,7 +334,8 @@ func (m *MenuWidget) jump(dir int) {
 // toggle.
 func (m *MenuWidget) reopen(first bool) {
 	m.closeSub()
-	m.hover, m.current, m.typed = -1, -1, ""
+	m.hover, m.current = -1, -1
+	m.search.clear()
 	for _, it := range m.items {
 		it.Sync()
 	}
@@ -417,44 +417,23 @@ func (m *MenuWidget) opens() bool {
 
 // typing reports whether a search by typing is under way in m.
 func (m *MenuWidget) typing() bool {
-	return m.typed != "" && ggui.FrameTime().Sub(m.typedAt) < menuTypeReset
+	return m.search.active(ggui.FrameTime(), menuTypeaheadReset)
 }
 
 // typeahead gives typed text to the innermost open menu under m, which
 // moves its highlight to the next enabled row whose label starts with what
-// has been typed since the last pause. The same letter again moves on to
-// the next row that starts with it. It reports whether a row was found.
+// has been typed since the last pause, searching on from the row the
+// highlight was on when the typing began. The same letter again moves on
+// to the next row that starts with it. It reports whether a row was found.
 func (m *MenuWidget) typeahead(text string) bool {
 	leaf := m.leaf()
-	text = strings.ToLower(text)
-	if !leaf.typing() {
-		leaf.typed = ""
-		if strings.TrimSpace(text) == "" {
-			// A space starts no search: it runs the highlighted row.
-			return false
-		}
+	i := leaf.search.search(text, ggui.FrameTime(), menuTypeaheadReset, len(leaf.items), max(leaf.current, -1),
+		func(i int) string { return leaf.items[i].label }, leaf.enabled)
+	if i < 0 {
+		return false
 	}
-	from := max(leaf.current, -1)
-	switch {
-	case leaf.typed == text && utf8.RuneCountInString(text) == 1:
-		// The same letter again: on to the next row under it.
-	case leaf.typed != "":
-		// A longer search may still be the row it is on.
-		leaf.typed += text
-		from = max(from-1, -1)
-	default:
-		leaf.typed = text
-	}
-	leaf.typedAt = ggui.FrameTime()
-	n := len(leaf.items)
-	for step := 1; step <= n; step++ {
-		i := ((from+step)%n + n) % n
-		if leaf.enabled(i) && strings.HasPrefix(strings.ToLower(leaf.items[i].label), leaf.typed) {
-			leaf.current, leaf.hover, leaf.pointed = i, -1, false
-			return true
-		}
-	}
-	return false
+	leaf.current, leaf.hover, leaf.pointed = i, -1, false
+	return true
 }
 
 // key gives a key press to the innermost open menu under m and reports
@@ -968,7 +947,8 @@ func (it *MenuItemWidget) openSub(first bool) {
 		it.menu.hover = -1
 	}
 	it.sub.closeSub()
-	it.sub.current, it.sub.hover, it.sub.typed = -1, -1, ""
+	it.sub.current, it.sub.hover = -1, -1
+	it.sub.search.clear()
 	for _, row := range it.sub.items {
 		row.Sync()
 	}

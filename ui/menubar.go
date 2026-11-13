@@ -158,10 +158,11 @@ func (b *MenubarWidget) HandleKey(e ggui.KeyEvent) {
 	case e.Key == ggui.KeyEscape:
 		b.popup.Hide()
 	case vertical && !open:
-		// Up or Down opens the menu, Up on its last item.
-		b.open(b.active, true)
-		if e.Key == ggui.KeyArrowUp {
-			b.menus[b.active].jump(-1)
+		// Down opens the menu on its first item. Up does nothing: Base UI
+		// opens a menu of a horizontal bar on the cross-axis key that
+		// points into it only.
+		if e.Key == ggui.KeyArrowDown {
+			b.open(b.active, true)
 		}
 	case open && (vertical || ends):
 		// The menu had nothing to move to.

@@ -3,7 +3,6 @@ package ui
 import (
 	"image/color"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/ironpark/ggui"
@@ -51,8 +50,7 @@ type SelectWidget[T comparable] struct {
 	triggerSize    ggui.Size
 	highlight      int         // the option the keyboard is on while open, or -1
 	sides          JoinedSides // the sides a ButtonGroup joins the field on
-	typed          string      // the letters of the typeahead search under way
-	typedAt        time.Time   // when the last of them was typed
+	search         typeahead   // the search by typing under way
 	theme          *uitheme.Theme
 	env            ggui.Env
 }
@@ -611,6 +609,7 @@ func (s *SelectWidget[T]) toggle() {
 	}
 	s.highlight = s.index()
 	s.viewport.reveal = true
+	s.search.clear()
 	s.show()
 }
 
@@ -622,6 +621,7 @@ func (s *SelectWidget[T]) HandleKey(ev ggui.KeyEvent) {
 	s.Keyboard(ev, nil)
 	if ev.Kind == ggui.KeyBlur {
 		s.popup.Hide()
+		s.search.clear()
 	}
 	if ev.Kind == ggui.KeyText {
 		s.typeahead(ev.Text)
@@ -631,11 +631,21 @@ func (s *SelectWidget[T]) HandleKey(ev ggui.KeyEvent) {
 		return
 	}
 	open := s.popup.IsOpen()
+	if ev.Key == ggui.KeySpace && s.search.active(ggui.Now(), selectTypeaheadReset) {
+		// A space in the middle of a search is part of it, as Base UI's
+		// typeahead has it; the text event that follows adds it.
+		return
+	}
 	if ggui.Activates(ev) {
 		if open && s.highlight >= 0 {
 			s.choose(s.highlight)
-		} else {
-			s.toggle()
+			return
+		}
+		s.toggle()
+		if !open && s.highlight < 0 && len(s.options) > 0 {
+			// Opened from the keyboard with nothing chosen, the list
+			// starts on its first option.
+			s.highlight = stepIndex(-1, 1, len(s.options), s.enabled)
 		}
 		return
 	}
@@ -647,7 +657,8 @@ func (s *SelectWidget[T]) HandleKey(ev ggui.KeyEvent) {
 			return
 		}
 		if open {
-			s.highlight, _ = navIndex(ev, navVertical, s.highlight, len(s.options), s.enabled)
+			// The list does not wrap: Base UI's Select leaves loopFocus off.
+			s.highlight, _ = navIndexBounded(ev, navVertical, s.highlight, len(s.options), s.enabled)
 			s.viewport.reveal = true
 		} else if ev.Key == ggui.KeyArrowUp || ev.Key == ggui.KeyArrowDown {
 			// An arrow opens the list on the chosen option, as Base UI's
@@ -660,43 +671,26 @@ func (s *SelectWidget[T]) HandleKey(ev ggui.KeyEvent) {
 	}
 }
 
-// selectTypeaheadReset is how long after a letter the next one still
-// continues the same search, as Base UI's typeahead has it.
-const selectTypeaheadReset = 750 * time.Millisecond
-
 // typeahead takes typed text as a search of the options' labels: while the
 // list is open the match is highlighted, and while it is closed the match
 // becomes the value. Letters typed in quick succession spell a prefix; one
-// letter repeated steps through the options starting with it.
+// letter repeated steps through the options starting with it. A search
+// starts after the chosen option, or after the highlighted one when
+// nothing is chosen, as Base UI's does.
 func (s *SelectWidget[T]) typeahead(text string) {
-	now := ggui.Now()
-	if now.Sub(s.typedAt) > selectTypeaheadReset {
-		s.typed = ""
-	}
-	if s.typed == "" && strings.TrimSpace(text) == "" {
-		return // Space opens the list; it starts no search
-	}
-	s.typed, s.typedAt = s.typed+strings.ToLower(text), now
 	open := s.popup.IsOpen()
-	from := pick(open, s.highlight, s.index())
-	query, step := s.typed, 0
-	if runes := []rune(query); len(runes) > 1 && strings.Count(query, string(runes[0])) == len(runes) {
-		query, step = string(runes[0]), 1 // the same letter again: the next option under it
-	} else if len(runes) == 1 {
-		step = 1
+	start := s.index()
+	if start < 0 && open {
+		start = s.highlight
 	}
-	n, start := len(s.options), max(from+step, 0)
-	for k := range n {
-		i := (start + k) % n
-		if !s.enabled(i) || !strings.HasPrefix(strings.ToLower(s.label(s.options[i])), query) {
-			continue
-		}
-		if open {
-			s.highlight, s.viewport.reveal = i, true
-		} else if i != s.index() {
-			setChanged(s.value, s.options[i], s.onChange)
-		}
-		return
+	i := s.search.search(text, ggui.Now(), selectTypeaheadReset, len(s.options), start,
+		func(i int) string { return s.label(s.options[i]) }, s.enabled)
+	switch {
+	case i < 0:
+	case open:
+		s.highlight, s.viewport.reveal = i, true
+	case i != s.index():
+		setChanged(s.value, s.options[i], s.onChange)
 	}
 }
 
@@ -705,7 +699,7 @@ func (s *SelectWidget[T]) Adopt(prev any) {
 	s.Interactive.Adopt(prev)
 	if p, ok := prev.(*SelectWidget[T]); ok {
 		s.highlight = p.highlight
-		s.typed, s.typedAt = p.typed, p.typedAt
+		s.search = p.search
 		s.viewport.offset.Set(ggui.Untrack(p.viewport.offset.Get))
 		s.viewport.reveal = p.viewport.reveal
 		s.wasOpen = p.wasOpen

@@ -184,9 +184,14 @@ func TestResizableVertical(t *testing.T) {
 	p := ggui.NewProbe(ui.Resizable(fraction, ggui.Box(), ggui.Box()).Vertical().WithHandle(), ggui.Sz(100, 208))
 	defer p.Close()
 	p.Tap("Resize panels")
+	// An arrow moves the divider 5%, react-resizable-panels' keyboard step.
 	p.Type(ggui.Mods{}, ggui.KeyArrowDown)
-	if math.Abs(ggui.Untrack(fraction.Get)-.51) > 1e-9 {
+	if math.Abs(ggui.Untrack(fraction.Get)-.55) > 1e-9 {
 		t.Fatal(ggui.Untrack(fraction.Get))
+	}
+	p.Type(ggui.Mods{Shift: true}, ggui.KeyArrowUp)
+	if math.Abs(ggui.Untrack(fraction.Get)-.45) > 1e-9 {
+		t.Fatal("Shift+Up", ggui.Untrack(fraction.Get))
 	}
 	p.Type(ggui.Mods{}, ggui.KeyEnd)
 	if ggui.Untrack(fraction.Get) != 1 {

@@ -63,25 +63,29 @@ func TestNavTargetLeavesClampingToTheList(t *testing.T) {
 	}
 }
 
-// The single-select composites agree: both arrow axes, wrapping, and Home
-// and End at the ends.
+// The single-select composites wrap and take Home and End alike. Tabs
+// move on both arrow axes; a ToggleGroup moves its keyboard, not its
+// choice, and only along its own axis.
 func TestTabsAndToggleGroupNavigateAlike(t *testing.T) {
 	t.Parallel()
 	tab := ggui.State(0)
 	tabs := Tabs(tab, Tab("A", nil), Tab("B", nil), Tab("C", nil)).ActivateOnFocus(true)
 	choice := ggui.State("a")
 	group := ToggleGroup(choice).Options([]string{"a", "b", "c"})
-	read := []func() int{func() int { return ggui.Peek(tab) }, func() int { return map[string]int{"a": 0, "b": 1, "c": 2}[ggui.Peek(choice)] }}
+	read := []func() int{func() int { return ggui.Peek(tab) }, group.index}
 	for w, h := range []ggui.KeyHandler{tabs, group} {
 		for _, step := range []struct {
 			key  ggui.KeyboardKey
-			want int
-		}{{ggui.KeyArrowLeft, 2}, {ggui.KeyArrowRight, 0}, {ggui.KeyArrowUp, 2}, {ggui.KeyArrowDown, 0}, {ggui.KeyEnd, 2}, {ggui.KeyHome, 0}} {
+			want [2]int
+		}{{ggui.KeyArrowLeft, [2]int{2, 2}}, {ggui.KeyArrowRight, [2]int{0, 0}}, {ggui.KeyArrowUp, [2]int{2, 0}}, {ggui.KeyArrowDown, [2]int{0, 0}}, {ggui.KeyEnd, [2]int{2, 2}}, {ggui.KeyHome, [2]int{0, 0}}} {
 			h.HandleKey(press(step.key))
-			if got := read[w](); got != step.want {
-				t.Fatalf("widget %d, %v: at %d, want %d", w, step.key, got, step.want)
+			if got := read[w](); got != step.want[w] {
+				t.Fatalf("widget %d, %v: at %d, want %d", w, step.key, got, step.want[w])
 			}
 		}
+	}
+	if ggui.Peek(choice) != "a" {
+		t.Fatalf("the arrows changed the group's choice to %q", ggui.Peek(choice))
 	}
 }
 
