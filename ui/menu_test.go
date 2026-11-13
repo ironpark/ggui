@@ -111,3 +111,27 @@ func TestMenuBindNameRenamesTheTrigger(t *testing.T) {
 		t.Fatalf("the trigger's name did not follow its reader:\n%s", p.Semantics())
 	}
 }
+
+func TestMenuRowsAndMenubarTriggersKeepTheArrowCursor(t *testing.T) {
+	t.Parallel()
+	// shadcn's menu items are cursor-default, and its menubar triggers set
+	// none: only a link shows the hand.
+	bar := ui.Menubar(ui.Menu("File", ui.MenuItem("Open", nil)))
+	p := ggui.NewProbe(ggui.Padding(bar, 20), ggui.Sz(300, 300))
+	defer p.Close()
+	trigger, _ := p.Find("File")
+	p.Move(trigger.Center())
+	if p.Cursor() != ggui.CursorShapeDefault {
+		t.Fatalf("cursor = %v over a menubar trigger, want default", p.Cursor())
+	}
+	p.Click(trigger.Center())
+	p.Advance(time.Second)
+	row, ok := p.FindRole(ggui.RoleMenuItem, "Open")
+	if !ok {
+		t.Fatalf("the menu did not open:\n%s", p.Semantics())
+	}
+	p.Move(row.Center())
+	if p.Cursor() != ggui.CursorShapeDefault {
+		t.Fatalf("cursor = %v over a menu row, want default", p.Cursor())
+	}
+}
