@@ -95,6 +95,17 @@ func TestCalendarCaptionDropdownBrowsesByMonthAndYear(t *testing.T) {
 	if month, year := semNode(t, p, ggui.RoleSelect, "Month"), semNode(t, p, ggui.RoleSelect, "Year"); month.Value != "Jun" || year.Value != "2026" {
 		t.Fatalf("dropdowns show %q %q, want Jun 2026", month.Value, year.Value)
 	}
+	// A caption dropdown is shadcn's bordered label, six units and its
+	// border high, so the caption with it is a cell high as any other.
+	plain := ggui.NewProbe(ggui.Column(ui.Calendar(value).Location(time.UTC)).Align(ggui.AlignStart), ggui.Sz(600, 500))
+	defer plain.Close()
+	if month, year := semNode(t, p, ggui.RoleSelect, "Month"), semNode(t, p, ggui.RoleSelect, "Year"); month.Rect.Size.H != 26 || year.Rect.Size.H != 26 ||
+		year.Rect.Origin.X-month.Rect.Origin.X-month.Rect.Size.W != 6 {
+		t.Fatalf("the dropdowns are at %v and %v, want 26 high and 6 apart", month.Rect, year.Rect)
+	}
+	if with, without := semNode(t, p, ggui.RoleGroup, "Calendar"), semNode(t, plain, ggui.RoleGroup, "Calendar"); with.Rect.Size.H != without.Rect.Size.H {
+		t.Fatalf("the calendar is %v high with dropdowns and %v without", with.Rect.Size.H, without.Rect.Size.H)
+	}
 	act(t, p, ggui.RoleSelect, "Month", ggui.Action{Kind: ggui.ActionSetValue, Text: "Feb"})
 	act(t, p, ggui.RoleSelect, "Year", ggui.Action{Kind: ggui.ActionSetValue, Text: "2024"})
 	if calendarDates(p, "2024-02-29") != 1 {
