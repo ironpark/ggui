@@ -812,7 +812,6 @@ func (f *questionInput) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	t := uitheme.From(env)
 	t.FieldPad = ggui.Insets(5, 10)
 	t.Radius = t.Chat.QuestionInputRadius
-	t.Input = mix(t.Bg, t.Input, .3)
 	c.MinH = min(c.MaxH, max(c.MinH, 32))
 	return f.TextFieldWidget.Layout(c, t.Apply(env))
 }
