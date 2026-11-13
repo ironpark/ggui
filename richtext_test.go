@@ -5,6 +5,7 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 )
 
 // lineTexts returns what each line of a laid-out RichText draws.
@@ -474,5 +475,44 @@ func TestSelectableTextKeepsTextLayout(t *testing.T) {
 	sb, _ := sel.Baseline()
 	if pb != sb {
 		t.Fatalf("baselines %v and %v", pb, sb)
+	}
+}
+
+// A frame painted in part around a hovered paragraph leaves the area the
+// texts the last whole frame found: a click then clears the selection of
+// every text, not only of those painted around the pointer.
+func TestAClickAfterAFramePaintedInPartClearsTheWholeSelection(t *testing.T) {
+	t.Parallel()
+	var texts []Widget
+	for range 8 {
+		texts = append(texts, Text("an item of a list").Selectable())
+	}
+	area := SelectionArea(Scroll(Column(texts...).Gap(30).Stretch()))
+	p := NewWindowProbe(func() Widget { return area }, Sz(300, 500))
+	defer p.Close()
+	step := func() WindowFrame { return p.Step(16 * time.Millisecond) }
+	step()
+	first, last, mid := &texts[0].(*TextWidget).rich.w, &texts[7].(*TextWidget).rich.w, &texts[4].(*TextWidget).rich.w
+	p.Move(textAt(first, first.rect, 2))
+	step()
+	p.Press(textAt(first, first.rect, 2))
+	step()
+	p.Move(textAt(last, last.rect, 4))
+	step()
+	p.Release(textAt(last, last.rect, 4))
+	step()
+	p.Idle(16*time.Millisecond, time.Second)
+	if area.SelectedText() == "" {
+		t.Fatal("the drag selected nothing")
+	}
+	at := textAt(mid, mid.rect, 3)
+	p.Move(at)
+	if fr := step(); fr.Painted != FramePartial {
+		t.Fatalf("hovering a paragraph painted the frame %v, want it in part", fr.Painted)
+	}
+	p.Click(at)
+	step()
+	if got := area.SelectedText(); got != "" {
+		t.Fatalf("a click left %q selected", got)
 	}
 }
