@@ -148,8 +148,9 @@ func TestCommandKeptPanelFollowsItsOptions(t *testing.T) {
 	if got, want := c.hint.Layout(ggui.Loose(ggui.Sz(1000, 100)), env).W, Caption("↑↓ Move between the actions of this palette   ↵ Run").Layout(ggui.Loose(ggui.Sz(1000, 100)), env).W; got != want {
 		t.Fatalf("hint %v wide, want %v", got, want)
 	}
-	if inset := c.InsetSearch().Layout(cs, env); c.searchBox == nil || inset == hinted {
-		t.Fatalf("inset search not built: %v", inset)
+	// The search field is an inset pill whether or not InsetSearch asks.
+	if inset := c.InsetSearch().Layout(cs, env); c.searchBox == nil || inset != hinted {
+		t.Fatalf("InsetSearch changed the panel: %v, want %v", inset, hinted)
 	}
 }
 

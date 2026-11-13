@@ -70,3 +70,66 @@ func TestCommandDialogClosesOnChoosingAndTakesNewEntries(t *testing.T) {
 		t.Fatal("the empty list kept its own words")
 	}
 }
+
+func TestCommandRowsSeparatorsAndDialogWidth(t *testing.T) {
+	t.Parallel()
+	query := ggui.State("")
+	command := ui.Command(query,
+		ui.CommandItem("Calendar", nil).Group("Suggestions"),
+		ui.CommandItem("Calculator", nil).Group("Suggestions"),
+		ui.CommandSeparator(),
+		ui.CommandItem("Profile", nil).Group("Settings"),
+	)
+	p := ggui.NewProbe(ui.CommandDialog(ggui.State(true), command), ggui.Sz(800, 600))
+	defer p.Close()
+	if got := separators(p); got != 1 {
+		t.Fatalf("%d separators with no query, want 1", got)
+	}
+	calendar, _ := p.Find("Calendar")
+	calculator, _ := p.Find("Calculator")
+	if h := calendar.Rect.Size.H; h < 31 || h > 33 {
+		t.Fatalf("a row is %v tall, want about 32", h)
+	}
+	if gap := calculator.Rect.Origin.Y - calendar.Rect.Origin.Y; gap != calendar.Rect.Size.H {
+		t.Fatalf("rows of one group are %v apart", gap)
+	}
+	dialog, _ := p.FindRole(ggui.RoleDialog, "Commands")
+	if w := dialog.Rect.Size.W; w != 384 {
+		t.Fatalf("the palette is %v wide, want 384", w)
+	}
+	query.Set("o")
+	p.Frame()
+	if got := separators(p); got != 0 {
+		t.Fatalf("%d separators under a query, want none", got)
+	}
+}
+
+// separators counts the separators p's semantics hold.
+func separators(p *ggui.Probe) int {
+	n := 0
+	for range p.Semantics().Nodes(ggui.RoleSeparator) {
+		n++
+	}
+	return n
+}
+
+func TestComboboxListChecksItsValueAndIsAtLeastItsTriggerWide(t *testing.T) {
+	t.Parallel()
+	value := ggui.State("Beta")
+	combo := ui.Combobox(value).Options([]string{"Alpha", "Beta"}).Name("Pick")
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(ggui.Box(combo).Width(260))), ggui.Sz(400, 400))
+	defer p.Close()
+	p.Tap("Pick")
+	trigger, _ := p.Find("Pick")
+	tree := p.Semantics()
+	if n, ok := tree.Find(ggui.RoleMenuItem, "Beta"); !ok || !(n.Checked == ggui.Tri(true)) {
+		t.Fatalf("the chosen row is not checked:\n%s", tree)
+	}
+	alpha, _ := p.Find("Alpha")
+	if alpha.Rect.Size.W < trigger.Rect.Size.W-16 {
+		t.Fatalf("the list's rows are %v wide under a %v trigger", alpha.Rect.Size.W, trigger.Rect.Size.W)
+	}
+	if gap := alpha.Rect.Origin.Y - trigger.Rect.Origin.Y - trigger.Rect.Size.H; gap < 6 {
+		t.Fatalf("the list is %v below its trigger", gap)
+	}
+}

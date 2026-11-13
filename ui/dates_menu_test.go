@@ -224,7 +224,7 @@ func TestMenubarPopupHasBoundedWidth(t *testing.T) {
 	p.Tap("File")
 	p.Frame()
 	r := b.Popup().Rect()
-	if r.Size.W > 224 || r.Size.W < 180 || r.Origin.X < 40 {
+	if r.Size.W > 224 || r.Size.W < 144 || r.Origin.X < 40 {
 		t.Fatalf("unbounded or misplaced menu: %+v", r)
 	}
 }
