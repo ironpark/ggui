@@ -3,7 +3,6 @@ package ggui
 import (
 	"runtime"
 	"slices"
-	"sync/atomic"
 	"time"
 
 	"github.com/ironpark/ggui/internal/property"
@@ -597,7 +596,7 @@ func (in *inputState) dispatchKeys(f frameInput) {
 		// An Adopter already took the old one's state over during paint;
 		// anything else is told it has focus now.
 		if _, ok := cur.key.(Adopter); !ok {
-			delivered.Add(1)
+			delivered()
 			cur.key.HandleKey(KeyEvent{Kind: KeyFocus})
 		}
 	}
@@ -819,10 +818,12 @@ func (in *inputState) deliver(r *hitRegion, ev PointerEvent) bool {
 	return took
 }
 
-// delivered counts the events handed to widgets, which may change how
-// they look with no signal written: a frame in which it moves is painted
-// whole.
-var delivered atomic.Uint64
+// delivered counts the events handed to widgets in the active world,
+// which may change how they look with no signal written: a frame in which
+// its world's count moves is painted whole. The count is the world's, not
+// the process's: a window's frame is not painted whole for what a probe or
+// an App on another goroutine handled meanwhile.
+func delivered() { activeWorld().delivered++ }
 
 // send offers ev to regions under it from the top down until one consumes it
 // and returns that region, or nil.
@@ -900,7 +901,7 @@ func (in *inputState) focus(r *hitRegion, keyboard bool) {
 		return
 	}
 	if in.focused != nil && in.focused.key != nil {
-		delivered.Add(1)
+		delivered()
 		in.focused.key.HandleKey(KeyEvent{Kind: KeyBlur})
 	}
 	if r != nil && r.key != nil {

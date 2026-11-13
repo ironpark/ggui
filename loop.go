@@ -538,6 +538,9 @@ type world struct {
 	anims animator
 	frame frameClock
 	busy  map[any]bool // see inputState.markBusyGroups
+	// delivered counts the events handed to this world's widgets; see
+	// delivered.
+	delivered uint64
 
 	env     *StateValue[Env] // see UseEnv; nil until first read
 	envMemo envMemo

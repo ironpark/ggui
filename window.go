@@ -656,11 +656,11 @@ func (w *Window) frameOn(screen *ggfx.Image, scale float64, kept bool, setDamage
 	cf := w.canvas.fs()
 	moved := !cf.hasPointer || cf.pointer != f.pos
 	cf.pointer, cf.hasPointer = f.pos, true
-	before := delivered.Load()
+	before := w.world().delivered
 	w.dispatchInput(f)
 	touched, placed := w.input.takeTouched()
 	switch {
-	case delivered.Load() != before:
+	case w.world().delivered != before:
 		w.dirty.Or(uint32(dirtyInput))
 	case !placed:
 		w.dirty.Or(uint32(dirtyEvent))

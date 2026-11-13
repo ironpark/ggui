@@ -633,7 +633,7 @@ func (a *SelectionAreaWidget) extend(u *RichTextWidget, at int) {
 	lo, hi := min(i, j), max(i, j)
 	// The texts it runs through are not the one the pointer reached, which
 	// alone the frame would paint again.
-	delivered.Add(1)
+	delivered()
 	for k, t := range a.texts {
 		switch {
 		case k == i && k == j:
@@ -672,7 +672,7 @@ func (a *SelectionAreaWidget) clear(keep *RichTextWidget) {
 	for _, t := range a.texts {
 		if t != keep && t.ed.HasSelection() {
 			t.ed.MoveTo(t.ed.Caret, false)
-			delivered.Add(1)
+			delivered()
 		}
 	}
 	a.spans = false
