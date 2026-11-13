@@ -470,7 +470,7 @@ func (t *ToasterWidget) paintNotice(dst *ggui.Canvas, e *toastEntry, theme *uith
 		return
 	}
 	radius := theme.RadiusXl * scale
-	dst.Shadow(shown, radius, theme.OverlayShadow)
+	paintShadows(dst, shown, radius, theme.OverlayShadow, theme.OverlayContact)
 	dst.FillRoundRect(shown, radius, theme.Popover)
 	dst.StrokeRoundRect(shown, radius, theme.BorderWidth, theme.Border)
 	e.hit = ggui.Rect{}

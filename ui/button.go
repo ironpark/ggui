@@ -165,6 +165,23 @@ type ButtonWidget struct {
 	theme       *uitheme.Theme
 	chord       ggui.Chord
 	chorded     bool
+	invalidProp property.Value[bool] // set by Invalid or BindInvalid
+}
+
+// buttonInvalidSlot eases the destructive border and halo of an invalid
+// button.
+var buttonInvalidSlot = ggui.NewSlot[*ggui.Motion]("button invalid")
+
+// Invalid marks the button as holding a choice that failed validation, as
+// a date or a file picker's trigger may: a Destructive border and halo
+// around any variant, shadcn's aria-invalid. A Toggle takes the border
+// where its variant has one, and the Destructive ring while focused.
+func (b *ButtonWidget) Invalid(v bool) *ButtonWidget { b.invalidProp.Set(v); return b }
+
+// BindInvalid follows r for Invalid without a rebuild.
+func (b *ButtonWidget) BindInvalid(r ggui.Readable[bool]) *ButtonWidget {
+	b.invalidProp.Bind(r, "BindInvalid")
+	return b
 }
 
 // Button creates a primary button: the Primary surface with a PrimaryFg
@@ -462,6 +479,19 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	radius := b.corner
 	sides := b.sides.within(dst)
+	// shadcn's aria-invalid:border-destructive aria-invalid:ring-3
+	// aria-invalid:ring-destructive/20, eased as transition-all eases it.
+	// A button has a transparent border to color; a toggle has one only
+	// in its outline variant, and no ring until it is focused.
+	isInvalid := b.invalidProp.Get()
+	invalid := ease(dst, b.theme, anchor, buttonInvalidSlot, pick(isInvalid, 1.0, 0.0), b.motion)
+	if invalid > 0 && (!toggle || border != nil) {
+		line := pick(toggle, t.Destructive, invalidBorder(t))
+		if inert {
+			line = t.Disabled(line)
+		}
+		border = mix(colorOr(border, fade(line, 0)), line, invalid)
+	}
 
 	b.Hit(dst, r, b, pick(b.variant == ButtonLink, ggui.CursorShapePointer, ggui.CursorShapeDefault))
 	if b.chorded && !inert && b.onTap != nil {
@@ -473,6 +503,15 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	}
 	if st.Shadow && !inert {
 		dst.Shadow(r, radius, t.CardShadow)
+	}
+	if invalid > 0 && !inert && !toggle {
+		// Joined to its neighbours the ring is the group's to draw over
+		// them; alone, the box draws the line and only the halo is left.
+		if halo := fade(destructiveRing(t), invalid); sides.Any() {
+			joinedFocusRing(dst, t, r, radius, sides, border, halo)
+		} else {
+			haloStroke(dst, r, radius, t.Halo(halo))
+		}
 	}
 	if sides.Any() {
 		// A box rounds every corner alike, so the surface of a button joined
@@ -486,18 +525,34 @@ func (b *ButtonWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if st.Underline && hover > 0 {
 		if base, ok := b.box.Baseline(); ok {
 			pad := b.pad
-			y := r.Origin.Y + base + t.Space/2 // shadcn's underline-offset-4
+			// shadcn's underline-offset-4: the line's top edge is 4px
+			// under the alphabetic baseline, and it grows down from there.
+			y := r.Origin.Y + base + t.Space/2
+			if b.label != nil {
+				if ascent, ok := b.label.Baseline(); ok {
+					y = paintedBaseline(r.Origin.Y+base-ascent, ascent, dst.Scale()) + t.Space/2
+				}
+			}
 			dst.FillRect(ggui.Rct(ggui.Pt(r.Origin.X+pad.Left, y), ggui.Sz(r.Size.W-pad.Left-pad.Right, 1)), fade(label, hover))
 		}
 	}
 	// The ring eases in and out with the rest of the button, as shadcn's
-	// transition-all has it, and rests once it arrives. A ButtonGroup draws
-	// one ring for its children, the focused one's, so there a ring that
-	// lost the focus goes at once rather than over the one coming in.
+	// transition-all has it, and rests once it arrives. In a ButtonGroup
+	// the group draws it, over the children, and the one easing out around
+	// the button that lost the focus beside the one coming in.
 	focused := b.Focused && b.FocusVisible && !inert
-	if k := ease(dst, b.theme, anchor, focusRingSlot, pick(focused, 1.0, 0.0), b.motion); k > 0 && (focused || !sides.Any()) {
+	if k := ease(dst, b.theme, anchor, focusRingSlot, pick(focused, 1.0, 0.0), b.motion); k > 0 {
 		ring := colorOr(st.Ring, t.Ring)
-		joinedFocusRing(dst, t, r, radius, sides, fade(colorOr(st.FocusBorder, ring), k), fade(ring, k))
+		line := colorOr(st.FocusBorder, ring)
+		// An invalid control keeps its destructive border and ring while
+		// focused: aria-invalid sorts after focus-visible. The button
+		// already wears that ring, and the toggle puts it on here.
+		if isInvalid {
+			ring, line = destructiveRing(t), colorOr(border, t.Destructive)
+		}
+		if !isInvalid || toggle {
+			joinedFocusRing(dst, t, r, radius, sides, fade(line, k), fade(ring, k))
+		}
 	}
 }
 

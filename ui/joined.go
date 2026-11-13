@@ -186,7 +186,7 @@ func (f *joinedFocus) paint(dst *ggui.Canvas) {
 func joinedFocusRing(dst *ggui.Canvas, t *uitheme.Theme, r ggui.Rect, radius float64, j JoinedSides, line, ring color.Color) {
 	f := joinedFocus{on: true, r: r, radius: radius, sides: j, width: t.BorderWidth, line: line, halo: t.Halo(ring)}
 	if g, ok := dst.Enclosing().(*ButtonGroupWidget); ok && j.Any() {
-		g.focus = f
+		g.ring(f)
 		return
 	}
 	f.paint(dst)

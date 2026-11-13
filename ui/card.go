@@ -582,7 +582,7 @@ func (b *BadgeWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		hovered = ok && r.Contains(p) && dst.TakesInput()
 	}
 	fill, label := st.Fill, st.Label
-	b.hover = dst.Ease(b.Anchor(r), badgeHoverSlot, pick(hovered, 1.0, 0.0), b.motion)
+	b.hover = ease(dst, b.theme, b.Anchor(r), badgeHoverSlot, pick(hovered, 1.0, 0.0), b.motion)
 	if k := b.hover; k > 0 {
 		if overFill != nil {
 			fill = pick(fill == nil, fade(overFill, k), mix(colorOr(fill, overFill), overFill, k))

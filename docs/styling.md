@@ -217,8 +217,10 @@ Three shadows, in the order a surface rises off the page. They are
 | Token | For | Default |
 | --- | --- | --- |
 | `CardShadow` | raised tab and custom shadowed variants | `0 1px`, blur 2, 6% black |
-| `PanelShadow` | menus, select lists, date pickers, toasts | `0 4px`, blur 10, 10% black |
-| `OverlayShadow` | dialogs and sheets, shadcn's `shadow-lg` | `0 10px`, blur 15, spread −3, 10% black |
+| `PanelShadow` | menus, select and combobox lists, popovers, hover cards and date pickers: shadcn's `shadow-md` | `0 4px`, blur 6, spread −1, 10% black |
+| `PanelContact` | the tight second layer drawn with `PanelShadow` | `0 2px`, blur 4, spread −2, 10% black |
+| `OverlayShadow` | sheets, toasts and submenus: shadcn's `shadow-lg` | `0 10px`, blur 15, spread −3, 10% black |
+| `OverlayContact` | the tight second layer drawn with `OverlayShadow` | `0 4px`, blur 6, spread −4, 10% black |
 
 ### Size and space
 

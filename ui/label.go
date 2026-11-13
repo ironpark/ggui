@@ -75,8 +75,12 @@ func (l *LabelWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 // Baseline implements ggui.Baseliner.
 func (l *LabelWidget) Baseline() (float64, bool) { return l.text.Baseline() }
 
-func (l *LabelWidget) focusTarget() ggui.KeyHandler {
-	switch target := l.target.(type) {
+func (l *LabelWidget) focusTarget() ggui.KeyHandler { return labelFocusTarget(l.target) }
+
+// labelFocusTarget is what a click on the label of w focuses: w, or the
+// editor inside a field.
+func labelFocusTarget(w ggui.Widget) ggui.KeyHandler {
+	switch target := w.(type) {
 	case *TextFieldWidget:
 		return target.input
 	case *NumberInputWidget:
@@ -86,8 +90,26 @@ func (l *LabelWidget) focusTarget() ggui.KeyHandler {
 			return h
 		}
 	}
-	h, _ := l.target.(ggui.KeyHandler)
+	h, _ := w.(ggui.KeyHandler)
 	return h
+}
+
+// pressLabelTarget is a click on the label of w: a control that toggles or
+// opens is pressed, and an editor is left to take the focus.
+func pressLabelTarget(w ggui.Widget) {
+	d, ok := w.(ggui.Describer)
+	if !ok {
+		return
+	}
+	switch d.Describe().Role {
+	case ggui.RoleCheckbox, ggui.RoleRadio, ggui.RoleSwitch, ggui.RoleSelect, ggui.RoleButton:
+		if a, ok := w.(ggui.Actor); ok && a.Act(ggui.Action{Kind: ggui.ActionPress}) {
+			return
+		}
+		if h := labelFocusTarget(w); h != nil {
+			h.HandleKey(ggui.KeyEvent{Kind: ggui.KeyPress, Key: ggui.KeySpace})
+		}
+	}
 }
 
 // Paint implements ggui.Widget.
@@ -114,17 +136,7 @@ func (l *LabelWidget) HandlePointer(ev ggui.PointerEvent) bool {
 	}
 	return l.Pointer(ev, func() {
 		l.pending = true
-		if d, ok := l.target.(ggui.Describer); ok {
-			switch d.Describe().Role {
-			case ggui.RoleCheckbox, ggui.RoleRadio, ggui.RoleSwitch, ggui.RoleSelect, ggui.RoleButton:
-				if a, ok := l.target.(ggui.Actor); ok && a.Act(ggui.Action{Kind: ggui.ActionPress}) {
-					return
-				}
-				if h := l.focusTarget(); h != nil {
-					h.HandleKey(ggui.KeyEvent{Kind: ggui.KeyPress, Key: ggui.KeySpace})
-				}
-			}
-		}
+		pressLabelTarget(l.target)
 	})
 }
 

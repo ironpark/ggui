@@ -35,11 +35,11 @@ func TestCommandSearchIconLeadsTheField(t *testing.T) {
 func TestSheetCastsTheOverlayShadowAndADrawerNone(t *testing.T) {
 	t.Parallel()
 	th := uitheme.Default()
-	// shadcn's SheetContent is shadow-lg, which is the token as it stands.
-	if got := Sheet(ggui.State(true), ggui.Text("Body")).shape(&th).shadow; got != th.OverlayShadow {
-		t.Fatalf("a sheet casts %+v, want the theme's OverlayShadow %+v", got, th.OverlayShadow)
+	// shadcn's SheetContent is shadow-lg: the token and its tight layer.
+	if got, want := Sheet(ggui.State(true), ggui.Text("Body")).shape(&th).shadow, ([2]ggui.ShadowStyle{th.OverlayShadow, th.OverlayContact}); got != want {
+		t.Fatalf("a sheet casts %+v, want the theme's OverlayShadow over its OverlayContact %+v", got, want)
 	}
-	if got := Drawer(ggui.State(true), ggui.Text("Body")).shape(&th).shadow; got != (ggui.ShadowStyle{}) {
+	if got := Drawer(ggui.State(true), ggui.Text("Body")).shape(&th).shadow; got != ([2]ggui.ShadowStyle{}) {
 		t.Fatalf("a drawer casts %+v, want none", got)
 	}
 }

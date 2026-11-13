@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"slices"
+
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
@@ -19,20 +21,25 @@ type FieldWidget struct {
 	input        ggui.Widget
 	help         string
 	err          property.Value[string]
+	errs         property.Value[[]string]
 	horizontal   bool
 	controlFirst bool
+	carded       bool
 
 	caption *LabelWidget
 	note    *ggui.TextWidget // the description
 	alert   *ggui.TextWidget // the error
+	alerts  fieldErrorList   // the errors, when there are several
 	column  *ggui.ColumnWidget
-	row     *ggui.RowWidget // the body of a Horizontal field, holding column
-	shape   fieldShape      // what column and row were built for
+	row     *ggui.RowWidget  // the body of a Horizontal field, holding column
+	card    *FieldCardWidget // the body of a Card field
+	shape   fieldShape       // what column, row and card were built for
 }
 
 // fieldShape is what decides which widgets a Field's body holds.
 type fieldShape struct {
 	noted, alerted, horizontal, controlFirst bool
+	listed, carded                           bool
 }
 
 var fieldInvalid = ggui.NewEnvKey[bool]("field invalid")
@@ -85,6 +92,55 @@ func (f *FieldWidget) BindError(r ggui.Readable[string]) *FieldWidget {
 	return f
 }
 
+// Errors sets every error the field holds at once, as a form library
+// reports them: shadcn's FieldError with errors. Empty and repeated
+// messages are dropped; one that is left shows as Error's does, and
+// several as a bulleted list. The field is invalid while any is left.
+func (f *FieldWidget) Errors(messages []string) *FieldWidget {
+	if f.errs.Set(messages) {
+		f.props.Changed()
+	}
+	return f
+}
+
+// BindErrors follows a list of error messages without owning its reader.
+func (f *FieldWidget) BindErrors(r ggui.Readable[[]string]) *FieldWidget {
+	if f.errs.Bind(r, "BindErrors") {
+		f.props.Changed()
+	}
+	return f
+}
+
+// messages are the errors to show: Error's, then those of Errors, each
+// once.
+func (f *FieldWidget) messages() []string {
+	single, list := f.err.Get(), f.errs.Get()
+	if single == "" && len(list) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(list)+1)
+	for _, m := range append([]string{single}, list...) {
+		if m != "" && !slices.Contains(out, m) {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// Card makes the field a choice card, shadcn's FieldLabel around a Field:
+// a bordered box holding the label, with the description and the error
+// under it, beside the control. A click anywhere in it acts on the
+// control, and it is tinted while the control is checked. The control sits
+// at the end unless ControlFirst puts it at the start. See FieldCard.
+//
+//	ui.Field("Kubernetes", ui.Radio(target, "k8s", "")).
+//		Help("Run GPU workloads on a K8s cluster.").Card()
+func (f *FieldWidget) Card() *FieldWidget {
+	defer property.Watch(&f.props, &f.carded)()
+	f.carded = true
+	return f
+}
+
 // Horizontal lays the field out as a row, shadcn's horizontal orientation:
 // the label, with the description and the error under it, takes the width
 // that is left and the control sits at the end, as a switch does in a list
@@ -108,28 +164,53 @@ func (f *FieldWidget) ControlFirst() *FieldWidget {
 func (f *FieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer f.props.Layout().EndLayout()
 	t := uitheme.Of(env)
-	e := f.err.Get()
+	errors := f.messages()
+	e := ""
+	if len(errors) == 1 {
+		e = errors[0]
+	} else if len(errors) > 1 && !slices.Equal(errors, f.alerts.messages) {
+		f.alerts.set(errors)
+	}
 	// The description and the error are body text, as shadcn's text-sm,
 	// and both show: the error does not take the description's place.
 	f.note.Content(f.help).Style(t.Text).Color(t.MutedFg)
 	f.alert.Content(e).Style(t.Text).Color(t.Destructive)
 	// The body is rebuilt only when a part comes or goes, so its layout
 	// cache and the caption's survive a relayout.
-	if shape := (fieldShape{f.help != "", e != "", f.horizontal, f.controlFirst}); f.column == nil || shape != f.shape {
+	if shape := (fieldShape{f.help != "", len(errors) > 0, f.horizontal, f.controlFirst, len(errors) > 1, f.carded}); f.column == nil || shape != f.shape {
 		f.shape = shape
 		parts := make([]ggui.Widget, 0, 4)
-		parts = append(parts, f.caption)
-		if !shape.horizontal {
+		if shape.carded {
+			parts = append(parts, FieldTitle(f.label))
+		} else {
+			parts = append(parts, f.caption)
+		}
+		if !shape.horizontal && !shape.carded {
 			parts = append(parts, f.input)
 		}
-		if shape.noted {
+		if shape.noted && shape.carded {
+			parts = append(parts, FieldDescription(f.help))
+		} else if shape.noted {
 			parts = append(parts, f.note)
 		}
-		if shape.alerted {
+		if shape.listed {
+			parts = append(parts, &f.alerts)
+		} else if shape.alerted {
 			parts = append(parts, f.alert)
 		}
-		f.column, f.row = ggui.Column(parts...).Align(ggui.AlignStretch), nil
-		if shape.horizontal {
+		f.column, f.row, f.card = ggui.Column(parts...).Align(ggui.AlignStretch), nil, nil
+		if shape.carded {
+			// A title alone is centered on the control; with text under
+			// it the two are a FieldContent and start at the top.
+			content := parts[0]
+			if len(parts) > 1 {
+				content = FieldContent(parts...)
+			}
+			f.card = FieldCard(f.input, content)
+			if shape.controlFirst {
+				f.card.ControlFirst()
+			}
+		} else if shape.horizontal {
 			// Beside one line of label the control is centered; beside a
 			// label with text under it, it starts at the top.
 			align := pick(shape.noted || shape.alerted, ggui.AlignStart, ggui.AlignCenter)
@@ -140,8 +221,11 @@ func (f *FieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 			}
 		}
 	}
-	if e != "" {
+	if len(errors) > 0 {
 		env = env.With(fieldInvalid, true)
+	}
+	if f.card != nil {
+		return f.card.Layout(c, env)
 	}
 	if f.row != nil {
 		// shadcn's FieldContent: the label and its text a hair apart.
@@ -153,6 +237,10 @@ func (f *FieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 
 // Paint implements Widget.
 func (f *FieldWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	if f.card != nil {
+		dst.Paint(f.card, r)
+		return
+	}
 	if f.row != nil {
 		dst.Paint(f.row, r)
 		return

@@ -24,7 +24,12 @@ type toggle struct {
 
 	invalidProp  property.Value[bool] // set by Invalid or BindInvalid
 	fieldInvalid bool                 // the Field around the control holds an error
+	inCard       bool                 // a FieldCard around the control shows its focus
 }
+
+// hovered reports whether the pointer is on the control, for the FieldCard
+// around it.
+func (g *toggle) hovered() bool { return g.Hovered && !g.IsInert() }
 
 // toggleInvalidSlot eases the destructive halo of an invalid control.
 var toggleInvalidSlot = ggui.NewSlot[*ggui.Motion]("toggle invalid")
@@ -47,7 +52,11 @@ func (g *toggle) stateRing(dst *ggui.Canvas, box ggui.Rect, radius, invalid floa
 	if invalid > 0 && !g.IsInert() {
 		haloStroke(dst, box, radius, fade(t.Halo(destructiveRing(t)), invalid))
 	}
-	focusRing(dst, &g.Interactive, t, box, radius, fieldRing(t, g.invalid()), g.motion)
+	// In a FieldCard the ring is the card's, and the glyph keeps its
+	// border: shadcn's group-has-[:focus-visible]/field-label:ring-0.
+	if !g.inCard {
+		focusRing(dst, &g.Interactive, t, box, radius, fieldRing(t, g.invalid()), g.motion)
+	}
 }
 
 // layout takes the glyph size because each embedder sizes its own: a
@@ -59,6 +68,7 @@ func (g *toggle) layout(c ggui.Constraints, env ggui.Env, glyph ggui.Size) ggui.
 	g.motion = env.Motion(g.theme.MotionFast)
 	g.glyph = glyph
 	g.fieldInvalid, _ = env.Get(fieldInvalid)
+	g.inCard, _ = env.Get(inFieldCard)
 	size := g.glyph
 	if g.label != nil {
 		// A label inherits the destructive text of an invalid Field, as
@@ -79,14 +89,22 @@ func (g *toggle) layout(c ggui.Constraints, env ggui.Env, glyph ggui.Size) ggui.
 }
 
 // paint registers the region and paints the label, and returns the Rect the
-// glyph should be drawn in.
+// glyph should be drawn in. The pointer lands on the control a little way
+// outside the glyph as well, as shadcn's after:-inset-x-3 after:-inset-y-2
+// has it: 12px to either side and 8px above and below.
 func (g *toggle) paint(dst *ggui.Canvas, r ggui.Rect, handler ggui.Control) ggui.Rect {
-	g.Hit(dst, r, handler, ggui.CursorShapeDefault)
+	glyph := mirrorHorizontal(ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+(r.Size.H-g.glyph.H)/2), g.glyph), r, g.env.Direction() == ggui.DirRTL)
+	g.HitReach(dst, r, outset(glyph, 1.5*g.theme.Space, g.theme.Space), handler, ggui.CursorShapeDefault)
 	if g.label != nil {
 		at := ggui.Pt(r.Origin.X+g.glyph.W+g.theme.ControlGap, r.Origin.Y+(r.Size.H-g.labelSize.H)/2)
 		dst.Paint(g.label, mirrorHorizontal(ggui.Rct(at, g.labelSize), r, g.env.Direction() == ggui.DirRTL))
 	}
-	return mirrorHorizontal(ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+(r.Size.H-g.glyph.H)/2), g.glyph), r, g.env.Direction() == ggui.DirRTL)
+	return glyph
+}
+
+// outset is r grown by x to either side and by y above and below.
+func outset(r ggui.Rect, x, y float64) ggui.Rect {
+	return ggui.Rct(ggui.Pt(r.Origin.X-x, r.Origin.Y-y), ggui.Sz(r.Size.W+2*x, r.Size.H+2*y))
 }
 
 // HandleKey implements KeyHandler: Space or Enter toggles.

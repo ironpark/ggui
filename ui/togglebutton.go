@@ -83,6 +83,16 @@ func (t *ToggleWidget) BindDisabled(r ggui.Readable[bool]) *ToggleWidget {
 	return t
 }
 
+// Invalid marks the toggle as failing validation: a Destructive border in
+// the outline variant, and a Destructive ring while it is focused.
+func (t *ToggleWidget) Invalid(v bool) *ToggleWidget { t.ButtonWidget.Invalid(v); return t }
+
+// BindInvalid follows r for Invalid without a rebuild.
+func (t *ToggleWidget) BindInvalid(r ggui.Readable[bool]) *ToggleWidget {
+	t.ButtonWidget.BindInvalid(r)
+	return t
+}
+
 // Outline draws the toggle in ToggleOutline: a border around it, on or off.
 func (t *ToggleWidget) Outline() *ToggleWidget { t.ButtonWidget.Variant(ToggleOutline); return t }
 

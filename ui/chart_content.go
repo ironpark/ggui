@@ -225,7 +225,7 @@ func (c *ChartWidget) paintTooltipContent(dst *ggui.Canvas, r ggui.Rect, index i
 	}
 	t := c.theme
 	// shadcn's rounded-lg border-border/50 bg-background shadow-xl.
-	dst.Shadow(r, t.Radius, t.PanelShadow)
+	paintShadows(dst, r, t.Radius, t.PanelShadow, t.PanelContact)
 	dst.FillRoundRect(r, t.Radius, t.Bg)
 	dst.StrokeRoundRect(r, t.Radius, t.BorderWidth, fade(t.Border, .5))
 	left, right := r.Origin.X+chartTipPadX, r.Origin.X+r.Size.W-chartTipPadX

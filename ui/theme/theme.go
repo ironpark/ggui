@@ -70,8 +70,13 @@ type Theme struct {
 
 	// Elevation, in the order a surface rises off the page.
 	CardShadow    ggui.ShadowStyle // cards and the raised tab
-	PanelShadow   ggui.ShadowStyle // menus, select lists, date pickers
+	PanelShadow   ggui.ShadowStyle // menus, select lists, popovers and date pickers: shadcn's shadow-md
 	OverlayShadow ggui.ShadowStyle // sheets, toasts and submenus: shadcn's shadow-lg
+	// Tailwind's shadows are two layers each, a wide one and a tight one
+	// under the surface's edge. These are the tight ones, drawn with the
+	// shadow they are named after; a nil Color leaves one out.
+	PanelContact   ggui.ShadowStyle
+	OverlayContact ggui.ShadowStyle
 
 	// The radii are shadcn's scale of --radius, each named a step smaller
 	// than Tailwind names it: Radius is rounded-lg, the corner of a button
@@ -199,10 +204,13 @@ func lightBase() Theme {
 		Ring:   n["ring"],
 		Scrim:  color.NRGBA{A: 26},
 
-		CardShadow:  ggui.ShadowStyle{Offset: ggui.Pt(0, 1), Blur: 2, Color: color.NRGBA{A: 15}},
-		PanelShadow: ggui.ShadowStyle{Offset: ggui.Pt(0, 4), Blur: 10, Color: color.NRGBA{A: 26}},
-		// shadow-lg: 0 10px 15px -3px black at 10%.
-		OverlayShadow: ggui.ShadowStyle{Offset: ggui.Pt(0, 10), Blur: 15, Spread: -3, Color: color.NRGBA{A: 26}},
+		CardShadow: ggui.ShadowStyle{Offset: ggui.Pt(0, 1), Blur: 2, Color: color.NRGBA{A: 15}},
+		// shadow-md: 0 4px 6px -1px and 0 2px 4px -2px, black at 10%.
+		PanelShadow:  ggui.ShadowStyle{Offset: ggui.Pt(0, 4), Blur: 6, Spread: -1, Color: color.NRGBA{A: 26}},
+		PanelContact: ggui.ShadowStyle{Offset: ggui.Pt(0, 2), Blur: 4, Spread: -2, Color: color.NRGBA{A: 26}},
+		// shadow-lg: 0 10px 15px -3px and 0 4px 6px -4px, black at 10%.
+		OverlayShadow:  ggui.ShadowStyle{Offset: ggui.Pt(0, 10), Blur: 15, Spread: -3, Color: color.NRGBA{A: 26}},
+		OverlayContact: ggui.ShadowStyle{Offset: ggui.Pt(0, 4), Blur: 6, Spread: -4, Color: color.NRGBA{A: 26}},
 
 		Radius: 10,
 		Space:  8, BorderWidth: 1, ControlSize: 16, ControlGap: 8, IconSize: 16, MenuWidth: 224,
