@@ -138,7 +138,6 @@ func (p *PopupWidget) Animated(v bool) *PopupWidget {
 // one of PopupBottom, PopupTop, PopupLeft and PopupRight.
 func (p *PopupWidget) PlacedSide() PopupSide { return p.placed }
 
-
 // Modal controls focus trapping and outside-click interception. The default
 // is true. A nonmodal popup focuses its content on opening, permits Tab to
 // leave, closes when focus leaves both anchor and content, and lets outside
@@ -525,9 +524,15 @@ func (p *PopupWidget) placeBeside(screen Size, anchor Rect, side PopupSide) (Siz
 	if natural.W > room && other > room {
 		room, side = other, pick(side == PopupLeft, PopupRight, PopupLeft)
 	}
-	size := natural
-	if size.W > room || size.H > screen.H {
-		size = p.effect.Layout(Constraints{MaxW: max(min(room, screen.W), 0), MaxH: screen.H}, p.env)
+	// A height is given only to content that has to be held to one: a
+	// scrolling panel takes all of the height it is offered.
+	size, maxW := natural, screen.W
+	if size.W > room {
+		maxW = max(room, 0)
+		size = p.effect.Layout(Constraints{MaxW: maxW, MaxH: Unbounded}, p.env)
+	}
+	if size.H > screen.H {
+		size = p.effect.Layout(Constraints{MaxW: maxW, MaxH: screen.H}, p.env)
 	}
 	x := anchor.Origin.X + anchor.Size.W + p.gap
 	if side == PopupLeft {
