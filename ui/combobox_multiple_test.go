@@ -111,3 +111,28 @@ func TestComboboxMultipleControlledSelectionDoesNotInventState(t *testing.T) {
 		t.Fatal("unaccepted controlled selection became a chip")
 	}
 }
+
+func TestComboboxMultipleChipsSitInsideItsField(t *testing.T) {
+	t.Parallel()
+	values := ggui.State([]string{"Alpha", "Beta"})
+	combo := ui.ComboboxMultiple(values).Options([]string{"Alpha", "Beta", "Gamma"}).Name("Pick")
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(ggui.Box(combo).Width(300))), ggui.Sz(400, 300))
+	defer p.Close()
+	trigger, _ := p.Find("Pick")
+	remove, _ := p.Find("Remove Beta")
+	if remove.Rect.Origin.Y > trigger.Rect.Origin.Y+trigger.Rect.Size.H || remove.Rect.Origin.X > 300 {
+		t.Fatalf("the chip at %v is outside the field's line at %v", remove.Rect, trigger.Rect)
+	}
+	p.Tap("Pick")
+	tree := p.Semantics()
+	if n, ok := tree.Find(ggui.RoleMenuItem, "Beta"); !ok || !(n.Checked == ggui.Tri(true)) {
+		t.Fatalf("a chosen row is not checked:\n%s", tree)
+	}
+	if n, _ := tree.Find(ggui.RoleMenuItem, "Gamma"); n.Checked == ggui.Tri(true) {
+		t.Fatal("a row not chosen is checked")
+	}
+	list, _ := p.Find("Search options")
+	if list.Rect.Size.W > 300 {
+		t.Fatalf("the list is wider than its field: %v", list.Rect)
+	}
+}

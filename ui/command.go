@@ -81,9 +81,14 @@ type CommandWidget struct {
 	emptyText          string
 	dismiss            func() // closes the dialog it is in, set by CommandDialog
 	inDialog           bool   // rows take the dialog's larger radius
-	theme              *uitheme.Theme
-	env                ggui.Env
-	rects              []ggui.Rect
+	// menuRows draws the list as a combobox's: a menu's rows, padding and
+	// panel, and a muted empty line.
+	menuRows bool
+	keepOpen bool                     // choosing leaves the popup open, as a multiple combobox does
+	onKey    func(ggui.KeyEvent) bool // sees a key before the list does, set by its owner
+	theme    *uitheme.Theme
+	env      ggui.Env
+	rects    []ggui.Rect
 }
 
 // commandListHeight is the most a command list's rows take before the
@@ -246,11 +251,13 @@ func (c *CommandWidget) choose(index int) {
 	if index < 0 || index >= len(c.entries) || c.entries[index].disabled {
 		return
 	}
-	if popup, ok := ggui.PopupOf(c.env); ok {
-		popup.Hide()
-	}
-	if c.dismiss != nil {
-		c.dismiss()
+	if !c.keepOpen {
+		if popup, ok := ggui.PopupOf(c.env); ok {
+			popup.Hide()
+		}
+		if c.dismiss != nil {
+			c.dismiss()
+		}
 	}
 	if fn := c.entries[index].run; fn != nil {
 		fn()
@@ -260,6 +267,9 @@ func (c *CommandWidget) choose(index int) {
 func (c *CommandWidget) key(ev ggui.KeyEvent) bool {
 	if ev.Mods != (ggui.Mods{}) {
 		return false
+	}
+	if c.onKey != nil && c.onKey(ev) {
+		return true
 	}
 	switch ev.Key {
 	case ggui.KeyEnter, ggui.KeyNumpadEnter:
@@ -289,8 +299,12 @@ func (c *CommandWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	// The rows sit a panel's padding inside their group, which sits another
 	// inside the panel; the search pill is inset as far. The padding is
 	// inside the scroll, so a separator can reach the panel's edges.
+	// A combobox's rows sit only in the panel's padding, as a menu's do.
 	edge := t.PanelPad.Left + t.PanelPad.Right
 	listPad := ggui.Insets(t.PanelPad.Top, edge, t.PanelPad.Top+t.PanelPad.Bottom, edge)
+	if c.menuRows {
+		edge, listPad = t.PanelPad.Left, t.PanelPad
+	}
 	c.list.Padding(listPad)
 	radius := 0.0
 	if c.inDialog {
@@ -298,6 +312,8 @@ func (c *CommandWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	for _, item := range c.items {
 		item.radius = radius
+		item.style = pick(c.menuRows, menuStyle, commandStyle)
+		item.stay = c.keepOpen
 	}
 	natural := c.list.Layout(ggui.Loose(ggui.Sz(cs.MaxW, ggui.Unbounded)), env)
 	height := min(c.height, natural.H-listPad.Vertical())
@@ -322,7 +338,11 @@ func (c *CommandWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 		c.hintBox.Padding(ggui.Insets(t.Space, t.Space*1.5))
 	}
 	c.styled.Color(t.PopoverFg)
-	c.panel.Fill(t.Popover).Border(t.BorderWidth, t.Border).Radius(t.RadiusLg)
+	if c.menuRows {
+		c.panel.Fill(t.Popover).Border(t.BorderWidth, fade(t.Fg, .1)).Radius(t.Radius)
+	} else {
+		c.panel.Fill(t.Popover).Border(t.BorderWidth, t.Border).Radius(t.RadiusLg)
+	}
 	if c.borderless {
 		c.panel.Border(0, nil)
 	}
@@ -418,12 +438,18 @@ func (r *commandResults) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	if actions == 0 {
 		// Nothing matched: a line of body text 24 below the search, and as
-		// far above the panel's own padding, with no group around it.
+		// far above the panel's own padding, with no group around it; a
+		// combobox's is muted and 8 from either side.
 		if r.empty == nil {
 			r.empty = ggui.Text(c.emptyText)
 		}
+		room := t.Space * 6
+		if c.menuRows {
+			r.empty.Color(t.MutedFg)
+			room = t.Space * 2
+		}
 		r.emptySize = r.empty.Layout(cs.Loosen(), env)
-		height := r.emptySize.H + t.Space*6 - t.PanelPad.Vertical()
+		height := r.emptySize.H + room - t.PanelPad.Vertical()
 		if c.stable {
 			height = max(height, c.height)
 		}
