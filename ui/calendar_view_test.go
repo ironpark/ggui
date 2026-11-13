@@ -1,6 +1,7 @@
 package ui_test
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -31,7 +32,10 @@ func TestCalendarMeasuresFromItsCells(t *testing.T) {
 	}
 	// A day's hit target is its whole column and the row with its gap.
 	a, b := semNode(t, p, ggui.RoleOption, "2026-06-10"), semNode(t, p, ggui.RoleOption, "2026-06-17")
-	if a.Rect.Size != ggui.Sz(28, 36) || b.Rect.Origin.Y-a.Rect.Origin.Y != 36 {
+	// Where the grid starts follows the caption's line, a fraction of a
+	// pixel in some fonts, so the sizes are compared within a rounding.
+	near := func(got, want float64) bool { return math.Abs(got-want) < 1e-9 }
+	if !near(a.Rect.Size.W, 28) || !near(a.Rect.Size.H, 36) || !near(b.Rect.Origin.Y-a.Rect.Origin.Y, 36) {
 		t.Fatalf("day targets %v then %v, want 28x36 a row of 36 apart", a.Rect, b.Rect)
 	}
 	// Stretched, the columns share the width and the targets stay adjacent.
