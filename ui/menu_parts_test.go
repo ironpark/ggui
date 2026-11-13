@@ -293,3 +293,49 @@ func TestMenuTypeaheadMovesToTheRowTyped(t *testing.T) {
 	p.Text("o")
 	pick("Open")
 }
+
+// A row is lit under the pointer and not where the pointer last was, as
+// Base UI clears the highlight when the pointer leaves an item; a row the
+// keyboard went to stays lit.
+func TestMenuRowLosesThePointersHighlightWhenThePointerLeaves(t *testing.T) {
+	t.Parallel()
+	ran := ""
+	menu := ui.Menu("File",
+		ui.MenuItem("Open", func() { ran = "open" }),
+		ui.MenuSub("Recent", ui.MenuItem("notes.txt", func() { ran = "notes" })),
+		ui.MenuItem("Save", func() { ran = "save" }))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(menu)), ggui.Sz(500, 400))
+	defer p.Close()
+	p.Tap("File")
+	open := find(t, p, ggui.RoleMenuItem, "Open").Rect
+	p.Move(open.Center())
+	p.Move(ggui.Pt(450, 350))
+	p.Key("enter")
+	if ran != "" || !menu.Popup().IsOpen() {
+		t.Fatalf("the row the pointer left ran %q", ran)
+	}
+	// The keyboard's highlight is its own: the pointer leaving the row it
+	// rests on does not take it.
+	p.Move(open.Center())
+	p.Key("end")
+	p.Move(ggui.Pt(450, 350))
+	p.Key("enter")
+	if ran != "save" {
+		t.Fatalf("ran %q, want the row the keyboard went to", ran)
+	}
+	// The row of an open submenu stays lit while the pointer is in it.
+	p.Tap("File")
+	recent := find(t, p, ggui.RoleMenuItem, "Recent").Rect
+	p.Move(recent.Center())
+	p.Advance(200 * time.Millisecond)
+	notes := find(t, p, ggui.RoleMenuItem, "notes.txt").Rect
+	p.Move(notes.Center())
+	p.Move(ggui.Pt(450, 350))
+	if _, ok := p.FindRole(ggui.RoleMenuItem, "notes.txt"); !ok {
+		t.Fatal("the submenu closed as the pointer left it")
+	}
+	p.Key("enter")
+	if ran != "save" {
+		t.Fatalf("the submenu's row the pointer left ran %q", ran)
+	}
+}

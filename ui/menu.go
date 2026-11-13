@@ -49,6 +49,7 @@ type MenuWidget struct {
 	hoverAt time.Time // when it came there
 	took    time.Time // the frame a submenu last used Escape, Left or Right
 
+	pointed bool      // the pointer, not the keyboard, put the highlight where it is
 	typed   string    // what has been typed to find a row, lower-cased
 	typedAt time.Time // when its last character came
 }
@@ -316,7 +317,7 @@ func (m *MenuWidget) enabled(i int) bool { return !m.items[i].IsInert() }
 func (m *MenuWidget) navigate(ev ggui.KeyEvent) bool {
 	i, ok := navIndex(ev, navVertical, m.current, len(m.items), m.enabled)
 	if ok {
-		m.current, m.hover = i, -1
+		m.current, m.hover, m.pointed = i, -1, false
 	}
 	return ok
 }
@@ -324,7 +325,7 @@ func (m *MenuWidget) navigate(ev ggui.KeyEvent) bool {
 // jump puts the highlight on the first enabled item from the near end:
 // the top for dir 1, the bottom for -1.
 func (m *MenuWidget) jump(dir int) {
-	m.current = stepIndex(-1, dir, len(m.items), m.enabled)
+	m.current, m.pointed = stepIndex(-1, dir, len(m.items), m.enabled), false
 }
 
 // reopen refreshes the items and, when first is set, highlights the first
@@ -449,7 +450,7 @@ func (m *MenuWidget) typeahead(text string) bool {
 	for step := 1; step <= n; step++ {
 		i := ((from+step)%n + n) % n
 		if leaf.enabled(i) && strings.HasPrefix(strings.ToLower(leaf.items[i].label), leaf.typed) {
-			leaf.current, leaf.hover = i, -1
+			leaf.current, leaf.hover, leaf.pointed = i, -1, false
 			return true
 		}
 	}
@@ -493,7 +494,7 @@ func (m *MenuWidget) key(ev ggui.KeyEvent) bool {
 // pointAt moves the highlight to the row the pointer came to, and notes
 // when, for the submenu that opens or closes once it has rested there.
 func (m *MenuWidget) pointAt(i int) {
-	m.current = i
+	m.current, m.pointed = i, true
 	if p := m.parent; p != nil && p.menu != nil {
 		// The pointer is inside this submenu: the row it opened from keeps
 		// the highlight of the menu around it.
@@ -515,10 +516,16 @@ func (m *MenuWidget) pointAt(i int) {
 }
 
 // pointLeft forgets a row the pointer left before resting on it, so a
-// pointer crossing other rows on its way into a submenu does not close it.
+// pointer crossing other rows on its way into a submenu does not close it,
+// and takes the highlight off the row if the pointer gave it: a row is lit
+// under the pointer, not where the pointer last was. The row of an open
+// submenu stays lit through that submenu.
 func (m *MenuWidget) pointLeft(it *MenuItemWidget) {
 	if m.hover >= 0 && m.hover < len(m.items) && m.items[m.hover] == it {
 		m.hover = -1
+	}
+	if m.current >= 0 && m.current < len(m.items) && m.items[m.current] == it && m.pointed {
+		m.current, m.pointed = -1, false
 	}
 }
 
