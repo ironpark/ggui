@@ -8,11 +8,13 @@ import (
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
-// CollapsibleWidget is a titled section that folds its content away.
-// Build one with Collapsible.
+// CollapsibleWidget is a section that folds its content away under a
+// header: a title with a chevron, or a trigger of the caller's own. Build
+// one with Collapsible or CollapsibleOf.
 type CollapsibleWidget struct {
 	open     ggui.Binding[bool]
 	title    *ggui.TextWidget
+	trigger  ggui.Widget // CollapsibleOf's header, in place of the title
 	content  ggui.Widget
 	reveal   ggui.Motion
 	progress float64
@@ -37,6 +39,25 @@ func Collapsible(open ggui.Binding[bool], title string, content ggui.Widget) *Co
 	c.AutoKey()
 	return c
 }
+
+// CollapsibleOf is Collapsible with a header of the caller's own: trigger
+// is painted as it is, with no chevron, padding or hover surface, and all
+// of it toggles the content on click, Space or Enter. The content folds in
+// and out as Collapsible's does. It is the unstyled pair a custom
+// disclosure is made of; Progress turns a chevron drawn in the trigger.
+//
+//	ui.CollapsibleOf(open, ggui.Row(ggui.Text("Filters"), ggui.Spacer(), chevron), filters).Name("Filters")
+func CollapsibleOf(open ggui.Binding[bool], trigger, content ggui.Widget) *CollapsibleWidget {
+	c := &CollapsibleWidget{open: open, trigger: trigger, content: content}
+	c.Role = ggui.RoleDisclosure
+	c.AutoKey()
+	return c
+}
+
+// Progress returns how far open the last layout left the content, from
+// zero for folded away to one for all there, for a trigger that moves with
+// it, such as a chevron turning.
+func (c *CollapsibleWidget) Progress() float64 { return c.progress }
 
 // Disabled greys the header out and ignores input while v is true.
 func (c *CollapsibleWidget) Disabled(v bool) *CollapsibleWidget { c.SetInert(v); return c }
@@ -88,6 +109,9 @@ func (c *CollapsibleWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 	open := c.open.Get()
 	c.laidOpen = open
 	c.progress = c.reveal.LayoutToggle(env, open, t.MotionSlow)
+	if c.trigger != nil {
+		return c.layoutTrigger(cs, env, open)
+	}
 	c.pad = t.FieldPad
 	c.title.Color(pick(c.IsInert(), t.MutedFg, t.Fg))
 	c.titleSize = c.title.Layout(ggui.Loose(ggui.Sz(max(cs.MaxW-c.pad.Left-c.pad.Right-t.ControlSize-t.ControlGap, 0), cs.MaxH)), env)
@@ -100,6 +124,18 @@ func (c *CollapsibleWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size 
 	return cs.Constrain(ggui.Sz(max(c.titleSize.W+c.pad.Left+c.pad.Right+t.ControlSize+t.ControlGap, c.bodySize.W), c.headerH+c.bodySize.H*c.progress))
 }
 
+// layoutTrigger is Layout for CollapsibleOf: the trigger at its own height
+// across the width, and the content under it.
+func (c *CollapsibleWidget) layoutTrigger(cs ggui.Constraints, env ggui.Env, open bool) ggui.Size {
+	c.titleSize = c.trigger.Layout(ggui.Constraints{MinW: cs.MinW, MaxW: cs.MaxW, MaxH: cs.MaxH}, env)
+	c.headerH = c.titleSize.H
+	c.bodySize = ggui.Size{}
+	if c.progress > 0 || open {
+		c.bodySize = c.content.Layout(ggui.Constraints{MinW: cs.MinW, MaxW: cs.MaxW, MaxH: max(cs.MaxH-c.headerH, 0)}, env)
+	}
+	return cs.Constrain(ggui.Sz(max(c.titleSize.W, c.bodySize.W), c.headerH+c.bodySize.H*c.progress))
+}
+
 // Paint implements Widget.
 func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := c.theme
@@ -110,6 +146,15 @@ func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		ggui.Invalidate(c.env)
 	}
 	header := ggui.Rct(r.Origin, ggui.Sz(r.Size.W, c.headerH))
+	if c.trigger != nil {
+		// The header's region first, so a control inside the trigger sits
+		// above it and keeps its input.
+		c.Hit(dst, header, c, ggui.CursorShapePointer)
+		dst.Paint(c.trigger, header)
+		controlFocusRing(dst, &c.Interactive, t, header, t.RadiusSm, t.Ring)
+		paintDisclosure(dst, c.content, ggui.Pt(r.Origin.X, r.Origin.Y+c.headerH), r.Size.W, c.bodySize, c.progress, open)
+		return
+	}
 	c.Hit(dst, header, c, ggui.CursorShapePointer)
 	hover := dst.Ease(c.Anchor(header), disclosureHoverSlot, pick(c.Hovered && !c.IsInert(), 1.0, 0.0), c.env.Motion(t.MotionFast))
 	if hover > 0 {

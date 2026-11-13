@@ -376,6 +376,7 @@ func TestSidebarNavigatesWithThePointerAndTheArrows(t *testing.T) {
 	if _, ok := p.FindRole(ggui.RoleTab, "Inbox"); ok {
 		t.Fatal("a collapsed sidebar is still on screen")
 	}
+	p.Advance(time.Second) // past the slide off its edge
 	if got := bar.Layout(ggui.Loose(ggui.Sz(600, 400)), ggui.Env{}); got.W != 0 {
 		t.Fatalf("a collapsed sidebar keeps its width: %+v", got)
 	}
