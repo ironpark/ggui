@@ -151,7 +151,11 @@ func TestGalleryControlFlows(t *testing.T) {
 	}
 	searchGallery(p, "Toast")
 	p.Tap("Notify with action")
+	p.Advance(0)
+	p.Advance(time.Second) // a notice comes in from below the window
 	p.Tap("Undo")
+	p.Advance(0)
+	p.Advance(time.Second)
 	if _, ok := p.Find("Dismiss Restored"); !ok {
 		t.Fatal("toast undo failed")
 	}
