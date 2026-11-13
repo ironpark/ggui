@@ -80,9 +80,9 @@ func (m *sortMark) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	paintIconAt(dst, m.env, icons.ChevronDown, center.Add(ggui.Pt(0, shift)), size, t.MutedFg, 0)
 }
 
-// mutedText draws the text widgets under child in the theme's muted
+// withMutedText draws the text widgets under child in the theme's muted
 // foreground, as shadcn's text-muted-foreground does.
-func mutedText(child ggui.Widget) ggui.Widget {
+func withMutedText(child ggui.Widget) ggui.Widget {
 	return ggui.WithEnv(func(e ggui.Env) ggui.Env { return e.WithText(ggui.TextStyle{Color: uitheme.Of(e).MutedFg}) }, child)
 }
 
@@ -362,7 +362,7 @@ func DataTable[T any, K comparable](m *TableModel[T, K]) ggui.Widget {
 			}
 			return &dataTableFrame{minWidth: max(560, minWidth), box: box, scroll: ggui.Scroll(box).Horizontal(), isEmpty: isEmpty, message: ggui.Center(ggui.Text("No results."))}
 		})
-		summary := mutedText(ggui.TextOf(ggui.Derived(func() string {
+		summary := withMutedText(ggui.TextOf(ggui.Derived(func() string {
 			rows := m.filtered.Get()
 			return fmt.Sprintf("%d of %d row(s) selected.", m.countSelected(rows), len(rows))
 		})))
