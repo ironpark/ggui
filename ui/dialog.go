@@ -130,7 +130,7 @@ func (d *DialogWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	t := uitheme.Of(env)
 	d.build(env, modalShape{
-		headerGap: t.Space, closeInset: t.Space, band: true, fillColor: t.Popover,
+		headerGap: t.Space, titleLeading: 1, closeInset: t.Space, band: true, fillColor: t.Popover,
 		borderWidth: t.BorderWidth, border: fade(t.Fg, .1), radius: t.RadiusLg,
 	})
 	if d.effect == nil {

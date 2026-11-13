@@ -285,10 +285,15 @@ func (r *ResponsiveWidget) Paint(dst *Canvas, rect Rect) { dst.Paint(r.current, 
 // "inherit": Merge lets a set field win over an unset one, and Text resolves
 // what is still unset from the Env and then from built-in defaults.
 type TextStyle struct {
-	Font       *Font
-	Size       float64 // pixels
-	Color      color.Color
-	LineHeight float64    // multiple of Size between baselines
+	Font  *Font
+	Size  float64 // pixels
+	Color color.Color
+	// LineHeight is the height of a line as a multiple of Size, as CSS's
+	// line-height: a Text or RichText it was set for, by its own style or
+	// an inherited one, makes every line a box that high with the glyphs
+	// centered in it. Unset, text is as tall as its glyphs, with 1.2 times
+	// the size between baselines.
+	LineHeight float64
 	Weight     FontWeight // drawn with the Font's face nearest this weight
 	// Tracking is the space added after each letter as a multiple of
 	// Size, as CSS letter-spacing in em is: -0.025 sets a heading tight,

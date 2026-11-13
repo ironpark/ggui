@@ -49,11 +49,20 @@ type TextStyle struct {
 	Font       *Font
 	Size       float64     // pixels
 	Color      color.Color
-	LineHeight float64     // multiple of Size between baselines
+	LineHeight float64     // the height of a line, as a multiple of Size
 	Weight     FontWeight  // drawn with the Font's face nearest it
 	Tracking   float64     // multiple of Size added after each letter
 }
 ```
+
+`LineHeight` is CSS's `line-height`: text it was set for, by its own style or
+an inherited one such as `Theme.Text`, is laid out in line boxes, each
+`LineHeight × Size` high with its glyphs centered in it. A line of 14px text at
+20/14 is 20 pixels high in every font, and a 16px title at line height 1 is 16
+high, its glyphs reaching a little past the box, as `leading-none` has it in a
+browser. Text no line height was set for is as tall as its font's ascent and
+descent, with 1.2 times the size between baselines. A `TextInput` is always as
+tall as its glyphs.
 
 `Tracking` is CSS's `letter-spacing` in em: `-0.025` sets a heading tight, `0.1`
 spaces a shortcut hint out. Text is measured, wrapped, cut, hit and drawn with
@@ -267,7 +276,7 @@ it. See [Local styles](#local-styles) for how the merge resolves.
 | --- | --- | --- |
 | `Text` | everything; its `Color` follows `Fg` | 14px, line height 1.4 |
 | `Title` | page headings, `ui.Title` | 24px semibold |
-| `Heading` | dialog, sheet and card titles, `ui.Heading` | 16px medium, line height 22px |
+| `Heading` | dialog, sheet and card titles, `ui.Heading` | 16px medium, line height 22px (a dialog's title is set at 16px, a sheet's and an alert dialog's at 24px) |
 | `Label` | the labels of buttons, tabs, badges and accordion headers | medium weight |
 | `Caption` | small secondary text, `ui.Caption`; its `Color` follows `MutedFg` | 12px |
 | `Mono` | code, `ui.Mono` | the platform's monospaced font, `ggui.DefaultMonoFont()` |

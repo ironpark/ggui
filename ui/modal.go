@@ -60,8 +60,12 @@ type modalParts struct {
 // modalShape is what a kind of panel decides about the parts all of them
 // share. Each owner passes its own to build every layout.
 type modalShape struct {
-	headerGap  float64 // between the title and the description
-	closeInset float64 // from the close button to the panel's top and outer edge
+	headerGap float64 // between the title and the description
+	// titleLeading is the title's line height as a multiple of its size: 1
+	// for a Dialog's leading-none, 1.5 for the text-base a Sheet's title
+	// is left in. Zero leaves the theme's Heading as it is.
+	titleLeading float64
+	closeInset   float64 // from the close button to the panel's top and outer edge
 	// band draws the footer as Dialog's does: a tinted strip from edge to
 	// edge under a line, its actions in a row at the end. Without it the
 	// actions are stacked at full width, as a Sheet's are.
@@ -144,6 +148,9 @@ func (m *modal) build(env ggui.Env, shape modalShape) *ggui.BoxWidget {
 	}
 	if m.description != nil {
 		m.description.Style(mutedText(t))
+	}
+	if m.title != nil && shape.titleLeading != 0 {
+		m.title.LineHeight(shape.titleLeading)
 	}
 	if m.header != nil {
 		m.header.Gap(shape.headerGap)
