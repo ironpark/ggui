@@ -59,6 +59,38 @@ func TestFocusRingEasesIn(t *testing.T) {
 	}
 }
 
+// A button's focus ring eases as a checkbox's does: shadcn's button is
+// transition-all. A toggle is a button too.
+func TestButtonFocusRingEasesIn(t *testing.T) {
+	t.Parallel()
+	for _, reduced := range []bool{false, true} {
+		b := Button("Save", nil)
+		var ring float64
+		root := ggui.Provide(ggui.ReducedMotionKey, reduced, watchMotion(b, &b.Interactive, focusRingSlot, &ring))
+		p := ggui.NewProbe(root, ggui.Sz(200, 60))
+		p.Advance(0)
+		p.Advance(0)
+		if ring > 0 {
+			t.Fatalf("reduced=%v: an unfocused button has its ring at %v", reduced, ring)
+		}
+		p.Key("tab")
+		p.Advance(0)
+		p.Advance(uitheme.Default().MotionFast / 2)
+		if reduced {
+			if ring != 1 {
+				t.Fatalf("under reduced motion the ring is at %v half way, want 1", ring)
+			}
+		} else if ring <= 0 || ring >= 1 {
+			t.Fatalf("the ring is at %v half way through MotionFast, want between 0 and 1", ring)
+		}
+		p.Advance(time.Second)
+		if ring != 1 {
+			t.Fatalf("reduced=%v: the ring settled at %v, want 1", reduced, ring)
+		}
+		p.Close()
+	}
+}
+
 // A checkbox's fill eases to Primary when it is ticked.
 func TestCheckboxFillEases(t *testing.T) {
 	t.Parallel()
