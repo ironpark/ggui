@@ -139,6 +139,7 @@ func (m *MenuWidget) column(entries []ggui.Widget) ggui.Widget {
 type menuColumn struct {
 	entries []ggui.Widget
 	sizes   []ggui.Size
+	fill    bool // take all the width there is, as a Select's list does
 }
 
 func newMenuColumn(entries []ggui.Widget) *menuColumn {
@@ -147,7 +148,7 @@ func newMenuColumn(entries []ggui.Widget) *menuColumn {
 
 func (col *menuColumn) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	w := c.MaxW
-	if c.MinW < c.MaxW {
+	if c.MinW < c.MaxW && !(col.fill && c.MaxW < ggui.Unbounded) {
 		w = 0
 		for _, e := range col.entries {
 			w = max(w, e.Layout(ggui.Constraints{MaxW: c.MaxW, MaxH: ggui.Unbounded}, env).W)
