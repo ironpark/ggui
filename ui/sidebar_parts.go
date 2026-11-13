@@ -234,8 +234,10 @@ func (s *SidebarWidget) paintTip(dst *ggui.Canvas, right bool) {
 		return
 	}
 	tip.text.Content(tip.label).Style(ggui.TextStyle{Size: t.Caption.Size}).Color(t.Bg)
-	tip.box.Padding(ggui.Insets(t.Space*.75, t.Space*1.5)).Fill(t.Fg).Radius(t.RadiusSm)
-	tip.surface.fill, tip.surface.right = t.Fg, right
+	// shadcn's Tooltip is bg-foreground text-background whatever it is
+	// in: the page's colors, not the sidebar's in their place.
+	tip.box.Padding(ggui.Insets(t.Space*.75, t.Space*1.5)).Fill(s.pageFg).Radius(t.RadiusSm)
+	tip.surface.fill, tip.surface.right = s.pageFg, right
 	tip.effect.Progress(progress, want < 0)
 	dst.Overlay(func(dst *ggui.Canvas) {
 		// The surface holds the arrow in the gap, so it starts at the row.
