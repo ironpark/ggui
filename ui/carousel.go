@@ -572,22 +572,34 @@ func (c *CarouselWidget) HandlePointer(e ggui.PointerEvent) bool {
 		return true
 	case ggui.PointerUp:
 		if c.dragging {
-			projected := c.offset
-			if ggui.Now().Sub(c.dragTime) < 100*time.Millisecond {
-				projected += clamp(c.velocity*.12, -c.view, c.view)
+			// The release is Embla's: a flick, faster than 100px a second
+			// when the pointer last moved within its 170ms, carries on
+			// for what it would cover in 300ms. Less than a fifth of the
+			// view (between 50 and 225px) only nudges where the nearest
+			// snap is looked for; more goes to the snap next to the
+			// selected one, however short the drag was.
+			force := 0.0
+			if ggui.Now().Sub(c.dragTime) <= 170*time.Millisecond && math.Abs(c.velocity) > 100 {
+				force = c.velocity * .3
 			}
-			best, dist := 0, math.Inf(1)
-			for i := range c.snaps {
-				v := c.snapTarget(i, 0)
-				if delta := math.Abs(v - projected); delta < dist {
-					dist = delta
-					best = i
+			best, dir := 0, 0
+			if math.Abs(force) >= clamp(c.view*.2, 50, 225) {
+				dir = pick(force > 0, 1, -1)
+				best = c.Selected() + dir
+			} else {
+				dist := math.Inf(1)
+				for i := range c.snaps {
+					v := c.snapTarget(i, 0)
+					if delta := math.Abs(v - (c.offset + force)); delta < dist {
+						dist = delta
+						best = i
+					}
 				}
 			}
 			c.dragging = false
 			c.target = c.offset
 			c.began = time.Time{}
-			c.scroll(best, 0, false)
+			c.scroll(best, dir, false)
 		}
 	}
 	return c.Pointer(e, nil)
