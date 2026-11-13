@@ -144,7 +144,7 @@ func lightBase() Theme {
 		Chat:    defaultChat(),
 		Text:    ggui.TextStyle{Size: 14, LineHeight: 20.0 / 14},
 		Title:   ggui.TextStyle{Size: 24, Weight: ggui.WeightSemibold},
-		Heading: ggui.TextStyle{Size: 18, Weight: ggui.WeightSemibold},
+		Heading: ggui.TextStyle{Size: 16, LineHeight: 22.0 / 16, Weight: ggui.WeightMedium},
 		Label:   ggui.TextStyle{Weight: ggui.WeightMedium},
 		Caption: ggui.TextStyle{Size: 12, LineHeight: 16.0 / 12},
 		Mono:    ggui.TextStyle{Font: ggui.DefaultMonoFont()},
