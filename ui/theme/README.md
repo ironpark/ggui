@@ -206,10 +206,12 @@ them, which a ggui popup does not, so they are not offered.
 
 `Icons` names an icon library for the recipe's themes to carry. `ui/theme`
 cannot import the icon packages, which import it, so a library is a choice once
-it is registered, by the application or by the package of the set:
+it is registered. The bundled sets register themselves when linked; another set
+registers with `theme.RegisterIcons`:
 
 ```go
-theme.RegisterIcons(theme.IconsTabler, icons.SetKey, icons.Set(tabler.Set()))
+import _ "github.com/ironpark/ggui/ui/icons/tabler"
+
 recipe := theme.Config{Icons: theme.IconsTabler}
 ```
 

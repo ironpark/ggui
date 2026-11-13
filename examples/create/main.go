@@ -18,7 +18,7 @@ import (
 	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/icons"
 	"github.com/ironpark/ggui/ui/icons/lucide"
-	"github.com/ironpark/ggui/ui/icons/tabler"
+	_ "github.com/ironpark/ggui/ui/icons/tabler" // offered as a library; linking registers it
 	"github.com/ironpark/ggui/ui/theme"
 )
 
@@ -32,12 +32,6 @@ type customization struct {
 
 func defaults() customization {
 	return customization{Theme: theme.Config{Preset: theme.Preset{Base: theme.BaseNeutral, Style: theme.StyleNova}, Font: theme.FontInter, Heading: theme.FontInter, Icons: theme.IconsLucide}, Mode: theme.ModeDark}
-}
-
-// The icon sets the playground offers, registered so a recipe can name them.
-func init() {
-	theme.RegisterIcons(theme.IconsLucide, icons.SetKey, icons.Set(lucide.Set()))
-	theme.RegisterIcons(theme.IconsTabler, icons.SetKey, icons.Set(tabler.Set()))
 }
 
 // iconChoices are the libraries of the Icon library tile.
@@ -312,8 +306,9 @@ func validateCustomization(s customization) (err error) {
 	return nil
 }
 
-// sourceCode is a Go file that applies the recipe: it registers the icon
-// library the recipe names, then follows the chosen mode.
+// sourceCode is a Go file that applies the recipe: it links the icon
+// library the recipe names, which registers it, then follows the chosen
+// mode.
 func sourceCode(s customization) string {
 	library := string(s.Theme.Icons)
 	recipe := strings.TrimSuffix(s.Theme.GoCode(false), ".For(false)")
@@ -327,18 +322,16 @@ func sourceCode(s customization) string {
 	code := fmt.Sprintf(`package main
 
 import (
-%s "github.com/ironpark/ggui/ui/icons"
- "github.com/ironpark/ggui/ui/icons/%s"
+%s _ "github.com/ironpark/ggui/ui/icons/%s"
  "github.com/ironpark/ggui/ui/theme"
 )
 
 // Call applyTheme from your application's Setup.
 func applyTheme() {
- theme.RegisterIcons(%q, icons.SetKey, icons.Set(%s.Set()))
  recipe := %s
  %s
 }
-`, imports, library, library, library, recipe, apply)
+`, imports, library, recipe, apply)
 	formatted, err := format.Source([]byte(code))
 	if err != nil {
 		panic(err)
