@@ -479,3 +479,21 @@ func TestQuestionnairePartsAreAGapApartAndTheDescriptionUnderTheTitle(t *testing
 		t.Errorf("with no description the choices are %v under the title, want 16", got)
 	}
 }
+
+// A vertical attachment is shadcn's w-24, 96 across, and
+// has-data-[slot=attachment-content]:w-30, 120, once it has a title or a
+// description: media alone is a square card with nothing kept under it.
+func TestVerticalAttachmentIsNarrowerWithNoText(t *testing.T) {
+	t.Parallel()
+	env := uitheme.Default().Apply(ggui.Env{})
+	c := ggui.Loose(ggui.Sz(400, 400))
+	icon := func() ggui.Widget { return Icon(icons.File) }
+	named := Attachment("report.pdf", "2 MB").Media(icon()).Vertical().Layout(c, env)
+	bare := Attachment("", "").Media(icon()).Vertical().Layout(c, env)
+	if named.W != 120 || bare.W != 96 {
+		t.Fatalf("a vertical attachment is %v wide with text and %v without, want 120 and 96", named.W, bare.W)
+	}
+	if bare.H != bare.W {
+		t.Fatalf("media alone makes a card %v, want it square", bare)
+	}
+}
