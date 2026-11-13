@@ -256,3 +256,23 @@ func TestItemWithAnActionIsALinkAndOneWithoutTakesNoInput(t *testing.T) {
 		t.Fatalf("Enter on the focused row ran it %d times in all, want 2", taps)
 	}
 }
+
+// MenubarLabel hands DropdownMenuLabel "text-sm" over its "text-xs" and
+// leaves its text-muted-foreground: a heading in a menubar's menu is a
+// row's 20px line where a dropdown's is the caption's 16.
+func TestMenuLabelInAMenubarIsTheSizeOfARow(t *testing.T) {
+	t.Parallel()
+	theme := uitheme.Default()
+	env := theme.Apply(ggui.Env{})
+	c := ggui.Loose(ggui.Sz(400, 400))
+	inMenu, inBar := MenuLabel("Appearance"), MenuLabel("Appearance")
+	Menu("View", inMenu, MenuItem("Zoom", nil))
+	Menubar(Menu("View", inBar, MenuItem("Zoom", nil)))
+	small, large := inMenu.Layout(c, env), inBar.Layout(c, env)
+	rows := theme.ItemPad.Top + theme.ItemPad.Bottom
+	body := ggui.Text("Appearance").Style(theme.Text).Layout(c, env).H
+	caption := Caption("Appearance").Layout(c, env).H
+	if small.H != caption+rows || large.H != body+rows || large.H <= small.H {
+		t.Fatalf("a dropdown's label is %v tall and a menubar's %v, want %v and %v", small.H, large.H, caption+rows, body+rows)
+	}
+}
