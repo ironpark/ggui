@@ -170,11 +170,32 @@ func Parse(data []byte) (*SVG, error) {
 	if err != nil {
 		return nil, fmt.Errorf("icons: parse SVG: %w", err)
 	}
+	return checked(doc)
+}
+
+// checked is doc as an icon, which needs a box to be fitted by.
+func checked(doc *svg.Document) (*SVG, error) {
 	x, y, w, h := doc.ViewBox()
 	if w <= 0 || h <= 0 || math.IsNaN(w+h+x+y) || math.IsInf(w+h+x+y, 0) {
 		return nil, fmt.Errorf("icons: SVG needs a finite positive viewBox")
 	}
 	return &SVG{doc: doc}, nil
+}
+
+// MarshalBinary returns what parsing the SVG arrived at, for an icon known
+// ahead of time to be kept without its source and read back by ParseBinary
+// without parsing it. An icon of shapes in plain colors has such a form; one
+// with gradients, clip paths, masks or markers does not, and is kept as SVG.
+func (s *SVG) MarshalBinary() ([]byte, error) { return s.doc.MarshalBinary() }
+
+// ParseBinary is the SVG that MarshalBinary wrote as data. It draws as the
+// one it was written from does, and costs none of the reading of the source.
+func ParseBinary(data []byte) (*SVG, error) {
+	doc := new(svg.Document)
+	if err := doc.UnmarshalBinary(data); err != nil {
+		return nil, fmt.Errorf("icons: %w", err)
+	}
+	return checked(doc)
 }
 
 // Load reads an SVG from an embedded or other filesystem.
