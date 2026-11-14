@@ -66,6 +66,32 @@ References:
 - https://ui.shadcn.com/docs/cli#migrate-icons
 - [Lucide source and license](lucide/README.md)
 
+## Whole libraries
+
+The sets bundled here hold only the roles the controls draw. The whole of each
+library is a module of its own, a variable for each icon, and a program is
+linked with only the icons it names:
+
+| Module | Icons |
+| --- | --- |
+| [`github.com/ironpark/ggui/icons/lucide`](../../icons/lucide/README.md) | Lucide, 2055 |
+| [`github.com/ironpark/ggui/icons/tabler`](../../icons/tabler/README.md) | Tabler outline and filled, 6287 |
+| [`github.com/ironpark/ggui/icons/heroicons`](../../icons/heroicons/README.md) | Heroicons 24px outline and solid, 648 |
+
+```go
+import "github.com/ironpark/ggui/icons/lucide"
+
+lucide.Rocket.Icon().Size(20)                       // only this icon is linked
+icons.Map{icons.Download: lucide.HardDriveDownload.SVG()}
+```
+
+An icon is an `*icons.Glyph`, read the first time it is drawn. The libraries
+keep each icon already parsed (`Data`, the form `SVG.MarshalBinary` writes), so
+drawing one reads no SVG; your own can be declared from the source,
+`var Logo = &icons.Glyph{Name: "logo", Source: "<svg …>"}`. Each module's `all`
+package lists every icon for a lookup by name at run time, which links them
+all; see the module's README.
+
 ## Bundled libraries
 
 Each library exposes the same `Set()`, `Asset(name)`, and `Icon(name)` API and
