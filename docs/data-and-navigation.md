@@ -27,7 +27,7 @@ See [example conventions](README.md#start-here) before copying snippets.
 | Control | Behavior |
 | --- | --- |
 | `ui.Tabs(selected, ui.Tab("One", page), ...)` | Displays the selected index, with an animated segmented selection. Arrows move focus; Enter/Space activates. `.ActivateOnFocus(true)` opts into automatic selection; `.Line()` uses an underline. Only the active page is laid out. `Tab(...).Header(widget)` draws an icon, count or badge in place of the label's text, which still names the tab; `Tab(...).Tooltip(text)` explains it. |
-| `ui.Collapsible(open, "Title", content)` | A titled section whose content eases open and closed, as `Reveal` does. `ui.CollapsibleOf(open, trigger, content)` takes a header of your own, painted as it is, all of which toggles the content. |
+| `ui.Collapsible(open, "Title", content)` | A titled section whose content eases open and closed, as `ui.Reveal` does. `ui.CollapsibleOf(open, trigger, content)` takes a header of your own, painted as it is, all of which toggles the content. |
 | `ui.Card(child)` | Adds a surface, foreground/10 outline, radius and padding; `.Shadow(...)` opts into elevation. Given `CardHeader`, `CardContent` and `CardFooter` sections it lays them out as shadcn's card does; see [composition helpers](feedback-and-composition.md#composition-helpers). |
 | `ui.Badge("new")` | Displays a small label; `.Secondary()`, `.Outline()`, `.Ghost()`, `.Link()` and `.Destructive()` change its look, and `.Icon(role)` or `.TrailingIcon(role)` add an icon. |
 | `ui.Progress(value)` | Eases toward a fraction from a `Readable[float64]`. `.Label(text)` writes a label above its left end, `.ShowValue()` the percentage above its right end, and `.FormatValue(fn)` that value in words of your own, "3 of 12". |

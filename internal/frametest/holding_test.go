@@ -211,7 +211,7 @@ var (
 func disclosure() (ggui.Widget, func(*ggui.WindowProbe)) {
 	open := ggui.State(false)
 	body := ggui.Box(ggui.Box().Size(60, 40).Fill(red).Shadow(ggui.ShadowStyle{Blur: 12, Spread: 4, Color: shade})).Pad(10)
-	w := ggui.Column(ggui.Reveal(open, body), ggui.Box().Size(80, 20).Fill(blue))
+	w := ggui.Column(ui.Reveal(open, body), ggui.Box().Size(80, 20).Fill(blue))
 	return w, func(*ggui.WindowProbe) { open.Set(true) }
 }
 

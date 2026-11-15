@@ -9,6 +9,7 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
 )
 
@@ -32,7 +33,7 @@ func chatImage(name string) *ggfx.Image {
 	if err != nil {
 		panic(err)
 	}
-	img, err := ggui.DecodeImage(data)
+	img, err := ui.DecodeImage(data)
 	if err != nil {
 		panic(err)
 	}

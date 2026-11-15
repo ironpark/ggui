@@ -28,7 +28,10 @@ returns the factor, and drawing goes through it: `dst.FillRect`,
 converts a length, `dst.Geo(at)` is the transform for drawing on `dst.Image`
 with ggfx directly, and text rasterizes its face at the scaled size rather
 than scaling the pixels. A custom widget that draws with ggfx directly should
-do the same.
+do the same. Layout has no Canvas to ask; `ggui.UseScale()` is the factor of
+the window or probe being laid out, for a widget that sizes what it
+rasterizes or decodes before its first paint, as `ui.AsyncImage` does. In a
+test, `Probe.SetScale(2)` lays out and paints as a Retina screen would.
 
 `dst.DrawImage(img, r, ggui.ImageOptions{})` draws an image in a logical
 Rect. The options place it (`Fit`, contain by default, clipped to the Rect),

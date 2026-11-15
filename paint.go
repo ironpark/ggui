@@ -244,6 +244,116 @@ func (c *Canvas) maskRoundRect(img *ggfx.Image, r Rect, radius float64) {
 	render.MaskRoundRect(c.Image, img, Pt(c.px(centre.X), c.px(centre.Y)), Sz(r.Size.W*scale/2, r.Size.H*scale/2), radius*scale)
 }
 
+// ImageFit says how an image is placed in a box of another shape.
+type ImageFit int
+
+const (
+	FitContain ImageFit = iota // scaled to fit inside, keeping its aspect ratio
+	FitCover                   // scaled to cover the box, keeping its aspect ratio, and clipped
+	FitFill                    // stretched to the box
+	FitNone                    // drawn at its natural size, centered, and clipped
+)
+
+// Place returns the Rect an image of the natural size n is drawn in to fit
+// the box r this way. An image with no size fills r.
+func (f ImageFit) Place(n Size, r Rect) Rect {
+	if n.W == 0 || n.H == 0 {
+		return r
+	}
+	var s Size
+	switch f {
+	case FitFill:
+		return r
+	case FitNone:
+		s = n
+	case FitCover:
+		k := max(r.Size.W/n.W, r.Size.H/n.H)
+		s = Sz(n.W*k, n.H*k)
+	default:
+		k := min(r.Size.W/n.W, r.Size.H/n.H)
+		s = Sz(n.W*k, n.H*k)
+	}
+	return Rct(Pt(r.Origin.X+(r.Size.W-s.W)/2, r.Origin.Y+(r.Size.H-s.H)/2), s)
+}
+
+// ImageOptions says how DrawImage draws an image. The zero value fits it
+// inside the Rect, opaque, upright and smoothed.
+type ImageOptions struct {
+	// Fit places the image in the Rect; what falls outside is clipped.
+	Fit ImageFit
+	// Radius rounds the Rect's corners, antialiased, and the image is cut
+	// to them: at half the side of a square, a round photo.
+	Radius float64
+	// Fade is how far the image fades out: 0 draws it opaque, 1 not at all.
+	Fade float64
+	// Tint multiplies every pixel, which is how a white icon takes a
+	// colour; nil leaves them.
+	Tint color.Color
+	// Rotation turns the image clockwise about the centre of where it is
+	// drawn, in radians.
+	Rotation float64
+	// Pixelated scales by the nearest pixel instead of smoothing.
+	Pixelated bool
+}
+
+// DrawImage draws img in the logical Rect r, as o says.
+func (c *Canvas) DrawImage(img *ggfx.Image, r Rect, o ImageOptions) {
+	if c == nil || c.Image == nil || img == nil || o.Fade >= 1 {
+		return
+	}
+	b := img.Bounds()
+	if b.Empty() {
+		return
+	}
+	at := o.Fit.Place(Sz(float64(b.Dx()), float64(b.Dy())), r)
+	if o.Radius > 0 {
+		c.shadeImage(img, r, at, o)
+		return
+	}
+	if at != r {
+		c = c.Clip(r)
+	}
+	c.drawImage(img, at, o)
+}
+
+// drawImage draws img stretched over the logical Rect r.
+func (c *Canvas) drawImage(img *ggfx.Image, r Rect, o ImageOptions) {
+	b := img.Bounds()
+	// A turned image reaches as far as its corners do at this angle: no
+	// further than r when hardly turned, so that a spinner turning from
+	// upright stays within what the frame before it drew.
+	reach := 0.0
+	if o.Rotation != 0 {
+		sin, cos := math.Abs(math.Sin(o.Rotation)), math.Abs(math.Cos(o.Rotation))
+		w, h := r.Size.W, r.Size.H
+		reach = max((w*cos+h*sin-w)/2, (w*sin+h*cos-h)/2, 0)
+	}
+	if !c.visiblePaintBounds(r, reach) {
+		return
+	}
+	op := &ggfx.DrawImageOptions{Filter: ggfx.FilterLinear}
+	if o.Pixelated {
+		op.Filter = ggfx.FilterNearest
+	}
+	w, h := float64(b.Dx()), float64(b.Dy())
+	if o.Rotation != 0 {
+		op.GeoM.Translate(-w/2, -h/2)
+		op.GeoM.Scale(r.Size.W/w, r.Size.H/h)
+		op.GeoM.Rotate(o.Rotation)
+		op.GeoM.Concat(c.Geo(r.Center()))
+	} else {
+		op.GeoM.Scale(r.Size.W/w, r.Size.H/h)
+		op.GeoM.Concat(c.Geo(r.Origin))
+	}
+	if o.Tint != nil {
+		op.ColorScale.ScaleWithColor(o.Tint)
+	}
+	if o.Fade != 0 {
+		op.ColorScale.ScaleAlpha(float32(1 - o.Fade))
+	}
+	c.Image.DrawImage(img, op)
+}
+
 // shadeImage draws img placed at the logical Rect at, cut to r with its
 // corners rounded by o.Radius, in one draw: a quad over r and a pixel of
 // edge, whose source positions follow at.

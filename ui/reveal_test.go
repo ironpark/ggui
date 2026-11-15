@@ -1,28 +1,33 @@
-package ggui
+package ui
 
 import (
 	"testing"
 	"time"
+
+	"github.com/ironpark/ggui"
 )
 
 // counted is a child 80 by 40 that counts its layouts and paints, and its
 // taps.
 type counted struct{ laid, painted, taps int }
 
-func (k *counted) widget() Widget {
-	return Tap(FromFuncs(func(c Constraints, _ Env) Size {
+func (k *counted) widget() ggui.Widget {
+	return ggui.Tap(ggui.FromFuncs(func(c ggui.Constraints, _ ggui.Env) ggui.Size {
 		k.laid++
-		return c.Constrain(Sz(80, 40))
-	}, func(*Canvas, Rect) { k.painted++ }), func() { k.taps++ })
+		return c.Constrain(ggui.Sz(80, 40))
+	}, func(*ggui.Canvas, ggui.Rect) { k.painted++ }), func() { k.taps++ })
 }
+
+// atTopLeft aligns w to the top-left corner of the room it is given.
+func atTopLeft(w ggui.Widget) ggui.Widget { return ggui.Align(w).At(0, 0) }
 
 // revealing runs p's frames 16ms apart until the window rests, and checks
 // that the height h keeps moving one way from one end to the other through
 // several heights between.
-func revealing(t *testing.T, p *WindowProbe, h *float64, from, to float64) []WindowFrame {
+func revealing(t *testing.T, p *ggui.WindowProbe, h *float64, from, to float64) []ggui.WindowFrame {
 	t.Helper()
 	var heights []float64
-	var frames []WindowFrame
+	var frames []ggui.WindowFrame
 	for range 60 {
 		fr := p.Step(16 * time.Millisecond)
 		frames = append(frames, fr)
@@ -50,23 +55,25 @@ func revealing(t *testing.T, p *WindowProbe, h *float64, from, to float64) []Win
 }
 
 // heightOf wraps w to keep the height it was last laid out at.
-func heightOf(w Widget, h *float64) Widget {
-	return FromFuncs(func(c Constraints, e Env) Size {
+func heightOf(w ggui.Widget, h *float64) ggui.Widget {
+	return ggui.FromFuncs(func(c ggui.Constraints, e ggui.Env) ggui.Size {
 		s := w.Layout(c, e)
 		*h = s.H
 		return s
-	}, func(dst *Canvas, r Rect) { dst.Paint(w, r) })
+	}, func(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(w, r) })
 }
 
 // A Reveal eases open and closed in a window's own frames and rests at
 // each end. Closed, its child is neither laid out nor painted; closing,
 // the child is painted but takes no input.
 func TestARevealEasesOpenAndClosedInAWindowsFrames(t *testing.T) {
-	open := State(false)
+	open := ggui.State(false)
 	var k counted
 	var h float64
 	r := Reveal(open, k.widget())
-	p := NewWindowProbe(func() Widget { return topLeft(Column(heightOf(r, &h), Box().Size(80, 10))) }, Sz(200, 200))
+	p := ggui.NewWindowProbe(func() ggui.Widget {
+		return atTopLeft(ggui.Column(heightOf(r, &h), ggui.Box().Size(80, 10)))
+	}, ggui.Sz(200, 200))
 	defer p.Close()
 	p.Run(16*time.Millisecond, 10)
 	if h != 0 || k.laid != 0 || k.painted != 0 {
@@ -81,7 +88,7 @@ func TestARevealEasesOpenAndClosedInAWindowsFrames(t *testing.T) {
 
 	open.Set(false)
 	p.Step(16 * time.Millisecond)
-	p.Click(Pt(10, 5))
+	p.Click(ggui.Pt(10, 5))
 	p.Step(16 * time.Millisecond)
 	if k.taps != 0 {
 		t.Fatal("the child took a tap while it folded away")
@@ -100,12 +107,12 @@ func TestARevealEasesOpenAndClosedInAWindowsFrames(t *testing.T) {
 
 // Opened, a Reveal's child takes input as soon as it shows.
 func TestAnOpenRevealsChildTakesInput(t *testing.T) {
-	open := State(true)
+	open := ggui.State(true)
 	var k counted
-	p := NewWindowProbe(func() Widget { return topLeft(Reveal(open, k.widget())) }, Sz(200, 200))
+	p := ggui.NewWindowProbe(func() ggui.Widget { return atTopLeft(Reveal(open, k.widget())) }, ggui.Sz(200, 200))
 	defer p.Close()
 	p.Run(16*time.Millisecond, 10)
-	p.Click(Pt(10, 5))
+	p.Click(ggui.Pt(10, 5))
 	p.Step(16 * time.Millisecond)
 	if k.taps != 1 {
 		t.Fatalf("the open child took %d taps, want 1", k.taps)
@@ -114,12 +121,12 @@ func TestAnOpenRevealsChildTakesInput(t *testing.T) {
 
 // Under reduced motion a Reveal opens and closes at once.
 func TestARevealUnderReducedMotionOpensAtOnce(t *testing.T) {
-	open := State(false)
+	open := ggui.State(false)
 	var k counted
 	var h float64
-	p := NewWindowProbe(func() Widget {
-		return Provide(ReducedMotionKey, true, topLeft(heightOf(Reveal(open, k.widget()), &h)))
-	}, Sz(200, 200))
+	p := ggui.NewWindowProbe(func() ggui.Widget {
+		return ggui.Provide(ggui.ReducedMotionKey, true, atTopLeft(heightOf(Reveal(open, k.widget()), &h)))
+	}, ggui.Sz(200, 200))
 	defer p.Close()
 	p.Run(16*time.Millisecond, 10)
 	open.Set(true)
@@ -134,20 +141,20 @@ func TestARevealUnderReducedMotionOpensAtOnce(t *testing.T) {
 
 // A horizontal Reveal eases its width and leaves its height to the child.
 func TestAHorizontalRevealEasesItsWidth(t *testing.T) {
-	open := State(false)
+	open := ggui.State(false)
 	var k counted
 	var w float64
-	r := Reveal(open, k.widget()).Horizontal().Duration(100 * time.Millisecond).Easing(EaseLinear)
-	p := NewWindowProbe(func() Widget {
-		return topLeft(FromFuncs(func(c Constraints, e Env) Size {
+	r := Reveal(open, k.widget()).Horizontal().Duration(100 * time.Millisecond).Easing(ggui.EaseLinear)
+	p := ggui.NewWindowProbe(func() ggui.Widget {
+		return atTopLeft(ggui.FromFuncs(func(c ggui.Constraints, e ggui.Env) ggui.Size {
 			s := r.Layout(c, e)
 			w = s.W
 			if s.H != 0 && s.H != 40 {
 				t.Errorf("a horizontal reveal %v tall", s.H)
 			}
 			return s
-		}, func(dst *Canvas, rect Rect) { dst.Paint(r, rect) }))
-	}, Sz(200, 200))
+		}, func(dst *ggui.Canvas, rect ggui.Rect) { dst.Paint(r, rect) }))
+	}, ggui.Sz(200, 200))
 	defer p.Close()
 	p.Run(10*time.Millisecond, 10)
 	open.Set(true)
@@ -158,20 +165,20 @@ func TestAHorizontalRevealEasesItsWidth(t *testing.T) {
 // content, is painted within the pane's viewport alone, the frame of the
 // write that opened it aside.
 func TestARevealEasingInAScrollPaintsWithinItsViewport(t *testing.T) {
-	open := State(false)
+	open := ggui.State(false)
 	var k counted
 	var h float64
-	p := NewWindowProbe(func() Widget {
-		pane := Box(Scroll(Column(heightOf(Reveal(open, k.widget()), &h), Box().Size(100, 400)))).Size(100, 100)
-		return Row(pane, Box().Size(100, 100))
-	}, Sz(200, 100))
+	p := ggui.NewWindowProbe(func() ggui.Widget {
+		pane := ggui.Box(ggui.Scroll(ggui.Column(heightOf(Reveal(open, k.widget()), &h), ggui.Box().Size(100, 400)))).Size(100, 100)
+		return ggui.Row(pane, ggui.Box().Size(100, 100))
+	}, ggui.Sz(200, 100))
 	defer p.Close()
 	p.Run(16*time.Millisecond, 10)
 	open.Set(true)
 	frames := revealing(t, p, &h, 0, 40)
-	viewport := Rct(Point{}, Sz(100, 100))
+	viewport := ggui.Rct(ggui.Point{}, ggui.Sz(100, 100))
 	for i, fr := range frames[1:] {
-		if fr.Painted != FrameContained || len(fr.Damage) == 0 {
+		if fr.Painted != ggui.FrameContained || len(fr.Damage) == 0 {
 			t.Fatalf("frame %d was painted %v, want contained: %v", i+1, fr.Painted, frames)
 		}
 		for _, d := range fr.Damage {

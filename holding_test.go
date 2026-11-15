@@ -75,7 +75,11 @@ func TestAContainMeasuredMoreThanOnceIsCheckedUnderEach(t *testing.T) {
 // to follow its content passes the request to the one around it.
 func TestInvalidateAsksTheNearestBoundaryThatHolds(t *testing.T) {
 	open := State(false)
-	r := Reveal(open, Box().Size(40, 40)).Duration(100 * time.Millisecond)
+	// A disclosure of a block 40 square, easing its height open.
+	var m Motion
+	r := FromFuncs(func(c Constraints, env Env) Size {
+		return c.Constrain(Sz(40, 40*max(m.LayoutToggle(env, open.Get(), 100*time.Millisecond), 0)))
+	}, func(*Canvas, Rect) {})
 	inner := Contain(Column(r))
 	outer := Contain(Box(topLeft(inner)).Size(100, 100))
 	p := NewWindowProbe(func() Widget { return topLeft(Row(outer, Box().Size(50, 50))) }, Sz(200, 120))

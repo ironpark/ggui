@@ -439,3 +439,23 @@ func TestLayerGaugeBalances(t *testing.T) {
 		t.Fatalf("after freeing the gauge is %d off", got)
 	}
 }
+
+func TestImagePlacement(t *testing.T) {
+	t.Parallel()
+	natural := Sz(200, 100)
+	box := Rct(Pt(0, 0), Sz(100, 100))
+	cases := []struct {
+		fit  ImageFit
+		want Rect
+	}{
+		{FitContain, Rct(Pt(0, 25), Sz(100, 50))},
+		{FitCover, Rct(Pt(-50, 0), Sz(200, 100))},
+		{FitFill, box},
+		{FitNone, Rct(Pt(-50, 0), Sz(200, 100))},
+	}
+	for _, tc := range cases {
+		if got := tc.fit.Place(natural, box); got != tc.want {
+			t.Errorf("fit %d: %+v, want %+v", tc.fit, got, tc.want)
+		}
+	}
+}
