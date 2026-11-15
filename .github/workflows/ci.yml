@@ -124,7 +124,7 @@ jobs:
       # one platform alone is not dead: staticcheck runs once per platform.
       - name: staticcheck
         run: |
-          go install honnef.co/go/tools/cmd/staticcheck@v0.8.1
+          go install honnef.co/go/tools/cmd/staticcheck@v0.8.2
           for p in linux/amd64 darwin/arm64 windows/amd64 windows/arm64; do
             echo "::group::$p"
             GOOS=${p%/*} GOARCH=${p#*/} staticcheck ./... ./examples/sqlite/... ./fonts/notoemoji/... ./icons/heroicons/... ./icons/lucide/... ./icons/tabler/...
