@@ -1759,3 +1759,19 @@ func TestCachedTextInputFollowsSignal(t *testing.T) {
 		t.Fatalf("editor shows %q", in.ed.Text)
 	}
 }
+
+// A line is drawn in pieces, the stretches Colors gives in their colours
+// and the rest in the style's, the stretches cut to the line, and one
+// out of order left out.
+func TestColorPiecesCoverTheLine(t *testing.T) {
+	red, blue := color.NRGBA{R: 255, A: 255}, color.NRGBA{B: 255, A: 255}
+	colors := []TextColor{{Start: 2, End: 6, Color: red}, {Start: 4, End: 5, Color: blue}, {Start: 8, End: 20, Color: blue}}
+	got := colorPieces(nil, textlayout.Span{Start: 3, End: 10}, colors)
+	want := []TextColor{{Start: 3, End: 6, Color: red}, {Start: 6, End: 8}, {Start: 8, End: 10, Color: blue}}
+	if !slices.Equal(got, want) {
+		t.Fatalf("pieces %v, want %v", got, want)
+	}
+	if got := colorPieces(nil, textlayout.Span{Start: 0, End: 4}, nil); !slices.Equal(got, []TextColor{{Start: 0, End: 4}}) {
+		t.Fatalf("no colours: %v", got)
+	}
+}
