@@ -7,6 +7,7 @@ import (
 
 	"github.com/ironpark/ggui/internal/platform/textinput"
 	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/pkg/kinetics"
 	"github.com/ironpark/ggwd"
 )
@@ -342,8 +343,8 @@ type hitRegion struct {
 	scope   *focusScope // the focus trap the region was painted in, if any
 	role    Role        // from a Semantic handler
 	label   string
-	group   any        // set by inGroup: the EachKeyed entry that painted it
-	drag    dragSource // a DragSource beneath its child; see drag.go
+	group   any       // set by Group: the EachKeyed entry that painted it
+	drag    Draggable // a DragSource beneath its child; see drag.go
 
 	space  *paintSpace // the space it was painted in, nil for the window's
 	local  Rect        // rect in that space, clipped there; see contains
@@ -557,7 +558,7 @@ func (in *inputState) markBusyGroups() {
 	busy := activeWorld().busy
 	clear(busy)
 	for _, r := range []*hitRegion{in.focused, in.pressed, in.touchMotion.target} {
-		if r != nil && r.group != nil {
+		if r != nil && r.group != nil && comparableID(r.group) {
 			busy[r.group] = true
 		}
 	}
@@ -603,7 +604,7 @@ func (in *inputState) updateHover(f frameInput) {
 		if now != nil {
 			in.deliver(now, PointerEvent{Kind: PointerEnter, Pos: f.pos})
 		}
-	} else if now != nil && now.pointer != nil && !sameAny(now.pointer, in.hovered.pointer) {
+	} else if now != nil && now.pointer != nil && !gem.Same(now.pointer, in.hovered.pointer) {
 		// Rebuilt under the pointer, the region is a new handler, with a
 		// hover state of its own that never heard the enter: a row of a
 		// list redrawn for a change elsewhere would show itself left. The
@@ -720,12 +721,12 @@ func (in *inputState) dispatchKeys(f frameInput) {
 		in.afterFocused(f, nil)
 		return
 	}
-	if prev := in.focused.key; !sameAny(prev, cur.key) {
+	if prev := in.focused.key; !gem.Same(prev, cur.key) {
 		// The tree was rebuilt: the region is the same, the widget new.
 		// An Adopter already took the old one's state over during paint;
 		// anything else is told it has focus now.
 		if _, ok := cur.key.(Adopter); !ok {
-			delivered()
+			RepaintAll()
 			cur.key.HandleKey(KeyEvent{Kind: KeyFocus})
 		}
 	}
@@ -891,17 +892,17 @@ func (in *inputState) regionOf(h any, key bool) *hitRegion {
 	if key {
 		hint = &x.key
 	}
-	if hint.h != nil && sameAny(hint.h, h) {
+	if hint.h != nil && gem.Same(hint.h, h) {
 		if hint.at < 0 {
 			return nil
 		}
-		if r := &in.regions[hint.at]; sameAny(handlerOf(r, key), h) {
+		if r := &in.regions[hint.at]; gem.Same(handlerOf(r, key), h) {
 			return r
 		}
 	}
 	at := -1
 	for i := len(in.regions) - 1; i >= 0; i-- {
-		if r := handlerOf(&in.regions[i], key); r != nil && sameAny(r, h) {
+		if r := handlerOf(&in.regions[i], key); r != nil && gem.Same(r, h) {
 			at = i
 			break
 		}
@@ -947,12 +948,17 @@ func (in *inputState) deliver(r *hitRegion, ev PointerEvent) bool {
 	return took
 }
 
-// delivered counts the events handed to widgets in the active world,
-// which may change how they look with no signal written: a frame in which
-// its world's count moves is painted whole. The count is the world's, not
-// the process's: a window's frame is not painted whole for what a probe or
-// an App on another goroutine handled meanwhile.
-func delivered() { activeWorld().delivered++ }
+// RepaintAll has the frame that follows the input being handled paint the
+// whole window, rather than only the regions the input reached. A handler
+// calls it when what it did changes how widgets look with no signal
+// written, and beyond the region the event was handed to: a click that
+// clears a selection running through paragraphs it did not land in. Input
+// calls it itself for every focus and blur it hands out. It counts the
+// events handed to widgets in the active world, and a frame in which its
+// world's count moved is painted whole: a window's frame is not painted
+// whole for what a probe or an App on another goroutine handled meanwhile.
+// Outside an input handler it has no effect.
+func RepaintAll() { activeWorld().delivered++ }
 
 // send offers ev to regions under it from the top down until one consumes it
 // and returns that region, or nil.
@@ -1021,7 +1027,7 @@ func (in *inputState) focus(r *hitRegion, keyboard bool) {
 	if r == nil && in.focused == nil {
 		return
 	}
-	if r != nil && in.focused != nil && (sameAny(r.key, in.focused.key) || in.continues(r, in.focused)) {
+	if r != nil && in.focused != nil && (gem.Same(r.key, in.focused.key) || in.continues(r, in.focused)) {
 		// The same widget, perhaps in another region, such as a dropdown's
 		// list under its field: focus stays, without a blur, and becomes
 		// visible if the keyboard moved it there.
@@ -1030,7 +1036,7 @@ func (in *inputState) focus(r *hitRegion, keyboard bool) {
 		return
 	}
 	if in.focused != nil && in.focused.key != nil {
-		delivered()
+		RepaintAll()
 		in.focused.key.HandleKey(KeyEvent{Kind: KeyBlur})
 	}
 	if r != nil && r.key != nil {
@@ -1073,7 +1079,7 @@ func (in *inputState) moveFocus(dir int) {
 		if r.key == nil || (scope != nil && (r.scope == nil || r.scope.owner != scope.owner)) {
 			continue
 		}
-		if r == focused || focused != nil && sameAny(r.key, focused.key) {
+		if r == focused || focused != nil && gem.Same(r.key, focused.key) {
 			// The focused widget is one stop, at its first region, however
 			// many it painted: a combobox's input also takes the keyboard
 			// over its list.
@@ -1121,7 +1127,7 @@ func (in *inputState) continues(now, prev *hitRegion) bool {
 	if now == nil || prev == nil {
 		return now == prev
 	}
-	if (prev.pointer != nil && sameAny(now.pointer, prev.pointer)) || (prev.key != nil && sameAny(now.key, prev.key)) {
+	if (prev.pointer != nil && gem.Same(now.pointer, prev.pointer)) || (prev.key != nil && gem.Same(now.key, prev.key)) {
 		return true
 	}
 	if prev.pointer != nil && in.findPointer(prev) == now {
@@ -1379,7 +1385,7 @@ func (in *inputState) applyFocusRequest(f *frameState) {
 	}
 	for i := range in.regions {
 		r := &in.regions[i]
-		if sameAny(r.key, h) {
+		if gem.Same(r.key, h) {
 			if scope := in.activeScope(); scope != nil && r.scope != scope {
 				return
 			}
@@ -1525,7 +1531,7 @@ func (in *inputState) stepTouchMomentum(now time.Time) {
 		m.stop()
 		return
 	}
-	if scope := in.activeScope(); scope != nil && (cur.scope == nil || !sameAny(scope.owner, cur.scope.owner)) {
+	if scope := in.activeScope(); scope != nil && (cur.scope == nil || !gem.Same(scope.owner, cur.scope.owner)) {
 		m.stop()
 		return
 	}

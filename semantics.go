@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/ironpark/ggui/a11y"
+	"github.com/ironpark/ggui/pkg/gem"
 )
 
 // The description types live in the a11y package, which cannot import
@@ -264,13 +265,14 @@ func (c *Canvas) addSem(r Rect, n Node, h any) SemRef {
 	return ref
 }
 
-// named reports whether the element painted just before r, under the same
-// parent, is a control that covers it: a button's own label, a checkbox's
-// text. Such text is part of the control's name, not an element beside it,
-// so TextWidget stays quiet inside one. The comparison is against the
-// control's unclipped bounds, so a row scrolled out of view does not
-// suddenly grow a text node of its own.
-func (c *Canvas) named(r Rect) bool {
+// Named reports whether the element described just before r, under the
+// same parent, is a control that covers it: a button whose label this is, a
+// checkbox's text. Such text is part of the control's name, not an element
+// beside it, so a widget that paints text describes it with Leaf or Node
+// only where Named is false, and Text stays quiet inside a button. The
+// comparison is against the control's unclipped bounds, so a row scrolled
+// out of view does not suddenly grow a text node of its own.
+func (c *Canvas) Named(r Rect) bool {
 	if c == nil {
 		return false
 	}
@@ -335,7 +337,7 @@ func (s semSource) Parent(i int) int { return s.f.sem[i].parent - 1 }
 
 func (s semSource) Same(i int, b *SemNode) bool {
 	a := &s.f.sem[i]
-	return a.rect == b.Rect && a.full == b.Full && sameAny(a.id, b.ID.ID) && sameNode(&a.node, &b.Node)
+	return a.rect == b.Rect && a.full == b.Full && gem.Same(a.id, b.ID.ID) && sameNode(&a.node, &b.Node)
 }
 
 func (s semSource) Fill(i int, dst *SemNode) {
@@ -522,7 +524,7 @@ func findSemNode(c *Canvas, id NodeID) *semNode {
 		if e.node.Role != id.Role {
 			continue
 		}
-		if id.ID != nil && sameAny(e.id, id.ID) || id.ID == nil && e.id == nil && e.full == id.Rect {
+		if id.ID != nil && gem.Same(e.id, id.ID) || id.ID == nil && e.id == nil && e.full == id.Rect {
 			return e
 		}
 	}
@@ -549,7 +551,7 @@ func press(e *semNode) bool {
 // focusNode moves keyboard focus to the node's region, as Tab would, so the
 // control shows its focus ring and every Revealer scrolls it into view.
 func focusNode(in *inputState, e *semNode) bool {
-	r := in.topmost(func(r *hitRegion) bool { return r.key != nil && sameAny(r.key, e.handler) })
+	r := in.topmost(func(r *hitRegion) bool { return r.key != nil && gem.Same(r.key, e.handler) })
 	if r == nil {
 		return false
 	}

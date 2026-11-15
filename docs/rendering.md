@@ -78,6 +78,14 @@ at)`; `dst.TextStyleWidth` measures it. `dst.DrawText(s, font, size, at,
 col)` is the same without a weight. Text that wraps, can be selected
 or must be read by a screen reader is a `Text` painted as a child.
 
+A widget that draws on `dst.Image` itself, through ggfx or a text engine,
+asks `dst.Draws(r, reach)` before each piece it draws, a line of glyphs
+say: it notes `r`, and `reach` around it, as where the widget draws, which a
+frame painted in part needs, and reports whether any of that lands where
+this frame paints, so a long text in a Scroll shapes only the lines that
+show. `dst.Shows(r)` asks the second half alone, for work that is not
+drawing at all.
+
 Monospaced text on a grid, a terminal's cells or a hex dump's columns, is
 drawn with `dst.DrawTextCells(s, st, at, cellW)`: each grapheme starts a cell
 of its own, on a whole device pixel, so a cell rounded to whole pixels while
@@ -187,7 +195,10 @@ it drew before, its own Rect: one that draws past it, or opens an
 `Overlay`, has that frame painted whole, as does one under a `Transform` or
 a shape clip, which cannot be placed in the window. A signal written, a
 layout asked for outside a boundary, a key, a click or a resize still paint
-the whole window.
+the whole window. A pointer or key handler that changes how widgets look
+with no signal written, beyond the region its event reached, a click that
+clears a selection running through other paragraphs, calls
+`ggui.RepaintAll()`, and the frame that follows paints the whole window.
 
 ## Retained paint state
 

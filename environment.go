@@ -377,7 +377,7 @@ func (e Env) WithText(s TextStyle) Env {
 // WithTextReplaced replaces the inherited text style, including zero fields.
 // Use WithText to merge a partial style instead.
 func (e Env) WithTextReplaced(s TextStyle) Env {
-	if sameAny(s, e.text) {
+	if gem.Same(s, e.text) {
 		return e
 	}
 	val := any(s)
@@ -463,7 +463,7 @@ func (k EnvKey[T]) equal(a, b T) bool {
 	if k.same != nil {
 		return k.same.fn(a, b)
 	}
-	return sameAny(a, b)
+	return gem.Same(a, b)
 }
 
 // With returns e with v stored under k for the subtree below. Storing the

@@ -166,7 +166,7 @@ func (s inspectSource) Semantic(i int) int {
 		return -1
 	}
 	for j := range sem {
-		if sameAny(sem[j].handler, w) {
+		if gem.Same(sem[j].handler, w) {
 			return j
 		}
 	}

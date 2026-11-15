@@ -139,7 +139,7 @@ func (b *BoxWidget) Gradient(g Gradient) *BoxWidget {
 	if property.Equal(g, was) {
 		return b
 	}
-	if g.themed() || was.themed() {
+	if g.Themed() || was.Themed() {
 		b.props.Changed()
 	}
 	d := b.decorate()

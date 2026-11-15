@@ -8,10 +8,13 @@ import (
 )
 
 // The drag session: what input does while something is dragged. A drag
-// inside the app starts on a region registered with hitDrag and ends on
-// a region whose pointer handler is a dropTarget; DragSource, DropZone
+// inside the app starts on a region registered with HitDrag and ends on
+// a region whose pointer handler is a DropTarget; DragSource, DropZone
 // and Reorderable, in dragdrop.go, are built on it. Files dragged in from
-// the desktop are routed further down.
+// the desktop are routed further down, to a DropHandler and a DragHandler:
+// a drag inside the app carries a value of any type from a Draggable to a
+// DropTarget, one from the desktop carries files, and neither reaches the
+// other's handlers.
 //
 // A source does not take the press. The widget it wraps keeps its clicks,
 // and only when the pointer moves a few pixels with the button down does the
@@ -23,19 +26,44 @@ import (
 // becomes a drag.
 const dragThreshold = 4
 
-// dragSource is the side of a DragSourceWidget input talks to.
-type dragSource interface {
-	dragValue() any
-	dragMoved(at, grab Point)
-	dragEnded(dropped bool)
+// Draggable is what a drag inside the app is picked up from, registered
+// with Canvas.HitDrag. Input asks it for the value the drag carries as the
+// drag starts, tells it where the pointer is every frame the drag moves,
+// and tells it once when the drag ends.
+type Draggable interface {
+	// DragValue is the value the drag carries, asked for once as it
+	// starts. A DropTarget sees it as it is.
+	DragValue() any
+	// DragMoved is called every frame the drag follows the pointer, the
+	// first of them as it starts: at is the pointer, and grab where on the
+	// region it took hold, both in the coordinates the region was painted
+	// in. A source draws what follows the pointer from them, as a faded
+	// copy at at less grab.
+	DragMoved(at, grab Point)
+	// DragEnded is called once when the drag ends: dropped on a target
+	// that took it, or released elsewhere, or cancelled with Escape.
+	DragEnded(dropped bool)
 }
 
-// dropTarget is the side of a DropZoneWidget input talks to.
-type dropTarget interface {
-	acceptsDrag(v any) bool
-	dragOver(over bool)
-	dragMoved(v any, at Point) // the drag is over the target, at a point of its own
-	dropped(v any, at Point)
+// DropTarget is a PointerHandler that a drag inside the app can be put
+// down on: the topmost region under the pointer whose handler implements
+// it and accepts the drag's value is where it would land. It is the in-app
+// counterpart of DropHandler, which takes files from the desktop instead.
+// A region that registers only to be found under a drag returns false
+// from HandlePointer, as DropZone does.
+type DropTarget interface {
+	// AcceptsDrop reports whether the target takes v. It is asked every
+	// frame the drag is over the region; one that refuses is passed over
+	// for a target beneath.
+	AcceptsDrop(v any) bool
+	// DropHover is called with true when the drag comes over the target
+	// and with false when it leaves, is dropped or is cancelled.
+	DropHover(over bool)
+	// DropOver is called every frame the drag moves over the target, with
+	// where it would land in the target's own coordinates.
+	DropOver(v any, at Point)
+	// Drop puts v down on the target at a point of its own.
+	Drop(v any, at Point)
 }
 
 // appDrag is the drag in progress, or about to be: from the press until it
@@ -43,18 +71,18 @@ type dropTarget interface {
 type appDrag struct {
 	candidate *hitRegion // the source under the press
 	from      Point      // where the press was
-	source    dragSource // set once it is a drag
+	source    Draggable  // set once it is a drag
 	value     any
 	target    *hitRegion // the zone it is over, if one accepts it
 }
 
-// hitDrag registers r as a region a drag can start from, carrying what s
-// gives: a press on r that moves dragThreshold with the button down
-// becomes a drag, which s hears of as it moves and when it ends. The
-// region takes no press itself, so a source registers before what it
-// wraps, whose regions stay on top and keep their clicks.
-func (c *Canvas) hitDrag(r Rect, s dragSource) {
-	c.add(c.region(r, nil, hitRegion{drag: s}))
+// HitDrag registers r as a region a drag inside the app can start from,
+// carrying what d gives: a press on r that moves a few pixels with the
+// button down becomes a drag, which d hears of as it moves and when it
+// ends. The region takes no press itself, so a source registers before
+// what it wraps, whose regions stay on top and keep their clicks.
+func (c *Canvas) HitDrag(r Rect, d Draggable) {
+	c.add(c.region(r, nil, hitRegion{drag: d}))
 }
 
 // pressDrag notes the drag source under a press, if there is one.
@@ -85,38 +113,38 @@ func (in *inputState) updateAppDrag(f frameInput) {
 			return
 		}
 		src := d.candidate.drag
-		d.source, d.value = src, src.dragValue()
+		d.source, d.value = src, src.DragValue()
 		in.releasePress(f.pos, f.mods)
 	}
-	d.source.dragMoved(d.candidate.at(f.pos), d.candidate.offset(d.from))
+	d.source.DragMoved(d.candidate.at(f.pos), d.candidate.offset(d.from))
 	now := in.topmost(func(r *hitRegion) bool {
-		t, ok := r.pointer.(dropTarget)
-		return ok && r.contains(f.pos) && t.acceptsDrag(d.value)
+		t, ok := r.pointer.(DropTarget)
+		return ok && r.contains(f.pos) && t.AcceptsDrop(d.value)
 	})
 	if !in.continues(now, d.target) {
 		if d.target != nil {
-			d.target.pointer.(dropTarget).dragOver(false)
+			d.target.pointer.(DropTarget).DropHover(false)
 		}
 		if now != nil {
-			now.pointer.(dropTarget).dragOver(true)
+			now.pointer.(DropTarget).DropHover(true)
 		}
 	}
 	d.target = keep(now)
 	if now != nil && !released {
-		now.pointer.(dropTarget).dragMoved(d.value, now.offset(f.pos))
+		now.pointer.(DropTarget).DropOver(d.value, now.offset(f.pos))
 	}
 	if !released {
 		return
 	}
 	dropped := false
 	if now != nil {
-		t := now.pointer.(dropTarget)
-		t.dragOver(false)
-		t.dropped(d.value, now.offset(f.pos))
+		t := now.pointer.(DropTarget)
+		t.DropHover(false)
+		t.Drop(d.value, now.offset(f.pos))
 		dropped = true
 	}
 	in.drag = nil
-	d.source.dragEnded(dropped)
+	d.source.DragEnded(dropped)
 }
 
 // cancelAppDrag ends a drag in progress without a drop, as Escape does, and
@@ -128,9 +156,9 @@ func (in *inputState) cancelAppDrag() bool {
 		return false
 	}
 	if d.target != nil {
-		d.target.pointer.(dropTarget).dragOver(false)
+		d.target.pointer.(DropTarget).DropHover(false)
 	}
-	d.source.dragEnded(false)
+	d.source.DragEnded(false)
 	return true
 }
 

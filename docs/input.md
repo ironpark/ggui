@@ -258,6 +258,20 @@ it. `OnOver` follows the drag across the zone with a `Dropped[T]` for where
 it would land, to show where in the zone the value would go: a gap opening
 between tabs moved from one bar to another, say.
 
+A source or a zone of your own is built on the same session. A widget that
+can be picked up registers `dst.HitDrag(r, d)` before painting what it
+wraps, whose regions stay on top and keep their clicks; `d` is a
+`Draggable`, asked for the `DragValue` the drag carries as it starts, told
+`DragMoved(at, grab)` every frame it follows the pointer, with where on the
+region it took hold, and `DragEnded(dropped)` once. Somewhere a drag can
+land registers a `PointerHandler` with `HitPointer` that also implements
+`DropTarget`: the topmost one under the pointer whose `AcceptsDrop` takes
+the value hears `DropHover(true)` as the drag comes over it, `DropOver(v,
+at)` as it moves there, `Drop(v, at)` on release, in its own coordinates,
+and `DropHover(false)` as it leaves. These carry values inside the app;
+files from the desktop go to a `DropHandler` and a `DragHandler` instead,
+and neither kind reaches the other's handlers.
+
 ### Reordering a list
 
 `Reorderable(items, key, build)` is `EachKeyed` over a `Binding[[]T]` whose
@@ -346,6 +360,19 @@ Escape the focused widget did not consume closes it. `ui.Dialog(open,
 content)` is a centered modal on a scrim that takes the clicks, with
 `.Title`, `.Width` and `.OnClose`.
 
+A container that holds focus without a trap, as a nonmodal `Popup` does,
+is written on the Canvas's focus queries. It takes `mark := dst.HitMark()`
+before painting its content and `dst.KeysSince(mark, keys[:0])` after, the
+key handlers the content registered, into the slice it kept from last frame
+so painting allocates nothing; focus is inside when `dst.HasFocus` holds for
+one of them, and the first is what it focuses as it opens. `dst.Focused()`
+is who held focus as the paint began, kept as the opener, and
+`dst.FocusStale()` whether that handler has gone from the frame, so that
+focus left nowhere is taken back rather than read as moved elsewhere. As it
+closes, `dst.RestoreFocus(opener)`, asked after painting where the opener
+is, focuses the opener again, or the handler painted since with its
+`HitID`, where the opener was rebuilt.
+
 ## Roles and labels
 
 Every control carries a `Role` and a name: a button's text, a
@@ -369,7 +396,17 @@ the `IMEHandler` it passed shows compositions and applies commits.
 `dst.Clip(r)`
 returns a Canvas that draws and registers regions only inside `r`,
 `dst.Pointer()` is where the cursor is, and `dst.Overlay(fn)` paints above
-the tree once it is done.
+the tree once it is done. `dst.FocusBounds()` is where the focused region
+shows, in the same coordinates, and `dst.ClipBounds()` the Rect the Canvas
+draws within, to ask whether a point is in the part that shows.
+
+A list that keeps rows built off screen, as `EachKeyed` with `Retain` does,
+paints each row through `dst.Group(row, fn)`, which marks the regions it
+registers as the row's, and before letting a row go asks
+`ggui.GroupBusy(row)`: whether one of its regions holds the focus, a press
+or a touch being dragged, as of the last input dispatched. A row the user
+is typing in, or dragging, is then not disposed under them as it scrolls
+away. The group is compared as a map key: a pointer to the row's state.
 
 ## Keeping interaction state across rebuilds
 

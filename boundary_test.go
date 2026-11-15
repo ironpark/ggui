@@ -95,65 +95,10 @@ var privateAcross = []string{
 	"transition.go ComponentWidget.cw",
 	"transition.go CachedWidget.invalidate",
 
-	// Hit grouping: which regions belong to a row, and whether one of them
-	// holds the focus or a capture, which keeps the row mounted.
-	"dragdrop.go Canvas.inGroup",
-	"for.go Canvas.inGroup",
-	"for.go activeWorld",
-	"for.go world.busy",
-
-	// Popup's focus and hit inspection: where the focus went and what was
-	// under the pointer, which decides whether it closes.
-	"popup.go Canvas.fs",
-	"popup.go hitRegion.id",
-	"popup.go hitRegion.key",
-	"popup.go idOf",
-	"popup.go inputView.focusKey",
-	"popup.go paintedInput.hits",
-	"popup.go paintedInput.prev",
-	"popup.go sameAny",
-
-	// Drag, drop and reorder: the drag session's source, and where the
-	// focus and the clip are, for the row a drag picks up.
-	"dragdrop.go Canvas.hitDrag",
-	"dragdrop.go dragSource",
-	"dragdrop.go dragSource.dragEnded",
-	"dragdrop.go dragSource.dragMoved",
-	"dragdrop.go dragSource.dragValue",
-	"dragdrop.go Canvas.fs",
-	"dragdrop.go inputView.focusBounds",
-	"dragdrop.go Canvas.space",
-	"dragdrop.go Canvas.clip",
-	"dragdrop.go Canvas.clipped",
-	"dragdrop.go paintSpace.local",
-
-	// Semantics: a node scoped to a widget, and whether a control already
-	// named the text it painted.
-	"dragdrop.go Canvas.addSem",
-	"dragdrop.go Canvas.scoped",
-	"richtext.go Canvas.named",
-	"text.go Canvas.named",
-
-	// Culling: which lines of a long text the clip shows.
-	"richtext.go Canvas.visiblePaintBounds",
-	"text.go Canvas.visiblePaintBounds",
-
-	// Key delivery: whether a key event reached a handler.
-	"richtext.go delivered",
-
-	// Comparing spans: a style or a color compared as ==, an EnvColor by
-	// identity, without the panic an uncomparable one would raise.
-	// TextStyle.Equal compares colors by their RGBA instead.
-	"richtext.go sameAny",
-
 	// A Motion moved along with the content it scrolls, keeping its
 	// timing, which no public method does.
 	"scroll.go Motion.from",
 	"scroll.go Motion.to",
-
-	// Whether a Gradient holds an EnvColor, for Box to lay out again when
-	// one is set.
-	"widgets.go Gradient.themed",
 }
 
 // TestWidgetFilesUseThePublicKernel type-checks the root package and fails

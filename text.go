@@ -553,7 +553,7 @@ func (t *TextWidget) InspectLabel() string { return t.value }
 // the clip is skipped rather than shaped and drawn to be clipped: a long
 // Text in a Scroll draws only what shows.
 func (t *TextWidget) paintLines(dst *Canvas, r Rect, upright bool, place func(op *text.DrawOptions, x, y float64)) {
-	if t.value != "" && !dst.named(r) {
+	if t.value != "" && !dst.Named(r) {
 		dst.Leaf(r, Node{Role: roleOr(t.role, RoleText), Name: t.value})
 	}
 	if dst == nil || dst.Image == nil || dst.Image.Bounds().Empty() {
@@ -573,7 +573,7 @@ func (t *TextWidget) paintLines(dst *Canvas, r Rect, upright bool, place func(op
 		y := r.Origin.Y + t.lead + float64(i)*t.spacing()
 		// A line's glyphs can reach past its box, by an accent, a tall
 		// emoji or a long tail, by up to a line more.
-		if upright && !dst.visiblePaintBounds(Rct(Pt(r.Origin.X, y), Sz(r.Size.W, t.spacing())), t.spacing()) {
+		if upright && !dst.Draws(Rct(Pt(r.Origin.X, y), Sz(r.Size.W, t.spacing())), t.spacing()) {
 			continue
 		}
 		if t.paintBidi(dst, i, r, align, y, col, place) {

@@ -98,3 +98,29 @@ func FuzzClamp(f *testing.F) {
 		}
 	})
 }
+
+func TestSameComparesWithoutPanicking(t *testing.T) {
+	p, q := new(int), new(int)
+	type pair struct {
+		a  int
+		fn func()
+	}
+	for _, c := range []struct {
+		a, b any
+		want bool
+	}{
+		{nil, nil, true},
+		{p, p, true},
+		{p, q, false},
+		{"a", "a", true},
+		{1, int64(1), false},
+		{[2]int{1, 2}, [2]int{1, 2}, true},
+		{[]int{1}, []int{1}, false},
+		{pair{1, nil}, pair{1, nil}, false},
+		{map[int]int{}, nil, false},
+	} {
+		if got := Same(c.a, c.b); got != c.want {
+			t.Errorf("Same(%v, %v) = %v, want %v", c.a, c.b, got, c.want)
+		}
+	}
+}

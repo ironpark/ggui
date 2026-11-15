@@ -73,6 +73,14 @@ An interactive widget can implement `Describer` and `Actor`; register it with
 `Canvas.Describe` or `DescribeNode` when painting. Noninteractive content can
 use `Canvas.Leaf`, and `Canvas.Node` groups semantic children. Keep semantic
 names descriptive and avoid exposing decorative content as extra controls.
+A widget that paints text, and would describe it with `Leaf`, asks
+`dst.Named(r)` first: it is true where the element described just before is
+a control covering `r`, a button whose label the text is, and the text is
+then part of that control's name rather than an element of its own, which is
+how `Text` stays quiet inside a button. A container whose children hang
+under a node of its own that takes actions, as a reorderable list's rows do,
+implements `Describer` and `Actor` on the row and paints the row's content
+through `DescribeNode`.
 
 A control built around a `widget.TextInput` keeps the editor as the element rather
 than describing itself and forwarding the editor's input. The editor then
