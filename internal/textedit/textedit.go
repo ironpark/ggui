@@ -1,6 +1,8 @@
 // Package textedit is the editing model behind ggui's TextInput: a string,
 // a selection, undo history, and caret movement by grapheme cluster and by
-// word. It knows nothing of layout, painting or input events.
+// word, and the clicks that select (Clicks). It knows nothing of layout,
+// painting or input events: a click's offset, time and place come from
+// its caller.
 package textedit
 
 import (
