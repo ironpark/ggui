@@ -1,4 +1,11 @@
-package ggui_test
+// Package apitest_test holds the ggui package's tests that go through its
+// public surface alone: they build widgets, drive them with a Probe and read
+// back what the API, the cursor and the semantics tree show, as an
+// application or its tests would. In a package of their own they cannot
+// reach ggui's internals, so they keep holding when those change, and what
+// is left beside the source are the tests of invariants only the internals
+// show.
+package apitest_test
 
 import (
 	"testing"
@@ -6,6 +13,14 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 )
+
+// probe is a fixed-size widget that records the Rect it was painted in.
+func probe(w, h float64, got *ggui.Rect) ggui.Widget {
+	return ggui.FromFuncs(
+		func(c ggui.Constraints, _ ggui.Env) ggui.Size { return c.Constrain(ggui.Sz(w, h)) },
+		func(_ *ggui.Canvas, r ggui.Rect) { *got = r },
+	)
+}
 
 // This reader tracks through Get, but deliberately has no GetAny method.
 type formattedReader struct{ source ggui.Readable[int] }
