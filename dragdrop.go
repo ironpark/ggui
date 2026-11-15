@@ -82,7 +82,7 @@ func (d *DragSourceWidget[T]) Layout(c Constraints, env Env) Size {
 // child's own regions stay on top and keep their clicks.
 func (d *DragSourceWidget[T]) Paint(dst *Canvas, r Rect) {
 	if !d.disabled {
-		dst.hitDrag(r, d)
+		dst.HitDrag(r, d)
 	}
 	dst.Paint(d.child, r)
 	if !d.dragging {
@@ -95,9 +95,11 @@ func (d *DragSourceWidget[T]) Paint(dst *Canvas, r Rect) {
 	})
 }
 
-func (d *DragSourceWidget[T]) dragValue() any { return d.value }
+// DragValue implements Draggable: the value the source was made with.
+func (d *DragSourceWidget[T]) DragValue() any { return d.value }
 
-func (d *DragSourceWidget[T]) dragMoved(at, grab Point) {
+// DragMoved implements Draggable: the first move starts the drag.
+func (d *DragSourceWidget[T]) DragMoved(at, grab Point) {
 	if !d.dragging {
 		d.dragging = true
 		d.props.Changed() // lay out the preview
@@ -108,7 +110,8 @@ func (d *DragSourceWidget[T]) dragMoved(at, grab Point) {
 	d.at, d.grab = at, grab
 }
 
-func (d *DragSourceWidget[T]) dragEnded(dropped bool) {
+// DragEnded implements Draggable.
+func (d *DragSourceWidget[T]) DragEnded(dropped bool) {
 	d.dragging = false
 	if d.onEnd != nil {
 		d.onEnd(dropped)
@@ -186,12 +189,14 @@ func (z *DropZoneWidget[T]) Paint(dst *Canvas, r Rect) {
 // of its own; it registers only to be found under a drag.
 func (z *DropZoneWidget[T]) HandlePointer(PointerEvent) bool { return false }
 
-func (z *DropZoneWidget[T]) acceptsDrag(v any) bool {
+// AcceptsDrop implements DropTarget: a T that Accept, if set, takes.
+func (z *DropZoneWidget[T]) AcceptsDrop(v any) bool {
 	t, ok := v.(T)
 	return ok && (z.accept == nil || z.accept(t))
 }
 
-func (z *DropZoneWidget[T]) dragOver(over bool) {
+// DropHover implements DropTarget.
+func (z *DropZoneWidget[T]) DropHover(over bool) {
 	if z.over == over {
 		return
 	}
@@ -201,15 +206,17 @@ func (z *DropZoneWidget[T]) dragOver(over bool) {
 	}
 }
 
-func (z *DropZoneWidget[T]) dragMoved(v any, at Point) {
-	if z.onOver != nil {
-		z.onOver(Dropped[T]{Value: v.(T), Pos: at, Size: z.size})
+// DropOver implements DropTarget. A value that is not a T is ignored.
+func (z *DropZoneWidget[T]) DropOver(v any, at Point) {
+	if t, ok := v.(T); ok && z.onOver != nil {
+		z.onOver(Dropped[T]{Value: t, Pos: at, Size: z.size})
 	}
 }
 
-func (z *DropZoneWidget[T]) dropped(v any, at Point) {
-	if z.onDrop != nil {
-		z.onDrop(Dropped[T]{Value: v.(T), Pos: at, Size: z.size})
+// Drop implements DropTarget. A value that is not a T is ignored.
+func (z *DropZoneWidget[T]) Drop(v any, at Point) {
+	if t, ok := v.(T); ok && z.onDrop != nil {
+		z.onDrop(Dropped[T]{Value: t, Pos: at, Size: z.size})
 	}
 }
 
@@ -438,11 +445,10 @@ func (l *ReorderableWidget[T, K]) Paint(dst *Canvas, r Rect) {
 	// The row holding focus takes the move keys: the one its middle is in,
 	// as rows easing past each other overlap.
 	focus, keyed := Point{}, false
-	if dst != nil && !l.disabled {
-		if fb := dst.fs().focusBounds; !fb.Empty() {
-			focus, keyed = dst.space.local(fb.Center()), true
-		}
+	if fb, ok := dst.FocusBounds(); ok && !l.disabled {
+		focus, keyed = fb.Center(), true
 	}
+	clip, clipped := dst.ClipBounds()
 	dst.Node(r, listNode(n), func(dst *Canvas) {
 		for i, child := range f.children {
 			k := f.keys[i]
@@ -456,7 +462,7 @@ func (l *ReorderableWidget[T, K]) Paint(dst *Canvas, r Rect) {
 			rc := Rct(r.Origin.Add(f.rects[i].Origin).Add(Pt(0, dy)), f.rects[i].Size)
 			// Only where the row shows: one scrolled out of a Scroll's
 			// window lies under whatever is drawn there instead.
-			if keyed && rc.Contains(focus) && (!dst.clipped || dst.clip.Contains(focus)) {
+			if keyed && rc.Contains(focus) && (!clipped || clip.Contains(focus)) {
 				keyed = false
 				row := child.(*reorderRow[T, K])
 				dst.Shortcut(reorderUp, func() { row.moveBy(-1) })
@@ -466,7 +472,7 @@ func (l *ReorderableWidget[T, K]) Paint(dst *Canvas, r Rect) {
 				dst.RequestReveal(Rct(r.Origin.Add(f.rects[i].Origin), f.rects[i].Size))
 				st.reveal = nil
 			}
-			dst.inGroup(f.childEntries[i], func() { l.paintRow(dst, child, rc, i, n) })
+			dst.Group(f.childEntries[i], func() { l.paintRow(dst, child, rc, i, n) })
 		}
 	})
 	for k := range st.shift {
@@ -532,14 +538,11 @@ func (l *ReorderableWidget[T, K]) drawn() map[K]float64 {
 }
 
 // paintRow paints one row as a list item that knows its place and offers
-// the move actions.
+// the move actions, which reach the row.
 func (l *ReorderableWidget[T, K]) paintRow(dst *Canvas, w Widget, rc Rect, i, n int) {
-	item := listItem(i, n)
-	if !l.disabled {
-		item.Actions = ActionIncrement | ActionDecrement
-		item.Description = "Alt+Up or Alt+Down moves it"
-	}
-	dst.scoped(dst.addSem(rc, item, w), func(dst *Canvas) { dst.Paint(w, rc) })
+	row := w.(*reorderRow[T, K])
+	row.index, row.count = i, n
+	dst.DescribeNode(rc, row, func(dst *Canvas) { dst.Paint(w, rc) })
 }
 
 // autoScroll scrolls the enclosing Scroll while the dragged row is held
@@ -604,11 +607,13 @@ type reorderRow[T any, K comparable] struct {
 	key   K
 	child Widget
 	rect  Rect
+
+	index, count int // its place in the list, as last painted
 }
 
 // reorderTarget is the row a ReorderHandle drags.
 type reorderTarget interface {
-	dragSource
+	Draggable
 	moveBy(delta int) bool
 	enabled() bool
 	rowRect() Rect
@@ -625,9 +630,20 @@ func (w *reorderRow[T, K]) Baseline() (float64, bool) { return BaselineOf(w.chil
 func (w *reorderRow[T, K]) Paint(dst *Canvas, r Rect) {
 	w.rect = r
 	if w.enabled() && !w.list.handles {
-		dst.hitDrag(r, w)
+		dst.HitDrag(r, w)
 	}
 	dst.Paint(w.child, r)
+}
+
+// Describe implements Describer: a list item that knows its place and,
+// unless the list is disabled, offers the move actions.
+func (w *reorderRow[T, K]) Describe() Node {
+	item := listItem(w.index, w.count)
+	if !w.list.disabled {
+		item.Actions = ActionIncrement | ActionDecrement
+		item.Description = "Alt+Up or Alt+Down moves it"
+	}
+	return item
 }
 
 // Act implements Actor: an assistive technology moves the row down with
@@ -649,9 +665,11 @@ func (w *reorderRow[T, K]) moveBy(delta int) bool { return w.list.move(w.key, de
 func (w *reorderRow[T, K]) enabled() bool         { return !w.list.disabled }
 func (w *reorderRow[T, K]) rowRect() Rect         { return w.rect }
 
-func (w *reorderRow[T, K]) dragValue() any { return reorderToken{w.list.st} }
+// DragValue implements Draggable: a token only the row's own list takes.
+func (w *reorderRow[T, K]) DragValue() any { return reorderToken{w.list.st} }
 
-func (w *reorderRow[T, K]) dragMoved(at, grab Point) {
+// DragMoved implements Draggable: the first move lifts the row.
+func (w *reorderRow[T, K]) DragMoved(at, grab Point) {
 	st := w.list.st
 	if !st.dragging {
 		st.dragging, st.key, st.grab = true, w.key, grab
@@ -661,7 +679,8 @@ func (w *reorderRow[T, K]) dragMoved(at, grab Point) {
 	st.at = at
 }
 
-func (w *reorderRow[T, K]) dragEnded(dropped bool) {
+// DragEnded implements Draggable: a drop commits the move.
+func (w *reorderRow[T, K]) DragEnded(dropped bool) {
 	l := w.list
 	st := l.st
 	if !st.dragging {
@@ -680,10 +699,10 @@ func (w *reorderRow[T, K]) dragEnded(dropped bool) {
 type reorderCatcher struct{ token reorderToken }
 
 func (c reorderCatcher) HandlePointer(PointerEvent) bool { return false }
-func (c reorderCatcher) acceptsDrag(v any) bool          { return v == c.token }
-func (c reorderCatcher) dragOver(bool)                   {}
-func (c reorderCatcher) dragMoved(any, Point)            {}
-func (c reorderCatcher) dropped(any, Point)              {}
+func (c reorderCatcher) AcceptsDrop(v any) bool          { return v == c.token }
+func (c reorderCatcher) DropHover(bool)                  {}
+func (c reorderCatcher) DropOver(any, Point)             {}
+func (c reorderCatcher) Drop(any, Point)                 {}
 
 // ReorderHandleWidget is the grip a row of a Reorderable is dragged by.
 // Build one with ReorderHandle.
@@ -731,7 +750,7 @@ func (h *ReorderHandleWidget) Paint(dst *Canvas, r Rect) {
 		return
 	}
 	if h.row.enabled() && !h.IsInert() {
-		dst.hitDrag(r, reorderHandleSource{h})
+		dst.HitDrag(r, reorderHandleSource{h})
 	}
 	h.Hit(dst, r, h, CursorShapeMove)
 	dst.Paint(h.child, r)
@@ -780,8 +799,8 @@ func (h *ReorderHandleWidget) name() string {
 // pointer took the handle.
 type reorderHandleSource struct{ h *ReorderHandleWidget }
 
-func (s reorderHandleSource) dragValue() any { return s.h.row.dragValue() }
-func (s reorderHandleSource) dragMoved(at, grab Point) {
-	s.h.row.dragMoved(at, grab.Add(s.h.rect.Origin.Sub(s.h.row.rowRect().Origin)))
+func (s reorderHandleSource) DragValue() any { return s.h.row.DragValue() }
+func (s reorderHandleSource) DragMoved(at, grab Point) {
+	s.h.row.DragMoved(at, grab.Add(s.h.rect.Origin.Sub(s.h.row.rowRect().Origin)))
 }
-func (s reorderHandleSource) dragEnded(dropped bool) { s.h.row.dragEnded(dropped) }
+func (s reorderHandleSource) DragEnded(dropped bool) { s.h.row.DragEnded(dropped) }

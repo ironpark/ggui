@@ -614,7 +614,8 @@ Up to 16 stops are drawn, colors blend premultiplied, and stops may be theme
 tokens, resolved at layout. For custom drawing use `dst.FillGradientRect`,
 `dst.FillGradientRoundRect` and `dst.FillGradientPath`; a custom widget that
 takes a `Gradient` resolves its tokens with `g.Resolve(env)` in `Layout`, as
-it does a color's with `ResolveColor`.
+it does a color's with `ResolveColor`, and `g.Themed()` reports whether it
+holds any, for a setter that must ask for a layout when one comes or goes.
 
 ## Component appearance
 

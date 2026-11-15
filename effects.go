@@ -626,6 +626,14 @@ func (s *paintSpace) local(p Point) Point {
 	return s.toLocal.Apply(s.parent.local(p))
 }
 
+// localBounds returns the bounds in s of the window Rect r, ignoring clips.
+func (s *paintSpace) localBounds(r Rect) Rect {
+	if s == nil {
+		return r
+	}
+	return s.toLocal.Bounds(s.parent.localBounds(r))
+}
+
 // reach returns where the window point p is in s, and false when a clip or
 // a shape between the window and s hides it.
 func (s *paintSpace) reach(p Point) (Point, bool) {

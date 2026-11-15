@@ -367,29 +367,20 @@ func (p *PopupWidget) Paint(dst *Canvas, r Rect) {
 	p.anchorRect = r
 	anchorFocused := dst.PaintFocus(p.anchor, r)
 	if p.restore {
-		for _, hit := range dst.fs().hits {
-			if hit.key != nil && (sameAny(hit.key, p.opener) || idOf(p.opener) != nil && sameAny(hit.id, idOf(p.opener))) {
-				dst.RequestFocus(hit.key)
-				break
-			}
-		}
+		dst.RestoreFocus(p.opener)
 		p.restore = false
 	}
 	open := p.IsOpen()
 	if p.nonmodal {
 		if open && !p.paintedOpen {
-			p.opener = dst.fs().focusKey
+			p.opener = dst.Focused()
 			p.focusContent = !p.keepFocus
 			p.hadContentFocus = false
 		}
 		inside := p.ownsFocus(dst)
 		p.hadContentFocus = p.hadContentFocus || inside
-		if open && p.hadContentFocus && !inside && !anchorFocused && dst.fs().focusKey != nil {
-			present := false
-			for _, hit := range dst.fs().prev {
-				present = present || sameAny(hit.key, dst.fs().focusKey)
-			}
-			if present {
+		if open && p.hadContentFocus && !inside && !anchorFocused && dst.Focused() != nil {
+			if !dst.FocusStale() {
 				p.SetOpen(false)
 				open = p.IsOpen()
 			} else {
@@ -477,25 +468,19 @@ func (p *PopupWidget) paintContent(dst *Canvas, anchor Rect) {
 		if p.keys != nil {
 			dst.HitKey(p.rect, p.keys)
 		}
-		first := len(dst.fs().hits)
+		mark := dst.HitMark()
 		dst.Paint(p.effect, p.rect)
-		p.contentKeys = p.contentKeys[:0]
-		for _, hit := range dst.fs().hits[first:] {
-			if hit.key != nil {
-				p.contentKeys = append(p.contentKeys, hit.key)
-			}
-		}
+		p.contentKeys = dst.KeysSince(mark, p.contentKeys[:0])
 		if p.nonmodal && len(p.contentKeys) == 0 {
 			dst.HitKey(p.rect, p)
 			p.contentKeys = append(p.contentKeys, p)
 		}
 		if p.nonmodal && p.focusContent {
 			p.focusContent = false
-			for _, hit := range dst.fs().hits[first:] {
-				if hit.key != nil {
-					dst.RequestFocus(hit.key)
-					break
-				}
+			// The popup's own key region, merged into its surface's, is not
+			// among them; it is focused only where it stands apart.
+			if keys := dst.KeysSince(mark, nil); len(keys) > 0 {
+				dst.RequestFocus(keys[0])
 			}
 		}
 	}

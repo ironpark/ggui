@@ -8,6 +8,7 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/internal/render"
+	"github.com/ironpark/ggui/pkg/gem"
 )
 
 // Canvas is what a Widget paints into: the target image plus the frame's list
@@ -148,10 +149,10 @@ func (v *inputView) note(r *hitRegion, i int) {
 	if r.shaped {
 		x.cursors = true
 	}
-	if r.key != nil && x.key.h != nil && sameAny(r.key, x.key.h) {
+	if r.key != nil && x.key.h != nil && gem.Same(r.key, x.key.h) {
 		x.key.at = i
 	}
-	if r.pointer != nil && x.pointer.h != nil && sameAny(r.pointer, x.pointer.h) {
+	if r.pointer != nil && x.pointer.h != nil && gem.Same(r.pointer, x.pointer.h) {
 		x.pointer.at = i
 	}
 }
@@ -478,10 +479,81 @@ func (c *Canvas) FocusWithin(r Rect) bool {
 	return c != nil && !c.fs().focusBounds.Intersect(c.toWindow(r)).Empty()
 }
 
+// FocusBounds returns where the focused key region shows, in the canvas's
+// coordinates, as of the start of the paint, as Pointer does the pointer;
+// false when nothing has focus, or what has it is clipped or scrolled out
+// of view and shows nowhere. Under a Transform it is the bounds of where
+// the region lands. A list that moves the focused row with the keyboard
+// finds that row by it.
+func (c *Canvas) FocusBounds() (Rect, bool) {
+	if c == nil {
+		return Rect{}, false
+	}
+	fb := c.fs().focusBounds
+	if fb.Empty() {
+		return Rect{}, false
+	}
+	return c.space.localBounds(fb), true
+}
+
+// Focused returns the key handler that held focus as the paint began, or
+// nil. A popup that hands focus back when it closes keeps it as it opens;
+// RestoreFocus gives it back. Focus can be left on a widget that has gone,
+// which FocusStale tells.
+func (c *Canvas) Focused() KeyHandler {
+	if c == nil {
+		return nil
+	}
+	return c.fs().focusKey
+}
+
+// FocusStale reports whether focus, as the paint began, was held by a key
+// handler that registered no region in the last frame: a widget that went
+// away with nothing to move focus elsewhere, as a closed submenu's item. A
+// focus trap that closes when focus leaves it for another widget asks it
+// first, and takes focus back instead. It looks through the last frame's
+// regions, so it is for a decision about to be made, not a question asked
+// every frame.
+func (c *Canvas) FocusStale() bool {
+	if c == nil {
+		return false
+	}
+	f := c.fs()
+	if f.focusKey == nil {
+		return false
+	}
+	for i := range f.prev {
+		if gem.Same(f.prev[i].key, f.focusKey) {
+			return false
+		}
+	}
+	return true
+}
+
+// RestoreFocus asks the frame to focus h, as RequestFocus does, or, when h
+// has been rebuilt since it was kept, the key handler painted with the same
+// HitID: the opener of a popup, focused again as the popup closes. It
+// looks among the key regions painted so far this frame, so a container
+// asks it after painting where h would be, and reports whether it found
+// one.
+func (c *Canvas) RestoreFocus(h KeyHandler) bool {
+	if c == nil || h == nil {
+		return false
+	}
+	id := idOf(h)
+	for _, hit := range c.fs().hits {
+		if hit.key != nil && (gem.Same(hit.key, h) || id != nil && gem.Same(hit.id, id)) {
+			c.RequestFocus(hit.key)
+			return true
+		}
+	}
+	return false
+}
+
 // HasFocus reports whether h is the focused key handler, as of the start of
 // the paint.
 func (c *Canvas) HasFocus(h KeyHandler) bool {
-	return c != nil && h != nil && c.fs().focusKey != nil && sameAny(c.fs().focusKey, h)
+	return c != nil && h != nil && c.fs().focusKey != nil && gem.Same(c.fs().focusKey, h)
 }
 
 // FocusVisible reports whether focus, wherever it is, came there by the
@@ -504,6 +576,45 @@ func (c *Canvas) PaintFocus(w Widget, r Rect) bool {
 	held := f.focusPainted
 	f.focusPainted = outer || held
 	return held
+}
+
+// HitMark is a place in the frame's hit regions, which KeysSince reads
+// from: what Canvas.HitMark returned was where the regions registered next
+// begin. The zero HitMark is the start of the frame. A mark is good for
+// the frame it was taken in.
+type HitMark struct{ n int }
+
+// HitMark marks where the hit regions registered from now on begin, for
+// KeysSince to read what they hold.
+func (c *Canvas) HitMark() HitMark {
+	if c == nil {
+		return HitMark{}
+	}
+	return HitMark{n: len(c.fs().hits)}
+}
+
+// KeysSince appends to keys the key handler of every region registered
+// since m, in the order registered, and returns the slice. A focus trap
+// marks before painting its content and learns from it what it holds:
+// whether focus is inside, by HasFocus on each, and what to focus first.
+// Pass the slice it returned last frame, emptied, so painting allocates
+// nothing once it is large enough. A handler registered in several regions
+// is there as often. One registered at the Rect of the region just before
+// m, with nothing there to conflict, is merged into that region and so is
+// not there: a container that registers a region of its own at its
+// content's Rect before marking, as a popup's surface does, leaves a
+// content control of the same Rect out.
+func (c *Canvas) KeysSince(m HitMark, keys []KeyHandler) []KeyHandler {
+	if c == nil {
+		return keys
+	}
+	hits := c.fs().hits
+	for i := min(m.n, len(hits)); i < len(hits); i++ {
+		if k := hits[i].key; k != nil {
+			keys = append(keys, k)
+		}
+	}
+	return keys
 }
 
 // FocusVisibleWithin is FocusWithin for focus moved there with the
@@ -701,6 +812,17 @@ func (c *Canvas) Visible(r Rect) Rect {
 	return r
 }
 
+// ClipBounds returns the Rect this Canvas draws within, in its
+// coordinates, and false when nothing clips it. Visible cuts a Rect to it;
+// a widget asks it of a point, as whether the focus or the pointer is over
+// the part of it that shows rather than a part scrolled out of view.
+func (c *Canvas) ClipBounds() (Rect, bool) {
+	if c == nil || !c.clipped {
+		return Rect{}, false
+	}
+	return c.clip, true
+}
+
 // ClipReusing is Clip made in reuse, a Canvas the caller keeps from frame
 // to frame, for a widget that clips each time it paints: a row of a long
 // list clipping its content would otherwise make a Canvas a row a frame.
@@ -755,7 +877,7 @@ func (c *Canvas) add(h hitRegion) {
 	}
 	f := c.fs()
 	f.adopt(&h)
-	if h.key != nil && f.focusKey != nil && sameAny(h.key, f.focusKey) {
+	if h.key != nil && f.focusKey != nil && gem.Same(h.key, f.focusKey) {
 		f.focusPainted = true
 	}
 	if h.key != nil && f.focusClaim != nil {
@@ -789,10 +911,10 @@ func (f *frameState) adopt(h *hitRegion) {
 	// rebuilt in another's place, wherever it is now and whatever else held
 	// this Rect: a scroll and the scroll inside it are clipped to one
 	// viewport, and the outer must not take the inner's offset for its own.
-	if adoptsPointer && old.pointer != nil && !sameAny(old.pointer, h.pointer) && !f.heldLastFrame(h.pointer) {
+	if adoptsPointer && old.pointer != nil && !gem.Same(old.pointer, h.pointer) && !f.heldLastFrame(h.pointer) {
 		pointer.Adopt(old.pointer)
 	}
-	if adoptsKey && old.key != nil && !sameAny(old.key, h.key) && !sameAny(h.key, h.pointer) && !f.heldLastFrame(h.key) {
+	if adoptsKey && old.key != nil && !gem.Same(old.key, h.key) && !gem.Same(h.key, h.pointer) && !f.heldLastFrame(h.key) {
 		key.Adopt(old.key)
 	}
 }
@@ -856,42 +978,15 @@ func (f *frameState) indexPrev() {
 // the dynamic types matched, so both sides of the index check first.
 func comparableID(id any) bool { return reflect.TypeOf(id).Comparable() }
 
-// sameAny compares two handlers, treating uncomparable ones as different.
-// Handlers are pointers, and IDs mostly strings and numbers, which compare
-// as they are; input compares every region's handler this way, so only
-// another kind pays for the recover that guards a comparison which panics.
-func sameAny(a, b any) bool {
-	t := reflect.TypeOf(a)
-	if t != reflect.TypeOf(b) {
-		return false
-	}
-	if t == nil {
-		return true
-	}
-	switch t.Kind() {
-	case reflect.Pointer, reflect.UnsafePointer, reflect.Chan, reflect.String, reflect.Bool,
-		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
-		reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128:
-		return a == b
-	}
-	return sameAnyGuarded(a, b)
-}
-
-// sameAnyGuarded is a == b, false where the comparison panics: a slice, a
-// map or a func, or a struct or array holding one, even in an interface.
-func sameAnyGuarded(a, b any) (same bool) {
-	defer func() {
-		if recover() != nil {
-			same = false
-		}
-	}()
-	return a == b
-}
-
-// inGroup paints through fn with every region it registers marked as
-// belonging to g, so input can report whether g holds focus or a capture.
-func (c *Canvas) inGroup(g any, fn func()) {
+// Group paints fn with every hit region it registers marked as belonging
+// to g, so that GroupBusy can tell, frames later, whether g holds the focus
+// or a pointer capture. A list that keeps rows built off screen paints each
+// row in a group of its own and keeps the busy ones when it lets the rest
+// go: a row scrolled away mid-drag, or with focus in its text field, is not
+// disposed under the user. g is compared as a map key, so it is a pointer,
+// as a row's own state is, or another comparable value, and never nil.
+// Groups do not nest: the innermost Group marks the regions painted in it.
+func (c *Canvas) Group(g any, fn func()) {
 	if c == nil {
 		fn()
 		return
@@ -900,6 +995,17 @@ func (c *Canvas) inGroup(g any, fn func()) {
 	c.group = g
 	defer func() { c.group = prev }()
 	fn()
+}
+
+// GroupBusy reports whether a region painted in group g, through
+// Canvas.Group, holds the focus, a pointer button's press or a touch the
+// user is dragging. It answers as of the last input the frame loop running
+// on this goroutine dispatched, and so holds from then through the layout
+// and the paint that follow, which is where a list asks it before letting
+// a row go. Outside every frame loop, and for a nil or uncomparable g, it
+// is false.
+func GroupBusy(g any) bool {
+	return g != nil && comparableID(g) && activeWorld().busy[g]
 }
 
 // focusScope is a focus trap for one frame: while regions carrying it

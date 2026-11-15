@@ -1,6 +1,7 @@
 // Package gem holds the small generic helpers ggui's packages share and
 // an app built on them may as well: choosing a value inline, keeping one
-// within bounds, reading an unbounded constraint, and a typed sync.Pool.
+// within bounds, reading an unbounded constraint, comparing two values of
+// any type without the panic == can raise, and a typed sync.Pool.
 // A helper earns a place only when it is too small to belong to any one
 // package and more than one wants it.
 package gem
@@ -8,6 +9,7 @@ package gem
 import (
 	"cmp"
 	"math"
+	"reflect"
 )
 
 // Pick returns a when cond holds, else b. It is the expression form of an
@@ -38,4 +40,38 @@ func Bounded(v, fallback float64) float64 {
 		return fallback
 	}
 	return v
+}
+
+// Same reports whether a and b are equal as == has it, and false where ==
+// would panic: two slices, maps or funcs, or structs or arrays holding one,
+// even inside an interface. It is how handlers, keys and styles held as
+// any are compared, as a widget's identity is. Pointers, strings and
+// numbers, which those mostly are, compare as they are; only another kind
+// pays for the recover that guards a comparison which panics.
+func Same(a, b any) bool {
+	t := reflect.TypeOf(a)
+	if t != reflect.TypeOf(b) {
+		return false
+	}
+	if t == nil {
+		return true
+	}
+	switch t.Kind() {
+	case reflect.Pointer, reflect.UnsafePointer, reflect.Chan, reflect.String, reflect.Bool,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128:
+		return a == b
+	}
+	return sameGuarded(a, b)
+}
+
+// sameGuarded is a == b, false where the comparison panics.
+func sameGuarded(a, b any) (same bool) {
+	defer func() {
+		if recover() != nil {
+			same = false
+		}
+	}()
+	return a == b
 }

@@ -52,6 +52,16 @@ func (c *Canvas) visiblePaintBounds(r Rect, extra float64) bool {
 	return c.overlaps(r, extra)
 }
 
+// Draws notes r, and as far as reach past it, as where the widget painting
+// draws, and reports whether any of that lands where this frame paints: a
+// widget that draws on Image itself, glyphs through a text engine say,
+// skips what lies wholly outside, line by line, and still says where it
+// would have drawn, which a frame painted in part needs to catch what it now
+// draws past its Rect. A draw at the edge of what is painted counts, with a
+// physical pixel to spare for antialiasing. Like Shows, it decides drawing
+// only: the widget still collects input and semantics.
+func (c *Canvas) Draws(r Rect, reach float64) bool { return c.visiblePaintBounds(r, reach) }
+
 // Shows reports whether any of r, in the canvas's coordinates, lands where
 // this frame paints. A frame painted in part paints only around what
 // changed: a widget whose drawing costs more than the draws themselves,
@@ -865,8 +875,10 @@ func (g Gradient) StartAngle(rad float64) Gradient {
 // IsZero reports whether g has no stops and so fills nothing.
 func (g Gradient) IsZero() bool { return len(g.stops) == 0 }
 
-// themed reports whether a stop is an EnvColor.
-func (g Gradient) themed() bool {
+// Themed reports whether a stop is an EnvColor, which Resolve resolves: a
+// widget that takes a Gradient lays out again when one comes or goes, as it
+// would for a themed color, so that Resolve runs.
+func (g Gradient) Themed() bool {
 	return slices.ContainsFunc(g.stops, func(s GradientStop) bool { return IsEnvColor(s.Color) })
 }
 
@@ -874,7 +886,7 @@ func (g Gradient) themed() bool {
 // ResolveColor resolves a color: a widget that takes a Gradient resolves it
 // this way in Layout and paints the result.
 func (g Gradient) Resolve(env Env) Gradient {
-	if !g.themed() {
+	if !g.Themed() {
 		return g
 	}
 	g.stops = slices.Clone(g.stops)

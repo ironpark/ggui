@@ -514,12 +514,16 @@ func (f *EachWidget[T, K]) evict() {
 		return
 	}
 	var out []K
-	busy := activeWorld().busy
 	for k, e := range f.entries {
-		if e.seen != f.frame && !busy[e] {
+		if e.seen != f.frame {
 			out = append(out, k)
 		}
 	}
+	if len(out) <= f.retain {
+		return
+	}
+	// A row holding the focus or a capture stays, off screen or not.
+	out = slices.DeleteFunc(out, func(k K) bool { return GroupBusy(f.entries[k]) })
 	if len(out) <= f.retain {
 		return
 	}
@@ -547,7 +551,7 @@ func (f *EachWidget[T, K]) Paint(dst *Canvas, r Rect) {
 	list := func(dst *Canvas) {
 		defer func() {
 			if pinned != nil {
-				dst.inGroup(pinned, func() { f.paintRow(dst, pinned.widget, pinRect, pinIndex, n) })
+				dst.Group(pinned, func() { f.paintRow(dst, pinned.widget, pinRect, pinIndex, n) })
 			}
 		}()
 		if !f.virtual() {
@@ -556,7 +560,7 @@ func (f *EachWidget[T, K]) Paint(dst *Canvas, r Rect) {
 					continue
 				}
 				rc := Rct(r.Origin.Add(f.rects[i].Origin), f.rects[i].Size)
-				dst.inGroup(f.childEntries[i], func() { f.paintRow(dst, child, rc, i, n) })
+				dst.Group(f.childEntries[i], func() { f.paintRow(dst, child, rc, i, n) })
 			}
 			return
 		}
@@ -566,7 +570,7 @@ func (f *EachWidget[T, K]) Paint(dst *Canvas, r Rect) {
 				continue
 			}
 			rc := Rct(r.Origin.Add(f.rects[j].Origin), f.rects[j].Size)
-			dst.inGroup(e, func() { f.paintRow(dst, w, rc, f.first+j, n) })
+			dst.Group(e, func() { f.paintRow(dst, w, rc, f.first+j, n) })
 		}
 	}
 	if f.unlisted {

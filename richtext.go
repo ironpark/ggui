@@ -345,8 +345,8 @@ func (t *RichTextWidget) runStyle(i int) TextStyle {
 
 // sameSpan compares spans by what they show, and their tap by presence.
 func sameSpan(a, b TextSpan) bool {
-	return a.text == b.text && sameAny(a.style, b.style) && a.underline == b.underline && a.strike == b.strike &&
-		sameAny(a.background, b.background) && a.name == b.name && (a.onTap == nil) == (b.onTap == nil)
+	return a.text == b.text && gem.Same(a.style, b.style) && a.underline == b.underline && a.strike == b.strike &&
+		gem.Same(a.background, b.background) && a.name == b.name && (a.onTap == nil) == (b.onTap == nil)
 }
 
 // Baseline implements Baseliner: the first line's baseline.
@@ -381,7 +381,7 @@ func (t *RichTextWidget) Paint(dst *Canvas, r Rect) {
 		}
 		dst.HitCursor(r, CursorShapeText)
 		dst.DescribeNode(r, t, described)
-	case p.Text != "" && !dst.named(r):
+	case p.Text != "" && !dst.Named(r):
 		dst.Node(r, Node{Role: roleOr(t.role, RoleText), Name: p.Text}, described)
 	default:
 		described(dst)
@@ -403,7 +403,7 @@ func (t *RichTextWidget) Paint(dst *Canvas, r Rect) {
 		// A line wholly outside the clip is not shaped and drawn to be
 		// clipped, with a line's height to spare for what reaches past it.
 		top, h := ln.Baseline-ln.Ascent, ln.Ascent+ln.Descent
-		if !dst.visiblePaintBounds(Rct(Pt(r.Origin.X, r.Origin.Y+top), Sz(r.Size.W, h)), h) {
+		if !dst.Draws(Rct(Pt(r.Origin.X, r.Origin.Y+top), Sz(r.Size.W, h)), h) {
 			continue
 		}
 		x := r.Origin.X + p.LineX(i, r.Size.W, align)
@@ -637,7 +637,7 @@ func (a *SelectionAreaWidget) extend(u *RichTextWidget, at int) {
 	lo, hi := min(i, j), max(i, j)
 	// The texts it runs through are not the one the pointer reached, which
 	// alone the frame would paint again.
-	delivered()
+	RepaintAll()
 	for k, t := range a.texts {
 		switch {
 		case k == i && k == j:
@@ -676,7 +676,7 @@ func (a *SelectionAreaWidget) clear(keep *RichTextWidget) {
 	for _, t := range a.texts {
 		if t != keep && t.ed.HasSelection() {
 			t.ed.MoveTo(t.ed.Caret, false)
-			delivered()
+			RepaintAll()
 		}
 	}
 	a.spans = false
