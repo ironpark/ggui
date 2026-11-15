@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/pkg/gem"
 )
 
 // popupEscape closes the innermost open popup.
@@ -440,15 +441,15 @@ func (p *PopupWidget) paintContent(dst *Canvas, anchor Rect) {
 	if p.point != nil {
 		// Point placement is clamped to the screen, so the whole width is
 		// available regardless of where the anchor happened to be.
-		anchor = Rct(Pt(clamp(p.point.X, 0, screen.W), clamp(p.point.Y, 0, screen.H)), Size{})
+		anchor = Rct(Pt(gem.Clamp(p.point.X, 0, screen.W), gem.Clamp(p.point.Y, 0, screen.H)), Size{})
 	}
 	rtl := p.env.Direction() == DirRTL
 	side := p.side
 	switch side {
 	case PopupInlineStart:
-		side = pick(rtl, PopupRight, PopupLeft)
+		side = gem.Pick(rtl, PopupRight, PopupLeft)
 	case PopupInlineEnd:
-		side = pick(rtl, PopupLeft, PopupRight)
+		side = gem.Pick(rtl, PopupLeft, PopupRight)
 	}
 	var size Size
 	var at Point
@@ -536,7 +537,7 @@ func (p *PopupWidget) placeBelow(screen Size, anchor Rect, side PopupSide, rtl b
 		room, other = above, below
 	}
 	if natural.H > room && other > room {
-		room, side = other, pick(side == PopupTop, PopupBottom, PopupTop)
+		room, side = other, gem.Pick(side == PopupTop, PopupBottom, PopupTop)
 	}
 	size := natural
 	if size.H > room {
@@ -551,7 +552,7 @@ func (p *PopupWidget) placeBelow(screen Size, anchor Rect, side PopupSide, rtl b
 	x := anchor.Origin.X
 	switch {
 	case p.align == PopupCenter:
-		x += (anchor.Size.W-size.W)/2 + pick(rtl, -p.alignOffset, p.alignOffset)
+		x += (anchor.Size.W-size.W)/2 + gem.Pick(rtl, -p.alignOffset, p.alignOffset)
 		along = .5
 	case (p.align == PopupEnd) != rtl:
 		x += anchor.Size.W - size.W - p.alignOffset
@@ -560,7 +561,7 @@ func (p *PopupWidget) placeBelow(screen Size, anchor Rect, side PopupSide, rtl b
 		x += p.alignOffset
 	}
 	if screen.W != Unbounded {
-		x = clamp(x, edge, max(screen.W-edge-size.W, edge))
+		x = gem.Clamp(x, edge, max(screen.W-edge-size.W, edge))
 	}
 	return size, Pt(x, y), along, side
 }
@@ -576,7 +577,7 @@ func (p *PopupWidget) placeBeside(screen Size, anchor Rect, side PopupSide) (Siz
 		room, other = left, right
 	}
 	if natural.W > room && other > room {
-		room, side = other, pick(side == PopupLeft, PopupRight, PopupLeft)
+		room, side = other, gem.Pick(side == PopupLeft, PopupRight, PopupLeft)
 	}
 	// A height is given only to content that has to be held to one: a
 	// scrolling panel takes all of the height it is offered.
@@ -604,7 +605,7 @@ func (p *PopupWidget) placeBeside(screen Size, anchor Rect, side PopupSide) (Siz
 		y += p.alignOffset
 	}
 	if screen.H != Unbounded {
-		y = clamp(y, edge, max(screen.H-edge-size.H, edge))
+		y = gem.Clamp(y, edge, max(screen.H-edge-size.H, edge))
 	}
 	return size, Pt(x, y), along, side
 }

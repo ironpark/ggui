@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui/internal/property"
+	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/pkg/layout"
 )
 
@@ -185,15 +186,6 @@ func Directionality(dir TextDirection, child Widget) *EnvWidget {
 	return Provide(DirectionKey, dir, child)
 }
 
-// startAlign is where a line of text starts by default: the left edge, or
-// the right one under DirRTL.
-func startAlign(d TextDirection) float64 {
-	if d == DirRTL {
-		return 1
-	}
-	return 0
-}
-
 // EnvColor is a color the Env holds, such as a theme's primary color. A
 // widget given one resolves it against the Env it is laid out in, so the
 // widget follows a theme switch, or a subtree's own theme, without being
@@ -224,24 +216,6 @@ func IsEnvColor(c color.Color) bool {
 	return ok
 }
 
-// shownColor is a color property as it was given and as it is painted: the
-// given color itself, or an EnvColor's value in the Env of the last layout.
-type shownColor struct{ given, shown color.Color }
-
-// set gives the property c. A widget lays out again for an EnvColor, given
-// or replaced, since only layout knows its Env.
-func (s *shownColor) set(c color.Color, changed func()) {
-	if c == s.given {
-		return
-	}
-	if IsEnvColor(c) || IsEnvColor(s.given) {
-		changed()
-	}
-	s.given, s.shown = c, c
-}
-
-func (s *shownColor) layout(env Env) { s.shown = ResolveColor(s.given, env) }
-
 // ResponsiveWidget lays out one of two arrangements by the width it is
 // given. Build one with Responsive.
 type ResponsiveWidget struct {
@@ -265,12 +239,12 @@ func Responsive(breakpoint float64, wide, narrow Widget) *ResponsiveWidget {
 
 // Layout implements Widget.
 func (r *ResponsiveWidget) Layout(c Constraints, env Env) Size {
-	r.current = pick(c.MaxW < r.breakpoint, r.narrow, r.wide)
+	r.current = gem.Pick(c.MaxW < r.breakpoint, r.narrow, r.wide)
 	return r.current.Layout(c, env)
 }
 
 // Baseline implements Baseliner: the shown arrangement's.
-func (r *ResponsiveWidget) Baseline() (float64, bool) { return baselineOf(r.current) }
+func (r *ResponsiveWidget) Baseline() (float64, bool) { return BaselineOf(r.current) }
 
 // Paint implements Widget.
 func (r *ResponsiveWidget) Paint(dst *Canvas, rect Rect) { dst.Paint(r.current, rect) }

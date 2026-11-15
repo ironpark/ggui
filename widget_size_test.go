@@ -7,6 +7,7 @@ import (
 	"unsafe"
 
 	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggui/pkg/gem"
 )
 
 // steadyTextFrame lays w out and paints it, as a frame that finds nothing
@@ -60,7 +61,7 @@ func BenchmarkTextHeap(b *testing.B) {
 	img := ggfx.NewImage(200, 200)
 	r := Rct(Pt(0, 0), Sz(200, 20))
 	for _, painted := range []bool{false, true} {
-		b.Run(pick(painted, "painted", "built"), func(b *testing.B) {
+		b.Run(gem.Pick(painted, "painted", "built"), func(b *testing.B) {
 			for b.Loop() {
 				var before, after runtime.MemStats
 				runtime.GC()

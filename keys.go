@@ -3,6 +3,7 @@ package ggui
 import (
 	"slices"
 
+	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggwd"
 )
 
@@ -154,7 +155,7 @@ func (in *inputState) consumeBindings(keys []KeyboardKey, mods Mods) []KeyboardK
 	claimed := func(k KeyboardKey) bool { return in.claimedBy(KeyEvent{Kind: KeyPress, Key: k, Mods: mods}) != nil }
 	if i := slices.Index(keys, KeyTab); i >= 0 && !claimed(KeyTab) {
 		keys = slices.Delete(slices.Clone(keys), i, i+1)
-		in.moveFocus(pick(mods.Shift, -1, 1))
+		in.moveFocus(gem.Pick(mods.Shift, -1, 1))
 	}
 	if len(in.shortcuts) > 0 {
 		keys = in.withoutShortcuts(keys, mods, claimed)

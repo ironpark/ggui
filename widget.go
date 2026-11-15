@@ -1,7 +1,6 @@
 package ggui
 
 import (
-	"cmp"
 	"image/color"
 	"math"
 	"slices"
@@ -10,7 +9,6 @@ import (
 	"github.com/ironpark/ggui/a11y"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
-	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/pkg/geom"
 	"github.com/ironpark/ggui/pkg/layout"
 )
@@ -171,7 +169,9 @@ func (w *IfWidget) Else(other func() Widget) *IfWidget {
 	return w
 }
 func (w *IfWidget) current() Widget { return blockChild(w.comp) }
-func (w *IfWidget) absent() bool    { return w.current() == nil }
+
+// Vacant implements Vacant: the branch it is on builds nothing.
+func (w *IfWidget) Vacant() bool { return w.current() == nil }
 
 // blockChild unwraps component boundaries, including an empty branch.
 func blockChild(w Widget) Widget {
@@ -239,14 +239,19 @@ func mountKeyed(owner *reactive.Computation, build func() Widget) (child Widget,
 	return child, dispose
 }
 
-// vacant is reported by a widget that currently shows nothing, so the flow
-// around it leaves out the gap it would otherwise place beside it. It is
-// asked after the widget's Layout, which is when an If knows its branch.
-type vacant interface{ absent() bool }
+// Vacant is a widget that may show nothing, as an If whose condition is
+// false does: Vacant reports that it currently does, and a Row, Column or
+// Wrap around it then leaves out the gap it would place beside it, as if
+// it were not there. It is asked after the widget's Layout, which is when
+// an If knows its branch.
+type Vacant interface {
+	Vacant() bool
+}
 
-func isAbsent(w Widget) bool {
-	v, ok := w.(vacant)
-	return ok && v.absent()
+// IsVacant reports whether w is a Vacant that currently shows nothing.
+func IsVacant(w Widget) bool {
+	v, ok := w.(Vacant)
+	return ok && v.Vacant()
 }
 
 // Layout implements Widget. Showing nothing, it takes no space at all.
@@ -276,7 +281,7 @@ func (c *ComponentWidget) Layout(cs Constraints, env Env) Size {
 }
 
 // Baseline implements Baseliner: the mounted child's.
-func (c *ComponentWidget) Baseline() (float64, bool) { return baselineOf(c.child) }
+func (c *ComponentWidget) Baseline() (float64, bool) { return BaselineOf(c.child) }
 
 // Baseline implements Baseliner: the shown branch's.
 func (w *IfWidget) Baseline() (float64, bool) { return w.comp.Baseline() }
@@ -314,7 +319,8 @@ func FromFuncs(layout func(Constraints, Env) Size, paint func(*Canvas, Rect)) Wi
 	return widgetFunc{layout: layout, paint: paint}
 }
 
-func (c *ComponentWidget) absent() bool { return blockChild(c) == nil }
+// Vacant implements Vacant: it, or a component it mounted, mounted nothing.
+func (c *ComponentWidget) Vacant() bool { return blockChild(c) == nil }
 
 // Baseliner is a widget that knows where its first line of text sits: the
 // distance from the top of the Rect it was laid out for to that line's
@@ -331,18 +337,14 @@ type Baseliner interface {
 	Baseline() (float64, bool)
 }
 
-// baselineOf asks w for its baseline, or reports false when w cannot say.
-func baselineOf(w Widget) (float64, bool) {
+// BaselineOf asks w for its baseline, or reports false when w is not a
+// Baseliner. A container that is one reports its child's through it, moved
+// by where it placed the child.
+func BaselineOf(w Widget) (float64, bool) {
 	if b, ok := w.(Baseliner); ok {
 		return b.Baseline()
 	}
 	return 0, false
-}
-
-// baselineAt is baselineOf for a child painted dy below its parent's top.
-func baselineAt(w Widget, dy float64) (float64, bool) {
-	b, ok := baselineOf(w)
-	return b + dy, ok
 }
 
 // Geometry and constraints are owned by the renderer-independent layout
@@ -384,9 +386,6 @@ func Rct(origin Point, size Size) Rect { return layout.Rct(origin, size) }
 // fall back to their content size on an unbounded axis.
 var Unbounded = math.Inf(1)
 
-// bounded returns v, or fallback when v is Unbounded.
-func bounded(v, fallback float64) float64 { return gem.Bounded(v, fallback) }
-
 // Constraints bound the size a widget may choose during layout.
 type Constraints = layout.Constraints
 
@@ -395,9 +394,6 @@ func Tight(s Size) Constraints { return layout.Tight(s) }
 
 // Loose returns constraints that permit anything up to s.
 func Loose(s Size) Constraints { return layout.Loose(s) }
-
-// clamp keeps v within [lo, hi]; lo wins when the bounds contradict.
-func clamp[T cmp.Ordered](v, lo, hi T) T { return gem.Clamp(v, lo, hi) }
 
 // Role says what kind of element a node or region is. The ui package fills
 // it in; Probe.Find, the inspector and the semantics tree read it. The
@@ -682,7 +678,7 @@ type focusRefWidget struct {
 func (w *focusRefWidget) Layout(c Constraints, env Env) Size { return w.child.Layout(c, env) }
 
 // Baseline implements Baseliner: the child's.
-func (w *focusRefWidget) Baseline() (float64, bool) { return baselineOf(w.child) }
+func (w *focusRefWidget) Baseline() (float64, bool) { return BaselineOf(w.child) }
 
 // Paint implements Widget: while a Focus is pending, the first key region
 // the child registers claims it.
@@ -837,7 +833,7 @@ func (c *CachedWidget) tellOuter() {
 func (c *CachedWidget) Paint(dst *Canvas, r Rect) { dst.Paint(c.child, r) }
 
 // Baseline implements Baseliner: the child's.
-func (c *CachedWidget) Baseline() (float64, bool) { return baselineOf(c.child) }
+func (c *CachedWidget) Baseline() (float64, bool) { return BaselineOf(c.child) }
 
 // record notes src as read by this cache's measurement. Layout installs it
 // as the reactive core's recorder for the duration of a measurement, saving

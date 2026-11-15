@@ -595,7 +595,9 @@ func (w *AwaitWidget[T]) Catch(build func(Readable[error]) Widget) *AwaitWidget[
 }
 func (w *AwaitWidget[T]) Layout(c Constraints, env Env) Size { return w.comp.Layout(c, env) }
 func (w *AwaitWidget[T]) Paint(dst *Canvas, r Rect)          { w.comp.Paint(dst, r) }
-func (w *AwaitWidget[T]) absent() bool                       { return blockChild(w.comp) == nil }
+
+// Vacant implements Vacant: the state it is in builds nothing.
+func (w *AwaitWidget[T]) Vacant() bool { return blockChild(w.comp) == nil }
 
 // Async runs work on a goroutine and hands what it returns to done on the
 // UI thread, before the next frame of the window or probe that called it.

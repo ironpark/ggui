@@ -8,6 +8,7 @@ import (
 
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/pkg/kinetics"
 )
 
@@ -341,7 +342,7 @@ func (t *Tweened[T]) step(now time.Time) bool {
 		t.running = false
 		return false
 	}
-	f := t.ease(clamp(p, 0, 1))
+	f := t.ease(gem.Clamp(p, 0, 1))
 	if !t.running {
 		return false
 	}
@@ -554,32 +555,38 @@ func (m *Motion) moveTo(target float64, now time.Time, d time.Duration) (moving 
 		return false
 	}
 	var from float64
-	from, moving = m.at(now)
+	from, moving = m.At(now)
 	m.from, m.to, m.start, m.duration = from, target, now, d
 	return moving
 }
+
+// Target is where the motion is heading, or where it rests once there:
+// the target the last move gave it.
+func (m *Motion) Target() float64 { return m.to }
 
 // Toggle moves toward one while on and zero while off, over d, and
 // returns the position at now: the progress of something revealing
 // itself. A widget that shows or hides a panel calls it once per frame.
 func (m *Motion) Toggle(on bool, now time.Time, d time.Duration) float64 {
-	m.MoveTo(pick(on, 1.0, 0.0), now, d)
+	m.MoveTo(gem.Pick(on, 1.0, 0.0), now, d)
 	return m.Value(now)
 }
 
 // Value returns the position at now. While the motion is still moving it
 // asks for another frame, so the caller may read now with FrameTime.
 func (m *Motion) Value(now time.Time) float64 {
-	v, moving := m.at(now)
+	v, moving := m.At(now)
 	if moving {
 		activeWorld().frame.animate()
 	}
 	return v
 }
 
-// at returns the position at now and whether the motion is still moving
-// there, asking for nothing.
-func (m *Motion) at(now time.Time) (float64, bool) {
+// At returns the position at now and whether the motion is still moving
+// there, as Value does, but asks for no frame: for a widget that asks for
+// the frames it needs itself, as one that eases several values along one
+// Motion does, or that only wants to know where the motion is.
+func (m *Motion) At(now time.Time) (pos float64, moving bool) {
 	if m.duration <= 0 || m.from == m.to {
 		return m.to, false
 	}
@@ -592,7 +599,7 @@ func (m *Motion) at(now time.Time) (float64, bool) {
 	if ease == nil {
 		ease = EaseOut
 	}
-	return m.from + (m.to-m.from)*ease(clamp(p, 0, 1)), true
+	return m.from + (m.to-m.from)*ease(gem.Clamp(p, 0, 1)), true
 }
 
 // LayoutTo is MoveTo and Value for a size, called from the Layout of a
@@ -610,7 +617,7 @@ func (m *Motion) at(now time.Time) (float64, bool) {
 func (m *Motion) LayoutTo(env Env, target float64, d time.Duration) float64 {
 	now := FrameTime()
 	m.moveTo(target, now, env.Motion(d))
-	v, moving := m.at(now)
+	v, moving := m.At(now)
 	if moving {
 		Invalidate(env)
 	}
@@ -621,7 +628,7 @@ func (m *Motion) LayoutTo(env Env, target float64, d time.Duration) float64 {
 // zero while off, over d, as LayoutTo does, and returns how far it has
 // got, which is the share of its size a panel folding open shows.
 func (m *Motion) LayoutToggle(env Env, on bool, d time.Duration) float64 {
-	return m.LayoutTo(env, pick(on, 1.0, 0.0), d)
+	return m.LayoutTo(env, gem.Pick(on, 1.0, 0.0), d)
 }
 
 // A lerp moves between two values: it returns a at t = 0, b at t = 1, and
@@ -717,8 +724,8 @@ func splitColor(c color.Color) [4]float64 {
 }
 
 func joinColor(c [4]float64) color.Color {
-	a := clamp(c[3], 0, 255)
-	ch := func(v float64) uint16 { return uint16(clamp(v, 0, a)*0xffff/255 + 0.5) }
+	a := gem.Clamp(c[3], 0, 255)
+	ch := func(v float64) uint16 { return uint16(gem.Clamp(v, 0, a)*0xffff/255 + 0.5) }
 	return color.RGBA64{R: ch(c[0]), G: ch(c[1]), B: ch(c[2]), A: uint16(a*0xffff/255 + 0.5)}
 }
 
@@ -836,14 +843,14 @@ func (tl *TimelineValue) Seek(p float64) {
 		return
 	}
 	tl.Stop()
-	tl.sig.Set(clamp(p, 0, 1))
+	tl.sig.Set(gem.Clamp(p, 0, 1))
 }
 
 func (tl *TimelineValue) run(dir float64) {
 	if tl.disposed {
 		return
 	}
-	end := pick(dir > 0, 1.0, 0.0)
+	end := gem.Pick(dir > 0, 1.0, 0.0)
 	if tl.duration <= 0 || Untrack(tl.w.environment().Get).ReducedMotion() {
 		tl.Seek(end)
 		tl.finish()
@@ -866,7 +873,7 @@ func (tl *TimelineValue) finish() {
 }
 
 // end is the progress the current run is heading for.
-func (tl *TimelineValue) end() float64 { return pick(tl.dir > 0, 1.0, 0.0) }
+func (tl *TimelineValue) end() float64 { return gem.Pick(tl.dir > 0, 1.0, 0.0) }
 
 func (tl *TimelineValue) active() bool    { return tl.running }
 func (tl *TimelineValue) slot() *animSlot { return &tl.place }
@@ -937,7 +944,7 @@ func (tl *TimelineValue) Interval(begin, end float64, e Easing) Readable[float64
 //		... ggui.Interpolate(p, 12.0, 0.0, ggui.LerpFloat) ...
 //	}
 func (tl *TimelineValue) Stagger(i, n int, span float64, e Easing) Readable[float64] {
-	span = clamp(span, 0, 1)
+	span = gem.Clamp(span, 0, 1)
 	if n <= 1 || span >= 1 {
 		return tl.Interval(0, 1, e)
 	}

@@ -4,6 +4,7 @@ import (
 	"slices"
 	"sort"
 
+	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/pkg/virtual"
 )
 
@@ -90,11 +91,11 @@ func (f *EachWidget[T, K]) windowStart(r Rect) (float64, bool) {
 // mainAt and crossAt return where row i of those laid out starts, along
 // and across the list's axis, from the list's corner.
 func (f *EachWidget[T, K]) mainAt(i int) float64 {
-	return pick(f.horizontal, f.rects[i].Origin.X, f.rects[i].Origin.Y)
+	return gem.Pick(f.horizontal, f.rects[i].Origin.X, f.rects[i].Origin.Y)
 }
 
 func (f *EachWidget[T, K]) crossAt(i int) float64 {
-	return pick(f.horizontal, f.rects[i].Origin.Y, f.rects[i].Origin.X)
+	return gem.Pick(f.horizontal, f.rects[i].Origin.Y, f.rects[i].Origin.X)
 }
 
 // layoutPinned lays out, on the virtual path, the header of the section at
@@ -132,7 +133,7 @@ func (f *EachWidget[T, K]) pinned(r Rect) (*forEntry[T], int, Rect) {
 		return nil, 0, Rect{}
 	}
 	at := func(main, cross float64) Point {
-		return r.Origin.Add(pick(f.horizontal, Pt(main, cross), Pt(cross, main)))
+		return r.Origin.Add(gem.Pick(f.horizontal, Pt(main, cross), Pt(cross, main)))
 	}
 	if f.extent > 0 {
 		pitch, n := f.pin.pitch, len(f.items)
@@ -204,7 +205,7 @@ func (f *EachWidget[T, K]) placeKey(r Rect) {
 		if !ok {
 			return 0, false
 		}
-		start := pick(f.horizontal, r.Origin.X, r.Origin.Y)
+		start := gem.Pick(f.horizontal, r.Origin.X, r.Origin.Y)
 		if f.extent > 0 {
 			i := slices.Index(f.keys, key)
 			return start + float64(i)*f.pin.pitch, i >= 0

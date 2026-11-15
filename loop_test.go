@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/pkg/gem"
 )
 
 func TestCloseDisposesEverythingBuilt(t *testing.T) {
@@ -148,7 +149,7 @@ func TestProbeLayoutFollowsSetupAndEnvironmentChanges(t *testing.T) {
 		return c.Constrain(Sz(10, 10))
 	}, func(*Canvas, Rect) {})
 	p := NewProbe(Cached(w), Sz(20, 20)).Setup(func() {
-		Watch(dark, func(v bool) { SetEnv(Env{}.With(SpacingKey, pick(v, 12.0, 8.0))) })
+		Watch(dark, func(v bool) { SetEnv(Env{}.With(SpacingKey, gem.Pick(v, 12.0, 8.0))) })
 	})
 	defer p.Close()
 	p.Frame()

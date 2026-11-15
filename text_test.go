@@ -13,6 +13,7 @@ import (
 	"github.com/ironpark/ggui/internal/textedit"
 	"github.com/ironpark/ggui/internal/textlayout"
 	"github.com/ironpark/ggui/internal/third_party/text"
+	"github.com/ironpark/ggui/pkg/gem"
 	"golang.org/x/image/font/gofont/gomono"
 	"golang.org/x/image/font/gofont/goregular"
 )
@@ -344,11 +345,11 @@ func TestTextUnderRTLStartsAtTheRight(t *testing.T) {
 	if len(w.bidi.lines) != 1 || w.bidi.lines[0] == nil {
 		t.Fatal("RTL text was not reordered")
 	}
-	if a := pick(w.alignSet, w.align, startAlign(w.bidi.dir)); a != 1 {
+	if a := gem.Pick(w.alignSet, w.align, startAlign(w.bidi.dir)); a != 1 {
 		t.Fatalf("default alignment under RTL is %v, want 1", a)
 	}
 	w.Align(0)
-	if a := pick(w.alignSet, w.align, startAlign(w.bidi.dir)); a != 0 {
+	if a := gem.Pick(w.alignSet, w.align, startAlign(w.bidi.dir)); a != 0 {
 		t.Fatalf("explicit Align(0) gave %v", a)
 	}
 	// The Latin word comes first in the reordered line: it is on the left.

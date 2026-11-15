@@ -155,3 +155,12 @@ those guides as historical measurements; rerun them on your target hardware.
 | Overlays and images | [popup.go](../popup.go) (`Popup`), [overlay.go](../overlay.go) (the window's `Overlay`), [paint.go](../paint.go) (`Canvas.DrawImage`), [widget/image.go](../widget/image.go), [internal/imgcache/](../internal/imgcache/) (the cache `widget.AsyncImage` loads into) |
 | Testing and diagnostics | [probe.go](../probe.go), [inspect/panel/](../inspect/panel) (the panel, build tag `ggui_inspector`), [inspector.go](../inspector.go) (its registration, and the frame built from the trace), [inspect/](../inspect) (the frame model the panel and `App.OnInspect` share, and `ReadFrameStats` and `ReadMotionReport`), [internal/framestats/](../internal/framestats/) (the process's frame counters those read), [overlay.go](../overlay.go) (the Overlay the panel draws as), [widget.go](../widget.go) (Cached) |
 | Runnable applications | [examples/](../examples/) |
+
+The root package's files are of two kinds: the kernel, the frame loop,
+input, painting, layout caching and what else every widget stands on, and
+the built-in widgets written on it, which are to use the kernel's public API
+alone, as a widget of another package does, so that they can leave the root.
+`TestWidgetFilesUseThePublicKernel` in [boundary_test.go](../boundary_test.go)
+says which file is which, and fails when a widget file uses an unexported
+kernel name, or the kernel one of a widget file's, that its list of those
+still waiting for a public protocol does not hold; the list only shrinks.
