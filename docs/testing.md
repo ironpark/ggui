@@ -43,12 +43,13 @@ func TestCheckbox(t *testing.T) {
 | `Click`, `Press`, `Move`, `Release`, `Scroll` | Pointer interaction. |
 | `Key("cmd+v")`, `Type`, `Text` | Shortcuts, written as `ParseChord` reads them so `cmd` is ⌘ on macOS and Ctrl elsewhere; other key events; text entry. |
 | `Advance(duration)` | Advancing this probe's clock for animation. |
+| `SetIME(fn)` | Giving the text inputs the test builds a fake input method, which composes and commits through the `IMEHandler` it is handed. |
 
 > [!IMPORTANT]
 > Each probe has its own reactive runtime, animations, clock and
 > environment, so probe tests may call `t.Parallel`: one probe's frames never
 > run another's effects, and `Advance` moves only its own time. `SetEnv`, a
-> theme set with `ui/theme`, `SetClock`, `SetDefaultFont` and `SetEmojiFont`
+> theme set with `ui/theme`, `SetClock`, `SetDefaultFont`, `SetEmojiFont` and `SetIME`
 > change the probe whose frames the test runs, or before its first frame
 > what every probe the test makes starts from; either way they stay on the
 > test's goroutine. A subtest runs on a goroutine of its own, so a setting

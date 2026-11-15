@@ -14,6 +14,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // receiverType returns the base type name of a method receiver, dropping the
@@ -261,7 +262,7 @@ func TestFieldNamePriority(t *testing.T) {
 		make func() namedControl
 	}{
 		{"input OTP", func() namedControl { return ui.InputOTP(ggui.State(""), 6) }},
-		{"editor", func() namedControl { return ggui.TextInput(ggui.State("")).Placeholder("Hint") }},
+		{"editor", func() namedControl { return widget.TextInput(ggui.State("")).Placeholder("Hint") }},
 		{"textfield", func() namedControl { return ui.TextField(ggui.State("")).Placeholder("Hint") }},
 		{"combobox", func() namedControl { return ui.Combobox(ggui.State(1)).Options([]int{1, 2}) }},
 		{"datepicker", func() namedControl { return ui.DatePicker(ggui.State(time.Time{})) }},
@@ -272,7 +273,7 @@ func TestFieldNamePriority(t *testing.T) {
 		{"accordion", func() namedControl {
 			return ui.Accordion(ggui.State([]string{}), ui.AccordionItem("a", "A", ggui.Text("Body")))
 		}},
-		{"input group", func() namedControl { return ui.InputGroup(ggui.TextInput(ggui.State("")).Placeholder("Hint")) }},
+		{"input group", func() namedControl { return ui.InputGroup(widget.TextInput(ggui.State("")).Placeholder("Hint")) }},
 	}
 	for _, tc := range cases {
 		for _, explicit := range []bool{false, true} {
@@ -380,11 +381,11 @@ func TestDisabledSettingsAcrossControls(t *testing.T) {
 		checkDisabled(t, ui.Slider(ggui.State(0.0), 0, 10).Name("S"), ggui.RoleSlider, "S")
 	})
 	t.Run("editor", func(t *testing.T) {
-		checkDisabled(t, ggui.TextInput(ggui.State("")).Name("E"), ggui.RoleTextField, "E")
+		checkDisabled(t, widget.TextInput(ggui.State("")).Name("E"), ggui.RoleTextField, "E")
 	})
 	t.Run("textfield", func(t *testing.T) { checkDisabled(t, ui.TextField(ggui.State("")).Name("E"), ggui.RoleTextField, "E") })
 	t.Run("input group", func(t *testing.T) {
-		checkDisabled(t, ui.InputGroup(ggui.TextInput(ggui.State("")).Name("E")), ggui.RoleTextField, "E")
+		checkDisabled(t, ui.InputGroup(widget.TextInput(ggui.State("")).Name("E")), ggui.RoleTextField, "E")
 	})
 	t.Run("select", func(t *testing.T) {
 		checkDisabled(t, ui.Select(ggui.State(1)).Options([]int{1, 2}).Name("S"), ggui.RoleSelect, "S")
@@ -472,7 +473,7 @@ func TestInputGroupPreservesEditorBindingAndAddon(t *testing.T) {
 	t.Parallel()
 	value := ggui.State("abc")
 	childDisabled, groupDisabled := ggui.State(false), ggui.State(false)
-	editor := ggui.TextInput(value).Name("Editor").BindDisabled(childDisabled)
+	editor := widget.TextInput(value).Name("Editor").BindDisabled(childDisabled)
 	clicks := 0
 	group := ui.InputGroup(editor).BindDisabled(groupDisabled).Trailing(ui.Button("Addon", func() { clicks++ }))
 	p := ggui.NewProbe(group, ggui.Sz(400, 50))
@@ -514,7 +515,7 @@ func TestInputGroupPreservesEditorBindingAndAddon(t *testing.T) {
 
 func TestInheritedInputDisabledCannotBeClearedByDescendant(t *testing.T) {
 	t.Parallel()
-	editor := ggui.TextInput(ggui.State("value")).Name("Editor")
+	editor := widget.TextInput(ggui.State("value")).Name("Editor")
 	w := ggui.Provide(ggui.InputDisabledKey, true, ggui.Provide(ggui.InputDisabledKey, false, ui.InputGroup(editor).Disabled(false)))
 	p := ggui.NewProbe(w, ggui.Sz(300, 50))
 	defer p.Close()
@@ -595,7 +596,7 @@ func TestTextFieldPreservesEditorDisabledBinding(t *testing.T) {
 
 func TestInputGroupNamesFollowEditor(t *testing.T) {
 	t.Parallel()
-	editor := ggui.TextInput(ggui.State("")).Placeholder("Hint")
+	editor := widget.TextInput(ggui.State("")).Placeholder("Hint")
 	group := ui.InputGroup(editor)
 	p := ggui.NewProbe(group, ggui.Sz(300, 50))
 	defer p.Close()

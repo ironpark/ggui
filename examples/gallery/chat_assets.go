@@ -9,8 +9,8 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui"
-	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 //go:embed assets/chat/*
@@ -33,7 +33,7 @@ func chatImage(name string) *ggfx.Image {
 	if err != nil {
 		panic(err)
 	}
-	img, err := ui.DecodeImage(data)
+	img, err := widget.DecodeImage(data)
 	if err != nil {
 		panic(err)
 	}

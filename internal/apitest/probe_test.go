@@ -2,6 +2,7 @@ package apitest_test
 
 import (
 	"errors"
+	"image"
 	"image/color"
 	"slices"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/third_party/text"
 	"github.com/ironpark/ggui/runtime"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestProbeFlushSettlesEffectsWithoutPainting(t *testing.T) {
@@ -227,7 +229,7 @@ func TestALeakedProbeStaysOutOfTheNextOnesFrames(t *testing.T) {
 func TestAWidgetBuiltBeforeItsProbeStillFollowsItsSignals(t *testing.T) {
 	t.Parallel()
 	v := ggui.State("a")
-	in := ggui.TextInput(v)
+	in := widget.TextInput(v)
 	p := ggui.NewProbe(in, ggui.Sz(200, 30))
 	defer p.Close()
 	p.Frame()
@@ -324,5 +326,40 @@ func TestProbeFramesAgeTheTextCaches(t *testing.T) {
 	p.Advance(16 * time.Millisecond)
 	if got := text.Tick() - before; got != 4 {
 		t.Errorf("4 probe frames advanced the text tick by %d, want 4", got)
+	}
+}
+
+// quietIME is an input method that never composes, which a test installs
+// with ggui.SetIME so that its editors meet no platform IME.
+type quietIME struct{}
+
+func (quietIME) Update(image.Rectangle) (bool, error) { return false, nil }
+func (quietIME) Confirm()                             {}
+func (quietIME) Cancel()                              {}
+func (quietIME) Rebase(string, string)                {}
+func (quietIME) Typed(string)                         {}
+
+// useQuietIME gives the editors the test goroutine makes, and the ones its
+// probes build, a quietIME.
+func useQuietIME(t *testing.T) {
+	t.Helper()
+	t.Cleanup(ggui.SetIME(func(ggui.IMEHandler) ggui.IME { return quietIME{} }))
+}
+
+func TestEachProbeHasItsOwnClipboard(t *testing.T) {
+	t.Parallel()
+	useQuietIME(t)
+	a := ggui.NewProbe(widget.TextInput(ggui.State("secret")), ggui.Sz(200, 20))
+	defer a.Close()
+	b := ggui.NewProbe(ggui.Text("other"), ggui.Sz(100, 20))
+	defer b.Close()
+	b.Frame()
+	a.Click(ggui.Pt(190, 10))
+	a.Key("cmd+a", "cmd+c")
+	if got := a.Clipboard().Read(); got != "secret" {
+		t.Fatalf("copy put %q on the probe's clipboard", got)
+	}
+	if got := b.Clipboard().Read(); got != "" {
+		t.Fatalf("copy in one probe reached another's clipboard: %q", got)
 	}
 }

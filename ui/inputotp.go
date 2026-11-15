@@ -12,6 +12,7 @@ import (
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // InputOTPPart describes a group of slots or a visual separator. Parts are
@@ -44,7 +45,7 @@ type otpGroup struct{ rect ggui.Rect }
 type InputOTPWidget struct {
 	props property.Owner
 	ggui.Interactive
-	input                *ggui.TextInputWidget
+	input                *widget.TextInputWidget
 	maxLength            int
 	parts                []InputOTPPart
 	accept               func(rune) bool
@@ -81,7 +82,7 @@ func InputOTP(value ggui.Binding[string], maxLength int, parts ...InputOTPPart) 
 	o.Role = ggui.RoleTextField
 	o.AutoKey()
 	o.accept = func(r rune) bool { return r >= '0' && r <= '9' }
-	o.input = ggui.TextInput(value).Filter(o.normalize).OnChange(func(s string) {
+	o.input = widget.TextInput(value).Filter(o.normalize).OnChange(func(s string) {
 		o.blink = ggui.Now()
 		if o.onChange != nil {
 			o.onChange(s)
@@ -196,7 +197,7 @@ func (o *InputOTPWidget) Pattern(pattern *regexp.Regexp) *InputOTPWidget {
 func (o *InputOTPWidget) Accept(fn func(rune) bool) *InputOTPWidget { o.accept = fn; return o }
 
 // Input exposes the native editor for selection, submission and advanced use.
-func (o *InputOTPWidget) Input() *ggui.TextInputWidget { return o.input }
+func (o *InputOTPWidget) Input() *widget.TextInputWidget { return o.input }
 func (o *InputOTPWidget) Layout(c ggui.Constraints, e ggui.Env) ggui.Size {
 	defer o.props.Layout().EndLayout()
 	o.Sync()
@@ -311,7 +312,7 @@ func (o *InputOTPWidget) Paint(d *ggui.Canvas, r ggui.Rect) {
 	}
 	o.input.PaintCustom(d, r, o.paintSlots)
 }
-func (o *InputOTPWidget) paintSlots(d *ggui.Canvas, r ggui.Rect, state ggui.TextInputState) ggui.Rect {
+func (o *InputOTPWidget) paintSlots(d *ggui.Canvas, r ggui.Rect, state widget.TextInputState) ggui.Rect {
 	t := o.theme
 	// The border and the halo of an invalid code ease in and out together.
 	invalid := ease(d, o.theme, o.Anchor(r), fieldInvalidSlot, pick(o.invalid, 1.0, 0.0), o.motion)

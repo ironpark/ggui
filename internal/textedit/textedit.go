@@ -1,4 +1,4 @@
-// Package textedit is the editing model behind ggui's TextInput: a string,
+// Package textedit is the editing model behind widget.TextInput: a string,
 // a selection, undo history, and caret movement by grapheme cluster and by
 // word, and the clicks that select (Clicks). It knows nothing of layout,
 // painting or input events: a click's offset, time and place come from
@@ -19,7 +19,7 @@ import (
 	"github.com/ironpark/ggui/pkg/gem"
 )
 
-// Editor is the model behind TextInput: a string and a selection. The
+// Editor is the model behind widget.TextInput: a string and a selection. The
 // caret sits at Caret; Anchor is where the selection started, so Anchor ==
 // Caret means no selection. Offsets are bytes on rune boundaries.
 type Editor struct {

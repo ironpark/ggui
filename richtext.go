@@ -599,7 +599,7 @@ func (a *SelectionAreaWidget) pointer(t *RichTextWidget, ev PointerEvent) bool {
 			return true
 		}
 		a.clear(t)
-		t.clicks.Press(&t.ed, activeWorld().frame.raw(), ev.Pos, t.offsetAt, ev.Mods.Shift)
+		t.clicks.Press(&t.ed, ClockTime(), ev.Pos, t.offsetAt, ev.Mods.Shift)
 		a.anchor, a.anchorAt = t, t.ed.Anchor
 		a.focus, a.focusAt = t, t.ed.Caret
 		return true
@@ -893,7 +893,7 @@ func (t *RichTextWidget) HandlePointer(ev PointerEvent) bool {
 		if ev.Button != MouseButtonLeft {
 			return false
 		}
-		t.clicks.Press(&t.ed, activeWorld().frame.raw(), ev.Pos, t.offsetAt, ev.Mods.Shift)
+		t.clicks.Press(&t.ed, ClockTime(), ev.Pos, t.offsetAt, ev.Mods.Shift)
 		return true
 	case PointerDrag:
 		t.clicks.Drag(&t.ed, ev.Pos, t.offsetAt)

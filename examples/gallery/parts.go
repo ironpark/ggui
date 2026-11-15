@@ -7,6 +7,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/widget"
 )
 
 // newPartPreviews shows the parts shadcn/ui composes its components from:
@@ -128,12 +129,12 @@ func newPartPreviews(toasts *ui.ToasterWidget) func() []ggui.Widget {
 			).Gap(8)),
 
 			preview("Input group", ggui.Column(
-				ui.InputGroup(ggui.TextInput(url).Placeholder("example.com").Name("Website")).
+				ui.InputGroup(widget.TextInput(url).Placeholder("example.com").Name("Website")).
 					Leading(ui.Icon(icons.Search)).
 					Trailing(ui.Badge("12 results").Secondary()),
-				ui.InputGroup(ggui.TextInput(amount).Placeholder("0.00").Name("Amount")).
+				ui.InputGroup(widget.TextInput(amount).Placeholder("0.00").Name("Amount")).
 					Leading(ggui.Text("$")).Trailing(ggui.Text("USD")),
-				ui.InputGroup(ggui.TextInput(prompt).Placeholder("Ask, search or make anything…").Name("Prompt")).Multiline().
+				ui.InputGroup(widget.TextInput(prompt).Placeholder("Ask, search or make anything…").Name("Prompt")).Multiline().
 					Top(ui.Caption("Composer")).
 					Bottom(ggui.Row(
 						ui.ButtonOf(ui.Icon(icons.Plus), nil).Name("Attach").Size(ui.ButtonIconExtraSmall).Outline(),

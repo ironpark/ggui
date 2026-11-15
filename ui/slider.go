@@ -275,7 +275,7 @@ func (s *SliderWidget) HandlePointer(ev ggui.PointerEvent) bool {
 	return s.Pointer(ev, nil)
 }
 
-// TextFieldWidget is a TextInput in a themed box: Field background, a
+// TextFieldWidget is a widget.TextInput in a themed box: Field background, a
 // border that turns Accent while focused, the theme's padding and radius.
 
 // sliderGeometry keeps pointer mapping, track fill and thumb placement in the

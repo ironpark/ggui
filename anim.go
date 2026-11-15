@@ -520,7 +520,7 @@ func (s *Sprung[T]) step(now time.Time) bool {
 //		return c.Constrain(size)
 //	}
 //
-// ui.Reveal is such a panel, ready made.
+// widget.Reveal is such a panel, ready made.
 type Motion struct {
 	from, to float64
 	start    time.Time

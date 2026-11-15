@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // InputOTP draws its own slots, so it is the handler for its editor's input
@@ -16,7 +16,7 @@ import (
 // chord the editor claims going to a menu instead.
 func TestInputOTPForwardsTheEditorsInput(t *testing.T) {
 	t.Parallel()
-	editor := reflect.TypeFor[*ggui.TextInputWidget]()
+	editor := reflect.TypeFor[*widget.TextInputWidget]()
 	otp := reflect.TypeFor[*ui.InputOTPWidget]()
 	for i := range editor.NumMethod() {
 		m := editor.Method(i)
@@ -25,7 +25,7 @@ func TestInputOTPForwardsTheEditorsInput(t *testing.T) {
 			continue
 		}
 		if _, ok := otp.MethodByName(m.Name); !ok {
-			t.Errorf("TextInputWidget.%s is not forwarded by InputOTPWidget", m.Name)
+			t.Errorf("widget.TextInputWidget.%s is not forwarded by InputOTPWidget", m.Name)
 		}
 	}
 }

@@ -111,11 +111,13 @@ Use `ggui.Now()` in `Paint` for animation timing. It is sampled once per frame
 and advances by at most 100ms, so a hidden window resumes without a large jump.
 `ggui.SetClock` replaces the source in tests, for the probes the test's
 goroutine makes; `Probe.Advance(d)` advances one probe's clock, and its
-headless frame, by exactly `d`.
+headless frame, by exactly `d`. To time input rather than animate, as how
+soon a second click follows the first, read `ggui.ClockTime()`: the same
+clock, not frozen for the frame, and asking for no frame.
 
 ## Text input and validation
 
-Use `ui.TextField(value)` for a themed editor, or `ggui.TextInput(value)` to
+Use `ui.TextField(value)` for a themed editor, or `widget.TextInput(value)` to
 supply your own decoration. Both bind to a string value.
 
 | Option | Behavior |
@@ -131,7 +133,7 @@ supply your own decoration. Both bind to a string value.
 | `.Style(ts)` | Merge a text style onto the editor's. |
 | `.Key(k)` | Give the editor an identity that survives a rebuild that moved it. |
 
-Every chainable setter on `ggui.TextInput` has a namesake on `ui.TextField`;
+Every chainable setter on `widget.TextInput` has a namesake on `ui.TextField`;
 a test in the `ui` package keeps them in step.
 
 Editors support IME composition, with preedit text underlined in place.

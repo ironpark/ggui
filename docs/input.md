@@ -361,7 +361,12 @@ To make your own widget interactive, implement `PointerHandler` or
 `KeyHandler` and call `dst.HitPointer(r, w)`, `dst.HitKey(r, w)` or
 `dst.HitCursor(r, shape)` from `Paint`; calls for the same `Rect` merge into
 one region. A `KeyHandler` that also implements `TickHandler` runs once per
-frame while focused, which is how `TextInput` drives the IME. `dst.Clip(r)`
+frame while focused, which is how `widget.TextInput` drives the IME: a
+text widget of your own gets its session from `ggui.NewIME(handler)`, the
+platform's input method while an App runs and none under a Probe, calls
+its `Update` from `HandleTick` and hands it `KeyText` through `Typed`, and
+the `IMEHandler` it passed shows compositions and applies commits.
+`dst.Clip(r)`
 returns a Canvas that draws and registers regions only inside `r`,
 `dst.Pointer()` is where the cursor is, and `dst.Overlay(fn)` paints above
 the tree once it is done.
@@ -371,11 +376,11 @@ the tree once it is done.
 A rebuild replaces widgets, and with them the state they hold. A handler that
 implements `Adopter` is handed the handler that held the same region in the
 previous frame as it registers its own, so it can copy hover, press, a caret
-or an animation in flight: the built-in controls, `TextInput`, `Scroll` and
+or an animation in flight: the built-in controls, `widget.TextInput`, `Scroll` and
 `Popup` all do, which is why flipping a `ui.Switch` that rebuilds its own
 subtree still slides the knob. The region is matched by the handler's
 identity when it implements `Identified`, else by `Rect`; `.Key(k)` on a
-control, `TextInput`, `Scroll` or `Popup` sets one, so a widget rebuilt and
+control, `widget.TextInput`, `Scroll` or `Popup` sets one, so a widget rebuilt and
 moved in the same frame keeps its state. Inside a `Component`, keyed row, or `Key` branch every one of those gets an identity for free, the component's
 mount instance plus its place in construction order, so a keyed form keeps focus and
 carets through its own rebuilds with no keys on the fields.

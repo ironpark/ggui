@@ -421,12 +421,12 @@ func (e Env) WithTextReplaced(s TextStyle) Env {
 
 var textKey = new(byte)
 
-// TextScaleKey holds the factor every Text and TextInput multiplies its
+// TextScaleKey holds the factor every Text and widget.TextInput multiplies its
 // size by, for a user who asked for larger text: Provide it above the tree
 // or a subtree. Env.TextScale reads it, 1 by default.
 var TextScaleKey = NewEnvKey[float64]("text scale")
 
-// InputDisabledKey disables TextInput editing in a subtree without replacing the
+// InputDisabledKey disables widget.TextInput editing in a subtree without replacing the
 // editor's own Disabled or BindDisabled setting. Containers combine inherited
 // and local values with OR; false must not enable an already-disabled ancestor.
 var InputDisabledKey = NewEnvKey[bool]("input disabled")

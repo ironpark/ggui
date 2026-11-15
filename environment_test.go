@@ -32,21 +32,6 @@ func TestEnvironmentReplacementsPreserveParentsWithoutAccumulatingBindings(t *te
 	}
 }
 
-func TestCoreStylesWorkWithoutTheme(t *testing.T) {
-	t.Parallel()
-	env := Env{}.With(EditorStyleKey, EditorStyle{Muted: color.White, Selection: color.Black}).
-		With(ScrollStyleKey, ScrollStyle{Color: color.White, HoverColor: color.Black}).
-		With(PopupDurationKey, time.Duration(0)).With(SpacingKey, 0.0)
-	input := TextInput(State("text")).Disabled(true)
-	input.Layout(Loose(Sz(200, 40)), env)
-	if input.resolved.Color != color.White || input.selection != color.Black {
-		t.Fatal("editor ignored explicit environment colors")
-	}
-	if env.ScrollStyle().Duration != 0 || env.PopupDuration() != 0 || env.Spacing() != 0 {
-		t.Fatal("zero style settings were replaced by defaults")
-	}
-}
-
 func TestTextStyleKeyFallbackAndExplicitOverrides(t *testing.T) {
 	t.Parallel()
 	key := NewEnvKey[TextStyle]("label")

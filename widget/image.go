@@ -1,4 +1,4 @@
-package ui
+package widget
 
 import (
 	"bytes"
@@ -41,7 +41,7 @@ type ImageWidget struct {
 // logical pixels, and scales down, keeping its aspect ratio, when the
 // parent gives it less room.
 //
-//	ui.Image(cover).Size(96, 96).Fit(ggui.FitCover)
+//	widget.Image(cover).Size(96, 96).Fit(ggui.FitCover)
 func Image(img *ggfx.Image) *ImageWidget {
 	return &ImageWidget{img: img}
 }
@@ -324,7 +324,7 @@ func (h *asyncHandles) swap() {
 // Once loaded it lays out and paints as Image does, with the same Fit,
 // Size, Width, Height, Pixelated and Alt.
 //
-//	ui.AsyncImage(photo.Path).Size(96, 96).Fit(ggui.FitCover).
+//	widget.AsyncImage(photo.Path).Size(96, 96).Fit(ggui.FitCover).
 //		Placeholder(ui.Skeleton(96, 96))
 func AsyncImage(src string) *AsyncImageWidget {
 	a := &AsyncImageWidget{loader: LoadImage, inner: Image(nil), cache: defaultImageCache}

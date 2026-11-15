@@ -322,7 +322,7 @@ func (c *ComponentWidget) absent() bool { return blockChild(c) == nil }
 // caption beside a large title shares its baseline instead of its centre.
 //
 // The answer is valid after Layout, for the size Layout returned. Text and
-// TextInput report their face's ascent; Box, Column, Align and the other
+// widget.TextInput report their face's ascent; Box, Column, Align and the other
 // containers report their first child's baseline moved by where that child
 // went. A widget with no text in it reports false, and a Row then rests it
 // on the baseline by its bottom edge, as CSS does with an image in a line
@@ -714,7 +714,7 @@ func (w *focusRefWidget) Paint(dst *Canvas, r Rect) {
 // The cache holds while the constraints and everything inherited through
 // the Env (text style, Scroll viewport, Provide values) are the same
 // as last time and nothing inside asked for a layout. Reactive, EachKeyed, Scroll
-// and TextInput ask when they change; a custom widget whose size depends on
+// and widget.TextInput ask when they change; a custom widget whose size depends on
 // state outside a signal calls Invalidate with the Env it was laid out
 // under.
 type CachedWidget struct {

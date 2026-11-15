@@ -8,6 +8,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // watchMotion paints w at its own size and reports where the Motion
@@ -213,9 +214,9 @@ func TestInputGroupKeepsAFieldsHeight(t *testing.T) {
 		plain := Button("Go", nil)
 		kept := Button("Go", nil).Outline().Size(ButtonSmall)
 		for name, g := range map[string]*InputGroupWidget{
-			"bare":   InputGroup(ggui.TextInput(ggui.State(""))),
-			"text":   InputGroup(ggui.TextInput(ggui.State(""))).Leading(ggui.Text("https://")).Trailing(ggui.Text("kg")),
-			"button": InputGroup(ggui.TextInput(ggui.State(""))).Trailing(plain),
+			"bare":   InputGroup(widget.TextInput(ggui.State(""))),
+			"text":   InputGroup(widget.TextInput(ggui.State(""))).Leading(ggui.Text("https://")).Trailing(ggui.Text("kg")),
+			"button": InputGroup(widget.TextInput(ggui.State(""))).Trailing(plain),
 		} {
 			if size := g.Layout(c, env); size.H != field.H || size.W != 400 {
 				t.Errorf("%s: the group is %v, want a field's height %v across 400", name, size, field.H)
@@ -224,7 +225,7 @@ func TestInputGroupKeepsAFieldsHeight(t *testing.T) {
 		if plain.variant != ButtonGhost || plain.size != ButtonExtraSmall || plain.radius != theme.Radius-3 {
 			t.Errorf("a default button addon is %s %s with radius %v, want ghost xs with radius %v", plain.variant, plain.size, plain.radius, theme.Radius-3)
 		}
-		InputGroup(ggui.TextInput(ggui.State(""))).Trailing(kept).Layout(c, env)
+		InputGroup(widget.TextInput(ggui.State(""))).Trailing(kept).Layout(c, env)
 		if kept.variant != ButtonOutline || kept.size != ButtonSmall {
 			t.Errorf("a button given its own look became %s %s", kept.variant, kept.size)
 		}
@@ -237,13 +238,13 @@ func TestInputGroupBlockAddons(t *testing.T) {
 	t.Parallel()
 	env := uitheme.Default().Apply(ggui.Env{})
 	c := ggui.Loose(ggui.Sz(400, 600))
-	area := InputGroup(ggui.TextInput(ggui.State(""))).Multiline()
+	area := InputGroup(widget.TextInput(ggui.State(""))).Multiline()
 	plain := area.Layout(c, env)
-	if single := InputGroup(ggui.TextInput(ggui.State(""))).Layout(c, env); plain.H <= single.H {
+	if single := InputGroup(widget.TextInput(ggui.State(""))).Layout(c, env); plain.H <= single.H {
 		t.Fatalf("a multiline group is %v tall, a single line %v", plain.H, single.H)
 	}
 	send := Button("Send", nil)
-	g := InputGroup(ggui.TextInput(ggui.State(""))).Multiline().Top(ggui.Text("Context")).Bottom(send)
+	g := InputGroup(widget.TextInput(ggui.State(""))).Multiline().Top(ggui.Text("Context")).Bottom(send)
 	if size := g.Layout(c, env); size.H <= plain.H+send.Layout(c, env).H {
 		t.Fatalf("with addons above and below the group is %v tall, without %v", size.H, plain.H)
 	}
@@ -258,8 +259,8 @@ func TestInputGroupBlockAddons(t *testing.T) {
 	// A single line keeps a field's 32px and moves its text away from the
 	// addons' row inside it: shadcn's pt-3 over a block-end addon, pb-3
 	// under a block-start one, with the row's own py-1.5 between.
-	text := ggui.TextInput(ggui.State("")).Layout(c, env).H
-	line := InputGroup(ggui.TextInput(ggui.State(""))).Bottom(Button("Send", nil))
+	text := widget.TextInput(ggui.State("")).Layout(c, env).H
+	line := InputGroup(widget.TextInput(ggui.State(""))).Bottom(Button("Send", nil))
 	size := line.Layout(c, env)
 	above, below := line.rowRect.Origin.Y, line.botRect.Origin.Y-line.rowRect.Origin.Y-line.rowRect.Size.H
 	if want := 10 + (20-text)/2; math.Abs(above-want) > 1e-9 || math.Abs(below-(want-2)) > 1e-9 {
@@ -268,13 +269,13 @@ func TestInputGroupBlockAddons(t *testing.T) {
 	if want := 32 + 6 + line.botRect.Size.H + 8; math.Abs(size.H-want) > 1e-9 {
 		t.Fatalf("a single line over a row of addons is %v tall, want %v", size.H, want)
 	}
-	head := InputGroup(ggui.TextInput(ggui.State(""))).Top(ggui.Text("To"))
+	head := InputGroup(widget.TextInput(ggui.State(""))).Top(ggui.Text("To"))
 	size = head.Layout(c, env)
 	above, below = head.rowRect.Origin.Y-head.topRect.Origin.Y-head.topRect.Size.H, size.H-head.rowRect.Origin.Y-head.rowRect.Size.H
 	if want := 10 + (20-text)/2; math.Abs(below-want) > 1e-9 || math.Abs(above-(want-2)) > 1e-9 {
 		t.Fatalf("a single line starts %v under its top row and ends %v up, want %v and %v", above, below, want-2, want)
 	}
-	both := InputGroup(ggui.TextInput(ggui.State(""))).Top(ggui.Text("To")).Bottom(Button("Send", nil))
+	both := InputGroup(widget.TextInput(ggui.State(""))).Top(ggui.Text("To")).Bottom(Button("Send", nil))
 	size = both.Layout(c, env)
 	if want := 8 + both.topRect.Size.H + 6 + 32 + 6 + both.botRect.Size.H + 8; math.Abs(size.H-want) > 1e-9 {
 		t.Fatalf("a single line between two rows of addons is %v tall, want %v", size.H, want)
@@ -283,7 +284,7 @@ func TestInputGroupBlockAddons(t *testing.T) {
 	// focuses the editor.
 	taps := 0
 	value := ggui.State("")
-	input := ggui.TextInput(value).Name("Message")
+	input := widget.TextInput(value).Name("Message")
 	p := ggui.NewProbe(InputGroup(input).Multiline().Top(ggui.Text("Context")).Bottom(Button("Send", func() { taps++ })), ggui.Sz(400, 300))
 	defer p.Close()
 	p.Tap("Send")
@@ -424,8 +425,8 @@ func TestFormControlsLeaveACachedParentHeld(t *testing.T) {
 		"Radios horizontal":    Radios(ggui.State("a")).Options(options).Horizontal(),
 		"NumberInput":          NumberInput(ggui.State(1.0)),
 		"InputOTP":             InputOTP(ggui.State("12"), 6).Groups(3, 3),
-		"InputGroup":           InputGroup(ggui.TextInput(ggui.State("a"))).Leading(ggui.Text("$")).Trailing(Button("Go", nil)),
-		"InputGroup multiline": InputGroup(ggui.TextInput(ggui.State("a"))).Multiline().Top(ggui.Text("t")).Bottom(Button("Send", nil)),
+		"InputGroup":           InputGroup(widget.TextInput(ggui.State("a"))).Leading(ggui.Text("$")).Trailing(Button("Go", nil)),
+		"InputGroup multiline": InputGroup(widget.TextInput(ggui.State("a"))).Multiline().Top(ggui.Text("t")).Bottom(Button("Send", nil)),
 		"Field":                Field("Name", TextField(ggui.State("a"))).Help("help").Error("error"),
 		"Field horizontal":     Field("Name", Switch(ggui.State(true), "")).Help("help").Horizontal(),
 		"FieldSet":             FieldSet(Field("Name", TextField(ggui.State("a"))), FieldSeparator().Label("or")).Legend("Set").Description("d"),

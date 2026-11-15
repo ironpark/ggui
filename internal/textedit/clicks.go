@@ -8,7 +8,7 @@ import (
 
 // Clicks turns a pointer's clicks on text into a selection: one places the
 // caret, a quick second near the first selects a word, a third the line,
-// and a drag after one click extends the selection. ggui's TextInput and
+// and a drag after one click extends the selection. widget.TextInput and
 // selectable rich text share it, so a double click means the same in both.
 type Clicks struct {
 	clicks    int

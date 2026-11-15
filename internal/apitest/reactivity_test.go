@@ -13,6 +13,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/widget"
 )
 
 // A remembered value outlives the rebuilds of the View that asked for it,
@@ -120,7 +121,7 @@ func TestTextInputCommitsAndRevertsADraft(t *testing.T) {
 		saved.Set(v)
 		return nil
 	})
-	input := ggui.TextInput(d)
+	input := widget.TextInput(d)
 	p := ggui.NewProbe(input, ggui.Sz(200, 30))
 	defer p.Close()
 	escape := ggui.KeyEvent{Kind: ggui.KeyPress, Key: ggui.KeyEscape}

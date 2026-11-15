@@ -1,4 +1,4 @@
-// Package editlayout is the layout behind ggui's TextInput: its text cut
+// Package editlayout is the layout behind widget.TextInput: its text cut
 // into lines, wrapped to a width or broken at line breaks only, and each
 // line holding right-to-left text laid out in visual order. It is kept by
 // hard line, so that an edit lays out again only the lines it changed:

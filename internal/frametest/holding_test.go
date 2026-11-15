@@ -15,6 +15,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/gfxtest"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestMain(m *testing.M) { gfxtest.MainInFrame(m) }
@@ -211,7 +212,7 @@ var (
 func disclosure() (ggui.Widget, func(*ggui.WindowProbe)) {
 	open := ggui.State(false)
 	body := ggui.Box(ggui.Box().Size(60, 40).Fill(red).Shadow(ggui.ShadowStyle{Blur: 12, Spread: 4, Color: shade})).Pad(10)
-	w := ggui.Column(ui.Reveal(open, body), ggui.Box().Size(80, 20).Fill(blue))
+	w := ggui.Column(widget.Reveal(open, body), ggui.Box().Size(80, 20).Fill(blue))
 	return w, func(*ggui.WindowProbe) { open.Set(true) }
 }
 
