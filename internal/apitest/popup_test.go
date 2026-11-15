@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // sidePopup opens a 100x50 popup on a 60x20 anchor at at, in a 400x300
@@ -213,8 +214,8 @@ func TestPopupRejectedControlledCloseDoesNotNotify(t *testing.T) {
 func TestNonmodalPopupFocusOnOpenFalseKeepsTheOpenersFocus(t *testing.T) {
 	t.Parallel()
 	for _, keep := range []bool{false, true} {
-		input := ggui.TextInput(ggui.State("")).Name("Query")
-		item := ggui.TextInput(ggui.State("")).Name("Item")
+		input := widget.TextInput(ggui.State("")).Name("Query")
+		item := widget.TextInput(ggui.State("")).Name("Item")
 		p := ggui.Popup(input, ggui.Box(item).Size(120, 40)).Modal(false).FocusOnOpen(!keep)
 		pr := ggui.NewProbe(ggui.Column(p), ggui.Sz(300, 250))
 		pr.Tap("Query")
@@ -228,6 +229,58 @@ func TestNonmodalPopupFocusOnOpenFalseKeepsTheOpenersFocus(t *testing.T) {
 		}
 		if focused.Name != want {
 			t.Errorf("FocusOnOpen(%v): %q has focus, want %q", !keep, focused.Name, want)
+		}
+		pr.Close()
+	}
+}
+
+func TestPopupKeysKeepsFocusOnTheOpener(t *testing.T) {
+	t.Parallel()
+	useQuietIME(t)
+	for _, keys := range []bool{true, false} {
+		field := widget.TextInput(ggui.State("x"))
+		p := ggui.Popup(field, ggui.Box().Size(80, 40))
+		if keys {
+			p.Keys(field)
+		}
+		pr := ggui.NewProbe(ggui.Column(p), ggui.Sz(200, 200))
+		pr.Click(ggui.Pt(100, 5))
+		p.Show()
+		pr.Click(ggui.Pt(20, 40)) // inside the content
+		if field.Focused() != keys {
+			t.Errorf("Keys %v: the field is focused %v after a click in the content, want %v", keys, field.Focused(), keys)
+		}
+		pr.Close()
+	}
+}
+
+func TestPopupOwnerNestsTheContentUnderTheOpener(t *testing.T) {
+	t.Parallel()
+	useQuietIME(t)
+	for _, owned := range []bool{true, false} {
+		field := widget.TextInput(ggui.State("")).Name("combo")
+		option := ggui.FromFuncs(
+			func(c ggui.Constraints, _ ggui.Env) ggui.Size { return c.Constrain(ggui.Sz(80, 20)) },
+			func(dst *ggui.Canvas, r ggui.Rect) { dst.Leaf(r, ggui.Node{Role: ggui.RoleImage, Name: "option"}) },
+		)
+		p := ggui.Popup(field, option)
+		if owned {
+			p.Owner(field)
+		}
+		pr := ggui.NewProbe(ggui.Column(p), ggui.Sz(200, 200))
+		p.Show()
+		tree := pr.Semantics()
+		under := false
+		for i, n := range tree.Nodes(ggui.RoleImage) {
+			for _, a := range tree.Ancestors(i) {
+				under = under || (a.Role == ggui.RoleTextField && a.Name == "combo")
+			}
+			if n.Name != "option" {
+				t.Fatalf("unexpected image %q", n.Name)
+			}
+		}
+		if under != owned {
+			t.Errorf("Owner set %v: the option is under the field %v", owned, under)
 		}
 		pr.Close()
 	}

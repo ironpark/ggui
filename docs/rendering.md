@@ -30,7 +30,7 @@ with ggfx directly, and text rasterizes its face at the scaled size rather
 than scaling the pixels. A custom widget that draws with ggfx directly should
 do the same. Layout has no Canvas to ask; `ggui.UseScale()` is the factor of
 the window or probe being laid out, for a widget that sizes what it
-rasterizes or decodes before its first paint, as `ui.AsyncImage` does. In a
+rasterizes or decodes before its first paint, as `widget.AsyncImage` does. In a
 test, `Probe.SetScale(2)` lays out and paints as a Retina screen would.
 
 `dst.DrawImage(img, r, ggui.ImageOptions{})` draws an image in a logical
@@ -58,7 +58,7 @@ value only when you intend to override inherited settings.
 A widget that shows text, or wraps one that does, may also implement
 `Baseliner`: `Baseline()` returns how far below the widget's top its first
 text baseline sits, valid after `Layout`. `Row.Align(AlignBaseline)` reads it.
-`Text` and `TextInput` report their font's ascent; `Box`, `Column`, `Align`
+`Text` and `widget.TextInput` report their font's ascent; `Box`, `Column`, `Align`
 and the wrappers report their first child's, moved by where the child is
 painted. A widget that does not implement it is aligned by its bottom edge.
 
@@ -147,7 +147,7 @@ lays out from the root whenever anything was written.
 `Cached(child)` is the same cache without a rebuild boundary, for a static
 subtree that sits under something that does rebuild.
 
-`EachKeyed`, `Scroll` and `TextInput` ask for a layout when they change. A custom
+`EachKeyed`, `Scroll` and `widget.TextInput` ask for a layout when they change. A custom
 widget whose size depends on state outside a signal **must** call
 `Invalidate(env)` with the Env it was laid out under; without it the widget
 keeps the size it was last measured at, since the cache above it has no

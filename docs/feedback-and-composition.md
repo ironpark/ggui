@@ -188,7 +188,7 @@ otherwise get rebuilt by hand in every application.
 | `ui.Item(title, description)` | One row of a list: `.Media(widget)` or `.MediaIcon(role)` before the text, `.Action(widget)` after it, `.Header(widget)` and `.Footer(widget)` above and below, `.Outline()` for a bordered card or `.Muted()` for a tinted one, and `.Small()` or `.ExtraSmall()` for denser rows. It takes no input, so the action keeps its own. `ui.ItemGroup(items...)` stacks items as a list, with `ui.ItemSeparator()` drawing a line between two of them. |
 | `ui.Card(children...)` | A bordered surface. Given `ui.CardHeader(title, description)` (with `.Action(widget)` at its top right), `ui.CardContent(widget)` and `ui.CardFooter(widgets...)` (with `.Justify(j)`), it stacks them a CardPad apart and runs the footer to the card's bottom edge on a muted band; `.Small()` tightens it. |
 | `ui.Breadcrumb(crumbs...)` | The path to the page the user is on, built from `ui.Crumb(label, onTap)`. Every step but the last is a link with its own tab stop; a chevron separates them, `.Separator(s)` or `.SeparatorOf(widget)` replace it, and `.Max(n)` elides the middle behind an ellipsis. |
-| `ui.InputGroup(input)` | One field chrome around a bare `ggui.TextInput` and the widgets that flank it: `.Leading(widget)`, `.Trailing(widget)`, and `.Top(widget)` and `.Bottom(widget)` on rows of their own above and below the editor. `.Multiline()` makes it a text area that grows by the line. The group owns the border, fill, padding and focus ring, so it takes the editor rather than `ui.TextField`, which draws a box of its own. A Button handed over in its default look becomes a ghost, extra-small addon button. |
+| `ui.InputGroup(input)` | One field chrome around a bare `widget.TextInput` and the widgets that flank it: `.Leading(widget)`, `.Trailing(widget)`, and `.Top(widget)` and `.Bottom(widget)` on rows of their own above and below the editor. `.Multiline()` makes it a text area that grows by the line. The group owns the border, fill, padding and focus ring, so it takes the editor rather than `ui.TextField`, which draws a box of its own. A Button handed over in its default look becomes a ghost, extra-small addon button. |
 | `ui.Tooltip(child, text)` | A line of help shown above the child immediately on hover (customize with `.Delay(d)`), or while focus moved there with the keyboard is within it. `.Side(ggui.PopupRight)` and the other sides, `.Align(a)` and `.AlignOffset(px)` place it; it flips when its side has no room. `.Shortcut(chord)` adds a key cap. A press closes it until the cursor leaves, and the focus a click gives does not open it. It registers no hit region, so the child gets every event, and paints through `Canvas.Overlay` above everything else. |
 | `ui.HoverCard(anchor, content)` | A panel of content shown near the anchor once the cursor has rested on it, and kept up while the cursor is on either one. `.Delay(d)`, `.Width(px)`, `.Side(s)`, `.Align(a)` and `.AlignOffset(px)` tune it. Nothing about it takes focus: a hover card is an aside, and the keyboard never has to visit it. |
 
@@ -204,7 +204,7 @@ ui.Card(
 	ui.CardFooter(ui.Button("Cancel", cancel).Outline(), ui.Button("Deploy", deploy)).Justify(ggui.SpaceBetween),
 )
 
-ui.InputGroup(ggui.TextInput(prompt).Placeholder("Ask anything…")).Multiline().
+ui.InputGroup(widget.TextInput(prompt).Placeholder("Ask anything…")).Multiline().
 	Bottom(ggui.Row(ui.Caption("52% used"), ggui.Spacer(), ui.Button("Send", send).Size(ui.ButtonExtraSmall)).Gap(8))
 ```
 

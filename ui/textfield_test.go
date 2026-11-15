@@ -8,6 +8,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestTextFieldCallbacksFollowEditsSubmitAndBlur(t *testing.T) {
@@ -148,7 +149,7 @@ func TestProbeTextTypesIntoAFocusedTextField(t *testing.T) {
 // must have a namesake on the field with the same parameters.
 func TestTextFieldForwardsEditorSetters(t *testing.T) {
 	t.Parallel()
-	editor := reflect.TypeFor[*ggui.TextInputWidget]()
+	editor := reflect.TypeFor[*widget.TextInputWidget]()
 	field := reflect.TypeFor[*ui.TextFieldWidget]()
 	for i := range editor.NumMethod() {
 		m := editor.Method(i)
@@ -157,7 +158,7 @@ func TestTextFieldForwardsEditorSetters(t *testing.T) {
 		}
 		fm, ok := field.MethodByName(m.Name)
 		if !ok {
-			t.Errorf("TextInputWidget.%s has no TextFieldWidget counterpart", m.Name)
+			t.Errorf("widget.TextInputWidget.%s has no TextFieldWidget counterpart", m.Name)
 			continue
 		}
 		if fm.Type.NumIn() != m.Type.NumIn() || fm.Type.Out(0) != field {

@@ -10,6 +10,7 @@ import (
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // comboboxListHeight is the most a combobox's rows take before its list
@@ -30,7 +31,7 @@ type ComboboxWidget[T comparable] struct {
 	text        *ggui.StateValue[string] // what the input shows
 	query       *ggui.StateValue[string] // what the list is filtered by
 	typed       bool                     // text was typed since a value was last shown in the input
-	input       *ggui.TextInputWidget
+	input       *widget.TextInputWidget
 	field       *comboboxField
 	chevron     *comboboxAddon
 	clear       *comboboxAddon
@@ -53,7 +54,7 @@ type ComboboxWidget[T comparable] struct {
 // shallow-copied.
 func Combobox[T comparable](value ggui.Binding[T]) *ComboboxWidget[T] {
 	c := &ComboboxWidget[T]{value: value, label: sprint[T], placeholder: "Select…", text: ggui.State(""), query: ggui.State("")}
-	c.input = ggui.TextInput(c.text).Placeholder(c.placeholder).MinWidth(0)
+	c.input = widget.TextInput(c.text).Placeholder(c.placeholder).MinWidth(0)
 	c.input.OnKey(c.key).OnChange(c.typing).OnCommit(func(string) {
 		if !c.input.Focused() {
 			c.left()
@@ -399,7 +400,7 @@ func (c *ComboboxWidget[T]) BindName(r ggui.Readable[string]) *ComboboxWidget[T]
 // around ComboboxInput.
 type comboboxField struct {
 	ggui.Interactive // only disabled is used; the editor tracks its own focus
-	input            *ggui.TextInputWidget
+	input            *widget.TextInputWidget
 	addon            *comboboxAddon
 	open             func() // a press in the input opens the list
 	inputRect        ggui.Rect
@@ -479,7 +480,7 @@ func (p comboboxPress) HandlePointer(ev ggui.PointerEvent) bool {
 // keyboard for the input, so a click on a row leaves the keyboard there:
 // the list is never focused itself.
 type comboboxList struct {
-	input   *ggui.TextInputWidget
+	input   *widget.TextInputWidget
 	content ggui.Widget
 }
 
@@ -580,7 +581,7 @@ type ComboboxMultipleWidget[T comparable] struct {
 	optionProp  property.Value[[]T]
 	label       func(T) string
 	placeholder string
-	input       *ggui.TextInputWidget // after the chips, filtering the list
+	input       *widget.TextInputWidget // after the chips, filtering the list
 	popup       *ggui.PopupWidget
 	content     *ggui.BoxWidget // the list, as wide as the field
 	query       *ggui.StateValue[string]
@@ -603,7 +604,7 @@ type ComboboxMultipleWidget[T comparable] struct {
 func ComboboxMultiple[T comparable](values ggui.Binding[[]T]) *ComboboxMultipleWidget[T] {
 	property.Require(values, "ComboboxMultiple")
 	c := &ComboboxMultipleWidget[T]{values: values, label: sprint[T], placeholder: "Select…", query: ggui.State("")}
-	c.input = ggui.TextInput(c.query).Placeholder(c.placeholder).MinWidth(0)
+	c.input = widget.TextInput(c.query).Placeholder(c.placeholder).MinWidth(0)
 	c.input.OnKey(c.handleKey).OnChange(func(string) { c.open() }).OnCommit(func(string) {
 		// Leaving the input closes the list and drops what was typed.
 		if !c.input.Focused() {

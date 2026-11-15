@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // The rows of a list box and the steppers of a number input keep the arrow
@@ -44,7 +45,7 @@ func TestListRowsAndSteppersKeepTheDefaultCursor(t *testing.T) {
 // beam of the field it sits in: a button's cursor is its own.
 func TestAddonButtonKeepsTheArrowInsideAField(t *testing.T) {
 	t.Parallel()
-	group := ui.InputGroup(ggui.TextInput(ggui.State("")).Name("Site")).Trailing(ui.Button("Go", nil))
+	group := ui.InputGroup(widget.TextInput(ggui.State("")).Name("Site")).Trailing(ui.Button("Go", nil))
 	p := ggui.NewProbe(ggui.Column(group).Align(ggui.AlignStart), ggui.Sz(320, 120))
 	defer p.Close()
 	button, ok := p.FindRole(ggui.RoleButton, "Go")

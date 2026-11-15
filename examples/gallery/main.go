@@ -17,6 +17,7 @@ import (
 	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // Person is a row of the table below. Rows are keyed by ID, so editing or
@@ -478,7 +479,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 
 			preview("Reveal", ggui.Column(
 				ui.Switch(revealed, "Show more"),
-				ui.Reveal(revealed, ggui.Box(ggui.Text("Folds open beneath the switch, moving what follows down, and back up when hidden.")).
+				widget.Reveal(revealed, ggui.Box(ggui.Text("Folds open beneath the switch, moving what follows down, and back up when hidden.")).
 					Fill(t.Card).Radius(t.Radius).Pad(t.Space)),
 				ui.Caption("Below the reveal."),
 			).Space(1).Stretch()),
@@ -556,7 +557,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 					ui.TextField(ggui.State("")).Placeholder("10.00").Name("Amount"),
 					ui.Button("Send", func() { groupAction.Set("Sent the amount") }).Outline(),
 				),
-				ui.InputGroup(ggui.TextInput(site).Placeholder("example.com").Name("Site")).
+				ui.InputGroup(widget.TextInput(site).Placeholder("example.com").Name("Site")).
 					Leading(ggui.Text("https://").Color(t.MutedFg)).
 					Trailing(ui.Button("Go", func() {
 						if host := strings.TrimSpace(ggui.Peek(site)); host != "" {

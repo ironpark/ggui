@@ -61,12 +61,12 @@ an inherited one such as `Theme.Text`, is laid out in line boxes, each
 20/14 is 20 pixels high in every font, and a 16px title at line height 1 is 16
 high, its glyphs reaching a little past the box, as `leading-none` has it in a
 browser. Text no line height was set for is as tall as its font's ascent and
-descent, with 1.2 times the size between baselines. A `TextInput` is always as
+descent, with 1.2 times the size between baselines. A `widget.TextInput` is always as
 tall as its glyphs.
 
 `Tracking` is CSS's `letter-spacing` in em: `-0.025` sets a heading tight, `0.1`
 spaces a shortcut hint out. Text is measured, wrapped, cut, hit and drawn with
-it, in a `Text`, a `RichText` and a `TextInput` alike, and optional ligatures
+it, in a `Text`, a `RichText` and a `widget.TextInput` alike, and optional ligatures
 are left out, as a browser leaves them out of spaced text.
 
 **A zero field means "inherit", not "zero".** `a.Merge(b)` lays the set fields
@@ -462,7 +462,7 @@ ggui.Provide(ggui.TextScaleKey, 1.5, tree)     // every Text and TextInput grows
 ggui.Provide(ggui.ReducedMotionKey, true, tree) // transitions land at once
 ```
 
-`TextScaleKey` multiplies the resolved size of every `Text` and `TextInput`;
+`TextScaleKey` multiplies the resolved size of every `Text` and `widget.TextInput`;
 read it with `env.TextScale()`, which is 1 by default.
 
 `ReducedMotionKey` is read through `env.Motion(d)`, which returns `d`

@@ -192,33 +192,6 @@ func TestEmojiSwitchInvalidatesCachedMeasurement(t *testing.T) {
 	}
 }
 
-func TestEmojiPointerCaretAndBackspace(t *testing.T) {
-	t.Parallel()
-	for _, s := range []string{"👍🏽", "🇰🇷", "👩🏽‍💻", "👨‍👩‍👧‍👦", "1️⃣", "🏳️‍🌈", "❤️"} {
-		t.Run(s, func(t *testing.T) {
-			// A subtest runs on a goroutine of its own, whose settings are
-			// its own.
-			useTestEmoji(t)
-			useFakeIME(t)
-			value := State(s)
-			w := TextInput(value)
-			w.Layout(Tight(Sz(300, 30)), rootEnv())
-			for x := 0.0; x <= w.advance(s)+5; x += .5 {
-				i := w.indexOnLine(w.wrap(s), 0, x)
-				if i != 0 && i != len(s) {
-					t.Fatalf("click at x=%v placed caret inside emoji at byte %d/%d", x, i, len(s))
-				}
-			}
-			w.rect = Rct(Point{}, Sz(300, 30))
-			w.HandlePointer(PointerEvent{Kind: PointerDown, Button: MouseButtonLeft, Pos: Pt(299, 10)})
-			w.HandleKey(KeyEvent{Kind: KeyPress, Key: KeyBackspace})
-			if Untrack(value.Get) != "" {
-				t.Fatalf("backspace left emoji fragments: %q", Untrack(value.Get))
-			}
-		})
-	}
-}
-
 func TestKoreanFallsBackToASystemFont(t *testing.T) {
 	t.Parallel()
 	if !systemFontDrawsKorean() {

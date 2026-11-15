@@ -113,7 +113,7 @@ const commandListHeight = 276
 // group by group, and the first of them is highlighted. Up/Down
 // move through enabled matches and stop at the ends unless Loop is set, Home
 // and End go to the first and last, and Enter runs the highlighted action.
-// IME composition and the other editing keys stay with TextInput.
+// IME composition and the other editing keys stay with widget.TextInput.
 func Command(query ggui.Binding[string], entries ...CommandEntry) *CommandWidget {
 	c := &CommandWidget{query: query, highlight: -1, height: commandListHeight, offset: ggui.State(0.0),
 		hintNav: "Navigate", hintSel: "Select", emptyText: "No results"}

@@ -1,4 +1,4 @@
-package ui
+package widget
 
 import (
 	"time"
@@ -39,7 +39,7 @@ type RevealWidget struct {
 //	more := ggui.State(false)
 //	ggui.Column(
 //		ggui.Tap(ggui.Text("Details"), func() { ggui.Toggle(more) }),
-//		ui.Reveal(more, details),
+//		widget.Reveal(more, details),
 //	)
 func Reveal(open ggui.Readable[bool], child ggui.Widget) *RevealWidget {
 	return &RevealWidget{open: open, child: child, duration: 200 * time.Millisecond, ease: ggui.EaseOut}

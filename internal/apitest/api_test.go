@@ -12,6 +12,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // probe is a fixed-size widget that records the Rect it was painted in.
@@ -178,5 +179,31 @@ func TestInputObserversRespectModalScope(t *testing.T) {
 	p.Type(ggui.Mods{}, ggui.KeyEnter)
 	if observed != 0 {
 		t.Fatal("modal input reached background observer")
+	}
+}
+
+func TestComponentGivesControlsStableIdentity(t *testing.T) {
+	t.Parallel()
+	value := ggui.State("hello")
+	rebuild := ggui.State(0)
+	var input *widget.TextInputWidget
+	p := ggui.ProbeBuilder(func() ggui.Widget {
+		return ggui.Component(func() ggui.Widget {
+			return ggui.Reactive(func() ggui.Widget { rebuild.Get(); input = widget.TextInput(value); return input })
+		})
+	}, ggui.Sz(200, 100))
+	defer p.Close()
+	p.Frame()
+	first := input
+	if first.HitID() == nil {
+		t.Fatal("missing identity")
+	}
+	p.Click(ggui.Pt(2, 5))
+	p.Type(ggui.Mods{}, ggui.KeyArrowRight, ggui.KeyArrowRight)
+	rebuild.Set(1)
+	p.Frame()
+	p.Type(ggui.Mods{}, ggui.KeyArrowRight)
+	if first == input || first.HitID() != input.HitID() || input.EditingState().Caret != 3 || !input.Focused() {
+		t.Fatal("rebuild lost identity, caret or focus")
 	}
 }

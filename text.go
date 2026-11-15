@@ -25,6 +25,19 @@ func (st TextStyle) engine() paragraph.Style {
 	return paragraph.Style{Font: st.Font.engine(), Size: st.Size, Weight: fontsys.Weight(st.Weight), LineHeight: st.LineHeight, Tracking: st.Tracking, Emoji: activeEmoji()}
 }
 
+// TextEngineStyle is st as the text engine sets text in it, with what st
+// leaves unset filled in as with no Env (Env.ResolveText's result is
+// returned as it is), and the generation of the active world's fonts,
+// which changes whenever a measurement made in them may no longer hold.
+//
+// TextEngineStyle is meant for ggui's own packages, such as widget, whose text
+// input lays its text out with the engine directly. It is not meant to be
+// called by anything else, which it cannot be, since its result's type is
+// internal, and it is not subject to any compatibility promise.
+func TextEngineStyle(st TextStyle) (style paragraph.Style, generation uint64) {
+	return st.resolved().engine(), fontGen()
+}
+
 // RenderText draws s in st on the CPU, with no GPU, window or App, into an
 // image just large enough to hold it: for icons, thumbnails, files and
 // tests. Lines break at hard breaks and, when maxWidth is positive, wrap to

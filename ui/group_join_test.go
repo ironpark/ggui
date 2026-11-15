@@ -7,6 +7,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/widget"
 )
 
 // sidesRecorder is a child of a group that keeps the JoinedSides it was
@@ -253,7 +254,7 @@ func TestButtonGroupGivesEveryFieldTheSpareWidth(t *testing.T) {
 func TestJoinedSidesStopAtTheControl(t *testing.T) {
 	t.Parallel()
 	inner := &sidesRecorder{size: ggui.Sz(20, 20)}
-	g := ui.ButtonGroup(ui.Button("a", nil), ui.InputGroup(ggui.TextInput(ggui.State(""))).Trailing(inner), ui.Button("b", nil))
+	g := ui.ButtonGroup(ui.Button("a", nil), ui.InputGroup(widget.TextInput(ggui.State(""))).Trailing(inner), ui.Button("b", nil))
 	p := ggui.NewProbe(g, ggui.Sz(400, 100))
 	defer p.Close()
 	p.Frame()

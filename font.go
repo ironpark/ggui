@@ -289,7 +289,7 @@ func activeEmoji() *fontsys.EmojiChoice {
 	return nil
 }
 
-// SetEmojiFont selects a color emoji font for Text and TextInput. It does not
+// SetEmojiFont selects a color emoji font for Text and widget.TextInput. It does not
 // replace their Latin/CJK fonts. Use the fonts/notoemoji module for a portable embedded font,
 // or LoadFont for another CBDT, sbix, COLRv0 or OpenType SVG font. Nil disables
 // emoji substitution; SetEmojiFont(SystemEmojiFont()) restores system rendering.

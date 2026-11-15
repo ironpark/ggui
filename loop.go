@@ -638,9 +638,9 @@ func (l *frameLoop) settle(size Size) error {
 // goroutine's Base runtime. A probe's animations step in its frames alone
 // and Advance moves its clock without moving anyone else's.
 //
-// A world also holds the settings SetClock, SetDefaultFont and
-// SetEmojiFont make, and a test's IME. One it has not set is its parent's:
-// the world of the Base its runtime was made beside. Set on the goroutine
+// A world also holds the settings SetClock, SetDefaultFont, SetEmojiFont
+// and SetIME make. One it has not set is its parent's: the world of the
+// Base its runtime was made beside. Set on the goroutine
 // before any App or Probe runs, a setting reaches every one made there;
 // set during their frames, it is theirs alone.
 type world struct {
@@ -656,12 +656,12 @@ type world struct {
 	env     *StateValue[Env] // see UseEnv; nil until first read
 	envMemo envMemo
 
-	font        *Font                      // see SetDefaultFont; nil inherits
-	mono        *Font                      // see SetDefaultMonoFont; nil inherits
-	nativeFonts bool                       // an App's: defaults to the platform's fonts
-	emoji       *fontsys.EmojiChoice       // see SetEmojiFont; nil inherits
-	fontGen     uint64                     // counts this world's font and emoji settings
-	ime         func(*TextInputWidget) ime // a test's IME; nil inherits
+	font        *Font                // see SetDefaultFont; nil inherits
+	mono        *Font                // see SetDefaultMonoFont; nil inherits
+	nativeFonts bool                 // an App's: defaults to the platform's fonts
+	emoji       *fontsys.EmojiChoice // see SetEmojiFont; nil inherits
+	fontGen     uint64               // counts this world's font and emoji settings
+	ime         func(IMEHandler) IME // see SetIME; nil inherits
 }
 
 // worldOf returns rt's world, making it on first use. A runtime is used by
@@ -903,6 +903,14 @@ func Now() time.Time { return activeWorld().frame.instant() }
 // asks for frames itself while it moves, or together with WakeAt.
 func FrameTime() time.Time { return activeWorld().frame.peek() }
 
+// ClockTime is the time now by the clock Now is sampled from: the one
+// SetClock installed, or where Probe.Advance pinned a probe's, else
+// time.Now. Unlike Now it is not frozen for the frame, and like FrameTime
+// reading it keeps nothing animating. Use it to time input, such as how
+// soon a second click follows the first or which keystrokes undo together,
+// so that a test steps it with Advance as it does an animation.
+func ClockTime() time.Time { return activeWorld().frame.raw() }
+
 // Paced is Now for a look that loops on with no end, a spinner or a pulse:
 // it asks for the next frame at the next multiple of every, rather than at
 // every refresh of the display. A loop needs no more than 20 or 30 steps a
@@ -937,13 +945,6 @@ func WakeAt(t time.Time) {
 		f.marks.Add(1)
 	}
 	f.mu.Unlock()
-}
-
-// blinkWake returns when a caret that toggles every period since start next
-// changes, for WakeAt.
-func blinkWake(start, now time.Time, period time.Duration) time.Time {
-	n := now.Sub(start)/period + 1
-	return start.Add(n * period)
 }
 
 // SetClock replaces the raw time source behind Now and every animation,

@@ -159,26 +159,6 @@ func TestPopupEscapeClosesAndReturnsFocus(t *testing.T) {
 	}
 }
 
-func TestPopupKeysKeepsFocusOnTheOpener(t *testing.T) {
-	t.Parallel()
-	useFakeIME(t)
-	for _, keys := range []bool{true, false} {
-		field := TextInput(State("x"))
-		p := Popup(field, Box().Size(80, 40))
-		if keys {
-			p.Keys(field)
-		}
-		pr := NewProbe(Column(p), Sz(200, 200))
-		pr.Click(Pt(100, 5))
-		p.Show()
-		pr.Click(Pt(20, 40)) // inside the content
-		if field.Focused() != keys {
-			t.Errorf("Keys %v: the field is focused %v after a click in the content, want %v", keys, field.Focused(), keys)
-		}
-		pr.Close()
-	}
-}
-
 func TestPopupKeyKeepsItOpenWhenMoved(t *testing.T) {
 	t.Parallel()
 	moved := State(false)
@@ -231,38 +211,6 @@ func TestPopupFadesOutInertThenStopsPainting(t *testing.T) {
 	pr.Frame()
 	if paints != 0 {
 		t.Fatal("a closed popup still paints after its animation")
-	}
-}
-
-func TestPopupOwnerNestsTheContentUnderTheOpener(t *testing.T) {
-	t.Parallel()
-	useFakeIME(t)
-	for _, owned := range []bool{true, false} {
-		field := TextInput(State("")).Name("combo")
-		option := FromFuncs(
-			func(c Constraints, _ Env) Size { return c.Constrain(Sz(80, 20)) },
-			func(dst *Canvas, r Rect) { dst.Leaf(r, Node{Role: RoleImage, Name: "option"}) },
-		)
-		p := Popup(field, option)
-		if owned {
-			p.Owner(field)
-		}
-		pr := NewProbe(Column(p), Sz(200, 200))
-		p.Show()
-		tree := pr.Semantics()
-		under := false
-		for i, n := range tree.Nodes(RoleImage) {
-			for _, a := range tree.Ancestors(i) {
-				under = under || (a.Role == RoleTextField && a.Name == "combo")
-			}
-			if n.Name != "option" {
-				t.Fatalf("unexpected image %q", n.Name)
-			}
-		}
-		if under != owned {
-			t.Errorf("Owner set %v: the option is under the field %v", owned, under)
-		}
-		pr.Close()
 	}
 }
 

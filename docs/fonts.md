@@ -106,7 +106,7 @@ gofont.Enable() // Go Regular, Medium and Bold, and Go Mono; before building the
 
 ### Add color emoji
 
-`Text` and `TextInput` render color emoji as part of ordinary strings. Emoji
+`Text` and `widget.TextInput` render color emoji as part of ordinary strings. Emoji
 presentation selectors, skin tones, regional-indicator flags, keycaps and ZWJ
 sequences stay together when shaping, wrapping, moving the caret or deleting.
 Native apps draw them in the platform's color emoji font,

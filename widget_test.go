@@ -191,46 +191,6 @@ func TestCachedSeesProvideChange(t *testing.T) {
 	}
 }
 
-func TestCachedTextInputFollowsSignal(t *testing.T) {
-	t.Parallel()
-	v := State("a")
-	in := TextInput(v)
-	p := NewProbe(Cached(in), Sz(200, 30))
-	p.Frame()
-	v.Set("bbbbbbbb")
-	p.Frame()
-	p.Frame()
-	if in.ed.Text != "bbbbbbbb" {
-		t.Fatalf("editor shows %q", in.ed.Text)
-	}
-}
-
-func TestComponentGivesControlsStableIdentity(t *testing.T) {
-	t.Parallel()
-	value := State("hello")
-	rebuild := State(0)
-	var input *TextInputWidget
-	p := ProbeBuilder(func() Widget {
-		return Component(func() Widget {
-			return Reactive(func() Widget { rebuild.Get(); input = TextInput(value); return input })
-		})
-	}, Sz(200, 100))
-	defer p.Close()
-	p.Frame()
-	first := input
-	if first.HitID() == nil {
-		t.Fatal("missing identity")
-	}
-	p.Click(Pt(2, 5))
-	p.Type(Mods{}, KeyArrowRight, KeyArrowRight)
-	rebuild.Set(1)
-	p.Frame()
-	p.Type(Mods{}, KeyArrowRight)
-	if first == input || first.HitID() != input.HitID() || input.ed.Caret != 3 || !input.Focused() {
-		t.Fatal("rebuild lost identity, caret or focus")
-	}
-}
-
 func TestTabReachesAControlOutsideTheScrollWindow(t *testing.T) {
 	t.Parallel()
 	items := Column(Focus(Box().Size(50, 50)), Focus(Box().Size(50, 50)), Focus(Box().Size(50, 50)))

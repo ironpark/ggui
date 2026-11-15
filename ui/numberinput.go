@@ -11,6 +11,7 @@ import (
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // NumberInputWidget is a number field with − and + steppers: the number is
@@ -24,7 +25,7 @@ type NumberInputWidget struct {
 	ggui.Interactive
 	value    ggui.Binding[float64]
 	text     *ggui.StateValue[string]
-	input    *ggui.TextInputWidget
+	input    *widget.TextInputWidget
 	lo, hi   float64
 	step     float64
 	digits   int // decimals shown; -1 follows the step
@@ -47,7 +48,7 @@ type NumberInputWidget struct {
 func NumberInput(value ggui.Binding[float64]) *NumberInputWidget {
 	n := &NumberInputWidget{value: value, step: 1, digits: -1, lo: math.Inf(-1), hi: math.Inf(1)}
 	n.text = ggui.State(n.format(ggui.Untrack(value.Get)))
-	n.input = ggui.TextInput(n.text).MinWidth(64).Filter(numberChars).OnKey(n.key).OnCommit(func(string) { n.commit() }).
+	n.input = widget.TextInput(n.text).MinWidth(64).Filter(numberChars).OnKey(n.key).OnCommit(func(string) { n.commit() }).
 		OnDescribe(n.describe).OnAction(n.act)
 	n.dec = &numberStepper{n: n, dir: -1}
 	n.inc = &numberStepper{n: n, dir: 1}
@@ -125,7 +126,7 @@ func (n *NumberInputWidget) BindDisabled(r ggui.Readable[bool]) *NumberInputWidg
 func (n *NumberInputWidget) OnChange(fn func(float64)) *NumberInputWidget { n.onChange = fn; return n }
 
 // Input returns the editor inside, for Focused and its text setters.
-func (n *NumberInputWidget) Input() *ggui.TextInputWidget { return n.input }
+func (n *NumberInputWidget) Input() *widget.TextInputWidget { return n.input }
 
 // precision is the number of decimals shown.
 func (n *NumberInputWidget) precision() int {

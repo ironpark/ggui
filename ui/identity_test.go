@@ -7,6 +7,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestFluentButtonKeyKeepsFocusAfterMovingRebuild(t *testing.T) {
@@ -172,7 +173,7 @@ var keyedControls = []struct {
 		return keyed(ui.ToggleGroup(ggui.State("a")).Options([]string{"a", "b"}), k, n)
 	}},
 	{name: "InputGroup", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
-		return keyed(ui.InputGroup(ggui.TextInput(ggui.State(""))), k, n)
+		return keyed(ui.InputGroup(widget.TextInput(ggui.State(""))), k, n)
 	}, unfocused: "BUG: the key never reaches the editor's regions"},
 	{name: "InputOTP", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
 		return keyed(ui.InputOTP(ggui.State(""), 4), k, n)
@@ -395,7 +396,7 @@ func TestInputGroupKeyKeepsEditorFocusAfterMovingRebuild(t *testing.T) {
 	t.Parallel()
 	text := ggui.State("")
 	p, offset := moveAndRebuild(t, func() ggui.Widget {
-		return ui.InputGroup(ggui.TextInput(text).Name("Site")).Key("site")
+		return ui.InputGroup(widget.TextInput(text).Name("Site")).Key("site")
 	})
 	p.Tap("Site")
 	offset.Set(40)

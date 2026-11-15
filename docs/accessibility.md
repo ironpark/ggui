@@ -62,7 +62,7 @@ ggui.Provide(ggui.TextScaleKey, 1.5,
 )
 ```
 
-Text scaling affects `Text` and `TextInput`. Reduced motion makes transitions and
+Text scaling affects `Text` and `widget.TextInput`. Reduced motion makes transitions and
 control motion complete immediately. Custom controls can respect it through
 `env.Motion(d)`; see [Styling and themes](styling.md#accessibility-preferences).
 
@@ -74,14 +74,14 @@ An interactive widget can implement `Describer` and `Actor`; register it with
 use `Canvas.Leaf`, and `Canvas.Node` groups semantic children. Keep semantic
 names descriptive and avoid exposing decorative content as extra controls.
 
-A control built around a `TextInput` keeps the editor as the element rather
+A control built around a `widget.TextInput` keeps the editor as the element rather
 than describing itself and forwarding the editor's input. The editor then
 brings its caret, selection and character positions to the screen reader.
 `OnDescribe` amends the editor's node, and `OnAction` takes the actions the
 control adds, as `ui.NumberInput` makes its editor a spin button that steps:
 
 ```go
-input := ggui.TextInput(text).
+input := widget.TextInput(text).
 	OnDescribe(func(n *ggui.Node) { n.Role = ggui.RoleSpinButton; n.Actions |= ggui.ActionIncrement }).
 	OnAction(func(a ggui.Action) bool {
 		if a.Kind != ggui.ActionIncrement {

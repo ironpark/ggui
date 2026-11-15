@@ -15,9 +15,9 @@ Go 1.27 or newer.
 5. Add [headless interaction tests](testing.md).
 
 Examples are focused snippets unless they contain a `package` declaration.
-They use the `ggui`, `ui`, and `theme` (`github.com/ironpark/ggui/ui/theme`)
-packages; application callbacks, data, and colors
-such as `save`, `todos`, and `accent` are supplied by your app. Run shell commands
+They use the `ggui`, `widget` (`github.com/ironpark/ggui/widget`), `ui`, and
+`theme` (`github.com/ironpark/ggui/ui/theme`) packages; application callbacks,
+data, and colors such as `save`, `todos`, and `accent` are supplied by your app. Run shell commands
 from the repository root unless a guide says otherwise.
 
 > [!IMPORTANT]

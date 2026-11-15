@@ -17,7 +17,7 @@ type AspectRatioWidget struct {
 // for video, 1 for a square. It takes the width it is given and derives the
 // height, unless that would not fit, in which case the height leads.
 //
-//	ui.AspectRatio(16.0/9, ui.Image(cover).Fit(ggui.FitCover))
+//	ui.AspectRatio(16.0/9, widget.Image(cover).Fit(ggui.FitCover))
 func AspectRatio(ratio float64, child ggui.Widget) *AspectRatioWidget {
 	return &AspectRatioWidget{child: child, ratio: ratio}
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // previewGain is the green of money coming in, legible on both themes.
@@ -197,7 +198,7 @@ func (p *previewModel) kitchenCard() ggui.Widget {
 
 // previewAmount is a money field, its currency sign leading the digits.
 func (p *previewModel) previewAmount(value *ggui.StateValue[string], name string) ggui.Widget {
-	return ui.InputGroup(ggui.TextInput(value).MinWidth(0).Key(p.key(name))).
+	return ui.InputGroup(widget.TextInput(value).MinWidth(0).Key(p.key(name))).
 		Leading(ggui.Text("$").Size(14).Color(uitheme.MutedFg)).Name(name)
 }
 
@@ -445,7 +446,7 @@ func (p *previewModel) holdingsCard() ggui.Widget {
 		})
 		items = append(items, ggui.If(shown, func() ggui.Widget { return ggui.Padding(item, 0, 0, 12, 0) }))
 	}
-	search := ui.InputGroup(ggui.TextInput(query).MinWidth(0).Placeholder("Search holdings or tickers…").Key(p.key("holdings-search"))).
+	search := ui.InputGroup(widget.TextInput(query).MinWidth(0).Placeholder("Search holdings or tickers…").Key(p.key("holdings-search"))).
 		Leading(ui.Icon(icons.Search).Color(uitheme.MutedFg)).Name("Search holdings")
 	filter := ui.ToggleGroupMultiple(kinds).Options([]string{"Stocks", "ETFs", "REITs"}).Outline().Name("Holding kinds").Key(p.key("holdings-kinds"))
 	none := ggui.Derived(func() bool {
@@ -715,7 +716,7 @@ func (p *previewModel) socialCard() ggui.Widget {
 	for i := range links {
 		l := &links[i]
 		l.value = ggui.State(l.seed)
-		fields[i] = ui.Field(l.label, ui.InputGroup(ggui.TextInput(l.value).MinWidth(0).Placeholder(l.hint).Key(p.key("social-"+l.label))).
+		fields[i] = ui.Field(l.label, ui.InputGroup(widget.TextInput(l.value).MinWidth(0).Placeholder(l.hint).Key(p.key("social-"+l.label))).
 			Leading(glyph(l.icon).Color(uitheme.MutedFg)).Name(l.label))
 	}
 	return previewFooterCard(ui.Heading("Social Links").Size(16).Weight(ggui.WeightMedium), ggui.Column(fields...).Gap(16).Stretch(),

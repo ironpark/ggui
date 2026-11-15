@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"runtime"
 	"testing"
 )
 
@@ -67,7 +68,7 @@ func TestChordLabel(t *testing.T) {
 	t.Parallel()
 	c := MustChord("cmd+shift+s")
 	want := "Ctrl+Shift+S"
-	if runtimeIsDarwin() {
+	if runtime.GOOS == "darwin" {
 		want = "⇧⌘S"
 	}
 	if got := c.Label(); got != want {
@@ -104,11 +105,42 @@ func TestTrayNumbersItsActionsApart(t *testing.T) {
 	}
 }
 
+// editField is as much of a text field as the Edit menu reaches: a value
+// Backspace shortens and ⌘Z puts back, and that chord, which it claims
+// ahead of the menus and shortcuts while it has the focus.
+type editField struct {
+	Interactive
+	value *StateValue[string]
+	undo  []string
+}
+
+func (f *editField) Layout(c Constraints, _ Env) Size { return c.Constrain(Sz(200, 20)) }
+func (f *editField) Paint(dst *Canvas, r Rect)        { f.Hit(dst, r, f, 0) }
+func (f *editField) HandlePointer(PointerEvent) bool  { return true }
+
+func (f *editField) HandleKey(ev KeyEvent) {
+	f.Keyboard(ev, nil)
+	if ev.Kind != KeyPress {
+		return
+	}
+	switch v := Untrack(f.value.Get); {
+	case ev.Key == KeyBackspace && v != "":
+		f.undo = append(f.undo, v)
+		f.value.Set(v[:len(v)-1])
+	case f.ClaimsChord(ev) && len(f.undo) > 0:
+		f.value.Set(f.undo[len(f.undo)-1])
+		f.undo = f.undo[:len(f.undo)-1]
+	}
+}
+
+func (f *editField) ClaimsChord(ev KeyEvent) bool {
+	return ev.Kind == KeyPress && ev.Key == KeyZ && ev.Mods.Cmd()
+}
+
 func TestEditCommandsGoToTheFocusedFieldFirst(t *testing.T) {
 	t.Parallel()
-	useFakeIME(t)
 	value := State("hello")
-	field := TextInput(value)
+	field := &editField{value: value}
 	a := New(Config{}, func() Widget { return field })
 	defer a.Close()
 	undos := 0
@@ -121,7 +153,7 @@ func TestEditCommandsGoToTheFocusedFieldFirst(t *testing.T) {
 	paintFrame(&a.input, field, Sz(200, 20))
 	a.input.dispatch(frameInput{pos: Pt(190, 10), down: []MouseButton{MouseButtonLeft}})
 	a.input.dispatch(frameInput{pos: Pt(190, 10), up: []MouseButton{MouseButtonLeft}})
-	typeKeys(&a.input, Mods{}, KeyBackspace)
+	a.input.dispatch(frameInput{keys: []KeyboardKey{KeyBackspace}})
 	if Untrack(value.Get) != "hell" {
 		t.Fatalf("value = %q after Backspace", Untrack(value.Get))
 	}
@@ -132,13 +164,13 @@ func TestEditCommandsGoToTheFocusedFieldFirst(t *testing.T) {
 	// A shortcut on the same chord waits for the field too.
 	shortcut := 0
 	a.Shortcut("cmd+z", func() { shortcut++ })
-	typeKeys(&a.input, MustChord("cmd+z").held(), KeyZ)
+	a.input.dispatch(frameInput{keys: []KeyboardKey{KeyZ}, mods: MustChord("cmd+z").held()})
 	if shortcut != 0 {
 		t.Fatal("a shortcut took ⌘Z from the focused field")
 	}
 	saves := 0
 	a.Shortcut("cmd+s", func() { saves++ })
-	typeKeys(&a.input, MustChord("cmd+s").held(), KeyS)
+	a.input.dispatch(frameInput{keys: []KeyboardKey{KeyS}, mods: MustChord("cmd+s").held()})
 	if saves != 1 {
 		t.Fatal("the field kept a chord it does not edit with")
 	}

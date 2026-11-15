@@ -102,15 +102,6 @@ func TestTrackedTextIsEllipsizedToItsTrackedWidth(t *testing.T) {
 	}
 }
 
-func TestATextInputMeasuresItsCaretWithItsTracking(t *testing.T) {
-	t.Parallel()
-	plain := TextInput(State("")).Style(TextStyle{Size: 20})
-	tracked := TextInput(State("")).Style(TextStyle{Size: 20, Tracking: 0.1})
-	if got, want := tracked.advance("abc"), plain.advance("abc")+3*2; !trackingNear(got, want, 3) {
-		t.Fatalf("caret after abc at %v, want %v", got, want)
-	}
-}
-
 func TestRenderTextAndCanvasMeasureWithTracking(t *testing.T) {
 	t.Parallel()
 	const s = "abcd"

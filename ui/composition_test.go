@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestAspectRatioDerivesTheMissingSide(t *testing.T) {
@@ -126,7 +127,7 @@ func TestInputGroupFocusesTheEditorFromItsPadding(t *testing.T) {
 	t.Parallel()
 	value := ggui.State("ab")
 	visits := 0
-	group := ui.InputGroup(ggui.TextInput(value).Name("Site")).
+	group := ui.InputGroup(widget.TextInput(value).Name("Site")).
 		Leading(ggui.Text("https://")).
 		Trailing(ui.Button("Go", func() { visits++ }).Ghost())
 	p := ggui.NewProbe(group, ggui.Sz(320, 44))

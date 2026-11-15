@@ -305,7 +305,7 @@ type CardMediaWidget struct {
 // AspectRatio, which gives it its height.
 //
 //	ui.Card(
-//		ui.CardMedia(ui.AspectRatio(16.0/9, ui.Image(cover).Fit(ggui.FitCover))),
+//		ui.CardMedia(ui.AspectRatio(16.0/9, widget.Image(cover).Fit(ggui.FitCover))),
 //		ui.CardHeader("Lisbon", "Three days by the river."),
 //	)
 func CardMedia(child ggui.Widget) *CardMediaWidget { return &CardMediaWidget{child: child} }

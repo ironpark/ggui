@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // counting is a leaf that counts its layouts.
@@ -523,7 +524,7 @@ func TestReorderableKeysIgnoreFocusBehindAScrolledOutRow(t *testing.T) {
 	// The field sits above the Scroll where row b, scrolled out of the
 	// window, would be drawn.
 	p := ggui.NewProbe(ggui.Column(
-		ggui.Box(ggui.TextInput(focusable)).Size(100, 30),
+		ggui.Box(widget.TextInput(focusable)).Size(100, 30),
 		ggui.Box(ggui.Scroll(reorderFixture(items, map[string]ggui.Rect{}, true)).BindOffset(offset)).Size(100, 60),
 	), ggui.Sz(100, 200))
 	defer p.Close()

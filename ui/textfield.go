@@ -6,16 +6,17 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
-// TextFieldWidget is a TextInput in a themed box: Field background, a
+// TextFieldWidget is a widget.TextInput in a themed box: Field background, a
 // border that turns Accent while focused, the theme's padding and radius.
 // Build one with TextField.
 type TextFieldWidget struct {
 	props            property.Owner
 	multiline        bool
 	ggui.Interactive // only disabled is used; the editor tracks its own focus
-	input            *ggui.TextInputWidget
+	input            *widget.TextInputWidget
 	box              *ggui.BoxWidget
 	theme            *uitheme.Theme
 	plain            bool
@@ -26,7 +27,7 @@ type TextFieldWidget struct {
 
 // TextField creates a text field bound to value.
 func TextField(value ggui.Binding[string]) *TextFieldWidget {
-	f := &TextFieldWidget{input: ggui.TextInput(value)}
+	f := &TextFieldWidget{input: widget.TextInput(value)}
 	f.box = ggui.Box(f.input)
 	return f
 }
@@ -95,13 +96,13 @@ func (f *TextFieldWidget) OnKey(fn func(ggui.KeyEvent) bool) *TextFieldWidget {
 
 // ClaimKeys keeps the keys fn reports with the field while it has the
 // focus, ahead of Tab moving the focus and shortcuts; see
-// ggui.TextInputWidget.ClaimKeys.
+// widget.TextInputWidget.ClaimKeys.
 func (f *TextFieldWidget) ClaimKeys(fn func(ggui.KeyEvent) bool) *TextFieldWidget {
 	f.input.ClaimKeys(fn)
 	return f
 }
 
-// OnPasteImage takes a paste of an image; see TextInputWidget.OnPasteImage.
+// OnPasteImage takes a paste of an image; see widget.TextInputWidget.OnPasteImage.
 func (f *TextFieldWidget) OnPasteImage(fn func(png []byte) bool) *TextFieldWidget {
 	f.input.OnPasteImage(fn)
 	return f
@@ -118,14 +119,14 @@ func (f *TextFieldWidget) OnChange(fn func(string)) *TextFieldWidget { f.input.O
 func (f *TextFieldWidget) OnCommit(fn func(string)) *TextFieldWidget { f.input.OnCommit(fn); return f }
 
 // OnDescribe amends the node the field describes; see
-// ggui.TextInputWidget.OnDescribe.
+// widget.TextInputWidget.OnDescribe.
 func (f *TextFieldWidget) OnDescribe(fn func(*ggui.Node)) *TextFieldWidget {
 	f.input.OnDescribe(fn)
 	return f
 }
 
 // OnAction gives fn the first say on an assistive technology's action; see
-// ggui.TextInputWidget.OnAction.
+// widget.TextInputWidget.OnAction.
 func (f *TextFieldWidget) OnAction(fn func(ggui.Action) bool) *TextFieldWidget {
 	f.input.OnAction(fn)
 	return f
@@ -137,7 +138,7 @@ func (f *TextFieldWidget) OnAction(fn func(ggui.Action) bool) *TextFieldWidget {
 func (f *TextFieldWidget) Key(k any) *TextFieldWidget { f.input.Key(k); return f }
 
 // Filter installs a prefix-preserving function every edit passes through;
-// see TextInputWidget.Filter.
+// see widget.TextInputWidget.Filter.
 func (f *TextFieldWidget) Filter(fn func(string) string) *TextFieldWidget {
 	f.input.Filter(fn)
 	return f
@@ -147,7 +148,7 @@ func (f *TextFieldWidget) Filter(fn func(string) string) *TextFieldWidget {
 func (f *TextFieldWidget) Style(ts ggui.TextStyle) *TextFieldWidget { f.input.Style(ts); return f }
 
 // Input returns the editor inside, for Focused and the editor's own setters.
-func (f *TextFieldWidget) Input() *ggui.TextInputWidget { return f.input }
+func (f *TextFieldWidget) Input() *widget.TextInputWidget { return f.input }
 
 // Layout implements Widget.
 func (f *TextFieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {

@@ -54,7 +54,7 @@ func (p *panel) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 }
 ```
 
-`ui.Reveal(open, child)` is that panel ready made: it eases its height between
+`widget.Reveal(open, child)` is that panel ready made: it eases its height between
 nothing and the child's while `open` changes (`.Horizontal()` eases the
 width), over `.Duration(d)` with `.Easing(e)`. It clips the child, keeps it
 inert while it folds away, and once closed neither lays it out nor paints it,
@@ -63,7 +63,7 @@ it is, for a chevron that turns with it; `ui.Collapsible` and `ui.Accordion`
 fold their sections the same way.
 
 ```go
-ggui.Column(ggui.Tap(ggui.Text("Details"), func() { ggui.Toggle(more) }), ui.Reveal(more, details))
+ggui.Column(ggui.Tap(ggui.Text("Details"), func() { ggui.Toggle(more) }), widget.Reveal(more, details))
 ```
 
 ## Colors, points and other values
@@ -161,5 +161,5 @@ anew starts where it is told.
 card := ggui.AnimatedBox(content).BindFill(tint).BindPadding(inset).Radius(8)
 ```
 
-`Switcher`, `AnimatedBox`, `ui.Reveal`, `Transition` and `Each` rows land at once
+`Switcher`, `AnimatedBox`, `widget.Reveal`, `Transition` and `Each` rows land at once
 under `ReducedMotionKey`.

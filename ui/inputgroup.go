@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // InputGroupWidget draws one field chrome around an editor and the small
@@ -12,7 +13,7 @@ import (
 // a clear button, a search icon. Build one with InputGroup.
 //
 // The group owns the border, the fill, the padding and the focus ring, so
-// it takes the bare editor -- ggui.TextInput -- rather than ui.TextField,
+// it takes the bare editor -- widget.TextInput -- rather than ui.TextField,
 // which draws a box of its own. Anything else given to it is an addon:
 // Leading and Trailing sit beside the editor, Top and Bottom on a row of
 // their own above and below it. Addon text and icons are drawn muted and
@@ -45,7 +46,7 @@ type InputGroupWidget struct {
 
 // InputGroup wraps an editor in a shared field chrome.
 //
-//	ui.InputGroup(ggui.TextInput(site).Placeholder("example.com")).
+//	ui.InputGroup(widget.TextInput(site).Placeholder("example.com")).
 //		Leading(ggui.Text("https://")).
 //		Trailing(ui.Button("Go", visit))
 func InputGroup(input ggui.Widget) *InputGroupWidget {
@@ -90,7 +91,9 @@ func (g *InputGroupWidget) Bottom(w ggui.Widget) *InputGroupWidget {
 // by the line, and the group is padded as shadcn's textarea is.
 func (g *InputGroupWidget) Multiline() *InputGroupWidget {
 	g.multiline = true
-	if m, ok := g.input.(interface{ Multiline() *ggui.TextInputWidget }); ok {
+	if m, ok := g.input.(interface {
+		Multiline() *widget.TextInputWidget
+	}); ok {
 		m.Multiline()
 	}
 	return g

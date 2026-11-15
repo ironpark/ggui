@@ -1,33 +1,49 @@
-package ggui
+package widget
 
 import (
 	"image"
 	"image/color"
 	"math"
+	goruntime "runtime"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/a11y"
 	"github.com/ironpark/ggui/internal/editlayout"
 	"github.com/ironpark/ggui/internal/fontsys"
 	"github.com/ironpark/ggui/internal/paragraph"
-	"github.com/ironpark/ggui/internal/platform/textinput"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/textedit"
 	"github.com/ironpark/ggui/internal/textlayout"
 	"github.com/ironpark/ggui/internal/third_party/text"
+	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/runtime"
 )
 
 // caretBlink is how long the caret shows and hides for.
 const caretBlink = 530 * time.Millisecond
 
+// blinkWake returns when a caret that toggles every period since start next
+// changes, for WakeAt.
+func blinkWake(start, now time.Time, period time.Duration) time.Time {
+	n := now.Sub(start)/period + 1
+	return start.Add(n * period)
+}
+
+// isDarwin reports macOS, whose redo is Shift+Cmd+Z rather than Ctrl+Y.
+const isDarwin = goruntime.GOOS == "darwin"
+
+// px converts a logical length or coordinate to dst's Image pixels, as
+// Canvas.Px does, in the float64 a GeoM takes.
+func px(dst *ggui.Canvas, v float64) float64 { return v * dst.Scale() }
+
 // TextInputWidget is a text editor bound to a StateValue[string]: typing writes
 // the signal, and writing the signal updates the text. Build one with
 // TextInput. It is one line that scrolls sideways until Multiline makes it
-// wrap and grow. It draws only the text, selection and caret; TextField
+// wrap and grow. It draws only the text, selection and caret; ui.TextField
 // adds the themed box around it.
 //
 // Text comes in through the platform IME (a patched copy of Ebitengine's
@@ -45,11 +61,11 @@ type TextInputWidget struct {
 	// Interactive carries the identity, name and disabled state every
 	// control shares. The editor drives focus itself rather than through
 	// Keyboard: a caret and an IME session are not a press.
-	Interactive
+	ggui.Interactive
 
-	value             Binding[string]
+	value             ggui.Binding[string]
 	placeholder       string
-	style             TextStyle
+	style             ggui.TextStyle
 	password          bool
 	multiline         bool
 	noWrap            bool
@@ -58,18 +74,18 @@ type TextInputWidget struct {
 	onSubmit          func(string)
 	onCommit          func(string)
 	onChange          func(string)
-	onKey             func(KeyEvent) bool
-	claims            func(KeyEvent) bool
+	onKey             func(ggui.KeyEvent) bool
+	claims            func(ggui.KeyEvent) bool
 	onPasteImage      func(png []byte) bool
-	onDescribe        func(*Node)
-	onAction          func(Action) bool
+	onDescribe        func(*ggui.Node)
+	onAction          func(ggui.Action) bool
 	filter            func(string) string
 	escapeUsed        bool
 	inheritedDisabled bool
 
 	ed textedit.Editor
 
-	ime         ime
+	ime         ggui.IME
 	composition string
 	compCaret   int // caret inside composition, in bytes
 	imeStart    int // the byte range of ed.Text the IME was told about
@@ -92,7 +108,7 @@ type TextInputWidget struct {
 	// holds what it last handed out, moved to where the editor is.
 	described struct {
 		key           runsKey
-		measured, out []TextRun
+		measured, out []ggui.TextRun
 	}
 	// composed caches the text with the composition in it, which every
 	// paint, tick and EditingState asks for while the IME composes: built
@@ -104,25 +120,34 @@ type TextInputWidget struct {
 		out               string
 	}
 
-	cache       *CachedWidget
-	resolved    TextStyle
+	// env is the last Layout's: an edit that changes the editor's height,
+	// or a write to its binding, tells ggui.Invalidate about it, and the
+	// Cached above the editor measures it again.
+	env         ggui.Env
+	resolved    ggui.TextStyle
 	muted       color.Color
 	selection   color.Color
-	rect        Rect            // where it was last painted, in logical pixels
+	rect        ggui.Rect       // where it was last painted, in logical pixels
 	scale       float64         // the Canvas scale at that paint
 	caretBounds image.Rectangle // the caret in logical pixels, for the IME
 }
 
 // TextInput creates an editor bound to value.
-func TextInput(value Binding[string]) *TextInputWidget {
+func TextInput(value ggui.Binding[string]) *TextInputWidget {
 	t := &TextInputWidget{value: value, minWidth: 120}
-	t.Role = RoleTextField
+	t.Role = ggui.RoleTextField
 	t.AutoKey()
-	t.ime = newIME(t)
+	t.ime = ggui.NewIME(ggui.IMEHandler{
+		Session:     t.imeSession,
+		Composition: t.imeComposition,
+		Commit:      t.imeCommit,
+		Replace:     t.imeReplace,
+		End:         func() { t.Interactive.Focused = false },
+	})
 	t.layout.Face = func() text.Face { return t.face(1) }
-	t.layout.Style = func() paragraph.Style { return t.textStyle().engine() }
-	t.ed.Now = func() time.Time { return activeWorld().frame.raw() } // Probe.Advance reaches typing coalesced into one undo
-	t.ed.SetText(Untrack(value.Get))
+	t.layout.Style = func() paragraph.Style { return t.textStyle() }
+	t.ed.Now = ggui.ClockTime // Probe.Advance reaches typing coalesced into one undo
+	t.ed.SetText(ggui.Untrack(value.Get))
 	t.ed.MoveTo(len(t.ed.Text), false)
 	// Follow the binding rather than polling it in Layout: a write from
 	// outside reaches the editor even when the layout above it is cached.
@@ -144,7 +169,7 @@ func TextInput(value Binding[string]) *TextInputWidget {
 		if atEnd {
 			t.ed.MoveTo(len(v), false)
 		}
-		t.cache.invalidate()
+		ggui.Invalidate(t.env)
 		// The IME's next edit applies to the new text, and an IME that
 		// rewrites what it committed, as the Korean one does each
 		// syllable, reads it back.
@@ -159,7 +184,7 @@ func TextInput(value Binding[string]) *TextInputWidget {
 // control the editor reads r through Sync in Layout and Paint: Disabled
 // changes colour and whether input is accepted, both settled in Paint, so
 // nothing has to be measured again.
-func (t *TextInputWidget) BindDisabled(r Readable[bool]) *TextInputWidget {
+func (t *TextInputWidget) BindDisabled(r ggui.Readable[bool]) *TextInputWidget {
 	t.BindInert(r)
 	return t
 }
@@ -185,7 +210,7 @@ func (t *TextInputWidget) Placeholder(s string) *TextInputWidget {
 func (t *TextInputWidget) Name(s string) *TextInputWidget { t.SetName(s); return t }
 
 // BindName binds the field's name to r; see Interactive.BindName.
-func (t *TextInputWidget) BindName(r Readable[string]) *TextInputWidget {
+func (t *TextInputWidget) BindName(r ggui.Readable[string]) *TextInputWidget {
 	t.Interactive.BindName(r)
 	return t
 }
@@ -200,11 +225,11 @@ func (t *TextInputWidget) IsDisabled() bool { return t.IsInert() || t.inheritedD
 func (t *TextInputWidget) Key(k any) *TextInputWidget { t.Interactive.SetKey(k); return t }
 
 // Semantics implements Semantic.
-func (t *TextInputWidget) Semantics() (Role, string) {
+func (t *TextInputWidget) Semantics() (ggui.Role, string) {
 	if t.SemanticName() != "" {
-		return RoleTextField, t.SemanticName()
+		return ggui.RoleTextField, t.SemanticName()
 	}
-	return RoleTextField, t.placeholder
+	return ggui.RoleTextField, t.placeholder
 }
 
 // Describe implements Describer: the field, its contents and whether it
@@ -213,15 +238,15 @@ func (t *TextInputWidget) Semantics() (Role, string) {
 // says. ui.TextField describes the padded box it draws around this
 // editor with the same handler, which is why the two are one node and not
 // two: the first description of a handler in a frame is the one kept.
-func (t *TextInputWidget) Describe() Node {
+func (t *TextInputWidget) Describe() ggui.Node {
 	role, name := t.Semantics()
 	lo, hi := t.ed.Selection()
-	n := Node{
+	n := ggui.Node{
 		Role:     role,
 		Name:     name,
 		Value:    t.display(t.ed.Text),
 		Disabled: t.IsDisabled(),
-		Actions:  ActionFocus | ActionSetValue | ActionSetSelection,
+		Actions:  ggui.ActionFocus | ggui.ActionSetValue | ggui.ActionSetSelection,
 		SelStart: t.toDisplay(lo),
 		SelEnd:   t.toDisplay(hi),
 	}
@@ -257,7 +282,7 @@ func (t *TextInputWidget) Describe() Node {
 // describes this widget from the box around it, a step earlier still. A
 // field that moved or scrolled this frame therefore reports character
 // positions one frame behind, which is a frame that has not been shown yet.
-func (t *TextInputWidget) runs() []TextRun {
+func (t *TextInputWidget) runs() []ggui.TextRun {
 	d := &t.described
 	key := runsKey{t.ed.Text, t.wrapStyle(), t.textStyle().LineHeight}
 	if d.measured == nil || d.key != key {
@@ -288,9 +313,9 @@ type runsKey struct {
 }
 
 // measureRuns is runs, measured from the editor's top left, unscrolled.
-func (t *TextInputWidget) measureRuns() []TextRun {
+func (t *TextInputWidget) measureRuns() []ggui.TextRun {
 	r := t.wrap(t.ed.Text)
-	out := make([]TextRun, 0, len(r.Spans))
+	out := make([]ggui.TextRun, 0, len(r.Spans))
 	h := t.height()
 	for i, sp := range r.Spans {
 		y := 0.0
@@ -305,9 +330,9 @@ func (t *TextInputWidget) measureRuns() []TextRun {
 			width = t.prefixWidths(sp)
 			w = width(sp.End)
 		}
-		run := TextRun{Start: sp.Start, End: sp.End, Rect: Rct(Pt(0, y), Sz(w, h))}
+		run := ggui.TextRun{Start: sp.Start, End: sp.End, Rect: ggui.Rct(ggui.Pt(0, y), ggui.Sz(w, h))}
 		for b := sp.Start; ; b = textedit.NextRune(t.ed.Text, b) {
-			run.Stops = append(run.Stops, TextStop{Byte: b, X: width(b)})
+			run.Stops = append(run.Stops, ggui.TextStop{Byte: b, X: width(b)})
 			if b >= sp.End {
 				break
 			}
@@ -320,7 +345,7 @@ func (t *TextInputWidget) measureRuns() []TextRun {
 // Act implements Actor: the platform's text API replaces the contents
 // outright, which is what a dictation or a braille display does, and moves
 // the caret, which is what a screen reader does as it reads along.
-func (t *TextInputWidget) Act(a Action) bool {
+func (t *TextInputWidget) Act(a ggui.Action) bool {
 	if t.IsDisabled() {
 		return false
 	}
@@ -328,11 +353,11 @@ func (t *TextInputWidget) Act(a Action) bool {
 		return true
 	}
 	switch a.Kind {
-	case ActionSetValue:
+	case ggui.ActionSetValue:
 		t.ed.SetText(a.Text)
 		t.commit()
 		return true
-	case ActionSetSelection:
+	case ggui.ActionSetSelection:
 		t.ed.MoveTo(t.fromDisplay(a.SelStart), false)
 		t.ed.MoveTo(t.fromDisplay(a.SelEnd), true)
 		return true
@@ -342,8 +367,8 @@ func (t *TextInputWidget) Act(a Action) bool {
 
 // ConsumesKey implements KeyConsumer: editing keys stay with the editor.
 // Escape passes through unless it cancelled composition or OnKey consumed it.
-func (t *TextInputWidget) ConsumesKey(ev KeyEvent) bool {
-	return ev.Kind == KeyPress && (ev.Key != KeyEscape || t.escapeUsed)
+func (t *TextInputWidget) ConsumesKey(ev ggui.KeyEvent) bool {
+	return ev.Kind == ggui.KeyPress && (ev.Key != ggui.KeyEscape || t.escapeUsed)
 }
 
 // ClaimsChord implements ChordClaimer: the editing chords stay with the
@@ -351,9 +376,9 @@ func (t *TextInputWidget) ConsumesKey(ev KeyEvent) bool {
 // the same chord. Those are the clipboard, undo and select-all chords, and
 // the modified arrows, Home, End and deletes; ⌘/Ctrl+Enter too when the
 // editor submits with it; and any key ClaimKeys claims.
-func (t *TextInputWidget) ClaimsChord(ev KeyEvent) bool {
+func (t *TextInputWidget) ClaimsChord(ev ggui.KeyEvent) bool {
 	m := ev.Mods
-	if ev.Kind != KeyPress || t.IsDisabled() {
+	if ev.Kind != ggui.KeyPress || t.IsDisabled() {
 		return false
 	}
 	if t.claims != nil && t.composition == "" && t.claims(ev) {
@@ -363,15 +388,15 @@ func (t *TextInputWidget) ClaimsChord(ev KeyEvent) bool {
 		return false
 	}
 	switch ev.Key {
-	case KeyA, KeyC, KeyX, KeyV, KeyZ:
+	case ggui.KeyA, ggui.KeyC, ggui.KeyX, ggui.KeyV, ggui.KeyZ:
 		return m.Cmd()
-	case KeyY:
-		return m.Cmd() && !runtimeIsDarwin()
-	case KeyArrowLeft, KeyArrowRight, KeyHome, KeyEnd, KeyBackspace, KeyDelete:
+	case ggui.KeyY:
+		return m.Cmd() && !isDarwin
+	case ggui.KeyArrowLeft, ggui.KeyArrowRight, ggui.KeyHome, ggui.KeyEnd, ggui.KeyBackspace, ggui.KeyDelete:
 		return true
-	case KeyArrowUp, KeyArrowDown:
+	case ggui.KeyArrowUp, ggui.KeyArrowDown:
 		return t.multiline
-	case KeyEnter, KeyNumpadEnter:
+	case ggui.KeyEnter, ggui.KeyNumpadEnter:
 		return t.multiline && t.onSubmit != nil && m.Cmd()
 	}
 	return false
@@ -381,7 +406,7 @@ func (t *TextInputWidget) ClaimsChord(ev KeyEvent) bool {
 func (t *TextInputWidget) Password() *TextInputWidget { t.password = true; return t }
 
 // Style merges ts onto the widget's own text style.
-func (t *TextInputWidget) Style(ts TextStyle) *TextInputWidget {
+func (t *TextInputWidget) Style(ts ggui.TextStyle) *TextInputWidget {
 	defer property.Watch(&t.props, &t.style)()
 	t.style = t.style.Merge(ts)
 	return t
@@ -445,7 +470,7 @@ func (t *TextInputWidget) OnSubmit(fn func(string)) *TextInputWidget { t.onSubmi
 func (t *TextInputWidget) OnCommit(fn func(string)) *TextInputWidget { t.onCommit = fn; return t }
 
 func (t *TextInputWidget) committed() {
-	if c, ok := t.value.(Committer); ok {
+	if c, ok := t.value.(ggui.Committer); ok {
 		c.Commit()
 	}
 	if t.onCommit != nil {
@@ -460,14 +485,14 @@ func (t *TextInputWidget) OnChange(fn func(string)) *TextInputWidget { t.onChang
 // active. Return true to consume it. Focus, text and IME events stay with the
 // editor. This lets searchable lists use Up, Down and Enter without replacing
 // the editor's platform input driver.
-func (t *TextInputWidget) OnKey(fn func(KeyEvent) bool) *TextInputWidget { t.onKey = fn; return t }
+func (t *TextInputWidget) OnKey(fn func(ggui.KeyEvent) bool) *TextInputWidget { t.onKey = fn; return t }
 
 // ClaimKeys keeps the keys fn reports with the editor while it has the
 // focus, ahead of what the runtime does with them first: Tab moving the
 // focus, a shortcut or a menu action on the same chord. They reach OnKey,
 // then the editor. fn is asked at each press, so it can claim a key only
 // while it means something, as Tab while a completion list shows.
-func (t *TextInputWidget) ClaimKeys(fn func(KeyEvent) bool) *TextInputWidget {
+func (t *TextInputWidget) ClaimKeys(fn func(ggui.KeyEvent) bool) *TextInputWidget {
 	t.claims = fn
 	return t
 }
@@ -487,13 +512,19 @@ func (t *TextInputWidget) OnPasteImage(fn func(png []byte) bool) *TextInputWidge
 // a range and the actions that step it; OnAction then carries those out.
 // The editor stays the element, so its focus, input and text interface are
 // the control's without anything forwarding them.
-func (t *TextInputWidget) OnDescribe(fn func(*Node)) *TextInputWidget { t.onDescribe = fn; return t }
+func (t *TextInputWidget) OnDescribe(fn func(*ggui.Node)) *TextInputWidget {
+	t.onDescribe = fn
+	return t
+}
 
 // OnAction gives fn the first say on an action an assistive technology aims
 // at the editor: one it returns true for is done, and any other the editor
 // carries out as it would without it. It is not called while the editor is
 // disabled.
-func (t *TextInputWidget) OnAction(fn func(Action) bool) *TextInputWidget { t.onAction = fn; return t }
+func (t *TextInputWidget) OnAction(fn func(ggui.Action) bool) *TextInputWidget {
+	t.onAction = fn
+	return t
+}
 
 // Focused reports whether the editor has keyboard focus.
 func (t *TextInputWidget) Focused() bool { return t.Interactive.Focused }
@@ -531,17 +562,28 @@ func (t *TextInputWidget) fromDisplay(b int) int {
 	return i
 }
 
-// textStyle is the style the text is set in: what Layout resolved, or
-// before any Layout, the editor's own.
-func (t *TextInputWidget) textStyle() TextStyle {
+// engine is the style the text is set in, as the text engine sets it, and
+// the generation of its fonts: what Layout resolved, or before any Layout,
+// the editor's own.
+func (t *TextInputWidget) engine() (paragraph.Style, uint64) {
 	if t.resolved.Font == nil {
-		return t.style.resolved()
+		return ggui.TextEngineStyle(t.style)
 	}
-	return t.resolved
+	return ggui.TextEngineStyle(t.resolved)
 }
 
+// textStyle is the style engine returns, without the generation.
+func (t *TextInputWidget) textStyle() paragraph.Style {
+	st, _ := t.engine()
+	return st
+}
+
+// face is the face the text is drawn in at scale times its size, its
+// tracking with it.
 func (t *TextInputWidget) face(scale float64) text.Face {
-	return t.textStyle().face(scale)
+	st := t.textStyle()
+	size := st.Size * scale
+	return st.Font.SpacedFaceFor(size, st.Weight, st.Tracking*size, st.Emoji)
 }
 
 // advance is the logical width of s as drawn.
@@ -593,11 +635,11 @@ func (t *TextInputWidget) spacing() float64 {
 // measureKey is what measuring the text depends on beside the text: the
 // face and the language right-to-left text is shaped in.
 func (t *TextInputWidget) measureKey() editlayout.Key {
-	st := t.textStyle()
+	st, gen := t.engine()
 	return editlayout.Key{
-		Generation: fontGen(),
-		Font:       st.Font.engine(),
-		Weight:     fontsys.Weight(st.Weight),
+		Generation: gen,
+		Font:       st.Font,
+		Weight:     st.Weight,
 		Size:       st.Size,
 		Tracking:   st.Tracking,
 		Lang:       t.lang,
@@ -634,21 +676,21 @@ func (t *TextInputWidget) linesHeight(n int) float64 {
 }
 
 // Layout implements Widget.
-func (t *TextInputWidget) Layout(c Constraints, env Env) Size {
+func (t *TextInputWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer t.props.Layout().EndLayout()
 	t.Sync()
-	t.inheritedDisabled, _ = env.Get(InputDisabledKey)
+	t.inheritedDisabled, _ = env.Get(ggui.InputDisabledKey)
 	t.resolved = env.ResolveText(t.style)
 	t.lang = env.Language()
-	t.cache, _ = env.Get(cacheOwner)
+	t.env = env
 	style := env.EditorStyle()
 	if t.IsDisabled() {
 		t.resolved.Color = style.Muted
 	}
 	t.muted, t.selection = style.Muted, style.Selection
-	w := bounded(c.MaxW, t.minWidth)
+	w := gem.Bounded(c.MaxW, t.minWidth)
 	if !t.multiline {
-		return c.Constrain(Sz(w, t.height()))
+		return c.Constrain(ggui.Sz(w, t.height()))
 	}
 	t.width = max(c.MinW, w)
 	var n int
@@ -660,11 +702,11 @@ func (t *TextInputWidget) Layout(c Constraints, env Env) Size {
 		n = len(t.spans(t.ed.Text))
 	}
 	n = max(n, t.minLines)
-	return c.Constrain(Sz(t.width, t.linesHeight(n)))
+	return c.Constrain(ggui.Sz(t.width, t.linesHeight(n)))
 }
 
 // Paint implements Widget.
-func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
+func (t *TextInputWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t.Sync()
 	// Where it is being painted is recorded first: describing it reports
 	// where its characters are, which is measured from here.
@@ -674,7 +716,7 @@ func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
 	if !t.IsDisabled() {
 		dst.HitPointer(r, t)
 		dst.HitKey(r, t)
-		dst.HitCursor(r, CursorShapeText)
+		dst.HitCursor(r, ggui.CursorShapeText)
 	}
 	if t.multiline {
 		t.paintLines(dst, r)
@@ -690,7 +732,7 @@ func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
 	} else {
 		caretX, total = t.advance(shown[:caret]), t.advance(shown)
 	}
-	t.scroll = clamp(t.scroll, 0, max(total-r.Size.W+1, 0))
+	t.scroll = gem.Clamp(t.scroll, 0, max(total-r.Size.W+1, 0))
 	if caretX-t.scroll > r.Size.W-1 {
 		t.scroll = caretX - r.Size.W + 1
 	}
@@ -710,12 +752,12 @@ func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
 	if t.Focused() && t.composition == "" && t.ed.HasSelection() {
 		lo, hi := t.ed.Selection()
 		t.spanX(shown, textlayout.Span{End: len(shown)}, bl, lo, hi, 0, func(a, b float64) {
-			clip.FillRect(Rct(Pt(x0+a, r.Origin.Y), Sz(b-a, h)), t.selection)
+			clip.FillRect(ggui.Rct(ggui.Pt(x0+a, r.Origin.Y), ggui.Sz(b-a, h)), t.selection)
 		})
 	}
 
 	op := &text.DrawOptions{}
-	op.GeoM.Translate(dst.px(x0), dst.px(r.Origin.Y))
+	op.GeoM.Translate(px(dst, x0), px(dst, r.Origin.Y))
 	if shown == "" && t.placeholder != "" {
 		op.ColorScale.ScaleWithColor(t.muted)
 		fontsys.DrawText(clip.Image, t.placeholder, t.face(dst.Scale()), op)
@@ -729,21 +771,21 @@ func (t *TextInputWidget) Paint(dst *Canvas, r Rect) {
 		lo, _ := t.ed.Selection()
 		y := r.Origin.Y + h - 1
 		t.spanX(shown, textlayout.Span{End: len(shown)}, bl, lo, lo+len(t.composition), 0, func(a, b float64) {
-			clip.FillRect(Rct(Pt(x0+a, y), Sz(b-a, 1)), t.resolved.Color)
+			clip.FillRect(ggui.Rct(ggui.Pt(x0+a, y), ggui.Sz(b-a, 1)), t.resolved.Color)
 		})
 	}
 
 	if t.Focused() {
-		if now := FrameTime(); (now.Sub(t.blink)/caretBlink)%2 == 0 {
-			clip.FillRect(Rct(Pt(x0+caretX, r.Origin.Y), Sz(1, h)), t.resolved.Color)
+		if now := ggui.FrameTime(); (now.Sub(t.blink)/caretBlink)%2 == 0 {
+			clip.FillRect(ggui.Rct(ggui.Pt(x0+caretX, r.Origin.Y), ggui.Sz(1, h)), t.resolved.Color)
 		}
-		WakeAt(blinkWake(t.blink, FrameTime(), caretBlink))
+		ggui.WakeAt(blinkWake(t.blink, ggui.FrameTime(), caretBlink))
 	}
 }
 
 // paintLines is Paint for a Multiline editor: wrapped lines that scroll
 // vertically to keep the caret in view.
-func (t *TextInputWidget) paintLines(dst *Canvas, r Rect) {
+func (t *TextInputWidget) paintLines(dst *ggui.Canvas, r ggui.Rect) {
 	t.width = r.Size.W
 	shown, caret := t.rendered()
 	wrapped := t.wrap(shown)
@@ -752,7 +794,7 @@ func (t *TextInputWidget) paintLines(dst *Canvas, r Rect) {
 	caretX := t.xAt(wrapped, li, caret)
 	caretY := float64(li) * t.spacing()
 	h := t.height()
-	t.scroll = clamp(t.scroll, 0, max(t.linesHeight(len(spans))-r.Size.H, 0))
+	t.scroll = gem.Clamp(t.scroll, 0, max(t.linesHeight(len(spans))-r.Size.H, 0))
 	if caretY+h-t.scroll > r.Size.H {
 		t.scroll = caretY + h - r.Size.H
 	}
@@ -794,13 +836,13 @@ func (t *TextInputWidget) paintLines(dst *Canvas, r Rect) {
 	if t.Focused() && t.composition == "" && t.ed.HasSelection() {
 		lo, hi := t.ed.Selection()
 		eachLine(lo, hi, func(i int, a, b float64) {
-			clip.FillRect(Rct(Pt(x0+a, lineY(i)), Sz(b-a, h)), t.selection)
+			clip.FillRect(ggui.Rct(ggui.Pt(x0+a, lineY(i)), ggui.Sz(b-a, h)), t.selection)
 		})
 	}
 
 	op := &text.DrawOptions{}
 	if shown == "" && t.placeholder != "" {
-		op.GeoM.Translate(dst.px(x0), dst.px(y0))
+		op.GeoM.Translate(px(dst, x0), px(dst, y0))
 		op.ColorScale.ScaleWithColor(t.muted)
 		fontsys.DrawText(clip.Image, t.placeholder, t.face(dst.Scale()), op)
 	} else {
@@ -818,15 +860,15 @@ func (t *TextInputWidget) paintLines(dst *Canvas, r Rect) {
 	if t.composition != "" {
 		lo, _ := t.ed.Selection()
 		eachLine(lo, lo+len(t.composition), func(i int, a, b float64) {
-			clip.FillRect(Rct(Pt(x0+a, lineY(i)+h-1), Sz(b-a, 1)), t.resolved.Color)
+			clip.FillRect(ggui.Rct(ggui.Pt(x0+a, lineY(i)+h-1), ggui.Sz(b-a, 1)), t.resolved.Color)
 		})
 	}
 
 	if t.Focused() {
-		if now := FrameTime(); (now.Sub(t.blink)/caretBlink)%2 == 0 {
-			clip.FillRect(Rct(Pt(x0+caretX, y0+caretY), Sz(1, h)), t.resolved.Color)
+		if now := ggui.FrameTime(); (now.Sub(t.blink)/caretBlink)%2 == 0 {
+			clip.FillRect(ggui.Rct(ggui.Pt(x0+caretX, y0+caretY), ggui.Sz(1, h)), t.resolved.Color)
 		}
-		WakeAt(blinkWake(t.blink, FrameTime(), caretBlink))
+		ggui.WakeAt(blinkWake(t.blink, ggui.FrameTime(), caretBlink))
 	}
 }
 
@@ -869,9 +911,9 @@ func (t *TextInputWidget) spanX(s string, sp textlayout.Span, bl *editlayout.Lin
 
 // drawLine draws line, laid out as bl or as it is when bl is nil, with its
 // top left at x, y. op holds the color, and a GeoM drawLine moves.
-func (t *TextInputWidget) drawLine(dst *Canvas, line string, bl *editlayout.Line, x, y float64, op *text.DrawOptions) {
+func (t *TextInputWidget) drawLine(dst *ggui.Canvas, line string, bl *editlayout.Line, x, y float64, op *text.DrawOptions) {
 	if bl == nil {
-		op.GeoM.Translate(dst.px(x), dst.px(y))
+		op.GeoM.Translate(px(dst, x), px(dst, y))
 		fontsys.DrawText(dst.Image, t.display(line), t.face(dst.Scale()), op)
 		return
 	}
@@ -879,16 +921,16 @@ func (t *TextInputWidget) drawLine(dst *Canvas, line string, bl *editlayout.Line
 	baseline := t.face(dst.Scale()).Metrics().HAscent
 	bl.Draw(dst.Image, &t.pieceOp, dst.Scale(), baseline,
 		func(int) color.Color { return col },
-		func(op *text.DrawOptions) { op.GeoM.Translate(dst.px(x), dst.px(y)) })
+		func(op *text.DrawOptions) { op.GeoM.Translate(px(dst, x), px(dst, y)) })
 }
 
 // indexAt returns the byte offset in the text nearest to a logical point.
-func (t *TextInputWidget) indexAt(p Point) int {
+func (t *TextInputWidget) indexAt(p ggui.Point) int {
 	r := t.wrap(t.ed.Text)
 	spans := r.Spans
 	li := 0
 	if t.multiline {
-		li = clamp(int((p.Y-t.rect.Origin.Y+t.scroll)/t.spacing()), 0, len(spans)-1)
+		li = gem.Clamp(int((p.Y-t.rect.Origin.Y+t.scroll)/t.spacing()), 0, len(spans)-1)
 	}
 	x := p.X - t.rect.Origin.X
 	if !t.multiline {
@@ -947,7 +989,7 @@ func (t *TextInputWidget) lineBounds() (int, int) {
 
 // commit writes the editor's text to the signal after an edit.
 func (t *TextInputWidget) commit() {
-	t.blink = Now()
+	t.blink = ggui.Now()
 	if t.filter != nil {
 		// Map both selection boundaries through the same normalization, so
 		// removed characters cannot leave the caret beyond the accepted text.
@@ -955,92 +997,35 @@ func (t *TextInputWidget) commit() {
 		t.ed.SetText(t.filter(t.ed.Text))
 		t.ed.Anchor, t.ed.Caret = t.ed.Snap(a), t.ed.Snap(c)
 	}
-	if t.ed.Text == Untrack(t.value.Get) {
+	if t.ed.Text == ggui.Untrack(t.value.Get) {
 		return
 	}
 	t.value.Set(t.ed.Text)
 	if t.multiline {
-		t.cache.invalidate()
+		ggui.Invalidate(t.env)
 	}
 	if t.onChange != nil {
 		t.onChange(t.ed.Text)
 	}
 }
 
-// ime is the editor's view of the platform IME. The real one wraps
-// textinput.Composer; tests substitute a fake that feeds compositions and
+// IME callbacks, the editor's ggui.IMEHandler, after examples/textinput in
+// the Ebitengine repository. The IME is the platform's when an app runs;
+// tests substitute a fake through ggui.SetIME that feeds compositions and
 // commits by hand.
-type ime interface {
-	Update() (handled bool, err error)
-	Confirm()
-	Cancel()
-	// Rebase points a session at new text around the caret, written
-	// outside the IME.
-	Rebase(before, after string)
-}
 
-// newIME builds the IME driver for a new editor: the platform's, or the
-// one a test gave the world the editor is made in.
-func newIME(t *TextInputWidget) ime {
-	for w := range ownerWorld().chain() {
-		if w.ime != nil {
-			return w.ime(t)
-		}
-	}
-	return newPlatformIME(t)
-}
-
-// newPlatformIME builds the platform's IME driver for an editor.
-func newPlatformIME(t *TextInputWidget) ime {
-	c := &composerIME{}
-	c.OnNewSession = t.imeSession
-	c.OnComposition = func(comp *textinput.Composition) {
-		start, _ := comp.SelectionRangeInBytes()
-		t.imeComposition(comp.Text(), start)
-	}
-	c.OnCommit = func(commit *textinput.Commit) {
-		if before, after := commit.IsSurroundingTextReplaced(); before || after {
-			nb, na := commit.SurroundingText()
-			t.imeReplace(nb, commit.Text(), na)
-			return
-		}
-		t.imeCommit(commit.Text())
-	}
-	c.OnEndByUser = func() { t.Interactive.Focused = false }
-	return c
-}
-
-// composerIME drives textinput.Composer, but only inside a running app:
-// the package panics when used before ggfx has chosen its backend.
-type composerIME struct {
-	textinput.Composer
-}
-
-func (c *composerIME) Rebase(before, after string) { textinput.Rebase(&c.Composer, before, after) }
-
-func (c *composerIME) Update() (bool, error) {
-	if !appRunning.Load() {
-		return false, nil
-	}
-	return c.Composer.Update()
-}
-
-// IME callbacks, after examples/textinput in the Ebitengine repository.
-
-func (t *TextInputWidget) imeSession() *textinput.SessionOptions {
+// imeSession tells a new session where the caret is and the text around
+// it, which is the range a replacing commit replaces.
+func (t *TextInputWidget) imeSession() (caret image.Rectangle, before, after string) {
 	lo, hi := t.ed.Selection()
 	t.imeStart, t.imeEnd = 0, len(t.ed.Text)
-	return &textinput.SessionOptions{
-		CaretBounds:     t.caretBounds,
-		TextBeforeCaret: t.ed.Text[:lo],
-		TextAfterCaret:  t.ed.Text[hi:],
-	}
+	return t.caretBounds, t.ed.Text[:lo], t.ed.Text[hi:]
 }
 
 // imeComposition shows preedit text at the caret; "" clears it.
 func (t *TextInputWidget) imeComposition(text string, caret int) {
 	t.composition, t.compCaret = text, caret
-	t.blink = Now()
+	t.blink = ggui.Now()
 }
 
 // imeCommit inserts committed text in place of the selection.
@@ -1062,8 +1047,7 @@ func (t *TextInputWidget) HandleTick() bool {
 	if !t.Focused() || t.IsDisabled() {
 		return false
 	}
-	textinput.UpdateCaret(t.caretBounds)
-	handled, err := t.ime.Update()
+	handled, err := t.ime.Update(t.caretBounds)
 	if err != nil {
 		t.imeErr = err
 	}
@@ -1071,34 +1055,33 @@ func (t *TextInputWidget) HandleTick() bool {
 }
 
 // HandleKey implements KeyHandler.
-func (t *TextInputWidget) HandleKey(ev KeyEvent) {
-	if t.IsDisabled() && ev.Kind != KeyBlur {
+func (t *TextInputWidget) HandleKey(ev ggui.KeyEvent) {
+	if t.IsDisabled() && ev.Kind != ggui.KeyBlur {
 		return
 	}
 	switch ev.Kind {
-	case KeyFocus:
+	case ggui.KeyFocus:
 		t.Interactive.Focused = true
-		t.blink = Now()
-	case KeyBlur:
+		t.blink = ggui.Now()
+	case ggui.KeyBlur:
 		t.ime.Confirm()
 		t.Interactive.Focused = false
 		t.committed()
-	case KeyText:
+	case ggui.KeyText:
 		// Text arrives through the IME, on every platform. Outside a running
 		// app, as under a Probe, there is no platform IME, so typed text
-		// arrives here instead, as it would without one.
-		if _, platform := t.ime.(*composerIME); platform && !appRunning.Load() {
-			t.imeCommit(ev.Text)
-		}
-	case KeyPress:
-		t.escapeUsed = ev.Key == KeyEscape && t.composition != ""
+		// arrives here instead, as it would without one, and the IME
+		// commits it then.
+		t.ime.Typed(ev.Text)
+	case ggui.KeyPress:
+		t.escapeUsed = ev.Key == ggui.KeyEscape && t.composition != ""
 		if t.composition == "" && t.onKey != nil && t.onKey(ev) {
-			t.escapeUsed = ev.Key == KeyEscape
+			t.escapeUsed = ev.Key == ggui.KeyEscape
 			return
 		}
 		// Escape drops an edit a Committer holds back, and only then stays
 		// with the editor, so a dialog around a clean field still closes.
-		if c, ok := t.value.(Committer); ok && ev.Key == KeyEscape && t.composition == "" && c.Revert() {
+		if c, ok := t.value.(ggui.Committer); ok && ev.Key == ggui.KeyEscape && t.composition == "" && c.Revert() {
 			t.escapeUsed = true
 			return
 		}
@@ -1110,7 +1093,7 @@ func (t *TextInputWidget) HandleKey(ev KeyEvent) {
 // group reports whether anything it changed has to reach the binding: a key
 // the editor does not act on, or one that bailed out (Undo with nothing to
 // undo, an arrow in a single-line field), leaves the value alone.
-func (t *TextInputWidget) key(k KeyboardKey, m Mods) {
+func (t *TextInputWidget) key(k ggui.KeyboardKey, m ggui.Mods) {
 	if t.editKey(k, m) || t.moveKey(k, m) || t.clipboardKey(k, m) || t.historyKey(k, m) {
 		t.commit()
 	}
@@ -1119,9 +1102,9 @@ func (t *TextInputWidget) key(k KeyboardKey, m Mods) {
 // editKey handles the keys that change the text: Enter, Escape and the two
 // deletes. Enter in a single-line field submits instead, which commits
 // through committed rather than through the caller.
-func (t *TextInputWidget) editKey(k KeyboardKey, m Mods) bool {
+func (t *TextInputWidget) editKey(k ggui.KeyboardKey, m ggui.Mods) bool {
 	switch k {
-	case KeyEnter, KeyNumpadEnter:
+	case ggui.KeyEnter, ggui.KeyNumpadEnter:
 		t.ime.Confirm()
 		if t.multiline && !m.Cmd() {
 			t.ed.Replace("\n")
@@ -1131,15 +1114,15 @@ func (t *TextInputWidget) editKey(k KeyboardKey, m Mods) bool {
 			t.onSubmit(t.ed.Text)
 		}
 		t.committed()
-	case KeyEscape:
+	case ggui.KeyEscape:
 		t.ime.Cancel()
 		t.ed.MoveTo(t.ed.Caret, false)
 		return true
-	case KeyBackspace:
+	case ggui.KeyBackspace:
 		t.ime.Confirm()
 		t.ed.Backspace(textedit.WordWise(m.Alt, m.Ctrl, m.Meta))
 		return true
-	case KeyDelete:
+	case ggui.KeyDelete:
 		t.ime.Confirm()
 		t.ed.DeleteForward(textedit.WordWise(m.Alt, m.Ctrl, m.Meta))
 		return true
@@ -1150,22 +1133,22 @@ func (t *TextInputWidget) editKey(k KeyboardKey, m Mods) bool {
 // moveKey handles the keys that move the caret. Shift extends the selection
 // and Meta jumps to the ends of the text; in a multiline field Up and Down
 // step by line and Home and End stay within one.
-func (t *TextInputWidget) moveKey(k KeyboardKey, m Mods) bool {
+func (t *TextInputWidget) moveKey(k ggui.KeyboardKey, m ggui.Mods) bool {
 	switch k {
-	case KeyArrowUp, KeyArrowDown:
+	case ggui.KeyArrowUp, ggui.KeyArrowDown:
 		if !t.multiline {
 			return false
 		}
 		t.ime.Confirm()
 		if m.Meta {
-			t.ed.MoveTo(pick(k == KeyArrowUp, 0, len(t.ed.Text)), m.Shift)
+			t.ed.MoveTo(gem.Pick(k == ggui.KeyArrowUp, 0, len(t.ed.Text)), m.Shift)
 		} else {
-			t.moveLine(pick(k == KeyArrowUp, -1, 1), m.Shift)
+			t.moveLine(gem.Pick(k == ggui.KeyArrowUp, -1, 1), m.Shift)
 		}
 		return true
-	case KeyArrowLeft, KeyArrowRight:
+	case ggui.KeyArrowLeft, ggui.KeyArrowRight:
 		t.ime.Confirm()
-		dir := pick(k == KeyArrowLeft, -1, 1)
+		dir := gem.Pick(k == ggui.KeyArrowLeft, -1, 1)
 		if m.Meta {
 			// The macOS form of Home and End: the ends of the line the caret
 			// is on, which in a single-line field are the ends of the text.
@@ -1173,18 +1156,18 @@ func (t *TextInputWidget) moveKey(k KeyboardKey, m Mods) bool {
 			if t.multiline {
 				lo, hi = t.lineBounds()
 			}
-			t.ed.MoveTo(pick(dir < 0, lo, hi), m.Shift)
+			t.ed.MoveTo(gem.Pick(dir < 0, lo, hi), m.Shift)
 		} else {
 			t.ed.MoveBy(dir, textedit.WordWise(m.Alt, m.Ctrl, m.Meta), m.Shift)
 		}
 		return true
-	case KeyHome, KeyEnd:
+	case ggui.KeyHome, ggui.KeyEnd:
 		t.ime.Confirm()
 		lo, hi := 0, len(t.ed.Text)
 		if t.multiline && !m.Cmd() {
 			lo, hi = t.lineBounds()
 		}
-		t.ed.MoveTo(pick(k == KeyHome, lo, hi), m.Shift)
+		t.ed.MoveTo(gem.Pick(k == ggui.KeyHome, lo, hi), m.Shift)
 		return true
 	}
 	return false
@@ -1193,34 +1176,34 @@ func (t *TextInputWidget) moveKey(k KeyboardKey, m Mods) bool {
 // clipboardKey handles the Cmd/Ctrl shortcuts that move text in and out of
 // the field: select all, copy, cut and paste. A password field is never
 // copied out of, though cutting still deletes.
-func (t *TextInputWidget) clipboardKey(k KeyboardKey, m Mods) bool {
+func (t *TextInputWidget) clipboardKey(k ggui.KeyboardKey, m ggui.Mods) bool {
 	switch k {
-	case KeyA:
+	case ggui.KeyA:
 		if m.Cmd() {
 			t.ime.Confirm()
 			t.ed.SelectAll()
 		}
 		return true
-	case KeyC:
+	case ggui.KeyC:
 		if m.Cmd() && t.ed.HasSelection() && !t.password {
-			currentClipboard().Write(t.ed.Selected())
+			ggui.CurrentClipboard().Write(t.ed.Selected())
 		}
 		return true
-	case KeyX:
+	case ggui.KeyX:
 		if m.Cmd() && t.ed.HasSelection() {
 			t.ime.Confirm()
 			if !t.password {
-				currentClipboard().Write(t.ed.Selected())
+				ggui.CurrentClipboard().Write(t.ed.Selected())
 			}
 			t.ed.Replace("")
 		}
 		return true
-	case KeyV:
+	case ggui.KeyV:
 		if m.Cmd() {
 			t.ime.Confirm()
-			clip := currentClipboard().Read()
+			clip := ggui.CurrentClipboard().Read()
 			if clip == "" && t.onPasteImage != nil {
-				if png, ok := runtime.ReadImage(currentClipboard()); ok && t.onPasteImage(png) {
+				if png, ok := runtime.ReadImage(ggui.CurrentClipboard()); ok && t.onPasteImage(png) {
 					return false
 				}
 			}
@@ -1239,20 +1222,20 @@ func (t *TextInputWidget) clipboardKey(k KeyboardKey, m Mods) bool {
 // historyKey handles the Cmd/Ctrl shortcuts for undo and redo. Both report
 // false with nothing left on the stack, so an exhausted history writes
 // nothing back.
-func (t *TextInputWidget) historyKey(k KeyboardKey, m Mods) bool {
+func (t *TextInputWidget) historyKey(k ggui.KeyboardKey, m ggui.Mods) bool {
 	if !m.Cmd() {
 		return false
 	}
 	switch k {
-	case KeyZ:
+	case ggui.KeyZ:
 		t.ime.Confirm()
 		if m.Shift {
 			return t.ed.Redo()
 		}
 		return t.ed.Undo()
-	case KeyY:
+	case ggui.KeyY:
 		// Ctrl+Y is redo everywhere but macOS, which uses Shift+Cmd+Z.
-		if runtimeIsDarwin() || !t.ed.Redo() {
+		if isDarwin || !t.ed.Redo() {
 			return false
 		}
 		t.ime.Confirm()
@@ -1263,25 +1246,25 @@ func (t *TextInputWidget) historyKey(k KeyboardKey, m Mods) bool {
 
 // HandlePointer implements PointerHandler: clicks place the caret, drags
 // and repeated clicks select.
-func (t *TextInputWidget) HandlePointer(ev PointerEvent) bool {
+func (t *TextInputWidget) HandlePointer(ev ggui.PointerEvent) bool {
 	if t.IsDisabled() {
 		return false
 	}
 	switch ev.Kind {
-	case PointerDown:
-		if ev.Button != MouseButtonLeft {
+	case ggui.PointerDown:
+		if ev.Button != ggui.MouseButtonLeft {
 			return false
 		}
 		t.ime.Confirm()
-		t.clicks.Press(&t.ed, activeWorld().frame.raw(), ev.Pos, t.indexAt, false)
-		t.blink = Now()
+		t.clicks.Press(&t.ed, ggui.ClockTime(), ev.Pos, t.indexAt, false)
+		t.blink = ggui.Now()
 		return true
-	case PointerDrag:
+	case ggui.PointerDrag:
 		if t.clicks.Drag(&t.ed, ev.Pos, t.indexAt) {
-			t.blink = Now()
+			t.blink = ggui.Now()
 		}
 		return true
-	case PointerUp, PointerTap, PointerMove, PointerEnter, PointerExit:
+	case ggui.PointerUp, ggui.PointerTap, ggui.PointerMove, ggui.PointerEnter, ggui.PointerExit:
 		return true
 	}
 	return false
@@ -1298,10 +1281,10 @@ func (t *TextInputWidget) Adopt(prev any) {
 	t.Interactive.Adopt(prev)
 	t.ed, t.scroll, t.width = p.ed, p.scroll, p.width
 	t.clicks = p.clicks
-	if p.ed.Text != Untrack(t.value.Get) {
-		t.ed.SetText(Untrack(t.value.Get))
+	if p.ed.Text != ggui.Untrack(t.value.Get) {
+		t.ed.SetText(ggui.Untrack(t.value.Get))
 	}
-	t.blink = Now()
+	t.blink = ggui.Now()
 }
 
 // TextInputState is a read-only snapshot for custom editor presentations.
@@ -1347,14 +1330,14 @@ func (t *TextInputWidget) Select(anchor, caret int) {
 	t.ime.Confirm()
 	t.ed.MoveTo(anchor, false)
 	t.ed.MoveTo(caret, true)
-	t.blink = Now()
+	t.blink = ggui.Now()
 }
 
 // PaintCustom replaces the standard text drawing, for segmented editors such
 // as Input OTP. The callback returns the logical caret bounds used by the native
 // IME. The caller owns hit regions and semantics and forwards keyboard events
 // and HandleTick to this editor. Layout must have run first.
-func (t *TextInputWidget) PaintCustom(dst *Canvas, r Rect, paint func(*Canvas, Rect, TextInputState) Rect) {
+func (t *TextInputWidget) PaintCustom(dst *ggui.Canvas, r ggui.Rect, paint func(*ggui.Canvas, ggui.Rect, TextInputState) ggui.Rect) {
 	t.rect, t.scale = r, dst.Scale()
 	caret := paint(dst, r, t.EditingState())
 	t.caretBounds = image.Rect(int(caret.Origin.X), int(caret.Origin.Y), int(caret.Origin.X+caret.Size.W), int(caret.Origin.Y+caret.Size.H))
