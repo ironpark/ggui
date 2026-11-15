@@ -5,8 +5,6 @@ import (
 	"time"
 
 	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggui/internal/reactive"
-	"github.com/ironpark/ggui/runtime"
 	"github.com/ironpark/ggwd"
 )
 
@@ -98,11 +96,8 @@ type WindowFrame struct {
 // build makes. build runs at the first frame, under a root owner of its
 // own, after the functions Window().Setup registered.
 func NewWindowProbe(build Builder, size Size) *WindowProbe {
-	rt := reactive.NewRuntime()
-	worldOf(rt) // made here, on the goroutine that made the probe
-	w := newWindow(nil, rt, Config{Width: int(size.W), Height: int(size.H)}, build)
-	w.dialogs = &runtime.StubFilePicker{}
-	w.clipboard = &runtime.MemoryClipboard{}
+	w := newWindow(nil, nil, Config{Width: int(size.W), Height: int(size.H)}, build)
+	w.headless()
 	return &WindowProbe{w: w, screen: ggfx.NewImage(int(size.W), int(size.H))}
 }
 
@@ -136,14 +131,11 @@ func (p *WindowProbe) Step(d time.Duration) WindowFrame {
 	if w.frameErr != nil {
 		panic(w.frameErr)
 	}
-	if w.closed {
+	if w.Closed() {
 		return WindowFrame{}
 	}
-	if w.dispose == nil {
-		w.start()
-	}
-	clk := &w.world().frame
-	clk.pinned = clk.raw().Add(d)
+	w.start()
+	w.advanceClock(d)
 	p.damage = p.damage[:0]
 	// The first frame finds nothing on the screen to keep.
 	next, wake, err := w.frameOn(p.screen, 1, p.frames > 0, p.setDamage)

@@ -130,8 +130,6 @@ type Window struct {
 	app *App
 	cfg Config
 
-	canvas Canvas // also holds the frame's screen-pixels-per-logical-pixel scale
-	input  inputState
 	touch  touchInput
 	cursor CursorShape
 
@@ -154,7 +152,6 @@ type Window struct {
 	inspectChord Chord          // parsed from cfg.Inspector; Key is zero for none
 	panel        InspectorPanel // the registered inspector, once wanted
 	sinks        []func(*inspect.Frame)
-	overlay      Overlay // drawn over every frame; the inspector while it is on
 
 	// backbuf is what the window paints into while a BackdropBlur needs to
 	// read the frame, copied to the screen at the end; backdropTTL counts
@@ -197,8 +194,7 @@ type Window struct {
 // newWindow makes a window for app that is not open yet.
 func newWindow(app *App, rt *reactive.Runtime, cfg Config, build Builder) *Window {
 	w := &Window{app: app, cfg: cfg.withDefaults()}
-	w.host = w
-	w.rt = rt
+	w.init(w, rt, build)
 	w.wake = func() {
 		// Posted work is painted by what it changes: a signal or the
 		// layout keeps the next frame from being painted in part, and a
@@ -210,7 +206,6 @@ func newWindow(app *App, rt *reactive.Runtime, cfg Config, build Builder) *Windo
 			app.wakeUp()
 		}
 	}
-	w.build = build
 	w.dialogs = w.nativeDialogs()
 	w.clipboard = runtime.NativeClipboard()
 	w.focused = State(!cfg.Unfocused && !cfg.Hidden)
@@ -230,13 +225,7 @@ func newWindow(app *App, rt *reactive.Runtime, cfg Config, build Builder) *Windo
 // open builds the tree and creates the native window. It runs on the UI
 // thread while the engine runs, from inside an event.
 func (w *Window) open() error {
-	prev := runningLoop()
 	w.start()
-	// Opening a window from another window's frame must leave that frame's
-	// loop current.
-	if prev != nil {
-		setRunning(prev)
-	}
 	w.ax.Start(w.Perform, w.cfg.Accessibility)
 	nw, err := ggwd.NewWindow(w.cfg.options())
 	if err != nil {
@@ -273,13 +262,6 @@ func (w *Window) Setup(fn func()) *Window {
 	return w
 }
 
-// Post queues fn to run on the UI thread before the window's next frame's
-// input. It is the one way a goroutine may touch signals: do the work off
-// the thread, then Post the Set. Work posted by a callback runs next frame.
-// Work posted before the window opens, such as before App.Run, waits and
-// runs once, after Setup and the first build.
-func (w *Window) Post(fn func()) { w.post(fn) }
-
 // Close closes the window and disposes its root owner, and with it every
 // effect, memo and component the window created. It does not ask the
 // OnCloseRequest handlers. Closing an App's last window ends App.Run.
@@ -308,7 +290,6 @@ func (w *Window) release() {
 	}
 	w.ax.Close()
 	w.close()
-	w.canvas.freeLayers()
 	w.freeBackbuf()
 }
 
@@ -482,37 +463,6 @@ func (w *Window) wakeFrame() {
 	}
 }
 
-// OnFrame registers fn to run once per frame, before input is dispatched
-// and effects are flushed, for per-frame work that no widget owns. OnKey
-// covers global shortcuts; Pointer and Focus cover input aimed at a widget.
-func (w *Window) OnFrame(fn func()) {
-	w.frame = append(w.frame, fn)
-}
-
-// OnKey registers a window-wide key handler: fn sees every key press, with
-// its modifiers, before the focused widget does, and a press it returns
-// true for goes no further. A held key repeats into it as it would into a
-// widget. Shortcut is the simpler form for one chord; OnKey is for what a
-// chord cannot say. Keep the keys it takes away from a text field in
-// mind: returning true for Space while one is focused would eat the space
-// bar.
-func (w *Window) OnKey(fn func(KeyEvent) bool) {
-	w.input.shortcuts = append(w.input.shortcuts, fn)
-}
-
-// Shortcut runs fn on the chord, such as "cmd+s" or "escape"; see
-// ParseChord for the names. A chord with a modifier runs before the
-// focused widget and takes the key from it. A bare key reaches the focused
-// widget first, and the shortcut runs only when the widget did not consume
-// it (a text field consumes every key but Escape), unless the handle is
-// made Exclusive. It panics on a chord ParseChord rejects.
-//
-//	app.Shortcut("cmd+s", save)
-//	app.Shortcut("space", func() { ggui.Add(count, 1) })
-func (w *Window) Shortcut(chord string, fn func()) *ShortcutHandle {
-	return w.input.addShortcut(chord, fn)
-}
-
 // Semantics returns the accessibility tree as the last frame left it. The
 // tree is finished and frozen, so it may be read from any goroutine and
 // held for as long as it is useful; a changed frame publishes another rather
@@ -536,10 +486,6 @@ func (w *Window) wantSemantics() {
 		w.wake()
 	}
 }
-
-// OnDrop registers fn to receive files dropped onto the window that no
-// drop zone under the cursor took; see PointerWidget.OnDrop for zones.
-func (w *Window) OnDrop(fn func(DropEvent)) { w.input.drops = append(w.input.drops, fn) }
 
 // SetDialogs replaces the file and message dialogs, for a host that draws
 // its own. A nil p restores the platform's.
@@ -646,12 +592,8 @@ func (w *Window) runFrameEvent(ev ggwd.FrameEvent) error {
 // need not, the instant a widget asked to be painted again at, or zero.
 // The cursor the frame leaves is w.cursor.
 func (w *Window) frameOn(screen *ggfx.Image, scale float64, kept bool, setDamage func([]image.Rectangle)) (next bool, wake time.Time, err error) {
-	// The glyph and shaping caches expire after so many frames unused.
-	text.AdvanceTick()
 	// Handlers dispatched below reach this window through UseHost.
-	setRunning(&w.frameLoop)
-	w.runFrame()
-	w.runPosted()
+	w.beginFrame()
 	f := w.takeInput()
 	cf := w.canvas.fs()
 	moved := !cf.hasPointer || cf.pointer != f.pos
@@ -675,22 +617,21 @@ func (w *Window) frameOn(screen *ggfx.Image, scale float64, kept bool, setDamage
 	if w.closed {
 		return false, time.Time{}, nil
 	}
-	wd := w.world()
-	if err := w.tick(wd.frame.begin(wd.frame.raw())); err != nil {
+	if err := w.tick(false); err != nil {
 		return false, time.Time{}, err
 	}
 	w.draw(screen, scale, kept, setDamage)
 	if w.frameErr != nil {
 		return false, time.Time{}, w.frameErr
 	}
-	w.cursor = w.input.cursorOver(w.overlay, f.pos)
+	w.cursor = w.cursorAt(f.pos)
 	if w.closed {
 		return false, time.Time{}, nil
 	}
 	if w.endFrame(f) {
 		return true, time.Time{}, nil
 	}
-	return false, wd.frame.takeWake(), nil
+	return false, w.world().frame.takeWake(), nil
 }
 
 // paintTarget returns the image this frame paints into, and whether it
@@ -754,7 +695,6 @@ func (w *Window) catchUp() error {
 	if w.closed || w.root == nil {
 		return nil
 	}
-	setRunning(&w.frameLoop)
 	// A layout shapes text as a frame does, and the shaping caches expire
 	// by ticks: a window covered for hours, its rows laid out again as
 	// their text changes, would otherwise keep every string it shaped.
@@ -824,7 +764,7 @@ func (w *Window) wantsFrame(f frameInput) bool {
 // take the pointer. Otherwise a release over the inspector's panel would
 // leave a slider or text selection captured indefinitely.
 func (w *Window) dispatchInput(f frameInput) {
-	w.input.dispatchOver(w.overlay, f)
+	w.deliver(f)
 	if w.inspect && w.panel.Closed() {
 		w.Inspector(false)
 	}
@@ -923,7 +863,7 @@ func (w *Window) draw(screen *ggfx.Image, scale float64, kept bool, setDamage fu
 	}
 	d.tracing = w.inspect || len(w.sinks) > 0
 	_, err := w.paint(paintPass{
-		canvas: &w.canvas, in: &w.input, overlay: w.overlay, size: logical,
+		size:    logical,
 		tracing: d.tracing,
 		semOff:  !w.semWanted.Load() && w.performs.Load() == 0 && !d.tracing && !w.ax.Listening(),
 		hooks:   d,
