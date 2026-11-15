@@ -94,7 +94,7 @@ type RichTextWidget struct {
 	ed      textedit.Editor
 	focused bool
 	area    *SelectionAreaWidget // the SelectionArea it is in, if any
-	clicks  clickSelector
+	clicks  textedit.Clicks
 	rect    Rect
 
 	pieceOp text.DrawOptions // reused by paragraph.Draw, which would allocate one a piece
@@ -599,7 +599,7 @@ func (a *SelectionAreaWidget) pointer(t *RichTextWidget, ev PointerEvent) bool {
 			return true
 		}
 		a.clear(t)
-		t.clicks.press(&t.ed, ev.Pos, t.offsetAt, ev.Mods.Shift)
+		t.clicks.Press(&t.ed, activeWorld().frame.raw(), ev.Pos, t.offsetAt, ev.Mods.Shift)
 		a.anchor, a.anchorAt = t, t.ed.Anchor
 		a.focus, a.focusAt = t, t.ed.Caret
 		return true
@@ -609,7 +609,7 @@ func (a *SelectionAreaWidget) pointer(t *RichTextWidget, ev PointerEvent) bool {
 			// Within the text it began in, the selection grows as a lone
 			// text's does: by words after a double click.
 			a.clear(t)
-			t.clicks.drag(&t.ed, ev.Pos, t.offsetAt)
+			t.clicks.Drag(&t.ed, ev.Pos, t.offsetAt)
 			a.anchor, a.anchorAt, a.focus, a.focusAt = t, t.ed.Anchor, t, t.ed.Caret
 			return true
 		}
@@ -871,7 +871,7 @@ func (t *RichTextWidget) HandleKey(ev KeyEvent) {
 			t.ed.MoveTo(t.ed.Caret, false)
 		case KeyArrowLeft, KeyArrowRight:
 			if m.Shift {
-				t.ed.MoveBy(pick(ev.Key == KeyArrowLeft, -1, 1), wordWise(m), true)
+				t.ed.MoveBy(pick(ev.Key == KeyArrowLeft, -1, 1), textedit.WordWise(m.Alt, m.Ctrl, m.Meta), true)
 			}
 		case KeyHome, KeyEnd:
 			if m.Shift {
@@ -893,10 +893,10 @@ func (t *RichTextWidget) HandlePointer(ev PointerEvent) bool {
 		if ev.Button != MouseButtonLeft {
 			return false
 		}
-		t.clicks.press(&t.ed, ev.Pos, t.offsetAt, ev.Mods.Shift)
+		t.clicks.Press(&t.ed, activeWorld().frame.raw(), ev.Pos, t.offsetAt, ev.Mods.Shift)
 		return true
 	case PointerDrag:
-		t.clicks.drag(&t.ed, ev.Pos, t.offsetAt)
+		t.clicks.Drag(&t.ed, ev.Pos, t.offsetAt)
 		return true
 	case PointerUp, PointerTap, PointerMove, PointerEnter, PointerExit:
 		return true

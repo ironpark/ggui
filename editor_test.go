@@ -447,8 +447,8 @@ func TestNoWrapLayoutCountsLinesWithoutTheirTable(t *testing.T) {
 	one := TextInput(State("one")).NoWrap()
 	h3 := w.Layout(Loose(Sz(200, Unbounded)), Env{}).H
 	h1 := one.Layout(Loose(Sz(200, Unbounded)), Env{}).H
-	if h3 <= h1 || w.wrapped[0] != nil {
-		t.Fatalf("six lines %v tall against one's %v; line table made: %v", h3, h1, w.wrapped[0] != nil)
+	if h3 <= h1 || w.layout.Last() != nil {
+		t.Fatalf("six lines %v tall against one's %v; line table made: %v", h3, h1, w.layout.Last() != nil)
 	}
 }
 
@@ -1158,7 +1158,8 @@ func TestTextInputWrapsEditsAsTheWholeText(t *testing.T) {
 	for i := range 300 { // edits leave lines no wrap uses, which go
 		edit("typing", func() int { return 0 }, string(rune('a'+i%26)))
 	}
-	if n, lines := len(w.lines.byText), strings.Count(w.ed.Text, "\n")+1; n > 2*lines+64 {
+	n, _ := w.layout.Held()
+	if lines := strings.Count(w.ed.Text, "\n") + 1; n > 2*lines+64 {
 		t.Errorf("%d lines kept for a text of %d", n, lines)
 	}
 }
@@ -1339,7 +1340,7 @@ func TestTextInputPlacesTheCaretInRightToLeftText(t *testing.T) {
 		if bl == nil {
 			t.Fatal("a Hebrew line was not laid out in visual order")
 		}
-		total := bl.width()
+		total := bl.Width()
 		caretAt := func(b int) float64 {
 			w.ed.MoveTo(b, false)
 			paintFrame(&in, w, Sz(600, 50))
@@ -1411,8 +1412,8 @@ func TestTextInputKeepsNoCopyOfALongLinePerKeystroke(t *testing.T) {
 			w.ed.Replace("x")
 			w.spans(w.ed.Text)
 		}
-		if c := &w.lines; c.bytes > 2*len(w.ed.Text)+4096 || !multiline && len(c.byText) != 0 {
-			t.Errorf("multiline %v: %d lines of %d bytes kept for a text of %d", multiline, len(c.byText), c.bytes, len(w.ed.Text))
+		if lines, bytes := w.layout.Held(); bytes > 2*len(w.ed.Text)+4096 || !multiline && lines != 0 {
+			t.Errorf("multiline %v: %d lines of %d bytes kept for a text of %d", multiline, lines, bytes, len(w.ed.Text))
 		}
 	}
 }
@@ -1472,14 +1473,14 @@ func TestTextInputWrapsFromTheEditorsNameForTheTextBefore(t *testing.T) {
 		}
 	}
 	check("the first layout")
-	prev := w.wrapped[0]
-	if prev.rev == 0 {
+	prev := w.layout.Last()
+	if prev.Rev() == 0 {
 		t.Fatal("the wrap of the editor's text has no name for it")
 	}
 	w.ed.MoveTo(len(w.ed.Text)/2, false)
 	w.ed.Replace("typed")
 	at := w.ed.Caret - len("typed")
-	if a, cut, ins, ok := w.ed.Changed(prev.rev, w.ed.Text); !ok || a != at || cut != 0 || ins != len("typed") {
+	if a, cut, ins, ok := w.ed.Changed(prev.Rev(), w.ed.Text); !ok || a != at || cut != 0 || ins != len("typed") {
 		t.Fatalf("Changed from the last wrap = %d, %d, %d, %v; want %d, 0, 5, true", a, cut, ins, ok, at)
 	}
 	check("typing")
