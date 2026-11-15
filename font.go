@@ -181,6 +181,9 @@ var builtinFont = sync.OnceValue(func() *Font { return wrapFont(fontsys.Builtin(
 // where it draws: see DefaultMonoFont.
 var defaultMono = wrapFont(fontsys.Alias(func() *fontsys.Font { return monoFont().f }))
 
+// DefaultFont is the font Text uses when none is set.
+func DefaultFont() *Font { return fallbackFont() }
+
 // DefaultMonoFont returns a Font that draws in the default monospaced font
 // of whatever App or Probe it draws in: the one SetDefaultMonoFont set, or
 // in an App the platform's own, such as SF Mono on macOS, or else the

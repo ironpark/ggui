@@ -343,7 +343,7 @@ type hitRegion struct {
 	role    Role        // from a Semantic handler
 	label   string
 	group   any        // set by inGroup: the EachKeyed entry that painted it
-	drag    dragSource // a DragSource beneath its child; see dragdrop.go
+	drag    dragSource // a DragSource beneath its child; see drag.go
 
 	space  *paintSpace // the space it was painted in, nil for the window's
 	local  Rect        // rect in that space, clipped there; see contains
@@ -491,7 +491,7 @@ type inputState struct {
 	focusVisible         bool        // focused moved there with the keyboard
 	cursor               CursorShape // what the hovered region asked for
 	dragTarget           *hitRegion  // the region files are being dragged over
-	drag                 *appDrag    // a drag inside the app; see dragdrop.go
+	drag                 *appDrag    // a drag inside the app; see drag.go
 	touchPan             kinetics.Pan
 	touchScroll          *hitRegion // what took the pan
 	touchMotion          touchMotion
