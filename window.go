@@ -41,6 +41,14 @@ type Config struct {
 	Resizable bool
 	// Frameless opens the window without its title bar and border.
 	Frameless bool
+	// TitlebarHidden runs the window's content under its title bar on
+	// macOS, keeping the frame and the traffic lights: the bar is clear and
+	// has no title, the app draws its own header there, and moves the
+	// window by it with Window.StartDrag. TrafficLights, when set, is where
+	// the close button's top-left corner goes, from the window's, in
+	// logical pixels. Elsewhere the window has its title bar as usual.
+	TitlebarHidden bool
+	TrafficLights  *Point
 	// AlwaysOnTop keeps the window above ordinary windows.
 	AlwaysOnTop bool
 	// Transparent lets what is behind the window show through wherever
@@ -100,6 +108,10 @@ func (c Config) options() *ggwd.WindowOptions {
 	}
 	if c.Position != nil {
 		o.Position = &ggwd.Point{X: c.Position.X, Y: c.Position.Y}
+	}
+	o.TitlebarHidden = c.TitlebarHidden
+	if c.TrafficLights != nil {
+		o.TrafficLights = &ggwd.Point{X: c.TrafficLights.X, Y: c.TrafficLights.Y}
 	}
 	return o
 }
@@ -964,6 +976,16 @@ func (w *Window) SetIcon(icon []image.Image) {
 	w.cfg.Icon = icon
 	w.native(func(nw *ggwd.Window) { nw.SetIcon(icon) })
 }
+
+// StartDrag moves the window with the pointer while the press that is
+// down lasts, as a press on the title bar would: what a header drawn in
+// place of a hidden title bar does with a press on it (Config.TitlebarHidden).
+// It returns at once. It does nothing but on macOS.
+func (w *Window) StartDrag() { w.native((*ggwd.Window).StartDrag) }
+
+// TitlebarDoubleClick does what a double-click on the title bar does as
+// the system is set: on macOS, zoom the window, minimize it, or nothing.
+func (w *Window) TitlebarDoubleClick() { w.native((*ggwd.Window).TitlebarDoubleClick) }
 
 // Minimize minimizes the window.
 func (w *Window) Minimize() { w.native((*ggwd.Window).Minimize) }
