@@ -11,7 +11,7 @@ import (
 // showsImages are the widgets that take an image to show. An image is a
 // *ggfx.Image, which ggui does not rename, but they draw it through the
 // Canvas like everything else.
-var showsImages = []string{"attachment.go", "avatar.go"}
+var showsImages = []string{"attachment.go", "avatar.go", "image.go", "image_test.go"}
 
 // TestOnlyImageWidgetsImportGgfx keeps the rest of the package on ggui's own
 // surface: a widget author imports one package, and what renders is ggui's

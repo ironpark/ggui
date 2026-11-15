@@ -21,7 +21,7 @@ import (
 
 // SVG is a parsed monochrome SVG. Its alpha coverage is tinted at draw time,
 // including currentColor strokes and fills. Gradients and multicolor artwork
-// should use ggui.Image instead. SVGs are intended to be trusted local assets.
+// should use ui.Image instead. SVGs are intended to be trusted local assets.
 // A shared SVG retains at most eight device-resolution rasterizations, and
 // every SVG's together at most 32 MB, the least recently drawn let go first.
 type SVG struct {

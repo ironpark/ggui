@@ -478,7 +478,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 
 			preview("Reveal", ggui.Column(
 				ui.Switch(revealed, "Show more"),
-				ggui.Reveal(revealed, ggui.Box(ggui.Text("Folds open beneath the switch, moving what follows down, and back up when hidden.")).
+				ui.Reveal(revealed, ggui.Box(ggui.Text("Folds open beneath the switch, moving what follows down, and back up when hidden.")).
 					Fill(t.Card).Radius(t.Radius).Pad(t.Space)),
 				ui.Caption("Below the reveal."),
 			).Space(1).Stretch()),

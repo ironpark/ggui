@@ -644,13 +644,41 @@ var (
 // A component captures it while it is built to use it later from a
 // goroutine. It panics outside any window or probe.
 func UseHost() Host {
-	if l := loopOf(reactive.CurrentOwner()); l != nil {
-		return l.host
-	}
-	if l := runningLoop(); l != nil {
-		return l.host
+	if h, ok := LookupHost(); ok {
+		return h
 	}
 	panic("ggui: UseHost outside a window or probe")
+}
+
+// LookupHost returns the Host UseHost would, and false where UseHost
+// panics: outside any window or probe. It is for a widget that may also be
+// laid out on its own, as a test or a measurement does, and can do without
+// the host there, such as one that asks the host to Post the end of a load
+// when there is a host to tell.
+func LookupHost() (Host, bool) {
+	if l := loopOf(reactive.CurrentOwner()); l != nil {
+		return l.host, true
+	}
+	if l := runningLoop(); l != nil {
+		return l.host, true
+	}
+	return nil, false
+}
+
+// UseScale returns the device pixels per logical pixel of the window or
+// probe LookupHost finds, as its Canvas.Scale says, and 1 outside any. It is
+// for Layout, which has no Canvas to ask: a widget that sizes what it
+// rasterizes or decodes for the screen it is shown on can know it in its
+// first layout, before Paint is given a Canvas.
+func UseScale() float64 {
+	h, _ := LookupHost()
+	switch h := h.(type) {
+	case *Window:
+		return h.canvas.Scale()
+	case *Probe:
+		return h.canvas.Scale()
+	}
+	return 1
 }
 
 // UseWindow returns the Window UseHost would, or nil under a Probe, which

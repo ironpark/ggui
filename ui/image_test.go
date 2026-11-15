@@ -1,4 +1,4 @@
-package ggui
+package ui
 
 import (
 	"bytes"
@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/framestats"
 	"github.com/ironpark/ggui/internal/imgcache"
 	"github.com/ironpark/ggui/internal/reactive/goid"
@@ -30,39 +31,19 @@ func TestImageLayoutKeepsAspect(t *testing.T) {
 	cases := []struct {
 		name string
 		w    *ImageWidget
-		c    Constraints
-		want Size
+		c    ggui.Constraints
+		want ggui.Size
 	}{
-		{"natural", Image(img), Loose(Sz(Unbounded, Unbounded)), Sz(200, 100)},
-		{"shrinks to width", Image(img), Loose(Sz(100, Unbounded)), Sz(100, 50)},
-		{"shrinks to height", Image(img), Loose(Sz(Unbounded, 25)), Sz(50, 25)},
-		{"width follows", Image(img).Height(50), Loose(Sz(Unbounded, Unbounded)), Sz(100, 50)},
-		{"height follows", Image(img).Width(50), Loose(Sz(Unbounded, Unbounded)), Sz(50, 25)},
-		{"fixed", Image(img).Size(30, 30), Loose(Sz(Unbounded, Unbounded)), Sz(30, 30)},
+		{"natural", Image(img), ggui.Loose(ggui.Sz(ggui.Unbounded, ggui.Unbounded)), ggui.Sz(200, 100)},
+		{"shrinks to width", Image(img), ggui.Loose(ggui.Sz(100, ggui.Unbounded)), ggui.Sz(100, 50)},
+		{"shrinks to height", Image(img), ggui.Loose(ggui.Sz(ggui.Unbounded, 25)), ggui.Sz(50, 25)},
+		{"width follows", Image(img).Height(50), ggui.Loose(ggui.Sz(ggui.Unbounded, ggui.Unbounded)), ggui.Sz(100, 50)},
+		{"height follows", Image(img).Width(50), ggui.Loose(ggui.Sz(ggui.Unbounded, ggui.Unbounded)), ggui.Sz(50, 25)},
+		{"fixed", Image(img).Size(30, 30), ggui.Loose(ggui.Sz(ggui.Unbounded, ggui.Unbounded)), ggui.Sz(30, 30)},
 	}
 	for _, tc := range cases {
-		if got := tc.w.Layout(tc.c, Env{}); got != tc.want {
+		if got := tc.w.Layout(tc.c, ggui.Env{}); got != tc.want {
 			t.Errorf("%s: %v, want %v", tc.name, got, tc.want)
-		}
-	}
-}
-
-func TestImagePlacement(t *testing.T) {
-	t.Parallel()
-	img := ggfx.NewImage(200, 100)
-	box := Rct(Pt(0, 0), Sz(100, 100))
-	cases := []struct {
-		fit  ImageFit
-		want Rect
-	}{
-		{FitContain, Rct(Pt(0, 25), Sz(100, 50))},
-		{FitCover, Rct(Pt(-50, 0), Sz(200, 100))},
-		{FitFill, box},
-		{FitNone, Rct(Pt(-50, 0), Sz(200, 100))},
-	}
-	for _, tc := range cases {
-		if got := tc.fit.Place(Image(img).natural(), box); got != tc.want {
-			t.Errorf("fit %d: %+v, want %+v", tc.fit, got, tc.want)
 		}
 	}
 }
@@ -188,29 +169,29 @@ func TestLoadImageFileReadsTheFileAndReportsWhatFailed(t *testing.T) {
 	}
 }
 
-// measured lays w out loosely and records the size it asked for, which a
+// loosely lays w out loosely and records the size it asked for, which a
 // probe's root, laid out tight, does not tell.
-type measured struct {
-	w    Widget
-	size Size
+type loosely struct {
+	w    ggui.Widget
+	size ggui.Size
 }
 
-func (m *measured) Layout(c Constraints, env Env) Size {
+func (m *loosely) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	m.size = m.w.Layout(c.Loosen(), env)
 	return c.Constrain(m.size)
 }
-func (m *measured) Paint(dst *Canvas, r Rect) { dst.Paint(m.w, Rct(r.Origin, m.size)) }
+func (m *loosely) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(m.w, ggui.Rct(r.Origin, m.size)) }
 
 // measure is a probe around w and a function running a frame and returning
 // w's size.
-func measure(w Widget, size Size) (*Probe, func() Size) {
-	m := &measured{w: w}
-	p := NewProbe(m, size)
-	return p, func() Size { p.Frame(); return m.size }
+func measure(w ggui.Widget, size ggui.Size) (*ggui.Probe, func() ggui.Size) {
+	m := &loosely{w: w}
+	p := ggui.NewProbe(m, size)
+	return p, func() ggui.Size { p.Frame(); return m.size }
 }
 
 // pumpUntil runs frames until done reports true, failing after a second.
-func pumpUntil(t *testing.T, p *Probe, done func() bool) {
+func pumpUntil(t *testing.T, p *ggui.Probe, done func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for !done() {
@@ -240,16 +221,16 @@ func TestAsyncImageDecodesOffTheUIThread(t *testing.T) {
 		loaderGoroutine.Store(goid.ID())
 		<-release
 		return image.NewRGBA(image.Rect(0, 0, 40, 20)), nil
-	}).Placeholder(Box().Size(7, 7))
+	}).Placeholder(ggui.Box().Size(7, 7))
 	a.cache = newImageCache(1 << 20)
-	p, size := measure(a, Sz(300, 300))
+	p, size := measure(a, ggui.Sz(300, 300))
 	defer p.Close()
-	if got := size(); got != Sz(7, 7) || a.Status() != Pending {
+	if got := size(); got != ggui.Sz(7, 7) || a.Status() != ggui.Pending {
 		t.Fatalf("before ready: size %v status %v, want the placeholder", got, a.Status())
 	}
 	close(release)
-	pumpUntil(t, p, func() bool { return a.Status() == Ready })
-	if got := size(); got != Sz(40, 20) {
+	pumpUntil(t, p, func() bool { return a.Status() == ggui.Ready })
+	if got := size(); got != ggui.Sz(40, 20) {
 		t.Fatalf("ready: size %v, want 40x20", got)
 	}
 	if id := loaderGoroutine.Load(); id == 0 || id == ui {
@@ -264,19 +245,19 @@ func TestAsyncImageSameSrcDecodesOnce(t *testing.T) {
 	a := AsyncImage("same").Loader(sized(10, 10, &calls))
 	b := AsyncImage("same").Loader(sized(10, 10, &calls))
 	a.cache, b.cache = cache, cache
-	p := NewProbe(Column(a, b), Sz(300, 300))
+	p := ggui.NewProbe(ggui.Column(a, b), ggui.Sz(300, 300))
 	defer p.Close()
-	pumpUntil(t, p, func() bool { return a.Status() == Ready && b.Status() == Ready })
+	pumpUntil(t, p, func() bool { return a.Status() == ggui.Ready && b.Status() == ggui.Ready })
 	if calls.Load() != 1 {
 		t.Fatalf("loaded %d times, want once", calls.Load())
 	}
 	// A third, shown later at the same size, finds it ready.
 	c := AsyncImage("same").Loader(sized(10, 10, &calls))
 	c.cache = cache
-	q := NewProbe(Column(c), Sz(300, 300))
+	q := ggui.NewProbe(ggui.Column(c), ggui.Sz(300, 300))
 	defer q.Close()
 	q.Frame()
-	if c.Status() != Ready || calls.Load() != 1 {
+	if c.Status() != ggui.Ready || calls.Load() != 1 {
 		t.Fatalf("a cached src: status %v after %d loads", c.Status(), calls.Load())
 	}
 }
@@ -286,10 +267,10 @@ func TestAsyncImageMaxSizeDownscales(t *testing.T) {
 	var calls atomic.Int32
 	a := AsyncImage(t.Name()).Loader(sized(400, 100, &calls)).MaxSize(80)
 	a.cache = newImageCache(1 << 20)
-	p, size := measure(a, Sz(300, 300))
+	p, size := measure(a, ggui.Sz(300, 300))
 	defer p.Close()
-	pumpUntil(t, p, func() bool { return a.Status() == Ready })
-	if got := size(); got != Sz(80, 20) {
+	pumpUntil(t, p, func() bool { return a.Status() == ggui.Ready })
+	if got := size(); got != ggui.Sz(80, 20) {
 		t.Fatalf("size %v, want 80x20", got)
 	}
 }
@@ -305,14 +286,14 @@ func TestAsyncImageSrcChangeCancelsStaleLoad(t *testing.T) {
 		}
 		return image.NewRGBA(image.Rect(0, 0, 12, 34)), nil
 	}
-	src := State("slow")
+	src := ggui.State("slow")
 	a := AsyncImage("").BindSrc(src).Loader(loader)
 	a.cache = newImageCache(1 << 20)
-	p, size := measure(a, Sz(300, 300))
+	p, size := measure(a, ggui.Sz(300, 300))
 	defer p.Close()
 	p.Frame()
 	src.Set("fast")
-	pumpUntil(t, p, func() bool { return a.Status() == Ready })
+	pumpUntil(t, p, func() bool { return a.Status() == ggui.Ready })
 	select {
 	case got := <-cancelled:
 		if got != "slow" {
@@ -321,7 +302,7 @@ func TestAsyncImageSrcChangeCancelsStaleLoad(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("the stale load was not cancelled")
 	}
-	if got := size(); got != Sz(12, 34) {
+	if got := size(); got != ggui.Sz(12, 34) {
 		t.Fatalf("size %v, want the new image's", got)
 	}
 	if a.cache.Has(imgcache.Key{Src: "slow"}) {
@@ -333,12 +314,12 @@ func TestAsyncImageErrorShowsFallback(t *testing.T) {
 	t.Parallel()
 	a := AsyncImage(t.Name()).Loader(func(context.Context, string) (image.Image, error) {
 		return nil, errors.New("nope")
-	}).Placeholder(Box().Size(5, 5)).Fallback(Box().Size(9, 3))
+	}).Placeholder(ggui.Box().Size(5, 5)).Fallback(ggui.Box().Size(9, 3))
 	a.cache = newImageCache(1 << 20)
-	p, size := measure(a, Sz(300, 300))
+	p, size := measure(a, ggui.Sz(300, 300))
 	defer p.Close()
-	pumpUntil(t, p, func() bool { return a.Status() == Failed })
-	if got := size(); got != Sz(9, 3) || a.Err() == nil {
+	pumpUntil(t, p, func() bool { return a.Status() == ggui.Failed })
+	if got := size(); got != ggui.Sz(9, 3) || a.Err() == nil {
 		t.Fatalf("failed: size %v err %v", got, a.Err())
 	}
 }
@@ -348,13 +329,13 @@ func TestAsyncImageReleasesWhenItsOwnerGoes(t *testing.T) {
 	var calls atomic.Int32
 	cache := newImageCache(0)
 	var a *AsyncImageWidget
-	p := ProbeBuilder(func() Widget {
+	p := ggui.ProbeBuilder(func() ggui.Widget {
 		a = AsyncImage("x").Loader(sized(4, 4, &calls))
 		a.cache = cache
 		return a
-	}, Sz(100, 100))
+	}, ggui.Sz(100, 100))
 	p.Frame()
-	pumpUntil(t, p, func() bool { return a.Status() == Ready })
+	pumpUntil(t, p, func() bool { return a.Status() == ggui.Ready })
 	p.Close()
 	if n := cache.Len(); n != 0 {
 		t.Fatalf("%d entries left after the probe closed with a zero limit", n)
@@ -374,10 +355,10 @@ func TestAsyncImageDefaultLoaderReadsFiles(t *testing.T) {
 	f.Close()
 	a := AsyncImage(path)
 	a.cache = newImageCache(1 << 20)
-	p, size := measure(a, Sz(100, 100))
+	p, size := measure(a, ggui.Sz(100, 100))
 	defer p.Close()
-	pumpUntil(t, p, func() bool { return a.Status() != Pending })
-	if got := size(); a.Status() != Ready || got != Sz(6, 3) {
+	pumpUntil(t, p, func() bool { return a.Status() != ggui.Pending })
+	if got := size(); a.Status() != ggui.Ready || got != ggui.Sz(6, 3) {
 		t.Fatalf("status %v size %v err %v", a.Status(), got, a.Err())
 	}
 }
@@ -457,9 +438,9 @@ func texSize(a *AsyncImageWidget) image.Point {
 }
 
 // hiDPI is a probe of a on a canvas of two device pixels per logical one.
-func hiDPI(a Widget, size Size) (*Probe, func() Size) {
+func hiDPI(a ggui.Widget, size ggui.Size) (*ggui.Probe, func() ggui.Size) {
 	p, measure := measure(a, size)
-	p.canvas.scale = 2
+	p.SetScale(2)
 	return p, measure
 }
 
@@ -467,27 +448,27 @@ func TestAsyncImageDecodesForItsDisplay(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
 		name string
-		fit  ImageFit
+		fit  ggui.ImageFit
 		tex  image.Point
 	}{
 		// 50×50 at 2× is 100 device pixels, rounded up to 128.
-		{"contain", FitContain, image.Pt(128, 96)},
-		{"cover", FitCover, image.Pt(171, 128)},
-		{"fill", FitFill, image.Pt(171, 128)},
-		{"none", FitNone, image.Pt(1000, 750)},
+		{"contain", ggui.FitContain, image.Pt(128, 96)},
+		{"cover", ggui.FitCover, image.Pt(171, 128)},
+		{"fill", ggui.FitFill, image.Pt(171, 128)},
+		{"none", ggui.FitNone, image.Pt(1000, 750)},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			var calls atomic.Int32
 			a := AsyncImage(t.Name()).Loader(photo(1000, 750, &calls, nil)).Size(50, 50).Fit(tt.fit)
 			a.cache = newImageCache(1 << 30)
-			p, size := hiDPI(a, Sz(300, 300))
+			p, size := hiDPI(a, ggui.Sz(300, 300))
 			defer p.Close()
-			pumpUntil(t, p, func() bool { return a.Status() == Ready })
+			pumpUntil(t, p, func() bool { return a.Status() == ggui.Ready })
 			if got := texSize(a); got != tt.tex {
 				t.Errorf("texture %v, want %v", got, tt.tex)
 			}
-			if got := size(); got != Sz(50, 50) {
+			if got := size(); got != ggui.Sz(50, 50) {
 				t.Errorf("size %v, want 50x50", got)
 			}
 			if calls.Load() != 1 {
@@ -504,10 +485,10 @@ func TestAsyncImageUnsizedLaysOutAsTheImage(t *testing.T) {
 	var calls atomic.Int32
 	a := AsyncImage(t.Name()).Loader(photo(1000, 750, &calls, nil))
 	a.cache = newImageCache(1 << 30)
-	p, size := hiDPI(a, Sz(100, 100))
+	p, size := hiDPI(a, ggui.Sz(100, 100))
 	defer p.Close()
-	pumpUntil(t, p, func() bool { return a.Status() == Ready })
-	if got := size(); got != Sz(100, 75) {
+	pumpUntil(t, p, func() bool { return a.Status() == ggui.Ready })
+	if got := size(); got != ggui.Sz(100, 75) {
 		t.Errorf("size %v, want 100x75", got)
 	}
 	if got := texSize(a); got != image.Pt(256, 192) { // 200 device pixels, rounded up
@@ -521,9 +502,9 @@ func TestAsyncImageResizes(t *testing.T) {
 	gate := make(chan struct{})
 	a := AsyncImage(t.Name()).Loader(photo(1000, 750, &calls, gate)).Size(50, 50)
 	a.cache = newImageCache(1 << 30)
-	p, size := hiDPI(a, Sz(1000, 1000))
+	p, size := hiDPI(a, ggui.Sz(1000, 1000))
 	defer p.Close()
-	pumpUntil(t, p, func() bool { return a.Status() == Ready })
+	pumpUntil(t, p, func() bool { return a.Status() == ggui.Ready })
 	first := a.inner.img
 
 	// A little larger fits the bucket it has.
@@ -538,10 +519,10 @@ func TestAsyncImageResizes(t *testing.T) {
 	// Past it, a larger copy loads while the one it has stays on screen.
 	a.Size(100, 100)
 	pumpUntil(t, p, func() bool { return calls.Load() == 2 })
-	if a.Status() != Ready || a.inner.img != first {
+	if a.Status() != ggui.Ready || a.inner.img != first {
 		t.Fatalf("while the larger loads: status %v, texture %v, want the first shown", a.Status(), texSize(a))
 	}
-	if got := size(); got != Sz(100, 100) {
+	if got := size(); got != ggui.Sz(100, 100) {
 		t.Fatalf("size %v, want 100x100", got)
 	}
 	close(gate)
@@ -565,9 +546,9 @@ func TestAsyncImageMaxSizeAndFullResolutionAreKept(t *testing.T) {
 	var calls atomic.Int32
 	a := AsyncImage(t.Name()).Loader(photo(1000, 750, &calls, nil)).Size(200, 200).MaxSize(100)
 	a.cache = newImageCache(1 << 30)
-	p, _ := hiDPI(a, Sz(1000, 1000))
+	p, _ := hiDPI(a, ggui.Sz(1000, 1000))
 	defer p.Close()
-	pumpUntil(t, p, func() bool { return a.Status() == Ready })
+	pumpUntil(t, p, func() bool { return a.Status() == ggui.Ready })
 	if got := texSize(a); got != image.Pt(100, 75) {
 		t.Fatalf("MaxSize 100: texture %v", got)
 	}
@@ -590,16 +571,16 @@ func TestAsyncImageShowsAnotherSizeWhileItsOwnLoads(t *testing.T) {
 	cache := newImageCache(1 << 30)
 	a := AsyncImage("photo").Loader(photo(1000, 750, &calls, gate)).Size(50, 50)
 	a.cache = cache
-	p, _ := hiDPI(a, Sz(1000, 1000))
+	p, _ := hiDPI(a, ggui.Sz(1000, 1000))
 	defer p.Close()
-	pumpUntil(t, p, func() bool { return a.Status() == Ready })
+	pumpUntil(t, p, func() bool { return a.Status() == ggui.Ready })
 
 	b := AsyncImage("photo").Loader(photo(1000, 750, &calls, gate)).Size(200, 200)
 	b.cache = cache
-	q, _ := hiDPI(b, Sz(1000, 1000))
+	q, _ := hiDPI(b, ggui.Sz(1000, 1000))
 	defer q.Close()
 	q.Frame()
-	if b.Status() != Ready || b.inner.img != a.inner.img {
+	if b.Status() != ggui.Ready || b.inner.img != a.inner.img {
 		t.Fatalf("status %v, want the small copy shown", b.Status())
 	}
 	close(gate)
@@ -625,9 +606,9 @@ func TestAsyncImageUploadsRGBA(t *testing.T) {
 		uploads <- upload{img, goid.ID()}
 		return uploadImage(img)
 	}, freeImage)
-	p, _ := measure(a, Sz(1000, 1000))
+	p, _ := measure(a, ggui.Sz(1000, 1000))
 	defer p.Close()
-	pumpUntil(t, p, func() bool { return a.Status() == Ready })
+	pumpUntil(t, p, func() bool { return a.Status() == ggui.Ready })
 	u := <-uploads
 	if u.gid != ui {
 		t.Fatalf("uploaded on goroutine %d, the UI goroutine is %d", u.gid, ui)

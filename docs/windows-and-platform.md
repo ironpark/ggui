@@ -83,7 +83,10 @@ app, the user or the OS changed it.
 `ggui.UseHost()` returns the `Host` a component was built in or a handler was
 called from: the `Window` under an app, the `Probe` under a test. It reaches
 dialogs, the clipboard and `Post` without the model carrying them.
-`ggui.UseWindow()` returns the `Window`, or nil under a probe.
+`ggui.UseWindow()` returns the `Window`, or nil under a probe. Outside any
+window or probe `UseHost` panics; `ggui.LookupHost()` reports false there
+instead, for a widget that may also be laid out on its own and can do
+without the host.
 
 ```go
 ui.Button("Close", func() { ggui.UseWindow().Close() })

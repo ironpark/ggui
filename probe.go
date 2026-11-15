@@ -41,6 +41,12 @@ func (p *Probe) SetOverlay(o Overlay) { p.overlay = o }
 // probe lays out and routes input but draws nothing.
 func (p *Probe) RenderTo(img *ggfx.Image) { p.canvas.Image = img }
 
+// SetScale makes the probe's canvas scale device pixels per logical pixel,
+// as a HiDPI monitor makes a window's, for a test of what a widget sizes or
+// rasterizes for the screen: Canvas.Scale and UseScale report it, and
+// RenderTo draws at it. The default is 1. Call it before the first frame.
+func (p *Probe) SetScale(scale float64) { p.canvas.scale = scale }
+
 // Draw runs one frame into img, as RenderTo followed by Frame would, and
 // goes back to drawing nothing. The caller clears img and sizes the probe in
 // logical pixels with Resize. Call it where GPU drawing is allowed: inside a

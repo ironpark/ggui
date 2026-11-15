@@ -1,4 +1,4 @@
-package ggui
+package ui
 
 import (
 	"bytes"
@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	"image/color"
 	_ "image/gif"  // registered for DecodeImage
 	_ "image/jpeg" // registered for DecodeImage
 	_ "image/png"  // registered for DecodeImage
@@ -16,6 +15,7 @@ import (
 	"weak"
 
 	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/framestats"
 	"github.com/ironpark/ggui/internal/imgcache"
 	"github.com/ironpark/ggui/internal/property"
@@ -23,40 +23,32 @@ import (
 	"github.com/ironpark/ggui/internal/render"
 )
 
-// ImageFit says how an image is placed in a box of another shape.
-type ImageFit int
-
-const (
-	FitContain ImageFit = iota // scaled to fit inside, keeping its aspect ratio
-	FitCover                   // scaled to cover the box, keeping its aspect ratio, and clipped
-	FitFill                    // stretched to the box
-	FitNone                    // drawn at its natural size, centered, and clipped
-)
-
 // ImageWidget draws an ggfx.Image. Build one with Image.
 type ImageWidget struct {
 	props     property.Owner
 	img       *ggfx.Image
-	fit       ImageFit
+	fit       ggui.ImageFit
 	width     float64
 	height    float64
 	pixelated bool
 	alt       string
 	// source is the image's natural size when img is a smaller copy of
 	// it, as an AsyncImage decoded for its display is; zero for img's own.
-	source Size
+	source ggui.Size
 }
 
 // Image draws img. With no Size it asks for the image's natural size in
 // logical pixels, and scales down, keeping its aspect ratio, when the
 // parent gives it less room.
+//
+//	ui.Image(cover).Size(96, 96).Fit(ggui.FitCover)
 func Image(img *ggfx.Image) *ImageWidget {
 	return &ImageWidget{img: img}
 }
 
 // Fit sets how the image is placed when the box has another shape; the
-// default is FitContain.
-func (w *ImageWidget) Fit(f ImageFit) *ImageWidget {
+// default is ggui.FitContain.
+func (w *ImageWidget) Fit(f ggui.ImageFit) *ImageWidget {
 	defer property.Watch(&w.props, &w.fit)()
 	w.fit = f
 	return w
@@ -103,19 +95,19 @@ func (w *ImageWidget) Alt(s string) *ImageWidget {
 }
 
 // natural is the image's size in logical pixels.
-func (w *ImageWidget) natural() Size {
-	if w.source != (Size{}) {
+func (w *ImageWidget) natural() ggui.Size {
+	if w.source != (ggui.Size{}) {
 		return w.source
 	}
 	if w.img == nil {
-		return Size{}
+		return ggui.Size{}
 	}
 	b := w.img.Bounds()
-	return Sz(float64(b.Dx()), float64(b.Dy()))
+	return ggui.Sz(float64(b.Dx()), float64(b.Dy()))
 }
 
-// Layout implements Widget.
-func (w *ImageWidget) Layout(c Constraints, env Env) Size {
+// Layout implements ggui.Widget.
+func (w *ImageWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer w.props.Layout().EndLayout()
 	n := w.natural()
 	want := n
@@ -125,51 +117,40 @@ func (w *ImageWidget) Layout(c Constraints, env Env) Size {
 	}
 	switch {
 	case w.width > 0 && w.height > 0:
-		want = Sz(w.width, w.height)
+		want = ggui.Sz(w.width, w.height)
 	case w.width > 0:
-		want = Sz(w.width, w.width/ratio)
+		want = ggui.Sz(w.width, w.width/ratio)
 	case w.height > 0:
-		want = Sz(w.height*ratio, w.height)
+		want = ggui.Sz(w.height*ratio, w.height)
 	default:
 		// Natural size, shrunk to what fits.
 		if want.W > c.MaxW {
-			want = Sz(c.MaxW, c.MaxW/ratio)
+			want = ggui.Sz(c.MaxW, c.MaxW/ratio)
 		}
 		if want.H > c.MaxH {
-			want = Sz(c.MaxH*ratio, c.MaxH)
+			want = ggui.Sz(c.MaxH*ratio, c.MaxH)
 		}
 	}
 	return c.Constrain(want)
 }
 
-// Place returns the Rect an image of the natural size n is drawn in to fit
-// the box r this way. An image with no size fills r.
-func (f ImageFit) Place(n Size, r Rect) Rect {
-	if n.W == 0 || n.H == 0 {
-		return r
-	}
-	var s Size
-	switch f {
-	case FitFill:
-		return r
-	case FitNone:
-		s = n
-	case FitCover:
-		k := max(r.Size.W/n.W, r.Size.H/n.H)
-		s = Sz(n.W*k, n.H*k)
-	default:
-		k := min(r.Size.W/n.W, r.Size.H/n.H)
-		s = Sz(n.W*k, n.H*k)
-	}
-	return Rct(Pt(r.Origin.X+(r.Size.W-s.W)/2, r.Origin.Y+(r.Size.H-s.H)/2), s)
-}
-
-// Paint implements Widget.
-func (w *ImageWidget) Paint(dst *Canvas, r Rect) {
+// Paint implements ggui.Widget.
+func (w *ImageWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if w.alt != "" {
-		dst.Leaf(r, Node{Role: RoleImage, Name: w.alt})
+		dst.Leaf(r, ggui.Node{Role: ggui.RoleImage, Name: w.alt})
 	}
-	dst.drawImageAs(w.img, w.natural(), r, ImageOptions{Fit: w.fit, Pixelated: w.pixelated})
+	if dst == nil || dst.Image == nil || w.img == nil || w.img.Bounds().Empty() {
+		return
+	}
+	// img may be a smaller copy of the image, which covers the same Rect:
+	// it is placed as the image of its natural size would be, clipped to r
+	// as DrawImage clips what its Fit places outside, and stretched over
+	// that place.
+	at := w.fit.Place(w.natural(), r)
+	if at != r {
+		dst = dst.Clip(r)
+	}
+	dst.DrawImage(w.img, at, ggui.ImageOptions{Fit: ggui.FitFill, Pixelated: w.pixelated})
 }
 
 // imageBox is the most room an image may be drawn in, in logical pixels,
@@ -189,8 +170,8 @@ type imageBox struct {
 // the image's own shape, so fitting inside c's bounds is what covering it
 // takes too. FitNone draws the image at its natural size, so it needs all
 // of it, and no box limits it.
-func (w *ImageWidget) drawBound(c Constraints) imageBox {
-	if w.fit == FitNone {
+func (w *ImageWidget) drawBound(c ggui.Constraints) imageBox {
+	if w.fit == ggui.FitNone {
 		return imageBox{W: math.Inf(1), H: math.Inf(1)}
 	}
 	side := func(fixed, lo, hi float64) (float64, bool) {
@@ -201,7 +182,7 @@ func (w *ImageWidget) drawBound(c Constraints) imageBox {
 	}
 	bw, wKnown := side(w.width, c.MinW, c.MaxW)
 	bh, hKnown := side(w.height, c.MinH, c.MaxH)
-	if (w.fit == FitCover || w.fit == FitFill) && (wKnown || hKnown) {
+	if (w.fit == ggui.FitCover || w.fit == ggui.FitFill) && (wKnown || hKnown) {
 		if !wKnown {
 			bw = c.MinW
 		}
@@ -211,94 +192,6 @@ func (w *ImageWidget) drawBound(c Constraints) imageBox {
 		return imageBox{W: bw, H: bh, Cover: true}
 	}
 	return imageBox{W: bw, H: bh}
-}
-
-// ImageOptions says how DrawImage draws an image. The zero value fits it
-// inside the Rect, opaque, upright and smoothed.
-type ImageOptions struct {
-	// Fit places the image in the Rect; what falls outside is clipped.
-	Fit ImageFit
-	// Radius rounds the Rect's corners, antialiased, and the image is cut
-	// to them: at half the side of a square, a round photo.
-	Radius float64
-	// Fade is how far the image fades out: 0 draws it opaque, 1 not at all.
-	Fade float64
-	// Tint multiplies every pixel, which is how a white icon takes a
-	// colour; nil leaves them.
-	Tint color.Color
-	// Rotation turns the image clockwise about the centre of where it is
-	// drawn, in radians.
-	Rotation float64
-	// Pixelated scales by the nearest pixel instead of smoothing.
-	Pixelated bool
-}
-
-// DrawImage draws img in the logical Rect r, as o says.
-func (c *Canvas) DrawImage(img *ggfx.Image, r Rect, o ImageOptions) {
-	if img == nil {
-		return
-	}
-	b := img.Bounds()
-	c.drawImageAs(img, Sz(float64(b.Dx()), float64(b.Dy())), r, o)
-}
-
-// drawImageAs draws img as DrawImage does, placed as an image of natural
-// size n: img may be a smaller copy of the image, which covers the same
-// Rect.
-func (c *Canvas) drawImageAs(img *ggfx.Image, n Size, r Rect, o ImageOptions) {
-	if c == nil || c.Image == nil || img == nil || o.Fade >= 1 {
-		return
-	}
-	if img.Bounds().Empty() {
-		return
-	}
-	at := o.Fit.Place(n, r)
-	if o.Radius > 0 {
-		c.shadeImage(img, r, at, o)
-		return
-	}
-	if at != r {
-		c = c.Clip(r)
-	}
-	c.drawImage(img, at, o)
-}
-
-// drawImage draws img stretched over the logical Rect r.
-func (c *Canvas) drawImage(img *ggfx.Image, r Rect, o ImageOptions) {
-	b := img.Bounds()
-	// A turned image reaches as far as its corners do at this angle: no
-	// further than r when hardly turned, so that a spinner turning from
-	// upright stays within what the frame before it drew.
-	reach := 0.0
-	if o.Rotation != 0 {
-		sin, cos := math.Abs(math.Sin(o.Rotation)), math.Abs(math.Cos(o.Rotation))
-		w, h := r.Size.W, r.Size.H
-		reach = max((w*cos+h*sin-w)/2, (w*sin+h*cos-h)/2, 0)
-	}
-	if !c.visiblePaintBounds(r, reach) {
-		return
-	}
-	op := &ggfx.DrawImageOptions{Filter: ggfx.FilterLinear}
-	if o.Pixelated {
-		op.Filter = ggfx.FilterNearest
-	}
-	w, h := float64(b.Dx()), float64(b.Dy())
-	if o.Rotation != 0 {
-		op.GeoM.Translate(-w/2, -h/2)
-		op.GeoM.Scale(r.Size.W/w, r.Size.H/h)
-		op.GeoM.Rotate(o.Rotation)
-		op.GeoM.Concat(c.Geo(r.Center()))
-	} else {
-		op.GeoM.Scale(r.Size.W/w, r.Size.H/h)
-		op.GeoM.Concat(c.Geo(r.Origin))
-	}
-	if o.Tint != nil {
-		op.ColorScale.ScaleWithColor(o.Tint)
-	}
-	if o.Fade != 0 {
-		op.ColorScale.ScaleAlpha(float32(1 - o.Fade))
-	}
-	c.Image.DrawImage(img, op)
 }
 
 // DecodeImage decodes PNG, JPEG or GIF bytes into an ggfx.Image.
@@ -357,15 +250,15 @@ type AsyncImageWidget struct {
 	src         property.Value[string]
 	loader      ImageLoader
 	maxSize     int // a MaxSize, 0 to decode for the display, or fullSize
-	placeholder Widget
-	fallback    Widget
+	placeholder ggui.Widget
+	fallback    ggui.Widget
 	inner       *ImageWidget
 	cache       *imageCache
 	hs          *asyncHandles
 	box         imageBox // the room the last layout gave the image
 	scale       float64  // device pixels per logical pixel where it was last painted
 	waiter      imgcache.Waiter
-	status      AsyncStatus
+	status      ggui.AsyncStatus
 	err         error
 }
 
@@ -379,7 +272,7 @@ const fullSize = -1
 type asyncHandles struct {
 	cur, next       *imgcache.Handle[*ggfx.Image]
 	curKey, nextKey imgcache.Key // nextKey is the zero Key for nothing
-	source          Size         // the size cur's image was loaded at, once read
+	source          ggui.Size    // the size cur's image was loaded at, once read
 }
 
 // release lets go of both entries; it may run on the collector's
@@ -397,7 +290,7 @@ func (h *asyncHandles) clear() {
 }
 
 // setCur records that cur now holds k.
-func (h *asyncHandles) setCur(k imgcache.Key) { h.curKey, h.source = k, Size{} }
+func (h *asyncHandles) setCur(k imgcache.Key) { h.curKey, h.source = k, ggui.Size{} }
 
 // dropNext lets go of the copy next was loading.
 func (h *asyncHandles) dropNext() {
@@ -431,7 +324,7 @@ func (h *asyncHandles) swap() {
 // Once loaded it lays out and paints as Image does, with the same Fit,
 // Size, Width, Height, Pixelated and Alt.
 //
-//	ggui.AsyncImage(photo.Path).Size(96, 96).Fit(ggui.FitCover).
+//	ui.AsyncImage(photo.Path).Size(96, 96).Fit(ggui.FitCover).
 //		Placeholder(ui.Skeleton(96, 96))
 func AsyncImage(src string) *AsyncImageWidget {
 	a := &AsyncImageWidget{loader: LoadImage, inner: Image(nil), cache: defaultImageCache}
@@ -442,7 +335,7 @@ func AsyncImage(src string) *AsyncImageWidget {
 	// it is collected.
 	hs := a.hs
 	if reactive.CurrentOwner() != nil {
-		OnCleanup(hs.release)
+		ggui.OnCleanup(hs.release)
 	}
 	runtime.AddCleanup(a, func(hs *asyncHandles) { hs.release() }, hs)
 	return a
@@ -458,7 +351,7 @@ func (a *AsyncImageWidget) Src(src string) *AsyncImageWidget {
 }
 
 // BindSrc follows r for Src without a rebuild.
-func (a *AsyncImageWidget) BindSrc(r Readable[string]) *AsyncImageWidget {
+func (a *AsyncImageWidget) BindSrc(r ggui.Readable[string]) *AsyncImageWidget {
 	if a.src.Bind(r, "BindSrc") {
 		a.props.Changed()
 	}
@@ -497,21 +390,21 @@ func (a *AsyncImageWidget) FullResolution() *AsyncImageWidget {
 
 // Placeholder shows w until the image is ready, and when it fails without
 // a Fallback. With a fixed Size the placeholder is given that size.
-func (a *AsyncImageWidget) Placeholder(w Widget) *AsyncImageWidget {
+func (a *AsyncImageWidget) Placeholder(w ggui.Widget) *AsyncImageWidget {
 	defer property.Watch(&a.props, &a.placeholder)()
 	a.placeholder = w
 	return a
 }
 
 // Fallback shows w in place of an image that failed to load.
-func (a *AsyncImageWidget) Fallback(w Widget) *AsyncImageWidget {
+func (a *AsyncImageWidget) Fallback(w ggui.Widget) *AsyncImageWidget {
 	defer property.Watch(&a.props, &a.fallback)()
 	a.fallback = w
 	return a
 }
 
 // Fit sets how the image is placed when the box has another shape.
-func (a *AsyncImageWidget) Fit(f ImageFit) *AsyncImageWidget { a.inner.Fit(f); return a }
+func (a *AsyncImageWidget) Fit(f ggui.ImageFit) *AsyncImageWidget { a.inner.Fit(f); return a }
 
 // Size fixes both dimensions; see ImageWidget.Size.
 func (a *AsyncImageWidget) Size(width, height float64) *AsyncImageWidget {
@@ -533,7 +426,7 @@ func (a *AsyncImageWidget) Alt(s string) *AsyncImageWidget { a.inner.Alt(s); ret
 
 // Status reports whether the image is still loading, shown, or failed, as
 // of the last layout.
-func (a *AsyncImageWidget) Status() AsyncStatus { return a.status }
+func (a *AsyncImageWidget) Status() ggui.AsyncStatus { return a.status }
 
 // Err is why the image failed to load, when Status is Failed.
 func (a *AsyncImageWidget) Err() error { return a.err }
@@ -616,24 +509,6 @@ func (a *AsyncImageWidget) fixedKey(src string) (imgcache.Key, bool) {
 	return imgcache.Key{}, false
 }
 
-// hostScale is the device pixels per logical pixel of the window or probe
-// being laid out, 1 when there is none.
-func hostScale() float64 {
-	l := loopOf(reactive.CurrentOwner())
-	if l == nil {
-		l = runningLoop()
-	}
-	if l != nil {
-		switch h := l.host.(type) {
-		case *Window:
-			return h.canvas.Scale()
-		case *Probe:
-			return h.canvas.Scale()
-		}
-	}
-	return 1
-}
-
 // sync makes the handles hold the entries for the current src and reads
 // what to show. It runs on the UI thread, in Layout.
 //
@@ -641,19 +516,19 @@ func hostScale() float64 {
 // one already cached shows in this very frame. A change of size for the
 // same src waits for Paint, which knows the room the image was finally
 // given; Layout may be asked to measure it under other bounds first.
-func (a *AsyncImageWidget) sync(c Constraints) {
+func (a *AsyncImageWidget) sync(c ggui.Constraints) {
 	src := a.src.Get()
 	a.box = a.inner.drawBound(c)
 	if src == "" {
 		a.hs.clear()
-		a.status, a.err, a.inner.img, a.inner.source = Failed, errNoSrc, nil, Size{}
+		a.status, a.err, a.inner.img, a.inner.source = ggui.Failed, errNoSrc, nil, ggui.Size{}
 		return
 	}
 	want, fixed := a.fixedKey(src)
 	if !fixed {
 		scale := a.scale
 		if scale == 0 {
-			scale = hostScale()
+			scale = ggui.UseScale()
 		}
 		want = displayKey(src, a.box, scale)
 	}
@@ -734,36 +609,35 @@ func (a *AsyncImageWidget) read() {
 	}
 	a.inner.img, a.err = img, err
 	a.status = asyncStatus(st)
-	a.inner.source = Size{}
-	if a.status == Ready && a.maxSize <= 0 {
+	a.inner.source = ggui.Size{}
+	if a.status == ggui.Ready && a.maxSize <= 0 {
 		// A copy decoded for the display lays out as the image does. The
 		// size it was loaded at is the same for every copy of the src, so
 		// it is asked for once per Key.
-		if hs.source == (Size{}) {
+		if hs.source == (ggui.Size{}) {
 			s := hs.cur.Source()
-			hs.source = Sz(float64(s.X), float64(s.Y))
+			hs.source = ggui.Sz(float64(s.X), float64(s.Y))
 		}
 		a.inner.source = hs.source
 	}
 }
 
-// notifier is how the cache tells the widget a load ended.
+// notifier is how the cache tells the widget a load ended: through the
+// host the widget is laid out under, which posts it to the UI thread, and
+// not at all when there is none.
 func (a *AsyncImageWidget) notifier() imgcache.Waiter {
 	if a.waiter.Notify != nil {
 		return a.waiter
 	}
-	post := loopPost(reactive.CurrentOwner())
-	if l := runningLoop(); post == nil && l != nil {
-		post = l.post
-	}
-	if post == nil {
+	host, ok := ggui.LookupHost()
+	if !ok || host == nil {
 		return imgcache.Waiter{}
 	}
 	// The cache keeps notify until the load ends; holding the widget
 	// weakly lets a widget dropped meanwhile be collected, and its cleanup
 	// cancel the load.
 	wa := weak.Make(a)
-	a.waiter = imgcache.Waiter{Post: post, Notify: func() {
+	a.waiter = imgcache.Waiter{Post: host.Post, Notify: func() {
 		if a := wa.Value(); a != nil {
 			a.props.Changed()
 		}
@@ -771,41 +645,41 @@ func (a *AsyncImageWidget) notifier() imgcache.Waiter {
 	return a.waiter
 }
 
-// Layout implements Widget.
-func (a *AsyncImageWidget) Layout(c Constraints, env Env) Size {
+// Layout implements ggui.Widget.
+func (a *AsyncImageWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer a.props.Layout().EndLayout()
 	a.inner.props.Read()
 	a.sync(c)
-	if a.status == Ready {
+	if a.status == ggui.Ready {
 		return a.inner.Layout(c, env)
 	}
 	w, h := a.inner.width, a.inner.height
 	if p := a.shown(); p != nil {
 		if w > 0 && h > 0 {
-			c = Tight(c.Constrain(Sz(w, h)))
+			c = ggui.Tight(c.Constrain(ggui.Sz(w, h)))
 		}
 		return p.Layout(c, env)
 	}
-	return c.Constrain(Sz(w, h))
+	return c.Constrain(ggui.Sz(w, h))
 }
 
 // shown is the widget painted in place of the image, or nil.
-func (a *AsyncImageWidget) shown() Widget {
-	if a.status == Failed && a.fallback != nil {
+func (a *AsyncImageWidget) shown() ggui.Widget {
+	if a.status == ggui.Failed && a.fallback != nil {
 		return a.fallback
 	}
 	return a.placeholder
 }
 
-// Paint implements Widget.
-func (a *AsyncImageWidget) Paint(dst *Canvas, r Rect) {
+// Paint implements ggui.Widget.
+func (a *AsyncImageWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	a.resize(dst.Scale())
-	if a.status == Ready {
+	if a.status == ggui.Ready {
 		a.inner.Paint(dst, r)
 		return
 	}
 	if a.inner.alt != "" {
-		dst.Leaf(r, Node{Role: RoleImage, Name: a.inner.alt})
+		dst.Leaf(r, ggui.Node{Role: ggui.RoleImage, Name: a.inner.alt})
 	}
 	if p := a.shown(); p != nil {
 		dst.Paint(p, r)
@@ -831,7 +705,7 @@ func (a *AsyncImageWidget) resize(scale float64) {
 	before, img := a.status, a.inner.img
 	a.retarget(k)
 	a.read()
-	if a.status != before || a.status == Ready && a.inner.img != img {
+	if a.status != before || a.status == ggui.Ready && a.inner.img != img {
 		a.props.Changed()
 	}
 }
@@ -874,12 +748,12 @@ func freeImage(img *ggfx.Image) {
 }
 
 // asyncStatus is the AsyncStatus of a cache entry's.
-func asyncStatus(s imgcache.Status) AsyncStatus {
+func asyncStatus(s imgcache.Status) ggui.AsyncStatus {
 	switch s {
 	case imgcache.Ready:
-		return Ready
+		return ggui.Ready
 	case imgcache.Failed:
-		return Failed
+		return ggui.Failed
 	}
-	return Pending
+	return ggui.Pending
 }
