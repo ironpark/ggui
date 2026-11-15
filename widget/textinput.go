@@ -123,8 +123,12 @@ type TextInputWidget struct {
 	// env is the last Layout's: an edit that changes the editor's height,
 	// or a write to its binding, tells ggui.Invalidate about it, and the
 	// Cached above the editor measures it again.
-	env         ggui.Env
-	resolved    ggui.TextStyle
+	env      ggui.Env
+	resolved ggui.TextStyle
+	// colors colours stretches of the text shown; see Colors. pieces is
+	// the scratch colorPieces cuts a line into.
+	colors      func(text string) []TextColor
+	pieces      []TextColor
 	muted       color.Color
 	selection   color.Color
 	rect        ggui.Rect       // where it was last painted, in logical pixels
@@ -400,6 +404,23 @@ func (t *TextInputWidget) ClaimsChord(ev ggui.KeyEvent) bool {
 		return t.multiline && t.onSubmit != nil && m.Cmd()
 	}
 	return false
+}
+
+// TextColor colours the bytes [Start, End) of the text an editor shows.
+// Color may be one the environment resolves, as a theme's.
+type TextColor struct {
+	Start, End int
+	Color      color.Color
+}
+
+// Colors colours stretches of the text as fn says, asked with the text
+// shown, the IME's composition in it, each time it is drawn, so it should
+// be cheap or remember its last answer; the rest has the style's colour.
+// Stretches are in order and do not overlap. A password keeps the one
+// colour.
+func (t *TextInputWidget) Colors(fn func(text string) []TextColor) *TextInputWidget {
+	t.colors = fn
+	return t
 }
 
 // Password masks every rune with a bullet.
@@ -762,9 +783,7 @@ func (t *TextInputWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		op.ColorScale.ScaleWithColor(t.muted)
 		fontsys.DrawText(clip.Image, t.placeholder, t.face(dst.Scale()), op)
 	} else {
-		op.ColorScale.ScaleWithColor(t.resolved.Color)
-		op.GeoM.Reset()
-		t.drawLine(clip, shown, bl, x0, r.Origin.Y, op)
+		t.drawText(clip, shown, textlayout.Span{End: len(shown)}, bl, t.textColors(shown), x0, r.Origin.Y, op)
 	}
 
 	if t.composition != "" {
@@ -846,14 +865,11 @@ func (t *TextInputWidget) paintLines(dst *ggui.Canvas, r ggui.Rect) {
 		op.ColorScale.ScaleWithColor(t.muted)
 		fontsys.DrawText(clip.Image, t.placeholder, t.face(dst.Scale()), op)
 	} else {
-		op.ColorScale.ScaleWithColor(t.resolved.Color)
+		colors := t.textColors(shown)
 		for i, sp := range spans {
-			if !shows(i) {
-				continue
+			if shows(i) {
+				t.drawText(clip, shown, sp, t.bidiAt(wrapped, i), colors, x0, lineY(i), op)
 			}
-			line := shown[sp.Start:sp.End]
-			op.GeoM.Reset()
-			t.drawLine(clip, line, t.bidiAt(wrapped, i), x0, lineY(i), op)
 		}
 	}
 
@@ -909,19 +925,93 @@ func (t *TextInputWidget) spanX(s string, sp textlayout.Span, bl *editlayout.Lin
 	}
 }
 
+// drawText draws the line sp of s, laid out as bl or as it is when bl is
+// nil, with its top left at x, y: in the style's colour, and the pieces
+// colors colours each in its own, the line drawn again within where each
+// piece stands, so it is shaped once, in either direction. op is reused.
+func (t *TextInputWidget) drawText(dst *ggui.Canvas, s string, sp textlayout.Span, bl *editlayout.Line, colors []TextColor, x, y float64, op *text.DrawOptions) {
+	line := s[sp.Start:sp.End]
+	if len(colors) == 0 {
+		t.drawLine(dst, line, bl, x, y, op, t.resolved.Color)
+		return
+	}
+	t.pieces = colorPieces(t.pieces[:0], sp, colors)
+	h, w := t.height(), t.lineWidth(s, sp, bl)
+	for _, p := range t.pieces {
+		col := t.resolved.Color
+		if p.Color != nil {
+			col = ggui.ResolveColor(p.Color, t.env)
+		}
+		t.spanX(s, sp, bl, p.Start, p.End, 0, func(a, b float64) {
+			// A glyph may stand out past the line's ends, as an italic's
+			// does: the clip there runs on.
+			if a <= 0 {
+				a -= h
+			}
+			if b >= w {
+				b += h
+			}
+			t.drawLine(dst.Clip(ggui.Rct(ggui.Pt(x+a, y), ggui.Sz(b-a, h))), line, bl, x, y, op, col)
+		})
+	}
+}
+
+// lineWidth is how wide the line sp of s is laid out as bl, or as it is
+// when bl is nil.
+func (t *TextInputWidget) lineWidth(s string, sp textlayout.Span, bl *editlayout.Line) float64 {
+	if bl != nil {
+		return bl.Width()
+	}
+	return t.advance(s[sp.Start:sp.End])
+}
+
 // drawLine draws line, laid out as bl or as it is when bl is nil, with its
-// top left at x, y. op holds the color, and a GeoM drawLine moves.
-func (t *TextInputWidget) drawLine(dst *ggui.Canvas, line string, bl *editlayout.Line, x, y float64, op *text.DrawOptions) {
+// top left at x, y, in col. op is reused.
+func (t *TextInputWidget) drawLine(dst *ggui.Canvas, line string, bl *editlayout.Line, x, y float64, op *text.DrawOptions, col color.Color) {
 	if bl == nil {
+		op.GeoM.Reset()
+		op.ColorScale.Reset()
 		op.GeoM.Translate(px(dst, x), px(dst, y))
+		op.ColorScale.ScaleWithColor(col)
 		fontsys.DrawText(dst.Image, t.display(line), t.face(dst.Scale()), op)
 		return
 	}
-	col := t.resolved.Color
 	baseline := t.face(dst.Scale()).Metrics().HAscent
 	bl.Draw(dst.Image, &t.pieceOp, dst.Scale(), baseline,
 		func(int) color.Color { return col },
 		func(op *text.DrawOptions) { op.GeoM.Translate(px(dst, x), px(dst, y)) })
+}
+
+// textColors is what Colors says of shown, nil for none or a password.
+func (t *TextInputWidget) textColors(shown string) []TextColor {
+	if t.colors == nil || t.password || shown == "" {
+		return nil
+	}
+	return t.colors(shown)
+}
+
+// colorPieces appends to out the pieces of the line sp that colors
+// colours, those between them with no Color: in order, none empty,
+// covering the line. A stretch out of order, overlapping the one before,
+// is left out.
+func colorPieces(out []TextColor, sp textlayout.Span, colors []TextColor) []TextColor {
+	add := func(a, b int, c color.Color) {
+		if a < b {
+			out = append(out, TextColor{Start: a, End: b, Color: c})
+		}
+	}
+	at := sp.Start
+	for _, c := range colors {
+		a, b := max(c.Start, sp.Start), min(c.End, sp.End)
+		if b <= a || a < at {
+			continue
+		}
+		add(at, a, nil)
+		add(a, b, c.Color)
+		at = b
+	}
+	add(at, sp.End, nil)
+	return out
 }
 
 // indexAt returns the byte offset in the text nearest to a logical point.

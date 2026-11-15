@@ -147,6 +147,12 @@ func (f *TextFieldWidget) Filter(fn func(string) string) *TextFieldWidget {
 // Style merges ts onto the editor's text style.
 func (f *TextFieldWidget) Style(ts ggui.TextStyle) *TextFieldWidget { f.input.Style(ts); return f }
 
+// Colors colours stretches of the text; see widget.TextInputWidget.Colors.
+func (f *TextFieldWidget) Colors(fn func(text string) []widget.TextColor) *TextFieldWidget {
+	f.input.Colors(fn)
+	return f
+}
+
 // Input returns the editor inside, for Focused and the editor's own setters.
 func (f *TextFieldWidget) Input() *widget.TextInputWidget { return f.input }
 
