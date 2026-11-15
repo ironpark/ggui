@@ -1,12 +1,12 @@
 //go:build ggui_debug
 
-package ggui
+package reactive
 
 import (
+	"reflect"
 	"sync"
 	"weak"
 
-	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/reactive/goid"
 )
 
@@ -15,7 +15,7 @@ import (
 var (
 	watchedMu sync.Mutex
 	watched   []func(report func(store, sel string)) (live bool)
-	// checkMu has checkStores check one at a time.
+	// checkMu has CheckStores check one at a time.
 	checkMu sync.Mutex
 )
 
@@ -33,16 +33,27 @@ type selectCheck struct {
 }
 
 func watchSelect[M, T any](s *Store[M], d *DerivedValue[T], fn func(M) T) {
-	s.checks = append(s.checks, selectCheck{reactive.Origin(), func() (bool, bool) {
-		if reactive.Disposed(d) {
+	s.checks = append(s.checks, selectCheck{Origin(), func() (bool, bool) {
+		// A disposed Select keeps its last value, which no one reads.
+		if d.eff.disposed {
 			return false, false
 		}
-		return !reactive.Same(d, Untrack(d.Get), fn(s.model)), true
+		return !same(d, Untrack(d.Get), fn(s.model)), true
 	}})
 }
 
+// same reports whether m's equality takes a and b for one value, falling
+// back on reflect.DeepEqual where m has none; for the check comparing a
+// result with the one m holds.
+func same[T any](m *DerivedValue[T], a, b T) bool {
+	if eq := m.sig.eq; eq != nil {
+		return eq(a, b)
+	}
+	return reflect.DeepEqual(a, b)
+}
+
 func watchStore[M any](s *Store[M]) {
-	s.origin = reactive.Origin()
+	s.origin = Origin()
 	p, g := weak.Make(s), goid.ID()
 	watchedMu.Lock()
 	defer watchedMu.Unlock()
@@ -56,9 +67,10 @@ func watchStore[M any](s *Store[M]) {
 	})
 }
 
-// checkStores reports a Select whose model changed with nothing published,
-// once per place it was made.
-func checkStores() {
+// CheckStores reports a Select whose model changed with nothing published,
+// once per place it was made. The frame loop calls it after each frame's
+// input.
+func CheckStores() {
 	// Frames on goroutines of their own check at once; one at a time, or
 	// one would cut watched down below the length another read.
 	checkMu.Lock()
@@ -79,7 +91,7 @@ func checkStores() {
 }
 
 func reportStale(store, sel string) {
-	reactive.ReportOnce("store "+sel, "ggui: the model of the Store made at %s changed without being published, so the Select at %s shows a stale value; "+
+	ReportOnce("store "+sel, "ggui: the model of the Store made at %s changed without being published, so the Select at %s shows a stale value; "+
 		"change the model in Store.Update or Store.Action, or call Store.Changed after changing it", store, sel)
 }
 

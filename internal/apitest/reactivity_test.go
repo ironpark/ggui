@@ -1,7 +1,9 @@
 package apitest_test
 
 import (
+	"bytes"
 	"errors"
+	"log"
 	"reflect"
 	"slices"
 	"strconv"
@@ -170,6 +172,38 @@ func TestSelectBindWritesThroughUpdate(t *testing.T) {
 	store.Action(func(m *storeModel) { m.title = "w" })()
 	if ggui.Untrack(b.Get) != "w" {
 		t.Fatalf("after Action: %q", ggui.Untrack(b.Get))
+	}
+}
+
+// A debug build reports a model changed with nothing published, once, and
+// stays quiet about one changed through Update. The frame is what checks.
+func TestStoreReportsAChangeLeftUnpublished(t *testing.T) {
+	if !reactive.Debug {
+		t.Skip("only a ggui_debug build checks a store")
+	}
+	var out bytes.Buffer
+	prev := log.Writer()
+	log.SetOutput(&out)
+	defer log.SetOutput(prev)
+
+	store := ggui.NewStore(&storeModel{title: "a"})
+	title := ggui.Select(store, func(m *storeModel) string { return m.title })
+	p := ggui.ProbeBuilder(func() ggui.Widget { return ggui.TextOf(title) }, ggui.Sz(100, 20))
+	defer p.Close()
+	p.Frame()
+	store.Update(func(m *storeModel) { m.title = "b" })
+	p.Frame()
+	if out.Len() != 0 {
+		t.Fatalf("reported a published change:\n%s", out.String())
+	}
+	store.Model().title = "c"
+	p.Frame()
+	p.Frame()
+	if n := strings.Count(out.String(), "changed without being published"); n != 1 {
+		t.Fatalf("logged %d reports, want 1:\n%s", n, out.String())
+	}
+	if !strings.Contains(out.String(), "reactivity_test.go") {
+		t.Errorf("the report does not name the Select:\n%s", out.String())
 	}
 }
 

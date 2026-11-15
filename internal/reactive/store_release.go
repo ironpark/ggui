@@ -1,6 +1,6 @@
 //go:build !ggui_debug
 
-package ggui
+package reactive
 
 // storeChecks is what a ggui_debug build checks a Store with; nothing here.
 //
@@ -11,4 +11,6 @@ func watchStore[M any](*Store[M]) {}
 
 func watchSelect[M, T any](*Store[M], *DerivedValue[T], func(M) T) {}
 
-func checkStores() {}
+// CheckStores reports a Select whose model changed with nothing published,
+// in a ggui_debug build; nothing here.
+func CheckStores() {}
