@@ -4,7 +4,12 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/ironpark/ggui/internal/gfxtest"
 )
+
+// The tests paint with no renderer: see gfxtest.MainHeadless.
+func TestMain(m *testing.M) { gfxtest.MainHeadless(m) }
 
 // TestWidgetStaysBelowTheDesignSystem keeps the unstyled widgets free of
 // the themed library and what it embeds: ui imports widget, never the

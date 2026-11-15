@@ -13,7 +13,12 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/widget"
+
+	"github.com/ironpark/ggui/internal/gfxtest"
 )
+
+// The tests paint with no renderer: see gfxtest.MainHeadless.
+func TestMain(m *testing.M) { gfxtest.MainHeadless(m) }
 
 // probe is a fixed-size widget that records the Rect it was painted in.
 func probe(w, h float64, got *ggui.Rect) ggui.Widget {
