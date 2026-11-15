@@ -6,7 +6,12 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggfx"
+
+	"github.com/ironpark/ggui/internal/gfxtest"
 )
+
+// The tests paint with no renderer: see gfxtest.MainHeadless.
+func TestMain(m *testing.M) { gfxtest.MainHeadless(m) }
 
 // probeFrames returns a Probe painting w into an image of its own, a few
 // frames in, so that what each later frame allocates is the frame's own.

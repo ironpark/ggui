@@ -6,7 +6,12 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/ironpark/ggui/internal/gfxtest"
 )
+
+// The tests paint with no renderer: see gfxtest.MainHeadless.
+func TestMain(m *testing.M) { gfxtest.MainHeadless(m) }
 
 // showsImages are the widgets that take an image to show. An image is a
 // *ggfx.Image, which ggui does not rename, but they draw it through the
