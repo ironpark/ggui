@@ -157,10 +157,7 @@ func TestTextInputCommitsAndRevertsADraft(t *testing.T) {
 	}
 }
 
-type storeModel struct {
-	title string
-	tags  []string
-}
+type storeModel struct{ title string }
 
 // SelectBind hands a control's edit to the model as an Update.
 func TestSelectBindWritesThroughUpdate(t *testing.T) {
