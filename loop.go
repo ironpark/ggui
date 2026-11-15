@@ -15,6 +15,7 @@ import (
 	"github.com/ironpark/ggui/internal/fontsys"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/internal/third_party/text"
 	"github.com/ironpark/ggui/runtime"
 )
 
@@ -70,9 +71,14 @@ func cycle(rt *reactive.Runtime) error {
 }
 
 // frameLoop is the part of a frame loop App and Probe share: the root owner
-// the tree is built under, the posted work, and the record of the last
-// layout, which lets a still frame skip layout.
+// the tree is built under, the posted work, the record of the last layout,
+// which lets a still frame skip layout, and what a frame paints into and
+// routes input with.
 type frameLoop struct {
+	canvas  Canvas // also holds the frame's screen-pixels-per-logical-pixel scale
+	input   inputState
+	overlay Overlay // drawn over every frame and offered input first; a window's inspector while it is on
+
 	// contained are the window regions changes made in reactive.Contained
 	// since the last frame show in; see damage.go.
 	contained []Rect
@@ -140,7 +146,11 @@ func (l *frameLoop) OnCloseRequest(fn func() bool) {
 }
 
 // closeAllowed runs the close handlers and reports whether they all agree.
+// A loop that closed already allows nothing and asks none of them.
 func (l *frameLoop) closeAllowed() bool {
+	if l.closed {
+		return false
+	}
 	for _, fn := range l.closeRequests {
 		if !fn() {
 			return false
@@ -153,6 +163,56 @@ func (l *frameLoop) closeAllowed() bool {
 // runtime.MemoryClipboard of its own under a Probe, or what
 // App.SetClipboard installed.
 func (l *frameLoop) Clipboard() runtime.Clipboard { return l.clipboard }
+
+// Post queues fn to run on the UI thread before the next frame's input. It
+// is the one way a goroutine may touch signals: do the work off the thread,
+// then Post the Set. Work posted by a callback runs next frame. Work posted
+// before the first frame, such as before App.Run, waits and runs once,
+// after Setup and the first build.
+func (l *frameLoop) Post(fn func()) { l.post(fn) }
+
+// OnFrame registers fn to run once per frame, before input is dispatched
+// and effects are flushed, for per-frame work that no widget owns. OnKey
+// covers global shortcuts; Pointer and Focus cover input aimed at a widget.
+func (l *frameLoop) OnFrame(fn func()) {
+	l.frame = append(l.frame, fn)
+}
+
+// OnKey registers a window-wide key handler: fn sees every key press, with
+// its modifiers, before the focused widget does, and a press it returns
+// true for goes no further. A held key repeats into it as it would into a
+// widget. Shortcut is the simpler form for one chord; OnKey is for what a
+// chord cannot say. Keep the keys it takes away from a text field in
+// mind: returning true for Space while one is focused would eat the space
+// bar.
+func (l *frameLoop) OnKey(fn func(KeyEvent) bool) {
+	l.input.shortcuts = append(l.input.shortcuts, fn)
+}
+
+// Shortcut runs fn on the chord, such as "cmd+s" or "escape"; see
+// ParseChord for the names. A chord with a modifier runs before the
+// focused widget and takes the key from it. A bare key reaches the focused
+// widget first, and the shortcut runs only when the widget did not consume
+// it (a text field consumes every key but Escape), unless the handle is
+// made Exclusive. It panics on a chord ParseChord rejects.
+//
+//	app.Shortcut("cmd+s", save)
+//	app.Shortcut("space", func() { ggui.Add(count, 1) })
+func (l *frameLoop) Shortcut(chord string, fn func()) *ShortcutHandle {
+	return l.input.addShortcut(chord, fn)
+}
+
+// OnDrop registers fn to receive files dropped onto the window that no
+// drop zone under the cursor took; see PointerWidget.OnDrop for zones.
+func (l *frameLoop) OnDrop(fn func(DropEvent)) { l.input.drops = append(l.input.drops, fn) }
+
+// deliver routes a frame's input to the regions the last paint left, the
+// overlay offered it first.
+func (l *frameLoop) deliver(f frameInput) { l.input.dispatchOver(l.overlay, f) }
+
+// cursorAt returns the cursor shape the pointer at pos takes, over the
+// overlay or the regions the last paint left.
+func (l *frameLoop) cursorAt(pos Point) CursorShape { return l.input.cursorOver(l.overlay, pos) }
 
 // publishSemantics freezes what the frame just painted into a tree and
 // makes it the one readers see. focused is the region holding keyboard
@@ -252,9 +312,32 @@ func (l *frameLoop) runtime() *reactive.Runtime {
 // world is the world of the loop's runtime.
 func (l *frameLoop) world() *world { return worldOf(l.runtime()) }
 
-// start runs the setup functions and the builder under a fresh root owner.
-// Everything they create lives until close.
+// init makes l the loop of host, which builds its tree with build in rt.
+func (l *frameLoop) init(host Host, rt *reactive.Runtime, build Builder) {
+	l.host, l.rt, l.build = host, rt, build
+}
+
+// headless gives a loop no platform runs, a Probe's or a WindowProbe's, a
+// reactive runtime of its own in place of the one init was given, so that
+// its effects run in its frames alone, and stand-ins for the platform's
+// dialogs and clipboard.
+func (l *frameLoop) headless() {
+	l.rt = reactive.NewRuntime()
+	worldOf(l.rt) // made here, on the goroutine that made the probe
+	l.dialogs = &runtime.StubFilePicker{}
+	l.clipboard = &runtime.MemoryClipboard{}
+}
+
+// start runs the setup functions and the builder under a fresh root owner,
+// once: a loop that started or closed already starts no more. Everything
+// they create lives until close. Starting a loop from another loop's frame,
+// as opening a window from another window's frame does, leaves that frame's
+// loop current.
 func (l *frameLoop) start() {
+	if l.dispose != nil || l.closed {
+		return
+	}
+	prev := runningLoop()
 	setRunning(l)
 	l.dispose = l.runtime().Root(func() {
 		reactive.CurrentOwner().SetLoop(l)
@@ -266,10 +349,14 @@ func (l *frameLoop) start() {
 		l.root = remembering(l.build)
 	})
 	l.setup = nil
+	if prev != nil {
+		setRunning(prev)
+	}
 }
 
 // close disposes the root owner, and with it every effect, memo and
-// component the app created, then drops the tree.
+// component the app created, then drops the tree and the layers its paints
+// kept.
 func (l *frameLoop) close() {
 	l.postMu.Lock()
 	if l.closed {
@@ -284,6 +371,7 @@ func (l *frameLoop) close() {
 		l.dispose()
 	}
 	l.root = nil
+	l.canvas.freeLayers()
 }
 
 // post queues fn to run on the UI thread before the next frame's input.
@@ -308,11 +396,19 @@ func (l *frameLoop) hasPosted() bool {
 	return len(l.posted) > 0
 }
 
-// runFrame runs the OnFrame handlers, in registration order.
-func (l *frameLoop) runFrame() {
+// beginFrame opens a frame, before its input. The glyph, shaping and face
+// caches age by the frames they go unused, so a window or a headless run
+// showing thousands of strings over its frames lets go of those it stopped
+// showing. The loop becomes the running goroutine's, so that the handlers
+// the frame runs reach its host through UseHost. Then the OnFrame handlers
+// run, in registration order, and the work posted before the frame.
+func (l *frameLoop) beginFrame() {
+	text.AdvanceTick()
+	setRunning(l)
 	for _, fn := range l.frame {
 		fn()
 	}
+	l.runPosted()
 }
 
 // runPosted runs the work queued at the start of this frame, in order.
@@ -335,9 +431,19 @@ func (l *frameLoop) runPosted() {
 	}
 }
 
-// tick is the shared per-frame step after input: animations advance, then
-// effects run until quiet. It returns ErrCycle when they never are.
-func (l *frameLoop) tick(now time.Time) error {
+// tick is the shared per-frame step after input: the frame clock moves on
+// to its raw time, animations advance, then effects run until quiet. It
+// returns ErrCycle when they never are. A window's clock moves at most
+// maxFrameStep a frame (see begin); exact puts it at the raw time however
+// far off, as a Probe's is (see set).
+func (l *frameLoop) tick(exact bool) error {
+	clk := &l.world().frame
+	var now time.Time
+	if exact {
+		now = clk.set(clk.raw())
+	} else {
+		now = clk.begin(clk.raw())
+	}
 	setRunning(l)
 	checkStores()
 	// Animations made outside every tree, such as one a test built before
@@ -352,6 +458,14 @@ func (l *frameLoop) tick(now time.Time) error {
 		return cycle(rt)
 	}
 	return nil
+}
+
+// advanceClock moves the raw time the loop's frames advance from forward by
+// d, for a probe that steps time: the first call fixes it at the current
+// time, and from then on frames see only the time added.
+func (l *frameLoop) advanceClock(d time.Duration) {
+	f := &l.world().frame
+	f.pinned = f.raw().Add(d)
 }
 
 // layoutGen changes whenever something that can move a tree laid out on
@@ -393,9 +507,6 @@ func (l *frameLoop) paintTree(c *Canvas) {
 // paintPass is what one paint of a frame takes from the host running it,
 // which a Window and a Probe each hold.
 type paintPass struct {
-	canvas  *Canvas
-	in      *inputState
-	overlay Overlay
 	size    Size       // the logical viewport
 	tracing bool       // the inspector or a sink reads the paint's trace
 	semOff  bool       // nothing reads the accessibility tree
@@ -415,11 +526,11 @@ type paintHooks interface {
 
 // paint is the paint half of a frame, the same for a Window and a Probe:
 // settle effects and layout at the viewport size, paint the tree and its
-// overlays, hand the regions to input, publish the accessibility tree,
-// then paint the overlay. It reports false, painting nothing, when the loop
-// closed or had no root by the time it settled.
+// overlays into the loop's Canvas, hand the regions to input, publish the
+// accessibility tree, then paint the overlay. It reports false, painting
+// nothing, when the loop closed or had no root by the time it settled.
 func (l *frameLoop) paint(p paintPass) (bool, error) {
-	c := p.canvas
+	c, in, overlay := &l.canvas, &l.input, l.overlay
 	f := l.beginPaint(c)
 	defer endPaint(f)
 	// Last frame's regions stay readable while this frame paints, for
@@ -433,7 +544,7 @@ func (l *frameLoop) paint(p paintPass) (bool, error) {
 	unswap := func() { f.hits, f.prev = f.prev, spare }
 	f.logical = p.size
 	f.traceState.reset(p.tracing)
-	f.inputView.take(p.in)
+	f.inputView.take(in)
 	c.nextFrame()
 	c.resetSemantics()
 	f.semOff = p.semOff
@@ -449,25 +560,25 @@ func (l *frameLoop) paint(p paintPass) (bool, error) {
 		p.hooks.settled()
 	}
 	l.paintTree(c)
-	p.in.setRegions(f.hits, f.found)
-	p.in.observers = f.inputObservers
-	p.in.painted = f.shortcuts
-	p.in.refreshFocused()
+	in.setRegions(f.hits, f.found)
+	in.observers = f.inputObservers
+	in.painted = f.shortcuts
+	in.refreshFocused()
 	// A widget that changed its cursor over what the pointer just did, as
 	// a link underlined when a key is held, shows it this frame.
 	if f.hasPointer {
-		p.in.updateCursor(f.pointer)
+		in.updateCursor(f.pointer)
 	}
-	p.in.applyFocusRequest(f)
-	p.in.applyRevealRequests(f)
+	in.applyFocusRequest(f)
+	in.applyRevealRequests(f)
 	if !p.semOff {
-		l.publishSemantics(c, p.in.focused)
+		l.publishSemantics(c, in.focused)
 	}
 	if p.hooks != nil {
 		p.hooks.painted()
 	}
-	if p.overlay != nil {
-		p.overlay.Paint(c)
+	if overlay != nil {
+		overlay.Paint(c)
 	}
 	return true, nil
 }

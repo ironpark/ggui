@@ -6,9 +6,6 @@ import (
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/inspect"
-	"github.com/ironpark/ggui/internal/reactive"
-	"github.com/ironpark/ggui/internal/third_party/text"
-	"github.com/ironpark/ggui/runtime"
 )
 
 // Probe drives a widget tree without a window, for tests: it runs the same
@@ -27,15 +24,12 @@ import (
 // panic with ErrCycle.
 type Probe struct {
 	frameLoop
-	size   Size
-	in     inputState
-	canvas Canvas
+	size Size
 
 	pointer    Point
 	hasPointer bool
 
-	overlay Overlay
-	sinks   []func(*inspect.Frame)
+	sinks []func(*inspect.Frame)
 }
 
 // SetOverlay installs o over the probe's window, as App.SetOverlay does:
@@ -78,12 +72,8 @@ func NewProbe(w Widget, size Size) *Probe {
 //	p := ggui.ProbeBuilder(func() ggui.Widget { return ggui.Textf("%d", n) }, ggui.Sz(100, 20))
 func ProbeBuilder(build Builder, size Size) *Probe {
 	p := &Probe{size: size}
-	p.host = p
-	p.rt = reactive.NewRuntime()
-	worldOf(p.rt) // made here, on the goroutine that made the probe
-	p.build = build
-	p.dialogs = &runtime.StubFilePicker{}
-	p.clipboard = &runtime.MemoryClipboard{}
+	p.init(p, nil, build)
+	p.headless()
 	return p
 }
 
@@ -94,20 +84,14 @@ func (p *Probe) Setup(fn func()) *Probe {
 	return p
 }
 
-// Post queues fn to run before the next frame's input, as App.Post does.
-func (p *Probe) Post(fn func()) { p.post(fn) }
-
 // Close disposes the root owner and everything built under it.
-func (p *Probe) Close() {
-	p.close()
-	p.canvas.freeLayers()
-}
+func (p *Probe) Close() { p.close() }
 
 // RequestClose asks to close as a window's close button does: the
 // OnCloseRequest handlers run now, and the probe closes if they all agree.
 // It reports whether it closed.
 func (p *Probe) RequestClose() bool {
-	if p.closed || !p.closeAllowed() {
+	if !p.closeAllowed() {
 		return false
 	}
 	p.Close()
@@ -121,9 +105,7 @@ func (p *Probe) Resize(size Size) { p.size = size }
 // reads a DerivedValue or a widget built by an effect before the first frame. It
 // panics with ErrCycle when they never settle.
 func (p *Probe) Flush() {
-	if p.dispose == nil && !p.closed {
-		p.start()
-	}
+	p.start()
 	if err := p.settle(p.size); err != nil {
 		panic(err)
 	}
@@ -133,17 +115,9 @@ func (p *Probe) Flush() {
 // something moved and paint, collecting the hit regions the next event is
 // routed to. It returns the root's size.
 func (p *Probe) Frame() Size {
-	if p.dispose == nil && !p.closed {
-		p.start()
-	}
-	// The glyph, shaping and face caches age by the frames they go
-	// unused, as a window's do: a test or headless run showing thousands
-	// of strings over its frames lets go of those it stopped showing.
-	text.AdvanceTick()
-	p.runFrame()
-	p.runPosted()
-	clk := &p.world().frame
-	if err := p.tick(clk.set(clk.raw())); err != nil {
+	p.start()
+	p.beginFrame()
+	if err := p.tick(true); err != nil {
 		panic(err)
 	}
 	if p.root == nil {
@@ -153,7 +127,7 @@ func (p *Probe) Frame() Size {
 	defer c.trimLayers()
 	f := c.fs()
 	f.pointer, f.hasPointer = p.pointer, p.hasPointer
-	ok, err := p.paint(paintPass{canvas: c, in: &p.in, overlay: p.overlay, size: p.size, tracing: len(p.sinks) > 0, hooks: probeHooks{p}})
+	ok, err := p.paint(paintPass{size: p.size, tracing: len(p.sinks) > 0, hooks: probeHooks{p}})
 	if err != nil {
 		panic(err)
 	}
@@ -171,32 +145,18 @@ func (p *Probe) Frame() Size {
 //
 //	p.Advance(150 * time.Millisecond) // a 300ms tween is now halfway
 func (p *Probe) Advance(d time.Duration) {
-	f := &p.world().frame
-	f.pinned = f.raw().Add(d)
+	p.advanceClock(d)
 	p.Frame()
 }
 
 func (p *Probe) dispatch(f frameInput) {
 	p.pointer, p.hasPointer = f.pos, true
 	p.Frame()
-	p.in.dispatchOver(p.overlay, f)
+	p.deliver(f)
 	if err := p.settle(p.size); err != nil {
 		panic(err)
 	}
 }
-
-// OnFrame registers fn to run once per Frame, before posted work and
-// input, as App.OnFrame does.
-func (p *Probe) OnFrame(fn func()) { p.frame = append(p.frame, fn) }
-
-// OnKey registers a global key handler, as App.OnKey does.
-func (p *Probe) OnKey(fn func(KeyEvent) bool) { p.in.shortcuts = append(p.in.shortcuts, fn) }
-
-// Shortcut registers a chord, as App.Shortcut does.
-func (p *Probe) Shortcut(chord string, fn func()) *ShortcutHandle { return p.in.addShortcut(chord, fn) }
-
-// OnDrop registers a handler for drops no zone took, as App.OnDrop does.
-func (p *Probe) OnDrop(fn func(DropEvent)) { p.in.drops = append(p.in.drops, fn) }
 
 // Semantics runs a frame and returns the accessibility tree it published:
 // every element on screen, nested as the widgets described it, including
@@ -242,7 +202,7 @@ func (p *Probe) FindRole(role Role, label string) (Found, bool) {
 // region with a role when role is empty.
 func (p *Probe) FindAll(role Role) []Found {
 	p.Frame()
-	return foundIn(&p.in, role)
+	return foundIn(&p.input, role)
 }
 
 // foundIn returns every region in routes to with role, in paint order, or
@@ -366,10 +326,10 @@ func (p *Probe) DropPaths(pos Point, paths ...string) {
 }
 
 // Cursor returns the cursor shape the last event left the pointer with.
-func (p *Probe) Cursor() CursorShape { return p.in.cursorOver(p.overlay, p.pointer) }
+func (p *Probe) Cursor() CursorShape { return p.cursorAt(p.pointer) }
 
 // Focused reports whether some region holds keyboard focus.
-func (p *Probe) Focused() bool { return p.in.focused != nil }
+func (p *Probe) Focused() bool { return p.input.focused != nil }
 
 // probeHooks are a Probe's paintHooks: the sinks see each frame.
 type probeHooks struct{ p *Probe }

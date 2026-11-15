@@ -481,7 +481,7 @@ func (w *Window) Perform(id NodeID, act Action) {
 // test sees what came of it without having to drive the loop by hand. The
 // queueing is the same, so the path under test is the real one.
 func (p *Probe) Perform(id NodeID, act Action) {
-	p.Post(func() { perform(&p.canvas, &p.in, id, act) })
+	p.Post(func() { perform(&p.canvas, &p.input, id, act) })
 	p.Frame()
 }
 

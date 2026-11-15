@@ -976,7 +976,7 @@ func TestRequestRevealScrollsWithoutFocusing(t *testing.T) {
 	if sc.offset != 50*6-70 {
 		t.Fatalf("offset = %v after revealing row 5, want %v", sc.offset, 50*6-70)
 	}
-	if p.in.focused != nil {
+	if p.input.focused != nil {
 		t.Fatal("RequestReveal moved focus")
 	}
 	reveal = -1
@@ -1327,8 +1327,8 @@ func TestHandlerInTwoRegionsIsFoundOnTop(t *testing.T) {
 	defer p.Close()
 	p.Frame()
 	p.Click(Pt(5, 5))
-	if p.in.focused == nil || p.in.focused.rect != twoPlacesA {
-		t.Fatalf("focused = %v, want the region at %v", p.in.focused, twoPlacesA)
+	if p.input.focused == nil || p.input.focused.rect != twoPlacesA {
+		t.Fatalf("focused = %v, want the region at %v", p.input.focused, twoPlacesA)
 	}
 	for _, step := range []struct {
 		both bool
@@ -1336,10 +1336,10 @@ func TestHandlerInTwoRegionsIsFoundOnTop(t *testing.T) {
 	}{{true, twoPlacesB}, {true, twoPlacesB}, {false, twoPlacesA}, {true, twoPlacesB}} {
 		w.both = step.both
 		p.Frame()
-		if p.in.focused == nil || p.in.focused.rect != step.want {
-			t.Fatalf("both=%v: focused = %v, want the region at %v", step.both, p.in.focused, step.want)
+		if p.input.focused == nil || p.input.focused.rect != step.want {
+			t.Fatalf("both=%v: focused = %v, want the region at %v", step.both, p.input.focused, step.want)
 		}
-		if r := p.in.findKeyRegion(p.in.focused); r == nil || r.rect != step.want {
+		if r := p.input.findKeyRegion(p.input.focused); r == nil || r.rect != step.want {
 			t.Fatalf("both=%v: found %v, want the region at %v", step.both, r, step.want)
 		}
 	}
@@ -1392,8 +1392,8 @@ func TestLookupFollowsRowsReordered(t *testing.T) {
 		w.rows = order
 		p.Frame()
 		at := Rct(Pt(0, float64(slices.Index(order, b))*20), Sz(100, 20))
-		if p.in.focused == nil || p.in.focused.rect != at {
-			t.Fatalf("order %d: focused = %v, want b at %v", i, p.in.focused, at)
+		if p.input.focused == nil || p.input.focused.rect != at {
+			t.Fatalf("order %d: focused = %v, want b at %v", i, p.input.focused, at)
 		}
 		p.Type(Mods{}, KeyA)
 		if b.keys != i+1 || a.keys+c.keys != 0 {
