@@ -132,7 +132,7 @@ tasks:
     desc: Run staticcheck for every platform the tree has code for
     # Code a platform does not compile looks unused on it, so each platform
     # is checked on its own. Install with
-    # go install honnef.co/go/tools/cmd/staticcheck@v0.8.1
+    # go install honnef.co/go/tools/cmd/staticcheck@v0.8.2
     cmds:
       - for: [darwin/arm64, linux/amd64, windows/amd64, windows/arm64]
         cmd: 'GOOS={{splitList "/" .ITEM | first}} GOARCH={{splitList "/" .ITEM | last}} staticcheck ./... ./examples/sqlite/... ./fonts/notoemoji/... ./icons/heroicons/... ./icons/lucide/... ./icons/tabler/...'
