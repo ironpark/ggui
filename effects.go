@@ -8,6 +8,7 @@ import (
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/render"
+	"github.com/ironpark/ggui/pkg/gem"
 )
 
 // Blur paints a subtree blurred by a Gaussian of sigma logical pixels, as
@@ -145,7 +146,7 @@ func (b *BlurWidget) BindSigma(r Readable[float64]) *BlurWidget {
 }
 
 // Baseline implements Baseliner: the child's.
-func (b *BlurWidget) Baseline() (float64, bool) { return baselineOf(b.child) }
+func (b *BlurWidget) Baseline() (float64, bool) { return BaselineOf(b.child) }
 
 // Layout implements Widget.
 func (b *BlurWidget) Layout(c Constraints, env Env) Size {
@@ -204,7 +205,7 @@ func (b *BackdropBlurWidget) Baseline() (float64, bool) {
 	if b.child == nil {
 		return 0, false
 	}
-	return baselineOf(b.child)
+	return BaselineOf(b.child)
 }
 
 // Layout implements Widget.
@@ -212,7 +213,7 @@ func (b *BackdropBlurWidget) Layout(c Constraints, env Env) Size {
 	defer b.props.Layout().EndLayout()
 	b.shown = b.sigma.Get()
 	if b.child == nil {
-		return c.Constrain(Sz(bounded(c.MaxW, 0), bounded(c.MaxH, 0)))
+		return c.Constrain(Sz(gem.Bounded(c.MaxW, 0), gem.Bounded(c.MaxH, 0)))
 	}
 	return b.child.Layout(c, env)
 }
@@ -257,12 +258,12 @@ func (o *OpacityWidget) BindOpacity(r Readable[float64]) *OpacityWidget {
 }
 
 // Baseline implements Baseliner: the child's.
-func (o *OpacityWidget) Baseline() (float64, bool) { return baselineOf(o.child) }
+func (o *OpacityWidget) Baseline() (float64, bool) { return BaselineOf(o.child) }
 
 // Layout implements Widget.
 func (o *OpacityWidget) Layout(c Constraints, env Env) Size {
 	defer o.props.Layout().EndLayout()
-	o.shown = clamp(o.opacity.Get(), 0, 1)
+	o.shown = gem.Clamp(o.opacity.Get(), 0, 1)
 	return o.child.Layout(c, env)
 }
 
@@ -368,7 +369,7 @@ func (c *Canvas) FadeEdges(r Rect, horizontal bool, lead, trail float64, paint f
 				return
 			}
 			op := &ggfx.DrawImageOptions{Blend: ggfx.BlendDestinationIn, Filter: ggfx.FilterLinear}
-			along, across := c.px(length)/fadeRampLength, c.px(pick(horizontal, r.Size.H, r.Size.W))
+			along, across := c.px(length)/fadeRampLength, c.px(gem.Pick(horizontal, r.Size.H, r.Size.W))
 			if flip {
 				along = -along
 			}
@@ -383,7 +384,7 @@ func (c *Canvas) FadeEdges(r Rect, horizontal bool, lead, trail float64, paint f
 			}
 			img.DrawImage(ramp, op)
 		}
-		start, stop := pick(horizontal, r.Origin.X, r.Origin.Y), pick(horizontal, r.Origin.X+r.Size.W, r.Origin.Y+r.Size.H)
+		start, stop := gem.Pick(horizontal, r.Origin.X, r.Origin.Y), gem.Pick(horizontal, r.Origin.X+r.Size.W, r.Origin.Y+r.Size.H)
 		end(start, min(lead, stop-start), false)
 		end(stop, min(trail, stop-start), true)
 		op := &ggfx.DrawImageOptions{}
@@ -567,7 +568,7 @@ func (t *TransformWidget) Matrix(m Affine) *TransformWidget {
 
 // Baseline implements Baseliner: the child's, where layout put it. A
 // transform moves what is painted, not where its neighbours align.
-func (t *TransformWidget) Baseline() (float64, bool) { return baselineOf(t.child) }
+func (t *TransformWidget) Baseline() (float64, bool) { return BaselineOf(t.child) }
 
 // Layout implements Widget.
 func (t *TransformWidget) Layout(c Constraints, env Env) Size {

@@ -612,7 +612,9 @@ pointing right, far enough that its ends reach the corners, as CSS's does.
 spaces colors evenly; give `GradientStop{Offset, Color}` values to place them.
 Up to 16 stops are drawn, colors blend premultiplied, and stops may be theme
 tokens, resolved at layout. For custom drawing use `dst.FillGradientRect`,
-`dst.FillGradientRoundRect` and `dst.FillGradientPath`.
+`dst.FillGradientRoundRect` and `dst.FillGradientPath`; a custom widget that
+takes a `Gradient` resolves its tokens with `g.Resolve(env)` in `Layout`, as
+it does a color's with `ResolveColor`.
 
 ## Component appearance
 

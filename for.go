@@ -8,6 +8,7 @@ import (
 
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/pkg/virtual"
 )
 
@@ -701,7 +702,7 @@ func (f *EachWidget[T, K]) paintLead(r Rect) {
 	if p == nil {
 		return
 	}
-	lead := pick(f.horizontal, r.Origin.X-p.rect.Origin.X, r.Origin.Y-p.rect.Origin.Y) + p.visualOffset()
+	lead := gem.Pick(f.horizontal, r.Origin.X-p.rect.Origin.X, r.Origin.Y-p.rect.Origin.Y) + p.visualOffset()
 	if lead != f.lead {
 		f.lead = lead
 		f.cache.invalidate()

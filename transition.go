@@ -8,6 +8,7 @@ import (
 
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/pkg/gem"
 )
 
 // TransitionWidget animates its child in when it first appears: it fades,
@@ -145,12 +146,12 @@ func (t *TransitionWidget) drive(progress float64, leaving bool) {
 // A leaving effect paints without accepting input. Call on each frame when
 // using a Motion to coordinate a panel and its backdrop.
 func (t *TransitionWidget) Progress(value float64, leaving bool) *TransitionWidget {
-	t.drive(clamp(value, 0, 1), leaving)
+	t.drive(gem.Clamp(value, 0, 1), leaving)
 	return t
 }
 
 // Baseline implements Baseliner: the child's, where it lands.
-func (t *TransitionWidget) Baseline() (float64, bool) { return baselineOf(t.child) }
+func (t *TransitionWidget) Baseline() (float64, bool) { return BaselineOf(t.child) }
 
 // Layout implements Widget.
 func (t *TransitionWidget) Layout(c Constraints, env Env) Size {
@@ -176,10 +177,10 @@ func (t *TransitionWidget) Paint(dst *Canvas, r Rect) {
 		dst.Retain(at, transitionSlot, transitionStart{start})
 		p = 1
 		if t.duration > 0 {
-			p = clamp(float64(now.Sub(start))/float64(t.duration), 0, 1)
+			p = gem.Clamp(float64(now.Sub(start))/float64(t.duration), 0, 1)
 		}
 		if p < 1 {
-			activeWorld().frame.animate()
+			Now() // a frame for the next step
 		}
 	}
 	if p >= 1 && !t.leaving {
@@ -249,7 +250,7 @@ func Presence(show Readable[bool], child Widget) Widget {
 		// Duration set from Layout — a theme token, say — is not frozen to
 		// whatever it was on the first frame. Tweened.Set reads it here too,
 		// so nothing changes under a run already in flight.
-		Watch(show, func(v bool) { p.Duration(t.duration).Set(pick(v, 1.0, 0.0)) })
+		Watch(show, func(v bool) { p.Duration(t.duration).Set(gem.Pick(v, 1.0, 0.0)) })
 		return Reactive(func() Widget {
 			shown, v := show.Get(), p.Get()
 			if !shown && v == 0 {
@@ -298,13 +299,13 @@ type switchEntry struct {
 func (e *switchEntry) progress(now time.Time) float64 {
 	d := e.d
 	if d <= 0 {
-		return pick(e.leaving, 0.0, 1.0)
+		return gem.Pick(e.leaving, 0.0, 1.0)
 	}
 	moved := float64(now.Sub(e.since)) / float64(d)
 	if e.leaving {
-		return clamp(e.from-moved, 0, 1)
+		return gem.Clamp(e.from-moved, 0, 1)
 	}
-	return clamp(e.from+moved, 0, 1)
+	return gem.Clamp(e.from+moved, 0, 1)
 }
 
 // Switcher builds a subtree for key's value, as Key does, and cross-fades
@@ -371,7 +372,7 @@ func (s *SwitcherWidget[K]) change(v K, owner *reactive.Computation, first bool)
 			e.from, e.since, e.leaving = e.progress(now), now, true
 		}
 	}
-	e := &switchEntry{since: now, from: pick(first, 1.0, 0.0), d: s.duration}
+	e := &switchEntry{since: now, from: gem.Pick(first, 1.0, 0.0), d: s.duration}
 	child, dispose := mountKeyed(owner, func() Widget { return s.build(v) })
 	e.dispose = dispose
 	if child == nil {
@@ -414,7 +415,7 @@ func (b *switcherBody[K]) Layout(c Constraints, env Env) Size {
 	var total Size
 	moving := false
 	for _, e := range s.entries {
-		e.t.drive(pick(s.reduced, 1.0, e.progress(now)), e.leaving)
+		e.t.drive(gem.Pick(s.reduced, 1.0, e.progress(now)), e.leaving)
 		moving = moving || e.leaving || e.t.progress < 1
 		size := e.t.Layout(c.Loosen(), env)
 		s.sizes = append(s.sizes, size)
@@ -440,7 +441,7 @@ func (b *switcherBody[K]) Paint(dst *Canvas, r Rect) {
 // Baseline implements Baseliner: the current subtree's.
 func (b *switcherBody[K]) Baseline() (float64, bool) {
 	if n := len(b.s.entries); n > 0 {
-		return baselineOf(b.s.entries[n-1].t)
+		return BaselineOf(b.s.entries[n-1].t)
 	}
 	return 0, false
 }
@@ -651,7 +652,7 @@ func (f *follower[T]) start(from, to T, e Easing) {
 // at is where the property is at now: to itself once there, so a target
 // lands exactly, whatever lerp makes of one.
 func (f *follower[T]) at(now time.Time, lerp func(a, b T, t float64) T) T {
-	p, moving := f.p.at(now)
+	p, moving := f.p.At(now)
 	if !moving {
 		return f.to
 	}

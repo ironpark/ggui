@@ -262,13 +262,13 @@ func (w *ContainWidget) Layout(c Constraints, env Env) Size {
 	check := w.hold.begin(env)
 	w.size = w.child.Layout(c, env.With(boundaryKey, &w.hold))
 	size := c.Constrain(w.size)
-	baseline, based := baselineOf(w.child)
+	baseline, based := BaselineOf(w.child)
 	w.hold.end(check, c, size, baseline, based)
 	return size
 }
 
 // Baseline implements Baseliner: the child's.
-func (w *ContainWidget) Baseline() (float64, bool) { return baselineOf(w.child) }
+func (w *ContainWidget) Baseline() (float64, bool) { return BaselineOf(w.child) }
 
 // Paint implements Widget: the child, clipped to r.
 func (w *ContainWidget) Paint(dst *Canvas, r Rect) {

@@ -569,17 +569,15 @@ func watchSystemDark() {
 // CurrentClipboard is the clipboard of the App or Probe whose frame is
 // running, for a widget that cuts, copies or pastes: text fields use it.
 // Replace an app's with App.SetClipboard; a Probe has one of its own.
-func CurrentClipboard() runtime.Clipboard { return currentClipboard() }
-
-// systemClipboard serves a clipboard use with no frame loop running.
-var systemClipboard = runtime.NativeClipboard()
-
-func currentClipboard() runtime.Clipboard {
+func CurrentClipboard() runtime.Clipboard {
 	if l := runningLoop(); l != nil && l.clipboard != nil {
 		return l.clipboard
 	}
 	return systemClipboard
 }
+
+// systemClipboard serves a clipboard use with no frame loop running.
+var systemClipboard = runtime.NativeClipboard()
 
 // Host is what App and Probe have in common: the frame loop's surface for
 // code that should run the same under a window and under a test. Write

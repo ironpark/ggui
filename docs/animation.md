@@ -31,6 +31,12 @@ momentum, overshoots a little and settles (`.Stiffness`, `.Damping`). Easings:
 animations once per frame, before effects are flushed. For a look that moves
 inside one widget, `Motion` is the same tween driven from `Paint` with the
 current time and no signal; `ui.Switch` slides its knob with one.
+`Target()` is where a `Motion` is heading, and `At(now)` its position and
+whether it is still moving, without asking for a frame as `Value` does: for
+a widget that eases several things along one `Motion` and asks for its
+frames itself. A widget that moves with time by its own reckoning keeps the
+frames coming by reading `Now()`, which marks the frame as one time drives;
+`FrameTime()` reads the same instant without that.
 
 ## Sizes that move
 

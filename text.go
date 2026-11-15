@@ -2,58 +2,21 @@ package ggui
 
 import (
 	"fmt"
-	"image"
 	"image/color"
 	"math"
 	"slices"
+	"strconv"
 
 	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggui/inspect"
 	"github.com/ironpark/ggui/internal/fontsys"
 	"github.com/ironpark/ggui/internal/paragraph"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
-	"github.com/ironpark/ggui/internal/textedit"
 	"github.com/ironpark/ggui/internal/textlayout"
 	"github.com/ironpark/ggui/internal/third_party/text"
 	"github.com/ironpark/ggui/pkg/gem"
 )
-
-// engine is st as the text engine sets text in it: its font, size, weight,
-// line height and tracking, beside the emoji font the active world chose. st must
-// be resolved.
-func (st TextStyle) engine() paragraph.Style {
-	return paragraph.Style{Font: st.Font.engine(), Size: st.Size, Weight: fontsys.Weight(st.Weight), LineHeight: st.LineHeight, Tracking: st.Tracking, Emoji: activeEmoji()}
-}
-
-// TextEngineStyle is st as the text engine sets text in it, with what st
-// leaves unset filled in as with no Env (Env.ResolveText's result is
-// returned as it is), and the generation of the active world's fonts,
-// which changes whenever a measurement made in them may no longer hold.
-//
-// TextEngineStyle is meant for ggui's own packages, such as widget, whose text
-// input lays its text out with the engine directly. It is not meant to be
-// called by anything else, which it cannot be, since its result's type is
-// internal, and it is not subject to any compatibility promise.
-func TextEngineStyle(st TextStyle) (style paragraph.Style, generation uint64) {
-	return st.resolved().engine(), fontGen()
-}
-
-// RenderText draws s in st on the CPU, with no GPU, window or App, into an
-// image just large enough to hold it: for icons, thumbnails, files and
-// tests. Lines break at hard breaks and, when maxWidth is positive, wrap to
-// maxWidth as Text wraps them. Fields st leaves unset are Text's defaults:
-// the built-in font, DefaultTextSize, black, and 1.2 times the size between
-// baselines. A pixel of the image is a pixel of st.Size; scale st.Size for a
-// denser image.
-//
-// Glyphs come from st.Font and its fallbacks, as Text draws them, and emoji
-// from the emoji font, in color. Text is shaped with go-text and drawn with
-// go-text/render; emoji are drawn as Text draws them, from sbix, CBDT,
-// COLRv0 or SVG glyphs, rasterized on the CPU.
-func RenderText(s string, st TextStyle, maxWidth float64) *image.RGBA {
-	st = st.resolved()
-	return paragraph.Render(s, st.engine(), st.Color, maxWidth)
-}
 
 // textBidi is a Text's lines in visual order, for the lines that need
 // reordering: every line in a right-to-left paragraph, and a line holding
@@ -104,7 +67,8 @@ func (t *TextWidget) layoutBidi(env Env, rewrapped bool) {
 
 // lineStyles is a line of a Text in its one style.
 func (t *TextWidget) lineStyles(line string) []paragraph.LineStyle {
-	return []paragraph.LineStyle{{Start: 0, End: len(line), Style: t.current().engine()}}
+	st, _ := t.engine()
+	return []paragraph.LineStyle{{Start: 0, End: len(line), Style: st}}
 }
 
 // paintBidi draws line i in visual order at y, aligned at align in r, and
@@ -136,108 +100,10 @@ func (t *TextWidget) PaintRotated(dst *Canvas, r Rect, radians float64) {
 	}
 	center := r.Center()
 	t.paintLines(dst, r, false, func(op *text.DrawOptions, x, y float64) {
-		op.GeoM.Translate(dst.px(x-center.X), dst.px(y-center.Y))
+		op.GeoM.Translate((x-center.X)*dst.Scale(), (y-center.Y)*dst.Scale())
 		op.GeoM.Rotate(radians)
-		op.GeoM.Translate(dst.px(center.X), dst.px(center.Y))
+		op.GeoM.Translate(center.X*dst.Scale(), center.Y*dst.Scale())
 	})
-}
-
-// DrawTextCells draws s as DrawTextStyle does, but with each grapheme at
-// the start of a cell of its own, cellW wide, from at: the layout of a
-// terminal or any other grid of monospaced text. A grid's cells are best a
-// whole number of device pixels, so that fills meet without seams, while a
-// font's advance rarely is (SF Mono is 8.03 pixels wide at 13pt), and text
-// drawn at its own advance would drift off the grid along a row. Each
-// grapheme is placed on a whole device pixel, so the error stays under
-// half a pixel instead of growing with the column. The run is shaped
-// once, so it costs what DrawTextStyle does rather than a draw per cell.
-func (c *Canvas) DrawTextCells(s string, st TextStyle, at Point, cellW float64) {
-	if c == nil || c.Image == nil || c.Image.Bounds().Empty() || s == "" {
-		return
-	}
-	st = st.resolved()
-	// A terminal draws a run per row and colour every frame, each a string
-	// of its own: the run's graphemes, glyphs, shifts and images are kept
-	// in buffers it reuses.
-	buf := theCellsBufPool.Get()
-	defer func() {
-		clear(buf.glyphs)
-		clear(buf.entries)
-		theCellsBufPool.Put(buf)
-	}()
-	buf.bounds = textedit.AppendBounds(buf.bounds[:0], s)
-	// A grid sets its own advance, so a cell's glyph is the font's, with
-	// no tracking.
-	face := st.Font.face(c.px(st.Size), st.Weight)
-	face = fontsys.PlainFace(face, s)
-	if face == nil {
-		// An emoji is drawn from a font of its own, with its own
-		// metrics: one grapheme at a time keeps it in its cell.
-		x := at.X
-		for k := 0; k+1 < len(buf.bounds); k++ {
-			c.DrawTextStyle(s[buf.bounds[k]:buf.bounds[k+1]], st, Pt(x, at.Y))
-			x += cellW
-		}
-		return
-	}
-
-	var tint, colored ggfx.ColorScale
-	tint.ScaleWithColor(st.Color)
-	colored.ScaleAlpha(tint.A())
-	x0, y0, cell := c.px(at.X), c.px(at.Y), c.px(cellW)
-
-	buf.glyphs = text.AppendLazyGlyphs(buf.glyphs[:0], s, face, nil)
-	buf.shifts = cellShifts(buf.shifts, buf.bounds, buf.glyphs, x0, cell)
-	// Realize every image before drawing any, as text.Draw does, so the
-	// atlas is written in one batch, then draw those on one atlas page as
-	// one.
-	buf.entries = buf.entries[:0]
-	for i, g := range buf.glyphs {
-		if g.ImageBounds.Empty() {
-			continue
-		}
-		if img := g.Image(); img != nil {
-			e := ggfx.ImageDraw{Image: img, X: x0 + (float64(g.ImageBounds.Min.X) + buf.shifts[i]), Y: y0 + float64(g.ImageBounds.Min.Y), ColorScale: tint}
-			if g.Colored() {
-				e.ColorScale = colored
-			}
-			buf.entries = append(buf.entries, e)
-		}
-	}
-	c.Image.DrawImages(buf.entries, nil)
-}
-
-// cellsBuf holds what DrawTextCells works out for a run between runs.
-type cellsBuf struct {
-	bounds  []int
-	glyphs  []text.LazyGlyph
-	shifts  []float64
-	entries []ggfx.ImageDraw
-}
-
-var theCellsBufPool = gem.Pool[*cellsBuf]{
-	New: func() *cellsBuf { return &cellsBuf{} },
-}
-
-// cellShifts is how far each glyph moves from where its run shaped it, in
-// device pixels, to start its grapheme's cell: the kth grapheme, from
-// bounds[k] to bounds[k+1] of the run as textedit.Bounds gives them, has
-// its first glyph at the whole pixel nearest x0+k·cell, and the rest of a
-// grapheme, its marks or the parts of a ligature, move with it. It is kept
-// in dst's storage when that has room.
-func cellShifts(dst []float64, bounds []int, glyphs []text.LazyGlyph, x0, cell float64) []float64 {
-	shifts := slices.Grow(dst[:0], len(glyphs))[:len(glyphs)]
-	k, shift := -1, 0.0
-	for i, g := range glyphs {
-		if g.StartIndexInBytes >= bounds[k+1] {
-			for k+1 < len(bounds)-1 && g.StartIndexInBytes >= bounds[k+1] {
-				k++
-			}
-			shift = math.Round(x0+float64(k)*cell) - x0 - g.OriginX
-		}
-		shifts[i] = shift
-	}
-	return shifts
 }
 
 // TextWidget draws text, wrapping it to the width it is given. Build one
@@ -258,7 +124,6 @@ type TextWidget struct {
 	align     float64
 	role      Role
 	opts      *textOpts // set by Textf and StyleKey only
-	cache     *CachedWidget
 
 	// Layout caches the wrapped lines, their widths and the size they add up
 	// to, and re-measures only when the text, the face or the width it must
@@ -509,12 +374,23 @@ func (t *TextWidget) Align(x float64) *TextWidget {
 
 // current is the resolved style from the last Layout, or the widget's own
 // style over the defaults before any Layout has run.
+//
+// An EnvColor is kept as it is then, with no Env to resolve it in, and
+// paints its RGBA.
 func (t *TextWidget) current() TextStyle {
 	if t.resolved.Font == nil {
-		return t.style.resolved()
+		st := Env{}.ResolveText(t.style)
+		if t.style.Color != nil {
+			st.Color = t.style.Color
+		}
+		return st
 	}
 	return t.resolved
 }
+
+// engine is the current style as the text engine sets text in it, and the
+// generation of its fonts.
+func (t *TextWidget) engine() (paragraph.Style, uint64) { return TextEngineStyle(t.current()) }
 
 // dir is the direction the lines were last ordered for: DirLTR, unless
 // they were laid out in another.
@@ -525,16 +401,36 @@ func (t *TextWidget) dir() TextDirection {
 	return t.bidi.dir
 }
 
+// startAlign is where a line of text starts by default: the left edge, or
+// the right one under DirRTL.
+func startAlign(d TextDirection) float64 {
+	if d == DirRTL {
+		return 1
+	}
+	return 0
+}
+
 // faceAt returns the face at the resolved size times scale, so that on a
 // HiDPI Canvas glyphs are rasterized at full resolution instead of scaled up.
 func (t *TextWidget) faceAt(scale float64) text.Face {
-	return t.current().face(scale)
+	st, _ := t.engine()
+	return faceOf(st, scale)
 }
 
-// spacing is the distance between baselines.
+// faceOf is the face text in st is drawn in at scale times its size, its
+// tracking with it.
+func faceOf(st paragraph.Style, scale float64) text.Face {
+	size := st.Size * scale
+	return st.Font.SpacedFaceFor(size, st.Weight, st.Tracking*size, st.Emoji)
+}
+
+// spacing is the distance between baselines. It is rounded as it is
+// returned, whether or not it is inlined: fused into the sums Layout makes
+// of it, it would come out a rounding error off, and a line box of 20
+// would be 20.000000000000004 tall.
 func (t *TextWidget) spacing() float64 {
 	st := t.current()
-	return st.Size * st.LineHeight
+	return float64(st.Size * st.LineHeight)
 }
 
 // Layout implements Widget.
@@ -549,7 +445,6 @@ func (t *TextWidget) Layout(c Constraints, env Env) Size {
 	} else {
 		t.value = t.content.Get()
 	}
-	t.cache, _ = env.Get(cacheOwner)
 	style, ok := env.Get(opts.styleKey)
 	if !ok {
 		style = opts.styleFallback
@@ -571,21 +466,22 @@ func (t *TextWidget) Layout(c Constraints, env Env) Size {
 // height, by s or by a style it inherits, rather than left the default:
 // its lines are then boxes of that height.
 func lineHeightSet(env Env, s TextStyle) bool {
-	return s.LineHeight != 0 || env.text.LineHeight != 0
+	return s.LineHeight != 0 || env.Text().LineHeight != 0
 }
 
 // layoutLines wraps, cuts and orders the lines for a width of maxW, when
 // any of what they depend on changed since the last time.
 func (t *TextWidget) layoutLines(maxW float64, env Env) {
-	face := t.faceAt(1)
+	st, gen := t.engine()
+	face := faceOf(st, 1)
 	fits := t.wrap || t.ellipsis || t.maxLines > 0
-	key := wrapKey{generation: fontGen(), value: t.value, font: t.resolved.Font, weight: t.resolved.Weight, size: t.resolved.Size, lineHeight: t.resolved.LineHeight, tracking: t.resolved.Tracking,
-		maxW: pick(fits, maxW, 0), maxLines: t.maxLines, ellipsis: t.ellipsis, lineBox: t.lineBox}
+	key := wrapKey{generation: gen, value: t.value, font: t.resolved.Font, weight: t.resolved.Weight, size: t.resolved.Size, lineHeight: t.resolved.LineHeight, tracking: t.resolved.Tracking,
+		maxW: gem.Pick(fits, maxW, 0), maxLines: t.maxLines, ellipsis: t.ellipsis, lineBox: t.lineBox}
 	rewrapped := key != t.wrapped
 	if rewrapped {
 		t.wrapped = key
 		t.glyphFace = nil // the lines' glyphs are of the lines before
-		t.lines = textlayout.Wrap(key.value, face, pick(t.wrap, key.maxW, 0))
+		t.lines = textlayout.Wrap(key.value, face, gem.Pick(t.wrap, key.maxW, 0))
 		if n := key.maxLines; n > 0 && len(t.lines) > n {
 			t.lines = t.lines[:n]
 			t.lines[n-1] = textlayout.Ellipsize(t.lines[n-1], face, key.maxW, true)
@@ -636,9 +532,17 @@ func (t *TextWidget) Paint(dst *Canvas, r Rect) {
 		return
 	}
 	t.paintLines(dst, r, true, func(op *text.DrawOptions, x, y float64) {
-		op.GeoM.Translate(dst.px(x), dst.px(y))
+		op.GeoM.Translate(x*dst.Scale(), y*dst.Scale())
 	})
 }
+
+// InspectFields implements inspect.Fielder.
+func (t *TextWidget) InspectFields() []inspect.Field {
+	return []inspect.Field{{Key: "Typography"}, {Key: "font size", Value: inspect.Num(t.resolved.Size) + " px", Number: true}, {Key: "line height", Value: inspect.Num(t.resolved.LineHeight), Number: true}, {Key: "color", Value: inspect.Color(t.resolved.Color)}, {Key: "wrap", Value: strconv.FormatBool(t.wrap)}, {Key: "lines", Value: strconv.Itoa(len(t.lines)), Number: true}}
+}
+
+// InspectLabel implements inspect.Labeler: the text it shows.
+func (t *TextWidget) InspectLabel() string { return t.value }
 
 // paintLines emits the semantics leaf, then draws every laid-out line with the
 // shared style and line-advance math. place positions one line: it receives the
@@ -661,9 +565,9 @@ func (t *TextWidget) paintLines(dst *Canvas, r Rect, upright bool, place func(op
 	face := t.faceAt(dst.Scale())
 	op := &t.drawOp
 	*op = text.DrawOptions{}
-	col := pick(t.style.Color != nil && !IsEnvColor(t.style.Color), t.style.Color, t.current().Color)
+	col := gem.Pick(t.style.Color != nil && !IsEnvColor(t.style.Color), t.style.Color, t.current().Color)
 	op.ColorScale.ScaleWithColor(col)
-	align := pick(t.alignSet, t.align, startAlign(t.dir()))
+	align := gem.Pick(t.alignSet, t.align, startAlign(t.dir()))
 	for i, line := range t.lines {
 		x := r.Origin.X + (r.Size.W-t.widths[i])*align
 		y := r.Origin.Y + t.lead + float64(i)*t.spacing()
@@ -775,7 +679,7 @@ func (s *StyledWidget) Layout(c Constraints, env Env) Size {
 }
 
 // Baseline implements Baseliner: the child's.
-func (s *StyledWidget) Baseline() (float64, bool) { return baselineOf(s.child) }
+func (s *StyledWidget) Baseline() (float64, bool) { return BaselineOf(s.child) }
 
 // Paint implements Widget.
 func (s *StyledWidget) Paint(dst *Canvas, r Rect) { dst.Paint(s.child, r) }

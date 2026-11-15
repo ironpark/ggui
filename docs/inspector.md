@@ -108,6 +108,14 @@ func (w *GaugeWidget) InspectFields() []inspect.Field {
 A `Field` with no value is a section heading; `Number` colors a measurement.
 `inspect.Num` and `inspect.Color` format the way the built-in widgets do.
 
+Three more hooks are optional. `inspect.Kinder`'s `InspectKind()` names the
+way a container lays its children out, for the badge after its name in the
+tree: `Row` and `Column` say flex, `Grid` grid. `inspect.Boxer`'s
+`InspectBox(size)` is a box model, padding inside a border, which the Layout
+pane draws as `Box`'s. `inspect.Labeler`'s `InspectLabel()` labels a widget
+in the tree by something other than its accessible name, as `Text` is by
+its contents.
+
 ## Frames for another viewer
 
 The panel reads an `inspect.Frame`: the widgets as painted, in paint order

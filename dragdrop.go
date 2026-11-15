@@ -8,6 +8,7 @@ import (
 
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/pkg/gem"
 )
 
 // Dragging inside the app: a DragSource is something the user can pick up
@@ -87,7 +88,7 @@ func (d *DragSourceWidget[T]) Paint(dst *Canvas, r Rect) {
 	if !d.dragging {
 		return
 	}
-	ghost := pick(d.preview != nil, d.preview, d.child)
+	ghost := gem.Pick(d.preview != nil, d.preview, d.child)
 	at := Rct(Pt(d.at.X-d.grab.X, d.at.Y-d.grab.Y), d.size)
 	dst.Overlay(func(dst *Canvas) {
 		dst.Inert().Layer(LayerOptions{Fade: 0.3}, func(layer *Canvas) { layer.Paint(ghost, at) })
@@ -408,7 +409,7 @@ func (l *ReorderableWidget[T, K]) Paint(dst *Canvas, r Rect) {
 	slot, span := 0, 0.0
 	if d >= 0 {
 		size := f.rects[d].Size
-		y := clamp(st.at.Y-st.grab.Y, r.Origin.Y, max(r.Origin.Y, r.Origin.Y+r.Size.H-size.H))
+		y := gem.Clamp(st.at.Y-st.grab.Y, r.Origin.Y, max(r.Origin.Y, r.Origin.Y+r.Size.H-size.H))
 		lifted = Rct(Pt(r.Origin.X+f.rects[d].Origin.X, y), size)
 		middle := y - r.Origin.Y + size.H/2
 		for j := range n {
@@ -416,7 +417,7 @@ func (l *ReorderableWidget[T, K]) Paint(dst *Canvas, r Rect) {
 				slot++
 			}
 		}
-		st.to = pick(slot <= d, slot, slot+1)
+		st.to = gem.Pick(slot <= d, slot, slot+1)
 		span = size.H + l.gap()
 	}
 	if st.settle != nil {
@@ -510,7 +511,7 @@ func (l *ReorderableWidget[T, K]) shiftRow(k K, i, d, slot int, span float64, no
 	m.MoveTo(target, now, dur)
 	dy := m.Value(now)
 	st.painted[k] = l.list.rects[i].Origin.Y + dy
-	if d < 0 && dy == 0 && m.to == 0 {
+	if d < 0 && dy == 0 && m.Target() == 0 {
 		delete(st.shift, k)
 	}
 	return dy
@@ -565,7 +566,7 @@ func (l *ReorderableWidget[T, K]) autoScroll(now time.Time) {
 	if v == 0 || (v < 0 && p.position() <= 0) || (v > 0 && p.position() >= p.maxOffset()) {
 		return
 	}
-	activeWorld().frame.animate() // keep scrolling while the row is held still
+	Now() // keep scrolling while the row is held still
 	if dt > 0 {
 		p.scrollTo(p.position() + v*reorderMaxSpeed*dt)
 	}
@@ -578,7 +579,7 @@ func (l *ReorderableWidget[T, K]) move(k K, delta int) bool {
 	if l.disabled || l.st.dragging || i < 0 || j < 0 || j >= len(l.list.keys) {
 		return false
 	}
-	l.commit(i, pick(delta < 0, j, j+1))
+	l.commit(i, gem.Pick(delta < 0, j, j+1))
 	l.st.reveal = &k
 	return true
 }
@@ -619,7 +620,7 @@ func (w *reorderRow[T, K]) Layout(c Constraints, env Env) Size {
 	return w.child.Layout(c, env.With(reorderRowKey, reorderTarget(w)))
 }
 
-func (w *reorderRow[T, K]) Baseline() (float64, bool) { return baselineOf(w.child) }
+func (w *reorderRow[T, K]) Baseline() (float64, bool) { return BaselineOf(w.child) }
 
 func (w *reorderRow[T, K]) Paint(dst *Canvas, r Rect) {
 	w.rect = r

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/pkg/kinetics"
 	"github.com/ironpark/ggwd"
 )
@@ -294,7 +295,7 @@ func (k *keyed) Paint(dst *Canvas, r Rect)        { dst.HitKey(r, k) }
 func (k *keyed) HandleKey(ev KeyEvent) {
 	switch ev.Kind {
 	case KeyFocus:
-		*k.log = append(*k.log, k.id+pick(ev.Key == KeyTab, "+tab", ""))
+		*k.log = append(*k.log, k.id+gem.Pick(ev.Key == KeyTab, "+tab", ""))
 	case KeyBlur:
 		*k.log = append(*k.log, "-"+k.id)
 	case KeyPress:

@@ -75,6 +75,26 @@ type Fielder interface {
 	InspectFields() []Field
 }
 
+// Kinder is a widget that lays its children out in a way of its own, and
+// names it for the badge its row in the tree shows after its name: flex,
+// grid, scroll. Empty shows none.
+type Kinder interface {
+	InspectKind() string
+}
+
+// Boxer is a widget with a box model, padding inside a border, which the
+// Layout pane draws around its content. size is the size it was painted
+// at, from which a widget with no child works out what lies inside.
+type Boxer interface {
+	InspectBox(size Size) Box
+}
+
+// Labeler is a widget whose label in the tree is something other than its
+// accessible name: a text, its contents, which it names nothing by.
+type Labeler interface {
+	InspectLabel() string
+}
+
 // Tab is a details pane.
 type Tab uint8
 

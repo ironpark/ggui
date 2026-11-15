@@ -5,8 +5,10 @@ import (
 	"math"
 	"time"
 
+	"github.com/ironpark/ggui/inspect"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
+	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/pkg/kinetics"
 )
 
@@ -34,7 +36,7 @@ func ScrollViewport(env Env) (Viewport, bool) { return env.Get(viewportKey) }
 // viewportAlong returns the window of the nearest enclosing Scroll that
 // scrolls along the x axis, for horizontal, or the y axis.
 func viewportAlong(env Env, horizontal bool) (Viewport, bool) {
-	return env.Get(pick(horizontal, viewportXKey, viewportYKey))
+	return env.Get(gem.Pick(horizontal, viewportXKey, viewportYKey))
 }
 
 // ScrollWidget shows a window onto a child that may be taller (or, with
@@ -189,7 +191,7 @@ func (s *ScrollWidget) Offset(v float64) *ScrollWidget {
 	return s
 }
 
-func (s *ScrollWidget) extent(sz Size) float64 { return pick(s.horizontal, sz.W, sz.H) }
+func (s *ScrollWidget) extent(sz Size) float64 { return gem.Pick(s.horizontal, sz.W, sz.H) }
 
 func (s *ScrollWidget) maxOffset() float64 {
 	over := s.extent(s.childSize) - s.extent(s.viewport)
@@ -216,7 +218,7 @@ func (s *ScrollWidget) position() float64 {
 
 // scrollTo moves the window to v, clamped to the content; see contain.
 func (s *ScrollWidget) scrollTo(v float64) {
-	v = clamp(v, 0, s.maxOffset())
+	v = gem.Clamp(v, 0, s.maxOffset())
 	s.contain(v != s.position() || v != s.laidAt, func() {
 		if s.bound != nil {
 			s.bound.Set(v)
@@ -305,11 +307,11 @@ func (s *ScrollWidget) layout(c Constraints, env Env) Size {
 	s.laidAt = s.position()
 	vp := Viewport{Offset: s.laidAt, Extent: s.extent(c.Max()), Horizontal: s.horizontal}
 	env = env.With(viewportKey, vp).With(scrollPortKey, s).
-		With(pick(s.horizontal, viewportXKey, viewportYKey), vp).With(pick(s.horizontal, scrollPortXKey, scrollPortYKey), s)
+		With(gem.Pick(s.horizontal, viewportXKey, viewportYKey), vp).With(gem.Pick(s.horizontal, scrollPortXKey, scrollPortYKey), s)
 	// What the content builds as it is laid out, rows mounting as they
 	// scroll in, reacts within the viewport too; see Layout.
 	reactive.InRegion(&s.containedMove, func() { s.childSize = s.child.Layout(Loose(inner), env) })
-	s.viewport = c.Constrain(Sz(bounded(c.MaxW, s.childSize.W), bounded(c.MaxH, s.childSize.H)))
+	s.viewport = c.Constrain(Sz(gem.Bounded(c.MaxW, s.childSize.W), gem.Bounded(c.MaxH, s.childSize.H)))
 	if s.shrink {
 		// Constrain keeps it within c, so a tight c still decides.
 		if s.horizontal {
@@ -325,7 +327,7 @@ func (s *ScrollWidget) layout(c Constraints, env Env) Size {
 		s.phys.anim.from += shift
 		s.phys.anim.to += shift
 	}
-	s.scrollTo(pick(follow, s.maxOffset(), s.position()+shift))
+	s.scrollTo(gem.Pick(follow, s.maxOffset(), s.position()+shift))
 	s.phys.attach(s)
 	return s.viewport
 }
@@ -381,6 +383,14 @@ func (s *ScrollWidget) Paint(dst *Canvas, r Rect) {
 	s.paintBar(dst, r)
 }
 
+// InspectFields implements inspect.Fielder.
+func (s *ScrollWidget) InspectFields() []inspect.Field {
+	return []inspect.Field{{Key: "Scroll"}, {Key: "axis", Value: gem.Pick(s.horizontal, "horizontal", "vertical")}, {Key: "offset", Value: inspect.Num(s.position()) + " px", Number: true}, {Key: "content", Value: inspect.Num(s.childSize.W) + " × " + inspect.Num(s.childSize.H), Number: true}}
+}
+
+// InspectKind implements inspect.Kinder.
+func (s *ScrollWidget) InspectKind() string { return "scroll" }
+
 func (s *ScrollWidget) thumbLength() float64 {
 	track := s.extent(s.rect.Size)
 	if s.extent(s.childSize) <= 0 {
@@ -399,11 +409,11 @@ func (s *ScrollWidget) paintBar(dst *Canvas, r Rect) {
 	}
 	style := s.barEnv.ScrollStyle()
 	active := s.thumbHovered || s.dragging
-	amount := dst.Ease(Anchor{Rect: r, ID: scrollThumb{s}.HitID()}, scrollThumbHoverSlot, pick(active, 1.0, 0.0), s.barEnv.Motion(style.Duration))
+	amount := dst.Ease(Anchor{Rect: r, ID: scrollThumb{s}.HitID()}, scrollThumbHoverSlot, gem.Pick(active, 1.0, 0.0), s.barEnv.Motion(style.Duration))
 	fill := bar
 	if amount > 0 {
 		// Keep the thumb close to its resting gray, including while dragging.
-		fill = LerpColor(bar, style.HoverColor, amount*pick(s.dragging, .28, .18))
+		fill = LerpColor(bar, style.HoverColor, amount*gem.Pick(s.dragging, .28, .18))
 	}
 	thumb := s.thumbLength()
 	at := (track - thumb) * s.position() / s.maxOffset()
@@ -504,7 +514,7 @@ func (s *ScrollWidget) Reveal(target Rect) {
 // HandlePointer implements PointerHandler: wheel movement along the scroll
 // axis moves the window.
 func (s *ScrollWidget) HandlePointer(ev PointerEvent) bool {
-	axis := pick(s.horizontal, ev.Pos.X, ev.Pos.Y)
+	axis := gem.Pick(s.horizontal, ev.Pos.X, ev.Pos.Y)
 	switch ev.Kind {
 	case PointerDown:
 		if ev.Button != MouseButtonLeft || !s.thumbHit.Contains(ev.Pos) || s.extent(s.rect.Size) <= s.thumbLength() {
@@ -541,7 +551,7 @@ func (s *ScrollWidget) HandlePointer(ev PointerEvent) bool {
 	if s.speed > 0 && !ev.ScrollPixels {
 		by = Pt(ev.Scroll.X*s.speed, ev.Scroll.Y*s.speed)
 	}
-	delta := pick(s.horizontal, by.X, by.Y)
+	delta := gem.Pick(s.horizontal, by.X, by.Y)
 	if delta == 0 || s.maxOffset() == 0 {
 		return false
 	}
@@ -567,13 +577,13 @@ func (s *ScrollWidget) wheelStep(d float64) bool {
 	from := s.position()
 	heading := from
 	if p.animating && p.stepping {
-		heading = p.anim.to
+		heading = p.anim.Target()
 	}
 	to := heading - d
 	if ease <= 0 || p.over != 0 || p.mode != OverscrollClamp && (to < 0 || to > s.maxOffset()) {
 		return s.wheel(d, false)
 	}
-	to = clamp(to, 0, s.maxOffset())
+	to = gem.Clamp(to, 0, s.maxOffset())
 	if to == heading {
 		return false
 	}
@@ -725,7 +735,7 @@ func (s *ScrollWidget) wheelBy(d float64, momentum bool) bool {
 		p.dir = math.Copysign(1, -d)
 	}
 	if p.over != over {
-		activeWorld().frame.animate()
+		Now() // a frame for the content pulled past its end
 	}
 	if momentum && math.Abs(p.over) >= s.extent(s.viewport)/8 {
 		return false // a fling that reached the end stops there and bounces back
@@ -746,7 +756,7 @@ func (p *scrollPhysics) step(s *ScrollWidget) {
 		return
 	}
 	v := p.anim.Value(FrameTime())
-	if v == p.anim.to {
+	if v == p.anim.Target() {
 		p.animating = false
 	}
 	s.scrollTo(v)
@@ -826,7 +836,7 @@ func (s *ScrollWidget) snapTarget() (float64, bool) {
 func (s *ScrollWidget) animateTo(v float64, animate bool) {
 	p := &s.phys
 	if s.laidOut {
-		v = clamp(v, 0, s.maxOffset())
+		v = gem.Clamp(v, 0, s.maxOffset())
 	}
 	d := s.barEnv.Motion(scrollAnimation)
 	if !animate || d <= 0 || !s.laidOut || v == s.position() {
@@ -879,9 +889,9 @@ func (s *ScrollWidget) paintContent(dst *Canvas, r Rect) {
 	k := kinetics.Stretch(p.over, extent)
 	about := r.Origin
 	if p.over < 0 {
-		about = about.Add(pick(s.horizontal, Pt(r.Size.W, 0), Pt(0, r.Size.H)))
+		about = about.Add(gem.Pick(s.horizontal, Pt(r.Size.W, 0), Pt(0, r.Size.H)))
 	}
-	sx, sy := pick(s.horizontal, k, 1.0), pick(s.horizontal, 1.0, k)
+	sx, sy := gem.Pick(s.horizontal, k, 1.0), gem.Pick(s.horizontal, 1.0, k)
 	dst.Transform(Affine{}.Scale(sx, sy).About(about), func(dst *Canvas) { dst.Paint(s.child, content) })
 }
 
@@ -905,7 +915,7 @@ var (
 // scrollPortAlong returns the nearest enclosing Scroll along the x axis,
 // for horizontal, or the y axis.
 func scrollPortAlong(env Env, horizontal bool) *ScrollWidget {
-	s, _ := env.Get(pick(horizontal, scrollPortXKey, scrollPortYKey))
+	s, _ := env.Get(gem.Pick(horizontal, scrollPortXKey, scrollPortYKey))
 	return s
 }
 
@@ -987,7 +997,7 @@ func (c *ScrollController) ScrollBy(d float64) {
 	if r := c.pending; r != nil {
 		base = r.offset
 	} else if c.scroll != nil && c.scroll.phys.animating {
-		base = c.scroll.phys.anim.to
+		base = c.scroll.phys.anim.Target()
 	}
 	c.request(base+d, true)
 }
@@ -1038,7 +1048,7 @@ func (s *ScrollWidget) placeKey(match func(k any) (float64, bool)) {
 		return
 	}
 	c.keyed, c.key = false, nil
-	start := pick(s.horizontal, s.rect.Origin.X, s.rect.Origin.Y)
+	start := gem.Pick(s.horizontal, s.rect.Origin.X, s.rect.Origin.Y)
 	// at is where the row is drawn now; the content moved by the visible
 	// offset to put it there.
 	s.animateTo(s.visualOffset()+at-start, c.animate)
@@ -1085,7 +1095,7 @@ func Sticky(header, body Widget) *StickyWidget {
 // floats over the content reads.
 func (s *StickyWidget) Pinned() bool { return s.pinned }
 
-func (s *StickyWidget) main(z Size) float64 { return pick(s.horizontal, z.W, z.H) }
+func (s *StickyWidget) main(z Size) float64 { return gem.Pick(s.horizontal, z.W, z.H) }
 
 // Layout implements Widget.
 func (s *StickyWidget) Layout(c Constraints, env Env) Size {
@@ -1097,19 +1107,19 @@ func (s *StickyWidget) Layout(c Constraints, env Env) Size {
 	}
 	// Across the axis both stretch to the section, so a pinned header
 	// covers the rows passing under it.
-	cross := pick(s.horizontal, c.MaxH, c.MaxW)
+	cross := gem.Pick(s.horizontal, c.MaxH, c.MaxW)
 	child := func(w Widget, crossMin float64) Size {
 		if s.horizontal {
 			return w.Layout(Constraints{MinH: crossMin, MaxW: Unbounded, MaxH: cross}, env)
 		}
 		return w.Layout(Constraints{MinW: crossMin, MaxW: cross, MaxH: Unbounded}, env)
 	}
-	stretch := pick(cross >= Unbounded, 0, cross)
+	stretch := gem.Pick(cross >= Unbounded, 0, cross)
 	s.headerSize = child(s.header, stretch)
 	s.bodySize = child(s.body, stretch)
 	if stretch == 0 {
 		// Unbounded across: both take the wider of the two.
-		w := max(pick(s.horizontal, s.headerSize.H, s.headerSize.W), pick(s.horizontal, s.bodySize.H, s.bodySize.W))
+		w := max(gem.Pick(s.horizontal, s.headerSize.H, s.headerSize.W), gem.Pick(s.horizontal, s.bodySize.H, s.bodySize.W))
 		s.headerSize = child(s.header, w)
 		s.bodySize = child(s.body, w)
 	}
@@ -1123,11 +1133,11 @@ func (s *StickyWidget) Layout(c Constraints, env Env) Size {
 // over it, takes the input where the two overlap.
 func (s *StickyWidget) Paint(dst *Canvas, r Rect) {
 	lead := s.main(s.headerSize)
-	body := Rct(r.Origin.Add(pick(s.horizontal, Pt(lead, 0), Pt(0, lead))), s.bodySize)
+	body := Rct(r.Origin.Add(gem.Pick(s.horizontal, Pt(lead, 0), Pt(0, lead))), s.bodySize)
 	dst.Paint(s.body, body)
 	at := pinAt(s.port, s.horizontal, r, lead)
 	s.pinned = at != 0
-	header := Rct(r.Origin.Add(pick(s.horizontal, Pt(at, 0), Pt(0, at))), s.headerSize)
+	header := Rct(r.Origin.Add(gem.Pick(s.horizontal, Pt(at, 0), Pt(0, at))), s.headerSize)
 	dst.Paint(s.header, header)
 }
 
@@ -1139,7 +1149,7 @@ func pinAt(port *ScrollWidget, horizontal bool, r Rect, lead float64) float64 {
 	if !ok {
 		return 0
 	}
-	return pinPos(edge, 0, pick(horizontal, r.Size.W, r.Size.H), lead)
+	return pinPos(edge, 0, gem.Pick(horizontal, r.Size.W, r.Size.H), lead)
 }
 
 // portEdge returns how far past the start of r, along the axis, port's
@@ -1148,7 +1158,7 @@ func portEdge(port *ScrollWidget, horizontal bool, r Rect) (float64, bool) {
 	if port == nil || port.horizontal != horizontal {
 		return 0, false
 	}
-	return pick(horizontal, port.rect.Origin.X-r.Origin.X, port.rect.Origin.Y-r.Origin.Y), true
+	return gem.Pick(horizontal, port.rect.Origin.X-r.Origin.X, port.rect.Origin.Y-r.Origin.Y), true
 }
 
 // pinPos returns where a header of length lead, in a section from start to

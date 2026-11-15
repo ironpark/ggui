@@ -2,9 +2,11 @@ package ggui
 
 import (
 	"fmt"
+	"image"
 	"sync"
 
 	"github.com/ironpark/ggui/internal/fontsys"
+	"github.com/ironpark/ggui/internal/paragraph"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/third_party/text"
 )
@@ -290,6 +292,43 @@ func activeEmoji() *fontsys.EmojiChoice {
 		}
 	}
 	return nil
+}
+
+// engine is st as the text engine sets text in it: its font, size, weight,
+// line height and tracking, beside the emoji font the active world chose. st must
+// be resolved.
+func (st TextStyle) engine() paragraph.Style {
+	return paragraph.Style{Font: st.Font.engine(), Size: st.Size, Weight: fontsys.Weight(st.Weight), LineHeight: st.LineHeight, Tracking: st.Tracking, Emoji: activeEmoji()}
+}
+
+// TextEngineStyle is st as the text engine sets text in it, with what st
+// leaves unset filled in as with no Env (Env.ResolveText's result is
+// returned as it is), and the generation of the active world's fonts,
+// which changes whenever a measurement made in them may no longer hold.
+//
+// TextEngineStyle is meant for ggui's own packages, such as widget, whose text
+// input lays its text out with the engine directly. It is not meant to be
+// called by anything else, which it cannot be, since its result's type is
+// internal, and it is not subject to any compatibility promise.
+func TextEngineStyle(st TextStyle) (style paragraph.Style, generation uint64) {
+	return st.resolved().engine(), fontGen()
+}
+
+// RenderText draws s in st on the CPU, with no GPU, window or App, into an
+// image just large enough to hold it: for icons, thumbnails, files and
+// tests. Lines break at hard breaks and, when maxWidth is positive, wrap to
+// maxWidth as Text wraps them. Fields st leaves unset are Text's defaults:
+// the built-in font, DefaultTextSize, black, and 1.2 times the size between
+// baselines. A pixel of the image is a pixel of st.Size; scale st.Size for a
+// denser image.
+//
+// Glyphs come from st.Font and its fallbacks, as Text draws them, and emoji
+// from the emoji font, in color. Text is shaped with go-text and drawn with
+// go-text/render; emoji are drawn as Text draws them, from sbix, CBDT,
+// COLRv0 or SVG glyphs, rasterized on the CPU.
+func RenderText(s string, st TextStyle, maxWidth float64) *image.RGBA {
+	st = st.resolved()
+	return paragraph.Render(s, st.engine(), st.Color, maxWidth)
 }
 
 // SetEmojiFont selects a color emoji font for Text and widget.TextInput. It does not

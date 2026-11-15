@@ -9,6 +9,7 @@ import (
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/textedit"
 	"github.com/ironpark/ggui/internal/third_party/text"
+	"github.com/ironpark/ggui/pkg/gem"
 )
 
 // TextSpan is one stretch of a RichText in a style of its own. It is a
@@ -243,7 +244,7 @@ func (t *RichTextWidget) Text() string { return t.para.Text }
 
 // alignment is the fraction lines are placed at.
 func (t *RichTextWidget) alignment() float64 {
-	return pick(t.alignSet, t.align, startAlign(t.dir))
+	return gem.Pick(t.alignSet, t.align, startAlign(t.dir))
 }
 
 // Layout implements Widget.
@@ -286,7 +287,8 @@ func (t *RichTextWidget) Layout(c Constraints, env Env) Size {
 		st := env.ResolveText(t.style.Merge(sp.style))
 		start := end
 		end += len(sp.text)
-		p.Runs = append(p.Runs, paragraph.Run{Start: start, End: end, Style: st.engine(), Span: i})
+		run, _ := TextEngineStyle(st)
+		p.Runs = append(p.Runs, paragraph.Run{Start: start, End: end, Style: run, Span: i})
 		t.styles = append(t.styles, st)
 		keys = append(keys, runKey{start, end, st.Font, st.Size, st.LineHeight, st.Weight, st.Tracking})
 	}
@@ -300,13 +302,15 @@ func (t *RichTextWidget) Layout(c Constraints, env Env) Size {
 		}
 		text = sb.String()
 	}
-	p.Base, t.base = base.engine(), base
+	var gen uint64
+	p.Base, gen = TextEngineStyle(base)
+	t.base = base
 	t.dir, p.Lang = env.Direction(), env.Language()
 	p.RTL = t.dir == DirRTL
 	t.selection = env.EditorStyle().Selection
 	// As Text's: the width only matters when something wraps or cuts to it.
 	fits := t.wrap || t.ellipsis || t.maxLines > 0
-	key := richKey{generation: fontGen(), text: text, maxW: pick(fits, c.MaxW, 0), wrap: t.wrap, ellipsis: t.ellipsis, maxLines: t.maxLines,
+	key := richKey{generation: gen, text: text, maxW: gem.Pick(fits, c.MaxW, 0), wrap: t.wrap, ellipsis: t.ellipsis, maxLines: t.maxLines,
 		dir: t.dir, lang: p.Lang, base: runKey{font: base.Font, size: base.Size, lineHeight: base.LineHeight, weight: base.Weight, tracking: base.Tracking}, lineBox: lineBox}
 	p.LineBox = lineBox
 	if key != t.laid || !slices.Equal(keys, t.runKeys) || p.Lines == nil {
@@ -323,7 +327,7 @@ func (t *RichTextWidget) Layout(c Constraints, env Env) Size {
 			if sp.onTap != nil {
 				l := &spanLink{w: t, span: i}
 				l.Role = RoleLink
-				l.SetName(pick(sp.name != "", sp.name, sp.text))
+				l.SetName(gem.Pick(sp.name != "", sp.name, sp.text))
 				t.links = append(t.links, l)
 			}
 		}
@@ -354,7 +358,7 @@ func (t *RichTextWidget) Baseline() (float64, bool) {
 }
 
 // roleOr returns role, or fallback when it is unset.
-func roleOr(role, fallback Role) Role { return pick(role != "", role, fallback) }
+func roleOr(role, fallback Role) Role { return gem.Pick(role != "", role, fallback) }
 
 // Paint implements Widget.
 func (t *RichTextWidget) Paint(dst *Canvas, r Rect) {
@@ -415,8 +419,8 @@ func (t *RichTextWidget) Paint(dst *Canvas, r Rect) {
 			dst.FillRoundRect(bg, rs.Size*0.2, t.cur[p.Runs[st.Run].Span].background)
 		}
 		col := func(style int) color.Color { return t.runStyle(ln.Styles[style].Run).Color }
-		paragraph.Draw(dst.Image, &t.pieceOp, ln.S, ln.Pieces, ln.Styles, scale, dst.px(ln.Baseline), col, func(op *text.DrawOptions) {
-			op.GeoM.Translate(dst.px(x), dst.px(r.Origin.Y))
+		paragraph.Draw(dst.Image, &t.pieceOp, ln.S, ln.Pieces, ln.Styles, scale, ln.Baseline*scale, col, func(op *text.DrawOptions) {
+			op.GeoM.Translate(x*scale, r.Origin.Y*scale)
 		})
 		for _, pc := range ln.Pieces {
 			st := ln.Styles[pc.Style]
@@ -641,9 +645,9 @@ func (a *SelectionAreaWidget) extend(u *RichTextWidget, at int) {
 			t.ed.MoveTo(at, true)
 		case k == i:
 			t.ed.MoveTo(a.anchorAt, false)
-			t.ed.MoveTo(pick(i < j, len(t.ed.Text), 0), true)
+			t.ed.MoveTo(gem.Pick(i < j, len(t.ed.Text), 0), true)
 		case k == j:
-			t.ed.MoveTo(pick(i < j, 0, len(t.ed.Text)), false)
+			t.ed.MoveTo(gem.Pick(i < j, 0, len(t.ed.Text)), false)
 			t.ed.MoveTo(at, true)
 		case k > lo && k < hi:
 			t.ed.SelectAll()
@@ -860,9 +864,9 @@ func (t *RichTextWidget) HandleKey(ev KeyEvent) {
 			}
 		case KeyC:
 			if m.Cmd() && t.area != nil && t.area.spans {
-				currentClipboard().Write(t.area.SelectedText())
+				CurrentClipboard().Write(t.area.SelectedText())
 			} else if m.Cmd() && t.ed.HasSelection() {
-				currentClipboard().Write(t.ed.Selected())
+				CurrentClipboard().Write(t.ed.Selected())
 			}
 		case KeyEscape:
 			if t.area != nil {
@@ -871,11 +875,11 @@ func (t *RichTextWidget) HandleKey(ev KeyEvent) {
 			t.ed.MoveTo(t.ed.Caret, false)
 		case KeyArrowLeft, KeyArrowRight:
 			if m.Shift {
-				t.ed.MoveBy(pick(ev.Key == KeyArrowLeft, -1, 1), textedit.WordWise(m.Alt, m.Ctrl, m.Meta), true)
+				t.ed.MoveBy(gem.Pick(ev.Key == KeyArrowLeft, -1, 1), textedit.WordWise(m.Alt, m.Ctrl, m.Meta), true)
 			}
 		case KeyHome, KeyEnd:
 			if m.Shift {
-				t.ed.MoveTo(pick(ev.Key == KeyHome, 0, len(t.ed.Text)), true)
+				t.ed.MoveTo(gem.Pick(ev.Key == KeyHome, 0, len(t.ed.Text)), true)
 			}
 		}
 	}

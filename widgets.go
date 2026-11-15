@@ -1,9 +1,12 @@
 package ggui
 
 import (
+	"fmt"
 	"image/color"
 	"slices"
+	"strconv"
 
+	"github.com/ironpark/ggui/inspect"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/pkg/layout"
@@ -64,7 +67,7 @@ func WithEnv(transform func(Env) Env, child Widget) *EnvWidget {
 func (e *EnvWidget) Layout(c Constraints, env Env) Size { return e.child.Layout(c, e.with(env)) }
 
 // Baseline implements Baseliner: the child's.
-func (e *EnvWidget) Baseline() (float64, bool) { return baselineOf(e.child) }
+func (e *EnvWidget) Baseline() (float64, bool) { return BaselineOf(e.child) }
 
 // Paint implements Widget.
 func (e *EnvWidget) Paint(dst *Canvas, r Rect) { dst.Paint(e.child, r) }
@@ -99,12 +102,49 @@ type boxDeco struct {
 	shownGradient Gradient      // gradient with its colors resolved
 }
 
+// shownColor is a color property as it was given and as it is painted: the
+// given color itself, or an EnvColor's value in the Env of the last layout.
+type shownColor struct{ given, shown color.Color }
+
+// set gives the property c. A widget lays out again for an EnvColor, given
+// or replaced, since only layout knows its Env.
+func (s *shownColor) set(c color.Color, changed func()) {
+	if c == s.given {
+		return
+	}
+	if IsEnvColor(c) || IsEnvColor(s.given) {
+		changed()
+	}
+	s.given, s.shown = c, c
+}
+
+func (s *shownColor) layout(env Env) { s.shown = ResolveColor(s.given, env) }
+
 // decorate returns the box's boxDeco, making it on first use.
 func (b *BoxWidget) decorate() *boxDeco {
 	if b.deco == nil {
 		b.deco = new(boxDeco)
 	}
 	return b.deco
+}
+
+// Gradient fills the box with g, over its Fill and under its border, with
+// the same rounded corners. A zero Gradient removes it. EnvColor stops are
+// resolved at layout, as Fill's color is.
+func (b *BoxWidget) Gradient(g Gradient) *BoxWidget {
+	var was Gradient
+	if b.deco != nil {
+		was = b.deco.gradient
+	}
+	if property.Equal(g, was) {
+		return b
+	}
+	if g.themed() || was.themed() {
+		b.props.Changed()
+	}
+	d := b.decorate()
+	d.gradient, d.shownGradient = g, g
+	return b
 }
 
 // Box wraps at most one child. With no child it is an empty rectangle, sized
@@ -231,7 +271,7 @@ func (b *BoxWidget) Layout(c Constraints, env Env) Size {
 	b.fill.layout(env)
 	b.borderColor.layout(env)
 	if d := b.deco; d != nil {
-		d.shownGradient = d.gradient.resolve(env)
+		d.shownGradient = d.gradient.Resolve(env)
 		for i, s := range d.shadows {
 			d.shownShadows[i].Color = ResolveColor(s.Color, env)
 		}
@@ -252,6 +292,12 @@ func (b *BoxWidget) Layout(c Constraints, env Env) Size {
 // Baseline implements Baseliner: the child's, below the top padding.
 func (b *BoxWidget) Baseline() (float64, bool) { return baselineAt(b.child, b.padding.Top) }
 
+// baselineAt is BaselineOf for a child painted dy below its parent's top.
+func baselineAt(w Widget, dy float64) (float64, bool) {
+	b, ok := BaselineOf(w)
+	return b + dy, ok
+}
+
 // Paint implements Widget.
 func (b *BoxWidget) Paint(dst *Canvas, r Rect) {
 	if b.deco != nil {
@@ -269,6 +315,36 @@ func (b *BoxWidget) Paint(dst *Canvas, r Rect) {
 	if b.child != nil {
 		dst.Paint(b.child, Rct(r.Origin.Add(b.childRect.Origin), b.childRect.Size))
 	}
+}
+
+// InspectFields implements inspect.Fielder.
+func (b *BoxWidget) InspectFields() []inspect.Field {
+	out := []inspect.Field{{Key: "Box style"}, {Key: "background", Value: inspect.Color(b.fill.shown)}, {Key: "border", Value: inspect.Num(b.borderWidth) + " px " + inspect.Color(b.borderColor.shown)}, {Key: "radius", Value: inspect.Num(b.radius) + " px", Number: true}, {Key: "padding", Value: fmt.Sprintf("%s %s %s %s", inspect.Num(b.padding.Top), inspect.Num(b.padding.Right), inspect.Num(b.padding.Bottom), inspect.Num(b.padding.Left)), Number: true}}
+	if b.width > 0 {
+		out = append(out, inspect.Field{Key: "fixed width", Value: inspect.Num(b.width) + " px", Number: true})
+	}
+	if b.height > 0 {
+		out = append(out, inspect.Field{Key: "fixed height", Value: inspect.Num(b.height) + " px", Number: true})
+	}
+	if b.maxW > 0 {
+		out = append(out, inspect.Field{Key: "max width", Value: inspect.Num(b.maxW) + " px", Number: true})
+	}
+	if b.maxH > 0 {
+		out = append(out, inspect.Field{Key: "max height", Value: inspect.Num(b.maxH) + " px", Number: true})
+	}
+	return out
+}
+
+// InspectBox implements inspect.Boxer: the box model as painted at size,
+// its padding and border around the child, or around the space left when
+// it has none.
+func (b *BoxWidget) InspectBox(size Size) inspect.Box {
+	content := b.childRect.Size
+	if b.child == nil {
+		content = Sz(max(size.W-b.padding.Horizontal(), 0), max(size.H-b.padding.Vertical(), 0))
+	}
+	p := b.padding
+	return inspect.Box{Padding: inspect.Insets{Top: p.Top, Right: p.Right, Bottom: p.Bottom, Left: p.Left}, Border: b.borderWidth, Content: content, Valid: true}
 }
 
 // Padding surrounds child with empty space, using the CSS shorthand Insets
@@ -323,7 +399,7 @@ type flow struct {
 func (f *flow) Baseline() (float64, bool) {
 	for i, rect := range f.rects { // empty before the first layout
 		child := f.children[i]
-		if isAbsent(child) {
+		if IsVacant(child) {
 			continue
 		}
 		if b, ok := baselineAt(child, rect.Origin.Y); ok {
@@ -335,7 +411,7 @@ func (f *flow) Baseline() (float64, bool) {
 
 // axis is the flow's main axis in the layout package's terms; main, cross,
 // size and constraints read sizes and build bounds along it.
-func (f *flow) axis() layout.Axis { return pick(f.horizontal, layout.Horizontal, layout.Vertical) }
+func (f *flow) axis() layout.Axis { return gem.Pick(f.horizontal, layout.Horizontal, layout.Vertical) }
 
 func (f *flow) main(s Size) float64  { return f.axis().Main(s) }
 func (f *flow) cross(s Size) float64 { return f.axis().Cross(s) }
@@ -380,7 +456,7 @@ func (f *flow) layout(c Constraints, env Env) Size {
 	}, f.items, func(i int, c Constraints) layout.Measurement {
 		m := measureWidget(f.children[i], c, env)
 		if byBaseline {
-			m.Baseline, m.HasBaseline = baselineOf(f.children[i])
+			m.Baseline, m.HasBaseline = BaselineOf(f.children[i])
 		}
 		return m
 	})
@@ -391,7 +467,7 @@ func (f *flow) layout(c Constraints, env Env) Size {
 // measureWidget is the boundary between widget state and geometry calculation.
 func measureWidget(w Widget, c Constraints, env Env) layout.Measurement {
 	size := w.Layout(c, env)
-	return layout.Measurement{Size: size, Absent: isAbsent(w)}
+	return layout.Measurement{Size: size, Absent: IsVacant(w)}
 }
 
 // measureChildren measures children[i] for a multi-child layout.
@@ -408,15 +484,22 @@ func paintRects(dst *Canvas, r Rect, children []Widget, rects []Rect) {
 
 func (f *flow) paint(dst *Canvas, r Rect) { paintRects(dst, r, f.children, f.rects) }
 
+func (f *flow) inspectFields() []inspect.Field {
+	justify := []string{"start", "center", "end", "space-between", "space-around", "space-evenly"}
+	align := []string{"start", "center", "end", "stretch"}
+	out := []inspect.Field{{Key: "Flex layout"}, {Key: "direction", Value: gem.Pick(f.horizontal, "row", "column")}, {Key: "justify", Value: justify[gem.Clamp(int(f.justify), 0, len(justify)-1)]}, {Key: "align", Value: align[gem.Clamp(int(f.align), 0, len(align)-1)]}}
+	if f.space > 0 {
+		return append(out, inspect.Field{Key: "gap token", Value: inspect.Num(f.space) + " × env.spacing"})
+	}
+	return append(out, inspect.Field{Key: "gap", Value: inspect.Num(f.gap) + " px", Number: true})
+}
+
 // resize returns s with length n and every element zeroed, reusing s's array.
 func resize[T any](s []T, n int) []T {
 	s = slices.Grow(s[:0], n)[:n]
 	clear(s)
 	return s
 }
-
-// pick is gem.Pick under the name the package reads it by.
-func pick[T any](cond bool, a, b T) T { return gem.Pick(cond, a, b) }
 
 // ColumnWidget stacks its children vertically. Build one with Column.
 type ColumnWidget struct {
@@ -470,6 +553,12 @@ func (col *ColumnWidget) Layout(c Constraints, env Env) Size {
 // Paint implements Widget.
 func (col *ColumnWidget) Paint(dst *Canvas, r Rect) { col.paint(dst, r) }
 
+// InspectFields implements inspect.Fielder.
+func (col *ColumnWidget) InspectFields() []inspect.Field { return col.flow.inspectFields() }
+
+// InspectKind implements inspect.Kinder.
+func (col *ColumnWidget) InspectKind() string { return "flex" }
+
 // RowWidget lines its children up horizontally. Build one with Row.
 type RowWidget struct {
 	props property.Owner
@@ -522,6 +611,12 @@ func (row *RowWidget) Layout(c Constraints, env Env) Size {
 // Paint implements Widget.
 func (row *RowWidget) Paint(dst *Canvas, r Rect) { row.paint(dst, r) }
 
+// InspectFields implements inspect.Fielder.
+func (row *RowWidget) InspectFields() []inspect.Field { return row.flow.inspectFields() }
+
+// InspectKind implements inspect.Kinder.
+func (row *RowWidget) InspectKind() string { return "flex" }
+
 // FlexWidget marks a child of a Row or Column as one that takes a share of
 // the leftover main-axis space. Anywhere else it is transparent. Build one
 // with Flex, Expanded or Spacer.
@@ -550,10 +645,15 @@ func Spacer() *FlexWidget { return Expanded(Box()) }
 func (f *FlexWidget) Layout(c Constraints, env Env) Size { return f.child.Layout(c, env) }
 
 // Baseline implements Baseliner: the child's.
-func (f *FlexWidget) Baseline() (float64, bool) { return baselineOf(f.child) }
+func (f *FlexWidget) Baseline() (float64, bool) { return BaselineOf(f.child) }
 
 // Paint implements Widget.
 func (f *FlexWidget) Paint(dst *Canvas, r Rect) { dst.Paint(f.child, r) }
+
+// InspectFields implements inspect.Fielder.
+func (f *FlexWidget) InspectFields() []inspect.Field {
+	return []inspect.Field{{Key: "flex", Value: inspect.Num(f.flex), Number: true}}
+}
 
 // StackWidget layers its children on top of each other, first at the bottom.
 // Build one with Stack.
@@ -736,6 +836,14 @@ func (w *WrapWidget) Layout(c Constraints, env Env) Size {
 // Paint implements Widget.
 func (w *WrapWidget) Paint(dst *Canvas, r Rect) { paintRects(dst, r, w.children, w.rects) }
 
+// InspectFields implements inspect.Fielder.
+func (w *WrapWidget) InspectFields() []inspect.Field {
+	return []inspect.Field{{Key: "Wrapping layout"}, {Key: "gap", Value: inspect.Num(w.gap) + " px", Number: true}, {Key: "run gap", Value: inspect.Num(w.runGap) + " px", Number: true}}
+}
+
+// InspectKind implements inspect.Kinder.
+func (w *WrapWidget) InspectKind() string { return "wrap" }
+
 // GridWidget lays its children out in equal-width columns. Build one with
 // Grid.
 type GridWidget struct {
@@ -796,3 +904,11 @@ func (g *GridWidget) Layout(c Constraints, env Env) Size {
 
 // Paint implements Widget.
 func (g *GridWidget) Paint(dst *Canvas, r Rect) { paintRects(dst, r, g.children, g.rects) }
+
+// InspectFields implements inspect.Fielder.
+func (g *GridWidget) InspectFields() []inspect.Field {
+	return []inspect.Field{{Key: "Grid layout"}, {Key: "columns", Value: strconv.Itoa(g.cols), Number: true}, {Key: "column width", Value: inspect.Num(g.cellW) + " px", Number: true}, {Key: "column gap", Value: inspect.Num(g.gap) + " px", Number: true}, {Key: "row gap", Value: inspect.Num(g.rowGap) + " px", Number: true}}
+}
+
+// InspectKind implements inspect.Kinder.
+func (g *GridWidget) InspectKind() string { return "grid" }

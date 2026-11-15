@@ -61,6 +61,14 @@ text baseline sits, valid after `Layout`. `Row.Align(AlignBaseline)` reads it.
 `Text` and `widget.TextInput` report their font's ascent; `Box`, `Column`, `Align`
 and the wrappers report their first child's, moved by where the child is
 painted. A widget that does not implement it is aligned by its bottom edge.
+A container of your own reports its child's with `ggui.BaselineOf(child)`,
+which is false for a child that cannot say, plus where it placed the child.
+
+A widget that sometimes shows nothing, as an `If` whose condition is false
+does, implements `Vacant`: `Vacant()` reports, after `Layout`, that it shows
+nothing now, and a `Row`, `Column` or `Wrap` leaves out the gap it would put
+beside it. `ggui.IsVacant(w)` asks any widget, for a container of your own
+that spaces its children.
 
 A short label, such as a tick or a value drawn on a custom canvas, does not
 need a child `Text`: keep `env.ResolveText(style)` from `Layout`, the style a
