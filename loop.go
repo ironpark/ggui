@@ -445,7 +445,7 @@ func (l *frameLoop) tick(exact bool) error {
 		now = clk.begin(clk.raw())
 	}
 	setRunning(l)
-	checkStores()
+	reactive.CheckStores()
 	// Animations made outside every tree, such as one a test built before
 	// its probe, belong to a Base runtime's world, which this loop's flushes
 	// cover too.
