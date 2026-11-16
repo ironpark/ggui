@@ -550,8 +550,11 @@ func callerStack() (s callStack) {
 	return s
 }
 
-// outside returns the first call site in s outside this package,
-// resolving it on the first call.
+// outside returns the first call site in s outside this package and
+// package widget, resolving it on the first call. A built-in widget is
+// plumbing to whoever reads the report, as the kernel is: the line worth
+// naming is the application's, which placed the widget. A test is a caller
+// wherever it lives, so the widgets' own tests are named.
 func (s *callStack) outside() uintptr {
 	if s.pc != 0 || s.n == 0 {
 		return s.pc
@@ -559,7 +562,9 @@ func (s *callStack) outside() uintptr {
 	frames := runtime.CallersFrames(s.pcs[:s.n])
 	for {
 		f, more := frames.Next()
-		if !strings.HasPrefix(f.Function, "github.com/ironpark/ggui.") || !more {
+		own := strings.HasPrefix(f.Function, "github.com/ironpark/ggui.") ||
+			(strings.HasPrefix(f.Function, "github.com/ironpark/ggui/widget.") && !strings.HasSuffix(f.File, "_test.go"))
+		if !own || !more {
 			s.pc = f.PC
 			return s.pc
 		}
