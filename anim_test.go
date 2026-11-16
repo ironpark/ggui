@@ -125,7 +125,7 @@ func TestAnimationCleanupOnlyStopsOwnedValues(t *testing.T) {
 	defer outside.Jump(0)
 	var tw *Tweened[float64]
 	var sp *Sprung[float64]
-	p := NewProbe(Box(), Sz(10, 10)).Setup(func() {
+	p := NewProbe(sized(0, 0), Sz(10, 10)).Setup(func() {
 		tw = Tween(0.0, time.Second).Easing(EaseLinear)
 		sp = Spring(0.0)
 	})
@@ -418,7 +418,7 @@ func TestTweenAndSpringOfWithFollowASource(t *testing.T) {
 	src := State(Sz(0, 0))
 	var tw *Tweened[Size]
 	var sp *Sprung[Size]
-	p := NewProbe(Box(), Sz(10, 10)).Setup(func() {
+	p := NewProbe(sized(0, 0), Sz(10, 10)).Setup(func() {
 		tw = TweenOfWith(src, 100*time.Millisecond, LerpSize)
 		sp = SpringOfWith(src, SizeVector)
 	})
@@ -538,44 +538,10 @@ func TestTimelineDerivedValues(t *testing.T) {
 	}
 }
 
-func TestTimelineDrivesABoundBoxAndHonorsReducedMotion(t *testing.T) {
-	t.Parallel()
-	var tl *TimelineValue
-	var got Rect
-	box := Box(probe(0, 0, &got))
-	p := NewProbe(Column(box), Sz(300, 100)).Setup(func() {
-		tl = Timeline(100 * time.Millisecond)
-		box.BindWidth(Interpolate(tl, 100.0, 200.0, LerpFloat))
-	})
-	defer p.Close()
-	p.Frame()
-	if got.Size.W != 100 {
-		t.Fatalf("width before playing = %v", got.Size.W)
-	}
-	tl.Play()
-	p.Advance(0)
-	p.Advance(50 * time.Millisecond)
-	if got.Size.W != 150 {
-		t.Fatalf("width half way = %v", got.Size.W)
-	}
-	p.Advance(time.Second)
-	if got.Size.W != 200 {
-		t.Fatalf("width at the end = %v", got.Size.W)
-	}
-	done := false
-	tl.OnDone(func() { done = true })
-	SetEnv(UseEnv().With(ReducedMotionKey, true))
-	tl.Reverse()
-	p.Frame()
-	if Untrack(tl.Get) != 0 || !done || got.Size.W != 100 {
-		t.Fatalf("reduced motion: progress %v done %v width %v", Untrack(tl.Get), done, got.Size.W)
-	}
-}
-
 func TestTimelineStopsWithItsOwner(t *testing.T) {
 	t.Parallel()
 	var tl *TimelineValue
-	p := NewProbe(Box(), Sz(10, 10)).Setup(func() { tl = Timeline(time.Second) })
+	p := NewProbe(sized(0, 0), Sz(10, 10)).Setup(func() { tl = Timeline(time.Second) })
 	p.Frame()
 	tl.Play()
 	p.Advance(0)
@@ -702,7 +668,7 @@ func (e *layoutEased) last() float64 { return e.heights[len(e.heights)-1] }
 // within the measurement of, takes it up for the next frame.
 func TestAMotionMovedInLayoutLaysOutEachStepAndComesToRest(t *testing.T) {
 	e := newLayoutEased(0)
-	p := NewWindowProbe(func() Widget { return topLeft(Cached(Column(e, Box().Size(10, 10)))) }, Sz(50, 200))
+	p := NewWindowProbe(func() Widget { return stack(Cached(column(e, sized(10, 10)))) }, Sz(50, 200))
 	defer p.Close()
 	p.Run(10*time.Millisecond, 10)
 	e.target.Set(100)
@@ -731,7 +697,7 @@ func TestAMotionMovedInLayoutLaysOutEachStepAndComesToRest(t *testing.T) {
 // it has got to, not from either end.
 func TestAMotionMovedInLayoutRetargetsFromWhereItIs(t *testing.T) {
 	e := newLayoutEased(0)
-	p := NewWindowProbe(func() Widget { return topLeft(e) }, Sz(50, 200))
+	p := NewWindowProbe(func() Widget { return stack(e) }, Sz(50, 200))
 	defer p.Close()
 	p.Run(10*time.Millisecond, 10)
 	e.target.Set(100)
@@ -755,7 +721,7 @@ func TestAMotionMovedInLayoutRetargetsFromWhereItIs(t *testing.T) {
 // for no frame to get there.
 func TestAMotionMovedInLayoutJumpsUnderReducedMotion(t *testing.T) {
 	e := newLayoutEased(0)
-	p := NewWindowProbe(func() Widget { return Provide(ReducedMotionKey, true, topLeft(e)) }, Sz(50, 200))
+	p := NewWindowProbe(func() Widget { return Provide(ReducedMotionKey, true, stack(e)) }, Sz(50, 200))
 	defer p.Close()
 	p.Run(10*time.Millisecond, 10)
 	e.target.Set(100)

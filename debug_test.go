@@ -51,14 +51,14 @@ func TestBuildersReportASnapshotRead(t *testing.T) {
 	count.Get()
 	p := ProbeBuilder(func() Widget {
 		Untrack(count.Get)
-		return Column(
-			Reactive(func() Widget { count.Get(); return Box() }),
-			View(count, func(int) Widget { return Text("x") }),
+		return column(
+			Reactive(func() Widget { count.Get(); return sized(0, 0) }),
+			View(count, func(int) Widget { return labelled("x") }),
 			Component(func() Widget {
 				for range 2 {
 					count.Get() // reported once
 				}
-				return TextOf(label)
+				return readsAtLayout(label)
 			}),
 		)
 	}, Size{W: 100, H: 100})

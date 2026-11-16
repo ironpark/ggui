@@ -160,12 +160,16 @@ The root package's files are of two kinds: the kernel, the frame loop,
 input, painting, layout caching and what else every widget stands on, and
 the built-in widgets written on it, which are to use the kernel's public API
 alone, as a widget of another package does, so that they can leave the root.
-`TestWidgetFilesUseThePublicKernel` in [boundary_test.go](../boundary_test.go)
-says which file is which, and fails when a widget file uses an unexported
-kernel name, or the kernel one of a widget file's, that its list of those
-still waiting for a public protocol does not hold. The list is empty: the
-widget files mount keyed subtrees with `Scope`, hold changes of size with
-`LayoutBoundary` and ask for layouts with `Invalidate` and `Relayout`, as
-[internal/apitest](../internal/apitest/) shows a package of its own doing,
-and nothing goes on it: a widget that needs more of the kernel than it
-exports gets it exported.
+`TestKernelAndWidgetFilesStayApart` in [boundary_test.go](../boundary_test.go)
+says which file is which, test files included, and type-checks the package
+with its tests: it fails when a kernel file, source or test, uses anything a
+widget file declares, or a widget file, source or test, uses an unexported
+kernel name or anything a kernel test file declares. There is no list of
+exceptions: the widget files mount keyed subtrees with `Scope`, hold changes
+of size with `LayoutBoundary` and ask for layouts with `Invalidate` and
+`Relayout`, as [internal/apitest](../internal/apitest/) shows a package of
+its own doing, and their tests drive them with a `Probe` or a
+`WindowProbe`; a widget that needs more of the kernel than it exports gets
+it exported. The kernel's tests stand on the small widgets of
+[fixtures_test.go](../fixtures_test.go), built on the widget protocol, in
+place of the built-in ones.

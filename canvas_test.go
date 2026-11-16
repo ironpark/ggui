@@ -4,12 +4,9 @@ import (
 	"fmt"
 	"image"
 	"math"
-	"strings"
 	"testing"
 
 	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggui/internal/third_party/text"
-	"golang.org/x/image/font/gofont/goregular"
 )
 
 type adoptionCounter struct {
@@ -121,26 +118,10 @@ func TestClipKeepsScale(t *testing.T) {
 	}
 }
 
-func TestTextRasterizesAtScaledSize(t *testing.T) {
-	t.Parallel()
-	w := Text("x").Font(MustFont(goregular.TTF).NoFallback()).Size(14)
-	face, ok := w.faceAt(2).(*text.GoTextFace)
-	if !ok || face.Size != 28 {
-		t.Fatalf("face at scale 2 = %+v, want a GoTextFace of size 28", face)
-	}
-	if w.faceAt(1).(*text.GoTextFace).Size != 14 {
-		t.Fatal("layout face must stay at the logical size")
-	}
-}
-
-func TestFillRectAndTextTolerateNilTargets(t *testing.T) {
+func TestFillRectToleratesNilTargets(t *testing.T) {
 	t.Parallel()
 	(*Canvas)(nil).FillRect(Rect{}, nil)
 	(&Canvas{}).FillRect(Rct(Pt(0, 0), Sz(1, 1)), nil)
-	w := Text("x")
-	w.Layout(Loose(Sz(100, 100)), Env{})
-	w.Paint(nil, Rct(Pt(0, 0), Sz(10, 10)))
-	w.Paint(&Canvas{}, Rct(Pt(0, 0), Sz(10, 10)))
 }
 
 // A Canvas clipped into again is the Clip it would be made anew, with
@@ -196,7 +177,7 @@ func TestEmptyClipRetainsTextSemanticsAndTrace(t *testing.T) {
 	c := &Canvas{Image: img}
 	inspectorEnabled.Store(true)
 	c.fs().tracing = true
-	txt := Text("offscreen text")
+	txt := labelled("offscreen text")
 	size := txt.Layout(Tight(Sz(100, 20)), rootEnv())
 	clipped := c.Clip(Rct(Pt(200, 200), Sz(10, 10)))
 	clipped.Paint(txt, Rct(Pt(200, 200), size))
@@ -217,29 +198,6 @@ func BenchmarkOffscreenPaintBounds(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		c.visiblePaintBounds(r, 0)
-	}
-}
-
-// TestTextSkipsLinesOutsideTheClip paints a long Text into a canvas that
-// shows one line of it: the lines outside are not shaped and drawn, so it
-// allocates a fraction of what painting all of them does.
-func TestTextSkipsLinesOutsideTheClip(t *testing.T) {
-	img := ggfx.NewImage(400, 400)
-	defer img.Deallocate()
-	var s strings.Builder
-	for i := range 200 {
-		fmt.Fprintf(&s, "line %d of a long text\n", i)
-	}
-	txt := Text(s.String()).NoWrap()
-	size := txt.Layout(Loose(Sz(400, 1e6)), rootEnv())
-	full := &Canvas{Image: img}
-	shown := full.Clip(Rct(Pt(0, 0), Sz(400, 20)))
-	all := testing.AllocsPerRun(5, func() { full.Paint(txt, Rct(Point{}, size)) })
-	one := testing.AllocsPerRun(5, func() { shown.Paint(txt, Rct(Point{}, size)) })
-	// One line allocates about a twelfth of what all do, but about a tenth
-	// under the race detector; painting all of them would allocate as much.
-	if one*5 > all {
-		t.Errorf("painting one line of 200 allocates %v, all of them %v", one, all)
 	}
 }
 
@@ -277,7 +235,7 @@ func TestCanvasShortcutFollowsWhatIsPainted(t *testing.T) {
 	shown, inert, dialog := State(true), State(false), State(false)
 	var saves, dialogSaves int
 	p := ProbeBuilder(func() Widget {
-		return Column(
+		return column(
 			If(shown, func() Widget {
 				return &shortcutKeeper{chord: MustChord("cmd+s"), fn: func() { saves++ }, inert: inert}
 			}),
@@ -405,4 +363,15 @@ func withPrev(prev []hitRegion) *Canvas {
 	c := &Canvas{}
 	c.fs().prev = prev
 	return c
+}
+
+func TestClipNestsAndTrimsRegions(t *testing.T) {
+	t.Parallel()
+	var c Canvas
+	inner := c.Clip(Rct(Pt(0, 0), Sz(50, 50))).Clip(Rct(Pt(25, 25), Sz(100, 100)))
+	inner.HitPointer(Rct(Pt(0, 0), Sz(200, 200)), takesPointer{})
+	inner.HitPointer(Rct(Pt(60, 60), Sz(10, 10)), takesPointer{})
+	if len(c.hits) != 1 || c.hits[0].rect != Rct(Pt(25, 25), Sz(25, 25)) {
+		t.Fatalf("hits = %+v, want one region trimmed to {25 25 25 25}", c.hits)
+	}
 }

@@ -6,8 +6,6 @@ import (
 	"runtime"
 	"testing"
 	"time"
-
-	"github.com/ironpark/ggui/internal/reactive"
 )
 
 // The reactive tests here read what only the package sees: the rows an
@@ -15,35 +13,6 @@ import (
 // run. Those that go through the public surface alone are in
 // internal/apitest, and how often a Store published is in
 // internal/reactive, with the Store.
-
-func TestForRetainEvictsOffscreenRows(t *testing.T) {
-	t.Parallel()
-	var items []int
-	for i := range 100 {
-		items = append(items, i)
-	}
-	src := State(items)
-	var f *EachWidget[int, int]
-	off := State(0.0)
-	dispose := reactive.Observe(func() {
-		f = EachKeyed(src, func(i int) int { return i }, func(EachItem[int]) Widget { return Box().Size(10, 10) }).ItemExtent(10).Retain(2)
-	})
-	defer dispose()
-	p := NewProbe(Scroll(f).BindOffset(off), Sz(10, 50))
-	p.Frame()
-	off.Set(500)
-	p.Frame()
-	if n := len(f.entries); n != 5+2 {
-		t.Fatalf("mounted rows = %d, want 7", n)
-	}
-}
-
-// Stretch is Align(AlignStretch).
-func TestStretchIsAlignStretch(t *testing.T) {
-	if Column().Stretch().align != AlignStretch || Row().Stretch().align != AlignStretch {
-		t.Fatal("Stretch did not set AlignStretch")
-	}
-}
 
 type resourceReply struct {
 	value int
@@ -92,7 +61,9 @@ func TestResourceCancellationLateResultsReloadAndErrors(t *testing.T) {
 			result := <-req.reply // Deliberately ignore cancellation.
 			return result.value, result.err
 		})
-		return Await(r).Pending(func() Widget { return Text("pending") }).Then(func(v Readable[int]) Widget { return Textf("value %d", v) }).Catch(func(e Readable[error]) Widget { return Textf("error %v", e) })
+		// What each state shows reads its value as it is laid out, as a
+		// Textf of it does.
+		return Await(r).Pending(func() Widget { return labelled("pending") }).Then(func(v Readable[int]) Widget { return readsAtLayout(v) }).Catch(func(e Readable[error]) Widget { return readsAtLayout(e) })
 	}, Sz(200, 30))
 	defer p.Close()
 	p.Frame()
@@ -152,7 +123,7 @@ func TestResourceInputChangedBeforePostedCompletion(t *testing.T) {
 			v := <-req.reply
 			return v.value, v.err
 		})
-		return Box()
+		return sized(0, 0)
 	}, Sz(10, 10))
 	defer p.Close()
 	p.Frame()
@@ -186,7 +157,7 @@ func TestResourceEqualityAndSharedAwait(t *testing.T) {
 			v := <-req.reply
 			return v.value, v.err
 		}, ResourceEqual(func(a, b int) bool { return a%2 == b%2 }))
-		return Column(If(show, func() Widget { return Await(r) }), Await(r))
+		return column(If(show, func() Widget { return Await(r) }), Await(r))
 	}, Sz(10, 10))
 	defer p.Close()
 	p.Frame()

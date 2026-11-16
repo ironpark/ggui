@@ -4,6 +4,8 @@ import (
 	"image/color"
 	"testing"
 	"time"
+
+	"github.com/ironpark/ggfx"
 )
 
 // The transitions' tests through the public surface are in
@@ -49,4 +51,35 @@ func TestAnimatedBoxEasesBoundValues(t *testing.T) {
 	if got.Size.W != 125-20 {
 		t.Fatalf("a literal width half way = %v, want 105", got.Size.W)
 	}
+}
+
+func TestTransitionFadeHoldsALayerOnlyWhileAnimating(t *testing.T) {
+	t.Parallel()
+	img := ggfx.NewImage(120, 80)
+	defer img.Deallocate()
+	fading := func() *Probe {
+		p := NewProbe(Transition(Text("fading")), Sz(120, 80))
+		p.RenderTo(img)
+		p.Frame()
+		if n := p.Layers(); n != 1 {
+			t.Fatalf("mid-fade the window pools %d images; want 1", n)
+		}
+		return p
+	}
+	t.Run("fade ends", func(t *testing.T) {
+		p := fading()
+		defer p.Close()
+		p.Advance(time.Second)
+		p.Frame()
+		if n := p.Layers(); n != 0 {
+			t.Fatalf("after the fade the window pools %d images; want 0", n)
+		}
+	})
+	t.Run("closed mid-fade", func(t *testing.T) {
+		p := fading()
+		p.Close()
+		if n := p.Layers(); n != 0 {
+			t.Fatalf("a closed probe pools %d images; want 0", n)
+		}
+	})
 }

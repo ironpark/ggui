@@ -7,7 +7,7 @@ import (
 
 func TestMenuActionSkipsDisabled(t *testing.T) {
 	t.Parallel()
-	a := New(Config{}, func() Widget { return Box() })
+	a := New(Config{}, func() Widget { return sized(0, 0) })
 	defer a.Close()
 	enabled := State(false)
 	runs := 0
@@ -35,7 +35,7 @@ func TestMenuActionSkipsDisabled(t *testing.T) {
 
 func TestSetMenuReplacesShortcuts(t *testing.T) {
 	t.Parallel()
-	a := New(Config{}, func() Widget { return Box() })
+	a := New(Config{}, func() Widget { return sized(0, 0) })
 	defer a.Close()
 	a.SetMenu(Menu("File", MenuAction("Save", "cmd+s", func() {}), MenuAction("Open", "", func() {})))
 	a.addMenuShortcuts(a.Window)
@@ -78,7 +78,7 @@ func TestChordLabel(t *testing.T) {
 
 func TestTrayNumbersItsActionsApart(t *testing.T) {
 	t.Parallel()
-	a := New(Config{}, func() Widget { return Box() })
+	a := New(Config{}, func() Widget { return sized(0, 0) })
 	defer a.Close()
 	a.SetMenu(Menu("File", MenuAction("Save", "cmd+s", func() {})))
 	clicks := 0
@@ -178,7 +178,7 @@ func TestEditCommandsGoToTheFocusedFieldFirst(t *testing.T) {
 
 func TestContextMenuWithoutNativeWindow(t *testing.T) {
 	t.Parallel()
-	a := New(Config{}, func() Widget { return Box() })
+	a := New(Config{}, func() Widget { return sized(0, 0) })
 	defer a.Close()
 	if a.ShowContextMenu(Pt(10, 20), MenuAction("Run", "", func() { t.Fatal("action ran") })) {
 		t.Fatal("opened a native menu before the window exists")

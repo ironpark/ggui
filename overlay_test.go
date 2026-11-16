@@ -23,7 +23,7 @@ func TestOverlayTakesInputBeforeWidgetsExceptDuringADrag(t *testing.T) {
 	t.Parallel()
 	a := &Window{}
 	taps := 0
-	w := Tap(Box().Size(400, 400), func() { taps++ })
+	w := tapped(sized(400, 400), func() { taps++ })
 	paintFrame(&a.input, w, Sz(800, 600))
 	o := &recorder{rect: Rct(Pt(0, 0), Sz(100, 100))}
 	a.SetOverlay(o)

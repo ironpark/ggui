@@ -447,6 +447,27 @@ func Tight(s Size) Constraints { return layout.Tight(s) }
 // Loose returns constraints that permit anything up to s.
 func Loose(s Size) Constraints { return layout.Loose(s) }
 
+// EdgeInsets is padding on the four sides of a box: Top, Right, Bottom and
+// Left. Shrink removes it from constraints and Inflate adds it to a size.
+type EdgeInsets = layout.Insets
+
+// Insets builds EdgeInsets with CSS shorthand: one value for every side, two
+// for vertical then horizontal, four for top, right, bottom, left.
+func Insets(sides ...float64) EdgeInsets {
+	switch len(sides) {
+	case 0:
+		return EdgeInsets{}
+	case 1:
+		return EdgeInsets{Top: sides[0], Right: sides[0], Bottom: sides[0], Left: sides[0]}
+	case 2:
+		return EdgeInsets{Top: sides[0], Right: sides[1], Bottom: sides[0], Left: sides[1]}
+	case 4:
+		return EdgeInsets{Top: sides[0], Right: sides[1], Bottom: sides[2], Left: sides[3]}
+	default:
+		panic("ggui: Insets takes 1, 2 or 4 values")
+	}
+}
+
 // Role says what kind of element a node or region is. The ui package fills
 // it in; Probe.Find, the inspector and the semantics tree read it. The
 // control roles name things the user acts on, the rest name content and

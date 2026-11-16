@@ -21,7 +21,7 @@ func described(t *testing.T, w Widget, size Size) *SemTree {
 
 func TestSemanticsNestingComesFromTheBuilder(t *testing.T) {
 	t.Parallel()
-	// Column registers nothing, so paint depth would fold the leaf under
+	// A column registers nothing, so paint depth would fold the leaf under
 	// the group beside it; the explicit scope is what says otherwise.
 	inner := FromFuncs(
 		func(c Constraints, _ Env) Size { return c.Constrain(Sz(50, 20)) },
@@ -32,7 +32,7 @@ func TestSemanticsNestingComesFromTheBuilder(t *testing.T) {
 			})
 			dst.Leaf(r, Node{Role: RoleButton, Name: "three"})
 		})
-	got := described(t, Column(inner), Sz(100, 100)).String()
+	got := described(t, column(inner), Sz(100, 100)).String()
 	want := `button "one"
 group "box"
   button "two"
@@ -53,7 +53,7 @@ func TestSemanticsKeepsClippedNodesWithTheirBounds(t *testing.T) {
 			dst.Leaf(Rct(r.Origin, Sz(r.Size.W, 20)), Node{Role: RoleButton, Name: "top"})
 			dst.Leaf(Rct(Pt(r.Origin.X, r.Origin.Y+300), Sz(r.Size.W, 20)), Node{Role: RoleButton, Name: "far"})
 		})
-	tree := described(t, Scroll(tall), Sz(100, 50))
+	tree := described(t, &scroller{child: tall}, Sz(100, 50))
 	far, ok := tree.Find(RoleButton, "far")
 	if !ok {
 		t.Fatal("the clipped node was dropped instead of flagged")
@@ -102,7 +102,7 @@ func TestSemanticsDescribesOneHandlerOnce(t *testing.T) {
 func TestSemanticsSnapshotIsFrozen(t *testing.T) {
 	t.Parallel()
 	label := State("a")
-	p := ProbeBuilder(func() Widget { return TextOf(label) }, Sz(100, 100))
+	p := ProbeBuilder(func() Widget { return View(label, func(s string) Widget { return labelled(s) }) }, Sz(100, 100))
 	defer p.Close()
 	first := p.Semantics()
 	before := first.String()
@@ -121,8 +121,8 @@ func TestSemanticsSnapshotIsFrozen(t *testing.T) {
 
 func TestSemanticsMirrorsFocus(t *testing.T) {
 	t.Parallel()
-	one, two := Focus(Box().Size(40, 20)), Focus(Box().Size(40, 20))
-	p := NewProbe(Column(one, two), Sz(100, 100))
+	one, two := onKey(sized(40, 20), nil), onKey(sized(40, 20), nil)
+	p := NewProbe(column(one, two), Sz(100, 100))
 	defer p.Close()
 	p.Click(Pt(20, 10))
 	if _, ok := p.Semantics().Focused(); ok {
@@ -183,46 +183,20 @@ func TestFocusedNodePrefersHandlerAndFallsBackAfterRebuild(t *testing.T) {
 	}
 }
 
-func TestSemanticsListCountsItems(t *testing.T) {
-	t.Parallel()
-	items := State([]string{"a", "b", "c"})
-	tree := described(t, Each(items, func(rowItem EachItem[string]) Widget { s := rowItem.Value; return TextOf(s) }), Sz(100, 200))
-	list, ok := tree.Find(RoleList, "")
-	if !ok {
-		t.Fatalf("no list:\n%s", tree)
-	}
-	if list.Max != 3 {
-		t.Errorf("list.Max = %g, want 3", list.Max)
-	}
-	if len(list.Children) != 3 {
-		t.Fatalf("%d items, want 3:\n%s", len(list.Children), tree)
-	}
-	third := tree.At(list.Children[2])
-	if third.Role != RoleListItem || third.Now != 3 || third.Max != 3 {
-		t.Errorf("third item = %v, want item 3 of 3", third.Node)
-	}
-	if kids := third.Children; len(kids) != 1 || tree.At(kids[0]).Name != "c" {
-		t.Errorf("the item does not hold its row:\n%s", tree)
-	}
-}
-
-func TestSemanticsTextRoles(t *testing.T) {
-	t.Parallel()
-	tree := described(t, Column(Text("Heading").Role(RoleHeading), Text("body"), Text("")), Sz(200, 200))
-	want := `heading "Heading"
-text "body"
-`
-	if got := tree.String(); got != want {
-		t.Fatalf("tree =\n%s\nwant\n%s", got, want)
-	}
-}
-
 func TestSemanticsStagingReusePreservesOldTree(t *testing.T) {
 	t.Parallel()
 	rows := State([]string{"one", "two", "three"})
-	p := ProbeBuilder(func() Widget {
-		return Each(rows, func(rowItem EachItem[string]) Widget { s := rowItem.Value; return TextOf(s) })
-	}, Sz(100, 200))
+	// A list that describes itself and each row, as Each does.
+	list := func(items []string) Widget {
+		return FromFuncs(func(c Constraints, _ Env) Size { return c.Constrain(Sz(100, 20*float64(len(items)))) }, func(dst *Canvas, r Rect) {
+			dst.Node(r, Node{Role: RoleList, Max: float64(len(items))}, func(dst *Canvas) {
+				for i, s := range items {
+					dst.Leaf(Rct(r.Origin.Add(Pt(0, 20*float64(i))), Sz(100, 20)), Node{Role: RoleText, Name: s})
+				}
+			})
+		})
+	}
+	p := ProbeBuilder(func() Widget { return View(rows, list) }, Sz(100, 200))
 	defer p.Close()
 	old := p.Semantics()
 	before := old.String()
@@ -443,7 +417,7 @@ func TestSemTreeOldSnapshotCanBeReadDuringBufferReuse(t *testing.T) {
 
 func TestAnnounceQueuesWithoutAConsumer(t *testing.T) {
 	t.Parallel()
-	a := New(Config{}, func() Widget { return Box() })
+	a := New(Config{}, func() Widget { return sized(0, 0) })
 	a.Announce("Saved", Polite)
 	a.Announce("", Assertive) // nothing to say, nothing queued
 	a.Announce("Disk full", Assertive)
@@ -462,7 +436,7 @@ func TestPerformDoesNotWaitForTheUIGoroutine(t *testing.T) {
 	// An action is queued and returns at once: the platform thread that
 	// asked is blocked, and so may the UI goroutine be, so nothing may
 	// wait on anything. Without a frame, nothing has run.
-	a := New(Config{}, func() Widget { return Box() })
+	a := New(Config{}, func() Widget { return sized(0, 0) })
 	done := make(chan struct{})
 	go func() {
 		a.Perform(NodeID{Rect: Rct(Pt(0, 0), Sz(10, 10))}, Action{Kind: ActionPress})
@@ -474,32 +448,6 @@ func TestPerformDoesNotWaitForTheUIGoroutine(t *testing.T) {
 	a.postMu.Unlock()
 	if queued != 1 {
 		t.Fatalf("%d posted, want the action waiting for the UI goroutine", queued)
-	}
-}
-
-func TestPerformFocusesAndScrollsIntoView(t *testing.T) {
-	t.Parallel()
-	w := &twice{}
-	w.Role = RoleTextField
-	w.SetName("Name")
-	tall := Column(Box().Size(40, 200), w)
-	p := NewProbe(Scroll(tall), Sz(100, 60))
-	defer p.Close()
-	field, ok := p.Semantics().Find(RoleTextField, "Name")
-	if !ok {
-		t.Fatal("no field")
-	}
-	if !field.Offscreen {
-		t.Fatal("the field should start out of view")
-	}
-	p.Perform(field.ID, Action{Kind: ActionFocus})
-	if !p.Focused() {
-		t.Fatal("the field did not take focus")
-	}
-	// Focus moved by the keyboard reveals, and the action goes through the
-	// same path, so the scroll came along.
-	if now, _ := p.Semantics().Find(RoleTextField, "Name"); now.Offscreen {
-		t.Error("the field was focused but not scrolled into view")
 	}
 }
 

@@ -1,11 +1,9 @@
 package ggui
 
 import (
-	"image/color"
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/ironpark/ggui/internal/reactive"
 )
@@ -31,11 +29,11 @@ func TestInteractiveDirectInertWriteRequestsLayout(t *testing.T) {
 
 func TestConfigInspectorChord(t *testing.T) {
 	t.Parallel()
-	a := New(Config{Inspector: "f1"}, func() Widget { return Box() })
+	a := New(Config{Inspector: "f1"}, func() Widget { return sized(0, 0) })
 	if a.inspectChord.Key != KeyF1 {
 		t.Fatalf("chord key = %v", a.inspectChord.Key)
 	}
-	if New(Config{}, func() Widget { return Box() }).inspectChord.Key != 0 {
+	if New(Config{}, func() Widget { return sized(0, 0) }).inspectChord.Key != 0 {
 		t.Fatal("empty Inspector parsed a chord")
 	}
 }
@@ -50,7 +48,7 @@ func TestComponentSetupIsStable(t *testing.T) {
 			setups++
 			dep.Get()
 			local = State(3)
-			return View(local, func(n int) Widget { return Box().Size(float64(n), 1) })
+			return View(local, func(n int) Widget { return sized(float64(n), 1) })
 		})
 	}, Sz(100, 100))
 	defer p.Close()
@@ -71,7 +69,7 @@ func TestKeyDisposesAndRecreates(t *testing.T) {
 		return Key(key, func(int) Widget {
 			setups++
 			OnCleanup(func() { cleanups++ })
-			return Box()
+			return sized(0, 0)
 		})
 	}, Sz(10, 10))
 	p.Frame()
@@ -97,7 +95,7 @@ func TestComponentPropsAreReadable(t *testing.T) {
 	var seen []int
 	p := ProbeBuilder(func() Widget {
 		return Component(func() Widget {
-			return View(n, func(value int) Widget { seen = append(seen, value); return Box() })
+			return View(n, func(value int) Widget { seen = append(seen, value); return sized(0, 0) })
 		})
 	}, Sz(10, 10))
 	defer p.Close()
@@ -106,25 +104,6 @@ func TestComponentPropsAreReadable(t *testing.T) {
 	p.Frame()
 	if len(seen) != 2 || seen[1] != 2 {
 		t.Fatalf("props: %v", seen)
-	}
-}
-
-func TestScrollAdoptsOffsetAcrossRebuild(t *testing.T) {
-	t.Parallel()
-	dep := State(0)
-	p := ProbeBuilder(func() Widget {
-		dep.Get()
-		return Scroll(Box().Size(50, 500))
-	}, Sz(50, 100))
-	defer p.Close()
-	p.Scroll(Pt(10, 10), Pt(0, -3))
-	if off := p.root.(*ScrollWidget).offset; off != 60 {
-		t.Fatalf("offset = %v, want 60", off)
-	}
-	dep.Set(1)
-	p.Frame()
-	if off := p.root.(*ScrollWidget).offset; off != 60 {
-		t.Fatalf("after rebuild offset = %v, want 60", off)
 	}
 }
 
@@ -152,10 +131,10 @@ func TestAdoptionFollowsIDNotRect(t *testing.T) {
 	p := ProbeBuilder(func() Widget {
 		return Reactive(func() Widget {
 			if gen.Get() == 0 {
-				return Column(a, Box().Size(10, 10))
+				return column(a, sized(10, 10))
 			}
 			// Rebuilt and moved: a2 has a's id at another Rect; b sits where a was.
-			return Column(b, a2)
+			return column(b, a2)
 		})
 	}, Sz(10, 100))
 	defer p.Close()
@@ -188,47 +167,6 @@ func TestCachedSeesProvideChange(t *testing.T) {
 	}
 	if got := at(8).W; got != 8 || layouts != 2 {
 		t.Fatalf("width = %v after %d layouts, want 8 after 2", got, layouts)
-	}
-}
-
-func TestTabReachesAControlOutsideTheScrollWindow(t *testing.T) {
-	t.Parallel()
-	items := Column(Focus(Box().Size(50, 50)), Focus(Box().Size(50, 50)), Focus(Box().Size(50, 50)))
-	sc := Scroll(items)
-	p := NewProbe(sc, Sz(50, 40))
-	defer p.Close()
-	p.Type(Mods{}, KeyTab, KeyTab, KeyTab)
-	if sc.offset != 110 {
-		t.Fatalf("offset = %v after tabbing to the third, fully hidden item; want 110", sc.offset)
-	}
-}
-
-func TestRetainKeepsTheFocusedRow(t *testing.T) {
-	t.Parallel()
-	items := State([]int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9})
-	built := map[int]int{}
-	list := EachKeyed(items, func(i int) int { return i }, func(rowItem EachItem[int]) Widget {
-		r := rowItem.Value
-		built[r.Get()]++
-		return Focus(Box().Size(50, 10))
-	}).ItemExtent(10).Retain(1)
-	sc := Scroll(list)
-	p := NewProbe(sc, Sz(50, 30))
-	defer p.Close()
-	p.Click(Pt(5, 5)) // focus row 0
-	p.Scroll(Pt(5, 5), Pt(0, -5))
-	p.Frame()
-	p.Frame()
-	if sc.offset < 30 {
-		t.Fatalf("offset %v, want the first rows out of view", sc.offset)
-	}
-	p.Scroll(Pt(5, 5), Pt(0, 5)) // back up
-	p.Frame()
-	if built[0] != 1 {
-		t.Fatalf("row 0 built %d times: the focused row was evicted", built[0])
-	}
-	if built[1]+built[2] < 3 {
-		t.Fatalf("rows 1 and 2 built %d and %d times: one unfocused row should have been evicted with Retain(1)", built[1], built[2])
 	}
 }
 
@@ -270,11 +208,11 @@ func TestCachedSkipsLayoutUntilSomethingInsideChanges(t *testing.T) {
 	dep := State(0)
 	var inner Widget
 	dispose := reactive.Observe(func() {
-		inner = Reactive(func() Widget { dep.Get(); return Column(leaf) })
+		inner = Reactive(func() Widget { dep.Get(); return column(leaf) })
 	})
 	defer dispose()
 	c := Cached(inner)
-	tree := Column(c, Box().Size(10, 10))
+	tree := column(c, sized(10, 10))
 	env := rootEnv()
 	tree.Layout(Tight(Sz(100, 100)), env)
 	tree.Layout(Tight(Sz(100, 100)), env)
@@ -297,87 +235,6 @@ func TestCachedSkipsLayoutUntilSomethingInsideChanges(t *testing.T) {
 	}
 }
 
-func TestCachedNestsAndFollowsScrollAndFor(t *testing.T) {
-	t.Parallel()
-	leaf := &counting{}
-	items := State([]todo{{1, "a"}})
-	var list Widget
-	dispose := reactive.Observe(func() {
-		list = EachKeyed(items, func(t todo) int { return t.ID }, func(EachItem[todo]) Widget { return leaf })
-	})
-	defer dispose()
-	inner := Cached(list)
-	offset := State(0.0)
-	s := Scroll(Column(inner, Box().Size(10, 500))).BindOffset(offset)
-	outer := Cached(s)
-	env := rootEnv()
-	outer.Layout(Tight(Sz(100, 100)), env)
-	outer.Layout(Tight(Sz(100, 100)), env)
-	if leaf.layouts != 1 {
-		t.Fatalf("leaf laid out %d times, want 1", leaf.layouts)
-	}
-	items.Set([]todo{{1, "a"}, {2, "b"}})
-	reactive.Flush()
-	outer.Layout(Tight(Sz(100, 100)), env)
-	if leaf.layouts != 3 {
-		t.Fatalf("leaf laid out %d times after the list grew through two caches, want 3", leaf.layouts)
-	}
-	// A scroll through the bound signal changes the viewport the inner
-	// cache saw, so it lays out again when the outer one is asked.
-	offset.Set(40)
-	s.Paint(nil, Rct(Pt(0, 0), Sz(100, 100)))
-	outer.Layout(Tight(Sz(100, 100)), env)
-	if leaf.layouts != 5 {
-		t.Fatalf("leaf laid out %d times after scrolling, want 5", leaf.layouts)
-	}
-	if !outer.dirty && outer.valid {
-		outer.Layout(Tight(Sz(100, 100)), env)
-		if leaf.layouts != 5 {
-			t.Fatalf("leaf laid out %d times on a still frame, want 5", leaf.layouts)
-		}
-	}
-}
-
-// A Scroll and a Contain laid out again, as their parent is, hand down
-// the Env they did last time, carrying their boundaries, so a cache inside
-// either, with nothing changed in it, keeps its measurement.
-func TestACacheInsideABoundaryLaidOutAgainHolds(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		name string
-		wrap func(Widget) Widget
-	}{
-		{"scroll", func(w Widget) Widget { return Scroll(w) }},
-		{"contain", func(w Widget) Widget { return Contain(Box(w).Size(100, 50)) }},
-		{"contain in a scroll", func(w Widget) Widget { return Scroll(Contain(Box(w).Size(100, 50))) }},
-		{"scroll in a contain", func(w Widget) Widget { return Contain(Box(Scroll(w)).Size(100, 50)) }},
-	} {
-		leaf := &counting{}
-		dep := State(0)
-		boundary, laid := tc.wrap(Cached(Column(leaf))), 0
-		// A sibling rebuilt at the same size: the boundary is laid out
-		// again under the constraints it had.
-		p := NewProbe(Column(
-			Reactive(func() Widget { return Box().Size(10, 10).Fill(color.Gray{uint8(dep.Get())}) }),
-			FromFuncs(func(c Constraints, env Env) Size { laid++; return boundary.Layout(c, env) }, boundary.Paint),
-		), Sz(100, 100))
-		p.Frame()
-		p.Frame()
-		was, wasLaid := leaf.layouts, laid
-		dep.Set(1)
-		p.Frame()
-		dep.Set(2)
-		p.Frame()
-		p.Close()
-		if laid != wasLaid+2 {
-			t.Fatalf("%s: the boundary was laid out %d times for two rebuilds beside it, want 2", tc.name, laid-wasLaid)
-		}
-		if was != 1 || leaf.layouts != was {
-			t.Fatalf("%s: the leaf was laid out %d times, then %d more as the boundary was laid out again; want once, then none", tc.name, was, leaf.layouts-was)
-		}
-	}
-}
-
 // countingLeaf records how often it was measured.
 type countingLeaf struct{ n int }
 
@@ -395,7 +252,7 @@ func TestRebuildBoundaryConfinesLayout(t *testing.T) {
 	a, b := State(0), State(0)
 	leafA, leafB := &countingLeaf{}, &countingLeaf{}
 	p := ProbeBuilder(func() Widget {
-		return Column(
+		return column(
 			Reactive(func() Widget { a.Get(); return leafA }),
 			Reactive(func() Widget { b.Get(); return leafB }),
 		)
@@ -424,9 +281,9 @@ func TestACachedSkippedWhileOthersChangeKeepsTheCachesInside(t *testing.T) {
 	t.Parallel()
 	leaf := &counting{}
 	depA, depB := State(0), State(0)
-	a := Cached(Column(Reactive(func() Widget { depA.Get(); return Box().Size(10, 10) }), Cached(Column(leaf))))
-	b := Cached(Column(Reactive(func() Widget { depB.Get(); return Box().Size(10, 10) })))
-	p := NewProbe(Column(a, b), Sz(100, 100))
+	a := Cached(column(Reactive(func() Widget { depA.Get(); return sized(10, 10) }), Cached(column(leaf))))
+	b := Cached(column(Reactive(func() Widget { depB.Get(); return sized(10, 10) })))
+	p := NewProbe(column(a, b), Sz(100, 100))
 	defer p.Close()
 	p.Frame()
 	before := leaf.layouts
@@ -462,96 +319,13 @@ func TestEnvMemoStaysBoundedAsDerivationsChurn(t *testing.T) {
 	}
 }
 
-// readsWidth is a leaf as wide as the signal it reads while laid out.
-type readsWidth struct {
-	w       *StateValue[float64]
-	layouts int
-}
-
-func (r *readsWidth) Layout(cs Constraints, _ Env) Size {
-	r.layouts++
-	return cs.Constrain(Sz(r.w.Get(), 10))
-}
-func (r *readsWidth) Paint(*Canvas, Rect) {}
-
-// A signal read deep inside If, Key, Each, View and Cached, each a cache of
-// its own, measures the root afresh when it changes, and nothing at all
-// when it does not.
-func TestADeepReadReachesTheRootThroughEveryCache(t *testing.T) {
-	t.Parallel()
-	width := State(10.0)
-	other := State(0)
-	show := State(true)
-	key := State(1)
-	rows := State([]todo{{1, "a"}})
-	leaf := &readsWidth{w: width}
-	var tree Widget
-	dispose := reactive.Observe(func() {
-		tree = Cached(Column(
-			View(other, func(int) Widget { return Box().Size(5, 5) }),
-			If(show, func() Widget {
-				return Key(key, func(int) Widget {
-					return Cached(Column(EachKeyed(rows, func(t todo) int { return t.ID }, func(EachItem[todo]) Widget {
-						return View(rows, func([]todo) Widget { return Cached(Row(leaf)) })
-					})))
-				})
-			}),
-		))
-	})
-	defer dispose()
-	env := rootEnv()
-	layout := func() Size {
-		reactive.Flush()
-		return tree.Layout(Loose(Sz(500, 500)), env)
-	}
-	if got := layout(); got.W != 10 {
-		t.Fatalf("width %v, want 10", got.W)
-	}
-	n := leaf.layouts
-	layout()
-	other.Set(1) // a sibling rebuilds; the leaf's subtree stands
-	layout()
-	if leaf.layouts != n {
-		t.Fatalf("the leaf was laid out %d more times with nothing it reads changed", leaf.layouts-n)
-	}
-	width.Set(30)
-	if got := layout(); got.W != 30 {
-		t.Fatalf("width %v after the deep read changed, want 30", got.W)
-	}
-	width.Set(20)
-	if got := layout(); got.W != 20 {
-		t.Fatalf("width %v after it changed again, want 20", got.W)
-	}
-	n = leaf.layouts
-	layout()
-	if leaf.layouts != n {
-		t.Fatal("the leaf was laid out again after settling")
-	}
-}
-
-func TestTextfFollowsSignals(t *testing.T) {
-	t.Parallel()
-	n := State(1)
-	w := Textf("n=%d %s", n, "x")
-	p := NewProbe(w, Sz(200, 30))
-	p.Frame()
-	if w.value != "n=1 x" {
-		t.Fatalf("value = %q", w.value)
-	}
-	n.Set(2)
-	p.Frame()
-	if w.value != "n=2 x" {
-		t.Fatalf("after set value = %q", w.value)
-	}
-}
-
 func TestViewAndWhen(t *testing.T) {
 	t.Parallel()
 	s := State("a")
 	on := State(true)
-	then, other := Text("then"), Text("other")
+	then, other := labelled("then"), labelled("other")
 	builds := 0
-	root := Column(View(s, func(v string) *TextWidget { builds++; return Text(v) }), If(on, func() Widget {
+	root := column(View(s, func(v string) *label { builds++; return labelled(v) }), If(on, func() Widget {
 		return then
 	}).Else(func() Widget {
 		return other
@@ -563,7 +337,7 @@ func TestViewAndWhen(t *testing.T) {
 	if builds != 2 {
 		t.Fatalf("builds = %d", builds)
 	}
-	w := root.children[1].(*IfWidget)
+	w := root.kids[1].(*IfWidget)
 	if w.current() != then {
 		t.Fatal("When did not show then")
 	}
@@ -580,7 +354,7 @@ func TestViewAndWhen(t *testing.T) {
 func TestIfPicksTheFirstTrueBranch(t *testing.T) {
 	t.Parallel()
 	a, b := State(false), State(true)
-	ta, tb, tc := Text("A"), Text("B"), Text("C")
+	ta, tb, tc := labelled("A"), labelled("B"), labelled("C")
 	w := If(a, func() Widget {
 		return ta
 	}).ElseIf(b, func() Widget {
@@ -619,49 +393,12 @@ func TestIfPicksTheFirstTrueBranch(t *testing.T) {
 	}
 }
 
-// An If showing nothing is left out of its flow: no gap beside it in a
-// Column, Row or Wrap, and justification counts the children that are there.
-func TestIfShowingNothingTakesNoGap(t *testing.T) {
-	t.Parallel()
-	off := State(false)
-	col := Column(Box().Size(10, 10), If(off, func() Widget {
-		return Box().Size(10, 10)
-	}), Box().Size(10, 10)).Gap(4)
-	p := NewProbe(Align(col).At(0, 0), Sz(100, 100))
-	p.Frame()
-	if h := col.rects[0].Size.H + col.rects[1].Size.H + col.rects[2].Size.H; h != 20 || col.rects[2].Origin.Y != 14 {
-		t.Fatalf("third child at y=%v with %v of content, want 14 after one box and one gap", col.rects[2].Origin.Y, h)
-	}
-	off.Set(true)
-	p.Frame()
-	if got := col.rects[2].Origin.Y; got != 28 {
-		t.Fatalf("third child at y=%v once shown, want 28 after two boxes and two gaps", got)
-	}
-
-	off.Set(false)
-	p.Frame()
-	row := Row(Box().Size(10, 10), If(off, func() Widget {
-		return Box().Size(10, 10)
-	}), Box().Size(10, 10)).Justify(SpaceBetween)
-	row.Layout(Tight(Sz(100, 10)), rootEnv())
-	if got := row.rects[2].Origin.X; got != 90 {
-		t.Fatalf("space-between placed the last box at x=%v, want 90 with the absent child ignored", got)
-	}
-
-	wrap := Wrap(Box().Size(10, 10), If(off, func() Widget {
-		return Box().Size(10, 10)
-	}), Box().Size(10, 10)).Gap(4)
-	if w := wrap.Layout(Loose(Sz(100, 100)), rootEnv()).W; w != 24 {
-		t.Fatalf("wrap width = %v, want two boxes and one gap", w)
-	}
-}
-
 // Branches are constructed once and kept, so the one shown keeps its state
 // across being hidden; the choice rebuilds the If alone, not its parent.
 func TestIfKeepsBranchesAndRebuildsAlone(t *testing.T) {
 	t.Parallel()
 	on := State(true)
-	then := TextOf(State("kept"))
+	then := labelled("kept")
 	parentBuilds := 0
 	var w *IfWidget
 	p := ProbeBuilder(func() Widget {
@@ -669,7 +406,7 @@ func TestIfKeepsBranchesAndRebuildsAlone(t *testing.T) {
 		w = If(on, func() Widget {
 			return then
 		}).Else(func() Widget {
-			return Text("other")
+			return labelled("other")
 		})
 		return w
 	}, Sz(200, 100))
@@ -696,9 +433,9 @@ func TestIfIsDisposedWithItsParent(t *testing.T) {
 	p := ProbeBuilder(func() Widget {
 		return Reactive(func() Widget {
 			w := If(on, func() Widget {
-				return Text("a")
+				return labelled("a")
 			}).Else(func() Widget {
-				return Text("b")
+				return labelled("b")
 			})
 			if gen.Get() == 0 {
 				first = w
@@ -717,22 +454,6 @@ func TestIfIsDisposedWithItsParent(t *testing.T) {
 	}
 }
 
-func TestSpacingAndNamedTextStyles(t *testing.T) {
-	t.Parallel()
-	env := Env{}.With(SpacingKey, 12.0)
-	key := NewEnvKey[TextStyle]("heading")
-	env = env.With(key, TextStyle{Size: 24})
-	col := Column(Box().Size(10, 10), Box().Size(10, 10)).Space(2)
-	if h := col.Layout(Loose(Sz(100, 100)), env).H; h != 20+2*env.Spacing() {
-		t.Fatalf("height = %v", h)
-	}
-	title := Text("x").StyleKey(key).Role(RoleHeading)
-	title.Layout(Loose(Sz(100, 100)), env)
-	if title.resolved.Size != 24 {
-		t.Fatalf("title size = %v", title.resolved.Size)
-	}
-}
-
 // ViewOf rebuilds when the part it picks changes and not when the rest of
 // the state does, even under a parent that rebuilds it.
 func TestViewOfRebuildsOnlyForItsPart(t *testing.T) {
@@ -748,9 +469,9 @@ func TestViewOfRebuildsOnlyForItsPart(t *testing.T) {
 	p := ProbeBuilder(func() Widget {
 		return Reactive(func() Widget {
 			parent.Get()
-			return ViewOf(d, func(d doc) string { return d.Title }, func(title string) *TextWidget {
+			return ViewOf(d, func(d doc) string { return d.Title }, func(title string) *label {
 				built = append(built, title)
-				return Text(title)
+				return labelled(title)
 			})
 		})
 	}, Sz(200, 30))
@@ -769,173 +490,13 @@ func TestViewOfRebuildsOnlyForItsPart(t *testing.T) {
 	}
 }
 
-// This reader is intentionally not comparable, but its underlying signal is
-// still a measurement dependency.
-type propertyNumberReader struct{ get func() float64 }
-
-func (r propertyNumberReader) Get() float64 { return r.get() }
-
-func measuredPropertyProbe(w Widget) (*Probe, *Size, *int) {
-	size := new(Size)
-	layouts := new(int)
-	root := Cached(FromFuncs(func(cs Constraints, env Env) Size {
-		*layouts++
-		*size = w.Layout(Loose(cs.Max()), env)
-		return cs.Constrain(*size)
-	}, func(dst *Canvas, rc Rect) { dst.Paint(w, Rct(rc.Origin, *size)) }))
-	return NewProbe(root, Sz(600, 400)), size, layouts
-}
-
-func TestPropertyDimensionsReplaceSourcesUnderNestedCaches(t *testing.T) {
-	t.Parallel()
-	a, b := State(80.0), State(80.0)
-	height := State(20.0)
-	box := Box().BindWidth(a).BindHeight(height)
-	p, size, _ := measuredPropertyProbe(Cached(box))
-	defer p.Close()
-	p.Frame()
-	if *size != Sz(80, 20) {
-		t.Fatal(*size)
-	}
-	box.BindWidth(b) // Same result, different dependencies.
-	p.Frame()
-	a.Set(90)
-	p.Frame()
-	if size.W != 80 {
-		t.Fatal("old reader remained connected", *size)
-	}
-	b.Set(140)
-	height.Set(30)
-	p.Frame()
-	if *size != Sz(140, 30) {
-		t.Fatal(*size)
-	}
-	box.Size(140, 30) // Same values still detach both sources.
-	b.Set(160)
-	height.Set(60)
-	p.Frame()
-	if *size != Sz(140, 30) {
-		t.Fatal("Size did not detach", *size)
-	}
-	box.Size(100, 40).BindWidth(propertyNumberReader{a.Get})
-	a.Set(110)
-	p.Frame()
-	if *size != Sz(110, 40) {
-		t.Fatal("non-comparable width reader", *size)
-	}
-}
-
-func TestPropertyLiteralGeometryUpdatesMountedCaches(t *testing.T) {
-	t.Parallel()
-	box := Box(Text("x")).Pad(1)
-	p, size, layouts := measuredPropertyProbe(box)
-	defer p.Close()
-	p.Frame()
-	before := *size
-	box.Padding(Insets(12))
-	p.Frame()
-	if size.W != before.W+22 || size.H != before.H+22 {
-		t.Fatalf("padding did not invalidate: %v -> %v", before, *size)
-	}
-	n := *layouts
-	box.Pad(12)
-	p.Frame()
-	if *layouts != n {
-		t.Fatal("equivalent shorthand caused layout")
-	}
-	box.Fill(color.NRGBA{R: 255, A: 255}).Border(2, color.White)
-	p.Frame()
-	if *layouts != n {
-		t.Fatal("paint-only properties invalidated measurement")
-	}
-}
-
-func TestPropertyParentConfigurationConverges(t *testing.T) {
-	t.Parallel()
-	text := Text("unchanged")
-	box := Box(text)
-	layouts := 0
-	root := FromFuncs(func(cs Constraints, env Env) Size {
-		layouts++
-		// These intermediate styles differ each pass. The final configuration is
-		// consumed in this layout, so it must not force another frame's layout.
-		text.Style(TextStyle{Size: 12, Color: color.Black}).Color(color.White)
-		box.Pad(2).Padding(Insets(3))
-		return Cached(box).Layout(cs, env)
-	}, box.Paint)
-	p := NewProbe(root, Sz(200, 100))
-	defer p.Close()
-	p.Advance(0)
-	p.Frame()
-	p.Frame()
-	if layouts != 1 {
-		t.Fatalf("configuration did not settle: %d", layouts)
-	}
-}
-
-func TestTextPropertiesPullWithoutEffectsAndDetach(t *testing.T) {
-	t.Parallel()
-	start := reactive.Count()
-	source := State("a")
-	args := []any{source, Const(3)}
-	a := TextOf(source)
-	b := Textf("%s %d", args...)
-	args[0] = "caller mutation"
-	if reactive.Count() != start {
-		t.Fatal("text construction registered an effect")
-	}
-	p := NewProbe(Cached(Column(a, b)), Sz(300, 100))
-	p.Frame()
-	if b.value != "a 3" {
-		t.Fatal("Textf did not own its argument list", b.value)
-	}
-	source.Set("b")
-	p.Frame()
-	if a.value != "b" || b.value != "b 3" {
-		t.Fatal(a.value, b.value)
-	}
-	a.Content("b")
-	b.Content("fixed")
-	source.Set("c")
-	p.Frame()
-	if a.value != "b" || b.value != "fixed" {
-		t.Fatal("Content did not detach")
-	}
-	b.BindContent(source)
-	p.Frame()
-	if b.value != "c" {
-		t.Fatal("BindContent did not replace formatting")
-	}
-	p.Close()
-	if reactive.Count() != start {
-		t.Fatal("text leaked computations")
-	}
-	// Disposing a widget does not dispose a borrowed memo used elsewhere.
-	memo := Derived(func() string { return source.Get() + "!" })
-	defer memo.Dispose()
-	q := NewProbe(TextOf(memo), Sz(100, 40))
-	q.Frame()
-	q.Close()
-	source.Set("d")
-	if memo.Get() != "d!" {
-		t.Fatal("widget disposed borrowed memo")
-	}
-}
-
 func TestPropertyBindingsRejectNilReaders(t *testing.T) {
 	t.Parallel()
-	var width *StateValue[float64]
 	var text *StateValue[string]
 	var flag *StateValue[bool]
 	cases := map[string]func(){
-		"width nil":       func() { Box().BindWidth(nil) },
-		"width typed nil": func() { Box().BindWidth(width) },
-		"height":          func() { Box().BindHeight(width) },
-		"content":         func() { TextOf(text) },
-		"name":            func() { new(Interactive).BindName(text) },
-		"disabled":        func() { new(Interactive).BindInert(flag) },
-		"offset":          func() { Scroll(Box()).BindOffset(width) },
-		"popup":           func() { Popup(Box(), Box()).BindOpen(flag) },
+		"name":     func() { new(Interactive).BindName(text) },
+		"disabled": func() { new(Interactive).BindInert(flag) },
 	}
 	for name, run := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -950,48 +511,66 @@ func TestPropertyBindingsRejectNilReaders(t *testing.T) {
 	}
 }
 
-func TestBoundDimensionsFollowAnimationWithoutRebuilding(t *testing.T) {
-	t.Parallel()
-	tween := Tween(10.0, 100*time.Millisecond)
-	box := Box().Height(10).BindWidth(tween)
-	q, size, _ := measuredPropertyProbe(box)
-	defer q.Close()
-	q.Advance(0)
-	tween.Set(100)
-	q.Advance(0)
-	q.Advance(200 * time.Millisecond)
-	if size.W != 100 {
-		t.Fatalf("animation width=%v", size.W)
-	}
+// mustPanic fails the test unless fn panics.
+func mustPanic(t *testing.T, what string, fn func()) {
+	t.Helper()
+	defer func() {
+		if recover() == nil {
+			t.Fatalf("%s did not panic", what)
+		}
+	}()
+	fn()
 }
 
-func TestScrollOffsetDetachesAndClampsLocalPosition(t *testing.T) {
+func TestInsetsShorthand(t *testing.T) {
 	t.Parallel()
-	source := State(10.0)
-	scroll := Scroll(Box().Size(20, 600)).BindOffset(source)
-	p := NewProbe(scroll, Sz(100, 100))
-	defer p.Close()
-	p.Frame()
-	scroll.Offset(200)
-	p.Frame()
-	source.Set(30)
-	p.Frame()
-	if scroll.position() != 200 {
-		t.Fatal("old scroll source remained attached")
+	cases := []struct {
+		in   []float64
+		want EdgeInsets
+	}{
+		{nil, EdgeInsets{}},
+		{[]float64{8}, EdgeInsets{Top: 8, Right: 8, Bottom: 8, Left: 8}},
+		{[]float64{4, 12}, EdgeInsets{Top: 4, Right: 12, Bottom: 4, Left: 12}},
+		{[]float64{1, 2, 3, 4}, EdgeInsets{Top: 1, Right: 2, Bottom: 3, Left: 4}},
 	}
-	scroll.scrollTo(250)
-	if source.Get() != 30 {
-		t.Fatal("local scrolling wrote detached source")
+	for _, c := range cases {
+		if got := Insets(c.in...); got != c.want {
+			t.Fatalf("Insets(%v) = %+v, want %+v", c.in, got, c.want)
+		}
 	}
-	scroll.BindOffset(source)
-	p.Frame()
-	scroll.scrollTo(70)
-	if source.Get() != 70 {
-		t.Fatal("scroll did not write back")
+	mustPanic(t, "Insets(1, 2, 3)", func() { Insets(1, 2, 3) })
+}
+
+// A subtree mounted in a Scope and disposed by its Cleanup is let go of by
+// the scope's owner, so a list that mounts and evicts rows as it scrolls,
+// in its own scope, holds only the rows it keeps.
+func TestScopeLetsGoOfWhatItsCleanupDisposed(t *testing.T) {
+	t.Parallel()
+	var s Scope
+	dispose := Root(func() { s = UseScope() })
+	defer dispose()
+	var kept []Cleanup
+	mounted, cleaned := 0, 0
+	for i := range 100 {
+		_, cleanup := s.MountAs(i, "row", func() Widget {
+			mounted++
+			OnCleanup(func() { cleaned++ })
+			return sized(10, 10)
+		})
+		kept = append(kept, cleanup)
+		if len(kept) > 3 {
+			kept[0]()
+			kept = kept[1:]
+		}
 	}
-	scroll.Offset(1000)
-	p.Frame()
-	if scroll.position() != 500 {
-		t.Fatal("local scroll not clamped", scroll.position())
+	held := 0
+	for _, c := range s.owner.Children() {
+		if c.Disposed() {
+			t.Fatal("the scope's owner holds a disposed subtree")
+		}
+		held++
+	}
+	if held != len(kept) || mounted-cleaned != len(kept) {
+		t.Fatalf("the scope's owner holds %d subtrees, %d alive; want the %d kept", held, mounted-cleaned, len(kept))
 	}
 }

@@ -186,6 +186,34 @@ func Directionality(dir TextDirection, child Widget) *EnvWidget {
 	return Provide(DirectionKey, dir, child)
 }
 
+// EnvWidget hands its child a modified Env. Build one with Provide.
+type EnvWidget struct {
+	with  func(Env) Env
+	child Widget
+}
+
+// Provide stores v under k for the subtree below child, where any widget can
+// read it back from its Env with Get. It is how your own inherited values
+// (a form's disabled state, a list's density) travel down the tree.
+func Provide[T any](k EnvKey[T], v T, child Widget) *EnvWidget {
+	return &EnvWidget{with: func(e Env) Env { return e.With(k, v) }, child: child}
+}
+
+// WithEnv transforms the inherited environment for a subtree during layout.
+// The transform should be pure so equivalent layouts reuse environment revisions.
+func WithEnv(transform func(Env) Env, child Widget) *EnvWidget {
+	return &EnvWidget{with: transform, child: child}
+}
+
+// Layout implements Widget.
+func (e *EnvWidget) Layout(c Constraints, env Env) Size { return e.child.Layout(c, e.with(env)) }
+
+// Baseline implements Baseliner: the child's.
+func (e *EnvWidget) Baseline() (float64, bool) { return BaselineOf(e.child) }
+
+// Paint implements Widget.
+func (e *EnvWidget) Paint(dst *Canvas, r Rect) { dst.Paint(e.child, r) }
+
 // EnvColor is a color the Env holds, such as a theme's primary color. A
 // widget given one resolves it against the Env it is laid out in, so the
 // widget follows a theme switch, or a subtree's own theme, without being

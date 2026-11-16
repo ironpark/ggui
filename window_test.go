@@ -24,7 +24,7 @@ func TestConfigOptionsMapWindowFields(t *testing.T) {
 
 func TestWindowControlBeforeOpenChangesConfig(t *testing.T) {
 	t.Parallel()
-	a := New(Config{Title: "a"}, func() Widget { return Box() })
+	a := New(Config{Title: "a"}, func() Widget { return sized(0, 0) })
 	defer a.Close()
 	a.SetTitle("b")
 	a.SetSize(Sz(320, 240))
@@ -37,8 +37,8 @@ func TestWindowControlBeforeOpenChangesConfig(t *testing.T) {
 
 func TestOpenWindowBeforeRunWaits(t *testing.T) {
 	t.Parallel()
-	a := New(Config{}, func() Widget { return Box() })
-	w, err := a.OpenWindow(Config{Title: "second"}, func() Widget { return Box() })
+	a := New(Config{}, func() Widget { return sized(0, 0) })
+	w, err := a.OpenWindow(Config{Title: "second"}, func() Widget { return sized(0, 0) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func TestUseHostFindsTheProbe(t *testing.T) {
 	var built, clicked Host
 	p := ProbeBuilder(func() Widget {
 		built = UseHost()
-		return Pointer(Box().Size(20, 20)).OnTap(func() { clicked = UseHost() })
+		return tapped(sized(20, 20), func() { clicked = UseHost() })
 	}, Sz(100, 100))
 	defer p.Close()
 	p.Click(Pt(5, 5))
@@ -82,7 +82,7 @@ func useWindowIn(p *Probe) (w *Window) {
 func TestAsyncDeliversOnTheUIThread(t *testing.T) {
 	t.Parallel()
 	result := State("")
-	p := NewProbe(TextOf(result), Sz(100, 20))
+	p := NewProbe(readsAtLayout(result), Sz(100, 20))
 	defer p.Close()
 	p.Frame()
 	started := make(chan struct{})
@@ -103,7 +103,7 @@ func TestAsyncDeliversOnTheUIThread(t *testing.T) {
 
 func TestWindowSettersBeforeOpenShapeTheConfig(t *testing.T) {
 	t.Parallel()
-	a := New(Config{}, func() Widget { return Box() })
+	a := New(Config{}, func() Widget { return sized(0, 0) })
 	defer a.Close()
 	icon := []image.Image{image.NewRGBA(image.Rect(0, 0, 16, 16))}
 	a.SetSizeLimits(Sz(200, 100), Sz(0, 900))
@@ -140,13 +140,13 @@ func TestWindowSettersBeforeOpenShapeTheConfig(t *testing.T) {
 
 func TestWindowReadablesStartFromTheConfig(t *testing.T) {
 	t.Parallel()
-	a := New(Config{Width: 320, Height: 240, Maximized: true, Unfocused: true}, func() Widget { return Box() })
+	a := New(Config{Width: 320, Height: 240, Maximized: true, Unfocused: true}, func() Widget { return sized(0, 0) })
 	defer a.Close()
 	if Untrack(a.Focused().Get) || Untrack(a.Viewport().Get) != Sz(320, 240) || Untrack(a.State().Get) != WindowMaximized {
 		t.Fatalf("focused %v, viewport %v, state %v; want unfocused, 320x240, maximized",
 			Untrack(a.Focused().Get), Untrack(a.Viewport().Get), Untrack(a.State().Get))
 	}
-	b := New(Config{}, func() Widget { return Box() })
+	b := New(Config{}, func() Widget { return sized(0, 0) })
 	defer b.Close()
 	if !Untrack(b.Focused().Get) || Untrack(b.State().Get) != WindowNormal {
 		t.Fatal("a window configured with nothing does not start focused and normal")
@@ -155,7 +155,7 @@ func TestWindowReadablesStartFromTheConfig(t *testing.T) {
 
 func TestAppSetClipboardAndDialogsFallBackToThePlatform(t *testing.T) {
 	t.Parallel()
-	a := New(Config{}, func() Widget { return Box() })
+	a := New(Config{}, func() Widget { return sized(0, 0) })
 	defer a.Close()
 	clip := &runtime.MemoryClipboard{}
 	dialogs := &runtime.StubFilePicker{}
@@ -173,8 +173,8 @@ func TestAppSetClipboardAndDialogsFallBackToThePlatform(t *testing.T) {
 
 func TestAppQuitEndsRunAtTheNextEvent(t *testing.T) {
 	t.Parallel()
-	a := New(Config{}, func() Widget { return Box() })
-	extra, err := a.OpenWindow(Config{}, func() Widget { return Box() })
+	a := New(Config{}, func() Widget { return sized(0, 0) })
+	extra, err := a.OpenWindow(Config{}, func() Widget { return sized(0, 0) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +216,7 @@ func TestEventWindowIsTheWindowEachEventNames(t *testing.T) {
 			t.Errorf("eventWindow(%T) = %p, want none", ev, got)
 		}
 	}
-	a := New(Config{}, func() Widget { return Box() })
+	a := New(Config{}, func() Widget { return sized(0, 0) })
 	defer a.Close()
 	if a.windowFor(nw) != nil {
 		t.Fatal("a native window the app never made was matched to one of its windows")
@@ -225,7 +225,7 @@ func TestEventWindowIsTheWindowEachEventNames(t *testing.T) {
 
 func TestWindowStateFollowsTheStateEvents(t *testing.T) {
 	t.Parallel()
-	a := New(Config{}, func() Widget { return Box() })
+	a := New(Config{}, func() Widget { return sized(0, 0) })
 	defer a.Close()
 	for _, c := range []struct {
 		from ggwd.WindowState
@@ -248,7 +248,7 @@ func TestWindowStateFollowsTheStateEvents(t *testing.T) {
 
 func TestAWindowBuildsTheTreeOnlyOnceSomethingReadsIt(t *testing.T) {
 	t.Parallel()
-	a := New(Config{}, func() Widget { return Box() })
+	a := New(Config{}, func() Widget { return sized(0, 0) })
 	defer a.Close()
 	if a.semWanted.Load() {
 		t.Fatal("a window nobody asked builds its accessibility tree")
@@ -276,7 +276,7 @@ func TestAWindowBuildsTheTreeOnlyOnceSomethingReadsIt(t *testing.T) {
 	if a.semWanted.Load() {
 		t.Fatal("a Perform left the tree on after it ran")
 	}
-	b := New(Config{}, func() Widget { return Box() })
+	b := New(Config{}, func() Widget { return sized(0, 0) })
 	defer b.Close()
 	b.Semantics()
 	if !b.semWanted.Load() {
