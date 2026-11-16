@@ -51,8 +51,8 @@
 //	{"type":"debug-dump","path":"/tmp/w.png"}
 //		Writes what the window shows to a PNG, then says dumped.
 //	{"type":"debug-window","action":"hide"}
-//		hide, show, minimize, restore, focus, or resize with "width" and
-//		"height".
+//		hide, show, minimize, restore, focus, close, as the window's close
+//		button does, or resize with "width" and "height".
 //	{"type":"debug-input","input":{"kind":2,"x":10,"y":20,"pressed":true}}
 //		Sends the app an Input of package ggwd/remote as if the window got
 //		it; after the first, the window's own input goes nowhere.
@@ -68,5 +68,7 @@
 //
 // Closing the window asks the app to close, which it may refuse; when it
 // closes, or when no app is attached, the window closes and the viewer
-// ends. The viewer runs on unix systems only.
+// ends. An app that closes its window unasked, as App.Quit does, ends as
+// one that exits: the window stays for the next. The viewer runs on unix
+// systems only.
 package main
