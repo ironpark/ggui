@@ -86,12 +86,86 @@ starts the new one.
   catch to save first. After `--stop-timeout` (3s) it is killed.
 - **Ctrl-C** stops the app as above and then ggui. A second Ctrl-C kills
   the app at once.
+- **Timings**: each restart says how long it took from the change to the
+  new app's first frame in the viewer, split into the build and the
+  start.
 
 The app runs in a process group of its own, a job object on Windows, so
 the terminal's Ctrl-C reaches ggui rather than the app, and stopping the
 app also stops anything it started. On Windows the job ends with ggui
 however ggui ends, and on Linux the app is killed if ggui dies; on macOS
 an app outlives a ggui that is killed with `SIGKILL`.
+
+### The window: remote display
+
+On macOS the app's window belongs to a viewer, `ggviewer`, a process of
+its own that dev starts once and keeps for the session. The app is built
+with the `ggwd_remote` tag and started with the viewer's socket in
+`GGWD_REMOTE_SOCKET`; it then opens no window and no GPU device: it draws
+through ggfx's remote driver, whose command batches go to the viewer
+through shared memory, and gets its input, its size and its scale from
+the viewer's window. On a change only the app restarts: the window stays
+where it was and as large as it was, keeps the last frame while the new
+build starts, and the new app's first frame replaces it. The window notes
+a running build in a corner, shows a failed build's errors over the last
+frame, scrolled with the wheel, and says when the app exits and what it
+last wrote to stderr. Closing the window asks the app, as on its own
+window; when it closes, dev ends. The window's place and size are kept
+per module, under the user's cache directory.
+
+The viewer is built from the project's own module graph, with
+`go build github.com/ironpark/ggui/cmd/ggviewer` in the project, so that
+it replays the protocol of the ggfx and ggwd the app is built with. The
+binary is kept under the user's cache directory, `ggui/viewer`
+(`GGUI_CACHE_DIR` replaces the `ggui` there), under a key of what decides
+it: the Go version, the target and build environment, and the version of
+every module it is built from, or the contents of its files for a module
+being edited. A later session starts it at once; a changed dependency
+builds another, also when `go.mod` or `go.work` changes during a session,
+when dev restarts the viewer and the window closes and opens again once.
+The cache keeps the four used last. `GGUI_VIEWER` names a viewer binary to
+run instead, for work on the viewer itself.
+
+`--display=window`, or `display = "window"` under `[dev]`, gives each run
+a window of its own instead, as a release build has. Dev falls back to it
+by itself, saying why in one line, when the viewer cannot be had: on
+another system than macOS, for now; when the project's ggui has no
+`cmd/ggviewer` or its ggwd or ggfx lacks the `remote` package, which dev
+learns from `go list` in the project rather than from version numbers;
+when the viewer does not build or start. If the viewer goes away during
+the session, the app is started again in its own window and stays there.
+`ggui doctor` says whether the project gets remote display, and why not.
+
+An app shown by the viewer is the same program as a release build, and
+behaves as one, but for what belongs to the window on the desktop:
+
+- **One window.** `App.OpenWindow` returns an error while the app runs,
+  and a window made before `Run` other than the first does not open; the
+  app says so once on stderr. `ggui dev --display=window` opens them all.
+- **Menus.** `NativeMenu`, `NativeContextMenu` and `TraySupported` report
+  false: the menu bar is the viewer's, so `App.SetMenu`'s menus are drawn
+  by `ui.AppMenubar`, as on Windows and Linux, and their chords work. A
+  tray icon does not show, said once on stderr; `Window.ShowContextMenu`
+  returns false.
+- **Dialogs** open, from the app's process, standing alone in front of
+  the viewer's window rather than as a sheet on it; the viewer is active
+  again once they close.
+- **Clipboard** text copies and pastes through the system clipboard, as in
+  a release build.
+- **The window's placement and state** are the viewer's and its user's:
+  `SetSize`, `SetPosition`, maximize, minimize, fullscreen, show, hide,
+  focus and attention requests do nothing, and the window reports itself
+  at the screen's origin, visible and in none of those states. Its title,
+  size limits, resizability, frame and always-on-top follow the app's
+  `Config` and setters; a hidden title bar and transparency are the first
+  app's of the session. `Screens()` lists one screen, the viewer's.
+  Cursor shapes and text input, with input methods, work.
+- **No accessibility tree**: there is no native window to hang it on,
+  so screen readers see the viewer's window as empty.
+- The [inspector](inspector.md) and `ggui_debug` work as in a window of
+  the app's own.
+
+Remote display is macOS only for now, and shows one window.
 
 ### What is watched
 
@@ -119,6 +193,7 @@ old one.
 | `--tags a,b` | Build tags, replacing `dev.tags`. `--tags ""` builds with none. |
 | `--no-watch` | Build and run once; dev exits when the app does. |
 | `--stop-timeout 3s` | How long the app has to exit when asked before it is killed. |
+| `--display remote` | Where the window shows: `remote`, in the viewer, the default on macOS, or `window`, the app's own. Replaces `dev.display`. |
 | `--config file` | Read this file instead of the `ggui.toml` found from the package or the working directory. |
 | `-- args` | Arguments for the app, after `dev.args`. |
 
@@ -225,6 +300,7 @@ It prints what to do under each line that is not ok, and exits with status
 | go version | The toolchain against the `go` line of the go.mod of the ggui the project resolves. |
 | target | Whether ggfx and ggwd support `GOOS/GOARCH`; whether cgo is on, and on macOS whether the Xcode command line tools that a cgo build calls are installed. ggui needs no cgo, so `CGO_ENABLED=0` avoids needing them. |
 | ggui, ggfx, ggwd | The versions the project resolves, or the local directories that replace them, and whether ggfx and ggwd are the versions that ggui's go.mod requires. |
+| remote display | Whether `ggui dev` can show the app in its viewer, and why not. |
 | ggui.toml, icon | Whether the file is valid, and the icon a square PNG of at least 64 pixels, ideally 1024. |
 | platform | What ggwd and ggfx load when an app starts. |
 | tools | `wasm-opt`; on macOS `codesign`, and `lipo` for `--universal`. |
@@ -295,6 +371,7 @@ base = "/hello/"
 | `args` | `[]` | Arguments the app is run with. |
 | `env` | `{}` | Environment variables set for the app, such as `{ LOG_LEVEL = "debug" }`. |
 | `watch` | `[]` | More files or directories to watch, such as assets the app reads at run time. |
+| `display` | `"remote"` on macOS | Where the app's window shows: `"remote"`, in [the viewer](#the-window-remote-display) that stays while the app restarts, or `"window"`, the app's own. |
 
 ### [macos]
 

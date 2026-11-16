@@ -10,6 +10,7 @@ On macOS, install it with `brew install go-task`.
 
 - [Build and check](#build-and-check)
 - [Run native examples](#run-native-examples)
+- [The dev viewer](#the-dev-viewer)
 - [Run in a browser](#run-in-a-browser)
 - [Visual checks](#visual-checks)
 - [Repository layout](#repository-layout)
@@ -59,7 +60,9 @@ request:
 
 - **test**, on Linux, macOS and Windows: `go test` plain, with
   `ggui_inspector` and with `ggui_debug`, and with `-race` everywhere but
-  Windows, whose runner has no C toolchain for it. `examples/sqlite`, the
+  Windows, whose runner has no C toolchain for it. On Linux and macOS it
+  also tests the `ggwd_remote` build that `ggui dev` shows in its viewer,
+  and builds `examples/counter` with it. `examples/sqlite`, the
   other nested modules and `cmd/ggui` are tested through a `go work init`
   workspace, so they build against the checkout rather than a published
   ggui; `cmd/ggui`'s tests include building the app `ggui init` writes.
@@ -99,6 +102,32 @@ bin/ggui dev --web ./examples/gallery
 
 It is a module of its own, so it is built from its directory and run from
 here; the Task entries below do the same.
+
+### The dev viewer
+
+On macOS `ggui dev` shows the app in [`cmd/ggviewer`](../cmd/ggviewer/),
+a long-lived process that owns the OS window, rather than in a window of
+the app's own. The app is an ordinary native build with the `ggwd_remote`
+tag, started with `GGWD_REMOTE_SOCKET` naming the viewer's unix socket.
+Under that tag and variable ggwd opens no window and ggfx no GPU device:
+ggfx's remote driver records the frame's driver calls, images, shaders,
+draws and presents, as a command stream, which goes to the viewer in
+batches through shared memory, and `ggfx/remote`'s Replayer runs them
+against the viewer's own device into its window. Input, the window's
+size and scale and the system's appearance come back over the socket,
+in the protocol of `ggwd/remote`. The viewer acknowledges each batch
+once replayed, which paces the app to what is shown.
+
+The point is a restart that keeps the window: a code change rebuilds and
+restarts only the app, while the window stays where it was, keeps the
+last frame until the new app's first, and shows the build's state and
+errors itself. Replaying driver calls rather than pixels keeps the
+traffic small and the app's rendering the same code a release build
+runs, down to the shaders; the price is that the viewer must speak the
+app's ggfx and ggwd exactly, which is why `ggui dev` builds it from the
+project's own module graph. What the app gives up in the viewer, one
+window, native menus, the accessibility tree, is listed in
+[the ggui command](cli.md#the-window-remote-display).
 
 On macOS, the following commands build and launch application bundles:
 
@@ -164,7 +193,8 @@ those guides as historical measurements; rerun them on your target hardware.
 | Overlays and images | [widget/popup.go](../widget/popup.go) (`Popup`), [overlay.go](../overlay.go) (the window's `Overlay`), [paint.go](../paint.go) (`Canvas.DrawImage`), [widget/image.go](../widget/image.go), [internal/imgcache/](../internal/imgcache/) (the cache `widget.AsyncImage` loads into) |
 | Testing and diagnostics | [probe.go](../probe.go), [inspect/panel/](../inspect/panel) (the panel, build tag `ggui_inspector`), [inspector.go](../inspector.go) (its registration, and the frame built from the trace), [inspect/](../inspect) (the frame model the panel and `App.OnInspect` share, and `ReadFrameStats` and `ReadMotionReport`), [internal/framestats/](../internal/framestats/) (the process's frame counters those read), [overlay.go](../overlay.go) (the Overlay the panel draws as), [widget.go](../widget.go) (Cached) |
 | Runnable applications | [examples/](../examples/) |
-| The ggui command | [cmd/ggui/](../cmd/ggui/): `init`, `dev`, `build` and `doctor`, a module of its own that drives the go command and imports nothing of ggui; its [internal/](../cmd/ggui/internal/) packages keep the watcher, the process runner, the builders and the bundle writers apart |
+| The ggui command | [cmd/ggui/](../cmd/ggui/): `init`, `dev`, `build` and `doctor`, a module of its own that drives the go command and imports nothing of ggui; its [internal/](../cmd/ggui/internal/) packages keep the watcher, the process runner, the builders, the viewer's launcher and the bundle writers apart |
+| The dev viewer | [cmd/ggviewer/](../cmd/ggviewer/): the window `ggui dev` shows an app in while it restarts, replaying the app's command stream; [internal/platform/remotedisplay/](../internal/platform/remotedisplay/) is what the app gives up in it |
 
 The module is built in three layers, each importing only those below it:
 

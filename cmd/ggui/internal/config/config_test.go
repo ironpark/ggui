@@ -158,6 +158,7 @@ icon = "icon.jpg"
 
 [dev]
 tags = ["a b"]
+display = "viewer"
 
 [macos]
 category = "games"
@@ -172,9 +173,10 @@ wasm_opt = "O2"
 		3:  "app.version",
 		4:  "app.icon",
 		7:  "dev.tags",
-		10: "macos.category",
-		13: "web.base",
-		14: "web.wasm_opt",
+		8:  "dev.display",
+		11: "macos.category",
+		14: "web.base",
+		15: "web.wasm_opt",
 	}
 	if len(es) != len(want) {
 		t.Fatalf("got %d errors, want %d:\n%v", len(es), len(want), es)

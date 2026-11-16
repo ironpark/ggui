@@ -66,6 +66,10 @@ type Dev struct {
 	Args  []string          `toml:"args"`
 	Env   map[string]string `toml:"env"`
 	Watch []string          `toml:"watch"`
+	// Display is where the app's window shows: "remote", in a viewer
+	// that stays while the app restarts, or "window", the app's own.
+	// Empty is remote where it is available, macOS for now.
+	Display string `toml:"display"`
 }
 
 // MacOS holds what only the .app bundle uses.
@@ -381,6 +385,11 @@ func (c *Config) validate() []problem {
 				add(fmt.Sprintf("%s.tags: %q is not a build tag; give each tag as its own string", list.key, t), list.key, "tags")
 			}
 		}
+	}
+	switch c.Dev.Display {
+	case "", "remote", "window":
+	default:
+		add(fmt.Sprintf(`dev.display %q must be "remote" or "window"`, c.Dev.Display), "dev", "display")
 	}
 	for k := range c.Dev.Env {
 		if k == "" || strings.ContainsAny(k, "= \t") {

@@ -15,6 +15,7 @@ import (
 	"github.com/ironpark/ggui/cmd/ggui/internal/dev"
 	"github.com/ironpark/ggui/cmd/ggui/internal/gotool"
 	"github.com/ironpark/ggui/cmd/ggui/internal/project"
+	"github.com/ironpark/ggui/cmd/ggui/internal/viewer"
 )
 
 var devCmd = &command{
@@ -31,6 +32,18 @@ leaves the running app alone. An app that exits is started again by
 the next change. Ctrl-C stops the app and ggui; a second Ctrl-C kills
 the app at once.
 
+On macOS the app's window is shown by a viewer, a process of its own
+that keeps the window open, where it was and as large as it was, while
+the app is rebuilt and restarts: the window shows the build's progress
+and a failed build's errors, and says when the app exits. The app is
+built with the ggwd_remote tag for it and draws through the viewer. With
+--display=window, or dev.display = "window", each run of the app opens
+a window of its own, as a release build does. When there is no viewer
+to be had, because the project's ggui is too old for one or it does not
+build or start, the app opens its own window and ggui says why; if the
+viewer goes away, the app is started again in its own window. Closing
+the viewer's window ends ggui dev.
+
 The package is a directory such as ./cmd/app, app.package in ggui.toml
 by default. Arguments after -- go to the app, after dev.args.
 
@@ -42,6 +55,7 @@ which keeps running the last build that succeeded.`,
 		tags := fs.String("tags", "", "build `tags`, comma-separated, replacing dev.tags")
 		noWatch := fs.Bool("no-watch", false, "build and run once; do not watch for changes")
 		stopTimeout := fs.Duration("stop-timeout", 3*time.Second, "how long the app has to exit when asked before it is killed")
+		display := fs.String("display", "", "where the app's window shows: `remote`, in a viewer that stays while the app restarts (the default on macOS), or window, its own; replaces dev.display")
 		webMode := fs.Bool("web", false, "build for the browser and serve the app instead of running it")
 		port := fs.Int("port", 8080, "with --web, the `port` to serve on")
 		host := fs.String("host", "localhost", "with --web, the `address` to listen on; 0.0.0.0 reaches the server from other devices, such as a phone")
@@ -123,9 +137,46 @@ which keeps running the last build that succeeded.`,
 				StopTimeout: *stopTimeout, Force: force,
 				Log: os.Stderr, Stdout: os.Stdout, Stderr: os.Stderr,
 			}
+			mode := cfg.Dev.Display
+			if isSet(fs, "display") {
+				mode = *display
+			}
+			d, err := remoteDisplay(mode, proj.Root)
+			if err != nil {
+				return err
+			}
+			if d != nil {
+				n.Display = d
+			}
 			return n.Run(ctx)
 		}
 	},
+}
+
+// remoteDisplay returns the Display for mode, dev.display's value, or nil
+// for the app's own window. Remote display where it is not available is
+// the app's own window too, which is said when it was asked for by name.
+func remoteDisplay(mode, dir string) (*dev.RemoteDisplay, error) {
+	switch mode {
+	case "window":
+		return nil, nil
+	case "", "remote":
+	default:
+		fmt.Fprintf(os.Stderr, "ggui dev: --display is remote or window, not %q\n", mode)
+		return nil, errUsage
+	}
+	if err := viewer.Supported(); err != nil {
+		if mode == "remote" {
+			fmt.Fprintf(os.Stderr, "ggui: the app opens its own window: %v\n", err)
+		}
+		return nil, nil
+	}
+	cache, err := viewer.CacheDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ggui: the app opens its own window: no cache directory for the viewer: %v\n", err)
+		return nil, nil
+	}
+	return &dev.RemoteDisplay{Dir: dir, CacheDir: cache, Exe: os.Getenv("GGUI_VIEWER"), Stderr: os.Stderr, Log: os.Stderr}, nil
 }
 
 // target names the package for messages: its directory relative to the
