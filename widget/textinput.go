@@ -781,7 +781,7 @@ func (t *TextInputWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	op.GeoM.Translate(px(dst, x0), px(dst, r.Origin.Y))
 	if shown == "" && t.placeholder != "" {
 		op.ColorScale.ScaleWithColor(t.muted)
-		fontsys.DrawText(clip.Image, t.placeholder, t.face(dst.Scale()), op)
+		fontsys.DrawText(clip.Image, placeholderLines(t.placeholder, false)[0], t.face(dst.Scale()), op)
 	} else {
 		t.drawText(clip, shown, textlayout.Span{End: len(shown)}, bl, t.textColors(shown), x0, r.Origin.Y, op)
 	}
@@ -861,9 +861,17 @@ func (t *TextInputWidget) paintLines(dst *ggui.Canvas, r ggui.Rect) {
 
 	op := &text.DrawOptions{}
 	if shown == "" && t.placeholder != "" {
-		op.GeoM.Translate(px(dst, x0), px(dst, y0))
+		// The text drawer stacks no lines of its own: each line of the
+		// placeholder goes on a line of the field, as typed text would.
 		op.ColorScale.ScaleWithColor(t.muted)
-		fontsys.DrawText(clip.Image, t.placeholder, t.face(dst.Scale()), op)
+		for i, line := range placeholderLines(t.placeholder, true) {
+			if !shows(i) {
+				continue
+			}
+			op.GeoM.Reset()
+			op.GeoM.Translate(px(dst, x0), px(dst, lineY(i)))
+			fontsys.DrawText(clip.Image, line, t.face(dst.Scale()), op)
+		}
 	} else {
 		colors := t.textColors(shown)
 		for i, sp := range spans {
@@ -886,6 +894,17 @@ func (t *TextInputWidget) paintLines(dst *ggui.Canvas, r ggui.Rect) {
 		}
 		ggui.WakeAt(blinkWake(t.blink, ggui.FrameTime(), caretBlink))
 	}
+}
+
+// placeholderLines splits a placeholder into the lines a field shows: one
+// per line of a multiline field, and one line with spaces for its breaks
+// in a single-line field, which has room for no other.
+func placeholderLines(s string, multiline bool) []string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	if multiline {
+		return strings.Split(s, "\n")
+	}
+	return []string{strings.ReplaceAll(s, "\n", " ")}
 }
 
 // bidiAt returns line i of r laid out in visual order, or nil when it

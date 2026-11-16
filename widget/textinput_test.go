@@ -1775,3 +1775,23 @@ func TestColorPiecesCoverTheLine(t *testing.T) {
 		t.Fatalf("no colours: %v", got)
 	}
 }
+
+// A placeholder's lines go on lines of a multiline field; the text drawer
+// stacks none of its own, so drawn whole they overlapped on the first.
+func TestPlaceholderLines(t *testing.T) {
+	for _, c := range []struct {
+		in        string
+		multiline bool
+		want      []string
+	}{
+		{"Search", false, []string{"Search"}},
+		{"Search", true, []string{"Search"}},
+		{"8080:80\n127.0.0.1:9000:9000", true, []string{"8080:80", "127.0.0.1:9000:9000"}},
+		{"a\r\nb\n", true, []string{"a", "b", ""}},
+		{"a\nb", false, []string{"a b"}},
+	} {
+		if got := placeholderLines(c.in, c.multiline); !slices.Equal(got, c.want) {
+			t.Errorf("placeholderLines(%q, %v) = %q, want %q", c.in, c.multiline, got, c.want)
+		}
+	}
+}
