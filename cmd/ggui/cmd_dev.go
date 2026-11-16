@@ -55,7 +55,7 @@ which keeps running the last build that succeeded.`,
 		tags := fs.String("tags", "", "build `tags`, comma-separated, replacing dev.tags")
 		noWatch := fs.Bool("no-watch", false, "build and run once; do not watch for changes")
 		stopTimeout := fs.Duration("stop-timeout", 3*time.Second, "how long the app has to exit when asked before it is killed")
-		display := fs.String("display", "", "where the app's window shows: `remote`, in a viewer that stays while the app restarts (the default on macOS), or window, its own; replaces dev.display")
+		display := fs.String("display", "", "where the app's window shows: `remote`, in a viewer that stays while the app restarts (the default on macOS, Linux and Windows), or window, its own; replaces dev.display")
 		webMode := fs.Bool("web", false, "build for the browser and serve the app instead of running it")
 		port := fs.Int("port", 8080, "with --web, the `port` to serve on")
 		host := fs.String("host", "localhost", "with --web, the `address` to listen on; 0.0.0.0 reaches the server from other devices, such as a phone")
