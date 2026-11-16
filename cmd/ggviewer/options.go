@@ -1,4 +1,4 @@
-//go:build unix && !ios && !android
+//go:build (unix && !ios && !android) || windows
 
 package main
 

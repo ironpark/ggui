@@ -70,5 +70,8 @@
 // closes, or when no app is attached, the window closes and the viewer
 // ends. An app that closes its window unasked, as App.Quit does, ends as
 // one that exits: the window stays for the next. The viewer runs on unix
-// systems only.
+// systems and on Windows 10 1803 or later, whose unix sockets it listens
+// on; an app's clipboard requests are answered from the system's
+// clipboard, and on Windows the app's process may bring its dialogs to
+// the front while the user works in the window.
 package main

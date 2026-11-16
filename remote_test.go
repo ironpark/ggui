@@ -1,4 +1,4 @@
-//go:build ggwd_remote && unix && !android && !ios
+//go:build ggwd_remote && ((unix && !android && !ios) || windows)
 
 package ggui
 

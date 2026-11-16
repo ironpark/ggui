@@ -12,6 +12,8 @@ import (
 	"unsafe"
 
 	"github.com/ironpark/ggwd"
+
+	"github.com/ironpark/ggui/internal/platform/remotedisplay"
 	"golang.org/x/image/draw"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
@@ -184,8 +186,10 @@ type trayIcon struct {
 // app menu bar of its own.
 func Supported() bool { return false }
 
-// TraySupported reports whether the platform shows SetTray's icons.
-func TraySupported() bool { return true }
+// TraySupported reports whether the platform shows SetTray's icons: not in
+// an app ggui dev's viewer shows, whose main thread runs no message loop
+// for the tray's window.
+func TraySupported() bool { return !remotedisplay.On() }
 
 // Handle sets the function called with an action's id when it is chosen,
 // in a menu or by a tray's click. It runs on the main thread and must hand
