@@ -85,18 +85,22 @@ type session struct {
 	running    atomic.Bool
 	win        atomic.Pointer[ggwd.Window]
 
-	mu       sync.Mutex
-	cur      *app
-	apps     []*app // attached, for detachAll
-	nextID   int
-	gone     []*app
-	req      requests
-	ov       overlay
-	ovSerial int
-	cfg      remote.Config
-	haveCfg  bool
-	geom     geometry
-	geomSet  bool
+	mu  sync.Mutex
+	cur *app
+	// closeAsked is set once the window's close was handed to the app, so
+	// that the app's Closed closes the window too; an app that closes on
+	// its own, as App.Quit does, leaves the window to the next app.
+	closeAsked bool
+	apps       []*app // attached, for detachAll
+	nextID     int
+	gone       []*app
+	req        requests
+	ov         overlay
+	ovSerial   int
+	cfg        remote.Config
+	haveCfg    bool
+	geom       geometry
+	geomSet    bool
 
 	// The main thread's.
 	lastOpts  *remote.OpenWindow
@@ -228,7 +232,7 @@ func (v *session) attach(a *app) {
 	v.nextID++
 	a.id = v.nextID
 	old := v.cur
-	v.cur = a
+	v.cur, v.closeAsked = a, false
 	v.apps = append(v.apps, a)
 	// What the app before asked of the window is not this one's.
 	v.resetRequests()
@@ -324,7 +328,7 @@ func (v *session) read(a *app) {
 		case *remote.Closed:
 			if current {
 				v.mu.Lock()
-				v.req.close = true
+				v.req.close = v.req.close || v.closeAsked
 				v.mu.Unlock()
 			}
 		default:
@@ -352,6 +356,22 @@ func (v *session) request(m remote.Message) {
 	case *remote.WindowRequest:
 		v.req.window = append(v.req.window, m.Request)
 	}
+}
+
+// askClose hands the window's close to the app, and reports whether
+// there is an app to ask.
+func (v *session) askClose() bool {
+	v.mu.Lock()
+	a := v.cur
+	if a != nil {
+		v.closeAsked = true
+	}
+	v.mu.Unlock()
+	if a == nil {
+		return false
+	}
+	_ = a.conn.Send(&remote.Close{})
+	return true
 }
 
 // HandleEvent handles the viewer's window's events: it shows the app's
@@ -394,12 +414,8 @@ func (v *session) HandleEvent(ev ggwd.Event) error {
 	case ggwd.CloseEvent:
 		// The app decides, and says Closed when it closes; with no app the
 		// window closes, and the viewer ends.
-		v.mu.Lock()
-		a := v.cur
-		v.mu.Unlock()
-		if a != nil {
+		if v.askClose() {
 			ev.KeepOpen()
-			_ = a.conn.Send(&remote.Close{})
 		}
 	case ggwd.ClosedEvent:
 		v.saveState()
@@ -512,6 +528,11 @@ func (v *session) pump() {
 			w.Restore()
 		case "focus":
 			w.Focus()
+		case "close":
+			// As the window's close button: the app is asked.
+			if !v.askClose() {
+				w.Close()
+			}
 		}
 	}
 	for _, in := range r.inputs {

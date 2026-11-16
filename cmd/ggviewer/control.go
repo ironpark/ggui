@@ -62,7 +62,7 @@ type command struct {
 	Input *remote.Input `json:"input,omitempty"`
 }
 
-var windowActions = []string{"hide", "show", "minimize", "restore", "focus", "resize"}
+var windowActions = []string{"hide", "show", "minimize", "restore", "focus", "close", "resize"}
 
 // parseCommand parses one line of the control channel. debug allows the
 // debug commands.
