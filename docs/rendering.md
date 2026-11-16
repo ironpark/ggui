@@ -184,6 +184,38 @@ paints that frame whole and from then on leaves the next change to the
 boundary around it. Under a `Transform` or a shape clip a boundary cannot
 tell where it is in the window, and holds nothing.
 
+A widget of your own becomes a boundary by keeping a `LayoutBoundary`, as
+`Contain` and `Scroll` do. Its `Layout` calls `Begin(env)`, lays its child
+out under the `Env` that returns, which carries the boundary to the subtree,
+and ends with `End(check, c, size, baseline, based)`, which checks what
+`Begin` said to; its `Paint` calls `Paint(dst, r)` and clips the child to
+`r`:
+
+```go
+func (p *pane) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	inner, check := p.hold.Begin(env)
+	size := c.Constrain(p.child.Layout(c, inner))
+	p.hold.End(check, c, size, 0, false)
+	return size
+}
+
+func (p *pane) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	p.hold.Paint(dst, r)
+	dst.Clip(r).Paint(p.child, r)
+}
+```
+
+A boundary that changes what it shows of its content with no change of
+size, as a `Scroll` moving its window does, makes the change in
+`hold.Contained(func() { ... })`: where `Placed` says the last frame could
+tell where the boundary is, what it writes and the layouts it asks for show
+within the boundary alone, and it reports `false`, having made the change
+as any other, where not. Its own layout, which `Invalidate` would ask the
+boundary to hold and check by, it asks for with `Relayout(env)`, under the
+`Env` of its last `Layout`: that marks the caches above it stale and asks
+for a layout no boundary holds, or, made in `Contained`, one held within
+this boundary.
+
 A frame that only time asks for, a caret blinking or a spinner turning, is
 painted in part: over what the screen kept, within the bounds the widgets
 that read the time drew in last frame. A mouse move is painted the same way

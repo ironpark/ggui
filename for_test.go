@@ -355,7 +355,7 @@ func TestForEvictionReleasesOwnerChildren(t *testing.T) {
 		offset.Set(float64(i * 20))
 		scroll.Layout(Tight(Sz(100, 100)), Env{})
 		count := 0
-		for _, c := range f.owner.Children() {
+		for _, c := range f.scope.owner.Children() {
 			if c.Disposed() {
 				t.Fatal("owner retains a disposed row")
 			}

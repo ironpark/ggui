@@ -60,7 +60,10 @@ externally bound scroll position. Bind methods require non-nil readers.
 Custom parents may set child literals before measuring them. Install bindings
 in setup or UI handlers, not Layout or Paint. Built-in property revisions are
 tracked by layout caches without subscriptions. For custom non-reactive data,
-retain the layout `Env` and call `Invalidate(env)` when measurement changes.
+retain the layout `Env` and call `Invalidate(env)` when measurement changes;
+a widget that is itself a layout boundary, as a `Scroll` is, asks for its own
+layout with `Relayout(env)` instead (see
+[Layout caching](rendering.md#layout-caching)).
 Widget mutation belongs on the UI goroutine; workers use `App.Post`.
 
 ## Choosing a layout

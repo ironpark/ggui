@@ -224,8 +224,9 @@ func (w *Window) freeChanged() bool {
 }
 
 // A scroll that moves its content changes what its viewport shows and
-// nothing else: its writes and layout requests are made in
-// reactive.Contained, and it notes its viewport with noteContained. A
+// nothing else: it makes the move through its LayoutBoundary's Contained,
+// which runs it in reactive.Contained and notes the viewport with
+// noteContained, as Invalidate under a boundary notes that boundary. A
 // frame for which nothing else changed, no write or layout outside a
 // Contained, is laid out and painted as a whole frame is, every widget
 // registering its regions, semantics and shortcuts, but into the part of

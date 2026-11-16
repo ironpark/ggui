@@ -34,7 +34,9 @@ current time and no signal; `ui.Switch` slides its knob with one.
 `Target()` is where a `Motion` is heading, and `At(now)` its position and
 whether it is still moving, without asking for a frame as `Value` does: for
 a widget that eases several things along one `Motion` and asks for its
-frames itself. A widget that moves with time by its own reckoning keeps the
+frames itself. `Shift(d)` moves a motion under way by `d`, where it started
+and where it is heading, keeping its timing: a scroll easing to an offset
+shifts it by as much as the content above the window grew. A widget that moves with time by its own reckoning keeps the
 frames coming by reading `Now()`, which marks the frame as one time drives;
 `FrameTime()` reads the same instant without that.
 

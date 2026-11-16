@@ -85,8 +85,9 @@ func TestInvalidateAsksTheNearestBoundaryThatHolds(t *testing.T) {
 	p := NewWindowProbe(func() Widget { return topLeft(Row(outer, Box().Size(50, 50))) }, Sz(200, 120))
 	defer p.Close()
 	p.Run(16*time.Millisecond, 10)
-	if inner.hold.outer != &outer.hold || inner.hold.depth != 2 {
-		t.Fatalf("the inner Contain is %d deep, around it %p, want 2 and %p", inner.hold.depth, inner.hold.outer, &outer.hold)
+	// Two deep: the outer Contain, around the inner, is in none.
+	if inner.hold.outer != &outer.hold || outer.hold.outer != nil {
+		t.Fatalf("around the inner Contain %p, around that %p; want %p, then none", inner.hold.outer, outer.hold.outer, &outer.hold)
 	}
 	open.Set(true)
 	p.Run(16*time.Millisecond, 30)

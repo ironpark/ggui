@@ -319,15 +319,17 @@ func (e *switchEntry) progress(now time.Time) float64 {
 func Switcher[K comparable](key Readable[K], build func(K) Widget) *SwitcherWidget[K] {
 	s := &SwitcherWidget[K]{key: key, build: build, duration: 200 * time.Millisecond, ease: EaseOut}
 	s.comp = Component(func() Widget {
-		owner := reactive.CurrentOwner()
+		scope := UseScope()
 		OnCleanup(func() {
 			for _, e := range s.entries {
 				e.dispose()
 			}
 			s.entries = nil
 		})
-		observeKey(key, func(v K, first bool) {
-			reactive.Untrack(func() struct{} { s.change(v, owner, first); return struct{}{} })
+		first := true
+		Follow(key, func(v K) {
+			s.change(v, scope, first)
+			first = false
 		})
 		return &switcherBody[K]{s}
 	})
@@ -365,7 +367,7 @@ func (s *SwitcherWidget[K]) Easing(e Easing) *SwitcherWidget[K] {
 }
 
 // change makes v's subtree the current one and sends the rest away.
-func (s *SwitcherWidget[K]) change(v K, owner *reactive.Computation, first bool) {
+func (s *SwitcherWidget[K]) change(v K, scope Scope, first bool) {
 	now := FrameTime()
 	for _, e := range s.entries {
 		if !e.leaving {
@@ -373,7 +375,7 @@ func (s *SwitcherWidget[K]) change(v K, owner *reactive.Computation, first bool)
 		}
 	}
 	e := &switchEntry{since: now, from: gem.Pick(first, 1.0, 0.0), d: s.duration}
-	child, dispose := mountKeyed(owner, func() Widget { return s.build(v) })
+	child, dispose := scope.Mount(func() Widget { return s.build(v) })
 	e.dispose = dispose
 	if child == nil {
 		child = Box()
@@ -390,7 +392,7 @@ func (s *SwitcherWidget[K]) change(v K, owner *reactive.Computation, first bool)
 	}
 	e.t = t
 	s.entries = append(s.entries, e)
-	s.comp.cw.invalidate()
+	s.comp.Invalidate()
 }
 
 // switcherBody lays out and paints the switcher's subtrees inside its

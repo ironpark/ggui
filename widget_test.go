@@ -338,6 +338,46 @@ func TestCachedNestsAndFollowsScrollAndFor(t *testing.T) {
 	}
 }
 
+// A Scroll and a Contain laid out again, as their parent is, hand down
+// the Env they did last time, carrying their boundaries, so a cache inside
+// either, with nothing changed in it, keeps its measurement.
+func TestACacheInsideABoundaryLaidOutAgainHolds(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		wrap func(Widget) Widget
+	}{
+		{"scroll", func(w Widget) Widget { return Scroll(w) }},
+		{"contain", func(w Widget) Widget { return Contain(Box(w).Size(100, 50)) }},
+		{"contain in a scroll", func(w Widget) Widget { return Scroll(Contain(Box(w).Size(100, 50))) }},
+		{"scroll in a contain", func(w Widget) Widget { return Contain(Box(Scroll(w)).Size(100, 50)) }},
+	} {
+		leaf := &counting{}
+		dep := State(0)
+		boundary, laid := tc.wrap(Cached(Column(leaf))), 0
+		// A sibling rebuilt at the same size: the boundary is laid out
+		// again under the constraints it had.
+		p := NewProbe(Column(
+			Reactive(func() Widget { return Box().Size(10, 10).Fill(color.Gray{uint8(dep.Get())}) }),
+			FromFuncs(func(c Constraints, env Env) Size { laid++; return boundary.Layout(c, env) }, boundary.Paint),
+		), Sz(100, 100))
+		p.Frame()
+		p.Frame()
+		was, wasLaid := leaf.layouts, laid
+		dep.Set(1)
+		p.Frame()
+		dep.Set(2)
+		p.Frame()
+		p.Close()
+		if laid != wasLaid+2 {
+			t.Fatalf("%s: the boundary was laid out %d times for two rebuilds beside it, want 2", tc.name, laid-wasLaid)
+		}
+		if was != 1 || leaf.layouts != was {
+			t.Fatalf("%s: the leaf was laid out %d times, then %d more as the boundary was laid out again; want once, then none", tc.name, was, leaf.layouts-was)
+		}
+	}
+}
+
 // countingLeaf records how often it was measured.
 type countingLeaf struct{ n int }
 
