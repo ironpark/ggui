@@ -29,12 +29,13 @@ func TestInspectorTracesPaintedWidgets(t *testing.T) {
 	inspectorEnabled.Store(true)
 	c := Canvas{}
 	c.fs().tracing = true
-	w := Column(Box().Size(10, 10), Padding(Box().Size(10, 10), 5))
+	w := column(sized(10, 10), padded(sized(10, 10), 5))
 	c.Paint(w, Rct(Pt(0, 0), w.Layout(Loose(Sz(100, 100)), Env{})))
 	if len(c.fs().trace) != 4 || len(c.fs().traceWidgets) != 4 {
 		t.Fatalf("%d traced widgets, want 4", len(c.fs().trace))
 	}
-	if c.fs().trace[0].Name != "Column" || c.fs().trace[0].Depth != 0 || c.fs().trace[3].Depth != 2 {
+	// A widget is named by its type, *pile here.
+	if c.fs().trace[0].Name != "pile" || c.fs().trace[0].Depth != 0 || c.fs().trace[3].Depth != 2 {
 		t.Fatalf("trace = %+v", c.fs().trace)
 	}
 	if c.fs().trace[3].Rect != Rct(Pt(5, 15), Sz(10, 10)) || c.fs().trace[3].Path != "/0/1/0" {
@@ -42,24 +43,47 @@ func TestInspectorTracesPaintedWidgets(t *testing.T) {
 	}
 }
 
+// modelled is a block that describes a box model and its border to the
+// inspector, as they are when it is asked.
+type modelled struct {
+	block
+	pad    inspect.Insets
+	border float64
+}
+
+func (m *modelled) InspectBox(size Size) inspect.Box {
+	content := Sz(size.W-m.pad.Left-m.pad.Right, size.H-m.pad.Top-m.pad.Bottom)
+	return inspect.Box{Padding: m.pad, Border: m.border, Content: content, Valid: true}
+}
+
+func (m *modelled) InspectFields() []inspect.Field {
+	return []inspect.Field{{Key: "border", Value: inspect.Num(m.border) + " px", Number: true}}
+}
+
+// The frame answers what a widget says of itself, its box model and its
+// fields, from the widget as it is when asked, not as it was traced.
 func TestInspectFrameAnswersFromTheWidgets(t *testing.T) {
-	box := Box(Box().Size(80, 30)).Pad(7, 11, 13, 17).Border(2, red)
+	w := &modelled{block: block{size: Sz(108, 50)}, pad: inspect.Insets{Top: 7, Right: 11, Bottom: 13, Left: 17}, border: 2}
 	inspectorEnabled.Store(true)
 	c := &Canvas{}
 	c.fs().tracing = true
-	c.Paint(box, Rct(Pt(20, 30), box.Layout(Loose(Sz(400, 400)), rootEnv())))
+	c.Paint(w, Rct(Pt(20, 30), w.Layout(Loose(Sz(400, 400)), rootEnv())))
 	fr := inspectFrameOf(c)
 	info := fr.BoxOf(0)
 	if !info.Valid || info.Padding != (inspect.Insets{Top: 7, Right: 11, Bottom: 13, Left: 17}) || info.Border != 2 || info.Content != Sz(80, 30) {
 		t.Fatalf("incorrect box model: %+v", info)
 	}
-	if !slices.ContainsFunc(fr.Details(inspect.Computed, 0), func(f inspect.Field) bool { return f.Key == "border" && f.Value == "2 px #ff0000" }) {
-		t.Fatal("computed properties missed the actual border")
+	if !slices.ContainsFunc(fr.Details(inspect.Computed, 0), func(f inspect.Field) bool { return f.Key == "border" && f.Value == "2 px" }) {
+		t.Fatal("computed properties missed the widget's border")
 	}
 	// A widget that changes in place is read live, not from the trace.
-	box.padding.Top = 9
+	w.pad.Top = 9
 	if fr.BoxOf(0).Padding.Top != 9 {
 		t.Fatal("box model was frozen at trace time")
+	}
+	w.border = 3
+	if !slices.ContainsFunc(fr.Details(inspect.Computed, 0), func(f inspect.Field) bool { return f.Key == "border" && f.Value == "3 px" }) {
+		t.Fatal("computed properties were frozen at trace time")
 	}
 }
 
@@ -68,7 +92,7 @@ func TestInspectFrameFindsTheSemanticNode(t *testing.T) {
 	w := &twice{}
 	w.Role = RoleButton
 	w.SetName("Save document")
-	c := inspectorCanvas(Column(Text("Heading"), w), Sz(800, 600))
+	c := inspectorCanvas(column(labelled("Heading"), w), Sz(800, 600))
 	fr := inspectFrameOf(c)
 	if label, role := fr.Source.Describe(2); label != "Save document" || role != "button" {
 		t.Fatalf("described %q %q", label, role)
@@ -121,7 +145,7 @@ func TestInspectorDrivesTheRegisteredPanel(t *testing.T) {
 	if !a.inspect || a.overlay != a.panel || a.panel != InspectorPanel(panel) {
 		t.Fatal("turning the inspector on did not install the registered panel as the overlay")
 	}
-	c := inspectorCanvas(Box(Text("hello")), Sz(800, 600))
+	c := inspectorCanvas(around(100, 20, labelled("hello")), Sz(800, 600))
 	a.publishInspect(c, buildSemTree(c, nil, nil, new(a11y.Builder)))
 	if panel.frames != 1 {
 		t.Fatal("the open panel was not handed the frame")
@@ -171,9 +195,9 @@ func TestOnInspectReceivesFramesWithThePanelClosed(t *testing.T) {
 			t.Errorf("label = %q", label)
 		}
 	})
-	c := inspectorCanvas(Box(Text("hello")), Sz(800, 600))
+	c := inspectorCanvas(around(100, 20, labelled("hello")), Sz(800, 600))
 	a.publishInspect(c, buildSemTree(c, nil, nil, new(a11y.Builder)))
-	if frames != 1 || !slices.Equal(names, []string{"Box", "Text"}) {
+	if frames != 1 || !slices.Equal(names, []string{"block", "label"}) {
 		t.Fatalf("frames = %d, names = %v", frames, names)
 	}
 	if a.overlay != nil {
@@ -188,7 +212,7 @@ func TestOnInspectReceivesFramesWithThePanelClosed(t *testing.T) {
 
 func TestProbePublishesFramesAndPaintsTheOverlay(t *testing.T) {
 	t.Parallel()
-	p := NewProbe(Box(Text("hello")), Sz(300, 200))
+	p := NewProbe(around(100, 20, labelled("hello")), Sz(300, 200))
 	defer p.Close()
 	var names []string
 	p.OnInspect(func(fr *inspect.Frame) {
@@ -200,7 +224,7 @@ func TestProbePublishesFramesAndPaintsTheOverlay(t *testing.T) {
 	o := &recorder{rect: Rct(Pt(0, 0), Sz(50, 50))}
 	p.SetOverlay(o)
 	p.Frame()
-	if !slices.Equal(names, []string{"Box", "Text"}) || o.paints != 1 {
+	if !slices.Equal(names, []string{"block", "label"}) || o.paints != 1 {
 		t.Fatalf("names = %v, paints = %d", names, o.paints)
 	}
 	p.Move(Pt(10, 10))
@@ -213,7 +237,7 @@ func TestProbePublishesFramesAndPaintsTheOverlay(t *testing.T) {
 // the filter.
 func TestInspectorCountsRebuilds(t *testing.T) {
 	n := State(0)
-	view := View(n, func(v int) *BoxWidget { return Box().Size(10, 10) })
+	view := View(n, func(v int) *block { return sized(10, 10) })
 	p := NewProbe(view, Sz(50, 50))
 	defer p.Close()
 	p.Frame()

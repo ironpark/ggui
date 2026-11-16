@@ -213,3 +213,44 @@ func TestPopupFadesOutInertThenStopsPainting(t *testing.T) {
 		t.Fatal("a closed popup still paints after its animation")
 	}
 }
+
+func TestPopupTrapsTabAndRestoresFocus(t *testing.T) {
+	t.Parallel()
+	focused := ""
+	track := func(name string, size float64) *FocusWidget {
+		return Focus(Box().Size(size, size)).OnFocus(func(on bool) {
+			if on {
+				focused = name
+			} else if focused == name {
+				focused = ""
+			}
+		})
+	}
+	a, b := track("a", 20), track("b", 20)
+	c1, c2 := track("c1", 20), track("c2", 20)
+	pop := Popup(a, Column(c1, c2))
+	p := NewProbe(Column(pop, b), Sz(100, 200))
+	defer p.Close()
+	p.Click(Pt(10, 10))
+	if focused != "a" {
+		t.Fatalf("focused %q after clicking a", focused)
+	}
+	pop.Show()
+	p.Frame()
+	p.Type(Mods{}, KeyTab)
+	if focused != "c2" {
+		t.Fatalf("focused %q; the scope should take focus to c1 and Tab move it to c2", focused)
+	}
+	p.Type(Mods{}, KeyTab)
+	if focused != "c1" {
+		t.Fatalf("focused %q; Tab must wrap inside the popup, not reach b", focused)
+	}
+	p.Type(Mods{}, KeyEscape)
+	if pop.IsOpen() {
+		t.Fatal("Escape did not close the popup")
+	}
+	p.Move(Pt(90, 190)) // the next frame's dispatch restores focus
+	if focused != "a" {
+		t.Fatalf("focused %q after closing, want a", focused)
+	}
+}

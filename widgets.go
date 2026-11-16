@@ -23,55 +23,6 @@ import (
 // a reader and X replaces it with a literal. Configure structure, identity and
 // construction modes before the first Layout.
 
-// EdgeInsets is padding on the four sides of a box: Top, Right, Bottom and
-// Left. Shrink removes it from constraints and Inflate adds it to a size.
-type EdgeInsets = layout.Insets
-
-// Insets builds EdgeInsets with CSS shorthand: one value for every side, two
-// for vertical then horizontal, four for top, right, bottom, left.
-func Insets(sides ...float64) EdgeInsets {
-	switch len(sides) {
-	case 0:
-		return EdgeInsets{}
-	case 1:
-		return EdgeInsets{Top: sides[0], Right: sides[0], Bottom: sides[0], Left: sides[0]}
-	case 2:
-		return EdgeInsets{Top: sides[0], Right: sides[1], Bottom: sides[0], Left: sides[1]}
-	case 4:
-		return EdgeInsets{Top: sides[0], Right: sides[1], Bottom: sides[2], Left: sides[3]}
-	default:
-		panic("ggui: Insets takes 1, 2 or 4 values")
-	}
-}
-
-// EnvWidget hands its child a modified Env. Build one with Provide.
-type EnvWidget struct {
-	with  func(Env) Env
-	child Widget
-}
-
-// Provide stores v under k for the subtree below child, where any widget can
-// read it back from its Env with Get. It is how your own inherited values
-// (a form's disabled state, a list's density) travel down the tree.
-func Provide[T any](k EnvKey[T], v T, child Widget) *EnvWidget {
-	return &EnvWidget{with: func(e Env) Env { return e.With(k, v) }, child: child}
-}
-
-// WithEnv transforms the inherited environment for a subtree during layout.
-// The transform should be pure so equivalent layouts reuse environment revisions.
-func WithEnv(transform func(Env) Env, child Widget) *EnvWidget {
-	return &EnvWidget{with: transform, child: child}
-}
-
-// Layout implements Widget.
-func (e *EnvWidget) Layout(c Constraints, env Env) Size { return e.child.Layout(c, e.with(env)) }
-
-// Baseline implements Baseliner: the child's.
-func (e *EnvWidget) Baseline() (float64, bool) { return BaselineOf(e.child) }
-
-// Paint implements Widget.
-func (e *EnvWidget) Paint(dst *Canvas, r Rect) { dst.Paint(e.child, r) }
-
 // ContainWidget lays its child out under the constraints it is given,
 // clips it to its own Rect and holds a change of size inside it there.
 // Build one with Contain.

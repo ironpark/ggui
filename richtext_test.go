@@ -176,7 +176,7 @@ func TestRichTextLinkTapsWithPointerCursorAndA11y(t *testing.T) {
 func TestRichTextRelayoutKeepsWhatItMade(t *testing.T) {
 	spans := []TextSpan{Span("The agent ran "), Span("go test ./...").Weight(WeightBold), Span(" and every package passed.")}
 	rt := RichText(spans...)
-	env := rootEnv()
+	env := Untrack(UseEnv)
 	cs := Loose(Sz(400, 1e6))
 	rt.Layout(cs, env)
 	if allocs := testing.AllocsPerRun(100, func() { rt.Layout(cs, env) }); allocs != 0 {
@@ -314,14 +314,14 @@ func TestAClickClearsTheSelectionOfTheOtherTexts(t *testing.T) {
 	if area.SelectedText() == "" {
 		t.Fatal("the drag selected nothing")
 	}
-	before := p.world().delivered
+	before := p.WholeRepaints()
 	p.Press(textAt(&a.rich.w, a.rich.w.rect, 3))
 	p.Release(textAt(&a.rich.w, a.rich.w.rect, 3))
 	p.Frame()
 	if got := area.SelectedText(); got != "" {
 		t.Fatalf("a click left %q selected", got)
 	}
-	if p.world().delivered == before {
+	if p.WholeRepaints() == before {
 		t.Fatal("the other paragraph was left to show its selection")
 	}
 }

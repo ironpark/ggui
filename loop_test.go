@@ -2,7 +2,6 @@ package ggui
 
 import (
 	"errors"
-	"image/color"
 	"slices"
 	"strings"
 	"testing"
@@ -18,7 +17,7 @@ func TestCloseDisposesEverythingBuilt(t *testing.T) {
 	runs := 0
 	p := ProbeBuilder(func() Widget {
 		reactive.Observe(func() { n.Get(); runs++ })
-		return Box()
+		return sized(0, 0)
 	}, Sz(10, 10)).Setup(func() {
 		Watch(n, func(int) { runs++ })
 	})
@@ -39,7 +38,7 @@ func TestCloseDisposesEverythingBuilt(t *testing.T) {
 func TestAdvanceStepsAnimations(t *testing.T) {
 	t.Parallel()
 	tw := Tween(0.0, time.Second).Easing(EaseLinear)
-	p := NewProbe(Box(), Sz(10, 10))
+	p := NewProbe(sized(0, 0), Sz(10, 10))
 	defer p.Close()
 	p.Frame()
 	tw.Set(100)
@@ -57,7 +56,7 @@ func TestPostRunsBeforeTheFrame(t *testing.T) {
 	t.Parallel()
 	n := State(0)
 	var seen []int
-	p := ProbeBuilder(func() Widget { return Reactive(func() Widget { seen = append(seen, n.Get()); return Box() }) }, Sz(10, 10))
+	p := ProbeBuilder(func() Widget { return Reactive(func() Widget { seen = append(seen, n.Get()); return sized(0, 0) }) }, Sz(10, 10))
 	defer p.Close()
 	p.Frame()
 	p.Post(func() { n.Set(1) })
@@ -75,7 +74,7 @@ func TestPostBeforeStartRunsAfterSetupAndBuild(t *testing.T) {
 	n := State(0)
 	p := ProbeBuilder(func() Widget {
 		order = append(order, "build")
-		return Reactive(func() Widget { n.Get(); return Box() })
+		return Reactive(func() Widget { n.Get(); return sized(0, 0) })
 	}, Sz(10, 10)).Setup(func() { order = append(order, "setup") })
 	defer p.Close()
 	p.Post(func() { order = append(order, "post"); n.Set(1) })
@@ -89,7 +88,7 @@ func TestPostBeforeStartRunsAfterSetupAndBuild(t *testing.T) {
 func TestCycleIsReported(t *testing.T) {
 	t.Parallel()
 	n := State(0)
-	p := ProbeBuilder(func() Widget { return Box() }, Sz(10, 10)).Setup(func() {
+	p := ProbeBuilder(func() Widget { return sized(0, 0) }, Sz(10, 10)).Setup(func() {
 		reactive.Observe(func() { n.Set(n.Get() + 1) })
 	})
 	defer p.Close()
@@ -114,7 +113,7 @@ func TestCycleIsReported(t *testing.T) {
 func TestCycleSaysHowToNameTheEffects(t *testing.T) {
 	t.Parallel()
 	n := State(0)
-	p := ProbeBuilder(func() Widget { return Box() }, Sz(10, 10)).Setup(func() {
+	p := ProbeBuilder(func() Widget { return sized(0, 0) }, Sz(10, 10)).Setup(func() {
 		reactive.Observe(func() { n.Set(n.Get() + 1) })
 	})
 	defer p.Close()
@@ -165,7 +164,7 @@ func TestProbeLayoutFollowsSetupAndEnvironmentChanges(t *testing.T) {
 
 func TestPostDefersRepostedWorkToNextFrame(t *testing.T) {
 	t.Parallel()
-	p := NewProbe(Box(), Sz(10, 10))
+	p := NewProbe(sized(0, 0), Sz(10, 10))
 	defer p.Close()
 	var seen []int
 	var again func()
@@ -190,7 +189,7 @@ func TestPostDefersRepostedWorkToNextFrame(t *testing.T) {
 
 func TestPostedCloseSkipsRemainingWork(t *testing.T) {
 	t.Parallel()
-	p := NewProbe(Box(), Sz(10, 10))
+	p := NewProbe(sized(0, 0), Sz(10, 10))
 	defer p.Close()
 	p.Post(p.Close)
 	p.Post(func() { t.Error("posted work ran after Close") })
@@ -199,7 +198,7 @@ func TestPostedCloseSkipsRemainingWork(t *testing.T) {
 
 func TestCloseRejectsLatePostedWork(t *testing.T) {
 	t.Parallel()
-	p := NewProbe(Box(), Sz(10, 10))
+	p := NewProbe(sized(0, 0), Sz(10, 10))
 	defer p.Close()
 	p.Frame()
 	start, done := make(chan struct{}), make(chan struct{})
@@ -235,7 +234,7 @@ func TestUIThreadCarriesAResultBackIntoAComponent(t *testing.T) {
 				post(func() { loaded.Set("done") })
 				close(done)
 			}()
-			return Reactive(func() Widget { return Text(loaded.Get()) })
+			return Reactive(func() Widget { return labelled(loaded.Get()) })
 		})
 	}, Sz(100, 20))
 	defer p.Close()
@@ -253,7 +252,7 @@ func TestUIThreadCarriesAResultBackIntoAComponent(t *testing.T) {
 
 func TestUIThreadOutsideAFrameIsRefused(t *testing.T) {
 	t.Parallel()
-	p := ProbeBuilder(func() Widget { return Box() }, Sz(10, 10))
+	p := ProbeBuilder(func() Widget { return sized(0, 0) }, Sz(10, 10))
 	p.Frame()
 	p.Close()
 	defer func() {
@@ -267,7 +266,7 @@ func TestUIThreadOutsideAFrameIsRefused(t *testing.T) {
 func TestWorkPostedAfterCloseIsDropped(t *testing.T) {
 	t.Parallel()
 	var post func(func())
-	p := ProbeBuilder(func() Widget { post = UIThread(); return Box() }, Sz(10, 10))
+	p := ProbeBuilder(func() Widget { post = UIThread(); return sized(0, 0) }, Sz(10, 10))
 	p.Frame()
 	p.Close()
 	ran := false
@@ -277,36 +276,10 @@ func TestWorkPostedAfterCloseIsDropped(t *testing.T) {
 	}
 }
 
-// stamp paints its label twice in different colors, as a shimmer does.
-type stamp struct{ label *TextWidget }
-
-func (s *stamp) Layout(c Constraints, env Env) Size { return s.label.Layout(c, env) }
-func (s *stamp) Paint(dst *Canvas, r Rect) {
-	s.label.Color(color.White)
-	dst.Paint(s.label, r)
-	s.label.Color(color.Black)
-	dst.Paint(s.label, r)
-}
-
-func TestPaintTimeWritesScheduleNoLayout(t *testing.T) {
-	t.Parallel()
-	p := NewProbe(&stamp{label: Text("hi")}, Sz(100, 20))
-	defer p.Close()
-	p.Frame()
-	p.Frame()
-	// The layout generation is this goroutine's, so nothing another test
-	// does moves it.
-	before := reactive.LayoutGen()
-	p.Frame()
-	if reactive.LayoutGen() != before {
-		t.Fatal("configuring a child while painting scheduled a layout")
-	}
-}
-
 func TestCloseRequestCanKeepTheWindowOpen(t *testing.T) {
 	t.Parallel()
 	asking := State(false)
-	p := NewProbe(Text("doc"), Sz(100, 20))
+	p := NewProbe(labelled("doc"), Sz(100, 20))
 	defer p.Close()
 	var order []string
 	p.OnCloseRequest(func() bool { order = append(order, "save"); asking.Set(true); return false })
@@ -327,7 +300,7 @@ func TestCloseRequestCanKeepTheWindowOpen(t *testing.T) {
 
 func TestCloseRequestWithAgreeingHandlersCloses(t *testing.T) {
 	t.Parallel()
-	p := NewProbe(Text("doc"), Sz(100, 20))
+	p := NewProbe(labelled("doc"), Sz(100, 20))
 	defer p.Close()
 	p.OnCloseRequest(func() bool { return true })
 	p.Frame()
@@ -382,7 +355,7 @@ func TestFrameClockNeverGoesBackwards(t *testing.T) {
 func TestProbeAdvanceStepsPastTheCap(t *testing.T) {
 	t.Parallel()
 	tw := Tween(0.0, time.Second).Easing(EaseLinear)
-	p := NewProbe(Reactive(func() Widget { return Box().Size(tw.Get(), 1) }), Sz(200, 20))
+	p := NewProbe(Reactive(func() Widget { return sized(tw.Get(), 1) }), Sz(200, 20))
 	defer p.Close()
 	p.Frame()
 	tw.Set(100)
@@ -401,8 +374,8 @@ func (clockReader) Paint(*Canvas, Rect)              { Now() }
 
 func TestTimeReadOutsideTheClipDoesNotAnimate(t *testing.T) {
 	t.Parallel()
-	offset := State(0.0)
-	p := NewProbe(Scroll(Column(Box().Size(100, 500), clockReader{})).BindOffset(offset), Sz(100, 100))
+	s := &scroller{child: column(sized(100, 500), clockReader{})}
+	p := NewProbe(s, Sz(100, 100))
 	defer p.Close()
 	animating := func() bool {
 		f := &p.world().frame
@@ -415,7 +388,7 @@ func TestTimeReadOutsideTheClipDoesNotAnimate(t *testing.T) {
 	if animating() {
 		t.Fatal("a clock read below the viewport asked for another frame")
 	}
-	offset.Set(450)
+	s.offset = s.overflow // scrolled to the end, the reader in view
 	if !animating() {
 		t.Fatal("the clock read scrolled into view did not ask for another frame")
 	}
@@ -573,7 +546,7 @@ func TestReactiveRebuildsWithoutParent(t *testing.T) {
 	var root Widget
 	dispose := reactive.Observe(func() {
 		parentBuilds++
-		root = Column(Reactive(func() Widget { leafBuilds++; return Text(leaf.Get()) }))
+		root = column(Reactive(func() Widget { leafBuilds++; return labelled(leaf.Get()) }))
 	})
 	defer dispose()
 	leaf.Set("b")
@@ -581,7 +554,7 @@ func TestReactiveRebuildsWithoutParent(t *testing.T) {
 	if parentBuilds != 1 || leafBuilds != 2 {
 		t.Fatalf("parentBuilds = %d, leafBuilds = %d; want 1 and 2", parentBuilds, leafBuilds)
 	}
-	if got := root.(*ColumnWidget).children[0].(*ComponentWidget).child.(*TextWidget).value; got != "b" {
+	if got := root.(*pile).kids[0].(*ComponentWidget).child.(*label).text; got != "b" {
 		t.Fatalf("leaf shows %q, want b", got)
 	}
 }
@@ -595,7 +568,7 @@ func TestComponentRunsSetupOnceAndKeepsState(t *testing.T) {
 		c = Component(func() Widget {
 			setups++
 			local = State(0)
-			return Reactive(func() Widget { builds++; return Box().Size(float64(local.Get()), 1) })
+			return Reactive(func() Widget { builds++; return sized(float64(local.Get()), 1) })
 		})
 	})
 	defer dispose()
@@ -619,7 +592,7 @@ func TestComponentSetupDoesNotSubscribeParent(t *testing.T) {
 		parentBuilds++
 		c = Component(func() Widget {
 			dep.Get() // read during setup
-			return Reactive(func() Widget { return Box() })
+			return Reactive(func() Widget { return sized(0, 0) })
 		})
 	})
 	defer dispose()
@@ -640,7 +613,7 @@ func TestComponentDisposedWithParent(t *testing.T) {
 		parentDep.Get()
 		c = Component(func() Widget {
 			setups++
-			return Reactive(func() Widget { builds++; leaf.Get(); return Box() })
+			return Reactive(func() Widget { builds++; leaf.Get(); return sized(0, 0) })
 		})
 	})
 	defer dispose()
@@ -712,7 +685,7 @@ func TestEqualDerivedPropsDoNotRebuild(t *testing.T) {
 	builds := 0
 	p := ProbeBuilder(func() Widget {
 		props := Derived(func() mountProps { tick.Get(); return mountProps{Title: "a", Tags: []string{"x"}} })
-		return View(props, func(value mountProps) Widget { builds++; return Text(value.Title) })
+		return View(props, func(value mountProps) Widget { builds++; return labelled(value.Title) })
 	}, Sz(200, 200))
 	defer p.Close()
 	p.Frame()
@@ -811,5 +784,25 @@ func TestAWakeOutsideTheClipWakesNothing(t *testing.T) {
 		if hidden := y > 50; fr.Next || fr.Wake.IsZero() != hidden {
 			t.Fatalf("a paced look at %v, the clip 50 tall, asked for the next frame %v and woke at %v", y, fr.Next, fr.Wake)
 		}
+	}
+}
+
+func TestAppLaysOutOnlyWhenSomethingChanged(t *testing.T) {
+	t.Parallel()
+	a := New(Config{}, func() Widget { return sized(0, 0) })
+	a.root = a.build()
+	size := Sz(100, 100)
+	if !a.needsLayout(size) {
+		t.Fatal("first frame must lay out")
+	}
+	if a.needsLayout(size) {
+		t.Fatal("a still frame must not lay out")
+	}
+	if !a.needsLayout(Sz(200, 100)) || a.needsLayout(Sz(200, 100)) {
+		t.Fatal("a resize must lay out once")
+	}
+	State(0).Set(1)
+	if !a.needsLayout(Sz(200, 100)) {
+		t.Fatal("a signal write must lay out")
 	}
 }

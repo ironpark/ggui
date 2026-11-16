@@ -1010,6 +1010,17 @@ func (c *Canvas) Group(g any, fn func()) {
 	fn()
 }
 
+// Grouped is the group that the innermost Group around this paint marks
+// the hit regions registered now with, or nil outside every Group: it is
+// to Group what Enclosing is to Enclose. A row reads it to learn the group
+// its list paints it in, which is what GroupBusy is asked of.
+func (c *Canvas) Grouped() any {
+	if c == nil {
+		return nil
+	}
+	return c.group
+}
+
 // GroupBusy reports whether a region painted in group g, through
 // Canvas.Group, holds the focus, a pointer button's press or a touch the
 // user is dragging. It answers as of the last input the frame loop running

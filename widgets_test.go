@@ -2,8 +2,10 @@ package ggui
 
 import (
 	"math"
+	"slices"
 	"testing"
 
+	"github.com/ironpark/ggui/inspect"
 	"golang.org/x/image/font/gofont/goregular"
 )
 
@@ -54,7 +56,12 @@ func TestBoxMaxWidthCapsTheBoxAndItsChild(t *testing.T) {
 
 func TestBoxRejectsSeveralChildren(t *testing.T) {
 	t.Parallel()
-	mustPanic(t, "Box(a, b)", func() { Box(Text("a"), Text("b")) })
+	defer func() {
+		if recover() == nil {
+			t.Fatal("Box(a, b) did not panic")
+		}
+	}()
+	Box(Text("a"), Text("b"))
 }
 
 func TestColumnSumsHeightsAndGaps(t *testing.T) {
@@ -116,36 +123,6 @@ func probe(w, h float64, got *Rect) Widget {
 		func(c Constraints, _ Env) Size { return c.Constrain(Sz(w, h)) },
 		func(_ *Canvas, r Rect) { *got = r },
 	)
-}
-
-// mustPanic fails the test unless fn panics.
-func mustPanic(t *testing.T, what string, fn func()) {
-	t.Helper()
-	defer func() {
-		if recover() == nil {
-			t.Fatalf("%s did not panic", what)
-		}
-	}()
-	fn()
-}
-
-func TestInsetsShorthand(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		in   []float64
-		want EdgeInsets
-	}{
-		{nil, EdgeInsets{}},
-		{[]float64{8}, EdgeInsets{Top: 8, Right: 8, Bottom: 8, Left: 8}},
-		{[]float64{4, 12}, EdgeInsets{Top: 4, Right: 12, Bottom: 4, Left: 12}},
-		{[]float64{1, 2, 3, 4}, EdgeInsets{Top: 1, Right: 2, Bottom: 3, Left: 4}},
-	}
-	for _, c := range cases {
-		if got := Insets(c.in...); got != c.want {
-			t.Fatalf("Insets(%v) = %+v, want %+v", c.in, got, c.want)
-		}
-	}
-	mustPanic(t, "Insets(1, 2, 3)", func() { Insets(1, 2, 3) })
 }
 
 func TestRowSumsWidthsAndGaps(t *testing.T) {
@@ -447,26 +424,6 @@ func TestGridSharesWidthAndSizesRows(t *testing.T) {
 	}
 }
 
-func TestAppLaysOutOnlyWhenSomethingChanged(t *testing.T) {
-	t.Parallel()
-	a := New(Config{}, func() Widget { return Box() })
-	a.root = a.build()
-	size := Sz(100, 100)
-	if !a.needsLayout(size) {
-		t.Fatal("first frame must lay out")
-	}
-	if a.needsLayout(size) {
-		t.Fatal("a still frame must not lay out")
-	}
-	if !a.needsLayout(Sz(200, 100)) || a.needsLayout(Sz(200, 100)) {
-		t.Fatal("a resize must lay out once")
-	}
-	State(0).Set(1)
-	if !a.needsLayout(Sz(200, 100)) {
-		t.Fatal("a signal write must lay out")
-	}
-}
-
 // Borrowed rectangles must survive sibling layouts and cached children must
 // still paint correctly when parent scratch buffers are reused on later frames.
 func TestNestedLayoutRectsSurviveCacheHitsAndResize(t *testing.T) {
@@ -692,5 +649,106 @@ func TestBaselinePropagates(t *testing.T) {
 	}
 	if _, ok := Box().Size(4, 4).Baseline(); ok {
 		t.Fatal("an empty box has a baseline")
+	}
+}
+
+// An If showing nothing is left out of its flow: no gap beside it in a
+// Column, Row or Wrap, and justification counts the children that are there.
+func TestIfShowingNothingTakesNoGap(t *testing.T) {
+	t.Parallel()
+	off := State(false)
+	col := Column(Box().Size(10, 10), If(off, func() Widget {
+		return Box().Size(10, 10)
+	}), Box().Size(10, 10)).Gap(4)
+	p := NewProbe(Align(col).At(0, 0), Sz(100, 100))
+	p.Frame()
+	if h := col.rects[0].Size.H + col.rects[1].Size.H + col.rects[2].Size.H; h != 20 || col.rects[2].Origin.Y != 14 {
+		t.Fatalf("third child at y=%v with %v of content, want 14 after one box and one gap", col.rects[2].Origin.Y, h)
+	}
+	off.Set(true)
+	p.Frame()
+	if got := col.rects[2].Origin.Y; got != 28 {
+		t.Fatalf("third child at y=%v once shown, want 28 after two boxes and two gaps", got)
+	}
+
+	off.Set(false)
+	p.Frame()
+	row := Row(Box().Size(10, 10), If(off, func() Widget {
+		return Box().Size(10, 10)
+	}), Box().Size(10, 10)).Justify(SpaceBetween)
+	row.Layout(Tight(Sz(100, 10)), Untrack(UseEnv))
+	if got := row.rects[2].Origin.X; got != 90 {
+		t.Fatalf("space-between placed the last box at x=%v, want 90 with the absent child ignored", got)
+	}
+
+	wrap := Wrap(Box().Size(10, 10), If(off, func() Widget {
+		return Box().Size(10, 10)
+	}), Box().Size(10, 10)).Gap(4)
+	if w := wrap.Layout(Loose(Sz(100, 100)), Untrack(UseEnv)).W; w != 24 {
+		t.Fatalf("wrap width = %v, want two boxes and one gap", w)
+	}
+}
+
+func TestSpacingAndNamedTextStyles(t *testing.T) {
+	t.Parallel()
+	env := Env{}.With(SpacingKey, 12.0)
+	key := NewEnvKey[TextStyle]("heading")
+	env = env.With(key, TextStyle{Size: 24})
+	col := Column(Box().Size(10, 10), Box().Size(10, 10)).Space(2)
+	if h := col.Layout(Loose(Sz(100, 100)), env).H; h != 20+2*env.Spacing() {
+		t.Fatalf("height = %v", h)
+	}
+	title := Text("x").StyleKey(key).Role(RoleHeading)
+	title.Layout(Loose(Sz(100, 100)), env)
+	if title.resolved.Size != 24 {
+		t.Fatalf("title size = %v", title.resolved.Size)
+	}
+}
+
+// A Contain laid out and painted at rest, inside another, allocates
+// nothing: the Env it hands down is the one it handed down last time.
+func TestAContainAtRestAllocatesNothing(t *testing.T) {
+	c := Contain(Box(Contain(Box().Size(10, 10))).Size(50, 50))
+	run := func() {
+		size := c.Layout(Tight(Sz(50, 50)), Env{})
+		c.Paint(nil, Rct(Point{}, size))
+	}
+	run()
+	if n := testing.AllocsPerRun(100, run); n != 0 {
+		t.Fatalf("a Contain at rest allocates %v times a frame", n)
+	}
+}
+
+// Stretch is Align(AlignStretch).
+func TestStretchIsAlignStretch(t *testing.T) {
+	if Column().Stretch().align != AlignStretch || Row().Stretch().align != AlignStretch {
+		t.Fatal("Stretch did not set AlignStretch")
+	}
+}
+
+// A Box describes its box model and its border to the inspector, which the
+// Layout and Computed panes show, as the box is when asked.
+func TestBoxDescribesItsBoxModelToTheInspector(t *testing.T) {
+	t.Parallel()
+	box := Box(Box().Size(80, 30)).Pad(7, 11, 13, 17).Border(2, red)
+	p := NewProbe(Align(box).At(0, 0), Sz(400, 400))
+	defer p.Close()
+	var fr *inspect.Frame
+	p.OnInspect(func(f *inspect.Frame) { fr = f })
+	p.Frame()
+	i := slices.IndexFunc(fr.Nodes, func(n inspect.Node) bool { return n.Name == "Box" })
+	if i < 0 {
+		t.Fatalf("no Box among %+v", fr.Nodes)
+	}
+	info := fr.BoxOf(i)
+	if !info.Valid || info.Padding != (inspect.Insets{Top: 7, Right: 11, Bottom: 13, Left: 17}) || info.Border != 2 || info.Content != Sz(80, 30) {
+		t.Fatalf("incorrect box model: %+v", info)
+	}
+	if !slices.ContainsFunc(fr.Details(inspect.Computed, i), func(f inspect.Field) bool { return f.Key == "border" && f.Value == "2 px #ff0000" }) {
+		t.Fatal("computed properties missed the actual border")
+	}
+	box.padding.Top = 9
+	if fr.BoxOf(i).Padding.Top != 9 {
+		t.Fatal("box model was frozen at trace time")
 	}
 }

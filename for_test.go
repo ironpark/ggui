@@ -25,13 +25,16 @@ func TestForReusesChildrenByKey(t *testing.T) {
 	items := State([]todo{{1, "a"}, {2, "b"}})
 	setups := 0
 	var f Widget
+	shown := map[Widget]*TextWidget{} // each row's text, by the row's widget
 	dispose := reactive.Observe(func() {
 		f = EachKeyed(items, func(t todo) int { return t.ID }, func(rowItem EachItem[todo]) Widget {
 			it := rowItem.Value
-			return Component(func() Widget {
+			var row Widget
+			row = Component(func() Widget {
 				setups++
-				return Reactive(func() Widget { return Text(it.Get().Name) })
+				return Reactive(func() Widget { shown[row] = Text(it.Get().Name); return shown[row] })
 			})
+			return row
 		})
 	})
 	defer dispose()
@@ -45,7 +48,7 @@ func TestForReusesChildrenByKey(t *testing.T) {
 	names := func() []string {
 		var out []string
 		for _, w := range f.(*EachWidget[todo, int]).children {
-			out = append(out, blockChild(w).(*TextWidget).value)
+			out = append(out, shown[w].value)
 		}
 		return out
 	}
@@ -59,10 +62,11 @@ func TestForUpdatesItemSignalInPlace(t *testing.T) {
 	items := State([]todo{{1, "a"}})
 	builds := 0
 	var f Widget
+	var shown *TextWidget // the text the row built last
 	dispose := reactive.Observe(func() {
 		f = EachKeyed(items, func(t todo) int { return t.ID }, func(rowItem EachItem[todo]) Widget {
 			it := rowItem.Value
-			return Reactive(func() Widget { builds++; return Text(it.Get().Name) })
+			return Reactive(func() Widget { builds++; shown = Text(it.Get().Name); return shown })
 		})
 	})
 	defer dispose()
@@ -70,7 +74,10 @@ func TestForUpdatesItemSignalInPlace(t *testing.T) {
 	items.Set([]todo{{1, "renamed"}})
 	reactive.Flush()
 	layoutFor(f)
-	got := f.(*EachWidget[todo, int]).children[0].(*ComponentWidget).child.(*TextWidget).value
+	if len(f.(*EachWidget[todo, int]).children) != 1 {
+		t.Fatalf("%d rows, want the one kept", len(f.(*EachWidget[todo, int]).children))
+	}
+	got := shown.value
 	if got != "renamed" || builds != 2 {
 		t.Fatalf("child shows %q after %d builds, want renamed after 2", got, builds)
 	}
@@ -280,7 +287,7 @@ func TestForPaintGroupsFollowRows(t *testing.T) {
 					id := item.Get()
 					return FromFuncs(
 						func(c Constraints, _ Env) Size { return c.Constrain(Sz(20, 10)) },
-						func(dst *Canvas, _ Rect) { painted = append(painted, id); groups[id] = dst.group },
+						func(dst *Canvas, _ Rect) { painted = append(painted, id); groups[id] = dst.Grouped() },
 					)
 				})
 				if animate {
@@ -354,16 +361,11 @@ func TestForEvictionReleasesOwnerChildren(t *testing.T) {
 	for i := 0; i < len(ids); i += 5 {
 		offset.Set(float64(i * 20))
 		scroll.Layout(Tight(Sz(100, 100)), Env{})
-		count := 0
-		for _, c := range f.scope.owner.Children() {
-			if c.Disposed() {
-				t.Fatal("owner retains a disposed row")
-			}
-			count++
-		}
-		// One list-watching effect plus the visible and retained row roots.
-		if count != 1+len(f.entries) || len(f.entries) > 7 {
-			t.Fatalf("after row %d: %d children, %d entries", i, count, len(f.entries))
+		// The visible and retained rows are alive, and every row let go of
+		// was disposed; that what a Scope disposed is let go of by its
+		// owner is the kernel's, see TestScopeLetsGoOfWhatItsCleanupDisposed.
+		if live := created - cleaned; live != len(f.entries) || len(f.entries) > 7 {
+			t.Fatalf("after row %d: %d rows alive, %d entries", i, live, len(f.entries))
 		}
 	}
 	dispose()
@@ -1013,5 +1015,67 @@ func TestForRowsLeaveInAWindowsFrames(t *testing.T) {
 	}
 	if _, ok := painted[2]; ok || painted[3].Origin.Y != 10 {
 		t.Fatalf("after leaving: row 2 painted %v, row 3 at %+v", ok, painted[3])
+	}
+}
+
+func TestEachKeysByValue(t *testing.T) {
+	t.Parallel()
+	tags := State([]string{"a", "b"})
+	builds := 0
+	list := Each(tags, func(rowItem EachItem[string]) Widget { r := rowItem.Value; builds++; return TextOf(r) })
+	p := NewProbe(list, Sz(100, 100))
+	defer p.Close()
+	p.Frame()
+	tags.Set([]string{"b", "a", "c"})
+	p.Frame()
+	if builds != 3 {
+		t.Fatalf("builds = %d, want 3: a and b are kept by value", builds)
+	}
+}
+
+func TestForRetainEvictsOffscreenRows(t *testing.T) {
+	t.Parallel()
+	var items []int
+	for i := range 100 {
+		items = append(items, i)
+	}
+	src := State(items)
+	var f *EachWidget[int, int]
+	off := State(0.0)
+	dispose := reactive.Observe(func() {
+		f = EachKeyed(src, func(i int) int { return i }, func(EachItem[int]) Widget { return Box().Size(10, 10) }).ItemExtent(10).Retain(2)
+	})
+	defer dispose()
+	p := NewProbe(Scroll(f).BindOffset(off), Sz(10, 50))
+	p.Frame()
+	off.Set(500)
+	p.Frame()
+	if n := len(f.entries); n != 5+2 {
+		t.Fatalf("mounted rows = %d, want 7", n)
+	}
+}
+
+func TestSemanticsListCountsItems(t *testing.T) {
+	t.Parallel()
+	items := State([]string{"a", "b", "c"})
+	p := NewProbe(Each(items, func(rowItem EachItem[string]) Widget { s := rowItem.Value; return TextOf(s) }), Sz(100, 200))
+	defer p.Close()
+	tree := p.Semantics()
+	list, ok := tree.Find(RoleList, "")
+	if !ok {
+		t.Fatalf("no list:\n%s", tree)
+	}
+	if list.Max != 3 {
+		t.Errorf("list.Max = %g, want 3", list.Max)
+	}
+	if len(list.Children) != 3 {
+		t.Fatalf("%d items, want 3:\n%s", len(list.Children), tree)
+	}
+	third := tree.At(list.Children[2])
+	if third.Role != RoleListItem || third.Now != 3 || third.Max != 3 {
+		t.Errorf("third item = %v, want item 3 of 3", third.Node)
+	}
+	if kids := third.Children; len(kids) != 1 || tree.At(kids[0]).Name != "c" {
+		t.Errorf("the item does not hold its row:\n%s", tree)
 	}
 }

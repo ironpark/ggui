@@ -34,7 +34,7 @@ func paintFrame(in *inputState, w Widget, size Size) {
 func TestTapFiresOnDownAndUpInside(t *testing.T) {
 	t.Parallel()
 	taps := 0
-	w := Column(Box().Size(50, 50), Tap(Box().Size(50, 50), func() { taps++ }))
+	w := column(sized(50, 50), tapped(sized(50, 50), func() { taps++ }))
 	var in inputState
 	paintFrame(&in, w, Sz(50, 100))
 
@@ -59,7 +59,7 @@ func TestTapFiresOnDownAndUpInside(t *testing.T) {
 func TestTapSurvivesRebuildBetweenDownAndUp(t *testing.T) {
 	t.Parallel()
 	taps := 0
-	build := func() Widget { return Tap(Box().Size(50, 50), func() { taps++ }) }
+	build := func() Widget { return tapped(sized(50, 50), func() { taps++ }) }
 	var in inputState
 	paintFrame(&in, build(), Sz(50, 50))
 	in.dispatch(frameInput{pos: Pt(5, 5), down: []MouseButton{MouseButtonLeft}})
@@ -73,7 +73,7 @@ func TestTapSurvivesRebuildBetweenDownAndUp(t *testing.T) {
 func TestTopmostRegionWins(t *testing.T) {
 	t.Parallel()
 	var outer, inner int
-	w := Tap(Padding(Tap(Box().Size(20, 20), func() { inner++ }), 10), func() { outer++ })
+	w := tapped(padded(tapped(sized(20, 20), func() { inner++ }), 10), func() { outer++ })
 	var in inputState
 	paintFrame(&in, w, Sz(40, 40))
 	click := func(p Point) {
@@ -90,7 +90,15 @@ func TestTopmostRegionWins(t *testing.T) {
 func TestHoverEnterAndExit(t *testing.T) {
 	t.Parallel()
 	var log []bool
-	w := Pointer(Box().Size(50, 50)).OnHover(func(b bool) { log = append(log, b) })
+	w := onPointer(sized(50, 50), func(ev PointerEvent) bool {
+		switch ev.Kind {
+		case PointerEnter:
+			log = append(log, true)
+		case PointerExit:
+			log = append(log, false)
+		}
+		return true
+	})
 	var in inputState
 	paintFrame(&in, w, Sz(50, 50))
 	in.dispatch(frameInput{pos: Pt(10, 10)})
@@ -104,15 +112,21 @@ func TestHoverEnterAndExit(t *testing.T) {
 func TestUnhandledEventsFallThrough(t *testing.T) {
 	t.Parallel()
 	var scrolled Point
-	tapped := false
-	w := Pointer(Tap(Box().Size(50, 50), func() { tapped = true })).OnScroll(func(d Point) { scrolled = d })
+	taps := false
+	w := onPointer(tapped(sized(50, 50), func() { taps = true }), func(ev PointerEvent) bool {
+		if ev.Kind == PointerScroll {
+			scrolled = ev.Scroll
+			return true
+		}
+		return false
+	})
 	var in inputState
 	paintFrame(&in, w, Sz(50, 50))
 	in.dispatch(frameInput{pos: Pt(10, 10), wheel: Pt(0, -3)})
 	if scrolled != (Point{X: 0, Y: -3}) {
 		t.Fatalf("scroll reached %v, want {0 -3} through the tap region", scrolled)
 	}
-	if tapped {
+	if taps {
 		t.Fatal("scrolling tapped")
 	}
 }
@@ -122,12 +136,18 @@ func TestFocusRoutesKeys(t *testing.T) {
 	var keys []KeyboardKey
 	var typed string
 	var focus []bool
-	w := Row(
-		Focus(Box().Size(50, 50)).
-			OnKey(func(k KeyboardKey) { keys = append(keys, k) }).
-			OnText(func(s string) { typed += s }).
-			OnFocus(func(b bool) { focus = append(focus, b) }),
-		Box().Size(50, 50),
+	w := row(
+		onKey(sized(50, 50), func(ev KeyEvent) {
+			switch ev.Kind {
+			case KeyPress:
+				keys = append(keys, ev.Key)
+			case KeyText:
+				typed += ev.Text
+			case KeyFocus, KeyBlur:
+				focus = append(focus, ev.Kind == KeyFocus)
+			}
+		}),
+		sized(50, 50),
 	)
 	var in inputState
 	paintFrame(&in, w, Sz(100, 50))
@@ -154,11 +174,15 @@ func TestFocusRoutesKeys(t *testing.T) {
 func TestFocusLostWhenRegionDisappears(t *testing.T) {
 	t.Parallel()
 	blurred := false
-	w := Focus(Box().Size(50, 50)).OnFocus(func(b bool) { blurred = !b })
+	w := onKey(sized(50, 50), func(ev KeyEvent) {
+		if ev.Kind == KeyFocus || ev.Kind == KeyBlur {
+			blurred = ev.Kind == KeyBlur
+		}
+	})
 	var in inputState
 	paintFrame(&in, w, Sz(50, 50))
 	in.dispatch(frameInput{pos: Pt(10, 10), down: []MouseButton{MouseButtonLeft}})
-	paintFrame(&in, Box().Size(50, 50), Sz(50, 50))
+	paintFrame(&in, sized(50, 50), Sz(50, 50))
 	in.dispatch(frameInput{pos: Pt(10, 10)})
 	if !blurred || in.focused != nil {
 		t.Fatalf("blurred = %v, focused = %v; want blur and no focus", blurred, in.focused)
@@ -169,9 +193,16 @@ func TestPressedRegionCapturesDragAndRelease(t *testing.T) {
 	t.Parallel()
 	var drags, ups int
 	var last Point
-	w := Pointer(Box().Size(50, 50)).
-		OnDrag(func(ev PointerEvent) { drags++; last = ev.Pos }).
-		OnUp(func(PointerEvent) { ups++ })
+	w := onPointer(sized(50, 50), func(ev PointerEvent) bool {
+		switch ev.Kind {
+		case PointerDrag:
+			drags++
+			last = ev.Pos
+		case PointerUp:
+			ups++
+		}
+		return ev.Kind == PointerDown || ev.Kind == PointerUp || ev.Kind == PointerDrag
+	})
 	var in inputState
 	paintFrame(&in, w, Sz(50, 50))
 	in.dispatch(frameInput{pos: Pt(10, 10), down: []MouseButton{MouseButtonLeft}})
@@ -188,7 +219,11 @@ func TestPointerAroundFocusSharesOneRegion(t *testing.T) {
 	t.Parallel()
 	taps := 0
 	focused := false
-	w := Tap(Focus(Box().Size(50, 50)).OnFocus(func(b bool) { focused = b }), func() { taps++ })
+	w := tapped(onKey(sized(50, 50), func(ev KeyEvent) {
+		if ev.Kind == KeyFocus || ev.Kind == KeyBlur {
+			focused = ev.Kind == KeyFocus
+		}
+	}), func() { taps++ })
 	var in inputState
 	paintFrame(&in, w, Sz(50, 50))
 	if len(in.regions) != 1 {
@@ -203,9 +238,9 @@ func TestPointerAroundFocusSharesOneRegion(t *testing.T) {
 
 func TestCursorFollowsTopmostRegion(t *testing.T) {
 	t.Parallel()
-	w := Stack(
-		Pointer(Box().Size(100, 100)).Cursor(CursorShapeCrosshair),
-		Pointer(Box().Size(50, 50)).Cursor(CursorShapeText),
+	w := stack(
+		onPointer(sized(100, 100), takesNothing).withCursor(CursorShapeCrosshair),
+		onPointer(sized(50, 50), takesNothing).withCursor(CursorShapeText),
 	)
 	var in inputState
 	paintFrame(&in, w, Sz(100, 100))
@@ -226,10 +261,15 @@ func TestCursorFollowsTopmostRegion(t *testing.T) {
 func TestPressedRegionSurvivesBufferReuse(t *testing.T) {
 	t.Parallel()
 	var drags int
-	w := Row(
-		Pointer(Box().Size(50, 50)).OnDrag(func(PointerEvent) { drags++ }),
-		Pointer(Box().Size(50, 50)).OnDrag(func(PointerEvent) { t.Fatal("drag went to the wrong region") }),
-	)
+	drag := func(fn func()) Widget {
+		return onPointer(sized(50, 50), func(ev PointerEvent) bool {
+			if ev.Kind == PointerDrag {
+				fn()
+			}
+			return ev.Kind == PointerDown || ev.Kind == PointerUp || ev.Kind == PointerDrag
+		})
+	}
+	w := row(drag(func() { drags++ }), drag(func() { t.Fatal("drag went to the wrong region") }))
 	var in inputState
 	paintFrame(&in, w, Sz(100, 50))
 	in.dispatch(frameInput{pos: Pt(10, 10), down: []MouseButton{MouseButtonLeft}})
@@ -255,7 +295,7 @@ func TestAdopterTakesOverAtTheSameRect(t *testing.T) {
 		t.Fatalf("second adopted n = %d from %p, want 7 from the first", second.n, second.from)
 	}
 	third := build()
-	paintFrame(&in, Padding(third, 10), Sz(70, 70)) // a different Rect: nothing to adopt
+	paintFrame(&in, padded(third, 10), Sz(70, 70)) // a different Rect: nothing to adopt
 	if third.from != nil {
 		t.Fatal("adopted across different Rects")
 	}
@@ -306,7 +346,7 @@ func (k *keyed) HandleKey(ev KeyEvent) {
 func TestTabMovesFocusInPaintOrder(t *testing.T) {
 	t.Parallel()
 	var log []string
-	w := Row(&keyed{&log, "a"}, Box().Size(50, 50), &keyed{&log, "b"}, &keyed{&log, "c"})
+	w := row(&keyed{&log, "a"}, sized(50, 50), &keyed{&log, "b"}, &keyed{&log, "c"})
 	var in inputState
 	paintFrame(&in, w, Sz(200, 50))
 	tab := func(shift bool) { in.dispatch(frameInput{keys: []KeyboardKey{KeyTab}, mods: Mods{Shift: shift}}) }
@@ -342,7 +382,7 @@ func (k *claimer) ClaimsChord(ev KeyEvent) bool {
 func TestClaimedChordsSkipRuntimeBindings(t *testing.T) {
 	t.Parallel()
 	var log []string
-	w := Row(&claimer{keyed{&log, "term"}}, &keyed{&log, "b"})
+	w := row(&claimer{keyed{&log, "term"}}, &keyed{&log, "b"})
 	var in inputState
 	paintFrame(&in, w, Sz(100, 50))
 	hooked := 0
@@ -376,7 +416,7 @@ func TestClaimedChordsSkipRuntimeBindings(t *testing.T) {
 func TestTabTellsApartRegionsSharingARect(t *testing.T) {
 	t.Parallel()
 	var log []string
-	w := Stack(&keyed{&log, "a"}, &keyed{&log, "b"})
+	w := stack(&keyed{&log, "a"}, &keyed{&log, "b"})
 	var in inputState
 	paintFrame(&in, w, Sz(50, 50))
 	for range 3 {
@@ -419,7 +459,7 @@ func (r *roving) TabStop() bool              { return r.stop }
 func TestTabSkipsWhatIsNotATabStop(t *testing.T) {
 	t.Parallel()
 	var log []string
-	w := Row(&keyed{&log, "a"}, &roving{keyed{&log, "b"}, false}, &roving{keyed{&log, "c"}, true})
+	w := row(&keyed{&log, "a"}, &roving{keyed{&log, "b"}, false}, &roving{keyed{&log, "c"}, true})
 	var in inputState
 	paintFrame(&in, w, Sz(200, 50))
 	for range 3 {
@@ -473,7 +513,7 @@ func TestHoverExitReachesARebuiltControl(t *testing.T) {
 		return Reactive(func() Widget {
 			_ = gen.Get()
 			a = &hoverBox{id: "a"}
-			return Column(a, &hoverBox{id: "b"})
+			return column(a, &hoverBox{id: "b"})
 		})
 	}, Sz(50, 100))
 	defer p.Close()
@@ -527,7 +567,12 @@ func TestCursorFollowsTheFramePainted(t *testing.T) {
 		if held.Get() {
 			shape = CursorShapePointer
 		}
-		return Pointer(Box().Size(100, 100)).Cursor(shape).OnMove(func(ev PointerEvent) { held.Set(ev.Mods.Shift) })
+		return onPointer(sized(100, 100), func(ev PointerEvent) bool {
+			if ev.Kind == PointerMove {
+				held.Set(ev.Mods.Shift)
+			}
+			return true
+		}).withCursor(shape)
 	})
 	p := NewProbe(w, Sz(100, 100))
 	defer p.Close()
@@ -547,11 +592,22 @@ func TestARebuiltRegionIsToldItIsHovered(t *testing.T) {
 	t.Parallel()
 	var was, now []bool
 	var in inputState
-	paintFrame(&in, Pointer(Box().Size(50, 50)).OnHover(func(b bool) { was = append(was, b) }), Sz(50, 50))
+	hover := func(log *[]bool) Widget {
+		return onPointer(sized(50, 50), func(ev PointerEvent) bool {
+			switch ev.Kind {
+			case PointerEnter:
+				*log = append(*log, true)
+			case PointerExit:
+				*log = append(*log, false)
+			}
+			return true
+		})
+	}
+	paintFrame(&in, hover(&was), Sz(50, 50))
 	in.dispatch(frameInput{pos: Pt(10, 10)})
 	// Rebuilt under the pointer, as a list redrawn for a change elsewhere
 	// is: the new region holds a hover state of its own.
-	paintFrame(&in, Pointer(Box().Size(50, 50)).OnHover(func(b bool) { now = append(now, b) }), Sz(50, 50))
+	paintFrame(&in, hover(&now), Sz(50, 50))
 	in.dispatch(frameInput{pos: Pt(10, 10)})
 	in.dispatch(frameInput{pos: Pt(12, 12)})
 	if len(now) != 1 || !now[0] {
@@ -577,7 +633,7 @@ func (k *releasing) HandleKeyRelease(ev KeyEvent) {
 func TestReleasesReachTheFocusedHandlerThatAsks(t *testing.T) {
 	t.Parallel()
 	var log []string
-	w := Row(&releasing{keyed{&log, "a"}}, &keyed{&log, "b"})
+	w := row(&releasing{keyed{&log, "a"}}, &keyed{&log, "b"})
 	var in inputState
 	paintFrame(&in, w, Sz(100, 50))
 	clickAt(&in, Pt(25, 25))
@@ -600,9 +656,18 @@ func TestTouchTapAndCapturedDrag(t *testing.T) {
 	var in inputState
 	var taps, ups, drags int
 	var released Point
-	w := Pointer(Box().Size(50, 50)).OnTap(func() { taps++ }).
-		OnDrag(func(PointerEvent) { drags++ }).
-		OnUp(func(ev PointerEvent) { ups++; released = ev.Pos })
+	w := onPointer(sized(50, 50), func(ev PointerEvent) bool {
+		switch ev.Kind {
+		case PointerTap:
+			taps++
+		case PointerDrag:
+			drags++
+		case PointerUp:
+			ups++
+			released = ev.Pos
+		}
+		return ev.Kind != PointerMove && ev.Kind != PointerScroll
+	})
 	paintFrame(&in, w, Sz(50, 50))
 	step := func(ids []ggwd.TouchID, pos Point) {
 		f := frameInput{pos: Pt(999, 999)}
@@ -652,8 +717,16 @@ func TestTouchPanScrollsAndCancelsTap(t *testing.T) {
 	var in inputState
 	var touch touchInput
 	taps, ups := 0, 0
-	child := Pointer(Box().Size(100, 400)).OnTap(func() { taps++ }).OnUp(func(PointerEvent) { ups++ })
-	s := Scroll(child).Speed(99)
+	child := onPointer(sized(100, 400), func(ev PointerEvent) bool {
+		switch ev.Kind {
+		case PointerTap:
+			taps++
+		case PointerUp:
+			ups++
+		}
+		return ev.Kind == PointerDown || ev.Kind == PointerUp || ev.Kind == PointerTap
+	})
+	s := &scroller{child: child}
 	step := func(held bool, p Point) {
 		paintFrame(&in, s, Sz(100, 100))
 		var ids []ggwd.TouchID
@@ -666,7 +739,7 @@ func TestTouchPanScrollsAndCancelsTap(t *testing.T) {
 	}
 	step(true, Pt(50, 80))
 	step(true, Pt(50, 77))
-	if s.position() != 0 {
+	if s.offset != 0 {
 		t.Fatal("small tap jitter scrolled")
 	}
 	step(false, Point{})
@@ -675,12 +748,12 @@ func TestTouchPanScrollsAndCancelsTap(t *testing.T) {
 	}
 	step(true, Pt(50, 80))
 	step(true, Pt(50, 60))
-	if s.position() != 20 {
-		t.Fatalf("offset = %v, want 20 logical pixels", s.position())
+	if s.offset != 20 {
+		t.Fatalf("offset = %v, want 20 logical pixels", s.offset)
 	}
 	step(true, Pt(50, -10))
-	if s.position() != 90 {
-		t.Fatalf("captured offset = %v, want 90", s.position())
+	if s.offset != 90 {
+		t.Fatalf("captured offset = %v, want 90", s.offset)
 	}
 	step(false, Point{})
 	if taps != 1 || ups != 2 || in.pressed != nil || in.touchPan.Panning {
@@ -692,16 +765,21 @@ func TestHorizontalTouchDragDoesNotScrollVerticalList(t *testing.T) {
 	t.Parallel()
 	var in inputState
 	drags := 0
-	s := Scroll(Pointer(Box().Size(100, 400)).OnDrag(func(PointerEvent) { drags++ }))
+	s := &scroller{child: onPointer(sized(100, 400), func(ev PointerEvent) bool {
+		if ev.Kind == PointerDrag {
+			drags++
+		}
+		return ev.Kind == PointerDown || ev.Kind == PointerUp || ev.Kind == PointerDrag
+	})}
 	paintFrame(&in, s, Sz(100, 100))
 	in.dispatch(frameInput{touch: true, pos: Pt(10, 50), down: []MouseButton{MouseButtonLeft}})
 	in.dispatch(frameInput{touch: true, pos: Pt(40, 51)})
-	if s.position() != 0 || drags != 1 || in.touchPan.Panning {
-		t.Fatalf("horizontal drag stolen: offset=%v drags=%d", s.position(), drags)
+	if s.offset != 0 || drags != 1 || in.touchPan.Panning {
+		t.Fatalf("horizontal drag stolen: offset=%v drags=%d", s.offset, drags)
 	}
 }
 
-type touchDragControl struct{ *PointerWidget }
+type touchDragControl struct{ *pointed }
 
 func (*touchDragControl) CaptureTouchDrag() bool { return true }
 func (w *touchDragControl) Paint(dst *Canvas, r Rect) {
@@ -713,10 +791,16 @@ func TestTouchCapturedControlDoesNotPanParent(t *testing.T) {
 	t.Parallel()
 	var in inputState
 	drags, ups := 0, 0
-	control := &touchDragControl{Pointer(Box().Size(100, 400)).
-		OnDrag(func(PointerEvent) { drags++ }).
-		OnUp(func(PointerEvent) { ups++ })}
-	s := Scroll(control)
+	control := &touchDragControl{onPointer(sized(100, 400), func(ev PointerEvent) bool {
+		switch ev.Kind {
+		case PointerDrag:
+			drags++
+		case PointerUp:
+			ups++
+		}
+		return ev.Kind == PointerDown || ev.Kind == PointerUp || ev.Kind == PointerDrag
+	})}
+	s := &scroller{child: control}
 	paintFrame(&in, s, Sz(100, 100))
 	in.dispatch(frameInput{touch: true, pos: Pt(50, 80), down: []MouseButton{MouseButtonLeft}})
 	in.dispatch(frameInput{touch: true, pos: Pt(50, 40)})
@@ -725,8 +809,8 @@ func TestTouchCapturedControlDoesNotPanParent(t *testing.T) {
 	if drags != 2 || ups != 1 || in.pressed != nil {
 		t.Fatalf("lost captured drag: drags=%d ups=%d pressed=%v", drags, ups, in.pressed)
 	}
-	if s.position() != 0 || in.touchPan.Panning || in.touchMotion.target != nil {
-		t.Fatalf("captured control started scrolling: offset=%v", s.position())
+	if s.offset != 0 || in.touchPan.Panning || in.touchMotion.target != nil {
+		t.Fatalf("captured control started scrolling: offset=%v", s.offset)
 	}
 }
 
@@ -737,7 +821,7 @@ func TestTouchFlingSpeedHoldAndInterruption(t *testing.T) {
 		now := time.Unix(100, 0)
 		restore := SetClock(func() time.Time { return now })
 		defer restore()
-		s := Scroll(Box().Size(100, 10000))
+		s := &scroller{child: sized(100, 10000)}
 		paintFrame(&in, s, Sz(100, 100))
 		p := Pt(50, 80)
 		in.dispatch(frameInput{touch: true, pos: p, down: []MouseButton{MouseButtonLeft}})
@@ -754,7 +838,7 @@ func TestTouchFlingSpeedHoldAndInterruption(t *testing.T) {
 		}
 		now = now.Add(16 * time.Millisecond)
 		in.dispatch(frameInput{touch: true, pos: p, up: []MouseButton{MouseButtonLeft}})
-		before := s.position()
+		before := s.offset
 		if interrupt {
 			now = now.Add(16 * time.Millisecond)
 			in.dispatch(frameInput{touch: true, pos: Pt(50, 50), down: []MouseButton{MouseButtonLeft}})
@@ -766,7 +850,7 @@ func TestTouchFlingSpeedHoldAndInterruption(t *testing.T) {
 		if in.touchMotion.target != nil {
 			t.Fatal("fling never settled")
 		}
-		return s.position() - before
+		return s.offset - before
 	}
 	slow, fast := run(200, false, false), run(1000, false, false)
 	t.Logf("released travel: slow=%.1fpx fast=%.1fpx", slow, fast)
@@ -785,7 +869,7 @@ func TestTouchMomentumFrameRateAndBounds(t *testing.T) {
 	t.Parallel()
 	run := func(step time.Duration, height float64) (float64, bool) {
 		var in inputState
-		s := Scroll(Box().Size(100, height))
+		s := &scroller{child: sized(100, height)}
 		paintFrame(&in, s, Sz(100, 100))
 		target := in.topmost(func(r *hitRegion) bool { return r.pointer == s })
 		now := time.Unix(100, 0)
@@ -794,7 +878,7 @@ func TestTouchMomentumFrameRateAndBounds(t *testing.T) {
 			now = now.Add(step)
 			in.stepTouchMomentum(now)
 		}
-		return s.position(), in.touchMotion.target != nil
+		return s.offset, in.touchMotion.target != nil
 	}
 	a, _ := run(10*time.Millisecond, 10000)
 	b, _ := run(20*time.Millisecond, 10000)
@@ -810,7 +894,7 @@ func TestTouchMomentumStopsOnPauseOrMissingTarget(t *testing.T) {
 	t.Parallel()
 	for _, missing := range []bool{false, true} {
 		var in inputState
-		s := Scroll(Box().Size(100, 1000))
+		s := &scroller{child: sized(100, 1000)}
 		paintFrame(&in, s, Sz(100, 100))
 		target := in.topmost(func(r *hitRegion) bool { return r.pointer == s })
 		now := time.Unix(100, 0)
@@ -821,7 +905,7 @@ func TestTouchMomentumStopsOnPauseOrMissingTarget(t *testing.T) {
 			dt = 16 * time.Millisecond
 		}
 		in.stepTouchMomentum(now.Add(dt))
-		if s.position() != 0 || in.touchMotion.target != nil {
+		if s.offset != 0 || in.touchMotion.target != nil {
 			t.Fatal("stale fling continued")
 		}
 	}
@@ -866,7 +950,7 @@ func TestKeyEventIs(t *testing.T) {
 
 // spaceEater is a focusable region that consumes Space.
 type spaceEater struct {
-	FocusWidget
+	focusable
 	seen []KeyboardKey
 }
 
@@ -880,7 +964,7 @@ func (e *spaceEater) Paint(dst *Canvas, r Rect)    { dst.HitKey(r, e) }
 
 func TestShortcutsRunAroundTheFocusedWidget(t *testing.T) {
 	t.Parallel()
-	e := &spaceEater{FocusWidget: *Focus(Box().Size(20, 20))}
+	e := &spaceEater{focusable: focusable{child: sized(20, 20)}}
 	p := NewProbe(e, Sz(50, 50))
 	defer p.Close()
 	runs := map[string]int{}
@@ -907,99 +991,6 @@ func TestShortcutsRunAroundTheFocusedWidget(t *testing.T) {
 	}
 }
 
-func TestPopupTrapsTabAndRestoresFocus(t *testing.T) {
-	t.Parallel()
-	focused := ""
-	track := func(name string, size float64) *FocusWidget {
-		return Focus(Box().Size(size, size)).OnFocus(func(on bool) {
-			if on {
-				focused = name
-			} else if focused == name {
-				focused = ""
-			}
-		})
-	}
-	a, b := track("a", 20), track("b", 20)
-	c1, c2 := track("c1", 20), track("c2", 20)
-	pop := Popup(a, Column(c1, c2))
-	p := NewProbe(Column(pop, b), Sz(100, 200))
-	defer p.Close()
-	p.Click(Pt(10, 10))
-	if focused != "a" {
-		t.Fatalf("focused %q after clicking a", focused)
-	}
-	pop.Show()
-	p.Frame()
-	p.Type(Mods{}, KeyTab)
-	if focused != "c2" {
-		t.Fatalf("focused %q; the scope should take focus to c1 and Tab move it to c2", focused)
-	}
-	p.Type(Mods{}, KeyTab)
-	if focused != "c1" {
-		t.Fatalf("focused %q; Tab must wrap inside the popup, not reach b", focused)
-	}
-	p.Type(Mods{}, KeyEscape)
-	if pop.IsOpen() {
-		t.Fatal("Escape did not close the popup")
-	}
-	p.Move(Pt(90, 190)) // the next frame's dispatch restores focus
-	if focused != "a" {
-		t.Fatalf("focused %q after closing, want a", focused)
-	}
-}
-
-func TestTabScrollsTheTargetIntoView(t *testing.T) {
-	t.Parallel()
-	items := Column(Focus(Box().Size(50, 50)), Focus(Box().Size(50, 50)), Focus(Box().Size(50, 50)))
-	sc := Scroll(items)
-	p := NewProbe(sc, Sz(50, 70))
-	defer p.Close()
-	p.Type(Mods{}, KeyTab, KeyTab)
-	if sc.offset != 30 {
-		t.Fatalf("offset = %v after tabbing to the second item, want 30 so it is fully shown", sc.offset)
-	}
-}
-
-// RequestReveal scrolls its Rect into view, once, and leaves focus alone.
-func TestRequestRevealScrollsWithoutFocusing(t *testing.T) {
-	t.Parallel()
-	reveal := -1
-	rows := make([]Widget, 10)
-	for i := range rows {
-		rows[i] = &revealer{i: i, want: &reveal}
-	}
-	sc := Scroll(Column(rows...))
-	p := NewProbe(sc, Sz(50, 70))
-	defer p.Close()
-	p.Frame()
-	reveal = 5
-	p.Frame()
-	if sc.offset != 50*6-70 {
-		t.Fatalf("offset = %v after revealing row 5, want %v", sc.offset, 50*6-70)
-	}
-	if p.input.focused != nil {
-		t.Fatal("RequestReveal moved focus")
-	}
-	reveal = -1
-	p.Scroll(Pt(10, 10), Pt(0, -40))
-	p.Frame()
-	if sc.offset == 50*6-70 {
-		t.Fatal("the reveal held the scroll after it was asked once")
-	}
-}
-
-type revealer struct {
-	i    int
-	want *int
-}
-
-func (w *revealer) Layout(Constraints, Env) Size { return Sz(50, 50) }
-func (w *revealer) Paint(dst *Canvas, r Rect) {
-	if *w.want == w.i {
-		dst.RequestReveal(r)
-	}
-}
-
 // PaintFocus tells the widget that painted the focused handler from one
 // that only overlaps it: a badge floating over a focused editor, a parent
 // around it.
@@ -1012,9 +1003,9 @@ func TestPaintFocusKnowsWhoPaintedTheFocus(t *testing.T) {
 			func(dst *Canvas, r Rect) { *held = dst.PaintFocus(w, r) },
 		)
 	}
-	editor := Focus(Box().Size(200, 100))
-	badge := Box().Size(40, 20)
-	p := NewProbe(tracked(Stack(tracked(editor, &inEditor), Padding(tracked(badge, &inBadge), 10.5, 3.3)), &inColumn), Sz(200, 100))
+	editor := onKey(sized(200, 100), nil)
+	badge := sized(40, 20)
+	p := NewProbe(tracked(stack(tracked(editor, &inEditor), padded(tracked(badge, &inBadge), 10.5, 3.3)), &inColumn), Sz(200, 100))
 	defer p.Close()
 	p.Frame()
 	if inEditor || inBadge || inColumn {
@@ -1035,10 +1026,10 @@ func TestFocusRefFocusesTheAttachedWidget(t *testing.T) {
 	var first, second, empty FocusRef
 	dialog := State(false)
 	p := ProbeBuilder(func() Widget {
-		return Column(
-			first.Attach(Focus(Box().Size(20, 20))),
-			second.Attach(Row(Box().Size(5, 5), Focus(Box().Size(20, 20)), Focus(Box().Size(20, 20)))),
-			empty.Attach(Box().Size(20, 20)),
+		return column(
+			first.Attach(onKey(sized(20, 20), nil)),
+			second.Attach(row(sized(5, 5), onKey(sized(20, 20), nil), onKey(sized(20, 20), nil))),
+			empty.Attach(sized(20, 20)),
 			If(dialog, func() Widget { return &shortcutKeeper{trap: true} }),
 		)
 	}, Sz(200, 200))
@@ -1068,27 +1059,6 @@ func TestFocusRefFocusesTheAttachedWidget(t *testing.T) {
 	p.Frame()
 	if second.Focused() {
 		t.Fatal("Focus reached a widget behind an open dialog")
-	}
-}
-
-// A FocusRef whose widget was scrolled into view by Focus reports the focus
-// once the scroll has painted, without waiting for input to refresh it.
-func TestFocusRefFocusedAfterScrollingIntoView(t *testing.T) {
-	t.Parallel()
-	refs := make([]FocusRef, 30)
-	rows := make([]Widget, len(refs))
-	for i := range rows {
-		rows[i] = refs[i].Attach(Focus(Box().Size(100, 20)))
-	}
-	p := NewProbe(Scroll(Column(rows...)), Sz(100, 100))
-	defer p.Close()
-	p.Frame()
-	p.Post(refs[25].Focus)
-	p.Frame() // focuses the row, out of view, and scrolls to it
-	p.Frame() // paints it in view
-	p.Frame() // paints with the focus where it now is
-	if !refs[25].Focused() {
-		t.Fatal("Focused() = false after the row scrolled into view")
 	}
 }
 

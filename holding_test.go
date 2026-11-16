@@ -5,20 +5,6 @@ import (
 	"time"
 )
 
-// A Contain laid out and painted at rest, inside another, allocates
-// nothing: the Env it hands down is the one it handed down last time.
-func TestAContainAtRestAllocatesNothing(t *testing.T) {
-	c := Contain(Box(Contain(Box().Size(10, 10))).Size(50, 50))
-	run := func() {
-		size := c.Layout(Tight(Sz(50, 50)), Env{})
-		c.Paint(nil, Rct(Point{}, size))
-	}
-	run()
-	if n := testing.AllocsPerRun(100, run); n != 0 {
-		t.Fatalf("a Contain at rest allocates %v times a frame", n)
-	}
-}
-
 // measuredAt lays child out under each of cons in turn, as a parent that
 // measures a child before it settles on a size does, and paints it at
 // the last.
@@ -32,7 +18,7 @@ func measuredAt(child Widget, cons ...Constraints) Widget {
 	}, func(dst *Canvas, r Rect) { dst.Paint(child, Rct(r.Origin, size)) })
 }
 
-// A Contain its parent measures twice a layout, each time under the
+// A boundary its parent measures twice a layout, each time under the
 // constraints of the last, is checked against each and holds; one
 // measured under more constraints than it keeps cannot be checked, and
 // its frames are painted whole, though it stays a boundary: the easing
@@ -52,8 +38,8 @@ func TestAContainMeasuredMoreThanOnceIsCheckedUnderEach(t *testing.T) {
 		steps := 6 * len(tc.cons)
 		grows, laid, painted := easing(steps)
 		// As large as either constraint allows, whatever grows inside.
-		pane := Contain(Box(Column(grows, Box().Size(50, 10))).Size(100, 100))
-		p := NewWindowProbe(func() Widget { return topLeft(Row(measuredAt(pane, tc.cons...), Box().Size(50, 50))) }, Sz(200, 120))
+		pane := &held{child: around(100, 100, column(grows, sized(50, 10)))}
+		p := NewWindowProbe(func() Widget { return stack(row(measuredAt(pane, tc.cons...), sized(50, 50))) }, Sz(200, 120))
 		p.Step(0)
 		frames := p.Run(0, 18)
 		p.Close()
@@ -66,12 +52,12 @@ func TestAContainMeasuredMoreThanOnceIsCheckedUnderEach(t *testing.T) {
 			}
 		}
 		if pane.hold.sizedByContent {
-			t.Fatalf("%s: the Contain gave up holding", tc.name)
+			t.Fatalf("%s: the boundary gave up holding", tc.name)
 		}
 	}
 }
 
-// The Contain a disclosure asks is the nearest, and one that turned out
+// The boundary a disclosure asks is the nearest, and one that turned out
 // to follow its content passes the request to the one around it.
 func TestInvalidateAsksTheNearestBoundaryThatHolds(t *testing.T) {
 	open := State(false)
@@ -80,18 +66,18 @@ func TestInvalidateAsksTheNearestBoundaryThatHolds(t *testing.T) {
 	r := FromFuncs(func(c Constraints, env Env) Size {
 		return c.Constrain(Sz(40, 40*max(m.LayoutToggle(env, open.Get(), 100*time.Millisecond), 0)))
 	}, func(*Canvas, Rect) {})
-	inner := Contain(Column(r))
-	outer := Contain(Box(topLeft(inner)).Size(100, 100))
-	p := NewWindowProbe(func() Widget { return topLeft(Row(outer, Box().Size(50, 50))) }, Sz(200, 120))
+	inner := &held{child: column(r)}
+	outer := &held{child: around(100, 100, stack(inner))}
+	p := NewWindowProbe(func() Widget { return stack(row(outer, sized(50, 50))) }, Sz(200, 120))
 	defer p.Close()
 	p.Run(16*time.Millisecond, 10)
-	// Two deep: the outer Contain, around the inner, is in none.
+	// Two deep: the outer boundary, around the inner, is in none.
 	if inner.hold.outer != &outer.hold || outer.hold.outer != nil {
-		t.Fatalf("around the inner Contain %p, around that %p; want %p, then none", inner.hold.outer, outer.hold.outer, &outer.hold)
+		t.Fatalf("around the inner boundary %p, around that %p; want %p, then none", inner.hold.outer, outer.hold.outer, &outer.hold)
 	}
 	open.Set(true)
 	p.Run(16*time.Millisecond, 30)
 	if !inner.hold.sizedByContent || outer.hold.sizedByContent {
-		t.Fatalf("sized by content: the inner Contain %v, the outer %v; want the inner alone", inner.hold.sizedByContent, outer.hold.sizedByContent)
+		t.Fatalf("sized by content: the inner boundary %v, the outer %v; want the inner alone", inner.hold.sizedByContent, outer.hold.sizedByContent)
 	}
 }

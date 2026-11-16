@@ -5,7 +5,6 @@ import (
 	"image/color"
 	"math"
 	"testing"
-	"time"
 
 	"github.com/ironpark/ggfx"
 	"github.com/ironpark/ggui/internal/framestats"
@@ -40,195 +39,7 @@ func (t *target) taps() []Point {
 	return out
 }
 
-// topLeft places w at the probe's origin at its own size.
-func topLeft(w Widget) Widget { return Align(w).At(0, 0) }
-
 func nearPt(a, b Point) bool { return math.Abs(a.X-b.X) < 1e-9 && math.Abs(a.Y-b.Y) < 1e-9 }
-
-func TestTransformRoutesInputThroughTheInverse(t *testing.T) {
-	t.Parallel()
-	tg := &target{size: Sz(40, 20)}
-	p := NewProbe(topLeft(Transform(tg).Translate(100, 50)), Sz(300, 200))
-	defer p.Close()
-	p.Click(Pt(10, 10))
-	if len(tg.taps()) != 0 {
-		t.Fatal("a click where the child was laid out reached it after it moved")
-	}
-	p.Click(Pt(110, 60))
-	taps := tg.taps()
-	if len(taps) != 1 || !nearPt(taps[0], Pt(10, 10)) {
-		t.Fatalf("taps %v; want one at the child's own (10, 10)", taps)
-	}
-	if tg.rect != Rct(Pt(0, 0), Sz(40, 20)) {
-		t.Fatalf("child painted at %v; layout should not move", tg.rect)
-	}
-}
-
-func TestTransformedPressActionTapsInTheChildsCoordinates(t *testing.T) {
-	t.Parallel()
-	tg := &target{size: Sz(40, 20)}
-	p := NewProbe(topLeft(Transform(tg).Translate(100, 50)), Sz(300, 200))
-	defer p.Close()
-	node, ok := p.Semantics().Find(RoleButton, "target")
-	if !ok || node.Rect != Rct(Pt(100, 50), Sz(40, 20)) {
-		t.Fatalf("node %v %v; want it at the moved Rect", ok, node.Rect)
-	}
-	p.Perform(node.ID, Action{Kind: ActionPress})
-	taps := tg.taps()
-	if len(taps) != 1 || !nearPt(taps[0], Pt(20, 10)) {
-		t.Fatalf("taps %v; want one at the child's own centre", taps)
-	}
-}
-
-func TestTransformRotationHitsTheTurnedShape(t *testing.T) {
-	t.Parallel()
-	tg := &target{size: Sz(100, 20)}
-	// A bar 100 wide turned a quarter about its centre (50, 10) stands
-	// from (40, -40) to (60, 60).
-	p := NewProbe(topLeft(Transform(tg).Rotate(math.Pi/2)), Sz(200, 200))
-	defer p.Close()
-	p.Click(Pt(90, 10))
-	if len(tg.taps()) != 0 {
-		t.Fatal("the end of the bar before turning still takes a click")
-	}
-	p.Click(Pt(50, 55))
-	taps := tg.taps()
-	if len(taps) != 1 || math.Abs(taps[0].X-95) > 1e-6 || math.Abs(taps[0].Y-10) > 1e-6 {
-		t.Fatalf("taps %v; want one at the bar's own (95, 10)", taps)
-	}
-	f, ok := p.Semantics().Find(RoleButton, "target")
-	if !ok {
-		t.Fatal("the turned target is missing from the semantics")
-	}
-	if math.Abs(f.Rect.Size.W-20) > 1e-6 || math.Abs(f.Rect.Size.H-100) > 1e-6 {
-		t.Fatalf("semantic bounds %v; want the turned 20x100", f.Rect)
-	}
-}
-
-func TestTransformBindingsAndZeroScale(t *testing.T) {
-	t.Parallel()
-	tg := &target{size: Sz(20, 20)}
-	dx := State(Pt(0.0, 0.0))
-	scale := State(1.0)
-	w := Transform(tg).BindOffset(dx).BindScale(scale).Origin(0, 0)
-	p := NewProbe(topLeft(w), Sz(200, 200))
-	defer p.Close()
-	p.Click(Pt(5, 5))
-	if len(tg.taps()) != 1 {
-		t.Fatal("untransformed child missed")
-	}
-	dx.Set(Pt(50.0, 0.0))
-	scale.Set(2)
-	p.Frame()
-	p.Click(Pt(85, 35))
-	taps := tg.taps()
-	if len(taps) != 2 || !nearPt(taps[1], Pt(17.5, 17.5)) {
-		t.Fatalf("taps %v; want the second at (17.5, 17.5) after scaling and moving", taps)
-	}
-	scale.Set(0)
-	p.Frame()
-	p.Click(Pt(50, 0))
-	if len(tg.taps()) != 2 {
-		t.Fatal("a child scaled to nothing took a click")
-	}
-}
-
-func TestTransformNestsAndPaintsThroughALayer(t *testing.T) {
-	t.Parallel()
-	tg := &target{size: Sz(10, 10)}
-	inner := Transform(tg).Translate(10, 0)
-	outer := Transform(inner).Scale(2).Origin(0, 0)
-	p := NewProbe(topLeft(outer), Sz(100, 100))
-	defer p.Close()
-	img := ggfx.NewImage(100, 100)
-	defer img.Deallocate()
-	p.Draw(img)
-	if p.canvas.frameState.layers.Depth() != 0 || layerCount(&p.canvas) != 2 {
-		t.Fatalf("depth %d with %d layers; want two nested layers, all returned", p.canvas.frameState.layers.Depth(), layerCount(&p.canvas))
-	}
-	p.Click(Pt(25, 5))
-	taps := tg.taps()
-	if len(taps) != 1 || !nearPt(taps[0], Pt(2.5, 2.5)) {
-		t.Fatalf("taps %v; want one at (2.5, 2.5) through both transforms", taps)
-	}
-}
-
-func TestOpacityFadesWithoutChangingLayoutOrInput(t *testing.T) {
-	t.Parallel()
-	tg := &target{size: Sz(30, 30)}
-	level := State(2.0)
-	w := Opacity(tg, 0.5).BindOpacity(level)
-	p := NewProbe(topLeft(w), Sz(100, 100))
-	defer p.Close()
-	img := ggfx.NewImage(100, 100)
-	defer img.Deallocate()
-	p.Draw(img)
-	if w.shown != 1 || layerCount(&p.canvas) != 0 {
-		t.Fatalf("opacity %v with %d layers; want 1, clamped, and no layer", w.shown, layerCount(&p.canvas))
-	}
-	level.Set(0.25)
-	p.Draw(img)
-	if w.shown != 0.25 || layerCount(&p.canvas) != 1 {
-		t.Fatalf("opacity %v with %d layers; want 0.25 through one layer", w.shown, layerCount(&p.canvas))
-	}
-	w.Opacity(0)
-	p.Draw(img)
-	if layerCount(&p.canvas) != 0 {
-		t.Fatalf("an invisible child kept %d layers", layerCount(&p.canvas))
-	}
-	p.Click(Pt(10, 10))
-	if len(tg.taps()) != 1 {
-		t.Fatal("an invisible child stopped taking input")
-	}
-}
-
-func TestClipOvalKeepsInputInsideTheOval(t *testing.T) {
-	t.Parallel()
-	tg := &target{size: Sz(100, 100)}
-	p := NewProbe(topLeft(ClipOval(tg)), Sz(200, 200))
-	defer p.Close()
-	img := ggfx.NewImage(200, 200)
-	defer img.Deallocate()
-	p.Draw(img)
-	p.Click(Pt(5, 5))
-	if len(tg.taps()) != 0 {
-		t.Fatal("a corner outside the oval reached the child")
-	}
-	p.Click(Pt(50, 50))
-	p.Click(Pt(98, 50))
-	if len(tg.taps()) != 2 {
-		t.Fatalf("taps %v; want the centre and the right edge", tg.taps())
-	}
-	if p.canvas.frameState.layers.Depth() != 0 {
-		t.Fatal("a layer was not returned")
-	}
-}
-
-func TestClipPathFollowsItsShape(t *testing.T) {
-	t.Parallel()
-	tg := &target{size: Sz(100, 100)}
-	triangle := func(r Rect) *Path {
-		path := &Path{}
-		path.MoveTo(r.Origin.X, r.Origin.Y)
-		path.LineTo(r.Origin.X+r.Size.W, r.Origin.Y)
-		path.LineTo(r.Origin.X, r.Origin.Y+r.Size.H)
-		path.Close()
-		return path
-	}
-	p := NewProbe(topLeft(ClipPath(tg, triangle)), Sz(200, 200))
-	defer p.Close()
-	p.Click(Pt(90, 90))
-	if len(tg.taps()) != 0 {
-		t.Fatal("a point past the diagonal reached the child")
-	}
-	p.Click(Pt(10, 10))
-	if len(tg.taps()) != 1 {
-		t.Fatal("a point inside the triangle missed")
-	}
-	var c *Canvas
-	c.ClipPath(triangle(Rct(Pt(0, 0), Sz(1, 1))), func(*Canvas) {})
-	c.ClipOval(Rct(Pt(0, 0), Sz(1, 1)), func(*Canvas) {})
-}
 
 func TestPathContainsAndBounds(t *testing.T) {
 	t.Parallel()
@@ -307,30 +118,6 @@ func TestGradientStopsAndPlacement(t *testing.T) {
 	}
 }
 
-func TestBoxGradientResolvesThemeColors(t *testing.T) {
-	t.Parallel()
-	box := Box().Size(40, 20).Gradient(LinearGradient(0, Stops(testColor{}, color.White)...)).Radius(4)
-	env := Env{}.With(testColorKey, color.Color(color.RGBA{G: 200, A: 255}))
-	box.Layout(Loose(Sz(100, 100)), env)
-	if got := box.deco.shownGradient.stops[0].Color; got != (color.RGBA{G: 200, A: 255}) {
-		t.Fatalf("painted stop %v; want the Env's color", got)
-	}
-	img := ggfx.NewImage(50, 50)
-	defer img.Deallocate()
-	c := &Canvas{Image: img}
-	box.Paint(c, Rct(Pt(0, 0), Sz(40, 20)))
-	c.FillGradientRect(Rct(Pt(0, 0), Sz(10, 10)), SweepGradient(Stops(color.White, color.Black)...))
-	var path Path
-	path.MoveTo(0, 0)
-	path.LineTo(20, 0)
-	path.LineTo(0, 20)
-	path.Close()
-	c.FillGradientPath(&path, Rct(Pt(0, 0), Sz(20, 20)), RadialGradient(Stops(color.White, color.Black)...))
-	c.FillPathGradient(&path, Rct(Pt(0, 0), Sz(20, 20)), color.White, color.Black)
-	var none *Canvas
-	none.FillGradientRoundRect(Rct(Pt(0, 0), Sz(1, 1)), 1, box.deco.shownGradient)
-}
-
 func TestBlurPaintsTheSubtreeOnceAndReturnsItsImages(t *testing.T) {
 	t.Parallel()
 	img := ggfx.NewImage(80, 80)
@@ -354,29 +141,6 @@ func TestBlurPaintsTheSubtreeOnceAndReturnsItsImages(t *testing.T) {
 		t.Fatalf("blurs borrowed %d layers; want 2", n)
 	}
 	c.freeLayers()
-}
-
-func TestBlurWidgetsPassLayoutAndInputThrough(t *testing.T) {
-	t.Parallel()
-	tg := &target{size: Sz(30, 30)}
-	sigma := State(3.0)
-	blur := Blur(tg, 0).BindSigma(sigma)
-	glass := BackdropBlur(nil, 8).Radius(6)
-	p := NewProbe(topLeft(Column(blur, Box(glass).Size(40, 10))), Sz(100, 100))
-	defer p.Close()
-	img := ggfx.NewImage(100, 100)
-	defer img.Deallocate()
-	p.Draw(img)
-	if blur.shown != 3 || glass.shown != 8 {
-		t.Fatalf("sigmas %v and %v", blur.shown, glass.shown)
-	}
-	p.Click(Pt(10, 10))
-	if len(tg.taps()) != 1 {
-		t.Fatal("a blurred child stopped taking input")
-	}
-	if tg.rect.Size != Sz(30, 30) {
-		t.Fatalf("blurred child laid out at %v", tg.rect)
-	}
 }
 
 func TestBackdropBlurNeverReadsTheScreen(t *testing.T) {
@@ -502,91 +266,6 @@ func TestShadowGeometryScaleClipAndSpread(t *testing.T) {
 		}
 	}
 }
-func TestShadowDoesNotChangeLayoutOrHits(t *testing.T) {
-	t.Parallel()
-	b := Box().Size(50, 30).Shadow(ShadowStyle{Blur: 20, Spread: 5, Color: color.Black})
-	if got := b.Layout(Loose(Sz(100, 100)), Env{}); got != Sz(50, 30) {
-		t.Fatal(got)
-	}
-	c := &Canvas{}
-	b.Paint(c, Rct(Pt(0, 0), Sz(50, 30)))
-	if len(c.fs().hits) != 0 {
-		t.Fatal("shadow added hits")
-	}
-	(*Canvas)(nil).Shadow(Rect{}, 0, ShadowStyle{Color: color.Black})
-	b.Shadow()
-	if len(b.deco.shadows) != 0 {
-		t.Fatal("shadow not cleared")
-	}
-}
-
-// overlayTarget is a target that paints itself through an Overlay, as a
-// popup or tooltip places its content beside the Rect it was painted in.
-type overlayTarget struct{ target }
-
-func (o *overlayTarget) Paint(dst *Canvas, r Rect) {
-	dst.Overlay(func(dst *Canvas) { o.target.Paint(dst, r) })
-}
-
-func TestTransformCarriesOverlaysWithIt(t *testing.T) {
-	t.Parallel()
-	tg := &overlayTarget{target{size: Sz(40, 40)}}
-	p := NewProbe(topLeft(Transform(tg).Translate(100, 0)), Sz(200, 200))
-	defer p.Close()
-	p.Click(Pt(10, 10))
-	if len(tg.taps()) != 0 {
-		t.Fatal("an overlay under a Transform stayed where its anchor was laid out")
-	}
-	p.Click(Pt(110, 10))
-	if taps := tg.taps(); len(taps) != 1 || !nearPt(taps[0], Pt(10, 10)) {
-		t.Fatalf("taps %v; want one at the overlay's own (10, 10), beside the moved anchor", taps)
-	}
-	gone := &overlayTarget{target{size: Sz(40, 40)}}
-	q := NewProbe(topLeft(Transform(gone).Scale(0)), Sz(200, 200))
-	defer q.Close()
-	q.Click(Pt(20, 20))
-	if len(gone.taps()) != 0 {
-		t.Fatal("an overlay scheduled under a zero scale took a click")
-	}
-}
-
-func TestTransformTurnsScrollDeltas(t *testing.T) {
-	t.Parallel()
-	tg := &target{size: Sz(40, 40)}
-	p := NewProbe(topLeft(Transform(tg).Rotate(math.Pi/2).Scale(2)), Sz(200, 200))
-	defer p.Close()
-	p.Scroll(Pt(20, 20), Pt(0, 10))
-	var got []Point
-	for _, ev := range tg.events {
-		if ev.Kind == PointerScroll {
-			got = append(got, ev.Scroll)
-		}
-	}
-	// Down the screen is along the turned child's x, at half the length.
-	if len(got) != 1 || !nearPt(Pt(math.Round(got[0].X*1e9)/1e9, math.Round(got[0].Y*1e9)/1e9), Pt(5, 0)) {
-		t.Fatalf("scroll deltas %v; want (5, 0) in the child's coordinates", got)
-	}
-}
-
-func TestDragAndDropOffsetsUnderATransform(t *testing.T) {
-	t.Parallel()
-	var got []Dropped[int]
-	source := DragSource(Box().Size(100, 40), 7)
-	zone := DropZone(Box().Size(100, 40), func(d Dropped[int]) { got = append(got, d) })
-	p := NewProbe(topLeft(Column(Transform(source).Scale(2).Origin(0, 0), Transform(zone).Translate(50, 0))), Sz(300, 200))
-	defer p.Close()
-	p.Frame()
-	p.Press(Pt(30, 10))
-	p.Move(Pt(30, 40))
-	p.Move(Pt(120, 60))
-	if !source.Dragging() || source.grab != Pt(15, 5) {
-		t.Fatalf("dragging %v, grab %v; want the hold at (15, 5) on the source's own coordinates", source.Dragging(), source.grab)
-	}
-	p.Release(Pt(120, 60))
-	if len(got) != 1 || got[0].Pos != Pt(70, 20) {
-		t.Fatalf("dropped %+v; want one at (70, 20) in the moved zone's coordinates", got)
-	}
-}
 
 func TestTransformLayerCoversOnlyWhatShows(t *testing.T) {
 	t.Parallel()
@@ -614,107 +293,84 @@ func TestTransformLayerCoversOnlyWhatShows(t *testing.T) {
 	c.root().freeLayers()
 }
 
-func TestBoxGradientEqualAssignmentIsANoOp(t *testing.T) {
-	t.Parallel()
-	box := Box().Gradient(LinearGradient(0, Stops(testColor{}, testColor{})...))
-	before := box.props.Version()
-	box.Gradient(LinearGradient(0, Stops(testColor{}, testColor{})...))
-	if box.props.Version() != before {
-		t.Fatal("setting an equal themed gradient asked for a layout")
-	}
-	box.Gradient(Gradient{})
-	if box.props.Version() == before {
-		t.Fatal("removing a themed gradient did not ask for a layout")
-	}
-}
-
 // These tests check that the parity tracks compose: text under paint
 // effects, animation values driving paint effects, and selectable text
 // inside the scroll track's sticky headers.
-
-func TestRichTextLinkTapsUnderATransform(t *testing.T) {
-	t.Parallel()
-	taps := 0
-	text := RichText(Span("Read the "), Span("guide").OnTap(func() { taps++ }), Span(" first.")).Selectable()
-	p := NewProbe(topLeft(Transform(text).Translate(120, 40)), Sz(500, 200))
-	defer p.Close()
-	p.Frame()
-	link, ok := p.FindRole(RoleLink, "guide")
-	if !ok {
-		t.Fatal("no link")
-	}
-	if link.Center().X < 120 || link.Center().Y < 40 {
-		t.Fatalf("link reported at %v; want its moved on-screen box", link)
-	}
-	p.Click(link.Center())
-	if taps != 1 {
-		t.Fatalf("taps %d; want the moved link to take the click", taps)
-	}
-	if got := text.SelectedText(); got != "" {
-		t.Fatalf("a link tap selected %q", got)
-	}
-}
-
-func TestSelectableTextSelectsUnderAScale(t *testing.T) {
-	t.Parallel()
-	w := Text("hello world").Selectable()
-	p := NewProbe(topLeft(Transform(w).Scale(2).Origin(0, 0)), Sz(600, 100))
-	defer p.Close()
-	p.Frame()
-	local := textAt(&w.rich.w, Rct(Pt(0, 0), Sz(300, 50)), 4) // late in "hello", where an unmapped 2x point lands in "world"
-	at := Pt(local.X*2, local.Y*2)
-	p.Click(at)
-	p.Click(at)
-	if got := w.rich.w.SelectedText(); got != "hello" {
-		t.Fatalf("double click under a 2x scale selected %q, want hello", got)
-	}
-}
-
-func TestTimelineDrivesATransformOffset(t *testing.T) {
-	t.Parallel()
-	activeWorld().anims.list = nil
-	tl := Timeline(time.Second)
-	tg := &target{size: Sz(20, 20)}
-	w := Transform(tg).BindOffset(Interpolate(tl, Pt(0, 0), Pt(100, 0), LerpPoint)).Origin(0, 0)
-	p := NewProbe(topLeft(w), Sz(300, 100))
-	defer p.Close()
-	p.Click(Pt(5, 5))
-	if len(tg.taps()) != 1 {
-		t.Fatal("the child at rest missed its click")
-	}
-	tl.Seek(0.5)
-	p.Frame()
-	p.Click(Pt(55, 5))
-	if taps := tg.taps(); len(taps) != 2 || !nearPt(taps[1], Pt(5, 5)) {
-		t.Fatalf("taps %v; want the second at (5, 5) after the timeline moved the child 50", taps)
-	}
-}
-
-func TestSelectableTextInAPinnedStickyHeader(t *testing.T) {
-	t.Parallel()
-	head := Text("alpha beta").Selectable()
-	var body Rect
-	a := Sticky(head, probe(200, 300, &body))
-	offset := State(0.0)
-	p := NewProbe(Scroll(Column(a)).BindOffset(offset), Sz(200, 100))
-	defer p.Close()
-	p.Frame()
-	offset.Set(120)
-	p.Frame()
-	if !a.Pinned() {
-		t.Fatal("header did not pin")
-	}
-	at := textAt(&head.rich.w, Rct(Pt(0, 0), Sz(200, 30)), 7) // inside "beta"
-	p.Click(at)
-	p.Click(at)
-	if got := head.rich.w.SelectedText(); got != "beta" {
-		t.Fatalf("double click on the pinned header selected %q, want beta", got)
-	}
-}
 
 // FadeEdges' ramp is white coverage, alpha-only.
 func TestFadeRampIsAlpha(t *testing.T) {
 	if f := fadeRamp().Format(); f != ggfx.PixelFormatAlpha {
 		t.Fatalf("fade ramp of format %v, want alpha", f)
 	}
+}
+
+// A Canvas fills a rectangle, a path and a path's vertical ramp with a
+// gradient, and a nil one draws nothing without failing.
+func TestCanvasFillsGradientsAndToleratesNone(t *testing.T) {
+	t.Parallel()
+	img := ggfx.NewImage(50, 50)
+	defer img.Deallocate()
+	c := &Canvas{Image: img}
+	c.FillGradientRect(Rct(Pt(0, 0), Sz(10, 10)), SweepGradient(Stops(color.White, color.Black)...))
+	var path Path
+	path.MoveTo(0, 0)
+	path.LineTo(20, 0)
+	path.LineTo(0, 20)
+	path.Close()
+	c.FillGradientPath(&path, Rct(Pt(0, 0), Sz(20, 20)), RadialGradient(Stops(color.White, color.Black)...))
+	c.FillPathGradient(&path, Rct(Pt(0, 0), Sz(20, 20)), color.White, color.Black)
+	var none *Canvas
+	none.FillGradientRoundRect(Rct(Pt(0, 0), Sz(1, 1)), 1, LinearGradient(0, Stops(color.White, color.Black)...))
+}
+
+// A region painted under a Canvas transform takes the pointer where the
+// transform moved it, in its own coordinates, and not where it was laid
+// out.
+func TestInputFollowsACanvasTransform(t *testing.T) {
+	t.Parallel()
+	tg := &target{size: Sz(40, 20)}
+	moved := FromFuncs(tg.Layout, func(dst *Canvas, r Rect) {
+		dst.Transform(Affine{}.Translate(100, 50), func(dst *Canvas) { tg.Paint(dst, r) })
+	})
+	p := NewProbe(stack(moved), Sz(300, 200))
+	defer p.Close()
+	p.Click(Pt(10, 10))
+	if len(tg.taps()) != 0 {
+		t.Fatal("a click where the target was laid out reached it after it moved")
+	}
+	p.Click(Pt(110, 60))
+	if taps := tg.taps(); len(taps) != 1 || !nearPt(taps[0], Pt(10, 10)) {
+		t.Fatalf("taps %v; want one at the target's own (10, 10)", taps)
+	}
+}
+
+// Transforms nested on a Canvas paint through a layer each, and have given
+// every one back once they return.
+func TestNestedCanvasTransformsReturnTheirLayers(t *testing.T) {
+	t.Parallel()
+	img := ggfx.NewImage(100, 100)
+	defer img.Deallocate()
+	c := &Canvas{Image: img}
+	tg := &target{size: Sz(10, 10)}
+	c.Transform(Affine{}.Scale(2, 2), func(dst *Canvas) {
+		dst.Transform(Affine{}.Translate(10, 0), func(dst *Canvas) { tg.Paint(dst, Rct(Pt(0, 0), Sz(10, 10))) })
+	})
+	if c.fs().layers.Depth() != 0 || layerCount(c) != 2 {
+		t.Fatalf("depth %d with %d layers; want two nested layers, all returned", c.fs().layers.Depth(), layerCount(c))
+	}
+	c.freeLayers()
+}
+
+// An oval clip paints through layers and has given them back once it
+// returns.
+func TestClipOvalReturnsItsLayer(t *testing.T) {
+	t.Parallel()
+	img := ggfx.NewImage(100, 100)
+	defer img.Deallocate()
+	c := &Canvas{Image: img}
+	c.ClipOval(Rct(Pt(0, 0), Sz(100, 100)), func(dst *Canvas) { dst.FillRect(Rct(Pt(0, 0), Sz(100, 100)), color.White) })
+	if c.fs().layers.Depth() != 0 || layerCount(c) == 0 {
+		t.Fatalf("depth %d with %d layers; want layers, all returned", c.fs().layers.Depth(), layerCount(c))
+	}
+	c.freeLayers()
 }

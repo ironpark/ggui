@@ -212,37 +212,6 @@ func TestClipRoundRectWithoutARadiusOrImageIsClip(t *testing.T) {
 	}
 }
 
-func TestTransitionFadeHoldsALayerOnlyWhileAnimating(t *testing.T) {
-	t.Parallel()
-	img := ggfx.NewImage(120, 80)
-	defer img.Deallocate()
-	fading := func() *Probe {
-		p := NewProbe(Transition(Text("fading")), Sz(120, 80))
-		p.RenderTo(img)
-		p.Frame()
-		if n := layerCount(&p.canvas); n != 1 {
-			t.Fatalf("mid-fade the window pools %d images; want 1", n)
-		}
-		return p
-	}
-	t.Run("fade ends", func(t *testing.T) {
-		p := fading()
-		defer p.Close()
-		p.Advance(time.Second)
-		p.Frame()
-		if n := layerCount(&p.canvas); n != 0 {
-			t.Fatalf("after the fade the window pools %d images; want 0", n)
-		}
-	})
-	t.Run("closed mid-fade", func(t *testing.T) {
-		p := fading()
-		p.Close()
-		if n := layerCount(&p.canvas); n != 0 {
-			t.Fatalf("a closed probe pools %d images; want 0", n)
-		}
-	})
-}
-
 func TestLayerUnderAClipCoversTheClipAlone(t *testing.T) {
 	t.Parallel()
 	img := ggfx.NewImage(100, 80)

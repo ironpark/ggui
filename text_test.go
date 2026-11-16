@@ -2,19 +2,18 @@ package ggui
 
 import (
 	"fmt"
-	"image"
 	"image/color"
 	"math"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/ironpark/ggfx"
-	"github.com/ironpark/ggui/internal/property"
-	"github.com/ironpark/ggui/internal/textedit"
+	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/internal/textlayout"
 	"github.com/ironpark/ggui/internal/third_party/text"
 	"github.com/ironpark/ggui/pkg/gem"
-	"golang.org/x/image/font/gofont/gomono"
+	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
 )
 
@@ -93,13 +92,6 @@ func TestTextHeightFollowsInheritedLineHeight(t *testing.T) {
 	}
 }
 
-func TestLoadFontRejectsGarbage(t *testing.T) {
-	t.Parallel()
-	if _, err := LoadFont([]byte("not a font")); err == nil {
-		t.Fatal("LoadFont(garbage) = nil error")
-	}
-}
-
 func TestTextEllipsisCutsWhatDoesNotFit(t *testing.T) {
 	t.Parallel()
 	w := Text("aaa bbb ccc\nshort").NoWrap().Ellipsis()
@@ -144,173 +136,6 @@ func TestTextMaxLinesEndsTheLastShownLine(t *testing.T) {
 	defer p.Close()
 	if _, ok := p.Semantics().Find(RoleText, "aaa bbb ccc ddd"); !ok {
 		t.Fatal("the semantics tree lost the text that was cut")
-	}
-}
-
-func TestCanvasFitTextCutsToTheWidth(t *testing.T) {
-	t.Parallel()
-	c := &Canvas{scale: 2}
-	s := "a fairly long label"
-	full := c.TextWidth(s, nil, 14)
-	if got := c.FitText(s, nil, 14, full); got != s {
-		t.Fatalf("text that fits came back %q", got)
-	}
-	got := c.FitText(s, nil, 14, full/2)
-	if !strings.HasSuffix(got, "…") || c.TextWidth(got, nil, 14) > full/2 {
-		t.Fatalf("FitText = %q, %v wide; want an ellipsis within %v", got, c.TextWidth(got, nil, 14), full/2)
-	}
-}
-
-// inked counts the pixels of img with any alpha, and those with a color
-// other than gray.
-func inked(img *image.RGBA) (ink, colored int) {
-	for i := 0; i < len(img.Pix); i += 4 {
-		r, g, b, a := img.Pix[i], img.Pix[i+1], img.Pix[i+2], img.Pix[i+3]
-		if a == 0 {
-			continue
-		}
-		ink++
-		if r != g || g != b {
-			colored++
-		}
-	}
-	return ink, colored
-}
-
-func TestRenderTextDrawsWhatTextMeasures(t *testing.T) {
-	t.Parallel()
-	font := MustFont(goregular.TTF).NoFallback()
-	st := TextStyle{Font: font, Size: 20}
-	img := RenderText("Hello, world", st, 0)
-	want := textlayout.Width("Hello, world", font.face(20, 0))
-	if w := float64(img.Bounds().Dx()); math.Abs(w-want) > 1 {
-		t.Errorf("image is %v wide, Text measures %v", w, want)
-	}
-	if ink, colored := inked(img); ink == 0 || colored != 0 {
-		t.Errorf("black text has %d pixels drawn, %d of them colored", ink, colored)
-	}
-	m := font.face(20, 0).Metrics()
-	if h := float64(img.Bounds().Dy()); math.Abs(h-(m.HAscent+m.HDescent)) > 1 {
-		t.Errorf("one line is %v high, want its ascent and descent, %v", h, m.HAscent+m.HDescent)
-	}
-
-	red := RenderText("Hello", TextStyle{Font: font, Size: 20, Color: color.RGBA{R: 0xff, A: 0xff}}, 0)
-	if _, colored := inked(red); colored == 0 {
-		t.Error("red text has no colored pixels")
-	}
-
-	one := RenderText("one two three four five", st, 0)
-	wrapped := RenderText("one two three four five", st, 80)
-	if wrapped.Bounds().Dx() > 80 || wrapped.Bounds().Dy() <= one.Bounds().Dy() {
-		t.Errorf("wrapped to 80 the text is %v, on one line %v", wrapped.Bounds().Size(), one.Bounds().Size())
-	}
-	lines := RenderText("a\nb\nc", st, 0)
-	if want := m.HAscent + 2*1.2*20 + m.HDescent; math.Abs(float64(lines.Bounds().Dy())-want) > 1 {
-		t.Errorf("three lines are %v high, want %v", lines.Bounds().Dy(), want)
-	}
-}
-
-func TestRenderTextDrawsEmojiInColor(t *testing.T) {
-	useTestEmoji(t)
-	img := RenderText("a👍b", TextStyle{Font: MustFont(goregular.TTF), Size: 24}, 0)
-	if _, colored := inked(img); colored == 0 {
-		t.Error("the emoji drew no colored pixels")
-	}
-}
-
-func TestRenderTextIsSafeAcrossGoroutines(t *testing.T) {
-	t.Parallel()
-	font := MustFont(goregular.TTF)
-	done := make(chan *image.RGBA)
-	for range 8 {
-		go func() { done <- RenderText("concurrent ascent", TextStyle{Font: font, Size: 16}, 0) }()
-	}
-	first := <-done
-	for range 7 {
-		if img := <-done; !img.Bounds().Eq(first.Bounds()) || string(img.Pix) != string(first.Pix) {
-			t.Fatal("the same text renders differently on different goroutines")
-		}
-	}
-}
-
-// Each grapheme starts its own cell on a whole pixel, however far the
-// font's advance is from the cell's width, so a long row does not drift.
-func TestDrawTextCellsKeepsEveryGraphemeOnItsCell(t *testing.T) {
-	t.Parallel()
-	face := MustFont(gomono.TTF).NoFallback().face(13*2, 0)
-	adv := textlayout.Width("M", face)
-	cell := math.Round(adv) + 1 // well off the advance, so drift would show
-	const x0 = 20.25
-	s := "é" + "abcdefghijklmnopqrstuvwxyz0123456789"
-	glyphs := text.AppendLazyGlyphs(nil, s, face, nil)
-	shifts := cellShifts(nil, textedit.Bounds(s), glyphs, x0, cell)
-	k, last := -1, -1
-	for i, g := range glyphs {
-		at := x0 + g.OriginX + shifts[i]
-		if g.StartIndexInBytes < 3 { // é, its mark included
-			if g.StartIndexInBytes == 0 {
-				k = 0
-			}
-			if want := math.Round(x0) + g.OriginX - glyphs[0].OriginX; math.Abs(at-want) > 1e-9 {
-				t.Fatalf("glyph %d of é at %v, want %v: the mark left its letter", i, at, want)
-			}
-			continue
-		}
-		if g.StartIndexInBytes != last {
-			k++
-			last = g.StartIndexInBytes
-		}
-		if want := math.Round(x0 + float64(k)*cell); at != want {
-			t.Fatalf("grapheme %d at %v, want its cell at %v", k, at, want)
-		}
-	}
-	if k != 36 {
-		t.Fatalf("placed %d graphemes after é, want 36", k)
-	}
-	(&Canvas{}).DrawTextCells("no image, no panic", TextStyle{}, Pt(0, 0), 8)
-}
-
-// Shifts found from a run's bounds are those stepping through it grapheme
-// by grapheme finds, whatever its clusters are.
-func TestCellShiftsFollowTheRunsGraphemes(t *testing.T) {
-	face := MustFont(gomono.TTF).NoFallback().face(13*2, 0)
-	const x0, cell = 20.25, 17.0
-	for _, s := range []string{"é" + "abc", "한글 ok", "á̂b", "👩‍💻x", "ffi fl", "\xffz", "❯ go test"} {
-		glyphs := text.AppendLazyGlyphs(nil, s, face, nil)
-		got := cellShifts(nil, textedit.Bounds(s), glyphs, x0, cell)
-		k, next, shift := -1, 0, 0.0
-		for i, g := range glyphs {
-			if g.StartIndexInBytes >= next {
-				for g.StartIndexInBytes >= next && next < len(s) {
-					next = textedit.NextGrapheme(s, next)
-					k++
-				}
-				shift = math.Round(x0+float64(k)*cell) - x0 - g.OriginX
-			}
-			if got[i] != shift {
-				t.Errorf("%q glyph %d: shift %v, want %v", s, i, got[i], shift)
-			}
-		}
-	}
-}
-
-func TestTextStylesCompareWithoutAllocating(t *testing.T) {
-	a := TextStyle{Size: 13, Color: color.RGBA{1, 2, 3, 255}, LineHeight: 1.4, Weight: 500}
-	b := a
-	b.Color = color.NRGBA{1, 2, 3, 255}
-	if !property.Equal(a, b) {
-		t.Fatal("styles of colors drawing alike are not equal")
-	}
-	c := a
-	c.Size = 14
-	if property.Equal(a, c) {
-		t.Fatal("styles of two sizes are equal")
-	}
-	if property.Equal(a, TextStyle{Size: 13, LineHeight: 1.4, Weight: 500}) {
-		t.Fatal("a style with a color equals one without")
-	}
-	if n := testing.AllocsPerRun(100, func() { property.Equal(a, b) }); n != 0 {
-		t.Fatalf("comparing two styles took %v allocations", n)
 	}
 }
 
@@ -387,5 +212,166 @@ func TestTextUnderRTLStartsAtTheRight(t *testing.T) {
 	p.Frame()
 	if sel.SelectedText() != "שלום bold" {
 		t.Fatalf("select all in RTL selected %q", sel.SelectedText())
+	}
+}
+
+func TestTextRasterizesAtScaledSize(t *testing.T) {
+	t.Parallel()
+	w := Text("x").Font(MustFont(goregular.TTF).NoFallback()).Size(14)
+	face, ok := w.faceAt(2).(*text.GoTextFace)
+	if !ok || face.Size != 28 {
+		t.Fatalf("face at scale 2 = %+v, want a GoTextFace of size 28", face)
+	}
+	if w.faceAt(1).(*text.GoTextFace).Size != 14 {
+		t.Fatal("layout face must stay at the logical size")
+	}
+}
+
+// TestTextSkipsLinesOutsideTheClip paints a long Text into a canvas that
+// shows one line of it: the lines outside are not shaped and drawn, so it
+// allocates a fraction of what painting all of them does.
+func TestTextSkipsLinesOutsideTheClip(t *testing.T) {
+	img := ggfx.NewImage(400, 400)
+	defer img.Deallocate()
+	var s strings.Builder
+	for i := range 200 {
+		fmt.Fprintf(&s, "line %d of a long text\n", i)
+	}
+	txt := Text(s.String()).NoWrap()
+	size := txt.Layout(Loose(Sz(400, 1e6)), Untrack(UseEnv))
+	full := &Canvas{Image: img}
+	shown := full.Clip(Rct(Pt(0, 0), Sz(400, 20)))
+	all := testing.AllocsPerRun(5, func() { full.Paint(txt, Rct(Point{}, size)) })
+	one := testing.AllocsPerRun(5, func() { shown.Paint(txt, Rct(Point{}, size)) })
+	// One line allocates about a twelfth of what all do, but about a tenth
+	// under the race detector; painting all of them would allocate as much.
+	if one*5 > all {
+		t.Errorf("painting one line of 200 allocates %v, all of them %v", one, all)
+	}
+}
+
+// A Text laid out paints nothing, and fails nothing, on no Canvas or on
+// one with no image.
+func TestTextToleratesNilTargets(t *testing.T) {
+	t.Parallel()
+	w := Text("x")
+	w.Layout(Loose(Sz(100, 100)), Env{})
+	w.Paint(nil, Rct(Pt(0, 0), Sz(10, 10)))
+	w.Paint(&Canvas{}, Rct(Pt(0, 0), Sz(10, 10)))
+}
+
+func TestTextWeightDrawsTheHeavierFace(t *testing.T) {
+	t.Parallel()
+	family := MustFont(goregular.TTF).WithWeight(WeightBold, MustFont(gobold.TTF))
+	loose := Loose(Sz(1000, 1000))
+	regular := Text("Weighty words").Font(family).Layout(loose, Env{})
+	bold := Text("Weighty words").Font(family).Weight(WeightBold).Layout(loose, Env{})
+	if bold.W <= regular.W {
+		t.Fatalf("bold is %v wide, regular %v: want the bold face, which is wider", bold.W, regular.W)
+	}
+	inherited := Styled(Text("Weighty words")).Font(family).Weight(WeightBold)
+	if got := inherited.Layout(loose, Env{}); got.W != bold.W {
+		t.Fatalf("inherited bold is %v wide, want %v", got.W, bold.W)
+	}
+	// The built-in font has no bold, so it draws regular.
+	if plain, heavy := Text("Weighty words").Layout(loose, Env{}), Text("Weighty words").Weight(WeightBold).Layout(loose, Env{}); plain != heavy {
+		t.Fatalf("the built-in font drew bold %v against regular %v, want the same face", heavy, plain)
+	}
+}
+
+func TestTextRecolorIsPaintOnly(t *testing.T) {
+	t.Parallel()
+	w := Text("x")
+	w.Layout(Loose(Sz(100, 100)), Env{})
+	v := w.props.Version()
+	w.Color(color.RGBA{R: 255, A: 255})
+	if w.props.Version() == v {
+		t.Fatal("setting a color over the inherited one did not lay the text out again")
+	}
+	v = w.props.Version()
+	w.Color(color.RGBA{G: 255, A: 255})
+	if w.props.Version() != v {
+		t.Fatal("swapping one color for another laid the text out again")
+	}
+	w.Color(nil)
+	if w.props.Version() == v {
+		t.Fatal("going back to the inherited color did not lay the text out again")
+	}
+}
+
+// A Text a cache holds measures again when the emoji font changes. The
+// font is set in a probe's world, which the probe's frames make the one
+// its goroutine's widgets read, so that no other test's text sees it.
+func TestEmojiSwitchInvalidatesCachedMeasurement(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile("testdata/emoji-subset.ttf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := Text("👩🏽‍💻")
+	c := Cached(w)
+	p := NewProbe(c, Sz(1000, 100)).Setup(func() { SetEmojiFont(MustFont(data)) })
+	defer p.Close()
+	p.Frame()
+	constraints := Loose(Sz(1000, 100))
+	env := Env{}
+	c.Layout(constraints, env)
+	old := w.wrapped.generation
+	SetEmojiFont(nil)
+	c.Layout(constraints, env)
+	if w.wrapped.generation == old {
+		t.Fatal("cached text did not remeasure after font switch")
+	}
+}
+
+// stamp paints its label twice in different colors, as a shimmer does.
+type stamp struct{ label *TextWidget }
+
+func (s *stamp) Layout(c Constraints, env Env) Size { return s.label.Layout(c, env) }
+
+func (s *stamp) Paint(dst *Canvas, r Rect) {
+	s.label.Color(color.White)
+	dst.Paint(s.label, r)
+	s.label.Color(color.Black)
+	dst.Paint(s.label, r)
+}
+
+func TestPaintTimeWritesScheduleNoLayout(t *testing.T) {
+	t.Parallel()
+	p := NewProbe(&stamp{label: Text("hi")}, Sz(100, 20))
+	defer p.Close()
+	p.Frame()
+	p.Frame()
+	// The layout generation is this goroutine's, so nothing another test
+	// does moves it.
+	before := reactive.LayoutGen()
+	p.Frame()
+	if reactive.LayoutGen() != before {
+		t.Fatal("configuring a child while painting scheduled a layout")
+	}
+}
+
+func TestSemanticsTextRoles(t *testing.T) {
+	t.Parallel()
+	p := NewProbe(Column(Text("Heading").Role(RoleHeading), Text("body"), Text("")), Sz(200, 200))
+	defer p.Close()
+	tree := p.Semantics()
+	want := `heading "Heading"
+text "body"
+`
+	if got := tree.String(); got != want {
+		t.Fatalf("tree =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// A Text scrolled out of view, whose drawing the clip culls, is still in
+// the semantics tree, flagged as off screen.
+func TestTextOutOfViewKeepsItsSemantics(t *testing.T) {
+	t.Parallel()
+	p := NewProbe(Scroll(Column(Box().Size(100, 500), Text("offscreen text"))), Sz(100, 100))
+	defer p.Close()
+	n, ok := p.Semantics().Find(RoleText, "offscreen text")
+	if !ok || !n.Offscreen {
+		t.Fatalf("found %v, offscreen %v; want the text, flagged", ok, n.Offscreen)
 	}
 }

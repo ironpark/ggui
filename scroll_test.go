@@ -33,28 +33,20 @@ func TestScrollWheelMovesAndClamps(t *testing.T) {
 	t.Parallel()
 	var painted [3]Rect
 	s := Scroll(tall(nil, &painted)).Speed(10)
-	size := s.Layout(Loose(Sz(100, 120)), Env{})
-	var in inputState
-	paint := func() {
-		var c Canvas
-		s.Paint(&c, Rct(Pt(0, 0), size))
-		in.regions = c.hits
-	}
-	paint()
-	in.dispatch(frameInput{pos: Pt(50, 50), wheel: Pt(0, -5)}) // wheel down: content moves up
-	s.Layout(Loose(Sz(100, 120)), Env{})
-	paint()
+	p := NewProbe(s, Sz(100, 120))
+	defer p.Close()
+	p.Scroll(Pt(50, 50), Pt(0, -5)) // wheel down: content moves up
+	p.Frame()
 	if painted[0].Origin.Y != -50 {
 		t.Fatalf("first child at y=%v after scrolling 50, want -50", painted[0].Origin.Y)
 	}
-	in.dispatch(frameInput{pos: Pt(50, 50), wheel: Pt(0, -100)})
-	s.Layout(Loose(Sz(100, 120)), Env{})
-	paint()
+	p.Scroll(Pt(50, 50), Pt(0, -100))
+	p.Frame()
 	if painted[0].Origin.Y != -180 {
 		t.Fatalf("first child at y=%v, want clamped to -(300-120) = -180", painted[0].Origin.Y)
 	}
-	in.dispatch(frameInput{pos: Pt(50, 50), wheel: Pt(0, 100)})
-	s.Layout(Loose(Sz(100, 120)), Env{})
+	p.Scroll(Pt(50, 50), Pt(0, 100))
+	p.Frame()
 	if s.position() != 0 {
 		t.Fatalf("offset = %v after scrolling back past the top, want 0", s.position())
 	}
@@ -65,30 +57,18 @@ func TestScrollClipsHitRegions(t *testing.T) {
 	taps := 0
 	var painted [3]Rect
 	s := Scroll(tall(&taps, &painted)).Speed(10)
-	size := s.Layout(Loose(Sz(100, 120)), Env{})
-	var in inputState
-	paint := func() {
-		var c Canvas
-		s.Paint(&c, Rct(Pt(0, 0), size))
-		in.regions = c.hits
-	}
-	click := func(p Point) {
-		in.dispatch(frameInput{pos: p, down: []MouseButton{MouseButtonLeft}})
-		in.dispatch(frameInput{pos: p, up: []MouseButton{MouseButtonLeft}})
-	}
-	paint()
-	click(Pt(50, 150)) // the tappable box starts at y=100 but the viewport ends at 120
+	p := NewProbe(s, Sz(100, 120))
+	defer p.Close()
+	p.Click(Pt(50, 150)) // the tappable box starts at y=100 but the viewport ends at 120
 	if taps != 0 {
 		t.Fatalf("taps = %d on a point outside the viewport, want 0", taps)
 	}
-	click(Pt(50, 110)) // the visible sliver of it
+	p.Click(Pt(50, 110)) // the visible sliver of it
 	if taps != 1 {
 		t.Fatalf("taps = %d on the visible part, want 1", taps)
 	}
-	in.dispatch(frameInput{pos: Pt(50, 50), wheel: Pt(0, -10)}) // scroll by 100
-	s.Layout(Loose(Sz(100, 120)), Env{})
-	paint()
-	click(Pt(50, 50)) // now the tappable box fills the viewport top
+	p.Scroll(Pt(50, 50), Pt(0, -10)) // scroll by 100
+	p.Click(Pt(50, 50))              // now the tappable box fills the viewport top
 	if taps != 2 {
 		t.Fatalf("taps = %d after scrolling the box into view, want 2", taps)
 	}
@@ -114,22 +94,11 @@ func TestScrollDoesNotConsumeWheelWithNothingToScroll(t *testing.T) {
 	t.Parallel()
 	var got Point
 	s := Pointer(Scroll(Box().Size(10, 10))).OnScroll(func(d Point) { got = d })
-	var in inputState
-	paintFrame(&in, s, Sz(100, 100))
-	in.dispatch(frameInput{pos: Pt(5, 5), wheel: Pt(0, -1)})
+	p := NewProbe(s, Sz(100, 100))
+	defer p.Close()
+	p.Scroll(Pt(5, 5), Pt(0, -1))
 	if got != (Point{X: 0, Y: -1}) {
 		t.Fatalf("wheel did not fall through a scroll with no overflow: got %v", got)
-	}
-}
-
-func TestClipNestsAndTrimsRegions(t *testing.T) {
-	t.Parallel()
-	var c Canvas
-	inner := c.Clip(Rct(Pt(0, 0), Sz(50, 50))).Clip(Rct(Pt(25, 25), Sz(100, 100)))
-	inner.HitPointer(Rct(Pt(0, 0), Sz(200, 200)), Pointer(Box()))
-	inner.HitPointer(Rct(Pt(60, 60), Sz(10, 10)), Pointer(Box()))
-	if len(c.hits) != 1 || c.hits[0].rect != Rct(Pt(25, 25), Sz(25, 25)) {
-		t.Fatalf("hits = %+v, want one region trimmed to {25 25 25 25}", c.hits)
 	}
 }
 
@@ -166,6 +135,7 @@ func TestScrollBarFollowsEnvironmentAndPreservesOverrides(t *testing.T) {
 	if r+65535-a == 65535 && g+65535-a == 65535 && b+65535-a == 65535 {
 		t.Fatal("scrollbar disappears on white")
 	}
+	red := color.RGBA{0xff, 0, 0, 0xff}
 	s.Bar(red)
 	s.Layout(Tight(Sz(100, 100)), Env{}.With(ScrollStyleKey, ScrollStyle{Color: color.White}))
 	if s.bar != red {
@@ -191,11 +161,10 @@ func TestScrollThumbDrag(t *testing.T) {
 		if horizontal {
 			s.Horizontal()
 		}
-		var in inputState
-		paint := func() { paintFrame(&in, s, Sz(100, 100)) }
-		paint()
+		p := NewProbe(s, Sz(100, 100))
+		p.Frame()
 		grab := s.thumbHit.Origin.Add(Pt(s.thumbHit.Size.W/2, s.thumbHit.Size.H/2))
-		in.dispatch(frameInput{pos: grab, down: []MouseButton{MouseButtonLeft}})
+		p.Press(grab)
 		if !s.dragging || !s.CaptureTouchDrag() {
 			t.Fatal("thumb did not capture press")
 		}
@@ -203,39 +172,38 @@ func TestScrollThumbDrag(t *testing.T) {
 		if horizontal {
 			delta = Pt(40, 0)
 		}
-		paint()
-		in.dispatch(frameInput{pos: grab.Add(delta)})
+		p.Move(grab.Add(delta))
 		if got := Untrack(offset.Get); got != 200 {
 			t.Fatalf("horizontal=%v offset=%v, want 200", horizontal, got)
 		}
-		paint()
-		in.dispatch(frameInput{pos: Pt(1000, 1000)})
+		p.Move(Pt(1000, 1000))
 		if got := Untrack(offset.Get); got != 400 {
 			t.Fatalf("drag outside should clamp to end, got %v", got)
 		}
-		paint()
-		in.dispatch(frameInput{pos: Pt(1000, 1000), up: []MouseButton{MouseButtonLeft}})
+		p.Release(Pt(1000, 1000))
 		if s.dragging || taps != 0 {
 			t.Fatalf("dragging=%v content taps=%d", s.dragging, taps)
 		}
-		paint()
-		in.dispatch(frameInput{pos: Pt(0, 0)})
+		p.Move(Pt(0, 0))
 		if Untrack(offset.Get) != 400 {
 			t.Fatal("scroll moved after release")
 		}
+		p.Close()
 	}
 }
 
 func TestScrollHiddenAndTinyThumb(t *testing.T) {
 	t.Parallel()
 	s := Scroll(Box().Size(100, 500)).Bar(nil)
-	var in inputState
-	paintFrame(&in, s, Sz(100, 100))
+	p := NewProbe(s, Sz(100, 100))
+	defer p.Close()
+	p.Frame()
 	if s.HandlePointer(PointerEvent{Kind: PointerDown, Button: MouseButtonLeft, Pos: Pt(98, 5)}) {
 		t.Fatal("hidden scrollbar intercepted press")
 	}
 	s.Bar((Env{}).ScrollStyle().Color)
-	paintFrame(&in, s, Sz(100, 8))
+	p.Resize(Sz(100, 8))
+	p.Frame()
 	if s.thumbLength() > 8 {
 		t.Fatal("thumb extends beyond tiny viewport")
 	}
@@ -244,19 +212,20 @@ func TestScrollHiddenAndTinyThumb(t *testing.T) {
 func TestScrollThumbHoverAndDragFeedback(t *testing.T) {
 	t.Parallel()
 	s := Scroll(Box().Size(100, 500))
-	var in inputState
-	paintFrame(&in, s, Sz(100, 100))
+	p := NewProbe(s, Sz(100, 100))
+	defer p.Close()
+	p.Frame()
 	at := s.thumbHit.Origin.Add(Pt(5, 5))
-	in.dispatch(frameInput{pos: at})
+	p.Move(at)
 	if !s.thumbHovered {
 		t.Fatal("thumb hover not activated")
 	}
-	in.dispatch(frameInput{pos: at, down: []MouseButton{MouseButtonLeft}})
-	in.dispatch(frameInput{pos: Pt(200, 200)})
+	p.Press(at)
+	p.Move(Pt(200, 200))
 	if s.thumbHovered || !s.dragging {
 		t.Fatal("leaving thumb should retain drag feedback only")
 	}
-	in.dispatch(frameInput{pos: Pt(200, 200), up: []MouseButton{MouseButtonLeft}})
+	p.Release(Pt(200, 200))
 	if s.thumbHovered || s.dragging {
 		t.Fatal("feedback remains after release outside")
 	}
@@ -270,15 +239,16 @@ func TestScrollFollowEnd(t *testing.T) {
 	for _, bound := range []bool{false, true} {
 		lines, rebuild := State(10), State(0)
 		pos := State(0.0)
+		var s *ScrollWidget // the one built last
 		p := ProbeBuilder(func() Widget {
 			rebuild.Get()
-			s := Scroll(Reactive(func() Widget { return Box().Size(50, float64(lines.Get()*20)) })).FollowEnd()
+			s = Scroll(Reactive(func() Widget { return Box().Size(50, float64(lines.Get()*20)) })).FollowEnd()
 			if bound {
 				s.BindOffset(pos)
 			}
 			return s
 		}, Sz(50, 100))
-		offset := func() float64 { return Untrack(p.root.(*ScrollWidget).position) }
+		offset := func() float64 { return Untrack(s.position) }
 		step := func(what string, want float64) {
 			t.Helper()
 			p.Frame()
@@ -977,18 +947,315 @@ func TestScrollTakesARoundingErrorOfOverflowForNone(t *testing.T) {
 	var got Point
 	s := Scroll(Box().Size(100, body))
 	w := Pointer(s).OnScroll(func(d Point) { got = d })
-	var in inputState
-	paintFrame(&in, w, Sz(100, total-header))
+	p := NewProbe(w, Sz(100, total-header))
+	defer p.Close()
+	p.Frame()
 	if s.maxOffset() != 0 || s.thumbHit != (Rect{}) {
 		t.Fatalf("content %v over its viewport scrolls %v with a thumb at %v", s.childSize.H-s.viewport.H, s.maxOffset(), s.thumbHit)
 	}
-	in.dispatch(frameInput{pos: Pt(5, 5), wheel: Pt(0, -1)})
+	p.Scroll(Pt(5, 5), Pt(0, -1))
 	if got != (Point{X: 0, Y: -1}) {
 		t.Fatalf("the wheel did not fall through: got %v", got)
 	}
 	tall := Scroll(Box().Size(100, 101))
-	paintFrame(&in, tall, Sz(100, 100))
+	q := NewProbe(tall, Sz(100, 100))
+	defer q.Close()
+	q.Frame()
 	if tall.maxOffset() != 1 || tall.thumbHit == (Rect{}) {
 		t.Fatalf("content a pixel over scrolls %v with a thumb at %v", tall.maxOffset(), tall.thumbHit)
+	}
+}
+
+func TestTabScrollsTheTargetIntoView(t *testing.T) {
+	t.Parallel()
+	items := Column(Focus(Box().Size(50, 50)), Focus(Box().Size(50, 50)), Focus(Box().Size(50, 50)))
+	sc := Scroll(items)
+	p := NewProbe(sc, Sz(50, 70))
+	defer p.Close()
+	p.Type(Mods{}, KeyTab, KeyTab)
+	if sc.offset != 30 {
+		t.Fatalf("offset = %v after tabbing to the second item, want 30 so it is fully shown", sc.offset)
+	}
+}
+
+// RequestReveal scrolls its Rect into view, once, and leaves focus alone.
+func TestRequestRevealScrollsWithoutFocusing(t *testing.T) {
+	t.Parallel()
+	reveal := -1
+	rows := make([]Widget, 10)
+	for i := range rows {
+		rows[i] = &revealer{i: i, want: &reveal}
+	}
+	sc := Scroll(Column(rows...))
+	p := NewProbe(sc, Sz(50, 70))
+	defer p.Close()
+	p.Frame()
+	reveal = 5
+	p.Frame()
+	if sc.offset != 50*6-70 {
+		t.Fatalf("offset = %v after revealing row 5, want %v", sc.offset, 50*6-70)
+	}
+	if p.Focused() {
+		t.Fatal("RequestReveal moved focus")
+	}
+	reveal = -1
+	p.Scroll(Pt(10, 10), Pt(0, -40))
+	p.Frame()
+	if sc.offset == 50*6-70 {
+		t.Fatal("the reveal held the scroll after it was asked once")
+	}
+}
+
+type revealer struct {
+	i    int
+	want *int
+}
+
+func (w *revealer) Layout(Constraints, Env) Size { return Sz(50, 50) }
+
+func (w *revealer) Paint(dst *Canvas, r Rect) {
+	if *w.want == w.i {
+		dst.RequestReveal(r)
+	}
+}
+
+// A FocusRef whose widget was scrolled into view by Focus reports the focus
+// once the scroll has painted, without waiting for input to refresh it.
+func TestFocusRefFocusedAfterScrollingIntoView(t *testing.T) {
+	t.Parallel()
+	refs := make([]FocusRef, 30)
+	rows := make([]Widget, len(refs))
+	for i := range rows {
+		rows[i] = refs[i].Attach(Focus(Box().Size(100, 20)))
+	}
+	p := NewProbe(Scroll(Column(rows...)), Sz(100, 100))
+	defer p.Close()
+	p.Frame()
+	p.Post(refs[25].Focus)
+	p.Frame() // focuses the row, out of view, and scrolls to it
+	p.Frame() // paints it in view
+	p.Frame() // paints with the focus where it now is
+	if !refs[25].Focused() {
+		t.Fatal("Focused() = false after the row scrolled into view")
+	}
+}
+
+func TestScrollAdoptsOffsetAcrossRebuild(t *testing.T) {
+	t.Parallel()
+	dep := State(0)
+	var s *ScrollWidget // the one built last
+	p := NewProbe(Reactive(func() Widget {
+		dep.Get()
+		s = Scroll(Box().Size(50, 500))
+		return s
+	}), Sz(50, 100))
+	defer p.Close()
+	p.Scroll(Pt(10, 10), Pt(0, -3))
+	if off := s.offset; off != 60 {
+		t.Fatalf("offset = %v, want 60", off)
+	}
+	first := s
+	dep.Set(1)
+	p.Frame()
+	if s == first {
+		t.Fatal("the scroll was not rebuilt")
+	}
+	if off := s.offset; off != 60 {
+		t.Fatalf("after rebuild offset = %v, want 60", off)
+	}
+}
+
+func TestTabReachesAControlOutsideTheScrollWindow(t *testing.T) {
+	t.Parallel()
+	items := Column(Focus(Box().Size(50, 50)), Focus(Box().Size(50, 50)), Focus(Box().Size(50, 50)))
+	sc := Scroll(items)
+	p := NewProbe(sc, Sz(50, 40))
+	defer p.Close()
+	p.Type(Mods{}, KeyTab, KeyTab, KeyTab)
+	if sc.offset != 110 {
+		t.Fatalf("offset = %v after tabbing to the third, fully hidden item; want 110", sc.offset)
+	}
+}
+
+func TestRetainKeepsTheFocusedRow(t *testing.T) {
+	t.Parallel()
+	items := State([]int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9})
+	built := map[int]int{}
+	list := EachKeyed(items, func(i int) int { return i }, func(rowItem EachItem[int]) Widget {
+		r := rowItem.Value
+		built[r.Get()]++
+		return Focus(Box().Size(50, 10))
+	}).ItemExtent(10).Retain(1)
+	sc := Scroll(list)
+	p := NewProbe(sc, Sz(50, 30))
+	defer p.Close()
+	p.Click(Pt(5, 5)) // focus row 0
+	p.Scroll(Pt(5, 5), Pt(0, -5))
+	p.Frame()
+	p.Frame()
+	if sc.offset < 30 {
+		t.Fatalf("offset %v, want the first rows out of view", sc.offset)
+	}
+	p.Scroll(Pt(5, 5), Pt(0, 5)) // back up
+	p.Frame()
+	if built[0] != 1 {
+		t.Fatalf("row 0 built %d times: the focused row was evicted", built[0])
+	}
+	if built[1]+built[2] < 3 {
+		t.Fatalf("rows 1 and 2 built %d and %d times: one unfocused row should have been evicted with Retain(1)", built[1], built[2])
+	}
+}
+
+func TestScrollOffsetDetachesAndClampsLocalPosition(t *testing.T) {
+	t.Parallel()
+	source := State(10.0)
+	scroll := Scroll(Box().Size(20, 600)).BindOffset(source)
+	p := NewProbe(scroll, Sz(100, 100))
+	defer p.Close()
+	p.Frame()
+	scroll.Offset(200)
+	p.Frame()
+	source.Set(30)
+	p.Frame()
+	if scroll.position() != 200 {
+		t.Fatal("old scroll source remained attached")
+	}
+	scroll.scrollTo(250)
+	if source.Get() != 30 {
+		t.Fatal("local scrolling wrote detached source")
+	}
+	scroll.BindOffset(source)
+	p.Frame()
+	scroll.scrollTo(70)
+	if source.Get() != 70 {
+		t.Fatal("scroll did not write back")
+	}
+	scroll.Offset(1000)
+	p.Frame()
+	if scroll.position() != 500 {
+		t.Fatal("local scroll not clamped", scroll.position())
+	}
+}
+
+// A scroll's thumb gives the same ID frame after frame without boxing it
+// anew, and a new one once what it is made of changes.
+func TestScrollThumbHitIDAllocatesNothing(t *testing.T) {
+	s := Scroll(Box())
+	s.rect = Rct(Pt(0, 0), Sz(10, 10))
+	h := scrollThumb{s}
+	first := h.HitID()
+	if n := testing.AllocsPerRun(100, func() { _ = h.HitID() }); n != 0 {
+		t.Fatalf("the thumb's HitID allocates %v times", n)
+	}
+	s.rect = Rct(Pt(0, 0), Sz(20, 10))
+	if moved := h.HitID(); moved == first || moved != (struct{ Thumb Rect }{s.rect}) {
+		t.Fatalf("a moved thumb's ID is %v, was %v", moved, first)
+	}
+	s.Key("k")
+	if keyed := h.HitID(); keyed != (struct{ Thumb any }{"k"}) {
+		t.Fatalf("a keyed thumb's ID is %v", keyed)
+	}
+	if n := testing.AllocsPerRun(100, func() { _ = h.HitID() }); n != 0 {
+		t.Fatalf("a keyed thumb's HitID allocates %v times", n)
+	}
+}
+
+// A Scroll stores its viewport in the Env boxed once a frame, for both of
+// the keys it goes under, moving or not.
+func TestScrollFrameBoxesItsViewportOnce(t *testing.T) {
+	painted := map[int]Rect{}
+	offset := State(0.0)
+	s := Scroll(Column(Box().Size(50, 500))).BindOffset(offset)
+	for range 4 {
+		frame(s, painted)
+	}
+	if n := testing.AllocsPerRun(100, func() { frame(s, painted) }); n > 1 {
+		t.Fatalf("a still scroll frame allocates %v times; want its viewport boxed once", n)
+	}
+	i := 0
+	if n := testing.AllocsPerRun(100, func() {
+		i++
+		offset.Set(float64(i % 2 * 5))
+		frame(s, painted)
+	}); n > 1 {
+		t.Fatalf("a moving scroll frame allocates %v times; want its viewport boxed once", n)
+	}
+}
+
+// field is a control that takes the pointer and the keys and describes
+// itself, as a text field does.
+type field struct{ Interactive }
+
+func (f *field) Layout(c Constraints, _ Env) Size { return c.Constrain(Sz(40, 20)) }
+func (f *field) Paint(dst *Canvas, r Rect)        { f.Hit(dst, r, f, CursorShapeText) }
+func (f *field) HandlePointer(PointerEvent) bool  { return true }
+func (f *field) HandleKey(KeyEvent)               {}
+
+// An accessibility action focusing a control out of view scrolls it in, as
+// focus moved by the keyboard does.
+func TestPerformFocusesAndScrollsIntoView(t *testing.T) {
+	t.Parallel()
+	w := &field{}
+	w.Role = RoleTextField
+	w.SetName("Name")
+	tall := Column(Box().Size(40, 200), w)
+	p := NewProbe(Scroll(tall), Sz(100, 60))
+	defer p.Close()
+	field, ok := p.Semantics().Find(RoleTextField, "Name")
+	if !ok {
+		t.Fatal("no field")
+	}
+	if !field.Offscreen {
+		t.Fatal("the field should start out of view")
+	}
+	p.Perform(field.ID, Action{Kind: ActionFocus})
+	if !p.Focused() {
+		t.Fatal("the field did not take focus")
+	}
+	// Focus moved by the keyboard reveals, and the action goes through the
+	// same path, so the scroll came along.
+	if now, _ := p.Semantics().Find(RoleTextField, "Name"); now.Offscreen {
+		t.Error("the field was focused but not scrolled into view")
+	}
+}
+
+// A Scroll follows a finger that pans it one to one, whatever its Speed,
+// which is the wheel's, and the pan takes the gesture from the control the
+// finger came down on: it hears the release but no tap. A finger's jitter
+// is a tap, and a drag across a vertical scroll is the control's.
+func TestScrollFollowsATouchPan(t *testing.T) {
+	t.Parallel()
+	taps, ups, drags := 0, 0, 0
+	child := Pointer(Box().Size(100, 400)).OnTap(func() { taps++ }).OnUp(func(PointerEvent) { ups++ }).OnDrag(func(PointerEvent) { drags++ })
+	s := Scroll(child).Speed(99)
+	p := NewProbe(s, Sz(100, 100))
+	defer p.Close()
+	p.TouchDown(Pt(50, 80))
+	p.TouchMove(Pt(50, 77))
+	p.TouchUp(Pt(50, 77))
+	if s.position() != 0 || taps != 1 {
+		t.Fatalf("a jittering tap scrolled to %v and tapped %d times, want 0 and 1", s.position(), taps)
+	}
+	p.TouchDown(Pt(50, 80))
+	p.TouchMove(Pt(50, 60))
+	if s.position() != 20 {
+		t.Fatalf("offset = %v, want 20 logical pixels", s.position())
+	}
+	p.TouchMove(Pt(50, -10))
+	if s.position() != 90 {
+		t.Fatalf("offset = %v past the viewport, want 90: the pan holds the finger", s.position())
+	}
+	p.TouchUp(Pt(50, -10))
+	if taps != 1 || ups != 2 {
+		t.Fatalf("taps %d, releases %d; want the pan to have released the press without a tap", taps, ups)
+	}
+	drags = 0
+	across := Scroll(Pointer(Box().Size(100, 400)).OnDrag(func(PointerEvent) { drags++ }))
+	q := NewProbe(across, Sz(100, 100))
+	defer q.Close()
+	q.TouchDown(Pt(10, 50))
+	q.TouchMove(Pt(40, 51))
+	if across.position() != 0 || drags != 1 {
+		t.Fatalf("a drag across the scroll moved it to %v and reached its control %d times, want 0 and 1", across.position(), drags)
 	}
 }

@@ -47,6 +47,31 @@ func (p *Probe) RenderTo(img *ggfx.Image) { p.canvas.Image = img }
 // RenderTo draws at it. The default is 1. Call it before the first frame.
 func (p *Probe) SetScale(scale float64) { p.canvas.scale = scale }
 
+// Layers returns how many offscreen images the last frame drawn painted
+// its layers into. Canvas.Layer, and the blurs, shape clips and transforms
+// that paint through one, take an image each, though a layer opened after
+// another has closed, at the same depth, paints into that one's image
+// where it covers the area. It is for a test of when a widget pays for a
+// layer, as a fade in progress does and an opacity of 1 or 0 must not. A
+// probe that draws nothing, with no RenderTo or Draw, paints every layer
+// into the Canvas it was opened on and takes none.
+func (p *Probe) Layers() int {
+	if f := p.canvas.frameState; f != nil {
+		return f.layers.Len()
+	}
+	return 0
+}
+
+// WholeRepaints counts the times the input the probe handled asked for the
+// whole window to be painted again, rather than only the regions its
+// events reached: with RepaintAll, which a handler calls when what it did
+// changes how widgets look beyond the region its event reached, as a click
+// clearing a selection in the paragraphs it did not land in does, and as
+// input does itself for each focus and blur it hands out. A probe paints
+// every frame whole whatever was asked, so a test reads the count to tell
+// that a window would have painted the frame after the input whole.
+func (p *Probe) WholeRepaints() uint64 { return p.world().delivered }
+
 // Draw runs one frame into img, as RenderTo followed by Frame would, and
 // goes back to drawing nothing. The caller clears img and sizes the probe in
 // logical pixels with Resize. Call it where GPU drawing is allowed: inside a
@@ -267,6 +292,22 @@ func (p *Probe) ClickWith(pos Point, mods Mods) {
 func (p *Probe) ClickButton(pos Point, button MouseButton) {
 	p.dispatch(frameInput{pos: pos, down: []MouseButton{button}})
 	p.dispatch(frameInput{pos: pos, up: []MouseButton{button}})
+}
+
+// TouchDown puts a finger down at pos, as a touch screen reports its first
+// one: it presses there as the left button does. TouchMove and TouchUp
+// follow it, and a finger that moves far enough pans the scroll under it,
+// which takes the gesture from the press.
+func (p *Probe) TouchDown(pos Point) {
+	p.dispatch(frameInput{touch: true, pos: pos, down: []MouseButton{MouseButtonLeft}})
+}
+
+// TouchMove moves the finger TouchDown put down to pos.
+func (p *Probe) TouchMove(pos Point) { p.dispatch(frameInput{touch: true, pos: pos}) }
+
+// TouchUp lifts the finger at pos.
+func (p *Probe) TouchUp(pos Point) {
+	p.dispatch(frameInput{touch: true, pos: pos, up: []MouseButton{MouseButtonLeft}})
 }
 
 // Scroll turns the wheel by delta over pos.
