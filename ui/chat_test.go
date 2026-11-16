@@ -9,15 +9,16 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestAttachmentIndependentActionsAndStates(t *testing.T) {
 	t.Parallel()
 	state := ggui.State(ui.AttachmentIdle)
 	opened, removed := 0, 0
-	file := ui.Attachment("report.pdf", "PDF · 2.4 MB").Media(ggui.Text("PDF")).BindState(state).
-		Trigger("Preview report", func() { opened++ }).Actions(ui.AttachmentAction("Remove report", ggui.Text("×"), func() { removed++ }))
-	p := ggui.NewProbe(ggui.Column(file), ggui.Sz(300, 120))
+	file := ui.Attachment("report.pdf", "PDF · 2.4 MB").Media(widget.Text("PDF")).BindState(state).
+		Trigger("Preview report", func() { opened++ }).Actions(ui.AttachmentAction("Remove report", widget.Text("×"), func() { removed++ }))
+	p := ggui.NewProbe(widget.Column(file), ggui.Sz(300, 120))
 	defer p.Close()
 	p.Tap("Remove report")
 	if removed != 1 || opened != 0 {
@@ -51,9 +52,9 @@ func TestAttachmentSizesLongNamesAndGroup(t *testing.T) {
 	name := strings.Repeat("긴파일명", 30) + ".pdf"
 	heights := []float64{}
 	for _, size := range []ui.AttachmentSize{ui.AttachmentDefault, ui.AttachmentSmall, ui.AttachmentExtraSmall} {
-		a := ui.Attachment(name, "Long description").Media(ggui.Text("F")).Size(size).Width(180)
+		a := ui.Attachment(name, "Long description").Media(widget.Text("F")).Size(size).Width(180)
 		heights = append(heights, a.Layout(ggui.Loose(ggui.Sz(180, 400)), ggui.Env{}).H)
-		p := ggui.NewProbe(ggui.Column(a), ggui.Sz(180, 150))
+		p := ggui.NewProbe(widget.Column(a), ggui.Sz(180, 150))
 		node(t, p.Semantics(), ggui.RoleText, name)
 		p.Close()
 	}
@@ -65,7 +66,7 @@ func TestAttachmentSizesLongNamesAndGroup(t *testing.T) {
 		cards = append(cards, ui.Attachment(fmt.Sprintf("File %d", i), "PDF").Width(180).Trigger(fmt.Sprintf("Open %d", i), func() {}))
 	}
 	group := ui.AttachmentGroup(cards...)
-	p := ggui.NewProbe(ggui.Column(group), ggui.Sz(230, 140))
+	p := ggui.NewProbe(widget.Column(group), ggui.Sz(230, 140))
 	defer p.Close()
 	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyArrowRight)
 	if group.Position() != 192 {
@@ -93,9 +94,9 @@ func TestAttachmentSizesLongNamesAndGroup(t *testing.T) {
 func TestBubbleMessageAndMarkerComposition(t *testing.T) {
 	t.Parallel()
 	pressed, reactions := 0, 0
-	b := ui.Bubble(ggui.Text("Choose this reply")).End().Outline().Action("Reply", func() { pressed++ }).Reactions(ui.Button("Like", func() { reactions++ }).Ghost()).ReactionsTop()
-	msg := ui.Message(b).Avatar(ui.Avatar("Ada").Size(32)).Header(ggui.Text("Ada")).Footer(ui.Button("Retry", func() {}).Ghost()).End()
-	p := ggui.NewProbe(ggui.Padding(ggui.Column(msg, ui.Marker(ggui.Text("Today")).Separator(), ui.Marker(ggui.Text("Saved")).Border()).Gap(30), 24), ggui.Sz(500, 300))
+	b := ui.Bubble(widget.Text("Choose this reply")).End().Outline().Action("Reply", func() { pressed++ }).Reactions(ui.Button("Like", func() { reactions++ }).Ghost()).ReactionsTop()
+	msg := ui.Message(b).Avatar(ui.Avatar("Ada").Size(32)).Header(widget.Text("Ada")).Footer(ui.Button("Retry", func() {}).Ghost()).End()
+	p := ggui.NewProbe(widget.Padding(widget.Column(msg, ui.Marker(widget.Text("Today")).Separator(), ui.Marker(widget.Text("Saved")).Border()).Gap(30), 24), ggui.Sz(500, 300))
 	defer p.Close()
 	p.Tap("Reply")
 	p.Tap("Like")
@@ -116,7 +117,7 @@ func TestBubbleMessageAndMarkerComposition(t *testing.T) {
 func transcript(n int) []ui.MessageEntry {
 	out := []ui.MessageEntry{}
 	for i := range n {
-		out = append(out, ui.MessageEntry{ID: fmt.Sprint(i), Content: ggui.Box(ggui.Text(fmt.Sprint(i))).Height(80)})
+		out = append(out, ui.MessageEntry{ID: fmt.Sprint(i), Content: widget.Box(widget.Text(fmt.Sprint(i))).Height(80)})
 	}
 	return out
 }
@@ -174,7 +175,7 @@ func TestMessageScrollerHistoryAnchorsAndRestore(t *testing.T) {
 	s.ScrollToMessage("2", ui.ScrollAlignStart)
 	p.Frame()
 	saved := s.Save()
-	data := append([]ui.MessageEntry{{ID: "older", Content: ggui.Box().Height(100)}}, ggui.Untrack(rows.Get)...)
+	data := append([]ui.MessageEntry{{ID: "older", Content: widget.Box().Height(100)}}, ggui.Untrack(rows.Get)...)
 	rows.Set(data)
 	p.Frame()
 	if got := s.Save(); got.MessageID != saved.MessageID || got.Offset != saved.Offset {
@@ -187,7 +188,7 @@ func TestMessageScrollerHistoryAnchorsAndRestore(t *testing.T) {
 	if s.Save().MessageID != saved.MessageID {
 		t.Fatal("restore lost row")
 	}
-	data = append(data, ui.MessageEntry{ID: "turn", Content: ggui.Box(ggui.Text("new turn")).Height(40), Anchor: true})
+	data = append(data, ui.MessageEntry{ID: "turn", Content: widget.Box(widget.Text("new turn")).Height(40), Anchor: true})
 	rows.Set(data)
 	p.Frame()
 	v := s.Visibility()
@@ -195,7 +196,7 @@ func TestMessageScrollerHistoryAnchorsAndRestore(t *testing.T) {
 		t.Fatal("new turn not anchored", v)
 	}
 	s.ScrollToMessage("missing", ui.ScrollAlignCenter)
-	data = append(data, ui.MessageEntry{ID: "missing", Content: ggui.Box().Height(60)})
+	data = append(data, ui.MessageEntry{ID: "missing", Content: widget.Box().Height(60)})
 	rows.Set(data)
 	p.Frame()
 	if !slicesContains(s.Visibility().VisibleMessageIDs, "missing") {
@@ -353,7 +354,7 @@ func TestMessageScrollerNoImplicitFollowAndReducedMotion(t *testing.T) {
 	}
 	s.ScrollToMessage("future", ui.ScrollAlignStart)
 	s.ScrollToEnd()
-	rows.Set(append(transcript(7), ui.MessageEntry{ID: "future", Content: ggui.Box().Height(40)}))
+	rows.Set(append(transcript(7), ui.MessageEntry{ID: "future", Content: widget.Box().Height(40)}))
 	p.Frame()
 	// The later edge command must cancel a pending missing-message command.
 	if s.Position() != 420 {
@@ -373,7 +374,7 @@ func TestMessageScrollerRestoreReplacesQueuedJump(t *testing.T) {
 	saved := s.Save()
 	s.ScrollToMessage("future", ui.ScrollAlignStart)
 	s.Restore(saved)
-	rows.Set(append(transcript(8), ui.MessageEntry{ID: "future", Content: ggui.Box().Height(40)}))
+	rows.Set(append(transcript(8), ui.MessageEntry{ID: "future", Content: widget.Box().Height(40)}))
 	p.Frame()
 	if s.Position() != 0 {
 		t.Fatal("queued jump overrode restored position", s.Position())
@@ -387,7 +388,7 @@ func TestAttachmentGroupTouchPixelsAndMomentum(t *testing.T) {
 		ui.Attachment("Two", "PDF").Width(180),
 		ui.Attachment("Three", "PDF").Width(180),
 	)
-	p := ggui.NewProbe(ggui.Column(group), ggui.Sz(230, 140))
+	p := ggui.NewProbe(widget.Column(group), ggui.Sz(230, 140))
 	defer p.Close()
 	p.Frame()
 	// A prior wheel snap must not fire while the finger holds the strip.

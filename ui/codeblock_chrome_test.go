@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // A block has a header row only when it has a title or a language; without
@@ -13,7 +14,7 @@ import (
 func TestCodeBlockHeaderIsOptionalAndTheActionFloatsWithoutOne(t *testing.T) {
 	t.Parallel()
 	bare, titled := ui.CodeBlock("go build ./..."), ui.CodeBlock("go build ./...").Header("build.sh")
-	p := ggui.NewProbe(ggui.Column(bare, titled).Gap(20).Align(ggui.AlignStretch), ggui.Sz(320, 300))
+	p := ggui.NewProbe(widget.Column(bare, titled).Gap(20).Align(widget.AlignStretch), ggui.Sz(320, 300))
 	defer p.Close()
 	groups := p.Semantics().Nodes(ggui.RoleGroup)
 	var plain, headed ggui.SemNode
@@ -50,7 +51,7 @@ func TestCodeBlockHeaderIsOptionalAndTheActionFloatsWithoutOne(t *testing.T) {
 // The copy action says it copied for two seconds, then turns back.
 func TestCodeBlockCopyFeedbackRevertsAfterTwoSeconds(t *testing.T) {
 	t.Parallel()
-	p := ggui.NewProbe(ggui.Column(ui.CodeBlock("go test ./...").Language("shell")), ggui.Sz(320, 200))
+	p := ggui.NewProbe(widget.Column(ui.CodeBlock("go test ./...").Language("shell")), ggui.Sz(320, 200))
 	defer p.Close()
 	p.Tap("Copy code")
 	node(t, p.Semantics(), ggui.RoleStatus, "Code copied")
@@ -72,11 +73,11 @@ func TestCodeBlockSmallDestructiveAndFooter(t *testing.T) {
 	if small.H >= normal.H {
 		t.Fatalf("small block is %v tall, default %v", small.H, normal.H)
 	}
-	footed := size(ui.CodeBlock(code).Header("a.txt").Footer(ggui.Text("3 lines")))
+	footed := size(ui.CodeBlock(code).Header("a.txt").Footer(widget.Text("3 lines")))
 	if footed.H <= normal.H {
 		t.Fatalf("footer added no row: %v against %v", footed.H, normal.H)
 	}
-	p := ggui.NewProbe(ggui.Column(ui.CodeBlock(code).Destructive().Small().Footer(ggui.Text("3 lines"))), ggui.Sz(320, 300))
+	p := ggui.NewProbe(widget.Column(ui.CodeBlock(code).Destructive().Small().Footer(widget.Text("3 lines"))), ggui.Sz(320, 300))
 	defer p.Close()
 	footer := node(t, p.Semantics(), ggui.RoleText, "3 lines")
 	text := node(t, p.Semantics(), ggui.RoleText, code)

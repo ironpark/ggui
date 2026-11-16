@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestBubbleVariantsPickTheirThemeColors(t *testing.T) {
@@ -24,7 +25,7 @@ func TestBubbleVariantsPickTheirThemeColors(t *testing.T) {
 		{"ghost", (*BubbleWidget).Ghost, nil, th.Fg, nil},
 		{"destructive", (*BubbleWidget).Destructive, fade(th.Destructive, .1), th.Destructive, nil},
 	} {
-		b := Bubble(ggui.Text("hi"))
+		b := Bubble(widget.Text("hi"))
 		if tc.set(b) != b {
 			t.Fatalf("%s: the variant setter returned another bubble", tc.name)
 		}
@@ -49,7 +50,7 @@ func sameColor(a, b color.Color) bool {
 func TestBubbleLinkPressesThroughSemanticsAndKeyboard(t *testing.T) {
 	t.Parallel()
 	opened := 0
-	p := ggui.NewProbe(Bubble(ggui.Text("docs")).Link("Open docs", func() { opened++ }), ggui.Sz(300, 80))
+	p := ggui.NewProbe(Bubble(widget.Text("docs")).Link("Open docs", func() { opened++ }), ggui.Sz(300, 80))
 	defer p.Close()
 	node, ok := p.Semantics().Find(ggui.RoleLink, "Open docs")
 	if !ok {
@@ -67,7 +68,7 @@ func TestBubbleDisabledFollowsItsBindingAndIgnoresInput(t *testing.T) {
 	t.Parallel()
 	pressed := 0
 	disabled := ggui.State(true)
-	b := Bubble(ggui.Text("hi")).Action("Reply", func() { pressed++ }).BindDisabled(disabled)
+	b := Bubble(widget.Text("hi")).Action("Reply", func() { pressed++ }).BindDisabled(disabled)
 	p := ggui.NewProbe(b, ggui.Sz(300, 80))
 	defer p.Close()
 	node, _ := p.Semantics().Find(ggui.RoleButton, "Reply")
@@ -97,7 +98,7 @@ func TestBubbleDisabledFollowsItsBindingAndIgnoresInput(t *testing.T) {
 func TestBubbleReactionsStartSitsAtTheLeadingEdge(t *testing.T) {
 	t.Parallel()
 	body := func(start bool) ggui.Rect {
-		b := Bubble(ggui.Text("a long enough message")).Reactions(Button("Like", nil).Ghost())
+		b := Bubble(widget.Text("a long enough message")).Reactions(Button("Like", nil).Ghost())
 		if start {
 			b.ReactionsStart()
 		}
@@ -118,8 +119,8 @@ func TestBubbleReactionsStartSitsAtTheLeadingEdge(t *testing.T) {
 func TestBubbleGroupStacksBubblesEightApart(t *testing.T) {
 	t.Parallel()
 	p := ggui.NewProbe(BubbleGroup(
-		Bubble(ggui.Text("one")).Action("First", func() {}),
-		Bubble(ggui.Text("two")).Action("Second", func() {}),
+		Bubble(widget.Text("one")).Action("First", func() {}),
+		Bubble(widget.Text("two")).Action("Second", func() {}),
 	), ggui.Sz(300, 200))
 	defer p.Close()
 	first, _ := p.FindRole(ggui.RoleButton, "First")

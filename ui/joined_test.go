@@ -8,6 +8,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestJoinedPartsSplitOnlyWhereCornersDiffer(t *testing.T) {
@@ -156,7 +157,7 @@ func TestJoinedSidesHoldOnlyWhereTheGroupPaints(t *testing.T) {
 	t.Parallel()
 	inside, outside := &withinProbe{}, &withinProbe{}
 	leaked := ggui.WithEnv(func(env ggui.Env) ggui.Env { return env.With(JoinedSidesKey, JoinedSides{Left: true}) }, outside)
-	p := ggui.NewProbe(ggui.Column(ButtonGroup(Button("a", nil), inside), leaked), ggui.Sz(300, 200))
+	p := ggui.NewProbe(widget.Column(ButtonGroup(Button("a", nil), inside), leaked), ggui.Sz(300, 200))
 	defer p.Close()
 	p.Frame()
 	if want := (JoinedSides{Left: true}); inside.painted != want {
@@ -171,7 +172,7 @@ func TestButtonGroupDrawsTheFocusedChildsRingItself(t *testing.T) {
 	t.Parallel()
 	g := ButtonGroup(Button("One", nil).Outline(), Button("Two", nil).Outline(), Button("Three", nil).Outline())
 	alone := Button("Alone", nil)
-	p := ggui.NewProbe(ggui.Column(g, alone), ggui.Sz(400, 200))
+	p := ggui.NewProbe(widget.Column(g, alone), ggui.Sz(400, 200))
 	defer p.Close()
 	p.Frame()
 	if len(g.rings) != 0 {
@@ -211,7 +212,7 @@ func TestButtonGroupDrawsTheFocusedChildsRingItself(t *testing.T) {
 func TestButtonGroupRingEasesOut(t *testing.T) {
 	t.Parallel()
 	g := ButtonGroup(Button("One", nil).Outline(), Button("Two", nil).Outline())
-	p := ggui.NewProbe(ggui.Column(g).Align(ggui.AlignStart), ggui.Sz(400, 120))
+	p := ggui.NewProbe(widget.Column(g).Align(widget.AlignStart), ggui.Sz(400, 120))
 	defer p.Close()
 	th := uitheme.Default()
 	alpha := func(c color.Color) uint32 { _, _, _, a := c.RGBA(); return a }
@@ -253,7 +254,7 @@ func TestSelectJoinsAButtonGroup(t *testing.T) {
 	unit := Select(ggui.State("USD")).Options([]string{"USD", "EUR"}).Name("Currency")
 	g := ButtonGroup(unit, Button("Convert", nil).Outline())
 	alone := Select(ggui.State("USD")).Options([]string{"USD", "EUR"}).Name("Alone")
-	p := ggui.NewProbe(ggui.Column(g, alone).Gap(8), ggui.Sz(400, 300))
+	p := ggui.NewProbe(widget.Column(g, alone).Gap(8), ggui.Sz(400, 300))
 	defer p.Close()
 	p.Frame()
 	if want := (JoinedSides{Right: true}); unit.sides != want {

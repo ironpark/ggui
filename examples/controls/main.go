@@ -15,6 +15,7 @@ import (
 	_ "github.com/ironpark/ggui/inspect/panel"
 	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // model holds one signal per piece of state.
@@ -31,10 +32,10 @@ func newModel(name string, dark bool) model {
 // the theme comes from the Env and the demo is the island that follows the
 // selection.
 func (m model) build() ggui.Widget {
-	return ggui.Box(ggui.Column(
-		ggui.Row(
+	return widget.Box(widget.Column(
+		widget.Row(
 			ui.Title("Carousel & Input OTP"),
-			ggui.Spacer(),
+			widget.Spacer(),
 			ui.Switch(m.Dark, "Dark theme"),
 		).Gap(12),
 		ui.Select(m.Selected).Options(controlNames).Name("Component example"),

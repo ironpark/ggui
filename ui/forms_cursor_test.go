@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // shadcn's form controls keep the arrow under the pointer: none of them
@@ -12,7 +13,7 @@ import (
 func TestFormControlsKeepTheDefaultCursor(t *testing.T) {
 	t.Parallel()
 	fruit := ggui.State("Apple")
-	root := ggui.Column(
+	root := widget.Column(
 		ui.Checkbox(ggui.State(false), "Agree"),
 		ui.Radio(ggui.State("a"), "b", "Second"),
 		ui.Switch(ggui.State(false), "Airplane"),

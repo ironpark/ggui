@@ -7,6 +7,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // sidebarRailUnits is the width of an icon rail in units of the theme's
@@ -50,7 +51,7 @@ type sidebarNode struct {
 	depth    int // 0 in a group, 1 for a sub-item, and so on
 	kids     []*sidebarNode
 
-	label, detail, badge *ggui.TextWidget
+	label, detail, badge *widget.TextWidget
 	bones                [2]*SkeletonWidget // a skeleton's icon and its line
 	open                 bool               // a collapsible row's own state
 	reveal               ggui.Motion
@@ -71,12 +72,12 @@ func newSidebarNode(e SidebarEntry, parent *sidebarNode, depth int) *sidebarNode
 	n := &sidebarNode{e: e, parent: parent, depth: depth, index: -1, open: e.open}
 	switch e.kind {
 	case sidebarRowItem:
-		n.label = ggui.Text(e.label).NoWrap().Ellipsis()
+		n.label = widget.Text(e.label).NoWrap().Ellipsis()
 		if e.detail != "" {
-			n.detail = ggui.Text(e.detail).NoWrap().Ellipsis()
+			n.detail = widget.Text(e.detail).NoWrap().Ellipsis()
 		}
 		if e.badge != "" {
-			n.badge = ggui.Text(e.badge).NoWrap()
+			n.badge = widget.Text(e.badge).NoWrap()
 		}
 		for _, sub := range e.sub {
 			if sub.kind != sidebarRowSection && sub.kind != sidebarRowSeparator {
@@ -84,7 +85,7 @@ func newSidebarNode(e SidebarEntry, parent *sidebarNode, depth int) *sidebarNode
 			}
 		}
 	case sidebarRowSection:
-		n.label = ggui.Text(e.label).NoWrap().Ellipsis()
+		n.label = widget.Text(e.label).NoWrap().Ellipsis()
 	case sidebarRowSkeleton:
 		n.bones = [2]*SkeletonWidget{Skeleton(0, 0), Skeleton(0, 0)}
 	}

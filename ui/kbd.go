@@ -3,19 +3,20 @@ package ui
 import (
 	"github.com/ironpark/ggui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // KbdWidget displays a keyboard shortcut without registering an input handler.
 type KbdWidget struct {
-	text *ggui.TextWidget
-	box  *ggui.BoxWidget
+	text *widget.TextWidget
+	box  *widget.BoxWidget
 }
 
 // Kbd creates a key cap: a small label on the Muted surface, at least as
 // wide as it is tall. Put the caps of a chord in a KbdGroup.
 func Kbd(label string) *KbdWidget {
-	text := ggui.Text(label).NoWrap()
-	return &KbdWidget{text: text, box: ggui.Box(&buttonContent{child: text})}
+	text := widget.Text(label).NoWrap()
+	return &KbdWidget{text: text, box: widget.Box(&buttonContent{child: text})}
 }
 
 // Content changes the label on the cap.
@@ -61,7 +62,7 @@ type KbdGroupWidget struct {
 // apart and centred on one line.
 //
 //	ui.KbdGroup(ui.Kbd("⌘"), ui.Kbd("K"))
-//	ui.KbdGroup(ui.Kbd("Ctrl"), ggui.Text("+"), ui.Kbd("B"))
+//	ui.KbdGroup(ui.Kbd("Ctrl"), widget.Text("+"), ui.Kbd("B"))
 func KbdGroup(children ...ggui.Widget) *KbdGroupWidget { return &KbdGroupWidget{children: children} }
 
 // Layout implements ggui.Widget.

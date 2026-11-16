@@ -80,7 +80,7 @@ explicit composition already exists, not that every optional web prop is covered
 | [Questionnaire](https://ui.shadcn.com/docs/components/base/questionnaire) | `Questionnaire` | Existing |
 | [Radio Group](https://ui.shadcn.com/docs/components/base/radio-group) | `Radios / Radio` | Existing; vertical default and invalid state added |
 | [Resizable](https://ui.shadcn.com/docs/components/base/resizable) | `Resizable` | Existing |
-| [Scroll Area](https://ui.shadcn.com/docs/components/base/scroll-area) | `ggui.Scroll` | Existing core widget |
+| [Scroll Area](https://ui.shadcn.com/docs/components/base/scroll-area) | `widget.Scroll` | Existing core widget |
 | [Select](https://ui.shadcn.com/docs/components/base/select) | `Select` | Existing; alignment, placeholder, groups and disabled options added |
 | [Separator](https://ui.shadcn.com/docs/components/base/separator) | `Divider` | Existing |
 | [Sheet](https://ui.shadcn.com/docs/components/base/sheet) | `Sheet` | Existing; description and footer added |
@@ -97,7 +97,7 @@ explicit composition already exists, not that every optional web prop is covered
 | [Toggle Group](https://ui.shadcn.com/docs/components/base/toggle-group) | `ToggleGroup / ToggleGroupMultiple` | Existing; multiple selection, outline and joined spacing added |
 | [Tooltip](https://ui.shadcn.com/docs/components/base/tooltip) | `Tooltip` | Existing; arrow and sides added |
 | [Trace](https://ui.shadcn.com/docs/components/base/trace) | `Trace` | Added |
-| [Typography](https://ui.shadcn.com/docs/components/base/typography) | `ggui.Text / RichText, Title / Heading / Caption / Mono` | Existing composition |
+| [Typography](https://ui.shadcn.com/docs/components/base/typography) | `widget.Text / RichText, Title / Heading / Caption / Mono` | Existing composition |
 
 ## Native APIs implemented
 
@@ -118,7 +118,7 @@ explicit composition already exists, not that every optional web prop is covered
 | Direction | Tabs, button/toggle groups, toggle glyph/label placement, sliders, calendar, pagination icons, sidebar labels/border and resizable panes honor `Directionality`. Code content deliberately stays LTR. |
 | Buttons and groups | `Button.Icon` / `TrailingIcon`; `ToggleOf`; `ButtonGroup` joins its children with squared inner corners and shared borders and takes `ButtonGroupText` / `ButtonGroupTextOf` and `ButtonGroupSeparator`, while text fields and input groups in it take the spare width and a `Select` joins as a button does; `ToggleGroup.Outline` / `Size` / `Spacing(0)`; `KbdGroup`. |
 | Fields | `Checkbox` / `Radio` / `Radios` / `Switch` / `Select` / `Button` / `Toggle` `.Invalid(v)`; `Switch.Small`; `Field.Horizontal` / `ControlFirst` / `Card` / `Errors` / `BindErrors`; `FieldCard(control, content).ControlFirst`, `FieldContent`, `FieldTitle`, `FieldDescription`; `FieldGroup`, `FieldSet(...).Legend / Description`, `FieldSeparator().Label`; `InputGroup.Top` / `Bottom` / `Multiline`; `Select.Placeholder` / `GroupBy` / `DisabledOption` / `Small`. |
-| Overlays | `PopupWidget.Side` / `AlignOffset` / `MatchAnchorWidth` / `FocusOnOpen`; `Dialog.Description` / `Footer` / `TopAt`; `Sheet.Description` / `Footer` / `Handle`; `AlertDialog.Small` / `Media`; `Popover`, `HoverCard` and `Tooltip` `.Side` / `Align` / `AlignOffset` over `ggui.PopupSide`. |
+| Overlays | `PopupWidget.Side` / `AlignOffset` / `MatchAnchorWidth` / `FocusOnOpen`; `Dialog.Description` / `Footer` / `TopAt`; `Sheet.Description` / `Footer` / `Handle`; `AlertDialog.Small` / `Media`; `Popover`, `HoverCard` and `Tooltip` `.Side` / `Align` / `AlignOffset` over `widget.PopupSide`. |
 | Menus | `MenuLabel`, `MenuSub`, `MenuCheckbox`, `MenuRadioGroup`; `MenuItem.Icon` / `Inset` / `Destructive`; `CommandSeparator`, `CommandEntry.Icon`; menus draw in `Theme.Menu()`. |
 | Cards and feedback | `Card` sections (`CardHeader(...).Action`, `CardContent`, `CardFooter(...).Justify`), `Card.Small`; toast types, `ToastMessage.Loading` / `Countdown`, `Toaster.Position` / `Update`; `AvatarGroup`, `Avatar.Small` / `Large` / `Badge` / `BadgeIcon`; `ItemGroup`, `ItemSeparator`, `Item.MediaIcon` / `Header` / `Footer` / `Muted` / `Small`; `Empty.MediaIcon` / `Outline`; `Alert.Icon`; `Badge.Ghost` / `Link` / `Icon`; `Progress.Label` / `ShowValue` / `FormatValue`; `Spinner.Color`. |
 | Data | `Calendar.Months(n)`, `CaptionDropdown`, `DropdownYears`, `MonthNames`; `DateRangePicker` with `FormatRange` / `OnRangeChange`; `Table.Footer` / `Caption`. |

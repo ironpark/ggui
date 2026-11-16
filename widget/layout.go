@@ -1,4 +1,4 @@
-package ggui
+package widget
 
 import (
 	"fmt"
@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/inspect"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/pkg/gem"
@@ -27,9 +28,9 @@ import (
 // clips it to its own Rect and holds a change of size inside it there.
 // Build one with Contain.
 type ContainWidget struct {
-	child Widget
-	size  Size // the child's, as laid out
-	hold  LayoutBoundary
+	child ggui.Widget
+	size  ggui.Size // the child's, as laid out
+	hold  ggui.LayoutBoundary
 }
 
 // Contain clips child to the Rect it is painted in and makes it a layout
@@ -39,32 +40,32 @@ type ContainWidget struct {
 // panel, a card or a pane whose size its parent decides: a Box of fixed
 // Size, an Expanded share of a Row, a split's pane.
 //
-//	ggui.Row(ggui.Contain(ggui.Box(details).Size(320, 480)), rest)
+//	widget.Row(widget.Contain(widget.Box(details).Size(320, 480)), rest)
 //
 // A Contain whose size does follow its content's, as one under loose
 // constraints may, costs a frame painted whole the first time its content
 // grows, and holds nothing from then on; the boundary around it, a Scroll's
 // or another Contain's, holds the change instead. Under a Transform it
 // holds nothing either.
-func Contain(child Widget) *ContainWidget { return &ContainWidget{child: child} }
+func Contain(child ggui.Widget) *ContainWidget { return &ContainWidget{child: child} }
 
 // Layout implements Widget.
-func (w *ContainWidget) Layout(c Constraints, env Env) Size {
+func (w *ContainWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	inner, check := w.hold.Begin(env)
 	w.size = w.child.Layout(c, inner)
 	size := c.Constrain(w.size)
-	baseline, based := BaselineOf(w.child)
+	baseline, based := ggui.BaselineOf(w.child)
 	w.hold.End(check, c, size, baseline, based)
 	return size
 }
 
 // Baseline implements Baseliner: the child's.
-func (w *ContainWidget) Baseline() (float64, bool) { return BaselineOf(w.child) }
+func (w *ContainWidget) Baseline() (float64, bool) { return ggui.BaselineOf(w.child) }
 
 // Paint implements Widget: the child, clipped to r.
-func (w *ContainWidget) Paint(dst *Canvas, r Rect) {
+func (w *ContainWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	w.hold.Paint(dst, r)
-	dst.Clip(r).Paint(w.child, Rct(r.Origin, w.size))
+	dst.Clip(r).Paint(w.child, ggui.Rct(r.Origin, w.size))
 }
 
 // BoxWidget paints a rectangle and lays an optional child inside its padding.
@@ -79,22 +80,22 @@ type BoxWidget struct {
 	borderWidth float64
 	borderColor shownColor
 
-	padding    EdgeInsets
+	padding    ggui.EdgeInsets
 	width      float64 // 0 means "as small as the child allows"
 	height     float64
 	maxW, maxH float64 // 0 means no limit
-	child      Widget
+	child      ggui.Widget
 
-	childRect Rect // inside the padding, from the last Layout
+	childRect ggui.Rect // inside the padding, from the last Layout
 }
 
 // boxDeco is what few boxes paint: shadows and a gradient. A BoxWidget
 // makes one only when one is set.
 type boxDeco struct {
-	shadows       []ShadowStyle
-	gradient      Gradient      // as given; see BoxWidget.Gradient
-	shownShadows  []ShadowStyle // shadows with their colors resolved
-	shownGradient Gradient      // gradient with its colors resolved
+	shadows       []ggui.ShadowStyle
+	gradient      ggui.Gradient      // as given; see BoxWidget.Gradient
+	shownShadows  []ggui.ShadowStyle // shadows with their colors resolved
+	shownGradient ggui.Gradient      // gradient with its colors resolved
 }
 
 // shownColor is a color property as it was given and as it is painted: the
@@ -107,13 +108,13 @@ func (s *shownColor) set(c color.Color, changed func()) {
 	if c == s.given {
 		return
 	}
-	if IsEnvColor(c) || IsEnvColor(s.given) {
+	if ggui.IsEnvColor(c) || ggui.IsEnvColor(s.given) {
 		changed()
 	}
 	s.given, s.shown = c, c
 }
 
-func (s *shownColor) layout(env Env) { s.shown = ResolveColor(s.given, env) }
+func (s *shownColor) layout(env ggui.Env) { s.shown = ggui.ResolveColor(s.given, env) }
 
 // decorate returns the box's boxDeco, making it on first use.
 func (b *BoxWidget) decorate() *boxDeco {
@@ -126,8 +127,8 @@ func (b *BoxWidget) decorate() *boxDeco {
 // Gradient fills the box with g, over its Fill and under its border, with
 // the same rounded corners. A zero Gradient removes it. EnvColor stops are
 // resolved at layout, as Fill's color is.
-func (b *BoxWidget) Gradient(g Gradient) *BoxWidget {
-	var was Gradient
+func (b *BoxWidget) Gradient(g ggui.Gradient) *BoxWidget {
+	var was ggui.Gradient
 	if b.deco != nil {
 		was = b.deco.gradient
 	}
@@ -144,7 +145,7 @@ func (b *BoxWidget) Gradient(g Gradient) *BoxWidget {
 
 // Box wraps at most one child. With no child it is an empty rectangle, sized
 // with Size, Width or Height.
-func Box(child ...Widget) *BoxWidget {
+func Box(child ...ggui.Widget) *BoxWidget {
 	b := &BoxWidget{}
 	switch len(child) {
 	case 0:
@@ -164,12 +165,12 @@ func (b *BoxWidget) Fill(c color.Color) *BoxWidget {
 
 // Shadow replaces the outer shadow layers. Calling it without arguments clears
 // them. Shadows paint in argument order and do not reserve layout space.
-func (b *BoxWidget) Shadow(styles ...ShadowStyle) *BoxWidget {
+func (b *BoxWidget) Shadow(styles ...ggui.ShadowStyle) *BoxWidget {
 	if b.deco == nil && len(styles) == 0 {
 		return b
 	}
 	d := b.decorate()
-	themed := func(s ShadowStyle) bool { return IsEnvColor(s.Color) }
+	themed := func(s ggui.ShadowStyle) bool { return ggui.IsEnvColor(s.Color) }
 	if !slices.Equal(d.shadows, styles) && (slices.ContainsFunc(d.shadows, themed) || slices.ContainsFunc(styles, themed)) {
 		b.props.Changed()
 	}
@@ -194,12 +195,12 @@ func (b *BoxWidget) Border(w float64, c color.Color) *BoxWidget {
 // Pad sets padding with the CSS shorthand Insets accepts.
 func (b *BoxWidget) Pad(sides ...float64) *BoxWidget {
 	defer property.Watch(&b.props, &b.padding)()
-	b.padding = Insets(sides...)
+	b.padding = ggui.Insets(sides...)
 	return b
 }
 
 // Padding sets per-side padding.
-func (b *BoxWidget) Padding(e EdgeInsets) *BoxWidget {
+func (b *BoxWidget) Padding(e ggui.EdgeInsets) *BoxWidget {
 	defer property.Watch(&b.props, &b.padding)()
 	b.padding = e
 	return b
@@ -218,7 +219,7 @@ func (b *BoxWidget) Width(w float64) *BoxWidget {
 }
 
 // BindWidth follows a non-nil width reader without rebuilding the box.
-func (b *BoxWidget) BindWidth(r Readable[float64]) *BoxWidget {
+func (b *BoxWidget) BindWidth(r ggui.Readable[float64]) *BoxWidget {
 	if b.widthProp.Bind(r, "BindWidth") {
 		b.props.Changed()
 	}
@@ -235,7 +236,7 @@ func (b *BoxWidget) Height(h float64) *BoxWidget {
 }
 
 // BindHeight follows a non-nil height reader without rebuilding the box.
-func (b *BoxWidget) BindHeight(r Readable[float64]) *BoxWidget {
+func (b *BoxWidget) BindHeight(r ggui.Readable[float64]) *BoxWidget {
 	if b.heightProp.Bind(r, "BindHeight") {
 		b.props.Changed()
 	}
@@ -261,20 +262,20 @@ func (b *BoxWidget) MaxHeight(h float64) *BoxWidget {
 }
 
 // Layout implements Widget.
-func (b *BoxWidget) Layout(c Constraints, env Env) Size {
+func (b *BoxWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer b.props.Layout().EndLayout()
 	b.fill.layout(env)
 	b.borderColor.layout(env)
 	if d := b.deco; d != nil {
 		d.shownGradient = d.gradient.Resolve(env)
 		for i, s := range d.shadows {
-			d.shownShadows[i].Color = ResolveColor(s.Color, env)
+			d.shownShadows[i].Color = ggui.ResolveColor(s.Color, env)
 		}
 	}
 	b.width, b.height = b.widthProp.Get(), b.heightProp.Get()
 	var measure layout.MeasureFunc
 	if b.child != nil {
-		measure = func(_ int, c Constraints) layout.Measurement { return measureWidget(b.child, c, env) }
+		measure = func(_ int, c ggui.Constraints) layout.Measurement { return measureWidget(b.child, c, env) }
 	}
 	result := layout.Box(c, layout.BoxStyle{
 		Padding: b.padding, Width: b.width, Height: b.height,
@@ -288,13 +289,13 @@ func (b *BoxWidget) Layout(c Constraints, env Env) Size {
 func (b *BoxWidget) Baseline() (float64, bool) { return baselineAt(b.child, b.padding.Top) }
 
 // baselineAt is BaselineOf for a child painted dy below its parent's top.
-func baselineAt(w Widget, dy float64) (float64, bool) {
-	b, ok := BaselineOf(w)
+func baselineAt(w ggui.Widget, dy float64) (float64, bool) {
+	b, ok := ggui.BaselineOf(w)
 	return b + dy, ok
 }
 
 // Paint implements Widget.
-func (b *BoxWidget) Paint(dst *Canvas, r Rect) {
+func (b *BoxWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if b.deco != nil {
 		for _, s := range b.deco.shownShadows {
 			dst.Shadow(r, b.radius, s)
@@ -308,7 +309,7 @@ func (b *BoxWidget) Paint(dst *Canvas, r Rect) {
 		dst.StrokeRoundRect(r, b.radius, b.borderWidth, b.borderColor.shown)
 	}
 	if b.child != nil {
-		dst.Paint(b.child, Rct(r.Origin.Add(b.childRect.Origin), b.childRect.Size))
+		dst.Paint(b.child, ggui.Rct(r.Origin.Add(b.childRect.Origin), b.childRect.Size))
 	}
 }
 
@@ -333,10 +334,10 @@ func (b *BoxWidget) InspectFields() []inspect.Field {
 // InspectBox implements inspect.Boxer: the box model as painted at size,
 // its padding and border around the child, or around the space left when
 // it has none.
-func (b *BoxWidget) InspectBox(size Size) inspect.Box {
+func (b *BoxWidget) InspectBox(size ggui.Size) inspect.Box {
 	content := b.childRect.Size
 	if b.child == nil {
-		content = Sz(max(size.W-b.padding.Horizontal(), 0), max(size.H-b.padding.Vertical(), 0))
+		content = ggui.Sz(max(size.W-b.padding.Horizontal(), 0), max(size.H-b.padding.Vertical(), 0))
 	}
 	p := b.padding
 	return inspect.Box{Padding: inspect.Insets{Top: p.Top, Right: p.Right, Bottom: p.Bottom, Left: p.Left}, Border: b.borderWidth, Content: content, Valid: true}
@@ -345,7 +346,7 @@ func (b *BoxWidget) InspectBox(size Size) inspect.Box {
 // Padding surrounds child with empty space, using the CSS shorthand Insets
 // accepts: Padding(w, 8), Padding(w, 4, 12) or Padding(w, 1, 2, 3, 4). It is
 // a Box with no fill, so the rest of Box's setters stay available.
-func Padding(child Widget, sides ...float64) *BoxWidget { return Box(child).Pad(sides...) }
+func Padding(child ggui.Widget, sides ...float64) *BoxWidget { return Box(child).Pad(sides...) }
 
 // Justify distributes children along a flow's main axis.
 type Justify = layout.Justify
@@ -379,9 +380,9 @@ type flow struct {
 	space      float64 // gap in environment spacing units, when set
 	justify    Justify
 	align      CrossAlign
-	children   []Widget
+	children   []ggui.Widget
 
-	rects  []Rect // borrowed from engine, or EachWidget.virtualRects on its virtual paths
+	rects  []ggui.Rect // borrowed from engine, or EachWidget.virtualRects on its virtual paths
 	engine layout.Scratch
 	items  []layout.Item
 }
@@ -394,7 +395,7 @@ type flow struct {
 func (f *flow) Baseline() (float64, bool) {
 	for i, rect := range f.rects { // empty before the first layout
 		child := f.children[i]
-		if IsVacant(child) {
+		if ggui.IsVacant(child) {
 			continue
 		}
 		if b, ok := baselineAt(child, rect.Origin.Y); ok {
@@ -408,12 +409,12 @@ func (f *flow) Baseline() (float64, bool) {
 // size and constraints read sizes and build bounds along it.
 func (f *flow) axis() layout.Axis { return gem.Pick(f.horizontal, layout.Horizontal, layout.Vertical) }
 
-func (f *flow) main(s Size) float64  { return f.axis().Main(s) }
-func (f *flow) cross(s Size) float64 { return f.axis().Cross(s) }
+func (f *flow) main(s ggui.Size) float64  { return f.axis().Main(s) }
+func (f *flow) cross(s ggui.Size) float64 { return f.axis().Cross(s) }
 
-func (f *flow) size(main, cross float64) Size { return f.axis().Size(main, cross) }
+func (f *flow) size(main, cross float64) ggui.Size { return f.axis().Size(main, cross) }
 
-func (f *flow) constraints(mainMin, mainMax, crossMin, crossMax float64) Constraints {
+func (f *flow) constraints(mainMin, mainMax, crossMin, crossMax float64) ggui.Constraints {
 	return f.axis().Constraints(mainMin, mainMax, crossMin, crossMax)
 }
 
@@ -424,20 +425,20 @@ func (f *flow) stretched(crossMax, v float64) float64 { return f.align.Stretched
 
 // placeRow puts virtual row j at main along the axis, aligned across a
 // list that came out as big as result.
-func (f *flow) placeRow(j int, main float64, result Size) {
+func (f *flow) placeRow(j int, main float64, result ggui.Size) {
 	s := f.rects[j].Size
 	f.rects[j].Origin = f.axis().Point(main, (f.cross(result)-f.cross(s))*f.align.Fraction())
 }
 
 // gapFor returns the gap to use: Space times the environment unit, else Gap.
-func (f *flow) gapFor(env Env) float64 {
+func (f *flow) gapFor(env ggui.Env) float64 {
 	if f.space > 0 {
 		return f.space * env.Spacing()
 	}
 	return f.gap
 }
 
-func (f *flow) layout(c Constraints, env Env) Size {
+func (f *flow) layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	f.items = resize(f.items, len(f.children))
 	for i, child := range f.children {
 		if fw, ok := child.(*FlexWidget); ok {
@@ -448,10 +449,10 @@ func (f *flow) layout(c Constraints, env Env) Size {
 	result := f.engine.Flow(c, layout.FlowStyle{
 		Axis: f.axis(), Gap: f.gapFor(env), Justify: f.justify, Align: f.align,
 		Direction: env.Direction(),
-	}, f.items, func(i int, c Constraints) layout.Measurement {
+	}, f.items, func(i int, c ggui.Constraints) layout.Measurement {
 		m := measureWidget(f.children[i], c, env)
 		if byBaseline {
-			m.Baseline, m.HasBaseline = BaselineOf(f.children[i])
+			m.Baseline, m.HasBaseline = ggui.BaselineOf(f.children[i])
 		}
 		return m
 	})
@@ -460,24 +461,24 @@ func (f *flow) layout(c Constraints, env Env) Size {
 }
 
 // measureWidget is the boundary between widget state and geometry calculation.
-func measureWidget(w Widget, c Constraints, env Env) layout.Measurement {
+func measureWidget(w ggui.Widget, c ggui.Constraints, env ggui.Env) layout.Measurement {
 	size := w.Layout(c, env)
-	return layout.Measurement{Size: size, Absent: IsVacant(w)}
+	return layout.Measurement{Size: size, Absent: ggui.IsVacant(w)}
 }
 
 // measureChildren measures children[i] for a multi-child layout.
-func measureChildren(children []Widget, env Env) layout.MeasureFunc {
-	return func(i int, c Constraints) layout.Measurement { return measureWidget(children[i], c, env) }
+func measureChildren(children []ggui.Widget, env ggui.Env) layout.MeasureFunc {
+	return func(i int, c ggui.Constraints) layout.Measurement { return measureWidget(children[i], c, env) }
 }
 
 // paintRects paints each child at its rectangle, moved to r's origin.
-func paintRects(dst *Canvas, r Rect, children []Widget, rects []Rect) {
+func paintRects(dst *ggui.Canvas, r ggui.Rect, children []ggui.Widget, rects []ggui.Rect) {
 	for i, child := range children {
-		dst.Paint(child, Rct(r.Origin.Add(rects[i].Origin), rects[i].Size))
+		dst.Paint(child, ggui.Rct(r.Origin.Add(rects[i].Origin), rects[i].Size))
 	}
 }
 
-func (f *flow) paint(dst *Canvas, r Rect) { paintRects(dst, r, f.children, f.rects) }
+func (f *flow) paint(dst *ggui.Canvas, r ggui.Rect) { paintRects(dst, r, f.children, f.rects) }
 
 func (f *flow) inspectFields() []inspect.Field {
 	justify := []string{"start", "center", "end", "space-between", "space-around", "space-evenly"}
@@ -503,7 +504,7 @@ type ColumnWidget struct {
 }
 
 // Column stacks children top to bottom.
-func Column(children ...Widget) *ColumnWidget {
+func Column(children ...ggui.Widget) *ColumnWidget {
 	return &ColumnWidget{flow: flow{children: children}}
 }
 
@@ -540,13 +541,13 @@ func (col *ColumnWidget) Align(a CrossAlign) *ColumnWidget {
 func (col *ColumnWidget) Stretch() *ColumnWidget { return col.Align(AlignStretch) }
 
 // Layout implements Widget.
-func (col *ColumnWidget) Layout(c Constraints, env Env) Size {
+func (col *ColumnWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer col.props.Layout().EndLayout()
 	return col.layout(c, env)
 }
 
 // Paint implements Widget.
-func (col *ColumnWidget) Paint(dst *Canvas, r Rect) { col.paint(dst, r) }
+func (col *ColumnWidget) Paint(dst *ggui.Canvas, r ggui.Rect) { col.paint(dst, r) }
 
 // InspectFields implements inspect.Fielder.
 func (col *ColumnWidget) InspectFields() []inspect.Field { return col.flow.inspectFields() }
@@ -562,7 +563,7 @@ type RowWidget struct {
 
 // Row lines children up left to right, centered on the row's height; a
 // Column starts its children at the left.
-func Row(children ...Widget) *RowWidget {
+func Row(children ...ggui.Widget) *RowWidget {
 	return &RowWidget{flow: flow{horizontal: true, align: AlignCenter, children: children}}
 }
 
@@ -598,13 +599,13 @@ func (row *RowWidget) Align(a CrossAlign) *RowWidget {
 func (row *RowWidget) Stretch() *RowWidget { return row.Align(AlignStretch) }
 
 // Layout implements Widget.
-func (row *RowWidget) Layout(c Constraints, env Env) Size {
+func (row *RowWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer row.props.Layout().EndLayout()
 	return row.layout(c, env)
 }
 
 // Paint implements Widget.
-func (row *RowWidget) Paint(dst *Canvas, r Rect) { row.paint(dst, r) }
+func (row *RowWidget) Paint(dst *ggui.Canvas, r ggui.Rect) { row.paint(dst, r) }
 
 // InspectFields implements inspect.Fielder.
 func (row *RowWidget) InspectFields() []inspect.Field { return row.flow.inspectFields() }
@@ -617,33 +618,37 @@ func (row *RowWidget) InspectKind() string { return "flex" }
 // with Flex, Expanded or Spacer.
 type FlexWidget struct {
 	flex  float64
-	child Widget
+	child ggui.Widget
 	loose bool // the share is the most it takes, not what it must
 }
 
 // Flex gives child weight shares of the space its Row or Column has left
 // after the rigid children are placed.
-func Flex(child Widget, weight float64) *FlexWidget { return &FlexWidget{flex: weight, child: child} }
+func Flex(child ggui.Widget, weight float64) *FlexWidget {
+	return &FlexWidget{flex: weight, child: child}
+}
 
 // Expanded is Flex with weight 1.
-func Expanded(child Widget) *FlexWidget { return Flex(child, 1) }
+func Expanded(child ggui.Widget) *FlexWidget { return Flex(child, 1) }
 
 // Flexible is Flex with weight 1 that takes up to its share, and no more
 // than it needs: a Scroll of tabs as wide as its tabs until they fill the
 // row, so what follows them follows them until it is pushed to the end.
-func Flexible(child Widget) *FlexWidget { return &FlexWidget{flex: 1, child: child, loose: true} }
+func Flexible(child ggui.Widget) *FlexWidget { return &FlexWidget{flex: 1, child: child, loose: true} }
 
 // Spacer is an empty Expanded: it pushes its neighbours apart.
 func Spacer() *FlexWidget { return Expanded(Box()) }
 
 // Layout implements Widget.
-func (f *FlexWidget) Layout(c Constraints, env Env) Size { return f.child.Layout(c, env) }
+func (f *FlexWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	return f.child.Layout(c, env)
+}
 
 // Baseline implements Baseliner: the child's.
-func (f *FlexWidget) Baseline() (float64, bool) { return BaselineOf(f.child) }
+func (f *FlexWidget) Baseline() (float64, bool) { return ggui.BaselineOf(f.child) }
 
 // Paint implements Widget.
-func (f *FlexWidget) Paint(dst *Canvas, r Rect) { dst.Paint(f.child, r) }
+func (f *FlexWidget) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(f.child, r) }
 
 // InspectFields implements inspect.Fielder.
 func (f *FlexWidget) InspectFields() []inspect.Field {
@@ -657,15 +662,15 @@ type StackWidget struct {
 
 	props    property.Owner
 	expand   bool
-	children []Widget
+	children []ggui.Widget
 
-	rects []Rect // borrowed from engine
+	rects []ggui.Rect // borrowed from engine
 }
 
 // Stack layers children in order, all anchored at the top-left corner. It is
 // as large as its largest child unless Expand is set. Wrap a child in Align
 // to place it elsewhere.
-func Stack(children ...Widget) *StackWidget {
+func Stack(children ...ggui.Widget) *StackWidget {
 	return &StackWidget{children: children}
 }
 
@@ -678,7 +683,7 @@ func (st *StackWidget) Expand() *StackWidget {
 }
 
 // Layout implements Widget.
-func (st *StackWidget) Layout(c Constraints, env Env) Size {
+func (st *StackWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer st.props.Layout().EndLayout()
 	result := st.engine.Stack(c, st.expand, len(st.children), measureChildren(st.children, env))
 	st.rects = result.Children
@@ -686,24 +691,26 @@ func (st *StackWidget) Layout(c Constraints, env Env) Size {
 }
 
 // Paint implements Widget.
-func (st *StackWidget) Paint(dst *Canvas, r Rect) { paintRects(dst, r, st.children, st.rects) }
+func (st *StackWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	paintRects(dst, r, st.children, st.rects)
+}
 
 // AlignWidget fills the space it is given and places one child within it.
 // Build one with Align or Center.
 type AlignWidget struct {
 	props property.Owner
 	x, y  float64
-	child Widget
+	child ggui.Widget
 
-	childRect Rect // where child sits, from the last Layout
+	childRect ggui.Rect // where child sits, from the last Layout
 }
 
 // Align fills the available space and places child in it, centered until At
 // or one of Left, Right, Top, Bottom moves it.
-func Align(child Widget) *AlignWidget { return &AlignWidget{x: 0.5, y: 0.5, child: child} }
+func Align(child ggui.Widget) *AlignWidget { return &AlignWidget{x: 0.5, y: 0.5, child: child} }
 
 // Center is Align with the child in the middle.
-func Center(child Widget) *AlignWidget { return Align(child) }
+func Center(child ggui.Widget) *AlignWidget { return Align(child) }
 
 // At places the child at a fraction of the free space on each axis: (0, 0)
 // is the top-left corner, (1, 1) the bottom-right, (0.5, 0.5) the center.
@@ -743,9 +750,9 @@ func (a *AlignWidget) Bottom() *AlignWidget {
 }
 
 // Layout implements Widget.
-func (a *AlignWidget) Layout(c Constraints, env Env) Size {
+func (a *AlignWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer a.props.Layout().EndLayout()
-	result := layout.Align(c, a.x, a.y, func(_ int, c Constraints) layout.Measurement {
+	result := layout.Align(c, a.x, a.y, func(_ int, c ggui.Constraints) layout.Measurement {
 		return measureWidget(a.child, c, env)
 	})
 	a.childRect = result.Child
@@ -758,14 +765,14 @@ func (a *AlignWidget) Baseline() (float64, bool) {
 }
 
 // Paint implements Widget.
-func (a *AlignWidget) Paint(dst *Canvas, r Rect) {
-	dst.Paint(a.child, Rct(r.Origin.Add(a.childRect.Origin), a.childRect.Size))
+func (a *AlignWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	dst.Paint(a.child, ggui.Rct(r.Origin.Add(a.childRect.Origin), a.childRect.Size))
 }
 
 // List builds one child per item and stacks them like a Column, which is
 // what it returns: every Column setter applies to it.
-func List[T any](items []T, item func(T) Widget) *ColumnWidget {
-	return Column(Children(items, item)...)
+func List[T any](items []T, item func(T) ggui.Widget) *ColumnWidget {
+	return Column(ggui.Children(items, item)...)
 }
 
 // WrapWidget lines its children up like a Row and starts a new line when
@@ -774,18 +781,18 @@ type WrapWidget struct {
 	engine layout.Scratch
 
 	props    property.Owner
-	children []Widget
+	children []ggui.Widget
 	gap      float64 // between children on a line
 	runGap   float64 // between lines
 	space    float64 // both, in environment spacing units, when set
 	align    CrossAlign
 
-	rects []Rect // borrowed from engine
+	rects []ggui.Rect // borrowed from engine
 }
 
 // Wrap flows children left to right, wrapping onto new lines at the width
 // it is given, the way words fill a paragraph; tags and toolbars want it.
-func Wrap(children ...Widget) *WrapWidget { return &WrapWidget{children: children} }
+func Wrap(children ...ggui.Widget) *WrapWidget { return &WrapWidget{children: children} }
 
 // Gap sets the space between children on a line and between lines.
 func (w *WrapWidget) Gap(v float64) *WrapWidget {
@@ -817,7 +824,7 @@ func (w *WrapWidget) Align(a CrossAlign) *WrapWidget {
 }
 
 // Layout implements Widget.
-func (w *WrapWidget) Layout(c Constraints, env Env) Size {
+func (w *WrapWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer w.props.Layout().EndLayout()
 	if w.space > 0 {
 		w.gap = w.space * env.Spacing()
@@ -829,7 +836,7 @@ func (w *WrapWidget) Layout(c Constraints, env Env) Size {
 }
 
 // Paint implements Widget.
-func (w *WrapWidget) Paint(dst *Canvas, r Rect) { paintRects(dst, r, w.children, w.rects) }
+func (w *WrapWidget) Paint(dst *ggui.Canvas, r ggui.Rect) { paintRects(dst, r, w.children, w.rects) }
 
 // InspectFields implements inspect.Fielder.
 func (w *WrapWidget) InspectFields() []inspect.Field {
@@ -846,12 +853,12 @@ type GridWidget struct {
 
 	props    property.Owner
 	cols     int
-	children []Widget
+	children []ggui.Widget
 	gap      float64
 	rowGap   float64
 	space    float64 // both, in environment spacing units, when set
 
-	rects []Rect // borrowed from engine
+	rects []ggui.Rect // borrowed from engine
 	cellW float64
 }
 
@@ -859,7 +866,7 @@ type GridWidget struct {
 // bottom. Each column takes an equal share of the width; each row is as
 // tall as its tallest cell, and children are given the cell width tight, so
 // text and boxes align down the columns.
-func Grid(cols int, children ...Widget) *GridWidget {
+func Grid(cols int, children ...ggui.Widget) *GridWidget {
 	return &GridWidget{cols: max(cols, 1), children: children}
 }
 
@@ -886,7 +893,7 @@ func (g *GridWidget) Space(n float64) *GridWidget {
 }
 
 // Layout implements Widget.
-func (g *GridWidget) Layout(c Constraints, env Env) Size {
+func (g *GridWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer g.props.Layout().EndLayout()
 	if g.space > 0 {
 		g.gap = g.space * env.Spacing()
@@ -898,7 +905,7 @@ func (g *GridWidget) Layout(c Constraints, env Env) Size {
 }
 
 // Paint implements Widget.
-func (g *GridWidget) Paint(dst *Canvas, r Rect) { paintRects(dst, r, g.children, g.rects) }
+func (g *GridWidget) Paint(dst *ggui.Canvas, r ggui.Rect) { paintRects(dst, r, g.children, g.rects) }
 
 // InspectFields implements inspect.Fielder.
 func (g *GridWidget) InspectFields() []inspect.Field {
@@ -912,8 +919,8 @@ func (g *GridWidget) InspectKind() string { return "grid" }
 // given. Build one with Responsive.
 type ResponsiveWidget struct {
 	breakpoint   float64
-	wide, narrow Widget
-	current      Widget
+	wide, narrow ggui.Widget
+	current      ggui.Widget
 }
 
 // Responsive lays out wide while it is given at least breakpoint of width,
@@ -922,21 +929,21 @@ type ResponsiveWidget struct {
 // breakpoint:
 //
 //	title, actions := ui.Title("Tasks"), ui.Button("New", create)
-//	ggui.Responsive(680,
-//		ggui.Row(ggui.Expanded(title), actions),
-//		ggui.Column(title, actions).Stretch())
-func Responsive(breakpoint float64, wide, narrow Widget) *ResponsiveWidget {
+//	widget.Responsive(680,
+//		widget.Row(widget.Expanded(title), actions),
+//		widget.Column(title, actions).Stretch())
+func Responsive(breakpoint float64, wide, narrow ggui.Widget) *ResponsiveWidget {
 	return &ResponsiveWidget{breakpoint: breakpoint, wide: wide, narrow: narrow, current: wide}
 }
 
 // Layout implements Widget.
-func (r *ResponsiveWidget) Layout(c Constraints, env Env) Size {
+func (r *ResponsiveWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	r.current = gem.Pick(c.MaxW < r.breakpoint, r.narrow, r.wide)
 	return r.current.Layout(c, env)
 }
 
 // Baseline implements Baseliner: the shown arrangement's.
-func (r *ResponsiveWidget) Baseline() (float64, bool) { return BaselineOf(r.current) }
+func (r *ResponsiveWidget) Baseline() (float64, bool) { return ggui.BaselineOf(r.current) }
 
 // Paint implements Widget.
-func (r *ResponsiveWidget) Paint(dst *Canvas, rect Rect) { dst.Paint(r.current, rect) }
+func (r *ResponsiveWidget) Paint(dst *ggui.Canvas, rect ggui.Rect) { dst.Paint(r.current, rect) }

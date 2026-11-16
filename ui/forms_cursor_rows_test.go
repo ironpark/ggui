@@ -15,9 +15,9 @@ func TestListRowsAndSteppersKeepTheDefaultCursor(t *testing.T) {
 	t.Parallel()
 	files := []string{"main.go", "go.mod"}
 	list := ui.ListBox(ggui.Const(files), func(f string) string { return f },
-		func(f ggui.Readable[string]) ggui.Widget { return ggui.TextOf(f) }).Name("Files")
+		func(f ggui.Readable[string]) ggui.Widget { return widget.TextOf(f) }).Name("Files")
 	number := ui.NumberInput(ggui.State(3.0)).Name("Count")
-	p := ggui.NewProbe(ggui.Column(list, number).Gap(8).Align(ggui.AlignStart), ggui.Sz(320, 200))
+	p := ggui.NewProbe(widget.Column(list, number).Gap(8).Align(widget.AlignStart), ggui.Sz(320, 200))
 	defer p.Close()
 	row, ok := p.FindRole(ggui.RoleOption, "main.go")
 	if !ok {
@@ -46,7 +46,7 @@ func TestListRowsAndSteppersKeepTheDefaultCursor(t *testing.T) {
 func TestAddonButtonKeepsTheArrowInsideAField(t *testing.T) {
 	t.Parallel()
 	group := ui.InputGroup(widget.TextInput(ggui.State("")).Name("Site")).Trailing(ui.Button("Go", nil))
-	p := ggui.NewProbe(ggui.Column(group).Align(ggui.AlignStart), ggui.Sz(320, 120))
+	p := ggui.NewProbe(widget.Column(group).Align(widget.AlignStart), ggui.Sz(320, 120))
 	defer p.Close()
 	button, ok := p.FindRole(ggui.RoleButton, "Go")
 	if !ok {

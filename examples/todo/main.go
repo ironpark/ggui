@@ -17,17 +17,18 @@ import (
 	_ "github.com/ironpark/ggui/inspect/panel"
 	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // build is the root Builder. It reads nothing reactive: the theme comes
 // from the Env at layout, and every part that changes is bound to a signal
 // or a derived value on the model.
 func build(m *model) ggui.Widget {
-	content := ggui.Column(
-		ggui.Row(ui.Title("todo"), ggui.Spacer(), ui.Switch(m.Dark, "Dark")),
+	content := widget.Column(
+		widget.Row(ui.Title("todo"), widget.Spacer(), ui.Switch(m.Dark, "Dark")),
 		composer(m),
 		ui.Progress(m.Progress).Height(4),
-		ggui.Expanded(ggui.Scroll(list(m))),
+		widget.Expanded(widget.Scroll(list(m))),
 		ui.Divider(),
 		footer(m),
 		// The dialog takes no space here; it paints over the window while
@@ -35,14 +36,14 @@ func build(m *model) ggui.Widget {
 		ui.AlertDialog(m.Confirm, "Clear done?", "Every finished item is removed.").
 			Confirm("Remove", m.clearDone).Destructive(),
 	).Space(1.5)
-	return ggui.Center(ggui.Box(ui.Card(content).Pad(24)).Size(480, 540))
+	return widget.Center(widget.Box(ui.Card(content).Pad(24)).Size(480, 540))
 }
 
 // composer is the field that adds an item; Enter and the button do the same.
 func composer(m *model) ggui.Widget {
 	input := ui.TextField(m.Draft).Placeholder("What needs doing?").OnSubmit(func(string) { m.add() })
-	return ui.Field("New item", ggui.Row(
-		ggui.Expanded(input),
+	return ui.Field("New item", widget.Row(
+		widget.Expanded(input),
 		ui.Button("Add", m.add),
 	).Space(1)).Help("Enter adds it").BindError(m.DraftError)
 }
@@ -50,11 +51,11 @@ func composer(m *model) ggui.Widget {
 // list keys rows by ID so edits keep each row's widgets, slides rows in
 // and out, and shows an empty state when nothing matches the filter.
 func list(m *model) ggui.Widget {
-	return ggui.EachKeyed(m.Visible,
+	return widget.EachKeyed(m.Visible,
 		func(td *Todo) int { return td.ID },
-		func(item ggui.EachItem[*Todo]) ggui.Widget { return row(m, item.Item) },
+		func(item widget.EachItem[*Todo]) ggui.Widget { return row(m, item.Item) },
 	).Space(0.5).
-		Transition(func(w ggui.Widget) *ggui.TransitionWidget { return ggui.Transition(w).Fade().Slide(-16, 0) }).
+		Transition(func(w ggui.Widget) *widget.TransitionWidget { return widget.Transition(w).Fade().Slide(-16, 0) }).
 		Else(func() ggui.Widget { return ui.Empty("Nothing here", "Add an item above, or pick another filter.") })
 }
 
@@ -64,9 +65,9 @@ func list(m *model) ggui.Widget {
 func row(m *model, td *Todo) ggui.Widget {
 	editing := ggui.State(false)
 	check := ui.Checkbox(td.Done, "")
-	check.BindName(ggui.Sprintf("Done: %s", td.Title)) // Checkbox names itself after its label; this one has none
-	remove := ui.Button("×", func() { m.remove(td.ID) }).BindName(ggui.Sprintf("Remove %s", td.Title)).Outline().Pad(2, 8)
-	return ggui.Row(check, ggui.Expanded(title(td, editing)), remove).Space(1)
+	check.BindName(widget.Sprintf("Done: %s", td.Title)) // Checkbox names itself after its label; this one has none
+	remove := ui.Button("×", func() { m.remove(td.ID) }).BindName(widget.Sprintf("Remove %s", td.Title)).Outline().Pad(2, 8)
+	return widget.Row(check, widget.Expanded(title(td, editing)), remove).Space(1)
 }
 
 // title shows the row's text as a caption once done, and swaps in
@@ -75,23 +76,23 @@ func row(m *model, td *Todo) ggui.Widget {
 func title(td *Todo, editing *ggui.StateValue[bool]) ggui.Widget {
 	return ggui.If(editing, func() ggui.Widget {
 		return ui.TextField(td.Title).
-			BindName(ggui.Sprintf("Edit: %s", td.Title)).
+			BindName(widget.Sprintf("Edit: %s", td.Title)).
 			OnSubmit(func(string) { editing.Set(false) })
 	}).Else(func() ggui.Widget {
 		text := ggui.If(td.Done, func() ggui.Widget {
 			return ui.CaptionOf(td.Title)
 		}).
-			Else(func() ggui.Widget { return ggui.TextOf(td.Title) })
-		return ggui.Tap(text, func() { editing.Set(true) })
+			Else(func() ggui.Widget { return widget.TextOf(td.Title) })
+		return widget.Tap(text, func() { editing.Set(true) })
 	})
 }
 
 // footer shows what is left, the filter, and the clear action.
 func footer(m *model) ggui.Widget {
 	clear := ui.Button("Clear done", m.askClearDone).Outline().BindDisabled(m.NoneDone)
-	return ggui.Row(
+	return widget.Row(
 		ui.Captionf("%d left", m.Left).NoWrap(),
-		ggui.Spacer(),
+		widget.Spacer(),
 		ui.Radios(m.Show).Options([]filter{all, active, done}), // labelled through filter.String
 		ui.Tooltip(clear, "Removes every finished item (⌘/Ctrl+K)"),
 	).Space(1)

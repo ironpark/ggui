@@ -59,7 +59,7 @@ func TestProbeOnFrameRunsBeforeEachFrame(t *testing.T) {
 func TestProbePressAndReleaseTapOnlyInside(t *testing.T) {
 	t.Parallel()
 	taps := 0
-	p := ggui.NewProbe(ggui.Column(ggui.Tap(ggui.Box().Size(50, 50), func() { taps++ }), ggui.Box().Size(50, 50)), ggui.Sz(50, 100))
+	p := ggui.NewProbe(widget.Column(widget.Tap(widget.Box().Size(50, 50), func() { taps++ }), widget.Box().Size(50, 50)), ggui.Sz(50, 100))
 	defer p.Close()
 	p.Press(ggui.Pt(10, 10))
 	if taps != 0 {
@@ -79,7 +79,7 @@ func TestProbePressAndReleaseTapOnlyInside(t *testing.T) {
 func TestProbeTextReachesTheFocusedWidget(t *testing.T) {
 	t.Parallel()
 	var typed string
-	p := ggui.NewProbe(ggui.Focus(ggui.Box().Size(50, 50)).OnText(func(s string) { typed += s }), ggui.Sz(50, 50))
+	p := ggui.NewProbe(widget.Focus(widget.Box().Size(50, 50)).OnText(func(s string) { typed += s }), ggui.Sz(50, 50))
 	defer p.Close()
 	p.Text("ignored")
 	if typed != "" {
@@ -110,7 +110,7 @@ func TestCanvasPointerAndFocusWithinReadTheFrameStart(t *testing.T) {
 			elsewhere = dst.FocusWithin(ggui.Rct(ggui.Pt(60, 60), ggui.Sz(10, 10)))
 		},
 	)
-	p := ggui.NewProbe(ggui.Column(ggui.Focus(ggui.Box().Size(40, 20)), recorder), ggui.Sz(100, 100))
+	p := ggui.NewProbe(widget.Column(widget.Focus(widget.Box().Size(40, 20)), recorder), ggui.Sz(100, 100))
 	defer p.Close()
 	p.Frame()
 	if known || focusedIn {
@@ -153,7 +153,7 @@ func TestCanvasShapesTolerateNothingToDrawOn(t *testing.T) {
 // and records what was asked, so code written against Host runs headless.
 func TestProbeDialogsAreAStub(t *testing.T) {
 	t.Parallel()
-	p := ggui.NewProbe(ggui.Text("x"), ggui.Sz(10, 10))
+	p := ggui.NewProbe(widget.Text("x"), ggui.Sz(10, 10))
 	defer p.Close()
 	var h ggui.Host = p
 	if _, err := h.Dialogs().OpenFile(runtime.FileDialog{Title: "one"}); !errors.Is(err, runtime.ErrCanceled) {
@@ -180,11 +180,11 @@ func TestProbesDoNotRunEachOthersEffects(t *testing.T) {
 	t.Parallel()
 	n := ggui.State(0)
 	var inA, inB int
-	a := ggui.ProbeBuilder(func() ggui.Widget { return ggui.Box() }, ggui.Sz(10, 10)).Setup(func() {
+	a := ggui.ProbeBuilder(func() ggui.Widget { return widget.Box() }, ggui.Sz(10, 10)).Setup(func() {
 		reactive.Observe(func() { n.Get(); inA++ })
 	})
 	defer a.Close()
-	b := ggui.ProbeBuilder(func() ggui.Widget { return ggui.Box() }, ggui.Sz(10, 10)).Setup(func() {
+	b := ggui.ProbeBuilder(func() ggui.Widget { return widget.Box() }, ggui.Sz(10, 10)).Setup(func() {
 		reactive.Observe(func() { n.Get(); inB++ })
 	})
 	defer b.Close()
@@ -209,12 +209,12 @@ func TestALeakedProbeStaysOutOfTheNextOnesFrames(t *testing.T) {
 	t.Parallel()
 	n := ggui.State(0)
 	leaked := 0
-	ggui.ProbeBuilder(func() ggui.Widget { return ggui.Box() }, ggui.Sz(10, 10)).Setup(func() {
+	ggui.ProbeBuilder(func() ggui.Widget { return widget.Box() }, ggui.Sz(10, 10)).Setup(func() {
 		reactive.Observe(func() { n.Get(); leaked++ })
 	}).Frame()
 	leaked = 0
 
-	p := ggui.NewProbe(ggui.Box(), ggui.Sz(100, 20))
+	p := ggui.NewProbe(widget.Box(), ggui.Sz(100, 20))
 	defer p.Close()
 	n.Set(1)
 	p.Frame()
@@ -247,7 +247,7 @@ func TestAdvanceMovesOnlyItsOwnProbesClock(t *testing.T) {
 	var inA time.Time
 	a := ggui.NewProbe(ggui.FromFuncs(func(c ggui.Constraints, _ ggui.Env) ggui.Size { return c.Constrain(ggui.Sz(1, 1)) }, func(*ggui.Canvas, ggui.Rect) { inA = ggui.Now() }), ggui.Sz(10, 10))
 	defer a.Close()
-	b := ggui.NewProbe(ggui.Box(), ggui.Sz(10, 10))
+	b := ggui.NewProbe(widget.Box(), ggui.Sz(10, 10))
 	defer b.Close()
 	a.Frame()
 	start := inA
@@ -266,11 +266,11 @@ func TestAdvanceMovesOnlyItsOwnProbesClock(t *testing.T) {
 func TestAnAnimationStepsOnlyInItsOwnProbe(t *testing.T) {
 	t.Parallel()
 	var tw *ggui.Tweened[float64]
-	a := ggui.ProbeBuilder(func() ggui.Widget { return ggui.Box() }, ggui.Sz(10, 10)).Setup(func() {
+	a := ggui.ProbeBuilder(func() ggui.Widget { return widget.Box() }, ggui.Sz(10, 10)).Setup(func() {
 		tw = ggui.Tween(0.0, time.Second).Easing(ggui.EaseLinear)
 	})
 	defer a.Close()
-	b := ggui.NewProbe(ggui.Box(), ggui.Sz(10, 10))
+	b := ggui.NewProbe(widget.Box(), ggui.Sz(10, 10))
 	defer b.Close()
 	a.Frame()
 	tw.Set(100)
@@ -316,7 +316,7 @@ func TestSetEnvBeforeAProbeStaysOnItsGoroutine(t *testing.T) {
 // otherwise keep every string ever shaped. Not parallel, so no other
 // probe's frames run in between.
 func TestProbeFramesAgeTheTextCaches(t *testing.T) {
-	p := ggui.NewProbe(ggui.Text("aging"), ggui.Sz(100, 20))
+	p := ggui.NewProbe(widget.Text("aging"), ggui.Sz(100, 20))
 	defer p.Close()
 	p.Frame()
 	before := text.Tick()
@@ -351,7 +351,7 @@ func TestEachProbeHasItsOwnClipboard(t *testing.T) {
 	useQuietIME(t)
 	a := ggui.NewProbe(widget.TextInput(ggui.State("secret")), ggui.Sz(200, 20))
 	defer a.Close()
-	b := ggui.NewProbe(ggui.Text("other"), ggui.Sz(100, 20))
+	b := ggui.NewProbe(widget.Text("other"), ggui.Sz(100, 20))
 	defer b.Close()
 	b.Frame()
 	a.Click(ggui.Pt(190, 10))

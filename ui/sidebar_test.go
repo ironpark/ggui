@@ -7,13 +7,14 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestSidebarWidthHeaderFooterAndName(t *testing.T) {
 	t.Parallel()
 	bar := ui.Sidebar(ggui.State("inbox"), ui.SidebarItem("inbox", "Inbox")).
-		Width(180).Name("Mailboxes").Header(ggui.Text("Acme")).Footer(ggui.Text("v1.0"))
-	p := ggui.NewProbe(ggui.Row(bar, ggui.Expanded(ggui.Box())), ggui.Sz(600, 400))
+		Width(180).Name("Mailboxes").Header(widget.Text("Acme")).Footer(widget.Text("v1.0"))
+	p := ggui.NewProbe(widget.Row(bar, widget.Expanded(widget.Box())), ggui.Sz(600, 400))
 	defer p.Close()
 	tree := p.Semantics()
 	column, ok := tree.Find(ggui.RoleTabs, "Mailboxes")
@@ -43,7 +44,7 @@ func TestSidebarCollapsedDetachesItsBinding(t *testing.T) {
 	t.Parallel()
 	narrow := ggui.State(true)
 	bar := ui.Sidebar(ggui.State("a"), ui.SidebarItem("a", "Home")).BindCollapsed(narrow)
-	p := ggui.NewProbe(ggui.Row(bar, ggui.Expanded(ggui.Box())), ggui.Sz(400, 200))
+	p := ggui.NewProbe(widget.Row(bar, widget.Expanded(widget.Box())), ggui.Sz(400, 200))
 	defer p.Close()
 	if _, ok := p.Semantics().Find(ggui.RoleTab, "Home"); ok {
 		t.Fatal("bound-collapsed sidebar is on screen")
@@ -157,7 +158,7 @@ func TestSidebarRowsTakeShadcnSizes(t *testing.T) {
 		ui.SidebarItem("b", "Beta").Size(ui.SidebarSizeSmall),
 		ui.SidebarItem("c", "Gamma").Size(ui.SidebarSizeLarge),
 	).Name("Nav")
-	p := ggui.NewProbe(ggui.Row(bar, ggui.Expanded(ggui.Box())), ggui.Sz(600, 400))
+	p := ggui.NewProbe(widget.Row(bar, widget.Expanded(widget.Box())), ggui.Sz(600, 400))
 	defer p.Close()
 	tree := p.Semantics()
 	if col, _ := tree.Find(ggui.RoleTabs, "Nav"); col.Rect.Size.W != 256 {
@@ -188,7 +189,7 @@ func TestSidebarIconRailKeepsIconsAndTips(t *testing.T) {
 		ui.SidebarItem("a", "Alpha").Icon(icons.File).Tooltip("Alpha tip").Sub(ui.SidebarItem("a1", "Nested")),
 		ui.SidebarItem("b", "Beta").Icon(icons.Search),
 	).Name("Nav").Collapsible(ui.SidebarCollapseIcon).BindCollapsed(collapsed)
-	p := ggui.NewProbe(ggui.Row(bar, ggui.Expanded(ggui.Box())), ggui.Sz(600, 400))
+	p := ggui.NewProbe(widget.Row(bar, widget.Expanded(widget.Box())), ggui.Sz(600, 400))
 	defer p.Close()
 	p.Advance(0)
 	collapsed.Set(true)
@@ -228,7 +229,7 @@ func TestSidebarSlidesOffItsEdgeLinearly(t *testing.T) {
 	t.Parallel()
 	collapsed := ggui.State(false)
 	bar := ui.Sidebar(ggui.State("a"), ui.SidebarItem("a", "Alpha")).Name("Nav").BindCollapsed(collapsed)
-	p := ggui.NewProbe(ggui.Row(bar, ggui.Expanded(ggui.Box())), ggui.Sz(600, 400))
+	p := ggui.NewProbe(widget.Row(bar, widget.Expanded(widget.Box())), ggui.Sz(600, 400))
 	defer p.Close()
 	p.Advance(0)
 	collapsed.Set(true)
@@ -251,7 +252,7 @@ func TestSidebarTriggerRailAndShortcutShareTheState(t *testing.T) {
 	bar := ui.Sidebar(ggui.State("a"), ui.SidebarItem("a", "Alpha").Icon(icons.File)).
 		Collapsible(ui.SidebarCollapseIcon).BindCollapsed(collapsed).Rail(true).Shortcut("cmd+b")
 	trigger := ui.SidebarTrigger(collapsed)
-	p := ggui.NewProbe(ggui.Row(bar, ggui.Expanded(ggui.Column(trigger))), ggui.Sz(600, 400))
+	p := ggui.NewProbe(widget.Row(bar, widget.Expanded(widget.Column(trigger))), ggui.Sz(600, 400))
 	defer p.Close()
 	toggles := p.FindAll(ggui.RoleButton)
 	if len(toggles) != 2 {
@@ -337,9 +338,9 @@ func TestSidebarGroupsScrollBetweenHeaderAndFooter(t *testing.T) {
 		items = append(items, ui.SidebarItem(k, "Item "+k))
 	}
 	bar := ui.Sidebar(ggui.State("a"), items...).
-		Header(ggui.Text("Head")).Footer(ggui.Text("Foot")).
+		Header(widget.Text("Head")).Footer(widget.Text("Foot")).
 		FooterItems(ui.SidebarItem("me", "Account"))
-	p := ggui.NewProbe(ggui.Row(bar, ggui.Expanded(ggui.Box())), ggui.Sz(600, 300))
+	p := ggui.NewProbe(widget.Row(bar, widget.Expanded(widget.Box())), ggui.Sz(600, 300))
 	defer p.Close()
 	tree := p.Semantics()
 	head, _ := tree.Find("", "Head")

@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // openSheet mounts s, open, on a 400x300 window and lets it slide in.
@@ -32,7 +33,7 @@ func TestSheetSidesAnchorThePanelToTheirEdge(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			s := tc.side(ui.Sheet(ggui.State(true), ggui.Text("body")).Name("Panel").Size(150))
+			s := tc.side(ui.Sheet(ggui.State(true), widget.Text("body")).Name("Panel").Size(150))
 			p := openSheet(t, s)
 			node, ok := p.Semantics().Find(ggui.RoleDialog, "Panel")
 			if !ok || !tc.check(node.Rect) {
@@ -84,7 +85,7 @@ func TestSheetCompactDropsThePanelPadding(t *testing.T) {
 func TestSheetBindNameFollowsItsReaderUntilNameReplacesIt(t *testing.T) {
 	t.Parallel()
 	name := ggui.State("Filters")
-	s := ui.Sheet(ggui.State(true), ggui.Text("body")).BindName(name)
+	s := ui.Sheet(ggui.State(true), widget.Text("body")).BindName(name)
 	p := openSheet(t, s)
 	if _, ok := p.Semantics().Find(ggui.RoleDialog, "Filters"); !ok {
 		t.Fatalf("no dialog named Filters:\n%s", p.Semantics())
@@ -107,11 +108,11 @@ func TestSheetFooterStaysBelowFlexingContent(t *testing.T) {
 	t.Parallel()
 	rows := make([]ggui.Widget, 40)
 	for i := range rows {
-		rows[i] = ggui.Box().Height(30)
+		rows[i] = widget.Box().Height(30)
 	}
-	content := ggui.Column(
-		ggui.Text("Form"),
-		ggui.Expanded(ggui.Scroll(ggui.Column(rows...))),
+	content := widget.Column(
+		widget.Text("Form"),
+		widget.Expanded(widget.Scroll(widget.Column(rows...))),
 	).Stretch()
 	s := ui.Sheet(ggui.State(true), content).Name("Panel").Size(200).
 		Footer(ui.Button("Save", func() {}))
@@ -130,7 +131,7 @@ func TestSheetFooterStaysBelowFlexingContent(t *testing.T) {
 	}
 
 	// Content shorter than the room leaves the footer at the foot too.
-	short := ui.Sheet(ggui.State(true), ggui.Text("Short")).Name("Short").Size(200).
+	short := ui.Sheet(ggui.State(true), widget.Text("Short")).Name("Short").Size(200).
 		Footer(ui.Button("Done", func() {}))
 	p = openSheet(t, short)
 	done, _ := p.Semantics().Find(ggui.RoleButton, "Done")

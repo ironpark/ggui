@@ -6,15 +6,16 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // A padded button beside a label lines its text up with the label's under
 // AlignBaseline, since the button reports its label's baseline.
 func TestButtonBaselineAlignsWithText(t *testing.T) {
 	t.Parallel()
-	label := ggui.Text("Go")
+	label := widget.Text("Go")
 	button := ui.Button("Run", nil).Pad(8, 16)
-	p := ggui.NewProbe(ggui.Row(label, button).Gap(8).Align(ggui.AlignBaseline), ggui.Sz(300, 100))
+	p := ggui.NewProbe(widget.Row(label, button).Gap(8).Align(widget.AlignBaseline), ggui.Sz(300, 100))
 	defer p.Close()
 	tree := p.Semantics()
 	text, ok1 := tree.Find(ggui.RoleText, "Go")

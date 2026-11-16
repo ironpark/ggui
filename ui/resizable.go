@@ -6,6 +6,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // ResizableWidget splits its space into two clipped panes with a draggable divider.
@@ -16,7 +17,7 @@ import (
 // grabbed across 8 logical pixels over their edges, so the line of a split
 // nested in one pane runs up to it.
 //
-// Each pane is a ggui.Contain: its size is the split's to decide, so a
+// Each pane is a widget.Contain: its size is the split's to decide, so a
 // change of size inside one, a disclosure easing open, is painted within
 // that pane alone.
 type ResizableWidget struct {
@@ -40,7 +41,7 @@ type ResizableWidget struct {
 // Home/End move to the allowed limits. It fills finite constraints and uses
 // 320x200 logical pixels as its fallback under an unbounded parent.
 func Resizable(fraction ggui.Binding[float64], first, second ggui.Widget) *ResizableWidget {
-	r := &ResizableWidget{fraction: fraction, first: ggui.Contain(first), second: ggui.Contain(second)}
+	r := &ResizableWidget{fraction: fraction, first: widget.Contain(first), second: widget.Contain(second)}
 	r.Role = ggui.RoleSeparator
 	r.AutoKey()
 	if r.HitID() == nil {

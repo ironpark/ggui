@@ -7,6 +7,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestLeavingAPageCancelsItsResource(t *testing.T) {
@@ -24,7 +25,7 @@ func TestLeavingAPageCancelsItsResource(t *testing.T) {
 				}
 				return id, ctx.Err()
 			})
-			return ggui.Await(res).Then(func(v ggui.Readable[string]) ggui.Widget { return ggui.TextOf(v) })
+			return ggui.Await(res).Then(func(v ggui.Readable[string]) ggui.Widget { return widget.TextOf(v) })
 		}),
 	)
 	p := ggui.NewProbe(r.View(), ggui.Sz(100, 100))
@@ -54,7 +55,7 @@ func TestRapidNavigationBuildsOnlyTheLastPage(t *testing.T) {
 	t.Parallel()
 	built := map[string]int{}
 	page := func(name string) PageFunc {
-		return func(*Context) ggui.Widget { built[name]++; return ggui.Text(name) }
+		return func(*Context) ggui.Widget { built[name]++; return widget.Text(name) }
 	}
 	r := New(Page("/", page("home")), Page("/a", page("a")), Page("/b", page("b")), Page("/c", page("c")))
 	p := ggui.NewProbe(r.View(), ggui.Sz(100, 100))
@@ -82,10 +83,10 @@ func TestDisposingViewCleansUpOnce(t *testing.T) {
 		return page
 	}, Page("/", func(*Context) ggui.Widget {
 		ggui.OnCleanup(track("home"))
-		return ggui.Text("home")
+		return widget.Text("home")
 	}), Page("/other", func(*Context) ggui.Widget {
 		ggui.OnCleanup(track("other"))
-		return ggui.Text("other")
+		return widget.Text("other")
 	})))
 	p := ggui.NewProbe(r.View(), ggui.Sz(100, 100))
 	p.Frame()
@@ -105,7 +106,7 @@ func TestDisposingViewCleansUpOnce(t *testing.T) {
 func TestDepartedFocusClearsAndLayoutFocusSurvives(t *testing.T) {
 	t.Parallel()
 	r := New(Layout("", func(c *Context, page ggui.Widget) ggui.Widget {
-		return ggui.Column(ui.Button("chrome", func() {}), page)
+		return widget.Column(ui.Button("chrome", func() {}), page)
 	}, Page("/", func(*Context) ggui.Widget { return ui.Button("home", func() {}) }),
 		Page("/other", func(*Context) ggui.Widget { return ui.Button("other", func() {}) })))
 	p := ggui.NewProbe(r.View(), ggui.Sz(200, 200))

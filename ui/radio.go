@@ -3,6 +3,7 @@ package ui
 import (
 	"github.com/ironpark/ggui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // RadioWidget is one option of a group that shares a signal. Build one with
@@ -26,7 +27,7 @@ func Radio[T comparable](selected ggui.Binding[T], value T, label string) *Radio
 	r.SetName(label)
 	r.AutoKey()
 	if label != "" {
-		r.label = ggui.Text(label)
+		r.label = widget.Text(label)
 	}
 	r.onTap = func() { setChanged(selected, value, r.onChange) }
 	return r

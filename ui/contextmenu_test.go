@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestContextMenuPointerKeyboardAndAccessibility(t *testing.T) {
@@ -15,7 +16,7 @@ func TestContextMenuPointerKeyboardAndAccessibility(t *testing.T) {
 		ui.MenuItem("Unavailable", func() { t.Fatal("disabled action") }).Disabled(true),
 		ui.MenuItem("Copy", func() { picked = "copy" }), ui.MenuDivider(),
 		ui.MenuItem("Delete", func() { picked = "delete" })).Name("File actions")
-	p := ggui.NewProbe(ggui.Column(menu, ui.Button("Outside", func() { clicks++ })), ggui.Sz(320, 300))
+	p := ggui.NewProbe(widget.Column(menu, ui.Button("Outside", func() { clicks++ })), ggui.Sz(320, 300))
 	defer p.Close()
 	p.Tap("Content")
 	if clicks != 1 || menu.Popup().IsOpen() {
@@ -79,7 +80,7 @@ func TestContextMenuPointerKeyboardAndAccessibility(t *testing.T) {
 func TestContextMenuNoEnabledActions(t *testing.T) {
 	t.Parallel()
 	for _, entries := range [][]ggui.Widget{nil, {ui.MenuItem("Disabled", func() { t.Fatal("disabled action ran") }).Disabled(true)}} {
-		menu := ui.ContextMenu(ggui.Text("Target"), entries...).Name("Actions")
+		menu := ui.ContextMenu(widget.Text("Target"), entries...).Name("Actions")
 		p := ggui.NewProbe(menu, ggui.Sz(300, 200))
 		act(t, p, ggui.RoleMenu, "Actions", ggui.Action{Kind: ggui.ActionExpand})
 		p.Type(ggui.Mods{}, ggui.KeyArrowUp, ggui.KeyArrowDown, ggui.KeyHome, ggui.KeyEnd, ggui.KeyEnter)
@@ -97,7 +98,7 @@ func TestContextMenuEdgePlacementAndRebuild(t *testing.T) {
 	version := ggui.State(0)
 	p := ggui.ProbeBuilder(func() ggui.Widget {
 		_ = version.Get()
-		menu = ui.ContextMenu(ggui.Box().Size(300, 200), ui.MenuItem("A reasonably long action", nil))
+		menu = ui.ContextMenu(widget.Box().Size(300, 200), ui.MenuItem("A reasonably long action", nil))
 		menu.Key("context")
 		return menu
 	}, ggui.Sz(300, 200))
@@ -124,7 +125,7 @@ func TestContextMenuFuncMakesEntriesAsItOpens(t *testing.T) {
 	var menu *ui.ContextMenuWidget
 	p := ggui.ProbeBuilder(func() ggui.Widget {
 		_ = version.Get()
-		menu = ui.ContextMenuFunc(ggui.Box().Size(300, 200), func() []ggui.Widget {
+		menu = ui.ContextMenuFunc(widget.Box().Size(300, 200), func() []ggui.Widget {
 			made++
 			return []ggui.Widget{
 				ui.MenuItem("Copy", func() { picked = "copy" }), ui.MenuDivider(),
@@ -167,7 +168,7 @@ func TestNativeContextMenuFallback(t *testing.T) {
 	t.Parallel()
 	builds, runs := 0, 0
 	enabled := ggui.State(false)
-	menu := ui.NativeContextMenuFunc(ggui.Text("Target"), func() []ggui.MenuItem {
+	menu := ui.NativeContextMenuFunc(widget.Text("Target"), func() []ggui.MenuItem {
 		builds++
 		version := builds
 		return []ggui.MenuItem{
@@ -209,8 +210,8 @@ func TestNativeContextMenuFallback(t *testing.T) {
 func TestContextMenuNested(t *testing.T) {
 	t.Parallel()
 	picked := ""
-	row := ui.ContextMenu(ggui.Box(ggui.Text("Row")).Size(200, 40), ui.MenuItem("Open row", func() { picked = "row" })).Name("Row actions")
-	list := ui.ContextMenu(ggui.Column(row, ggui.Box().Size(200, 200)), ui.MenuItem("New file", func() { picked = "list" })).Name("List actions")
+	row := ui.ContextMenu(widget.Box(widget.Text("Row")).Size(200, 40), ui.MenuItem("Open row", func() { picked = "row" })).Name("Row actions")
+	list := ui.ContextMenu(widget.Column(row, widget.Box().Size(200, 200)), ui.MenuItem("New file", func() { picked = "list" })).Name("List actions")
 	p := ggui.NewProbe(list, ggui.Sz(320, 300))
 	defer p.Close()
 	target, _ := p.Find("Row")
@@ -234,7 +235,7 @@ func TestContextMenuNested(t *testing.T) {
 // where the right has no room for it.
 func TestContextMenuOpensBesideThePointerFourPixelsDown(t *testing.T) {
 	t.Parallel()
-	menu := ui.ContextMenu(ggui.Box().Size(600, 400), ui.MenuItem("Copy", nil), ui.MenuItem("Paste", nil))
+	menu := ui.ContextMenu(widget.Box().Size(600, 400), ui.MenuItem("Copy", nil), ui.MenuItem("Paste", nil))
 	p := ggui.NewProbe(menu, ggui.Sz(600, 400))
 	defer p.Close()
 	p.ClickButton(ggui.Pt(100, 50), ggui.MouseButtonRight)
@@ -246,7 +247,7 @@ func TestContextMenuOpensBesideThePointerFourPixelsDown(t *testing.T) {
 	p.Advance(time.Second)
 	p.ClickButton(ggui.Pt(590, 50), ggui.MouseButtonRight)
 	p.Frame()
-	if r := menu.Popup().Rect(); r.Origin.X+r.Size.W != 590 || r.Origin.Y != 54 || menu.Popup().PlacedSide() != ggui.PopupLeft {
+	if r := menu.Popup().Rect(); r.Origin.X+r.Size.W != 590 || r.Origin.Y != 54 || menu.Popup().PlacedSide() != widget.PopupLeft {
 		t.Fatalf("by the right edge the menu is at %v on side %v, want it ending at the pointer on the left", r, menu.Popup().PlacedSide())
 	}
 }

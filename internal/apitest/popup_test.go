@@ -9,11 +9,11 @@ import (
 
 // sidePopup opens a 100x50 popup on a 60x20 anchor at at, in a 400x300
 // window.
-func sidePopup(t *testing.T, at ggui.Point, set func(*ggui.PopupWidget)) *ggui.PopupWidget {
+func sidePopup(t *testing.T, at ggui.Point, set func(*widget.PopupWidget)) *widget.PopupWidget {
 	t.Helper()
-	p := ggui.Popup(ggui.Box().Size(60, 20), ggui.Box().Size(100, 50))
+	p := widget.Popup(widget.Box().Size(60, 20), widget.Box().Size(100, 50))
 	set(p)
-	pr := ggui.NewProbe(ggui.Row(ggui.Padding(p, at.Y, 0, 0, at.X)).Align(ggui.AlignStart), ggui.Sz(400, 300))
+	pr := ggui.NewProbe(widget.Row(widget.Padding(p, at.Y, 0, 0, at.X)).Align(widget.AlignStart), ggui.Sz(400, 300))
 	t.Cleanup(pr.Close)
 	p.Show()
 	pr.Frame()
@@ -24,18 +24,18 @@ func TestPopupSidePlacesContentAroundTheAnchor(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
 		name string
-		side ggui.PopupSide
+		side widget.PopupSide
 		want ggui.Rect
-		on   ggui.PopupSide
+		on   widget.PopupSide
 	}{
-		{"bottom", ggui.PopupBottom, ggui.Rct(ggui.Pt(150, 124), ggui.Sz(100, 50)), ggui.PopupBottom},
-		{"top", ggui.PopupTop, ggui.Rct(ggui.Pt(150, 46), ggui.Sz(100, 50)), ggui.PopupTop},
-		{"right", ggui.PopupRight, ggui.Rct(ggui.Pt(214, 100), ggui.Sz(100, 50)), ggui.PopupRight},
-		{"left", ggui.PopupLeft, ggui.Rct(ggui.Pt(46, 100), ggui.Sz(100, 50)), ggui.PopupLeft},
-		{"inline end", ggui.PopupInlineEnd, ggui.Rct(ggui.Pt(214, 100), ggui.Sz(100, 50)), ggui.PopupRight},
-		{"inline start", ggui.PopupInlineStart, ggui.Rct(ggui.Pt(46, 100), ggui.Sz(100, 50)), ggui.PopupLeft},
+		{"bottom", widget.PopupBottom, ggui.Rct(ggui.Pt(150, 124), ggui.Sz(100, 50)), widget.PopupBottom},
+		{"top", widget.PopupTop, ggui.Rct(ggui.Pt(150, 46), ggui.Sz(100, 50)), widget.PopupTop},
+		{"right", widget.PopupRight, ggui.Rct(ggui.Pt(214, 100), ggui.Sz(100, 50)), widget.PopupRight},
+		{"left", widget.PopupLeft, ggui.Rct(ggui.Pt(46, 100), ggui.Sz(100, 50)), widget.PopupLeft},
+		{"inline end", widget.PopupInlineEnd, ggui.Rct(ggui.Pt(214, 100), ggui.Sz(100, 50)), widget.PopupRight},
+		{"inline start", widget.PopupInlineStart, ggui.Rct(ggui.Pt(46, 100), ggui.Sz(100, 50)), widget.PopupLeft},
 	} {
-		p := sidePopup(t, ggui.Pt(150, 100), func(p *ggui.PopupWidget) { p.Side(tt.side) })
+		p := sidePopup(t, ggui.Pt(150, 100), func(p *widget.PopupWidget) { p.Side(tt.side) })
 		if p.Rect() != tt.want || p.PlacedSide() != tt.on {
 			t.Errorf("%s: content at %v on side %v, want %v on %v", tt.name, p.Rect(), p.PlacedSide(), tt.want, tt.on)
 		}
@@ -46,12 +46,12 @@ func TestPopupInlineSidesFollowTheWritingDirection(t *testing.T) {
 	t.Parallel()
 	// The anchor records the Rect it is painted in, which is the popup's.
 	var anchor ggui.Rect
-	p := ggui.Popup(ggui.Box(probe(60, 20, &anchor)).Size(60, 20), ggui.Box().Size(100, 50)).Side(ggui.PopupInlineEnd)
-	pr := ggui.NewProbe(ggui.Provide(ggui.DirectionKey, ggui.DirRTL, ggui.Center(p)), ggui.Sz(400, 300))
+	p := widget.Popup(widget.Box(probe(60, 20, &anchor)).Size(60, 20), widget.Box().Size(100, 50)).Side(widget.PopupInlineEnd)
+	pr := ggui.NewProbe(ggui.Provide(ggui.DirectionKey, ggui.DirRTL, widget.Center(p)), ggui.Sz(400, 300))
 	defer pr.Close()
 	p.Show()
 	pr.Frame()
-	if p.PlacedSide() != ggui.PopupLeft || p.Rect().Origin.X+p.Rect().Size.W != anchor.Origin.X-4 {
+	if p.PlacedSide() != widget.PopupLeft || p.Rect().Origin.X+p.Rect().Size.W != anchor.Origin.X-4 {
 		t.Fatalf("inline end under RTL: content at %v on side %v beside anchor %v", p.Rect(), p.PlacedSide(), anchor)
 	}
 }
@@ -61,15 +61,15 @@ func TestPopupSideFlipsWhenOnlyTheOppositeSideHasRoom(t *testing.T) {
 	for _, tt := range []struct {
 		name string
 		at   ggui.Point
-		side ggui.PopupSide
-		on   ggui.PopupSide
+		side widget.PopupSide
+		on   widget.PopupSide
 	}{
-		{"top at the top edge", ggui.Pt(150, 10), ggui.PopupTop, ggui.PopupBottom},
-		{"bottom at the bottom edge", ggui.Pt(150, 270), ggui.PopupBottom, ggui.PopupTop},
-		{"left at the left edge", ggui.Pt(10, 100), ggui.PopupLeft, ggui.PopupRight},
-		{"right at the right edge", ggui.Pt(330, 100), ggui.PopupRight, ggui.PopupLeft},
+		{"top at the top edge", ggui.Pt(150, 10), widget.PopupTop, widget.PopupBottom},
+		{"bottom at the bottom edge", ggui.Pt(150, 270), widget.PopupBottom, widget.PopupTop},
+		{"left at the left edge", ggui.Pt(10, 100), widget.PopupLeft, widget.PopupRight},
+		{"right at the right edge", ggui.Pt(330, 100), widget.PopupRight, widget.PopupLeft},
 	} {
-		p := sidePopup(t, tt.at, func(p *ggui.PopupWidget) { p.Side(tt.side) })
+		p := sidePopup(t, tt.at, func(p *widget.PopupWidget) { p.Side(tt.side) })
 		r := p.Rect()
 		if p.PlacedSide() != tt.on || r.Origin.X < 0 || r.Origin.Y < 0 || r.Origin.X+r.Size.W > 400 || r.Origin.Y+r.Size.H > 300 {
 			t.Errorf("%s: content at %v on side %v, want it whole on side %v", tt.name, r, p.PlacedSide(), tt.on)
@@ -81,21 +81,21 @@ func TestPopupAlignAndOffsetAlongASide(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
 		name   string
-		side   ggui.PopupSide
-		align  ggui.PopupAlignment
+		side   widget.PopupSide
+		align  widget.PopupAlignment
 		offset float64
 		want   ggui.Point
 	}{
-		{"below, start, overhanging", ggui.PopupBottom, ggui.PopupStart, -4, ggui.Pt(146, 124)},
-		{"below, end, overhanging", ggui.PopupBottom, ggui.PopupEnd, -4, ggui.Pt(114, 124)},
-		{"below, center, shifted", ggui.PopupBottom, ggui.PopupCenter, 10, ggui.Pt(140, 124)},
-		{"right, start", ggui.PopupRight, ggui.PopupStart, 0, ggui.Pt(214, 100)},
-		{"right, start, raised", ggui.PopupRight, ggui.PopupStart, -3, ggui.Pt(214, 97)},
-		{"right, center", ggui.PopupRight, ggui.PopupCenter, 0, ggui.Pt(214, 85)},
-		{"right, end", ggui.PopupRight, ggui.PopupEnd, 0, ggui.Pt(214, 70)},
-		{"right, end, lowered", ggui.PopupRight, ggui.PopupEnd, -3, ggui.Pt(214, 73)},
+		{"below, start, overhanging", widget.PopupBottom, widget.PopupStart, -4, ggui.Pt(146, 124)},
+		{"below, end, overhanging", widget.PopupBottom, widget.PopupEnd, -4, ggui.Pt(114, 124)},
+		{"below, center, shifted", widget.PopupBottom, widget.PopupCenter, 10, ggui.Pt(140, 124)},
+		{"right, start", widget.PopupRight, widget.PopupStart, 0, ggui.Pt(214, 100)},
+		{"right, start, raised", widget.PopupRight, widget.PopupStart, -3, ggui.Pt(214, 97)},
+		{"right, center", widget.PopupRight, widget.PopupCenter, 0, ggui.Pt(214, 85)},
+		{"right, end", widget.PopupRight, widget.PopupEnd, 0, ggui.Pt(214, 70)},
+		{"right, end, lowered", widget.PopupRight, widget.PopupEnd, -3, ggui.Pt(214, 73)},
 	} {
-		p := sidePopup(t, ggui.Pt(150, 100), func(p *ggui.PopupWidget) { p.Side(tt.side).Align(tt.align).AlignOffset(tt.offset) })
+		p := sidePopup(t, ggui.Pt(150, 100), func(p *widget.PopupWidget) { p.Side(tt.side).Align(tt.align).AlignOffset(tt.offset) })
 		if p.Rect().Origin != tt.want {
 			t.Errorf("%s: content at %v, want %v", tt.name, p.Rect().Origin, tt.want)
 		}
@@ -111,22 +111,22 @@ func TestPopupKeepsTheCollisionPaddingFromEveryEdge(t *testing.T) {
 	for _, tt := range []struct {
 		name  string
 		at    ggui.Point
-		side  ggui.PopupSide
-		align ggui.PopupAlignment
+		side  widget.PopupSide
+		align widget.PopupAlignment
 		want  ggui.Point
 	}{
-		{"below, at the left edge", ggui.Pt(0, 100), ggui.PopupBottom, ggui.PopupStart, ggui.Pt(5, 124)},
-		{"below, its end at the right edge", ggui.Pt(340, 100), ggui.PopupBottom, ggui.PopupEnd, ggui.Pt(400-5-100, 124)},
-		{"beside, at the top edge", ggui.Pt(100, 0), ggui.PopupRight, ggui.PopupStart, ggui.Pt(164, 5)},
-		{"beside, at the bottom edge", ggui.Pt(100, 280), ggui.PopupRight, ggui.PopupStart, ggui.Pt(164, 300-5-50)},
+		{"below, at the left edge", ggui.Pt(0, 100), widget.PopupBottom, widget.PopupStart, ggui.Pt(5, 124)},
+		{"below, its end at the right edge", ggui.Pt(340, 100), widget.PopupBottom, widget.PopupEnd, ggui.Pt(400-5-100, 124)},
+		{"beside, at the top edge", ggui.Pt(100, 0), widget.PopupRight, widget.PopupStart, ggui.Pt(164, 5)},
+		{"beside, at the bottom edge", ggui.Pt(100, 280), widget.PopupRight, widget.PopupStart, ggui.Pt(164, 300-5-50)},
 	} {
-		p := sidePopup(t, tt.at, func(p *ggui.PopupWidget) { p.Side(tt.side).Align(tt.align) })
+		p := sidePopup(t, tt.at, func(p *widget.PopupWidget) { p.Side(tt.side).Align(tt.align) })
 		if got := p.Rect().Origin; got != tt.want {
 			t.Errorf("%s: content at %v, want %v", tt.name, got, tt.want)
 		}
 	}
 	// CollisionPadding(0) lets it sit flush against the edge.
-	p := sidePopup(t, ggui.Pt(0, 100), func(p *ggui.PopupWidget) { p.CollisionPadding(0) })
+	p := sidePopup(t, ggui.Pt(0, 100), func(p *widget.PopupWidget) { p.CollisionPadding(0) })
 	if got := p.Rect().Origin; got != ggui.Pt(0, 124) {
 		t.Errorf("with no collision padding the content is at %v, want flush at (0,124)", got)
 	}
@@ -139,19 +139,19 @@ func TestPopupFlipsWhenItWouldComeWithinTheCollisionPadding(t *testing.T) {
 	for _, tt := range []struct {
 		name string
 		at   ggui.Point
-		side ggui.PopupSide
-		on   ggui.PopupSide
+		side widget.PopupSide
+		on   widget.PopupSide
 	}{
 		// 300 - (224+20+4) leaves 52 below, 47 of them inside the padding.
-		{"below", ggui.Pt(150, 224), ggui.PopupBottom, ggui.PopupTop},
+		{"below", ggui.Pt(150, 224), widget.PopupBottom, widget.PopupTop},
 		// 400 - (234+60+4) leaves 102 to the right, 97 inside the padding.
-		{"right", ggui.Pt(234, 100), ggui.PopupRight, ggui.PopupLeft},
+		{"right", ggui.Pt(234, 100), widget.PopupRight, widget.PopupLeft},
 	} {
-		p := sidePopup(t, tt.at, func(p *ggui.PopupWidget) { p.Side(tt.side) })
+		p := sidePopup(t, tt.at, func(p *widget.PopupWidget) { p.Side(tt.side) })
 		if p.PlacedSide() != tt.on {
 			t.Errorf("%s: content on side %v at %v, want it flipped to %v", tt.name, p.PlacedSide(), p.Rect(), tt.on)
 		}
-		flush := sidePopup(t, tt.at, func(p *ggui.PopupWidget) { p.Side(tt.side).CollisionPadding(0) })
+		flush := sidePopup(t, tt.at, func(p *widget.PopupWidget) { p.Side(tt.side).CollisionPadding(0) })
 		if flush.PlacedSide() != tt.side {
 			t.Errorf("%s: with no collision padding the content is on side %v, want it kept on %v", tt.name, flush.PlacedSide(), tt.side)
 		}
@@ -163,8 +163,8 @@ func TestPopupFlipsWhenItWouldComeWithinTheCollisionPadding(t *testing.T) {
 func TestPopupIsHeldToTheRoomInsideTheCollisionPadding(t *testing.T) {
 	t.Parallel()
 	var content ggui.Rect
-	p := ggui.Popup(ggui.Box().Size(60, 20), probe(80, 1000, &content))
-	pr := ggui.NewProbe(ggui.Row(ggui.Padding(p, 100, 0, 0, 150)).Align(ggui.AlignStart), ggui.Sz(400, 300))
+	p := widget.Popup(widget.Box().Size(60, 20), probe(80, 1000, &content))
+	pr := ggui.NewProbe(widget.Row(widget.Padding(p, 100, 0, 0, 150)).Align(widget.AlignStart), ggui.Sz(400, 300))
 	defer pr.Close()
 	p.Show()
 	pr.Frame()
@@ -176,16 +176,16 @@ func TestPopupIsHeldToTheRoomInsideTheCollisionPadding(t *testing.T) {
 func TestPopupLogicalAlignment(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
-		align ggui.PopupAlignment
+		align widget.PopupAlignment
 		dir   ggui.TextDirection
 		x     float64
 	}{
-		{ggui.PopupStart, ggui.DirLTR, 0}, {ggui.PopupCenter, ggui.DirLTR, -20}, {ggui.PopupEnd, ggui.DirLTR, -40},
-		{ggui.PopupStart, ggui.DirRTL, -40}, {ggui.PopupCenter, ggui.DirRTL, -20}, {ggui.PopupEnd, ggui.DirRTL, 0},
+		{widget.PopupStart, ggui.DirLTR, 0}, {widget.PopupCenter, ggui.DirLTR, -20}, {widget.PopupEnd, ggui.DirLTR, -40},
+		{widget.PopupStart, ggui.DirRTL, -40}, {widget.PopupCenter, ggui.DirRTL, -20}, {widget.PopupEnd, ggui.DirRTL, 0},
 	} {
 		var anchor ggui.Rect
-		p := ggui.Popup(ggui.Box(probe(60, 20, &anchor)).Size(60, 20), ggui.Box().Size(100, 50)).Align(tt.align)
-		pr := ggui.NewProbe(ggui.Provide(ggui.DirectionKey, tt.dir, ggui.Column(ggui.Padding(p, 0, 100))), ggui.Sz(400, 250))
+		p := widget.Popup(widget.Box(probe(60, 20, &anchor)).Size(60, 20), widget.Box().Size(100, 50)).Align(tt.align)
+		pr := ggui.NewProbe(ggui.Provide(ggui.DirectionKey, tt.dir, widget.Column(widget.Padding(p, 0, 100))), ggui.Sz(400, 250))
 		p.Show()
 		pr.Frame()
 		want := anchor.Origin.X + tt.x
@@ -199,7 +199,7 @@ func TestPopupLogicalAlignment(t *testing.T) {
 func TestPopupRejectedControlledCloseDoesNotNotify(t *testing.T) {
 	t.Parallel()
 	requests, closes := 0, 0
-	p := ggui.Popup(ggui.Box().Size(50, 20), ggui.Box().Size(100, 100)).Modal(false).BindOpen(ggui.Controlled(true, func(bool) { requests++ })).OnClose(func() { closes++ })
+	p := widget.Popup(widget.Box().Size(50, 20), widget.Box().Size(100, 100)).Modal(false).BindOpen(ggui.Controlled(true, func(bool) { requests++ })).OnClose(func() { closes++ })
 	pr := ggui.NewProbe(p, ggui.Sz(300, 250))
 	defer pr.Close()
 	pr.Frame()
@@ -216,8 +216,8 @@ func TestNonmodalPopupFocusOnOpenFalseKeepsTheOpenersFocus(t *testing.T) {
 	for _, keep := range []bool{false, true} {
 		input := widget.TextInput(ggui.State("")).Name("Query")
 		item := widget.TextInput(ggui.State("")).Name("Item")
-		p := ggui.Popup(input, ggui.Box(item).Size(120, 40)).Modal(false).FocusOnOpen(!keep)
-		pr := ggui.NewProbe(ggui.Column(p), ggui.Sz(300, 250))
+		p := widget.Popup(input, widget.Box(item).Size(120, 40)).Modal(false).FocusOnOpen(!keep)
+		pr := ggui.NewProbe(widget.Column(p), ggui.Sz(300, 250))
 		pr.Tap("Query")
 		p.Show()
 		pr.Frame()
@@ -239,11 +239,11 @@ func TestPopupKeysKeepsFocusOnTheOpener(t *testing.T) {
 	useQuietIME(t)
 	for _, keys := range []bool{true, false} {
 		field := widget.TextInput(ggui.State("x"))
-		p := ggui.Popup(field, ggui.Box().Size(80, 40))
+		p := widget.Popup(field, widget.Box().Size(80, 40))
 		if keys {
 			p.Keys(field)
 		}
-		pr := ggui.NewProbe(ggui.Column(p), ggui.Sz(200, 200))
+		pr := ggui.NewProbe(widget.Column(p), ggui.Sz(200, 200))
 		pr.Click(ggui.Pt(100, 5))
 		p.Show()
 		pr.Click(ggui.Pt(20, 40)) // inside the content
@@ -263,11 +263,11 @@ func TestPopupOwnerNestsTheContentUnderTheOpener(t *testing.T) {
 			func(c ggui.Constraints, _ ggui.Env) ggui.Size { return c.Constrain(ggui.Sz(80, 20)) },
 			func(dst *ggui.Canvas, r ggui.Rect) { dst.Leaf(r, ggui.Node{Role: ggui.RoleImage, Name: "option"}) },
 		)
-		p := ggui.Popup(field, option)
+		p := widget.Popup(field, option)
 		if owned {
 			p.Owner(field)
 		}
-		pr := ggui.NewProbe(ggui.Column(p), ggui.Sz(200, 200))
+		pr := ggui.NewProbe(widget.Column(p), ggui.Sz(200, 200))
 		p.Show()
 		tree := pr.Semantics()
 		under := false

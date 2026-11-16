@@ -9,6 +9,7 @@ import (
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // ButtonGroupWidget joins several controls into one strip: the corners
@@ -268,7 +269,7 @@ type ButtonGroupTextWidget struct {
 //
 //	ui.ButtonGroup(ui.ButtonGroupText("https://"), ui.TextField(host))
 func ButtonGroupText(label string) *ButtonGroupTextWidget {
-	return ButtonGroupTextOf(ggui.Text(label).NoWrap())
+	return ButtonGroupTextOf(widget.Text(label).NoWrap())
 }
 
 // ButtonGroupTextOf is ButtonGroupText around any content, such as an icon
@@ -334,7 +335,7 @@ type ToggleGroupWidget[T comparable] struct {
 	optional         bool // a press on the chosen option clears the choice
 	focusPending     bool
 	options          []T
-	labels           []*ggui.TextWidget
+	labels           []*widget.TextWidget
 	names            []string
 	icon             func(T) *icons.Widget // nil without icons
 	icons            []*icons.Widget       // by option, nil where the option has none
@@ -441,12 +442,12 @@ func (g *ToggleGroupWidget[T]) setOptions(options []T) bool {
 	g.hover = -1
 	g.cur = -1
 	g.names = make([]string, len(options))
-	g.labels = make([]*ggui.TextWidget, len(options))
+	g.labels = make([]*widget.TextWidget, len(options))
 	g.sizes = nil
 	g.rects = nil
 	for i, v := range options {
 		g.names[i] = g.label(v)
-		g.labels[i] = ggui.Text(g.names[i]).NoWrap()
+		g.labels[i] = widget.Text(g.names[i]).NoWrap()
 	}
 	g.makeIcons()
 	return true
@@ -466,7 +467,7 @@ func (g *ToggleGroupWidget[T]) makeIcons() {
 	if g.iconOnly {
 		g.tips = make([]*TooltipWidget, len(g.options))
 		for i := range g.options {
-			g.tips[i] = Tooltip(ggui.Box(), g.names[i])
+			g.tips[i] = Tooltip(widget.Box(), g.names[i])
 		}
 	}
 }

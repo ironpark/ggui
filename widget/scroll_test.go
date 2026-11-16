@@ -1,6 +1,7 @@
-package ggui
+package widget
 
 import (
+	"github.com/ironpark/ggui"
 	"image/color"
 	"math"
 	"testing"
@@ -8,7 +9,7 @@ import (
 )
 
 // tall is a 100x300 probe: three 100-high boxes with the middle one tappable.
-func tall(taps *int, painted *[3]Rect) Widget {
+func tall(taps *int, painted *[3]ggui.Rect) ggui.Widget {
 	return Column(
 		probe(100, 100, &painted[0]),
 		Tap(probe(100, 100, &painted[1]), func() { *taps++ }),
@@ -18,10 +19,10 @@ func tall(taps *int, painted *[3]Rect) Widget {
 
 func TestScrollGivesChildUnboundedHeightAndFillsViewport(t *testing.T) {
 	t.Parallel()
-	var painted [3]Rect
+	var painted [3]ggui.Rect
 	s := Scroll(tall(nil, &painted))
-	got := s.Layout(Loose(Sz(100, 120)), Env{})
-	if got != (Size{W: 100, H: 120}) {
+	got := s.Layout(ggui.Loose(ggui.Sz(100, 120)), ggui.Env{})
+	if got != (ggui.Size{W: 100, H: 120}) {
 		t.Fatalf("Layout() = %+v, want the viewport {100 120}", got)
 	}
 	if s.childSize.H != 300 {
@@ -31,21 +32,21 @@ func TestScrollGivesChildUnboundedHeightAndFillsViewport(t *testing.T) {
 
 func TestScrollWheelMovesAndClamps(t *testing.T) {
 	t.Parallel()
-	var painted [3]Rect
+	var painted [3]ggui.Rect
 	s := Scroll(tall(nil, &painted)).Speed(10)
-	p := NewProbe(s, Sz(100, 120))
+	p := ggui.NewProbe(s, ggui.Sz(100, 120))
 	defer p.Close()
-	p.Scroll(Pt(50, 50), Pt(0, -5)) // wheel down: content moves up
+	p.Scroll(ggui.Pt(50, 50), ggui.Pt(0, -5)) // wheel down: content moves up
 	p.Frame()
 	if painted[0].Origin.Y != -50 {
 		t.Fatalf("first child at y=%v after scrolling 50, want -50", painted[0].Origin.Y)
 	}
-	p.Scroll(Pt(50, 50), Pt(0, -100))
+	p.Scroll(ggui.Pt(50, 50), ggui.Pt(0, -100))
 	p.Frame()
 	if painted[0].Origin.Y != -180 {
 		t.Fatalf("first child at y=%v, want clamped to -(300-120) = -180", painted[0].Origin.Y)
 	}
-	p.Scroll(Pt(50, 50), Pt(0, 100))
+	p.Scroll(ggui.Pt(50, 50), ggui.Pt(0, 100))
 	p.Frame()
 	if s.position() != 0 {
 		t.Fatalf("offset = %v after scrolling back past the top, want 0", s.position())
@@ -55,20 +56,20 @@ func TestScrollWheelMovesAndClamps(t *testing.T) {
 func TestScrollClipsHitRegions(t *testing.T) {
 	t.Parallel()
 	taps := 0
-	var painted [3]Rect
+	var painted [3]ggui.Rect
 	s := Scroll(tall(&taps, &painted)).Speed(10)
-	p := NewProbe(s, Sz(100, 120))
+	p := ggui.NewProbe(s, ggui.Sz(100, 120))
 	defer p.Close()
-	p.Click(Pt(50, 150)) // the tappable box starts at y=100 but the viewport ends at 120
+	p.Click(ggui.Pt(50, 150)) // the tappable box starts at y=100 but the viewport ends at 120
 	if taps != 0 {
 		t.Fatalf("taps = %d on a point outside the viewport, want 0", taps)
 	}
-	p.Click(Pt(50, 110)) // the visible sliver of it
+	p.Click(ggui.Pt(50, 110)) // the visible sliver of it
 	if taps != 1 {
 		t.Fatalf("taps = %d on the visible part, want 1", taps)
 	}
-	p.Scroll(Pt(50, 50), Pt(0, -10)) // scroll by 100
-	p.Click(Pt(50, 50))              // now the tappable box fills the viewport top
+	p.Scroll(ggui.Pt(50, 50), ggui.Pt(0, -10)) // scroll by 100
+	p.Click(ggui.Pt(50, 50))                   // now the tappable box fills the viewport top
 	if taps != 2 {
 		t.Fatalf("taps = %d after scrolling the box into view, want 2", taps)
 	}
@@ -76,15 +77,15 @@ func TestScrollClipsHitRegions(t *testing.T) {
 
 func TestScrollOffsetBinding(t *testing.T) {
 	t.Parallel()
-	var painted [3]Rect
-	pos := State(0.0)
+	var painted [3]ggui.Rect
+	pos := ggui.State(0.0)
 	s := Scroll(tall(nil, &painted)).BindOffset(pos)
 	pos.Set(1000)
-	size := s.Layout(Loose(Sz(100, 120)), Env{})
-	if Untrack(pos.Get) != 180 {
-		t.Fatalf("bound offset = %v after layout, want clamped 180", Untrack(pos.Get))
+	size := s.Layout(ggui.Loose(ggui.Sz(100, 120)), ggui.Env{})
+	if ggui.Untrack(pos.Get) != 180 {
+		t.Fatalf("bound offset = %v after layout, want clamped 180", ggui.Untrack(pos.Get))
 	}
-	s.Paint(nil, Rct(Pt(0, 0), size))
+	s.Paint(nil, ggui.Rct(ggui.Pt(0, 0), size))
 	if painted[2].Origin.Y != 20 {
 		t.Fatalf("last child at y=%v, want 20", painted[2].Origin.Y)
 	}
@@ -92,20 +93,20 @@ func TestScrollOffsetBinding(t *testing.T) {
 
 func TestScrollDoesNotConsumeWheelWithNothingToScroll(t *testing.T) {
 	t.Parallel()
-	var got Point
-	s := Pointer(Scroll(Box().Size(10, 10))).OnScroll(func(d Point) { got = d })
-	p := NewProbe(s, Sz(100, 100))
+	var got ggui.Point
+	s := Pointer(Scroll(Box().Size(10, 10))).OnScroll(func(d ggui.Point) { got = d })
+	p := ggui.NewProbe(s, ggui.Sz(100, 100))
 	defer p.Close()
-	p.Scroll(Pt(5, 5), Pt(0, -1))
-	if got != (Point{X: 0, Y: -1}) {
+	p.Scroll(ggui.Pt(5, 5), ggui.Pt(0, -1))
+	if got != (ggui.Point{X: 0, Y: -1}) {
 		t.Fatalf("wheel did not fall through a scroll with no overflow: got %v", got)
 	}
 }
 
 func TestFillingWidgetsFallBackToContentWhenUnbounded(t *testing.T) {
 	t.Parallel()
-	unb := Constraints{MaxW: 100, MaxH: Unbounded}
-	cases := map[string]Widget{
+	unb := ggui.Constraints{MaxW: 100, MaxH: ggui.Unbounded}
+	cases := map[string]ggui.Widget{
 		"align":   Align(Box().Size(10, 10)),
 		"stack":   Stack(Box().Size(10, 10)).Expand(),
 		"justify": Column(Box().Size(10, 10)).Justify(JustifyCenter),
@@ -113,7 +114,7 @@ func TestFillingWidgetsFallBackToContentWhenUnbounded(t *testing.T) {
 		"flex":    Column(Expanded(Box().Size(10, 10))),
 	}
 	for name, w := range cases {
-		got := w.Layout(unb, Env{})
+		got := w.Layout(unb, ggui.Env{})
 		if got.H != 10 {
 			t.Fatalf("%s: height %v under an unbounded axis, want the content's 10", name, got.H)
 		}
@@ -123,13 +124,13 @@ func TestFillingWidgetsFallBackToContentWhenUnbounded(t *testing.T) {
 func TestScrollBarFollowsEnvironmentAndPreservesOverrides(t *testing.T) {
 	t.Parallel()
 	s := Scroll(Box().Size(100, 300))
-	for _, style := range []ScrollStyle{{Color: color.Black}, {Color: color.White}} {
-		s.Layout(Tight(Sz(100, 100)), Env{}.With(ScrollStyleKey, style))
+	for _, style := range []ggui.ScrollStyle{{Color: color.Black}, {Color: color.White}} {
+		s.Layout(ggui.Tight(ggui.Sz(100, 100)), ggui.Env{}.With(ggui.ScrollStyleKey, style))
 		if s.bar != style.Color {
 			t.Fatal("default scrollbar did not follow environment")
 		}
 	}
-	s.Layout(Tight(Sz(100, 100)), Env{})
+	s.Layout(ggui.Tight(ggui.Sz(100, 100)), ggui.Env{})
 	r, g, b, a := s.bar.RGBA()
 	// Premultiplied channels plus white behind alpha must not become white.
 	if r+65535-a == 65535 && g+65535-a == 65535 && b+65535-a == 65535 {
@@ -137,12 +138,12 @@ func TestScrollBarFollowsEnvironmentAndPreservesOverrides(t *testing.T) {
 	}
 	red := color.RGBA{0xff, 0, 0, 0xff}
 	s.Bar(red)
-	s.Layout(Tight(Sz(100, 100)), Env{}.With(ScrollStyleKey, ScrollStyle{Color: color.White}))
+	s.Layout(ggui.Tight(ggui.Sz(100, 100)), ggui.Env{}.With(ggui.ScrollStyleKey, ggui.ScrollStyle{Color: color.White}))
 	if s.bar != red {
 		t.Fatal("environment replaced explicit scrollbar color")
 	}
 	s.Bar(nil)
-	s.Layout(Tight(Sz(100, 100)), Env{})
+	s.Layout(ggui.Tight(ggui.Sz(100, 100)), ggui.Env{})
 	if s.bar != nil {
 		t.Fatal("environment made a hidden scrollbar visible")
 	}
@@ -151,41 +152,41 @@ func TestScrollBarFollowsEnvironmentAndPreservesOverrides(t *testing.T) {
 func TestScrollThumbDrag(t *testing.T) {
 	t.Parallel()
 	for _, horizontal := range []bool{false, true} {
-		offset := State(0.0)
+		offset := ggui.State(0.0)
 		taps := 0
-		content := Sz(100, 500)
+		content := ggui.Sz(100, 500)
 		if horizontal {
-			content = Sz(500, 100)
+			content = ggui.Sz(500, 100)
 		}
 		s := Scroll(Tap(Box().Size(content.W, content.H), func() { taps++ })).BindOffset(offset)
 		if horizontal {
 			s.Horizontal()
 		}
-		p := NewProbe(s, Sz(100, 100))
+		p := ggui.NewProbe(s, ggui.Sz(100, 100))
 		p.Frame()
-		grab := s.thumbHit.Origin.Add(Pt(s.thumbHit.Size.W/2, s.thumbHit.Size.H/2))
+		grab := s.thumbHit.Origin.Add(ggui.Pt(s.thumbHit.Size.W/2, s.thumbHit.Size.H/2))
 		p.Press(grab)
 		if !s.dragging || !s.CaptureTouchDrag() {
 			t.Fatal("thumb did not capture press")
 		}
-		delta := Pt(0, 40)
+		delta := ggui.Pt(0, 40)
 		if horizontal {
-			delta = Pt(40, 0)
+			delta = ggui.Pt(40, 0)
 		}
 		p.Move(grab.Add(delta))
-		if got := Untrack(offset.Get); got != 200 {
+		if got := ggui.Untrack(offset.Get); got != 200 {
 			t.Fatalf("horizontal=%v offset=%v, want 200", horizontal, got)
 		}
-		p.Move(Pt(1000, 1000))
-		if got := Untrack(offset.Get); got != 400 {
+		p.Move(ggui.Pt(1000, 1000))
+		if got := ggui.Untrack(offset.Get); got != 400 {
 			t.Fatalf("drag outside should clamp to end, got %v", got)
 		}
-		p.Release(Pt(1000, 1000))
+		p.Release(ggui.Pt(1000, 1000))
 		if s.dragging || taps != 0 {
 			t.Fatalf("dragging=%v content taps=%d", s.dragging, taps)
 		}
-		p.Move(Pt(0, 0))
-		if Untrack(offset.Get) != 400 {
+		p.Move(ggui.Pt(0, 0))
+		if ggui.Untrack(offset.Get) != 400 {
 			t.Fatal("scroll moved after release")
 		}
 		p.Close()
@@ -195,14 +196,14 @@ func TestScrollThumbDrag(t *testing.T) {
 func TestScrollHiddenAndTinyThumb(t *testing.T) {
 	t.Parallel()
 	s := Scroll(Box().Size(100, 500)).Bar(nil)
-	p := NewProbe(s, Sz(100, 100))
+	p := ggui.NewProbe(s, ggui.Sz(100, 100))
 	defer p.Close()
 	p.Frame()
-	if s.HandlePointer(PointerEvent{Kind: PointerDown, Button: MouseButtonLeft, Pos: Pt(98, 5)}) {
+	if s.HandlePointer(ggui.PointerEvent{Kind: ggui.PointerDown, Button: ggui.MouseButtonLeft, Pos: ggui.Pt(98, 5)}) {
 		t.Fatal("hidden scrollbar intercepted press")
 	}
-	s.Bar((Env{}).ScrollStyle().Color)
-	p.Resize(Sz(100, 8))
+	s.Bar((ggui.Env{}).ScrollStyle().Color)
+	p.Resize(ggui.Sz(100, 8))
 	p.Frame()
 	if s.thumbLength() > 8 {
 		t.Fatal("thumb extends beyond tiny viewport")
@@ -212,20 +213,20 @@ func TestScrollHiddenAndTinyThumb(t *testing.T) {
 func TestScrollThumbHoverAndDragFeedback(t *testing.T) {
 	t.Parallel()
 	s := Scroll(Box().Size(100, 500))
-	p := NewProbe(s, Sz(100, 100))
+	p := ggui.NewProbe(s, ggui.Sz(100, 100))
 	defer p.Close()
 	p.Frame()
-	at := s.thumbHit.Origin.Add(Pt(5, 5))
+	at := s.thumbHit.Origin.Add(ggui.Pt(5, 5))
 	p.Move(at)
 	if !s.thumbHovered {
 		t.Fatal("thumb hover not activated")
 	}
 	p.Press(at)
-	p.Move(Pt(200, 200))
+	p.Move(ggui.Pt(200, 200))
 	if s.thumbHovered || !s.dragging {
 		t.Fatal("leaving thumb should retain drag feedback only")
 	}
-	p.Release(Pt(200, 200))
+	p.Release(ggui.Pt(200, 200))
 	if s.thumbHovered || s.dragging {
 		t.Fatal("feedback remains after release outside")
 	}
@@ -237,18 +238,18 @@ func TestScrollThumbHoverAndDragFeedback(t *testing.T) {
 func TestScrollFollowEnd(t *testing.T) {
 	t.Parallel()
 	for _, bound := range []bool{false, true} {
-		lines, rebuild := State(10), State(0)
-		pos := State(0.0)
+		lines, rebuild := ggui.State(10), ggui.State(0)
+		pos := ggui.State(0.0)
 		var s *ScrollWidget // the one built last
-		p := ProbeBuilder(func() Widget {
+		p := ggui.ProbeBuilder(func() ggui.Widget {
 			rebuild.Get()
-			s = Scroll(Reactive(func() Widget { return Box().Size(50, float64(lines.Get()*20)) })).FollowEnd()
+			s = Scroll(ggui.Reactive(func() ggui.Widget { return Box().Size(50, float64(lines.Get()*20)) })).FollowEnd()
 			if bound {
 				s.BindOffset(pos)
 			}
 			return s
-		}, Sz(50, 100))
-		offset := func() float64 { return Untrack(s.position) }
+		}, ggui.Sz(50, 100))
+		offset := func() float64 { return ggui.Untrack(s.position) }
 		step := func(what string, want float64) {
 			t.Helper()
 			p.Frame()
@@ -259,13 +260,13 @@ func TestScrollFollowEnd(t *testing.T) {
 		step("opened", 100)
 		lines.Set(15)
 		step("grew at the end", 200)
-		p.Scroll(Pt(10, 10), Pt(0, 2)) // back 40
+		p.Scroll(ggui.Pt(10, 10), ggui.Pt(0, 2)) // back 40
 		step("scrolled back", 160)
 		lines.Set(20)
 		step("grew while scrolled back", 160)
 		rebuild.Set(1)
 		step("rebuilt while scrolled back", 160)
-		p.Scroll(Pt(10, 10), Pt(0, -100))
+		p.Scroll(ggui.Pt(10, 10), ggui.Pt(0, -100))
 		step("scrolled to the end", 300)
 		lines.Set(25)
 		step("grew after returning", 400)
@@ -282,19 +283,19 @@ func TestScrollFollowEnd(t *testing.T) {
 func TestScrollFollowEndAcrossContentRebuilds(t *testing.T) {
 	t.Parallel()
 	for _, bound := range []bool{false, true} {
-		lines := State(10)
-		pos := State(0.0)
+		lines := ggui.State(10)
+		pos := ggui.State(0.0)
 		var current *ScrollWidget
-		p := ProbeBuilder(func() Widget {
-			return Column(Text("header"), View(lines, func(n int) Widget {
+		p := ggui.ProbeBuilder(func() ggui.Widget {
+			return Column(Text("header"), ggui.View(lines, func(n int) ggui.Widget {
 				current = Scroll(Box().Size(50, float64(n*20))).FollowEnd()
 				if bound {
 					current.BindOffset(pos)
 				}
 				return Box(current).Height(100)
 			}))
-		}, Sz(50, 200))
-		offset := func() float64 { return Untrack(current.position) }
+		}, ggui.Sz(50, 200))
+		offset := func() float64 { return ggui.Untrack(current.position) }
 		step := func(what string, want float64) {
 			t.Helper()
 			p.Frame()
@@ -306,11 +307,11 @@ func TestScrollFollowEndAcrossContentRebuilds(t *testing.T) {
 		step("opened", 100)
 		lines.Set(15)
 		step("grew at the end", 200)
-		p.Scroll(Pt(10, 50), Pt(0, 2))
+		p.Scroll(ggui.Pt(10, 50), ggui.Pt(0, 2))
 		step("scrolled back", 160)
 		lines.Set(20)
 		step("grew while scrolled back", 160)
-		p.Scroll(Pt(10, 50), Pt(0, -100))
+		p.Scroll(ggui.Pt(10, 50), ggui.Pt(0, -100))
 		step("scrolled to the end", 300)
 		lines.Set(25)
 		step("grew after returning", 400)
@@ -319,8 +320,8 @@ func TestScrollFollowEndAcrossContentRebuilds(t *testing.T) {
 }
 
 // rows is a column of n probes h high whose painted rects land in got.
-func rows(n int, h float64, got []Rect) Widget {
-	children := make([]Widget, n)
+func rows(n int, h float64, got []ggui.Rect) ggui.Widget {
+	children := make([]ggui.Widget, n)
 	for i := range children {
 		children[i] = probe(100, h, &got[i])
 	}
@@ -329,11 +330,11 @@ func rows(n int, h float64, got []Rect) Widget {
 
 func TestStickyPinsItsHeaderUntilTheNextSectionPushesItOut(t *testing.T) {
 	t.Parallel()
-	var headA, bodyA, headB, bodyB Rect
+	var headA, bodyA, headB, bodyB ggui.Rect
 	a := Sticky(probe(100, 20, &headA), probe(100, 100, &bodyA))
 	b := Sticky(probe(100, 20, &headB), probe(100, 100, &bodyB))
-	offset := State(0.0)
-	p := NewProbe(Scroll(Column(a, b)).BindOffset(offset), Sz(100, 60))
+	offset := ggui.State(0.0)
+	p := ggui.NewProbe(Scroll(Column(a, b)).BindOffset(offset), ggui.Sz(100, 60))
 	defer p.Close()
 	p.Frame()
 	if headA.Origin.Y != 0 || bodyA.Origin.Y != 20 || headA.Size.W != 100 || a.Pinned() {
@@ -359,8 +360,8 @@ func TestStickyPinsItsHeaderUntilTheNextSectionPushesItOut(t *testing.T) {
 
 func TestStickyOutsideAScrollIsAHeaderAboveItsBody(t *testing.T) {
 	t.Parallel()
-	var head, body Rect
-	p := NewProbe(Sticky(probe(50, 20, &head), probe(80, 30, &body)), Sz(100, 100))
+	var head, body ggui.Rect
+	p := ggui.NewProbe(Sticky(probe(50, 20, &head), probe(80, 30, &body)), ggui.Sz(100, 100))
 	defer p.Close()
 	p.Frame()
 	if head.Origin.Y != 0 || body.Origin.Y != 20 || head.Size.W != 100 {
@@ -376,20 +377,20 @@ func TestEachStickyHeadersPinInPlainAndVirtualLists(t *testing.T) {
 		for i := range list {
 			list[i] = i
 		}
-		items := State(list)
-		painted := map[int]Rect{}
-		each := EachKeyed(items, func(v int) int { return v }, func(it EachItem[int]) Widget {
+		items := ggui.State(list)
+		painted := map[int]ggui.Rect{}
+		each := EachKeyed(items, func(v int) int { return v }, func(it EachItem[int]) ggui.Widget {
 			v := it.Item
-			return FromFuncs(
-				func(c Constraints, _ Env) Size { return c.Constrain(Sz(100, 20)) },
-				func(_ *Canvas, r Rect) { painted[v] = r },
+			return ggui.FromFuncs(
+				func(c ggui.Constraints, _ ggui.Env) ggui.Size { return c.Constrain(ggui.Sz(100, 20)) },
+				func(_ *ggui.Canvas, r ggui.Rect) { painted[v] = r },
 			)
 		}).StickyHeaders(func(v int) bool { return v%10 == 0 })
 		if virtual {
 			each.ItemExtent(20)
 		}
-		offset := State(250.0)
-		p := NewProbe(Scroll(each).BindOffset(offset), Sz(100, 60))
+		offset := ggui.State(250.0)
+		p := ggui.NewProbe(Scroll(each).BindOffset(offset), ggui.Sz(100, 60))
 		p.Frame()
 		if r := painted[10]; r.Origin.Y != 0 {
 			t.Fatalf("virtual %v at 250: header 10 at %v, want pinned at 0", virtual, r)
@@ -406,9 +407,9 @@ func TestEachStickyHeadersPinInPlainAndVirtualLists(t *testing.T) {
 
 func TestScrollControllerAnimatesJumpsAndAddsUp(t *testing.T) {
 	t.Parallel()
-	got := make([]Rect, 20)
+	got := make([]ggui.Rect, 20)
 	var sc ScrollController
-	p := NewProbe(Scroll(rows(20, 50, got)).Controller(&sc), Sz(100, 100))
+	p := ggui.NewProbe(Scroll(rows(20, 50, got)).Controller(&sc), ggui.Sz(100, 100))
 	defer p.Close()
 	sc.JumpTo(200) // before the first layout: kept until then
 	p.Frame()
@@ -441,7 +442,7 @@ func TestScrollControllerAnimatesJumpsAndAddsUp(t *testing.T) {
 	}
 	sc.ScrollTo(0)
 	p.Frame()
-	p.Scroll(Pt(50, 50), Pt(0, -1)) // the wheel takes over
+	p.Scroll(ggui.Pt(50, 50), ggui.Pt(0, -1)) // the wheel takes over
 	if sc.Animating() {
 		t.Fatal("wheel input left the controller's animation running")
 	}
@@ -449,9 +450,9 @@ func TestScrollControllerAnimatesJumpsAndAddsUp(t *testing.T) {
 
 func TestScrollControllerUnderReducedMotionJumps(t *testing.T) {
 	t.Parallel()
-	got := make([]Rect, 20)
+	got := make([]ggui.Rect, 20)
 	var sc ScrollController
-	p := NewProbe(Provide(ReducedMotionKey, true, Scroll(rows(20, 50, got)).Controller(&sc)), Sz(100, 100))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, Scroll(rows(20, 50, got)).Controller(&sc)), ggui.Sz(100, 100))
 	defer p.Close()
 	p.Frame()
 	sc.ScrollTo(300)
@@ -468,13 +469,13 @@ func TestScrollControllerScrollsToAKeyedRow(t *testing.T) {
 		for i := range list {
 			list[i] = i * 7
 		}
-		each := EachKeyed(State(list), func(v int) int { return v }, func(EachItem[int]) Widget { return Box().Size(100, 20) })
+		each := EachKeyed(ggui.State(list), func(v int) int { return v }, func(EachItem[int]) ggui.Widget { return Box().Size(100, 20) })
 		if virtual {
 			each.ItemExtent(20)
 		}
-		var head Rect
+		var head ggui.Rect
 		var sc ScrollController
-		p := NewProbe(Scroll(Column(probe(100, 50, &head), each)).Controller(&sc), Sz(100, 100))
+		p := ggui.NewProbe(Scroll(Column(probe(100, 50, &head), each)).Controller(&sc), ggui.Sz(100, 100))
 		p.Frame()
 		sc.ScrollToKey(70) // the eleventh row, at 50 + 10*20
 		p.Frame()
@@ -500,12 +501,12 @@ func TestScrollControllerScrollsToAKeyedRow(t *testing.T) {
 
 func TestScrollBounceFollowsPastTheEndAndSpringsBack(t *testing.T) {
 	t.Parallel()
-	var painted [3]Rect
+	var painted [3]ggui.Rect
 	s := Scroll(tall(nil, &painted)).Speed(1).Overscroll(OverscrollBounce)
-	p := NewProbe(s, Sz(100, 120))
+	p := ggui.NewProbe(s, ggui.Sz(100, 120))
 	defer p.Close()
 	p.Frame()
-	p.Scroll(Pt(50, 50), Pt(0, 40)) // pull down at the top
+	p.Scroll(ggui.Pt(50, 50), ggui.Pt(0, 40)) // pull down at the top
 	p.Frame()
 	if s.position() != 0 || painted[0].Origin.Y <= 0 || painted[0].Origin.Y >= 40 {
 		t.Fatalf("pulled 40 at the top: offset %v, first row at %v; want it to follow, resisted", s.position(), painted[0])
@@ -519,7 +520,7 @@ func TestScrollBounceFollowsPastTheEndAndSpringsBack(t *testing.T) {
 	// A fling into the end stops once it has bounced far enough.
 	stopped := false
 	for range 50 {
-		if !s.HandlePointer(PointerEvent{Kind: PointerScroll, Scroll: Pt(0, -60), ScrollPixels: true, ScrollMomentum: true}) {
+		if !s.HandlePointer(ggui.PointerEvent{Kind: ggui.PointerScroll, Scroll: ggui.Pt(0, -60), ScrollPixels: true, ScrollMomentum: true}) {
 			stopped = true
 			break
 		}
@@ -531,10 +532,10 @@ func TestScrollBounceFollowsPastTheEndAndSpringsBack(t *testing.T) {
 
 func TestScrollClampsByDefaultAndStretchKeepsContentInPlace(t *testing.T) {
 	t.Parallel()
-	var painted [3]Rect
+	var painted [3]ggui.Rect
 	s := Scroll(tall(nil, &painted)).Speed(1)
-	p := NewProbe(s, Sz(100, 120))
-	p.Scroll(Pt(50, 50), Pt(0, 40))
+	p := ggui.NewProbe(s, ggui.Sz(100, 120))
+	p.Scroll(ggui.Pt(50, 50), ggui.Pt(0, 40))
 	p.Frame()
 	if s.phys.over != 0 || painted[0].Origin.Y != 0 {
 		t.Fatalf("default scroll overscrolled: over %v, row at %v", s.phys.over, painted[0])
@@ -542,10 +543,10 @@ func TestScrollClampsByDefaultAndStretchKeepsContentInPlace(t *testing.T) {
 	p.Close()
 
 	s = Scroll(tall(nil, &painted)).Speed(1).Overscroll(OverscrollStretch)
-	p = NewProbe(s, Sz(100, 120))
+	p = ggui.NewProbe(s, ggui.Sz(100, 120))
 	defer p.Close()
 	p.Frame()
-	p.Scroll(Pt(50, 50), Pt(0, 40))
+	p.Scroll(ggui.Pt(50, 50), ggui.Pt(0, 40))
 	p.Frame()
 	if s.phys.over <= 0 || painted[0].Origin.Y != 0 {
 		t.Fatalf("stretch: over %v, row at %v; want the pull recorded and the content in place", s.phys.over, painted[0])
@@ -554,12 +555,12 @@ func TestScrollClampsByDefaultAndStretchKeepsContentInPlace(t *testing.T) {
 
 func TestScrollSnapSettlesOnTheNearestStop(t *testing.T) {
 	t.Parallel()
-	got := make([]Rect, 10)
+	got := make([]ggui.Rect, 10)
 	s := Scroll(rows(10, 50, got)).Speed(1).Snap(50)
-	p := NewProbe(s, Sz(100, 120))
+	p := ggui.NewProbe(s, ggui.Sz(100, 120))
 	defer p.Close()
 	p.Frame()
-	p.Scroll(Pt(50, 50), Pt(0, -70))
+	p.Scroll(ggui.Pt(50, 50), ggui.Pt(0, -70))
 	if s.position() != 70 {
 		t.Fatalf("offset %v before settling, want 70", s.position())
 	}
@@ -573,7 +574,7 @@ func TestScrollSnapSettlesOnTheNearestStop(t *testing.T) {
 	if s.position() != 50 {
 		t.Fatalf("settled at %v, want 50", s.position())
 	}
-	p.Scroll(Pt(50, 50), Pt(0, -1000))
+	p.Scroll(ggui.Pt(50, 50), ggui.Pt(0, -1000))
 	p.Advance(time.Second)
 	p.Advance(time.Second)
 	if s.position() != 380 {
@@ -583,9 +584,9 @@ func TestScrollSnapSettlesOnTheNearestStop(t *testing.T) {
 
 func TestScrollPagingTurnsAPageInTheGesturesDirection(t *testing.T) {
 	t.Parallel()
-	got := make([]Rect, 10)
+	got := make([]ggui.Rect, 10)
 	s := Scroll(rows(10, 50, got)).Speed(1).Paging()
-	p := NewProbe(s, Sz(100, 100))
+	p := ggui.NewProbe(s, ggui.Sz(100, 100))
 	defer p.Close()
 	p.Frame()
 	settle := func() {
@@ -593,17 +594,17 @@ func TestScrollPagingTurnsAPageInTheGesturesDirection(t *testing.T) {
 		p.Advance(time.Second)
 		p.Frame()
 	}
-	p.Scroll(Pt(50, 50), Pt(0, -10))
+	p.Scroll(ggui.Pt(50, 50), ggui.Pt(0, -10))
 	settle()
 	if s.position() != 0 {
 		t.Fatalf("a short gesture settled at %v, want back at 0", s.position())
 	}
-	p.Scroll(Pt(50, 50), Pt(0, -30))
+	p.Scroll(ggui.Pt(50, 50), ggui.Pt(0, -30))
 	settle()
 	if s.position() != 100 {
 		t.Fatalf("a longer gesture settled at %v, want the next page, 100", s.position())
 	}
-	p.Scroll(Pt(50, 50), Pt(0, 25))
+	p.Scroll(ggui.Pt(50, 50), ggui.Pt(0, 25))
 	settle()
 	if s.position() != 0 {
 		t.Fatalf("back by a quarter page settled at %v, want the previous page, 0", s.position())
@@ -612,13 +613,13 @@ func TestScrollPagingTurnsAPageInTheGesturesDirection(t *testing.T) {
 
 func TestScrollControllerRequestSurvivesARebuiltScroll(t *testing.T) {
 	t.Parallel()
-	got := make([]Rect, 20)
+	got := make([]ggui.Rect, 20)
 	var sc ScrollController
-	tick := State(0)
-	p := NewProbe(Reactive(func() Widget {
+	tick := ggui.State(0)
+	p := ggui.NewProbe(ggui.Reactive(func() ggui.Widget {
 		_ = tick.Get()
 		return Scroll(rows(20, 50, got)).Controller(&sc)
-	}), Sz(100, 100))
+	}), ggui.Sz(100, 100))
 	defer p.Close()
 	p.Frame()
 	sc.JumpTo(500)
@@ -638,12 +639,12 @@ func TestScrollControllerRequestSurvivesARebuiltScroll(t *testing.T) {
 func TestRevealTakesOverFromAnEasedScroll(t *testing.T) {
 	t.Parallel()
 	reveal := -1
-	children := make([]Widget, 20)
+	children := make([]ggui.Widget, 20)
 	for i := range children {
 		children[i] = &revealer{i: i, want: &reveal}
 	}
 	var sc ScrollController
-	p := NewProbe(Scroll(Column(children...)).Controller(&sc), Sz(50, 100))
+	p := ggui.NewProbe(Scroll(Column(children...)).Controller(&sc), ggui.Sz(50, 100))
 	defer p.Close()
 	p.Frame()
 	sc.ScrollTo(900)
@@ -660,22 +661,22 @@ func TestRevealTakesOverFromAnEasedScroll(t *testing.T) {
 
 // wheeled is a window of a scroll, the left half of it, over content 2000
 // tall, with config to configure the scroll, and its controller.
-func wheeled(config func(*ScrollWidget)) (*WindowProbe, *ScrollController) {
+func wheeled(config func(*ScrollWidget)) (*ggui.WindowProbe, *ScrollController) {
 	sc := &ScrollController{}
-	p := NewWindowProbe(func() Widget {
+	p := ggui.NewWindowProbe(func() ggui.Widget {
 		s := Scroll(Box().Size(100, 2000)).Controller(sc)
 		if config != nil {
 			config(s)
 		}
 		return Row(Box(s).Size(100, 100), Box().Size(100, 100))
-	}, Sz(200, 100))
+	}, ggui.Sz(200, 100))
 	p.Run(frameTime, 10)
 	return p, sc
 }
 
 // offsets runs p's frames until the window rests and returns the scroll's
 // offset after each.
-func offsets(t *testing.T, p *WindowProbe, sc *ScrollController) (at []float64) {
+func offsets(t *testing.T, p *ggui.WindowProbe, sc *ScrollController) (at []float64) {
 	t.Helper()
 	for range 60 {
 		fr := p.Step(frameTime)
@@ -695,7 +696,7 @@ func offsets(t *testing.T, p *WindowProbe, sc *ScrollController) (at []float64) 
 func TestAWheelsNotchScrollsThePlatformsDistanceEased(t *testing.T) {
 	p, sc := wheeled(nil)
 	defer p.Close()
-	p.Wheel(Pt(50, 50), Pt(0, -1), 100)
+	p.Wheel(ggui.Pt(50, 50), ggui.Pt(0, -1), 100)
 	at := offsets(t, p, sc)
 	if got := at[len(at)-1]; got != 100 {
 		t.Fatalf("a notch of 100 came to rest at %v; offsets %v", got, at)
@@ -716,7 +717,7 @@ func TestAWheelsNotchScrollsThePlatformsDistanceEased(t *testing.T) {
 		t.Fatalf("the notch took %d frames; a wheel must not feel slow: %v", n, at)
 	}
 	// Another platform's notch is another distance.
-	p.Wheel(Pt(50, 50), Pt(0, -1), 53)
+	p.Wheel(ggui.Pt(50, 50), ggui.Pt(0, -1), 53)
 	if at := offsets(t, p, sc); at[len(at)-1] != 153 {
 		t.Fatalf("a notch of 53 more came to rest at %v", at[len(at)-1])
 	}
@@ -728,7 +729,7 @@ func TestWheelNotchesAddUpWhileEasing(t *testing.T) {
 	p, sc := wheeled(nil)
 	defer p.Close()
 	for range 3 {
-		p.Wheel(Pt(50, 50), Pt(0, -1), 100)
+		p.Wheel(ggui.Pt(50, 50), ggui.Pt(0, -1), 100)
 		p.Step(frameTime)
 		p.Step(frameTime)
 	}
@@ -736,9 +737,9 @@ func TestWheelNotchesAddUpWhileEasing(t *testing.T) {
 		t.Fatalf("three notches of 100 came to rest at %v", at[len(at)-1])
 	}
 	// And one back takes one off, from wherever the view has got to.
-	p.Wheel(Pt(50, 50), Pt(0, -1), 100)
+	p.Wheel(ggui.Pt(50, 50), ggui.Pt(0, -1), 100)
 	p.Step(frameTime)
-	p.Wheel(Pt(50, 50), Pt(0, 1), 100)
+	p.Wheel(ggui.Pt(50, 50), ggui.Pt(0, 1), 100)
 	if at := offsets(t, p, sc); at[len(at)-1] != 300 {
 		t.Fatalf("a notch on and a notch back came to rest at %v, not where they began", at[len(at)-1])
 	}
@@ -749,7 +750,7 @@ func TestWheelNotchesAddUpWhileEasing(t *testing.T) {
 func TestATrackpadsScrollIsFollowedAtOnce(t *testing.T) {
 	p, sc := wheeled(nil)
 	defer p.Close()
-	p.Trackpad(Pt(50, 50), Pt(0, -37.5))
+	p.Trackpad(ggui.Pt(50, 50), ggui.Pt(0, -37.5))
 	p.Step(frameTime)
 	if got := sc.Offset(); got != 37.5 {
 		t.Fatalf("a trackpad's 37.5 pixels moved the view %v in its frame", got)
@@ -760,11 +761,11 @@ func TestATrackpadsScrollIsFollowedAtOnce(t *testing.T) {
 // distance of the view's own for a wheel's unit.
 func TestAWheelsNotchJumpsUnderReducedMotionAndSpeedSetsItsDistance(t *testing.T) {
 	sc := &ScrollController{}
-	p := NewWindowProbe(func() Widget {
-		return Provide(ReducedMotionKey, true, Box(Scroll(Box().Size(100, 2000)).Controller(sc)).Size(100, 100))
-	}, Sz(200, 100))
+	p := ggui.NewWindowProbe(func() ggui.Widget {
+		return ggui.Provide(ggui.ReducedMotionKey, true, Box(Scroll(Box().Size(100, 2000)).Controller(sc)).Size(100, 100))
+	}, ggui.Sz(200, 100))
 	p.Run(frameTime, 10)
-	p.Wheel(Pt(50, 50), Pt(0, -1), 100)
+	p.Wheel(ggui.Pt(50, 50), ggui.Pt(0, -1), 100)
 	p.Step(frameTime)
 	if got := sc.Offset(); got != 100 {
 		t.Fatalf("under reduced motion a notch moved the view %v in its frame", got)
@@ -773,7 +774,7 @@ func TestAWheelsNotchJumpsUnderReducedMotionAndSpeedSetsItsDistance(t *testing.T
 
 	p, sc = wheeled(func(s *ScrollWidget) { s.Speed(30) })
 	defer p.Close()
-	p.Wheel(Pt(50, 50), Pt(0, -2), 100)
+	p.Wheel(ggui.Pt(50, 50), ggui.Pt(0, -2), 100)
 	if at := offsets(t, p, sc); at[len(at)-1] != 60 {
 		t.Fatalf("two notches at Speed(30) came to rest at %v", at[len(at)-1])
 	}
@@ -783,20 +784,20 @@ func TestAWheelsNotchJumpsUnderReducedMotionAndSpeedSetsItsDistance(t *testing.T
 // does not take it, and the outer eases as it would for its own.
 func TestAWheelsNotchAtTheEndGoesToTheScrollAround(t *testing.T) {
 	inner, outer := &ScrollController{}, &ScrollController{}
-	p := NewWindowProbe(func() Widget {
+	p := ggui.NewWindowProbe(func() ggui.Widget {
 		in := Box(Scroll(Box().Size(100, 150)).Controller(inner)).Size(100, 100)
 		return Scroll(Column(in, Box().Size(100, 2000))).Controller(outer)
-	}, Sz(200, 100))
+	}, ggui.Sz(200, 100))
 	defer p.Close()
 	p.Run(frameTime, 10)
-	p.Wheel(Pt(50, 50), Pt(0, -1), 100)
+	p.Wheel(ggui.Pt(50, 50), ggui.Pt(0, -1), 100)
 	for range 30 {
 		p.Step(frameTime)
 	}
 	if inner.Offset() != 50 || outer.Offset() != 0 {
 		t.Fatalf("a notch moved the inner scroll to %v of 50 and the outer to %v", inner.Offset(), outer.Offset())
 	}
-	p.Wheel(Pt(50, 50), Pt(0, -1), 100)
+	p.Wheel(ggui.Pt(50, 50), ggui.Pt(0, -1), 100)
 	for range 30 {
 		p.Step(frameTime)
 	}
@@ -810,7 +811,7 @@ func TestAWheelsNotchAtTheEndGoesToTheScrollAround(t *testing.T) {
 func TestAWheelsNotchOnASnappingScrollSettlesFromWhereItLed(t *testing.T) {
 	p, sc := wheeled(func(s *ScrollWidget) { s.Snap(40) })
 	defer p.Close()
-	p.Wheel(Pt(50, 50), Pt(0, -1), 100)
+	p.Wheel(ggui.Pt(50, 50), ggui.Pt(0, -1), 100)
 	var at []float64
 	for range 80 {
 		fr := p.Step(frameTime)
@@ -835,10 +836,10 @@ func TestAWheelsNotchOnASnappingScrollSettlesFromWhereItLed(t *testing.T) {
 func TestAWheelsNotchEasingPaintsWithinTheViewport(t *testing.T) {
 	p, _ := wheeled(nil)
 	defer p.Close()
-	p.Wheel(Pt(50, 50), Pt(0, -1), 100)
+	p.Wheel(ggui.Pt(50, 50), ggui.Pt(0, -1), 100)
 	frames := p.Run(frameTime, 60)
 	for i, fr := range frames[1:] {
-		if fr.Painted != FrameContained {
+		if fr.Painted != ggui.FrameContained {
 			t.Fatalf("frame %d of the notch was painted %v: %v", i+1, fr.Painted, frames)
 		}
 	}
@@ -847,37 +848,37 @@ func TestAWheelsNotchEasingPaintsWithinTheViewport(t *testing.T) {
 // What a window's scroll events say of distance reaches a handler in
 // ScrollBy, and an event that says nothing counts WheelLine a unit.
 func TestScrollByIsThePlatformsDistance(t *testing.T) {
-	if got := (PointerEvent{Kind: PointerScroll, Scroll: Pt(0, -2)}).ScrollBy(); got != Pt(0, -2*WheelLine) {
+	if got := (ggui.PointerEvent{Kind: ggui.PointerScroll, Scroll: ggui.Pt(0, -2)}).ScrollBy(); got != ggui.Pt(0, -2*ggui.WheelLine) {
 		t.Fatalf("an event that says no distance scrolls by %v", got)
 	}
-	if got := (PointerEvent{Kind: PointerScroll, Scroll: Pt(3, -7), ScrollPixels: true}).ScrollBy(); got != Pt(3, -7) {
+	if got := (ggui.PointerEvent{Kind: ggui.PointerScroll, Scroll: ggui.Pt(3, -7), ScrollPixels: true}).ScrollBy(); got != ggui.Pt(3, -7) {
 		t.Fatalf("a scroll in pixels scrolls by %v", got)
 	}
-	var got []PointerEvent
-	p := NewWindowProbe(func() Widget { return &scrollCatcher{got: &got} }, Sz(100, 100))
+	var got []ggui.PointerEvent
+	p := ggui.NewWindowProbe(func() ggui.Widget { return &scrollCatcher{got: &got} }, ggui.Sz(100, 100))
 	defer p.Close()
 	p.Run(frameTime, 3)
-	p.Wheel(Pt(50, 50), Pt(0, -1), 100)
-	p.Wheel(Pt(50, 50), Pt(0, -2), 100)
+	p.Wheel(ggui.Pt(50, 50), ggui.Pt(0, -1), 100)
+	p.Wheel(ggui.Pt(50, 50), ggui.Pt(0, -2), 100)
 	p.Step(frameTime)
-	if len(got) != 1 || got[0].Scroll != Pt(0, -3) || got[0].ScrollBy() != Pt(0, -300) || !got[0].ScrollStep || got[0].ScrollPixels {
+	if len(got) != 1 || got[0].Scroll != ggui.Pt(0, -3) || got[0].ScrollBy() != ggui.Pt(0, -300) || !got[0].ScrollStep || got[0].ScrollPixels {
 		t.Fatalf("three notches of 100 reached the handler as %+v", got)
 	}
 	got = nil
-	p.Trackpad(Pt(50, 50), Pt(0, -12))
+	p.Trackpad(ggui.Pt(50, 50), ggui.Pt(0, -12))
 	p.Step(frameTime)
-	if len(got) != 1 || got[0].ScrollBy() != Pt(0, -12) || got[0].ScrollStep || !got[0].ScrollPixels {
+	if len(got) != 1 || got[0].ScrollBy() != ggui.Pt(0, -12) || got[0].ScrollStep || !got[0].ScrollPixels {
 		t.Fatalf("a trackpad's 12 pixels reached the handler as %+v", got)
 	}
 }
 
 // scrollCatcher fills the window and keeps the scrolls that reach it.
-type scrollCatcher struct{ got *[]PointerEvent }
+type scrollCatcher struct{ got *[]ggui.PointerEvent }
 
-func (c *scrollCatcher) Layout(cs Constraints, _ Env) Size { return cs.Max() }
-func (c *scrollCatcher) Paint(dst *Canvas, r Rect)         { dst.HitPointer(r, c) }
-func (c *scrollCatcher) HandlePointer(ev PointerEvent) bool {
-	if ev.Kind == PointerScroll {
+func (c *scrollCatcher) Layout(cs ggui.Constraints, _ ggui.Env) ggui.Size { return cs.Max() }
+func (c *scrollCatcher) Paint(dst *ggui.Canvas, r ggui.Rect)              { dst.HitPointer(r, c) }
+func (c *scrollCatcher) HandlePointer(ev ggui.PointerEvent) bool {
+	if ev.Kind == ggui.PointerScroll {
 		*c.got = append(*c.got, ev)
 	}
 	return true
@@ -887,29 +888,29 @@ func (c *scrollCatcher) HandlePointer(ev PointerEvent) bool {
 // in its Env, and at 3 logical pixels, 2 from the edge, without them.
 func TestScrollbarThumbTakesItsThicknessAndMarginFromTheStyle(t *testing.T) {
 	t.Parallel()
-	def := Env{}.ScrollStyle()
+	def := ggui.Env{}.ScrollStyle()
 	if def.Thickness != 3 || def.HoverThickness != 4.5 || def.Margin != 2 {
 		t.Fatalf("default bar is %v thick, %v under the pointer, %v from the edge; want 3, 4.5, 2", def.Thickness, def.HoverThickness, def.Margin)
 	}
-	style := ScrollStyle{Color: color.Black, Thickness: 7, HoverThickness: 7, Margin: 1}
-	if got := (Env{}).With(ScrollStyleKey, style).ScrollStyle(); got.Thickness != 7 || got.HoverThickness != 7 || got.Margin != 1 {
+	style := ggui.ScrollStyle{Color: color.Black, Thickness: 7, HoverThickness: 7, Margin: 1}
+	if got := (ggui.Env{}).With(ggui.ScrollStyleKey, style).ScrollStyle(); got.Thickness != 7 || got.HoverThickness != 7 || got.Margin != 1 {
 		t.Fatalf("a style's sizes were replaced: %+v", got)
 	}
-	r := Rct(Pt(0, 0), Sz(100, 100))
-	visual, hit := def.thumbRects(r, false, 10, 30, 0)
-	if visual != Rct(Pt(95, 10), Sz(3, 30)) || hit != Rct(Pt(90, 10), Sz(10, 30)) {
+	r := ggui.Rct(ggui.Pt(0, 0), ggui.Sz(100, 100))
+	visual, hit := thumbRects(def, r, false, 10, 30, 0)
+	if visual != ggui.Rct(ggui.Pt(95, 10), ggui.Sz(3, 30)) || hit != ggui.Rct(ggui.Pt(90, 10), ggui.Sz(10, 30)) {
 		t.Fatalf("the default thumb is drawn at %v and grabbed at %v", visual, hit)
 	}
-	if visual, _ = def.thumbRects(r, false, 10, 30, 1); visual.Size.W != 4.5 {
+	if visual, _ = thumbRects(def, r, false, 10, 30, 1); visual.Size.W != 4.5 {
 		t.Fatalf("the default thumb is %v wide under the pointer, want 4.5", visual.Size.W)
 	}
-	themed := (Env{}).With(ScrollStyleKey, style).ScrollStyle()
+	themed := (ggui.Env{}).With(ggui.ScrollStyleKey, style).ScrollStyle()
 	for _, amount := range []float64{0, 1} {
-		if visual, _ = themed.thumbRects(r, false, 10, 30, amount); visual != Rct(Pt(92, 10), Sz(7, 30)) {
+		if visual, _ = thumbRects(themed, r, false, 10, 30, amount); visual != ggui.Rct(ggui.Pt(92, 10), ggui.Sz(7, 30)) {
 			t.Fatalf("a 7px thumb 1px from the edge is drawn at %v, hovered %v", visual, amount)
 		}
 	}
-	if visual, hit = themed.thumbRects(r, true, 10, 30, 0); visual != Rct(Pt(10, 92), Sz(30, 7)) || hit != Rct(Pt(10, 90), Sz(30, 10)) {
+	if visual, hit = thumbRects(themed, r, true, 10, 30, 0); visual != ggui.Rct(ggui.Pt(10, 92), ggui.Sz(30, 7)) || hit != ggui.Rct(ggui.Pt(10, 90), ggui.Sz(30, 10)) {
 		t.Fatalf("a horizontal 7px thumb is drawn at %v and grabbed at %v", visual, hit)
 	}
 }
@@ -921,11 +922,11 @@ func TestNestedScrollsOfOneViewportKeepTheirOwnOffsets(t *testing.T) {
 	var x, y ScrollController
 	inner := Scroll(Box().Size(600, 900)).Horizontal().Controller(&x)
 	outer := Scroll(inner).Controller(&y)
-	p := NewWindowProbe(func() Widget { return outer }, Sz(300, 300))
+	p := ggui.NewWindowProbe(func() ggui.Widget { return outer }, ggui.Sz(300, 300))
 	defer p.Close()
 	p.Run(time.Second, 10)
 	for range 5 {
-		p.Trackpad(Pt(150, 150), Pt(0, -10))
+		p.Trackpad(ggui.Pt(150, 150), ggui.Pt(0, -10))
 		p.Step(16 * time.Millisecond)
 	}
 	if x.Offset() != 0 || y.Offset() != 50 {
@@ -944,24 +945,24 @@ func TestScrollTakesARoundingErrorOfOverflowForNone(t *testing.T) {
 	if total-header >= body {
 		t.Fatal("the sum no longer loses a rounding error; pick another")
 	}
-	var got Point
+	var got ggui.Point
 	s := Scroll(Box().Size(100, body))
-	w := Pointer(s).OnScroll(func(d Point) { got = d })
-	p := NewProbe(w, Sz(100, total-header))
+	w := Pointer(s).OnScroll(func(d ggui.Point) { got = d })
+	p := ggui.NewProbe(w, ggui.Sz(100, total-header))
 	defer p.Close()
 	p.Frame()
-	if s.maxOffset() != 0 || s.thumbHit != (Rect{}) {
+	if s.maxOffset() != 0 || s.thumbHit != (ggui.Rect{}) {
 		t.Fatalf("content %v over its viewport scrolls %v with a thumb at %v", s.childSize.H-s.viewport.H, s.maxOffset(), s.thumbHit)
 	}
-	p.Scroll(Pt(5, 5), Pt(0, -1))
-	if got != (Point{X: 0, Y: -1}) {
+	p.Scroll(ggui.Pt(5, 5), ggui.Pt(0, -1))
+	if got != (ggui.Point{X: 0, Y: -1}) {
 		t.Fatalf("the wheel did not fall through: got %v", got)
 	}
 	tall := Scroll(Box().Size(100, 101))
-	q := NewProbe(tall, Sz(100, 100))
+	q := ggui.NewProbe(tall, ggui.Sz(100, 100))
 	defer q.Close()
 	q.Frame()
-	if tall.maxOffset() != 1 || tall.thumbHit == (Rect{}) {
+	if tall.maxOffset() != 1 || tall.thumbHit == (ggui.Rect{}) {
 		t.Fatalf("content a pixel over scrolls %v with a thumb at %v", tall.maxOffset(), tall.thumbHit)
 	}
 }
@@ -970,9 +971,9 @@ func TestTabScrollsTheTargetIntoView(t *testing.T) {
 	t.Parallel()
 	items := Column(Focus(Box().Size(50, 50)), Focus(Box().Size(50, 50)), Focus(Box().Size(50, 50)))
 	sc := Scroll(items)
-	p := NewProbe(sc, Sz(50, 70))
+	p := ggui.NewProbe(sc, ggui.Sz(50, 70))
 	defer p.Close()
-	p.Type(Mods{}, KeyTab, KeyTab)
+	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyTab)
 	if sc.offset != 30 {
 		t.Fatalf("offset = %v after tabbing to the second item, want 30 so it is fully shown", sc.offset)
 	}
@@ -982,12 +983,12 @@ func TestTabScrollsTheTargetIntoView(t *testing.T) {
 func TestRequestRevealScrollsWithoutFocusing(t *testing.T) {
 	t.Parallel()
 	reveal := -1
-	rows := make([]Widget, 10)
+	rows := make([]ggui.Widget, 10)
 	for i := range rows {
 		rows[i] = &revealer{i: i, want: &reveal}
 	}
 	sc := Scroll(Column(rows...))
-	p := NewProbe(sc, Sz(50, 70))
+	p := ggui.NewProbe(sc, ggui.Sz(50, 70))
 	defer p.Close()
 	p.Frame()
 	reveal = 5
@@ -999,7 +1000,7 @@ func TestRequestRevealScrollsWithoutFocusing(t *testing.T) {
 		t.Fatal("RequestReveal moved focus")
 	}
 	reveal = -1
-	p.Scroll(Pt(10, 10), Pt(0, -40))
+	p.Scroll(ggui.Pt(10, 10), ggui.Pt(0, -40))
 	p.Frame()
 	if sc.offset == 50*6-70 {
 		t.Fatal("the reveal held the scroll after it was asked once")
@@ -1011,9 +1012,9 @@ type revealer struct {
 	want *int
 }
 
-func (w *revealer) Layout(Constraints, Env) Size { return Sz(50, 50) }
+func (w *revealer) Layout(ggui.Constraints, ggui.Env) ggui.Size { return ggui.Sz(50, 50) }
 
-func (w *revealer) Paint(dst *Canvas, r Rect) {
+func (w *revealer) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if *w.want == w.i {
 		dst.RequestReveal(r)
 	}
@@ -1023,12 +1024,12 @@ func (w *revealer) Paint(dst *Canvas, r Rect) {
 // once the scroll has painted, without waiting for input to refresh it.
 func TestFocusRefFocusedAfterScrollingIntoView(t *testing.T) {
 	t.Parallel()
-	refs := make([]FocusRef, 30)
-	rows := make([]Widget, len(refs))
+	refs := make([]ggui.FocusRef, 30)
+	rows := make([]ggui.Widget, len(refs))
 	for i := range rows {
 		rows[i] = refs[i].Attach(Focus(Box().Size(100, 20)))
 	}
-	p := NewProbe(Scroll(Column(rows...)), Sz(100, 100))
+	p := ggui.NewProbe(Scroll(Column(rows...)), ggui.Sz(100, 100))
 	defer p.Close()
 	p.Frame()
 	p.Post(refs[25].Focus)
@@ -1042,15 +1043,15 @@ func TestFocusRefFocusedAfterScrollingIntoView(t *testing.T) {
 
 func TestScrollAdoptsOffsetAcrossRebuild(t *testing.T) {
 	t.Parallel()
-	dep := State(0)
+	dep := ggui.State(0)
 	var s *ScrollWidget // the one built last
-	p := NewProbe(Reactive(func() Widget {
+	p := ggui.NewProbe(ggui.Reactive(func() ggui.Widget {
 		dep.Get()
 		s = Scroll(Box().Size(50, 500))
 		return s
-	}), Sz(50, 100))
+	}), ggui.Sz(50, 100))
 	defer p.Close()
-	p.Scroll(Pt(10, 10), Pt(0, -3))
+	p.Scroll(ggui.Pt(10, 10), ggui.Pt(0, -3))
 	if off := s.offset; off != 60 {
 		t.Fatalf("offset = %v, want 60", off)
 	}
@@ -1069,9 +1070,9 @@ func TestTabReachesAControlOutsideTheScrollWindow(t *testing.T) {
 	t.Parallel()
 	items := Column(Focus(Box().Size(50, 50)), Focus(Box().Size(50, 50)), Focus(Box().Size(50, 50)))
 	sc := Scroll(items)
-	p := NewProbe(sc, Sz(50, 40))
+	p := ggui.NewProbe(sc, ggui.Sz(50, 40))
 	defer p.Close()
-	p.Type(Mods{}, KeyTab, KeyTab, KeyTab)
+	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyTab, ggui.KeyTab)
 	if sc.offset != 110 {
 		t.Fatalf("offset = %v after tabbing to the third, fully hidden item; want 110", sc.offset)
 	}
@@ -1079,24 +1080,24 @@ func TestTabReachesAControlOutsideTheScrollWindow(t *testing.T) {
 
 func TestRetainKeepsTheFocusedRow(t *testing.T) {
 	t.Parallel()
-	items := State([]int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9})
+	items := ggui.State([]int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9})
 	built := map[int]int{}
-	list := EachKeyed(items, func(i int) int { return i }, func(rowItem EachItem[int]) Widget {
+	list := EachKeyed(items, func(i int) int { return i }, func(rowItem EachItem[int]) ggui.Widget {
 		r := rowItem.Value
 		built[r.Get()]++
 		return Focus(Box().Size(50, 10))
 	}).ItemExtent(10).Retain(1)
 	sc := Scroll(list)
-	p := NewProbe(sc, Sz(50, 30))
+	p := ggui.NewProbe(sc, ggui.Sz(50, 30))
 	defer p.Close()
-	p.Click(Pt(5, 5)) // focus row 0
-	p.Scroll(Pt(5, 5), Pt(0, -5))
+	p.Click(ggui.Pt(5, 5)) // focus row 0
+	p.Scroll(ggui.Pt(5, 5), ggui.Pt(0, -5))
 	p.Frame()
 	p.Frame()
 	if sc.offset < 30 {
 		t.Fatalf("offset %v, want the first rows out of view", sc.offset)
 	}
-	p.Scroll(Pt(5, 5), Pt(0, 5)) // back up
+	p.Scroll(ggui.Pt(5, 5), ggui.Pt(0, 5)) // back up
 	p.Frame()
 	if built[0] != 1 {
 		t.Fatalf("row 0 built %d times: the focused row was evicted", built[0])
@@ -1108,9 +1109,9 @@ func TestRetainKeepsTheFocusedRow(t *testing.T) {
 
 func TestScrollOffsetDetachesAndClampsLocalPosition(t *testing.T) {
 	t.Parallel()
-	source := State(10.0)
+	source := ggui.State(10.0)
 	scroll := Scroll(Box().Size(20, 600)).BindOffset(source)
-	p := NewProbe(scroll, Sz(100, 100))
+	p := ggui.NewProbe(scroll, ggui.Sz(100, 100))
 	defer p.Close()
 	p.Frame()
 	scroll.Offset(200)
@@ -1141,14 +1142,14 @@ func TestScrollOffsetDetachesAndClampsLocalPosition(t *testing.T) {
 // anew, and a new one once what it is made of changes.
 func TestScrollThumbHitIDAllocatesNothing(t *testing.T) {
 	s := Scroll(Box())
-	s.rect = Rct(Pt(0, 0), Sz(10, 10))
+	s.rect = ggui.Rct(ggui.Pt(0, 0), ggui.Sz(10, 10))
 	h := scrollThumb{s}
 	first := h.HitID()
 	if n := testing.AllocsPerRun(100, func() { _ = h.HitID() }); n != 0 {
 		t.Fatalf("the thumb's HitID allocates %v times", n)
 	}
-	s.rect = Rct(Pt(0, 0), Sz(20, 10))
-	if moved := h.HitID(); moved == first || moved != (struct{ Thumb Rect }{s.rect}) {
+	s.rect = ggui.Rct(ggui.Pt(0, 0), ggui.Sz(20, 10))
+	if moved := h.HitID(); moved == first || moved != (struct{ Thumb ggui.Rect }{s.rect}) {
 		t.Fatalf("a moved thumb's ID is %v, was %v", moved, first)
 	}
 	s.Key("k")
@@ -1163,8 +1164,8 @@ func TestScrollThumbHitIDAllocatesNothing(t *testing.T) {
 // A Scroll stores its viewport in the Env boxed once a frame, for both of
 // the keys it goes under, moving or not.
 func TestScrollFrameBoxesItsViewportOnce(t *testing.T) {
-	painted := map[int]Rect{}
-	offset := State(0.0)
+	painted := map[int]ggui.Rect{}
+	offset := ggui.State(0.0)
 	s := Scroll(Column(Box().Size(50, 500))).BindOffset(offset)
 	for range 4 {
 		frame(s, painted)
@@ -1184,37 +1185,37 @@ func TestScrollFrameBoxesItsViewportOnce(t *testing.T) {
 
 // field is a control that takes the pointer and the keys and describes
 // itself, as a text field does.
-type field struct{ Interactive }
+type field struct{ ggui.Interactive }
 
-func (f *field) Layout(c Constraints, _ Env) Size { return c.Constrain(Sz(40, 20)) }
-func (f *field) Paint(dst *Canvas, r Rect)        { f.Hit(dst, r, f, CursorShapeText) }
-func (f *field) HandlePointer(PointerEvent) bool  { return true }
-func (f *field) HandleKey(KeyEvent)               {}
+func (f *field) Layout(c ggui.Constraints, _ ggui.Env) ggui.Size { return c.Constrain(ggui.Sz(40, 20)) }
+func (f *field) Paint(dst *ggui.Canvas, r ggui.Rect)             { f.Hit(dst, r, f, ggui.CursorShapeText) }
+func (f *field) HandlePointer(ggui.PointerEvent) bool            { return true }
+func (f *field) HandleKey(ggui.KeyEvent)                         {}
 
 // An accessibility action focusing a control out of view scrolls it in, as
 // focus moved by the keyboard does.
 func TestPerformFocusesAndScrollsIntoView(t *testing.T) {
 	t.Parallel()
 	w := &field{}
-	w.Role = RoleTextField
+	w.Role = ggui.RoleTextField
 	w.SetName("Name")
 	tall := Column(Box().Size(40, 200), w)
-	p := NewProbe(Scroll(tall), Sz(100, 60))
+	p := ggui.NewProbe(Scroll(tall), ggui.Sz(100, 60))
 	defer p.Close()
-	field, ok := p.Semantics().Find(RoleTextField, "Name")
+	field, ok := p.Semantics().Find(ggui.RoleTextField, "Name")
 	if !ok {
 		t.Fatal("no field")
 	}
 	if !field.Offscreen {
 		t.Fatal("the field should start out of view")
 	}
-	p.Perform(field.ID, Action{Kind: ActionFocus})
+	p.Perform(field.ID, ggui.Action{Kind: ggui.ActionFocus})
 	if !p.Focused() {
 		t.Fatal("the field did not take focus")
 	}
 	// Focus moved by the keyboard reveals, and the action goes through the
 	// same path, so the scroll came along.
-	if now, _ := p.Semantics().Find(RoleTextField, "Name"); now.Offscreen {
+	if now, _ := p.Semantics().Find(ggui.RoleTextField, "Name"); now.Offscreen {
 		t.Error("the field was focused but not scrolled into view")
 	}
 }
@@ -1226,35 +1227,35 @@ func TestPerformFocusesAndScrollsIntoView(t *testing.T) {
 func TestScrollFollowsATouchPan(t *testing.T) {
 	t.Parallel()
 	taps, ups, drags := 0, 0, 0
-	child := Pointer(Box().Size(100, 400)).OnTap(func() { taps++ }).OnUp(func(PointerEvent) { ups++ }).OnDrag(func(PointerEvent) { drags++ })
+	child := Pointer(Box().Size(100, 400)).OnTap(func() { taps++ }).OnUp(func(ggui.PointerEvent) { ups++ }).OnDrag(func(ggui.PointerEvent) { drags++ })
 	s := Scroll(child).Speed(99)
-	p := NewProbe(s, Sz(100, 100))
+	p := ggui.NewProbe(s, ggui.Sz(100, 100))
 	defer p.Close()
-	p.TouchDown(Pt(50, 80))
-	p.TouchMove(Pt(50, 77))
-	p.TouchUp(Pt(50, 77))
+	p.TouchDown(ggui.Pt(50, 80))
+	p.TouchMove(ggui.Pt(50, 77))
+	p.TouchUp(ggui.Pt(50, 77))
 	if s.position() != 0 || taps != 1 {
 		t.Fatalf("a jittering tap scrolled to %v and tapped %d times, want 0 and 1", s.position(), taps)
 	}
-	p.TouchDown(Pt(50, 80))
-	p.TouchMove(Pt(50, 60))
+	p.TouchDown(ggui.Pt(50, 80))
+	p.TouchMove(ggui.Pt(50, 60))
 	if s.position() != 20 {
 		t.Fatalf("offset = %v, want 20 logical pixels", s.position())
 	}
-	p.TouchMove(Pt(50, -10))
+	p.TouchMove(ggui.Pt(50, -10))
 	if s.position() != 90 {
 		t.Fatalf("offset = %v past the viewport, want 90: the pan holds the finger", s.position())
 	}
-	p.TouchUp(Pt(50, -10))
+	p.TouchUp(ggui.Pt(50, -10))
 	if taps != 1 || ups != 2 {
 		t.Fatalf("taps %d, releases %d; want the pan to have released the press without a tap", taps, ups)
 	}
 	drags = 0
-	across := Scroll(Pointer(Box().Size(100, 400)).OnDrag(func(PointerEvent) { drags++ }))
-	q := NewProbe(across, Sz(100, 100))
+	across := Scroll(Pointer(Box().Size(100, 400)).OnDrag(func(ggui.PointerEvent) { drags++ }))
+	q := ggui.NewProbe(across, ggui.Sz(100, 100))
 	defer q.Close()
-	q.TouchDown(Pt(10, 50))
-	q.TouchMove(Pt(40, 51))
+	q.TouchDown(ggui.Pt(10, 50))
+	q.TouchMove(ggui.Pt(40, 51))
 	if across.position() != 0 || drags != 1 {
 		t.Fatalf("a drag across the scroll moved it to %v and reached its control %d times, want 0 and 1", across.position(), drags)
 	}

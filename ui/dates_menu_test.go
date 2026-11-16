@@ -7,6 +7,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 func date(y int, m time.Month, d int) time.Time { return time.Date(y, m, d, 0, 0, 0, 0, time.UTC) }
@@ -103,7 +104,7 @@ func TestDatePickerSelectionAndCancel(t *testing.T) {
 	n := 0
 	d := ui.DatePicker(v).Name("Due date").OnChange(func(time.Time) { n++ })
 	d.Calendar().Location(time.UTC)
-	p := ggui.NewProbe(ggui.Column(d), ggui.Sz(380, 450))
+	p := ggui.NewProbe(widget.Column(d), ggui.Sz(380, 450))
 	defer p.Close()
 	p.Tap("Due date")
 	p.Tap("2024-02-29")
@@ -135,7 +136,7 @@ func TestMenubarSwitchAndKeyboard(t *testing.T) {
 	picked := ""
 	after := 0
 	b := ui.Menubar(ui.Menu("File", ui.MenuItem("Unavailable", nil).Disabled(true), ui.MenuItem("New", func() { picked = "new" })), ui.Menu("Edit", ui.MenuItem("Copy", func() { picked = "copy" })))
-	p := ggui.NewProbe(ggui.Column(b, ui.Button("After", func() { after++ })), ggui.Sz(400, 300))
+	p := ggui.NewProbe(widget.Column(b, ui.Button("After", func() { after++ })), ggui.Sz(400, 300))
 	defer p.Close()
 	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyArrowDown, ggui.KeyEnter)
 	if picked != "new" || b.Popup().IsOpen() {
@@ -206,7 +207,7 @@ func TestMenubarDisabledAndRebuild(t *testing.T) {
 		_ = version.Get()
 		b = ui.Menubar(ui.Menu("Disabled", ui.MenuItem("Never", nil)).Disabled(true), ui.Menu("Enabled", ui.MenuItem("Run", func() { calls++ })))
 		b.Key("bar")
-		return ggui.Column(b)
+		return widget.Column(b)
 	}, ggui.Sz(400, 300))
 	defer p.Close()
 	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyArrowDown)
@@ -265,7 +266,7 @@ func TestButtonStylesPreserveActivationAndDisabledState(t *testing.T) {
 func TestMenubarPopupHasBoundedWidth(t *testing.T) {
 	t.Parallel()
 	b := ui.Menubar(ui.Menu("File", ui.MenuItem("New", nil).Shortcut("⌘N")))
-	p := ggui.NewProbe(ggui.Padding(b, 40), ggui.Sz(900, 400))
+	p := ggui.NewProbe(widget.Padding(b, 40), ggui.Sz(900, 400))
 	defer p.Close()
 	p.Tap("File")
 	p.Frame()
@@ -279,7 +280,7 @@ func TestCommandHoverAndStableHeight(t *testing.T) {
 	q := ggui.State("")
 	picked := ""
 	c := ui.Command(q, ui.CommandItem("One", func() { picked = "one" }), ui.CommandItem("Two", func() { picked = "two" })).Height(160).StableHeight().Borderless()
-	p := ggui.NewProbe(ggui.Column(c), ggui.Sz(360, 320))
+	p := ggui.NewProbe(widget.Column(c), ggui.Sz(360, 320))
 	defer p.Close()
 	p.Tap("Search commands")
 	two, _ := p.Find("Two")

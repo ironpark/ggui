@@ -70,9 +70,9 @@ percentage resolution, or browser intrinsic-size algorithm.
 
 ## ggui integration
 
-The root package delegates its Box, Row, Column, Stack, Align, Wrap, and Grid
-calculations here. Existing `ggui.Constraints`, `Justify`, `CrossAlign`, and
-`TextDirection` names alias the core types. Widget adapters resolve `Env`
+Package `widget` delegates its Box, Row, Column, Stack, Align, Wrap, and Grid
+calculations here. `ggui.Constraints`, `ggui.TextDirection`, `widget.Justify`,
+and `widget.CrossAlign` alias the core types. Widget adapters resolve `Env`
 spacing/direction and flex wrapper metadata before calling the core, while
 existing property tracking and layout caches remain in ggui. Multi-child widget
 adapters retain the engine's borrowed `Children` slice directly, with no separate

@@ -6,6 +6,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // modalBlur is how far the window behind a modal panel is blurred, in
@@ -20,8 +21,8 @@ const modalBlur = 4
 type modal struct {
 	open        ggui.Binding[bool]
 	content     ggui.Widget
-	title       *ggui.TextWidget
-	description *ggui.TextWidget
+	title       *widget.TextWidget
+	description *widget.TextWidget
 	actions     []ggui.Widget // what Footer was given
 	actionsRev  int           // counts the calls to setFooter
 	evenActions bool          // the actions share the footer's width equally
@@ -37,14 +38,14 @@ type modal struct {
 	// only when one of them is replaced, and restyled every layout.
 	parts  modalParts
 	shape  modalShape
-	header *ggui.ColumnWidget
-	body   *ggui.ColumnWidget
-	stack  *ggui.ColumnWidget // the body over a full-height panel's stacked footer, or nil
-	inner  *ggui.BoxWidget    // pads the header and the content, not the footer
-	styled *ggui.StyledWidget
+	header *widget.ColumnWidget
+	body   *widget.ColumnWidget
+	stack  *widget.ColumnWidget // the body over a full-height panel's stacked footer, or nil
+	inner  *widget.BoxWidget    // pads the header and the content, not the footer
+	styled *widget.StyledWidget
 	footer *modalFooter
 
-	panel *ggui.BoxWidget
+	panel *widget.BoxWidget
 	theme *uitheme.Theme
 	env   ggui.Env
 	rect  ggui.Rect
@@ -52,7 +53,7 @@ type modal struct {
 
 // modalParts is what a panel was assembled from.
 type modalParts struct {
-	title, description *ggui.TextWidget
+	title, description *widget.TextWidget
 	actionsRev         int
 	evenActions        bool
 	band, fill         bool
@@ -102,7 +103,7 @@ func (m *modal) setDescription(s string) {
 	case s == "":
 		m.description = nil
 	case m.description == nil:
-		m.description = ggui.Text(s)
+		m.description = widget.Text(s)
 	default:
 		m.description.Content(s)
 	}
@@ -135,7 +136,7 @@ func (m *modal) Semantics() (ggui.Role, string) { return ggui.RoleDialog, m.name
 // build makes the panel out of the title, the description, the content and
 // the footer, on the surface every floating thing uses and in the shape its
 // owner asks for. The caller lays it out when it knows the room.
-func (m *modal) build(env ggui.Env, shape modalShape) *ggui.BoxWidget {
+func (m *modal) build(env ggui.Env, shape modalShape) *widget.BoxWidget {
 	t := uitheme.Of(env)
 	m.theme, m.env, m.shape = t, env, shape
 	if m.closeButton == nil {
@@ -181,7 +182,7 @@ func (m *modal) assemble() {
 		if m.description != nil {
 			lines = append(lines, m.description)
 		}
-		m.header = ggui.Column(lines...).Align(ggui.AlignStretch)
+		m.header = widget.Column(lines...).Align(widget.AlignStretch)
 		rows = append(rows, m.header)
 	}
 	m.footer = nil
@@ -197,23 +198,23 @@ func (m *modal) assemble() {
 		// the bottom of the panel. The content takes up to the room they
 		// leave and no more, so content that flexes, a form in a Scroll
 		// say, scrolls above them instead of pushing them out of the panel.
-		m.body = ggui.Column(append(rows, ggui.Flexible(m.content))...).Align(ggui.AlignStretch)
-		m.stack = ggui.Column(ggui.Expanded(m.body), m.footer).Align(ggui.AlignStretch)
+		m.body = widget.Column(append(rows, widget.Flexible(m.content))...).Align(widget.AlignStretch)
+		m.stack = widget.Column(widget.Expanded(m.body), m.footer).Align(widget.AlignStretch)
 		top = m.stack
 	case m.footer != nil && !m.shape.band:
-		m.body = ggui.Column(append(rows, m.content, m.footer)...).Align(ggui.AlignStretch)
+		m.body = widget.Column(append(rows, m.content, m.footer)...).Align(widget.AlignStretch)
 		top = m.body
 	default:
-		m.body = ggui.Column(append(rows, m.content)...).Align(ggui.AlignStretch)
+		m.body = widget.Column(append(rows, m.content)...).Align(widget.AlignStretch)
 		top = m.body
 	}
-	m.styled = ggui.Styled(top)
-	m.inner = ggui.Box(m.styled)
+	m.styled = widget.Styled(top)
+	m.inner = widget.Box(m.styled)
 	if m.footer != nil && m.shape.band {
-		m.panel = ggui.Box(ggui.Column(m.inner, m.footer).Align(ggui.AlignStretch))
+		m.panel = widget.Box(widget.Column(m.inner, m.footer).Align(widget.AlignStretch))
 		return
 	}
-	m.panel = ggui.Box(m.inner)
+	m.panel = widget.Box(m.inner)
 }
 
 // modalFooter is a panel's actions. As a band it is the strip at the foot
@@ -223,30 +224,30 @@ func (m *modal) assemble() {
 type modalFooter struct {
 	m     *modal
 	band  bool
-	box   *ggui.BoxWidget
-	row   *ggui.RowWidget
-	stack *ggui.ColumnWidget
+	box   *widget.BoxWidget
+	row   *widget.RowWidget
+	stack *widget.ColumnWidget
 	size  ggui.Size
 }
 
 func (f *modalFooter) assemble(actions []ggui.Widget, even bool) {
 	if !f.band {
-		f.stack = ggui.Column(actions...).Align(ggui.AlignStretch)
-		f.box = ggui.Box(f.stack)
+		f.stack = widget.Column(actions...).Align(widget.AlignStretch)
+		f.box = widget.Box(f.stack)
 		return
 	}
 	children := make([]ggui.Widget, 0, len(actions)+1)
 	if !even {
-		children = append(children, ggui.Spacer())
+		children = append(children, widget.Spacer())
 	}
 	for _, a := range actions {
 		if even {
-			a = ggui.Expanded(a)
+			a = widget.Expanded(a)
 		}
 		children = append(children, a)
 	}
-	f.row = ggui.Row(children...)
-	f.box = ggui.Box(f.row)
+	f.row = widget.Row(children...)
+	f.box = widget.Box(f.row)
 }
 
 // Layout implements ggui.Widget.

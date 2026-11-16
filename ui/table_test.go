@@ -10,6 +10,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 type person struct {
@@ -361,7 +362,7 @@ func TestTableIsOneTabStop(t *testing.T) {
 	t.Parallel()
 	tbl, chosen := table(people())
 	chosen.Set(2)
-	p := ggui.NewProbe(ggui.Column(ui.Button("before", func() {}), tbl, ui.Button("after", func() {})), ggui.Sz(300, 300))
+	p := ggui.NewProbe(widget.Column(ui.Button("before", func() {}), tbl, ui.Button("after", func() {})), ggui.Sz(300, 300))
 	defer p.Close()
 	var stops []string
 	for range 3 {

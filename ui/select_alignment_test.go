@@ -7,12 +7,13 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestSelectAlignsSelectedRowWithTrigger(t *testing.T) {
 	t.Parallel()
 	selectBox := ui.Select(ggui.State("Beta")).Options([]string{"Alpha", "Beta", "Gamma"}).Name("Choice").MinWidth(180)
-	p := ggui.NewProbe(ggui.Padding(ggui.Column(ggui.Box().Height(100), selectBox), 0, 50), ggui.Sz(400, 350))
+	p := ggui.NewProbe(widget.Padding(widget.Column(widget.Box().Height(100), selectBox), 0, 50), ggui.Sz(400, 350))
 	defer p.Close()
 	p.Tap("Choice")
 	p.Advance(time.Second)
@@ -36,7 +37,7 @@ func TestSelectAlignedCollisionAndOptOut(t *testing.T) {
 	t.Parallel()
 	for _, align := range []bool{true, false} {
 		box := ui.Select(ggui.State("Beta")).Options([]string{"Alpha", "Beta", "Gamma"}).Name("Choice").AlignItemWithTrigger(align)
-		p := ggui.NewProbe(ggui.Column(box), ggui.Sz(240, 220))
+		p := ggui.NewProbe(widget.Column(box), ggui.Sz(240, 220))
 		p.Tap("Choice")
 		p.Advance(time.Second)
 		trigger, _ := p.Find("Choice")
@@ -66,7 +67,7 @@ func TestSelectAlignedOverflowAndReducedMotion(t *testing.T) {
 	t.Parallel()
 	values := []string{"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"}
 	box := ui.Select(ggui.State("seven")).Options(values).Name("Choice")
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(ggui.Box().Height(60), box)), ggui.Sz(220, 160))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(widget.Box().Height(60), box)), ggui.Sz(220, 160))
 	defer p.Close()
 	p.Tap("Choice")
 	selected, ok := p.FindRole(ggui.RoleOption, "seven")
@@ -90,7 +91,7 @@ func TestSelectAlignedRebuildKeepsScrollPosition(t *testing.T) {
 	p := ggui.ProbeBuilder(func() ggui.Widget {
 		_ = revision.Get()
 		box = ui.Select(value).Options([]string{"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"}).Name("Choice").Key("choice")
-		return ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(ggui.Box().Height(60), box))
+		return ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(widget.Box().Height(60), box))
 	}, ggui.Sz(220, 160))
 	defer p.Close()
 	p.Tap("Choice")
@@ -112,7 +113,7 @@ func TestNativeSelectFallsBackWithoutNativeWindow(t *testing.T) {
 	value := ggui.State("Alpha")
 	changes := 0
 	box := ui.NativeSelect(value).Options([]string{"Alpha", "Beta"}).Name("Native choice").OnChange(func(string) { changes++ })
-	p := ggui.NewProbe(ggui.Column(box), ggui.Sz(240, 220))
+	p := ggui.NewProbe(widget.Column(box), ggui.Sz(240, 220))
 	defer p.Close()
 	p.Tap("Native choice")
 	if !box.Popup().IsOpen() {

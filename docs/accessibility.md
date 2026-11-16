@@ -4,7 +4,7 @@
 
 Expose meaningful names and actions, and support text scaling and reduced motion.
 
-Examples use `ggui` and `ui` imports and application-defined placeholders.
+Examples use `ggui`, `widget` and `ui` imports and application-defined placeholders.
 See [example conventions](README.md#start-here) before copying snippets.
 
 **The native accessibility bridge covers macOS and Windows.** On macOS it

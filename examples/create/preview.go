@@ -10,6 +10,7 @@ import (
 	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // previewModel owns sample data and controls independently of the theme editor.
@@ -18,7 +19,7 @@ import (
 type previewModel struct {
 	view                                            ggui.Widget
 	cards                                           []ggui.Widget
-	scroll, pan                                     ggui.ScrollController
+	scroll, pan                                     widget.ScrollController
 	threshold                                       *ggui.StateValue[float64]
 	payoutCurrency, notes, payoutFeedback           *ggui.StateValue[string]
 	emailUpdates, publicStats                       *ggui.StateValue[bool]
@@ -71,30 +72,30 @@ func newPreview() *previewModel {
 			for i := column; i < len(p.cards); i += columns {
 				cards = append(cards, p.cards[i])
 			}
-			stacks[column] = ggui.Expanded(ggui.Column(cards...).Gap(32).Stretch())
+			stacks[column] = widget.Expanded(widget.Column(cards...).Gap(32).Stretch())
 		}
-		return ggui.Padding(ggui.Row(stacks...).Gap(32).Align(ggui.AlignStart), pad)
+		return widget.Padding(widget.Row(stacks...).Gap(32).Align(widget.AlignStart), pad)
 	}
 	// The desktop collage is the reference's: five single columns around a
 	// double one, whose wide cards span it and whose others pair up.
-	stack := func(cards ...ggui.Widget) ggui.Widget { return ggui.Column(cards...).Gap(previewGap).Stretch() }
+	stack := func(cards ...ggui.Widget) ggui.Widget { return widget.Column(cards...).Gap(previewGap).Stretch() }
 	pair := func(a, b ggui.Widget) ggui.Widget {
-		return ggui.Row(ggui.Expanded(a), ggui.Expanded(b)).Gap(previewGap).Align(ggui.AlignStart)
+		return widget.Row(widget.Expanded(a), widget.Expanded(b)).Gap(previewGap).Align(widget.AlignStart)
 	}
-	single := func(cards ...ggui.Widget) ggui.Widget { return ggui.Box(stack(cards...)).Width(previewColumn) }
-	collage := ggui.Padding(ggui.Row(
+	single := func(cards ...ggui.Widget) ggui.Widget { return widget.Box(stack(cards...)).Width(previewColumn) }
+	collage := widget.Padding(widget.Row(
 		single(contributions, distribute, scan, dividends, averaging, syncing),
 		single(payout, balance, preferences, goal, kitchen),
-		ggui.Box(stack(pair(savings, buy), transactions, pair(stack(nav, faq), stack(shortcuts, door)), holdings)).Width(2*previewColumn+previewGutter),
+		widget.Box(stack(pair(savings, buy), transactions, pair(stack(nav, faq), stack(shortcuts, door)), holdings)).Width(2*previewColumn+previewGutter),
 		single(access, summary, transfer, cover, loading),
 		single(method, power, bank, upcoming, shades),
 		single(stock, catalog, milestone, social, notifications),
-	).Gap(previewGutter).Align(ggui.AlignStart), previewMargin)
-	narrow := ggui.Scroll(ggui.Responsive(650, grid(2, 24), grid(1, 16))).Controller(&p.scroll).Key(p.key("preview-scroll"))
-	desktop := ggui.Scroll(ggui.Box(collage).Width(previewWidth)).Controller(&p.scroll).Key(p.key("preview-scroll"))
-	wide := ggui.Scroll(desktop).Horizontal().Controller(&p.pan).Key(p.key("preview-pan"))
-	viewport := ggui.Responsive(1000, wide, narrow)
-	p.view = ggui.Stack(viewport, p.feedbackDialog(), p.savingsDialog(), p.releaseDialog())
+	).Gap(previewGutter).Align(widget.AlignStart), previewMargin)
+	narrow := widget.Scroll(widget.Responsive(650, grid(2, 24), grid(1, 16))).Controller(&p.scroll).Key(p.key("preview-scroll"))
+	desktop := widget.Scroll(widget.Box(collage).Width(previewWidth)).Controller(&p.scroll).Key(p.key("preview-scroll"))
+	wide := widget.Scroll(desktop).Horizontal().Controller(&p.pan).Key(p.key("preview-pan"))
+	viewport := widget.Responsive(1000, wide, narrow)
+	p.view = widget.Stack(viewport, p.feedbackDialog(), p.savingsDialog(), p.releaseDialog())
 	return p
 }
 
@@ -118,20 +119,20 @@ func (p *previewModel) key(name string) any {
 }
 
 func previewHeader(title, description string) ggui.Widget {
-	return ggui.Column(ui.Heading(title).Size(16).Weight(ggui.WeightMedium), previewDescription(description)).Gap(5).Stretch()
+	return widget.Column(ui.Heading(title).Size(16).Weight(ggui.WeightMedium), previewDescription(description)).Gap(5).Stretch()
 }
 
-func previewDescription(text string) *ggui.TextWidget {
-	return ggui.Text(text).Size(14).LineHeight(1.5).Color(uitheme.MutedFg)
+func previewDescription(text string) *widget.TextWidget {
+	return widget.Text(text).Size(14).LineHeight(1.5).Color(uitheme.MutedFg)
 }
 
 // previewHeaderAction is a header with a control at its top right corner.
 func previewHeaderAction(title, description string, action ggui.Widget) ggui.Widget {
-	return ggui.Row(ggui.Expanded(previewHeader(title, description)), action).Gap(8).Align(ggui.AlignStart)
+	return widget.Row(widget.Expanded(previewHeader(title, description)), action).Gap(8).Align(widget.AlignStart)
 }
 
-func previewLabel(text string) *ggui.TextWidget {
-	return ggui.Text(text).Size(14).Weight(ggui.WeightMedium)
+func previewLabel(text string) *widget.TextWidget {
+	return widget.Text(text).Size(14).Weight(ggui.WeightMedium)
 }
 
 func previewCard(title, description string, body ggui.Widget) ggui.Widget {
@@ -140,25 +141,25 @@ func previewCard(title, description string, body ggui.Widget) ggui.Widget {
 
 // previewPlainCard is a card of sections 16 apart, with no footer.
 func previewPlainCard(sections ...ggui.Widget) ggui.Widget {
-	return ui.Card(ggui.Column(sections...).Gap(16).Stretch()).Pad(16)
+	return ui.Card(widget.Column(sections...).Gap(16).Stretch()).Pad(16)
 }
 
 // previewEmpty is a card with nothing in it yet: a tile of media over a
 // title, what to do about it, and the button that does.
 func previewEmpty(media ggui.Widget, title, description string, action ggui.Widget) ggui.Widget {
-	return ui.Card(ggui.Column(
-		ggui.Center(ggui.Box(media).Pad(8).Fill(previewMuted).Radius(8)),
-		ggui.Column(
+	return ui.Card(widget.Column(
+		widget.Center(widget.Box(media).Pad(8).Fill(previewMuted).Radius(8)),
+		widget.Column(
 			ui.Heading(title).Size(14).Weight(ggui.WeightMedium).Align(.5),
 			previewDescription(description).Align(.5),
 		).Gap(8).Stretch(),
-		ggui.Center(action),
+		widget.Center(action),
 	).Gap(16).Stretch()).Pad(32, 24)
 }
 
 // previewValue is a row naming a value at its right edge.
 func previewValue(label, value string) ggui.Widget {
-	return ggui.Row(ggui.Expanded(previewDescription(label)), ggui.Text(value).Size(14).Weight(ggui.WeightMedium).NoWrap()).Gap(8).Align(ggui.AlignCenter)
+	return widget.Row(widget.Expanded(previewDescription(label)), widget.Text(value).Size(14).Weight(ggui.WeightMedium).NoWrap()).Gap(8).Align(widget.AlignCenter)
 }
 
 // Both colors stay live when the surrounding theme changes.
@@ -171,8 +172,8 @@ func previewFooterCard(header, body, footer ggui.Widget) ggui.Widget {
 			sections = append(sections, section)
 		}
 	}
-	content := ggui.Box(ggui.Column(sections...).Gap(16).Stretch()).Pad(16).Fill(uitheme.Card)
-	card := ui.Card(ggui.Column(content, ui.Divider(), ggui.Padding(ggui.Column(footer).Stretch(), 16)).Gap(0).Stretch()).Fill(previewMuted).Pad(0)
+	content := widget.Box(widget.Column(sections...).Gap(16).Stretch()).Pad(16).Fill(uitheme.Card)
+	card := ui.Card(widget.Column(content, ui.Divider(), widget.Padding(widget.Column(footer).Stretch(), 16)).Gap(0).Stretch()).Fill(previewMuted).Pad(0)
 	var radius, borderWidth float64
 	var border color.Color
 	clippedCard := ggui.FromFuncs(func(cs ggui.Constraints, env ggui.Env) ggui.Size {
@@ -191,7 +192,7 @@ func previewFooterCard(header, body, footer ggui.Widget) ggui.Widget {
 }
 
 func previewTile(content ggui.Widget) ggui.Widget {
-	return ggui.Box(content).Pad(12).Fill(previewMuted).Radius(8)
+	return widget.Box(content).Pad(12).Fill(previewMuted).Radius(8)
 }
 
 func previewFeedback(value ggui.Readable[string]) ggui.Widget {
@@ -217,8 +218,8 @@ func (p *previewModel) dismiss(card string) ggui.Widget {
 }
 
 func (p *previewModel) feedbackDialog() ggui.Widget {
-	return ui.Dialog(p.feedbackOpen, ggui.Column(
-		ggui.TextOf(p.feedback).Role(ggui.RoleStatus).Size(14),
+	return ui.Dialog(p.feedbackOpen, widget.Column(
+		widget.TextOf(p.feedback).Role(ggui.RoleStatus).Size(14),
 		ui.Button("Done", func() { p.feedbackOpen.Set(false) }).Key(p.key("feedback-done")),
 	).Gap(20).Stretch()).Title("Preview update").Width(420)
 }
@@ -252,14 +253,14 @@ func (p *previewModel) contributionsCard() ggui.Widget {
 		})
 	labels := make([]ggui.Widget, len(months))
 	for i, month := range months {
-		labels[i] = ggui.Expanded(ggui.Center(ui.Caption(month).Size(12)))
+		labels[i] = widget.Expanded(widget.Center(ui.Caption(month).Size(12)))
 	}
-	chartWithLabels := ggui.Column(chart, ggui.Padding(ggui.Row(labels...), 0, 12)).Gap(0).Stretch()
+	chartWithLabels := widget.Column(chart, widget.Padding(widget.Row(labels...), 0, 12)).Gap(0).Stretch()
 	tile := func(label, title, description string) ggui.Widget {
-		return previewTile(ggui.Column(ui.Caption(label).Size(12), ggui.Text(title).Size(16).Weight(ggui.WeightMedium), ui.Caption(description).Size(14)).Gap(8).Stretch())
+		return previewTile(widget.Column(ui.Caption(label).Size(12), widget.Text(title).Size(16).Weight(ggui.WeightMedium), ui.Caption(description).Size(14)).Gap(8).Stretch())
 	}
 	return previewFooterCard(previewHeaderAction("Contribution History", "Last 6 months of activity", ui.Badge("+12% vs last month").Secondary()),
-		ggui.Column(chartWithLabels, ggui.Row(ggui.Expanded(tile("UPCOMING", "May 25, 2024", "$1,000 scheduled")), ggui.Expanded(tile("AUTO-SAVE PLAN", "Accelerated", "Recurring weekly"))).Gap(12)).Gap(16).Stretch(),
+		widget.Column(chartWithLabels, widget.Row(widget.Expanded(tile("UPCOMING", "May 25, 2024", "$1,000 scheduled")), widget.Expanded(tile("AUTO-SAVE PLAN", "Accelerated", "Recurring weekly"))).Gap(12)).Gap(16).Stretch(),
 		ui.Button("View Full Report", func() {
 			p.announce(p.chartFeedback, "December–May contributions: "+previewMoney("USD", 13350)+". Highest month: May, $3,000.00.")
 		}).Key(p.key("full-report")))
@@ -267,18 +268,18 @@ func (p *previewModel) contributionsCard() ggui.Widget {
 
 func (p *previewModel) savingsCard() ggui.Widget {
 	goal := func(name string, value *ggui.StateValue[float64], target float64) ggui.Widget {
-		return previewTile(ggui.Column(
+		return previewTile(widget.Column(
 			ui.Caption(name).Size(12),
-			ggui.Text(strings.TrimSuffix(previewMoney("USD", target), ".00")).Size(30).Weight(ggui.WeightSemibold),
+			widget.Text(strings.TrimSuffix(previewMoney("USD", target), ".00")).Size(30).Weight(ggui.WeightSemibold),
 			ui.Progress(ggui.Map(value, func(v float64) float64 { return v / target })).Height(4),
-			ggui.Row(ggui.Expanded(ui.CaptionOf(ggui.Map(value, func(v float64) string { return fmt.Sprintf("%.0f%% achieved", v/target*100) })).Size(14)),
+			widget.Row(widget.Expanded(ui.CaptionOf(ggui.Map(value, func(v float64) string { return fmt.Sprintf("%.0f%% achieved", v/target*100) })).Size(14)),
 				ui.CaptionOf(ggui.Map(value, func(v float64) string { return strings.TrimSuffix(previewMoney("USD", v), ".00") })).Size(14)).Gap(8),
 		).Gap(14).Stretch())
 	}
 	header := previewHeaderAction("Savings Targets", "Active milestones for 2024",
 		ui.Button("New Goal", func() { p.savingsOpen.Set(true) }).Name("Manage savings targets").Key(p.key("manage-savings")).Outline().Size(ui.ButtonSmall))
-	return previewFooterCard(header, ggui.Column(goal("RETIREMENT", p.retirement, 420000), goal("REAL ESTATE", p.property, 85000)).Gap(16).Stretch(),
-		ggui.TextOf(ggui.Combine(p.retirement, p.property, func(retirement, property float64) string {
+	return previewFooterCard(header, widget.Column(goal("RETIREMENT", p.retirement, 420000), goal("REAL ESTATE", p.property, 85000)).Gap(16).Stretch(),
+		widget.TextOf(ggui.Combine(p.retirement, p.property, func(retirement, property float64) string {
 			if retirement >= 420000 && property >= 85000 {
 				return "You have met your targets for this year."
 			}
@@ -294,7 +295,7 @@ func (p *previewModel) savingsDialog() ggui.Widget {
 			p.savingsFeedback.Set(name + ": " + previewMoney("USD", next) + " saved in this preview.")
 		}).Key(p.key("save-" + name)).Outline()
 	}
-	return ui.Dialog(p.savingsOpen, ggui.Column(previewDescription("Explore contributions with local sample data. No money is moved."),
+	return ui.Dialog(p.savingsOpen, widget.Column(previewDescription("Explore contributions with local sample data. No money is moved."),
 		add("Retirement", p.retirement, 420000), add("Real Estate", p.property, 85000), previewFeedback(p.savingsFeedback),
 		ui.Button("Close savings", func() { p.savingsOpen.Set(false) }).Key(p.key("close-savings")),
 	).Gap(16).Stretch()).Title("Manage savings targets").Width(420)
@@ -311,12 +312,12 @@ func (p *previewModel) payoutCard() ggui.Widget {
 		return strings.ReplaceAll(previewMoney(currency, value), ",", "")
 	})
 	// Stack the label and value on small cards; neither should squeeze the form.
-	amountLabel := ggui.Text("Minimum Payout Amount").Size(14).Weight(ggui.WeightMedium)
-	amountValue := ggui.TextOf(amount).Size(24).Weight(ggui.WeightSemibold)
-	amountRow := ggui.Responsive(330, ggui.Row(amountLabel, ggui.Spacer(), amountValue).Gap(8).Align(ggui.AlignCenter), ggui.Column(amountLabel, amountValue).Gap(8))
-	return previewFooterCard(previewHeaderAction("Payout Threshold", "Set the minimum balance required before a payout is triggered.", p.dismiss("Payout Threshold")), ggui.Column(
+	amountLabel := widget.Text("Minimum Payout Amount").Size(14).Weight(ggui.WeightMedium)
+	amountValue := widget.TextOf(amount).Size(24).Weight(ggui.WeightSemibold)
+	amountRow := widget.Responsive(330, widget.Row(amountLabel, widget.Spacer(), amountValue).Gap(8).Align(widget.AlignCenter), widget.Column(amountLabel, amountValue).Gap(8))
+	return previewFooterCard(previewHeaderAction("Payout Threshold", "Set the minimum balance required before a payout is triggered.", p.dismiss("Payout Threshold")), widget.Column(
 		ui.Field("Preferred Currency", currency),
-		ggui.Column(amountRow, slider, ggui.Row(ggui.Expanded(ui.Caption("$50 (MIN)").Size(12)), ui.Caption("$10,000 (MAX)").Size(12))).Gap(12).Stretch(),
+		widget.Column(amountRow, slider, widget.Row(widget.Expanded(ui.Caption("$50 (MIN)").Size(12)), ui.Caption("$10,000 (MAX)").Size(12))).Gap(12).Stretch(),
 		ui.Field("Notes", ui.TextField(p.notes).Name("Payout notes").Key(p.key("payout-notes")).Lines(4).MinWidth(0).Placeholder("Add any notes for this payout configuration…")),
 	).Gap(20).Stretch(), ui.Button("Save Threshold", func() {
 		message := "Threshold saved: " + previewMoney(ggui.Peek(p.payoutCurrency), ggui.Peek(p.threshold)) + "."
@@ -334,7 +335,7 @@ func (p *previewModel) distributeCard() ggui.Widget {
 }
 
 func (p *previewModel) releaseDialog() ggui.Widget {
-	return ui.Dialog(p.releaseOpen, ggui.Column(
+	return ui.Dialog(p.releaseOpen, widget.Column(
 		previewDescription("Create a local release draft. Distribution and file uploads are not connected in this preview."),
 		ui.Field("Release title", ui.TextField(p.releaseName).Name("Release title").MinWidth(0).Key(p.key("release-title"))),
 		ui.Button("Save release draft", func() {
@@ -350,10 +351,10 @@ func (p *previewModel) releaseDialog() ggui.Widget {
 }
 
 func (p *previewModel) balanceCard() ggui.Widget {
-	return previewFooterCard(ggui.Column(
+	return previewFooterCard(widget.Column(
 		ui.Heading("Claimable Balance").Size(14).Weight(ggui.WeightMedium).Color(uitheme.MutedFg),
-		ggui.TextOf(ggui.Map(p.balance, func(v float64) string { return previewMoney("USD", v) })).Size(36).Weight(ggui.WeightSemibold),
-		ggui.Row(ggui.Box(ggui.Row(ggui.Box().Size(7, 7).Fill(color.NRGBA{R: 234, G: 179, B: 8, A: 255}).Radius(4), ggui.Text("Pending Setup").Size(12)).Gap(5).Align(ggui.AlignCenter)).Pad(2, 7).Border(1, uitheme.Border).Radius(20)),
-	).Gap(12).Stretch(), previewTile(ggui.Column(previewValue("Net Royalties", "$0.00"), previewValue("Processing Fee", "−$0.00"), ui.Divider(), previewValue("Total Ready to Claim", "$0.00 USD")).Gap(16).Stretch()),
+		widget.TextOf(ggui.Map(p.balance, func(v float64) string { return previewMoney("USD", v) })).Size(36).Weight(ggui.WeightSemibold),
+		widget.Row(widget.Box(widget.Row(widget.Box().Size(7, 7).Fill(color.NRGBA{R: 234, G: 179, B: 8, A: 255}).Radius(4), widget.Text("Pending Setup").Size(12)).Gap(5).Align(widget.AlignCenter)).Pad(2, 7).Border(1, uitheme.Border).Radius(20)),
+	).Gap(12).Stretch(), previewTile(widget.Column(previewValue("Net Royalties", "$0.00"), previewValue("Processing Fee", "−$0.00"), ui.Divider(), previewValue("Total Ready to Claim", "$0.00 USD")).Gap(16).Stretch()),
 		previewDescription("Once your bank is connected, balances over $10.00 are automatically eligible for monthly distribution on the 15th of each month."))
 }

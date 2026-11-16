@@ -8,6 +8,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // Column describes one column of a Table: its heading, how wide it is and
@@ -36,7 +37,7 @@ func Col[T any](title string, cell func(ggui.Readable[T]) ggui.Widget) Column[T]
 // which follows the item without a rebuild.
 func TextCol[T any](title string, text func(T) string) Column[T] {
 	c := Col(title, func(r ggui.Readable[T]) ggui.Widget {
-		return ggui.TextOf(ggui.Map(r, text)).NoWrap()
+		return widget.TextOf(ggui.Map(r, text)).NoWrap()
 	})
 	c.Search = text
 	return c
@@ -96,15 +97,15 @@ type TableWidget[T any, K comparable] struct {
 	bodyH  float64
 	widths []*ggui.StateValue[float64] // a Resizable column's width
 
-	body    *ggui.EachWidget[T, K]
-	head    *ggui.RowWidget
-	headBox *ggui.BoxWidget
-	foot    *ggui.RowWidget  // the footer's cells, nil without Footer
-	footBox *ggui.BoxWidget  // foot at the height of a row
-	caption *ggui.TextWidget // nil without Caption
+	body    *widget.EachWidget[T, K]
+	head    *widget.RowWidget
+	headBox *widget.BoxWidget
+	foot    *widget.RowWidget  // the footer's cells, nil without Footer
+	footBox *widget.BoxWidget  // foot at the height of a row
+	caption *widget.TextWidget // nil without Caption
 	capSize ggui.Size
-	scroll  *ggui.ScrollWidget
-	column  *ggui.ColumnWidget
+	scroll  *widget.ScrollWidget
+	column  *widget.ColumnWidget
 	theme   *uitheme.Theme
 	headH   float64
 	footH   float64
@@ -140,18 +141,18 @@ func Table[T any, K comparable](rows ggui.Readable[[]T], key func(T) K, cols ...
 		}
 		heading := c.Header
 		if heading == nil {
-			heading = ggui.Text(c.Title).NoWrap().Ellipsis().Align(c.Align)
+			heading = widget.Text(c.Title).NoWrap().Ellipsis().Align(c.Align)
 		}
 		heads[i] = t.cell(i, heading, ggui.RoleHeader)
 		if c.Resize {
 			heads[i] = &columnGrip{cell: heads[i], width: t.widths[i]}
 		}
 	}
-	t.head = ggui.Row(heads...).Align(ggui.AlignStretch)
-	t.headBox = ggui.Box(ggui.WithEnv(tableLabelText, t.head))
-	t.body = ggui.EachKeyed(rows, key, func(row ggui.EachItem[T]) ggui.Widget { return t.row(row) }).Gap(0).Align(ggui.AlignStretch).ItemExtent(t.rowH).Unlisted()
+	t.head = widget.Row(heads...).Align(widget.AlignStretch)
+	t.headBox = widget.Box(ggui.WithEnv(tableLabelText, t.head))
+	t.body = widget.EachKeyed(rows, key, func(row widget.EachItem[T]) ggui.Widget { return t.row(row) }).Gap(0).Align(widget.AlignStretch).ItemExtent(t.rowH).Unlisted()
 	t.offset = ggui.State(0.0)
-	t.scroll = ggui.Scroll(t.body).BindOffset(t.offset)
+	t.scroll = widget.Scroll(t.body).BindOffset(t.offset)
 	t.compose()
 	return t
 }
@@ -162,12 +163,12 @@ func Table[T any, K comparable](rows ggui.Readable[[]T], key func(T) K, cols ...
 func (t *TableWidget[T, K]) compose() {
 	parts := []ggui.Widget{t.headBox, t.body}
 	if t.height > 0 {
-		parts[1] = ggui.Expanded(t.scroll)
+		parts[1] = widget.Expanded(t.scroll)
 	}
 	if t.footBox != nil {
 		parts = append(parts, t.footBox)
 	}
-	t.column = ggui.Column(parts...).Align(ggui.AlignStretch)
+	t.column = widget.Column(parts...).Align(widget.AlignStretch)
 }
 
 // Footer adds a summary row under the rows, as shadcn's TableFooter: on a
@@ -176,21 +177,21 @@ func (t *TableWidget[T, K]) compose() {
 // to leave a column empty. The footer stays in place under a scrolling
 // body. Calling it with no cells removes it.
 //
-//	ui.Table(...).Footer(ggui.Text("Total"), nil, ggui.Text("$2,500.00"))
+//	ui.Table(...).Footer(widget.Text("Total"), nil, widget.Text("$2,500.00"))
 func (t *TableWidget[T, K]) Footer(cells ...ggui.Widget) *TableWidget[T, K] {
 	defer property.Watch(&t.props, &t.column)()
 	t.foot, t.footBox = nil, nil
 	if len(cells) > 0 {
 		row := make([]ggui.Widget, len(t.cols))
 		for i := range row {
-			var w ggui.Widget = ggui.Box()
+			var w ggui.Widget = widget.Box()
 			if i < len(cells) && cells[i] != nil {
 				w = cells[i]
 			}
 			row[i] = t.cell(i, w, ggui.RoleCell)
 		}
-		t.foot = ggui.Row(row...).Align(ggui.AlignStretch)
-		t.footBox = ggui.Box(ggui.WithEnv(tableLabelText, t.foot))
+		t.foot = widget.Row(row...).Align(widget.AlignStretch)
+		t.footBox = widget.Box(ggui.WithEnv(tableLabelText, t.foot))
 	}
 	t.compose()
 	return t
@@ -208,7 +209,7 @@ func (t *TableWidget[T, K]) Caption(text string) *TableWidget[T, K] {
 	case t.caption != nil:
 		t.caption.Content(text)
 	default:
-		t.caption = ggui.Text(text).Align(.5)
+		t.caption = widget.Text(text).Align(.5)
 		t.props.Changed()
 	}
 	return t
@@ -389,24 +390,24 @@ func (t *TableWidget[T, K]) cell(i int, w ggui.Widget, role ggui.Role) ggui.Widg
 	c := t.cols[i]
 	// Align the whole cell, including custom widgets, and clip long content so
 	// it cannot paint or receive input in the adjacent column.
-	w = &tableCell{box: ggui.Box(ggui.Align(w).At(c.Align, .5)), role: role}
+	w = &tableCell{box: widget.Box(widget.Align(w).At(c.Align, .5)), role: role}
 	if width := t.widths[i]; width != nil {
-		return ggui.Box(w).BindWidth(width)
+		return widget.Box(w).BindWidth(width)
 	}
 	if c.Width > 0 {
-		return ggui.Box(w).Width(c.Width)
+		return widget.Box(w).Width(c.Width)
 	}
-	return ggui.Flex(w, pick(c.Flex > 0, c.Flex, 1))
+	return widget.Flex(w, pick(c.Flex > 0, c.Flex, 1))
 }
 
-func (t *TableWidget[T, K]) row(row ggui.EachItem[T]) ggui.Widget {
+func (t *TableWidget[T, K]) row(row widget.EachItem[T]) ggui.Widget {
 	item := row.Value
 	cells := make([]ggui.Widget, len(t.cols))
 	for i, c := range t.cols {
 		cells[i] = t.cell(i, c.Cell(item), ggui.RoleCell)
 	}
 	first := ggui.Untrack(item.Get)
-	r := &tableRow[T, K]{table: t, item: item, index: row.Index, key: t.key(first), cells: ggui.Row(cells...)}
+	r := &tableRow[T, K]{table: t, item: item, index: row.Index, key: t.key(first), cells: widget.Row(cells...)}
 	r.Role = ggui.RoleRow
 	r.SetName(t.label(first))
 	r.AutoKey()
@@ -478,8 +479,8 @@ type tableRow[T any, K comparable] struct {
 	key    K
 	index  ggui.Readable[int]
 	motion time.Duration
-	cells  *ggui.RowWidget
-	box    *ggui.BoxWidget
+	cells  *widget.RowWidget
+	box    *widget.BoxWidget
 	theme  *uitheme.Theme
 }
 
@@ -489,9 +490,9 @@ func (r *tableRow[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	r.Sync()
 	r.SetName(r.table.label(r.item.Get()))
 	r.motion = env.Motion(th.MotionFast)
-	r.cells.Gap(0).Align(ggui.AlignStretch)
+	r.cells.Gap(0).Align(widget.AlignStretch)
 	if r.box == nil {
-		r.box = ggui.Box(r.cells)
+		r.box = widget.Box(r.cells)
 	}
 	r.box.Height(r.table.rowH)
 	return r.box.Layout(c, env)
@@ -686,7 +687,7 @@ func (g *columnGrip) HandlePointer(ev ggui.PointerEvent) bool {
 var tableRowFillSlot = ggui.NewSlot[*ggui.Motion]("table row fill")
 
 type tableCell struct {
-	box  *ggui.BoxWidget
+	box  *widget.BoxWidget
 	role ggui.Role
 }
 

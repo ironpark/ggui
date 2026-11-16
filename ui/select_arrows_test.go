@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // A list with more options than fit shows an arrow at the edge there is
@@ -18,7 +19,7 @@ func TestSelectScrollArrowsScrollWhileHovered(t *testing.T) {
 	}
 	value := ggui.State(options[0])
 	s := Select(value).Options(options).Name("Pick").AlignItemWithTrigger(false)
-	p := ggui.NewProbe(ggui.Column(s).Align(ggui.AlignStart), ggui.Sz(320, 300))
+	p := ggui.NewProbe(widget.Column(s).Align(widget.AlignStart), ggui.Sz(320, 300))
 	defer p.Close()
 	p.Tap("Pick")
 	p.Advance(0)
@@ -83,7 +84,7 @@ func TestSelectKeyboardRowClearsTheScrollArrow(t *testing.T) {
 		options[i] = fmt.Sprintf("Option %02d", i)
 	}
 	s := Select(ggui.State(options[0])).Options(options).Name("Pick").AlignItemWithTrigger(false)
-	p := ggui.NewProbe(ggui.Column(s).Align(ggui.AlignStart), ggui.Sz(320, 300))
+	p := ggui.NewProbe(widget.Column(s).Align(widget.AlignStart), ggui.Sz(320, 300))
 	defer p.Close()
 	p.Key("tab")
 	p.Key("enter")

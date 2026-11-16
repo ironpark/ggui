@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestPaginationNavigation(t *testing.T) {
@@ -97,7 +98,7 @@ func TestNoticeActionsAndKeyboard(t *testing.T) {
 	t.Parallel()
 	retries, creates := 0, 0
 	p := ggui.ProbeBuilder(func() ggui.Widget {
-		return ggui.Column(
+		return widget.Column(
 			ui.Alert("Upload failed", "Try again when connected.").Destructive().Action(ui.Button("Retry", func() { retries++ })),
 			ui.Empty("No files", "Create your first file.").Media(ui.Kbd("N")).Action(ui.Button("Create", func() { creates++ })),
 			ui.Skeleton(120, 16), ui.Spinner(),

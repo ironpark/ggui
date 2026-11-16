@@ -8,6 +8,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 type selectTriggerFace struct {
@@ -37,7 +38,7 @@ func TestSelectTriggerContentMeasuresFaceWithoutChevronSpace(t *testing.T) {
 	if got := control.Layout(ggui.Tight(ggui.Sz(120, 30)), env); got != ggui.Sz(120, 30) {
 		t.Fatalf("tight constraints ignored: %v", got)
 	}
-	p := ggui.NewProbe(theme.With(th, ggui.Column(control)), ggui.Sz(500, 300))
+	p := ggui.NewProbe(theme.With(th, widget.Column(control)), ggui.Sz(500, 300))
 	defer p.Close()
 	field := find(t, p, ggui.RoleSelect, "Custom").Rect
 	if face.painted.Origin.X != field.Origin.X+th.FieldPad.Left || face.painted.Origin.Y != field.Origin.Y+th.FieldPad.Top ||
@@ -54,7 +55,7 @@ func TestSelectTriggerContentPreservesSemanticsAndInput(t *testing.T) {
 		face := ui.Button("Decorative button", func() { childActions++ })
 		control := ui.Select(value).Native(native).Options([]string{"alpha", "beta", "gamma"}).Format(strings.ToUpper).
 			TriggerContent(face).Name("Choice").AlignItemWithTrigger(false).OnChange(func(string) { changes++ })
-		p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(control, ui.Button("After", nil))), ggui.Sz(350, 300))
+		p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(control, ui.Button("After", nil))), ggui.Sz(350, 300))
 		n := node(t, p.Semantics(), ggui.RoleSelect, "Choice")
 		if n.Value != "ALPHA" {
 			t.Fatalf("custom text replaced formatted semantic value: %q", n.Value)
@@ -92,9 +93,9 @@ func TestSelectTriggerContentPreservesSemanticsAndInput(t *testing.T) {
 func TestSelectTriggerContentUpdatesCachedLayoutAndRestoresDefault(t *testing.T) {
 	t.Parallel()
 	value, height := ggui.State("Alpha"), ggui.State(26.0)
-	face := ggui.Box().Width(60).BindHeight(height)
+	face := widget.Box().Width(60).BindHeight(height)
 	control := ui.Select(value).Options([]string{"Alpha", "Beta"}).TriggerContent(face).Name("Dynamic")
-	p := ggui.NewProbe(ggui.Column(ggui.Cached(control)), ggui.Sz(500, 300))
+	p := ggui.NewProbe(widget.Column(ggui.Cached(control)), ggui.Sz(500, 300))
 	defer p.Close()
 	before := find(t, p, ggui.RoleSelect, "Dynamic").Rect
 	height.Set(64)
@@ -126,8 +127,8 @@ func TestSelectTriggerContentUpdatesCachedLayoutAndRestoresDefault(t *testing.T)
 func TestSelectTriggerContentAlignsUsingTallAnchor(t *testing.T) {
 	t.Parallel()
 	control := ui.Select(ggui.State("Beta")).Options([]string{"Alpha", "Beta", "Gamma"}).
-		TriggerContent(ggui.Box().Size(140, 64)).Name("Tall choice")
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(ggui.Box().Height(100), control)), ggui.Sz(400, 350))
+		TriggerContent(widget.Box().Size(140, 64)).Name("Tall choice")
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(widget.Box().Height(100), control)), ggui.Sz(400, 350))
 	defer p.Close()
 	p.Tap("Tall choice")
 	field := find(t, p, ggui.RoleSelect, "Tall choice").Rect

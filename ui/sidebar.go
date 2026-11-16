@@ -7,6 +7,7 @@ import (
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // sidebarKind is what one SidebarEntry is.
@@ -204,7 +205,7 @@ type SidebarWidget struct {
 	parts            [3][]SidebarEntry // header items, the groups, footer items
 	lists            [3]*sidebarList
 	rows             []*sidebarNode // every entry given, in the order the arrow keys walk
-	scroll           *ggui.ScrollWidget
+	scroll           *widget.ScrollWidget
 	onChange         func(string)
 	header, footer   ggui.Widget
 	width            float64
@@ -258,7 +259,7 @@ func Sidebar(selected ggui.Binding[string], entries ...SidebarEntry) *SidebarWid
 	for i := range s.lists {
 		s.lists[i] = &sidebarList{s: s}
 	}
-	s.scroll = ggui.Scroll(s.lists[1]).Bar(nil)
+	s.scroll = widget.Scroll(s.lists[1]).Bar(nil)
 	s.parts[1] = entries
 	s.build()
 	return s

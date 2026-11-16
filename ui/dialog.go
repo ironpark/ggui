@@ -4,6 +4,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // DialogWidget is a modal panel centered over the window: a scrim dims
@@ -18,7 +19,7 @@ type DialogWidget struct {
 	width  float64
 	top    float64 // the panel's distance from the window's top; 0 centres it
 	topAt  float64 // the share of the window's height above the panel, when top is 0
-	effect *ggui.TransitionWidget
+	effect *widget.TransitionWidget
 	reveal ggui.Motion
 }
 
@@ -29,9 +30,9 @@ const dialogWidth = 384
 // Dialog creates a dialog that shows content while open is true.
 //
 //	confirm := ggui.State(false)
-//	ui.Dialog(confirm, ggui.Column(
-//		ggui.Text("Delete the file?"),
-//		ggui.Row(ui.Button("Delete", del), ui.Button("Cancel", func() { confirm.Set(false) }).Outline()),
+//	ui.Dialog(confirm, widget.Column(
+//		widget.Text("Delete the file?"),
+//		widget.Row(ui.Button("Delete", del), ui.Button("Cancel", func() { confirm.Set(false) }).Outline()),
 //	)).Title("Confirm")
 func Dialog(open ggui.Binding[bool], content ggui.Widget) *DialogWidget {
 	d := &DialogWidget{width: dialogWidth}
@@ -134,7 +135,7 @@ func (d *DialogWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		borderWidth: t.BorderWidth, border: fade(t.Fg, .1), radius: t.RadiusLg,
 	})
 	if d.effect == nil {
-		d.effect = ggui.PopIn(ggui.FromFuncs(
+		d.effect = widget.PopIn(ggui.FromFuncs(
 			func(c ggui.Constraints, e ggui.Env) ggui.Size { return d.panel.Layout(c, e) },
 			d.paintSurface,
 		))

@@ -1,6 +1,7 @@
-package ggui
+package widget
 
 import (
+	"github.com/ironpark/ggui"
 	"image/color"
 	"math"
 	"strings"
@@ -19,15 +20,15 @@ func lineTexts(t *RichTextWidget) []string {
 
 func TestRichTextWrapsAcrossSpans(t *testing.T) {
 	t.Parallel()
-	w := RichText(Span("aaa "), Span("bbb").Weight(WeightBold), Span(" ccc"))
-	wide := w.Layout(Loose(Sz(1000, 1000)), Env{})
+	w := RichText(Span("aaa "), Span("bbb").Weight(ggui.WeightBold), Span(" ccc"))
+	wide := w.Layout(ggui.Loose(ggui.Sz(1000, 1000)), ggui.Env{})
 	if got := lineTexts(w); len(got) != 1 || got[0] != "aaa bbb ccc" {
 		t.Fatalf("wide: lines = %q, want one", got)
 	}
 	if w.Text() != "aaa bbb ccc" {
 		t.Fatalf("Text = %q", w.Text())
 	}
-	narrow := w.Layout(Loose(Sz(wide.W*0.7, 1000)), Env{})
+	narrow := w.Layout(ggui.Loose(ggui.Sz(wide.W*0.7, 1000)), ggui.Env{})
 	if got := lineTexts(w); len(got) != 2 || got[0] != "aaa bbb" || got[1] != "ccc" {
 		t.Fatalf("narrow: lines = %q, want [aaa bbb, ccc]", got)
 	}
@@ -44,8 +45,8 @@ func TestRichTextWrapsAcrossSpans(t *testing.T) {
 func TestRichTextOneSpanMeasuresAsText(t *testing.T) {
 	t.Parallel()
 	for _, s := range []string{"hello world", "a\nb\nc", ""} {
-		got := RichText(Span(s)).Layout(Loose(Sz(1000, 1000)), Env{})
-		want := Text(s).Layout(Loose(Sz(1000, 1000)), Env{})
+		got := RichText(Span(s)).Layout(ggui.Loose(ggui.Sz(1000, 1000)), ggui.Env{})
+		want := Text(s).Layout(ggui.Loose(ggui.Sz(1000, 1000)), ggui.Env{})
 		if math.Abs(got.W-want.W) > 0.01 || math.Abs(got.H-want.H) > 0.01 {
 			t.Fatalf("%q: RichText %v, Text %v", s, got, want)
 		}
@@ -55,16 +56,16 @@ func TestRichTextOneSpanMeasuresAsText(t *testing.T) {
 func TestRichTextBaselineIsTheTallestSpans(t *testing.T) {
 	t.Parallel()
 	small := RichText(Span("x"))
-	small.Layout(Loose(Sz(1000, 1000)), Env{})
+	small.Layout(ggui.Loose(ggui.Sz(1000, 1000)), ggui.Env{})
 	mixed := RichText(Span("x"), Span("Y").Size(40))
-	mixed.Layout(Loose(Sz(1000, 1000)), Env{})
+	mixed.Layout(ggui.Loose(ggui.Sz(1000, 1000)), ggui.Env{})
 	sb, ok1 := small.Baseline()
 	mb, ok2 := mixed.Baseline()
 	if !ok1 || !ok2 || mb <= sb {
 		t.Fatalf("baselines %v (%v) and %v (%v), want the large span's to sit lower", sb, ok1, mb, ok2)
 	}
 	text := Text("x")
-	text.Layout(Loose(Sz(1000, 1000)), Env{})
+	text.Layout(ggui.Loose(ggui.Sz(1000, 1000)), ggui.Env{})
 	if tb, _ := text.Baseline(); math.Abs(tb-sb) > 0.01 {
 		t.Fatalf("one span's baseline %v, Text's %v", sb, tb)
 	}
@@ -72,9 +73,9 @@ func TestRichTextBaselineIsTheTallestSpans(t *testing.T) {
 
 func TestRichTextMaxLinesAndEllipsis(t *testing.T) {
 	t.Parallel()
-	w := RichText(Span("aaa bbb "), Span("ccc ddd").Weight(WeightBold)).MaxLines(1)
-	full := RichText(Span("aaa bbb ccc ddd")).Layout(Loose(Sz(1000, 1000)), Env{})
-	w.Layout(Loose(Sz(full.W/2, 1000)), Env{})
+	w := RichText(Span("aaa bbb "), Span("ccc ddd").Weight(ggui.WeightBold)).MaxLines(1)
+	full := RichText(Span("aaa bbb ccc ddd")).Layout(ggui.Loose(ggui.Sz(1000, 1000)), ggui.Env{})
+	w.Layout(ggui.Loose(ggui.Sz(full.W/2, 1000)), ggui.Env{})
 	got := lineTexts(w)
 	if len(got) != 1 || !strings.HasSuffix(got[0], "…") || strings.HasSuffix(got[0], " …") {
 		t.Fatalf("lines = %q, want one cut with an ellipsis", got)
@@ -84,12 +85,12 @@ func TestRichTextMaxLinesAndEllipsis(t *testing.T) {
 	}
 
 	e := RichText(Span("aaa bbb ccc ddd")).NoWrap().Ellipsis()
-	e.Layout(Loose(Sz(full.W/2, 1000)), Env{})
+	e.Layout(ggui.Loose(ggui.Sz(full.W/2, 1000)), ggui.Env{})
 	if got := lineTexts(e); len(got) != 1 || !strings.HasSuffix(got[0], "…") {
 		t.Fatalf("NoWrap Ellipsis lines = %q", got)
 	}
 	fits := RichText(Span("aaa")).Ellipsis()
-	fits.Layout(Loose(Sz(1000, 1000)), Env{})
+	fits.Layout(ggui.Loose(ggui.Sz(1000, 1000)), ggui.Env{})
 	if got := lineTexts(fits); got[0] != "aaa" {
 		t.Fatalf("text that fits was cut: %q", got)
 	}
@@ -98,20 +99,20 @@ func TestRichTextMaxLinesAndEllipsis(t *testing.T) {
 func TestRichTextAlignAndSpansSetter(t *testing.T) {
 	t.Parallel()
 	w := RichText(Span("ab")).Align(1)
-	w.Layout(Tight(Sz(200, 20)), Env{})
-	var box Rect
-	w.para.Rects(0, 2, 200, w.alignment(), func(r Rect) { box = r })
+	w.Layout(ggui.Tight(ggui.Sz(200, 20)), ggui.Env{})
+	var box ggui.Rect
+	w.para.Rects(0, 2, 200, w.alignment(), func(r ggui.Rect) { box = r })
 	if math.Abs(box.Origin.X+box.Size.W-200) > 0.01 {
 		t.Fatalf("right-aligned text covers %v, want it to end at 200", box)
 	}
 	w.Spans(Span("one "), Span("two"))
-	w.Layout(Loose(Sz(1000, 1000)), Env{})
+	w.Layout(ggui.Loose(ggui.Sz(1000, 1000)), ggui.Env{})
 	if w.Text() != "one two" {
 		t.Fatalf("after Spans, Text = %q", w.Text())
 	}
-	spans := State([]TextSpan{Span("bound")})
+	spans := ggui.State([]TextSpan{Span("bound")})
 	w.BindSpans(spans)
-	w.Layout(Loose(Sz(1000, 1000)), Env{})
+	w.Layout(ggui.Loose(ggui.Sz(1000, 1000)), ggui.Env{})
 	if w.Text() != "bound" {
 		t.Fatalf("after BindSpans, Text = %q", w.Text())
 	}
@@ -121,9 +122,9 @@ func TestRichTextSpansInheritAndOverride(t *testing.T) {
 	t.Parallel()
 	red := color.RGBA{R: 255, A: 255}
 	blue := color.RGBA{B: 255, A: 255}
-	env := Env{}.WithText(TextStyle{Color: red, Size: 20})
+	env := ggui.Env{}.WithText(ggui.TextStyle{Color: red, Size: 20})
 	w := RichText(Span("a"), Span("b").Color(blue).Size(10))
-	w.Layout(Loose(Sz(1000, 1000)), env)
+	w.Layout(ggui.Loose(ggui.Sz(1000, 1000)), env)
 	a, b := w.styles[0], w.styles[1]
 	if a.Color != red || a.Size != 20 {
 		t.Fatalf("plain span drew in %v at %v, want the inherited red at 20", a.Color, a.Size)
@@ -139,14 +140,14 @@ func TestRichTextSpansInheritAndOverride(t *testing.T) {
 func TestRichTextLinkTapsWithPointerCursorAndA11y(t *testing.T) {
 	t.Parallel()
 	taps := 0
-	p := NewProbe(RichText(Span("Read the "), Span("guide").Underline().OnTap(func() { taps++ }), Span(" first.")), Sz(400, 40))
+	p := ggui.NewProbe(RichText(Span("Read the "), Span("guide").Underline().OnTap(func() { taps++ }), Span(" first.")), ggui.Sz(400, 40))
 	defer p.Close()
-	link, ok := p.FindRole(RoleLink, "guide")
+	link, ok := p.FindRole(ggui.RoleLink, "guide")
 	if !ok {
 		t.Fatal("the tappable span registered no link")
 	}
 	p.Move(link.Center())
-	if c := p.Cursor(); c != CursorShapePointer {
+	if c := p.Cursor(); c != ggui.CursorShapePointer {
 		t.Fatalf("cursor over the link is %v, want the pointer", c)
 	}
 	p.Click(link.Center())
@@ -154,17 +155,17 @@ func TestRichTextLinkTapsWithPointerCursorAndA11y(t *testing.T) {
 		t.Fatalf("%d taps after a click, want 1", taps)
 	}
 	tree := p.Semantics()
-	if _, ok := tree.Find(RoleText, "Read the guide first."); !ok {
+	if _, ok := tree.Find(ggui.RoleText, "Read the guide first."); !ok {
 		t.Fatal("the paragraph is missing from the semantics tree")
 	}
-	node, ok := tree.Find(RoleLink, "guide")
-	if !ok || node.Actions&ActionPress == 0 {
+	node, ok := tree.Find(ggui.RoleLink, "guide")
+	if !ok || node.Actions&ggui.ActionPress == 0 {
 		t.Fatalf("link node %+v, want a pressable link", node)
 	}
-	if node.Parent < 0 || tree.At(node.Parent).Role != RoleText {
+	if node.Parent < 0 || tree.At(node.Parent).Role != ggui.RoleText {
 		t.Fatal("the link is not a child of its paragraph")
 	}
-	p.Perform(node.ID, Action{Kind: ActionPress})
+	p.Perform(node.ID, ggui.Action{Kind: ggui.ActionPress})
 	if taps != 2 {
 		t.Fatalf("%d taps after ActionPress, want 2", taps)
 	}
@@ -174,10 +175,10 @@ func TestRichTextLinkTapsWithPointerCursorAndA11y(t *testing.T) {
 // whenever anything above it is, keeps what it made: its spans, its text
 // and its run keys are not made again.
 func TestRichTextRelayoutKeepsWhatItMade(t *testing.T) {
-	spans := []TextSpan{Span("The agent ran "), Span("go test ./...").Weight(WeightBold), Span(" and every package passed.")}
+	spans := []TextSpan{Span("The agent ran "), Span("go test ./...").Weight(ggui.WeightBold), Span(" and every package passed.")}
 	rt := RichText(spans...)
-	env := Untrack(UseEnv)
-	cs := Loose(Sz(400, 1e6))
+	env := ggui.Untrack(ggui.UseEnv)
+	cs := ggui.Loose(ggui.Sz(400, 1e6))
 	rt.Layout(cs, env)
 	if allocs := testing.AllocsPerRun(100, func() { rt.Layout(cs, env) }); allocs != 0 {
 		t.Errorf("laying out unchanged spans allocates %v times, want 0", allocs)
@@ -197,7 +198,7 @@ func TestASpanStruckOutAndOneSetApart(t *testing.T) {
 		t.Fatal("two spans struck out alike differ")
 	}
 	r := RichText(Span("code").Background(color.RGBA{1, 2, 3, 255}).Strike())
-	p := NewProbe(topLeft(r), Sz(200, 40))
+	p := ggui.NewProbe(topLeft(r), ggui.Sz(200, 40))
 	defer p.Close()
 	p.Frame()
 	if len(r.cur) != 1 || r.cur[0].background == nil || !r.cur[0].strike {
@@ -208,14 +209,14 @@ func TestASpanStruckOutAndOneSetApart(t *testing.T) {
 func TestSelectableRichTextLinkStillTaps(t *testing.T) {
 	t.Parallel()
 	taps := 0
-	p := NewProbe(RichText(Span("Read the "), Span("guide").OnTap(func() { taps++ }), Span(" first.")).Selectable(), Sz(400, 40))
+	p := ggui.NewProbe(RichText(Span("Read the "), Span("guide").OnTap(func() { taps++ }), Span(" first.")).Selectable(), ggui.Sz(400, 40))
 	defer p.Close()
-	link, ok := p.FindRole(RoleLink, "guide")
+	link, ok := p.FindRole(ggui.RoleLink, "guide")
 	if !ok {
 		t.Fatal("no link")
 	}
 	p.Move(link.Center())
-	if c := p.Cursor(); c != CursorShapePointer {
+	if c := p.Cursor(); c != ggui.CursorShapePointer {
 		t.Errorf("cursor %v", c)
 	}
 	p.Click(link.Center())
@@ -227,9 +228,9 @@ func TestSelectableRichTextLinkStillTaps(t *testing.T) {
 func TestRichTextRelayoutsWhenASpanResizes(t *testing.T) {
 	t.Parallel()
 	w := RichText(Span("abc").Size(10))
-	a := w.Layout(Loose(Sz(1000, 1000)), Env{})
+	a := w.Layout(ggui.Loose(ggui.Sz(1000, 1000)), ggui.Env{})
 	w.Spans(Span("abc").Size(30))
-	b := w.Layout(Loose(Sz(1000, 1000)), Env{})
+	b := w.Layout(ggui.Loose(ggui.Sz(1000, 1000)), ggui.Env{})
 	if b.W <= a.W || b.H <= a.H {
 		t.Fatalf("size 10 %v, size 30 %v", a, b)
 	}
@@ -238,21 +239,21 @@ func TestRichTextRelayoutsWhenASpanResizes(t *testing.T) {
 func TestSelectableRTLWordsHitWhereTheyAreDrawn(t *testing.T) {
 	t.Parallel()
 	w := RichText(Span("שלום עולם")).Selectable()
-	p := NewProbe(Directionality(DirRTL, w), Sz(300, 30))
+	p := ggui.NewProbe(ggui.Directionality(ggui.DirRTL, w), ggui.Sz(300, 30))
 	defer p.Close()
 	p.Frame()
-	node, ok := p.Semantics().Find(RoleText, "שלום עולם")
+	node, ok := p.Semantics().Find(ggui.RoleText, "שלום עולם")
 	if !ok {
 		t.Fatal("no node")
 	}
 	r := node.Rect
-	at := Pt(r.Origin.X+r.Size.W-3, r.Origin.Y+r.Size.H/2)
+	at := ggui.Pt(r.Origin.X+r.Size.W-3, r.Origin.Y+r.Size.H/2)
 	p.Click(at)
 	p.Click(at)
 	if got := w.SelectedText(); got != "שלום" {
 		t.Fatalf("double click at the right selected %q", got)
 	}
-	left := Pt(r.Origin.X+r.Size.W-w.para.Lines[0].Width+3, r.Origin.Y+r.Size.H/2)
+	left := ggui.Pt(r.Origin.X+r.Size.W-w.para.Lines[0].Width+3, r.Origin.Y+r.Size.H/2)
 	p.Frame()
 	p.Click(left)
 	p.Click(left)
@@ -265,7 +266,7 @@ func TestASelectionRunsThroughTheTextsOfAnArea(t *testing.T) {
 	t.Parallel()
 	a, b, c := Text("first line").Selectable(), Text("second line").Selectable(), Text("third line").Selectable()
 	area := SelectionArea(Column(a, b, c).Gap(10).Stretch())
-	p := NewProbe(area, Sz(300, 200))
+	p := ggui.NewProbe(area, ggui.Sz(300, 200))
 	defer p.Close()
 	p.Frame()
 	// From inside the first paragraph to inside the third.
@@ -304,7 +305,7 @@ func TestAClickClearsTheSelectionOfTheOtherTexts(t *testing.T) {
 	t.Parallel()
 	a, b := Text("first line").Selectable(), Text("second line").Selectable()
 	area := SelectionArea(Column(a, b).Gap(10).Stretch())
-	p := NewProbe(area, Sz(300, 100))
+	p := ggui.NewProbe(area, ggui.Sz(300, 100))
 	defer p.Close()
 	p.Frame()
 	p.Press(textAt(&a.rich.w, a.rich.w.rect, 2))
@@ -330,7 +331,7 @@ func TestADragWithinOneTextOfAnAreaSelectsAsItsOwn(t *testing.T) {
 	t.Parallel()
 	a, b := Text("hello world").Selectable(), Text("other").Selectable()
 	area := SelectionArea(Column(a, b).Gap(10))
-	p := NewProbe(area, Sz(300, 100))
+	p := ggui.NewProbe(area, ggui.Sz(300, 100))
 	defer p.Close()
 	p.Frame()
 	p.Press(textAt(&a.rich.w, a.rich.w.rect, 0))
@@ -349,7 +350,7 @@ func TestFindSelectsTheMatchesOfAnAreaInTurn(t *testing.T) {
 	t.Parallel()
 	a, b := Text("Error: the path").Selectable(), Text("another error, and an ERROR").Selectable()
 	area := SelectionArea(Column(a, b).Gap(10))
-	p := NewProbe(area, Sz(400, 100))
+	p := ggui.NewProbe(area, ggui.Sz(400, 100))
 	defer p.Close()
 	p.Frame()
 	for n, want := range []string{"Error", "error", "ERROR"} {
@@ -372,19 +373,19 @@ func TestFindSelectsTheMatchesOfAnAreaInTurn(t *testing.T) {
 
 // textAt returns the window point over offset b of a laid-out paragraph
 // painted at r, halfway down its line.
-func textAt(w *RichTextWidget, r Rect, b int) Point {
-	var at Point
+func textAt(w *RichTextWidget, r ggui.Rect, b int) ggui.Point {
+	var at ggui.Point
 	n := len(w.para.Text)
 	lo, hi := b, min(b+1, n)
 	if lo == hi {
 		lo = max(b-1, 0)
 	}
-	w.para.Rects(lo, hi, r.Size.W, w.alignment(), func(box Rect) {
+	w.para.Rects(lo, hi, r.Size.W, w.alignment(), func(box ggui.Rect) {
 		x := box.Origin.X
 		if b == n {
 			x += box.Size.W
 		}
-		at = Pt(r.Origin.X+x+0.5, r.Origin.Y+box.Origin.Y+box.Size.H/2)
+		at = ggui.Pt(r.Origin.X+x+0.5, r.Origin.Y+box.Origin.Y+box.Size.H/2)
 	})
 	return at
 }
@@ -392,10 +393,10 @@ func textAt(w *RichTextWidget, r Rect, b int) Point {
 func TestSelectableTextDoubleClickSelectsAWordAndCopies(t *testing.T) {
 	t.Parallel()
 	w := Text("hello world").Selectable()
-	p := NewProbe(w, Sz(300, 30))
+	p := ggui.NewProbe(w, ggui.Sz(300, 30))
 	defer p.Close()
 	p.Frame()
-	r := Rct(Pt(0, 0), Sz(300, 30))
+	r := ggui.Rct(ggui.Pt(0, 0), ggui.Sz(300, 30))
 	at := textAt(&w.rich.w, r, 7) // inside "world"
 	p.Click(at)
 	p.Click(at)
@@ -418,18 +419,18 @@ func TestSelectableTextDoubleClickSelectsAWordAndCopies(t *testing.T) {
 
 func TestSelectableRichTextDragAndShiftClick(t *testing.T) {
 	t.Parallel()
-	w := RichText(Span("one "), Span("two").Weight(WeightBold), Span(" three")).Selectable()
-	p := NewProbe(w, Sz(400, 30))
+	w := RichText(Span("one "), Span("two").Weight(ggui.WeightBold), Span(" three")).Selectable()
+	p := ggui.NewProbe(w, ggui.Sz(400, 30))
 	defer p.Close()
 	p.Frame()
-	r := Rct(Pt(0, 0), Sz(400, 30))
+	r := ggui.Rct(ggui.Pt(0, 0), ggui.Sz(400, 30))
 	p.Press(textAt(w, r, 0))
 	p.Move(textAt(w, r, 7))
 	p.Release(textAt(w, r, 7))
 	if got := w.SelectedText(); got != "one two" {
 		t.Fatalf("drag selected %q, want across the spans to \"one two\"", got)
 	}
-	p.ClickWith(textAt(w, r, len("one two three")), Mods{Shift: true})
+	p.ClickWith(textAt(w, r, len("one two three")), ggui.Mods{Shift: true})
 	if got := w.SelectedText(); got != "one two three" {
 		t.Fatalf("shift-click extended to %q", got)
 	}
@@ -437,7 +438,7 @@ func TestSelectableRichTextDragAndShiftClick(t *testing.T) {
 	if got := p.Clipboard().Read(); got != "one two three" {
 		t.Fatalf("copy put %q on the clipboard", got)
 	}
-	if p.Cursor() != CursorShapeText {
+	if p.Cursor() != ggui.CursorShapeText {
 		t.Fatalf("cursor over selectable text is %v, want the text cursor", p.Cursor())
 	}
 }
@@ -445,18 +446,18 @@ func TestSelectableRichTextDragAndShiftClick(t *testing.T) {
 func TestSelectableTextDescribesItsSelection(t *testing.T) {
 	t.Parallel()
 	w := RichText(Span("abc def")).Selectable()
-	p := NewProbe(w, Sz(300, 30))
+	p := ggui.NewProbe(w, ggui.Sz(300, 30))
 	defer p.Close()
 	tree := p.Semantics()
-	node, ok := tree.Find(RoleText, "abc def")
-	if !ok || node.Actions&ActionSetSelection == 0 {
+	node, ok := tree.Find(ggui.RoleText, "abc def")
+	if !ok || node.Actions&ggui.ActionSetSelection == 0 {
 		t.Fatalf("node %+v, want text that takes a selection", node)
 	}
-	p.Perform(node.ID, Action{Kind: ActionSetSelection, SelStart: 4, SelEnd: 7})
+	p.Perform(node.ID, ggui.Action{Kind: ggui.ActionSetSelection, SelStart: 4, SelEnd: 7})
 	if got := w.SelectedText(); got != "def" {
 		t.Fatalf("ActionSetSelection selected %q", got)
 	}
-	node, _ = p.Semantics().Find(RoleText, "abc def")
+	node, _ = p.Semantics().Find(ggui.RoleText, "abc def")
 	if node.SelStart != 4 || node.SelEnd != 7 {
 		t.Fatalf("node reports %d..%d, want 4..7", node.SelStart, node.SelEnd)
 	}
@@ -466,8 +467,8 @@ func TestSelectableTextKeepsTextLayout(t *testing.T) {
 	t.Parallel()
 	plain := Text("aaa bbb ccc").MaxLines(1)
 	sel := Text("aaa bbb ccc").MaxLines(1).Selectable()
-	a := plain.Layout(Loose(Sz(60, 100)), Env{})
-	b := sel.Layout(Loose(Sz(60, 100)), Env{})
+	a := plain.Layout(ggui.Loose(ggui.Sz(60, 100)), ggui.Env{})
+	b := sel.Layout(ggui.Loose(ggui.Sz(60, 100)), ggui.Env{})
 	if a != b {
 		t.Fatalf("selectable text measured %v, plain %v", b, a)
 	}
@@ -483,14 +484,14 @@ func TestSelectableTextKeepsTextLayout(t *testing.T) {
 // every text, not only of those painted around the pointer.
 func TestAClickAfterAFramePaintedInPartClearsTheWholeSelection(t *testing.T) {
 	t.Parallel()
-	var texts []Widget
+	var texts []ggui.Widget
 	for range 8 {
 		texts = append(texts, Text("an item of a list").Selectable())
 	}
 	area := SelectionArea(Scroll(Column(texts...).Gap(30).Stretch()))
-	p := NewWindowProbe(func() Widget { return area }, Sz(300, 500))
+	p := ggui.NewWindowProbe(func() ggui.Widget { return area }, ggui.Sz(300, 500))
 	defer p.Close()
-	step := func() WindowFrame { return p.Step(16 * time.Millisecond) }
+	step := func() ggui.WindowFrame { return p.Step(16 * time.Millisecond) }
 	step()
 	first, last, mid := &texts[0].(*TextWidget).rich.w, &texts[7].(*TextWidget).rich.w, &texts[4].(*TextWidget).rich.w
 	p.Move(textAt(first, first.rect, 2))
@@ -507,7 +508,7 @@ func TestAClickAfterAFramePaintedInPartClearsTheWholeSelection(t *testing.T) {
 	}
 	at := textAt(mid, mid.rect, 3)
 	p.Move(at)
-	if fr := step(); fr.Painted != FramePartial {
+	if fr := step(); fr.Painted != ggui.FramePartial {
 		t.Fatalf("hovering a paragraph painted the frame %v, want it in part", fr.Painted)
 	}
 	p.Click(at)

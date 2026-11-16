@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestContextForwardsToItsRouter(t *testing.T) {
@@ -14,7 +15,7 @@ func TestContextForwardsToItsRouter(t *testing.T) {
 		Page("/", text("home")),
 		Page("/items/:id", func(c *Context) ggui.Widget {
 			ctx = c
-			return ggui.Text(c.Param("id"))
+			return widget.Text(c.Param("id"))
 		}),
 		Page("/next", text("next")),
 	)

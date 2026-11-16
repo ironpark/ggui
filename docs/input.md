@@ -4,7 +4,7 @@
 
 Handle pointer and keyboard input, manage focus, and preserve interaction state across rebuilds.
 
-Examples use `ggui` and `ui` imports and application-defined placeholders.
+Examples use `ggui`, `widget` and `ui` imports and application-defined placeholders.
 See [example conventions](README.md#start-here) before copying snippets.
 
 ## On this page
@@ -30,7 +30,7 @@ the one beneath, so a tap target does not block scrolling.
 
 ```go
 hovered := ggui.State(false)
-button := ggui.Pointer(ggui.Box(ggui.Text("+")).Pad(6, 16)).
+button := widget.Pointer(widget.Box(widget.Text("+")).Pad(6, 16)).
 	OnTap(func() { ggui.Add(count, 1) }).
 	OnHover(hovered.Set)
 ```
@@ -63,7 +63,7 @@ log or a terminal does: scrolling back stops following and scrolling to the
 end again resumes it, with no sentinel offset to manage. `ui.MessageScroller`
 is the chat-transcript version, with anchors and a jump-to-latest button.
 
-`.Overscroll(ggui.OverscrollBounce)` lets a pull past either end follow
+`.Overscroll(widget.OverscrollBounce)` lets a pull past either end follow
 the input with growing resistance and spring back when it stops, as iOS
 does; `OverscrollStretch` stretches the content from that end instead.
 `.Snap(v)` settles the offset on a multiple of `v` (or the end) once
@@ -82,8 +82,8 @@ an eased scroll. To keep
 a known `Rect` in view instead, use `Canvas.RequestReveal`.
 
 ```go
-var sc ggui.ScrollController
-list := ggui.Scroll(ggui.EachKeyed(todos, Todo.Key, row).ItemExtent(40)).Controller(&sc)
+var sc widget.ScrollController
+list := widget.Scroll(widget.EachKeyed(todos, Todo.Key, row).ItemExtent(40)).Controller(&sc)
 top := ui.Button("Top", func() { sc.ScrollTo(0) })
 sc.ScrollToKey(added.ID)
 ```
@@ -96,9 +96,9 @@ with or without `ItemExtent`, though not with `EstimatedExtent`, where headers
 keep to their rows:
 
 ```go
-ggui.Scroll(ggui.Column(
-	ggui.Sticky(ui.Title("Today"), ggui.List(today, row)),
-	ggui.Sticky(ui.Title("Earlier"), ggui.List(earlier, row)),
+widget.Scroll(widget.Column(
+	widget.Sticky(ui.Title("Today"), widget.List(today, row)),
+	widget.Sticky(ui.Title("Earlier"), widget.List(earlier, row)),
 ).Stretch())
 ```
 
@@ -140,7 +140,7 @@ from a handler, an effect or posted work:
 
 ```go
 var nameRef ggui.FocusRef
-form := ggui.Column(nameRef.Attach(ui.TextField(name)), save)
+form := widget.Column(nameRef.Attach(ui.TextField(name)), save)
 // after a failed validation:
 nameRef.Focus()
 ```
@@ -212,7 +212,7 @@ A drop no zone took reaches the handlers registered with `App.OnDrop`,
 which is where an app that accepts a drop anywhere listens.
 
 ```go
-zone := ggui.Pointer(ui.Card(ggui.Text("Drop images here"))).
+zone := widget.Pointer(ui.Card(widget.Text("Drop images here"))).
 	OnDrop(func(ev ggui.DropEvent) {
 		for _, f := range ev.Files {
 			if !f.Dir {
@@ -247,8 +247,8 @@ the drag; either drop ends it too.
 
 ### Dragging inside the app
 
-`ggui.DragSource(child, value)` lets the user pick child up and carry a
-value of any type; `ggui.DropZone(child, fn)` takes values of its type
+`widget.DragSource(child, value)` lets the user pick child up and carry a
+value of any type; `widget.DropZone(child, fn)` takes values of its type
 parameter and calls `fn` with a `Dropped[T]`: the value, where it landed in
 the zone and the zone's size. The child of a source keeps its clicks. A
 press becomes a drag once it moves a few pixels, a faded copy of the child,
@@ -285,29 +285,29 @@ decrement actions to assistive technology. A move writes `items` through
 also a focusable button for the keyboard:
 
 ```go
-ggui.Reorderable(tasks, func(t Task) int { return t.ID }, func(it ggui.EachItem[Task]) ggui.Widget {
-	return ggui.Row(ggui.ReorderHandle(ui.Icon(icons.Grip)).Name("Move "+it.Item.Title),
-		ggui.Text(it.Item.Title)).Gap(8)
+widget.Reorderable(tasks, func(t Task) int { return t.ID }, func(it widget.EachItem[Task]) ggui.Widget {
+	return widget.Row(widget.ReorderHandle(ui.Icon(icons.Grip)).Name("Move "+it.Item.Title),
+		widget.Text(it.Item.Title)).Gap(8)
 }).Handles().Gap(4).OnReorder(func(from, to int) { app.Announce("Moved", ggui.Polite) })
 ```
 
 Rows lay out vertically and are all laid out; `ItemExtent` virtualization
 is not available for a reorderable list.
 
-A list reorders with a source and a zone per row and `ggui.Move`. The rows
+A list reorders with a source and a zone per row and `widget.Move`. The rows
 carry their keys, which stay right while the list moves under them:
 
 ```go
-ggui.EachKeyed(items, func(it Item) int { return it.ID }, func(row ggui.EachItem[Item]) ggui.Widget {
+widget.EachKeyed(items, func(it Item) int { return it.ID }, func(row widget.EachItem[Item]) ggui.Widget {
 	id := row.Item.ID
-	return ggui.DropZone(ggui.DragSource(itemRow(row.Value), id), func(d ggui.Dropped[int]) {
+	return widget.DropZone(widget.DragSource(itemRow(row.Value), id), func(d widget.Dropped[int]) {
 		list := ggui.Peek(items)
 		from := slices.IndexFunc(list, func(it Item) bool { return it.ID == d.Value })
 		to := ggui.Peek(row.Index)
 		if !d.Before() {
 			to++
 		}
-		items.Set(ggui.Move(list, from, to))
+		items.Set(widget.Move(list, from, to))
 	})
 })
 ```

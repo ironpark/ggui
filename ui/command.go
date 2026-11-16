@@ -9,6 +9,7 @@ import (
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // CommandEntry describes an action in a searchable command list.
@@ -68,18 +69,18 @@ type CommandWidget struct {
 	items              []*MenuItemWidget
 	field              *TextFieldWidget
 	results            *commandResults
-	scroll             *ggui.ScrollWidget
-	list               *ggui.BoxWidget // the rows and the padding around them, inside the scroll
+	scroll             *widget.ScrollWidget
+	list               *widget.BoxWidget // the rows and the padding around them, inside the scroll
 	offset             *ggui.StateValue[float64]
-	panel              *ggui.BoxWidget
-	body               *ggui.ColumnWidget
-	styled             *ggui.StyledWidget
-	resultsBox         *ggui.BoxWidget // the scroll at its height
-	searchBox          *ggui.BoxWidget // the search field's pill
+	panel              *widget.BoxWidget
+	body               *widget.ColumnWidget
+	styled             *widget.StyledWidget
+	resultsBox         *widget.BoxWidget // the scroll at its height
+	searchBox          *widget.BoxWidget // the search field's pill
 	searchRow          *commandSearchRow
-	searchWrap         *ggui.BoxWidget  // the space around the pill
-	hintBox            *ggui.BoxWidget  // the space around the hint
-	hint               *ggui.TextWidget // the key hints under the results
+	searchWrap         *widget.BoxWidget  // the space around the pill
+	hintBox            *widget.BoxWidget  // the space around the hint
+	hint               *widget.TextWidget // the key hints under the results
 	matched            []int
 	highlight          int
 	lastQuery          string
@@ -123,8 +124,8 @@ func Command(query ggui.Binding[string], entries ...CommandEntry) *CommandWidget
 	}
 	c.field.plain = true
 	c.results = &commandResults{owner: c}
-	c.list = ggui.Box(c.results)
-	c.scroll = ggui.Scroll(c.list).BindOffset(c.offset)
+	c.list = widget.Box(c.results)
+	c.scroll = widget.Scroll(c.list).BindOffset(c.offset)
 	c.setEntries(entries)
 	return c
 }
@@ -293,7 +294,7 @@ func (c *CommandWidget) choose(index int) {
 		return
 	}
 	if !c.keepOpen {
-		if popup, ok := ggui.PopupOf(c.env); ok {
+		if popup, ok := widget.PopupOf(c.env); ok {
 			popup.Hide()
 		}
 		if c.dismiss != nil {
@@ -404,7 +405,7 @@ func (c *CommandWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	if c.borderless {
 		c.panel.Border(0, nil)
 	}
-	if _, ok := ggui.PopupOf(env); ok {
+	if _, ok := widget.PopupOf(env); ok {
 		panelShadow(c.panel, t)
 	} else {
 		c.panel.Shadow()
@@ -415,23 +416,23 @@ func (c *CommandWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 // buildPanel assembles the panel for the current hints; Layout styles it
 // from the theme.
 func (c *CommandWidget) buildPanel() {
-	c.resultsBox = ggui.Box(c.scroll)
+	c.resultsBox = widget.Box(c.scroll)
 	parts := []ggui.Widget{c.resultsBox}
 	if !c.bare {
 		c.searchRow = &commandSearchRow{c: c}
-		c.searchBox = ggui.Box(c.searchRow)
-		c.searchWrap = ggui.Box(&commandSearch{c})
+		c.searchBox = widget.Box(c.searchRow)
+		c.searchWrap = widget.Box(&commandSearch{c})
 		parts = []ggui.Widget{c.searchWrap, c.resultsBox}
 	}
 	c.hint, c.hintBox = nil, nil
 	if c.hints {
 		c.hint = Caption(c.hintText())
-		c.hintBox = ggui.Box(c.hint)
+		c.hintBox = widget.Box(c.hint)
 		parts = append(parts, Divider(), c.hintBox)
 	}
-	c.body = ggui.Column(parts...).Gap(0).Align(ggui.AlignStretch)
-	c.styled = ggui.Styled(c.body)
-	c.panel = ggui.Box(c.styled)
+	c.body = widget.Column(parts...).Gap(0).Align(widget.AlignStretch)
+	c.styled = widget.Styled(c.body)
+	c.panel = widget.Box(c.styled)
 }
 
 // commandSearch is the search pill: the whole of it, padding included,
@@ -469,20 +470,20 @@ type commandRow struct {
 type commandResults struct {
 	owner     *CommandWidget
 	rows      []commandRow
-	headings  map[string]*ggui.BoxWidget // each group's heading, kept across layouts
-	empty     *ggui.TextWidget
+	headings  map[string]*widget.BoxWidget // each group's heading, kept across layouts
+	empty     *widget.TextWidget
 	emptySize ggui.Size
 }
 
 // heading is the kept heading of group: small, medium and muted, in a
 // row's own padding.
-func (r *commandResults) heading(group string, t *uitheme.Theme) *ggui.BoxWidget {
+func (r *commandResults) heading(group string, t *uitheme.Theme) *widget.BoxWidget {
 	h := r.headings[group]
 	if h == nil {
 		if r.headings == nil {
-			r.headings = map[string]*ggui.BoxWidget{}
+			r.headings = map[string]*widget.BoxWidget{}
 		}
-		h = ggui.Box(Caption(group).Weight(ggui.WeightMedium))
+		h = widget.Box(Caption(group).Weight(ggui.WeightMedium))
 		r.headings[group] = h
 	}
 	return h.Padding(ggui.Insets(t.Space*.75, t.Space))
@@ -503,7 +504,7 @@ func (r *commandResults) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 		// far above the panel's own padding, with no group around it; a
 		// combobox's is muted and 8 from either side.
 		if r.empty == nil {
-			r.empty = ggui.Text(c.emptyText)
+			r.empty = widget.Text(c.emptyText)
 		}
 		room := t.Space * 6
 		if c.menuRows {

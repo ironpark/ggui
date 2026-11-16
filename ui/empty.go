@@ -5,6 +5,7 @@ import (
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // emptyMeasure is the widest the text and the action of an empty state
@@ -14,17 +15,17 @@ const emptyMeasure = 384.0
 // EmptyWidget presents an empty collection with optional media and an action.
 type EmptyWidget struct {
 	props              property.Owner
-	title, description *ggui.TextWidget
+	title, description *widget.TextWidget
 	media, action      ggui.Widget
 	outline            bool
 	theme              *uitheme.Theme
-	box                *ggui.BoxWidget
+	box                *widget.BoxWidget
 	stale              bool // Media or Action changed what box should hold
-	row                *ggui.RowWidget
-	column             *ggui.ColumnWidget // the header over the action
-	header             *ggui.ColumnWidget // the title over the description
-	lead               *ggui.BoxWidget    // the media, with the space under it
-	text, content      *ggui.BoxWidget    // the header and the action, held to the measure
+	row                *widget.RowWidget
+	column             *widget.ColumnWidget // the header over the action
+	header             *widget.ColumnWidget // the title over the description
+	lead               *widget.BoxWidget    // the media, with the space under it
+	text, content      *widget.BoxWidget    // the header and the action, held to the measure
 }
 
 // emptyTitleTracking is the letter spacing of an Empty's title: shadcn's
@@ -34,9 +35,9 @@ const emptyTitleTracking = -0.025
 // Empty creates a centered empty-state panel. An empty description is
 // left out.
 func Empty(title, description string) *EmptyWidget {
-	e := &EmptyWidget{title: ggui.Text(title).Align(.5).Tracking(emptyTitleTracking)}
+	e := &EmptyWidget{title: widget.Text(title).Align(.5).Tracking(emptyTitleTracking)}
 	if description != "" {
-		e.description = ggui.Text(description).Align(.5)
+		e.description = widget.Text(description).Align(.5)
 	}
 	return e
 }
@@ -84,24 +85,24 @@ func (e *EmptyWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		e.lead = nil
 		head := []ggui.Widget{}
 		if e.media != nil {
-			e.lead = ggui.Box(e.media)
+			e.lead = widget.Box(e.media)
 			head = append(head, e.lead)
 		}
 		head = append(head, e.title)
 		if e.description != nil {
 			head = append(head, e.description)
 		}
-		e.header = ggui.Column(head...).Align(ggui.AlignCenter)
-		e.text = ggui.Box(e.header)
+		e.header = widget.Column(head...).Align(widget.AlignCenter)
+		e.text = widget.Box(e.header)
 		parts := []ggui.Widget{e.text}
 		e.content = nil
 		if e.action != nil {
-			e.content = ggui.Box(e.action)
+			e.content = widget.Box(e.action)
 			parts = append(parts, e.content)
 		}
-		e.column = ggui.Column(parts...).Align(ggui.AlignCenter)
-		e.row = ggui.Row(e.column).Justify(ggui.JustifyCenter)
-		e.box = ggui.Box(e.row)
+		e.column = widget.Column(parts...).Align(widget.AlignCenter)
+		e.row = widget.Row(e.column).Justify(widget.JustifyCenter)
+		e.box = widget.Box(e.row)
 		e.stale = false
 	}
 	if e.lead != nil {

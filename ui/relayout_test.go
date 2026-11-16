@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // Controls keep their child widgets across layouts so the text caches
@@ -185,7 +186,7 @@ func BenchmarkRelayoutChartAndSelects(b *testing.B) {
 	for range 20 {
 		widgets = append(widgets, Select(ggui.State("alpha")).Options([]string{"alpha", "beta", "gamma"}))
 	}
-	p := ggui.NewProbe(uitheme.With(uitheme.Default(), ggui.Column(widgets...)), ggui.Sz(800, 2000))
+	p := ggui.NewProbe(uitheme.With(uitheme.Default(), widget.Column(widgets...)), ggui.Sz(800, 2000))
 	defer p.Close()
 	p.Frame()
 	b.ReportAllocs()

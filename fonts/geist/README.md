@@ -10,13 +10,14 @@ shared fonts as immutable. Loading them does not change application defaults.
 import (
     "github.com/ironpark/ggui"
     "github.com/ironpark/ggui/fonts/geist"
+    "github.com/ironpark/ggui/widget"
 )
 
-label := ggui.Text("Contribution History").Style(ggui.TextStyle{
+label := widget.Text("Contribution History").Style(ggui.TextStyle{
     Font: geist.Font(),
     Weight: ggui.WeightMedium,
 })
-code := ggui.Text("go test ./...").Style(ggui.TextStyle{Font: geist.Mono()})
+code := widget.Text("go test ./...").Style(ggui.TextStyle{Font: geist.Mono()})
 ```
 
 The theme builder exposes the same families through `theme.FontGeist` and

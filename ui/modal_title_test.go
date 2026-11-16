@@ -7,6 +7,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // shadcn's DialogTitle is text-base leading-none, a 16px box, over gap-2;
@@ -20,13 +21,13 @@ func TestModalTitlesAreBoxesOfTheirLineHeight(t *testing.T) {
 		title, toDesc float64 // the title's height, and from its top to the description's
 	}{
 		{"dialog", func(o ggui.Binding[bool]) ggui.Widget {
-			return ui.Dialog(o, ggui.Text("Body")).Title("Title here").Description("Description here")
+			return ui.Dialog(o, widget.Text("Body")).Title("Title here").Description("Description here")
 		}, 16, 16 + 8},
 		{"alert dialog", func(o ggui.Binding[bool]) ggui.Widget {
 			return ui.AlertDialog(o, "Title here", "Description here")
 		}, 24, 24 + 6},
 		{"sheet", func(o ggui.Binding[bool]) ggui.Widget {
-			return ui.Sheet(o, ggui.Text("Body")).Title("Title here").Description("Description here")
+			return ui.Sheet(o, widget.Text("Body")).Title("Title here").Description("Description here")
 		}, 24, 24 + 2},
 	} {
 		p := ggui.NewProbe(c.build(ggui.State(true)), ggui.Sz(800, 600))

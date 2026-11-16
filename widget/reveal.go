@@ -37,8 +37,8 @@ type RevealWidget struct {
 // The first layout shows it as open is, without easing.
 //
 //	more := ggui.State(false)
-//	ggui.Column(
-//		ggui.Tap(ggui.Text("Details"), func() { ggui.Toggle(more) }),
+//	widget.Column(
+//		widget.Tap(widget.Text("Details"), func() { ggui.Toggle(more) }),
 //		widget.Reveal(more, details),
 //	)
 func Reveal(open ggui.Readable[bool], child ggui.Widget) *RevealWidget {

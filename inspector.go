@@ -298,7 +298,7 @@ func inspectComparable(v any) any {
 	return nil
 }
 
-// widgetName is a widget's type for the inspector: Box for *ggui.BoxWidget.
+// widgetName is a widget's type for the inspector: Box for *widget.BoxWidget.
 func widgetName(w Widget) string {
 	t := reflect.TypeOf(w)
 	if name, ok := widgetNames.Load(t); ok {

@@ -34,7 +34,7 @@ func TestRememberKeepsValuesAcrossRebuilds(t *testing.T) {
 						return ggui.State(k)
 					})
 				}
-				return ggui.Box()
+				return widget.Box()
 			})
 		})
 	}, ggui.Sz(100, 100))
@@ -82,10 +82,10 @@ func TestRememberScopesByComponentAndType(t *testing.T) {
 				if i == 0 {
 					str = ggui.Remember("k", func() *ggui.StateValue[string] { return ggui.State("s") })
 				}
-				return ggui.Box()
+				return widget.Box()
 			})
 		}
-		return ggui.Column(cell(0), ggui.If(show, func() ggui.Widget { return cell(1) }))
+		return widget.Column(cell(0), ggui.If(show, func() ggui.Widget { return cell(1) }))
 	}, ggui.Sz(100, 100))
 	defer p.Close()
 	p.Frame()
@@ -186,7 +186,7 @@ func TestStoreReportsAChangeLeftUnpublished(t *testing.T) {
 
 	store := ggui.NewStore(&storeModel{title: "a"})
 	title := ggui.Select(store, func(m *storeModel) string { return m.title })
-	p := ggui.ProbeBuilder(func() ggui.Widget { return ggui.TextOf(title) }, ggui.Sz(100, 20))
+	p := ggui.ProbeBuilder(func() ggui.Widget { return widget.TextOf(title) }, ggui.Sz(100, 20))
 	defer p.Close()
 	p.Frame()
 	store.Update(func(m *storeModel) { m.title = "b" })
@@ -941,7 +941,7 @@ func TestEffectDisposedBeforeFirstRunAndUntrackedCleanup(t *testing.T) {
 		stop()
 		stop()
 		ggui.Effect(func() ggui.Cleanup { trigger.Get(); runs++; return func() { other.Get() } })
-		return ggui.Box()
+		return widget.Box()
 	}, ggui.Sz(10, 10))
 	defer p.Close()
 	p.Frame()
@@ -963,7 +963,7 @@ func TestIfFactoryLifetimeAndConfiguration(t *testing.T) {
 		created++
 		local = ggui.State(0)
 		ggui.OnCleanup(func() { cleaned++ })
-		return ggui.Textf("%d", local)
+		return widget.Textf("%d", local)
 	})
 	p := ggui.NewProbe(branch, ggui.Sz(100, 30))
 	defer p.Close()
@@ -985,7 +985,7 @@ func TestIfFactoryLifetimeAndConfiguration(t *testing.T) {
 	if created != 2 || cleaned != 1 || local.Get() != 0 {
 		t.Fatal("branch lifetime incorrect")
 	}
-	assertPanics(t, func() { branch.Else(func() ggui.Widget { return ggui.Box() }) })
+	assertPanics(t, func() { branch.Else(func() ggui.Widget { return widget.Box() }) })
 }
 
 func TestEachPositionKeyIndexAndEmptyLifetime(t *testing.T) {
@@ -995,14 +995,14 @@ func TestEachPositionKeyIndexAndEmptyLifetime(t *testing.T) {
 		Label string
 	}
 	source := ggui.State([]item{{1, "a"}, {2, "b"}})
-	var rows []ggui.EachItem[item]
+	var rows []widget.EachItem[item]
 	created, cleaned, empty := 0, 0, 0
-	keyed := ggui.EachKeyed(source, func(v item) int { return v.ID }, func(row ggui.EachItem[item]) ggui.Widget {
+	keyed := widget.EachKeyed(source, func(v item) int { return v.ID }, func(row widget.EachItem[item]) ggui.Widget {
 		rows = append(rows, row)
 		created++
 		ggui.OnCleanup(func() { cleaned++ })
-		return ggui.Textf("%v", row.Value)
-	}).Else(func() ggui.Widget { empty++; return ggui.Text("empty") })
+		return widget.Textf("%v", row.Value)
+	}).Else(func() ggui.Widget { empty++; return widget.Text("empty") })
 	p := ggui.NewProbe(keyed, ggui.Sz(200, 100))
 	defer p.Close()
 	p.Frame()
@@ -1022,10 +1022,10 @@ func TestEachPositionKeyIndexAndEmptyLifetime(t *testing.T) {
 		t.Fatal("empty branch remounted")
 	}
 	values := ggui.State([]string{"x", "x"})
-	var positional []ggui.EachItem[string]
-	q := ggui.NewProbe(ggui.Each(values, func(row ggui.EachItem[string]) ggui.Widget {
+	var positional []widget.EachItem[string]
+	q := ggui.NewProbe(widget.Each(values, func(row widget.EachItem[string]) ggui.Widget {
 		positional = append(positional, row)
-		return ggui.TextOf(row.Value)
+		return widget.TextOf(row.Value)
 	}), ggui.Sz(100, 50))
 	defer q.Close()
 	q.Frame()
@@ -1042,7 +1042,7 @@ func TestDerivedEqualityAndMeasurementTracking(t *testing.T) {
 	runs := 0
 	p := ggui.ProbeBuilder(func() ggui.Widget {
 		v := ggui.Derived(func() []int { return []int{n.Get() % 2} }).WithEqual(slices.Equal[[]int])
-		return ggui.View(v, func([]int) ggui.Widget { runs++; return ggui.Box() })
+		return ggui.View(v, func([]int) ggui.Widget { runs++; return widget.Box() })
 	}, ggui.Sz(10, 10))
 	defer p.Close()
 	p.Frame()
@@ -1058,7 +1058,7 @@ func TestPublicEffectCycleReportsItsOrigin(t *testing.T) {
 	n := ggui.State(0)
 	p := ggui.ProbeBuilder(func() ggui.Widget {
 		ggui.Effect(func() ggui.Cleanup { n.Set(n.Get() + 1); return nil })
-		return ggui.Box()
+		return widget.Box()
 	}, ggui.Sz(10, 10))
 	defer p.Close()
 	defer func() {
@@ -1096,13 +1096,13 @@ func TestEachEmptyBranchLaidOutAfterExitTransition(t *testing.T) {
 	items := ggui.State([]int{1})
 	cleaned := 0
 	p := ggui.ProbeBuilder(func() ggui.Widget {
-		return ggui.EachKeyed(items, func(n int) int { return n }, func(ggui.EachItem[int]) ggui.Widget {
+		return widget.EachKeyed(items, func(n int) int { return n }, func(widget.EachItem[int]) ggui.Widget {
 			ggui.OnCleanup(func() { cleaned++ })
-			return ggui.Box().Size(10, 10)
-		}).Transition(func(w ggui.Widget) *ggui.TransitionWidget {
-			return ggui.Transition(w).Fade().Duration(time.Millisecond)
+			return widget.Box().Size(10, 10)
+		}).Transition(func(w ggui.Widget) *widget.TransitionWidget {
+			return widget.Transition(w).Fade().Duration(time.Millisecond)
 		}).
-			Else(func() ggui.Widget { return ggui.Column(ggui.Text("empty"), ggui.Text("list")) })
+			Else(func() ggui.Widget { return widget.Column(widget.Text("empty"), widget.Text("list")) })
 	}, ggui.Sz(100, 100))
 	defer p.Close()
 	p.Frame()
@@ -1123,7 +1123,7 @@ func TestViewFollowsOnlyItsValue(t *testing.T) {
 	value, other := ggui.State(0), ggui.State(0)
 	builds := 0
 	p := ggui.ProbeBuilder(func() ggui.Widget {
-		return ggui.View(value, func(int) ggui.Widget { builds++; other.Get(); return ggui.Box() })
+		return ggui.View(value, func(int) ggui.Widget { builds++; other.Get(); return widget.Box() })
 	}, ggui.Size{W: 100, H: 100})
 	defer p.Close()
 	p.Frame()
@@ -1153,7 +1153,7 @@ func TestPeekDoesNotSubscribe(t *testing.T) {
 		})
 	})
 	defer dispose()
-	p := ggui.NewProbe(ggui.Box(), ggui.Sz(10, 10))
+	p := ggui.NewProbe(widget.Box(), ggui.Sz(10, 10))
 	defer p.Close()
 	p.Frame()
 	s.Set(2)
@@ -1190,10 +1190,10 @@ func TestBooleanCombinators(t *testing.T) {
 // Responsive lays out the arrangement its width calls for, and the two may
 // share a widget.
 func TestResponsivePicksAnArrangementByWidth(t *testing.T) {
-	shared := ggui.Box().Size(40, 20)
-	wide := ggui.Row(shared, ggui.Box().Size(40, 20))
-	narrow := ggui.Column(shared, ggui.Box().Size(40, 20))
-	r := ggui.Responsive(100, wide, narrow)
+	shared := widget.Box().Size(40, 20)
+	wide := widget.Row(shared, widget.Box().Size(40, 20))
+	narrow := widget.Column(shared, widget.Box().Size(40, 20))
+	r := widget.Responsive(100, wide, narrow)
 	if got := r.Layout(ggui.Loose(ggui.Sz(200, 200)), ggui.Env{}); got != ggui.Sz(80, 20) {
 		t.Fatalf("wide: %v, want the row's 80x20", got)
 	}
@@ -1211,7 +1211,7 @@ func TestAwaitRequestIdentityAndReactiveValue(t *testing.T) {
 		builds++
 		value = v
 		ggui.OnCleanup(func() { cleanups++ })
-		return ggui.Textf("%d", v)
+		return widget.Textf("%d", v)
 	})
 	p := ggui.NewProbe(view, ggui.Sz(100, 30))
 	defer p.Close()
@@ -1226,5 +1226,5 @@ func TestAwaitRequestIdentityAndReactiveValue(t *testing.T) {
 	if builds != 2 || cleanups != 1 {
 		t.Fatal("fast request failed to remount")
 	}
-	assertPanics(t, func() { view.Pending(func() ggui.Widget { return ggui.Box() }) })
+	assertPanics(t, func() { view.Pending(func() ggui.Widget { return widget.Box() }) })
 }

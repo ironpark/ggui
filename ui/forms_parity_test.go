@@ -15,7 +15,7 @@ import (
 // retained for it under slot stands in each frame, or -1 while there is
 // none.
 func watchMotion(w ggui.Widget, state *ggui.Interactive, slot ggui.Slot[*ggui.Motion], at *float64) ggui.Widget {
-	return ggui.Column(watched(w, state, slot, at))
+	return widget.Column(watched(w, state, slot, at))
 }
 
 func watched(w ggui.Widget, state *ggui.Interactive, slot ggui.Slot[*ggui.Motion], at *float64) ggui.Widget {
@@ -148,7 +148,7 @@ func TestTogglesReadTheFieldsError(t *testing.T) {
 	own := Checkbox(ggui.State(false), "Own").Invalid(true)
 	bound := ggui.State(false)
 	follows := Switch(ggui.State(false), "Follows").BindInvalid(bound)
-	p := ggui.NewProbe(ggui.Column(
+	p := ggui.NewProbe(widget.Column(
 		Field("Terms", box).BindError(err), Field("Plan", radio).BindError(err), Field("Alerts", sw).BindError(err), own, follows,
 	), ggui.Sz(320, 400))
 	defer p.Close()
@@ -215,7 +215,7 @@ func TestInputGroupKeepsAFieldsHeight(t *testing.T) {
 		kept := Button("Go", nil).Outline().Size(ButtonSmall)
 		for name, g := range map[string]*InputGroupWidget{
 			"bare":   InputGroup(widget.TextInput(ggui.State(""))),
-			"text":   InputGroup(widget.TextInput(ggui.State(""))).Leading(ggui.Text("https://")).Trailing(ggui.Text("kg")),
+			"text":   InputGroup(widget.TextInput(ggui.State(""))).Leading(widget.Text("https://")).Trailing(widget.Text("kg")),
 			"button": InputGroup(widget.TextInput(ggui.State(""))).Trailing(plain),
 		} {
 			if size := g.Layout(c, env); size.H != field.H || size.W != 400 {
@@ -244,7 +244,7 @@ func TestInputGroupBlockAddons(t *testing.T) {
 		t.Fatalf("a multiline group is %v tall, a single line %v", plain.H, single.H)
 	}
 	send := Button("Send", nil)
-	g := InputGroup(widget.TextInput(ggui.State(""))).Multiline().Top(ggui.Text("Context")).Bottom(send)
+	g := InputGroup(widget.TextInput(ggui.State(""))).Multiline().Top(widget.Text("Context")).Bottom(send)
 	if size := g.Layout(c, env); size.H <= plain.H+send.Layout(c, env).H {
 		t.Fatalf("with addons above and below the group is %v tall, without %v", size.H, plain.H)
 	}
@@ -269,13 +269,13 @@ func TestInputGroupBlockAddons(t *testing.T) {
 	if want := 32 + 6 + line.botRect.Size.H + 8; math.Abs(size.H-want) > 1e-9 {
 		t.Fatalf("a single line over a row of addons is %v tall, want %v", size.H, want)
 	}
-	head := InputGroup(widget.TextInput(ggui.State(""))).Top(ggui.Text("To"))
+	head := InputGroup(widget.TextInput(ggui.State(""))).Top(widget.Text("To"))
 	size = head.Layout(c, env)
 	above, below = head.rowRect.Origin.Y-head.topRect.Origin.Y-head.topRect.Size.H, size.H-head.rowRect.Origin.Y-head.rowRect.Size.H
 	if want := 10 + (20-text)/2; math.Abs(below-want) > 1e-9 || math.Abs(above-(want-2)) > 1e-9 {
 		t.Fatalf("a single line starts %v under its top row and ends %v up, want %v and %v", above, below, want-2, want)
 	}
-	both := InputGroup(widget.TextInput(ggui.State(""))).Top(ggui.Text("To")).Bottom(Button("Send", nil))
+	both := InputGroup(widget.TextInput(ggui.State(""))).Top(widget.Text("To")).Bottom(Button("Send", nil))
 	size = both.Layout(c, env)
 	if want := 8 + both.topRect.Size.H + 6 + 32 + 6 + both.botRect.Size.H + 8; math.Abs(size.H-want) > 1e-9 {
 		t.Fatalf("a single line between two rows of addons is %v tall, want %v", size.H, want)
@@ -285,7 +285,7 @@ func TestInputGroupBlockAddons(t *testing.T) {
 	taps := 0
 	value := ggui.State("")
 	input := widget.TextInput(value).Name("Message")
-	p := ggui.NewProbe(InputGroup(input).Multiline().Top(ggui.Text("Context")).Bottom(Button("Send", func() { taps++ })), ggui.Sz(400, 300))
+	p := ggui.NewProbe(InputGroup(input).Multiline().Top(widget.Text("Context")).Bottom(Button("Send", func() { taps++ })), ggui.Sz(400, 300))
 	defer p.Close()
 	p.Tap("Send")
 	if taps != 1 {
@@ -316,7 +316,7 @@ func TestFieldPartsAndOrientation(t *testing.T) {
 
 	sw := Switch(ggui.State(false), "")
 	box := Checkbox(ggui.State(false), "")
-	p := ggui.NewProbe(ggui.Column(Field("Alerts", sw).Help("By email").Horizontal(), Field("Terms", box).ControlFirst()).Align(ggui.AlignStretch), ggui.Sz(300, 200))
+	p := ggui.NewProbe(widget.Column(Field("Alerts", sw).Help("By email").Horizontal(), Field("Terms", box).ControlFirst()).Align(widget.AlignStretch), ggui.Sz(300, 200))
 	defer p.Close()
 	p.Frame()
 	alerts, ok := p.FindRole(ggui.RoleSwitch, "Alerts")
@@ -425,8 +425,8 @@ func TestFormControlsLeaveACachedParentHeld(t *testing.T) {
 		"Radios horizontal":    Radios(ggui.State("a")).Options(options).Horizontal(),
 		"NumberInput":          NumberInput(ggui.State(1.0)),
 		"InputOTP":             InputOTP(ggui.State("12"), 6).Groups(3, 3),
-		"InputGroup":           InputGroup(widget.TextInput(ggui.State("a"))).Leading(ggui.Text("$")).Trailing(Button("Go", nil)),
-		"InputGroup multiline": InputGroup(widget.TextInput(ggui.State("a"))).Multiline().Top(ggui.Text("t")).Bottom(Button("Send", nil)),
+		"InputGroup":           InputGroup(widget.TextInput(ggui.State("a"))).Leading(widget.Text("$")).Trailing(Button("Go", nil)),
+		"InputGroup multiline": InputGroup(widget.TextInput(ggui.State("a"))).Multiline().Top(widget.Text("t")).Bottom(Button("Send", nil)),
 		"Field":                Field("Name", TextField(ggui.State("a"))).Help("help").Error("error"),
 		"Field horizontal":     Field("Name", Switch(ggui.State(true), "")).Help("help").Horizontal(),
 		"FieldSet":             FieldSet(Field("Name", TextField(ggui.State("a"))), FieldSeparator().Label("or")).Legend("Set").Description("d"),
@@ -437,7 +437,7 @@ func TestFormControlsLeaveACachedParentHeld(t *testing.T) {
 			layouts := 0
 			sibling := ggui.FromFuncs(func(c ggui.Constraints, _ ggui.Env) ggui.Size { layouts++; return c.Constrain(ggui.Sz(10, 10)) }, func(*ggui.Canvas, ggui.Rect) {})
 			tick := ggui.State(0)
-			root := ggui.Column(ggui.Cached(ggui.Column(w, sibling)), ggui.TextOf(ggui.Map[int, string](tick, strconv.Itoa)))
+			root := widget.Column(ggui.Cached(widget.Column(w, sibling)), widget.TextOf(ggui.Map[int, string](tick, strconv.Itoa)))
 			p := ggui.NewProbe(root, ggui.Sz(600, 600))
 			defer p.Close()
 			for range 3 {

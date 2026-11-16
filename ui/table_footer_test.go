@@ -7,6 +7,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func footedTable(rows ggui.Readable[[]person]) *ui.TableWidget[person, int] {
@@ -19,8 +20,8 @@ func footedTable(rows ggui.Readable[[]person]) *ui.TableWidget[person, int] {
 func TestTableRowsFollowTheThemeAndFooterAndCaptionSitBelow(t *testing.T) {
 	t.Parallel()
 	rows := ggui.State([]person{{1, "Ada", 36}, {2, "Grace", 45}, {3, "Linus", 28}})
-	tbl := footedTable(rows).Footer(ggui.Text("Total"), ggui.Text("109")).Caption("Three pioneers.")
-	p := ggui.NewProbe(ggui.Column(tbl).Align(ggui.AlignStretch), ggui.Sz(400, 400))
+	tbl := footedTable(rows).Footer(widget.Text("Total"), widget.Text("109")).Caption("Three pioneers.")
+	p := ggui.NewProbe(widget.Column(tbl).Align(widget.AlignStretch), ggui.Sz(400, 400))
 	defer p.Close()
 	// A 40px heading row, then 37px rows: a 20px line in 8px of padding over a 1px line.
 	ada, grace := semNode(t, p, ggui.RoleRow, "Ada"), semNode(t, p, ggui.RoleRow, "Grace")
@@ -60,7 +61,7 @@ func TestTableFooterStaysUnderAScrollingBody(t *testing.T) {
 	for i := range 50 {
 		many = append(many, person{ID: i + 1, Name: "p" + strconv.Itoa(i+1), Age: i})
 	}
-	tbl := footedTable(ggui.State(many)).Height(200).Footer(ggui.Text("Total"), nil).Caption("Fifty rows.")
+	tbl := footedTable(ggui.State(many)).Height(200).Footer(widget.Text("Total"), nil).Caption("Fifty rows.")
 	p := ggui.NewProbe(tbl, ggui.Sz(300, 400))
 	defer p.Close()
 	if sz := p.Frame(); sz.H != 200 {

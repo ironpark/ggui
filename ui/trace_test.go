@@ -6,16 +6,17 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestTraceNestedDisclosuresAndAccessibleActions(t *testing.T) {
 	t.Parallel()
 	trace := ui.Trace(ui.TraceStep{ID: "run", Title: "Run", Status: ui.TraceRunning, Duration: 1500 * time.Millisecond,
-		Details: ggui.Text("Run details"), Children: []ui.TraceStep{
-			{ID: "fetch", Title: "Fetch", Status: ui.TraceCompleted, Details: ggui.Text("Fetched two files")},
+		Details: widget.Text("Run details"), Children: []ui.TraceStep{
+			{ID: "fetch", Title: "Fetch", Status: ui.TraceCompleted, Details: widget.Text("Fetched two files")},
 			{ID: "save", Title: "Save", Status: ui.TracePending},
 		}})
-	p := ggui.NewProbe(ggui.Column(trace), ggui.Sz(400, 400))
+	p := ggui.NewProbe(widget.Column(trace), ggui.Sz(400, 400))
 	defer p.Close()
 	node(t, p.Semantics(), ggui.RoleList, "Execution trace")
 	if n := node(t, p.Semantics(), ggui.RoleListItem, "Run"); n.Description != "running · 1.5s" {
@@ -59,9 +60,9 @@ func TestTraceKeyboardDetailsAndImmutableExpansionBinding(t *testing.T) {
 	clicked := 0
 	trace := ui.Trace(
 		ui.TraceStep{ID: "a", Title: "First", Details: ui.Button("Inspect", func() { clicked++ })},
-		ui.TraceStep{ID: "b", Title: "Second", Details: ggui.Text("Second details")},
+		ui.TraceStep{ID: "b", Title: "Second", Details: widget.Text("Second details")},
 	).BindExpanded(expanded).OnToggle(func(id string, open bool) { toggles = append(toggles, id) })
-	p := ggui.NewProbe(ggui.Column(trace), ggui.Sz(350, 300))
+	p := ggui.NewProbe(widget.Column(trace), ggui.Sz(350, 300))
 	defer p.Close()
 	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyEnter)
 	p.Advance(300 * time.Millisecond)
@@ -87,18 +88,18 @@ func TestTraceKeyboardDetailsAndImmutableExpansionBinding(t *testing.T) {
 func TestTraceUpdatesKeepKeyedFocusAndExpansion(t *testing.T) {
 	t.Parallel()
 	steps := ggui.State([]ui.TraceStep{
-		{ID: "a", Title: "Compile", Status: ui.TraceRunning, Details: ggui.Text("Compiling")},
-		{ID: "b", Title: "Test", Status: ui.TracePending, Details: ggui.Text("Waiting")},
+		{ID: "a", Title: "Compile", Status: ui.TraceRunning, Details: widget.Text("Compiling")},
+		{ID: "b", Title: "Test", Status: ui.TracePending, Details: widget.Text("Waiting")},
 	})
 	trace := ui.Trace().BindSteps(steps)
-	p := ggui.NewProbe(ggui.Column(trace), ggui.Sz(350, 300))
+	p := ggui.NewProbe(widget.Column(trace), ggui.Sz(350, 300))
 	defer p.Close()
 	p.Tap("Compile")
 	p.Advance(300 * time.Millisecond)
 	before := node(t, p.Semantics(), ggui.RoleDisclosure, "Compile")
 	steps.Set([]ui.TraceStep{
-		{ID: "b", Title: "Test", Status: ui.TraceRunning, Details: ggui.Text("Running tests")},
-		{ID: "a", Title: "Compiled", Status: ui.TraceCompleted, Duration: 42 * time.Millisecond, Details: ggui.Text("Finished")},
+		{ID: "b", Title: "Test", Status: ui.TraceRunning, Details: widget.Text("Running tests")},
+		{ID: "a", Title: "Compiled", Status: ui.TraceCompleted, Duration: 42 * time.Millisecond, Details: widget.Text("Finished")},
 	})
 	p.Frame()
 	after := node(t, p.Semantics(), ggui.RoleDisclosure, "Compiled")
@@ -126,7 +127,7 @@ func TestTraceOwnsLiteralSlicesAndValidatesIDs(t *testing.T) {
 	steps := []ui.TraceStep{{ID: "root", Title: "Root", Children: []ui.TraceStep{{ID: "child", Title: "Child"}}}}
 	trace := ui.Trace(steps...).Expanded(map[string]bool{"root": true})
 	steps[0].Children[0].Title = "Mutated"
-	p := ggui.NewProbe(ggui.Column(trace), ggui.Sz(280, 200))
+	p := ggui.NewProbe(widget.Column(trace), ggui.Sz(280, 200))
 	node(t, p.Semantics(), ggui.RoleListItem, "Child")
 	p.Close()
 	for _, invalid := range [][]ui.TraceStep{
@@ -153,7 +154,7 @@ func TestTraceEmptyAndNarrowLayout(t *testing.T) {
 	}
 	p.Close()
 	trace := ui.Trace(ui.TraceStep{ID: "step", Title: "A long execution step title", Status: ui.TraceFailed, Duration: time.Second,
-		Details: ggui.Text("Long details that should wrap in a narrow view")}).Expanded(map[string]bool{"step": true})
+		Details: widget.Text("Long details that should wrap in a narrow view")}).Expanded(map[string]bool{"step": true})
 	for _, size := range []ggui.Size{ggui.Sz(0, 0), ggui.Sz(50, 50), ggui.Sz(200, 300)} {
 		got := trace.Layout(ggui.Loose(size), ggui.Env{})
 		if got.W < 0 || got.H < 0 || got.W > size.W || got.H > size.H {
@@ -169,7 +170,7 @@ func TestTraceDescriptionsAndActionRows(t *testing.T) {
 		ui.TraceStep{ID: "plain", Title: "Complete", Description: "Two files written"},
 		ui.TraceStep{ID: "error", Title: "Failed build", Description: "Open diagnostics", Status: ui.TraceError, OnActivate: func() { activated++ }},
 	)
-	p := ggui.NewProbe(ggui.Column(trace), ggui.Sz(300, 200))
+	p := ggui.NewProbe(widget.Column(trace), ggui.Sz(300, 200))
 	defer p.Close()
 	if n := node(t, p.Semantics(), ggui.RoleListItem, "Complete"); n.Description != "Two files written" {
 		t.Fatal(n)

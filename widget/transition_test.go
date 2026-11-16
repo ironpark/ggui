@@ -1,4 +1,4 @@
-package ggui
+package widget
 
 import (
 	"image/color"
@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggui"
 )
 
 // The transitions' tests through the public surface are in
@@ -13,20 +14,20 @@ import (
 // way, which a probe that paints no pixels reads only from inside.
 func TestAnimatedBoxEasesBoundValues(t *testing.T) {
 	t.Parallel()
-	width := State(100.0)
-	pad := State(Insets(0))
-	fill := State[color.Color](color.Black)
-	var got Rect
+	width := ggui.State(100.0)
+	pad := ggui.State(ggui.Insets(0))
+	fill := ggui.State[color.Color](color.Black)
+	var got ggui.Rect
 	box := AnimatedBox(probe(0, 0, &got)).BindWidth(width).Height(20).BindPadding(pad).
-		BindFill(fill).Radius(4).Easing(EaseLinear).Duration(100 * time.Millisecond)
-	p := NewProbe(Column(box), Sz(300, 100))
+		BindFill(fill).Radius(4).Easing(ggui.EaseLinear).Duration(100 * time.Millisecond)
+	p := ggui.NewProbe(Column(box), ggui.Sz(300, 100))
 	defer p.Close()
 	p.Frame()
 	if got.Size.W != 100 {
 		t.Fatalf("starting width %v", got.Size.W)
 	}
 	width.Set(200)
-	pad.Set(Insets(10))
+	pad.Set(ggui.Insets(10))
 	fill.Set(color.White)
 	p.Advance(0)
 	p.Advance(0)
@@ -57,8 +58,8 @@ func TestTransitionFadeHoldsALayerOnlyWhileAnimating(t *testing.T) {
 	t.Parallel()
 	img := ggfx.NewImage(120, 80)
 	defer img.Deallocate()
-	fading := func() *Probe {
-		p := NewProbe(Transition(Text("fading")), Sz(120, 80))
+	fading := func() *ggui.Probe {
+		p := ggui.NewProbe(Transition(Text("fading")), ggui.Sz(120, 80))
 		p.RenderTo(img)
 		p.Frame()
 		if n := p.Layers(); n != 1 {

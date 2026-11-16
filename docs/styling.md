@@ -4,7 +4,7 @@
 
 Customize local styles, inherited values, semantic colors, geometry, and motion.
 
-Examples use `ggui`, `ui`, and `theme` (`github.com/ironpark/ggui/ui/theme`) imports and application-defined placeholders.
+Examples use `ggui`, `widget`, `ui`, and `theme` (`github.com/ironpark/ggui/ui/theme`) imports and application-defined placeholders.
 See the [migration guide](../ui/theme/README.md) for the package/API changes.
 See [example conventions](README.md#start-here) before copying snippets.
 
@@ -74,14 +74,14 @@ of `b` over `a` and leaves the rest of `a` alone, which is what makes a style
 composable:
 
 ```go
-ggui.Text("Heading").Style(t.Title)              // the theme's heading
-ggui.Text("Heading").Style(t.Title).Color(brand) // the same, in one other color
+widget.Text("Heading").Style(t.Title)              // the theme's heading
+widget.Text("Heading").Style(t.Title).Color(brand) // the same, in one other color
 ```
 
 `ui.Title(s)`, `ui.Heading(s)`, `ui.Caption(s)` and `ui.Mono(s)` are
 shorthands for the same merge against the theme's named styles, resolved from
 the `Env` at layout, so a heading needs no `theme.Use`. Each has the forms
-`ggui.Text` has: `ui.CaptionOf(reader)` follows a value and
+`widget.Text` has: `ui.CaptionOf(reader)` follows a value and
 `ui.Captionf("%d left", count)` formats one, as `TextOf` and `Textf` do. Note that the named
 styles are *deltas*: `theme.Default().Title` is `{Size: 24, Weight:
 WeightSemibold}` and nothing else, so a title inherits its font, color and
@@ -106,15 +106,15 @@ CSS inherits font and color. `Styled(child)` sets what everything below starts
 from, and a `Text`'s own setters still win:
 
 ```go
-ggui.Styled(ggui.Column(
-	ggui.Text("inherits 12px muted"),
-	ggui.Text("but this one is 18").Size(18),
+widget.Styled(widget.Column(
+	widget.Text("inherits 12px muted"),
+	widget.Text("but this one is 18").Size(18),
 )).Color(t.MutedFg).Size(12)
 ```
 
 Importing `ui/theme` (also imported by `ui`) installs the default UI environment.
 `theme.Set` and `theme.Bind` supply `Theme.Text` to the root `Env`, so a bare
-`ggui.Text(s)` inherits it. The core has no dependency on the theme package.
+`widget.Text(s)` inherits it. The core has no dependency on the theme package.
 
 `theme.With(t, child)` gives a subtree a theme of its own — a preview pane showing
 the dark theme inside a light window, say. `.Space(n)` on `Column`, `Row`,
@@ -164,9 +164,9 @@ in, so it follows a theme switch, or a subtree's own `theme.With`, without
 anything being rebuilt.
 
 ```go
-ggui.Box(ggui.Text("Z").Color(theme.PrimaryFg)).Fill(theme.Primary)
-ggui.Text("Off").Color(theme.MutedFg.Alpha(.55))
-ggui.Box().Fill(theme.Var("warning"))   // a variable of your own; see below
+widget.Box(widget.Text("Z").Color(theme.PrimaryFg)).Fill(theme.Primary)
+widget.Text("Off").Color(theme.MutedFg.Alpha(.55))
+widget.Box().Fill(theme.Var("warning"))   // a variable of your own; see below
 ```
 
 `Alpha` fades a token, and `theme.Fade` and `theme.Mix` keep a token a token
@@ -350,7 +350,7 @@ A color variable with no token of its own, such as the `--warning` or
 under `theme.CSSColor(name)`:
 
 ```go
-ggui.Text("Low disk space").Color(theme.Var("warning"))
+widget.Text("Low disk space").Color(theme.Var("warning"))
 warning, ok := theme.From(env).Get(theme.CSSColor("warning")) // in a widget's Layout
 ```
 
@@ -600,9 +600,9 @@ border, with the box's rounded corners. A gradient is placed relative to the
 Rect it fills, so one value fits a box of any size:
 
 ```go
-ggui.Box(content).Radius(12).Gradient(ggui.LinearGradient(math.Pi/4, ggui.Stops(from, to)...))
-ggui.Box().Size(64, 64).Gradient(ggui.RadialGradient(ggui.Stops(glow, transparent)...).Center(0.5, 0.3))
-ggui.Box().Size(48, 48).Radius(24).Gradient(ggui.SweepGradient(ggui.Stops(red, green, blue, red)...))
+widget.Box(content).Radius(12).Gradient(ggui.LinearGradient(math.Pi/4, ggui.Stops(from, to)...))
+widget.Box().Size(64, 64).Gradient(ggui.RadialGradient(ggui.Stops(glow, transparent)...).Center(0.5, 0.3))
+widget.Box().Size(48, 48).Radius(24).Gradient(ggui.SweepGradient(ggui.Stops(red, green, blue, red)...))
 ```
 
 `LinearGradient(angle, stops...)` runs at `angle` radians clockwise from
@@ -696,8 +696,8 @@ and inheritance is resolved at layout time, so a theme swap reaches widgets
 built long before it.
 
 ```go
-ggui.Text("Heading").Style(t.Title).Color(brand)        // local
-ggui.Styled(page).Color(theme.MutedFg).Size(12)         // inherited
+widget.Text("Heading").Style(t.Title).Color(brand)        // local
+widget.Styled(page).Color(theme.MutedFg).Size(12)         // inherited
 app.Setup(func() { theme.Bind(dark, theme.Dark(), theme.Default()) })
 ```
 
@@ -717,11 +717,11 @@ control supports `.Name("Appearance")`, `.OnChange(fn)`, `.Disabled(v)`, and
 | Reading shadcn/ui CSS | [ui/theme/css.go](../ui/theme/css.go) |
 | Color tokens, `EnvColor` | [ui/theme/tokens.go](../ui/theme/tokens.go), [environment.go](../environment.go) |
 | `Variant`, `Restyle` | [ui/variant.go](../ui/variant.go) |
-| `Text`, `Styled` | [text.go](../text.go) |
-| `Provide`, `WithEnv` | [widgets.go](../widgets.go) |
+| `widget.Text`, `widget.Styled` | [widget/text.go](../widget/text.go) |
+| `Provide`, `WithEnv` | [environment.go](../environment.go) |
 | `ui.Title`, `ui.Heading`, `ui.Caption`, `ui.Mono` | [ui/text.go](../ui/text.go) |
 | Shadows | [effects.go](../effects.go) |
-| Motion and transitions | [anim.go](../anim.go), [transition.go](../transition.go) |
+| Motion and transitions | [anim.go](../anim.go), [widget/transition.go](../widget/transition.go) |
 | The controls that consume the tokens | [ui/](../ui/) |
 
 See [Documentation](README.md) for the rest of the framework, and

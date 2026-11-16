@@ -5,6 +5,7 @@ import (
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // CheckboxWidget is a box that is ticked while its signal is true. Build one
@@ -24,7 +25,7 @@ func Checkbox(checked ggui.Binding[bool], label string) *CheckboxWidget {
 	c.SetName(label)
 	c.AutoKey()
 	if label != "" {
-		c.label = ggui.Text(label)
+		c.label = widget.Text(label)
 	}
 	c.onTap = func() { setChanged(checked, !ggui.Untrack(checked.Get), c.onChange) }
 	return c

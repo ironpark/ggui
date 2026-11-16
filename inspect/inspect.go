@@ -33,7 +33,7 @@ type (
 
 // Node is one widget as painted: its Rect and where it sits in the tree.
 type Node struct {
-	Name     string // the widget's type: Box for *ggui.BoxWidget
+	Name     string // the widget's type: Box for *widget.BoxWidget
 	Kind     string // a layout badge, flex or grid or scroll; empty for most
 	Rect     Rect
 	Clip     Rect // the clip in force when it painted

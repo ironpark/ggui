@@ -10,6 +10,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // AttachmentState is the caller-owned upload lifecycle. Attachment does not
@@ -42,7 +43,7 @@ type AttachmentWidget struct {
 	title, description                   string
 	titleText, descriptionText           attachmentText
 	media                                ggui.Widget
-	mediaView                            *ggui.StyledWidget
+	mediaView                            *widget.StyledWidget
 	image                                *ggfx.Image
 	imageAlt                             string
 	actions                              []ggui.Widget
@@ -99,7 +100,7 @@ func (a *AttachmentWidget) Trigger(name string, fn func()) *AttachmentWidget {
 	if fn == nil {
 		a.trigger = nil
 	} else {
-		a.trigger = ButtonOf(ggui.Box(), fn).Name(name).Ghost().Pad(0)
+		a.trigger = ButtonOf(widget.Box(), fn).Name(name).Ghost().Pad(0)
 	}
 	return a
 }
@@ -142,7 +143,7 @@ func (a *AttachmentWidget) Width(px float64) *AttachmentWidget {
 // AttachmentAction is a 24px ghost action with an explicit accessible name.
 // content is usually an icon. Button setters can customize its style or state.
 func AttachmentAction(name string, content ggui.Widget, fn func()) *ButtonWidget {
-	return ButtonOf(ggui.Box(ggui.Center(content)).Width(24).Height(24), fn).Name(name).Ghost().Pad(0)
+	return ButtonOf(widget.Box(widget.Center(content)).Width(24).Height(24), fn).Name(name).Ghost().Pad(0)
 }
 
 func (a *AttachmentWidget) uploadState() AttachmentState {
@@ -278,7 +279,7 @@ func (a *AttachmentWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	a.descriptionRect = ggui.Rct(ggui.Pt(x, y+title.H+2), ggui.Sz(textW, desc.H))
 	if a.media != nil {
 		if a.mediaView == nil {
-			a.mediaView = ggui.Styled(ggui.Center(a.media))
+			a.mediaView = widget.Styled(widget.Center(a.media))
 		}
 		fg := a.theme.Fg
 		if a.current == AttachmentError {
@@ -377,14 +378,14 @@ func (a *AttachmentWidget) paintMedia(dst *ggui.Canvas, r ggui.Rect, state Attac
 // attachmentText ends a name too long for its line with an ellipsis while
 // keeping the complete name in the semantics tree.
 type attachmentText struct {
-	text  *ggui.TextWidget
+	text  *widget.TextWidget
 	value string
 }
 
 func (t *attachmentText) set(value string, size float64, col color.Color) {
 	t.value = strings.ReplaceAll(value, "\n", " ")
 	if t.text == nil {
-		t.text = ggui.Text(t.value).NoWrap().Ellipsis()
+		t.text = widget.Text(t.value).NoWrap().Ellipsis()
 	}
 	t.text.Content(t.value).Size(size).LineHeight(1.25).Color(col)
 }

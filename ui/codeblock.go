@@ -11,6 +11,7 @@ import (
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // CodeLineStyle decorates a logical source line without changing its contents.
@@ -41,7 +42,7 @@ type CodeBlockWidget struct {
 	lineStyles               map[int]CodeLineStyle
 	lineStylesGen            int // counts LineStyles calls, for the body to tell one map from the next
 	startLine                int
-	xController, yController ggui.ScrollController
+	xController, yController widget.ScrollController
 	props                    property.Owner
 	code                     property.Value[string]
 	language, header         string
@@ -50,11 +51,11 @@ type CodeBlockWidget struct {
 	height                   float64
 	onCopy                   func(string)
 	footer                   ggui.Widget
-	text                     *ggui.RichTextWidget
-	title, lang              *ggui.TextWidget
+	text                     *widget.RichTextWidget
+	title, lang              *widget.TextWidget
 	glyph                    *codeCopyGlyph
 	copy                     *ButtonWidget
-	xScroll, yScroll         *ggui.ScrollWidget
+	xScroll, yScroll         *widget.ScrollWidget
 	body                     *codeBlockBody
 	theme                    *uitheme.Theme
 	motion                   time.Duration
@@ -82,14 +83,14 @@ func CodeBlock(code string) *CodeBlockWidget {
 	c.SetName("Code content")
 	c.AutoKey()
 	c.code.Set(code)
-	c.text = ggui.RichText().Selectable()
-	c.title = ggui.Text("").NoWrap().Ellipsis()
-	c.lang = ggui.Text("").NoWrap().Ellipsis()
+	c.text = widget.RichText().Selectable()
+	c.title = widget.Text("").NoWrap().Ellipsis()
+	c.lang = widget.Text("").NoWrap().Ellipsis()
 	c.glyph = &codeCopyGlyph{owner: c}
 	c.copy = ButtonOf(c.glyph, c.copyCode).Name("Copy code").Ghost().Size(ButtonIconExtraSmall)
-	c.body = &codeBlockBody{owner: c, measure: ggui.RichText()}
-	c.xScroll = ggui.Scroll(c.body).Horizontal().Controller(&c.xController)
-	c.yScroll = ggui.Scroll(c.xScroll).Shrink().Controller(&c.yController)
+	c.body = &codeBlockBody{owner: c, measure: widget.RichText()}
+	c.xScroll = widget.Scroll(c.body).Horizontal().Controller(&c.xController)
+	c.yScroll = widget.Scroll(c.xScroll).Shrink().Controller(&c.yController)
 	c.paintBodyFn = c.paintBody
 	return c
 }
@@ -254,7 +255,7 @@ func (c *CodeBlockWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	c.codeStyle = t.Text.Merge(t.Mono)
 	c.codeStyle.Size *= scale
 	c.codeStyle.LineHeight = 1.625
-	c.text.Spans(ggui.Span(code)).Style(c.codeStyle).Color(c.ink())
+	c.text.Spans(widget.Span(code)).Style(c.codeStyle).Color(c.ink())
 	c.pad = t.Space * pick(c.small, 1.25, 1.5)
 	c.padTop, c.padBottom = c.pad, c.pad
 	innerW := max(0, cs.MaxW-2*c.pad)
@@ -406,7 +407,7 @@ func (c *CodeBlockWidget) paintBody(dst *ggui.Canvas) { dst.Paint(c.yScroll, c.v
 
 // codeFade is how long the faded ends of a scrolled axis are: what lies
 // beyond each end, up to limit.
-func codeFade(axis *ggui.ScrollController, limit float64) (lead, trail float64) {
+func codeFade(axis *widget.ScrollController, limit float64) (lead, trail float64) {
 	at := axis.Offset()
 	return clamp(at, 0, limit), clamp(axis.MaxOffset()-at, 0, limit)
 }
@@ -486,7 +487,7 @@ func (g *codeCopyGlyph) Paint(dst *ggui.Canvas, r ggui.Rect) {
 // The gutter is painted separately so selecting or copying code cannot include it.
 type codeBlockBody struct {
 	owner                           *CodeBlockWidget
-	measure                         *ggui.RichTextWidget
+	measure                         *widget.RichTextWidget
 	lines                           []codeBlockLine
 	textSize                        ggui.Size
 	gutter, numberW, markerW, lineH float64
@@ -513,7 +514,7 @@ func (g codeBlockGutter) same(o codeBlockGutter) bool {
 }
 
 type codeBlockLine struct {
-	number, marker *ggui.TextWidget
+	number, marker *widget.TextWidget
 	top, height    float64
 	style          CodeLineStyle
 }
@@ -553,13 +554,13 @@ func (b *codeBlockBody) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	b.laid = inputs
 	b.measure.Style(style)
 	loose := ggui.Loose(ggui.Sz(ggui.Unbounded, ggui.Unbounded))
-	b.lineH = b.measure.Spans(ggui.Span("")).Layout(loose, env).H
+	b.lineH = b.measure.Spans(widget.Span("")).Layout(loose, env).H
 	// Every line uses the same font metrics. A paragraph omits the final line's
 	// leading; adding it back gives the next logical line's exact top offset.
 	b.leading = resolved.Size*resolved.LineHeight - b.lineH
 	sourceLines := strings.Split(c.laidCode, "\n")
 	for len(b.lines) < len(sourceLines) {
-		b.lines = append(b.lines, codeBlockLine{number: ggui.Text("").NoWrap().Align(1), marker: ggui.Text("").NoWrap()})
+		b.lines = append(b.lines, codeBlockLine{number: widget.Text("").NoWrap().Align(1), marker: widget.Text("").NoWrap()})
 	}
 	b.lines = b.lines[:len(sourceLines)]
 	b.gutter, b.numberW, b.markerW = 0, 0, 0
@@ -590,7 +591,7 @@ func (b *codeBlockBody) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	for i, source := range sourceLines {
 		line := &b.lines[i]
 		line.top = top
-		line.height = b.measure.Spans(ggui.Span(source)).Layout(textCS, env).H + b.leading
+		line.height = b.measure.Spans(widget.Span(source)).Layout(textCS, env).H + b.leading
 		top += line.height
 	}
 	return cs.Constrain(ggui.Sz(b.textSize.W+b.gutter+sides, b.textSize.H+ends))

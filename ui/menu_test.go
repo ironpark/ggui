@@ -7,6 +7,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // openMenu taps the trigger named label and lets the popup open.
@@ -51,7 +52,7 @@ func TestMenuItemCheckMarksFollowTheirBinding(t *testing.T) {
 func TestMenuWidthSizesThePanel(t *testing.T) {
 	t.Parallel()
 	width := func(m *ui.MenuWidget) float64 {
-		p := ggui.NewProbe(ggui.Row(m), ggui.Sz(500, 300))
+		p := ggui.NewProbe(widget.Row(m), ggui.Sz(500, 300))
 		defer p.Close()
 		openMenu(p, "File")
 		item, ok := p.FindRole(ggui.RoleMenuItem, "Open")
@@ -117,7 +118,7 @@ func TestMenuRowsAndMenubarTriggersKeepTheArrowCursor(t *testing.T) {
 	// shadcn's menu items are cursor-default, and its menubar triggers set
 	// none: only a link shows the hand.
 	bar := ui.Menubar(ui.Menu("File", ui.MenuItem("Open", nil)))
-	p := ggui.NewProbe(ggui.Padding(bar, 20), ggui.Sz(300, 300))
+	p := ggui.NewProbe(widget.Padding(bar, 20), ggui.Sz(300, 300))
 	defer p.Close()
 	trigger, _ := p.Find("File")
 	p.Move(trigger.Center())

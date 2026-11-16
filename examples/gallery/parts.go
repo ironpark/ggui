@@ -52,7 +52,7 @@ func newPartPreviews(toasts *ui.ToasterWidget) func() []ggui.Widget {
 	)
 	return func() []ggui.Widget {
 		return []ggui.Widget{
-			preview("Card", ggui.Column(
+			preview("Card", widget.Column(
 				ui.Card(
 					ui.CardHeader("Create project", "Deploy your new project in one click.").
 						Action(ui.Badge("New").Secondary()),
@@ -62,10 +62,10 @@ func newPartPreviews(toasts *ui.ToasterWidget) func() []ggui.Widget {
 					)),
 					ui.CardFooter(ui.Button("Cancel", func() { project.Set("") }).Outline(), ui.Button("Deploy", func() {
 						toasts.Push(ui.Toast("Deploying", "Your project is on its way.").Success())
-					})).Justify(ggui.SpaceBetween),
+					})).Justify(widget.SpaceBetween),
 				),
 				ui.Card(
-					ui.CardMedia(ui.AspectRatio(3, ggui.Box(ggui.Center(ggui.Text("Cover").Color(color.White))).Fill(color.NRGBA{R: 37, G: 99, B: 235, A: 255}))),
+					ui.CardMedia(ui.AspectRatio(3, widget.Box(widget.Center(widget.Text("Cover").Color(color.White))).Fill(color.NRGBA{R: 37, G: 99, B: 235, A: 255}))),
 					ui.CardHeader("Leading media", "Flush with the card's top and sides, under its rounded corners."),
 				),
 				ui.Card(
@@ -89,7 +89,7 @@ func newPartPreviews(toasts *ui.ToasterWidget) func() []ggui.Widget {
 				),
 			).Legend("Preferences").Description("How the workspace reaches you.")),
 
-			preview("Validation states", ggui.Column(
+			preview("Validation states", widget.Column(
 				ui.Checkbox(terms, "I accept the terms").BindInvalid(ggui.Not(terms)),
 				ui.Field("Tier", ui.Radios(tier).Options([]string{"Starter", "Team", "Enterprise"}).Horizontal()).BindError(tier.Map(func(v string) string {
 					if v == "" {
@@ -112,7 +112,7 @@ func newPartPreviews(toasts *ui.ToasterWidget) func() []ggui.Widget {
 				ui.Caption("Each control turns destructive until it holds a valid answer."),
 			).Gap(12).Stretch()),
 
-			preview("Choice cards", ggui.Column(
+			preview("Choice cards", widget.Column(
 				ui.Field("Kubernetes", ui.Radio(compute, "kubernetes", "")).Help("Run GPU workloads on a K8s cluster.").Card(),
 				ui.Field("Virtual machine", ui.Radio(compute, "vm", "")).Help("Access a cluster to run GPU workloads.").Card(),
 				ui.FieldCard(ui.Checkbox(digest, ""), ui.FieldContent(
@@ -123,38 +123,38 @@ func newPartPreviews(toasts *ui.ToasterWidget) func() []ggui.Widget {
 				ui.Field("Password", ui.TextField(password).Placeholder("New password")).BindErrors(password.Map(passwordErrors)),
 			).Gap(12).Stretch()),
 
-			preview("Dropdown menu", ggui.Column(
+			preview("Dropdown menu", widget.Column(
 				menu,
 				ui.Captionf("Sorted by %s", sortBy),
 			).Gap(8)),
 
-			preview("Input group", ggui.Column(
+			preview("Input group", widget.Column(
 				ui.InputGroup(widget.TextInput(url).Placeholder("example.com").Name("Website")).
 					Leading(ui.Icon(icons.Search)).
 					Trailing(ui.Badge("12 results").Secondary()),
 				ui.InputGroup(widget.TextInput(amount).Placeholder("0.00").Name("Amount")).
-					Leading(ggui.Text("$")).Trailing(ggui.Text("USD")),
+					Leading(widget.Text("$")).Trailing(widget.Text("USD")),
 				ui.InputGroup(widget.TextInput(prompt).Placeholder("Ask, search or make anything…").Name("Prompt")).Multiline().
 					Top(ui.Caption("Composer")).
-					Bottom(ggui.Row(
+					Bottom(widget.Row(
 						ui.ButtonOf(ui.Icon(icons.Plus), nil).Name("Attach").Size(ui.ButtonIconExtraSmall).Outline(),
-						ggui.Spacer(),
+						widget.Spacer(),
 						ui.Caption("52% used"),
 						ui.Button("Send", func() { prompt.Set("") }).Size(ui.ButtonExtraSmall),
 					).Gap(8)),
 			).Gap(12).Stretch()),
 
-			preview("Tooltip", ggui.Column(
-				ggui.Wrap(
-					ui.Tooltip(ui.Button("Top", nil).Outline(), "Opens above").Side(ggui.PopupTop),
-					ui.Tooltip(ui.Button("Right", nil).Outline(), "Opens to the right").Side(ggui.PopupRight),
-					ui.Tooltip(ui.Button("Bottom", nil).Outline(), "Opens below").Side(ggui.PopupBottom),
-					ui.Tooltip(ui.Button("Left", nil).Outline(), "Opens to the left").Side(ggui.PopupLeft),
+			preview("Tooltip", widget.Column(
+				widget.Wrap(
+					ui.Tooltip(ui.Button("Top", nil).Outline(), "Opens above").Side(widget.PopupTop),
+					ui.Tooltip(ui.Button("Right", nil).Outline(), "Opens to the right").Side(widget.PopupRight),
+					ui.Tooltip(ui.Button("Bottom", nil).Outline(), "Opens below").Side(widget.PopupBottom),
+					ui.Tooltip(ui.Button("Left", nil).Outline(), "Opens to the left").Side(widget.PopupLeft),
 				).Gap(8),
 				ui.Tooltip(ui.ButtonOf(ui.Icon(icons.Undo), nil).Name("Undo").Size(ui.ButtonIcon).Outline(), "Undo").Shortcut("cmd+z"),
 			).Gap(12)),
 
-			preview("Alert dialog", ggui.Column(
+			preview("Alert dialog", widget.Column(
 				ui.Button("Allow notifications…", func() { allowOpen.Set(true) }).Outline(),
 				ui.CaptionOf(allowed),
 				allowDialog,

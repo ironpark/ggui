@@ -1,9 +1,10 @@
-package ggui
+package widget
 
 import (
 	"slices"
 	"sort"
 
+	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/pkg/gem"
 	"github.com/ironpark/ggui/pkg/virtual"
 )
@@ -18,7 +19,7 @@ type eachPin[T any] struct {
 	header func(T) bool
 	port   *ScrollWidget
 	row    int // virtual path: the header laid out for the window's start, or -1
-	size   Size
+	size   ggui.Size
 	pitch  float64
 	gap    float64
 
@@ -36,7 +37,7 @@ type eachPin[T any] struct {
 // when its own row has scrolled far out of view. Configure it before
 // mount.
 //
-//	ggui.EachKeyed(contacts, Contact.Key, row).ItemExtent(40).
+//	widget.EachKeyed(contacts, Contact.Key, row).ItemExtent(40).
 //		StickyHeaders(func(c Contact) bool { return c.Letter })
 func (f *EachWidget[T, K]) StickyHeaders(isHeader func(T) bool) *EachWidget[T, K] {
 	f.checkConfig()
@@ -83,7 +84,7 @@ func (f *EachWidget[T, K]) headerAfter(i int) int {
 // windowStart returns how far into the list the window of its Scroll
 // starts, along the list's axis, given where the list is painted; ok is
 // false when the list's own start is in view.
-func (f *EachWidget[T, K]) windowStart(r Rect) (float64, bool) {
+func (f *EachWidget[T, K]) windowStart(r ggui.Rect) (float64, bool) {
 	edge, ok := portEdge(f.pin.port, f.horizontal, r)
 	return edge, ok && edge > 0
 }
@@ -100,7 +101,7 @@ func (f *EachWidget[T, K]) crossAt(i int) float64 {
 
 // layoutPinned lays out, on the virtual path, the header of the section at
 // the window's start when it is not among the rows in view.
-func (f *EachWidget[T, K]) layoutPinned(pitch, gap, crossMin, crossMax float64, env Env) {
+func (f *EachWidget[T, K]) layoutPinned(pitch, gap, crossMin, crossMax float64, env ggui.Env) {
 	f.pin.row, f.pin.pitch, f.pin.gap = -1, pitch, gap
 	_, ok := viewportAlong(env, f.horizontal)
 	n := len(f.items)
@@ -124,23 +125,23 @@ func (f *EachWidget[T, K]) layoutPinned(pitch, gap, crossMin, crossMax float64, 
 
 // pinned returns the header row to draw pinned at the window's start, its
 // index and where it goes, or nil when no header has to move.
-func (f *EachWidget[T, K]) pinned(r Rect) (*forEntry[T], int, Rect) {
+func (f *EachWidget[T, K]) pinned(r ggui.Rect) (*forEntry[T], int, ggui.Rect) {
 	if f.pin.header == nil || len(f.items) == 0 || f.estimated() {
-		return nil, 0, Rect{}
+		return nil, 0, ggui.Rect{}
 	}
 	edge, ok := f.windowStart(r)
 	if !ok {
-		return nil, 0, Rect{}
+		return nil, 0, ggui.Rect{}
 	}
-	at := func(main, cross float64) Point {
-		return r.Origin.Add(gem.Pick(f.horizontal, Pt(main, cross), Pt(cross, main)))
+	at := func(main, cross float64) ggui.Point {
+		return r.Origin.Add(gem.Pick(f.horizontal, ggui.Pt(main, cross), ggui.Pt(cross, main)))
 	}
 	if f.extent > 0 {
 		pitch, n := f.pin.pitch, len(f.items)
 		first, last := virtual.Fixed(n, pitch, edge, f.extent)
 		h := f.headerBefore(min(first, n-1))
 		if h < 0 || h != f.pin.row {
-			return nil, 0, Rect{}
+			return nil, 0, ggui.Rect{}
 		}
 		start := float64(h) * pitch
 		end := max(float64(n)*pitch-f.pin.gap, start)
@@ -150,13 +151,13 @@ func (f *EachWidget[T, K]) pinned(r Rect) (*forEntry[T], int, Rect) {
 		}
 		pos := pinPos(edge, start, end, f.extent)
 		if pos == start {
-			return nil, 0, Rect{}
+			return nil, 0, ggui.Rect{}
 		}
 		cross := 0.0
 		if h >= f.first && h < f.last {
 			cross = f.crossAt(h - f.first)
 		}
-		return f.entries[f.keys[h]], h, Rct(at(pos, cross), f.pin.size)
+		return f.entries[f.keys[h]], h, ggui.Rct(at(pos, cross), f.pin.size)
 	}
 	// Every row is laid out, rows leaving among them: find the item the
 	// window starts on, the header at or before it, and the end of its
@@ -165,11 +166,11 @@ func (f *EachWidget[T, K]) pinned(r Rect) (*forEntry[T], int, Rect) {
 	n := min(len(f.childEntries), len(f.childItem), len(f.rects))
 	row := sort.Search(n, func(i int) bool { return f.mainAt(i) > edge }) - 1
 	if row < 0 || f.childItem[row] < 0 {
-		return nil, 0, Rect{}
+		return nil, 0, ggui.Rect{}
 	}
 	h := f.headerBefore(f.childItem[row])
 	if h < 0 {
-		return nil, 0, Rect{}
+		return nil, 0, ggui.Rect{}
 	}
 	head := f.childOf(h, n)
 	last := n - 1
@@ -181,9 +182,9 @@ func (f *EachWidget[T, K]) pinned(r Rect) (*forEntry[T], int, Rect) {
 	end := max(start+lead, f.mainAt(last)+f.main(f.rects[last].Size))
 	pos := pinPos(edge, start, end, lead)
 	if pos == start {
-		return nil, 0, Rect{}
+		return nil, 0, ggui.Rect{}
 	}
-	return f.childEntries[head], h, Rct(at(pos, f.crossAt(head)), f.rects[head].Size)
+	return f.childEntries[head], h, ggui.Rct(at(pos, f.crossAt(head)), f.rects[head].Size)
 }
 
 // childOf returns the child painting item i, of the first n, or n when it
@@ -195,7 +196,7 @@ func (f *EachWidget[T, K]) childOf(i, n int) int {
 
 // placeKey answers the enclosing Scroll's ScrollToKey when the key is one
 // of this list's rows.
-func (f *EachWidget[T, K]) placeKey(r Rect) {
+func (f *EachWidget[T, K]) placeKey(r ggui.Rect) {
 	p := f.pin.port
 	if p == nil || p.horizontal != f.horizontal || !p.keyPending() {
 		return

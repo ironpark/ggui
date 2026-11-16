@@ -141,13 +141,13 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 	// The sheets, the drawer, the confirmation and the sidebar own state that
 	// has to outlive a rebuild -- an animation in flight, the highlighted
 	// destination -- so they are built once, beside the signals they bind.
-	filtersSheet := ui.Sheet(filtersOpen, ggui.Column(
+	filtersSheet := ui.Sheet(filtersOpen, widget.Column(
 		ui.Checkbox(notify, "Only unread"),
 		ui.Radios(plan).Options([]string{"free", "pro", "team"}),
 	).Space(1.5).Stretch()).Title("Filters").Description("Narrow the list to what you need.").Size(320).
 		Footer(ui.Button("Apply", func() { filtersOpen.Set(false) }), ui.Button("Cancel", func() { filtersOpen.Set(false) }).Outline())
-	shareDrawer := ui.Drawer(drawerOpen, ggui.Column(
-		ggui.Text("A drawer rises from the bottom edge, as tall as what it holds, with a grab handle on top."),
+	shareDrawer := ui.Drawer(drawerOpen, widget.Column(
+		widget.Text("A drawer rises from the bottom edge, as tall as what it holds, with a grab handle on top."),
 		ui.Button("Close", func() { drawerOpen.Set(false) }).Outline(),
 	).Space(1.5).Stretch()).Title("Share").Description("Send this page to a teammate.").Handle(true)
 	removeDialog := ui.AlertDialog(removeOpen, "Remove the row?", "A click beside this question will not dismiss it.").
@@ -179,15 +179,15 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 		// control does: Input is translucent, a tint of whatever is
 		// behind a field, so on its own it would show nothing.
 		swatch := func(label string, c color.Color) ggui.Widget {
-			return ggui.Column(
+			return widget.Column(
 				colorChip(c, t.Bg, t.Border, t.Radius),
 				ui.Caption(label),
 			).Gap(2).Stretch()
 		}
 		entries := []ggui.Widget{
-			preview("Theme presets", ggui.Column(
-				ggui.Text("Choose surfaces, accent and geometry independently. The whole gallery updates."),
-				ggui.Grid(2,
+			preview("Theme presets", widget.Column(
+				widget.Text("Choose surfaces, accent and geometry independently. The whole gallery updates."),
+				widget.Grid(2,
 					ui.Field("Base color", ui.Select(baseColor).Options(uitheme.BaseColors()).Name("Theme base")),
 					ui.Field("Accent color", ui.Select(accentColor).Options(uitheme.AccentColors()).Name("Theme accent").Format(func(v uitheme.AccentColor) string {
 						if v == "" {
@@ -223,7 +223,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 					})),
 				).Gap(12),
 				ui.Field("Mode", ui.ThemeMode(mode)),
-				ggui.Grid(4,
+				widget.Grid(4,
 					swatch("Bg", t.Bg),
 					swatch("Primary", t.Primary),
 					swatch("Secondary", t.Secondary),
@@ -237,53 +237,53 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 					swatch("Destructive", t.Destructive),
 					swatch("Popover", t.Popover),
 				).Gap(8),
-				ggui.Row(
+				widget.Row(
 					ui.Button("Primary action", func() { themeAction.Set("Primary action selected.") }),
 					ui.Button("Secondary action", func() { themeAction.Set("Secondary action selected.") }).Secondary(),
 				).Gap(8),
-				ui.Bubble(ggui.Text("Theme tokens also shape chat bubbles 👍")).End(),
+				ui.Bubble(widget.Text("Theme tokens also shape chat bubbles 👍")).End(),
 				ui.CaptionOf(themeAction),
 			).Gap(12).Stretch()),
 			preview("Icons", iconDemo),
 
-			preview("Emoji", ggui.Column(
-				ggui.Text("Faces 😀 😭 🫩   Reactions 👍 🔥 👀").Size(22),
-				ggui.Text("Skin tones 👋🏻 👋🏽 👋🏿   Flags 🇰🇷 🇺🇸").Size(20),
-				ggui.Text("Families 👨‍👩‍👧‍👦   Work 👩🏽‍💻   Keycaps 1️⃣ #️⃣").Size(20),
+			preview("Emoji", widget.Column(
+				widget.Text("Faces 😀 😭 🫩   Reactions 👍 🔥 👀").Size(22),
+				widget.Text("Skin tones 👋🏻 👋🏽 👋🏿   Flags 🇰🇷 🇺🇸").Size(20),
+				widget.Text("Families 👨‍👩‍👧‍👦   Work 👩🏽‍💻   Keycaps 1️⃣ #️⃣").Size(20),
 				ui.TextField(emojiText).Name("Emoji text").Multiline().Lines(2),
-				ggui.TextOf(emojiText).Size(24),
+				widget.TextOf(emojiText).Size(24),
 				ui.Button("Insert emoji sequence", func() { emojiText.Set(ggui.Peek(emojiText) + " 🏳️‍🌈 👨‍👩‍👧‍👦") }).Outline(),
 				ui.Caption("Type, paste, select and delete: composed emoji stay together."),
 			).Gap(16).Stretch()),
-			preview("Buttons", ggui.Column(
-				ggui.Wrap(
+			preview("Buttons", widget.Column(
+				widget.Wrap(
 					ui.Button("Save changes", func() { toasts.Push(ui.Toast("Saved", "Your changes are stored.")) }),
 					ui.Button("Outline", func() { toasts.Push(ui.Toast("Outline action", "Outline buttons support quieter actions.")) }).Outline(),
 					ui.Button("Disabled", nil).Disabled(true),
 				).Gap(8),
-				ggui.Wrap(ui.Button("Secondary", nil).Secondary(), ui.Button("Ghost", nil).Ghost(), ui.Button("Delete", func() {
+				widget.Wrap(ui.Button("Secondary", nil).Secondary(), ui.Button("Ghost", nil).Ghost(), ui.Button("Delete", func() {
 					toasts.Push(ui.Toast("Destructive action", "A red button makes the intent clear.").Destructive())
 				}).Destructive()).Gap(8),
-				ggui.Wrap(
+				widget.Wrap(
 					ui.Button("Extra small", nil).Size(ui.ButtonExtraSmall).Outline(),
 					ui.Button("Small", nil).Size(ui.ButtonSmall).Outline(),
 					ui.Button("Default", nil).Outline(),
 					ui.Button("Large", nil).Size(ui.ButtonLarge).Outline(),
 				).Gap(8),
-				ggui.Wrap(
+				widget.Wrap(
 					ui.ButtonOf(ui.Icon(icons.Plus), nil).Name("Extra small icon").Size(ui.ButtonIconExtraSmall).Outline(),
 					ui.ButtonOf(ui.Icon(icons.Plus), nil).Name("Small icon").Size(ui.ButtonIconSmall).Outline(),
 					ui.ButtonOf(ui.Icon(icons.Plus), nil).Name("Default icon").Size(ui.ButtonIcon).Outline(),
 					ui.ButtonOf(ui.Icon(icons.Plus), nil).Name("Large icon").Size(ui.ButtonIconLarge).Outline(),
 					ui.Button("Link", nil).Link(),
 				).Gap(8),
-				ggui.Wrap(
+				widget.Wrap(
 					ui.Button("New branch", nil).Icon(ui.Icon(icons.Plus)).Outline(),
 					ui.Button("Download", nil).Icon(ui.Icon(icons.Download)),
 					ui.Button("Next", nil).TrailingIcon(ui.Icon(icons.ChevronRight)).Secondary(),
 					ui.Button("Search", nil).Icon(ui.Icon(icons.Search)).Size(ui.ButtonSmall).Ghost(),
 				).Gap(8),
-				ggui.Wrap(
+				widget.Wrap(
 					ui.Badge("Draft"),
 					ui.Badge("Published").Primary(),
 					ui.Badge("Verified").Icon(icons.Check),
@@ -291,36 +291,36 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 					ui.Badge("Link").Link(),
 					ui.Badge("Failed").Destructive().Icon(icons.Alert),
 				).Gap(8),
-				ggui.Wrap(
+				widget.Wrap(
 					ui.Tooltip(ui.Button("Hover for help", nil).Outline(), "Tooltips add context to an action."),
 					ui.Tooltip(ui.Button("Save", nil).Outline().Shortcut("cmd+s"), "Save the draft"),
 				).Gap(8),
 			).Gap(16)),
 
-			preview("Text", ggui.Column(
+			preview("Text", widget.Column(
 				ui.TextField(name).Placeholder("Type here, IME works"),
 				ui.TextField(notes).Placeholder("Notes: Enter breaks the line, ⌘+Enter submits").Lines(3),
 				ggui.Reactive(func() ggui.Widget {
-					return ggui.Text(fmt.Sprintf("Hello, %s", or(name.Get(), "stranger"))).Size(size.Get())
+					return widget.Text(fmt.Sprintf("Hello, %s", or(name.Get(), "stranger"))).Size(size.Get())
 				}),
-				ggui.Row(
-					ggui.Text("Size").Color(t.MutedFg),
-					ggui.Expanded(ui.Slider(size, 10, 40).Step(1)),
-					ggui.Textf("%2.0f", size).NoWrap(),
+				widget.Row(
+					widget.Text("Size").Color(t.MutedFg),
+					widget.Expanded(ui.Slider(size, 10, 40).Step(1)),
+					widget.Textf("%2.0f", size).NoWrap(),
 				).Space(1),
 			).Space(1)),
 
-			preview("Field", ggui.Column(
+			preview("Field", widget.Column(
 				ui.Field("Email", ui.TextField(email).Placeholder("you@example.com")).
 					Help("Help text sits here until there is an error").BindError(emailError),
 				ui.Field("Text size", ui.Slider(size, 10, 40).Step(1)).Help("A Field labels any control"),
 			).Space(1).Stretch()),
 
-			preview("Choices", ggui.Column(
+			preview("Choices", widget.Column(
 				ui.Checkbox(notify, "Send notifications"),
 				ui.Radios(plan).Options([]string{"free", "pro", "team"}),
 				ui.Radios(plan).Options([]string{"free", "pro", "team"}).Horizontal().Name("Plan, in a row"),
-				ggui.Wrap(
+				widget.Wrap(
 					ui.Select(fruit).Options([]string{"Apple", "Banana", "Cherry", "Durian"}).Name("Choose fruit"),
 					ui.Menu("Actions",
 						ui.MenuLabel("Text"),
@@ -333,20 +333,20 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 				).Space(1),
 			).Space(1)),
 
-			preview("Shadows", ggui.Padding(ggui.Wrap(
-				ui.Card(ggui.Text("Subtle")).Shadow(ggui.ShadowStyle{Offset: ggui.Pt(0, 2), Blur: 4, Color: color.NRGBA{A: 40}}),
-				ui.Card(ggui.Text("Floating")).Shadow(ggui.ShadowStyle{Offset: ggui.Pt(0, 6), Blur: 12, Color: color.NRGBA{A: 55}}),
-				ui.Card(ggui.Text("Colored")).Shadow(ggui.ShadowStyle{Offset: ggui.Pt(0, 4), Blur: 16, Spread: 2, Color: color.NRGBA{R: 70, G: 100, B: 230, A: 85}}),
+			preview("Shadows", widget.Padding(widget.Wrap(
+				ui.Card(widget.Text("Subtle")).Shadow(ggui.ShadowStyle{Offset: ggui.Pt(0, 2), Blur: 4, Color: color.NRGBA{A: 40}}),
+				ui.Card(widget.Text("Floating")).Shadow(ggui.ShadowStyle{Offset: ggui.Pt(0, 6), Blur: 12, Color: color.NRGBA{A: 55}}),
+				ui.Card(widget.Text("Colored")).Shadow(ggui.ShadowStyle{Offset: ggui.Pt(0, 4), Blur: 16, Spread: 2, Color: color.NRGBA{R: 70, G: 100, B: 230, A: 85}}),
 			).Gap(24), 20)),
 			preview("Effects", effectsDemo()),
 			preview("Menubar", menubar),
 			preview("Calendar", calendar),
-			preview("Date picker", ggui.Column(
-				ggui.Wrap(datePicker, rangePicker).Gap(8),
+			preview("Date picker", widget.Column(
+				widget.Wrap(datePicker, rangePicker).Gap(8),
 				ui.Caption("The second picker takes a range: the first night, then the last, across two months."),
 			).Gap(12)),
 			preview("Context menu", ui.ContextMenu(
-				ggui.Box(ggui.Column(ui.Title("Project notes"), ui.Caption("Right-click here, or use Tab then Shift+F10.")).Space(1)).Pad(24).Border(1, t.Border).Radius(t.Radius),
+				widget.Box(widget.Column(ui.Title("Project notes"), ui.Caption("Right-click here, or use Tab then Shift+F10.")).Space(1)).Pad(24).Border(1, t.Border).Radius(t.Radius),
 				ui.MenuLabel("Notes"),
 				ui.MenuItem("Open notes", func() {
 					toasts.Push(ui.Toast("Notes opened", "Context-menu actions work with keyboard and pointer input."))
@@ -360,7 +360,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 				ui.MenuItem("Delete notes", func() { toasts.Push(ui.Toast("Notes deleted", "Your project notes have been deleted.").Error()) }).Destructive().Shortcut("cmd+backspace"),
 			).Name("Project notes actions")),
 
-			preview("Notices and empty states", ggui.Column(
+			preview("Notices and empty states", widget.Column(
 				ui.Alert("Changes saved", "Your settings are up to date.").Icon(icons.Check),
 				ui.Alert("Connection interrupted", "You can retry without losing your work.").Destructive().Icon(icons.Alert).
 					Action(ui.Button("Retry", func() { progress.Set(0) }).Size(ui.ButtonExtraSmall).Outline()),
@@ -368,41 +368,41 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 					MediaIcon(icons.File).Action(ui.Button("Add sample", func() { progress.Set(1) })).Outline(),
 			).Space(1).Stretch()),
 
-			preview("Loading and shortcuts", ggui.Column(
-				ggui.Row(ui.Spinner(), ggui.Text("Loading…"), ui.KbdGroup(ui.Kbd("Ctrl"), ui.Kbd("K"))).Space(1),
-				ggui.Row(ui.Spinner().Color(t.Primary), ggui.Text("Press"), ui.KbdGroup(ui.Kbd("⌘"), ggui.Text("+"), ui.Kbd("B")), ggui.Text("to fold the panel")).Space(1),
-				ggui.Row(ui.Skeleton(40, 40).Circle(), ggui.Column(ui.Skeleton(180, 14), ui.Skeleton(120, 14)).Space(1)).Space(1),
+			preview("Loading and shortcuts", widget.Column(
+				widget.Row(ui.Spinner(), widget.Text("Loading…"), ui.KbdGroup(ui.Kbd("Ctrl"), ui.Kbd("K"))).Space(1),
+				widget.Row(ui.Spinner().Color(t.Primary), widget.Text("Press"), ui.KbdGroup(ui.Kbd("⌘"), widget.Text("+"), ui.Kbd("B")), widget.Text("to fold the panel")).Space(1),
+				widget.Row(ui.Skeleton(40, 40).Circle(), widget.Column(ui.Skeleton(180, 14), ui.Skeleton(120, 14)).Space(1)).Space(1),
 			).Space(1)),
 
-			preview("Progress", ggui.Column(
+			preview("Progress", widget.Column(
 				ui.Progress(download).Label("Download").ShowValue(),
 				ui.Progress(download).Label("Files").FormatValue(func(v float64) string { return fmt.Sprintf("%.0f of 12", v*12) }),
-				ggui.Wrap(
+				widget.Wrap(
 					ui.Button("Advance download", func() { download.Set(min(1, ggui.Peek(download)+0.25)) }).BindDisabled(download.Map(func(v float64) bool { return v >= 1 })),
 					ui.Button("Restart download", func() { download.Set(0) }).Outline(),
 				).Gap(8),
 			).Space(1).Stretch()),
 
-			preview("Collapsible", ggui.Column(
-				ui.Collapsible(disclosureOpen, "Delivery preferences", ggui.Column(
+			preview("Collapsible", widget.Column(
+				ui.Collapsible(disclosureOpen, "Delivery preferences", widget.Column(
 					ui.Checkbox(notify, "Email delivery updates"),
 					ui.Caption("Your selection is preserved when this section is closed."),
 				).Space(1)),
-				ui.Collapsible(ggui.State(false), "Unavailable preferences", ggui.Text("Not available")).Disabled(true),
+				ui.Collapsible(ggui.State(false), "Unavailable preferences", widget.Text("Not available")).Disabled(true),
 			).Space(1).Stretch()),
 
-			preview("Pagination", ggui.Column(
+			preview("Pagination", widget.Column(
 				ui.Pagination(page, pageCount),
 				ui.Captionf("Page %d — bind this value to your data query or slice.", page),
 			).Space(1)),
 
 			preview("Accordion", ui.Accordion(accordionOpen,
-				ui.AccordionItem("intro", "How does it work?", ggui.Text("Use the arrow keys to choose a header, then Enter to expand it.")),
-				ui.AccordionItem("keys", "Keyboard controls", ggui.Row(ui.Kbd("Up / Down"), ui.Kbd("Home / End"), ui.Kbd("Enter")).Space(1)),
-				ui.AccordionItem("disabled", "Unavailable section", ggui.Text("Hidden")).Disabled(true),
+				ui.AccordionItem("intro", "How does it work?", widget.Text("Use the arrow keys to choose a header, then Enter to expand it.")),
+				ui.AccordionItem("keys", "Keyboard controls", widget.Row(ui.Kbd("Up / Down"), ui.Kbd("Home / End"), ui.Kbd("Enter")).Space(1)),
+				ui.AccordionItem("disabled", "Unavailable section", widget.Text("Hidden")).Disabled(true),
 			)),
 
-			preview("Search and commands", ggui.Wrap(
+			preview("Search and commands", widget.Wrap(
 				ui.Combobox(fruit).Options([]string{"Apple", "Banana", "Cherry", "Durian", "Grape", "Mango", "Orange"}).Name("Search fruit").Placeholder("Search fruit…").ClearButton(true).Empty("No fruit found."),
 				ui.Button("Commands…", func() { paletteOpen.Set(true) }).Outline(),
 			).Space(1)),
@@ -421,12 +421,12 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 				}).Group("Actions"),
 			).Height(176).StableHeight().Hints()),
 
-			preview("Resizable", ggui.Box(ui.Resizable(split,
-				ggui.Center(ggui.Text("Sidebar")),
-				ui.Resizable(verticalSplit, ggui.Center(ggui.Text("Header")), ggui.Center(ggui.Text("Content"))).Vertical().WithHandle().MinSizes(48, 48),
+			preview("Resizable", widget.Box(ui.Resizable(split,
+				widget.Center(widget.Text("Sidebar")),
+				ui.Resizable(verticalSplit, widget.Center(widget.Text("Header")), widget.Center(widget.Text("Content"))).Vertical().WithHandle().MinSizes(48, 48),
 			).WithHandle().MinSizes(100, 140)).Height(200).Border(1, t.Border).Radius(t.Radius)),
 
-			preview("Toast", ggui.Column(ggui.Wrap(
+			preview("Toast", widget.Column(widget.Wrap(
 				ui.Button("Notify", func() { toasts.Push(ui.Toast("Saved", "Your changes are stored.")) }).Outline(),
 				ui.Button("Success", func() { toasts.Push(ui.Toast("Published", "The page is live.").Success()) }).Outline(),
 				ui.Button("Info", func() { toasts.Push(ui.Toast("Heads up", "A new version is available.").Info()) }).Outline(),
@@ -452,58 +452,58 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 			toasts,
 
 			preview("Tabs", ui.Tabs(tab,
-				ui.Tab("Overview", ggui.Column(
-					ggui.Row(ggui.Text("Status"), ui.Badge("stable"), ui.Badge("new").Primary()).Space(1),
+				ui.Tab("Overview", widget.Column(
+					widget.Row(widget.Text("Status"), ui.Badge("stable"), ui.Badge("new").Primary()).Space(1),
 					ui.Progress(progress), // reads the signal every frame: no Reactive needed
-					ggui.Row(
+					widget.Row(
 						ui.Button("+10%", func() { progress.Set(min(ggui.Peek(progress)+0.1, 1)) }).Outline(),
 						ui.Button("Reset", func() { progress.Set(0) }).Outline(),
 					).Space(1),
 				).Space(1).Stretch()),
-				ui.Tab("Details", ggui.Column(
-					ui.Collapsible(more, "More options", ggui.Column(
+				ui.Tab("Details", widget.Column(
+					ui.Collapsible(more, "More options", widget.Column(
 						ui.Checkbox(notify, "Send notifications"),
-						ggui.Text("Folded content fades and slides.").Color(t.MutedFg),
+						widget.Text("Folded content fades and slides.").Color(t.MutedFg),
 					).Space(1)),
 				)),
-				ui.Tab("About", ggui.Text("Tabs lay out only the page they show; Left and Right switch while focused.")),
+				ui.Tab("About", widget.Text("Tabs lay out only the page they show; Left and Right switch while focused.")),
 			)),
 
-			preview("Transition", ggui.Column(
+			preview("Transition", widget.Column(
 				ui.Switch(details, "Show details"),
-				ggui.Presence(details, ggui.Transition(
-					ggui.Box(ggui.Text("Slides and fades in, and back out when hidden. A leaving widget takes no input.")).
+				widget.Presence(details, widget.Transition(
+					widget.Box(widget.Text("Slides and fades in, and back out when hidden. A leaving widget takes no input.")).
 						Fill(t.Card).Radius(t.Radius).Pad(t.Space),
 				).Slide(0, -8).Fade()),
 			).Space(1).Stretch()),
 
-			preview("Reveal", ggui.Column(
+			preview("Reveal", widget.Column(
 				ui.Switch(revealed, "Show more"),
-				widget.Reveal(revealed, ggui.Box(ggui.Text("Folds open beneath the switch, moving what follows down, and back up when hidden.")).
+				widget.Reveal(revealed, widget.Box(widget.Text("Folds open beneath the switch, moving what follows down, and back up when hidden.")).
 					Fill(t.Card).Radius(t.Radius).Pad(t.Space)),
 				ui.Caption("Below the reveal."),
 			).Space(1).Stretch()),
 
-			preview("Dialog", ggui.Column(
-				ggui.Row(
+			preview("Dialog", widget.Column(
+				widget.Row(
 					ui.Button("Reset form…", func() { confirm.Set(true) }).Outline(),
 					ui.Captionf("reset %d times", cleared),
 				).Space(1),
 				// Dialog takes no space where it sits; it paints over the
 				// window while confirm is true. Escape, the scrim or Cancel
 				// closes it and focus returns to the button.
-				ui.Dialog(confirm, ggui.Text("The name, the email and the text size go back to their defaults.")).
+				ui.Dialog(confirm, widget.Text("The name, the email and the text size go back to their defaults.")).
 					Title("Reset the form?").Description("Nothing else on the page changes.").
 					Footer(ui.Button("Cancel", func() { confirm.Set(false) }).Outline(), ui.Button("Reset", reset)),
-				ggui.Row(
+				widget.Row(
 					ui.Button("Remove row…", func() { removeOpen.Set(true) }).Destructive(),
 					ui.Captionf("removed %d times", removed),
 				).Space(1),
 				removeDialog,
 			).Space(1)),
 
-			preview("Sheets and drawers", ggui.Column(
-				ggui.Wrap(
+			preview("Sheets and drawers", widget.Column(
+				widget.Wrap(
 					ui.Button("Open filters", func() { filtersOpen.Set(true) }).Outline(),
 					ui.Button("Open drawer", func() { drawerOpen.Set(true) }).Outline(),
 				).Space(1),
@@ -511,23 +511,23 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 			).Space(1)),
 			filtersSheet, shareDrawer,
 
-			preview("Sidebar", ggui.Column(
+			preview("Sidebar", widget.Column(
 				ui.Breadcrumb(
 					ui.Crumb("Home", func() { nav.Set("inbox") }),
 					ui.Crumb("Mail", func() { nav.Set("inbox") }),
 					ui.Crumb("Message", nil),
 				),
-				roundFrame(ggui.Box(ggui.Row(navBar, ggui.Expanded(ggui.Padding(ggui.Column(
-					ggui.Row(ui.SidebarTrigger(sidebarCollapsed), ggui.Expanded(ggui.TextOf(nav).NoWrap().Ellipsis())).Gap(8),
+				roundFrame(widget.Box(widget.Row(navBar, widget.Expanded(widget.Padding(widget.Column(
+					widget.Row(ui.SidebarTrigger(sidebarCollapsed), widget.Expanded(widget.TextOf(nav).NoWrap().Ellipsis())).Gap(8),
 					ui.Divider(),
-					ggui.Expanded(ggui.Center(ui.Caption("The panel button, the rail or ⌘B folds the sidebar to its icons."))),
+					widget.Expanded(widget.Center(ui.Caption("The panel button, the rail or ⌘B folds the sidebar to its icons."))),
 				).Gap(8).Stretch(), 8)))).Height(320), t.RadiusLg, t.Border),
 			).Space(1).Stretch()),
 
-			preview("Groups and addons", ggui.Column(
+			preview("Groups and addons", widget.Column(
 				ui.Switch(controlsLocked, "Lock alignment"),
 				ui.ToggleGroup(align).Options([]string{"left", "center", "right"}).Name("Text alignment").BindDisabled(controlsLocked),
-				ggui.Textf("Alignment: %s", align),
+				widget.Textf("Alignment: %s", align),
 				ui.ToggleGroupMultiple(textStyle).Options([]string{"Bold", "Italic", "Underline"}).Name("Text style").Outline().Spacing(0),
 				ui.ButtonGroup(
 					ui.Button("Copy", func() { groupAction.Set("Copy selected") }).Outline(),
@@ -535,11 +535,11 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 					ui.Button("Paste", func() { groupAction.Set("Paste selected") }).Outline(),
 				),
 				ui.CaptionOf(groupAction),
-				ggui.Wrap(
+				widget.Wrap(
 					ui.ButtonGroup(
 						ui.ButtonGroupText("Zoom"),
 						ui.ButtonOf(ui.Icon(icons.Minus), func() { zoom.Set(max(25, ggui.Peek(zoom)-25)) }).Name("Zoom out").Size(ui.ButtonIcon).Outline(),
-						ui.ButtonGroupTextOf(ggui.Textf("%d%%", zoom)),
+						ui.ButtonGroupTextOf(widget.Textf("%d%%", zoom)),
 						ui.ButtonOf(ui.Icon(icons.Plus), func() { zoom.Set(min(400, ggui.Peek(zoom)+25)) }).Name("Zoom in").Size(ui.ButtonIcon).Outline(),
 					),
 					ui.ButtonGroup(
@@ -558,7 +558,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 					ui.Button("Send", func() { groupAction.Set("Sent the amount") }).Outline(),
 				),
 				ui.InputGroup(widget.TextInput(site).Placeholder("example.com").Name("Site")).
-					Leading(ggui.Text("https://").Color(t.MutedFg)).
+					Leading(widget.Text("https://").Color(t.MutedFg)).
 					Trailing(ui.Button("Go", func() {
 						if host := strings.TrimSpace(ggui.Peek(site)); host != "" {
 							sitePreview.Set("Preview: https://" + host)
@@ -569,8 +569,8 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 				ui.CaptionOf(sitePreview),
 			).Space(1).Stretch()),
 
-			preview("Profile and media", ggui.Column(
-				ggui.Wrap(
+			preview("Profile and media", widget.Column(
+				widget.Wrap(
 					ui.Avatar("Ada Lovelace").Small(),
 					ui.Avatar("Ada Lovelace"),
 					ui.Avatar("Ada Lovelace").Large().Badge(color.NRGBA{R: 34, G: 197, B: 94, A: 255}),
@@ -584,8 +584,8 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 						Media(ui.Avatar("Ada Lovelace")).
 						Action(ui.HoverCard(
 							ui.Button("Details", nil).Outline(),
-							ggui.Column(ui.Title("Ada Lovelace").Size(16), ui.Caption("Rest the cursor to preview.")).Gap(4),
-						).Side(ggui.PopupLeft)),
+							widget.Column(ui.Title("Ada Lovelace").Size(16), ui.Caption("Rest the cursor to preview.")).Gap(4),
+						).Side(widget.PopupLeft)),
 					ui.ItemSeparator(),
 					ui.Item("Quarterly report", "Shared with you yesterday").MediaIcon(icons.File).
 						Action(ui.ButtonOf(ui.Icon(icons.Download), nil).Name("Download report").Size(ui.ButtonIconSmall).Ghost()),
@@ -593,11 +593,11 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 				ui.Item("Two-factor sign-in is on", "").MediaIcon(icons.Check).Small().Muted(),
 				ui.Item("Read the changelog", "The whole row is a link.").MediaIcon(icons.File).Outline().
 					Action(ui.Icon(icons.ChevronRight)).OnTap(func() {}),
-				ui.AspectRatio(16.0/9, ggui.Box(ggui.Center(ui.Caption("16 : 9"))).Fill(t.Muted).Radius(t.Radius)),
+				ui.AspectRatio(16.0/9, widget.Box(widget.Center(ui.Caption("16 : 9"))).Fill(t.Muted).Radius(t.Radius)),
 			).Space(1).Stretch()),
 
-			preview("Wrap", ggui.View(tags, func(list []string) *ggui.WrapWidget {
-				return ggui.Wrap(ggui.Children(list, func(tag string) ggui.Widget {
+			preview("Wrap", ggui.View(tags, func(list []string) *widget.WrapWidget {
+				return widget.Wrap(ggui.Children(list, func(tag string) ggui.Widget {
 					return ui.Tooltip(
 						ui.Button(tag+"  ×", func() { ggui.Remove(tags, func(s string) bool { return s == tag }) }).Outline().Pad(4, 10),
 						"Click to remove",
@@ -607,7 +607,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 
 			preview("Data Table", paymentTable),
 
-			preview("Table", ggui.Column(
+			preview("Table", widget.Column(
 				ui.Table(people, func(p Person) int { return p.ID },
 					ui.TextCol("Name", func(p Person) string { return p.Name }),
 					ui.TextCol("Role", func(p Person) string { return p.Role }).Grow(2),
@@ -617,7 +617,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 						return ui.Button("×", func() { ggui.Remove(people, func(p Person) bool { return p.ID == id }) }).Outline().Pad(0, 8)
 					}).W(48),
 				).BindSelected(chosen).RowName(func(p Person) string { return p.Name }).Height(260).
-					Footer(ggui.Text("Average age"), nil, ggui.TextOf(people.Map(func(ps []Person) string {
+					Footer(widget.Text("Average age"), nil, widget.TextOf(people.Map(func(ps []Person) string {
 						total := 0
 						for _, p := range ps {
 							total += p.Age
@@ -628,7 +628,7 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 				ui.Captionf("selected: %s. Click a row, or Tab to it and press Space; the body scrolls under the heading.", chosenName),
 			).Space(1).Stretch()),
 
-			preview("Grid", ggui.Cached(ggui.Grid(4,
+			preview("Grid", ggui.Cached(widget.Grid(4,
 				swatch("Bg", t.Bg), swatch("Card", t.Card), swatch("Input", t.Input), swatch("Border", t.Border),
 				swatch("Accent", t.Primary), swatch("AccentHover", t.PrimaryHover), swatch("Muted", t.MutedFg), swatch("Fg", t.Fg),
 			).Space(1))),
@@ -637,21 +637,21 @@ func newGalleryPreview(present func([]ggui.Widget) ggui.Widget) (ggui.Builder, f
 		entries = append(entries, parityPreviews()...)
 		entries = append(entries, partPreviews()...)
 		entries = append(entries, reactivityPreview())
-		entries = append(entries, preview("Carousel", ui.Carousel(carouselIndex, ui.Card(ggui.Center(ui.Title("1"))), ui.Card(ggui.Center(ui.Title("2"))), ui.Card(ggui.Center(ui.Title("3")))).Height(180)))
-		entries = append(entries, preview("Rich text", ggui.Column(
-			ggui.RichText(
-				ggui.Span("Spans wrap as one paragraph, in "),
-				ggui.Span("bold").Weight(ggui.WeightBold),
-				ggui.Span(", "),
-				ggui.Span("larger").Size(20),
-				ggui.Span(" or "),
-				ggui.Span("linked").Color(t.Primary).Underline().OnTap(func() { toasts.Push(ui.Toast("Link", "The span was tapped.")) }),
-				ggui.Span(" text. Drag across it to select, then copy."),
+		entries = append(entries, preview("Carousel", ui.Carousel(carouselIndex, ui.Card(widget.Center(ui.Title("1"))), ui.Card(widget.Center(ui.Title("2"))), ui.Card(widget.Center(ui.Title("3")))).Height(180)))
+		entries = append(entries, preview("Rich text", widget.Column(
+			widget.RichText(
+				widget.Span("Spans wrap as one paragraph, in "),
+				widget.Span("bold").Weight(ggui.WeightBold),
+				widget.Span(", "),
+				widget.Span("larger").Size(20),
+				widget.Span(" or "),
+				widget.Span("linked").Color(t.Primary).Underline().OnTap(func() { toasts.Push(ui.Toast("Link", "The span was tapped.")) }),
+				widget.Span(" text. Drag across it to select, then copy."),
 			).Selectable(),
-			ggui.Directionality(ggui.DirRTL, ggui.Text("مرحبا بالعالم · שלום עולם · ggui").Selectable()),
+			ggui.Directionality(ggui.DirRTL, widget.Text("مرحبا بالعالم · שלום עולם · ggui").Selectable()),
 		).Space(1).Stretch()))
 		entries = append(entries, preview("Input OTP", ui.Field("Verification code", ui.InputOTP(otpValue, 6).Groups(3, 3)).Help("Paste a code or edit individual slots.")))
-		entries = append(entries, preview("Charts", ggui.Column(
+		entries = append(entries, preview("Charts", widget.Column(
 			chartPreview(),
 			ui.Caption("Area, bar, line, pie, radar and radial charts. Run examples/charts for all variants."),
 		).Gap(12)))

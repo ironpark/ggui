@@ -14,8 +14,8 @@ import (
 // It is how a builder colors what it builds; Use, which reads the colors
 // themselves, belongs in a Reactive or in a custom widget's Layout.
 //
-//	ggui.Text("Saved").Color(theme.MutedFg)
-//	ggui.Box().Fill(theme.Destructive.Alpha(.1))
+//	widget.Text("Saved").Color(theme.MutedFg)
+//	widget.Box().Fill(theme.Destructive.Alpha(.1))
 //
 // Drawn without an Env, as a custom widget's raw Canvas calls do, it is the
 // color the application's theme has.

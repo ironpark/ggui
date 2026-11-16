@@ -1,6 +1,7 @@
-package ggui
+package widget
 
 import (
+	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/pkg/gem"
 )
@@ -12,7 +13,7 @@ import (
 // BlurWidget paints its child blurred. Build one with Blur.
 type BlurWidget struct {
 	props property.Owner
-	child Widget
+	child ggui.Widget
 	sigma property.Value[float64]
 	shown float64
 }
@@ -20,8 +21,8 @@ type BlurWidget struct {
 // Blur paints child blurred by a Gaussian of sigma logical pixels; zero
 // paints it sharp.
 //
-//	ggui.Blur(content, 0).BindSigma(blur) // a Tween that eases a blur in
-func Blur(child Widget, sigma float64) *BlurWidget {
+//	widget.Blur(content, 0).BindSigma(blur) // a Tween that eases a blur in
+func Blur(child ggui.Widget, sigma float64) *BlurWidget {
 	b := &BlurWidget{child: child}
 	b.sigma.Set(sigma)
 	return b
@@ -34,31 +35,31 @@ func (b *BlurWidget) Sigma(v float64) *BlurWidget {
 }
 
 // BindSigma follows a non-nil sigma reader.
-func (b *BlurWidget) BindSigma(r Readable[float64]) *BlurWidget {
+func (b *BlurWidget) BindSigma(r ggui.Readable[float64]) *BlurWidget {
 	property.Bind(&b.props, &b.sigma, r, "BindSigma")
 	return b
 }
 
 // Baseline implements Baseliner: the child's.
-func (b *BlurWidget) Baseline() (float64, bool) { return BaselineOf(b.child) }
+func (b *BlurWidget) Baseline() (float64, bool) { return ggui.BaselineOf(b.child) }
 
 // Layout implements Widget.
-func (b *BlurWidget) Layout(c Constraints, env Env) Size {
+func (b *BlurWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer b.props.Layout().EndLayout()
 	b.shown = b.sigma.Get()
 	return b.child.Layout(c, env)
 }
 
 // Paint implements Widget.
-func (b *BlurWidget) Paint(dst *Canvas, r Rect) {
-	dst.Blur(r, b.shown, func(dst *Canvas) { dst.Paint(b.child, r) })
+func (b *BlurWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	dst.Blur(r, b.shown, func(dst *ggui.Canvas) { dst.Paint(b.child, r) })
 }
 
 // BackdropBlurWidget blurs what lies behind it and paints its child on top:
 // a frosted panel. Build one with BackdropBlur.
 type BackdropBlurWidget struct {
 	props  property.Owner
-	child  Widget
+	child  ggui.Widget
 	sigma  property.Value[float64]
 	shown  float64
 	radius float64
@@ -69,8 +70,8 @@ type BackdropBlurWidget struct {
 // does. Give child a translucent fill to tint the glass. A nil child blurs
 // all the space it is given.
 //
-//	ggui.BackdropBlur(ggui.Box(menu).Fill(glass).Radius(12), 16).Radius(12)
-func BackdropBlur(child Widget, sigma float64) *BackdropBlurWidget {
+//	widget.BackdropBlur(widget.Box(menu).Fill(glass).Radius(12), 16).Radius(12)
+func BackdropBlur(child ggui.Widget, sigma float64) *BackdropBlurWidget {
 	b := &BackdropBlurWidget{child: child}
 	b.sigma.Set(sigma)
 	return b
@@ -83,7 +84,7 @@ func (b *BackdropBlurWidget) Sigma(v float64) *BackdropBlurWidget {
 }
 
 // BindSigma follows a non-nil sigma reader.
-func (b *BackdropBlurWidget) BindSigma(r Readable[float64]) *BackdropBlurWidget {
+func (b *BackdropBlurWidget) BindSigma(r ggui.Readable[float64]) *BackdropBlurWidget {
 	property.Bind(&b.props, &b.sigma, r, "BindSigma")
 	return b
 }
@@ -99,21 +100,21 @@ func (b *BackdropBlurWidget) Baseline() (float64, bool) {
 	if b.child == nil {
 		return 0, false
 	}
-	return BaselineOf(b.child)
+	return ggui.BaselineOf(b.child)
 }
 
 // Layout implements Widget.
-func (b *BackdropBlurWidget) Layout(c Constraints, env Env) Size {
+func (b *BackdropBlurWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer b.props.Layout().EndLayout()
 	b.shown = b.sigma.Get()
 	if b.child == nil {
-		return c.Constrain(Sz(gem.Bounded(c.MaxW, 0), gem.Bounded(c.MaxH, 0)))
+		return c.Constrain(ggui.Sz(gem.Bounded(c.MaxW, 0), gem.Bounded(c.MaxH, 0)))
 	}
 	return b.child.Layout(c, env)
 }
 
 // Paint implements Widget.
-func (b *BackdropBlurWidget) Paint(dst *Canvas, r Rect) {
+func (b *BackdropBlurWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	dst.BackdropBlur(r, b.radius, b.shown)
 	if b.child != nil {
 		dst.Paint(b.child, r)
@@ -125,7 +126,7 @@ func (b *BackdropBlurWidget) Paint(dst *Canvas, r Rect) {
 // faded on its own. Build one with Opacity.
 type OpacityWidget struct {
 	props   property.Owner
-	child   Widget
+	child   ggui.Widget
 	opacity property.Value[float64]
 	shown   float64
 }
@@ -133,7 +134,7 @@ type OpacityWidget struct {
 // Opacity paints child at opacity, from 0, invisible, to 1, as it is. An
 // invisible child is still laid out and still takes input, as Flutter's
 // Opacity does; wrap it in Inert as well to stop that.
-func Opacity(child Widget, opacity float64) *OpacityWidget {
+func Opacity(child ggui.Widget, opacity float64) *OpacityWidget {
 	o := &OpacityWidget{child: child}
 	o.opacity.Set(opacity)
 	return o
@@ -146,16 +147,16 @@ func (o *OpacityWidget) Opacity(v float64) *OpacityWidget {
 }
 
 // BindOpacity follows a non-nil opacity reader, a Tween say.
-func (o *OpacityWidget) BindOpacity(r Readable[float64]) *OpacityWidget {
+func (o *OpacityWidget) BindOpacity(r ggui.Readable[float64]) *OpacityWidget {
 	property.Bind(&o.props, &o.opacity, r, "BindOpacity")
 	return o
 }
 
 // Baseline implements Baseliner: the child's.
-func (o *OpacityWidget) Baseline() (float64, bool) { return BaselineOf(o.child) }
+func (o *OpacityWidget) Baseline() (float64, bool) { return ggui.BaselineOf(o.child) }
 
 // Layout implements Widget.
-func (o *OpacityWidget) Layout(c Constraints, env Env) Size {
+func (o *OpacityWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer o.props.Layout().EndLayout()
 	o.shown = gem.Clamp(o.opacity.Get(), 0, 1)
 	return o.child.Layout(c, env)
@@ -164,7 +165,7 @@ func (o *OpacityWidget) Layout(c Constraints, env Env) Size {
 // Paint implements Widget. A fully opaque child paints directly, with no
 // layer, and an invisible one with no image, so that it still registers its
 // input and semantics.
-func (o *OpacityWidget) Paint(dst *Canvas, r Rect) {
+func (o *OpacityWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	switch {
 	case o.shown >= 1 || dst == nil:
 		dst.Paint(o.child, r)
@@ -173,7 +174,7 @@ func (o *OpacityWidget) Paint(dst *Canvas, r Rect) {
 		dst.Invisible().Paint(o.child, r)
 		return
 	}
-	dst.Layer(LayerOptions{Fade: 1 - o.shown}, func(layer *Canvas) { layer.Paint(o.child, r) })
+	dst.Layer(ggui.LayerOptions{Fade: 1 - o.shown}, func(layer *ggui.Canvas) { layer.Paint(o.child, r) })
 }
 
 // TransformWidget paints its child scaled, turned and moved, about an origin
@@ -182,22 +183,22 @@ func (o *OpacityWidget) Paint(dst *Canvas, r Rect) {
 // Transform does. Build one with Transform.
 type TransformWidget struct {
 	props   property.Owner
-	child   Widget
+	child   ggui.Widget
 	rotate  property.Value[float64]
 	scale   property.Value[float64]
-	offset  property.Value[Point]
+	offset  property.Value[ggui.Point]
 	originX float64
 	originY float64
-	matrix  Affine
-	shown   Affine // rotate, scale and offset as of the last layout
+	matrix  ggui.Affine
+	shown   ggui.Affine // rotate, scale and offset as of the last layout
 }
 
 // Transform wraps child in a transform, the identity until Rotate, Scale,
 // Translate or Matrix say otherwise. The child is scaled, then turned, then
 // moved, about its center unless Origin says otherwise:
 //
-//	ggui.Transform(card).Rotate(math.Pi / 12).Scale(1.1)
-func Transform(child Widget) *TransformWidget {
+//	widget.Transform(card).Rotate(math.Pi / 12).Scale(1.1)
+func Transform(child ggui.Widget) *TransformWidget {
 	t := &TransformWidget{child: child, originX: 0.5, originY: 0.5}
 	t.scale.Set(1)
 	return t
@@ -210,7 +211,7 @@ func (t *TransformWidget) Rotate(rad float64) *TransformWidget {
 }
 
 // BindRotate follows a non-nil angle reader, an animation say.
-func (t *TransformWidget) BindRotate(r Readable[float64]) *TransformWidget {
+func (t *TransformWidget) BindRotate(r ggui.Readable[float64]) *TransformWidget {
 	property.Bind(&t.props, &t.rotate, r, "BindRotate")
 	return t
 }
@@ -222,22 +223,24 @@ func (t *TransformWidget) Scale(s float64) *TransformWidget {
 }
 
 // BindScale follows a non-nil scale reader.
-func (t *TransformWidget) BindScale(r Readable[float64]) *TransformWidget {
+func (t *TransformWidget) BindScale(r ggui.Readable[float64]) *TransformWidget {
 	property.Bind(&t.props, &t.scale, r, "BindScale")
 	return t
 }
 
 // Translate moves the child by dx, dy logical pixels. It is Offset(Pt(dx, dy)).
-func (t *TransformWidget) Translate(dx, dy float64) *TransformWidget { return t.Offset(Pt(dx, dy)) }
+func (t *TransformWidget) Translate(dx, dy float64) *TransformWidget {
+	return t.Offset(ggui.Pt(dx, dy))
+}
 
 // Offset moves the child by p.
-func (t *TransformWidget) Offset(p Point) *TransformWidget {
+func (t *TransformWidget) Offset(p ggui.Point) *TransformWidget {
 	property.Set(&t.props, &t.offset, p)
 	return t
 }
 
 // BindOffset follows a non-nil offset reader.
-func (t *TransformWidget) BindOffset(r Readable[Point]) *TransformWidget {
+func (t *TransformWidget) BindOffset(r ggui.Readable[ggui.Point]) *TransformWidget {
 	property.Bind(&t.props, &t.offset, r, "BindOffset")
 	return t
 }
@@ -254,7 +257,7 @@ func (t *TransformWidget) Origin(x, y float64) *TransformWidget {
 
 // Matrix applies m after scaling and turning and before the move, about the
 // origin: a skew, or a transform built elsewhere.
-func (t *TransformWidget) Matrix(m Affine) *TransformWidget {
+func (t *TransformWidget) Matrix(m ggui.Affine) *TransformWidget {
 	defer property.Watch(&t.props, &t.matrix)()
 	t.matrix = m
 	return t
@@ -262,56 +265,58 @@ func (t *TransformWidget) Matrix(m Affine) *TransformWidget {
 
 // Baseline implements Baseliner: the child's, where layout put it. A
 // transform moves what is painted, not where its neighbours align.
-func (t *TransformWidget) Baseline() (float64, bool) { return BaselineOf(t.child) }
+func (t *TransformWidget) Baseline() (float64, bool) { return ggui.BaselineOf(t.child) }
 
 // Layout implements Widget.
-func (t *TransformWidget) Layout(c Constraints, env Env) Size {
+func (t *TransformWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer t.props.Layout().EndLayout()
 	s := t.scale.Get()
 	off := t.offset.Get()
-	t.shown = Affine{}.Scale(s, s).Rotate(t.rotate.Get()).Then(t.matrix).Translate(off.X, off.Y)
+	t.shown = ggui.Affine{}.Scale(s, s).Rotate(t.rotate.Get()).Then(t.matrix).Translate(off.X, off.Y)
 	return t.child.Layout(c, env)
 }
 
 // Paint implements Widget.
-func (t *TransformWidget) Paint(dst *Canvas, r Rect) {
-	dst.Transform(t.at(r), func(dst *Canvas) { dst.Paint(t.child, r) })
+func (t *TransformWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	dst.Transform(t.at(r), func(dst *ggui.Canvas) { dst.Paint(t.child, r) })
 }
 
 // at returns the transform for the child painted in r.
-func (t *TransformWidget) at(r Rect) Affine {
-	return t.shown.About(Pt(r.Origin.X+r.Size.W*t.originX, r.Origin.Y+r.Size.H*t.originY))
+func (t *TransformWidget) at(r ggui.Rect) ggui.Affine {
+	return t.shown.About(ggui.Pt(r.Origin.X+r.Size.W*t.originX, r.Origin.Y+r.Size.H*t.originY))
 }
 
 // ClipPathWidget clips its child to a path built for the Rect it paints in,
 // input included. Build one with ClipPath or ClipOval.
 type ClipPathWidget struct {
-	child Widget
-	shape func(r Rect) *Path
+	child ggui.Widget
+	shape func(r ggui.Rect) *ggui.Path
 	oval  bool
 }
 
 // ClipPath clips child to the path shape returns for the Rect the child
 // paints in, in the same coordinates:
 //
-//	ggui.ClipPath(photo, func(r ggui.Rect) *ggui.Path { return star(r) })
-func ClipPath(child Widget, shape func(r Rect) *Path) *ClipPathWidget {
+//	widget.ClipPath(photo, func(r ggui.Rect) *ggui.Path { return star(r) })
+func ClipPath(child ggui.Widget, shape func(r ggui.Rect) *ggui.Path) *ClipPathWidget {
 	return &ClipPathWidget{child: child, shape: shape}
 }
 
 // ClipOval clips child to the ellipse inscribed in its Rect, a circle when
 // the child is square.
-func ClipOval(child Widget) *ClipPathWidget { return &ClipPathWidget{child: child, oval: true} }
+func ClipOval(child ggui.Widget) *ClipPathWidget { return &ClipPathWidget{child: child, oval: true} }
 
 // Baseline implements Baseliner: the child's.
-func (w *ClipPathWidget) Baseline() (float64, bool) { return BaselineOf(w.child) }
+func (w *ClipPathWidget) Baseline() (float64, bool) { return ggui.BaselineOf(w.child) }
 
 // Layout implements Widget.
-func (w *ClipPathWidget) Layout(c Constraints, env Env) Size { return w.child.Layout(c, env) }
+func (w *ClipPathWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	return w.child.Layout(c, env)
+}
 
 // Paint implements Widget.
-func (w *ClipPathWidget) Paint(dst *Canvas, r Rect) {
-	paint := func(dst *Canvas) { dst.Paint(w.child, r) }
+func (w *ClipPathWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
+	paint := func(dst *ggui.Canvas) { dst.Paint(w.child, r) }
 	if w.oval {
 		dst.ClipOval(r, paint)
 		return

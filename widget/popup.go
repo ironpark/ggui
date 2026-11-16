@@ -1,15 +1,16 @@
-package ggui
+package widget
 
 import (
 	"slices"
 
+	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/pkg/gem"
 )
 
 // popupEscape closes the innermost open popup.
-var popupEscape = MustChord("escape")
+var popupEscape = ggui.MustChord("escape")
 
 // PopupWidget shows content floating over the tree, anchored below (or,
 // when there is no room, above) its anchor widget: the base of dropdowns
@@ -28,12 +29,12 @@ var popupEscape = MustChord("escape")
 // popup with PopupOf and close it after acting.
 type PopupWidget struct {
 	props           property.Owner
-	anchor          Widget
-	content         Widget
+	anchor          ggui.Widget
+	content         ggui.Widget
 	open            bool
-	bound           Binding[bool]
+	bound           ggui.Binding[bool]
 	gap             float64
-	keys            KeyHandler
+	keys            ggui.KeyHandler
 	owner           any
 	onClose         func()
 	nonmodal        bool
@@ -45,26 +46,26 @@ type PopupWidget struct {
 	still           bool    // Animated(false): no entrance or exit
 	ownWidth        bool    // MatchAnchorWidth(false): below or above, the content keeps its width
 	keepFocus       bool    // FocusOnOpen(false): opening leaves focus where it is
-	anchorRect      Rect
+	anchorRect      ggui.Rect
 	paintedOpen     bool
 	hadContentFocus bool
-	contentKeys     []KeyHandler
+	contentKeys     []ggui.KeyHandler
 	children        []*PopupWidget
 	parent          *PopupWidget
-	opener          KeyHandler
+	opener          ggui.KeyHandler
 	restore         bool
 	focusContent    bool
 	id              any
-	point           *Point
+	point           *ggui.Point
 
-	env         Env
-	contentSize Size
-	rect        Rect // where the content was last painted
-	reveal      Motion
+	env         ggui.Env
+	contentSize ggui.Size
+	rect        ggui.Rect // where the content was last painted
+	reveal      ggui.Motion
 	effect      *TransitionWidget
 }
 
-var popupKey = NewEnvKey[*PopupWidget]("popup")
+var popupKey = ggui.NewEnvKey[*PopupWidget]("popup")
 
 // PopupAlignment positions content horizontally relative to its anchor.
 // Start and End follow the environment's writing direction.
@@ -163,7 +164,7 @@ func (p *PopupWidget) Modal(v bool) *PopupWidget {
 }
 
 // Popup creates a closed popup that opens content next to anchor.
-func Popup(anchor, content Widget) *PopupWidget {
+func Popup(anchor, content ggui.Widget) *PopupWidget {
 	return &PopupWidget{anchor: anchor, content: content, gap: 4, edge: PopupCollisionPadding, id: reactive.AutoID(), effect: PopIn(content)}
 }
 
@@ -186,7 +187,7 @@ func (p *PopupWidget) CollisionPadding(px float64) *PopupWidget {
 
 // BindOpen stores the open state in sig: writing it opens or closes the popup,
 // and the popup writes it when it closes itself.
-func (p *PopupWidget) BindOpen(sig Binding[bool]) *PopupWidget {
+func (p *PopupWidget) BindOpen(sig ggui.Binding[bool]) *PopupWidget {
 	property.Require(sig, "BindOpen")
 	if !property.Same(p.bound, sig) {
 		p.bound = sig
@@ -240,22 +241,24 @@ func (p *PopupWidget) Adopt(prev any) {
 
 // HandlePointer implements PointerHandler for the anchor region, which
 // exists only so a rebuilt popup can adopt: it consumes nothing.
-func (p *PopupWidget) HandlePointer(PointerEvent) bool { return false }
+func (p *PopupWidget) HandlePointer(ggui.PointerEvent) bool { return false }
 
 // HandleKey handles Escape when a text-only nonmodal panel owns focus.
-func (p *PopupWidget) HandleKey(e KeyEvent) {
-	if e.Kind == KeyPress && e.Key == KeyEscape {
+func (p *PopupWidget) HandleKey(e ggui.KeyEvent) {
+	if e.Kind == ggui.KeyPress && e.Key == ggui.KeyEscape {
 		p.Hide()
 	}
 }
 
 // ConsumesKey reserves Escape for a text-only popup's focus target.
-func (p *PopupWidget) ConsumesKey(e KeyEvent) bool { return e.Kind == KeyPress && e.Key == KeyEscape }
+func (p *PopupWidget) ConsumesKey(e ggui.KeyEvent) bool {
+	return e.Kind == ggui.KeyPress && e.Key == ggui.KeyEscape
+}
 
 // Keys registers h as the key handler over the content, so a click inside
 // the popup keeps keyboard focus on h (the widget that opened it) instead
 // of blurring it.
-func (p *PopupWidget) Keys(h KeyHandler) *PopupWidget { p.keys = h; return p }
+func (p *PopupWidget) Keys(h ggui.KeyHandler) *PopupWidget { p.keys = h; return p }
 
 // Owner names the widget the content belongs to in the accessibility
 // tree: the combobox or menu button that opened it. Without one the
@@ -269,7 +272,7 @@ func (p *PopupWidget) OnClose(fn func()) *PopupWidget { p.onClose = fn; return p
 // IsOpen reports whether the content is showing.
 func (p *PopupWidget) IsOpen() bool {
 	if p.bound != nil {
-		return Untrack(p.bound.Get)
+		return ggui.Untrack(p.bound.Get)
 	}
 	return p.open
 }
@@ -284,10 +287,10 @@ func (p *PopupWidget) SetOpen(v bool) {
 	}
 	actual := p.IsOpen()
 	if was != actual {
-		Invalidate(p.env)
+		ggui.Invalidate(p.env)
 	}
 	if was && !actual {
-		Invalidate(p.env)
+		ggui.Invalidate(p.env)
 		if p.onClose != nil {
 			p.onClose()
 		}
@@ -316,7 +319,7 @@ func (p *PopupWidget) Show() { p.SetOpen(true) }
 
 // ShowAt opens at a window-coordinate point instead of the anchor's edge.
 // The point remains in effect until AnchorPosition is called.
-func (p *PopupWidget) ShowAt(at Point) { p.point = &at; p.Show() }
+func (p *PopupWidget) ShowAt(at ggui.Point) { p.point = &at; p.Show() }
 
 // AnchorPosition restores placement relative to the anchor widget.
 func (p *PopupWidget) AnchorPosition() { p.point = nil }
@@ -335,11 +338,11 @@ func (p *PopupWidget) Toggle() { p.SetOpen(!p.IsOpen()) }
 
 // Rect returns where the content was last painted, for a widget that
 // positions itself relative to the popup.
-func (p *PopupWidget) Rect() Rect { return p.rect }
+func (p *PopupWidget) Rect() ggui.Rect { return p.rect }
 
 // PopupOf returns the popup whose content the widget laid out under env is
 // part of, if any. A menu item closes its menu this way.
-func PopupOf(env Env) (*PopupWidget, bool) { return env.Get(popupKey) }
+func PopupOf(env ggui.Env) (*PopupWidget, bool) { return env.Get(popupKey) }
 
 // attach lists p among its parent popup's children, once. The parent
 // empties the list as it paints, so both passes ask.
@@ -350,7 +353,7 @@ func (p *PopupWidget) attach() {
 }
 
 // Layout implements Widget.
-func (p *PopupWidget) Layout(c Constraints, env Env) Size {
+func (p *PopupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer p.props.Layout().EndLayout()
 	if parent, ok := PopupOf(env); ok && parent != p {
 		p.parent = parent
@@ -361,7 +364,7 @@ func (p *PopupWidget) Layout(c Constraints, env Env) Size {
 }
 
 // Paint implements Widget.
-func (p *PopupWidget) Paint(dst *Canvas, r Rect) {
+func (p *PopupWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	p.attach()
 	dst.HitPointer(r, p)
 	p.anchorRect = r
@@ -389,7 +392,7 @@ func (p *PopupWidget) Paint(dst *Canvas, r Rect) {
 		}
 	}
 	p.paintedOpen = open
-	now := FrameTime()
+	now := ggui.FrameTime()
 	duration := p.env.Motion(p.env.PopupDuration())
 	if p.still {
 		duration = 0
@@ -399,7 +402,7 @@ func (p *PopupWidget) Paint(dst *Canvas, r Rect) {
 		return
 	}
 	p.effect.Progress(progress, !open)
-	dst.Overlay(func(dst *Canvas) {
+	dst.Overlay(func(dst *ggui.Canvas) {
 		if !open {
 			dst = dst.Inert()
 		}
@@ -409,7 +412,7 @@ func (p *PopupWidget) Paint(dst *Canvas, r Rect) {
 
 // paintContent lays the content out for the room around the anchor and
 // paints it, on a scrim that closes the popup when clicked.
-func (p *PopupWidget) ownsFocus(dst *Canvas) bool {
+func (p *PopupWidget) ownsFocus(dst *ggui.Canvas) bool {
 	for _, key := range p.contentKeys {
 		if dst.HasFocus(key) {
 			return true
@@ -423,18 +426,18 @@ func (p *PopupWidget) ownsFocus(dst *Canvas) bool {
 	return false
 }
 
-func (p *PopupWidget) paintContent(dst *Canvas, anchor Rect) {
+func (p *PopupWidget) paintContent(dst *ggui.Canvas, anchor ggui.Rect) {
 	p.children = p.children[:0]
 	screen := dst.Size()
-	if screen == (Size{}) {
-		screen = Sz(Unbounded, Unbounded)
+	if screen == (ggui.Size{}) {
+		screen = ggui.Sz(ggui.Unbounded, ggui.Unbounded)
 	}
 	if p.point != nil {
 		// Point placement is clamped to the screen, so the whole width is
 		// available regardless of where the anchor happened to be.
-		anchor = Rct(Pt(gem.Clamp(p.point.X, 0, screen.W), gem.Clamp(p.point.Y, 0, screen.H)), Size{})
+		anchor = ggui.Rct(ggui.Pt(gem.Clamp(p.point.X, 0, screen.W), gem.Clamp(p.point.Y, 0, screen.H)), ggui.Size{})
 	}
-	rtl := p.env.Direction() == DirRTL
+	rtl := p.env.Direction() == ggui.DirRTL
 	side := p.side
 	switch side {
 	case PopupInlineStart:
@@ -442,8 +445,8 @@ func (p *PopupWidget) paintContent(dst *Canvas, anchor Rect) {
 	case PopupInlineEnd:
 		side = gem.Pick(rtl, PopupLeft, PopupRight)
 	}
-	var size Size
-	var at Point
+	var size ggui.Size
+	var at ggui.Point
 	var along float64
 	if side == PopupLeft || side == PopupRight {
 		size, at, along, side = p.placeBeside(screen, anchor, side)
@@ -452,19 +455,19 @@ func (p *PopupWidget) paintContent(dst *Canvas, anchor Rect) {
 	}
 	p.placed = side
 	p.contentSize = size
-	p.rect = Rct(at, size)
+	p.rect = ggui.Rct(at, size)
 	p.effect.PopFrom(side, along)
 
-	dst.HitPointer(Rect{Size: screen}, popupScrim{p})
+	dst.HitPointer(ggui.Rect{Size: screen}, popupScrim{p})
 	if !p.nonmodal {
 		// A modal popup leaves nothing under its scrim to point at.
-		dst.HitCursor(Rect{Size: screen}, CursorShapeDefault)
+		dst.HitCursor(ggui.Rect{Size: screen}, ggui.CursorShapeDefault)
 	}
-	paint := func(dst *Canvas) {
+	paint := func(dst *ggui.Canvas) {
 		dst.HitPointer(p.rect, popupSink{})
 		// The content is a surface of its own: what it floats over does
 		// not choose the cursor on it.
-		dst.HitCursor(p.rect, CursorShapeDefault)
+		dst.HitCursor(p.rect, ggui.CursorShapeDefault)
 		if p.keys != nil {
 			dst.HitKey(p.rect, p.keys)
 		}
@@ -502,7 +505,7 @@ func (p *PopupWidget) paintContent(dst *Canvas, anchor Rect) {
 // asks for unless only the other has the room, and aligns it across. It
 // returns the content's size and place, how far along the anchor's side its
 // entrance grows from, and the side it ended on.
-func (p *PopupWidget) placeBelow(screen Size, anchor Rect, side PopupSide, rtl bool) (Size, Point, float64, PopupSide) {
+func (p *PopupWidget) placeBelow(screen ggui.Size, anchor ggui.Rect, side PopupSide, rtl bool) (ggui.Size, ggui.Point, float64, PopupSide) {
 	// The content stays edge inside the window: its room on each side of
 	// the anchor, and across, ends there.
 	edge := p.edge
@@ -514,7 +517,7 @@ func (p *PopupWidget) placeBelow(screen Size, anchor Rect, side PopupSide, rtl b
 	if p.align != PopupStart || rtl || p.point != nil {
 		maxW = max(screen.W-2*edge, minW)
 	}
-	natural := p.effect.Layout(Constraints{MinW: minW, MaxW: maxW, MaxH: Unbounded}, p.env)
+	natural := p.effect.Layout(ggui.Constraints{MinW: minW, MaxW: maxW, MaxH: ggui.Unbounded}, p.env)
 	below := screen.H - edge - (anchor.Origin.Y + anchor.Size.H + p.gap)
 	above := anchor.Origin.Y - p.gap - edge
 	room, other := below, above
@@ -526,7 +529,7 @@ func (p *PopupWidget) placeBelow(screen Size, anchor Rect, side PopupSide, rtl b
 	}
 	size := natural
 	if size.H > room {
-		size = p.effect.Layout(Constraints{MinW: minW, MaxW: maxW, MaxH: max(room, 0)}, p.env)
+		size = p.effect.Layout(ggui.Constraints{MinW: minW, MaxW: maxW, MaxH: max(room, 0)}, p.env)
 	}
 	y := anchor.Origin.Y + anchor.Size.H + p.gap
 	if side == PopupTop {
@@ -545,16 +548,16 @@ func (p *PopupWidget) placeBelow(screen Size, anchor Rect, side PopupSide, rtl b
 	default:
 		x += p.alignOffset
 	}
-	if screen.W != Unbounded {
+	if screen.W != ggui.Unbounded {
 		x = gem.Clamp(x, edge, max(screen.W-edge-size.W, edge))
 	}
-	return size, Pt(x, y), along, side
+	return size, ggui.Pt(x, y), along, side
 }
 
 // placeBeside is placeBelow for a popup to the left or right of its anchor.
-func (p *PopupWidget) placeBeside(screen Size, anchor Rect, side PopupSide) (Size, Point, float64, PopupSide) {
+func (p *PopupWidget) placeBeside(screen ggui.Size, anchor ggui.Rect, side PopupSide) (ggui.Size, ggui.Point, float64, PopupSide) {
 	edge := p.edge
-	natural := p.effect.Layout(Constraints{MaxW: max(screen.W-2*edge, 0), MaxH: Unbounded}, p.env)
+	natural := p.effect.Layout(ggui.Constraints{MaxW: max(screen.W-2*edge, 0), MaxH: ggui.Unbounded}, p.env)
 	left := anchor.Origin.X - p.gap - edge
 	right := screen.W - edge - (anchor.Origin.X + anchor.Size.W + p.gap)
 	room, other := right, left
@@ -569,10 +572,10 @@ func (p *PopupWidget) placeBeside(screen Size, anchor Rect, side PopupSide) (Siz
 	size, maxW := natural, max(screen.W-2*edge, 0)
 	if size.W > room {
 		maxW = max(room, 0)
-		size = p.effect.Layout(Constraints{MaxW: maxW, MaxH: Unbounded}, p.env)
+		size = p.effect.Layout(ggui.Constraints{MaxW: maxW, MaxH: ggui.Unbounded}, p.env)
 	}
 	if maxH := max(screen.H-2*edge, 0); size.H > maxH {
-		size = p.effect.Layout(Constraints{MaxW: maxW, MaxH: maxH}, p.env)
+		size = p.effect.Layout(ggui.Constraints{MaxW: maxW, MaxH: maxH}, p.env)
 	}
 	x := anchor.Origin.X + anchor.Size.W + p.gap
 	if side == PopupLeft {
@@ -589,26 +592,26 @@ func (p *PopupWidget) placeBeside(screen Size, anchor Rect, side PopupSide) (Siz
 	default:
 		y += p.alignOffset
 	}
-	if screen.H != Unbounded {
+	if screen.H != ggui.Unbounded {
 		y = gem.Clamp(y, edge, max(screen.H-edge-size.H, edge))
 	}
-	return size, Pt(x, y), along, side
+	return size, ggui.Pt(x, y), along, side
 }
 
 // popupScrim covers the window under an open popup: a press closes the
 // popup and goes no further, while hovering and scrolling pass through.
 type popupScrim struct{ p *PopupWidget }
 
-func (s popupScrim) HandlePointer(ev PointerEvent) bool {
+func (s popupScrim) HandlePointer(ev ggui.PointerEvent) bool {
 	switch ev.Kind {
-	case PointerDown:
+	case ggui.PointerDown:
 		if s.p.nonmodal {
 			s.p.SetOpen(false)
 			return s.p.anchorRect.Contains(ev.Pos)
 		}
 		s.p.Hide()
 		return true
-	case PointerUp, PointerTap:
+	case ggui.PointerUp, ggui.PointerTap:
 		return true
 	}
 	return false
@@ -617,4 +620,4 @@ func (s popupScrim) HandlePointer(ev PointerEvent) bool {
 // popupSink keeps presses inside the content from reaching the scrim.
 type popupSink struct{}
 
-func (popupSink) HandlePointer(ev PointerEvent) bool { return ev.Kind != PointerScroll }
+func (popupSink) HandlePointer(ev ggui.PointerEvent) bool { return ev.Kind != ggui.PointerScroll }

@@ -1,6 +1,7 @@
-package ggui
+package widget
 
 import (
+	"github.com/ironpark/ggui"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -18,31 +19,31 @@ func TestInputInAnotherWorldLeavesAWindowsFramePartial(t *testing.T) {
 	for range 4 {
 		neighbours.Go(func() {
 			a, b := Focus(Box().Size(50, 50)), Focus(Box().Size(50, 50))
-			p := NewProbe(Column(a, b), Sz(50, 100))
+			p := ggui.NewProbe(Column(a, b), ggui.Sz(50, 100))
 			defer p.Close()
 			for !done.Load() {
-				p.Click(Pt(25, 25))
-				p.Click(Pt(25, 75))
+				p.Click(ggui.Pt(25, 25))
+				p.Click(ggui.Pt(25, 75))
 			}
 		})
 	}
 	defer neighbours.Wait()
 	defer done.Store(true)
 
-	var texts []Widget
+	var texts []ggui.Widget
 	for range 8 {
 		texts = append(texts, Text("an item of a list").Selectable())
 	}
 	area := SelectionArea(Scroll(Column(texts...).Gap(30).Stretch()))
-	p := NewWindowProbe(func() Widget { return area }, Sz(300, 500))
+	p := ggui.NewWindowProbe(func() ggui.Widget { return area }, ggui.Sz(300, 500))
 	defer p.Close()
-	step := func() WindowFrame { return p.Step(16 * time.Millisecond) }
+	step := func() ggui.WindowFrame { return p.Step(16 * time.Millisecond) }
 	step()
 	p.Idle(16*time.Millisecond, time.Second)
 	for i := range 400 {
 		w := &texts[2+i%4].(*TextWidget).rich.w
 		p.Move(textAt(w, w.rect, 3))
-		if fr := step(); fr.Painted != FramePartial {
+		if fr := step(); fr.Painted != ggui.FramePartial {
 			t.Fatalf("hover %d painted the frame %v while other worlds handled input, want it in part", i, fr.Painted)
 		}
 	}

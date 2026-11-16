@@ -8,6 +8,7 @@ import (
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // ButtonStyle is the look of a button variant under a theme.
@@ -144,8 +145,8 @@ type ButtonWidget struct {
 	toggleValue func() bool
 	props       property.Owner
 	ggui.Interactive
-	label       *ggui.TextWidget
-	box         *ggui.BoxWidget
+	label       *widget.TextWidget
+	box         *widget.BoxWidget
 	content     *buttonContent
 	onTap       func()
 	defaultName string
@@ -187,9 +188,9 @@ func (b *ButtonWidget) BindInvalid(r ggui.Readable[bool]) *ButtonWidget {
 // Button creates a primary button: the Primary surface with a PrimaryFg
 // label.
 func Button(label string, onTap func()) *ButtonWidget {
-	b := &ButtonWidget{onTap: onTap, label: ggui.Text(label).NoWrap(), variant: ButtonPrimary, size: ButtonDefault, radius: -1}
+	b := &ButtonWidget{onTap: onTap, label: widget.Text(label).NoWrap(), variant: ButtonPrimary, size: ButtonDefault, radius: -1}
 	b.content = &buttonContent{child: b.label}
-	b.box = ggui.Box(b.content)
+	b.box = widget.Box(b.content)
 	b.Role = ggui.RoleButton
 	b.SetName(label)
 	b.AutoKey()
@@ -202,7 +203,7 @@ func Button(label string, onTap func()) *ButtonWidget {
 // an extra small button.
 func ButtonOf(child ggui.Widget, onTap func()) *ButtonWidget {
 	b := &ButtonWidget{onTap: onTap, content: &buttonContent{child: child}, variant: ButtonPrimary, size: ButtonDefault, radius: -1}
-	b.box = ggui.Box(b.content)
+	b.box = widget.Box(b.content)
 	b.Role = ggui.RoleButton
 	b.AutoKey()
 	return b

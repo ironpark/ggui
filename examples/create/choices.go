@@ -6,6 +6,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 const (
@@ -24,13 +25,13 @@ const (
 // A tile remains a real Select: the custom face changes its presentation only.
 // The lock is a sibling action, not an interactive child of the select node.
 func choice[T comparable](m *model, slot int, label string, value ggui.Binding[T], options []T, format func(T) string) ggui.Widget {
-	face := ggui.Row(
-		ggui.Expanded(ggui.Column(
-			ggui.Text(label).Size(12).Color(theme.MutedFg).NoWrap(),
-			ggui.TextOf(ggui.Map(value, format)).Size(14).Weight(ggui.WeightMedium).NoWrap(),
+	face := widget.Row(
+		widget.Expanded(widget.Column(
+			widget.Text(label).Size(12).Color(theme.MutedFg).NoWrap(),
+			widget.TextOf(ggui.Map(value, format)).Size(14).Weight(ggui.WeightMedium).NoWrap(),
 		).Gap(2).Stretch()),
-		ggui.Box().Width(22), tileMark(m, slot),
-	).Gap(4).Align(ggui.AlignCenter)
+		widget.Box().Width(22), tileMark(m, slot),
+	).Gap(4).Align(widget.AlignCenter)
 	selectWidget := ui.Select(value).Options(options).Format(format).Name(label).
 		AlignItemWithTrigger(false).TriggerContent(face).Key("setting-" + label)
 	styled := theme.Override(func(t *theme.Theme) {
@@ -72,7 +73,7 @@ func choice[T comparable](m *model, slot int, label string, value ggui.Binding[T
 
 func tileMark(m *model, slot int) ggui.Widget {
 	if slot == lockFont || slot == lockHeading {
-		return ggui.Text("Aa").Size(16).NoWrap()
+		return widget.Text("Aa").Size(16).NoWrap()
 	}
 	var ink color.Color
 	return ggui.FromFuncs(func(c ggui.Constraints, env ggui.Env) ggui.Size {

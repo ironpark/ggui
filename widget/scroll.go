@@ -1,10 +1,11 @@
-package ggui
+package widget
 
 import (
 	"image/color"
 	"math"
 	"time"
 
+	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/inspect"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
@@ -22,20 +23,20 @@ type Viewport struct {
 }
 
 var (
-	viewportKey = NewEnvKey[Viewport]("viewport")
+	viewportKey = ggui.NewEnvKey[Viewport]("viewport")
 	// The window of the nearest Scroll along each axis: a list inside a
 	// Scroll that scrolls the other way, as a diff's long lines do, is
 	// still windowed by the one along its own.
-	viewportXKey = NewEnvKey[Viewport]("viewport x")
-	viewportYKey = NewEnvKey[Viewport]("viewport y")
+	viewportXKey = ggui.NewEnvKey[Viewport]("viewport x")
+	viewportYKey = ggui.NewEnvKey[Viewport]("viewport y")
 )
 
 // ScrollViewport returns the window of the nearest enclosing Scroll, if any.
-func ScrollViewport(env Env) (Viewport, bool) { return env.Get(viewportKey) }
+func ScrollViewport(env ggui.Env) (Viewport, bool) { return env.Get(viewportKey) }
 
 // viewportAlong returns the window of the nearest enclosing Scroll that
 // scrolls along the x axis, for horizontal, or the y axis.
-func viewportAlong(env Env, horizontal bool) (Viewport, bool) {
+func viewportAlong(env ggui.Env, horizontal bool) (Viewport, bool) {
 	return env.Get(gem.Pick(horizontal, viewportXKey, viewportYKey))
 }
 
@@ -49,17 +50,17 @@ type ScrollWidget struct {
 	// the content made a contained move since the last paint or as the
 	// last layout ran, and movedSinceLayout that it made one since the last
 	// layout began, which asks for another; see contain.
-	hold             LayoutBoundary
+	hold             ggui.LayoutBoundary
 	containedMove    bool
 	movedSinceLayout bool
 	props            property.Owner
-	child            Widget
+	child            ggui.Widget
 	horizontal       bool
 	shrink           bool // along its axis, as long as its content and no longer
 	speed            float64
 	bar              color.Color
 	barSet           bool
-	bound            Binding[float64]
+	bound            ggui.Binding[float64]
 	offset           float64
 	follow           bool
 	id               any
@@ -70,16 +71,16 @@ type ScrollWidget struct {
 	laidOut, decideAtPaint bool
 	adoptedAtEnd           *bool // whether the scroll it adopted was at its end
 
-	childSize   Size
-	viewport    Size
-	laidAt      float64 // the offset the child was last laid out for
-	anchorShift float64 // how far the child asked, as it laid out, to move to keep what is in view
-	rect        Rect    // where the window was last painted
-	thumbHit    Rect
+	childSize   ggui.Size
+	viewport    ggui.Size
+	laidAt      float64   // the offset the child was last laid out for
+	anchorShift float64   // how far the child asked, as it laid out, to move to keep what is in view
+	rect        ggui.Rect // where the window was last painted
+	thumbHit    ggui.Rect
 	// thumbID is the thumb's HitID as last boxed: of the key, or for a
 	// scroll with none of its rect.
 	thumbID               any
-	barEnv                Env // the last layout's: the bar is styled by it, and relayout asks under it
+	barEnv                ggui.Env // the last layout's: the bar is styled by it, and relayout asks under it
 	thumbHovered          bool
 	dragging              bool
 	dragStart, dragOffset float64
@@ -122,7 +123,7 @@ func (s *ScrollWidget) Adopt(prev any) {
 // Scroll lets child take any height and scrolls it within the space Scroll
 // is given. The offset lives in the widget and carries across a rebuild;
 // bind it to a StateValue with Offset to read or set it.
-func Scroll(child Widget) *ScrollWidget {
+func Scroll(child ggui.Widget) *ScrollWidget {
 	return &ScrollWidget{child: child, id: reactive.AutoID()}
 }
 
@@ -161,7 +162,7 @@ func (s *ScrollWidget) Bar(c color.Color) *ScrollWidget {
 // BindOffset binds the scroll position to sig: wheel input writes it, and
 // writing it scrolls. Use it to keep the position across rebuilds or to
 // scroll programmatically.
-func (s *ScrollWidget) BindOffset(sig Binding[float64]) *ScrollWidget {
+func (s *ScrollWidget) BindOffset(sig ggui.Binding[float64]) *ScrollWidget {
 	property.Require(sig, "BindOffset")
 	if !property.Same(s.bound, sig) {
 		s.bound = sig
@@ -190,7 +191,7 @@ func (s *ScrollWidget) Offset(v float64) *ScrollWidget {
 	return s
 }
 
-func (s *ScrollWidget) extent(sz Size) float64 { return gem.Pick(s.horizontal, sz.W, sz.H) }
+func (s *ScrollWidget) extent(sz ggui.Size) float64 { return gem.Pick(s.horizontal, sz.W, sz.H) }
 
 func (s *ScrollWidget) maxOffset() float64 {
 	over := s.extent(s.childSize) - s.extent(s.viewport)
@@ -210,7 +211,7 @@ const scrollSlack = 0.5
 
 func (s *ScrollWidget) position() float64 {
 	if s.bound != nil {
-		return Untrack(s.bound.Get)
+		return ggui.Untrack(s.bound.Get)
 	}
 	return s.offset
 }
@@ -236,7 +237,7 @@ func (s *ScrollWidget) scrollTo(v float64) {
 // caches above it hold its last layout, so it asks with Relayout under the
 // Env of its last layout, not with Invalidate. In contain, the layout it
 // asks for is held within the viewport.
-func (s *ScrollWidget) relayout() { Relayout(s.barEnv) }
+func (s *ScrollWidget) relayout() { ggui.Relayout(s.barEnv) }
 
 // contain runs move, which changes what the viewport shows and nothing
 // else when moves is set: the window moving, by the wheel, an animation or
@@ -279,10 +280,10 @@ func (s *ScrollWidget) moved() {
 // grew or shrank with its content, as a Shrink scroll's does, moved what
 // lies beside it, and the frame is painted whole; the next layout held is
 // the business of the boundary around this one.
-func (s *ScrollWidget) Layout(c Constraints, env Env) Size {
+func (s *ScrollWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	inner, check := s.hold.Begin(env)
 	s.movedSinceLayout = false
-	var size Size
+	var size ggui.Size
 	contained := s.containedMove
 	if contained {
 		reactive.Contained(func() { size = s.layout(c, env, inner) })
@@ -295,7 +296,7 @@ func (s *ScrollWidget) Layout(c Constraints, env Env) Size {
 
 // layout lays the scroll out under env, and its content under within, the
 // Env its boundary's Begin returned.
-func (s *ScrollWidget) layout(c Constraints, env, within Env) Size {
+func (s *ScrollWidget) layout(c ggui.Constraints, env, within ggui.Env) ggui.Size {
 	defer s.props.Layout().EndLayout()
 	s.barEnv = env
 	if !s.barSet {
@@ -303,9 +304,9 @@ func (s *ScrollWidget) layout(c Constraints, env, within Env) Size {
 	}
 	inner := c.Max()
 	if s.horizontal {
-		inner.W = Unbounded
+		inner.W = ggui.Unbounded
 	} else {
-		inner.H = Unbounded
+		inner.H = ggui.Unbounded
 	}
 	// Judged against the last layout, before the content can grow.
 	follow := s.follow && s.laidOut && s.atEnd()
@@ -319,14 +320,14 @@ func (s *ScrollWidget) layout(c Constraints, env, within Env) Size {
 		With(gem.Pick(s.horizontal, viewportXKey, viewportYKey), vp).With(gem.Pick(s.horizontal, scrollPortXKey, scrollPortYKey), s)
 	// What the content builds as it is laid out, rows mounting as they
 	// scroll in, reacts within the viewport too; see Layout.
-	reactive.InRegion(&s.containedMove, func() { s.childSize = s.child.Layout(Loose(inner), env) })
-	s.viewport = c.Constrain(Sz(gem.Bounded(c.MaxW, s.childSize.W), gem.Bounded(c.MaxH, s.childSize.H)))
+	reactive.InRegion(&s.containedMove, func() { s.childSize = s.child.Layout(ggui.Loose(inner), env) })
+	s.viewport = c.Constrain(ggui.Sz(gem.Bounded(c.MaxW, s.childSize.W), gem.Bounded(c.MaxH, s.childSize.H)))
 	if s.shrink {
 		// Constrain keeps it within c, so a tight c still decides.
 		if s.horizontal {
-			s.viewport.W = c.Constrain(Sz(s.childSize.W, 0)).W
+			s.viewport.W = c.Constrain(ggui.Sz(s.childSize.W, 0)).W
 		} else {
-			s.viewport.H = c.Constrain(Sz(0, s.childSize.H)).H
+			s.viewport.H = c.Constrain(ggui.Sz(0, s.childSize.H)).H
 		}
 	}
 	s.laidOut = true
@@ -363,7 +364,7 @@ func (s *ScrollWidget) followFirst() {
 func (s *ScrollWidget) atEnd() bool { return s.position() >= s.maxOffset()-0.5 }
 
 // Paint implements Widget.
-func (s *ScrollWidget) Paint(dst *Canvas, r Rect) {
+func (s *ScrollWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if s.position() != s.laidAt && !s.movedSinceLayout {
 		// Written through the bound signal since the layout: a virtualized
 		// child must be laid out again for the new window. A contained move
@@ -378,7 +379,7 @@ func (s *ScrollWidget) Paint(dst *Canvas, r Rect) {
 	dst.HitPointer(r, s) // adopts the scroll this one replaces
 	s.followFirst()
 	s.phys.paint(s)
-	dst.Node(r, Node{Role: RoleGroup, Actions: ActionScrollIntoView}, func(dst *Canvas) {
+	dst.Node(r, ggui.Node{Role: ggui.RoleGroup, Actions: ggui.ActionScrollIntoView}, func(dst *ggui.Canvas) {
 		clip := dst.Clip(r)
 		if s.fade <= 0 {
 			s.paintContent(clip, r)
@@ -386,7 +387,7 @@ func (s *ScrollWidget) Paint(dst *Canvas, r Rect) {
 		}
 		pos := s.position()
 		lead, trail := min(s.fade, max(pos, 0)), min(s.fade, max(s.maxOffset()-pos, 0))
-		clip.FadeEdges(r, s.horizontal, lead, trail, func(dst *Canvas) { s.paintContent(dst, r) })
+		clip.FadeEdges(r, s.horizontal, lead, trail, func(dst *ggui.Canvas) { s.paintContent(dst, r) })
 	})
 	s.paintBar(dst, r)
 }
@@ -407,47 +408,47 @@ func (s *ScrollWidget) thumbLength() float64 {
 	return min(track, max(track*track/s.extent(s.childSize), 16))
 }
 
-func (s *ScrollWidget) paintBar(dst *Canvas, r Rect) {
-	s.thumbHit = Rect{}
+func (s *ScrollWidget) paintBar(dst *ggui.Canvas, r ggui.Rect) {
+	s.thumbHit = ggui.Rect{}
 	track, content := s.extent(r.Size), s.extent(s.childSize)
-	bar := ResolveColor(s.bar, s.barEnv)
+	bar := ggui.ResolveColor(s.bar, s.barEnv)
 	if bar == nil || content-track < scrollSlack || track <= 0 {
 		s.dragging, s.thumbHovered = false, false
 		return
 	}
 	style := s.barEnv.ScrollStyle()
 	active := s.thumbHovered || s.dragging
-	amount := dst.Ease(Anchor{Rect: r, ID: scrollThumb{s}.HitID()}, scrollThumbHoverSlot, gem.Pick(active, 1.0, 0.0), s.barEnv.Motion(style.Duration))
+	amount := dst.Ease(ggui.Anchor{Rect: r, ID: scrollThumb{s}.HitID()}, scrollThumbHoverSlot, gem.Pick(active, 1.0, 0.0), s.barEnv.Motion(style.Duration))
 	fill := bar
 	if amount > 0 {
 		// Keep the thumb close to its resting gray, including while dragging.
-		fill = LerpColor(bar, style.HoverColor, amount*gem.Pick(s.dragging, .28, .18))
+		fill = ggui.LerpColor(bar, style.HoverColor, amount*gem.Pick(s.dragging, .28, .18))
 	}
 	thumb := s.thumbLength()
 	at := (track - thumb) * s.position() / s.maxOffset()
-	var visual Rect
-	visual, s.thumbHit = style.thumbRects(r, s.horizontal, at, thumb, amount)
+	var visual ggui.Rect
+	visual, s.thumbHit = thumbRects(style, r, s.horizontal, at, thumb, amount)
 	// Register after the content so grabbing the thumb never activates a row.
 	dst.HitPointer(s.thumbHit, scrollThumb{s})
-	dst.HitCursor(s.thumbHit, CursorShapePointer)
+	dst.HitCursor(s.thumbHit, ggui.CursorShapePointer)
 	dst.Clip(r).FillRoundRect(visual, min(visual.Size.W, visual.Size.H)/2, fill)
 }
 
 // thumbRects places a thumb of length thumb, at along the bar of a scroll
 // painted in r: where it is drawn, amount of the way from its resting
 // thickness to its hovered one, and where it is grabbed, which is across at
-// least 10 logical pixels however thin it is drawn. s is a resolved style,
-// as Env.ScrollStyle returns.
-func (s ScrollStyle) thumbRects(r Rect, horizontal bool, at, thumb, amount float64) (visual, hit Rect) {
+// least 10 logical pixels however thin it is drawn, with s, a resolved
+// style as Env.ScrollStyle returns it.
+func thumbRects(s ggui.ScrollStyle, r ggui.Rect, horizontal bool, at, thumb, amount float64) (visual, hit ggui.Rect) {
 	thickness := s.Thickness + (s.HoverThickness-s.Thickness)*amount
 	hitWidth := max(10, max(s.Thickness, s.HoverThickness)+2*s.Margin)
 	if horizontal {
-		visual = Rct(Pt(r.Origin.X+at, r.Origin.Y+r.Size.H-thickness-s.Margin), Sz(thumb, thickness))
-		hit = Rct(Pt(r.Origin.X+at, r.Origin.Y+max(0, r.Size.H-hitWidth)), Sz(thumb, min(hitWidth, r.Size.H)))
+		visual = ggui.Rct(ggui.Pt(r.Origin.X+at, r.Origin.Y+r.Size.H-thickness-s.Margin), ggui.Sz(thumb, thickness))
+		hit = ggui.Rct(ggui.Pt(r.Origin.X+at, r.Origin.Y+max(0, r.Size.H-hitWidth)), ggui.Sz(thumb, min(hitWidth, r.Size.H)))
 		return visual, hit
 	}
-	visual = Rct(Pt(r.Origin.X+r.Size.W-thickness-s.Margin, r.Origin.Y+at), Sz(thickness, thumb))
-	hit = Rct(Pt(r.Origin.X+max(0, r.Size.W-hitWidth), r.Origin.Y+at), Sz(min(hitWidth, r.Size.W), thumb))
+	visual = ggui.Rct(ggui.Pt(r.Origin.X+r.Size.W-thickness-s.Margin, r.Origin.Y+at), ggui.Sz(thickness, thumb))
+	hit = ggui.Rct(ggui.Pt(r.Origin.X+max(0, r.Size.W-hitWidth), r.Origin.Y+at), ggui.Sz(min(hitWidth, r.Size.W), thumb))
 	return visual, hit
 }
 
@@ -455,13 +456,13 @@ func (s ScrollStyle) thumbRects(r Rect, horizontal bool, at, thumb, amount float
 // viewport when keyboard focus asks enclosing Revealer widgets to move.
 type scrollThumb struct{ scroll *ScrollWidget }
 
-var scrollThumbHoverSlot = NewSlot[*Motion]("scroll thumb hover")
+var scrollThumbHoverSlot = ggui.NewSlot[*ggui.Motion]("scroll thumb hover")
 
-func (h scrollThumb) HandlePointer(ev PointerEvent) bool {
+func (h scrollThumb) HandlePointer(ev ggui.PointerEvent) bool {
 	switch ev.Kind {
-	case PointerMove, PointerEnter:
+	case ggui.PointerMove, ggui.PointerEnter:
 		h.scroll.thumbHovered = h.scroll.thumbHit.Contains(ev.Pos)
-	case PointerExit:
+	case ggui.PointerExit:
 		h.scroll.thumbHovered = false
 	}
 	return h.scroll.HandlePointer(ev)
@@ -477,8 +478,8 @@ func (h scrollThumb) HitID() any {
 		}
 		return s.thumbID
 	}
-	if id, ok := s.thumbID.(struct{ Thumb Rect }); !ok || id.Thumb != s.rect {
-		s.thumbID = struct{ Thumb Rect }{s.rect}
+	if id, ok := s.thumbID.(struct{ Thumb ggui.Rect }); !ok || id.Thumb != s.rect {
+		s.thumbID = struct{ Thumb ggui.Rect }{s.rect}
 	}
 	return s.thumbID
 }
@@ -489,10 +490,10 @@ func (s *ScrollWidget) CaptureTouchDrag() bool { return s.dragging }
 // Reveal implements Revealer: the window moves the least it must for
 // target, in window coordinates, to be inside it. Focus moved by the
 // keyboard calls it.
-func (s *ScrollWidget) Reveal(target Rect) {
+func (s *ScrollWidget) Reveal(target ggui.Rect) {
 	// Only a target inside the content, which may lie beyond the window
 	// along the axis but not across it.
-	content := Rct(s.rect.Origin, s.childSize)
+	content := ggui.Rct(s.rect.Origin, s.childSize)
 	if s.horizontal {
 		content.Origin.X -= s.position()
 		content.Size.H = s.rect.Size.H
@@ -521,16 +522,16 @@ func (s *ScrollWidget) Reveal(target Rect) {
 
 // HandlePointer implements PointerHandler: wheel movement along the scroll
 // axis moves the window.
-func (s *ScrollWidget) HandlePointer(ev PointerEvent) bool {
+func (s *ScrollWidget) HandlePointer(ev ggui.PointerEvent) bool {
 	axis := gem.Pick(s.horizontal, ev.Pos.X, ev.Pos.Y)
 	switch ev.Kind {
-	case PointerDown:
-		if ev.Button != MouseButtonLeft || !s.thumbHit.Contains(ev.Pos) || s.extent(s.rect.Size) <= s.thumbLength() {
+	case ggui.PointerDown:
+		if ev.Button != ggui.MouseButtonLeft || !s.thumbHit.Contains(ev.Pos) || s.extent(s.rect.Size) <= s.thumbLength() {
 			return false
 		}
 		s.dragging, s.dragStart, s.dragOffset = true, axis, s.position()
 		return true
-	case PointerDrag:
+	case ggui.PointerDrag:
 		if !s.dragging {
 			return false
 		}
@@ -540,24 +541,24 @@ func (s *ScrollWidget) HandlePointer(ev PointerEvent) bool {
 			s.scrollTo(s.dragOffset + (axis-s.dragStart)*s.maxOffset()/travel)
 		}
 		return true
-	case PointerUp:
-		if !s.dragging || ev.Button != MouseButtonLeft {
+	case ggui.PointerUp:
+		if !s.dragging || ev.Button != ggui.MouseButtonLeft {
 			return false
 		}
 		s.dragging = false
 		return true
-	case PointerMove, PointerEnter:
+	case ggui.PointerMove, ggui.PointerEnter:
 		return s.thumbHit.Contains(ev.Pos)
-	case PointerTap:
+	case ggui.PointerTap:
 		return s.thumbHit.Contains(ev.Pos)
 	}
 
-	if ev.Kind != PointerScroll {
+	if ev.Kind != ggui.PointerScroll {
 		return false
 	}
 	by := ev.ScrollBy()
 	if s.speed > 0 && !ev.ScrollPixels {
-		by = Pt(ev.Scroll.X*s.speed, ev.Scroll.Y*s.speed)
+		by = ggui.Pt(ev.Scroll.X*s.speed, ev.Scroll.Y*s.speed)
 	}
 	delta := gem.Pick(s.horizontal, by.X, by.Y)
 	if delta == 0 || s.maxOffset() == 0 {
@@ -597,8 +598,8 @@ func (s *ScrollWidget) wheelStep(d float64) bool {
 	}
 	p.input(s)
 	p.dir = math.Copysign(1, to-from)
-	now := FrameTime()
-	p.anim = Motion{}
+	now := ggui.FrameTime()
+	p.anim = ggui.Motion{}
 	p.anim.MoveTo(from, now, 0)
 	p.anim.MoveTo(to, now, ease)
 	p.animating, p.stepping = true, true
@@ -653,13 +654,13 @@ type scrollPhysics struct {
 // one carries on with.
 type scrollMotionState struct {
 	over       float64 // how far the content is pulled past an end: offset minus where it shows
-	overMotion Motion
+	overMotion ggui.Motion
 	relaxing   bool // over is springing back
 	lastInput  time.Time
 	from       float64 // the offset when the gesture began
 	dir        float64 // the sign of the last movement
 	settle     bool    // waiting for input to pause
-	anim       Motion
+	anim       ggui.Motion
 	animating  bool
 	stepping   bool // anim is a wheel's notch easing; see wheelStep
 }
@@ -696,7 +697,7 @@ func (s *ScrollWidget) Paging() *ScrollWidget {
 // input notes a scroll gesture: what settling waits on and where it began.
 // It stops a programmatic scroll and a spring-back under way.
 func (p *scrollPhysics) input(s *ScrollWidget) {
-	now := FrameTime()
+	now := ggui.FrameTime()
 	if p.lastInput.IsZero() || now.Sub(p.lastInput) >= scrollSettleDelay {
 		p.from = s.position()
 	}
@@ -704,7 +705,7 @@ func (p *scrollPhysics) input(s *ScrollWidget) {
 	p.animating, p.stepping, p.relaxing = false, false, false
 	p.settle = p.mode != OverscrollClamp || p.snap > 0 || p.paging
 	if p.settle {
-		WakeAt(now.Add(scrollSettleDelay))
+		ggui.WakeAt(now.Add(scrollSettleDelay))
 	}
 }
 
@@ -746,7 +747,7 @@ func (s *ScrollWidget) wheelBy(d float64, momentum bool) bool {
 		p.dir = math.Copysign(1, -d)
 	}
 	if p.over != over {
-		Now() // a frame for the content pulled past its end
+		ggui.Now() // a frame for the content pulled past its end
 	}
 	if momentum && math.Abs(p.over) >= s.extent(s.viewport)/8 {
 		return false // a fling that reached the end stops there and bounces back
@@ -766,7 +767,7 @@ func (p *scrollPhysics) step(s *ScrollWidget) {
 	if !p.animating {
 		return
 	}
-	v := p.anim.Value(FrameTime())
+	v := p.anim.Value(ggui.FrameTime())
 	if v == p.anim.Target() {
 		p.animating = false
 	}
@@ -800,7 +801,7 @@ func (p *scrollPhysics) reapply(s *ScrollWidget) {
 // paint keeps a programmatic scroll and a spring-back moving, and settles
 // a scroll once its input pauses.
 func (p *scrollPhysics) paint(s *ScrollWidget) {
-	now := FrameTime()
+	now := ggui.FrameTime()
 	p.applied, p.painted = nil, true // Adopt, if any, has run
 	if p.animating {
 		s.contain(true, s.relayout) // the next frame lays out the child for the next step
@@ -813,12 +814,12 @@ func (p *scrollPhysics) paint(s *ScrollWidget) {
 		return
 	}
 	if wait := p.lastInput.Add(scrollSettleDelay); now.Before(wait) {
-		WakeAt(wait)
+		ggui.WakeAt(wait)
 		return
 	}
 	p.settle = false
 	if p.over != 0 {
-		p.overMotion = Motion{}
+		p.overMotion = ggui.Motion{}
 		p.overMotion.MoveTo(p.over, now, 0)
 		p.overMotion.MoveTo(0, now, s.barEnv.Motion(scrollSpringBack))
 		p.over = p.overMotion.Value(now)
@@ -855,8 +856,8 @@ func (s *ScrollWidget) animateTo(v float64, animate bool) {
 		s.jumpTo(v)
 		return
 	}
-	now := FrameTime()
-	p.anim = Motion{}
+	now := ggui.FrameTime()
+	p.anim = ggui.Motion{}
 	p.anim.MoveTo(s.position(), now, 0)
 	p.anim.MoveTo(v, now, d)
 	p.animating, p.stepping = true, false
@@ -880,7 +881,7 @@ func (s *ScrollWidget) jumpTo(v float64) {
 
 // paintContent paints the child at the window's offset, moved or stretched
 // by any overscroll.
-func (s *ScrollWidget) paintContent(dst *Canvas, r Rect) {
+func (s *ScrollWidget) paintContent(dst *ggui.Canvas, r ggui.Rect) {
 	p := &s.phys
 	off := s.visualOffset()
 	origin := r.Origin
@@ -889,7 +890,7 @@ func (s *ScrollWidget) paintContent(dst *Canvas, r Rect) {
 	} else {
 		origin.Y -= off
 	}
-	content := Rct(origin, s.childSize)
+	content := ggui.Rct(origin, s.childSize)
 	extent := s.extent(r.Size)
 	if p.mode != OverscrollStretch || p.over == 0 || extent <= 0 || dst == nil || dst.Image == nil {
 		dst.Paint(s.child, content)
@@ -900,10 +901,10 @@ func (s *ScrollWidget) paintContent(dst *Canvas, r Rect) {
 	k := kinetics.Stretch(p.over, extent)
 	about := r.Origin
 	if p.over < 0 {
-		about = about.Add(gem.Pick(s.horizontal, Pt(r.Size.W, 0), Pt(0, r.Size.H)))
+		about = about.Add(gem.Pick(s.horizontal, ggui.Pt(r.Size.W, 0), ggui.Pt(0, r.Size.H)))
 	}
 	sx, sy := gem.Pick(s.horizontal, k, 1.0), gem.Pick(s.horizontal, 1.0, k)
-	dst.Transform(Affine{}.Scale(sx, sy).About(about), func(dst *Canvas) { dst.Paint(s.child, content) })
+	dst.Transform(ggui.Affine{}.Scale(sx, sy).About(about), func(dst *ggui.Canvas) { dst.Paint(s.child, content) })
 }
 
 // visualOffset is the offset the content is drawn at, past either end
@@ -918,20 +919,20 @@ func (s *ScrollWidget) visualOffset() float64 {
 // scrollPortKey carries the nearest Scroll to its subtree, so a sticky
 // header can find the window's edge and a list can answer ScrollToKey.
 var (
-	scrollPortKey  = NewEnvKey[*ScrollWidget]("scroll port")
-	scrollPortXKey = NewEnvKey[*ScrollWidget]("scroll port x")
-	scrollPortYKey = NewEnvKey[*ScrollWidget]("scroll port y")
+	scrollPortKey  = ggui.NewEnvKey[*ScrollWidget]("scroll port")
+	scrollPortXKey = ggui.NewEnvKey[*ScrollWidget]("scroll port x")
+	scrollPortYKey = ggui.NewEnvKey[*ScrollWidget]("scroll port y")
 )
 
 // scrollPortAlong returns the nearest enclosing Scroll along the x axis,
 // for horizontal, or the y axis.
-func scrollPortAlong(env Env, horizontal bool) *ScrollWidget {
+func scrollPortAlong(env ggui.Env, horizontal bool) *ScrollWidget {
 	s, _ := env.Get(gem.Pick(horizontal, scrollPortXKey, scrollPortYKey))
 	return s
 }
 
 // scrollPortOf returns the nearest enclosing Scroll in env, if any.
-func scrollPortOf(env Env) *ScrollWidget {
+func scrollPortOf(env ggui.Env) *ScrollWidget {
 	s, _ := env.Get(scrollPortKey)
 	return s
 }
@@ -942,8 +943,8 @@ func scrollPortOf(env Env) *ScrollWidget {
 // effects or posted work. A request made before the scroll is first laid
 // out is kept until it is.
 //
-//	var sc ggui.ScrollController
-//	ggui.Scroll(list).Controller(&sc)
+//	var sc widget.ScrollController
+//	widget.Scroll(list).Controller(&sc)
 //	// in a handler:
 //	sc.ScrollTo(0)
 //	sc.ScrollToKey(todo.ID)
@@ -1077,12 +1078,12 @@ func (s *ScrollWidget) keyPending() bool {
 // out by the section after it. Build one with Sticky.
 type StickyWidget struct {
 	props      property.Owner
-	header     Widget
-	body       Widget
+	header     ggui.Widget
+	body       ggui.Widget
 	port       *ScrollWidget
 	horizontal bool
-	headerSize Size
-	bodySize   Size
+	headerSize ggui.Size
+	bodySize   ggui.Size
 	pinned     bool
 }
 
@@ -1093,11 +1094,11 @@ type StickyWidget struct {
 // to the next. In a horizontal Scroll the header leads on the left and
 // pins to the left edge. Outside a Scroll it is a plain header and body.
 //
-//	ggui.Scroll(ggui.Column(
-//		ggui.Sticky(ui.Title("A"), ggui.List(as, row)),
-//		ggui.Sticky(ui.Title("B"), ggui.List(bs, row)),
+//	widget.Scroll(widget.Column(
+//		widget.Sticky(ui.Title("A"), widget.List(as, row)),
+//		widget.Sticky(ui.Title("B"), widget.List(bs, row)),
 //	).Stretch())
-func Sticky(header, body Widget) *StickyWidget {
+func Sticky(header, body ggui.Widget) *StickyWidget {
 	return &StickyWidget{header: header, body: body}
 }
 
@@ -1106,10 +1107,10 @@ func Sticky(header, body Widget) *StickyWidget {
 // floats over the content reads.
 func (s *StickyWidget) Pinned() bool { return s.pinned }
 
-func (s *StickyWidget) main(z Size) float64 { return gem.Pick(s.horizontal, z.W, z.H) }
+func (s *StickyWidget) main(z ggui.Size) float64 { return gem.Pick(s.horizontal, z.W, z.H) }
 
 // Layout implements Widget.
-func (s *StickyWidget) Layout(c Constraints, env Env) Size {
+func (s *StickyWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer s.props.Layout().EndLayout()
 	s.port = scrollPortOf(env)
 	s.horizontal = false
@@ -1119,13 +1120,13 @@ func (s *StickyWidget) Layout(c Constraints, env Env) Size {
 	// Across the axis both stretch to the section, so a pinned header
 	// covers the rows passing under it.
 	cross := gem.Pick(s.horizontal, c.MaxH, c.MaxW)
-	child := func(w Widget, crossMin float64) Size {
+	child := func(w ggui.Widget, crossMin float64) ggui.Size {
 		if s.horizontal {
-			return w.Layout(Constraints{MinH: crossMin, MaxW: Unbounded, MaxH: cross}, env)
+			return w.Layout(ggui.Constraints{MinH: crossMin, MaxW: ggui.Unbounded, MaxH: cross}, env)
 		}
-		return w.Layout(Constraints{MinW: crossMin, MaxW: cross, MaxH: Unbounded}, env)
+		return w.Layout(ggui.Constraints{MinW: crossMin, MaxW: cross, MaxH: ggui.Unbounded}, env)
 	}
-	stretch := gem.Pick(cross >= Unbounded, 0, cross)
+	stretch := gem.Pick(cross >= ggui.Unbounded, 0, cross)
 	s.headerSize = child(s.header, stretch)
 	s.bodySize = child(s.body, stretch)
 	if stretch == 0 {
@@ -1135,27 +1136,27 @@ func (s *StickyWidget) Layout(c Constraints, env Env) Size {
 		s.bodySize = child(s.body, w)
 	}
 	if s.horizontal {
-		return c.Constrain(Sz(s.headerSize.W+s.bodySize.W, max(s.headerSize.H, s.bodySize.H)))
+		return c.Constrain(ggui.Sz(s.headerSize.W+s.bodySize.W, max(s.headerSize.H, s.bodySize.H)))
 	}
-	return c.Constrain(Sz(max(s.headerSize.W, s.bodySize.W), s.headerSize.H+s.bodySize.H))
+	return c.Constrain(ggui.Sz(max(s.headerSize.W, s.bodySize.W), s.headerSize.H+s.bodySize.H))
 }
 
 // Paint implements Widget. The body paints first so the header, painted
 // over it, takes the input where the two overlap.
-func (s *StickyWidget) Paint(dst *Canvas, r Rect) {
+func (s *StickyWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	lead := s.main(s.headerSize)
-	body := Rct(r.Origin.Add(gem.Pick(s.horizontal, Pt(lead, 0), Pt(0, lead))), s.bodySize)
+	body := ggui.Rct(r.Origin.Add(gem.Pick(s.horizontal, ggui.Pt(lead, 0), ggui.Pt(0, lead))), s.bodySize)
 	dst.Paint(s.body, body)
 	at := pinAt(s.port, s.horizontal, r, lead)
 	s.pinned = at != 0
-	header := Rct(r.Origin.Add(gem.Pick(s.horizontal, Pt(at, 0), Pt(0, at))), s.headerSize)
+	header := ggui.Rct(r.Origin.Add(gem.Pick(s.horizontal, ggui.Pt(at, 0), ggui.Pt(0, at))), s.headerSize)
 	dst.Paint(s.header, header)
 }
 
 // pinAt returns how far past its own place a header of length lead moves
 // to stay at the start of port's window, staying inside the section r so
 // the section's end pushes it out.
-func pinAt(port *ScrollWidget, horizontal bool, r Rect, lead float64) float64 {
+func pinAt(port *ScrollWidget, horizontal bool, r ggui.Rect, lead float64) float64 {
 	edge, ok := portEdge(port, horizontal, r)
 	if !ok {
 		return 0
@@ -1165,7 +1166,7 @@ func pinAt(port *ScrollWidget, horizontal bool, r Rect, lead float64) float64 {
 
 // portEdge returns how far past the start of r, along the axis, port's
 // window starts, and false when there is no port scrolling along it.
-func portEdge(port *ScrollWidget, horizontal bool, r Rect) (float64, bool) {
+func portEdge(port *ScrollWidget, horizontal bool, r ggui.Rect) (float64, bool) {
 	if port == nil || port.horizontal != horizontal {
 		return 0, false
 	}

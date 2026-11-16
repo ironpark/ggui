@@ -266,12 +266,12 @@ func TestFieldNamePriority(t *testing.T) {
 		{"textfield", func() namedControl { return ui.TextField(ggui.State("")).Placeholder("Hint") }},
 		{"combobox", func() namedControl { return ui.Combobox(ggui.State(1)).Options([]int{1, 2}) }},
 		{"datepicker", func() namedControl { return ui.DatePicker(ggui.State(time.Time{})) }},
-		{"menu", func() namedControl { return ui.MenuOf(ggui.Text("Icon"), ui.MenuItem("Open", nil)) }},
+		{"menu", func() namedControl { return ui.MenuOf(widget.Text("Icon"), ui.MenuItem("Open", nil)) }},
 		{"radios", func() namedControl { return ui.Radios(ggui.State(1)).Options([]int{1, 2}) }},
 		{"toggle group", func() namedControl { return ui.ToggleGroup(ggui.State(1)).Options([]int{1, 2}) }},
 		{"calendar", func() namedControl { return ui.Calendar(ggui.State(time.Time{})) }},
 		{"accordion", func() namedControl {
-			return ui.Accordion(ggui.State([]string{}), ui.AccordionItem("a", "A", ggui.Text("Body")))
+			return ui.Accordion(ggui.State([]string{}), ui.AccordionItem("a", "A", widget.Text("Body")))
 		}},
 		{"input group", func() namedControl { return ui.InputGroup(widget.TextInput(ggui.State("")).Placeholder("Hint")) }},
 	}
@@ -368,7 +368,7 @@ func TestDisabledSettingsAcrossControls(t *testing.T) {
 		checkDisabled(t, ui.InputOTP(ggui.State(""), 6).Name("Code"), ggui.RoleTextField, "Code")
 	})
 	t.Run("carousel", func(t *testing.T) {
-		checkDisabled(t, ui.Carousel(ggui.State(0), ggui.Text("1"), ggui.Text("2")).Name("Slides"), ggui.RoleGroup, "Slides")
+		checkDisabled(t, ui.Carousel(ggui.State(0), widget.Text("1"), widget.Text("2")).Name("Slides"), ggui.RoleGroup, "Slides")
 	})
 	t.Run("button", func(t *testing.T) { checkDisabled(t, ui.Button("B", nil), ggui.RoleButton, "B") })
 	t.Run("checkbox", func(t *testing.T) { checkDisabled(t, ui.Checkbox(ggui.State(false), "C"), ggui.RoleCheckbox, "C") })
@@ -399,10 +399,10 @@ func TestDisabledSettingsAcrossControls(t *testing.T) {
 	t.Run("menu", func(t *testing.T) { checkDisabled(t, ui.Menu("M", ui.MenuItem("Open", nil)), ggui.RoleMenu, "M") })
 	t.Run("menu item", func(t *testing.T) { checkDisabled(t, ui.MenuItem("Open", nil), ggui.RoleMenuItem, "Open") })
 	t.Run("contextmenu", func(t *testing.T) {
-		checkDisabled(t, ui.ContextMenu(ggui.Text("Content"), ui.MenuItem("Open", nil)), ggui.RoleMenu, "Context menu")
+		checkDisabled(t, ui.ContextMenu(widget.Text("Content"), ui.MenuItem("Open", nil)), ggui.RoleMenu, "Context menu")
 	})
 	t.Run("tabs", func(t *testing.T) {
-		checkDisabled(t, ui.Tabs(ggui.State(0), ui.Tab("T", ggui.Text("Page"))), ggui.RoleTab, "T")
+		checkDisabled(t, ui.Tabs(ggui.State(0), ui.Tab("T", widget.Text("Page"))), ggui.RoleTab, "T")
 	})
 	t.Run("calendar", func(t *testing.T) {
 		checkDisabled(t, ui.Calendar(ggui.State(time.Time{})), ggui.RoleButton, "Next month")
@@ -414,10 +414,10 @@ func TestDisabledSettingsAcrossControls(t *testing.T) {
 		checkDisabled(t, ui.Sidebar(ggui.State("a"), ui.SidebarItem("a", "A")), ggui.RoleTab, "A")
 	})
 	t.Run("resizable", func(t *testing.T) {
-		checkDisabled(t, ui.Resizable(ggui.State(.5), ggui.Text("A"), ggui.Text("B")), ggui.RoleSeparator, "Resize panels")
+		checkDisabled(t, ui.Resizable(ggui.State(.5), widget.Text("A"), widget.Text("B")), ggui.RoleSeparator, "Resize panels")
 	})
 	t.Run("collapsible", func(t *testing.T) {
-		checkDisabled(t, ui.Collapsible(ggui.State(true), "C", ggui.Text("Body")), ggui.RoleDisclosure, "C")
+		checkDisabled(t, ui.Collapsible(ggui.State(true), "C", widget.Text("Body")), ggui.RoleDisclosure, "C")
 	})
 	t.Run("toggle group", func(t *testing.T) {
 		checkDisabled(t, ui.ToggleGroup(ggui.State(1)).Options([]int{1, 2}), ggui.RoleRadio, "1")
@@ -427,7 +427,7 @@ func TestDisabledSettingsAcrossControls(t *testing.T) {
 func checkPopupDisabled[W interface {
 	ggui.Widget
 	BindDisabled(ggui.Readable[bool]) W
-	Popup() *ggui.PopupWidget
+	Popup() *widget.PopupWidget
 }](t *testing.T, w W) {
 	busy := ggui.State(false)
 	w.BindDisabled(busy)
@@ -465,7 +465,7 @@ func TestReactiveDisabledClosesPopups(t *testing.T) {
 	t.Run("datepicker", func(t *testing.T) { checkPopupDisabled(t, ui.DatePicker(ggui.State(time.Time{}))) })
 	t.Run("menu", func(t *testing.T) { checkPopupDisabled(t, ui.Menu("M", ui.MenuItem("Open", nil))) })
 	t.Run("contextmenu", func(t *testing.T) {
-		checkPopupDisabled(t, ui.ContextMenu(ggui.Text("Content"), ui.MenuItem("Open", nil)))
+		checkPopupDisabled(t, ui.ContextMenu(widget.Text("Content"), ui.MenuItem("Open", nil)))
 	})
 }
 

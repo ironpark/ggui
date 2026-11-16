@@ -6,6 +6,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestBreadcrumbSeparatesStepsWithAChevronTextOrAWidget(t *testing.T) {
@@ -47,9 +48,9 @@ func TestBreadcrumbWrapsWhenTheTrailIsTooLong(t *testing.T) {
 	for _, label := range []string{"Workspace", "Documentation", "Components", "Navigation", "Trail"} {
 		crumbs = append(crumbs, ui.Crumb(label, func() {}))
 	}
-	wide := ggui.NewProbe(ggui.Column(ui.Breadcrumb(crumbs...)), ggui.Sz(900, 200))
+	wide := ggui.NewProbe(widget.Column(ui.Breadcrumb(crumbs...)), ggui.Sz(900, 200))
 	defer wide.Close()
-	narrow := ggui.NewProbe(ggui.Column(ui.Breadcrumb(crumbs...)), ggui.Sz(220, 200))
+	narrow := ggui.NewProbe(widget.Column(ui.Breadcrumb(crumbs...)), ggui.Sz(220, 200))
 	defer narrow.Close()
 	first, _ := narrow.Semantics().Find(ggui.RoleLink, "Workspace")
 	last, ok := narrow.Semantics().Find(ggui.RoleText, "Trail")

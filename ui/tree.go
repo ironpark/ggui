@@ -9,6 +9,7 @@ import (
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // TreeWidget is a hierarchy of keyed rows, each indented by its depth with a
@@ -33,8 +34,8 @@ type TreeWidget[T any, K comparable] struct {
 	height        float64
 
 	flat    *ggui.DerivedValue[[]treeEntry[T, K]]
-	body    *ggui.EachWidget[treeEntry[T, K], K]
-	scroll  *ggui.ScrollWidget
+	body    *widget.EachWidget[treeEntry[T, K], K]
+	scroll  *widget.ScrollWidget
 	offset  *ggui.StateValue[float64]
 	content ggui.Widget
 	viewH   float64
@@ -59,7 +60,7 @@ type treeEntry[T any, K comparable] struct {
 //	ui.Tree(roots, func(f File) string { return f.Path },
 //		func(f File) []File { return f.Children },
 //		func(f ggui.Readable[File]) ggui.Widget {
-//			return ggui.TextOf(ggui.Map(f, func(f File) string { return f.Name }))
+//			return widget.TextOf(ggui.Map(f, func(f File) string { return f.Name }))
 //		},
 //	).RowName(func(f File) string { return f.Name }).BindSelected(chosen).Height(320)
 func Tree[T any, K comparable](roots ggui.Readable[[]T], key func(T) K, children func(T) []T, label func(ggui.Readable[T]) ggui.Widget) *TreeWidget[T, K] {
@@ -67,11 +68,11 @@ func Tree[T any, K comparable](roots ggui.Readable[[]T], key func(T) K, children
 	t.label = func(item T) string { return sprint(key(item)) }
 	t.expanded = ggui.State[ggui.Binding[map[K]bool]](ggui.State(map[K]bool{}))
 	t.flat = ggui.Derived(func() []treeEntry[T, K] { return t.flatten(roots.Get(), t.expanded.Get().Get()) })
-	t.body = ggui.EachKeyed(t.flat, func(e treeEntry[T, K]) K { return e.key }, func(row ggui.EachItem[treeEntry[T, K]]) ggui.Widget {
+	t.body = widget.EachKeyed(t.flat, func(e treeEntry[T, K]) K { return e.key }, func(row widget.EachItem[treeEntry[T, K]]) ggui.Widget {
 		return t.row(row, label)
-	}).Gap(0).Align(ggui.AlignStretch).Unlisted().ItemExtent(t.rowH)
+	}).Gap(0).Align(widget.AlignStretch).Unlisted().ItemExtent(t.rowH)
 	t.offset = ggui.State(0.0)
-	t.scroll = ggui.Scroll(t.body).BindOffset(t.offset)
+	t.scroll = widget.Scroll(t.body).BindOffset(t.offset)
 	t.content = t.body
 	return t
 }
@@ -213,12 +214,12 @@ func (t *TreeWidget[T, K]) Height(h float64) *TreeWidget[T, K] {
 	return t
 }
 
-func (t *TreeWidget[T, K]) row(row ggui.EachItem[treeEntry[T, K]], label func(ggui.Readable[T]) ggui.Widget) ggui.Widget {
+func (t *TreeWidget[T, K]) row(row widget.EachItem[treeEntry[T, K]], label func(ggui.Readable[T]) ggui.Widget) ggui.Widget {
 	item := ggui.Map(row.Value, func(e treeEntry[T, K]) T { return e.item })
 	e := ggui.Untrack(row.Value.Get)
-	r := &treeRow[T, K]{tree: t, entry: row.Value, index: row.Index, key: e.key, label: ggui.Align(label(item)).At(0, .5)}
+	r := &treeRow[T, K]{tree: t, entry: row.Value, index: row.Index, key: e.key, label: widget.Align(label(item)).At(0, .5)}
 	r.toggle.row = r
-	r.box = ggui.Box(r.label)
+	r.box = widget.Box(r.label)
 	r.Role = ggui.RoleTreeItem
 	r.SetName(t.label(e.item))
 	r.AutoKey()
@@ -290,7 +291,7 @@ type treeRow[T any, K comparable] struct {
 	index  ggui.Readable[int]
 	key    K
 	label  ggui.Widget
-	box    *ggui.BoxWidget
+	box    *widget.BoxWidget
 	toggle treeToggle[T, K]
 	env    ggui.Env
 	theme  *uitheme.Theme

@@ -7,6 +7,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // calendarDates counts the described days named date.
@@ -23,7 +24,7 @@ func calendarDates(p *ggui.Probe, date string) int {
 func TestCalendarMeasuresFromItsCells(t *testing.T) {
 	t.Parallel()
 	c := ui.Calendar(ggui.State(civil(2026, time.June, 10))).Location(time.UTC)
-	p := ggui.NewProbe(ggui.Column(c).Align(ggui.AlignStart), ggui.Sz(600, 600))
+	p := ggui.NewProbe(widget.Column(c).Align(widget.AlignStart), ggui.Sz(600, 600))
 	defer p.Close()
 	// Seven 28px cells between 8px of padding.
 	group := semNode(t, p, ggui.RoleGroup, "Calendar")
@@ -51,7 +52,7 @@ func TestCalendarMonthsShowsEachDateOnceAndSlidesByOne(t *testing.T) {
 	t.Parallel()
 	value := ggui.State(ui.DateRange{Start: civil(2026, time.June, 29), End: civil(2026, time.July, 2)})
 	c := ui.CalendarRange(value).Location(time.UTC).Months(2)
-	p := ggui.NewProbe(ggui.Column(c).Align(ggui.AlignStart), ggui.Sz(600, 400))
+	p := ggui.NewProbe(widget.Column(c).Align(widget.AlignStart), ggui.Sz(600, 400))
 	defer p.Close()
 	if w := semNode(t, p, ggui.RoleGroup, "Calendar").Rect.Size.W; w != 2*7*28+16+16 {
 		t.Fatalf("two months are %v wide, want 424", w)
@@ -78,7 +79,7 @@ func TestCalendarMonthsShowsEachDateOnceAndSlidesByOne(t *testing.T) {
 		t.Fatal("Previous month did not slide the months by one")
 	}
 	// Too narrow for two side by side, the months stack.
-	narrow := ggui.NewProbe(ggui.Column(ui.Calendar(ggui.State(civil(2026, time.June, 10))).Location(time.UTC).Months(2)).Align(ggui.AlignStart), ggui.Sz(300, 700))
+	narrow := ggui.NewProbe(widget.Column(ui.Calendar(ggui.State(civil(2026, time.June, 10))).Location(time.UTC).Months(2)).Align(widget.AlignStart), ggui.Sz(300, 700))
 	defer narrow.Close()
 	june, july := semNode(t, narrow, ggui.RoleOption, "2026-06-10"), semNode(t, narrow, ggui.RoleOption, "2026-07-10")
 	if july.Rect.Origin.Y <= june.Rect.Origin.Y+200 {
@@ -90,14 +91,14 @@ func TestCalendarCaptionDropdownBrowsesByMonthAndYear(t *testing.T) {
 	t.Parallel()
 	value := ggui.State(civil(2026, time.June, 30))
 	c := ui.Calendar(value).Location(time.UTC).CaptionDropdown(true).DropdownYears(2020, 2030)
-	p := ggui.NewProbe(ggui.Column(c).Align(ggui.AlignStart), ggui.Sz(600, 500))
+	p := ggui.NewProbe(widget.Column(c).Align(widget.AlignStart), ggui.Sz(600, 500))
 	defer p.Close()
 	if month, year := semNode(t, p, ggui.RoleSelect, "Month"), semNode(t, p, ggui.RoleSelect, "Year"); month.Value != "Jun" || year.Value != "2026" {
 		t.Fatalf("dropdowns show %q %q, want Jun 2026", month.Value, year.Value)
 	}
 	// A caption dropdown is shadcn's bordered label, six units and its
 	// border high, so the caption with it is a cell high as any other.
-	plain := ggui.NewProbe(ggui.Column(ui.Calendar(value).Location(time.UTC)).Align(ggui.AlignStart), ggui.Sz(600, 500))
+	plain := ggui.NewProbe(widget.Column(ui.Calendar(value).Location(time.UTC)).Align(widget.AlignStart), ggui.Sz(600, 500))
 	defer plain.Close()
 	if month, year := semNode(t, p, ggui.RoleSelect, "Month"), semNode(t, p, ggui.RoleSelect, "Year"); month.Rect.Size.H != 26 || year.Rect.Size.H != 26 ||
 		year.Rect.Origin.X-month.Rect.Origin.X-month.Rect.Size.W != 6 {
@@ -136,7 +137,7 @@ func TestDateRangePickerStaysOpenAndShowsTheRange(t *testing.T) {
 	changes := 0
 	d := ui.DateRangePicker(value).Name("Stay").OnRangeChange(func(ui.DateRange) { changes++ })
 	d.Calendar().Location(time.UTC).Bounds(civil(2026, time.June, 1), time.Time{})
-	p := ggui.NewProbe(ggui.Column(d).Align(ggui.AlignStart), ggui.Sz(640, 520))
+	p := ggui.NewProbe(widget.Column(d).Align(widget.AlignStart), ggui.Sz(640, 520))
 	defer p.Close()
 	if trigger := semNode(t, p, ggui.RoleButton, "Stay"); trigger.Value != "" {
 		t.Fatalf("an empty range has the value %q", trigger.Value)
@@ -185,7 +186,7 @@ func TestDatePickerFitsItsCalendarUnderAWideTrigger(t *testing.T) {
 	d.Calendar().Location(time.UTC)
 	// Padded, so the trigger is not at the window's edge, which a popup
 	// keeps 5px from.
-	p := ggui.NewProbe(ggui.Box(ggui.Column(d).Align(ggui.AlignStretch)).Pad(0, 16), ggui.Sz(600, 480))
+	p := ggui.NewProbe(widget.Box(widget.Column(d).Align(widget.AlignStretch)).Pad(0, 16), ggui.Sz(600, 480))
 	defer p.Close()
 	p.Tap("Due")
 	trigger, cal := semNode(t, p, ggui.RoleButton, "Due"), semNode(t, p, ggui.RoleGroup, "Due")

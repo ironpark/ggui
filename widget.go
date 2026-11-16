@@ -92,8 +92,8 @@ func Reactive[W Widget](build func() W) *ComponentWidget {
 // followed: build runs untracked like every other builder, so what it reads
 // itself is a snapshot, and a value that changes is bound instead.
 //
-//	ggui.View(label, ggui.Text)
-//	ggui.View(rows, func(r []Row) *ggui.ColumnWidget { return ggui.List(r, rowWidget) })
+//	ggui.View(label, widget.Text)
+//	ggui.View(rows, func(r []Row) *widget.ColumnWidget { return widget.List(r, rowWidget) })
 func View[T any, W Widget](r Readable[T], build func(T) W) Widget {
 	return Reactive(func() Widget {
 		v := r.Get()
@@ -720,7 +720,7 @@ func (s *Interactive) Adopt(prev any) {
 // posted work; the zero value is ready to use.
 //
 //	var name ggui.FocusRef
-//	form := ggui.Column(name.Attach(ui.TextField(value)), save)
+//	form := widget.Column(name.Attach(ui.TextField(value)), save)
 //	...
 //	name.Focus()
 type FocusRef struct {

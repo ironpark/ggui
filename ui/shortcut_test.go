@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // A button's Shortcut presses it while it is on screen and enabled, and a
@@ -51,7 +52,7 @@ func TestShortcutHintsWriteChordsForThePlatform(t *testing.T) {
 			t.Errorf("shortcutLabel(%q) = %q, want %q", in, got, want)
 		}
 	}
-	tip := Tooltip(ggui.Box(), "Save").Shortcut("cmd+s")
+	tip := Tooltip(widget.Box(), "Save").Shortcut("cmd+s")
 	tip.Layout(ggui.Loose(ggui.Sz(100, 100)), ggui.Env{})
 	if tip.keys == nil {
 		t.Fatal("Tooltip.Shortcut added no hint")
@@ -66,10 +67,10 @@ func TestTabsHeaderAndTooltip(t *testing.T) {
 	sel := ggui.State(0)
 	badge := Badge("3")
 	tabs := Tabs(sel,
-		Tab("Build", ggui.Text("build page")).Header(ggui.Row(ggui.Text("Build"), badge).Gap(6)).Tooltip("Compile the project"),
-		Tab("Test", ggui.Text("test page")).Tooltip("Run the tests"),
+		Tab("Build", widget.Text("build page")).Header(widget.Row(widget.Text("Build"), badge).Gap(6)).Tooltip("Compile the project"),
+		Tab("Test", widget.Text("test page")).Tooltip("Run the tests"),
 	)
-	p := ggui.NewProbe(ggui.Column(tabs), ggui.Sz(400, 200))
+	p := ggui.NewProbe(widget.Column(tabs), ggui.Sz(400, 200))
 	defer p.Close()
 	p.Frame()
 	names := func() map[string]bool {

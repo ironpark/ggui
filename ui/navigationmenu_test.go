@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestNavigationMenuLinksDropdownsAndFocus(t *testing.T) {
@@ -14,10 +15,10 @@ func TestNavigationMenuLinksDropdownsAndFocus(t *testing.T) {
 	nav := ui.NavigationMenu(
 		ui.NavigationMenuLink("Home", func() { destination = "home" }).Active(true),
 		ui.NavigationMenuLink("Disabled", func() { t.Fatal("disabled link activated") }).Disabled(true),
-		ui.NavigationMenuItem("Products", ggui.Column(ui.NavigationMenuLink("Editor", func() { destination = "editor" }), ui.NavigationMenuLink("Tools", func() { destination = "tools" }).CloseOnClick(true))),
-		ui.NavigationMenuItem("Learn", ggui.Column(ui.NavigationMenuLink("Docs", func() { destination = "docs" }))),
+		ui.NavigationMenuItem("Products", widget.Column(ui.NavigationMenuLink("Editor", func() { destination = "editor" }), ui.NavigationMenuLink("Tools", func() { destination = "tools" }).CloseOnClick(true))),
+		ui.NavigationMenuItem("Learn", widget.Column(ui.NavigationMenuLink("Docs", func() { destination = "docs" }))),
 	).Name("Main navigation")
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(nav)), ggui.Sz(600, 400))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(nav)), ggui.Sz(600, 400))
 	defer p.Close()
 	p.Key("tab")
 	focused, _ := p.Semantics().Focused()
@@ -67,7 +68,7 @@ func TestNavigationMenuPointerSwitchAndDisabled(t *testing.T) {
 	disabled := ggui.State(false)
 	products := ui.NavigationMenuItem("Products", ui.NavigationMenuLink("Editor", nil)).BindDisabled(disabled)
 	nav := ui.NavigationMenu(products, ui.NavigationMenuItem("Learn", ui.NavigationMenuLink("Docs", func() { selected = "docs" })), ui.NavigationMenuLink("Home", func() { selected = "home" }).CloseOnClick(true))
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(nav)), ggui.Sz(500, 350))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(nav)), ggui.Sz(500, 350))
 	defer p.Close()
 	p.Tap("Products")
 	p.Tap("Learn")
@@ -104,7 +105,7 @@ func TestNavigationMenuAccessibleActionsAndRebuild(t *testing.T) {
 	p := ggui.ProbeBuilder(func() ggui.Widget {
 		_ = revision.Get()
 		nav = ui.NavigationMenu(ui.NavigationMenuItem("Browse", ui.NavigationMenuLink("Article", nil))).Key("nav")
-		return ggui.Column(nav)
+		return widget.Column(nav)
 	}, ggui.Sz(300, 250))
 	defer p.Close()
 	act(t, p, ggui.RoleButton, "Browse", ggui.Action{Kind: ggui.ActionExpand})
@@ -140,7 +141,7 @@ func TestNavigationMenuEmptyAndAllDisabled(t *testing.T) {
 func TestNavigationMenuRTLAndNoWrap(t *testing.T) {
 	t.Parallel()
 	nav := ui.NavigationMenu(ui.NavigationMenuLink("One", nil), ui.NavigationMenuItem("Two", ui.NavigationMenuLink("Child", nil)), ui.NavigationMenuLink("Three", nil))
-	p := ggui.NewProbe(ggui.Provide(ggui.DirectionKey, ggui.DirRTL, ggui.Column(nav)), ggui.Sz(500, 250))
+	p := ggui.NewProbe(ggui.Provide(ggui.DirectionKey, ggui.DirRTL, widget.Column(nav)), ggui.Sz(500, 250))
 	defer p.Close()
 	p.Key("tab", "left")
 	focused, _ := p.Semantics().Focused()
@@ -163,7 +164,7 @@ func TestNavigationMenuHoverOpensAndCloses(t *testing.T) {
 		)
 	}
 	nav := build()
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(nav)), ggui.Sz(500, 350))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(nav)), ggui.Sz(500, 350))
 	defer p.Close()
 	p.Frame()
 	products, _ := p.Find("Products")
@@ -217,7 +218,7 @@ func TestNavigationMenuHoverOpensAndCloses(t *testing.T) {
 	}
 
 	off := build().OpenOnHover(false)
-	q := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(off)), ggui.Sz(500, 350))
+	q := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(off)), ggui.Sz(500, 350))
 	defer q.Close()
 	q.Frame()
 	trigger, _ := q.Find("Products")
@@ -234,7 +235,7 @@ func TestNavigationMenuPanelMotionSettles(t *testing.T) {
 		ui.NavigationMenuItem("Products", ui.NavigationMenuLink("Editor", nil)).Width(200),
 		ui.NavigationMenuItem("Learn", ui.NavigationMenuLink("Docs", nil)).Width(300),
 	).OpenOnHover(false)
-	p := ggui.NewProbe(ggui.Column(nav), ggui.Sz(600, 350))
+	p := ggui.NewProbe(widget.Column(nav), ggui.Sz(600, 350))
 	defer p.Close()
 	p.Tap("Products")
 	p.Advance(time.Second)

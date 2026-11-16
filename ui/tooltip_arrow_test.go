@@ -5,12 +5,13 @@ import (
 
 	"github.com/ironpark/ggui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestTooltipArrowReservesGapAndFollowsCollision(t *testing.T) {
 	t.Parallel()
 	env := uitheme.Default().Apply(ggui.Env{})
-	tip := Tooltip(ggui.Box().Size(20, 20), "Tooltip content")
+	tip := Tooltip(widget.Box().Size(20, 20), "Tooltip content")
 	tip.Layout(ggui.Loose(ggui.Sz(300, 300)), env)
 	with := tip.effect.Layout(ggui.Loose(ggui.Sz(320, 300)), env)
 	tip.Arrow(false)
@@ -19,11 +20,11 @@ func TestTooltipArrowReservesGapAndFollowsCollision(t *testing.T) {
 		t.Fatalf("arrow changed body geometry: with=%v without=%v", with, without)
 	}
 	tip.Arrow(true)
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(tip)), ggui.Sz(180, 180))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(tip)), ggui.Sz(180, 180))
 	defer p.Close()
 	p.Move(ggui.Pt(10, 10))
 	p.Frame()
-	if tip.placed != ggui.PopupBottom {
+	if tip.placed != widget.PopupBottom {
 		t.Fatal("tooltip at top edge did not flip arrow/body below")
 	}
 	if tip.arrowAt < tip.theme.RadiusSm+5 {
@@ -33,12 +34,12 @@ func TestTooltipArrowReservesGapAndFollowsCollision(t *testing.T) {
 
 func TestTooltipArrowPointsDownForAbovePlacement(t *testing.T) {
 	t.Parallel()
-	tip := Tooltip(ggui.Box().Size(60, 20), "Tip")
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(ggui.Box().Height(100), tip)), ggui.Sz(180, 180))
+	tip := Tooltip(widget.Box().Size(60, 20), "Tip")
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(widget.Box().Height(100), tip)), ggui.Sz(180, 180))
 	defer p.Close()
 	p.Move(ggui.Pt(30, 110))
 	p.Frame()
-	if tip.placed != ggui.PopupTop {
+	if tip.placed != widget.PopupTop {
 		t.Fatal("room above anchor should keep tooltip above")
 	}
 	if tip.arrowAt <= 0 {
@@ -51,7 +52,7 @@ func TestTooltipEscapeAndDisabledKeepChildInteractive(t *testing.T) {
 	calls := 0
 	disabled := ggui.State(false)
 	tip := Tooltip(Button("Target", func() { calls++ }), "Help").BindDisabled(disabled)
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(tip)), ggui.Sz(180, 180))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(tip)), ggui.Sz(180, 180))
 	defer p.Close()
 	p.Move(ggui.Pt(20, 10))
 	p.Key("escape")
@@ -77,18 +78,18 @@ func TestTooltipSideMovesTheBodyAndTheArrow(t *testing.T) {
 	anchor := ggui.Rct(ggui.Pt(170, 140), ggui.Sz(60, 20))
 	for _, tc := range []struct {
 		name       string
-		side       ggui.PopupSide
+		side       widget.PopupSide
 		horizontal bool
 		check      func(r ggui.Rect) bool
 	}{
 		// The surface reaches the anchor: the arrow stands in the gap.
-		{"top", ggui.PopupTop, false, func(r ggui.Rect) bool { return r.Origin.Y+r.Size.H == anchor.Origin.Y }},
-		{"bottom", ggui.PopupBottom, false, func(r ggui.Rect) bool { return r.Origin.Y == anchor.Origin.Y+anchor.Size.H }},
-		{"left", ggui.PopupLeft, true, func(r ggui.Rect) bool { return r.Origin.X+r.Size.W == anchor.Origin.X }},
-		{"right", ggui.PopupRight, true, func(r ggui.Rect) bool { return r.Origin.X == anchor.Origin.X+anchor.Size.W }},
+		{"top", widget.PopupTop, false, func(r ggui.Rect) bool { return r.Origin.Y+r.Size.H == anchor.Origin.Y }},
+		{"bottom", widget.PopupBottom, false, func(r ggui.Rect) bool { return r.Origin.Y == anchor.Origin.Y+anchor.Size.H }},
+		{"left", widget.PopupLeft, true, func(r ggui.Rect) bool { return r.Origin.X+r.Size.W == anchor.Origin.X }},
+		{"right", widget.PopupRight, true, func(r ggui.Rect) bool { return r.Origin.X == anchor.Origin.X+anchor.Size.W }},
 	} {
-		tip := Tooltip(ggui.Box().Size(60, 20), "Tip").Side(tc.side)
-		p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Center(tip)), ggui.Sz(400, 300))
+		tip := Tooltip(widget.Box().Size(60, 20), "Tip").Side(tc.side)
+		p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Center(tip)), ggui.Sz(400, 300))
 		p.Move(anchor.Center())
 		p.Frame()
 		node, ok := p.Semantics().Find(ggui.RoleText, "Tip")
@@ -109,9 +110,9 @@ func TestTooltipSideMovesTheBodyAndTheArrow(t *testing.T) {
 		// The text is inside the body, which stops 4px short of the anchor.
 		grown := ggui.Rct(node.Rect.Origin.Sub(ggui.Pt(tip.pad.Left, tip.pad.Top)), body)
 		switch tc.side {
-		case ggui.PopupBottom:
+		case widget.PopupBottom:
 			grown.Origin.Y -= 4
-		case ggui.PopupRight:
+		case widget.PopupRight:
 			grown.Origin.X -= 4
 		}
 		grown.Size = surface
@@ -125,7 +126,7 @@ func TestTooltipSideMovesTheBodyAndTheArrow(t *testing.T) {
 func TestTooltipShortcutSitsCloserThanAWord(t *testing.T) {
 	t.Parallel()
 	env := uitheme.Default().Apply(ggui.Env{})
-	tip := Tooltip(ggui.Box().Size(20, 20), "Save").Shortcut("mod+s")
+	tip := Tooltip(widget.Box().Size(20, 20), "Save").Shortcut("mod+s")
 	tip.Layout(ggui.Loose(ggui.Sz(300, 300)), env)
 	if tip.pad.Right != 6 || tip.pad.Left != 12 {
 		t.Fatalf("a tip with a key hint is padded %v, want 6 after the hint and 12 before the text", tip.pad)

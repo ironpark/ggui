@@ -9,6 +9,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // buttonTranscript is n 80px rows ten apart, each holding a button named
@@ -17,7 +18,7 @@ func buttonTranscript(n int) []ui.MessageEntry {
 	out := make([]ui.MessageEntry, n)
 	for i := range out {
 		name := fmt.Sprintf("Row %d", i)
-		out[i] = ui.MessageEntry{ID: fmt.Sprint(i), Content: ggui.Box(ui.Button(name, func() {})).Height(80)}
+		out[i] = ui.MessageEntry{ID: fmt.Sprint(i), Content: widget.Box(ui.Button(name, func() {})).Height(80)}
 	}
 	return out
 }
@@ -89,7 +90,7 @@ func TestMessageScrollerNewAnchorLeavesAPeekOfThePreviousMessage(t *testing.T) {
 	p := ggui.NewProbe(s, ggui.Sz(300, 200))
 	defer p.Close()
 	p.Frame()
-	more := append(transcript(3), ui.MessageEntry{ID: "q", Anchor: true, Content: ggui.Box(ggui.Text("question")).Height(80)})
+	more := append(transcript(3), ui.MessageEntry{ID: "q", Anchor: true, Content: widget.Box(widget.Text("question")).Height(80)})
 	rows.Set(more)
 	p.Frame()
 	// The new anchor starts at 270; 30px of the message before it stay in view.

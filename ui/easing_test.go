@@ -7,6 +7,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 var easingTestSlot = ggui.NewSlot[*ggui.Motion]("easing test")
@@ -55,7 +56,7 @@ func TestControlTransitionsMoveOnTheThemesCurve(t *testing.T) {
 // cubic-bezier(0, 0, 0.58, 1), over 200ms.
 func TestAnAccordionPanelOpensOnCSSEaseOut(t *testing.T) {
 	open := ggui.State([]string{})
-	a := Accordion(open, AccordionItem("a", "Alpha", ggui.Text("Content")))
+	a := Accordion(open, AccordionItem("a", "Alpha", widget.Text("Content")))
 	p := ggui.NewProbe(a, ggui.Sz(300, 300))
 	defer p.Close()
 	p.Advance(0)

@@ -7,6 +7,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestTraceStatusColorsEveryVariantWithoutTintingDetails(t *testing.T) {
@@ -23,7 +24,7 @@ func TestTraceStatusColorsEveryVariantWithoutTintingDetails(t *testing.T) {
 				TraceStep{ID: "action", Title: "Action", Status: status, OnActivate: func() {}},
 				TraceStep{ID: "disclosure", Title: "Disclosure", Status: status, Details: details},
 			).Expanded(map[string]bool{"disclosure": true})
-			p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, uitheme.With(theme, ggui.Column(trace))), ggui.Sz(300, 300))
+			p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, uitheme.With(theme, widget.Column(trace))), ggui.Sz(300, 300))
 			p.Frame()
 			for id, row := range trace.rows {
 				// A line is muted until the pointer is over it, and a failed
@@ -57,10 +58,10 @@ func TestTraceLineTurnsForegroundUnderThePointer(t *testing.T) {
 	theme := uitheme.Default()
 	trace := Trace(
 		TraceStep{ID: "plain", Title: "Plain"},
-		TraceStep{ID: "open", Title: "Open", Details: ggui.Text("Details")},
+		TraceStep{ID: "open", Title: "Open", Details: widget.Text("Details")},
 		TraceStep{ID: "failed", Title: "Failed", Status: TraceFailed, OnActivate: func() {}},
 	)
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, uitheme.With(theme, ggui.Column(trace))), ggui.Sz(300, 300))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, uitheme.With(theme, widget.Column(trace))), ggui.Sz(300, 300))
 	p.Frame()
 	defer p.Close()
 	for id, want := range map[string]color.Color{"plain": theme.MutedFg, "open": theme.Fg, "failed": theme.Destructive} {
@@ -78,10 +79,10 @@ func TestTraceLineTurnsForegroundUnderThePointer(t *testing.T) {
 func TestTraceLineShowsDescriptionAndDurationNotStatus(t *testing.T) {
 	t.Parallel()
 	trace := Trace(
-		TraceStep{ID: "a", Title: "Search", Description: "12 results", Status: TraceCompleted, Duration: 1500 * time.Millisecond, Details: ggui.Text("Details")},
+		TraceStep{ID: "a", Title: "Search", Description: "12 results", Status: TraceCompleted, Duration: 1500 * time.Millisecond, Details: widget.Text("Details")},
 		TraceStep{ID: "b", Title: "Plan", Status: TraceRunning},
 	)
-	p := ggui.NewProbe(ggui.Column(trace), ggui.Sz(400, 300))
+	p := ggui.NewProbe(widget.Column(trace), ggui.Sz(400, 300))
 	defer p.Close()
 	p.Frame()
 	a, b := trace.rows["a"], trace.rows["b"]
@@ -106,12 +107,12 @@ func TestTraceRunningShimmerStopsForReducedMotionAndCompletion(t *testing.T) {
 				step.OnActivate = func() {}
 			}
 			if variant == "disclosure" {
-				step.Details = ggui.Text("Details")
+				step.Details = widget.Text("Details")
 			}
 			steps := ggui.State([]TraceStep{step})
 			trace := Trace().BindSteps(steps)
 			p := ggui.NewWindowProbe(func() ggui.Widget {
-				return ggui.Provide(ggui.ReducedMotionKey, reduced, ggui.Column(trace))
+				return ggui.Provide(ggui.ReducedMotionKey, reduced, widget.Column(trace))
 			}, ggui.Sz(300, 150))
 			frame := p.Step(0)
 			if frame.Wake.IsZero() != reduced {
@@ -145,7 +146,7 @@ func TestTraceStepIconLeadsItsTitle(t *testing.T) {
 		TraceStep{ID: "plain", Title: "Read file"},
 		TraceStep{ID: "icon", Title: "Read file", Icon: "file"},
 	)
-	p := ggui.NewProbe(uitheme.With(theme, ggui.Column(trace)), ggui.Sz(300, 200))
+	p := ggui.NewProbe(uitheme.With(theme, widget.Column(trace)), ggui.Sz(300, 200))
 	defer p.Close()
 	p.Frame()
 	plain, icon := trace.rows["plain"], trace.rows["icon"]

@@ -6,14 +6,15 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // CollapsibleOf folds its content under a trigger of the caller's own.
 func TestCollapsibleOfTogglesFromItsTrigger(t *testing.T) {
 	t.Parallel()
 	open := ggui.State(false)
-	c := ui.CollapsibleOf(open, ggui.Text("Filters"), ui.Button("Apply", nil)).Name("Filters")
-	p := ggui.NewProbe(ggui.Column(c), ggui.Sz(300, 300))
+	c := ui.CollapsibleOf(open, widget.Text("Filters"), ui.Button("Apply", nil)).Name("Filters")
+	p := ggui.NewProbe(widget.Column(c), ggui.Sz(300, 300))
 	defer p.Close()
 	if _, ok := p.FindRole(ggui.RoleButton, "Apply"); ok {
 		t.Fatal("closed content takes input")

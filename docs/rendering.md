@@ -4,7 +4,7 @@
 
 Implement custom widgets, draw at the correct display scale, and understand frame and cache behavior.
 
-Examples use `ggui` and `ui` imports and application-defined placeholders.
+Examples use `ggui`, `widget` and `ui` imports and application-defined placeholders.
 See [example conventions](README.md#start-here) before copying snippets.
 
 ## On this page
@@ -274,13 +274,13 @@ Widgets that paint a subtree differently, all built on layers. None changes
 layout.
 
 ```go
-ggui.Transform(card).Rotate(math.Pi / 12).Scale(1.1).Translate(0, -4)
-ggui.Transform(card).BindScale(ggui.Tween(1.0, 150*time.Millisecond)).Origin(0, 0)
-ggui.Opacity(panel, 0.6).BindOpacity(fade)
-ggui.ClipOval(avatar)
-ggui.ClipPath(photo, func(r ggui.Rect) *ggui.Path { return star(r) })
-ggui.Blur(content, 0).BindSigma(blur)
-ggui.BackdropBlur(ggui.Box(menu).Fill(glass).Radius(12), 16).Radius(12)
+widget.Transform(card).Rotate(math.Pi / 12).Scale(1.1).Translate(0, -4)
+widget.Transform(card).BindScale(ggui.Tween(1.0, 150*time.Millisecond)).Origin(0, 0)
+widget.Opacity(panel, 0.6).BindOpacity(fade)
+widget.ClipOval(avatar)
+widget.ClipPath(photo, func(r ggui.Rect) *ggui.Path { return star(r) })
+widget.Blur(content, 0).BindSigma(blur)
+widget.BackdropBlur(widget.Box(menu).Fill(glass).Radius(12), 16).Radius(12)
 ```
 
 `Transform` scales, then turns, then moves its child about `Origin`, a

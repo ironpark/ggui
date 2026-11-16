@@ -8,6 +8,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // panelBox applies the chrome every floating surface shares: menus, context
@@ -16,14 +17,14 @@ import (
 // for the popup of a menu, a select or a combobox; see Theme.Menu.
 func menuSurface(content ggui.Widget) ggui.Widget { return ggui.WithEnv(uitheme.MenuEnv, content) }
 
-func panelBox(b *ggui.BoxWidget, t *uitheme.Theme) *ggui.BoxWidget {
+func panelBox(b *widget.BoxWidget, t *uitheme.Theme) *widget.BoxWidget {
 	return panelShadow(b, t).Fill(t.Popover).Border(t.BorderWidth, fade(t.Fg, .1)).Radius(t.Radius).Padding(t.PanelPad)
 }
 
 // panelShadow gives b the shadow of a popup, shadcn's shadow-md: a select
 // list, a combobox list, a menu, a popover, a hover card. It is the theme's
 // PanelShadow over its PanelContact, the two layers Tailwind draws.
-func panelShadow(b *ggui.BoxWidget, t *uitheme.Theme) *ggui.BoxWidget {
+func panelShadow(b *widget.BoxWidget, t *uitheme.Theme) *widget.BoxWidget {
 	layers := [2]ggui.ShadowStyle{t.PanelShadow, t.PanelContact}
 	return b.Shadow(layers[:]...)
 }
@@ -31,7 +32,7 @@ func panelShadow(b *ggui.BoxWidget, t *uitheme.Theme) *ggui.BoxWidget {
 // overlayShadow gives b the shadow of what floats higher, shadcn's
 // shadow-lg: a submenu, a sheet. It is the theme's OverlayShadow over its
 // OverlayContact.
-func overlayShadow(b *ggui.BoxWidget, t *uitheme.Theme) *ggui.BoxWidget {
+func overlayShadow(b *widget.BoxWidget, t *uitheme.Theme) *widget.BoxWidget {
 	layers := [2]ggui.ShadowStyle{t.OverlayShadow, t.OverlayContact}
 	return b.Shadow(layers[:]...)
 }
@@ -59,7 +60,7 @@ func paintedBaseline(top, ascent, scale float64) float64 {
 
 // fieldBoxShape gives a field's box what its size depends on, the padding
 // and the radius, and leaves its colors to fieldChrome.
-func fieldBoxShape(b *ggui.BoxWidget, t *uitheme.Theme, pad ggui.EdgeInsets) *ggui.BoxWidget {
+func fieldBoxShape(b *widget.BoxWidget, t *uitheme.Theme, pad ggui.EdgeInsets) *widget.BoxWidget {
 	return b.Padding(pad).Radius(t.Radius)
 }
 
@@ -95,7 +96,7 @@ type fieldState struct {
 
 // fieldChrome colors a field's box for its state and draws the halo around
 // it; see fieldTones. Call it in Paint, before painting b in r.
-func fieldChrome(dst *ggui.Canvas, at ggui.Anchor, b *ggui.BoxWidget, t *uitheme.Theme, r ggui.Rect, radius float64, s fieldState, motion time.Duration) {
+func fieldChrome(dst *ggui.Canvas, at ggui.Anchor, b *widget.BoxWidget, t *uitheme.Theme, r ggui.Rect, radius float64, s fieldState, motion time.Duration) {
 	fill, border := fieldTones(dst, at, t, r, radius, s, motion)
 	b.Fill(fill).Border(t.BorderWidth, border)
 }
@@ -105,7 +106,7 @@ func fieldChrome(dst *ggui.Canvas, at ggui.Anchor, b *ggui.BoxWidget, t *uitheme
 // its border gives way to the neighbour's, and its halo, which the group
 // draws above its children, runs past the seam. With no side joined it is
 // fieldChrome.
-func fieldChromeJoined(dst *ggui.Canvas, at ggui.Anchor, b *ggui.BoxWidget, t *uitheme.Theme, r ggui.Rect, radius float64, s fieldState, motion time.Duration, sides JoinedSides) {
+func fieldChromeJoined(dst *ggui.Canvas, at ggui.Anchor, b *widget.BoxWidget, t *uitheme.Theme, r ggui.Rect, radius float64, s fieldState, motion time.Duration, sides JoinedSides) {
 	if !sides.Any() {
 		fieldChrome(dst, at, b, t, r, radius, s, motion)
 		return

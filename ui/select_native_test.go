@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // shadcn's native select has its chevron at right-2.5, 10px in from the
@@ -13,7 +14,7 @@ func TestNativeSelectChevronInset(t *testing.T) {
 	options := []string{"Standard", "Express"}
 	plain := Select(ggui.State("Standard")).Options(options).Name("Plain")
 	native := NativeSelect(ggui.State("Standard")).Options(options).Name("Native")
-	p := ggui.NewProbe(ggui.Column(plain, native).Gap(8).Align(ggui.AlignStart), ggui.Sz(320, 200))
+	p := ggui.NewProbe(widget.Column(plain, native).Gap(8).Align(widget.AlignStart), ggui.Sz(320, 200))
 	defer p.Close()
 	a, _ := p.FindRole(ggui.RoleSelect, "Plain")
 	b, _ := p.FindRole(ggui.RoleSelect, "Native")

@@ -6,6 +6,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // CollapsibleWidget is a section that folds its content away under a
@@ -13,7 +14,7 @@ import (
 // one with Collapsible or CollapsibleOf.
 type CollapsibleWidget struct {
 	open     ggui.Binding[bool]
-	title    *ggui.TextWidget
+	title    *widget.TextWidget
 	trigger  ggui.Widget // CollapsibleOf's header, in place of the title
 	content  ggui.Widget
 	reveal   ggui.Motion
@@ -33,7 +34,7 @@ type CollapsibleWidget struct {
 // The header toggles it on click, Space or Enter; the content
 // reveals and clips vertically in and out.
 func Collapsible(open ggui.Binding[bool], title string, content ggui.Widget) *CollapsibleWidget {
-	c := &CollapsibleWidget{open: open, title: ggui.Text(title).NoWrap(), content: content}
+	c := &CollapsibleWidget{open: open, title: widget.Text(title).NoWrap(), content: content}
 	c.Role = ggui.RoleDisclosure
 	c.SetName(title)
 	c.AutoKey()
@@ -46,7 +47,7 @@ func Collapsible(open ggui.Binding[bool], title string, content ggui.Widget) *Co
 // and out as Collapsible's does. It is the unstyled pair a custom
 // disclosure is made of; Progress turns a chevron drawn in the trigger.
 //
-//	ui.CollapsibleOf(open, ggui.Row(ggui.Text("Filters"), ggui.Spacer(), chevron), filters).Name("Filters")
+//	ui.CollapsibleOf(open, widget.Row(widget.Text("Filters"), widget.Spacer(), chevron), filters).Name("Filters")
 func CollapsibleOf(open ggui.Binding[bool], trigger, content ggui.Widget) *CollapsibleWidget {
 	c := &CollapsibleWidget{open: open, trigger: trigger, content: content}
 	c.Role = ggui.RoleDisclosure

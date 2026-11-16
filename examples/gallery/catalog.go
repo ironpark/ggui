@@ -7,6 +7,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 type previewInfo struct{ category, description string }
@@ -88,8 +89,8 @@ func preview(title string, body ggui.Widget) *componentPreview {
 	info := previewDetails[title]
 	return &componentPreview{
 		title: title, info: info,
-		Widget: ui.Card(ggui.Column(
-			ggui.Wrap(ui.Title(title).Size(18), ui.Badge(info.category)).Gap(8),
+		Widget: ui.Card(widget.Column(
+			widget.Wrap(ui.Title(title).Size(18), ui.Badge(info.category)).Gap(8),
 			ui.Caption(info.description),
 			ui.Divider(),
 			body,
@@ -105,7 +106,7 @@ func (p *componentPreview) matches(category, query string) bool {
 // previewGrid chooses its column count at layout time, so resizing the
 // window does not rebuild controls or discard their state.
 func previewGrid(cards []ggui.Widget) ggui.Widget {
-	return ggui.Responsive(1000, ggui.Grid(2, cards...).Gap(20), ggui.Grid(1, cards...).Gap(20))
+	return widget.Responsive(1000, widget.Grid(2, cards...).Gap(20), widget.Grid(1, cards...).Gap(20))
 }
 
 // galleryPage builds the chrome once. The filter row follows category, the
@@ -140,7 +141,7 @@ func galleryPage(dark ggui.Binding[bool], search, category *ggui.StateValue[stri
 		scroll.Set(0)
 	}
 
-	filters := ggui.View(category, func(selected string) *ggui.WrapWidget {
+	filters := ggui.View(category, func(selected string) *widget.WrapWidget {
 		var buttons []ggui.Widget
 		for _, label := range []string{"All", "Inputs", "Navigation", "Feedback", "Layout", "Data"} {
 			button := ui.Button(fmt.Sprintf("%s  %d", label, counts[label]), func() {
@@ -152,13 +153,13 @@ func galleryPage(dark ggui.Binding[bool], search, category *ggui.StateValue[stri
 			}
 			buttons = append(buttons, button)
 		}
-		return ggui.Wrap(buttons...).Gap(8)
+		return widget.Wrap(buttons...).Gap(8)
 	})
 	field := ui.TextField(search).Name("Search components").Placeholder("Search components…").OnChange(func(string) { scroll.Set(0) })
-	header := ggui.Box(ggui.Column(
-		ggui.Row(ui.Title("Component gallery").Size(28), ggui.Spacer(), ui.ThemeSwitch(dark)).Gap(16),
+	header := widget.Box(widget.Column(
+		widget.Row(ui.Title("Component gallery").Size(28), widget.Spacer(), ui.ThemeSwitch(dark)).Gap(16),
 		ui.Caption("Explore the building blocks. Try an interaction, adjust the theme, make it yours."),
-		ggui.Row(ggui.Expanded(field), ui.Button("Commands", commands).Outline()).Gap(12),
+		widget.Row(widget.Expanded(field), ui.Button("Commands", commands).Outline()).Gap(12),
 		filters,
 	).Gap(14).Stretch()).Pad(24, 28).Fill(uitheme.Card)
 	content := ggui.View(shown, func(cards []ggui.Widget) ggui.Widget {
@@ -167,11 +168,11 @@ func galleryPage(dark ggui.Binding[bool], search, category *ggui.StateValue[stri
 		}
 		return previewGrid(cards)
 	})
-	footer := ggui.Padding(ggui.Row(
-		ui.Captionf("%d of %d previews", shown.Map(func(cards []ggui.Widget) int { return len(cards) }), len(previews)), ggui.Spacer(),
+	footer := widget.Padding(widget.Row(
+		ui.Captionf("%d of %d previews", shown.Map(func(cards []ggui.Widget) int { return len(cards) }), len(previews)), widget.Spacer(),
 		ui.Caption("⌘K  Commands   ·   Tab  Navigate   ·   F1  Inspect"),
 	).Gap(12), 12, 28)
-	children := []ggui.Widget{header, ui.Divider(), ggui.Expanded(ggui.Scroll(ggui.Padding(content, 24, 28)).BindOffset(scroll)), ui.Divider(), footer}
+	children := []ggui.Widget{header, ui.Divider(), widget.Expanded(widget.Scroll(widget.Padding(content, 24, 28)).BindOffset(scroll)), ui.Divider(), footer}
 	children = append(children, extras...)
-	return ggui.Column(children...).Stretch()
+	return widget.Column(children...).Stretch()
 }

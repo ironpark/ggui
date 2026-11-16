@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/widget"
 )
 
 type selectionProperties struct {
@@ -56,7 +57,7 @@ func TestSelectionPropertySnapshotsAndBindingReplacement(t *testing.T) {
 			value := ggui.State("missing")
 			changes := 0
 			w := selectionPropertyFixture(kind, value, func(string) { changes++ })
-			p := ggui.NewProbe(ggui.Component(func() ggui.Widget { return ggui.Column(ggui.Cached(w.widget)) }), ggui.Sz(400, 300))
+			p := ggui.NewProbe(ggui.Component(func() ggui.Widget { return widget.Column(ggui.Cached(w.widget)) }), ggui.Sz(400, 300))
 			defer p.Close()
 			p.Frame()
 			if len(w.values()) != 0 {
@@ -103,7 +104,7 @@ func TestRadiosKeepDuplicateOccurrenceIdentityAndFocus(t *testing.T) {
 	t.Parallel()
 	value := ggui.State("a")
 	w := Radios(value).Options([]string{"a", "a", "b"})
-	p := ggui.NewProbe(ggui.Cached(ggui.Column(w)), ggui.Sz(400, 200))
+	p := ggui.NewProbe(ggui.Cached(widget.Column(w)), ggui.Sz(400, 200))
 	defer p.Close()
 	p.Tap("a")
 	first, second := w.radios[0], w.radios[1]
@@ -128,7 +129,7 @@ func TestToggleOptionsRejectStaleSegmentsAndKeepFocus(t *testing.T) {
 	t.Parallel()
 	value := ggui.State("a")
 	w := ToggleGroup(value).Options([]string{"a", "b"})
-	p := ggui.NewProbe(ggui.Column(w), ggui.Sz(400, 200))
+	p := ggui.NewProbe(widget.Column(w), ggui.Sz(400, 200))
 	defer p.Close()
 	p.Tap("a")
 	p.Type(ggui.Mods{}, ggui.KeyTab)
@@ -210,7 +211,7 @@ func TestUIBindingsRejectNilAndTypedNil(t *testing.T) {
 	runs := []func(){
 		func() { Select(ggui.State("")).BindOptions(nil) }, func() { Combobox(ggui.State("")).BindOptions(options) },
 		func() { Radios(ggui.State("")).BindOptions(options) }, func() { ToggleGroup(ggui.State("")).BindOptions(options) },
-		func() { Field("label", ggui.Text("value")).BindError(text) }, func() { InputOTP(ggui.State(""), 4).BindInvalid(invalid) },
+		func() { Field("label", widget.Text("value")).BindError(text) }, func() { InputOTP(ggui.State(""), 4).BindInvalid(invalid) },
 		func() { Attachment("file", "").BindState(state) }, func() { Button("x", nil).BindName(text) },
 	}
 	for i, run := range runs {
@@ -228,7 +229,7 @@ func TestUIBindingsRejectNilAndTypedNil(t *testing.T) {
 func TestRepeatedRuntimeConfigurationPreservesChildren(t *testing.T) {
 	t.Parallel()
 	table := Table(ggui.State([]int{1, 2}), func(v int) int { return v },
-		Col("Value", func(v ggui.Readable[int]) ggui.Widget { return ggui.Textf("%d", v) }))
+		Col("Value", func(v ggui.Readable[int]) ggui.Widget { return widget.Textf("%d", v) }))
 	p := ggui.NewProbe(ggui.Cached(table), ggui.Sz(300, 400))
 	defer p.Close()
 	p.Advance(0)

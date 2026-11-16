@@ -49,9 +49,9 @@ jobs:
       - name: Test
         run: go test ./... ./examples/sqlite/... ./fonts/notoemoji/... ./icons/heroicons/... ./icons/lucide/... ./icons/tabler/...
       - name: Test with the inspector
-        run: go test -tags ggui_inspector .
+        run: go test -tags ggui_inspector . ./widget
       - name: Test the debug build
-        run: go test -tags ggui_debug . ./internal/reactive
+        run: go test -tags ggui_debug . ./widget ./internal/reactive
       # The race detector needs cgo, which the Windows runner has no C
       # toolchain configured for. Probe tests run under t.Parallel, and
       # -race is what shows that no probe reaches another's state.

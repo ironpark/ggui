@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestTogglePressedBindingAndDisabled(t *testing.T) {
@@ -70,11 +71,11 @@ func TestToggleGroupMultipleKeepsFocusSeparateFromSelection(t *testing.T) {
 
 func TestRTLControlsMirrorGeometryAndKeyboard(t *testing.T) {
 	selected := ggui.State(0)
-	tabs := ui.Tabs(selected, ui.Tab("First", ggui.Text("One")), ui.Tab("Second", ggui.Text("Two")))
+	tabs := ui.Tabs(selected, ui.Tab("First", widget.Text("One")), ui.Tab("Second", widget.Text("Two")))
 	choice := ggui.State("A")
 	group := ui.ToggleGroup(choice).Options([]string{"A", "B"})
 	buttons := ui.ButtonGroup(ui.Button("Left logical", nil), ui.Button("Right logical", nil))
-	p := ggui.NewProbe(ggui.Directionality(ggui.DirRTL, ggui.Column(tabs, group, buttons)), ggui.Sz(400, 200))
+	p := ggui.NewProbe(ggui.Directionality(ggui.DirRTL, widget.Column(tabs, group, buttons)), ggui.Sz(400, 200))
 	defer p.Close()
 	a, b := node(t, p.Semantics(), ggui.RoleTab, "First"), node(t, p.Semantics(), ggui.RoleTab, "Second")
 	if a.Rect.Origin.X <= b.Rect.Origin.X {
@@ -104,7 +105,7 @@ func TestLabelFocusesFieldAndActivatesCheckbox(t *testing.T) {
 	checked := ggui.State(false)
 	input := ui.TextField(value)
 	box := ui.Checkbox(checked, "")
-	p := ggui.NewProbe(ggui.Column(ui.Field("Email address", input), ui.Label("Accept terms").For(box), box), ggui.Sz(300, 180))
+	p := ggui.NewProbe(widget.Column(ui.Field("Email address", input), ui.Label("Accept terms").For(box), box), ggui.Sz(300, 180))
 	defer p.Close()
 	p.Tap("Email address")
 	p.Text("hello")
@@ -127,7 +128,7 @@ func TestTabsManualVerticalAndDisabledPages(t *testing.T) {
 	selected := ggui.State(0)
 	tabs := ui.Tabs(selected,
 		ui.Tab("First", ui.Button("First action", nil)),
-		ui.Tab("Unavailable", ggui.Text("Unavailable")).Disabled(true),
+		ui.Tab("Unavailable", widget.Text("Unavailable")).Disabled(true),
 		ui.Tab("Last", ui.Button("Last action", nil)),
 	).Vertical().Line()
 	p := ggui.NewProbe(tabs, ggui.Sz(400, 200))
@@ -207,8 +208,8 @@ func TestAssociatedLabelOpensSelect(t *testing.T) {
 
 func TestCompositeRovingFocusIsAnnouncedAndDoesNotTrapTab(t *testing.T) {
 	selected := ggui.State(0)
-	tabs := ui.Tabs(selected, ui.Tab("First", ui.Button("Page action", nil)), ui.Tab("Second", ggui.Text("Second page")))
-	p := ggui.NewProbe(ggui.Column(tabs, ui.Button("After tabs", nil)), ggui.Sz(400, 160))
+	tabs := ui.Tabs(selected, ui.Tab("First", ui.Button("Page action", nil)), ui.Tab("Second", widget.Text("Second page")))
+	p := ggui.NewProbe(widget.Column(tabs, ui.Button("After tabs", nil)), ggui.Sz(400, 160))
 	defer p.Close()
 	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyArrowRight)
 	focused, ok := p.Semantics().Focused()
@@ -226,7 +227,7 @@ func TestCompositeRovingFocusIsAnnouncedAndDoesNotTrapTab(t *testing.T) {
 		t.Fatal("accessibility-focused tab did not activate")
 	}
 	values := ggui.State([]string{"A"})
-	q := ggui.NewProbe(ggui.Column(ui.ToggleGroupMultiple(values).Options([]string{"A", "B"}), ui.Button("After group", nil)), ggui.Sz(300, 100))
+	q := ggui.NewProbe(widget.Column(ui.ToggleGroupMultiple(values).Options([]string{"A", "B"}), ui.Button("After group", nil)), ggui.Sz(300, 100))
 	defer q.Close()
 	q.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyArrowRight)
 	focused, ok = q.Semantics().Focused()
@@ -261,9 +262,9 @@ func TestModalRejectedCloseDoesNotReportCompletion(t *testing.T) {
 		})
 		var close func()
 		if drawer {
-			close = ui.Drawer(binding, ggui.Text("Body")).OnClose(func() { closes++ }).Close
+			close = ui.Drawer(binding, widget.Text("Body")).OnClose(func() { closes++ }).Close
 		} else {
-			close = ui.Dialog(binding, ggui.Text("Body")).OnClose(func() { closes++ }).Close
+			close = ui.Dialog(binding, widget.Text("Body")).OnClose(func() { closes++ }).Close
 		}
 		close()
 		if !opened || requests != 1 || closes != 0 {

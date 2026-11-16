@@ -9,6 +9,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 var controlNames = []string{"carousel-demo", "carousel-size", "carousel-spacing", "carousel-orientation", "carousel-api", "carousel-plugin", "carousel-multiple", "carousel-rtl", "carousel-loop", "input-otp-demo", "input-otp-pattern", "input-otp-separator", "input-otp-disabled", "input-otp-controlled", "input-otp-invalid", "input-otp-four-digits", "input-otp-alphanumeric", "input-otp-form", "input-otp-rtl"}
@@ -43,7 +44,7 @@ func buildControl(name string) controlDemo {
 		d = otpDemo(name)
 	}
 	title := ui.Title(controlTitle(name)).Size(20)
-	d.Widget = ui.Card(ggui.Column(title, ui.Caption("Native ggui · shadcn reference"), d.Widget).Gap(20).Stretch()).Pad(24)
+	d.Widget = ui.Card(widget.Column(title, ui.Caption("Native ggui · shadcn reference"), d.Widget).Gap(20).Stretch()).Pad(24)
 	return d
 }
 
@@ -52,8 +53,8 @@ func carouselDemo(name string) controlDemo {
 	selected := ggui.State(0)
 	items := make([]ggui.Widget, 5)
 	for i := range items {
-		slide := ui.Card(ggui.Center(ui.Title(fmt.Sprint(i + 1)).Size(30))).Pad(24)
-		it := ui.CarouselItem(ggui.Box(slide).Pad(4))
+		slide := ui.Card(widget.Center(ui.Title(fmt.Sprint(i + 1)).Size(30))).Pad(24)
+		it := ui.CarouselItem(widget.Box(slide).Pad(4))
 		switch name {
 		case "carousel-size", "carousel-multiple":
 			it.BasisWhen(func(s ggui.Size) float64 {
@@ -86,10 +87,10 @@ func carouselDemo(name string) controlDemo {
 	switch name {
 	case "carousel-api":
 		label := selected.Map(func(i int) string { return fmt.Sprintf("Slide %d of 5", i+1) })
-		d.Widget = ggui.Column(c, ggui.Box(ggui.Center(ui.CaptionOf(label))).Height(20)).Gap(16).Stretch()
+		d.Widget = widget.Column(c, widget.Box(widget.Center(ui.CaptionOf(label))).Height(20)).Gap(16).Stretch()
 	case "carousel-plugin":
-		controls := ggui.Row(ui.Button("Pause", c.Pause).Outline(), ui.Button("Play", c.Play).Outline()).Gap(8)
-		d.Widget = ggui.Column(c, ggui.Box(ggui.Center(controls)).Height(36)).Gap(16).Stretch()
+		controls := widget.Row(ui.Button("Pause", c.Pause).Outline(), ui.Button("Play", c.Play).Outline()).Gap(8)
+		d.Widget = widget.Column(c, widget.Box(widget.Center(controls)).Height(36)).Gap(16).Stretch()
 	}
 	return d
 }
@@ -128,13 +129,13 @@ func otpDemo(name string) controlDemo {
 			}
 			return "You entered: " + s
 		})
-		body = ggui.Column(o, ui.CaptionOf(message)).Gap(12)
+		body = widget.Column(o, ui.CaptionOf(message)).Gap(12)
 	case "input-otp-pattern":
 		body = ui.Field("Digits Only", o)
 	case "input-otp-form":
 		body = otpForm(o, value)
 	}
-	return controlDemo{OTP: o, Value: value, Widget: ggui.Box(ggui.Center(body)).Height(288)}
+	return controlDemo{OTP: o, Value: value, Widget: widget.Box(widget.Center(body)).Height(288)}
 }
 
 // otpForm is a verification form around o, which edits value.
@@ -155,11 +156,11 @@ func otpForm(o *ui.InputOTPWidget, value *ggui.StateValue[string]) ggui.Widget {
 		value.Set("")
 		status.Set("Demo code reset.")
 	}
-	return ggui.Column(
+	return widget.Column(
 		ui.Title("Verify your login"),
-		ggui.Text("Enter the verification code we sent to m@example.com."),
+		widget.Text("Enter the verification code we sent to m@example.com."),
 		ui.Field("Verification code", o).BindError(errorText),
-		ggui.Row(ui.Button("Verify", verify), ui.Button("Resend code", resend).Outline()).Gap(12),
+		widget.Row(ui.Button("Verify", verify), ui.Button("Resend code", resend).Outline()).Gap(12),
 		ui.CaptionOf(status),
 	).Gap(16)
 }

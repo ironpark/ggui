@@ -1,4 +1,4 @@
-package ggui
+package widget
 
 import (
 	"fmt"
@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/inspect"
 	"github.com/ironpark/ggui/internal/fontsys"
 	"github.com/ironpark/ggui/internal/paragraph"
@@ -25,7 +26,7 @@ import (
 // A Text keeps one only once it is laid out under DirRTL or with a line
 // that needs reordering; most never do.
 type textBidi struct {
-	dir     TextDirection
+	dir     ggui.TextDirection
 	lang    string
 	key     wrapKey
 	laid    bool
@@ -36,13 +37,13 @@ type textBidi struct {
 
 // layoutBidi orders the lines Layout just wrapped for the Env's direction.
 // rewrapped says the lines changed since the last call.
-func (t *TextWidget) layoutBidi(env Env, rewrapped bool) {
+func (t *TextWidget) layoutBidi(env ggui.Env, rewrapped bool) {
 	dir := env.Direction()
 	if t.bidi == nil {
 		// Under DirLTR, lines with no right-to-left text draw as they
 		// are, whatever the language: they need no textBidi until the
 		// lines or the direction change.
-		if dir != DirRTL && (!rewrapped || !slices.ContainsFunc(t.lines, paragraph.HasRTL)) {
+		if dir != ggui.DirRTL && (!rewrapped || !slices.ContainsFunc(t.lines, paragraph.HasRTL)) {
 			return
 		}
 		t.bidi = new(textBidi)
@@ -54,7 +55,7 @@ func (t *TextWidget) layoutBidi(env Env, rewrapped bool) {
 	}
 	b.laid, b.dir, b.lang, b.key = true, dir, lang, t.wrapped
 	b.lines, b.styles = b.lines[:0], b.styles[:0]
-	rtl := dir == DirRTL
+	rtl := dir == ggui.DirRTL
 	for _, line := range t.lines {
 		if !paragraph.NeedsBidi(line, rtl) {
 			b.lines, b.styles = append(b.lines, nil), append(b.styles, nil)
@@ -74,7 +75,7 @@ func (t *TextWidget) lineStyles(line string) []paragraph.LineStyle {
 // paintBidi draws line i in visual order at y, aligned at align in r, and
 // reports whether it did; a line that needs no reordering is left to the
 // caller.
-func (t *TextWidget) paintBidi(dst *Canvas, i int, r Rect, align, y float64, col color.Color, place func(op *text.DrawOptions, x, y float64)) bool {
+func (t *TextWidget) paintBidi(dst *ggui.Canvas, i int, r ggui.Rect, align, y float64, col color.Color, place func(op *text.DrawOptions, x, y float64)) bool {
 	if t.bidi == nil || i >= len(t.bidi.lines) || t.bidi.lines[i] == nil {
 		return false
 	}
@@ -90,7 +91,7 @@ func (t *TextWidget) paintBidi(dst *Canvas, i int, r Rect, align, y float64, col
 // PaintRotated paints already-laid-out text clockwise around the center of r.
 // It uses the regular glyph cache without allocating an intermediate image.
 // Layout is unchanged; the caller reserves space for the rotated bounds.
-func (t *TextWidget) PaintRotated(dst *Canvas, r Rect, radians float64) {
+func (t *TextWidget) PaintRotated(dst *ggui.Canvas, r ggui.Rect, radians float64) {
 	if radians == 0 {
 		t.Paint(dst, r)
 		return
@@ -114,7 +115,7 @@ type TextWidget struct {
 	props     property.Owner
 	value     string
 	content   property.Value[string]
-	style     TextStyle
+	style     ggui.TextStyle
 	formatted bool
 	wrap      bool
 	ellipsis  bool
@@ -122,13 +123,13 @@ type TextWidget struct {
 	lineBox   bool // a line height was set: every line is a box of it
 	maxLines  int
 	align     float64
-	role      Role
+	role      ggui.Role
 	opts      *textOpts // set by Textf and StyleKey only
 
 	// Layout caches the wrapped lines, their widths and the size they add up
 	// to, and re-measures only when the text, the face or the width it must
 	// fit in changes.
-	resolved TextStyle
+	resolved ggui.TextStyle
 	lines    []string
 	// glyphs are each line's glyphs laid out in glyphFace, the face they
 	// were last drawn in, kept until the lines are wrapped again: a frame
@@ -136,7 +137,7 @@ type TextWidget struct {
 	glyphs    [][]text.LazyGlyph
 	glyphFace text.Face
 	widths    []float64
-	natural   Size
+	natural   ggui.Size
 	ascent    float64 // the first baseline, below the top
 	lead      float64 // from the top to the first line's glyphs, in a line box; negative when they are taller than a line
 	wrapped   wrapKey
@@ -150,8 +151,8 @@ type TextWidget struct {
 type textOpts struct {
 	format        string
 	formatArgs    []any
-	styleKey      EnvKey[TextStyle]
-	styleFallback TextStyle
+	styleKey      ggui.EnvKey[ggui.TextStyle]
+	styleFallback ggui.TextStyle
 }
 
 // options returns the Text's textOpts, making them on first use.
@@ -168,15 +169,15 @@ func (t *TextWidget) options() *textOpts {
 type selectableText struct {
 	w    RichTextWidget
 	maxW float64
-	env  Env
+	env  ggui.Env
 }
 
 // wrapKey is the input textlayout.Wrap was last run with.
 type wrapKey struct {
 	generation uint64
 	value      string
-	font       *Font
-	weight     FontWeight
+	font       *ggui.Font
+	weight     ggui.FontWeight
 	size       float64
 	lineHeight float64
 	tracking   float64
@@ -194,12 +195,12 @@ func Text(s string) *TextWidget {
 
 // StyleKey selects an inherited text style, merged below explicit setters.
 // An optional fallback is used when the environment has no value for key.
-func (t *TextWidget) StyleKey(key EnvKey[TextStyle], fallback ...TextStyle) *TextWidget {
+func (t *TextWidget) StyleKey(key ggui.EnvKey[ggui.TextStyle], fallback ...ggui.TextStyle) *TextWidget {
 	o := t.options()
 	defer property.Watch(&t.props, &o.styleKey)()
 	defer property.Watch(&t.props, &o.styleFallback)()
 	o.styleKey = key
-	o.styleFallback = TextStyle{}
+	o.styleFallback = ggui.TextStyle{}
 	if len(fallback) > 0 {
 		o.styleFallback = fallback[0]
 	}
@@ -207,14 +208,14 @@ func (t *TextWidget) StyleKey(key EnvKey[TextStyle], fallback ...TextStyle) *Tex
 }
 
 // Role sets the accessibility role; the default is RoleText.
-func (t *TextWidget) Role(role Role) *TextWidget {
+func (t *TextWidget) Role(role ggui.Role) *TextWidget {
 	defer property.Watch(&t.props, &t.role)()
 	t.role = role
 	return t
 }
 
 // TextOf borrows r and follows it during layout without owning a subscription.
-func TextOf(r Readable[string]) *TextWidget { return Text("").BindContent(r) }
+func TextOf(r ggui.Readable[string]) *TextWidget { return Text("").BindContent(r) }
 
 // Textf formats during layout, reading GetAny arguments like Sprintf. It copies
 // args and creates no computation; construction needs no owner.
@@ -232,9 +233,9 @@ func Textf(format string, args ...any) *TextWidget {
 // and Sprung implement that method. Other arguments pass through unchanged;
 // Readable's Get() alone is not enough. Adapt a custom Readable with
 // Derived(reader.Get), or format its Get() inside a Derived callback.
-func Sprintf(format string, args ...any) *DerivedValue[string] {
+func Sprintf(format string, args ...any) *ggui.DerivedValue[string] {
 	args = append([]any(nil), args...)
-	return Derived(func() string { return formatValues(format, args) })
+	return ggui.Derived(func() string { return formatValues(format, args) })
 }
 func formatValues(format string, args []any) string {
 	vals := make([]any, len(args))
@@ -249,7 +250,7 @@ func formatValues(format string, args []any) string {
 }
 
 // Style merges ts onto the widget's own style.
-func (t *TextWidget) Style(ts TextStyle) *TextWidget {
+func (t *TextWidget) Style(ts ggui.TextStyle) *TextWidget {
 	defer property.Watch(&t.props, &t.style)()
 	t.style = t.style.Merge(ts)
 	return t
@@ -259,7 +260,7 @@ func (t *TextWidget) Style(ts TextStyle) *TextWidget {
 // is paint-only, so a control can recolor its label as the pointer moves
 // over it without laying it out again.
 func (t *TextWidget) Color(c color.Color) *TextWidget {
-	if (c == nil) != (t.style.Color == nil) || IsEnvColor(c) || IsEnvColor(t.style.Color) {
+	if (c == nil) != (t.style.Color == nil) || ggui.IsEnvColor(c) || ggui.IsEnvColor(t.style.Color) {
 		defer property.Watch(&t.props, &t.style)()
 	}
 	t.style.Color = c
@@ -267,7 +268,7 @@ func (t *TextWidget) Color(c color.Color) *TextWidget {
 }
 
 // Font sets the face; nil inherits.
-func (t *TextWidget) Font(f *Font) *TextWidget {
+func (t *TextWidget) Font(f *ggui.Font) *TextWidget {
 	defer property.Watch(&t.props, &t.style)()
 	t.style.Font = f
 	return t
@@ -275,7 +276,7 @@ func (t *TextWidget) Font(f *Font) *TextWidget {
 
 // Weight sets the font weight, drawn with the Font's face nearest it; zero
 // inherits.
-func (t *TextWidget) Weight(w FontWeight) *TextWidget {
+func (t *TextWidget) Weight(w ggui.FontWeight) *TextWidget {
 	defer property.Watch(&t.props, &t.style)()
 	t.style.Weight = w
 	return t
@@ -325,7 +326,7 @@ func (t *TextWidget) Content(s string) *TextWidget {
 }
 
 // BindContent follows r during layout without owning a subscription.
-func (t *TextWidget) BindContent(r Readable[string]) *TextWidget {
+func (t *TextWidget) BindContent(r ggui.Readable[string]) *TextWidget {
 	changed := t.content.Bind(r, "BindContent") || t.formatted
 	t.formatted = false
 	if t.opts != nil {
@@ -377,9 +378,9 @@ func (t *TextWidget) Align(x float64) *TextWidget {
 //
 // An EnvColor is kept as it is then, with no Env to resolve it in, and
 // paints its RGBA.
-func (t *TextWidget) current() TextStyle {
+func (t *TextWidget) current() ggui.TextStyle {
 	if t.resolved.Font == nil {
-		st := Env{}.ResolveText(t.style)
+		st := ggui.Env{}.ResolveText(t.style)
 		if t.style.Color != nil {
 			st.Color = t.style.Color
 		}
@@ -390,21 +391,21 @@ func (t *TextWidget) current() TextStyle {
 
 // engine is the current style as the text engine sets text in it, and the
 // generation of its fonts.
-func (t *TextWidget) engine() (paragraph.Style, uint64) { return TextEngineStyle(t.current()) }
+func (t *TextWidget) engine() (paragraph.Style, uint64) { return ggui.TextEngineStyle(t.current()) }
 
 // dir is the direction the lines were last ordered for: DirLTR, unless
 // they were laid out in another.
-func (t *TextWidget) dir() TextDirection {
+func (t *TextWidget) dir() ggui.TextDirection {
 	if t.bidi == nil {
-		return DirLTR
+		return ggui.DirLTR
 	}
 	return t.bidi.dir
 }
 
 // startAlign is where a line of text starts by default: the left edge, or
 // the right one under DirRTL.
-func startAlign(d TextDirection) float64 {
-	if d == DirRTL {
+func startAlign(d ggui.TextDirection) float64 {
+	if d == ggui.DirRTL {
 		return 1
 	}
 	return 0
@@ -434,7 +435,7 @@ func (t *TextWidget) spacing() float64 {
 }
 
 // Layout implements Widget.
-func (t *TextWidget) Layout(c Constraints, env Env) Size {
+func (t *TextWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer t.props.Layout().EndLayout()
 	var opts textOpts
 	if t.opts != nil {
@@ -465,13 +466,13 @@ func (t *TextWidget) Layout(c Constraints, env Env) Size {
 // lineHeightSet reports whether text in style s under env was given a line
 // height, by s or by a style it inherits, rather than left the default:
 // its lines are then boxes of that height.
-func lineHeightSet(env Env, s TextStyle) bool {
+func lineHeightSet(env ggui.Env, s ggui.TextStyle) bool {
 	return s.LineHeight != 0 || env.Text().LineHeight != 0
 }
 
 // layoutLines wraps, cuts and orders the lines for a width of maxW, when
 // any of what they depend on changed since the last time.
-func (t *TextWidget) layoutLines(maxW float64, env Env) {
+func (t *TextWidget) layoutLines(maxW float64, env ggui.Env) {
 	st, gen := t.engine()
 	face := faceOf(st, 1)
 	fits := t.wrap || t.ellipsis || t.maxLines > 0
@@ -505,7 +506,7 @@ func (t *TextWidget) layoutLines(maxW float64, env Env) {
 			// above them and half below, as CSS's half-leading does.
 			t.lead = (t.spacing() - m.HAscent - m.HDescent) / 2
 		}
-		t.natural = Sz(w, float64(len(t.lines)-1)*t.spacing()+m.HAscent+m.HDescent+2*t.lead)
+		t.natural = ggui.Sz(w, float64(len(t.lines)-1)*t.spacing()+m.HAscent+m.HDescent+2*t.lead)
 		t.ascent = t.lead + m.HAscent
 	}
 	t.layoutBidi(env, rewrapped)
@@ -521,7 +522,7 @@ func (t *TextWidget) Baseline() (float64, bool) {
 }
 
 // Paint implements Widget.
-func (t *TextWidget) Paint(dst *Canvas, r Rect) {
+func (t *TextWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	// Text is half of what a screen reader reads, and none of it takes
 	// input, so it goes in the semantics tree and never in the hit list,
 	// which input scans backwards on every pointer event. Text a control
@@ -552,9 +553,9 @@ func (t *TextWidget) InspectLabel() string { return t.value }
 // upright says place only translates them, so that a line wholly outside
 // the clip is skipped rather than shaped and drawn to be clipped: a long
 // Text in a Scroll draws only what shows.
-func (t *TextWidget) paintLines(dst *Canvas, r Rect, upright bool, place func(op *text.DrawOptions, x, y float64)) {
+func (t *TextWidget) paintLines(dst *ggui.Canvas, r ggui.Rect, upright bool, place func(op *text.DrawOptions, x, y float64)) {
 	if t.value != "" && !dst.Named(r) {
-		dst.Leaf(r, Node{Role: roleOr(t.role, RoleText), Name: t.value})
+		dst.Leaf(r, ggui.Node{Role: roleOr(t.role, ggui.RoleText), Name: t.value})
 	}
 	if dst == nil || dst.Image == nil || dst.Image.Bounds().Empty() {
 		return
@@ -565,7 +566,7 @@ func (t *TextWidget) paintLines(dst *Canvas, r Rect, upright bool, place func(op
 	face := t.faceAt(dst.Scale())
 	op := &t.drawOp
 	*op = text.DrawOptions{}
-	col := gem.Pick(t.style.Color != nil && !IsEnvColor(t.style.Color), t.style.Color, t.current().Color)
+	col := gem.Pick(t.style.Color != nil && !ggui.IsEnvColor(t.style.Color), t.style.Color, t.current().Color)
 	op.ColorScale.ScaleWithColor(col)
 	align := gem.Pick(t.alignSet, t.align, startAlign(t.dir()))
 	for i, line := range t.lines {
@@ -573,7 +574,7 @@ func (t *TextWidget) paintLines(dst *Canvas, r Rect, upright bool, place func(op
 		y := r.Origin.Y + t.lead + float64(i)*t.spacing()
 		// A line's glyphs can reach past its box, by an accent, a tall
 		// emoji or a long tail, by up to a line more.
-		if upright && !dst.Draws(Rct(Pt(r.Origin.X, y), Sz(r.Size.W, t.spacing())), t.spacing()) {
+		if upright && !dst.Draws(ggui.Rct(ggui.Pt(r.Origin.X, y), ggui.Sz(r.Size.W, t.spacing())), t.spacing()) {
 			continue
 		}
 		if t.paintBidi(dst, i, r, align, y, col, place) {
@@ -612,8 +613,8 @@ func (t *TextWidget) drawLine(dst *ggfx.Image, i int, line string, face text.Fac
 // Styled.
 type StyledWidget struct {
 	props property.Owner
-	style TextStyle
-	child Widget
+	style ggui.TextStyle
+	child ggui.Widget
 }
 
 // Styled gives every Text below child a new base style: what the setters
@@ -621,10 +622,10 @@ type StyledWidget struct {
 // win over it.
 //
 //	Styled(Column(Text("a"), Text("b"))).Color(muted).Size(12)
-func Styled(child Widget) *StyledWidget { return &StyledWidget{child: child} }
+func Styled(child ggui.Widget) *StyledWidget { return &StyledWidget{child: child} }
 
 // Style merges ts onto the style the subtree inherits.
-func (s *StyledWidget) Style(ts TextStyle) *StyledWidget {
+func (s *StyledWidget) Style(ts ggui.TextStyle) *StyledWidget {
 	defer property.Watch(&s.props, &s.style)()
 	s.style = s.style.Merge(ts)
 	return s
@@ -638,14 +639,14 @@ func (s *StyledWidget) Color(c color.Color) *StyledWidget {
 }
 
 // Font sets the inherited font.
-func (s *StyledWidget) Font(f *Font) *StyledWidget {
+func (s *StyledWidget) Font(f *ggui.Font) *StyledWidget {
 	defer property.Watch(&s.props, &s.style)()
 	s.style.Font = f
 	return s
 }
 
 // Weight sets the inherited font weight.
-func (s *StyledWidget) Weight(w FontWeight) *StyledWidget {
+func (s *StyledWidget) Weight(w ggui.FontWeight) *StyledWidget {
 	defer property.Watch(&s.props, &s.style)()
 	s.style.Weight = w
 	return s
@@ -673,13 +674,13 @@ func (s *StyledWidget) Tracking(em float64) *StyledWidget {
 }
 
 // Layout implements Widget.
-func (s *StyledWidget) Layout(c Constraints, env Env) Size {
+func (s *StyledWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer s.props.Layout().EndLayout()
 	return s.child.Layout(c, env.WithText(s.style))
 }
 
 // Baseline implements Baseliner: the child's.
-func (s *StyledWidget) Baseline() (float64, bool) { return BaselineOf(s.child) }
+func (s *StyledWidget) Baseline() (float64, bool) { return ggui.BaselineOf(s.child) }
 
 // Paint implements Widget.
-func (s *StyledWidget) Paint(dst *Canvas, r Rect) { dst.Paint(s.child, r) }
+func (s *StyledWidget) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(s.child, r) }

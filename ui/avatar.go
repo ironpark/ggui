@@ -10,6 +10,7 @@ import (
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // The avatar sizes of shadcn/ui: Small, the default and Large.
@@ -28,7 +29,7 @@ type AvatarWidget struct {
 	nameReader ggui.Readable[string]
 	props      property.Owner
 	name       string
-	initials   *ggui.TextWidget
+	initials   *widget.TextWidget
 	img        *ggfx.Image
 	side       float64 // negative is the default size
 	square     bool
@@ -47,7 +48,7 @@ type AvatarWidget struct {
 //
 //	ui.Avatar("Ada Lovelace").Image(portrait).Large()
 func Avatar(name string) *AvatarWidget {
-	return &AvatarWidget{name: name, initials: ggui.Text(initialsOf(name)).NoWrap(), side: -1}
+	return &AvatarWidget{name: name, initials: widget.Text(initialsOf(name)).NoWrap(), side: -1}
 }
 
 // initialsOf takes the first letter of the first and last words, which is
@@ -251,7 +252,7 @@ func (g *AvatarGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		// of the first one beside it.
 		if g.count == nil || g.counted != hidden {
 			label := "+" + strconv.Itoa(hidden)
-			g.count = &AvatarWidget{name: strconv.Itoa(hidden) + " more", initials: ggui.Text(label).NoWrap(), side: -1, counts: true}
+			g.count = &AvatarWidget{name: strconv.Itoa(hidden) + " more", initials: widget.Text(label).NoWrap(), side: -1, counts: true}
 			g.counted = hidden
 		}
 		side := -1.0

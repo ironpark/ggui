@@ -6,6 +6,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestCarouselTakesItsDirectionAndGapFromTheEnv(t *testing.T) {
@@ -42,8 +43,8 @@ func TestAccordionHeaderDrawsAWidgetAndKeepsTheTitleAsItsName(t *testing.T) {
 	t.Parallel()
 	open := ggui.State([]string{})
 	a := Accordion(open,
-		AccordionItem("billing", "Billing", ggui.Text("Body")).Header(ggui.Row(Icon(icons.File).Alt("Invoice"), ggui.Text("Billing and invoices")).Gap(8)),
-		AccordionItem("plain", "Plain", ggui.Text("Body")),
+		AccordionItem("billing", "Billing", widget.Text("Body")).Header(widget.Row(Icon(icons.File).Alt("Invoice"), widget.Text("Billing and invoices")).Gap(8)),
+		AccordionItem("plain", "Plain", widget.Text("Body")),
 	)
 	p := ggui.NewProbe(a, ggui.Sz(400, 300))
 	defer p.Close()
@@ -65,7 +66,7 @@ func TestAccordionHeaderDrawsAWidgetAndKeepsTheTitleAsItsName(t *testing.T) {
 
 func TestResizableDividerIsALineThePanesMeetAt(t *testing.T) {
 	t.Parallel()
-	r := Resizable(ggui.State(.5), ggui.Box(), ggui.Box())
+	r := Resizable(ggui.State(.5), widget.Box(), widget.Box())
 	p := ggui.NewProbe(r, ggui.Sz(201, 100))
 	defer p.Close()
 	p.Frame()

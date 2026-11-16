@@ -18,6 +18,7 @@ import (
 	_ "github.com/ironpark/ggui/inspect/panel"
 	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // Profile is a plain value. The form edits a copy in one signal and writes
@@ -102,7 +103,7 @@ func (m *model) build(post func(func())) ggui.Widget {
 	savedName := m.Saved.Field(func(p *Profile) *string { return &p.Name })
 	savedEmail := m.Saved.Field(func(p *Profile) *string { return &p.Email })
 
-	form := ggui.Column(
+	form := widget.Column(
 		ui.Title("Profile"),
 		ui.Field("Name", ui.TextField(name).Placeholder("How should we address you?")),
 		ui.Field("Email", ui.TextField(email).Placeholder("you@example.com")).
@@ -111,21 +112,21 @@ func (m *model) build(post func(func())) ggui.Widget {
 			Help("Notification sound level"),
 		ui.Switch(notify, "Email me about activity"),
 		ui.Divider(),
-		ggui.Row(
+		widget.Row(
 			ui.Button("Save", func() { m.save(post) }).BindDisabled(cannotSave),
 			ui.Button("Reset", m.reset).Outline().BindDisabled(cannotReset),
-			ggui.Spacer(),
+			widget.Spacer(),
 			ui.CaptionOf(m.Status).NoWrap(),
 		).Space(1),
 		// Styled sets the base style for everything below it: these lines
 		// are small and muted without a setter on each Text. MutedFg is a
 		// token, resolved at layout, so it follows a theme switch.
-		ggui.Styled(ggui.Column(
-			ggui.Textf("Draft: %s <%s>, notify=%t, volume=%.2f", name, email, notify, volume),
-			ggui.Textf("Saved: %s <%s>", savedName, savedEmail),
+		widget.Styled(widget.Column(
+			widget.Textf("Draft: %s <%s>, notify=%t, volume=%.2f", name, email, notify, volume),
+			widget.Textf("Saved: %s <%s>", savedName, savedEmail),
 		).Space(0.5)).Size(12).Color(uitheme.MutedFg),
 	).Space(1.5).Stretch()
-	return ggui.Center(ggui.Box(ui.Card(form).Pad(24)).Width(440))
+	return widget.Center(widget.Box(ui.Card(form).Pad(24)).Width(440))
 }
 
 // persistSlowly stands in for a backend: it takes a moment and refuses

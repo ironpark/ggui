@@ -5,13 +5,14 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // The reader and format forms of the text helpers follow their values and
 // keep the role the plain forms give.
 func TestTextHelpersFollowValues(t *testing.T) {
 	status, count := ggui.State("Saved"), ggui.State(3)
-	p := ggui.NewProbe(ggui.Column(ui.CaptionOf(status), ui.Titlef("%d left", count)), ggui.Sz(200, 80))
+	p := ggui.NewProbe(widget.Column(ui.CaptionOf(status), ui.Titlef("%d left", count)), ggui.Sz(200, 80))
 	defer p.Close()
 	p.Frame()
 	status.Set("Saving…")

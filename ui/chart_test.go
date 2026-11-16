@@ -9,6 +9,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 func chartTestData() []ChartDatum {
@@ -264,7 +265,7 @@ func TestChartMotionThroughProbe(t *testing.T) {
 func TestChartTooltipAndLegendEmpty(t *testing.T) {
 	t.Parallel()
 	c := PieChart(nil, nil)
-	p := ggui.NewProbe(ggui.Column(ChartLegend(c), ChartTooltip(c, 99)), ggui.Sz(300, 200))
+	p := ggui.NewProbe(widget.Column(ChartLegend(c), ChartTooltip(c, 99)), ggui.Sz(300, 200))
 	defer p.Close()
 	p.Frame()
 }

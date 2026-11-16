@@ -6,12 +6,13 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestPopoverSideAndDensity(t *testing.T) {
 	t.Parallel()
-	pop := ui.Popover("Open", ui.Button("Inside", nil)).Title("Dimensions").Description("Set the dimensions.").Side(ggui.PopupRight).Align(ggui.PopupStart)
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Padding(pop, 100, 0, 0, 100)), ggui.Sz(800, 500))
+	pop := ui.Popover("Open", ui.Button("Inside", nil)).Title("Dimensions").Description("Set the dimensions.").Side(widget.PopupRight).Align(widget.PopupStart)
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Padding(pop, 100, 0, 0, 100)), ggui.Sz(800, 500))
 	defer p.Close()
 	p.Tap("Open")
 	p.Frame()
@@ -41,21 +42,21 @@ func TestHoverCardOpensOnTheSideItIsGiven(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name  string
-		side  ggui.PopupSide
+		side  widget.PopupSide
 		check func(card, anchor ggui.Rect) bool
 	}{
-		{"bottom", ggui.PopupBottom, func(c, a ggui.Rect) bool {
+		{"bottom", widget.PopupBottom, func(c, a ggui.Rect) bool {
 			// shadcn's alignOffset = 4 moves a centered card toward the end.
 			return c.Origin.Y == a.Origin.Y+a.Size.H+4 && near(c.Center().X, a.Center().X+4)
 		}},
-		{"top", ggui.PopupTop, func(c, a ggui.Rect) bool { return c.Origin.Y+c.Size.H == a.Origin.Y-4 }},
-		{"right", ggui.PopupRight, func(c, a ggui.Rect) bool {
+		{"top", widget.PopupTop, func(c, a ggui.Rect) bool { return c.Origin.Y+c.Size.H == a.Origin.Y-4 }},
+		{"right", widget.PopupRight, func(c, a ggui.Rect) bool {
 			return c.Origin.X == a.Origin.X+a.Size.W+4 && near(c.Center().Y, a.Center().Y+4)
 		}},
-		{"left", ggui.PopupLeft, func(c, a ggui.Rect) bool { return c.Origin.X+c.Size.W == a.Origin.X-4 }},
+		{"left", widget.PopupLeft, func(c, a ggui.Rect) bool { return c.Origin.X+c.Size.W == a.Origin.X-4 }},
 	} {
-		card := ui.HoverCard(ggui.Box().Size(80, 24), ggui.Box().Height(60)).Name("Preview").Side(tc.side).Delay(0)
-		p := ggui.NewProbe(ggui.Center(card), ggui.Sz(900, 500))
+		card := ui.HoverCard(widget.Box().Size(80, 24), widget.Box().Height(60)).Name("Preview").Side(tc.side).Delay(0)
+		p := ggui.NewProbe(widget.Center(card), ggui.Sz(900, 500))
 		p.Frame()
 		p.Move(ggui.Pt(450, 250))
 		p.Advance(time.Second)

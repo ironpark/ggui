@@ -9,6 +9,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // placed records where its child was last painted.
@@ -31,8 +32,8 @@ func TestBadgeLooksUnderThePointerLeaveItToWhatTheBadgeIsIn(t *testing.T) {
 	sel := ggui.State(0)
 	ghost := Badge("3").Ghost()
 	spot := &placed{Widget: ghost}
-	tabs := Tabs(sel, Tab("Build", ggui.Text("b")), Tab("Test", ggui.Text("t")).Header(ggui.Row(ggui.Text("Test"), spot).Gap(6)))
-	p := ggui.NewProbe(ggui.Column(tabs), ggui.Sz(400, 200))
+	tabs := Tabs(sel, Tab("Build", widget.Text("b")), Tab("Test", widget.Text("t")).Header(widget.Row(widget.Text("Test"), spot).Gap(6)))
+	p := ggui.NewProbe(widget.Column(tabs), ggui.Sz(400, 200))
 	defer p.Close()
 	p.Frame()
 	if ghost.hover != 0 {
@@ -72,7 +73,7 @@ func TestBadgeWithAnActionIsALink(t *testing.T) {
 	taps := 0
 	link.OnTap(func() { taps++ })
 	a, b := &placed{Widget: plain}, &placed{Widget: link}
-	p := ggui.NewProbe(ggui.Row(a, b).Gap(8), ggui.Sz(300, 100))
+	p := ggui.NewProbe(widget.Row(a, b).Gap(8), ggui.Sz(300, 100))
 	defer p.Close()
 	p.Frame()
 	p.Move(center(a.at))
@@ -108,7 +109,7 @@ func TestBadgeWithAnActionIsALink(t *testing.T) {
 func TestCardHeaderActionIsAGridGapFromTheText(t *testing.T) {
 	t.Parallel()
 	theme := uitheme.Default()
-	action := &placed{Widget: ggui.Box().Size(40, 20)}
+	action := &placed{Widget: widget.Box().Size(40, 20)}
 	h := CardHeader("Team", "Invite people to the project and give each of them a role in it.").Action(action)
 	p := ggui.NewProbe(h, ggui.Sz(260, 200))
 	defer p.Close()
@@ -136,10 +137,10 @@ func TestCardHeaderActionIsAGridGapFromTheText(t *testing.T) {
 func TestCardMediaInFirstPlaceIsFlushWithTheTopAndSides(t *testing.T) {
 	t.Parallel()
 	theme := uitheme.Default()
-	media := &placed{Widget: ggui.Box().Height(90)}
+	media := &placed{Widget: widget.Box().Height(90)}
 	lead := CardMedia(media)
 	card := Card(lead, CardHeader("Lisbon", ""))
-	p := ggui.NewProbe(ggui.Column(card).Align(ggui.AlignStretch), ggui.Sz(300, 400))
+	p := ggui.NewProbe(widget.Column(card).Align(widget.AlignStretch), ggui.Sz(300, 400))
 	defer p.Close()
 	p.Frame()
 	b := theme.BorderWidth
@@ -151,8 +152,8 @@ func TestCardMediaInFirstPlaceIsFlushWithTheTopAndSides(t *testing.T) {
 	}
 	env := theme.Apply(ggui.Env{})
 	cs := ggui.Loose(ggui.Sz(300, 400))
-	first := Card(CardMedia(ggui.Box().Height(90)), CardContent(ggui.Box().Height(20))).Layout(cs, env)
-	second := Card(CardContent(ggui.Box().Height(20)), CardMedia(ggui.Box().Height(90))).Layout(cs, env)
+	first := Card(CardMedia(widget.Box().Height(90)), CardContent(widget.Box().Height(20))).Layout(cs, env)
+	second := Card(CardContent(widget.Box().Height(20)), CardMedia(widget.Box().Height(90))).Layout(cs, env)
 	if got := second.H - first.H; got != theme.CardPad.Top-b {
 		t.Fatalf("media in last place makes the card %v taller than media in first place, want the top padding it does not replace", got)
 	}
@@ -173,7 +174,7 @@ func TestAvatarGroupCountHasNoHairlineAndKeepsTheBodyText(t *testing.T) {
 	if got := g.sizes[len(g.sizes)-1]; got != ggui.Sz(24, 24) {
 		t.Fatalf("the bubble beside small avatars is %v, want 24 across", got)
 	}
-	body := ggui.Text("+2").NoWrap().Style(theme.Text).Layout(ggui.Loose(ggui.Sz(100, 100)), env)
+	body := widget.Text("+2").NoWrap().Style(theme.Text).Layout(ggui.Loose(ggui.Sz(100, 100)), env)
 	if g.count.textSize != body {
 		t.Fatalf("the count is set %v, want the body text's %v", g.count.textSize, body)
 	}
@@ -190,7 +191,7 @@ func TestAvatarGroupCountHasNoHairlineAndKeepsTheBodyText(t *testing.T) {
 func TestTabsLineBarHangsOffTheTriggersPaddingBox(t *testing.T) {
 	t.Parallel()
 	tabs := Tabs(ggui.State(0), Tab("One", nil), Tab("Two", nil)).Line()
-	p := ggui.NewProbe(ggui.Column(tabs), ggui.Sz(320, 200))
+	p := ggui.NewProbe(widget.Column(tabs), ggui.Sz(320, 200))
 	defer p.Close()
 	p.Frame()
 	strip, lr := ggui.Rct(ggui.Pt(0, 0), ggui.Sz(tabs.stripW, tabs.stripH)), tabs.labelRect[0]
@@ -198,7 +199,7 @@ func TestTabsLineBarHangsOffTheTriggersPaddingBox(t *testing.T) {
 		t.Fatalf("the bar is at %v, want %v", got, want)
 	}
 	side := Tabs(ggui.State(0), Tab("One", nil), Tab("Two", nil)).Line().Vertical()
-	q := ggui.NewProbe(ggui.Column(side), ggui.Sz(320, 200))
+	q := ggui.NewProbe(widget.Column(side), ggui.Sz(320, 200))
 	defer q.Close()
 	q.Frame()
 	strip, lr = ggui.Rct(ggui.Pt(0, 0), ggui.Sz(side.stripW, side.stripH)), side.labelRect[0]
@@ -217,7 +218,7 @@ func TestItemWithAnActionIsALinkAndOneWithoutTakesNoInput(t *testing.T) {
 	plain := Item("Backups", "Last run 2 hours ago")
 	link := Item("Changelog", "What is new").Action(Button("Run", func() { runs++ })).OnTap(func() { taps++ })
 	a, b := &placed{Widget: plain}, &placed{Widget: link}
-	p := ggui.NewProbe(ggui.Column(a, b).Align(ggui.AlignStretch), ggui.Sz(320, 300))
+	p := ggui.NewProbe(widget.Column(a, b).Align(widget.AlignStretch), ggui.Sz(320, 300))
 	defer p.Close()
 	p.Frame()
 	p.Move(center(a.at))
@@ -273,7 +274,7 @@ func TestMenuLabelInAMenubarIsTheSizeOfARow(t *testing.T) {
 	Menubar(Menu("View", inBar, MenuItem("Zoom", nil)))
 	small, large := inMenu.Layout(c, env), inBar.Layout(c, env)
 	rows := theme.ItemPad.Top + theme.ItemPad.Bottom
-	body := ggui.Text("Appearance").Style(theme.Text).Layout(c, env).H
+	body := widget.Text("Appearance").Style(theme.Text).Layout(c, env).H
 	caption := Caption("Appearance").Layout(c, env).H
 	if small.H != caption+rows || large.H != body+rows || large.H <= small.H {
 		t.Fatalf("a dropdown's label is %v tall and a menubar's %v, want %v and %v", small.H, large.H, caption+rows, body+rows)
@@ -287,8 +288,8 @@ func TestMenuLabelInAMenubarIsTheSizeOfARow(t *testing.T) {
 func TestSheetScrimFadesOnItsOwnClock(t *testing.T) {
 	t.Parallel()
 	open := ggui.State(false)
-	sheet := Sheet(open, ggui.Text("body"))
-	p := ggui.NewProbe(ggui.Column(sheet), ggui.Sz(600, 400))
+	sheet := Sheet(open, widget.Text("body"))
+	p := ggui.NewProbe(widget.Column(sheet), ggui.Sz(600, 400))
 	defer p.Close()
 	p.Frame()
 	open.Set(true)
@@ -300,8 +301,8 @@ func TestSheetScrimFadesOnItsOwnClock(t *testing.T) {
 	}
 
 	rises := ggui.State(false)
-	drawer := Drawer(rises, ggui.Box().Height(200))
-	q := ggui.NewProbe(ggui.Column(drawer), ggui.Sz(600, 400))
+	drawer := Drawer(rises, widget.Box().Height(200))
+	q := ggui.NewProbe(widget.Column(drawer), ggui.Sz(600, 400))
 	defer q.Close()
 	q.Frame()
 	rises.Set(true)
@@ -386,8 +387,8 @@ func TestMenubarCrossesTheMenuLeftWithTheMenuMovedTo(t *testing.T) {
 // its own scale runs back down over the 150ms the popup fades it in.
 func TestNavigationMenuPanelScalesDownAsItLeaves(t *testing.T) {
 	t.Parallel()
-	nav := NavigationMenu(NavigationMenuItem("Products", ggui.Column(NavigationMenuLink("Editor", nil))))
-	p := ggui.NewProbe(ggui.Column(nav), ggui.Sz(500, 300))
+	nav := NavigationMenu(NavigationMenuItem("Products", widget.Column(NavigationMenuLink("Editor", nil))))
+	p := ggui.NewProbe(widget.Column(nav), ggui.Sz(500, 300))
 	defer p.Close()
 	p.Tap("Products")
 	p.Frame()
@@ -415,7 +416,7 @@ func TestSidebarTipIsFilledWithThePagesForeground(t *testing.T) {
 	collapsed := ggui.State(true)
 	bar := Sidebar(ggui.State("a"), SidebarItem("a", "Alpha").Icon(icons.File).Tooltip("Alpha tip")).
 		Collapsible(SidebarCollapseIcon).BindCollapsed(collapsed)
-	p := ggui.NewProbe(ggui.WithEnv(theme.Apply, ggui.Row(bar, ggui.Expanded(ggui.Box()))), ggui.Sz(600, 400))
+	p := ggui.NewProbe(ggui.WithEnv(theme.Apply, widget.Row(bar, widget.Expanded(widget.Box()))), ggui.Sz(600, 400))
 	defer p.Close()
 	p.Frame()
 	p.Advance(time.Second)
@@ -507,7 +508,7 @@ func TestCodeBlockAtItsOwnHeightHasNothingToScroll(t *testing.T) {
 	env := uitheme.Default().Apply(ggui.Env{})
 	c := CodeBlock("go build ./...\n").Language("shell")
 	size := c.Layout(ggui.Loose(ggui.Sz(300, ggui.Unbounded)), env)
-	p := ggui.NewProbe(ggui.Column(c), ggui.Sz(300, size.H))
+	p := ggui.NewProbe(widget.Column(c), ggui.Sz(300, size.H))
 	defer p.Close()
 	p.Frame()
 	if got := c.yController.MaxOffset(); got != 0 {

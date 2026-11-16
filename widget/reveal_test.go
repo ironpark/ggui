@@ -12,14 +12,14 @@ import (
 type counted struct{ laid, painted, taps int }
 
 func (k *counted) widget() ggui.Widget {
-	return ggui.Tap(ggui.FromFuncs(func(c ggui.Constraints, _ ggui.Env) ggui.Size {
+	return Tap(ggui.FromFuncs(func(c ggui.Constraints, _ ggui.Env) ggui.Size {
 		k.laid++
 		return c.Constrain(ggui.Sz(80, 40))
 	}, func(*ggui.Canvas, ggui.Rect) { k.painted++ }), func() { k.taps++ })
 }
 
 // atTopLeft aligns w to the top-left corner of the room it is given.
-func atTopLeft(w ggui.Widget) ggui.Widget { return ggui.Align(w).At(0, 0) }
+func atTopLeft(w ggui.Widget) ggui.Widget { return Align(w).At(0, 0) }
 
 // revealing runs p's frames 16ms apart until the window rests, and checks
 // that the height h keeps moving one way from one end to the other through
@@ -72,7 +72,7 @@ func TestARevealEasesOpenAndClosedInAWindowsFrames(t *testing.T) {
 	var h float64
 	r := Reveal(open, k.widget())
 	p := ggui.NewWindowProbe(func() ggui.Widget {
-		return atTopLeft(ggui.Column(heightOf(r, &h), ggui.Box().Size(80, 10)))
+		return atTopLeft(Column(heightOf(r, &h), Box().Size(80, 10)))
 	}, ggui.Sz(200, 200))
 	defer p.Close()
 	p.Run(16*time.Millisecond, 10)
@@ -169,8 +169,8 @@ func TestARevealEasingInAScrollPaintsWithinItsViewport(t *testing.T) {
 	var k counted
 	var h float64
 	p := ggui.NewWindowProbe(func() ggui.Widget {
-		pane := ggui.Box(ggui.Scroll(ggui.Column(heightOf(Reveal(open, k.widget()), &h), ggui.Box().Size(100, 400)))).Size(100, 100)
-		return ggui.Row(pane, ggui.Box().Size(100, 100))
+		pane := Box(Scroll(Column(heightOf(Reveal(open, k.widget()), &h), Box().Size(100, 400)))).Size(100, 100)
+		return Row(pane, Box().Size(100, 100))
 	}, ggui.Sz(200, 100))
 	defer p.Close()
 	p.Run(16*time.Millisecond, 10)

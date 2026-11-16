@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // disclosure shows its body only while open. The flag is an ordinary bool,
@@ -14,12 +15,12 @@ type disclosure struct {
 	env    ggui.Env
 	header ggui.Widget
 	body   ggui.Widget
-	column *ggui.ColumnWidget
+	column *widget.ColumnWidget
 }
 
 func newDisclosure(title string, body ggui.Widget) *disclosure {
 	d := &disclosure{body: body}
-	d.header = ggui.Tap(ggui.Row(ggui.Text(title), ggui.Spacer(), ui.Caption("tap to toggle")).Space(1), d.toggle)
+	d.header = widget.Tap(widget.Row(widget.Text(title), widget.Spacer(), ui.Caption("tap to toggle")).Space(1), d.toggle)
 	return d
 }
 
@@ -31,9 +32,9 @@ func (d *disclosure) toggle() {
 func (d *disclosure) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	d.env = env
 	if d.open {
-		d.column = ggui.Column(d.header, d.body).Space(1).Stretch()
+		d.column = widget.Column(d.header, d.body).Space(1).Stretch()
 	} else {
-		d.column = ggui.Column(d.header).Stretch()
+		d.column = widget.Column(d.header).Stretch()
 	}
 	return d.column.Layout(c, env)
 }

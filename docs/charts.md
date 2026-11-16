@@ -4,7 +4,7 @@
 
 Create native charts, configure their appearance, and support interactive data exploration.
 
-Examples use `ggui` and `ui` imports and application-defined placeholders.
+Examples use `ggui`, `widget` and `ui` imports and application-defined placeholders.
 See [example conventions](README.md#start-here) before copying snippets.
 
 `ui` provides native area, bar, line, pie/donut, radar and radial charts. They
@@ -45,7 +45,7 @@ chart := ui.BarChart(data, config).
     TickFormatter(func(s string) string { return s[:3] }).
     Tooltip(ui.ChartTooltipOptions{Indicator: ui.ChartIndicatorLine})
 
-panel := ui.Card(ggui.Column(
+panel := ui.Card(widget.Column(
     ui.Title("Visitors"),
     ui.Caption("January – March"),
     chart,
@@ -71,7 +71,7 @@ charts show “No data”. Radar charts require at least three categories.
 
 `ChartContainer(kind, data, config)` is the common constructor. Charts fill a
 bounded width and default to 240 pixels tall (400 pixels wide when unbounded).
-`Height` sets a logical height. Use `ggui.Box` and the normal layout widgets to
+`Height` sets a logical height. Use `widget.Box` and the normal layout widgets to
 constrain size or create an aspect ratio.
 
 ### Configure the plot

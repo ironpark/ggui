@@ -7,6 +7,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // messageEndKey tells a Bubble that the Message around it is aligned to the end.
@@ -23,12 +24,12 @@ type BubbleWidget struct {
 	props      property.Owner
 	alignedEnd bool
 	ggui.Interactive
-	content                    *ggui.StyledWidget
-	box                        *ggui.BoxWidget
+	content                    *widget.StyledWidget
+	box                        *widget.BoxWidget
 	variant                    string
 	end                        bool
 	reactions                  ggui.Widget
-	reactionBox                *ggui.BoxWidget
+	reactionBox                *widget.BoxWidget
 	reactionTop, reactionStart bool
 	bodySize, reactionSize     ggui.Size
 	theme                      *uitheme.Theme
@@ -39,8 +40,8 @@ type BubbleWidget struct {
 // Bubble creates a chat surface around content, on the Primary color. Its
 // width follows the content up to four fifths of the row.
 func Bubble(content ggui.Widget) *BubbleWidget {
-	b := &BubbleWidget{content: ggui.Styled(content), variant: "default"}
-	b.box = ggui.Box(b.content)
+	b := &BubbleWidget{content: widget.Styled(content), variant: "default"}
+	b.box = widget.Box(b.content)
 	b.Role = ggui.RoleButton
 	b.AutoKey()
 	return b
@@ -125,7 +126,7 @@ func (b *BubbleWidget) BindDisabled(r ggui.Readable[bool]) *BubbleWidget { b.Bin
 // space between rows for the overlap. Use named buttons for interactive reactions.
 func (b *BubbleWidget) Reactions(w ggui.Widget) *BubbleWidget {
 	b.reactions = w
-	b.reactionBox = ggui.Box(w).Pad(2, 6).Radius(100)
+	b.reactionBox = widget.Box(w).Pad(2, 6).Radius(100)
 	return b
 }
 
@@ -144,8 +145,8 @@ func (b *BubbleWidget) ReactionsStart() *BubbleWidget {
 }
 
 // BubbleGroup stacks consecutive bubbles with shadcn's 8px gap.
-func BubbleGroup(bubbles ...ggui.Widget) *ggui.ColumnWidget {
-	return ggui.Column(bubbles...).Gap(8).Align(ggui.AlignStretch)
+func BubbleGroup(bubbles ...ggui.Widget) *widget.ColumnWidget {
+	return widget.Column(bubbles...).Gap(8).Align(widget.AlignStretch)
 }
 
 // luma is how bright c reads, from 0 to 1, as the eye weighs its channels.

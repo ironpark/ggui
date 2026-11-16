@@ -7,6 +7,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 const (
@@ -73,7 +74,7 @@ type SheetWidget struct {
 	slide  ggui.Motion
 	scrim  ggui.Motion // the dimming behind the panel, on its own duration and curve
 	dim    float64     // how far in the scrim was last painted, before a drawer's height scales it
-	effect *ggui.TransitionWidget
+	effect *widget.TransitionWidget
 
 	draggable                                            bool
 	snapPoints                                           []float64
@@ -259,7 +260,7 @@ func (s *SheetWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	s.grip.SetName(pick(s.name == "", "Drawer size", s.name+" size"))
 	if s.effect == nil {
-		s.effect = ggui.Transition(ggui.FromFuncs(func(c ggui.Constraints, e ggui.Env) ggui.Size { return s.panel.Layout(c, e) }, s.paintDrawerSurface)).Fade().Easing(ggui.EaseLinear)
+		s.effect = widget.Transition(ggui.FromFuncs(func(c ggui.Constraints, e ggui.Env) ggui.Size { return s.panel.Layout(c, e) }, s.paintDrawerSurface)).Fade().Easing(ggui.EaseLinear)
 	}
 	return c.Constrain(ggui.Size{})
 }

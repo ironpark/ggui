@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // act performs kind on the first node with role and name.
@@ -63,7 +64,7 @@ func TestActStepsASlider(t *testing.T) {
 func TestActExpandsAndCollapses(t *testing.T) {
 	t.Parallel()
 	open := ggui.State(false)
-	p := ggui.NewProbe(ui.Collapsible(open, "More", ggui.Text("body")), ggui.Sz(200, 200))
+	p := ggui.NewProbe(ui.Collapsible(open, "More", widget.Text("body")), ggui.Sz(200, 200))
 	defer p.Close()
 	act(t, p, ggui.RoleDisclosure, "More", ggui.Action{Kind: ggui.ActionExpand})
 	if !ggui.Untrack(open.Get) {
@@ -84,7 +85,7 @@ func TestActExpandsAndCollapses(t *testing.T) {
 func TestActOpensAndChoosesInASelect(t *testing.T) {
 	t.Parallel()
 	value := ggui.State(1)
-	p := ggui.NewProbe(ggui.Column(ui.Select(value).Options([]int{1, 2, 3}).Name("Count")), ggui.Sz(200, 300))
+	p := ggui.NewProbe(widget.Column(ui.Select(value).Options([]int{1, 2, 3}).Name("Count")), ggui.Sz(200, 300))
 	defer p.Close()
 	act(t, p, ggui.RoleSelect, "Count", ggui.Action{Kind: ggui.ActionExpand})
 	if n, _ := p.Semantics().Find(ggui.RoleSelect, "Count"); !n.Expanded.Open() {
@@ -99,7 +100,7 @@ func TestActOpensAndChoosesInASelect(t *testing.T) {
 func TestActSelectsATabAndARow(t *testing.T) {
 	t.Parallel()
 	sel := ggui.State(0)
-	tabs := ui.Tabs(sel, ui.Tab("One", ggui.Text("first")), ui.Tab("Two", ggui.Text("second")))
+	tabs := ui.Tabs(sel, ui.Tab("One", widget.Text("first")), ui.Tab("Two", widget.Text("second")))
 	p := ggui.NewProbe(tabs, ggui.Sz(300, 200))
 	defer p.Close()
 	act(t, p, ggui.RoleTab, "Two", ggui.Action{Kind: ggui.ActionSelect})
@@ -133,7 +134,7 @@ func TestActRunsAMenuItem(t *testing.T) {
 	t.Parallel()
 	ran := 0
 	m := ui.Menu("File", ui.MenuItem("Open", func() { ran++ }))
-	p := ggui.NewProbe(ggui.Column(m), ggui.Sz(200, 300))
+	p := ggui.NewProbe(widget.Column(m), ggui.Sz(200, 300))
 	defer p.Close()
 	act(t, p, ggui.RoleMenu, "File", ggui.Action{Kind: ggui.ActionExpand})
 	act(t, p, ggui.RoleMenuItem, "Open", ggui.Action{Kind: ggui.ActionPress})

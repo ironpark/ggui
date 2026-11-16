@@ -7,13 +7,14 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // toggle is the shared body of Checkbox, Radio and Switch: a glyph, an
 // optional label, hover and tap.
 type toggle struct {
 	ggui.Interactive
-	label *ggui.TextWidget
+	label *widget.TextWidget
 	onTap func()
 
 	labelSize ggui.Size

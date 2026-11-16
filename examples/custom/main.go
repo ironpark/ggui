@@ -16,6 +16,7 @@ import (
 	"github.com/ironpark/ggui"
 	_ "github.com/ironpark/ggui/inspect/panel"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 type item struct {
@@ -50,33 +51,33 @@ func (m *model) jump(index int) { m.Scroll.Set(float64(index) * rowHeight) }
 // build is the root Builder. The dial and the list are bound to signals,
 // the disclosure holds its own flag, and nothing here reads reactively.
 func (m *model) build() ggui.Widget {
-	m.Detail = newDisclosure("How this works", ggui.Styled(ggui.Column(
-		ggui.Text("The dial embeds ggui.Interactive and draws itself; a Spring eases its needle."),
-		ggui.Text("This panel calls Invalidate instead of writing a signal when it opens."),
-		ggui.Text("The list below builds only the rows in view and keeps 24 spares mounted."),
+	m.Detail = newDisclosure("How this works", widget.Styled(widget.Column(
+		widget.Text("The dial embeds ggui.Interactive and draws itself; a Spring eases its needle."),
+		widget.Text("This panel calls Invalidate instead of writing a signal when it opens."),
+		widget.Text("The list below builds only the rows in view and keeps 24 spares mounted."),
 	).Space(0.5)).Size(12))
-	return ggui.Box(ggui.Column(
-		ggui.Row(
+	return widget.Box(widget.Column(
+		widget.Row(
 			newDial(m.Level, "Level"),
-			ggui.Column(
+			widget.Column(
 				ui.Title("Custom widgets"),
-				ggui.Textf("Level: %.0f%%", m.Level.Map(func(v float64) float64 { return v * 100 })),
+				widget.Textf("Level: %.0f%%", m.Level.Map(func(v float64) float64 { return v * 100 })),
 				ui.Caption("Drag the dial, or focus it and use the arrows."),
 				ui.Progress(m.Level),
 			).Space(1).Stretch(),
-		).Space(2).Align(ggui.AlignCenter),
+		).Space(2).Align(widget.AlignCenter),
 		ui.Card(m.Detail),
-		ggui.Row(
+		widget.Row(
 			ui.Captionf("%d rows", m.Items.Map(func(it []item) int { return len(it) })),
-			ggui.Spacer(),
+			widget.Spacer(),
 			ui.Button("Top", func() { m.jump(0) }).Outline(),
 			ui.Button("Middle", func() { m.jump(rowCount / 2) }).Outline(),
 			ui.Button("End", func() { m.jump(rowCount) }).Outline(),
 		).Space(1),
-		ggui.Expanded(ggui.Scroll(
+		widget.Expanded(widget.Scroll(
 			// Each row keeps a checkbox of its own; Retain bounds how many
 			// offscreen rows keep that state before being rebuilt.
-			ggui.EachKeyed(m.Items, func(it item) int { return it.ID }, func(row ggui.EachItem[item]) ggui.Widget {
+			widget.EachKeyed(m.Items, func(it item) int { return it.ID }, func(row widget.EachItem[item]) ggui.Widget {
 				picked := ggui.State(false)
 				return ui.Checkbox(picked, row.Item.Name)
 			}).ItemExtent(rowHeight).Retain(24),

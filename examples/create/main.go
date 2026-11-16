@@ -21,6 +21,7 @@ import (
 	"github.com/ironpark/ggui/ui/icons/lucide"
 	_ "github.com/ironpark/ggui/ui/icons/tabler" // offered as a library; linking registers it
 	"github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // customization is everything the playground edits: the recipe, which
@@ -70,17 +71,17 @@ func newModel() *model {
 	m.source = m.settings.Map(sourceCode)
 	m.panel = m.customizer()
 	m.settingsSheet = ui.Sheet(m.settingsOpen, m.panel).Title("Customize").Size(292)
-	m.codeDialog = ui.Dialog(m.codeOpen, ggui.Column(
+	m.codeDialog = ui.Dialog(m.codeOpen, widget.Column(
 		ui.Caption("Use this theme in any GGUI application."),
 		ui.CodeBlockOf(m.source).Language("go").LineNumbers(true).Height(340),
 		ui.CaptionOf(m.status).Role(ggui.RoleStatus),
-		ggui.Row(ui.Button("Copy Go code", m.copyCode), ui.Button("Done", func() { m.codeOpen.Set(false) }).Outline()).Gap(8),
+		widget.Row(ui.Button("Copy Go code", m.copyCode), ui.Button("Done", func() { m.codeOpen.Set(false) }).Outline()).Gap(8),
 	).Gap(16).Stretch()).Title("Your theme is ready").Width(680)
-	m.presetDialog = ui.Dialog(m.presetOpen, ggui.Column(
+	m.presetDialog = ui.Dialog(m.presetOpen, widget.Column(
 		ui.Caption("Paste a preset copied from this playground."),
 		ui.TextField(m.presetText).Name("Preset JSON").Multiline().Lines(8),
 		ui.CaptionOf(m.presetError),
-		ggui.Row(ui.Button("Apply preset", m.importPreset), ui.Button("Cancel", func() { m.presetOpen.Set(false) }).Outline()).Gap(8),
+		widget.Row(ui.Button("Apply preset", m.importPreset), ui.Button("Cancel", func() { m.presetOpen.Set(false) }).Outline()).Gap(8),
 	).Gap(12).Stretch()).Title("Open preset").Width(560)
 	return m
 }
@@ -140,9 +141,9 @@ func (m *model) customizer() ggui.Widget {
 	iconSet := m.settings.Field(func(s *customization) *theme.IconLibrary { return &s.Theme.Icons })
 	menuAccent := m.settings.Field(func(s *customization) *theme.MenuAccent { return &s.Theme.MenuAccent })
 	group := func(children ...ggui.Widget) ggui.Widget {
-		return ggui.Padding(ggui.Column(children...).Gap(12).Stretch(), 12)
+		return widget.Padding(widget.Column(children...).Gap(12).Stretch(), 12)
 	}
-	fields := ggui.Column(
+	fields := widget.Column(
 		group(
 			choice(m, lockStyle, "Style", style, theme.Styles(), func(v theme.Style) string {
 				if v == "" {
@@ -173,7 +174,7 @@ func (m *model) customizer() ggui.Widget {
 			}),
 		),
 	).Gap(0).Stretch()
-	menu := ui.MenuOf(ggui.Row(ggui.Text("Menu"), ggui.Spacer(), menuMark()).Gap(12),
+	menu := ui.MenuOf(widget.Row(widget.Text("Menu"), widget.Spacer(), menuMark()).Gap(12),
 		ui.MenuItem("Reset", m.reset),
 		ui.MenuItem("Shuffle", m.shuffle),
 		ui.MenuItem("Light", func() { m.setMode(theme.ModeLight) }),
@@ -184,16 +185,16 @@ func (m *model) customizer() ggui.Widget {
 		ui.MenuItem("Copy preset", m.copyPreset),
 		ui.MenuItem("Get Code", func() { m.codeOpen.Set(true) }),
 	).Name("Menu").Width(224)
-	return ggui.Column(
-		ggui.Padding(menu, 12), ui.Divider(),
-		ggui.Expanded(ggui.Scroll(fields).Key("settings-scroll")),
+	return widget.Column(
+		widget.Padding(menu, 12), ui.Divider(),
+		widget.Expanded(widget.Scroll(fields).Key("settings-scroll")),
 		ui.Divider(),
-		ggui.Padding(ggui.Column(
+		widget.Padding(widget.Column(
 			ui.Button("Copy preset", m.copyPreset).Outline(),
 			ui.Button("Open Preset", m.openPreset).Name("Open preset").Outline(),
 			ui.Button("Shuffle", m.shuffle).Outline(),
 		).Gap(8).Stretch(), 12), ui.Divider(),
-		ggui.Padding(ggui.Column(ui.Button("Get Code", func() { m.codeOpen.Set(true) })).Stretch(), 12),
+		widget.Padding(widget.Column(ui.Button("Get Code", func() { m.codeOpen.Set(true) })).Stretch(), 12),
 	).Gap(0).Stretch()
 }
 
@@ -352,25 +353,25 @@ func (m *model) build() ggui.Widget {
 	preview := theme.With(selected, content)
 	// The two previews are one joined strip of outline toggles, shadcn's
 	// segmented look, on the preview's own surface.
-	switches := ggui.Padding(ui.ToggleGroup(m.example).Options([]string{"01", "02"}).Outline().Spacing(0).Size(ui.ButtonSmall).Key("preview-mode"), 12)
-	previewFrame := ggui.Box(ggui.Stack(preview, ggui.Align(switches).Right().Bottom())).Fill(selected.Bg).Radius(18).Border(1, shell.Border)
-	panel := ggui.Box(m.panel).Fill(shell.Card).Radius(16).Border(1, shell.Border).Width(208)
+	switches := widget.Padding(ui.ToggleGroup(m.example).Options([]string{"01", "02"}).Outline().Spacing(0).Size(ui.ButtonSmall).Key("preview-mode"), 12)
+	previewFrame := widget.Box(widget.Stack(preview, widget.Align(switches).Right().Bottom())).Fill(selected.Bg).Radius(18).Border(1, shell.Border)
+	panel := widget.Box(m.panel).Fill(shell.Card).Radius(16).Border(1, shell.Border).Width(208)
 	modeRole := icons.Sun
 	if !dark {
 		modeRole = icons.Moon
 	}
 	mode := ui.ButtonOf(icon(modeRole), m.toggleAppearance).Ghost().Name("Toggle appearance").Key("toggle-appearance")
-	brand := ggui.Row(ggui.Text("//").Size(24).Weight(ggui.WeightSemibold), ggui.Text("ggui").Weight(ggui.WeightSemibold), ui.Caption("/"), ggui.Text("Create")).Gap(12)
+	brand := widget.Row(widget.Text("//").Size(24).Weight(ggui.WeightSemibold), widget.Text("ggui").Weight(ggui.WeightSemibold), ui.Caption("/"), widget.Text("Create")).Gap(12)
 	getCode := ui.Button("Get Code", func() { m.codeOpen.Set(true) })
-	wideHeader := ggui.Row(brand, ggui.Spacer(), ui.CaptionOf(m.status), mode, getCode).Gap(16)
-	narrowHeader := ggui.Row(ggui.Text("ggui / Create").Weight(ggui.WeightSemibold), ggui.Spacer(), mode, getCode).Gap(8)
-	header := ggui.Padding(ggui.Responsive(760, wideHeader, narrowHeader), 16, 24)
-	body := ggui.Responsive(760,
-		ggui.Row(panel, ggui.Expanded(previewFrame)).Gap(24).Stretch(),
-		ggui.Column(ggui.Row(ui.Button("Customize", func() { m.settingsOpen.Set(true) }).Outline(), ggui.Spacer(), ui.Caption("Live preview")).Gap(8), ggui.Expanded(previewFrame)).Gap(12).Stretch(),
+	wideHeader := widget.Row(brand, widget.Spacer(), ui.CaptionOf(m.status), mode, getCode).Gap(16)
+	narrowHeader := widget.Row(widget.Text("ggui / Create").Weight(ggui.WeightSemibold), widget.Spacer(), mode, getCode).Gap(8)
+	header := widget.Padding(widget.Responsive(760, wideHeader, narrowHeader), 16, 24)
+	body := widget.Responsive(760,
+		widget.Row(panel, widget.Expanded(previewFrame)).Gap(24).Stretch(),
+		widget.Column(widget.Row(ui.Button("Customize", func() { m.settingsOpen.Set(true) }).Outline(), widget.Spacer(), ui.Caption("Live preview")).Gap(8), widget.Expanded(previewFrame)).Gap(12).Stretch(),
 	)
-	page := ggui.Column(header, ggui.Expanded(ggui.Padding(body, 0, 24, 24, 24))).Gap(0).Stretch()
-	return theme.With(shell, ggui.Stack(ggui.Box(page).Fill(shell.Bg), m.codeDialog, m.presetDialog, ggui.Responsive(760, ggui.Box(), m.settingsSheet)))
+	page := widget.Column(header, widget.Expanded(widget.Padding(body, 0, 24, 24, 24))).Gap(0).Stretch()
+	return theme.With(shell, widget.Stack(widget.Box(page).Fill(shell.Bg), m.codeDialog, m.presetDialog, widget.Responsive(760, widget.Box(), m.settingsSheet)))
 }
 
 func main() {

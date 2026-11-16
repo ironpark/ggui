@@ -14,6 +14,7 @@ import (
 	"github.com/ironpark/ggui/fonts/gofont"
 	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // This catalog deliberately excludes the recently added charts, Carousel and OTP,
@@ -77,7 +78,7 @@ func (g *galleryAudit) step() (bool, error) {
 					widgets = append(widgets, entry)
 				}
 			}
-			return ggui.Stack(widgets...)
+			return widget.Stack(widgets...)
 		})
 		return build()
 	}, ggui.Sz(width, 1200)).Setup(func() { ggui.SetDefaultMonoFont(gofont.Mono()) })
@@ -209,21 +210,21 @@ func renderGalleryAudit(dir, only string) error {
 func auditControlStates() ggui.Widget {
 	on, off := ggui.State(true), ggui.State(false)
 	text := ggui.State("invalid@example")
-	return ui.Card(ggui.Column(
+	return ui.Card(widget.Column(
 		ui.Title("Control states"),
-		ggui.Wrap(
+		widget.Wrap(
 			ui.Checkbox(on, "Checked"),
 			ui.Checkbox(on, "Disabled checked").Disabled(true),
 			ui.Checkbox(ggui.State(false), "Disabled empty").Disabled(true),
 		).Gap(12),
-		ggui.Wrap(ui.Radio(on, true, "Selected"), ui.Radio(on, true, "Disabled selected").Disabled(true)).Gap(12),
-		ggui.Wrap(
+		widget.Wrap(ui.Radio(on, true, "Selected"), ui.Radio(on, true, "Disabled selected").Disabled(true)).Gap(12),
+		widget.Wrap(
 			ui.Switch(off, "Enabled switch"),
 			ui.Switch(on, "Disabled on").Disabled(true),
 			ui.Switch(ggui.State(false), "Disabled off").Disabled(true),
 		).Gap(12),
-		ggui.Wrap(ui.Button("Primary", nil), ui.Button("Delete", nil).Destructive(), ui.Button("Disabled", nil).Disabled(true)).Gap(8),
-		ggui.Wrap(ui.ThemeSwitch(ggui.State(false)), ui.ThemeSwitch(ggui.State(true)).Disabled(true)).Gap(12),
+		widget.Wrap(ui.Button("Primary", nil), ui.Button("Delete", nil).Destructive(), ui.Button("Disabled", nil).Disabled(true)).Gap(8),
+		widget.Wrap(ui.ThemeSwitch(ggui.State(false)), ui.ThemeSwitch(ggui.State(true)).Disabled(true)).Gap(12),
 		ui.Field("Email", ui.TextField(text)).BindError(ggui.State("Enter a valid email address.")),
 		ui.Slider(ggui.State(.5), 0, 1).Disabled(true),
 		ui.Progress(ggui.State(.6)),

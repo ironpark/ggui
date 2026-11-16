@@ -4,7 +4,7 @@
 
 Configure text fallbacks, add color emoji, and choose semantic or library-specific icons.
 
-Examples use `ggui` and `ui` imports and application-defined placeholders.
+Examples use `ggui`, `widget` and `ui` imports and application-defined placeholders.
 See [example conventions](README.md#start-here) before copying snippets.
 
 ## Fonts and international text
@@ -50,7 +50,7 @@ right. `Env.Direction()` reads it in a custom widget. `Align`'s `Left` and
 
 ```go
 ggui.Provide(ggui.LanguageKey, "ar",
-	ggui.Directionality(ggui.DirRTL, ggui.Text("مرحبا بالعالم")))
+	ggui.Directionality(ggui.DirRTL, widget.Text("مرحبا بالعالم")))
 ```
 
 Levels are resolved line by line after wrapping, not across a whole
@@ -123,7 +123,7 @@ so its 10.7 MB are downloaded only by applications that require it:
 import "github.com/ironpark/ggui/fonts/notoemoji"
 
 notoemoji.Enable() // before building the app
-label := ggui.Text("Hello 👋🏽 · 🇰🇷 · 👩🏽‍💻 · 1️⃣")
+label := widget.Text("Hello 👋🏽 · 🇰🇷 · 👩🏽‍💻 · 1️⃣")
 ```
 
 To keep the font out of a WebAssembly binary, serve it and load it as

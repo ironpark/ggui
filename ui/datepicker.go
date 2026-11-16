@@ -6,6 +6,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // DatePickerWidget opens a Calendar in a focus-trapped popup. Build one with
@@ -17,8 +18,8 @@ type DatePickerWidget struct {
 	formatRange func(DateRange) string
 	calendar    *CalendarWidget
 	button      *ButtonWidget
-	popup       *ggui.PopupWidget
-	panel       *ggui.BoxWidget
+	popup       *widget.PopupWidget
+	panel       *widget.BoxWidget
 	format      func(time.Time) string
 	placeholder string
 }
@@ -55,8 +56,8 @@ func newDatePicker(calendar *CalendarWidget, placeholder string) *DatePickerWidg
 	d.button.value = func() string { return ggui.Untrack(d.text) }
 	// The panel is as wide as its calendar, as shadcn's w-auto popover is,
 	// and lines up with the trigger's start.
-	d.panel = ggui.Box(calendar)
-	d.popup = ggui.Popup(d.button, d.panel).Owner(d.button).MatchAnchorWidth(false)
+	d.panel = widget.Box(calendar)
+	d.popup = widget.Popup(d.button, d.panel).Owner(d.button).MatchAnchorWidth(false)
 	d.button.Expands(d.popup.IsOpen).Opens(d)
 	return d
 }
@@ -88,7 +89,7 @@ type datePickerKey struct {
 func (d *DatePickerWidget) Calendar() *CalendarWidget { return d.calendar }
 
 // Popup exposes the popup's open state.
-func (d *DatePickerWidget) Popup() *ggui.PopupWidget { return d.popup }
+func (d *DatePickerWidget) Popup() *widget.PopupWidget { return d.popup }
 
 // Key preserves trigger focus, popup state and the browsed month across rebuilds.
 func (d *DatePickerWidget) Key(key any) *DatePickerWidget {

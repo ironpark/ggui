@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // A choice card is its control's label: a click anywhere in it acts on the
@@ -17,7 +18,7 @@ func TestFieldCardActsAsItsControlsLabel(t *testing.T) {
 	plan := ggui.State("free")
 	free := Field("Free", Radio(plan, "free", "")).Help("For trying things out.").Card()
 	pro := FieldCard(Radio(plan, "pro", ""), FieldContent(FieldTitle("Pro"), FieldDescription("For growing businesses.")))
-	p := ggui.NewProbe(ggui.Box(ggui.Column(free, pro).Gap(12).Align(ggui.AlignStretch)).Padding(ggui.Insets(20)), ggui.Sz(360, 240))
+	p := ggui.NewProbe(widget.Box(widget.Column(free, pro).Gap(12).Align(widget.AlignStretch)).Padding(ggui.Insets(20)), ggui.Sz(360, 240))
 	defer p.Close()
 	radio, ok := p.FindRole(ggui.RoleRadio, "Pro")
 	if !ok {
@@ -61,7 +62,7 @@ func TestFieldCardFollowsADisabledControl(t *testing.T) {
 	t.Parallel()
 	on := ggui.State(false)
 	card := Field("Airplane mode", Switch(on, "").Disabled(true)).Card()
-	p := ggui.NewProbe(ggui.Box(card).Padding(ggui.Insets(20)), ggui.Sz(360, 120))
+	p := ggui.NewProbe(widget.Box(card).Padding(ggui.Insets(20)), ggui.Sz(360, 120))
 	defer p.Close()
 	p.Click(ggui.Pt(60, 40))
 	if on.Get() || card.card.Hovered {
@@ -76,7 +77,7 @@ func TestFieldErrorsListsUniqueMessages(t *testing.T) {
 	errs := ggui.State([]string{})
 	box := Checkbox(ggui.State(false), "")
 	f := Field("Password", box).BindErrors(errs)
-	p := ggui.NewProbe(ggui.Box(f).Padding(ggui.Insets(20)), ggui.Sz(360, 240))
+	p := ggui.NewProbe(widget.Box(f).Padding(ggui.Insets(20)), ggui.Sz(360, 240))
 	defer p.Close()
 	p.Advance(0)
 	if f.shape.alerted || box.fieldInvalid {

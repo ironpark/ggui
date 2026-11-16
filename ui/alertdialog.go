@@ -5,6 +5,7 @@ import (
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 const (
@@ -37,13 +38,13 @@ type AlertDialogWidget struct {
 	media              ggui.Widget
 
 	dialog   *DialogWidget
-	heading  *ggui.TextWidget
-	text     *ggui.TextWidget
-	lines    *ggui.ColumnWidget // the title over the description
-	tile     *ggui.BoxWidget    // the media, if any
+	heading  *widget.TextWidget
+	text     *widget.TextWidget
+	lines    *widget.ColumnWidget // the title over the description
+	tile     *widget.BoxWidget    // the media, if any
 	header   ggui.Widget
-	beside   *ggui.RowWidget    // the media beside the lines
-	stacked  *ggui.ColumnWidget // the media over the lines, in a Small dialog
+	beside   *widget.RowWidget    // the media beside the lines
+	stacked  *widget.ColumnWidget // the media over the lines, in a Small dialog
 	answered bool
 }
 
@@ -142,24 +143,24 @@ func (a *AlertDialogWidget) finish(fn func()) {
 // in the dialog's footer.
 func (a *AlertDialogWidget) build() {
 	// The title is left in text-base, whose lines are 1.5 times its size.
-	a.heading, a.text = Heading(a.title).LineHeight(1.5), ggui.Text(a.description)
-	a.lines = ggui.Column(a.heading, a.text)
+	a.heading, a.text = Heading(a.title).LineHeight(1.5), widget.Text(a.description)
+	a.lines = widget.Column(a.heading, a.text)
 	a.tile, a.beside, a.stacked = nil, nil, nil
 	a.header = a.lines
 	if a.small {
 		a.heading.Align(.5)
 		a.text.Align(.5)
-		a.lines.Align(ggui.AlignCenter)
+		a.lines.Align(widget.AlignCenter)
 	} else {
-		a.lines.Align(ggui.AlignStretch)
+		a.lines.Align(widget.AlignStretch)
 	}
 	if a.media != nil {
-		a.tile = ggui.Box(ggui.Center(a.media)).Size(alertDialogMediaSize, alertDialogMediaSize)
+		a.tile = widget.Box(widget.Center(a.media)).Size(alertDialogMediaSize, alertDialogMediaSize)
 		if a.small {
-			a.stacked = ggui.Column(a.tile, a.lines).Align(ggui.AlignCenter)
+			a.stacked = widget.Column(a.tile, a.lines).Align(widget.AlignCenter)
 			a.header = a.stacked
 		} else {
-			a.beside = ggui.Row(a.tile, ggui.Expanded(a.lines)).Align(ggui.AlignStart)
+			a.beside = widget.Row(a.tile, widget.Expanded(a.lines)).Align(widget.AlignStart)
 			a.header = a.beside
 		}
 	}

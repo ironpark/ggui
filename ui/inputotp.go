@@ -65,7 +65,7 @@ type InputOTPWidget struct {
 	cells                []otpCell
 	groups               []otpGroup
 	separators           []ggui.Rect
-	labels               []*ggui.TextWidget
+	labels               []*widget.TextWidget
 	sizes                []ggui.Size
 	lastText             string
 	rect                 ggui.Rect
@@ -275,10 +275,10 @@ func (o *InputOTPWidget) Layout(c ggui.Constraints, e ggui.Env) ggui.Size {
 		o.separators[i] = adapt(o.separators[i])
 	}
 	if len(o.labels) != o.maxLength {
-		o.labels = make([]*ggui.TextWidget, o.maxLength)
+		o.labels = make([]*widget.TextWidget, o.maxLength)
 		o.sizes = make([]ggui.Size, o.maxLength)
 		for i := range o.labels {
-			o.labels[i] = ggui.Text("").NoWrap()
+			o.labels[i] = widget.Text("").NoWrap()
 		}
 	}
 	o.lastText = "\x00"

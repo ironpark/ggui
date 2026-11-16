@@ -4,7 +4,7 @@
 
 Bind inputs to application state, name controls, and show validation feedback.
 
-Examples use `ggui`, `ui` and `ui/icons` imports and application-defined placeholders.
+Examples use `ggui`, `widget`, `ui` and `ui/icons` imports and application-defined placeholders.
 See [example conventions](README.md#start-here) before copying snippets.
 
 ## On this page
@@ -32,13 +32,13 @@ dark := ggui.State(false)
 size := ggui.State(0.5)
 plan := ggui.State("free")
 
-ggui.Column(
+widget.Column(
 	ui.TextField(name).Placeholder("Your name").OnSubmit(func(_ string) { save() }),
 	ui.Checkbox(agree, "I agree"),
 	ui.Switch(dark, "Dark mode"),
 	ui.Slider(size, 0, 1).Step(0.1),
 	ui.Radios(plan).Options([]string{"free", "pro"}).Format(strings.ToTitle),
-	ggui.Row(ui.Button("Save", save), ui.Button("Cancel", cancel).Outline()).Gap(8),
+	widget.Row(ui.Button("Save", save), ui.Button("Cancel", cancel).Outline()).Gap(8),
 	ui.Divider(),
 ).Gap(12)
 ```

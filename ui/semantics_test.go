@@ -7,6 +7,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // semantics paints w at size and returns the tree the frame published.
@@ -81,7 +82,7 @@ textfield "Email"
 func TestSemanticsTabsHoldTheirTabs(t *testing.T) {
 	t.Parallel()
 	sel := ggui.State(1)
-	tabs := ui.Tabs(sel, ui.Tab("One", ggui.Text("first")), ui.Tab("Two", ggui.Text("second")))
+	tabs := ui.Tabs(sel, ui.Tab("One", widget.Text("first")), ui.Tab("Two", widget.Text("second")))
 	wantTree(t, semantics(t, tabs, ggui.Sz(300, 200)), `
 tabs
   tab "One"
@@ -93,7 +94,7 @@ tabs
 func TestSemanticsDialogPanelIsTheNode(t *testing.T) {
 	t.Parallel()
 	// The scrim takes the clicks but is not an element; the panel is.
-	tree := semantics(t, ui.Dialog(ggui.State(true), ggui.Text("body")).Title("Confirm"), ggui.Sz(300, 300))
+	tree := semantics(t, ui.Dialog(ggui.State(true), widget.Text("body")).Title("Confirm"), ggui.Sz(300, 300))
 	wantTree(t, tree, `
 dialog "Confirm"
   heading "Confirm"
@@ -106,7 +107,7 @@ func TestSemanticsSelectOwnsItsOptions(t *testing.T) {
 	t.Parallel()
 	value := ggui.State(2)
 	sel := ui.Select(value).Options([]int{1, 2, 3}).Name("Count")
-	p := ggui.NewProbe(ggui.Column(sel), ggui.Sz(200, 200))
+	p := ggui.NewProbe(widget.Column(sel), ggui.Sz(200, 200))
 	defer p.Close()
 	wantTree(t, p.Semantics(), `
 select "Count" value="2" collapsed
@@ -161,8 +162,8 @@ func TestSemanticsDisclosuresReportOpen(t *testing.T) {
 	t.Parallel()
 	open := ggui.State([]string{"a"})
 	acc := ui.Accordion(open,
-		ui.AccordionItem("a", "A", ggui.Text("ac")),
-		ui.AccordionItem("b", "B", ggui.Text("bc")).Disabled(true),
+		ui.AccordionItem("a", "A", widget.Text("ac")),
+		ui.AccordionItem("b", "B", widget.Text("bc")).Disabled(true),
 	)
 	wantTree(t, semantics(t, acc, ggui.Sz(200, 200)), `
 accordion "Accordion"
@@ -171,7 +172,7 @@ accordion "Accordion"
   disclosure "B" collapsed disabled
 `)
 
-	tree := semantics(t, ui.Collapsible(ggui.State(true), "More", ggui.Text("body")), ggui.Sz(200, 200))
+	tree := semantics(t, ui.Collapsible(ggui.State(true), "More", widget.Text("body")), ggui.Sz(200, 200))
 	n := node(t, tree, ggui.RoleDisclosure, "More")
 	if !n.Expanded.Open() {
 		t.Errorf("the collapsible does not report itself open:\n%s", tree)
@@ -197,7 +198,7 @@ func TestSemanticsTogglesReportChecked(t *testing.T) {
 	t.Parallel()
 	on, off := ggui.State(true), ggui.State(false)
 	chosen := ggui.State("b")
-	w := ggui.Column(
+	w := widget.Column(
 		ui.Checkbox(on, "Ready"),
 		ui.Switch(off, "Dark"),
 		ui.Radio(chosen, "a", "A"),
@@ -241,7 +242,7 @@ table
 
 func TestSemanticsCardGroupsAndProgressReports(t *testing.T) {
 	t.Parallel()
-	wantTree(t, semantics(t, ui.Card(ggui.Text("inside")), ggui.Sz(200, 100)), `
+	wantTree(t, semantics(t, ui.Card(widget.Text("inside")), ggui.Sz(200, 100)), `
 group
   text "inside"
 `)
@@ -249,7 +250,7 @@ group
 	if n := node(t, tree, ggui.RoleProgress, ""); n.Max != 1 {
 		t.Errorf("progress = %g of %g, want a 0..1 range", n.Now, n.Max)
 	}
-	ring := semantics(t, ggui.Center(ui.ProgressRing(ggui.State(0.25)).Size(12)), ggui.Sz(200, 40))
+	ring := semantics(t, widget.Center(ui.ProgressRing(ggui.State(0.25)).Size(12)), ggui.Sz(200, 40))
 	if n := node(t, ring, ggui.RoleProgress, ""); n.Max != 1 || n.Rect.Size != ggui.Sz(12, 12) {
 		t.Errorf("ring = %g of %g in %v, want a 0..1 range in 12×12", n.Now, n.Max, n.Rect)
 	}
@@ -275,11 +276,11 @@ func TestSemanticsScrolledRowsStayWithTheirBounds(t *testing.T) {
 	for i := range rows {
 		rows[i] = "row " + strconv.Itoa(i)
 	}
-	list := ggui.Each(ggui.State(rows), func(rowItem ggui.EachItem[string]) ggui.Widget {
+	list := widget.Each(ggui.State(rows), func(rowItem widget.EachItem[string]) ggui.Widget {
 		s := rowItem.Value
 		return ui.Button(s.Get(), nil)
 	}).ItemExtent(20)
-	tree := semantics(t, ggui.Scroll(list), ggui.Sz(200, 60))
+	tree := semantics(t, widget.Scroll(list), ggui.Sz(200, 60))
 	n, ok := tree.Find(ggui.RoleList, "")
 	if !ok || n.Max != 200 {
 		t.Fatalf("list = %v, want 200 items:\n%s", n.Node, tree)

@@ -144,11 +144,11 @@ runtime errors returned from `Navigate`.
 
 ```go
 func homePage(c *router.Context) ggui.Widget {
-    return ggui.Text("Home")
+    return widget.Text("Home")
 }
 
 func appLayout(c *router.Context, page ggui.Widget) ggui.Widget {
-    return ggui.Column(header(), page)
+    return widget.Column(header(), page)
 }
 ```
 
@@ -385,7 +385,7 @@ redirect loop and stop at the current screen.
 If the focused control belongs to the departed suffix, focus moves to no
 control. Controls with an identity, such as every `ui` control, get a fresh
 one under the new outlet, and the input system drops the stale focus at the
-next input dispatch. A bare `ggui.Focus` without an identity is matched by
+next input dispatch. A bare `widget.Focus` without an identity is matched by
 its rectangle, so a new page's control in the same place inherits focus;
 give such controls a key when that matters. The goal is that the next Tab starts at the new page's outlet
 rather than the window's first control. That needs a Tab anchor in the

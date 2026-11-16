@@ -7,6 +7,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func fileList(n int, selected ggui.Binding[string]) *ui.ListBoxWidget[string, string] {
@@ -15,7 +16,7 @@ func fileList(n int, selected ggui.Binding[string]) *ui.ListBoxWidget[string, st
 		files[i] = fmt.Sprintf("file-%02d", i)
 	}
 	return ui.ListBox(ggui.Const(files), func(f string) string { return f },
-		func(f ggui.Readable[string]) ggui.Widget { return ggui.TextOf(f).NoWrap() },
+		func(f ggui.Readable[string]) ggui.Widget { return widget.TextOf(f).NoWrap() },
 	).BindSelected(selected).Name("Files")
 }
 
@@ -36,7 +37,7 @@ func TestListBoxKeyboard(t *testing.T) {
 	selected := ggui.State("file-01")
 	var picked []string
 	list := fileList(4, selected).OnSelect(func(f string) { picked = append(picked, f) })
-	p := ggui.NewProbe(ggui.Column(ui.Button("Before", func() {}), list), ggui.Sz(200, 300))
+	p := ggui.NewProbe(widget.Column(ui.Button("Before", func() {}), list), ggui.Sz(200, 300))
 	defer p.Close()
 	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyTab)
 	if got := focusedItem(p); got != "file-01" {
@@ -73,7 +74,7 @@ func TestListBoxRevealsASelectionMadeElsewhere(t *testing.T) {
 	t.Parallel()
 	selected := ggui.State("file-00")
 	offset := ggui.State(0.0)
-	p := ggui.NewProbe(ggui.Column(ui.Button("Elsewhere", func() {}), ggui.Expanded(ggui.Scroll(fileList(40, selected)).BindOffset(offset))), ggui.Sz(200, 200))
+	p := ggui.NewProbe(widget.Column(ui.Button("Elsewhere", func() {}), widget.Expanded(widget.Scroll(fileList(40, selected)).BindOffset(offset))), ggui.Sz(200, 200))
 	defer p.Close()
 	p.Type(ggui.Mods{}, ggui.KeyTab)
 	selected.Set("file-30")

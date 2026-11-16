@@ -55,7 +55,7 @@ func isGgui(fn string) bool {
 func reportSnapshot() {
 	origin := callerOutside(3, inModule)
 	ReportOnce(origin, "ggui: %s reads a signal while building widgets, which takes a snapshot that never updates; "+
-		"bind the value instead (TextOf, a BindX setter, View or If), or read it in ggui.Untrack if a snapshot is meant", origin)
+		"bind the value instead (widget.TextOf, a BindX setter, View or If), or read it in ggui.Untrack if a snapshot is meant", origin)
 }
 
 // inModule reports whether fn is ggui's own, ui and theme included, as

@@ -7,11 +7,12 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 type optionControl struct {
 	ggui.Widget
-	popup   *ggui.PopupWidget
+	popup   *widget.PopupWidget
 	options func([]string)
 	bind    func(ggui.Readable[[]string])
 	format  func(func(string) string)
@@ -33,7 +34,7 @@ func TestOptionsUpdateOpenControlWithoutWritingSelection(t *testing.T) {
 			value := ggui.State("Alpha")
 			changes := 0
 			w := makeOptionControl(kind, value, func(string) { changes++ })
-			p := ggui.NewProbe(ggui.Component(func() ggui.Widget { return ggui.Column(w) }), ggui.Sz(500, 400))
+			p := ggui.NewProbe(ggui.Component(func() ggui.Widget { return widget.Column(w) }), ggui.Sz(500, 400))
 			defer p.Close()
 			p.Tap("Choice")
 			p.Advance(time.Second)
@@ -72,7 +73,7 @@ func TestBindOptionsLastSettingWinsInsideCaches(t *testing.T) {
 			w := makeOptionControl(kind, ggui.State("Alpha"), nil)
 			source := ggui.State([]string{"Alpha", "First"})
 			w.bind(source)
-			p := ggui.NewProbe(ggui.Cached(ggui.Component(func() ggui.Widget { return ggui.Column(w) })), ggui.Sz(500, 400))
+			p := ggui.NewProbe(ggui.Cached(ggui.Component(func() ggui.Widget { return widget.Column(w) })), ggui.Sz(500, 400))
 			defer p.Close()
 			p.Tap("Choice")
 			p.Advance(time.Second)
@@ -115,7 +116,7 @@ func TestOptionsAndFormatComposeInEitherOrder(t *testing.T) {
 				if !formatFirst {
 					w.format(strings.ToUpper)
 				}
-				p := ggui.NewProbe(ggui.Column(w), ggui.Sz(300, 300))
+				p := ggui.NewProbe(widget.Column(w), ggui.Sz(300, 300))
 				defer p.Close()
 				p.Tap("Choice")
 				if _, ok := p.Find("GAMMA"); !ok {
@@ -129,7 +130,7 @@ func TestOptionsAndFormatComposeInEitherOrder(t *testing.T) {
 func TestSelectOptionsResizeCachedTrigger(t *testing.T) {
 	t.Parallel()
 	w := ui.Select(ggui.State("a")).Options([]string{"a"}).Name("Choice")
-	p := ggui.NewProbe(ggui.Component(func() ggui.Widget { return ggui.Column(w) }), ggui.Sz(600, 300))
+	p := ggui.NewProbe(ggui.Component(func() ggui.Widget { return widget.Column(w) }), ggui.Sz(600, 300))
 	defer p.Close()
 	before := find(t, p, ggui.RoleSelect, "Choice").Rect.Size.W
 	w.Options([]string{"a", "A much longer option that needs a wider trigger"})
@@ -151,7 +152,7 @@ func TestSelectOptionsResetKeyboardHighlightToValue(t *testing.T) {
 	t.Parallel()
 	value := ggui.State("Beta")
 	w := ui.Select(value).Options([]string{"Alpha", "Beta"}).Name("Choice")
-	p := ggui.NewProbe(ggui.Column(w), ggui.Sz(400, 350))
+	p := ggui.NewProbe(widget.Column(w), ggui.Sz(400, 350))
 	defer p.Close()
 	p.Tap("Choice")
 	p.Type(ggui.Mods{}, ggui.KeyArrowUp)
@@ -172,7 +173,7 @@ func TestComboboxOptionsKeepSearchQueryAndFocus(t *testing.T) {
 	t.Parallel()
 	value := ggui.State("Alpha")
 	w := ui.Combobox(value).Options([]string{"Alpha", "Beta"}).Name("Choice")
-	p := ggui.NewProbe(ggui.Component(func() ggui.Widget { return ggui.Column(w) }), ggui.Sz(450, 400))
+	p := ggui.NewProbe(ggui.Component(func() ggui.Widget { return widget.Column(w) }), ggui.Sz(450, 400))
 	defer p.Close()
 	p.Tap("Choice")
 	act(t, p, ggui.RoleCombobox, "Choice", ggui.Action{Kind: ggui.ActionSetValue, Text: "be"})
@@ -241,7 +242,7 @@ func TestBindOptionsSupportsCustomNonComparableReaders(t *testing.T) {
 			w := makeOptionControl(kind, ggui.State("Alpha"), nil)
 			w.bind(reader)
 			w.bind(reader) // must not compare non-comparable interfaces with ==
-			p := ggui.NewProbe(ggui.Cached(ggui.Column(w)), ggui.Sz(400, 350))
+			p := ggui.NewProbe(ggui.Cached(widget.Column(w)), ggui.Sz(400, 350))
 			defer p.Close()
 			p.Tap("Choice")
 			source.Set([]string{"Beta"})
@@ -258,7 +259,7 @@ func TestOptionsReplacementCancelsPressOnRemovedRow(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			value := ggui.State("Alpha")
 			w := makeOptionControl(kind, value, nil)
-			p := ggui.NewProbe(ggui.Column(w), ggui.Sz(400, 350))
+			p := ggui.NewProbe(widget.Column(w), ggui.Sz(400, 350))
 			defer p.Close()
 			p.Tap("Choice")
 			p.Advance(time.Second)

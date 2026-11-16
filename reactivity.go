@@ -198,7 +198,7 @@ func Or(rs ...Readable[bool]) *DerivedValue[bool] {
 //			text := ggui.Remember(f.ID, func() *ggui.StateValue[string] { return ggui.State(f.Value) })
 //			rows = append(rows, ui.TextField(text))
 //		}
-//		return ggui.Column(rows...)
+//		return widget.Column(rows...)
 //	})
 //
 // A value is kept while the builds around it keep asking for it: one a

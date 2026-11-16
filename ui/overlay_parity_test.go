@@ -8,6 +8,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/widget"
 )
 
 // near reports whether a and b are the same to within a rounding.
@@ -37,7 +38,7 @@ func openModal(t *testing.T, w ggui.Widget, size ggui.Size) *ggui.Probe {
 func TestDialogDescriptionAndFooterBand(t *testing.T) {
 	t.Parallel()
 	saved := 0
-	d := ui.Dialog(ggui.State(true), ggui.Text("Body")).
+	d := ui.Dialog(ggui.State(true), widget.Text("Body")).
 		Title("Edit profile").
 		Description("Make changes to your profile here.").
 		Footer(ui.Button("Cancel", nil).Outline(), ui.Button("Save", func() { saved++ }))
@@ -115,7 +116,7 @@ func TestAlertDialogHeaderGapFooterAndSizes(t *testing.T) {
 
 func TestSheetDescriptionFooterAndCloseInset(t *testing.T) {
 	t.Parallel()
-	s := ui.Sheet(ggui.State(true), ggui.Text("Body")).
+	s := ui.Sheet(ggui.State(true), widget.Text("Body")).
 		Title("Edit profile").
 		Description("Make changes here.").
 		Footer(ui.Button("Save", nil), ui.Button("Close sheet", nil).Outline())
@@ -143,18 +144,18 @@ func TestSheetDescriptionFooterAndCloseInset(t *testing.T) {
 
 func TestDrawerIsAsTallAsItsContentUpToItsHeadroom(t *testing.T) {
 	t.Parallel()
-	short := ui.Drawer(ggui.State(true), ggui.Box().Height(100)).Name("Short").CloseButton(false)
+	short := ui.Drawer(ggui.State(true), widget.Box().Height(100)).Name("Short").CloseButton(false)
 	openModal(t, short, ggui.Sz(400, 600))
 	if r := short.Rect(); r.Size.H != 132 || r.Origin.Y+r.Size.H != 600 {
 		t.Errorf("a drawer around 100px of content is at %v, want 132 tall on the bottom edge", r)
 	}
-	tall := ui.Drawer(ggui.State(true), ggui.Box().Height(900)).Name("Tall").CloseButton(false)
+	tall := ui.Drawer(ggui.State(true), widget.Box().Height(900)).Name("Tall").CloseButton(false)
 	openModal(t, tall, ggui.Sz(400, 600))
 	if r := tall.Rect(); r.Size.H != 600-96 {
 		t.Errorf("a drawer around 900px of content is %v tall, want the window less 96", r.Size.H)
 	}
 	// The handle is opt-in, and takes a strip of its own above the content.
-	handled := ui.Drawer(ggui.State(true), ggui.Box().Height(100)).Name("Handled").CloseButton(false).Handle(true)
+	handled := ui.Drawer(ggui.State(true), widget.Box().Height(100)).Name("Handled").CloseButton(false).Handle(true)
 	openModal(t, handled, ggui.Sz(400, 600))
 	if r := handled.Rect(); r.Size.H != 144 {
 		t.Errorf("a drawer with its handle is %v tall, want 12 more than the 132 without", r.Size.H)
@@ -163,17 +164,17 @@ func TestDrawerIsAsTallAsItsContentUpToItsHeadroom(t *testing.T) {
 
 func TestDrawerHasNoCloseButtonUntilAsked(t *testing.T) {
 	t.Parallel()
-	bare := ui.Drawer(ggui.State(true), ggui.Text("Body")).Title("Share")
+	bare := ui.Drawer(ggui.State(true), widget.Text("Body")).Title("Share")
 	p := openModal(t, bare, ggui.Sz(400, 600))
 	if _, ok := p.FindRole(ggui.RoleButton, "Close"); ok {
 		t.Error("a drawer shows a close button nobody asked for")
 	}
-	asked := ui.Drawer(ggui.State(true), ggui.Text("Body")).Title("Share").CloseButton(true)
+	asked := ui.Drawer(ggui.State(true), widget.Text("Body")).Title("Share").CloseButton(true)
 	p = openModal(t, asked, ggui.Sz(400, 600))
 	if _, ok := p.FindRole(ggui.RoleButton, "Close"); !ok {
 		t.Error("CloseButton(true) gave a drawer no close button")
 	}
-	sheet := ui.Sheet(ggui.State(true), ggui.Text("Body")).Title("Share")
+	sheet := ui.Sheet(ggui.State(true), widget.Text("Body")).Title("Share")
 	p = openModal(t, sheet, ggui.Sz(400, 600))
 	if _, ok := p.FindRole(ggui.RoleButton, "Close"); !ok {
 		t.Error("a sheet lost its close button")
@@ -183,7 +184,7 @@ func TestDrawerHasNoCloseButtonUntilAsked(t *testing.T) {
 func TestDrawerRisesOverItsOwnDuration(t *testing.T) {
 	t.Parallel()
 	open := ggui.State(false)
-	d := ui.Drawer(open, ggui.Box().Height(100)).Name("Details")
+	d := ui.Drawer(open, widget.Box().Height(100)).Name("Details")
 	p := ggui.NewProbe(d, ggui.Sz(400, 600))
 	defer p.Close()
 	p.Frame()

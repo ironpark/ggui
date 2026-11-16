@@ -7,6 +7,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // PaginationWidget navigates a one-based page binding. It does not slice data.
@@ -17,12 +18,12 @@ type PaginationWidget struct {
 	pages                    ggui.Readable[int]
 	previous, next           *ButtonWidget
 	previousIcon, nextIcon   *icons.Widget
-	previousLabel, nextLabel *ggui.TextWidget
+	previousLabel, nextLabel *widget.TextWidget
 	numbers                  [5]*ButtonWidget
 	targets                  [5]int
 	gaps                     [2]ggui.Widget // the leading and trailing ellipses
 	children                 []ggui.Widget
-	row                      *ggui.WrapWidget
+	row                      *widget.WrapWidget
 	shape                    paginationShape // what row was built for
 	onChange                 func(int)
 }
@@ -39,9 +40,9 @@ type paginationShape struct {
 func Pagination(page ggui.Binding[int], pages ggui.Readable[int]) *PaginationWidget {
 	p := &PaginationWidget{page: page, pages: pages}
 	p.previousIcon, p.nextIcon = Icon(icons.ChevronLeft), Icon(icons.ChevronRight)
-	p.previousLabel, p.nextLabel = ggui.Text("Previous").NoWrap(), ggui.Text("Next").NoWrap()
-	p.previous = ButtonOf(ggui.Row(p.previousIcon, p.previousLabel).Gap(paginationGap), func() { p.move(-1) }).Name("Previous").Ghost()
-	p.next = ButtonOf(ggui.Row(p.nextLabel, p.nextIcon).Gap(paginationGap), func() { p.move(1) }).Name("Next").Ghost()
+	p.previousLabel, p.nextLabel = widget.Text("Previous").NoWrap(), widget.Text("Next").NoWrap()
+	p.previous = ButtonOf(widget.Row(p.previousIcon, p.previousLabel).Gap(paginationGap), func() { p.move(-1) }).Name("Previous").Ghost()
+	p.next = ButtonOf(widget.Row(p.nextLabel, p.nextIcon).Gap(paginationGap), func() { p.move(1) }).Name("Next").Ghost()
 	for i := range p.numbers {
 		p.numbers[i] = Button("", func() { p.selectPage(p.targets[i]) }).Size(ButtonIcon)
 	}
@@ -136,7 +137,7 @@ func (p *PaginationWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 			children = append(children, p.gaps[1])
 		}
 		p.children = append(children, p.next)
-		p.row, p.shape = ggui.Wrap(p.children...).Align(ggui.AlignCenter), shape
+		p.row, p.shape = widget.Wrap(p.children...).Align(widget.AlignCenter), shape
 	}
 	return p.row.Gap(t.Space/4).Layout(c, env)
 }

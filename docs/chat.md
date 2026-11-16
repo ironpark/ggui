@@ -4,7 +4,7 @@
 
 Build attachments, conversations, transcript scrolling, and validated questionnaires.
 
-Examples use `ggui` and `ui` imports and application-defined placeholders.
+Examples use `ggui`, `widget` and `ui` imports and application-defined placeholders.
 See [example conventions](README.md#start-here) before copying snippets.
 
 The chat controls follow the [shadcn/ui chat components](https://ui.shadcn.com/docs/changelog/2026-06-chat-components)
@@ -36,9 +36,9 @@ widgets continue to use the host theme and font. Sources and licenses are listed
 ```go
 state := ggui.State(ui.AttachmentIdle)
 file := ui.Attachment("report.pdf", "PDF · 2.4 MB").
-    Media(ggui.Text("PDF").Size(11)).BindState(state).
+    Media(widget.Text("PDF").Size(11)).BindState(state).
     Trigger("Preview report.pdf", previewReport).
-    Actions(ui.AttachmentAction("Remove report.pdf", ggui.Text("×"), removeReport))
+    Actions(ui.AttachmentAction("Remove report.pdf", widget.Text("×"), removeReport))
 ```
 
 `State` sets a fixed state and replaces `BindState`. The five states are `AttachmentIdle`
@@ -86,8 +86,8 @@ avatars, links, attachments and content are supplied by the caller.
 
 ```go
 rows := ggui.State([]ui.MessageEntry{
-    {ID: "question", Content: ui.Message(ui.Bubble(ggui.Text("Review this?"))).End(), Anchor: true},
-    {ID: "reply", Content: ui.Message(ui.Bubble(ggui.Text("Reviewing…")).Secondary())},
+    {ID: "question", Content: ui.Message(ui.Bubble(widget.Text("Review this?"))).End(), Anchor: true},
+    {ID: "reply", Content: ui.Message(ui.Bubble(widget.Text("Reviewing…")).Secondary())},
 })
 transcript := ui.MessageScroller(rows).Height(320).AutoScroll(true)
 ```

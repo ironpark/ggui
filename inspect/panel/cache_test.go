@@ -10,6 +10,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/inspect"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestPanelOutlinesAreOptIn(t *testing.T) {
@@ -87,7 +88,7 @@ func (d *described) Describe() ggui.Node {
 
 func TestPanelSnapshotTracksLiveValues(t *testing.T) {
 	t.Parallel()
-	box := ggui.Box(ggui.Text("hello")).Pad(4)
+	box := widget.Box(widget.Text("hello")).Pad(4)
 	h := newHarness(t, box, ggui.Sz(800, 600))
 	in := View{}
 	in.bounds(h.dst.Size())
@@ -163,7 +164,7 @@ func TestPanelSnapshotTracksLiveSemantics(t *testing.T) {
 
 func TestPanelWidePanelShowsLayoutColumn(t *testing.T) {
 	t.Parallel()
-	h := newHarness(t, ggui.Box(ggui.Text("hello")).Pad(4), ggui.Sz(1400, 900))
+	h := newHarness(t, widget.Box(widget.Text("hello")).Pad(4), ggui.Sz(1400, 900))
 	in := View{}
 	in.paint(h.dst, h.fr)
 	if in.layout.Empty() {
@@ -211,7 +212,7 @@ func TestPanelPrunesStaleFolds(t *testing.T) {
 
 func TestPanelResetDropsPanelCache(t *testing.T) {
 	t.Parallel()
-	h := newHarness(t, ggui.Box(ggui.Text("hello")), ggui.Sz(800, 600))
+	h := newHarness(t, widget.Box(widget.Text("hello")), ggui.Sz(800, 600))
 	h.rendered(t, 800, 600)
 	in := New()
 	in.paint(h.dst, h.fr)

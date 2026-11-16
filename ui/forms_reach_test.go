@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // shadcn's checkbox, radio and switch are hit 12px to either side of the
@@ -13,11 +14,11 @@ import (
 func TestChoiceControlsAreHitAroundTheGlyph(t *testing.T) {
 	t.Parallel()
 	agree, pick, on := ggui.State(false), ggui.State("a"), ggui.State(false)
-	root := ggui.Box(ggui.Column(
+	root := widget.Box(widget.Column(
 		ui.Checkbox(agree, "").Name("Agree"),
 		ui.Radio(pick, "b", "").Name("Second"),
 		ui.Switch(on, "").Name("Airplane"),
-	).Gap(40).Align(ggui.AlignStart)).Padding(ggui.Insets(40))
+	).Gap(40).Align(widget.AlignStart)).Padding(ggui.Insets(40))
 	p := ggui.NewProbe(root, ggui.Sz(320, 400))
 	defer p.Close()
 	for _, c := range []struct {
@@ -58,7 +59,7 @@ func TestChoiceControlsAreHitAroundTheGlyph(t *testing.T) {
 func TestChoiceReachStaysWithTheGlyph(t *testing.T) {
 	t.Parallel()
 	agree := ggui.State(false)
-	root := ggui.Box(ggui.Column(ui.Checkbox(agree, "Agree to the terms")).Align(ggui.AlignStart)).Padding(ggui.Insets(40))
+	root := widget.Box(widget.Column(ui.Checkbox(agree, "Agree to the terms")).Align(widget.AlignStart)).Padding(ggui.Insets(40))
 	p := ggui.NewProbe(root, ggui.Sz(320, 200))
 	defer p.Close()
 	f, _ := p.FindRole(ggui.RoleCheckbox, "Agree to the terms")
@@ -79,7 +80,7 @@ func TestSliderThumbIsHitAroundIt(t *testing.T) {
 	t.Parallel()
 	v := ggui.State(0.0)
 	s := ui.Slider(v, 0, 100).Name("Volume")
-	p := ggui.NewProbe(ggui.Box(s).Padding(ggui.Insets(40)), ggui.Sz(320, 120))
+	p := ggui.NewProbe(widget.Box(s).Padding(ggui.Insets(40)), ggui.Sz(320, 120))
 	defer p.Close()
 	f, _ := p.FindRole(ggui.RoleSlider, "Volume")
 	if f.Rect.Size.H != 20 {

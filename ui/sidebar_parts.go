@@ -8,6 +8,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // sidebarToggleName is what the trigger and the rail are called.
@@ -45,7 +46,7 @@ func (w sidebarTriggerIcon) Paint(dst *ggui.Canvas, r ggui.Rect) { w.icon.Paint(
 //
 //	collapsed := ggui.State(false)
 //	bar := ui.Sidebar(page, items...).BindCollapsed(collapsed).Rail(true)
-//	top := ggui.Row(ui.SidebarTrigger(collapsed), title)
+//	top := widget.Row(ui.SidebarTrigger(collapsed), title)
 func SidebarTrigger(collapsed ggui.Binding[bool]) *ButtonWidget {
 	icon := sidebarTriggerIcon{icons.Placeholder(sidebarPanelIcon).Fallback(sidebarIcons())}
 	return ButtonOf(icon, func() { collapsed.Set(!ggui.Untrack(collapsed.Get)) }).
@@ -65,9 +66,9 @@ type SidebarInsetWidget struct {
 // a Sidebar of SidebarVariantInset, which leaves its inner padding to it.
 // It takes all the room it is given.
 //
-//	ggui.Row(
+//	widget.Row(
 //		ui.Sidebar(page, items...).Variant(ui.SidebarVariantInset),
-//		ggui.Expanded(ui.SidebarInset(content)),
+//		widget.Expanded(ui.SidebarInset(content)),
 //	)
 func SidebarInset(child ggui.Widget) *SidebarInsetWidget {
 	return &SidebarInsetWidget{child: child}
@@ -160,10 +161,10 @@ func (s *SidebarWidget) paintRail(dst *ggui.Canvas, r ggui.Rect, right bool) {
 // sidebarTip is the tip a rail shows beside the item under the pointer or
 // the keyboard: one for the sidebar, since one row has either at a time.
 type sidebarTip struct {
-	text    *ggui.TextWidget
-	box     *ggui.BoxWidget
+	text    *widget.TextWidget
+	box     *widget.BoxWidget
 	surface *sidebarTipSurface
-	effect  *ggui.TransitionWidget
+	effect  *widget.TransitionWidget
 	label   string
 	anchor  ggui.Rect
 	reveal  ggui.Motion
@@ -172,7 +173,7 @@ type sidebarTip struct {
 // sidebarTipSurface is a tip's body and, in the gap between it and the row
 // it names, the arrow a Tooltip points with, in the one transition layer.
 type sidebarTipSurface struct {
-	box     *ggui.BoxWidget
+	box     *widget.BoxWidget
 	fill    color.Color
 	right   bool    // the sidebar stands at the right, the tip to its left
 	arrowAt float64 // how far down the body the arrow points
@@ -222,10 +223,10 @@ func (s *SidebarWidget) paintTip(dst *ggui.Canvas, right bool) {
 	}
 	if want >= 0 {
 		if tip.effect == nil {
-			tip.text = ggui.Text("")
-			tip.box = ggui.Box(tip.text)
+			tip.text = widget.Text("")
+			tip.box = widget.Box(tip.text)
 			tip.surface = &sidebarTipSurface{box: tip.box}
-			tip.effect = ggui.PopIn(tip.surface)
+			tip.effect = widget.PopIn(tip.surface)
 		}
 		tip.label, tip.anchor = s.rows[want].e.tooltip, s.rows[want].rect
 	}
@@ -255,7 +256,7 @@ func (s *SidebarWidget) paintTip(dst *ggui.Canvas, right bool) {
 		// clear of the body's corners.
 		margin := min(t.RadiusSm+5, size.H/2)
 		tip.surface.arrowAt = clamp(anchor.Center().Y-at.Y, margin, size.H-margin)
-		tip.effect.PopFrom(pick(right, ggui.PopupLeft, ggui.PopupRight), tip.surface.arrowAt/max(size.H, 1))
+		tip.effect.PopFrom(pick(right, widget.PopupLeft, widget.PopupRight), tip.surface.arrowAt/max(size.H, 1))
 		dst.Node(ggui.Rct(at, size), ggui.Node{Role: ggui.RoleGroup}, func(dst *ggui.Canvas) { dst.Paint(tip.effect, ggui.Rct(at, size)) })
 	})
 }

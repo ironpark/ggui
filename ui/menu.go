@@ -8,6 +8,7 @@ import (
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // menuSubDelay is how long the pointer rests on a row before its submenu
@@ -20,8 +21,8 @@ const menuSubDelay = 100 * time.Millisecond
 type MenuWidget struct {
 	props    property.Owner
 	button   *ButtonWidget
-	popup    *ggui.PopupWidget
-	panel    *ggui.BoxWidget
+	popup    *widget.PopupWidget
+	panel    *widget.BoxWidget
 	body     *menuBody
 	items    []*MenuItemWidget
 	current  int // the item the keyboard is on while open, or -1
@@ -77,7 +78,7 @@ func MenuOf(content ggui.Widget, entries ...ggui.Widget) *MenuWidget {
 func newMenu() *MenuWidget {
 	m := &MenuWidget{current: -1, hover: -1}
 	m.body = &menuBody{m: m}
-	m.panel = ggui.Box(m.body)
+	m.panel = widget.Box(m.body)
 	return m
 }
 
@@ -107,7 +108,7 @@ func (m *MenuWidget) ConsumesKey(ev ggui.KeyEvent) bool {
 func (m *MenuWidget) init(entries []ggui.Widget) {
 	m.body.content = m.column(entries)
 	m.keys = m
-	m.popup = ggui.Popup(m.button, menuSurface(m.panel)).Keys(m).Owner(m.button)
+	m.popup = widget.Popup(m.button, menuSurface(m.panel)).Keys(m).Owner(m.button)
 	m.button.Expands(m.popup.IsOpen).Opens(m)
 }
 
@@ -187,7 +188,7 @@ func (m *MenuWidget) Width(w float64) *MenuWidget {
 }
 
 // Popup returns the popup the entries open in.
-func (m *MenuWidget) Popup() *ggui.PopupWidget { return m.popup }
+func (m *MenuWidget) Popup() *widget.PopupWidget { return m.popup }
 
 func (m *MenuWidget) toggle() {
 	if m.popup.IsOpen() {
@@ -294,7 +295,7 @@ func (m *MenuWidget) HandleKey(ev ggui.KeyEvent) {
 
 // chrome dresses the panel. A menubar and a context menu paint the panel
 // through their own popup, so the width lives here rather than in Layout.
-func (m *MenuWidget) chrome(t *uitheme.Theme) *ggui.BoxWidget {
+func (m *MenuWidget) chrome(t *uitheme.Theme) *widget.BoxWidget {
 	m.theme = t
 	if t.Menu().Popover != t.Popover {
 		mt := t.Menu()
@@ -603,12 +604,12 @@ const (
 type MenuItemWidget struct {
 	props property.Owner
 	ggui.Interactive
-	text         *ggui.TextWidget
+	text         *widget.TextWidget
 	label        string
 	onTap        func()
 	menu         *MenuWidget
 	active       bool
-	shortcut     *ggui.TextWidget
+	shortcut     *widget.TextWidget
 	shortcutSize ggui.Size
 	onHover      func()
 	motion       pointerMotion
@@ -624,20 +625,20 @@ type MenuItemWidget struct {
 	style       menuItemStyle
 	radius      float64 // the highlight's corner radius, or 0 for the style's own
 
-	sub      *MenuWidget       // the submenu this row opens, if any
-	subPopup *ggui.PopupWidget // the popup it opens in
+	sub      *MenuWidget         // the submenu this row opens, if any
+	subPopup *widget.PopupWidget // the popup it opens in
 
 	pad      ggui.EdgeInsets
 	textSize ggui.Size
 	textX    float64 // where the label starts, from the row's left edge
 	theme    *uitheme.Theme
 	env      ggui.Env
-	popup    *ggui.PopupWidget
+	popup    *widget.PopupWidget
 }
 
 // MenuItem creates an entry that runs onTap and closes the menu.
 func MenuItem(label string, onTap func()) *MenuItemWidget {
-	it := &MenuItemWidget{text: ggui.Text(label).NoWrap(), label: label, onTap: onTap}
+	it := &MenuItemWidget{text: widget.Text(label).NoWrap(), label: label, onTap: onTap}
 	it.Role = ggui.RoleMenuItem
 	it.SetName(label)
 	it.AutoKey()
@@ -662,8 +663,8 @@ func MenuSub(label string, entries ...ggui.Widget) *MenuItemWidget {
 	it.sub = newMenu()
 	it.sub.fit, it.sub.parent = true, it
 	it.sub.body.content = it.sub.column(entries)
-	it.subPopup = ggui.Popup(menuItemFace{it}, menuSurface(it.sub.panel)).Gap(0).Modal(false).Owner(it).
-		Side(ggui.PopupInlineEnd).Align(ggui.PopupStart)
+	it.subPopup = widget.Popup(menuItemFace{it}, menuSurface(it.sub.panel)).Gap(0).Modal(false).Owner(it).
+		Side(widget.PopupInlineEnd).Align(widget.PopupStart)
 	return it
 }
 
@@ -800,7 +801,7 @@ func (d *menuDivider) Paint(dst *ggui.Canvas, r ggui.Rect) {
 // with MenuLabel.
 type MenuLabelWidget struct {
 	props property.Owner
-	text  *ggui.TextWidget
+	text  *widget.TextWidget
 	menu  *MenuWidget // the menu the heading is in, which sets its size
 	inset bool
 	pad   ggui.EdgeInsets
@@ -996,7 +997,7 @@ func (it *MenuItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	it.Sync()
 	it.theme = uitheme.Of(env)
 	it.env = env
-	it.popup, _ = ggui.PopupOf(env)
+	it.popup, _ = widget.PopupOf(env)
 	if it.sub == nil {
 		return it.layoutRow(c, env)
 	}

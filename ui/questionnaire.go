@@ -10,6 +10,7 @@ import (
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // QuestionAnswer distinguishes unanswered, explicitly skipped and answered
@@ -406,7 +407,7 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 	// the muted color, and the progress a medium-weight caption.
 	heading := []ggui.Widget{Heading(item.Title)}
 	if item.Description != "" {
-		heading = append(heading, ggui.Text(item.Description).Color(uitheme.MutedFg))
+		heading = append(heading, widget.Text(item.Description).Color(uitheme.MutedFg))
 	}
 	// shadcn's Questionnaire is flex-col gap-4 around the progress, the
 	// item and the actions, and its item a fieldset, flex-col gap-4 too,
@@ -416,7 +417,7 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 	// the same thing.
 	body := []ggui.Widget{
 		&questionProgress{Caption(fmt.Sprintf("Question %d of %d", current, total)).Weight(ggui.WeightMedium), current, total},
-		ggui.Column(heading...).Gap(0).Align(ggui.AlignStretch),
+		widget.Column(heading...).Gap(0).Align(widget.AlignStretch),
 	}
 	rows := []ggui.Widget{}
 	shortcut := 0
@@ -456,10 +457,10 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 		})
 		rows = append(rows, &questionInput{q.input})
 	}
-	body = append(body, ggui.Column(rows...).Gap(8).Align(ggui.AlignStretch))
+	body = append(body, widget.Column(rows...).Gap(8).Align(widget.AlignStretch))
 	if message := q.errors[item.Name]; message != "" {
 		// The error's mt-2, beside the gap.
-		body = append(body, ggui.Box(&questionError{ggui.Text(message)}).Pad(8, 0, 0, 0))
+		body = append(body, widget.Box(&questionError{widget.Text(message)}).Pad(8, 0, 0, 0))
 	}
 	actions := []ggui.Widget{}
 	if current > 1 {
@@ -471,7 +472,7 @@ func (q *QuestionnaireWidget) build() ggui.Widget {
 	label := pick(current == total, q.submitLabel, "Next")
 	actions = append(actions, q.button(label, func() { q.Next() }, false))
 	body = append(body, &questionActions{children: actions, previous: current > 1})
-	return &questionStack{ggui.Column(body...).Align(ggui.AlignStretch)}
+	return &questionStack{widget.Column(body...).Align(widget.AlignStretch)}
 }
 func (q *QuestionnaireWidget) button(label string, fn func(), outline bool) ggui.Widget {
 	b := Button(label, fn)
@@ -613,14 +614,14 @@ type questionChoice struct {
 	option   QuestionOption
 	index    int
 	shortcut string
-	body     *ggui.BoxWidget
+	body     *widget.BoxWidget
 	theme    *uitheme.Theme
 
 	// The parts of body, kept to restyle across layouts.
-	label, description, key *ggui.TextWidget
-	glyphBox, keyBox        *ggui.BoxWidget
-	text                    *ggui.ColumnWidget
-	row                     *ggui.RowWidget
+	label, description, key *widget.TextWidget
+	glyphBox, keyBox        *widget.BoxWidget
+	text                    *widget.ColumnWidget
+	row                     *widget.RowWidget
 	builtMono               ggui.TextStyle // the theme's mono style the shortcut was built with
 	env                     ggui.Env
 }
@@ -639,24 +640,24 @@ func (c *questionChoice) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	// description are the text size at a snug line height, the label in the
 	// regular weight.
 	if c.body == nil || !property.Equal(c.builtMono, t.Mono) {
-		c.label = ggui.Text(c.option.Label).LineHeight(1.375)
+		c.label = widget.Text(c.option.Label).LineHeight(1.375)
 		text := []ggui.Widget{c.label}
 		c.description = nil
 		if c.option.Description != "" {
-			c.description = ggui.Text(c.option.Description).LineHeight(1.375)
+			c.description = widget.Text(c.option.Description).LineHeight(1.375)
 			text = append(text, c.description)
 		}
-		c.glyphBox = ggui.Box()
-		c.text = ggui.Column(text...)
-		parts := []ggui.Widget{c.glyphBox, ggui.Expanded(c.text)}
+		c.glyphBox = widget.Box()
+		c.text = widget.Column(text...)
+		parts := []ggui.Widget{c.glyphBox, widget.Expanded(c.text)}
 		c.keyBox, c.key = nil, nil
 		if c.shortcut != "" {
-			c.key = ggui.Text(c.shortcut).Style(t.Mono).Weight(ggui.WeightMedium).LineHeight(1)
-			c.keyBox = ggui.Box(ggui.Center(c.key))
+			c.key = widget.Text(c.shortcut).Style(t.Mono).Weight(ggui.WeightMedium).LineHeight(1)
+			c.keyBox = widget.Box(widget.Center(c.key))
 			parts = append(parts, c.keyBox)
 		}
-		c.row = ggui.Row(parts...).Align(ggui.AlignStart)
-		c.body = ggui.Box(c.row)
+		c.row = widget.Row(parts...).Align(widget.AlignStart)
+		c.body = widget.Box(c.row)
 		c.builtMono = t.Mono
 	}
 	// A disabled choice is drawn at half strength, as shadcn's opacity-50.
@@ -788,8 +789,8 @@ type questionActions struct {
 	children []ggui.Widget
 	previous bool
 	body     ggui.Widget
-	wrap     *ggui.WrapWidget // body when the actions do not fit on a line
-	row      *ggui.RowWidget  // body when they do
+	wrap     *widget.WrapWidget // body when the actions do not fit on a line
+	row      *widget.RowWidget  // body when they do
 }
 
 func (a *questionActions) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
@@ -800,7 +801,7 @@ func (a *questionActions) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	// Both bodies are built once, so their layout caches survive switching.
 	if width > c.MaxW {
 		if a.wrap == nil {
-			a.wrap = ggui.Wrap(a.children...).Gap(8)
+			a.wrap = widget.Wrap(a.children...).Gap(8)
 		}
 		a.body = a.wrap
 	} else {
@@ -810,8 +811,8 @@ func (a *questionActions) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 			if a.previous {
 				at = 1
 			}
-			parts = slices.Insert(parts, at, ggui.Widget(ggui.Spacer()))
-			a.row = ggui.Row(parts...).Gap(8)
+			parts = slices.Insert(parts, at, ggui.Widget(widget.Spacer()))
+			a.row = widget.Row(parts...).Gap(8)
 		}
 		a.body = a.row
 	}
@@ -833,14 +834,14 @@ func (f *questionInput) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 
 // Theme-dependent presentation resolves at layout, including under Themed.
 // A palette swap must not reconstruct the editor or reset the answers.
-type questionStack struct{ *ggui.ColumnWidget }
+type questionStack struct{ *widget.ColumnWidget }
 
 func (s *questionStack) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	s.Gap(uitheme.Of(env).Chat.QuestionGap)
 	return s.ColumnWidget.Layout(c, env)
 }
 
-type questionError struct{ *ggui.TextWidget }
+type questionError struct{ *widget.TextWidget }
 
 func (e *questionError) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	e.Color(uitheme.Of(env).Destructive)

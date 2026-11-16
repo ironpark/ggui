@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // A row that appears with a write eases in through its Transition over
@@ -16,10 +17,10 @@ func TestARowAppearingEasesInInPart(t *testing.T) {
 	frames := sameAsWhole(t, ggui.Sz(200, 160), func() (ggui.Builder, func(*ggui.WindowProbe)) {
 		rows := ggui.State([]int{1})
 		return func() ggui.Widget {
-				list := ggui.EachKeyed(rows, func(i int) int { return i }, func(item ggui.EachItem[int]) ggui.Widget {
-					return ggui.Box().Size(120, 24).Fill(red)
-				}).Space(0.5).Transition(func(w ggui.Widget) *ggui.TransitionWidget { return ggui.Transition(w).Fade().Slide(-16, 0) })
-				return ggui.Column(ggui.Box().Size(100, 20).Fill(blue), ggui.Expanded(ggui.Scroll(list)))
+				list := widget.EachKeyed(rows, func(i int) int { return i }, func(item widget.EachItem[int]) ggui.Widget {
+					return widget.Box().Size(120, 24).Fill(red)
+				}).Space(0.5).Transition(func(w ggui.Widget) *widget.TransitionWidget { return widget.Transition(w).Fade().Slide(-16, 0) })
+				return widget.Column(widget.Box().Size(100, 20).Fill(blue), widget.Expanded(widget.Scroll(list)))
 			}, func(*ggui.WindowProbe) {
 				ggui.Append(rows, 2)
 			}
@@ -39,8 +40,8 @@ func TestARowAppearingEasesInInPart(t *testing.T) {
 func TestATooltipOpeningAtItsDelayShowsWhole(t *testing.T) {
 	sameAsWhole(t, ggui.Sz(240, 160), func() (ggui.Builder, func(*ggui.WindowProbe)) {
 		return func() ggui.Widget {
-				anchor := ggui.Box().Size(60, 24).Fill(blue)
-				return topLeft(ggui.Column(ui.Tooltip(anchor, "A tip that runs past its anchor"), ggui.Box().Size(200, 80).Fill(green)))
+				anchor := widget.Box().Size(60, 24).Fill(blue)
+				return topLeft(widget.Column(ui.Tooltip(anchor, "A tip that runs past its anchor"), widget.Box().Size(200, 80).Fill(green)))
 			}, func(p *ggui.WindowProbe) {
 				p.Move(ggui.Pt(30, 12))
 			}
@@ -54,10 +55,10 @@ func TestARowLeavingEasesOut(t *testing.T) {
 	frames := sameAsWhole(t, ggui.Sz(200, 160), func() (ggui.Builder, func(*ggui.WindowProbe)) {
 		rows := ggui.State([]int{1, 2, 3})
 		return func() ggui.Widget {
-				list := ggui.EachKeyed(rows, func(i int) int { return i }, func(item ggui.EachItem[int]) ggui.Widget {
-					return ggui.Box().Size(120, 24).Fill([]color.Color{red, green, blue}[item.Item-1])
-				}).Space(0.5).Transition(func(w ggui.Widget) *ggui.TransitionWidget { return ggui.Transition(w).Fade().Slide(-16, 0) })
-				return ggui.Column(ggui.Box().Size(100, 20).Fill(gray), ggui.Expanded(ggui.Scroll(list)))
+				list := widget.EachKeyed(rows, func(i int) int { return i }, func(item widget.EachItem[int]) ggui.Widget {
+					return widget.Box().Size(120, 24).Fill([]color.Color{red, green, blue}[item.Item-1])
+				}).Space(0.5).Transition(func(w ggui.Widget) *widget.TransitionWidget { return widget.Transition(w).Fade().Slide(-16, 0) })
+				return widget.Column(widget.Box().Size(100, 20).Fill(gray), widget.Expanded(widget.Scroll(list)))
 			}, func(*ggui.WindowProbe) {
 				ggui.Remove(rows, func(i int) bool { return i == 2 })
 			}

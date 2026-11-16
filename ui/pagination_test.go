@@ -5,11 +5,12 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestPaginationPageButtonsAreSquareAndEllipsesAreIcons(t *testing.T) {
 	t.Parallel()
-	p := ggui.NewProbe(ggui.Column(ui.Pagination(ggui.State(6), ggui.State(12))), ggui.Sz(600, 120))
+	p := ggui.NewProbe(widget.Column(ui.Pagination(ggui.State(6), ggui.State(12))), ggui.Sz(600, 120))
 	defer p.Close()
 	tree := p.Semantics()
 	page, ok := tree.Find(ggui.RoleButton, "Page 6")
@@ -34,7 +35,7 @@ func TestPaginationPageButtonsAreSquareAndEllipsesAreIcons(t *testing.T) {
 func TestPaginationLabelsRenameThePreviousAndNextButtons(t *testing.T) {
 	t.Parallel()
 	page := ggui.State(2)
-	p := ggui.NewProbe(ggui.Column(ui.Pagination(page, ggui.State(3)).Labels("Zurück", "Weiter")), ggui.Sz(600, 120))
+	p := ggui.NewProbe(widget.Column(ui.Pagination(page, ggui.State(3)).Labels("Zurück", "Weiter")), ggui.Sz(600, 120))
 	defer p.Close()
 	if _, ok := p.Find("Previous"); ok {
 		t.Fatal("the default label survived Labels")

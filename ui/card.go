@@ -10,6 +10,7 @@ import (
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // Card is a panel on the theme's Card surface, with a border and rounded
@@ -36,7 +37,7 @@ func Card(children ...ggui.Widget) *CardWidget {
 		}
 	}
 	if !c.sectioned {
-		c.box = ggui.Box(children[0])
+		c.box = widget.Box(children[0])
 		return c
 	}
 	parts := make([]ggui.Widget, len(children))
@@ -51,16 +52,16 @@ func Card(children ...ggui.Widget) *CardWidget {
 		c.lead, _ = parts[0].(*CardMediaWidget)
 		c.trail, _ = parts[n-1].(*CardMediaWidget)
 	}
-	c.column = ggui.Column(parts...).Align(ggui.AlignStretch)
-	c.box = ggui.Box(c.column)
+	c.column = widget.Column(parts...).Align(widget.AlignStretch)
+	c.box = widget.Box(c.column)
 	return c
 }
 
 // CardWidget is a themed panel. Build one with Card.
 type CardWidget struct {
 	props       property.Owner
-	box         *ggui.BoxWidget
-	column      *ggui.ColumnWidget // the sections, when the card has them
+	box         *widget.BoxWidget
+	column      *widget.ColumnWidget // the sections, when the card has them
 	sectioned   bool
 	footed      bool             // the last section is a footer, which takes the bottom padding's place
 	lead, trail *CardMediaWidget // media in first and in last place, whose outer corners the card rounds
@@ -205,20 +206,20 @@ func (c *CardWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 // description, with an optional action at the top right. Build one with
 // CardHeader.
 type CardHeaderWidget struct {
-	title, description *ggui.TextWidget
+	title, description *widget.TextWidget
 	action             ggui.Widget
 	stale              bool // Action changed what the row should hold
-	box                *ggui.BoxWidget
-	row                *ggui.RowWidget
-	column             *ggui.ColumnWidget
+	box                *widget.BoxWidget
+	row                *widget.RowWidget
+	column             *widget.ColumnWidget
 }
 
 // CardHeader creates a card's header titled title. An empty description is
 // left out.
 func CardHeader(title, description string) *CardHeaderWidget {
-	h := &CardHeaderWidget{title: ggui.Text(title).Role(ggui.RoleHeading)}
+	h := &CardHeaderWidget{title: widget.Text(title).Role(ggui.RoleHeading)}
 	if description != "" {
-		h.description = ggui.Text(description)
+		h.description = widget.Text(description)
 	}
 	return h
 }
@@ -241,13 +242,13 @@ func (h *CardHeaderWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		if h.description != nil {
 			text = append(text, h.description)
 		}
-		h.column = ggui.Column(text...).Align(ggui.AlignStretch)
-		parts := []ggui.Widget{ggui.Expanded(h.column)}
+		h.column = widget.Column(text...).Align(widget.AlignStretch)
+		parts := []ggui.Widget{widget.Expanded(h.column)}
 		if h.action != nil {
 			parts = append(parts, h.action)
 		}
-		h.row = ggui.Row(parts...).Align(ggui.AlignStart)
-		h.box = ggui.Box(h.row)
+		h.row = widget.Row(parts...).Align(widget.AlignStart)
+		h.box = widget.Box(h.row)
 		h.stale = false
 	}
 	title := t.Text.Merge(t.Heading)
@@ -271,12 +272,12 @@ func (h *CardHeaderWidget) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(h.bo
 // CardContentWidget is the body section of a Card, padded at its sides.
 // Build one with CardContent.
 type CardContentWidget struct {
-	box *ggui.BoxWidget
+	box *widget.BoxWidget
 }
 
 // CardContent creates a card's body around child.
 func CardContent(child ggui.Widget) *CardContentWidget {
-	return &CardContentWidget{box: ggui.Box(child)}
+	return &CardContentWidget{box: widget.Box(child)}
 }
 
 func (c *CardContentWidget) cardSection() {}
@@ -340,24 +341,24 @@ func (m *CardMediaWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 // surface under a line, holding the card's actions in a row. Build one
 // with CardFooter.
 type CardFooterWidget struct {
-	box    *ggui.BoxWidget
-	row    *ggui.RowWidget
+	box    *widget.BoxWidget
+	row    *widget.RowWidget
 	theme  *uitheme.Theme
 	radius float64
 }
 
 // CardFooter creates a card's footer holding children in a row.
 func CardFooter(children ...ggui.Widget) *CardFooterWidget {
-	f := &CardFooterWidget{row: ggui.Row(children...).Align(ggui.AlignCenter)}
-	f.box = ggui.Box(f.row)
+	f := &CardFooterWidget{row: widget.Row(children...).Align(widget.AlignCenter)}
+	f.box = widget.Box(f.row)
 	return f
 }
 
 func (f *CardFooterWidget) cardSection() {}
 
-// Justify distributes the footer's children along it: ggui.JustifyEnd for
-// actions at the right, ggui.SpaceBetween for one at each end.
-func (f *CardFooterWidget) Justify(j ggui.Justify) *CardFooterWidget {
+// Justify distributes the footer's children along it: widget.JustifyEnd for
+// actions at the right, widget.SpaceBetween for one at each end.
+func (f *CardFooterWidget) Justify(j widget.Justify) *CardFooterWidget {
 	f.row.Justify(j)
 	return f
 }
@@ -441,7 +442,7 @@ type BadgeWidget struct {
 	action         func()
 	motion         time.Duration
 	hover          float64 // how far into its look under the pointer the badge was painted
-	text           *ggui.TextWidget
+	text           *widget.TextWidget
 	variant        *BadgeVariant
 	radius         float64 // set by Radius; negative is a pill
 	lead, trail    icons.Role
@@ -459,7 +460,7 @@ type BadgeWidget struct {
 // Badge creates a pill labelled s on the Primary surface; Variant, or
 // Secondary, Outline, Destructive, Ghost and Link, change its look.
 func Badge(s string) *BadgeWidget {
-	b := &BadgeWidget{text: ggui.Text(s).NoWrap(), variant: BadgePrimary, radius: -1}
+	b := &BadgeWidget{text: widget.Text(s).NoWrap(), variant: BadgePrimary, radius: -1}
 	b.Role = ggui.RoleLink
 	b.SetName(s)
 	b.AutoKey()
@@ -652,12 +653,12 @@ type ProgressWidget struct {
 	env    ggui.Env
 	motion time.Duration
 
-	label     *ggui.TextWidget // nil without Label
+	label     *widget.TextWidget // nil without Label
 	name      string
 	labelSize ggui.Size
 	shows     bool // the value is written at the right, above the bar
 	format    func(float64) string
-	reading   *ggui.TextWidget // the value as text, laid out when it changes
+	reading   *widget.TextWidget // the value as text, laid out when it changes
 	readSize  ggui.Size
 	readFor   float64 // the value reading shows
 	readOK    bool
@@ -688,7 +689,7 @@ func (p *ProgressWidget) Label(s string) *ProgressWidget {
 	case s == "":
 		p.label = nil
 	case p.label == nil:
-		p.label = ggui.Text(s).NoWrap().Ellipsis()
+		p.label = widget.Text(s).NoWrap().Ellipsis()
 	default:
 		p.label.Content(s)
 	}
@@ -728,7 +729,7 @@ func (p *ProgressWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	if p.shows {
 		if p.reading == nil {
-			p.reading = ggui.Text("").NoWrap()
+			p.reading = widget.Text("").NoWrap()
 		}
 		p.reading.Style(t.Text).Color(t.MutedFg)
 		// Laid out here for the row's height and under this Env; Paint

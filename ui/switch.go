@@ -3,6 +3,7 @@ package ui
 import (
 	"github.com/ironpark/ggui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // SwitchWidget is a sliding on/off toggle. Build one with Switch.
@@ -20,7 +21,7 @@ func Switch(on ggui.Binding[bool], label string) *SwitchWidget {
 	s.SetName(label)
 	s.AutoKey()
 	if label != "" {
-		s.label = ggui.Text(label)
+		s.label = widget.Text(label)
 	}
 	s.onTap = func() { setChanged(on, !ggui.Untrack(on.Get), s.onChange) }
 	return s

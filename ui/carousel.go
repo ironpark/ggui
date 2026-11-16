@@ -10,6 +10,7 @@ import (
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // CarouselItemWidget is one slide. Basis is a fraction of the viewport.
@@ -49,11 +50,11 @@ func carouselBasis(f float64) float64 {
 // CarouselContentWidget groups slides for composition with Carousel.
 type CarouselContentWidget struct {
 	items []ggui.Widget
-	row   *ggui.RowWidget
+	row   *widget.RowWidget
 }
 
 func CarouselContent(items ...ggui.Widget) *CarouselContentWidget {
-	return &CarouselContentWidget{items: append([]ggui.Widget(nil), items...), row: ggui.Row(items...)}
+	return &CarouselContentWidget{items: append([]ggui.Widget(nil), items...), row: widget.Row(items...)}
 }
 func (w *CarouselContentWidget) Layout(c ggui.Constraints, e ggui.Env) ggui.Size {
 	return w.row.Layout(c, e)

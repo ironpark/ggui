@@ -5,10 +5,11 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func numberProbe(n *ui.NumberInputWidget) *ggui.Probe {
-	return ggui.NewProbe(ggui.Column(n, ui.Button("Elsewhere", nil)), ggui.Sz(300, 120))
+	return ggui.NewProbe(widget.Column(n, ui.Button("Elsewhere", nil)), ggui.Sz(300, 120))
 }
 
 func TestNumberInputCommitsParsedClampedRoundedText(t *testing.T) {

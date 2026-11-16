@@ -18,6 +18,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 type model struct {
@@ -30,7 +31,7 @@ type model struct {
 func (m *model) main() ggui.Widget {
 	w := ggui.UseWindow()
 	ggui.Watch(m.Count, func(n int) { w.SetTitle(fmt.Sprintf("ggui · windows (%d)", n)) })
-	return ggui.Column(ui.AppMenubar(w.App().Menu()), ggui.Expanded(ggui.Center(ui.Card(ggui.Column(
+	return widget.Column(ui.AppMenubar(w.App().Menu()), widget.Expanded(widget.Center(ui.Card(widget.Column(
 		ui.NativeContextMenu(ui.Titlef("count: %d", m.Count),
 			ggui.MenuAction("Add One", "", func() { ggui.Add(m.Count, 1) }),
 			ggui.MenuAction("Reset", "", func() { m.Count.Set(0) }).BindEnabled(
@@ -39,11 +40,11 @@ func (m *model) main() ggui.Widget {
 			ggui.Menu("Windows", ggui.MenuAction("New Inspector", "", func() { m.open(w.App()) })),
 		),
 		ui.Caption("Right-click the count for native actions"),
-		ggui.Row(
+		widget.Row(
 			ui.Button("+1", func() { ggui.Add(m.Count, 1) }),
 			ui.Button("Open inspector", func() { m.open(w.App()) }),
 		).Space(1),
-		ggui.Textf("windows opened: %d", m.Opened),
+		widget.Textf("windows opened: %d", m.Opened),
 		describe(w),
 	).Space(1)).Pad(24))))
 }
@@ -72,9 +73,9 @@ func (m *model) open(app *ggui.App) *ggui.Window {
 // just this window.
 func (m *model) inspector() ggui.Widget {
 	w := ggui.UseWindow()
-	return ggui.Center(ggui.Column(
-		ggui.Textf("shared count: %d", m.Count),
-		ggui.Row(
+	return widget.Center(widget.Column(
+		widget.Textf("shared count: %d", m.Count),
+		widget.Row(
 			ui.Button("-1", func() { ggui.Add(m.Count, -1) }),
 			ui.Button("Close", w.Close),
 		).Space(1),
