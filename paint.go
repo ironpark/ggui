@@ -738,42 +738,6 @@ func (c *Canvas) scratch(area image.Rectangle, fn func(img *ggfx.Image)) {
 	fn(img)
 }
 
-// ClipPathWidget clips its child to a path built for the Rect it paints in,
-// input included. Build one with ClipPath or ClipOval.
-type ClipPathWidget struct {
-	child Widget
-	shape func(r Rect) *Path
-	oval  bool
-}
-
-// ClipPath clips child to the path shape returns for the Rect the child
-// paints in, in the same coordinates:
-//
-//	ggui.ClipPath(photo, func(r ggui.Rect) *ggui.Path { return star(r) })
-func ClipPath(child Widget, shape func(r Rect) *Path) *ClipPathWidget {
-	return &ClipPathWidget{child: child, shape: shape}
-}
-
-// ClipOval clips child to the ellipse inscribed in its Rect, a circle when
-// the child is square.
-func ClipOval(child Widget) *ClipPathWidget { return &ClipPathWidget{child: child, oval: true} }
-
-// Baseline implements Baseliner: the child's.
-func (w *ClipPathWidget) Baseline() (float64, bool) { return BaselineOf(w.child) }
-
-// Layout implements Widget.
-func (w *ClipPathWidget) Layout(c Constraints, env Env) Size { return w.child.Layout(c, env) }
-
-// Paint implements Widget.
-func (w *ClipPathWidget) Paint(dst *Canvas, r Rect) {
-	paint := func(dst *Canvas) { dst.Paint(w.child, r) }
-	if w.oval {
-		dst.ClipOval(r, paint)
-		return
-	}
-	dst.ClipPath(w.shape(r), paint)
-}
-
 // GradientStop is one colour of a Gradient, at Offset along it: 0 at its
 // start, 1 at its end.
 type GradientStop struct {

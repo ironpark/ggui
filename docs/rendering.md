@@ -297,7 +297,11 @@ layer is the window's size, so what lies outside the window before the
 transform moves it is not drawn.
 
 `Opacity` composites its child as a whole, so overlapping parts do not show
-through each other. `ClipOval` and `ClipPath`, and `dst.ClipOval(r, paint)`
+through each other. At zero it paints the child through `dst.Invisible()`, a
+Canvas that draws nothing but registers hit regions and semantics as `dst`
+does: the other half of `dst.Inert()`, which draws and takes no input. A
+widget that hides a subtree without taking it out of input or the semantics
+tree paints it the same way. `ClipOval` and `ClipPath`, and `dst.ClipOval(r, paint)`
 and `dst.ClipPath(path, paint)`, cut a subtree to a shape with antialiased
 edges; input outside the shape does not reach the child. `Path.Contains` and
 `Path.Bounds` answer the same questions for a path of your own.
