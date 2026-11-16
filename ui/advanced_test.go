@@ -9,6 +9,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestAccordionSelectionAndKeyboard(t *testing.T) {
@@ -17,8 +18,8 @@ func TestAccordionSelectionAndKeyboard(t *testing.T) {
 	calls := 0
 	a := ui.Accordion(open,
 		ui.AccordionItem("a", "Alpha", ui.Button("Inside Alpha", func() { calls++ })),
-		ui.AccordionItem("b", "Disabled", ggui.Text("Hidden")).Disabled(true),
-		ui.AccordionItem("c", "Charlie", ggui.Text("Content")),
+		ui.AccordionItem("b", "Disabled", widget.Text("Hidden")).Disabled(true),
+		ui.AccordionItem("c", "Charlie", widget.Text("Content")),
 	)
 	p := ggui.NewProbe(a, ggui.Sz(300, 300))
 	defer p.Close()
@@ -67,7 +68,7 @@ func TestCommandFiltersAndSkipsDisabled(t *testing.T) {
 		ui.CommandItem("Open", func() { picked = "open" }).Keywords("file", "문서"),
 		ui.CommandItem("Save", func() { picked = "save" }),
 	)
-	p := ggui.NewProbe(ggui.Column(cmd), ggui.Sz(300, 260))
+	p := ggui.NewProbe(widget.Column(cmd), ggui.Sz(300, 260))
 	defer p.Close()
 	p.Tap("Search commands")
 	p.Type(ggui.Mods{}, ggui.KeyEnter)
@@ -108,7 +109,7 @@ func TestComboboxSelectionAndEscape(t *testing.T) {
 	value := ggui.State("Apple")
 	changes := 0
 	c := ui.Combobox(value).Options([]string{"Apple", "Banana", "Cherry"}).Name("Fruit").OnChange(func(string) { changes++ })
-	p := ggui.NewProbe(ggui.Column(c, ui.Button("Outside", func() {})), ggui.Sz(360, 320))
+	p := ggui.NewProbe(widget.Column(c, ui.Button("Outside", func() {})), ggui.Sz(360, 320))
 	defer p.Close()
 	p.Tap("Fruit")
 	p.Type(ggui.Mods{}, ggui.KeyArrowDown, ggui.KeyEnter)
@@ -139,7 +140,7 @@ func TestComboboxSelectionAndEscape(t *testing.T) {
 func TestResizableCaptureLimitsAndKeyboard(t *testing.T) {
 	t.Parallel()
 	fraction := ggui.State(.5)
-	r := ui.Resizable(fraction, ggui.Box(), ggui.Box()).WithHandle().MinSizes(40, 60)
+	r := ui.Resizable(fraction, widget.Box(), widget.Box()).WithHandle().MinSizes(40, 60)
 	p := ggui.NewProbe(r, ggui.Sz(201, 100)) // 200 for the panes and the divider's line
 	defer p.Close()
 	at := find(t, p, ggui.RoleSeparator, "Resize panels").Center()
@@ -181,7 +182,7 @@ func TestResizableCaptureLimitsAndKeyboard(t *testing.T) {
 func TestResizableVertical(t *testing.T) {
 	t.Parallel()
 	fraction := ggui.State(.5)
-	p := ggui.NewProbe(ui.Resizable(fraction, ggui.Box(), ggui.Box()).Vertical().WithHandle(), ggui.Sz(100, 208))
+	p := ggui.NewProbe(ui.Resizable(fraction, widget.Box(), widget.Box()).Vertical().WithHandle(), ggui.Sz(100, 208))
 	defer p.Close()
 	p.Tap("Resize panels")
 	// An arrow moves the divider 5%, react-resizable-panels' keyboard step.
@@ -203,7 +204,7 @@ func TestToasterLifecycleAndNonmodalActions(t *testing.T) {
 	t.Parallel()
 	toaster := ui.NewToaster().Limit(2)
 	clicks := 0
-	p := ggui.ProbeBuilder(func() ggui.Widget { return ggui.Column(ui.Button("Background", func() { clicks++ }), toaster) }, ggui.Sz(500, 500))
+	p := ggui.ProbeBuilder(func() ggui.Widget { return widget.Column(ui.Button("Background", func() { clicks++ }), toaster) }, ggui.Sz(500, 500))
 	p.Setup(func() { ggui.OnCleanup(toaster.Close) })
 	defer p.Close()
 	p.Advance(0)
@@ -247,7 +248,7 @@ func TestToasterLifecycleAndNonmodalActions(t *testing.T) {
 func TestToasterPausesWhileInteracting(t *testing.T) {
 	t.Parallel()
 	toaster := ui.NewToaster()
-	p := ggui.NewProbe(ggui.Column(toaster), ggui.Sz(500, 400))
+	p := ggui.NewProbe(widget.Column(toaster), ggui.Sz(500, 400))
 	defer p.Close()
 	p.Advance(0)
 	toaster.Push(ui.Toast("Pause", "Hover the dismiss button").Duration(time.Second))
@@ -273,7 +274,7 @@ func TestCommandScrollsKeyboardHighlight(t *testing.T) {
 	for i := range entries {
 		entries[i] = ui.CommandItem(fmt.Sprintf("Action %d", i), func() { picked = i })
 	}
-	p := ggui.NewProbe(ggui.Column(ui.Command(query, entries...).Height(60)), ggui.Sz(300, 160))
+	p := ggui.NewProbe(widget.Column(ui.Command(query, entries...).Height(60)), ggui.Sz(300, 160))
 	defer p.Close()
 	p.Tap("Search commands")
 	for range 19 {
@@ -299,9 +300,9 @@ func TestAdvancedBindingsInvalidateCachedLayout(t *testing.T) {
 	open := ggui.State([]string{})
 	fraction := ggui.State(.5)
 	p := ggui.ProbeBuilder(func() ggui.Widget {
-		return ggui.Column(
+		return widget.Column(
 			ggui.Cached(ui.Accordion(open, ui.AccordionItem("a", "Header", ui.Button("Content", func() {})))),
-			ggui.Box(ggui.Cached(ui.Resizable(fraction, ggui.Box(), ggui.Box()))).Height(100),
+			widget.Box(ggui.Cached(ui.Resizable(fraction, widget.Box(), widget.Box()))).Height(100),
 		)
 	}, ggui.Sz(201, 300))
 	defer p.Close()
@@ -319,7 +320,7 @@ func TestAdvancedBindingsInvalidateCachedLayout(t *testing.T) {
 
 func TestResizableCapturesTouchDrag(t *testing.T) {
 	t.Parallel()
-	r := ui.Resizable(ggui.State(.5), ggui.Box(), ggui.Box()).Vertical()
+	r := ui.Resizable(ggui.State(.5), widget.Box(), widget.Box()).Vertical()
 	var capturer ggui.TouchDragCapturer = r
 	if !capturer.CaptureTouchDrag() {
 		t.Fatal("resize handle allows parent touch scrolling")
@@ -334,7 +335,7 @@ func TestResizableHairlineLetsThePanesMeet(t *testing.T) {
 	t.Parallel()
 	fraction := ggui.State(.5)
 	var second ggui.Size
-	p := ggui.NewProbe(ui.Resizable(fraction, ggui.Box(), sizeOf(&second)).Hairline(), ggui.Sz(201, 100))
+	p := ggui.NewProbe(ui.Resizable(fraction, widget.Box(), sizeOf(&second)).Hairline(), ggui.Sz(201, 100))
 	defer p.Close()
 	p.Frame()
 	if second.W != 100 {

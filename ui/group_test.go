@@ -6,13 +6,14 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/icons"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestButtonGroupVerticalStacksAndNamesTheToolbar(t *testing.T) {
 	t.Parallel()
 	name := ggui.State("Clipboard")
 	group := ui.ButtonGroup(ui.Button("Copy", func() {}).Ghost(), ui.Button("Paste", func() {}).Ghost()).Vertical().BindName(name)
-	p := ggui.NewProbe(ggui.Row(group), ggui.Sz(300, 200))
+	p := ggui.NewProbe(widget.Row(group), ggui.Sz(300, 200))
 	defer p.Close()
 	copyB := find(t, p, ggui.RoleButton, "Copy").Rect
 	paste := find(t, p, ggui.RoleButton, "Paste").Rect
@@ -42,7 +43,7 @@ func TestToggleGroupVerticalMovesWithUpAndDown(t *testing.T) {
 	value := ggui.State("b")
 	var changes []string
 	g := ui.ToggleGroup(value).Options([]string{"a", "b", "c"}).Vertical().Name("Align").OnChange(func(s string) { changes = append(changes, s) })
-	p := ggui.NewProbe(ggui.Row(g), ggui.Sz(300, 300))
+	p := ggui.NewProbe(widget.Row(g), ggui.Sz(300, 300))
 	defer p.Close()
 	a := find(t, p, ggui.RoleRadio, "a").Rect
 	b := find(t, p, ggui.RoleRadio, "b").Rect
@@ -88,7 +89,7 @@ func TestToggleGroupOptionalClearsOnASecondPress(t *testing.T) {
 	t.Parallel()
 	kept, cleared := ggui.State("b"), ggui.State("b")
 	var changes []string
-	root := ggui.Column(
+	root := widget.Column(
 		ui.ToggleGroup(kept).Options([]string{"a", "b"}).Name("Kept").Format(func(s string) string { return "kept " + s }),
 		ui.ToggleGroup(cleared).Options([]string{"a", "b"}).Name("Cleared").Format(func(s string) string { return "cleared " + s }).
 			Optional().OnChange(func(s string) { changes = append(changes, s) }),
@@ -127,7 +128,7 @@ func TestToggleGroupIcons(t *testing.T) {
 	labelled := ui.ToggleGroup(value).Options(opts).Icon(glyph)
 	bare := ui.ToggleGroup(value).Options(opts)
 	only := ui.ToggleGroup(value).Options(opts).Icon(glyph).IconOnly()
-	p := ggui.NewProbe(ggui.Column(labelled, bare, only), ggui.Sz(400, 300))
+	p := ggui.NewProbe(widget.Column(labelled, bare, only), ggui.Sz(400, 300))
 	defer p.Close()
 	p.Frame()
 	var widths []float64

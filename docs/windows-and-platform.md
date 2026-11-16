@@ -31,7 +31,7 @@ another, with a `Config` and a builder of its own:
 inspector, err := app.OpenWindow(ggui.Config{
     Title: "Inspector", Width: 320, Height: 240, AlwaysOnTop: true,
 }, func() ggui.Widget {
-    return ggui.Textf("shared count: %d", count)
+    return widget.Textf("shared count: %d", count)
 })
 ```
 
@@ -144,7 +144,7 @@ equivalents. Elsewhere every window runs the chords as shortcuts, and
 one tree serves every platform:
 
 ```go
-ggui.Column(ui.AppMenubar(app.Menu()), ggui.Expanded(content))
+widget.Column(ui.AppMenubar(app.Menu()), widget.Expanded(content))
 ```
 
 `ggui.EditMenu` is the usual Edit menu: Undo, Redo, Cut, Copy, Paste and
@@ -171,7 +171,7 @@ It accepts the same `ggui.MenuItem` model as the menu bar and tray, including
 submenus, separators, enabled state, and check marks:
 
 ```go
-ui.NativeContextMenu(ggui.Text("Right-click me"),
+ui.NativeContextMenu(widget.Text("Right-click me"),
     ggui.MenuAction("Open", "", open),
     ggui.MenuAction("Save", "", save).BindEnabled(dirty),
     ggui.MenuSeparator(),

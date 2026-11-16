@@ -8,6 +8,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func dataModel(rows ggui.Readable[[]person]) *ui.TableModel[person, int] {
@@ -102,7 +103,7 @@ func TestDataTableControls(t *testing.T) {
 	t.Parallel()
 	m := dataModel(people())
 	m.SetPageSize(2)
-	p := ggui.NewProbe(ggui.Column(ui.DataTable(m)).Align(ggui.AlignStretch), ggui.Sz(640, 600))
+	p := ggui.NewProbe(widget.Column(ui.DataTable(m)).Align(widget.AlignStretch), ggui.Sz(640, 600))
 	defer p.Close()
 	p.Tap("Select row 1")
 	if !m.IsSelected(1) {
@@ -151,10 +152,10 @@ func TestDataTableReusesCellsAndKeyboardMenu(t *testing.T) {
 	rows := people()
 	col := ui.Col("Name", func(p ggui.Readable[person]) ggui.Widget {
 		builds++
-		return ggui.TextOf(ggui.Map(p, func(p person) string { return p.Name }))
+		return widget.TextOf(ggui.Map(p, func(p person) string { return p.Name }))
 	}).Sortable(func(a, b person) int { return cmp.Compare(a.Name, b.Name) })
 	m := ui.NewTableModel(rows, func(p person) int { return p.ID }, col, ui.TextCol("Age", func(p person) string { return strconv.Itoa(p.Age) }))
-	p := ggui.NewProbe(ggui.Column(ui.DataTable(m)), ggui.Sz(640, 600))
+	p := ggui.NewProbe(widget.Column(ui.DataTable(m)), ggui.Sz(640, 600))
 	defer p.Close()
 	p.Frame()
 	initial := builds
@@ -181,7 +182,7 @@ func TestDataTableNarrowLayout(t *testing.T) {
 	t.Parallel()
 	m := dataModel(people())
 	m.SetPageSize(2)
-	p := ggui.NewProbe(ggui.Column(ui.DataTable(m)).Align(ggui.AlignStretch), ggui.Sz(280, 600))
+	p := ggui.NewProbe(widget.Column(ui.DataTable(m)).Align(widget.AlignStretch), ggui.Sz(280, 600))
 	defer p.Close()
 	next, ok := p.Find("Next")
 	if !ok || next.Rect.Origin.Y+next.Rect.Size.H > 600 || next.Rect.Origin.X+next.Rect.Size.W > 280 {
@@ -203,7 +204,7 @@ func TestDataTableEmptyMessageStaysInsideNarrowViewport(t *testing.T) {
 	t.Parallel()
 	m := dataModel(people())
 	m.SetQuery("absent")
-	p := ggui.NewProbe(ggui.Column(ui.DataTable(m)).Align(ggui.AlignStretch), ggui.Sz(280, 600))
+	p := ggui.NewProbe(widget.Column(ui.DataTable(m)).Align(widget.AlignStretch), ggui.Sz(280, 600))
 	defer p.Close()
 	n, ok := p.Semantics().Find(ggui.RoleText, "No results.")
 	if !ok {
@@ -221,7 +222,7 @@ func TestDataTableWideColumnsRemainReachable(t *testing.T) {
 		cols[i] = ui.TextCol("Column "+strconv.Itoa(i), func(p person) string { return p.Name }).W(180).Sortable(func(a, b person) int { return cmp.Compare(a.Name, b.Name) })
 	}
 	m := ui.NewTableModel(people(), func(p person) int { return p.ID }, cols...)
-	p := ggui.NewProbe(ggui.Column(ui.DataTable(m)).Align(ggui.AlignStretch), ggui.Sz(640, 600))
+	p := ggui.NewProbe(widget.Column(ui.DataTable(m)).Align(widget.AlignStretch), ggui.Sz(640, 600))
 	defer p.Close()
 	p.Scroll(ggui.Pt(320, 80), ggui.Pt(-1000, 0))
 	if _, ok := p.Find("Sort Column 5"); !ok {
@@ -235,7 +236,7 @@ func TestDataTableWideColumnsRemainReachable(t *testing.T) {
 
 func TestDataTableColumnMenuOpensUnderTheButtonsTrailingEdge(t *testing.T) {
 	t.Parallel()
-	p := ggui.NewProbe(ggui.Column(ui.DataTable(dataModel(people()))).Align(ggui.AlignStretch), ggui.Sz(640, 600))
+	p := ggui.NewProbe(widget.Column(ui.DataTable(dataModel(people()))).Align(widget.AlignStretch), ggui.Sz(640, 600))
 	defer p.Close()
 	p.Tap("Columns")
 	button, item := semNode(t, p, ggui.RoleMenu, "Columns"), semNode(t, p, ggui.RoleMenuItem, "Show Age")

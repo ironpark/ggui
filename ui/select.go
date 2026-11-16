@@ -9,6 +9,7 @@ import (
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // SelectWidget is a dropdown that picks one of a list of values into a
@@ -36,11 +37,11 @@ type SelectWidget[T comparable] struct {
 	placedAnchor  ggui.Rect
 	placedScreen  ggui.Size
 
-	popup          *ggui.PopupWidget
-	text           *ggui.TextWidget
-	box            *ggui.BoxWidget // the field's fill and border
+	popup          *widget.PopupWidget
+	text           *widget.TextWidget
+	box            *widget.BoxWidget // the field's fill and border
 	viewport       *selectViewport[T]
-	list           *ggui.BoxWidget // the open list's panel
+	list           *widget.BoxWidget // the open list's panel
 	items          []*selectItem[T]
 	rowOf          []int // each option's place among the list's rows, which include headings and separators
 	motion         time.Duration
@@ -65,14 +66,14 @@ func Select[T comparable](value ggui.Binding[T]) *SelectWidget[T] {
 	s := &SelectWidget[T]{value: value, label: sprint[T], highlight: -1, alignItem: true}
 	s.Role = ggui.RoleSelect
 	s.AutoKey()
-	s.box = ggui.Box()
-	s.text = ggui.Text("").NoWrap()
+	s.box = widget.Box()
+	s.text = widget.Text("").NoWrap()
 	column := newMenuColumn(nil)
 	column.fill = true
 	s.viewport = &selectViewport[T]{owner: s, column: column, offset: ggui.State(0.0)}
-	s.viewport.scroll = ggui.Scroll(column).BindOffset(s.viewport.offset)
-	s.list = ggui.Box(s.viewport)
-	s.popup = ggui.Popup(selectAnchor[T]{s}, menuSurface(s.list)).Keys(s).Owner(s)
+	s.viewport.scroll = widget.Scroll(column).BindOffset(s.viewport.offset)
+	s.list = widget.Box(s.viewport)
+	s.popup = widget.Popup(selectAnchor[T]{s}, menuSurface(s.list)).Keys(s).Owner(s)
 	return s
 }
 
@@ -160,7 +161,7 @@ func (s *SelectWidget[T]) build() {
 			previous = group
 		}
 		name := s.label(value)
-		it := &selectItem[T]{owner: s, index: i, text: ggui.Text(name).NoWrap()}
+		it := &selectItem[T]{owner: s, index: i, text: widget.Text(name).NoWrap()}
 		it.Role = ggui.RoleOption
 		it.SetName(name)
 		it.SetInert(s.disabled != nil && s.disabled(value))
@@ -171,7 +172,7 @@ func (s *SelectWidget[T]) build() {
 	}
 	s.viewport.column = newMenuColumn(rows)
 	s.viewport.column.fill = true
-	s.viewport.scroll = ggui.Scroll(s.viewport.column).BindOffset(s.viewport.offset)
+	s.viewport.scroll = widget.Scroll(s.viewport.column).BindOffset(s.viewport.offset)
 	s.highlight = s.index()
 	s.viewport.reveal = true
 }
@@ -356,7 +357,7 @@ func (s *SelectWidget[T]) AlignItemWithTrigger(v bool) *SelectWidget[T] {
 }
 
 // Popup returns the popup the options open in.
-func (s *SelectWidget[T]) Popup() *ggui.PopupWidget { return s.popup }
+func (s *SelectWidget[T]) Popup() *widget.PopupWidget { return s.popup }
 
 // Layout implements Widget.
 func (s *SelectWidget[T]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
@@ -742,7 +743,7 @@ type selectItem[T comparable] struct {
 	ggui.Interactive
 	owner  *SelectWidget[T]
 	index  int
-	text   *ggui.TextWidget
+	text   *widget.TextWidget
 	active bool // highlighted from the keyboard
 
 	pad      ggui.EdgeInsets
@@ -822,7 +823,7 @@ func (it *selectItem[T]) HandlePointer(ev ggui.PointerEvent) bool {
 type selectViewport[T comparable] struct {
 	owner    *SelectWidget[T]
 	column   *menuColumn
-	scroll   *ggui.ScrollWidget
+	scroll   *widget.ScrollWidget
 	offset   *ggui.StateValue[float64]
 	reveal   bool
 	env      ggui.Env

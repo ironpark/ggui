@@ -7,6 +7,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestCardSectionsStackAndAFooterRunsToTheBottom(t *testing.T) {
@@ -14,7 +15,7 @@ func TestCardSectionsStackAndAFooterRunsToTheBottom(t *testing.T) {
 	theme := uitheme.Default()
 	env := theme.Apply(ggui.Env{})
 	cs := ggui.Loose(ggui.Sz(360, 600))
-	block := func() ggui.Widget { return ggui.Box().Height(20) }
+	block := func() ggui.Widget { return widget.Box().Height(20) }
 
 	// One child keeps the old look: CardPad on every side.
 	single := Card(block()).Layout(cs, env)
@@ -183,7 +184,7 @@ func TestProgressLabelAndValueSitAboveTheBar(t *testing.T) {
 	}
 	theme := uitheme.Of(env)
 	reads := func(s string) ggui.Size {
-		return ggui.Text(s).NoWrap().Style(theme.Text).Layout(ggui.Loose(ggui.Sz(300, 100)), env)
+		return widget.Text(s).NoWrap().Style(theme.Text).Layout(ggui.Loose(ggui.Sz(300, 100)), env)
 	}
 	if got, want := p.readSize, reads("42%"); got != want {
 		t.Fatalf("value is %v, want the size of 42%%, %v", got, want)

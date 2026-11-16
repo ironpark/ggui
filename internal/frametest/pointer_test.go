@@ -9,6 +9,7 @@ import (
 	"github.com/ironpark/ggui/internal/framestats"
 	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // A widget that reads where the pointer is in its Paint, as a tooltip
@@ -88,7 +89,7 @@ func counts(frames []ggui.WindowFrame) map[ggui.FramePaint]int {
 func TestAMovingPointerPaintsWhatFollowsItInPart(t *testing.T) {
 	before := framestats.Read().Pointer
 	frames := sameAsWholeAlong(t, ggui.Sz(260, 120), along(func() ggui.Widget {
-		return topLeft(ggui.Row(follower(ggui.Sz(100, 80), red), ggui.Box().Size(100, 80).Fill(green)))
+		return topLeft(widget.Row(follower(ggui.Sz(100, 80), red), widget.Box().Size(100, 80).Fill(green)))
 	}, path(ggui.Pt(10, 10), ggui.Pt(90, 70), 12), nil))
 	if n := paintedIn(t, frames, ggui.Rct(ggui.Pt(0, 0), ggui.Sz(110, 90))); n < 12 {
 		t.Fatalf("%d frames painted in part, want each the pointer moved in: %v", n, counts(frames))
@@ -109,7 +110,7 @@ func TestAPointerFollowerDrawingPastItsBoundsPaintsWhole(t *testing.T) {
 				dst.FillCircle(p, 6, red)
 			}
 		})
-		return topLeft(ggui.Row(spot, ggui.Box().Size(160, 80).Fill(green)))
+		return topLeft(widget.Row(spot, widget.Box().Size(160, 80).Fill(green)))
 	}, path(ggui.Pt(20, 20), ggui.Pt(200, 60), 10), nil))
 	if counts(frames)[ggui.FrameWhole] == 0 {
 		t.Fatalf("no frame painted whole for a dot drawn past its widget: %v", counts(frames))
@@ -120,7 +121,7 @@ func TestAPointerFollowerDrawingPastItsBoundsPaintsWhole(t *testing.T) {
 // window: a move paints the whole window.
 func TestAPointerReaderUnderATransformPaintsWhole(t *testing.T) {
 	frames := sameAsWholeAlong(t, ggui.Sz(260, 120), along(func() ggui.Widget {
-		return topLeft(ggui.Row(ggui.Transform(follower(ggui.Sz(100, 80), red)).Rotate(0.1), ggui.Box().Size(100, 80).Fill(green)))
+		return topLeft(widget.Row(widget.Transform(follower(ggui.Sz(100, 80), red)).Rotate(0.1), widget.Box().Size(100, 80).Fill(green)))
 	}, path(ggui.Pt(10, 10), ggui.Pt(90, 70), 8), nil))
 	for i, fr := range frames[:8] {
 		if fr.Painted != ggui.FrameWhole {
@@ -132,7 +133,7 @@ func TestAPointerReaderUnderATransformPaintsWhole(t *testing.T) {
 // A pointer reader under a shape clip cannot be placed either.
 func TestAPointerReaderUnderAShapeClipPaintsWhole(t *testing.T) {
 	frames := sameAsWholeAlong(t, ggui.Sz(260, 120), along(func() ggui.Widget {
-		return topLeft(ggui.Row(ggui.ClipOval(follower(ggui.Sz(100, 80), red)), ggui.Box().Size(100, 80).Fill(green)))
+		return topLeft(widget.Row(widget.ClipOval(follower(ggui.Sz(100, 80), red)), widget.Box().Size(100, 80).Fill(green)))
 	}, path(ggui.Pt(10, 10), ggui.Pt(90, 70), 8), nil))
 	for i, fr := range frames[:8] {
 		if fr.Painted != ggui.FrameWhole {
@@ -145,9 +146,9 @@ func TestAPointerReaderUnderAShapeClipPaintsWhole(t *testing.T) {
 // and one over another stays over it.
 func TestAPointerReaderUnderAndOverOthersInAStack(t *testing.T) {
 	sameAsWholeAlong(t, ggui.Sz(260, 160), along(func() ggui.Widget {
-		under := ggui.Stack(follower(ggui.Sz(120, 100), red), ggui.Align(ggui.Box().Size(50, 50).Fill(shade)).At(0.5, 0.5))
-		over := ggui.Stack(ggui.Box().Size(120, 100).Fill(blue), ggui.Align(follower(ggui.Sz(60, 60), green)).At(0.5, 0.5))
-		return topLeft(ggui.Row(under, over).Gap(8))
+		under := widget.Stack(follower(ggui.Sz(120, 100), red), widget.Align(widget.Box().Size(50, 50).Fill(shade)).At(0.5, 0.5))
+		over := widget.Stack(widget.Box().Size(120, 100).Fill(blue), widget.Align(follower(ggui.Sz(60, 60), green)).At(0.5, 0.5))
+		return topLeft(widget.Row(under, over).Gap(8))
 	}, path(ggui.Pt(10, 10), ggui.Pt(240, 90), 16), nil))
 }
 
@@ -161,8 +162,8 @@ func TestAPointerReaderWithShadows(t *testing.T) {
 				dst.Shadow(ggui.Rct(p.Add(ggui.Pt(-8, -8)), ggui.Sz(16, 16)), 4, ggui.ShadowStyle{Blur: 10, Spread: 2, Color: shade})
 			}
 		})
-		framed := ggui.Box(follower(ggui.Sz(100, 80), red)).Pad(4).Shadow(ggui.ShadowStyle{Blur: 14, Color: shade})
-		return topLeft(ggui.Row(lit, framed).Gap(24))
+		framed := widget.Box(follower(ggui.Sz(100, 80), red)).Pad(4).Shadow(ggui.ShadowStyle{Blur: 14, Color: shade})
+		return topLeft(widget.Row(lit, framed).Gap(24))
 	}, path(ggui.Pt(5, 5), ggui.Pt(250, 90), 18), nil))
 }
 
@@ -170,10 +171,10 @@ func TestAPointerReaderWithShadows(t *testing.T) {
 // a BackdropBlur that reads what lies behind it.
 func TestAPointerReaderInALayerAndUnderABlur(t *testing.T) {
 	sameAsWholeAlong(t, ggui.Sz(280, 140), along(func() ggui.Widget {
-		faded := ggui.Opacity(follower(ggui.Sz(100, 80), red), 0.5)
-		glass := ggui.Box(ggui.BackdropBlur(ggui.Box().Size(60, 40), 4)).Size(60, 40)
-		blurred := ggui.Stack(follower(ggui.Sz(120, 100), blue), ggui.Align(glass).At(0.5, 0.5))
-		return topLeft(ggui.Row(faded, blurred).Gap(12))
+		faded := widget.Opacity(follower(ggui.Sz(100, 80), red), 0.5)
+		glass := widget.Box(widget.BackdropBlur(widget.Box().Size(60, 40), 4)).Size(60, 40)
+		blurred := widget.Stack(follower(ggui.Sz(120, 100), blue), widget.Align(glass).At(0.5, 0.5))
+		return topLeft(widget.Row(faded, blurred).Gap(12))
 	}, path(ggui.Pt(10, 10), ggui.Pt(220, 90), 16), nil))
 }
 
@@ -181,7 +182,7 @@ func TestAPointerReaderInALayerAndUnderABlur(t *testing.T) {
 // painted again as it is touched and as it fades.
 func TestHoverHighlightsFadingAsThePointerCrossesRows(t *testing.T) {
 	sameAsWholeAlong(t, ggui.Sz(240, 200), along(func() ggui.Widget {
-		return topLeft(ggui.Column(
+		return topLeft(widget.Column(
 			ui.Tooltip(ui.Button("First", nil).Ghost(), "the first"),
 			ui.Button("Second", nil).Ghost(),
 			ui.Tooltip(ui.Button("Third", nil).Ghost(), "the third"),
@@ -195,8 +196,8 @@ func TestHoverHighlightsFadingAsThePointerCrossesRows(t *testing.T) {
 // opens past its anchor.
 func TestATooltipFollowsThePointerInPartAndOpensWhole(t *testing.T) {
 	frames := sameAsWholeAlong(t, ggui.Sz(260, 160), along(func() ggui.Widget {
-		anchor := ggui.Box().Size(60, 24).Fill(blue)
-		return topLeft(ggui.Column(ui.Tooltip(anchor, "A tip that runs past its anchor").Delay(500*time.Millisecond), ggui.Box().Size(200, 80).Fill(green)))
+		anchor := widget.Box().Size(60, 24).Fill(blue)
+		return topLeft(widget.Column(ui.Tooltip(anchor, "A tip that runs past its anchor").Delay(500*time.Millisecond), widget.Box().Size(200, 80).Fill(green)))
 	}, path(ggui.Pt(150, 100), ggui.Pt(30, 12), 8), nil))
 	if counts(frames)[ggui.FramePartial] < 6 {
 		t.Fatalf("want the moves before the tooltip opened painted in part: %v", counts(frames))
@@ -207,8 +208,8 @@ func TestATooltipFollowsThePointerInPartAndOpensWhole(t *testing.T) {
 // frame is painted whole.
 func TestAHoverCardOpeningPaintsWhole(t *testing.T) {
 	sameAsWholeAlong(t, ggui.Sz(300, 220), along(func() ggui.Widget {
-		card := ui.HoverCard(ggui.Box().Size(80, 24).Fill(blue), ggui.Box().Size(120, 60).Fill(red))
-		return topLeft(ggui.Column(card, ggui.Box().Size(200, 60).Fill(green)).Gap(8))
+		card := ui.HoverCard(widget.Box().Size(80, 24).Fill(blue), widget.Box().Size(120, 60).Fill(red))
+		return topLeft(widget.Column(card, widget.Box().Size(200, 60).Fill(green)).Gap(8))
 	}, path(ggui.Pt(200, 150), ggui.Pt(40, 12), 6), nil))
 }
 
@@ -227,7 +228,7 @@ func TestAPointerReaderReadingASignalWrittenAsItMoves(t *testing.T) {
 					dst.FillCircle(p, 4, red)
 				}
 			})
-			return topLeft(ggui.Row(bar, ggui.Box().Size(100, 80).Fill(green)))
+			return topLeft(widget.Row(bar, widget.Box().Size(100, 80).Fill(green)))
 		}, path(ggui.Pt(10, 20), ggui.Pt(90, 70), 8), func(p *ggui.WindowProbe, i int) {
 			if i == 3 {
 				lv.Set(0.7)
@@ -243,7 +244,7 @@ func TestAPointerReaderReadingASignalWrittenAsItMoves(t *testing.T) {
 // The theme changing as the pointer moves paints the frame whole.
 func TestAThemeChangeAsThePointerMovesPaintsWhole(t *testing.T) {
 	frames := sameAsWholeAlong(t, ggui.Sz(260, 160), along(func() ggui.Widget {
-		return topLeft(ggui.Column(ui.Tooltip(ui.Button("Themed", nil), "tip"), follower(ggui.Sz(100, 60), red)).Gap(8))
+		return topLeft(widget.Column(ui.Tooltip(ui.Button("Themed", nil), "tip"), follower(ggui.Sz(100, 60), red)).Gap(8))
 	}, path(ggui.Pt(10, 60), ggui.Pt(90, 100), 6), func(p *ggui.WindowProbe, i int) {
 		if i == 2 {
 			uitheme.Set(uitheme.Dark())
@@ -265,9 +266,9 @@ func TestAWriteInAnotherWindowPaintsThePointersFrameWhole(t *testing.T) {
 			dst.FillCircle(p, 4, red)
 		}
 	})
-	a := ggui.NewWindowProbe(func() ggui.Widget { return topLeft(ggui.Row(reader, ggui.Box().Size(100, 80).Fill(green))) }, ggui.Sz(220, 100))
+	a := ggui.NewWindowProbe(func() ggui.Widget { return topLeft(widget.Row(reader, widget.Box().Size(100, 80).Fill(green))) }, ggui.Sz(220, 100))
 	defer a.Close()
-	b := ggui.NewWindowProbe(func() ggui.Widget { return ggui.Box().Fill(gray) }, ggui.Sz(50, 50))
+	b := ggui.NewWindowProbe(func() ggui.Widget { return widget.Box().Fill(gray) }, ggui.Sz(50, 50))
 	defer b.Close()
 	a.Run(refresh, 30)
 	b.Run(refresh, 30)
@@ -291,19 +292,19 @@ func TestAWriteInAnotherWindowPaintsThePointersFrameWhole(t *testing.T) {
 func TestAPropertySetAsThePointerMovesPaintsWhole(t *testing.T) {
 	for _, tc := range []struct {
 		name string
-		set  func(b *ggui.BoxWidget, p *ggui.WindowProbe)
+		set  func(b *widget.BoxWidget, p *ggui.WindowProbe)
 	}{
-		{"a size", func(b *ggui.BoxWidget, _ *ggui.WindowProbe) { b.Size(80, 60) }},
-		{"a color, repainted", func(b *ggui.BoxWidget, p *ggui.WindowProbe) {
+		{"a size", func(b *widget.BoxWidget, _ *ggui.WindowProbe) { b.Size(80, 60) }},
+		{"a color, repainted", func(b *widget.BoxWidget, p *ggui.WindowProbe) {
 			b.Fill(blue)
 			p.Window().Repaint()
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			frames := sameAsWholeAlong(t, ggui.Sz(260, 120), func() (ggui.Builder, func(*ggui.WindowProbe, int) bool) {
-				beside := ggui.Box().Size(100, 80).Fill(green)
+				beside := widget.Box().Size(100, 80).Fill(green)
 				return along(func() ggui.Widget {
-					return topLeft(ggui.Row(follower(ggui.Sz(100, 80), red), beside))
+					return topLeft(widget.Row(follower(ggui.Sz(100, 80), red), beside))
 				}, path(ggui.Pt(10, 10), ggui.Pt(90, 70), 6), func(p *ggui.WindowProbe, i int) {
 					if i == 2 {
 						tc.set(beside, p)

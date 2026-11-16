@@ -8,6 +8,7 @@ import (
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // AccordionSection describes a keyed disclosure and its persistent content.
@@ -27,7 +28,7 @@ func AccordionItem(key, title string, content ggui.Widget) AccordionSection {
 // headed by an icon and a label, say, or a title with a count beside it:
 //
 //	ui.AccordionItem("billing", "Billing", body).
-//		Header(ggui.Row(ui.Icon(icons.File), ggui.Text("Billing")).Gap(8))
+//		Header(widget.Row(ui.Icon(icons.File), widget.Text("Billing")).Gap(8))
 //
 // The title still names the section to screen readers and Probe. Text in w
 // takes the header's style and color unless it sets its own; the chevron
@@ -74,8 +75,8 @@ func Accordion(open ggui.Binding[[]string], items ...AccordionSection) *Accordio
 		seen[item.key] = true
 		h := &accordionHeader{owner: a, index: i}
 		if item.header == nil {
-			h.text = ggui.Text(item.title)
-			h.lined = ggui.RichText(ggui.Span(item.title).Underline())
+			h.text = widget.Text(item.title)
+			h.lined = widget.RichText(widget.Span(item.title).Underline())
 		}
 		h.Role = ggui.RoleDisclosure
 		h.SetName(item.title)
@@ -294,11 +295,11 @@ type accordionHeader struct {
 	ggui.Interactive
 	owner *AccordionWidget
 	index int
-	text  *ggui.TextWidget
+	text  *widget.TextWidget
 	size  ggui.Size
 	// lined is the title again with every line underlined, painted in
 	// text's place under the pointer.
-	lined     *ggui.RichTextWidget
+	lined     *widget.RichTextWidget
 	linedSize ggui.Size
 	reveal    ggui.Motion
 	progress  float64

@@ -1,10 +1,11 @@
-package ggui
+package widget
 
 import (
 	"slices"
 	"testing"
 	"time"
 
+	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/framestats"
 )
 
@@ -18,27 +19,27 @@ const frameTime = 16 * time.Millisecond
 // containedWindow is a window of a scroll of tall content, its rows
 // tappable, beside a box, drawn once whole. It returns the window, the
 // signal the box beside is built from and the count of taps on the rows.
-func containedWindow(t *testing.T) (*WindowProbe, *StateValue[int], *int) {
+func containedWindow(t *testing.T) (*ggui.WindowProbe, *ggui.StateValue[int], *int) {
 	t.Helper()
 	return containedWindowBeside(t, nil)
 }
 
 // containedWindowBeside is containedWindow with beside, when not nil, in
 // place of the box.
-func containedWindowBeside(t *testing.T, beside Widget) (*WindowProbe, *StateValue[int], *int) {
+func containedWindowBeside(t *testing.T, beside ggui.Widget) (*ggui.WindowProbe, *ggui.StateValue[int], *int) {
 	t.Helper()
-	other, taps := State(0), new(int)
-	p := NewWindowProbe(func() Widget {
-		rows := make([]Widget, 40)
+	other, taps := ggui.State(0), new(int)
+	p := ggui.NewWindowProbe(func() ggui.Widget {
+		rows := make([]ggui.Widget, 40)
 		for i := range rows {
 			rows[i] = Tap(Box().Size(100, 20), func() { *taps++ })
 		}
 		side := beside
 		if side == nil {
-			side = View(other, func(int) Widget { return Box().Size(100, 100) })
+			side = ggui.View(other, func(int) ggui.Widget { return Box().Size(100, 100) })
 		}
 		return Row(Box(Scroll(Column(rows...))).Size(100, 100), side)
-	}, Sz(200, 100))
+	}, ggui.Sz(200, 100))
 	t.Cleanup(p.Close)
 	p.Step(0)
 	return p, other, taps
@@ -50,13 +51,13 @@ func containedWindowBeside(t *testing.T, beside Widget) (*WindowProbe, *StateVal
 // frame takes lands on the row the move brought under it.
 func TestAScrollsMovePaintsWithinItsViewport(t *testing.T) {
 	p, _, taps := containedWindow(t)
-	p.Scroll(Pt(50, 50), Pt(0, -30))
+	p.Scroll(ggui.Pt(50, 50), ggui.Pt(0, -30))
 	fr := p.Step(frameTime)
-	paintedWithin(t, "the wheel", []WindowFrame{fr}, false, pointerReach, false)
+	paintedWithin(t, "the wheel", []ggui.WindowFrame{fr}, false, pointerReach, false)
 	if len(fr.Damage) != 1 {
 		t.Fatalf("damage %v, want one region", fr.Damage)
 	}
-	p.Click(Pt(50, 50))
+	p.Click(ggui.Pt(50, 50))
 	p.Step(frameTime)
 	if *taps != 1 {
 		t.Fatalf("a click after the frame tapped %d rows, want 1: the frame registered no regions", *taps)
@@ -68,21 +69,21 @@ func TestAScrollsMovePaintsWithinItsViewport(t *testing.T) {
 // so the scroll moves alone first.
 func TestAScrollsMoveWithAnotherChangePaintsWhole(t *testing.T) {
 	p, other, _ := containedWindow(t)
-	p.Scroll(Pt(50, 50), Pt(0, -30))
-	if fr := p.Step(frameTime); fr.Painted != FrameContained {
+	p.Scroll(ggui.Pt(50, 50), ggui.Pt(0, -30))
+	if fr := p.Step(frameTime); fr.Painted != ggui.FrameContained {
 		t.Fatalf("the scroll's move alone was painted %v, want within its viewport", fr.Painted)
 	}
-	p.Scroll(Pt(50, 50), Pt(0, -30))
+	p.Scroll(ggui.Pt(50, 50), ggui.Pt(0, -30))
 	other.Set(1)
 	fr := p.Step(frameTime)
-	if fr.Painted != FrameWhole {
+	if fr.Painted != ggui.FrameWhole {
 		t.Fatalf("a frame with another change was painted %v, want whole", fr.Painted)
 	}
-	if len(fr.Damage) != 1 || fr.Damage[0] != Rct(Point{}, Sz(200, 100)) {
+	if len(fr.Damage) != 1 || fr.Damage[0] != ggui.Rct(ggui.Point{}, ggui.Sz(200, 100)) {
 		t.Fatalf("damage %v, want all of the screen", fr.Damage)
 	}
 	// The write is named as what kept the frame whole.
-	const writer = "state changed github.com/ironpark/ggui.TestAScrollsMoveWithAnotherChangePaintsWhole"
+	const writer = "state changed github.com/ironpark/ggui/widget.TestAScrollsMoveWithAnotherChangePaintsWhole"
 	if framestats.ReadReport().Dirtiers[writer] == 0 {
 		t.Fatalf("the write outside the scroll was not named: %v", framestats.ReadReport().Dirtiers)
 	}
@@ -93,13 +94,13 @@ func TestAScrollsMoveWithAnotherChangePaintsWhole(t *testing.T) {
 // past the pointerReach around the scroll that a wheel's frame paints too.
 func TestAWidgetBesideAScrollsMoveIsNotShown(t *testing.T) {
 	var shown []bool
-	beside := Row(Box().Size(pointerReach, 100), Box(FromFuncs(func(c Constraints, _ Env) Size { return c.Max() }, func(dst *Canvas, r Rect) { shown = append(shown, dst.Shows(r)) })).Size(52, 100))
+	beside := Row(Box().Size(pointerReach, 100), Box(ggui.FromFuncs(func(c ggui.Constraints, _ ggui.Env) ggui.Size { return c.Max() }, func(dst *ggui.Canvas, r ggui.Rect) { shown = append(shown, dst.Shows(r)) })).Size(52, 100))
 	p, _, _ := containedWindowBeside(t, beside)
 	if len(shown) != 1 || !shown[0] {
 		t.Fatalf("a whole frame showed the widget %v, want [true]", shown)
 	}
-	p.Scroll(Pt(50, 50), Pt(0, -30))
-	if fr := p.Step(frameTime); fr.Painted != FrameContained {
+	p.Scroll(ggui.Pt(50, 50), ggui.Pt(0, -30))
+	if fr := p.Step(frameTime); fr.Painted != ggui.FrameContained {
 		t.Fatalf("the scroll's frame was painted %v, want within its viewport", fr.Painted)
 	}
 	if len(shown) != 2 || shown[1] {
@@ -111,34 +112,34 @@ func TestAWidgetBesideAScrollsMoveIsNotShown(t *testing.T) {
 // learn their height a pass later, and the frame lays the list out again to keep
 // what is in view in place: all of that is contained in the viewport.
 func TestAScrollMountingRowsItGuessedWrongStaysContained(t *testing.T) {
-	items := State(make([]int, 200))
+	items := ggui.State(make([]int, 200))
 	for i := range items.Get() {
 		items.Get()[i] = i
 	}
-	p := NewWindowProbe(func() Widget {
-		list := EachKeyed(items, func(i int) int { return i }, func(row EachItem[int]) Widget {
+	p := ggui.NewWindowProbe(func() ggui.Widget {
+		list := EachKeyed(items, func(i int) int { return i }, func(row EachItem[int]) ggui.Widget {
 			// A row learns its height as it is laid out, as a chat's turn
 			// does: the frame lays the list out again.
-			return View(row.Value, func(i int) Widget {
-				h := State(20.0)
+			return ggui.View(row.Value, func(i int) ggui.Widget {
+				h := ggui.State(20.0)
 				want := float64(30 + i%3*20)
-				return View(h, func(got float64) Widget {
-					return FromFuncs(func(Constraints, Env) Size {
+				return ggui.View(h, func(got float64) ggui.Widget {
+					return ggui.FromFuncs(func(ggui.Constraints, ggui.Env) ggui.Size {
 						if got != want {
 							h.Set(want)
 						}
-						return Sz(100, got)
-					}, func(*Canvas, Rect) {})
+						return ggui.Sz(100, got)
+					}, func(*ggui.Canvas, ggui.Rect) {})
 				})
 			})
 		}).EstimatedExtent(20)
 		return Row(Box(Scroll(list).FollowEnd()).Size(100, 100), Box().Size(100, 100))
-	}, Sz(200, 100))
+	}, ggui.Sz(200, 100))
 	defer p.Close()
 	atRest(t, p)
 	for k := range 60 {
-		p.Scroll(Pt(50, 50), Pt(0, 3))
-		if fr := p.Step(frameTime); fr.Painted != FrameContained {
+		p.Scroll(ggui.Pt(50, 50), ggui.Pt(0, 3))
+		if fr := p.Step(frameTime); fr.Painted != ggui.FrameContained {
 			t.Fatalf("move %d was painted %v: %v %v", k, fr.Painted, framestats.ReadReport().Refusals, framestats.ReadReport().Dirtiers)
 		}
 	}
@@ -147,26 +148,26 @@ func TestAScrollMountingRowsItGuessedWrongStaysContained(t *testing.T) {
 // A widget beside a scroll that reads its offset, as a button to the end
 // does, is painted when what it shows changes: that frame is whole.
 func TestAReaderOfAScrollsOffsetBesideItIsPainted(t *testing.T) {
-	offset := State(0.0)
+	offset := ggui.State(0.0)
 	builds := 0
-	p := NewWindowProbe(func() Widget {
-		rows := make([]Widget, 40)
+	p := ggui.NewWindowProbe(func() ggui.Widget {
+		rows := make([]ggui.Widget, 40)
 		for i := range rows {
 			rows[i] = Box().Size(100, 20)
 		}
-		far := Map(offset, func(o float64) bool { return o > 100 })
-		side := View(far, func(bool) Widget { builds++; return Box().Size(100, 100) })
+		far := ggui.Map(offset, func(o float64) bool { return o > 100 })
+		side := ggui.View(far, func(bool) ggui.Widget { builds++; return Box().Size(100, 100) })
 		return Row(Box(Scroll(Column(rows...)).BindOffset(offset)).Size(100, 100), side)
-	}, Sz(200, 100))
+	}, ggui.Sz(200, 100))
 	defer p.Close()
 	p.Step(0)
 	for k := 0; offset.Get() <= 100; k++ {
 		if k > 20 {
 			t.Fatal("the scroll did not move")
 		}
-		p.Scroll(Pt(50, 50), Pt(0, -1))
+		p.Scroll(ggui.Pt(50, 50), ggui.Pt(0, -1))
 		built := builds
-		contained := p.Step(frameTime).Painted == FrameContained
+		contained := p.Step(frameTime).Painted == ggui.FrameContained
 		if crossed := builds != built; crossed == contained {
 			t.Fatalf("move %d to %v: the reader beside was rebuilt %v, the frame contained %v", k, offset.Get(), crossed, contained)
 		}
@@ -177,17 +178,17 @@ func TestAReaderOfAScrollsOffsetBesideItIsPainted(t *testing.T) {
 // is steps tall, asking for the next layout as it paints, the way a
 // disclosure easing open does. It reports the layouts run and the last one
 // painted.
-func disclosure(steps int) (w Widget, laid, painted *int) {
-	var env Env
+func disclosure(steps int) (w ggui.Widget, laid, painted *int) {
+	var env ggui.Env
 	laid, painted = new(int), new(int)
-	return FromFuncs(func(c Constraints, e Env) Size {
+	return ggui.FromFuncs(func(c ggui.Constraints, e ggui.Env) ggui.Size {
 		env = e
 		*laid++
-		return c.Constrain(Sz(10, float64(*laid)))
-	}, func(dst *Canvas, r Rect) {
+		return c.Constrain(ggui.Sz(10, float64(*laid)))
+	}, func(dst *ggui.Canvas, r ggui.Rect) {
 		*painted = *laid
 		if *laid < steps {
-			Invalidate(env)
+			ggui.Invalidate(env)
 		}
 	}), laid, painted
 }
@@ -199,9 +200,9 @@ func TestALayoutEasedInsideAScrollPaintsWithinItsViewport(t *testing.T) {
 	const steps = 5
 	grows, laid, painted := disclosure(steps)
 	taps := 0
-	p := NewWindowProbe(func() Widget {
+	p := ggui.NewWindowProbe(func() ggui.Widget {
 		return Row(Box(Scroll(Column(grows, Tap(Box().Size(100, 400), func() { taps++ })))).Size(100, 100), Box().Size(100, 100))
-	}, Sz(200, 100))
+	}, ggui.Sz(200, 100))
 	defer p.Close()
 	p.Step(0)
 	frames := p.Run(0, 2*steps)
@@ -211,9 +212,9 @@ func TestALayoutEasedInsideAScrollPaintsWithinItsViewport(t *testing.T) {
 	if len(frames) != steps-1 {
 		t.Fatalf("%d frames after the first, want %d: %v", len(frames), steps-1, frames)
 	}
-	viewport := Rct(Point{}, Sz(100, 100))
+	viewport := ggui.Rct(ggui.Point{}, ggui.Sz(100, 100))
 	for i, fr := range frames {
-		if fr.Painted != FrameContained || len(fr.Damage) == 0 {
+		if fr.Painted != ggui.FrameContained || len(fr.Damage) == 0 {
 			t.Fatalf("frame %d was painted %v, want within the scroll: %v", i, fr.Painted, frames)
 		}
 		for _, d := range fr.Damage {
@@ -222,7 +223,7 @@ func TestALayoutEasedInsideAScrollPaintsWithinItsViewport(t *testing.T) {
 			}
 		}
 	}
-	p.Click(Pt(50, 50))
+	p.Click(ggui.Pt(50, 50))
 	p.Step(frameTime)
 	if taps != 1 {
 		t.Fatalf("a click after the frames tapped %d times, want 1: the frames registered no regions", taps)
@@ -236,19 +237,19 @@ func TestALayoutEasedInsideAScrollSizedByItsContentIsNotHeldThere(t *testing.T) 
 	const steps = 6
 	// A scroll no longer than its content, with a box below it that the
 	// content's growth moves.
-	shrunk := func(w Widget) Widget { return Column(Scroll(w).Shrink(), Box().Size(50, 50)) }
+	shrunk := func(w ggui.Widget) ggui.Widget { return Column(Scroll(w).Shrink(), Box().Size(50, 50)) }
 	for _, tc := range []struct {
 		name   string
-		around func(Widget) Widget
+		around func(ggui.Widget) ggui.Widget
 		whole  bool
 	}{
-		{"alone", func(w Widget) Widget { return Align(shrunk(w)).At(0, 0) }, true},
-		{"in a scroll that keeps its size", func(w Widget) Widget {
+		{"alone", func(w ggui.Widget) ggui.Widget { return Align(shrunk(w)).At(0, 0) }, true},
+		{"in a scroll that keeps its size", func(w ggui.Widget) ggui.Widget {
 			return Row(Box(Scroll(Column(shrunk(w), Box().Size(100, 400)))).Size(100, 100), Box().Size(100, 100))
 		}, false},
 	} {
 		grows, laid, painted := disclosure(steps)
-		p := NewWindowProbe(func() Widget { return tc.around(grows) }, Sz(200, 100))
+		p := ggui.NewWindowProbe(func() ggui.Widget { return tc.around(grows) }, ggui.Sz(200, 100))
 		frames := p.Run(0, 3*steps)
 		p.Close()
 		if *laid < steps || *painted != *laid {
@@ -257,10 +258,10 @@ func TestALayoutEasedInsideAScrollSizedByItsContentIsNotHeldThere(t *testing.T) 
 		// Whatever the first frames found, the last ones show how the
 		// change is painted once the scroll is known to follow its content.
 		last := frames[len(frames)-1]
-		if whole := last.Painted == FrameWhole; whole != tc.whole {
+		if whole := last.Painted == ggui.FrameWhole; whole != tc.whole {
 			t.Fatalf("%s: the last of %v was painted %v; whole %v, want %v", tc.name, frames, last.Painted, whole, tc.whole)
 		}
-		if !tc.whole && (len(last.Damage) != 1 || last.Damage[0].Intersect(Rct(Point{}, Sz(100, 100))) != last.Damage[0]) {
+		if !tc.whole && (len(last.Damage) != 1 || last.Damage[0].Intersect(ggui.Rct(ggui.Point{}, ggui.Sz(100, 100))) != last.Damage[0]) {
 			t.Fatalf("%s: last damage %v, want within the outer scroll's viewport", tc.name, last.Damage)
 		}
 	}
@@ -278,25 +279,25 @@ const (
 // scrolledList is a window of a scroll of a virtualized list of 200 rows,
 // 20 tall, with a sticky header every tenth, beside a box: the scroll is
 // the left half of it. config configures the scroll.
-func scrolledList(sc *ScrollController, config func(*ScrollWidget)) *WindowProbe {
+func scrolledList(sc *ScrollController, config func(*ScrollWidget)) *ggui.WindowProbe {
 	items := make([]int, 200)
 	for i := range items {
 		items[i] = i
 	}
-	list := EachKeyed(State(items), func(i int) int { return i }, func(EachItem[int]) Widget { return Box().Size(100, 20) }).
+	list := EachKeyed(ggui.State(items), func(i int) int { return i }, func(EachItem[int]) ggui.Widget { return Box().Size(100, 20) }).
 		EstimatedExtent(20).StickyHeaders(func(i int) bool { return i%10 == 0 })
-	return NewWindowProbe(func() Widget {
+	return ggui.NewWindowProbe(func() ggui.Widget {
 		s := Scroll(list).Controller(sc)
 		if config != nil {
 			config(s)
 		}
 		return Row(Box(s).Size(100, 100), Box().Size(100, 100))
-	}, Sz(200, 100))
+	}, ggui.Sz(200, 100))
 }
 
 // atRest runs p's frames until the window asks for no other, as its list
 // mounts and measures its rows.
-func atRest(t *testing.T, p *WindowProbe) {
+func atRest(t *testing.T, p *ggui.WindowProbe) {
 	t.Helper()
 	if fr := p.Run(frameTime, 10); fr[len(fr)-1].Next {
 		t.Fatalf("the window did not come to rest: %v", fr)
@@ -306,11 +307,11 @@ func atRest(t *testing.T, p *WindowProbe) {
 // paintedWithin fails t unless every frame was painted contained, or in
 // part where partial says it may be, within the scroll's viewport grown by
 // reach, and, for rest, the last asks for no other.
-func paintedWithin(t *testing.T, name string, frames []WindowFrame, partial bool, reach float64, rest bool) {
+func paintedWithin(t *testing.T, name string, frames []ggui.WindowFrame, partial bool, reach float64, rest bool) {
 	t.Helper()
-	viewport := Rct(Point{}, Sz(100, 100)).Grow(reach)
+	viewport := ggui.Rct(ggui.Point{}, ggui.Sz(100, 100)).Grow(reach)
 	for i, fr := range frames {
-		if fr.Painted != FrameContained && (!partial || fr.Painted != FramePartial) || len(fr.Damage) == 0 {
+		if fr.Painted != ggui.FrameContained && (!partial || fr.Painted != ggui.FramePartial) || len(fr.Damage) == 0 {
 			t.Fatalf("%s: frame %d was painted %v, want within the scroll: %v", name, i, fr.Painted, frames)
 		}
 		for _, d := range fr.Damage {
@@ -358,13 +359,13 @@ func TestAScrollSettlingOnASnapPaintsWithinItsViewport(t *testing.T) {
 	p := scrolledList(&sc, func(s *ScrollWidget) { s.Snap(20) })
 	defer p.Close()
 	atRest(t, p)
-	p.Scroll(Pt(50, 50), Pt(0, -0.6)) // 12 pixels down
+	p.Scroll(ggui.Pt(50, 50), ggui.Pt(0, -0.6)) // 12 pixels down
 	// The wheel's frame paints what the pointer reached with pointerReach
 	// around it, and what reads the clock is painted with clockReach.
-	paintedWithin(t, "the wheel", []WindowFrame{p.Step(frameTime)}, false, pointerReach, false)
+	paintedWithin(t, "the wheel", []ggui.WindowFrame{p.Step(frameTime)}, false, pointerReach, false)
 	frames := p.Idle(frameTime, time.Second)
 	paintedWithin(t, "snap", frames, true, clockReach, true)
-	if !slices.ContainsFunc(frames, func(fr WindowFrame) bool { return fr.Painted == FrameContained }) {
+	if !slices.ContainsFunc(frames, func(fr ggui.WindowFrame) bool { return fr.Painted == ggui.FrameContained }) {
 		t.Fatalf("no frame of the settle was contained: %v", frames)
 	}
 	if sc.Offset() != 20 {
@@ -380,16 +381,16 @@ func TestAScrollsThumbDraggedPaintsWithinItsViewport(t *testing.T) {
 	p := scrolledList(&sc, nil)
 	defer p.Close()
 	atRest(t, p)
-	p.Press(Pt(97, 5))
+	p.Press(ggui.Pt(97, 5))
 	p.Step(frameTime) // pressing focuses and is painted whole
-	var frames []WindowFrame
+	var frames []ggui.WindowFrame
 	for i := 1; i <= 4; i++ {
-		p.Move(Pt(97, 5+float64(i)*10))
+		p.Move(ggui.Pt(97, 5+float64(i)*10))
 		frames = append(frames, p.Step(frameTime))
 	}
 	// Held, the thumb asks for frames until it is let go.
 	paintedWithin(t, "thumb", frames, false, pointerReach, false)
-	p.Release(Pt(97, 45))
+	p.Release(ggui.Pt(97, 45))
 	atRest(t, p)
 	travel := 100 - 16.0 // the track less the shortest thumb
 	if want := 40 * sc.MaxOffset() / travel; sc.Offset() != want {
@@ -401,26 +402,26 @@ func TestAScrollsThumbDraggedPaintsWithinItsViewport(t *testing.T) {
 // which it changes the layout for, and the move to the new end it asks for
 // within its viewport, the rows that move brings into view mounting there.
 func TestAScrollFollowingTheEndMovesWithinItsViewport(t *testing.T) {
-	lines := State([]int{})
+	lines := ggui.State([]int{})
 	for i := range 30 {
 		lines.Set(append(lines.Get(), i))
 	}
 	var sc ScrollController
-	p := NewWindowProbe(func() Widget {
+	p := ggui.NewWindowProbe(func() ggui.Widget {
 		// A line learns its height as it is laid out, as a chat's turn does:
 		// one mounting writes it.
-		line := func(EachItem[int]) Widget {
-			h := State(10.0)
-			return View(h, func(got float64) Widget {
-				return FromFuncs(func(Constraints, Env) Size {
+		line := func(EachItem[int]) ggui.Widget {
+			h := ggui.State(10.0)
+			return ggui.View(h, func(got float64) ggui.Widget {
+				return ggui.FromFuncs(func(ggui.Constraints, ggui.Env) ggui.Size {
 					h.Set(20)
-					return Sz(100, got)
-				}, func(*Canvas, Rect) {})
+					return ggui.Sz(100, got)
+				}, func(*ggui.Canvas, ggui.Rect) {})
 			})
 		}
 		log := EachKeyed(lines, func(i int) int { return i }, line).EstimatedExtent(20)
 		return Row(Box(Scroll(log).FollowEnd().Controller(&sc)).Size(100, 100), Box().Size(100, 100))
-	}, Sz(200, 100))
+	}, ggui.Sz(200, 100))
 	defer p.Close()
 	atRest(t, p)
 	// A line at a time, and a page and more of them at once.
@@ -432,7 +433,7 @@ func TestAScrollFollowingTheEndMovesWithinItsViewport(t *testing.T) {
 		}
 		lines.Set(more)
 		frames := p.Run(frameTime, 10)
-		if frames[0].Painted != FrameWhole {
+		if frames[0].Painted != ggui.FrameWhole {
 			t.Fatalf("%d lines: the log's growth was painted %v, want whole", n, frames[0].Painted)
 		}
 		paintedWithin(t, "FollowEnd", frames[1:], false, 0, false)
@@ -450,24 +451,24 @@ func TestAScrollFollowingTheEndMovesWithinItsViewport(t *testing.T) {
 // what the content does there, noting the window as a virtualized list
 // mounts the rows it brings, is contained as the move was.
 func TestTheLayoutAScrollsOwnMoveAsksForIsContained(t *testing.T) {
-	n := State(10)
-	window := State(0.0)
+	n := ggui.State(10)
+	window := ggui.State(0.0)
 	var sc ScrollController
-	p := NewWindowProbe(func() Widget {
-		content := View(n, func(k int) Widget {
-			return FromFuncs(func(c Constraints, env Env) Size {
+	p := ggui.NewWindowProbe(func() ggui.Widget {
+		content := ggui.View(n, func(k int) ggui.Widget {
+			return ggui.FromFuncs(func(c ggui.Constraints, env ggui.Env) ggui.Size {
 				vp, _ := ScrollViewport(env)
 				window.Set(vp.Offset)
-				return Sz(100, float64(k)*20)
-			}, func(*Canvas, Rect) {})
+				return ggui.Sz(100, float64(k)*20)
+			}, func(*ggui.Canvas, ggui.Rect) {})
 		})
 		return Row(Box(Scroll(content).FollowEnd().Controller(&sc)).Size(100, 100), Box().Size(100, 100))
-	}, Sz(200, 100))
+	}, ggui.Sz(200, 100))
 	defer p.Close()
 	atRest(t, p)
 	n.Set(20)
 	frames := p.Run(frameTime, 10)
-	if len(frames) < 2 || frames[0].Painted != FrameWhole {
+	if len(frames) < 2 || frames[0].Painted != ggui.FrameWhole {
 		t.Fatalf("the content's growth was painted %v, want whole and a frame after", frames)
 	}
 	paintedWithin(t, "the layout after", frames[1:], false, 0, true)
@@ -480,18 +481,18 @@ func TestTheLayoutAScrollsOwnMoveAsksForIsContained(t *testing.T) {
 // it shows changes as a ScrollController eases the scroll: that frame is
 // whole, and those it reads nothing new in are contained.
 func TestAReaderOfAnAnimatedScrollsOffsetBesideItIsPainted(t *testing.T) {
-	offset := State(0.0)
+	offset := ggui.State(0.0)
 	builds := 0
 	var sc ScrollController
-	p := NewWindowProbe(func() Widget {
-		rows := make([]Widget, 40)
+	p := ggui.NewWindowProbe(func() ggui.Widget {
+		rows := make([]ggui.Widget, 40)
 		for i := range rows {
 			rows[i] = Box().Size(100, 20)
 		}
-		far := Map(offset, func(o float64) bool { return o > 100 })
-		side := View(far, func(bool) Widget { builds++; return Box().Size(100, 100) })
+		far := ggui.Map(offset, func(o float64) bool { return o > 100 })
+		side := ggui.View(far, func(bool) ggui.Widget { builds++; return Box().Size(100, 100) })
 		return Row(Box(Scroll(Column(rows...)).BindOffset(offset).Controller(&sc)).Size(100, 100), side)
-	}, Sz(200, 100))
+	}, ggui.Sz(200, 100))
 	defer p.Close()
 	p.Step(0)
 	sc.ScrollTo(300)
@@ -506,7 +507,7 @@ func TestAReaderOfAnAnimatedScrollsOffsetBesideItIsPainted(t *testing.T) {
 		if crossed {
 			crossings++
 		}
-		if whole := fr.Painted == FrameWhole; crossed != whole || !whole && fr.Painted != FrameContained {
+		if whole := fr.Painted == ggui.FrameWhole; crossed != whole || !whole && fr.Painted != ggui.FrameContained {
 			t.Fatalf("frame %d at %v: the reader beside was rebuilt %v, the frame painted %v", k, offset.Get(), crossed, fr.Painted)
 		}
 		if !fr.Next {
@@ -524,27 +525,27 @@ func TestAReaderOfAnAnimatedScrollsOffsetBesideItIsPainted(t *testing.T) {
 // as it was, moves nothing and may be contained.
 func TestAnAnimatedScrollSizedByItsContentIsNotHeldThere(t *testing.T) {
 	var h float64
-	content := FromFuncs(func(c Constraints, env Env) Size {
+	content := ggui.FromFuncs(func(c ggui.Constraints, env ggui.Env) ggui.Size {
 		vp, _ := ScrollViewport(env)
 		h = 20 + vp.Offset/10
-		return Sz(400, h)
-	}, func(*Canvas, Rect) {})
+		return ggui.Sz(400, h)
+	}, func(*ggui.Canvas, ggui.Rect) {})
 	var sc ScrollController
-	p := NewWindowProbe(func() Widget {
+	p := ggui.NewWindowProbe(func() ggui.Widget {
 		// Inside a vertical scroll, the horizontal one is as tall as its
 		// content, and the box below it moves as it grows.
 		inner := Scroll(content).Horizontal().Controller(&sc)
 		return Row(Box(Scroll(Column(inner, Box().Size(100, 400)))).Size(100, 100), Box().Size(100, 100))
-	}, Sz(200, 100))
+	}, ggui.Sz(200, 100))
 	defer p.Close()
 	atRest(t, p)
 	sc.ScrollTo(300)
-	var frames []WindowFrame
+	var frames []ggui.WindowFrame
 	for i := range 60 {
 		was := h
 		fr := p.Step(frameTime)
 		frames = append(frames, fr)
-		if h != was && fr.Painted == FrameContained {
+		if h != was && fr.Painted == ggui.FrameContained {
 			t.Fatalf("frame %d, the scroll's height changing from %v to %v, was contained: %v", i, was, h, frames)
 		}
 		if !fr.Next {
@@ -560,19 +561,19 @@ func TestAnAnimatedScrollSizedByItsContentIsNotHeldThere(t *testing.T) {
 // window: its eased move is painted whole.
 func TestAnAnimatedScrollUnderATransformPaintsWhole(t *testing.T) {
 	var sc ScrollController
-	p := NewWindowProbe(func() Widget {
-		rows := make([]Widget, 40)
+	p := ggui.NewWindowProbe(func() ggui.Widget {
+		rows := make([]ggui.Widget, 40)
 		for i := range rows {
 			rows[i] = Box().Size(100, 20)
 		}
 		return Row(Transform(Box(Scroll(Column(rows...)).Controller(&sc)).Size(100, 100)).Rotate(0.01), Box().Size(100, 100))
-	}, Sz(200, 100))
+	}, ggui.Sz(200, 100))
 	defer p.Close()
 	p.Step(0)
 	sc.ScrollTo(300)
 	frames := p.Run(frameTime, 60)
 	for i, fr := range frames {
-		if fr.Painted != FrameWhole {
+		if fr.Painted != ggui.FrameWhole {
 			t.Fatalf("frame %d was painted %v, want whole: %v", i, fr.Painted, frames)
 		}
 	}

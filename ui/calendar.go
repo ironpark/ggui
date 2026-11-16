@@ -10,6 +10,7 @@ import (
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // CalendarWidget selects civil dates in single, range or multiple mode.
@@ -69,9 +70,9 @@ type calendarMetrics struct {
 
 // calendarPane is one month: its caption, weekday labels and six weeks.
 type calendarPane struct {
-	title               *ggui.TextWidget
+	title               *widget.TextWidget
 	titleSize           ggui.Size
-	weekdayText         [7]*ggui.TextWidget
+	weekdayText         [7]*widget.TextWidget
 	weekdaySize         [7]ggui.Size
 	days                [42]*calendarDay
 	month               *SelectWidget[time.Month]
@@ -119,13 +120,13 @@ func newCalendar() *CalendarWidget {
 // setPanes keeps n month panes, reusing the ones already there.
 func (c *CalendarWidget) setPanes(n int) {
 	for len(c.panes) < n {
-		p := &calendarPane{title: ggui.Text("").NoWrap()}
+		p := &calendarPane{title: widget.Text("").NoWrap()}
 		for i := range p.days {
-			p.days[i] = &calendarDay{owner: c, column: i % 7, text: ggui.Text("").NoWrap()}
+			p.days[i] = &calendarDay{owner: c, column: i % 7, text: widget.Text("").NoWrap()}
 			p.days[i].Role = ggui.RoleOption
 		}
 		for i := range p.weekdayText {
-			p.weekdayText[i] = ggui.Text("").NoWrap()
+			p.weekdayText[i] = widget.Text("").NoWrap()
 		}
 		c.panes = append(c.panes, p)
 	}
@@ -421,7 +422,7 @@ func (c *CalendarWidget) layoutDropdown(p *calendarPane, index int, cs ggui.Cons
 type calendarCaptionFace struct {
 	owner *CalendarWidget
 	label func() string
-	text  *ggui.TextWidget
+	text  *widget.TextWidget
 	size  ggui.Size
 	env   ggui.Env
 }
@@ -429,7 +430,7 @@ type calendarCaptionFace struct {
 func (f *calendarCaptionFace) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 	t := uitheme.Of(env)
 	if f.text == nil {
-		f.text = ggui.Text("").NoWrap()
+		f.text = widget.Text("").NoWrap()
 	}
 	f.env = env
 	f.size = f.text.Content(f.label()).Weight(pick(t.Label.Weight != 0, t.Label.Weight, ggui.WeightMedium)).Layout(cs.Loosen(), env)
@@ -725,7 +726,7 @@ type calendarDay struct {
 	ggui.Interactive
 	owner   *CalendarWidget
 	date    time.Time
-	text    *ggui.TextWidget
+	text    *widget.TextWidget
 	size    ggui.Size
 	column  int          // 0 on the side the week starts
 	mark    calendarMark // its part in the selection

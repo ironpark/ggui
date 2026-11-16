@@ -4,7 +4,7 @@
 
 Animate values and transitions while keeping motion tied to component lifetimes.
 
-Examples use `ggui` and `ui` imports and application-defined placeholders.
+Examples use `ggui`, `widget` and `ui` imports and application-defined placeholders.
 See [example conventions](README.md#start-here) before copying snippets.
 
 `Tween(v, d)` and `Spring(v)` move a value toward a target over time. Both
@@ -12,7 +12,7 @@ implement `Binding`, so controls can read and set them. Bind a property to anima
 
 ```go
 width := ggui.Tween(0.0, 200*time.Millisecond).Easing(ggui.EaseOut)
-bar := ggui.Box().BindWidth(width).Height(4).Fill(accent)
+bar := widget.Box().BindWidth(width).Height(4).Fill(accent)
 width.Set(120) // slides there over 200ms; Jump(v) skips the motion
 ```
 
@@ -71,7 +71,7 @@ it is, for a chevron that turns with it; `ui.Collapsible` and `ui.Accordion`
 fold their sections the same way.
 
 ```go
-ggui.Column(ggui.Tap(ggui.Text("Details"), func() { ggui.Toggle(more) }), widget.Reveal(more, details))
+widget.Column(widget.Tap(widget.Text("Details"), func() { ggui.Toggle(more) }), widget.Reveal(more, details))
 ```
 
 ## Colors, points and other values
@@ -120,7 +120,7 @@ to bind:
 tl := ggui.Timeline(500 * time.Millisecond) // in setup
 for i, row := range rows {
 	p := tl.Stagger(i, len(rows), 0.4, ggui.EaseOutBack)
-	ggui.Box(row).BindWidth(ggui.Interpolate(p, 0.0, 240.0, ggui.LerpFloat))
+	widget.Box(row).BindWidth(ggui.Interpolate(p, 0.0, 240.0, ggui.LerpFloat))
 }
 tl.Play()
 ```
@@ -140,7 +140,7 @@ with the same identity does not restart it.
 inert to input, and runs the same animation backwards before removing it:
 
 ```go
-ggui.Presence(open, ggui.Transition(panel).Slide(0, -8).Fade())
+widget.Presence(open, widget.Transition(panel).Slide(0, -8).Fade())
 ```
 
 ## Implicit animations
@@ -153,7 +153,7 @@ a change after mount applies from the next switch. Subtrees are stacked at the
 top-left corner.
 
 ```go
-ggui.Switcher(tab, page).Slide(0, 8).Duration(180 * time.Millisecond)
+widget.Switcher(tab, page).Slide(0, 8).Duration(180 * time.Millisecond)
 ```
 
 `AnimatedBox(child)` is a Box whose `Fill`, `Border`, `Radius`, `Width`,
@@ -166,7 +166,7 @@ so a theme switch fades too. Keep one box and change its values: a box built
 anew starts where it is told.
 
 ```go
-card := ggui.AnimatedBox(content).BindFill(tint).BindPadding(inset).Radius(8)
+card := widget.AnimatedBox(content).BindFill(tint).BindPadding(inset).Radius(8)
 ```
 
 `Switcher`, `AnimatedBox`, `widget.Reveal`, `Transition` and `Each` rows land at once

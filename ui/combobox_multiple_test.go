@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestComboboxMultipleSearchToggleChipsAndKeyboard(t *testing.T) {
@@ -19,7 +20,7 @@ func TestComboboxMultipleSearchToggleChipsAndKeyboard(t *testing.T) {
 			v[0] = "mutated callback"
 		}
 	})
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(combo)), ggui.Sz(420, 350))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(combo)), ggui.Sz(420, 350))
 	defer p.Close()
 	if _, ok := p.Find("Remove Alpha"); !ok {
 		t.Fatal("initial chip missing")
@@ -66,7 +67,7 @@ func TestComboboxMultipleOptionsBindingsAndDisabled(t *testing.T) {
 	options := ggui.State([]string{"Alpha", "Beta"})
 	disabled := ggui.State(false)
 	combo := ui.ComboboxMultiple(values).BindOptions(options).BindDisabled(disabled).Name("Pick")
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(combo)), ggui.Sz(350, 300))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(combo)), ggui.Sz(350, 300))
 	defer p.Close()
 	p.Tap("Pick")
 	p.Tap("Beta")
@@ -100,7 +101,7 @@ func TestComboboxMultipleControlledSelectionDoesNotInventState(t *testing.T) {
 	t.Parallel()
 	var requested []string
 	combo := ui.ComboboxMultiple(ggui.Controlled([]string{"Alpha"}, func(v []string) { requested = v })).Options([]string{"Alpha", "Beta"}).Name("Controlled")
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(combo)), ggui.Sz(350, 300))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(combo)), ggui.Sz(350, 300))
 	defer p.Close()
 	p.Tap("Controlled")
 	p.Tap("Beta")
@@ -116,7 +117,7 @@ func TestComboboxMultipleChipsSitInsideItsField(t *testing.T) {
 	t.Parallel()
 	values := ggui.State([]string{"Alpha", "Beta"})
 	combo := ui.ComboboxMultiple(values).Options([]string{"Alpha", "Beta", "Gamma"}).Name("Pick")
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(ggui.Box(combo).Width(300))), ggui.Sz(400, 300))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(widget.Box(combo).Width(300))), ggui.Sz(400, 300))
 	defer p.Close()
 	trigger, _ := p.Find("Pick")
 	remove, _ := p.Find("Remove Beta")
@@ -141,7 +142,7 @@ func TestComboboxMultipleTypesAfterItsChipsAndKeepsTheKeyboard(t *testing.T) {
 	t.Parallel()
 	values := ggui.State([]string{"Alpha"})
 	combo := ui.ComboboxMultiple(values).Options([]string{"Alpha", "Beta", "Gamma"}).Name("Pick")
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(combo, ui.Button("After", nil))), ggui.Sz(400, 300))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(combo, ui.Button("After", nil))), ggui.Sz(400, 300))
 	defer p.Close()
 	p.Tap("Pick")
 	p.Type(ggui.Mods{}, ggui.KeyEscape)

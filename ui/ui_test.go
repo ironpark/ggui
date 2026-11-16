@@ -8,6 +8,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // find returns the region with role and label, or fails the test.
@@ -53,7 +54,7 @@ func TestButtonSizesFromThemePadding(t *testing.T) {
 	got := ui.Button("go", nil).Layout(ggui.Loose(ggui.Sz(300, 300)), ggui.Env{})
 	th := uitheme.Default()
 	// The label is drawn in the theme's Label style, a medium weight.
-	text := ggui.Text("go").Style(th.Text.Merge(th.Label)).Layout(ggui.Loose(ggui.Sz(300, 300)), ggui.Env{})
+	text := widget.Text("go").Style(th.Text.Merge(th.Label)).Layout(ggui.Loose(ggui.Sz(300, 300)), ggui.Env{})
 	if got.W != text.W+th.ButtonPad.Left+th.ButtonPad.Right || got.H != max(32, text.H+th.ButtonPad.Top+th.ButtonPad.Bottom) {
 		t.Fatalf("button %v around text %v, want theme padding", got, text)
 	}
@@ -77,7 +78,7 @@ func TestCheckboxTogglesSignal(t *testing.T) {
 		t.Fatalf("changed = %v, on = %v", changed, ggui.Untrack(on.Get))
 	}
 	size := c.Layout(ggui.Loose(ggui.Sz(200, 30)), ggui.Env{})
-	label := ggui.Text("label").Layout(ggui.Loose(ggui.Sz(200, 30)), ggui.Env{})
+	label := widget.Text("label").Layout(ggui.Loose(ggui.Sz(200, 30)), ggui.Env{})
 	th := uitheme.Default()
 	if size.W != th.ControlSize+th.ControlGap+label.W {
 		t.Fatalf("checkbox width %v, want glyph + gap + label %v", size.W, label.W)
@@ -87,7 +88,7 @@ func TestCheckboxTogglesSignal(t *testing.T) {
 func TestRadioSelectsValue(t *testing.T) {
 	t.Parallel()
 	choice := ggui.State("a")
-	col := ggui.Column(ui.Radio(choice, "a", "A"), ui.Radio(choice, "b", "B")).Gap(4)
+	col := widget.Column(ui.Radio(choice, "a", "A"), ui.Radio(choice, "b", "B")).Gap(4)
 	p := ggui.NewProbe(col, ggui.Sz(100, 60))
 	defer p.Close()
 	p.Tap("B")
@@ -180,10 +181,10 @@ func TestDividerFillsItsAxis(t *testing.T) {
 func TestControlsPaintOnNilCanvas(t *testing.T) {
 	t.Parallel()
 	widgets := []ggui.Widget{
-		ui.Button("b", nil), ui.Button("b", nil).Outline(), ui.ButtonOf(ggui.Box().Size(4, 4), nil),
+		ui.Button("b", nil), ui.Button("b", nil).Outline(), ui.ButtonOf(widget.Box().Size(4, 4), nil),
 		ui.Checkbox(ggui.State(true), "c"), ui.Radio(ggui.State(1), 1, "r"), ui.Switch(ggui.State(true), "s"),
 		ui.Slider(ggui.State(0.5), 0, 1), ui.TextField(ggui.State("x")), ui.Divider(),
-		ui.Dialog(ggui.State(true), ggui.Text("d")).Title("t"),
+		ui.Dialog(ggui.State(true), widget.Text("d")).Title("t"),
 	}
 	for _, w := range widgets {
 		w.Paint(nil, ggui.Rct(ggui.Pt(0, 0), w.Layout(ggui.Loose(ggui.Sz(200, 50)), ggui.Env{})))
@@ -238,7 +239,7 @@ func TestControlsWorkFromTheKeyboard(t *testing.T) {
 	taps := 0
 	on := ggui.State(false)
 	v := ggui.State(50.0)
-	tree := ggui.Column(
+	tree := widget.Column(
 		ui.Button("go", func() { taps++ }),
 		ui.Checkbox(on, "c"),
 		ui.Slider(v, 0, 100).Step(5),
@@ -264,8 +265,8 @@ func TestSliderKeepsDraggingWhenItMoves(t *testing.T) {
 	// The value it writes changes a widget above it, so every drag frame
 	// moves the slider itself; capture must follow the widget, not its Rect.
 	v := ggui.State(0.0)
-	tree := ggui.Column(
-		ggui.Reactive(func() ggui.Widget { return ggui.Box().Size(10, 10+v.Get()) }),
+	tree := widget.Column(
+		ggui.Reactive(func() ggui.Widget { return widget.Box().Size(10, 10+v.Get()) }),
 		ui.Slider(v, 0, 100),
 	)
 	p := ggui.NewProbe(tree, ggui.Sz(216, 300))
@@ -285,7 +286,7 @@ func TestSelectOpensPicksAndClosesWithPointerAndKeys(t *testing.T) {
 	v := ggui.State("b")
 	changes := 0
 	sel := ui.Select(v).Options([]string{"a", "b", "c"}).AlignItemWithTrigger(false).Name("letter").OnChange(func(string) { changes++ })
-	tree := ggui.Column(ggui.Padding(sel, 10))
+	tree := widget.Column(widget.Padding(sel, 10))
 	p := ggui.NewProbe(tree, ggui.Sz(300, 300))
 	defer p.Close()
 	field := find(t, p, ggui.RoleSelect, "letter")
@@ -332,7 +333,7 @@ func TestMenuRunsItemsAndClosesOnEscape(t *testing.T) {
 	t.Parallel()
 	ran := ""
 	m := ui.Menu("File", ui.MenuItem("New", func() { ran = "new" }), ui.MenuDivider(), ui.MenuItem("Quit", func() { ran = "quit" }))
-	p := ggui.NewProbe(ggui.Column(m), ggui.Sz(300, 300))
+	p := ggui.NewProbe(widget.Column(m), ggui.Sz(300, 300))
 	defer p.Close()
 	button := find(t, p, ggui.RoleMenu, "File")
 	p.Tap("File")
@@ -362,7 +363,7 @@ func TestTabsSwitchByClickAndKeys(t *testing.T) {
 	sel := ggui.State(0)
 	var a, b ggui.Rect
 	tabs := ui.Tabs(sel, ui.Tab("One", probe(80, 30, &a)), ui.Tab("Two", probe(80, 30, &b))).ActivateOnFocus(true)
-	p := ggui.NewProbe(ggui.Column(tabs), ggui.Sz(300, 200))
+	p := ggui.NewProbe(widget.Column(tabs), ggui.Sz(300, 200))
 	defer p.Close()
 	p.Frame()
 	if a == (ggui.Rect{}) || b != (ggui.Rect{}) {
@@ -392,7 +393,7 @@ func TestCollapsibleTogglesAndHidesContent(t *testing.T) {
 	open := ggui.State(false)
 	var body ggui.Rect
 	c := ui.Collapsible(open, "Details", probe(80, 40, &body))
-	p := ggui.NewProbe(ggui.Column(c), ggui.Sz(300, 200))
+	p := ggui.NewProbe(widget.Column(c), ggui.Sz(300, 200))
 	defer p.Close()
 	p.Frame()
 	closed := c.Layout(ggui.Loose(ggui.Sz(300, 200)), ggui.Env{})
@@ -418,7 +419,7 @@ func TestCollapsibleTogglesAndHidesContent(t *testing.T) {
 func TestCardBadgeProgressLayout(t *testing.T) {
 	t.Parallel()
 	v := ggui.State(0.5)
-	tree := ggui.Column(ui.Card(ggui.Text("x")), ui.Badge("new").Primary(), ui.Progress(v))
+	tree := widget.Column(ui.Card(widget.Text("x")), ui.Badge("new").Primary(), ui.Progress(v))
 	p := ggui.NewProbe(tree, ggui.Sz(200, 200))
 	defer p.Close()
 	if s := p.Frame(); s.W != 200 {
@@ -464,7 +465,7 @@ func TestMenuKeysSkipDisabledItems(t *testing.T) {
 		ui.MenuItem("Open", func() { ran = "open" }),
 		ui.MenuItem("Quit", func() { ran = "quit" }).Disabled(true),
 	)
-	p := ggui.NewProbe(ggui.Column(m), ggui.Sz(300, 300))
+	p := ggui.NewProbe(widget.Column(m), ggui.Sz(300, 300))
 	defer p.Close()
 	p.Tap("File") // focus and open
 	p.Type(ggui.Mods{}, ggui.KeyArrowDown, ggui.KeyEnter)
@@ -528,10 +529,10 @@ func TestDialogKeyboardFlow(t *testing.T) {
 	t.Parallel()
 	open := ggui.State(false)
 	deleted := false
-	tree := ggui.Column(
+	tree := widget.Column(
 		ui.Button("Open", func() { open.Set(true) }),
 		ui.Button("Other", nil),
-		ui.Dialog(open, ggui.Row(
+		ui.Dialog(open, widget.Row(
 			ui.Button("Delete", func() { deleted = true; open.Set(false) }),
 			ui.Button("Cancel", func() { open.Set(false) }).Outline(),
 		)).Title("Confirm").CloseButton(false),

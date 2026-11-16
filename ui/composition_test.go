@@ -11,7 +11,7 @@ import (
 
 func TestAspectRatioDerivesTheMissingSide(t *testing.T) {
 	t.Parallel()
-	a := ui.AspectRatio(2, ggui.Box())
+	a := ui.AspectRatio(2, widget.Box())
 	if got := a.Layout(ggui.Loose(ggui.Sz(200, 500)), ggui.Env{}); got != ggui.Sz(200, 100) {
 		t.Fatalf("width leads: %+v", got)
 	}
@@ -26,7 +26,7 @@ func TestAspectRatioDerivesTheMissingSide(t *testing.T) {
 	if got := a.Layout(free, ggui.Env{}); got != (ggui.Size{}) {
 		t.Fatalf("nothing bounds it, so there is nothing to divide: %+v", got)
 	}
-	if got := ui.AspectRatio(0, ggui.Box()).Layout(ggui.Loose(ggui.Sz(80, 500)), ggui.Env{}); got != ggui.Sz(80, 80) {
+	if got := ui.AspectRatio(0, widget.Box()).Layout(ggui.Loose(ggui.Sz(80, 500)), ggui.Env{}); got != ggui.Sz(80, 80) {
 		t.Fatalf("a ratio of zero falls back to square: %+v", got)
 	}
 }
@@ -128,7 +128,7 @@ func TestInputGroupFocusesTheEditorFromItsPadding(t *testing.T) {
 	value := ggui.State("ab")
 	visits := 0
 	group := ui.InputGroup(widget.TextInput(value).Name("Site")).
-		Leading(ggui.Text("https://")).
+		Leading(widget.Text("https://")).
 		Trailing(ui.Button("Go", func() { visits++ }).Ghost())
 	p := ggui.NewProbe(group, ggui.Sz(320, 44))
 	defer p.Close()
@@ -150,8 +150,8 @@ func TestInputGroupFocusesTheEditorFromItsPadding(t *testing.T) {
 
 func TestHoverCardWaitsForTheCursorToRest(t *testing.T) {
 	t.Parallel()
-	card := ui.HoverCard(ggui.Box(ggui.Text("@ada")).Size(80, 24), ggui.Text("Ada Lovelace"))
-	p := ggui.NewProbe(ggui.Column(card, ggui.Spacer()), ggui.Sz(400, 300))
+	card := ui.HoverCard(widget.Box(widget.Text("@ada")).Size(80, 24), widget.Text("Ada Lovelace"))
+	p := ggui.NewProbe(widget.Column(card, widget.Spacer()), ggui.Sz(400, 300))
 	defer p.Close()
 	shown := func() bool {
 		_, ok := p.Semantics().Find(ggui.RoleText, "Ada Lovelace")
@@ -181,8 +181,8 @@ func TestHoverCardWaitsForTheCursorToRest(t *testing.T) {
 
 func TestTooltipAppearsAfterHover(t *testing.T) {
 	t.Parallel()
-	tip := ui.Tooltip(ggui.Box().Size(50, 50), "hint").Delay(0)
-	p := ggui.NewProbe(ggui.Column(tip, ggui.Spacer()), ggui.Sz(100, 100))
+	tip := ui.Tooltip(widget.Box().Size(50, 50), "hint").Delay(0)
+	p := ggui.NewProbe(widget.Column(tip, widget.Spacer()), ggui.Sz(100, 100))
 	defer p.Close()
 	shown := func() bool {
 		_, ok := p.Semantics().Find(ggui.RoleText, "hint")
@@ -207,7 +207,7 @@ func TestTooltipStaysClosedAfterAClick(t *testing.T) {
 	t.Parallel()
 	taps := 0
 	tip := ui.Tooltip(ui.Button("Toggle", func() { taps++ }), "hint").Delay(0)
-	p := ggui.NewProbe(ggui.Column(tip, ggui.Spacer()), ggui.Sz(200, 200))
+	p := ggui.NewProbe(widget.Column(tip, widget.Spacer()), ggui.Sz(200, 200))
 	defer p.Close()
 	shown := func() bool {
 		_, ok := p.Semantics().Find(ggui.RoleText, "hint")
@@ -243,7 +243,7 @@ func TestButtonGroupJoinsChildrenWithoutTakingTheirInput(t *testing.T) {
 		ui.Button("Copy", func() { copies++ }).Ghost(),
 		ui.Button("Paste", func() { pastes++ }).Ghost(),
 	)
-	p := ggui.NewProbe(ggui.Row(g, ggui.Spacer()), ggui.Sz(400, 60))
+	p := ggui.NewProbe(widget.Row(g, widget.Spacer()), ggui.Sz(400, 60))
 	defer p.Close()
 	p.Tap("Copy")
 	p.Tap("Paste")
@@ -316,7 +316,7 @@ func TestSheetSlidesInFromItsEdgeAndClosesOnTheScrim(t *testing.T) {
 	t.Parallel()
 	open := ggui.State(false)
 	sheet := ui.Sheet(open, ui.Button("Save", func() {})).Title("Filters").Size(200)
-	p := ggui.NewProbe(ggui.Column(ui.Button("Open", func() { open.Set(true) }), sheet), ggui.Sz(400, 300))
+	p := ggui.NewProbe(widget.Column(ui.Button("Open", func() { open.Set(true) }), sheet), ggui.Sz(400, 300))
 	defer p.Close()
 	p.Frame()
 	if _, ok := p.Find("Save"); ok {
@@ -360,7 +360,7 @@ func TestSidebarNavigatesWithThePointerAndTheArrows(t *testing.T) {
 		ui.SidebarItem("sent", "Sent"),
 		ui.SidebarItem("spam", "Spam").Disabled(true),
 	).BindCollapsed(narrow)
-	p := ggui.NewProbe(ggui.Row(bar, ggui.Expanded(ggui.Box())), ggui.Sz(600, 400))
+	p := ggui.NewProbe(widget.Row(bar, widget.Expanded(widget.Box())), ggui.Sz(600, 400))
 	defer p.Close()
 	p.Tap("Sent")
 	if ggui.Untrack(page.Get) != "sent" {
@@ -426,8 +426,8 @@ func TestAlertDialogHasToBeAnswered(t *testing.T) {
 func TestTooltipTextIsAskedWhileShown(t *testing.T) {
 	t.Parallel()
 	text := "first"
-	tip := ui.TooltipText(ggui.Box().Size(50, 50), func() string { return text }).Delay(0)
-	p := ggui.NewProbe(ggui.Column(tip, ggui.Spacer()), ggui.Sz(100, 100))
+	tip := ui.TooltipText(widget.Box().Size(50, 50), func() string { return text }).Delay(0)
+	p := ggui.NewProbe(widget.Column(tip, widget.Spacer()), ggui.Sz(100, 100))
 	defer p.Close()
 	p.Move(ggui.Pt(10, 10))
 	if _, ok := p.Semantics().Find(ggui.RoleText, "first"); !ok {

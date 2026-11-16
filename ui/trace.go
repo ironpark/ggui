@@ -11,6 +11,7 @@ import (
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // TraceStatus describes an execution step. The caller owns its lifecycle.
@@ -71,7 +72,7 @@ type TraceWidget struct {
 // Trace creates a hierarchy of execution steps. Details and descendants start
 // collapsed. Expanded or BindExpanded controls the open step IDs. Tab reaches
 // each disclosure and its visible detail controls; Enter and Space toggle it.
-// Wrap the trace in ggui.Scroll when the execution history needs a viewport.
+// Wrap the trace in widget.Scroll when the execution history needs a viewport.
 func Trace(steps ...TraceStep) *TraceWidget {
 	t := &TraceWidget{name: "Execution trace", expanded: ggui.State(map[string]bool{}), rows: make(map[string]*traceRow)}
 	t.steps.Set(cloneTraceSteps(steps))
@@ -134,7 +135,7 @@ func (t *TraceWidget) build(steps []TraceStep, seen map[string]bool) []*traceRow
 		seen[step.ID] = true
 		row := t.rows[step.ID]
 		if row == nil {
-			row = &traceRow{id: step.ID, trace: t, title: ggui.Text("").NoWrap().Ellipsis(), run: ggui.Text("").NoWrap().Ellipsis()}
+			row = &traceRow{id: step.ID, trace: t, title: widget.Text("").NoWrap().Ellipsis(), run: widget.Text("").NoWrap().Ellipsis()}
 			row.body.row = row
 			row.SetKey(row)
 			t.rows[step.ID] = row
@@ -225,7 +226,7 @@ type traceRow struct {
 	id                    string
 	step                  TraceStep
 	trace                 *TraceWidget
-	title, run            *ggui.TextWidget
+	title, run            *widget.TextWidget
 	body                  traceBody
 	reveal                ggui.Motion
 	progress              float64

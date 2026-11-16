@@ -12,6 +12,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/inspect"
+	"github.com/ironpark/ggui/widget"
 )
 
 func trace(entries ...inspect.Node) *inspect.Frame { return &inspect.Frame{Nodes: entries} }
@@ -172,7 +173,7 @@ func rows(n int, depths bool) *inspect.Frame {
 
 func TestPanelDocksToTheBottom(t *testing.T) {
 	t.Parallel()
-	h := newHarness(t, ggui.Box(), ggui.Sz(400, 400))
+	h := newHarness(t, widget.Box(), ggui.Sz(400, 400))
 	h.rendered(t, 400, 400)
 	h.p.Move(ggui.Pt(25, 25))
 	in := New()
@@ -196,7 +197,7 @@ func TestPanelDocksToTheBottom(t *testing.T) {
 	}
 	// Arrow keys resolve against this frame's trace and pin where they land;
 	// with no pointer and nothing selected, Down starts from the top.
-	fresh := newHarness(t, ggui.Box(), ggui.Sz(400, 400))
+	fresh := newHarness(t, widget.Box(), ggui.Sz(400, 400))
 	in.pinned, in.move = false, 2
 	in.sel = inspectKey{}
 	in.paint(fresh.dst, rows(50, true))
@@ -238,7 +239,7 @@ func TestPanelFoldsAndFilters(t *testing.T) {
 		t.Fatalf("filter = %q, want typed text minus one Backspace", in.filter)
 	}
 	// The pointer's pick unfolds down to what it is over.
-	h := newHarness(t, ggui.Box(), ggui.Sz(400, 400))
+	h := newHarness(t, widget.Box(), ggui.Sz(400, 400))
 	h.rendered(t, 400, 400)
 	h.p.Move(ggui.Pt(5, 5))
 	in.filter = ""
@@ -250,7 +251,7 @@ func TestPanelFoldsAndFilters(t *testing.T) {
 
 func TestPanelPaintsAndCullsTheTree(t *testing.T) {
 	t.Parallel()
-	h := newHarness(t, ggui.Box(), ggui.Sz(400, 200))
+	h := newHarness(t, widget.Box(), ggui.Sz(400, 200))
 	h.rendered(t, 400, 200)
 	h.p.Move(ggui.Pt(25, 25))
 	tr := rows(200, true)
@@ -274,7 +275,7 @@ func TestPanelPaintsAndCullsTheTree(t *testing.T) {
 
 func TestPanelClampsScroll(t *testing.T) {
 	t.Parallel()
-	h := newHarness(t, ggui.Box(), ggui.Sz(400, 200))
+	h := newHarness(t, widget.Box(), ggui.Sz(400, 200))
 	h.rendered(t, 400, 200)
 	tr := rows(200, false)
 	in := &View{scroll: -500}
@@ -291,17 +292,17 @@ func TestPanelClampsScroll(t *testing.T) {
 
 func TestPanelTracksIdentityAcrossReorderAndRemoval(t *testing.T) {
 	t.Parallel()
-	one, two := ggui.Scroll(ggui.Box()).Key("one"), ggui.Scroll(ggui.Box()).Key("two")
-	h := newHarness(t, ggui.Column(one, two), ggui.Sz(800, 600))
+	one, two := widget.Scroll(widget.Box()).Key("one"), widget.Scroll(widget.Box()).Key("two")
+	h := newHarness(t, widget.Column(one, two), ggui.Sz(800, 600))
 	selected := slices.IndexFunc(h.fr.Nodes, func(n inspect.Node) bool { return n.ID == "two" })
 	var in View
 	in.selectEntry(h.fr, selected)
-	moved := newHarness(t, ggui.Column(ggui.Scroll(ggui.Box()).Key("two"), ggui.Scroll(ggui.Box()).Key("one")), ggui.Sz(800, 600))
+	moved := newHarness(t, widget.Column(widget.Scroll(widget.Box()).Key("two"), widget.Scroll(widget.Box()).Key("one")), ggui.Sz(800, 600))
 	found := in.find(moved.fr)
 	if found < 0 || moved.fr.Nodes[found].ID != "two" {
 		t.Fatal("selection did not follow the keyed widget")
 	}
-	removed := newHarness(t, ggui.Column(ggui.Scroll(ggui.Box()).Key("one")), ggui.Sz(800, 600))
+	removed := newHarness(t, widget.Column(widget.Scroll(widget.Box()).Key("one")), ggui.Sz(800, 600))
 	if in.find(removed.fr) != -1 {
 		t.Fatal("removed keyed widget selected its neighbour")
 	}
@@ -309,7 +310,7 @@ func TestPanelTracksIdentityAcrossReorderAndRemoval(t *testing.T) {
 
 func TestPanelResolvesRebuiltWidgetByStructuralPath(t *testing.T) {
 	t.Parallel()
-	build := func() ggui.Widget { return ggui.Column(ggui.Text("first"), ggui.Text("second")) }
+	build := func() ggui.Widget { return widget.Column(widget.Text("first"), widget.Text("second")) }
 	h := newHarness(t, build(), ggui.Sz(800, 600))
 	var in View
 	in.selectEntry(h.fr, 2)
@@ -322,7 +323,7 @@ func TestPanelResolvesRebuiltWidgetByStructuralPath(t *testing.T) {
 func TestPanelSearchesLabelsAndRoles(t *testing.T) {
 	t.Parallel()
 	w := &named{role: ggui.RoleButton, name: "Save document"}
-	h := newHarness(t, ggui.Column(ggui.Text("Heading"), w), ggui.Sz(800, 600))
+	h := newHarness(t, widget.Column(widget.Text("Heading"), w), ggui.Sz(800, 600))
 	for _, query := range []string{"SAVE", "button"} {
 		in := View{filter: query}
 		if shown := in.visible(h.fr); !slices.Equal(shown, []int{0, 2}) {
@@ -333,7 +334,7 @@ func TestPanelSearchesLabelsAndRoles(t *testing.T) {
 
 func TestPanelPickerConsumesPressAndRelease(t *testing.T) {
 	t.Parallel()
-	h := newHarness(t, ggui.Box(), ggui.Sz(1000, 700))
+	h := newHarness(t, widget.Box(), ggui.Sz(1000, 700))
 	in := View{picking: true}
 	in.paint(h.dst, h.fr)
 	for _, f := range []ggui.OverlayInput{
@@ -354,7 +355,7 @@ func TestPanelPickerConsumesPressAndRelease(t *testing.T) {
 
 func TestPanelIndependentPanesAndFilterFocus(t *testing.T) {
 	t.Parallel()
-	h := newHarness(t, ggui.Box(ggui.Text("Long value")).Pad(12), ggui.Sz(1200, 800))
+	h := newHarness(t, widget.Box(widget.Text("Long value")).Pad(12), ggui.Sz(1200, 800))
 	in := View{dock: ggui.InspectorBottom}
 	in.selectEntry(h.fr, 0)
 	in.paint(h.dst, h.fr)
@@ -372,7 +373,7 @@ func TestPanelIndependentPanesAndFilterFocus(t *testing.T) {
 
 func TestPanelResizesAndClampsPanel(t *testing.T) {
 	t.Parallel()
-	h := newHarness(t, ggui.Box(), ggui.Sz(1200, 800))
+	h := newHarness(t, widget.Box(), ggui.Sz(1200, 800))
 	in := View{dock: ggui.InspectorRight}
 	in.paint(h.dst, h.fr)
 	in.Input(ggui.OverlayInput{Pos: in.edge.Origin.Add(ggui.Pt(2.0, 40.0)), Down: []ggui.MouseButton{ggui.MouseButtonLeft}})
@@ -393,7 +394,7 @@ func TestPanelResizesAndClampsPanel(t *testing.T) {
 
 func TestPanelArrowNavigationRevealsPinnedRows(t *testing.T) {
 	t.Parallel()
-	h := newHarness(t, ggui.Box(), ggui.Sz(800, 600))
+	h := newHarness(t, widget.Box(), ggui.Sz(800, 600))
 	tr := rows(100, false)
 	var in View
 	in.paint(h.dst, tr)
@@ -413,7 +414,7 @@ func TestPanelArrowNavigationRevealsPinnedRows(t *testing.T) {
 
 func TestPanelCopyAndClose(t *testing.T) {
 	t.Parallel()
-	h := newHarness(t, ggui.Box(ggui.Text("Example")).Pad(12), ggui.Sz(1200, 800))
+	h := newHarness(t, widget.Box(widget.Text("Example")).Pad(12), ggui.Sz(1200, 800))
 	mem := h.p.Clipboard()
 	in := View{dock: ggui.InspectorBottom}
 	in.selectEntry(h.fr, 0)
@@ -437,7 +438,7 @@ func TestPanelCopyAndClose(t *testing.T) {
 func TestPanelLetsApplicationCaptureFinish(t *testing.T) {
 	t.Parallel()
 	drags := 0
-	w := ggui.Pointer(ggui.Box()).OnDrag(func(ggui.PointerEvent) { drags++ })
+	w := widget.Pointer(widget.Box()).OnDrag(func(ggui.PointerEvent) { drags++ })
 	p := ggui.NewProbe(w, ggui.Sz(800, 600))
 	defer p.Close()
 	in := New()
@@ -458,7 +459,7 @@ func TestPanelLetsApplicationCaptureFinish(t *testing.T) {
 
 func TestPanelResetReleasesWidgetReferences(t *testing.T) {
 	t.Parallel()
-	h := newHarness(t, ggui.Box(ggui.Text("temporary")), ggui.Sz(800, 600))
+	h := newHarness(t, widget.Box(widget.Text("temporary")), ggui.Sz(800, 600))
 	in := New()
 	in.selectEntry(h.fr, 0)
 	in.paint(h.dst, h.fr)
@@ -470,8 +471,8 @@ func TestPanelResetReleasesWidgetReferences(t *testing.T) {
 
 func TestPanelCopyResolvesNewSelectionWithoutAnotherPaint(t *testing.T) {
 	t.Parallel()
-	one, two := ggui.Box(ggui.Text("one")).Pad(11), ggui.Box(ggui.Text("two")).Pad(22)
-	h := newHarness(t, ggui.Column(one, two), ggui.Sz(800, 600))
+	one, two := widget.Box(widget.Text("one")).Pad(11), widget.Box(widget.Text("two")).Pad(22)
+	h := newHarness(t, widget.Column(one, two), ggui.Sz(800, 600))
 	mem := h.p.Clipboard()
 	var in View
 	in.selectEntry(h.fr, 1)
@@ -517,7 +518,7 @@ func TestPanelFilterScratchDoesNotKeepOldMatches(t *testing.T) {
 // probe published and takes the pointer over itself.
 func TestPanelRunsAsTheProbesOverlay(t *testing.T) {
 	t.Parallel()
-	p := ggui.NewProbe(ggui.Box(ggui.Text("hello")), ggui.Sz(800, 600))
+	p := ggui.NewProbe(widget.Box(widget.Text("hello")), ggui.Sz(800, 600))
 	defer p.Close()
 	in := New()
 	p.SetOverlay(in)

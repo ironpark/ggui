@@ -17,7 +17,7 @@ type TextFieldWidget struct {
 	multiline        bool
 	ggui.Interactive // only disabled is used; the editor tracks its own focus
 	input            *widget.TextInputWidget
-	box              *ggui.BoxWidget
+	box              *widget.BoxWidget
 	theme            *uitheme.Theme
 	plain            bool
 	invalid          bool
@@ -28,7 +28,7 @@ type TextFieldWidget struct {
 // TextField creates a text field bound to value.
 func TextField(value ggui.Binding[string]) *TextFieldWidget {
 	f := &TextFieldWidget{input: widget.TextInput(value)}
-	f.box = ggui.Box(f.input)
+	f.box = widget.Box(f.input)
 	return f
 }
 

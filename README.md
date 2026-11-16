@@ -74,6 +74,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func main() {
@@ -84,11 +85,11 @@ func main() {
 		Width:  480,
 		Height: 320,
 	}, func() ggui.Widget {
-		return ggui.Center(
-			ggui.Column(
-				ggui.Textf("Count: %d", count),
+		return widget.Center(
+			widget.Column(
+				widget.Textf("Count: %d", count),
 				ui.Button("Increment", func() { ggui.Add(count, 1) }),
-			).Gap(12).Align(ggui.AlignCenter),
+			).Gap(12).Align(widget.AlignCenter),
 		)
 	})
 
@@ -144,9 +145,12 @@ headlessly with a `Probe`.
 4. **Scope reactive updates.** `Component`, `If`, `EachKeyed`, and `Await` let parts of the
    interface update independently.
 
-The core `ggui` package provides layout, reactivity, rendering, and input.
-The `ui` package adds themed controls built on that public API, which you can
-also use to build your own controls.
+The core `ggui` package provides the app and its windows, reactivity,
+rendering, input, and the widget protocol. The `widget` package holds the
+unstyled building blocks written on it: text, rows, columns, stacks,
+scrolling, lists, popups, and transitions. The `ui` package adds themed
+controls built on both public APIs, which you can also use to build your
+own controls.
 
 ## Accessibility
 

@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // shadcn's button and toggle take aria-invalid, eased as the rest of a
@@ -17,10 +18,10 @@ func TestButtonAndToggleInvalid(t *testing.T) {
 	b := Button("Pick a date", nil).Outline().BindInvalid(bad)
 	g := Toggle(ggui.State(false), "Bold").Outline().Invalid(true)
 	var button, toggle float64
-	root := ggui.Column(
+	root := widget.Column(
 		watched(b, &b.Interactive, buttonInvalidSlot, &button),
 		watched(g, &g.Interactive, buttonInvalidSlot, &toggle),
-	).Gap(12).Align(ggui.AlignStart)
+	).Gap(12).Align(widget.AlignStart)
 	p := ggui.NewProbe(root, ggui.Sz(240, 120))
 	defer p.Close()
 	th := uitheme.Default()

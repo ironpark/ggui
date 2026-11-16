@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestPopoverFocusDismissalAndBinding(t *testing.T) {
@@ -13,8 +14,8 @@ func TestPopoverFocusDismissalAndBinding(t *testing.T) {
 	open := ggui.State(false)
 	disabled := ggui.State(false)
 	closes, outside := 0, 0
-	pover := ui.Popover("Settings", ggui.Column(ui.Button("First", nil), ui.Button("Second", nil))).Modal(true).BindOpen(open).BindDisabled(disabled).OnClose(func() { closes++ })
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(pover, ggui.Box().Height(160), ui.Button("Outside", func() { outside++ }))), ggui.Sz(440, 380))
+	pover := ui.Popover("Settings", widget.Column(ui.Button("First", nil), ui.Button("Second", nil))).Modal(true).BindOpen(open).BindDisabled(disabled).OnClose(func() { closes++ })
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(pover, widget.Box().Height(160), ui.Button("Outside", func() { outside++ }))), ggui.Sz(440, 380))
 	defer p.Close()
 	p.Key("tab")
 	p.Key("enter")
@@ -61,8 +62,8 @@ func TestPopoverKeyedRebuildAndComposition(t *testing.T) {
 	var pop *ui.PopoverWidget
 	p := ggui.ProbeBuilder(func() ggui.Widget {
 		_ = revision.Get()
-		pop = ui.PopoverOf(ggui.Text("Open custom"), ui.Button("Close content", func() { pop.Hide() })).Name("Custom").Key("custom").Width(240).Pad(12)
-		return ggui.Column(pop)
+		pop = ui.PopoverOf(widget.Text("Open custom"), ui.Button("Close content", func() { pop.Hide() })).Name("Custom").Key("custom").Width(240).Pad(12)
+		return widget.Column(pop)
 	}, ggui.Sz(360, 320))
 	defer p.Close()
 	p.Tap("Custom")
@@ -83,8 +84,8 @@ func TestPopoverKeyedRebuildAndComposition(t *testing.T) {
 
 func TestPopoverAccessibleActionsAndSmallViewport(t *testing.T) {
 	t.Parallel()
-	pop := ui.Popover("Open", ggui.Column(ui.Button("A", nil), ggui.Box().Height(500), ui.Button("Z", nil)))
-	p := ggui.NewProbe(ggui.Column(ggui.Box().Height(140), pop), ggui.Sz(180, 180))
+	pop := ui.Popover("Open", widget.Column(ui.Button("A", nil), widget.Box().Height(500), ui.Button("Z", nil)))
+	p := ggui.NewProbe(widget.Column(widget.Box().Height(140), pop), ggui.Sz(180, 180))
 	defer p.Close()
 	act(t, p, ggui.RoleButton, "Open", ggui.Action{Kind: ggui.ActionExpand})
 	p.Advance(time.Second)
@@ -102,7 +103,7 @@ func TestPopoverDefaultsAreNonmodalAndCentered(t *testing.T) {
 	t.Parallel()
 	clicks := 0
 	pop := ui.Popover("Open", ui.Button("Inside", nil))
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(ggui.Padding(pop, 0, 200), ggui.Box().Height(150), ui.Button("Outside", func() { clicks++ }))), ggui.Sz(600, 350))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(widget.Padding(pop, 0, 200), widget.Box().Height(150), ui.Button("Outside", func() { clicks++ }))), ggui.Sz(600, 350))
 	defer p.Close()
 	p.Tap("Open")
 	p.Frame()
@@ -127,8 +128,8 @@ func TestPopoverDefaultsAreNonmodalAndCentered(t *testing.T) {
 func TestPopoverNestedPanelsKeepParentOpen(t *testing.T) {
 	t.Parallel()
 	inner := ui.Popover("Inner", ui.Button("Deep action", nil))
-	outer := ui.Popover("Outer", ggui.Column(inner, ui.Button("Sibling", nil)))
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(outer)), ggui.Sz(600, 500))
+	outer := ui.Popover("Outer", widget.Column(inner, ui.Button("Sibling", nil)))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(outer)), ggui.Sz(600, 500))
 	defer p.Close()
 	p.Tap("Outer")
 	p.Tap("Inner")
@@ -146,8 +147,8 @@ func TestPopoverNestedPanelsKeepParentOpen(t *testing.T) {
 
 func TestPopoverTextOnlyDialogSemanticsAndEscape(t *testing.T) {
 	t.Parallel()
-	pop := ui.Popover("Info", ggui.Text("Read only content")).Title("Details").Description("More information")
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(pop)), ggui.Sz(450, 300))
+	pop := ui.Popover("Info", widget.Text("Read only content")).Title("Details").Description("More information")
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(pop)), ggui.Sz(450, 300))
 	defer p.Close()
 	p.Tap("Info")
 	p.Frame()

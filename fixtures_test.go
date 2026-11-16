@@ -4,10 +4,11 @@ import "image/color"
 
 // The kernel's tests stand on widgets of their own, made here on the
 // kernel's widget protocol alone, rather than on the built-in ones: those
-// are to leave the package, and a test of the kernel could not import them
-// back without a cycle. Each does the least a test of the kernel asks of a
-// widget of its kind, and is no copy of the built-in widget it stands in
-// for: a test of what a built-in widget does belongs with the widgets.
+// are in package widget, which imports this one, and a test of the kernel
+// could not import them back without a cycle. Each does the least a test of
+// the kernel asks of a widget of its kind, and is no copy of the built-in
+// widget it stands in for: a test of what a built-in widget does belongs
+// with the widgets.
 
 // block is as big as its constraints allow of size, whatever its child,
 // filled with fill when it has one, and lays its child out at the top left

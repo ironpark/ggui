@@ -14,6 +14,7 @@ import (
 	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 //go:embed fixtures.json
@@ -236,7 +237,7 @@ func buildChart(e chartExample) *ui.ChartWidget {
 	if has("radar-label-custom") {
 		c.TickPainter(func(dst *ggui.Canvas, ctx ui.ChartPointContext) {
 			env := ctx.Env
-			w := ggui.Column(ggui.Text(fmt.Sprintf("%g / %g", ctx.Datum.Values["desktop"], ctx.Datum.Values["mobile"])).Size(12).Color(ctx.Color), ui.Caption(ctx.Datum.Label).Size(11)).Align(ggui.AlignCenter)
+			w := widget.Column(widget.Text(fmt.Sprintf("%g / %g", ctx.Datum.Values["desktop"], ctx.Datum.Values["mobile"])).Size(12).Color(ctx.Color), ui.Caption(ctx.Datum.Label).Size(11)).Align(widget.AlignCenter)
 			size := w.Layout(ggui.Loose(ggui.Sz(120, 50)), env)
 			dst.Paint(w, ggui.Rct(ctx.Position.Add(ggui.Pt(-size.W/2, -size.H/2)), size))
 		})
@@ -351,7 +352,7 @@ func chartCard(e chartExample) ggui.Widget {
 			mobile := e
 			mobile.Keys = []string{"mobile"}
 			selection := ggui.State("desktop")
-			widgets = append(widgets, ggui.Row(ui.Button("Desktop", func() { selection.Set("desktop") }), ui.Button("Mobile", func() { selection.Set("mobile") })).Gap(8))
+			widgets = append(widgets, widget.Row(ui.Button("Desktop", func() { selection.Set("desktop") }), ui.Button("Mobile", func() { selection.Set("mobile") })).Gap(8))
 			widgets = append(widgets, ggui.View(selection, func(s string) *ui.ChartWidget {
 				if s == "mobile" {
 					return buildChart(mobile)
@@ -365,16 +366,16 @@ func chartCard(e chartExample) ggui.Widget {
 		widgets = append(widgets, chart)
 	}
 	if !strings.Contains(e.Name, "tooltip") {
-		widgets = append(widgets, ggui.Text("Trending up by 5.2% this month ↗").Size(14), ui.Caption(footer))
+		widgets = append(widgets, widget.Text("Trending up by 5.2% this month ↗").Size(14), ui.Caption(footer))
 	}
 	if strings.Contains(e.Name, "pie") || strings.Contains(e.Name, "radial") || strings.Contains(e.Name, "radar") {
 		for i, w := range widgets {
-			if text, ok := w.(*ggui.TextWidget); ok {
+			if text, ok := w.(*widget.TextWidget); ok {
 				widgets[i] = text.Align(.5)
 			}
 		}
 	}
-	column := ggui.Column(widgets...).Gap(12).Stretch()
+	column := widget.Column(widgets...).Gap(12).Stretch()
 	return decorateChart(ui.Card(column).Pad(24))
 }
 func nextData(e chartExample) []ui.ChartDatum {
@@ -407,7 +408,7 @@ func comma(v float64) string {
 }
 
 func demoText(dst *ggui.Canvas, env ggui.Env, s string, p ggui.Point, col color.Color, align float64) {
-	w := ggui.Text(s).Size(12).Color(col)
+	w := widget.Text(s).Size(12).Color(col)
 	size := w.Layout(ggui.Loose(ggui.Sz(200, 30)), env)
 	p.X -= size.W * align
 	dst.Paint(w, ggui.Rct(p, size))

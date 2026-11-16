@@ -15,6 +15,7 @@ import (
 	_ "github.com/ironpark/ggui/inspect/panel"
 	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // model holds one signal per piece of state. Bumping Generation changes the
@@ -48,10 +49,10 @@ func (m model) build() ggui.Widget {
 	selection := ggui.Combine(m.Selected, m.Generation, func(name string, generation int) cardKey {
 		return cardKey{name: name, generation: generation}
 	})
-	return ggui.Box(ggui.Column(
-		ggui.Row(
+	return widget.Box(widget.Column(
+		widget.Row(
 			ui.Title("Charts"),
-			ggui.Spacer(),
+			widget.Spacer(),
 			ui.Button("Replay", m.replay),
 			ui.Switch(m.Dark, "Dark theme"),
 		).Gap(12),

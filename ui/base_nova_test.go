@@ -7,6 +7,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestBaseNovaControlGeometry(t *testing.T) {
@@ -46,9 +47,9 @@ func TestBaseNovaModalCloseAction(t *testing.T) {
 	t.Parallel()
 	for _, sheet := range []bool{false, true} {
 		open := ggui.State(true)
-		var w ggui.Widget = Dialog(open, ggui.Text("Body"))
+		var w ggui.Widget = Dialog(open, widget.Text("Body"))
 		if sheet {
-			w = Sheet(open, ggui.Text("Body"))
+			w = Sheet(open, widget.Text("Body"))
 		}
 		p := ggui.NewProbe(w, ggui.Sz(800, 600))
 		p.Frame()
@@ -63,7 +64,7 @@ func TestBaseNovaModalCloseAction(t *testing.T) {
 func TestAccordionHeadersAreIndependentTabStops(t *testing.T) {
 	t.Parallel()
 	open := ggui.State([]string{})
-	a := Accordion(open, AccordionItem("a", "Alpha", ggui.Text("A")), AccordionItem("b", "Disabled", ggui.Text("B")).Disabled(true), AccordionItem("c", "Charlie", ggui.Text("C")))
+	a := Accordion(open, AccordionItem("a", "Alpha", widget.Text("A")), AccordionItem("b", "Disabled", widget.Text("B")).Disabled(true), AccordionItem("c", "Charlie", widget.Text("C")))
 	p := ggui.NewProbe(a, ggui.Sz(400, 300))
 	defer p.Close()
 	p.Key("tab")

@@ -557,7 +557,7 @@ func TestTextInputClaimsTheKeysItIsAsked(t *testing.T) {
 		ClaimKeys(func(ev ggui.KeyEvent) bool { return claim && ev.Key == ggui.KeyTab }).
 		OnKey(func(ev ggui.KeyEvent) bool { seen++; return ev.Key == ggui.KeyTab })
 	b := TextInput(ggui.State("")).Name("b")
-	p := ggui.NewProbe(ggui.Column(a, b), ggui.Sz(200, 100))
+	p := ggui.NewProbe(Column(a, b), ggui.Sz(200, 100))
 	defer p.Close()
 	p.Frame()
 	field, _ := p.Semantics().Find(ggui.RoleTextField, "a")
@@ -764,7 +764,7 @@ func TestTextInputBaselineIsTheFirstLineAscent(t *testing.T) {
 	}
 	// Beside a box, which sits on its bottom edge, the field's baseline
 	// lines up with that edge.
-	row := ggui.Row(ggui.Box().Size(10, 40), w).Align(ggui.AlignBaseline)
+	row := Row(Box().Size(10, 40), w).Align(AlignBaseline)
 	row.Layout(ggui.Loose(ggui.Sz(300, 100)), ggui.Env{})
 	if b, ok := row.Baseline(); !ok || !closeTo(b, 40) {
 		t.Fatalf("row baseline = %v, %v; want the field's, on the box's bottom at 40", b, ok)
@@ -781,9 +781,9 @@ func TestTextInputKeyKeepsCaretAndFocusWhenMoved(t *testing.T) {
 		return ggui.Reactive(func() ggui.Widget {
 			input = TextInput(value).Key("query")
 			if moved.Get() {
-				return ggui.Column(ggui.Box().Size(10, 40), input)
+				return Column(Box().Size(10, 40), input)
 			}
-			return ggui.Column(input)
+			return Column(input)
 		})
 	}, ggui.Sz(200, 100))
 	defer p.Close()
@@ -808,7 +808,7 @@ func editorProbe(t *testing.T, text string, configure ...func(*TextInputWidget))
 	for _, fn := range configure {
 		fn(w)
 	}
-	p := ggui.NewProbe(ggui.Column(w, ggui.Box().Size(300, 100)), ggui.Sz(300, 140))
+	p := ggui.NewProbe(Column(w, Box().Size(300, 100)), ggui.Sz(300, 140))
 	t.Cleanup(p.Close)
 	p.Click(ggui.Pt(295, 5))
 	if !w.Focused() {

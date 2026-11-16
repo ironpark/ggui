@@ -15,6 +15,7 @@ import (
 	_ "github.com/ironpark/ggui/inspect/panel"
 	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // model holds one signal per piece of state. Each field is its own reactive
@@ -48,21 +49,21 @@ func (m model) build() ggui.Widget {
 			fmt.Sprintf("%d more to reach 100", max(100-n, 0)),
 		}
 	})
-	buttons := ggui.Row(
+	buttons := widget.Row(
 		ui.Button("-", m.sub).Pad(6, 16),
 		ui.Button("+", m.add).Pad(6, 16),
-	).Space(1).Justify(ggui.JustifyCenter)
-	help := ggui.View(hints, func(lines []string) *ggui.ColumnWidget {
-		return ggui.List(lines, func(line string) ggui.Widget {
+	).Space(1).Justify(widget.JustifyCenter)
+	help := ggui.View(hints, func(lines []string) *widget.ColumnWidget {
+		return widget.List(lines, func(line string) ggui.Widget {
 			return ui.Caption(line)
 		}).Space(0.5)
 	})
-	content := ggui.Column(
+	content := widget.Column(
 		ui.Titlef("count: %d", m.Count),
 		buttons,
 		help,
-	).Space(1.5).Align(ggui.AlignCenter)
-	return ggui.Center(ggui.Box(ui.Card(content).Pad(24)).Width(360))
+	).Space(1.5).Align(widget.AlignCenter)
+	return widget.Center(widget.Box(ui.Card(content).Pad(24)).Width(360))
 }
 
 // shortcuts binds the keys. Bare-key shortcuts reach the focused widget

@@ -1,6 +1,7 @@
-package ggui
+package widget
 
 import (
+	"github.com/ironpark/ggui"
 	"slices"
 	"testing"
 )
@@ -19,35 +20,35 @@ func TestPointerCallsItsCallbacks(t *testing.T) {
 	t.Parallel()
 	var taps, drags, ups int
 	var hover []bool
-	var scrolled Point
+	var scrolled ggui.Point
 	w := Column(
-		Pointer(Tap(Box().Size(50, 50), func() { taps++ })).OnScroll(func(d Point) { scrolled = d }),
+		Pointer(Tap(Box().Size(50, 50), func() { taps++ })).OnScroll(func(d ggui.Point) { scrolled = d }),
 		Pointer(Box().Size(50, 50)).
 			OnHover(func(on bool) { hover = append(hover, on) }).
-			OnDrag(func(PointerEvent) { drags++ }).
-			OnUp(func(PointerEvent) { ups++ }).
-			Cursor(CursorShapeText),
+			OnDrag(func(ggui.PointerEvent) { drags++ }).
+			OnUp(func(ggui.PointerEvent) { ups++ }).
+			Cursor(ggui.CursorShapeText),
 	)
-	p := NewProbe(w, Sz(50, 100))
+	p := ggui.NewProbe(w, ggui.Sz(50, 100))
 	defer p.Close()
-	p.Click(Pt(10, 10))
-	p.Press(Pt(10, 10))
-	p.Release(Pt(10, 200))
+	p.Click(ggui.Pt(10, 10))
+	p.Press(ggui.Pt(10, 10))
+	p.Release(ggui.Pt(10, 200))
 	if taps != 1 {
 		t.Fatalf("taps = %d after a click and a press let go outside, want 1", taps)
 	}
-	p.Scroll(Pt(10, 10), Pt(0, -3))
-	if scrolled != Pt(0, -3) {
+	p.Scroll(ggui.Pt(10, 10), ggui.Pt(0, -3))
+	if scrolled != ggui.Pt(0, -3) {
 		t.Fatalf("the wheel reached OnScroll as %v through the Tap, want (0, -3)", scrolled)
 	}
-	p.Move(Pt(10, 60))
-	if p.Cursor() != CursorShapeText {
+	p.Move(ggui.Pt(10, 60))
+	if p.Cursor() != ggui.CursorShapeText {
 		t.Fatalf("cursor %v over the Pointer, want its text cursor", p.Cursor())
 	}
-	p.Press(Pt(10, 60))
-	p.Move(Pt(200, 200))
-	p.Release(Pt(200, 200))
-	p.Move(Pt(10, 10))
+	p.Press(ggui.Pt(10, 60))
+	p.Move(ggui.Pt(200, 200))
+	p.Release(ggui.Pt(200, 200))
+	p.Move(ggui.Pt(10, 10))
 	if drags != 1 || ups != 1 {
 		t.Fatalf("drags %d, releases %d; want the drag outside and its release", drags, ups)
 	}
@@ -60,29 +61,29 @@ func TestPointerCallsItsCallbacks(t *testing.T) {
 // it holds it to OnKey and OnText, and says when it gains and loses it.
 func TestFocusCallsItsCallbacks(t *testing.T) {
 	t.Parallel()
-	var keys []KeyboardKey
+	var keys []ggui.KeyboardKey
 	var typed string
 	var focus []bool
 	w := Row(
 		Focus(Box().Size(50, 50)).
-			OnKey(func(k KeyboardKey) { keys = append(keys, k) }).
+			OnKey(func(k ggui.KeyboardKey) { keys = append(keys, k) }).
 			OnText(func(s string) { typed += s }).
 			OnFocus(func(on bool) { focus = append(focus, on) }),
 		Box().Size(50, 50),
 	)
-	p := NewProbe(w, Sz(100, 50))
+	p := ggui.NewProbe(w, ggui.Sz(100, 50))
 	defer p.Close()
-	p.Type(Mods{}, KeyA)
+	p.Type(ggui.Mods{}, ggui.KeyA)
 	if len(keys) != 0 {
 		t.Fatal("keys reached Focus before it was clicked")
 	}
-	p.Click(Pt(10, 10))
-	p.TypeText(Mods{}, KeyA, "a")
-	if !slices.Equal(keys, []KeyboardKey{KeyA}) || typed != "a" {
+	p.Click(ggui.Pt(10, 10))
+	p.TypeText(ggui.Mods{}, ggui.KeyA, "a")
+	if !slices.Equal(keys, []ggui.KeyboardKey{ggui.KeyA}) || typed != "a" {
 		t.Fatalf("keys %v, typed %q; want [A] and a", keys, typed)
 	}
-	p.Click(Pt(75, 10))
-	p.Type(Mods{}, KeyB)
+	p.Click(ggui.Pt(75, 10))
+	p.Type(ggui.Mods{}, ggui.KeyB)
 	if len(keys) != 1 || !slices.Equal(focus, []bool{true, false}) {
 		t.Fatalf("keys %v, focus %v; want none after the click away, and focus gained then lost", keys, focus)
 	}

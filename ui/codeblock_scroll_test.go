@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // A trackpad's swipe is never along one axis alone. The code's horizontal
@@ -13,7 +14,7 @@ import (
 func TestCodeBlockScrollsBothWaysOnADiagonalSwipe(t *testing.T) {
 	code := strings.Repeat("recipe := theme.Config{Preset: theme.Preset{Base: theme.BaseNeutral, Accent: theme.AccentViolet}, Chart: theme.AccentBlue}\n", 60)
 	c := CodeBlock(code).Height(200)
-	p := ggui.NewProbe(ggui.Box(c).Width(400), ggui.Sz(400, 300))
+	p := ggui.NewProbe(widget.Box(c).Width(400), ggui.Sz(400, 300))
 	defer p.Close()
 	p.Frame()
 	p.Scroll(ggui.Pt(200, 100), ggui.Pt(-1, -5))
@@ -30,7 +31,7 @@ func TestCodeBlockScrollsBothWaysOnADiagonalSwipe(t *testing.T) {
 func TestCodeBlockKeepsScrollingDownInAWindow(t *testing.T) {
 	code := strings.Repeat("recipe := theme.Config{Preset: theme.Preset{Base: theme.BaseNeutral, Accent: theme.AccentViolet}}\n", 60)
 	c := CodeBlock(code).Language("go").LineNumbers(true).Height(340)
-	p := ggui.NewWindowProbe(func() ggui.Widget { return ggui.Center(ggui.Box(c).Width(600)) }, ggui.Sz(1000, 700))
+	p := ggui.NewWindowProbe(func() ggui.Widget { return widget.Center(widget.Box(c).Width(600)) }, ggui.Sz(1000, 700))
 	defer p.Close()
 	p.Run(time.Second, 60)
 	for range 6 {
@@ -48,7 +49,7 @@ func TestCodeBlockKeepsScrollingDownInAWindow(t *testing.T) {
 func TestCodeBlockFadesTowardWhatIsBeyondItsEnds(t *testing.T) {
 	code := strings.Repeat("recipe := theme.Config{Preset: theme.Preset{Base: theme.BaseNeutral, Accent: theme.AccentViolet}, Chart: theme.AccentBlue}\n", 60)
 	c := CodeBlock(code).Height(200)
-	p := ggui.NewProbe(ggui.Box(c).Width(400), ggui.Sz(400, 300))
+	p := ggui.NewProbe(widget.Box(c).Width(400), ggui.Sz(400, 300))
 	defer p.Close()
 	p.Frame()
 	if lead, trail := codeFade(&c.xController, 16); lead != 0 || trail != 16 {

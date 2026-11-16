@@ -7,6 +7,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestMenuSubOpensBesideItsRowFromTheKeyboard(t *testing.T) {
@@ -18,7 +19,7 @@ func TestMenuSubOpensBesideItsRowFromTheKeyboard(t *testing.T) {
 			ui.MenuItem("Email", func() { ran = "email" }),
 			ui.MenuItem("Message", func() { ran = "message" })),
 		ui.MenuItem("Close", func() { ran = "close" }))
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Row(menu)), ggui.Sz(600, 400))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Row(menu)), ggui.Sz(600, 400))
 	defer p.Close()
 	p.Tap("File")
 	p.Key("down", "down")
@@ -71,7 +72,7 @@ func TestMenuSubOpensWhereThePointerRestsAndOnAClick(t *testing.T) {
 		ui.MenuItem("Open", func() { ran = "open" }),
 		ui.MenuSub("More", ui.MenuItem("Rename", func() { ran = "rename" })),
 	)
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(menu)), ggui.Sz(600, 400))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(menu)), ggui.Sz(600, 400))
 	defer p.Close()
 	p.ClickButton(find(t, p, ggui.RoleButton, "Target").Center(), ggui.MouseButtonRight)
 	more := find(t, p, ggui.RoleMenuItem, "More")
@@ -103,7 +104,7 @@ func TestMenubarKeepsLeftAndRightForAnOpenSubmenu(t *testing.T) {
 	bar := ui.Menubar(
 		ui.Menu("File", ui.MenuSub("Recent", ui.MenuItem("notes.txt", nil)), ui.MenuItem("Quit", nil)),
 		ui.Menu("Edit", ui.MenuItem("Undo", nil)))
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(bar)), ggui.Sz(600, 400))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(bar)), ggui.Sz(600, 400))
 	defer p.Close()
 	// A click opens the menu on no row; Down goes to the first.
 	p.Tap("File")
@@ -132,7 +133,7 @@ func TestMenuCheckboxAndRadioRowsKeepTheMenuOpen(t *testing.T) {
 		ui.MenuDivider(),
 		ui.MenuRadioGroup(zoom, "50%", "100%", "200%").OnChange(func(string) { changes++ }),
 		ui.MenuItem("Delete", nil).Destructive().Icon(ui.Icon("close")))
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Row(menu)), ggui.Sz(400, 400))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Row(menu)), ggui.Sz(400, 400))
 	defer p.Close()
 	p.Tap("View")
 	p.Tap("Grid")
@@ -158,7 +159,7 @@ func TestMenuPanelsFitTheirEntriesAndTheDividerBleeds(t *testing.T) {
 	t.Parallel()
 	th := uitheme.Default()
 	menu := ui.ContextMenu(ui.Button("Target", nil), ui.MenuItem("Go", nil), ui.MenuDivider(), ui.MenuItem("Stop", nil))
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(menu)), ggui.Sz(600, 400))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(menu)), ggui.Sz(600, 400))
 	defer p.Close()
 	p.ClickButton(find(t, p, ggui.RoleButton, "Target").Center(), ggui.MouseButtonRight)
 	p.Frame()
@@ -166,7 +167,7 @@ func TestMenuPanelsFitTheirEntriesAndTheDividerBleeds(t *testing.T) {
 		t.Fatalf("a context menu of short entries is %v wide, want the least width %v", w, th.Space*18)
 	}
 	wide := ui.ContextMenu(ui.Button("Target", nil), ui.MenuItem("An entry far wider than the least a context menu is", nil))
-	q := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(wide)), ggui.Sz(600, 400))
+	q := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(wide)), ggui.Sz(600, 400))
 	defer q.Close()
 	q.ClickButton(find(t, q, ggui.RoleButton, "Target").Center(), ggui.MouseButtonRight)
 	q.Frame()
@@ -187,7 +188,7 @@ func TestMenusStartOnARowOnlyFromTheKeyboard(t *testing.T) {
 	}
 	menu := ui.Menu("File", entries()...)
 	bar := ui.Menubar(ui.Menu("Edit", entries()...), ui.Menu("View", ui.MenuItem("Zoom", func() { ran = "zoom" })))
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(menu, bar)), ggui.Sz(400, 300))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(menu, bar)), ggui.Sz(400, 300))
 	defer p.Close()
 
 	// The dropdown: a click, then Enter, runs nothing.
@@ -240,9 +241,9 @@ func TestMenuTypeaheadMovesToTheRowTyped(t *testing.T) {
 		return []ggui.Widget{item("Open"), item("Save"), item("Share").Disabled(true), item("Save as"), item("Print")}
 	}
 	menu := ui.Menu("File", entries()...)
-	ctx := ui.ContextMenu(ggui.Box(ggui.Text("Target")).Size(100, 40), entries()...).Name("Target actions")
+	ctx := ui.ContextMenu(widget.Box(widget.Text("Target")).Size(100, 40), entries()...).Name("Target actions")
 	bar := ui.Menubar(ui.Menu("Edit", entries()...))
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(menu, bar, ctx)), ggui.Sz(400, 400))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(menu, bar, ctx)), ggui.Sz(400, 400))
 	defer p.Close()
 	pick := func(want string) {
 		t.Helper()
@@ -304,7 +305,7 @@ func TestMenuRowLosesThePointersHighlightWhenThePointerLeaves(t *testing.T) {
 		ui.MenuItem("Open", func() { ran = "open" }),
 		ui.MenuSub("Recent", ui.MenuItem("notes.txt", func() { ran = "notes" })),
 		ui.MenuItem("Save", func() { ran = "save" }))
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(menu)), ggui.Sz(500, 400))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(menu)), ggui.Sz(500, 400))
 	defer p.Close()
 	p.Tap("File")
 	open := find(t, p, ggui.RoleMenuItem, "Open").Rect

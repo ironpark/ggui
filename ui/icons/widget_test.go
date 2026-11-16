@@ -10,6 +10,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 const squareSVG = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect width="24" height="24" fill="currentColor"/></svg>`
@@ -20,7 +21,7 @@ func TestIconIsDecorativeUnlessGivenAnAlt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := ggui.NewProbe(ggui.Row(
+	p := ggui.NewProbe(widget.Row(
 		New(asset).Size(20),
 		New(asset).Alt("Saved").Color(color.Black).Rotate(1),
 		Placeholder(Check).Fallback(Map{Check: asset}).Alt("Done"),

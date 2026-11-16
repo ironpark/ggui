@@ -4,7 +4,7 @@
 
 Learn how state updates reach widgets, where component state lives, and how to run asynchronous work safely.
 
-Examples use `ggui` and `ui` imports and application-defined placeholders.
+Examples use `ggui`, `widget` and `ui` imports and application-defined placeholders.
 See [example conventions](README.md#start-here) before copying snippets.
 
 ## On this page
@@ -54,7 +54,7 @@ subscribing, as an action reading state it does not show does; it is
 ```go
 count := ggui.State(0)
 count.Update(func(n int) int { return n + 1 })
-label := ggui.Textf("Count: %d", count)
+label := widget.Textf("Count: %d", count)
 ```
 
 State is shallow: assigning `items.Get()[0].Name` does not publish a change.
@@ -99,7 +99,7 @@ than read automatically. Adapt it with an owned derived value:
 
 ```go
 // Inside Component or app setup; reader is a custom Readable[int].
-label := ggui.Textf("Count: %d", ggui.Derived(reader.Get))
+label := widget.Textf("Count: %d", ggui.Derived(reader.Get))
 ```
 
 Alternatively, format `reader.Get()` inside a `Derived` callback and pass that
@@ -127,7 +127,7 @@ name := ggui.SelectBind(store,
     func(e *Editor) string { return e.Name },
     func(e *Editor, v string) { e.Name = v })
 
-ggui.TextOf(title)
+widget.TextOf(title)
 ui.TextField(name)
 ui.Button("Save", store.Action((*Editor).Save))
 ```
@@ -263,8 +263,8 @@ widgets or use explicit reactive blocks for subsequent changes:
 func Counter() ggui.Widget {
     return ggui.Component(func() ggui.Widget {
         count := ggui.State(0)
-        return ggui.Column(
-            ggui.Textf("Count: %d", count),
+        return widget.Column(
+            widget.Textf("Count: %d", count),
             ui.Button("Increment", func() { ggui.Add(count, 1) }),
         )
     })
@@ -316,7 +316,7 @@ ggui.View(fields, func(fs []FieldSpec) ggui.Widget {
         })
         rows = append(rows, ui.Field(f.Label, ui.TextField(draft)).BindError(draft.Error()))
     }
-    return ggui.Column(rows...)
+    return widget.Column(rows...)
 })
 ```
 
@@ -391,13 +391,13 @@ input identity and are distinct from the `Key` control-flow block.
 `EachKeyed(items, key, row)` preserves row identity across reordering:
 
 ```go
-ggui.EachKeyed(todos, func(t Todo) int { return t.ID },
-    func(row ggui.EachItem[Todo]) ggui.Widget {
+widget.EachKeyed(todos, func(t Todo) int { return t.ID },
+    func(row widget.EachItem[Todo]) ggui.Widget {
         return ggui.View(row.Value, func(t Todo) ggui.Widget {
-            return ggui.Text(t.Title)
+            return widget.Text(t.Title)
         })
     },
-).Else(func() ggui.Widget { return ggui.Text("No items") })
+).Else(func() ggui.Widget { return widget.Text("No items") })
 ```
 
 Each row gets reactive `Value` and `Index`. Its factory runs once per row
@@ -430,12 +430,12 @@ users := ggui.Resource(
 )
 
 view := ggui.Await(users).
-    Pending(func() ggui.Widget { return ggui.Text("Searching…") }).
+    Pending(func() ggui.Widget { return widget.Text("Searching…") }).
     Then(func(value ggui.Readable[[]User]) ggui.Widget {
-        return ggui.EachKeyed(value, userID, userRow)
+        return widget.EachKeyed(value, userID, userRow)
     }).
     Catch(func(err ggui.Readable[error]) ggui.Widget {
-        return ggui.Textf("Search failed: %v", err)
+        return widget.Textf("Search failed: %v", err)
     })
 ```
 

@@ -8,6 +8,7 @@ import (
 	"github.com/ironpark/ggui/ui/icons"
 	"github.com/ironpark/ggui/ui/icons/lucide"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 type observedIcons struct{ seen map[icons.Role]int }
@@ -19,10 +20,10 @@ func (s *observedIcons) Resolve(role icons.Role) *icons.SVG {
 func TestControlsResolveInheritedIcons(t *testing.T) {
 	t.Parallel()
 	set := &observedIcons{seen: map[icons.Role]int{}}
-	tree := ggui.Provide(icons.SetKey, icons.Set(set), ggui.Column(
+	tree := ggui.Provide(icons.SetKey, icons.Set(set), widget.Column(
 		ui.Checkbox(ggui.State(true), "Check"),
 		ui.Select(ggui.State("one")).Options([]string{"one", "two"}),
-		ui.Collapsible(ggui.State(false), "More", ggui.Text("Body")),
+		ui.Collapsible(ggui.State(false), "More", widget.Text("Body")),
 		ui.Spinner(), ui.Icon(icons.Close),
 	))
 	p := ggui.NewProbe(tree, ggui.Sz(300, 400))
@@ -36,7 +37,7 @@ func TestControlsResolveInheritedIcons(t *testing.T) {
 }
 func TestIconDecorativeAndAccessible(t *testing.T) {
 	t.Parallel()
-	p := ggui.NewProbe(ggui.Row(ui.Icon(icons.Check), ui.Icon(icons.Download).Alt("Download icon")), ggui.Sz(100, 30))
+	p := ggui.NewProbe(widget.Row(ui.Icon(icons.Check), ui.Icon(icons.Download).Alt("Download icon")), ggui.Sz(100, 30))
 	defer p.Close()
 	node(t, p.Semantics(), ggui.RoleImage, "Download icon")
 }

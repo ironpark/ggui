@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // PageFunc builds a page or not-found screen once per mount.
@@ -196,7 +197,7 @@ func compile(r *Router, routes []Route) {
 	c := &compiler{r: r, seen: map[any]bool{}, leaves: map[string]*route{}, notFounds: map[string]*route{}}
 	c.walk(routes, nil, nil)
 	// The screen used when no NotFound applies.
-	r.builtin = c.add(&route{kind: kindNotFound, page: func(*Context) ggui.Widget { return ggui.Text("Not found") }})
+	r.builtin = c.add(&route{kind: kindNotFound, page: func(*Context) ggui.Widget { return widget.Text("Not found") }})
 	for _, rt := range r.leaves {
 		if rt.kind != kindRedirect {
 			continue

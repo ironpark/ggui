@@ -43,7 +43,7 @@ func TestButtonGroupTellsEachChildWhichSidesAreJoined(t *testing.T) {
 		}, [3]sides{}},
 	} {
 		rs := make3()
-		p := ggui.NewProbe(ggui.Row(tc.build(rs)), ggui.Sz(400, 200))
+		p := ggui.NewProbe(widget.Row(tc.build(rs)), ggui.Sz(400, 200))
 		p.Frame()
 		for i, r := range rs {
 			if r.sides != tc.want[i] {
@@ -53,7 +53,7 @@ func TestButtonGroupTellsEachChildWhichSidesAreJoined(t *testing.T) {
 		p.Close()
 	}
 	lone := &sidesRecorder{size: ggui.Sz(30, 20)}
-	p := ggui.NewProbe(ggui.Row(ui.ButtonGroup(lone)), ggui.Sz(400, 200))
+	p := ggui.NewProbe(widget.Row(ui.ButtonGroup(lone)), ggui.Sz(400, 200))
 	defer p.Close()
 	p.Frame()
 	if lone.sides.Any() {
@@ -69,7 +69,7 @@ func TestButtonGroupJoinsWithoutAGapAndStretchesItsChildren(t *testing.T) {
 		ui.Button("More", nil).Size(ui.ButtonSmall),
 		ui.ButtonGroupText("items"),
 	)
-	p := ggui.NewProbe(ggui.Row(g, ggui.Spacer()), ggui.Sz(500, 100))
+	p := ggui.NewProbe(widget.Row(g, widget.Spacer()), ggui.Sz(500, 100))
 	defer p.Close()
 	apply, more := find(t, p, ggui.RoleButton, "Apply").Rect, find(t, p, ggui.RoleButton, "More").Rect
 	strip := node(t, p.Semantics(), ggui.RoleToolbar, "Actions").Rect
@@ -94,7 +94,7 @@ func TestButtonGroupOfGroupsKeepsThemApart(t *testing.T) {
 		ui.ButtonGroup(ui.Button("One", nil).Outline(), ui.Button("Two", nil).Outline()).Name("Pages"),
 		ui.ButtonGroup(ui.Button("Back", nil).Outline(), ui.Button("Next", nil).Outline()).Name("Steps"),
 	)
-	p := ggui.NewProbe(ggui.Row(g, ggui.Spacer()), ggui.Sz(500, 100))
+	p := ggui.NewProbe(widget.Row(g, widget.Spacer()), ggui.Sz(500, 100))
 	defer p.Close()
 	one, two := find(t, p, ggui.RoleButton, "One").Rect, find(t, p, ggui.RoleButton, "Two").Rect
 	back := find(t, p, ggui.RoleButton, "Back").Rect
@@ -109,7 +109,7 @@ func TestButtonGroupOfGroupsKeepsThemApart(t *testing.T) {
 func TestButtonGroupGivesATextFieldTheSpareWidth(t *testing.T) {
 	t.Parallel()
 	g := ui.ButtonGroup(ui.ButtonGroupText("https://"), ui.TextField(ggui.State("")).Name("Host"), ui.Button("Open", nil).Outline())
-	p := ggui.NewProbe(ggui.Row(ggui.Box(g).Width(400), ggui.Spacer()), ggui.Sz(500, 100))
+	p := ggui.NewProbe(widget.Row(widget.Box(g).Width(400), widget.Spacer()), ggui.Sz(500, 100))
 	defer p.Close()
 	open := find(t, p, ggui.RoleButton, "Open").Rect
 	if end := open.Origin.X + open.Size.W; end != 400 {
@@ -124,7 +124,7 @@ func TestButtonGroupChildrenKeepTheirOwnFocus(t *testing.T) {
 	t.Parallel()
 	taps := 0
 	g := ui.ButtonGroup(ui.Button("One", nil).Outline(), ui.Button("Two", func() { taps++ }).Outline(), ui.Button("Three", nil).Outline())
-	p := ggui.NewProbe(ggui.Row(g, ggui.Spacer()), ggui.Sz(500, 100))
+	p := ggui.NewProbe(widget.Row(g, widget.Spacer()), ggui.Sz(500, 100))
 	defer p.Close()
 	p.Type(ggui.Mods{}, ggui.KeyTab, ggui.KeyTab)
 	p.Frame()
@@ -138,7 +138,7 @@ func TestToggleGroupSegmentsAreTogglesWithSpacing(t *testing.T) {
 	t.Parallel()
 	opts := []string{"a", "bb", "c"}
 	rects := func(g ggui.Widget) (group ggui.Rect, segs []ggui.Rect) {
-		p := ggui.NewProbe(ggui.Row(g, ggui.Spacer()), ggui.Sz(500, 300))
+		p := ggui.NewProbe(widget.Row(g, widget.Spacer()), ggui.Sz(500, 300))
 		defer p.Close()
 		p.Frame()
 		for _, f := range p.FindAll(ggui.RoleRadio) {
@@ -210,7 +210,7 @@ func TestJoinedControlsLeaveACachedParentHeld(t *testing.T) {
 			t.Parallel()
 			sibling := &layoutCounter{}
 			tick := ggui.State(0)
-			root := ggui.Column(ggui.Cached(ggui.Column(w, sibling)), ggui.TextOf(ggui.Map[int, string](tick, strconv.Itoa)))
+			root := widget.Column(ggui.Cached(widget.Column(w, sibling)), widget.TextOf(ggui.Map[int, string](tick, strconv.Itoa)))
 			p := ggui.NewProbe(root, ggui.Sz(600, 600))
 			defer p.Close()
 			for range 3 {
@@ -234,12 +234,12 @@ func TestButtonGroupGivesEveryFieldTheSpareWidth(t *testing.T) {
 	t.Parallel()
 	for name, field := range map[string]ggui.Widget{
 		"NumberInput": ui.NumberInput(ggui.State(1.0)).Name("Count"),
-		"InputGroup":  ui.InputGroup(ui.TextField(ggui.State(""))).Leading(ggui.Text("$")).Name("Amount"),
+		"InputGroup":  ui.InputGroup(ui.TextField(ggui.State(""))).Leading(widget.Text("$")).Name("Amount"),
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			g := ui.ButtonGroup(field, ui.Button("Open", nil).Outline())
-			p := ggui.NewProbe(ggui.Row(ggui.Box(g).Width(400), ggui.Spacer()), ggui.Sz(500, 100))
+			p := ggui.NewProbe(widget.Row(widget.Box(g).Width(400), widget.Spacer()), ggui.Sz(500, 100))
 			defer p.Close()
 			open := find(t, p, ggui.RoleButton, "Open").Rect
 			if end := open.Origin.X + open.Size.W; end != 400 {

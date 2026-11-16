@@ -32,8 +32,8 @@ type NumberInputWidget struct {
 	onChange func(float64)
 
 	dec, inc *numberStepper
-	row      *ggui.RowWidget
-	box      *ggui.BoxWidget
+	row      *widget.RowWidget
+	box      *widget.BoxWidget
 	theme    *uitheme.Theme
 	disabled bool // own or inherited, as of the last Layout
 	invalid  bool // inside a Field showing an error
@@ -303,8 +303,8 @@ func (n *NumberInputWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	n.motion = env.Motion(t.MotionFast)
 	n.sides, env = takeJoinedSides(env)
 	if n.row == nil {
-		n.row = ggui.Row(ggui.Expanded(n.input), n.dec, n.inc)
-		n.box = ggui.Box(n.row)
+		n.row = widget.Row(widget.Expanded(n.input), n.dec, n.inc)
+		n.box = widget.Box(n.row)
 	}
 	n.row.Gap(t.Space / 2)
 	// The colors follow the field's state in Paint; see fieldChrome.

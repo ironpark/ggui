@@ -20,7 +20,7 @@ import (
 //
 //	width := ggui.Tween(0.0, 200*time.Millisecond)
 //	...
-//	ggui.Reactive(func() ggui.Widget { return ggui.Box().Size(width.Get(), 4) })
+//	ggui.Reactive(func() ggui.Widget { return widget.Box().Size(width.Get(), 4) })
 //	...
 //	width.Set(120) // slides there over 200ms
 //

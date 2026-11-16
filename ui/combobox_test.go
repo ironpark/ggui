@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // comboboxProbe is a combobox over three fruit with a button after it.
@@ -14,7 +15,7 @@ func comboboxProbe(t *testing.T, value *ggui.StateValue[string], configure func(
 	if configure != nil {
 		configure(c)
 	}
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(c, ui.Button("After", nil))), ggui.Sz(360, 360))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(c, ui.Button("After", nil))), ggui.Sz(360, 360))
 	t.Cleanup(p.Close)
 	return p, c
 }
@@ -244,7 +245,7 @@ func TestComboboxListIsWiderThanItsField(t *testing.T) {
 	t.Parallel()
 	single := ui.Combobox(ggui.State("Go")).Options([]string{"Go", "Rust", "Zig"}).Name("Language")
 	multiple := ui.ComboboxMultiple(ggui.State([]string{"Go"})).Options([]string{"Go", "Rust", "Zig"}).Name("Languages")
-	root := ggui.Padding(ggui.Column(ggui.Box(single).Width(200), ggui.Box(multiple).Width(200)).Gap(8), 20)
+	root := widget.Padding(widget.Column(widget.Box(single).Width(200), widget.Box(multiple).Width(200)).Gap(8), 20)
 	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, root), ggui.Sz(500, 500))
 	defer p.Close()
 	p.Key("tab", "down")

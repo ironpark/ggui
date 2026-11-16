@@ -8,6 +8,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	"github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 func preserveEnv(t *testing.T) {
@@ -49,7 +50,7 @@ func TestBindUpdatesCachedLayoutAndTrackedReaders(t *testing.T) {
 	p.Close()
 	dark.Set(true)
 	// Closing the owner must dispose Bind; a new frame flushes pending work.
-	next := ggui.NewProbe(ggui.Box(), ggui.Sz(10, 10))
+	next := ggui.NewProbe(widget.Box(), ggui.Sz(10, 10))
 	defer next.Close()
 	next.Frame()
 	if ggui.Untrack(theme.Use).Bg != theme.Default().Bg {
@@ -144,7 +145,7 @@ func TestOverrideChangesTokensForASubtreeAndKeepsItsLayoutCached(t *testing.T) {
 		outside = theme.From(env)
 		return ggui.Size{}
 	}, func(*ggui.Canvas, ggui.Rect) {})
-	tree := ggui.Column(probe, theme.Override(func(t *theme.Theme) { t.Primary = brand }, ggui.Cached(child)))
+	tree := widget.Column(probe, theme.Override(func(t *theme.Theme) { t.Primary = brand }, ggui.Cached(child)))
 	p := ggui.NewProbe(tree, ggui.Sz(20, 20))
 	defer p.Close()
 	p.Frame()

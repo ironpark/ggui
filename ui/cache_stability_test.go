@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // A control that writes a property of its own after measuring with it has
@@ -27,9 +28,9 @@ func TestControlsLeaveACachedParentHeld(t *testing.T) {
 		"Select":              ui.Select(ggui.State("a")).Options(options),
 		"ComboboxMultiple":    ui.ComboboxMultiple(ggui.State([]string{"a"})).Options(options),
 		"ToggleGroupMultiple": ui.ToggleGroupMultiple(ggui.State([]string{"a"})).Options(options),
-		"Tabs":                ui.Tabs(ggui.State(0), ui.Tab("a", ggui.Text("x")), ui.Tab("b", ggui.Text("x"))),
-		"Popover":             ui.Popover("p", ggui.Text("x")),
-		"NavigationMenu":      ui.NavigationMenu(ui.NavigationMenuItem("a", ggui.Text("x")), ui.NavigationMenuLink("b", nil)),
+		"Tabs":                ui.Tabs(ggui.State(0), ui.Tab("a", widget.Text("x")), ui.Tab("b", widget.Text("x"))),
+		"Popover":             ui.Popover("p", widget.Text("x")),
+		"NavigationMenu":      ui.NavigationMenu(ui.NavigationMenuItem("a", widget.Text("x")), ui.NavigationMenuLink("b", nil)),
 		"CodeBlock":           ui.CodeBlock("a\nb\nc").LineNumbers(true),
 		"Trace":               ui.Trace(ui.TraceStep{ID: "a", Title: "A"}),
 	} {
@@ -37,7 +38,7 @@ func TestControlsLeaveACachedParentHeld(t *testing.T) {
 			t.Parallel()
 			sibling := &layoutCounter{}
 			tick := ggui.State(0)
-			root := ggui.Column(ggui.Cached(ggui.Column(w, sibling)), ggui.TextOf(ggui.Map[int, string](tick, strconv.Itoa)))
+			root := widget.Column(ggui.Cached(widget.Column(w, sibling)), widget.TextOf(ggui.Map[int, string](tick, strconv.Itoa)))
 			p := ggui.NewProbe(root, ggui.Sz(600, 600))
 			defer p.Close()
 			for range 3 {

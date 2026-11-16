@@ -1,4 +1,4 @@
-package ggui
+package widget
 
 import (
 	"image/color"
@@ -7,17 +7,18 @@ import (
 	"unsafe"
 
 	"github.com/ironpark/ggfx"
+	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/pkg/gem"
 )
 
 // steadyTextFrame lays w out and paints it, as a frame that finds nothing
 // changed does.
-func steadyTextFrame(b *testing.B, w Widget, env Env) {
+func steadyTextFrame(b *testing.B, w ggui.Widget, env ggui.Env) {
 	img := ggfx.NewImage(200, 200)
-	r := Rct(Pt(0, 0), Sz(200, 200))
+	r := ggui.Rct(ggui.Pt(0, 0), ggui.Sz(200, 200))
 	frame := func() {
-		w.Layout(Loose(r.Size), env)
-		w.Paint(&Canvas{Image: img}, r)
+		w.Layout(ggui.Loose(r.Size), env)
+		w.Paint(&ggui.Canvas{Image: img}, r)
 	}
 	for range 4 {
 		frame()
@@ -31,24 +32,24 @@ func steadyTextFrame(b *testing.B, w Widget, env Env) {
 // A steady frame of a Text lays out and paints nothing new, and allocates
 // no more for keeping its rarely used parts apart.
 func BenchmarkSteadyTextFrame(b *testing.B) {
-	key := NewEnvKey[TextStyle]("bench style")
-	rtl := Env{}.With(DirectionKey, DirRTL)
+	key := ggui.NewEnvKey[ggui.TextStyle]("bench style")
+	rtl := ggui.Env{}.With(ggui.DirectionKey, ggui.DirRTL)
 	for _, tc := range []struct {
 		name string
-		w    func() Widget
-		env  Env
+		w    func() ggui.Widget
+		env  ggui.Env
 	}{
-		{"plain", func() Widget { return Text("hello world, a plain line of text") }, Env{}},
-		{"rtl", func() Widget { return Text("שלום world") }, rtl},
-		{"mixed", func() Widget { return Text("hello שלום world") }, Env{}},
-		{"selectable", func() Widget { return Text("hello world").Selectable() }, Env{}},
-		{"stylekey", func() Widget { return Text("hello").StyleKey(key, TextStyle{Size: 20}) }, Env{}},
-		{"textf", func() Widget { return Textf("n=%d", 42) }, Env{}},
-		{"box", func() Widget { return Box(Text("in a box")).Pad(4).Fill(color.White) }, Env{}},
-		{"box-decorated", func() Widget {
+		{"plain", func() ggui.Widget { return Text("hello world, a plain line of text") }, ggui.Env{}},
+		{"rtl", func() ggui.Widget { return Text("שלום world") }, rtl},
+		{"mixed", func() ggui.Widget { return Text("hello שלום world") }, ggui.Env{}},
+		{"selectable", func() ggui.Widget { return Text("hello world").Selectable() }, ggui.Env{}},
+		{"stylekey", func() ggui.Widget { return Text("hello").StyleKey(key, ggui.TextStyle{Size: 20}) }, ggui.Env{}},
+		{"textf", func() ggui.Widget { return Textf("n=%d", 42) }, ggui.Env{}},
+		{"box", func() ggui.Widget { return Box(Text("in a box")).Pad(4).Fill(color.White) }, ggui.Env{}},
+		{"box-decorated", func() ggui.Widget {
 			return Box(Text("in a box")).Pad(4).Fill(color.White).
-				Gradient(LinearGradient(0, GradientStop{Color: color.White}, GradientStop{Offset: 1, Color: color.Black}))
-		}, Env{}},
+				Gradient(ggui.LinearGradient(0, ggui.GradientStop{Color: color.White}, ggui.GradientStop{Offset: 1, Color: color.Black}))
+		}, ggui.Env{}},
 	} {
 		b.Run(tc.name, func(b *testing.B) { steadyTextFrame(b, tc.w(), tc.env) })
 	}
@@ -59,7 +60,7 @@ func BenchmarkSteadyTextFrame(b *testing.B) {
 func BenchmarkTextHeap(b *testing.B) {
 	const n = 10000
 	img := ggfx.NewImage(200, 200)
-	r := Rct(Pt(0, 0), Sz(200, 20))
+	r := ggui.Rct(ggui.Pt(0, 0), ggui.Sz(200, 20))
 	for _, painted := range []bool{false, true} {
 		b.Run(gem.Pick(painted, "painted", "built"), func(b *testing.B) {
 			for b.Loop() {
@@ -70,8 +71,8 @@ func BenchmarkTextHeap(b *testing.B) {
 				for i := range ws {
 					ws[i] = Text("hello world")
 					if painted {
-						ws[i].Layout(Loose(r.Size), Env{})
-						ws[i].Paint(&Canvas{Image: img}, r)
+						ws[i].Layout(ggui.Loose(r.Size), ggui.Env{})
+						ws[i].Paint(&ggui.Canvas{Image: img}, r)
 					}
 				}
 				runtime.GC()
@@ -105,44 +106,44 @@ func TestWidgetSizes(t *testing.T) {
 // keeps working when it stops needing them.
 func TestTextKeepsRarePartsApart(t *testing.T) {
 	t.Parallel()
-	c := Loose(Sz(300, 100))
+	c := ggui.Loose(ggui.Sz(300, 100))
 	w := Text("hello world")
-	w.Layout(c, Env{})
-	w.Paint(&Canvas{}, Rct(Pt(0, 0), Sz(300, 100)))
+	w.Layout(c, ggui.Env{})
+	w.Paint(&ggui.Canvas{}, ggui.Rct(ggui.Pt(0, 0), ggui.Sz(300, 100)))
 	if w.bidi != nil || w.opts != nil || w.rich != nil {
 		t.Fatalf("a plain Text made bidi %v, opts %v, rich %v", w.bidi, w.opts, w.rich)
 	}
-	rtl := Env{}.With(DirectionKey, DirRTL)
+	rtl := ggui.Env{}.With(ggui.DirectionKey, ggui.DirRTL)
 	w.Layout(c, rtl)
 	if w.bidi == nil || startAlign(w.dir()) != 1 {
 		t.Fatal("a Text under DirRTL is not ordered right to left")
 	}
-	w.Layout(c, Env{})
+	w.Layout(c, ggui.Env{})
 	if startAlign(w.dir()) != 0 || w.bidi.lines[0] != nil {
 		t.Fatal("a Text back under DirLTR still draws right to left")
 	}
 
 	mixed := Text("hello שלום")
-	mixed.Layout(c, Env{})
+	mixed.Layout(c, ggui.Env{})
 	if mixed.bidi == nil || mixed.bidi.lines[0] == nil {
 		t.Fatal("a line holding right-to-left text was not reordered")
 	}
 
 	f := Textf("n=%d", 7)
-	f.Layout(c, Env{})
+	f.Layout(c, ggui.Env{})
 	if f.value != "n=7" {
 		t.Fatalf("Textf laid out %q", f.value)
 	}
 	f.Content("plain")
-	f.Layout(c, Env{})
+	f.Layout(c, ggui.Env{})
 	if f.value != "plain" || f.opts.format != "" || f.opts.formatArgs != nil {
 		t.Fatalf("Content after Textf laid out %q, kept %+v", f.value, *f.opts)
 	}
 
 	b := Box(Text("x")).Shadow()
-	b.Gradient(Gradient{})
-	b.Layout(c, Env{})
-	b.Paint(&Canvas{}, Rct(Pt(0, 0), Sz(10, 10)))
+	b.Gradient(ggui.Gradient{})
+	b.Layout(c, ggui.Env{})
+	b.Paint(&ggui.Canvas{}, ggui.Rct(ggui.Pt(0, 0), ggui.Sz(10, 10)))
 	if b.deco != nil {
 		t.Fatal("a Box with no shadow or gradient made a boxDeco")
 	}

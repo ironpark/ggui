@@ -9,8 +9,8 @@ import (
 
 // The drag session: what input does while something is dragged. A drag
 // inside the app starts on a region registered with HitDrag and ends on
-// a region whose pointer handler is a DropTarget; DragSource, DropZone
-// and Reorderable, in dragdrop.go, are built on it. Files dragged in from
+// a region whose pointer handler is a DropTarget; package widget's
+// DragSource, DropZone and Reorderable are built on it. Files dragged in from
 // the desktop are routed further down, to a DropHandler and a DragHandler:
 // a drag inside the app carries a value of any type from a Draggable to a
 // DropTarget, one from the desktop carries files, and neither reaches the

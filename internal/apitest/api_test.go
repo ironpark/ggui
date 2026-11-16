@@ -38,7 +38,7 @@ func TestSprintfCustomReadablePassesThroughWithoutGetAny(t *testing.T) {
 	t.Parallel()
 	state := ggui.State(1)
 	r := formattedReader{state}
-	text := ggui.Sprintf("%v", r)
+	text := widget.Sprintf("%v", r)
 	defer text.Dispose()
 	if got := text.Get(); got != "custom reader" {
 		t.Fatalf("custom argument formatted as %q", got)
@@ -55,7 +55,7 @@ func TestTextfAdaptsCustomReadableAndTracksLens(t *testing.T) {
 	form := ggui.State(struct{ Name string }{"Ada"})
 	reader := formattedReader{state}
 	p := ggui.ProbeBuilder(func() ggui.Widget {
-		return ggui.Textf("%d %s", ggui.Derived(reader.Get), form.Field(func(f *struct{ Name string }) *string { return &f.Name }))
+		return widget.Textf("%d %s", ggui.Derived(reader.Get), form.Field(func(f *struct{ Name string }) *string { return &f.Name }))
 	}, ggui.Sz(300, 50))
 	defer p.Close()
 	if _, ok := p.Semantics().Find(ggui.RoleText, "1 Ada"); !ok {
@@ -88,7 +88,7 @@ func TestKeyedIdentityAcrossParentsAndRemount(t *testing.T) {
 	}
 
 	p := ggui.ProbeBuilder(func() ggui.Widget {
-		return ggui.Column(panel(0, left, "Left"), panel(1, right, "Right"))
+		return widget.Column(panel(0, left, "Left"), panel(1, right, "Right"))
 	}, ggui.Sz(300, 200))
 	defer p.Close()
 	p.Frame()
@@ -178,7 +178,7 @@ func TestInputObserversRespectModalScope(t *testing.T) {
 	observed := 0
 	open := ggui.State(true)
 	background := &focusRequester{child: ui.Button("Background", func() {}), observed: &observed}
-	p := ggui.NewProbe(ggui.Column(background, ui.Dialog(open, ui.Button("Modal", func() {}))), ggui.Sz(400, 300))
+	p := ggui.NewProbe(widget.Column(background, ui.Dialog(open, ui.Button("Modal", func() {}))), ggui.Sz(400, 300))
 	defer p.Close()
 	p.Tap("Modal")
 	p.Type(ggui.Mods{}, ggui.KeyEnter)

@@ -4,7 +4,7 @@
 
 Build tables, menus, date pickers, search, and navigation using themed controls.
 
-Examples use `ggui`, `ui` and `ui/icons` imports and application-defined placeholders.
+Examples use `ggui`, `widget`, `ui` and `ui/icons` imports and application-defined placeholders.
 See [example conventions](README.md#start-here) before copying snippets.
 
 ## On this page
@@ -93,7 +93,7 @@ to its parent. Rows report `RoleTreeItem` with `Level` and `Expanded`.
 ui.Tree(roots, func(f File) string { return f.Path },
 	func(f File) []File { return f.Children },
 	func(f ggui.Readable[File]) ggui.Widget {
-		return ggui.TextOf(ggui.Map(f, func(f File) string { return f.Name }))
+		return widget.TextOf(ggui.Map(f, func(f File) string { return f.Name }))
 	},
 ).RowName(func(f File) string { return f.Name }).BindSelected(chosen).Height(320)
 ```
@@ -119,9 +119,9 @@ elsewhere, such as a canvas showing the same items, scrolls its row into view
 without taking the focus.
 
 ```go
-ggui.Scroll(ui.ListBox(files, func(f File) string { return f.Path },
+widget.Scroll(ui.ListBox(files, func(f File) string { return f.Path },
 	func(f ggui.Readable[File]) ggui.Widget {
-		return ggui.TextOf(ggui.Map(f, func(f File) string { return f.Name }))
+		return widget.TextOf(ggui.Map(f, func(f File) string { return f.Name }))
 	},
 ).RowName(func(f File) string { return f.Name }).BindSelected(chosen))
 ```
@@ -268,7 +268,7 @@ Accessibility clients can expand/collapse the menu and press its items. Keep
 the instance in a persistent tree or assign a stable `.Key(...)` across rebuilds.
 
 ```go
-ui.ContextMenu(ggui.Text("Project notes"),
+ui.ContextMenu(widget.Text("Project notes"),
     ui.MenuItem("Open", openNotes),
     ui.MenuDivider(),
     ui.MenuItem("Archive", archiveNotes),
@@ -407,7 +407,7 @@ keyboard. `.Variant(ui.SidebarVariantFloating)` raises it as a rounded panel and
 
 ```go
 page, collapsed := ggui.State("inbox"), ggui.State(false)
-ggui.Row(
+widget.Row(
 	ui.Sidebar(page,
 		ui.SidebarSection("Mail"),
 		ui.SidebarItem("inbox", "Inbox").Icon(icons.Download).Badge("12").Tooltip("Inbox"),
@@ -416,7 +416,7 @@ ggui.Row(
 			Sub(ui.SidebarItem("design", "Design"), ui.SidebarItem("research", "Research")),
 	).Header(ui.Title("Acme")).
 		Collapsible(ui.SidebarCollapseIcon).BindCollapsed(collapsed).Rail(true).Shortcut("cmd+b"),
-	ggui.Expanded(ggui.Column(ui.SidebarTrigger(collapsed), content)),
+	widget.Expanded(widget.Column(ui.SidebarTrigger(collapsed), content)),
 )
 ```
 
@@ -508,7 +508,7 @@ keyboard stays open until dismissed. `.OpenOnHover(false)` opens dropdowns by
 activation alone.
 
 `ui.Popover(label, content)` provides a themed interactive panel. `.Title(text)`
-and `.Description(text)` head it, `.Side(ggui.PopupRight)` and the other sides
+and `.Description(text)` head it, `.Side(widget.PopupRight)` and the other sides
 choose where it opens (below by default, flipping when that side has no room),
 and `.Align(a)` and `.AlignOffset(px)` place it along that side. Use
 `PopoverOf(face, content)` for a custom trigger, `.BindOpen(binding)` for

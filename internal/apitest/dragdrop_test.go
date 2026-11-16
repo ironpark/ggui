@@ -23,12 +23,12 @@ func (c *counting) Paint(*ggui.Canvas, ggui.Rect)               {}
 func TestDragFromASourceDropsOnAZoneThatTakesIt(t *testing.T) {
 	t.Parallel()
 	taps, ended := 0, []bool{}
-	var got []ggui.Dropped[int]
+	var got []widget.Dropped[int]
 	var hovers []bool
-	source := ggui.DragSource(ggui.Tap(ggui.Box().Size(100, 40), func() { taps++ }), 7).OnDragEnd(func(d bool) { ended = append(ended, d) })
-	strings := ggui.DropZone(ggui.Box().Size(100, 40), func(ggui.Dropped[string]) { t.Fatal("a zone for strings took an int") })
-	zone := ggui.DropZone(ggui.Box().Size(100, 40), func(d ggui.Dropped[int]) { got = append(got, d) }).OnHover(func(over bool) { hovers = append(hovers, over) })
-	p := ggui.NewProbe(ggui.Column(source, ggui.Stack(zone, strings)), ggui.Sz(100, 120))
+	source := widget.DragSource(widget.Tap(widget.Box().Size(100, 40), func() { taps++ }), 7).OnDragEnd(func(d bool) { ended = append(ended, d) })
+	strings := widget.DropZone(widget.Box().Size(100, 40), func(widget.Dropped[string]) { t.Fatal("a zone for strings took an int") })
+	zone := widget.DropZone(widget.Box().Size(100, 40), func(d widget.Dropped[int]) { got = append(got, d) }).OnHover(func(over bool) { hovers = append(hovers, over) })
+	p := ggui.NewProbe(widget.Column(source, widget.Stack(zone, strings)), ggui.Sz(100, 120))
 	defer p.Close()
 	p.Frame()
 
@@ -69,8 +69,8 @@ func TestDragFromASourceDropsOnAZoneThatTakesIt(t *testing.T) {
 func TestDropZoneAcceptNarrowsWhatItTakes(t *testing.T) {
 	t.Parallel()
 	dropped := 0
-	zone := ggui.DropZone(ggui.Box().Size(100, 40), func(ggui.Dropped[int]) { dropped++ }).Accept(func(v int) bool { return v > 10 })
-	p := ggui.NewProbe(ggui.Column(ggui.DragSource(ggui.Box().Size(100, 40), 7), zone), ggui.Sz(100, 80))
+	zone := widget.DropZone(widget.Box().Size(100, 40), func(widget.Dropped[int]) { dropped++ }).Accept(func(v int) bool { return v > 10 })
+	p := ggui.NewProbe(widget.Column(widget.DragSource(widget.Box().Size(100, 40), 7), zone), ggui.Sz(100, 80))
 	defer p.Close()
 	p.Frame()
 	p.Press(ggui.Pt(50, 20))
@@ -93,7 +93,7 @@ func TestMoveReordersAsADragWould(t *testing.T) {
 		{3, 0, []string{"d", "a", "b", "c"}},
 		{1, 1, in}, {1, 2, in}, {-1, 0, in}, {0, 5, in},
 	} {
-		if got := ggui.Move(in, c.from, c.to); !slices.Equal(got, c.want) {
+		if got := widget.Move(in, c.from, c.to); !slices.Equal(got, c.want) {
 			t.Errorf("Move(%v, %d, %d) = %v, want %v", in, c.from, c.to, got, c.want)
 		}
 	}
@@ -109,16 +109,16 @@ func TestAListReordersByDraggingItsRows(t *testing.T) {
 		Name string
 	}
 	items := ggui.State([]item{{1, "a"}, {2, "b"}, {3, "c"}})
-	list := ggui.EachKeyed(items, func(it item) int { return it.ID }, func(row ggui.EachItem[item]) ggui.Widget {
+	list := widget.EachKeyed(items, func(it item) int { return it.ID }, func(row widget.EachItem[item]) ggui.Widget {
 		id := ggui.Untrack(row.Value.Get).ID
-		return ggui.DropZone(ggui.DragSource(ggui.Box().Size(100, 30), id), func(d ggui.Dropped[int]) {
+		return widget.DropZone(widget.DragSource(widget.Box().Size(100, 30), id), func(d widget.Dropped[int]) {
 			list := ggui.Untrack(items.Get)
 			from := slices.IndexFunc(list, func(it item) bool { return it.ID == d.Value })
 			to := ggui.Untrack(row.Index.Get)
 			if !d.Before() {
 				to++
 			}
-			items.Set(ggui.Move(list, from, to))
+			items.Set(widget.Move(list, from, to))
 		})
 	}).Gap(0)
 	p := ggui.NewProbe(list, ggui.Sz(100, 90))
@@ -150,8 +150,8 @@ func TestAListReordersByDraggingItsRows(t *testing.T) {
 func TestDragPreviewIsLaidOutOnlyWhileDragging(t *testing.T) {
 	t.Parallel()
 	preview := &counting{}
-	source := ggui.DragSource(ggui.Box().Size(100, 40), 7).Preview(preview)
-	p := ggui.NewProbe(ggui.Column(source, ggui.Box().Size(100, 40)), ggui.Sz(100, 80))
+	source := widget.DragSource(widget.Box().Size(100, 40), 7).Preview(preview)
+	p := ggui.NewProbe(widget.Column(source, widget.Box().Size(100, 40)), ggui.Sz(100, 80))
 	defer p.Close()
 	p.Frame()
 	if preview.layouts != 0 {
@@ -170,14 +170,14 @@ func TestDragPreviewIsLaidOutOnlyWhileDragging(t *testing.T) {
 func TestDropZoneFollowsADragOverIt(t *testing.T) {
 	t.Parallel()
 	var at []ggui.Point
-	source := ggui.DragSource(ggui.Box().Size(100, 40), "tab")
-	zone := ggui.DropZone(ggui.Box().Size(100, 40), func(ggui.Dropped[string]) {}).OnOver(func(d ggui.Dropped[string]) {
+	source := widget.DragSource(widget.Box().Size(100, 40), "tab")
+	zone := widget.DropZone(widget.Box().Size(100, 40), func(widget.Dropped[string]) {}).OnOver(func(d widget.Dropped[string]) {
 		if d.Value != "tab" || d.Size != ggui.Sz(100, 40) {
 			t.Fatalf("over with %+v", d)
 		}
 		at = append(at, d.Pos)
 	})
-	p := ggui.NewProbe(ggui.Column(source, zone), ggui.Sz(100, 80))
+	p := ggui.NewProbe(widget.Column(source, zone), ggui.Sz(100, 80))
 	defer p.Close()
 	p.Frame()
 	p.Press(ggui.Pt(50, 20))
@@ -194,12 +194,12 @@ func TestDropGoesToTheZoneUnderTheCursor(t *testing.T) {
 	t.Parallel()
 	var zone, host []string
 	build := func() ggui.Widget {
-		target := ggui.Pointer(ggui.Box(ggui.Text("drop here")).Size(200, 100)).OnDrop(func(ev ggui.DropEvent) {
+		target := widget.Pointer(widget.Box(widget.Text("drop here")).Size(200, 100)).OnDrop(func(ev ggui.DropEvent) {
 			for _, f := range ev.Files {
 				zone = append(zone, f.Name)
 			}
 		})
-		return ggui.Column(target, ggui.Box(ggui.Text("elsewhere")).Size(200, 100))
+		return widget.Column(target, widget.Box(widget.Text("elsewhere")).Size(200, 100))
 	}
 	p := ggui.ProbeBuilder(build, ggui.Sz(400, 400))
 	defer p.Close()
@@ -234,7 +234,7 @@ func TestDroppedFileOpensWithoutAPath(t *testing.T) {
 	t.Parallel()
 	var got string
 	p := ggui.ProbeBuilder(func() ggui.Widget {
-		return ggui.Pointer(ggui.Box(ggui.Text("zone")).Size(100, 100)).OnDrop(func(ev ggui.DropEvent) {
+		return widget.Pointer(widget.Box(widget.Text("zone")).Size(100, 100)).OnDrop(func(ev ggui.DropEvent) {
 			f, err := ev.Files[0].Open()
 			if err != nil {
 				t.Fatal(err)
@@ -266,7 +266,7 @@ func TestDropPathsCarriesRealFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	var ev ggui.DropEvent
-	p := ggui.ProbeBuilder(func() ggui.Widget { return ggui.Text("nothing accepts") }, ggui.Sz(200, 200))
+	p := ggui.ProbeBuilder(func() ggui.Widget { return widget.Text("nothing accepts") }, ggui.Sz(200, 200))
 	defer p.Close()
 	p.OnDrop(func(e ggui.DropEvent) { ev = e })
 
@@ -297,8 +297,8 @@ func TestZoneWithoutOnDropLetsTheDropFallThrough(t *testing.T) {
 	t.Parallel()
 	var outer, host int
 	p := ggui.ProbeBuilder(func() ggui.Widget {
-		inner := ggui.Pointer(ggui.Box(ggui.Text("tap only")).Size(50, 50)).OnTap(func() {})
-		return ggui.Pointer(ggui.Box(inner).Size(200, 200)).OnDrop(func(ggui.DropEvent) { outer++ })
+		inner := widget.Pointer(widget.Box(widget.Text("tap only")).Size(50, 50)).OnTap(func() {})
+		return widget.Pointer(widget.Box(inner).Size(200, 200)).OnDrop(func(ggui.DropEvent) { outer++ })
 	}, ggui.Sz(200, 200))
 	defer p.Close()
 	p.OnDrop(func(ggui.DropEvent) { host++ })
@@ -311,7 +311,7 @@ func TestZoneWithoutOnDropLetsTheDropFallThrough(t *testing.T) {
 func TestEmptyDropIsNotDispatched(t *testing.T) {
 	t.Parallel()
 	var host int
-	p := ggui.ProbeBuilder(func() ggui.Widget { return ggui.Text("x") }, ggui.Sz(100, 100))
+	p := ggui.ProbeBuilder(func() ggui.Widget { return widget.Text("x") }, ggui.Sz(100, 100))
 	defer p.Close()
 	p.OnDrop(func(ggui.DropEvent) { host++ })
 	p.Drop(ggui.Pt(1, 1), fstest.MapFS{})
@@ -324,10 +324,10 @@ func TestDragHoverFollowsTheZoneUnderTheCursor(t *testing.T) {
 	t.Parallel()
 	var top, bottom []bool
 	build := func() ggui.Widget {
-		return ggui.Column(
-			ggui.Pointer(ggui.Box(ggui.Text("top")).Size(200, 100)).OnDrop(func(ggui.DropEvent) {}).OnDropHover(func(over bool) { top = append(top, over) }),
-			ggui.Pointer(ggui.Box(ggui.Text("bottom")).Size(200, 100)).OnDrop(func(ggui.DropEvent) {}).OnDropHover(func(over bool) { bottom = append(bottom, over) }),
-			ggui.Pointer(ggui.Box(ggui.Text("plain")).Size(200, 100)).OnDrop(func(ggui.DropEvent) {}),
+		return widget.Column(
+			widget.Pointer(widget.Box(widget.Text("top")).Size(200, 100)).OnDrop(func(ggui.DropEvent) {}).OnDropHover(func(over bool) { top = append(top, over) }),
+			widget.Pointer(widget.Box(widget.Text("bottom")).Size(200, 100)).OnDrop(func(ggui.DropEvent) {}).OnDropHover(func(over bool) { bottom = append(bottom, over) }),
+			widget.Pointer(widget.Box(widget.Text("plain")).Size(200, 100)).OnDrop(func(ggui.DropEvent) {}),
 		)
 	}
 	p := ggui.ProbeBuilder(build, ggui.Sz(400, 400))
@@ -360,8 +360,8 @@ func TestDragHoverFollowsTheZoneUnderTheCursor(t *testing.T) {
 
 // reorderFixture is a Reorderable of 30-high rows whose painted rects land
 // in painted, keyed by item.
-func reorderFixture(items *ggui.StateValue[[]string], painted map[string]ggui.Rect, handle bool) *ggui.ReorderableWidget[string, string] {
-	return ggui.Reorderable(items, func(s string) string { return s }, func(it ggui.EachItem[string]) ggui.Widget {
+func reorderFixture(items *ggui.StateValue[[]string], painted map[string]ggui.Rect, handle bool) *widget.ReorderableWidget[string, string] {
+	return widget.Reorderable(items, func(s string) string { return s }, func(it widget.EachItem[string]) ggui.Widget {
 		v := it.Item
 		row := ggui.FromFuncs(
 			func(c ggui.Constraints, _ ggui.Env) ggui.Size { return c.Constrain(ggui.Sz(80, 30)) },
@@ -370,7 +370,7 @@ func reorderFixture(items *ggui.StateValue[[]string], painted map[string]ggui.Re
 		if !handle {
 			return row
 		}
-		return ggui.Row(ggui.ReorderHandle(ggui.Box().Size(20, 30)).Name("Move "+v), row)
+		return widget.Row(widget.ReorderHandle(widget.Box().Size(20, 30)).Name("Move "+v), row)
 	})
 }
 
@@ -498,7 +498,7 @@ func TestReorderableScrollsItsScrollNearTheEdge(t *testing.T) {
 	}
 	items := ggui.State(list)
 	offset := ggui.State(0.0)
-	p := ggui.NewProbe(ggui.Scroll(reorderFixture(items, map[string]ggui.Rect{}, false)).BindOffset(offset), ggui.Sz(100, 100))
+	p := ggui.NewProbe(widget.Scroll(reorderFixture(items, map[string]ggui.Rect{}, false)).BindOffset(offset), ggui.Sz(100, 100))
 	defer p.Close()
 	p.Frame()
 	p.Press(ggui.Pt(40, 15))
@@ -523,9 +523,9 @@ func TestReorderableKeysIgnoreFocusBehindAScrolledOutRow(t *testing.T) {
 	offset := ggui.State(60.0)
 	// The field sits above the Scroll where row b, scrolled out of the
 	// window, would be drawn.
-	p := ggui.NewProbe(ggui.Column(
-		ggui.Box(widget.TextInput(focusable)).Size(100, 30),
-		ggui.Box(ggui.Scroll(reorderFixture(items, map[string]ggui.Rect{}, true)).BindOffset(offset)).Size(100, 60),
+	p := ggui.NewProbe(widget.Column(
+		widget.Box(widget.TextInput(focusable)).Size(100, 30),
+		widget.Box(widget.Scroll(reorderFixture(items, map[string]ggui.Rect{}, true)).BindOffset(offset)).Size(100, 60),
 	), ggui.Sz(100, 200))
 	defer p.Close()
 	p.Frame()
@@ -540,8 +540,8 @@ func TestReorderableKeysIgnoreFocusBehindAScrolledOutRow(t *testing.T) {
 func TestReorderableRowsAnswerScrollToKey(t *testing.T) {
 	t.Parallel()
 	items := ggui.State([]string{"a", "b", "c", "d", "e", "f", "g", "h"})
-	var sc ggui.ScrollController
-	p := ggui.NewProbe(ggui.Scroll(reorderFixture(items, map[string]ggui.Rect{}, false)).Controller(&sc), ggui.Sz(100, 60))
+	var sc widget.ScrollController
+	p := ggui.NewProbe(widget.Scroll(reorderFixture(items, map[string]ggui.Rect{}, false)).Controller(&sc), ggui.Sz(100, 60))
 	defer p.Close()
 	p.Frame()
 	sc.JumpToKey("f")

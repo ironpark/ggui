@@ -10,6 +10,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 type reactivePerson struct {
@@ -49,26 +50,26 @@ func reactivityPreview() ggui.Widget {
 			}
 			return matches, nil
 		})
-		row := func(item ggui.EachItem[reactivePerson]) ggui.Widget {
+		row := func(item widget.EachItem[reactivePerson]) ggui.Widget {
 			selected := ggui.State(false)
 			label := ggui.Derived(func() string {
 				return fmt.Sprintf("%d. %s", item.Index.Get()+1, item.Value.Get().Name)
 			})
-			return ggui.Row(
+			return widget.Row(
 				ui.Checkbox(selected, "Keep this row selected"),
-				ggui.TextOf(label),
+				widget.TextOf(label),
 			).Gap(8)
 		}
-		return ggui.Column(
+		return widget.Column(
 			ui.TextField(query).Name("Reactive search").Placeholder("Search names; type error to fail"),
 			ui.Button("Retry request", results.Reload).Outline(),
 			ggui.Await(results).
-				Pending(func() ggui.Widget { return ggui.Text("Searching…") }).
+				Pending(func() ggui.Widget { return widget.Text("Searching…") }).
 				Then(func(value ggui.Readable[[]reactivePerson]) ggui.Widget {
-					return ggui.EachKeyed(value, func(p reactivePerson) int { return p.ID }, func(item ggui.EachItem[reactivePerson]) ggui.Widget {
-						return ggui.TextOf(ggui.Map(item.Value, func(p reactivePerson) string { return p.Name }))
-					}).Else(func() ggui.Widget { return ggui.Text("No matches") })
-				}).Catch(func(err ggui.Readable[error]) ggui.Widget { return ggui.Textf("%v", err) }),
+					return widget.EachKeyed(value, func(p reactivePerson) int { return p.ID }, func(item widget.EachItem[reactivePerson]) ggui.Widget {
+						return widget.TextOf(ggui.Map(item.Value, func(p reactivePerson) string { return p.Name }))
+					}).Else(func() ggui.Widget { return widget.Text("No matches") })
+				}).Catch(func(err ggui.Readable[error]) ggui.Widget { return widget.Textf("%v", err) }),
 			ui.Button("Reverse keyed rows", func() {
 				people.Update(func(p []reactivePerson) []reactivePerson {
 					out := slices.Clone(p)
@@ -76,14 +77,14 @@ func reactivityPreview() ggui.Widget {
 					return out
 				})
 			}).Outline(),
-			ggui.EachKeyed(people, func(p reactivePerson) int { return p.ID }, row).Gap(4),
+			widget.EachKeyed(people, func(p reactivePerson) int { return p.ID }, row).Gap(4),
 			ui.Checkbox(shown, "Mount local counter"),
 			ggui.If(shown, func() ggui.Widget {
 				count := ggui.State(0)
 				ggui.OnCleanup(func() { ggui.Add(cleaned, 1) })
-				return ggui.Row(ggui.Textf("Local count: %d", count), ui.Button("Increment local", func() { ggui.Add(count, 1) })).Gap(8)
+				return widget.Row(widget.Textf("Local count: %d", count), ui.Button("Increment local", func() { ggui.Add(count, 1) })).Gap(8)
 			}),
-			ggui.Textf("Disposed branches: %d", cleaned),
+			widget.Textf("Disposed branches: %d", cleaned),
 		).Gap(8)
 	}))
 }

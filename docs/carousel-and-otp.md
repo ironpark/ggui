@@ -4,7 +4,7 @@
 
 Create swipeable slide collections and segmented code inputs with native keyboard and accessibility support.
 
-Examples use `ggui` and `ui` imports and application-defined placeholders.
+Examples use `ggui`, `widget` and `ui` imports and application-defined placeholders.
 See [example conventions](README.md#start-here) before copying snippets.
 
 Native implementations of the [shadcn Carousel](https://ui.shadcn.com/docs/components/base/carousel)
@@ -22,9 +22,9 @@ inherit ggui theme tokens and require no browser, JavaScript or new dependency.
 ```go
 slide := ggui.State(0)
 carousel := ui.Carousel(slide,
-    ui.CarouselItem(ui.Card(ggui.Center(ui.Title("1")))),
-    ui.CarouselItem(ui.Card(ggui.Center(ui.Title("2")))),
-    ui.CarouselItem(ui.Card(ggui.Center(ui.Title("3")))),
+    ui.CarouselItem(ui.Card(widget.Center(ui.Title("1")))),
+    ui.CarouselItem(ui.Card(widget.Center(ui.Title("2")))),
+    ui.CarouselItem(ui.Card(widget.Center(ui.Title("3")))),
 ).Height(240).Loop(true)
 ```
 

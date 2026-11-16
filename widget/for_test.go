@@ -1,4 +1,4 @@
-package ggui
+package widget
 
 import (
 	"fmt"
@@ -7,13 +7,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/pkg/virtual"
 )
 
 // layoutFor lays a EachKeyed out with room for everything, which is when its
 // children are built.
-func layoutFor(w Widget) { w.Layout(Loose(Sz(500, Unbounded)), Env{}) }
+func layoutFor(w ggui.Widget) { w.Layout(ggui.Loose(ggui.Sz(500, ggui.Unbounded)), ggui.Env{}) }
 
 type todo struct {
 	ID   int
@@ -22,17 +23,17 @@ type todo struct {
 
 func TestForReusesChildrenByKey(t *testing.T) {
 	t.Parallel()
-	items := State([]todo{{1, "a"}, {2, "b"}})
+	items := ggui.State([]todo{{1, "a"}, {2, "b"}})
 	setups := 0
-	var f Widget
-	shown := map[Widget]*TextWidget{} // each row's text, by the row's widget
+	var f ggui.Widget
+	shown := map[ggui.Widget]*TextWidget{} // each row's text, by the row's widget
 	dispose := reactive.Observe(func() {
-		f = EachKeyed(items, func(t todo) int { return t.ID }, func(rowItem EachItem[todo]) Widget {
+		f = EachKeyed(items, func(t todo) int { return t.ID }, func(rowItem EachItem[todo]) ggui.Widget {
 			it := rowItem.Value
-			var row Widget
-			row = Component(func() Widget {
+			var row ggui.Widget
+			row = ggui.Component(func() ggui.Widget {
 				setups++
-				return Reactive(func() Widget { shown[row] = Text(it.Get().Name); return shown[row] })
+				return ggui.Reactive(func() ggui.Widget { shown[row] = Text(it.Get().Name); return shown[row] })
 			})
 			return row
 		})
@@ -59,14 +60,14 @@ func TestForReusesChildrenByKey(t *testing.T) {
 
 func TestForUpdatesItemSignalInPlace(t *testing.T) {
 	t.Parallel()
-	items := State([]todo{{1, "a"}})
+	items := ggui.State([]todo{{1, "a"}})
 	builds := 0
-	var f Widget
+	var f ggui.Widget
 	var shown *TextWidget // the text the row built last
 	dispose := reactive.Observe(func() {
-		f = EachKeyed(items, func(t todo) int { return t.ID }, func(rowItem EachItem[todo]) Widget {
+		f = EachKeyed(items, func(t todo) int { return t.ID }, func(rowItem EachItem[todo]) ggui.Widget {
 			it := rowItem.Value
-			return Reactive(func() Widget { builds++; shown = Text(it.Get().Name); return shown })
+			return ggui.Reactive(func() ggui.Widget { builds++; shown = Text(it.Get().Name); return shown })
 		})
 	})
 	defer dispose()
@@ -85,14 +86,14 @@ func TestForUpdatesItemSignalInPlace(t *testing.T) {
 
 func TestForDisposesRemovedAndAllOnParentRebuild(t *testing.T) {
 	t.Parallel()
-	items := State([]todo{{1, "a"}, {2, "b"}})
-	parentDep := State(0)
+	items := ggui.State([]todo{{1, "a"}, {2, "b"}})
+	parentDep := ggui.State(0)
 	cleanups := 0
-	var f Widget
+	var f ggui.Widget
 	dispose := reactive.Observe(func() {
 		parentDep.Get()
-		f = EachKeyed(items, func(t todo) int { return t.ID }, func(rowItem EachItem[todo]) Widget {
-			OnCleanup(func() { cleanups++ })
+		f = EachKeyed(items, func(t todo) int { return t.ID }, func(rowItem EachItem[todo]) ggui.Widget {
+			ggui.OnCleanup(func() { cleanups++ })
 			return Box()
 		})
 	})
@@ -112,11 +113,11 @@ func TestForDisposesRemovedAndAllOnParentRebuild(t *testing.T) {
 
 func TestForDoesNotRebuildOnParentSignals(t *testing.T) {
 	t.Parallel()
-	items := State([]todo{{1, "a"}})
+	items := ggui.State([]todo{{1, "a"}})
 	setups := 0
-	var f Widget
+	var f ggui.Widget
 	dispose := reactive.Observe(func() {
-		f = EachKeyed(items, func(t todo) int { return t.ID }, func(rowItem EachItem[todo]) Widget {
+		f = EachKeyed(items, func(t todo) int { return t.ID }, func(rowItem EachItem[todo]) ggui.Widget {
 			setups++
 			return Box()
 		})
@@ -138,18 +139,18 @@ func TestForRejectsDuplicateKeys(t *testing.T) {
 			t.Fatal("duplicate keys did not panic")
 		}
 	}()
-	EachKeyed(State([]todo{{1, "a"}, {1, "b"}}), func(t todo) int { return t.ID }, func(EachItem[todo]) Widget { return Box() }).Layout(Loose(Sz(100, 100)), Env{})
+	EachKeyed(ggui.State([]todo{{1, "a"}, {1, "b"}}), func(t todo) int { return t.ID }, func(EachItem[todo]) ggui.Widget { return Box() }).Layout(ggui.Loose(ggui.Sz(100, 100)), ggui.Env{})
 }
 
 func TestRootOutlivesOwnerRerunsUntilDisposed(t *testing.T) {
 	t.Parallel()
-	dep, inner := State(0), State(0)
+	dep, inner := ggui.State(0), ggui.State(0)
 	innerRuns := 0
 	var disposeRoot func()
 	dispose := reactive.Observe(func() {
 		dep.Get()
 		if disposeRoot == nil {
-			disposeRoot = Root(func() {
+			disposeRoot = ggui.Root(func() {
 				reactive.Observe(func() { inner.Get(); innerRuns++ })
 			})
 		}
@@ -170,22 +171,22 @@ func TestForWithItemExtentBuildsOnlyTheViewport(t *testing.T) {
 	for i := range 1000 {
 		list = append(list, todo{i, "x"})
 	}
-	items := State(list)
+	items := ggui.State(list)
 	builds := 0
 	var f *EachWidget[todo, int]
-	rects := make([]Rect, len(list)) // where each row was painted, by ID
+	rects := make([]ggui.Rect, len(list)) // where each row was painted, by ID
 	dispose := reactive.Observe(func() {
-		f = EachKeyed(items, func(t todo) int { return t.ID }, func(rowItem EachItem[todo]) Widget {
+		f = EachKeyed(items, func(t todo) int { return t.ID }, func(rowItem EachItem[todo]) ggui.Widget {
 			it := rowItem.Value
 			builds++
 			return probe(50, 20, &rects[it.Get().ID])
 		}).ItemExtent(20).Gap(4)
 	})
 	defer dispose()
-	offset := State(0.0)
+	offset := ggui.State(0.0)
 	s := Scroll(f).BindOffset(offset)
-	size := s.Layout(Tight(Sz(100, 100)), Env{})
-	s.Paint(nil, Rct(Pt(0, 0), size))
+	size := s.Layout(ggui.Tight(ggui.Sz(100, 100)), ggui.Env{})
+	s.Paint(nil, ggui.Rct(ggui.Pt(0, 0), size))
 	// 1000 rows of 24 pitch: 23996 tall; a 100-tall window shows rows 0..5.
 	if f.Len() != 1000 || len(f.entries) != 5 || builds != 5 {
 		t.Fatalf("len %d built %d builds %d, want 1000, 5, 5", f.Len(), len(f.entries), builds)
@@ -193,30 +194,30 @@ func TestForWithItemExtentBuildsOnlyTheViewport(t *testing.T) {
 	if s.childSize.H != 23996 {
 		t.Fatalf("content height %v, want 23996", s.childSize.H)
 	}
-	if rects[1] != Rct(Pt(0, 24), Sz(50, 20)) {
+	if rects[1] != ggui.Rct(ggui.Pt(0, 24), ggui.Sz(50, 20)) {
 		t.Fatalf("row 1 painted at %+v, want (0,24) 50x20", rects[1])
 	}
 	offset.Set(12000) // exactly row 500: rows 500..504 come into view
-	size = s.Layout(Tight(Sz(100, 100)), Env{})
-	s.Paint(nil, Rct(Pt(0, 0), size))
+	size = s.Layout(ggui.Tight(ggui.Sz(100, 100)), ggui.Env{})
+	s.Paint(nil, ggui.Rct(ggui.Pt(0, 0), size))
 	if len(f.entries) != 10 || f.first != 500 || f.last != 505 {
 		t.Fatalf("built %d, range [%d,%d); want 10 built and [500,505)", len(f.entries), f.first, f.last)
 	}
-	if rects[500] != Rct(Pt(0, 500*24-12000), Sz(50, 20)) {
+	if rects[500] != ggui.Rct(ggui.Pt(0, 500*24-12000), ggui.Sz(50, 20)) {
 		t.Fatalf("row 500 painted at %+v, want y=0 with the offset applied", rects[500])
 	}
 }
 
 func TestForWithoutViewportLaysOutEverything(t *testing.T) {
 	t.Parallel()
-	items := State([]todo{{1, "a"}, {2, "b"}, {3, "c"}})
+	items := ggui.State([]todo{{1, "a"}, {2, "b"}, {3, "c"}})
 	var f *EachWidget[todo, int]
 	dispose := reactive.Observe(func() {
-		f = EachKeyed(items, func(t todo) int { return t.ID }, func(EachItem[todo]) Widget { return Box().Size(10, 5) }).ItemExtent(30)
+		f = EachKeyed(items, func(t todo) int { return t.ID }, func(EachItem[todo]) ggui.Widget { return Box().Size(10, 5) }).ItemExtent(30)
 	})
 	defer dispose()
-	got := f.Layout(Loose(Sz(100, 1000)), Env{})
-	if got != Sz(10, 90) || len(f.entries) != 3 {
+	got := f.Layout(ggui.Loose(ggui.Sz(100, 1000)), ggui.Env{})
+	if got != ggui.Sz(10, 90) || len(f.entries) != 3 {
 		t.Fatalf("size %v built %d, want 10x90 and 3", got, len(f.entries))
 	}
 }
@@ -224,20 +225,20 @@ func TestForWithoutViewportLaysOutEverything(t *testing.T) {
 func TestForRowsLeaveThroughTheirTransition(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	defer SetClock(func() time.Time { return now })()
-	items := State([]int{1, 2, 3})
-	painted := map[int]Rect{}
-	list := EachKeyed(items, func(i int) int { return i }, func(rowItem EachItem[int]) Widget {
+	defer ggui.SetClock(func() time.Time { return now })()
+	items := ggui.State([]int{1, 2, 3})
+	painted := map[int]ggui.Rect{}
+	list := EachKeyed(items, func(i int) int { return i }, func(rowItem EachItem[int]) ggui.Widget {
 		r := rowItem.Value
 		i := r.Get()
-		return FromFuncs(
-			func(c Constraints, _ Env) Size { return c.Constrain(Sz(50, 10)) },
-			func(_ *Canvas, rect Rect) { painted[i] = rect },
+		return ggui.FromFuncs(
+			func(c ggui.Constraints, _ ggui.Env) ggui.Size { return c.Constrain(ggui.Sz(50, 10)) },
+			func(_ *ggui.Canvas, rect ggui.Rect) { painted[i] = rect },
 		)
-	}).Transition(func(w Widget) *TransitionWidget {
-		return Transition(w).Slide(-20, 0).Easing(EaseLinear).Duration(100 * time.Millisecond)
+	}).Transition(func(w ggui.Widget) *TransitionWidget {
+		return Transition(w).Slide(-20, 0).Easing(ggui.EaseLinear).Duration(100 * time.Millisecond)
 	})
-	p := NewProbe(list, Sz(100, 100))
+	p := ggui.NewProbe(list, ggui.Sz(100, 100))
 	defer p.Close()
 	p.Frame()
 	now = now.Add(time.Second)
@@ -245,7 +246,7 @@ func TestForRowsLeaveThroughTheirTransition(t *testing.T) {
 	if painted[2].Origin.X != 0 || painted[2].Origin.Y != 10 {
 		t.Fatalf("row 2 at %+v once settled, want in place", painted[2])
 	}
-	Remove(items, func(i int) bool { return i == 2 })
+	ggui.Remove(items, func(i int) bool { return i == 2 })
 	clear(painted)
 	p.Frame()
 	if _, ok := painted[2]; !ok {
@@ -277,24 +278,26 @@ func TestForPaintGroupsFollowRows(t *testing.T) {
 			name = "transition"
 		}
 		t.Run(name, func(t *testing.T) {
-			items := State([]int{1, 2, 3})
+			items := ggui.State([]int{1, 2, 3})
 			var list *EachWidget[int, int]
 			var painted []int
 			groups := map[int]any{}
-			p := ProbeBuilder(func() Widget {
-				list = EachKeyed(items, func(id int) int { return id }, func(rowItem EachItem[int]) Widget {
+			p := ggui.ProbeBuilder(func() ggui.Widget {
+				list = EachKeyed(items, func(id int) int { return id }, func(rowItem EachItem[int]) ggui.Widget {
 					item := rowItem.Value
 					id := item.Get()
-					return FromFuncs(
-						func(c Constraints, _ Env) Size { return c.Constrain(Sz(20, 10)) },
-						func(dst *Canvas, _ Rect) { painted = append(painted, id); groups[id] = dst.Grouped() },
+					return ggui.FromFuncs(
+						func(c ggui.Constraints, _ ggui.Env) ggui.Size { return c.Constrain(ggui.Sz(20, 10)) },
+						func(dst *ggui.Canvas, _ ggui.Rect) { painted = append(painted, id); groups[id] = dst.Grouped() },
 					)
 				})
 				if animate {
-					list.Transition(func(w Widget) *TransitionWidget { return Transition(w).Slide(-10, 0).Duration(100 * time.Millisecond) })
+					list.Transition(func(w ggui.Widget) *TransitionWidget {
+						return Transition(w).Slide(-10, 0).Duration(100 * time.Millisecond)
+					})
 				}
 				return list
-			}, Sz(100, 100))
+			}, ggui.Sz(100, 100))
 			defer p.Close()
 			p.Advance(0)
 			p.Advance(time.Second)
@@ -348,19 +351,19 @@ func TestForEvictionReleasesOwnerChildren(t *testing.T) {
 	}
 	var f *EachWidget[int, int]
 	created, cleaned := 0, 0
-	dispose := Root(func() {
-		f = EachKeyed(State(ids), func(i int) int { return i }, func(EachItem[int]) Widget {
+	dispose := ggui.Root(func() {
+		f = EachKeyed(ggui.State(ids), func(i int) int { return i }, func(EachItem[int]) ggui.Widget {
 			created++
-			OnCleanup(func() { cleaned++ })
+			ggui.OnCleanup(func() { cleaned++ })
 			return Box().Size(10, 20)
 		}).ItemExtent(20).Retain(2)
 	})
 	defer dispose()
-	offset := State(0.0)
+	offset := ggui.State(0.0)
 	scroll := Scroll(f).BindOffset(offset)
 	for i := 0; i < len(ids); i += 5 {
 		offset.Set(float64(i * 20))
-		scroll.Layout(Tight(Sz(100, 100)), Env{})
+		scroll.Layout(ggui.Tight(ggui.Sz(100, 100)), ggui.Env{})
 		// The visible and retained rows are alive, and every row let go of
 		// was disposed; that what a Scope disposed is let go of by its
 		// owner is the kernel's, see TestScopeLetsGoOfWhatItsCleanupDisposed.
@@ -376,16 +379,16 @@ func TestForEvictionReleasesOwnerChildren(t *testing.T) {
 
 // estimatedRows is a list of rows from 10 to 50 tall, by ID, virtualized
 // on an estimate of 30, whose rows note where they are painted.
-func estimatedRows(t *testing.T, items *StateValue[[]todo], painted map[int]Rect, builds *int) *EachWidget[todo, int] {
+func estimatedRows(t *testing.T, items *ggui.StateValue[[]todo], painted map[int]ggui.Rect, builds *int) *EachWidget[todo, int] {
 	t.Helper()
 	var f *EachWidget[todo, int]
 	dispose := reactive.Observe(func() {
-		f = EachKeyed(items, func(t todo) int { return t.ID }, func(row EachItem[todo]) Widget {
+		f = EachKeyed(items, func(t todo) int { return t.ID }, func(row EachItem[todo]) ggui.Widget {
 			id := row.Item.ID
 			*builds++
-			return FromFuncs(
-				func(c Constraints, _ Env) Size { return c.Constrain(Sz(50, rowHeight(id))) },
-				func(_ *Canvas, r Rect) { painted[id] = r },
+			return ggui.FromFuncs(
+				func(c ggui.Constraints, _ ggui.Env) ggui.Size { return c.Constrain(ggui.Sz(50, rowHeight(id))) },
+				func(_ *ggui.Canvas, r ggui.Rect) { painted[id] = r },
 			)
 		}).EstimatedExtent(30)
 	})
@@ -405,16 +408,16 @@ func todos(from, to int) []todo {
 
 // frame lays out and paints s in a 100 by 100 window, noting afresh where
 // each row is painted.
-func frame(s *ScrollWidget, painted map[int]Rect) {
+func frame(s *ScrollWidget, painted map[int]ggui.Rect) {
 	clear(painted)
-	size := s.Layout(Tight(Sz(100, 100)), Env{})
-	s.Paint(nil, Rct(Pt(0, 0), size))
+	size := s.Layout(ggui.Tight(ggui.Sz(100, 100)), ggui.Env{})
+	s.Paint(nil, ggui.Rct(ggui.Pt(0, 0), size))
 }
 
 func TestEstimatedRowsBuildOnlyNearTheWindow(t *testing.T) {
 	t.Parallel()
-	items := State(todos(0, 1000))
-	painted, builds := map[int]Rect{}, 0
+	items := ggui.State(todos(0, 1000))
+	painted, builds := map[int]ggui.Rect{}, 0
 	f := estimatedRows(t, items, painted, &builds)
 	s := Scroll(f)
 	frame(s, painted)
@@ -422,7 +425,7 @@ func TestEstimatedRowsBuildOnlyNearTheWindow(t *testing.T) {
 	if builds != 5 || len(f.entries) != 5 {
 		t.Fatalf("built %d rows, %d kept; want 5 of 1000", builds, len(f.entries))
 	}
-	if painted[2] != Rct(Pt(0, 30), Sz(50, 30)) {
+	if painted[2] != ggui.Rct(ggui.Pt(0, 30), ggui.Sz(50, 30)) {
 		t.Fatalf("row 2 painted at %+v, want (0,30) 50x30, below rows of 10 and 20", painted[2])
 	}
 	// Those laid out at their size, the rest at the estimate.
@@ -433,10 +436,10 @@ func TestEstimatedRowsBuildOnlyNearTheWindow(t *testing.T) {
 
 func TestEstimatedRowsScrollByWhatTheReaderScrolls(t *testing.T) {
 	t.Parallel()
-	items := State(todos(0, 1000))
-	painted, builds := map[int]Rect{}, 0
+	items := ggui.State(todos(0, 1000))
+	painted, builds := map[int]ggui.Rect{}, 0
 	f := estimatedRows(t, items, painted, &builds)
-	offset := State(20000.0)
+	offset := ggui.State(20000.0)
 	s := Scroll(f).BindOffset(offset)
 	frame(s, painted)
 	frame(s, painted)
@@ -445,43 +448,43 @@ func TestEstimatedRowsScrollByWhatTheReaderScrolls(t *testing.T) {
 	// the step, and the rows painted meet.
 	for range 200 {
 		before := maps.Clone(painted)
-		offset.Set(Peek(offset) - 37)
+		offset.Set(ggui.Peek(offset) - 37)
 		reactive.Flush()
 		frame(s, painted)
 		ids := sortedIDs(painted)
 		for i, id := range ids[1:] {
 			prev := painted[ids[i]]
 			if got := painted[id].Origin.Y; got != prev.Origin.Y+prev.Size.H {
-				t.Fatalf("at offset %v row %d starts at %v, want %v, where row %d ends", Peek(offset), id, got, prev.Origin.Y+prev.Size.H, ids[i])
+				t.Fatalf("at offset %v row %d starts at %v, want %v, where row %d ends", ggui.Peek(offset), id, got, prev.Origin.Y+prev.Size.H, ids[i])
 			}
 		}
 		moved := false
 		for id, r := range painted {
 			if b, ok := before[id]; ok && r.Origin.Y >= 0 && r.Origin.Y < 100 {
-				if r.Origin.Y-b.Origin.Y != 37 && Peek(offset) > 0 {
-					t.Fatalf("at offset %v row %d moved %v on screen, want 37", Peek(offset), id, r.Origin.Y-b.Origin.Y)
+				if r.Origin.Y-b.Origin.Y != 37 && ggui.Peek(offset) > 0 {
+					t.Fatalf("at offset %v row %d moved %v on screen, want 37", ggui.Peek(offset), id, r.Origin.Y-b.Origin.Y)
 				}
 				moved = true
 			}
 		}
 		if !moved {
-			t.Fatalf("at offset %v no row stayed in view across a step of 37", Peek(offset))
+			t.Fatalf("at offset %v no row stayed in view across a step of 37", ggui.Peek(offset))
 		}
 	}
 }
 
 func TestEstimatedRowsKeepTheirPlaceAsRowsComeInAbove(t *testing.T) {
 	t.Parallel()
-	items := State(todos(0, 1000))
-	painted, builds := map[int]Rect{}, 0
+	items := ggui.State(todos(0, 1000))
+	painted, builds := map[int]ggui.Rect{}, 0
 	f := estimatedRows(t, items, painted, &builds)
-	offset := State(3000.0)
+	offset := ggui.State(3000.0)
 	s := Scroll(f).BindOffset(offset)
 	frame(s, painted)
 	frame(s, painted)
 	before := maps.Clone(painted)
 	// Older rows read in above, as a conversation pages back.
-	items.Set(append(todos(-40, 0), Peek(items)...))
+	items.Set(append(todos(-40, 0), ggui.Peek(items)...))
 	reactive.Flush()
 	frame(s, painted)
 	kept := 0
@@ -502,11 +505,11 @@ func TestEstimatedRowsKeepTheirPlaceAsRowsComeInAbove(t *testing.T) {
 
 func TestEstimatedRowsFollowWhereTheListStarts(t *testing.T) {
 	t.Parallel()
-	items := State(todos(0, 1000))
-	painted, builds := map[int]Rect{}, 0
+	items := ggui.State(todos(0, 1000))
+	painted, builds := map[int]ggui.Rect{}, 0
 	f := estimatedRows(t, items, painted, &builds)
-	var head Rect
-	offset := State(5000.0)
+	var head ggui.Rect
+	offset := ggui.State(5000.0)
 	s := Scroll(Column(probe(100, 400, &head), f)).BindOffset(offset)
 	frame(s, painted)
 	frame(s, painted)
@@ -528,7 +531,7 @@ func TestEstimatedRowsFollowWhereTheListStarts(t *testing.T) {
 	}
 }
 
-func sortedIDs(m map[int]Rect) []int {
+func sortedIDs(m map[int]ggui.Rect) []int {
 	ids := make([]int, 0, len(m))
 	for id := range m {
 		ids = append(ids, id)
@@ -539,8 +542,8 @@ func sortedIDs(m map[int]Rect) []int {
 
 func TestEstimatedRowsAreWindowedThroughAScrollAcross(t *testing.T) {
 	t.Parallel()
-	items := State(todos(0, 1000))
-	painted, builds := map[int]Rect{}, 0
+	items := ggui.State(todos(0, 1000))
+	painted, builds := map[int]ggui.Rect{}, 0
 	f := estimatedRows(t, items, painted, &builds)
 	// A diff's long lines scroll sideways inside its scroll down.
 	s := Scroll(Scroll(f).Horizontal())
@@ -552,21 +555,21 @@ func TestEstimatedRowsAreWindowedThroughAScrollAcross(t *testing.T) {
 
 func TestFixedRowsUnderAHeaderFillTheWindow(t *testing.T) {
 	t.Parallel()
-	items := State(todos(0, 1000))
-	painted := map[int]Rect{}
+	items := ggui.State(todos(0, 1000))
+	painted := map[int]ggui.Rect{}
 	var f *EachWidget[todo, int]
 	dispose := reactive.Observe(func() {
-		f = EachKeyed(items, func(t todo) int { return t.ID }, func(row EachItem[todo]) Widget {
+		f = EachKeyed(items, func(t todo) int { return t.ID }, func(row EachItem[todo]) ggui.Widget {
 			id := row.Item.ID
-			return FromFuncs(
-				func(c Constraints, _ Env) Size { return c.Constrain(Sz(50, 20)) },
-				func(_ *Canvas, r Rect) { painted[id] = r },
+			return ggui.FromFuncs(
+				func(c ggui.Constraints, _ ggui.Env) ggui.Size { return c.Constrain(ggui.Sz(50, 20)) },
+				func(_ *ggui.Canvas, r ggui.Rect) { painted[id] = r },
 			)
 		}).ItemExtent(20)
 	})
 	defer dispose()
-	var head Rect
-	offset := State(5000.0)
+	var head ggui.Rect
+	offset := ggui.State(5000.0)
 	s := Scroll(Column(probe(100, 410, &head), f)).BindOffset(offset)
 	frame(s, painted)
 	frame(s, painted)
@@ -587,18 +590,18 @@ func BenchmarkForFrame(b *testing.B) {
 	for _, n := range []int{1000, 10000} {
 		for _, changed := range []bool{false, true} {
 			b.Run(fmt.Sprintf("rows=%d/changed=%t", n, changed), func(b *testing.B) {
-				values := make([]*StateValue[int], n)
+				values := make([]*ggui.StateValue[int], n)
 				ids := make([]int, n)
 				for i := range ids {
-					ids[i], values[i] = i, State(0)
+					ids[i], values[i] = i, ggui.State(0)
 				}
-				items := State(ids)
-				p := ProbeBuilder(func() Widget {
-					return EachKeyed(items, func(id int) int { return id }, func(rowItem EachItem[int]) Widget {
+				items := ggui.State(ids)
+				p := ggui.ProbeBuilder(func() ggui.Widget {
+					return EachKeyed(items, func(id int) int { return id }, func(rowItem EachItem[int]) ggui.Widget {
 						item := rowItem.Value
-						return Reactive(func() Widget { return Box().Size(float64(values[item.Get()].Get()%7+1), 1) })
+						return ggui.Reactive(func() ggui.Widget { return Box().Size(float64(values[item.Get()].Get()%7+1), 1) })
 					})
-				}, Sz(100, 100))
+				}, ggui.Sz(100, 100))
 				defer p.Close()
 				p.Frame()
 				b.ReportAllocs()
@@ -622,29 +625,29 @@ func BenchmarkForFrame(b *testing.B) {
 func TestForManyRowsLeaveInTheirPlaces(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	defer SetClock(func() time.Time { return now })()
+	defer ggui.SetClock(func() time.Time { return now })()
 	ids := make([]int, 20)
 	for i := range ids {
 		ids[i] = i
 	}
-	items := State(ids)
-	painted := map[int]Rect{}
-	list := EachKeyed(items, func(i int) int { return i }, func(row EachItem[int]) Widget {
+	items := ggui.State(ids)
+	painted := map[int]ggui.Rect{}
+	list := EachKeyed(items, func(i int) int { return i }, func(row EachItem[int]) ggui.Widget {
 		i := row.Item
-		return FromFuncs(
-			func(c Constraints, _ Env) Size { return c.Constrain(Sz(50, 10)) },
-			func(_ *Canvas, rect Rect) { painted[i] = rect },
+		return ggui.FromFuncs(
+			func(c ggui.Constraints, _ ggui.Env) ggui.Size { return c.Constrain(ggui.Sz(50, 10)) },
+			func(_ *ggui.Canvas, rect ggui.Rect) { painted[i] = rect },
 		)
-	}).Transition(func(w Widget) *TransitionWidget {
+	}).Transition(func(w ggui.Widget) *TransitionWidget {
 		return Transition(w).Fade().Duration(100 * time.Millisecond)
 	})
-	p := NewProbe(list, Sz(100, 400))
+	p := ggui.NewProbe(list, ggui.Sz(100, 400))
 	defer p.Close()
 	p.Frame()
 	now = now.Add(time.Second)
 	p.Frame()
 	gone := map[int]bool{0: true, 1: true, 2: true, 7: true, 8: true, 13: true, 19: true}
-	Remove(items, func(i int) bool { return gone[i] })
+	ggui.Remove(items, func(i int) bool { return gone[i] })
 	clear(painted)
 	p.Frame()
 	for i := range ids {
@@ -653,7 +656,7 @@ func TestForManyRowsLeaveInTheirPlaces(t *testing.T) {
 		}
 	}
 	// 8 comes back before it has gone; the rest finish leaving.
-	Append(items, 8)
+	ggui.Append(items, 8)
 	now = now.Add(time.Second)
 	clear(painted)
 	p.Frame()
@@ -680,12 +683,12 @@ func BenchmarkForClearWithTransition(b *testing.B) {
 			for i := range ids {
 				ids[i] = i
 			}
-			items := State(ids)
-			p := ProbeBuilder(func() Widget {
-				return EachKeyed(items, func(id int) int { return id }, func(EachItem[int]) Widget {
+			items := ggui.State(ids)
+			p := ggui.ProbeBuilder(func() ggui.Widget {
+				return EachKeyed(items, func(id int) int { return id }, func(EachItem[int]) ggui.Widget {
 					return Box().Size(1, 1)
-				}).Transition(func(w Widget) *TransitionWidget { return Transition(w).Fade().Duration(time.Hour) })
-			}, Sz(100, 100))
+				}).Transition(func(w ggui.Widget) *TransitionWidget { return Transition(w).Fade().Duration(time.Hour) })
+			}, ggui.Sz(100, 100))
 			defer p.Close()
 			p.Frame()
 			b.ReportAllocs()
@@ -704,26 +707,26 @@ func BenchmarkForClearWithTransition(b *testing.B) {
 // Scroll frames over rows already measured, in a list of 100k rows of any
 // size: what a frame costs when only the window moved.
 func BenchmarkEstimatedScrollFrame(b *testing.B) {
-	items := State(todos(0, 100000))
-	painted, builds := map[int]Rect{}, 0
+	items := ggui.State(todos(0, 100000))
+	painted, builds := map[int]ggui.Rect{}, 0
 	var f *EachWidget[todo, int]
 	dispose := reactive.Observe(func() {
-		f = EachKeyed(items, func(t todo) int { return t.ID }, func(row EachItem[todo]) Widget {
+		f = EachKeyed(items, func(t todo) int { return t.ID }, func(row EachItem[todo]) ggui.Widget {
 			id := row.Item.ID
 			builds++
-			return FromFuncs(
-				func(c Constraints, _ Env) Size { return c.Constrain(Sz(50, rowHeight(id))) },
-				func(_ *Canvas, r Rect) { painted[id] = r },
+			return ggui.FromFuncs(
+				func(c ggui.Constraints, _ ggui.Env) ggui.Size { return c.Constrain(ggui.Sz(50, rowHeight(id))) },
+				func(_ *ggui.Canvas, r ggui.Rect) { painted[id] = r },
 			)
 		}).EstimatedExtent(30)
 	})
 	defer dispose()
-	offset := State(1500000.0)
+	offset := ggui.State(1500000.0)
 	s := Scroll(f).BindOffset(offset)
 	for range 4 {
 		frame(s, painted)
 	}
-	at := Untrack(offset.Get)
+	at := ggui.Untrack(offset.Get)
 	b.ReportAllocs()
 	for i := 0; b.Loop(); i++ {
 		offset.Set(at + float64(i%2)*5)
@@ -747,11 +750,11 @@ func TestItemEqualKeepsUnchangedRowsStill(t *testing.T) {
 		for i := range list {
 			list[i] = tagged{i, []string{"a"}}
 		}
-		items := State(list)
+		items := ggui.State(list)
 		runs := map[int]int{}
-		p := ProbeBuilder(func() Widget {
-			each := EachKeyed(items, func(r tagged) int { return r.ID }, func(row EachItem[tagged]) Widget {
-				return Reactive(func() Widget {
+		p := ggui.ProbeBuilder(func() ggui.Widget {
+			each := EachKeyed(items, func(r tagged) int { return r.ID }, func(row EachItem[tagged]) ggui.Widget {
+				return ggui.Reactive(func() ggui.Widget {
 					r := row.Value.Get()
 					runs[r.ID]++
 					return Box().Size(1, 1)
@@ -761,7 +764,7 @@ func TestItemEqualKeepsUnchangedRowsStill(t *testing.T) {
 				each.ItemEqual(func(a, b tagged) bool { return a.ID == b.ID && slices.Equal(a.Tags, b.Tags) })
 			}
 			return each
-		}, Sz(100, 100))
+		}, ggui.Sz(100, 100))
 		p.Frame()
 		clear(runs)
 		next := slices.Clone(list)
@@ -784,17 +787,17 @@ func TestItemEqualKeepsUnchangedRowsStill(t *testing.T) {
 // what is in view in place as before.
 func TestEstimatedScrollFramesPlaceAsAFreshPlace(t *testing.T) {
 	t.Parallel()
-	items := State(todos(0, 2000))
-	painted, builds := map[int]Rect{}, 0
+	items := ggui.State(todos(0, 2000))
+	painted, builds := map[int]ggui.Rect{}, 0
 	f := estimatedRows(t, items, painted, &builds)
-	offset := State(30000.0)
+	offset := ggui.State(30000.0)
 	s := Scroll(f).BindOffset(offset)
 	frame(s, painted)
 	frame(s, painted)
 	for step := range 120 {
 		// Back and forth over rows measured, and on down into new ones.
 		d := []float64{-23, 23, 41}[step%3]
-		offset.Set(Peek(offset) + d)
+		offset.Set(ggui.Peek(offset) + d)
 		reactive.Flush()
 		frame(s, painted)
 		var fresh virtual.Estimate[int]
@@ -821,19 +824,19 @@ func BenchmarkStickyScrollFrame(b *testing.B) {
 	for i := range ids {
 		ids[i] = i
 	}
-	painted := map[int]Rect{}
+	painted := map[int]ggui.Rect{}
 	var f *EachWidget[int, int]
 	dispose := reactive.Observe(func() {
-		f = EachKeyed(State(ids), func(i int) int { return i }, func(row EachItem[int]) Widget {
+		f = EachKeyed(ggui.State(ids), func(i int) int { return i }, func(row EachItem[int]) ggui.Widget {
 			id := row.Item
-			return FromFuncs(
-				func(c Constraints, _ Env) Size { return c.Constrain(Sz(50, 20)) },
-				func(_ *Canvas, r Rect) { painted[id] = r },
+			return ggui.FromFuncs(
+				func(c ggui.Constraints, _ ggui.Env) ggui.Size { return c.Constrain(ggui.Sz(50, 20)) },
+				func(_ *ggui.Canvas, r ggui.Rect) { painted[id] = r },
 			)
 		}).ItemExtent(20).StickyHeaders(func(i int) bool { return i%50000 == 0 })
 	})
 	defer dispose()
-	offset := State(1900000.0)
+	offset := ggui.State(1900000.0)
 	s := Scroll(f).BindOffset(offset)
 	frame(s, painted)
 	b.ReportAllocs()
@@ -854,16 +857,16 @@ func TestStickyHeadersFollowTheItems(t *testing.T) {
 		}
 		return v
 	}
-	items := State(values(0))
-	painted := map[int]Rect{}
-	each := EachKeyed(items, func(v int) int { return v }, func(it EachItem[int]) Widget {
+	items := ggui.State(values(0))
+	painted := map[int]ggui.Rect{}
+	each := EachKeyed(items, func(v int) int { return v }, func(it EachItem[int]) ggui.Widget {
 		v := it.Item
-		return FromFuncs(
-			func(c Constraints, _ Env) Size { return c.Constrain(Sz(100, 20)) },
-			func(_ *Canvas, r Rect) { painted[v] = r },
+		return ggui.FromFuncs(
+			func(c ggui.Constraints, _ ggui.Env) ggui.Size { return c.Constrain(ggui.Sz(100, 20)) },
+			func(_ *ggui.Canvas, r ggui.Rect) { painted[v] = r },
 		)
 	}).ItemExtent(20).StickyHeaders(func(v int) bool { return v%10 == 0 })
-	p := NewProbe(Scroll(each).BindOffset(State(250.0)), Sz(100, 60))
+	p := ggui.NewProbe(Scroll(each).BindOffset(ggui.State(250.0)), ggui.Sz(100, 60))
 	defer p.Close()
 	p.Frame()
 	if painted[10].Origin.Y != 0 {
@@ -885,13 +888,13 @@ func TestStickyHeadersFollowTheItems(t *testing.T) {
 // could compare, as WithEqual(nil) does for a State.
 func TestItemEqualNilTellsEveryRow(t *testing.T) {
 	t.Parallel()
-	items := State([]int{1, 2, 3})
+	items := ggui.State([]int{1, 2, 3})
 	runs := 0
-	p := ProbeBuilder(func() Widget {
-		return Each(items, func(row EachItem[int]) Widget {
-			return Reactive(func() Widget { row.Value.Get(); runs++; return Box().Size(1, 1) })
+	p := ggui.ProbeBuilder(func() ggui.Widget {
+		return Each(items, func(row EachItem[int]) ggui.Widget {
+			return ggui.Reactive(func() ggui.Widget { row.Value.Get(); runs++; return Box().Size(1, 1) })
 		}).ItemEqual(nil)
-	}, Sz(100, 100))
+	}, ggui.Sz(100, 100))
 	defer p.Close()
 	p.Frame()
 	runs = 0
@@ -909,19 +912,19 @@ func BenchmarkStickyPlainFrame(b *testing.B) {
 	for i := range ids {
 		ids[i] = i
 	}
-	painted := map[int]Rect{}
+	painted := map[int]ggui.Rect{}
 	var f *EachWidget[int, int]
 	dispose := reactive.Observe(func() {
-		f = EachKeyed(State(ids), func(i int) int { return i }, func(row EachItem[int]) Widget {
+		f = EachKeyed(ggui.State(ids), func(i int) int { return i }, func(row EachItem[int]) ggui.Widget {
 			id := row.Item
-			return FromFuncs(
-				func(c Constraints, _ Env) Size { return c.Constrain(Sz(50, 20)) },
-				func(_ *Canvas, r Rect) { painted[id] = r },
+			return ggui.FromFuncs(
+				func(c ggui.Constraints, _ ggui.Env) ggui.Size { return c.Constrain(ggui.Sz(50, 20)) },
+				func(_ *ggui.Canvas, r ggui.Rect) { painted[id] = r },
 			)
 		}).StickyHeaders(func(i int) bool { return i%1000 == 0 })
 	})
 	defer dispose()
-	offset := State(50000.0)
+	offset := ggui.State(50000.0)
 	s := Scroll(f).BindOffset(offset)
 	frame(s, painted)
 	b.ReportAllocs()
@@ -937,27 +940,27 @@ func BenchmarkStickyPlainFrame(b *testing.B) {
 func TestStickyHeadersPinAmongLeavingRows(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	defer SetClock(func() time.Time { return now })()
+	defer ggui.SetClock(func() time.Time { return now })()
 	list := make([]int, 100)
 	for i := range list {
 		list[i] = i
 	}
-	items := State(list)
-	painted := map[int]Rect{}
-	each := EachKeyed(items, func(v int) int { return v }, func(it EachItem[int]) Widget {
+	items := ggui.State(list)
+	painted := map[int]ggui.Rect{}
+	each := EachKeyed(items, func(v int) int { return v }, func(it EachItem[int]) ggui.Widget {
 		v := it.Item
-		return FromFuncs(
-			func(c Constraints, _ Env) Size { return c.Constrain(Sz(100, 20)) },
-			func(_ *Canvas, r Rect) { painted[v] = r },
+		return ggui.FromFuncs(
+			func(c ggui.Constraints, _ ggui.Env) ggui.Size { return c.Constrain(ggui.Sz(100, 20)) },
+			func(_ *ggui.Canvas, r ggui.Rect) { painted[v] = r },
 		)
-	}).StickyHeaders(func(v int) bool { return v%10 == 0 }).Transition(func(w Widget) *TransitionWidget {
+	}).StickyHeaders(func(v int) bool { return v%10 == 0 }).Transition(func(w ggui.Widget) *TransitionWidget {
 		return Transition(w).Fade().Duration(time.Hour)
 	})
-	offset := State(250.0)
-	p := NewProbe(Scroll(each).BindOffset(offset), Sz(100, 60))
+	offset := ggui.State(250.0)
+	p := ggui.NewProbe(Scroll(each).BindOffset(offset), ggui.Sz(100, 60))
 	defer p.Close()
 	p.Frame()
-	Remove(items, func(v int) bool { return v == 3 || v == 15 })
+	ggui.Remove(items, func(v int) bool { return v == 3 || v == 15 })
 	clear(painted)
 	p.Frame()
 	if painted[10].Origin.Y != 0 {
@@ -977,25 +980,25 @@ func TestStickyHeadersPinAmongLeavingRows(t *testing.T) {
 // asked as the list is laid out, within the measurement of the caches
 // above it.
 func TestForRowsLeaveInAWindowsFrames(t *testing.T) {
-	items := State([]int{1, 2, 3})
-	painted := map[int]Rect{}
-	p := NewWindowProbe(func() Widget {
-		list := EachKeyed(items, func(i int) int { return i }, func(rowItem EachItem[int]) Widget {
+	items := ggui.State([]int{1, 2, 3})
+	painted := map[int]ggui.Rect{}
+	p := ggui.NewWindowProbe(func() ggui.Widget {
+		list := EachKeyed(items, func(i int) int { return i }, func(rowItem EachItem[int]) ggui.Widget {
 			i := rowItem.Value.Get()
-			return FromFuncs(
-				func(c Constraints, _ Env) Size { return c.Constrain(Sz(50, 10)) },
-				func(_ *Canvas, rect Rect) { painted[i] = rect },
+			return ggui.FromFuncs(
+				func(c ggui.Constraints, _ ggui.Env) ggui.Size { return c.Constrain(ggui.Sz(50, 10)) },
+				func(_ *ggui.Canvas, rect ggui.Rect) { painted[i] = rect },
 			)
-		}).Transition(func(w Widget) *TransitionWidget {
-			return Transition(w).Slide(-20, 0).Easing(EaseLinear).Duration(100 * time.Millisecond)
+		}).Transition(func(w ggui.Widget) *TransitionWidget {
+			return Transition(w).Slide(-20, 0).Easing(ggui.EaseLinear).Duration(100 * time.Millisecond)
 		})
-		return Column(Component(func() Widget { return Column(list) }), Box().Size(50, 10))
-	}, Sz(200, 200))
+		return Column(ggui.Component(func() ggui.Widget { return Column(list) }), Box().Size(50, 10))
+	}, ggui.Sz(200, 200))
 	defer p.Close()
 	p.Run(16*time.Millisecond, 10)
-	Remove(items, func(i int) bool { return i == 2 })
+	ggui.Remove(items, func(i int) bool { return i == 2 })
 	var xs []float64
-	var frames []WindowFrame
+	var frames []ggui.WindowFrame
 	for range 30 {
 		clear(painted)
 		fr := p.Step(16 * time.Millisecond)
@@ -1020,10 +1023,10 @@ func TestForRowsLeaveInAWindowsFrames(t *testing.T) {
 
 func TestEachKeysByValue(t *testing.T) {
 	t.Parallel()
-	tags := State([]string{"a", "b"})
+	tags := ggui.State([]string{"a", "b"})
 	builds := 0
-	list := Each(tags, func(rowItem EachItem[string]) Widget { r := rowItem.Value; builds++; return TextOf(r) })
-	p := NewProbe(list, Sz(100, 100))
+	list := Each(tags, func(rowItem EachItem[string]) ggui.Widget { r := rowItem.Value; builds++; return TextOf(r) })
+	p := ggui.NewProbe(list, ggui.Sz(100, 100))
 	defer p.Close()
 	p.Frame()
 	tags.Set([]string{"b", "a", "c"})
@@ -1039,14 +1042,14 @@ func TestForRetainEvictsOffscreenRows(t *testing.T) {
 	for i := range 100 {
 		items = append(items, i)
 	}
-	src := State(items)
+	src := ggui.State(items)
 	var f *EachWidget[int, int]
-	off := State(0.0)
+	off := ggui.State(0.0)
 	dispose := reactive.Observe(func() {
-		f = EachKeyed(src, func(i int) int { return i }, func(EachItem[int]) Widget { return Box().Size(10, 10) }).ItemExtent(10).Retain(2)
+		f = EachKeyed(src, func(i int) int { return i }, func(EachItem[int]) ggui.Widget { return Box().Size(10, 10) }).ItemExtent(10).Retain(2)
 	})
 	defer dispose()
-	p := NewProbe(Scroll(f).BindOffset(off), Sz(10, 50))
+	p := ggui.NewProbe(Scroll(f).BindOffset(off), ggui.Sz(10, 50))
 	p.Frame()
 	off.Set(500)
 	p.Frame()
@@ -1057,11 +1060,11 @@ func TestForRetainEvictsOffscreenRows(t *testing.T) {
 
 func TestSemanticsListCountsItems(t *testing.T) {
 	t.Parallel()
-	items := State([]string{"a", "b", "c"})
-	p := NewProbe(Each(items, func(rowItem EachItem[string]) Widget { s := rowItem.Value; return TextOf(s) }), Sz(100, 200))
+	items := ggui.State([]string{"a", "b", "c"})
+	p := ggui.NewProbe(Each(items, func(rowItem EachItem[string]) ggui.Widget { s := rowItem.Value; return TextOf(s) }), ggui.Sz(100, 200))
 	defer p.Close()
 	tree := p.Semantics()
-	list, ok := tree.Find(RoleList, "")
+	list, ok := tree.Find(ggui.RoleList, "")
 	if !ok {
 		t.Fatalf("no list:\n%s", tree)
 	}
@@ -1072,7 +1075,7 @@ func TestSemanticsListCountsItems(t *testing.T) {
 		t.Fatalf("%d items, want 3:\n%s", len(list.Children), tree)
 	}
 	third := tree.At(list.Children[2])
-	if third.Role != RoleListItem || third.Now != 3 || third.Max != 3 {
+	if third.Role != ggui.RoleListItem || third.Now != 3 || third.Max != 3 {
 		t.Errorf("third item = %v, want item 3 of 3", third.Node)
 	}
 	if kids := third.Children; len(kids) != 1 || tree.At(kids[0]).Name != "c" {

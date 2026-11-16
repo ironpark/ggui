@@ -7,13 +7,14 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // The tests here assert how a window paints its frames, which an event
 // handed to any widget in the process changes: they run without
 // t.Parallel; see ggui.WindowProbe.
 
-// pane is a layout boundary of our own, as ggui.Contain is one: it lays
+// pane is a layout boundary of our own, as widget.Contain is one: it lays
 // its child out under the constraints it is given and clips it to its own
 // Rect, and a change of size made inside it is held there.
 type pane struct {
@@ -64,7 +65,7 @@ func growing(t *testing.T, build func(ggui.Widget) ggui.Widget) []ggui.WindowFra
 	t.Helper()
 	g := &grower{target: ggui.State(0.0)}
 	p := ggui.NewWindowProbe(func() ggui.Widget {
-		return ggui.Align(build(ggui.Column(g, ggui.Box().Size(60, 10).Fill(gray)))).At(0, 0)
+		return widget.Align(build(widget.Column(g, widget.Box().Size(60, 10).Fill(gray)))).At(0, 0)
 	}, ggui.Sz(240, 160))
 	defer p.Close()
 	p.Step(0)
@@ -83,7 +84,7 @@ func growing(t *testing.T, build func(ggui.Widget) ggui.Widget) []ggui.WindowFra
 func TestABoundaryOfOurOwnHoldsAChangeOfSizeInside(t *testing.T) {
 	fixed := func(boundary func(ggui.Widget) ggui.Widget) func(ggui.Widget) ggui.Widget {
 		return func(w ggui.Widget) ggui.Widget {
-			return ggui.Row(boundary(ggui.Box(w).Size(100, 120)), ggui.Box().Size(100, 120).Fill(gray))
+			return widget.Row(boundary(widget.Box(w).Size(100, 120)), widget.Box().Size(100, 120).Fill(gray))
 		}
 	}
 	ours := growing(t, fixed(func(w ggui.Widget) ggui.Widget { return &pane{child: w} }))
@@ -91,7 +92,7 @@ func TestABoundaryOfOurOwnHoldsAChangeOfSizeInside(t *testing.T) {
 		t.Fatalf("the write was painted %v, want whole: %v", ours[0].Painted, ours)
 	}
 	paintedWithin(t, ours[1:], ggui.Rct(ggui.Pt(0, 0), ggui.Sz(100, 120)))
-	contain := growing(t, fixed(func(w ggui.Widget) ggui.Widget { return ggui.Contain(w) }))
+	contain := growing(t, fixed(func(w ggui.Widget) ggui.Widget { return widget.Contain(w) }))
 	if !sameFrames(ours, contain) {
 		t.Fatalf("our boundary's frames %v, a Contain's %v", ours, contain)
 	}
@@ -108,10 +109,10 @@ func TestABoundaryOfOurOwnSizedByItsContentDefersToTheOneAroundIt(t *testing.T) 
 		boundary func(ggui.Widget) ggui.Widget
 	}{
 		{"ours", func(w ggui.Widget) ggui.Widget { return &pane{child: w} }},
-		{"Contain", func(w ggui.Widget) ggui.Widget { return ggui.Contain(w) }},
+		{"Contain", func(w ggui.Widget) ggui.Widget { return widget.Contain(w) }},
 	} {
 		loose := func(w ggui.Widget) ggui.Widget {
-			return ggui.Column(tc.boundary(w), ggui.Box().Size(100, 30).Fill(gray))
+			return widget.Column(tc.boundary(w), widget.Box().Size(100, 30).Fill(gray))
 		}
 		alone := growing(t, loose)
 		for i, fr := range alone {
@@ -121,7 +122,7 @@ func TestABoundaryOfOurOwnSizedByItsContentDefersToTheOneAroundIt(t *testing.T) 
 		}
 
 		held := growing(t, func(w ggui.Widget) ggui.Widget {
-			return ggui.Row(tc.boundary(ggui.Box(loose(w)).Size(120, 140)), ggui.Box().Size(100, 100).Fill(gray))
+			return widget.Row(tc.boundary(widget.Box(loose(w)).Size(120, 140)), widget.Box().Size(100, 100).Fill(gray))
 		})
 		// The write, and the frame that finds the inner one sized by its
 		// content; then the outer holds every step.
@@ -198,9 +199,9 @@ func (s *shifter) HandlePointer(ev ggui.PointerEvent) bool {
 }
 
 func TestAScrollerOfOurOwnMovesWithinItself(t *testing.T) {
-	s := &shifter{child: ggui.Column(ggui.Box().Size(100, 50).Fill(gray), ggui.Box().Size(100, 50))}
+	s := &shifter{child: widget.Column(widget.Box().Size(100, 50).Fill(gray), widget.Box().Size(100, 50))}
 	p := ggui.NewWindowProbe(func() ggui.Widget {
-		return ggui.Align(ggui.Row(ggui.Box().Size(50, 60).Fill(gray), s)).At(0, 0)
+		return widget.Align(widget.Row(widget.Box().Size(50, 60).Fill(gray), s)).At(0, 0)
 	}, ggui.Sz(240, 160))
 	defer p.Close()
 	if s.hold.Placed() {

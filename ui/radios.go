@@ -6,6 +6,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // RadiosWidget is a group of Radio options built from a list of values.
@@ -20,8 +21,8 @@ type RadiosWidget[T comparable] struct {
 	props property.Owner
 	ggui.Interactive
 	radios      []*RadioWidget[T]
-	row         *ggui.RowWidget
-	column      *ggui.ColumnWidget
+	row         *widget.RowWidget
+	column      *widget.ColumnWidget
 	horizontal  bool // set by Horizontal
 	gap         float64
 	gapSet      bool
@@ -40,7 +41,7 @@ type RadiosWidget[T comparable] struct {
 func Radios[T comparable](selected ggui.Binding[T]) *RadiosWidget[T] {
 	g := &RadiosWidget[T]{selected: selected, label: sprint[T]}
 	g.Role = ggui.RoleGroup
-	g.row, g.column = ggui.Row(), ggui.Column()
+	g.row, g.column = widget.Row(), widget.Column()
 	g.AutoKey()
 	return g
 }
@@ -93,7 +94,7 @@ func (g *RadiosWidget[T]) setOptions(options []T) bool {
 	g.options = slices.Clone(options)
 	g.radios = next
 	// Only the flow of the current direction is laid out and painted.
-	g.row, g.column = ggui.Row(g.children()...), ggui.Column(g.children()...)
+	g.row, g.column = widget.Row(g.children()...), widget.Column(g.children()...)
 	return true
 }
 
@@ -144,7 +145,7 @@ func (g *RadiosWidget[T]) Format(fn func(T) string) *RadiosWidget[T] {
 	for _, r := range g.radios {
 		name := fn(r.value)
 		r.SetName(name)
-		r.label = ggui.Text(name)
+		r.label = widget.Text(name)
 	}
 	return g
 }

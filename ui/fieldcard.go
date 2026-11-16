@@ -6,6 +6,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // inFieldCard tells a control it is painted in a FieldCard, which shows
@@ -27,7 +28,7 @@ type FieldCardWidget struct {
 	controlFirst bool
 	pending      bool // a click that has yet to move focus to the control
 
-	row    *ggui.RowWidget
+	row    *widget.RowWidget
 	first  bool // what row was built for
 	pad    ggui.EdgeInsets
 	theme  *uitheme.Theme
@@ -112,14 +113,14 @@ func (c *FieldCardWidget) Layout(cs ggui.Constraints, env ggui.Env) ggui.Size {
 		// Beside a FieldContent the control starts at the top, a pixel
 		// down, as shadcn's items-start and mt-px; beside anything else it
 		// is centered.
-		align, control := ggui.AlignCenter, c.control
+		align, control := widget.AlignCenter, c.control
 		if _, ok := c.content.(*FieldContentWidget); ok {
-			align, control = ggui.AlignStart, ggui.Padding(c.control, 1, 0, 0, 0)
+			align, control = widget.AlignStart, widget.Padding(c.control, 1, 0, 0, 0)
 		}
 		if c.controlFirst {
-			c.row = ggui.Row(control, ggui.Expanded(c.content)).Align(align)
+			c.row = widget.Row(control, widget.Expanded(c.content)).Align(align)
 		} else {
-			c.row = ggui.Row(ggui.Expanded(c.content), control).Align(align)
+			c.row = widget.Row(widget.Expanded(c.content), control).Align(align)
 		}
 	}
 	// shadcn's p-2.5 inside the label's one-pixel border.
@@ -191,14 +192,14 @@ func (c *FieldCardWidget) HandlePointer(ev ggui.PointerEvent) bool {
 // FieldContent.
 type FieldContentWidget struct {
 	children []ggui.Widget
-	column   *ggui.ColumnWidget
+	column   *widget.ColumnWidget
 }
 
 // FieldContent stacks a FieldTitle, a FieldDescription and anything else
 // that describes a control a quarter of the theme's Space apart: shadcn's
 // FieldContent, the text beside the control of a FieldCard.
 func FieldContent(children ...ggui.Widget) *FieldContentWidget {
-	return &FieldContentWidget{children: children, column: ggui.Column(children...).Align(ggui.AlignStretch)}
+	return &FieldContentWidget{children: children, column: widget.Column(children...).Align(widget.AlignStretch)}
 }
 
 // Layout implements ggui.Widget.
@@ -220,14 +221,14 @@ const (
 // FieldTitle.
 type FieldTitleWidget struct {
 	content string
-	text    *ggui.TextWidget
+	text    *widget.TextWidget
 }
 
 // FieldTitle is medium body text on a snug line: shadcn's FieldTitle, the
 // first line of a FieldContent. It dims with a disabled control and turns
 // destructive in an invalid Field.
 func FieldTitle(text string) *FieldTitleWidget {
-	return &FieldTitleWidget{content: text, text: ggui.Text(text)}
+	return &FieldTitleWidget{content: text, text: widget.Text(text)}
 }
 
 // Layout implements ggui.Widget.
@@ -254,14 +255,14 @@ func (f *FieldTitleWidget) Baseline() (float64, bool) { return f.text.Baseline()
 // FieldDescriptionWidget is the muted text that explains a field. Build
 // one with FieldDescription.
 type FieldDescriptionWidget struct {
-	text *ggui.TextWidget
+	text *widget.TextWidget
 }
 
 // FieldDescription is muted body text: shadcn's FieldDescription, under
 // the FieldTitle of a FieldContent. Field's Help sets the same under a
 // label.
 func FieldDescription(text string) *FieldDescriptionWidget {
-	return &FieldDescriptionWidget{text: ggui.Text(text)}
+	return &FieldDescriptionWidget{text: widget.Text(text)}
 }
 
 // Layout implements ggui.Widget.
@@ -279,7 +280,7 @@ func (f *FieldDescriptionWidget) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Pain
 // bulleted list, each message half a Space under the last.
 type fieldErrorList struct {
 	messages []string
-	rows     []*ggui.TextWidget
+	rows     []*widget.TextWidget
 	sizes    []ggui.Size
 	theme    *uitheme.Theme
 }
@@ -288,7 +289,7 @@ type fieldErrorList struct {
 func (l *fieldErrorList) set(messages []string) {
 	l.messages = messages
 	for len(l.rows) < len(messages) {
-		l.rows = append(l.rows, ggui.Text(""))
+		l.rows = append(l.rows, widget.Text(""))
 	}
 	l.rows = l.rows[:len(messages)]
 	l.sizes = make([]ggui.Size, len(messages))

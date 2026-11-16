@@ -7,13 +7,14 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // ThemeMode offers the three modes by name and writes the one tapped.
 func TestThemeModeChoosesLightDarkOrSystem(t *testing.T) {
 	t.Parallel()
 	mode := ggui.State(uitheme.ModeSystem)
-	p := ggui.NewProbe(ggui.Row(ui.ThemeMode(mode)), ggui.Sz(320, 80))
+	p := ggui.NewProbe(widget.Row(ui.ThemeMode(mode)), ggui.Sz(320, 80))
 	defer p.Close()
 	p.Frame()
 	if _, ok := p.Semantics().Find(ggui.RoleGroup, "Theme"); !ok {

@@ -9,6 +9,7 @@ import (
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // itemSize is one of an item's three densities.
@@ -41,7 +42,7 @@ type ItemWidget struct {
 	onTap              func()
 	motion             time.Duration
 	hover              float64 // how far onto the surface under the pointer the row was painted
-	title, description *ggui.TextWidget
+	title, description *widget.TextWidget
 	media, action      ggui.Widget
 	header, footer     ggui.Widget
 	look               itemLook
@@ -60,12 +61,12 @@ type ItemWidget struct {
 //		Media(ui.Avatar("Ada")).
 //		Action(ui.Button("Run", run).Outline())
 func Item(title, description string) *ItemWidget {
-	i := &ItemWidget{title: ggui.Text(title).MaxLines(1)}
+	i := &ItemWidget{title: widget.Text(title).MaxLines(1)}
 	i.Role = ggui.RoleLink
 	i.SetName(title)
 	i.AutoKey()
 	if description != "" {
-		i.description = ggui.Text(description).MaxLines(2)
+		i.description = widget.Text(description).MaxLines(2)
 	}
 	return i
 }
@@ -324,7 +325,7 @@ func (m *itemIcon) Paint(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(m.icon, r) }
 // ItemGroupWidget is a list of items, set apart by a gap that follows
 // their size. Build one with ItemGroup.
 type ItemGroupWidget struct {
-	column *ggui.ColumnWidget
+	column *widget.ColumnWidget
 	items  []ggui.Widget
 }
 
@@ -336,7 +337,7 @@ type ItemGroupWidget struct {
 //		ui.Item("Grace Hopper", "Compilers").Outline(),
 //	)
 func ItemGroup(items ...ggui.Widget) *ItemGroupWidget {
-	return &ItemGroupWidget{column: ggui.Column(items...).Align(ggui.AlignStretch), items: items}
+	return &ItemGroupWidget{column: widget.Column(items...).Align(widget.AlignStretch), items: items}
 }
 
 // Layout implements ggui.Widget.

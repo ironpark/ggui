@@ -4,6 +4,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // MarkerWidget is a muted conversation status, bordered update, or labeled
@@ -12,14 +13,14 @@ type MarkerWidget struct {
 	props                 property.Owner
 	content               ggui.Widget
 	icon                  ggui.Widget
-	view                  *ggui.StyledWidget
+	view                  *widget.StyledWidget
 	variant               string
 	contentSize, iconSize ggui.Size
 	theme                 *uitheme.Theme
 }
 
 func Marker(content ggui.Widget) *MarkerWidget {
-	return &MarkerWidget{content: content, view: ggui.Styled(content)}
+	return &MarkerWidget{content: content, view: widget.Styled(content)}
 }
 func (m *MarkerWidget) Icon(w ggui.Widget) *MarkerWidget { m.icon = w; return m }
 func (m *MarkerWidget) Separator() *MarkerWidget {

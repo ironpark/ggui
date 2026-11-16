@@ -163,7 +163,7 @@ var cssColorKeys sync.Map // name -> ggui.EnvKey[color.Color]
 //	light, dark, _ := theme.FromCSS(`
 //		:root { --warning: oklch(0.84 0.16 84); }
 //		.dark { --warning: oklch(0.41 0.11 46); }`)
-//	ggui.Text("Low disk space").Color(theme.Var("warning"))
+//	widget.Text("Low disk space").Color(theme.Var("warning"))
 //
 // An app setting the color in Go uses the same key with Theme.Set, so the
 // two stay interchangeable.

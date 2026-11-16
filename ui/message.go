@@ -4,6 +4,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // MessageWidget lays out a conversation row independently of its surface.
@@ -13,7 +14,7 @@ import (
 type MessageWidget struct {
 	props                                        property.Owner
 	content, avatar                              ggui.Widget
-	headerView, footerView                       *ggui.StyledWidget
+	headerView, footerView                       *widget.StyledWidget
 	end                                          bool
 	ghost                                        bool // a ghost Bubble was laid out inside
 	bodySize, avatarSize, headerSize, footerSize ggui.Size
@@ -30,14 +31,14 @@ func (m *MessageWidget) Avatar(w ggui.Widget) *MessageWidget { m.avatar = w; ret
 // Header sets a row above the content, such as the sender's name, in small
 // medium muted text, inset to line up with a bubble's text.
 func (m *MessageWidget) Header(w ggui.Widget) *MessageWidget {
-	m.headerView = ggui.Styled(w)
+	m.headerView = widget.Styled(w)
 	return m
 }
 
 // Footer sets a row under the content, such as a delivery status or
 // actions, styled and inset as the header is.
 func (m *MessageWidget) Footer(w ggui.Widget) *MessageWidget {
-	m.footerView = ggui.Styled(w)
+	m.footerView = widget.Styled(w)
 	return m
 }
 
@@ -49,8 +50,8 @@ func (m *MessageWidget) End() *MessageWidget {
 }
 
 // MessageGroup stacks consecutive messages with shadcn's 8px gap.
-func MessageGroup(messages ...ggui.Widget) *ggui.ColumnWidget {
-	return ggui.Column(messages...).Gap(8).Align(ggui.AlignStretch)
+func MessageGroup(messages ...ggui.Widget) *widget.ColumnWidget {
+	return widget.Column(messages...).Gap(8).Align(widget.AlignStretch)
 }
 
 // Layout implements Widget.

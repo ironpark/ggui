@@ -6,6 +6,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // ListBoxWidget is a list of keyed rows of which one is selected, as in a
@@ -26,7 +27,7 @@ type ListBoxWidget[T any, K comparable] struct {
 	label         func(T) string
 	name          string
 
-	body *ggui.EachWidget[T, K]
+	body *widget.EachWidget[T, K]
 	nav  rovingRows[T, K]
 
 	shown  rowCursor[K] // the selection as of the last paint
@@ -39,14 +40,14 @@ type ListBoxWidget[T any, K comparable] struct {
 //
 //	ui.ListBox(files, func(f File) string { return f.Path },
 //		func(f ggui.Readable[File]) ggui.Widget {
-//			return ggui.TextOf(ggui.Map(f, func(f File) string { return f.Name }))
+//			return widget.TextOf(ggui.Map(f, func(f File) string { return f.Name }))
 //		},
 //	).RowName(func(f File) string { return f.Name }).BindSelected(chosen)
 func ListBox[T any, K comparable](items ggui.Readable[[]T], key func(T) K, row func(ggui.Readable[T]) ggui.Widget) *ListBoxWidget[T, K] {
 	l := &ListBoxWidget[T, K]{items: items, key: key}
 	l.label = func(item T) string { return sprint(key(item)) }
-	l.body = ggui.EachKeyed(items, key, func(it ggui.EachItem[T]) ggui.Widget { return l.row(it, row) }).
-		Gap(2).Align(ggui.AlignStretch).Unlisted()
+	l.body = widget.EachKeyed(items, key, func(it widget.EachItem[T]) ggui.Widget { return l.row(it, row) }).
+		Gap(2).Align(widget.AlignStretch).Unlisted()
 	return l
 }
 
@@ -140,10 +141,10 @@ func (l *ListBoxWidget[T, K]) activate(item T, k K) {
 	}
 }
 
-func (l *ListBoxWidget[T, K]) row(it ggui.EachItem[T], content func(ggui.Readable[T]) ggui.Widget) ggui.Widget {
+func (l *ListBoxWidget[T, K]) row(it widget.EachItem[T], content func(ggui.Readable[T]) ggui.Widget) ggui.Widget {
 	item := ggui.Untrack(it.Value.Get)
 	r := &listRow[T, K]{list: l, item: it.Value, index: it.Index, key: l.key(item)}
-	r.box = ggui.Box(content(it.Value))
+	r.box = widget.Box(content(it.Value))
 	r.Role = ggui.RoleOption
 	r.SetName(l.label(item))
 	r.AutoKey()
@@ -157,7 +158,7 @@ type listRow[T any, K comparable] struct {
 	item   ggui.Readable[T]
 	index  ggui.Readable[int]
 	key    K
-	box    *ggui.BoxWidget
+	box    *widget.BoxWidget
 	theme  *uitheme.Theme
 	motion time.Duration
 }

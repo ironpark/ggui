@@ -10,6 +10,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // TableSort describes a single column sort. An empty Column preserves source order.
@@ -42,7 +43,7 @@ func (s TableSort) Mark(id string) string {
 // sortHeading is a ghost heading button that toggles sorting by id and shows
 // the current direction from sort as an icon after the title.
 func sortHeading(title string, sort ggui.Readable[TableSort], id string, toggle func()) *ButtonWidget {
-	face := ggui.Row(ggui.Text(title).NoWrap(), &sortMark{sort: sort, id: id}).Gap(4).Align(ggui.AlignCenter)
+	face := widget.Row(widget.Text(title).NoWrap(), &sortMark{sort: sort, id: id}).Gap(4).Align(widget.AlignCenter)
 	b := ButtonOf(face, toggle).Ghost().Pad(0, 0).Name("Sort " + title)
 	b.value = func() string {
 		if s := ggui.Untrack(sort.Get); s.Column == id {
@@ -328,8 +329,8 @@ func DataTable[T any, K comparable](m *TableModel[T, K]) ggui.Widget {
 		// trailing edge, so it does not run past the table's.
 		columns := Menu("Columns", entries...)
 		columns.button.TrailingIcon(Icon(icons.ChevronDown))
-		columns.Popup().Align(ggui.PopupEnd)
-		toolbar := ggui.Row(ggui.Expanded(search), columns).Gap(12)
+		columns.Popup().Align(widget.PopupEnd)
+		toolbar := widget.Row(widget.Expanded(search), columns).Gap(12)
 		isEmpty := ggui.Map(m.visible, func(rows []T) bool { return len(rows) == 0 })
 		page := ggui.Derived(m.pageSelection)
 		table := ggui.Reactive(func() ggui.Widget {
@@ -352,35 +353,35 @@ func DataTable[T any, K comparable](m *TableModel[T, K]) ggui.Widget {
 			t := Table(m.visible, m.key, cols...).RowHeight(48).BindSelectedRows(m.selected)
 			empty := ggui.View(isEmpty, func(empty bool) ggui.Widget {
 				if empty {
-					return ggui.Box().Height(96)
+					return widget.Box().Height(96)
 				}
-				return ggui.Box()
+				return widget.Box()
 			})
-			box := ggui.Box(ggui.Column(t, empty).Align(ggui.AlignStretch))
+			box := widget.Box(widget.Column(t, empty).Align(widget.AlignStretch))
 			minWidth := 0.0
 			for _, c := range cols {
 				minWidth += cmp.Or(c.Width, 160)
 			}
-			return &dataTableFrame{minWidth: max(560, minWidth), box: box, scroll: ggui.Scroll(box).Horizontal(), isEmpty: isEmpty, message: ggui.Center(ggui.Text("No results."))}
+			return &dataTableFrame{minWidth: max(560, minWidth), box: box, scroll: widget.Scroll(box).Horizontal(), isEmpty: isEmpty, message: widget.Center(widget.Text("No results."))}
 		})
-		summary := withMutedText(ggui.TextOf(ggui.Derived(func() string {
+		summary := withMutedText(widget.TextOf(ggui.Derived(func() string {
 			rows := m.filtered.Get()
 			return fmt.Sprintf("%d of %d row(s) selected.", m.countSelected(rows), len(rows))
 		})))
-		pageLabel := ggui.TextOf(ggui.Derived(func() string { return fmt.Sprintf("Page %d of %d", m.Page(), m.PageCount()) })).NoWrap()
+		pageLabel := widget.TextOf(ggui.Derived(func() string { return fmt.Sprintf("Page %d of %d", m.Page(), m.PageCount()) })).NoWrap()
 		previous := Button("Previous", func() { m.SetPage(m.Page() - 1) }).Outline().Size(ButtonSmall).BindDisabled(ggui.Derived(func() bool { return m.Page() <= 1 }))
 		next := Button("Next", func() { m.SetPage(m.Page() + 1) }).Outline().Size(ButtonSmall).BindDisabled(ggui.Derived(func() bool { return m.Page() >= m.PageCount() }))
-		size := ggui.Box(Select(ggui.Bind(m.PageSize, m.SetPageSize)).Options([]int{5, 10, 20, 50}).Name("Rows per page")).Width(72)
-		footer := ggui.Wrap(summary, ggui.Row(ggui.WithEnv(tableLabelText, ggui.Text("Rows per page").NoWrap()), size).Gap(8).Align(ggui.AlignCenter), pageLabel, ggui.Row(previous, next).Gap(8)).Gap(12).Align(ggui.AlignCenter)
-		return ggui.Column(toolbar, table, footer).Gap(16).Align(ggui.AlignStretch)
+		size := widget.Box(Select(ggui.Bind(m.PageSize, m.SetPageSize)).Options([]int{5, 10, 20, 50}).Name("Rows per page")).Width(72)
+		footer := widget.Wrap(summary, widget.Row(ggui.WithEnv(tableLabelText, widget.Text("Rows per page").NoWrap()), size).Gap(8).Align(widget.AlignCenter), pageLabel, widget.Row(previous, next).Gap(8)).Gap(12).Align(widget.AlignCenter)
+		return widget.Column(toolbar, table, footer).Gap(16).Align(widget.AlignStretch)
 	})
 }
 
 // A narrow container scrolls whole columns rather than crushing their text.
 type dataTableFrame struct {
 	minWidth float64
-	box      *ggui.BoxWidget
-	scroll   *ggui.ScrollWidget
+	box      *widget.BoxWidget
+	scroll   *widget.ScrollWidget
 	isEmpty  ggui.Readable[bool]
 	message  ggui.Widget
 	head     float64

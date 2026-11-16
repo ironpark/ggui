@@ -15,7 +15,7 @@ func TestDisclosureHeightMotionAndLeavingInput(t *testing.T) {
 			on := ggui.State(false)
 			keys := ggui.State([]string{})
 			clicked := 0
-			body := ggui.Box(Button("Inside", func() { clicked++ })).Height(100)
+			body := widget.Box(Button("Inside", func() { clicked++ })).Height(100)
 			var w ggui.Widget
 			if accordion {
 				w = Accordion(keys, AccordionItem("a", "Reveal", body))
@@ -24,7 +24,7 @@ func TestDisclosureHeightMotionAndLeavingInput(t *testing.T) {
 			}
 			var measured ggui.Size
 			watch := ggui.FromFuncs(func(c ggui.Constraints, e ggui.Env) ggui.Size { measured = w.Layout(c, e); return measured }, func(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(w, r) })
-			p := ggui.NewProbe(ggui.Column(watch), ggui.Sz(320, 400))
+			p := ggui.NewProbe(widget.Column(watch), ggui.Sz(320, 400))
 			height := func() float64 { p.Frame(); return measured.H }
 			defer p.Close()
 			p.Advance(0)
@@ -61,10 +61,10 @@ func TestDisclosureHeightMotionAndLeavingInput(t *testing.T) {
 func TestDisclosureReducedMotionImmediate(t *testing.T) {
 	t.Parallel()
 	keys := ggui.State([]string{})
-	a := Accordion(keys, AccordionItem("a", "Reveal", ggui.Box().Height(100)))
+	a := Accordion(keys, AccordionItem("a", "Reveal", widget.Box().Height(100)))
 	var measured ggui.Size
 	watch := ggui.FromFuncs(func(c ggui.Constraints, e ggui.Env) ggui.Size { measured = a.Layout(c, e); return measured }, func(dst *ggui.Canvas, r ggui.Rect) { dst.Paint(a, r) })
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(watch)), ggui.Sz(320, 400))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(watch)), ggui.Sz(320, 400))
 	height := func() float64 { p.Frame(); return measured.H }
 	defer p.Close()
 	h0 := height()
@@ -121,8 +121,8 @@ func TestDisabledSliderAndTabsIgnoreDirectInput(t *testing.T) {
 	value := ggui.State(.5)
 	slider := Slider(value, 0, 1).Disabled(true)
 	selected := ggui.State(0)
-	tabs := Tabs(selected, Tab("One", ggui.Text("1")), Tab("Two", ggui.Text("2"))).Disabled(true)
-	p := ggui.NewProbe(ggui.Column(slider, tabs), ggui.Sz(320, 200))
+	tabs := Tabs(selected, Tab("One", widget.Text("1")), Tab("Two", widget.Text("2"))).Disabled(true)
+	p := ggui.NewProbe(widget.Column(slider, tabs), ggui.Sz(320, 200))
 	defer p.Close()
 	p.Frame()
 	slider.HandleKey(ggui.KeyEvent{Kind: ggui.KeyPress, Key: ggui.KeyArrowRight})
@@ -136,7 +136,7 @@ func TestDisabledSliderAndTabsIgnoreDirectInput(t *testing.T) {
 func TestHoverCardBridgeAndNarrowViewport(t *testing.T) {
 	t.Parallel()
 	h := HoverCard(Button("Preview", nil), Button("Preview action", nil)).Width(400)
-	p := ggui.NewProbe(ggui.Column(h), ggui.Sz(180, 300))
+	p := ggui.NewProbe(widget.Column(h), ggui.Sz(180, 300))
 	defer p.Close()
 	p.Advance(0)
 	anchor, _ := p.Find("Preview")
@@ -174,7 +174,7 @@ func TestFieldErrorPropagatesToInputChrome(t *testing.T) {
 	err := ggui.State("")
 	input := TextField(ggui.State(""))
 	group := InputGroup(widget.TextInput(ggui.State("")))
-	p := ggui.NewProbe(ggui.Column(Field("Email", input).BindError(err), Field("Website", group).BindError(err)), ggui.Sz(320, 240))
+	p := ggui.NewProbe(widget.Column(Field("Email", input).BindError(err), Field("Website", group).BindError(err)), ggui.Sz(320, 240))
 	defer p.Close()
 	p.Frame()
 	if input.invalid || group.invalid {
@@ -198,7 +198,7 @@ func TestDisclosureStopsLayoutAfterSettling(t *testing.T) {
 	layouts := 0
 	body := ggui.FromFuncs(func(c ggui.Constraints, _ ggui.Env) ggui.Size { layouts++; return c.Constrain(ggui.Sz(100, 100)) }, func(*ggui.Canvas, ggui.Rect) {})
 	a := Accordion(open, AccordionItem("a", "Reveal", body))
-	p := ggui.NewProbe(ggui.Column(a), ggui.Sz(320, 300))
+	p := ggui.NewProbe(widget.Column(a), ggui.Sz(320, 300))
 	defer p.Close()
 	p.Advance(0)
 	for range 20 {
@@ -225,7 +225,7 @@ func TestTableRowSelectionMotion(t *testing.T) {
 	for _, reduced := range []bool{false, true} {
 		selected := ggui.State(0)
 		tbl := Table(ggui.State([]int{1}), func(v int) int { return v }, TextCol("ID", func(int) string { return "one" })).BindSelected(selected)
-		row := tbl.row(ggui.EachItem[int]{Value: ggui.State(1), Index: ggui.State(0)}).(*tableRow[int, int])
+		row := tbl.row(widget.EachItem[int]{Value: ggui.State(1), Index: ggui.State(0)}).(*tableRow[int, int])
 		var amount float64
 		watch := ggui.FromFuncs(row.Layout, func(dst *ggui.Canvas, rc ggui.Rect) {
 			dst.Paint(row, rc)
@@ -286,8 +286,8 @@ func TestTooltipKeyboardFocusAndNarrowViewport(t *testing.T) {
 func TestTooltipOverAFocusedWidgetStaysClosed(t *testing.T) {
 	t.Parallel()
 	input := widget.TextInput(ggui.State("")).Name("Editor")
-	badge := Tooltip(ggui.Box(ggui.Text("badge")).Size(40, 20), "Over the editor")
-	p := ggui.NewProbe(ggui.Stack(ggui.Box(input).Size(200, 100), ggui.Padding(badge, 13.7, 10.3)), ggui.Sz(200, 100))
+	badge := Tooltip(widget.Box(widget.Text("badge")).Size(40, 20), "Over the editor")
+	p := ggui.NewProbe(widget.Stack(widget.Box(input).Size(200, 100), widget.Padding(badge, 13.7, 10.3)), ggui.Sz(200, 100))
 	defer p.Close()
 	p.Advance(0)
 	p.Type(ggui.Mods{}, ggui.KeyTab)
@@ -309,7 +309,7 @@ func TestDialogTopHoldsItsPanelAsItGrows(t *testing.T) {
 	open := ggui.State(true)
 	tall := ggui.State(false)
 	body := ggui.Reactive(func() ggui.Widget {
-		return ggui.Box(Button("Inside", nil)).Height(pick(tall.Get(), 200.0, 60.0))
+		return widget.Box(Button("Inside", nil)).Height(pick(tall.Get(), 200.0, 60.0))
 	})
 	d := Dialog(open, body).Compact().Top(80)
 	p := ggui.NewProbe(d, ggui.Sz(500, 400))
@@ -370,14 +370,14 @@ func TestDisclosureHoverMotion(t *testing.T) {
 			var w ggui.Widget
 			var anchor func(ggui.Rect) ggui.Anchor
 			if accordion {
-				a := Accordion(ggui.State([]string{}), AccordionItem("a", "Reveal", ggui.Text("Body")))
+				a := Accordion(ggui.State([]string{}), AccordionItem("a", "Reveal", widget.Text("Body")))
 				w = a
 				anchor = func(r ggui.Rect) ggui.Anchor {
 					r.Size.H = a.heights[0]
 					return a.headers[0].Anchor(r)
 				}
 			} else {
-				c := Collapsible(ggui.State(false), "Reveal", ggui.Text("Body"))
+				c := Collapsible(ggui.State(false), "Reveal", widget.Text("Body"))
 				w = c
 				anchor = func(r ggui.Rect) ggui.Anchor {
 					r.Size.H = c.headerH

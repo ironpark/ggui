@@ -6,6 +6,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // MenubarWidget coordinates Menu triggers through one popup and one tab stop.
@@ -15,7 +16,7 @@ type MenubarWidget struct {
 	ggui.Interactive
 	menus        []*MenuWidget
 	active       int
-	popup        *ggui.PopupWidget
+	popup        *widget.PopupWidget
 	sizes        []ggui.Size
 	rects        []ggui.Rect
 	theme        *uitheme.Theme
@@ -28,8 +29,8 @@ type MenubarWidget struct {
 	// one left plays its exit where it was while the one moved to plays
 	// its entrance. The bar has one popup, so it replays the entrance in
 	// swap and paints the menu left as a ghost on its way out.
-	swap     *ggui.TransitionWidget
-	ghost    *ggui.TransitionWidget
+	swap     *widget.TransitionWidget
+	ghost    *widget.TransitionWidget
 	arrive   ggui.Motion
 	depart   ggui.Motion
 	arriving bool
@@ -44,9 +45,9 @@ func Menubar(menus ...*MenuWidget) *MenubarWidget {
 	b := &MenubarWidget{menus: menus, active: 0, left: -1, sizes: make([]ggui.Size, len(menus)), rects: make([]ggui.Rect, len(menus))}
 	b.Role = ggui.RoleToolbar
 	b.AutoKey()
-	b.swap = ggui.PopIn(menuSurface(menubarPanel{b}))
-	b.ghost = ggui.PopIn(menuSurface(menubarGhost{b}))
-	b.popup = ggui.Popup(menubarAnchor{b}, b.swap).Keys(b).Owner(b)
+	b.swap = widget.PopIn(menuSurface(menubarPanel{b}))
+	b.ghost = widget.PopIn(menuSurface(menubarGhost{b}))
+	b.popup = widget.Popup(menubarAnchor{b}, b.swap).Keys(b).Owner(b)
 	for i, m := range menus {
 		m.fit, m.checkLeft, m.keys = true, true, b
 		m.button.Ghost()
@@ -67,7 +68,7 @@ func (b *MenubarWidget) Compact() *MenubarWidget {
 }
 
 // Popup returns the shared popup.
-func (b *MenubarWidget) Popup() *ggui.PopupWidget { return b.popup }
+func (b *MenubarWidget) Popup() *widget.PopupWidget { return b.popup }
 func (b *MenubarWidget) open(i int, first bool) {
 	if b.IsInert() || i < 0 || i >= len(b.menus) || b.menus[i].button.IsInert() {
 		return

@@ -49,8 +49,8 @@ func chatSurface(content ggui.Widget, maxWidth ...float64) ggui.Widget {
 	if len(maxWidth) > 0 {
 		width = maxWidth[0]
 	}
-	scene := ggui.Row(ggui.Spacer(), ggui.Box(uitheme.With(t, content)).Width(width), ggui.Spacer())
-	return ggui.Box(ggui.Padding(scene, 24, 20, 32, 20)).Fill(t.Bg).Radius(12)
+	scene := widget.Row(widget.Spacer(), widget.Box(uitheme.With(t, content)).Width(width), widget.Spacer())
+	return widget.Box(widget.Padding(scene, 24, 20, 32, 20)).Fill(t.Bg).Radius(12)
 }
 
 // Small outline icons use logical coordinates so they stay crisp at any scale.

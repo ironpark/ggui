@@ -143,33 +143,43 @@ those guides as historical measurements; rerun them on your target hardware.
 | Area | Source |
 | --- | --- |
 | Application and frame loop | [app.go](../app.go), [loop.go](../loop.go) |
-| Reactivity and component ownership | [reactivity.go](../reactivity.go), [widget.go](../widget.go), [for.go](../for.go), [pkg/virtual/](../pkg/virtual/) (which rows a virtual list lays out, and where) |
-| Layout, geometry, and drawing | [widgets.go](../widgets.go) (boxes, rows, stacks, grids and `Responsive`), [scroll.go](../scroll.go), [canvas.go](../canvas.go) (the frame state, retained values, clips and hit-region registration), [paint.go](../paint.go) (shapes, paths, gradients and layers), [damage.go](../damage.go) and [internal/region/](../internal/region/) (the regions a partial frame repaints), [pkg/layout/](../pkg/layout/) (box layout and rectangles), [pkg/geom/](../pkg/geom/) (affine transforms and path outlines), [internal/render/](../internal/render/) (the shaders behind the Canvas, and the layer images it lends) |
-| Unstyled widgets | [widget/](../widget/): the text input, images and Reveal, written on ggui's public API and the internal packages and importing nothing of `ui`, its theme, icons or fonts |
+| Reactivity and component ownership | [reactivity.go](../reactivity.go), [widget.go](../widget.go), [widget/for.go](../widget/for.go) (`Each` and `EachKeyed`), [pkg/virtual/](../pkg/virtual/) (which rows a virtual list lays out, and where) |
+| Layout, geometry, and drawing | [boundary.go](../boundary.go) (`LayoutBoundary`), [widget/layout.go](../widget/layout.go) (boxes, rows, stacks, grids and `Responsive`), [widget/scroll.go](../widget/scroll.go), [canvas.go](../canvas.go) (the frame state, retained values, clips and hit-region registration), [paint.go](../paint.go) (shapes, paths, gradients and layers), [damage.go](../damage.go) and [internal/region/](../internal/region/) (the regions a partial frame repaints), [pkg/layout/](../pkg/layout/) (box layout and rectangles), [pkg/geom/](../pkg/geom/) (affine transforms and path outlines), [internal/render/](../internal/render/) (the shaders behind the Canvas, and the layer images it lends) |
+| Unstyled widgets | [widget/](../widget/): layout, text, scrolling, lists, popups, transitions, compositing, pointer and drag and drop, the text input, images and Reveal, written on ggui's public API and the internal packages and importing nothing of `ui`, its theme, icons or fonts |
 | UI controls | [ui/](../ui/) (themed components, built on `ggui` and `widget`) |
-| Text editing and fonts | [widget/textinput.go](../widget/textinput.go), [font.go](../font.go), [text.go](../text.go), [internal/fontsys/](../internal/fontsys/) (fonts, fallback chains and emoji), [internal/textlayout/](../internal/textlayout/) (measuring and wrapping), [internal/paragraph/](../internal/paragraph/) (bidi lines, styled paragraphs and CPU rendering), [internal/textedit/](../internal/textedit/) (the buffer, selection, undo, click selection and case-blind find), [internal/editlayout/](../internal/editlayout/) (TextInput's wrap and bidi lines, cached by hard line), [input.go](../input.go) (`IME`, `NewIME`, `SetIME`: the IME session a text widget is given), [internal/platform/textinput/](../internal/platform/textinput/) (the platform IME) |
-| Input and shortcuts | [input.go](../input.go) (hit regions, pointer and focus routing, touch), [interact.go](../interact.go) (`Pointer`, `Tap` and `Focus`), [drag.go](../drag.go) (the drag session: a drag inside the app, and files dropped from the desktop), [dragdrop.go](../dragdrop.go) (`DragSource`, `DropZone` and `Reorderable`), [keys.go](../keys.go) (keys, chords and the shortcuts taken before and after the focused widget), [pkg/kinetics/](../pkg/kinetics/) (a touch's pan, velocity and fling) |
+| Text editing and fonts | [widget/textinput.go](../widget/textinput.go), [font.go](../font.go), [widget/text.go](../widget/text.go) and [widget/richtext.go](../widget/richtext.go), [internal/fontsys/](../internal/fontsys/) (fonts, fallback chains and emoji), [internal/textlayout/](../internal/textlayout/) (measuring and wrapping), [internal/paragraph/](../internal/paragraph/) (bidi lines, styled paragraphs and CPU rendering), [internal/textedit/](../internal/textedit/) (the buffer, selection, undo, click selection and case-blind find), [internal/editlayout/](../internal/editlayout/) (TextInput's wrap and bidi lines, cached by hard line), [input.go](../input.go) (`IME`, `NewIME`, `SetIME`: the IME session a text widget is given), [internal/platform/textinput/](../internal/platform/textinput/) (the platform IME) |
+| Input and shortcuts | [input.go](../input.go) (hit regions, pointer and focus routing, touch), [widget/interact.go](../widget/interact.go) (`Pointer`, `Tap` and `Focus`), [drag.go](../drag.go) (the drag session: a drag inside the app, and files dropped from the desktop), [widget/dragdrop.go](../widget/dragdrop.go) (`DragSource`, `DropZone` and `Reorderable`), [keys.go](../keys.go) (keys, chords and the shortcuts taken before and after the focused widget), [pkg/kinetics/](../pkg/kinetics/) (a touch's pan, velocity and fling) |
 | Platform services | [runtime/](../runtime/) (file dialogs and the clipboard, reached through `Host`) |
 | Accessibility and semantics | [a11y/](../a11y/) (the vocabulary), [internal/platform/a11ybridge/](../internal/platform/a11ybridge/) (the platform bridges), [semantics.go](../semantics.go) |
-| Styling and animation | [environment.go](../environment.go) (styles), [anim.go](../anim.go), [transition.go](../transition.go), [effects.go](../effects.go) (the Canvas's blurs, shadows, edge fades and transforms), [composite.go](../composite.go) (`Opacity`, `Blur`, `BackdropBlur`, `Transform` and `ClipPath` on them), [pkg/kinetics/](../pkg/kinetics/) (easing curves, springs, and scroll and touch physics) — see [Styling and themes](styling.md) |
-| Overlays and images | [popup.go](../popup.go) (`Popup`), [overlay.go](../overlay.go) (the window's `Overlay`), [paint.go](../paint.go) (`Canvas.DrawImage`), [widget/image.go](../widget/image.go), [internal/imgcache/](../internal/imgcache/) (the cache `widget.AsyncImage` loads into) |
+| Styling and animation | [environment.go](../environment.go) (styles), [anim.go](../anim.go), [widget/transition.go](../widget/transition.go), [effects.go](../effects.go) (the Canvas's blurs, shadows, edge fades and transforms), [widget/composite.go](../widget/composite.go) (`Opacity`, `Blur`, `BackdropBlur`, `Transform` and `ClipPath` on them), [pkg/kinetics/](../pkg/kinetics/) (easing curves, springs, and scroll and touch physics) — see [Styling and themes](styling.md) |
+| Overlays and images | [widget/popup.go](../widget/popup.go) (`Popup`), [overlay.go](../overlay.go) (the window's `Overlay`), [paint.go](../paint.go) (`Canvas.DrawImage`), [widget/image.go](../widget/image.go), [internal/imgcache/](../internal/imgcache/) (the cache `widget.AsyncImage` loads into) |
 | Testing and diagnostics | [probe.go](../probe.go), [inspect/panel/](../inspect/panel) (the panel, build tag `ggui_inspector`), [inspector.go](../inspector.go) (its registration, and the frame built from the trace), [inspect/](../inspect) (the frame model the panel and `App.OnInspect` share, and `ReadFrameStats` and `ReadMotionReport`), [internal/framestats/](../internal/framestats/) (the process's frame counters those read), [overlay.go](../overlay.go) (the Overlay the panel draws as), [widget.go](../widget.go) (Cached) |
 | Runnable applications | [examples/](../examples/) |
 
-The root package's files are of two kinds: the kernel, the frame loop,
-input, painting, layout caching and what else every widget stands on, and
-the built-in widgets written on it, which are to use the kernel's public API
-alone, as a widget of another package does, so that they can leave the root.
-`TestKernelAndWidgetFilesStayApart` in [boundary_test.go](../boundary_test.go)
-says which file is which, test files included, and type-checks the package
-with its tests: it fails when a kernel file, source or test, uses anything a
-widget file declares, or a widget file, source or test, uses an unexported
-kernel name or anything a kernel test file declares. There is no list of
-exceptions: the widget files mount keyed subtrees with `Scope`, hold changes
-of size with `LayoutBoundary` and ask for layouts with `Invalidate` and
-`Relayout`, as [internal/apitest](../internal/apitest/) shows a package of
-its own doing, and their tests drive them with a `Probe` or a
-`WindowProbe`; a widget that needs more of the kernel than it exports gets
-it exported. The kernel's tests stand on the small widgets of
-[fixtures_test.go](../fixtures_test.go), built on the widget protocol, in
-place of the built-in ones.
+The module is built in three layers, each importing only those below it:
+
+- **`ggui`**, the root package, is the kernel: the app and its windows, the
+  frame loop, the canvas and painting, input and shortcuts, the environment,
+  reactivity and component ownership, the widget protocol (`Widget`,
+  `Scope`, `LayoutBoundary`, `Invalidate`, `Cached`) and the `Probe` and
+  `WindowProbe` that drive a tree in tests. It holds no widget of its own.
+- **[`widget`](../widget/)** holds the unstyled building blocks written on
+  the kernel's public API: `Text` and `RichText`, `Box`, `Row`, `Column`,
+  `Stack` and the other layouts, `Scroll`, `Each`, `Popup`, `Transition`,
+  `Opacity` and the other composites, the pointer and drag and drop
+  widgets, the text input, images and `Reveal`. They take their looks from
+  the `Env` and what they are given.
+- **[`ui`](../ui/)** is the themed component library, built on both.
+
+The import graph keeps the layers apart, with no test to guard it: `widget`
+cannot reach a name the kernel keeps to itself, and the kernel, tests
+included, cannot import a widget back without a cycle. A widget that needs
+more of the kernel than it exports gets it exported, as one of an
+application's own package would; [internal/apitest](../internal/apitest/)
+shows such a package mounting keyed subtrees with `Scope`, holding changes
+of size with `LayoutBoundary` and asking for layouts with `Invalidate` and
+`Relayout`. The kernel's tests stand on the small widgets of
+[fixtures_test.go](../fixtures_test.go), built on the widget protocol, and
+`widget`'s tests drive the widgets with a `Probe` or a `WindowProbe`.
+`widget` imports none of `ui`, its theme, icons or fonts, which
+[widget/imports_test.go](../widget/imports_test.go) checks.

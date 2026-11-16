@@ -6,13 +6,14 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestDatePickerPlaceholderAndFormatShowOnTheTrigger(t *testing.T) {
 	t.Parallel()
 	// The trigger is as wide as the text on it.
 	width := func(d *ui.DatePickerWidget) float64 {
-		p := ggui.NewProbe(ggui.Row(d.Name("Due")), ggui.Sz(380, 450))
+		p := ggui.NewProbe(widget.Row(d.Name("Due")), ggui.Sz(380, 450))
 		defer p.Close()
 		return find(t, p, ggui.RoleButton, "Due").Rect.Size.W
 	}
@@ -24,7 +25,7 @@ func TestDatePickerPlaceholderAndFormatShowOnTheTrigger(t *testing.T) {
 	value := ggui.State(time.Time{})
 	d := ui.DatePicker(value).Name("Due").Format(func(t time.Time) string { return t.Format("Jan 2") }).Format(nil)
 	d.Calendar().Location(time.UTC)
-	p := ggui.NewProbe(ggui.Column(d), ggui.Sz(380, 450))
+	p := ggui.NewProbe(widget.Column(d), ggui.Sz(380, 450))
 	defer p.Close()
 	if trigger, _ := p.Semantics().Find(ggui.RoleButton, "Due"); trigger.Value != "" {
 		t.Fatalf("a zero date has the value %q, want none", trigger.Value)
@@ -38,7 +39,7 @@ func TestDatePickerPlaceholderAndFormatShowOnTheTrigger(t *testing.T) {
 func TestDatePickerExpandAndCollapseActions(t *testing.T) {
 	t.Parallel()
 	d := ui.DatePicker(ggui.State(date(2024, 3, 14))).Name("Due")
-	p := ggui.NewProbe(ggui.Column(d), ggui.Sz(380, 450))
+	p := ggui.NewProbe(widget.Column(d), ggui.Sz(380, 450))
 	defer p.Close()
 	trigger, _ := p.Semantics().Find(ggui.RoleButton, "Due")
 	p.Perform(trigger.ID, ggui.Action{Kind: ggui.ActionExpand})
@@ -69,7 +70,7 @@ func TestDatePickerKeyKeepsThePopupAndMonthAcrossAMovingRebuild(t *testing.T) {
 		return ggui.Reactive(func() ggui.Widget {
 			picker = ui.DatePicker(value).Name("Due").Key("due")
 			picker.Calendar().Location(time.UTC)
-			return ggui.Column(ggui.Box().Height(offset.Get()), picker)
+			return widget.Column(widget.Box().Height(offset.Get()), picker)
 		})
 	}, ggui.Sz(400, 520))
 	defer p.Close()
@@ -89,7 +90,7 @@ func TestDatePickerBindNameNamesTriggerAndCalendar(t *testing.T) {
 	t.Parallel()
 	name := ggui.State("Start")
 	d := ui.DatePicker(ggui.State(date(2024, 3, 14))).BindName(name)
-	p := ggui.NewProbe(ggui.Column(d), ggui.Sz(380, 450))
+	p := ggui.NewProbe(widget.Column(d), ggui.Sz(380, 450))
 	defer p.Close()
 	p.Tap("Start")
 	if _, ok := p.Semantics().Find(ggui.RoleGroup, "Start"); !ok {

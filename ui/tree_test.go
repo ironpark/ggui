@@ -7,6 +7,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 type folder struct {
@@ -25,7 +26,7 @@ func folders() ggui.Readable[[]folder] {
 func folderTree() *ui.TreeWidget[folder, string] {
 	return ui.Tree(folders(), func(f folder) string { return f.Name }, func(f folder) []folder { return f.Kids },
 		func(f ggui.Readable[folder]) ggui.Widget {
-			return ggui.TextOf(ggui.Map(f, func(f folder) string { return f.Name })).NoWrap()
+			return widget.TextOf(ggui.Map(f, func(f folder) string { return f.Name })).NoWrap()
 		})
 }
 
@@ -150,7 +151,7 @@ func TestTreeKeysNavigateExpandAndSelect(t *testing.T) {
 func TestTreeIsOneTabStop(t *testing.T) {
 	t.Parallel()
 	open := ggui.State(map[string]bool{"Fruits": true})
-	p := ggui.NewProbe(ggui.Column(
+	p := ggui.NewProbe(widget.Column(
 		folderTree().BindExpanded(open).Selected("Pear"),
 		ui.Button("After", func() {}),
 	), ggui.Sz(300, 400))
@@ -239,7 +240,7 @@ func TestTreeKeyboardReachesRowsScrolledOutOfView(t *testing.T) {
 	}
 	tree := ui.Tree(ggui.Const(many), func(f folder) string { return f.Name }, func(f folder) []folder { return f.Kids },
 		func(f ggui.Readable[folder]) ggui.Widget {
-			return ggui.TextOf(ggui.Map(f, func(f folder) string { return f.Name }))
+			return widget.TextOf(ggui.Map(f, func(f folder) string { return f.Name }))
 		}).Height(160)
 	p := ggui.NewProbe(tree, ggui.Sz(300, 400))
 	defer p.Close()

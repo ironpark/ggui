@@ -11,6 +11,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // Keep presentation separate from raw values: sorting and searching never use
@@ -18,7 +19,7 @@ import (
 func resultColumn(index int, name string) ui.Column[record] {
 	c := ui.Col(name, func(row ggui.Readable[record]) ggui.Widget {
 		return ggui.View(ggui.Map(row, func(r record) any { return r.Values[index] }), func(value any) ggui.Widget {
-			text := ggui.Text(cellText(value)).NoWrap()
+			text := widget.Text(cellText(value)).NoWrap()
 			if value == nil {
 				text.StyleKey(uitheme.CaptionKey, uitheme.Default().Caption)
 			}
@@ -101,7 +102,7 @@ func compareNumber(a, b any) int {
 func queryResultTable(source ggui.Readable[result]) ggui.Widget {
 	return ggui.View(source, func(r result) ggui.Widget {
 		if len(r.Columns) == 0 {
-			return ggui.Padding(ui.Empty("No result set", "Run a SELECT statement to explore rows here."), 24)
+			return widget.Padding(ui.Empty("No result set", "Run a SELECT statement to explore rows here."), 24)
 		}
 		return ggui.Component(func() ggui.Widget {
 			cols := make([]ui.Column[record], len(r.Columns))
@@ -121,7 +122,7 @@ func queryResultTable(source ggui.Readable[result]) ggui.Widget {
 			if r.Limited {
 				notice = "Showing the first 500 rows. Refine your SQL to retrieve a different result window."
 			}
-			return ggui.Column(ui.Caption(notice), ui.DataTable(table)).Gap(12).Stretch()
+			return widget.Column(ui.Caption(notice), ui.DataTable(table)).Gap(12).Stretch()
 		})
 	})
 }

@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestBindDisabledFollowsSignalWithoutRebuild(t *testing.T) {
@@ -28,7 +29,7 @@ func TestBindNameFollowsSignalWithoutRebuild(t *testing.T) {
 	name := ggui.State("Remove Buy milk")
 	b := ui.Button("×", nil).BindName(name)
 	f := ui.Field("Label", ui.TextField(ggui.State("")).BindName(name))
-	p := ggui.NewProbe(ggui.Column(b, f), ggui.Sz(200, 120))
+	p := ggui.NewProbe(widget.Column(b, f), ggui.Sz(200, 120))
 	defer p.Close()
 	if _, ok := p.FindRole(ggui.RoleButton, "Remove Buy milk"); !ok {
 		t.Fatal("button not found by its bound name")

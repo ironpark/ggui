@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestSliderOrientationAndDirection(t *testing.T) {
@@ -135,7 +136,7 @@ func TestSliderDisableDuringDragCancelsPressAndCommit(t *testing.T) {
 	value := ggui.State(0.0)
 	commits := 0
 	s := ui.Slider(value, 0, 100).BindDisabled(disabled).OnCommit(func(float64) { commits++ })
-	p := ggui.NewProbe(ggui.Column(s), ggui.Sz(224, 40))
+	p := ggui.NewProbe(widget.Column(s), ggui.Sz(224, 40))
 	defer p.Close()
 	p.Press(ggui.Pt(50, 10))
 	before := ggui.Peek(value)

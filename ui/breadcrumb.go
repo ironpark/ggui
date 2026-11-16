@@ -9,6 +9,7 @@ import (
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 const (
@@ -51,10 +52,10 @@ type BreadcrumbWidget struct {
 	limit      int
 	name       string
 
-	row      *ggui.WrapWidget
-	muted    []*ggui.TextWidget // text separators and the steps that are no link
-	chevrons []*icons.Widget    // the default separators
-	current  *ggui.TextWidget   // the page the user is on
+	row      *widget.WrapWidget
+	muted    []*widget.TextWidget // text separators and the steps that are no link
+	chevrons []*icons.Widget      // the default separators
+	current  *widget.TextWidget   // the page the user is on
 }
 
 // Breadcrumb creates a trail. The last crumb is drawn as the current page:
@@ -135,7 +136,7 @@ func (b *BreadcrumbWidget) build() {
 			case b.custom != nil:
 				parts = append(parts, &breadcrumbSeparatorOf{child: b.custom})
 			case b.separator != "":
-				sep := ggui.Text(b.separator).NoWrap()
+				sep := widget.Text(b.separator).NoWrap()
 				b.muted = append(b.muted, sep)
 				parts = append(parts, sep)
 			default:
@@ -149,17 +150,17 @@ func (b *BreadcrumbWidget) build() {
 		case c.elided:
 			parts = append(parts, &moreIcon{icon: Icon(icons.MoreHorizontal).Alt("More"), muted: true, side: func(t *uitheme.Theme) float64 { return t.IconSize + 4 }})
 		case last:
-			b.current = ggui.Text(c.label).NoWrap()
+			b.current = widget.Text(c.label).NoWrap()
 			parts = append(parts, b.current)
 		case c.onTap == nil:
-			label := ggui.Text(c.label).NoWrap()
+			label := widget.Text(c.label).NoWrap()
 			b.muted = append(b.muted, label)
 			parts = append(parts, label)
 		default:
 			parts = append(parts, newBreadcrumbLink(c.label, c.onTap))
 		}
 	}
-	b.row = ggui.Wrap(parts...).Gap(breadcrumbGap).Align(ggui.AlignCenter)
+	b.row = widget.Wrap(parts...).Gap(breadcrumbGap).Align(widget.AlignCenter)
 }
 
 // Layout implements ggui.Widget.
@@ -207,7 +208,7 @@ func (b *BreadcrumbWidget) BindName(r ggui.Readable[string]) *BreadcrumbWidget {
 // text color under the pointer, with no surface of its own.
 type breadcrumbLink struct {
 	ggui.Interactive
-	label  *ggui.TextWidget
+	label  *widget.TextWidget
 	onTap  func()
 	theme  *uitheme.Theme
 	motion time.Duration
@@ -215,7 +216,7 @@ type breadcrumbLink struct {
 }
 
 func newBreadcrumbLink(label string, onTap func()) *breadcrumbLink {
-	l := &breadcrumbLink{label: ggui.Text(label).NoWrap(), onTap: onTap}
+	l := &breadcrumbLink{label: widget.Text(label).NoWrap(), onTap: onTap}
 	l.Role = ggui.RoleLink
 	l.SetName(label)
 	l.AutoKey()

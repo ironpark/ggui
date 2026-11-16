@@ -8,6 +8,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // Picking a tab fades its surface in where it stands while the one left
@@ -17,11 +18,11 @@ func TestTabsCrossfadeTheShownSegmentInPlace(t *testing.T) {
 	t.Parallel()
 	for _, line := range []bool{false, true} {
 		selected := ggui.State(0)
-		tabs := Tabs(selected, Tab("One", ggui.Text("1")), Tab("Two", ggui.Text("2")), Tab("Three", ggui.Text("3")))
+		tabs := Tabs(selected, Tab("One", widget.Text("1")), Tab("Two", widget.Text("2")), Tab("Three", widget.Text("3")))
 		if line {
 			tabs.Line()
 		}
-		p := ggui.NewProbe(ggui.Column(tabs), ggui.Sz(320, 200))
+		p := ggui.NewProbe(widget.Column(tabs), ggui.Sz(320, 200))
 		p.Advance(0)
 		p.Frame()
 		if got := tabs.shown; len(got) != 3 || got[0] != 1 || got[1] != 0 || got[2] != 0 {
@@ -48,7 +49,7 @@ func TestTabsCrossfadeTheShownSegmentInPlace(t *testing.T) {
 func TestTabLabelColorEasesTowardTheTextColor(t *testing.T) {
 	t.Parallel()
 	tabs := Tabs(ggui.State(0), Tab("One", nil), Tab("Two", nil))
-	p := ggui.NewProbe(ggui.Column(tabs), ggui.Sz(320, 200))
+	p := ggui.NewProbe(widget.Column(tabs), ggui.Sz(320, 200))
 	defer p.Close()
 	p.Frame()
 	th := tabs.theme
@@ -69,8 +70,8 @@ func TestTabLabelColorEasesTowardTheTextColor(t *testing.T) {
 // every section but the last taking a pixel more.
 func TestAccordionSectionsHaveTheTriggerBorderAndRuleInTheirHeight(t *testing.T) {
 	t.Parallel()
-	one := Accordion(ggui.State([]string(nil)), AccordionItem("a", "A", ggui.Text("a")))
-	three := Accordion(ggui.State([]string(nil)), AccordionItem("a", "A", ggui.Text("a")), AccordionItem("b", "B", ggui.Text("b")), AccordionItem("c", "C", ggui.Text("c")))
+	one := Accordion(ggui.State([]string(nil)), AccordionItem("a", "A", widget.Text("a")))
+	three := Accordion(ggui.State([]string(nil)), AccordionItem("a", "A", widget.Text("a")), AccordionItem("b", "B", widget.Text("b")), AccordionItem("c", "C", widget.Text("c")))
 	env := uitheme.Default().Apply(ggui.Env{})
 	c := ggui.Loose(ggui.Sz(320, 400))
 	h1, h3 := one.Layout(c, env).H, three.Layout(c, env).H
@@ -85,9 +86,9 @@ func TestAccordionSectionsHaveTheTriggerBorderAndRuleInTheirHeight(t *testing.T)
 func TestAccordionHoverUnderlinesEveryLineOfTheTitle(t *testing.T) {
 	t.Parallel()
 	title := "A title long enough to wrap onto a second line in a narrow accordion"
-	a := Accordion(ggui.State([]string(nil)), AccordionItem("a", title, ggui.Text("a")))
+	a := Accordion(ggui.State([]string(nil)), AccordionItem("a", title, widget.Text("a")))
 	spot := &placed{Widget: a}
-	p := ggui.NewProbe(ggui.Column(spot).Align(ggui.AlignStretch), ggui.Sz(200, 400))
+	p := ggui.NewProbe(widget.Column(spot).Align(widget.AlignStretch), ggui.Sz(200, 400))
 	defer p.Close()
 	p.Frame()
 	h := a.headers[0]
@@ -112,7 +113,7 @@ func TestSpinnerIsAStatusNamedLoading(t *testing.T) {
 		spinner *SpinnerWidget
 		name    string
 	}{{Spinner(), "Loading"}, {Spinner().Name("Saving"), "Saving"}, {Spinner().Name(""), ""}} {
-		p := ggui.NewProbe(ggui.Column(tc.spinner), ggui.Sz(100, 100))
+		p := ggui.NewProbe(widget.Column(tc.spinner), ggui.Sz(100, 100))
 		n, ok := p.Semantics().Find(ggui.RoleStatus, tc.name)
 		if ok != (tc.name != "") {
 			t.Errorf("spinner named %q: found a status %v, want %v", tc.name, ok, tc.name != "")
@@ -129,7 +130,7 @@ func TestSpinnerIsAStatusNamedLoading(t *testing.T) {
 func TestAlertIsAStatusAroundItsTextAndAction(t *testing.T) {
 	t.Parallel()
 	a := Alert("Upload failed", "Try again when connected.").Action(Button("Retry", nil))
-	p := ggui.NewProbe(ggui.Column(a), ggui.Sz(320, 200))
+	p := ggui.NewProbe(widget.Column(a), ggui.Sz(320, 200))
 	defer p.Close()
 	tree := p.Semantics()
 	status, ok := tree.Find(ggui.RoleStatus, "")

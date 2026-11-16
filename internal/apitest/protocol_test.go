@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // The widgets here are written as a package other than ggui writes one,
@@ -55,7 +56,7 @@ func TestADragSourceAndDropTargetOfOurOwn(t *testing.T) {
 	src := &card{label: "apple"}
 	under := &bin{}
 	refusing := &bin{accept: func(string) bool { return false }}
-	p := ggui.NewProbe(ggui.Column(src, ggui.Stack(under, refusing)), ggui.Sz(100, 80))
+	p := ggui.NewProbe(widget.Column(src, widget.Stack(under, refusing)), ggui.Sz(100, 80))
 	defer p.Close()
 	p.Frame()
 
@@ -183,9 +184,9 @@ func (b *rebuilt) Paint(dst *ggui.Canvas, r ggui.Rect) {
 func TestAFocusTrapOfOurOwn(t *testing.T) {
 	t.Parallel()
 	var log []string
-	pn := &panel{content: ggui.Column(&field{name: "a", log: &log}, &field{name: "b", log: &log})}
+	pn := &panel{content: widget.Column(&field{name: "a", log: &log}, &field{name: "b", log: &log})}
 	other := &field{name: "other", log: &log}
-	p := ggui.NewProbe(&rebuilt{name: "opener", log: &log, w: ggui.Column(other, pn)}, ggui.Sz(100, 100))
+	p := ggui.NewProbe(&rebuilt{name: "opener", log: &log, w: widget.Column(other, pn)}, ggui.Sz(100, 100))
 	defer p.Close()
 	p.Frame()
 	p.Click(ggui.Pt(50, 10))
@@ -296,7 +297,7 @@ func TestAKeyedListOfOurOwnKeepsTheRowInUse(t *testing.T) {
 	}
 }
 
-// switcher is a keyed switcher of our own, as ggui.Switcher is: it mounts
+// switcher is a keyed switcher of our own, as widget.Switcher is: it mounts
 // a subtree for each key it follows, in the Scope of the component it
 // builds, and keeps the one it switched from mounted beside the new one
 // until settle lets it go, as a switcher does once that one has faded out.

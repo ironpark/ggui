@@ -7,6 +7,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestCodeBlockCopiesOriginalAndFollowsSource(t *testing.T) {
@@ -15,7 +16,7 @@ func TestCodeBlockCopiesOriginalAndFollowsSource(t *testing.T) {
 	var copied []string
 	block := ui.CodeBlockOf(source).Language("go").Header("main.go").LineNumbers(true).
 		OnCopy(func(code string) { copied = append(copied, code) })
-	p := ggui.NewProbe(ggui.Column(block), ggui.Sz(380, 260))
+	p := ggui.NewProbe(widget.Column(block), ggui.Sz(380, 260))
 	defer p.Close()
 	node(t, p.Semantics(), ggui.RoleGroup, "main.go · go")
 	p.Tap("Copy code")
@@ -45,7 +46,7 @@ func TestCodeBlockKeyboardViewportAndSelection(t *testing.T) {
 	t.Parallel()
 	code := strings.Repeat(strings.Repeat("wide code ", 25)+"\n", 20)
 	block := ui.CodeBlock(code).Height(100)
-	p := ggui.NewProbe(ggui.Column(block), ggui.Sz(260, 220))
+	p := ggui.NewProbe(widget.Column(block), ggui.Sz(260, 220))
 	defer p.Close()
 	// Without a header the copy action floats over the code, after it in the Tab order.
 	p.Type(ggui.Mods{}, ggui.KeyTab)
@@ -72,7 +73,7 @@ func TestCodeBlockKeepsCodeLTRInsideRTL(t *testing.T) {
 	t.Parallel()
 	code := "short\na much longer second line"
 	block := ui.CodeBlock(code).LineNumbers(true).StartLine(50)
-	p := ggui.NewProbe(ggui.Directionality(ggui.DirRTL, ggui.Column(block)), ggui.Sz(360, 180))
+	p := ggui.NewProbe(ggui.Directionality(ggui.DirRTL, widget.Column(block)), ggui.Sz(360, 180))
 	defer p.Close()
 	text := node(t, p.Semantics(), ggui.RoleText, code)
 	if copy := node(t, p.Semantics(), ggui.RoleButton, "Copy code"); copy.Rect.Origin.X != 8 {
@@ -93,7 +94,7 @@ func TestCodeBlockSelectionExcludesLineNumbers(t *testing.T) {
 	t.Parallel()
 	code := "first\nsecond\nthird\n"
 	block := ui.CodeBlock(code).LineNumbers(true).CopyButton(false)
-	p := ggui.NewProbe(ggui.Column(block), ggui.Sz(300, 200))
+	p := ggui.NewProbe(widget.Column(block), ggui.Sz(300, 200))
 	defer p.Close()
 	if _, ok := p.Semantics().Find(ggui.RoleButton, "Copy code"); ok {
 		t.Fatal("hidden copy action is present")
@@ -116,7 +117,7 @@ func TestCodeBlockScrollsBothAxesWithFixedHeader(t *testing.T) {
 	t.Parallel()
 	code := strings.Repeat(strings.Repeat("long code ", 30)+"\n", 30)
 	block := ui.CodeBlock(code).Header("output.log").Height(100).LineNumbers(true)
-	p := ggui.NewProbe(ggui.Column(block), ggui.Sz(260, 240))
+	p := ggui.NewProbe(widget.Column(block), ggui.Sz(260, 240))
 	defer p.Close()
 	before := node(t, p.Semantics(), ggui.RoleText, code)
 	button := node(t, p.Semantics(), ggui.RoleButton, "Copy code")
@@ -156,7 +157,7 @@ func TestCodeBlockEmptyAndNarrowConstraints(t *testing.T) {
 			t.Fatalf("size %v escaped %v", got, size)
 		}
 	}
-	p := ggui.NewProbe(ggui.Column(ui.CodeBlock("")), ggui.Sz(180, 100))
+	p := ggui.NewProbe(widget.Column(ui.CodeBlock("")), ggui.Sz(180, 100))
 	defer p.Close()
 	p.Clipboard().Write("old")
 	p.Tap("Copy code")
@@ -172,7 +173,7 @@ func TestCodeBlockWrappedDiffGutterAlignsAndCopiesSource(t *testing.T) {
 	styles := map[int]ui.CodeLineStyle{1: ui.CodeLineHighlighted, 2: ui.CodeLineAdded, 3: ui.CodeLineRemoved}
 	block := ui.CodeBlock(code).LineNumbers(true).StartLine(10).Wrap(true).LineStyles(styles).Height(500)
 	styles[2] = ui.CodeLineRemoved // the widget owns a copy
-	p := ggui.NewProbe(ggui.Column(block), ggui.Sz(260, 650))
+	p := ggui.NewProbe(widget.Column(block), ggui.Sz(260, 650))
 	defer p.Close()
 	firstLine := node(t, p.Semantics(), ggui.RoleText, "Highlighted line 10")
 	added := node(t, p.Semantics(), ggui.RoleText, "Added line 11")

@@ -9,9 +9,10 @@ font as immutable. Loading it does not change application defaults.
 import (
     "github.com/ironpark/ggui"
     "github.com/ironpark/ggui/fonts/inter"
+    "github.com/ironpark/ggui/widget"
 )
 
-label := ggui.Text("Contribution History").Style(ggui.TextStyle{
+label := widget.Text("Contribution History").Style(ggui.TextStyle{
     Font: inter.Font(),
     Weight: ggui.WeightMedium,
 })

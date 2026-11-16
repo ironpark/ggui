@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestTransitionSlidesInOnceAndNotOnRebuild(t *testing.T) {
@@ -18,7 +19,7 @@ func TestTransitionSlidesInOnceAndNotOnRebuild(t *testing.T) {
 	tick := ggui.State(0)
 	tree := ggui.Reactive(func() ggui.Widget {
 		tick.Get() // rebuilt on every tick
-		return ggui.Column(ggui.Transition(probe(50, 20, &got)).Slide(0, 30).Easing(ggui.EaseLinear).Duration(100 * time.Millisecond))
+		return widget.Column(widget.Transition(probe(50, 20, &got)).Slide(0, 30).Easing(ggui.EaseLinear).Duration(100 * time.Millisecond))
 	})
 	p := ggui.NewProbe(tree, ggui.Sz(100, 100))
 	p.Frame()
@@ -43,8 +44,8 @@ func TestPresenceKeepsChildInertWhileLeaving(t *testing.T) {
 	show := ggui.State(true)
 	taps := 0
 	var got ggui.Rect
-	child := ggui.Tap(probe(50, 20, &got), func() { taps++ })
-	tree := ggui.Column(ggui.Presence(show, ggui.Transition(child).Slide(0, 40).Easing(ggui.EaseLinear).Duration(100*time.Millisecond)))
+	child := widget.Tap(probe(50, 20, &got), func() { taps++ })
+	tree := widget.Column(widget.Presence(show, widget.Transition(child).Slide(0, 40).Easing(ggui.EaseLinear).Duration(100*time.Millisecond)))
 	p := ggui.NewProbe(tree, ggui.Sz(100, 100))
 	defer p.Close()
 	p.Click(ggui.Pt(10, 10))
@@ -84,7 +85,7 @@ func TestPresenceAppliesTheEasingOnce(t *testing.T) {
 	t.Parallel()
 	show := ggui.State(true)
 	var got ggui.Rect
-	tree := ggui.Column(ggui.Presence(show, ggui.Transition(probe(50, 20, &got)).Slide(0, 40).Easing(ggui.EaseIn).Duration(100*time.Millisecond)))
+	tree := widget.Column(widget.Presence(show, widget.Transition(probe(50, 20, &got)).Slide(0, 40).Easing(ggui.EaseIn).Duration(100*time.Millisecond)))
 	p := ggui.NewProbe(tree, ggui.Sz(100, 100))
 	defer p.Close()
 	p.Frame()
@@ -104,11 +105,11 @@ func TestSwitcherCrossFadesAndDisposesTheOldSubtree(t *testing.T) {
 	var rects [3]ggui.Rect
 	taps := [3]int{}
 	disposed := [3]bool{}
-	sw := ggui.Switcher(key, func(k int) ggui.Widget {
+	sw := widget.Switcher(key, func(k int) ggui.Widget {
 		ggui.OnCleanup(func() { disposed[k] = true })
-		return ggui.Tap(probe(50, 20, &rects[k]), func() { taps[k]++ })
+		return widget.Tap(probe(50, 20, &rects[k]), func() { taps[k]++ })
 	}).Slide(0, 10).Easing(ggui.EaseLinear).Duration(100 * time.Millisecond)
-	p := ggui.NewProbe(ggui.Column(sw), ggui.Sz(100, 100))
+	p := ggui.NewProbe(widget.Column(sw), ggui.Sz(100, 100))
 	defer p.Close()
 	p.Click(ggui.Pt(10, 10))
 	if rects[0].Origin.Y != 0 || taps[0] != 1 {
@@ -147,11 +148,11 @@ func TestSwitcherUnderReducedMotionSwitchesAtOnce(t *testing.T) {
 	key := ggui.State(0)
 	var rects [2]ggui.Rect
 	disposed := [2]bool{}
-	sw := ggui.Switcher(key, func(k int) ggui.Widget {
+	sw := widget.Switcher(key, func(k int) ggui.Widget {
 		ggui.OnCleanup(func() { disposed[k] = true })
 		return probe(50, 20, &rects[k])
 	})
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(sw)), ggui.Sz(100, 100))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(sw)), ggui.Sz(100, 100))
 	defer p.Close()
 	p.Frame()
 	key.Set(1)
@@ -169,9 +170,9 @@ func TestSwitcherOptionsApplyFromTheNextSwitch(t *testing.T) {
 	t.Parallel()
 	key := ggui.State(0)
 	var rects [3]ggui.Rect
-	sw := ggui.Switcher(key, func(k int) ggui.Widget { return probe(50, 20, &rects[k]) }).
+	sw := widget.Switcher(key, func(k int) ggui.Widget { return probe(50, 20, &rects[k]) }).
 		Slide(0, 10).Easing(ggui.EaseLinear).Duration(100 * time.Millisecond)
-	p := ggui.NewProbe(ggui.Column(sw), ggui.Sz(100, 100))
+	p := ggui.NewProbe(widget.Column(sw), ggui.Sz(100, 100))
 	defer p.Close()
 	p.Frame()
 	sw.Duration(200*time.Millisecond).Slide(0, 20)
@@ -193,8 +194,8 @@ func TestAnimatedBoxUnderReducedMotionJumps(t *testing.T) {
 	t.Parallel()
 	width := ggui.State(100.0)
 	var got ggui.Rect
-	box := ggui.AnimatedBox(probe(0, 0, &got)).BindWidth(width).Height(10)
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(box)), ggui.Sz(300, 100))
+	box := widget.AnimatedBox(probe(0, 0, &got)).BindWidth(width).Height(10)
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(box)), ggui.Sz(300, 100))
 	defer p.Close()
 	p.Frame()
 	width.Set(200)
@@ -210,8 +211,8 @@ func TestAnimatedBoxEasesFromTheChildSize(t *testing.T) {
 	t.Parallel()
 	width := ggui.State(0.0)
 	var got ggui.Rect
-	box := ggui.AnimatedBox(probe(60, 10, &got)).BindWidth(width).Easing(ggui.EaseLinear).Duration(100 * time.Millisecond)
-	p := ggui.NewProbe(ggui.Column(box), ggui.Sz(300, 100))
+	box := widget.AnimatedBox(probe(60, 10, &got)).BindWidth(width).Easing(ggui.EaseLinear).Duration(100 * time.Millisecond)
+	p := ggui.NewProbe(widget.Column(box), ggui.Sz(300, 100))
 	defer p.Close()
 	p.Frame()
 	if got.Size.W != 60 {
@@ -238,9 +239,9 @@ func TestAnimatedBoxCollapsibleEasesToZero(t *testing.T) {
 	t.Parallel()
 	width := ggui.State(100.0)
 	var got ggui.Rect
-	box := ggui.AnimatedBox(probe(60, 10, &got)).BindWidth(width).Collapsible().Easing(ggui.EaseLinear).Duration(100 * time.Millisecond)
+	box := widget.AnimatedBox(probe(60, 10, &got)).BindWidth(width).Collapsible().Easing(ggui.EaseLinear).Duration(100 * time.Millisecond)
 	var shown ggui.Rect
-	p := ggui.NewProbe(ggui.Column(ggui.Row(box, probe(10, 10, &shown))), ggui.Sz(300, 100))
+	p := ggui.NewProbe(widget.Column(widget.Row(box, probe(10, 10, &shown))), ggui.Sz(300, 100))
 	defer p.Close()
 	p.Frame()
 	if shown.Origin.X != 100 {
@@ -270,12 +271,12 @@ func TestASwitcherInAScrollPaintsWithinItsViewport(t *testing.T) {
 	key := ggui.State(0)
 	disposed := 0
 	p := ggui.NewWindowProbe(func() ggui.Widget {
-		sw := ggui.Switcher(key, func(k int) ggui.Widget {
+		sw := widget.Switcher(key, func(k int) ggui.Widget {
 			ggui.OnCleanup(func() { disposed++ })
-			return ggui.Box().Size(80, float64(20+10*k))
+			return widget.Box().Size(80, float64(20+10*k))
 		}).Slide(0, 10)
-		pane := ggui.Box(ggui.Scroll(ggui.Column(sw, ggui.Box().Size(100, 400)))).Size(100, 100)
-		return ggui.Row(pane, ggui.Box().Size(100, 100))
+		pane := widget.Box(widget.Scroll(widget.Column(sw, widget.Box().Size(100, 400)))).Size(100, 100)
+		return widget.Row(pane, widget.Box().Size(100, 100))
 	}, ggui.Sz(200, 100))
 	defer p.Close()
 	p.Run(16*time.Millisecond, 10)
@@ -306,10 +307,10 @@ func TestASwitcherInAScrollPaintsWithinItsViewport(t *testing.T) {
 func TestAnAnimatedBoxEasesInAWindowsFramesWithinAScroll(t *testing.T) {
 	height := ggui.State(20.0)
 	var got ggui.Rect
-	box := ggui.AnimatedBox(probe(0, 0, &got)).Width(80).BindHeight(height).Duration(100 * time.Millisecond)
+	box := widget.AnimatedBox(probe(0, 0, &got)).Width(80).BindHeight(height).Duration(100 * time.Millisecond)
 	p := ggui.NewWindowProbe(func() ggui.Widget {
-		pane := ggui.Box(ggui.Scroll(ggui.Column(box, ggui.Box().Size(100, 400)))).Size(100, 100)
-		return ggui.Row(pane, ggui.Box().Size(100, 100))
+		pane := widget.Box(widget.Scroll(widget.Column(box, widget.Box().Size(100, 400)))).Size(100, 100)
+		return widget.Row(pane, widget.Box().Size(100, 100))
 	}, ggui.Sz(200, 100))
 	defer p.Close()
 	p.Run(16*time.Millisecond, 10)

@@ -1,6 +1,9 @@
 package ui
 
-import "github.com/ironpark/ggui"
+import (
+	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/widget"
+)
 
 // AppMenubar draws the app's menus, as App.SetMenu installed them, as a
 // Menubar inside a window: what an app shows on Windows and Linux, which
@@ -8,12 +11,12 @@ import "github.com/ironpark/ggui"
 // are in the menu bar, it draws nothing, so one tree serves every
 // platform. The chords work either way; the menubar only shows them.
 //
-//	ggui.Column(ui.AppMenubar(app.Menu()), ggui.Expanded(content))
+//	widget.Column(ui.AppMenubar(app.Menu()), widget.Expanded(content))
 //
 // A submenu opens beside its row, as MenuSub's does.
 func AppMenubar(menus []ggui.MenuItem) ggui.Widget {
 	if ggui.NativeMenu() || len(menus) == 0 {
-		return ggui.Box()
+		return widget.Box()
 	}
 	var bar []*MenuWidget
 	for _, m := range menus {

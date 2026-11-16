@@ -9,7 +9,7 @@ so expressions chain. There is no public property wrapper.
 ```go
 ui.TextField(name).Name("Display name").BindDisabled(saving)
 ui.Select(selected).BindOptions(available)
-ggui.Box(ggui.TextOf(status)).Pad(24).BindWidth(width)
+widget.Box(widget.TextOf(status)).Pad(24).BindWidth(width)
 ```
 
 | Area | Contract |

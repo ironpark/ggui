@@ -7,6 +7,7 @@ import (
 	"github.com/ironpark/ggui/ui/icons/heroicons"
 	"github.com/ironpark/ggui/ui/icons/lucide"
 	"github.com/ironpark/ggui/ui/icons/tabler"
+	"github.com/ironpark/ggui/widget"
 )
 
 func iconPreview() ggui.Widget {
@@ -19,7 +20,7 @@ func iconPreview() ggui.Widget {
 		panic(err)
 	}
 	custom := icons.Map{icons.Check: plus}
-	return ggui.Column(
+	return widget.Column(
 		ui.Select(selected).Options([]string{"Lucide", "Tabler", "Heroicons"}).Name("Icon library"),
 		// Key remounts the subtree when the library changes: the checkbox
 		// inside is rebuilt on purpose, so it picks up the new check glyph.
@@ -31,10 +32,10 @@ func iconPreview() ggui.Widget {
 			case "Heroicons":
 				set = heroicons.Set()
 			}
-			return ggui.Provide(icons.SetKey, set, ggui.Column(
-				ggui.Row(ui.Icon(icons.Check), ui.Icon(icons.Close), ui.Icon(icons.Search),
+			return ggui.Provide(icons.SetKey, set, widget.Column(
+				widget.Row(ui.Icon(icons.Check), ui.Icon(icons.Close), ui.Icon(icons.Search),
 					ui.Icon(icons.Download), ui.Icon(icons.File), ui.Icon(icons.Sun), ui.Icon(icons.Moon)).Gap(16),
-				ggui.Row(ui.Icon(icons.ChevronLeft), ui.Icon(icons.ChevronRight), ui.Icon(icons.ChevronUp),
+				widget.Row(ui.Icon(icons.ChevronLeft), ui.Icon(icons.ChevronRight), ui.Icon(icons.ChevronUp),
 					ui.Icon(icons.ChevronDown), ui.Icon(icons.Alert), ui.Icon(icons.Info), ui.Icon(icons.Plus),
 					ui.Icon(icons.Minus), ui.Icon(icons.Grip), ui.Spinner()).Gap(12),
 				ui.Checkbox(checked, "Selected library checkbox"),
@@ -46,7 +47,7 @@ func iconPreview() ggui.Widget {
 			if replaced {
 				set = custom
 			}
-			return ggui.Provide(icons.SetKey, set, ggui.Row(
+			return ggui.Provide(icons.SetKey, set, widget.Row(
 				ui.Checkbox(checked, "Scoped icon override"), ui.Icon(icons.Close),
 			).Gap(16))
 		}),

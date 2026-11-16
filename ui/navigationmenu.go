@@ -10,6 +10,7 @@ import (
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // NavigationMenuItemWidget is a navigation link or dropdown trigger. Build it
@@ -18,9 +19,9 @@ import (
 type NavigationMenuItemWidget struct {
 	*ButtonWidget
 	content      ggui.Widget
-	panel        *ggui.BoxWidget
+	panel        *widget.BoxWidget
 	owner        *NavigationMenuWidget
-	popup        *ggui.PopupWidget
+	popup        *widget.PopupWidget
 	onNavigate   func()
 	width        float64
 	activeProp   property.Value[bool]
@@ -60,7 +61,7 @@ var (
 func NavigationMenuLink(label string, onNavigate func()) *NavigationMenuItemWidget {
 	item := &NavigationMenuItemWidget{onNavigate: onNavigate}
 	item.ButtonWidget = Button(label, item.activate).Ghost().Size(ButtonLarge)
-	item.box = ggui.Box(&navigationMenuLinkFace{item: item, child: item.label})
+	item.box = widget.Box(&navigationMenuLinkFace{item: item, child: item.label})
 	item.Role = ggui.RoleLink
 	return item
 }
@@ -70,7 +71,7 @@ func NavigationMenuLink(label string, onNavigate func()) *NavigationMenuItemWidg
 func NavigationMenuLinkOf(content ggui.Widget, onNavigate func()) *NavigationMenuItemWidget {
 	item := &NavigationMenuItemWidget{onNavigate: onNavigate}
 	item.ButtonWidget = ButtonOf(content, item.activate).Ghost().Size(ButtonLarge)
-	item.box = ggui.Box(&navigationMenuLinkFace{item: item, child: content})
+	item.box = widget.Box(&navigationMenuLinkFace{item: item, child: content})
 	item.Role = ggui.RoleLink
 	return item
 }
@@ -80,8 +81,8 @@ func NavigationMenuLinkOf(content ggui.Widget, onNavigate func()) *NavigationMen
 func NavigationMenuItem(label string, content ggui.Widget) *NavigationMenuItemWidget {
 	item := &NavigationMenuItemWidget{content: content, width: 320}
 	item.ButtonWidget = Button(label, item.activate).Ghost().Size(ButtonLarge)
-	item.box = ggui.Box(&buttonContent{child: &navigationMenuFace{item: item}})
-	item.panel = ggui.Box(ggui.Scroll(content))
+	item.box = widget.Box(&buttonContent{child: &navigationMenuFace{item: item}})
+	item.panel = widget.Box(widget.Scroll(content))
 	item.Expands(item.isOpen).Opens(item)
 	return item
 }
@@ -235,7 +236,7 @@ func (i *NavigationMenuItemWidget) Describe() ggui.Node {
 // row, padded by one spacing unit, in the regular weight and at the smaller
 // radius.
 func (i *NavigationMenuItemWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
-	i.popup, _ = ggui.PopupOf(env)
+	i.popup, _ = widget.PopupOf(env)
 	i.selected = i.activeProp.Get()
 	i.inContent = i.owner == nil && i.popup != nil
 	i.menu, _ = env.Get(navigationMenuOwnerKey)
@@ -355,13 +356,13 @@ type NavigationMenuWidget struct {
 	props property.Owner
 	ggui.Interactive
 	items   []*NavigationMenuItemWidget
-	popup   *ggui.PopupWidget
-	row     *ggui.RowWidget
+	popup   *widget.PopupWidget
+	row     *widget.RowWidget
 	active  int
 	pending *NavigationMenuItemWidget
 	rtl     bool
 
-	chrome   *ggui.BoxWidget // the panel's surface, around whichever content shows
+	chrome   *widget.BoxWidget // the panel's surface, around whichever content shows
 	theme    *uitheme.Theme
 	env      ggui.Env
 	motion   time.Duration // navigationMenuMotion, or zero under reduced motion
@@ -403,9 +404,9 @@ func NavigationMenu(items ...*NavigationMenuItemWidget) *NavigationMenuWidget {
 		item.owner = n
 		children[j] = item
 	}
-	n.row = ggui.Row(children...).Gap(0)
-	n.chrome = ggui.Box(&navigationMenuViewport{n})
-	n.popup = ggui.Popup(n.row, navigationMenuPanel{n}).Owner(n).Modal(false)
+	n.row = widget.Row(children...).Gap(0)
+	n.chrome = widget.Box(&navigationMenuViewport{n})
+	n.popup = widget.Popup(n.row, navigationMenuPanel{n}).Owner(n).Modal(false)
 	return n
 }
 
@@ -441,7 +442,7 @@ func (n *NavigationMenuWidget) OpenOnHover(v bool) *NavigationMenuWidget {
 }
 
 // Popup returns the shared popup for inspecting or dismissing the open panel.
-func (n *NavigationMenuWidget) Popup() *ggui.PopupWidget { return n.popup }
+func (n *NavigationMenuWidget) Popup() *widget.PopupWidget { return n.popup }
 
 // Disabled disables all entries and closes the open panel.
 func (n *NavigationMenuWidget) Disabled(v bool) *NavigationMenuWidget {

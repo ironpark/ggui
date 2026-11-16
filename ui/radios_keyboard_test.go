@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // A Radios is one stop in the Tab order, on its chosen option, and the
@@ -14,7 +15,7 @@ func TestRadiosAreOneTabStopMovedByArrows(t *testing.T) {
 	t.Parallel()
 	plan := ggui.State("pro")
 	changes := 0
-	root := ggui.Column(
+	root := widget.Column(
 		ui.Button("Before", nil),
 		ui.Radios(plan).Options([]string{"free", "pro", "team"}).Name("Plan").OnChange(func(string) { changes++ }),
 		ui.Button("After", nil),
@@ -61,7 +62,7 @@ func TestRadiosTabStopWithoutAChoice(t *testing.T) {
 	t.Parallel()
 	plan := ggui.State("")
 	lone := ggui.State("a")
-	root := ggui.Column(
+	root := widget.Column(
 		ui.Radios(plan).Options([]string{"free", "pro"}).Name("Plan"),
 		ui.Radio(lone, "a", "A"),
 		ui.Radio(lone, "b", "B"),

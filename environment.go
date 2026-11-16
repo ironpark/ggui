@@ -181,7 +181,7 @@ func (e Env) Language() string {
 // on the right; Align's Left and Right, and an explicit Text.Align, stay
 // where they say.
 //
-//	ggui.Directionality(ggui.DirRTL, ggui.Text("שלום עולם"))
+//	ggui.Directionality(ggui.DirRTL, widget.Text("שלום עולם"))
 func Directionality(dir TextDirection, child Widget) *EnvWidget {
 	return Provide(DirectionKey, dir, child)
 }

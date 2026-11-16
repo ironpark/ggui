@@ -1,4 +1,4 @@
-package ggui
+package widget
 
 import (
 	"image/color"
@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/pkg/gem"
@@ -21,14 +22,14 @@ import (
 // widget that appears at a new place plays it.
 type TransitionWidget struct {
 	props    property.Owner
-	child    Widget
+	child    ggui.Widget
 	fade     bool
 	dx, dy   float64
-	from     float64 // starting scale, 0 for none
-	origin   Point   // where the scale is anchored, as fractions of the child
-	travel   Point   // how far a scaled entrance also comes from, in pixels
+	from     float64    // starting scale, 0 for none
+	origin   ggui.Point // where the scale is anchored, as fractions of the child
+	travel   ggui.Point // how far a scaled entrance also comes from, in pixels
 	duration time.Duration
-	ease     Easing
+	ease     ggui.Easing
 	id       any // from the keyed component it was constructed in
 
 	// Presence drives progress from outside.
@@ -43,15 +44,15 @@ type transitionStart struct{ at time.Time }
 
 // Transition wraps child in an enter animation: a fade over 200ms until
 // Fade, Slide or Scale say otherwise.
-func Transition(child Widget) *TransitionWidget {
-	return &TransitionWidget{child: child, origin: Pt(.5, .5), duration: 200 * time.Millisecond, ease: EaseOut, id: reactive.AutoID()}
+func Transition(child ggui.Widget) *TransitionWidget {
+	return &TransitionWidget{child: child, origin: ggui.Pt(.5, .5), duration: 200 * time.Millisecond, ease: ggui.EaseOut, id: reactive.AutoID()}
 }
 
 // PopIn is the entrance every floating panel shares: a fade with a slight
 // scale up, driven through Progress by a Motion. The easing is linear
 // because Motion.Value already eases; a curve here would apply twice.
-func PopIn(child Widget) *TransitionWidget {
-	return Transition(child).Fade().Scale(.95).Easing(EaseLinear)
+func PopIn(child ggui.Widget) *TransitionWidget {
+	return Transition(child).Fade().Scale(.95).Easing(ggui.EaseLinear)
 }
 
 // Fade animates opacity from transparent.
@@ -83,7 +84,7 @@ func (t *TransitionWidget) Scale(from float64) *TransitionWidget {
 // that opens below a button scales from its top edge with ScaleOrigin(.5, 0).
 func (t *TransitionWidget) ScaleOrigin(x, y float64) *TransitionWidget {
 	defer property.Watch(&t.props, &t.origin)()
-	t.origin = Pt(x, y)
+	t.origin = ggui.Pt(x, y)
 	return t
 }
 
@@ -105,13 +106,13 @@ const popTravel = 8
 func (t *TransitionWidget) PopFrom(side PopupSide, along float64) *TransitionWidget {
 	switch side {
 	case PopupTop:
-		t.origin, t.travel = Pt(along, 1), Pt(0, popTravel)
+		t.origin, t.travel = ggui.Pt(along, 1), ggui.Pt(0, popTravel)
 	case PopupLeft:
-		t.origin, t.travel = Pt(1, along), Pt(popTravel, 0)
+		t.origin, t.travel = ggui.Pt(1, along), ggui.Pt(popTravel, 0)
 	case PopupRight:
-		t.origin, t.travel = Pt(0, along), Pt(-popTravel, 0)
+		t.origin, t.travel = ggui.Pt(0, along), ggui.Pt(-popTravel, 0)
 	default:
-		t.origin, t.travel = Pt(along, 0), Pt(0, -popTravel)
+		t.origin, t.travel = ggui.Pt(along, 0), ggui.Pt(0, -popTravel)
 	}
 	return t
 }
@@ -124,7 +125,7 @@ func (t *TransitionWidget) Duration(d time.Duration) *TransitionWidget {
 }
 
 // Easing sets the curve; see EaseLinear, EaseIn, EaseOut, EaseInOut.
-func (t *TransitionWidget) Easing(e Easing) *TransitionWidget {
+func (t *TransitionWidget) Easing(e ggui.Easing) *TransitionWidget {
 	defer property.Watch(&t.props, &t.ease)()
 	t.ease = e
 	return t
@@ -151,26 +152,26 @@ func (t *TransitionWidget) Progress(value float64, leaving bool) *TransitionWidg
 }
 
 // Baseline implements Baseliner: the child's, where it lands.
-func (t *TransitionWidget) Baseline() (float64, bool) { return BaselineOf(t.child) }
+func (t *TransitionWidget) Baseline() (float64, bool) { return ggui.BaselineOf(t.child) }
 
 // Layout implements Widget.
-func (t *TransitionWidget) Layout(c Constraints, env Env) Size {
+func (t *TransitionWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer t.props.Layout().EndLayout()
 	t.reduced = env.ReducedMotion()
 	return t.child.Layout(c, env)
 }
 
 // Paint implements Widget.
-func (t *TransitionWidget) Paint(dst *Canvas, r Rect) {
+func (t *TransitionWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	p := t.progress
 	if t.reduced {
 		// Reduced motion: in place at once; a leaving child is still inert
 		// until Presence removes it.
 		p = 1
 	} else if !t.driven {
-		now := FrameTime()
+		now := ggui.FrameTime()
 		start := now
-		at := Anchor{Rect: r, ID: t.id}
+		at := ggui.Anchor{Rect: r, ID: t.id}
 		if s, ok := dst.Retained(at, transitionSlot); ok {
 			start = s.at
 		}
@@ -180,7 +181,7 @@ func (t *TransitionWidget) Paint(dst *Canvas, r Rect) {
 			p = gem.Clamp(float64(now.Sub(start))/float64(t.duration), 0, 1)
 		}
 		if p < 1 {
-			Now() // a frame for the next step
+			ggui.Now() // a frame for the next step
 		}
 	}
 	if p >= 1 && !t.leaving {
@@ -195,7 +196,7 @@ func (t *TransitionWidget) Paint(dst *Canvas, r Rect) {
 	e := t.ease(p)
 	at := r
 	if slide {
-		at.Origin = at.Origin.Add(Pt((1-e)*t.dx, (1-e)*t.dy))
+		at.Origin = at.Origin.Add(ggui.Pt((1-e)*t.dx, (1-e)*t.dy))
 	}
 	if !(fade || scale) {
 		target.Paint(t.child, at)
@@ -204,22 +205,22 @@ func (t *TransitionWidget) Paint(dst *Canvas, r Rect) {
 	// Fade and scale apply to the child as a whole, so it paints into a
 	// layer that is composited: hit regions still register where the child
 	// painted itself.
-	var o LayerOptions
+	var o ggui.LayerOptions
 	if scale {
 		o.Scale = t.from + (1-t.from)*e
 		// Scaling about a point moved travel/(1-from) off the origin moves
 		// the child by travel at the start and by nothing at the end, which
 		// is the slide, without moving what the child registers.
 		k := 1 / (1 - t.from)
-		o.About = at.Origin.Add(Pt(at.Size.W*t.origin.X+t.travel.X*k, at.Size.H*t.origin.Y+t.travel.Y*k))
+		o.About = at.Origin.Add(ggui.Pt(at.Size.W*t.origin.X+t.travel.X*k, at.Size.H*t.origin.Y+t.travel.Y*k))
 	}
 	if fade {
 		o.Fade = 1 - e
 	}
-	target.Layer(o, func(layer *Canvas) { layer.Paint(t.child, at) })
+	target.Layer(o, func(layer *ggui.Canvas) { layer.Paint(t.child, at) })
 }
 
-var transitionSlot = NewSlot[transitionStart]("transition start")
+var transitionSlot = ggui.NewSlot[transitionStart]("transition start")
 
 // Presence keeps child on screen while it animates out. While show is
 // true the child is laid out and painted as usual, playing its enter
@@ -227,15 +228,15 @@ var transitionSlot = NewSlot[transitionStart]("transition start")
 // inert to input, and runs the same animation backwards before it is
 // removed. child is a Transition, or is wrapped in a fading one.
 //
-//	ggui.Presence(open, ggui.Transition(panel).Slide(0, -8).Fade())
-func Presence(show Readable[bool], child Widget) Widget {
+//	widget.Presence(open, widget.Transition(panel).Slide(0, -8).Fade())
+func Presence(show ggui.Readable[bool], child ggui.Widget) ggui.Widget {
 	t, ok := child.(*TransitionWidget)
 	if !ok {
 		t = Transition(child).Fade()
 	}
-	return Component(func() Widget {
+	return ggui.Component(func() ggui.Widget {
 		var initial float64
-		Untrack(func() struct {
+		ggui.Untrack(func() struct {
 		} {
 			if show.Get() {
 				initial = 1
@@ -245,13 +246,13 @@ func Presence(show Readable[bool], child Widget) Widget {
 		})
 		// The tween is linear: the Transition applies its easing to the
 		// progress it is driven with, and a curve here would apply twice.
-		p := Tween(initial, t.duration).Easing(EaseLinear)
+		p := ggui.Tween(initial, t.duration).Easing(ggui.EaseLinear)
 		// Read the duration at the toggle rather than at setup, so a
 		// Duration set from Layout — a theme token, say — is not frozen to
 		// whatever it was on the first frame. Tweened.Set reads it here too,
 		// so nothing changes under a run already in flight.
-		Watch(show, func(v bool) { p.Duration(t.duration).Set(gem.Pick(v, 1.0, 0.0)) })
-		return Reactive(func() Widget {
+		ggui.Watch(show, func(v bool) { p.Duration(t.duration).Set(gem.Pick(v, 1.0, 0.0)) })
+		return ggui.Reactive(func() ggui.Widget {
 			shown, v := show.Get(), p.Get()
 			if !shown && v == 0 {
 				return Box()
@@ -268,19 +269,19 @@ func Presence(show Readable[bool], child Widget) Widget {
 // of nothing, inert to input, and is disposed when it is gone. Build one
 // with Switcher.
 type SwitcherWidget[K comparable] struct {
-	comp  *ComponentWidget
-	key   Readable[K]
-	build func(K) Widget
+	comp  *ggui.ComponentWidget
+	key   ggui.Readable[K]
+	build func(K) ggui.Widget
 
 	fade     bool
 	dx, dy   float64
 	from     float64 // starting scale, 0 for none
 	duration time.Duration
-	ease     Easing
+	ease     ggui.Easing
 
 	props   property.Owner
 	entries []*switchEntry // oldest first; the last is the current key's
-	sizes   []Size
+	sizes   []ggui.Size
 	reduced bool
 }
 
@@ -288,7 +289,7 @@ type SwitcherWidget[K comparable] struct {
 // on its way out.
 type switchEntry struct {
 	t       *TransitionWidget
-	dispose Cleanup
+	dispose ggui.Cleanup
 	since   time.Time     // when it started its current move
 	from    float64       // its progress then
 	d       time.Duration // how long a full move takes, as of its switch
@@ -315,19 +316,19 @@ func (e *switchEntry) progress(now time.Time) float64 {
 // once it has left. Its options may change after mount; they apply from
 // the next switch.
 //
-//	ggui.Switcher(tab, func(t Tab) ggui.Widget { return page(t) }).Slide(0, 8)
-func Switcher[K comparable](key Readable[K], build func(K) Widget) *SwitcherWidget[K] {
-	s := &SwitcherWidget[K]{key: key, build: build, duration: 200 * time.Millisecond, ease: EaseOut}
-	s.comp = Component(func() Widget {
-		scope := UseScope()
-		OnCleanup(func() {
+//	widget.Switcher(tab, func(t Tab) ggui.Widget { return page(t) }).Slide(0, 8)
+func Switcher[K comparable](key ggui.Readable[K], build func(K) ggui.Widget) *SwitcherWidget[K] {
+	s := &SwitcherWidget[K]{key: key, build: build, duration: 200 * time.Millisecond, ease: ggui.EaseOut}
+	s.comp = ggui.Component(func() ggui.Widget {
+		scope := ggui.UseScope()
+		ggui.OnCleanup(func() {
 			for _, e := range s.entries {
 				e.dispose()
 			}
 			s.entries = nil
 		})
 		first := true
-		Follow(key, func(v K) {
+		ggui.Follow(key, func(v K) {
 			s.change(v, scope, first)
 			first = false
 		})
@@ -361,21 +362,21 @@ func (s *SwitcherWidget[K]) Duration(d time.Duration) *SwitcherWidget[K] {
 }
 
 // Easing sets the curve, EaseOut by default.
-func (s *SwitcherWidget[K]) Easing(e Easing) *SwitcherWidget[K] {
+func (s *SwitcherWidget[K]) Easing(e ggui.Easing) *SwitcherWidget[K] {
 	s.ease = e
 	return s
 }
 
 // change makes v's subtree the current one and sends the rest away.
-func (s *SwitcherWidget[K]) change(v K, scope Scope, first bool) {
-	now := FrameTime()
+func (s *SwitcherWidget[K]) change(v K, scope ggui.Scope, first bool) {
+	now := ggui.FrameTime()
 	for _, e := range s.entries {
 		if !e.leaving {
 			e.from, e.since, e.leaving = e.progress(now), now, true
 		}
 	}
 	e := &switchEntry{since: now, from: gem.Pick(first, 1.0, 0.0), d: s.duration}
-	child, dispose := scope.Mount(func() Widget { return s.build(v) })
+	child, dispose := scope.Mount(func() ggui.Widget { return s.build(v) })
 	e.dispose = dispose
 	if child == nil {
 		child = Box()
@@ -401,11 +402,11 @@ type switcherBody[K comparable] struct{ s *SwitcherWidget[K] }
 
 // Layout implements Widget: as large as the largest subtree, the leaving
 // ones included, all anchored at the top-left corner as in a Stack.
-func (b *switcherBody[K]) Layout(c Constraints, env Env) Size {
+func (b *switcherBody[K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	s := b.s
 	defer s.props.Layout().EndLayout()
 	s.reduced = env.ReducedMotion()
-	now := FrameTime()
+	now := ggui.FrameTime()
 	s.entries = slices.DeleteFunc(s.entries, func(e *switchEntry) bool {
 		if e.leaving && (s.reduced || e.progress(now) <= 0) {
 			e.dispose()
@@ -414,7 +415,7 @@ func (b *switcherBody[K]) Layout(c Constraints, env Env) Size {
 		return false
 	})
 	s.sizes = s.sizes[:0]
-	var total Size
+	var total ggui.Size
 	moving := false
 	for _, e := range s.entries {
 		e.t.drive(gem.Pick(s.reduced, 1.0, e.progress(now)), e.leaving)
@@ -427,32 +428,34 @@ func (b *switcherBody[K]) Layout(c Constraints, env Env) Size {
 		// The next step is driven, and a finished subtree dropped, by the
 		// next layout, which the switcher asks for as a size on its way
 		// does: held within the Scroll around it, if one holds it.
-		Invalidate(env)
+		ggui.Invalidate(env)
 	}
 	return c.Constrain(total)
 }
 
 // Paint implements Widget.
-func (b *switcherBody[K]) Paint(dst *Canvas, r Rect) {
+func (b *switcherBody[K]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	s := b.s
 	for i, e := range s.entries {
-		dst.Paint(e.t, Rct(r.Origin, s.sizes[i]))
+		dst.Paint(e.t, ggui.Rct(r.Origin, s.sizes[i]))
 	}
 }
 
 // Baseline implements Baseliner: the current subtree's.
 func (b *switcherBody[K]) Baseline() (float64, bool) {
 	if n := len(b.s.entries); n > 0 {
-		return BaselineOf(b.s.entries[n-1].t)
+		return ggui.BaselineOf(b.s.entries[n-1].t)
 	}
 	return 0, false
 }
 
 // Layout implements Widget.
-func (s *SwitcherWidget[K]) Layout(c Constraints, env Env) Size { return s.comp.Layout(c, env) }
+func (s *SwitcherWidget[K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+	return s.comp.Layout(c, env)
+}
 
 // Paint implements Widget.
-func (s *SwitcherWidget[K]) Paint(dst *Canvas, r Rect) { s.comp.Paint(dst, r) }
+func (s *SwitcherWidget[K]) Paint(dst *ggui.Canvas, r ggui.Rect) { s.comp.Paint(dst, r) }
 
 // Baseline implements Baseliner: the current subtree's.
 func (s *SwitcherWidget[K]) Baseline() (float64, bool) { return s.comp.Baseline() }
@@ -469,26 +472,26 @@ type AnimatedBoxWidget struct {
 	props       property.Owner
 	box         *BoxWidget // painted with the values of the moment
 	duration    time.Duration
-	ease        Easing
+	ease        ggui.Easing
 	collapsible bool // a size of zero is zero, eased like any other
 
 	fill, border            property.Value[color.Color]
 	width, height           property.Value[float64]
 	radius, borderWidth     property.Value[float64]
-	padding                 property.Value[EdgeInsets]
+	padding                 property.Value[ggui.EdgeInsets]
 	fillTo, borderTo        follower[color.Color]
 	widthTo, heightTo       follower[float64]
 	radiusTo, borderWidthTo follower[float64]
-	paddingTo               follower[EdgeInsets]
-	size                    Size // as the last layout left it
+	paddingTo               follower[ggui.EdgeInsets]
+	size                    ggui.Size // as the last layout left it
 }
 
 // AnimatedBox wraps at most one child, as Box does, and animates its looks
 // over 200ms with EaseOut until Duration and Easing say otherwise.
 //
-//	card := ggui.AnimatedBox(content).BindFill(tint).Radius(8).Pad(12)
-func AnimatedBox(child ...Widget) *AnimatedBoxWidget {
-	return &AnimatedBoxWidget{box: Box(child...), duration: 200 * time.Millisecond, ease: EaseOut}
+//	card := widget.AnimatedBox(content).BindFill(tint).Radius(8).Pad(12)
+func AnimatedBox(child ...ggui.Widget) *AnimatedBoxWidget {
+	return &AnimatedBoxWidget{box: Box(child...), duration: 200 * time.Millisecond, ease: ggui.EaseOut}
 }
 
 // animSet assigns a literal and lays out again if it changed.
@@ -498,7 +501,7 @@ func animSet[T any](a *AnimatedBoxWidget, p *property.Value[T], v T) *AnimatedBo
 }
 
 // animBind follows a reader and lays out again if it is a new one.
-func animBind[T any](a *AnimatedBoxWidget, p *property.Value[T], r Readable[T], name string) *AnimatedBoxWidget {
+func animBind[T any](a *AnimatedBoxWidget, p *property.Value[T], r ggui.Readable[T], name string) *AnimatedBoxWidget {
 	property.Bind(&a.props, p, r, name)
 	return a
 }
@@ -511,7 +514,7 @@ func (a *AnimatedBoxWidget) Duration(d time.Duration) *AnimatedBoxWidget {
 }
 
 // Easing sets the curve; see EaseLinear, EaseIn, EaseOut, EaseInOut.
-func (a *AnimatedBoxWidget) Easing(e Easing) *AnimatedBoxWidget {
+func (a *AnimatedBoxWidget) Easing(e ggui.Easing) *AnimatedBoxWidget {
 	a.ease = e
 	return a
 }
@@ -521,7 +524,7 @@ func (a *AnimatedBoxWidget) Easing(e Easing) *AnimatedBoxWidget {
 func (a *AnimatedBoxWidget) Fill(c color.Color) *AnimatedBoxWidget { return animSet(a, &a.fill, c) }
 
 // BindFill follows a non-nil color reader, easing to each new color.
-func (a *AnimatedBoxWidget) BindFill(r Readable[color.Color]) *AnimatedBoxWidget {
+func (a *AnimatedBoxWidget) BindFill(r ggui.Readable[color.Color]) *AnimatedBoxWidget {
 	return animBind(a, &a.fill, r, "BindFill")
 }
 
@@ -531,7 +534,7 @@ func (a *AnimatedBoxWidget) Border(w float64, c color.Color) *AnimatedBoxWidget 
 }
 
 // BindBorderColor follows a non-nil reader for the border's color.
-func (a *AnimatedBoxWidget) BindBorderColor(r Readable[color.Color]) *AnimatedBoxWidget {
+func (a *AnimatedBoxWidget) BindBorderColor(r ggui.Readable[color.Color]) *AnimatedBoxWidget {
 	return animBind(a, &a.border, r, "BindBorderColor")
 }
 
@@ -539,7 +542,7 @@ func (a *AnimatedBoxWidget) BindBorderColor(r Readable[color.Color]) *AnimatedBo
 func (a *AnimatedBoxWidget) Radius(r float64) *AnimatedBoxWidget { return animSet(a, &a.radius, r) }
 
 // BindRadius follows a non-nil corner radius reader.
-func (a *AnimatedBoxWidget) BindRadius(r Readable[float64]) *AnimatedBoxWidget {
+func (a *AnimatedBoxWidget) BindRadius(r ggui.Readable[float64]) *AnimatedBoxWidget {
 	return animBind(a, &a.radius, r, "BindRadius")
 }
 
@@ -551,7 +554,7 @@ func (a *AnimatedBoxWidget) Size(w, h float64) *AnimatedBoxWidget { return a.Wid
 func (a *AnimatedBoxWidget) Width(w float64) *AnimatedBoxWidget { return animSet(a, &a.width, w) }
 
 // BindWidth follows a non-nil width reader.
-func (a *AnimatedBoxWidget) BindWidth(r Readable[float64]) *AnimatedBoxWidget {
+func (a *AnimatedBoxWidget) BindWidth(r ggui.Readable[float64]) *AnimatedBoxWidget {
 	return animBind(a, &a.width, r, "BindWidth")
 }
 
@@ -568,43 +571,43 @@ func (a *AnimatedBoxWidget) Collapsible() *AnimatedBoxWidget {
 func (a *AnimatedBoxWidget) Height(h float64) *AnimatedBoxWidget { return animSet(a, &a.height, h) }
 
 // BindHeight follows a non-nil height reader.
-func (a *AnimatedBoxWidget) BindHeight(r Readable[float64]) *AnimatedBoxWidget {
+func (a *AnimatedBoxWidget) BindHeight(r ggui.Readable[float64]) *AnimatedBoxWidget {
 	return animBind(a, &a.height, r, "BindHeight")
 }
 
 // Pad sets padding with the CSS shorthand Insets accepts.
 func (a *AnimatedBoxWidget) Pad(sides ...float64) *AnimatedBoxWidget {
-	return animSet(a, &a.padding, Insets(sides...))
+	return animSet(a, &a.padding, ggui.Insets(sides...))
 }
 
 // Padding sets per-side padding.
-func (a *AnimatedBoxWidget) Padding(e EdgeInsets) *AnimatedBoxWidget {
+func (a *AnimatedBoxWidget) Padding(e ggui.EdgeInsets) *AnimatedBoxWidget {
 	return animSet(a, &a.padding, e)
 }
 
 // BindPadding follows a non-nil padding reader.
-func (a *AnimatedBoxWidget) BindPadding(r Readable[EdgeInsets]) *AnimatedBoxWidget {
+func (a *AnimatedBoxWidget) BindPadding(r ggui.Readable[ggui.EdgeInsets]) *AnimatedBoxWidget {
 	return animBind(a, &a.padding, r, "BindPadding")
 }
 
 // Layout implements Widget.
-func (a *AnimatedBoxWidget) Layout(c Constraints, env Env) Size {
+func (a *AnimatedBoxWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer a.props.Layout().EndLayout()
 	d := env.Motion(a.duration)
 	b := a.box
-	b.Fill(a.fillTo.follow(env, ResolveColor(a.fill.Get(), env), d, a.ease, LerpColor))
-	b.Border(a.borderWidthTo.follow(env, a.borderWidth.Get(), d, a.ease, LerpFloat),
-		a.borderTo.follow(env, ResolveColor(a.border.Get(), env), d, a.ease, LerpColor))
-	b.Radius(a.radiusTo.follow(env, a.radius.Get(), d, a.ease, LerpFloat))
+	b.Fill(a.fillTo.follow(env, ggui.ResolveColor(a.fill.Get(), env), d, a.ease, ggui.LerpColor))
+	b.Border(a.borderWidthTo.follow(env, a.borderWidth.Get(), d, a.ease, ggui.LerpFloat),
+		a.borderTo.follow(env, ggui.ResolveColor(a.border.Get(), env), d, a.ease, ggui.LerpColor))
+	b.Radius(a.radiusTo.follow(env, a.radius.Get(), d, a.ease, ggui.LerpFloat))
 	b.Width(a.boxSize(followSize(env, &a.widthTo, a.width.Get(), a.size.W, d, a.ease, a.collapsible)))
 	b.Height(a.boxSize(followSize(env, &a.heightTo, a.height.Get(), a.size.H, d, a.ease, a.collapsible)))
-	b.Padding(a.paddingTo.follow(env, a.padding.Get(), d, a.ease, LerpInsets))
+	b.Padding(a.paddingTo.follow(env, a.padding.Get(), d, a.ease, ggui.LerpInsets))
 	a.size = b.Layout(c, env)
 	return a.size
 }
 
 // Paint implements Widget.
-func (a *AnimatedBoxWidget) Paint(dst *Canvas, r Rect) { a.box.Paint(dst, r) }
+func (a *AnimatedBoxWidget) Paint(dst *ggui.Canvas, r ggui.Rect) { a.box.Paint(dst, r) }
 
 // Baseline implements Baseliner: the child's, below the top padding.
 func (a *AnimatedBoxWidget) Baseline() (float64, bool) { return a.box.Baseline() }
@@ -616,12 +619,12 @@ func (a *AnimatedBoxWidget) Baseline() (float64, bool) { return a.box.Baseline()
 // one or only paints: one Motion for both kinds keeps them in step.
 type follower[T any] struct {
 	from, to T
-	p        Motion // from zero at from to one at to
-	set      bool   // to is a target followed, not a zero value
+	p        ggui.Motion // from zero at from to one at to
+	set      bool        // to is a target followed, not a zero value
 }
 
 // follow heads for target over d and returns the value of the moment.
-func (f *follower[T]) follow(env Env, target T, d time.Duration, e Easing, lerp func(a, b T, t float64) T) T {
+func (f *follower[T]) follow(env ggui.Env, target T, d time.Duration, e ggui.Easing, lerp func(a, b T, t float64) T) T {
 	if d <= 0 {
 		f.jump(target)
 		return target
@@ -632,22 +635,22 @@ func (f *follower[T]) follow(env Env, target T, d time.Duration, e Easing, lerp 
 		return target
 	}
 	if !property.Equal(f.to, target) {
-		f.start(f.at(FrameTime(), lerp), target, e)
+		f.start(f.at(ggui.FrameTime(), lerp), target, e)
 	}
 	f.p.LayoutTo(env, 1, d)
-	return f.at(FrameTime(), lerp)
+	return f.at(ggui.FrameTime(), lerp)
 }
 
 // jump lands on v at once, with nothing to follow from.
 func (f *follower[T]) jump(v T) {
 	f.from, f.to, f.set = v, v, false
-	f.p = Motion{}
+	f.p = ggui.Motion{}
 }
 
 // start sets off from from toward to along e, from this frame.
-func (f *follower[T]) start(from, to T, e Easing) {
+func (f *follower[T]) start(from, to T, e ggui.Easing) {
 	f.from, f.to = from, to
-	f.p = Motion{}
+	f.p = ggui.Motion{}
 	f.p.Easing(e).MoveTo(0, time.Time{}, 0)
 }
 
@@ -674,9 +677,9 @@ func (a *AnimatedBoxWidget) boxSize(v float64) float64 {
 // but "as the child sizes it": a move to zero lands at once, and a move
 // away from it starts at shown, the size the box last had. A collapsible
 // box's zero is a number like any other.
-func followSize(env Env, f *follower[float64], target, shown float64, d time.Duration, e Easing, collapsible bool) float64 {
+func followSize(env ggui.Env, f *follower[float64], target, shown float64, d time.Duration, e ggui.Easing, collapsible bool) float64 {
 	if collapsible {
-		return f.follow(env, target, d, e, LerpFloat)
+		return f.follow(env, target, d, e, ggui.LerpFloat)
 	}
 	if target <= 0 {
 		d = 0
@@ -684,5 +687,5 @@ func followSize(env Env, f *follower[float64], target, shown float64, d time.Dur
 		f.jump(shown)
 		f.set = true
 	}
-	return f.follow(env, target, d, e, LerpFloat)
+	return f.follow(env, target, d, e, ggui.LerpFloat)
 }

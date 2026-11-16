@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // Right to left, Left is the arrow that goes on to the next option and
@@ -14,7 +15,7 @@ import (
 func TestRadiosArrowsFollowTheReadingDirection(t *testing.T) {
 	t.Parallel()
 	plan := ggui.State("free")
-	root := ggui.Directionality(ggui.DirRTL, ggui.Column(
+	root := ggui.Directionality(ggui.DirRTL, widget.Column(
 		ui.Radios(plan).Options([]string{"free", "pro", "team"}).Name("Plan"),
 	))
 	p := ggui.NewProbe(root, ggui.Sz(300, 300))

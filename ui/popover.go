@@ -4,6 +4,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // PopoverWidget opens a themed, focusable panel from a button. The content can
@@ -12,15 +13,15 @@ import (
 type PopoverWidget struct {
 	props                        property.Owner
 	button                       *ButtonWidget
-	popup                        *ggui.PopupWidget
-	panel                        *ggui.BoxWidget
+	popup                        *widget.PopupWidget
+	panel                        *widget.BoxWidget
 	width                        float64
 	pad                          ggui.EdgeInsets
 	padded                       bool
 	content                      ggui.Widget
-	body                         *ggui.ColumnWidget
-	header                       *ggui.ColumnWidget
-	heading, text                *ggui.TextWidget
+	body                         *widget.ColumnWidget
+	header                       *widget.ColumnWidget
+	heading, text                *widget.TextWidget
 	title, description           string
 	builtTitle, builtDescription string
 }
@@ -50,8 +51,8 @@ func PopoverOf(face, content ggui.Widget) *PopoverWidget {
 
 func (p *PopoverWidget) init(content ggui.Widget) {
 	p.content = content
-	p.panel = ggui.Box(ggui.Scroll(popoverBody{p}))
-	p.popup = ggui.Popup(p.button, popoverPanel{p}).Owner(p.button).Modal(false).Align(ggui.PopupCenter)
+	p.panel = widget.Box(widget.Scroll(popoverBody{p}))
+	p.popup = widget.Popup(p.button, popoverPanel{p}).Owner(p.button).Modal(false).Align(widget.PopupCenter)
 	p.button.Expands(p.popup.IsOpen).Opens(p)
 }
 
@@ -73,7 +74,7 @@ func (p *PopoverWidget) Description(v string) *PopoverWidget {
 func (p *PopoverWidget) Trigger() *ButtonWidget { return p.button }
 
 // Popup returns the underlying popup for lower-level configuration.
-func (p *PopoverWidget) Popup() *ggui.PopupWidget { return p.popup }
+func (p *PopoverWidget) Popup() *widget.PopupWidget { return p.popup }
 
 // Name names the trigger.
 func (p *PopoverWidget) Name(name string) *PopoverWidget { p.button.Name(name); return p }
@@ -112,14 +113,14 @@ func (p *PopoverWidget) Modal(v bool) *PopoverWidget { p.popup.Modal(v); return 
 
 // Align chooses center (the default), logical start, or logical end
 // alignment along the trigger's side.
-func (p *PopoverWidget) Align(v ggui.PopupAlignment) *PopoverWidget { p.popup.Align(v); return p }
+func (p *PopoverWidget) Align(v widget.PopupAlignment) *PopoverWidget { p.popup.Align(v); return p }
 
-// Side sets the side of the trigger the panel opens on, ggui.PopupBottom by
+// Side sets the side of the trigger the panel opens on, widget.PopupBottom by
 // default. It opens on the opposite side when only that one has the room.
-func (p *PopoverWidget) Side(v ggui.PopupSide) *PopoverWidget { p.popup.Side(v); return p }
+func (p *PopoverWidget) Side(v widget.PopupSide) *PopoverWidget { p.popup.Side(v); return p }
 
 // AlignOffset moves the panel along the trigger's side, away from the edge
-// Align lines it up with; see ggui.PopupWidget.AlignOffset.
+// Align lines it up with; see widget.PopupWidget.AlignOffset.
 func (p *PopoverWidget) AlignOffset(v float64) *PopoverWidget { p.popup.AlignOffset(v); return p }
 
 // Gap sets the distance from the trigger to the panel (4px by default).
@@ -235,19 +236,19 @@ func (b popoverBody) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		var lines, children []ggui.Widget
 		p.heading, p.text, p.header = nil, nil, nil
 		if p.title != "" {
-			p.heading = ggui.Text(p.title).Role(ggui.RoleHeading)
+			p.heading = widget.Text(p.title).Role(ggui.RoleHeading)
 			lines = append(lines, p.heading)
 		}
 		if p.description != "" {
-			p.text = ggui.Text(p.description)
+			p.text = widget.Text(p.description)
 			lines = append(lines, p.text)
 		}
 		if len(lines) > 0 {
-			p.header = ggui.Column(lines...).Align(ggui.AlignStretch)
+			p.header = widget.Column(lines...).Align(widget.AlignStretch)
 			children = append(children, p.header)
 		}
 		children = append(children, p.content)
-		p.body = ggui.Column(children...).Align(ggui.AlignStretch)
+		p.body = widget.Column(children...).Align(widget.AlignStretch)
 		p.builtTitle, p.builtDescription = p.title, p.description
 	}
 	if p.heading != nil {

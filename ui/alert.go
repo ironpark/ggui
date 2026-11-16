@@ -5,22 +5,23 @@ import (
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/ui/icons"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // AlertWidget is an inline notice with a title, description and optional
 // icon and action.
 type AlertWidget struct {
 	props              property.Owner
-	title, description *ggui.TextWidget
+	title, description *widget.TextWidget
 	action             ggui.Widget
 	role               icons.Role // the leading icon; empty is none
 	destructive        bool
-	box                *ggui.BoxWidget
+	box                *widget.BoxWidget
 	stale              bool // Icon or Action changed what box should hold
-	row                *ggui.RowWidget
-	column             *ggui.ColumnWidget
+	row                *widget.RowWidget
+	column             *widget.ColumnWidget
 	icon               *icons.Widget
-	iconBox            *ggui.BoxWidget
+	iconBox            *widget.BoxWidget
 	actionSize         ggui.Size
 	inset              float64 // of the action from the top and right edges
 }
@@ -28,9 +29,9 @@ type AlertWidget struct {
 // Alert creates an inline notice. It does not interrupt focus or open a
 // modal. An empty description is left out.
 func Alert(title, description string) *AlertWidget {
-	a := &AlertWidget{title: ggui.Text(title)}
+	a := &AlertWidget{title: widget.Text(title)}
 	if description != "" {
-		a.description = ggui.Text(description)
+		a.description = widget.Text(description)
 	}
 	return a
 }
@@ -79,16 +80,16 @@ func (a *AlertWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		if a.description != nil {
 			text = append(text, a.description)
 		}
-		a.column = ggui.Column(text...).Align(ggui.AlignStretch)
+		a.column = widget.Column(text...).Align(widget.AlignStretch)
 		parts := []ggui.Widget{}
 		a.icon, a.iconBox = nil, nil
 		if a.role != "" {
 			a.icon = Icon(a.role)
-			a.iconBox = ggui.Box(a.icon)
+			a.iconBox = widget.Box(a.icon)
 			parts = append(parts, a.iconBox)
 		}
-		a.row = ggui.Row(append(parts, ggui.Expanded(a.column))...).Align(ggui.AlignStart)
-		a.box = ggui.Box(a.row)
+		a.row = widget.Row(append(parts, widget.Expanded(a.column))...).Align(widget.AlignStart)
+		a.box = widget.Box(a.row)
 		a.stale = false
 	}
 	if a.icon != nil {

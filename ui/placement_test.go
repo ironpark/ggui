@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // A tooltip and a hover card are placed as a Base UI positioner places its
@@ -14,17 +15,17 @@ func TestFloatingPanelsKeepTheCollisionPaddingFromTheEdges(t *testing.T) {
 	for _, c := range []struct {
 		name   string
 		anchor ggui.Rect
-		side   ggui.PopupSide
-		align  ggui.PopupAlignment
+		side   widget.PopupSide
+		align  widget.PopupAlignment
 		want   ggui.Point
-		on     ggui.PopupSide
+		on     widget.PopupSide
 	}{
-		{"centered over an anchor at the left edge", ggui.Rct(ggui.Pt(0, 100), ggui.Sz(40, 20)), ggui.PopupTop, ggui.PopupCenter, ggui.Pt(5, 46), ggui.PopupTop},
-		{"centered over an anchor at the right edge", ggui.Rct(ggui.Pt(360, 100), ggui.Sz(40, 20)), ggui.PopupTop, ggui.PopupCenter, ggui.Pt(295, 46), ggui.PopupTop},
+		{"centered over an anchor at the left edge", ggui.Rct(ggui.Pt(0, 100), ggui.Sz(40, 20)), widget.PopupTop, widget.PopupCenter, ggui.Pt(5, 46), widget.PopupTop},
+		{"centered over an anchor at the right edge", ggui.Rct(ggui.Pt(360, 100), ggui.Sz(40, 20)), widget.PopupTop, widget.PopupCenter, ggui.Pt(295, 46), widget.PopupTop},
 		// 56px above the anchor less the 4px gap is room for 50 flush
 		// against the top, and not 5px inside it.
-		{"over an anchor with room only flush against the top", ggui.Rct(ggui.Pt(150, 56), ggui.Sz(40, 20)), ggui.PopupTop, ggui.PopupCenter, ggui.Pt(120, 80), ggui.PopupBottom},
-		{"beside an anchor at the bottom edge", ggui.Rct(ggui.Pt(150, 280), ggui.Sz(40, 20)), ggui.PopupRight, ggui.PopupStart, ggui.Pt(194, 245), ggui.PopupRight},
+		{"over an anchor with room only flush against the top", ggui.Rct(ggui.Pt(150, 56), ggui.Sz(40, 20)), widget.PopupTop, widget.PopupCenter, ggui.Pt(120, 80), widget.PopupBottom},
+		{"beside an anchor at the bottom edge", ggui.Rct(ggui.Pt(150, 280), ggui.Sz(40, 20)), widget.PopupRight, widget.PopupStart, ggui.Pt(194, 245), widget.PopupRight},
 	} {
 		got, on, _ := floatBeside(screen, c.anchor, size, c.side, c.align, 0, 4, false)
 		if got.Origin != c.want || on != c.on {

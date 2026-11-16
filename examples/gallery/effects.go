@@ -7,6 +7,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // effectsDemo shows the painting effects: a card that turns and still takes
@@ -19,16 +20,16 @@ func effectsDemo() ggui.Widget {
 		clicks := ggui.State(0)
 		red, blue, green := color.NRGBA{R: 230, G: 72, B: 72, A: 255}, color.NRGBA{R: 64, G: 110, B: 230, A: 255}, color.NRGBA{R: 52, G: 180, B: 110, A: 255}
 		swatch := func(g ggui.Gradient, radius float64) ggui.Widget {
-			return ggui.Box().Size(72, 72).Gradient(g).Radius(radius)
+			return widget.Box().Size(72, 72).Gradient(g).Radius(radius)
 		}
-		stripes := ggui.Row(
-			ggui.Box().Size(12, 72).Fill(red), ggui.Box().Size(12, 72).Fill(blue),
-			ggui.Box().Size(12, 72).Fill(red), ggui.Box().Size(12, 72).Fill(blue),
-			ggui.Box().Size(12, 72).Fill(red), ggui.Box().Size(12, 72).Fill(blue),
+		stripes := widget.Row(
+			widget.Box().Size(12, 72).Fill(red), widget.Box().Size(12, 72).Fill(blue),
+			widget.Box().Size(12, 72).Fill(red), widget.Box().Size(12, 72).Fill(blue),
+			widget.Box().Size(12, 72).Fill(red), widget.Box().Size(12, 72).Fill(blue),
 		)
-		return ggui.Column(
-			ggui.Wrap(
-				ggui.Transform(ui.Button("Click me", func() { clicks.Set(clicks.Get() + 1) })).BindRotate(angle),
+		return widget.Column(
+			widget.Wrap(
+				widget.Transform(ui.Button("Click me", func() { clicks.Set(clicks.Get() + 1) })).BindRotate(angle),
 				ui.Button("Turn", func() {
 					turned.Set(!turned.Get())
 					target := 0.0
@@ -37,19 +38,19 @@ func effectsDemo() ggui.Widget {
 					}
 					angle.Set(target)
 				}).Outline(),
-				ggui.Textf("%d clicks", clicks),
+				widget.Textf("%d clicks", clicks),
 			).Gap(16),
-			ggui.Wrap(
+			widget.Wrap(
 				swatch(ggui.LinearGradient(math.Pi/4, ggui.Stops(red, green, blue)...), 12),
 				swatch(ggui.RadialGradient(ggui.Stops(color.White, blue)...), 12),
 				swatch(ggui.SweepGradient(ggui.Stops(red, green, blue, red)...), 36),
-				ggui.ClipOval(swatch(ggui.LinearGradient(math.Pi/2, ggui.Stops(green, blue)...), 0)),
-				ggui.Opacity(swatch(ggui.LinearGradient(0, ggui.Stops(red, blue)...), 12), 0.5),
+				widget.ClipOval(swatch(ggui.LinearGradient(math.Pi/2, ggui.Stops(green, blue)...), 0)),
+				widget.Opacity(swatch(ggui.LinearGradient(0, ggui.Stops(red, blue)...), 12), 0.5),
 			).Gap(16),
-			ggui.Wrap(
-				ggui.Blur(stripes, 0).BindSigma(sigma),
-				ggui.Stack(stripes, ggui.Padding(ggui.BackdropBlur(ggui.Box().Size(48, 32).Fill(color.NRGBA{R: 255, G: 255, B: 255, A: 60}).Radius(8), 4).Radius(8), 20, 12)),
-				ggui.Box(ui.Slider(sigma, 0, 12)).Width(160),
+			widget.Wrap(
+				widget.Blur(stripes, 0).BindSigma(sigma),
+				widget.Stack(stripes, widget.Padding(widget.BackdropBlur(widget.Box().Size(48, 32).Fill(color.NRGBA{R: 255, G: 255, B: 255, A: 60}).Radius(8), 4).Radius(8), 20, 12)),
+				widget.Box(ui.Slider(sigma, 0, 12)).Width(160),
 			).Gap(16),
 		).Gap(20)
 	})

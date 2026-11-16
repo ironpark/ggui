@@ -14,6 +14,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/router"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func routes() *router.Router {
@@ -41,9 +42,9 @@ func appLayout(r *router.Router, page ggui.Widget) ggui.Widget {
 	back := ui.Button("‹ Back", r.Back).Ghost().BindDisabled(ggui.Not(r.CanBack()))
 	forward := ui.Button("Forward ›", r.Forward).Ghost().BindDisabled(ggui.Not(r.CanForward()))
 	path := ggui.Derived(func() string { return r.Location().String() })
-	toolbar := ggui.Row(back, forward, ggui.TextOf(path)).Space(1).Align(ggui.AlignCenter)
+	toolbar := widget.Row(back, forward, widget.TextOf(path)).Space(1).Align(widget.AlignCenter)
 
-	sidebar := ggui.Column(
+	sidebar := widget.Column(
 		ui.Title("Router"),
 		// Active("/") is true everywhere, so Home compares the path exactly.
 		navLink(r, "Home", "/", ggui.Derived(func() bool { return r.Location().Path == "/" })),
@@ -54,9 +55,9 @@ func appLayout(r *router.Router, page ggui.Widget) ggui.Widget {
 		navLink(r, "Broken link", "/nowhere", ggui.Const(false)),
 	).Space(0.5)
 
-	return ggui.Box(ggui.Row(
-		ggui.Box(sidebar).Width(200),
-		ggui.Expanded(ggui.Column(toolbar, ui.Card(page).Pad(24)).Space(1)),
+	return widget.Box(widget.Row(
+		widget.Box(sidebar).Width(200),
+		widget.Expanded(widget.Column(toolbar, ui.Card(page).Pad(24)).Space(1)),
 	).Space(2)).Pad(16)
 }
 
@@ -72,9 +73,9 @@ func navLink(r *router.Router, label, url string, active ggui.Readable[bool]) gg
 }
 
 func homePage(c *router.Context) ggui.Widget {
-	return ggui.Column(
+	return widget.Column(
 		ui.Title("Home"),
-		ggui.Text("The sidebar and toolbar belong to the app layout and stay mounted while pages change."),
+		widget.Text("The sidebar and toolbar belong to the app layout and stay mounted while pages change."),
 	).Space(1)
 }
 
@@ -91,16 +92,16 @@ func projectLayout(c *router.Context, page ggui.Widget) ggui.Widget {
 	tab := func(label, url string) ggui.Widget {
 		return ui.Button(label, func() { _ = c.Navigate(url) }).Outline()
 	}
-	return ggui.Column(
+	return widget.Column(
 		ui.Title("Project "+id),
-		ggui.Textf("locations seen by this project layout: %d", visits),
-		ggui.Row(tab("Overview", "/projects/"+id), tab("Tasks", "/projects/"+id+"/tasks"), tab("Open tasks", "/projects/"+id+"/tasks?filter=open")).Space(0.5),
+		widget.Textf("locations seen by this project layout: %d", visits),
+		widget.Row(tab("Overview", "/projects/"+id), tab("Tasks", "/projects/"+id+"/tasks"), tab("Open tasks", "/projects/"+id+"/tasks?filter=open")).Space(0.5),
 		page,
 	).Space(1)
 }
 
 func overviewPage(c *router.Context) ggui.Widget {
-	return ggui.Text(fmt.Sprintf("Overview of project %s.", c.Param("id")))
+	return widget.Text(fmt.Sprintf("Overview of project %s.", c.Param("id")))
 }
 
 func tasksPage(c *router.Context) ggui.Widget {
@@ -110,17 +111,17 @@ func tasksPage(c *router.Context) ggui.Widget {
 		}
 		return "All tasks."
 	})
-	return ggui.TextOf(filter)
+	return widget.TextOf(filter)
 }
 
 func settingsPage(c *router.Context) ggui.Widget {
-	return ggui.Column(ui.Title("Settings"), ggui.Text("Nothing to configure.")).Space(1)
+	return widget.Column(ui.Title("Settings"), widget.Text("Nothing to configure.")).Space(1)
 }
 
 func notFoundPage(c *router.Context) ggui.Widget {
-	return ggui.Column(
+	return widget.Column(
 		ui.Title("Not found"),
-		ggui.TextOf(ggui.Map(c.LocationValue(), func(l router.Location) string { return "No page at " + l.Path + "." })),
+		widget.TextOf(ggui.Map(c.LocationValue(), func(l router.Location) string { return "No page at " + l.Path + "." })),
 		ui.Button("Go home", func() { _ = c.Navigate("/") }),
 	).Space(1)
 }

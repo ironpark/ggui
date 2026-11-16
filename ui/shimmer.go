@@ -5,6 +5,7 @@ import (
 	"math"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // paintShimmer moves a highlight across text already painted over r in
@@ -12,7 +13,7 @@ import (
 // the line every two seconds. It leaves the text in base. The band steps
 // on loopStep and asks for the frames it needs, so the caller paints it
 // only while the text is in view and motion is wanted.
-func paintShimmer(dst *ggui.Canvas, text *ggui.TextWidget, r ggui.Rect, base, highlight color.Color) {
+func paintShimmer(dst *ggui.Canvas, text *widget.TextWidget, r ggui.Rect, base, highlight color.Color) {
 	const (
 		bands = 16
 		bandW = 4.0

@@ -5,10 +5,11 @@ import (
 	"testing"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func text(s string) PageFunc {
-	return func(*Context) ggui.Widget { return ggui.Text(s) }
+	return func(*Context) ggui.Widget { return widget.Text(s) }
 }
 
 func passLayout(c *Context, page ggui.Widget) ggui.Widget { return page }
@@ -133,13 +134,13 @@ func mount(t *testing.T, h History) *harness {
 	page := func(name string) PageFunc {
 		return func(c *Context) ggui.Widget {
 			x.count[name+":"+c.Param("id")]++
-			return ggui.Text(name)
+			return widget.Text(name)
 		}
 	}
 	layout := func(name string) LayoutFunc {
 		return func(c *Context, outlet ggui.Widget) ggui.Widget {
 			x.count[name+":"+c.Param("id")]++
-			return ggui.Column(ggui.Text(name), outlet)
+			return widget.Column(widget.Text(name), outlet)
 		}
 	}
 	x.r = New(
@@ -279,7 +280,7 @@ func TestTargetsAndQueryTracking(t *testing.T) {
 		return ggui.Reactive(func() ggui.Widget {
 			filterRuns++
 			filter = c.Query("filter")
-			return ggui.Text(filter)
+			return widget.Text(filter)
 		})
 	})
 	other := Page("/other", text("other"))

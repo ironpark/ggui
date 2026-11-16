@@ -4,6 +4,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // LabelWidget provides a themed label and an optional association with a control.
@@ -11,7 +12,7 @@ import (
 type LabelWidget struct {
 	ggui.Interactive
 	props   property.Owner
-	text    *ggui.TextWidget
+	text    *widget.TextWidget
 	content string
 	target  ggui.Widget
 	pending bool
@@ -20,7 +21,7 @@ type LabelWidget struct {
 
 // Label creates a medium-weight form label. For associates it with a control.
 func Label(text string) *LabelWidget {
-	l := &LabelWidget{text: ggui.Text(text), content: text}
+	l := &LabelWidget{text: widget.Text(text), content: text}
 	l.Role = ggui.RoleText
 	l.SetName(text)
 	l.AutoKey()

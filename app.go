@@ -1,5 +1,3 @@
-// Package ggui is a cross-platform GUI framework for Go: Flutter's widget tree
-// and layout model, driven by Svelte-style reactivity, rendered by ggfx.
 package ggui
 
 import (

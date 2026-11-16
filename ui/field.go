@@ -6,6 +6,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // FieldWidget is a labelled input: a caption above any control, a muted
@@ -27,13 +28,13 @@ type FieldWidget struct {
 	carded       bool
 
 	caption *LabelWidget
-	note    *ggui.TextWidget // the description
-	alert   *ggui.TextWidget // the error
-	alerts  fieldErrorList   // the errors, when there are several
-	column  *ggui.ColumnWidget
-	row     *ggui.RowWidget  // the body of a Horizontal field, holding column
-	card    *FieldCardWidget // the body of a Card field
-	shape   fieldShape       // what column, row and card were built for
+	note    *widget.TextWidget // the description
+	alert   *widget.TextWidget // the error
+	alerts  fieldErrorList     // the errors, when there are several
+	column  *widget.ColumnWidget
+	row     *widget.RowWidget // the body of a Horizontal field, holding column
+	card    *FieldCardWidget  // the body of a Card field
+	shape   fieldShape        // what column, row and card were built for
 }
 
 // fieldShape is what decides which widgets a Field's body holds.
@@ -63,7 +64,7 @@ func Field(label string, input ggui.Widget) *FieldWidget {
 		}
 	}
 	f.caption = Label(label).For(input)
-	f.note, f.alert = ggui.Text(""), ggui.Text("")
+	f.note, f.alert = widget.Text(""), widget.Text("")
 	return f
 }
 
@@ -198,7 +199,7 @@ func (f *FieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		} else if shape.alerted {
 			parts = append(parts, f.alert)
 		}
-		f.column, f.row, f.card = ggui.Column(parts...).Align(ggui.AlignStretch), nil, nil
+		f.column, f.row, f.card = widget.Column(parts...).Align(widget.AlignStretch), nil, nil
 		if shape.carded {
 			// A title alone is centered on the control; with text under
 			// it the two are a FieldContent and start at the top.
@@ -213,11 +214,11 @@ func (f *FieldWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		} else if shape.horizontal {
 			// Beside one line of label the control is centered; beside a
 			// label with text under it, it starts at the top.
-			align := pick(shape.noted || shape.alerted, ggui.AlignStart, ggui.AlignCenter)
+			align := pick(shape.noted || shape.alerted, widget.AlignStart, widget.AlignCenter)
 			if shape.controlFirst {
-				f.row = ggui.Row(f.input, ggui.Expanded(f.column)).Align(align)
+				f.row = widget.Row(f.input, widget.Expanded(f.column)).Align(align)
 			} else {
-				f.row = ggui.Row(ggui.Expanded(f.column), f.input).Align(align)
+				f.row = widget.Row(widget.Expanded(f.column), f.input).Align(align)
 			}
 		}
 	}
@@ -251,7 +252,7 @@ func (f *FieldWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 // FieldGroupWidget stacks fields with the room a form gives them. Build one
 // with FieldGroup.
 type FieldGroupWidget struct {
-	column *ggui.ColumnWidget
+	column *widget.ColumnWidget
 }
 
 // FieldGroup stacks fields, and anything else a form holds between them
@@ -264,7 +265,7 @@ type FieldGroupWidget struct {
 //		ui.Field("Email", ui.TextField(email)).Help("We never share it"),
 //	)
 func FieldGroup(children ...ggui.Widget) *FieldGroupWidget {
-	return &FieldGroupWidget{column: ggui.Column(children...).Align(ggui.AlignStretch)}
+	return &FieldGroupWidget{column: widget.Column(children...).Align(widget.AlignStretch)}
 }
 
 // Layout implements Widget.
@@ -283,8 +284,8 @@ type FieldSetWidget struct {
 	legend      string
 	description string
 
-	title, note *ggui.TextWidget
-	body, outer *ggui.ColumnWidget
+	title, note *widget.TextWidget
+	body, outer *widget.ColumnWidget
 	shape       fieldShape // what body and outer were built for
 }
 
@@ -297,7 +298,7 @@ type FieldSetWidget struct {
 //		ui.Field("City", ui.TextField(city)),
 //	).Legend("Address").Description("Where we deliver.")
 func FieldSet(children ...ggui.Widget) *FieldSetWidget {
-	return &FieldSetWidget{children: children, title: ggui.Text(""), note: ggui.Text("")}
+	return &FieldSetWidget{children: children, title: widget.Text(""), note: widget.Text("")}
 }
 
 // Legend sets the heading of the set, in medium text a step larger than
@@ -331,11 +332,11 @@ func (s *FieldSetWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		if shape.noted {
 			parts = append(parts, s.note)
 		}
-		s.body = ggui.Column(append(parts, s.children...)...).Align(ggui.AlignStretch)
+		s.body = widget.Column(append(parts, s.children...)...).Align(widget.AlignStretch)
 		if shape.alerted {
-			s.outer = ggui.Column(s.title, s.body).Align(ggui.AlignStretch)
+			s.outer = widget.Column(s.title, s.body).Align(widget.AlignStretch)
 		} else {
-			s.outer = ggui.Column(s.body).Align(ggui.AlignStretch)
+			s.outer = widget.Column(s.body).Align(widget.AlignStretch)
 		}
 	}
 	s.body.Gap(t.Space * 2)
@@ -355,14 +356,14 @@ func (s *FieldSetWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 type FieldSeparatorWidget struct {
 	props   property.Owner
 	content string
-	text    *ggui.TextWidget
+	text    *widget.TextWidget
 	size    ggui.Size // the text's
 	theme   *uitheme.Theme
 }
 
 // FieldSeparator is a hairline across a FieldGroup, in the theme's Border
 // color: shadcn's FieldSeparator. Label sets a word in the middle of it.
-func FieldSeparator() *FieldSeparatorWidget { return &FieldSeparatorWidget{text: ggui.Text("")} }
+func FieldSeparator() *FieldSeparatorWidget { return &FieldSeparatorWidget{text: widget.Text("")} }
 
 // Label breaks the line around muted text, such as "Or continue with".
 func (s *FieldSeparatorWidget) Label(text string) *FieldSeparatorWidget {

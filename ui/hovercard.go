@@ -6,6 +6,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // HoverCardWidget shows a panel of content near its anchor once the cursor
@@ -24,12 +25,12 @@ type HoverCardWidget struct {
 	closeDelay      time.Duration
 	width           float64
 	name            string
-	side            ggui.PopupSide
-	align           ggui.PopupAlignment
+	side            widget.PopupSide
+	align           widget.PopupAlignment
 	alignOffset     float64
 
-	panel  *ggui.BoxWidget
-	effect *ggui.TransitionWidget
+	panel  *widget.BoxWidget
+	effect *widget.TransitionWidget
 	env    ggui.Env
 	theme  *uitheme.Theme
 	size   ggui.Size
@@ -59,11 +60,11 @@ const hoverCardAlignOffset = 4
 
 // HoverCard wraps anchor and shows content below it after 600ms.
 //
-//	ui.HoverCard(ui.Button("@ada", nil).Ghost(), ggui.Column(
+//	ui.HoverCard(ui.Button("@ada", nil).Ghost(), widget.Column(
 //		Title("Ada Lovelace"), Caption("Joined 1843"),
 //	).Gap(4))
 func HoverCard(anchor, content ggui.Widget) *HoverCardWidget {
-	return &HoverCardWidget{anchor: anchor, content: content, delay: 600 * time.Millisecond, closeDelay: 300 * time.Millisecond, width: hoverCardWidth, align: ggui.PopupCenter, alignOffset: hoverCardAlignOffset}
+	return &HoverCardWidget{anchor: anchor, content: content, delay: 600 * time.Millisecond, closeDelay: 300 * time.Millisecond, width: hoverCardWidth, align: widget.PopupCenter, alignOffset: hoverCardAlignOffset}
 }
 
 // Delay sets how long the cursor must rest before the card appears.
@@ -80,9 +81,9 @@ func (h *HoverCardWidget) Width(w float64) *HoverCardWidget {
 	return h
 }
 
-// Side sets the side of the anchor the card opens on, ggui.PopupBottom by
+// Side sets the side of the anchor the card opens on, widget.PopupBottom by
 // default. It opens on the opposite side when only that one has the room.
-func (h *HoverCardWidget) Side(v ggui.PopupSide) *HoverCardWidget {
+func (h *HoverCardWidget) Side(v widget.PopupSide) *HoverCardWidget {
 	defer property.Watch(&h.props, &h.side)()
 	h.side = v
 	return h
@@ -90,14 +91,14 @@ func (h *HoverCardWidget) Side(v ggui.PopupSide) *HoverCardWidget {
 
 // Align sets where the card sits along the anchor's side: centered by
 // default, or lined up with its logical start or end.
-func (h *HoverCardWidget) Align(v ggui.PopupAlignment) *HoverCardWidget {
+func (h *HoverCardWidget) Align(v widget.PopupAlignment) *HoverCardWidget {
 	defer property.Watch(&h.props, &h.align)()
 	h.align = v
 	return h
 }
 
 // AlignOffset moves the card along the anchor's side, away from the edge
-// Align lines it up with; see ggui.PopupWidget.AlignOffset. It is four
+// Align lines it up with; see widget.PopupWidget.AlignOffset. It is four
 // pixels by default.
 func (h *HoverCardWidget) AlignOffset(v float64) *HoverCardWidget {
 	defer property.Watch(&h.props, &h.alignOffset)()
@@ -128,8 +129,8 @@ func (h *HoverCardWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	}
 	h.env, h.theme = env, uitheme.Of(env)
 	if h.panel == nil {
-		h.panel = ggui.Box(h.content)
-		h.effect = ggui.PopIn(h.panel)
+		h.panel = widget.Box(h.content)
+		h.effect = widget.PopIn(h.panel)
 	}
 	panelBox(h.panel, h.theme).Radius(h.theme.Radius).Pad(h.theme.Space * 1.25)
 	return h.anchor.Layout(c, env)

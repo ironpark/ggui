@@ -7,6 +7,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // frameStep is a display's refresh, the time between a window's frames.
@@ -76,8 +77,8 @@ func TestCollapsibleEasesOpenInAWindowsFrames(t *testing.T) {
 		t.Run(how, func(t *testing.T) {
 			open := ggui.State(false)
 			var h float64
-			c := measuring(ui.Collapsible(open, "More", ggui.Box().Height(100)), &h)
-			p := ggui.NewWindowProbe(func() ggui.Widget { return ggui.Column(c) }, ggui.Sz(320, 400))
+			c := measuring(ui.Collapsible(open, "More", widget.Box().Height(100)), &h)
+			p := ggui.NewWindowProbe(func() ggui.Widget { return widget.Column(c) }, ggui.Sz(320, 400))
 			defer p.Close()
 			atRest(t, p)
 			closed := h
@@ -104,15 +105,15 @@ func TestAccordionEasesOpenInAWindowsFrames(t *testing.T) {
 	t.Parallel()
 	open := ggui.State([]string{})
 	var h float64
-	a := measuring(ui.Accordion(open, ui.AccordionItem("a", "Reveal", ggui.Box().Height(100))), &h)
-	p := ggui.NewWindowProbe(func() ggui.Widget { return ggui.Column(a) }, ggui.Sz(320, 400))
+	a := measuring(ui.Accordion(open, ui.AccordionItem("a", "Reveal", widget.Box().Height(100))), &h)
+	p := ggui.NewWindowProbe(func() ggui.Widget { return widget.Column(a) }, ggui.Sz(320, 400))
 	defer p.Close()
 	atRest(t, p)
 	closed := h
 	open.Set([]string{"a"})
 	// Open, the section takes its content's height and the space around it.
 	var full float64
-	q := ggui.NewProbe(ggui.Column(measuring(ui.Accordion(ggui.State([]string{"a"}), ui.AccordionItem("a", "Reveal", ggui.Box().Height(100))), &full)), ggui.Sz(320, 400))
+	q := ggui.NewProbe(widget.Column(measuring(ui.Accordion(ggui.State([]string{"a"}), ui.AccordionItem("a", "Reveal", widget.Box().Height(100))), &full)), ggui.Sz(320, 400))
 	defer q.Close()
 	q.Advance(time.Second)
 	q.Advance(time.Second)
@@ -130,10 +131,10 @@ func TestAccordionEasesOpenInAWindowsFrames(t *testing.T) {
 func TestCollapsibleEasingInAScrollPaintsWithinItsViewport(t *testing.T) {
 	open := ggui.State(false)
 	var h float64
-	c := measuring(ui.Collapsible(open, "More", ggui.Box().Height(100)), &h)
+	c := measuring(ui.Collapsible(open, "More", widget.Box().Height(100)), &h)
 	p := ggui.NewWindowProbe(func() ggui.Widget {
-		pane := ggui.Box(ggui.Scroll(ggui.Column(c, ggui.Box().Size(150, 400)))).Size(150, 100)
-		return ggui.Row(pane, ggui.Box().Size(150, 100))
+		pane := widget.Box(widget.Scroll(widget.Column(c, widget.Box().Size(150, 400)))).Size(150, 100)
+		return widget.Row(pane, widget.Box().Size(150, 100))
 	}, ggui.Sz(300, 100))
 	defer p.Close()
 	atRest(t, p)
@@ -172,7 +173,7 @@ func woken(first ggui.WindowFrame, frames []ggui.WindowFrame) int {
 }
 
 func carouselSlides() []ggui.Widget {
-	return []ggui.Widget{ui.Card(ggui.Center(ui.Title("1"))), ui.Card(ggui.Center(ui.Title("2"))), ui.Card(ggui.Center(ui.Title("3")))}
+	return []ggui.Widget{ui.Card(widget.Center(ui.Title("1"))), ui.Card(widget.Center(ui.Title("2"))), ui.Card(widget.Center(ui.Title("3")))}
 }
 
 // A carousel with nothing to do asks for no frames: it reads the time only
@@ -203,7 +204,7 @@ func TestAnAutoplayingCarouselWakesOnlyAtItsInterval(t *testing.T) {
 	selected := ggui.State(0)
 	moves := 0
 	c := ui.Carousel(selected, carouselSlides()...).Autoplay(interval).StopOnInteraction(false).OnChange(func(int) { moves++ })
-	p := ggui.NewWindowProbe(func() ggui.Widget { return ggui.Padding(c, 40) }, ggui.Sz(580, 320))
+	p := ggui.NewWindowProbe(func() ggui.Widget { return widget.Padding(c, 40) }, ggui.Sz(580, 320))
 	defer p.Close()
 	first := p.Step(0)
 	frames := p.Idle(frameStep, 3*interval+interval/2)
@@ -236,7 +237,7 @@ func TestAnAutoplayingCarouselWakesOnlyAtItsInterval(t *testing.T) {
 // in; one with a countdown asks for them until it has gone.
 func TestAPersistentToastAsksForNoFrames(t *testing.T) {
 	toaster := ui.NewToaster()
-	p := ggui.NewWindowProbe(func() ggui.Widget { return ggui.Column(toaster) }, ggui.Sz(500, 400))
+	p := ggui.NewWindowProbe(func() ggui.Widget { return widget.Column(toaster) }, ggui.Sz(500, 400))
 	defer p.Close()
 	atRest(t, p)
 	toaster.Push(ui.Toast("Saved", "Stays until dismissed").Duration(0))
@@ -263,11 +264,11 @@ func TestAPersistentToastAsksForNoFrames(t *testing.T) {
 // not at each of theirs in turn, and paint only where they are.
 func TestLoopsShowingTogetherShareTheirFrames(t *testing.T) {
 	p := ggui.NewWindowProbe(func() ggui.Widget {
-		return ggui.Column(
+		return widget.Column(
 			ui.Spinner(),
 			ui.Skeleton(120, 16),
 			ui.Attachment("report.pdf", "1 MB").State(ui.AttachmentUploading).Width(220),
-			ggui.Box().Size(600, 400),
+			widget.Box().Size(600, 400),
 		)
 	}, ggui.Sz(600, 600))
 	defer p.Close()
@@ -299,7 +300,7 @@ func TestAnAttachmentStripSnapsAfterTheWheelWithoutWatching(t *testing.T) {
 		cards = append(cards, ui.Attachment(fmt.Sprintf("File %d", i), "PDF").Width(180))
 	}
 	group := ui.AttachmentGroup(cards...)
-	p := ggui.NewWindowProbe(func() ggui.Widget { return ggui.Column(group) }, ggui.Sz(230, 140))
+	p := ggui.NewWindowProbe(func() ggui.Widget { return widget.Column(group) }, ggui.Sz(230, 140))
 	defer p.Close()
 	atRest(t, p)
 	p.Scroll(ggui.Pt(100, 20), ggui.Pt(-8, 0))
@@ -360,7 +361,7 @@ func TestAMessageScrollerEasesAWheelsNotchAndFollowsATrackpad(t *testing.T) {
 // so the button shows what it showed.
 func TestASpinnerBesideATooltipIsPaintedInPart(t *testing.T) {
 	p := ggui.NewWindowProbe(func() ggui.Widget {
-		return ggui.Row(ui.Spinner(), ui.Tooltip(ui.Button("Stop", func() {}), "Stop the work")).Gap(8)
+		return widget.Row(ui.Spinner(), ui.Tooltip(ui.Button("Stop", func() {}), "Stop the work")).Gap(8)
 	}, ggui.Sz(400, 300))
 	defer p.Close()
 	p.Move(ggui.Pt(300, 200))

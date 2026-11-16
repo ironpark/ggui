@@ -7,6 +7,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func civil(y int, m time.Month, d int) time.Time { return time.Date(y, m, d, 0, 0, 0, 0, time.UTC) }
@@ -245,7 +246,7 @@ func TestCalendarFunctionSettersInvalidateCachedLayout(t *testing.T) {
 				c = ui.CalendarMultiple(ggui.State([]time.Time{start}))
 			}
 			c.Location(time.UTC)
-			p := calendarProbe(t, ggui.Column(c))
+			p := calendarProbe(t, widget.Column(c))
 			p.Frame()
 			p.Frame() // ensure the parent is reusing its child's measurement
 			c.DisabledDate(func(d time.Time) bool { return d.Day() == 12 })

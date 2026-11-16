@@ -6,13 +6,14 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestSelectPopupStaysWithinTriggerWidth(t *testing.T) {
 	t.Parallel()
 	value := ggui.State("Alpha")
 	selectBox := ui.Select(value).Options([]string{"Alpha", "Beta"}).Name("Choose option")
-	p := ggui.NewProbe(ggui.Box(selectBox).Width(180), ggui.Sz(900, 400))
+	p := ggui.NewProbe(widget.Box(selectBox).Width(180), ggui.Sz(900, 400))
 	defer p.Close()
 	p.Tap("Choose option")
 	trigger, ok := p.Find("Choose option")
@@ -34,9 +35,9 @@ func TestSelectOverflowScrollsWithoutCollapsingOptions(t *testing.T) {
 	for _, above := range []bool{false, true} {
 		value := ggui.State("lime")
 		selectBox := ui.Select(value).Options(options).Name("Color")
-		var root ggui.Widget = ggui.Column(selectBox).Align(ggui.AlignStretch)
+		var root ggui.Widget = widget.Column(selectBox).Align(widget.AlignStretch)
 		if above {
-			root = ggui.Column(ggui.Box().Height(180), selectBox).Align(ggui.AlignStretch)
+			root = widget.Column(widget.Box().Height(180), selectBox).Align(widget.AlignStretch)
 		}
 		p := ggui.NewProbe(root, ggui.Sz(240, 220))
 		p.Tap("Color")
@@ -72,7 +73,7 @@ func TestSelectKeyboardRevealsOverflowOption(t *testing.T) {
 	options := []string{"one", "two", "three", "four", "five", "six", "seven", "eight"}
 	value := ggui.State("one")
 	selectBox := ui.Select(value).Options(options).Name("Number")
-	p := ggui.NewProbe(ggui.Column(selectBox), ggui.Sz(180, 150))
+	p := ggui.NewProbe(widget.Column(selectBox), ggui.Sz(180, 150))
 	defer p.Close()
 	p.Tap("Number")
 	p.Advance(time.Second)
@@ -103,7 +104,7 @@ func TestSelectionControlsOwnOptionSnapshots(t *testing.T) {
 				control = ui.ToggleGroup(value).Options(options)
 			}
 			options[0] = "Mutated"
-			p := ggui.NewProbe(ggui.Column(control), ggui.Sz(300, 300))
+			p := ggui.NewProbe(widget.Column(control), ggui.Sz(300, 300))
 			defer p.Close()
 			if kind != "toggle group" {
 				p.Tap("Choice")

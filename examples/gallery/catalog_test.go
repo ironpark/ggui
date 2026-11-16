@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestGalleryFiltersAndGlobalActions(t *testing.T) {
@@ -61,7 +62,7 @@ func TestPreviewGridReflows(t *testing.T) {
 		preview("Buttons", ui.Button("First", nil)),
 		preview("Text", ui.Button("Second", nil)),
 	})
-	p := ggui.NewProbe(ggui.Scroll(grid), ggui.Sz(1120, 820))
+	p := ggui.NewProbe(widget.Scroll(grid), ggui.Sz(1120, 820))
 	defer p.Close()
 	p.Frame()
 	first, _ := p.Find("First")

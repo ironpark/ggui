@@ -5,6 +5,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/pkg/gem"
+	"github.com/ironpark/ggui/widget"
 )
 
 // reachButton is a control hit a little way outside its Rect.
@@ -39,7 +40,7 @@ func TestHitReachExtendsThePointerTargetOnly(t *testing.T) {
 	b := &reachButton{margin: 8}
 	b.Role = ggui.RoleButton
 	b.SetName("Target")
-	p := ggui.NewProbe(ggui.Box(b).Padding(ggui.Insets(20)), ggui.Sz(100, 100))
+	p := ggui.NewProbe(widget.Box(b).Padding(ggui.Insets(20)), ggui.Sz(100, 100))
 	defer p.Close()
 	f, ok := p.FindRole(ggui.RoleButton, "Target")
 	if !ok || f.Rect != ggui.Rct(ggui.Pt(20, 20), ggui.Sz(16, 16)) {
@@ -92,7 +93,7 @@ func TestHitReachFollowsClipAndTransform(t *testing.T) {
 	p.Close()
 
 	b = &reachButton{margin: 8}
-	p = ggui.NewProbe(ggui.Box(ggui.Transform(b).Translate(30, 0)).Padding(ggui.Insets(20)), ggui.Sz(100, 100))
+	p = ggui.NewProbe(widget.Box(widget.Transform(b).Translate(30, 0)).Padding(ggui.Insets(20)), ggui.Sz(100, 100))
 	defer p.Close()
 	p.Move(ggui.Pt(44, 28))
 	if !b.Hovered {
@@ -109,11 +110,11 @@ func TestHitReachFollowsClipAndTransform(t *testing.T) {
 // region beneath from showing through.
 func TestARegionAskingForTheArrowHidesTheCursorBeneath(t *testing.T) {
 	t.Parallel()
-	w := ggui.Stack(
-		ggui.Pointer(ggui.Box().Size(100, 100)).Cursor(ggui.CursorShapeText),
-		ggui.Pointer(ggui.Box().Size(50, 50)).Cursor(ggui.CursorShapeDefault),
+	w := widget.Stack(
+		widget.Pointer(widget.Box().Size(100, 100)).Cursor(ggui.CursorShapeText),
+		widget.Pointer(widget.Box().Size(50, 50)).Cursor(ggui.CursorShapeDefault),
 		// A region that asks for nothing lets the one beneath decide.
-		ggui.Padding(ggui.Pointer(ggui.Box().Size(20, 20)).OnMove(func(ggui.PointerEvent) {}), 70, 0, 0, 70),
+		widget.Padding(widget.Pointer(widget.Box().Size(20, 20)).OnMove(func(ggui.PointerEvent) {}), 70, 0, 0, 70),
 	)
 	p := ggui.NewProbe(w, ggui.Sz(100, 100))
 	defer p.Close()
@@ -149,7 +150,7 @@ func (a *arrowControl) Semantics() (ggui.Role, string)          { return ggui.Ro
 
 func TestAControlAskingForTheArrowHidesTheCursorBeneath(t *testing.T) {
 	t.Parallel()
-	w := ggui.Stack(ggui.Pointer(ggui.Box().Size(100, 100)).Cursor(ggui.CursorShapeText), &arrowControl{})
+	w := widget.Stack(widget.Pointer(widget.Box().Size(100, 100)).Cursor(ggui.CursorShapeText), &arrowControl{})
 	p := ggui.NewProbe(w, ggui.Sz(100, 100))
 	defer p.Close()
 	p.Move(ggui.Pt(20, 20))
@@ -169,10 +170,10 @@ func TestAControlAskingForTheArrowHidesTheCursorBeneath(t *testing.T) {
 func TestAPopupShowsTheArrowOverWhatItCovers(t *testing.T) {
 	t.Parallel()
 	for _, modal := range []bool{true, false} {
-		field := ggui.Pointer(ggui.Box().Size(300, 300)).Cursor(ggui.CursorShapeText)
-		inner := ggui.Pointer(ggui.Box().Size(40, 20)).Cursor(ggui.CursorShapePointer)
-		pop := ggui.Popup(ggui.Box().Size(60, 20), ggui.Column(inner, ggui.Box().Size(100, 60))).Modal(modal)
-		p := ggui.NewProbe(ggui.Stack(field, ggui.Padding(pop, 50, 0, 0, 50)), ggui.Sz(300, 300))
+		field := widget.Pointer(widget.Box().Size(300, 300)).Cursor(ggui.CursorShapeText)
+		inner := widget.Pointer(widget.Box().Size(40, 20)).Cursor(ggui.CursorShapePointer)
+		pop := widget.Popup(widget.Box().Size(60, 20), widget.Column(inner, widget.Box().Size(100, 60))).Modal(modal)
+		p := ggui.NewProbe(widget.Stack(field, widget.Padding(pop, 50, 0, 0, 50)), ggui.Sz(300, 300))
 		p.Move(ggui.Pt(200, 200))
 		if got := p.Cursor(); got != ggui.CursorShapeText {
 			t.Errorf("modal=%v: before the popup opens the cursor is %v, want text", modal, got)

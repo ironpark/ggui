@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // An arrow on the closed field opens the list as Base UI's trigger does: on
@@ -17,7 +18,7 @@ func TestSelectArrowsOpenTheClosedList(t *testing.T) {
 	} {
 		value := ggui.State(c.start)
 		box := ui.Select(value).Options([]string{"Alpha", "Beta", "Gamma"}).Name("Choice").Placeholder("Pick")
-		p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(box)), ggui.Sz(300, 300))
+		p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(box)), ggui.Sz(300, 300))
 		p.Key("tab", c.key)
 		if !box.Popup().IsOpen() || value.Get() != c.start {
 			t.Fatalf("%s from %q: open=%v value=%q, want the list open and the value kept", c.key, c.start, box.Popup().IsOpen(), value.Get())
@@ -37,7 +38,7 @@ func TestSelectHomeAndEndMoveThroughTheOpenList(t *testing.T) {
 	value := ggui.State("Beta")
 	box := ui.Select(value).Options([]string{"Alpha", "Beta", "Gamma", "Delta"}).Name("Choice").
 		DisabledOption(func(v string) bool { return v == "Delta" })
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(box)), ggui.Sz(300, 300))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(box)), ggui.Sz(300, 300))
 	defer p.Close()
 	p.Key("tab", "end")
 	if box.Popup().IsOpen() || value.Get() != "Beta" {
@@ -62,7 +63,7 @@ func TestSelectTypeahead(t *testing.T) {
 	changes := 0
 	box := ui.Select(value).Options([]string{"Apple", "Banana", "Blueberry", "Cherry", "Cranberry"}).Name("Fruit").
 		DisabledOption(func(v string) bool { return v == "Cherry" }).OnChange(func(string) { changes++ })
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(box)), ggui.Sz(300, 400))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(box)), ggui.Sz(300, 400))
 	defer p.Close()
 	p.Key("tab")
 	p.Text("b")

@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // Each variant has its own surface under the pointer: the primary's hover
@@ -24,7 +25,7 @@ func TestBubbleVariantsHoverOnTheirOwnSurfaces(t *testing.T) {
 			{"ghost", (*BubbleWidget).Ghost, pick(dark, fade(th.Muted, .5), th.Muted)},
 			{"destructive", (*BubbleWidget).Destructive, fade(th.Destructive, pick(dark, .3, .2))},
 		} {
-			b := tc.set(Bubble(ggui.Text("hi")).Action("Reply", func() {}))
+			b := tc.set(Bubble(widget.Text("hi")).Action("Reply", func() {}))
 			p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, uitheme.With(th, b)), ggui.Sz(300, 80))
 			p.Frame()
 			p.Move(ggui.Pt(8, 8))

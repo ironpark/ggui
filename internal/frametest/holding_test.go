@@ -211,12 +211,12 @@ var (
 // down as it opens, and what opens it.
 func disclosure() (ggui.Widget, func(*ggui.WindowProbe)) {
 	open := ggui.State(false)
-	body := ggui.Box(ggui.Box().Size(60, 40).Fill(red).Shadow(ggui.ShadowStyle{Blur: 12, Spread: 4, Color: shade})).Pad(10)
-	w := ggui.Column(widget.Reveal(open, body), ggui.Box().Size(80, 20).Fill(blue))
+	body := widget.Box(widget.Box().Size(60, 40).Fill(red).Shadow(ggui.ShadowStyle{Blur: 12, Spread: 4, Color: shade})).Pad(10)
+	w := widget.Column(widget.Reveal(open, body), widget.Box().Size(80, 20).Fill(blue))
 	return w, func(*ggui.WindowProbe) { open.Set(true) }
 }
 
-func topLeft(w ggui.Widget) ggui.Widget { return ggui.Align(w).At(0, 0) }
+func topLeft(w ggui.Widget) ggui.Widget { return widget.Align(w).At(0, 0) }
 
 // A disclosure easing open inside a Contain of fixed size, beside other
 // content and with no Scroll anywhere, is painted within the Contain.
@@ -224,8 +224,8 @@ func TestADisclosureInAFixedContainPaintsWithinIt(t *testing.T) {
 	frames := sameAsWhole(t, ggui.Sz(240, 160), func() (ggui.Builder, func(*ggui.WindowProbe)) {
 		d, act := disclosure()
 		return func() ggui.Widget {
-			pane := ggui.Contain(ggui.Box(d).Size(100, 120).Fill(gray))
-			return topLeft(ggui.Row(pane, ggui.Box().Size(100, 120).Fill(green)))
+			pane := widget.Contain(widget.Box(d).Size(100, 120).Fill(gray))
+			return topLeft(widget.Row(pane, widget.Box().Size(100, 120).Fill(green)))
 		}, act
 	})
 	within(t, frames, ggui.Rct(ggui.Pt(0, 0), ggui.Sz(100, 120)))
@@ -237,11 +237,11 @@ func TestADisclosureInAFixedCardOfAPageScrollPaintsWithinTheCard(t *testing.T) {
 	frames := sameAsWhole(t, ggui.Sz(240, 200), func() (ggui.Builder, func(*ggui.WindowProbe)) {
 		d, act := disclosure()
 		return func() ggui.Widget {
-			card := ggui.Contain(ggui.Box(d).Size(150, 100).Fill(gray))
+			card := widget.Contain(widget.Box(d).Size(150, 100).Fill(gray))
 			// The card's own shadow lies outside it and outside what the
 			// frames paint; it does not change.
-			framed := ggui.Box(card).Shadow(ggui.ShadowStyle{Blur: 16, Color: shade})
-			return ggui.Scroll(ggui.Column(ggui.Box().Size(200, 40).Fill(green), framed, ggui.Box().Size(200, 400).Fill(blue)))
+			framed := widget.Box(card).Shadow(ggui.ShadowStyle{Blur: 16, Color: shade})
+			return widget.Scroll(widget.Column(widget.Box().Size(200, 40).Fill(green), framed, widget.Box().Size(200, 400).Fill(blue)))
 		}, act
 	})
 	within(t, frames, ggui.Rct(ggui.Pt(0, 40), ggui.Sz(150, 100)))
@@ -255,7 +255,7 @@ func TestADisclosureInAFixedCardOfAPageScrollPaintsWithinTheCard(t *testing.T) {
 // asked for to paint it whole.
 func TestAContainSizedByItsContentDefersToTheOneAroundIt(t *testing.T) {
 	loose := func(d ggui.Widget) ggui.Widget {
-		return ggui.Column(ggui.Contain(ggui.Box(d).Fill(gray)), ggui.Box().Size(100, 30).Fill(green))
+		return widget.Column(widget.Contain(widget.Box(d).Fill(gray)), widget.Box().Size(100, 30).Fill(green))
 	}
 	alone := sameAsWhole(t, ggui.Sz(240, 200), func() (ggui.Builder, func(*ggui.WindowProbe)) {
 		d, act := disclosure()
@@ -267,7 +267,7 @@ func TestAContainSizedByItsContentDefersToTheOneAroundIt(t *testing.T) {
 	held := sameAsWhole(t, ggui.Sz(240, 200), func() (ggui.Builder, func(*ggui.WindowProbe)) {
 		d, act := disclosure()
 		return func() ggui.Widget {
-			return topLeft(ggui.Row(ggui.Contain(ggui.Box(loose(d)).Size(120, 180)), ggui.Box().Size(100, 100).Fill(red)))
+			return topLeft(widget.Row(widget.Contain(widget.Box(loose(d)).Size(120, 180)), widget.Box().Size(100, 100).Fill(red)))
 		}, act
 	})
 	for _, fr := range held {
@@ -295,9 +295,9 @@ func TestWhatABoundaryHoldsIsClippedToIt(t *testing.T) {
 		d, act := disclosure()
 		return func() ggui.Widget {
 			// Wider than the Contain, and shadowed at its edge.
-			over := ggui.Column(d, ggui.Box().Size(160, 20).Fill(red).Shadow(ggui.ShadowStyle{Blur: 20, Spread: 8, Color: shade}))
-			pane := ggui.Box(ggui.Contain(ggui.Box(over).Size(110, 140).Fill(gray))).Pad(20).Shadow(ggui.ShadowStyle{Offset: ggui.Pt(6, 6), Blur: 18, Color: shade})
-			return topLeft(ggui.Row(pane, ggui.Box().Size(60, 60).Fill(green)))
+			over := widget.Column(d, widget.Box().Size(160, 20).Fill(red).Shadow(ggui.ShadowStyle{Blur: 20, Spread: 8, Color: shade}))
+			pane := widget.Box(widget.Contain(widget.Box(over).Size(110, 140).Fill(gray))).Pad(20).Shadow(ggui.ShadowStyle{Offset: ggui.Pt(6, 6), Blur: 18, Color: shade})
+			return topLeft(widget.Row(pane, widget.Box().Size(60, 60).Fill(green)))
 		}, act
 	})
 	within(t, frames, ggui.Rct(ggui.Pt(20, 20), ggui.Sz(110, 140)))
@@ -309,8 +309,8 @@ func TestADisclosureWithNoBoundaryPaintsWhole(t *testing.T) {
 	frames := sameAsWhole(t, ggui.Sz(260, 200), func() (ggui.Builder, func(*ggui.WindowProbe)) {
 		d, act := disclosure()
 		return func() ggui.Widget {
-			over := ggui.Column(d, ggui.Box().Size(160, 20).Fill(red))
-			return topLeft(ggui.Box(ggui.Box(over).Size(110, 140).Fill(gray)).Pad(20).Shadow(ggui.ShadowStyle{Blur: 18, Color: shade}))
+			over := widget.Column(d, widget.Box().Size(160, 20).Fill(red))
+			return topLeft(widget.Box(widget.Box(over).Size(110, 140).Fill(gray)).Pad(20).Shadow(ggui.ShadowStyle{Blur: 18, Color: shade}))
 		}, act
 	})
 	wholly(t, frames)
@@ -322,9 +322,9 @@ func TestAScrollInAContainHoldsWithinItsViewport(t *testing.T) {
 	frames := sameAsWhole(t, ggui.Sz(240, 200), func() (ggui.Builder, func(*ggui.WindowProbe)) {
 		d, act := disclosure()
 		return func() ggui.Widget {
-			inner := ggui.Box(ggui.Scroll(ggui.Column(d, ggui.Box().Size(80, 300).Fill(green)))).Size(100, 80)
-			pane := ggui.Contain(ggui.Box(ggui.Column(ggui.Box().Size(100, 40).Fill(blue), inner)).Size(120, 160).Fill(gray))
-			return topLeft(ggui.Row(pane, ggui.Box().Size(100, 100).Fill(red)))
+			inner := widget.Box(widget.Scroll(widget.Column(d, widget.Box().Size(80, 300).Fill(green)))).Size(100, 80)
+			pane := widget.Contain(widget.Box(widget.Column(widget.Box().Size(100, 40).Fill(blue), inner)).Size(120, 160).Fill(gray))
+			return topLeft(widget.Row(pane, widget.Box().Size(100, 100).Fill(red)))
 		}, act
 	})
 	within(t, frames, ggui.Rct(ggui.Pt(0, 40), ggui.Sz(100, 80)))
@@ -336,9 +336,9 @@ func TestNestedContainsHoldAtTheNearest(t *testing.T) {
 	frames := sameAsWhole(t, ggui.Sz(240, 200), func() (ggui.Builder, func(*ggui.WindowProbe)) {
 		d, act := disclosure()
 		return func() ggui.Widget {
-			inner := ggui.Contain(ggui.Box(d).Size(100, 110).Fill(gray))
-			outer := ggui.Contain(ggui.Box(ggui.Column(ggui.Box().Size(100, 30).Fill(blue), inner)).Pad(10).Size(140, 180).Fill(green))
-			return topLeft(ggui.Row(outer, ggui.Box().Size(60, 60).Fill(red)))
+			inner := widget.Contain(widget.Box(d).Size(100, 110).Fill(gray))
+			outer := widget.Contain(widget.Box(widget.Column(widget.Box().Size(100, 30).Fill(blue), inner)).Pad(10).Size(140, 180).Fill(green))
+			return topLeft(widget.Row(outer, widget.Box().Size(60, 60).Fill(red)))
 		}, act
 	})
 	within(t, frames, ggui.Rct(ggui.Pt(10, 40), ggui.Sz(100, 110)))
@@ -350,8 +350,8 @@ func TestAContainUnderATransformHoldsNothing(t *testing.T) {
 	frames := sameAsWhole(t, ggui.Sz(240, 200), func() (ggui.Builder, func(*ggui.WindowProbe)) {
 		d, act := disclosure()
 		return func() ggui.Widget {
-			pane := ggui.Transform(ggui.Contain(ggui.Box(d).Size(100, 120).Fill(gray))).Translate(7, 5)
-			return topLeft(ggui.Row(pane, ggui.Box().Size(60, 60).Fill(red)))
+			pane := widget.Transform(widget.Contain(widget.Box(d).Size(100, 120).Fill(gray))).Translate(7, 5)
+			return topLeft(widget.Row(pane, widget.Box().Size(60, 60).Fill(red)))
 		}, act
 	})
 	wholly(t, frames)
@@ -363,8 +363,8 @@ func TestACollapsibleInAResizablePanePaintsWithinIt(t *testing.T) {
 		open := ggui.State(false)
 		fraction := ggui.State(0.5)
 		return func() ggui.Widget {
-				pane := ui.Collapsible(open, "More", ggui.Box().Size(100, 60).Fill(red))
-				return ui.Resizable(fraction, pane, ggui.Box().Fill(green))
+				pane := ui.Collapsible(open, "More", widget.Box().Size(100, 60).Fill(red))
+				return ui.Resizable(fraction, pane, widget.Box().Fill(green))
 			}, func(*ggui.WindowProbe) {
 				open.Set(true)
 			}
@@ -378,18 +378,18 @@ func TestACollapsibleInAResizablePanePaintsWithinIt(t *testing.T) {
 // and those that leave its height as it was within the scroll around it.
 func TestAScrollSizedByItsContentShowsAsPaintedWhole(t *testing.T) {
 	frames := sameAsWhole(t, ggui.Sz(200, 100), func() (ggui.Builder, func(*ggui.WindowProbe)) {
-		var sc ggui.ScrollController
+		var sc widget.ScrollController
 		content := ggui.FromFuncs(func(c ggui.Constraints, env ggui.Env) ggui.Size {
-			vp, _ := ggui.ScrollViewport(env)
+			vp, _ := widget.ScrollViewport(env)
 			return ggui.Sz(400, 20+vp.Offset/10)
 		}, func(dst *ggui.Canvas, r ggui.Rect) {
 			dst.FillRect(r, red)
 			dst.FillRect(ggui.Rct(r.Origin.Add(ggui.Pt(r.Size.W/2, 0)), ggui.Sz(r.Size.W/2, r.Size.H)), blue)
 		})
 		return func() ggui.Widget {
-			inner := ggui.Scroll(content).Horizontal().Controller(&sc)
-			page := ggui.Scroll(ggui.Column(inner, ggui.Box().Size(100, 400).Fill(green)))
-			return ggui.Row(ggui.Box(page).Size(100, 100), ggui.Box().Size(100, 100).Fill(gray))
+			inner := widget.Scroll(content).Horizontal().Controller(&sc)
+			page := widget.Scroll(widget.Column(inner, widget.Box().Size(100, 400).Fill(green)))
+			return widget.Row(widget.Box(page).Size(100, 100), widget.Box().Size(100, 100).Fill(gray))
 		}, func(*ggui.WindowProbe) { sc.ScrollTo(300) }
 	})
 	if len(frames) < 4 {
@@ -407,8 +407,8 @@ func TestAContainMovedAsItsDisclosureOpensHoldsWhereItIsNow(t *testing.T) {
 		d, open := disclosure()
 		above := ggui.State(10.0)
 		return func() ggui.Widget {
-				pane := ggui.Contain(ggui.Box(d).Size(100, 120).Fill(gray))
-				return topLeft(ggui.Column(ggui.Box().Width(100).BindHeight(above).Fill(green), pane))
+				pane := widget.Contain(widget.Box(d).Size(100, 120).Fill(gray))
+				return topLeft(widget.Column(widget.Box().Width(100).BindHeight(above).Fill(green), pane))
 			}, func(p *ggui.WindowProbe) {
 				above.Set(150)
 				open(p)
@@ -428,9 +428,9 @@ func TestBoundariesNestedThreeDeepHoldAtTheInnermost(t *testing.T) {
 		frames := sameAsWhole(t, ggui.Sz(240, 240), func() (ggui.Builder, func(*ggui.WindowProbe)) {
 			d, act := disclosure()
 			return func() ggui.Widget {
-				inner := ggui.Contain(ggui.Box(d).Size(100, 110).Fill(gray))
-				scroll := ggui.Box(ggui.Scroll(ggui.Column(ggui.Box().Size(120, 30).Fill(blue), inner, ggui.Box().Size(120, 300).Fill(green)))).Size(120, 180)
-				return topLeft(ggui.Row(ggui.Contain(ggui.Box(scroll).Pad(10).Fill(red)), ggui.Box().Size(60, 60).Fill(blue)))
+				inner := widget.Contain(widget.Box(d).Size(100, 110).Fill(gray))
+				scroll := widget.Box(widget.Scroll(widget.Column(widget.Box().Size(120, 30).Fill(blue), inner, widget.Box().Size(120, 300).Fill(green)))).Size(120, 180)
+				return topLeft(widget.Row(widget.Contain(widget.Box(scroll).Pad(10).Fill(red)), widget.Box().Size(60, 60).Fill(blue)))
 			}, act
 		})
 		within(t, frames, ggui.Rct(ggui.Pt(10, 40), ggui.Sz(100, 110)))
@@ -439,9 +439,9 @@ func TestBoundariesNestedThreeDeepHoldAtTheInnermost(t *testing.T) {
 		frames := sameAsWhole(t, ggui.Sz(240, 240), func() (ggui.Builder, func(*ggui.WindowProbe)) {
 			d, act := disclosure()
 			return func() ggui.Widget {
-				inner := ggui.Box(ggui.Scroll(ggui.Column(d, ggui.Box().Size(80, 300).Fill(green)))).Size(100, 80)
-				card := ggui.Contain(ggui.Box(ggui.Column(ggui.Box().Size(100, 20).Fill(blue), inner)).Size(140, 120).Fill(gray))
-				return ggui.Scroll(ggui.Column(ggui.Box().Size(200, 30).Fill(red), card, ggui.Box().Size(200, 400).Fill(blue)))
+				inner := widget.Box(widget.Scroll(widget.Column(d, widget.Box().Size(80, 300).Fill(green)))).Size(100, 80)
+				card := widget.Contain(widget.Box(widget.Column(widget.Box().Size(100, 20).Fill(blue), inner)).Size(140, 120).Fill(gray))
+				return widget.Scroll(widget.Column(widget.Box().Size(200, 30).Fill(red), card, widget.Box().Size(200, 400).Fill(blue)))
 			}, act
 		})
 		within(t, frames, ggui.Rct(ggui.Pt(0, 50), ggui.Sz(100, 80)))

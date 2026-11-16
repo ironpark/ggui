@@ -1,4 +1,4 @@
-package ggui
+package widget
 
 import (
 	"cmp"
@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/pkg/gem"
@@ -18,31 +19,31 @@ import (
 type EachWidget[T any, K comparable] struct {
 	props property.Owner
 	flow
-	mount        *ComponentWidget
+	mount        *ggui.ComponentWidget
 	mounted      bool
-	emptyBuild   func() Widget
-	empty        Widget
-	emptyDispose Cleanup
+	emptyBuild   func() ggui.Widget
+	empty        ggui.Widget
+	emptyDispose ggui.Cleanup
 	key          func(int, T) K
-	build        func(EachItem[T]) Widget
+	build        func(EachItem[T]) ggui.Widget
 	retain       int               // offscreen rows kept mounted with ItemExtent; 0 keeps all
 	itemEq       func(a, b T) bool // how a row's item is compared; see ItemEqual
 	frame        uint64
-	scope        Scope // the rows and the empty branch are mounted in
+	scope        ggui.Scope // the rows and the empty branch are mounted in
 	items        []T
 	keys         []K
 	entries      map[K]*forEntry[T]
-	stale        bool    // items changed since children was last filled
-	itemsGen     uint64  // counts the changes to items, for what is worked out from them
-	env          Env     // the last layout's, which a change of the items asks to lay out again under
-	extent       float64 // fixed main-axis size per item; 0 lays every child out
-	estimate     float64 // a row's size until it is laid out, virtualizing rows of any size; see EstimatedExtent
+	stale        bool     // items changed since children was last filled
+	itemsGen     uint64   // counts the changes to items, for what is worked out from them
+	env          ggui.Env // the last layout's, which a change of the items asks to lay out again under
+	extent       float64  // fixed main-axis size per item; 0 lays every child out
+	estimate     float64  // a row's size until it is laid out, virtualizing rows of any size; see EstimatedExtent
 	est          virtual.Estimate[K]
 	lead         float64 // virtual paths: where the list starts in its Scroll's content, as last painted
 	unlisted     bool    // the rows describe their own place; see Unlisted
 
 	// Transition wraps every row; removed rows then leave through it.
-	transition func(Widget) *TransitionWidget
+	transition func(ggui.Widget) *TransitionWidget
 	leaving    []*forEntry[T]
 	leaveKeys  []K
 	reduced    bool
@@ -57,23 +58,23 @@ type EachWidget[T any, K comparable] struct {
 	// The buffers placeLeaving merges children and leaving rows into, the
 	// ones it last merged out of, kept so a list with rows leaving
 	// allocates nothing frame to frame.
-	spareChildren []Widget
+	spareChildren []ggui.Widget
 	spareEntries  []*forEntry[T]
 
 	// The virtual path: the range of items laid out this frame and their
 	// widgets; rects are indexed the same way. Those rects live in
 	// virtualRects, owned here, never in the flow engine's borrowed buffer.
 	first, last  int
-	visible      []Widget
-	virtualRects []Rect
+	visible      []ggui.Widget
+	virtualRects []ggui.Rect
 
 	pin eachPin[T] // sticky headers and ScrollToKey; see scroll.go
 }
 
 type forEntry[T any] struct {
-	item     *StateValue[T]
-	position *StateValue[int]
-	widget   Widget
+	item     *ggui.StateValue[T]
+	position *ggui.StateValue[int]
+	widget   ggui.Widget
 	dispose  func()
 	seen     uint64 // the last frame the entry was laid out
 
@@ -90,8 +91,8 @@ func (e *forEntry[T]) transition() *TransitionWidget {
 
 // EachItem exposes a row's current value and position without rebuilding it.
 type EachItem[T any] struct {
-	Value Readable[T]
-	Index Readable[int]
+	Value ggui.Readable[T]
+	Index ggui.Readable[int]
 	// Item is the item the row was built for, read once: what a row keeps
 	// for life, such as the ID EachKeyed matched it by, is read from it.
 	// Value follows the item as it changes.
@@ -108,21 +109,21 @@ type EachItem[T any] struct {
 // with neither, such as a struct holding a slice, cannot be compared, so
 // every kept row is told and whatever reads its Value runs again, for any
 // change to the list; ItemEqual supplies the comparison.
-func EachKeyed[T any, K comparable](items Readable[[]T], key func(T) K, build func(EachItem[T]) Widget) *EachWidget[T, K] {
+func EachKeyed[T any, K comparable](items ggui.Readable[[]T], key func(T) K, build func(EachItem[T]) ggui.Widget) *EachWidget[T, K] {
 	return each(items, func(_ int, value T) K { return key(value) }, build)
 }
 
 // Each reuses rows by position. Duplicate values are allowed.
-func Each[T any](items Readable[[]T], build func(EachItem[T]) Widget) *EachWidget[T, int] {
+func Each[T any](items ggui.Readable[[]T], build func(EachItem[T]) ggui.Widget) *EachWidget[T, int] {
 	return each(items, func(index int, _ T) int { return index }, build)
 }
 
-func each[T any, K comparable](items Readable[[]T], key func(int, T) K, build func(EachItem[T]) Widget) *EachWidget[T, K] {
+func each[T any, K comparable](items ggui.Readable[[]T], key func(int, T) K, build func(EachItem[T]) ggui.Widget) *EachWidget[T, K] {
 	f := &EachWidget[T, K]{key: key, build: build, entries: map[K]*forEntry[T]{}, itemEq: reactive.ComparableEqual[T]()}
-	f.mount = Component(func() Widget {
+	f.mount = ggui.Component(func() ggui.Widget {
 		f.mounted = true
-		f.scope = UseScope()
-		OnCleanup(func() {
+		f.scope = ggui.UseScope()
+		ggui.OnCleanup(func() {
 			for _, e := range f.entries {
 				e.dispose()
 			}
@@ -202,7 +203,7 @@ func each[T any, K comparable](items Readable[[]T], key func(int, T) K, build fu
 			f.itemsGen++
 			// A whole layout, not one the Scroll around holds: Invalidate
 			// would have that Scroll check its size by it.
-			Relayout(f.env)
+			ggui.Relayout(f.env)
 		})
 		return nil
 	})
@@ -210,7 +211,7 @@ func each[T any, K comparable](items Readable[[]T], key func(int, T) K, build fu
 }
 
 // Else mounts an empty-list branch. Configure it before the first layout.
-func (f *EachWidget[T, K]) Else(build func() Widget) *EachWidget[T, K] {
+func (f *EachWidget[T, K]) Else(build func() ggui.Widget) *EachWidget[T, K] {
 	if f.mounted {
 		panic("ggui: Each configured after mount")
 	}
@@ -238,7 +239,7 @@ func (f *EachWidget[T, K]) remove(k K, e *forEntry[T], was map[K]int) {
 		i = -1
 	}
 	e.index = i
-	e.since = Now()
+	e.since = ggui.Now()
 	f.leaving = append(f.leaving, e)
 	f.leaveKeys = append(f.leaveKeys, k)
 }
@@ -267,10 +268,10 @@ func (f *EachWidget[T, K]) sortLeaving() {
 // Presence does for one child. It applies without ItemExtent; a
 // virtualized list removes rows at once.
 //
-//	ggui.EachKeyed(todos, key, row).Transition(func(w ggui.Widget) *ggui.TransitionWidget {
-//		return ggui.Transition(w).Fade().Slide(-16, 0)
+//	widget.EachKeyed(todos, key, row).Transition(func(w ggui.Widget) *widget.TransitionWidget {
+//		return widget.Transition(w).Fade().Slide(-16, 0)
 //	})
-func (f *EachWidget[T, K]) Transition(wrap func(Widget) *TransitionWidget) *EachWidget[T, K] {
+func (f *EachWidget[T, K]) Transition(wrap func(ggui.Widget) *TransitionWidget) *EachWidget[T, K] {
 	f.checkConfig()
 	f.transition = wrap
 	return f
@@ -336,7 +337,7 @@ func (f *EachWidget[T, K]) Retain(n int) *EachWidget[T, K] { f.checkConfig(); f.
 // changes, so that a row whose item is the same is not told of it, for an
 // item type with no Equal method that == cannot compare:
 //
-//	ggui.EachKeyed(files, File.Path, row).ItemEqual(func(a, b File) bool {
+//	widget.EachKeyed(files, File.Path, row).ItemEqual(func(a, b File) bool {
 //		return a.Path == b.Path && a.Size == b.Size && slices.Equal(a.Tags, b.Tags)
 //	})
 //
@@ -358,9 +359,9 @@ func (f *EachWidget[T, K]) entry(i int) *forEntry[T] {
 	k := f.keys[i]
 	e := f.entries[k]
 	if e == nil {
-		e = &forEntry[T]{item: State(f.items[i]), position: State(i)}
+		e = &forEntry[T]{item: ggui.State(f.items[i]), position: ggui.State(i)}
 		e.item.WithEqual(f.itemEq) // nil, as for State, tells the row of every write
-		e.widget, e.dispose = f.scope.MountAs(e, fmt.Sprint(k), func() Widget {
+		e.widget, e.dispose = f.scope.MountAs(e, fmt.Sprint(k), func() ggui.Widget {
 			w := f.build(EachItem[T]{Value: e.item, Index: e.position, Item: f.items[i]})
 			if f.transition == nil {
 				return w
@@ -375,7 +376,7 @@ func (f *EachWidget[T, K]) entry(i int) *forEntry[T] {
 }
 
 // Layout implements Widget.
-func (f *EachWidget[T, K]) Layout(c Constraints, env Env) Size {
+func (f *EachWidget[T, K]) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer f.props.Layout().EndLayout()
 	f.env = env
 	f.pin.port = scrollPortAlong(env, f.horizontal)
@@ -452,8 +453,8 @@ type forRowKey[K comparable] struct{ k K }
 // The rows still leaving are merged with the children in one pass, in the
 // order of their places, as inserting each where it was would have put
 // them: inserting them one at a time moved the whole list for each.
-func (f *EachWidget[T, K]) placeLeaving(env Env) {
-	now := FrameTime()
+func (f *EachWidget[T, K]) placeLeaving(env ggui.Env) {
+	now := ggui.FrameTime()
 	kept := 0
 	for i, e := range f.leaving {
 		t := e.transition()
@@ -503,7 +504,7 @@ func (f *EachWidget[T, K]) placeLeaving(env Env) {
 		f.children, f.childEntries = children, entries
 	}
 	if len(f.leaving) > 0 {
-		Invalidate(env)
+		ggui.Invalidate(env)
 	}
 }
 
@@ -522,7 +523,7 @@ func (f *EachWidget[T, K]) evict() {
 		return
 	}
 	// A row holding the focus or a capture stays, off screen or not.
-	out = slices.DeleteFunc(out, func(k K) bool { return GroupBusy(f.entries[k]) })
+	out = slices.DeleteFunc(out, func(k K) bool { return ggui.GroupBusy(f.entries[k]) })
 	if len(out) <= f.retain {
 		return
 	}
@@ -536,7 +537,7 @@ func (f *EachWidget[T, K]) evict() {
 // Paint implements Widget. The list describes itself as a list of Len
 // items and each row as the item it is, so "item 3 of 200" can be said of
 // a virtualized list where only a dozen rows exist at all.
-func (f *EachWidget[T, K]) Paint(dst *Canvas, r Rect) {
+func (f *EachWidget[T, K]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if len(f.items) == 0 && len(f.leaving) == 0 && f.empty != nil {
 		dst.Paint(f.empty, r)
 		return
@@ -547,7 +548,7 @@ func (f *EachWidget[T, K]) Paint(dst *Canvas, r Rect) {
 	}
 	f.placeKey(r)
 	pinned, pinIndex, pinRect := f.pinned(r)
-	list := func(dst *Canvas) {
+	list := func(dst *ggui.Canvas) {
 		defer func() {
 			if pinned != nil {
 				dst.Group(pinned, func() { f.paintRow(dst, pinned.widget, pinRect, pinIndex, n) })
@@ -558,7 +559,7 @@ func (f *EachWidget[T, K]) Paint(dst *Canvas, r Rect) {
 				if f.childEntries[i] == pinned {
 					continue
 				}
-				rc := Rct(r.Origin.Add(f.rects[i].Origin), f.rects[i].Size)
+				rc := ggui.Rct(r.Origin.Add(f.rects[i].Origin), f.rects[i].Size)
 				dst.Group(f.childEntries[i], func() { f.paintRow(dst, child, rc, i, n) })
 			}
 			return
@@ -568,7 +569,7 @@ func (f *EachWidget[T, K]) Paint(dst *Canvas, r Rect) {
 			if e == pinned {
 				continue
 			}
-			rc := Rct(r.Origin.Add(f.rects[j].Origin), f.rects[j].Size)
+			rc := ggui.Rct(r.Origin.Add(f.rects[j].Origin), f.rects[j].Size)
 			dst.Group(e, func() { f.paintRow(dst, w, rc, f.first+j, n) })
 		}
 	}
@@ -580,22 +581,22 @@ func (f *EachWidget[T, K]) Paint(dst *Canvas, r Rect) {
 }
 
 // paintRow paints one row inside a list item that knows its place.
-func (f *EachWidget[T, K]) paintRow(dst *Canvas, w Widget, rc Rect, i, n int) {
+func (f *EachWidget[T, K]) paintRow(dst *ggui.Canvas, w ggui.Widget, rc ggui.Rect, i, n int) {
 	if f.unlisted {
 		dst.Paint(w, rc)
 		return
 	}
-	dst.Node(rc, listItem(i, n), func(dst *Canvas) { dst.Paint(w, rc) })
+	dst.Node(rc, listItem(i, n), func(dst *ggui.Canvas) { dst.Paint(w, rc) })
 }
 
 // listNode and listItem are how a list of n rows, and its row i, are
 // described: EachKeyed's rows and Reorderable's alike, so that "item 3 of
 // 200" is said of both the same way. Each paints its rows itself: a shared
 // painting helper between them cost a list of rows at rest 6% a frame.
-func listNode(n int) Node { return Node{Role: RoleList, Min: 1, Max: float64(n)} }
+func listNode(n int) ggui.Node { return ggui.Node{Role: ggui.RoleList, Min: 1, Max: float64(n)} }
 
-func listItem(i, n int) Node {
-	return Node{Role: RoleListItem, Min: 1, Now: float64(i + 1), Max: float64(n)}
+func listItem(i, n int) ggui.Node {
+	return ggui.Node{Role: ggui.RoleListItem, Min: 1, Now: float64(i + 1), Max: float64(n)}
 }
 
 func (f *EachWidget[T, K]) checkConfig() {
@@ -612,7 +613,7 @@ func (f *EachWidget[T, K]) checkConfig() {
 // so what is in view stays where it is. ItemExtent, for rows all of one
 // size, takes precedence. StickyHeaders keep to their rows.
 //
-//	ggui.EachKeyed(messages, Message.ID, bubble).EstimatedExtent(120)
+//	widget.EachKeyed(messages, Message.ID, bubble).EstimatedExtent(120)
 func (f *EachWidget[T, K]) EstimatedExtent(v float64) *EachWidget[T, K] {
 	defer property.Watch(&f.props, &f.estimate)()
 	f.estimate = v
@@ -627,7 +628,7 @@ func (f *EachWidget[T, K]) virtual() bool { return f.extent > 0 || f.estimate > 
 
 // layoutEstimated lays out the rows in or near a Scroll's window, each at
 // its own size, and places the rest from their sizes as last known.
-func (f *EachWidget[T, K]) layoutEstimated(c Constraints, env Env) Size {
+func (f *EachWidget[T, K]) layoutEstimated(c ggui.Constraints, env ggui.Env) ggui.Size {
 	est := &f.est
 	if f.stale {
 		est.KeysChanged(f.keys)
@@ -661,10 +662,10 @@ func (f *EachWidget[T, K]) layoutEstimated(c Constraints, env Env) Size {
 	for ; i < n && (!windowed || at < lo+vp.Extent+reach); i++ {
 		e := f.entry(i)
 		e.seen = f.frame
-		s := e.widget.Layout(f.constraints(0, Unbounded, crossMin, crossMax), env)
+		s := e.widget.Layout(f.constraints(0, ggui.Unbounded, crossMin, crossMax), env)
 		resized = est.MeasureAt(i, f.keys[i], f.main(s)) || resized
 		f.visible = append(f.visible, e.widget)
-		f.virtualRects = append(f.virtualRects, Rect{Size: s})
+		f.virtualRects = append(f.virtualRects, ggui.Rect{Size: s})
 		crossUsed = max(crossUsed, f.cross(s))
 		at += f.main(s) + gap
 	}
@@ -700,7 +701,7 @@ func (f *EachWidget[T, K]) layoutEstimated(c Constraints, env Env) Size {
 // paintLead notes, on a virtual path, where the list starts in its
 // Scroll's content, which the next layout's window is reckoned from, and
 // lays out again when that moved: under a header, or padded.
-func (f *EachWidget[T, K]) paintLead(r Rect) {
+func (f *EachWidget[T, K]) paintLead(r ggui.Rect) {
 	p := f.pin.port
 	if p == nil {
 		return
@@ -708,7 +709,7 @@ func (f *EachWidget[T, K]) paintLead(r Rect) {
 	lead := gem.Pick(f.horizontal, r.Origin.X-p.rect.Origin.X, r.Origin.Y-p.rect.Origin.Y) + p.visualOffset()
 	if lead != f.lead {
 		f.lead = lead
-		Relayout(f.env)
+		ggui.Relayout(f.env)
 		reactive.RequestLayout()
 	}
 }

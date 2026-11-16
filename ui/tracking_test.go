@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // shadcn sets a row's shortcut hint in tracking-widest (0.1em of its 12px)
@@ -24,7 +25,7 @@ func TestShortcutHintsAndTheEmptyTitleAreTracked(t *testing.T) {
 
 	empty := Empty("ABCD", "")
 	empty.Layout(room, env)
-	plain = ggui.Text("ABCD").Style(th.Text.Merge(th.Label)).Layout(room, env).W
+	plain = widget.Text("ABCD").Style(th.Text.Merge(th.Label)).Layout(room, env).W
 	if got, want := empty.title.Layout(room, env).W, plain-4*0.025*14; math.Abs(got-want) > 0.1 {
 		t.Errorf("empty title is %v wide, want the plain %v less 0.35px after each letter, %v", got, plain, want)
 	}

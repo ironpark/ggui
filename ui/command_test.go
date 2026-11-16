@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestGroupedCommandFilteringAndNavigation(t *testing.T) {
@@ -122,7 +123,7 @@ func TestComboboxListChecksItsValueAndIsAtLeastItsTriggerWide(t *testing.T) {
 	t.Parallel()
 	value := ggui.State("Beta")
 	combo := ui.Combobox(value).Options([]string{"Alpha", "Beta"}).Name("Pick")
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(ggui.Box(combo).Width(260))), ggui.Sz(400, 400))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(widget.Box(combo).Width(260))), ggui.Sz(400, 400))
 	defer p.Close()
 	p.Tap("Pick")
 	trigger, _ := p.Find("Pick")

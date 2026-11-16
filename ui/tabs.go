@@ -8,6 +8,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/property"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 const (
@@ -34,12 +35,12 @@ type TabsWidget struct {
 	tabs            []TabPage
 	onChange        func(int)
 
-	ggui.Interactive                    // hovered is unused; hover holds the label instead
-	boxes            []*ggui.BoxWidget  // each label, padded
-	heads            []ggui.Widget      // each box, in its Tooltip if it has one
-	labels           []*ggui.TextWidget // each label's own text, nil under a Header
-	labelSize        []ggui.Size        // padding included
-	hover            int                // the label under the pointer, or -1
+	ggui.Interactive                      // hovered is unused; hover holds the label instead
+	boxes            []*widget.BoxWidget  // each label, padded
+	heads            []ggui.Widget        // each box, in its Tooltip if it has one
+	labels           []*widget.TextWidget // each label's own text, nil under a Header
+	labelSize        []ggui.Size          // padding included
+	hover            int                  // the label under the pointer, or -1
 
 	theme     *uitheme.Theme
 	motion    time.Duration
@@ -68,7 +69,7 @@ func Tab(label string, content ggui.Widget) TabPage { return TabPage{Label: labe
 // Header draws w in the strip in place of the label's text, for a tab with
 // an icon, a count or a badge:
 //
-//	ui.Tab("Build", build).Header(ggui.Row(ggui.Text("Build"), ui.Badge("3")).Gap(6))
+//	ui.Tab("Build", build).Header(widget.Row(widget.Text("Build"), ui.Badge("3")).Gap(6))
 //
 // The label still names the tab to screen readers and Probe. Text in w
 // takes the strip's colors unless it sets its own.
@@ -90,11 +91,11 @@ func Tabs(selected ggui.Binding[int], tabs ...TabPage) *TabsWidget {
 			head = tab.header
 			t.labels = append(t.labels, nil)
 		} else {
-			label := ggui.Text(tab.Label).NoWrap()
+			label := widget.Text(tab.Label).NoWrap()
 			head = label
 			t.labels = append(t.labels, label)
 		}
-		box := ggui.Box(head)
+		box := widget.Box(head)
 		t.boxes = append(t.boxes, box)
 		if tab.tooltip != "" {
 			// Keyboard focus shows the roving tab's tooltip.

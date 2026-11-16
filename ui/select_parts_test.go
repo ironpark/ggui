@@ -6,6 +6,7 @@ import (
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 func TestSelectDisabledOptionsAreSkippedAndCannotBeChosen(t *testing.T) {
@@ -13,7 +14,7 @@ func TestSelectDisabledOptionsAreSkippedAndCannotBeChosen(t *testing.T) {
 	value := ggui.State("Alpha")
 	box := ui.Select(value).Options([]string{"Alpha", "Beta", "Gamma"}).Name("Choice").
 		DisabledOption(func(v string) bool { return v == "Beta" })
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(box)), ggui.Sz(300, 300))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(box)), ggui.Sz(300, 300))
 	defer p.Close()
 	// Down opens the list on the value, and from there the highlight steps
 	// over the disabled option.
@@ -55,7 +56,7 @@ func TestSelectGroupsAddHeadingsAndSeparatorsAndKeepAlignment(t *testing.T) {
 		// Away from the window's edges, which a popup keeps 5px from and an
 		// aligned list 10px from above and below: Base UI
 		// holds an aligned Select's popup that far inside too.
-		p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Box(ggui.Column(ggui.Box().Height(160), box)).Pad(0, 16)), ggui.Sz(300, 400))
+		p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Box(widget.Column(widget.Box().Height(160), box)).Pad(0, 16)), ggui.Sz(300, 400))
 		defer p.Close()
 		p.Tap("Choice")
 		p.Frame()

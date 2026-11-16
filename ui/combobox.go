@@ -36,8 +36,8 @@ type ComboboxWidget[T comparable] struct {
 	chevron     *comboboxAddon
 	clear       *comboboxAddon
 	clearable   bool
-	content     *ggui.BoxWidget // the list, as wide as the field
-	popup       *ggui.PopupWidget
+	content     *widget.BoxWidget // the list, as wide as the field
+	popup       *widget.PopupWidget
 	search      *CommandWidget
 	onChange    func(T)
 }
@@ -71,8 +71,8 @@ func Combobox[T comparable](value ggui.Binding[T]) *ComboboxWidget[T] {
 	c.field = &comboboxField{input: c.input, open: c.toggleFromInput}
 	c.search = Command(c.query).Name("Search options").Height(comboboxListHeight).Empty("No items found.")
 	c.search.menuRows, c.search.bare = true, true
-	c.content = ggui.Box(c.search)
-	c.popup = ggui.Popup(c.field, menuSurface(&comboboxList{input: c.input, content: c.content})).
+	c.content = widget.Box(c.search)
+	c.popup = widget.Popup(c.field, menuSurface(&comboboxList{input: c.input, content: c.content})).
 		Owner(c.input).Modal(false).FocusOnOpen(false)
 	return c
 }
@@ -185,7 +185,7 @@ func (c *ComboboxWidget[T]) Disabled(v bool) *ComboboxWidget[T] {
 func (c *ComboboxWidget[T]) OnChange(fn func(T)) *ComboboxWidget[T] { c.onChange = fn; return c }
 
 // Popup exposes the underlying popup for programmatic opening and closing.
-func (c *ComboboxWidget[T]) Popup() *ggui.PopupWidget { return c.popup }
+func (c *ComboboxWidget[T]) Popup() *widget.PopupWidget { return c.popup }
 
 // chosen returns the label of the value when it is among the options.
 func (c *ComboboxWidget[T]) chosen() (string, bool) {
@@ -582,8 +582,8 @@ type ComboboxMultipleWidget[T comparable] struct {
 	label       func(T) string
 	placeholder string
 	input       *widget.TextInputWidget // after the chips, filtering the list
-	popup       *ggui.PopupWidget
-	content     *ggui.BoxWidget // the list, as wide as the field
+	popup       *widget.PopupWidget
+	content     *widget.BoxWidget // the list, as wide as the field
 	query       *ggui.StateValue[string]
 	search      *CommandWidget
 	field       *comboboxChips[T]
@@ -616,8 +616,8 @@ func ComboboxMultiple[T comparable](values ggui.Binding[[]T]) *ComboboxMultipleW
 	c.search = Command(c.query).Name("Search options").Height(comboboxListHeight).Empty("No items found.")
 	c.search.menuRows, c.search.keepOpen, c.search.bare = true, true, true
 	c.field = &comboboxChips[T]{c: c}
-	c.content = ggui.Box(c.search)
-	c.popup = ggui.Popup(c.field, menuSurface(&comboboxList{input: c.input, content: c.content})).
+	c.content = widget.Box(c.search)
+	c.popup = widget.Popup(c.field, menuSurface(&comboboxList{input: c.input, content: c.content})).
 		Owner(c.input).Modal(false).FocusOnOpen(false)
 	return c
 }
@@ -724,7 +724,7 @@ func (c *ComboboxMultipleWidget[T]) OnValuesChange(fn func([]T)) *ComboboxMultip
 }
 
 // Popup exposes the underlying popup.
-func (c *ComboboxMultipleWidget[T]) Popup() *ggui.PopupWidget { return c.popup }
+func (c *ComboboxMultipleWidget[T]) Popup() *widget.PopupWidget { return c.popup }
 
 // Act supports accessible expansion and collapse.
 func (c *ComboboxMultipleWidget[T]) Act(a ggui.Action) bool {
@@ -849,11 +849,11 @@ func (c *ComboboxMultipleWidget[T]) Layout(cs ggui.Constraints, env ggui.Env) gg
 		c.chips = c.chips[:0]
 		for j, v := range values {
 			label := c.label(v)
-			remove := ButtonOf(ggui.Box(), func() { c.selectValue(v, false) }).Ghost().Size(ButtonIconExtraSmall).Name("Remove " + label)
+			remove := ButtonOf(widget.Box(), func() { c.selectValue(v, false) }).Ghost().Size(ButtonIconExtraSmall).Name("Remove " + label)
 			if c.key != nil {
 				remove.Key(childKey{owner: c.key, part: j})
 			}
-			c.chips = append(c.chips, &comboboxChip{text: caption(ggui.Text(label)).NoWrap().Weight(ggui.WeightMedium), remove: remove})
+			c.chips = append(c.chips, &comboboxChip{text: caption(widget.Text(label)).NoWrap().Weight(ggui.WeightMedium), remove: remove})
 		}
 	}
 	c.built = true
@@ -977,7 +977,7 @@ func (f *comboboxChips[T]) Paint(dst *ggui.Canvas, r ggui.Rect) {
 // comboboxChip is one selected value in a multiple combobox's field: its
 // label on a muted pill, and a button that removes it.
 type comboboxChip struct {
-	text     *ggui.TextWidget
+	text     *widget.TextWidget
 	remove   *ButtonWidget
 	textSize ggui.Size
 	theme    *uitheme.Theme

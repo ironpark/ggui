@@ -1,6 +1,7 @@
-package ggui
+package widget
 
 import (
+	"github.com/ironpark/ggui"
 	"math"
 	"testing"
 )
@@ -10,9 +11,9 @@ import (
 // tall as the size, and the glyphs are centered in the box.
 func TestALineHeightIsTheHeightOfEveryLine(t *testing.T) {
 	t.Parallel()
-	free := Loose(Sz(500, 500))
+	free := ggui.Loose(ggui.Sz(500, 500))
 	plain := Text("a").Size(16)
-	glyphs := plain.Layout(free, Env{})
+	glyphs := plain.Layout(free, ggui.Env{})
 	plainBase, _ := plain.Baseline()
 	for _, c := range []struct {
 		lh    float64
@@ -23,7 +24,7 @@ func TestALineHeightIsTheHeightOfEveryLine(t *testing.T) {
 		{1, "a\nb", 32}, {1.5, "a\nb\nc", 72},
 	} {
 		w := Text(c.lines).Size(16).LineHeight(c.lh)
-		got := w.Layout(free, Env{})
+		got := w.Layout(free, ggui.Env{})
 		if math.Abs(got.H-c.want) > 1e-9 {
 			t.Errorf("%q at line height %v is %v tall, want %v", c.lines, c.lh, got.H, c.want)
 		}
@@ -40,17 +41,17 @@ func TestALineHeightIsTheHeightOfEveryLine(t *testing.T) {
 // was, and a line height inherited from the Env or a Styled counts as set.
 func TestOnlyALineHeightThatWasSetBoxesTheLines(t *testing.T) {
 	t.Parallel()
-	free := Loose(Sz(500, 500))
+	free := ggui.Loose(ggui.Sz(500, 500))
 	w := Text("a").Size(20)
-	glyphs := w.Layout(free, Env{})
+	glyphs := w.Layout(free, ggui.Env{})
 	face := w.faceAt(1).Metrics()
 	if want := face.HAscent + face.HDescent; math.Abs(glyphs.H-want) > 1e-9 {
 		t.Fatalf("text with no line height is %v tall, want its glyphs' %v", glyphs.H, want)
 	}
-	if got := Text("a").Size(20).Layout(free, Env{}.WithText(TextStyle{LineHeight: 1.5})); math.Abs(got.H-30) > 1e-9 {
+	if got := Text("a").Size(20).Layout(free, ggui.Env{}.WithText(ggui.TextStyle{LineHeight: 1.5})); math.Abs(got.H-30) > 1e-9 {
 		t.Errorf("under an Env with line height 1.5 the text is %v tall, want 30", got.H)
 	}
-	if got := Styled(Text("a").Size(20)).LineHeight(1.5).Layout(free, Env{}); math.Abs(got.H-30) > 1e-9 {
+	if got := Styled(Text("a").Size(20)).LineHeight(1.5).Layout(free, ggui.Env{}); math.Abs(got.H-30) > 1e-9 {
 		t.Errorf("under a Styled with line height 1.5 the text is %v tall, want 30", got.H)
 	}
 }
@@ -58,7 +59,7 @@ func TestOnlyALineHeightThatWasSetBoxesTheLines(t *testing.T) {
 // A RichText, and so a Selectable Text, boxes its lines as a Text does.
 func TestRichTextBoxesItsLinesAsTextDoes(t *testing.T) {
 	t.Parallel()
-	free := Loose(Sz(500, 500))
+	free := ggui.Loose(ggui.Sz(500, 500))
 	for _, lh := range []float64{0, 1, 1.5, 2} {
 		for _, s := range []string{"a", "a\nb\nc"} {
 			plain, rich, sel := Text(s).Size(16), RichText(Span(s)).Size(16), Text(s).Size(16).Selectable()
@@ -67,13 +68,13 @@ func TestRichTextBoxesItsLinesAsTextDoes(t *testing.T) {
 				rich.LineHeight(lh)
 				sel.LineHeight(lh)
 			}
-			want := plain.Layout(free, Env{})
+			want := plain.Layout(free, ggui.Env{})
 			wantBase, _ := plain.Baseline()
 			for name, w := range map[string]interface {
-				Widget
+				ggui.Widget
 				Baseline() (float64, bool)
 			}{"RichText": rich, "Selectable Text": sel} {
-				got := w.Layout(free, Env{})
+				got := w.Layout(free, ggui.Env{})
 				base, _ := w.Baseline()
 				if math.Abs(got.H-want.H) > 1e-9 || math.Abs(base-wantBase) > 1e-9 {
 					t.Errorf("%s %q at line height %v: %v tall with its baseline at %v, want Text's %v and %v", name, s, lh, got.H, base, want.H, wantBase)

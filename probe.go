@@ -100,7 +100,7 @@ func NewProbe(w Widget, size Size) *Probe {
 // runs once under a root owner, and
 // setup functions run first.
 //
-//	p := ggui.ProbeBuilder(func() ggui.Widget { return ggui.Textf("%d", n) }, ggui.Sz(100, 20))
+//	p := ggui.ProbeBuilder(func() ggui.Widget { return widget.Textf("%d", n) }, ggui.Sz(100, 20))
 func ProbeBuilder(build Builder, size Size) *Probe {
 	p := &Probe{size: size}
 	p.init(p, nil, build)

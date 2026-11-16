@@ -18,7 +18,7 @@ func TestFluentButtonKeyKeepsFocusAfterMovingRebuild(t *testing.T) {
 	p := ggui.ProbeBuilder(func() ggui.Widget {
 		return ggui.Reactive(func() ggui.Widget {
 			button = ui.Button("Action", func() { clicks++ }).Key("action").Outline()
-			return ggui.Column(ggui.Box().Height(offset.Get()), button)
+			return widget.Column(widget.Box().Height(offset.Get()), button)
 		})
 	}, ggui.Sz(350, 300))
 	defer p.Close()
@@ -42,7 +42,7 @@ func TestFluentSelectKeyKeepsOpenPopupAfterMovingRebuild(t *testing.T) {
 	p := ggui.ProbeBuilder(func() ggui.Widget {
 		return ggui.Reactive(func() ggui.Widget {
 			control = ui.Select(value).Options([]string{"Alpha", "Beta"}).Key("select").Name("Choice")
-			return ggui.Column(ggui.Box().Height(offset.Get()), control)
+			return widget.Column(widget.Box().Height(offset.Get()), control)
 		})
 	}, ggui.Sz(350, 350))
 	defer p.Close()
@@ -66,7 +66,7 @@ func TestComboboxKeyKeepsPopupAndSearchFocusAfterMovingRebuild(t *testing.T) {
 	p := ggui.ProbeBuilder(func() ggui.Widget {
 		return ggui.Reactive(func() ggui.Widget {
 			control = ui.Combobox(value).Options([]string{"Alpha", "Beta"}).Key("combobox").Name("Choice")
-			return ggui.Column(ggui.Box().Height(offset.Get()), control)
+			return widget.Column(widget.Box().Height(offset.Get()), control)
 		})
 	}, ggui.Sz(350, 400))
 	defer p.Close()
@@ -99,7 +99,7 @@ func TestControlConfigurationDoesNotCauseIdleLayouts(t *testing.T) {
 	t.Parallel()
 	leaf := &layoutCounter{}
 	p := ggui.ProbeBuilder(func() ggui.Widget {
-		return ggui.Column(ui.Button("Action", nil), ui.Select(ggui.State("a")).Options([]string{"a", "b"}), leaf)
+		return widget.Column(ui.Button("Action", nil), ui.Select(ggui.State("a")).Options([]string{"a", "b"}), leaf)
 	}, ggui.Sz(350, 300))
 	defer p.Close()
 	p.Frame()
@@ -134,13 +134,13 @@ var keyedControls = []struct {
 	unnamed   bool
 }{
 	{name: "Accordion", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
-		return keyed(ui.Accordion(ggui.State([]string(nil)), ui.AccordionItem("a", "Section", ggui.Text("body"))), k, n)
+		return keyed(ui.Accordion(ggui.State([]string(nil)), ui.AccordionItem("a", "Section", widget.Text("body"))), k, n)
 	}},
 	{name: "AttachmentGroup", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
 		return keyed(ui.AttachmentGroup(ui.Attachment("a.txt", "1 KB"), ui.Attachment("b.txt", "2 KB")), k, n)
 	}},
 	{name: "Bubble", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
-		return keyed(ui.Bubble(ggui.Text("hello")).Action("Reply", func() {}), k, n)
+		return keyed(ui.Bubble(widget.Text("hello")).Action("Reply", func() {}), k, n)
 	}},
 	{name: "Button", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
 		return keyed(ui.Button("Go", nil), k, n)
@@ -149,12 +149,12 @@ var keyedControls = []struct {
 		return keyed(ui.Calendar(ggui.State(time.Date(2024, 3, 14, 0, 0, 0, 0, time.UTC))), k, n)
 	}, unfocused: "its month buttons are not keyed; TestCalendarKeyKeepsKeyboardAfterMovingRebuild covers the grid"},
 	{name: "Carousel", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
-		return keyed(ui.Carousel(ggui.State(0), ggui.Text("one"), ggui.Text("two")).Height(80), k, n)
+		return keyed(ui.Carousel(ggui.State(0), widget.Text("one"), widget.Text("two")).Height(80), k, n)
 	}},
 	{name: "CarouselNavigation", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
-		c := ui.Carousel(ggui.State(0), ggui.Text("one"), ggui.Text("two")).Height(40)
+		c := ui.Carousel(ggui.State(0), widget.Text("one"), widget.Text("two")).Height(40)
 		_, w, ok := keyed(ui.CarouselNext(c), k, n)
-		return ggui.Column(c, w), w, ok
+		return widget.Column(c, w), w, ok
 	}},
 	{name: "Chart", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
 		data := []ui.ChartDatum{{Label: "a", Values: map[string]float64{"v": 1}}, {Label: "b", Values: map[string]float64{"v": 2}}}
@@ -164,10 +164,10 @@ var keyedControls = []struct {
 		return keyed(ui.Checkbox(ggui.State(false), "Check"), k, n)
 	}},
 	{name: "Collapsible", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
-		return keyed(ui.Collapsible(ggui.State(false), "More", ggui.Text("body")), k, n)
+		return keyed(ui.Collapsible(ggui.State(false), "More", widget.Text("body")), k, n)
 	}},
 	{name: "ContextMenu", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
-		return keyed(ui.ContextMenu(ggui.Box().Size(100, 40), ui.MenuItem("Copy", nil)), k, n)
+		return keyed(ui.ContextMenu(widget.Box().Size(100, 40), ui.MenuItem("Copy", nil)), k, n)
 	}},
 	{name: "ToggleGroup", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
 		return keyed(ui.ToggleGroup(ggui.State("a")).Options([]string{"a", "b"}), k, n)
@@ -185,7 +185,7 @@ var keyedControls = []struct {
 		return keyed(ui.Menubar(ui.Menu("File", ui.MenuItem("Open", nil))), k, n)
 	}},
 	{name: "MessageScroller", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
-		items := ggui.State([]ui.MessageEntry{{ID: "1", Content: ggui.Text("hi")}})
+		items := ggui.State([]ui.MessageEntry{{ID: "1", Content: widget.Text("hi")}})
 		return keyed(ui.MessageScroller(items).Height(100), k, n)
 	}},
 	{name: "Pagination", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
@@ -202,7 +202,7 @@ var keyedControls = []struct {
 		return keyed(ui.Radios(ggui.State("a")).Options([]string{"a", "b"}), k, n)
 	}, unfocused: "BUG: options are keyed by their own pointers"},
 	{name: "Resizable", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
-		return keyed(ui.Resizable(ggui.State(.5), ggui.Text("left"), ggui.Text("right")), k, n)
+		return keyed(ui.Resizable(ggui.State(.5), widget.Text("left"), widget.Text("right")), k, n)
 	}},
 	{name: "Select", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
 		return keyed(ui.Select(ggui.State("a")).Options([]string{"a", "b"}), k, n)
@@ -217,7 +217,7 @@ var keyedControls = []struct {
 		return keyed(ui.Switch(ggui.State(false), "Wifi"), k, n)
 	}},
 	{name: "Tabs", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
-		return keyed(ui.Tabs(ggui.State(0), ui.Tab("One", ggui.Text("1")), ui.Tab("Two", ggui.Text("2"))), k, n)
+		return keyed(ui.Tabs(ggui.State(0), ui.Tab("One", widget.Text("1")), ui.Tab("Two", widget.Text("2"))), k, n)
 	}},
 	{name: "ThemeSwitch", build: func(k any, n ggui.Readable[string]) (ggui.Widget, ggui.Widget, bool) {
 		return keyed(ui.ThemeSwitch(ggui.State(false)), k, n)
@@ -254,7 +254,7 @@ func TestKeySettersKeepFocusAcrossMovingRebuilds(t *testing.T) {
 					root, control, ok := tc.build(key, name)
 					fluent = fluent && ok
 					built = append(built, control)
-					return ggui.Column(ggui.Box().Height(offset.Get()), root)
+					return widget.Column(widget.Box().Height(offset.Get()), root)
 				})
 			}, ggui.Sz(480, 520))
 			defer p.Close()
@@ -331,7 +331,7 @@ func moveAndRebuild(t *testing.T, control func() ggui.Widget) (*ggui.Probe, *ggu
 	offset := ggui.State(0.0)
 	p := ggui.ProbeBuilder(func() ggui.Widget {
 		return ggui.Reactive(func() ggui.Widget {
-			return ggui.Column(ggui.Box().Height(offset.Get()), control())
+			return widget.Column(widget.Box().Height(offset.Get()), control())
 		})
 	}, ggui.Sz(480, 520))
 	t.Cleanup(p.Close)
@@ -426,7 +426,7 @@ func TestNameSettersReachSemantics(t *testing.T) {
 		build   func(name string) (root ggui.Widget, fluent bool)
 	}{
 		{"Accordion", func(name string) (ggui.Widget, bool) {
-			w := ui.Accordion(ggui.State([]string(nil)), ui.AccordionItem("a", "Section", ggui.Text("body")))
+			w := ui.Accordion(ggui.State([]string(nil)), ui.AccordionItem("a", "Section", widget.Text("body")))
 			return w, w.Name(name) == w
 		}},
 		{"AttachmentGroup", func(name string) (ggui.Widget, bool) {
@@ -434,20 +434,20 @@ func TestNameSettersReachSemantics(t *testing.T) {
 			return w, w.Name(name) == w
 		}},
 		{"Bubble", func(name string) (ggui.Widget, bool) {
-			w := ui.Bubble(ggui.Text("hi")).Action("Reply", func() {})
+			w := ui.Bubble(widget.Text("hi")).Action("Reply", func() {})
 			return w, w.Name(name) == w
 		}},
 		{"CarouselNavigation", func(name string) (ggui.Widget, bool) {
-			c := ui.Carousel(ggui.State(0), ggui.Text("one"), ggui.Text("two")).Controls(false)
+			c := ui.Carousel(ggui.State(0), widget.Text("one"), widget.Text("two")).Controls(false)
 			w := ui.CarouselNext(c)
-			return ggui.Column(c, w), w.Name(name) == w
+			return widget.Column(c, w), w.Name(name) == w
 		}},
 		{"Checkbox", func(name string) (ggui.Widget, bool) {
 			w := ui.Checkbox(ggui.State(false), "Check")
 			return w, w.Name(name) == w
 		}},
 		{"Collapsible", func(name string) (ggui.Widget, bool) {
-			w := ui.Collapsible(ggui.State(false), "More", ggui.Text("body"))
+			w := ui.Collapsible(ggui.State(false), "More", widget.Text("body"))
 			return w, w.Name(name) == w
 		}},
 		{"Menubar", func(name string) (ggui.Widget, bool) {
@@ -467,7 +467,7 @@ func TestNameSettersReachSemantics(t *testing.T) {
 			return w, w.Name(name) == w
 		}},
 		{"Resizable", func(name string) (ggui.Widget, bool) {
-			w := ui.Resizable(ggui.State(.5), ggui.Text("left"), ggui.Text("right"))
+			w := ui.Resizable(ggui.State(.5), widget.Text("left"), widget.Text("right"))
 			return w, w.Name(name) == w
 		}},
 		{"Switch", func(name string) (ggui.Widget, bool) {
@@ -475,7 +475,7 @@ func TestNameSettersReachSemantics(t *testing.T) {
 			return w, w.Name(name) == w
 		}},
 		{"Tabs", func(name string) (ggui.Widget, bool) {
-			w := ui.Tabs(ggui.State(0), ui.Tab("One", ggui.Text("1")))
+			w := ui.Tabs(ggui.State(0), ui.Tab("One", widget.Text("1")))
 			return w, w.Name(name) == w
 		}},
 	} {

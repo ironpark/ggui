@@ -221,7 +221,7 @@ func TestAsyncImageDecodesOffTheUIThread(t *testing.T) {
 		loaderGoroutine.Store(goid.ID())
 		<-release
 		return image.NewRGBA(image.Rect(0, 0, 40, 20)), nil
-	}).Placeholder(ggui.Box().Size(7, 7))
+	}).Placeholder(Box().Size(7, 7))
 	a.cache = newImageCache(1 << 20)
 	p, size := measure(a, ggui.Sz(300, 300))
 	defer p.Close()
@@ -245,7 +245,7 @@ func TestAsyncImageSameSrcDecodesOnce(t *testing.T) {
 	a := AsyncImage("same").Loader(sized(10, 10, &calls))
 	b := AsyncImage("same").Loader(sized(10, 10, &calls))
 	a.cache, b.cache = cache, cache
-	p := ggui.NewProbe(ggui.Column(a, b), ggui.Sz(300, 300))
+	p := ggui.NewProbe(Column(a, b), ggui.Sz(300, 300))
 	defer p.Close()
 	pumpUntil(t, p, func() bool { return a.Status() == ggui.Ready && b.Status() == ggui.Ready })
 	if calls.Load() != 1 {
@@ -254,7 +254,7 @@ func TestAsyncImageSameSrcDecodesOnce(t *testing.T) {
 	// A third, shown later at the same size, finds it ready.
 	c := AsyncImage("same").Loader(sized(10, 10, &calls))
 	c.cache = cache
-	q := ggui.NewProbe(ggui.Column(c), ggui.Sz(300, 300))
+	q := ggui.NewProbe(Column(c), ggui.Sz(300, 300))
 	defer q.Close()
 	q.Frame()
 	if c.Status() != ggui.Ready || calls.Load() != 1 {
@@ -314,7 +314,7 @@ func TestAsyncImageErrorShowsFallback(t *testing.T) {
 	t.Parallel()
 	a := AsyncImage(t.Name()).Loader(func(context.Context, string) (image.Image, error) {
 		return nil, errors.New("nope")
-	}).Placeholder(ggui.Box().Size(5, 5)).Fallback(ggui.Box().Size(9, 3))
+	}).Placeholder(Box().Size(5, 5)).Fallback(Box().Size(9, 3))
 	a.cache = newImageCache(1 << 20)
 	p, size := measure(a, ggui.Sz(300, 300))
 	defer p.Close()

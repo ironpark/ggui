@@ -9,6 +9,7 @@ import (
 	"github.com/ironpark/ggui/ui/icons"
 	"github.com/ironpark/ggui/ui/icons/lucide"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // ToastType is what a notification reports, which picks the icon it leads
@@ -279,9 +280,9 @@ func (t *ToasterWidget) fill(e *toastEntry, message ToastMessage) {
 		}).Outline().Size(ButtonSmall)
 		e.action.Key(&e.action)
 	}
-	e.panel = &toastPanel{entry: e, title: ggui.Text(message.title), closeIcon: closeIcon, kind: message.kind, countdown: message.countdown}
+	e.panel = &toastPanel{entry: e, title: widget.Text(message.title), closeIcon: closeIcon, kind: message.kind, countdown: message.countdown}
 	if message.description != "" {
-		e.panel.description = ggui.Text(message.description)
+		e.panel.description = widget.Text(message.description)
 	}
 }
 
@@ -521,7 +522,7 @@ func (t *ToasterWidget) paintNotice(dst *ggui.Canvas, e *toastEntry, theme *uith
 // one row. Colors follow the current theme.
 type toastPanel struct {
 	entry              *toastEntry
-	title, description *ggui.TextWidget
+	title, description *widget.TextWidget
 	closeIcon          *icons.Widget
 	kind               ToastType
 	countdown          bool
@@ -529,9 +530,9 @@ type toastPanel struct {
 
 	// The panel's parts, built once at the first layout (the entry's action
 	// and mark never change), so their layout caches survive a relayout.
-	body    *ggui.BoxWidget
-	rowFlow *ggui.RowWidget
-	column  *ggui.ColumnWidget
+	body    *widget.BoxWidget
+	rowFlow *widget.RowWidget
+	column  *widget.ColumnWidget
 	parts   []ggui.Widget // the row's children, in order
 }
 
@@ -543,17 +544,17 @@ func (p *toastPanel) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		if p.description != nil {
 			text = append(text, p.description)
 		}
-		p.column = ggui.Column(text...).Align(ggui.AlignStretch)
+		p.column = widget.Column(text...).Align(widget.AlignStretch)
 		if p.kind != ToastPlain {
 			p.parts = append(p.parts, &toastMark{kind: p.kind})
 		}
-		p.parts = append(p.parts, ggui.Expanded(p.column))
+		p.parts = append(p.parts, widget.Expanded(p.column))
 		if p.entry.action != nil {
 			p.parts = append(p.parts, p.entry.action)
 		}
 		p.parts = append(p.parts, p.entry.dismiss)
-		p.rowFlow = ggui.Row(p.parts...).Align(ggui.AlignCenter)
-		p.body = ggui.Box(p.rowFlow)
+		p.rowFlow = widget.Row(p.parts...).Align(widget.AlignCenter)
+		p.body = widget.Box(p.rowFlow)
 	}
 	p.title.Style(t.Text.Merge(t.Label)).Color(t.PopoverFg)
 	if p.description != nil {

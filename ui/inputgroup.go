@@ -30,7 +30,7 @@ type InputGroupWidget struct {
 	leading, trailing ggui.Widget
 	top, bottom       ggui.Widget
 	multiline         bool
-	row               *ggui.RowWidget
+	row               *widget.RowWidget
 	theme             *uitheme.Theme
 	addonEnv          ggui.Env        // what the addons are laid out under
 	styled            []*ButtonWidget // the addon buttons given the group's defaults
@@ -47,7 +47,7 @@ type InputGroupWidget struct {
 // InputGroup wraps an editor in a shared field chrome.
 //
 //	ui.InputGroup(widget.TextInput(site).Placeholder("example.com")).
-//		Leading(ggui.Text("https://")).
+//		Leading(widget.Text("https://")).
 //		Trailing(ui.Button("Go", visit))
 func InputGroup(input ggui.Widget) *InputGroupWidget {
 	g := &InputGroupWidget{input: input, styledRadius: -1}
@@ -200,11 +200,11 @@ func (g *InputGroupWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		if g.leading != nil {
 			parts = append(parts, groupAddon{g, g.leading})
 		}
-		parts = append(parts, ggui.Expanded(groupInput{g}))
+		parts = append(parts, widget.Expanded(groupInput{g}))
 		if g.trailing != nil {
 			parts = append(parts, groupAddon{g, g.trailing})
 		}
-		g.row = ggui.Row(parts...)
+		g.row = widget.Row(parts...)
 	}
 	// shadcn's rounded-[calc(var(--radius)-3px)], so that a button's corner
 	// runs alongside the group's.

@@ -3,6 +3,7 @@ package ui
 import (
 	"github.com/ironpark/ggui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 // ContextMenuWidget wraps content with a secondary-click action menu.
@@ -85,8 +86,8 @@ func newContextMenu(content ggui.Widget, m *MenuWidget) *ContextMenuWidget {
 	// the point pressed: the panel's corner is at the pointer and four
 	// pixels under it, and it opens to the left where the right has no
 	// room.
-	c.menu.popup = ggui.Popup(content, menuSurface(c.menu.panel)).Gap(0).Keys(c).Owner(c).
-		Side(ggui.PopupRight).Align(ggui.PopupStart).AlignOffset(contextMenuDrop)
+	c.menu.popup = widget.Popup(content, menuSurface(c.menu.panel)).Gap(0).Keys(c).Owner(c).
+		Side(widget.PopupRight).Align(widget.PopupStart).AlignOffset(contextMenuDrop)
 	return c
 }
 
@@ -128,7 +129,7 @@ func (c *ContextMenuWidget) Disabled(v bool) *ContextMenuWidget {
 }
 
 // Popup returns the menu's popup.
-func (c *ContextMenuWidget) Popup() *ggui.PopupWidget { return c.menu.popup }
+func (c *ContextMenuWidget) Popup() *widget.PopupWidget { return c.menu.popup }
 
 func (c *ContextMenuWidget) open(at ggui.Point, first bool) {
 	if c.IsInert() {

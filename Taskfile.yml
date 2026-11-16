@@ -36,11 +36,12 @@ tasks:
     desc: Run all tests, including the modules nested in this one
     # Both configurations: the tagged run is the only one that exercises the
     # inspector's own tests, the plain one the only one that proves the
-    # stub keeps an app running without it. internal/apitest holds the ggui
-    # package's tests through its public surface, so it runs under both.
+    # stub keeps an app running without it. widget's tests and
+    # internal/apitest's drive the ggui package through its public surface,
+    # so they run under both.
     cmds:
       - '"{{.GO}}" test ./...'
-      - '"{{.GO}}" test -tags ggui_inspector . ./internal/apitest'
+      - '"{{.GO}}" test -tags ggui_inspector . ./widget ./internal/apitest'
       - '"{{.GO}}" test -C examples/sqlite ./...'
       - '"{{.GO}}" test -C fonts/notoemoji ./...'
       - '"{{.GO}}" test -C icons/heroicons ./...'

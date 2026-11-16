@@ -7,7 +7,7 @@ Choose a layout, size its children, and display text, images, and overlays. Dime
 For use in another toolkit without ggui widgets or rendering, see the public
 [`layout` package](../pkg/layout/README.md).
 
-Examples use `ggui` and `ui` imports and application-defined placeholders.
+Examples use `ggui`, `widget` and `ui` imports and application-defined placeholders.
 See [example conventions](README.md#start-here) before copying snippets.
 
 A `Widget` is asked for a size under `Constraints` and an `Env`
@@ -18,11 +18,11 @@ do without, chainable setters take the rest, so the code reads as the tree it
 builds:
 
 ```go
-ggui.Center(
-	ggui.Box(
-		ggui.Column(
-			ggui.Text(title).Color(fg),
-			ggui.Text(body).Color(dim),
+widget.Center(
+	widget.Box(
+		widget.Column(
+			widget.Text(title).Color(fg),
+			widget.Text(body).Color(dim),
 		).Gap(8),
 	).Pad(24).Fill(panel),
 )
@@ -82,12 +82,12 @@ Widget mutation belongs on the UI goroutine; workers use `App.Post`.
 Build children from a plain slice with `List` or `Children`:
 
 ```go
-ggui.List(rows, func(r Row) ggui.Widget {
-	return ggui.Text(r.Title)
+widget.List(rows, func(r Row) ggui.Widget {
+	return widget.Text(r.Title)
 }).Gap(4)
 
-ggui.Row(ggui.Children(rows, func(r Row) ggui.Widget {
-	return ggui.Text(r.Title)
+widget.Row(ggui.Children(rows, func(r Row) ggui.Widget {
+	return widget.Text(r.Title)
 })...)
 ```
 
@@ -98,7 +98,7 @@ top/right/bottom/left.
 `Box(w).MaxWidth(640)` stops a form or a paragraph from growing past 640
 pixels, padding included, in a wide window; `MaxHeight` caps the height. A
 parent that stretches its children still wins, so center the box to keep it
-narrow there: `ggui.Center(ggui.Box(form).MaxWidth(640))`.
+narrow there: `widget.Center(widget.Box(form).MaxWidth(640))`.
 
 `Stack` layers children at the top-left and takes its largest child's size
 unless `.Expand()` is set. `Align` fills available space and positions its child
@@ -116,19 +116,19 @@ by fraction (`.At(0.25, 1)`) or edge (`.Bottom().Right()`). `Center` places it a
 Any of those makes the widget fill its main axis. `.Align(...)` places
 children across the axis (`AlignStart`, `AlignCenter`, `AlignEnd`,
 `AlignStretch`, `AlignBaseline`); a Row centers by default, a Column starts
-at the left. `.Stretch()` is short for `.Align(ggui.AlignStretch)`, the usual
+at the left. `.Stretch()` is short for `.Align(widget.AlignStretch)`, the usual
 arrangement of a form or a page. `AlignBaseline` lines a Row's children up on their first text
 baseline, so a caption beside a title shares its baseline rather than its
 centre; a child with no text rests on that baseline by its bottom edge. A
 Column, `Wrap` or `Each` treats it as `AlignStart`.
 
 ```go
-ggui.Row(ui.Title("Inbox"), ui.Caption("12 unread")).Gap(8).Align(ggui.AlignBaseline)
+widget.Row(ui.Title("Inbox"), ui.Caption("12 unread")).Gap(8).Align(widget.AlignBaseline)
 ```
 
 ```go
-ggui.Row(ggui.Text("Title"), ggui.Spacer(), ggui.Text("3 items")) // centered on its height
-ggui.Column(ggui.Text("a"), ggui.Text("b")).Stretch() // Align(ggui.AlignStretch)
+widget.Row(widget.Text("Title"), widget.Spacer(), widget.Text("3 items")) // centered on its height
+widget.Column(widget.Text("a"), widget.Text("b")).Stretch() // Align(widget.AlignStretch)
 ```
 
 ### Changing arrangement by width
@@ -139,9 +139,9 @@ so a field keeps its text and focus as the window crosses the breakpoint:
 
 ```go
 search, filters := ui.TextField(query), ui.ToggleGroup(filter).Options(kinds)
-ggui.Responsive(760,
-    ggui.Row(ggui.Expanded(search), filters).Gap(16),
-    ggui.Column(search, filters).Gap(12).Stretch(),
+widget.Responsive(760,
+    widget.Row(widget.Expanded(search), filters).Gap(16),
+    widget.Column(search, filters).Gap(12).Stretch(),
 )
 ```
 
@@ -231,10 +231,10 @@ it as a link under the paragraph. `MaxLines`, `Ellipsis`, `NoWrap` and `Align`
 work as on `Text`; `Spans` and `BindSpans` replace the spans after mount.
 
 ```go
-ggui.RichText(
-	ggui.Span("Read the "),
-	ggui.Span("guide").Color(accent).Underline().OnTap(openGuide),
-	ggui.Span(" before you start.").Weight(ggui.WeightBold),
+widget.RichText(
+	widget.Span("Read the "),
+	widget.Span("guide").Color(accent).Underline().OnTap(openGuide),
+	widget.Span(" before you start.").Weight(ggui.WeightBold),
 ).MaxLines(2)
 ```
 
@@ -248,5 +248,5 @@ Shift-click to extend. Once a click has focused it, ⌘A/Ctrl+A selects all and
 `RichTextWidget.Selection` and `SelectedText` read it back.
 
 ```go
-ggui.Text(orderID).Selectable()
+widget.Text(orderID).Selectable()
 ```

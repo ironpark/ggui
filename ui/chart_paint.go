@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/ironpark/ggui"
+	"github.com/ironpark/ggui/widget"
 )
 
 type chartTextKey struct {
@@ -26,7 +27,7 @@ const (
 )
 
 type chartText struct {
-	widget *ggui.TextWidget
+	widget *widget.TextWidget
 	size   ggui.Size
 	layout uint64 // the chart's textLayout this was measured at
 }
@@ -57,7 +58,7 @@ func (c *ChartWidget) measuredFace(text string, size float64, col color.Color, f
 	free := ggui.Loose(ggui.Sz(ggui.Unbounded, ggui.Unbounded))
 	t := c.textCache[key]
 	if t == nil {
-		w := ggui.Text(text).Size(size).Color(col)
+		w := widget.Text(text).Size(size).Color(col)
 		switch face {
 		case chartMedium:
 			w.Weight(c.theme.Label.Weight)

@@ -1,10 +1,11 @@
-package ggui
+package widget
 
 import (
 	"image/color"
 	"slices"
 	"strings"
 
+	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/internal/paragraph"
 	"github.com/ironpark/ggui/internal/property"
 	"github.com/ironpark/ggui/internal/textedit"
@@ -17,7 +18,7 @@ import (
 // changed copy.
 type TextSpan struct {
 	text       string
-	style      TextStyle
+	style      ggui.TextStyle
 	underline  bool
 	strike     bool
 	background color.Color // behind the span's text, nil for none
@@ -32,16 +33,16 @@ func Span(s string) TextSpan { return TextSpan{text: s} }
 func (s TextSpan) Text() string { return s.text }
 
 // Style merges ts onto the span's style.
-func (s TextSpan) Style(ts TextStyle) TextSpan { s.style = s.style.Merge(ts); return s }
+func (s TextSpan) Style(ts ggui.TextStyle) TextSpan { s.style = s.style.Merge(ts); return s }
 
 // Color sets the span's color; nil inherits the paragraph's.
 func (s TextSpan) Color(c color.Color) TextSpan { s.style.Color = c; return s }
 
 // Font sets the span's face; nil inherits.
-func (s TextSpan) Font(f *Font) TextSpan { s.style.Font = f; return s }
+func (s TextSpan) Font(f *ggui.Font) TextSpan { s.style.Font = f; return s }
 
 // Weight sets the span's font weight; zero inherits.
-func (s TextSpan) Weight(w FontWeight) TextSpan { s.style.Weight = w; return s }
+func (s TextSpan) Weight(w ggui.FontWeight) TextSpan { s.style.Weight = w; return s }
 
 // Size sets the span's font size in pixels; zero inherits.
 func (s TextSpan) Size(px float64) TextSpan { s.style.Size = px; return s }
@@ -69,22 +70,22 @@ func (s TextSpan) Name(name string) TextSpan { s.name = name; return s }
 type RichTextWidget struct {
 	props      property.Owner
 	spans      property.Value[[]TextSpan]
-	style      TextStyle
+	style      ggui.TextStyle
 	wrap       bool
 	ellipsis   bool
 	maxLines   int
 	align      float64
 	alignSet   bool
-	role       Role
+	role       ggui.Role
 	selectable bool
 
 	// Layout keeps the spans it read, the paragraph they made and what it
 	// was laid out for.
 	cur       []TextSpan
 	para      paragraph.Paragraph
-	styles    []TextStyle   // each of para.Runs' style, resolved, for what the engine does not take
-	base      TextStyle     // the paragraph's style, resolved
-	dir       TextDirection // what para was laid out in
+	styles    []ggui.TextStyle   // each of para.Runs' style, resolved, for what the engine does not take
+	base      ggui.TextStyle     // the paragraph's style, resolved
+	dir       ggui.TextDirection // what para was laid out in
 	laid      richKey
 	runKeys   []runKey
 	keyBuf    []runKey // the other of runKeys' two arrays, which layouts take in turn
@@ -96,7 +97,7 @@ type RichTextWidget struct {
 	focused bool
 	area    *SelectionAreaWidget // the SelectionArea it is in, if any
 	clicks  textedit.Clicks
-	rect    Rect
+	rect    ggui.Rect
 
 	pieceOp text.DrawOptions // reused by paragraph.Draw, which would allocate one a piece
 }
@@ -109,7 +110,7 @@ type richKey struct {
 	wrap       bool
 	ellipsis   bool
 	maxLines   int
-	dir        TextDirection
+	dir        ggui.TextDirection
 	lang       string
 	base       runKey
 	lineBox    bool
@@ -118,10 +119,10 @@ type richKey struct {
 // runKey is what of a run's style changes its measure: not its color.
 type runKey struct {
 	start, end int
-	font       *Font
+	font       *ggui.Font
 	size       float64
 	lineHeight float64
-	weight     FontWeight
+	weight     ggui.FontWeight
 	tracking   float64
 }
 
@@ -129,10 +130,10 @@ type runKey struct {
 // drawn in its own on top: the paragraph wraps across span boundaries
 // and lines its spans up on a shared baseline.
 //
-//	ggui.RichText(
-//		ggui.Span("Read the "),
-//		ggui.Span("guide").Color(link).Underline().OnTap(openGuide),
-//		ggui.Span(" first.").Weight(ggui.WeightBold),
+//	widget.RichText(
+//		widget.Span("Read the "),
+//		widget.Span("guide").Color(link).Underline().OnTap(openGuide),
+//		widget.Span(" first.").Weight(ggui.WeightBold),
 //	)
 func RichText(spans ...TextSpan) *RichTextWidget {
 	t := &RichTextWidget{wrap: true}
@@ -149,7 +150,7 @@ func (t *RichTextWidget) Spans(spans ...TextSpan) *RichTextWidget {
 }
 
 // BindSpans follows r during layout without owning a subscription.
-func (t *RichTextWidget) BindSpans(r Readable[[]TextSpan]) *RichTextWidget {
+func (t *RichTextWidget) BindSpans(r ggui.Readable[[]TextSpan]) *RichTextWidget {
 	if t.spans.Bind(r, "BindSpans") {
 		t.props.Changed()
 	}
@@ -157,7 +158,7 @@ func (t *RichTextWidget) BindSpans(r Readable[[]TextSpan]) *RichTextWidget {
 }
 
 // Style merges ts onto the style every span starts from.
-func (t *RichTextWidget) Style(ts TextStyle) *RichTextWidget {
+func (t *RichTextWidget) Style(ts ggui.TextStyle) *RichTextWidget {
 	defer property.Watch(&t.props, &t.style)()
 	t.style = t.style.Merge(ts)
 	return t
@@ -171,14 +172,14 @@ func (t *RichTextWidget) Color(c color.Color) *RichTextWidget {
 }
 
 // Font sets the paragraph's face; nil inherits.
-func (t *RichTextWidget) Font(f *Font) *RichTextWidget {
+func (t *RichTextWidget) Font(f *ggui.Font) *RichTextWidget {
 	defer property.Watch(&t.props, &t.style)()
 	t.style.Font = f
 	return t
 }
 
 // Weight sets the paragraph's font weight; zero inherits.
-func (t *RichTextWidget) Weight(w FontWeight) *RichTextWidget {
+func (t *RichTextWidget) Weight(w ggui.FontWeight) *RichTextWidget {
 	defer property.Watch(&t.props, &t.style)()
 	t.style.Weight = w
 	return t
@@ -232,7 +233,7 @@ func (t *RichTextWidget) Align(x float64) *RichTextWidget {
 }
 
 // Role sets the accessibility role; the default is RoleText.
-func (t *RichTextWidget) Role(role Role) *RichTextWidget {
+func (t *RichTextWidget) Role(role ggui.Role) *RichTextWidget {
 	defer property.Watch(&t.props, &t.role)()
 	t.role = role
 	return t
@@ -248,7 +249,7 @@ func (t *RichTextWidget) alignment() float64 {
 }
 
 // Layout implements Widget.
-func (t *RichTextWidget) Layout(c Constraints, env Env) Size {
+func (t *RichTextWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer t.props.Layout().EndLayout()
 	t.area = nil
 	if t.selectable {
@@ -268,7 +269,7 @@ func (t *RichTextWidget) Layout(c Constraints, env Env) Size {
 	// A span's background, resolved here for the paint, which has no Env.
 	for i := range t.cur {
 		if t.cur[i].background != nil {
-			t.cur[i].background = ResolveColor(t.cur[i].background, env)
+			t.cur[i].background = ggui.ResolveColor(t.cur[i].background, env)
 		}
 	}
 	base := env.ResolveText(t.style)
@@ -287,7 +288,7 @@ func (t *RichTextWidget) Layout(c Constraints, env Env) Size {
 		st := env.ResolveText(t.style.Merge(sp.style))
 		start := end
 		end += len(sp.text)
-		run, _ := TextEngineStyle(st)
+		run, _ := ggui.TextEngineStyle(st)
 		p.Runs = append(p.Runs, paragraph.Run{Start: start, End: end, Style: run, Span: i})
 		t.styles = append(t.styles, st)
 		keys = append(keys, runKey{start, end, st.Font, st.Size, st.LineHeight, st.Weight, st.Tracking})
@@ -303,10 +304,10 @@ func (t *RichTextWidget) Layout(c Constraints, env Env) Size {
 		text = sb.String()
 	}
 	var gen uint64
-	p.Base, gen = TextEngineStyle(base)
+	p.Base, gen = ggui.TextEngineStyle(base)
 	t.base = base
 	t.dir, p.Lang = env.Direction(), env.Language()
-	p.RTL = t.dir == DirRTL
+	p.RTL = t.dir == ggui.DirRTL
 	t.selection = env.EditorStyle().Selection
 	// As Text's: the width only matters when something wraps or cuts to it.
 	fits := t.wrap || t.ellipsis || t.maxLines > 0
@@ -326,7 +327,7 @@ func (t *RichTextWidget) Layout(c Constraints, env Env) Size {
 		for i, sp := range t.cur {
 			if sp.onTap != nil {
 				l := &spanLink{w: t, span: i}
-				l.Role = RoleLink
+				l.Role = ggui.RoleLink
 				l.SetName(gem.Pick(sp.name != "", sp.name, sp.text))
 				t.links = append(t.links, l)
 			}
@@ -336,7 +337,7 @@ func (t *RichTextWidget) Layout(c Constraints, env Env) Size {
 }
 
 // runStyle returns run i's resolved style, or the paragraph's for -1.
-func (t *RichTextWidget) runStyle(i int) TextStyle {
+func (t *RichTextWidget) runStyle(i int) ggui.TextStyle {
 	if i < 0 {
 		return t.base
 	}
@@ -358,14 +359,14 @@ func (t *RichTextWidget) Baseline() (float64, bool) {
 }
 
 // roleOr returns role, or fallback when it is unset.
-func roleOr(role, fallback Role) Role { return gem.Pick(role != "", role, fallback) }
+func roleOr(role, fallback ggui.Role) ggui.Role { return gem.Pick(role != "", role, fallback) }
 
 // Paint implements Widget.
-func (t *RichTextWidget) Paint(dst *Canvas, r Rect) {
+func (t *RichTextWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t.rect = r
 	p := &t.para
 	align := t.alignment()
-	described := func(dst *Canvas) {
+	described := func(dst *ggui.Canvas) {
 		for _, l := range t.links {
 			l.paint(dst, r, align)
 		}
@@ -379,10 +380,10 @@ func (t *RichTextWidget) Paint(dst *Canvas, r Rect) {
 		if t.area != nil && dst.TakesInput() {
 			t.area.painted(t)
 		}
-		dst.HitCursor(r, CursorShapeText)
+		dst.HitCursor(r, ggui.CursorShapeText)
 		dst.DescribeNode(r, t, described)
 	case p.Text != "" && !dst.Named(r):
-		dst.Node(r, Node{Role: roleOr(t.role, RoleText), Name: p.Text}, described)
+		dst.Node(r, ggui.Node{Role: roleOr(t.role, ggui.RoleText), Name: p.Text}, described)
 	default:
 		described(dst)
 	}
@@ -393,8 +394,8 @@ func (t *RichTextWidget) Paint(dst *Canvas, r Rect) {
 	// selection runs through many texts, and only one has the focus.
 	if t.selectable && (t.focused || t.area != nil) && t.ed.HasSelection() {
 		lo, hi := t.ed.Selection()
-		p.Rects(lo, hi, r.Size.W, align, func(b Rect) {
-			dst.FillRect(Rct(r.Origin.Add(b.Origin), b.Size), t.selection)
+		p.Rects(lo, hi, r.Size.W, align, func(b ggui.Rect) {
+			dst.FillRect(ggui.Rct(r.Origin.Add(b.Origin), b.Size), t.selection)
 		})
 	}
 	scale := dst.Scale()
@@ -403,7 +404,7 @@ func (t *RichTextWidget) Paint(dst *Canvas, r Rect) {
 		// A line wholly outside the clip is not shaped and drawn to be
 		// clipped, with a line's height to spare for what reaches past it.
 		top, h := ln.Baseline-ln.Ascent, ln.Ascent+ln.Descent
-		if !dst.Draws(Rct(Pt(r.Origin.X, r.Origin.Y+top), Sz(r.Size.W, h)), h) {
+		if !dst.Draws(ggui.Rct(ggui.Pt(r.Origin.X, r.Origin.Y+top), ggui.Sz(r.Size.W, h)), h) {
 			continue
 		}
 		x := r.Origin.X + p.LineX(i, r.Size.W, align)
@@ -415,7 +416,7 @@ func (t *RichTextWidget) Paint(dst *Canvas, r Rect) {
 			rs := t.runStyle(st.Run)
 			// The run's own ascent and descent, a little past them.
 			pad := rs.Size * 0.12
-			bg := Rct(Pt(x+pc.X-pad, r.Origin.Y+ln.Baseline-rs.Size*0.92), Sz(pc.W+2*pad, rs.Size*1.18))
+			bg := ggui.Rct(ggui.Pt(x+pc.X-pad, r.Origin.Y+ln.Baseline-rs.Size*0.92), ggui.Sz(pc.W+2*pad, rs.Size*1.18))
 			dst.FillRoundRect(bg, rs.Size*0.2, t.cur[p.Runs[st.Run].Span].background)
 		}
 		col := func(style int) color.Color { return t.runStyle(ln.Styles[style].Run).Color }
@@ -432,12 +433,12 @@ func (t *RichTextWidget) Paint(dst *Canvas, r Rect) {
 			thick := max(1/scale, rs.Size/14)
 			if span.underline {
 				y := r.Origin.Y + ln.Baseline + max(1, rs.Size*0.08)
-				dst.FillRect(Rct(Pt(x+pc.X, y), Sz(pc.W, thick)), rs.Color)
+				dst.FillRect(ggui.Rct(ggui.Pt(x+pc.X, y), ggui.Sz(pc.W, thick)), rs.Color)
 			}
 			if span.strike {
 				// Through the middle of the lower case letters.
 				y := r.Origin.Y + ln.Baseline - rs.Size*0.3
-				dst.FillRect(Rct(Pt(x+pc.X, y), Sz(pc.W, thick)), rs.Color)
+				dst.FillRect(ggui.Rct(ggui.Pt(x+pc.X, y), ggui.Sz(pc.W, thick)), rs.Color)
 			}
 		}
 	}
@@ -446,7 +447,7 @@ func (t *RichTextWidget) Paint(dst *Canvas, r Rect) {
 // spanLink is the control a tappable span is: every box the span covers
 // takes the pointer, the first one the focus.
 type spanLink struct {
-	Interactive
+	ggui.Interactive
 	w    *RichTextWidget
 	span int
 }
@@ -459,26 +460,26 @@ func (l *spanLink) tap() {
 }
 
 // HandlePointer implements PointerHandler.
-func (l *spanLink) HandlePointer(ev PointerEvent) bool { return l.Pointer(ev, l.tap) }
+func (l *spanLink) HandlePointer(ev ggui.PointerEvent) bool { return l.Pointer(ev, l.tap) }
 
 // HandleKey implements KeyHandler.
-func (l *spanLink) HandleKey(ev KeyEvent) { l.Keyboard(ev, l.tap) }
+func (l *spanLink) HandleKey(ev ggui.KeyEvent) { l.Keyboard(ev, l.tap) }
 
 // Describe implements Describer: a link that can be pressed and focused.
-func (l *spanLink) Describe() Node {
-	return Node{Role: RoleLink, Name: l.SemanticName(), Actions: ActionPress | ActionFocus}
+func (l *spanLink) Describe() ggui.Node {
+	return ggui.Node{Role: ggui.RoleLink, Name: l.SemanticName(), Actions: ggui.ActionPress | ggui.ActionFocus}
 }
 
 // paint registers the span's boxes in a paragraph at r.
-func (l *spanLink) paint(dst *Canvas, r Rect, align float64) {
+func (l *spanLink) paint(dst *ggui.Canvas, r ggui.Rect, align float64) {
 	p := &l.w.para
-	var boxes []Rect
+	var boxes []ggui.Rect
 	for _, run := range p.Runs {
 		if run.Span != l.span {
 			continue
 		}
-		p.Rects(run.Start, run.End, r.Size.W, align, func(b Rect) {
-			boxes = append(boxes, Rct(r.Origin.Add(b.Origin), b.Size))
+		p.Rects(run.Start, run.End, r.Size.W, align, func(b ggui.Rect) {
+			boxes = append(boxes, ggui.Rct(r.Origin.Add(b.Origin), b.Size))
 		})
 	}
 	if len(boxes) == 0 {
@@ -494,7 +495,7 @@ func (l *spanLink) paint(dst *Canvas, r Rect, align float64) {
 		if i == 0 {
 			dst.HitKey(b, l)
 		}
-		dst.HitCursor(b, CursorShapePointer)
+		dst.HitCursor(b, ggui.CursorShapePointer)
 	}
 	if l.Focused && l.FocusVisible && dst != nil && dst.Image != nil {
 		col := l.w.base.Color
@@ -505,7 +506,7 @@ func (l *spanLink) paint(dst *Canvas, r Rect, align float64) {
 			}
 		}
 		for _, b := range boxes {
-			dst.StrokeRoundRect(Rct(b.Origin.Add(Pt(-2, -1)), Sz(b.Size.W+4, b.Size.H+2)), 2, 1, col)
+			dst.StrokeRoundRect(ggui.Rct(b.Origin.Add(ggui.Pt(-2, -1)), ggui.Sz(b.Size.W+4, b.Size.H+2)), 2, 1, col)
 		}
 	}
 }
@@ -513,7 +514,7 @@ func (l *spanLink) paint(dst *Canvas, r Rect, align float64) {
 // SelectionAreaWidget lets a drag select across the Selectable texts inside
 // it, as a page in a browser does. Build one with SelectionArea.
 type SelectionAreaWidget struct {
-	child Widget
+	child ggui.Widget
 
 	// The Selectable texts inside, in the order they were painted, which
 	// is the order a selection runs through them; painting gathers the
@@ -527,7 +528,7 @@ type SelectionAreaWidget struct {
 	spans             bool // the selection spans more than one text
 }
 
-var selectionAreaKey = NewEnvKey[*SelectionAreaWidget]("selection area")
+var selectionAreaKey = ggui.NewEnvKey[*SelectionAreaWidget]("selection area")
 
 // SelectionArea lets the reader select across the Selectable texts inside
 // child at once: a drag from one runs through those painted after it, ⌘A
@@ -535,14 +536,14 @@ var selectionAreaKey = NewEnvKey[*SelectionAreaWidget]("selection area")
 // selected of each, a line apart. A conversation of many paragraphs, each
 // a text of its own, then copies as it reads.
 //
-//	ggui.SelectionArea(ggui.Column(
-//		ggui.Text(question).Selectable(),
-//		ggui.Text(answer).Selectable(),
+//	widget.SelectionArea(widget.Column(
+//		widget.Text(question).Selectable(),
+//		widget.Text(answer).Selectable(),
 //	))
-func SelectionArea(child Widget) *SelectionAreaWidget { return &SelectionAreaWidget{child: child} }
+func SelectionArea(child ggui.Widget) *SelectionAreaWidget { return &SelectionAreaWidget{child: child} }
 
 // Layout implements Widget.
-func (a *SelectionAreaWidget) Layout(c Constraints, env Env) Size {
+func (a *SelectionAreaWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	return a.child.Layout(c, env.With(selectionAreaKey, a))
 }
 
@@ -553,7 +554,7 @@ func (a *SelectionAreaWidget) Layout(c Constraints, env Env) Size {
 // texts the last whole frame found, as it keeps that frame's hit regions:
 // gathered from it, they would be the few around a hovered row, and a
 // click would clear the selection of those alone.
-func (a *SelectionAreaWidget) Paint(dst *Canvas, r Rect) {
+func (a *SelectionAreaWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	if !dst.TakesInput() {
 		dst.Paint(a.child, r)
 		return
@@ -567,8 +568,8 @@ func (a *SelectionAreaWidget) Paint(dst *Canvas, r Rect) {
 
 // HandlePointer implements PointerHandler: a press that reaches the area,
 // past every text, clears the selection and lets the press go on.
-func (a *SelectionAreaWidget) HandlePointer(ev PointerEvent) bool {
-	if ev.Kind == PointerDown && ev.Button == MouseButtonLeft && !ev.Mods.Shift {
+func (a *SelectionAreaWidget) HandlePointer(ev ggui.PointerEvent) bool {
+	if ev.Kind == ggui.PointerDown && ev.Button == ggui.MouseButtonLeft && !ev.Mods.Shift {
 		a.clear(nil)
 	}
 	return false
@@ -592,10 +593,10 @@ func (a *SelectionAreaWidget) painted(t *RichTextWidget) { a.painting = append(a
 // pointer handles the pointer for t, a text inside the area: a press
 // starts a selection in it, as a lone text's would, and a drag carries the
 // selection into the texts it reaches.
-func (a *SelectionAreaWidget) pointer(t *RichTextWidget, ev PointerEvent) bool {
+func (a *SelectionAreaWidget) pointer(t *RichTextWidget, ev ggui.PointerEvent) bool {
 	switch ev.Kind {
-	case PointerDown:
-		if ev.Button != MouseButtonLeft {
+	case ggui.PointerDown:
+		if ev.Button != ggui.MouseButtonLeft {
 			return false
 		}
 		if ev.Mods.Shift && a.anchor != nil && slices.Contains(a.texts, a.anchor) && a.anchor != t {
@@ -603,11 +604,11 @@ func (a *SelectionAreaWidget) pointer(t *RichTextWidget, ev PointerEvent) bool {
 			return true
 		}
 		a.clear(t)
-		t.clicks.Press(&t.ed, ClockTime(), ev.Pos, t.offsetAt, ev.Mods.Shift)
+		t.clicks.Press(&t.ed, ggui.ClockTime(), ev.Pos, t.offsetAt, ev.Mods.Shift)
 		a.anchor, a.anchorAt = t, t.ed.Anchor
 		a.focus, a.focusAt = t, t.ed.Caret
 		return true
-	case PointerDrag:
+	case ggui.PointerDrag:
 		u, at := a.textAt(ev.Pos)
 		if u == nil || u == a.anchor || !slices.Contains(a.texts, a.anchor) {
 			// Within the text it began in, the selection grows as a lone
@@ -619,7 +620,7 @@ func (a *SelectionAreaWidget) pointer(t *RichTextWidget, ev PointerEvent) bool {
 		}
 		a.extend(u, at)
 		return true
-	case PointerUp, PointerTap, PointerMove, PointerEnter, PointerExit:
+	case ggui.PointerUp, ggui.PointerTap, ggui.PointerMove, ggui.PointerEnter, ggui.PointerExit:
 		return true
 	}
 	return false
@@ -637,7 +638,7 @@ func (a *SelectionAreaWidget) extend(u *RichTextWidget, at int) {
 	lo, hi := min(i, j), max(i, j)
 	// The texts it runs through are not the one the pointer reached, which
 	// alone the frame would paint again.
-	RepaintAll()
+	ggui.RepaintAll()
 	for k, t := range a.texts {
 		switch {
 		case k == i && k == j:
@@ -676,7 +677,7 @@ func (a *SelectionAreaWidget) clear(keep *RichTextWidget) {
 	for _, t := range a.texts {
 		if t != keep && t.ed.HasSelection() {
 			t.ed.MoveTo(t.ed.Caret, false)
-			RepaintAll()
+			ggui.RepaintAll()
 		}
 	}
 	a.spans = false
@@ -685,7 +686,7 @@ func (a *SelectionAreaWidget) clear(keep *RichTextWidget) {
 // textAt returns the text inside the area at the window point at, and the
 // offset in it nearest at. Between texts it is the one level with at, or
 // the one above it, at its end; above every text, the first, at its start.
-func (a *SelectionAreaWidget) textAt(at Point) (*RichTextWidget, int) {
+func (a *SelectionAreaWidget) textAt(at ggui.Point) (*RichTextWidget, int) {
 	for _, t := range a.texts {
 		if t.rect.Contains(at) {
 			return t, t.offsetAt(at)
@@ -717,9 +718,9 @@ func (a *SelectionAreaWidget) textAt(at Point) (*RichTextWidget, int) {
 // whose rows are laid out only near the window. Case is ignored. ok is
 // false, and the selection is left as it was, when there are no more than
 // n matches.
-func (a *SelectionAreaWidget) Find(needle string, top float64, n int) (at Rect, ok bool) {
+func (a *SelectionAreaWidget) Find(needle string, top float64, n int) (at ggui.Rect, ok bool) {
 	if needle == "" || n < 0 {
-		return Rect{}, false
+		return ggui.Rect{}, false
 	}
 	for _, t := range a.texts {
 		if t.rect.Origin.Y+t.rect.Size.H <= top {
@@ -741,7 +742,7 @@ func (a *SelectionAreaWidget) Find(needle string, top float64, n int) (at Rect, 
 			t.ed.MoveTo(hi, true)
 			a.anchor, a.anchorAt, a.focus, a.focusAt = t, lo, t, hi
 			first := true
-			t.para.Rects(lo, hi, t.rect.Size.W, t.alignment(), func(b Rect) {
+			t.para.Rects(lo, hi, t.rect.Size.W, t.alignment(), func(b ggui.Rect) {
 				b.Origin = t.rect.Origin.Add(b.Origin)
 				if first {
 					at, first = b, false
@@ -752,7 +753,7 @@ func (a *SelectionAreaWidget) Find(needle string, top float64, n int) (at Rect, 
 			return at, true
 		}
 	}
-	return Rect{}, false
+	return ggui.Rect{}, false
 }
 
 // Selectable lets the reader select the paragraph's text and copy it: a
@@ -787,7 +788,7 @@ func (t *RichTextWidget) SelectedText() string { return t.ed.Selected() }
 
 // layoutRich lays a Selectable Text out as a one-span RichText in style,
 // the Text's own merged onto the one it inherits.
-func (t *TextWidget) layoutRich(c Constraints, env Env, style TextStyle) Size {
+func (t *TextWidget) layoutRich(c ggui.Constraints, env ggui.Env, style ggui.TextStyle) ggui.Size {
 	r := &t.rich.w
 	if len(r.cur) != 1 || r.cur[0].text != t.value {
 		r.spans.Set([]TextSpan{Span(t.value)})
@@ -800,20 +801,20 @@ func (t *TextWidget) layoutRich(c Constraints, env Env, style TextStyle) Size {
 
 // Describe implements Describer: text whose selection a screen reader can
 // read and move.
-func (t *RichTextWidget) Describe() Node {
+func (t *RichTextWidget) Describe() ggui.Node {
 	lo, hi := t.ed.Selection()
-	return Node{
-		Role:     roleOr(t.role, RoleText),
+	return ggui.Node{
+		Role:     roleOr(t.role, ggui.RoleText),
 		Name:     t.para.Text,
-		Actions:  ActionFocus | ActionSetSelection,
+		Actions:  ggui.ActionFocus | ggui.ActionSetSelection,
 		SelStart: lo,
 		SelEnd:   hi,
 	}
 }
 
 // Act implements Actor: a screen reader moves the selection.
-func (t *RichTextWidget) Act(a Action) bool {
-	if a.Kind != ActionSetSelection || !t.selectable {
+func (t *RichTextWidget) Act(a ggui.Action) bool {
+	if a.Kind != ggui.ActionSetSelection || !t.selectable {
 		return false
 	}
 	t.ed.MoveTo(a.SelStart, false)
@@ -827,14 +828,14 @@ func (t *RichTextWidget) TabStop() bool { return false }
 
 // ConsumesKey implements KeyConsumer: Escape clears a selection, and the
 // arrows move one; with nothing selected Escape passes on.
-func (t *RichTextWidget) ConsumesKey(ev KeyEvent) bool {
-	if ev.Kind != KeyPress {
+func (t *RichTextWidget) ConsumesKey(ev ggui.KeyEvent) bool {
+	if ev.Kind != ggui.KeyPress {
 		return false
 	}
 	switch ev.Key {
-	case KeyEscape:
+	case ggui.KeyEscape:
 		return t.ed.HasSelection() || t.area != nil && t.area.spans
-	case KeyArrowLeft, KeyArrowRight, KeyHome, KeyEnd:
+	case ggui.KeyArrowLeft, ggui.KeyArrowRight, ggui.KeyHome, ggui.KeyEnd:
 		return ev.Mods.Shift
 	}
 	return false
@@ -842,44 +843,44 @@ func (t *RichTextWidget) ConsumesKey(ev KeyEvent) bool {
 
 // ClaimsChord implements ChordClaimer: select-all and copy stay with the
 // focused text, ahead of a shortcut on the same chord.
-func (t *RichTextWidget) ClaimsChord(ev KeyEvent) bool {
-	return ev.Kind == KeyPress && t.selectable && ev.Mods.Cmd() && (ev.Key == KeyA || ev.Key == KeyC)
+func (t *RichTextWidget) ClaimsChord(ev ggui.KeyEvent) bool {
+	return ev.Kind == ggui.KeyPress && t.selectable && ev.Mods.Cmd() && (ev.Key == ggui.KeyA || ev.Key == ggui.KeyC)
 }
 
 // HandleKey implements KeyHandler.
-func (t *RichTextWidget) HandleKey(ev KeyEvent) {
+func (t *RichTextWidget) HandleKey(ev ggui.KeyEvent) {
 	switch ev.Kind {
-	case KeyFocus:
+	case ggui.KeyFocus:
 		t.focused = true
-	case KeyBlur:
+	case ggui.KeyBlur:
 		t.focused = false
-	case KeyPress:
+	case ggui.KeyPress:
 		m := ev.Mods
 		switch ev.Key {
-		case KeyA:
+		case ggui.KeyA:
 			if m.Cmd() && t.area != nil {
 				t.area.selectAll()
 			} else if m.Cmd() {
 				t.ed.SelectAll()
 			}
-		case KeyC:
+		case ggui.KeyC:
 			if m.Cmd() && t.area != nil && t.area.spans {
-				CurrentClipboard().Write(t.area.SelectedText())
+				ggui.CurrentClipboard().Write(t.area.SelectedText())
 			} else if m.Cmd() && t.ed.HasSelection() {
-				CurrentClipboard().Write(t.ed.Selected())
+				ggui.CurrentClipboard().Write(t.ed.Selected())
 			}
-		case KeyEscape:
+		case ggui.KeyEscape:
 			if t.area != nil {
 				t.area.clear(nil)
 			}
 			t.ed.MoveTo(t.ed.Caret, false)
-		case KeyArrowLeft, KeyArrowRight:
+		case ggui.KeyArrowLeft, ggui.KeyArrowRight:
 			if m.Shift {
-				t.ed.MoveBy(gem.Pick(ev.Key == KeyArrowLeft, -1, 1), textedit.WordWise(m.Alt, m.Ctrl, m.Meta), true)
+				t.ed.MoveBy(gem.Pick(ev.Key == ggui.KeyArrowLeft, -1, 1), textedit.WordWise(m.Alt, m.Ctrl, m.Meta), true)
 			}
-		case KeyHome, KeyEnd:
+		case ggui.KeyHome, ggui.KeyEnd:
 			if m.Shift {
-				t.ed.MoveTo(gem.Pick(ev.Key == KeyHome, 0, len(t.ed.Text)), true)
+				t.ed.MoveTo(gem.Pick(ev.Key == ggui.KeyHome, 0, len(t.ed.Text)), true)
 			}
 		}
 	}
@@ -888,21 +889,21 @@ func (t *RichTextWidget) HandleKey(ev KeyEvent) {
 // HandlePointer implements PointerHandler: a press places the selection's
 // start, a drag extends it, and repeated clicks select a word, then the
 // line.
-func (t *RichTextWidget) HandlePointer(ev PointerEvent) bool {
+func (t *RichTextWidget) HandlePointer(ev ggui.PointerEvent) bool {
 	if t.area != nil {
 		return t.area.pointer(t, ev)
 	}
 	switch ev.Kind {
-	case PointerDown:
-		if ev.Button != MouseButtonLeft {
+	case ggui.PointerDown:
+		if ev.Button != ggui.MouseButtonLeft {
 			return false
 		}
-		t.clicks.Press(&t.ed, ClockTime(), ev.Pos, t.offsetAt, ev.Mods.Shift)
+		t.clicks.Press(&t.ed, ggui.ClockTime(), ev.Pos, t.offsetAt, ev.Mods.Shift)
 		return true
-	case PointerDrag:
+	case ggui.PointerDrag:
 		t.clicks.Drag(&t.ed, ev.Pos, t.offsetAt)
 		return true
-	case PointerUp, PointerTap, PointerMove, PointerEnter, PointerExit:
+	case ggui.PointerUp, ggui.PointerTap, ggui.PointerMove, ggui.PointerEnter, ggui.PointerExit:
 		return true
 	}
 	return false
@@ -913,8 +914,8 @@ func (t *RichTextWidget) HandlePointer(ev PointerEvent) bool {
 func (t *RichTextWidget) CaptureTouchDrag() bool { return t.selectable }
 
 // offsetAt returns the text offset nearest the window point at.
-func (t *RichTextWidget) offsetAt(at Point) int {
-	return t.para.OffsetAt(Pt(at.X-t.rect.Origin.X, at.Y-t.rect.Origin.Y), t.rect.Size.W, t.alignment())
+func (t *RichTextWidget) offsetAt(at ggui.Point) int {
+	return t.para.OffsetAt(ggui.Pt(at.X-t.rect.Origin.X, at.Y-t.rect.Origin.Y), t.rect.Size.W, t.alignment())
 }
 
 // Adopt implements Adopter: a rebuilt paragraph at the same place keeps

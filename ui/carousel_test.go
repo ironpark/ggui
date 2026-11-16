@@ -7,12 +7,13 @@ import (
 
 	"github.com/ironpark/ggui"
 	uitheme "github.com/ironpark/ggui/ui/theme"
+	"github.com/ironpark/ggui/widget"
 )
 
 func carouselSlides(n int, basis float64) []ggui.Widget {
 	w := make([]ggui.Widget, n)
 	for i := range w {
-		w[i] = CarouselItem(ggui.Text("Slide")).Basis(basis)
+		w[i] = CarouselItem(widget.Text("Slide")).Basis(basis)
 	}
 	return w
 }
@@ -226,7 +227,7 @@ func BenchmarkCarouselVisiblePaint10000(b *testing.B) {
 func TestCarouselAutoplayPausesForFocusedSlideChild(t *testing.T) {
 	t.Parallel()
 	child := Button("Inside", func() {})
-	c := Carousel(ggui.State(0), child, ggui.Text("Second")).Autoplay(time.Second).StopOnInteraction(false)
+	c := Carousel(ggui.State(0), child, widget.Text("Second")).Autoplay(time.Second).StopOnInteraction(false)
 	p := ggui.NewProbe(c, ggui.Sz(416, 240))
 	defer p.Close()
 	p.Advance(0)
@@ -263,7 +264,7 @@ func TestCarouselSpringMatchesReferenceSteps(t *testing.T) {
 func TestCarouselContentFlattensIntoSlides(t *testing.T) {
 	t.Parallel()
 	value := ggui.State(0)
-	c := Carousel(value, CarouselContent(ggui.Text("a"), CarouselItem(ggui.Text("b"))), nil, ggui.Text("c"))
+	c := Carousel(value, CarouselContent(widget.Text("a"), CarouselItem(widget.Text("b"))), nil, widget.Text("c"))
 	p := ggui.NewProbe(c, ggui.Sz(416, 240))
 	defer p.Close()
 	p.Frame()
@@ -274,7 +275,7 @@ func TestCarouselContentFlattensIntoSlides(t *testing.T) {
 		t.Fatalf("first slide is not described:\n%s", p.Semantics())
 	}
 	// Standalone, the content is a plain row of its items.
-	row := ggui.NewProbe(CarouselContent(ggui.Text("a"), ggui.Text("b")), ggui.Sz(200, 40))
+	row := ggui.NewProbe(CarouselContent(widget.Text("a"), widget.Text("b")), ggui.Sz(200, 40))
 	defer row.Close()
 	if _, ok := row.Semantics().Find("", "b"); !ok {
 		t.Fatal("standalone CarouselContent did not paint its items")
@@ -286,7 +287,7 @@ func TestCarouselBasisWhenFollowsTheViewport(t *testing.T) {
 	var seen []ggui.Size
 	slides := make([]ggui.Widget, 4)
 	for i := range slides {
-		slides[i] = CarouselItem(ggui.Text("Slide")).BasisWhen(func(s ggui.Size) float64 {
+		slides[i] = CarouselItem(widget.Text("Slide")).BasisWhen(func(s ggui.Size) float64 {
 			seen = append(seen, s)
 			if s.W >= 400 {
 				return .5
@@ -314,7 +315,7 @@ func TestCarouselBasisWhenFollowsTheViewport(t *testing.T) {
 func TestCarouselWithoutControlsUsesTheFullWidth(t *testing.T) {
 	t.Parallel()
 	c := Carousel(ggui.State(0), carouselSlides(3, 1)...).Controls(false).Gap(-5).Height(-1)
-	p := ggui.NewProbe(ggui.Column(c), ggui.Sz(416, 240))
+	p := ggui.NewProbe(widget.Column(c), ggui.Sz(416, 240))
 	defer p.Close()
 	p.Frame()
 	if _, ok := p.Semantics().Find(ggui.RoleButton, "Next slide"); ok {
@@ -444,7 +445,7 @@ func TestCarouselStandaloneNavigationButtons(t *testing.T) {
 	t.Parallel()
 	value := ggui.State(0)
 	c := Carousel(value, carouselSlides(4, 1)...).Controls(false)
-	p := ggui.NewProbe(ggui.Column(c, ggui.Row(CarouselPrevious(c), CarouselNext(c))), ggui.Sz(416, 320))
+	p := ggui.NewProbe(widget.Column(c, widget.Row(CarouselPrevious(c), CarouselNext(c))), ggui.Sz(416, 320))
 	defer p.Close()
 	prev, _ := p.Semantics().Find(ggui.RoleButton, "Previous slide")
 	if !prev.Disabled {

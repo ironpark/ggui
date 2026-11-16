@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 func drawerGrip(s *ui.SheetWidget) ggui.Point {
@@ -17,8 +18,8 @@ func TestDrawerDragDismissesAndReturnsFocus(t *testing.T) {
 	t.Parallel()
 	open := ggui.State(false)
 	closed := 0
-	s := ui.Drawer(open, ggui.Text("Content")).Name("Details").Size(200).OnClose(func() { closed++ })
-	p := ggui.NewProbe(ggui.Column(ui.Button("Show", func() { open.Set(true) }), s), ggui.Sz(400, 300))
+	s := ui.Drawer(open, widget.Text("Content")).Name("Details").Size(200).OnClose(func() { closed++ })
+	p := ggui.NewProbe(widget.Column(ui.Button("Show", func() { open.Set(true) }), s), ggui.Sz(400, 300))
 	defer p.Close()
 	p.Key("tab", "enter")
 	p.Frame()
@@ -50,7 +51,7 @@ func TestDrawerSnapsOnReleaseAndFollowsBinding(t *testing.T) {
 	t.Parallel()
 	selected := ggui.State(0)
 	changes := 0
-	s := ui.Drawer(ggui.State(true), ggui.Text("Content")).Name("Details").SnapPoints(80, 160, 260).BindSnapPoint(selected).OnSnapChange(func(int) { changes++ })
+	s := ui.Drawer(ggui.State(true), widget.Text("Content")).Name("Details").SnapPoints(80, 160, 260).BindSnapPoint(selected).OnSnapChange(func(int) { changes++ })
 	p := openSheet(t, s)
 	if s.Rect().Origin.Y != 220 {
 		t.Fatalf("initial snap: %v", s.Rect())
@@ -98,7 +99,7 @@ func TestDrawerSnapsOnReleaseAndFollowsBinding(t *testing.T) {
 func TestDrawerControlledSnapCanBeRejected(t *testing.T) {
 	t.Parallel()
 	requested := -1
-	s := ui.Drawer(ggui.State(true), ggui.Text("Content")).SnapPoints(80, 160, 260).BindSnapPoint(ggui.Controlled(0, func(i int) { requested = i }))
+	s := ui.Drawer(ggui.State(true), widget.Text("Content")).SnapPoints(80, 160, 260).BindSnapPoint(ggui.Controlled(0, func(i int) { requested = i }))
 	p := openSheet(t, s)
 	start := drawerGrip(s)
 	p.Press(start)
@@ -113,7 +114,7 @@ func TestDrawerControlledSnapCanBeRejected(t *testing.T) {
 func TestDrawerNonDismissibleDragSettlesAndEscapeStillCloses(t *testing.T) {
 	t.Parallel()
 	open := ggui.State(true)
-	s := ui.Drawer(open, ggui.Text("Content")).SnapPoints(80, 160).SnapPoint(1).Dismissible(false)
+	s := ui.Drawer(open, widget.Text("Content")).SnapPoints(80, 160).SnapPoint(1).Dismissible(false)
 	p := openSheet(t, s)
 	start := drawerGrip(s)
 	p.Press(start)
@@ -158,7 +159,7 @@ func TestDrawerDragDoesNotStealContentAndCanBeDisabled(t *testing.T) {
 func TestDrawerSnapPointsClampToViewportAndRespectReducedMotion(t *testing.T) {
 	t.Parallel()
 	selected := ggui.State(1)
-	s := ui.Drawer(ggui.State(true), ggui.Text("Content")).SnapPoints(80, 600).BindSnapPoint(selected)
+	s := ui.Drawer(ggui.State(true), widget.Text("Content")).SnapPoints(80, 600).BindSnapPoint(selected)
 	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, s), ggui.Sz(400, 300))
 	defer p.Close()
 	p.Frame()

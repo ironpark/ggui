@@ -20,7 +20,7 @@ func TestTextFieldCallbacksFollowEditsSubmitAndBlur(t *testing.T) {
 		OnChange(func(s string) { changes = append(changes, s) }).
 		OnSubmit(func(s string) { submits = append(submits, s) }).
 		OnCommit(func(s string) { commits = append(commits, s) })
-	p := ggui.NewProbe(ggui.Column(field, ui.Button("Elsewhere", nil)), ggui.Sz(300, 120))
+	p := ggui.NewProbe(widget.Column(field, ui.Button("Elsewhere", nil)), ggui.Sz(300, 120))
 	defer p.Close()
 	p.Tap("Code")
 	paste(p, "a1b2")
@@ -62,7 +62,7 @@ func TestTextFieldMultilineBreaksOnEnterAndSubmitsOnCmdEnter(t *testing.T) {
 	submitted := ""
 	single := ui.TextField(ggui.State("")).Name("Single")
 	multi := ui.TextField(value).Name("Notes").Multiline().Lines(3).OnSubmit(func(s string) { submitted = s })
-	p := ggui.NewProbe(ggui.Column(single, multi), ggui.Sz(300, 300))
+	p := ggui.NewProbe(widget.Column(single, multi), ggui.Sz(300, 300))
 	defer p.Close()
 	one, _ := p.FindRole(ggui.RoleTextField, "Single")
 	three, _ := p.FindRole(ggui.RoleTextField, "Notes")
@@ -87,7 +87,7 @@ func TestTextFieldMinWidthStyleAndBaselineShapeTheBox(t *testing.T) {
 	plain := ui.TextField(ggui.State("x")).Name("Plain")
 	wide := ui.TextField(ggui.State("x")).Name("Wide").MinWidth(260)
 	big := ui.TextField(ggui.State("x")).Name("Big").Style(ggui.TextStyle{Size: 40})
-	p := ggui.NewProbe(ggui.Column(ggui.Row(plain), ggui.Row(wide), ggui.Row(big)), ggui.Sz(600, 400))
+	p := ggui.NewProbe(widget.Column(widget.Row(plain), widget.Row(wide), widget.Row(big)), ggui.Sz(600, 400))
 	defer p.Close()
 	a, _ := p.FindRole(ggui.RoleTextField, "Plain")
 	b, _ := p.FindRole(ggui.RoleTextField, "Wide")

@@ -6,12 +6,13 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // textArea is a field that fills the window and asks for the I-beam all
 // over it, for a panel to float over.
 func textArea() ggui.Widget {
-	return ggui.Pointer(ggui.Box().Size(400, 300)).Cursor(ggui.CursorShapeText)
+	return widget.Pointer(widget.Box().Size(400, 300)).Cursor(ggui.CursorShapeText)
 }
 
 // A menu's rows and the panel around them show the arrow over a text field
@@ -19,7 +20,7 @@ func textArea() ggui.Widget {
 func TestAMenuShowsTheArrowOverATextField(t *testing.T) {
 	t.Parallel()
 	m := ui.Menu("File", ui.MenuItem("Open", nil), ui.MenuItem("Save", nil))
-	p := ggui.NewProbe(ggui.Stack(textArea(), ggui.Padding(m, 40, 0, 0, 40)), ggui.Sz(400, 300))
+	p := ggui.NewProbe(widget.Stack(textArea(), widget.Padding(m, 40, 0, 0, 40)), ggui.Sz(400, 300))
 	defer p.Close()
 	p.Move(ggui.Pt(200, 200))
 	if got := p.Cursor(); got != ggui.CursorShapeText {
@@ -48,8 +49,8 @@ func TestAMenuShowsTheArrowOverATextField(t *testing.T) {
 func TestADialogShowsTheArrowOverATextField(t *testing.T) {
 	t.Parallel()
 	open := ggui.State(true)
-	d := ui.Dialog(open, ggui.Column(ggui.Text("Rename"), ui.TextField(ggui.State("")).Placeholder("name")))
-	p := ggui.NewProbe(ggui.Stack(textArea(), d), ggui.Sz(400, 300))
+	d := ui.Dialog(open, widget.Column(widget.Text("Rename"), ui.TextField(ggui.State("")).Placeholder("name")))
+	p := ggui.NewProbe(widget.Stack(textArea(), d), ggui.Sz(400, 300))
 	defer p.Close()
 	p.Advance(time.Second)
 	title, ok := p.Semantics().Find(ggui.RoleText, "Rename")
@@ -91,7 +92,7 @@ func TestAContextMenuLeavesItsContentTheCursor(t *testing.T) {
 func TestAButtonOverATextFieldShowsTheArrow(t *testing.T) {
 	t.Parallel()
 	b := ui.Button("Clear", nil)
-	p := ggui.NewProbe(ggui.Stack(textArea(), ggui.Padding(b, 20, 0, 0, 20)), ggui.Sz(400, 300))
+	p := ggui.NewProbe(widget.Stack(textArea(), widget.Padding(b, 20, 0, 0, 20)), ggui.Sz(400, 300))
 	defer p.Close()
 	p.Move(find(t, p, ggui.RoleButton, "Clear").Rect.Center())
 	if got := p.Cursor(); got != ggui.CursorShapeDefault {

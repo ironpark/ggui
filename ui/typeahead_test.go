@@ -6,6 +6,7 @@ import (
 
 	"github.com/ironpark/ggui"
 	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
 )
 
 // Enter and Space open a Select with nothing chosen on its first enabled
@@ -17,7 +18,7 @@ func TestSelectKeyboardOpenStartsOnTheFirstOptionAndDoesNotWrap(t *testing.T) {
 		value := ggui.State("")
 		box := ui.Select(value).Options([]string{"Alpha", "Beta", "Gamma"}).Name("Choice").Placeholder("Pick").
 			DisabledOption(func(v string) bool { return v == "Alpha" })
-		p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(box)), ggui.Sz(300, 300))
+		p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(box)), ggui.Sz(300, 300))
 		p.Key("tab", key, "enter")
 		if value.Get() != "Beta" {
 			t.Fatalf("%s then Enter chose %q, want Beta, the first enabled option", key, value.Get())
@@ -44,7 +45,7 @@ func TestSelectTypeaheadFollowsBaseUI(t *testing.T) {
 	space := func(p *ggui.Probe) { p.TypeText(ggui.Mods{}, ggui.KeySpace, " ") }
 	value := ggui.State("")
 	box := ui.Select(value).Options([]string{"New Jersey", "New York", "Nevada", "Ohio"}).Name("State").Placeholder("Pick")
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(box)), ggui.Sz(300, 400))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(box)), ggui.Sz(300, 400))
 	defer p.Close()
 	p.Key("tab")
 	p.Text("n")
@@ -101,7 +102,7 @@ func TestSelectTypeaheadFollowsBaseUI(t *testing.T) {
 	} {
 		v := ggui.State("")
 		s := ui.Select(v).Options(c.options).Name("Name")
-		q := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(s)), ggui.Sz(300, 300))
+		q := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(s)), ggui.Sz(300, 300))
 		q.Key("tab")
 		q.Text("a")
 		q.Text("a")
@@ -119,7 +120,7 @@ func TestSelectTypeaheadStartsAfterTheChosenOption(t *testing.T) {
 	t.Parallel()
 	value := ggui.State("Banana")
 	box := ui.Select(value).Options([]string{"Apple", "Banana", "Blueberry", "Cherry", "Bilberry"}).Name("Fruit")
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(box)), ggui.Sz(300, 400))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(box)), ggui.Sz(300, 400))
 	defer p.Close()
 	p.Key("tab", "down", "down", "down") // open on Banana, then to Cherry
 	p.Text("b")
@@ -136,7 +137,7 @@ func TestMenuTypeaheadResetsAfterHalfASecond(t *testing.T) {
 	ran := ""
 	item := func(label string) *ui.MenuItemWidget { return ui.MenuItem(label, func() { ran = label }) }
 	menu := ui.Menu("File", item("Save"), item("Save as"), item("Aardvark"), item("Print"))
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(menu)), ggui.Sz(400, 400))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(menu)), ggui.Sz(400, 400))
 	defer p.Close()
 	p.Tap("File")
 	p.Text("s")
@@ -168,8 +169,8 @@ func TestMenusExpandedByAnActionStartOnTheFirstRow(t *testing.T) {
 		return []ggui.Widget{ui.MenuItem("Open", func() { ran = "open" }), ui.MenuItem("Save", func() { ran = "save" })}
 	}
 	menu := ui.Menu("File", entries()...)
-	ctx := ui.ContextMenu(ggui.Box(ggui.Text("Target")).Size(100, 40), entries()...).Name("Target actions")
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(menu, ctx)), ggui.Sz(400, 400))
+	ctx := ui.ContextMenu(widget.Box(widget.Text("Target")).Size(100, 40), entries()...).Name("Target actions")
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(menu, ctx)), ggui.Sz(400, 400))
 	defer p.Close()
 	for name, expand := range map[string]func() bool{
 		"dropdown": func() bool { return menu.Act(ggui.Action{Kind: ggui.ActionExpand}) },
@@ -196,7 +197,7 @@ func TestMenubarOpensOnDownAndNotOnUp(t *testing.T) {
 	t.Parallel()
 	ran := ""
 	bar := ui.Menubar(ui.Menu("Edit", ui.MenuItem("Undo", func() { ran = "undo" }), ui.MenuItem("Redo", func() { ran = "redo" })))
-	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, ggui.Column(bar)), ggui.Sz(400, 300))
+	p := ggui.NewProbe(ggui.Provide(ggui.ReducedMotionKey, true, widget.Column(bar)), ggui.Sz(400, 300))
 	defer p.Close()
 	p.Key("tab", "up")
 	if bar.Popup().IsOpen() {
