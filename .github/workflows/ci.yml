@@ -55,6 +55,14 @@ jobs:
         run: go test -tags ggui_inspector . ./widget
       - name: Test the debug build
         run: go test -tags ggui_debug . ./widget ./internal/reactive
+      # The build ggui dev shows in its viewer: ggwd's remote backend is
+      # linked in, which only unix systems have. The tests set the viewer's
+      # socket in the environment and need no viewer.
+      - name: Test the remote display build
+        if: runner.os != 'Windows'
+        run: |
+          go test -tags ggwd_remote . ./internal/platform/... ./runtime
+          go build -tags ggwd_remote,ggui_inspector,ggui_debug -o /dev/null ./examples/counter
       # The race detector needs cgo, which the Windows runner has no C
       # toolchain configured for. Probe tests run under t.Parallel, and
       # -race is what shows that no probe reaches another's state.

@@ -54,6 +54,11 @@ version = {{.Version}}
 # Files or directories to watch besides the Go sources the app is built
 # from, the files it embeds and this file: assets read at run time.
 # watch = []
+# Where the app's window shows: "remote" keeps one window, the viewer's,
+# open while the app is rebuilt and restarts; "window" gives each run a
+# window of its own, as a release build has. Remote is the default on
+# macOS; ggui dev --display overrides this.
+# display = "remote"
 
 [macos]
 # The oldest macOS the app runs on: LSMinimumSystemVersion. Programs

@@ -26,6 +26,7 @@ import (
 type Options struct {
 	Dir    string
 	Env    []string // the whole environment; nil for ggui's own
+	Stdin  io.Reader
 	Stdout io.Writer
 	Stderr io.Writer
 }
@@ -42,13 +43,14 @@ type Process struct {
 }
 
 // Start starts name with args in a group of its own. Its standard input
-// is empty: the app reads nothing from the terminal, and a process outside
-// the terminal's foreground group that tried would be stopped.
+// is Stdin, empty when that is nil, as it is for the app: the app reads
+// nothing from the terminal, and a process outside the terminal's
+// foreground group that tried would be stopped.
 func Start(name string, args []string, o Options) (*Process, error) {
 	cmd := exec.Command(name, args...)
 	cmd.Dir = o.Dir
 	cmd.Env = o.Env
-	cmd.Stdout, cmd.Stderr = o.Stdout, o.Stderr
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = o.Stdin, o.Stdout, o.Stderr
 	cmd.SysProcAttr = sysProcAttr()
 	if err := cmd.Start(); err != nil {
 		return nil, err

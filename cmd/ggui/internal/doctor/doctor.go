@@ -78,6 +78,7 @@ func Run(ctx context.Context, o Options) *Report {
 	checkGoVersion(r, env, proj)
 	checkTarget(r, env)
 	r.Checks = append(r.Checks, pr.Checks...)
+	checkRemote(ctx, r, o, proj)
 	checkConfig(r, o)
 	checkPlatform(ctx, r, env)
 	checkTools(ctx, r, env)

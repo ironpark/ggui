@@ -26,6 +26,8 @@ tasks:
       - '"{{.GO}}" build ./...'
       # Only the root package has tagged files, so the second pass is scoped to it.
       - '"{{.GO}}" build -tags ggui_inspector .'
+      # What ggui dev runs in its viewer, ggwd's remote backend linked in.
+      - '"{{.GO}}" build -tags ggwd_remote,ggui_inspector,ggui_debug ./...'
       - '"{{.GO}}" build -C examples/sqlite ./...'
       - '"{{.GO}}" build -C fonts/notoemoji ./...'
       - '"{{.GO}}" build -C icons/heroicons ./...'
@@ -43,6 +45,7 @@ tasks:
     cmds:
       - '"{{.GO}}" test ./...'
       - '"{{.GO}}" test -tags ggui_inspector . ./widget ./internal/apitest'
+      - '"{{.GO}}" test -tags ggwd_remote . ./internal/platform/... ./runtime'
       - '"{{.GO}}" test -C examples/sqlite ./...'
       - '"{{.GO}}" test -C fonts/notoemoji ./...'
       - '"{{.GO}}" test -C icons/heroicons ./...'
