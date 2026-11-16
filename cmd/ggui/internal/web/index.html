@@ -72,7 +72,22 @@
   }
   #retry:hover { border-color: var(--dim); }
   #loader.failed #retry { display: inline-block; }
+
+  /* ggui dev's notice over the running app: a rebuild under way, or the
+     compiler's errors while the app keeps running the last good build. */
+  #dev {
+    position: fixed; right: 12px; bottom: 12px; z-index: 20; display: none;
+    max-width: min(720px, calc(100vw - 24px)); box-sizing: border-box; padding: 8px 12px;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--fg);
+    box-shadow: 0 8px 24px rgb(0 0 0 / .12); font-size: 12px;
+  }
+  #dev.shown { display: block; }
+  #dev.error { border-color: var(--bad); }
+  #dev pre { margin: 8px 0 0; max-height: 40vh; overflow: auto; white-space: pre-wrap;
+             font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #dev pre:empty { display: none; }
 </style>
+<!--ggui:config-->
 <div id="loader">
   <div class="card">
     <div class="head">
@@ -92,11 +107,19 @@
     <button id="retry" type="button">Rebuild and reload</button>
   </div>
 </div>
+<div id="dev"><span id="dev-text"></span><pre id="dev-error"></pre></div>
 <script src="wasm_exec.js"></script>
 <script>
+// config is written by ggui: dev is true when ggui dev serves the page,
+// which has a build to wait for and tells the page about rebuilds; a
+// bundle from ggui build is served by any static host and has neither,
+// and says instead how large the binary is.
+const config = Object.assign({ dev: false, size: 0, target: '' }, window.gguiConfig);
 const $ = (id) => document.getElementById(id);
 const loader = $('loader'), track = $('track'), bar = $('bar'), note = $('note');
 const pageStart = performance.now();
+if (!config.dev) $('build').remove();
+if (config.target) $('target').textContent = config.target;
 
 const secs = (ms) => (ms / 1000).toFixed(1) + 's';
 const mb = (n) => (n / (1 << 20)).toFixed(1) + ' MB';
@@ -138,9 +161,48 @@ const fail = (text) => {
 
 // Retrying drops the failed build on the server, which a page load does too;
 // asking for it outright also covers a build that succeeded but will not run.
+// A static bundle has nothing to rebuild, and retrying is reloading.
+$('retry').textContent = config.dev ? 'Rebuild and reload' : 'Reload';
 $('retry').onclick = async () => {
-  try { await fetch('_rebuild', { cache: 'no-store' }); } catch {}
+  if (config.dev) {
+    try { await fetch('_rebuild', { cache: 'no-store' }); } catch {}
+  }
   location.reload();
+};
+
+// The build this page runs, once it has one; null while it loads or after
+// it failed to.
+let running = null;
+let failed = false;
+
+// devNotice shows what ggui dev is doing over the running app: nothing,
+// a rebuild under way, or the errors of one that failed.
+const devNotice = (text, error) => {
+  const box = $('dev');
+  box.classList.toggle('shown', !!text);
+  box.classList.toggle('error', !!error);
+  $('dev-text').textContent = text || '';
+  $('dev-error').textContent = error || '';
+};
+
+// follow listens for ggui dev's builds. A new build that succeeded reloads
+// the page, which loads it; one that failed is shown over the app, which
+// keeps running the build before it. EventSource reconnects by itself when
+// ggui dev restarts, and the first event after it does names the build it
+// has, which is new, so the page reloads onto it.
+const follow = () => {
+  const events = new EventSource('_events');
+  events.onmessage = (e) => {
+    const s = JSON.parse(e.data);
+    if (s.state === 'building') {
+      if (running) devNotice('Rebuilding…');
+    } else if (s.state === 'error') {
+      if (running) devNotice('Build failed; the app is running the last build that succeeded.', s.error);
+    } else if (s.state === 'ready') {
+      if ((running && s.id !== running) || failed) location.reload();
+      else devNotice('');
+    }
+  };
 };
 
 // The loader goes once the app has painted, not the moment Go starts, so
@@ -230,9 +292,11 @@ const compile = async (bytes, go) => {
 };
 
 (async () => {
+  if (config.dev) follow();
   try {
-    const status = await waitForBuild();
+    const status = config.dev ? await waitForBuild() : { size: config.size };
     const bytes = await download(status.size);
+    running = status.id || 'static';
     const go = new Go();
     const instance = await compile(bytes, go);
     const s = step('start');
@@ -243,6 +307,8 @@ const compile = async (bytes, go) => {
     loader.classList.add('done');
     setTimeout(() => loader.remove(), 300);
   } catch (e) {
+    failed = true;
+    running = null;
     fail(String(e && e.message || e));
   }
 })();

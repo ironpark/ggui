@@ -106,6 +106,18 @@ go run .
 `State` holds the count, `Textf` follows it, and the button updates it.
 No manual refresh or subscription wiring is needed.
 
+### Or start with the ggui command
+
+```sh
+go install github.com/ironpark/ggui/cmd/ggui@latest
+ggui init hello && cd hello
+ggui dev      # run it, rebuilding and restarting it as you edit
+ggui build    # a signed .app on macOS; --target web for a browser
+ggui doctor   # check this machine has what ggui needs
+```
+
+See [the ggui command](docs/cli.md) for every command and `ggui.toml`.
+
 ## Examples
 
 Run these commands from a checkout of this repository. The Task commands build
@@ -195,12 +207,13 @@ task run         # bundle and launch the counter example (macOS)
 task run-todo
 task run-gallery
 task bundle EXAMPLE=gallery  # build the .app without launching
+task serve-gallery           # the gallery in a browser, reloading on change
 task clean
 ```
 
 These commands use Task v3 (`brew install go-task`). On macOS, the run tasks
-build `bin/ggui-<example>.app`, including its executable and `Info.plist`, then
-launch it with `open -n`. Each launch starts a new instance using the rebuilt
+build `bin/ggui-<example>.app` with [`ggui build`](docs/cli.md#ggui-build),
+then launch it with `open -n`. Each launch starts a new instance using the rebuilt
 binary. The bundles are local development builds; they are not distribution-signed
 or notarized. `task build`, `task test`, and the other Go maintenance tasks also
 work on other platforms; run examples there with `go run ./examples/<example>`.

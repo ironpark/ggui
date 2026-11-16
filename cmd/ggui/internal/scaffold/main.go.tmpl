@@ -1,0 +1,39 @@
+// Command {{.Executable}} is a ggui application. Run it with ggui dev, which
+// rebuilds and restarts it as you edit, and bundle it with ggui build.
+package main
+
+import (
+	"log"
+
+	"github.com/ironpark/ggui"
+	_ "github.com/ironpark/ggui/inspect/panel" // the inspector; empty unless built with ggui_inspector, as ggui dev does
+	"github.com/ironpark/ggui/ui"
+	"github.com/ironpark/ggui/widget"
+)
+
+func main() {
+	// State is a signal: what reads it follows it.
+	count := ggui.State(0)
+
+	app := ggui.New(ggui.Config{
+		Title:     {{printf "%q" .Name}},
+		Width:     480,
+		Height:    320,
+		Resizable: true,
+		// F1 toggles the widget inspector in a ggui dev build.
+		Inspector: "f1",
+	}, func() ggui.Widget {
+		return widget.Center(
+			widget.Column(
+				ui.Titlef("Count: %d", count),
+				widget.Row(
+					ui.Button("-", func() { ggui.Add(count, -1) }),
+					ui.Button("+", func() { ggui.Add(count, 1) }),
+				).Space(1),
+			).Space(1.5).Align(widget.AlignCenter),
+		)
+	})
+	if err := app.Run(); err != nil {
+		log.Fatal(err)
+	}
+}
