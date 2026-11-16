@@ -39,7 +39,8 @@ type modal struct {
 	shape  modalShape
 	header *ggui.ColumnWidget
 	body   *ggui.ColumnWidget
-	inner  *ggui.BoxWidget // pads the header and the content, not the footer
+	stack  *ggui.ColumnWidget // the body over a full-height panel's stacked footer, or nil
+	inner  *ggui.BoxWidget    // pads the header and the content, not the footer
 	styled *ggui.StyledWidget
 	footer *modalFooter
 
@@ -156,6 +157,9 @@ func (m *modal) build(env ggui.Env, shape modalShape) *ggui.BoxWidget {
 		m.header.Gap(shape.headerGap)
 	}
 	m.body.Gap(t.Space * 2)
+	if m.stack != nil {
+		m.stack.Gap(t.Space * 2)
+	}
 	m.styled.Color(t.PopoverFg)
 	pad := pick(m.compact, ggui.EdgeInsets{}, t.CardPad)
 	pad.Top += shape.topInset
@@ -180,23 +184,30 @@ func (m *modal) assemble() {
 		m.header = ggui.Column(lines...).Align(ggui.AlignStretch)
 		rows = append(rows, m.header)
 	}
-	rows = append(rows, m.content)
 	m.footer = nil
+	m.stack = nil
 	if len(m.actions) > 0 {
 		m.footer = &modalFooter{m: m, band: m.shape.band}
 		m.footer.assemble(m.actions, m.evenActions)
-		if !m.shape.band {
-			// Stacked actions belong with the content, inside its padding,
-			// and at the bottom of a panel taller than both.
-			if m.shape.fill {
-				rows = append(rows, ggui.Expanded(m.footer))
-			} else {
-				rows = append(rows, m.footer)
-			}
-		}
 	}
-	m.body = ggui.Column(rows...).Align(ggui.AlignStretch)
-	m.styled = ggui.Styled(m.body)
+	var top ggui.Widget
+	switch {
+	case m.footer != nil && !m.shape.band && m.shape.fill:
+		// Stacked actions belong with the content, inside its padding, at
+		// the bottom of the panel. The content takes up to the room they
+		// leave and no more, so content that flexes, a form in a Scroll
+		// say, scrolls above them instead of pushing them out of the panel.
+		m.body = ggui.Column(append(rows, ggui.Flexible(m.content))...).Align(ggui.AlignStretch)
+		m.stack = ggui.Column(ggui.Expanded(m.body), m.footer).Align(ggui.AlignStretch)
+		top = m.stack
+	case m.footer != nil && !m.shape.band:
+		m.body = ggui.Column(append(rows, m.content, m.footer)...).Align(ggui.AlignStretch)
+		top = m.body
+	default:
+		m.body = ggui.Column(append(rows, m.content)...).Align(ggui.AlignStretch)
+		top = m.body
+	}
+	m.styled = ggui.Styled(top)
 	m.inner = ggui.Box(m.styled)
 	if m.footer != nil && m.shape.band {
 		m.panel = ggui.Box(ggui.Column(m.inner, m.footer).Align(ggui.AlignStretch))

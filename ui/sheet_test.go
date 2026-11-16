@@ -99,3 +99,43 @@ func TestSheetBindNameFollowsItsReaderUntilNameReplacesIt(t *testing.T) {
 		t.Fatalf("Name did not detach the reader:\n%s", p.Semantics())
 	}
 }
+
+// A sheet that fills the window keeps its footer on screen when its content
+// flexes, as a form in a Scroll under Expanded does: the content takes the
+// room the footer leaves, rather than all of it.
+func TestSheetFooterStaysBelowFlexingContent(t *testing.T) {
+	t.Parallel()
+	rows := make([]ggui.Widget, 40)
+	for i := range rows {
+		rows[i] = ggui.Box().Height(30)
+	}
+	content := ggui.Column(
+		ggui.Text("Form"),
+		ggui.Expanded(ggui.Scroll(ggui.Column(rows...))),
+	).Stretch()
+	s := ui.Sheet(ggui.State(true), content).Name("Panel").Size(200).
+		Footer(ui.Button("Save", func() {}))
+	p := openSheet(t, s)
+	panel, ok := p.Semantics().Find(ggui.RoleDialog, "Panel")
+	if !ok {
+		t.Fatal("no panel")
+	}
+	save, ok := p.Semantics().Find(ggui.RoleButton, "Save")
+	if !ok {
+		t.Fatal("no Save button")
+	}
+	r := save.Rect
+	if r.Size.H < 20 || r.Origin.Y+r.Size.H > panel.Rect.Origin.Y+panel.Rect.Size.H+0.5 || r.Origin.Y < 150 {
+		t.Fatalf("Save at %v in a panel at %v: the footer is not at the panel's foot", r, panel.Rect)
+	}
+
+	// Content shorter than the room leaves the footer at the foot too.
+	short := ui.Sheet(ggui.State(true), ggui.Text("Short")).Name("Short").Size(200).
+		Footer(ui.Button("Done", func() {}))
+	p = openSheet(t, short)
+	done, _ := p.Semantics().Find(ggui.RoleButton, "Done")
+	panel, _ = p.Semantics().Find(ggui.RoleDialog, "Short")
+	if bottom, foot := done.Rect.Origin.Y+done.Rect.Size.H, panel.Rect.Origin.Y+panel.Rect.Size.H; foot-bottom > 40 {
+		t.Fatalf("Done ends at %v, far above the panel's foot at %v", bottom, foot)
+	}
+}
