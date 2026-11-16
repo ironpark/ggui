@@ -3,6 +3,7 @@ package icons
 import (
 	"image"
 	"image/color"
+	"math"
 	"testing"
 
 	"github.com/ironpark/ggfx"
@@ -188,5 +189,30 @@ func TestSVGRasterBudgetAndGauge(t *testing.T) {
 	drain(svgs...)
 	if gauge() != 0 {
 		t.Fatalf("drained: gauge %d", gauge())
+	}
+}
+
+// An icon's lines are as wide as its size makes them: a third thinner at
+// 16 pixels than at 24, where a 24 unit grid's two unit stroke is two
+// pixels, and twice as wide again at 48. Drawn two pixels wide at every
+// size, an icon is heavy on a display of one pixel a point and thin on a
+// denser one.
+func TestAnIconsLinesFollowItsSize(t *testing.T) {
+	t.Parallel()
+	const plus = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M12 5v14"/><path d="M5 12h14"/></svg>`
+	asset, err := Parse([]byte(plus))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, size := range []int{16, 24, 32, 48} {
+		img := asset.Image(size)
+		row, sum := size/3, 0 // a row that crosses the upright line alone
+		for x := range size {
+			sum += int(img.RGBAAt(x, row).A)
+		}
+		got, want := float64(sum)/255, 2*float64(size)/24
+		if math.Abs(got-want) > 0.05 {
+			t.Errorf("at %d pixels the line is %.2f pixels wide, want %.2f", size, got, want)
+		}
 	}
 }
