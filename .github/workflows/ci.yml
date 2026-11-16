@@ -56,19 +56,60 @@ jobs:
       - name: Test the debug build
         run: go test -tags ggui_debug . ./widget ./internal/reactive
       # The build ggui dev shows in its viewer: ggwd's remote backend is
-      # linked in, which only unix systems have. The tests set the viewer's
-      # socket in the environment and need no viewer.
+      # linked in. The tests set the viewer's socket in the environment and
+      # need no viewer.
       - name: Test the remote display build
-        if: runner.os != 'Windows'
+        shell: bash
         run: |
           go test -tags ggwd_remote . ./internal/platform/... ./runtime
-          go build -tags ggwd_remote,ggui_inspector,ggui_debug -o /dev/null ./examples/counter
+          go build -tags ggwd_remote,ggui_inspector,ggui_debug -o "$RUNNER_TEMP/counter-remote" ./examples/counter
       # The race detector needs cgo, which the Windows runner has no C
       # toolchain configured for. Probe tests run under t.Parallel, and
       # -race is what shows that no probe reaches another's state.
       - name: Test with the race detector
         if: runner.os != 'Windows'
         run: go test -race ./...
+
+  # The viewer and examples/counter with the remote backend, end to end, on
+  # the runner's window system and GPU: cmd/ggviewer's TestEndToEnd. Linux
+  # draws with Mesa's software OpenGL under Xvfb, with openbox to minimize
+  # the window; Windows' runner has no GPU, and DirectX draws with WARP.
+  remote:
+    name: remote (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Install an X server, a window manager and Mesa
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-nanum libegl1 libegl-mesa0 libgl1 libgl1-mesa-dri xvfb openbox
+          Xvfb :99 -screen 0 1280x1024x24 &
+          echo DISPLAY=:99 >> "$GITHUB_ENV"
+          sleep 1
+          DISPLAY=:99 openbox &
+      - name: End to end
+        env:
+          GGUI_E2E: "1"
+          GGFX_DIRECTX: warp
+        run: GGUI_E2E_DIR="$RUNNER_TEMP/e2e" go test -count=1 -v -run '^TestEndToEnd$' ./cmd/ggviewer
+      - name: Keep the window's pictures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-${{ matrix.os }}
+          path: ${{ runner.temp }}/e2e
+          if-no-files-found: ignore
 
   wasm:
     runs-on: ubuntu-latest
