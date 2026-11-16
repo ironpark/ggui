@@ -58,7 +58,8 @@ func (d *fakeDisplay) Start(ctx context.Context) (Viewer, error) {
 	if d.err != nil {
 		return nil, d.err
 	}
-	v := &fakeViewer{socket: filepath.Join("/fake", "v"+string(rune('0'+len(d.viewers)))+".sock"), events: make(chan viewer.Event, 4)}
+	// The socket is a name the app is given, never a file: the same on every system.
+	v := &fakeViewer{socket: "/fake/v" + string(rune('0'+len(d.viewers))) + ".sock", events: make(chan viewer.Event, 4)}
 	d.viewers = append(d.viewers, v)
 	return v, nil
 }
