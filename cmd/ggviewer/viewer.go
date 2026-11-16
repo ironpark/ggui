@@ -1,4 +1,4 @@
-//go:build unix && !ios && !android
+//go:build (unix && !ios && !android) || windows
 
 package main
 
@@ -325,6 +325,20 @@ func (v *session) read(a *app) {
 			continue
 		case *remote.Idle:
 			continue
+		case *remote.ClipboardRequest:
+			// The app's clipboard is this system's, which the app may not reach
+			// itself (X11 needs a window of its own).
+			text, err := ggwd.ClipboardText()
+			if err != nil && v.opts.debug {
+				log.Printf("app %d: reading the clipboard: %v", a.pid, err)
+			}
+			_ = a.conn.Send(&remote.ClipboardText{Seq: m.Seq, Text: text, OK: err == nil})
+			continue
+		case *remote.SetClipboard:
+			if err := ggwd.SetClipboardText(m.Text); err != nil {
+				log.Printf("app %d: writing the clipboard: %v", a.pid, err)
+			}
+			continue
 		case *remote.Closed:
 			if current {
 				v.mu.Lock()
@@ -568,6 +582,10 @@ func (v *session) forward(in remote.Input) {
 	}
 	v.seq++
 	in.Seq = v.seq
+	if (in.Kind == remote.InputMouseButton || in.Kind == remote.InputKey) && in.Pressed {
+		// What the user does in the window may open a dialog of the app's.
+		allowForeground(a.pid)
+	}
 	_ = a.conn.Send(&in)
 }
 

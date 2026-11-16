@@ -1,6 +1,6 @@
 // The constraint is ggwd's for linking its remote backend in.
 
-//go:build ggwd_remote && unix && !android && !ios && !nintendosdk && !playstation5
+//go:build ggwd_remote && ((unix && !android && !ios) || windows) && !nintendosdk && !playstation5
 
 package remotedisplay
 
