@@ -38,7 +38,7 @@ func TestSprintfCustomReadablePassesThroughWithoutGetAny(t *testing.T) {
 	t.Parallel()
 	state := ggui.State(1)
 	r := formattedReader{state}
-	text := widget.Sprintf("%v", r)
+	text := ggui.Sprintf("%v", r)
 	defer text.Dispose()
 	if got := text.Get(); got != "custom reader" {
 		t.Fatalf("custom argument formatted as %q", got)

@@ -131,7 +131,7 @@ layout. Input, animation, and other frame bookkeeping still run. See
 A custom widget that keeps size-affecting state outside signals calls
 `Invalidate(env)` when that state changes; `Scroll` does for its offset. A
 `Scroll` also tells its subtree the window it shows through the `Env`
-(`ScrollViewport(env)`), which is how `EachKeyed` virtualizes.
+(`widget.ScrollViewportOf(env)`), which is how `EachKeyed` virtualizes.
 
 Effects are flushed until they are quiet. If writes keep retriggering effects without settling, the frame gives
 up, `App.Run` returns `ErrCycle` and `Probe` panics with it. Match it with

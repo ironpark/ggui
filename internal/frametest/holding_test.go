@@ -380,7 +380,7 @@ func TestAScrollSizedByItsContentShowsAsPaintedWhole(t *testing.T) {
 	frames := sameAsWhole(t, ggui.Sz(200, 100), func() (ggui.Builder, func(*ggui.WindowProbe)) {
 		var sc widget.ScrollController
 		content := ggui.FromFuncs(func(c ggui.Constraints, env ggui.Env) ggui.Size {
-			vp, _ := widget.ScrollViewport(env)
+			vp, _ := widget.ScrollViewportOf(env)
 			return ggui.Sz(400, 20+vp.Offset/10)
 		}, func(dst *ggui.Canvas, r ggui.Rect) {
 			dst.FillRect(r, red)

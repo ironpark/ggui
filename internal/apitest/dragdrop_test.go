@@ -93,7 +93,7 @@ func TestMoveReordersAsADragWould(t *testing.T) {
 		{3, 0, []string{"d", "a", "b", "c"}},
 		{1, 1, in}, {1, 2, in}, {-1, 0, in}, {0, 5, in},
 	} {
-		if got := widget.Move(in, c.from, c.to); !slices.Equal(got, c.want) {
+		if got := widget.MoveItem(in, c.from, c.to); !slices.Equal(got, c.want) {
 			t.Errorf("Move(%v, %d, %d) = %v, want %v", in, c.from, c.to, got, c.want)
 		}
 	}
@@ -118,7 +118,7 @@ func TestAListReordersByDraggingItsRows(t *testing.T) {
 			if !d.Before() {
 				to++
 			}
-			items.Set(widget.Move(list, from, to))
+			items.Set(widget.MoveItem(list, from, to))
 		})
 	}).Gap(0)
 	p := ggui.NewProbe(list, ggui.Sz(100, 90))

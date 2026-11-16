@@ -457,7 +457,7 @@ func TestTheLayoutAScrollsOwnMoveAsksForIsContained(t *testing.T) {
 	p := ggui.NewWindowProbe(func() ggui.Widget {
 		content := ggui.View(n, func(k int) ggui.Widget {
 			return ggui.FromFuncs(func(c ggui.Constraints, env ggui.Env) ggui.Size {
-				vp, _ := ScrollViewport(env)
+				vp, _ := ScrollViewportOf(env)
 				window.Set(vp.Offset)
 				return ggui.Sz(100, float64(k)*20)
 			}, func(*ggui.Canvas, ggui.Rect) {})
@@ -526,7 +526,7 @@ func TestAReaderOfAnAnimatedScrollsOffsetBesideItIsPainted(t *testing.T) {
 func TestAnAnimatedScrollSizedByItsContentIsNotHeldThere(t *testing.T) {
 	var h float64
 	content := ggui.FromFuncs(func(c ggui.Constraints, env ggui.Env) ggui.Size {
-		vp, _ := ScrollViewport(env)
+		vp, _ := ScrollViewportOf(env)
 		h = 20 + vp.Offset/10
 		return ggui.Sz(400, h)
 	}, func(*ggui.Canvas, ggui.Rect) {})

@@ -228,10 +228,10 @@ func (z *DropZoneWidget[T]) Adopt(prev any) {
 	}
 }
 
-// Move returns items with the element at from moved to index to, counted
+// MoveItem returns items with the element at from moved to index to, counted
 // in the slice before the move, as a list reordered by dragging needs. It
 // returns items unchanged when either index is out of range.
-func Move[T any](items []T, from, to int) []T {
+func MoveItem[T any](items []T, from, to int) []T {
 	if from < 0 || from >= len(items) || to < 0 || to > len(items) || from == to || from+1 == to {
 		return items
 	}
@@ -595,7 +595,7 @@ func (l *ReorderableWidget[T, K]) commit(from, to int) {
 	if from == to || from+1 == to {
 		return
 	}
-	l.items.Set(Move(ggui.Peek(l.items), from, to))
+	l.items.Set(MoveItem(ggui.Peek(l.items), from, to))
 	if l.onReorder != nil {
 		l.onReorder(from, to)
 	}
