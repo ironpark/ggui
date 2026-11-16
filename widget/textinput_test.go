@@ -1529,11 +1529,11 @@ func TestTextInputWrapsFromTheEditorsNameForTheTextBefore(t *testing.T) {
 // The tests below were the kernel's while the editor was, and are the
 // editor's: its style, emoji, tracking and accessibility.
 
-// useTestEmoji makes the color emoji font in the module's testdata the
+// useTestEmoji makes the color emoji font in the module's assets/testdata the
 // one the test goroutine's editors draw with.
 func useTestEmoji(t *testing.T) {
 	t.Helper()
-	data, err := os.ReadFile("../testdata/emoji-subset.ttf")
+	data, err := os.ReadFile("../assets/testdata/emoji-subset.ttf")
 	if err != nil {
 		t.Fatal(err)
 	}

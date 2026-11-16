@@ -305,7 +305,7 @@ func TestTextRecolorIsPaintOnly(t *testing.T) {
 // its goroutine's widgets read, so that no other test's text sees it.
 func TestEmojiSwitchInvalidatesCachedMeasurement(t *testing.T) {
 	t.Parallel()
-	data, err := os.ReadFile("../testdata/emoji-subset.ttf")
+	data, err := os.ReadFile("../assets/testdata/emoji-subset.ttf")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -71,7 +71,7 @@ func TestDrawTextStyleKeepsTheWeight(t *testing.T) {
 
 func useTestEmoji(t *testing.T) *Font {
 	t.Helper()
-	data, err := os.ReadFile("testdata/emoji-subset.ttf")
+	data, err := os.ReadFile("assets/testdata/emoji-subset.ttf")
 	if err != nil {
 		t.Fatal(err)
 	}
