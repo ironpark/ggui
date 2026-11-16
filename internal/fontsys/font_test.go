@@ -21,7 +21,7 @@ func mustLoad(t testing.TB, data []byte) *Font {
 // emojiChain is Go Regular with the emoji test subset as its fallback.
 func emojiChain(t testing.TB) *Font {
 	t.Helper()
-	data, err := os.ReadFile("../../testdata/emoji-subset.ttf")
+	data, err := os.ReadFile("../../assets/testdata/emoji-subset.ttf")
 	if err != nil {
 		t.Fatal(err)
 	}

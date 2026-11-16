@@ -195,7 +195,7 @@ func FuzzTextRunsCoverTheTextByGrapheme(f *testing.F) {
 // testEmoji is the emoji subset ggui's tests draw with, as an emoji choice.
 func testEmoji(tb testing.TB) *fontsys.EmojiChoice {
 	tb.Helper()
-	data, err := os.ReadFile("../../testdata/emoji-subset.ttf")
+	data, err := os.ReadFile("../../assets/testdata/emoji-subset.ttf")
 	if err != nil {
 		tb.Fatal(err)
 	}
