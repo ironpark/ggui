@@ -55,7 +55,7 @@ func TestEnginePackagesStayBelowTheUI(t *testing.T) {
 // kernelFiles and widgetFiles say which root file is which, by name.
 var (
 	kernelFiles = []string{"anim", "app", "boundary", "canvas", "damage", "drag", "effects", "environment", "font", "input", "inspector", "keys", "keys_gen", "loop", "menu", "overlay", "paint", "probe", "reactivity", "semantics", "widget", "window", "windowprobe"}
-	widgetFiles = []string{"dragdrop", "for", "for_sticky", "popup", "richtext", "scroll", "text", "transition", "widgets"}
+	widgetFiles = []string{"composite", "dragdrop", "for", "for_sticky", "interact", "popup", "richtext", "scroll", "text", "transition", "widgets"}
 )
 
 // privateAcross is every unexported name a widget file still takes from a

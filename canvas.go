@@ -379,6 +379,19 @@ func (c *Canvas) Inert() *Canvas {
 	return child
 }
 
+// Invisible returns a Canvas that draws nothing but registers hit regions
+// and semantics as c does, the other half of Inert: for a subtree that does
+// not show but can still be pointed at and read by a screen reader, as an
+// Opacity at zero paints its child. An Overlay scheduled through it paints
+// on the root Canvas as any does. Like a Clip's, it is the frame's: a
+// widget keeps none past its frame.
+func (c *Canvas) Invisible() *Canvas {
+	if c == nil {
+		return nil
+	}
+	return c.into(nil)
+}
+
 // derive returns a copy of c that paints through it. The copy shares the
 // root's frameState, so the frame's overlays, trace, retained slots and
 // semantics stay where they are: there is nothing here to clear. It is
