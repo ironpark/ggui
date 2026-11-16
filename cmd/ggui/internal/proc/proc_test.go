@@ -30,7 +30,10 @@ func TestMain(m *testing.M) {
 		fmt.Println("bye")
 		os.Exit(0)
 	case "stubborn":
-		signal.Ignore(syscall.SIGTERM, os.Interrupt)
+		// Takes the interrupt and goes on. Ignoring it would not do on
+		// Windows, where a Ctrl-Break that no handler of the process takes
+		// goes on to the default one, which exits.
+		signal.Notify(make(chan os.Signal, 1), syscall.SIGTERM, os.Interrupt)
 		fmt.Println("ready")
 		time.Sleep(time.Hour)
 	case "parent":
