@@ -164,8 +164,12 @@ func TestNativeLoop(t *testing.T) {
 }
 
 func TestDescribe(t *testing.T) {
-	got := describe("/p", []string{"/p/a.go", "/p/b/c.go", "/q/d.go", "/p/e.go", "/p/f.go"})
-	if want := "a.go, b/c.go, /q/d.go and 2 more"; got != filepath.FromSlash(want) && got != want {
+	paths := []string{"/p/a.go", "/p/b/c.go", "/q/d.go", "/p/e.go", "/p/f.go"}
+	for i, p := range paths {
+		paths[i] = filepath.FromSlash(p)
+	}
+	got := describe(filepath.FromSlash("/p"), paths)
+	if want := filepath.FromSlash("a.go, b/c.go, /q/d.go and 2 more"); got != want {
 		t.Errorf("describe = %q, want %q", got, want)
 	}
 }

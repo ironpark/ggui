@@ -89,8 +89,10 @@ func TestAssemble(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
-	if entries, err := icns.Read(f); err != nil || len(entries) == 0 {
+	entries, err := icns.Read(f)
+	// Closed before the bundle is built again: Windows removes no file that is open.
+	f.Close()
+	if err != nil || len(entries) == 0 {
 		t.Errorf("icon: %d entries, %v", len(entries), err)
 	}
 	plistPath := filepath.Join(app, "Contents", "Info.plist")
