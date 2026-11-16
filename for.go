@@ -28,13 +28,13 @@ type EachWidget[T any, K comparable] struct {
 	retain       int               // offscreen rows kept mounted with ItemExtent; 0 keeps all
 	itemEq       func(a, b T) bool // how a row's item is compared; see ItemEqual
 	frame        uint64
-	owner        *reactive.Computation
+	scope        Scope // the rows and the empty branch are mounted in
 	items        []T
 	keys         []K
 	entries      map[K]*forEntry[T]
-	stale        bool   // items changed since children was last filled
-	itemsGen     uint64 // counts the changes to items, for what is worked out from them
-	cache        *CachedWidget
+	stale        bool    // items changed since children was last filled
+	itemsGen     uint64  // counts the changes to items, for what is worked out from them
+	env          Env     // the last layout's, which a change of the items asks to lay out again under
 	extent       float64 // fixed main-axis size per item; 0 lays every child out
 	estimate     float64 // a row's size until it is laid out, virtualizing rows of any size; see EstimatedExtent
 	est          virtual.Estimate[K]
@@ -121,7 +121,7 @@ func each[T any, K comparable](items Readable[[]T], key func(int, T) K, build fu
 	f := &EachWidget[T, K]{key: key, build: build, entries: map[K]*forEntry[T]{}, itemEq: reactive.ComparableEqual[T]()}
 	f.mount = Component(func() Widget {
 		f.mounted = true
-		f.owner = reactive.CurrentOwner()
+		f.scope = UseScope()
 		OnCleanup(func() {
 			for _, e := range f.entries {
 				e.dispose()
@@ -196,13 +196,13 @@ func each[T any, K comparable](items Readable[[]T], key func(int, T) K, build fu
 				f.emptyDispose, f.empty = nil, nil
 			}
 			if len(list) == 0 && f.emptyBuild != nil && f.emptyDispose == nil {
-				reactive.WithOwner(f.owner, func() {
-					f.emptyDispose = reactive.RootWith(new(int), "", func() { f.empty = remembering(f.emptyBuild) })
-				})
+				f.empty, f.emptyDispose = f.scope.Mount(f.emptyBuild)
 			}
 			f.items, f.keys, f.stale = list, keys, true
 			f.itemsGen++
-			f.cache.invalidate()
+			// A whole layout, not one the Scroll around holds: Invalidate
+			// would have that Scroll check its size by it.
+			Relayout(f.env)
 		})
 		return nil
 	})
@@ -360,15 +360,14 @@ func (f *EachWidget[T, K]) entry(i int) *forEntry[T] {
 	if e == nil {
 		e = &forEntry[T]{item: State(f.items[i]), position: State(i)}
 		e.item.WithEqual(f.itemEq) // nil, as for State, tells the row of every write
-		reactive.WithOwner(f.owner, func() {
-			e.dispose = reactive.RootWith(e, fmt.Sprint(k), func() {
-				e.widget = remembering(func() Widget { return f.build(EachItem[T]{Value: e.item, Index: e.position, Item: f.items[i]}) })
-				if f.transition != nil {
-					t := f.transition(e.widget)
-					t.id = forRowKey[K]{k} // the row keeps its animation when it moves
-					e.widget = t
-				}
-			})
+		e.widget, e.dispose = f.scope.MountAs(e, fmt.Sprint(k), func() Widget {
+			w := f.build(EachItem[T]{Value: e.item, Index: e.position, Item: f.items[i]})
+			if f.transition == nil {
+				return w
+			}
+			t := f.transition(w)
+			t.id = forRowKey[K]{k} // the row keeps its animation when it moves
+			return t
 		})
 		f.entries[k] = e
 	}
@@ -378,7 +377,7 @@ func (f *EachWidget[T, K]) entry(i int) *forEntry[T] {
 // Layout implements Widget.
 func (f *EachWidget[T, K]) Layout(c Constraints, env Env) Size {
 	defer f.props.Layout().EndLayout()
-	f.cache, _ = env.Get(cacheOwner)
+	f.env = env
 	f.pin.port = scrollPortAlong(env, f.horizontal)
 	f.mount.Layout(c, env)
 	if len(f.items) == 0 && len(f.leaving) == 0 && f.empty != nil {
@@ -709,7 +708,7 @@ func (f *EachWidget[T, K]) paintLead(r Rect) {
 	lead := gem.Pick(f.horizontal, r.Origin.X-p.rect.Origin.X, r.Origin.Y-p.rect.Origin.Y) + p.visualOffset()
 	if lead != f.lead {
 		f.lead = lead
-		f.cache.invalidate()
+		Relayout(f.env)
 		reactive.RequestLayout()
 	}
 }

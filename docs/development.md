@@ -163,4 +163,9 @@ alone, as a widget of another package does, so that they can leave the root.
 `TestWidgetFilesUseThePublicKernel` in [boundary_test.go](../boundary_test.go)
 says which file is which, and fails when a widget file uses an unexported
 kernel name, or the kernel one of a widget file's, that its list of those
-still waiting for a public protocol does not hold; the list only shrinks.
+still waiting for a public protocol does not hold. The list is empty: the
+widget files mount keyed subtrees with `Scope`, hold changes of size with
+`LayoutBoundary` and ask for layouts with `Invalidate` and `Relayout`, as
+[internal/apitest](../internal/apitest/) shows a package of its own doing,
+and nothing goes on it: a widget that needs more of the kernel than it
+exports gets it exported.

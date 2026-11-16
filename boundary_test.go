@@ -60,46 +60,12 @@ var (
 
 // privateAcross is every unexported name a widget file still takes from a
 // kernel file, or a kernel file from a widget file, as "file name": a
-// package-level name, or Type.field or Type.method. Each waits for the
-// public protocol its group names; once a file no longer uses a name, it
-// comes off the list, and nothing goes on it.
-var privateAcross = []string{
-	// Layout boundary: a Scroll is one, and holds the layouts asked for
-	// inside it in its own viewport, which Invalidate cannot say. Its
-	// moves mark its own cache stale, not the cache above, as Invalidate
-	// would.
-	"boundary.go ScrollWidget.hold",
-	"boundary.go scrollPortKey",
-	"scroll.go layoutBoundary",
-	"scroll.go layoutBoundary.begin",
-	"scroll.go layoutBoundary.end",
-	"scroll.go layoutBoundary.paint",
-	"scroll.go layoutBoundary.placed",
-	"scroll.go layoutBoundary.win",
-	"scroll.go noteContained",
-	"scroll.go cacheOwner",
-	"scroll.go CachedWidget.invalidate",
-
-	// Each's layout requests: a list whose items changed, or that moved in
-	// its Scroll, asks for a whole layout, where Invalidate would hold it
-	// in the Scroll around it and check that Scroll's size by it.
-	"for.go cacheOwner",
-	"for.go CachedWidget.invalidate",
-
-	// Keyed mounting: Each's rows and Switcher's subtrees are mounted
-	// under keys, with identities of their own, and Switcher marks its own
-	// component's cache stale when a key mounts.
-	"for.go remembering",
-	"transition.go mountKeyed",
-	"transition.go observeKey",
-	"transition.go ComponentWidget.cw",
-	"transition.go CachedWidget.invalidate",
-
-	// A Motion moved along with the content it scrolls, keeping its
-	// timing, which no public method does.
-	"scroll.go Motion.from",
-	"scroll.go Motion.to",
-}
+// package-level name, or Type.field or Type.method, each waiting for a
+// public protocol. None is left: the widget files use the kernel's public
+// API alone, and the kernel nothing of theirs. Nothing goes on it: a widget
+// that needs more of the kernel than it exports gets it exported, as one of
+// another package would need it.
+var privateAcross = []string{}
 
 // TestWidgetFilesUseThePublicKernel type-checks the root package and fails
 // when a widget file uses an unexported name of a kernel file, or a kernel

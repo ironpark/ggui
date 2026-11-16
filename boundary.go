@@ -37,9 +37,29 @@ import "github.com/ironpark/ggui/internal/reactive"
 // the root, and a cache above that held would hand back its size without
 // laying out the boundary inside it at all.
 
-// layoutBoundary is what a widget that holds a change of size inside it
-// keeps: a Scroll's and a Contain's.
-type layoutBoundary struct {
+// LayoutBoundary is what a widget keeps that holds a change of size made
+// inside it, as described above: a Scroll's, a Contain's, a split pane's.
+// The widget calls Begin and End around the layout of what is inside, lays
+// that out under the Env Begin returns, and calls Paint from its own Paint
+// with the Rect it was given, clipping what is inside to it:
+//
+//	func (p *pane) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
+//		inner, check := p.hold.Begin(env)
+//		size := c.Constrain(p.child.Layout(c, inner))
+//		p.hold.End(check, c, size, 0, false)
+//		return size
+//	}
+//
+//	func (p *pane) Paint(dst *ggui.Canvas, r ggui.Rect) {
+//		p.hold.Paint(dst, r)
+//		dst.Clip(r).Paint(p.child, r)
+//	}
+//
+// A widget that changes what it shows inside the boundary with no change
+// of size, as a Scroll moving its content does, makes the change through
+// Contained, for the frame to be painted within the boundary alone. The
+// zero value is ready to use; a boundary is not copied once laid out.
+type LayoutBoundary struct {
 	// win is the part of the window the last paint showed the boundary in,
 	// placed whether it could tell, as outside a Transform or a shape clip.
 	win    Rect
@@ -53,12 +73,17 @@ type layoutBoundary struct {
 	// sizedByContent is that a layout it held changed its size or
 	// baseline: it holds nothing from then on.
 	sizedByContent bool
-	outer          *layoutBoundary // the nearest boundary around it
-	depth          int             // how many boundaries it is in, itself included
+	outer          *LayoutBoundary // the nearest boundary around it
 	// laid are its last layouts under as many different constraints, the
 	// next to be replaced at next.
 	laid [boundaryLayouts]boundaryLaid
 	next int
+	// inner is the Env Begin returned last, derived from the one whose
+	// revision is from, and none before the first: laid out under that
+	// again, as a boundary at rest is, it is the answer, found without the
+	// Env's memo. Envs of one revision are copies of one another.
+	inner Env
+	from  uint64
 }
 
 // boundaryLayouts is how many layouts under different constraints a
@@ -76,31 +101,16 @@ type boundaryLaid struct {
 	set      bool
 }
 
-// boundaryKey carries a Contain to its subtree, for Invalidate; a Scroll
-// is found under scrollPortKey, which it stores already. Each stores
-// itself, the same pointer every layout, so the Env it hands down keeps
-// its revision and the caches below hold.
-var boundaryKey = NewEnvKey[*layoutBoundary]("layout boundary")
+// boundaryKey carries a boundary to what is laid out inside it, for
+// Invalidate. Each stores itself, the same pointer every layout, so the
+// Env it hands down keeps its revision and the caches below hold.
+var boundaryKey = NewEnvKey[*LayoutBoundary]("layout boundary")
 
-// boundaryOf returns the nearest boundary in env, a Contain's or a
-// Scroll's, if any. The nearest of each is in env; which of those two is
-// nearer the list does not say, as a value stored under a key already
-// there takes the old one's place in it, but the deeper is: one is
-// inside the other.
-func boundaryOf(env Env) *layoutBoundary {
-	var contain, scroll *layoutBoundary
-	for n := env.vals; n != nil && (contain == nil || scroll == nil); n = n.next {
-		switch n.key {
-		case boundaryKey.id:
-			contain = n.val.(*layoutBoundary)
-		case scrollPortKey.id:
-			scroll = &n.val.(*ScrollWidget).hold
-		}
-	}
-	if contain == nil || scroll != nil && scroll.depth > contain.depth {
-		return scroll
-	}
-	return contain
+// boundaryOf returns the nearest boundary around what is laid out under
+// env, if any: one stored inside another takes its place in the Env.
+func boundaryOf(env Env) *LayoutBoundary {
+	b, _ := env.Get(boundaryKey)
+	return b
 }
 
 // settleSeq numbers the settles of the frame loop running on this
@@ -116,7 +126,7 @@ func settleSeq() uint64 {
 // b, or the nearest one around it whose size does not follow its
 // content's, and nil when there is none or where it was painted cannot be
 // told.
-func (b *layoutBoundary) holding() *layoutBoundary {
+func (b *LayoutBoundary) holding() *LayoutBoundary {
 	for ; b != nil; b = b.outer {
 		if !b.placed || !b.laidOut {
 			return nil
@@ -130,36 +140,38 @@ func (b *layoutBoundary) holding() *layoutBoundary {
 
 // hold takes a layout asked for inside b: the change shows within b alone,
 // where the last paint put it, and b's next layout checks it.
-func (b *layoutBoundary) hold() {
+func (b *LayoutBoundary) hold() {
 	b.held = true
 	noteContained(b.win)
 }
 
-// begin starts a layout of the boundary under env, before its content's,
-// and reports whether this layout is checked: the one held, or one in the
-// same settle. The boundary is then stored in the Env its content is laid
-// out under, a Contain's under boundaryKey.
-func (b *layoutBoundary) begin(env Env) bool {
+// Begin starts a layout of the boundary's widget under env, before what is
+// inside it is laid out, which is laid out under inner: env carrying the
+// boundary, so that a change of size made there asks this boundary to hold
+// it. check is End's, and says whether this layout is checked: the one a
+// change held asked for, or another in the same settle.
+func (b *LayoutBoundary) Begin(env Env) (inner Env, check bool) {
 	b.outer = boundaryOf(env)
-	b.depth = 1
-	if b.outer != nil {
-		b.depth = b.outer.depth + 1
-	}
-	check := b.held
+	check = b.held
 	if b.held {
 		b.held = false
 		b.checkSeq = settleSeq()
 	} else if b.checkSeq != 0 && b.checkSeq == settleSeq() {
 		check = true
 	}
-	return check
+	if b.inner.vals == nil || env.rev != b.from {
+		b.inner, b.from = env.With(boundaryKey, b), env.rev
+	}
+	return b.inner, check
 }
 
-// end ends a layout begin started, which came out at size with the
-// baseline given, under c. A layout checked that came out other than the
-// last under c did asks for the frame to be painted whole, and, as one the
-// content sized, demotes the boundary.
-func (b *layoutBoundary) end(check bool, c Constraints, size Size, baseline float64, based bool) {
+// End ends the layout Begin started, under c, which came out at size and,
+// when based is set, with baseline: what the widget hands its parent. check
+// is Begin's, or set for a layout the widget knows to change nothing
+// outside it either, as a Scroll's after a move made in Contained. A
+// layout checked that came out other than the last under c did has the
+// frame painted whole and, as one its content sized, demotes the boundary.
+func (b *LayoutBoundary) End(check bool, c Constraints, size Size, baseline float64, based bool) {
 	now := boundaryLaid{cons: c, size: size, baseline: baseline, based: based, set: true}
 	at := -1
 	for i, l := range b.laid {
@@ -208,12 +220,13 @@ func paintWhole() {
 	reactive.RequestLayout()
 }
 
-// paint notes where the boundary is painted at r. A layout asked for in
+// Paint notes where the boundary is painted, at r: the widget calls it
+// from its own Paint, with the Rect it was given. A layout asked for in
 // the last layout, before this paint, is held where the boundary is now,
 // which a move outside it may have changed, and taken whole where it
 // cannot be told. A frame painted in part leaves it all as it was: it
 // paints within its regions, not where the boundary shows.
-func (b *layoutBoundary) paint(dst *Canvas, r Rect) {
+func (b *LayoutBoundary) Paint(dst *Canvas, r Rect) {
 	if dst == nil || dst.fs().partial {
 		return
 	}
@@ -232,46 +245,26 @@ func (b *layoutBoundary) paint(dst *Canvas, r Rect) {
 	}
 }
 
-// ContainWidget lays its child out under the constraints it is given,
-// clips it to its own Rect and holds a change of size inside it there.
-// Build one with Contain.
-type ContainWidget struct {
-	child Widget
-	size  Size // the child's, as laid out
-	hold  layoutBoundary
-}
+// Placed reports whether the last frame painted whole could tell where in
+// the window the boundary is: whether it was painted, and not under a
+// Transform or a shape clip. Contained holds a change within it only then.
+func (b *LayoutBoundary) Placed() bool { return b.placed }
 
-// Contain clips child to the Rect it is painted in and makes it a layout
-// boundary: a disclosure easing open inside, or anything else that calls
-// Invalidate, is painted within it alone, and what lies beside it is left
-// as the last frame painted it, while its size stays as it was. Wrap a
-// panel, a card or a pane whose size its parent decides: a Box of fixed
-// Size, an Expanded share of a Row, a split's pane.
-//
-//	ggui.Row(ggui.Contain(ggui.Box(details).Size(320, 480)), rest)
-//
-// A Contain whose size does follow its content's, as one under loose
-// constraints may, costs a frame painted whole the first time its content
-// grows, and holds nothing from then on; the boundary around it, a Scroll's
-// or another Contain's, holds the change instead. Under a Transform it
-// holds nothing either.
-func Contain(child Widget) *ContainWidget { return &ContainWidget{child: child} }
-
-// Layout implements Widget.
-func (w *ContainWidget) Layout(c Constraints, env Env) Size {
-	check := w.hold.begin(env)
-	w.size = w.child.Layout(c, env.With(boundaryKey, &w.hold))
-	size := c.Constrain(w.size)
-	baseline, based := BaselineOf(w.child)
-	w.hold.end(check, c, size, baseline, based)
-	return size
-}
-
-// Baseline implements Baseliner: the child's.
-func (w *ContainWidget) Baseline() (float64, bool) { return BaselineOf(w.child) }
-
-// Paint implements Widget: the child, clipped to r.
-func (w *ContainWidget) Paint(dst *Canvas, r Rect) {
-	w.hold.paint(dst, r)
-	dst.Clip(r).Paint(w.child, Rct(r.Origin, w.size))
+// Contained makes change, which changes what is inside the boundary and
+// nothing else, and reports whether the change was held there: where the
+// boundary is placed, the signals change writes and the layouts it asks
+// for, Relayout's among them, are taken to show within the boundary alone,
+// and a frame nothing else changed for is painted there and nowhere else.
+// It is how a Scroll moves its content. Where the boundary is not placed,
+// change is made as any change is, and the frame is painted whole. What
+// reacts outside the boundary to a signal change writes reacts as to any
+// write, and has the frame painted whole too.
+func (b *LayoutBoundary) Contained(change func()) bool {
+	if !b.placed {
+		change()
+		return false
+	}
+	reactive.Contained(change)
+	noteContained(b.win)
+	return true
 }

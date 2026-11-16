@@ -564,6 +564,16 @@ func (m *Motion) moveTo(target float64, now time.Time, d time.Duration) (moving 
 // the target the last move gave it.
 func (m *Motion) Target() float64 { return m.to }
 
+// Shift moves the motion by d: where it started and where it is heading,
+// so that every position on its way is d further along and its timing is
+// as it was. It is for a motion over something that moved under it, as a
+// Scroll easing to an offset shifts its motion by as much as a list above
+// the window grew, keeping what is in view where it was.
+func (m *Motion) Shift(d float64) {
+	m.from += d
+	m.to += d
+}
+
 // Toggle moves toward one while on and zero while off, over d, and
 // returns the position at now: the progress of something revealing
 // itself. A widget that shows or hides a panel calls it once per frame.

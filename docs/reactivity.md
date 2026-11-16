@@ -352,6 +352,35 @@ a fresh instance. Branch factories are builders, untracked like the rest; use
 bindings or `View` inside them. `Key` recreates its subtree when its comparable key changes.
 Configure fluent blocks before mount; later configuration panics.
 
+A widget of your own mounts subtrees the way `Key`, `Switcher` and the rows
+of `EachKeyed` do with a `Scope`, the place a builder runs: `UseScope()` in
+a component's setup takes it, and `scope.Mount(build)` builds a subtree there
+as a branch is built, untracked, with a `Remember` memory and an identity of
+its own, returning it with the `Cleanup` that disposes it. What is mounted
+stays until that `Cleanup` runs or the scope is disposed, so a switcher can
+keep the old subtree while the new one mounts. `scope.MountAs(id, name,
+build)` gives the subtree's controls the identity `id`, which a subtree
+mounted again under the same `id` keeps, as a list's row does. `Follow(key,
+fn)` calls `fn` with the key now, before it returns, and again whenever the
+key changes to a different value, untracked; unlike `Watch`, which waits
+for the frame's effects, it has the first subtree mounted by the first
+layout. A component whose content changed with no rebuild, as a switcher's
+does when a key mounts, calls `Invalidate()` on itself:
+
+```go
+comp = ggui.Component(func() ggui.Widget {
+    scope := ggui.UseScope()
+    ggui.Follow(page, func(p Page) {
+        if dispose != nil {
+            dispose()
+        }
+        shown, dispose = scope.Mount(func() ggui.Widget { return view(p) })
+        comp.Invalidate()
+    })
+    return body
+})
+```
+
 The keyboard key type is `KeyboardKey`; constants such as `KeyEnter` and the
 `KeyEvent.Key` field retain their names. Widget `.Key(id)` setters still assign
 input identity and are distinct from the `Key` control-flow block.

@@ -65,12 +65,9 @@ func Component(setup func() Widget) *ComponentWidget {
 		if owner == nil {
 			owner = reactive.CurrentOwner()
 		}
-		reactive.WithOwner(owner, func() {
-			reactive.RootWith(c, "", func() {
-				c.child = remembering(setup)
-				c.cw.child = c.child
-			})
-		})
+		// Disposed with the owner: a component is not unmounted on its own.
+		c.child, _ = Scope{owner}.MountAs(c, "", setup)
+		c.cw.child = c.child
 	}
 	return c
 }
@@ -190,54 +187,109 @@ func Key[K comparable](key Readable[K], build func(K) Widget) *ComponentWidget {
 	return Component(func() Widget {
 		c := &ComponentWidget{}
 		var dispose Cleanup
-		owner := reactive.CurrentOwner()
+		scope := UseScope()
 		OnCleanup(func() {
 			if dispose != nil {
 				dispose()
 			}
 		})
-		observeKey(key, func(value K, _ bool) {
+		Follow(key, func(value K) {
 			if dispose != nil {
 				dispose()
 				dispose = nil
 			}
-			c.child, dispose = mountKeyed(owner, func() Widget { return build(value) })
+			c.child, dispose = scope.Mount(func() Widget { return build(value) })
 			c.cw.child = c.child
-			c.cw.invalidate()
+			c.Invalidate()
 		})
 		return c
 	})
 }
 
-// observeKey calls changed with key's value now and again whenever it
-// changes to a different one; first is set on the initial call. It shares
-// Key's and Switcher's dedupe, which a re-run reading the same key skips.
-func observeKey[K comparable](key Readable[K], changed func(v K, first bool)) {
+// Follow calls fn with key's value now, before it returns, and again
+// whenever key changes to a value other than the last fn was given,
+// compared with ==, until stop is called or the builder or effect it was
+// called in is disposed. fn runs untracked: what it reads itself does not
+// call it again. Unlike Watch, whose first call waits for the frame's
+// effects, after layout, a builder that mounts what the key picks with it
+// has that mounted by its first layout; Key and Switcher follow their keys
+// with it.
+func Follow[K comparable](key Readable[K], fn func(K)) (stop func()) {
 	var previous K
 	var initialized bool
-	reactive.Observe(func() {
+	return reactive.Observe(func() {
 		v := key.Get()
 		if initialized && v == previous {
 			return
 		}
-		first := !initialized
 		previous, initialized = v, true
-		changed(v, first)
+		Untrack(func() struct{} { fn(v); return struct{}{} })
 	})
 }
 
-// mountKeyed builds a keyed subtree under owner in a root of its own, and
-// returns it with the function that disposes it.
-func mountKeyed(owner *reactive.Computation, build func() Widget) (child Widget, dispose Cleanup) {
-	reactive.WithOwner(owner, func() {
-		// A unique root gives remounted controls fresh identities.
-		identity := new(int)
-		dispose = reactive.RootWith(identity, "", func() {
+// A Scope is where a builder runs: what is mounted in it, a subtree a Key
+// branch or an EachKeyed row builds, is disposed with it, and before then
+// whenever the Cleanup Mount returned is called. A widget that mounts
+// subtrees of its own as it goes, keyed by a value or by the rows of a
+// list, takes the Scope of the builder that made it with UseScope and
+// mounts each in it, as Key does:
+//
+//	comp = ggui.Component(func() ggui.Widget {
+//		scope := ggui.UseScope()
+//		ggui.Follow(page, func(p Page) {
+//			if dispose != nil {
+//				dispose()
+//			}
+//			shown, dispose = scope.Mount(func() ggui.Widget { return view(p) })
+//			comp.Invalidate()
+//		})
+//		return body
+//	})
+//
+// The zero Scope belongs to nothing: what is mounted in it lives until its
+// Cleanup is called.
+type Scope struct {
+	owner *reactive.Computation
+}
+
+// UseScope returns the Scope of the builder or effect running now: a
+// Component's setup, a Key branch, an EachKeyed row, an App's builder.
+// Outside every one it returns the zero Scope.
+func UseScope() Scope { return Scope{reactive.CurrentOwner()} }
+
+// Mount builds a subtree with build, under s, and returns it with the
+// Cleanup that disposes it. build runs as a Key branch does: untracked, as
+// the root of computations of its own, with a Remember memory of its own
+// that goes when the subtree does, and with an identity of its own, so the
+// controls of a subtree mounted again for the same key start afresh rather
+// than taking the state of those the last mount built. What was mounted
+// before stays mounted until its own Cleanup is called: a Switcher keeps
+// the subtree it switched from while it fades out.
+func (s Scope) Mount(build func() Widget) (Widget, Cleanup) {
+	// A unique root gives remounted controls fresh identities.
+	return s.MountAs(new(int), "", build)
+}
+
+// MountAs is Mount with the identity the controls in the subtree derive
+// theirs from given, which a subtree mounted again with the same id keeps,
+// and with name, which the subtree's computations are listed under in a
+// ggui_debug build and the inspector. EachKeyed mounts each row as the
+// entry it keeps for it, named by its key: a row whose key comes back after
+// it was disposed is a new entry, and starts afresh.
+func (s Scope) MountAs(id any, name string, build func() Widget) (child Widget, dispose Cleanup) {
+	reactive.WithOwner(s.owner, func() {
+		dispose = reactive.RootWith(id, name, func() {
 			child = remembering(build)
 		})
 	})
 	return child, dispose
 }
+
+// Invalidate marks the component's own layout cache stale, and every one
+// above it, and asks for a layout: for a widget that changed what the
+// component holds without the component rebuilding, as a Switcher does when
+// it mounts the subtree of a new key beside the one leaving.
+func (c *ComponentWidget) Invalidate() { c.cw.invalidate() }
 
 // Vacant is a widget that may show nothing, as an If whose condition is
 // false does: Vacant reports that it currently does, and a Row, Column or
@@ -924,7 +976,7 @@ func dedupeReads(reads []sourceRead) []sourceRead {
 // pane or a fixed panel does not paint the window again at every step. A
 // boundary that turns out to follow its content's size is painted whole
 // once and passes the next change to the one around it; see
-// layoutBoundary.
+// LayoutBoundary.
 //
 // It may be called from the widget's own Layout, for a size that is still
 // on its way somewhere, as Motion.LayoutTo does: the layout asked for is
@@ -939,4 +991,23 @@ func Invalidate(env Env) {
 	}
 	reactive.RequestLayout()
 	c.stale()
+}
+
+// Relayout asks for a layout that no boundary holds, and marks the layout
+// caches above the widget laid out under env stale, at once: the next
+// frame lays the tree out again and measures that widget's subtree afresh.
+// It is for a change that shows outside any boundary around the widget, or
+// for the widget that is the boundary, whose own layout must run though
+// its size has not changed, as a Scroll's does for content to lay out at a
+// new offset. Made inside the boundary's LayoutBoundary.Contained, the
+// layout it asks for is held there after all, as a Scroll's moves are. A
+// cache measuring as it is called, as one around a Layout that calls it
+// is, keeps no mark: that measurement is under way, and ends valid.
+//
+// Invalidate stays the call for a widget whose size changed: it lets the
+// boundary around hold that. A widget keeps the Env of its last Layout to
+// call either later.
+func Relayout(env Env) {
+	c, _ := env.Get(cacheOwner)
+	c.invalidate()
 }

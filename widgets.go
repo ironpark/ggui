@@ -72,6 +72,50 @@ func (e *EnvWidget) Baseline() (float64, bool) { return BaselineOf(e.child) }
 // Paint implements Widget.
 func (e *EnvWidget) Paint(dst *Canvas, r Rect) { dst.Paint(e.child, r) }
 
+// ContainWidget lays its child out under the constraints it is given,
+// clips it to its own Rect and holds a change of size inside it there.
+// Build one with Contain.
+type ContainWidget struct {
+	child Widget
+	size  Size // the child's, as laid out
+	hold  LayoutBoundary
+}
+
+// Contain clips child to the Rect it is painted in and makes it a layout
+// boundary: a disclosure easing open inside, or anything else that calls
+// Invalidate, is painted within it alone, and what lies beside it is left
+// as the last frame painted it, while its size stays as it was. Wrap a
+// panel, a card or a pane whose size its parent decides: a Box of fixed
+// Size, an Expanded share of a Row, a split's pane.
+//
+//	ggui.Row(ggui.Contain(ggui.Box(details).Size(320, 480)), rest)
+//
+// A Contain whose size does follow its content's, as one under loose
+// constraints may, costs a frame painted whole the first time its content
+// grows, and holds nothing from then on; the boundary around it, a Scroll's
+// or another Contain's, holds the change instead. Under a Transform it
+// holds nothing either.
+func Contain(child Widget) *ContainWidget { return &ContainWidget{child: child} }
+
+// Layout implements Widget.
+func (w *ContainWidget) Layout(c Constraints, env Env) Size {
+	inner, check := w.hold.Begin(env)
+	w.size = w.child.Layout(c, inner)
+	size := c.Constrain(w.size)
+	baseline, based := BaselineOf(w.child)
+	w.hold.End(check, c, size, baseline, based)
+	return size
+}
+
+// Baseline implements Baseliner: the child's.
+func (w *ContainWidget) Baseline() (float64, bool) { return BaselineOf(w.child) }
+
+// Paint implements Widget: the child, clipped to r.
+func (w *ContainWidget) Paint(dst *Canvas, r Rect) {
+	w.hold.Paint(dst, r)
+	dst.Clip(r).Paint(w.child, Rct(r.Origin, w.size))
+}
+
 // BoxWidget paints a rectangle and lays an optional child inside its padding.
 // Build one with Box.
 type BoxWidget struct {
