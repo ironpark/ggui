@@ -61,7 +61,7 @@ var sheetDone = sync.OnceValue(func() *cocoa.Block {
 func showDialog(k dialogKind, d FileDialog, owner uintptr) (paths []string, err error) {
 	// The engine runs nothing on the main thread before it has a window.
 	err = ErrNotRunning
-	ggwd.RunOnMainThread(func() { paths, err = runPanel(k, d, owner) })
+	ggwd.RunOnMainThread(func() { inFront(func() { paths, err = runPanel(k, d, owner) }) })
 	return paths, err
 }
 

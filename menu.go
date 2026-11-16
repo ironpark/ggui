@@ -87,7 +87,9 @@ func (m MenuItem) BindChecked(r Readable[bool]) MenuItem { m.Checked = r; return
 
 // NativeMenu reports whether App.SetMenu's menus appear in the platform's
 // menu bar, which is so on macOS. Elsewhere an app draws them itself, with
-// ui.AppMenubar, and their chords work either way.
+// ui.AppMenubar, and their chords work either way. An app ggui dev shows
+// in its viewer draws them itself on macOS too: the menu bar is the
+// viewer's.
 func NativeMenu() bool { return nativemenu.Supported() }
 
 // menuSet is one group of menus the app installed: the menu bar's, or a
@@ -317,7 +319,8 @@ func keyEquivalent(k KeyboardKey) string {
 	return strings.ToLower(k.String())
 }
 
-// NativeContextMenu reports whether the platform supports native context menus.
+// NativeContextMenu reports whether the platform supports native context
+// menus: not in an app ggui dev shows in its viewer.
 func NativeContextMenu() bool { return nativemenu.ContextSupported() }
 
 // ShowContextMenu opens a native menu at a position in window content coordinates
@@ -381,7 +384,9 @@ type Tray struct {
 }
 
 // TraySupported reports whether AddTray's icons show, which is so on
-// macOS and Windows. Elsewhere a Tray does nothing.
+// macOS and Windows, except in an app ggui dev shows in its viewer.
+// Elsewhere a Tray does nothing; in the viewer's app it says so once on
+// stderr.
 func TraySupported() bool { return nativemenu.TraySupported() }
 
 // AddTray puts an icon in the system tray. Call it from the UI thread or
@@ -415,6 +420,7 @@ func (a *App) AddTray(cfg TrayConfig) *Tray {
 	t.encodeIcon()
 	a.trays = append(a.trays, t)
 	t.install()
+	remoteNotice("the tray icon does not show")
 	return t
 }
 

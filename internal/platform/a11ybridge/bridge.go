@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 
 	"github.com/ironpark/ggui/a11y"
+	"github.com/ironpark/ggui/internal/platform/remotedisplay"
 	"github.com/ironpark/ggwd"
 )
 
@@ -149,9 +150,12 @@ type Bridge struct {
 // none before Run. act is what an assistive technology's request to press or
 // focus something ends up calling; the bridge takes the function rather than
 // the App so that nothing here has to know what an App is.
+//
+// An app ggui dev shows in its viewer has no native window to hang a tree
+// on, so its bridge stays unbound, as with mode Off.
 func (b *Bridge) Start(act func(a11y.NodeID, a11y.Action), mode a11y.Mode) {
 	b.mode = mode
-	if mode == a11y.Off {
+	if mode == a11y.Off || remotedisplay.On() {
 		return
 	}
 	b.plat = newAXPlatform()

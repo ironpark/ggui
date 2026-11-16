@@ -33,7 +33,7 @@ const (
 // showMessage runs the alert on the main thread and waits for it.
 func showMessage(m Message, owner uintptr) (i int, err error) {
 	err = ErrNotRunning
-	ggwd.RunOnMainThread(func() { i, err = runAlert(m, objc.ID(owner)) })
+	ggwd.RunOnMainThread(func() { inFront(func() { i, err = runAlert(m, objc.ID(owner)) }) })
 	return i, err
 }
 

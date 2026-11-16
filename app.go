@@ -1,6 +1,7 @@
 package ggui
 
 import (
+	"fmt"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/ironpark/ggui/a11y"
 	"github.com/ironpark/ggui/internal/platform/nativemenu"
+	"github.com/ironpark/ggui/internal/platform/remotedisplay"
 	"github.com/ironpark/ggui/internal/reactive"
 	"github.com/ironpark/ggui/runtime"
 	"github.com/ironpark/ggwd"
@@ -99,6 +101,10 @@ func (a *App) SetClipboard(c runtime.Clipboard) *App {
 // with other windows is ordinary signals: a write in one repaints every
 // window that reads it.
 //
+// An app ggui dev shows in its viewer has one window: there OpenWindow
+// returns an error while Run runs, and a window made before Run other than
+// the first does not open, which the app says once on stderr.
+//
 //	ggui.UseWindow().App().OpenWindow(ggui.Config{Title: "Preferences"}, prefs)
 func (a *App) OpenWindow(cfg Config, build Builder) (*Window, error) {
 	w := newWindow(a, a.rt, cfg, build)
@@ -107,7 +113,7 @@ func (a *App) OpenWindow(cfg Config, build Builder) (*Window, error) {
 	}
 	if a.running {
 		if err := w.open(); err != nil {
-			return nil, err
+			return nil, errOneWindow(err)
 		}
 	}
 	a.mu.Lock()
@@ -191,8 +197,14 @@ func (a *App) handleEvent(ev ggwd.Event) error {
 		if Appearance(appearance.Load()) != AppearanceSystem {
 			applyAppearance()
 		}
-		for _, w := range a.Windows() {
+		for i, w := range a.Windows() {
 			if err := w.open(); err != nil {
+				if i > 0 && remotedisplay.On() {
+					// The viewer shows the first; the app runs on without
+					// the others rather than not at all.
+					remoteNotice(fmt.Sprintf("window %q does not open", w.Title()))
+					continue
+				}
 				return err
 			}
 		}

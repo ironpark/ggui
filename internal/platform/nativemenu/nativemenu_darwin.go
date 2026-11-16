@@ -8,6 +8,7 @@ import (
 
 	"github.com/ebitengine/purego/objc"
 	"github.com/ironpark/ggui/internal/platform/cocoa"
+	"github.com/ironpark/ggui/internal/platform/remotedisplay"
 	"github.com/ironpark/ggwd"
 )
 
@@ -127,11 +128,14 @@ var targetClass = sync.OnceValue(func() objc.Class {
 	return c
 })
 
-// Supported reports whether the platform shows Set's menus.
-func Supported() bool { return true }
+// Supported reports whether the platform shows Set's menus. An app shown by
+// ggui dev's viewer has none of its own: the menu bar is the viewer's,
+// and the app's process runs no AppKit event loop to answer a menu, a
+// tray icon or a popup, so all three are off there.
+func Supported() bool { return !remotedisplay.On() }
 
 // TraySupported reports whether the platform shows SetTray's icons.
-func TraySupported() bool { return true }
+func TraySupported() bool { return !remotedisplay.On() }
 
 // Handle sets the function called with an action's id when it is chosen,
 // in a menu or by a tray's click. It runs on the main thread and must hand
@@ -357,7 +361,7 @@ func RemoveTray(key int) {
 }
 
 // ContextSupported reports whether native popup menus are available.
-func ContextSupported() bool { return true }
+func ContextSupported() bool { return !remotedisplay.On() }
 
 // Popup tracks a menu synchronously and returns its selected action, or zero
 // on dismissal. Selection is returned to the caller rather than dispatched
