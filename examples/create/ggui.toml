@@ -1,0 +1,9 @@
+# How ggui build bundles this example, as task bundle and the run tasks
+# do. See docs/cli.md for every key.
+
+[app]
+name = "ggui-create"
+id = "io.github.ironpark.ggui.create"
+
+[macos.plist]
+CFBundleDisplayName = "ggui · create"

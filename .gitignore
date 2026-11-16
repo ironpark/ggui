@@ -37,3 +37,6 @@ go.work.sum
 
 # Benchmark baselines and runs from task bench:save and bench:compare.
 /.bench/
+
+# Task's record of the sources a task was last run on (the cli task's).
+/.task/

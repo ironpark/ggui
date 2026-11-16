@@ -31,6 +31,7 @@ tasks:
       - '"{{.GO}}" build -C icons/heroicons ./...'
       - '"{{.GO}}" build -C icons/lucide ./...'
       - '"{{.GO}}" build -C icons/tabler ./...'
+      - '"{{.GO}}" build -C cmd/ggui ./...'
 
   test:
     desc: Run all tests, including the modules nested in this one
@@ -47,6 +48,7 @@ tasks:
       - '"{{.GO}}" test -C icons/heroicons ./...'
       - '"{{.GO}}" test -C icons/lucide ./...'
       - '"{{.GO}}" test -C icons/tabler ./...'
+      - '"{{.GO}}" test -C cmd/ggui ./...'
 
   bench:
     desc: Run benchmarks (COUNT=6 by default, for benchstat)
@@ -112,6 +114,7 @@ tasks:
       - '"{{.GO}}" vet -C icons/heroicons ./...'
       - '"{{.GO}}" vet -C icons/lucide ./...'
       - '"{{.GO}}" vet -C icons/tabler ./...'
+      - '"{{.GO}}" vet -C cmd/ggui ./...'
 
   vet:windows:
     desc: Type-check and vet the Windows build from any host
@@ -126,6 +129,7 @@ tasks:
       - 'GOOS=windows GOARCH=amd64 "{{.GO}}" vet -unsafeptr=false -tags ggui_inspector .'
       - 'GOOS=windows GOARCH=arm64 "{{.GO}}" vet -unsafeptr=false -tags ggui_inspector .'
       - 'GOOS=windows GOARCH=arm64 "{{.GO}}" vet -unsafeptr=false ./...'
+      - 'GOOS=windows GOARCH=amd64 "{{.GO}}" vet -C cmd/ggui ./...'
       - 'GOOS=windows GOARCH=amd64 "{{.GO}}" test -c -o /dev/null ./internal/platform/a11ybridge'
       - 'GOOS=windows GOARCH=arm64 "{{.GO}}" test -c -o /dev/null ./internal/platform/a11ybridge'
 
@@ -136,7 +140,7 @@ tasks:
     # go install honnef.co/go/tools/cmd/staticcheck@v0.8.2
     cmds:
       - for: [darwin/arm64, linux/amd64, windows/amd64, windows/arm64]
-        cmd: 'GOOS={{splitList "/" .ITEM | first}} GOARCH={{splitList "/" .ITEM | last}} staticcheck ./... ./examples/sqlite/... ./fonts/notoemoji/... ./icons/heroicons/... ./icons/lucide/... ./icons/tabler/...'
+        cmd: 'GOOS={{splitList "/" .ITEM | first}} GOARCH={{splitList "/" .ITEM | last}} staticcheck ./... ./examples/sqlite/... ./fonts/notoemoji/... ./icons/heroicons/... ./icons/lucide/... ./icons/tabler/... ./cmd/ggui/...'
 
   fuzz:
     desc: Run every fuzz target for FUZZTIME each (default 10s)
@@ -152,6 +156,7 @@ tasks:
       - '"{{.GO}}" fmt -C icons/heroicons ./...'
       - '"{{.GO}}" fmt -C icons/lucide ./...'
       - '"{{.GO}}" fmt -C icons/tabler ./...'
+      - '"{{.GO}}" fmt -C cmd/ggui ./...'
 
   tidy:
     desc: Tidy Go dependencies
@@ -162,10 +167,24 @@ tasks:
       - '"{{.GO}}" mod tidy -C icons/heroicons'
       - '"{{.GO}}" mod tidy -C icons/lucide'
       - '"{{.GO}}" mod tidy -C icons/tabler'
+      - '"{{.GO}}" mod tidy -C cmd/ggui'
       - '"{{.GO}}" work sync'
 
+  cli:
+    internal: true
+    # The ggui command, built into bin/ and rebuilt when its sources
+    # change. It is a module of its own, so it is built from its directory;
+    # the tasks that use it run from here, so the paths they hand it stay
+    # relative to the repository.
+    sources:
+      - cmd/ggui/**/*
+    generates:
+      - bin/ggui{{exeExt}}
+    cmds:
+      - '"{{.GO}}" build -C cmd/ggui -o ../../bin/ggui{{exeExt}} .'
+
   bundle:
-    desc: Build a macOS app bundle (EXAMPLE=counter, todo, workspace, gallery, create, or router)
+    desc: Build a macOS app bundle with ggui build (EXAMPLE=counter, todo, workspace, gallery, create, or router)
     vars:
       EXAMPLE: '{{default "counter" .EXAMPLE}}'
       # Empty by default: a bundle is a release build. launch sets it.
@@ -177,38 +196,11 @@ tasks:
     preconditions:
       - sh: 'test "$(uname -s)" = Darwin'
         msg: App bundles require macOS.
+    deps: [cli]
+    # The bundle's name, identifier and display name come from the
+    # example's ggui.toml: bin/ggui-EXAMPLE.app.
     cmds:
-      - |
-        mkdir -p 'bin/ggui-{{.EXAMPLE}}.app/Contents/MacOS'
-        "{{.GO}}" build {{if .TAGS}}-tags {{.TAGS}} {{end}}-o 'bin/ggui-{{.EXAMPLE}}.app/Contents/MacOS/ggui-{{.EXAMPLE}}' './examples/{{.EXAMPLE}}'
-      - |
-        cat > 'bin/ggui-{{.EXAMPLE}}.app/Contents/Info.plist' <<'PLIST'
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-          <key>CFBundleExecutable</key>
-          <string>ggui-{{.EXAMPLE}}</string>
-          <key>CFBundleIdentifier</key>
-          <string>io.github.ironpark.ggui.{{.EXAMPLE}}</string>
-          <key>CFBundleName</key>
-          <string>ggui-{{.EXAMPLE}}</string>
-          <key>CFBundleDisplayName</key>
-          <string>ggui · {{.EXAMPLE}}</string>
-          <key>CFBundlePackageType</key>
-          <string>APPL</string>
-          <key>CFBundleInfoDictionaryVersion</key>
-          <string>6.0</string>
-          <key>CFBundleShortVersionString</key>
-          <string>0.1.0</string>
-          <key>CFBundleVersion</key>
-          <string>1</string>
-          <key>NSHighResolutionCapable</key>
-          <true/>
-        </dict>
-        </plist>
-        PLIST
-      - "plutil -lint 'bin/ggui-{{.EXAMPLE}}.app/Contents/Info.plist'"
+      - 'bin/ggui build --target macos --out bin --tags "{{.TAGS}}" ./examples/{{.EXAMPLE}}'
 
   run:
     desc: Bundle and launch the counter example
@@ -249,20 +241,22 @@ tasks:
       - "open -n 'bin/ggui-{{.EXAMPLE}}.app'"
 
   serve:
-    desc: Build an example for js/wasm and serve it (EXAMPLE=gallery, PORT=3000, WASM_OPT=-Oz or empty to skip)
+    desc: Serve an example in a browser with ggui dev --web, which rebuilds and reloads the page on change (EXAMPLE=gallery, PORT=3000, WASM_OPT=-O2 to optimize)
     vars:
       EXAMPLE: '{{default "gallery" .EXAMPLE}}'
       PORT: '{{default "3000" .PORT}}'
       # The dev loop, so the served app gets the inspector by default.
       TAGS: '{{default "ggui_inspector" .TAGS}}'
-      # Mirrors the server's own default; set WASM_OPT= to skip the pass.
-      WASM_OPT: '{{default "-O2" .WASM_OPT}}'
+      # Empty skips wasm-opt, as ggui dev does by default: the pass adds
+      # seconds to every rebuild for 2% of the binary.
+      WASM_OPT: '{{default "" .WASM_OPT}}'
     requires:
       vars:
         - name: EXAMPLE
           enum: [counter, todo, workspace, gallery, create, router]
+    deps: [cli]
     cmds:
-      - '"{{.GO}}" run ./internal/tools/serve -http ":{{.PORT}}" -wasm-opt "{{.WASM_OPT}}" -tags "{{.TAGS}}" "./examples/{{.EXAMPLE}}"'
+      - 'bin/ggui dev --web --port {{.PORT}} --wasm-opt "{{.WASM_OPT}}" --tags "{{.TAGS}}" ./examples/{{.EXAMPLE}}'
 
   serve-gallery:
     desc: Serve the component gallery in a browser at http://localhost:3000

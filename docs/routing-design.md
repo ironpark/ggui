@@ -516,9 +516,10 @@ path, a deployment needs two things that `Hash` does not:
 
 A path outside the base, which only a misconfigured host delivers, is
 taken whole and usually shows a not-found screen. The development server
-does both for you: `go run ./internal/tools/serve -base /app ./examples/router`
+does both for you: `ggui dev --web --base /app/ ./examples/router`
 injects the `<base>` element and serves the page for any HTML request that
-names no file.
+names no file, and `ggui build --target web` writes `web.base` from
+`ggui.toml` into the page it bundles (see [the ggui command](cli.md)).
 
 Fragment changes update state only; anchor scrolling is not part of v1. New
 pages get fresh control identities, so page scroll positions are not

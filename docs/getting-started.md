@@ -19,6 +19,18 @@ In your Go module, install the library:
 go get github.com/ironpark/ggui
 ```
 
+Or let [the ggui command](cli.md) make the module, a counter to start from
+and a `ggui.toml`, then run it with live rebuilds:
+
+```sh
+go install github.com/ironpark/ggui/cmd/ggui@latest
+ggui init hello && cd hello
+ggui dev
+```
+
+`ggui doctor` checks that the machine has what ggui needs, and
+`ggui build` bundles the app as a macOS `.app` or for the web.
+
 The repository requires Go 1.27+ for generic methods. The core package provides
 layout, state, rendering, and input; `github.com/ironpark/ggui/ui` provides themed
 controls. Platform build dependencies still apply even though ggui itself does

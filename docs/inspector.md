@@ -33,9 +33,10 @@ the import is empty and `App.Inspector` still exists, but the call does
 nothing and none of the panel — including its own monospaced font — reaches
 the binary. What stays in every build is small: the `inspect` package that
 models a frame, the `InspectFields` hooks on the built-in widgets, and
-`App.OnInspect`, which works without the tag or the import. The
-`task run-*` and `task serve` development loops set the tag for you;
-`task bundle` does not, because that is the release path.
+`App.OnInspect`, which works without the tag or the import.
+[`ggui dev`](cli.md#ggui-dev) and the `task run-*` and `task serve`
+development loops set the tag for you; `ggui build` and `task bundle` do
+not, because they are the release path.
 
 The panel uses a compact, syntax-colored widget tree with type, accessible
 name, role or layout badges, and dimensions. Moving the pointer follows the

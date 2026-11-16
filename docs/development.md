@@ -59,9 +59,10 @@ request:
 
 - **test**, on Linux, macOS and Windows: `go test` plain, with
   `ggui_inspector` and with `ggui_debug`, and with `-race` everywhere but
-  Windows, whose runner has no C toolchain for it. `examples/sqlite` is
-  tested through a `go work init . ./examples/sqlite` workspace, so it
-  builds against the checkout rather than a published ggui.
+  Windows, whose runner has no C toolchain for it. `examples/sqlite`, the
+  other nested modules and `cmd/ggui` are tested through a `go work init`
+  workspace, so they build against the checkout rather than a published
+  ggui; `cmd/ggui`'s tests include building the app `ggui init` writes.
 - **wasm**: builds everything for `js/wasm` and runs the packages that do
   not start ggfx under node, `internal/reactive/goid` among them.
 - **lint**: `gofmt`, `go vet`, the Windows vet of `task vet:windows`,
@@ -87,6 +88,18 @@ go run ./examples/settings
 go run ./examples/custom
 ```
 
+The [ggui command](cli.md) in [cmd/ggui](../cmd/ggui) runs any of them
+with live rebuilds, restarting the app on every change:
+
+```sh
+go build -C cmd/ggui -o ../../bin/ggui .
+bin/ggui dev ./examples/gallery
+bin/ggui dev --web ./examples/gallery
+```
+
+It is a module of its own, so it is built from its directory and run from
+here; the Task entries below do the same.
+
 On macOS, the following commands build and launch application bundles:
 
 ```sh
@@ -96,10 +109,12 @@ task run-gallery
 task bundle EXAMPLE=gallery
 ```
 
-`task bundle` accepts `counter`, `todo`, or `gallery` and builds
-`bin/ggui-<example>.app` with its executable and `Info.plist`. The run tasks launch
-it with `open -n`, so each invocation starts a new instance. These local builds
-are not distribution-signed or notarized. Other platforms use the `go run`
+`task bundle` accepts `counter`, `todo`, `workspace`, `gallery`, `create` or
+`router` and builds `bin/ggui-<example>.app` with `ggui build --target macos`,
+which reads the bundle's name and identifier from the example's
+`ggui.toml`. The run tasks launch it with `open -n`, so each invocation
+starts a new instance. These local builds are signed ad hoc, not with a
+Developer ID, and are not notarized. Other platforms use the `go run`
 commands above; chart and control examples also run directly on macOS.
 
 ## Run in a browser
@@ -109,26 +124,20 @@ task serve-gallery
 task serve EXAMPLE=todo PORT=3001
 ```
 
-The server builds the example for `js/wasm` and serves a loading page. Open
-`http://localhost:3000` for `serve-gallery`, or the port you selected. The Task
-entry accepts `counter`, `todo`, and `gallery`.
+`task serve` runs `ggui dev --web`, which builds the example for `js/wasm`
+and serves a loading page. Open `http://localhost:3000` for
+`serve-gallery`, or the port you selected. The Task entry accepts the same
+examples as `task bundle`.
 
-Build output is cached for the lifetime of the server. After editing code,
-request `/_rebuild` on the same server to invalidate the build, then reload the
-app page. The endpoint returns HTTP 204; it does not navigate or rebuild by itself. Reloading after a failed build retries it; a normal reload of a successful
-build uses the cache.
+The server rebuilds when the example's code changes, and an open page
+reloads itself onto each build; a build that fails is shown over the page,
+which keeps running the build before it. Each rebuild skips Binaryen's
+`wasm-opt`, which takes seconds for 2% of the binary; pass `WASM_OPT=-O2`
+to run it. `ggui build --target web` runs it by default.
 
-If Binaryen's `wasm-opt` is installed, the server uses `-O2` by default; without
-it, the linked binary is served. To explicitly skip optimization, run the server
-directly (the Task default substitutes `-O2` for an empty option):
-
-```sh
-go run ./internal/tools/serve -http :3000 -wasm-opt="" ./examples/gallery
-```
-
-The server uses `go` from `PATH` for its child build, even when the Task launcher
-uses `GO=/path/to/go`. Put the intended toolchain on `PATH` for WASM builds.
-This is a development server; stop it when finished.
+ggui runs `go` from `PATH`, even when the Task launcher uses
+`GO=/path/to/go`, so put the intended toolchain on `PATH`. This is a
+development server, bound to localhost; stop it when finished.
 
 ## Visual checks
 
@@ -155,6 +164,7 @@ those guides as historical measurements; rerun them on your target hardware.
 | Overlays and images | [widget/popup.go](../widget/popup.go) (`Popup`), [overlay.go](../overlay.go) (the window's `Overlay`), [paint.go](../paint.go) (`Canvas.DrawImage`), [widget/image.go](../widget/image.go), [internal/imgcache/](../internal/imgcache/) (the cache `widget.AsyncImage` loads into) |
 | Testing and diagnostics | [probe.go](../probe.go), [inspect/panel/](../inspect/panel) (the panel, build tag `ggui_inspector`), [inspector.go](../inspector.go) (its registration, and the frame built from the trace), [inspect/](../inspect) (the frame model the panel and `App.OnInspect` share, and `ReadFrameStats` and `ReadMotionReport`), [internal/framestats/](../internal/framestats/) (the process's frame counters those read), [overlay.go](../overlay.go) (the Overlay the panel draws as), [widget.go](../widget.go) (Cached) |
 | Runnable applications | [examples/](../examples/) |
+| The ggui command | [cmd/ggui/](../cmd/ggui/): `init`, `dev`, `build` and `doctor`, a module of its own that drives the go command and imports nothing of ggui; its [internal/](../cmd/ggui/internal/) packages keep the watcher, the process runner, the builders and the bundle writers apart |
 
 The module is built in three layers, each importing only those below it:
 

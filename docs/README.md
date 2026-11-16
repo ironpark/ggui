@@ -8,7 +8,8 @@ Go 1.27 or newer.
 
 ## Start here
 
-1. Run the [counter quick start](../README.md#quick-start).
+1. Run the [counter quick start](../README.md#quick-start), or create an
+   app with [`ggui init`](cli.md#ggui-init).
 2. Learn [app setup and configuration](getting-started.md).
 3. Read [state and components](reactivity.md) before adding reactive behavior.
 4. Choose [layouts](layout.md) and [form controls](forms.md) for your screen.
@@ -56,6 +57,7 @@ from the repository root unless a guide says otherwise.
 | Test and inspect a UI | [Testing](testing.md) · [Widget inspector](inspector.md) |
 | Write a custom widget or understand rendering | [Custom widgets and rendering](rendering.md) |
 | Understand API conventions and runtime setters | [Public API conventions](api-conventions.md) |
+| Create an app, run it with live rebuilds, bundle it as a macOS app or for the web, or check a machine's setup | [The ggui command](cli.md) |
 | Build examples, run checks, or navigate the source | [Development](development.md) |
 
 ## Package and asset references
