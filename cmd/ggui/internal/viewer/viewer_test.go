@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -45,9 +44,6 @@ func fakeViewer() {
 
 func startFake(t *testing.T) *Process {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("the viewer runs on unix systems")
-	}
 	t.Setenv("GGUI_FAKE_VIEWER", "1")
 	exe, err := os.Executable()
 	if err != nil {

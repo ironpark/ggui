@@ -27,13 +27,16 @@ type Unavailable struct{ Reason string }
 func (u *Unavailable) Error() string { return u.Reason }
 
 // Supported reports, with an *Unavailable, why remote display is not
-// offered on this system. The viewer builds on unix systems, but is made
-// and tried on macOS only for now.
+// offered on this system. The viewer builds on unix systems and Windows,
+// and is made and tried on macOS, Linux with X11, and Windows 10 1803 or
+// later, the first with unix sockets: on an older Windows it does not
+// start, and the app opens its own window.
 func Supported() error {
-	if runtime.GOOS != "darwin" {
-		return &Unavailable{"remote display is available on macOS only for now"}
+	switch runtime.GOOS {
+	case "darwin", "linux", "windows":
+		return nil
 	}
-	return nil
+	return &Unavailable{"remote display is available on macOS, Linux and Windows"}
 }
 
 // Binary is the viewer a project's module graph builds.

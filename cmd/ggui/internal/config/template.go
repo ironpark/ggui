@@ -57,7 +57,7 @@ version = {{.Version}}
 # Where the app's window shows: "remote" keeps one window, the viewer's,
 # open while the app is rebuilt and restarts; "window" gives each run a
 # window of its own, as a release build has. Remote is the default on
-# macOS; ggui dev --display overrides this.
+# macOS, Linux and Windows; ggui dev --display overrides this.
 # display = "remote"
 
 [macos]

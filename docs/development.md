@@ -60,9 +60,18 @@ request:
 
 - **test**, on Linux, macOS and Windows: `go test` plain, with
   `ggui_inspector` and with `ggui_debug`, and with `-race` everywhere but
-  Windows, whose runner has no C toolchain for it. On Linux and macOS it
-  also tests the `ggwd_remote` build that `ggui dev` shows in its viewer,
-  and builds `examples/counter` with it. `examples/sqlite`, the
+  Windows, whose runner has no C toolchain for it. It also tests the
+  `ggwd_remote` build that `ggui dev` shows in its viewer, and builds
+  `examples/counter` with it.
+- **remote**, on Linux, macOS and Windows: runs the viewer and
+  `examples/counter` with the remote backend end to end, on the runner's
+  window system and GPU (`cmd/ggviewer`'s `TestEndToEnd`, which
+  `GGUI_E2E=1` turns on): the app attaches and shows its first frame,
+  takes input, shows a failed build's errors over its frame, follows a
+  resize, restarts into the same window, and gets its frames through
+  while the window is hidden or minimized. Linux runs it under Xvfb with
+  openbox and Mesa's software OpenGL, Windows on WARP, Direct3D's software
+  rasterizer; the window's pictures are kept as the job's artifact. `examples/sqlite`, the
   other nested modules and `cmd/ggui` are tested through a `go work init`
   workspace, so they build against the checkout rather than a published
   ggui; `cmd/ggui`'s tests include building the app `ggui init` writes.
@@ -105,7 +114,8 @@ here; the Task entries below do the same.
 
 ### The dev viewer
 
-On macOS `ggui dev` shows the app in [`cmd/ggviewer`](../cmd/ggviewer/),
+On macOS, Linux and Windows `ggui dev` shows the app in
+[`cmd/ggviewer`](../cmd/ggviewer/),
 a long-lived process that owns the OS window, rather than in a window of
 the app's own. The app is an ordinary native build with the `ggwd_remote`
 tag, started with `GGWD_REMOTE_SOCKET` naming the viewer's unix socket.
@@ -117,6 +127,25 @@ against the viewer's own device into its window. Input, the window's
 size and scale and the system's appearance come back over the socket,
 in the protocol of `ggwd/remote`. The viewer acknowledges each batch
 once replayed, which paces the app to what is shown.
+
+The transport is a unix socket everywhere, Windows' included (Windows 10
+1803 and later). On macOS and Linux the shared memory's descriptor goes
+over the socket with `SCM_RIGHTS`: a memfd on Linux, an unlinked
+temporary file on macOS. Windows passes no handles over a unix socket,
+so there it is a file mapping with a random name in the session's
+`Local` namespace, which the viewer opens by name; either way it goes
+with the last process that holds it. The replay is checked against a
+native draw, pixel for pixel, on Metal, Direct3D 11 and 12, and OpenGL
+(ggfx's `internal/rendertest`).
+
+What differs by system is what the window system gives a process without
+a window: X11's clipboard belongs to a window, so on Linux the app's
+clipboard goes through the viewer's (`ClipboardRequest` and
+`SetClipboard` in `ggwd/remote`); Windows lets only the process the user
+works in bring a window to the front, so its viewer allows the app's
+process to with each click and key press, for the app's dialogs; and
+macOS turns the app into an accessory application while a dialog is up
+(`runtime/remote_darwin.go`). The tray is off on macOS and Windows.
 
 The point is a restart that keeps the window: a code change rebuilds and
 restarts only the app, while the window stays where it was, keeps the

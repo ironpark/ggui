@@ -98,8 +98,9 @@ an app outlives a ggui that is killed with `SIGKILL`.
 
 ### The window: remote display
 
-On macOS the app's window belongs to a viewer, `ggviewer`, a process of
-its own that dev starts once and keeps for the session. The app is built
+On macOS, Linux and Windows the app's window belongs to a viewer,
+`ggviewer`, a process of its own that dev starts once and keeps for the
+session. The app is built
 with the `ggwd_remote` tag and started with the viewer's socket in
 `GGWD_REMOTE_SOCKET`; it then opens no window and no GPU device: it draws
 through ggfx's remote driver, whose command batches go to the viewer
@@ -129,7 +130,7 @@ run instead, for work on the viewer itself.
 `--display=window`, or `display = "window"` under `[dev]`, gives each run
 a window of its own instead, as a release build has. Dev falls back to it
 by itself, saying why in one line, when the viewer cannot be had: on
-another system than macOS, for now; when the project's ggui has no
+another system than macOS, Linux and Windows; when the project's ggui has no
 `cmd/ggviewer` or its ggwd or ggfx lacks the `remote` package, which dev
 learns from `go list` in the project rather than from version numbers;
 when the viewer does not build or start. If the viewer goes away during
@@ -146,12 +147,18 @@ behaves as one, but for what belongs to the window on the desktop:
   false: the menu bar is the viewer's, so `App.SetMenu`'s menus are drawn
   by `ui.AppMenubar`, as on Windows and Linux, and their chords work. A
   tray icon does not show, said once on stderr; `Window.ShowContextMenu`
-  returns false.
+  returns false. On Windows, too, `TraySupported` is false while the
+  viewer shows the app.
 - **Dialogs** open, from the app's process, standing alone in front of
-  the viewer's window rather than as a sheet on it; the viewer is active
-  again once they close.
-- **Clipboard** text copies and pastes through the system clipboard, as in
-  a release build.
+  the viewer's window rather than as a sheet on it or owned by it. On
+  macOS the viewer is active again once they close; on Windows the viewer
+  lets the app's process come to the front each time the window is
+  clicked or typed in, so that a dialog opened then is not left behind
+  it; on Linux `zenity` or `kdialog` shows them, as in a release build.
+- **Clipboard** text copies and pastes through the system clipboard. On
+  macOS and Windows the app reaches it itself, as in a release build; on
+  Linux, where X11 has the clipboard belong to a window, the app reads and
+  writes it through the viewer's.
 - **The window's placement and state** are the viewer's and its user's:
   `SetSize`, `SetPosition`, maximize, minimize, fullscreen, show, hide,
   focus and attention requests do nothing, and the window reports itself
@@ -165,7 +172,14 @@ behaves as one, but for what belongs to the window on the desktop:
 - The [inspector](inspector.md) and `ggui_debug` work as in a window of
   the app's own.
 
-Remote display is macOS only for now, and shows one window.
+Remote display shows one window. It needs, on Linux, an X11 display, as
+any ggui app does, and a window manager for the window to be minimized;
+on Windows, Windows 10 1803 or later, the first with unix sockets, where
+the shared memory is a named file mapping, since descriptors do not pass
+over those sockets. On an older Windows the viewer does not start and the
+app opens its own window. The socket lives in the temporary directory;
+on Windows a temporary directory too long for a unix socket's path, as
+under a very long user name, leaves the app in its own window too.
 
 ### What is watched
 
@@ -193,7 +207,7 @@ old one.
 | `--tags a,b` | Build tags, replacing `dev.tags`. `--tags ""` builds with none. |
 | `--no-watch` | Build and run once; dev exits when the app does. |
 | `--stop-timeout 3s` | How long the app has to exit when asked before it is killed. |
-| `--display remote` | Where the window shows: `remote`, in the viewer, the default on macOS, or `window`, the app's own. Replaces `dev.display`. |
+| `--display remote` | Where the window shows: `remote`, in the viewer, the default on macOS, Linux and Windows, or `window`, the app's own. Replaces `dev.display`. |
 | `--config file` | Read this file instead of the `ggui.toml` found from the package or the working directory. |
 | `-- args` | Arguments for the app, after `dev.args`. |
 
@@ -371,7 +385,7 @@ base = "/hello/"
 | `args` | `[]` | Arguments the app is run with. |
 | `env` | `{}` | Environment variables set for the app, such as `{ LOG_LEVEL = "debug" }`. |
 | `watch` | `[]` | More files or directories to watch, such as assets the app reads at run time. |
-| `display` | `"remote"` on macOS | Where the app's window shows: `"remote"`, in [the viewer](#the-window-remote-display) that stays while the app restarts, or `"window"`, the app's own. |
+| `display` | `"remote"` on macOS, Linux and Windows | Where the app's window shows: `"remote"`, in [the viewer](#the-window-remote-display) that stays while the app restarts, or `"window"`, the app's own. |
 
 ### [macos]
 

@@ -19,6 +19,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
@@ -139,18 +140,27 @@ func Start(ctx context.Context, exe string, o Options) (*Process, error) {
 }
 
 // socketPath returns a new directory and the socket path in it. A unix
-// socket's path is limited to 104 bytes on macOS, so the directory is
-// short: the temporary directory when it leaves room, /tmp otherwise.
+// socket's path is limited to 104 bytes on macOS and 108 on Linux and
+// Windows, so the directory is short: the temporary directory when it
+// leaves room, /tmp otherwise. Windows has no /tmp, and its temporary
+// directory, under the user's profile, leaves room but for the longest
+// user names; then there is no socket, and the app opens its own window.
 func socketPath() (dir, socket string, err error) {
+	const maxPath = 103 // with the 0 that ends it, in macOS's 104 bytes
 	base := ""
-	if len(os.TempDir()) > 60 {
+	if len(os.TempDir())+len(`/ggui-1234567890/v.sock`) > maxPath && runtime.GOOS != "windows" {
 		base = "/tmp"
 	}
 	dir, err = os.MkdirTemp(base, "ggui-")
 	if err != nil {
 		return "", "", err
 	}
-	return dir, filepath.Join(dir, "v.sock"), nil
+	socket = filepath.Join(dir, "v.sock")
+	if len(socket) > maxPath {
+		os.RemoveAll(dir)
+		return "", "", fmt.Errorf("the viewer's socket would be %s, longer than a unix socket's %d bytes", socket, maxPath)
+	}
+	return dir, socket, nil
 }
 
 // read decodes the viewer's events until it exits, the first, ready, to
