@@ -42,6 +42,16 @@ func State[T any](v T) *StateValue[T] { return reactive.State(v) }
 // Derived returns a memo of fn, recomputed when what it reads changes.
 func Derived[T any](fn func() T) *DerivedValue[T] { return reactive.Derived(fn) }
 
+// Sprintf formats like fmt.Sprintf, reading arguments that implement
+// GetAny() any on each computation. StateValue, DerivedValue, Lens, Tweened
+// and Sprung implement that method. Other arguments pass through unchanged;
+// Readable's Get() alone is not enough. Adapt a custom Readable with
+// Derived(reader.Get), or format its Get() inside a Derived callback.
+func Sprintf(format string, args ...any) *DerivedValue[string] {
+	args = append([]any(nil), args...)
+	return Derived(func() string { return reactive.Format(format, args) })
+}
+
 // Map returns a memo of fn applied to r.
 func Map[T, U any](r Readable[T], fn func(T) U) *DerivedValue[U] { return reactive.Map(r, fn) }
 

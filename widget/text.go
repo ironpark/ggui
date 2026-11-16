@@ -1,7 +1,6 @@
 package widget
 
 import (
-	"fmt"
 	"image/color"
 	"math"
 	"slices"
@@ -217,7 +216,7 @@ func (t *TextWidget) Role(role ggui.Role) *TextWidget {
 // TextOf borrows r and follows it during layout without owning a subscription.
 func TextOf(r ggui.Readable[string]) *TextWidget { return Text("").BindContent(r) }
 
-// Textf formats during layout, reading GetAny arguments like Sprintf. It copies
+// Textf formats during layout, reading GetAny arguments like [ggui.Sprintf]. It copies
 // args and creates no computation; construction needs no owner.
 func Textf(format string, args ...any) *TextWidget {
 	t := Text("")
@@ -226,27 +225,6 @@ func Textf(format string, args ...any) *TextWidget {
 	o.formatArgs = append([]any(nil), args...)
 	t.formatted = true
 	return t
-}
-
-// Sprintf formats like fmt.Sprintf, reading arguments that implement
-// GetAny() any on each computation. StateValue, DerivedValue, Lens, Tweened
-// and Sprung implement that method. Other arguments pass through unchanged;
-// Readable's Get() alone is not enough. Adapt a custom Readable with
-// Derived(reader.Get), or format its Get() inside a Derived callback.
-func Sprintf(format string, args ...any) *ggui.DerivedValue[string] {
-	args = append([]any(nil), args...)
-	return ggui.Derived(func() string { return formatValues(format, args) })
-}
-func formatValues(format string, args []any) string {
-	vals := make([]any, len(args))
-	for i, a := range args {
-		if r, ok := a.(reactive.AnyReader); ok {
-			vals[i] = r.GetAny()
-		} else {
-			vals[i] = a
-		}
-	}
-	return fmt.Sprintf(format, vals...)
 }
 
 // Style merges ts onto the widget's own style.
@@ -442,7 +420,7 @@ func (t *TextWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 		opts = *t.opts
 	}
 	if t.formatted {
-		t.value = formatValues(opts.format, opts.formatArgs)
+		t.value = reactive.Format(opts.format, opts.formatArgs)
 	} else {
 		t.value = t.content.Get()
 	}

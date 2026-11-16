@@ -3,6 +3,7 @@ package reactive
 import (
 	"cmp"
 	"container/heap"
+	"fmt"
 	"reflect"
 	"slices"
 	"strconv"
@@ -360,6 +361,21 @@ func (l *Lens[U]) GetAny() any { return l.Get() }
 // AnyReader is what Sprintf looks for among its arguments: a reactive value
 // read without its type.
 type AnyReader interface{ GetAny() any }
+
+// Format formats like fmt.Sprintf, with each argument that is an AnyReader
+// replaced by the value it holds now. Read inside a computation, those
+// arguments are tracked like any other read.
+func Format(format string, args []any) string {
+	vals := make([]any, len(args))
+	for i, a := range args {
+		if r, ok := a.(AnyReader); ok {
+			vals[i] = r.GetAny()
+		} else {
+			vals[i] = a
+		}
+	}
+	return fmt.Sprintf(format, vals...)
+}
 
 // GetAny returns the value as any and subscribes, for Sprintf.
 func (s *StateValue[T]) GetAny() any { return s.Get() }

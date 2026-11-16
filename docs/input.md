@@ -294,7 +294,7 @@ widget.Reorderable(tasks, func(t Task) int { return t.ID }, func(it widget.EachI
 Rows lay out vertically and are all laid out; `ItemExtent` virtualization
 is not available for a reorderable list.
 
-A list reorders with a source and a zone per row and `widget.Move`. The rows
+A list reorders with a source and a zone per row and `widget.MoveItem`. The rows
 carry their keys, which stay right while the list moves under them:
 
 ```go
@@ -307,7 +307,7 @@ widget.EachKeyed(items, func(it Item) int { return it.ID }, func(row widget.Each
 		if !d.Before() {
 			to++
 		}
-		items.Set(widget.Move(list, from, to))
+		items.Set(widget.MoveItem(list, from, to))
 	})
 })
 ```

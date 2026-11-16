@@ -13,30 +13,30 @@ import (
 	"github.com/ironpark/ggui/pkg/kinetics"
 )
 
-// Viewport is what a Scroll tells the subtree it lays out: how far along
+// ScrollViewport is what a Scroll tells the subtree it lays out: how far along
 // the scroll axis the window starts and how long it is, in logical pixels.
 // A list that knows its items' sizes can then lay out only the ones in
 // view; EachKeyed does with ItemExtent.
-type Viewport struct {
+type ScrollViewport struct {
 	Offset, Extent float64
 	Horizontal     bool
 }
 
 var (
-	viewportKey = ggui.NewEnvKey[Viewport]("viewport")
+	viewportKey = ggui.NewEnvKey[ScrollViewport]("viewport")
 	// The window of the nearest Scroll along each axis: a list inside a
 	// Scroll that scrolls the other way, as a diff's long lines do, is
 	// still windowed by the one along its own.
-	viewportXKey = ggui.NewEnvKey[Viewport]("viewport x")
-	viewportYKey = ggui.NewEnvKey[Viewport]("viewport y")
+	viewportXKey = ggui.NewEnvKey[ScrollViewport]("viewport x")
+	viewportYKey = ggui.NewEnvKey[ScrollViewport]("viewport y")
 )
 
-// ScrollViewport returns the window of the nearest enclosing Scroll, if any.
-func ScrollViewport(env ggui.Env) (Viewport, bool) { return env.Get(viewportKey) }
+// ScrollViewportOf returns the window of the nearest enclosing Scroll, if any.
+func ScrollViewportOf(env ggui.Env) (ScrollViewport, bool) { return env.Get(viewportKey) }
 
 // viewportAlong returns the window of the nearest enclosing Scroll that
 // scrolls along the x axis, for horizontal, or the y axis.
-func viewportAlong(env ggui.Env, horizontal bool) (Viewport, bool) {
+func viewportAlong(env ggui.Env, horizontal bool) (ScrollViewport, bool) {
 	return env.Get(gem.Pick(horizontal, viewportXKey, viewportYKey))
 }
 
@@ -315,7 +315,7 @@ func (s *ScrollWidget) layout(c ggui.Constraints, env, within ggui.Env) ggui.Siz
 	}
 	s.phys.step(s)
 	s.laidAt = s.position()
-	vp := Viewport{Offset: s.laidAt, Extent: s.extent(c.Max()), Horizontal: s.horizontal}
+	vp := ScrollViewport{Offset: s.laidAt, Extent: s.extent(c.Max()), Horizontal: s.horizontal}
 	env = within.With(viewportKey, vp).With(scrollPortKey, s).
 		With(gem.Pick(s.horizontal, viewportXKey, viewportYKey), vp).With(gem.Pick(s.horizontal, scrollPortXKey, scrollPortYKey), s)
 	// What the content builds as it is laid out, rows mounting as they
@@ -1114,7 +1114,7 @@ func (s *StickyWidget) Layout(c ggui.Constraints, env ggui.Env) ggui.Size {
 	defer s.props.Layout().EndLayout()
 	s.port = scrollPortOf(env)
 	s.horizontal = false
-	if vp, ok := ScrollViewport(env); ok {
+	if vp, ok := ScrollViewportOf(env); ok {
 		s.horizontal = vp.Horizontal
 	}
 	// Across the axis both stretch to the section, so a pinned header

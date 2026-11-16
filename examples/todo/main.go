@@ -65,8 +65,8 @@ func list(m *model) ggui.Widget {
 func row(m *model, td *Todo) ggui.Widget {
 	editing := ggui.State(false)
 	check := ui.Checkbox(td.Done, "")
-	check.BindName(widget.Sprintf("Done: %s", td.Title)) // Checkbox names itself after its label; this one has none
-	remove := ui.Button("×", func() { m.remove(td.ID) }).BindName(widget.Sprintf("Remove %s", td.Title)).Outline().Pad(2, 8)
+	check.BindName(ggui.Sprintf("Done: %s", td.Title)) // Checkbox names itself after its label; this one has none
+	remove := ui.Button("×", func() { m.remove(td.ID) }).BindName(ggui.Sprintf("Remove %s", td.Title)).Outline().Pad(2, 8)
 	return widget.Row(check, widget.Expanded(title(td, editing)), remove).Space(1)
 }
 
@@ -76,7 +76,7 @@ func row(m *model, td *Todo) ggui.Widget {
 func title(td *Todo, editing *ggui.StateValue[bool]) ggui.Widget {
 	return ggui.If(editing, func() ggui.Widget {
 		return ui.TextField(td.Title).
-			BindName(widget.Sprintf("Edit: %s", td.Title)).
+			BindName(ggui.Sprintf("Edit: %s", td.Title)).
 			OnSubmit(func(string) { editing.Set(false) })
 	}).Else(func() ggui.Widget {
 		text := ggui.If(td.Done, func() ggui.Widget {
