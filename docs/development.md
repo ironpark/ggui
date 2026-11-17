@@ -278,12 +278,11 @@ The command signs and packages macOS builds with zapp's `pkg/` packages,
 and two things follow from that dependency. zapp requires ggui and ggfx itself, for its own window, so an
 older ggui and ggfx stand in the command's module graph without being
 built; in a workspace with `.` they resolve to the checkout, and with
-`GOWORK=off` nothing of them is downloaded. And zapp's module zip, about
-40 MB, carries the static rcodesign libraries that sign on Linux and
-Windows, linked only when cgo is on: the formula's build downloads it, but
-builds with `CGO_ENABLED=0`, as the release archives are, so both sign
-only on macOS, through Apple's tools. To try a release without publishing
-it:
+`GOWORK=off` nothing of them is downloaded. And the command imports
+zapp's signing and verification packages on macOS only: on Linux and
+Windows they would import its rcodesign binding, which a cgo build links
+against 30 MB static libraries, and MinGW's GCC on Windows cannot link at
+all. To try a release without publishing it:
 
 ```sh
 GORELEASER_CURRENT_TAG=v0.2.0 goreleaser release --clean --skip=publish,validate -f cmd/ggui/.goreleaser.yaml

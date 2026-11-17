@@ -33,9 +33,7 @@ class Ggui < Formula
     # The module zip holds the module below its path and version.
     cd "ironpark/ggui/cmd/ggui@v#{version}" do
       ENV["GOWORK"] = "off"
-      # Built as the release binaries are. With cgo, a Linux build would
-      # link zapp's static rcodesign library, 30 MB of Rust, with whatever
-      # C compiler the machine has, to sign macOS apps away from a Mac.
+      # Built as the release binaries are; the command needs no cgo.
       ENV["CGO_ENABLED"] = "0"
       system "go", "build", *std_go_args(ldflags: "-s -w -X main.releaseVersion=v#{version}")
     end
