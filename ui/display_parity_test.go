@@ -105,6 +105,30 @@ func TestAccordionHoverUnderlinesEveryLineOfTheTitle(t *testing.T) {
 	}
 }
 
+// A header is hovered over itself, not over a control in the section it
+// reveals, though the section is painted inside the header's region.
+func TestAccordionHeaderIsNotHoveredOverItsContent(t *testing.T) {
+	t.Parallel()
+	more := Button("More", nil)
+	a := Accordion(ggui.State([]string{"a"}), AccordionItem("a", "Section", more))
+	p := ggui.NewProbe(widget.Column(a).Align(widget.AlignStretch), ggui.Sz(300, 300))
+	defer p.Close()
+	p.Advance(time.Second)
+	h := a.headers[0]
+	b, ok := p.FindRole(ggui.RoleButton, "More")
+	if !ok {
+		t.Fatal("no button in the open section")
+	}
+	p.Move(ggui.Pt(h.at.Origin.X+10, h.at.Origin.Y+10))
+	if !h.Hovered {
+		t.Fatal("the header is not hovered under the pointer")
+	}
+	p.Move(b.Center())
+	if h.Hovered || !more.Hovered {
+		t.Fatalf("over the section's button: header hovered %v, button hovered %v; want the button alone", h.Hovered, more.Hovered)
+	}
+}
+
 // A spinner is a status named "Loading" to a screen reader, shadcn's
 // role="status" aria-label="Loading", until Name renames or removes it.
 func TestSpinnerIsAStatusNamedLoading(t *testing.T) {

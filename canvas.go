@@ -80,13 +80,48 @@ type frameState struct {
 // the hit regions, with the last frame's for Adopter handoff, and the
 // requests, observers and shortcuts widgets made as they painted.
 type paintedInput struct {
-	hits           []hitRegion
-	prev           []hitRegion // last frame's regions, for Adopter handoff
-	focusRequest   KeyHandler
-	focusClaim     *FocusRef // a Focus waiting for the next key region painted
-	revealRequests []Rect
-	inputObservers []inputObserver
-	shortcuts      []paintedShortcut
+	hits []hitRegion
+	prev []hitRegion // last frame's regions, for Adopter handoff
+	// withins are the handlers of the hits registered with HitWithin, and
+	// prevWithins last frame's, which input routes to until this paint
+	// ends.
+	withins, prevWithins []withinEntry
+	focusRequest         KeyHandler
+	focusClaim           *FocusRef // a Focus waiting for the next key region painted
+	revealRequests       []Rect
+	inputObservers       []inputObserver
+	shortcuts            []paintedShortcut
+	// cur is where in the tree of regions the paint is: see parentFor.
+	cur regionCursor
+}
+
+// regionCursor is where in the region tree the paint is, as indices plus
+// one into the paint's regions, 0 for none. Canvas.Paint saves it as it
+// opens a widget's scope and makes at the widget's outer, and restores it
+// as the scope closes, so it needs nothing of a scope to be correct where a
+// widget is painted with none open, as the root is in a test.
+type regionCursor struct {
+	at    int32 // the last region the widget painting registered, else outer
+	outer int32 // the region the widget painting is inside
+}
+
+// parentFor returns, as an index plus one, the region h is inside: the
+// nearest region the widget painting registered itself whose unclipped
+// Rect covers h's in the same space, else the region the widget is inside.
+// A scroll's thumb is inside the scroll's region; three cells of a
+// calendar are beside each other.
+func (f *frameState) parentFor(h *hitRegion) int32 {
+	if n := int32(len(f.hits)); f.cur.at > n || f.cur.outer > n {
+		// The list was emptied under a cursor into it, as a test that
+		// reuses a Canvas without beginning a paint does: start again.
+		f.cur = regionCursor{}
+	}
+	for p := f.cur.at; p != f.cur.outer && p != 0; p = f.hits[p-1].parent {
+		if q := &f.hits[p-1]; q.space == h.space && covers(q.full, h.full) {
+			return p
+		}
+	}
+	return f.cur.outer
 }
 
 // inputView is where input stood as the paint began, which the Canvas's
@@ -148,6 +183,9 @@ func (v *inputView) note(r *hitRegion, i int) {
 	}
 	if r.shaped {
 		x.cursors = true
+	}
+	if r.within {
+		x.within = true
 	}
 	if r.key != nil && x.key.h != nil && gem.Same(r.key, x.key.h) {
 		x.key.at = i
@@ -684,13 +722,19 @@ func (c *Canvas) Size() Size {
 
 // paintOverlays runs the overlays queued this frame, including ones they
 // queue themselves, and clears the queue.
+//
+// The regions an overlay registers start a tree of their own: a popup is
+// inside no region, whatever widget scheduled it.
 func (c *Canvas) paintOverlays() {
 	f := c.fs()
 	f.overlaid = f.overlaid || len(f.overlays) > 0
+	saved := f.cur
 	for i := 0; i < len(f.overlays); i++ {
 		o := f.overlays[i]
+		f.cur = regionCursor{}
 		c.scoped(o.owner, o.fn)
 	}
+	f.cur = saved
 	f.overlays = f.overlays[:0]
 }
 
@@ -864,10 +908,15 @@ func (c *Canvas) clipInto(child *Canvas, r Rect) *Canvas {
 // region registered at the same Rect as the previous one is merged into it,
 // so Pointer(Focus(w)) or a widget that calls HitPointer and HitKey for the
 // same Rect is one region with both handlers.
-func (c *Canvas) add(h hitRegion) {
+func (c *Canvas) add(h hitRegion) { c.addWithin(h, nil) }
+
+// addWithin is add for a region that may have a within handler: one
+// registered with HitWithin, whose handler is kept beside the list.
+func (c *Canvas) addWithin(h hitRegion, within any) {
 	if c == nil || c.inert {
 		return
 	}
+	h.within = within != nil
 	h.full = h.rect
 	if c.clipped {
 		h.rect = h.rect.Intersect(c.clip)
@@ -898,9 +947,17 @@ func (c *Canvas) add(h hitRegion) {
 	}
 	i := len(f.hits)
 	if i > 0 && f.hits[i-1].merge(h) {
+		// One node: what the widget paints next is inside the merged
+		// region, which stays where it was in the tree.
 		i--
 	} else {
+		h.parent = f.parentFor(&h)
 		f.hits = append(f.hits, h)
+	}
+	f.cur.at = int32(i + 1)
+	if within != nil {
+		// In the order of the regions: one merged into is the last.
+		f.withins = append(f.withins, withinEntry{at: int32(i), h: within})
 	}
 	f.note(&f.hits[i], i)
 }
@@ -1062,6 +1119,22 @@ func (c *Canvas) FocusTrap(owner any, onEscape func(), fn func(dst *Canvas)) {
 // before painting its children.
 func (c *Canvas) HitPointer(r Rect, h PointerHandler) {
 	c.add(c.region(r, h, hitRegion{pointer: h}))
+}
+
+// HitWithin registers r as a region that is told of what goes on inside
+// it: at r, where nothing painted over it by another widget takes the
+// event, and in every region painted inside it, wherever that shows. It
+// takes no input by itself. h implements any of PointerWithinHandler,
+// FocusWithinHandler and KeyWithinHandler. A region is inside another when
+// the widget that registered it was painted, through any number of widgets,
+// by the one that registered the other, so a container calls HitWithin
+// before it paints its children. A region it registers at the Rect of the
+// one before, as HitPointer for the same handler, is one region with it.
+func (c *Canvas) HitWithin(r Rect, h any) {
+	if h == nil {
+		return
+	}
+	c.addWithin(c.region(r, h, hitRegion{}), h)
 }
 
 // HitKey registers r as a region that receives keyboard events while focused.

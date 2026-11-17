@@ -256,3 +256,31 @@ func TestInspectorCountsRebuilds(t *testing.T) {
 		t.Errorf("Computed pane %+v, want 3 rebuilds", fr.Details(inspect.Computed, 0))
 	}
 }
+
+// The Computed pane shows the region a widget registered, what it takes,
+// and the regions it was painted inside, the nearest first.
+func TestInspectorShowsARegionsChain(t *testing.T) {
+	inner := onPointer(sized(20, 20), takesNothing)
+	w := onPointer(padded(onKey(padded(inner, 2), nil), 5), takesNothing)
+	c := inspectorCanvas(column(w), Sz(100, 100))
+	fr := inspectFrameOf(c)
+	fields := func(target Widget) map[string]string {
+		for i := range fr.Nodes {
+			if fr.Nodes[i].Instance == any(target) {
+				got := map[string]string{}
+				for _, f := range fr.Source.Fields(i) {
+					got[f.Key] = f.Value
+				}
+				return got
+			}
+		}
+		t.Fatalf("%T not traced", target)
+		return nil
+	}
+	if got := fields(inner); got["takes"] != "pointer" || got["inside"] != "focusable › pointed" {
+		t.Fatalf("the inner's fields %v, want it to take the pointer inside the focusable and the outer", got)
+	}
+	if got := fields(w); got["inside"] != "nothing" {
+		t.Fatalf("the outer's fields %v, want it inside nothing", got)
+	}
+}

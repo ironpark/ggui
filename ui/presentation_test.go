@@ -413,3 +413,31 @@ func TestDisclosureHoverMotion(t *testing.T) {
 		}
 	}
 }
+
+// A row of a table that does not select still shows the pointer over it,
+// over a button in one of its cells too, and stops once it leaves.
+func TestTableRowHoverEndsAsThePointerLeaves(t *testing.T) {
+	t.Parallel()
+	tbl := Table(ggui.State([]int{1}), func(v int) int { return v },
+		TextCol("ID", func(int) string { return "one" }),
+		Col("Act", func(ggui.Readable[int]) ggui.Widget { return Button("Go", func() {}) }))
+	row := tbl.row(widget.EachItem[int]{Value: ggui.State(1), Index: ggui.State(0)}).(*tableRow[int, int])
+	p := ggui.NewProbe(widget.Column(row, widget.Box().Size(200, 40)), ggui.Sz(300, 120))
+	defer p.Close()
+	go_, ok := p.FindRole(ggui.RoleButton, "Go")
+	if !ok {
+		t.Fatal("no button in the row")
+	}
+	p.Move(ggui.Pt(5, go_.Center().Y))
+	if !row.Hovered {
+		t.Fatal("the row is not hovered under the pointer")
+	}
+	p.Move(go_.Center())
+	if !row.Hovered {
+		t.Fatal("the row is not hovered over its cell's button")
+	}
+	p.Move(ggui.Pt(5, 110))
+	if row.Hovered {
+		t.Fatal("the row is still hovered after the pointer left it")
+	}
+}

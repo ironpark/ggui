@@ -1353,6 +1353,10 @@ func (t *TextInputWidget) historyKey(k ggui.KeyboardKey, m ggui.Mods) bool {
 	return false
 }
 
+// CaptureDrag implements ggui.DragCapturer: a drag that selects in a field
+// inside a drag source selects, and does not drag the source.
+func (t *TextInputWidget) CaptureDrag() bool { return !t.IsDisabled() }
+
 // HandlePointer implements PointerHandler: clicks place the caret, drags
 // and repeated clicks select.
 func (t *TextInputWidget) HandlePointer(ev ggui.PointerEvent) bool {

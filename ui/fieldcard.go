@@ -139,10 +139,9 @@ func (c *FieldCardWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 	t := c.theme
 	inert := c.disabled()
 	dark := isDark(t.Bg)
+	// The control is painted inside the card's region, so the card is
+	// hovered while the pointer is over it too.
 	hovered := c.Hovered
-	if h, ok := c.control.(interface{ hovered() bool }); ok && h.hovered() {
-		hovered = true
-	}
 	focused := !inert && dst.FocusVisibleWithin(r)
 	// The states have no transition in shadcn's FieldLabel: they switch.
 	var fill color.Color

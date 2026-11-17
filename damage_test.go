@@ -413,3 +413,25 @@ func easing(steps int) (w Widget, laid, painted *int) {
 		}
 	}), laid, painted
 }
+
+// A move over a control inside a hovered region paints the region again
+// as well as the control: the region is on the hover path. A region around
+// them that passes the move is not.
+func TestAHoveredRegionAroundIsPaintedAgain(t *testing.T) {
+	inner := onPointer(sized(10, 10), func(PointerEvent) bool { return true })
+	hovered := onPointer(padded(inner, 5), func(PointerEvent) bool { return true })
+	passes := onPointer(padded(hovered, 5), func(PointerEvent) bool { return false })
+	var in inputState
+	paintFrame(&in, column(passes), Sz(100, 100))
+	in.dispatch(frameInput{pos: Pt(12, 12)})
+	got, _ := in.takeTouched()
+	want := []Rect{Rct(Pt(10, 10), Sz(10, 10)), Rct(Pt(5, 5), Sz(20, 20))}
+	for _, r := range want {
+		if !slices.Contains(got, r) {
+			t.Fatalf("touched %v, want %v among them", got, r)
+		}
+	}
+	if slices.Contains(got, Rct(Pt(0, 0), Sz(30, 30))) {
+		t.Fatalf("touched %v: the region that passed the move was painted again", got)
+	}
+}

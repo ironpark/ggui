@@ -28,10 +28,6 @@ type toggle struct {
 	inCard       bool                 // a FieldCard around the control shows its focus
 }
 
-// hovered reports whether the pointer is on the control, for the FieldCard
-// around it.
-func (g *toggle) hovered() bool { return g.Hovered && !g.IsInert() }
-
 // toggleInvalidSlot eases the destructive halo of an invalid control.
 var toggleInvalidSlot = ggui.NewSlot[*ggui.Motion]("toggle invalid")
 

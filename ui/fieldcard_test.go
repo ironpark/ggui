@@ -42,7 +42,7 @@ func TestFieldCardActsAsItsControlsLabel(t *testing.T) {
 	}
 	p.Move(radio.Rect.Center())
 	r := pro.control.(*RadioWidget[string])
-	if !r.hovered() {
+	if !r.Hovered {
 		t.Fatal("the radio in the card is not hovered under the pointer")
 	}
 	if _, ok := p.FindRole(ggui.RoleRadio, "Free"); !ok {
@@ -54,6 +54,34 @@ func TestFieldCardActsAsItsControlsLabel(t *testing.T) {
 	}
 	if !r.inCard {
 		t.Fatal("the control was not told it sits in a card, and draws a focus ring of its own")
+	}
+}
+
+// A card is hovered while the pointer is over its control, which is
+// painted inside it, as well as over its own area: the control keeps its
+// own hover.
+func TestAFieldCardIsHoveredOverItsControl(t *testing.T) {
+	t.Parallel()
+	on := ggui.State(false)
+	sw := Switch(on, "")
+	card := Field("Airplane mode", sw).Card()
+	p := ggui.NewProbe(widget.Box(card).Padding(ggui.Insets(20)), ggui.Sz(360, 120))
+	defer p.Close()
+	x, ok := p.FindRole(ggui.RoleSwitch, "Airplane mode")
+	if !ok {
+		t.Fatal("no switch")
+	}
+	p.Move(x.Rect.Center())
+	if !card.card.Hovered || !sw.Hovered {
+		t.Fatalf("over the switch: card hovered %v, switch hovered %v; want both", card.card.Hovered, sw.Hovered)
+	}
+	p.Move(ggui.Pt(40, 40))
+	if !card.card.Hovered || sw.Hovered {
+		t.Fatalf("over the card's text: card hovered %v, switch hovered %v; want the card alone", card.card.Hovered, sw.Hovered)
+	}
+	p.Move(ggui.Pt(5, 5))
+	if card.card.Hovered {
+		t.Fatal("the card is still hovered after the pointer left it")
 	}
 }
 

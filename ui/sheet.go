@@ -517,6 +517,9 @@ type drawerHandle struct {
 }
 
 func (h *drawerHandle) CaptureTouchDrag() bool { return h.owner.draggable }
+
+// CaptureDrag implements ggui.DragCapturer, as CaptureTouchDrag.
+func (h *drawerHandle) CaptureDrag() bool { return h.owner.draggable }
 func (h *drawerHandle) Describe() ggui.Node {
 	s := h.owner
 	maxIndex := max(0, len(s.snapPoints)-1)

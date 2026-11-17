@@ -550,7 +550,7 @@ func (s *SidebarWidget) paintItem(dst, face *ggui.Canvas, n *sidebarNode, row gg
 		}
 		if n.e.action != nil {
 			at := s.place(row, n.actionX, (n.rowH-n.actionSize.H)/2, n.actionSize)
-			if s.showsAction(dst, n, row, at) {
+			if s.showsAction(dst, n, at) {
 				dst.Paint(n.e.action, at)
 			}
 		}
@@ -578,13 +578,11 @@ func (s *SidebarWidget) focusRing(dst *ggui.Canvas, row ggui.Rect) {
 }
 
 // showsAction reports whether a row's action is on screen: always, or for
-// ActionOnHover while the pointer is over the row, the keyboard is on it,
-// or the action itself has the keyboard.
-func (s *SidebarWidget) showsAction(dst *ggui.Canvas, n *sidebarNode, row, at ggui.Rect) bool {
+// ActionOnHover while the pointer is over the row, the action included,
+// which is painted inside the row's region, the keyboard is on it, or the
+// action itself has the keyboard.
+func (s *SidebarWidget) showsAction(dst *ggui.Canvas, n *sidebarNode, at ggui.Rect) bool {
 	if !n.e.actionOnHover || n.index == s.hover || (n.index == s.active && s.Focused && s.FocusVisible) {
-		return true
-	}
-	if p, ok := dst.Pointer(); ok && row.Contains(p) {
 		return true
 	}
 	return dst.FocusWithin(at)

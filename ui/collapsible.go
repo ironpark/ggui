@@ -27,6 +27,7 @@ type CollapsibleWidget struct {
 	pad       ggui.EdgeInsets
 	titleSize ggui.Size
 	headerH   float64
+	headerAt  ggui.Rect // where the header was last painted
 	bodySize  ggui.Size
 }
 
@@ -147,6 +148,7 @@ func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 		ggui.Invalidate(c.env)
 	}
 	header := ggui.Rct(r.Origin, ggui.Sz(r.Size.W, c.headerH))
+	c.headerAt = header
 	if c.trigger != nil {
 		// The header's region first, so a control inside the trigger sits
 		// above it and keeps its input.
@@ -174,5 +176,11 @@ func (c *CollapsibleWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 // HandleKey implements KeyHandler: Space or Enter toggles.
 func (c *CollapsibleWidget) HandleKey(ev ggui.KeyEvent) { c.Keyboard(ev, c.toggle) }
 
-// HandlePointer implements PointerHandler.
-func (c *CollapsibleWidget) HandlePointer(ev ggui.PointerEvent) bool { return c.Pointer(ev, c.toggle) }
+// HandlePointer implements PointerHandler. The body is not the header: a
+// move over a control in it passes.
+func (c *CollapsibleWidget) HandlePointer(ev ggui.PointerEvent) bool {
+	if beyond(ev, c.headerAt) {
+		return false
+	}
+	return c.Pointer(ev, c.toggle)
+}

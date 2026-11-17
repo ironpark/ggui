@@ -142,7 +142,83 @@ func (s inspectSource) Fields(i int) []inspect.Field {
 		st := w.state()
 		out = append(out, inspect.Field{Key: "Interaction"}, inspect.Field{Key: "hovered", Value: fmtBool(st.Hovered)}, inspect.Field{Key: "pressed", Value: fmtBool(st.Pressed)}, inspect.Field{Key: "focused", Value: fmtBool(st.Focused)}, inspect.Field{Key: "disabled", Value: fmtBool(st.IsInert())})
 	}
-	return out
+	return s.region(w, out)
+}
+
+// region appends to out the hit region w registered, the topmost if it
+// registered several: what it takes, and the chain of regions it was
+// painted inside, the nearest first, by the type of their handlers.
+func (s inspectSource) region(w Widget, out []inspect.Field) []inspect.Field {
+	if w == nil {
+		return out
+	}
+	hits := s.f.hits
+	at := -1
+	for i := len(hits) - 1; i >= 0 && at < 0; i-- {
+		r := &hits[i]
+		if r.pointer != nil && gem.Same(r.pointer, w) || r.key != nil && gem.Same(r.key, w) || r.within && gem.Same(s.withinOf(i), w) {
+			at = i
+		}
+	}
+	if at < 0 {
+		return out
+	}
+	out = append(out, inspect.Field{Key: "Input"}, inspect.Field{Key: "takes", Value: regionTakes(&hits[at])})
+	var chain []string
+	for p := hits[at].parent; p != 0 && int(p) <= len(hits); p = hits[p-1].parent {
+		chain = append(chain, s.regionName(int(p-1)))
+	}
+	if len(chain) == 0 {
+		return append(out, inspect.Field{Key: "inside", Value: "nothing"})
+	}
+	return append(out, inspect.Field{Key: "inside", Value: strings.Join(chain, " › ")})
+}
+
+// withinOf is the within handler of the region at i of the frame's.
+func (s inspectSource) withinOf(i int) any {
+	for _, e := range s.f.withins {
+		if int(e.at) == i {
+			return e.h
+		}
+	}
+	return nil
+}
+
+// regionName names the region at i by the type of its handler.
+func (s inspectSource) regionName(i int) string {
+	r := &s.f.hits[i]
+	for _, h := range [...]any{r.pointer, r.key, s.withinOf(i), r.drag} {
+		if h != nil {
+			return handlerName(h)
+		}
+	}
+	return "cursor"
+}
+
+// regionTakes lists what a region takes.
+func regionTakes(r *hitRegion) string {
+	var kinds []string
+	for _, k := range [...]struct {
+		on   bool
+		name string
+	}{{r.pointer != nil, "pointer"}, {r.key != nil, "keys"}, {r.within, "within"}, {r.drag != nil, "drag"}, {r.shaped, "cursor"}} {
+		if k.on {
+			kinds = append(kinds, k.name)
+		}
+	}
+	return strings.Join(kinds, ", ")
+}
+
+// handlerName is a handler's type, as widgetName writes a widget's.
+func handlerName(h any) string {
+	if w, ok := h.(Widget); ok {
+		return widgetName(w)
+	}
+	t := reflect.TypeOf(h)
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	return t.Name()
 }
 
 func fmtBool(b bool) string { return gem.Pick(b, "true", "false") }

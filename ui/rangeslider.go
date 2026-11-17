@@ -301,6 +301,9 @@ func (s *RangeSliderWidget) Paint(dst *ggui.Canvas, r ggui.Rect) {
 // CaptureTouchDrag keeps a thumb or track drag from becoming a scroll gesture.
 func (s *RangeSliderWidget) CaptureTouchDrag() bool { return !s.IsInert() }
 
+// CaptureDrag implements ggui.DragCapturer, as CaptureTouchDrag.
+func (s *RangeSliderWidget) CaptureDrag() bool { return !s.IsInert() }
+
 func (s *RangeSliderWidget) HandlePointer(ev ggui.PointerEvent) bool {
 	if s.IsInert() {
 		s.Pressed = false
@@ -352,6 +355,9 @@ type rangeSliderThumb struct {
 }
 
 func (h *rangeSliderThumb) CaptureTouchDrag() bool { return !h.owner.IsInert() }
+
+// CaptureDrag implements ggui.DragCapturer, as CaptureTouchDrag.
+func (h *rangeSliderThumb) CaptureDrag() bool { return !h.owner.IsInert() }
 func (h *rangeSliderThumb) Describe() ggui.Node {
 	s, vs := h.owner, h.owner.values()
 	if h.index >= len(vs) {

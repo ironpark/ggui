@@ -71,10 +71,15 @@ const (
 // laterPhase is the phase a frame's scrolls report, of what it had and
 // the next: the fingers lifting stays reported over all after it in the
 // frame, momentum too, so a gesture is not seen still on; the momentum
-// stopping, over more momentum.
+// stopping, over more momentum; and the fingers starting to move over
+// their moving on, so a new gesture is seen to begin.
 func laterPhase(had, next ScrollPhase) ScrollPhase {
 	switch {
 	case had == ScrollPhaseEnded:
+		return had
+	case had == ScrollPhaseBegan && next == ScrollPhaseChanged:
+		// The fingers starting to move, which ends the last gesture's
+		// latch, is kept over their moving on.
 		return had
 	case had == ScrollPhaseMomentumEnded && (next == ScrollPhaseMomentum || next == ScrollPhaseNone):
 		return had
@@ -156,6 +161,9 @@ func (in *inputState) consumeBindings(keys []KeyboardKey, mods Mods) []KeyboardK
 	if i := slices.Index(keys, KeyTab); i >= 0 && !claimed(KeyTab) {
 		keys = slices.Delete(slices.Clone(keys), i, i+1)
 		in.moveFocus(gem.Pick(mods.Shift, -1, 1))
+	}
+	if modified(mods) && in.keysWithin() {
+		keys = in.withoutKeysWithin(keys, mods, claimed)
 	}
 	if len(in.shortcuts) > 0 {
 		keys = in.withoutShortcuts(keys, mods, claimed)
@@ -262,12 +270,16 @@ func (in *inputState) shortcut(k KeyboardKey, mods Mods) bool {
 }
 
 // afterFocused runs what comes after the focused widget saw the keys: the
-// bare-key shortcuts and the trap's Escape, for keys the widget did not
-// consume.
+// within handlers around it, the bare-key shortcuts and the trap's Escape,
+// for keys the widget did not consume.
 func (in *inputState) afterFocused(f frameInput, h KeyHandler) {
+	within := !modified(f.mods) && in.keysWithin()
 	for _, k := range f.keys {
 		ev := KeyEvent{Kind: KeyPress, Key: k, Mods: f.mods}
 		if h != nil && consumes(h, ev) {
+			continue
+		}
+		if within && k != KeyTab && in.claimedBy(ev) == nil && in.offerKeyWithin(ev) {
 			continue
 		}
 		if k == KeyEscape && f.mods == (Mods{}) {
@@ -278,4 +290,44 @@ func (in *inputState) afterFocused(f frameInput, h KeyHandler) {
 		}
 		in.runChords(k, f.mods, false)
 	}
+}
+
+// modified reports whether mods hold a modifier other than Shift: a chord
+// that goes before the focused widget.
+func modified(mods Mods) bool { return mods.Ctrl || mods.Alt || mods.Meta }
+
+// keysWithin reports whether a key press may be offered to within
+// handlers: a region was registered with HitWithin and one has focus.
+func (in *inputState) keysWithin() bool { return in.focused != nil && in.index().within }
+
+// withoutKeysWithin returns keys less those a KeyWithinHandler around the
+// focused region took, copying only once one has. A claimed chord and Tab
+// are not offered.
+func (in *inputState) withoutKeysWithin(keys []KeyboardKey, mods Mods, claimed func(KeyboardKey) bool) []KeyboardKey {
+	out, copied := keys, false
+	for i, k := range keys {
+		taken := k != KeyTab && !claimed(k) && in.offerKeyWithin(KeyEvent{Kind: KeyPress, Key: k, Mods: mods})
+		switch {
+		case taken && !copied:
+			out, copied = slices.Clone(keys[:i]), true
+		case !taken && copied:
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+// offerKeyWithin offers ev to the KeyWithinHandlers on the chain of the
+// focused region, the nearest first, and reports whether one took it.
+func (in *inputState) offerKeyWithin(ev KeyEvent) bool {
+	cur := in.findKeyRegion(in.focused)
+	if cur == nil {
+		return false
+	}
+	for i := in.indexOf(cur); i >= 0; i = in.regions[i].parent - 1 {
+		if h, ok := in.withinOf(i).(KeyWithinHandler); ok && h.HandleKeyWithin(ev) {
+			return true
+		}
+	}
+	return false
 }

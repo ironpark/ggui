@@ -383,6 +383,22 @@ func TestSidebarActionOnHover(t *testing.T) {
 	if !ok {
 		t.Fatal("the action does not show under the pointer")
 	}
+	// Over the action itself the row stays hovered, the action is painted
+	// inside it, and so the action stays.
+	p.Move(more.Center())
+	for range 3 {
+		p.Frame()
+	}
+	if _, ok := p.FindRole(ggui.RoleButton, "More"); !ok {
+		t.Fatal("the action went away under the pointer")
+	}
+	p.Move(ggui.Pt(290, 290))
+	p.Frame()
+	if _, ok := p.FindRole(ggui.RoleButton, "More"); ok {
+		t.Fatal("the action shows after the pointer left the row")
+	}
+	p.Move(alpha.Center())
+	p.Frame()
 	p.Click(more.Center())
 	if pressed != 1 {
 		t.Fatalf("the action ran %d times", pressed)

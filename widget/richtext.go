@@ -913,6 +913,10 @@ func (t *RichTextWidget) HandlePointer(ev ggui.PointerEvent) bool {
 // on selectable text selects rather than scrolls.
 func (t *RichTextWidget) CaptureTouchDrag() bool { return t.selectable }
 
+// CaptureDrag implements ggui.DragCapturer: a selection dragged in text
+// inside a drag source selects rather than drags the source.
+func (t *RichTextWidget) CaptureDrag() bool { return t.selectable }
+
 // offsetAt returns the text offset nearest the window point at.
 func (t *RichTextWidget) offsetAt(at ggui.Point) int {
 	return t.para.OffsetAt(ggui.Pt(at.X-t.rect.Origin.X, at.Y-t.rect.Origin.Y), t.rect.Size.W, t.alignment())

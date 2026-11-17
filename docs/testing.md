@@ -40,7 +40,7 @@ func TestCheckbox(t *testing.T) {
 | `ProbeBuilder(build, size)` | Testing app-style setup: the root builder runs once; use explicit reactive blocks for updates. |
 | `Host` | The surface `App` and `Probe` share (`Shortcut`, `OnKey`, `OnFrame`, `Post`, `Perform`, `Announce`, `Semantics`, `Close`), so the same setup function drives both. |
 | `Tap(label)`, `Find(label)`, `FindRole(role, label)` | Locating controls by semantics. |
-| `Click`, `Press`, `Move`, `Release`, `Scroll` | Pointer interaction. |
+| `Click`, `Press`, `Move`, `Release`, `Scroll` | Pointer interaction. `Move` hovers the region under the pointer and the regions it is painted inside, as a window does. |
 | `Key("cmd+v")`, `Type`, `Text` | Shortcuts, written as `ParseChord` reads them so `cmd` is ⌘ on macOS and Ctrl elsewhere; other key events; text entry. |
 | `Advance(duration)` | Advancing this probe's clock for animation. |
 | `SetIME(fn)` | Giving the text inputs the test builds a fake input method, which composes and commits through the `IMEHandler` it is handed. |
@@ -78,6 +78,11 @@ if !ok {
 }
 p.Perform(node.ID, ggui.Action{Kind: ggui.ActionPress})
 ```
+
+A `WindowProbe` drives a real window's frames, damage and all, and reads
+the platform's events as a window does: `Wheel` turns a wheel by notches,
+`Trackpad` scrolls by pixels, and `TrackpadGesture` scrolls in a phase of a
+trackpad's gesture, which stays with the view that took it.
 
 `Perform` queues the action and runs a frame. Test the resulting binding or
 semantic state. Headless paint does not validate GPU pixels; use the

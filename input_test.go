@@ -28,7 +28,7 @@ func paintFrame(in *inputState, w Widget, size Size) {
 	reactive.Flush()
 	c := withPrev(in.regions)
 	w.Paint(c, Rct(Pt(0, 0), w.Layout(Tight(size), Env{})))
-	in.regions = c.fs().hits
+	in.regions, in.withins = c.fs().hits, c.fs().withins
 }
 
 func TestTapFiresOnDownAndUpInside(t *testing.T) {
@@ -1250,7 +1250,7 @@ func TestRegionLookupFindsTheTopmost(t *testing.T) {
 		c.HitPointer(over, h)
 		c.HitKey(over, h)
 		if painted {
-			in.setRegions(c.fs().hits, c.fs().found)
+			in.setRegions(c.fs().hits, c.fs().withins, c.fs().found)
 		} else {
 			in.regions = c.fs().hits
 		}

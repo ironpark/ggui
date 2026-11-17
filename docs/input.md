@@ -35,6 +35,26 @@ button := widget.Pointer(widget.Box(widget.Text("+")).Pad(6, 16)).
 	OnHover(hovered.Set)
 ```
 
+The regions form a tree. A region is inside the region of the nearest
+widget around it that registered one, the widget whose `Paint` painted it
+through `dst.Paint`, directly or through widgets that register nothing,
+such as `Column` and `Box`; a popup or anything else an `Overlay` paints
+is inside nothing. Events are offered in the same order as ever, the
+topmost region first, and a region that takes one still keeps it from
+everything beneath; the tree adds what a flat list could not say:
+
+- **Hover follows the tree**, as CSS's `:hover` does: a region stays
+  hovered while the pointer is over a control painted inside it. A row
+  that shows its close button while hovered keeps it while the pointer is
+  on the button.
+- **A region can hear what goes on inside it**: `widget.Within(child)` is
+  told of the pointer over its child, a press anywhere in it before what it
+  lands on, focus coming in and leaving, and the keys of the widget that
+  has focus inside it, and takes none of it unless asked.
+- **A drag source is picked up only through what is part of it**, and a
+  control that drags by itself keeps its drags.
+- **A trackpad's gesture stays with the view that took it.**
+
 ## Scrolling
 
 `Scroll(child)` gives its child `Unbounded` height (or width, with
@@ -71,6 +91,15 @@ scrolling stops, and `.Paging()` on whole viewports, turning the page when
 a gesture moved more than a sixth of one. ggfx reports no gesture phases,
 so both settle after a short pause in the input. The default clamps and
 never snaps.
+
+A trackpad's gesture stays with the view that took it as it began, an
+axis each, its momentum included, as a browser latches one: an inner list
+run to its end mid-gesture does not hand the rest to the page around it,
+and a gesture begun over a list already at its end moves the page. The
+fingers starting to move again, a press, the view going and the momentum
+stopping end the latch. A wheel's notches, a touch's pan and a scroll on a
+platform that reports no phases are not latched: a view at its end passes
+them to the view around it, as before.
 
 A `ScrollController` scrolls from code. The zero value is ready; attach it
 and call it from a handler. `ScrollTo` and `ScrollBy` ease (and jump under
@@ -113,6 +142,8 @@ and prevents a tap on the original child. Scrolling can continue with momentum
 after release. A custom control that must retain a touch drag can implement
 `TouchDragCapturer`; return true from `CaptureTouchDrag()` while it owns that
 gesture. Carousel uses this to keep slide dragging within the control.
+`DragCapturer` asks the same of a mouse drag, against a drag source around
+the control; see [Dragging inside the app](#dragging-inside-the-app).
 
 ## Pointer and keyboard events
 
@@ -124,6 +155,40 @@ press and a release inside the same region, matched by `Rect`, so a tree
 rebuilt in between still completes it. The region that took a press captures
 the pointer: it gets `OnDrag` every frame until the release, wherever the
 cursor went, which is what a slider or a text selection needs.
+
+`OnHover`, `OnEnter` and `OnExit` follow the pointer over the child and
+over anything painted inside it that takes the hover: the pointer moving
+from a row onto its button neither leaves the row nor enters it again, and
+the button still shows its own hover. Every control built on
+`Interactive` is hovered the same way, a card or a table row while the
+pointer is over a button in it. `PointerEvent.Inner` is set on the move
+and the enter a region hears because the pointer is over a region inside
+it; a control that should look hovered only where a click would land on it
+ignores those. `OnMove` passes the event on, `Inner` and all.
+
+`Within(child)` hears what goes on inside its child without taking it:
+`OnHover` the pointer over it or anything inside, `OnFocus` focus coming
+into it and leaving it altogether, `OnDown` a button going down anywhere in
+it before the widget it lands on, and `OnKey` the keys of the widget that
+has focus inside it (see [Shortcuts](#shortcuts)). A press on a popup the
+child opened is not inside it. Hover means nothing to a screen reader, so
+what it shows should be there for the keyboard too: build it always, and
+show it while the pointer or the focus is inside:
+
+```go
+hover, focus := ggui.State(false), ggui.State(false)
+shown := ggui.Combine(hover, focus, func(h, f bool) float64 {
+	if h || f {
+		return 1
+	}
+	return 0
+})
+tab := widget.Within(widget.Row(
+	label,
+	widget.Opacity(closeButton, 0).BindOpacity(shown),
+)).OnHover(hover.Set).OnFocus(focus.Set)
+pane := widget.Within(content).OnDown(func(ggui.PointerEvent) { current.Set(id) })
+```
 
 `Focus(child)`
 takes keyboard focus when clicked and delivers `OnKey`, `OnText` and
@@ -169,6 +234,17 @@ names, `KeyEvent.Is(chord)` matches one in a handler, and `App.OnKey` stays
 for what a chord cannot say. A digit or punctuation key may be written as the
 character it types on a US layout: `"cmd+1"` is `"cmd+digit1"`, `"cmd+,"` is
 `"cmd+comma"`.
+
+A part of the window can have keys of its own while focus is inside it.
+`widget.Within(pane).OnKey(fn)` is offered the presses of the focused
+widget inside the pane where a shortcut would run: a chord with a modifier
+before that widget and before the window's shortcuts, a bare key after the
+widget, when it did not consume it, and before a dialog's Escape and the
+bare-key shortcuts. The handler nearest the focus hears a press first and
+returning true takes it, so a pane's ⌘W closes the pane's tab and the
+window's ⌘W runs only where no pane took it. A chord the widget claims, Tab
+and typed text are never offered, and with nothing focused there is
+nothing to offer them from.
 
 `Chord.Label()` writes a chord the way the platform shows it: `"⇧⌘Z"` on
 macOS, in Apple's ⌃⌥⇧⌘ order, and `"Ctrl+Shift+Z"` elsewhere. The handle
@@ -257,6 +333,14 @@ narrows what a zone takes and `OnHover` highlights it while a drag is over
 it. `OnOver` follows the drag across the zone with a `Dropped[T]` for where
 it would land, to show where in the zone the value would go: a gap opening
 between tabs moved from one bar to another, say.
+
+A press picks up only a source that is part of what it landed on: the
+source around the button pressed, or one inside the wrapper that took the
+press. A press on a popup or a layer painted over a source drags nothing.
+A control that drags by itself inside a source keeps its drag: a slider,
+a text field's selection, a scrollbar's thumb, a `Resizable`'s divider, a
+carousel and a `Pointer` with `OnDrag` implement `DragCapturer`, and while
+`CaptureDrag` reports true the source never starts.
 
 A source or a zone of your own is built on the same session. A widget that
 can be picked up registers `dst.HitDrag(r, d)` before painting what it
@@ -387,7 +471,16 @@ a rebuild. The inspector shows them, and tests find controls by them.
 To make your own widget interactive, implement `PointerHandler` or
 `KeyHandler` and call `dst.HitPointer(r, w)`, `dst.HitKey(r, w)` or
 `dst.HitCursor(r, shape)` from `Paint`; calls for the same `Rect` merge into
-one region. A `KeyHandler` that also implements `TickHandler` runs once per
+one region. Register before painting the children, so that their regions
+are inside yours: a region registered after them is beside them, on top.
+Of several regions one `Paint` registers, a later one is inside the
+nearest earlier one whose unclipped `Rect` covers it, as a knob in its
+track. `dst.HitWithin(r, h)` registers a region that takes nothing itself
+and hears what goes on inside it: `h` implements any of
+`PointerWithinHandler`, offered each press and wheel headed inside before
+the regions inside hear of it, outermost first, true taking it from them;
+`FocusWithinHandler`, told when focus comes inside and when it has left;
+and `KeyWithinHandler`, offered key presses as `Within`'s `OnKey` is. A `KeyHandler` that also implements `TickHandler` runs once per
 frame while focused, which is how `widget.TextInput` drives the IME: a
 text widget of your own gets its session from `ggui.NewIME(handler)`, the
 platform's input method while an App runs and none under a Probe, calls

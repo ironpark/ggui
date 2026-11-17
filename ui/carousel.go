@@ -531,6 +531,10 @@ func (c *CarouselWidget) HandleKey(e ggui.KeyEvent) {
 func (c *CarouselWidget) CaptureTouchDrag() bool {
 	return !c.IsInert() && c.dragEnabled && len(c.snaps) > 1
 }
+
+// CaptureDrag implements ggui.DragCapturer: a carousel dragged by the mouse
+// moves its slides, not a drag source around it.
+func (c *CarouselWidget) CaptureDrag() bool { return c.CaptureTouchDrag() }
 func (c *CarouselWidget) HandlePointer(e ggui.PointerEvent) bool {
 	if c.IsInert() {
 		return false

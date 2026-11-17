@@ -129,6 +129,16 @@ func (m *pointerMotion) drifted(p ggui.Point) bool {
 	return m.moved(p) && seen
 }
 
+// beyond reports whether ev is a move a header hears only because the
+// pointer is over a region painted inside its own but outside at, the
+// header's Rect: a disclosure's body, painted after the header registered
+// its region and so inside it. A header passes such a move, so that it is
+// hovered over itself and the controls in it, not over the body it
+// reveals.
+func beyond(ev ggui.PointerEvent, at ggui.Rect) bool {
+	return ev.Kind == ggui.PointerMove && ev.Inner && !at.Contains(ev.Pos)
+}
+
 // hoverPick is the pointer body a group's items share: the hovered index
 // follows the pointer, a left click picks, and the wheel passes through to
 // whatever scrolls behind. A tab strip, a toggle group and a sidebar all
@@ -136,7 +146,11 @@ func (m *pointerMotion) drifted(p ggui.Point) bool {
 func hoverPick(ev ggui.PointerEvent, i int, hover *int, pick func()) bool {
 	switch ev.Kind {
 	case ggui.PointerEnter, ggui.PointerMove:
-		*hover = i
+		// Over a control inside the item the item stays hovered, but does
+		// not take the hover from an item inside it that has it.
+		if !ev.Inner || *hover < 0 {
+			*hover = i
+		}
 	case ggui.PointerExit:
 		if *hover == i {
 			*hover = -1

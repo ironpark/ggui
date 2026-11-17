@@ -264,6 +264,16 @@ func (p *WindowProbe) Trackpad(pos, pixels Point) {
 	p.handle(ggwd.ScrollEvent{X: pixels.X / ggwd.PreciseLine, Y: pixels.Y / ggwd.PreciseLine, Line: ggwd.PreciseLine, Precise: true})
 }
 
+// TrackpadGesture is Trackpad in a phase of a gesture, as a platform that
+// reports them sends it: ScrollPhaseBegan as the fingers start to move,
+// ScrollPhaseChanged as they move on, ScrollPhaseEnded as they lift, then
+// ScrollPhaseMomentum and ScrollPhaseMomentumEnded. A gesture stays with
+// the view that took it as it began.
+func (p *WindowProbe) TrackpadGesture(pos, pixels Point, phase ScrollPhase) {
+	p.Move(pos)
+	p.handle(ggwd.ScrollEvent{X: pixels.X / ggwd.PreciseLine, Y: pixels.Y / ggwd.PreciseLine, Line: ggwd.PreciseLine, Precise: true, Phase: phase})
+}
+
 // Key presses and releases each chord, written as ParseChord reads it,
 // all for the next frame. It panics on a malformed chord.
 func (p *WindowProbe) Key(chords ...string) {
